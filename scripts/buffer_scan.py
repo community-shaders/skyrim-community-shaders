@@ -1,48 +1,9 @@
 import os
 import subprocess
-import io
-import pcpp
 import re
 from py_markdown_table.markdown_table import markdown_table
 from operator import itemgetter
 import urllib.parse
-
-
-class preParser(pcpp.Preprocessor):
-    def get_output(self) -> str:
-        """Return this objects current tokens as a string."""
-        with io.StringIO() as buffer:
-            self.write(buffer)
-            for name in self.known_defines:
-                buffer.write(f"#define {name} ...\n")
-            return buffer.getvalue()
-
-    def on_include_not_found(
-        self, is_malformed: bool, is_system_include: bool, curdir: str, includepath: str
-    ) -> None:
-        """Pass through bad includes."""
-        raise pcpp.OutputDirective(pcpp.Action.IgnoreAndPassThrough)
-
-
-def preProcessData(data: str, defines=None) -> str:
-    """Use pcpp to preprocess string.
-
-    Args:
-        data (str): Input data string
-        defines (dict, optional): Dict of defines. Defaults to None.
-
-    Returns:
-        str: string after processing
-    """
-
-    defines = defines or {}
-    global cpp
-    for key, value in defines.items():
-        cpp.define(f"{key} {value}")
-    cpp.parse(data)
-    with io.StringIO() as buffer:
-        cpp.write(buffer)
-        return buffer.getvalue()
 
 
 def create_link(text):
@@ -142,10 +103,11 @@ hlsl_types = {"t": "SRV", "u": "UAV", "s": "Sampler", "b": "CBV"}
 cwd = os.getcwd()
 pattern = r"(?P<filename>\w+)\.(?P<extension>hlsli?)"
 feature_pattern = r".*features/(?P<feature>[\w -]*)/.*"
-shader_pattern = r"(?P<type>[\w<>]+)\s+(?P<name>[\w]+)\s+:\s+register\(\s*(?P<buffer_type>[a-z]*)(?P<buffer_number>[0-9]+)\s*\)"
+shader_pattern = r"(?P<type>[\w<> ]+)\s+(?P<name>[\w]+)\s+:\s+register\(\s*(?P<buffer_type>[a-z]*)(?P<buffer_number>[0-9]+)\s*\)"
 feature = ""
 filename = ""
 results = []
+result_map = {}  # used to prune duplicates
 # Iterate over the files in the current directory and all of its subdirectories
 for root, dirs, files in os.walk(cwd):
     # Iterate over the files in the current directory
@@ -166,7 +128,6 @@ for root, dirs, files in os.walk(cwd):
                 path.lower().find("skyrim-community-shaders")
                 + len("skyrim-community-shaders") :
             ]
-            cpp = preParser()  # init preprocessor
             for defines in defines_list:
                 arg_list = []
                 for define in [f"{k}" for k, v in defines.items()]:
@@ -190,23 +151,29 @@ for root, dirs, files in os.walk(cwd):
                                 contents,
                             )
                             for line_number, result in capturelist:
-
-                                results.append(
-                                    {
+                                path_with_line_no = f"{short_path}:{line_number}"
+                                entry = result_map.get(path_with_line_no.lower())
+                                if not entry:
+                                    entry = {
                                         "Register": f'{result.group("buffer_type").lower()}{result.group("buffer_number")}',
                                         "Feature": feature,
                                         "Type": f'`{result.group("type")}`',
                                         "Name": result.group("name"),
-                                        "File": f"[{short_path}:{line_number}]({create_link(f'{urllib.parse.quote(short_path)}#L{line_number}')})",
+                                        "File": f"[{path_with_line_no}]({create_link(f'{urllib.parse.quote(short_path)}#L{line_number}')})",
                                         "Register Type": hlsl_types.get(
                                             result.group("buffer_type").lower(),
                                             "Unknown",
                                         ),
                                         "Buffer Type": result.group("buffer_type"),
                                         "Number": int(result.group("buffer_number")),
-                                        "Defines": defines,
+                                        "PSHADER": False,
+                                        "VSHADER": False,
+                                        "VR": False,
                                     }
-                                )
+                                    for key in defines.keys():
+                                        entry[key] = True
+                                    result_map[path_with_line_no.lower()] = entry
+results = [v for v in result_map.values()]
 # print(results)
 if results:
     results = sorted(results, key=itemgetter("Buffer Type", "Number", "File"))
