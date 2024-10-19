@@ -1024,6 +1024,11 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "TerrainVariation/TerrainVariation.hlsli"
 #	endif
 
+#	if defined(EXTENDED_TRANSLUCENCY) && !(defined(LOD) || defined(SKIN) || defined(HAIR) || defined(EYE) || defined(TREE_ANIM) || defined(LODOBJECTSHD) || defined(LODOBJECTS) || defined(DEPTH_WRITE_DECALS))
+#		include "ExtendedTranslucency/ExtendedTranslucency.hlsli"
+#		define ANISOTROPIC_ALPHA
+#	endif
+
 #	define LinearSampler SampColorSampler
 
 #	include "Common/ShadowSampling.hlsli"
@@ -3108,6 +3113,47 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		discard;
 	}
 #		endif      // DO_ALPHA_TEST
+
+#		if defined(ANISOTROPIC_ALPHA)
+	// Uniform alpha material settings
+	uint AlphaMaterialModel = ExtendedTranslucency::GetMaterialModelFromDescriptor(Permutation::ExtraFeatureDescriptor);
+	float AlphaMaterialReduction = 0.f;
+	float AlphaMaterialSoftness = 0.f;
+	float AlphaMaterialStrength = 0.f;
+	if (AlphaMaterialModel == ExtendedTranslucency::MaterialModel::Default) {
+		AlphaMaterialModel = SharedData::extendedTranslucencySettings.MaterialModel;
+		AlphaMaterialReduction = SharedData::extendedTranslucencySettings.Reduction;
+		AlphaMaterialSoftness = SharedData::extendedTranslucencySettings.Softness;
+		AlphaMaterialStrength = SharedData::extendedTranslucencySettings.Strength;
+	}
+
+	[branch] if (ExtendedTranslucency::IsValidMaterial(AlphaMaterialModel))
+	{
+		if (alpha >= 0.0156862754 && alpha < 1.0) {
+			float originalAlpha = alpha;
+			alpha = alpha * (1.0 - AlphaMaterialReduction);
+			[branch] if (AlphaMaterialModel == ExtendedTranslucency::MaterialModel::AnisotropicFabric)
+			{
+#			if defined(SKINNED) || !defined(MODELSPACENORMALS)
+				alpha = ExtendedTranslucency::GetViewDependentAlphaFabric2D(alpha, viewDirection, tbnTr);
+#			else
+				alpha = ExtendedTranslucency::GetViewDependentAlphaFabric1D(alpha, viewDirection, modelNormal.xyz);
+#			endif
+			}
+			else if (AlphaMaterialModel == ExtendedTranslucency::MaterialModel::IsotropicFabric)
+			{
+				alpha = ExtendedTranslucency::GetViewDependentAlphaFabric1D(alpha, viewDirection, modelNormal.xyz);
+			}
+			else
+			{
+				alpha = ExtendedTranslucency::GetViewDependentAlphaNaive(alpha, viewDirection, modelNormal.xyz);
+			}
+			alpha = saturate(ExtendedTranslucency::SoftClamp(alpha, 2.0f - AlphaMaterialSoftness));
+			alpha = lerp(alpha, originalAlpha, AlphaMaterialStrength);
+		}
+	}
+#		endif  // ANISOTROPIC_ALPHA
+
 	psout.Diffuse.w = alpha;
 
 #	endif

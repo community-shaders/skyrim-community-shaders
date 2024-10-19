@@ -143,7 +143,8 @@ public:
 		THLand2HasDisplacement = 1 << 2,
 		THLand3HasDisplacement = 1 << 3,
 		THLand4HasDisplacement = 1 << 4,
-		THLand5HasDisplacement = 1 << 5
+		THLand5HasDisplacement = 1 << 5,
+		ETMaterialModel = 0b111 << 6,
 	};
 
 	void UpdateSharedData(bool a_inWorld, bool a_prepass);
