@@ -194,6 +194,19 @@ struct TransformInfo
 				},
 				make_array<8>(f4{ 0.f, 1.f, 0.f, 0.f }) },
 
+				{ "Linear to Log"sv, "LinearToLog"sv,
+					"Convert between linear and ACEScct."sv,
+					[](CTP& params) {
+						auto spaces = std::array{ "ACEScct", "ARRI LogC4", "Sony S-Log3" };
+						bool inverse = (bool)params[0].x;
+						int space = (int)params[0].y;
+						if (ImGui::Checkbox("Inverse", &inverse))
+							params[0].x = (float)inverse;
+						if (ImGui::Combo("Output Space", &space, spaces.data(), (int)spaces.size()))
+							params[0].y = (float)space;
+					},
+					{ f4{ 0.f, 0.f, 0.f, 0.f } } },
+
 			{ "_"sv, "Colour Space Conversions"sv,
 				"Converting to other colour spaces to exploit their characteristic."sv,
 				[](CTP&) {},
@@ -228,19 +241,6 @@ struct TransformInfo
 					}
 				},
 				{ f4{ 1.f, 0.f, 0.f, 0.f }, f4{ 0.f, 1.f, 0.f, 0.f }, f4{ 0.f, 0.f, 1.f, -1.f } } },
-
-			{ "ACEScct"sv, "ACEScct"sv,
-				"Convert between linear and ACEScct."sv,
-				[](CTP& params) {
-					auto spaces = std::array{ "Linear", "ACEScct" };
-					int in_space = (int)params[0].x;
-					int out_space = (int)params[0].y;
-					if (ImGui::Combo("Input Space", &in_space, spaces.data(), (int)spaces.size()))
-						params[0].x = (float)in_space;
-					if (ImGui::Combo("Output Space", &out_space, spaces.data(), (int)spaces.size()))
-						params[0].y = (float)out_space;
-				},
-				{ f4{ 0.f, 1.f, 0.f, 0.f } } },
 
 			{ "_"sv, "Tonemapping Operators"sv,
 				"Transforms HDR values into a displayable image while retaining contrast and colours. "

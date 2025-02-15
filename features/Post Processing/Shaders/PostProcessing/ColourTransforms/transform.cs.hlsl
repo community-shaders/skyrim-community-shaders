@@ -206,40 +206,108 @@ float3 AldridgeFilmic(float3 val)
 	return val;
 }
 
-float3 ACEScct(float3 val)
+float3 ACEScct(float3 linearColor, bool inverse)
 {
-	if (Params[0].x == Params[0].y) {
-		return val;
-	}
-
 	const float a = 10.5402377416545;
     const float b = 0.0729055341958355;
     const float cutoff = 0.0078125;
 	const float cutoff2 = 0.155251141552511;
 
-	float3 cct = val;
+	float3 cct = linearColor;
 
-	if (Params[0].x == 0 && Params[0].y == 1) {
+	if (!inverse) {
 		for (int i = 0; i < 3; i++) {
-			if (val[i] > cutoff) {
-				cct[i] = (log2(val[i]) + 9.72) / 17.52;
+			if (linearColor[i] > cutoff) {
+				cct[i] = (log2(linearColor[i]) + 9.72) / 17.52;
 			}
 			else {
-				cct[i] = val[i] * a + b;
+				cct[i] = linearColor[i] * a + b;
 			}
 		}
-	} else if (Params[0].x == 1 && Params[0].y == 0) {
+	} else {
 		for (int i = 0; i < 3; i++) {
-			if (val[i] >= cutoff2) {
-				cct[i] = pow(2, val[i] * 17.52 - 9.72);
+			if (linearColor[i] >= cutoff2) {
+				cct[i] = pow(2, linearColor[i] * 17.52 - 9.72);
 			}
 			else {
-				cct[i] = (val[i] - b) / a;
+				cct[i] = (linearColor[i] - b) / a;
 			}
 		}
 	}
 
 	return cct;
+}
+
+float3 ARRIlogC4(float3 linearColor, bool inverse)
+{
+	const float a = 2231.8263;
+	const float b = 0.9071359;
+	const float c = 0.0928641;
+	const float s = 0.6816768;
+	const float t = -0.0180570;
+
+	float3 logColor = linearColor;
+
+	if (!inverse) {
+		for (int i = 0; i < 3; i++) {
+			if (linearColor[i] > t) {
+				logColor[i] = (log2(linearColor[i] * a + 64) - 6) / 14 * b + c;
+			}
+			else {
+				logColor[i] = (linearColor[i] - t) / s;
+			}
+		}
+	} else {
+		for (int i = 0; i < 3; i++) {
+			if (linearColor[i] > 0) {
+				logColor[i] = (pow(2, 14 * (linearColor[i] - c) / b + 6) - 64) / a;
+			}
+			else {
+				logColor[i] = linearColor[i] * s + t;
+			}
+		}
+	}
+
+	return logColor;
+}
+
+float3 SonySLog3(float3 linearColor, bool inverse)
+{
+	float3 logColor = linearColor;
+
+	if (!inverse) {
+		for (int i = 0; i < 3; i++) {
+			if (linearColor[i] > 0.0112500) {
+				logColor[i] = (420.0 + log10((linearColor[i] + 0.01) / 0.19) * 261.5) / 1023.0;
+			}
+			else {
+				logColor[i] = (linearColor[i] * (171.2102946929 - 95.0) / 0.0112500 + 95.0) / 1023.0;
+			}
+		}
+	} else {
+		for (int i = 0; i < 3; i++) {
+			if (linearColor[i] > 0.1712102946929 / 1023.0) {
+				logColor[i] = pow(10, (linearColor[i] * 1023.0 - 420.0) / 261.5) * 0.19 - 0.01;
+			}
+			else {
+				logColor[i] = (linearColor[i] * 1023.0 - 95.0) * 0.0112500 / (171.2102946929 - 95.0);
+			}
+		}
+	}
+
+	return logColor;
+}
+
+float3 LinearToLog(float3 val)
+{
+	float3 logColor = val;
+	if (Params[0].y == 0) 
+		logColor = ACEScct(val, (bool)Params[0].x);
+	else if (Params[0].y == 1)
+		logColor = ARRIlogC4(val, (bool)Params[0].x);
+	else if (Params[0].y == 2)
+		logColor = SonySLog3(val, (bool)Params[0].x);
+	return logColor;
 }
 
 float3 AcesHill(float3 val)
