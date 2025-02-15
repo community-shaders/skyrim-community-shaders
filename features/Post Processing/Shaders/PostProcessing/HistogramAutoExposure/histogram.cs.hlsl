@@ -3,7 +3,7 @@
 /// https://bruop.github.io/exposure/
 /// https://knarkowicz.wordpress.com/2016/01/09/automatic-exposure/
 
-#include "common.hlsli"
+#include "PostProcessing/HistogramAutoExposure/common.hlsli"
 
 #include "Common/Color.hlsli"
 

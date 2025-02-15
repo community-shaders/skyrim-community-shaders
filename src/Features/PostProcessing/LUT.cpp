@@ -61,9 +61,17 @@ void LUT::LoadSettings(json& o_json)
 {
 	settings = o_json;
 
-	if (!settings.LutPath.empty())
-		ReadTexture(settings.LutPath);
 	tempPath = settings.LutPath;
+	logger::info("Loading LUT settings, LUT Path: {}", settings.LutPath);
+
+	try {
+		if (!tempPath.empty() && !firstLoad)
+			ReadTexture(tempPath);
+		else if (firstLoad)
+			firstLoad = false;
+	} catch (const std::exception& e) {
+		logger::warn("Failed to load LUT settings: {}", e.what());
+	}
 }
 
 void LUT::SaveSettings(json& o_json)
@@ -73,7 +81,10 @@ void LUT::SaveSettings(json& o_json)
 
 void LUT::SetupResources()
 {
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+	auto renderer = globals::game::renderer;
+
+	if (!settings.LutPath.empty())
+		ReadTexture(settings.LutPath);
 
 	logger::debug("Creating buffers...");
 	{
@@ -115,16 +126,18 @@ void LUT::ReadTexture(std::filesystem::path path)
 {
 	constexpr auto comErrMsg = "Failed to create texture! Error: {}";
 
-	auto device = State::GetSingleton()->device;
+	auto device = globals::d3d::device;
 
 	Clear();
 
 	if (path.extension() != ".dds" && path.extension() != ".png" && path.extension() != ".bmp") {
 		errMsg = std::format("Invalid extension: {}! Only dds/png/bmp are supported.", path.extension().string());
+		logger::warn("Invalid extension: {}! Only dds/png/bmp are supported.", path.extension().string());
 		return;
 	}
 	if (!std::filesystem::exists(path)) {
 		errMsg = "The file does not exist.";
+		logger::warn("The file does not exist.");
 		return;
 	}
 
@@ -135,6 +148,7 @@ void LUT::ReadTexture(std::filesystem::path path)
 			DX::ThrowIfFailed(DirectX::CreateDDSTextureFromFile(device, path.c_str(), &pRsrc, &pSrv));
 		} catch (std::runtime_error& e) {
 			errMsg = std::format(comErrMsg, e.what());
+			logger::warn(comErrMsg, e.what());
 			return;
 		}
 
@@ -150,6 +164,7 @@ void LUT::ReadTexture(std::filesystem::path path)
 			LutType = 3;
 		} else {
 			errMsg = std::format("Invalid texture dimension: {}! Only 2D/3D textures are supported.", magic_enum::enum_name(texType));
+			logger::warn("Invalid texture dimension: {}! Only 2D/3D textures are supported.", magic_enum::enum_name(texType));
 			return;
 		}
 	} else {
@@ -158,6 +173,7 @@ void LUT::ReadTexture(std::filesystem::path path)
 			DX::ThrowIfFailed(DirectX::LoadFromWICFile(path.c_str(), DirectX::WIC_FLAGS_NONE, nullptr, image));
 		} catch (std::runtime_error& e) {
 			errMsg = std::format(comErrMsg, e.what());
+			logger::warn(comErrMsg, e.what());
 			return;
 		}
 
@@ -166,6 +182,7 @@ void LUT::ReadTexture(std::filesystem::path path)
 			DX::ThrowIfFailed(CreateTexture(device, image.GetImages(), image.GetImageCount(), image.GetMetadata(), &pRsrc));
 		} catch (std::runtime_error& e) {
 			errMsg = std::format(comErrMsg, e.what());
+			logger::warn(comErrMsg, e.what());
 			return;
 		}
 
@@ -228,7 +245,7 @@ void LUT::Draw(TextureInfo& inout_tex)
 	if (LutType == -1)
 		return;
 
-	auto context = State::GetSingleton()->context;
+	auto context = globals::d3d::context;
 
 	float2 res = { (float)texOutput->desc.Width, (float)texOutput->desc.Height };
 	res = Util::ConvertToDynamic(res);

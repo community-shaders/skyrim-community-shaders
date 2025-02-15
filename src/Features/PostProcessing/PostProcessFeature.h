@@ -13,7 +13,7 @@ struct PostProcessFeature
 	virtual std::string GetType() const = 0;
 	std::string name;
 	virtual std::string GetDesc() const = 0;
-	virtual bool SupportsVR() const { return false; }
+	virtual bool SupportsVR() const { return true; }
 
 	virtual inline void SetupResources() = 0;
 	virtual void ClearShaderCache() = 0;

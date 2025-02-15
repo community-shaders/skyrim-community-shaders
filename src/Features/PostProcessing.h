@@ -1,8 +1,5 @@
 #pragma once
 
-#include "Buffer.h"
-#include "Feature.h"
-
 #include "PostProcessing/PostProcessFeature.h"
 
 struct PostProcessing : Feature
@@ -13,8 +10,15 @@ struct PostProcessing : Feature
 		return &singleton;
 	}
 
+	const std::string ppPresetPath = "Data\\SKSE\\Plugins\\CommunityShaders\\PostProcessing";
+
 	virtual inline std::string GetName() override { return "Post Processing"; }
 	virtual inline std::string GetShortName() override { return "PostProcessing"; }
+	virtual inline std::string_view GetShaderDefineName() override { return "POSTPROCESS"; }
+	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override
+	{
+		return t == RE::BSShader::Type::ImageSpace;
+	};
 
 	virtual bool SupportsVR() { return true; }
 
@@ -22,6 +26,11 @@ struct PostProcessing : Feature
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;
+
+	std::vector<std::string> presets = {};
+	std::vector<std::string> LoadPresets();
+	void SavePresetTo(std::string a_name);
+	void LoadPresetFrom(std::string a_name);
 
 	virtual void ClearShaderCache() override;
 

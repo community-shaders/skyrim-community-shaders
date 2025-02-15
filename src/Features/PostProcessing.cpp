@@ -4,7 +4,6 @@
 #include "imgui_stdlib.h"
 
 #include "State.h"
-#include "Util.h"
 
 constexpr auto def_settings = R"(
 [
@@ -239,17 +238,57 @@ void PostProcessing::DrawSettings()
 	// 1 for feat settings
 	static int pageNum = 0;
 	static int featIdx = 0;
+	static int presetIdx = -1;
 	const float _iconButtonSize = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetStyle().FramePadding.x;
 	const ImVec2 iconButtonSize{ _iconButtonSize, _iconButtonSize };
 
-	if (ImGui::BeginTable("Page Select", 2)) {
-		ImGui::TableNextColumn();
-		ImGui::RadioButton("Effect List", &pageNum, 0);
-		ImGui::TableNextColumn();
-		ImGui::RadioButton("Effect Settings", &pageNum, 1);
+	//if (ImGui::BeginTable("Page Select", 2)) {
+	//	ImGui::TableNextColumn();
+	//	ImGui::RadioButton("Effect List", &pageNum, 0);
+	//	ImGui::TableNextColumn();
+	//	ImGui::RadioButton("Effect Settings", &pageNum, 1);
 
-		ImGui::EndTable();
+	//	ImGui::EndTable();
+	//}
+
+	ImGui::BeginGroup();
+	std::string currentPreset = (presetIdx >= 0 && presetIdx < presets.size()) 
+                                ? presets[presetIdx] 
+                                : "Select a preset";
+
+	if (ImGui::BeginCombo("##PresetCombo", currentPreset.c_str())) {
+		presets = LoadPresets();
+
+		for (int i = 0; i < presets.size(); ++i) {
+			bool isSelected = presetIdx == i;
+			if (ImGui::Selectable(presets[i].c_str(), isSelected))
+				presetIdx = i;
+			if (isSelected)
+				ImGui::SetItemDefaultFocus();
+		}
+		ImGui::EndCombo();
 	}
+
+	ImGui::SameLine();
+	if (ImGui::Button("Load")) {
+		if (presetIdx >= 0 && presetIdx < presets.size())
+		{
+			LoadPresetFrom(presets[presetIdx]);
+		}
+	}
+
+	ImGui::EndGroup();
+	ImGui::BeginGroup();
+	static std::string newPresetName = "";
+	ImGui::InputText("##NewPresetName", &newPresetName);
+
+	ImGui::SameLine();
+	if (ImGui::Button("Save")) {
+		if (!newPresetName.empty())
+			SavePresetTo(newPresetName);
+	}
+
+	ImGui::EndGroup();
 
 	ImGui::Separator();
 	ImGui::Spacing();
@@ -341,6 +380,14 @@ void PostProcessing::DrawSettings()
 					ImGui::Text("Move the selected effect down.");
 
 				ImGui::SameLine();
+				if (ImGui::Button(ICON_FA_BARS, iconButtonSize)) {
+					markedFeat = i;
+					actionType = 3;
+				}
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text("Edit the selected effect.");
+
+				ImGui::SameLine();
 				ImGui::AlignTextToFramePadding();
 
 				if (nonVR)
@@ -382,6 +429,10 @@ void PostProcessing::DrawSettings()
 				else if (markedFeat + 1 == featIdx)
 					featIdx--;
 				break;
+			case 3:
+				featIdx = markedFeat;
+				pageNum = 1;
+				break;
 			default:
 				break;
 			}
@@ -392,8 +443,14 @@ void PostProcessing::DrawSettings()
 
 		if (featIdx < feats.size()) {
 			auto& feat = feats[featIdx];
-			ImGui::InputText("Name", &feat->name);
+			if (ImGui::Button(ICON_FA_ARROW_LEFT, iconButtonSize)) {
+				pageNum = 0;
+			}
 
+			ImGui::Spacing();
+
+			ImGui::InputText("Name", &feat->name);
+	
 			ImGui::SeparatorText(std::format("{} ({})", feat->name, feat->GetType()).c_str());
 
 			ImGui::TextWrapped(feat->GetDesc().c_str());
@@ -467,6 +524,75 @@ void PostProcessing::SaveSettings(json& o_json)
 	o_json["effects"] = arr;
 }
 
+std::vector<std::string> PostProcessing::LoadPresets()
+{
+	std::vector<std::string> o_presets = {};
+
+	try {
+		std::filesystem::create_directories(ppPresetPath);
+	} catch (const std::filesystem::filesystem_error& e) {
+		logger::warn("Error creating preset directory during Load ({}) : {}\n", ppPresetPath, e.what());
+		return o_presets;
+	}
+
+	for (const auto& entry : std::filesystem::directory_iterator(ppPresetPath)) {
+		if (entry.is_regular_file() && entry.path().extension() == ".json") {
+			o_presets.push_back(entry.path().stem().string());
+		}
+	}
+
+	return o_presets;
+}
+
+void PostProcessing::LoadPresetFrom(std::string a_name)
+{
+	json a_presets = {};
+
+	// if the name has .json, remove it
+	if (a_name.ends_with(".json"))
+		a_name = a_name.substr(0, a_name.size() - 5);
+
+	try {
+		std::ifstream i{ std::format("{}\\{}.json", ppPresetPath, a_name) };
+		i >> a_presets;
+	} catch (const std::exception& e) {
+		logger::warn("Failed to load preset: {}. Error: {}", a_name, e.what());
+		return;
+	}
+
+	LoadSettings(a_presets);
+}
+
+void PostProcessing::SavePresetTo(std::string a_name)
+{
+	json a_presets = {};
+	SaveSettings(a_presets);
+	a_presets["preset_name"] = a_name;
+
+	// Check if the name is valid
+	if (a_name.empty()) {
+		logger::warn("Invalid preset name.");
+		return;
+	}
+
+	try {
+		std::filesystem::create_directories(ppPresetPath);
+	} catch (const std::filesystem::filesystem_error& e) {
+		logger::warn("Error creating preset directory during Save ({}) : {}\n", ppPresetPath, e.what());
+		return;
+	}
+
+	std::string presetPath = std::format("{}\\{}.json", ppPresetPath, a_name);
+	std::ofstream o{ presetPath };
+
+	try {
+		o << std::setw(4) << a_presets;
+		logger::info("Saving preset to {}", presetPath);
+	} catch (const std::exception& e) {
+		logger::warn("Failed to write preset to file: {}. Error: {}", presetPath, e.what());
+	}
+}
+
 void PostProcessing::RestoreDefaultSettings()
 {
 	auto bogus = json();
@@ -483,7 +609,7 @@ void PostProcessing::ClearShaderCache()
 void PostProcessing::SetupResources()
 {
 	{
-		auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+		auto renderer = globals::game::renderer;
 		auto gameTexMainCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
 
 		D3D11_TEXTURE2D_DESC texDesc;
@@ -529,8 +655,8 @@ void PostProcessing::PreProcess()
 	if (bypass)
 		return;
 
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-	auto context = State::GetSingleton()->context;
+	auto renderer = globals::game::renderer;
+	auto context = globals::d3d::context;
 
 	auto gameTexMain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 	PostProcessFeature::TextureInfo lastTexColor = { gameTexMain.texture, gameTexMain.SRV };

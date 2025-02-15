@@ -438,7 +438,7 @@ void ColourTransforms::SaveSettings(json& o_json)
 
 void ColourTransforms::SetupResources()
 {
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+	auto renderer = globals::game::renderer;
 
 	logger::debug("Creating buffers...");
 	{
@@ -521,7 +521,7 @@ void ColourTransforms::CompileComputeShaders()
 
 void ColourTransforms::Draw(TextureInfo& inout_tex)
 {
-	auto context = State::GetSingleton()->context;
+	auto context = globals::d3d::context;
 
 	if (recompileFlag)
 		ClearShaderCache();

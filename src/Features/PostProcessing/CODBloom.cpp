@@ -57,8 +57,8 @@ void CODBloom::SaveSettings(json& o_json)
 
 void CODBloom::SetupResources()
 {
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-	auto device = State::GetSingleton()->device;
+	auto renderer = globals::game::renderer;
+	auto device = globals::d3d::device;
 
 	logger::debug("Creating buffers...");
 	{
@@ -174,8 +174,8 @@ void CODBloom::CompileComputeShaders()
 
 void CODBloom::Draw(TextureInfo& inout_tex)
 {
-	auto state = State::GetSingleton();
-	auto context = state->context;
+	auto state = globals::state;
+	auto context = globals::d3d::context;
 
 	state->BeginPerfEvent("COD Bloom");
 

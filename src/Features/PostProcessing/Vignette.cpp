@@ -42,7 +42,7 @@ void Vignette::SaveSettings(json& o_json)
 
 void Vignette::SetupResources()
 {
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+	auto renderer = globals::game::renderer;
 
 	logger::debug("Creating buffers...");
 	{
@@ -119,7 +119,7 @@ void Vignette::CompileComputeShaders()
 
 void Vignette::Draw(TextureInfo& inout_tex)
 {
-	auto context = State::GetSingleton()->context;
+	auto context = globals::d3d::context;
 
 	float2 res = { (float)texOutput->desc.Width, (float)texOutput->desc.Height };
 	res = Util::ConvertToDynamic(res);

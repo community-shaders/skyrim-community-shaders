@@ -63,7 +63,7 @@ void HistogramAutoExposure::SaveSettings(json& o_json)
 
 void HistogramAutoExposure::SetupResources()
 {
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+	auto renderer = globals::game::renderer;
 
 	logger::debug("Creating buffers...");
 	{
@@ -150,7 +150,7 @@ void HistogramAutoExposure::CompileComputeShaders()
 
 void HistogramAutoExposure::Draw(TextureInfo& inout_tex)
 {
-	auto context = State::GetSingleton()->context;
+	auto context = globals::d3d::context;
 
 	AutoExposureCB cbData = {
 		.AdaptArea = settings.AdaptArea,
