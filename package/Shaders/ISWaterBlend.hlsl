@@ -1,4 +1,3 @@
-#include "Common/Constants.hlsli"
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/VR.hlsli"

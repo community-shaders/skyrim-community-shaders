@@ -1,4 +1,4 @@
-#include "Common/Constants.hlsli"
+#include "Common/Math.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/VR.hlsli"
 
@@ -15,6 +15,21 @@ Texture3D<float4> NoiseTex : register(t3);
 
 RWTexture3D<float4> DensityRW : register(u0);
 RWTexture3D<float4> DensityCopyRW : register(u1);
+
+#	define LinearSampler ShadowmapSampler
+
+#	include "Common/Framebuffer.hlsli"
+#	include "Common/SharedData.hlsli"
+
+#	if defined(TERRAIN_SHADOWS)
+#		include "TerrainShadows/TerrainShadows.hlsli"
+#	endif
+
+#	if defined(CLOUD_SHADOWS)
+#		include "CloudShadows/CloudShadows.hlsli"
+#	endif
+
+#	include "Common/ShadowSampling.hlsli"
 
 cbuffer PerTechnique : register(b0)
 {
@@ -124,8 +139,11 @@ cbuffer PerTechnique : register(b0)
 	float densityContribution = lerp(1, densityFactor, DensityContribution);
 
 	float LdotN = dot(normalize(-positionWS.xyz), normalize(DirLightDirection));
-	float phaseFactor = (1 - PhaseScattering * PhaseScattering) / (4 * M_PI * (1 - LdotN * PhaseScattering));
+	float phaseFactor = (1 - PhaseScattering * PhaseScattering) / (4 * Math::PI * (1 - LdotN * PhaseScattering));
 	float phaseContribution = lerp(1, phaseFactor, PhaseContribution);
+
+	if (shadowContribution != 0.0 && !SharedData::InInterior && !SharedData::HideSky)
+		shadowContribution *= ShadowSampling::GetWorldShadow(positionWS.xyz, PosAdjust[eyeIndex].xyz, eyeIndex);
 
 	float vl = shadowContribution * densityContribution * phaseContribution;
 

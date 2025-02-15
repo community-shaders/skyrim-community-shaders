@@ -1,7 +1,5 @@
 #pragma once
 
-#include "Buffer.h"
-
 struct GlintParameters
 {
 	bool enabled = false;
@@ -24,27 +22,17 @@ public:
 
 	void DrawSettings();
 	void SetupResources();
-	void LoadSettings(json& o_json);
-	void SaveSettings(json& o_json);
 	void PrePass();
 	void PostPostLoad();
 	void DataLoaded();
 
-	void SetShaderResouces();
+	void SetShaderResouces(ID3D11DeviceContext* a_context);
 	void GenerateShaderPermutations(RE::BSShader* shader);
 
 	void SetupGlintsTexture();
 	eastl::unique_ptr<Texture2D> glintsNoiseTexture = nullptr;
 
 	std::unordered_map<uint32_t, std::string> editorIDs;
-
-	struct Settings
-	{
-		uint32_t useMultipleScattering = true;
-		uint32_t useMultiBounceAO = true;
-		uint32_t pad[2];
-	} settings{};
-	static_assert(sizeof(Settings) % 16 == 0);
 
 	struct PBRTextureSetData
 	{
@@ -74,8 +62,11 @@ public:
 	PBRTextureSetData* GetPBRTextureSetData(const RE::TESForm* textureSet);
 	bool IsPBRTextureSet(const RE::TESForm* textureSet);
 
+	void SetupDefaultPBRLandTextureSet();
+
 	std::unordered_map<std::string, PBRTextureSetData> pbrTextureSets;
 	RE::BGSTextureSet* defaultPbrLandTextureSet = nullptr;
+	bool defaultLandTextureSetReplaced = false;
 	std::string selectedPbrTextureSetName;
 	PBRTextureSetData* selectedPbrTextureSet = nullptr;
 

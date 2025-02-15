@@ -1,9 +1,5 @@
 #pragma once
 
-#include "Buffer.h"
-#include "Feature.h"
-#include "State.h"
-
 struct WetnessEffects : Feature
 {
 public:
@@ -23,7 +19,7 @@ public:
 	{
 		uint EnableWetnessEffects = true;
 		float MaxRainWetness = 1.0f;
-		float MaxPuddleWetness = 2.667f;
+		float MaxPuddleWetness = 2.5f;
 		float MaxShoreWetness = 0.5f;
 		uint ShoreRange = 32;
 		float PuddleRadius = 1.0f;
@@ -37,8 +33,6 @@ public:
 		uint EnableRaindropFx = true;
 		uint EnableSplashes = true;
 		uint EnableRipples = true;
-		uint EnableChaoticRipples = true;
-		float RaindropFxRange = 1000.f;
 		float RaindropGridSize = 4.f;
 		float RaindropInterval = .5f;
 		float RaindropChance = .3f;
@@ -50,34 +44,24 @@ public:
 		float RippleRadius = 1.f;
 		float RippleBreadth = .5f;
 		float RippleLifetime = .15f;
-		float ChaoticRippleStrength = .1f;
-		float ChaoticRippleScale = 1.f;
-		float ChaoticRippleSpeed = 20.f;
 	};
 
 	struct alignas(16) PerFrame
 	{
+		REX::W32::XMFLOAT4X4 OcclusionViewProj;
 		float Time;
 		float Raining;
 		float Wetness;
 		float PuddleWetness;
 		Settings settings;
-		uint pad0[2];
+		uint pad0[3];
 	};
 
 	Settings settings;
 
 	PerFrame GetCommonBufferData();
 
-	bool requiresUpdate = true;
-	float wetnessDepth = 0.0f;
-	float puddleDepth = 0.0f;
-	float lastGameTimeValue = 0.0f;
-	uint32_t currentWeatherID = 0;
-	uint32_t lastWeatherID = 0;
-	float previousWeatherTransitionPercentage = 0.0f;
-
-	virtual void Reset() override;
+	virtual void Prepass() override;
 
 	virtual void DrawSettings() override;
 
@@ -85,8 +69,6 @@ public:
 	virtual void SaveSettings(json& o_json) override;
 
 	virtual void RestoreDefaultSettings() override;
-	float CalculateWeatherTransitionPercentage(float skyCurrentWeatherPct, float beginFade, bool fadeIn);
-	void CalculateWetness(RE::TESWeather* weather, RE::Sky* sky, float seconds, float& wetness, float& puddleWetness);
 
 	virtual bool SupportsVR() override { return true; };
 };

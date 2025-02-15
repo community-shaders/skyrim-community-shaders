@@ -31,7 +31,10 @@ struct Feature
 	virtual void Reset() {}
 
 	virtual void DrawSettings() {}
+
+	virtual void ReflectionsPrepass(){};
 	virtual void Prepass() {}
+	virtual void EarlyPrepass() {}
 
 	virtual void DataLoaded() {}
 	virtual void PostPostLoad() {}

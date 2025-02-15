@@ -1,5 +1,4 @@
 #include "Common/Color.hlsli"
-#include "Common/Constants.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/VR.hlsli"
@@ -51,22 +50,10 @@ float3 GetSamplingVector(uint3 ThreadID, in RWTexture2DArray<float4> OutputTextu
 	return normalize(result);
 }
 
-cbuffer UpdateData : register(b1)
+cbuffer UpdateData : register(b0)
 {
-	uint Reset;
 	float3 CameraPreviousPosAdjust2;
-}
-
-bool IsSaturated(float value) { return value == saturate(value); }
-bool IsSaturated(float2 value) { return IsSaturated(value.x) && IsSaturated(value.y); }
-
-// Inverse project UV + raw depth into world space.
-float3 InverseProjectUVZ(float2 uv, float z)
-{
-	uv.y = 1 - uv.y;
-	float4 cp = float4(float3(uv, z) * 2 - 1, 1);
-	float4 vp = mul(CameraViewProjInverse[0], cp);
-	return float3(vp.xy, vp.z) / vp.w;
+	uint padb10;
 }
 
 float smoothbumpstep(float edge0, float edge1, float x)
@@ -81,14 +68,7 @@ float smoothbumpstep(float edge0, float edge1, float x)
 	float3 viewDirection = FrameBuffer::WorldToView(captureDirection, false);
 	float2 uv = FrameBuffer::ViewToUV(viewDirection, false);
 
-	if (Reset) {
-		DynamicCubemap[ThreadID] = 0.0;
-		DynamicCubemapRaw[ThreadID] = 0.0;
-		DynamicCubemapPosition[ThreadID] = 0.0;
-		return;
-	}
-
-	if (IsSaturated(uv) && viewDirection.z < 0.0) {  // Check that the view direction exists in screenspace and that it is in front of the camera
+	if (!FrameBuffer::IsOutsideFrame(uv) && viewDirection.z < 0.0) {  // Check that the view direction exists in screenspace and that it is in front of the camera
 		float3 color = 0.0;
 		float3 position = 0.0;
 		float weight = 0.0;
@@ -99,9 +79,13 @@ float smoothbumpstep(float edge0, float edge1, float x)
 		float depth = DepthTexture.SampleLevel(LinearSampler, uv, 0);
 		float linearDepth = SharedData::GetScreenDepth(depth);
 
+#if defined(REFLECTIONS)
 		if (linearDepth > 16.5) {  // Ignore objects which are too close
+#else
+		if (linearDepth > 16.5 && depth != 1.0) {  // Ignore objects which are too close or the sky
+#endif
 			half4 positionCS = half4(2 * half2(uv.x, -uv.y + 1) - 1, depth, 1);
-			positionCS = mul(CameraViewProjInverse[0], positionCS);
+			positionCS = mul(FrameBuffer::CameraViewProjInverse[0], positionCS);
 			positionCS.xyz = positionCS.xyz / positionCS.w;
 
 			position += positionCS.xyz;
@@ -131,12 +115,21 @@ float smoothbumpstep(float edge0, float edge1, float x)
 	}
 
 	float4 position = DynamicCubemapPosition[ThreadID];
-	position.xyz = (position.xyz + (CameraPreviousPosAdjust2.xyz * 0.001)) - (CameraPosAdjust[0].xyz * 0.001);  // Remove adjustment, add new adjustment
+	position.xyz = (position.xyz + (CameraPreviousPosAdjust2.xyz * 0.001)) - (FrameBuffer::CameraPosAdjust[0].xyz * 0.001);  // Remove adjustment, add new adjustment
 	DynamicCubemapPosition[ThreadID] = position;
 
 	float4 color = DynamicCubemapRaw[ThreadID];
 
-	float distanceFactor = sqrt(smoothbumpstep(0.0, 2.0, length(position.xyz)));
+	float distance = length(position.xyz);
+	float distanceFactor = smoothbumpstep(0.0, 2.0, distance);
+
+	if (distance < 1.0)
+		distanceFactor = sqrt(distanceFactor);
+
+#if defined(FAKEREFLECTIONS)
+	distanceFactor = max(distanceFactor, smoothstep(0.0, 2.0, distance));
+#endif
+
 	color *= distanceFactor;
 
 	DynamicCubemap[ThreadID] = max(0, color);

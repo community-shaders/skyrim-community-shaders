@@ -1,5 +1,5 @@
-#ifndef CS_RANDOM
-#define CS_RANDOM
+#ifndef __RANDOM_DEPENDENCY_HLSL__
+#define __RANDOM_DEPENDENCY_HLSL__
 
 namespace Random
 {
@@ -14,6 +14,25 @@ namespace Random
 		{ -0.0000, 0.3750 },
 		{ -0.1768, -0.1768 },
 		{ 0.1250, 0.0000 }
+	};
+
+	const static float2 PoissonSampleOffsets16[] = {
+		{ -0.39721655431143005f, 0.8056832047758435f },
+		{ 0.5039282018939948f, 0.8175656806923035f },
+		{ -0.14008842764914875f, 0.5239821992425406f },
+		{ -0.9385950332618932f, 0.3214309237575714f },
+		{ 0.25282140190834174f, 0.37924512167905416f },
+		{ 0.9223936032296853f, 0.332539962017578f },
+		{ -0.5496451570034276f, 0.1790707762170039f },
+		{ -0.37302426066908373f, -0.13877390665733164f },
+		{ 0.03579198121130009f, -0.15676850000512513f },
+		{ 0.4919267941196914f, -0.23310683759624068f },
+		{ -0.8035590829710795f, -0.29468514494873416f },
+		{ 0.8535425755478637f, -0.27933954067261685f },
+		{ -0.34182152498958196f, -0.6383963127313933f },
+		{ 0.0426828706429914f, -0.554272463115887f },
+		{ 0.47470719643897386f, -0.7164602403811255f },
+		{ 0.07000602455182418f, -0.9868660954557704f },
 	};
 
 	///////////////////////////////////////////////////////////
@@ -143,10 +162,10 @@ namespace Random
 		return frac(magic.z * frac(dot(pxCoord, magic.xy)));
 	}
 
-	float InterleavedGradientNoise(float2 pxCoord, uint frameCount)
+	float InterleavedGradientNoise(float2 pxCoord, uint frame)
 	{
 		// Temporal factor
-		float frameStep = float(frameCount % 16) * 0.0625f;
+		float frameStep = float(frame % 16) * 0.0625f;
 		pxCoord.x += frameStep * 4.7526;
 		pxCoord.y += frameStep * 3.1914;
 
@@ -252,4 +271,4 @@ namespace Random
 
 }
 
-#endif
+#endif  // __RANDOM_DEPENDENCY_HLSL__

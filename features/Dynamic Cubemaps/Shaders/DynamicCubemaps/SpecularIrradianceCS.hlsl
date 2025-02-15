@@ -5,9 +5,8 @@
 // Part of specular IBL split-sum approximation.
 
 #include "Common/Color.hlsli"
+#include "Common/Math.hlsli"
 
-static const float PI = 3.141592;
-static const float TwoPI = 2 * PI;
 static const float Epsilon = 0.00001;
 
 static const uint NumSamples = 16;
@@ -50,7 +49,7 @@ float3 sampleGGX(float u1, float u2, float roughness)
 
 	float cosTheta = sqrt((1.0 - u2) / (1.0 + (alpha * alpha - 1.0) * u2));
 	float sinTheta = sqrt(1.0 - cosTheta * cosTheta);  // Trig. identity
-	float phi = TwoPI * u1;
+	float phi = Math::TAU * u1;
 
 	// Convert to Cartesian upon return.
 	return float3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
@@ -64,7 +63,7 @@ float ndfGGX(float cosLh, float roughness)
 	float alphaSq = alpha * alpha;
 
 	float denom = (cosLh * cosLh) * (alphaSq - 1.0) + 1.0;
-	return alphaSq / (PI * denom * denom);
+	return alphaSq / (Math::PI * denom * denom);
 }
 
 // Calculate normalized sampling direction vector based on current fragment coordinates.
@@ -135,7 +134,7 @@ float3 tangentToWorld(const float3 v, const float3 N, const float3 S, const floa
 
 	// Solid angle associated with a single cubemap texel at zero mipmap level.
 	// This will come in handy for importance sampling below.
-	float wt = 4.0 * PI / (6 * inputWidth * inputHeight);
+	float wt = 4.0 * Math::PI / (6 * inputWidth * inputHeight);
 
 	// Approximation: Assume zero viewing angle (isotropic reflections).
 	float3 N = getSamplingVector(ThreadID);

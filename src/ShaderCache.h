@@ -1,15 +1,9 @@
 #pragma once
 
-#include <RE/B/BSShader.h>
+#include <BS_thread_pool.hpp>
+#include <efsw/efsw.hpp>
 
-#include "BS_thread_pool.hpp"
-#include "efsw/efsw.hpp"
-#include <chrono>
-#include <condition_variable>
-#include <unordered_map>
-#include <unordered_set>
-
-static constexpr REL::Version SHADER_CACHE_VERSION = { 0, 0, 0, 20 };
+static constexpr REL::Version SHADER_CACHE_VERSION = { 0, 0, 0, 28 };
 
 using namespace std::chrono;
 
@@ -157,6 +151,45 @@ namespace ShaderConstants
 		const int32_t PBRFlags = 0;
 		const int32_t PBRParams1 = 1;
 		const int32_t PBRParams2 = 2;
+	};
+
+	struct EffectPS
+	{
+		static const EffectPS& Get()
+		{
+			static EffectPS instance = REL::Module::IsVR() ? GetVR() : GetFlat();
+			return instance;
+		}
+
+		static EffectPS GetFlat()
+		{
+			return EffectPS{};
+		}
+
+		static EffectPS GetVR()
+		{
+			return EffectPS{};
+		}
+
+		const int32_t PropertyColor = 0;
+		const int32_t AlphaTestRef = 1;
+		const int32_t MembraneRimColor = 2;
+		const int32_t MembraneVars = 3;
+		const int32_t PLightPositionX = 4;
+		const int32_t PLightPositionY = 5;
+		const int32_t PLightPositionZ = 6;
+		const int32_t PLightingRadiusInverseSquared = 7;
+		const int32_t PLightColorR = 8;
+		const int32_t PLightColorG = 9;
+		const int32_t PLightColorB = 10;
+		const int32_t DLightColor = 11;
+		const int32_t VPOSOffset = 12;
+		const int32_t CameraData = 13;
+		const int32_t FilteringParam = 14;
+		const int32_t BaseColor = 15;
+		const int32_t BaseColorScale = 16;
+		const int32_t LightingInfluence = 17;
+		const int32_t ExtendedFlags = 18;
 	};
 }
 
@@ -670,7 +703,7 @@ namespace SIE
 		 * 
 		 * @return Void. Updates internal state and modifies `clearCache` and `fileDone` by reference.
 		 */
-		void UpdateCache(const std::filesystem::path& filePath, SIE::ShaderCache& cache, bool& clearCache, bool& retFlag);
+		void UpdateCache(const std::filesystem::path& filePath, SIE::ShaderCache* cache, bool& clearCache, bool& retFlag);
 		void processQueue();
 		void handleFileAction(efsw::WatchID, const std::string& dir, const std::string& filename, efsw::Action action, std::string) override;
 

@@ -1,8 +1,5 @@
 #pragma once
 
-#include "Buffer.h"
-#include "Feature.h"
-
 struct GrassCollision : Feature
 {
 	static GrassCollision* GetSingleton()
@@ -66,11 +63,7 @@ struct GrassCollision : Feature
 	{
 		struct BSGrassShader_SetupGeometry
 		{
-			static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
-			{
-				GetSingleton()->Update();
-				func(This, Pass, RenderFlags);
-			}
+			static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags);
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 

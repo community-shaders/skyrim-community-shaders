@@ -1,12 +1,13 @@
 #pragma once
 
+#include <shared_mutex>
 #include <new>
 void* operator new[](size_t size, const char* pName, int flags, unsigned debugFlags, const char* file, int line);
 void* operator new[](size_t size, size_t alignment, size_t alignmentOffset, const char* pName, int flags,
 	unsigned debugFlags, const char* file, int line);
 
-#include "RE/Skyrim.h"
-#include "SKSE/SKSE.h"
+#include <RE/Skyrim.h>
+#include <SKSE/SKSE.h>
 #include <xbyak/xbyak.h>
 
 #include <detours/Detours.h>
@@ -138,7 +139,7 @@ namespace DX
 #include <ClibUtil/rng.hpp>
 #include <ClibUtil/simpleINI.hpp>
 
-#include "imgui.h"
+#include <imgui.h>
 
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
@@ -184,3 +185,8 @@ using float3 = DirectX::SimpleMath::Vector3;
 using float4 = DirectX::SimpleMath::Vector4;
 using float4x4 = DirectX::SimpleMath::Matrix;
 using uint = uint32_t;
+
+#include "Globals.h"
+#include "Util.h"
+#include "Feature.h"
+#include "Buffer.h"

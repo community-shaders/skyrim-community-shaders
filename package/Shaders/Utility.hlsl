@@ -1,6 +1,6 @@
-#include "Common/Constants.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/LodLandscape.hlsli"
+#include "Common/Math.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/Skinned.hlsli"
@@ -157,18 +157,18 @@ VS_OUTPUT main(VS_INPUT input)
 #		endif
 
 #		if defined(LOD_LANDSCAPE)
-	positionMS = AdjustLodLandscapeVertexPositionMS(positionMS, World[eyeIndex], HighDetailRange[eyeIndex]);
+	positionMS = LodLandscape::AdjustLodLandscapeVertexPositionMS(positionMS, World[eyeIndex], HighDetailRange[eyeIndex]);
 #		endif
 
 #		if defined(SKINNED)
 	precise int4 boneIndices = 765.01.xxxx * input.BoneIndices.xyzw;
 
-	float3x4 worldMatrix = GetBoneTransformMatrix(Bones, boneIndices, CameraPosAdjust[eyeIndex].xyz, input.BoneWeights);
+	float3x4 worldMatrix = Skinned::GetBoneTransformMatrix(Bones, boneIndices, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, input.BoneWeights);
 	precise float4 positionWS = float4(mul(positionMS, transpose(worldMatrix)), 1);
 
-	positionCS = mul(CameraViewProj[eyeIndex], positionWS);
+	positionCS = mul(FrameBuffer::CameraViewProj[eyeIndex], positionWS);
 #		else
-	precise float4x4 modelViewProj = mul(CameraViewProj[eyeIndex], World[eyeIndex]);
+	precise float4x4 modelViewProj = mul(FrameBuffer::CameraViewProj[eyeIndex], World[eyeIndex]);
 	positionCS = mul(modelViewProj, positionMS);
 #		endif
 
@@ -177,7 +177,7 @@ VS_OUTPUT main(VS_INPUT input)
 #		endif
 
 #		if defined(LOD_LANDSCAPE)
-	vsout.PositionCS = AdjustLodLandscapeVertexPositionCS(positionCS);
+	vsout.PositionCS = LodLandscape::AdjustLodLandscapeVertexPositionCS(positionCS);
 #		elif defined(RENDER_SHADOWMAP_PB)
 	float3 positionCSPerspective = positionCS.xyz / positionCS.w;
 	float3 shadowDirection = normalize(normalize(positionCSPerspective) + float3(0, 0, ParabolaParam.y));
@@ -191,11 +191,11 @@ VS_OUTPUT main(VS_INPUT input)
 #		if defined(RENDER_NORMAL)
 	float3 normalVS = float3(1, 1, 1);
 #			if defined(SKINNED)
-	float3x3 boneRSMatrix = GetBoneRSMatrix(Bones, boneIndices, input.BoneWeights);
+	float3x3 boneRSMatrix = Skinned::GetBoneRSMatrix(Bones, boneIndices, input.BoneWeights);
 	normalMS = normalize(mul(normalMS, transpose(boneRSMatrix)));
-	normalVS = mul(CameraView[eyeIndex], float4(normalMS, 0)).xyz;
+	normalVS = mul(FrameBuffer::CameraView[eyeIndex], float4(normalMS, 0)).xyz;
 #			else
-	normalVS = mul(mul(CameraView[eyeIndex], World[eyeIndex]), float4(normalMS, 0)).xyz;
+	normalVS = mul(mul(FrameBuffer::CameraView[eyeIndex], World[eyeIndex]), float4(normalMS, 0)).xyz;
 #			endif
 #			if defined(RENDER_NORMAL_CLAMP)
 	normalVS = max(min(normalVS, 0.1), -0.1);
@@ -270,8 +270,7 @@ VS_OUTPUT main(VS_INPUT input)
 #	endif
 
 #	if defined(OFFSET_DEPTH)
-	if (vsout.PositionCS.z < 4096)
-		vsout.PositionCS.z += 5.0;
+	vsout.PositionCS.z += 10.0;
 #	endif
 
 #	ifdef VR
@@ -371,23 +370,20 @@ float GetPoissonDiskFilteredShadowVisibility(float noise, float2x2 rotationMatri
 float GetPoissonDiskFilteredShadowVisibility(float noise, float2x2 rotationMatrix, Texture2DArray<float4> tex, SamplerComparisonState samp, float2 baseUV, float layerIndex, float compareValue, bool asymmetric)
 #	endif
 {
-	const int sampleCount = 8;
+	const int sampleCount = 16;
 
 #	if defined(RENDER_SHADOWMASK)
 	uint onePlusLayerIndex = 1.0 + layerIndex;
-	compareValue += 0.001 * onePlusLayerIndex;
 	float layerIndexRcp = rcp(onePlusLayerIndex);
 #	endif
 
 	float visibility = 0;
 	for (int sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex) {
-		float2 sampleOffset = mul(Random::SpiralSampleOffsets8[sampleIndex], rotationMatrix);
-		sampleOffset *= 1.5;
+		float2 sampleOffset = mul(Random::PoissonSampleOffsets16[sampleIndex], rotationMatrix);
 
 #	if defined(RENDER_SHADOWMASKDPB)
-		float2 sampleUV = sampleOffset + baseUV.xy;
-
-		baseUV.z += noise;
+		float2 sampleUV = baseUV.xy + sampleOffset;
+		baseUV.z += noise * 0.5;
 
 		bool lowerHalf = baseUV.z * 0.5 + 0.5 < 0;
 		float3 normalizedPositionLS = normalize(float3(sampleUV.xy, baseUV.z));
@@ -397,7 +393,7 @@ float GetPoissonDiskFilteredShadowVisibility(float noise, float2x2 rotationMatri
 		float2 shadowMapUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
 		shadowMapUV.y = lowerHalf ? 1 - 0.5 * shadowMapUV.y : 0.5 * shadowMapUV.y;
 
-		visibility += tex.SampleCmpLevelZero(samp, float3(shadowMapUV, layerIndex), compareValue + noise * 0.001).x;
+		visibility += tex.SampleCmpLevelZero(samp, float3(shadowMapUV, layerIndex), compareValue).x;
 
 #	elif defined(RENDER_SHADOWMASK)
 		float2 sampleUV = layerIndexRcp * sampleOffset * ShadowSampleParam.z + baseUV;
@@ -445,12 +441,6 @@ PS_OUTPUT main(PS_INPUT input)
 	if (AlphaTestRef.w - maskValues[alphaMask.x] < 0) {
 		discard;
 	}
-#	endif
-
-#	if defined(FOLIAGE)
-	float checkerboard = Random::InterleavedGradientNoise(input.PositionCS.xy, 0);
-	if (checkerboard > 0.75)
-		discard;
 #	endif
 
 	float2 baseTexCoord = 0;
@@ -516,9 +506,9 @@ PS_OUTPUT main(PS_INPUT input)
 	TexStencilSampler.GetDimensions(0, stencilDimensions.x, stencilDimensions.y, stencilDimensions.z);
 	stencilValue = TexStencilSampler.Load(float3(stencilDimensions.xy * depthUv, 0)).x;
 #			endif
-	depthUv = Stereo::ConvertFromStereoUV(depthUv * DynamicResolutionParams2.xy, eyeIndex);
+	depthUv = Stereo::ConvertFromStereoUV(depthUv * FrameBuffer::DynamicResolutionParams2.xy, eyeIndex);
 	float4 positionCS = float4(2 * float2(depthUv.x, -depthUv.y + 1) - 1, depth, 1);
-	float4 positionMS = mul(CameraViewProjInverse[eyeIndex], positionCS);
+	float4 positionMS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionCS);
 	positionMS.xyz = positionMS.xyz / positionMS.w;
 
 	float fadeFactor = 1 - pow(saturate(dot(positionMS.xyz, positionMS.xyz) / ShadowLightParam.z), 8);
@@ -530,10 +520,10 @@ PS_OUTPUT main(PS_INPUT input)
 	float fadeFactor = input.Alpha.x;
 #		endif
 
-	float noise = Random::InterleavedGradientNoise(input.PositionCS.xy, FrameCount);
+	float noise = Random::InterleavedGradientNoise(input.PositionCS.xy, SharedData::FrameCount);
 
 	float2 rotation;
-	sincos(M_2PI * noise, rotation.y, rotation.x);
+	sincos(Math::TAU * noise, rotation.y, rotation.x);
 	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 
 	noise = noise * 2.0 - 1.0;

@@ -15,7 +15,6 @@ cbuffer PerFrameSSS : register(b1)
 };
 
 #include "Common/Color.hlsli"
-#include "Common/Constants.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 
@@ -23,7 +22,7 @@ cbuffer PerFrameSSS : register(b1)
 
 [numthreads(8, 8, 1)] void main(uint3 DTid
 								: SV_DispatchThreadID) {
-	float2 texCoord = (DTid.xy + 0.5) * BufferDim.zw;
+	float2 texCoord = (DTid.xy + 0.5) * SharedData::BufferDim.zw;
 
 #if defined(HORIZONTAL)
 

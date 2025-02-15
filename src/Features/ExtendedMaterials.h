@@ -1,7 +1,5 @@
 #pragma once
 
-#include "Feature.h"
-
 struct ExtendedMaterials : Feature
 {
 	static ExtendedMaterials* GetSingleton()
@@ -26,8 +24,9 @@ struct ExtendedMaterials : Feature
 
 		uint EnableShadows = 1;
 		uint ExtendShadows = 0;
+		uint EnableParallaxWarpingFix = 1;
 
-		float pad[2];
+		float pad[1];
 	};
 
 	Settings settings;

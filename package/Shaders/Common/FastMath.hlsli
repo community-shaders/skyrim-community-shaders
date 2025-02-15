@@ -44,6 +44,8 @@
 #ifndef SHADER_FAST_MATH_INC_FX
 #define SHADER_FAST_MATH_INC_FX
 
+#include "Common/Math.hlsli"
+
 // Define switch for PC compilation
 #ifdef _PC
 #	define asint(_x) *reinterpret_cast<int*>(&_x);
@@ -249,8 +251,6 @@ namespace FastMath
 	//
 	// Trigonometric functions
 	//
-	static const float fsl_PI = 3.1415926535897932384626433f;
-	static const float fsl_HALF_PI = 0.5f * fsl_PI;
 
 	// 4th order polynomial approximation
 	// 4 VGRP, 16 ALU Full Rate
@@ -270,7 +270,7 @@ namespace FastMath
 
 		// acos function mirroring
 		// check per platform if compiles to a selector - no branch neeeded
-		return inX >= 0.0f ? s : fsl_PI - s;
+		return inX >= 0.0f ? s : Math::PI - s;
 	}
 
 	// 4th order polynomial approximation
@@ -281,7 +281,7 @@ namespace FastMath
 		float x = inX;
 
 		// asin is offset of acos
-		return fsl_HALF_PI - acosFast4(x);
+		return Math::HALF_PI - acosFast4(x);
 	}
 
 	// 4th order hyperbolical approximation
@@ -305,9 +305,9 @@ namespace FastMath
 	float ACos(float inX)
 	{
 		float x = abs(inX);
-		float res = -0.156583f * x + fsl_HALF_PI;
+		float res = -0.156583f * x + Math::HALF_PI;
 		res *= fastSqrtNR0(1.0f - x);
-		return (inX >= 0) ? res : fsl_PI - res;
+		return (inX >= 0) ? res : Math::PI - res;
 	}
 
 	// Same cost as Acos + 1 FR
@@ -315,7 +315,7 @@ namespace FastMath
 	// input [-1, 1] and output [-PI/2, PI/2]
 	float ASin(float x)
 	{
-		return fsl_HALF_PI - ACos(x);
+		return Math::HALF_PI - ACos(x);
 	}
 
 	// max absolute error 1.3x10^-3
@@ -330,7 +330,7 @@ namespace FastMath
 		poly = -0.301895f + poly * t1;
 		poly = 1.0f + poly * t1;
 		poly = poly * t0;
-		return (x < 1.0f) ? poly : fsl_HALF_PI - poly;
+		return (x < 1.0f) ? poly : Math::HALF_PI - poly;
 	}
 
 	// 4 VGPR, 16 FR (12 FR, 1 QR), 2 scalar

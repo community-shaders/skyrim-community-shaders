@@ -1,10 +1,6 @@
 #pragma once
 
-#include "imgui.h"
-#include "imgui_impl_dx11.h"
-#include "imgui_impl_win32.h"
-#include <chrono>
-#include <shared_mutex>
+#include <dxgi1_4.h>
 
 using namespace std::chrono;
 #define BUFFER_VIEWER_NODE(a_value, a_scale)                                                                 \
@@ -40,7 +36,7 @@ public:
 	void Load(json& o_json);
 	void Save(json& o_json);
 
-	void Init(IDXGISwapChain* swapchain, ID3D11Device* device, ID3D11DeviceContext* context);
+	void Init();
 	void DrawSettings();
 	void DrawOverlay();
 
@@ -55,9 +51,9 @@ public:
 		bool UseSimplePalette = true;  // simple palette or full customization
 		struct PaletteColors
 		{
-			ImVec4 Background{ 0.f, 0.f, 0.f, 0.5f };
+			ImVec4 Background{ 0.f, 0.f, 0.f, 0.5882353186607361f };
 			ImVec4 Text{ 1.f, 1.f, 1.f, 1.f };
-			ImVec4 Border{ 0.569f, 0.545f, 0.506f, 0.5f };
+			ImVec4 Border{ 0.5882353186607361f, 0.5882353186607361f, 0.5882353186607361f, 0.5882353186607361f };
 		} Palette;
 		struct StatusPaletteColors
 		{
@@ -212,4 +208,5 @@ private:
 	std::vector<KeyEvent> _keyEventQueue{};
 	void addToEventQueue(KeyEvent e);
 	void ProcessInputEventQueue();
+	winrt::com_ptr<IDXGIAdapter3> dxgiAdapter3;
 };

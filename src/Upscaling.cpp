@@ -1,21 +1,23 @@
 #include "Upscaling.h"
 
 #include "Hooks.h"
-#include "Util.h"
+#include "State.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Upscaling::Settings,
 	upscaleMethod,
 	upscaleMethodNoDLSS,
+	upscaleMethodNoFSR,
 	sharpness,
 	dlssPreset);
 
 void Upscaling::DrawSettings()
 {
 	// Skyrim settings control whether any upscaling is possible
-	auto state = State::GetSingleton();
+
+	auto state = globals::state;
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
-	auto streamline = Streamline::GetSingleton();
+	auto streamline = globals::streamline;
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
 	auto& bTAA = BSImagespaceShaderISTemporalAA->taaEnabled;  // Setting used by shaders
 
@@ -28,7 +30,10 @@ void Upscaling::DrawSettings()
 	// Determine available modes
 	bool featureDLSS = streamline->featureDLSS;
 	uint* currentUpscaleMode = featureDLSS ? &settings.upscaleMethod : &settings.upscaleMethodNoDLSS;
-	uint availableModes = (state->isVR && state->upscalerLoaded) ? (featureDLSS ? 2 : 1) : (featureDLSS ? 3 : 2);
+	uint availableModes = (globals::game::isVR && state->upscalerLoaded) ? (featureDLSS ? 2 : 1) : (featureDLSS ? 3 : 2);
+
+	if (state->featureLevel != D3D_FEATURE_LEVEL_11_1)
+		availableModes = 1;
 
 	// Slider for method selection
 	ImGui::SliderInt("Method", (int*)currentUpscaleMode, 0, availableModes, std::format("{}", upscaleModes[(uint)*currentUpscaleMode]).c_str());
@@ -51,7 +56,7 @@ void Upscaling::DrawSettings()
 	bTAA = *currentUpscaleMode != (uint)UpscaleMethod::kNONE;
 
 	// settings for scaleform/ini
-	if (auto iniSettingCollection = RE::INIPrefSettingCollection::GetSingleton()) {
+	if (auto iniSettingCollection = globals::game::iniPrefSettingCollection) {
 		if (auto setting = iniSettingCollection->GetSetting("bUseTAA:Display")) {
 			setting->data.b = bTAA;
 		}
@@ -61,7 +66,7 @@ void Upscaling::DrawSettings()
 	auto upscaleMethod = GetUpscaleMethod();
 
 	// Display sharpness slider if applicable
-	if (upscaleMethod != UpscaleMethod::kTAA && upscaleMethod != UpscaleMethod::kNONE) {
+	if (upscaleMethod != UpscaleMethod::kNONE) {
 		ImGui::SliderFloat("Sharpness", &settings.sharpness, 0.0f, 1.0f, "%.1f");
 		settings.sharpness = std::clamp(settings.sharpness, 0.0f, 1.0f);
 	}
@@ -79,12 +84,12 @@ void Upscaling::DrawSettings()
 				"An older variant best suited to combat ghosting for elements with missing inputs (such as motion vectors)\n\n"
 				"Preset B (intended for Ultra Perf mode):\n"
 				"Similar to Preset A but for Ultra Performance mode\n\n"
-				"Preset C (intended for Perf/Balanced/Quality modes):\n"
+				"The CS default preset. Preset C (intended for Perf/Balanced/Quality modes):\n"
 				"Preset which generally favors current frame information. Generally well-suited for fast-paced game content\n\n"
 				"Preset D (intended for Perf/Balanced/Quality modes):\n"
 				"Similar to Preset E. Preset E is generally recommended over Preset D.\n\n"
 				"Preset E (intended for Perf/Balanced/Quality modes):\n"
-				"The CS default preset. Default preset for Perf/Balanced/Quality mode. Generally favors image stability\n\n"
+				"Default preset for Perf/Balanced/Quality mode. Generally favors image stability\n\n"
 				"Preset F (intended for Ultra Perf/DLAA modes):\n"
 				"The default preset for Ultra Perf and DLAA modes.");
 		}
@@ -96,7 +101,7 @@ void Upscaling::SaveSettings(json& o_json)
 	std::lock_guard<std::mutex> lock(settingsMutex);
 
 	o_json = settings;
-	auto iniSettingCollection = RE::INIPrefSettingCollection::GetSingleton();
+	auto iniSettingCollection = globals::game::iniPrefSettingCollection;
 	if (iniSettingCollection) {
 		auto setting = iniSettingCollection->GetSetting("bUseTAA:Display");
 		if (setting) {
@@ -109,7 +114,7 @@ void Upscaling::LoadSettings(json& o_json)
 {
 	std::lock_guard<std::mutex> lock(settingsMutex);
 	settings = o_json;
-	auto iniSettingCollection = RE::INIPrefSettingCollection::GetSingleton();
+	auto iniSettingCollection = globals::game::iniPrefSettingCollection;
 	if (iniSettingCollection) {
 		auto setting = iniSettingCollection->GetSetting("bUseTAA:Display");
 		if (setting) {
@@ -118,10 +123,20 @@ void Upscaling::LoadSettings(json& o_json)
 	}
 }
 
+void Upscaling::RestoreDefaultSettings()
+{
+	settings = {};
+}
+
 Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
 {
-	auto streamline = Streamline::GetSingleton();
-	return streamline->featureDLSS ? (Upscaling::UpscaleMethod)settings.upscaleMethod : (Upscaling::UpscaleMethod)settings.upscaleMethodNoDLSS;
+	if (globals::state->featureLevel != D3D_FEATURE_LEVEL_11_1)
+		return (Upscaling::UpscaleMethod)settings.upscaleMethodNoFSR;
+
+	if (globals::streamline->featureDLSS)
+		return (Upscaling::UpscaleMethod)settings.upscaleMethod;
+
+	return (Upscaling::UpscaleMethod)settings.upscaleMethodNoDLSS;
 }
 
 void Upscaling::CheckResources()
@@ -129,20 +144,16 @@ void Upscaling::CheckResources()
 	static auto previousUpscaleMode = UpscaleMethod::kTAA;
 	auto currentUpscaleMode = GetUpscaleMethod();
 
-	auto streamline = Streamline::GetSingleton();
+	auto streamline = globals::streamline;
 	auto fidelityFX = FidelityFX::GetSingleton();
 
 	if (previousUpscaleMode != currentUpscaleMode) {
-		if (previousUpscaleMode == UpscaleMethod::kTAA)
-			CreateUpscalingResources();
-		else if (previousUpscaleMode == UpscaleMethod::kDLSS)
+		if (previousUpscaleMode == UpscaleMethod::kDLSS)
 			streamline->DestroyDLSSResources();
 		else if (previousUpscaleMode == UpscaleMethod::kFSR)
 			fidelityFX->DestroyFSRResources();
 
-		if (currentUpscaleMode == UpscaleMethod::kTAA)
-			DestroyUpscalingResources();
-		else if (currentUpscaleMode == UpscaleMethod::kFSR)
+		if (currentUpscaleMode == UpscaleMethod::kFSR)
 			fidelityFX->CreateFSRResources();
 
 		previousUpscaleMode = currentUpscaleMode;
@@ -180,16 +191,26 @@ ID3D11ComputeShader* Upscaling::GetEncodeTexturesCS()
 	return encodeTexturesCS;
 }
 
+ID3D11ComputeShader* Upscaling::GetEncodeTexturesDLSSCS()
+{
+	if (!encodeTexturesDLSSCS) {
+		logger::debug("Compiling EncodeTexturesCS.hlsl DLSS");
+		encodeTexturesDLSSCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data/Shaders/Upscaling/EncodeTexturesCS.hlsl", { { "DLSS", "" } }, "cs_5_0");
+	}
+	return encodeTexturesDLSSCS;
+}
+
 void Upscaling::UpdateJitter()
 {
 	auto upscaleMethod = GetUpscaleMethod();
 	if (upscaleMethod == UpscaleMethod::kFSR || upscaleMethod == UpscaleMethod::kDLSS) {
-		static auto gameViewport = RE::BSGraphics::State::GetSingleton();
-		auto state = State::GetSingleton();
+		static auto gameViewport = globals::game::graphicsState;
 
-		ffxFsr3UpscalerGetJitterOffset(&jitter.x, &jitter.y, gameViewport->frameCount, 8);
+		auto state = globals::state;
 
-		if (state->isVR)
+		ffxFsr3UpscalerGetJitterOffset(&jitter.x, &jitter.y, globals::state->frameCount, 8);
+
+		if (globals::game::isVR)
 			gameViewport->projectionPosScaleX = -jitter.x / state->screenSize.x;
 		else
 			gameViewport->projectionPosScaleX = -2.0f * jitter.x / state->screenSize.x;
@@ -211,9 +232,9 @@ void Upscaling::Upscale()
 
 	Hooks::BSGraphics_SetDirtyStates::func(false);
 
-	auto state = State::GetSingleton();
+	auto state = globals::state;
 
-	auto& context = state->context;
+	auto context = globals::d3d::context;
 
 	ID3D11ShaderResourceView* inputTextureSRV;
 	context->PSGetShaderResources(0, 1, &inputTextureSRV);
@@ -241,7 +262,7 @@ void Upscaling::Upscale()
 	{
 		state->BeginPerfEvent("Alpha Mask");
 
-		static auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+		static auto renderer = globals::game::renderer;
 		static auto& temporalAAMask = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kTEMPORAL_AA_MASK];
 
 		{
@@ -251,7 +272,7 @@ void Upscaling::Upscale()
 			ID3D11UnorderedAccessView* uavs[1] = { alphaMaskTexture->uav.get() };
 			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
-			context->CSSetShader(GetEncodeTexturesCS(), nullptr, 0);
+			context->CSSetShader(upscaleMethod == UpscaleMethod::kDLSS ? GetEncodeTexturesDLSSCS() : GetEncodeTexturesCS(), nullptr, 0);
 
 			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 		}
@@ -274,7 +295,7 @@ void Upscaling::Upscale()
 		context->CopyResource(upscalingTexture->resource.get(), inputTextureResource);
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			Streamline::GetSingleton()->Upscale(upscalingTexture, alphaMaskTexture, (sl::DLSSPreset)settings.dlssPreset);
+			globals::streamline->Upscale(upscalingTexture, alphaMaskTexture, (sl::DLSSPreset)settings.dlssPreset);
 		else if (upscaleMethod == UpscaleMethod::kFSR)
 			FidelityFX::GetSingleton()->Upscale(upscalingTexture, alphaMaskTexture, jitter, reset, settings.sharpness);
 
@@ -317,9 +338,75 @@ void Upscaling::Upscale()
 	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
 }
 
+void Upscaling::SharpenTAA()
+{
+	std::lock_guard<std::mutex> lock(settingsMutex);  // Lock for the duration of this function
+
+	CheckResources();
+
+	auto state = globals::state;
+	auto context = globals::d3d::context;
+
+	ID3D11ShaderResourceView* inputTextureSRV;
+	context->PSGetShaderResources(0, 1, &inputTextureSRV);
+
+	inputTextureSRV->Release();
+
+	ID3D11RenderTargetView* outputTextureRTV;
+	ID3D11DepthStencilView* dsv;
+	context->OMGetRenderTargets(1, &outputTextureRTV, &dsv);
+	context->OMSetRenderTargets(0, nullptr, nullptr);
+
+	outputTextureRTV->Release();
+
+	if (dsv)
+		dsv->Release();
+
+	ID3D11Resource* inputTextureResource;
+	inputTextureSRV->GetResource(&inputTextureResource);
+
+	ID3D11Resource* outputTextureResource;
+	outputTextureRTV->GetResource(&outputTextureResource);
+
+	auto dispatchCount = Util::GetScreenDispatchCount(false);
+
+	state->BeginPerfEvent("Sharpening");
+
+	context->CopyResource(inputTextureResource, outputTextureResource);
+
+	{
+		{
+			ID3D11ShaderResourceView* views[1] = { inputTextureSRV };
+			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+			ID3D11UnorderedAccessView* uavs[1] = { upscalingTexture->uav.get() };
+			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+			context->CSSetShader(GetRCASCS(), nullptr, 0);
+
+			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+		}
+
+		ID3D11ShaderResourceView* views[1] = { nullptr };
+		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+		ID3D11UnorderedAccessView* uavs[1] = { nullptr };
+		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+		ID3D11ComputeShader* shader = nullptr;
+		context->CSSetShader(shader, nullptr, 0);
+	}
+
+	state->EndPerfEvent();
+
+	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
+
+	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
+}
+
 void Upscaling::CreateUpscalingResources()
 {
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+	auto renderer = globals::game::renderer;
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
 	D3D11_TEXTURE2D_DESC texDesc{};
@@ -360,4 +447,23 @@ void Upscaling::DestroyUpscalingResources()
 	alphaMaskTexture->uav = nullptr;
 	alphaMaskTexture->resource = nullptr;
 	delete alphaMaskTexture;
+}
+
+void Upscaling::InstallHooks()
+{
+	if (!globals::state->upscalerLoaded) {
+		bool isGOG = !GetModuleHandle(L"steam_api64.dll");
+
+		stl::write_thunk_call<Main_UpdateJitter>(REL::RelocationID(75460, 77245).address() + REL::Relocate(0xE5, isGOG ? 0x133 : 0xE2, 0x104));
+		stl::write_thunk_call<TAA_BeginTechnique>(REL::RelocationID(100540, 107270).address() + REL::Relocate(0x3E9, 0x3EA, 0x448));
+		stl::write_thunk_call<TAA_EndTechnique>(REL::RelocationID(100540, 107270).address() + REL::Relocate(0x3F3, 0x3F4, 0x452));
+		stl::write_thunk_call<BSImageSpacerShader_RenderPassImmediately>(REL::RelocationID(100951, 107733).address() + REL::Relocate(0x82, 0x78, 0x7E));
+
+		logger::info("[Upscaling] Installed hooks");
+
+		globals::game::ui->GetEventSource<RE::MenuOpenCloseEvent>()->AddEventSink(globals::upscaling);
+		logger::info("[Upscaling] Registered for MenuOpenCloseEvent");
+	} else {
+		logger::info("[Upscaling] Not installing hooks due to Skyrim Upscaler");
+	}
 }

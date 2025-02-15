@@ -1,9 +1,7 @@
 #include "FidelityFX.h"
 
-#include "Upscaling.h"
-
 #include "State.h"
-#include "Util.h"
+#include "Upscaling.h"
 
 FfxResource ffxGetResource(ID3D11Resource* dx11Resource,
 	[[maybe_unused]] wchar_t const* ffxResName,
@@ -25,9 +23,9 @@ FfxResource ffxGetResource(ID3D11Resource* dx11Resource,
 
 void FidelityFX::CreateFSRResources()
 {
-	auto state = State::GetSingleton();
+	auto state = globals::state;
 
-	auto fsrDevice = ffxGetDeviceDX11(state->device);
+	auto fsrDevice = ffxGetDeviceDX11(globals::d3d::device);
 
 	size_t scratchBufferSize = ffxGetScratchMemorySizeDX11(FFX_FSR3UPSCALER_CONTEXT_COUNT);
 	void* scratchBuffer = calloc(scratchBufferSize, 1);
@@ -61,14 +59,11 @@ void FidelityFX::DestroyFSRResources()
 
 void FidelityFX::Upscale(Texture2D* a_color, Texture2D* a_alphaMask, float2 a_jitter, bool a_reset, float a_sharpness)
 {
-	static auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+	static auto renderer = globals::game::renderer;
+	static auto context = globals::d3d::context;
+	auto state = globals::state;
 	static auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 	static auto& motionVectorsTexture = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kMOTION_VECTOR];
-
-	static auto gameViewport = RE::BSGraphics::State::GetSingleton();
-	static auto context = reinterpret_cast<ID3D11DeviceContext*>(renderer->GetRuntimeData().context);
-
-	auto state = State::GetSingleton();
 
 	{
 		FfxFsr3DispatchUpscaleDescription dispatchParameters{};
@@ -82,7 +77,7 @@ void FidelityFX::Upscale(Texture2D* a_color, Texture2D* a_alphaMask, float2 a_ji
 		dispatchParameters.reactive = ffxGetResource(a_alphaMask->resource.get(), L"FSR3_InputReactiveMap", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 		dispatchParameters.transparencyAndComposition = ffxGetResource(nullptr, L"FSR3_TransparencyAndCompositionMap", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 
-		dispatchParameters.motionVectorScale.x = state->isVR ? state->screenSize.x / 2 : state->screenSize.x;
+		dispatchParameters.motionVectorScale.x = globals::game::isVR ? state->screenSize.x / 2 : state->screenSize.x;
 		dispatchParameters.motionVectorScale.y = state->screenSize.y;
 		dispatchParameters.renderSize.width = (uint)state->screenSize.x;
 		dispatchParameters.renderSize.height = (uint)state->screenSize.y;

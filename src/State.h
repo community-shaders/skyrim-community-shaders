@@ -33,9 +33,10 @@ public:
 	spdlog::level::level_enum logLevel = spdlog::level::info;
 	std::string shaderDefinesString = "";
 	std::vector<std::pair<std::string, std::string>> shaderDefines{};  // data structure to parse string into; needed to avoid dangling pointers
-	const std::string testConfigPath = "Data\\SKSE\\Plugins\\CommunityShadersTEST.json";
-	const std::string userConfigPath = "Data\\SKSE\\Plugins\\CommunityShadersUSER.json";
-	const std::string defaultConfigPath = "Data\\SKSE\\Plugins\\CommunityShaders.json";
+	const std::string folderPath = "Data\\SKSE\\Plugins\\CommunityShaders";
+	const std::string testConfigPath = "Data\\SKSE\\Plugins\\CommunityShaders\\SettingsTest.json";
+	const std::string userConfigPath = "Data\\SKSE\\Plugins\\CommunityShaders\\SettingsUser.json";
+	const std::string defaultConfigPath = "Data\\SKSE\\Plugins\\CommunityShaders\\SettingsDefault.json";
 
 	bool upscalerLoaded = false;
 
@@ -104,7 +105,7 @@ public:
 
 	void SetAdapterDescription(const std::wstring& description);
 
-	bool extendedFrameAnnotations = false;
+	bool frameAnnotations = false;
 
 	uint lastVertexDescriptor = 0;
 	uint lastPixelDescriptor = 0;
@@ -119,10 +120,13 @@ public:
 	enum class ExtraShaderDescriptors : uint32_t
 	{
 		InWorld = 1 << 0,
-		IsBeastRace = 1 << 1,
+		IsReflections = 1 << 1,
+		IsBeastRace = 1 << 2,
+		EffectShadows = 1 << 3,
+		IsDecal = 1 << 4
 	};
 
-	void UpdateSharedData();
+	void UpdateSharedData(bool a_inWorld);
 
 	struct alignas(16) PermutationCB
 	{
@@ -147,17 +151,19 @@ public:
 		uint FrameCountAlwaysActive;
 		uint InInterior;
 		uint InMapMenu;
-		float3 pad0;
+		uint HideSky;
+		float2 pad0;
 	};
 
 	ConstantBuffer* sharedDataCB = nullptr;
 	ConstantBuffer* featureDataCB = nullptr;
 
+	Util::FrameChecker frameChecker;
+	uint frameCount = 0;
+
 	// Skyrim constants
-	bool isVR = false;
 	float2 screenSize = {};
-	ID3D11DeviceContext* context = nullptr;
-	ID3D11Device* device = nullptr;
+	D3D_FEATURE_LEVEL featureLevel;
 
 	TracyD3D11Ctx tracyCtx = nullptr;  // Tracy context
 
@@ -165,6 +171,8 @@ public:
 	bool SetFeatureDisabled(const std::string& featureName, bool isDisabled);
 	bool IsFeatureDisabled(const std::string& featureName);
 	std::unordered_map<std::string, bool>& GetDisabledFeatures();
+
+	bool useFrameAnnotations = false;
 
 	// Features that are more special then others
 	std::unordered_map<std::string, bool> specialFeatures = {

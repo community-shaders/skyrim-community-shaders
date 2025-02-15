@@ -38,4 +38,10 @@ namespace Util
 		(*data) = percentageData * 1e-2f;
 		return retval;
 	}
+
+	ImVec2 GetNativeViewportSizeScaled(float scale)
+	{
+		const auto Size = ImGui::GetMainViewport()->Size;
+		return { Size.x * scale, Size.y * scale };
+	}
 }  // namespace Util

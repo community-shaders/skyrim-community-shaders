@@ -100,7 +100,7 @@ groupshared float2 g_shadowHeight[NTHREADS];
 	GroupMemoryBarrierWithGroupSync();
 
 	// simple parallel scan
-	[unroll] for (uint offset = 1; offset < 1024; offset <<= 1)
+	[unroll] for (uint offset = 1; offset < NTHREADS; offset <<= 1)
 	{
 		if (isValid && gtid >= offset) {
 			if (all(floor(rawThreadUV - lightUVDir * offset) == floor(rawThreadUV)))  // no wraparound happened

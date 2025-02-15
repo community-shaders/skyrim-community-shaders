@@ -1,6 +1,7 @@
 #include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
+#include "Common/Math.hlsli"
 #include "Common/MotionBlur.hlsli"
 #include "Common/Permutation.hlsli"
 #include "Common/Random.hlsli"
@@ -165,14 +166,14 @@ float GetProjectedU(float3 worldPosition, float4 texCoordOffset)
 		0.999866009;
 	float projUvTmp5;
 	if (abs(worldPosition.x) > abs(worldPosition.y)) {
-		projUvTmp5 = projUvTmp * projUvTmp2 * -2 + M_HALFPI;
+		projUvTmp5 = projUvTmp * projUvTmp2 * -2 + Math::HALF_PI;
 	} else {
 		projUvTmp5 = 0;
 	}
 	float projUvTmp6 = projUvTmp * projUvTmp2 + projUvTmp5;
 	float projUvTmp7;
 	if (worldPosition.y < -worldPosition.y) {
-		projUvTmp7 = -M_PI;
+		projUvTmp7 = -Math::PI;
 	} else {
 		projUvTmp7 = 0;
 	}
@@ -215,12 +216,12 @@ VS_OUTPUT main(VS_INPUT input)
 	precise int4 actualIndices = 765.01.xxxx * input.BoneIndices.xyzw;
 #		if defined(MOTIONVECTORS_NORMALS)
 	float3x4 previousBoneTransformMatrix =
-		GetBoneTransformMatrix(PreviousBones, actualIndices, PreviousBonesPivot[eyeIndex], input.BoneWeights);
+		Skinned::GetBoneTransformMatrix(PreviousBones, actualIndices, PreviousBonesPivot[eyeIndex], input.BoneWeights);
 	precise float4 previousWorldPosition =
 		float4(mul(inputPosition, transpose(previousBoneTransformMatrix)), 1);
 #		endif
 	float3x4 boneTransformMatrix =
-		GetBoneTransformMatrix(Bones, actualIndices, BonesPivot[eyeIndex], input.BoneWeights);
+		Skinned::GetBoneTransformMatrix(Bones, actualIndices, BonesPivot[eyeIndex], input.BoneWeights);
 	precise float4 worldPosition = float4(mul(inputPosition, transpose(boneTransformMatrix)), 1);
 	float4 viewPos = mul(viewProj, worldPosition);
 #	else
@@ -233,7 +234,7 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.Position = viewPos;
 
 #	if defined(SKINNED)
-	float3x3 boneRSMatrix = GetBoneRSMatrix(Bones, actualIndices, input.BoneWeights);
+	float3x3 boneRSMatrix = Skinned::GetBoneRSMatrix(Bones, actualIndices, input.BoneWeights);
 	float3x3 boneRSMatrixTr = transpose(boneRSMatrix);
 #	endif
 
@@ -513,6 +514,10 @@ cbuffer PerGeometry : register(b2)
 #		include "CloudShadows/CloudShadows.hlsli"
 #	endif
 
+#	if defined(SKYLIGHTING)
+#		include "Skylighting/Skylighting.hlsli"
+#	endif
+
 #	include "Common/ShadowSampling.hlsli"
 
 #	if defined(LIGHTING)
@@ -522,30 +527,57 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 	float4 lightFadeMul = 1.0.xxxx - saturate(PLightingRadiusInverseSquared * lightDistanceSquared);
 
 	float3 color = DLightColor.xyz;
-#		if defined(EFFECT_WEATHER)
-#			if defined(EFFECT_SHADOWS)
-	if (!InInterior && !InMapMenu && (ExtraShaderDescriptor & _InWorld)) {
-		color = DirLightColorShared * GetEffectShadow(worldPosition, normalize(worldPosition), screenPosition, eyeIndex) * 0.5;
 
-		float3 directionalAmbientColor = DirectionalAmbientShared._14_24_34;
-		color += directionalAmbientColor;
-	} else {
-		color = DirLightColorShared * 0.5;
+	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::EffectShadows)) {
+		float3 dirLightColor = SharedData::DirLightColor * 0.5;
+		float3 ambientColor = mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1));
 
-		float3 directionalAmbientColor = DirectionalAmbientShared._14_24_34;
-		color += directionalAmbientColor;
-	}
+		color = ambientColor;
+
+#		if defined(SKYLIGHTING)
+#			if defined(VR)
+		float3 positionMSSkylight = worldPosition + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
 #			else
-	color = DirLightColorShared * 0.5;
-
-	float3 directionalAmbientColor = DirectionalAmbientShared._14_24_34;
-	color += directionalAmbientColor;
+		float3 positionMSSkylight = worldPosition;
 #			endif
+
+		sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
+		float skylighting = SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1));
+		skylighting = lerp(1.0, skylighting, Skylighting::getFadeOutFactor(worldPosition));
+		color = Color::GammaToLinear(color);
+		color *= Skylighting::mixDiffuse(SharedData::skylightingSettings, skylighting);
+		color = Color::LinearToGamma(color);
 #		endif
 
-	color.x += dot(PLightColorR * lightFadeMul, 1.0.xxxx);
-	color.y += dot(PLightColorG * lightFadeMul, 1.0.xxxx);
-	color.z += dot(PLightColorB * lightFadeMul, 1.0.xxxx);
+		if (!SharedData::InInterior)
+			color += dirLightColor * ShadowSampling::GetEffectShadow(worldPosition, normalize(worldPosition), screenPosition, eyeIndex);
+		else
+			color += dirLightColor;
+	} else {
+#		if defined(SKYLIGHTING)
+#			if defined(VR)
+		float3 positionMSSkylight = worldPosition + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
+#			else
+		float3 positionMSSkylight = worldPosition;
+#			endif
+
+		sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
+		float skylighting = SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1));
+		skylighting = lerp(1.0, skylighting, Skylighting::getFadeOutFactor(worldPosition));
+		color = Color::GammaToLinear(color);
+		color *= Skylighting::mixDiffuse(SharedData::skylightingSettings, skylighting);
+		color = Color::LinearToGamma(color);
+#		endif
+	}
+
+#		if defined(LIGHT_LIMIT_FIX)
+	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld))
+#		endif
+	{
+		color.x += dot(PLightColorR * lightFadeMul, 1.0.xxxx);
+		color.y += dot(PLightColorG * lightFadeMul, 1.0.xxxx);
+		color.z += dot(PLightColorB * lightFadeMul, 1.0.xxxx);
+	}
 
 	return color;
 }
@@ -601,7 +633,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float softMul = 1;
 #	if defined(SOFT)
 	float depth = TexDepthSamplerEffect.Load(int3(input.Position.xy, 0)).x;
-	softMul = saturate(-input.TexCoord0.w + LightingInfluence.y / ((1 - depth) * CameraData.z + CameraData.y));
+	softMul = saturate(-input.TexCoord0.w + LightingInfluence.y / ((1 - depth) * CameraDataEffect.z + CameraDataEffect.y));
 #	endif
 
 	float lightingInfluence = LightingInfluence.x;
@@ -613,26 +645,26 @@ PS_OUTPUT main(PS_INPUT input)
 #		if defined(LIGHT_LIMIT_FIX)
 	uint lightCount = 0;
 	if (LightingInfluence.x > 0.0) {
-		float3 viewPosition = mul(CameraView[eyeIndex], float4(input.WorldPosition.xyz, 1)).xyz;
+		float3 viewPosition = mul(FrameBuffer::CameraView[eyeIndex], float4(input.WorldPosition.xyz, 1)).xyz;
 		float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
-		bool inWorld = ExtraShaderDescriptor & _InWorld;
+		bool inWorld = Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld;
 
 		uint clusterIndex = 0;
 		if (inWorld && LightLimitFix::GetClusterIndex(screenUV, viewPosition.z, clusterIndex)) {
-			lightCount = lightGrid[clusterIndex].lightCount;
-			uint lightOffset = lightGrid[clusterIndex].offset;
+			lightCount = LightLimitFix::lightGrid[clusterIndex].lightCount;
+			uint lightOffset = LightLimitFix::lightGrid[clusterIndex].offset;
 			[loop] for (uint i = 0; i < lightCount; i++)
 			{
-				uint light_index = lightList[lightOffset + i];
-				StructuredLight light = lights[light_index];
-				if (LightLimitFix::IsLightIgnored(light)) {
+				uint clusteredLightIndex = LightLimitFix::lightList[lightOffset + i];
+				LightLimitFix::Light light = LightLimitFix::lights[clusteredLightIndex];
+				if (LightLimitFix::IsLightIgnored(light) || light.lightFlags & LightLimitFix::LightFlags::Shadow) {
 					continue;
 				}
 				float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WorldPosition.xyz;
 				float lightDist = length(lightDirection);
 				float intensityFactor = saturate(lightDist / light.radius);
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
-				float3 lightColor = light.color.xyz * intensityMultiplier;
+				float3 lightColor = light.color.xyz * intensityMultiplier * 0.5;
 				propertyColor += lightColor;
 			}
 		}
@@ -646,12 +678,12 @@ PS_OUTPUT main(PS_INPUT input)
 	float4 baseTexColor = float4(1, 1, 1, 1);
 	float4 baseColor = float4(1, 1, 1, 1);
 #	if !defined(TEXTURE)
-	[branch] if (PixelShaderDescriptor & _GrayscaleToColor || PixelShaderDescriptor & _GrayscaleToAlpha)
+	[branch] if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToColor || Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha)
 #	endif
 	{
 		baseTexColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord0.xy);
 		baseColor *= baseTexColor;
-		if (PixelShaderDescriptor & _IgnoreTexAlpha || PixelShaderDescriptor & _GrayscaleToAlpha) {
+		if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::IgnoreTexAlpha || Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha) {
 			baseColor.w = 1;
 		}
 	}
@@ -705,10 +737,10 @@ PS_OUTPUT main(PS_INPUT input)
 	baseColorScale = MembraneVars.z;
 #	endif
 
-	if (PixelShaderDescriptor & _GrayscaleToAlpha)
+	if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha)
 		alpha = TexGrayscaleSampler.Sample(SampGrayscaleSampler, float2(baseTexColor.w, alpha)).w;
 
-	[branch] if (PixelShaderDescriptor & _GrayscaleToColor)
+	[branch] if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToColor)
 	{
 		float2 grayscaleToColorUv = float2(baseTexColor.y, baseColorMul.x);
 #	if defined(MEMBRANE)
@@ -745,13 +777,13 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif
 	psout.Diffuse = finalColor;
 #	if defined(LIGHTING) && defined(LIGHT_LIMIT_FIX) && defined(LLFDEBUG)
-	if (lightLimitFixSettings.EnableLightsVisualisation) {
-		if (lightLimitFixSettings.LightsVisualisationMode == 0) {
+	if (SharedData::lightLimitFixSettings.EnableLightsVisualisation) {
+		if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 0) {
 			psout.Diffuse.xyz = LightLimitFix::TurboColormap(0.0);
-		} else if (lightLimitFixSettings.LightsVisualisationMode == 1) {
+		} else if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 1) {
 			psout.Diffuse.xyz = LightLimitFix::TurboColormap(0.0);
 		} else {
-			psout.Diffuse.xyz = LightLimitFix::TurboColormap((float)lightCount / 128.0);
+			psout.Diffuse.xyz = LightLimitFix::TurboColormap((float)lightCount / MAX_CLUSTER_LIGHTS);
 		}
 	}
 #	endif
@@ -765,16 +797,17 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 screenSpaceNormal = normalize(input.ScreenSpaceNormal);
 #			endif
 	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), 0.0, psout.Diffuse.w);
-	float2 screenMotionVector = GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);
+	float2 screenMotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);
 	psout.MotionVectors = float4(screenMotionVector, 0.0, psout.Diffuse.w);
 #		endif
 
-	psout.Specular = float4(0.0.xxx, psout.Diffuse.w);
-	psout.Albedo = float4(baseColor.xyz * psout.Diffuse.w, psout.Diffuse.w);
-	psout.Reflectance = float4(0.0.xxx, psout.Diffuse.w);
+	psout.Specular = float4(0.0.xxx, finalColor.w);
+	psout.Albedo = float4(0.0.xxx, finalColor.w);
+	psout.Reflectance = float4(0.0.xxx, finalColor.w);
+	psout.Masks = float4(0.0.xxx, finalColor.w);
 
 #	elif defined(MOTIONVECTORS_NORMALS)
-	float2 screenMotionVector = GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);
+	float2 screenMotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);
 	psout.MotionVectors = screenMotionVector;
 
 #		if (defined(MEMBRANE) && defined(SKINNED) && defined(NORMALS))
@@ -788,9 +821,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.ScreenSpaceNormals.xy = screenSpaceNormal.xy + 0.5.xx;
 	psout.ScreenSpaceNormals.zw = 0.0.xx;
 #	else
-	psout.Normal.xyz = float3(1, 0, 0);
-	psout.Normal.w = finalColor.w;
-
+	psout.Normal = float4(!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::EffectShadows), 0, 0, finalColor.w);
 	psout.Color2 = finalColor;
 #	endif
 

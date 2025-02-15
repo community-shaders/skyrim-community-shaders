@@ -1,8 +1,5 @@
 #pragma once
 
-#include "Buffer.h"
-#include "State.h"
-
 #define NV_WINDOWS
 #include <sl.h>
 #include <sl_consts.h>
@@ -29,10 +26,18 @@ public:
 	bool featureDLSSG = false;
 	bool featureReflex = false;
 
+	double refreshRate = 60.0;
+
 	sl::ViewportHandle viewport{ 0 };
 	sl::FrameToken* frameToken;
 
-	sl::DLSSGMode frameGenerationMode = sl::DLSSGMode::eAuto;
+	struct Settings
+	{
+		sl::DLSSGMode frameGenerationMode = sl::DLSSGMode::eOn;
+		int frameLimitMode = 0;
+	};
+
+	Settings settings{};
 
 	HMODULE interposer = NULL;
 
@@ -79,7 +84,7 @@ public:
 
 	void LoadInterposer();
 	void Initialize();
-	void PostDevice();
+	void PostDevice(DXGI_SWAP_CHAIN_DESC* a_swapChainDesc);
 
 	HRESULT CreateDXGIFactory(REFIID riid, void** ppFactory);
 
@@ -90,7 +95,7 @@ public:
 		const D3D_FEATURE_LEVEL* pFeatureLevels,
 		UINT FeatureLevels,
 		UINT SDKVersion,
-		const DXGI_SWAP_CHAIN_DESC* pSwapChainDesc,
+		DXGI_SWAP_CHAIN_DESC* pSwapChainDesc,
 		IDXGISwapChain** ppSwapChain,
 		ID3D11Device** ppDevice,
 		D3D_FEATURE_LEVEL* pFeatureLevel,
@@ -104,19 +109,28 @@ public:
 	void Upscale(Texture2D* a_color, Texture2D* a_alphaMask, sl::DLSSPreset a_preset);
 	void UpdateConstants();
 
+	void SaveSettings(json& o_json);
+	void LoadSettings(json& o_json);
+
+	void RestoreDefaultSettings();
+
 	void DestroyDLSSResources();
+
+	void BeginFrame();
+
+	struct Main_Update_Start
+	{
+		static void thunk(INT64 a_unk)
+		{
+			GetSingleton()->BeginFrame();
+			func(a_unk);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
 
 	struct Main_RenderWorld
 	{
-		static void thunk(bool a1)
-		{
-			auto state = State::GetSingleton();
-			if (!state->isVR || !state->upscalerLoaded) {
-				// With upscaler, VR hangs on this function, specifically at slSetConstants
-				GetSingleton()->UpdateConstants();
-			}
-			func(a1);
-		}
+		static void thunk(bool a1);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -132,6 +146,7 @@ public:
 
 	static void InstallHooks()
 	{
+		stl::write_thunk_call<Main_Update_Start>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x1E, 0x3E, 0x33));
 		stl::write_thunk_call<Main_RenderWorld>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x831, 0x841, 0x791));
 		stl::write_thunk_call<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084).address() + REL::Relocate(0x7E, 0x83, 0x97));
 	}

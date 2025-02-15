@@ -5,10 +5,14 @@
 #define NUMTHREAD_Y 16
 #define NUMTHREAD_Z 4
 #define GROUP_SIZE (NUMTHREAD_X * NUMTHREAD_Y * NUMTHREAD_Z)
-#define MAX_CLUSTER_LIGHTS 128
+#define MAX_CLUSTER_LIGHTS 256
 
-#define Llf_PortalStrictLight (1 << 0)
-#define Llf_ShadowLight (1 << 1)
+namespace LightFlags
+{
+	static const uint PortalStrict = (1 << 0);
+	static const uint Shadow = (1 << 1);
+	static const uint Simple = (1 << 2);
+}
 
 struct ClusterAABB
 {
@@ -23,7 +27,7 @@ struct LightGrid
 	uint pad0[2];
 };
 
-struct StructuredLight
+struct Light
 {
 	float3 color;
 	float radius;
@@ -32,7 +36,7 @@ struct StructuredLight
 	uint4 roomFlags;
 	uint lightFlags;
 	uint shadowLightIndex;
-	float pad0[2];
+	uint2 pad0;
 };
 
 #endif  //__LLF_COMMON_DEPENDENCY_HLSL__

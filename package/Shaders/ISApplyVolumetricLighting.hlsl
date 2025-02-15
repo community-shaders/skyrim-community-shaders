@@ -1,5 +1,6 @@
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
+#include "Common/VR.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
 
@@ -52,7 +53,16 @@ PS_OUTPUT main(PS_INPUT input)
 
 	if (0.001 < g_IntensityX_TemporalY.y) {
 		float2 motionVector = MotionVectorsTex.Sample(MotionVectorsSampler, screenPosition).xy;
+#	ifdef VR
+		uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(input.TexCoord);
+		float2 previousTexCoord = Stereo::ConvertFromStereoUV(input.TexCoord, eyeIndex);
+		previousTexCoord += motionVector;
+		bool isValid = previousTexCoord.x >= 0 && previousTexCoord.x < 1 && previousTexCoord.y >= 0 && previousTexCoord.y < 1;
+		previousTexCoord = Stereo::ConvertToStereoUV(previousTexCoord, eyeIndex);
+#	else
 		float2 previousTexCoord = input.TexCoord + motionVector;
+		bool isValid = previousTexCoord.x >= 0 && previousTexCoord.x < 1 && previousTexCoord.y >= 0 && previousTexCoord.y < 1;
+#	endif
 		float2 previousScreenPosition = FrameBuffer::GetPreviousDynamicResolutionAdjustedScreenPosition(previousTexCoord);
 		float previousVl = PreviousFrameTex.Sample(PreviousFrameSampler, previousScreenPosition).x;
 		float previousDepth = PreviousDepthTex.Sample(PreviousDepthSampler,
@@ -67,13 +77,11 @@ PS_OUTPUT main(PS_INPUT input)
 												  )
 		                          .x;
 
-		float temporalContribution = g_IntensityX_TemporalY.y * (1 - smoothstep(0, 1, min(1, 100 * abs(depth - previousDepth))));
-
-		float isValid = (previousTexCoord.x >= 0 && previousTexCoord.x < 1 && previousTexCoord.y >= 0 && previousTexCoord.y < 1
 #	ifdef VR
-						 && abs(previousDepth) > 0.0001
+		isValid = isValid && abs(previousDepth) > 0.0001;
 #	endif
-		);
+
+		float temporalContribution = g_IntensityX_TemporalY.y * (1 - smoothstep(0, 1, min(1, 100 * abs(depth - previousDepth))));
 		psout.VL = lerp(adjustedVl, previousVl, temporalContribution * isValid);
 	} else {
 		psout.VL = adjustedVl;

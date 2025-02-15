@@ -1,14 +1,8 @@
 #include "ShaderCache.h"
 
-#include <RE/V/VertexDesc.h>
-
-#include <d3d11.h>
 #include <d3dcompiler.h>
-#include <fmt/std.h>
-#include <wrl/client.h>
 
 #include "Deferred.h"
-#include "Feature.h"
 #include "State.h"
 
 #include "Features/DynamicCubemaps.h"
@@ -862,27 +856,31 @@ namespace SIE
 				{ "MatProj", 13 },
 			};
 
+			const auto& effectPSConstants = ShaderConstants::EffectPS::Get();
+
 			auto& effectPS = result[static_cast<size_t>(RE::BSShader::Type::Effect)]
 								   [static_cast<size_t>(ShaderClass::Pixel)];
 			effectPS = {
-				{ "PropertyColor", 0 },
-				{ "AlphaTestRef", 1 },
-				{ "MembraneRimColor", 2 },
-				{ "MembraneVars", 3 },
-				{ "PLightPositionX", 4 },
-				{ "PLightPositionY", 5 },
-				{ "PLightPositionZ", 6 },
-				{ "PLightingRadiusInverseSquared", 7 },
-				{ "PLightColorR", 8 },
-				{ "PLightColorG", 9 },
-				{ "PLightColorB", 10 },
-				{ "DLightColor", 11 },
-				{ "VPOSOffset", 12 },
-				{ "CameraData", 13 },
-				{ "FilteringParam", 14 },
-				{ "BaseColor", 15 },
-				{ "BaseColorScale", 16 },
-				{ "LightingInfluence", 17 },
+				{ "PropertyColor", effectPSConstants.PropertyColor },
+				{ "AlphaTestRef", effectPSConstants.AlphaTestRef },
+				{ "MembraneRimColor", effectPSConstants.MembraneRimColor },
+				{ "MembraneVars", effectPSConstants.MembraneVars },
+				{ "PLightPositionX", effectPSConstants.PLightPositionX },
+				{ "PLightPositionY", effectPSConstants.PLightPositionY },
+				{ "PLightPositionZ", effectPSConstants.PLightPositionZ },
+				{ "PLightingRadiusInverseSquared", effectPSConstants.PLightingRadiusInverseSquared },
+				{ "PLightColorR", effectPSConstants.PLightColorR },
+				{ "PLightColorG", effectPSConstants.PLightColorG },
+				{ "PLightColorB", effectPSConstants.PLightColorB },
+				{ "DLightColor", effectPSConstants.DLightColor },
+				{ "VPOSOffset", effectPSConstants.VPOSOffset },
+				{ "CameraDataEffect", effectPSConstants.CameraData },
+				{ "FilteringParam", effectPSConstants.FilteringParam },
+				{ "BaseColor", effectPSConstants.BaseColor },
+				{ "BaseColorScale", effectPSConstants.BaseColorScale },
+				{ "LightingInfluence", effectPSConstants.LightingInfluence },
+
+				{ "ExtendedFlags", effectPSConstants.ExtendedFlags },
 			};
 
 			auto& waterVS = result[static_cast<size_t>(RE::BSShader::Type::Water)]
@@ -922,7 +920,7 @@ namespace SIE
 				{ "BlendRadius", 5 },
 				{ "PosAdjust", 6 },
 				{ "ReflectPlane", 7 },
-				{ "CameraData", 8 },
+				{ "CameraDataWater", 8 },
 				{ "ProjData", 9 },
 				{ "VarAmounts", 10 },
 				{ "FogParam", 11 },
@@ -1299,13 +1297,13 @@ namespace SIE
 			} else if (shaderClass == ShaderClass::Compute) {
 				defines[lastIndex++] = { "CSHADER", nullptr };
 			}
-			if (State::GetSingleton()->IsDeveloperMode()) {
+			if (globals::state->IsDeveloperMode()) {
 				defines[lastIndex++] = { "D3DCOMPILE_SKIP_OPTIMIZATION", nullptr };
 				defines[lastIndex++] = { "D3DCOMPILE_DEBUG", nullptr };
 			}
 			if (REL::Module::IsVR())
 				defines[lastIndex++] = { "VR", nullptr };
-			auto shaderDefines = State::GetSingleton()->GetDefines();
+			auto shaderDefines = globals::state->GetDefines();
 			if (!shaderDefines->empty()) {
 				for (unsigned int i = 0; i < shaderDefines->size(); i++)
 					defines[lastIndex++] = { shaderDefines->at(i).first.c_str(), shaderDefines->at(i).second.c_str() };
@@ -1326,7 +1324,7 @@ namespace SIE
 
 			// compile shaders
 			ID3DBlob* errorBlob = nullptr;
-			const uint32_t flags = !State::GetSingleton()->IsDeveloperMode() ? D3DCOMPILE_OPTIMIZATION_LEVEL3 : D3DCOMPILE_DEBUG;
+			const uint32_t flags = !globals::state->IsDeveloperMode() ? D3DCOMPILE_OPTIMIZATION_LEVEL3 : D3DCOMPILE_DEBUG;
 			const HRESULT compileResult = D3DCompileFromFile(path.c_str(), defines.data(), D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
 				GetShaderProfile(shaderClass), flags, 0, &shaderBlob, &errorBlob);
 
@@ -1352,7 +1350,7 @@ namespace SIE
 			logger::debug("Compiled shader {}:{}:{:X}", magic_enum::enum_name(type), magic_enum::enum_name(shaderClass), descriptor);
 
 			// strip debug info
-			if (!State::GetSingleton()->IsDeveloperMode()) {
+			if (!globals::state->IsDeveloperMode()) {
 				ID3DBlob* strippedShaderBlob = nullptr;
 
 				const uint32_t stripFlags = D3DCOMPILER_STRIP_DEBUG_INFO |
@@ -1389,7 +1387,6 @@ namespace SIE
 		std::unique_ptr<RE::BSGraphics::VertexShader> CreateVertexShader(ID3DBlob& shaderData,
 			const RE::BSShader& shader, uint32_t descriptor)
 		{
-			static const auto device = REL::Relocation<ID3D11Device**>(RE::Offset::D3D11Device);
 			static const auto perTechniqueBuffersArray =
 				REL::Relocation<ID3D11Buffer**>(RELOCATION_ID(524755, 411371));
 			static const auto perMaterialBuffersArray =
@@ -1448,7 +1445,6 @@ namespace SIE
 		std::unique_ptr<RE::BSGraphics::PixelShader> CreatePixelShader(ID3DBlob& shaderData,
 			const RE::BSShader& shader, uint32_t descriptor)
 		{
-			static const auto device = REL::Relocation<ID3D11Device**>(RE::Offset::D3D11Device);
 			static const auto perTechniqueBuffersArray =
 				REL::Relocation<ID3D11Buffer**>(RELOCATION_ID(524761, 411377));
 			static const auto perMaterialBuffersArray =
@@ -1512,67 +1508,67 @@ namespace SIE
 			using enum RE::ImageSpaceManager::ImageSpaceEffectEnum;
 
 			static const std::unordered_map<std::string_view, uint32_t> descriptors{
-				{ "BSImagespaceShaderISBlur", static_cast<uint32_t>(ISBlur) },
-				{ "BSImagespaceShaderBlur3", static_cast<uint32_t>(ISBlur3) },
-				{ "BSImagespaceShaderBlur5", static_cast<uint32_t>(ISBlur5) },
-				{ "BSImagespaceShaderBlur7", static_cast<uint32_t>(ISBlur7) },
-				{ "BSImagespaceShaderBlur9", static_cast<uint32_t>(ISBlur9) },
-				{ "BSImagespaceShaderBlur11", static_cast<uint32_t>(ISBlur11) },
-				{ "BSImagespaceShaderBlur13", static_cast<uint32_t>(ISBlur13) },
-				{ "BSImagespaceShaderBlur15", static_cast<uint32_t>(ISBlur15) },
-				{ "BSImagespaceShaderBrightPassBlur3", static_cast<uint32_t>(ISBrightPassBlur3) },
-				{ "BSImagespaceShaderBrightPassBlur5", static_cast<uint32_t>(ISBrightPassBlur5) },
-				{ "BSImagespaceShaderBrightPassBlur7", static_cast<uint32_t>(ISBrightPassBlur7) },
-				{ "BSImagespaceShaderBrightPassBlur9", static_cast<uint32_t>(ISBrightPassBlur9) },
-				{ "BSImagespaceShaderBrightPassBlur11", static_cast<uint32_t>(ISBrightPassBlur11) },
-				{ "BSImagespaceShaderBrightPassBlur13", static_cast<uint32_t>(ISBrightPassBlur13) },
-				{ "BSImagespaceShaderBrightPassBlur15", static_cast<uint32_t>(ISBrightPassBlur15) },
-				{ "BSImagespaceShaderNonHDRBlur3", static_cast<uint32_t>(ISNonHDRBlur3) },
-				{ "BSImagespaceShaderNonHDRBlur5", static_cast<uint32_t>(ISNonHDRBlur5) },
-				{ "BSImagespaceShaderNonHDRBlur7", static_cast<uint32_t>(ISNonHDRBlur7) },
-				{ "BSImagespaceShaderNonHDRBlur9", static_cast<uint32_t>(ISNonHDRBlur9) },
-				{ "BSImagespaceShaderNonHDRBlur11", static_cast<uint32_t>(ISNonHDRBlur11) },
-				{ "BSImagespaceShaderNonHDRBlur13", static_cast<uint32_t>(ISNonHDRBlur13) },
-				{ "BSImagespaceShaderNonHDRBlur15", static_cast<uint32_t>(ISNonHDRBlur15) },
-				{ "BSImagespaceShaderISBasicCopy", static_cast<uint32_t>(ISBasicCopy) },
-				{ "BSImagespaceShaderISSimpleColor", static_cast<uint32_t>(ISSimpleColor) },
-				{ "BSImagespaceShaderApplyReflections", static_cast<uint32_t>(ISApplyReflections) },
-				{ "BSImagespaceShaderISExp", static_cast<uint32_t>(ISExp) },
-				{ "BSImagespaceShaderISDisplayDepth", static_cast<uint32_t>(ISDisplayDepth) },
-				{ "BSImagespaceShaderAlphaBlend", static_cast<uint32_t>(ISAlphaBlend) },
-				{ "BSImagespaceShaderWaterFlow", static_cast<uint32_t>(ISWaterFlow) },
-				{ "BSImagespaceShaderISWaterBlend", static_cast<uint32_t>(ISWaterBlend) },
-				{ "BSImagespaceShaderGreyScale", static_cast<uint32_t>(ISCopyGrayScale) },
-				{ "BSImagespaceShaderCopy", static_cast<uint32_t>(ISCopy) },
-				{ "BSImagespaceShaderCopyScaleBias", static_cast<uint32_t>(ISCopyScaleBias) },
-				{ "BSImagespaceShaderCopyCustomViewport",
-					static_cast<uint32_t>(ISCopyCustomViewport) },
-				{ "BSImagespaceShaderCopyTextureMask", static_cast<uint32_t>(ISCopyTextureMask) },
-				{ "BSImagespaceShaderCopyDynamicFetchDisabled",
-					static_cast<uint32_t>(ISCopyDynamicFetchDisabled) },
+				// { "BSImagespaceShaderISBlur", static_cast<uint32_t>(ISBlur) },
+				// { "BSImagespaceShaderBlur3", static_cast<uint32_t>(ISBlur3) },
+				// { "BSImagespaceShaderBlur5", static_cast<uint32_t>(ISBlur5) },
+				// { "BSImagespaceShaderBlur7", static_cast<uint32_t>(ISBlur7) },
+				// { "BSImagespaceShaderBlur9", static_cast<uint32_t>(ISBlur9) },
+				// { "BSImagespaceShaderBlur11", static_cast<uint32_t>(ISBlur11) },
+				// { "BSImagespaceShaderBlur13", static_cast<uint32_t>(ISBlur13) },
+				// { "BSImagespaceShaderBlur15", static_cast<uint32_t>(ISBlur15) },
+				// { "BSImagespaceShaderBrightPassBlur3", static_cast<uint32_t>(ISBrightPassBlur3) },
+				// { "BSImagespaceShaderBrightPassBlur5", static_cast<uint32_t>(ISBrightPassBlur5) },
+				// { "BSImagespaceShaderBrightPassBlur7", static_cast<uint32_t>(ISBrightPassBlur7) },
+				// { "BSImagespaceShaderBrightPassBlur9", static_cast<uint32_t>(ISBrightPassBlur9) },
+				// { "BSImagespaceShaderBrightPassBlur11", static_cast<uint32_t>(ISBrightPassBlur11) },
+				// { "BSImagespaceShaderBrightPassBlur13", static_cast<uint32_t>(ISBrightPassBlur13) },
+				// { "BSImagespaceShaderBrightPassBlur15", static_cast<uint32_t>(ISBrightPassBlur15) },
+				// { "BSImagespaceShaderNonHDRBlur3", static_cast<uint32_t>(ISNonHDRBlur3) },
+				// { "BSImagespaceShaderNonHDRBlur5", static_cast<uint32_t>(ISNonHDRBlur5) },
+				// { "BSImagespaceShaderNonHDRBlur7", static_cast<uint32_t>(ISNonHDRBlur7) },
+				// { "BSImagespaceShaderNonHDRBlur9", static_cast<uint32_t>(ISNonHDRBlur9) },
+				// { "BSImagespaceShaderNonHDRBlur11", static_cast<uint32_t>(ISNonHDRBlur11) },
+				// { "BSImagespaceShaderNonHDRBlur13", static_cast<uint32_t>(ISNonHDRBlur13) },
+				// { "BSImagespaceShaderNonHDRBlur15", static_cast<uint32_t>(ISNonHDRBlur15) },
+				// { "BSImagespaceShaderISBasicCopy", static_cast<uint32_t>(ISBasicCopy) },
+				// { "BSImagespaceShaderISSimpleColor", static_cast<uint32_t>(ISSimpleColor) },
+				// { "BSImagespaceShaderApplyReflections", static_cast<uint32_t>(ISApplyReflections) },
+				// { "BSImagespaceShaderISExp", static_cast<uint32_t>(ISExp) },
+				// { "BSImagespaceShaderISDisplayDepth", static_cast<uint32_t>(ISDisplayDepth) },
+				// { "BSImagespaceShaderAlphaBlend", static_cast<uint32_t>(ISAlphaBlend) },
+				// { "BSImagespaceShaderWaterFlow", static_cast<uint32_t>(ISWaterFlow) },
+				// { "BSImagespaceShaderISWaterBlend", static_cast<uint32_t>(ISWaterBlend) },
+				// { "BSImagespaceShaderGreyScale", static_cast<uint32_t>(ISCopyGrayScale) },
+				// { "BSImagespaceShaderCopy", static_cast<uint32_t>(ISCopy) },
+				// { "BSImagespaceShaderCopyScaleBias", static_cast<uint32_t>(ISCopyScaleBias) },
+				// { "BSImagespaceShaderCopyCustomViewport",
+				// 	static_cast<uint32_t>(ISCopyCustomViewport) },
+				// { "BSImagespaceShaderCopyTextureMask", static_cast<uint32_t>(ISCopyTextureMask) },
+				// { "BSImagespaceShaderCopyDynamicFetchDisabled",
+				// 	static_cast<uint32_t>(ISCopyDynamicFetchDisabled) },
 				{ "BSImagespaceShaderISCompositeVolumetricLighting",
 					static_cast<uint32_t>(ISCompositeVolumetricLighting) },
 				{ "BSImagespaceShaderISCompositeLensFlare",
 					static_cast<uint32_t>(ISCompositeLensFlare) },
 				{ "BSImagespaceShaderISCompositeLensFlareVolumetricLighting",
 					static_cast<uint32_t>(ISCompositeLensFlareVolumetricLighting) },
-				{ "BSImagespaceShaderISDebugSnow", static_cast<uint32_t>(ISDebugSnow) },
-				{ "BSImagespaceShaderDepthOfField", static_cast<uint32_t>(ISDepthOfField) },
-				{ "BSImagespaceShaderDepthOfFieldFogged",
-					static_cast<uint32_t>(ISDepthOfFieldFogged) },
-				{ "BSImagespaceShaderDepthOfFieldMaskedFogged",
-					static_cast<uint32_t>(ISDepthOfFieldMaskedFogged) },
-				{ "BSImagespaceShaderDistantBlur", static_cast<uint32_t>(ISDistantBlur) },
-				{ "BSImagespaceShaderDistantBlurFogged",
-					static_cast<uint32_t>(ISDistantBlurFogged) },
-				{ "BSImagespaceShaderDistantBlurMaskedFogged",
-					static_cast<uint32_t>(ISDistantBlurMaskedFogged) },
-				{ "BSImagespaceShaderDoubleVision", static_cast<uint32_t>(ISDoubleVision) },
+				// { "BSImagespaceShaderISDebugSnow", static_cast<uint32_t>(ISDebugSnow) },
+				// { "BSImagespaceShaderDepthOfField", static_cast<uint32_t>(ISDepthOfField) },
+				// { "BSImagespaceShaderDepthOfFieldFogged",
+				// 	static_cast<uint32_t>(ISDepthOfFieldFogged) },
+				// { "BSImagespaceShaderDepthOfFieldMaskedFogged",
+				// 	static_cast<uint32_t>(ISDepthOfFieldMaskedFogged) },
+				// { "BSImagespaceShaderDistantBlur", static_cast<uint32_t>(ISDistantBlur) },
+				// { "BSImagespaceShaderDistantBlurFogged",
+				// 	static_cast<uint32_t>(ISDistantBlurFogged) },
+				// { "BSImagespaceShaderDistantBlurMaskedFogged",
+				// 	static_cast<uint32_t>(ISDistantBlurMaskedFogged) },
+				// { "BSImagespaceShaderDoubleVision", static_cast<uint32_t>(ISDoubleVision) },
 				{ "BSImagespaceShaderISDownsample", static_cast<uint32_t>(ISDownsample) },
 				{ "BSImagespaceShaderISDownsampleIgnoreBrightest",
 					static_cast<uint32_t>(ISDownsampleIgnoreBrightest) },
-				{ "BSImagespaceShaderISUpsampleDynamicResolution",
-					static_cast<uint32_t>(ISUpsampleDynamicResolution) },
+				// { "BSImagespaceShaderISUpsampleDynamicResolution",
+				// 	static_cast<uint32_t>(ISUpsampleDynamicResolution) },
 				{ "BSImageSpaceShaderVolumetricLighting",
 					static_cast<uint32_t>(ISVolumetricLighting) },
 				{ "BSImagespaceShaderHDRDownSample4", static_cast<uint32_t>(ISHDRDownSample4) },
@@ -1593,7 +1589,7 @@ namespace SIE
 					static_cast<uint32_t>(ISHDRTonemapBlendCinematic) },
 				{ "BSImagespaceShaderHDRTonemapBlendCinematicFade",
 					static_cast<uint32_t>(ISHDRTonemapBlendCinematicFade) },
-				{ "BSImagespaceShaderISIBLensFlares", static_cast<uint32_t>(ISIBLensFlares) },
+				// { "BSImagespaceShaderISIBLensFlares", static_cast<uint32_t>(ISIBLensFlares) },
 
 				// Those cause issue because of typo in shader name in vanilla code but at the same time they are not used by vanilla game.
 				/*{ "BSImagespaceShaderISLightingComposite",
@@ -1603,47 +1599,47 @@ namespace SIE
 				{ "BSImagespaceShaderISLightingCompositeNoDirectionalLight",
 					static_cast<uint32_t>(ISLightingCompositeNoDirectionalLight) },*/
 
-				{ "BSImagespaceShaderLocalMap", static_cast<uint32_t>(ISLocalMap) },
-				{ "BSISWaterBlendHeightmaps", static_cast<uint32_t>(ISWaterBlendHeightmaps) },
-				{ "BSISWaterDisplacementClearSimulation",
-					static_cast<uint32_t>(ISWaterDisplacementClearSimulation) },
-				{ "BSISWaterDisplacementNormals",
-					static_cast<uint32_t>(ISWaterDisplacementNormals) },
-				{ "BSISWaterDisplacementRainRipple",
-					static_cast<uint32_t>(ISWaterDisplacementRainRipple) },
-				{ "BSISWaterDisplacementTexOffset",
-					static_cast<uint32_t>(ISWaterDisplacementTexOffset) },
-				{ "BSISWaterWadingHeightmap", static_cast<uint32_t>(ISWaterWadingHeightmap) },
-				{ "BSISWaterRainHeightmap", static_cast<uint32_t>(ISWaterRainHeightmap) },
-				{ "BSISWaterSmoothHeightmap", static_cast<uint32_t>(ISWaterSmoothHeightmap) },
-				{ "BSISWaterWadingHeightmap", static_cast<uint32_t>(ISWaterWadingHeightmap) },
-				{ "BSImagespaceShaderMap", static_cast<uint32_t>(ISMap) },
-				{ "BSImagespaceShaderMap", static_cast<uint32_t>(ISMap) },
-				{ "BSImagespaceShaderWorldMap", static_cast<uint32_t>(ISWorldMap) },
-				{ "BSImagespaceShaderWorldMapNoSkyBlur",
-					static_cast<uint32_t>(ISWorldMapNoSkyBlur) },
-				{ "BSImagespaceShaderISMinify", static_cast<uint32_t>(ISMinify) },
-				{ "BSImagespaceShaderISMinifyContrast", static_cast<uint32_t>(ISMinifyContrast) },
-				{ "BSImagespaceShaderNoiseNormalmap", static_cast<uint32_t>(ISNoiseNormalmap) },
-				{ "BSImagespaceShaderNoiseScrollAndBlend",
-					static_cast<uint32_t>(ISNoiseScrollAndBlend) },
-				{ "BSImagespaceShaderRadialBlur",
-					static_cast<uint32_t>(ISRadialBlur) },
-				{ "BSImagespaceShaderRadialBlurHigh", static_cast<uint32_t>(ISRadialBlurHigh) },
-				{ "BSImagespaceShaderRadialBlurMedium", static_cast<uint32_t>(ISRadialBlurMedium) },
-				{ "BSImagespaceShaderRefraction", static_cast<uint32_t>(ISRefraction) },
+				// { "BSImagespaceShaderLocalMap", static_cast<uint32_t>(ISLocalMap) },
+				// { "BSISWaterBlendHeightmaps", static_cast<uint32_t>(ISWaterBlendHeightmaps) },
+				// { "BSISWaterDisplacementClearSimulation",
+				// 	static_cast<uint32_t>(ISWaterDisplacementClearSimulation) },
+				// { "BSISWaterDisplacementNormals",
+				// 	static_cast<uint32_t>(ISWaterDisplacementNormals) },
+				// { "BSISWaterDisplacementRainRipple",
+				// 	static_cast<uint32_t>(ISWaterDisplacementRainRipple) },
+				// { "BSISWaterDisplacementTexOffset",
+				// 	static_cast<uint32_t>(ISWaterDisplacementTexOffset) },
+				// { "BSISWaterWadingHeightmap", static_cast<uint32_t>(ISWaterWadingHeightmap) },
+				// { "BSISWaterRainHeightmap", static_cast<uint32_t>(ISWaterRainHeightmap) },
+				// { "BSISWaterSmoothHeightmap", static_cast<uint32_t>(ISWaterSmoothHeightmap) },
+				// { "BSISWaterWadingHeightmap", static_cast<uint32_t>(ISWaterWadingHeightmap) },
+				// { "BSImagespaceShaderMap", static_cast<uint32_t>(ISMap) },
+				// { "BSImagespaceShaderMap", static_cast<uint32_t>(ISMap) },
+				// { "BSImagespaceShaderWorldMap", static_cast<uint32_t>(ISWorldMap) },
+				// { "BSImagespaceShaderWorldMapNoSkyBlur",
+				// 	static_cast<uint32_t>(ISWorldMapNoSkyBlur) },
+				// { "BSImagespaceShaderISMinify", static_cast<uint32_t>(ISMinify) },
+				// { "BSImagespaceShaderISMinifyContrast", static_cast<uint32_t>(ISMinifyContrast) },
+				// { "BSImagespaceShaderNoiseNormalmap", static_cast<uint32_t>(ISNoiseNormalmap) },
+				// { "BSImagespaceShaderNoiseScrollAndBlend",
+				// 	static_cast<uint32_t>(ISNoiseScrollAndBlend) },
+				// { "BSImagespaceShaderRadialBlur",
+				// 	static_cast<uint32_t>(ISRadialBlur) },
+				// { "BSImagespaceShaderRadialBlurHigh", static_cast<uint32_t>(ISRadialBlurHigh) },
+				// { "BSImagespaceShaderRadialBlurMedium", static_cast<uint32_t>(ISRadialBlurMedium) },
+				// { "BSImagespaceShaderRefraction", static_cast<uint32_t>(ISRefraction) },
 				{ "BSImagespaceShaderISSAOCompositeSAO", static_cast<uint32_t>(ISSAOCompositeSAO) },
 				{ "BSImagespaceShaderISSAOCompositeFog", static_cast<uint32_t>(ISSAOCompositeFog) },
 				{ "BSImagespaceShaderISSAOCompositeSAOFog", static_cast<uint32_t>(ISSAOCompositeSAOFog) },
-				{ "BSImagespaceShaderISSAOCameraZ", static_cast<uint32_t>(ISSAOCameraZ) },
-				{ "BSImagespaceShaderISSILComposite", static_cast<uint32_t>(ISSILComposite) },
-				{ "BSImagespaceShaderISSnowSSS", static_cast<uint32_t>(ISSnowSSS) },
-				{ "BSImagespaceShaderISSAOBlurH", static_cast<uint32_t>(ISSAOBlurH) },
-				{ "BSImagespaceShaderISSAOBlurV", static_cast<uint32_t>(ISSAOBlurV) },
-				{ "BSImagespaceShaderISUnderwaterMask", static_cast<uint32_t>(ISUnderwaterMask) },
+				// { "BSImagespaceShaderISSAOCameraZ", static_cast<uint32_t>(ISSAOCameraZ) },
+				// { "BSImagespaceShaderISSILComposite", static_cast<uint32_t>(ISSILComposite) },
+				// { "BSImagespaceShaderISSnowSSS", static_cast<uint32_t>(ISSnowSSS) },
+				// { "BSImagespaceShaderISSAOBlurH", static_cast<uint32_t>(ISSAOBlurH) },
+				// { "BSImagespaceShaderISSAOBlurV", static_cast<uint32_t>(ISSAOBlurV) },
+				// { "BSImagespaceShaderISUnderwaterMask", static_cast<uint32_t>(ISUnderwaterMask) },
 				{ "BSImagespaceShaderISApplyVolumetricLighting", static_cast<uint32_t>(ISApplyVolumetricLighting) },
 				{ "BSImagespaceShaderReflectionsRayTracing", static_cast<uint32_t>(ISReflectionsRayTracing) },
-				{ "BSImagespaceShaderReflectionsDebugSpecMask", static_cast<uint32_t>(ISReflectionsDebugSpecMask) },
+				//{ "BSImagespaceShaderReflectionsDebugSpecMask", static_cast<uint32_t>(ISReflectionsDebugSpecMask) },
 
 				{ "BSImagespaceShaderVolumetricLightingRaymarchCS", 256 },
 				{ "BSImagespaceShaderVolumetricLightingGenerateCS", 257 },
@@ -1651,7 +1647,6 @@ namespace SIE
 				{ "BSImagespaceShaderCopyDepthBuffer", 99 },
 				{ "BSImagespaceShaderCopyDepthBuffer", 100 },
 				{ "BSImagespaceShaderISFullScreenVR", 129 },
-
 			};
 
 			auto it = descriptors.find(imagespaceShader.name);
@@ -1673,8 +1668,8 @@ namespace SIE
 			}
 		}
 
-		auto state = State::GetSingleton();
-		if (state->isVR && strcmp(shader.fxpFilename, "OBBOcclusionTesting") == 0)
+		auto state = globals::state;
+		if (globals::game::isVR && strcmp(shader.fxpFilename, "OBBOcclusionTesting") == 0)
 			// use vanilla shader
 			return nullptr;
 
@@ -1682,13 +1677,15 @@ namespace SIE
 			return nullptr;
 		}
 
-		auto key = SIE::SShaderCache::GetShaderString(ShaderClass::Vertex, shader, descriptor, true);
-		if (blockedKeyIndex != -1 && !blockedKey.empty() && key == blockedKey) {
-			if (std::find(blockedIDs.begin(), blockedIDs.end(), descriptor) == blockedIDs.end()) {
-				blockedIDs.push_back(descriptor);
-				logger::debug("Skipping blocked shader {:X}:{} total: {}", descriptor, blockedKey, blockedIDs.size());
+		if (state->IsDeveloperMode()) {
+			auto key = SIE::SShaderCache::GetShaderString(ShaderClass::Vertex, shader, descriptor, true);
+			if (blockedKeyIndex != -1 && !blockedKey.empty() && key == blockedKey) {
+				if (std::find(blockedIDs.begin(), blockedIDs.end(), descriptor) == blockedIDs.end()) {
+					blockedIDs.push_back(descriptor);
+					logger::debug("Skipping blocked shader {:X}:{} total: {}", descriptor, blockedKey, blockedIDs.size());
+				}
+				return nullptr;
 			}
-			return nullptr;
 		}
 
 		{
@@ -1712,8 +1709,8 @@ namespace SIE
 	RE::BSGraphics::PixelShader* ShaderCache::GetPixelShader(const RE::BSShader& shader,
 		uint32_t descriptor)
 	{
-		auto state = State::GetSingleton();
-		if (state->isVR && strcmp(shader.fxpFilename, "OBBOcclusionTesting") == 0)
+		auto state = globals::state;
+		if (globals::game::isVR && strcmp(shader.fxpFilename, "OBBOcclusionTesting") == 0)
 			// use vanilla shader
 			return nullptr;
 
@@ -1728,13 +1725,15 @@ namespace SIE
 			}
 		}
 
-		auto key = SIE::SShaderCache::GetShaderString(ShaderClass::Pixel, shader, descriptor, true);
-		if (blockedKeyIndex != -1 && !blockedKey.empty() && key == blockedKey) {
-			if (std::find(blockedIDs.begin(), blockedIDs.end(), descriptor) == blockedIDs.end()) {
-				blockedIDs.push_back(descriptor);
-				logger::debug("Skipping blocked shader {:X}:{} total: {}", descriptor, blockedKey, blockedIDs.size());
+		if (state->IsDeveloperMode()) {
+			auto key = SIE::SShaderCache::GetShaderString(ShaderClass::Pixel, shader, descriptor, true);
+			if (blockedKeyIndex != -1 && !blockedKey.empty() && key == blockedKey) {
+				if (std::find(blockedIDs.begin(), blockedIDs.end(), descriptor) == blockedIDs.end()) {
+					blockedIDs.push_back(descriptor);
+					logger::debug("Skipping blocked shader {:X}:{} total: {}", descriptor, blockedKey, blockedIDs.size());
+				}
+				return nullptr;
 			}
-			return nullptr;
 		}
 
 		{
@@ -1758,7 +1757,7 @@ namespace SIE
 	RE::BSGraphics::ComputeShader* ShaderCache::GetComputeShader(const RE::BSShader& shader,
 		uint32_t descriptor)
 	{
-		auto state = State::GetSingleton();
+		auto state = globals::state;
 		if (!((ShaderCache::IsSupportedShader(shader) || state->IsDeveloperMode() && state->IsShaderEnabled(shader)) && state->enableCShaders)) {
 			return nullptr;
 		}
@@ -1770,13 +1769,15 @@ namespace SIE
 			}
 		}
 
-		auto key = SIE::SShaderCache::GetShaderString(ShaderClass::Compute, shader, descriptor, true);
-		if (blockedKeyIndex != -1 && !blockedKey.empty() && key == blockedKey) {
-			if (std::find(blockedIDs.begin(), blockedIDs.end(), descriptor) == blockedIDs.end()) {
-				blockedIDs.push_back(descriptor);
-				logger::debug("Skipping blocked shader {:X}:{} total: {}", descriptor, blockedKey, blockedIDs.size());
+		if (state->IsDeveloperMode()) {
+			auto key = SIE::SShaderCache::GetShaderString(ShaderClass::Compute, shader, descriptor, true);
+			if (blockedKeyIndex != -1 && !blockedKey.empty() && key == blockedKey) {
+				if (std::find(blockedIDs.begin(), blockedIDs.end(), descriptor) == blockedIDs.end()) {
+					blockedIDs.push_back(descriptor);
+					logger::debug("Skipping blocked shader {:X}:{} total: {}", descriptor, blockedKey, blockedIDs.size());
+				}
+				return nullptr;
 			}
-			return nullptr;
 		}
 
 		{
@@ -1847,6 +1848,12 @@ namespace SIE
 			hlslToShaderMap.clear();
 		}
 		compilationSet.Clear();
+		globals::deferred->ClearShaderCache();
+		for (auto* feature : Feature::GetFeatureList()) {
+			if (feature->loaded) {
+				feature->ClearShaderCache();
+			}
+		}
 	}
 
 	template <typename ShaderType, typename MutexType>
@@ -2137,7 +2144,7 @@ namespace SIE
 		bool valid = true;
 
 		if (auto version = ini.GetValue("Cache", "Version")) {
-			if (strcmp(SHADER_CACHE_VERSION.string().c_str(), version) != 0 || !(State::GetSingleton()->ValidateCache(ini))) {
+			if (strcmp(SHADER_CACHE_VERSION.string().c_str(), version) != 0 || !(globals::state->ValidateCache(ini))) {
 				logger::info("Disk cache outdated or invalid");
 				valid = false;
 			}
@@ -2158,7 +2165,7 @@ namespace SIE
 		CSimpleIniA ini;
 		ini.SetUnicode();
 		ini.SetValue("Cache", "Version", SHADER_CACHE_VERSION.string().c_str());
-		State::GetSingleton()->WriteDiskCacheInfo(ini);
+		globals::state->WriteDiskCacheInfo(ini);
 		ini.SaveFile(L"Data\\ShaderCache\\Info.ini");
 		logger::info("Saved disk cache info");
 	}
@@ -2271,14 +2278,14 @@ namespace SIE
 	{
 		if (const auto shaderBlob =
 				SShaderCache::CompileShader(ShaderClass::Vertex, shader, descriptor, isDiskCache)) {
-			static const auto device = REL::Relocation<ID3D11Device**>(RE::Offset::D3D11Device);
+			auto device = globals::d3d::device;
 
 			auto newShader = SShaderCache::CreateVertexShader(*shaderBlob, shader,
 				descriptor);
 
 			std::lock_guard lockGuard(vertexShadersMutex);
 
-			const auto result = (*device)->CreateVertexShader(shaderBlob->GetBufferPointer(),
+			const auto result = device->CreateVertexShader(shaderBlob->GetBufferPointer(),
 				newShader->byteCodeSize, nullptr, reinterpret_cast<ID3D11VertexShader**>(&newShader->shader));
 			if (FAILED(result)) {
 				logger::error("Failed to create vertex shader {}::{:X}",
@@ -2300,13 +2307,13 @@ namespace SIE
 	{
 		if (const auto shaderBlob =
 				SShaderCache::CompileShader(ShaderClass::Pixel, shader, descriptor, isDiskCache)) {
-			static const auto device = REL::Relocation<ID3D11Device**>(RE::Offset::D3D11Device);
+			auto device = globals::d3d::device;
 
 			auto newShader = SShaderCache::CreatePixelShader(*shaderBlob, shader,
 				descriptor);
 
 			std::lock_guard lockGuard(pixelShadersMutex);
-			const auto result = (*device)->CreatePixelShader(shaderBlob->GetBufferPointer(),
+			const auto result = device->CreatePixelShader(shaderBlob->GetBufferPointer(),
 				shaderBlob->GetBufferSize(), nullptr, reinterpret_cast<ID3D11PixelShader**>(&newShader->shader));
 			if (FAILED(result)) {
 				logger::error("Failed to create pixel shader {}::{:X}",
@@ -2329,13 +2336,13 @@ namespace SIE
 	{
 		if (const auto shaderBlob =
 				SShaderCache::CompileShader(ShaderClass::Compute, shader, descriptor, isDiskCache)) {
-			static const auto device = REL::Relocation<ID3D11Device**>(RE::Offset::D3D11Device);
+			auto device = globals::d3d::device;
 
 			auto newShader = SShaderCache::CreateComputeShader(*shaderBlob, shader,
 				descriptor);
 
 			std::lock_guard lockGuard(computeShadersMutex);
-			const auto result = (*device)->CreateComputeShader(shaderBlob->GetBufferPointer(),
+			const auto result = device->CreateComputeShader(shaderBlob->GetBufferPointer(),
 				shaderBlob->GetBufferSize(), nullptr, reinterpret_cast<ID3D11ComputeShader**>(&newShader->shader));
 			if (FAILED(result)) {
 				logger::error("Failed to create pixel shader {}::{:X}",
@@ -2504,17 +2511,17 @@ namespace SIE
 	std::optional<ShaderCompilationTask> CompilationSet::WaitTake(std::stop_token stoken)
 	{
 		std::unique_lock lock(compilationMutex);
-		auto& shaderCache = ShaderCache::Instance();
+		auto shaderCache = globals::shaderCache;
 		if (!conditionVariable.wait(
 				lock, stoken,
 				[this, &shaderCache]() { return !availableTasks.empty() &&
 			                                    // check against all tasks in queue to trickle the work. It cannot be the active tasks count because the thread pool itself is maximum.
-			                                    (int)shaderCache.compilationPool.get_tasks_total() <=
-			                                        (!shaderCache.backgroundCompilation ? shaderCache.compilationThreadCount : shaderCache.backgroundCompilationThreadCount); })) {
+			                                    (int)shaderCache->compilationPool.get_tasks_total() <=
+			                                        (!shaderCache->backgroundCompilation ? shaderCache->compilationThreadCount : shaderCache->backgroundCompilationThreadCount); })) {
 			/*Woke up because of a stop request. */
 			return std::nullopt;
 		}
-		if (!ShaderCache::Instance().IsCompiling()) {  // we just got woken up because there's a task, start clock
+		if (!shaderCache->IsCompiling()) {  // we just got woken up because there's a task, start clock
 			lastCalculation = lastReset = high_resolution_clock::now();
 		}
 		auto node = availableTasks.extract(availableTasks.begin());
@@ -2528,7 +2535,7 @@ namespace SIE
 		std::unique_lock lock(compilationMutex);
 		auto inProgressIt = tasksInProgress.find(task);
 		auto processedIt = processedTasks.find(task);
-		if (inProgressIt == tasksInProgress.end() && processedIt == processedTasks.end() && !ShaderCache::Instance().GetCompletedShader(task)) {
+		if (inProgressIt == tasksInProgress.end() && processedIt == processedTasks.end() && !globals::shaderCache->GetCompletedShader(task)) {
 			auto [availableIt, wasAdded] = availableTasks.insert(task);
 			lock.unlock();
 			if (wasAdded) {
@@ -2557,7 +2564,6 @@ namespace SIE
 		processedTasks.insert(task);
 		tasksInProgress.erase(task);
 		conditionVariable.notify_one();
-		DynamicCubemaps::GetSingleton()->resetCapture = true;
 	}
 
 	void CompilationSet::Clear()
@@ -2609,7 +2615,7 @@ namespace SIE
 			GetHumanTime(GetEta() + totalMs));
 	}
 
-	void UpdateListener::UpdateCache(const std::filesystem::path& filePath, SIE::ShaderCache& cache, bool& clearCache, bool& fileDone)
+	void UpdateListener::UpdateCache(const std::filesystem::path& filePath, SIE::ShaderCache* cache, bool& clearCache, bool& fileDone)
 	{
 		// Extract file components
 		const std::string extension = filePath.extension().string();
@@ -2631,10 +2637,10 @@ namespace SIE
 			[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 		if (!std::filesystem::is_directory(filePath) && lowerExtension == ".hlsl") {
 			// Update cache with the modified shader
-			cache.InsertModifiedShaderMap(shaderTypeString, modifiedTime);
+			cache->InsertModifiedShaderMap(shaderTypeString, modifiedTime);
 
 			// Attempt to mark the shader for recompilation
-			bool foundPath = cache.Clear(filePath.string());
+			bool foundPath = cache->Clear(filePath.string());
 
 			if (!foundPath) {
 				// File was not found in the the map so check its shader type
@@ -2644,7 +2650,7 @@ namespace SIE
 
 				// Check if the parent directory name matches "shaders" in a case-insensitive way
 				if (lowerExtension == ".hlsl" && parentDirName == "shaders" && shaderType.has_value()) {
-					cache.Clear(shaderType.value());
+					cache->Clear(shaderType.value());
 				} else {
 					// If it's not specifically handled, clear all cache
 					clearCache = true;
@@ -2659,8 +2665,8 @@ namespace SIE
 	{
 		SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
 		std::unique_lock lock(actionMutex, std::defer_lock);
-		auto& cache = SIE::ShaderCache::Instance();
-		while (cache.UseFileWatcher()) {
+		auto cache = globals::shaderCache;
+		while (cache->UseFileWatcher()) {
 			lock.lock();
 			if (!queue.empty() && queue.size() == lastQueueSize) {
 				bool clearCache = false;
@@ -2689,8 +2695,8 @@ namespace SIE
 						continue;
 				}
 				if (clearCache) {
-					cache.DeleteDiskCache();
-					cache.Clear();
+					cache->DeleteDiskCache();
+					cache->Clear();
 				}
 				queue.clear();
 			}

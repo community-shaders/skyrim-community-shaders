@@ -1,7 +1,7 @@
-#include "Hooks.h"
-
 #include "Deferred.h"
 #include "FrameAnnotations.h"
+#include "Globals.h"
+#include "Hooks.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -9,9 +9,7 @@
 #include "Upscaling.h"
 
 #include "ENB/ENBSeriesAPI.h"
-#include "Features/ExtendedMaterials.h"
-#include "Features/LightLimitFIx/ParticleLights.h"
-#include "Features/LightLimitFix.h"
+
 #define DLLEXPORT __declspec(dllexport)
 
 std::list<std::string> errors;
@@ -61,8 +59,8 @@ extern "C" DLLEXPORT constinit auto SKSEPlugin_Version = []() noexcept {
 	SKSE::PluginVersionData v;
 	v.PluginName(Plugin::NAME.data());
 	v.PluginVersion(Plugin::VERSION);
-	v.UsesAddressLibrary(true);
-	v.HasNoStructUse();
+	v.UsesAddressLibrary();
+	v.UsesNoStructs();
 	return v;
 }();
 
@@ -80,22 +78,22 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 	case SKSE::MessagingInterface::kPostPostLoad:
 		{
 			if (errors.empty()) {
-				auto state = State::GetSingleton();
+				auto state = globals::state;
 				state->PostPostLoad();  // state should load first so basic information is populated
 				Deferred::Hooks::Install();
-				TruePBR::GetSingleton()->PostPostLoad();
+				globals::truePBR->PostPostLoad();
 				if (!state->IsFeatureDisabled("Upscaling")) {
 					Upscaling::InstallHooks();
 				}
 				Hooks::Install();
 				FrameAnnotations::OnPostPostLoad();
 
-				auto& shaderCache = SIE::ShaderCache::Instance();
+				auto shaderCache = globals::shaderCache;
 
-				shaderCache.ValidateDiskCache();
+				shaderCache->ValidateDiskCache();
 
-				if (shaderCache.UseFileWatcher())
-					shaderCache.StartFileWatcher();
+				if (shaderCache->UseFileWatcher())
+					shaderCache->StartFileWatcher();
 
 				for (auto* feature : Feature::GetFeatureList()) {
 					if (feature->loaded) {
@@ -114,19 +112,25 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 			}
 
 			if (errors.empty()) {
+				globals::OnDataLoaded();
 				FrameAnnotations::OnDataLoaded();
 
-				auto& shaderCache = SIE::ShaderCache::Instance();
-				shaderCache.menuLoaded = true;
-				while (shaderCache.IsCompiling() && !shaderCache.backgroundCompilation) {
+				auto shaderCache = globals::shaderCache;
+				shaderCache->menuLoaded = true;
+				while (shaderCache->IsCompiling() && !shaderCache->backgroundCompilation) {
 					std::this_thread::sleep_for(100ms);
 				}
 
-				if (shaderCache.IsDiskCache()) {
-					shaderCache.WriteDiskCacheInfo();
+				if (shaderCache->IsDiskCache()) {
+					shaderCache->WriteDiskCacheInfo();
 				}
 
-				TruePBR::GetSingleton()->DataLoaded();
+				if (!REL::Module::IsVR()) {
+					RE::GetINISetting("bEnableImprovedSnow:Display")->data.b = false;
+					RE::GetINISetting("bIBLFEnable:Display")->data.b = false;
+				}
+
+				globals::truePBR->DataLoaded();
 				for (auto* feature : Feature::GetFeatureList()) {
 					if (feature->loaded) {
 						feature->DataLoaded();
@@ -147,13 +151,20 @@ bool Load()
 	}
 
 	if (REL::Module::IsVR()) {
-		REL::IDDatabase::get().IsVRAddressLibraryAtLeastVersion("0.155.0", true);
+		REL::IDDatabase::get().IsVRAddressLibraryAtLeastVersion("0.160.0", true);
+	}
+
+	auto privateProfileRedirectorVersion = Util::GetDllVersion(L"Data/SKSE/Plugins/PrivateProfileRedirector.dll");
+	if (privateProfileRedirectorVersion.has_value() && privateProfileRedirectorVersion.value().compare(REL::Version(0, 6, 2)) == std::strong_ordering::less) {
+		stl::report_and_fail("Old version of PrivateProfileRedirector detected, 0.6.2+ required if using it."sv);
 	}
 
 	auto messaging = SKSE::GetMessagingInterface();
 	messaging->RegisterListener("SKSE", MessageHandler);
 
-	auto state = State::GetSingleton();
+	globals::ReInit();
+
+	auto state = globals::state;
 	state->Load();
 	auto log = spdlog::default_logger();
 	log->set_level(state->GetLogLevel());

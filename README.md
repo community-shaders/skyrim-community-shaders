@@ -86,6 +86,12 @@ docker run -it --rm -v .:C:/skyrim-community-shaders skyrim-community-shaders:la
 4. Retrieve the generated build files from the `build/aio` folder.
 5. In subsequent builds only run the build step (3.)
 
+#### Troubleshooting Build with Docker
+If you run into `Access violation` build errors during step 3, you can try adding [`--isolation=process`](https://learn.microsoft.com/en-us/virtualization/windowscontainers/manage-containers/hyperv-container):
+```pwsh
+docker run -it --rm --isolation=process -v .:C:/skyrim-community-shaders skyrim-community-shaders:latest
+```
+
 ## License
 
 ### Default

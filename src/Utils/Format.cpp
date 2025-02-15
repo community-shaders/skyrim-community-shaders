@@ -25,6 +25,7 @@ namespace Util
 		}
 		return result;
 	}
+
 	std::string DefinesToString(const std::vector<D3D_SHADER_MACRO>& defines)
 	{
 		std::string result;

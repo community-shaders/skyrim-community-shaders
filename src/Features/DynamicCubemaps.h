@@ -1,9 +1,5 @@
 #pragma once
 
-#include "Buffer.h"
-#include "Feature.h"
-#include "Util.h"
-
 class MenuOpenCloseEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
 {
 public:
@@ -43,33 +39,45 @@ public:
 
 	struct alignas(16) UpdateCubemapCB
 	{
-		uint Reset;
 		float3 CameraPreviousPosAdjust;
+		uint pad0;
 	};
 
 	ID3D11ComputeShader* updateCubemapCS = nullptr;
+	ID3D11ComputeShader* updateCubemapReflectionsCS = nullptr;
+	ID3D11ComputeShader* updateCubemapFakeReflectionsCS = nullptr;
+
 	ConstantBuffer* updateCubemapCB = nullptr;
 
 	ID3D11ComputeShader* inferCubemapCS = nullptr;
 	ID3D11ComputeShader* inferCubemapReflectionsCS = nullptr;
+	ID3D11ComputeShader* inferCubemapFakeReflectionsCS = nullptr;
 
 	Texture2D* envCaptureTexture = nullptr;
 	Texture2D* envCaptureRawTexture = nullptr;
 	Texture2D* envCapturePositionTexture = nullptr;
+
+	Texture2D* envCaptureReflectionsTexture = nullptr;
+	Texture2D* envCaptureRawReflectionsTexture = nullptr;
+	Texture2D* envCapturePositionReflectionsTexture = nullptr;
+
 	Texture2D* envInferredTexture = nullptr;
 
 	ID3D11ShaderResourceView* defaultCubemap = nullptr;
 
 	bool activeReflections = false;
-	bool resetCapture = true;
+	bool fakeReflections = false;
+
+	bool resetCapture[2] = { true, true };
 	bool recompileFlag = false;
 
 	enum class NextTask
 	{
 		kCapture,
 		kInferrence,
-		kInferrence2,
 		kIrradiance,
+		kCapture2,
+		kInferrence2,
 		kIrradiance2
 	};
 
@@ -81,13 +89,11 @@ public:
 	{
 		uint EnabledCreator = false;
 		uint EnabledSSR = true;
-		uint MaxIterations = static_cast<uint>(REL::Relocate(16, 16, 48));
-		uint pad0{};
+		uint pad0[2];
 		float4 CubemapColor{ 1.0f, 1.0f, 1.0f, 0.0f };
 	};
 
 	Settings settings;
-	std::string maxIterationsString = "";  // required to avoid string going out of scope for defines
 	bool enabledAtBoot = false;
 	void UpdateCubemap();
 
@@ -110,13 +116,6 @@ public:
 	virtual void DataLoaded() override;
 	virtual void PostPostLoad() override;
 
-	std::map<std::string, Util::GameSetting> SSRSettings{
-		{ "fWaterSSRNormalPerturbationScale:Display", { "Water Normal Perturbation Scale", "Controls the scale of normal perturbations for Screen Space Reflections (SSR) on water surfaces.", 0, 0.05f, 0.f, 1.f } },
-		{ "fWaterSSRBlurAmount:Display", { "Water SSR Blur Amount", "Defines the amount of blur applied to Screen Space Reflections on water surfaces.", 0, 0.3f, 0.f, 1.f } },
-		{ "fWaterSSRIntensity:Display", { "Water SSR Intensity", "Adjusts the intensity or strength of Screen Space Reflections on water.", 0, 1.3f, 0.f, 5.f } },
-		{ "bDownSampleNormalSSR:Display", { "Down Sample Normal SSR", "Enables or disables downsampling of normals for SSR to improve performance.", 0, true, false, true } }
-	};
-
 	std::map<std::string, Util::GameSetting> iniVRCubeMapSettings{
 		{ "bAutoWaterSilhouetteReflections:Water", { "Auto Water Silhouette Reflections", "Automatically reflects silhouettes on water surfaces.", 0, true, false, true } },
 		{ "bForceHighDetailReflections:Water", { "Force High Detail Reflections", "Forces the use of high-detail reflections on water surfaces.", 0, true, false, true } }
@@ -133,11 +132,16 @@ public:
 
 	virtual void ClearShaderCache() override;
 	ID3D11ComputeShader* GetComputeShaderUpdate();
+	ID3D11ComputeShader* GetComputeShaderUpdateReflections();
+	ID3D11ComputeShader* GetComputeShaderUpdateFakeReflections();
+
 	ID3D11ComputeShader* GetComputeShaderInferrence();
 	ID3D11ComputeShader* GetComputeShaderInferrenceReflections();
+	ID3D11ComputeShader* GetComputeShaderInferrenceFakeReflections();
+
 	ID3D11ComputeShader* GetComputeShaderSpecularIrradiance();
 
-	void UpdateCubemapCapture();
+	void UpdateCubemapCapture(bool a_reflections);
 
 	void Inferrence(bool a_reflections);
 

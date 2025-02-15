@@ -4,9 +4,6 @@
 #include <FidelityFX/host/ffx_fsr3.h>
 #include <FidelityFX/host/ffx_interface.h>
 
-#include "Buffer.h"
-#include "State.h"
-
 class FidelityFX
 {
 public:

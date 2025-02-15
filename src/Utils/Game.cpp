@@ -30,8 +30,8 @@ namespace Util
 
 	float4 TryGetWaterData(float offsetX, float offsetY)
 	{
-		if (RE::BSGraphics::RendererShadowState::GetSingleton()) {
-			if (auto tes = RE::TES::GetSingleton()) {
+		if (globals::game::shadowState) {
+			if (auto tes = globals::game::tes) {
 				auto position = GetEyePosition(0);
 				position.x += offsetX;
 				position.y += offsetY;
@@ -77,7 +77,7 @@ namespace Util
 						}
 					}
 
-					if (auto sky = RE::Sky::GetSingleton()) {
+					if (auto sky = globals::game::sky) {
 						const auto& color = sky->skyColor[RE::TESWeather::ColorTypes::kWaterMultiplier];
 						data.x *= color.red;
 						data.y *= color.green;
@@ -95,7 +95,7 @@ namespace Util
 
 	RE::NiPoint3 GetAverageEyePosition()
 	{
-		auto shadowState = RE::BSGraphics::RendererShadowState::GetSingleton();
+		auto shadowState = globals::game::shadowState;
 		if (!REL::Module::IsVR())
 			return shadowState->GetRuntimeData().posAdjust.getEye();
 		return (shadowState->GetVRRuntimeData().posAdjust.getEye(0) + shadowState->GetVRRuntimeData().posAdjust.getEye(1)) * 0.5f;
@@ -103,7 +103,7 @@ namespace Util
 
 	RE::NiPoint3 GetEyePosition(int eyeIndex)
 	{
-		auto shadowState = RE::BSGraphics::RendererShadowState::GetSingleton();
+		auto shadowState = globals::game::shadowState;
 		if (!REL::Module::IsVR())
 			return shadowState->GetRuntimeData().posAdjust.getEye();
 		return shadowState->GetVRRuntimeData().posAdjust.getEye(eyeIndex);
@@ -111,7 +111,7 @@ namespace Util
 
 	RE::BSGraphics::ViewData GetCameraData(int eyeIndex)
 	{
-		auto shadowState = RE::BSGraphics::RendererShadowState::GetSingleton();
+		auto shadowState = globals::game::shadowState;
 		if (!REL::Module::IsVR()) {
 			return shadowState->GetRuntimeData().cameraData.getEye();
 		}
@@ -135,7 +135,7 @@ namespace Util
 	bool GetTemporal()
 	{
 		auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
-		return (!REL::Module::IsVR() ? imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled : imageSpaceManager->GetVRRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled) || State::GetSingleton()->upscalerLoaded;
+		return (!REL::Module::IsVR() ? imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled : imageSpaceManager->GetVRRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled) || globals::state->upscalerLoaded;
 	}
 
 	// https://github.com/PureDark/Skyrim-Upscaler/blob/fa057bb088cf399e1112c1eaba714590c881e462/src/SkyrimUpscaler.cpp#L88
@@ -144,14 +144,14 @@ namespace Util
 		static float& fac = (*(float*)(REL::RelocationID(513786, 388785).address()));
 		const auto base = fac;
 		const auto x = base / 1.30322540f;
-		auto state = State::GetSingleton();
+		auto state = globals::state;
 		const auto vFOV = 2 * atan(x / (state->screenSize.x / state->screenSize.y));
 		return vFOV;
 	}
 
 	float2 ConvertToDynamic(float2 a_size)
 	{
-		auto viewport = RE::BSGraphics::State::GetSingleton();
+		auto viewport = globals::game::graphicsState;
 
 		return float2(
 			a_size.x * viewport->GetRuntimeData().dynamicResolutionWidthRatio,
@@ -160,7 +160,7 @@ namespace Util
 
 	DispatchCount GetScreenDispatchCount(bool a_dynamic)
 	{
-		float2 resolution = State::GetSingleton()->screenSize;
+		float2 resolution = globals::state->screenSize;
 
 		if (a_dynamic)
 			ConvertToDynamic(resolution);
@@ -176,5 +176,10 @@ namespace Util
 		const static auto address = REL::RelocationID{ 508794, 380760 }.address();
 		bool* bDynamicResolution = reinterpret_cast<bool*>(address);
 		return *bDynamicResolution;
+	}
+
+	bool FrameChecker::IsNewFrame()
+	{
+		return IsNewFrame(globals::state->frameCount);
 	}
 }  // namespace Util

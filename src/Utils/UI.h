@@ -38,4 +38,5 @@ namespace Util
 	};
 
 	bool PercentageSlider(const char* label, float* data, float lb = 0.f, float ub = 100.f, const char* format = "%.1f %%");
+	ImVec2 GetNativeViewportSizeScaled(float scale);
 }  // namespace Util

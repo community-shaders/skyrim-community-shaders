@@ -7,7 +7,12 @@ RWTexture2D<float> AlphaMask : register(u0);
 	float2 taaMask = TAAMask[dispatchID.xy];
 
 	float alphaMask = taaMask.x * 0.5;
-	alphaMask = lerp(alphaMask, 1.0, taaMask.y);
+
+#if defined(DLSS)
+	alphaMask = lerp(alphaMask, 1.0, taaMask.y > 0.0);
+#else
+	alphaMask = lerp(alphaMask, 1.0, pow(taaMask.y, 0.25));
+#endif
 
 	AlphaMask[dispatchID.xy] = alphaMask;
 }

@@ -1,9 +1,13 @@
 #ifndef __VR_DEPENDENCY_HLSL__
 #define __VR_DEPENDENCY_HLSL__
 #ifdef VR
-#	if !defined(COMPUTESHADER) && !defined(CSHADER)
-#		include "Common\Constants.hlsli"
-#		include "Common\FrameBuffer.hlsli"
+
+#	if defined(VSHADER)
+#		include "Common/Math.hlsli"
+#	endif  // VSHADER
+
+#	if (!defined(COMPUTESHADER) && !defined(CSHADER)) || defined(FRAMEBUFFER)
+#		include "Common/FrameBuffer.hlsli"
 #	endif
 cbuffer VRValues : register(b13)
 {
@@ -146,7 +150,8 @@ namespace Stereo
 		return normalizedCoord;
 	}
 
-#ifdef PSHADER
+#if defined(PSHADER) || defined(FRAMEBUFFER)
+	// These functions require the framebuffer which is typically provided with the PSHADER
 	/**
 	Gets the eyeIndex for PSHADER
 	@returns eyeIndex (0 left, 1 right)
@@ -158,7 +163,7 @@ namespace Stereo
 #	else
 		float4 stereoUV;
 		stereoUV.xy = position.xy * offset.xy + offset.zw;
-		stereoUV.x = DynamicResolutionParams2.x * stereoUV.x;
+		stereoUV.x = FrameBuffer::DynamicResolutionParams2.x * stereoUV.x;
 		stereoUV.x = (stereoUV.x >= 0.5);
 		uint eyeIndex = (uint)(((int)((uint)StereoEnabled)) * (int)stereoUV.x);
 #	endif
@@ -188,37 +193,44 @@ namespace Stereo
 	* @brief Converts mono UV coordinates from one eye to the corresponding mono UV coordinates of the other eye.
 	*
 	* This function is used to transition UV coordinates from one eye's perspective to the other eye in a stereo rendering setup.
-	* It works by converting the mono UV to clip space, transforming it into view space, and then reprojecting it into the other eye's
-	* clip space before converting back to UV coordinates. It also supports dynamic resolution.
+	* It operates by converting the mono UV to clip space, transforming it into world space, and then reprojecting it 
+	* into the other eye's clip space before converting back to UV coordinates. It supports dynamic resolution adjustments 
+	* and applies eye offset adjustments for correct stereo separation.
+	*
+	* The function considers the aspect of VR by modifying the NDC to view space conversion based on the stereo setup, 
+	* ensuring accurate rendering across both eyes.
 	*
 	* @param[in] monoUV The UV coordinates and depth value (Z component) for the current eye, in the range [0,1].
-	* @param[in] eyeIndex Index of the source/current eye (0 or 1).
+	* @param[in] eyeIndex Index of the source/current eye (0 for left, 1 for right).
 	* @param[in] dynamicres Optional flag indicating whether dynamic resolution is applied. Default is false.
 	* @return UV coordinates adjusted to the other eye, with depth.
 	*/
 	float3 ConvertMonoUVToOtherEye(float3 monoUV, uint eyeIndex, bool dynamicres = false)
 	{
-		// Convert from dynamic res to true UV space
+		// Convert from dynamic res to true UV space if necessary
 		if (dynamicres)
-			monoUV.xy *= DynamicResolutionParams2.xy;
+			monoUV.xy *= FrameBuffer::DynamicResolutionParams2.xy;
 
-		// Step 1: Convert UV to Clip Space
+		// Convert UV to Clip Space
 		float4 clipPos = float4(monoUV.xy * float2(2, -2) - float2(1, -1), monoUV.z, 1);
 
-		// Step 2: Convert Clip Space to View Space for the current eye
-		float4 viewPosCurrentEye = mul(CameraProjInverse[eyeIndex], clipPos);
-		viewPosCurrentEye /= viewPosCurrentEye.w;
+		// Convert Clip Space to World Space for the current eye
+		float4 worldPos = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], clipPos);
+		worldPos /= worldPos.w;
 
-		// Step 3: Convert View Space to Clip Space for the other eye
-		float4 clipPosOtherEye = mul(CameraProj[1 - eyeIndex], viewPosCurrentEye);
+		// Apply eye offset adjustment in world space
+		worldPos.xyz += FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[1 - eyeIndex].xyz;
+
+		// Convert World Space to Clip Space for the other eye
+		float4 clipPosOtherEye = mul(FrameBuffer::CameraViewProj[1 - eyeIndex], worldPos);
 		clipPosOtherEye /= clipPosOtherEye.w;
 
-		// Step 4: Convert Clip Space to UV
+		// Convert Clip Space to UV
 		float3 monoUVOtherEye = float3((clipPosOtherEye.xy * 0.5f) + 0.5f, clipPosOtherEye.z);
 
 		// Convert back to dynamic res space if necessary
 		if (dynamicres)
-			monoUVOtherEye.xy *= DynamicResolutionParams1.xy;
+			monoUVOtherEye.xy *= FrameBuffer::DynamicResolutionParams1.xy;
 
 		return monoUVOtherEye;
 	}
@@ -249,12 +261,12 @@ namespace Stereo
 		float3 resultUV = monoUV;
 #		ifdef VR
 		// Check if the UV coordinates are outside the frame
-		if (FrameBuffer::isOutsideFrame(resultUV.xy, false)) {
+		if (FrameBuffer::IsOutsideFrame(resultUV.xy, false)) {
 			// Transition to the other eye
 			float3 otherEyeUV = ConvertMonoUVToOtherEye(resultUV, eyeIndex);
 
 			// Check if the other eye's UV coordinates are within the frame
-			if (!FrameBuffer::isOutsideFrame(otherEyeUV.xy, false)) {
+			if (!FrameBuffer::IsOutsideFrame(otherEyeUV.xy, false)) {
 				resultUV = ConvertToStereoUV(otherEyeUV, 1 - eyeIndex);
 				fromOtherEye = true;  // Indicate that the result is from the other eye
 			}
@@ -281,7 +293,7 @@ namespace Stereo
 	{
 		// Convert from dynamic res to true UV space
 		if (dynamicres)
-			stereoUV.xy *= DynamicResolutionParams2.xy;
+			stereoUV.xy *= FrameBuffer::DynamicResolutionParams2.xy;
 
 		stereoUV.xy = ConvertFromStereoUV(stereoUV.xy, eyeIndex, true);  // for some reason, the uv.y needs to be inverted before conversion?
 		// Swap eyes
@@ -291,7 +303,7 @@ namespace Stereo
 
 		// Convert back to dynamic res space if necessary
 		if (dynamicres)
-			stereoUV.xy *= DynamicResolutionParams1.xy;
+			stereoUV.xy *= FrameBuffer::DynamicResolutionParams1.xy;
 		return stereoUV;
 	}
 
@@ -316,9 +328,9 @@ namespace Stereo
 		bool dynamicres = false)
 	{
 		// Check validity for color1
-		bool validColor1 = IsNonZeroColor(color1) && !FrameBuffer::isOutsideFrame(uv1.xy, dynamicres);
+		bool validColor1 = IsNonZeroColor(color1) && !FrameBuffer::IsOutsideFrame(uv1.xy, dynamicres);
 		// Check validity for color2
-		bool validColor2 = IsNonZeroColor(color2) && !FrameBuffer::isOutsideFrame(uv2.xy, dynamicres);
+		bool validColor2 = IsNonZeroColor(color2) && !FrameBuffer::IsOutsideFrame(uv2.xy, dynamicres);
 
 		// Calculate alpha values
 		float alpha1 = validColor1 ? color1.a : 0.0f;
@@ -390,7 +402,7 @@ namespace Stereo
 		}
 
 		float stereoAdjustment = 2.0f - StereoEnabled;
-		float eyeOffset = dot(EyeOffsetScale, M_IdentityMatrix[a_eyeIndex].xy);
+		float eyeOffset = dot(EyeOffsetScale, Math::IdentityMatrix[a_eyeIndex].xy);
 
 		float xPositionOffset = eyeOffset * clipPos.w * (isStereoEnabled ? 1.0f : 0.0f);
 		float xPositionBase = stereoAdjustment * clipPos.x;

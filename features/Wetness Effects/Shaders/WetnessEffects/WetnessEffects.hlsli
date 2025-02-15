@@ -2,6 +2,8 @@
 
 namespace WetnessEffects
 {
+	Texture2D<float4> TexPrecipOcclusion : register(t70);
+
 	// https://www.unrealengine.com/en-US/blog/physically-based-shading-on-mobile
 	float2 EnvBRDFApproxWater(float3 F0, float Roughness, float NoV)
 	{
@@ -55,35 +57,35 @@ namespace WetnessEffects
 	float4 GetRainDrops(float3 worldPos, float t, float3 normal)
 	{
 		const static float uintToFloat = rcp(4294967295.0);
-		const float rippleBreadthRcp = rcp(wetnessEffectsSettings.RippleBreadth);
+		const float rippleBreadthRcp = rcp(SharedData::wetnessEffectsSettings.RippleBreadth);
 
-		float2 gridUV = worldPos.xy * wetnessEffectsSettings.RaindropGridSizeRcp;
-		gridUV += normal.xy * 0.5;
+		float2 gridUV = worldPos.xy * SharedData::wetnessEffectsSettings.RaindropGridSizeRcp;
+		gridUV += normal.xy;
 		int2 grid = floor(gridUV);
 		gridUV -= grid;
 
 		float3 rippleNormal = float3(0, 0, 1);
 		float wetness = 0;
 
-		if (wetnessEffectsSettings.EnableSplashes || wetnessEffectsSettings.EnableRipples)
-			for (int i = -1; i <= 1; i++)
+		if (SharedData::wetnessEffectsSettings.EnableSplashes || SharedData::wetnessEffectsSettings.EnableRipples) {
+			for (int i = -1; i <= 1; i++) {
 				for (int j = -1; j <= 1; j++) {
 					int2 gridCurr = grid + int2(i, j);
 					float tOffset = float(Random::iqint3(gridCurr)) * uintToFloat;
 
 					// splashes
-					if (wetnessEffectsSettings.EnableSplashes) {
-						float residual = t * wetnessEffectsSettings.RaindropIntervalRcp / wetnessEffectsSettings.SplashesLifetime + tOffset + worldPos.z * 0.001;
+					if (SharedData::wetnessEffectsSettings.EnableSplashes) {
+						float residual = t * SharedData::wetnessEffectsSettings.RaindropIntervalRcp / SharedData::wetnessEffectsSettings.SplashesLifetime + tOffset + worldPos.z * 0.001;
 						uint timestep = residual;
 						residual = residual - timestep;
 
 						uint3 hash = Random::pcg3d(uint3(asuint(gridCurr), timestep));
 						float3 floatHash = float3(hash) * uintToFloat;
 
-						if (floatHash.z < (wetnessEffectsSettings.RaindropChance)) {
+						if (floatHash.z < (SharedData::wetnessEffectsSettings.RaindropChance)) {
 							float2 vec2Centre = int2(i, j) + floatHash.xy - gridUV;
 							float distSqr = dot(vec2Centre, vec2Centre);
-							float drop_radius = lerp(wetnessEffectsSettings.SplashesMinRadius, wetnessEffectsSettings.SplashesMaxRadius,
+							float drop_radius = lerp(SharedData::wetnessEffectsSettings.SplashesMinRadius, SharedData::wetnessEffectsSettings.SplashesMaxRadius,
 								float(Random::iqint3(hash.yz)) * uintToFloat);
 							if (distSqr < drop_radius * drop_radius)
 								wetness = max(wetness, RainFade(residual));
@@ -91,26 +93,26 @@ namespace WetnessEffects
 					}
 
 					// ripples
-					if (wetnessEffectsSettings.EnableRipples) {
-						float residual = t * wetnessEffectsSettings.RaindropIntervalRcp + tOffset + worldPos.z * 0.001;
+					if (SharedData::wetnessEffectsSettings.EnableRipples) {
+						float residual = t * SharedData::wetnessEffectsSettings.RaindropIntervalRcp + tOffset + worldPos.z * 0.001;
 						uint timestep = residual;
 						residual = residual - timestep;
 
 						uint3 hash = Random::pcg3d(uint3(asuint(gridCurr), timestep));
 						float3 floatHash = float3(hash) * uintToFloat;
 
-						if (floatHash.z < (wetnessEffectsSettings.RaindropChance)) {
+						if (floatHash.z < (SharedData::wetnessEffectsSettings.RaindropChance)) {
 							float2 vec2Centre = int2(i, j) + floatHash.xy - gridUV;
 							float distSqr = dot(vec2Centre, vec2Centre);
-							float rippleT = residual * wetnessEffectsSettings.RippleLifetimeRcp;
+							float rippleT = residual * SharedData::wetnessEffectsSettings.RippleLifetimeRcp;
 							if (rippleT < 1.) {
-								float ripple_r = lerp(0., wetnessEffectsSettings.RippleRadius, rippleT);
-								float ripple_inner_radius = ripple_r - wetnessEffectsSettings.RippleBreadth;
+								float ripple_r = lerp(0., SharedData::wetnessEffectsSettings.RippleRadius, rippleT);
+								float ripple_inner_radius = ripple_r - SharedData::wetnessEffectsSettings.RippleBreadth;
 
 								float band_lerp = (sqrt(distSqr) - ripple_inner_radius) * rippleBreadthRcp;
 								if (band_lerp > 0. && band_lerp < 1.) {
 									float deriv = (band_lerp < .5 ? SmoothstepDeriv(band_lerp * 2.) : -SmoothstepDeriv(2. - band_lerp * 2.)) *
-									              lerp(wetnessEffectsSettings.RippleStrength, 0, rippleT * rippleT);
+									              lerp(SharedData::wetnessEffectsSettings.RippleStrength, 0, rippleT * rippleT);
 
 									float3 grad = float3(normalize(vec2Centre), -deriv);
 									float3 bitangent = float3(-grad.y, grad.x, 0);
@@ -122,15 +124,10 @@ namespace WetnessEffects
 						}
 					}
 				}
-
-		if (wetnessEffectsSettings.EnableChaoticRipples) {
-			float3 turbulenceNormal = Random::perlinNoise(float3(worldPos.xy * wetnessEffectsSettings.ChaoticRippleScaleRcp, t * wetnessEffectsSettings.ChaoticRippleSpeed));
-			turbulenceNormal.z = turbulenceNormal.z * .5 + 5;
-			turbulenceNormal = normalize(turbulenceNormal);
-			rippleNormal = normalize(rippleNormal + float3(turbulenceNormal.xy * wetnessEffectsSettings.ChaoticRippleStrength, 0));
+			}
 		}
 
-		wetness *= wetnessEffectsSettings.SplashesStrength;
+		wetness *= SharedData::wetnessEffectsSettings.SplashesStrength;
 
 		return float4(rippleNormal, wetness);
 	}
@@ -146,7 +143,7 @@ namespace WetnessEffects
 		float3 specularIrradiance = 1.0;
 #	else
 		float level = roughness * 7.0;
-		float3 specularIrradiance = Color::GammaToLinear(specularTexture.SampleLevel(SampColorSampler, R, level).rgb);
+		float3 specularIrradiance = Color::GammaToLinear(DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).rgb);
 #	endif
 #else
 		float3 specularIrradiance = 1.0;
