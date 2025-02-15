@@ -206,6 +206,38 @@ float3 AldridgeFilmic(float3 val)
 	return val;
 }
 
+float3 ACEScct(float3 val)
+{
+	if (Params[0].x == Params[0].y) {
+		return val;
+	}
+
+	if (Params[0].x == 0 && Params[0].y == 1) {
+		for (int i = 0; i < 3; i++) {
+			if (val[i] > 0.072905) {
+				val[i] = (log2(val[i]) + 9.72) / 17.52;
+			}
+			else {
+				val[i] = val[i] * 10.5402377416545 / 0.0729055341958355;
+			}
+		}
+	} else if (Params[0].x == 1 && Params[0].y == 0) {
+		for (int i = 0; i < 3; i++) {
+			if (val[i] >= 0.155251141552511 && val[i] < 1.46799631204) {
+				val[i] = pow(2, val[i] * 17.52 - 9.72);
+			}
+			else if (val[i] < 0.155251141552511) {
+				val[i] = val[i] * 0.0729055341958355 / 10.5402377416545;
+			}
+			else {
+				val[i] = 65504.0;
+			}
+		}
+	}
+
+	return val;
+}
+
 float3 AcesHill(float3 val)
 {
 	static const float3x3 g_sRGBToACEScg = float3x3(
