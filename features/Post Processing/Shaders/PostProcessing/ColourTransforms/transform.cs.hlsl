@@ -212,30 +212,34 @@ float3 ACEScct(float3 val)
 		return val;
 	}
 
+	const float a = 10.5402377416545;
+    const float b = 0.0729055341958355;
+    const float cutoff = 0.0078125;
+	const float cutoff2 = 0.155251141552511;
+
+	float3 cct = val;
+
 	if (Params[0].x == 0 && Params[0].y == 1) {
 		for (int i = 0; i < 3; i++) {
-			if (val[i] > 0.072905) {
-				val[i] = (log2(val[i]) + 9.72) / 17.52;
+			if (val[i] > cutoff) {
+				cct[i] = (log2(val[i]) + 9.72) / 17.52;
 			}
 			else {
-				val[i] = val[i] * 10.5402377416545 / 0.0729055341958355;
+				cct[i] = val[i] * a + b;
 			}
 		}
 	} else if (Params[0].x == 1 && Params[0].y == 0) {
 		for (int i = 0; i < 3; i++) {
-			if (val[i] >= 0.155251141552511 && val[i] < 1.46799631204) {
-				val[i] = pow(2, val[i] * 17.52 - 9.72);
-			}
-			else if (val[i] < 0.155251141552511) {
-				val[i] = val[i] * 0.0729055341958355 / 10.5402377416545;
+			if (val[i] >= cutoff2) {
+				cct[i] = pow(2, val[i] * 17.52 - 9.72);
 			}
 			else {
-				val[i] = 65504.0;
+				cct[i] = (val[i] - b) / a;
 			}
 		}
 	}
 
-	return val;
+	return cct;
 }
 
 float3 AcesHill(float3 val)
