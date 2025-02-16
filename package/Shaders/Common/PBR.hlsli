@@ -74,7 +74,8 @@ namespace PBR
 		float GlintLogMicrofacetDensity;
 		float GlintMicrofacetRoughness;
 		float GlintDensityRandomization;
-		Glints::GlintCachedVars GlintCache[4];
+		Glints::GlintCachedVars GlintCache;
+		float Noise;
 	};
 
 	SurfaceProperties InitSurfaceProperties()
@@ -103,12 +104,10 @@ namespace PBR
 		surfaceProperties.GlintDensityRandomization = 2.0;
 
 #ifdef GLINT
-		surfaceProperties.GlintCache[0].uv = 0;
-		surfaceProperties.GlintCache[0].gridSeed = 0;
-		surfaceProperties.GlintCache[0].footprintArea = surfaceProperties.GlintCache[0].gridWeight = 0;
-		surfaceProperties.GlintCache[1] = surfaceProperties.GlintCache[2] = surfaceProperties.GlintCache[3] = surfaceProperties.GlintCache[0];
-#else
-		surfaceProperties.GlintCache[0] = surfaceProperties.GlintCache[1] = surfaceProperties.GlintCache[2] = surfaceProperties.GlintCache[3] = 0;
+		surfaceProperties.GlintCache.uv = 0;
+		surfaceProperties.GlintCache.gridSeed = 0;
+		surfaceProperties.GlintCache.footprintArea = 0;
+		surfaceProperties.Noise = 0;
 #endif
 
 		return surfaceProperties;
@@ -190,15 +189,15 @@ namespace PBR
 	}
 
 #if defined(GLINT)
-	float3 GetSpecularDirectLightMultiplierMicrofacetWithGlint(float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH, float glintH,
-		float logDensity, float microfacetRoughness, float densityRandomization, Glints::GlintCachedVars glintCache[4],
+	float3 GetSpecularDirectLightMultiplierMicrofacetWithGlint(float noise, float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH, float glintH,
+		float logDensity, float microfacetRoughness, float densityRandomization, Glints::GlintCachedVars glintCache,
 		out float3 F)
 	{
 		float D = GetNormalDistributionFunctionGGX(roughness, NdotH);
 		[branch] if (logDensity > 1.1)
 		{
 			float D_max = GetNormalDistributionFunctionGGX(roughness, 1);
-			D = Glints::SampleGlints2023NDF(logDensity, microfacetRoughness, densityRandomization, glintCache, glintH, D, D_max);
+			D = Glints::SampleGlints2023NDF(noise, logDensity, microfacetRoughness, densityRandomization, glintCache, glintH, D, D_max);
 		}
 		float G = GetVisibilityFunctionSmithJointApprox(roughness, NdotV, NdotL);
 		F = GetFresnelFactorSchlick(specularColor, VdotH);
@@ -440,7 +439,7 @@ namespace PBR
 
 			float3 F;
 #if defined(GLINT)
-			specular += GetSpecularDirectLightMultiplierMicrofacetWithGlint(surfaceProperties.Roughness, surfaceProperties.F0, satNdotL, satNdotV, satNdotH, satVdotH, mul(tbnTr, H),
+			specular += GetSpecularDirectLightMultiplierMicrofacetWithGlint(surfaceProperties.Noise, surfaceProperties.Roughness, surfaceProperties.F0, satNdotL, satNdotV, satNdotH, satVdotH, mul(tbnTr, H),
 							surfaceProperties.GlintLogMicrofacetDensity, surfaceProperties.GlintMicrofacetRoughness, surfaceProperties.GlintDensityRandomization, surfaceProperties.GlintCache, F) *
 			            lightProperties.LightColor * satNdotL;
 #else

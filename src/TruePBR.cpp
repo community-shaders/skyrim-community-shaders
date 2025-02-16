@@ -269,7 +269,7 @@ void TruePBR::PrePass()
 
 void TruePBR::SetupGlintsTexture()
 {
-	constexpr uint noiseTexSize = 64;
+	constexpr uint noiseTexSize = 128;
 
 	D3D11_TEXTURE2D_DESC tex_desc{
 		.Width = noiseTexSize,

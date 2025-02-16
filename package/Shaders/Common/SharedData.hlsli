@@ -130,6 +130,12 @@ namespace SharedData
 		uint2 pad0;
 	};
 
+	struct CloudShadowsSettings
+	{
+		float Opacity;
+		float3 pad0;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -139,6 +145,7 @@ namespace SharedData
 		LightLimitFixSettings lightLimitFixSettings;
 		WetnessEffectsSettings wetnessEffectsSettings;
 		SkylightingSettings skylightingSettings;
+		CloudShadowsSettings cloudShadowsSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);

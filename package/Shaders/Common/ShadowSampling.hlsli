@@ -156,11 +156,8 @@ namespace ShadowSampling
 #endif
 
 #if defined(CLOUD_SHADOWS)
-		if (!SharedData::InMapMenu) {
+		if (!SharedData::InMapMenu)
 			worldShadow *= CloudShadows::GetCloudShadowMult(positionWS, LinearSampler);
-			if (worldShadow == 0.0)
-				return worldShadow;
-		}
 #endif
 
 		return worldShadow;

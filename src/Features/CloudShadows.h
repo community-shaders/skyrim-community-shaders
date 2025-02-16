@@ -8,6 +8,14 @@ struct CloudShadows : Feature
 		return &singleton;
 	}
 
+	struct alignas(16) Settings
+	{
+		float Opacity = 0.8f;
+		float pad[3];
+	};
+
+	Settings settings;
+
 	virtual inline std::string GetName() override { return "Cloud Shadows"; }
 	virtual inline std::string GetShortName() override { return "CloudShadows"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "CLOUD_SHADOWS"; }
@@ -25,6 +33,13 @@ struct CloudShadows : Feature
 	ID3D11BlendState* cloudShadowBlendState = nullptr;
 
 	virtual void SetupResources() override;
+
+	virtual void DrawSettings() override;
+
+	virtual void LoadSettings(json& o_json) override;
+	virtual void SaveSettings(json& o_json) override;
+
+	virtual void RestoreDefaultSettings() override;
 
 	void CheckResourcesSide(int side);
 	void ModifySky(RE::BSRenderPass* Pass);

@@ -166,7 +166,6 @@ namespace WetnessEffects
 
 	float3 GetWetnessSpecular(float3 N, float3 L, float3 V, float3 lightColor, float roughness)
 	{
-		lightColor *= 0.01;
-		return LightingFuncGGX_OPT3(N, V, L, roughness, 1.0 - roughness) * lightColor;
+		return LightingFuncGGX_OPT3(N, V, L, roughness, 0.02) * lightColor;
 	}
 }
