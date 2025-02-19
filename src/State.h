@@ -126,7 +126,7 @@ public:
 		IsDecal = 1 << 4
 	};
 
-	void UpdateSharedData(bool a_inWorld);
+	void UpdateSharedData(bool a_inWorld, bool a_prepass);
 
 	struct alignas(16) PermutationCB
 	{
@@ -152,7 +152,8 @@ public:
 		uint InInterior;
 		uint InMapMenu;
 		uint HideSky;
-		float2 pad0;
+		float MipBias;
+		float pad0;
 	};
 
 	ConstantBuffer* sharedDataCB = nullptr;

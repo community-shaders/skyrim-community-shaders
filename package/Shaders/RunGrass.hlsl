@@ -450,14 +450,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 baseColor;
 #		if !defined(TRUE_PBR)
 	if (complex) {
-		baseColor = TexBaseSampler.Sample(SampBaseSampler, float2(input.TexCoord.x, input.TexCoord.y * 0.5));
+		baseColor = TexBaseSampler.SampleBias(SampBaseSampler, float2(input.TexCoord.x, input.TexCoord.y * 0.5), SharedData::MipBias);
 	} else
 #		endif  // !TRUE_PBR
 	{
-		baseColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord.xy);
+		baseColor = TexBaseSampler.SampleBias(SampBaseSampler, input.TexCoord.xy, SharedData::MipBias);
 	}
 
-#		if defined(RENDER_DEPTH) || defined(DO_ALPHA_TEST)
+#		if defined(RENDER_DEPTH)
 	float diffuseAlpha = input.VertexColor.w * baseColor.w;
 	if ((diffuseAlpha - AlphaTestRefRS) < 0) {
 		discard;
@@ -470,9 +470,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	psout.PS.w = diffuseAlpha;
 #		else
 #			if !defined(TRUE_PBR)
-	float4 specColor = complex ? TexBaseSampler.Sample(SampBaseSampler, float2(input.TexCoord.x, 0.5 + input.TexCoord.y * 0.5)) : 1;
+	float4 specColor = complex ? TexBaseSampler.SampleBias(SampBaseSampler, float2(input.TexCoord.x, 0.5 + input.TexCoord.y * 0.5), SharedData::MipBias) : 1;
 #			else
-	float4 specColor = TexNormalSampler.Sample(SampNormalSampler, input.TexCoord.xy);
+	float4 specColor = TexNormalSampler.SampleBias(SampNormalSampler, input.TexCoord.xy, SharedData::MipBias);
 #			endif
 
 	uint eyeIndex = Stereo::GetEyeIndexPS(input.HPosition, VPOSOffset);
@@ -508,7 +508,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #			endif  // !TRUE_PBR
 
 #			if defined(TRUE_PBR)
-	float4 rawRMAOS = TexRMAOSSampler.Sample(SampRMAOSSampler, input.TexCoord.xy) * float4(PBRParams1.x, 1, 1, PBRParams1.y);
+	float4 rawRMAOS = TexRMAOSSampler.SampleBias(SampRMAOSSampler, input.TexCoord.xy, SharedData::MipBias) * float4(PBRParams1.x, 1, 1, PBRParams1.y);
 
 	PBR::SurfaceProperties pbrSurfaceProperties = PBR::InitSurfaceProperties();
 
@@ -733,9 +733,9 @@ PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
 
-	float4 baseColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord.xy);
+	float4 baseColor = TexBaseSampler.SampleBias(SampBaseSampler, input.TexCoord.xy, SharedData::MipBias);
 
-#		if defined(RENDER_DEPTH) || defined(DO_ALPHA_TEST)
+#		if defined(RENDER_DEPTH)
 	float diffuseAlpha = input.DiffuseColor.w * baseColor.w;
 
 	if ((diffuseAlpha - AlphaTestRefRS) < 0) {

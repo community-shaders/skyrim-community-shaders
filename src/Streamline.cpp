@@ -72,7 +72,7 @@ void Streamline::Initialize()
 
 	sl::Preferences pref;
 
-	sl::Feature featuresToLoad[] = { sl::kFeatureDLSS, sl::kFeatureDLSS_G, sl::kFeatureReflex };
+	sl::Feature featuresToLoad[] = { sl::kFeatureDLSS, sl::kFeatureDLSS_G, sl::kFeatureReflex, sl::kFeatureNIS };
 	pref.featuresToLoad = featuresToLoad;
 	pref.numFeaturesToLoad = _countof(featuresToLoad);
 
@@ -134,6 +134,11 @@ void Streamline::PostDevice(DXGI_SWAP_CHAIN_DESC* a_swapChainDesc)
 		slGetFeatureFunction(sl::kFeatureReflex, "slReflexSetMarker", (void*&)slReflexSetMarker);
 		slGetFeatureFunction(sl::kFeatureReflex, "slReflexSleep", (void*&)slReflexSleep);
 		slGetFeatureFunction(sl::kFeatureReflex, "slReflexSetOptions", (void*&)slReflexSetOptions);
+	}
+
+	if (featureNIS) {
+		slGetFeatureFunction(sl::kFeatureNIS, "slNISSetOptions", (void*&)slNISSetOptions);
+		slGetFeatureFunction(sl::kFeatureNIS, "slNISGetState", (void*&)slNISGetState);
 	}
 
 	MONITORINFOEX monitorInfo = {};
@@ -219,9 +224,23 @@ HRESULT Streamline::CreateDeviceAndSwapChain(IDXGIAdapter* pAdapter,
 		}
 	}
 
+	slIsFeatureLoaded(sl::kFeatureNIS, featureNIS);
+	if (featureReflex) {
+		logger::info("[Streamline] NIS feature is loaded");
+		featureReflex = slIsFeatureSupported(sl::kFeatureNIS, adapterInfo) == sl::Result::eOk;
+	} else {
+		logger::info("[Streamline] NIS feature is not loaded");
+		sl::FeatureRequirements featureRequirements;
+		sl::Result result = slGetFeatureRequirements(sl::kFeatureNIS, featureRequirements);
+		if (result != sl::Result::eOk) {
+			logger::info("[Streamline] NIS feature failed to load due to: {}", magic_enum::enum_name(result));
+		}
+	}
+
 	logger::info("[Streamline] DLSS {} available", featureDLSS ? "is" : "is not");
 	logger::info("[Streamline] DLSSG {} available", featureDLSSG && !REL::Module::IsVR() ? "is" : "is not");
 	logger::info("[Streamline] Reflex {} available", featureReflex ? "is" : "is not");
+	logger::info("[Streamline] NIS {} available", featureNIS ? "is" : "is not");
 
 	HRESULT hr = S_OK;
 
@@ -454,7 +473,7 @@ void Streamline::Present()
 	slSetTag(viewport, inputs, _countof(inputs), globals::d3d::context);
 }
 
-void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl::DLSSPreset a_preset)
+void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl::DLSSPreset a_preset, float a_sharpness)
 {
 	UpdateConstants();
 
@@ -515,6 +534,68 @@ void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl
 	sl::ViewportHandle view(viewport);
 	const sl::BaseStructure* inputs[] = { &view };
 	slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
+
+	{
+		sl::Extent fullExtent{ 0, 0, (uint)state->screenSize.x, (uint)state->screenSize.y };
+
+		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_upscaleTexture->resource.get(), 0 };
+		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_upscaleTexture->resource.get(), 0 };
+
+		sl::ResourceTag colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
+		sl::ResourceTag colorOutTag = sl::ResourceTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
+
+		sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag };
+		slSetTag(viewport, resourceTags, _countof(resourceTags), globals::d3d::context);
+	}
+
+	{
+		sl::NISOptions nisOptions{};
+		nisOptions.mode = sl::NISMode::eSharpen;
+		nisOptions.hdrMode = sl::NISHDR::eNone;
+		nisOptions.sharpness = a_sharpness / 3.0f;
+
+		if (SL_FAILED(result, slNISSetOptions(viewport, nisOptions))) {
+			logger::critical("[Streamline] Could not set NIS options");
+		}
+	}
+
+	slEvaluateFeature(sl::kFeatureNIS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
+}
+
+void Streamline::Sharpen(Texture2D* a_sharpenTexture, float a_sharpness)
+{
+	UpdateConstants();
+
+	auto state = globals::state;
+
+	{
+		sl::Extent fullExtent{ 0, 0, (uint)state->screenSize.x, (uint)state->screenSize.y };
+
+		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_sharpenTexture->resource.get(), 0 };
+		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_sharpenTexture->resource.get(), 0 };
+
+		sl::ResourceTag colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
+		sl::ResourceTag colorOutTag = sl::ResourceTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
+
+		sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag };
+		slSetTag(viewport, resourceTags, _countof(resourceTags), globals::d3d::context);
+	}
+
+	{
+		sl::NISOptions nisOptions{};
+		nisOptions.mode = sl::NISMode::eSharpen;
+		nisOptions.hdrMode = sl::NISHDR::eNone;
+		nisOptions.sharpness = a_sharpness * 0.5f;
+
+		if (SL_FAILED(result, slNISSetOptions(viewport, nisOptions))) {
+			logger::critical("[Streamline] Could not set NIS options");
+		}
+	}
+
+	sl::ViewportHandle view(viewport);
+	const sl::BaseStructure* inputs[] = { &view };
+
+	slEvaluateFeature(sl::kFeatureNIS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
 }
 
 void Streamline::UpdateConstants()

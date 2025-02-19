@@ -222,7 +222,7 @@ void Deferred::ReflectionsPrepasses()
 	if (!shaderCache->IsEnabled())
 		return;
 
-	globals::state->UpdateSharedData(false);
+	globals::state->UpdateSharedData(false, false);
 
 	ZoneScoped;
 	TracyD3D11Zone(globals::game::graphicsState->tracyCtx, "Early Prepass");
@@ -246,7 +246,7 @@ void Deferred::EarlyPrepasses()
 	if (!shaderCache->IsEnabled())
 		return;
 
-	globals::state->UpdateSharedData(false);
+	globals::state->UpdateSharedData(false, true);
 
 	ZoneScoped;
 	TracyD3D11Zone(globals::game::graphicsState->tracyCtx, "Early Prepass");
@@ -288,7 +288,7 @@ void Deferred::PrepassPasses()
 
 void Deferred::StartDeferred()
 {
-	globals::state->UpdateSharedData(true);
+	globals::state->UpdateSharedData(true, false);
 
 	auto shadowState = globals::game::shadowState;
 	GET_INSTANCE_MEMBER(renderTargets, shadowState)

@@ -654,7 +654,7 @@ void State::SetAdapterDescription(const std::wstring& description)
 	adapterDescription = converter.to_bytes(description);
 }
 
-void State::UpdateSharedData(bool a_inWorld)
+void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 {
 	{
 		SharedDataCB data{};
@@ -706,6 +706,13 @@ void State::UpdateSharedData(bool a_inWorld)
 			data.InMapMenu = ui->IsMenuOpen(RE::MapMenu::MENU_NAME);
 		else
 			data.InMapMenu = true;
+
+		if (!globals::game::isVR && bTAA && (a_inWorld || a_prepass)) {
+			auto renderSize = Util::ConvertToDynamic(screenSize);
+			data.MipBias = std::log2f(renderSize.x / screenSize.x) - 1.0f;
+		} else {
+			data.MipBias = 0;
+		}
 
 		sharedDataCB->Update(data);
 	}

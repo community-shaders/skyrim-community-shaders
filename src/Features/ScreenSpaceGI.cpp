@@ -88,7 +88,7 @@ void ScreenSpaceGI::DrawSettings()
 			settings.NumSlices = 10;
 			settings.NumSteps = 12;
 			settings.ResolutionMode = 2;
-			settings.EnableBlur = true;
+			settings.EnableBlur = false;
 			settings.EnableGI = true;
 			recompileFlag = true;
 		}
@@ -100,7 +100,7 @@ void ScreenSpaceGI::DrawSettings()
 			settings.NumSlices = 2;
 			settings.NumSteps = 8;
 			settings.ResolutionMode = 1;
-			settings.EnableBlur = true;
+			settings.EnableBlur = false;
 			settings.EnableGI = true;
 			recompileFlag = true;
 		}
@@ -112,7 +112,7 @@ void ScreenSpaceGI::DrawSettings()
 			settings.NumSlices = 4;
 			settings.NumSteps = 8;
 			settings.ResolutionMode = 0;
-			settings.EnableBlur = true;
+			settings.EnableBlur = false;
 			settings.EnableGI = true;
 			recompileFlag = true;
 		}
