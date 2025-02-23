@@ -18,13 +18,13 @@
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/Skylighting.h"
+#include "Features/SnowCover.h"
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainShadows.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
 #include "Features/WetnessEffects.h"
-#include "Features/SnowCover.h"
 
 #include "Features/LightLimitFix/ParticleLights.h"
 

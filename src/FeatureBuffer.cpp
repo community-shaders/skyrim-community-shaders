@@ -9,7 +9,6 @@
 #include "Features/SnowCover.h"
 #include "Features/TerrainShadows.h"
 #include "Features/WetnessEffects.h"
-#include "Features/SnowCover.h"
 
 #include "TruePBR.h"
 
