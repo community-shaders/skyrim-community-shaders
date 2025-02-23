@@ -137,8 +137,33 @@ namespace SharedData
 		float3 pad0;
 	};
 
+	struct SnowCoverSettings
+	{
+		float Month;
+		float TimeSnowing;
+		float SnowAmount;
+		uint Sky;
+
+		uint EnableSnowCover;
+		uint AffectFoliageColor;
+		float SnowHeightOffset;
+		float FoliageHeightOffset;
+
+		uint MaxSummerMonth;
+		uint MaxWinterMonth;
+		float SummerHeightOffset;
+		float WinterHeightOffset;
+
+		float UVScale;
+		float ParallaxScale;
+		uint2 pad2;
+
+		float4 Glint;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
+		SnowCoverSettings snowCoverSettings;
 		GrassLightingSettings grassLightingSettings;
 		CPMSettings extendedMaterialSettings;
 		CubemapCreatorSettings cubemapCreatorSettings;

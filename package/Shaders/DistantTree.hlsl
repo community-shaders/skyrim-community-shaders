@@ -173,6 +173,14 @@ const static float DepthOffsets[16] = {
 #	define LinearSampler SampDiffuse
 
 #	include "Common/ShadowSampling.hlsli"
+#	if defined(SNOW_COVER)
+#		undef SNOW
+#		undef PROJECTED_UV
+#		undef SPARKLE
+#		define BASIC_SNOW_COVER
+#		define SampColorSampler SampDiffuse
+#		include "SnowCover/SnowCover.hlsli"
+#	endif
 
 PS_OUTPUT main(PS_INPUT input)
 {
@@ -209,6 +217,14 @@ PS_OUTPUT main(PS_INPUT input)
 	if ((baseColor.w - AlphaTestRefRS) < 0) {
 		discard;
 	}
+	float3 ddx = ddx_coarse(input.WorldPosition);
+	float3 ddy = ddy_coarse(input.WorldPosition);
+	float3 normal = normalize(normalize(cross(ddx, ddy)) + float3(0, 0, 1));
+
+#		if defined(SNOW_COVER)
+	if (snowCoverSettings.EnableSnowCover)
+		SnowCover::ApplySnowFoliage(baseColor.xyz, normal, input.WorldPosition.xyz + CameraPosAdjust[eyeIndex].xyz, 1);
+#		endif
 
 #		if defined(DEFERRED)
 	float3 viewPosition = mul(FrameBuffer::CameraView[eyeIndex], float4(input.WorldPosition.xyz, 1)).xyz;

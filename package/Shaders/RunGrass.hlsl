@@ -434,6 +434,16 @@ cbuffer PerMaterial : register(b1)
 
 #		include "GrassLighting/GrassLighting.hlsli"
 
+#		define SampColorSampler SampBaseSampler
+#		define PI 3.1415927
+#		if defined(SNOW_COVER)
+#			undef SNOW
+#			undef PROJECTED_UV
+#			undef SPARKLE
+#			define BASIC_SNOW_COVER
+#			include "SnowCover/SnowCover.hlsli"
+#		endif
+
 PS_OUTPUT main(PS_INPUT input, bool frontFace
 			   : SV_IsFrontFace)
 {
@@ -506,6 +516,25 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	if (!complex || SharedData::grassLightingSettings.OverrideComplexGrassSettings)
 		baseColor.xyz *= SharedData::grassLightingSettings.BasicGrassBrightness;
 #			endif  // !TRUE_PBR
+
+#			if defined(SKYLIGHTING)
+#				if defined(VR)
+	float3 positionMSSkylight = input.WorldPosition.xyz + CameraPosAdjust[eyeIndex].xyz - CameraPosAdjust[0].xyz;
+#				else
+	float3 positionMSSkylight = input.WorldPosition.xyz;
+#				endif
+
+	sh2 skylightingSH = Skylighting::sample(skylightingSettings, SkylightingProbeArray, positionMSSkylight, normal);
+
+	float snowOcclusion = smoothstep(0, 1, (shUnproject(skylightingSH, float3(0, 0, 1))));
+#			else
+	float snowOcclusion = 1;
+#			endif
+#			if defined(SNOW_COVER)
+	snowOcclusion *= saturate(input.WorldPosition.z - GetWaterData(input.WorldPosition.xyz).w);
+	if (snowCoverSettings.EnableSnowCover)
+		SnowCover::ApplySnowFoliage(baseColor.xyz, normal, input.WorldPosition.xyz + CameraPosAdjust[eyeIndex].xyz, snowOcclusion);
+#			endif
 
 #			if defined(TRUE_PBR)
 	float4 rawRMAOS = TexRMAOSSampler.SampleBias(SampRMAOSSampler, input.TexCoord.xy, SharedData::MipBias) * float4(PBRParams1.x, 1, 1, PBRParams1.y);

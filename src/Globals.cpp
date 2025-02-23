@@ -24,6 +24,7 @@
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
 #include "Features/WetnessEffects.h"
+#include "Features/SnowCover.h"
 
 #include "Features/LightLimitFix/ParticleLights.h"
 
@@ -40,6 +41,7 @@ namespace globals
 
 	namespace features
 	{
+		SnowCover* snowCover = nullptr;
 		CloudShadows* cloudShadows = nullptr;
 		DynamicCubemaps* dynamicCubemaps = nullptr;
 		ExtendedMaterials* extendedMaterials = nullptr;
@@ -133,6 +135,7 @@ namespace globals
 		streamline = Streamline::GetSingleton();
 		upscaling = Upscaling::GetSingleton();
 
+		features::snowCover = SnowCover::GetSingleton();
 		features::cloudShadows = CloudShadows::GetSingleton();
 		features::dynamicCubemaps = DynamicCubemaps::GetSingleton();
 		features::extendedMaterials = ExtendedMaterials::GetSingleton();

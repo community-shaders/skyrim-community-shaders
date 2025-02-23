@@ -1,5 +1,6 @@
 #pragma once
 
+struct SnowCover;
 struct CloudShadows;
 struct DynamicCubemaps;
 struct ExtendedMaterials;
@@ -41,6 +42,7 @@ namespace globals
 
 	namespace features
 	{
+		extern SnowCover* snowCover;
 		extern CloudShadows* cloudShadows;
 		extern DynamicCubemaps* dynamicCubemaps;
 		extern ExtendedMaterials* extendedMaterials;

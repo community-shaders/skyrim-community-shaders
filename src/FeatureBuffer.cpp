@@ -6,8 +6,10 @@
 #include "Features/GrassLighting.h"
 #include "Features/LightLimitFix.h"
 #include "Features/Skylighting.h"
+#include "Features/SnowCover.h"
 #include "Features/TerrainShadows.h"
 #include "Features/WetnessEffects.h"
+#include "Features/SnowCover.h"
 
 #include "TruePBR.h"
 
@@ -30,6 +32,7 @@ std::pair<unsigned char*, size_t> _GetFeatureBufferData(Ts... feat_datas)
 std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 {
 	return _GetFeatureBufferData(
+		globals::features::snowCover->GetCommonBufferData(),
 		globals::features::grassLighting->settings,
 		globals::features::extendedMaterials->settings,
 		globals::features::dynamicCubemaps->settings,
