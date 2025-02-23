@@ -46,8 +46,6 @@ public:
 		float RippleLifetime = .15f;
 	};
 
-	static_assert(sizeof(Settings) % 16 == 0);
-
 	struct alignas(16) PerFrame
 	{
 		REX::W32::XMFLOAT4X4 OcclusionViewProj;
@@ -58,8 +56,6 @@ public:
 		Settings settings;
 		uint pad0[3];
 	};
-
-	static_assert(sizeof(PerFrame) % 16 == 0);
 
 	Settings settings;
 

@@ -124,8 +124,8 @@ SnowCover::PerFrame SnowCover::GetCommonBufferData()
 			if (sky->mode.get() == RE::Sky::Mode::kFull) {
 				if (auto currentWeather = sky->currentWeather) {
 					if (currentWeather->precipitationData && currentWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kSnow)) {
-						float particleDensity = currentWeather->precipitationData->data[static_cast<int>(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity)].f;
-						float particleGravity = currentWeather->precipitationData->data[static_cast<int>(RE::BGSShaderParticleGeometryData::DataID::kGravityVelocity)].f;
+						float particleDensity = currentWeather->precipitationData->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;
+						float particleGravity = currentWeather->precipitationData->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kGravityVelocity).f;
 						currentWeatherSnowing = std::clamp(((particleDensity * particleGravity) / AVERAGE_RAIN_VOLUME), MIN_RAINDROP_CHANCE_MULTIPLIER, MAX_RAINDROP_CHANCE_MULTIPLIER);
 					}
 					currentWeatherID = currentWeather->GetFormID();
@@ -158,8 +158,8 @@ SnowCover::PerFrame SnowCover::GetCommonBufferData()
 								CalculateWetness(lastWeather, sky, seconds, lastWeatherWetnessDepth);
 								// If it was raining, wait to transition until precipitation ends, otherwise use the current weather's fade in
 								if (lastWeather->precipitationData && lastWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy)) {
-									float particleDensity = lastWeather->precipitationData->data[static_cast<int>(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity)].f;
-									float particleGravity = lastWeather->precipitationData->data[static_cast<int>(RE::BGSShaderParticleGeometryData::DataID::kGravityVelocity)].f;
+									float particleDensity = currentWeather->precipitationData->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;
+									float particleGravity = currentWeather->precipitationData->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kGravityVelocity).f;
 									lastWeatherSnowing = std::clamp(((particleDensity * particleGravity) / AVERAGE_RAIN_VOLUME), MIN_RAINDROP_CHANCE_MULTIPLIER, MAX_RAINDROP_CHANCE_MULTIPLIER);
 									weatherTransitionPercentage = CalculateWeatherTransitionPercentage(sky->currentWeatherPct, lastWeather->data.precipitationEndFadeOut, false);
 								} else {
@@ -194,8 +194,8 @@ SnowCover::PerFrame SnowCover::GetCommonBufferData()
 
 void SnowCover::SetupResources()
 {
-	auto& device = State::GetSingleton()->device;
-	auto& context = State::GetSingleton()->context;
+	auto device = globals::d3d::device;
+	auto context = globals::d3d::context;
 	HRESULT hr = DirectX::CreateDDSTextureFromFile(device, context, L"Data\\Shaders\\SnowCover\\snow.dds", nullptr, &views.at(0));
 	if (hr != S_OK)
 		logger::warn("Snow Cover: Error loading diffuse texture: {}", hr);
@@ -212,7 +212,7 @@ void SnowCover::SetupResources()
 
 void SnowCover::Prepass()
 {
-	auto& context = State::GetSingleton()->context;
+	auto context = globals::d3d::context;
 	context->PSSetShaderResources(73, (uint)views.size(), views.data());
 }
 
