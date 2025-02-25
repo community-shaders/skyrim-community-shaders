@@ -222,8 +222,8 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 normal = normalize(normalize(cross(ddx, ddy)) + float3(0, 0, 1));
 
 #		if defined(SNOW_COVER)
-	if (snowCoverSettings.EnableSnowCover)
-		SnowCover::ApplySnowFoliage(baseColor.xyz, normal, input.WorldPosition.xyz + CameraPosAdjust[eyeIndex].xyz, 1);
+	if (SharedData::snowCoverSettings.EnableSnowCover)
+		SnowCover::ApplySnowFoliage(baseColor.xyz, normal, input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz, 1);
 #		endif
 
 #		if defined(DEFERRED)
@@ -241,10 +241,6 @@ PS_OUTPUT main(PS_INPUT input)
 		dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition, FrameBuffer::CameraPosAdjust[eyeIndex], eyeIndex);
 
 	float3 diffuseColor = SharedData::DirLightColor.xyz * dirShadow * 0.5;
-
-	float3 ddx = ddx_coarse(input.WorldPosition.xyz);
-	float3 ddy = ddy_coarse(input.WorldPosition.xyz);
-	float3 normal = normalize(cross(ddx, ddy));
 
 #			if !defined(SSGI)
 	float3 directionalAmbientColor = mul(SharedData::DirectionalAmbient, float4(normal, 1.0));
@@ -266,9 +262,6 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 diffuseColor = SharedData::DirLightColor.xyz * dirShadow * 0.5;
 
-	float3 ddx = ddx_coarse(input.WorldPosition.xyz);
-	float3 ddy = ddy_coarse(input.WorldPosition.xyz);
-	float3 normal = normalize(cross(ddx, ddy));
 
 	float3 directionalAmbientColor = mul(SharedData::DirectionalAmbient, float4(normal, 1.0));
 	diffuseColor += directionalAmbientColor;

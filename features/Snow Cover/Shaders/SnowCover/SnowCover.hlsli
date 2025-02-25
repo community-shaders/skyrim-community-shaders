@@ -1,4 +1,5 @@
 #include "Common/SharedData.hlsli"
+#include "Common/Color.hlsli"
 #if defined(PSHADER)
 
 namespace SnowCover
@@ -58,35 +59,35 @@ namespace SnowCover
 
 	float GetHeightMult(float3 p)
 	{
-		float height_tresh = p.z - snowCoverSettings.SnowHeightOffset - (p.x * 0.010569460362286 - p.y * 0.165389061732133 - p.x * p.x * 0.000000034552775 - p.x * p.y * 0.000000572526633 - p.y * p.y * 0.000000272913055 - p.x * p.x * p.x * 0.000000000001466 + p.x * p.x * p.y * 0.000000000000441 + p.x * p.y * p.y * 0.000000000003507 + p.y * p.y * p.y * 0.000000000006575);
+		float height_tresh = p.z - SharedData::snowCoverSettings.SnowHeightOffset - (p.x * 0.010569460362286 - p.y * 0.165389061732133 - p.x * p.x * 0.000000034552775 - p.x * p.y * 0.000000572526633 - p.y * p.y * 0.000000272913055 - p.x * p.x * p.x * 0.000000000001466 + p.x * p.x * p.y * 0.000000000000441 + p.x * p.y * p.y * 0.000000000003507 + p.y * p.y * p.y * 0.000000000006575);
 		return height_tresh;
 	}
 
 	float GetEnvironmentalMultiplier(float3 p)
 	{
-		float maxMonth = max(snowCoverSettings.MaxSummerMonth, snowCoverSettings.MaxWinterMonth);
-		float minMonth = min(snowCoverSettings.MaxSummerMonth, snowCoverSettings.MaxWinterMonth);
+		float maxMonth = max(SharedData::snowCoverSettings.MaxSummerMonth, SharedData::snowCoverSettings.MaxWinterMonth);
+		float minMonth = min(SharedData::snowCoverSettings.MaxSummerMonth, SharedData::snowCoverSettings.MaxWinterMonth);
 		float summerToWinter;
-		if (snowCoverSettings.Month > maxMonth) {
-			summerToWinter = (snowCoverSettings.Month - maxMonth) / (minMonth + 12 - maxMonth);
-			if (snowCoverSettings.MaxWinterMonth > snowCoverSettings.MaxSummerMonth)
+		if (SharedData::snowCoverSettings.Month > maxMonth) {
+			summerToWinter = (SharedData::snowCoverSettings.Month - maxMonth) / (minMonth + 12 - maxMonth);
+			if (SharedData::snowCoverSettings.MaxWinterMonth > SharedData::snowCoverSettings.MaxSummerMonth)
 				summerToWinter = 1 - summerToWinter;
-		} else if (snowCoverSettings.Month < minMonth) {
-			summerToWinter = (12 - maxMonth + snowCoverSettings.Month) / (minMonth + 12 - maxMonth);
-			if (snowCoverSettings.MaxSummerMonth > snowCoverSettings.MaxWinterMonth)
+		} else if (SharedData::snowCoverSettings.Month < minMonth) {
+			summerToWinter = (12 - maxMonth + SharedData::snowCoverSettings.Month) / (minMonth + 12 - maxMonth);
+			if (SharedData::snowCoverSettings.MaxSummerMonth > SharedData::snowCoverSettings.MaxWinterMonth)
 				summerToWinter = 1 - summerToWinter;
 		} else {
-			summerToWinter = (snowCoverSettings.Month - minMonth) / (maxMonth - minMonth);
-			if (snowCoverSettings.MaxSummerMonth > snowCoverSettings.MaxWinterMonth)
+			summerToWinter = (SharedData::snowCoverSettings.Month - minMonth) / (maxMonth - minMonth);
+			if (SharedData::snowCoverSettings.MaxSummerMonth > SharedData::snowCoverSettings.MaxWinterMonth)
 				summerToWinter = 1 - summerToWinter;
 		}
 
-		return (GetHeightMult(p) - lerp(snowCoverSettings.SummerHeightOffset, snowCoverSettings.WinterHeightOffset, summerToWinter)) / 10000;
+		return (GetHeightMult(p) - lerp(SharedData::snowCoverSettings.SummerHeightOffset, SharedData::snowCoverSettings.WinterHeightOffset, summerToWinter)) / 10000;
 	}
 
 	void ApplyFoliageColor(inout float3 color, float env_mult)
 	{
-		float gmult = saturate(env_mult - snowCoverSettings.FoliageHeightOffset / 1000);
+		float gmult = saturate(env_mult - SharedData::snowCoverSettings.FoliageHeightOffset / 1000);
 		float3 hsv = RGBtoHSV(color);
 		if (hsv.x > 0.5625)
 			hsv.x = frac(lerp(hsv.x, 1.125, gmult));
@@ -100,13 +101,13 @@ namespace SnowCover
 	{
 		float env_mult = GetEnvironmentalMultiplier(p);
 		float mult = saturate(pow(abs(worldNormal.z), 1)) * saturate(env_mult) * skylight;
-		if (snowCoverSettings.AffectFoliageColor) {
+		if (SharedData::snowCoverSettings.AffectFoliageColor) {
 			ApplyFoliageColor(color, env_mult);
 		}
-		float2 uv = snowCoverSettings.UVScale * p.xy / 100;
+		float2 uv = SharedData::snowCoverSettings.UVScale * p.xy / 100;
 		float3 diffuse = SnowDiffuse.Sample(SampColorSampler, uv).rgb;
 #	if !defined(TRUE_PBR)
-		diffuse = pow(LinearToGamma(diffuse) / 3.141, 1 / 1.5);
+		diffuse = pow(Color::LinearToGamma(diffuse) / 3.141, 1 / 1.5);
 #	endif
 		color = lerp(color, diffuse, mult);
 	}
@@ -114,7 +115,7 @@ namespace SnowCover
 #	if !defined(BASIC_SNOW_COVER)
 	float ApplySnowBase(inout float3 worldNormal, inout float sh0, inout float2 uv, float underDispScale, float3 p, float skylight, float waterDist, float3 viewPos)
 	{
-		if (snowCoverSettings.Sky < 3)  // 3 = exterior
+		if (SharedData::snowCoverSettings.Sky < 3)  // 3 = exterior
 			return 0;
 			//float viewDist = max(1, sqrt(viewPos.z) / 512);
 #		if defined(TRUE_PBR) && defined(LANDSCAPE)
@@ -122,8 +123,8 @@ namespace SnowCover
 #		else
 		float disp = sh0 - 0.5;
 #		endif
-		float raw_p = SnowParallax.Sample(SampColorSampler, snowCoverSettings.UVScale * p.xy / 1000).x;
-		float parallax = 0.1 * snowCoverSettings.ParallaxScale * (raw_p - 0.5);
+		float raw_p = SnowParallax.Sample(SampColorSampler, SharedData::snowCoverSettings.UVScale * p.xy / 1000).x;
+		float parallax = 0.1 * SharedData::snowCoverSettings.ParallaxScale * (raw_p - 0.5);
 		float env_mult = GetEnvironmentalMultiplier(p) + parallax + disp * underDispScale * 0.1;
 		waterDist = smoothstep(-64, 8, -waterDist);
 		float disp_factor = 0;
@@ -131,8 +132,8 @@ namespace SnowCover
 		if (extendedMaterialSettings.ExtendShadows)
 			disp_factor = -disp * underDispScale;
 #		endif                                                                                                                                                                                              //
-		float mult = skylight * (smoothstep(0.3, 0.5, (pow(max(0, worldNormal.z), 2) + disp_factor) * (max(0, env_mult - waterDist) * (0.5 + 0.5 * raw_p + disp_factor) + snowCoverSettings.SnowAmount)));  //-smoothstep(-32, 8, -waterDist)
-		uv = snowCoverSettings.UVScale * p.xy / 100 + parallax * viewPos.xy;
+		float mult = skylight * (smoothstep(0.3, 0.5, (pow(max(0, worldNormal.z), 2) + disp_factor) * (max(0, env_mult - waterDist) * (0.5 + 0.5 * raw_p + disp_factor) + SharedData::snowCoverSettings.SnowAmount)));  //-smoothstep(-32, 8, -waterDist)
+		uv = SharedData::snowCoverSettings.UVScale * p.xy / 100 + parallax * viewPos.xy;
 		if (mult < 0.01)
 			return 0;
 		sh0 = saturate(sh0 + mult * parallax);
@@ -156,10 +157,10 @@ namespace SnowCover
 		prop.Metallic = lerp(prop.Metallic, rmaos.y, mult);
 		prop.AO = lerp(prop.AO, rmaos.z, mult);
 		prop.F0 = lerp(prop.F0, rmaos.w * 0.08, mult);
-		prop.GlintScreenSpaceScale = lerp(prop.GlintScreenSpaceScale, snowCoverSettings.Glint.x, mult);
-		prop.GlintLogMicrofacetDensity = lerp(prop.GlintLogMicrofacetDensity, snowCoverSettings.Glint.y, mult);
-		prop.GlintMicrofacetRoughness = lerp(prop.GlintMicrofacetRoughness, snowCoverSettings.Glint.z, mult);
-		prop.GlintDensityRandomization = lerp(prop.GlintDensityRandomization, snowCoverSettings.Glint.w, mult);
+		prop.GlintScreenSpaceScale = lerp(prop.GlintScreenSpaceScale, SharedData::snowCoverSettings.Glint.x, mult);
+		prop.GlintLogMicrofacetDensity = lerp(prop.GlintLogMicrofacetDensity, SharedData::snowCoverSettings.Glint.y, mult);
+		prop.GlintMicrofacetRoughness = lerp(prop.GlintMicrofacetRoughness, SharedData::snowCoverSettings.Glint.z, mult);
+		prop.GlintDensityRandomization = lerp(prop.GlintDensityRandomization, SharedData::snowCoverSettings.Glint.w, mult);
 		return mult;
 	}
 #		else
@@ -173,7 +174,7 @@ namespace SnowCover
 		// apparently LOD landscape color sampler clamps uvs
 		diffuse = SnowDiffuse.Sample(SampColorSampler, frac(uv)).rgb;
 		//diffuse = frac(float3(uv.x, uv.y, 0));
-		diffuse = pow(LinearToGamma(diffuse) / PI, 1 / 1.5);
+		diffuse = pow(Color::LinearToGamma(diffuse) / PI, 1 / 1.5);
 		float4 rmaos = SnowRMAOS.Sample(SampColorSampler, uv);
 		glossiness = lerp(glossiness, 1 - rmaos.x, mult);  // yes these are named wrong not my fault bye
 		shininess = lerp(shininess, 25 * 500 * rmaos.w, mult);

@@ -519,21 +519,25 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #			if defined(SKYLIGHTING)
 #				if defined(VR)
-	float3 positionMSSkylight = input.WorldPosition.xyz + CameraPosAdjust[eyeIndex].xyz - CameraPosAdjust[0].xyz;
+	float3 positionMSSkylight = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
 #				else
 	float3 positionMSSkylight = input.WorldPosition.xyz;
 #				endif
 
-	sh2 skylightingSH = Skylighting::sample(skylightingSettings, SkylightingProbeArray, positionMSSkylight, normal);
 
-	float snowOcclusion = smoothstep(0, 1, (shUnproject(skylightingSH, float3(0, 0, 1))));
+	sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, normal);
+	float skylighting = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(normal.xy, normal.z * 0.5 + 0.5))) / Math::PI;
+	skylighting = lerp(1.0, skylighting, Skylighting::getFadeOutFactor(input.WorldPosition));
+	skylighting = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylighting);
+
+	float snowOcclusion = smoothstep(0, 1, SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1)));
 #			else
 	float snowOcclusion = 1;
 #			endif
 #			if defined(SNOW_COVER)
-	snowOcclusion *= saturate(input.WorldPosition.z - GetWaterData(input.WorldPosition.xyz).w);
-	if (snowCoverSettings.EnableSnowCover)
-		SnowCover::ApplySnowFoliage(baseColor.xyz, normal, input.WorldPosition.xyz + CameraPosAdjust[eyeIndex].xyz, snowOcclusion);
+	snowOcclusion *= saturate(input.WorldPosition.z - SharedData::GetWaterData(input.WorldPosition.xyz).w);
+	if (SharedData::snowCoverSettings.EnableSnowCover)
+		SnowCover::ApplySnowFoliage(baseColor.xyz, normal, input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz, snowOcclusion);
 #			endif
 
 #			if defined(TRUE_PBR)
@@ -698,16 +702,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 directionalAmbientColor = mul(SharedData::DirectionalAmbient, float4(normal, 1.0));
 
 #					if defined(SKYLIGHTING)
-#						if defined(VR)
-	float3 positionMSSkylight = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
-#						else
-	float3 positionMSSkylight = input.WorldPosition.xyz;
-#						endif
-
-	sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, normal);
-	float skylighting = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(normal.xy, normal.z * 0.5 + 0.5))) / Math::PI;
-	skylighting = lerp(1.0, skylighting, Skylighting::getFadeOutFactor(input.WorldPosition));
-	skylighting = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylighting);
 
 	directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
 	directionalAmbientColor *= skylighting;
