@@ -262,7 +262,6 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 diffuseColor = SharedData::DirLightColor.xyz * dirShadow * 0.5;
 
-
 	float3 directionalAmbientColor = mul(SharedData::DirectionalAmbient, float4(normal, 1.0));
 	diffuseColor += directionalAmbientColor;
 
