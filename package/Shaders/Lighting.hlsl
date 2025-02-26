@@ -2299,7 +2299,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	diffuseColor += emitColor.xyz;
 #	endif
 
-	float3 directionalAmbientColor = mul(DirectionalAmbient, modelNormal);
+	float3 directionalAmbientColor = max(0, mul(DirectionalAmbient, modelNormal));
 	float3 directionalAmbientColorDirect = 0;
 
 	float3 reflectionDiffuseColor = diffuseColor + directionalAmbientColor;

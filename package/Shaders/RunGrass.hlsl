@@ -692,7 +692,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	normal = normalize(float3(normal.xy, max(0, normal.z)));
 
-	float3 directionalAmbientColor = mul(SharedData::DirectionalAmbient, float4(normal, 1.0));
+	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
 	float3 directionalAmbientColorDirect = 0;
 
 #				if defined(SKYLIGHTING)
@@ -874,7 +874,7 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #			endif
 
-	float3 directionalAmbientColor = mul(SharedData::DirectionalAmbient, float4(normal, 1.0));
+	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
 	float3 directionalAmbientColorDirect = 0;
 
 #			if defined(SKYLIGHTING)
