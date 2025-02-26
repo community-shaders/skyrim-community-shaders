@@ -44,9 +44,9 @@ namespace GrassCollision
 				displacement -= length(shift);
 			}
 
-			displacement *= distance(position.xyz, input.InstanceData1.xyz) * alpha * 0.01;
+			displacement *= saturate((position.z - input.InstanceData1.z) * 0.1) * alpha;
 
-			SmoothLimitDisplacement(displacement, 10.0);
+			SmoothLimitDisplacement(displacement, 32.0);
 
 			return displacement;
 		}
