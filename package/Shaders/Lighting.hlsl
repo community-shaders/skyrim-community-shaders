@@ -1816,7 +1816,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float snowOcclusion = inWorld;
 #		endif
 #		if defined(LODLANDNOISE)
-	snowOcclusion *= 0.9 + noise*0.1;
+	snowOcclusion *= 0.9 + noise * 0.1;
 #		endif
 
 #		if !defined(MODELSPACENORMALS)
@@ -1839,7 +1839,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif
 
 #		if defined(TREE_ANIM)
-		SnowCover::ApplyFoliageColor(baseColor.rgb, SnowCover::GetEnvironmentalMultiplier(pos));
+	SnowCover::ApplyFoliageColor(baseColor.rgb, SnowCover::GetEnvironmentalMultiplier(pos));
 #		endif
 	baseColor.rgb = lerp(baseColor.rgb, snowDiffuse, snowFactor);
 
@@ -1855,7 +1855,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif
 		modelNormal.xyz = worldSpaceNormal;
 	modelNormal.xyz = normalize(modelNormal.xyz);
-#	endif // SNOW_COVER
+#	endif  // SNOW_COVER
 
 	float waterRoughnessSpecular = 1;
 
