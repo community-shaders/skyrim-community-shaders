@@ -27,6 +27,10 @@
 #	define LOD
 #endif
 
+#if defined(SKINNED) || defined(SKIN) || defined(EYE) || defined(HAIR) || !defined(EXTENDED_MATERIALS)
+#	undef SNOW_COVER
+#endif
+
 struct VS_INPUT
 {
 	float4 Position : POSITION0;
@@ -1001,6 +1005,12 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "Skylighting/Skylighting.hlsli"
 #	endif
 
+#	if defined(SNOW_COVER)
+#		undef SNOW
+#		undef SPARKLE
+#		include "SnowCover/SnowCover.hlsli"
+#	endif
+
 #	define LinearSampler SampColorSampler
 
 #	include "Common/ShadowSampling.hlsli"
@@ -1798,6 +1808,54 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	float4 waterData = SharedData::GetWaterData(input.WorldPosition.xyz);
 	float waterHeight = waterData.w;
+
+#	if defined(SNOW_COVER)
+#		if defined(SKYLIGHTING)
+	float snowOcclusion = inWorld ? pow(saturate(SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1))), 2) : 0;
+#		else
+	float snowOcclusion = inWorld;
+#		endif
+#		if defined(LODLANDNOISE)
+	snowOcclusion *= 0.9 + noise*0.1;
+#		endif
+
+#		if !defined(MODELSPACENORMALS)
+	float3 viewDirTS = normalize(mul(tbnTr, viewDirection));
+	viewDirTS.xy /= viewDirTS.z * 0.7 + 0.3;  // Fix for objects at extreme viewing angles
+#		else
+	float3 viewDirTS = 0;
+#		endif
+	float underDispScale = 1.0;
+	float3 pos = (input.WorldPosition + FrameBuffer::CameraPosAdjust[eyeIndex]).xyz;
+
+	float snowFactor = 0;
+	float3 snowDiffuse = baseColor.rgb;
+	if (SharedData::snowCoverSettings.EnableSnowCover)
+#		if defined(TRUE_PBR)
+		snowFactor = SnowCover::ApplySnowPBR(snowDiffuse, worldSpaceNormal, pbrSurfaceProperties, sh0, underDispScale, pos, snowOcclusion, input.WorldPosition.z - waterHeight, float3(viewDirTS.x, viewDirTS.y, viewPosition.z));
+#		else
+		snowFactor = SnowCover::ApplySnow(snowDiffuse, worldSpaceNormal, glossiness.x, shininess, sh0, underDispScale, pos, snowOcclusion, input.WorldPosition.z - waterHeight, float3(viewDirTS.x, viewDirTS.y, viewPosition.z));
+	glossiness = glossiness.xxxx;
+#		endif
+
+#		if defined(TREE_ANIM)
+		SnowCover::ApplyFoliageColor(baseColor.rgb, SnowCover::GetEnvironmentalMultiplier(pos));
+#		endif
+	baseColor.rgb = lerp(baseColor.rgb, snowDiffuse, snowFactor);
+
+#		if defined(LOD_LAND_BLEND)
+	lodLandColor.rgb = lerp(lodLandColor.rgb, snowDiffuse, snowFactor);
+
+#		endif  // LOD_LAND_BLEND
+
+#		if !defined(DRAW_IN_WORLDSPACE)  // && (defined(SKINNED) || !defined(MODELSPACENORMALS))
+	[flatten] if (!input.WorldSpace)
+		modelNormal.xyz = mul(transpose(input.World[eyeIndex]), float4(worldSpaceNormal, 0));
+	else
+#		endif
+		modelNormal.xyz = worldSpaceNormal;
+	modelNormal.xyz = normalize(modelNormal.xyz);
+#	endif // SNOW_COVER
 
 	float waterRoughnessSpecular = 1;
 
