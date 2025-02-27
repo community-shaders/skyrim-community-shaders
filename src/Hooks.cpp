@@ -8,8 +8,8 @@
 
 #include "ShaderTools/BSShaderHooks.h"
 
-#include "Streamline.h"
 #include "FidelityFX.h"
+#include "Streamline.h"
 
 #include "DX12SwapChain.h"
 #include "VariableCache.h"
