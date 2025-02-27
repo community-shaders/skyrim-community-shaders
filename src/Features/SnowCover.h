@@ -84,10 +84,20 @@ public:
 
 	virtual inline void PostPostLoad() override { Hooks::Install(); }
 
+	void BSLightingShader_Setup(RE::BSRenderPass* Pass);
+
 	struct Hooks
 	{
+		struct BSLightingShader_SetupGeometry
+		{
+			static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
 		static void Install()
 		{
+			stl::write_vfunc<0x6, BSLightingShader_SetupGeometry>(RE::VTABLE_BSLightingShader[0]);
+			logger::info("[SnowCover] Installed hooks");
 		}
 	};
 

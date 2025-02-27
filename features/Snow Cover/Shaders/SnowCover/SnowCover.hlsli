@@ -174,7 +174,7 @@ namespace SnowCover
 		// apparently LOD landscape color sampler clamps uvs
 		diffuse = SnowDiffuse.Sample(SampColorSampler, frac(uv)).rgb;
 		//diffuse = frac(float3(uv.x, uv.y, 0));
-		diffuse = pow(Color::LinearToGamma(diffuse) / PI, 1 / 1.5);
+		diffuse = pow(Color::LinearToGamma(diffuse) / 3.14, 1 / 1.5);
 		float4 rmaos = SnowRMAOS.Sample(SampColorSampler, uv);
 		glossiness = lerp(glossiness, 1 - rmaos.x, mult);  // yes these are named wrong not my fault bye
 		shininess = lerp(shininess, 25 * 500 * rmaos.w, mult);

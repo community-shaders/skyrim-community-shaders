@@ -235,3 +235,19 @@ void SnowCover::RestoreDefaultSettings()
 {
 	settings = {};
 }
+
+void SnowCover::Hooks::BSLightingShader_SetupGeometry::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
+{
+	globals::features::snowCover->BSLightingShader_Setup(Pass);
+	func(This, Pass, RenderFlags);
+}
+
+void SnowCover::BSLightingShader_Setup(RE::BSRenderPass* a_pass)
+{
+	auto state = globals::state;
+	auto userData = a_pass->geometry->GetUserData();
+	if (!userData)
+		return;
+	if (userData && userData->CanBeMoved() && !userData->As<RE::Actor>())
+		state->currentExtraDescriptor |= (uint)State::ExtraShaderDescriptors::IsMobile;
+}
