@@ -1381,7 +1381,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(EMAT_ENVMAP)
 	complexMaterial = complexMaterial && complexMaterialColor.y > (4.0 / 255.0) && (complexMaterialColor.y < (1.0 - (4.0 / 255.0)));
 	shininess = lerp(shininess, shininess * complexMaterialColor.y, complexMaterial);
-	float3 complexSpecular = lerp(1.0, lerp(1.0, baseColor.xyz, complexMaterialColor.z), complexMaterial);
+	float3 complexSpecular = lerp(1.0, lerp(1.0, Color::GammaToLinear(baseColor.xyz), complexMaterialColor.z), complexMaterial);
 	baseColor.xyz = lerp(baseColor.xyz, lerp(baseColor.xyz, 0.0, complexMaterialColor.z), complexMaterial);
 #	endif  // defined (EMAT) && defined(ENVMAP)
 
@@ -2292,8 +2292,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 directionalAmbientColor = max(0, mul(DirectionalAmbient, modelNormal));
 	float3 directionalAmbientColorDirect = 0;
 
-	float3 reflectionDiffuseColor = diffuseColor + directionalAmbientColor;
-
 #	if defined(SKYLIGHTING)
 	float skylightingDiffuse = 1;
 	if (!SharedData::InInterior) {
@@ -2314,6 +2312,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
 	}
 #	endif
+
+	float3 reflectionDiffuseColor = diffuseColor + directionalAmbientColor;
 
 #	if defined(TRUE_PBR) && defined(LOD_LAND_BLEND) && !defined(DEFERRED)
 	lodLandDiffuseColor += directionalAmbientColor;
@@ -2398,7 +2398,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #			if defined(EMAT)
 				float complexMaterialRoughness = 1.0 - complexMaterialColor.y;
 				envRoughness = lerp(envRoughness, pow(complexMaterialRoughness, 1.5), complexMaterial);
-				F0 = lerp(F0, Color::GammaToLinear(complexSpecular), complexMaterial);
+				F0 = lerp(F0, complexSpecular, complexMaterial);
 #			endif
 
 				if (any(F0 > 0.0))
@@ -2414,7 +2414,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif
 
 		if (!dynamicCubemap) {
-			float3 envColorBase = TexEnvSampler.Sample(SampEnvSampler, envSamplingPoint);
+			float3 envColorBase = Color::GammaToLinear(TexEnvSampler.Sample(SampEnvSampler, envSamplingPoint));
 			envColor = envColorBase.xyz * envMask;
 		}
 	}
@@ -2557,9 +2557,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(SPECULAR)
 #		if defined(EMAT_ENVMAP)
-	specularColor = (specularColor * glossiness * MaterialData.yyy) * lerp(SpecularColor.xyz, complexSpecular, complexMaterial);
+	specularColor = (specularColor * glossiness * MaterialData.yyy) * lerp(Color::GammaToLinear(SpecularColor.xyz), complexSpecular, complexMaterial);
 #		else
-	specularColor = (specularColor * glossiness * MaterialData.yyy) * SpecularColor.xyz;
+	specularColor = (specularColor * glossiness * MaterialData.yyy) * Color::GammaToLinear(SpecularColor.xyz);
 #		endif
 #	elif defined(SPARKLE)
 	specularColor *= glossiness;
@@ -2576,7 +2576,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(DYNAMIC_CUBEMAPS)
 	if (!dynamicCubemap)
 #		endif
-		specularColor += envColor * diffuseColor;
+		specularColor += envColor * Color::GammaToLinear(diffuseColor);
 #	endif
 
 #	if defined(EMAT_ENVMAP)
