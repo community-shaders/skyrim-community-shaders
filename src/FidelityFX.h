@@ -4,10 +4,11 @@
 #include <FidelityFX/host/ffx_fsr3.h>
 #include <FidelityFX/host/ffx_interface.h>
 
-#include <ffx_api.h>
+#include <ffx_api.hpp>
 #include <ffx_api_loader.h>
 #include <ffx_api_types.h>
-#include <ffx/ffx_api_dx12.h>
+#include <dx12/ffx_api_dx12.h>
+#include <ffx_framegeneration.hpp>
 
 #include "Buffer.h"
 #include "State.h"
@@ -23,11 +24,13 @@ public:
 
 	HMODULE dll = NULL;
 
-	ffxFunctions* fidelityFXDX12;
+	ffxContext frameGenContext;
 
 	FfxFsr3Context fsrContext;
 
 	void Init();
+
+	void CreateFrameGenerationResources();
 
 	void CreateFSRResources();
 	void DestroyFSRResources();

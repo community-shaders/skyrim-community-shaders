@@ -5,6 +5,11 @@
 #include "State.h"
 #include "Util.h"
 
+#include "DX12SwapChain.h"
+#include <dx12/ffx_api_dx12.hpp>
+
+ffxFunctions ffxModule;
+
 FfxResource ffxGetResource(ID3D11Resource* dx11Resource,
 	[[maybe_unused]] wchar_t const* ffxResName,
 	FfxResourceStates state /*=FFX_RESOURCE_STATE_COMPUTE_READ*/)
@@ -26,7 +31,25 @@ FfxResource ffxGetResource(ID3D11Resource* dx11Resource,
 void FidelityFX::Init()
 {
 	dll = LoadLibrary(L"Data\\SKSE\\Plugins\\FidelityFX\\amd_fidelityfx_dx12.dll");
-	ffxLoadFunctions(fidelityFXDX12, dll);
+
+	ffxLoadFunctions(&ffxModule, dll);
+}
+
+void FidelityFX::CreateFrameGenerationResources()
+{
+	auto swapChain = DX12SwapChain::GetSingleton();
+
+	ffx::CreateContextDescFrameGeneration createFg{};
+	createFg.displaySize = { swapChain->swapChainDesc.Width, swapChain->swapChainDesc.Height };
+	createFg.maxRenderSize = createFg.displaySize;
+	createFg.flags = FFX_FRAMEGENERATION_ENABLE_ASYNC_WORKLOAD_SUPPORT;
+	createFg.backBufferFormat = FFX_API_SURFACE_FORMAT_R8G8B8A8_UNORM;
+
+	ffx::CreateBackendDX12Desc createBackend{};
+	createBackend.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_BACKEND_DX12;
+	createBackend.device = swapChain->d3d12Device.get();
+
+	ffx::CreateContext(frameGenContext, nullptr, createFg, createBackend);
 }
 
 void FidelityFX::CreateFSRResources()
