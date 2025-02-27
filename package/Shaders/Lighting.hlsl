@@ -1855,8 +1855,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif
 		modelNormal.xyz = worldSpaceNormal;
 	modelNormal.xyz = normalize(modelNormal.xyz);
-#	endif  // SNOW_COVER
-	if (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsMobile) // TESTING TODO REMOVE
+#	endif                                                                       // SNOW_COVER
+	if (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsMobile)  // TESTING TODO REMOVE
 		baseColor.rgb = float3(1, 0, 0);
 	float waterRoughnessSpecular = 1;
 
