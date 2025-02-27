@@ -419,7 +419,7 @@ RE::BSLightingShaderProperty::Data* Skylighting::BSLightingShaderProperty_GetPre
 
 	bool valid = false;
 
-	if (skylighting->inOcclusion){
+	if (skylighting->inOcclusion) {
 		valid = property->flags.any(kZBufferWrite) && property->flags.none(kRefraction, kTempRefraction, kLODLandscape, kEyeReflect, kDecal, kDynamicDecal);
 	} else {
 		valid = property->flags.any(kZBufferWrite) && property->flags.none(kRefraction, kTempRefraction, kMultiTextureLandscape, kNoLODLandBlend, kLODLandscape, kEyeReflect, kDecal, kDynamicDecal);
@@ -447,7 +447,7 @@ RE::BSLightingShaderProperty::Data* Skylighting::BSLightingShaderProperty_GetPre
 			if (property->flags.any(kTreeAnim)) {
 				technique.set(TreeAnim);
 			}
-			
+
 			precipitationOcclusionMapRenderPassList->EmplacePass(
 				globals::game::utilityShader,
 				property,
