@@ -289,18 +289,6 @@ HRESULT Streamline::CreateDeviceAndSwapChain(IDXGIAdapter* pAdapter,
 
 void Streamline::SetupResources()
 {
-	if (featureDLSSG && !REL::Module::IsVR()) {
-		sl::DLSSGOptions options{};
-		options.mode = sl::DLSSGMode::eAuto;
-		options.flags = sl::DLSSGFlags::eRetainResourcesWhenOff;
-
-		if (SL_FAILED(result, slDLSSGSetOptions(viewport, options))) {
-			logger::critical("[Streamline] Could not enable DLSSG");
-		} else {
-			logger::info("[Streamline] Successfully enabled DLSSG");
-		}
-	}
-
 	if (featureReflex) {
 		sl::ReflexOptions reflexOptions{};
 		reflexOptions.mode = sl::ReflexMode::eLowLatencyWithBoost;
@@ -422,7 +410,7 @@ void Streamline::Present()
 
 	UpdateConstants();
 
-	static auto currentFrameGenerationMode = settings.frameGenerationMode;
+	static auto currentFrameGenerationMode = sl::DLSSGMode::eOff;
 
 	if (currentFrameGenerationMode != settings.frameGenerationMode) {
 		currentFrameGenerationMode = settings.frameGenerationMode;
