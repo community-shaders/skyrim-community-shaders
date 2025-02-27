@@ -1979,16 +1979,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	if (dirShadow != 0.0 && (inWorld || inReflection))
 		dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition, FrameBuffer::CameraPosAdjust[eyeIndex], eyeIndex);
 
-#	if defined(SKYLIGHTING)
-	float skylightingFadeOutFactor = 1.0;
-	if (!SharedData::InInterior) {
-		skylightingFadeOutFactor = Skylighting::getFadeOutFactor(input.WorldPosition.xyz);
-		// Shadow bias fix
-		float skylightingDirShadow = saturate(SphericalHarmonics::Unproject(skylightingSH, SharedData::DirLightDirection.xyz));
-		dirShadow *= lerp(1.0, skylightingDirShadow * skylightingDirShadow, skylightingFadeOutFactor);
-	}
-#	endif
-
 	dirLightColorMultiplier *= dirShadow;
 
 	float3 diffuseColor = 0.0.xxx;
