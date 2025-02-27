@@ -11,7 +11,7 @@ Texture2D<half3> srcPrevGeo : register(t3);  // maybe half-res
 Texture2D<float4> srcMotionVec : register(t4);
 Texture2D<half3> srcPrevAmbient : register(t5);
 Texture2D<unorm float> srcAccumFrames : register(t6);  // maybe half-res
-Texture2D<unorm float4> srcPrevAo : register(t7);              // maybe half-res
+Texture2D<unorm float4> srcPrevAo : register(t7);      // maybe half-res
 Texture2D<half4> srcPrevIlY : register(t8);            // maybe half-res
 Texture2D<half2> srcPrevIlCoCg : register(t9);         // maybe half-res
 Texture2D<half4> srcPrevGISpecular : register(t10);    // maybe half-res

@@ -4,7 +4,7 @@
 #include "ScreenSpaceGI/common.hlsli"
 
 Texture2D<half> srcDepth : register(t0);
-Texture2D<unorm float4> srcAo : register(t1);           // half-res
+Texture2D<unorm float4> srcAo : register(t1);   // half-res
 Texture2D<half4> srcIlY : register(t2);         // half-res
 Texture2D<half2> srcIlCoCg : register(t3);      // half-res
 Texture2D<half4> srcGiSpecular : register(t4);  // half-res
