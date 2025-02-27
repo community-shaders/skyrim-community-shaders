@@ -2294,7 +2294,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(SKYLIGHTING)
 	float skylightingDiffuse = 1;
+	float skylightingFadeOutFactor = 1.0;
 	if (!SharedData::InInterior) {
+		skylightingFadeOutFactor = Skylighting::getFadeOutFactor(input.WorldPosition.xyz);
+
 		skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(skylightingNormal)) / Math::PI;
 		skylightingDiffuse = saturate(skylightingDiffuse);
 
