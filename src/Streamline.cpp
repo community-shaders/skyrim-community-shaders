@@ -283,143 +283,6 @@ void Streamline::SetupResources()
 			logger::info("[Streamline] Successfully set reflex options");
 		}
 	}
-
-	if (featureDLSS || (featureDLSSG && !REL::Module::IsVR())) {
-		logger::info("[Streamline] Creating resources");
-
-		auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-		auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-
-		D3D11_TEXTURE2D_DESC texDesc{};
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
-		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-
-		main.texture->GetDesc(&texDesc);
-		main.SRV->GetDesc(&srvDesc);
-		main.RTV->GetDesc(&rtvDesc);
-		main.UAV->GetDesc(&uavDesc);
-
-		if (featureDLSSG && !REL::Module::IsVR()) {
-			texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
-
-			texDesc.Format = DXGI_FORMAT_R16_UNORM;
-			srvDesc.Format = texDesc.Format;
-			rtvDesc.Format = texDesc.Format;
-			uavDesc.Format = texDesc.Format;
-
-			depthBufferShared = new Texture2D(texDesc);
-			depthBufferShared->CreateSRV(srvDesc);
-			depthBufferShared->CreateRTV(rtvDesc);
-			depthBufferShared->CreateUAV(uavDesc);
-
-			copyDepthToSharedBufferCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\Streamline\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0");
-		}
-
-		texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		srvDesc.Format = texDesc.Format;
-		rtvDesc.Format = texDesc.Format;
-		uavDesc.Format = texDesc.Format;
-
-		colorBufferShared = new Texture2D(texDesc);
-		colorBufferShared->CreateSRV(srvDesc);
-		colorBufferShared->CreateRTV(rtvDesc);
-		colorBufferShared->CreateUAV(uavDesc);
-
-		{
-			IDXGIResource1* dxgiResource = nullptr;
-			DX::ThrowIfFailed(colorBufferShared->resource->QueryInterface(IID_PPV_ARGS(&dxgiResource)));
-
-			HANDLE sharedHandle = nullptr;
-			DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(
-				nullptr,
-				DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE,
-				nullptr,
-				&sharedHandle));
-
-			DX::ThrowIfFailed(DX12SwapChain::GetSingleton()->d3d12Device->OpenSharedHandle(
-				sharedHandle,
-				IID_PPV_ARGS(&colorBufferShared12)));
-
-			CloseHandle(sharedHandle);
-		}
-
-		{
-			IDXGIResource1* dxgiResource = nullptr;
-			DX::ThrowIfFailed(depthBufferShared->resource->QueryInterface(IID_PPV_ARGS(&dxgiResource)));
-
-			HANDLE sharedHandle = nullptr;
-			DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(
-				nullptr,
-				DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE,
-				nullptr,
-				&sharedHandle));
-
-			DX::ThrowIfFailed(DX12SwapChain::GetSingleton()->d3d12Device->OpenSharedHandle(
-				sharedHandle,
-				IID_PPV_ARGS(&depthBufferShared12)));
-
-			CloseHandle(sharedHandle);
-		}
-	}
-}
-
-void Streamline::CopyResourcesToSharedBuffers()
-{
-	if (!(featureDLSSG && !REL::Module::IsVR()) || frameGenerationMode == sl::DLSSGMode::eOff)
-		return;
-
-	auto& context = State::GetSingleton()->context;
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-
-	ID3D11RenderTargetView* backupViews[8];
-	ID3D11DepthStencilView* backupDsv;
-	context->OMGetRenderTargets(8, backupViews, &backupDsv);  // Backup bound render targets
-	context->OMSetRenderTargets(0, nullptr, nullptr);         // Unbind all bound render targets
-
-	auto& swapChain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-
-	ID3D11Resource* swapChainResource;
-	swapChain.SRV->GetResource(&swapChainResource);
-
-	context->CopyResource(colorBufferShared->resource.get(), swapChainResource);
-
-	{
-		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
-
-		{
-			auto dispatchCount = Util::GetScreenDispatchCount(true);
-
-			ID3D11ShaderResourceView* views[1] = { depth.depthSRV };
-			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
-
-			ID3D11UnorderedAccessView* uavs[1] = { depthBufferShared->uav.get() };
-			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
-
-			context->CSSetShader(copyDepthToSharedBufferCS, nullptr, 0);
-
-			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
-		}
-
-		ID3D11ShaderResourceView* views[1] = { nullptr };
-		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
-
-		ID3D11UnorderedAccessView* uavs[1] = { nullptr };
-		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
-
-		ID3D11ComputeShader* shader = nullptr;
-		context->CSSetShader(shader, nullptr, 0);
-	}
-
-	context->OMSetRenderTargets(8, backupViews, backupDsv);  // Restore all bound render targets
-
-	for (int i = 0; i < 8; i++) {
-		if (backupViews[i])
-			backupViews[i]->Release();
-	}
-
-	if (backupDsv)
-		backupDsv->Release();
 }
 
 void Streamline::Present()
@@ -475,13 +338,15 @@ void Streamline::Present()
 	float2 dynamicScreenSize = Util::ConvertToDynamic(State::GetSingleton()->screenSize);
 	sl::Extent dynamicExtent{ 0, 0, (uint)dynamicScreenSize.x, (uint)dynamicScreenSize.y };
 
-	sl::Resource depth = { sl::ResourceType::eTex2d, depthBufferShared12.get(), 0 };
+	auto upscaling = Upscaling::GetSingleton();
+
+	sl::Resource depth = { sl::ResourceType::eTex2d, upscaling->depthBufferShared12.get(), 0 };
 	sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &dynamicExtent };
 
 	sl::Resource mvec = { sl::ResourceType::eTex2d, DX12SwapChain::GetSingleton()->renderTargetsD3D12[RE::RENDER_TARGETS::RENDER_TARGET::kMOTION_VECTOR].d3d12Resource.get(), 0 };
 	sl::ResourceTag mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &dynamicExtent };
 
-	sl::Resource hudLess = { sl::ResourceType::eTex2d, colorBufferShared12.get(), 0 };
+	sl::Resource hudLess = { sl::ResourceType::eTex2d, upscaling->colorBufferShared12.get(), 0 };
 	sl::ResourceTag hudLessTag = sl::ResourceTag{ &hudLess, sl::kBufferTypeHUDLessColor, sl::ResourceLifecycle::eValidUntilPresent, &fullExtent };
 
 	sl::Resource ui = { sl::ResourceType::eTex2d, nullptr, 0 };

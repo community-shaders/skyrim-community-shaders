@@ -33,9 +33,9 @@ public:
 struct DXGISwapChainProxy : IDXGISwapChain
 {
 public:
-	DXGISwapChainProxy(IDXGISwapChain3* a_swapChain);
+	DXGISwapChainProxy(IDXGISwapChain4* a_swapChain);
 
-	IDXGISwapChain3* swapChain;
+	IDXGISwapChain4* swapChain;
 
 	/****IUnknown****/
 	virtual HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppvObj) override;
@@ -106,7 +106,7 @@ public:
 	winrt::com_ptr<ID3D12CommandAllocator> commandAllocator;
 	winrt::com_ptr<ID3D12GraphicsCommandList> commandList;
 
-	winrt::com_ptr<IDXGISwapChain3> swapChain;
+	winrt::com_ptr<IDXGISwapChain4> swapChain;
 
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc;
 	WrappedResource* swapChainBufferWrapped = nullptr;

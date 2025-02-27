@@ -437,7 +437,7 @@ RenderTargetDataD3D12 RenderTargetDataD3D12::ConvertD3D11TextureToD3D12(RE::BSGr
 	return renderTargetData;
 }
 
-DXGISwapChainProxy::DXGISwapChainProxy(IDXGISwapChain3* a_swapChain)
+DXGISwapChainProxy::DXGISwapChainProxy(IDXGISwapChain4* a_swapChain)
 {
 	swapChain = a_swapChain;
 }

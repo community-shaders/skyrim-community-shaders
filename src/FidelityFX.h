@@ -30,7 +30,11 @@ public:
 
 	void Init();
 
+	void WrapSwapChain();
+
 	void CreateFrameGenerationResources();
+
+	void ConfigureFrameGeneration();
 
 	void CreateFSRResources();
 	void DestroyFSRResources();
