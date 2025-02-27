@@ -117,13 +117,16 @@ public:
 	uint lastExtraDescriptor = 0;
 	bool forceUpdatePermutationBuffer = true;
 
+	bool isTree = false;
+
 	enum class ExtraShaderDescriptors : uint32_t
 	{
 		InWorld = 1 << 0,
 		IsReflections = 1 << 1,
 		IsBeastRace = 1 << 2,
 		EffectShadows = 1 << 3,
-		IsDecal = 1 << 4
+		IsDecal = 1 << 4,
+		IsTree = 1 << 5
 	};
 
 	void UpdateSharedData(bool a_inWorld, bool a_prepass);

@@ -47,6 +47,9 @@ void State::Draw()
 		if (deferred->inDecals)
 			currentExtraDescriptor |= (uint32_t)ExtraShaderDescriptors::IsDecal;
 
+		if (isTree)
+			currentExtraDescriptor |= (uint32_t)ExtraShaderDescriptors::IsTree;
+
 		if (forceUpdatePermutationBuffer || currentPixelDescriptor != lastPixelDescriptor || currentExtraDescriptor != lastExtraDescriptor) {
 			PermutationCB data{};
 			data.VertexShaderDescriptor = currentVertexDescriptor;

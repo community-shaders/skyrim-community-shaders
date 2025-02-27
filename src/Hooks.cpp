@@ -163,6 +163,25 @@ namespace EffectExtensions
 	};
 }
 
+namespace LightingExtensions
+{
+	struct BSLightingShader_SetupGeometry
+	{
+		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
+		{
+			func(shader, pass, renderFlags);
+
+			globals::state->isTree = false;
+
+			auto userData = pass->geometry->GetUserData();
+			if (userData)
+				if (userData->GetBaseObject()->As<RE::TESObjectTREE>())
+					globals::state->isTree = true;
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+}
+
 struct IDXGISwapChain_Present
 {
 	static HRESULT WINAPI thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
@@ -751,6 +770,7 @@ namespace Hooks
 
 		logger::info("Hooking BSEffectShader");
 		stl::write_vfunc<0x6, EffectExtensions::BSEffectShader_SetupGeometry>(RE::VTABLE_BSEffectShader[0]);
+		stl::write_vfunc<0x6, LightingExtensions::BSLightingShader_SetupGeometry>(RE::VTABLE_BSLightingShader[0]);
 
 		const auto renderPassCacheCtor = REL::VariantID(100720, 107500, 0x1340330);
 		const int32_t passCount = 4194240;

@@ -751,7 +751,8 @@ float3 GetLightSpecularInput(PS_INPUT input, float3 L, float3 V, float3 N, float
 	sparkleMultiplier = sparkleMultiplier >= 0.5 ? 1 : 0;
 	lightColorMultiplier += sparkleMultiplier * HdotN;
 #	endif
-	return lightColor * lightColorMultiplier.xxx;
+	float fresnel = 1.0 + pow(1 - dot(V, H), 5);
+	return lightColor * lightColorMultiplier.xxx * fresnel;
 }
 
 float3 TransformNormal(float3 normal)
@@ -1788,6 +1789,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 positionMSSkylight = input.WorldPosition.xyz;
 #		endif
 
+	float3 skylightingNormal = normalize(float3(worldSpaceNormal.xy, max(0, worldSpaceNormal.z)));
+
 #		if defined(DEFERRED)
 	sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.Position.xy, positionMSSkylight, worldSpaceNormal);
 #		else
@@ -1948,13 +1951,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	bool useScreenSpaceShadows = inWorld && !SharedData::InInterior && Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsDecal;
 #		endif
 
-	if (useScreenSpaceShadows) {
+	if (useScreenSpaceShadows)
 		dirDetailShadow = ScreenSpaceShadows::GetScreenSpaceShadow(input.Position.xyz, screenUV, screenNoise, eyeIndex);
-#		if defined(TREE_ANIM)
-		ShadowSampling::ShadowData sD = ShadowSampling::SharedShadowData[0];
-		dirDetailShadow = lerp(1.0, dirDetailShadow, saturate(viewPosition.z / sqrt(sD.ShadowLightParam.z)));
-#		endif
-	}
 #	endif
 
 #	if defined(EMAT) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
@@ -1980,6 +1978,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	if (dirShadow != 0.0 && (inWorld || inReflection))
 		dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition, FrameBuffer::CameraPosAdjust[eyeIndex], eyeIndex);
+
+#	if defined(SKYLIGHTING)
+	float skylightingFadeOutFactor = 1.0;
+	if (!SharedData::InInterior) {
+		skylightingFadeOutFactor = Skylighting::getFadeOutFactor(input.WorldPosition.xyz);
+		// Shadow bias fix
+		float skylightingDirShadow = saturate(SphericalHarmonics::Unproject(skylightingSH, SharedData::DirLightDirection.xyz));
+		dirShadow *= lerp(1.0, skylightingDirShadow * skylightingDirShadow, skylightingFadeOutFactor);
+	}
+#	endif
 
 	dirLightColorMultiplier *= dirShadow;
 
@@ -2012,18 +2020,20 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	else
 	dirDetailShadow *= parallaxShadow;
 	dirLightColor *= dirLightColorMultiplier;
+
 	float3 dirDiffuseColor = dirLightColor * saturate(dirLightAngle) * dirDetailShadow;
+	float dirBacklighting = 1.0 + saturate(-dot(DirLightDirection.xyz, viewDirection));
 
 #		if defined(SOFT_LIGHTING)
-	lightsDiffuseColor += dirLightColor * GetSoftLightMultiplier(dirLightAngle) * rimSoftLightColor.xyz;
+	lightsDiffuseColor += dirBacklighting * dirLightColor * GetSoftLightMultiplier(dirLightAngle) * rimSoftLightColor.xyz;
 #		endif
 
 #		if defined(RIM_LIGHTING)
-	lightsDiffuseColor += dirLightColor * GetRimLightMultiplier(DirLightDirection, viewDirection, modelNormal.xyz) * rimSoftLightColor.xyz;
+	lightsDiffuseColor += dirBacklighting * dirLightColor * GetRimLightMultiplier(DirLightDirection, viewDirection, modelNormal.xyz) * rimSoftLightColor.xyz;
 #		endif
 
 #		if defined(BACK_LIGHTING)
-	lightsDiffuseColor += dirLightColor * saturate(-dirLightAngle) * backLightColor.xyz;
+	lightsDiffuseColor += dirBacklighting * dirLightColor * saturate(-dirLightAngle) * backLightColor.xyz;
 #		endif
 
 	if (useSnowSpecular && useSnowDecalSpecular) {
@@ -2087,17 +2097,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		lightColor *= lightShadow;
 		float lightAngle = dot(modelNormal.xyz, normalizedLightDirection.xyz);
 		float3 lightDiffuseColor = lightColor * saturate(lightAngle.xxx);
+		float lightBacklighting = 1.0 + saturate(-dot(normalizedLightDirection.xyz, viewDirection));
 
 #				if defined(SOFT_LIGHTING)
-		lightDiffuseColor += lightColor * GetSoftLightMultiplier(lightAngle) * rimSoftLightColor.xyz;
+		lightDiffuseColor += lightBacklighting * lightColor * GetSoftLightMultiplier(lightAngle) * rimSoftLightColor.xyz;
 #				endif  // SOFT_LIGHTING
 
 #				if defined(RIM_LIGHTING)
-		lightDiffuseColor += lightColor * GetRimLightMultiplier(normalizedLightDirection, viewDirection, modelNormal.xyz) * rimSoftLightColor.xyz;
+		lightDiffuseColor += lightBacklighting * lightColor * GetRimLightMultiplier(normalizedLightDirection, viewDirection, modelNormal.xyz) * rimSoftLightColor.xyz;
 #				endif  // RIM_LIGHTING
 
 #				if defined(BACK_LIGHTING)
-		lightDiffuseColor += lightColor * saturate(-lightAngle) * backLightColor.xyz;
+		lightDiffuseColor += lightBacklighting * lightColor * saturate(-lightAngle) * backLightColor.xyz;
 #				endif  // BACK_LIGHTING
 
 #				if defined(SPECULAR) || (defined(SPARKLE) && !defined(SNOW))
@@ -2227,17 +2238,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		lightColor *= lightShadow;
 
 		float3 lightDiffuseColor = lightColor * contactShadow * parallaxShadow * saturate(lightAngle.xxx);
+		float lightBacklighting = 1.0 + saturate(dot(normalizedLightDirection.xyz, worldSpaceViewDirection));
 
 #				if defined(SOFT_LIGHTING)
-		lightDiffuseColor += lightColor * GetSoftLightMultiplier(lightAngle) * rimSoftLightColor.xyz;
+		lightDiffuseColor += lightBacklighting * lightColor * GetSoftLightMultiplier(lightAngle) * rimSoftLightColor.xyz;
 #				endif
 
 #				if defined(RIM_LIGHTING)
-		lightDiffuseColor += lightColor * GetRimLightMultiplier(normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz) * rimSoftLightColor.xyz;
+		lightDiffuseColor += lightBacklighting * lightColor * GetRimLightMultiplier(normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz) * rimSoftLightColor.xyz;
 #				endif
 
 #				if defined(BACK_LIGHTING)
-		lightDiffuseColor += lightColor * saturate(-lightAngle) * backLightColor.xyz;
+		lightDiffuseColor += lightBacklighting * lightColor * saturate(-lightAngle) * backLightColor.xyz;
 #				endif
 
 #				if defined(SPECULAR) || (defined(SPARKLE) && !defined(SNOW))
@@ -2287,25 +2299,42 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	diffuseColor += emitColor.xyz;
 #	endif
 
-	float3 directionalAmbientColor = mul(DirectionalAmbient, modelNormal);
+	float3 directionalAmbientColor = max(0, mul(DirectionalAmbient, modelNormal));
+	float3 directionalAmbientColorDirect = 0;
 
 	float3 reflectionDiffuseColor = diffuseColor + directionalAmbientColor;
 
 #	if defined(SKYLIGHTING)
-	float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(worldSpaceNormal.xy, worldSpaceNormal.z * 0.5 + 0.5))) / Math::PI;
-	skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(input.WorldPosition.xyz));
-	skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
-	directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
-	directionalAmbientColor *= skylightingDiffuse;
-	directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
+	float skylightingDiffuse = 1;
+	if (!SharedData::InInterior) {
+		skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(skylightingNormal)) / Math::PI;
+		skylightingDiffuse = saturate(skylightingDiffuse);
+
+		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
+
+		float skylightingBoost = 0.25 * skylightingDiffuse * saturate(worldSpaceNormal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
+
+		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+
+		directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
+		directionalAmbientColorDirect = directionalAmbientColor * skylightingBoost;
+		directionalAmbientColorDirect = Color::LinearToGamma(directionalAmbientColorDirect);
+
+		directionalAmbientColor *= skylightingDiffuse + skylightingBoost;
+		directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
+	}
 #	endif
 
 #	if defined(TRUE_PBR) && defined(LOD_LAND_BLEND) && !defined(DEFERRED)
 	lodLandDiffuseColor += directionalAmbientColor;
 #	endif
 
-#	if !(defined(DEFERRED) && defined(SSGI)) && !defined(TRUE_PBR)
+#	if !defined(TRUE_PBR)
+#		if defined(DEFERRED) && defined(SSGI)
+	diffuseColor += directionalAmbientColorDirect;
+#		else
 	diffuseColor += directionalAmbientColor;
+#		endif
 #	endif
 
 #	if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
@@ -2433,6 +2462,30 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(HAIR)
 	float3 vertexColor = lerp(1, TintColor.xyz, input.Color.y);
+#	elif defined(SKYLIGHTING)
+	float3 vertexColor = input.Color.xyz;
+	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
+
+	if (!SharedData::InInterior) {
+#		if defined(LANDSCAPE)
+		// Remove AO
+		vertexColor = vertexColor / vertexAO;
+#		else
+
+		if (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsTree) {
+			// Remove AO
+			vertexColor = vertexColor / vertexAO;
+			vertexColor = lerp(input.Color.xyz, vertexColor, skylightingFadeOutFactor);
+
+			// Apply AO to direct lighting only
+			diffuseColor -= lightsDiffuseColor;
+			diffuseColor += lerp(lightsDiffuseColor, lightsDiffuseColor * vertexAO, skylightingFadeOutFactor);
+		}
+
+		// Brighten skylighting on vertex AO
+		vertexColor *= 1.0 + (1.0 - vertexAO) * (1.0 - skylightingDiffuse);
+#		endif
+	}
 #	else
 	float3 vertexColor = input.Color.xyz;
 #	endif  // defined (HAIR)
@@ -2457,7 +2510,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		indirectSpecularLobeWeight += PBR::GetWetnessIndirectSpecularLobeWeight(wetnessNormal, worldSpaceViewDirection, worldSpaceVertexNormal, waterRoughnessSpecular) * wetnessGlossinessSpecular;
 #		endif
 
-#		if !(defined(DEFERRED) && defined(SSGI))
+#		if defined(DEFERRED) && defined(SSGI)
+	color.xyz += indirectDiffuseLobeWeight * directionalAmbientColorDirect;
+#		else
 	color.xyz += indirectDiffuseLobeWeight * directionalAmbientColor;
 #		endif
 
@@ -2537,10 +2592,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(EMAT_ENVMAP)
 	specularColor *= complexSpecular;
 #	endif  // defined (EMAT) && defined(ENVMAP)
-
-#	if !defined(TRUE_PBR)
-	specularColor = Color::GammaToLinear(specularColor);
-#	endif
 
 #	if !defined(DEFERRED) && defined(DYNAMIC_CUBEMAPS) && (defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE))
 	if (dynamicCubemap)
