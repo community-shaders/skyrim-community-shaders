@@ -46,7 +46,7 @@ Texture2D<float4> srcPrevY : register(t6);             // maybe half-res
 Texture2D<float2> srcPrevCoCg : register(t7);          // maybe half-res
 Texture2D<float4> srcPrevGISpecular : register(t8);    // maybe half-res
 
-RWTexture2D<unorm float> outAo : register(u0);
+RWTexture2D<unorm float4> outBentNormalAO : register(u0);
 RWTexture2D<float4> outY : register(u1);
 RWTexture2D<float2> outCoCg : register(u2);
 RWTexture2D<float4> outGISpecular : register(u3);
@@ -87,7 +87,7 @@ float GetVisibilityFunctionSmithJointApprox(float roughness, float NdotV, float 
 
 void CalculateGI(
 	uint2 dtid, float2 uv, float viewspaceZ, float3 viewspaceNormal,
-	out float o_ao, out sh2 o_currY, out float2 o_currCoCg, out float4 o_currGIAOSpecular)
+	out float4 o_bentNormalAO, out sh2 o_currY, out float2 o_currCoCg, out float4 o_currGIAOSpecular)
 {
 	const float2 frameScale = FrameDim * RcpTexDim;
 
@@ -130,6 +130,7 @@ void CalculateGI(
 	float4 radianceY = 0;
 	float2 radianceCoCg = 0;
 	float3 radianceSpecular = 0;
+	float3 bentNormal = 0;
 
 #ifdef GI_SPECULAR
 	const float roughness = max(0.2, saturate(1 - FULLRES_LOAD(srcNormalRoughness, dtid, uv * frameScale, samplerLinearClamp).z));  // can't handle low roughness
@@ -287,6 +288,8 @@ void CalculateGI(
 #endif
 	}
 
+	bentNormal = viewspaceNormal;
+
 	float depthFade = GetDepthFade(viewspaceZ);
 
 	visibility *= rcpNumSlices;
@@ -308,7 +311,10 @@ void CalculateGI(
 #	endif
 #endif
 
-	o_ao = visibility;
+	bentNormal = normalize(bentNormal);
+	bentNormal = bentNormal * 0.5 + 0.5;
+
+	o_bentNormalAO = float4(bentNormal, visibility);
 	o_currY = radianceY;
 	o_currCoCg = radianceCoCg;
 	o_currGIAOSpecular = float4(radianceSpecular, visibilitySpecular);
@@ -334,7 +340,7 @@ void CalculateGI(
 	// Move center pixel slightly towards camera to avoid imprecision artifacts due to depth buffer imprecision; offset depends on depth texture format used
 	viewspaceZ *= 0.99920h;  // this is good for FP16 depth buffer
 
-	float currAo = 0;
+	float4 currBentNormalAO = 0;
 	float4 currY = 0;
 	float2 currCoCg = 0;
 	float4 currGIAOSpecular = float4(0, 0, 0, 0);
@@ -343,7 +349,7 @@ void CalculateGI(
 	if (needGI) {
 		CalculateGI(
 			pxCoord, uv, viewspaceZ, viewspaceNormal,
-			currAo, currY, currCoCg, currGIAOSpecular);
+			currBentNormalAO, currY, currCoCg, currGIAOSpecular);
 
 #ifdef TEMPORAL_DENOISER
 		float lerpFactor = rcp(srcAccumFrames[pxCoord] * 255);
@@ -359,7 +365,7 @@ void CalculateGI(
 	currCoCg = filterNaN(currCoCg);
 	currGIAOSpecular = filterNaN(currGIAOSpecular);
 
-	outAo[pxCoord] = currAo;
+	outBentNormalAO[pxCoord] = currBentNormalAO;
 	outY[pxCoord] = currY;
 	outCoCg[pxCoord] = currCoCg;
 #ifdef GI_SPECULAR

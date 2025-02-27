@@ -419,7 +419,7 @@ void ScreenSpaceGI::SetupResources()
 			texIlCoCg[1]->CreateUAV(uavDesc);
 		}
 
-		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R8_UNORM;
+		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 		{
 			texAo[0] = eastl::make_unique<Texture2D>(texDesc);
 			texAo[0]->CreateSRV(srvDesc);

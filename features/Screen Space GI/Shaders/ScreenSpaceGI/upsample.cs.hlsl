@@ -4,12 +4,12 @@
 #include "ScreenSpaceGI/common.hlsli"
 
 Texture2D<half> srcDepth : register(t0);
-Texture2D<half> srcAo : register(t1);           // half-res
+Texture2D<unorm float4> srcAo : register(t1);           // half-res
 Texture2D<half4> srcIlY : register(t2);         // half-res
 Texture2D<half2> srcIlCoCg : register(t3);      // half-res
 Texture2D<half4> srcGiSpecular : register(t4);  // half-res
 
-RWTexture2D<half> outAo : register(u0);
+RWTexture2D<unorm float4> outAo : register(u0);
 RWTexture2D<half4> outIlY : register(u1);
 RWTexture2D<half2> outIlCoCg : register(u2);
 RWTexture2D<half4> outGiSpecular : register(u3);
@@ -43,7 +43,7 @@ RWTexture2D<half4> outGiSpecular : register(u3);
 	float avg = dot(d, 0.25.xxxx);
 	bool d_edge = (diffd / avg) < 0.1;
 
-	float ao;
+	float4 ao;
 	float4 y;
 	float2 coCg;
 	float4 giSpecular;

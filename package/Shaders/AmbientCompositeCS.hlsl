@@ -19,7 +19,7 @@ Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t4);
 #endif
 
 #if defined(SSGI)
-Texture2D<float> SsgiAoTexture : register(t5);
+Texture2D<float4> SsgiAoTexture : register(t5);
 Texture2D<float4> SsgiYTexture : register(t6);
 Texture2D<float2> SsgiCoCgTexture : register(t7);
 #endif
@@ -29,7 +29,7 @@ RWTexture2D<float4> MainRW : register(u0);
 RWTexture2D<float3> DiffuseAmbientRW : register(u1);
 void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 {
-	ao = 1 - SsgiAoTexture[pixCoord];
+	ao = 1 - SsgiAoTexture[pixCoord].w;
 	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
 	// without ZH hallucination
 	// float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, SphericalHarmonics::EvaluateCosineLobe(normalWS));
@@ -131,5 +131,7 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 	DiffuseAmbientRW[dispatchID.xy] = diffuseColor - originalDiffuseColor;
 #endif
 
-	MainRW[dispatchID.xy] = float4(diffuseColor, 1);
+	float3 bentNormal = SsgiAoTexture[dispatchID.xy];
+
+	MainRW[dispatchID.xy] = float4(bentNormal, 1);
 };

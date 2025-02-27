@@ -11,14 +11,14 @@ Texture2D<half3> srcPrevGeo : register(t3);  // maybe half-res
 Texture2D<float4> srcMotionVec : register(t4);
 Texture2D<half3> srcPrevAmbient : register(t5);
 Texture2D<unorm float> srcAccumFrames : register(t6);  // maybe half-res
-Texture2D<half> srcPrevAo : register(t7);              // maybe half-res
+Texture2D<unorm float4> srcPrevAo : register(t7);              // maybe half-res
 Texture2D<half4> srcPrevIlY : register(t8);            // maybe half-res
 Texture2D<half2> srcPrevIlCoCg : register(t9);         // maybe half-res
 Texture2D<half4> srcPrevGISpecular : register(t10);    // maybe half-res
 
 RWTexture2D<float3> outRadianceDisocc : register(u0);
 RWTexture2D<unorm float> outAccumFrames : register(u1);
-RWTexture2D<float> outRemappedAo : register(u2);
+RWTexture2D<unorm float4> outRemappedAo : register(u2);
 RWTexture2D<float4> outRemappedIlY : register(u3);
 RWTexture2D<float2> outRemappedIlCoCg : register(u4);
 RWTexture2D<float4> outRemappedPrevGISpecular : register(u5);
@@ -29,7 +29,7 @@ RWTexture2D<float4> outRemappedPrevGISpecular : register(u5);
 
 void readHistory(
 	uint eyeIndex, float curr_depth, float3 curr_pos, int2 pixCoord, float bilinear_weight,
-	inout half prev_ao, inout half4 prev_y, inout half2 prev_co_cg, inout half3 prev_ambient, inout float accum_frames, inout half4 prev_gi_specular, inout float wsum)
+	inout float4 prev_ao, inout half4 prev_y, inout half2 prev_co_cg, inout half3 prev_ambient, inout float accum_frames, inout half4 prev_gi_specular, inout float wsum)
 {
 	const float2 uv = (pixCoord + .5) * RCP_OUT_FRAME_DIM;
 	const float2 screen_pos = Stereo::ConvertFromStereoUV(uv, eyeIndex);
@@ -81,7 +81,7 @@ void readHistory(
 	float2 prev_uv = Stereo::ConvertToStereoUV(prev_screen_pos, eyeIndex);
 
 	half3 prev_ambient = 0;
-	half prev_ao = 0;
+	float4 prev_ao = 0;
 	half4 prev_y = 0;
 	half2 prev_co_cg = 0;
 	half4 prev_gi_specular = 0;
