@@ -90,7 +90,7 @@ void FidelityFX::ConfigureFrameGeneration()
 
 	configParameters.frameGenerationCallback = nullptr;
 	configParameters.frameGenerationCallbackUserContext = nullptr;
-	
+
 	configParameters.onlyPresentGenerated = false;
 
 	static uint64_t frameID = 0;
@@ -126,7 +126,7 @@ void FidelityFX::ConfigureFrameGeneration()
 
 	dispatchParameters.depth = ffxApiGetResourceDX12(upscaling->depthBufferShared12.get(), FFX_API_RESOURCE_STATE_COMPUTE_READ);
 	dispatchParameters.motionVectors = ffxApiGetResourceDX12(swapChain->renderTargetsD3D12[RE::RENDER_TARGETS::RENDER_TARGET::kMOTION_VECTOR].d3d12Resource.get(), FFX_API_RESOURCE_STATE_COMPUTE_READ);
-	
+
 	ffx::Dispatch(frameGenContext, dispatchParameters);
 
 	frameID++;

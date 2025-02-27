@@ -1,8 +1,8 @@
 #include "Upscaling.h"
 
+#include "DX12SwapChain.h"
 #include "Hooks.h"
 #include "Util.h"
-#include "DX12SwapChain.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Upscaling::Settings,
@@ -468,7 +468,7 @@ void Upscaling::CreateFrameGenerationResources()
 	main.SRV->GetDesc(&srvDesc);
 	main.RTV->GetDesc(&rtvDesc);
 	main.UAV->GetDesc(&uavDesc);
-	
+
 	texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
 	texDesc.Format = DXGI_FORMAT_R16_UNORM;
@@ -482,7 +482,7 @@ void Upscaling::CreateFrameGenerationResources()
 	depthBufferShared->CreateUAV(uavDesc);
 
 	copyDepthToSharedBufferCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\Streamline\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0");
-		
+
 	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	srvDesc.Format = texDesc.Format;
 	rtvDesc.Format = texDesc.Format;
