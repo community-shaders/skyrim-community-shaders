@@ -410,7 +410,7 @@ void Streamline::Present()
 
 	UpdateConstants();
 
-	static auto currentFrameGenerationMode =  sl::DLSSGMode::eOff;
+	static auto currentFrameGenerationMode = sl::DLSSGMode::eOff;
 
 	if (currentFrameGenerationMode != settings.frameGenerationMode) {
 		currentFrameGenerationMode = settings.frameGenerationMode;
