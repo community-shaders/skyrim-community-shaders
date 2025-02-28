@@ -369,7 +369,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	//if (SUCCEEDED(result)) {
 	//	return result;
 	//}
-	//return ptrD3D11CreateDeviceAndSwapChain(pAdapter,
+	//auto ret = ptrD3D11CreateDeviceAndSwapChain(pAdapter,
 	//	DriverType,
 	//	Software,
 	//	Flags,
@@ -381,6 +381,12 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	//	ppDevice,
 	//	pFeatureLevel,
 	//	ppImmediateContext);
+
+	//proxy->SetD3D11Device(*ppDevice);
+	//proxy->SetD3D11DeviceContext(*ppImmediateContext);
+	//proxy->CreateInterop();
+
+	//return ret;
 }
 
 struct BSShaderRenderTargets_Create

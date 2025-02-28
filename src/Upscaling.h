@@ -60,9 +60,7 @@ public:
 	ID3D11ComputeShader* GetRCASCS();
 
 	ID3D11ComputeShader* encodeTexturesCS;
-	ID3D11ComputeShader* encodeTexturesDLSSCS;
 	ID3D11ComputeShader* GetEncodeTexturesCS();
-	ID3D11ComputeShader* GetEncodeTexturesDLSSCS();
 
 	void UpdateJitter();
 	void Upscale();
@@ -76,9 +74,11 @@ public:
 
 	Texture2D* colorBufferShared;
 	Texture2D* depthBufferShared;
+	Texture2D* motionVectorBufferShared;
 
 	winrt::com_ptr<ID3D12Resource> colorBufferShared12;
 	winrt::com_ptr<ID3D12Resource> depthBufferShared12;
+	winrt::com_ptr<ID3D12Resource> motionVectorBufferShared12;
 
 	ID3D11ComputeShader* copyDepthToSharedBufferCS;
 

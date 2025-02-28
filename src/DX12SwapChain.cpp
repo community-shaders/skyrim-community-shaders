@@ -114,7 +114,6 @@ HRESULT DX12SwapChain::Present(UINT, UINT)
 	if (needsReset2) {
 		DX::ThrowIfFailed(commandList->Reset(commandAllocator.get(), nullptr));
 		needsReset2 = false;
-		OpenSharedHandles();
 	}
 
 	// Wait for D3D11 work to finish
@@ -155,31 +154,29 @@ HRESULT DX12SwapChain::Present(UINT, UINT)
 
 	currentSharedFenceValue++;
 
+	FidelityFX::GetSingleton()->Present();
+
 	DX::ThrowIfFailed(commandList->Close());
 
 	ID3D12CommandList* commandLists[] = { commandList.get() };
 	commandQueue->ExecuteCommandLists(1, commandLists);
 
-	FidelityFX::GetSingleton()->Present();
-
 	auto hr = swapChain->Present(0, DXGI_PRESENT_ALLOW_TEARING);
 
+	DX::ThrowIfFailed(commandQueue->Signal(d3d12OnlyFence.get(), currentSharedFenceValue));
+
+	// Wait until the fence has been processed.
+	DX::ThrowIfFailed(d3d12OnlyFence->SetEventOnCompletion(currentSharedFenceValue, fenceEvent));
+	WaitForSingleObjectEx(fenceEvent, INFINITE, FALSE);
+
+
 	// Because D3D12 was accessing D3D11 resources we need to sync
-	DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence2.get(), currentSharedFenceValue));
-	DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence2.get(), currentSharedFenceValue));
-	
-	currentSharedFenceValue++;
+	//DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence.get(), currentSharedFenceValue));
+	//DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence.get(), currentSharedFenceValue));
+
+//	currentSharedFenceValue++;
 
 	return hr;
-}
-
-void DX12SwapChain::OpenSharedHandles()
-{
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-
-	for (int i = 0; i < RE::RENDER_TARGET::kTOTAL; i++) {
-		renderTargetsD3D12[i] = RenderTargetDataD3D12::ConvertD3D11TextureToD3D12(&renderer->GetRuntimeData().renderTargets[i], d3d12Device.get());
-	}
 }
 
 WrappedResource::WrappedResource(D3D11_TEXTURE2D_DESC a_texDesc, ID3D11Device5* a_d3d11Device, ID3D12Device* a_d3d12Device)
@@ -231,33 +228,6 @@ WrappedResource::WrappedResource(D3D11_TEXTURE2D_DESC a_texDesc, ID3D11Device5* 
 			DX::ThrowIfFailed(a_d3d11Device->CreateUnorderedAccessView(resource11, &uavDesc, &uav));
 		}
 	}
-}
-
-RenderTargetDataD3D12 RenderTargetDataD3D12::ConvertD3D11TextureToD3D12(RE::BSGraphics::RenderTargetData* rtData, ID3D12Device* a_d3d12Device)
-{
-	RenderTargetDataD3D12 renderTargetData{};
-
-	if (!rtData->texture)
-		return renderTargetData;
-
-	D3D11_TEXTURE2D_DESC texDesc{};
-	rtData->texture->GetDesc(&texDesc);
-
-	if (!(texDesc.MiscFlags & D3D11_RESOURCE_MISC_SHARED_NTHANDLE))
-		return renderTargetData;
-
-	// Query the DXGIResource1 interface to access shared NT handle
-	winrt::com_ptr<IDXGIResource1> dxgiResource1;
-	DX::ThrowIfFailed(rtData->texture->QueryInterface(IID_PPV_ARGS(&dxgiResource1)));
-
-	// Create the shared NT handle
-	HANDLE sharedNtHandle = nullptr;
-	DX::ThrowIfFailed(dxgiResource1->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE, nullptr, &sharedNtHandle));
-
-	// Open the shared handle in D3D12
-	DX::ThrowIfFailed(a_d3d12Device->OpenSharedHandle(sharedNtHandle, IID_PPV_ARGS(&renderTargetData.d3d12Resource)));
-
-	return renderTargetData;
 }
 
 DXGISwapChainProxy::DXGISwapChainProxy(IDXGISwapChain4* a_swapChain)

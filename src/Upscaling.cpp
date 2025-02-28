@@ -192,15 +192,6 @@ ID3D11ComputeShader* Upscaling::GetEncodeTexturesCS()
 	return encodeTexturesCS;
 }
 
-ID3D11ComputeShader* Upscaling::GetEncodeTexturesDLSSCS()
-{
-	if (!encodeTexturesDLSSCS) {
-		logger::debug("Compiling EncodeTexturesCS.hlsl DLSS");
-		encodeTexturesDLSSCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data/Shaders/Upscaling/EncodeTexturesCS.hlsl", { { "DLSS", "" } }, "cs_5_0");
-	}
-	return encodeTexturesDLSSCS;
-}
-
 void Upscaling::UpdateJitter()
 {
 	auto upscaleMethod = GetUpscaleMethod();
@@ -273,7 +264,7 @@ void Upscaling::Upscale()
 			ID3D11UnorderedAccessView* uavs[1] = { alphaMaskTexture->uav.get() };
 			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
-			context->CSSetShader(upscaleMethod == UpscaleMethod::kDLSS ? GetEncodeTexturesDLSSCS() : GetEncodeTexturesCS(), nullptr, 0);
+			context->CSSetShader(GetEncodeTexturesCS(), nullptr, 0);
 
 			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 		}
@@ -442,6 +433,16 @@ void Upscaling::CreateFrameGenerationResources()
 
 	texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
+	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	srvDesc.Format = texDesc.Format;
+	rtvDesc.Format = texDesc.Format;
+	uavDesc.Format = texDesc.Format;
+
+	colorBufferShared = new Texture2D(texDesc);
+	colorBufferShared->CreateSRV(srvDesc);
+	colorBufferShared->CreateRTV(rtvDesc);
+	colorBufferShared->CreateUAV(uavDesc);
+
 	texDesc.Format = DXGI_FORMAT_R16_UNORM;
 	srvDesc.Format = texDesc.Format;
 	rtvDesc.Format = texDesc.Format;
@@ -452,17 +453,19 @@ void Upscaling::CreateFrameGenerationResources()
 	depthBufferShared->CreateRTV(rtvDesc);
 	depthBufferShared->CreateUAV(uavDesc);
 
-	copyDepthToSharedBufferCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\Streamline\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0");
+	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+	D3D11_TEXTURE2D_DESC texDescMotionVector{};
+	motionVector.texture->GetDesc(&texDescMotionVector);
 
-	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	texDesc.Format = texDescMotionVector.Format;
 	srvDesc.Format = texDesc.Format;
 	rtvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
 
-	colorBufferShared = new Texture2D(texDesc);
-	colorBufferShared->CreateSRV(srvDesc);
-	colorBufferShared->CreateRTV(rtvDesc);
-	colorBufferShared->CreateUAV(uavDesc);
+	motionVectorBufferShared = new Texture2D(texDesc);
+	motionVectorBufferShared->CreateSRV(srvDesc);
+	motionVectorBufferShared->CreateRTV(rtvDesc);
+	motionVectorBufferShared->CreateUAV(uavDesc);
 
 	{
 		IDXGIResource1* dxgiResource = nullptr;
@@ -499,6 +502,26 @@ void Upscaling::CreateFrameGenerationResources()
 
 		CloseHandle(sharedHandle);
 	}
+
+	{
+		IDXGIResource1* dxgiResource = nullptr;
+		DX::ThrowIfFailed(motionVectorBufferShared->resource->QueryInterface(IID_PPV_ARGS(&dxgiResource)));
+
+		HANDLE sharedHandle = nullptr;
+		DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(
+			nullptr,
+			DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE,
+			nullptr,
+			&sharedHandle));
+
+		DX::ThrowIfFailed(DX12SwapChain::GetSingleton()->d3d12Device->OpenSharedHandle(
+			sharedHandle,
+			IID_PPV_ARGS(&motionVectorBufferShared12)));
+
+		CloseHandle(sharedHandle);
+	}
+
+	copyDepthToSharedBufferCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\Upscaling\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0");
 }
 
 void Upscaling::CopyResourcesToSharedBuffers()
@@ -518,8 +541,11 @@ void Upscaling::CopyResourcesToSharedBuffers()
 
 	context->CopyResource(colorBufferShared->resource.get(), swapChainResource);
 
+	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+	context->CopyResource(motionVectorBufferShared->resource.get(), motionVector.texture);
+
 	{
-		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
 		{
 			auto dispatchCount = Util::GetScreenDispatchCount(true);

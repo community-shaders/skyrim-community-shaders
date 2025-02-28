@@ -382,7 +382,7 @@ void Streamline::Present()
 	sl::Resource depth = { sl::ResourceType::eTex2d, upscaling->depthBufferShared12.get(), 0 };
 	sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &dynamicExtent };
 
-	sl::Resource mvec = { sl::ResourceType::eTex2d, DX12SwapChain::GetSingleton()->renderTargetsD3D12[RE::RENDER_TARGETS::RENDER_TARGET::kMOTION_VECTOR].d3d12Resource.get(), 0 };
+	sl::Resource mvec = { sl::ResourceType::eTex2d, upscaling->motionVectorBufferShared12.get(), 0 };
 	sl::ResourceTag mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &dynamicExtent };
 
 	sl::Resource hudLess = { sl::ResourceType::eTex2d, upscaling->colorBufferShared12.get(), 0 };
