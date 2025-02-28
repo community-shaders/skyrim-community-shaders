@@ -82,7 +82,7 @@ void FidelityFX::Present()
 	auto hudlessColor = upscaling->colorBufferShared12.get();
 	auto depth = upscaling->depthBufferShared12.get();
 	auto motionVectors = swapChain->renderTargetsD3D12[RE::RENDER_TARGETS::RENDER_TARGET::kMOTION_VECTOR].d3d12Resource.get();
-	
+
 	{
 		std::vector<D3D12_RESOURCE_BARRIER> barriers;
 		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(hudlessColor, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));

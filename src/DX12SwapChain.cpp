@@ -167,7 +167,7 @@ HRESULT DX12SwapChain::Present(UINT, UINT)
 	// Because D3D12 was accessing D3D11 resources we need to sync
 	DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence2.get(), currentSharedFenceValue));
 	DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence2.get(), currentSharedFenceValue));
-	
+
 	currentSharedFenceValue++;
 
 	return hr;
