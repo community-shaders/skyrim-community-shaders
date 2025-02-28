@@ -48,9 +48,9 @@ void InitializeLog([[maybe_unused]] spdlog::level::level_enum a_level = spdlog::
 
 extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_skse)
 {
-	//#ifndef NDEBUG
-	//	while (!REX::W32::IsDebuggerPresent()) {};
-	//#endif
+	#ifndef NDEBUG
+		while (!REX::W32::IsDebuggerPresent()) {};
+	#endif
 	InitializeLog();
 	logger::info("Loaded {} {}", Plugin::NAME, Plugin::VERSION.string());
 	SKSE::Init(a_skse);
@@ -84,9 +84,9 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 				state->PostPostLoad();  // state should load first so basic information is populated
 				Deferred::Hooks::Install();
 				globals::truePBR->PostPostLoad();
-				//if (!state->IsFeatureDisabled("Upscaling")) {
-				//	Upscaling::InstallHooks();
-				//}
+				if (!state->IsFeatureDisabled("Upscaling")) {
+					Upscaling::InstallHooks();
+				}
 				Hooks::Install();
 				FrameAnnotations::OnPostPostLoad();
 				DX12SwapChain::Install();

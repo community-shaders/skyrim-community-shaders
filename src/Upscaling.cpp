@@ -406,6 +406,8 @@ void Upscaling::CreateUpscalingResources()
 	alphaMaskTexture = new Texture2D(texDesc);
 	alphaMaskTexture->CreateSRV(srvDesc);
 	alphaMaskTexture->CreateUAV(uavDesc);
+
+	CreateFrameGenerationResources();
 }
 
 void Upscaling::DestroyUpscalingResources()

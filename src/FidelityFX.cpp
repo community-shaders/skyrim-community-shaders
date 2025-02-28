@@ -62,7 +62,7 @@ void FidelityFX::CreateFrameGenerationResources()
 	ffx::CreateContextDescFrameGeneration createFg{};
 	createFg.displaySize = { swapChain->swapChainDesc.Width, swapChain->swapChainDesc.Height };
 	createFg.maxRenderSize = createFg.displaySize;
-	createFg.flags = FFX_FRAMEGENERATION_ENABLE_ASYNC_WORKLOAD_SUPPORT;
+	createFg.flags = 0;
 	createFg.backBufferFormat = FFX_API_SURFACE_FORMAT_R8G8B8A8_UNORM;
 
 	ffx::CreateBackendDX12Desc createBackend{};
@@ -77,6 +77,19 @@ void FidelityFX::Present()
 {
 	auto upscaling = globals::upscaling;
 	auto swapChain = DX12SwapChain::GetSingleton();
+	auto commandList = swapChain->commandList.get();
+
+	auto hudlessColor = upscaling->colorBufferShared12.get();
+	auto depth = upscaling->depthBufferShared12.get();
+	auto motionVectors = swapChain->renderTargetsD3D12[RE::RENDER_TARGETS::RENDER_TARGET::kMOTION_VECTOR].d3d12Resource.get();
+	
+	{
+		std::vector<D3D12_RESOURCE_BARRIER> barriers;
+		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(hudlessColor, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(depth, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(motionVectors, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+		commandList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+	}
 
 	ffx::ConfigureDescFrameGeneration configParameters{};
 
@@ -87,9 +100,9 @@ void FidelityFX::Present()
 	configParameters.frameGenerationCallbackUserContext = &frameGenContext;
 
 	configParameters.frameGenerationEnabled = enableFrameGeneration;
-	configParameters.flags = 0;
+	configParameters.flags = FFX_FRAMEGENERATION_FLAG_DRAW_DEBUG_VIEW;
 	configParameters.HUDLessColor = ffxApiGetResourceDX12(upscaling->colorBufferShared12.get(), FFX_API_RESOURCE_STATE_COMPUTE_READ);
-	configParameters.allowAsyncWorkloads = true;
+	configParameters.allowAsyncWorkloads = false;
 
 	configParameters.generationRect.left = (swapChain->swapChainDesc.Width - swapChain->swapChainDesc.Width) / 2;
 	configParameters.generationRect.top = (swapChain->swapChainDesc.Height - swapChain->swapChainDesc.Height) / 2;
@@ -110,7 +123,7 @@ void FidelityFX::Present()
 	if (enableFrameGeneration) {
 		ffx::DispatchDescFrameGenerationPrepare dispatchParameters{};
 
-		dispatchParameters.commandList = swapChain->commandList.get();
+		dispatchParameters.commandList = commandList;
 
 		dispatchParameters.motionVectorScale.x = (float)swapChain->swapChainDesc.Width;
 		dispatchParameters.motionVectorScale.y = (float)swapChain->swapChainDesc.Height;
@@ -138,6 +151,14 @@ void FidelityFX::Present()
 		if (ffx::Dispatch(frameGenContext, dispatchParameters) != ffx::ReturnCode::Ok) {
 			logger::critical("[FidelityFX] Failed to dispatch frame generation!");
 		}
+	}
+
+	{
+		std::vector<D3D12_RESOURCE_BARRIER> barriers;
+		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(hudlessColor, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON));
+		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(depth, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON));
+		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(motionVectors, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON));
+		commandList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
 	}
 
 	frameID++;
