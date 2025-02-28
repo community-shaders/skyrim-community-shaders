@@ -961,13 +961,14 @@ void Menu::DrawDisplaySettings()
 
 		const std::vector<std::pair<std::string, std::function<void()>>> features = {
 			{ "Upscaling", []() { Upscaling::GetSingleton()->DrawSettings(); } },
+			{ "DLSS", []() { Streamline::GetSingleton()->DrawSettings(); } },
 			{ "Frame Generation", []() { FidelityFX::GetSingleton()->DrawSettings(); } }
 		};
 
 		for (const auto& [featureName, drawFunc] : features) {
 			bool isDisabled = globals::state->IsFeatureDisabled(featureName);
 
-			if (featureName == "Frame Generation" && REL::Module::IsVR()) {
+			if (featureName == "DLSS" && REL::Module::IsVR()) {
 				isDisabled = true;
 			}
 

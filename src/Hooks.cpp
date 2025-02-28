@@ -196,13 +196,13 @@ struct IDXGISwapChain_Present
 		globals::state->Reset();
 		globals::menu->DrawOverlay();
 
-		auto streamline = globals::streamline;
-		streamline->Present();
+		//auto streamline = globals::streamline;
+		//streamline->Present();
 
-		if (streamline->featureDLSSG && streamline->settings.frameGenerationMode == sl::DLSSGMode::eOn) {
-			SyncInterval = 0;
-			Flags |= DXGI_PRESENT_ALLOW_TEARING;
-		}
+		//if (streamline->featureDLSSG && streamline->settings.frameGenerationMode == sl::DLSSGMode::eOn) {
+		//	SyncInterval = 0;
+		//	Flags |= DXGI_PRESENT_ALLOW_TEARING;
+		//}
 
 		State::GetSingleton()->Reset();
 		Menu::GetSingleton()->DrawOverlay();
@@ -252,23 +252,8 @@ decltype(&CreateDXGIFactory) ptrCreateDXGIFactory;
 
 HRESULT WINAPI hk_CreateDXGIFactory(REFIID, void** ppFactory)
 {
-	return ptrCreateDXGIFactory(__uuidof(IDXGIFactory4), ppFactory);
-
-	//if (SUCCEEDED(ptrCreateDXGIFactory(__uuidof(IDXGIFactory4), ppFactory))) {
-	//	return S_OK;
-	//}
-
-	//if (SUCCEEDED(ptrCreateDXGIFactory(__uuidof(IDXGIFactory3), ppFactory))) {
-	//	return S_OK;
-	//}
-
-	//if (SUCCEEDED(ptrCreateDXGIFactory(__uuidof(IDXGIFactory2), ppFactory))) {
-	//	return S_OK;
-	//}
-
-	//auto hr = ptrCreateDXGIFactory(__uuidof(IDXGIFactory), ppFactory);
-
-	//return hr;
+	return Streamline::GetSingleton()->CreateDXGIFactory(__uuidof(IDXGIFactory4), ppFactory);
+	//return ptrCreateDXGIFactory(__uuidof(IDXGIFactory4), ppFactory);
 }
 
 decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChain;

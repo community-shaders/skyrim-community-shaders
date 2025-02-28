@@ -89,6 +89,8 @@ public:
 
 	DXGISwapChainProxy* swapChainProxy = nullptr;
 
+	double refreshRate = 60.0;
+
 	void CreateD3D12Device(IDXGIAdapter* a_adapter);
 	void CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC swapChainDesc);
 
@@ -99,8 +101,6 @@ public:
 	void SetD3D11DeviceContext(ID3D11DeviceContext* a_d3d11Context);
 
 	HRESULT GetBuffer(void** ppSurface);
-
-	bool needsReset = true;
-
+	void BeginFrame();
 	HRESULT Present(UINT SyncInterval, UINT Flags);
 };

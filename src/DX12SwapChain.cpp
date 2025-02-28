@@ -2,10 +2,12 @@
 #include <dxgi1_6.h>
 
 #include "FidelityFX.h"
+#include "Streamline.h"
 
 void DX12SwapChain::CreateD3D12Device(IDXGIAdapter* adapter)
 {
 	DX::ThrowIfFailed(D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_12_2, IID_PPV_ARGS(&d3d12Device)));
+	Streamline::GetSingleton()->slSetD3DDevice(d3d12Device.get());
 
 	D3D12_COMMAND_QUEUE_DESC queueDesc = {};
 	queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
@@ -46,7 +48,24 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 
 	swapChain = swapChainCOM.detach();
 
-	FidelityFX::GetSingleton()->WrapSwapChain();
+	//FidelityFX::GetSingleton()->WrapSwapChain();
+
+	MONITORINFOEX monitorInfo = {};
+	monitorInfo.cbSize = sizeof(MONITORINFOEX);
+
+	HMONITOR monitor = MonitorFromWindow(a_swapChainDesc.OutputWindow, MONITOR_DEFAULTTONEAREST);
+	GetMonitorInfo(monitor, &monitorInfo);
+
+	DEVMODE devMode = {};
+	devMode.dmSize = sizeof(DEVMODE);
+
+	EnumDisplaySettings(monitorInfo.szDevice, ENUM_CURRENT_SETTINGS, &devMode);
+	refreshRate = devMode.dmDisplayFrequency;
+
+	DXGI_ADAPTER_DESC adapterDesc;
+	adapter->GetDesc(&adapterDesc);
+
+	Streamline::GetSingleton()->CheckFeatures(adapterDesc);
 }
 
 void DX12SwapChain::CreateInterop()
@@ -99,6 +118,34 @@ HRESULT DX12SwapChain::GetBuffer(void** ppSurface)
 	return S_OK;
 }
 
+static void TimerSleepQPC(int64_t targetQPC)
+{
+	LARGE_INTEGER currentQPC;
+	do {
+		QueryPerformanceCounter(&currentQPC);
+	} while (currentQPC.QuadPart < targetQPC);
+}
+
+void DX12SwapChain::BeginFrame()
+{
+	//if (featureDLSSG && settings.frameGenerationMode == sl::DLSSGMode::eOn && settings.frameLimitMode) {
+	//	LARGE_INTEGER qpf;
+	//	QueryPerformanceFrequency(&qpf);
+
+	//	double bestRefreshRate = refreshRate - (refreshRate * refreshRate) / 3600.0;
+	//	int64_t targetFrameTicks = int64_t(double(qpf.QuadPart) / (bestRefreshRate * 0.5));
+
+	//	static LARGE_INTEGER lastFrame = {};
+	//	LARGE_INTEGER timeNow;
+	//	QueryPerformanceCounter(&timeNow);
+	//	int64_t delta = timeNow.QuadPart - lastFrame.QuadPart;
+	//	if (delta < targetFrameTicks) {
+	//		TimerSleepQPC(lastFrame.QuadPart + targetFrameTicks);
+	//	}
+	//	QueryPerformanceCounter(&lastFrame);
+	//}
+}
+
 HRESULT DX12SwapChain::Present(UINT, UINT)
 {
 	// Wait for D3D11 work to finish
@@ -132,14 +179,29 @@ HRESULT DX12SwapChain::Present(UINT, UINT)
 		}
 	}
 
-	FidelityFX::GetSingleton()->Present();
+	auto streamline = globals::streamline;
+
+	//FidelityFX::GetSingleton()->Present();
+	streamline->Present();
 
 	DX::ThrowIfFailed(commandList->Close());
 
 	ID3D12CommandList* commandLists[] = { commandList.get() };
 	commandQueue->ExecuteCommandLists(1, commandLists);
 
+	sl::FrameToken* frameToken;
+
+	streamline->slGetNewFrameToken(frameToken, nullptr);
+	streamline->slPCLSetMarker2(sl::PCLMarker::eRenderSubmitEnd, *frameToken);
+	streamline->slPCLSetMarker2(sl::PCLMarker::ePresentStart, *frameToken);
+
 	auto hr = swapChain->Present(0, DXGI_PRESENT_ALLOW_TEARING);
+
+	streamline->slPCLSetMarker2(sl::PCLMarker::ePresentEnd, *frameToken);
+
+	//DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence.get(), currentSharedFenceValue));
+	//DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence.get(), currentSharedFenceValue));
+	//currentSharedFenceValue++;
 
 	// Signal D3D12 work is done
 	DX::ThrowIfFailed(commandQueue->Signal(d3d12OnlyFence.get(), currentSharedFenceValue));
@@ -147,6 +209,10 @@ HRESULT DX12SwapChain::Present(UINT, UINT)
 	// Wait until the fence has been processed.
 	DX::ThrowIfFailed(d3d12OnlyFence->SetEventOnCompletion(currentSharedFenceValue, fenceEvent));
 	WaitForSingleObjectEx(fenceEvent, INFINITE, FALSE);
+
+	streamline->slGetNewFrameToken(frameToken, nullptr);
+	streamline->slPCLSetMarker2(sl::PCLMarker::eRenderSubmitStart, *frameToken);
+	streamline->slReflexSleep(*frameToken);
 
 	// New frame, reset
 	DX::ThrowIfFailed(commandAllocator->Reset());

@@ -44,8 +44,6 @@ public:
 	bool featureReflex = false;
 	bool featureNIS = false;
 
-	double refreshRate = 60.0;
-
 	bool reflex = true;
 
 	sl::ViewportHandle viewport{ 0 };
@@ -94,6 +92,7 @@ public:
 	PFun_slGetNativeInterface* slGetNativeInterface{};
 	PFun_slGetFeatureFunction* slGetFeatureFunction{};
 	PFun_slSetD3DDevice* slSetD3DDevice{};
+	decltype(&D3D12CreateDevice) slD3D12CreateDevice{};
 
 	// DLSS specific functions
 	PFun_slDLSSGetOptimalSettings* slDLSSGetOptimalSettings{};
@@ -113,33 +112,16 @@ public:
 	PFun_slNISSetOptions* slNISSetOptions{};
 	PFun_slNISGetState* slNISGetState{};
 
-	PFun_slReflexSetCameraData* slReflexSetCameraData{};
-	PFun_slReflexGetPredictedCameraData* slReflexGetPredictedCameraData{};
-
 	PFun_slPCLSetMarker* slPCLSetMarker2{};
 
 	void DrawSettings();
 
 	void LoadInterposer();
 	void Initialize();
-	void PostDevice(DXGI_SWAP_CHAIN_DESC* a_swapChainDesc);
 
 	HRESULT CreateDXGIFactory(REFIID riid, void** ppFactory);
 
-	HRESULT CreateDeviceAndSwapChain(IDXGIAdapter* pAdapter,
-		D3D_DRIVER_TYPE DriverType,
-		HMODULE Software,
-		UINT Flags,
-		const D3D_FEATURE_LEVEL* pFeatureLevels,
-		UINT FeatureLevels,
-		UINT SDKVersion,
-		DXGI_SWAP_CHAIN_DESC* pSwapChainDesc,
-		IDXGISwapChain** ppSwapChain,
-		ID3D11Device** ppDevice,
-		D3D_FEATURE_LEVEL* pFeatureLevel,
-		ID3D11DeviceContext** ppImmediateContext);
-
-	void SetupResources();
+	void CheckFeatures(DXGI_ADAPTER_DESC adapterDesc);
 
 	void Present();
 
@@ -154,18 +136,6 @@ public:
 
 	void DestroyDLSSResources();
 
-	void BeginFrame();
-
-	struct Main_Update_Start
-	{
-		static void thunk(INT64 a_unk)
-		{
-			GetSingleton()->BeginFrame();
-			func(a_unk);
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
 	struct Main_RenderWorld
 	{
 		static void thunk(bool a1);
@@ -173,8 +143,6 @@ public:
 	};
 
 	static void InstallHooks(){
-		//stl::write_thunk_call<Main_Update_Start>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x1E, 0x3E, 0x33));
-		//stl::write_thunk_call<Main_RenderWorld>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x831, 0x841, 0x791));
-		//stl::write_thunk_call<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084).address() + REL::Relocate(0x7E, 0x83, 0x97));
+		stl::write_thunk_call<Main_RenderWorld>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x831, 0x841, 0x791));
 	};
 };

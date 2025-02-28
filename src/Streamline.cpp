@@ -75,7 +75,7 @@ void Streamline::Initialize()
 {
 	logger::info("[Streamline] Initializing Streamline");
 
-	sl::Preferences pref;
+	sl::Preferences pref{};
 
 	sl::Feature featuresToLoad[] = { sl::kFeatureDLSS, sl::kFeatureDLSS_G, sl::kFeatureReflex, sl::kFeatureNIS, sl::kFeaturePCL };
 	pref.featuresToLoad = featuresToLoad;
@@ -88,7 +88,7 @@ void Streamline::Initialize()
 	pref.engine = sl::EngineType::eCustom;
 	pref.engineVersion = "1.0.0";
 	pref.projectId = "f8776929-c969-43bd-ac2b-294b4de58aac";
-	//pref.flags |= sl::PreferenceFlags::eUseDXGIFactoryProxy;
+	//pref.flags = sl::PreferenceFlags::eUseDXGIFactoryProxy;
 
 	pref.renderAPI = sl::RenderAPI::eD3D12;
 
@@ -110,6 +110,7 @@ void Streamline::Initialize()
 	slGetFeatureFunction = (PFun_slGetFeatureFunction*)GetProcAddress(interposer, "slGetFeatureFunction");
 	slGetNewFrameToken = (PFun_slGetNewFrameToken*)GetProcAddress(interposer, "slGetNewFrameToken");
 	slSetD3DDevice = (PFun_slSetD3DDevice*)GetProcAddress(interposer, "slSetD3DDevice");
+	slD3D12CreateDevice = (decltype(&D3D12CreateDevice))GetProcAddress(interposer, "D3D12CreateDevice");
 
 	if (SL_FAILED(res, slInit(pref, sl::kSDKVersion))) {
 		logger::critical("[Streamline] Failed to initialize Streamline");
@@ -117,49 +118,6 @@ void Streamline::Initialize()
 		initialized = true;
 		logger::info("[Streamline] Successfully initialized Streamline");
 	}
-}
-
-void Streamline::PostDevice(DXGI_SWAP_CHAIN_DESC* a_swapChainDesc)
-{
-	// Hook up all of the feature functions using the sl function slGetFeatureFunction
-
-	if (featureDLSS) {
-		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetOptimalSettings", (void*&)slDLSSGetOptimalSettings);
-		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetState", (void*&)slDLSSGetState);
-		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSSetOptions", (void*&)slDLSSSetOptions);
-	}
-
-	if (featureDLSSG && !REL::Module::IsVR()) {
-		slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGGetState", (void*&)slDLSSGGetState);
-		slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGSetOptions", (void*&)slDLSSGSetOptions);
-	}
-
-	if (featureReflex) {
-		slGetFeatureFunction(sl::kFeatureReflex, "slReflexGetState", (void*&)slReflexGetState);
-		//slGetFeatureFunction(sl::kFeatureReflex, "slReflexSetMarker", (void*&)slReflexSetMarker);
-		slGetFeatureFunction(sl::kFeatureReflex, "slReflexSleep", (void*&)slReflexSleep);
-		slGetFeatureFunction(sl::kFeatureReflex, "slReflexSetOptions", (void*&)slReflexSetOptions);
-		slGetFeatureFunction(sl::kFeatureReflex, "slReflexGetPredictedCameraData", (void*&)slReflexGetPredictedCameraData);
-		slGetFeatureFunction(sl::kFeatureReflex, "slReflexSetCameraData", (void*&)slReflexSetCameraData);
-	}
-
-	if (featureNIS) {
-		slGetFeatureFunction(sl::kFeatureNIS, "slNISSetOptions", (void*&)slNISSetOptions);
-		slGetFeatureFunction(sl::kFeatureNIS, "slNISGetState", (void*&)slNISGetState);
-	}
-
-	MONITORINFOEX monitorInfo = {};
-	monitorInfo.cbSize = sizeof(MONITORINFOEX);
-
-	HMONITOR monitor = MonitorFromWindow(a_swapChainDesc->OutputWindow, MONITOR_DEFAULTTONEAREST);
-	GetMonitorInfo(monitor, &monitorInfo);
-
-	DEVMODE devMode = {};
-	devMode.dmSize = sizeof(DEVMODE);
-
-	EnumDisplaySettings(monitorInfo.szDevice, ENUM_CURRENT_SETTINGS, &devMode);
-	refreshRate = devMode.dmDisplayFrequency;
-	slGetFeatureFunction(sl::kFeaturePCL, "slPCLSetMarker", (void*&)slPCLSetMarker2);
 }
 
 HRESULT Streamline::CreateDXGIFactory(REFIID riid, void** ppFactory)
@@ -170,25 +128,8 @@ HRESULT Streamline::CreateDXGIFactory(REFIID riid, void** ppFactory)
 	return slCreateDXGIFactory1(riid, ppFactory);
 }
 
-extern decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChain;
-
-HRESULT Streamline::CreateDeviceAndSwapChain(IDXGIAdapter* pAdapter,
-	D3D_DRIVER_TYPE DriverType,
-	HMODULE Software,
-	UINT Flags,
-	const D3D_FEATURE_LEVEL* pFeatureLevels,
-	UINT FeatureLevels,
-	UINT SDKVersion,
-	DXGI_SWAP_CHAIN_DESC* pSwapChainDesc,
-	IDXGISwapChain** ppSwapChain,
-	ID3D11Device** ppDevice,
-	D3D_FEATURE_LEVEL* pFeatureLevel,
-	ID3D11DeviceContext** ppImmediateContext)
+void Streamline::CheckFeatures(DXGI_ADAPTER_DESC adapterDesc)
 {
-	logger::info("[Streamline] Creating Device and Swapchain");
-	DXGI_ADAPTER_DESC adapterDesc;
-	pAdapter->GetDesc(&adapterDesc);
-
 	sl::AdapterInfo adapterInfo;
 	adapterInfo.deviceLUID = (uint8_t*)&adapterDesc.AdapterLuid;
 	adapterInfo.deviceLUIDSizeInBytes = sizeof(LUID);
@@ -250,78 +191,37 @@ HRESULT Streamline::CreateDeviceAndSwapChain(IDXGIAdapter* pAdapter,
 	logger::info("[Streamline] Reflex {} available", featureReflex ? "is" : "is not");
 	logger::info("[Streamline] NIS {} available", featureNIS ? "is" : "is not");
 
-	HRESULT hr = S_OK;
-
-	if (featureDLSSG && !REL::Module::IsVR()) {
-		logger::info("[Streamline] Proxying D3D11CreateDeviceAndSwapChain to add D3D12 swapchain");
-
-		pSwapChainDesc->Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
-
-		auto slD3D11CreateDeviceAndSwapChain = reinterpret_cast<decltype(&D3D11CreateDeviceAndSwapChain)>(GetProcAddress(interposer, "D3D11CreateDeviceAndSwapChain"));
-
-		hr = slD3D11CreateDeviceAndSwapChain(
-			pAdapter,
-			DriverType,
-			Software,
-			Flags,
-			pFeatureLevels,
-			FeatureLevels,
-			SDKVersion,
-			pSwapChainDesc,
-			ppSwapChain,
-			ppDevice,
-			pFeatureLevel,
-			ppImmediateContext);
-	} else {
-		hr = ptrD3D11CreateDeviceAndSwapChain(
-			pAdapter,
-			DriverType,
-			Software,
-			Flags,
-			pFeatureLevels,
-			FeatureLevels,
-			SDKVersion,
-			pSwapChainDesc,
-			ppSwapChain,
-			ppDevice,
-			pFeatureLevel,
-			ppImmediateContext);
-
-		slSetD3DDevice(*ppDevice);
+	if (featureDLSS) {
+		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetOptimalSettings", (void*&)slDLSSGetOptimalSettings);
+		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetState", (void*&)slDLSSGetState);
+		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSSetOptions", (void*&)slDLSSSetOptions);
 	}
 
-	PostDevice(pSwapChainDesc);
-
-	return hr;
-}
-
-void Streamline::SetupResources()
-{
 	if (featureDLSSG && !REL::Module::IsVR()) {
-		sl::DLSSGOptions options{};
-		options.mode = sl::DLSSGMode::eOn;
-		//options.flags = sl::DLSSGFlags::eRetainResourcesWhenOff;
-
-		if (SL_FAILED(result, slDLSSGSetOptions(viewport, options))) {
-			logger::critical("[Streamline] Could not enable DLSSG");
-		} else {
-			logger::info("[Streamline] Successfully enabled DLSSG");
-		}
+		slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGGetState", (void*&)slDLSSGGetState);
+		slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGSetOptions", (void*&)slDLSSGSetOptions);
 	}
 
 	if (featureReflex) {
-		sl::ReflexOptions reflexOptions{};
-		reflexOptions.mode = reflex ? sl::ReflexMode::eLowLatencyWithBoost : sl::ReflexMode::eOff;
-		reflexOptions.useMarkersToOptimize = false;
-		reflexOptions.virtualKey = 0;
-		reflexOptions.frameLimitUs = int(1000000. / 30.);
-
-		if (SL_FAILED(res, slReflexSetOptions(reflexOptions))) {
-			logger::error("[Streamline] Failed to set reflex options");
-		} else {
-			logger::info("[Streamline] Successfully set reflex options");
-		}
+		slGetFeatureFunction(sl::kFeatureReflex, "slReflexGetState", (void*&)slReflexGetState);
+		slGetFeatureFunction(sl::kFeatureReflex, "slReflexSleep", (void*&)slReflexSleep);
+		slGetFeatureFunction(sl::kFeatureReflex, "slReflexSetOptions", (void*&)slReflexSetOptions);
 	}
+
+	if (featureNIS) {
+		slGetFeatureFunction(sl::kFeatureNIS, "slNISSetOptions", (void*&)slNISSetOptions);
+		slGetFeatureFunction(sl::kFeatureNIS, "slNISGetState", (void*&)slNISGetState);
+	}
+
+	slGetFeatureFunction(sl::kFeaturePCL, "slPCLSetMarker", (void*&)slPCLSetMarker2);
+
+	sl::ReflexOptions reflexOptions{};
+	reflexOptions.frameLimitUs = 0;
+	reflexOptions.mode = sl::ReflexMode::eLowLatency;
+	reflexOptions.useMarkersToOptimize = false;
+	slReflexSetOptions(reflexOptions);
+
+	featureDLSS = false;
 }
 
 void Streamline::Present()
@@ -333,34 +233,19 @@ void Streamline::Present()
 
 	static auto currentFrameGenerationMode = sl::DLSSGMode::eOff;
 
-	if (currentFrameGenerationMode != settings.frameGenerationMode) {
+	//if (currentFrameGenerationMode != settings.frameGenerationMode) {
 		currentFrameGenerationMode = settings.frameGenerationMode;
 
 		sl::DLSSGOptions options{};
-		options.mode = settings.frameGenerationMode;
+		options.mode = sl::DLSSGMode::eOn;
 		options.flags = sl::DLSSGFlags::eRetainResourcesWhenOff;
-		//options.flags = sl::DLSSGFlags::eRetainResourcesWhenOff;
 
 		if (SL_FAILED(result, slDLSSGSetOptions(viewport, options))) {
 			logger::error("[Streamline] Could not set DLSSG");
 		}
-	}
-
-	if (featureReflex) {
-		// Fake NVIDIA Reflex to prevent DLSSG errors
-		//slReflexSetMarker(sl::ReflexMarker::eInputSample, *frameToken);
-		//slReflexSetMarker(sl::ReflexMarker::eSimulationStart, *frameToken);
-		//slReflexSetMarker(sl::ReflexMarker::eSimulationEnd, *frameToken);
-		//slReflexSetMarker(sl::ReflexMarker::eRenderSubmitStart, *frameToken);
-		//slReflexSetMarker(sl::ReflexMarker::eRenderSubmitEnd, *frameToken);
-		//slReflexSetMarker(sl::ReflexMarker::ePresentStart, *frameToken);
-		//slReflexSetMarker(sl::ReflexMarker::ePresentEnd, *frameToken);
-	}
+	//}
 
 	auto state = globals::state;
-	//auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-
-	//auto& motionVectorsBuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::RENDER_TARGET::kMOTION_VECTOR];
 
 	sl::Extent fullExtent{ 0, 0, (uint)state->screenSize.x, (uint)state->screenSize.y };
 
@@ -368,8 +253,8 @@ void Streamline::Present()
 	auto context = DX12SwapChain::GetSingleton()->commandList.get();
 
 	{
-		// tag backbuffer resource mainly to pass extent data and therefore resource can be nullptr.
-		// If the viewport extent is invalid - set extent to null. This informs streamline that full resource extent needs to be used
+		// Tag backbuffer resource mainly to pass extent data and therefore resource can be nullptr
+		// If the viewport extent is invalid - set extent to null. This informs Streamline that full resource extent needs to be used
 		sl::ResourceTag backBufferResourceTag = sl::ResourceTag{ nullptr, sl::kBufferTypeBackbuffer, sl::ResourceLifecycle{}, nullptr };
 		sl::ResourceTag inputs[] = { backBufferResourceTag };
 		slSetTag(viewport, inputs, _countof(inputs), context);
@@ -392,8 +277,6 @@ void Streamline::Present()
 	sl::ResourceTag uiTag = sl::ResourceTag{ &ui, sl::kBufferTypeUIColorAndAlpha, sl::ResourceLifecycle::eValidUntilPresent, &fullExtent };
 
 	sl::ResourceTag inputs[] = { depthTag, mvecTag, hudLessTag, uiTag };
-	slSetTag(viewport, inputs, _countof(inputs), globals::d3d::context);
-
 	slSetTag(viewport, inputs, _countof(inputs), context);
 }
 
@@ -584,7 +467,7 @@ void Streamline::UpdateConstants()
 	slConstants.motionVectorsDilated = sl::Boolean::eFalse;
 	slConstants.motionVectorsJittered = sl::Boolean::eFalse;
 
-	GetFrameToken(frameID);
+	slGetNewFrameToken(frameToken, nullptr);
 
 	if (SL_FAILED(res, slSetConstants(slConstants, *frameToken, viewport))) {
 		logger::error("[Streamline] Could not set constants");
@@ -614,39 +497,11 @@ void Streamline::DestroyDLSSResources()
 	slFreeResources(sl::kFeatureDLSS, viewport);
 }
 
-static void TimerSleepQPC(int64_t targetQPC)
-{
-	LARGE_INTEGER currentQPC;
-	do {
-		QueryPerformanceCounter(&currentQPC);
-	} while (currentQPC.QuadPart < targetQPC);
-}
-
-void Streamline::BeginFrame()
-{
-	if (featureDLSSG && settings.frameGenerationMode == sl::DLSSGMode::eOn && settings.frameLimitMode) {
-		LARGE_INTEGER qpf;
-		QueryPerformanceFrequency(&qpf);
-
-		double bestRefreshRate = refreshRate - (refreshRate * refreshRate) / 3600.0;
-		int64_t targetFrameTicks = int64_t(double(qpf.QuadPart) / (bestRefreshRate * 0.5));
-
-		static LARGE_INTEGER lastFrame = {};
-		LARGE_INTEGER timeNow;
-		QueryPerformanceCounter(&timeNow);
-		int64_t delta = timeNow.QuadPart - lastFrame.QuadPart;
-		if (delta < targetFrameTicks) {
-			TimerSleepQPC(lastFrame.QuadPart + targetFrameTicks);
-		}
-		QueryPerformanceCounter(&lastFrame);
-	}
-}
-
 void Streamline::Main_RenderWorld::thunk(bool a1)
 {
-	if (!globals::game::isVR || !globals::state->upscalerLoaded) {
-		// With upscaler, VR hangs on this function, specifically at slSetConstants
-		globals::streamline->UpdateConstants();
-	}
+	//if (!globals::game::isVR || !globals::state->upscalerLoaded) {
+	//	// With upscaler, VR hangs on this function, specifically at slSetConstants
+	//	globals::streamline->UpdateConstants();
+	//}
 	func(a1);
 }
