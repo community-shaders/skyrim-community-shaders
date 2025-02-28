@@ -103,7 +103,7 @@ HRESULT DX12SwapChain::Present(UINT, UINT)
 {
 	// Wait for D3D11 work to finish
 	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), currentSharedFenceValue));
-	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), currentSharedFenceValue));	
+	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), currentSharedFenceValue));
 	currentSharedFenceValue++;
 
 	auto index = swapChain->GetCurrentBackBufferIndex();
@@ -143,7 +143,7 @@ HRESULT DX12SwapChain::Present(UINT, UINT)
 
 	// Signal D3D12 work is done
 	DX::ThrowIfFailed(commandQueue->Signal(d3d12OnlyFence.get(), currentSharedFenceValue));
-	
+
 	// Wait until the fence has been processed.
 	DX::ThrowIfFailed(d3d12OnlyFence->SetEventOnCompletion(currentSharedFenceValue, fenceEvent));
 	WaitForSingleObjectEx(fenceEvent, INFINITE, FALSE);
