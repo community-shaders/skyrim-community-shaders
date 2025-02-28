@@ -339,7 +339,6 @@ void Streamline::Present()
 		sl::DLSSGOptions options{};
 		options.mode = settings.frameGenerationMode;
 		options.flags = sl::DLSSGFlags::eRetainResourcesWhenOff;
-		options.mode = frameGenerationMode;
 		//options.flags = sl::DLSSGFlags::eRetainResourcesWhenOff;
 
 		if (SL_FAILED(result, slDLSSGSetOptions(viewport, options))) {
@@ -358,7 +357,6 @@ void Streamline::Present()
 		//slReflexSetMarker(sl::ReflexMarker::ePresentEnd, *frameToken);
 	}
 
-	auto renderer = globals::game::renderer;
 	auto state = globals::state;
 	//auto renderer = RE::BSGraphics::Renderer::GetSingleton();
 
@@ -377,7 +375,6 @@ void Streamline::Present()
 		slSetTag(viewport, inputs, _countof(inputs), context);
 	}
 
-	float2 dynamicScreenSize = Util::ConvertToDynamic(State::GetSingleton()->screenSize);
 	sl::Extent dynamicExtent{ 0, 0, (uint)dynamicScreenSize.x, (uint)dynamicScreenSize.y };
 
 	auto upscaling = Upscaling::GetSingleton();
@@ -435,8 +432,6 @@ void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl
 			logger::critical("[Streamline] Could not enable DLSS");
 		}
 	}
-
-	auto context = DX12SwapChain::GetSingleton()->commandList.get();
 
 	{
 		sl::Extent fullExtent{ 0, 0, (uint)state->screenSize.x, (uint)state->screenSize.y };
@@ -519,7 +514,6 @@ void Streamline::Sharpen(Texture2D* a_sharpenTexture, float a_sharpness)
 		if (SL_FAILED(result, slNISSetOptions(viewport, nisOptions))) {
 			logger::critical("[Streamline] Could not set NIS options");
 		}
-		slSetTag(viewport, resourceTags, _countof(resourceTags), context);
 	}
 
 	sl::ViewportHandle view(viewport);

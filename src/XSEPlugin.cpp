@@ -1,4 +1,3 @@
-#include "Hooks.h"
 
 #include "DX12SwapChain.h"
 #include "Deferred.h"
@@ -88,7 +87,6 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 				//if (!state->IsFeatureDisabled("Upscaling")) {
 				//	Upscaling::InstallHooks();
 				//}
-
 				Hooks::Install();
 				FrameAnnotations::OnPostPostLoad();
 				DX12SwapChain::Install();

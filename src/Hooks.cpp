@@ -14,7 +14,6 @@
 #include "Streamline.h"
 
 #include "DX12SwapChain.h"
-#include "VariableCache.h"
 
 std::unordered_map<void*, std::pair<std::unique_ptr<uint8_t[]>, size_t>> ShaderBytecodeMap;
 
@@ -277,7 +276,6 @@ decltype(&ID3D11DeviceContext::ClearState) ptrClearState;
 void WINAPI hk_ClearState(ID3D11DeviceContext* This)
 {
 	DX12SwapChain::GetSingleton()->BeginFrame();
-	;
 	(This->*ptrClearState)();
 }
 
@@ -335,12 +333,9 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	globals::state->SetAdapterDescription(adapterDesc.Description);
 
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;  // Create a device with only the latest feature level
-	auto result = globals::streamline->CreateDeviceAndSwapChain(
 	auto proxy = DX12SwapChain::GetSingleton();
 
 	proxy->CreateD3D12Device(pAdapter);
-
-	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
 
 	D3D11CreateDevice(
 		pAdapter,
@@ -467,9 +462,7 @@ namespace Hooks
 				stl::detour_vfunc<15, ID3D11Device_CreatePixelShader>(globals::d3d::device);
 			}
 			globals::menu->Init();
-			*(uintptr_t*)&ptrClearState = Detours::X64::DetourClassVTable(*(uintptr_t*)context, &hk_ClearState, 110);
-
-			VariableCache::GetSingleton()->OnInit();
+			*(uintptr_t*)&ptrClearState = Detours::X64::DetourClassVTable(*(uintptr_t*)globals::d3d::context, &hk_ClearState, 110);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -794,6 +787,7 @@ namespace Hooks
 
 		logger::info("Hooking BSShader::LoadShaders");
 		stl::detour_thunk<BSShader_LoadShaders>(REL::RelocationID(101339, 108326));
+
 		logger::info("Hooking BSShader::BeginTechnique");
 		stl::detour_thunk<BSShader_BeginTechnique>(REL::RelocationID(101341, 108328));
 
