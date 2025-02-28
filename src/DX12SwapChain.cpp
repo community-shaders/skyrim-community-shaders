@@ -222,8 +222,6 @@ HRESULT DX12SwapChain::Present(UINT, UINT)
 	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), currentSharedFenceValue));
 	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), currentSharedFenceValue));
 
-	FidelityFX::GetSingleton()->Present();
-
 	//Streamline::GetSingleton()->Present();
 
 	currentSharedFenceValue++;
@@ -325,6 +323,7 @@ HRESULT DX12SwapChain::Present(UINT, UINT)
 	//!
 	//!
 	//! This method is thread safe.
+	FidelityFX::GetSingleton()->Present();
 
 	auto hr = swapChain->Present(0, DXGI_PRESENT_ALLOW_TEARING);
 
