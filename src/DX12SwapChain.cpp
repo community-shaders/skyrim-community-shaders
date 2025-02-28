@@ -14,7 +14,6 @@ void DX12SwapChain::CreateD3D12Device(IDXGIAdapter* adapter)
 	DX::ThrowIfFailed(d3d12Device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&commandQueue)));
 	DX::ThrowIfFailed(d3d12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocator)));
 	DX::ThrowIfFailed(d3d12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator.get(), nullptr, IID_PPV_ARGS(&commandList)));
-	DX::ThrowIfFailed(commandList->Close());
 }
 
 winrt::com_ptr<IDXGISwapChain4> swapChainy;
@@ -52,16 +51,11 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 
 void DX12SwapChain::CreateInterop()
 {
-	DX::ThrowIfFailed(d3d12Device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&d3d12Fence)));
-
 	HANDLE sharedFenceHandle;
+	DX::ThrowIfFailed(d3d12Device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&d3d12Fence)));
 	DX::ThrowIfFailed(d3d12Device->CreateSharedHandle(d3d12Fence.get(), nullptr, GENERIC_ALL, nullptr, &sharedFenceHandle));
 	DX::ThrowIfFailed(d3d11Device->OpenSharedFence(sharedFenceHandle, IID_PPV_ARGS(&d3d11Fence)));
-
-	HANDLE sharedFenceHandle2;
-	DX::ThrowIfFailed(d3d12Device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&d3d12Fence2)));
-	DX::ThrowIfFailed(d3d12Device->CreateSharedHandle(d3d12Fence2.get(), nullptr, GENERIC_ALL, nullptr, &sharedFenceHandle2));
-	DX::ThrowIfFailed(d3d11Device->OpenSharedFence(sharedFenceHandle2, IID_PPV_ARGS(&d3d11Fence2)));
+	CloseHandle(sharedFenceHandle);
 
 	DX::ThrowIfFailed(d3d12Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&d3d12OnlyFence)));
 	fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
@@ -82,7 +76,6 @@ void DX12SwapChain::CreateInterop()
 	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
 	swapChainBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
-	swapChainBufferWrappedDummy = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
 }
 
 DXGISwapChainProxy* DX12SwapChain::GetSwapChainProxy()
@@ -108,18 +101,9 @@ HRESULT DX12SwapChain::GetBuffer(void** ppSurface)
 
 HRESULT DX12SwapChain::Present(UINT, UINT)
 {
-	DX::ThrowIfFailed(commandAllocator->Reset());
-
-	bool needsReset2 = true;
-	if (needsReset2) {
-		DX::ThrowIfFailed(commandList->Reset(commandAllocator.get(), nullptr));
-		needsReset2 = false;
-	}
-
 	// Wait for D3D11 work to finish
 	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), currentSharedFenceValue));
-	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), currentSharedFenceValue));
-
+	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), currentSharedFenceValue));	
 	currentSharedFenceValue++;
 
 	auto index = swapChain->GetCurrentBackBufferIndex();
@@ -148,12 +132,6 @@ HRESULT DX12SwapChain::Present(UINT, UINT)
 		}
 	}
 
-	// Because D3D12 was accessing D3D11 resources we need to sync
-	DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence2.get(), currentSharedFenceValue));
-	DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence2.get(), currentSharedFenceValue));
-
-	currentSharedFenceValue++;
-
 	FidelityFX::GetSingleton()->Present();
 
 	DX::ThrowIfFailed(commandList->Close());
@@ -163,18 +141,16 @@ HRESULT DX12SwapChain::Present(UINT, UINT)
 
 	auto hr = swapChain->Present(0, DXGI_PRESENT_ALLOW_TEARING);
 
+	// Signal D3D12 work is done
 	DX::ThrowIfFailed(commandQueue->Signal(d3d12OnlyFence.get(), currentSharedFenceValue));
-
+	
 	// Wait until the fence has been processed.
 	DX::ThrowIfFailed(d3d12OnlyFence->SetEventOnCompletion(currentSharedFenceValue, fenceEvent));
 	WaitForSingleObjectEx(fenceEvent, INFINITE, FALSE);
 
-
-	// Because D3D12 was accessing D3D11 resources we need to sync
-	//DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence.get(), currentSharedFenceValue));
-	//DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence.get(), currentSharedFenceValue));
-
-//	currentSharedFenceValue++;
+	// New frame, reset
+	DX::ThrowIfFailed(commandAllocator->Reset());
+	DX::ThrowIfFailed(commandList->Reset(commandAllocator.get(), nullptr));
 
 	return hr;
 }

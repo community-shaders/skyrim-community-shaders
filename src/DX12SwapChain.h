@@ -82,7 +82,6 @@ public:
 
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc;
 	WrappedResource* swapChainBufferWrapped = nullptr;
-	WrappedResource* swapChainBufferWrappedDummy = nullptr;
 
 	winrt::com_ptr<ID3D11Device5> d3d11Device;
 	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context;
@@ -90,16 +89,13 @@ public:
 	winrt::com_ptr<ID3D11Fence> d3d11Fence;
 	winrt::com_ptr<ID3D12Fence> d3d12Fence;
 
-	winrt::com_ptr<ID3D11Fence> d3d11Fence2;
-	winrt::com_ptr<ID3D12Fence> d3d12Fence2;
-
 	UINT64 currentSharedFenceValue = 0;
-
-	DXGISwapChainProxy* swapChainProxy = nullptr;
 
 	winrt::com_ptr<ID3D12Fence> d3d12OnlyFence;
 	UINT64 d3d12FenceValue = 0;
 	HANDLE fenceEvent = nullptr;
+
+	DXGISwapChainProxy* swapChainProxy = nullptr;
 
 	void CreateD3D12Device(IDXGIAdapter* a_adapter);
 	void CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC swapChainDesc);
