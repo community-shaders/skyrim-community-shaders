@@ -129,7 +129,7 @@ namespace SnowCover
 		waterDist = smoothstep(-64, 8, -waterDist);
 		float disp_factor = 0;
 #		if defined(TRUE_PBR)
-		if (extendedMaterialSettings.ExtendShadows)
+		if (SharedData::extendedMaterialSettings.ExtendShadows)
 			disp_factor = -disp * underDispScale;
 #		endif                                                                                                                                                                                                          //
 		float mult = skylight * (smoothstep(0.3, 0.5, (pow(max(0, worldNormal.z), 2) + disp_factor) * (max(0, env_mult - waterDist) * (0.5 + 0.5 * raw_p + disp_factor) + SharedData::snowCoverSettings.SnowAmount)));  //-smoothstep(-32, 8, -waterDist)
