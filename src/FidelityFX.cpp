@@ -17,7 +17,7 @@ void FidelityFX::DrawSettings()
 	ImGui::Checkbox("Enable Frame Generation", &enableFrameGeneration);
 }
 
-	FfxResource ffxGetResource(ID3D11Resource* dx11Resource,
+FfxResource ffxGetResource(ID3D11Resource* dx11Resource,
 	[[maybe_unused]] wchar_t const* ffxResName,
 	FfxResourceStates state /*=FFX_RESOURCE_STATE_COMPUTE_READ*/)
 {
@@ -52,8 +52,7 @@ void FidelityFX::WrapSwapChain()
 
 	ffx::Context swapChainContext{};
 
-	if (ffx::CreateContext(swapChainContext, nullptr, desc) != ffx::ReturnCode::Ok)
-	{
+	if (ffx::CreateContext(swapChainContext, nullptr, desc) != ffx::ReturnCode::Ok) {
 		logger::critical("[FidelityFX] Failed to create swap chain context!");
 	}
 }
@@ -71,8 +70,7 @@ void FidelityFX::CreateFrameGenerationResources()
 	ffx::CreateBackendDX12Desc createBackend{};
 	createBackend.device = swapChain->d3d12Device.get();
 
-	if (ffx::CreateContext(frameGenContext, nullptr, createFg, createBackend) != ffx::ReturnCode::Ok)
-	{
+	if (ffx::CreateContext(frameGenContext, nullptr, createFg, createBackend) != ffx::ReturnCode::Ok) {
 		logger::critical("[FidelityFX] Failed to create frame generation context!");
 	}
 }
