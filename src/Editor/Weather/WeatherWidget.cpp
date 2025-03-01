@@ -7,45 +7,19 @@
 #include "State.h"
 #include "Util.h"
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::WeatherColor, colorTimes)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::Atmosphere, colorTimes)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::DirectionalColor, max, min)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::DALC, specular, fresnelPower, directional)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::Settings,
-	currentParentBuffer,
-	transDelta,
-
-	sunGlare,
-	sunDamage,
-
-	precipitationBeginFadeIn,
-	precipitationEndFadeOut,
-
-	thunderLightningBeginFadeIn,
-	thunderLightningEndFadeOut,
-	thunderLightningFrequency,
-	lightningColor,
-
-	visualEffectBegin,
-	visualEffectEnd,
-
-	windDirection,
-	windDirectionRange,
-	windSpeed,
+	parent,
+	inheritance,
+	weatherProperties,
+	weatherColors,
+	fogProperties,
 
 	weatherColors,
-	dalc,
-	fog,
-
-	inheritWindSettings,
-	inheritSunSettings,
-	inheritPrecipitationSettings,
-	inheritLightningSettings,
-	inheritVisualEffectSettings,
-	inheritTransDeltaSettings,
-	inheritDALCSettings,
-	inheritWeatherColorSettings,
-	inheritFogSettings)
+	dalc)
 
 WeatherWidget::~WeatherWidget()
 {
@@ -61,19 +35,17 @@ void WeatherWidget::DrawWidget()
 		auto& widgets = editorWindow->weatherWidgets;
 
 		// Sets the parent widget if settings have been loaded.
-		if (settings.currentParentBuffer != "None") {
+		if (settings.parent != "None") {
 			parent = GetParent();
 			if (parent == nullptr)
-				settings.currentParentBuffer = "None";
-			strncpy(currentParentBuffer, settings.currentParentBuffer.c_str(), sizeof(settings.currentParentBuffer));
+				settings.parent = "None";
 		}
 
-		if (ImGui::BeginCombo("Parent", currentParentBuffer)) {
+		if (ImGui::BeginCombo("Parent", settings.parent.c_str())) {
 			// Option for "None"
 			if (ImGui::Selectable("None", parent == nullptr)) {
 				parent = nullptr;
-				settings.currentParentBuffer = "None";
-				strncpy(currentParentBuffer, settings.currentParentBuffer.c_str(), sizeof(settings.currentParentBuffer));
+				settings.parent = "None";
 			}
 
 			for (int i = 0; i < widgets.size(); i++) {
@@ -86,9 +58,7 @@ void WeatherWidget::DrawWidget()
 				// Option for each widget
 				if (ImGui::Selectable(widget->GetEditorID().c_str(), parent == widget)) {
 					parent = (WeatherWidget*)widget;
-					settings.currentParentBuffer = widget->GetEditorID();
-					strncpy(currentParentBuffer, settings.currentParentBuffer.c_str(), sizeof(settings.currentParentBuffer) - 1);
-					currentParentBuffer[sizeof(currentParentBuffer) - 1] = '\0';  // Ensure null-termination
+					settings.parent = widget->GetEditorID();
 				}
 
 				// Set default focus to the current parent
@@ -105,53 +75,25 @@ void WeatherWidget::DrawWidget()
 				parent->SetOpen(true);
 		}
 
-		DrawSunSettings();
+		DrawProperties("Sun", { { "Sun Glare", INT8_SLIDER }, { "Sun Damage", INT8_SLIDER } });
+		DrawProperties("Wind", { { "Wind Speed", UINT8_SLIDER }, { "Wind Direction", INT8_SLIDER }, { "Wind Direction Range", INT8_SLIDER } });
+		DrawProperties("Precipitation", { { "Precipitation Begin Fade In", INT8_SLIDER }, { "Precipitation Begin Fade Out", INT8_SLIDER } });
+		
+		DrawProperties("Lightning", { { "Thunder Lightning Begin Fade In", INT8_SLIDER }, { "Thunder Lightning End Fade Out", INT8_SLIDER },
+										{ "Thunder Lightning Frequency", INT8_SLIDER }, { "Lightning Color", COLOR3_PICKER } });
 
-		DrawSeparator();
-
-		DrawWindSettings();
-
-		DrawSeparator();
-
-		DrawPrecipitationSettings();
-
-		DrawSeparator();
-
-		DrawLightningSettings();
-
-		DrawSeparator();
-
-		DrawVisualEffectSettings();
-
-		DrawSeparator();
+		DrawProperties("Visual Effects", { { "Visual Effect Begin", INT8_SLIDER }, { "Visual Effect End", INT8_SLIDER } });
 
 		DrawDALCSettings();
 
-		DrawSeparator();
-
 		DrawWeatherColorSettings();
-
-		DrawSeparator();
 
 		DrawCloudSettings();
 
-		DrawSeparator();
+		DrawProperties("Fog", { { "Day Near", FLOAT_SLIDER }, { "Day Far", FLOAT_SLIDER }, { "Day Power", FLOAT_SLIDER }, { "Day Max", FLOAT_SLIDER },
+								  { "Night Near", FLOAT_SLIDER }, { "Night Far", FLOAT_SLIDER }, { "Night Power", FLOAT_SLIDER }, { "Night Max", FLOAT_SLIDER } });
 
-		DrawFogSettings();
-
-		DrawSeparator();
-
-		ImGui::Checkbox("Inherit From Parent##transDelta", &settings.inheritTransDeltaSettings);
-		ImGui::SameLine();
-		ImGui::Spacing();
-		ImGui::SameLine();
-		ImGui::SliderInt("Trans Delta", &settings.transDelta, -128, 127);
-
-		if (settings.inheritTransDeltaSettings && HasParent()) {
-			settings.transDelta = GetParent()->settings.transDelta;
-		}
-
-		SetWeatherValues();
+		DrawProperties("Weather Transition", { { "Trans Delta", INT8_SLIDER } });
 	}
 	ImGui::End();
 }
@@ -160,8 +102,6 @@ void WeatherWidget::LoadSettings()
 {
 	if (!js.empty()) {
 		settings = js;
-		strncpy(currentParentBuffer, settings.currentParentBuffer.c_str(), sizeof(settings.currentParentBuffer));
-		currentParentBuffer[sizeof(currentParentBuffer) - 1] = '\0';  // Ensure null-termination
 	}
 }
 
@@ -175,50 +115,68 @@ WeatherWidget* WeatherWidget::GetParent()
 	auto editorWindow = EditorWindow::GetSingleton();
 	auto& widgets = editorWindow->weatherWidgets;
 
-	auto temp = std::find_if(widgets.begin(), widgets.end(), [&](Widget* w) { return w->GetEditorID() == settings.currentParentBuffer; });
+	auto temp = std::find_if(widgets.begin(), widgets.end(), [&](Widget* w) { return w->GetEditorID() == settings.parent; });
 	if (temp != widgets.end())
 		return (WeatherWidget*)*temp;
 
 	return nullptr;
 }
 
-bool WeatherWidget::HasParent()
+bool WeatherWidget::HasParent() const
 {
-	return settings.currentParentBuffer != "None";
+	return settings.parent != "None";
 }
 
 void WeatherWidget::SetWeatherValues()
 {
-	weather->data.transDelta = (int8_t)settings.transDelta;
+	std::map<std::string, int>& weatherProps = settings.weatherProperties;
+	std::map<std::string, float3>& weatherColors = settings.weatherColors;
+	std::map<std::string, float>& fogProperties = settings.fogProperties;
+
+	auto& data = weather->data;
+	auto& colorData = weather->colorData;
+	auto& fogData = weather->fogData;
+
+	weather->data.transDelta = (int8_t)weatherProps["Trans Delta"];
 
 	// Sun
-	weather->data.sunGlare = (int8_t)settings.sunGlare;
-	weather->data.sunDamage = (int8_t)settings.sunDamage;
+	data.sunGlare = (int8_t)weatherProps["Sun Glare"];
+	data.sunDamage = (int8_t)weatherProps["Sun Damage"];
 
 	// Precipitation
-	weather->data.precipitationBeginFadeIn = (int8_t)settings.precipitationBeginFadeIn;
-	weather->data.precipitationEndFadeOut = (int8_t)settings.precipitationEndFadeOut;
+	data.precipitationBeginFadeIn = (int8_t)weatherProps["Precipitation Begin Fade In"];
+	data.precipitationEndFadeOut = (int8_t)weatherProps["Precipitation End Fade Out"];
 
 	// Lightning
-	weather->data.thunderLightningBeginFadeIn = (int8_t)settings.thunderLightningBeginFadeIn;
-	weather->data.thunderLightningEndFadeOut = (int8_t)settings.thunderLightningEndFadeOut;
-	weather->data.thunderLightningFrequency = (int8_t)settings.thunderLightningFrequency;
-	Float3ToColor(settings.lightningColor, weather->data.lightningColor);
+	data.thunderLightningBeginFadeIn = (int8_t)weatherProps["Thunder Lightning Begin Fade In"];
+	data.thunderLightningEndFadeOut = (int8_t)weatherProps["Thunder Lightning End Fade Out"];
+	data.thunderLightningFrequency = (int8_t)weatherProps["Thunder Lightning Frequency"];
+	Float3ToColor(weatherColors["Lightning Color"], weather->data.lightningColor);
 
 	// Visual Effects
-	weather->data.visualEffectBegin = (int8_t)settings.visualEffectBegin;
-	weather->data.visualEffectEnd = (int8_t)settings.visualEffectEnd;
+	data.visualEffectBegin = (int8_t)weatherProps["Visual Effect Begin"];
+	data.visualEffectEnd = (int8_t)weatherProps["Visual Effect End"];
 
 	// Wind
-	weather->data.windSpeed = (uint8_t)settings.windSpeed;
-	weather->data.windDirection = (int8_t)settings.windDirection;
-	weather->data.windDirectionRange = (int8_t)settings.windDirectionRange;
+	data.windSpeed = (uint8_t)weatherProps["Wind Speed"];
+	data.windDirection = (int8_t)weatherProps["Wind Direction"];
+	data.windDirectionRange = (int8_t)weatherProps["Wind Direction Range"];
 
-	// Weather
+	// Fog
+	fogData.dayNear = fogProperties["Day Near"];
+	fogData.dayFar = fogProperties["Day Far"];
+	fogData.dayPower = fogProperties["Day Power"];
+	fogData.dayMax = fogProperties["Day Max"];
+	fogData.nightNear = fogProperties["Night Near"];
+	fogData.nightFar = fogProperties["Night Far"];
+	fogData.nightPower = fogProperties["Night Power"];
+	fogData.nightMax = fogProperties["Night Max"];
+
+	// Atmosphere colors
 	for (size_t i = 0; i < ColorTypes::kTotal; i++) {
 		for (size_t j = 0; j < ColorTimes::kTotal; j++) {
-			auto& color = weather->colorData[i][j];
-			Float3ToColor(settings.weatherColors[i].colorTimes[j], color);
+			auto& color = colorData[i][j];
+			Float3ToColor(settings.atmosphereColors[i].colorTimes[j], color);
 		}
 	}
 
@@ -244,8 +202,8 @@ void WeatherWidget::SetWeatherValues()
 	for (size_t i = 0; i < TESWeather::kTotalLayers; i++) {
 		auto& settingsCloud = settings.clouds[i];
 
-		weather->cloudLayerSpeedX[i] = settingsCloud.cloudLayerSpeedX;
-		weather->cloudLayerSpeedY[i] = settingsCloud.cloudLayerSpeedY;
+		weather->cloudLayerSpeedX[i] = (int8_t)settingsCloud.cloudLayerSpeedX;
+		weather->cloudLayerSpeedY[i] = (int8_t)settingsCloud.cloudLayerSpeedY;
 
 		auto& cloudColors = weather->cloudColorData[i];
 		auto& cloudAlphas = weather->cloudAlpha[i];
@@ -255,43 +213,58 @@ void WeatherWidget::SetWeatherValues()
 			Float3ToColor(settingsCloud.color[j], cloudColors[j]);
 		}
 	}
-
-	// Fog
-	weather->fogData = settings.fog;
 }
 
 void WeatherWidget::LoadWeatherValues()
 {
-	settings.transDelta = weather->data.transDelta;
+	std::map<std::string, int>& weatherProps = settings.weatherProperties;
+	std::map<std::string, float3>& weatherColors = settings.weatherColors;
+	std::map<std::string, float>& fogProperties = settings.fogProperties;
+
+	const auto& data = weather->data;
+	const auto& colorData = weather->colorData;
+	const auto& fogData = weather->fogData;
+
+	weatherProps["Trans Delta"] = data.transDelta;
 
 	// Sun
-	settings.sunGlare = weather->data.sunGlare;
-	settings.sunDamage = weather->data.sunDamage;
+	weatherProps["Sun Glare"] = data.sunGlare;
+	weatherProps["Sun Damage"] = data.sunDamage;
 
 	// Precipitation
-	settings.precipitationBeginFadeIn = weather->data.precipitationBeginFadeIn;
-	settings.precipitationEndFadeOut = weather->data.precipitationEndFadeOut;
+	weatherProps["Precipitation Begin Fade In"] = data.precipitationBeginFadeIn;
+	weatherProps["Precipitation End Fade Out"] = data.precipitationEndFadeOut;
 
 	// Lightning
-	settings.thunderLightningBeginFadeIn = weather->data.thunderLightningBeginFadeIn;
-	settings.thunderLightningEndFadeOut = weather->data.thunderLightningEndFadeOut;
-	settings.thunderLightningFrequency = weather->data.thunderLightningFrequency;
-	ColorToFloat3(weather->data.lightningColor, settings.lightningColor);
+	weatherProps["Thunder Lightning Begin Fade In"] = data.thunderLightningBeginFadeIn;
+	weatherProps["Thunder Lightning End Fade Out"] = data.thunderLightningEndFadeOut;
+	weatherProps["Thunder Lightning Frequency"] = data.thunderLightningFrequency;
+	ColorToFloat3(data.lightningColor, weatherColors["Lightning Color"]);
 
 	// Visual Effects
-	settings.visualEffectBegin = weather->data.visualEffectBegin;
-	settings.visualEffectEnd = weather->data.visualEffectEnd;
+	weatherProps["Visual Effect Begin"] = data.visualEffectBegin;
+	weatherProps["Visual Effect End"] = data.visualEffectEnd;
 
 	// Wind
-	settings.windSpeed = weather->data.windSpeed;
-	settings.windDirection = weather->data.windDirection;
-	settings.windDirectionRange = weather->data.windDirectionRange;
+	weatherProps["Wind Speed"] = data.windSpeed;
+	weatherProps["Wind Direction"] = data.windDirection;
+	weatherProps["Wind Direction Range"] = data.windDirectionRange;
 
-	// Weather color
+	// Fog
+	fogProperties["Day Near"] = fogData.dayNear;
+	fogProperties["Day Far"] = fogData.dayFar;
+	fogProperties["Night Near"] = fogData.nightNear;
+	fogProperties["Night Far"] = fogData.nightFar;
+	fogProperties["Day Power"] = fogData.dayPower;
+	fogProperties["Night Power"] = fogData.nightPower;
+	fogProperties["Day Max"] = fogData.dayMax;
+	fogProperties["Night Max"] = fogData.nightMax;
+
+	// Atmosphere color
 	for (size_t i = 0; i < ColorTypes::kTotal; i++) {
 		for (size_t j = 0; j < ColorTimes::kTotal; j++) {
-			auto& color = weather->colorData[i][j];
-			ColorToFloat3(color, settings.weatherColors[i].colorTimes[j]);
+			auto& color = colorData[i][j];
+			ColorToFloat3(color, settings.atmosphereColors[i].colorTimes[j]);
 		}
 	}
 
@@ -328,58 +301,35 @@ void WeatherWidget::LoadWeatherValues()
 			ColorToFloat3(cloudColors[j], settingsCloud.color[j]);
 		}
 	}
-
-	// Fog
-	settings.fog = weather->fogData;
-}
-
-void WeatherWidget::DrawWindSettings()
-{
-	if (ImGui::CollapsingHeader("Wind settings", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
-		ImGui::Checkbox("Inherit From Parent##wind", &settings.inheritWindSettings);
-
-		if (settings.inheritWindSettings && HasParent()) {
-			settings.windSpeed = GetParent()->settings.windSpeed;
-			settings.windDirection = GetParent()->settings.windDirection;
-			settings.windDirectionRange = GetParent()->settings.windDirectionRange;
-		} else {
-			settings.inheritWindSettings = false;
-			ImGui::SliderInt("Wind Direction", &settings.windDirection, -128, 127);
-			ImGui::SliderInt("Wind Direction Range", &settings.windDirectionRange, -128, 127);
-			ImGui::SliderInt("Wind Speed", &settings.windSpeed, 0, 255);
-		}
-	}
 }
 
 void WeatherWidget::DrawDALCSettings()
 {
 	if (ImGui::CollapsingHeader("DALC settings", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
-		ImGui::Checkbox("Inherit From Parent##dalc", &settings.inheritDALCSettings);
+		bool& doesInherit = settings.inheritance["DALC"];
+		ImGui::Checkbox("Inherit From Parent##dalc", &doesInherit);
 
-		if (settings.inheritDALCSettings && HasParent()) {
+		if (doesInherit && HasParent()) {
 			for (size_t i = 0; i < RE::TESWeather::ColorTimes::kTotal; i++) {
 				settings.dalc[i] = GetParent()->settings.dalc[i];
 			}
 		} else {
-			settings.inheritDALCSettings = false;
+			doesInherit = false;
 			for (int i = 0; i < RE::TESWeather::ColorTimes::kTotal; i++) {
 				std::string label = ColorTimeLabel(i);
 
 				if (ImGui::CollapsingHeader(label.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
 					ImGui::Spacing();
-					ImGui::ColorEdit3(std::format("Specular##{}", label).c_str(), (float*)&settings.dalc[i].specular);
+					DrawColorEdit(std::format("Specular##{}", label), settings.dalc[i].specular);
 					ImGui::Spacing();
-					ImGui::SliderFloat(std::format("Fresnel Power##{}", label).c_str(), &settings.dalc[i].fresnelPower, -127, 128);
+					DrawSliderFloat(std::format("Fresnel Power##{}", label), settings.dalc[i].fresnelPower);
 					ImGui::Spacing();
-					ImGui::ColorEdit3(std::format("DALC X Max##{}", label).c_str(), (float*)&settings.dalc[i].directional[0].max);
-					ImGui::ColorEdit3(std::format("DALC X Min##{}", label).c_str(), (float*)&settings.dalc[i].directional[0].min);
-					ImGui::Spacing();
-					ImGui::ColorEdit3(std::format("DALC Y Max##{}", label).c_str(), (float*)&settings.dalc[i].directional[1].max);
-					ImGui::ColorEdit3(std::format("DALC Y Min##{}", label).c_str(), (float*)&settings.dalc[i].directional[1].min);
-					ImGui::Spacing();
-					ImGui::ColorEdit3(std::format("DALC Z Max##{}", label).c_str(), (float*)&settings.dalc[i].directional[2].max);
-					ImGui::ColorEdit3(std::format("DALC Z Min##{}", label).c_str(), (float*)&settings.dalc[i].directional[2].min);
-					ImGui::Spacing();
+
+					for (int j = 0; j < 3; j++) {
+						DrawColorEdit(std::format("DALC X Max##{}", label), settings.dalc[i].directional[j].max);
+						DrawColorEdit(std::format("DALC X Min##{}", label), settings.dalc[i].directional[j].min);
+						ImGui::Spacing();
+					}
 				}
 			}
 		}
@@ -388,21 +338,23 @@ void WeatherWidget::DrawDALCSettings()
 
 void WeatherWidget::DrawWeatherColorSettings()
 {
-	if (ImGui::CollapsingHeader("Weather Color settings", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
-		ImGui::Checkbox("Inherit From Parent##weatherColor", &settings.inheritWeatherColorSettings);
+	if (ImGui::CollapsingHeader("Atmosphere Colors", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
+		bool& doesInherit = settings.inheritance["Atmosphere Colors"];
+		ImGui::Checkbox("Inherit From Parent##atmosphereColors", &doesInherit);
 
-		if (settings.inheritWeatherColorSettings && HasParent()) {
+		if (&doesInherit && HasParent()) {
 			for (size_t i = 0; i < ColorTypes::kTotal; i++) {
-				settings.weatherColors[i] = GetParent()->settings.weatherColors[i];
+				settings.atmosphereColors[i] = GetParent()->settings.atmosphereColors[i];
 			}
 		} else {
-			settings.inheritWeatherColorSettings = false;
+			doesInherit = false;
+
 			for (int i = 0; i < ColorTypes::kTotal; i++) {
 				std::string colorTypeLabel = ColorTypeLabel(i);
+
 				if (ImGui::CollapsingHeader(colorTypeLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
 					for (int j = 0; j < ColorTimes::kTotal; j++) {
-						ImGui::Spacing();
-						ImGui::ColorEdit3(std::format("{}##{}", ColorTimeLabel(j), colorTypeLabel).c_str(), (float*)&settings.weatherColors[i].colorTimes[j]);
+						DrawColorEdit(std::format("{}##{}", ColorTimeLabel(j), colorTypeLabel), settings.atmosphereColors[i].colorTimes[j]);
 						ImGui::Spacing();
 					}
 				}
@@ -413,30 +365,31 @@ void WeatherWidget::DrawWeatherColorSettings()
 
 void WeatherWidget::DrawCloudSettings()
 {
-	if (ImGui::CollapsingHeader("Cloud settings", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
-		ImGui::Checkbox("Inherit From Parent##cloud", &settings.inheritDALCSettings);
+	if (ImGui::CollapsingHeader("Clouds Properties", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
+		bool& doesInherit = settings.inheritance["Clouds"];
+		ImGui::Checkbox("Inherit From Parent##cloud", &doesInherit);
 
-		if (settings.inheritCloudSettings && HasParent()) {
+		if (doesInherit && HasParent()) {
 			for (size_t i = 0; i < RE::TESWeather::ColorTimes::kTotal; i++) {
 				settings.dalc[i] = GetParent()->settings.dalc[i];
 			}
 		} else {
-			settings.inheritCloudSettings = false;
+			doesInherit = false;
 			for (int i = 0; i < TESWeather::kTotalLayers; i++) {
 				std::string layer = std::format("Layer {}", i);
 
 				if (ImGui::CollapsingHeader(layer.c_str(), ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
+					DrawSliderInt8(std::format("Cloud Layer Speed Y##{}", layer), settings.clouds[i].cloudLayerSpeedY);
 					ImGui::Spacing();
-					ImGui::SliderInt(std::format("Cloud Layer Speed Y##{}", layer).c_str(), (int*)&settings.clouds[i].cloudLayerSpeedY, -127, 128);
-					ImGui::Spacing();
-					ImGui::SliderInt(std::format("Cloud Layer Speed X##{}", layer).c_str(), (int*)&settings.clouds[i].cloudLayerSpeedX, -127, 128);
+					DrawSliderInt8(std::format("Cloud Layer Speed X##{}", layer), settings.clouds[i].cloudLayerSpeedX);
+
 					for (int j = 0; j < ColorTimes::kTotal; j++) {
 						std::string colorTime = ColorTimeLabel(j).c_str();
+
 						if (ImGui::CollapsingHeader(colorTime.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
+							DrawColorEdit(std::format("Cloud Color##{}{}", colorTime, i), settings.clouds[i].color[j]);
 							ImGui::Spacing();
-							ImGui::ColorEdit3(std::format("Cloud Color##{}{}", colorTime, i).c_str(), (float*)&settings.clouds[i].color[j]);
-							ImGui::Spacing();
-							ImGui::SliderFloat(std::format("Cloud Alpha##{}{}", colorTime, i).c_str(), &settings.clouds[i].cloudAlpha[j], -127, 128);
+							DrawSliderFloat(std::format("Cloud Alpha##{}{}", colorTime, i), settings.clouds[i].cloudAlpha[j]);
 							ImGui::Spacing();
 						}
 					}
@@ -446,99 +399,48 @@ void WeatherWidget::DrawCloudSettings()
 	}
 }
 
-void WeatherWidget::DrawLightningSettings()
+void WeatherWidget::DrawProperties(std::string category, std::map<std::string, int> properties)
 {
-	if (ImGui::CollapsingHeader("Lightning settings", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
-		ImGui::Checkbox("Inherit From Parent##lightning", &settings.inheritLightningSettings);
+	if (ImGui::CollapsingHeader(std::format("{} Properties", category).c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
+		bool& doesInherit = settings.inheritance[category];
+		ImGui::Checkbox(std::format("Inherit From Parent##{}", category).c_str(), &doesInherit);
 
-		if (settings.inheritLightningSettings && HasParent()) {
-			settings.thunderLightningBeginFadeIn = GetParent()->settings.thunderLightningBeginFadeIn;
-			settings.thunderLightningEndFadeOut = GetParent()->settings.thunderLightningEndFadeOut;
-			settings.thunderLightningFrequency = GetParent()->settings.thunderLightningFrequency;
-
-			settings.lightningColor = GetParent()->settings.lightningColor;
+		if (doesInherit && HasParent()) {
+			for (auto& p : properties) {
+				InheritFromParent(p.first);
+			}
 		} else {
-			settings.inheritLightningSettings = false;
-			ImGui::SliderInt("Thunder Lightning Begin Fade In", &settings.thunderLightningBeginFadeIn, -128, 127);
-			ImGui::SliderInt("Thunder Lightning End Fade Out", &settings.thunderLightningEndFadeOut, -128, 127);
-			ImGui::SliderInt("Thunder Lightning Frequency", &settings.thunderLightningFrequency, -128, 127);
-			ImGui::ColorEdit3("Lightning Color", (float*)&settings.lightningColor);
+			doesInherit = false;
+
+			for (auto& p : properties) {
+				switch (p.second) {
+				case 0:
+					DrawSliderInt8(p.first, settings.weatherProperties[p.first]);
+					break;
+				case 1:
+					DrawColorEdit(p.first, settings.weatherColors[p.first]);
+					break;
+				case 2:
+					DrawSliderUint8(p.first, settings.weatherProperties[p.first]);
+				case 3:
+					DrawSliderFloat(p.first, settings.fogProperties[p.first]);
+				default:
+					break;
+				}
+			}
 		}
 	}
-}
 
-void WeatherWidget::DrawFogSettings()
-{
-	if (ImGui::CollapsingHeader("Fog settings", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
-		ImGui::Checkbox("Inherit From Parent##wind", &settings.inheritFogSettings);
-
-		if (settings.inheritFogSettings && HasParent()) {
-			settings.fog = GetParent()->settings.fog;
-		} else {
-			settings.inheritFogSettings = false;
-			ImGui::SliderFloat("Day Near", &settings.fog.dayNear, 0, 500000);
-			ImGui::SliderFloat("Day Far", &settings.fog.dayFar, 0, 500000);
-			ImGui::SliderFloat("Night Near", &settings.fog.nightNear, 0, 500000);
-			ImGui::SliderFloat("Night far", &settings.fog.nightFar, 0, 500000);
-			ImGui::SliderFloat("Day Power", &settings.fog.dayPower, 0, 500000);
-			ImGui::SliderFloat("Night Power", &settings.fog.nightPower, 0, 500000);
-			ImGui::SliderFloat("Day Max", &settings.fog.dayMax, 0, 500000);
-			ImGui::SliderFloat("Night Max", &settings.fog.nightMax, 0, 500000);
-		}
-	}
-}
-
-void WeatherWidget::DrawVisualEffectSettings()
-{
-	if (ImGui::CollapsingHeader("Visual Effect settings", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
-		ImGui::Checkbox("Inherit From Parent##visualEffect", &settings.inheritVisualEffectSettings);
-
-		if (settings.inheritVisualEffectSettings && HasParent()) {
-			settings.visualEffectBegin = GetParent()->settings.visualEffectBegin;
-			settings.visualEffectBegin = GetParent()->settings.visualEffectEnd;
-		} else {
-			settings.inheritVisualEffectSettings = false;
-			ImGui::SliderInt("Visual Effect Begin", &settings.visualEffectBegin, -128, 127);
-			ImGui::SliderInt("Visual Effect End", &settings.visualEffectEnd, -128, 127);
-		}
-	}
-}
-
-void WeatherWidget::DrawSunSettings()
-{
-	if (ImGui::CollapsingHeader("Sun settings", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
-		ImGui::Checkbox("Inherit From Parent##sun", &settings.inheritSunSettings);
-
-		if (settings.inheritSunSettings && HasParent()) {
-			settings.sunGlare = GetParent()->settings.sunGlare;
-			settings.sunDamage = GetParent()->settings.sunDamage;
-		} else {
-			settings.inheritSunSettings = false;
-			ImGui::SliderInt("Sun Glare", &settings.sunGlare, -128, 127);
-			ImGui::SliderInt("Sun Damage", &settings.sunDamage, -128, 127);
-		}
-	}
-}
-
-void WeatherWidget::DrawPrecipitationSettings()
-{
-	if (ImGui::CollapsingHeader("Precipitation settings", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
-		ImGui::Checkbox("Inherit From Parent##precipitation", &settings.inheritPrecipitationSettings);
-
-		if (settings.inheritPrecipitationSettings && HasParent()) {
-			settings.precipitationBeginFadeIn = GetParent()->settings.precipitationBeginFadeIn;
-			settings.precipitationEndFadeOut = GetParent()->settings.precipitationEndFadeOut;
-		} else {
-			settings.inheritPrecipitationSettings = false;
-			ImGui::SliderInt("Precipitation Begin Fade In", &settings.precipitationBeginFadeIn, -128, 127);
-			ImGui::SliderInt("Precipitation End Fade Out", &settings.precipitationEndFadeOut, -128, 127);
-		}
-	}
-}
-
-void WeatherWidget::DrawSeparator()
-{
 	ImGui::Spacing();
 	ImGui::Separator();
 	ImGui::Spacing();
+}
+
+void WeatherWidget::InheritFromParent(const std::string& property)
+{
+	if (settings.weatherProperties.find(property) != settings.weatherProperties.end()) {
+		settings.weatherProperties[property] = GetParent()->settings.weatherProperties[property];
+	} else if (settings.weatherColors.find(property) != settings.weatherColors.end()) {
+		settings.weatherColors[property] = GetParent()->settings.weatherColors[property];
+	}
 }

@@ -11,8 +11,6 @@ class WeatherWidget : public Widget
 {
 public:
 	WeatherWidget* parent = nullptr;
-	char currentParentBuffer[256] = "None";
-
 	TESWeather* weather = nullptr;
 
 	WeatherWidget(TESWeather* a_weather)
@@ -35,56 +33,30 @@ public:
 		float fresnelPower;
 	};
 
-	struct WeatherColor
+	struct Atmosphere
 	{
 		float3 colorTimes[ColorTimes::kTotal];
 	};
 
 	struct Cloud
 	{
-		int8_t cloudLayerSpeedY;
-		int8_t cloudLayerSpeedX;
+		int cloudLayerSpeedY;
+		int cloudLayerSpeedX;
 		float3 color[ColorTimes::kTotal];
 		float cloudAlpha[ColorTimes::kTotal];
 	};
 
 	struct Settings
 	{
-		std::string currentParentBuffer;
+		std::string parent = "None";
+		std::map<std::string, bool> inheritance;
+		std::map<std::string, int> weatherProperties;
+		std::map<std::string, float3> weatherColors;
+		std::map<std::string, float> fogProperties;
 
-		int windSpeed;  // underlying type uint8_t
-
-		//// underlying type int8_t
-		int transDelta;
-		int sunGlare;
-		int sunDamage;
-		int precipitationBeginFadeIn;
-		int precipitationEndFadeOut;
-		int thunderLightningBeginFadeIn;
-		int thunderLightningEndFadeOut;
-		int thunderLightningFrequency;
-		int visualEffectBegin;
-		int visualEffectEnd;
-		int windDirection;
-		int windDirectionRange;
-
-		float3 lightningColor;
-
-		WeatherColor weatherColors[ColorTypes::kTotal];
+		Atmosphere atmosphereColors[ColorTypes::kTotal];
 		DALC dalc[ColorTimes::kTotal];
-		FogData fog;
 		Cloud clouds[TESWeather::kTotalLayers];
-
-		bool inheritWindSettings;
-		bool inheritSunSettings;
-		bool inheritPrecipitationSettings;
-		bool inheritLightningSettings;
-		bool inheritVisualEffectSettings;
-		bool inheritTransDeltaSettings;
-		bool inheritDALCSettings;
-		bool inheritWeatherColorSettings;
-		bool inheritCloudSettings;
-		bool inheritFogSettings;
 	};
 
 	Settings settings;
@@ -96,19 +68,14 @@ public:
 	virtual void SaveSettings() override;
 
 	WeatherWidget* GetParent();
-	bool HasParent();
+	bool HasParent() const;
 	void SetWeatherValues();
 	void LoadWeatherValues();
 
 private:
-	void DrawWindSettings();
 	void DrawDALCSettings();
 	void DrawWeatherColorSettings();
 	void DrawCloudSettings();
-	void DrawLightningSettings();
-	void DrawFogSettings();
-	void DrawVisualEffectSettings();
-	void DrawSunSettings();
-	void DrawPrecipitationSettings();
-	void DrawSeparator();
+	void DrawProperties(std::string category, std::map<std::string, int> properties);
+	void InheritFromParent(const std::string& property);
 };
