@@ -50,9 +50,6 @@ namespace ExtendedMaterials
 		float2 dxSize = ddx(texCoordsPerSize);
 		float2 dySize = ddy(texCoordsPerSize);
 
-		// Find min of change in u and v across quad: compute du and dv magnitude across quad
-		//float2 dTexCoords = dxSize * dxSize + dySize * dySize;
-
 		// Standard mipmapping uses max here
 		float minTexCoordDelta = min(dot(dxSize, dxSize), dot(dySize, dySize));
 
