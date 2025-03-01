@@ -148,7 +148,7 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 
 	ID3D12CommandList* commandLists[] = { commandList.get() };
 	commandQueue->ExecuteCommandLists(1, commandLists);
-	
+
 	DX::ThrowIfFailed(commandQueue->Signal(d3d12OnlyFence.get(), currentSharedFenceValue));
 	DX::ThrowIfFailed(d3d12Fence->SetEventOnCompletion(currentSharedFenceValue, fenceEvent));
 
