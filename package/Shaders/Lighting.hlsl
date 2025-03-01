@@ -1543,7 +1543,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float lodBlendMask = TexLandLodBlend2Sampler.Sample(SampLandLodBlend2Sampler, 3.0.xx * input.TexCoord0.zw).x;
 	float lodLandFadeFactor = GetLodLandBlendMultiplier(lodBlendParameter, lodBlendMask);
 	float lodLandBlendFactor = LODTexParams.z * input.LandBlendWeights2.w;
-
 	normal.xyz = lerp(normal.xyz, float3(0, 0, 1), lodLandBlendFactor);
 
 #			if !defined(TRUE_PBR)
@@ -1776,7 +1775,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 specularColorPBR = 0;
 	float3 transmissionColor = 0;
 
-	float pbrWeight = 1;
 	float pbrGlossiness = 1 - pbrSurfaceProperties.Roughness;
 #	endif  // TRUE_PBR
 
@@ -2604,22 +2602,23 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(LOD_LAND_BLEND) && defined(TRUE_PBR)
 	{
-		pbrWeight = 1 - lodLandBlendFactor;
+#		if defined(DEFERRED) && defined(SSGI)
+		lodLandDiffuseColor += directionalAmbientColorDirect;
+#		else
+		lodLandDiffuseColor += directionalAmbientColor;
+#		endif
+		float3 litLodLandColor = vertexColor * lodLandColor * lodLandFadeFactor * lodLandDiffuseColor;
+		color.xyz = lerp(color.xyz * Color::PBRLightingScale, litLodLandColor, lodLandBlendFactor);
 
-		float3 litLodLandColor = vertexColor * lodLandColor.xyz * lodLandFadeFactor * lodLandDiffuseColor;
-		color.xyz = lerp(color.xyz, litLodLandColor, lodLandBlendFactor);
-
-		specularColorPBR = lerp(specularColorPBR, 0, lodLandBlendFactor);
-		indirectDiffuseLobeWeight = lerp(indirectDiffuseLobeWeight, input.Color.xyz * lodLandColor * lodLandFadeFactor, lodLandBlendFactor);
+		specularColor = lerp(specularColorPBR * Color::PBRLightingScale, 0, lodLandBlendFactor);
+		indirectDiffuseLobeWeight = lerp(indirectDiffuseLobeWeight, vertexColor * lodLandColor * lodLandFadeFactor, lodLandBlendFactor);
 		indirectSpecularLobeWeight = lerp(indirectSpecularLobeWeight, 0, lodLandBlendFactor);
 		pbrGlossiness = lerp(pbrGlossiness, 0, lodLandBlendFactor);
 	}
-#	endif  // defined(LOD_LAND_BLEND) && defined(TRUE_PBR)
-
-#	if defined(TRUE_PBR)
+#	elif defined(TRUE_PBR)
 	color.xyz *= Color::PBRLightingScale;
 	specularColorPBR *= Color::PBRLightingScale;
-	specularColor += specularColorPBR;
+	specularColor = specularColorPBR;
 #	endif
 
 #	if !defined(DEFERRED)
