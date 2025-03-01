@@ -120,7 +120,8 @@ namespace ExtendedMaterials
 			total += h * weights[5];
 			weights[5] *= pow(heightBlend, HEIGHT_MULT * h);
 		}
-		[unroll] for (int i = 0; i < 6; i++){
+		[unroll] for (int i = 0; i < 6; i++)
+		{
 			weights[i] = pow(weights[i], heightBlend);
 		}
 		float wsum = 0;
@@ -178,7 +179,8 @@ namespace ExtendedMaterials
 			total += h * weights[5];
 			weights[5] *= pow(heightBlend, HEIGHT_MULT * h);
 		}
-		[unroll] for (int i = 0; i < 6; i++){
+		[unroll] for (int i = 0; i < 6; i++)
+		{
 			weights[i] = pow(weights[i], heightBlend);
 		}
 		float wsum = 0;
@@ -216,7 +218,8 @@ namespace ExtendedMaterials
 		float blendFactor = SharedData::extendedMaterialSettings.EnableHeightBlending ? sqrt(saturate(1 - nearBlendToFar)) : 0;
 		float4 w1 = lerp(input.LandBlendWeights1, smoothstep(0, 1, input.LandBlendWeights1), blendFactor);
 		float2 w2 = lerp(input.LandBlendWeights2.xy, smoothstep(0, 1, input.LandBlendWeights2.xy), blendFactor);
-		float scale = max(params[0].HeightScale * w1.x, max(params[1].HeightScale * w1.y, max(params[2].HeightScale * w1.z, max(params[3].HeightScale * w1.w, max(params[4].HeightScale * w2.x, params[5].HeightScale * w2.y)))));		float scalercp = rcp(scale);
+		float scale = max(params[0].HeightScale * w1.x, max(params[1].HeightScale * w1.y, max(params[2].HeightScale * w1.z, max(params[3].HeightScale * w1.w, max(params[4].HeightScale * w2.x, params[5].HeightScale * w2.y)))));
+		float scalercp = rcp(scale);
 		float maxHeight = 0.1 * scale;
 #	else
 		float blendFactor = SharedData::extendedMaterialSettings.EnableHeightBlending ? sqrt(saturate(1 - nearBlendToFar)) : 0;
@@ -413,7 +416,7 @@ namespace ExtendedMaterials
 #	if defined(TRUE_PBR)
 			float scale = max(params[0].HeightScale * input.LandBlendWeights1.x, max(params[1].HeightScale * input.LandBlendWeights1.y, max(params[2].HeightScale * input.LandBlendWeights1.z,
 																																			max(params[3].HeightScale * input.LandBlendWeights1.w, max(params[4].HeightScale * input.LandBlendWeights2.x, params[5].HeightScale * input.LandBlendWeights2.y)))));
-			if(scale < 0.01)
+			if (scale < 0.01)
 				return 1.0;
 			rayDir *= scale;
 			sh = GetTerrainHeight(input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
@@ -423,7 +426,7 @@ namespace ExtendedMaterials
 				sh.z = GetTerrainHeight(input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
 			if (quality > 0.75)
 				sh.w = GetTerrainHeight(input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-			return 1.0 - saturate(dot(max(0, sh - sh0)/scale, 1.0) * shadowIntensity) * quality;
+			return 1.0 - saturate(dot(max(0, sh - sh0) / scale, 1.0) * shadowIntensity) * quality;
 #	else
 			sh = GetTerrainHeight(input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
 			if (quality > 0.25)
