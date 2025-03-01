@@ -30,7 +30,7 @@ public:
 
 	void DrawSettings();
 
-	void Init();
+	void LoadFFX();
 
 	void WrapSwapChain();
 

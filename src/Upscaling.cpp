@@ -74,25 +74,12 @@ void Upscaling::DrawSettings()
 
 	// Display DLSS preset slider if using DLSS
 	if (upscaleMethod == UpscaleMethod::kDLSS) {
-		const char* dlssPresets[] = { "Default", "Preset A", "Preset B", "Preset C", "Preset D", "Preset E", "Preset F" };
-		ImGui::SliderInt("DLSS Preset", (int*)&settings.dlssPreset, 0, 6, std::format("{}", dlssPresets[(uint)settings.dlssPreset]).c_str());
-		settings.dlssPreset = std::min(6u, (uint)settings.dlssPreset);
+		const char* dlssPresets[] = { "Transformer Model", "Convolutional Model"};
+		settings.dlssPreset = std::clamp(settings.dlssPreset, 0u, 1u);
+		ImGui::SliderInt("DLSS Super Resolution Preset", (int*)&settings.dlssPreset, 0, 1, std::format("{}", dlssPresets[settings.dlssPreset]).c_str());
+		settings.dlssPreset = std::clamp(settings.dlssPreset, 0u, 1u);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Default:\n"
-				"Preset E\n\n"
-				"Preset A (intended for Perf/Balanced/Quality modes):\n"
-				"An older variant best suited to combat ghosting for elements with missing inputs (such as motion vectors)\n\n"
-				"Preset B (intended for Ultra Perf mode):\n"
-				"Similar to Preset A but for Ultra Performance mode\n\n"
-				"The CS default preset. Preset C (intended for Perf/Balanced/Quality modes):\n"
-				"Preset which generally favors current frame information. Generally well-suited for fast-paced game content\n\n"
-				"Preset D (intended for Perf/Balanced/Quality modes):\n"
-				"Similar to Preset E. Preset E is generally recommended over Preset D.\n\n"
-				"Preset E (intended for Perf/Balanced/Quality modes):\n"
-				"Default preset for Perf/Balanced/Quality mode. Generally favors image stability\n\n"
-				"Preset F (intended for Ultra Perf/DLAA modes):\n"
-				"The default preset for Ultra Perf and DLAA modes.");
+			ImGui::Text("The new DLSS Transformer model offers more image stability, less ghosting and improved anti-aliasing in comparison with the original DLSS Convolutional Neural Network model.");
 		}
 	}
 }
@@ -287,7 +274,7 @@ void Upscaling::Upscale()
 		context->CopyResource(upscalingTexture->resource.get(), inputTextureResource);
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			globals::streamline->Upscale(upscalingTexture, alphaMaskTexture, (sl::DLSSPreset)settings.dlssPreset, settings.sharpness);
+			globals::streamline->Upscale(upscalingTexture, alphaMaskTexture, settings.dlssPreset == 0 ? sl::DLSSPreset::ePresetJ : sl::DLSSPreset::ePresetE, settings.sharpness);
 		else if (upscaleMethod == UpscaleMethod::kFSR)
 			FidelityFX::GetSingleton()->Upscale(upscalingTexture, alphaMaskTexture, jitter, reset, settings.sharpness);
 

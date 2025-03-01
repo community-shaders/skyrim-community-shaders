@@ -2,10 +2,11 @@
 #include <dxgi1_6.h>
 
 #include "FidelityFX.h"
+#include "Streamline.h"
 
-void DX12SwapChain::CreateD3D12Device(IDXGIAdapter* adapter)
+void DX12SwapChain::CreateD3D12Device(IDXGIAdapter* a_adapter)
 {
-	DX::ThrowIfFailed(D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_12_2, IID_PPV_ARGS(&d3d12Device)));
+	DX::ThrowIfFailed(D3D12CreateDevice(a_adapter, D3D_FEATURE_LEVEL_12_2, IID_PPV_ARGS(&d3d12Device)));
 
 	D3D12_COMMAND_QUEUE_DESC queueDesc = {};
 	queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
@@ -14,6 +15,9 @@ void DX12SwapChain::CreateD3D12Device(IDXGIAdapter* adapter)
 	DX::ThrowIfFailed(d3d12Device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&commandQueue)));
 	DX::ThrowIfFailed(d3d12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocator)));
 	DX::ThrowIfFailed(d3d12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator.get(), nullptr, IID_PPV_ARGS(&commandList)));
+
+	if (globals::streamline->initialized)
+		globals::streamline->CheckFeatures(a_adapter);
 }
 
 void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC a_swapChainDesc)
@@ -86,6 +90,11 @@ DXGISwapChainProxy* DX12SwapChain::GetSwapChainProxy()
 void DX12SwapChain::SetD3D11Device(ID3D11Device* a_d3d11Device)
 {
 	DX::ThrowIfFailed(a_d3d11Device->QueryInterface(IID_PPV_ARGS(&d3d11Device)));
+
+	if (globals::streamline->initialized) {
+		globals::streamline->slSetD3DDevice(d3d11Device.get());
+		globals::streamline->PostDevice();
+	}
 }
 
 void DX12SwapChain::SetD3D11DeviceContext(ID3D11DeviceContext* a_d3d11Context)

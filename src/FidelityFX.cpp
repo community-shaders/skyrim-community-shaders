@@ -33,7 +33,7 @@ FfxResource ffxGetResource(ID3D11Resource* dx11Resource,
 	return resource;
 }
 
-void FidelityFX::Init()
+void FidelityFX::LoadFFX()
 {
 	dll = LoadLibrary(L"Data\\SKSE\\Plugins\\FidelityFX\\amd_fidelityfx_dx12.dll");
 
