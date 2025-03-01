@@ -28,9 +28,9 @@ FfxResource ffxGetResource(ID3D11Resource* dx11Resource,
 
 void FidelityFX::LoadFFX()
 {
-	dll = LoadLibrary(L"Data\\SKSE\\Plugins\\FidelityFX\\amd_fidelityfx_dx12.dll");
+	auto module = LoadLibrary(L"Data\\SKSE\\Plugins\\FidelityFX\\amd_fidelityfx_dx12.dll");
 
-	ffxLoadFunctions(&ffxModule, dll);
+	ffxLoadFunctions(&ffxModule, module);
 }
 
 void FidelityFX::WrapSwapChain()
@@ -101,7 +101,7 @@ void FidelityFX::Present()
 	configParameters.frameID = frameID;
 	configParameters.swapChain = swapChain->swapChain;
 	configParameters.onlyPresentGenerated = false;
-	configParameters.allowAsyncWorkloads = false;
+	configParameters.allowAsyncWorkloads = true;
 	configParameters.flags = 0;
 
 	configParameters.generationRect.left = (swapChain->swapChainDesc.Width - swapChain->swapChainDesc.Width) / 2;

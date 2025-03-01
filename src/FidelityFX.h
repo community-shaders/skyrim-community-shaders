@@ -22,8 +22,6 @@ public:
 		return &singleton;
 	}
 
-	HMODULE dll = NULL;
-
 	ffxContext frameGenContext;
 
 	FfxFsr3Context fsrContext;
