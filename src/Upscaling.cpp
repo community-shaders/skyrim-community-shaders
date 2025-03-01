@@ -13,8 +13,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	dlssPreset,
 	vsyncMode,
 	frameLimitMode,
-	frameGenerationMode
-);
+	frameGenerationMode);
 
 void Upscaling::DrawSettings()
 {
