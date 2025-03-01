@@ -40,7 +40,7 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	swapChainDesc.BufferCount = 2;
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-	swapChainDesc.Flags = a_swapChainDesc.Flags | DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+	swapChainDesc.Flags = a_swapChainDesc.Flags | DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT | DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
 
 	winrt::com_ptr<IDXGISwapChain4> swapChainCOM;
 
@@ -164,7 +164,9 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	ID3D12CommandList* commandListsToExecute[] = { commandLists[frameIndex].get() };
 	commandQueue->ExecuteCommandLists(1, commandListsToExecute);
 
-	auto hr = swapChain->Present(SyncInterval, Flags);
+	auto upscaling = globals::upscaling;
+
+	auto hr = swapChain->Present(upscaling->settings.vsyncMode ? std::max(1u, SyncInterval) : 0, upscaling->settings.vsyncMode ? Flags : DXGI_PRESENT_ALLOW_TEARING);
 
 	// Schedule a Signal command in the queue.
 	const UINT64 currentFenceValue = fenceValues[frameIndex];
@@ -176,7 +178,7 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	// Set the fence value for the next frame.
 	fenceValues[frameIndex] = currentFenceValue + 1;
 
-	if (Upscaling::GetSingleton()->settings.frameLimitMode)
+	if (upscaling->settings.vsyncMode || upscaling->settings.frameLimitMode)
 		FrameLimiter();
 
 	return hr;
@@ -192,8 +194,11 @@ static void TimerSleepQPC(int64_t targetQPC)
 
 void DX12SwapChain::FrameLimiter()
 {
-	double bestRefreshRate = refreshRate - (refreshRate * refreshRate) / 3600.0;
-	int64_t targetFrameTicks = int64_t(double(qpf.QuadPart) / (bestRefreshRate * (Upscaling::GetSingleton()->settings.frameGenerationMode ? 0.5 : 1.0)));
+	auto upscaling = globals::upscaling;
+
+	double bestRefreshRate = upscaling->settings.vsyncMode ? refreshRate : refreshRate - (refreshRate * refreshRate) / 3600.0;
+
+	int64_t targetFrameTicks = int64_t(double(qpf.QuadPart) / (bestRefreshRate * (upscaling->settings.frameGenerationMode ? 0.5 : 1.0)));
 
 	static LARGE_INTEGER lastFrame = {};
 	LARGE_INTEGER timeNow;

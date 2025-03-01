@@ -11,7 +11,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	upscaleMethodNoFSR,
 	sharpness,
 	dlssPreset,
-	frameGenerationMode);
+	vsyncMode,
+	frameLimitMode,
+	frameGenerationMode
+);
 
 void Upscaling::DrawSettings()
 {
@@ -86,9 +89,19 @@ void Upscaling::DrawSettings()
 
 	if (state->featureLevel && !globals::game::isVR) {
 		if (ImGui::TreeNodeEx("AMD FSR 3.1 Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
-			const char* frameGenerationModes[] = { "Disabled", "Enabled" };
-			ImGui::SliderInt("Frame Limit (Refresh Rate)", (int*)&settings.frameLimitMode, 0, 1, std::format("{}", frameGenerationModes[(uint)settings.frameLimitMode]).c_str());
-			ImGui::SliderInt("Frame Generation", (int*)&settings.frameGenerationMode, 0, 1, std::format("{}", frameGenerationModes[(uint)settings.frameGenerationMode]).c_str());
+			const char* toggleModes[] = { "Disabled", "Enabled" };
+
+			ImGui::SliderInt("V-Sync", (int*)&settings.vsyncMode, 0, 1, std::format("{}", toggleModes[(uint)settings.vsyncMode]).c_str());
+
+			if (settings.vsyncMode)
+				ImGui::BeginDisabled();
+
+			ImGui::SliderInt("Frame Limit (Variable Refresh Rate)", (int*)&settings.frameLimitMode, 0, 1, std::format("{}", toggleModes[(uint)settings.frameLimitMode]).c_str());
+
+			if (settings.vsyncMode)
+				ImGui::EndDisabled();
+
+			ImGui::SliderInt("Frame Generation", (int*)&settings.frameGenerationMode, 0, 1, std::format("{}", toggleModes[(uint)settings.frameGenerationMode]).c_str());
 			ImGui::TreePop();
 		}
 	}
