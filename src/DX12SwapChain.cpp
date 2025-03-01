@@ -42,16 +42,13 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 	swapChainDesc.Flags = a_swapChainDesc.Flags | DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
 
-	DXGI_SWAP_CHAIN_FULLSCREEN_DESC fullscreenDesc = {};
-	fullscreenDesc.Windowed = TRUE;
-
 	winrt::com_ptr<IDXGISwapChain4> swapChainCOM;
 
 	DX::ThrowIfFailed(dxgiFactory->CreateSwapChainForHwnd(
 		commandQueue.get(),
 		a_swapChainDesc.OutputWindow,
 		&swapChainDesc,
-		&fullscreenDesc,
+		nullptr,
 		nullptr,
 		(IDXGISwapChain1**)swapChainCOM.put()));
 

@@ -352,6 +352,16 @@ namespace Hooks
 		static void thunk()
 		{
 			logger::info("Calling original Init3D");
+
+			// Force disable exclusive fullscreen
+			auto& rendererRuntimeData = RE::BSGraphics::Renderer::GetSingleton()->GetRuntimeData();
+			if (rendererRuntimeData.fullScreen) {
+				rendererRuntimeData.fullScreen = false;
+				rendererRuntimeData.borderlessDisplay = true;
+				rendererRuntimeData.isNotWindowed = false;
+				SetWindowLongPtr((HWND)rendererRuntimeData.renderWindows[0].hWnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
+			}
+
 			func();
 
 			logger::info("Accessing render device information");
