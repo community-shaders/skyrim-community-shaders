@@ -85,28 +85,36 @@ void FidelityFX::Present()
 
 	ffx::ConfigureDescFrameGeneration configParameters{};
 
-	configParameters.frameGenerationCallback = [](ffxDispatchDescFrameGeneration* params, void* pUserCtx) -> ffxReturnCode_t {
-		return ffxModule.Dispatch(reinterpret_cast<ffxContext*>(pUserCtx), &params->header);
-	};
+	if (enableFrameGeneration) {
+		configParameters.frameGenerationEnabled = true;
 
-	configParameters.frameGenerationCallbackUserContext = &frameGenContext;
+		configParameters.frameGenerationCallback = [](ffxDispatchDescFrameGeneration* params, void* pUserCtx) -> ffxReturnCode_t {
+			return ffxModule.Dispatch(reinterpret_cast<ffxContext*>(pUserCtx), &params->header);
+		};
+		configParameters.frameGenerationCallbackUserContext = &frameGenContext;
 
-	configParameters.frameGenerationEnabled = enableFrameGeneration;
-	configParameters.flags = 0;
-	configParameters.HUDLessColor = ffxApiGetResourceDX12(hudlessColor);
+		configParameters.HUDLessColor = ffxApiGetResourceDX12(hudlessColor);
+
+	} else {
+		configParameters.frameGenerationEnabled = false;
+
+		configParameters.frameGenerationCallbackUserContext = nullptr;
+		configParameters.frameGenerationCallback = nullptr;
+
+		configParameters.HUDLessColor = FfxApiResource({});
+	}
+
+	static uint64_t frameID = 0;
+	configParameters.frameID = frameID;
+	configParameters.swapChain = swapChain->swapChain;
+	configParameters.onlyPresentGenerated = false;
 	configParameters.allowAsyncWorkloads = false;
+	configParameters.flags = 0;
 
 	configParameters.generationRect.left = (swapChain->swapChainDesc.Width - swapChain->swapChainDesc.Width) / 2;
 	configParameters.generationRect.top = (swapChain->swapChainDesc.Height - swapChain->swapChainDesc.Height) / 2;
 	configParameters.generationRect.width = swapChain->swapChainDesc.Width;
 	configParameters.generationRect.height = swapChain->swapChainDesc.Height;
-
-	configParameters.onlyPresentGenerated = false;
-
-	static uint64_t frameID = 0;
-	configParameters.frameID = frameID;
-
-	configParameters.swapChain = swapChain->swapChain;
 
 	if (ffx::Configure(frameGenContext, configParameters) != ffx::ReturnCode::Ok) {
 		logger::critical("[FidelityFX] Failed to configure frame generation!");

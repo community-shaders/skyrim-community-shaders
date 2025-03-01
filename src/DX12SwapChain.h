@@ -74,6 +74,7 @@ public:
 
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc;
 	WrappedResource* swapChainBufferWrapped = nullptr;
+	WrappedResource* swapChainBufferWrappedDummy[2];
 
 	winrt::com_ptr<ID3D11Device5> d3d11Device;
 	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context;

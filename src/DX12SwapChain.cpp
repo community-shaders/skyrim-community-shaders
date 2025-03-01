@@ -80,6 +80,8 @@ void DX12SwapChain::CreateInterop()
 	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
 	swapChainBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
+	swapChainBufferWrappedDummy[0] = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
+	swapChainBufferWrappedDummy[1] = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
 }
 
 DXGISwapChainProxy* DX12SwapChain::GetSwapChainProxy()
@@ -111,18 +113,20 @@ HRESULT DX12SwapChain::GetBuffer(void** ppSurface)
 HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 {
 	// Wait for D3D11 work to finish
+	auto index = swapChain->GetCurrentBackBufferIndex();
+
+	d3d11Context->CopyResource(swapChainBufferWrappedDummy[index]->resource11, swapChainBufferWrapped->resource11);
+
 	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), currentSharedFenceValue));
 	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), currentSharedFenceValue));
 	currentSharedFenceValue++;
-
-	auto index = swapChain->GetCurrentBackBufferIndex();
 
 	winrt::com_ptr<ID3D12Resource> swapChainBuffer;
 	DX::ThrowIfFailed(swapChain->GetBuffer(index, IID_PPV_ARGS(&swapChainBuffer)));
 
 	// Copy D3D11 result to D3D12
 	{
-		auto fakeSwapChain = swapChainBufferWrapped->resource.get();
+		auto fakeSwapChain = swapChainBufferWrappedDummy[index]->resource.get();
 		auto realSwapchain = swapChainBuffer.get();
 		{
 			std::vector<D3D12_RESOURCE_BARRIER> barriers;
