@@ -81,10 +81,9 @@ public:
 	winrt::com_ptr<ID3D11Fence> d3d11Fence;
 	winrt::com_ptr<ID3D12Fence> d3d12Fence;
 
-	UINT64 currentSharedFenceValue = 0;
+	UINT64 fenceValue = 1;
 
 	winrt::com_ptr<ID3D12Fence> d3d12OnlyFence;
-	UINT64 d3d12FenceValue = 0;
 	HANDLE fenceEvent = nullptr;
 
 	DXGISwapChainProxy* swapChainProxy = nullptr;

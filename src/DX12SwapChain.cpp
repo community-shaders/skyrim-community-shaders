@@ -112,16 +112,19 @@ HRESULT DX12SwapChain::GetBuffer(void** ppSurface)
 HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 {
 	// Wait for D3D11 work to finish
-	auto index = swapChain->GetCurrentBackBufferIndex();
+	d3d11Context->Flush();
 
-	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), currentSharedFenceValue));
-	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), currentSharedFenceValue));
-	currentSharedFenceValue++;
+	// Signal fence from D3D11
+	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), fenceValue));
+	
+	// Wait for D3D11 to finish on D3D12 side
+	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), fenceValue));
 
 	winrt::com_ptr<ID3D12Resource> swapChainBuffer;
+	auto index = swapChain->GetCurrentBackBufferIndex();
 	DX::ThrowIfFailed(swapChain->GetBuffer(index, IID_PPV_ARGS(&swapChainBuffer)));
 
-	// Copy D3D11 result to D3D12
+	// Copy shared texture to swapchain buffer
 	{
 		auto fakeSwapChain = swapChainBufferWrapped->resource.get();
 		auto realSwapchain = swapChainBuffer.get();
@@ -149,12 +152,27 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	ID3D12CommandList* commandLists[] = { commandList.get() };
 	commandQueue->ExecuteCommandLists(1, commandLists);
 	
-	DX::ThrowIfFailed(commandQueue->Signal(d3d12OnlyFence.get(), currentSharedFenceValue));
-	DX::ThrowIfFailed(d3d12Fence->SetEventOnCompletion(currentSharedFenceValue, fenceEvent));
+	// Signal and increment fence value
+	commandQueue->Signal(d3d12Fence.get(), fenceValue);
+
+	// Wait for GPU to finish before presenting
+	if (d3d12Fence->GetCompletedValue() < fenceValue - 1) {
+		d3d12Fence->SetEventOnCompletion(fenceValue - 1, fenceEvent);
+		WaitForSingleObject(fenceEvent, 500);
+	}
+
+	fenceValue++;
 
 	auto hr = swapChain->Present(SyncInterval, Flags);
 
-	WaitForSingleObject(fenceEvent, 500);
+	// Use FSR waitable latency object
+	if (globals::upscaling->settings.frameGenerationMode) {
+		swapChain->SetMaximumFrameLatency(1);
+		auto frameLatencyWaitableObject = swapChain->GetFrameLatencyWaitableObject();
+		WaitForSingleObject(frameLatencyWaitableObject, 500);
+	} else {
+		swapChain->SetMaximumFrameLatency(0);
+	}
 
 	// New frame, reset
 	DX::ThrowIfFailed(commandAllocator->Reset());
