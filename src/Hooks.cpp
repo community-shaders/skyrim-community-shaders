@@ -197,7 +197,7 @@ struct IDXGISwapChain_Present
 		globals::menu->DrawOverlay();
 
 		auto retval = func(This, SyncInterval, Flags);
-		
+
 		TracyD3D11Collect(globals::state->tracyCtx);
 
 		return retval;
@@ -268,7 +268,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	auto proxy = DX12SwapChain::GetSingleton();
 
 	proxy->CreateD3D12Device(pAdapter);
-	
+
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
 
 	D3D11CreateDevice(

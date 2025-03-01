@@ -74,7 +74,7 @@ void Upscaling::DrawSettings()
 
 	// Display DLSS preset slider if using DLSS
 	if (upscaleMethod == UpscaleMethod::kDLSS) {
-		const char* dlssPresets[] = { "Transformer Model", "Convolutional Model"};
+		const char* dlssPresets[] = { "Transformer Model", "Convolutional Model" };
 		settings.dlssPreset = std::clamp(settings.dlssPreset, 0u, 1u);
 		ImGui::SliderInt("DLSS Super Resolution Preset", (int*)&settings.dlssPreset, 0, 1, std::format("{}", dlssPresets[settings.dlssPreset]).c_str());
 		settings.dlssPreset = std::clamp(settings.dlssPreset, 0u, 1u);

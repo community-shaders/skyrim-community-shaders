@@ -12,10 +12,10 @@
 #pragma warning(disable: 4471)
 #include <sl.h>
 #include <sl_consts.h>
-#include <sl_hooks.h>
-#include <sl_version.h>
 #include <sl_dlss.h>
+#include <sl_hooks.h>
 #include <sl_nis.h>
+#include <sl_version.h>
 #pragma warning(pop)
 
 class Streamline
