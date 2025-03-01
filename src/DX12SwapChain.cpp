@@ -25,7 +25,6 @@ void DX12SwapChain::CreateD3D12Device(IDXGIAdapter* a_adapter)
 
 	if (globals::streamline->initialized)
 		globals::streamline->CheckFeatures(a_adapter);
-
 }
 
 void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC a_swapChainDesc)
@@ -61,7 +60,7 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
 
 	FidelityFX::GetSingleton()->WrapSwapChain();
-	
+
 	swapChain->SetMaximumFrameLatency(1);
 	frameLatencyWaitableObject = swapChain->GetFrameLatencyWaitableObject();
 }
@@ -129,7 +128,7 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 
 	// Signal fence from D3D11
 	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), fenceValues[frameIndex]));
-	
+
 	// Wait for D3D11 to finish on D3D12 side
 	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), fenceValues[frameIndex]));
 
