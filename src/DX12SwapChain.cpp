@@ -3,6 +3,7 @@
 
 #include "FidelityFX.h"
 #include "Streamline.h"
+#include "Upscaling.h"
 
 void DX12SwapChain::CreateD3D12Device(IDXGIAdapter* a_adapter)
 {
@@ -154,8 +155,13 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 
 	auto hr = swapChain->Present(SyncInterval, Flags);
 
-	auto frameLatencyWaitableObject = swapChain->GetFrameLatencyWaitableObject();
-	WaitForSingleObject(frameLatencyWaitableObject, 1000);
+	if (globals::upscaling->settings.frameGenerationMode) {
+		swapChain->SetMaximumFrameLatency(1);
+		auto frameLatencyWaitableObject = swapChain->GetFrameLatencyWaitableObject();
+		WaitForSingleObject(frameLatencyWaitableObject, 1000);
+	} else {
+		swapChain->SetMaximumFrameLatency(0);
+	}
 
 	// New frame, reset
 	DX::ThrowIfFailed(commandAllocator->Reset());

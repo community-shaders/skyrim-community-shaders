@@ -43,6 +43,7 @@ public:
 		uint upscaleMethodNoFSR = (uint)UpscaleMethod::kTAA;
 		float sharpness = 0.5f;
 		uint dlssPreset = (uint)sl::DLSSPreset::ePresetJ;
+		uint frameGenerationMode = 1;
 	};
 
 	Settings settings;

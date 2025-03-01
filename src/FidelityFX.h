@@ -28,8 +28,6 @@ public:
 
 	FfxFsr3Context fsrContext;
 
-	void DrawSettings();
-
 	void LoadFFX();
 
 	void WrapSwapChain();

@@ -10,7 +10,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	upscaleMethodNoDLSS,
 	upscaleMethodNoFSR,
 	sharpness,
-	dlssPreset);
+	dlssPreset,
+	frameGenerationMode);
 
 void Upscaling::DrawSettings()
 {
@@ -80,6 +81,15 @@ void Upscaling::DrawSettings()
 		settings.dlssPreset = std::clamp(settings.dlssPreset, 0u, 1u);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("The new DLSS Transformer model offers more image stability, less ghosting and improved anti-aliasing in comparison with the original DLSS Convolutional Neural Network model.");
+		}
+	}
+
+	if (state->featureLevel && !globals::game::isVR)
+	{
+		if (ImGui::TreeNodeEx("AMD FSR 3.1 Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
+			const char* frameGenerationModes[] = { "Disabled", "Enabled" };
+			ImGui::SliderInt("Frame Generation", (int*)&settings.frameGenerationMode, 0, 1, std::format("{}", frameGenerationModes[(uint)settings.frameGenerationMode]).c_str());
+			ImGui::TreePop();
 		}
 	}
 }

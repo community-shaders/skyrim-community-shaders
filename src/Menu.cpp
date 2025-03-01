@@ -960,8 +960,7 @@ void Menu::DrawDisplaySettings()
 		auto& themeSettings = settings.Theme;
 
 		const std::vector<std::pair<std::string, std::function<void()>>> features = {
-			{ "Upscaling", []() { Upscaling::GetSingleton()->DrawSettings(); } },
-			{ "Frame Generation", []() { FidelityFX::GetSingleton()->DrawSettings(); } }
+			{ "Upscaling", []() { Upscaling::GetSingleton()->DrawSettings(); } }
 		};
 
 		for (const auto& [featureName, drawFunc] : features) {

@@ -8,13 +8,6 @@
 
 ffxFunctions ffxModule;
 
-bool enableFrameGeneration = true;
-
-void FidelityFX::DrawSettings()
-{
-	ImGui::Checkbox("Enable Frame Generation", &enableFrameGeneration);
-}
-
 FfxResource ffxGetResource(ID3D11Resource* dx11Resource,
 	[[maybe_unused]] wchar_t const* ffxResName,
 	FfxResourceStates state /*=FFX_RESOURCE_STATE_COMPUTE_READ*/)
@@ -85,7 +78,7 @@ void FidelityFX::Present()
 
 	ffx::ConfigureDescFrameGeneration configParameters{};
 
-	if (enableFrameGeneration) {
+	if (upscaling->settings.frameGenerationMode) {
 		configParameters.frameGenerationEnabled = true;
 
 		configParameters.frameGenerationCallback = [](ffxDispatchDescFrameGeneration* params, void* pUserCtx) -> ffxReturnCode_t {
@@ -120,7 +113,7 @@ void FidelityFX::Present()
 		logger::critical("[FidelityFX] Failed to configure frame generation!");
 	}
 
-	if (enableFrameGeneration) {
+	if (upscaling->settings.frameGenerationMode) {
 		ffx::DispatchDescFrameGenerationPrepare dispatchParameters{};
 
 		dispatchParameters.commandList = commandList;
