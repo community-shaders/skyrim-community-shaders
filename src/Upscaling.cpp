@@ -91,7 +91,7 @@ void Upscaling::DrawSettings()
 		if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Text("Frame Generation uses a D3D11 to D3D12 proxy which can create compatibility issues");
 			ImGui::Text("Frame Generation requires a refresh rate of at least 120 and the game running in windowed mode");
-			
+
 			const char* toggleModes[] = { "Disabled", "Enabled" };
 
 			if (DX12SwapChain::GetSingleton()->swapChain) {
