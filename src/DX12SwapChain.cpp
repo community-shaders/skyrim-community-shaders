@@ -12,16 +12,16 @@ void DX12SwapChain::CreateD3D12Device(IDXGIAdapter* a_adapter)
 	D3D12_COMMAND_QUEUE_DESC queueDesc = {};
 	queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
 	queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+	queueDesc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
+	queueDesc.NodeMask = 0;
 
 	DX::ThrowIfFailed(d3d12Device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&commandQueue)));
-	DX::ThrowIfFailed(d3d12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocators[0])));
-	DX::ThrowIfFailed(d3d12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocators[1])));
 
-	DX::ThrowIfFailed(d3d12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocators[0].get(), nullptr, IID_PPV_ARGS(&commandLists[0])));
-	DX::ThrowIfFailed(d3d12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocators[1].get(), nullptr, IID_PPV_ARGS(&commandLists[1])));
-
-	commandLists[0]->Close();
-	commandLists[1]->Close();
+	for (int i = 0; i < 2; i++) {
+		DX::ThrowIfFailed(d3d12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocators[i])));
+		DX::ThrowIfFailed(d3d12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocators[i].get(), nullptr, IID_PPV_ARGS(&commandLists[i])));
+		commandLists[i]->Close();
+	}
 
 	if (globals::streamline->initialized)
 		globals::streamline->CheckFeatures(a_adapter);
@@ -68,11 +68,13 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 
 void DX12SwapChain::CreateInterop()
 {
-	HANDLE sharedFenceHandle;
-	DX::ThrowIfFailed(d3d12Device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&d3d12Fence)));
-	DX::ThrowIfFailed(d3d12Device->CreateSharedHandle(d3d12Fence.get(), nullptr, GENERIC_ALL, nullptr, &sharedFenceHandle));
-	DX::ThrowIfFailed(d3d11Device->OpenSharedFence(sharedFenceHandle, IID_PPV_ARGS(&d3d11Fence)));
-	CloseHandle(sharedFenceHandle);
+	for (int i = 0; i < 2; i++) {
+		HANDLE sharedFenceHandle;
+		DX::ThrowIfFailed(d3d12Device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&d3d12Fences[i])));
+		DX::ThrowIfFailed(d3d12Device->CreateSharedHandle(d3d12Fences[i].get(), nullptr, GENERIC_ALL, nullptr, &sharedFenceHandle));
+		DX::ThrowIfFailed(d3d11Device->OpenSharedFence(sharedFenceHandle, IID_PPV_ARGS(&d3d11Fences[i])));
+		CloseHandle(sharedFenceHandle);
+	}
 
 	swapChainProxy = new DXGISwapChainProxy(swapChain);
 
@@ -123,15 +125,21 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	// Wait for D3D11 work to finish
 	d3d11Context->Flush();
 
+	// Update the frame index.
+	frameIndex = swapChain->GetCurrentBackBufferIndex();
+
 	// New frame, reset
 	DX::ThrowIfFailed(commandAllocators[frameIndex]->Reset());
 	DX::ThrowIfFailed(commandLists[frameIndex]->Reset(commandAllocators[frameIndex].get(), nullptr));
 
+	// Update the fence value for the current frame
+	fenceValues[frameIndex]++;
+
 	// Signal fence from D3D11
-	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), fenceValues[frameIndex]));
+	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fences[frameIndex].get(), fenceValues[frameIndex]));
 
 	// Wait for D3D11 to finish on D3D12 side
-	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), fenceValues[frameIndex]));
+	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fences[frameIndex].get(), fenceValues[frameIndex]));
 
 	winrt::com_ptr<ID3D12Resource> swapChainBuffer;
 	DX::ThrowIfFailed(swapChain->GetBuffer(frameIndex, IID_PPV_ARGS(&swapChainBuffer)));
@@ -166,22 +174,27 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 
 	auto upscaling = globals::upscaling;
 
-	auto hr = swapChain->Present(upscaling->settings.vsyncMode ? std::max(1u, SyncInterval) : 0, upscaling->settings.vsyncMode ? Flags : DXGI_PRESENT_ALLOW_TEARING);
+	// Present the frame
+	DX::ThrowIfFailed(swapChain->Present(upscaling->settings.vsyncMode ? std::max(1u, SyncInterval) : 0, upscaling->settings.vsyncMode ? Flags : DXGI_PRESENT_ALLOW_TEARING));
 
-	// Schedule a Signal command in the queue.
-	const UINT64 currentFenceValue = fenceValues[frameIndex];
-	DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence.get(), currentFenceValue));
+	// Wait for the frame to finish to minimise latency
+	WaitForSingleObject(frameLatencyWaitableObject, 500);
 
-	// Update the frame index.
-	frameIndex = swapChain->GetCurrentBackBufferIndex();
-
-	// Set the fence value for the next frame.
-	fenceValues[frameIndex] = currentFenceValue + 1;
-
+	// Frame limiter for V-Sync and VRR
 	if (upscaling->settings.vsyncMode || upscaling->settings.frameLimitMode)
 		FrameLimiter();
 
-	return hr;
+	return S_OK;
+}
+
+HRESULT DX12SwapChain::GetDevice(REFIID uuid, void** ppDevice)
+{
+	if (uuid == __uuidof(ID3D11Device) || uuid == __uuidof(ID3D11Device1) || uuid == __uuidof(ID3D11Device2) || uuid == __uuidof(ID3D11Device3) || uuid == __uuidof(ID3D11Device4) || uuid == __uuidof(ID3D11Device5)) {
+		*ppDevice = d3d11Device.get();
+		return S_OK;
+	}
+
+	return swapChain->GetDevice(uuid, ppDevice);
 }
 
 static void TimerSleepQPC(int64_t targetQPC)
@@ -380,7 +393,7 @@ HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetParent(_In_ REFIID riid, _COM_O
 /****IDXGIDeviceSubObject****/
 HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetDevice(_In_ REFIID riid, _COM_Outptr_ void** ppDevice)
 {
-	return swapChain->GetDevice(riid, ppDevice);
+	return  DX12SwapChain::GetSingleton()->GetDevice(riid, ppDevice);
 }
 
 /****IDXGISwapChain****/
