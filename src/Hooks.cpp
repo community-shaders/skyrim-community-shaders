@@ -269,20 +269,21 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	auto streamline = globals::streamline;
 	streamline->LoadInterposer();
 
-	auto fidelityFX = FidelityFX::GetSingleton();
-
-	if (pSwapChainDesc->Windowed)
-		fidelityFX->LoadFFX();
-
 	auto proxy = globals::dx12SwapChain;
 
 	bool shouldProxy = false;
 
-	// Check that the FFX DLL is present
-	if (fidelityFX->module) {
-		// Check that the monitor is HFR
-		if (Upscaling::GetSingleton()->settings.frameGenerationForceEnable || proxy->GetRefreshRate(pSwapChainDesc->OutputWindow) >= 120) {
-			shouldProxy = true;
+	auto fidelityFX = FidelityFX::GetSingleton();
+
+	if (!globals::game::isVR && pSwapChainDesc->Windowed) {
+		fidelityFX->LoadFFX();
+
+		// Check that the FFX DLL is present
+		if (fidelityFX->module) {
+			// Check that the monitor is HFR
+			if (Upscaling::GetSingleton()->settings.frameGenerationForceEnable || proxy->GetRefreshRate(pSwapChainDesc->OutputWindow) >= 120) {
+				shouldProxy = true;
+			}
 		}
 	}
 
