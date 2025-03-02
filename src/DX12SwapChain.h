@@ -76,7 +76,6 @@ public:
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc;
 
 	WrappedResource* swapChainBufferWrapped;
-	WrappedResource* uiBuffersWrapped[2];
 
 	winrt::com_ptr<ID3D11Device5> d3d11Device;
 	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context;
@@ -111,17 +110,4 @@ public:
 	void FrameLimiter(bool a_useFrameGeneration);
 
 	double GetRefreshRate(HWND a_window);
-
-	void SetUIBuffer();
-
-	struct MenuManagerDrawInterface
-	{
-		static void thunk(int64_t a1);
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	static void InstallHooks()
-	{
-		stl::detour_thunk<MenuManagerDrawInterface>(REL::RelocationID(79947, 82084));
-	}
 };

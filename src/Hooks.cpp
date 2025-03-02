@@ -270,13 +270,15 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	streamline->LoadInterposer();
 
 	auto fidelityFX = FidelityFX::GetSingleton();
-	fidelityFX->LoadFFX();
+	
+	if (pSwapChainDesc->Windowed)
+		fidelityFX->LoadFFX();
 
 	auto proxy = DX12SwapChain::GetSingleton();
 
 	bool shouldProxy = false;
 
-	/// Check that the FFX DLL is present
+	// Check that the FFX DLL is present
 	if (fidelityFX->module){
 		// Check that the monitor is HFR
 		if (proxy->GetRefreshRate(pSwapChainDesc->OutputWindow) >= 120) {
@@ -313,7 +315,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 		return S_OK;
 	}
 
-	return ptrD3D11CreateDeviceAndSwapChain(pAdapter,
+	auto ret = ptrD3D11CreateDeviceAndSwapChain(pAdapter,
 		DriverType,
 		Software,
 		Flags,
@@ -325,6 +327,14 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 		ppDevice,
 		pFeatureLevel,
 		ppImmediateContext);
+
+	
+	if (globals::streamline->initialized) {
+		globals::streamline->slSetD3DDevice(*ppDevice);
+		globals::streamline->PostDevice();
+	}
+
+	return ret;
 }
 
 struct BSShaderRenderTargets_Create
@@ -384,15 +394,6 @@ namespace Hooks
 		static void thunk()
 		{
 			logger::info("Calling original Init3D");
-
-			// Force disable exclusive fullscreen
-			auto& rendererRuntimeData = RE::BSGraphics::Renderer::GetSingleton()->GetRuntimeData();
-			if (rendererRuntimeData.fullScreen) {
-				rendererRuntimeData.fullScreen = false;
-				rendererRuntimeData.borderlessDisplay = true;
-				rendererRuntimeData.isNotWindowed = false;
-				SetWindowLongPtr((HWND)rendererRuntimeData.renderWindows[0].hWnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
-			}
 
 			func();
 

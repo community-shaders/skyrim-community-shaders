@@ -90,10 +90,6 @@ void DX12SwapChain::CreateInterop()
 	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
 	swapChainBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
-
-	for (int i = 0; i < 2; i++) {
-		uiBuffersWrapped[i] = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
-	}
 }
 
 DXGISwapChainProxy* DX12SwapChain::GetSwapChainProxy()
@@ -288,21 +284,6 @@ double DX12SwapChain::GetRefreshRate(HWND a_window)
 	return 60;
 }
 
-void DX12SwapChain::SetUIBuffer()
-{
-	if (!swapChain)
-		return;
-
-	float clearColor[4]{ 0, 0, 0, 0 };
-	d3d11Context->ClearRenderTargetView(uiBuffersWrapped[frameIndex]->rtv, clearColor);
-
-	auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-
-	data.RTV = uiBuffersWrapped[frameIndex]->rtv;
-
-	d3d11Context->OMSetRenderTargets(1, &data.RTV, nullptr);
-}
-
 WrappedResource::WrappedResource(D3D11_TEXTURE2D_DESC a_texDesc, ID3D11Device5* a_d3d11Device, ID3D12Device* a_d3d12Device)
 {
 	D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
@@ -459,10 +440,4 @@ HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetFrameStatistics(_Out_ DXGI_FRAM
 HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetLastPresentCount(_Out_ UINT* pLastPresentCount)
 {
 	return swapChain->GetLastPresentCount(pLastPresentCount);
-}
-
-void DX12SwapChain::MenuManagerDrawInterface::thunk(int64_t a1)
-{
-	DX12SwapChain::GetSingleton()->SetUIBuffer();
-	func(a1);
 }
