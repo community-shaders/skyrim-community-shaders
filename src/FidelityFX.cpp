@@ -55,7 +55,7 @@ void FidelityFX::CreateFrameGenerationResources()
 	ffx::CreateContextDescFrameGeneration createFg{};
 	createFg.displaySize = { swapChain->swapChainDesc.Width, swapChain->swapChainDesc.Height };
 	createFg.maxRenderSize = createFg.displaySize;
-	createFg.flags = 0;
+	createFg.flags = FFX_FRAMEGENERATION_ENABLE_ASYNC_WORKLOAD_SUPPORT;
 	createFg.backBufferFormat = FFX_API_SURFACE_FORMAT_R8G8B8A8_UNORM;
 
 	ffx::CreateBackendDX12Desc createBackend{};
