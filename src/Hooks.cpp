@@ -270,7 +270,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	streamline->LoadInterposer();
 
 	auto fidelityFX = FidelityFX::GetSingleton();
-	
+
 	if (pSwapChainDesc->Windowed)
 		fidelityFX->LoadFFX();
 
@@ -279,7 +279,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	bool shouldProxy = false;
 
 	// Check that the FFX DLL is present
-	if (fidelityFX->module){
+	if (fidelityFX->module) {
 		// Check that the monitor is HFR
 		if (proxy->GetRefreshRate(pSwapChainDesc->OutputWindow) >= 120) {
 			shouldProxy = true;
@@ -328,7 +328,6 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 		pFeatureLevel,
 		ppImmediateContext);
 
-	
 	if (globals::streamline->initialized) {
 		globals::streamline->slSetD3DDevice(*ppDevice);
 		globals::streamline->PostDevice();
