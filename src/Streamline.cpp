@@ -158,7 +158,7 @@ void Streamline::Sharpen(Texture2D* a_sharpenTexture, float a_sharpness)
 		sl::NISOptions nisOptions{};
 		nisOptions.mode = sl::NISMode::eSharpen;
 		nisOptions.hdrMode = sl::NISHDR::eNone;
-		nisOptions.sharpness = a_sharpness;
+		nisOptions.sharpness = a_sharpness * 0.3f;
 
 		if (SL_FAILED(result, slNISSetOptions(viewport, nisOptions))) {
 			logger::critical("[Streamline] Could not set NIS options");
