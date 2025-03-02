@@ -144,23 +144,23 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	winrt::com_ptr<ID3D12Resource> swapChainBuffer;
 	DX::ThrowIfFailed(swapChain->GetBuffer(frameIndex, IID_PPV_ARGS(&swapChainBuffer)));
 
-	// Copy shared texture to swapchain buffer
+	// Copy shared texture to swap chain buffer
 	{
 		auto fakeSwapChain = swapChainBufferWrapped->resource.get();
-		auto realSwapchain = swapChainBuffer.get();
+		auto realSwapChain = swapChainBuffer.get();
 		{
 			std::vector<D3D12_RESOURCE_BARRIER> barriers;
 			barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(fakeSwapChain, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE));
-			barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(realSwapchain, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST));
+			barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(realSwapChain, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST));
 			commandLists[frameIndex]->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
 		}
 
-		commandLists[frameIndex]->CopyResource(realSwapchain, fakeSwapChain);
+		commandLists[frameIndex]->CopyResource(realSwapChain, fakeSwapChain);
 
 		{
 			std::vector<D3D12_RESOURCE_BARRIER> barriers;
 			barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(fakeSwapChain, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON));
-			barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(realSwapchain, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
+			barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(realSwapChain, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
 			commandLists[frameIndex]->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
 		}
 	}
