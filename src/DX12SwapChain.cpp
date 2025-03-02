@@ -393,7 +393,7 @@ HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetParent(_In_ REFIID riid, _COM_O
 /****IDXGIDeviceSubObject****/
 HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetDevice(_In_ REFIID riid, _COM_Outptr_ void** ppDevice)
 {
-	return  DX12SwapChain::GetSingleton()->GetDevice(riid, ppDevice);
+	return DX12SwapChain::GetSingleton()->GetDevice(riid, ppDevice);
 }
 
 /****IDXGISwapChain****/
