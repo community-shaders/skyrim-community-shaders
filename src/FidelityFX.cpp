@@ -193,11 +193,11 @@ void FidelityFX::DestroyFSRResources()
 
 void FidelityFX::Upscale(Texture2D* a_color, Texture2D* a_alphaMask, float2 a_jitter, bool a_reset)
 {
-	static auto renderer = globals::game::renderer;
-	static auto context = globals::d3d::context;
+	auto renderer = globals::game::renderer;
+	auto context = globals::d3d::context;
 	auto state = globals::state;
-	static auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
-	static auto& motionVectorsTexture = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kMOTION_VECTOR];
+	auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+	auto& motionVectorsTexture = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kMOTION_VECTOR];
 
 	{
 		FfxFsr3DispatchUpscaleDescription dispatchParameters{};
