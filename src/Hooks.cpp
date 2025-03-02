@@ -277,7 +277,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	bool shouldProxy = false;
 
 	/// Check that the FFX DLL is present
-	if (fidelityFX->module){
+	if (fidelityFX->module) {
 		// Check that the monitor is HFR
 		if (proxy->GetRefreshRate(pSwapChainDesc->OutputWindow) >= 120) {
 			shouldProxy = true;

@@ -88,7 +88,6 @@ void Upscaling::DrawSettings()
 
 	if (state->featureLevel && !globals::game::isVR) {
 		if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
-
 			ImGui::Text("Frame Generation uses a D3D11 to D3D12 proxy which can create compatibility issues");
 			ImGui::Text("Frame Generation requires a refresh rate of at least 120");
 
