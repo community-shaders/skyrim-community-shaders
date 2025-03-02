@@ -19,6 +19,7 @@ public:
 	ID3D11Texture2D* resource11;
 	ID3D11ShaderResourceView* srv;
 	ID3D11UnorderedAccessView* uav;
+	ID3D11RenderTargetView* rtv;
 	winrt::com_ptr<ID3D12Resource> resource;
 };
 
@@ -73,7 +74,9 @@ public:
 	IDXGISwapChain4* swapChain;
 
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc;
-	WrappedResource* swapChainBufferWrapped = nullptr;
+
+	WrappedResource* swapChainBufferWrapped;
+	WrappedResource* uiBuffersWrapped[2];
 
 	winrt::com_ptr<ID3D11Device5> d3d11Device;
 	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context;
@@ -105,6 +108,20 @@ public:
 	HRESULT Present(UINT SyncInterval, UINT Flags);
 	HRESULT GetDevice(_In_ REFIID riid, _COM_Outptr_ void** ppDevice);
 
-	void FrameLimiter();
+	void FrameLimiter(bool a_useFrameGeneration);
+
 	double GetRefreshRate();
+
+	void SetUIBuffer();
+
+	struct MenuManagerDrawInterfaceStartHook
+	{
+		static void thunk(int64_t a1);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	static void InstallHooks()
+	{
+		stl::write_thunk_call<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084).address() + REL::Relocate(0x7E, 0x83, 0x17F));
+	}
 };

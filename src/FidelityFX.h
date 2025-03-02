@@ -22,7 +22,8 @@ public:
 		return &singleton;
 	}
 
-	ffxContext frameGenContext;
+	ffx::Context swapChainContext{};
+	ffx::Context frameGenContext;
 
 	FfxFsr3Context fsrContext;
 
@@ -32,7 +33,7 @@ public:
 
 	void CreateFrameGenerationResources();
 
-	void Present();
+	void Present(bool a_useFrameGeneration);
 
 	void CreateFSRResources();
 	void DestroyFSRResources();

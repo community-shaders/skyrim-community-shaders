@@ -41,8 +41,6 @@ void FidelityFX::WrapSwapChain()
 	desc.swapchain = &swapChain->swapChain;
 	desc.gameQueue = swapChain->commandQueue.get();
 
-	ffx::Context swapChainContext{};
-
 	if (ffx::CreateContext(swapChainContext, nullptr, desc) != ffx::ReturnCode::Ok) {
 		logger::critical("[FidelityFX] Failed to create swap chain context!");
 	}
@@ -66,7 +64,7 @@ void FidelityFX::CreateFrameGenerationResources()
 	}
 }
 
-void FidelityFX::Present()
+void FidelityFX::Present(bool a_useFrameGeneration)
 {
 	auto upscaling = globals::upscaling;
 	auto swapChain = DX12SwapChain::GetSingleton();
@@ -78,7 +76,7 @@ void FidelityFX::Present()
 
 	ffx::ConfigureDescFrameGeneration configParameters{};
 
-	if (upscaling->settings.frameGenerationMode) {
+	if ( a_useFrameGeneration) {
 		configParameters.frameGenerationEnabled = true;
 
 		configParameters.frameGenerationCallback = [](ffxDispatchDescFrameGeneration* params, void* pUserCtx) -> ffxReturnCode_t {
@@ -113,7 +111,15 @@ void FidelityFX::Present()
 		logger::critical("[FidelityFX] Failed to configure frame generation!");
 	}
 
-	if (upscaling->settings.frameGenerationMode) {
+	ffx::ConfigureDescFrameGenerationSwapChainRegisterUiResourceDX12 uiConfig{};
+	uiConfig.uiResource = ffxApiGetResourceDX12(swapChain->uiBuffersWrapped[swapChain->frameIndex]->resource.get());
+	uiConfig.flags = FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_USE_PREMUL_ALPHA;
+	
+	if (ffx::Configure(swapChainContext, uiConfig) != ffx::ReturnCode::Ok) {
+		logger::critical("[FidelityFX] Failed to configure UI composition!");
+	}
+
+	if (a_useFrameGeneration) {
 		ffx::DispatchDescFrameGenerationPrepare dispatchParameters{};
 
 		dispatchParameters.commandList = commandList;

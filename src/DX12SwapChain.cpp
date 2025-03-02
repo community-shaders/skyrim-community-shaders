@@ -92,6 +92,10 @@ void DX12SwapChain::CreateInterop()
 	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
 	swapChainBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
+
+	for (int i = 0; i < 2; i++) {
+		uiBuffersWrapped[i] = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
+	}
 }
 
 DXGISwapChainProxy* DX12SwapChain::GetSwapChainProxy()
@@ -121,12 +125,9 @@ HRESULT DX12SwapChain::GetBuffer(void** ppSurface)
 }
 
 HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
-{
+{	
 	// Wait for D3D11 work to finish
 	d3d11Context->Flush();
-
-	// Update the frame index.
-	frameIndex = swapChain->GetCurrentBackBufferIndex();
 
 	// New frame, reset
 	DX::ThrowIfFailed(commandAllocators[frameIndex]->Reset());
@@ -165,14 +166,16 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 		}
 	}
 
-	FidelityFX::GetSingleton()->Present();
+	auto upscaling = globals::upscaling;
+
+	bool useFrameGeneration = upscaling->settings.frameGenerationMode && !RE::UI::GetSingleton()->GameIsPaused();
+
+	FidelityFX::GetSingleton()->Present(useFrameGeneration);
 
 	DX::ThrowIfFailed(commandLists[frameIndex]->Close());
 
 	ID3D12CommandList* commandListsToExecute[] = { commandLists[frameIndex].get() };
 	commandQueue->ExecuteCommandLists(1, commandListsToExecute);
-
-	auto upscaling = globals::upscaling;
 
 	// Present the frame
 	DX::ThrowIfFailed(swapChain->Present(upscaling->settings.vsyncMode ? std::max(1u, SyncInterval) : 0, upscaling->settings.vsyncMode ? Flags : DXGI_PRESENT_ALLOW_TEARING));
@@ -182,7 +185,12 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 
 	// Frame limiter for V-Sync and VRR
 	if (upscaling->settings.vsyncMode || upscaling->settings.frameLimitMode)
-		FrameLimiter();
+		FrameLimiter(useFrameGeneration);
+
+	// Update the frame index.
+	frameIndex = swapChain->GetCurrentBackBufferIndex();
+
+	globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER].RTV = swapChainBufferWrapped->rtv;
 
 	return S_OK;
 }
@@ -205,13 +213,13 @@ static void TimerSleepQPC(int64_t targetQPC)
 	} while (currentQPC.QuadPart < targetQPC);
 }
 
-void DX12SwapChain::FrameLimiter()
+void DX12SwapChain::FrameLimiter(bool a_useFrameGeneration)
 {
 	auto upscaling = globals::upscaling;
 
 	double bestRefreshRate = upscaling->settings.vsyncMode ? refreshRate : refreshRate - (refreshRate * refreshRate) / 3600.0;
 
-	int64_t targetFrameTicks = int64_t(double(qpf.QuadPart) / (bestRefreshRate * (upscaling->settings.frameGenerationMode ? 0.5 : 1.0)));
+	int64_t targetFrameTicks = int64_t(double(qpf.QuadPart) / (bestRefreshRate * (a_useFrameGeneration ? 0.5 : 1.0)));
 
 	static LARGE_INTEGER lastFrame = {};
 	LARGE_INTEGER timeNow;
@@ -297,6 +305,18 @@ double DX12SwapChain::GetRefreshRate()
 	return 60;
 }
 
+void DX12SwapChain::SetUIBuffer()
+{
+	float clearColor[4]{ 0, 0, 0, 0 };
+	d3d11Context->ClearRenderTargetView(uiBuffersWrapped[frameIndex]->rtv, clearColor);
+
+	auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+
+	data.RTV = uiBuffersWrapped[frameIndex]->rtv;
+
+	d3d11Context->OMSetRenderTargets(1, &data.RTV, nullptr);
+}
+
 WrappedResource::WrappedResource(D3D11_TEXTURE2D_DESC a_texDesc, ID3D11Device5* a_d3d11Device, ID3D12Device* a_d3d12Device)
 {
 	D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
@@ -345,6 +365,14 @@ WrappedResource::WrappedResource(D3D11_TEXTURE2D_DESC a_texDesc, ID3D11Device5* 
 
 			DX::ThrowIfFailed(a_d3d11Device->CreateUnorderedAccessView(resource11, &uavDesc, &uav));
 		}
+	}
+
+	if (a_texDesc.BindFlags & D3D11_BIND_RENDER_TARGET) {
+		D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+		rtvDesc.Format = a_texDesc.Format;
+		rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+		rtvDesc.Texture2D.MipSlice = 0;
+		DX::ThrowIfFailed(a_d3d11Device->CreateRenderTargetView(resource11, &rtvDesc, &rtv));
 	}
 }
 
@@ -445,4 +473,10 @@ HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetFrameStatistics(_Out_ DXGI_FRAM
 HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetLastPresentCount(_Out_ UINT* pLastPresentCount)
 {
 	return swapChain->GetLastPresentCount(pLastPresentCount);
+}
+
+void DX12SwapChain::MenuManagerDrawInterfaceStartHook::thunk(int64_t a1)
+{
+	DX12SwapChain::GetSingleton()->SetUIBuffer();
+	func(a1);
 }
