@@ -14,7 +14,6 @@
 #include <sl_consts.h>
 #include <sl_dlss.h>
 #include <sl_hooks.h>
-#include <sl_nis.h>
 #include <sl_version.h>
 #pragma warning(pop)
 
@@ -63,18 +62,13 @@ public:
 	PFun_slDLSSGetState* slDLSSGetState{};
 	PFun_slDLSSSetOptions* slDLSSSetOptions{};
 
-	// NIS specific functions
-	PFun_slNISSetOptions* slNISSetOptions{};
-	PFun_slNISGetState* slNISGetState{};
-
 	void LoadInterposer();
 
 	void CheckFeatures(IDXGIAdapter* a_adapter);
 
 	void PostDevice();
 
-	void Upscale(Texture2D* a_color, Texture2D* a_alphaMask, sl::DLSSPreset a_preset, float a_sharpness);
-	void Sharpen(Texture2D* a_sharpenTexture, float a_sharpness);
+	void Upscale(Texture2D* a_color, Texture2D* a_alphaMask, sl::DLSSPreset a_preset);
 	void UpdateConstants();
 
 	void DestroyDLSSResources();

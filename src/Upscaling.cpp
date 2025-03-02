@@ -302,11 +302,42 @@ void Upscaling::Upscale()
 		context->CopyResource(upscalingTexture->resource.get(), inputTextureResource);
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			globals::streamline->Upscale(upscalingTexture, alphaMaskTexture, settings.dlssPreset == 0 ? sl::DLSSPreset::ePresetJ : sl::DLSSPreset::ePresetE, settings.sharpness);
+			globals::streamline->Upscale(upscalingTexture, alphaMaskTexture, settings.dlssPreset == 0 ? sl::DLSSPreset::ePresetJ : sl::DLSSPreset::ePresetE);
 		else if (upscaleMethod == UpscaleMethod::kFSR)
 			FidelityFX::GetSingleton()->Upscale(upscalingTexture, alphaMaskTexture, jitter, reset, settings.sharpness);
 
 		reset = false;
+
+		state->EndPerfEvent();
+	}
+
+	if (upscaleMethod != UpscaleMethod::kFSR && settings.sharpness > 0.0f) {
+		state->BeginPerfEvent("Sharpening");
+
+		context->CopyResource(inputTextureResource, upscalingTexture->resource.get());
+
+		{
+			{
+				ID3D11ShaderResourceView* views[1] = { inputTextureSRV };
+				context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+				ID3D11UnorderedAccessView* uavs[1] = { upscalingTexture->uav.get() };
+				context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+				context->CSSetShader(GetRCASCS(), nullptr, 0);
+
+				context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+			}
+
+			ID3D11ShaderResourceView* views[1] = { nullptr };
+			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+			ID3D11UnorderedAccessView* uavs[1] = { nullptr };
+			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+			ID3D11ComputeShader* shader = nullptr;
+			context->CSSetShader(shader, nullptr, 0);
+		}
 
 		state->EndPerfEvent();
 	}
@@ -340,10 +371,7 @@ void Upscaling::SharpenTAA()
 
 	state->BeginPerfEvent("Sharpening");
 
-	if (globals::streamline->featureNIS) {
-		context->CopyResource(upscalingTexture->resource.get(), outputTextureResource);
-		globals::streamline->Sharpen(upscalingTexture, settings.sharpness);
-	} else {
+	{
 		ID3D11ShaderResourceView* inputTextureSRV;
 		context->PSGetShaderResources(0, 1, &inputTextureSRV);
 		inputTextureSRV->Release();
