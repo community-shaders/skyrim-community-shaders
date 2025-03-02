@@ -2415,7 +2415,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #			if defined(SKYLIGHTING)
 					envColor = DynamicCubemaps::GetDynamicCubemap(worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, envRoughness, F0, skylightingSH) * envMask;
 #			else
-					envColor = DynamicCubemaps::GetDynamicCubemap(worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, envRoughness, F0, ) * envMask;
+					envColor = DynamicCubemaps::GetDynamicCubemap(worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, envRoughness, F0) * envMask;
 #			endif
 				else
 					envColor = 0.0;
