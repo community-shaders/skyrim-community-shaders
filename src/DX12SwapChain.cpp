@@ -475,7 +475,7 @@ HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetLastPresentCount(_Out_ UINT* pL
 	return swapChain->GetLastPresentCount(pLastPresentCount);
 }
 
-void DX12SwapChain::MenuManagerDrawInterfaceStartHook::thunk(int64_t a1)
+void DX12SwapChain::MenuManagerDrawInterface::thunk(int64_t a1)
 {
 	DX12SwapChain::GetSingleton()->SetUIBuffer();
 	func(a1);

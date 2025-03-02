@@ -114,7 +114,7 @@ public:
 
 	void SetUIBuffer();
 
-	struct MenuManagerDrawInterfaceStartHook
+	struct MenuManagerDrawInterface
 	{
 		static void thunk(int64_t a1);
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -122,6 +122,6 @@ public:
 
 	static void InstallHooks()
 	{
-		stl::write_thunk_call<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084).address() + REL::Relocate(0x7E, 0x83, 0x17F));
+		stl::detour_thunk<MenuManagerDrawInterface>(REL::RelocationID(79947, 82084));
 	}
 };
