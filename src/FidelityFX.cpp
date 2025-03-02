@@ -116,9 +116,9 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		dispatchParameters.motionVectorScale.y = (float)swapChain->swapChainDesc.Height;
 		dispatchParameters.renderSize.width = swapChain->swapChainDesc.Width;
 		dispatchParameters.renderSize.height = swapChain->swapChainDesc.Height;
-	
+
 		auto gameViewport = globals::game::graphicsState;
-		
+
 		float2 jitter;
 
 		if (globals::game::isVR)
