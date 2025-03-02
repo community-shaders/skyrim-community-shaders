@@ -72,7 +72,7 @@ void FidelityFX::Present()
 	auto swapChain = DX12SwapChain::GetSingleton();
 	auto commandList = swapChain->commandLists[swapChain->frameIndex].get();
 
-	auto hudlessColor = upscaling->colorBufferShared12.get();
+	auto HUDLessColor = upscaling->colorBufferShared12.get();
 	auto depth = upscaling->depthBufferShared12.get();
 	auto motionVectors = upscaling->motionVectorBufferShared12.get();
 
@@ -86,7 +86,7 @@ void FidelityFX::Present()
 		};
 		configParameters.frameGenerationCallbackUserContext = &frameGenContext;
 
-		configParameters.HUDLessColor = ffxApiGetResourceDX12(hudlessColor);
+		configParameters.HUDLessColor = ffxApiGetResourceDX12(HUDLessColor);
 
 	} else {
 		configParameters.frameGenerationEnabled = false;
