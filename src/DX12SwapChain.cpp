@@ -184,7 +184,7 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT)
 	WaitForSingleObject(frameLatencyWaitableObject, 500);
 
 	// Frame limiter for V-Sync and VRR
-	if (upscaling->settings.vsyncMode || upscaling->settings.frameLimitMode)
+	if (!upscaling->settings.vsyncMode && upscaling->settings.frameLimitMode)
 		FrameLimiter(useFrameGeneration);
 
 	// Update the frame index.
@@ -215,9 +215,7 @@ static void TimerSleepQPC(int64_t targetQPC)
 
 void DX12SwapChain::FrameLimiter(bool a_useFrameGeneration)
 {
-	auto upscaling = globals::upscaling;
-
-	double bestRefreshRate = upscaling->settings.vsyncMode ? refreshRate : refreshRate - (refreshRate * refreshRate) / 3600.0;
+	double bestRefreshRate = refreshRate - 1;
 
 	int64_t targetFrameTicks = int64_t(double(qpf.QuadPart) / (bestRefreshRate * (a_useFrameGeneration ? 0.5 : 1.0)));
 
