@@ -6,6 +6,7 @@
 #include <sl_dlss.h>
 #include <sl_dlss_g.h>
 #include <sl_matrix_helpers.h>
+#include <sl_nis.h>
 #include <sl_reflex.h>
 
 class Streamline
@@ -25,6 +26,7 @@ public:
 	bool featureDLSS = false;
 	bool featureDLSSG = false;
 	bool featureReflex = false;
+	bool featureNIS = false;
 
 	double refreshRate = 60.0;
 
@@ -75,6 +77,10 @@ public:
 	PFun_slReflexSleep* slReflexSleep{};
 	PFun_slReflexSetOptions* slReflexSetOptions{};
 
+	// NIS specific functions
+	PFun_slNISSetOptions* slNISSetOptions{};
+	PFun_slNISGetState* slNISGetState{};
+
 	Texture2D* colorBufferShared;
 	Texture2D* depthBufferShared;
 
@@ -106,7 +112,8 @@ public:
 	void CopyResourcesToSharedBuffers();
 	void Present();
 
-	void Upscale(Texture2D* a_color, Texture2D* a_alphaMask, sl::DLSSPreset a_preset);
+	void Upscale(Texture2D* a_color, Texture2D* a_alphaMask, sl::DLSSPreset a_preset, float a_sharpness);
+	void Sharpen(Texture2D* a_sharpenTexture, float a_sharpness);
 	void UpdateConstants();
 
 	void SaveSettings(json& o_json);
