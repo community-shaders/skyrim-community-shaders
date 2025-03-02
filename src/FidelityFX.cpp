@@ -28,25 +28,13 @@ FfxResource ffxGetResource(ID3D11Resource* dx11Resource,
 
 void FidelityFX::LoadFFX()
 {
-	auto module = LoadLibrary(L"Data\\SKSE\\Plugins\\FidelityFX\\amd_fidelityfx_dx12.dll");
+	module = LoadLibrary(L"Data\\SKSE\\Plugins\\FidelityFX\\amd_fidelityfx_dx12.dll");
 
-	ffxLoadFunctions(&ffxModule, module);
+	if (module)
+		ffxLoadFunctions(&ffxModule, module);
 }
 
-void FidelityFX::WrapSwapChain()
-{
-	auto swapChain = DX12SwapChain::GetSingleton();
-
-	ffx::CreateContextDescFrameGenerationSwapChainWrapDX12 desc{};
-	desc.swapchain = &swapChain->swapChain;
-	desc.gameQueue = swapChain->commandQueue.get();
-
-	if (ffx::CreateContext(swapChainContext, nullptr, desc) != ffx::ReturnCode::Ok) {
-		logger::critical("[FidelityFX] Failed to create swap chain context!");
-	}
-}
-
-void FidelityFX::CreateFrameGenerationResources()
+void FidelityFX::SetupFrameGeneration()
 {
 	auto swapChain = DX12SwapChain::GetSingleton();
 
@@ -61,6 +49,14 @@ void FidelityFX::CreateFrameGenerationResources()
 
 	if (ffx::CreateContext(frameGenContext, nullptr, createFg, createBackend) != ffx::ReturnCode::Ok) {
 		logger::critical("[FidelityFX] Failed to create frame generation context!");
+	}
+
+	ffx::CreateContextDescFrameGenerationSwapChainWrapDX12 desc{};
+	desc.swapchain = &swapChain->swapChain;
+	desc.gameQueue = swapChain->commandQueue.get();
+
+	if (ffx::CreateContext(swapChainContext, nullptr, desc) != ffx::ReturnCode::Ok) {
+		logger::critical("[FidelityFX] Failed to create swap chain context!");
 	}
 }
 

@@ -265,34 +265,66 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	DXGI_ADAPTER_DESC adapterDesc;
 	pAdapter->GetDesc(&adapterDesc);
 	globals::state->SetAdapterDescription(adapterDesc.Description);
+
+	auto streamline = globals::streamline;
+	streamline->LoadInterposer();
+
+	auto fidelityFX = FidelityFX::GetSingleton();
+	fidelityFX->LoadFFX();
+
 	auto proxy = DX12SwapChain::GetSingleton();
 
-	proxy->CreateD3D12Device(pAdapter);
+	bool shouldProxy = false;
+
+	/// Check that the FFX DLL is present
+	if (fidelityFX->module){
+		// Check that the monitor is HFR
+		if (proxy->GetRefreshRate(pSwapChainDesc->OutputWindow) >= 120) {
+			shouldProxy = true;
+		}
+	}
 
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
 
-	D3D11CreateDevice(
-		pAdapter,
+	if (shouldProxy) {
+		proxy->CreateD3D12Device(pAdapter);
+
+		D3D11CreateDevice(
+			pAdapter,
+			DriverType,
+			Software,
+			Flags,
+			&featureLevel,
+			1,
+			SDKVersion,
+			ppDevice,
+			pFeatureLevel,
+			ppImmediateContext);
+
+		proxy->SetD3D11Device(*ppDevice);
+		proxy->SetD3D11DeviceContext(*ppImmediateContext);
+
+		proxy->CreateSwapChain(pAdapter, *pSwapChainDesc);
+
+		proxy->CreateInterop();
+
+		*ppSwapChain = proxy->GetSwapChainProxy();
+
+		return S_OK;
+	}
+
+	return ptrD3D11CreateDeviceAndSwapChain(pAdapter,
 		DriverType,
 		Software,
 		Flags,
 		&featureLevel,
 		1,
 		SDKVersion,
+		pSwapChainDesc,
+		ppSwapChain,
 		ppDevice,
 		pFeatureLevel,
 		ppImmediateContext);
-
-	proxy->SetD3D11Device(*ppDevice);
-	proxy->SetD3D11DeviceContext(*ppImmediateContext);
-
-	proxy->CreateSwapChain(pAdapter, *pSwapChainDesc);
-
-	proxy->CreateInterop();
-
-	*ppSwapChain = proxy->GetSwapChainProxy();
-
-	return S_OK;
 }
 
 struct BSShaderRenderTargets_Create
@@ -789,12 +821,6 @@ namespace Hooks
 
 	void InstallD3DHooks()
 	{
-		auto streamline = globals::streamline;
-		streamline->LoadInterposer();
-
-		auto fidelityFX = FidelityFX::GetSingleton();
-		fidelityFX->LoadFFX();
-
 		*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
 		*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", !REL::Module::IsVR() ? "CreateDXGIFactory" : "CreateDXGIFactory1");
 	}

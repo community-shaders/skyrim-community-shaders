@@ -56,14 +56,12 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
 
-	FidelityFX::GetSingleton()->WrapSwapChain();
+	FidelityFX::GetSingleton()->SetupFrameGeneration();
 
 	swapChain->SetMaximumFrameLatency(1);
 	frameLatencyWaitableObject = swapChain->GetFrameLatencyWaitableObject();
 
 	QueryPerformanceFrequency(&qpf);
-
-	refreshRate = GetRefreshRate();
 }
 
 void DX12SwapChain::CreateInterop()
@@ -251,48 +249,35 @@ void DX12SwapChain::FrameLimiter(bool a_useFrameGeneration)
 * SOFTWARE.
 */
 
-double DX12SwapChain::GetRefreshRate()
+double DX12SwapChain::GetRefreshRate(HWND a_window)
 {
-	IDXGIOutput* dxgiOutput;
-	HRESULT hr = swapChain->GetContainingOutput(&dxgiOutput);
-	// if swap chain get failed to get DXGIoutput then follow the below link get the details from remarks section
-	//https://docs.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgiswapchain-getcontainingoutput
-	if (SUCCEEDED(hr)) {
-		// get the descriptor for current output
-		// from which associated mornitor will be fetched
-		DXGI_OUTPUT_DESC outputDes{};
-		hr = dxgiOutput->GetDesc(&outputDes);
-		dxgiOutput->Release();
-		if (SUCCEEDED(hr)) {
-			MONITORINFOEXW info;
-			info.cbSize = sizeof(info);
-			// get the associated monitor info
-			if (GetMonitorInfoW(outputDes.Monitor, &info) != 0) {
-				// using the CCD get the associated path and display configuration
-				UINT32 requiredPaths, requiredModes;
-				if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &requiredPaths, &requiredModes) == ERROR_SUCCESS) {
-					std::vector<DISPLAYCONFIG_PATH_INFO> paths(requiredPaths);
-					std::vector<DISPLAYCONFIG_MODE_INFO> modes2(requiredModes);
-					if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &requiredPaths, paths.data(), &requiredModes, modes2.data(), nullptr) == ERROR_SUCCESS) {
-						// iterate through all the paths until find the exact source to match
-						for (auto& p : paths) {
-							DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName;
-							sourceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
-							sourceName.header.size = sizeof(sourceName);
-							sourceName.header.adapterId = p.sourceInfo.adapterId;
-							sourceName.header.id = p.sourceInfo.id;
-							if (DisplayConfigGetDeviceInfo(&sourceName.header) == ERROR_SUCCESS) {
-								// find the matched device which is associated with current device
-								// there may be the possibility that display may be duplicated and windows may be one of them in such scenario
-								// there may be two callback because source is same target will be different
-								// as window is on both the display so either selecting either one is ok
-								if (wcscmp(info.szDevice, sourceName.viewGdiDeviceName) == 0) {
-									// get the refresh rate
-									UINT numerator = p.targetInfo.refreshRate.Numerator;
-									UINT denominator = p.targetInfo.refreshRate.Denominator;
-									return (double)numerator / (double)denominator;
-								}
-							}
+	HMONITOR monitor = MonitorFromWindow(a_window, MONITOR_DEFAULTTONEAREST);
+	MONITORINFOEXW info;
+	info.cbSize = sizeof(info);
+	if (GetMonitorInfoW(monitor, &info) != 0) {
+		// using the CCD get the associated path and display configuration
+		UINT32 requiredPaths, requiredModes;
+		if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &requiredPaths, &requiredModes) == ERROR_SUCCESS) {
+			std::vector<DISPLAYCONFIG_PATH_INFO> paths(requiredPaths);
+			std::vector<DISPLAYCONFIG_MODE_INFO> modes2(requiredModes);
+			if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &requiredPaths, paths.data(), &requiredModes, modes2.data(), nullptr) == ERROR_SUCCESS) {
+				// iterate through all the paths until find the exact source to match
+				for (auto& p : paths) {
+					DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName;
+					sourceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+					sourceName.header.size = sizeof(sourceName);
+					sourceName.header.adapterId = p.sourceInfo.adapterId;
+					sourceName.header.id = p.sourceInfo.id;
+					if (DisplayConfigGetDeviceInfo(&sourceName.header) == ERROR_SUCCESS) {
+						// find the matched device which is associated with current device
+						// there may be the possibility that display may be duplicated and windows may be one of them in such scenario
+						// there may be two callback because source is same target will be different
+						// as window is on both the display so either selecting either one is ok
+						if (wcscmp(info.szDevice, sourceName.viewGdiDeviceName) == 0) {
+							// get the refresh rate
+							UINT numerator = p.targetInfo.refreshRate.Numerator;
+							UINT denominator = p.targetInfo.refreshRate.Denominator;
+							return (double)numerator / (double)denominator;
 						}
 					}
 				}
@@ -305,6 +290,9 @@ double DX12SwapChain::GetRefreshRate()
 
 void DX12SwapChain::SetUIBuffer()
 {
+	if (!swapChain)
+		return;
+
 	float clearColor[4]{ 0, 0, 0, 0 };
 	d3d11Context->ClearRenderTargetView(uiBuffersWrapped[frameIndex]->rtv, clearColor);
 

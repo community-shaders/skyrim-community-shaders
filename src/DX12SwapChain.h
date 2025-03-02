@@ -110,7 +110,7 @@ public:
 
 	void FrameLimiter(bool a_useFrameGeneration);
 
-	double GetRefreshRate();
+	double GetRefreshRate(HWND a_window);
 
 	void SetUIBuffer();
 

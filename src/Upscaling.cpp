@@ -87,20 +87,27 @@ void Upscaling::DrawSettings()
 	}
 
 	if (state->featureLevel && !globals::game::isVR) {
-		if (ImGui::TreeNodeEx("AMD FSR 3.1 Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
-			const char* toggleModes[] = { "Disabled", "Enabled" };
+		if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
 
-			ImGui::SliderInt("V-Sync", (int*)&settings.vsyncMode, 0, 1, std::format("{}", toggleModes[(uint)settings.vsyncMode]).c_str());
+			ImGui::Text("Frame Generation uses a D3D11 to D3D12 proxy which can create compatibility issues");
+			ImGui::Text("Frame Generation requires a refresh rate of at least 120");
 
-			if (settings.vsyncMode)
-				ImGui::BeginDisabled();
+			if (DX12SwapChain::GetSingleton()->swapChain) {
+				const char* toggleModes[] = { "Disabled", "Enabled" };
 
-			ImGui::SliderInt("Frame Limit (Variable Refresh Rate)", (int*)&settings.frameLimitMode, 0, 1, std::format("{}", toggleModes[(uint)settings.frameLimitMode]).c_str());
+				ImGui::SliderInt("V-Sync", (int*)&settings.vsyncMode, 0, 1, std::format("{}", toggleModes[(uint)settings.vsyncMode]).c_str());
 
-			if (settings.vsyncMode)
-				ImGui::EndDisabled();
+				if (settings.vsyncMode)
+					ImGui::BeginDisabled();
 
-			ImGui::SliderInt("Frame Generation", (int*)&settings.frameGenerationMode, 0, 1, std::format("{}", toggleModes[(uint)settings.frameGenerationMode]).c_str());
+				ImGui::SliderInt("Frame Limit (Variable Refresh Rate)", (int*)&settings.frameLimitMode, 0, 1, std::format("{}", toggleModes[(uint)settings.frameLimitMode]).c_str());
+
+				if (settings.vsyncMode)
+					ImGui::EndDisabled();
+
+				ImGui::SliderInt("Frame Generation", (int*)&settings.frameGenerationMode, 0, 1, std::format("{}", toggleModes[(uint)settings.frameGenerationMode]).c_str());
+			}
+
 			ImGui::TreePop();
 		}
 	}
@@ -407,7 +414,8 @@ void Upscaling::CreateUpscalingResources()
 	alphaMaskTexture->CreateSRV(srvDesc);
 	alphaMaskTexture->CreateUAV(uavDesc);
 
-	CreateFrameGenerationResources();
+	if (DX12SwapChain::GetSingleton()->swapChain)
+		CreateFrameGenerationResources();
 }
 
 void Upscaling::DestroyUpscalingResources()
@@ -535,6 +543,9 @@ void Upscaling::CreateFrameGenerationResources()
 
 void Upscaling::CopyResourcesToSharedBuffers()
 {
+	if (!DX12SwapChain::GetSingleton()->swapChain)
+		return;
+
 	auto& context = globals::d3d::context;
 	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
 

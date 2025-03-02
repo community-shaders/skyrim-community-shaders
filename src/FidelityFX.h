@@ -22,6 +22,8 @@ public:
 		return &singleton;
 	}
 
+	HMODULE module = nullptr;
+
 	ffx::Context swapChainContext{};
 	ffx::Context frameGenContext;
 
@@ -29,9 +31,7 @@ public:
 
 	void LoadFFX();
 
-	void WrapSwapChain();
-
-	void CreateFrameGenerationResources();
+	void SetupFrameGeneration();
 
 	void Present(bool a_useFrameGeneration);
 
