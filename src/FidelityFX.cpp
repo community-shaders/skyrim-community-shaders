@@ -116,8 +116,20 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		dispatchParameters.motionVectorScale.y = (float)swapChain->swapChainDesc.Height;
 		dispatchParameters.renderSize.width = swapChain->swapChainDesc.Width;
 		dispatchParameters.renderSize.height = swapChain->swapChainDesc.Height;
-		dispatchParameters.jitterOffset.x = 0;
-		dispatchParameters.jitterOffset.y = 0;
+	
+		auto gameViewport = globals::game::graphicsState;
+		
+		float2 jitter;
+
+		if (globals::game::isVR)
+			jitter.x = -gameViewport->projectionPosScaleX * float(swapChain->swapChainDesc.Width);
+		else
+			jitter.x = -gameViewport->projectionPosScaleX * float(swapChain->swapChainDesc.Width) / 2.0f;
+
+		jitter.y = gameViewport->projectionPosScaleY * (float)swapChain->swapChainDesc.Height / 2.0f;
+
+		dispatchParameters.jitterOffset.x = -jitter.x;
+		dispatchParameters.jitterOffset.y = -jitter.y;
 
 		static float& deltaTime = (*(float*)REL::RelocationID(523660, 410199).address());
 		dispatchParameters.frameTimeDelta = deltaTime * 1000.f;

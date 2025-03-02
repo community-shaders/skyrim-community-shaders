@@ -211,7 +211,7 @@ void Upscaling::UpdateJitter()
 {
 	auto upscaleMethod = GetUpscaleMethod();
 	if (upscaleMethod == UpscaleMethod::kFSR || upscaleMethod == UpscaleMethod::kDLSS) {
-		static auto gameViewport = globals::game::graphicsState;
+		auto gameViewport = globals::game::graphicsState;
 
 		auto state = globals::state;
 
