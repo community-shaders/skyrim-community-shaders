@@ -530,7 +530,7 @@ void Upscaling::CreateFrameGenerationResources()
 
 void Upscaling::CopyResourcesToSharedBuffers()
 {
-	if (!globals::dx12SwapChain->swapChain)
+	if (!globals::dx12SwapChain->swapChain || !settings.frameGenerationMode || RE::UI::GetSingleton()->GameIsPaused())
 		return;
 
 	auto& context = globals::d3d::context;
