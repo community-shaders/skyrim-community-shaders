@@ -51,6 +51,9 @@ public:
 
 	Settings settings;
 
+	bool isWindowed = false;
+	bool lowRefreshRate = false;
+
 	void DrawSettings();
 	void SaveSettings(json& o_json);
 	void LoadSettings(json& o_json);

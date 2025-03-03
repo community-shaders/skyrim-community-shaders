@@ -275,17 +275,36 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 
 	auto fidelityFX = FidelityFX::GetSingleton();
 
-	if (!globals::game::isVR && pSwapChainDesc->Windowed) {
-		fidelityFX->LoadFFX();
+	auto upscaling = Upscaling::GetSingleton();
 
-		// Check that the FFX DLL is present
-		if (fidelityFX->module) {
-			// Check that the monitor is HFR
-			if (Upscaling::GetSingleton()->settings.frameGenerationForceEnable || proxy->GetRefreshRate(pSwapChainDesc->OutputWindow) >= 120) {
+	shouldProxy = !globals::game::isVR;
+
+	if (shouldProxy)
+		if (!pSwapChainDesc->Windowed)
+			shouldProxy = false;
+
+	auto refreshRate = proxy->GetRefreshRate(pSwapChainDesc->OutputWindow);
+
+	if (shouldProxy) {
+		if (upscaling->settings.frameGenerationMode)
+			if (refreshRate >= 120)
 				shouldProxy = true;
-			}
-		}
+			else if (upscaling->settings.frameGenerationForceEnable)
+				shouldProxy = true;
+			else
+				shouldProxy = false;
+		else
+			shouldProxy = false;
 	}
+
+	upscaling->lowRefreshRate = refreshRate < 120;
+	
+	fidelityFX->LoadFFX();
+
+	if (shouldProxy)
+		shouldProxy = fidelityFX->module;
+
+	upscaling->isWindowed = pSwapChainDesc->Windowed;
 
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
 

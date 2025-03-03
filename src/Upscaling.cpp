@@ -90,25 +90,51 @@ void Upscaling::DrawSettings()
 	if (!globals::game::isVR) {
 		if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Text("Frame Generation uses a D3D11 to D3D12 proxy which can create compatibility issues");
-			ImGui::Text("Frame Generation requires a refresh rate of at least 120 and the game running in windowed mode");
+			ImGui::Text("Toggling this setting requires a restart to work correctly.");
+
+			bool onlyRequiresRestart = true;
+
+			if (!isWindowed) {
+				ImGui::Text("Warning: Requires windowed mode");
+				onlyRequiresRestart = false;
+			}
+
+			if (lowRefreshRate && !settings.frameGenerationForceEnable) {
+				ImGui::Text("Warning: Requires a high refresh rate monitor or Force Enable Frame Generation");
+				onlyRequiresRestart = false;
+			}
+
+			if (!FidelityFX::GetSingleton()->module) {
+				ImGui::Text("Warning: Requires amd_fidelityfx_dx12.dll to be loaded");
+				onlyRequiresRestart = false;
+			}
+
+			auto swapChain = DX12SwapChain::GetSingleton()->swapChain;
+
+			if (onlyRequiresRestart && settings.frameGenerationMode && !swapChain)
+				ImGui::Text("Warning: Requires restart");
 
 			const char* toggleModes[] = { "Disabled", "Enabled" };
 
-			if (globals::dx12SwapChain->swapChain) {
-				ImGui::SliderInt("V-Sync", (int*)&settings.vsyncMode, 0, 1, std::format("{}", toggleModes[settings.vsyncMode]).c_str());
+			ImGui::SliderInt("Frame Generation", (int*)&settings.frameGenerationMode, 0, 1, std::format("{}", toggleModes[settings.frameGenerationMode]).c_str());
 
-				if (settings.vsyncMode)
-					ImGui::BeginDisabled();
+			if (!settings.frameGenerationMode && swapChain)
+				ImGui::BeginDisabled();
+		
+			ImGui::SliderInt("V-Sync", (int*)&settings.vsyncMode, 0, 1, std::format("{}", toggleModes[settings.vsyncMode]).c_str());
+			
+			if (!settings.frameGenerationMode && swapChain)
+				ImGui::EndDisabled();
 
-				ImGui::SliderInt("Frame Limit (Variable Refresh Rate)", (int*)&settings.frameLimitMode, 0, 1, std::format("{}", toggleModes[settings.frameLimitMode]).c_str());
+			if ((settings.vsyncMode || !settings.frameGenerationMode) && swapChain)
+				ImGui::BeginDisabled();
 
-				if (settings.vsyncMode)
-					ImGui::EndDisabled();
+			ImGui::SliderInt("Frame Limit (Variable Refresh Rate)", (int*)&settings.frameLimitMode, 0, 1, std::format("{}", toggleModes[settings.frameLimitMode]).c_str());
 
-				ImGui::SliderInt("Frame Generation", (int*)&settings.frameGenerationMode, 0, 1, std::format("{}", toggleModes[settings.frameGenerationMode]).c_str());
-			}
+			if ((settings.vsyncMode || !settings.frameGenerationMode) && swapChain)
+				ImGui::EndDisabled();
 
-			ImGui::Text("Allows frame generation to function on low refresh rate monitors - requires restart");
+			ImGui::Text("Allows frame generation to function on low refresh rate monitors");
 			ImGui::SliderInt("Force Enable Frame Generation", (int*)&settings.frameGenerationForceEnable, 0, 1, std::format("{}", toggleModes[settings.frameGenerationForceEnable]).c_str());
 
 			ImGui::TreePop();
