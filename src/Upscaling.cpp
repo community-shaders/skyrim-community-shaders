@@ -89,7 +89,9 @@ void Upscaling::DrawSettings()
 
 	if (!globals::game::isVR) {
 		if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Text("Frame Generation uses a D3D11 to D3D12 proxy which can create compatibility issues");
+			ImGui::Text("Frame Generation interpolates real frames with generated ones for a smoother experience");
+			ImGui::Text("Uses AMD FSR 3.1 Frame Generation technology");
+			ImGui::Text("Requires a D3D11 to D3D12 proxy which can create compatibility issues");
 			ImGui::Text("Toggling this setting requires a restart to work correctly.");
 
 			bool onlyRequiresRestart = true;
