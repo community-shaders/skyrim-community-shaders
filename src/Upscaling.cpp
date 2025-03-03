@@ -419,7 +419,7 @@ void Upscaling::CreateFrameGenerationResources()
 	colorBufferShared->CreateRTV(rtvDesc);
 	colorBufferShared->CreateUAV(uavDesc);
 
-	texDesc.Format = DXGI_FORMAT_R16_UNORM;
+	texDesc.Format = DXGI_FORMAT_R32_FLOAT;
 	srvDesc.Format = texDesc.Format;
 	rtvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
