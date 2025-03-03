@@ -120,9 +120,9 @@ void Upscaling::DrawSettings()
 
 			if (!settings.frameGenerationMode && swapChain)
 				ImGui::BeginDisabled();
-		
+
 			ImGui::SliderInt("V-Sync", (int*)&settings.vsyncMode, 0, 1, std::format("{}", toggleModes[settings.vsyncMode]).c_str());
-			
+
 			if (!settings.frameGenerationMode && swapChain)
 				ImGui::EndDisabled();
 

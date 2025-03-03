@@ -298,7 +298,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	}
 
 	upscaling->lowRefreshRate = refreshRate < 120;
-	
+
 	fidelityFX->LoadFFX();
 
 	if (shouldProxy)
