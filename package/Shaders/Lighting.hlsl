@@ -2461,11 +2461,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	diffuseColor += directionalAmbientColor;
 #		endif
 #	elif defined(SKIN) && defined(CS_SKIN)
-	if (SharedData::skinData.skinParams.w > 0) {
+	if (SharedData::skinData.skinParams.w <= 1e-5) {
+#		if defined(DEFERRED) && defined(SSGI)
 		diffuseColor += directionalAmbientColorDirect;
-	}
-	else {
+#		else
 		diffuseColor += directionalAmbientColor;
+#		endif
 	}
 #	endif
 
