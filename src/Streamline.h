@@ -72,9 +72,10 @@ public:
 
 	void PostDevice();
 
-	void Sharpen(Texture2D* a_sharpenTexture, float a_sharpness);
+	void Sharpen(ID3D11Texture2D* a_sharpenTexture, float a_sharpness);
 
-	void Upscale(Texture2D* a_color, Texture2D* a_alphaMask, sl::DLSSPreset a_preset);
+	void Upscale(ID3D11Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl::DLSSPreset a_preset);
+
 	void UpdateConstants();
 
 	void DestroyDLSSResources();

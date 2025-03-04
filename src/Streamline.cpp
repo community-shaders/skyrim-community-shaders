@@ -137,15 +137,15 @@ void Streamline::PostDevice()
 	}
 }
 
-void Streamline::Sharpen(Texture2D* a_sharpenTexture, float a_sharpness)
+void Streamline::Sharpen(ID3D11Texture2D* a_sharpenTexture, float a_sharpness)
 {
 	auto state = globals::state;
 
 	{
 		sl::Extent fullExtent{ 0, 0, (uint)state->screenSize.x, (uint)state->screenSize.y };
 
-		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_sharpenTexture->resource.get(), 0 };
-		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_sharpenTexture->resource.get(), 0 };
+		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_sharpenTexture, 0 };
+		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_sharpenTexture, 0 };
 
 		sl::ResourceTag colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
 		sl::ResourceTag colorOutTag = sl::ResourceTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
@@ -174,7 +174,7 @@ void Streamline::Sharpen(Texture2D* a_sharpenTexture, float a_sharpness)
 	slEvaluateFeature(sl::kFeatureNIS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
 }
 
-void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl::DLSSPreset a_preset)
+void Streamline::Upscale(ID3D11Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl::DLSSPreset a_preset)
 {
 	UpdateConstants();
 
@@ -213,8 +213,8 @@ void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl
 	{
 		sl::Extent fullExtent{ 0, 0, (uint)state->screenSize.x, (uint)state->screenSize.y };
 
-		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_upscaleTexture->resource.get(), 0 };
-		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_upscaleTexture->resource.get(), 0 };
+		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_upscaleTexture, 0 };
+		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_upscaleTexture, 0 };
 		sl::Resource depth = { sl::ResourceType::eTex2d, depthTexture.texture, 0 };
 		sl::Resource mvec = { sl::ResourceType::eTex2d, motionVectorsTexture.texture, 0 };
 

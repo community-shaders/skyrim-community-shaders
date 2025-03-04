@@ -76,6 +76,7 @@ public:
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc;
 
 	WrappedResource* swapChainBufferWrapped;
+	WrappedResource* uiBuffersWrapped[2];
 
 	winrt::com_ptr<ID3D11Device5> d3d11Device;
 	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context;
@@ -110,4 +111,28 @@ public:
 	void FrameLimiter(bool a_useFrameGeneration);
 
 	double GetRefreshRate(HWND a_window);
+
+	void SetUIBuffer();
+
+	struct MenuManagerDrawInterfaceStartHook
+	{
+		static void thunk(int64_t a1);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	static void InstallHooks()
+	{
+		stl::write_thunk_call<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084).address() + REL::Relocate(0x7E, 0x83, 0x17F));
+		
+		// Always enable TAA jitters, even without TAA
+
+		static REL::Relocation<uintptr_t> updateJitterHook{ REL::RelocationID(75709, 77518) };          // D7CFB0, DB96E0
+		static REL::Relocation<uintptr_t> buildCameraStateDataHook{ REL::RelocationID(75711, 77520) };  // D7D130, DB9850
+
+		uint8_t patch1[] = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 };
+		uint8_t patch2[] = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 };
+
+		REL::safe_write<uint8_t>(updateJitterHook.address() + REL::Relocate(0xE, 0x11), patch1);
+		REL::safe_write<uint8_t>(buildCameraStateDataHook.address() + REL::Relocate(0x1D5, 0x1D5), patch2);
+	}
 };

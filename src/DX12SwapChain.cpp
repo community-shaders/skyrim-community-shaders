@@ -87,11 +87,15 @@ void DX12SwapChain::CreateInterop()
 	texDesc11.SampleDesc.Count = 1;
 	texDesc11.SampleDesc.Quality = 0;
 	texDesc11.Usage = D3D11_USAGE_DEFAULT;
-	texDesc11.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+	texDesc11.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET | D3D11_BIND_UNORDERED_ACCESS;
 	texDesc11.CPUAccessFlags = 0;
 	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
 	swapChainBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
+
+	for (int i = 0; i < 2; i++) {
+		uiBuffersWrapped[i] = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
+	}
 }
 
 DXGISwapChainProxy* DX12SwapChain::GetSwapChainProxy()
@@ -442,4 +446,25 @@ HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetFrameStatistics(_Out_ DXGI_FRAM
 HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetLastPresentCount(_Out_ UINT* pLastPresentCount)
 {
 	return swapChain->GetLastPresentCount(pLastPresentCount);
+}
+
+void DX12SwapChain::SetUIBuffer()
+{
+	Upscaling::GetSingleton()->Upscale();
+	Upscaling::GetSingleton()->CopyResourcesToSharedBuffers();
+
+	float clearColor[4]{ 0, 0, 0, 0 };
+	d3d11Context->ClearRenderTargetView(uiBuffersWrapped[frameIndex]->rtv, clearColor);
+
+	auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+
+	data.RTV = uiBuffersWrapped[frameIndex]->rtv;
+
+	d3d11Context->OMSetRenderTargets(1, &data.RTV, nullptr);
+}
+
+void DX12SwapChain::MenuManagerDrawInterfaceStartHook::thunk(int64_t a1)
+{
+	DX12SwapChain::GetSingleton()->SetUIBuffer();
+	func(a1);
 }

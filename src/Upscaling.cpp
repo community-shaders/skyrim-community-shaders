@@ -63,7 +63,7 @@ void Upscaling::DrawSettings()
 	// settings for scaleform/ini
 	if (auto iniSettingCollection = globals::game::iniPrefSettingCollection) {
 		if (auto setting = iniSettingCollection->GetSetting("bUseTAA:Display")) {
-			setting->data.b = bTAA;
+			setting->data.b = false;
 		}
 	}
 
@@ -247,32 +247,11 @@ void Upscaling::Upscale()
 
 	CheckResources();
 
-	Hooks::BSGraphics_SetDirtyStates::func(false);
-
 	auto state = globals::state;
 
 	auto context = globals::d3d::context;
 
-	ID3D11ShaderResourceView* inputTextureSRV;
-	context->PSGetShaderResources(0, 1, &inputTextureSRV);
-
-	inputTextureSRV->Release();
-
-	ID3D11RenderTargetView* outputTextureRTV;
-	ID3D11DepthStencilView* dsv;
-	context->OMGetRenderTargets(1, &outputTextureRTV, &dsv);
-	context->OMSetRenderTargets(0, nullptr, nullptr);
-
-	outputTextureRTV->Release();
-
-	if (dsv)
-		dsv->Release();
-
-	ID3D11Resource* inputTextureResource;
-	inputTextureSRV->GetResource(&inputTextureResource);
-
-	ID3D11Resource* outputTextureResource;
-	outputTextureRTV->GetResource(&outputTextureResource);
+	auto swapChain = DX12SwapChain::GetSingleton()->swapChainBufferWrapped->resource11;
 
 	auto dispatchCount = Util::GetScreenDispatchCount(false);
 
@@ -309,12 +288,10 @@ void Upscaling::Upscale()
 	{
 		state->BeginPerfEvent("Upscaling");
 
-		context->CopyResource(upscalingTexture->resource.get(), inputTextureResource);
-
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			globals::streamline->Upscale(upscalingTexture, alphaMaskTexture, settings.dlssPreset == 0 ? (sl::DLSSPreset)11u : sl::DLSSPreset::ePresetE);
+			globals::streamline->Upscale(swapChain, alphaMaskTexture, settings.dlssPreset == 0 ? (sl::DLSSPreset)11u : sl::DLSSPreset::ePresetE);
 		else if (upscaleMethod == UpscaleMethod::kFSR)
-			FidelityFX::GetSingleton()->Upscale(upscalingTexture, alphaMaskTexture, jitter, reset);
+			FidelityFX::GetSingleton()->Upscale(swapChain, alphaMaskTexture, jitter, reset);
 
 		reset = false;
 
@@ -324,49 +301,9 @@ void Upscaling::Upscale()
 	if (settings.sharpness > 0.0f) {
 		state->BeginPerfEvent("Sharpening");
 
-		globals::streamline->Sharpen(upscalingTexture, settings.sharpness);
+		globals::streamline->Sharpen(swapChain, settings.sharpness);
 
 		state->EndPerfEvent();
-	}
-
-	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
-}
-
-void Upscaling::SharpenTAA()
-{
-	if (settings.sharpness > 0.0f) {
-		std::lock_guard<std::mutex> lock(settingsMutex);  // Lock for the duration of this function
-
-		CheckResources();
-
-		auto state = globals::state;
-		auto context = globals::d3d::context;
-
-		ID3D11RenderTargetView* outputTextureRTV;
-		ID3D11DepthStencilView* dsv;
-		context->OMGetRenderTargets(1, &outputTextureRTV, &dsv);
-		context->OMSetRenderTargets(0, nullptr, nullptr);
-
-		outputTextureRTV->Release();
-
-		if (dsv)
-			dsv->Release();
-
-		ID3D11Resource* outputTextureResource;
-		outputTextureRTV->GetResource(&outputTextureResource);
-
-		auto dispatchCount = Util::GetScreenDispatchCount(false);
-
-		state->BeginPerfEvent("Sharpening");
-
-		context->CopyResource(upscalingTexture->resource.get(), outputTextureResource);
-		globals::streamline->Sharpen(upscalingTexture, settings.sharpness);
-
-		state->EndPerfEvent();
-
-		context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
-
-		globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
 	}
 }
 
@@ -385,14 +322,6 @@ void Upscaling::CreateUpscalingResources()
 
 	texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
-	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	srvDesc.Format = texDesc.Format;
-	uavDesc.Format = texDesc.Format;
-
-	upscalingTexture = new Texture2D(texDesc);
-	upscalingTexture->CreateSRV(srvDesc);
-	upscalingTexture->CreateUAV(uavDesc);
-
 	texDesc.Format = DXGI_FORMAT_R8_UNORM;
 	srvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
@@ -407,11 +336,6 @@ void Upscaling::CreateUpscalingResources()
 
 void Upscaling::DestroyUpscalingResources()
 {
-	upscalingTexture->srv = nullptr;
-	upscalingTexture->uav = nullptr;
-	upscalingTexture->resource = nullptr;
-	delete upscalingTexture;
-
 	alphaMaskTexture->srv = nullptr;
 	alphaMaskTexture->uav = nullptr;
 	alphaMaskTexture->resource = nullptr;

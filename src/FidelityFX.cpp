@@ -107,6 +107,14 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		logger::critical("[FidelityFX] Failed to configure frame generation!");
 	}
 
+	ffx::ConfigureDescFrameGenerationSwapChainRegisterUiResourceDX12 uiConfig{};
+	uiConfig.uiResource = ffxApiGetResourceDX12(swapChain->uiBuffersWrapped[swapChain->frameIndex]->resource.get());
+	uiConfig.flags = FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_USE_PREMUL_ALPHA;
+
+	if (ffx::Configure(swapChainContext, uiConfig) != ffx::ReturnCode::Ok) {
+		logger::critical("[FidelityFX] Failed to configure UI composition!");
+	}
+
 	if (a_useFrameGeneration) {
 		ffx::DispatchDescFrameGenerationPrepare dispatchParameters{};
 
@@ -188,7 +196,7 @@ void FidelityFX::DestroyFSRResources()
 		logger::critical("[FidelityFX] Failed to destroy FSR3 context!");
 }
 
-void FidelityFX::Upscale(Texture2D* a_color, Texture2D* a_alphaMask, float2 a_jitter, bool a_reset)
+void FidelityFX::Upscale(ID3D11Texture2D* a_color, Texture2D* a_alphaMask, float2 a_jitter, bool a_reset)
 {
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
@@ -200,7 +208,7 @@ void FidelityFX::Upscale(Texture2D* a_color, Texture2D* a_alphaMask, float2 a_ji
 		FfxFsr3DispatchUpscaleDescription dispatchParameters{};
 
 		dispatchParameters.commandList = ffxGetCommandListDX11(context);
-		dispatchParameters.color = ffxGetResource(a_color->resource.get(), L"FSR3_Input_OutputColor", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+		dispatchParameters.color = ffxGetResource(a_color, L"FSR3_Input_OutputColor", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 		dispatchParameters.depth = ffxGetResource(depthTexture.texture, L"FSR3_InputDepth", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 		dispatchParameters.motionVectors = ffxGetResource(motionVectorsTexture.texture, L"FSR3_InputMotionVectors", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 		dispatchParameters.exposure = ffxGetResource(nullptr, L"FSR3_InputExposure", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
