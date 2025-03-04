@@ -255,14 +255,14 @@ void Upscaling::Upscale()
 	auto outputTexture = swapChain->upscaledSwapChainBufferWrapped->resource11;
 
 	//context->CopySubresourceRegion(
-	//	outputTexture,       
-	//	0,                     
-	//	0,                   
-	//	0,                   
-	//	0,                        
-	//	inputTexture,      
-	//	0,                      
-	//	nullptr                  
+	//	outputTexture,
+	//	0,
+	//	0,
+	//	0,
+	//	0,
+	//	inputTexture,
+	//	0,
+	//	nullptr
 	//);
 
 	auto dispatchCount = Util::GetScreenDispatchCount(false);

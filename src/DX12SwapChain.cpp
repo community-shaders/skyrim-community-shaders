@@ -54,11 +54,11 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 
 	swapChain = swapChainCOM.detach();
 
-	 SetWindowPos(
+	SetWindowPos(
 		a_swapChainDesc.OutputWindow,  // Window handle
-		NULL,       // Keep current Z-order
-		0,          // X position (ignored with SWP_NOMOVE)
-		0,          // Y position (ignored with SWP_NOMOVE)
+		NULL,                          // Keep current Z-order
+		0,                             // X position (ignored with SWP_NOMOVE)
+		0,                             // Y position (ignored with SWP_NOMOVE)
 		(uint)outputSize.x,            // New width
 		(uint)outputSize.y,            // New height
 		SWP_NOZORDER | SWP_NOMOVE | SWP_SHOWWINDOW);
@@ -67,7 +67,7 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 
 	//renderSize = outputSize * resolutionScale;
 
-//	PostInitD3D();
+	//	PostInitD3D();
 
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
 

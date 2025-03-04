@@ -4,6 +4,7 @@
 
 #include <pystring/pystring.h>
 
+#include "DX12SwapChain.h"
 #include "Deferred.h"
 #include "Features/CloudShadows.h"
 #include "Features/TerrainBlending.h"
@@ -12,7 +13,6 @@
 #include "Streamline.h"
 #include "TruePBR.h"
 #include "Upscaling.h"
-#include "DX12SwapChain.h"
 
 void State::Draw()
 {
