@@ -12,6 +12,7 @@
 #include "Streamline.h"
 #include "TruePBR.h"
 #include "Upscaling.h"
+#include "DX12SwapChain.h"
 
 void State::Draw()
 {
@@ -663,9 +664,7 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 		data.BufferDim = { screenSize.x, screenSize.y, 1.0f / screenSize.x, 1.0f / screenSize.y };
 		data.Timer = timer;
 
-		auto bTAA = !globals::game::isVR ? imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled :
-		                                   imageSpaceManager->GetVRRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled;
-
+		bool bTAA = true;
 		data.FrameCount = frameCount * (bTAA || globals::state->upscalerLoaded);
 		data.FrameCountAlwaysActive = frameCount;
 
@@ -691,9 +690,9 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 		else
 			data.InMapMenu = true;
 
-		if (!globals::game::isVR && bTAA && (a_inWorld || a_prepass)) {
-			auto renderSize = Util::ConvertToDynamic(screenSize);
-			data.MipBias = std::log2f(renderSize.x / screenSize.x) - 1.0f;
+		if (!globals::game::isVR && (a_inWorld || a_prepass)) {
+			auto swapChain = globals::dx12SwapChain;
+			data.MipBias = std::log2f(swapChain->renderSize.x / swapChain->outputSize.x) - 1.0f;
 		} else {
 			data.MipBias = 0;
 		}

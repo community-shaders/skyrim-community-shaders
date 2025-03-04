@@ -33,8 +33,8 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	DX::ThrowIfFailed(adapter->GetParent(IID_PPV_ARGS(&dxgiFactory)));
 
 	swapChainDesc = {};
-	swapChainDesc.Width = a_swapChainDesc.BufferDesc.Width;
-	swapChainDesc.Height = a_swapChainDesc.BufferDesc.Height;
+	swapChainDesc.Width = (uint)outputSize.x;
+	swapChainDesc.Height = (uint)outputSize.y;
 	swapChainDesc.Format = a_swapChainDesc.BufferDesc.Format;
 	swapChainDesc.SampleDesc.Count = 1;
 	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -54,11 +54,20 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 
 	swapChain = swapChainCOM.detach();
 
-	outputSize = { float(swapChainDesc.Width), float(swapChainDesc.Height) };
+	 SetWindowPos(
+		a_swapChainDesc.OutputWindow,  // Window handle
+		NULL,       // Keep current Z-order
+		0,          // X position (ignored with SWP_NOMOVE)
+		0,          // Y position (ignored with SWP_NOMOVE)
+		(uint)outputSize.x,            // New width
+		(uint)outputSize.y,            // New height
+		SWP_NOZORDER | SWP_NOMOVE | SWP_SHOWWINDOW);
 
-	renderSize = outputSize * resolutionScale;
+	//outputSize = { float(swapChainDesc.Width), float(swapChainDesc.Height) };
 
-	PostInitD3D();
+	//renderSize = outputSize * resolutionScale;
+
+//	PostInitD3D();
 
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
 
@@ -507,6 +516,10 @@ void DX12SwapChain::PostInitD3D()
 	static uint32_t* g_height = (uint32_t*)REL::RelocationID(525003, 411484).address();   // 302C8B8, 30C6DB8
 	static uint32_t* g_xRight = (uint32_t*)REL::RelocationID(525004, 411485).address();   // 302C8BC, 30C6DBC
 	static uint32_t* g_yBottom = (uint32_t*)REL::RelocationID(525005, 411486).address();  // 302C8C0, 30C6DC0
+
+	outputSize = { (float)*g_width, (float)*g_height };
+
+	renderSize = outputSize * resolutionScale;
 
 	*g_width = (uint32_t)renderSize.x;
 	*g_height = (uint32_t)renderSize.y;

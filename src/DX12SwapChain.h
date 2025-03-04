@@ -130,9 +130,55 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	struct SetupWindowHook
+	{
+		static void thunk(int64_t a1)
+		{
+			GetSingleton()->PostInitD3D();
+			func(a1);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct GetWindowRectHook
+	{
+		static bool thunk(HWND hWnd, LPRECT lpRect)
+		{
+			auto ret = func(hWnd, lpRect);
+
+			auto swapChain = globals::dx12SwapChain;
+
+			lpRect->right = (LONG)swapChain->renderSize.x;
+			lpRect->bottom = (LONG)swapChain->renderSize.y;
+
+			return ret;
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct GetClientRectHook
+	{
+		static bool thunk(HWND hWnd, LPRECT lpRect)
+		{
+			auto ret = func(hWnd, lpRect);
+
+			auto swapChain = globals::dx12SwapChain;
+
+			lpRect->right = (LONG)swapChain->renderSize.x;
+			lpRect->bottom = (LONG)swapChain->renderSize.y;
+
+			return ret;
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	static void InstallHooks()
 	{
 		stl::write_thunk_call<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084).address() + REL::Relocate(0x7E, 0x83, 0x17F));
+		stl::write_thunk_call<SetupWindowHook>(REL::RelocationID(75445, 75445).address() + REL::Relocate(0xEC, 0xEC, 0xEC));
+
+		*(uintptr_t*)&GetWindowRectHook::func = Detours::X64::DetourFunction((uintptr_t) & ::GetWindowRect, (uintptr_t)&GetWindowRectHook::thunk);
+		*(uintptr_t*)&GetClientRectHook::func = Detours::X64::DetourFunction((uintptr_t) & ::GetClientRect, (uintptr_t)&GetClientRectHook::thunk);
 
 		// Always enable TAA jitters, even without TAA
 
