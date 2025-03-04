@@ -123,7 +123,7 @@ public:
 	static void InstallHooks()
 	{
 		stl::write_thunk_call<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084).address() + REL::Relocate(0x7E, 0x83, 0x17F));
-		
+
 		// Always enable TAA jitters, even without TAA
 
 		static REL::Relocation<uintptr_t> updateJitterHook{ REL::RelocationID(75709, 77518) };          // D7CFB0, DB96E0
