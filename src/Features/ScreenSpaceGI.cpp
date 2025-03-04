@@ -76,7 +76,7 @@ void ScreenSpaceGI::DrawSettings()
 		if (ImGui::Button("AO only", { -1, 0 })) {
 			settings.NumSlices = 1;
 			settings.NumSteps = 6;
-			settings.EnableBlur = false;
+			settings.EnableBlur = true;
 			settings.EnableGI = false;
 			recompileFlag = true;
 		}
@@ -88,7 +88,7 @@ void ScreenSpaceGI::DrawSettings()
 			settings.NumSlices = 10;
 			settings.NumSteps = 12;
 			settings.ResolutionMode = 2;
-			settings.EnableBlur = false;
+			settings.EnableBlur = true;
 			settings.EnableGI = true;
 			recompileFlag = true;
 		}
@@ -100,7 +100,7 @@ void ScreenSpaceGI::DrawSettings()
 			settings.NumSlices = 2;
 			settings.NumSteps = 8;
 			settings.ResolutionMode = 1;
-			settings.EnableBlur = false;
+			settings.EnableBlur = true;
 			settings.EnableGI = true;
 			recompileFlag = true;
 		}
@@ -112,7 +112,7 @@ void ScreenSpaceGI::DrawSettings()
 			settings.NumSlices = 4;
 			settings.NumSteps = 8;
 			settings.ResolutionMode = 0;
-			settings.EnableBlur = false;
+			settings.EnableBlur = true;
 			settings.EnableGI = true;
 			recompileFlag = true;
 		}
@@ -124,7 +124,7 @@ void ScreenSpaceGI::DrawSettings()
 			settings.NumSlices = 8;
 			settings.NumSteps = 10;
 			settings.ResolutionMode = 0;
-			settings.EnableBlur = false;
+			settings.EnableBlur = true;
 			settings.EnableGI = true;
 			recompileFlag = true;
 		}

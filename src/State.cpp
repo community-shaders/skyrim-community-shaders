@@ -47,6 +47,9 @@ void State::Draw()
 		if (deferred->inDecals)
 			currentExtraDescriptor |= (uint32_t)ExtraShaderDescriptors::IsDecal;
 
+		if (isTree)
+			currentExtraDescriptor |= (uint32_t)ExtraShaderDescriptors::IsTree;
+
 		if (forceUpdatePermutationBuffer || currentPixelDescriptor != lastPixelDescriptor || currentExtraDescriptor != lastExtraDescriptor) {
 			PermutationCB data{};
 			data.VertexShaderDescriptor = currentVertexDescriptor;
@@ -119,7 +122,6 @@ void State::Setup()
 		if (feature->loaded)
 			feature->SetupResources();
 	globals::deferred->SetupResources();
-	globals::streamline->SetupResources();
 	if (!upscalerLoaded)
 		globals::upscaling->CreateUpscalingResources();
 	if (initialized)
@@ -283,20 +285,6 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 			logger::warn("Missing settings for Upscaling, using default.");
 		}
 
-		auto streamline = globals::streamline;
-		auto& streamlineJson = settings[streamline->GetShortName()];
-		if (streamlineJson.is_object()) {
-			logger::info("Loading Streamline settings");
-			try {
-				streamline->LoadSettings(streamlineJson);
-			} catch (...) {
-				logger::warn("Invalid settings for Streamline, using default.");
-				streamline->RestoreDefaultSettings();
-			}
-		} else {
-			logger::warn("Missing settings for Streamline, using default.");
-		}
-
 		for (auto* feature : Feature::GetFeatureList()) {
 			try {
 				const std::string featureName = feature->GetShortName();
@@ -376,10 +364,6 @@ void State::Save(ConfigMode a_configMode)
 	auto upscaling = globals::upscaling;
 	auto& upscalingJson = settings[upscaling->GetShortName()];
 	upscaling->SaveSettings(upscalingJson);
-
-	auto streamline = globals::streamline;
-	auto& streamlineJson = settings[streamline->GetShortName()];
-	streamline->SaveSettings(streamlineJson);
 
 	json originalShaders;
 	for (int classIndex = 0; classIndex < RE::BSShader::Type::Total - 1; ++classIndex) {

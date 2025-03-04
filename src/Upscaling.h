@@ -42,10 +42,17 @@ public:
 		uint upscaleMethodNoDLSS = (uint)UpscaleMethod::kTAA;
 		uint upscaleMethodNoFSR = (uint)UpscaleMethod::kTAA;
 		float sharpness = 0.5f;
-		uint dlssPreset = (uint)sl::DLSSPreset::ePresetE;
+		uint dlssPreset = 1;
+		uint vsyncMode = 1;
+		uint frameLimitMode = 1;
+		uint frameGenerationMode = 1;
+		uint frameGenerationForceEnable = 0;
 	};
 
 	Settings settings;
+
+	bool isWindowed = false;
+	bool lowRefreshRate = false;
 
 	void DrawSettings();
 	void SaveSettings(json& o_json);
@@ -56,13 +63,8 @@ public:
 
 	void CheckResources();
 
-	ID3D11ComputeShader* rcasCS;
-	ID3D11ComputeShader* GetRCASCS();
-
 	ID3D11ComputeShader* encodeTexturesCS;
-	ID3D11ComputeShader* encodeTexturesDLSSCS;
 	ID3D11ComputeShader* GetEncodeTexturesCS();
-	ID3D11ComputeShader* GetEncodeTexturesDLSSCS();
 
 	void UpdateJitter();
 	void Upscale();
@@ -73,6 +75,19 @@ public:
 
 	void CreateUpscalingResources();
 	void DestroyUpscalingResources();
+
+	Texture2D* colorBufferShared;
+	Texture2D* depthBufferShared;
+	Texture2D* motionVectorBufferShared;
+
+	winrt::com_ptr<ID3D12Resource> colorBufferShared12;
+	winrt::com_ptr<ID3D12Resource> depthBufferShared12;
+	winrt::com_ptr<ID3D12Resource> motionVectorBufferShared12;
+
+	ID3D11ComputeShader* copyDepthToSharedBufferCS;
+
+	void CreateFrameGenerationResources();
+	void CopyResourcesToSharedBuffers();
 
 	struct Main_UpdateJitter
 	{
@@ -125,5 +140,34 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	static void InstallHooks();
+	struct MenuManagerDrawInterfaceStartHook
+	{
+		static void thunk(int64_t a1)
+		{
+			GetSingleton()->CopyResourcesToSharedBuffers();
+			func(a1);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	static void InstallHooks()
+	{
+		if (!State::GetSingleton()->upscalerLoaded) {
+			bool isGOG = !GetModuleHandle(L"steam_api64.dll");
+
+			stl::write_thunk_call<Main_UpdateJitter>(REL::RelocationID(75460, 77245).address() + REL::Relocate(0xE5, isGOG ? 0x133 : 0xE2, 0x104));
+			stl::write_thunk_call<TAA_BeginTechnique>(REL::RelocationID(100540, 107270).address() + REL::Relocate(0x3E9, 0x3EA, 0x448));
+			stl::write_thunk_call<TAA_EndTechnique>(REL::RelocationID(100540, 107270).address() + REL::Relocate(0x3F3, 0x3F4, 0x452));
+			stl::write_thunk_call<BSImageSpacerShader_RenderPassImmediately>(REL::RelocationID(100951, 107733).address() + REL::Relocate(0x82, 0x78, 0x7E));
+
+			stl::detour_thunk<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
+
+			logger::info("[Upscaling] Installed hooks");
+
+			RE::UI::GetSingleton()->GetEventSource<RE::MenuOpenCloseEvent>()->AddEventSink(Upscaling::GetSingleton());
+			logger::info("[Upscaling] Registered for MenuOpenCloseEvent");
+		} else {
+			logger::info("[Upscaling] Not installing hooks due to Skyrim Upscaler");
+		}
+	}
 };

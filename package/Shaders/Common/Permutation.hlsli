@@ -61,6 +61,7 @@ namespace Permutation
 		static const uint IsBeastRace = (1 << 2);
 		static const uint EffectShadows = (1 << 3);
 		static const uint IsDecal = (1 << 4);
+		static const uint IsTree = (1 << 5);
 	}
 
 	cbuffer PerShader : register(b4)

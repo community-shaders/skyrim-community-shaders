@@ -25,6 +25,7 @@ struct TruePBR;
 class Menu;
 class Streamline;
 class Upscaling;
+class DX12SwapChain;
 
 namespace SIE
 {
@@ -79,6 +80,7 @@ namespace globals
 		extern RE::GameSettingCollection* gameSettingCollection;
 		extern float* cameraNear;
 		extern float* cameraFar;
+		extern float* deltaTime;
 		extern RE::BSUtilityShader* utilityShader;
 		extern RE::Sky* sky;
 		extern RE::UI* ui;
@@ -99,6 +101,7 @@ namespace globals
 	extern SIE::ShaderCache* shaderCache;
 	extern Streamline* streamline;
 	extern Upscaling* upscaling;
+	extern DX12SwapChain* dx12SwapChain;
 
 	void ReInit();
 	void OnDataLoaded();

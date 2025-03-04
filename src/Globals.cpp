@@ -2,6 +2,7 @@
 
 #include "Utils/Game.h"
 
+#include "DX12SwapChain.h"
 #include "Deferred.h"
 #include "Menu.h"
 #include "ShaderCache.h"
@@ -78,6 +79,7 @@ namespace globals
 		RE::GameSettingCollection* gameSettingCollection = nullptr;
 		float* cameraNear = nullptr;
 		float* cameraFar = nullptr;
+		float* deltaTime = nullptr;
 		RE::BSUtilityShader* utilityShader = nullptr;
 		RE::Sky* sky = nullptr;
 		RE::UI* ui = nullptr;
@@ -98,6 +100,7 @@ namespace globals
 	SIE::ShaderCache* shaderCache = nullptr;
 	Streamline* streamline = nullptr;
 	Upscaling* upscaling = nullptr;
+	DX12SwapChain* dx12SwapChain = nullptr;
 
 	void ReInit()
 	{
@@ -115,6 +118,7 @@ namespace globals
 			gameSettingCollection = RE::GameSettingCollection::GetSingleton();
 			cameraNear = (float*)(REL::RelocationID(517032, 403540).address() + 0x40);
 			cameraFar = (float*)(REL::RelocationID(517032, 403540).address() + 0x44);
+			deltaTime = (float*)REL::RelocationID(523660, 410199).address();
 
 			currentPixelShader = GET_INSTANCE_MEMBER_PTR(currentPixelShader, shadowState);
 			currentVertexShader = GET_INSTANCE_MEMBER_PTR(currentVertexShader, shadowState);
@@ -134,6 +138,7 @@ namespace globals
 		truePBR = TruePBR::GetSingleton();
 		streamline = Streamline::GetSingleton();
 		upscaling = Upscaling::GetSingleton();
+		dx12SwapChain = DX12SwapChain::GetSingleton();
 
 		features::cloudShadows = CloudShadows::GetSingleton();
 		features::dynamicCubemaps = DynamicCubemaps::GetSingleton();

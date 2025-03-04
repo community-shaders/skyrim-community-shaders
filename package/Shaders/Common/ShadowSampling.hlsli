@@ -190,7 +190,7 @@ namespace ShadowSampling
 			sincos(Math::TAU * noise, rotation.y, rotation.x);
 			float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 			float shadow = Get2DFilteredShadow(noise, rotationMatrix, worldPosition, eyeIndex);
-			return shadow;
+			return worldShadow * shadow;
 		}
 
 		return worldShadow;

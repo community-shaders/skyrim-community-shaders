@@ -77,6 +77,7 @@ target_link_libraries(
 	efsw::efsw
 	Tracy::TracyClient
 	Streamline
+	d3d12.lib
 )
 
 # https://gitlab.kitware.com/cmake/cmake/-/issues/24922#note_1371990
