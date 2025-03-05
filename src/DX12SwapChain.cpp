@@ -196,7 +196,6 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT)
 	return S_OK;
 }
 
-
 HRESULT DX12SwapChain::GetDevice(REFIID uuid, void** ppDevice)
 {
 	if (uuid == __uuidof(ID3D11Device) || uuid == __uuidof(ID3D11Device1) || uuid == __uuidof(ID3D11Device2) || uuid == __uuidof(ID3D11Device3) || uuid == __uuidof(ID3D11Device4) || uuid == __uuidof(ID3D11Device5)) {
