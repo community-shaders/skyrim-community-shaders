@@ -1,0 +1,1179 @@
+Next Generation Post Processing in
+Call of Duty Advanced Warfare
+Jorge Jimenez
+Graphics R&D Technical Director - Activision Blizzard
+NOTICE FOR OFFLINE READING
+Hidden slides in this presentation
+Slide show mode won’t show them
+Don’t miss the speaker notes, most slides have them
+BACKGROUND
+I’ve been working inside of Sledgehammer Games for a year 
+I’m presenting this work on their behalf
+I’d like to highlight the tremendous work done by Sledgehammer Games and all the credit they deserve
+Regarding the game technology, this presentation is just the tip of the iceberg
+BACKGROUND
+My Sledgehammer Games co-presenter Danny Chan unfortunately could not join because of game finaling needs
+All images/footage are from development builds and not from the completed game
+I feel really lucky to be here presenting this work, and wish you will enjoy the presentation as much as we did developing the technology we will explain
+
+INTRODUCTION
+Call of Duty: Advanced Warfare art direction aims for photorealism
+Post effects play a huge role in photorealism
+They received extensive attention for this game
+Post effects quality and image stability is probably one of the most striking differences between games and films
+
+
+INTRODUCTION
+Improve image quality: better sampling approaches
+Improve accuracy: better approximate ground truth
+Do not sacrifice performance for quality: 60 fps constraint
+Pay attention to the details
+
+
+
+POST EFFECT PIPELINE
+Motion Blur
+Bokeh Depth of Field
+Subsurface Scattering
+Bloom/Veil
+
+Bonus: Shadow Sampling
+MOTION BLUR
+GROUND TRUTH
+POST FX FILTERING
+Our approach is based on post FX filtering and taking as input
+Color buffer
+Depth buffer
+Velocity buffer
+
+No screen-space post DOF can be completely accurate
+Missing information
+In MB background is revealed as objects move
+In DOF background shows as we accumulate views from different view points
+
+
+STOCHASTIC RASTERIZATION
+STOCHASTIC RASTERIZATION
+STOCHASTIC RASTERIZATION
+STOCHASTIC RASTERIZATION
+STOCHASTIC RASTERIZATION
+STOCHASTIC RASTERIZATION
+STOCHASTIC RASTERIZATION
+POST FX CHALLENGE
+POST FX CHALLENGE
+OUR APPROACH IN A NUTSHELL
+BASIC SCATTER IDEA
+Naturally implemented with scatter techniques
+BASIC SCATTER IDEA
+Naturally implemented with scatter techniques
+SCATTER-AS-YOU-GATHER
+Scatter as you gather allows for a filter-based approach
+SCATTER-AS-YOU-GATHER PROBLEMS
+Main scatter-as-you-gather problems:
+How to determine the sampling area
+Detecting which samples actually contribute
+How to recover the background
+
+SAMPLING AREA
+Simple approaches use current pixel velocity
+SAMPLING AREA
+But this fails in some cases
+SCATTER-AS-YOU-GATHER PROBLEMS
+Main scatter-as-you-gather problems:
+How to determine the sampling area
+Detecting which samples actually contribute
+How to recover the background
+SAMPLE CONTRIBUTION
+SAMPLE CONTRIBUTION
+SAMPLE CONTRIBUTION
+SAMPLE CONTRIBUTION
+SCATTER-AS-YOU-GATHER PROBLEMS
+Main scatter-as-you-gather problems:
+How to determine the sampling area
+Detecting which samples actually contribute
+How to recover the background
+BACKGROUND RECOVERY
+BACKGROUND RECOVERY
+BACKGROUND RECOVERY
+BACKGROUND RECOVERY
+BACKGROUND RECOVERY
+BACKGROUND RECOVERY
+The blur should be centered in the object silhouette
+This means the object will become transparent on the silhouette
+We do not know the background
+Need to reconstruct it
+PREVIOUS WORK
+Our motion blur technique based on
+[McGuire2012] [McGuire2013]
+And its code vectorization
+[Sousa2013]
+
+Our Improvements
+Accuracy
+Using more accurate sample contributions and background recovery
+Image quality
+Using better sampling patterns to mask undersampling – See online slides
+Optimization
+Running simplified versions of the shader were possible
+
+SCATTER-AS-YOU-GATHER PROBLEMS
+Main scatter-as-you-gather problems:
+How to determine the sampling area
+Detecting which samples actually contribute
+How to recover the background
+
+SAMPLING AREA
+First Pass [ Tile Max ]:
+Calculate maximum velocities in tiles (20x20 pixels)
+SAMPLING AREA
+First Pass [ Tile Max ]:
+Calculate maximum velocities in tiles (20x20 pixels)
+Second Pass [ Tile Neighborhood ]:
+Calculate maximum velocity in a 3x3 kernel for each tile
+SAMPLING AREA
+First Pass [ Tile Max ]:
+Calculate maximum velocities in tiles (20x20 pixels)
+Second Pass [ Tile Neighborhood ]:
+Calculate maximum velocity in a 3x3 kernel for each tile
+Third Pass [ Motion Blur ]:
+Apply a fullres variable-width blur in the tile velocity direction
+See [McGuire2012] for more details
+SAMPLING AREA
+SAMPLING AREA
+SAMPLING AREA
+SCATTER-AS-YOU-GATHER PROBLEMS
+Main scatter-as-you-gather problems:
+How to determine the sampling area
+Detecting which samples actually contribute
+How to recover the background
+
+SAMPLE CONTRIBUTION - BACKGROUND RECOVERY
+[McGuire2012] [McGuire2013] approximates scatter-as-you-gather as following:
+Classify samples as background or foreground with respect to current pixel
+Calculate a weight that depends on three conditions
+Foreground sample with a velocity bigger or equal than its offset
+Background sample within the bounds of current pixel velocity (allows to approximate the background on silhouettes)
+Sample velocity similar to current pixel velocity (sample and pixel contributing to each other)
+IMPROVED SAMPLE CONTRIBUTION
+The first improvement that we have introduced is to more accurately calculate the contribution from each sample
+IMPROVED SAMPLE CONTRIBUTION
+Each sample receives a weight depending on its contribution
+The total contribution is tracked
+The average is then renormalized
+
+
+
+IMPROVED SAMPLE CONTRIBUTION
+Consider this moving object
+
+IMPROVED SAMPLE CONTRIBUTION
+It creates two blurred areas
+Outer blur
+Inner blur
+Inner blur reveals a background that we do not have
+IMPROVED SAMPLE CONTRIBUTION
+Outer blur: sample contributes if is foreground and it spreads over current pixel
+The only real case that happens in real world
+We can calculate this accurately
+
+IMPROVED SAMPLE CONTRIBUTION
+Inner blur: sample contributes if is background but current pixel velocity is bigger than the offset to the sample
+Allows to reconstruct the background by blurring background pixels [McGuire2012]
+
+
+IMPROVED SAMPLE CONTRIBUTION
+There is a discontinuity between the outer and inner blurs
+IMPROVED SAMPLE CONTRIBUTION
+Consider this moving object
+IMPROVED SAMPLE CONTRIBUTION
+Consider this moving object
+IMPROVED SAMPLE CONTRIBUTION
+For the first outer blur pixel there is an abrupt change in the weights
+IMPROVED SAMPLE CONTRIBUTION
+For the first outer blur pixel there is an abrupt change in the weights
+We want renormalize them in such a way that the background receives a 4 to compensate for the samples that are failing (with zeroes)
+We assign to current pixel:
+7-3=4
+
+IMPROVED SAMPLE CONTRIBUTION
+We assign to current pixel:
+7-2=5
+IMPROVED SAMPLE CONTRIBUTION
+We assign to current pixel:
+7-1=6
+IMPROVED SAMPLE CONTRIBUTION
+From a logic stand point, for each pixel we have:
+Background
+Foreground
+Alpha (Gradient Value)
+
+The actual implementation is a bit different but the same in spirit
+Accumulate background and foreground together as in [McGuire2012] [McGuire2013]
+Correct the gradient in the end of the shader
+IMPROVED SAMPLE CONTRIBUTION
+Depth compare function returns two weights (background and foreground) that sum one
+Key for proper gradients
+
+float2 DepthCmp(
+	float centerDepth,
+	float sampleDepth,
+	float depthScale )
+{
+	return saturate( 0.5 + float2( depthScale, -depthScale ) *
+		( sampleDepth - centerDepth ) );
+}
+
+IMPROVED SAMPLE CONTRIBUTION
+Used together as follows to get the weight for a sample:
+
+float SampleWeight(
+	float centerDepth, float sampleDepth, float offsetLen, float centerSpreadLen,
+	float sampleSpreadLen, float pixelToSampleUnitsScale, float depthScale )
+{
+	float2 depthCmp = DepthCmp( centerDepth, sampleDepth, depthScale );
+	float2 spreadCmp = SpreadCmp( offsetLen, float2( centerSpreadLen, sampleSpreadLen ), pixelToSampleUnitsScale );
+	return dot( depthCmp, spreadCmp );
+}
+IMPROVED SAMPLE CONTRIBUTION
+In the end of the loop we can then tell the correct center tap weight
+Center tap considered the background
+Accumulated weights (sum.w) is the foreground alpha
+
+
+
+sum.rgbw *= 1.0 / SAMPLE_COUNT;
+color.rgb = sum.rgb + ( 1.0 - sum.w ) * centerColor.rgb;
+
+IMPROVED SAMPLE CONTRIBUTION
+Clarification
+For performance, we only consider a single blur direction for motion blur
+Because of that, we can accumulate foreground and background together into “sum.rgbw” (saves VGPRs)
+Blending equation in this case is actually a “correction” equation (foreground and background accumulate together)
+We can easily illustrate this by displaying each component
+
+IMPROVED SAMPLE CONTRIBUTION
+Works great for constant or low-frequency backgrounds, but creates artifacts on detailed ones
+MIRRORED BACKGROUND RECONSTRUCTION
+The issue is that the background comes from two different sources
+In the outer blur, the background is readily available
+The center pixel, which is not blurred
+In the inner blur, the real background is not available
+It is reconstructed and approximated by blurring nearby background pixels
+MIRRORED BACKGROUND RECONSTRUCTION
+The solution is to blur the background even on areas where we know the exact non-blurred background
+We mirror the blurriness along the silhouette edge
+MIRRORED BACKGROUND RECONSTRUCTION
+// Check samples in pairs (mirrored left and right):
+float weight1 = SampleWeight(
+	centerDepth, sampleDepth1, offsetLen, centerVelocityLen, sampleVelocityLen1,
+	pixelToSampleUnitsScale, MB_SOFTZ_INCHES ); // To the left
+float weight2 = SampleWeight(
+	centerDepth, sampleDepth2, offsetLen, centerVelocityLen, sampleVelocityLen2,
+	pixelToSampleUnitsScale, MB_SOFTZ_INCHES ); // To the right
+
+#if MB_MIRROR_FILTER
+bool2 mirror = bool2( rawVelocityDepth1.b > rawVelocityDepth2.b, sampleVelocityLen2 > sampleVelocityLen1 );
+weight1 = all( mirror ) ? weight2 : weight1;
+weight2 = any( mirror ) ? weight2 : weight1;
+#endif // #if MB_MIRROR_FILTER
+
+sum += weight1 * float4( tex2D( colorMapSampler, float4( sampleTexCoords.xy, 0.0, 1.0 ) ).rgb, 1.0 );
+sum += weight2 * float4( tex2D( colorMapSampler, float4( sampleTexCoords.zw, 0.0, 1.0 ) ).rgb, 1.0 );
+Mirrored BACKGROUND RECONSTRUCTION
+Mirrored BACKGROUND RECONSTRUCTION
+MIRRORED BACKGROUND RECONSTRUCTION
+Mirrored BACKGROUND RECONSTRUCTION
+MIRROR BACKGROUND RECONSTRUCTION
+FOCUS - ACCURACY, IQ, PERFORMANCE
+Accuracy
+Using more accurate sample contributions and background recovery
+Image quality
+Using better sampling patterns to mask undersampling
+Optimization
+Running simplified versions of the shader were possible
+
+SAMPLING
+We tried several approaches, including:
+Uniform
+White Noise
+Dither
+UNIFORM SAMPLING
+Snippet:
+
+return 0.0;
+
+RANDOM SAMPLING
+Snippet:
+float scale = 0.5;
+float magic = 3571.0;
+float2 random =
+	( 1.0 / 4320.0 ) * position +
+	float2( 0.25, 0.0 );
+random.x = frac( dot( random * random, magic ) );
+random.x = frac( dot( random * random, magic ) );
+return -scale + 2.0 * scale * random.x;
+
+Played with transcendental functions, to find fast random noise generation
+Simple square works pretty well
+
+Thanks to Padraic Hennessy for suggesting an offset to avoid pole/mirror artifacts
+
+DITHER SAMPLING
+Snippet:
+float scale = 0.25;
+float2 positionMod = float2( uint2( sv_position ) & 1 );
+return
+	( -scale + 2.0 * scale * positionMod.x ) *
+	( -1.0 + 2.0 * positionMod.y );
+
+We also tried with different dithered schemes
+Found a simple checkerboard to work best
+Versus more complex approaches like a 4-valued ordered dither
+
+Thanks to Paul Edelstein for the ideas/code
+
+NON-UNIFORM SAMPLING ISSUES
+For the sake of simplicity, we shown sampling positions as:
+
+
+Non-uniform sampling will show sharp lines in blur center
+This pattern is preferred:
+
+
+
+Center tap (background) is effectively excluded from the blur
+NON-UNIFORM SAMPLING ISSUES
+Now there are samples that are 0.5 samples away from the center:
+
+
+
+
+Previous presented SpreadCmp assumes the smallest sample offset is 1.0
+Needs tweaking to avoid bleeding
+
+float2 SpreadCmp( float offsetLen, float2 spreadLen, float pixelToSampleUnitsScale )
+{
+	return saturate( pixelToSampleUnitsScale * spreadLen - max( offsetLen - 1.0, 0.0 ) );
+}
+SAMPLING TAKE AWAY
+From our experience with noise in our post FX pipeline
+Random noise better if you are heavily undersampling
+Random noise will mask better the undersampling artifacts given that it produces more different values
+Dither works better in other cases
+To fill smaller sampling gaps like in motion blur, for example
+We think of it as a “finisher”
+FOCUS - ACCURACY, IQ, PERFORMANCE
+Accuracy
+Using more accurate sample contributions and background recovery
+Image quality
+Using better sampling patterns to mask undersampling
+Optimization
+Running simplified versions of the shader were possible
+
+OPTIMIZATION
+Calculate min/max for each tile (versus only the max)
+Branch to a simpler version if [max-min] is small
+The algorithm converges to a regular color average if [max-min] equals zero
+IMPLEMENTATION TIPS
+Using a separable approach to calculate the maximum velocity (faster)
+Horizontal pass from [width x height] to a [20 x height] buffer
+Vertical pass from [20 x height] to [20 x 20]
+Similar to [Sousa2013], we pack velocities an depth together
+In our case to a R11G11B10 buffer
+Reduces taps per sample from 3 (color, velocity, depth) to 2 (color, velocity/depth)
+Similar to [McGuire2013], we dither the texture coordinates used to access the tiles
+Helps to reduce tiling artifacts
+Using point sampling to avoid bleeding
+Really important to look at the assembly
+DEPTH OF FIELD
+OVERVIEW
+Many ideas from motion blur apply to DOF
+Scatter as you gather ideas useful for both
+The presented motion blur scatter-as-you-gather approach only covers a single layer
+Single blurred direction over unblurred background
+Many can potentially happen and overlap
+Not much of an issue in our case for motion blur
+In DOF they are easier to see
+Moving objects hide issues
+So we developed a 2-layer approach
+Potentially with two different circles of confusion
+OVERVIEW
+Wanted to have something that looks good at all times
+Using real camera controls (f-stop, focus distance…) makes harder to fix DOF issues in authoring
+DOF triggered by the player, outside of authoring control
+
+OVERVIEW
+Experimented with separable hexagonal [White2011] and octagonal [McIntosh2012] shapes
+Great filter quality, but hard to make them to work with scatter-as-you-gather (because of their separable nature)
+Preferred circular Bokeh because that is the aperture found in our eyes
+Generally the preferred shape among artists
+49-tap 2d filter ran in halfres
+Heavily inspired by:
+[Sousa2013] for filtering
+[Lee2008] for sorting
+TYPICAL DOF ISSUES
+Scatter-As-You-Gather Issues
+As in motion blur, neighborhood pixels can bleed into current pixel, similar solution
+Calculate maximum COC in tiles [Tile Max]
+Calculate maximum COC in the tile neighborhood [Tile Neighborhood]
+Main 2D Filter radius scaled with it
+Calculating each sample contribution
+Sorting samples and blending them
+Background reconstruction – See online slides
+Filter Quality Issues
+Undersampling
+How to use bilinear filtering? – See online slides
+Performance Issues
+Lots of samples
+Half-res rendering – See online slides
+
+
+SCATTER-AS-YOU-GATHER - BIG PICTURE
+Brute force approach
+Check if a sample circle of confusion overlaps current pixel
+Check if it is in the foreground
+Sort overlapping and foreground pixels from background to foreground
+Assign an alpha to each sample
+
+Where  is the COC radius
+Blend them
+
+Similar in spirit to typical scatter approaches
+Sorting is extremely expensive
+SCATTER-AS-YOU-GATHER - BIG PICTURE
+Our approach
+Similar in spirit to [Lee2008]
+Simplified for performance
+Gather instead of Scatter
+Divide samples in two layers, using tile nearest depth
+Background
+Foreground
+For each layer
+Additive alpha blending average
+Calculate foreground alpha
+Alpha blend foreground/background
+Loose foreground/background classification
+Distance 0 in: foreground
+Distance 100 in: background
+
+
+
+SCATTER-AS-YOU-GATHER - BIG PICTURE
+SCATTER-AS-YOU-GATHER - BIG PICTURE
+SCATTER-AS-YOU-GATHER - BIG PICTURE
+SCATTER-AS-YOU-GATHER - BIG PICTURE
+OVERVIEW
+Tiling Passes
+Tile Max
+Tile Neighborhood
+Prepare Passes (all in the same pass in practice)
+Downsample Color/Depth Pass
+Prefilter Pass
+Presort Pass
+Main Pass
+Median Pass
+Upsample Pass
+TILING PASSES
+Two tiling passes, as in the motion blur case:
+Tile Max: for each tile compute closest depth and maximum COC
+Tile Neighborhood: gather information from neighborhood tiles using a 3x3 filter
+PRESORT PASS
+We run a pass that we call presort
+For each pixel
+Calculates its COC
+Classifies it as background or foreground
+Calculate weights with the alpha for the additive alpha blending average in the main filter pass
+Output to a R11G11B10
+r: coc
+g: SampleAlpha() * DepthCmp2().x
+b: SampleAlpha() * DepthCmp2().y
+To determine if a pixel is background or foreground we compare with the closest depth in each tile
+Presorting before filtering reduces ALU and VGPR pressure on the main filter pass
+MAIN PASS
+float SpreadToe( float offsetCoc, float spreadCmp )
+{
+	return	offsetCoc <= 1.0 ?
+		pow( spreadCmp, DOF_SPREAD_TOE_POWER ) : spreadCmp;
+}
+float SpreadCmp(
+	float offsetCoc,
+	float sampleCoc,
+	float pixelToSampleUnitsScale )
+{
+	return SpreadToe(
+		offsetCoc,
+		saturate( pixelToSampleUnitsScale * sampleCoc – offsetCoc + 1.0 ) );
+}
+float spreadCmp = SpreadCmp( offsetCoc, samplePresortParams.coc, spreadScale );
+samplePresortParams.backgroundWeight *= spreadCmp;
+samplePresortParams.foregroundWeight *= spreadCmp;
+background += samplePresortParams.backgroundWeight * float4( sampleColor.rgb, 1.0 );
+foreground += samplePresortParams.foregroundWeight * float4( sampleColor.rgb, 1.0 );
+ALPHA CALCULATION
+During the main pass, we have accumulated the samples into two float4 registers, background and foreground
+rgb: accumulated color
+a: accumulated weight
+The alpha value comes from additive alpha blending over all samples [Lee2008]
+foreground.a
+We scatter-as-you-gather (vs. [Lee2008] scatter), so it needs normalization
+
+float alpha = saturate( ( 1.0 / SAMPLE_COUNT ) * ( 1.0 / SampleAlpha( tileMaxCoc ) ) * foreground.a );
+
+BACKGROUND RECONSTRUCTION
+In the case of DOF we want to avoid reconstructing the missing background
+Much harder in 2D
+Specially for blurry on top of sharp
+[Lee2008] renders the scene again
+We could not afford this
+Original alpha
+
+
+We shift the alpha to start outwards the object
+
+
+float alpha = saturate( 2.0 * ( 1.0 / SAMPLE_COUNT ) *
+	( 1.0 / SampleAlpha( tileMaxCoc ) ) * foreground.a );
+
+BACKGROUND RECONSTRUCTION
+In the case of DOF we want to avoid reconstructing the missing background
+Much harder in 2D
+Specially for blurry on top of sharp
+[Lee2008] renders the scene again
+We could not afford this
+Original alpha
+
+
+We shift the alpha to start outwards the object
+
+
+float alpha = saturate( 2.0 * ( 1.0 / SAMPLE_COUNT ) *
+	( 1.0 / SampleAlpha( tileMaxCoc ) ) * foreground.a );
+
+BACKGROUND RECONSTRUCTION
+Shifting the blur outwards creates fat shapes
+Problematic if the grown area is significant with respect to the object size
+Usually in the far field
+Bad for human silhouettes and big circles of confusion
+Typical issue in point sprite DOF
+Approximating the background is easier for the far field (foreground and background blurry)
+Far field: grow centered (without the 2.0 scale)
+Near field: grow outwards (with the 2.0 scale)
+Far field background reconstruction similar in spirit to motion blur
+
+FIGHTING UNDERSAMPLING
+Two measures
+Before filtering: Prefilter
+After filtering: Median
+
+OVERVIEW
+Tiling Passes
+Tile Max
+Tile Neighborhood
+Prepare Passes (in the same pass in practice)
+Downsample Color/Depth Pass
+Prefilter Pass
+Presort Pass
+Main Pass
+Median Pass
+Upsample Pass
+PREFILTER
+Blurring in multiple passes increases quality
+More effective samples
+Can’t be used with scatter-as-you-gather
+Data (Depth & COC) information meaning lost after first pass
+But It is possible to prefilter color values if the blur follows the surface
+Depth and COC meaning preserved
+We apply a circular 9-tap bilateral prefilter
+Radius scaled by the center COC
+Depth bilateral weighting
+Width close the main filter sample spacing
+
+PREFILTER
+Previous slide was simplified for easing the explanation
+In our case, we have two layers:
+Background
+Foreground
+Improved effectiveness by allowing the bilateral weighting to accept samples if:
+They are foreground and the center tap is foreground
+They are background and the center tap is background
+In other words, we allow blurring inside of each layer, but not cross-layer
+FIGHTING FIREFLIES
+Aliasing issues accentuated when using a flat kernel (vs. a Gaussian)
+We use the Karis average [Karis2013] during prefiltering, with an strength tweak which trades temporal stability for Bokeh contrast
+1.0 / ( 1.0 + ( 1.0 – strengthTweak ) * Luma( color ) )
+Prefilter radius clamped to at least 1 pixel wide for maximum effectiveness
+
+MEDIAN
+Given the very high dynamic range, there might still be signs of undersampling
+And signs of noise (see next slides)
+Similar in spirit to [Sousa2013] we apply a postfilter
+Median instead of Max
+3x3 Median on halfres buffer
+Using [Smith1996]
+Hardware min3/max3/med3 friendly
+Median vs. Max
+Median more effective in our case
+Median do not grow highlights
+Sampling with BILINEAR FILTERING
+Produces bleeding artifacts
+Sampling with BILINEAR FILTERING
+Typically solved with COC premultiply
+Works for extreme cases, in-between ones can fail
+Specially true for high dynamic range images
+Requires RGBA16 buffers
+More memory
+Incompatible with color-only loops (tiling optimizations, see later slides)
+Color encoded in smaller numbers, reduces precision
+
+
+Sampling with BILINEAR FILTERING
+Prefilter
+Color buffer samples
+Bilinear sampling
+Depth buffer samples
+Gather4 + Calculate the conservative bilateral weight to prevent bilinear bleeding (minimum)
+
+Main Pass
+Color buffer samples
+Point sampling + randomized offsets
+Presort buffer samples
+Point sampling + randomized offsets
+
+But for fast tiles (color only loop, see Optimization slides)
+Bilinear sampling + randomized offsets
+
+
+Sampling with BILINEAR FILTERING
+Also explored picking the minimum weight during main pass
+Color buffer samples
+Bilinear filtering
+Presort buffer samples
+Gather4 + Take the minimum weight in the bilinear access area
+[ min4( GatherRed() ), min4( GatherGreen() , min4( GatherBlue() )
+Drawbacks:
+Three accesses instead of one
+Expensive, but not as bad as it looks like (around 0.3ms on Xbox One)
+DX11.1 minimum filter mode would be very useful
+But only works with single channel buffers
+Underestimates the foreground alpha, less smooth silhouettes
+
+OPTIMIZATIONS
+FILTERING AT HALF RES
+Downsample/Surface Filter/Presort in the same pass
+First, we pick furthest away depth sample in the 2x2 block to reduce halfres haloing
+Then (in the same pass), Prefilter and Presort uses that sample depth sample for downsampling/prefiltering color and presorting
+Main 2D Circular filter outputs half res color and alpha
+Color (R11G11B10) => stores lerp( background, foreground, alpha )
+Alpha (R8)
+Both filtered with the median
+UPSAMPLE PASS
+Overview
+fullres = CalculateFullRes()	// Calculate small 9-tap fullres circular filter
+						// (with temporal dithering to halve the sample count to 5)
+halfres = UpscaleColor()
+combinedFactor = lerp( backgroundFactor, foregroundFactor, UpscaleAlpha() )
+color = lerp( halfres, fullres, combinedFactor )
+Background Factor
+Derived from fullres COC
+Foreground Factor
+Derived from tile maximum COC
+Keeping the halfres alpha allows for proper blurry foreground over focused background
+SHADOW SAMPLING
+OVERVIEW
+Being a 60-fps title, the constraints on the shadow filtering are challenging, as there is not budget for many taps
+We experimented with randomly per-pixel rotated Poisson disks
+We found them to produce low-quality results, with moderate sample counts (eight)
+Very unstable under motion
+OVERVIEW
+Creating random noise:
+
+values.xy = sv_position;
+values.xy = frac( dot( values.xy, magic.xy ) );
+values.xy = frac( dot( values.xy, magic.xy ) );
+…
+values.xy = frac( dot( values.xy, magic.xy ) );
+
+
+OVERVIEW
+Experimenting and optimizing a noise generator, we found a noise function that we could classify as being half way between dithered and random, and that we called Interleaved Gradient Noise:
+
+float3 magic = float3( 0.06711056, 0.00583715, 52.9829189 );
+return frac( magic.z * frac( dot( sv_position, magic.xy ) ) );
+
+Used to rotate the samples:
+
+sincos( 2.0 * PI * InterleavedGradientNoise( sv_position ), rotation.y, rotation.x );
+float2x2 rotationMatrix = { rotation.x, rotation.y, -rotation.y, rotation.x };
+...
+float2 sampleOffset = mul( offsets[i], rotationMatrix );
+
+Best of both worlds:
+Produces a rich range of values, similar to random noise
+Produces temporally coherent results, similar to dithered schemes
+INTERLEAVED GRADIENT NOISE
+This noise produces interleaved gradients
+This means that objects moving at a constant speed will rotate the samples smoothly
+
+
+INTERLEAVED GRADIENT NOISE
+Its spatial coherency allows for easier smoothing via blurring
+In our case we can’t blur it, but it could be useful in other situations
+INTERLEAVED GRADIENT NOISE
+Its spatial coherency allows for easier smoothing via blurring
+In our case we can’t blur it, but it could be useful in other situations
+SAMPLE LAYOUT
+We found spirals to yield better results than a Poisson disks
+With a XY flip each odd sample for better coverage
+Spiral warrants no sample overlap under rotations
+Snippet:
+{ -0.7071,  0.7071 },
+{ -0.0000, -0.8750 },
+{  0.5303,  0.5303 },
+{ -0.6250, -0.0000 },
+{  0.3536, -0.3536 },
+{ -0.0000,  0.3750 },
+{ -0.1768, -0.1768 },
+{  0.1250,  0.0000 },
+SAMPLE LAYOUT
+We found spirals to yield better results than a Poisson disks
+With a XY flip each odd sample for better coverage
+Spiral warrants no sample overlap under rotations
+Snippet:
+{ -0.7071,  0.7071 },
+{ -0.0000, -0.8750 },
+{  0.5303,  0.5303 },
+{ -0.6250, -0.0000 },
+{  0.3536, -0.3536 },
+{ -0.0000,  0.3750 },
+{ -0.1768, -0.1768 },
+{  0.1250,  0.0000 },
+SAMPLE LAYOUT
+We found spirals to yield better results than a Poisson disks
+With a XY flip each odd sample for better coverage
+Spiral warrants no sample overlap under rotations
+Snippet:
+{ -0.7071,  0.7071 },
+{ -0.0000, -0.8750 },
+{  0.5303,  0.5303 },
+{ -0.6250, -0.0000 },
+{  0.3536, -0.3536 },
+{ -0.0000,  0.3750 },
+{ -0.1768, -0.1768 },
+{  0.1250,  0.0000 },
+SAMPLE LAYOUT
+We found spirals to yield better results than a Poisson disks
+With a XY flip each odd sample for better coverage
+Spiral warrants no sample overlap under rotations
+Snippet:
+{ -0.7071,  0.7071 },
+{ -0.0000, -0.8750 },
+{  0.5303,  0.5303 },
+{ -0.6250, -0.0000 },
+{  0.3536, -0.3536 },
+{ -0.0000,  0.3750 },
+{ -0.1768, -0.1768 },
+{  0.1250,  0.0000 },
+SAMPLE LAYOUT
+We found spirals to yield better results than a Poisson disks
+With a XY flip each odd sample for better coverage
+Spiral warrants no sample overlap under rotations
+Snippet:
+{ -0.7071,  0.7071 },
+{ -0.0000, -0.8750 },
+{  0.5303,  0.5303 },
+{ -0.6250, -0.0000 },
+{  0.3536, -0.3536 },
+{ -0.0000,  0.3750 },
+{ -0.1768, -0.1768 },
+{  0.1250,  0.0000 },
+EXPLOITING TEMPORAL SUPERSAMPLING OR DITHERING
+If using temporal supersampling (for example SMAA T2x), we can temporally dither the noise:
+frameTick.x * InterleavedGradientNoise( sv_position ) + frameTick.y
+Where:
+frameTick.x = 0.5
+frameTick.y = 0.0 or 0.5 for odd and even frames respectively
+2x sample count
+If the game runs at 60fps, temporal dithering might be enough
+Just flipping the coordinates each frame without frame blending (just flicker very fast)
+Shadow filter radius will need to be conservative
+SHADOW SAMPLING wrap up
+Putting all these concepts together, we have an spiral that rotates smoothly over time, and given the high frame rate, in motion it resembles many more samples than what it actually uses
+If the game look and feel is smooth/stylized (do not have enough detail to hide the noise), with ~8 samples it might still be better to use a fixed uniform kernel (banding is in that case better than noise/dithering)
+OTHER USES
+This noise can be applied to other techniques, like opacity dithering (see the movie on this slide)
+It roughly approximates alpha blending
+We have seen good results with SSAO as well
+PERFORMANCE ON XBOX ONE
+Veil (Fixed):					0.35ms	
+Motion Blur (Running):			0.52ms
+Depth of Field (Portrait):			1.27ms	
+Subsurface Scattering (Portrait):	0.46ms	
+QUESTIONS AND ACKS - IN ALPHABETICAL ORDER
+Angelo Pesce
+Adam Micciulla
+Christer Ericson
+Danny Chan
+Dave Blizzard
+Dave Cowling
+Javier Pahlen
+Jian Zhang
+Jose Checa
+Maria Lopez
+
+BONUS SLIDES
+SUBSURFACE SCATTERING
+SUBSURFACE SCATTERING
+We are using the Separable Subsurface Scattering approach [Jimenez2013]
+2-pass screen space blur (vertical + horizontal)
+Using noise to hide artifacts (random rotation)
+Shape for the filter is a sum of two Gaussians:
+R1: near scattering (float3)
+R2: far scattering (float3)
+W: blend factor (float)
+
+
+
+
+
+SUBSURFACE SCATTERING
+Following [Mikklesen2010] Skin Rendering by Pseudo-Separable Cross Bilateral Filtering, we have done various improvements:
+Using Importance Sampling
+Only 9 samples per pass (but 7 is plausible in most of the cases)
+No longer using hacks for depth differences
+From a high level perspective, we convert the positions to world space, and apply the profile on the fly. It enables to better approximate ground truth (except where information is missing in screen space)
+From a low level perspective, it has been heavily optimized (at assembly level), with the XY component of the profile being baked in the CPU and the Z component being evaluated on the fly (see derivation on the right)
+16 instruction slots per sample
+Special thanks to our mathematician Xian-Chun Wu!
+
+BLOOM/VEIL
+TYPICAL IMPLEMENTATION
+Thresholded color used as input
+Downscale input image into mipmap chain
+Upscales each mip to the original image resolution
+Adds mips to original image
+Gaussian blurred somewhere in bloom/veil pipeline
+OUR BLOOM/VEIL CORE FEATURES
+Aims to improve the perception of a wider dynamic range
+In a non-intrusive way
+Non-thresholded color used as input for bloom
+As suggested by [Ward1997]
+Our dynamic range (physically based rendering) is very wide
+Aims to yield natural results, as if we were looking with our eyes
+Temporally stable
+Wide dynamic range makes it harder
+TEMPORAL STABILITY
+Sources of temporal instability
+
+Filtering
+Downsampling: information must fit in the lower mips
+Upsampling: information must be correctly synthesized
+
+Fireflies (very bright subpixels)
+FILTERING POSSIBILITIES
+#1
+Downsample
+Filter each MIP
+Upscale each MIP
+#2
+Downsample and filter
+Upscale
+#3
+Downsample
+Upscale and filter
+#4
+Downsample and filter
+Upscale and filter
+RESAMLPING
+Bilinear downsampling/upsampling generates low-quality results
+Many filtering possibilities [Kraus2007]
+Bicubic do not work well due to the negative lobes [Kawase2011]
+Gaussian possibly the best option for bloom [Kawase2011]
+
+DOWNSAMPLING - 1 FETCH
+Average 4-texel (1 bilinear fetch)
+Typical way to create mip chains
+Creates pulsating artifacts and temporal stability issues
+
+Called  in [Kraus2007] notation
+Infinite  downsamples would be equivalent to a box filter (discontinuous)
+
+DOWNSAMPLING - 4 FETCHES
+Average 16-texel (4 bilinear fetches)
+Mitigates the issues – but does not completely fix them (unless wide filter radii is used)
+
+Called in [Kraus2007] notation
+Infinite  downsamples would be equivalent to a continuous filter (similar to a triangle filter, but with a flat constant part)
+Used in Unreal Engine 4 [Mittring2012]
+
+
+DOWNSAMPLING - OUR SOLUTION
+Custom hand-crafted 36-texel downsample (13 bilinear fetches)
+Created by a weighted average of one-pixel shifts of 
+Intuitively, the overlapping further breaks the grid nature of pyramid approaches
+Works better than comparable-sized filters
+Eliminates the pulsating artifacts and temporal stability issues
+DOWNSAMPLING - OUR SOLUTION
+Custom hand-crafted 36-texel downsample (13 bilinear fetches)
+Created by a weighted average of one-pixel shifts of 
+Intuitively, the overlapping further breaks the grid nature of pyramid approaches
+Works better than comparable-sized filters
+Eliminates the pulsating artifacts and temporal stability issues
+DOWNSAMPLING - OUR SOLUTION
+Custom hand-crafted 36-texel downsample (13 bilinear fetches)
+Created by a weighted average of one-pixel shifts of 
+Intuitively, the overlapping further breaks the grid nature of pyramid approaches
+Works better than comparable-sized filters
+Eliminates the pulsating artifacts and temporal stability issues
+DOWNSAMPLING - OUR SOLUTION
+Custom hand-crafted 36-texel downsample (13 bilinear fetches)
+Created by a weighted average of one-pixel shifts of 
+Intuitively, the overlapping further breaks the grid nature of pyramid approaches
+Works better than comparable-sized filters
+Eliminates the pulsating artifacts and temporal stability issues
+DOWNSAMPLING - OUR SOLUTION
+Custom hand-crafted 36-texel downsample (13 bilinear fetches)
+Created by a weighted average of one-pixel shifts of 
+Intuitively, the overlapping further breaks the grid nature of pyramid approaches
+Works better than comparable-sized filters
+Eliminates the pulsating artifacts and temporal stability issues
+DOWNSAMPLING - OUR SOLUTION
+Custom hand-crafted 36-texel downsample (13 bilinear fetches)
+Created by a weighted average of one-pixel shifts of 
+Intuitively, the overlapping further breaks the grid nature of pyramid approaches
+Works better than comparable-sized filters
+Eliminates the pulsating artifacts and temporal stability issues
+
+UPSAMPLING
+Upsampling progressively yields the best results [Kraus2007] [Kawase2011] [Mittring2012] 
+Never bilinearly upsample mip6 to mip0 resolution directly
+Upsample from mip6 to mip5, from mip5 to mip4 and so on
+Why this works? [Kraus2007]
+Progressively natural bilinearly upsampling is equivalent to bi-quadratic b-spline filtering
+“Natural” means to sample in finer MIP pixel centers
+If you box blur at each upscale step (with a , for example), you get a higher order b-spline upscale
+UPSAMPLING
+Added bonus of upscaling progressively: you can also do the sum with previous mip as you upscale [Mittring2012]
+Reduces memory fetches required at higher resolutions
+
+UPSAMPLING - OUR SOLUTION
+Progressive upsample (and sum the chain as you upscale) as found in [Mittring2012]
+We filter during upsample (on the flight, as in the downsample case):
+E’ = E
+D’ = D + blur(E’)
+C’ = C + blur(D’)
+B’ = B + blur(C’)
+A’ = A + blur(B’)
+We use a 3x3 tent filter
+
+
+
+Scaled by a radius parameter
+The filter do not map to pixels, has “holes” in it
+Repeated convolutions converge to a Gaussian [Kraus2007]
+Simple and fast
+
+TEMPORAL STABILITY
+Typically hampered by
+
+Filtering artifacts
+Downsampling: information must fit in the lower mips
+Upsampling: information must be correctly synthesized
+
+Fireflies (very bright subpixels)
+FIREFLIES
+HDR physically-based rendering often produces flickering bright pixels as result of image undersampling
+[Karis2013] proposes reducing the dynamic range before averaging
+By means of a weighted average of the involved samples:
+
+We apply a similar technique for the mip0 to mip1 downsample
+
+
+FIREFLIES
+We found that any non-linear intensity mapping before averaging yields produces pulsating artifacts
+On small objects that move in steps similar to their size
+Linear motion of the objects do not translate to linear color changes
+Subpixel motion would solve this issue (multi/supersampling)
+But that is not universally available
+
+FIREFLIES - PARTIAL KARIS AVERAGE
+We found that doing the Karis average on each  separately mitigates the issue
+Intuitively, it allows to recover linear motion of small objects after the fireflies are removed by each separate  filter
+FIREFLIES - PARTIAL KARIS AVERAGE
+Full Karis Average: apply the Karis average to all 13-tap together
+Partial Karis Average: apply the Karis average in blocks of 4 samples
+Our approach
+
+See the comparison in the next movie
+In both cases we only apply the Karis average on the mip0 to mip1 downsample
+
+
+BLOOM-VEIL WRAP UP
+Karis average for MIP0 to MIP1 downsample
+Filtering using small 2D kernels
+13-tap custom convolution for downsampling
+9-tap convolution for upsampling (3x3 tent filter)
+6 R11G11B10 mips
+REFERENCES
+[Cook1984] Distributed ray tracing
+[Cook1987] The Reyes Image Rendering Architecture
+[Haeberli1990] The Accumulation Buffer:  Hardware Support for High-Quality Rendering
+[Jimenez2013] Next Generation Character Rendering
+[Karis2013] http://graphicrants.blogspot.com.es/2013/12/tone-mapping.html
+[Kawase2011] Anti-Downsized Buffer Artifacts
+[Kraus2007] Pyramid Filters Based On Bilinear Interpolation
+[Lee2008] Real-Time Depth-of-Field Rendering Using Point Splatting on Per-Pixel Layers
+[McGuire2010] Real-Time Stochastic Rasterization on Conventional GPU Architectures
+[McGuire2012] A Reconstruction Filter for Plausible Motion Blur
+[McGuire2013] A Fast and Stable Feature-Aware Motion Blur Filter
+[McIntosh2012] Efficiently Simulating the Bokeh of Polygonal Apertures in a Post-Process Depth of Field Shader
+[Mittring2012] The Technology Behind the Elemental Demo
+[Smith1996] Implementing median filters in XC4000E FPGAs
+[Sousa2013] CryENGINE 3 Graphics Gems
+[Strengert2006] Pyramid Methods in GPU-Based Image Processing
+[Valient2013] Killzone Shadow Fall Demo Postmortem
+[Ward1997] A Visibility Matching Tone Reproduction Operator for High Dynamic Range Scenes
+[White2011] More Performance! Five Rendering Ideas from Battlefield 3 and Need for Speed: The Run
+
+
+BASIC SCATTER IDEA
+SCATTER-AS-YOU-GATHER
+SCATTER-AS-YOU-GATHER PROBLEMS
+SAMPLING AREA
+SAMPLING AREA
+SCATTER-AS-YOU-GATHER PROBLEMS
+SAMPLE CONTRIBUTION
+SAMPLE CONTRIBUTION
+SAMPLE CONTRIBUTION
+SAMPLE CONTRIBUTION
+SCATTER-AS-YOU-GATHER PROBLEMS
+BACKGROUND RECOVERY
+BACKGROUND RECOVERY
+BACKGROUND RECOVERY
+BACKGROUND RECOVERY
+BACKGROUND RECOVERY
+BACKGROUND RECOVERY
+PREVIOUS WORK
+SCATTER-AS-YOU-GATHER PROBLEMS
+SAMPLING AREA
+SAMPLING AREA
+SAMPLING AREA
+SAMPLING AREA
+SAMPLING AREA
+SAMPLING AREA
+SCATTER-AS-YOU-GATHER PROBLEMS
+SAMPLE CONTRIBUTION - BACKGROUND RECOVERY
+IMPROVED SAMPLE CONTRIBUTION
+IMPROVED SAMPLE CONTRIBUTION
+IMPROVED SAMPLE CONTRIBUTION
+IMPROVED SAMPLE CONTRIBUTION
+IMPROVED SAMPLE CONTRIBUTION
+IMPROVED SAMPLE CONTRIBUTION
+IMPROVED SAMPLE CONTRIBUTION
+IMPROVED SAMPLE CONTRIBUTION
+IMPROVED SAMPLE CONTRIBUTION
+IMPROVED SAMPLE CONTRIBUTION
+IMPROVED SAMPLE CONTRIBUTION
+IMPROVED SAMPLE CONTRIBUTION
+IMPROVED SAMPLE CONTRIBUTION
+IMPROVED SAMPLE CONTRIBUTION
+IMPROVED SAMPLE CONTRIBUTION
+IMPROVED SAMPLE CONTRIBUTION
+IMPROVED SAMPLE CONTRIBUTION
+IMPROVED SAMPLE CONTRIBUTION
+IMPROVED SAMPLE CONTRIBUTION
+MIRRORED BACKGROUND RECONSTRUCTION
+MIRRORED BACKGROUND RECONSTRUCTION
+MIRRORED BACKGROUND RECONSTRUCTION
+Mirrored BACKGROUND RECONSTRUCTION
+Mirrored BACKGROUND RECONSTRUCTION
+MIRRORED BACKGROUND RECONSTRUCTION
+Mirrored BACKGROUND RECONSTRUCTION
+MIRROR BACKGROUND RECONSTRUCTION
+FOCUS - ACCURACY, IQ, PERFORMANCE
+SAMPLING
+UNIFORM SAMPLING
+RANDOM SAMPLING
+DITHER SAMPLING
+NON-UNIFORM SAMPLING ISSUES
+NON-UNIFORM SAMPLING ISSUES
+SAMPLING TAKE AWAY
+FOCUS - ACCURACY, IQ, PERFORMANCE
+OPTIMIZATION
+IMPLEMENTATION TIPS
+DEPTH OF FIELD
+OVERVIEW
+OVERVIEW
+OVERVIEW
+TYPICAL DOF ISSUES
+SCATTER-AS-YOU-GATHER - BIG PICTURE
+SCATTER-AS-YOU-GATHER - BIG PICTURE
+SCATTER-AS-YOU-GATHER - BIG PICTURE
+SCATTER-AS-YOU-GATHER - BIG PICTURE
+SCATTER-AS-YOU-GATHER - BIG PICTURE
+SCATTER-AS-YOU-GATHER - BIG PICTURE
+OVERVIEW
+TILING PASSES
+PRESORT PASS
+MAIN PASS
+ALPHA CALCULATION
+BACKGROUND RECONSTRUCTION
+BACKGROUND RECONSTRUCTION
+BACKGROUND RECONSTRUCTION
+FIGHTING UNDERSAMPLING
+OVERVIEW
+PREFILTER
+PREFILTER
+FIGHTING FIREFLIES
+MEDIAN
+Sampling with BILINEAR FILTERING
+Sampling with BILINEAR FILTERING
+Sampling with BILINEAR FILTERING
+Sampling with BILINEAR FILTERING
+OPTIMIZATIONS
+FILTERING AT HALF RES
+UPSAMPLE PASS
+SHADOW SAMPLING
+OVERVIEW
+OVERVIEW
+OVERVIEW
+INTERLEAVED GRADIENT NOISE
+INTERLEAVED GRADIENT NOISE
+INTERLEAVED GRADIENT NOISE
+SAMPLE LAYOUT
+SAMPLE LAYOUT
+SAMPLE LAYOUT
+SAMPLE LAYOUT
+SAMPLE LAYOUT
+EXPLOITING TEMPORAL SUPERSAMPLING OR DITHERING
+SHADOW SAMPLING wrap up
+OTHER USES
+PERFORMANCE ON XBOX ONE
+QUESTIONS AND ACKS - IN ALPHABETICAL ORDER
+BONUS SLIDES
+SUBSURFACE SCATTERING
+SUBSURFACE SCATTERING
+SUBSURFACE SCATTERING
+BLOOM/VEIL
+TYPICAL IMPLEMENTATION
+OUR BLOOM/VEIL CORE FEATURES
+TEMPORAL STABILITY
+FILTERING POSSIBILITIES
+RESAMLPING
+DOWNSAMPLING - 1 FETCH
+DOWNSAMPLING - 4 FETCHES
+DOWNSAMPLING - OUR SOLUTION
+DOWNSAMPLING - OUR SOLUTION
+DOWNSAMPLING - OUR SOLUTION
+DOWNSAMPLING - OUR SOLUTION
+DOWNSAMPLING - OUR SOLUTION
+DOWNSAMPLING - OUR SOLUTION
+UPSAMPLING
+UPSAMPLING
+UPSAMPLING - OUR SOLUTION
+TEMPORAL STABILITY
+FIREFLIES
+FIREFLIES
+FIREFLIES - PARTIAL KARIS AVERAGE
+FIREFLIES - PARTIAL KARIS AVERAGE
+BLOOM-VEIL WRAP UP
+REFERENCES

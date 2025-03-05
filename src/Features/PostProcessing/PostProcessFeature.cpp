@@ -4,6 +4,7 @@
 #include "ColourTransforms.h"
 #include "HistogramAutoExposure.h"
 #include "LUT.h"
+#include "MotionBlur.h"
 #include "Vignette.h"
 #include "pCamera.h"
 #include "LensFlare.h"
@@ -28,6 +29,7 @@ const ankerl::unordered_dense::map<std::string, PostProcessFeatureConstructor>& 
 		GetFeatureConstructorPair<LensFlare>(),
 		GetFeatureConstructorPair<VanillaImagespace>(),
 		GetFeatureConstructorPair<DoF>(),
+		GetFeatureConstructorPair<MotionBlur>(),
 	};
 	return retval;
 }
