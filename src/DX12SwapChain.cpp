@@ -139,7 +139,7 @@ void DX12SwapChain::RenderReShadeEffects()
 void DX12SwapChain::UpdateReShadeEffects()
 {
 	auto& depth = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
-	
+
 	auto depthRTV = reshade::api::resource_view{ reinterpret_cast<uintptr_t>(depth.depthSRV) };
 	reShadeRuntime->update_texture_bindings("DEPTH", depthRTV, depthRTV);
 
