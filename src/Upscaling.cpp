@@ -347,7 +347,6 @@ void Upscaling::Upscale()
 		state->EndPerfEvent();
 	}
 
-
 	if (upscaleMethod != UpscaleMethod::kFSR) {
 		state->BeginPerfEvent("Sharpening");
 
