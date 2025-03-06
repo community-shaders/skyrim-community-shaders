@@ -748,7 +748,6 @@ std::unordered_map<std::string, bool>& State::GetDisabledFeatures()
 	return disabledFeatures;
 }
 
-
 void State::SetupReShade()
 {
 	SetEnvironmentVariableW(L"RESHADE_DISABLE_GRAPHICS_HOOK", L"1");
@@ -769,7 +768,7 @@ void State::SetupReShade()
 
 		reShadeDevice->create_resource_view(reShadeSwapChainResource, reshade::api::resource_usage::render_target, reshade::api::resource_view_desc(reshade::api::format_to_default_typed(reShadeSwapChainDesc.texture.format, 0), 0, 1, 0, 1), &reshadeSwapChainRTV);
 		reShadeDevice->create_resource_view(reShadeSwapChainResource, reshade::api::resource_usage::render_target, reshade::api::resource_view_desc(reshade::api::format_to_default_typed(reShadeSwapChainDesc.texture.format, 1), 0, 1, 0, 1), &reshadeSwapChainRTVsRGB);
-		
+
 		auto& depth = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 
 		auto depthRTV = reshade::api::resource_view{ reinterpret_cast<uintptr_t>(depth.depthSRV) };
