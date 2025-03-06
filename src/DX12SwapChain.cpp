@@ -60,10 +60,15 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 
 	swapChain->SetMaximumFrameLatency(1);
 	frameLatencyWaitableObject = swapChain->GetFrameLatencyWaitableObject();
-
 	QueryPerformanceFrequency(&qpf);
 
 	refreshRate = GetRefreshRate(a_swapChainDesc.OutputWindow);
+
+	// Create an event handle to use for frame synchronization.
+	fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+	if (fenceEvent == nullptr) {
+		DX::ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
+	}
 }
 
 void DX12SwapChain::CreateInterop()
@@ -129,14 +134,14 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT)
 	DX::ThrowIfFailed(commandAllocators[frameIndex]->Reset());
 	DX::ThrowIfFailed(commandLists[frameIndex]->Reset(commandAllocators[frameIndex].get(), nullptr));
 
-	// Update the fence value for the current frame
-	fenceValues[frameIndex]++;
+	// Update fence value
+	fenceValuesPre[frameIndex]++;
 
 	// Signal fence from D3D11
-	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fences[frameIndex].get(), fenceValues[frameIndex]));
+	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fences[0].get(), fenceValuesPre[frameIndex]));
 
 	// Wait for D3D11 to finish on D3D12 side
-	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fences[frameIndex].get(), fenceValues[frameIndex]));
+	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fences[0].get(), fenceValuesPre[frameIndex]));
 
 	winrt::com_ptr<ID3D12Resource> swapChainBuffer;
 	DX::ThrowIfFailed(swapChain->GetBuffer(frameIndex, IID_PPV_ARGS(&swapChainBuffer)));
@@ -176,16 +181,28 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT)
 	// Present the frame
 	DX::ThrowIfFailed(swapChain->Present(upscaling->settings.vsyncMode ? std::max(1u, SyncInterval) : 0, 0));
 
-	// Wait for the frame to finish to minimise latency
-	WaitForSingleObject(frameLatencyWaitableObject, 500);
+	const UINT64 currentFenceValue = fenceValuesPost[frameIndex];
+
+	DX::ThrowIfFailed(commandQueue->Signal(d3d12Fences[1].get(), currentFenceValue));
+	DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fences[1].get(), currentFenceValue));
+
+	// Update the frame index.
+	frameIndex = swapChain->GetCurrentBackBufferIndex();
+
+	// If the next frame is not ready to be rendered yet, wait until it is ready.
+	if (d3d12Fences[1]->GetCompletedValue() < fenceValuesPost[frameIndex]) {
+		DX::ThrowIfFailed(d3d12Fences[1]->SetEventOnCompletion(fenceValuesPost[frameIndex], fenceEvent));
+		WaitForSingleObjectEx(fenceEvent, INFINITE, FALSE);
+	}
+
+	// Update fence value
+	fenceValuesPost[frameIndex] = currentFenceValue + 1;
 
 	// Frame limiter for V-Sync and VRR
 	if (!upscaling->settings.vsyncMode && upscaling->settings.frameLimitMode)
 		FrameLimiter(useFrameGeneration);
 
-	// Update the frame index.
-	frameIndex = swapChain->GetCurrentBackBufferIndex();
-
+	// Reset framebuffer
 	globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER].RTV = swapChainBufferWrapped->rtv;
 
 	return S_OK;

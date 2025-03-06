@@ -84,9 +84,11 @@ public:
 	winrt::com_ptr<ID3D12Fence> d3d12Fences[2];
 
 	UINT frameIndex = 0;
-	UINT64 fenceValues[2]{ 0, 0 };
+	UINT64 fenceValuesPre[2]{ 0, 0 };
+	UINT64 fenceValuesPost[2]{ 0, 0 };
 
 	HANDLE frameLatencyWaitableObject = nullptr;
+	HANDLE fenceEvent;
 
 	LARGE_INTEGER qpf;
 
