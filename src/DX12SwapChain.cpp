@@ -94,12 +94,11 @@ void DX12SwapChain::CreateInterop()
 	swapChainBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
 
 	if (reshade::create_effect_runtime(reshade::api::device_api::d3d11, d3d11Device.get(), d3d11Context.get(), swapChainProxy, "ReShade", &reShadeRuntime)) {
-
 		auto device = reShadeRuntime->get_device();
-		
-		reshade::api::resource reshadeSwapChainResource = device->get_resource_from_view(reshade::api::resource_view{ reinterpret_cast<uintptr_t>(swapChainBufferWrapped->rtv) });	
+
+		reshade::api::resource reshadeSwapChainResource = device->get_resource_from_view(reshade::api::resource_view{ reinterpret_cast<uintptr_t>(swapChainBufferWrapped->rtv) });
 		reshade::api::resource_desc reshadeSwapChainDesc = device->get_resource_desc(reshadeSwapChainResource);
-		
+
 		device->create_resource_view(reshadeSwapChainResource, reshade::api::resource_usage::render_target, reshade::api::resource_view_desc(reshade::api::format_to_default_typed(reshadeSwapChainDesc.texture.format, 0), 0, 1, 0, 1), &reshadeSwapChainRTV);
 		device->create_resource_view(reshadeSwapChainResource, reshade::api::resource_usage::render_target, reshade::api::resource_view_desc(reshade::api::format_to_default_typed(reshadeSwapChainDesc.texture.format, 1), 0, 1, 0, 1), &reshadeSwapChainRTVsRGB);
 	}
