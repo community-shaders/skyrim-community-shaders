@@ -37,7 +37,7 @@ namespace globals
 	{
 		extern ID3D11Device* device;
 		extern ID3D11DeviceContext* context;
-		extern IDXGISwapChain* swapchain;
+		extern IDXGISwapChain* swapChain;
 	}
 
 	namespace features

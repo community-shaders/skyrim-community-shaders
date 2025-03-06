@@ -90,7 +90,7 @@ public:
 	ID3D11ComputeShader* copyDepthToSharedBufferCS;
 
 	void CreateFrameGenerationResources();
-	void CopyResourcesToSharedBuffers();
+	void PostDisplay();
 
 	struct Main_UpdateJitter
 	{
@@ -147,7 +147,7 @@ public:
 	{
 		static void thunk(int64_t a1)
 		{
-			GetSingleton()->CopyResourcesToSharedBuffers();
+			GetSingleton()->PostDisplay();
 			func(a1);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;

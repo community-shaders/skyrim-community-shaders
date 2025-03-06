@@ -145,9 +145,6 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 
 bool Load()
 {
-	SetEnvironmentVariableW(L"RESHADE_DISABLE_GRAPHICS_HOOK", L"1");
-	LoadLibraryW(L"ReShade64.dll");
-
 	if (ENB_API::RequestENBAPI()) {
 		logger::info("ENB detected, disabling all hooks and features");
 		return true;

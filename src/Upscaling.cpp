@@ -610,14 +610,11 @@ void Upscaling::CreateFrameGenerationResources()
 	copyDepthToSharedBufferCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\FrameGeneration\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0");
 }
 
-void Upscaling::CopyResourcesToSharedBuffers()
+void Upscaling::PostDisplay()
 {
-	if (!globals::dx12SwapChain->swapChain)
-		return;
+	globals::state->RenderReShade();
 
-	globals::dx12SwapChain->RenderReShadeEffects();
-
-	if (!settings.frameGenerationMode || RE::UI::GetSingleton()->GameIsPaused())
+	if (!globals::dx12SwapChain || !settings.frameGenerationMode || RE::UI::GetSingleton()->GameIsPaused())
 		return;
 
 	auto& context = globals::d3d::context;

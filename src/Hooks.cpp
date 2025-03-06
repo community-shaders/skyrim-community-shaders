@@ -193,6 +193,7 @@ struct IDXGISwapChain_Present
 {
 	static HRESULT WINAPI thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
 	{
+		globals::state->PresentReShade();
 		globals::state->Reset();
 		globals::menu->DrawOverlay();
 
@@ -421,7 +422,7 @@ namespace Hooks
 			globals::ReInit();
 
 			logger::info("Detouring virtual function tables");
-			stl::detour_vfunc<8, IDXGISwapChain_Present>(globals::d3d::swapchain);
+			stl::detour_vfunc<8, IDXGISwapChain_Present>(globals::d3d::swapChain);
 
 			auto shaderCache = globals::shaderCache;
 			if (shaderCache->IsDump()) {

@@ -92,16 +92,6 @@ void DX12SwapChain::CreateInterop()
 	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
 	swapChainBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
-
-	if (reshade::create_effect_runtime(reshade::api::device_api::d3d11, d3d11Device.get(), d3d11Context.get(), swapChainProxy, "ReShade", &reShadeRuntime)) {
-		auto device = reShadeRuntime->get_device();
-
-		reshade::api::resource reshadeSwapChainResource = device->get_resource_from_view(reshade::api::resource_view{ reinterpret_cast<uintptr_t>(swapChainBufferWrapped->rtv) });
-		reshade::api::resource_desc reshadeSwapChainDesc = device->get_resource_desc(reshadeSwapChainResource);
-
-		device->create_resource_view(reshadeSwapChainResource, reshade::api::resource_usage::render_target, reshade::api::resource_view_desc(reshade::api::format_to_default_typed(reshadeSwapChainDesc.texture.format, 0), 0, 1, 0, 1), &reshadeSwapChainRTV);
-		device->create_resource_view(reshadeSwapChainResource, reshade::api::resource_usage::render_target, reshade::api::resource_view_desc(reshade::api::format_to_default_typed(reshadeSwapChainDesc.texture.format, 1), 0, 1, 0, 1), &reshadeSwapChainRTVsRGB);
-	}
 }
 
 DXGISwapChainProxy* DX12SwapChain::GetSwapChainProxy()
@@ -130,32 +120,8 @@ HRESULT DX12SwapChain::GetBuffer(void** ppSurface)
 	return S_OK;
 }
 
-void DX12SwapChain::RenderReShadeEffects()
-{
-	if (reShadeRuntime) {
-		reShadeRuntime->render_effects(reShadeRuntime->get_command_queue()->get_immediate_command_list(), reshadeSwapChainRTV, reshadeSwapChainRTVsRGB);
-	}
-}
-void DX12SwapChain::UpdateReShadeEffects()
-{
-	auto& depth = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
-
-	auto depthRTV = reshade::api::resource_view{ reinterpret_cast<uintptr_t>(depth.depthSRV) };
-	reShadeRuntime->update_texture_bindings("DEPTH", depthRTV, depthRTV);
-
-	reShadeRuntime->enumerate_uniform_variables(nullptr, [](reshade::api::effect_runtime* runtime, reshade::api::effect_uniform_variable variable) {
-		char source[32];
-		if (runtime->get_annotation_string_from_uniform_variable(variable, "source", source) &&
-			std::strcmp(source, "bufready_depth") == 0)
-			runtime->set_uniform_value_bool(variable, true);
-	});
-}
-
 HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT)
 {
-	// If ReShade is loaded, call it now
-	reshade::update_and_present_effect_runtime(reShadeRuntime);
-
 	// Wait for D3D11 work to finish
 	d3d11Context->Flush();
 

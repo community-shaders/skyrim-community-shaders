@@ -216,7 +216,7 @@ void Menu::Init()
 	imgui_io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\Jost-Regular.ttf", 36, &font_config);
 
 	DXGI_SWAP_CHAIN_DESC desc;
-	globals::d3d::swapchain->GetDesc(&desc);
+	globals::d3d::swapChain->GetDesc(&desc);
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplWin32_Init(desc.OutputWindow);

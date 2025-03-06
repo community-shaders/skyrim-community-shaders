@@ -36,7 +36,7 @@ namespace globals
 	{
 		ID3D11Device* device = nullptr;
 		ID3D11DeviceContext* context = nullptr;
-		IDXGISwapChain* swapchain = nullptr;
+		IDXGISwapChain* swapChain = nullptr;
 	}
 
 	namespace features
@@ -127,7 +127,7 @@ namespace globals
 
 		d3d::device = reinterpret_cast<ID3D11Device*>(game::renderer->GetRuntimeData().forwarder);
 		d3d::context = reinterpret_cast<ID3D11DeviceContext*>(game::renderer->GetRuntimeData().context);
-		d3d::swapchain = reinterpret_cast<IDXGISwapChain*>(game::renderer->GetRuntimeData().renderWindows->swapChain);
+		d3d::swapChain = reinterpret_cast<IDXGISwapChain*>(game::renderer->GetRuntimeData().renderWindows->swapChain);
 
 		state = State::GetSingleton();
 		menu = Menu::GetSingleton();
