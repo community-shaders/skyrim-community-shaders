@@ -43,7 +43,6 @@ public:
 		uint upscaleMethodNoFSR = (uint)UpscaleMethod::kTAA;
 		float sharpness = 0.0f;
 		uint dlssPreset = 1;
-		uint vsyncMode = 1;
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 1;
 		uint frameGenerationForceEnable = 0;
@@ -58,6 +57,7 @@ public:
 	bool fidelityFXMissing = false;
 
 	bool d3d12Interop = false;
+	double refreshRate = 0.0f;
 
 	void DrawSettings();
 	void SaveSettings(json& o_json);
@@ -96,6 +96,12 @@ public:
 
 	void CreateFrameGenerationResources();
 	void PostDisplay();
+
+	static void TimerSleepQPC(int64_t targetQPC);
+
+	void FrameLimiter();
+
+	static double GetRefreshRate(HWND a_window);
 
 	struct Main_UpdateJitter
 	{

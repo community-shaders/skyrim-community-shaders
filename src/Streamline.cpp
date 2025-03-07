@@ -308,6 +308,7 @@ void Streamline::Present()
 	}
 
 	auto state = globals::state;
+	auto renderer = globals::game::renderer;
 
 	// Fake NVIDIA Reflex to prevent DLSSG errors
 	slReflexSetMarker(sl::ReflexMarker::eInputSample, *frameToken);
@@ -318,13 +319,11 @@ void Streamline::Present()
 	slReflexSetMarker(sl::ReflexMarker::ePresentStart, *frameToken);
 	slReflexSetMarker(sl::ReflexMarker::ePresentEnd, *frameToken);
 
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-
 	auto& motionVectorsBuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::RENDER_TARGET::kMOTION_VECTOR];
 
 	sl::Extent fullExtent{ 0, 0, (uint)state->screenSize.x, (uint)state->screenSize.y };
 
-	float2 dynamicScreenSize = Util::ConvertToDynamic(State::GetSingleton()->screenSize);
+	float2 dynamicScreenSize = Util::ConvertToDynamic(state->screenSize);
 	sl::Extent dynamicExtent{ 0, 0, (uint)dynamicScreenSize.x, (uint)dynamicScreenSize.y };
 
 	sl::Resource depth = { sl::ResourceType::eTex2d, upscaling->depthBufferShared->resource.get(), 0 };

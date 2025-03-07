@@ -193,17 +193,29 @@ struct IDXGISwapChain_Present
 {
 	static HRESULT WINAPI thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
 	{
-		globals::state->PresentReShade();
+		auto state = globals::state;
+		auto streamline = globals::streamline;
+		auto upscaling = globals::upscaling;
+		auto menu = globals::menu;
 
-		if (globals::streamline->initialized)
-			globals::streamline->Present();
+		state->PresentReShade();
 
-		globals::state->Reset();
-		globals::menu->DrawOverlay();
+		if (streamline->initialized)
+			streamline->Present();
+
+		state->Reset();
+		menu->DrawOverlay();
+
+		if (upscaling->d3d12Interop){
+			SyncInterval = std::max(1u, SyncInterval);
+			Flags |= DXGI_PRESENT_ALLOW_TEARING;
+		}
 
 		auto retval = func(This, SyncInterval, Flags);
 
-		TracyD3D11Collect(globals::state->tracyCtx);
+		TracyD3D11Collect(state->tracyCtx);
+
+		upscaling->FrameLimiter();
 
 		return retval;
 	}
@@ -290,7 +302,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 		if (!pSwapChainDesc->Windowed)
 			shouldProxy = false;
 
-	auto refreshRate = proxy->GetRefreshRate(pSwapChainDesc->OutputWindow);
+	auto refreshRate = Upscaling::GetRefreshRate(pSwapChainDesc->OutputWindow);
+	upscaling->refreshRate = refreshRate;
 
 	if (shouldProxy) {
 		if (upscaling->settings.frameGenerationMode)

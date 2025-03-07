@@ -106,8 +106,4 @@ public:
 	HRESULT GetBuffer(void** ppSurface);
 	HRESULT Present(UINT SyncInterval, UINT Flags);
 	HRESULT GetDevice(_In_ REFIID riid, _COM_Outptr_ void** ppDevice);
-
-	void FrameLimiter(bool a_useFrameGeneration);
-
-	double GetRefreshRate(HWND a_window);
 };

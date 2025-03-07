@@ -62,10 +62,6 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
 
 	fidelityFX->SetupFrameGeneration();
-
-	QueryPerformanceFrequency(&qpf);
-
-	refreshRate = GetRefreshRate(a_swapChainDesc.OutputWindow);
 }
 
 void DX12SwapChain::CreateInterop()
@@ -115,7 +111,7 @@ HRESULT DX12SwapChain::GetBuffer(void** ppSurface)
 	return S_OK;
 }
 
-HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT)
+HRESULT DX12SwapChain::Present(UINT, UINT Flags)
 {
 	// Update fence value
 	fenceValues[frameIndex]++;
@@ -126,7 +122,7 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT)
 	// Simulate Present on D3D11
 	d3d11Context->Flush();
 
-	// WAit for D3D11
+	// Wait for D3D11
 	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), fenceValues[frameIndex]));
 
 	// New frame, reset
@@ -156,9 +152,7 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT)
 
 	auto upscaling = globals::upscaling;
 
-	bool useFrameGeneration = upscaling->settings.frameGenerationMode;
-
-	FidelityFX::GetSingleton()->Present(useFrameGeneration);
+	FidelityFX::GetSingleton()->Present(upscaling->settings.frameGenerationMode);
 
 	DX::ThrowIfFailed(commandLists[frameIndex]->Close());
 
@@ -166,7 +160,7 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT)
 	commandQueue->ExecuteCommandLists(1, commandListsToExecute);
 
 	// Present the frame
-	DX::ThrowIfFailed(swapChain->Present(upscaling->settings.vsyncMode ? std::max(1u, SyncInterval) : 0, DXGI_PRESENT_ALLOW_TEARING));
+	DX::ThrowIfFailed(swapChain->Present(0, Flags | DXGI_PRESENT_ALLOW_TEARING));
 
 	// Update fence value
 	fenceValues[frameIndex]++;
@@ -175,17 +169,10 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT)
 	DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence.get(), fenceValues[frameIndex]));
 	DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence.get(), fenceValues[frameIndex]));
 
-	// Update the frame index.
+	// Update the frame index
 	auto currentFenceValue = fenceValues[frameIndex];
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
 	fenceValues[frameIndex] = currentFenceValue;
-
-	// Frame limiter for V-Sync and VRR
-	if (!upscaling->settings.vsyncMode && upscaling->settings.frameLimitMode)
-		FrameLimiter(useFrameGeneration);
-
-	// Reset framebuffer
-	globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER].RTV = swapChainBufferWrapped->rtv;
 
 	return S_OK;
 }
@@ -198,91 +185,6 @@ HRESULT DX12SwapChain::GetDevice(REFIID uuid, void** ppDevice)
 	}
 
 	return swapChain->GetDevice(uuid, ppDevice);
-}
-
-static void TimerSleepQPC(int64_t targetQPC)
-{
-	LARGE_INTEGER currentQPC;
-	do {
-		QueryPerformanceCounter(&currentQPC);
-	} while (currentQPC.QuadPart < targetQPC);
-}
-
-void DX12SwapChain::FrameLimiter(bool a_useFrameGeneration)
-{
-	double bestRefreshRate = refreshRate - (refreshRate * refreshRate) / 3600.0;
-
-	int64_t targetFrameTicks = int64_t(double(qpf.QuadPart) / (bestRefreshRate * (a_useFrameGeneration ? 0.5 : 1.0)));
-
-	static LARGE_INTEGER lastFrame = {};
-	LARGE_INTEGER timeNow;
-	QueryPerformanceCounter(&timeNow);
-	int64_t delta = timeNow.QuadPart - lastFrame.QuadPart;
-	if (delta < targetFrameTicks) {
-		TimerSleepQPC(lastFrame.QuadPart + targetFrameTicks);
-	}
-	QueryPerformanceCounter(&lastFrame);
-}
-
-/*
-* Copyright (c) 2022-2023 NVIDIA CORPORATION. All rights reserved
-*
-* Permission is hereby granted, free of charge, to any person obtaining a copy
-* of this software and associated documentation files (the "Software"), to deal
-* in the Software without restriction, including without limitation the rights
-* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the Software is
-* furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in all
-* copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
-
-double DX12SwapChain::GetRefreshRate(HWND a_window)
-{
-	HMONITOR monitor = MonitorFromWindow(a_window, MONITOR_DEFAULTTONEAREST);
-	MONITORINFOEXW info;
-	info.cbSize = sizeof(info);
-	if (GetMonitorInfoW(monitor, &info) != 0) {
-		// using the CCD get the associated path and display configuration
-		UINT32 requiredPaths, requiredModes;
-		if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &requiredPaths, &requiredModes) == ERROR_SUCCESS) {
-			std::vector<DISPLAYCONFIG_PATH_INFO> paths(requiredPaths);
-			std::vector<DISPLAYCONFIG_MODE_INFO> modes2(requiredModes);
-			if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &requiredPaths, paths.data(), &requiredModes, modes2.data(), nullptr) == ERROR_SUCCESS) {
-				// iterate through all the paths until find the exact source to match
-				for (auto& p : paths) {
-					DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName;
-					sourceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
-					sourceName.header.size = sizeof(sourceName);
-					sourceName.header.adapterId = p.sourceInfo.adapterId;
-					sourceName.header.id = p.sourceInfo.id;
-					if (DisplayConfigGetDeviceInfo(&sourceName.header) == ERROR_SUCCESS) {
-						// find the matched device which is associated with current device
-						// there may be the possibility that display may be duplicated and windows may be one of them in such scenario
-						// there may be two callback because source is same target will be different
-						// as window is on both the display so either selecting either one is ok
-						if (wcscmp(info.szDevice, sourceName.viewGdiDeviceName) == 0) {
-							// get the refresh rate
-							UINT numerator = p.targetInfo.refreshRate.Numerator;
-							UINT denominator = p.targetInfo.refreshRate.Denominator;
-							return (double)numerator / (double)denominator;
-						}
-					}
-				}
-			}
-		}
-	}
-	logger::error("Failed to retrieve refresh rate from swap chain");
-	return 60;
 }
 
 WrappedResource::WrappedResource(D3D11_TEXTURE2D_DESC a_texDesc, ID3D11Device5* a_d3d11Device, ID3D12Device* a_d3d12Device)
