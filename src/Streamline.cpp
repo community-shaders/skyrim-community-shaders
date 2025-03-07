@@ -295,9 +295,6 @@ void Streamline::Present()
 
 	auto upscaling = globals::upscaling;
 
-	if (!upscaling->settings.frameGenerationMode)
-		return;
-
 	static auto currentFrameGenerationMode = sl::DLSSGMode::eOff;
 	auto frameGenerationMode = upscaling->settings.frameGenerationMode ? sl::DLSSGMode::eOn : sl::DLSSGMode::eOff;
 
