@@ -670,7 +670,6 @@ void Upscaling::PostDisplay()
 		backupDsv->Release();
 }
 
-
 void Upscaling::TimerSleepQPC(int64_t targetQPC)
 {
 	LARGE_INTEGER currentQPC;
