@@ -13,6 +13,9 @@
 #include <sl.h>
 #include <sl_consts.h>
 #include <sl_dlss.h>
+#include <sl_dlss_g.h>
+#include <sl_matrix_helpers.h>
+#include <sl_reflex.h>
 #include <sl_version.h>
 #pragma warning(pop)
 
@@ -31,7 +34,8 @@ public:
 	bool initialized = false;
 
 	bool featureDLSS = false;
-	bool featureNIS = false;
+	bool featureDLSSG = false;
+	bool featureReflex = false;
 
 	sl::ViewportHandle viewport{ 0 };
 
@@ -60,6 +64,16 @@ public:
 	PFun_slDLSSGetOptimalSettings* slDLSSGetOptimalSettings{};
 	PFun_slDLSSGetState* slDLSSGetState{};
 	PFun_slDLSSSetOptions* slDLSSSetOptions{};
+
+	// DLSSG specific functions
+	PFun_slDLSSGGetState* slDLSSGGetState{};
+	PFun_slDLSSGSetOptions* slDLSSGSetOptions{};
+
+	// Reflex specific functions
+	PFun_slReflexGetState* slReflexGetState{};
+	PFun_slReflexSetMarker* slReflexSetMarker{};
+	PFun_slReflexSleep* slReflexSleep{};
+	PFun_slReflexSetOptions* slReflexSetOptions{};
 
 	void LoadInterposer();
 

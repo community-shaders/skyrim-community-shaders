@@ -125,7 +125,6 @@ HRESULT DX12SwapChain::GetBuffer(void** ppSurface)
 
 HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT)
 {
-	;
 	// Update fence value
 	fenceValues[frameIndex]++;
 

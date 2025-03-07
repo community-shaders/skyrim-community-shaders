@@ -40,7 +40,7 @@ void Streamline::LoadInterposer()
 
 	sl::Preferences pref;
 
-	sl::Feature featuresToLoad[] = { sl::kFeatureNIS, sl::kFeatureDLSS };
+	sl::Feature featuresToLoad[] = { sl::kFeatureDLSS, sl::kFeatureDLSS_G, sl::kFeatureReflex };
 	pref.featuresToLoad = featuresToLoad;
 	pref.numFeaturesToLoad = _countof(featuresToLoad);
 
@@ -91,19 +91,6 @@ void Streamline::CheckFeatures(IDXGIAdapter* a_adapter)
 	adapterInfo.deviceLUID = (uint8_t*)&adapterDesc.AdapterLuid;
 	adapterInfo.deviceLUIDSizeInBytes = sizeof(LUID);
 
-	slIsFeatureLoaded(sl::kFeatureNIS, featureNIS);
-	if (featureNIS) {
-		logger::info("[Streamline] NIS feature is loaded");
-		featureNIS = slIsFeatureSupported(sl::kFeatureNIS, adapterInfo) == sl::Result::eOk;
-	} else {
-		logger::info("[Streamline] NIS feature is not loaded");
-		sl::FeatureRequirements featureRequirements;
-		sl::Result result = slGetFeatureRequirements(sl::kFeatureNIS, featureRequirements);
-		if (result != sl::Result::eOk) {
-			logger::info("[Streamline] NIS feature failed to load due to: {}", magic_enum::enum_name(result));
-		}
-	}
-
 	slIsFeatureLoaded(sl::kFeatureDLSS, featureDLSS);
 	if (featureDLSS) {
 		logger::info("[Streamline] DLSS feature is loaded");
@@ -117,8 +104,35 @@ void Streamline::CheckFeatures(IDXGIAdapter* a_adapter)
 		}
 	}
 
+	slIsFeatureLoaded(sl::kFeatureDLSS_G, featureDLSSG);
+	if (featureDLSSG && !REL::Module::IsVR()) {
+		logger::info("[Streamline] DLSSG feature is loaded");
+		featureDLSSG = slIsFeatureSupported(sl::kFeatureDLSS_G, adapterInfo) == sl::Result::eOk;
+	} else {
+		logger::info("[Streamline] DLSSG feature is not loaded");
+		sl::FeatureRequirements featureRequirements;
+		sl::Result result = slGetFeatureRequirements(sl::kFeatureDLSS_G, featureRequirements);
+		if (result != sl::Result::eOk) {
+			logger::info("[Streamline] DLSSG feature failed to load due to: {}", magic_enum::enum_name(result));
+		}
+	}
+
+	slIsFeatureLoaded(sl::kFeatureReflex, featureReflex);
+	if (featureReflex) {
+		logger::info("[Streamline] Reflex feature is loaded");
+		featureReflex = slIsFeatureSupported(sl::kFeatureReflex, adapterInfo) == sl::Result::eOk;
+	} else {
+		logger::info("[Streamline] Reflex feature is not loaded");
+		sl::FeatureRequirements featureRequirements;
+		sl::Result result = slGetFeatureRequirements(sl::kFeatureReflex, featureRequirements);
+		if (result != sl::Result::eOk) {
+			logger::info("[Streamline] Reflex feature failed to load due to: {}", magic_enum::enum_name(result));
+		}
+	}
+
 	logger::info("[Streamline] DLSS {} available", featureDLSS ? "is" : "is not");
-	logger::info("[Streamline] NIS {} available", featureNIS ? "is" : "is not");
+	logger::info("[Streamline] DLSSG {} available", featureDLSSG && !REL::Module::IsVR() ? "is" : "is not");
+	logger::info("[Streamline] Reflex {} available", featureReflex && !REL::Module::IsVR() ? "is" : "is not");
 }
 
 void Streamline::PostDevice()
@@ -129,6 +143,18 @@ void Streamline::PostDevice()
 		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetOptimalSettings", (void*&)slDLSSGetOptimalSettings);
 		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetState", (void*&)slDLSSGetState);
 		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSSetOptions", (void*&)slDLSSSetOptions);
+	}
+
+	if (featureDLSSG && !REL::Module::IsVR()) {
+		slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGGetState", (void*&)slDLSSGGetState);
+		slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGSetOptions", (void*&)slDLSSGSetOptions);
+	}
+
+	if (featureReflex && !REL::Module::IsVR()) {
+		slGetFeatureFunction(sl::kFeatureReflex, "slReflexGetState", (void*&)slReflexGetState);
+		slGetFeatureFunction(sl::kFeatureReflex, "slReflexSetMarker", (void*&)slReflexSetMarker);
+		slGetFeatureFunction(sl::kFeatureReflex, "slReflexSleep", (void*&)slReflexSleep);
+		slGetFeatureFunction(sl::kFeatureReflex, "slReflexSetOptions", (void*&)slReflexSetOptions);
 	}
 }
 
