@@ -25,6 +25,7 @@ class Menu;
 class Streamline;
 class Upscaling;
 class DX12SwapChain;
+class FidelityFX;
 
 namespace SIE
 {
@@ -101,6 +102,7 @@ namespace globals
 	extern Streamline* streamline;
 	extern Upscaling* upscaling;
 	extern DX12SwapChain* dx12SwapChain;
+	extern FidelityFX* fidelityFX;
 
 	void ReInit();
 	void OnDataLoaded();

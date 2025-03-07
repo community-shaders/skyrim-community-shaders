@@ -157,7 +157,7 @@ public:
 
 	static void InstallHooks()
 	{
-		if (!State::GetSingleton()->upscalerLoaded) {
+		if (!globals::state->upscalerLoaded) {
 			bool isGOG = !GetModuleHandle(L"steam_api64.dll");
 
 			stl::write_thunk_call<Main_UpdateJitter>(REL::RelocationID(75460, 77245).address() + REL::Relocate(0xE5, isGOG ? 0x133 : 0xE2, 0x104));

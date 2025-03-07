@@ -289,8 +289,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	globals::state->SetAdapterDescription(adapterDesc.Description);
 
 	auto streamline = globals::streamline;
-	auto fidelityFX = FidelityFX::GetSingleton();
-	auto upscaling = Upscaling::GetSingleton();
+	auto fidelityFX = globals::fidelityFX;
+	auto upscaling = globals::upscaling;
 
 	if (streamline->initialized)
 		streamline->CheckFeatures(pAdapter);
@@ -898,11 +898,8 @@ namespace Hooks
 
 	void InstallD3DHooks()
 	{
-		auto streamline = globals::streamline;
-		streamline->LoadInterposer();
-
-		auto fidelityFX = FidelityFX::GetSingleton();
-		fidelityFX->LoadFFX();
+		globals::streamline->LoadInterposer();
+		globals::fidelityFX->LoadFFX();
 
 		*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
 		*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", !REL::Module::IsVR() ? "CreateDXGIFactory" : "CreateDXGIFactory1");

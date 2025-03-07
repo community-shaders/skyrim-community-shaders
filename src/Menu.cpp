@@ -961,7 +961,7 @@ void Menu::DrawDisplaySettings()
 		auto& themeSettings = settings.Theme;
 
 		const std::vector<std::pair<std::string, std::function<void()>>> features = {
-			{ "Upscaling", []() { Upscaling::GetSingleton()->DrawSettings(); } }
+			{ "Upscaling", []() { globals::upscaling->DrawSettings(); } }
 		};
 
 		for (const auto& [featureName, drawFunc] : features) {

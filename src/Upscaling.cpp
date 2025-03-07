@@ -188,7 +188,7 @@ void Upscaling::CheckResources()
 	auto currentUpscaleMode = GetUpscaleMethod();
 
 	auto streamline = globals::streamline;
-	auto fidelityFX = FidelityFX::GetSingleton();
+	auto fidelityFX = globals::fidelityFX;
 
 	if (previousUpscaleMode != currentUpscaleMode) {
 		if (previousUpscaleMode == UpscaleMethod::kDLSS)
@@ -334,7 +334,7 @@ void Upscaling::Upscale()
 		if (upscaleMethod == UpscaleMethod::kDLSS)
 			globals::streamline->Upscale(upscalingTexture, alphaMaskTexture, settings.dlssPreset == 0 ? (sl::DLSSPreset)11u : sl::DLSSPreset::ePresetE);
 		else if (upscaleMethod == UpscaleMethod::kFSR)
-			FidelityFX::GetSingleton()->Upscale(upscalingTexture, alphaMaskTexture, jitter, settings.sharpness);
+			globals::fidelityFX->Upscale(upscalingTexture, alphaMaskTexture, jitter, settings.sharpness);
 
 		state->EndPerfEvent();
 	}
@@ -379,8 +379,7 @@ void Upscaling::SharpenTAA()
 
 	CheckResources();
 
-	auto state = State::GetSingleton();
-
+	auto state = globals::state;
 	auto context = globals::d3d::context;
 
 	ID3D11ShaderResourceView* inputTextureSRV;
@@ -437,10 +436,7 @@ void Upscaling::SharpenTAA()
 
 	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
 
-	auto shadowState = RE::BSGraphics::RendererShadowState::GetSingleton();
-	GET_INSTANCE_MEMBER(stateUpdateFlags, shadowState)
-
-	stateUpdateFlags.set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
+	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
 }
 
 void Upscaling::CreateUpscalingResources()
@@ -495,7 +491,7 @@ void Upscaling::CreateFrameGenerationResources()
 {
 	logger::info("[Frame Generation] Creating resources");
 
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+	auto renderer = globals::game::renderer;
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
 	D3D11_TEXTURE2D_DESC texDesc{};

@@ -9,6 +9,7 @@
 #include "State.h"
 #include "Streamline.h"
 #include "Upscaling.h"
+#include "FidelityFX.h"
 
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
@@ -101,6 +102,7 @@ namespace globals
 	Streamline* streamline = nullptr;
 	Upscaling* upscaling = nullptr;
 	DX12SwapChain* dx12SwapChain = nullptr;
+	FidelityFX* fidelityFX = nullptr;
 
 	void ReInit()
 	{
@@ -140,6 +142,7 @@ namespace globals
 		streamline = Streamline::GetSingleton();
 		upscaling = Upscaling::GetSingleton();
 		dx12SwapChain = DX12SwapChain::GetSingleton();
+		fidelityFX = FidelityFX::GetSingleton();
 
 		features::cloudShadows = CloudShadows::GetSingleton();
 		features::dynamicCubemaps = DynamicCubemaps::GetSingleton();
