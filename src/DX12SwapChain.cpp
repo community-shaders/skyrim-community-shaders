@@ -113,14 +113,10 @@ HRESULT DX12SwapChain::GetBuffer(void** ppSurface)
 
 HRESULT DX12SwapChain::Present(UINT, UINT Flags)
 {
-	// Update fence value
-	fenceValues[frameIndex]++;
-
 	// Wait for D3D11 to finish
-	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), fenceValues[frameIndex]));
-
-	// Wait for D3D11
-	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), fenceValues[frameIndex]));
+	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), fenceValue));
+	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), fenceValue));
+	fenceValue++;
 
 	// New frame, reset
 	DX::ThrowIfFailed(commandAllocators[frameIndex]->Reset());
@@ -159,17 +155,13 @@ HRESULT DX12SwapChain::Present(UINT, UINT Flags)
 	// Present the frame
 	DX::ThrowIfFailed(swapChain->Present(0, Flags | DXGI_PRESENT_ALLOW_TEARING));
 
-	// Update fence value
-	fenceValues[frameIndex]++;
-
 	// Wait for D3D12 to finish
-	DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence.get(), fenceValues[frameIndex]));
-	DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence.get(), fenceValues[frameIndex]));
+	DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence.get(), fenceValue));
+	DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence.get(), fenceValue));
+	fenceValue++;
 
 	// Update the frame index
-	auto currentFenceValue = fenceValues[frameIndex];
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
-	fenceValues[frameIndex] = currentFenceValue;
 
 	return S_OK;
 }

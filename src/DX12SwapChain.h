@@ -86,7 +86,7 @@ public:
 	winrt::com_ptr<ID3D12Resource> swapChainBuffers[2];
 
 	UINT frameIndex = 0;
-	UINT64 fenceValues[2]{ 0, 0 };
+	UINT64 fenceValue = 0;
 
 	LARGE_INTEGER qpf;
 
