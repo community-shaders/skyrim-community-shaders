@@ -647,7 +647,7 @@ void Upscaling::CopyBuffersToSharedResources()
 		context->CSSetShader(shader, nullptr, 0);
 	}
 
-	if (!useHUDLess){
+	if (!useHUDLess) {
 		auto& swapChain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 		ID3D11Resource* swapChainResource;
 		swapChain.SRV->GetResource(&swapChainResource);
