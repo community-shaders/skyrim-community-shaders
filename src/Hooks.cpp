@@ -206,7 +206,7 @@ struct IDXGISwapChain_Present
 		state->Reset();
 		menu->DrawOverlay();
 
-		if (upscaling->d3d12Interop){
+		if (upscaling->d3d12Interop) {
 			SyncInterval = std::max(1u, SyncInterval);
 			Flags |= DXGI_PRESENT_ALLOW_TEARING;
 		}
