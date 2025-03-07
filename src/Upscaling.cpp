@@ -622,7 +622,7 @@ void Upscaling::PostDisplay()
 {
 	globals::state->RenderReShade();
 
-	if (!d3d12Interop || !settings.frameGenerationMode || RE::UI::GetSingleton()->GameIsPaused())
+	if (!d3d12Interop || !settings.frameGenerationMode)
 		return;
 
 	auto& context = globals::d3d::context;

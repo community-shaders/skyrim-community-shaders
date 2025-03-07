@@ -156,7 +156,7 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT)
 
 	auto upscaling = globals::upscaling;
 
-	bool useFrameGeneration = upscaling->settings.frameGenerationMode && !RE::UI::GetSingleton()->GameIsPaused();
+	bool useFrameGeneration = upscaling->settings.frameGenerationMode;
 
 	FidelityFX::GetSingleton()->Present(useFrameGeneration);
 
