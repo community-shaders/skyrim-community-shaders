@@ -75,13 +75,21 @@ public:
 	PFun_slReflexSleep* slReflexSleep{};
 	PFun_slReflexSetOptions* slReflexSetOptions{};
 
+	Util::FrameChecker frameChecker;
+	sl::FrameToken* frameToken;
+
+	decltype(&CreateDXGIFactory1) slCreateDXGIFactory1{};
+	decltype(&D3D11CreateDeviceAndSwapChain) slD3D11CreateDeviceAndSwapChain{};
+
 	void LoadInterposer();
 
 	void CheckFeatures(IDXGIAdapter* a_adapter);
 
 	void PostDevice();
 
-	void Upscale(Texture2D* a_color, Texture2D* a_alphaMask, sl::DLSSPreset a_preset);
+	void CheckFrameConstants();
 
+	void Upscale(Texture2D* a_color, Texture2D* a_alphaMask, sl::DLSSPreset a_preset);
+	void Present();
 	void DestroyDLSSResources();
 };

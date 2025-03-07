@@ -54,6 +54,11 @@ public:
 	bool isWindowed = false;
 	bool lowRefreshRate = false;
 
+	bool streamlineMissing = false;
+	bool fidelityFXMissing = false;
+
+	bool d3d12Interop = false;
+
 	void DrawSettings();
 	void SaveSettings(json& o_json);
 	void LoadSettings(json& o_json);
@@ -79,13 +84,13 @@ public:
 	void CreateUpscalingResources();
 	void DestroyUpscalingResources();
 
-	Texture2D* colorBufferShared[2];
-	Texture2D* depthBufferShared[2];
-	Texture2D* motionVectorBufferShared[2];
+	Texture2D* colorBufferShared;
+	Texture2D* depthBufferShared;
+	Texture2D* motionVectorBufferShared;
 
-	winrt::com_ptr<ID3D12Resource> colorBufferShared12[2];
-	winrt::com_ptr<ID3D12Resource> depthBufferShared12[2];
-	winrt::com_ptr<ID3D12Resource> motionVectorBufferShared12[2];
+	winrt::com_ptr<ID3D12Resource> colorBufferShared12;
+	winrt::com_ptr<ID3D12Resource> depthBufferShared12;
+	winrt::com_ptr<ID3D12Resource> motionVectorBufferShared12;
 
 	ID3D11ComputeShader* copyDepthToSharedBufferCS;
 

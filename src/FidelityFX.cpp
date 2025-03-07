@@ -58,11 +58,9 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 	auto swapChain = globals::dx12SwapChain;
 	auto commandList = swapChain->commandLists[swapChain->frameIndex].get();
 
-	auto frameIndex = globals::dx12SwapChain->frameIndex;
-
-	auto HUDLessColor = upscaling->colorBufferShared12[frameIndex].get();
-	auto depth = upscaling->depthBufferShared12[frameIndex].get();
-	auto motionVectors = upscaling->motionVectorBufferShared12[frameIndex].get();
+	auto HUDLessColor = upscaling->colorBufferShared12.get();
+	auto depth = upscaling->depthBufferShared12.get();
+	auto motionVectors = upscaling->motionVectorBufferShared12.get();
 
 	ffx::ConfigureDescFrameGeneration configParameters{};
 

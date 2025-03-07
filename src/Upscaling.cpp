@@ -91,9 +91,9 @@ void Upscaling::DrawSettings()
 	if (!globals::game::isVR) {
 		if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Text("Frame Generation interpolates real frames with generated ones for a smoother experience");
-			ImGui::Text("Uses AMD FSR 3.1 Frame Generation technology");
+			ImGui::Text("Uses AMD FSR 3.1 Frame Generation and NVIDIA DLSS Frame Generation technology");
 			ImGui::Text("Requires a D3D11 to D3D12 proxy which can create compatibility issues");
-			ImGui::Text("Toggling this setting requires a restart to work correctly.");
+			ImGui::Text("Toggling this setting requires a restart to work correctly");
 
 			bool onlyRequiresRestart = true;
 
@@ -107,34 +107,37 @@ void Upscaling::DrawSettings()
 				onlyRequiresRestart = false;
 			}
 
-			if (!FidelityFX::GetSingleton()->module) {
-				ImGui::Text("Warning: Requires amd_fidelityfx_dx12.dll to be loaded");
+			if (streamlineMissing) {
+				ImGui::Text("Warning: amd_fidelityfx_dx12.dll is not loaded");
 				onlyRequiresRestart = false;
 			}
 
-			auto swapChain = DX12SwapChain::GetSingleton()->swapChain;
+			if (fidelityFXMissing) {
+				ImGui::Text("Warning: Streamline is not loaded");
+				onlyRequiresRestart = false;
+			}
 
-			if (onlyRequiresRestart && settings.frameGenerationMode && !swapChain)
+			if (onlyRequiresRestart && settings.frameGenerationMode && !d3d12Interop)
 				ImGui::Text("Warning: Requires restart");
 
 			const char* toggleModes[] = { "Disabled", "Enabled" };
 
 			ImGui::SliderInt("Frame Generation", (int*)&settings.frameGenerationMode, 0, 1, std::format("{}", toggleModes[settings.frameGenerationMode]).c_str());
 
-			if (!settings.frameGenerationMode && swapChain)
+			if (!settings.frameGenerationMode && d3d12Interop)
 				ImGui::BeginDisabled();
 
 			ImGui::SliderInt("V-Sync", (int*)&settings.vsyncMode, 0, 1, std::format("{}", toggleModes[settings.vsyncMode]).c_str());
 
-			if (!settings.frameGenerationMode && swapChain)
+			if (!settings.frameGenerationMode && d3d12Interop)
 				ImGui::EndDisabled();
 
-			if ((settings.vsyncMode || !settings.frameGenerationMode) && swapChain)
+			if ((settings.vsyncMode || !settings.frameGenerationMode) && d3d12Interop)
 				ImGui::BeginDisabled();
 
 			ImGui::SliderInt("Frame Limit (Variable Refresh Rate)", (int*)&settings.frameLimitMode, 0, 1, std::format("{}", toggleModes[settings.frameLimitMode]).c_str());
 
-			if ((settings.vsyncMode || !settings.frameGenerationMode) && swapChain)
+			if ((settings.vsyncMode || !settings.frameGenerationMode) && d3d12Interop)
 				ImGui::EndDisabled();
 
 			ImGui::Text("Allows frame generation to function on low refresh rate monitors");
@@ -482,7 +485,7 @@ void Upscaling::CreateUpscalingResources()
 	alphaMaskTexture->CreateSRV(srvDesc);
 	alphaMaskTexture->CreateUAV(uavDesc);
 
-	if (globals::dx12SwapChain->swapChain)
+	if (d3d12Interop)
 		CreateFrameGenerationResources();
 }
 
@@ -506,57 +509,57 @@ void Upscaling::CreateFrameGenerationResources()
 	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-	for (int i = 0; i < 2; i++) {
-		D3D11_TEXTURE2D_DESC texDesc{};
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
-		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+	D3D11_TEXTURE2D_DESC texDesc{};
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+	D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 
-		main.texture->GetDesc(&texDesc);
-		main.SRV->GetDesc(&srvDesc);
-		main.RTV->GetDesc(&rtvDesc);
-		main.UAV->GetDesc(&uavDesc);
+	main.texture->GetDesc(&texDesc);
+	main.SRV->GetDesc(&srvDesc);
+	main.RTV->GetDesc(&rtvDesc);
+	main.UAV->GetDesc(&uavDesc);
 
-		texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+	texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
-		texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		srvDesc.Format = texDesc.Format;
-		rtvDesc.Format = texDesc.Format;
-		uavDesc.Format = texDesc.Format;
+	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	srvDesc.Format = texDesc.Format;
+	rtvDesc.Format = texDesc.Format;
+	uavDesc.Format = texDesc.Format;
 
-		colorBufferShared[i] = new Texture2D(texDesc);
-		colorBufferShared[i]->CreateSRV(srvDesc);
-		colorBufferShared[i]->CreateRTV(rtvDesc);
-		colorBufferShared[i]->CreateUAV(uavDesc);
+	colorBufferShared = new Texture2D(texDesc);
+	colorBufferShared->CreateSRV(srvDesc);
+	colorBufferShared->CreateRTV(rtvDesc);
+	colorBufferShared->CreateUAV(uavDesc);
 
-		texDesc.Format = DXGI_FORMAT_R32_FLOAT;
-		srvDesc.Format = texDesc.Format;
-		rtvDesc.Format = texDesc.Format;
-		uavDesc.Format = texDesc.Format;
+	texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+	srvDesc.Format = texDesc.Format;
+	rtvDesc.Format = texDesc.Format;
+	uavDesc.Format = texDesc.Format;
 
-		depthBufferShared[i] = new Texture2D(texDesc);
-		depthBufferShared[i]->CreateSRV(srvDesc);
-		depthBufferShared[i]->CreateRTV(rtvDesc);
-		depthBufferShared[i]->CreateUAV(uavDesc);
+	depthBufferShared = new Texture2D(texDesc);
+	depthBufferShared->CreateSRV(srvDesc);
+	depthBufferShared->CreateRTV(rtvDesc);
+	depthBufferShared->CreateUAV(uavDesc);
 
-		auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-		D3D11_TEXTURE2D_DESC texDescMotionVector{};
-		motionVector.texture->GetDesc(&texDescMotionVector);
+	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+	D3D11_TEXTURE2D_DESC texDescMotionVector{};
+	motionVector.texture->GetDesc(&texDescMotionVector);
 
-		texDesc.Format = texDescMotionVector.Format;
-		srvDesc.Format = texDesc.Format;
-		rtvDesc.Format = texDesc.Format;
-		uavDesc.Format = texDesc.Format;
+	texDesc.Format = texDescMotionVector.Format;
+	srvDesc.Format = texDesc.Format;
+	rtvDesc.Format = texDesc.Format;
+	uavDesc.Format = texDesc.Format;
 
-		motionVectorBufferShared[i] = new Texture2D(texDesc);
-		motionVectorBufferShared[i]->CreateSRV(srvDesc);
-		motionVectorBufferShared[i]->CreateRTV(rtvDesc);
-		motionVectorBufferShared[i]->CreateUAV(uavDesc);
+	motionVectorBufferShared = new Texture2D(texDesc);
+	motionVectorBufferShared->CreateSRV(srvDesc);
+	motionVectorBufferShared->CreateRTV(rtvDesc);
+	motionVectorBufferShared->CreateUAV(uavDesc);
 
-		{
-			IDXGIResource1* dxgiResource = nullptr;
-			DX::ThrowIfFailed(colorBufferShared[i]->resource->QueryInterface(IID_PPV_ARGS(&dxgiResource)));
+	{
+		IDXGIResource1* dxgiResource = nullptr;
+		DX::ThrowIfFailed(colorBufferShared->resource->QueryInterface(IID_PPV_ARGS(&dxgiResource)));
 
+		if (globals::dx12SwapChain->swapChain) {
 			HANDLE sharedHandle = nullptr;
 			DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(
 				nullptr,
@@ -566,15 +569,17 @@ void Upscaling::CreateFrameGenerationResources()
 
 			DX::ThrowIfFailed(globals::dx12SwapChain->d3d12Device->OpenSharedHandle(
 				sharedHandle,
-				IID_PPV_ARGS(&colorBufferShared12[i])));
+				IID_PPV_ARGS(&colorBufferShared12)));
 
 			CloseHandle(sharedHandle);
 		}
+	}
 
-		{
-			IDXGIResource1* dxgiResource = nullptr;
-			DX::ThrowIfFailed(depthBufferShared[i]->resource->QueryInterface(IID_PPV_ARGS(&dxgiResource)));
+	{
+		IDXGIResource1* dxgiResource = nullptr;
+		DX::ThrowIfFailed(depthBufferShared->resource->QueryInterface(IID_PPV_ARGS(&dxgiResource)));
 
+		if (globals::dx12SwapChain->swapChain) {
 			HANDLE sharedHandle = nullptr;
 			DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(
 				nullptr,
@@ -584,15 +589,17 @@ void Upscaling::CreateFrameGenerationResources()
 
 			DX::ThrowIfFailed(globals::dx12SwapChain->d3d12Device->OpenSharedHandle(
 				sharedHandle,
-				IID_PPV_ARGS(&depthBufferShared12[i])));
+				IID_PPV_ARGS(&depthBufferShared12)));
 
 			CloseHandle(sharedHandle);
 		}
+	}
 
-		{
-			IDXGIResource1* dxgiResource = nullptr;
-			DX::ThrowIfFailed(motionVectorBufferShared[i]->resource->QueryInterface(IID_PPV_ARGS(&dxgiResource)));
+	{
+		IDXGIResource1* dxgiResource = nullptr;
+		DX::ThrowIfFailed(motionVectorBufferShared->resource->QueryInterface(IID_PPV_ARGS(&dxgiResource)));
 
+		if (globals::dx12SwapChain->swapChain) {
 			HANDLE sharedHandle = nullptr;
 			DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(
 				nullptr,
@@ -602,7 +609,7 @@ void Upscaling::CreateFrameGenerationResources()
 
 			DX::ThrowIfFailed(globals::dx12SwapChain->d3d12Device->OpenSharedHandle(
 				sharedHandle,
-				IID_PPV_ARGS(&motionVectorBufferShared12[i])));
+				IID_PPV_ARGS(&motionVectorBufferShared12)));
 
 			CloseHandle(sharedHandle);
 		}
@@ -615,7 +622,7 @@ void Upscaling::PostDisplay()
 {
 	globals::state->RenderReShade();
 
-	if (!globals::dx12SwapChain->swapChain || !settings.frameGenerationMode || RE::UI::GetSingleton()->GameIsPaused())
+	if (!d3d12Interop || !settings.frameGenerationMode || RE::UI::GetSingleton()->GameIsPaused())
 		return;
 
 	auto& context = globals::d3d::context;
@@ -631,12 +638,10 @@ void Upscaling::PostDisplay()
 	ID3D11Resource* swapChainResource;
 	swapChain.SRV->GetResource(&swapChainResource);
 
-	auto frameIndex = globals::dx12SwapChain->frameIndex;
-
-	context->CopyResource(colorBufferShared[frameIndex]->resource.get(), swapChainResource);
+	context->CopyResource(colorBufferShared->resource.get(), swapChainResource);
 
 	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-	context->CopyResource(motionVectorBufferShared[frameIndex]->resource.get(), motionVector.texture);
+	context->CopyResource(motionVectorBufferShared->resource.get(), motionVector.texture);
 
 	{
 		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
@@ -647,7 +652,7 @@ void Upscaling::PostDisplay()
 			ID3D11ShaderResourceView* views[1] = { depth.depthSRV };
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
-			ID3D11UnorderedAccessView* uavs[1] = { depthBufferShared[frameIndex]->uav.get() };
+			ID3D11UnorderedAccessView* uavs[1] = { depthBufferShared->uav.get() };
 			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
 			context->CSSetShader(copyDepthToSharedBufferCS, nullptr, 0);

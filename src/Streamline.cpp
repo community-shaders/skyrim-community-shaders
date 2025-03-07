@@ -53,6 +53,7 @@ void Streamline::LoadInterposer()
 	pref.projectId = "f8776929-c969-43bd-ac2b-294b4de58aac";
 
 	pref.renderAPI = sl::RenderAPI::eD3D11;
+	pref.flags = sl::PreferenceFlags::eDisableCLStateTracking | sl::PreferenceFlags::eUseDXGIFactoryProxy;
 
 	// Hook up all of the functions exported by the SL Interposer Library
 	slInit = (PFun_slInit*)GetProcAddress(interposer, "slInit");
@@ -72,6 +73,9 @@ void Streamline::LoadInterposer()
 	slGetFeatureFunction = (PFun_slGetFeatureFunction*)GetProcAddress(interposer, "slGetFeatureFunction");
 	slGetNewFrameToken = (PFun_slGetNewFrameToken*)GetProcAddress(interposer, "slGetNewFrameToken");
 	slSetD3DDevice = (PFun_slSetD3DDevice*)GetProcAddress(interposer, "slSetD3DDevice");
+
+	slCreateDXGIFactory1 = (decltype(&CreateDXGIFactory1))GetProcAddress(interposer, "CreateDXGIFactory1");
+	slD3D11CreateDeviceAndSwapChain = (decltype(&D3D11CreateDeviceAndSwapChain))GetProcAddress(interposer, "D3D11CreateDeviceAndSwapChain");
 
 	if (SL_FAILED(res, slInit(pref, sl::kSDKVersion))) {
 		logger::critical("[Streamline] Failed to initialize Streamline");
@@ -105,7 +109,9 @@ void Streamline::CheckFeatures(IDXGIAdapter* a_adapter)
 	}
 
 	slIsFeatureLoaded(sl::kFeatureDLSS_G, featureDLSSG);
-	if (featureDLSSG && !REL::Module::IsVR()) {
+	if (REL::Module::IsVR()) {
+		featureDLSSG = false;
+	} else if (featureDLSSG) {
 		logger::info("[Streamline] DLSSG feature is loaded");
 		featureDLSSG = slIsFeatureSupported(sl::kFeatureDLSS_G, adapterInfo) == sl::Result::eOk;
 	} else {
@@ -118,7 +124,9 @@ void Streamline::CheckFeatures(IDXGIAdapter* a_adapter)
 	}
 
 	slIsFeatureLoaded(sl::kFeatureReflex, featureReflex);
-	if (featureReflex) {
+	if (REL::Module::IsVR()) {
+		featureReflex = false;
+	} else if (featureReflex) {
 		logger::info("[Streamline] Reflex feature is loaded");
 		featureReflex = slIsFeatureSupported(sl::kFeatureReflex, adapterInfo) == sl::Result::eOk;
 	} else {
@@ -145,57 +153,82 @@ void Streamline::PostDevice()
 		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSSetOptions", (void*&)slDLSSSetOptions);
 	}
 
-	if (featureDLSSG && !REL::Module::IsVR()) {
+	if (featureDLSSG) {
 		slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGGetState", (void*&)slDLSSGGetState);
 		slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGSetOptions", (void*&)slDLSSGSetOptions);
 	}
 
-	if (featureReflex && !REL::Module::IsVR()) {
+	if (featureReflex) {
 		slGetFeatureFunction(sl::kFeatureReflex, "slReflexGetState", (void*&)slReflexGetState);
 		slGetFeatureFunction(sl::kFeatureReflex, "slReflexSetMarker", (void*&)slReflexSetMarker);
 		slGetFeatureFunction(sl::kFeatureReflex, "slReflexSleep", (void*&)slReflexSleep);
 		slGetFeatureFunction(sl::kFeatureReflex, "slReflexSetOptions", (void*&)slReflexSetOptions);
+
+		if (featureDLSSG) {
+			sl::ReflexOptions reflexOptions{};
+			reflexOptions.mode = sl::ReflexMode::eLowLatency;
+			reflexOptions.useMarkersToOptimize = false;
+			reflexOptions.virtualKey = 0;
+			reflexOptions.frameLimitUs = 0;
+
+			if (SL_FAILED(res, slReflexSetOptions(reflexOptions))) {
+				logger::error("[Streamline] Failed to set reflex options");
+			} else {
+				logger::info("[Streamline] Successfully set reflex options");
+			}
+		}
 	}
 }
 
+
+void Streamline::CheckFrameConstants()
+{
+	if (frameChecker.IsNewFrame()) {
+		slGetNewFrameToken(frameToken, nullptr);
+
+		auto state = globals::state;
+
+		sl::Constants slConstants = {};
+
+		if (globals::game::isVR) {
+			slConstants.cameraAspectRatio = (state->screenSize.x * 0.5f) / state->screenSize.y;
+		} else {
+			slConstants.cameraAspectRatio = state->screenSize.x / state->screenSize.y;
+		}
+
+		slConstants.cameraFOV = Util::GetVerticalFOVRad();
+		slConstants.cameraNear = *globals::game::cameraNear;
+		slConstants.cameraFar = *globals::game::cameraFar;
+
+		slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
+		slConstants.cameraPinholeOffset = { 0.f, 0.f };
+		slConstants.depthInverted = sl::Boolean::eFalse;
+
+		auto upscaling = globals::upscaling;
+		auto jitter = upscaling->jitter;
+		slConstants.jitterOffset = { -jitter.x, -jitter.y };
+		slConstants.reset = upscaling->reset ? sl::Boolean::eTrue : sl::Boolean::eFalse;
+
+		slConstants.mvecScale = { (globals::game::isVR ? 0.5f : 1.0f), 1 };
+		slConstants.motionVectors3D = sl::Boolean::eTrue;
+		slConstants.motionVectorsInvalidValue = FLT_MIN;
+		slConstants.orthographicProjection = sl::Boolean::eFalse;
+		slConstants.motionVectorsDilated = sl::Boolean::eFalse;
+		slConstants.motionVectorsJittered = sl::Boolean::eFalse;
+
+		if (SL_FAILED(res, slSetConstants(slConstants, *frameToken, viewport))) {
+			logger::error("[Streamline] Could not set constants");
+		}
+	}
+}
+
+
 void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl::DLSSPreset a_preset)
 {
+	CheckFrameConstants();
+
 	auto state = globals::state;
 
-	sl::Constants slConstants = {};
-
-	if (globals::game::isVR) {
-		slConstants.cameraAspectRatio = (state->screenSize.x * 0.5f) / state->screenSize.y;
-	} else {
-		slConstants.cameraAspectRatio = state->screenSize.x / state->screenSize.y;
-	}
-
-	slConstants.cameraFOV = Util::GetVerticalFOVRad();
-	slConstants.cameraNear = *globals::game::cameraNear;
-	slConstants.cameraFar = *globals::game::cameraFar;
-
-	slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
-	slConstants.cameraPinholeOffset = { 0.f, 0.f };
-	slConstants.depthInverted = sl::Boolean::eFalse;
-
-	auto upscaling = globals::upscaling;
-	auto jitter = upscaling->jitter;
-	slConstants.jitterOffset = { -jitter.x, -jitter.y };
-	slConstants.reset = upscaling->reset ? sl::Boolean::eTrue : sl::Boolean::eFalse;
-
-	slConstants.mvecScale = { (globals::game::isVR ? 0.5f : 1.0f), 1 };
-	slConstants.motionVectors3D = sl::Boolean::eTrue;
-	slConstants.motionVectorsInvalidValue = FLT_MIN;
-	slConstants.orthographicProjection = sl::Boolean::eFalse;
-	slConstants.motionVectorsDilated = sl::Boolean::eFalse;
-	slConstants.motionVectorsJittered = sl::Boolean::eFalse;
-
-	sl::FrameToken* frameToken;
-	slGetNewFrameToken(frameToken, nullptr);
-
-	if (SL_FAILED(res, slSetConstants(slConstants, *frameToken, viewport))) {
-		logger::error("[Streamline] Could not set constants");
-	}
 	auto renderer = globals::game::renderer;
 	auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 	auto& motionVectorsTexture = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
@@ -251,6 +284,68 @@ void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl
 	sl::ViewportHandle view(viewport);
 	const sl::BaseStructure* inputs[] = { &view };
 	slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
+}
+
+void Streamline::Present()
+{
+	if (!initialized || !featureDLSSG || globals::game::isVR || !globals::upscaling->d3d12Interop)
+		return;
+
+	CheckFrameConstants();
+
+	auto upscaling = globals::upscaling;
+
+	if (!upscaling->settings.frameGenerationMode)
+		return;
+
+	static auto currentFrameGenerationMode = sl::DLSSGMode::eOff;
+	auto frameGenerationMode = upscaling->settings.frameGenerationMode ? sl::DLSSGMode::eOn : sl::DLSSGMode::eOff;
+
+	if (currentFrameGenerationMode != frameGenerationMode) {
+		currentFrameGenerationMode = frameGenerationMode;
+
+		sl::DLSSGOptions options{};
+		options.mode = upscaling->settings.frameGenerationMode ? sl::DLSSGMode::eOn : sl::DLSSGMode::eOff;
+
+		if (SL_FAILED(result, slDLSSGSetOptions(viewport, options))) {
+			logger::error("[Streamline] Could not set DLSSG");
+		}
+	}
+
+	auto state = globals::state;
+
+	// Fake NVIDIA Reflex to prevent DLSSG errors
+	slReflexSetMarker(sl::ReflexMarker::eInputSample, *frameToken);
+	slReflexSetMarker(sl::ReflexMarker::eSimulationStart, *frameToken);
+	slReflexSetMarker(sl::ReflexMarker::eSimulationEnd, *frameToken);
+	slReflexSetMarker(sl::ReflexMarker::eRenderSubmitStart, *frameToken);
+	slReflexSetMarker(sl::ReflexMarker::eRenderSubmitEnd, *frameToken);
+	slReflexSetMarker(sl::ReflexMarker::ePresentStart, *frameToken);
+	slReflexSetMarker(sl::ReflexMarker::ePresentEnd, *frameToken);
+
+	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+
+	auto& motionVectorsBuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::RENDER_TARGET::kMOTION_VECTOR];
+
+	sl::Extent fullExtent{ 0, 0, (uint)state->screenSize.x, (uint)state->screenSize.y };
+
+	float2 dynamicScreenSize = Util::ConvertToDynamic(State::GetSingleton()->screenSize);
+	sl::Extent dynamicExtent{ 0, 0, (uint)dynamicScreenSize.x, (uint)dynamicScreenSize.y };
+
+	sl::Resource depth = { sl::ResourceType::eTex2d, upscaling->depthBufferShared->resource.get(), 0 };
+	sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &dynamicExtent };
+
+	sl::Resource mvec = { sl::ResourceType::eTex2d, motionVectorsBuffer.texture, 0 };
+	sl::ResourceTag mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &dynamicExtent };
+
+	sl::Resource hudLess = { sl::ResourceType::eTex2d, upscaling->colorBufferShared->resource.get(), 0 };
+	sl::ResourceTag hudLessTag = sl::ResourceTag{ &hudLess, sl::kBufferTypeHUDLessColor, sl::ResourceLifecycle::eValidUntilPresent, &fullExtent };
+
+	sl::Resource ui = { sl::ResourceType::eTex2d, nullptr, 0 };
+	sl::ResourceTag uiTag = sl::ResourceTag{ &ui, sl::kBufferTypeUIColorAndAlpha, sl::ResourceLifecycle::eValidUntilPresent, &fullExtent };
+
+	sl::ResourceTag inputs[] = { depthTag, mvecTag, hudLessTag, uiTag };
+	slSetTag(viewport, inputs, _countof(inputs), globals::d3d::context);
 }
 
 void Streamline::DestroyDLSSResources()
