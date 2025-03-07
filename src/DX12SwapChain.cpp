@@ -1,7 +1,7 @@
 #include "DX12SwapChain.h"
 
-#include <dxgi1_6.h>
 #include <dx12/ffx_api_dx12.hpp>
+#include <dxgi1_6.h>
 
 #include "FidelityFX.h"
 #include "Streamline.h"
@@ -124,7 +124,8 @@ HRESULT DX12SwapChain::GetBuffer(void** ppSurface)
 }
 
 HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT)
-{;
+{
+	;
 	// New frame, reset
 	DX::ThrowIfFailed(commandAllocators[frameIndex]->Reset());
 	DX::ThrowIfFailed(commandLists[frameIndex]->Reset(commandAllocators[frameIndex].get(), nullptr));
@@ -170,14 +171,14 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT)
 
 	// Present the frame
 	DX::ThrowIfFailed(swapChain->Present(upscaling->settings.vsyncMode ? std::max(1u, SyncInterval) : 0, DXGI_PRESENT_ALLOW_TEARING));
-	
+
 	// Update fence value
 	fenceValues[frameIndex]++;
 
 	// Wait for D3D12 to finish
 	DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence.get(), fenceValues[frameIndex]));
 	DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence.get(), fenceValues[frameIndex]));
-	
+
 	// Update the frame index.
 	auto currentFenceValue = fenceValues[frameIndex];
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
