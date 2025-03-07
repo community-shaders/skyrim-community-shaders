@@ -80,15 +80,13 @@ public:
 	winrt::com_ptr<ID3D11Device5> d3d11Device;
 	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context;
 
-	winrt::com_ptr<ID3D11Fence> d3d11Fences[2];
-	winrt::com_ptr<ID3D12Fence> d3d12Fences[2];
+	winrt::com_ptr<ID3D11Fence> d3d11Fence;
+	winrt::com_ptr<ID3D12Fence> d3d12Fence;
+
+	winrt::com_ptr<ID3D12Resource> swapChainBuffers[2];
 
 	UINT frameIndex = 0;
-	UINT64 fenceValuesPre[2]{ 0, 0 };
-	UINT64 fenceValuesPost[2]{ 0, 0 };
-
-	HANDLE frameLatencyWaitableObject = nullptr;
-	HANDLE fenceEvent;
+	UINT64 fenceValues[2]{ 0, 0 };
 
 	LARGE_INTEGER qpf;
 

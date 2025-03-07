@@ -1,5 +1,7 @@
 #include "DX12SwapChain.h"
+
 #include <dxgi1_6.h>
+#include <dx12/ffx_api_dx12.hpp>
 
 #include "FidelityFX.h"
 #include "Streamline.h"
@@ -42,44 +44,40 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 	swapChainDesc.Flags = a_swapChainDesc.Flags;
 
-	winrt::com_ptr<IDXGISwapChain4> swapChainCOM;
+	ffx::CreateContextDescFrameGenerationSwapChainForHwndDX12 ffxSwapChainDesc{};
 
-	DX::ThrowIfFailed(dxgiFactory->CreateSwapChainForHwnd(
-		commandQueue.get(),
-		a_swapChainDesc.OutputWindow,
-		&swapChainDesc,
-		nullptr,
-		nullptr,
-		(IDXGISwapChain1**)swapChainCOM.put()));
+	ffxSwapChainDesc.desc = &swapChainDesc;
+	ffxSwapChainDesc.dxgiFactory = dxgiFactory;
+	ffxSwapChainDesc.fullscreenDesc = nullptr;
+	ffxSwapChainDesc.gameQueue = commandQueue.get();
+	ffxSwapChainDesc.hwnd = a_swapChainDesc.OutputWindow;
+	ffxSwapChainDesc.swapchain = &swapChain;
 
-	swapChain = swapChainCOM.detach();
+	auto fidelityFX = FidelityFX::GetSingleton();
+
+	if (ffx::CreateContext(fidelityFX->swapChainContext, nullptr, ffxSwapChainDesc) != ffx::ReturnCode::Ok) {
+		logger::critical("[FidelityFX] Failed to create swap chain context!");
+	}
+
+	DX::ThrowIfFailed(swapChain->GetBuffer(0, IID_PPV_ARGS(&swapChainBuffers[0])));
+	DX::ThrowIfFailed(swapChain->GetBuffer(1, IID_PPV_ARGS(&swapChainBuffers[1])));
 
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
 
-	FidelityFX::GetSingleton()->SetupFrameGeneration();
+	fidelityFX->SetupFrameGeneration();
 
-	swapChain->SetMaximumFrameLatency(1);
-	frameLatencyWaitableObject = swapChain->GetFrameLatencyWaitableObject();
 	QueryPerformanceFrequency(&qpf);
 
 	refreshRate = GetRefreshRate(a_swapChainDesc.OutputWindow);
-
-	// Create an event handle to use for frame synchronization.
-	fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-	if (fenceEvent == nullptr) {
-		DX::ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
-	}
 }
 
 void DX12SwapChain::CreateInterop()
 {
-	for (int i = 0; i < 2; i++) {
-		HANDLE sharedFenceHandle;
-		DX::ThrowIfFailed(d3d12Device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&d3d12Fences[i])));
-		DX::ThrowIfFailed(d3d12Device->CreateSharedHandle(d3d12Fences[i].get(), nullptr, GENERIC_ALL, nullptr, &sharedFenceHandle));
-		DX::ThrowIfFailed(d3d11Device->OpenSharedFence(sharedFenceHandle, IID_PPV_ARGS(&d3d11Fences[i])));
-		CloseHandle(sharedFenceHandle);
-	}
+	HANDLE sharedFenceHandle;
+	DX::ThrowIfFailed(d3d12Device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&d3d12Fence)));
+	DX::ThrowIfFailed(d3d12Device->CreateSharedHandle(d3d12Fence.get(), nullptr, GENERIC_ALL, nullptr, &sharedFenceHandle));
+	DX::ThrowIfFailed(d3d11Device->OpenSharedFence(sharedFenceHandle, IID_PPV_ARGS(&d3d11Fence)));
+	CloseHandle(sharedFenceHandle);
 
 	swapChainProxy = new DXGISwapChainProxy(swapChain);
 
@@ -126,30 +124,22 @@ HRESULT DX12SwapChain::GetBuffer(void** ppSurface)
 }
 
 HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT)
-{
-	// Wait for D3D11 work to finish
-	d3d11Context->Flush();
-
+{;
 	// New frame, reset
 	DX::ThrowIfFailed(commandAllocators[frameIndex]->Reset());
 	DX::ThrowIfFailed(commandLists[frameIndex]->Reset(commandAllocators[frameIndex].get(), nullptr));
 
 	// Update fence value
-	fenceValuesPre[frameIndex]++;
+	fenceValues[frameIndex]++;
 
-	// Signal fence from D3D11
-	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fences[0].get(), fenceValuesPre[frameIndex]));
-
-	// Wait for D3D11 to finish on D3D12 side
-	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fences[0].get(), fenceValuesPre[frameIndex]));
-
-	winrt::com_ptr<ID3D12Resource> swapChainBuffer;
-	DX::ThrowIfFailed(swapChain->GetBuffer(frameIndex, IID_PPV_ARGS(&swapChainBuffer)));
+	// Wait for D3D11 to finish
+	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), fenceValues[frameIndex]));
+	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), fenceValues[frameIndex]));
 
 	// Copy shared texture to swap chain buffer
 	{
 		auto fakeSwapChain = swapChainBufferWrapped->resource.get();
-		auto realSwapChain = swapChainBuffer.get();
+		auto realSwapChain = swapChainBuffers[frameIndex].get();
 		{
 			std::vector<D3D12_RESOURCE_BARRIER> barriers;
 			barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(fakeSwapChain, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE));
@@ -179,24 +169,19 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT)
 	commandQueue->ExecuteCommandLists(1, commandListsToExecute);
 
 	// Present the frame
-	DX::ThrowIfFailed(swapChain->Present(upscaling->settings.vsyncMode ? std::max(1u, SyncInterval) : 0, 0));
-
-	const UINT64 currentFenceValue = fenceValuesPost[frameIndex];
-
-	DX::ThrowIfFailed(commandQueue->Signal(d3d12Fences[1].get(), currentFenceValue));
-	DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fences[1].get(), currentFenceValue));
-
-	// Update the frame index.
-	frameIndex = swapChain->GetCurrentBackBufferIndex();
-
-	// If the next frame is not ready to be rendered yet, wait until it is ready.
-	if (d3d12Fences[1]->GetCompletedValue() < fenceValuesPost[frameIndex]) {
-		DX::ThrowIfFailed(d3d12Fences[1]->SetEventOnCompletion(fenceValuesPost[frameIndex], fenceEvent));
-		WaitForSingleObjectEx(fenceEvent, INFINITE, FALSE);
-	}
-
+	DX::ThrowIfFailed(swapChain->Present(upscaling->settings.vsyncMode ? std::max(1u, SyncInterval) : 0, DXGI_PRESENT_ALLOW_TEARING));
+	
 	// Update fence value
-	fenceValuesPost[frameIndex] = currentFenceValue + 1;
+	fenceValues[frameIndex]++;
+
+	// Wait for D3D12 to finish
+	DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence.get(), fenceValues[frameIndex]));
+	DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence.get(), fenceValues[frameIndex]));
+	
+	// Update the frame index.
+	auto currentFenceValue = fenceValues[frameIndex];
+	frameIndex = swapChain->GetCurrentBackBufferIndex();
+	fenceValues[frameIndex] = currentFenceValue;
 
 	// Frame limiter for V-Sync and VRR
 	if (!upscaling->settings.vsyncMode && upscaling->settings.frameLimitMode)

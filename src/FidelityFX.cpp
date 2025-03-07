@@ -50,14 +50,6 @@ void FidelityFX::SetupFrameGeneration()
 	if (ffx::CreateContext(frameGenContext, nullptr, createFg, createBackend) != ffx::ReturnCode::Ok) {
 		logger::critical("[FidelityFX] Failed to create frame generation context!");
 	}
-
-	ffx::CreateContextDescFrameGenerationSwapChainWrapDX12 desc{};
-	desc.swapchain = &swapChain->swapChain;
-	desc.gameQueue = swapChain->commandQueue.get();
-
-	if (ffx::CreateContext(swapChainContext, nullptr, desc) != ffx::ReturnCode::Ok) {
-		logger::critical("[FidelityFX] Failed to create swap chain context!");
-	}
 }
 
 void FidelityFX::Present(bool a_useFrameGeneration)
