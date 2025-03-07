@@ -340,7 +340,7 @@ void Streamline::Present()
 	sl::Resource mvec = { sl::ResourceType::eTex2d, upscaling->motionVectorBufferShared->resource.get(), 0 };
 	sl::ResourceTag mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &dynamicExtent };
 
-	sl::Resource hudLess = { sl::ResourceType::eTex2d, upscaling->colorBufferShared->resource.get(), 0 };
+	sl::Resource hudLess = { sl::ResourceType::eTex2d, upscaling->HUDLessBufferShared->resource.get(), 0 };
 	sl::ResourceTag hudLessTag = sl::ResourceTag{ &hudLess, sl::kBufferTypeHUDLessColor, sl::ResourceLifecycle::eValidUntilPresent, &fullExtent };
 
 	sl::Resource ui = { sl::ResourceType::eTex2d, nullptr, 0 };

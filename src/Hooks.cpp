@@ -198,6 +198,8 @@ struct IDXGISwapChain_Present
 		auto upscaling = globals::upscaling;
 		auto menu = globals::menu;
 
+		upscaling->CopyBuffersToSharedResources();
+
 		state->PresentReShade();
 
 		if (streamline->initialized)

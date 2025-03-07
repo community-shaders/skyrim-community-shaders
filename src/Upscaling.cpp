@@ -515,10 +515,10 @@ void Upscaling::CreateFrameGenerationResources()
 	rtvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
 
-	colorBufferShared = new Texture2D(texDesc);
-	colorBufferShared->CreateSRV(srvDesc);
-	colorBufferShared->CreateRTV(rtvDesc);
-	colorBufferShared->CreateUAV(uavDesc);
+	HUDLessBufferShared = new Texture2D(texDesc);
+	HUDLessBufferShared->CreateSRV(srvDesc);
+	HUDLessBufferShared->CreateRTV(rtvDesc);
+	HUDLessBufferShared->CreateUAV(uavDesc);
 
 	texDesc.Format = DXGI_FORMAT_R32_FLOAT;
 	srvDesc.Format = texDesc.Format;
@@ -546,7 +546,7 @@ void Upscaling::CreateFrameGenerationResources()
 
 	{
 		IDXGIResource1* dxgiResource = nullptr;
-		DX::ThrowIfFailed(colorBufferShared->resource->QueryInterface(IID_PPV_ARGS(&dxgiResource)));
+		DX::ThrowIfFailed(HUDLessBufferShared->resource->QueryInterface(IID_PPV_ARGS(&dxgiResource)));
 
 		if (globals::dx12SwapChain->swapChain) {
 			HANDLE sharedHandle = nullptr;
@@ -558,7 +558,7 @@ void Upscaling::CreateFrameGenerationResources()
 
 			DX::ThrowIfFailed(globals::dx12SwapChain->d3d12Device->OpenSharedHandle(
 				sharedHandle,
-				IID_PPV_ARGS(&colorBufferShared12)));
+				IID_PPV_ARGS(&HUDLessBufferShared12)));
 
 			CloseHandle(sharedHandle);
 		}
@@ -607,30 +607,18 @@ void Upscaling::CreateFrameGenerationResources()
 	copyDepthToSharedBufferCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\FrameGeneration\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0");
 }
 
-void Upscaling::PostDisplay()
+void Upscaling::CopyBuffersToSharedResources()
 {
-	globals::state->RenderReShade();
-
 	if (!d3d12Interop || !settings.frameGenerationMode)
 		return;
 
-	auto& context = globals::d3d::context;
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+	auto renderer = globals::game::renderer;
+	auto context = globals::d3d::context;
 
-	ID3D11RenderTargetView* backupViews[8];
-	ID3D11DepthStencilView* backupDsv;
-	context->OMGetRenderTargets(8, backupViews, &backupDsv);  // Backup bound render targets
-	context->OMSetRenderTargets(0, nullptr, nullptr);         // Unbind all bound render targets
-
-	auto& swapChain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-
-	ID3D11Resource* swapChainResource;
-	swapChain.SRV->GetResource(&swapChainResource);
-
-	context->CopyResource(colorBufferShared->resource.get(), swapChainResource);
-
-	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-	context->CopyResource(motionVectorBufferShared->resource.get(), motionVector.texture);
+	{
+		auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+		context->CopyResource(motionVectorBufferShared->resource.get(), motionVector.texture);
+	}
 
 	{
 		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
@@ -659,15 +647,40 @@ void Upscaling::PostDisplay()
 		context->CSSetShader(shader, nullptr, 0);
 	}
 
-	context->OMSetRenderTargets(8, backupViews, backupDsv);  // Restore all bound render targets
-
-	for (int i = 0; i < 8; i++) {
-		if (backupViews[i])
-			backupViews[i]->Release();
+	if (!useHUDLess)
+	{
+		auto& swapChain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+		ID3D11Resource* swapChainResource;
+		swapChain.SRV->GetResource(&swapChainResource);
+		context->CopyResource(HUDLessBufferShared->resource.get(), swapChainResource);
 	}
 
-	if (backupDsv)
-		backupDsv->Release();
+	useHUDLess = false;
+}
+
+void Upscaling::PostDisplay()
+{
+	globals::state->RenderReShade();
+
+	if (!d3d12Interop || !settings.frameGenerationMode)
+		return;
+
+	auto& context = globals::d3d::context;
+	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+
+	ID3D11RenderTargetView* backupViews[8];
+	ID3D11DepthStencilView* backupDsv;
+	context->OMGetRenderTargets(8, backupViews, &backupDsv);  // Backup bound render targets
+	context->OMSetRenderTargets(0, nullptr, nullptr);         // Unbind all bound render targets
+
+	auto& swapChain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+
+	ID3D11Resource* swapChainResource;
+	swapChain.SRV->GetResource(&swapChainResource);
+
+	context->CopyResource(HUDLessBufferShared->resource.get(), swapChainResource);
+
+	useHUDLess = true;
 }
 
 void Upscaling::TimerSleepQPC(int64_t targetQPC)

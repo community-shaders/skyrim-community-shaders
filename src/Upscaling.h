@@ -72,17 +72,20 @@ public:
 	void CreateUpscalingResources();
 	void DestroyUpscalingResources();
 
-	Texture2D* colorBufferShared;
+	Texture2D* HUDLessBufferShared;
 	Texture2D* depthBufferShared;
 	Texture2D* motionVectorBufferShared;
 
-	winrt::com_ptr<ID3D12Resource> colorBufferShared12;
+	winrt::com_ptr<ID3D12Resource> HUDLessBufferShared12;
 	winrt::com_ptr<ID3D12Resource> depthBufferShared12;
 	winrt::com_ptr<ID3D12Resource> motionVectorBufferShared12;
 
 	ID3D11ComputeShader* copyDepthToSharedBufferCS;
 
+	bool useHUDLess = false;
+
 	void CreateFrameGenerationResources();
+	void CopyBuffersToSharedResources();
 	void PostDisplay();
 
 	static void TimerSleepQPC(int64_t targetQPC);
