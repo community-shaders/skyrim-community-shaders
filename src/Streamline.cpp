@@ -8,8 +8,8 @@
 #include "Util.h"
 
 #include "DX12SwapChain.h"
-#include "Upscaling.h"
 #include "Deferred.h"
+#include "Upscaling.h"
 
 void LoggingCallback(sl::LogType type, const char* msg)
 {
@@ -199,7 +199,7 @@ void Streamline::CheckFrameConstants()
 		slConstants.cameraFOV = Util::GetVerticalFOVRad();
 		slConstants.cameraNear = *globals::game::cameraNear;
 		slConstants.cameraFar = *globals::game::cameraFar;
-	
+
 		auto viewMatrix = frameBufferCached.CameraViewInverse.Transpose();
 		auto cameraViewToClip = frameBufferCached.CameraProjUnjittered.Transpose();
 
@@ -357,7 +357,6 @@ void Streamline::DestroyDLSSResources()
 	slDLSSSetOptions(viewport, dlssOptions);
 	slFreeResources(sl::kFeatureDLSS, viewport);
 }
-
 
 void Streamline::InstallHooks(ID3D11DeviceContext* a_context)
 {
