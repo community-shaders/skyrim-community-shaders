@@ -45,7 +45,7 @@ void Streamline::LoadInterposer()
 	pref.featuresToLoad = featuresToLoad;
 	pref.numFeaturesToLoad = _countof(featuresToLoad);
 
-	pref.logLevel = sl::LogLevel::eVerbose;
+	pref.logLevel = sl::LogLevel::eOff;
 	pref.logMessageCallback = LoggingCallback;
 	pref.showConsole = false;
 
