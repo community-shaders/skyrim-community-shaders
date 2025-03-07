@@ -344,6 +344,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 			upscaling->d3d12Interop = true;
 
 			streamline->PostDevice();
+			streamline->InstallHooks(*ppImmediateContext);
 
 			return ret;
 

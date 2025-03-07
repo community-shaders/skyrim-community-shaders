@@ -90,6 +90,7 @@ namespace globals
 		extern RE::Setting* bEnableLandFade;
 		extern RE::Setting* bShadowsOnGrass;
 		extern RE::Setting* shadowMaskQuarter;
+		extern REL::Relocation<ID3D11Buffer**> perFrame;
 	}
 
 	extern State* state;

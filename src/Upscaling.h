@@ -3,20 +3,9 @@
 #include "FidelityFX.h"
 #include "Streamline.h"
 
-class Upscaling : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
+class Upscaling
 {
 public:
-	virtual RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
-	{
-		if (a_event->menuName == RE::LoadingMenu::MENU_NAME ||
-			a_event->menuName == RE::MapMenu::MENU_NAME ||
-			a_event->menuName == RE::LockpickingMenu::MENU_NAME ||
-			a_event->menuName == RE::MainMenu::MENU_NAME ||
-			a_event->menuName == RE::MistMenu::MENU_NAME)
-			reset = true;
-		return RE::BSEventNotifyControl::kContinue;
-	}
-
 	static Upscaling* GetSingleton()
 	{
 		static Upscaling singleton;
@@ -25,7 +14,6 @@ public:
 
 	inline std::string GetShortName() { return "Upscaling"; }
 
-	bool reset = false;
 	float2 jitter = { 0, 0 };
 
 	enum class UpscaleMethod
@@ -177,9 +165,6 @@ public:
 			stl::detour_thunk<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
 
 			logger::info("[Upscaling] Installed hooks");
-
-			RE::UI::GetSingleton()->GetEventSource<RE::MenuOpenCloseEvent>()->AddEventSink(Upscaling::GetSingleton());
-			logger::info("[Upscaling] Registered for MenuOpenCloseEvent");
 		} else {
 			logger::info("[Upscaling] Not installing hooks due to Skyrim Upscaler");
 		}

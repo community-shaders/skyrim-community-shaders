@@ -89,6 +89,8 @@ namespace globals
 		RE::Setting* bEnableLandFade = nullptr;
 		RE::Setting* bShadowsOnGrass = nullptr;
 		RE::Setting* shadowMaskQuarter = nullptr;
+
+		REL::Relocation<ID3D11Buffer**> perFrame;
 	}
 
 	State* state = nullptr;
@@ -123,6 +125,7 @@ namespace globals
 			stateUpdateFlags = GET_INSTANCE_MEMBER_PTR(stateUpdateFlags, shadowState);
 
 			ui = RE::UI::GetSingleton();
+			perFrame = { REL::RelocationID(524768, 411384) };
 		}
 
 		d3d::device = reinterpret_cast<ID3D11Device*>(game::renderer->GetRuntimeData().forwarder);

@@ -92,4 +92,42 @@ public:
 	void Upscale(Texture2D* a_color, Texture2D* a_alphaMask, sl::DLSSPreset a_preset);
 	void Present();
 	void DestroyDLSSResources();
+
+	void InstallHooks(ID3D11DeviceContext* a_context);
+
+	struct FrameBuffer
+	{
+		Matrix CameraView;
+		Matrix CameraProj;
+		Matrix CameraViewProj;
+		Matrix CameraViewProjUnjittered;
+		Matrix CameraPreviousViewProjUnjittered;
+		Matrix CameraProjUnjittered;
+		Matrix CameraProjUnjitteredInverse;
+		Matrix CameraViewInverse;
+		Matrix CameraViewProjInverse;
+		Matrix CameraProjInverse;
+		float4 CameraPosAdjust;
+		float4 CameraPreviousPosAdjust;
+		float4 FrameParams;
+		float4 DynamicResolutionParams1;
+		float4 DynamicResolutionParams2;
+	};
+
+	D3D11_MAPPED_SUBRESOURCE* mappedFrameBuffer = nullptr;
+	FrameBuffer frameBufferCached{};
+
+	void CacheFramebuffer();
+
+	struct ID3D11DeviceContext_Map
+	{
+		static HRESULT thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource, D3D11_MAP MapType, UINT MapFlags, D3D11_MAPPED_SUBRESOURCE* pMappedResource);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct ID3D11DeviceContext_Unmap
+	{
+		static void thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
 };

@@ -9,6 +9,7 @@
 
 #include "DX12SwapChain.h"
 #include "Upscaling.h"
+#include "Deferred.h"
 
 void LoggingCallback(sl::LogType type, const char* msg)
 {
@@ -44,7 +45,7 @@ void Streamline::LoadInterposer()
 	pref.featuresToLoad = featuresToLoad;
 	pref.numFeaturesToLoad = _countof(featuresToLoad);
 
-	pref.logLevel = sl::LogLevel::eOff;
+	pref.logLevel = sl::LogLevel::eVerbose;
 	pref.logMessageCallback = LoggingCallback;
 	pref.showConsole = false;
 
@@ -198,15 +199,25 @@ void Streamline::CheckFrameConstants()
 		slConstants.cameraFOV = Util::GetVerticalFOVRad();
 		slConstants.cameraNear = *globals::game::cameraNear;
 		slConstants.cameraFar = *globals::game::cameraFar;
+	
+		auto viewMatrix = frameBufferCached.CameraViewInverse.Transpose();
+		auto cameraViewToClip = frameBufferCached.CameraProjUnjittered.Transpose();
 
 		slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
 		slConstants.cameraPinholeOffset = { 0.f, 0.f };
+		slConstants.cameraRight = { viewMatrix._11, viewMatrix._12, viewMatrix._13 };
+		slConstants.cameraUp = { viewMatrix._21, viewMatrix._22, viewMatrix._23 };
+		slConstants.cameraFwd = { viewMatrix._31, viewMatrix._32, viewMatrix._33 };
+		slConstants.cameraPos = *(sl::float3*)&frameBufferCached.CameraPosAdjust;
+		slConstants.cameraViewToClip = *(sl::float4x4*)&cameraViewToClip;
 		slConstants.depthInverted = sl::Boolean::eFalse;
+
+		recalculateCameraMatrices(slConstants);
 
 		auto upscaling = globals::upscaling;
 		auto jitter = upscaling->jitter;
 		slConstants.jitterOffset = { -jitter.x, -jitter.y };
-		slConstants.reset = upscaling->reset ? sl::Boolean::eTrue : sl::Boolean::eFalse;
+		slConstants.reset = sl::Boolean::eFalse;
 
 		slConstants.mvecScale = { (globals::game::isVR ? 0.5f : 1.0f), 1 };
 		slConstants.motionVectors3D = sl::Boolean::eTrue;
@@ -268,7 +279,8 @@ void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl
 		sl::ResourceTag colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
 		sl::ResourceTag colorOutTag = sl::ResourceTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
 		sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &fullExtent };
-		sl::ResourceTag mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &fullExtent };
+		sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
+		sl::ResourceTag mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
 
 		bool needsMask = a_preset != sl::DLSSPreset::ePresetA && a_preset != sl::DLSSPreset::ePresetB;
 
@@ -308,7 +320,6 @@ void Streamline::Present()
 	}
 
 	auto state = globals::state;
-	auto renderer = globals::game::renderer;
 
 	// Fake NVIDIA Reflex to prevent DLSSG errors
 	slReflexSetMarker(sl::ReflexMarker::eInputSample, *frameToken);
@@ -319,8 +330,6 @@ void Streamline::Present()
 	slReflexSetMarker(sl::ReflexMarker::ePresentStart, *frameToken);
 	slReflexSetMarker(sl::ReflexMarker::ePresentEnd, *frameToken);
 
-	auto& motionVectorsBuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::RENDER_TARGET::kMOTION_VECTOR];
-
 	sl::Extent fullExtent{ 0, 0, (uint)state->screenSize.x, (uint)state->screenSize.y };
 
 	float2 dynamicScreenSize = Util::ConvertToDynamic(state->screenSize);
@@ -329,7 +338,7 @@ void Streamline::Present()
 	sl::Resource depth = { sl::ResourceType::eTex2d, upscaling->depthBufferShared->resource.get(), 0 };
 	sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &dynamicExtent };
 
-	sl::Resource mvec = { sl::ResourceType::eTex2d, motionVectorsBuffer.texture, 0 };
+	sl::Resource mvec = { sl::ResourceType::eTex2d, upscaling->motionVectorBufferShared->resource.get(), 0 };
 	sl::ResourceTag mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &dynamicExtent };
 
 	sl::Resource hudLess = { sl::ResourceType::eTex2d, upscaling->colorBufferShared->resource.get(), 0 };
@@ -348,4 +357,35 @@ void Streamline::DestroyDLSSResources()
 	dlssOptions.mode = sl::DLSSMode::eOff;
 	slDLSSSetOptions(viewport, dlssOptions);
 	slFreeResources(sl::kFeatureDLSS, viewport);
+}
+
+
+void Streamline::InstallHooks(ID3D11DeviceContext* a_context)
+{
+	stl::detour_vfunc<14, ID3D11DeviceContext_Map>(a_context);
+	stl::detour_vfunc<15, ID3D11DeviceContext_Unmap>(a_context);
+}
+
+HRESULT Streamline::ID3D11DeviceContext_Map::thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource, D3D11_MAP MapType, UINT MapFlags, D3D11_MAPPED_SUBRESOURCE* pMappedResource)
+{
+	HRESULT hr = func(This, pResource, Subresource, MapType, MapFlags, pMappedResource);
+	if (hr == S_OK) {
+		if (*globals::game::perFrame.get() == pResource)
+			globals::streamline->mappedFrameBuffer = pMappedResource;
+	}
+	return hr;
+}
+
+void Streamline::ID3D11DeviceContext_Unmap::thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource)
+{
+	if (*globals::game::perFrame.get() == pResource && globals::streamline->mappedFrameBuffer)
+		globals::streamline->CacheFramebuffer();
+	func(This, pResource, Subresource);
+}
+
+void Streamline::CacheFramebuffer()
+{
+	auto frameBuffer = (FrameBuffer*)mappedFrameBuffer->pData;
+	frameBufferCached = *frameBuffer;
+	mappedFrameBuffer = nullptr;
 }

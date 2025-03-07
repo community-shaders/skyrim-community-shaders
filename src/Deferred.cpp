@@ -10,6 +10,8 @@
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
 
+#include "Streamline.h"
+
 struct DepthStates
 {
 	ID3D11DepthStencilState* a[6][40];
@@ -347,6 +349,8 @@ void Deferred::StartDeferred()
 
 void Deferred::DeferredPasses()
 {
+	globals::streamline->CheckFrameConstants();
+
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "Deferred");
 
