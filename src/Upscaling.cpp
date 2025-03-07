@@ -506,104 +506,106 @@ void Upscaling::CreateFrameGenerationResources()
 	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-	D3D11_TEXTURE2D_DESC texDesc{};
-	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
-	D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+	for (int i = 0; i < 2; i++) {
+		D3D11_TEXTURE2D_DESC texDesc{};
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 
-	main.texture->GetDesc(&texDesc);
-	main.SRV->GetDesc(&srvDesc);
-	main.RTV->GetDesc(&rtvDesc);
-	main.UAV->GetDesc(&uavDesc);
+		main.texture->GetDesc(&texDesc);
+		main.SRV->GetDesc(&srvDesc);
+		main.RTV->GetDesc(&rtvDesc);
+		main.UAV->GetDesc(&uavDesc);
 
-	texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+		texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
-	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	srvDesc.Format = texDesc.Format;
-	rtvDesc.Format = texDesc.Format;
-	uavDesc.Format = texDesc.Format;
+		texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		srvDesc.Format = texDesc.Format;
+		rtvDesc.Format = texDesc.Format;
+		uavDesc.Format = texDesc.Format;
 
-	colorBufferShared = new Texture2D(texDesc);
-	colorBufferShared->CreateSRV(srvDesc);
-	colorBufferShared->CreateRTV(rtvDesc);
-	colorBufferShared->CreateUAV(uavDesc);
+		colorBufferShared[i] = new Texture2D(texDesc);
+		colorBufferShared[i]->CreateSRV(srvDesc);
+		colorBufferShared[i]->CreateRTV(rtvDesc);
+		colorBufferShared[i]->CreateUAV(uavDesc);
 
-	texDesc.Format = DXGI_FORMAT_R32_FLOAT;
-	srvDesc.Format = texDesc.Format;
-	rtvDesc.Format = texDesc.Format;
-	uavDesc.Format = texDesc.Format;
+		texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+		srvDesc.Format = texDesc.Format;
+		rtvDesc.Format = texDesc.Format;
+		uavDesc.Format = texDesc.Format;
 
-	depthBufferShared = new Texture2D(texDesc);
-	depthBufferShared->CreateSRV(srvDesc);
-	depthBufferShared->CreateRTV(rtvDesc);
-	depthBufferShared->CreateUAV(uavDesc);
+		depthBufferShared[i] = new Texture2D(texDesc);
+		depthBufferShared[i]->CreateSRV(srvDesc);
+		depthBufferShared[i]->CreateRTV(rtvDesc);
+		depthBufferShared[i]->CreateUAV(uavDesc);
 
-	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-	D3D11_TEXTURE2D_DESC texDescMotionVector{};
-	motionVector.texture->GetDesc(&texDescMotionVector);
+		auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+		D3D11_TEXTURE2D_DESC texDescMotionVector{};
+		motionVector.texture->GetDesc(&texDescMotionVector);
 
-	texDesc.Format = texDescMotionVector.Format;
-	srvDesc.Format = texDesc.Format;
-	rtvDesc.Format = texDesc.Format;
-	uavDesc.Format = texDesc.Format;
+		texDesc.Format = texDescMotionVector.Format;
+		srvDesc.Format = texDesc.Format;
+		rtvDesc.Format = texDesc.Format;
+		uavDesc.Format = texDesc.Format;
 
-	motionVectorBufferShared = new Texture2D(texDesc);
-	motionVectorBufferShared->CreateSRV(srvDesc);
-	motionVectorBufferShared->CreateRTV(rtvDesc);
-	motionVectorBufferShared->CreateUAV(uavDesc);
+		motionVectorBufferShared[i] = new Texture2D(texDesc);
+		motionVectorBufferShared[i]->CreateSRV(srvDesc);
+		motionVectorBufferShared[i]->CreateRTV(rtvDesc);
+		motionVectorBufferShared[i]->CreateUAV(uavDesc);
 
-	{
-		IDXGIResource1* dxgiResource = nullptr;
-		DX::ThrowIfFailed(colorBufferShared->resource->QueryInterface(IID_PPV_ARGS(&dxgiResource)));
+		{
+			IDXGIResource1* dxgiResource = nullptr;
+			DX::ThrowIfFailed(colorBufferShared[i]->resource->QueryInterface(IID_PPV_ARGS(&dxgiResource)));
 
-		HANDLE sharedHandle = nullptr;
-		DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(
-			nullptr,
-			DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE,
-			nullptr,
-			&sharedHandle));
+			HANDLE sharedHandle = nullptr;
+			DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(
+				nullptr,
+				DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE,
+				nullptr,
+				&sharedHandle));
 
-		DX::ThrowIfFailed(globals::dx12SwapChain->d3d12Device->OpenSharedHandle(
-			sharedHandle,
-			IID_PPV_ARGS(&colorBufferShared12)));
+			DX::ThrowIfFailed(globals::dx12SwapChain->d3d12Device->OpenSharedHandle(
+				sharedHandle,
+				IID_PPV_ARGS(&colorBufferShared12[i])));
 
-		CloseHandle(sharedHandle);
-	}
+			CloseHandle(sharedHandle);
+		}
 
-	{
-		IDXGIResource1* dxgiResource = nullptr;
-		DX::ThrowIfFailed(depthBufferShared->resource->QueryInterface(IID_PPV_ARGS(&dxgiResource)));
+		{
+			IDXGIResource1* dxgiResource = nullptr;
+			DX::ThrowIfFailed(depthBufferShared[i]->resource->QueryInterface(IID_PPV_ARGS(&dxgiResource)));
 
-		HANDLE sharedHandle = nullptr;
-		DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(
-			nullptr,
-			DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE,
-			nullptr,
-			&sharedHandle));
+			HANDLE sharedHandle = nullptr;
+			DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(
+				nullptr,
+				DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE,
+				nullptr,
+				&sharedHandle));
 
-		DX::ThrowIfFailed(globals::dx12SwapChain->d3d12Device->OpenSharedHandle(
-			sharedHandle,
-			IID_PPV_ARGS(&depthBufferShared12)));
+			DX::ThrowIfFailed(globals::dx12SwapChain->d3d12Device->OpenSharedHandle(
+				sharedHandle,
+				IID_PPV_ARGS(&depthBufferShared12[i])));
 
-		CloseHandle(sharedHandle);
-	}
+			CloseHandle(sharedHandle);
+		}
 
-	{
-		IDXGIResource1* dxgiResource = nullptr;
-		DX::ThrowIfFailed(motionVectorBufferShared->resource->QueryInterface(IID_PPV_ARGS(&dxgiResource)));
+		{
+			IDXGIResource1* dxgiResource = nullptr;
+			DX::ThrowIfFailed(motionVectorBufferShared[i]->resource->QueryInterface(IID_PPV_ARGS(&dxgiResource)));
 
-		HANDLE sharedHandle = nullptr;
-		DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(
-			nullptr,
-			DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE,
-			nullptr,
-			&sharedHandle));
+			HANDLE sharedHandle = nullptr;
+			DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(
+				nullptr,
+				DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE,
+				nullptr,
+				&sharedHandle));
 
-		DX::ThrowIfFailed(globals::dx12SwapChain->d3d12Device->OpenSharedHandle(
-			sharedHandle,
-			IID_PPV_ARGS(&motionVectorBufferShared12)));
+			DX::ThrowIfFailed(globals::dx12SwapChain->d3d12Device->OpenSharedHandle(
+				sharedHandle,
+				IID_PPV_ARGS(&motionVectorBufferShared12[i])));
 
-		CloseHandle(sharedHandle);
+			CloseHandle(sharedHandle);
+		}
 	}
 
 	copyDepthToSharedBufferCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\FrameGeneration\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0");
@@ -629,10 +631,12 @@ void Upscaling::PostDisplay()
 	ID3D11Resource* swapChainResource;
 	swapChain.SRV->GetResource(&swapChainResource);
 
-	context->CopyResource(colorBufferShared->resource.get(), swapChainResource);
+	auto frameIndex = globals::dx12SwapChain->frameIndex;
+
+	context->CopyResource(colorBufferShared[frameIndex]->resource.get(), swapChainResource);
 
 	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-	context->CopyResource(motionVectorBufferShared->resource.get(), motionVector.texture);
+	context->CopyResource(motionVectorBufferShared[frameIndex]->resource.get(), motionVector.texture);
 
 	{
 		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
@@ -643,7 +647,7 @@ void Upscaling::PostDisplay()
 			ID3D11ShaderResourceView* views[1] = { depth.depthSRV };
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
-			ID3D11UnorderedAccessView* uavs[1] = { depthBufferShared->uav.get() };
+			ID3D11UnorderedAccessView* uavs[1] = { depthBufferShared[frameIndex]->uav.get() };
 			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
 			context->CSSetShader(copyDepthToSharedBufferCS, nullptr, 0);

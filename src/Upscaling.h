@@ -79,13 +79,13 @@ public:
 	void CreateUpscalingResources();
 	void DestroyUpscalingResources();
 
-	Texture2D* colorBufferShared;
-	Texture2D* depthBufferShared;
-	Texture2D* motionVectorBufferShared;
+	Texture2D* colorBufferShared[2];
+	Texture2D* depthBufferShared[2];
+	Texture2D* motionVectorBufferShared[2];
 
-	winrt::com_ptr<ID3D12Resource> colorBufferShared12;
-	winrt::com_ptr<ID3D12Resource> depthBufferShared12;
-	winrt::com_ptr<ID3D12Resource> motionVectorBufferShared12;
+	winrt::com_ptr<ID3D12Resource> colorBufferShared12[2];
+	winrt::com_ptr<ID3D12Resource> depthBufferShared12[2];
+	winrt::com_ptr<ID3D12Resource> motionVectorBufferShared12[2];
 
 	ID3D11ComputeShader* copyDepthToSharedBufferCS;
 
