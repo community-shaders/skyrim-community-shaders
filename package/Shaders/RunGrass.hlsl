@@ -709,7 +709,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(skylightingNormal)) / Math::PI;
 		skylightingDiffuse = saturate(skylightingDiffuse);
 
-		float skylightingBoost = 0.25 * skylightingDiffuse * saturate(normal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
+		float skylightingBoost = skylightingDiffuse * saturate(normal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
 
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
