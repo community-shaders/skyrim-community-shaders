@@ -38,7 +38,7 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	swapChainDesc.SampleDesc.Count = 1;
 	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	swapChainDesc.BufferCount = 2;
-	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+	swapChainDesc.SwapEffect = a_swapChainDesc.SwapEffect;
 	swapChainDesc.Flags = a_swapChainDesc.Flags;
 
 	ffx::CreateContextDescFrameGenerationSwapChainForHwndDX12 ffxSwapChainDesc{};
@@ -111,7 +111,7 @@ HRESULT DX12SwapChain::GetBuffer(void** ppSurface)
 	return S_OK;
 }
 
-HRESULT DX12SwapChain::Present(UINT, UINT Flags)
+HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 {
 	// Wait for D3D11 to finish
 	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), fenceValue));
@@ -153,7 +153,7 @@ HRESULT DX12SwapChain::Present(UINT, UINT Flags)
 	commandQueue->ExecuteCommandLists(1, commandListsToExecute);
 
 	// Present the frame
-	DX::ThrowIfFailed(swapChain->Present(0, Flags | DXGI_PRESENT_ALLOW_TEARING));
+	DX::ThrowIfFailed(swapChain->Present(SyncInterval, Flags));
 
 	// Wait for D3D12 to finish
 	DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence.get(), fenceValue));

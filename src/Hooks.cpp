@@ -208,8 +208,14 @@ struct IDXGISwapChain_Present
 		state->Reset();
 		menu->DrawOverlay();
 
-		if (upscaling->d3d12Interop) {
-			SyncInterval = std::max(1u, SyncInterval);
+		if (upscaling->d3d12Interop)
+			SyncInterval = 0;
+
+		BOOL fullscreen = FALSE;
+		((IDXGISwapChain*)This)->GetFullscreenState(&fullscreen, nullptr);
+		if (fullscreen || SyncInterval) {
+			Flags &= ~DXGI_PRESENT_ALLOW_TEARING;
+		} else if (SyncInterval == 0) {
 			Flags |= DXGI_PRESENT_ALLOW_TEARING;
 		}
 
@@ -287,6 +293,23 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	DXGI_ADAPTER_DESC adapterDesc;
 	pAdapter->GetDesc(&adapterDesc);
 	globals::state->SetAdapterDescription(adapterDesc.Description);
+
+	pSwapChainDesc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+
+	IDXGIFactory5* dxgiFactory;
+	DX::ThrowIfFailed(pAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory)));
+
+	BOOL allowTearing = FALSE;
+	DX::ThrowIfFailed(dxgiFactory->CheckFeatureSupport(
+		DXGI_FEATURE_PRESENT_ALLOW_TEARING,
+		&allowTearing,
+		sizeof(allowTearing)));
+
+	if (allowTearing) {
+		pSwapChainDesc->Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+	} else {
+		pSwapChainDesc->Flags &= ~DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+	}
 
 	auto streamline = globals::streamline;
 	auto fidelityFX = globals::fidelityFX;
