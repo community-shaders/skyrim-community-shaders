@@ -2301,7 +2301,21 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
 
-		float skylightingBoost = skylightingDiffuse * saturate(worldSpaceNormal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
+		float skylightingBoost = skylightingDiffuse * saturate(worldSpaceNormal.z);
+
+#				if defined(SOFT_LIGHTING)
+		skylightingBoost += GetSoftLightMultiplier(worldSpaceNormal.z) * rimSoftLightColor.xyz;
+#				endif
+
+#				if defined(RIM_LIGHTING)
+		skylightingBoost += GetRimLightMultiplier(float3(0, 0, -1), worldSpaceViewDirection, worldSpaceNormal.xyz) * rimSoftLightColor.xyz;
+#				endif
+
+#				if defined(BACK_LIGHTING)
+		skylightingBoost += saturate(-worldSpaceNormal.z) * backLightColor.xyz;
+#				endif
+
+		skylightingBoost *= (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
 
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 
