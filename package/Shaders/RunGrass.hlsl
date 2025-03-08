@@ -693,7 +693,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	normal = normalize(float3(normal.xy, max(0, normal.z)));
 
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
-	float3 directionalAmbientColorDirect = 0;
 
 #				if defined(SKYLIGHTING)
 	if (!SharedData::InInterior) {
@@ -709,23 +708,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(skylightingNormal)) / Math::PI;
 		skylightingDiffuse = saturate(skylightingDiffuse);
 
-		float skylightingBoost = 0.25 * skylightingDiffuse * saturate(normal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
-
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 
 		directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
-		directionalAmbientColorDirect = directionalAmbientColor * skylightingBoost;
-		directionalAmbientColorDirect = Color::LinearToGamma(directionalAmbientColorDirect);
 
-		directionalAmbientColor *= skylightingDiffuse + skylightingBoost;
+		directionalAmbientColor *= skylightingDiffuse;
+		directionalAmbientColor *= 1.0 + saturate(normal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
 		directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
 	}
 #				endif  // SKYLIGHTING
 
-#				if defined(SSGI)
-	diffuseColor += directionalAmbientColorDirect;
-#				else
+#				if !defined(SSGI)
 	diffuseColor += directionalAmbientColor;
 #				endif
 
@@ -875,7 +869,6 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif
 
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
-	float3 directionalAmbientColorDirect = 0;
 
 #			if defined(SKYLIGHTING)
 	if (!SharedData::InInterior) {
@@ -891,23 +884,19 @@ PS_OUTPUT main(PS_INPUT input)
 		float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(skylightingNormal)) / Math::PI;
 		skylightingDiffuse = saturate(skylightingDiffuse);
 
-		float skylightingBoost = 0.25 * skylightingDiffuse * saturate(normal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
-
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 
 		directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
-		directionalAmbientColorDirect = directionalAmbientColor * skylightingBoost;
-		directionalAmbientColorDirect = Color::LinearToGamma(directionalAmbientColorDirect);
 
-		directionalAmbientColor *= skylightingDiffuse + skylightingBoost;
+		directionalAmbientColor *= skylightingDiffuse;
+		directionalAmbientColor *= 1.0 + saturate(normal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
+
 		directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
 	}
 #			endif  // SKYLIGHTING
 
-#			if defined(SSGI)
-	diffuseColor += directionalAmbientColorDirect;
-#			else
+#			if !defined(SSGI)
 	diffuseColor += directionalAmbientColor;
 #			endif
 

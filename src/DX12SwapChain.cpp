@@ -1,4 +1,6 @@
 #include "DX12SwapChain.h"
+
+#include <dx12/ffx_api_dx12.hpp>
 #include <dxgi1_6.h>
 
 #include "FidelityFX.h"
@@ -22,9 +24,6 @@ void DX12SwapChain::CreateD3D12Device(IDXGIAdapter* a_adapter)
 		DX::ThrowIfFailed(d3d12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocators[i].get(), nullptr, IID_PPV_ARGS(&commandLists[i])));
 		commandLists[i]->Close();
 	}
-
-	if (globals::streamline->initialized)
-		globals::streamline->CheckFeatures(a_adapter);
 }
 
 void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC a_swapChainDesc)
@@ -42,39 +41,36 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 	swapChainDesc.Flags = a_swapChainDesc.Flags;
 
-	winrt::com_ptr<IDXGISwapChain4> swapChainCOM;
+	ffx::CreateContextDescFrameGenerationSwapChainForHwndDX12 ffxSwapChainDesc{};
 
-	DX::ThrowIfFailed(dxgiFactory->CreateSwapChainForHwnd(
-		commandQueue.get(),
-		a_swapChainDesc.OutputWindow,
-		&swapChainDesc,
-		nullptr,
-		nullptr,
-		(IDXGISwapChain1**)swapChainCOM.put()));
+	ffxSwapChainDesc.desc = &swapChainDesc;
+	ffxSwapChainDesc.dxgiFactory = dxgiFactory;
+	ffxSwapChainDesc.fullscreenDesc = nullptr;
+	ffxSwapChainDesc.gameQueue = commandQueue.get();
+	ffxSwapChainDesc.hwnd = a_swapChainDesc.OutputWindow;
+	ffxSwapChainDesc.swapchain = &swapChain;
 
-	swapChain = swapChainCOM.detach();
+	auto fidelityFX = globals::fidelityFX;
+
+	if (ffx::CreateContext(fidelityFX->swapChainContext, nullptr, ffxSwapChainDesc) != ffx::ReturnCode::Ok) {
+		logger::critical("[FidelityFX] Failed to create swap chain context!");
+	}
+
+	DX::ThrowIfFailed(swapChain->GetBuffer(0, IID_PPV_ARGS(&swapChainBuffers[0])));
+	DX::ThrowIfFailed(swapChain->GetBuffer(1, IID_PPV_ARGS(&swapChainBuffers[1])));
 
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
 
-	FidelityFX::GetSingleton()->SetupFrameGeneration();
-
-	swapChain->SetMaximumFrameLatency(1);
-	frameLatencyWaitableObject = swapChain->GetFrameLatencyWaitableObject();
-
-	QueryPerformanceFrequency(&qpf);
-
-	refreshRate = GetRefreshRate(a_swapChainDesc.OutputWindow);
+	fidelityFX->SetupFrameGeneration();
 }
 
 void DX12SwapChain::CreateInterop()
 {
-	for (int i = 0; i < 2; i++) {
-		HANDLE sharedFenceHandle;
-		DX::ThrowIfFailed(d3d12Device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&d3d12Fences[i])));
-		DX::ThrowIfFailed(d3d12Device->CreateSharedHandle(d3d12Fences[i].get(), nullptr, GENERIC_ALL, nullptr, &sharedFenceHandle));
-		DX::ThrowIfFailed(d3d11Device->OpenSharedFence(sharedFenceHandle, IID_PPV_ARGS(&d3d11Fences[i])));
-		CloseHandle(sharedFenceHandle);
-	}
+	HANDLE sharedFenceHandle;
+	DX::ThrowIfFailed(d3d12Device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&d3d12Fence)));
+	DX::ThrowIfFailed(d3d12Device->CreateSharedHandle(d3d12Fence.get(), nullptr, GENERIC_ALL, nullptr, &sharedFenceHandle));
+	DX::ThrowIfFailed(d3d11Device->OpenSharedFence(sharedFenceHandle, IID_PPV_ARGS(&d3d11Fence)));
+	CloseHandle(sharedFenceHandle);
 
 	swapChainProxy = new DXGISwapChainProxy(swapChain);
 
@@ -102,11 +98,6 @@ DXGISwapChainProxy* DX12SwapChain::GetSwapChainProxy()
 void DX12SwapChain::SetD3D11Device(ID3D11Device* a_d3d11Device)
 {
 	DX::ThrowIfFailed(a_d3d11Device->QueryInterface(IID_PPV_ARGS(&d3d11Device)));
-
-	if (globals::streamline->initialized) {
-		globals::streamline->slSetD3DDevice(d3d11Device.get());
-		globals::streamline->PostDevice();
-	}
 }
 
 void DX12SwapChain::SetD3D11DeviceContext(ID3D11DeviceContext* a_d3d11Context)
@@ -120,31 +111,21 @@ HRESULT DX12SwapChain::GetBuffer(void** ppSurface)
 	return S_OK;
 }
 
-HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT)
+HRESULT DX12SwapChain::Present(UINT, UINT Flags)
 {
-	// Wait for D3D11 work to finish
-	d3d11Context->Flush();
+	// Wait for D3D11 to finish
+	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), fenceValue));
+	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), fenceValue));
+	fenceValue++;
 
 	// New frame, reset
 	DX::ThrowIfFailed(commandAllocators[frameIndex]->Reset());
 	DX::ThrowIfFailed(commandLists[frameIndex]->Reset(commandAllocators[frameIndex].get(), nullptr));
 
-	// Update the fence value for the current frame
-	fenceValues[frameIndex]++;
-
-	// Signal fence from D3D11
-	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fences[frameIndex].get(), fenceValues[frameIndex]));
-
-	// Wait for D3D11 to finish on D3D12 side
-	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fences[frameIndex].get(), fenceValues[frameIndex]));
-
-	winrt::com_ptr<ID3D12Resource> swapChainBuffer;
-	DX::ThrowIfFailed(swapChain->GetBuffer(frameIndex, IID_PPV_ARGS(&swapChainBuffer)));
-
 	// Copy shared texture to swap chain buffer
 	{
 		auto fakeSwapChain = swapChainBufferWrapped->resource.get();
-		auto realSwapChain = swapChainBuffer.get();
+		auto realSwapChain = swapChainBuffers[frameIndex].get();
 		{
 			std::vector<D3D12_RESOURCE_BARRIER> barriers;
 			barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(fakeSwapChain, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE));
@@ -164,9 +145,7 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT)
 
 	auto upscaling = globals::upscaling;
 
-	bool useFrameGeneration = upscaling->settings.frameGenerationMode && !RE::UI::GetSingleton()->GameIsPaused();
-
-	FidelityFX::GetSingleton()->Present(useFrameGeneration);
+	globals::fidelityFX->Present(upscaling->settings.frameGenerationMode);
 
 	DX::ThrowIfFailed(commandLists[frameIndex]->Close());
 
@@ -174,19 +153,15 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT)
 	commandQueue->ExecuteCommandLists(1, commandListsToExecute);
 
 	// Present the frame
-	DX::ThrowIfFailed(swapChain->Present(upscaling->settings.vsyncMode ? std::max(1u, SyncInterval) : 0, 0));
+	DX::ThrowIfFailed(swapChain->Present(0, Flags | DXGI_PRESENT_ALLOW_TEARING));
 
-	// Wait for the frame to finish to minimise latency
-	WaitForSingleObject(frameLatencyWaitableObject, 500);
+	// Wait for D3D12 to finish
+	DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence.get(), fenceValue));
+	DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence.get(), fenceValue));
+	fenceValue++;
 
-	// Frame limiter for V-Sync and VRR
-	if (!upscaling->settings.vsyncMode && upscaling->settings.frameLimitMode)
-		FrameLimiter(useFrameGeneration);
-
-	// Update the frame index.
+	// Update the frame index
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
-
-	globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER].RTV = swapChainBufferWrapped->rtv;
 
 	return S_OK;
 }
@@ -199,91 +174,6 @@ HRESULT DX12SwapChain::GetDevice(REFIID uuid, void** ppDevice)
 	}
 
 	return swapChain->GetDevice(uuid, ppDevice);
-}
-
-static void TimerSleepQPC(int64_t targetQPC)
-{
-	LARGE_INTEGER currentQPC;
-	do {
-		QueryPerformanceCounter(&currentQPC);
-	} while (currentQPC.QuadPart < targetQPC);
-}
-
-void DX12SwapChain::FrameLimiter(bool a_useFrameGeneration)
-{
-	double bestRefreshRate = refreshRate - (refreshRate * refreshRate) / 3600.0;
-
-	int64_t targetFrameTicks = int64_t(double(qpf.QuadPart) / (bestRefreshRate * (a_useFrameGeneration ? 0.5 : 1.0)));
-
-	static LARGE_INTEGER lastFrame = {};
-	LARGE_INTEGER timeNow;
-	QueryPerformanceCounter(&timeNow);
-	int64_t delta = timeNow.QuadPart - lastFrame.QuadPart;
-	if (delta < targetFrameTicks) {
-		TimerSleepQPC(lastFrame.QuadPart + targetFrameTicks);
-	}
-	QueryPerformanceCounter(&lastFrame);
-}
-
-/*
-* Copyright (c) 2022-2023 NVIDIA CORPORATION. All rights reserved
-*
-* Permission is hereby granted, free of charge, to any person obtaining a copy
-* of this software and associated documentation files (the "Software"), to deal
-* in the Software without restriction, including without limitation the rights
-* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the Software is
-* furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in all
-* copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
-
-double DX12SwapChain::GetRefreshRate(HWND a_window)
-{
-	HMONITOR monitor = MonitorFromWindow(a_window, MONITOR_DEFAULTTONEAREST);
-	MONITORINFOEXW info;
-	info.cbSize = sizeof(info);
-	if (GetMonitorInfoW(monitor, &info) != 0) {
-		// using the CCD get the associated path and display configuration
-		UINT32 requiredPaths, requiredModes;
-		if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &requiredPaths, &requiredModes) == ERROR_SUCCESS) {
-			std::vector<DISPLAYCONFIG_PATH_INFO> paths(requiredPaths);
-			std::vector<DISPLAYCONFIG_MODE_INFO> modes2(requiredModes);
-			if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &requiredPaths, paths.data(), &requiredModes, modes2.data(), nullptr) == ERROR_SUCCESS) {
-				// iterate through all the paths until find the exact source to match
-				for (auto& p : paths) {
-					DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName;
-					sourceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
-					sourceName.header.size = sizeof(sourceName);
-					sourceName.header.adapterId = p.sourceInfo.adapterId;
-					sourceName.header.id = p.sourceInfo.id;
-					if (DisplayConfigGetDeviceInfo(&sourceName.header) == ERROR_SUCCESS) {
-						// find the matched device which is associated with current device
-						// there may be the possibility that display may be duplicated and windows may be one of them in such scenario
-						// there may be two callback because source is same target will be different
-						// as window is on both the display so either selecting either one is ok
-						if (wcscmp(info.szDevice, sourceName.viewGdiDeviceName) == 0) {
-							// get the refresh rate
-							UINT numerator = p.targetInfo.refreshRate.Numerator;
-							UINT denominator = p.targetInfo.refreshRate.Denominator;
-							return (double)numerator / (double)denominator;
-						}
-					}
-				}
-			}
-		}
-	}
-	logger::error("Failed to retrieve refresh rate from swap chain");
-	return 60;
 }
 
 WrappedResource::WrappedResource(D3D11_TEXTURE2D_DESC a_texDesc, ID3D11Device5* a_d3d11Device, ID3D12Device* a_d3d12Device)
@@ -353,7 +243,10 @@ DXGISwapChainProxy::DXGISwapChainProxy(IDXGISwapChain4* a_swapChain)
 /****IUknown****/
 HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::QueryInterface(REFIID riid, void** ppvObj)
 {
-	return swapChain->QueryInterface(riid, ppvObj);
+	auto ret = swapChain->QueryInterface(riid, ppvObj);
+	if (*ppvObj)
+		*ppvObj = this;
+	return ret;
 }
 
 ULONG STDMETHODCALLTYPE DXGISwapChainProxy::AddRef()

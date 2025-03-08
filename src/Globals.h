@@ -26,6 +26,7 @@ class Menu;
 class Streamline;
 class Upscaling;
 class DX12SwapChain;
+class FidelityFX;
 
 namespace SIE
 {
@@ -38,7 +39,7 @@ namespace globals
 	{
 		extern ID3D11Device* device;
 		extern ID3D11DeviceContext* context;
-		extern IDXGISwapChain* swapchain;
+		extern IDXGISwapChain* swapChain;
 	}
 
 	namespace features
@@ -92,6 +93,7 @@ namespace globals
 		extern RE::Setting* bEnableLandFade;
 		extern RE::Setting* bShadowsOnGrass;
 		extern RE::Setting* shadowMaskQuarter;
+		extern REL::Relocation<ID3D11Buffer**> perFrame;
 	}
 
 	extern State* state;
@@ -102,7 +104,9 @@ namespace globals
 	extern Streamline* streamline;
 	extern Upscaling* upscaling;
 	extern DX12SwapChain* dx12SwapChain;
+	extern FidelityFX* fidelityFX;
 
+	void OnInit();
 	void ReInit();
 	void OnDataLoaded();
 }

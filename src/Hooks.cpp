@@ -193,12 +193,31 @@ struct IDXGISwapChain_Present
 {
 	static HRESULT WINAPI thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
 	{
-		globals::state->Reset();
-		globals::menu->DrawOverlay();
+		auto state = globals::state;
+		auto streamline = globals::streamline;
+		auto upscaling = globals::upscaling;
+		auto menu = globals::menu;
+
+		upscaling->CopyBuffersToSharedResources();
+
+		state->PresentReShade();
+
+		if (streamline->initialized)
+			streamline->Present();
+
+		state->Reset();
+		menu->DrawOverlay();
+
+		if (upscaling->d3d12Interop) {
+			SyncInterval = std::max(1u, SyncInterval);
+			Flags |= DXGI_PRESENT_ALLOW_TEARING;
+		}
 
 		auto retval = func(This, SyncInterval, Flags);
 
-		TracyD3D11Collect(globals::state->tracyCtx);
+		TracyD3D11Collect(state->tracyCtx);
+
+		upscaling->FrameLimiter();
 
 		return retval;
 	}
@@ -243,6 +262,9 @@ decltype(&CreateDXGIFactory) ptrCreateDXGIFactory;
 
 HRESULT WINAPI hk_CreateDXGIFactory(REFIID, void** ppFactory)
 {
+	auto streamline = globals::streamline;
+	if (streamline->initialized)
+		return streamline->slCreateDXGIFactory1(__uuidof(IDXGIFactory4), ppFactory);
 	return ptrCreateDXGIFactory(__uuidof(IDXGIFactory4), ppFactory);
 }
 
@@ -267,23 +289,23 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	globals::state->SetAdapterDescription(adapterDesc.Description);
 
 	auto streamline = globals::streamline;
-	streamline->LoadInterposer();
+	auto fidelityFX = globals::fidelityFX;
+	auto upscaling = globals::upscaling;
+
+	if (streamline->initialized)
+		streamline->CheckFeatures(pAdapter);
+	else
+		upscaling->streamlineMissing = true;
 
 	auto proxy = globals::dx12SwapChain;
 
-	bool shouldProxy = false;
-
-	auto fidelityFX = FidelityFX::GetSingleton();
-
-	auto upscaling = Upscaling::GetSingleton();
-
-	shouldProxy = !globals::game::isVR;
-
+	bool shouldProxy = !REL::Module::IsVR();
 	if (shouldProxy)
 		if (!pSwapChainDesc->Windowed)
 			shouldProxy = false;
 
-	auto refreshRate = proxy->GetRefreshRate(pSwapChainDesc->OutputWindow);
+	auto refreshRate = Upscaling::GetRefreshRate(pSwapChainDesc->OutputWindow);
+	upscaling->refreshRate = refreshRate;
 
 	if (shouldProxy) {
 		if (upscaling->settings.frameGenerationMode)
@@ -298,41 +320,76 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	}
 
 	upscaling->lowRefreshRate = refreshRate < 120;
-
-	fidelityFX->LoadFFX();
-
-	if (shouldProxy)
-		shouldProxy = fidelityFX->module;
-
 	upscaling->isWindowed = pSwapChainDesc->Windowed;
 
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
 
 	if (shouldProxy) {
-		proxy->CreateD3D12Device(pAdapter);
+		logger::info("[Frame Generation] Frame Generation enabled, using D3D12 proxy");
 
-		D3D11CreateDevice(
-			pAdapter,
-			DriverType,
-			Software,
-			Flags,
-			&featureLevel,
-			1,
-			SDKVersion,
-			ppDevice,
-			pFeatureLevel,
-			ppImmediateContext);
+		if (streamline->featureDLSSG) {
+			logger::info("[Frame Generation] Using D3D12 proxy via Streamline");
 
-		proxy->SetD3D11Device(*ppDevice);
-		proxy->SetD3D11DeviceContext(*ppImmediateContext);
+			auto ret = streamline->slD3D11CreateDeviceAndSwapChain(pAdapter,
+				DriverType,
+				Software,
+				Flags,
+				&featureLevel,
+				1,
+				SDKVersion,
+				pSwapChainDesc,
+				ppSwapChain,
+				ppDevice,
+				pFeatureLevel,
+				ppImmediateContext);
 
-		proxy->CreateSwapChain(pAdapter, *pSwapChainDesc);
+			upscaling->d3d12Interop = true;
 
-		proxy->CreateInterop();
+			streamline->PostDevice();
+			streamline->InstallHooks(*ppImmediateContext);
 
-		*ppSwapChain = proxy->GetSwapChainProxy();
+			return ret;
 
-		return S_OK;
+		} else {
+			logger::info("[Frame Generation] Using manual D3D12 proxy");
+
+			if (fidelityFX->module) {
+				proxy->CreateD3D12Device(pAdapter);
+
+				D3D11CreateDevice(
+					pAdapter,
+					DriverType,
+					Software,
+					Flags,
+					&featureLevel,
+					1,
+					SDKVersion,
+					ppDevice,
+					pFeatureLevel,
+					ppImmediateContext);
+
+				proxy->SetD3D11Device(*ppDevice);
+				proxy->SetD3D11DeviceContext(*ppImmediateContext);
+
+				proxy->CreateSwapChain(pAdapter, *pSwapChainDesc);
+
+				proxy->CreateInterop();
+
+				*ppSwapChain = proxy->GetSwapChainProxy();
+
+				upscaling->d3d12Interop = true;
+
+				if (streamline->initialized) {
+					streamline->slSetD3DDevice(*ppDevice);
+					streamline->PostDevice();
+				}
+
+				return S_OK;
+			} else {
+				logger::warn("[Frame Generation] amd_fidelityfx_dx12.dll is not loaded, skipping proxy");
+				upscaling->fidelityFXMissing = true;
+			}
+		}
 	}
 
 	auto ret = ptrD3D11CreateDeviceAndSwapChain(pAdapter,
@@ -348,10 +405,9 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 		pFeatureLevel,
 		ppImmediateContext);
 
-	if (globals::streamline->initialized) {
-		globals::streamline->CheckFeatures(pAdapter);
-		globals::streamline->slSetD3DDevice(*ppDevice);
-		globals::streamline->PostDevice();
+	if (streamline->initialized) {
+		streamline->slSetD3DDevice(*ppDevice);
+		streamline->PostDevice();
 	}
 
 	return ret;
@@ -421,7 +477,7 @@ namespace Hooks
 			globals::ReInit();
 
 			logger::info("Detouring virtual function tables");
-			stl::detour_vfunc<8, IDXGISwapChain_Present>(globals::d3d::swapchain);
+			stl::detour_vfunc<8, IDXGISwapChain_Present>(globals::d3d::swapChain);
 
 			auto shaderCache = globals::shaderCache;
 			if (shaderCache->IsDump()) {
@@ -842,6 +898,9 @@ namespace Hooks
 
 	void InstallD3DHooks()
 	{
+		globals::streamline->LoadInterposer();
+		globals::fidelityFX->LoadFFX();
+
 		*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
 		*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", !REL::Module::IsVR() ? "CreateDXGIFactory" : "CreateDXGIFactory1");
 	}

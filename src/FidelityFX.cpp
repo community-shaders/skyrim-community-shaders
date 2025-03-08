@@ -50,14 +50,6 @@ void FidelityFX::SetupFrameGeneration()
 	if (ffx::CreateContext(frameGenContext, nullptr, createFg, createBackend) != ffx::ReturnCode::Ok) {
 		logger::critical("[FidelityFX] Failed to create frame generation context!");
 	}
-
-	ffx::CreateContextDescFrameGenerationSwapChainWrapDX12 desc{};
-	desc.swapchain = &swapChain->swapChain;
-	desc.gameQueue = swapChain->commandQueue.get();
-
-	if (ffx::CreateContext(swapChainContext, nullptr, desc) != ffx::ReturnCode::Ok) {
-		logger::critical("[FidelityFX] Failed to create swap chain context!");
-	}
 }
 
 void FidelityFX::Present(bool a_useFrameGeneration)
@@ -66,7 +58,7 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 	auto swapChain = globals::dx12SwapChain;
 	auto commandList = swapChain->commandLists[swapChain->frameIndex].get();
 
-	auto HUDLessColor = upscaling->colorBufferShared12.get();
+	auto HUDLessColor = upscaling->HUDLessBufferShared12.get();
 	auto depth = upscaling->depthBufferShared12.get();
 	auto motionVectors = upscaling->motionVectorBufferShared12.get();
 
@@ -188,7 +180,7 @@ void FidelityFX::DestroyFSRResources()
 		logger::critical("[FidelityFX] Failed to destroy FSR3 context!");
 }
 
-void FidelityFX::Upscale(Texture2D* a_color, Texture2D* a_alphaMask, float2 a_jitter, bool a_reset)
+void FidelityFX::Upscale(Texture2D* a_color, Texture2D* a_alphaMask, float2 a_jitter, float a_sharpness)
 {
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
@@ -221,11 +213,11 @@ void FidelityFX::Upscale(Texture2D* a_color, Texture2D* a_alphaMask, float2 a_ji
 		dispatchParameters.cameraNear = *globals::game::cameraNear;
 
 		dispatchParameters.enableSharpening = true;
-		dispatchParameters.sharpness = 0.0f;
+		dispatchParameters.sharpness = a_sharpness;
 
 		dispatchParameters.cameraFovAngleVertical = Util::GetVerticalFOVRad();
 		dispatchParameters.viewSpaceToMetersFactor = 0.01428222656f;
-		dispatchParameters.reset = a_reset;
+		dispatchParameters.reset = false;
 		dispatchParameters.preExposure = 1.0f;
 
 		dispatchParameters.flags = 0;

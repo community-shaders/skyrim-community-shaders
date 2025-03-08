@@ -13,7 +13,9 @@
 #include <sl.h>
 #include <sl_consts.h>
 #include <sl_dlss.h>
-#include <sl_nis.h>
+#include <sl_dlss_g.h>
+#include <sl_matrix_helpers.h>
+#include <sl_reflex.h>
 #include <sl_version.h>
 #pragma warning(pop)
 
@@ -32,7 +34,8 @@ public:
 	bool initialized = false;
 
 	bool featureDLSS = false;
-	bool featureNIS = false;
+	bool featureDLSSG = false;
+	bool featureReflex = false;
 
 	sl::ViewportHandle viewport{ 0 };
 
@@ -57,14 +60,26 @@ public:
 	PFun_slGetNewFrameToken* slGetNewFrameToken{};
 	PFun_slSetD3DDevice* slSetD3DDevice{};
 
-	// NIS specific functions
-	PFun_slNISSetOptions* slNISSetOptions{};
-	PFun_slNISGetState* slNISGetState{};
-
 	// DLSS specific functions
 	PFun_slDLSSGetOptimalSettings* slDLSSGetOptimalSettings{};
 	PFun_slDLSSGetState* slDLSSGetState{};
 	PFun_slDLSSSetOptions* slDLSSSetOptions{};
+
+	// DLSSG specific functions
+	PFun_slDLSSGGetState* slDLSSGGetState{};
+	PFun_slDLSSGSetOptions* slDLSSGSetOptions{};
+
+	// Reflex specific functions
+	PFun_slReflexGetState* slReflexGetState{};
+	PFun_slReflexSetMarker* slReflexSetMarker{};
+	PFun_slReflexSleep* slReflexSleep{};
+	PFun_slReflexSetOptions* slReflexSetOptions{};
+
+	Util::FrameChecker frameChecker;
+	sl::FrameToken* frameToken;
+
+	decltype(&CreateDXGIFactory1) slCreateDXGIFactory1{};
+	decltype(&D3D11CreateDeviceAndSwapChain) slD3D11CreateDeviceAndSwapChain{};
 
 	void LoadInterposer();
 
@@ -72,10 +87,47 @@ public:
 
 	void PostDevice();
 
-	void Sharpen(Texture2D* a_sharpenTexture, float a_sharpness);
+	void CheckFrameConstants();
 
 	void Upscale(Texture2D* a_color, Texture2D* a_alphaMask, sl::DLSSPreset a_preset);
-	void UpdateConstants();
-
+	void Present();
 	void DestroyDLSSResources();
+
+	void InstallHooks(ID3D11DeviceContext* a_context);
+
+	struct FrameBuffer
+	{
+		Matrix CameraView;
+		Matrix CameraProj;
+		Matrix CameraViewProj;
+		Matrix CameraViewProjUnjittered;
+		Matrix CameraPreviousViewProjUnjittered;
+		Matrix CameraProjUnjittered;
+		Matrix CameraProjUnjitteredInverse;
+		Matrix CameraViewInverse;
+		Matrix CameraViewProjInverse;
+		Matrix CameraProjInverse;
+		float4 CameraPosAdjust;
+		float4 CameraPreviousPosAdjust;
+		float4 FrameParams;
+		float4 DynamicResolutionParams1;
+		float4 DynamicResolutionParams2;
+	};
+
+	D3D11_MAPPED_SUBRESOURCE* mappedFrameBuffer = nullptr;
+	FrameBuffer frameBufferCached{};
+
+	void CacheFramebuffer();
+
+	struct ID3D11DeviceContext_Map
+	{
+		static HRESULT thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource, D3D11_MAP MapType, UINT MapFlags, D3D11_MAPPED_SUBRESOURCE* pMappedResource);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct ID3D11DeviceContext_Unmap
+	{
+		static void thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
 };
