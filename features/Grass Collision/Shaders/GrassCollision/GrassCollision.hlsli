@@ -48,7 +48,7 @@ namespace GrassCollision
 
 			SmoothLimitDisplacement(displacement, 32.0);
 
-			return displacement;
+			return displacement * 0.75;
 		}
 
 		return 0.0;
