@@ -552,7 +552,7 @@ void Upscaling::CopyResourcesToSharedBuffers()
 	context->CopyResource(motionVectorBufferShared->resource.get(), motionVector.texture);
 
 	{
-		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 
 		{
 			auto dispatchCount = Util::GetScreenDispatchCount(true);
