@@ -97,7 +97,7 @@ void ScreenSpaceGI::DrawSettings()
 
 		ImGui::TableNextColumn();
 		if (ImGui::Button("Standard", { -1, 0 })) {
-			settings.NumSlices = 2;
+			settings.NumSlices = 4;
 			settings.NumSteps = 8;
 			settings.ResolutionMode = 1;
 			settings.EnableBlur = true;
