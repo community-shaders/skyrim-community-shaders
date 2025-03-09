@@ -269,6 +269,8 @@ decltype(&CreateDXGIFactory) ptrCreateDXGIFactory;
 HRESULT WINAPI hk_CreateDXGIFactory(REFIID, void** ppFactory)
 {
 	auto streamline = globals::streamline;
+	if (!streamline->triedInitialization)
+		globals::streamline->LoadInterposer();
 	if (streamline->initialized)
 		return streamline->slCreateDXGIFactory1(__uuidof(IDXGIFactory4), ppFactory);
 	return ptrCreateDXGIFactory(__uuidof(IDXGIFactory4), ppFactory);
@@ -921,7 +923,6 @@ namespace Hooks
 
 	void InstallD3DHooks()
 	{
-		globals::streamline->LoadInterposer();
 		globals::fidelityFX->LoadFFX();
 
 		*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");

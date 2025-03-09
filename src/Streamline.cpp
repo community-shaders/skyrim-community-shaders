@@ -28,6 +28,8 @@ void LoggingCallback(sl::LogType type, const char* msg)
 
 void Streamline::LoadInterposer()
 {
+	triedInitialization = true;
+
 	interposer = LoadLibraryW(L"Data/SKSE/Plugins/Streamline/sl.interposer.dll");
 	if (interposer == nullptr) {
 		DWORD errorCode = GetLastError();
