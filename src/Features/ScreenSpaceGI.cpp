@@ -171,14 +171,14 @@ void ScreenSpaceGI::DrawSettings()
 
 	ImGui::Separator();
 
-	ImGui::SliderFloat("AO radius", &settings.AORadius, 10.f, 800.0f, "%.1f game units");
+	ImGui::SliderFloat("AO radius", &settings.AORadius, 10.f, 1024.0f, "%.1f game units");
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("A smaller radius produces tighter AO.");
 
 	{
 		auto _ = Util::DisableGuard(!settings.EnableGI);
 
-		ImGui::SliderFloat("IL radius", &settings.GIRadius, 10.f, 800.0f, "%.1f game units");
+		ImGui::SliderFloat("IL radius", &settings.GIRadius, 10.f, 1024.0f, "%.1f game units");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("A larger radius produces wider IL.");
 	}
@@ -194,7 +194,7 @@ void ScreenSpaceGI::DrawSettings()
 	if (showAdvanced) {
 		ImGui::Separator();
 
-		ImGui::SliderFloat("Thickness", &settings.Thickness, 0.f, 500.0f, "%.1f game units");
+		ImGui::SliderFloat("Thickness", &settings.Thickness, 0.f, 128.0f, "%.1f game units");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("How thick the occluders are. Only affects AO.");
 	}
