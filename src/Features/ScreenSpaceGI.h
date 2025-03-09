@@ -56,20 +56,20 @@ struct ScreenSpaceGI : Feature
 		float Thickness = 32.f;
 		float2 DepthFadeRange = { 4e4, 5e4 };
 		// gi
-		float GISaturation = 0.8f;
+		float GISaturation = 1.0f;
 		bool EnableGIBounce = true;
 		float GIBounceFade = 1.0f;
 		float GIDistanceCompensation = 0.f;
 		// mix
-		float AOPower = 3.14f;
-		float GIStrength = 3.14f;
+		float AOPower = 2.0f;
+		float GIStrength = 2.0f;
 		// denoise
 		bool EnableTemporalDenoiser = true;
 		bool EnableBlur = true;
 		float DepthDisocclusion = .1f;
 		float NormalDisocclusion = .1f;
-		uint MaxAccumFrames = 64;
-		float BlurRadius = 2.f;
+		uint MaxAccumFrames = 30;
+		float BlurRadius = 5.f;
 		float DistanceNormalisation = 2.f;
 	} settings;
 

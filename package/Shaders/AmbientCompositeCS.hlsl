@@ -57,11 +57,11 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normalWS, 1.0)));
 
-	float3 linAlbedo = Color::GammaToTrueLinear(albedo);
-	float3 linDirectionalAmbientColor = Color::GammaToTrueLinear(directionalAmbientColor);
-	float3 linDiffuseColor = Color::GammaToTrueLinear(diffuseColor);
+	float3 linAlbedo = Color::GammaToLinear(albedo);
+	float3 linDirectionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
+	float3 linDiffuseColor = Color::GammaToLinear(diffuseColor);
 
-	float3 linAmbient = Color::GammaToTrueLinear(albedo * directionalAmbientColor);
+	float3 linAmbient = Color::GammaToLinear(albedo * directionalAmbientColor);
 
 	float visibility = 1.0;
 #if defined(SKYLIGHTING)
@@ -124,8 +124,8 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 #endif
 
 	linAmbient *= visibility;
-	diffuseColor = Color::TrueLinearToGamma(linDiffuseColor);
-	directionalAmbientColor = Color::TrueLinearToGamma(linDirectionalAmbientColor * visibility);
+	diffuseColor = Color::LinearToGamma(linDiffuseColor);
+	directionalAmbientColor = Color::LinearToGamma(linDirectionalAmbientColor * visibility);
 
 	diffuseColor = diffuseColor + directionalAmbientColor * albedo;
 
