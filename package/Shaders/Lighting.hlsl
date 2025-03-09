@@ -831,6 +831,9 @@ float3 GetFacegenBaseColor(float3 rawBaseColor, float2 uv)
 	float3 detailColor = TexDetailSampler.Sample(SampDetailSampler, uv).xyz;
 	detailColor = float3(3.984375, 3.984375, 3.984375) * (float3(0.00392156886, 0, 0.00392156886) + detailColor);
 	float3 tintColor = TexTintSampler.Sample(SampTintSampler, uv).xyz;
+#		if defined(CS_SKIN)
+	// tintColor = Color::GammaToLinear(tintColor);
+#		endif
 	tintColor = tintColor * rawBaseColor * 2.0.xxx;
 	tintColor = tintColor - tintColor * rawBaseColor;
 	return (rawBaseColor * rawBaseColor + tintColor) * detailColor;
@@ -841,6 +844,9 @@ float3 GetFacegenBaseColor(float3 rawBaseColor, float2 uv)
 float3 GetFacegenRGBTintBaseColor(float3 rawBaseColor, float2 uv)
 {
 	float3 tintColor = TintColor.xyz * rawBaseColor * 2.0.xxx;
+#		if defined(CS_SKIN)
+	// tintColor = Color::GammaToLinear(tintColor);
+#		endif
 	tintColor = tintColor - tintColor * rawBaseColor;
 	return float3(1.01171875, 0.99609375, 1.01171875) * (rawBaseColor * rawBaseColor + tintColor);
 }
@@ -1393,6 +1399,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	baseColor.xyz = lerp(baseColor.xyz, lerp(baseColor.xyz, 0.0, complexMaterialColor.z), complexMaterial);
 #	endif  // defined (EMAT) && defined(ENVMAP)
 
+#	if defined(SKIN) && defined(CS_SKIN)
+	if (SharedData::skinData.skinParams.w > 0.0f) {
+		// baseColor.xyz = Color::GammaToLinear(baseColor.xyz);
+	}
+#	endif  // CS_SKIN
+
 #	if defined(FACEGEN)
 	baseColor.xyz = GetFacegenBaseColor(baseColor.xyz, uv);
 #	elif defined(FACEGEN_RGB_TINT)
@@ -1401,7 +1413,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(SKIN) && defined(CS_SKIN)
 	if (SharedData::skinData.skinParams.w > 0.0f) {
-		baseColor.xyz = baseColor.xyz * SharedData::skinData.skinParams2.www * 1.5f;
+		baseColor.xyz = baseColor.xyz * SharedData::skinData.skinParams2.www;
 	}
 #	endif  // CS_SKIN
 
@@ -2458,7 +2470,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	elif defined(SKIN) && defined(CS_SKIN)
 	if (SharedData::skinData.skinParams.w <= 1e-5) {
 #		if defined(DEFERRED) && defined(SSGI)
-		diffuseColor += directionalAmbientColorDirect;
 #		else
 		diffuseColor += directionalAmbientColor;
 #		endif
@@ -2738,7 +2749,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif
 #	elif defined(SPECULAR) && defined(SKIN) && defined(CS_SKIN)
 	if (SharedData::skinData.skinParams.w < 1e-5) {
-		specularColor = (specularColor * glossiness * MaterialData.yyy) * SpecularColor.xyz;
+		specularColor = (specularColor * glossiness * MaterialData.yyy) * Color::GammaToLinear(SpecularColor.xyz);
 	}
 #	elif defined(SPARKLE)
 	specularColor *= glossiness;
@@ -2791,8 +2802,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	specularColor = specularColorPBR;
 #	elif defined(SKIN) && defined(CS_SKIN)
 	if (SharedData::skinData.skinParams.w > 0) {
-		color.xyz *= Color::PBRLightingScale;
-		specularColorPBR *= Color::PBRLightingScale;
+		// color.xyz *= Color::PBRLightingScale;
+		// specularColorPBR *= Color::PBRLightingScale;
 		specularColor = specularColorPBR;
 	}
 #	endif

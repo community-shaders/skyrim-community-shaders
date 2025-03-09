@@ -129,7 +129,7 @@ namespace Skin
 		diffuseAO = PBR::MultiBounceAO(skin.Albedo, diffuseAO.x).y;
 		specularAO = PBR::MultiBounceAO(skin.F0, specularAO.x).y;
 
-		diffuseWeight *= diffuseAO * Color::PBRLightingScale;
+		diffuseWeight *= diffuseAO;
 		specularWeight *= specularAO;
 	}
 }
