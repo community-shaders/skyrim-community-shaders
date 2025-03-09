@@ -28,6 +28,8 @@ void LoggingCallback(sl::LogType type, const char* msg)
 
 void Streamline::LoadInterposer()
 {
+	triedInitialization = true;
+
 	interposer = LoadLibraryW(L"Data/SKSE/Plugins/Streamline/sl.interposer.dll");
 	if (interposer == nullptr) {
 		DWORD errorCode = GetLastError();
@@ -42,7 +44,9 @@ void Streamline::LoadInterposer()
 	sl::Preferences pref;
 
 	sl::Feature featuresToLoad[] = { sl::kFeatureDLSS, sl::kFeatureDLSS_G, sl::kFeatureReflex };
-	pref.featuresToLoad = featuresToLoad;
+	sl::Feature featuresToLoadVR[] = { sl::kFeatureDLSS };
+
+	pref.featuresToLoad = REL::Module::IsVR() ? featuresToLoadVR : featuresToLoad;
 	pref.numFeaturesToLoad = _countof(featuresToLoad);
 
 	pref.logLevel = sl::LogLevel::eOff;
