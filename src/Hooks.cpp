@@ -294,7 +294,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	pAdapter->GetDesc(&adapterDesc);
 	globals::state->SetAdapterDescription(adapterDesc.Description);
 
-	if (!REL::Module::IsVR()){
+	if (!REL::Module::IsVR()) {
 		pSwapChainDesc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 
 		IDXGIFactory5* dxgiFactory;
