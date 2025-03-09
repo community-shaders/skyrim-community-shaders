@@ -159,7 +159,7 @@ float4 SSSSBlurCS(
 		float3 color = ColorTexture[coords].rgb;
 
 #if defined(HORIZONTAL)
-		color.rgb = Color::GammaToLinear(color.rgb);
+		color.rgb = Color::GammaToTrueLinear(color.rgb);
 #endif
 
 		float depth = DepthTexture[coords].r;
