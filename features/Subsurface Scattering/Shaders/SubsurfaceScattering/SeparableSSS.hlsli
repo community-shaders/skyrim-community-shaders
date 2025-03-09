@@ -102,7 +102,7 @@ float4 SSSSBlurCS(
 	float4 colorM = ColorTexture[DTid.xy];
 
 #if defined(HORIZONTAL)
-	colorM.rgb = Color::GammaToLinear(colorM.rgb);
+	colorM.rgb = Color::GammaToTrueLinear(colorM.rgb);
 #endif
 
 	if (sssAmount == 0)
