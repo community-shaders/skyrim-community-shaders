@@ -1399,12 +1399,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	baseColor.xyz = lerp(baseColor.xyz, lerp(baseColor.xyz, 0.0, complexMaterialColor.z), complexMaterial);
 #	endif  // defined (EMAT) && defined(ENVMAP)
 
-#	if defined(SKIN) && defined(CS_SKIN)
-	if (SharedData::skinData.skinParams.w > 0.0f) {
-		// baseColor.xyz = Color::GammaToLinear(baseColor.xyz);
-	}
-#	endif  // CS_SKIN
-
 #	if defined(FACEGEN)
 	baseColor.xyz = GetFacegenBaseColor(baseColor.xyz, uv);
 #	elif defined(FACEGEN_RGB_TINT)
@@ -1414,6 +1408,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(SKIN) && defined(CS_SKIN)
 	if (SharedData::skinData.skinParams.w > 0.0f) {
 		baseColor.xyz = baseColor.xyz * SharedData::skinData.skinParams2.www;
+		baseColor.xyz = Color::GammaToLinear(baseColor.xyz);
 	}
 #	endif  // CS_SKIN
 
@@ -2452,7 +2447,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 		directionalAmbientColor *= skylightingDiffuse;
 		directionalAmbientColor *= 1.0 + saturate(worldSpaceNormal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
+	#	if !(defined(SKIN) && defined(CS_SKIN))
 		directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
+	#	else
+		if (SharedData::skinData.skinParams.w == 0) {
+			directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
+		}
+	#	endif
 	}
 #	endif
 
@@ -3027,6 +3028,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		else
 	psout.Masks = float4(0, 0, 0, psout.Diffuse.w);
 #		endif
+#	endif
+
+#	if defined(SKIN) && defined(CS_SKIN)
+	if (SharedData::skinData.skinParams.w > 0) {
+		psout.Diffuse.xyz = Color::LinearToGamma(psout.Diffuse.xyz);
+#		if defined(DEFERRED)
+		// psout.Specular.xyz = Color::LinearToGamma(psout.Specular.xyz);
+		psout.Albedo.xyz = Color::LinearToGamma(psout.Albedo.xyz);
+		// psout.Reflectance.xyz = Color::LinearToGamma(psout.Reflectance.xyz);
+#		endif
+	}
 #	endif
 
 	return psout;
