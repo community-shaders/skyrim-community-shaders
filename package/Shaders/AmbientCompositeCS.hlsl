@@ -50,7 +50,6 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 	float3 normalVS = GBuffer::DecodeNormal(normalGlossiness.xy);
 
 	float3 diffuseColor = MainRW[dispatchID.xy];
-	float3 originalDiffuseColor = diffuseColor;
 	float3 albedo = AlbedoTexture[dispatchID.xy];
 
 	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
@@ -60,6 +59,7 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 	float3 linAlbedo = Color::GammaToLinear(albedo);
 	float3 linDirectionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
 	float3 linDiffuseColor = Color::GammaToLinear(diffuseColor);
+	float3 originalDiffuseColor = linDiffuseColor;
 
 	float3 linAmbient = Color::GammaToLinear(albedo * directionalAmbientColor);
 
@@ -120,7 +120,7 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 	linDiffuseColor *= lerp(ssgiAo, 1.0, 0.5);
 #	endif
 
-	linDiffuseColor += ssgiIl * linAlbedo / Math::PI;
+	linDiffuseColor += ssgiIl * linAlbedo;
 #endif
 
 	linAmbient *= visibility;
@@ -130,7 +130,7 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 	diffuseColor = diffuseColor + directionalAmbientColor * albedo;
 
 #if defined(SSGI)
-	DiffuseAmbientRW[dispatchID.xy] = diffuseColor - originalDiffuseColor;
+	DiffuseAmbientRW[dispatchID.xy] = Color::GammaToLinear(diffuseColor - originalDiffuseColor);
 #endif
 
 	MainRW[dispatchID.xy] = float4(diffuseColor, 1);
