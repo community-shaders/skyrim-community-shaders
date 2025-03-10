@@ -2447,13 +2447,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 		directionalAmbientColor *= skylightingDiffuse;
 		directionalAmbientColor *= 1.0 + saturate(worldSpaceNormal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
-	#	if !(defined(SKIN) && defined(CS_SKIN))
+#		if !(defined(SKIN) && defined(CS_SKIN))
 		directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
-	#	else
+#		else
 		if (SharedData::skinData.skinParams.w == 0) {
 			directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
 		}
-	#	endif
+#		endif
 	}
 #	endif
 
