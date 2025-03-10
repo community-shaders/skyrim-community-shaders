@@ -2749,7 +2749,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif
 #	elif defined(SPECULAR) && defined(SKIN) && defined(CS_SKIN)
 	if (SharedData::skinData.skinParams.w < 1e-5) {
-		specularColor = (specularColor * glossiness * MaterialData.yyy) * Color::GammaToLinear(SpecularColor.xyz);
+		specularColor = (specularColor * glossiness * MaterialData.yyy) * SpecularColor.xyz;
 	}
 #	elif defined(SPARKLE)
 	specularColor *= glossiness;
