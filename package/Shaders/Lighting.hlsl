@@ -2461,7 +2461,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		if (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsTree) {
 			// Remove AO
 			float3 originalVertexColor = vertexColor;
-			vertexColor = vertexColor / vertexAO;
+			vertexColor = lerp(vertexColor, vertexColor / vertexAO, sqrt(vertexAO));
 			vertexColor = lerp(input.Color.xyz, vertexColor, skylightingFadeOutFactor);
 
 			// Apply AO to direct lighting only
