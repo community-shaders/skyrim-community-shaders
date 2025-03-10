@@ -754,8 +754,7 @@ float3 GetLightSpecularInput(PS_INPUT input, float3 L, float3 V, float3 N, float
 	sparkleMultiplier = sparkleMultiplier >= 0.5 ? 1 : 0;
 	lightColorMultiplier += sparkleMultiplier * HdotN;
 #	endif
-	float fresnel = 1.0 + pow(1 - dot(V, H), 5);
-	return lightColor * lightColorMultiplier.xxx * fresnel;
+	return lightColor * lightColorMultiplier;
 }
 
 float3 TransformNormal(float3 normal)
@@ -2744,9 +2743,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(SPECULAR) && !(defined(SKIN) && defined(CS_SKIN))
 #		if defined(EMAT_ENVMAP)
-	specularColor = (specularColor * glossiness * MaterialData.yyy) * lerp(Color::GammaToLinear(SpecularColor.xyz), complexSpecular, complexMaterial);
+	specularColor = (specularColor * glossiness * MaterialData.yyy) * lerp(SpecularColor.xyz, Color::LinearToGamma(complexSpecular), complexMaterial);
 #		else
-	specularColor = (specularColor * glossiness * MaterialData.yyy) * Color::GammaToLinear(SpecularColor.xyz);
+	specularColor = (specularColor * glossiness * MaterialData.yyy) * SpecularColor.xyz;
 #		endif
 #	elif defined(SPECULAR) && defined(SKIN) && defined(CS_SKIN)
 	if (SharedData::skinData.skinParams.w < 1e-5) {
