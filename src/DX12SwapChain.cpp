@@ -9,29 +9,7 @@
 
 void DX12SwapChain::CreateD3D12Device(IDXGIAdapter* a_adapter)
 {
-	// Define feature levels in descending order (highest to lowest)
-	D3D_FEATURE_LEVEL featureLevels[] = {
-		D3D_FEATURE_LEVEL_12_2,
-		D3D_FEATURE_LEVEL_12_1,
-		D3D_FEATURE_LEVEL_12_0
-	};
-
-	// Store the supported feature level
-	D3D_FEATURE_LEVEL supportedFeatureLevel;
-
-	// Try to create the device with the highest feature level
-	for (const auto& level : featureLevels) {
-		HRESULT hr = D3D12CreateDevice(a_adapter, level, IID_PPV_ARGS(&d3d12Device));
-		if (SUCCEEDED(hr)) {
-			supportedFeatureLevel = level;
-			break;
-		}
-	}
-
-	// Ensure we actually created a device
-	if (!d3d12Device) {
-		throw std::runtime_error("[Frame Generation] Failed to create Direct3D 12 device");
-	}
+	DX::ThrowIfFailed(D3D12CreateDevice(a_adapter, D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&d3d12Device)));
 
 	D3D12_COMMAND_QUEUE_DESC queueDesc = {};
 	queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
