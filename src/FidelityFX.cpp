@@ -61,7 +61,7 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 	auto HUDLessColor = upscaling->HUDLessBufferShared12.get();
 	auto depth = upscaling->depthBufferShared12.get();
 	auto motionVectors = upscaling->motionVectorBufferShared12.get();
-	
+
 	FfxApiSwapchainFramePacingTuning framePacingTuning{ 0.1f, 0.1f, true, 2, false };
 
 	ffx::ConfigureDescFrameGenerationSwapChainKeyValueDX12 framePacingTuningParameters{};
@@ -70,7 +70,7 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 
 	if (ffx::Configure(swapChainContext, framePacingTuningParameters) != ffx::ReturnCode::Ok) {
 		logger::critical("[FidelityFX] Failed to configure frame pacing tuning!");
-	}	
+	}
 
 	ffx::ConfigureDescFrameGeneration configParameters{};
 
