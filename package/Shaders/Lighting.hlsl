@@ -2696,13 +2696,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		color.xyz += indirectDiffuseLobeWeight * directionalAmbientColor;
 #		endif
 
-#		if !defined(DYNAMIC_CUBEMAPS)
-		specularColorPBR += indirectSpecularLobeWeight * directionalAmbientColor;
-#		endif
-
 #		if !defined(DEFERRED)
 #			if defined(DYNAMIC_CUBEMAPS)
-		specularColorPBR += indirectSpecularLobeWeight * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, skinSurfaceProperties.RoughnessPrimary, viewPosition.z);
+#				if defined(SKYLIGHTING)
+		specularColorPBR += indirectSpecularLobeWeight * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, pbrSurfaceProperties.Roughness, skylightingSH);
+#				else
+		specularColorPBR += indirectSpecularLobeWeight * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, pbrSurfaceProperties.Roughness);
+#				endif
+#			else
+		specularColorPBR += indirectSpecularLobeWeight * directionalAmbientColor;
 #			endif
 #		else
 		indirectDiffuseLobeWeight *= vertexColor;
