@@ -76,7 +76,7 @@ void ScreenSpaceGI::DrawSettings()
 		if (ImGui::Button("AO only", { -1, 0 })) {
 			settings.NumSlices = 1;
 			settings.NumSteps = 6;
-			settings.EnableBlur = false;
+			settings.EnableBlur = true;
 			settings.EnableGI = false;
 			recompileFlag = true;
 		}
@@ -88,7 +88,7 @@ void ScreenSpaceGI::DrawSettings()
 			settings.NumSlices = 10;
 			settings.NumSteps = 12;
 			settings.ResolutionMode = 2;
-			settings.EnableBlur = false;
+			settings.EnableBlur = true;
 			settings.EnableGI = true;
 			recompileFlag = true;
 		}
@@ -97,10 +97,10 @@ void ScreenSpaceGI::DrawSettings()
 
 		ImGui::TableNextColumn();
 		if (ImGui::Button("Standard", { -1, 0 })) {
-			settings.NumSlices = 2;
+			settings.NumSlices = 4;
 			settings.NumSteps = 8;
 			settings.ResolutionMode = 1;
-			settings.EnableBlur = false;
+			settings.EnableBlur = true;
 			settings.EnableGI = true;
 			recompileFlag = true;
 		}
@@ -112,7 +112,7 @@ void ScreenSpaceGI::DrawSettings()
 			settings.NumSlices = 4;
 			settings.NumSteps = 8;
 			settings.ResolutionMode = 0;
-			settings.EnableBlur = false;
+			settings.EnableBlur = true;
 			settings.EnableGI = true;
 			recompileFlag = true;
 		}
@@ -124,7 +124,7 @@ void ScreenSpaceGI::DrawSettings()
 			settings.NumSlices = 8;
 			settings.NumSteps = 10;
 			settings.ResolutionMode = 0;
-			settings.EnableBlur = false;
+			settings.EnableBlur = true;
 			settings.EnableGI = true;
 			recompileFlag = true;
 		}
@@ -171,14 +171,14 @@ void ScreenSpaceGI::DrawSettings()
 
 	ImGui::Separator();
 
-	ImGui::SliderFloat("AO radius", &settings.AORadius, 10.f, 800.0f, "%.1f game units");
+	ImGui::SliderFloat("AO radius", &settings.AORadius, 10.f, 1024.0f, "%.1f game units");
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("A smaller radius produces tighter AO.");
 
 	{
 		auto _ = Util::DisableGuard(!settings.EnableGI);
 
-		ImGui::SliderFloat("IL radius", &settings.GIRadius, 10.f, 800.0f, "%.1f game units");
+		ImGui::SliderFloat("IL radius", &settings.GIRadius, 10.f, 1024.0f, "%.1f game units");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("A larger radius produces wider IL.");
 	}
@@ -194,7 +194,7 @@ void ScreenSpaceGI::DrawSettings()
 	if (showAdvanced) {
 		ImGui::Separator();
 
-		ImGui::SliderFloat("Thickness", &settings.Thickness, 0.f, 500.0f, "%.1f game units");
+		ImGui::SliderFloat("Thickness", &settings.Thickness, 0.f, 128.0f, "%.1f game units");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("How thick the occluders are. Only affects AO.");
 	}

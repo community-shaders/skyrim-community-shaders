@@ -10,6 +10,8 @@
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
 
+#include "Streamline.h"
+
 struct DepthStates
 {
 	ID3D11DepthStencilState* a[6][40];
@@ -347,6 +349,8 @@ void Deferred::StartDeferred()
 
 void Deferred::DeferredPasses()
 {
+	globals::streamline->CheckFrameConstants();
+
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "Deferred");
 
@@ -354,8 +358,7 @@ void Deferred::DeferredPasses()
 	auto context = globals::d3d::context;
 
 	{
-		static REL::Relocation<ID3D11Buffer**> perFrame{ REL::RelocationID(524768, 411384) };
-		ID3D11Buffer* buffers[1] = { *perFrame.get() };
+		ID3D11Buffer* buffers[1] = { *globals::game::perFrame };
 		ID3D11Buffer* vrBuffer = nullptr;
 
 		if (REL::Module::IsVR()) {
