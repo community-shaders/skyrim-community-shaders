@@ -27,7 +27,7 @@ namespace Skylighting
 
 	float mixDiffuse(SharedData::SkylightingSettings params, float visibility)
 	{
-		return lerp(params.MinDiffuseVisibility, 1.0, saturate(visibility));
+		return lerp(params.MinDiffuseVisibility, 1.0, visibility);
 	}
 
 	float mixSpecular(SharedData::SkylightingSettings params, float visibility)
@@ -43,11 +43,7 @@ namespace Skylighting
 		if (SharedData::InInterior)
 			return scaledUnitSH;
 
-		// Fix objects which are too dark
-		normalWS.z = normalWS.z * 0.5 + 0.5;
-		normalWS = normalize(normalWS);
-
-		positionMS.xyz += normalWS * CELL_SIZE * 0.5;  // Receiver normal bias
+		positionMS.xyz += normalWS * CELL_SIZE;  // Receiver normal bias
 
 		if (SharedData::FrameCount) {  // Check TAA
 			float3 offset = blueNoise[int3(screenPosition.xy % 128, SharedData::FrameCount % 64)] * 2.0 - 1.0;
@@ -66,35 +62,31 @@ namespace Skylighting
 
 		sh2 sum = 0;
 		float wsum = 0;
-		[unroll] for (int i = 0; i < 2; i++)
-			[unroll] for (int j = 0; j < 2; j++)
-				[unroll] for (int k = 0; k < 2; k++)
-		{
-			int3 offset = int3(i, j, k);
-			int3 cellID = cell000 + offset;
+		for (int i = 0; i < 2; i++)
+			for (int j = 0; j < 2; j++)
+				for (int k = 0; k < 2; k++) {
+					int3 offset = int3(i, j, k);
+					int3 cellID = cell000 + offset;
 
-			if (any(cellID < 0) || any((uint3)cellID >= ARRAY_DIM))
-				continue;
+					if (any(cellID < 0) || any((uint3)cellID >= ARRAY_DIM))
+						continue;
 
-			float3 cellCentreMS = cellID + 0.5 - ARRAY_DIM / 2;
-			cellCentreMS = cellCentreMS * CELL_SIZE;
+					float3 cellCentreMS = cellID + 0.5 - ARRAY_DIM / 2;
+					cellCentreMS = cellCentreMS * CELL_SIZE;
 
-			// https://handmade.network/p/75/monter/blog/p/7288-engine_work__global_illumination_with_irradiance_probes
-			// basic tangent checks
-			float tangentWeight = dot(normalize(cellCentreMS - positionMSAdjusted), normalWS);
-			if (tangentWeight <= 0.0)
-				continue;
-			tangentWeight = sqrt(tangentWeight);
+					// https://handmade.network/p/75/monter/blog/p/7288-engine_work__global_illumination_with_irradiance_probes
+					// basic tangent checks
+					float tangentWeight = dot(normalize(cellCentreMS - positionMSAdjusted), normalWS) * 0.5 + 0.5;
 
-			float3 trilinearWeights = 1 - abs(offset - trilinearPos);
-			float w = trilinearWeights.x * trilinearWeights.y * trilinearWeights.z * tangentWeight;
+					float3 trilinearWeights = 1 - abs(offset - trilinearPos);
+					float w = trilinearWeights.x * trilinearWeights.y * trilinearWeights.z * tangentWeight;
 
-			uint3 cellTexID = (cellID + params.ArrayOrigin.xyz) % ARRAY_DIM;
-			sh2 probe = SphericalHarmonics::Scale(probeArray[cellTexID], w);
+					uint3 cellTexID = (cellID + params.ArrayOrigin.xyz) % ARRAY_DIM;
+					sh2 probe = SphericalHarmonics::Scale(probeArray[cellTexID], w);
 
-			sum = SphericalHarmonics::Add(sum, probe);
-			wsum += w;
-		}
+					sum = SphericalHarmonics::Add(sum, probe);
+					wsum += w;
+				}
 
 		return SphericalHarmonics::Scale(sum, rcp(wsum + 1e-10));
 	}

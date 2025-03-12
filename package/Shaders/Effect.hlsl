@@ -530,7 +530,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 
 	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::EffectShadows)) {
 		float3 dirLightColor = SharedData::DirLightColor * 0.5;
-		float3 ambientColor = mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1));
+		float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
 
 		color = ambientColor;
 
@@ -542,10 +542,13 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 #			endif
 
 		sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
-		float skylighting = SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1));
-		skylighting = lerp(1.0, skylighting, Skylighting::getFadeOutFactor(worldPosition));
+		float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
+		skylightingDiffuse = saturate(skylightingDiffuse);
+		skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(worldPosition));
+		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+
 		color = Color::GammaToLinear(color);
-		color *= Skylighting::mixDiffuse(SharedData::skylightingSettings, skylighting);
+		color *= skylightingDiffuse;
 		color = Color::LinearToGamma(color);
 #		endif
 
@@ -562,11 +565,17 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 #			endif
 
 		sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
-		float skylighting = SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1));
-		skylighting = lerp(1.0, skylighting, Skylighting::getFadeOutFactor(worldPosition));
-		color = Color::GammaToLinear(color);
-		color *= Skylighting::mixDiffuse(SharedData::skylightingSettings, skylighting);
-		color = Color::LinearToGamma(color);
+
+		if (!SharedData::InInterior) {
+			float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
+			skylightingDiffuse = saturate(skylightingDiffuse);
+			skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(worldPosition));
+			skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+
+			color = Color::GammaToLinear(color);
+			color *= skylightingDiffuse;
+			color = Color::LinearToGamma(color);
+		}
 #		endif
 	}
 

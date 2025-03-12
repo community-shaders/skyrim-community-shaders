@@ -137,7 +137,7 @@ namespace DisplayMapping
 		col = ICtCpToRGB(ictcp * float3(1, saturationAmount.xx));
 
 		// Hue preserving mapping
-		float maxCol = max(col.x, max(col.y, col.z));
+		float maxCol = Color::RGBToLuminance(col);
 		float mappedMax = GetTonemapFactorHejlBurgessDawson(maxCol);
 		float3 compressedHuePreserving = col * mappedMax / maxCol;
 

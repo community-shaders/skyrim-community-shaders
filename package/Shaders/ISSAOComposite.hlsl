@@ -160,7 +160,7 @@ PS_OUTPUT main(PS_INPUT input)
 		ao = min(1, SparklesParameters3.x + ao);
 	}
 	composedColor.xyz = Color::GammaToLinear(composedColor.xyz);
-	composedColor.xyz *= pow(ao, 1.5);
+	composedColor.xyz *= Color::GammaToLinear(ao);
 	composedColor.xyz = Color::LinearToGamma(composedColor.xyz);
 #	endif
 
