@@ -1,9 +1,10 @@
 [submodule "extern/CommonLibSSE-NG"]
 	path = extern/CommonLibSSE-NG
 	url = https://github.com/alandtse/CommonLibVR.git
+
+[submodule "extern/Streamline"]
+	path = extern/Streamline
+	url = https://github.com/FlayaN/Streamline.git
 [submodule "extern/FidelityFX-SDK"]
 	path = extern/FidelityFX-SDK
 	url = https://github.com/MapleHinata/FidelityFX-SDK.git
-[submodule "extern/Streamline-DX12"]
-	path = extern/Streamline-DX12
-	url = https://github.com/NVIDIAGameWorks/Streamline.git

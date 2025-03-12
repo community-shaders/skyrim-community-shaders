@@ -25,8 +25,6 @@ struct TruePBR;
 class Menu;
 class Streamline;
 class Upscaling;
-class DX12SwapChain;
-class FidelityFX;
 
 namespace SIE
 {
@@ -39,7 +37,7 @@ namespace globals
 	{
 		extern ID3D11Device* device;
 		extern ID3D11DeviceContext* context;
-		extern IDXGISwapChain* swapChain;
+		extern IDXGISwapChain* swapchain;
 	}
 
 	namespace features
@@ -81,7 +79,6 @@ namespace globals
 		extern RE::GameSettingCollection* gameSettingCollection;
 		extern float* cameraNear;
 		extern float* cameraFar;
-		extern float* deltaTime;
 		extern RE::BSUtilityShader* utilityShader;
 		extern RE::Sky* sky;
 		extern RE::UI* ui;
@@ -93,7 +90,6 @@ namespace globals
 		extern RE::Setting* bEnableLandFade;
 		extern RE::Setting* bShadowsOnGrass;
 		extern RE::Setting* shadowMaskQuarter;
-		extern REL::Relocation<ID3D11Buffer**> perFrame;
 	}
 
 	extern State* state;
@@ -103,10 +99,7 @@ namespace globals
 	extern SIE::ShaderCache* shaderCache;
 	extern Streamline* streamline;
 	extern Upscaling* upscaling;
-	extern DX12SwapChain* dx12SwapChain;
-	extern FidelityFX* fidelityFX;
 
-	void OnInit();
 	void ReInit();
 	void OnDataLoaded();
 }

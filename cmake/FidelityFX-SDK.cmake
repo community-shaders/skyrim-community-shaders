@@ -11,5 +11,8 @@ target_link_libraries(
   ${PROJECT_NAME}
   PRIVATE
   ffx_backend_dx11_x64
+  ffx_frameinterpolation_x64
   ffx_fsr3_x64
+  ffx_fsr3upscaler_x64
+  ffx_opticalflow_x64
 )

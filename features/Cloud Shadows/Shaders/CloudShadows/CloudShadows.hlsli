@@ -2,7 +2,7 @@ namespace CloudShadows
 {
 	TextureCube<float> CloudShadowsTexture : register(t25);
 
-	const static float CloudHeight = (2e3f / 1.428e-2) * 0.25;
+	const static float CloudHeight = 2e3f / 1.428e-2;
 	const static float PlanetRadius = (6371e3f / 1.428e-2);
 	const static float RcpHPlusR = (1.0 / (CloudHeight + PlanetRadius));
 

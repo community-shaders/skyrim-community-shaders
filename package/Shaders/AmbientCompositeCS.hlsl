@@ -54,39 +54,30 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 
 	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
 
-	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normalWS, 1.0)));
+	float3 directionalAmbientColor = mul(SharedData::DirectionalAmbient, float4(normalWS, 1.0));
 
 	float3 linAlbedo = Color::GammaToLinear(albedo);
 	float3 linDirectionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
 	float3 linDiffuseColor = Color::GammaToLinear(diffuseColor);
-	float3 originalDiffuseColor = linDiffuseColor;
 
 	float3 linAmbient = Color::GammaToLinear(albedo * directionalAmbientColor);
 
 	float visibility = 1.0;
 #if defined(SKYLIGHTING)
-	if (!SharedData::InInterior) {
-		float rawDepth = DepthTexture[dispatchID.xy];
-		float4 positionCS = float4(2 * float2(uv.x, -uv.y + 1) - 1, rawDepth, 1);
-		float4 positionMS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionCS);
-		positionMS.xyz = positionMS.xyz / positionMS.w;
+	float rawDepth = DepthTexture[dispatchID.xy];
+	float4 positionCS = float4(2 * float2(uv.x, -uv.y + 1) - 1, rawDepth, 1);
+	float4 positionMS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionCS);
+	positionMS.xyz = positionMS.xyz / positionMS.w;
 #	if defined(VR)
-		positionMS.xyz += FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
+	positionMS.xyz += FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
 #	endif
-		float3 skylightingNormal = normalize(float3(normalWS.xy, max(0, normalWS.z)));
 
-		sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, SkylightingProbeArray, stbn_vec3_2Dx1D_128x128x64, dispatchID.xy, positionMS.xyz, normalWS);
-		float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(skylightingNormal)) / Math::PI;
-		skylightingDiffuse = saturate(skylightingDiffuse);
+	sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, SkylightingProbeArray, stbn_vec3_2Dx1D_128x128x64, dispatchID.xy, positionMS.xyz, normalWS);
+	float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylighting, SphericalHarmonics::EvaluateCosineLobe(float3(normalWS.xy, normalWS.z * 0.5 + 0.5))) / Math::PI;
+	skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(positionMS.xyz));
+	skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 
-		skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(positionMS.xyz));
-
-		skylightingDiffuse *= 1.0 + saturate(normalWS.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
-
-		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
-
-		visibility = skylightingDiffuse;
-	}
+	visibility = skylightingDiffuse;
 #endif
 
 #if defined(SSGI)
@@ -113,13 +104,14 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 #	endif
 
 	visibility *= ssgiAo;
-
 #	if defined(INTERIOR)
 	linDiffuseColor *= ssgiAo;
 #	else
 	linDiffuseColor *= lerp(ssgiAo, 1.0, 0.5);
 #	endif
 
+	float clampedLinAlbedo = min(linAlbedo, 0.5);
+	DiffuseAmbientRW[dispatchID.xy] = linAmbient * visibility + clampedLinAlbedo * ssgiIl;
 	linDiffuseColor += ssgiIl * linAlbedo;
 #endif
 
@@ -128,10 +120,6 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 	directionalAmbientColor = Color::LinearToGamma(linDirectionalAmbientColor * visibility);
 
 	diffuseColor = diffuseColor + directionalAmbientColor * albedo;
-
-#if defined(SSGI)
-	DiffuseAmbientRW[dispatchID.xy] = Color::GammaToLinear(diffuseColor - originalDiffuseColor);
-#endif
 
 	MainRW[dispatchID.xy] = float4(diffuseColor, 1);
 };
