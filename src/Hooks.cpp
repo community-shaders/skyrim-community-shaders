@@ -347,7 +347,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	upscaling->lowRefreshRate = refreshRate < 119;
 	upscaling->isWindowed = pSwapChainDesc->Windowed;
 
-	const D3D_FEATURE_LEVEL featureLevels[2] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_11_1};
+	const D3D_FEATURE_LEVEL featureLevels[2] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_11_1 };
 
 	if (shouldProxy) {
 		logger::info("[Frame Generation] Frame Generation enabled, using D3D12 proxy");
