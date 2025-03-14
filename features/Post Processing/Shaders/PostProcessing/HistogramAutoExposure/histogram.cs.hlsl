@@ -18,19 +18,39 @@ const static float RcpLogLumRange = rcp(LogLumRange);
 
 groupshared uint histogramShared[256];
 
+// Hash function for jittering the sample positions
+// Adapted from: https://www.shadertoy.com/view/4djSRW
+float hash(float2 p)
+{
+	float3 p3 = frac(float3(p.xyx) * float3(0.1031, 0.1030, 0.0973));
+	p3 += dot(p3, p3.yzx + 33.33);
+	return frac((p3.x + p3.y) * p3.z);
+}
+
 [numthreads(16, 16, 1)] void CS_Histogram(uint2 tid
 										  : SV_DispatchThreadID, uint gidx
 										  : SV_GroupIndex) {
 	uint2 dims;
 	TexColor.GetDimensions(dims.x, dims.y);
 
-	// half res here
-	uint2 pxCoord = tid * 2;
-
-	// init
+	// Initialize shared memory
 	histogramShared[gidx] = 0;
 
 	GroupMemoryBarrierWithGroupSync();
+
+	// Sample spacing - take fewer samples (1 out of N pixels)
+	const uint SAMPLE_SPACING = 4; // Sample every 4th pixel for 16x reduction in samples
+
+	// Compute base pixel coordinate with spacing
+	uint2 pxCoord = tid * (2 * SAMPLE_SPACING);
+	
+	// Calculate a jitter offset based on the thread ID to break up grid patterns
+	// The jitter should be within the SAMPLE_SPACING range to avoid gaps
+	float2 jitter = float2(hash(tid), hash(tid + 17.53)) * (SAMPLE_SPACING - 0.5) * 2.0;
+	int2 jitterOffset = int2(jitter);
+	
+	// Apply jitter to the pixel coordinate
+	pxCoord = uint2(max(0, min(int2(pxCoord) + jitterOffset, int2(dims) - 1)));
 
 	// local histo
 	float4 box = float4(.5 - AdaptArea * .5, .5 + AdaptArea * .5);
@@ -47,7 +67,9 @@ groupshared uint histogramShared[256];
 			bin = uint(lerp(1, 255, logLuma));
 		}
 
-		InterlockedAdd(histogramShared[bin], 1);
+		// Apply additional weight to compensate for the reduced sample count
+		// SAMPLE_SPACING^2 represents how many pixels each sample is representing
+		InterlockedAdd(histogramShared[bin], SAMPLE_SPACING * SAMPLE_SPACING);
 	}
 
 	GroupMemoryBarrierWithGroupSync();
