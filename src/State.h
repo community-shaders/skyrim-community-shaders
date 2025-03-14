@@ -45,7 +45,7 @@ public:
 
 	float timer = 0;
 	double smoothDrawCalls[RE::BSShader::Type::Total + 1];
-	int drawCalls[RE::BSShader::Type::Total+1];
+	int drawCalls[RE::BSShader::Type::Total + 1];
 
 	enum ConfigMode
 	{
