@@ -67,9 +67,9 @@ struct MotionBlur : public PostProcessFeature {
     winrt::com_ptr<ID3D11ComputeShader> neighborMaxPassShader; // Pass 2
     winrt::com_ptr<ID3D11ComputeShader> blurPassShader;        // Pass 3
     
-    // Constant buffers
-    winrt::com_ptr<ID3D11Buffer> blurConstantBuffer;
-    winrt::com_ptr<ID3D11Buffer> reductionPassConstantBuffer;
+    // ConstantBuffer wrapper objects
+    eastl::unique_ptr<ConstantBuffer> blurConstantBufferObj;
+    eastl::unique_ptr<ConstantBuffer> reductionPassConstantBufferObj;
     
     // Textures
     eastl::unique_ptr<Texture2D> horizontalPassTexture;  // [grid x height]
