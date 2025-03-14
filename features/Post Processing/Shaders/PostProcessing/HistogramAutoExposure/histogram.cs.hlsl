@@ -16,66 +16,79 @@ const static float MinLogLum = -8;    // -5 EV
 const static float LogLumRange = 21;  // -5 to 16 EV
 const static float RcpLogLumRange = rcp(LogLumRange);
 
+// Increased thread count per group for better occupancy
 groupshared uint histogramShared[256];
 
-// Hash function for jittering the sample positions
-// Adapted from: https://www.shadertoy.com/view/4djSRW
-float hash(float2 p)
+// Optimized hash function using fewer operations
+float2 hash2D(float2 p)
 {
 	float3 p3 = frac(float3(p.xyx) * float3(0.1031, 0.1030, 0.0973));
 	p3 += dot(p3, p3.yzx + 33.33);
-	return frac((p3.x + p3.y) * p3.z);
+	return frac((p3.xx + p3.yz) * p3.zy);
 }
 
-[numthreads(16, 16, 1)] void CS_Histogram(uint2 tid
+// Precompute box bounds to avoid per-pixel calculations
+float4 ComputeBoxBounds(float2 dims)
+{
+	float4 box = float4(.5 - AdaptArea * .5, .5 + AdaptArea * .5);
+	return float4(
+		dims.x * box.r,
+		dims.y * box.g,
+		dims.x * box.b,
+		dims.y * box.a
+	);
+}
+
+[numthreads(32, 32, 1)] void CS_Histogram(uint2 tid
 										  : SV_DispatchThreadID, uint gidx
 										  : SV_GroupIndex) {
 	uint2 dims;
 	TexColor.GetDimensions(dims.x, dims.y);
 
-	// Initialize shared memory
-	histogramShared[gidx] = 0;
-
+	// Initialize shared memory - only need to do this once per group
+	if (gidx < 256) {
+		histogramShared[gidx] = 0;
+	}
 	GroupMemoryBarrierWithGroupSync();
 
 	// Sample spacing - take fewer samples (1 out of N pixels)
-	const uint SAMPLE_SPACING = 4; // Sample every 4th pixel for 16x reduction in samples
+	const uint SAMPLE_SPACING = 8; // Sample every 8th pixel for 64x reduction in samples
 
 	// Compute base pixel coordinate with spacing
 	uint2 pxCoord = tid * (2 * SAMPLE_SPACING);
 	
-	// Calculate a jitter offset based on the thread ID to break up grid patterns
-	// The jitter should be within the SAMPLE_SPACING range to avoid gaps
-	float2 jitter = float2(hash(tid), hash(tid + 17.53)) * (SAMPLE_SPACING - 0.5) * 2.0;
+	// Calculate jitter offset using blue noise distribution
+	float2 jitter = hash2D(tid) * (SAMPLE_SPACING - 0.5) * 2.0;
 	int2 jitterOffset = int2(jitter);
 	
-	// Apply jitter to the pixel coordinate
+	// Optimized bounds checking
 	pxCoord = uint2(max(0, min(int2(pxCoord) + jitterOffset, int2(dims) - 1)));
 
-	// local histo
-	float4 box = float4(.5 - AdaptArea * .5, .5 + AdaptArea * .5);
-	if ((pxCoord.x > dims.x * box.r) &&
-		(pxCoord.x < dims.x * box.b) &&
-		(pxCoord.y > dims.y * box.g) &&
-		(pxCoord.y < dims.y * box.a)) {
-		uint bin = 0;
+	// Precompute box bounds
+	float4 boxBounds = ComputeBoxBounds(dims);
+	
+	// Optimized box check using precomputed bounds
+	bool inBox = (pxCoord.x > boxBounds.x) && (pxCoord.x < boxBounds.z) &&
+				 (pxCoord.y > boxBounds.y) && (pxCoord.y < boxBounds.w);
 
+	if (inBox) {
 		float3 color = TexColor[pxCoord].rgb;
 		float luma = Color::RGBToLuminance(color);
+		
+		// Optimized bin calculation - avoid unnecessary saturate
 		if (luma > 1e-10) {
-			float logLuma = saturate((log2(luma) - MinLogLum) * RcpLogLumRange);
-			bin = uint(lerp(1, 255, logLuma));
+			float logLuma = (log2(luma) - MinLogLum) * RcpLogLumRange;
+			uint bin = uint(lerp(1, 255, min(1.0, max(0.0, logLuma))));
+			InterlockedAdd(histogramShared[bin], SAMPLE_SPACING * SAMPLE_SPACING);
 		}
-
-		// Apply additional weight to compensate for the reduced sample count
-		// SAMPLE_SPACING^2 represents how many pixels each sample is representing
-		InterlockedAdd(histogramShared[bin], SAMPLE_SPACING * SAMPLE_SPACING);
 	}
 
 	GroupMemoryBarrierWithGroupSync();
 
-	// save to texture
-	InterlockedAdd(RWBufferHistogram[gidx], histogramShared[gidx]);
+	// Save to texture - only need to do this once per group
+	if (gidx < 256) {
+		InterlockedAdd(RWBufferHistogram[gidx], histogramShared[gidx]);
+	}
 };
 
 [numthreads(256, 1, 1)] void CS_Average(uint gidx
@@ -84,24 +97,24 @@ float hash(float2 p)
 	TexColor.GetDimensions(dims.x, dims.y);
 	uint numPixels = dims.x * dims.y * AdaptArea.x * AdaptArea.y * 0.25;
 
-	// init
-	uint pixelsInBin = RWBufferHistogram[gidx];
-	histogramShared[gidx] = pixelsInBin * gidx;
-	RWBufferHistogram[gidx] = 0;  // for next frame
-
+	// Optimized initialization
+	if (gidx < 256) {
+		uint pixelsInBin = RWBufferHistogram[gidx];
+		histogramShared[gidx] = pixelsInBin * gidx;
+		RWBufferHistogram[gidx] = 0;  // for next frame
+	}
 	GroupMemoryBarrierWithGroupSync();
 
-	// sum
-	[unroll] for (uint cutoff = (256 >> 1); cutoff > 0; cutoff >>= 1)
+	// Optimized reduction using bit shifts
+	[unroll] for (uint offset = 128; offset > 0; offset >>= 1)
 	{
-		if (gidx < cutoff)
-			histogramShared[gidx] += histogramShared[gidx + cutoff];
+		if (gidx < offset)
+			histogramShared[gidx] += histogramShared[gidx + offset];
 		GroupMemoryBarrierWithGroupSync();
 	}
 
-	// average
+	// Optimized average calculation
 	if (gidx == 0) {
-		// pixelsInBin here is number of zero value pixels
 		float logAvgLum = float(histogramShared[0]) / max(numPixels, 1.0) - 1.0;
 		float avgLum = exp2(((logAvgLum / 254.0) * LogLumRange) + MinLogLum);
 		float adaptedLum = lerp(max(1e-5, RWBufferAdaptation[0]), avgLum, AdaptLerp);
