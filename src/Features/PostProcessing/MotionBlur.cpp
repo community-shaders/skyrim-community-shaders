@@ -33,7 +33,7 @@ void MotionBlur::SetupResources()
 	// Compile shaders
     CompileComputeShaders();
     
-	// Initialize constant buffers
+	// Initialize constant buffer structs
 	motionBlurCB = {
 		.VelocityScale = GetScaleValueFromPreset(settings.ScalePreset),
 		.SampleCount = (settings.SampleCount * 2) & ~1  // Double and ensure it's always even
@@ -42,6 +42,23 @@ void MotionBlur::SetupResources()
 	reductionPassCB = {
 		.VelocityScale = GetScaleValueFromPreset(settings.ScalePreset)
 	};
+    
+    // Create the actual D3D constant buffers
+    try {
+        // Create constant buffers using the ConstantBuffer helper class
+        blurConstantBufferObj = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<MotionBlurConstantBuffer>());
+        reductionPassConstantBufferObj = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<ReductionPassConstantBuffer>());
+        
+        // Initial update
+        blurConstantBufferObj->Update(motionBlurCB);
+        reductionPassConstantBufferObj->Update(reductionPassCB);
+        
+        // Cache the initial values
+        lastMotionBlurCB = motionBlurCB;
+        lastReductionPassCB = reductionPassCB;
+    } catch (const std::exception& e) {
+        logger::error("Motion blur error initializing constant buffers: {}", e.what());
+    }
 
     logger::info("Motion blur resources initialized");
 }
@@ -103,6 +120,10 @@ void MotionBlur::ClearShaderCache()
     verticalPassTexture = nullptr;
     neighborMaxTexture = nullptr;
     blurOutputTexture = nullptr;
+    
+    // Release constant buffer objects
+    blurConstantBufferObj = nullptr;
+    reductionPassConstantBufferObj = nullptr;
 
 	lastWidth = lastHeight = 0;
 }
@@ -201,6 +222,14 @@ void MotionBlur::Draw(TextureInfo& inout_tex)
 
 		// Check for resize and update resources if needed
 		CheckAndResizeResources(inout_tex);
+        
+        // Handle image scaling by converting to dynamic resolution if needed
+        if (lastWidth > 0 && lastHeight > 0) {
+            float2 res = { (float)lastWidth, (float)lastHeight };
+            res = Util::ConvertToDynamic(res);
+            lastWidth = (uint32_t)res.x;
+            lastHeight = (uint32_t)res.y;
+        }
 
 		// Update constant buffers
 		UpdateConstantBuffers();
@@ -268,19 +297,6 @@ bool MotionBlur::CheckAndResizeResources(const TextureInfo& inout_tex)
         D3D11_TEXTURE2D_DESC horizontalDesc = gridDesc;
         horizontalDesc.Height = horizontalPassHeight;
 
-        // View descriptors
-        D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-            .Format = gridDesc.Format,
-            .ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-            .Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
-        };
-
-        D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
-            .Format = gridDesc.Format,
-            .ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
-            .Texture2D = { .MipSlice = 0 }
-        };
-
         // Release previous resources
         verticalPassTexture = nullptr;
         neighborMaxTexture = nullptr;
@@ -289,25 +305,51 @@ bool MotionBlur::CheckAndResizeResources(const TextureInfo& inout_tex)
 
         // Create textures with error handling
         try {
+            // For grid-based textures (using R16G16B16A16_FLOAT format)
+            D3D11_SHADER_RESOURCE_VIEW_DESC gridSrvDesc = {
+                .Format = gridDesc.Format,
+                .ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+                .Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
+            };
+
+            D3D11_UNORDERED_ACCESS_VIEW_DESC gridUavDesc = {
+                .Format = gridDesc.Format,
+                .ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+                .Texture2D = { .MipSlice = 0 }
+            };
+
             horizontalPassTexture = eastl::make_unique<Texture2D>(horizontalDesc);
-            horizontalPassTexture->CreateSRV(srvDesc);
-            horizontalPassTexture->CreateUAV(uavDesc);
+            horizontalPassTexture->CreateSRV(gridSrvDesc);
+            horizontalPassTexture->CreateUAV(gridUavDesc);
 
             verticalPassTexture = eastl::make_unique<Texture2D>(gridDesc);
-            verticalPassTexture->CreateSRV(srvDesc);
-            verticalPassTexture->CreateUAV(uavDesc);
+            verticalPassTexture->CreateSRV(gridSrvDesc);
+            verticalPassTexture->CreateUAV(gridUavDesc);
 
             neighborMaxTexture = eastl::make_unique<Texture2D>(gridDesc);
-            neighborMaxTexture->CreateSRV(srvDesc);
-            neighborMaxTexture->CreateUAV(uavDesc);
+            neighborMaxTexture->CreateSRV(gridSrvDesc);
+            neighborMaxTexture->CreateUAV(gridUavDesc);
 
-            // Create full-resolution output texture
+            // Create full-resolution output texture with format matching the input texture
             D3D11_TEXTURE2D_DESC blurDesc = texDesc;
             blurDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
+            // Output texture views need to match its format
+            D3D11_SHADER_RESOURCE_VIEW_DESC blurSrvDesc = {
+                .Format = blurDesc.Format,
+                .ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+                .Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
+            };
+
+            D3D11_UNORDERED_ACCESS_VIEW_DESC blurUavDesc = {
+                .Format = blurDesc.Format,
+                .ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+                .Texture2D = { .MipSlice = 0 }
+            };
+
             blurOutputTexture = eastl::make_unique<Texture2D>(blurDesc);
-            blurOutputTexture->CreateSRV(srvDesc);
-            blurOutputTexture->CreateUAV(uavDesc);
+            blurOutputTexture->CreateSRV(blurSrvDesc);
+            blurOutputTexture->CreateUAV(blurUavDesc);
         } catch (const std::exception& e) {
             logger::error("Motion blur error creating textures: {}", e.what());
             return false;
@@ -317,35 +359,6 @@ bool MotionBlur::CheckAndResizeResources(const TextureInfo& inout_tex)
         if (!horizontalPassTexture || !verticalPassTexture || !neighborMaxTexture || !blurOutputTexture) {
             logger::error("Motion blur error: Failed to create one or more required textures");
             return false;
-        }
-
-        // Create constant buffers if needed
-        if (!blurConstantBuffer) {
-            D3D11_BUFFER_DESC cbDesc = {
-                .ByteWidth = sizeof(MotionBlurConstantBuffer),
-                .Usage = D3D11_USAGE_DYNAMIC,
-                .BindFlags = D3D11_BIND_CONSTANT_BUFFER,
-                .CPUAccessFlags = D3D11_CPU_ACCESS_WRITE
-            };
-            HRESULT hr = device->CreateBuffer(&cbDesc, nullptr, blurConstantBuffer.put());
-            if (FAILED(hr)) {
-                logger::error("Motion blur error: Failed to create blur constant buffer, HRESULT: {}", hr);
-                return false;
-            }
-        }
-
-        if (!reductionPassConstantBuffer) {
-            D3D11_BUFFER_DESC reductionCbDesc = {
-                .ByteWidth = sizeof(ReductionPassConstantBuffer),
-                .Usage = D3D11_USAGE_DYNAMIC,
-                .BindFlags = D3D11_BIND_CONSTANT_BUFFER,
-                .CPUAccessFlags = D3D11_CPU_ACCESS_WRITE
-            };
-            HRESULT hr = device->CreateBuffer(&reductionCbDesc, nullptr, reductionPassConstantBuffer.put());
-            if (FAILED(hr)) {
-                logger::error("Motion blur error: Failed to create reduction pass constant buffer, HRESULT: {}", hr);
-                return false;
-            }
         }
 
         return true;
@@ -366,7 +379,7 @@ bool MotionBlur::UpdateConstantBuffers()
 		return false;
 	}
 
-	if (!blurConstantBuffer || !reductionPassConstantBuffer) {
+	if (!blurConstantBufferObj || !reductionPassConstantBufferObj) {
 		logger::error("Motion blur error: Constant buffers are invalid");
 		return false;
 	}
@@ -388,34 +401,26 @@ bool MotionBlur::UpdateConstantBuffers()
 
 	// Update blur constant buffer if needed
 	if (memcmp(&motionBlurCB, &lastMotionBlurCB, sizeof(MotionBlurConstantBuffer)) != 0) {
-		D3D11_MAPPED_SUBRESOURCE mapped;
-		HRESULT hr = context->Map(blurConstantBuffer.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-		if (FAILED(hr)) {
-			logger::error("Motion blur error: Failed to map blur constant buffer, HRESULT: {}", hr);
+		try {
+			blurConstantBufferObj->Update(motionBlurCB);
+			lastMotionBlurCB = motionBlurCB;
+			updated = true;
+		} catch (const std::exception& e) {
+			logger::error("Motion blur error updating blur constant buffer: {}", e.what());
 			return false;
 		}
-		
-		memcpy(mapped.pData, &motionBlurCB, sizeof(MotionBlurConstantBuffer));
-		context->Unmap(blurConstantBuffer.get(), 0);
-
-		lastMotionBlurCB = motionBlurCB;
-		updated = true;
 	}
 
 	// Update reduction pass constant buffer if needed
 	if (memcmp(&reductionPassCB, &lastReductionPassCB, sizeof(ReductionPassConstantBuffer)) != 0) {
-		D3D11_MAPPED_SUBRESOURCE mapped;
-		HRESULT hr = context->Map(reductionPassConstantBuffer.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-		if (FAILED(hr)) {
-			logger::error("Motion blur error: Failed to map reduction constant buffer, HRESULT: {}", hr);
+		try {
+			reductionPassConstantBufferObj->Update(reductionPassCB);
+			lastReductionPassCB = reductionPassCB;
+			updated = true;
+		} catch (const std::exception& e) {
+			logger::error("Motion blur error updating reduction constant buffer: {}", e.what());
 			return false;
 		}
-		
-		memcpy(mapped.pData, &reductionPassCB, sizeof(ReductionPassConstantBuffer));
-		context->Unmap(reductionPassConstantBuffer.get(), 0);
-
-		lastReductionPassCB = reductionPassCB;
-		updated = true;
 	}
 
 	return updated;
@@ -475,14 +480,14 @@ void MotionBlur::ExecuteVerticalPass()
 		return;
 	}
 
-	if (!reductionPassConstantBuffer) {
+	if (!reductionPassConstantBufferObj) {
 		logger::error("Motion blur error: Reduction pass constant buffer is invalid");
 		return;
 	}
 
 	// Then do vertical reduction
 	auto horizontalPassSRV = horizontalPassTexture->srv.get();
-	ID3D11Buffer* reductionCB = reductionPassConstantBuffer.get();
+	ID3D11Buffer* reductionCB = reductionPassConstantBufferObj->CB();
 	SetupComputePass(verticalPassShader.get(), &horizontalPassSRV, 1, verticalPassTexture->uav.get(), reductionCB);
 
 	// Dispatch vertical pass (3 thread groups × height/8)
@@ -527,7 +532,7 @@ void MotionBlur::ExecuteHorizontalPass()
 	}
 	
 	// Setup horizontal pass
-	ID3D11Buffer* reductionCB = reductionPassConstantBuffer.get();
+	ID3D11Buffer* reductionCB = reductionPassConstantBufferObj->CB();
 	SetupComputePass(horizontalPassShader.get(), &velocitySRV, 1, horizontalPassTexture->uav.get(), reductionCB);
 
 	// Dispatch horizontal pass (width/8 × height/8)
@@ -562,14 +567,14 @@ void MotionBlur::ExecuteNeighborMaxPass()
 		return;
 	}
 
-	if (!reductionPassConstantBuffer) {
+	if (!reductionPassConstantBufferObj) {
 		logger::error("Motion blur error: Reduction pass constant buffer is invalid in neighbor pass");
 		return;
 	}
 	
 	// Setup neighbor pass
 	ID3D11ShaderResourceView* verticalPassSRV = verticalPassTexture->srv.get();
-	ID3D11Buffer* reductionCB = reductionPassConstantBuffer.get();
+	ID3D11Buffer* reductionCB = reductionPassConstantBufferObj->CB();
 	SetupComputePass(neighborMaxPassShader.get(), &verticalPassSRV, 1, neighborMaxTexture->uav.get(), reductionCB);
 
 	// Dispatch neighbor pass
@@ -635,7 +640,7 @@ void MotionBlur::ExecuteBlurPass(TextureInfo& inout_tex)
 	
 	// Setup blur pass
 	ID3D11ShaderResourceView* srvs[] = { inout_tex.srv, velocitySRV, neighborMaxTexture->srv.get(), depthSRV };
-	ID3D11Buffer* blurCB = blurConstantBuffer.get();
+	ID3D11Buffer* blurCB = blurConstantBufferObj->CB();
 	
 	if (!blurPassShader) {
 		logger::error("Motion blur error: Blur pass shader is invalid");
