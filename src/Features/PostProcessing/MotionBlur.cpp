@@ -479,21 +479,23 @@ void MotionBlur::ExecuteVerticalPass()
 		logger::error("Motion blur error: Vertical pass shader is invalid");
 		return;
 	}
-
+	
+	// Check if constant buffer is valid
 	if (!reductionPassConstantBufferObj) {
-		logger::error("Motion blur error: Reduction pass constant buffer is invalid");
+		logger::error("Motion blur error: Reduction pass constant buffer is null in vertical pass");
 		return;
 	}
 
-	// Then do vertical reduction
-	auto horizontalPassSRV = horizontalPassTexture->srv.get();
+	// Setup vertical pass with horizontal pass texture as input
+	ID3D11ShaderResourceView* horizontalSRV = horizontalPassTexture->srv.get();
 	ID3D11Buffer* reductionCB = reductionPassConstantBufferObj->CB();
-	SetupComputePass(verticalPassShader.get(), &horizontalPassSRV, 1, verticalPassTexture->uav.get(), reductionCB);
+	SetupComputePass(verticalPassShader.get(), &horizontalSRV, 1, verticalPassTexture->uav.get(), reductionCB);
 
-	// Dispatch vertical pass (3 thread groups × height/8)
+	// Dispatch vertical pass
+	uint32_t dispatchX = (lastWidth + 7) / 8;
 	uint32_t dispatchY = (lastHeight + 7) / 8;
-	context->Dispatch(3, dispatchY, 1); // 3 = ceil(20/8)
-        
+	context->Dispatch(dispatchX, dispatchY, 1);
+
 	ClearComputeResources(1);
 }
 
@@ -528,6 +530,17 @@ void MotionBlur::ExecuteHorizontalPass()
 	// Validate horizontal pass texture
 	if (!horizontalPassTexture || !horizontalPassTexture->uav) {
 		logger::error("Motion blur error: Horizontal pass texture is invalid");
+		return;
+	}
+	
+	// Check if constant buffer is valid
+	if (!reductionPassConstantBufferObj) {
+		logger::error("Motion blur error: Reduction pass constant buffer is null");
+		return;
+	}
+
+	if (!horizontalPassShader) {
+		logger::error("Motion blur error: Horizontal pass shader is null");
 		return;
 	}
 	
@@ -637,6 +650,12 @@ void MotionBlur::ExecuteBlurPass(TextureInfo& inout_tex)
 	
 	ID3D11SamplerState* samplers[] = { linearSampler.get(), pointSampler.get() };
 	context->CSSetSamplers(0, 2, samplers);
+	
+	// Make sure constant buffer is valid
+	if (!blurConstantBufferObj) {
+		logger::error("Motion blur error: Blur constant buffer is null");
+		return;
+	}
 	
 	// Setup blur pass
 	ID3D11ShaderResourceView* srvs[] = { inout_tex.srv, velocitySRV, neighborMaxTexture->srv.get(), depthSRV };
