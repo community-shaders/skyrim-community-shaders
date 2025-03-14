@@ -18,7 +18,7 @@ struct LODBlending : Feature
 		float LODTerrainBrightness = 1;
 		float LODObjectBrightness = 1;
 		float LODObjectSnowBrightness = 1;
-		bool DisableTerrainVertexColors = false;
+		uint DisableTerrainVertexColors = false;
 	};
 
 	Settings settings;
