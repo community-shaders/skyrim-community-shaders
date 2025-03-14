@@ -1312,13 +1312,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 		baseColor = float4(Color::Diffuse(rawBaseColor.rgb), rawBaseColor.a);
 
-#   if defined(LOD_BLENDING)
-# 		if defined(LODOBJECTS) || defined(LODOBJECTSHD)
+#	if defined(LOD_BLENDING)
+#		if defined(LODOBJECTS) || defined(LODOBJECTSHD)
 		baseColor.xyz *= SharedData::lodBlendingSettings.LODObjectBrightness;
-# 		elif defined(LODLANDSCAPE)
+#		elif defined(LODLANDSCAPE)
 		baseColor.xyz *= SharedData::lodBlendingSettings.LODTerrainBrightness;
-#   	endif
-#   endif // LOD_BLENDING
+#		endif
+#	endif  // LOD_BLENDING
 
 		float landSnowMask1 = GetLandSnowMaskValue(baseColor.w);
 		float4 normalColor = TexNormalSampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias);
@@ -1546,9 +1546,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #		if defined(LOD_LAND_BLEND)
 	float4 lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
-#		if defined(LOD_BLENDING)
+#			if defined(LOD_BLENDING)
 	lodLandColor.xyz *= SharedData::lodBlendingSettings.LODTerrainBrightness;
-#		endif // LOD_BLENDING
+#			endif  // LOD_BLENDING
 	float lodBlendParameter = GetLodLandBlendParameter(lodLandColor.xyz);
 	float lodBlendMask = TexLandLodBlend2Sampler.Sample(SampLandLodBlend2Sampler, 3.0.xx * input.TexCoord0.zw).x;
 	float lodLandFadeFactor = GetLodLandBlendMultiplier(lodBlendParameter, lodBlendMask);
@@ -2468,9 +2468,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(LANDSCAPE)
 		// Remove AO
 		vertexColor = vertexColor / vertexAO;
-#		if defined(LOD_BLENDING)
+#			if defined(LOD_BLENDING)
 		vertexColor = lerp(vertexColor, 1, SharedData::lodBlendingSettings.DisableTerrainVertexColors);
-#		endif // LOD_BLENDING
+#			endif  // LOD_BLENDING
 #		else
 
 		if (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsTree) {
