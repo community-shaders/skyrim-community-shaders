@@ -9,4 +9,4 @@
 	url = https://github.com/NVIDIAGameWorks/Streamline.git
 [submodule "extern/KickstartRT"]
 	path = extern/KickstartRT
-	url = https://github.com/NVIDIAGameWorks/KickstartRT.git
+	url = https://github.com/doodlum/KickstartRT.git
