@@ -9,6 +9,7 @@
 #include <imgui_internal.h>
 #include <imgui_stdlib.h>
 
+#include "DX12SwapChain.h"
 #include "Deferred.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -215,7 +216,7 @@ void Menu::Init()
 	imgui_io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\Jost-Regular.ttf", 36, &font_config);
 
 	DXGI_SWAP_CHAIN_DESC desc;
-	globals::d3d::swapchain->GetDesc(&desc);
+	globals::d3d::swapChain->GetDesc(&desc);
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplWin32_Init(desc.OutputWindow);
@@ -960,8 +961,7 @@ void Menu::DrawDisplaySettings()
 		auto& themeSettings = settings.Theme;
 
 		const std::vector<std::pair<std::string, std::function<void()>>> features = {
-			{ "Upscaling", []() { globals::upscaling->DrawSettings(); } },
-			{ "Frame Generation", []() { globals::streamline->DrawSettings(); } }
+			{ "Upscaling", []() { globals::upscaling->DrawSettings(); } }
 		};
 
 		for (const auto& [featureName, drawFunc] : features) {
@@ -996,7 +996,7 @@ void Menu::DrawFooter()
 {
 	ImGui::BulletText(std::format("Game Version: {} {}", magic_enum::enum_name(REL::Module::GetRuntime()), Util::GetFormattedVersion(REL::Module::get().version()).c_str()).c_str());
 	ImGui::SameLine();
-	ImGui::BulletText(std::format("D3D12 Interop: {}", globals::streamline->featureDLSSG && !REL::Module::IsVR() ? "Active" : "Inactive").c_str());
+	ImGui::BulletText(std::format("D3D12 Interop: {}", globals::upscaling->d3d12Interop ? "Active" : "Inactive").c_str());
 	ImGui::SameLine();
 	ImGui::BulletText(std::format("GPU: {}", globals::state->adapterDescription.c_str()).c_str());
 

@@ -1,3 +1,5 @@
+
+#include "DX12SwapChain.h"
 #include "Deferred.h"
 #include "FrameAnnotations.h"
 #include "Globals.h"
@@ -82,9 +84,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 				state->PostPostLoad();  // state should load first so basic information is populated
 				Deferred::Hooks::Install();
 				globals::truePBR->PostPostLoad();
-				if (!state->IsFeatureDisabled("Upscaling")) {
-					Upscaling::InstallHooks();
-				}
+				Upscaling::InstallHooks();
 				Hooks::Install();
 				FrameAnnotations::OnPostPostLoad();
 
@@ -162,6 +162,7 @@ bool Load()
 	auto messaging = SKSE::GetMessagingInterface();
 	messaging->RegisterListener("SKSE", MessageHandler);
 
+	globals::OnInit();
 	globals::ReInit();
 
 	auto state = globals::state;
