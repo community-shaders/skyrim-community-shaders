@@ -5,10 +5,10 @@
 namespace SnowCover
 {
 
-	Texture2D<float4> SnowRDAO : register(t73); //snow_rdao
-	Texture2D<float3> SnowNormal : register(t74); //snow_n
-	Texture2D<float4> IceRDAO : register(t75); //ice_rdao
-	Texture2D<float> IceNormal : register(t76); //ice_n
+	Texture2D<float4> SnowRDAO : register(t73);    //snow_rdao
+	Texture2D<float3> SnowNormal : register(t74);  //snow_n
+	Texture2D<float4> IceRDAO : register(t75);     //ice_rdao
+	Texture2D<float> IceNormal : register(t76);    //ice_n
 
 	// https://blog.selfshadow.com/publications/blending-in-detail/
 	// for when s = (0,0,1)
@@ -131,7 +131,7 @@ namespace SnowCover
 #		if defined(TRUE_PBR)
 		if (SharedData::extendedMaterialSettings.ExtendShadows)
 			disp_factor = disp * underDispScale;
-#		endif                                                                                                                                                                                                          //
+#		endif                                                                                                                                                                                            //
 		float mult = skylight * (smoothstep(0.3, 0.5, (pow(max(0, worldNormal.z), 2) + disp_factor) * (max(0, env_mult - waterDist) * (0.5 + disp_factor) + SharedData::snowCoverSettings.SnowAmount)));  //-smoothstep(-32, 8, -waterDist)
 		uv = SharedData::snowCoverSettings.UVScale * (uv + p.xy / 100);
 		if (mult < 0.01)
@@ -147,7 +147,7 @@ namespace SnowCover
 		if (mult <= 0.0)
 			return prop;
 		float3 rdao = SnowRDAO.Sample(SampColorSampler, uv).rgb;
-		diffuse = rdao.yyy*0.66;
+		diffuse = rdao.yyy * 0.66;
 		//diffuse = frac(float3(uv.x, uv.y, 0));
 		float3 normal = TransformNormal(SnowNormal.Sample(SampNormalSampler, uv).rgb);
 		worldNormal = normalize(lerp(worldNormal, MyReorientNormal(worldNormal, normal), mult));

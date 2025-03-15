@@ -209,7 +209,6 @@ std::string wstrtostr(std::wstring& wide)
 	return str;
 }
 
-
 std::wstring strtowstr(std::string& wide)
 {
 	std::wstring str(wide.length(), 0);
