@@ -1567,12 +1567,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	uint numLights = min(7, uint(NumLightNumShadowLight.x));
 	uint numShadowLights = min(4, uint(NumLightNumShadowLight.y));
 
-#	if defined(TRUE_PBR) && !defined(MODELSPACENORMALS)
-	if (!frontFace) {
-		normal.xyz *= -1;
-	}
-#	endif
-
 #	if defined(MODELSPACENORMALS) && !defined(SKINNED)
 	float4 modelNormal = normal;
 #	else
