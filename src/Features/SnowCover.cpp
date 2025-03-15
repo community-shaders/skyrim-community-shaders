@@ -2,6 +2,7 @@
 
 #include "Util.h"
 #include <DDSTextureLoader.h>
+#include <cstdlib>
 
 const float MIN_START_PERCENTAGE = 0.05f;
 const float DEFAULT_TRANSITION_PERCENTAGE = 1.0f;
@@ -27,33 +28,32 @@ const float MIN_RAINDROP_CHANCE_MULTIPLIER = 0.1f;
 const float MAX_RAINDROP_CHANCE_MULTIPLIER = 2.0f;
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-	SnowCover::Settings,
-	EnableSnowCover,
+	SnowCover::UserSettings,
 	AffectFoliageColor,
-	SnowHeightOffset,
-	FoliageHeightOffset,
-	MaxSummerMonth,
-	MaxWinterMonth, SummerHeightOffset, WinterHeightOffset, UVScale, ParallaxScale, screenSpaceScale, logMicrofacetDensity, microfacetRoughness, densityRandomization)
+	SnowHeightOffset)
 
 void SnowCover::DrawSettings()
 {
 	if (ImGui::TreeNodeEx("Snow Cover", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Checkbox("Enable Snow Cover", (bool*)&settings.EnableSnowCover);
+		if (ImGui::Button("Reload configs")) {
+			last_worldspace = "";
+		}
+
+		ImGui::Checkbox("Enable Snow Cover", (bool*)&wsettings.EnableSnowCover);
 		ImGui::Checkbox("Affect Foliage Color", (bool*)&settings.AffectFoliageColor);
 		ImGui::SliderFloat("Snow Line Height Offset", &settings.SnowHeightOffset, -10000.0f, 10000.0f);
-		ImGui::SliderFloat("Foliage Color Height Offset", &settings.FoliageHeightOffset, -10000.0f, 10000.0f);
-		ImGui::SliderInt("Maximum Summer Month", (int*)&settings.MaxSummerMonth, 0, 11);
-		ImGui::SliderInt("Maximum Winter Month", (int*)&settings.MaxWinterMonth, 0, 11);
-		ImGui::SliderFloat("Summer Height Offset", &settings.SummerHeightOffset, -10000.0f, 10000.0f);
-		ImGui::SliderFloat("Winter Height Offset", &settings.WinterHeightOffset, -10000.0f, 10000.0f);
+		ImGui::SliderFloat("Foliage Color Height Offset", &wsettings.FoliageHeightOffset, -10000.0f, 10000.0f);
+		ImGui::SliderInt("Maximum Summer Month", (int*)&wsettings.MaxSummerMonth, 0, 11);
+		ImGui::SliderInt("Maximum Winter Month", (int*)&wsettings.MaxWinterMonth, 0, 11);
+		ImGui::SliderFloat("Summer Height Offset", &wsettings.SummerHeightOffset, -10000.0f, 10000.0f);
+		ImGui::SliderFloat("Winter Height Offset", &wsettings.WinterHeightOffset, -10000.0f, 10000.0f);
 
 		if (ImGui::TreeNodeEx("Snow Material", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::SliderFloat("UV Scale", &settings.UVScale, 0.1f, 10.f, "%.1f");
-			ImGui::SliderFloat("Parallax Scale", &settings.ParallaxScale, 0.f, 2.f, "%.1f");
-			ImGui::SliderFloat("Screenspace Scale", &settings.screenSpaceScale, 0.f, 3.f, "%.3f");
-			ImGui::SliderFloat("Log Microfacet Density", &settings.logMicrofacetDensity, 0.f, 40.f, "%.3f");
-			ImGui::SliderFloat("Microfacet Roughness", &settings.microfacetRoughness, 0.f, 1.f, "%.3f");
-			ImGui::SliderFloat("Density Randomization", &settings.densityRandomization, 0.f, 5.f, "%.3f");
+			ImGui::SliderFloat("UV Scale", &wsettings.UVScale, 0.1f, 10.f, "%.1f");
+			ImGui::SliderFloat("Screenspace Scale", &wsettings.ScreenSpaceScale, 0.f, 3.f, "%.3f");
+			ImGui::SliderFloat("Log Microfacet Density", &wsettings.LogMicrofacetDensity, 0.f, 40.f, "%.3f");
+			ImGui::SliderFloat("Microfacet Roughness", &wsettings.MicrofacetRoughness, 0.f, 1.f, "%.3f");
+			ImGui::SliderFloat("Density Randomization", &wsettings.DensityRandomization, 0.f, 5.f, "%.3f");
 			ImGui::TreePop();
 		}
 		ImGui::TreePop();
@@ -109,6 +109,8 @@ void SnowCover::Draw(const RE::BSShader*, const uint32_t)
 
 SnowCover::PerFrame SnowCover::GetCommonBufferData()
 {
+	Reload();
+
 	PerFrame data{};
 	data.SnowAmount = 0;
 	currentWeatherID = 0;
@@ -118,7 +120,7 @@ SnowCover::PerFrame SnowCover::GetCommonBufferData()
 	float lastWeatherSnowing = 0.0f;
 	float weatherTransitionPercentage = previousWeatherTransitionPercentage;
 
-	if (settings.EnableSnowCover) {
+	if (wsettings.EnableSnowCover) {
 		if (auto sky = RE::Sky::GetSingleton()) {
 			data.Sky = static_cast<uint>(sky->mode.get());
 			if (sky->mode.get() == RE::Sky::Mode::kFull) {
@@ -188,37 +190,134 @@ SnowCover::PerFrame SnowCover::GetCommonBufferData()
 	data.TimeSnowing = snowTimer / 1000.f;
 
 	data.settings = settings;
+	data.wsettings = wsettings;
 
 	return data;
 }
 
 void SnowCover::SetupResources()
 {
-	auto device = globals::d3d::device;
-	auto context = globals::d3d::context;
-	HRESULT hr = DirectX::CreateDDSTextureFromFile(device, context, L"Data\\Shaders\\SnowCover\\snow.dds", nullptr, &views.at(0));
-	if (hr != S_OK)
-		logger::warn("Snow Cover: Error loading diffuse texture: {}", hr);
-	hr = DirectX::CreateDDSTextureFromFile(device, context, L"Data\\Shaders\\SnowCover\\snow_n.dds", nullptr, &views.at(1));
-	if (hr != S_OK)
-		logger::warn("Snow Cover: Error loading normal texture: {}", hr);
-	hr = DirectX::CreateDDSTextureFromFile(device, context, L"Data\\Shaders\\SnowCover\\snow_rmaos.dds", nullptr, &views.at(2));
-	if (hr != S_OK)
-		logger::warn("Snow Cover: Error loading RMAOS texture: {}", hr);
-	hr = DirectX::CreateDDSTextureFromFile(device, context, L"Data\\Shaders\\SnowCover\\snow_p.dds", nullptr, &views.at(3));
-	if (hr != S_OK)
-		logger::warn("Snow Cover: Error loading parallax texture: {}", hr);
+	Reload();
+}
+
+std::string wstrtostr(std::wstring& wide)
+{
+	std::string str(wide.length(), 0);
+	std::transform(wide.begin(), wide.end(), str.begin(), [](wchar_t c) {
+		return (char)c;
+	});
+	return str;
+}
+
+
+std::wstring strtowstr(std::string& wide)
+{
+	std::wstring str(wide.length(), 0);
+	std::transform(wide.begin(), wide.end(), str.begin(), [](char c) {
+		return (wchar_t)c;
+	});
+	return str;
+}
+
+void SnowCover::Reload()
+{
+	std::string curr_worldspace = "none";
+	auto tes = globals::game::tes;
+	if (tes) {
+		auto worldspace = tes->GetRuntimeData2().worldSpace;
+		if (worldspace) {
+			curr_worldspace = worldspace->GetFormEditorID();
+		}
+	}
+	if (curr_worldspace == last_worldspace)
+		return;
+	last_worldspace = curr_worldspace;
+	auto path = std::string("Data\\Shaders\\SnowCover\\") + curr_worldspace + ".json";
+	if (!std::filesystem::exists(path)) {
+		wsettings.EnableSnowCover = false;
+		return;
+	}
+	std::ifstream fileStream(path);
+	if (!fileStream.is_open()) {
+		logger::error("[Snow Cover] Cannot open config at  {}", path);
+		return;
+	}
+	json config;
+	try {
+		fileStream >> config;
+		wsettings.EnableSnowCover = true;
+		wsettings.FoliageHeightOffset = config["FoliageHeightOffset"];
+		wsettings.UVScale = config["UVScale"];
+		wsettings.MaxSummerMonth = config["MaxSummerMonth"];
+		wsettings.MaxWinterMonth = config["MaxWinterMonth"];
+		wsettings.SummerHeightOffset = config["SummerHeightOffset"];
+		wsettings.WinterHeightOffset = config["WinterHeightOffset"];
+		for (auto i = 0; i < 9; ++i)
+			wsettings.Equation[i] = config["Equation"][i];
+		wsettings.ScreenSpaceScale = config["ScreenSpaceScale"];
+		wsettings.LogMicrofacetDensity = config["LogMicrofacetDensity"];
+		wsettings.MicrofacetRoughness = config["MicrofacetRoughness"];
+		wsettings.DensityRandomization = config["DensityRandomization"];
+		wsettings.MainTint = float4(config["MainTint"][0], config["MainTint"][1], config["MainTint"][2], config["MainTint"][3]);
+		wsettings.AltTint = float4(config["AltTint"][0], config["AltTint"][1], config["AltTint"][2], config["AltTint"][3]);
+
+		std::string str_tname = config["MainTexture"];
+		std::wstring tname = strtowstr(str_tname);
+
+		auto device = globals::d3d::device;
+		auto context = globals::d3d::context;
+		if (views[0])
+			views[0]->Release();
+		if (views[1])
+			views[1]->Release();
+		HRESULT hr = DirectX::CreateDDSTextureFromFile(device, context, (std::wstring(L"Data\\Shaders\\SnowCover\\") + tname + L"_rdao.dds").c_str(), nullptr, &views.at(0));
+		if (hr != S_OK)
+			logger::warn("Snow Cover: Error loading {}_rdao.dds texture: {}", str_tname, hr);
+		hr = DirectX::CreateDDSTextureFromFile(device, context, (std::wstring(L"Data\\Shaders\\SnowCover\\") + tname + L"_n.dds").c_str(), nullptr, &views.at(1));
+		if (hr != S_OK)
+			logger::warn("Snow Cover: Error loading {}_n.dds texture: {}", str_tname, hr);
+		if (config.contains("AltTexture")) {
+			if (views[2])
+				views[2]->Release();
+			if (views[3])
+				views[3]->Release();
+			std::string str_altname = config["AltTexture"];
+			std::wstring altname = strtowstr(str_altname);
+			hr = DirectX::CreateDDSTextureFromFile(device, context, (std::wstring(L"Data\\Shaders\\SnowCover\\") + altname + L"_rdao.dds").c_str(), nullptr, &views.at(2));
+			if (hr != S_OK)
+				logger::warn("Snow Cover: Error loading {}_rdao.dds texture: {}", str_altname, hr);
+			hr = DirectX::CreateDDSTextureFromFile(device, context, (std::wstring(L"Data\\Shaders\\SnowCover\\") + altname + L"_n.dds").c_str(), nullptr, &views.at(3));
+			if (hr != S_OK)
+				logger::warn("Snow Cover: Error loading {}_n.dds texture: {}", str_altname, hr);
+
+		} else {
+			views[2] = views[0];
+			views[3] = views[1];
+		}
+
+	} catch (const nlohmann::json::parse_error& e) {
+		logger::error("[Snow Cover] failed to parse {} : {}", path, e.what());
+		wsettings = WorldSettings{};
+		wsettings.EnableSnowCover = false;
+		return;
+	} catch (const nlohmann::json::exception e) {
+		logger::error("[Snow Cover] failed to parse {} : {}", path, e.what());
+		wsettings = WorldSettings{};
+		wsettings.EnableSnowCover = false;
+		return;
+	}
 }
 
 void SnowCover::Prepass()
 {
-	auto context = globals::d3d::context;
-	context->PSSetShaderResources(73, (uint)views.size(), views.data());
+	if (globals::features::snowCover->wsettings.EnableSnowCover) {
+		auto context = globals::d3d::context;
+		context->PSSetShaderResources(73, (uint)views.size(), views.data());
+	}
 }
 
 void SnowCover::Reset()
 {
-	requiresUpdate = true;
 }
 
 void SnowCover::Load(json& o_json)
@@ -238,7 +337,9 @@ void SnowCover::RestoreDefaultSettings()
 
 void SnowCover::Hooks::BSLightingShader_SetupGeometry::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 {
-	globals::features::snowCover->BSLightingShader_Setup(Pass);
+	if (globals::features::snowCover->wsettings.EnableSnowCover) {
+		globals::features::snowCover->BSLightingShader_Setup(Pass);
+	}
 	func(This, Pass, RenderFlags);
 }
 

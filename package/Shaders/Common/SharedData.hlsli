@@ -144,21 +144,29 @@ namespace SharedData
 		float SnowAmount;
 		uint Sky;
 
-		uint EnableSnowCover;
 		uint AffectFoliageColor;
 		float SnowHeightOffset;
+		uint2 pad;
+
+		uint EnableSnowCover;
 		float FoliageHeightOffset;
+		float UVScale;
+		uint pad2;
 
 		uint MaxSummerMonth;
 		uint MaxWinterMonth;
 		float SummerHeightOffset;
 		float WinterHeightOffset;
 
-		float UVScale;
-		float ParallaxScale;
-		uint2 pad2;
+		float4 equation;
+		float4 equation2;
+
+		float equation3;
+		float3 pad3;
 
 		float4 Glint;
+		float4 MainTint;
+		float4 AltTint;
 	};
 
 	cbuffer FeatureData : register(b6)

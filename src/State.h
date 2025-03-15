@@ -129,8 +129,8 @@ public:
 		IsBeastRace = 1 << 2,
 		EffectShadows = 1 << 3,
 		IsDecal = 1 << 4,
-		IsTree = 1 << 5
-		IsMobile = 1 << 6,
+		IsTree = 1 << 5,
+		IsMobile = 1 << 6
 	};
 
 	void UpdateSharedData(bool a_inWorld, bool a_prepass);

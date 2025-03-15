@@ -1007,7 +1007,6 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 
 #	if defined(SNOW_COVER)
 #		undef SNOW
-#		undef SPARKLE
 #		include "SnowCover/SnowCover.hlsli"
 #	endif
 
@@ -1832,9 +1831,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 snowDiffuse = baseColor.rgb;
 	if (SharedData::snowCoverSettings.EnableSnowCover)
 #		if defined(TRUE_PBR)
-		snowFactor = SnowCover::ApplySnowPBR(snowDiffuse, worldSpaceNormal, pbrSurfaceProperties, sh0, underDispScale, pos, snowOcclusion, input.WorldPosition.z - waterHeight, float3(viewDirTS.x, viewDirTS.y, viewPosition.z));
+		pbrSurfaceProperties = SnowCover::ApplySnowPBR(snowDiffuse, worldSpaceNormal, sh0, snowFactor, underDispScale, pos, snowOcclusion, input.WorldPosition.z - waterHeight, float3(viewDirTS.x, viewDirTS.y, viewPosition.z), pbrSurfaceProperties, uv-uvOriginal);
 #		else
-		snowFactor = SnowCover::ApplySnow(snowDiffuse, worldSpaceNormal, glossiness.x, shininess, sh0, underDispScale, pos, snowOcclusion, input.WorldPosition.z - waterHeight, float3(viewDirTS.x, viewDirTS.y, viewPosition.z));
+		snowFactor = SnowCover::ApplySnow(snowDiffuse, worldSpaceNormal, glossiness.x, shininess, sh0, underDispScale, pos, snowOcclusion, input.WorldPosition.z - waterHeight, float3(viewDirTS.x, viewDirTS.y, viewPosition.z), uv-uvOriginal);
 	glossiness = glossiness.xxxx;
 #		endif
 
@@ -2538,6 +2537,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	else
 	float3 vertexColor = input.Color.xyz;
 #	endif  // defined (HAIR)
+
+#if defined(SNOW_COVER)
+	vertexColor.rgb = snowFactor + (1-snowFactor)*vertexColor.rgb;
+#endif
 
 	float4 color = 0;
 

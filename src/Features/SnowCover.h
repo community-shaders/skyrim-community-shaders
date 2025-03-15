@@ -20,28 +20,39 @@ public:
 
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
-	struct Settings
+	struct UserSettings
 	{
-		uint EnableSnowCover = true;
 		uint AffectFoliageColor = true;
 		float SnowHeightOffset = 0.0f;
+		uint pad[2];
+	};
+	static_assert(sizeof(UserSettings) % 16 == 0);
+
+	struct WorldSettings
+	{
+		uint EnableSnowCover = true;
 		float FoliageHeightOffset = -512.0f;
+		float UVScale = 1;
+		uint pad[1];
 
 		uint MaxSummerMonth = 6;
 		uint MaxWinterMonth = 0;
 		float SummerHeightOffset = 0.0f;
 		float WinterHeightOffset = -10000.0f;
 
-		float UVScale = 1;
-		float ParallaxScale = 0.1f;
-		uint pad[2];
+		float Equation[9];
+		uint pad1[3];
+
 		//glint
-		float screenSpaceScale = 1.2f;
-		float logMicrofacetDensity = 33.f;
-		float microfacetRoughness = .15f;
-		float densityRandomization = 2.f;
+		float ScreenSpaceScale = 1.2f;
+		float LogMicrofacetDensity = 33.f;
+		float MicrofacetRoughness = .15f;
+		float DensityRandomization = 2.f;
+
+		float4 MainTint;
+		float4 AltTint;
 	};
-	static_assert(sizeof(Settings) % 16 == 0);
+	static_assert(sizeof(WorldSettings) % 16 == 0);
 
 	struct alignas(16) PerFrame
 	{
@@ -50,17 +61,19 @@ public:
 		float SnowAmount;
 		uint Sky;
 
-		Settings settings;
+		UserSettings settings;
+		WorldSettings wsettings;
 	};
 	static_assert(sizeof(PerFrame) % 16 == 0);
 
-	Settings settings;
+	UserSettings settings;
+	WorldSettings wsettings;
 
 	PerFrame GetCommonBufferData();
 
 	std::array<ID3D11ShaderResourceView*, 4> views;
 
-	bool requiresUpdate = true;
+	std::string last_worldspace;
 	float snowDepth = 0.0f;
 	float lastGameTimeValue = 0.0f;
 	uint32_t currentWeatherID = 0;
@@ -81,6 +94,7 @@ public:
 	virtual void RestoreDefaultSettings();
 	float CalculateWeatherTransitionPercentage(float skyCurrentWeatherPct, float beginFade, bool fadeIn);
 	void CalculateWetness(RE::TESWeather* weather, RE::Sky* sky, float seconds, float& wetness);
+	void Reload();
 
 	virtual inline void PostPostLoad() override { Hooks::Install(); }
 
