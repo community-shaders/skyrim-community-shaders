@@ -142,7 +142,7 @@ namespace SharedData
 		float Month;
 		float TimeSnowing;
 		float SnowAmount;
-		uint Sky;
+		uint pad0;
 
 		uint AffectFoliageColor;
 		float SnowHeightOffset;

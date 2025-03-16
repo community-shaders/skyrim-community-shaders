@@ -1808,7 +1808,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 waterData = SharedData::GetWaterData(input.WorldPosition.xyz);
 	float waterHeight = waterData.w;
 
-#	if defined(SNOW_COVER)
+#	if defined(SNOW_COVER) && !defined(MODELSPACENORMALS)
 #		if defined(SKYLIGHTING)
 	float snowOcclusion = inWorld ? pow(saturate(SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1))), 2) : 0;
 #		else
@@ -1824,18 +1824,27 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		else
 	float3 viewDirTS = 0;
 #		endif
-	float underDispScale = 1.0;
 	float3 pos = (input.WorldPosition + FrameBuffer::CameraPosAdjust[eyeIndex]).xyz;
 
 	float snowFactor = 0;
 	float3 snowDiffuse = baseColor.rgb;
-	if (SharedData::snowCoverSettings.EnableSnowCover)
+	if (SharedData::snowCoverSettings.EnableSnowCover){
 #		if defined(TRUE_PBR)
-		pbrSurfaceProperties = SnowCover::ApplySnowPBR(snowDiffuse, worldSpaceNormal, sh0, snowFactor, underDispScale, pos, snowOcclusion, input.WorldPosition.z - waterHeight, float3(viewDirTS.x, viewDirTS.y, viewPosition.z), pbrSurfaceProperties, uv-uvOriginal);
+#			if defined(LANDSCAPE)
+		float disp = sh0 * max(displacementParams[0].HeightScale * input.LandBlendWeights1.x, max(displacementParams[1].HeightScale * input.LandBlendWeights1.y, max(displacementParams[2].HeightScale * input.LandBlendWeights1.z, max(displacementParams[3].HeightScale * input.LandBlendWeights1.w, max(displacementParams[4].HeightScale * input.LandBlendWeights2.x, displacementParams[5].HeightScale * input.LandBlendWeights2.y)))));
+#			else
+		float disp = (sh0 - 0.5)*displacementParams.HeightScale;
+#			endif
 #		else
-		snowFactor = SnowCover::ApplySnow(snowDiffuse, worldSpaceNormal, glossiness.x, shininess, sh0, underDispScale, pos, snowOcclusion, input.WorldPosition.z - waterHeight, float3(viewDirTS.x, viewDirTS.y, viewPosition.z), uv-uvOriginal);
-	glossiness = glossiness.xxxx;
+		float disp = sh0 - 0.5;
 #		endif
+#		if defined(TRUE_PBR)
+		pbrSurfaceProperties = SnowCover::ApplySnowPBR(snowDiffuse, worldSpaceNormal, snowFactor, disp, pos, snowOcclusion, input.WorldPosition.z - waterHeight, float3(viewDirTS.x, viewDirTS.y, viewPosition.z), pbrSurfaceProperties, uv-uvOriginal, tbn);
+#		else
+		snowFactor = SnowCover::ApplySnow(snowDiffuse, worldSpaceNormal, glossiness.x, shininess, disp, pos, snowOcclusion, input.WorldPosition.z - waterHeight, float3(viewDirTS.x, viewDirTS.y, viewPosition.z), uv-uvOriginal, tbn);
+		glossiness = glossiness.xxxx;
+#		endif
+		}
 
 #		if defined(TREE_ANIM)
 	SnowCover::ApplyFoliageColor(baseColor.rgb, SnowCover::GetEnvironmentalMultiplier(pos));
@@ -2538,7 +2547,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 vertexColor = input.Color.xyz;
 #	endif  // defined (HAIR)
 
-#if defined(SNOW_COVER)
+#if defined(SNOW_COVER) && !defined(MODELSPACENORMALS)
 	vertexColor.rgb = snowFactor + (1-snowFactor)*vertexColor.rgb;
 #endif
 

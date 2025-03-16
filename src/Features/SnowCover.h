@@ -41,7 +41,7 @@ public:
 		float WinterHeightOffset = -10000.0f;
 
 		float Equation[9];
-		uint pad1[3];
+		uint pad2[3];
 
 		//glint
 		float ScreenSpaceScale = 1.2f;
@@ -59,7 +59,7 @@ public:
 		float Month;
 		float TimeSnowing;
 		float SnowAmount;
-		uint Sky;
+		uint pad;
 
 		UserSettings settings;
 		WorldSettings wsettings;
@@ -73,12 +73,18 @@ public:
 
 	std::array<ID3D11ShaderResourceView*, 4> views;
 
+	std::string status;
 	std::string last_worldspace;
-	float snowDepth = 0.0f;
-	float lastGameTimeValue = 0.0f;
-	uint32_t currentWeatherID = 0;
-	uint32_t lastWeatherID = 0;
-	float previousWeatherTransitionPercentage = 0.0f;
+	std::string main_tex;
+	std::string alt_tex;
+	float snowing_speed;
+	float melting_speed;
+	char tbuf[128] = "snow";
+	char altbuf[128] = "";
+
+	float lastHour = 12;
+	float timeSnowing = 0.0f;
+	float snowAmount = 0.0f;
 
 	virtual void SetupResources();
 	virtual void Reset();
@@ -86,15 +92,14 @@ public:
 
 	virtual void DrawSettings();
 
-	virtual void Draw(const RE::BSShader* shader, const uint32_t descriptor);
+	//virtual void Draw(const RE::BSShader* shader, const uint32_t descriptor);
 
 	virtual void Load(json& o_json);
 	virtual void Save(json& o_json);
 
 	virtual void RestoreDefaultSettings();
-	float CalculateWeatherTransitionPercentage(float skyCurrentWeatherPct, float beginFade, bool fadeIn);
-	void CalculateWetness(RE::TESWeather* weather, RE::Sky* sky, float seconds, float& wetness);
 	void Reload();
+	void SaveConfig();
 
 	virtual inline void PostPostLoad() override { Hooks::Install(); }
 

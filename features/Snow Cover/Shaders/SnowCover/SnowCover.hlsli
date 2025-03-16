@@ -5,10 +5,10 @@
 namespace SnowCover
 {
 
-	Texture2D<float4> SnowRDAO : register(t73); //snow_rdao
+	Texture2D<float3> SnowRDAO : register(t73); //snow_rdao
 	Texture2D<float3> SnowNormal : register(t74); //snow_n
-	Texture2D<float4> IceRDAO : register(t75); //ice_rdao
-	Texture2D<float> IceNormal : register(t76); //ice_n
+	Texture2D<float3> IceRDAO : register(t75); //ice_rdao
+	Texture2D<float3> IceNormal : register(t76); //ice_n
 
 	// https://blog.selfshadow.com/publications/blending-in-detail/
 	// for when s = (0,0,1)
@@ -59,7 +59,7 @@ namespace SnowCover
 
 	float GetHeightMult(float3 p)
 	{
-		float height_tresh = p.z - SharedData::snowCoverSettings.SnowHeightOffset - (p.x * 0.010569460362286 - p.y * 0.165389061732133 - p.x * p.x * 0.000000034552775 - p.x * p.y * 0.000000572526633 - p.y * p.y * 0.000000272913055 - p.x * p.x * p.x * 0.000000000001466 + p.x * p.x * p.y * 0.000000000000441 + p.x * p.y * p.y * 0.000000000003507 + p.y * p.y * p.y * 0.000000000006575);
+		float height_tresh = p.z - SharedData::snowCoverSettings.SnowHeightOffset - (p.x * SharedData::snowCoverSettings.equation.x - p.y * SharedData::snowCoverSettings.equation.y - p.x * p.x * SharedData::snowCoverSettings.equation.z - p.x * p.y * SharedData::snowCoverSettings.equation.w - p.y * p.y * SharedData::snowCoverSettings.equation2.x - p.x * p.x * p.x * SharedData::snowCoverSettings.equation2.y + p.x * p.x * p.y * SharedData::snowCoverSettings.equation2.z + p.x * p.y * p.y * SharedData::snowCoverSettings.equation2.w + p.y * p.y * p.y * SharedData::snowCoverSettings.equation3);
 		return height_tresh;
 	}
 
@@ -108,31 +108,23 @@ namespace SnowCover
 		float3 rdao = SnowRDAO.Sample(SampColorSampler, uv).rgb;
 		float3 diffuse = rdao.yyy;
 #	if !defined(TRUE_PBR)
-		diffuse = pow(Color::LinearToGamma(diffuse) / 3.141, 1 / 1.5);
+		diffuse *= Color::PBRLightingScale * rdao.z;
 #	endif
 		color = lerp(color, diffuse, mult);
 	}
 
 #	if !defined(BASIC_SNOW_COVER)
-	float ApplySnowBase(inout float3 worldNormal, inout float sh0, inout float2 uv, float underDispScale, float3 p, float skylight, float waterDist, float3 viewPos)
+	float ApplySnowBase(inout float3 worldNormal, inout float2 uv, out bool alt, float disp, float3 p, float skylight, float waterDist, float3 viewPos)
 	{
-		if (SharedData::snowCoverSettings.Sky < 3)  // 3 = exterior
-			return 0;
-			//float viewDist = max(1, sqrt(viewPos.z) / 512);
-#		if defined(TRUE_PBR) && defined(LANDSCAPE)
-		float disp = sh0;
-#		else
-		float disp = sh0 - 0.5;
-#		endif
-
-		float env_mult = GetEnvironmentalMultiplier(p) - disp * underDispScale * 0.1;
-		waterDist = smoothstep(-64, 8, -waterDist);
-		float disp_factor = 0;
-#		if defined(TRUE_PBR)
-		if (SharedData::extendedMaterialSettings.ExtendShadows)
-			disp_factor = disp * underDispScale;
-#		endif                                                                                                                                                                                                          //
-		float mult = skylight * (smoothstep(0.3, 0.5, (pow(max(0, worldNormal.z), 2) + disp_factor) * (max(0, env_mult - waterDist) * (0.5 + disp_factor) + SharedData::snowCoverSettings.SnowAmount)));  //-smoothstep(-32, 8, -waterDist)
+		waterDist = smoothstep(-64, 8, -waterDist - disp);
+		float weatherMult = SharedData::snowCoverSettings.TimeSnowing*SharedData::snowCoverSettings.SnowAmount/3000;
+		float env_mult = max(0, saturate(GetEnvironmentalMultiplier(p) + disp) - waterDist);
+		float main_mult = skylight * saturate(smoothstep(0.1, 0.9, (max(0, worldNormal.z)) * (env_mult + max(0, saturate(weatherMult) - waterDist))));
+		float alt_env_mult = max(0, saturate(GetEnvironmentalMultiplier(p) - disp) - waterDist*0.65);
+		float alt_mult = skylight * saturate(smoothstep(0.5, 1.0, worldNormal.z) * alt_env_mult);
+		alt = alt_mult > main_mult;
+		float mult = max(main_mult, alt_mult);
+		//mult = step(0.5, mult);
 		uv = SharedData::snowCoverSettings.UVScale * (uv + p.xy / 100);
 		if (mult < 0.01)
 			return 0;
@@ -141,15 +133,16 @@ namespace SnowCover
 	}
 
 #		if defined(TRUE_PBR)
-	PBR::SurfaceProperties ApplySnowPBR(inout float3 diffuse, inout float3 worldNormal, inout float sh0, out float mult, float underDispScale, float3 p, float skylight, float waterDist, float3 viewPos, PBR::SurfaceProperties prop, float2 uv)
+	PBR::SurfaceProperties ApplySnowPBR(inout float3 diffuse, inout float3 worldNormal, out float mult, float disp, float3 p, float skylight, float waterDist, float3 viewPos, PBR::SurfaceProperties prop, float2 uv, float3x3 tbn)
 	{
-		mult = max(0.0, ApplySnowBase(worldNormal, sh0, uv, underDispScale, p, skylight, waterDist, viewPos));
+		bool alt;
+		mult = max(0.0, ApplySnowBase(worldNormal, uv, alt, disp, p, skylight, waterDist, viewPos));
 		if (mult <= 0.0)
 			return prop;
-		float3 rdao = SnowRDAO.Sample(SampColorSampler, uv).rgb;
-		diffuse = rdao.yyy*0.66;
+		float3 rdao = alt ? IceRDAO.Sample(SampColorSampler, uv).rgb : SnowRDAO.Sample(SampColorSampler, uv).rgb;
+		diffuse = rdao.yyy*(alt ? SharedData::snowCoverSettings.AltTint.rgb :SharedData::snowCoverSettings.MainTint.rgb);
 		//diffuse = frac(float3(uv.x, uv.y, 0));
-		float3 normal = TransformNormal(SnowNormal.Sample(SampNormalSampler, uv).rgb);
+		float3 normal = normalize(mul(tbn, TransformNormal(alt ? IceNormal.Sample(SampNormalSampler, uv).rgb : SnowNormal.Sample(SampNormalSampler, uv).rgb)));
 		worldNormal = normalize(lerp(worldNormal, MyReorientNormal(worldNormal, normal), mult));
 		//worldNormal = normalize(lerp(worldNormal, normal, mult));
 		prop.Roughness = lerp(prop.Roughness, rdao.x, mult);
@@ -160,27 +153,30 @@ namespace SnowCover
 		prop.GlintLogMicrofacetDensity = lerp(prop.GlintLogMicrofacetDensity, SharedData::snowCoverSettings.Glint.y, mult);
 		prop.GlintMicrofacetRoughness = lerp(prop.GlintMicrofacetRoughness, SharedData::snowCoverSettings.Glint.z, mult);
 		prop.GlintDensityRandomization = lerp(prop.GlintDensityRandomization, SharedData::snowCoverSettings.Glint.w, mult);
+		mult *= alt ? SharedData::snowCoverSettings.AltTint.w : SharedData::snowCoverSettings.MainTint.w;
 		return prop;
 	}
 #		else
 
-	float ApplySnow(inout float3 diffuse, inout float3 worldNormal, inout float glossiness, inout float shininess, inout float sh0, float underDispScale, float3 p, float skylight, float waterDist, float3 viewPos, float2 uv)
+	float ApplySnow(inout float3 diffuse, inout float3 worldNormal, inout float glossiness, inout float shininess, float disp, float3 p, float skylight, float waterDist, float3 viewPos, float2 uv, float3x3 tbn)
 	{
-		float mult = ApplySnowBase(worldNormal, sh0, uv, underDispScale, p, skylight, waterDist, viewPos);
+		bool alt;
+		float mult = ApplySnowBase(worldNormal, uv, alt, disp, p, skylight, waterDist, viewPos);
 		if (mult <= 0.0)
 			return 0;
 		// apparently LOD landscape color sampler clamps uvs
-		float3 rdao = SnowRDAO.Sample(SampColorSampler, frac(uv)).rgb;
-		diffuse = rdao.yyy;
+		float3 rdao = alt ? IceRDAO.Sample(SampColorSampler, uv).rgb : SnowRDAO.Sample(SampColorSampler, uv).rgb;
+		diffuse = rdao.yyy*(alt ? SharedData::snowCoverSettings.AltTint.rgb :SharedData::snowCoverSettings.MainTint.rgb);
 		//diffuse = frac(float3(uv.x, uv.y, 0));
-		diffuse = pow(Color::LinearToGamma(diffuse) / 3.14, 1 / 1.5);
+		diffuse *= Color::PBRLightingScale;
 		glossiness = lerp(glossiness, 1 - rdao.x, mult);  // yes these are named wrong not my fault bye
 		shininess = lerp(shininess, 25 * 500 * 0.02, mult);
 		diffuse *= rdao.z;
-		float3 normal = TransformNormal(SnowNormal.Sample(SampNormalSampler, uv).rgb);
+		float3 normal = normalize(mul(tbn, TransformNormal(alt ? IceNormal.Sample(SampNormalSampler, uv).rgb : SnowNormal.Sample(SampNormalSampler, uv).rgb)));
 		worldNormal = normalize(lerp(worldNormal, MyReorientNormal(worldNormal, normal), mult));
 		//glossiness = lerp(glossiness, 0.5 * pow(v * s, 3.0), mult);
 		//shininess = lerp(shininess, max(1, pow(1 - v, 3.0) * 100), mult);
+		mult *= alt ? SharedData::snowCoverSettings.AltTint.w : SharedData::snowCoverSettings.MainTint.w;
 		return mult;
 	}
 #		endif
