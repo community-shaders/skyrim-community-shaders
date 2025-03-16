@@ -63,23 +63,6 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	// Set the color space to HDR10
 	DX::ThrowIfFailed(swapChain->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020));
 
-	// Set HDR metadata
-	DXGI_HDR_METADATA_HDR10 hdrMetadata = {};
-	hdrMetadata.RedPrimary[0] = 34000; // Display P3 primaries (scaled by 50000)
-	hdrMetadata.RedPrimary[1] = 16000;
-	hdrMetadata.GreenPrimary[0] = 13250;
-	hdrMetadata.GreenPrimary[1] = 34500;
-	hdrMetadata.BluePrimary[0] = 7500;
-	hdrMetadata.BluePrimary[1] = 3000;
-	hdrMetadata.WhitePoint[0] = 15635;
-	hdrMetadata.WhitePoint[1] = 16450;
-	hdrMetadata.MaxMasteringLuminance = 1000 * 10000; // 1000 nits in units of 0.0001 nits
-	hdrMetadata.MinMasteringLuminance = 100;          // 0.01 nits in units of 0.0001 nits
-	hdrMetadata.MaxContentLightLevel = 1000;          // 1000 nits
-	hdrMetadata.MaxFrameAverageLightLevel = 400;      // 400 nits average
-
-	DX::ThrowIfFailed(swapChain->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10, sizeof(hdrMetadata), &hdrMetadata));
-
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
 
 	fidelityFX->SetupFrameGeneration();
