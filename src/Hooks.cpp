@@ -732,7 +732,7 @@ namespace Hooks
 				// if PBR, we are done
 				return true;
 			}
-			
+
 			bool vanillaResult = func(land);
 
 			// setup material for terrain helper
@@ -748,7 +748,8 @@ namespace Hooks
 
 	struct BSLightingShader_SetupMaterial
 	{
-		static void thunk(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material) {
+		static void thunk(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material)
+		{
 			// setup material for PBR
 			auto TruePBRSingleton = globals::truePBR;
 			if (TruePBRSingleton->BSLightingShader_SetupMaterial(shader, material)) {

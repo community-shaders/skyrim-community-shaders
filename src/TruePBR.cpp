@@ -704,7 +704,8 @@ struct BSLightingShaderProperty_GetRenderPasses
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
-bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material) {
+bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material)
+{
 	using enum SIE::ShaderCache::LightingShaderTechniques;
 
 	const auto& lightingPSConstants = ShaderConstants::LightingPS::Get();
@@ -1073,7 +1074,8 @@ RE::TESLandTexture* GetDefaultLandTexture()
 	return *defaultLandTextureAddress;
 }
 
-bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land) {
+bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
+{
 	auto singleton = globals::truePBR;
 
 	bool isPbr = false;

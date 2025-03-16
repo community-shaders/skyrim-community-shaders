@@ -22,7 +22,7 @@ struct TerrainHelper : Feature
 	};
 
 	std::unordered_map<uint32_t, ExtendedSlots> extendedSlots;
-	RE::BGSTextureSet *defaultLandTexture;
+	RE::BGSTextureSet* defaultLandTexture;
 
 	virtual void DataLoaded() override;
 	virtual bool SupportsVR() override { return true; };

@@ -2,7 +2,8 @@
 
 #include "ShaderCache.h"
 
-void TerrainHelper::DataLoaded() {
+void TerrainHelper::DataLoaded()
+{
 	// Get the default landscape texture set for terrain helper
 	const auto defaultLandTextureSet = RE::TESForm::LookupByEditorID<RE::BGSTextureSet>("LandscapeDefault");
 	if (defaultLandTextureSet != nullptr) {
@@ -15,7 +16,8 @@ void TerrainHelper::DataLoaded() {
 	}
 }
 
-bool TerrainHelper::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land) {
+bool TerrainHelper::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
+{
 	if (land->loadedData == nullptr || land->loadedData->mesh[0] == nullptr) {
 		// this is not terrain or vanilla material failed
 		return false;
@@ -107,7 +109,8 @@ void TerrainHelper::SetShaderResouces(ID3D11DeviceContext* a_context)
 	thExtendedRendererState.PSResourceModifiedBits = 0;
 }
 
-void TerrainHelper::BSLightingShader_SetupMaterial(RE::BSLightingShaderMaterialBase const* material) {
+void TerrainHelper::BSLightingShader_SetupMaterial(RE::BSLightingShaderMaterialBase const* material)
+{
 	if (!extendedSlots.contains(material->hashKey)) {
 		// hash does not exists
 		return;
