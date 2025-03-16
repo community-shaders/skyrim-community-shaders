@@ -94,15 +94,15 @@ void Deferred::SetupResources()
 		// TEMPORAL_AA_WATER_2
 
 		// Albedo
-		SetupRenderTarget(ALBEDO, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
+		SetupRenderTarget(ALBEDO, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Specular
 		SetupRenderTarget(SPECULAR, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Reflectance
-		SetupRenderTarget(REFLECTANCE, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
+		SetupRenderTarget(REFLECTANCE, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Normal + Roughness
 		SetupRenderTarget(NORMALROUGHNESS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Masks
-		SetupRenderTarget(MASKS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
+		SetupRenderTarget(MASKS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 	}
 
 	{
@@ -230,9 +230,9 @@ void Deferred::ReflectionsPrepasses()
 	TracyD3D11Zone(globals::game::graphicsState->tracyCtx, "Early Prepass");
 
 	auto context = globals::d3d::context;
-	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
+	context->OMSetRenderTargets(0, nullptr, nullptr); // Unbind all bound render targets
 
-	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
+	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET); // Run OMSetRenderTargets again
 
 	for (auto* feature : Feature::GetFeatureList()) {
 		if (feature->loaded) {
@@ -254,9 +254,9 @@ void Deferred::EarlyPrepasses()
 	TracyD3D11Zone(globals::game::graphicsState->tracyCtx, "Early Prepass");
 
 	auto context = globals::d3d::context;
-	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
+	context->OMSetRenderTargets(0, nullptr, nullptr); // Unbind all bound render targets
 
-	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
+	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET); // Run OMSetRenderTargets again
 
 	for (auto* feature : Feature::GetFeatureList()) {
 		if (feature->loaded) {
@@ -276,9 +276,9 @@ void Deferred::PrepassPasses()
 		return;
 
 	auto context = globals::game::renderer->GetRuntimeData().context;
-	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
+	context->OMSetRenderTargets(0, nullptr, nullptr); // Unbind all bound render targets
 
-	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
+	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET); // Run OMSetRenderTargets again
 
 	globals::truePBR->PrePass();
 	for (auto* feature : Feature::GetFeatureList()) {
@@ -314,11 +314,11 @@ void Deferred::StartDeferred()
 	};
 
 	for (uint i = 2; i < 8; i++) {
-		renderTargets[i] = targets[i];                                             // We must use unused targets to be indexable
-		setRenderTargetMode[i] = RE::BSGraphics::SetRenderTargetMode::SRTM_CLEAR;  // Dirty from last frame, this calls ClearRenderTargetView once
+		renderTargets[i] = targets[i];                                            // We must use unused targets to be indexable
+		setRenderTargetMode[i] = RE::BSGraphics::SetRenderTargetMode::SRTM_CLEAR; // Dirty from last frame, this calls ClearRenderTargetView once
 	}
 
-	stateUpdateFlags.set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
+	stateUpdateFlags.set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET); // Run OMSetRenderTargets again
 
 	deferredPass = true;
 
@@ -525,11 +525,11 @@ void Deferred::EndDeferred()
 	}
 
 	auto context = globals::d3d::context;
-	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
+	context->OMSetRenderTargets(0, nullptr, nullptr); // Unbind all bound render targets
 
-	DeferredPasses();  // Perform deferred passes and composite forward buffers
+	DeferredPasses(); // Perform deferred passes and composite forward buffers
 
-	stateUpdateFlags.set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
+	stateUpdateFlags.set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET); // Run OMSetRenderTargets again
 
 	deferredPass = false;
 
@@ -738,9 +738,9 @@ void Deferred::Hooks::Main_RenderWorld_Start::thunk(RE::BSBatchRenderer* This, u
 	if (shaderCache->IsEnabled() && deferred->inWorld) {
 		// Here is where the first opaque objects start rendering
 		deferred->StartDeferred();
-		func(This, StartRange, EndRanges, RenderFlags, GeometryGroup);  // RenderBatches                                                               // RenderBatches
+		func(This, StartRange, EndRanges, RenderFlags, GeometryGroup); // RenderBatches                                                               // RenderBatches
 	} else {
-		func(This, StartRange, EndRanges, RenderFlags, GeometryGroup);  // RenderBatches
+		func(This, StartRange, EndRanges, RenderFlags, GeometryGroup); // RenderBatches
 	}
 };
 

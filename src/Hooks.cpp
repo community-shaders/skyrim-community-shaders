@@ -37,7 +37,7 @@ void DumpShader(const REX::BSShader* thisClass, const ShaderType* shader, const 
 {
 	static_assert(std::is_same_v<ShaderType, RE::BSGraphics::VertexShader> || std::is_same_v<ShaderType, RE::BSGraphics::PixelShader>);
 
-	uint8_t* dxbcData = new uint8_t[bytecode.second];
+	auto dxbcData = new uint8_t[bytecode.second];
 	size_t dxbcLen = bytecode.second;
 	memcpy(dxbcData, bytecode.first.get(), bytecode.second);
 
@@ -51,12 +51,12 @@ void DumpShader(const REX::BSShader* thisClass, const ShaderType* shader, const 
 	if (!std::filesystem::is_directory(directoryPath)) {
 		try {
 			std::filesystem::create_directories(directoryPath);
-		} catch (std::filesystem::filesystem_error const& ex) {
+		} catch (const std::filesystem::filesystem_error& ex) {
 			logger::error("Failed to create folder: {}", ex.what());
 		}
 	}
 
-	if (FILE * file; fopen_s(&file, dumpDir.c_str(), "wb") == 0) {
+	if (FILE* file; fopen_s(&file, dumpDir.c_str(), "wb") == 0) {
 		fwrite(dxbcData, 1, dxbcLen, file);
 		fclose(file);
 	}
@@ -132,7 +132,7 @@ bool Hooks::BSShader_BeginTechnique::thunk(RE::BSShader* shader, uint32_t vertex
 			shaderFound = false;
 		} else {
 			state->settingCustomShader = true;
-			globals::d3d::context->VSSetShader(reinterpret_cast<ID3D11VertexShader*>(vertexShader->shader), NULL, NULL);
+			globals::d3d::context->VSSetShader(reinterpret_cast<ID3D11VertexShader*>(vertexShader->shader), nullptr, NULL);
 			*globals::game::currentVertexShader = vertexShader;
 			globals::game::stateUpdateFlags->set(RE::BSGraphics::DIRTY_VERTEX_DESC);
 			if (skipPixelShader) {
@@ -140,7 +140,7 @@ bool Hooks::BSShader_BeginTechnique::thunk(RE::BSShader* shader, uint32_t vertex
 			}
 			*globals::game::currentPixelShader = pixelShader;
 			if (pixelShader)
-				globals::d3d::context->PSSetShader(reinterpret_cast<ID3D11PixelShader*>(pixelShader->shader), NULL, NULL);
+				globals::d3d::context->PSSetShader(reinterpret_cast<ID3D11PixelShader*>(pixelShader->shader), nullptr, NULL);
 			state->settingCustomShader = false;
 			shaderFound = true;
 		}
@@ -162,7 +162,7 @@ namespace EffectExtensions
 			if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(pass->geometry->GetGeometryRuntimeData().properties[1].get())) {
 				if (shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kUniformScale)) {
 					auto state = globals::state;
-					state->currentExtraDescriptor |= (uint)State::ExtraShaderDescriptors::EffectShadows;
+					state->currentExtraDescriptor |= static_cast<uint>(State::ExtraShaderDescriptors::EffectShadows);
 				}
 			}
 		}
@@ -209,7 +209,7 @@ struct IDXGISwapChain_Present
 
 		if (!globals::game::isVR) {
 			BOOL fullscreen = FALSE;
-			((IDXGISwapChain*)This)->GetFullscreenState(&fullscreen, nullptr);
+			This->GetFullscreenState(&fullscreen, nullptr);
 			if (fullscreen || SyncInterval) {
 				Flags &= ~DXGI_PRESENT_ALLOW_TEARING;
 			} else if (SyncInterval == 0) {
@@ -293,6 +293,9 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	DXGI_ADAPTER_DESC adapterDesc;
 	pAdapter->GetDesc(&adapterDesc);
 	globals::state->SetAdapterDescription(adapterDesc.Description);
+
+	// Set HDR format for the swap chain
+	pSwapChainDesc->BufferDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
 
 	if (!REL::Module::IsVR()) {
 		pSwapChainDesc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
@@ -380,53 +383,50 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 			}
 
 			return ret;
-
-		} else {
-			logger::info("[Frame Generation] Using manual D3D12 proxy");
-
-			if (fidelityFX->module) {
-				proxy->CreateD3D12Device(pAdapter);
-
-				D3D11CreateDevice(
-					pAdapter,
-					DriverType,
-					Software,
-					Flags,
-					&featureLevel,
-					1,
-					SDKVersion,
-					ppDevice,
-					pFeatureLevel,
-					ppImmediateContext);
-
-				proxy->SetD3D11Device(*ppDevice);
-				proxy->SetD3D11DeviceContext(*ppImmediateContext);
-
-				proxy->CreateSwapChain(pAdapter, *pSwapChainDesc);
-
-				proxy->CreateInterop();
-
-				*ppSwapChain = proxy->GetSwapChainProxy();
-
-				upscaling->d3d12Interop = true;
-
-				if (streamline->initialized) {
-					streamline->slSetD3DDevice(*ppDevice);
-					streamline->PostDevice();
-				}
-
-				IDXGIFactory* factory = nullptr;
-				if (SUCCEEDED((*ppSwapChain)->GetParent(IID_PPV_ARGS(&factory)))) {
-					factory->MakeWindowAssociation(pSwapChainDesc->OutputWindow, DXGI_MWA_NO_WINDOW_CHANGES);
-					factory->Release();
-				}
-
-				return S_OK;
-			} else {
-				logger::warn("[Frame Generation] amd_fidelityfx_dx12.dll is not loaded, skipping proxy");
-				upscaling->fidelityFXMissing = true;
-			}
 		}
+		logger::info("[Frame Generation] Using manual D3D12 proxy");
+
+		if (fidelityFX->module) {
+			proxy->CreateD3D12Device(pAdapter);
+
+			D3D11CreateDevice(
+				pAdapter,
+				DriverType,
+				Software,
+				Flags,
+				&featureLevel,
+				1,
+				SDKVersion,
+				ppDevice,
+				pFeatureLevel,
+				ppImmediateContext);
+
+			proxy->SetD3D11Device(*ppDevice);
+			proxy->SetD3D11DeviceContext(*ppImmediateContext);
+
+			proxy->CreateSwapChain(pAdapter, *pSwapChainDesc);
+
+			proxy->CreateInterop();
+
+			*ppSwapChain = proxy->GetSwapChainProxy();
+
+			upscaling->d3d12Interop = true;
+
+			if (streamline->initialized) {
+				streamline->slSetD3DDevice(*ppDevice);
+				streamline->PostDevice();
+			}
+
+			IDXGIFactory* factory = nullptr;
+			if (SUCCEEDED((*ppSwapChain)->GetParent(IID_PPV_ARGS(&factory)))) {
+				factory->MakeWindowAssociation(pSwapChainDesc->OutputWindow, DXGI_MWA_NO_WINDOW_CHANGES);
+				factory->Release();
+			}
+
+			return S_OK;
+		}
+		logger::warn("[Frame Generation] amd_fidelityfx_dx12.dll is not loaded, skipping proxy");
+		upscaling->fidelityFXMissing = true;
 	}
 
 	auto ret = ptrD3D11CreateDeviceAndSwapChain(pAdapter,
@@ -445,6 +445,31 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	if (streamline->initialized) {
 		streamline->slSetD3DDevice(*ppDevice);
 		streamline->PostDevice();
+	}
+
+	// After creating the swap chain, set HDR color space and metadata
+	if (*ppSwapChain) {
+		IDXGISwapChain4* swapChain4 = nullptr;
+		if (SUCCEEDED((*ppSwapChain)->QueryInterface(IID_PPV_ARGS(&swapChain4)))) {
+			swapChain4->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
+
+			DXGI_HDR_METADATA_HDR10 hdrMetadata = {};
+			hdrMetadata.RedPrimary[0] = 34000; // Display P3 primaries
+			hdrMetadata.RedPrimary[1] = 16000;
+			hdrMetadata.GreenPrimary[0] = 13250;
+			hdrMetadata.GreenPrimary[1] = 34500;
+			hdrMetadata.BluePrimary[0] = 7500;
+			hdrMetadata.BluePrimary[1] = 3000;
+			hdrMetadata.WhitePoint[0] = 15635;
+			hdrMetadata.WhitePoint[1] = 16450;
+			hdrMetadata.MaxMasteringLuminance = 1000 * 10000;
+			hdrMetadata.MinMasteringLuminance = 100;
+			hdrMetadata.MaxContentLightLevel = 1000;
+			hdrMetadata.MaxFrameAverageLightLevel = 400;
+
+			swapChain4->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10, sizeof(hdrMetadata), &hdrMetadata);
+			swapChain4->Release();
+		}
 	}
 
 	return ret;
@@ -478,18 +503,19 @@ struct BSInputDeviceManager_PollInputDevices
 					bool vrDevice = false;
 #ifdef ENABLE_SKYRIM_VR
 					vrDevice = (globals::game::isVR && ((device == RE::INPUT_DEVICES::INPUT_DEVICE::kVivePrimary) ||
-														   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kViveSecondary) ||
-														   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusPrimary) ||
-														   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusSecondary) ||
-														   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRPrimary) ||
-														   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRSecondary)));
+					                                    (device == RE::INPUT_DEVICES::INPUT_DEVICE::kViveSecondary) ||
+					                                    (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusPrimary) ||
+					                                    (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusSecondary) ||
+					                                    (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRPrimary) ||
+					                                    (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRSecondary)));
 #endif
 					blockedDevice = !((device == RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad) || vrDevice);
 				}
 			}
 		}
 
-		if (blockedDevice && menu->ShouldSwallowInput()) {  //the menu is open, eat all keypresses
+		if (blockedDevice && menu->ShouldSwallowInput()) {
+			//the menu is open, eat all keypresses
 			constexpr RE::InputEvent* const dummy[] = { nullptr };
 			func(a_dispatcher, dummy);
 			return;
@@ -619,7 +645,7 @@ namespace Hooks
 						if (state->enabledClasses[type - 1]) {
 							RE::BSGraphics::VertexShader* vertexShader = shaderCache->GetVertexShader(*currentShader, state->modifiedVertexDescriptor);
 							if (vertexShader) {
-								globals::d3d::context->VSSetShader(reinterpret_cast<ID3D11VertexShader*>(vertexShader->shader), NULL, NULL);
+								globals::d3d::context->VSSetShader(reinterpret_cast<ID3D11VertexShader*>(vertexShader->shader), nullptr, NULL);
 								*globals::game::currentVertexShader = a_vertexShader;
 								globals::game::stateUpdateFlags->set(RE::BSGraphics::DIRTY_VERTEX_DESC);
 								return;
@@ -632,7 +658,7 @@ namespace Hooks
 			globals::game::stateUpdateFlags->set(RE::BSGraphics::DIRTY_VERTEX_DESC);
 
 			*globals::game::currentVertexShader = a_vertexShader;
-			globals::d3d::context->VSSetShader(reinterpret_cast<ID3D11VertexShader*>(a_vertexShader->shader), NULL, NULL);
+			globals::d3d::context->VSSetShader(reinterpret_cast<ID3D11VertexShader*>(a_vertexShader->shader), nullptr, NULL);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -652,7 +678,7 @@ namespace Hooks
 						if (state->enabledClasses[type - 1]) {
 							RE::BSGraphics::PixelShader* pixelShader = shaderCache->GetPixelShader(*currentShader, state->modifiedPixelDescriptor);
 							if (pixelShader) {
-								globals::d3d::context->PSSetShader(reinterpret_cast<ID3D11PixelShader*>(pixelShader->shader), NULL, NULL);
+								globals::d3d::context->PSSetShader(reinterpret_cast<ID3D11PixelShader*>(pixelShader->shader), nullptr, NULL);
 								*globals::game::currentPixelShader = a_pixelShader;
 								return;
 							}
@@ -664,7 +690,7 @@ namespace Hooks
 			*globals::game::currentPixelShader = a_pixelShader;
 
 			if (a_pixelShader)
-				globals::d3d::context->PSSetShader(reinterpret_cast<ID3D11PixelShader*>(a_pixelShader->shader), NULL, NULL);
+				globals::d3d::context->PSSetShader(reinterpret_cast<ID3D11PixelShader*>(a_pixelShader->shader), nullptr, NULL);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};

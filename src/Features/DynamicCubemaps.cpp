@@ -52,6 +52,7 @@ void DynamicCubemaps::DrawSettings()
 					auto context = globals::d3d::context;
 
 					D3D11_TEXTURE2D_DESC texDesc{};
+					// Might has to be changed to DXGI_FORMAT_R10G10B10A2_UNORM
 					texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 					texDesc.Height = 1;
 					texDesc.Width = 1;
@@ -71,10 +72,10 @@ void DynamicCubemaps::DrawSettings()
 
 					static PixelData colorPixel{};
 
-					colorPixel = { (uint8_t)((settings.CubemapColor.x * 255.0f) + 0.5f),
-						(uint8_t)((settings.CubemapColor.y * 255.0f) + 0.5f),
-						(uint8_t)((settings.CubemapColor.z * 255.0f) + 0.5f),
-						std::min((uint8_t)254u, (uint8_t)((settings.CubemapColor.w * 255.0f) + 0.5f)) };
+					colorPixel = { static_cast<uint8_t>((settings.CubemapColor.x * 255.0f) + 0.5f),
+					               static_cast<uint8_t>((settings.CubemapColor.y * 255.0f) + 0.5f),
+					               static_cast<uint8_t>((settings.CubemapColor.z * 255.0f) + 0.5f),
+					               std::min(static_cast<uint8_t>(254u), static_cast<uint8_t>((settings.CubemapColor.w * 255.0f) + 0.5f)) };
 
 					static PixelData emptyPixel{};
 
@@ -103,13 +104,12 @@ void DynamicCubemaps::DrawSettings()
 						std::filesystem::path filename(std::format("R{:03d}G{:03d}B{:03d}A{:03d}.dds", colorPixel.r, colorPixel.g, colorPixel.b, colorPixel.a));
 						DynamicCubeMapSavePath /= filename;
 
-						if (std::filesystem::exists(DynamicCubeMapSavePath)) {
+						if (exists(DynamicCubeMapSavePath)) {
 							logger::info("DynamicCubeMap Creator file for {} already exists, skipping.", filename.string());
 						} else {
 							DX::ThrowIfFailed(SaveToDDSFile(image.GetImages(), image.GetImageCount(), image.GetMetadata(), DirectX::DDS_FLAGS::DDS_FLAGS_NONE, DynamicCubeMapSavePath.c_str()));
 							logger::info("DynamicCubeMap Creator file for {} written", filename.string());
 						}
-
 					} catch (const std::exception& e) {
 						logger::error("Failed in DynamicCubeMap Creator file: {} {}", defaultDynamicCubeMapSavePath, e.what());
 					}
@@ -122,8 +122,8 @@ void DynamicCubemaps::DrawSettings()
 		}
 		if (REL::Module::IsVR()) {
 			if (ImGui::TreeNodeEx("Advanced VR Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-				Util::RenderImGuiSettingsTree(iniVRCubeMapSettings, "VR");
-				Util::RenderImGuiSettingsTree(hiddenVRCubeMapSettings, "hiddenVR");
+				RenderImGuiSettingsTree(iniVRCubeMapSettings, "VR");
+				RenderImGuiSettingsTree(hiddenVRCubeMapSettings, "hiddenVR");
 				ImGui::TreePop();
 			}
 		}
@@ -139,7 +139,7 @@ void DynamicCubemaps::LoadSettings(json& o_json)
 {
 	settings = o_json;
 	if (REL::Module::IsVR()) {
-		Util::LoadGameSettings(iniVRCubeMapSettings);
+		LoadGameSettings(iniVRCubeMapSettings);
 	}
 	recompileFlag = true;
 }
@@ -148,7 +148,7 @@ void DynamicCubemaps::SaveSettings(json& o_json)
 {
 	o_json = settings;
 	if (REL::Module::IsVR()) {
-		Util::SaveGameSettings(iniVRCubeMapSettings);
+		SaveGameSettings(iniVRCubeMapSettings);
 	}
 }
 
@@ -156,8 +156,8 @@ void DynamicCubemaps::RestoreDefaultSettings()
 {
 	settings = {};
 	if (REL::Module::IsVR()) {
-		Util::ResetGameSettingsToDefaults(iniVRCubeMapSettings);
-		Util::ResetGameSettingsToDefaults(hiddenVRCubeMapSettings);
+		ResetGameSettingsToDefaults(iniVRCubeMapSettings);
+		ResetGameSettingsToDefaults(hiddenVRCubeMapSettings);
 	}
 	recompileFlag = true;
 }
@@ -166,8 +166,8 @@ void DynamicCubemaps::DataLoaded()
 {
 	if (REL::Module::IsVR()) {
 		// enable cubemap settings in VR
-		Util::EnableBooleanSettings(iniVRCubeMapSettings, GetName());
-		Util::EnableBooleanSettings(hiddenVRCubeMapSettings, GetName());
+		EnableBooleanSettings(iniVRCubeMapSettings, GetName());
+		EnableBooleanSettings(hiddenVRCubeMapSettings, GetName());
 	}
 	MenuOpenCloseEventHandler::Register();
 }
@@ -181,7 +181,7 @@ void DynamicCubemaps::PostPostLoad()
 		for (const auto& settingPair : earlyhiddenVRCubeMapSettings) {
 			const auto& settingName = settingPair.first;
 			const auto address = REL::Offset{ settingPair.second }.address();
-			bool* setting = reinterpret_cast<bool*>(address);
+			auto setting = reinterpret_cast<bool*>(address);
 			if (!*setting) {
 				logger::info("[PostPostLoad] Changing {} from {} to {} to support Dynamic Cubemaps", settingName, *setting, true);
 				*setting = true;
@@ -368,7 +368,7 @@ void DynamicCubemaps::UpdateCubemapCapture(bool a_reflections)
 
 	context->CSSetShader(a_reflections ? (fakeReflections ? GetComputeShaderUpdateFakeReflections() : GetComputeShaderUpdateReflections()) : GetComputeShaderUpdate(), nullptr, 0);
 
-	context->Dispatch((uint32_t)std::ceil(envCaptureTexture->desc.Width / 8.0f), (uint32_t)std::ceil(envCaptureTexture->desc.Height / 8.0f), 6);
+	context->Dispatch(static_cast<uint32_t>(std::ceil(envCaptureTexture->desc.Width / 8.0f)), static_cast<uint32_t>(std::ceil(envCaptureTexture->desc.Height / 8.0f)), 6);
 
 	uavs[0] = nullptr;
 	uavs[1] = nullptr;
@@ -409,7 +409,7 @@ void DynamicCubemaps::Inferrence(bool a_reflections)
 
 	context->CSSetShader(a_reflections ? (fakeReflections ? GetComputeShaderInferrenceFakeReflections() : GetComputeShaderInferrenceReflections()) : GetComputeShaderInferrence(), nullptr, 0);
 
-	context->Dispatch((uint32_t)std::ceil(envCaptureTexture->desc.Width / 8.0f), (uint32_t)std::ceil(envCaptureTexture->desc.Height / 8.0f), 6);
+	context->Dispatch(static_cast<uint32_t>(std::ceil(envCaptureTexture->desc.Width / 8.0f)), static_cast<uint32_t>(std::ceil(envCaptureTexture->desc.Height / 8.0f)), 6);
 
 	srvs[0] = nullptr;
 	srvs[1] = nullptr;
@@ -420,7 +420,7 @@ void DynamicCubemaps::Inferrence(bool a_reflections)
 
 	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 
-	context->CSSetShader(nullptr, 0, 0);
+	context->CSSetShader(nullptr, nullptr, 0);
 
 	ID3D11SamplerState* sampler = nullptr;
 	context->CSSetSamplers(0, 1, &sampler);
@@ -448,12 +448,12 @@ void DynamicCubemaps::Irradiance(bool a_reflections)
 		ID3D11Buffer* buffer = spmapCB->CB();
 		context->CSSetConstantBuffers(0, 1, &buffer);
 
-		float const delta_roughness = 1.0f / std::max(float(MIPLEVELS - 1), 1.0f);
+		const float delta_roughness = 1.0f / std::max(static_cast<float>(MIPLEVELS - 1), 1.0f);
 
 		std::uint32_t size = std::max(envTexture->desc.Width, envTexture->desc.Height) / 2;
 
 		for (std::uint32_t level = 1; level < MIPLEVELS; level++, size /= 2) {
-			const UINT numGroups = (UINT)std::max(1u, size / 8);
+			const UINT numGroups = std::max(1u, size / 8);
 
 			const SpecularMapFilterSettingsCB spmapConstants = { level * delta_roughness };
 			spmapCB->Update(spmapConstants);
@@ -472,7 +472,7 @@ void DynamicCubemaps::Irradiance(bool a_reflections)
 
 	context->CSSetShaderResources(0, 1, &nullSRV);
 	context->CSSetSamplers(0, 1, &nullSampler);
-	context->CSSetShader(nullptr, 0, 0);
+	context->CSSetShader(nullptr, nullptr, 0);
 	context->CSSetConstantBuffers(0, 1, &nullBuffer);
 	context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
 }

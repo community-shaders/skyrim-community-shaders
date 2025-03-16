@@ -34,7 +34,8 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	swapChainDesc = {};
 	swapChainDesc.Width = a_swapChainDesc.BufferDesc.Width;
 	swapChainDesc.Height = a_swapChainDesc.BufferDesc.Height;
-	swapChainDesc.Format = a_swapChainDesc.BufferDesc.Format;
+	// Use HDR format for the swap chain
+	swapChainDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
 	swapChainDesc.SampleDesc.Count = 1;
 	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	swapChainDesc.BufferCount = 2;
@@ -52,12 +53,32 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 
 	auto fidelityFX = globals::fidelityFX;
 
-	if (ffx::CreateContext(fidelityFX->swapChainContext, nullptr, ffxSwapChainDesc) != ffx::ReturnCode::Ok) {
+	if (CreateContext(fidelityFX->swapChainContext, nullptr, ffxSwapChainDesc) != ffx::ReturnCode::Ok) {
 		logger::critical("[FidelityFX] Failed to create swap chain context!");
 	}
 
 	DX::ThrowIfFailed(swapChain->GetBuffer(0, IID_PPV_ARGS(&swapChainBuffers[0])));
 	DX::ThrowIfFailed(swapChain->GetBuffer(1, IID_PPV_ARGS(&swapChainBuffers[1])));
+
+	// Set the color space to HDR10
+	DX::ThrowIfFailed(swapChain->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020));
+
+	// Set HDR metadata
+	DXGI_HDR_METADATA_HDR10 hdrMetadata = {};
+	hdrMetadata.RedPrimary[0] = 34000; // Display P3 primaries (scaled by 50000)
+	hdrMetadata.RedPrimary[1] = 16000;
+	hdrMetadata.GreenPrimary[0] = 13250;
+	hdrMetadata.GreenPrimary[1] = 34500;
+	hdrMetadata.BluePrimary[0] = 7500;
+	hdrMetadata.BluePrimary[1] = 3000;
+	hdrMetadata.WhitePoint[0] = 15635;
+	hdrMetadata.WhitePoint[1] = 16450;
+	hdrMetadata.MaxMasteringLuminance = 1000 * 10000; // 1000 nits in units of 0.0001 nits
+	hdrMetadata.MinMasteringLuminance = 100;          // 0.01 nits in units of 0.0001 nits
+	hdrMetadata.MaxContentLightLevel = 1000;          // 1000 nits
+	hdrMetadata.MaxFrameAverageLightLevel = 400;      // 400 nits average
+
+	DX::ThrowIfFailed(swapChain->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10, sizeof(hdrMetadata), &hdrMetadata));
 
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
 
@@ -187,7 +208,7 @@ WrappedResource::WrappedResource(D3D11_TEXTURE2D_DESC a_texDesc, ID3D11Device5* 
 		flags |= D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE;
 	if (!(a_texDesc.BindFlags & D3D11_BIND_RENDER_TARGET))
 		flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-	D3D12_RESOURCE_DESC desc12{ D3D12_RESOURCE_DIMENSION_TEXTURE2D, 0, a_texDesc.Width, a_texDesc.Height, (UINT16)a_texDesc.ArraySize, (UINT16)a_texDesc.MipLevels, a_texDesc.Format, { a_texDesc.SampleDesc.Count, a_texDesc.SampleDesc.Quality }, D3D12_TEXTURE_LAYOUT_UNKNOWN, flags };
+	D3D12_RESOURCE_DESC desc12{ D3D12_RESOURCE_DIMENSION_TEXTURE2D, 0, a_texDesc.Width, a_texDesc.Height, static_cast<UINT16>(a_texDesc.ArraySize), static_cast<UINT16>(a_texDesc.MipLevels), a_texDesc.Format, { a_texDesc.SampleDesc.Count, a_texDesc.SampleDesc.Quality }, D3D12_TEXTURE_LAYOUT_UNKNOWN, flags };
 	D3D12_HEAP_PROPERTIES heapProp = { D3D12_HEAP_TYPE_DEFAULT, D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 1, 1 };
 
 	DX::ThrowIfFailed(a_d3d12Device->CreateCommittedResource(&heapProp, D3D12_HEAP_FLAG_SHARED, &desc12, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&resource)));

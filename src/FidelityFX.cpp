@@ -9,11 +9,11 @@
 ffxFunctions ffxModule;
 
 FfxResource ffxGetResource(ID3D11Resource* dx11Resource,
-	[[maybe_unused]] wchar_t const* ffxResName,
+	[[maybe_unused]] const wchar_t* ffxResName,
 	FfxResourceStates state /*=FFX_RESOURCE_STATE_COMPUTE_READ*/)
 {
 	FfxResource resource = {};
-	resource.resource = reinterpret_cast<void*>(const_cast<ID3D11Resource*>(dx11Resource));
+	resource.resource = reinterpret_cast<void*>(dx11Resource);
 	resource.state = state;
 	resource.description = GetFfxResourceDescriptionDX11(dx11Resource);
 
@@ -42,12 +42,12 @@ void FidelityFX::SetupFrameGeneration()
 	createFg.displaySize = { swapChain->swapChainDesc.Width, swapChain->swapChainDesc.Height };
 	createFg.maxRenderSize = createFg.displaySize;
 	createFg.flags = FFX_FRAMEGENERATION_ENABLE_ASYNC_WORKLOAD_SUPPORT;
-	createFg.backBufferFormat = FFX_API_SURFACE_FORMAT_R8G8B8A8_UNORM;
+	createFg.backBufferFormat = FFX_API_SURFACE_FORMAT_R10G10B10A2_UNORM;
 
 	ffx::CreateBackendDX12Desc createBackend{};
 	createBackend.device = swapChain->d3d12Device.get();
 
-	if (ffx::CreateContext(frameGenContext, nullptr, createFg, createBackend) != ffx::ReturnCode::Ok) {
+	if (CreateContext(frameGenContext, nullptr, createFg, createBackend) != ffx::ReturnCode::Ok) {
 		logger::critical("[FidelityFX] Failed to create frame generation context!");
 	}
 }
@@ -68,7 +68,7 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 	framePacingTuningParameters.key = FFX_API_CONFIGURE_FG_SWAPCHAIN_KEY_FRAMEPACINGTUNING;
 	framePacingTuningParameters.ptr = &framePacingTuning;
 
-	if (ffx::Configure(swapChainContext, framePacingTuningParameters) != ffx::ReturnCode::Ok) {
+	if (Configure(swapChainContext, framePacingTuningParameters) != ffx::ReturnCode::Ok) {
 		logger::critical("[FidelityFX] Failed to configure frame pacing tuning!");
 	}
 
@@ -83,7 +83,6 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		configParameters.frameGenerationCallbackUserContext = &frameGenContext;
 
 		configParameters.HUDLessColor = ffxApiGetResourceDX12(HUDLessColor);
-
 	} else {
 		configParameters.frameGenerationEnabled = false;
 
@@ -105,7 +104,7 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 	configParameters.generationRect.width = swapChain->swapChainDesc.Width;
 	configParameters.generationRect.height = swapChain->swapChainDesc.Height;
 
-	if (ffx::Configure(frameGenContext, configParameters) != ffx::ReturnCode::Ok) {
+	if (Configure(frameGenContext, configParameters) != ffx::ReturnCode::Ok) {
 		logger::critical("[FidelityFX] Failed to configure frame generation!");
 	}
 
@@ -114,8 +113,8 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 
 		dispatchParameters.commandList = commandList;
 
-		dispatchParameters.motionVectorScale.x = (float)swapChain->swapChainDesc.Width;
-		dispatchParameters.motionVectorScale.y = (float)swapChain->swapChainDesc.Height;
+		dispatchParameters.motionVectorScale.x = static_cast<float>(swapChain->swapChainDesc.Width);
+		dispatchParameters.motionVectorScale.y = static_cast<float>(swapChain->swapChainDesc.Height);
 		dispatchParameters.renderSize.width = swapChain->swapChainDesc.Width;
 		dispatchParameters.renderSize.height = swapChain->swapChainDesc.Height;
 
@@ -124,11 +123,11 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		float2 jitter;
 
 		if (globals::game::isVR)
-			jitter.x = -gameViewport->projectionPosScaleX * float(swapChain->swapChainDesc.Width);
+			jitter.x = -gameViewport->projectionPosScaleX * static_cast<float>(swapChain->swapChainDesc.Width);
 		else
-			jitter.x = -gameViewport->projectionPosScaleX * float(swapChain->swapChainDesc.Width) / 2.0f;
+			jitter.x = -gameViewport->projectionPosScaleX * static_cast<float>(swapChain->swapChainDesc.Width) / 2.0f;
 
-		jitter.y = gameViewport->projectionPosScaleY * (float)swapChain->swapChainDesc.Height / 2.0f;
+		jitter.y = gameViewport->projectionPosScaleY * static_cast<float>(swapChain->swapChainDesc.Height) / 2.0f;
 
 		dispatchParameters.jitterOffset.x = -jitter.x;
 		dispatchParameters.jitterOffset.y = -jitter.y;
@@ -146,7 +145,7 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		dispatchParameters.depth = ffxApiGetResourceDX12(depth);
 		dispatchParameters.motionVectors = ffxApiGetResourceDX12(motionVectors);
 
-		if (ffx::Dispatch(frameGenContext, dispatchParameters) != ffx::ReturnCode::Ok) {
+		if (Dispatch(frameGenContext, dispatchParameters) != ffx::ReturnCode::Ok) {
 			logger::critical("[FidelityFX] Failed to dispatch frame generation!");
 		}
 	}
@@ -169,14 +168,14 @@ void FidelityFX::CreateFSRResources()
 		logger::critical("[FidelityFX] Failed to initialize FSR3 backend interface!");
 
 	FfxFsr3ContextDescription contextDescription;
-	contextDescription.maxRenderSize.width = (uint)state->screenSize.x;
-	contextDescription.maxRenderSize.height = (uint)state->screenSize.y;
-	contextDescription.maxUpscaleSize.width = (uint)state->screenSize.x;
-	contextDescription.maxUpscaleSize.height = (uint)state->screenSize.y;
-	contextDescription.displaySize.width = (uint)state->screenSize.x;
-	contextDescription.displaySize.height = (uint)state->screenSize.y;
+	contextDescription.maxRenderSize.width = static_cast<uint>(state->screenSize.x);
+	contextDescription.maxRenderSize.height = static_cast<uint>(state->screenSize.y);
+	contextDescription.maxUpscaleSize.width = static_cast<uint>(state->screenSize.x);
+	contextDescription.maxUpscaleSize.height = static_cast<uint>(state->screenSize.y);
+	contextDescription.displaySize.width = static_cast<uint>(state->screenSize.x);
+	contextDescription.displaySize.height = static_cast<uint>(state->screenSize.y);
 	contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE;
-	contextDescription.backBufferFormat = FFX_SURFACE_FORMAT_R8G8B8A8_UNORM;
+	contextDescription.backBufferFormat = FFX_SURFACE_FORMAT_R10G10B10A2_UNORM;
 
 	contextDescription.backendInterfaceUpscaling = fsrInterface;
 
@@ -212,8 +211,8 @@ void FidelityFX::Upscale(Texture2D* a_color, Texture2D* a_alphaMask, float2 a_ji
 
 		dispatchParameters.motionVectorScale.x = globals::game::isVR ? state->screenSize.x / 2 : state->screenSize.x;
 		dispatchParameters.motionVectorScale.y = state->screenSize.y;
-		dispatchParameters.renderSize.width = (uint)state->screenSize.x;
-		dispatchParameters.renderSize.height = (uint)state->screenSize.y;
+		dispatchParameters.renderSize.width = static_cast<uint>(state->screenSize.x);
+		dispatchParameters.renderSize.height = static_cast<uint>(state->screenSize.y);
 		dispatchParameters.jitterOffset.x = -a_jitter.x;
 		dispatchParameters.jitterOffset.y = -a_jitter.y;
 

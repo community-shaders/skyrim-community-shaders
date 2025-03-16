@@ -24,10 +24,10 @@ void Upscaling::DrawSettings()
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	auto streamline = globals::streamline;
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
-	auto& bTAA = BSImagespaceShaderISTemporalAA->taaEnabled;  // Setting used by shaders
+	auto& bTAA = BSImagespaceShaderISTemporalAA->taaEnabled; // Setting used by shaders
 
 	// Update upscale mode based on TAA setting
-	settings.upscaleMethod = bTAA ? (settings.upscaleMethod == (uint)UpscaleMethod::kNONE ? (uint)UpscaleMethod::kTAA : settings.upscaleMethod) : (uint)UpscaleMethod::kNONE;
+	settings.upscaleMethod = bTAA ? (settings.upscaleMethod == static_cast<uint>(UpscaleMethod::kNONE) ? static_cast<uint>(UpscaleMethod::kTAA) : settings.upscaleMethod) : static_cast<uint>(UpscaleMethod::kNONE);
 
 	// Display upscaling options in the UI
 	const char* upscaleModes[] = { "Disabled", "Temporal Anti-Aliasing", "AMD FSR 3.1", "NVIDIA DLAA" };
@@ -41,7 +41,7 @@ void Upscaling::DrawSettings()
 		availableModes = 1;
 
 	// Slider for method selection
-	ImGui::SliderInt("Method", (int*)currentUpscaleMode, 0, availableModes, std::format("{}", upscaleModes[(uint)*currentUpscaleMode]).c_str());
+	ImGui::SliderInt("Method", (int*)currentUpscaleMode, 0, availableModes, std::format("{}", upscaleModes[(*currentUpscaleMode)]).c_str());
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
 			"Disabled:\n"
@@ -57,8 +57,8 @@ void Upscaling::DrawSettings()
 			"NVIDIA's Deep Learning Anti-Aliasing leverages AI to provide high-quality anti-aliasing without sacrificing performance. Requires NVIDIA RTX GPU.");
 	}
 
-	*currentUpscaleMode = std::min(availableModes, (uint)*currentUpscaleMode);
-	bTAA = *currentUpscaleMode != (uint)UpscaleMethod::kNONE;
+	*currentUpscaleMode = std::min(availableModes, *currentUpscaleMode);
+	bTAA = *currentUpscaleMode != static_cast<uint>(UpscaleMethod::kNONE);
 
 	// settings for scaleform/ini
 	if (auto iniSettingCollection = globals::game::iniPrefSettingCollection) {
@@ -174,12 +174,12 @@ void Upscaling::RestoreDefaultSettings()
 Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
 {
 	if (globals::state->featureLevel != D3D_FEATURE_LEVEL_11_1)
-		return (Upscaling::UpscaleMethod)settings.upscaleMethodNoFSR;
+		return static_cast<UpscaleMethod>(settings.upscaleMethodNoFSR);
 
 	if (globals::streamline->featureDLSS)
-		return (Upscaling::UpscaleMethod)settings.upscaleMethod;
+		return static_cast<UpscaleMethod>(settings.upscaleMethod);
 
-	return (Upscaling::UpscaleMethod)settings.upscaleMethodNoDLSS;
+	return static_cast<UpscaleMethod>(settings.upscaleMethodNoDLSS);
 }
 
 void Upscaling::CheckResources()
@@ -207,7 +207,7 @@ ID3D11ComputeShader* Upscaling::GetEncodeTexturesCS()
 {
 	if (!encodeTexturesCS) {
 		logger::debug("Compiling EncodeTexturesCS.hlsl");
-		encodeTexturesCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data/Shaders/Upscaling/EncodeTexturesCS.hlsl", {}, "cs_5_0");
+		encodeTexturesCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data/Shaders/Upscaling/EncodeTexturesCS.hlsl", {}, "cs_5_0"));
 	}
 	return encodeTexturesCS;
 }
@@ -231,7 +231,7 @@ ID3D11ComputeShader* Upscaling::GetRCASCS()
 
 	if (!rcasCS) {
 		logger::debug("Compiling RCAS.hlsl");
-		rcasCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data/Shaders/Upscaling/RCAS/RCAS.hlsl", { { "SHARPNESS", std::format("{}", currentSharpness).c_str() } }, "cs_5_0");
+		rcasCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data/Shaders/Upscaling/RCAS/RCAS.hlsl", { { "SHARPNESS", std::format("{}", currentSharpness).c_str() } }, "cs_5_0"));
 	}
 
 	return rcasCS;
@@ -258,7 +258,7 @@ void Upscaling::UpdateJitter()
 
 void Upscaling::Upscale()
 {
-	std::lock_guard<std::mutex> lock(settingsMutex);  // Lock for the duration of this function
+	std::lock_guard<std::mutex> lock(settingsMutex); // Lock for the duration of this function
 
 	auto upscaleMethod = GetUpscaleMethod();
 
@@ -332,7 +332,7 @@ void Upscaling::Upscale()
 		context->CopyResource(upscalingTexture->resource.get(), inputTextureResource);
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			globals::streamline->Upscale(upscalingTexture, alphaMaskTexture, settings.dlssPreset == 0 ? (sl::DLSSPreset)11u : sl::DLSSPreset::ePresetE);
+			globals::streamline->Upscale(upscalingTexture, alphaMaskTexture, settings.dlssPreset == 0 ? static_cast<sl::DLSSPreset>(11u) : sl::DLSSPreset::ePresetE);
 		else if (upscaleMethod == UpscaleMethod::kFSR)
 			globals::fidelityFX->Upscale(upscalingTexture, alphaMaskTexture, jitter, settings.sharpness);
 
@@ -375,7 +375,7 @@ void Upscaling::Upscale()
 
 void Upscaling::SharpenTAA()
 {
-	std::lock_guard<std::mutex> lock(settingsMutex);  // Lock for the duration of this function
+	std::lock_guard<std::mutex> lock(settingsMutex); // Lock for the duration of this function
 
 	CheckResources();
 
@@ -436,7 +436,7 @@ void Upscaling::SharpenTAA()
 
 	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
 
-	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
+	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET); // Run OMSetRenderTargets again
 }
 
 void Upscaling::CreateUpscalingResources()
@@ -454,7 +454,7 @@ void Upscaling::CreateUpscalingResources()
 
 	texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
-	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	texDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
 	srvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
 
@@ -506,7 +506,8 @@ void Upscaling::CreateFrameGenerationResources()
 
 	texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
-	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	// Change this to HDR format to match the swap chain
+	texDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM; // Was DXGI_FORMAT_R8G8B8A8_UNORM
 	srvDesc.Format = texDesc.Format;
 	rtvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
@@ -600,7 +601,7 @@ void Upscaling::CreateFrameGenerationResources()
 		}
 	}
 
-	copyDepthToSharedBufferCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\FrameGeneration\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0");
+	copyDepthToSharedBufferCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\FrameGeneration\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0"));
 }
 
 void Upscaling::CopyBuffersToSharedResources()
@@ -687,7 +688,7 @@ void Upscaling::FrameLimiter()
 		LARGE_INTEGER qpf;
 		QueryPerformanceFrequency(&qpf);
 
-		int64_t targetFrameTicks = int64_t(double(qpf.QuadPart) / (bestRefreshRate * (settings.frameGenerationMode ? 0.5 : 1.0)));
+		int64_t targetFrameTicks = static_cast<int64_t>(static_cast<double>(qpf.QuadPart) / (bestRefreshRate * (settings.frameGenerationMode ? 0.5 : 1.0)));
 
 		static LARGE_INTEGER lastFrame = {};
 		LARGE_INTEGER timeNow;
@@ -750,7 +751,7 @@ double Upscaling::GetRefreshRate(HWND a_window)
 							// get the refresh rate
 							UINT numerator = p.targetInfo.refreshRate.Numerator;
 							UINT denominator = p.targetInfo.refreshRate.Denominator;
-							return (double)numerator / (double)denominator;
+							return static_cast<double>(numerator) / static_cast<double>(denominator);
 						}
 					}
 				}
