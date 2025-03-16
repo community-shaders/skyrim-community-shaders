@@ -2,11 +2,14 @@
 
 #include "ShaderTools/BSShaderHooks.h"
 
+#include "Globals.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
 #include "Util.h"
+
+#include "Features/TerrainHelper.h"
 
 #include "ShaderTools/BSShaderHooks.h"
 
@@ -719,6 +722,52 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	struct TESObjectLAND_SetupMaterial
+	{
+		static bool thunk(RE::TESObjectLAND* land)
+		{
+			// setup material for PBR
+			auto TruePBRSingleton = globals::truePBR;
+			if (TruePBRSingleton->TESObjectLAND_SetupMaterial(land)) {
+				// if PBR, we are done
+				return true;
+			}
+			
+			bool vanillaResult = func(land);
+
+			// setup material for terrain helper
+			auto terrainHelper = globals::features::terrainHelper;
+			if (vanillaResult && terrainHelper->loaded) {
+				terrainHelper->TESObjectLAND_SetupMaterial(land);
+			}
+
+			return vanillaResult;
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct BSLightingShader_SetupMaterial
+	{
+		static void thunk(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material) {
+			// setup material for PBR
+			auto TruePBRSingleton = globals::truePBR;
+			if (TruePBRSingleton->BSLightingShader_SetupMaterial(shader, material)) {
+				// if PBR, we are done
+				return;
+			}
+
+			// vanilla
+			func(shader, material);
+
+			// terrain helper
+			auto terrainHelper = globals::features::terrainHelper;
+			if (terrainHelper->loaded) {
+				terrainHelper->BSLightingShader_SetupMaterial(material);
+			}
+		};
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 #ifdef TRACY_ENABLE
 	struct Main_Update
 	{
@@ -894,6 +943,12 @@ namespace Hooks
 		logger::info("Hooking BSEffectShader");
 		stl::write_vfunc<0x6, EffectExtensions::BSEffectShader_SetupGeometry>(RE::VTABLE_BSEffectShader[0]);
 		stl::write_vfunc<0x6, LightingExtensions::BSLightingShader_SetupGeometry>(RE::VTABLE_BSLightingShader[0]);
+
+		logger::info("Hooking TESObjectLAND");
+		stl::detour_thunk<TESObjectLAND_SetupMaterial>(REL::RelocationID(18368, 18791));
+
+		logger::info("Hooking BSLightingShader");
+		stl::write_vfunc<0x4, BSLightingShader_SetupMaterial>(RE::VTABLE_BSLightingShader[0]);
 
 		const auto renderPassCacheCtor = REL::VariantID(100720, 107500, 0x1340330);
 		const int32_t passCount = 4194240;

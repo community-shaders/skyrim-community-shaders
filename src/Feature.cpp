@@ -12,6 +12,7 @@
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
+#include "Features/TerrainHelper.h"
 #include "Features/TerrainShadows.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
@@ -133,6 +134,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		globals::features::screenSpaceGI,
 		globals::features::skylighting,
 		globals::features::terrainBlending,
+		globals::features::terrainHelper,
 		globals::features::volumetricLighting
 	};
 

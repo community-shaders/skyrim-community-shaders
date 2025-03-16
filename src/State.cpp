@@ -8,6 +8,7 @@
 #include "Deferred.h"
 #include "Features/CloudShadows.h"
 #include "Features/TerrainBlending.h"
+#include "Features/TerrainHelper.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "Streamline.h"
@@ -19,6 +20,7 @@ void State::Draw()
 	auto shaderCache = globals::shaderCache;
 	auto deferred = globals::deferred;
 	auto terrainBlending = globals::features::terrainBlending;
+	auto terrainHelper = globals::features::terrainHelper;
 	auto cloudShadows = globals::features::cloudShadows;
 	auto truePBR = globals::truePBR;
 	auto smState = globals::game::smState;
@@ -30,6 +32,9 @@ void State::Draw()
 
 		if (cloudShadows->loaded)
 			cloudShadows->SkyShaderHacks();
+
+		if (terrainHelper->loaded)
+			terrainHelper->SetShaderResouces(context);
 
 		truePBR->SetShaderResouces(context);
 

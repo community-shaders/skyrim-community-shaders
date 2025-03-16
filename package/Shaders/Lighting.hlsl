@@ -512,7 +512,14 @@ Texture2D<float4> TexLandNormal4Sampler : register(t10);
 Texture2D<float4> TexLandNormal5Sampler : register(t11);
 Texture2D<float4> TexLandNormal6Sampler : register(t12);
 
-#		if defined(TRUE_PBR)
+Texture2D<float4> TexLandTHDisp0Sampler : register(t92);
+Texture2D<float4> TexLandTHDisp1Sampler : register(t93);
+Texture2D<float4> TexLandTHDisp2Sampler : register(t94);
+Texture2D<float4> TexLandTHDisp3Sampler : register(t95);
+Texture2D<float4> TexLandTHDisp4Sampler : register(t96);
+Texture2D<float4> TexLandTHDisp5Sampler : register(t97);
+
+#if defined(TRUE_PBR)
 
 Texture2D<float4> TexLandDisplacement0Sampler : register(t80);
 Texture2D<float4> TexLandDisplacement1Sampler : register(t81);
@@ -639,6 +646,10 @@ cbuffer PerMaterial : register(b1)
 	uint PBRFlags : packoffset(c15.x);
 	float3 PBRParams1 : packoffset(c15.y);  // roughness scale, displacement scale, specular level
 	float4 PBRParams2 : packoffset(c16);    // subsurface color, subsurface opacity
+
+#   if defined(LANDSCAPE) && !defined(TRUE_PBR)
+    uint THFlags : packoffset(c17.x);
+#   endif
 };
 
 cbuffer PerGeometry : register(b2)
@@ -956,6 +967,10 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #	if defined(DYNAMIC_CUBEMAPS)
 #		include "DynamicCubemaps/DynamicCubemaps.hlsli"
 #	endif
+
+#   if defined(LANDSCAPE)
+#       include "TerrainHelper/TerrainHelper.hlsli"
+#   endif
 
 #	if defined(TRUE_PBR)
 #		include "Common/PBR.hlsli"
