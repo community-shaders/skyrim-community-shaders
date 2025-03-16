@@ -1818,25 +1818,24 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	snowOcclusion *= 0.9 + noise * 0.1;
 #		endif
 
-
 	float3 pos = (input.WorldPosition + FrameBuffer::CameraPosAdjust[eyeIndex]).xyz;
 
 	float snowFactor = 0;
-	if (SharedData::snowCoverSettings.EnableSnowCover && !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsMobile) && !(Permutation::VertexShaderDescriptor & Permutation::LightingFlags::Skinned)){
+	if (SharedData::snowCoverSettings.EnableSnowCover && !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsMobile) && !(Permutation::VertexShaderDescriptor & Permutation::LightingFlags::Skinned)) {
 #		if defined(TRUE_PBR)
 #			if defined(LANDSCAPE)
-		float disp = 0.1*sh0 * max(displacementParams[0].HeightScale * input.LandBlendWeights1.x, max(displacementParams[1].HeightScale * input.LandBlendWeights1.y, max(displacementParams[2].HeightScale * input.LandBlendWeights1.z, max(displacementParams[3].HeightScale * input.LandBlendWeights1.w, max(displacementParams[4].HeightScale * input.LandBlendWeights2.x, displacementParams[5].HeightScale * input.LandBlendWeights2.y)))));
+		float disp = 0.1 * sh0 * max(displacementParams[0].HeightScale * input.LandBlendWeights1.x, max(displacementParams[1].HeightScale * input.LandBlendWeights1.y, max(displacementParams[2].HeightScale * input.LandBlendWeights1.z, max(displacementParams[3].HeightScale * input.LandBlendWeights1.w, max(displacementParams[4].HeightScale * input.LandBlendWeights2.x, displacementParams[5].HeightScale * input.LandBlendWeights2.y)))));
 #			elif defined(EMAT)
-		float disp = 0.1*(sh0 - 0.5)*displacementParams.HeightScale;
+		float disp = 0.1 * (sh0 - 0.5) * displacementParams.HeightScale;
 #			endif
 #		else
-		float disp = 0.1*(sh0 - 0.5);
+		float disp = 0.1 * (sh0 - 0.5);
 #		endif
 		float3 snowNormal = worldSpaceNormal;
 #		if defined(TRUE_PBR)
-		pbrSurfaceProperties = SnowCover::ApplySnowPBR(baseColor.rgb, snowNormal, snowFactor, disp, pos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, pbrSurfaceProperties, uv-uvOriginal);
+		pbrSurfaceProperties = SnowCover::ApplySnowPBR(baseColor.rgb, snowNormal, snowFactor, disp, pos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, pbrSurfaceProperties, uv - uvOriginal);
 #		else
-		snowFactor = SnowCover::ApplySnow(baseColor.rgb, snowNormal, glossiness.x, shininess, disp, pos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, uv-uvOriginal);
+		snowFactor = SnowCover::ApplySnow(baseColor.rgb, snowNormal, glossiness.x, shininess, disp, pos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, uv - uvOriginal);
 		glossiness = glossiness.xxxx;
 #		endif
 #		if !defined(MODELSPACENORMALS)
@@ -1847,7 +1846,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(LOD_LAND_BLEND)
 		lodLandColor.rgb = lerp(lodLandColor, baseColor.rgb, snowFactor);
 #		endif
-		}
+	}
 
 #		if defined(TREE_ANIM)
 	SnowCover::ApplyFoliageColor(baseColor.rgb, SnowCover::GetEnvironmentalMultiplier(pos));
@@ -1860,7 +1859,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif
 		modelNormal.xyz = worldSpaceNormal;
 	modelNormal.xyz = normalize(modelNormal.xyz);
-#	endif                                                                       // SNOW_COVER
+#	endif  // SNOW_COVER
 	float waterRoughnessSpecular = 1;
 
 #	if defined(WETNESS_EFFECTS)
