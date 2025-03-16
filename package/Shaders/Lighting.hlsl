@@ -2542,9 +2542,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 vertexColor = input.Color.xyz;
 #	endif  // defined (HAIR)
 
-#if defined(SNOW_COVER) && !defined(MODELSPACENORMALS)
-	vertexColor.rgb = snowFactor + (1-snowFactor)*vertexColor.rgb;
-#endif
+#	if defined(SNOW_COVER) && !defined(MODELSPACENORMALS)
+	vertexColor.rgb = snowFactor + (1 - snowFactor) * vertexColor.rgb;
+#	endif
 
 	float4 color = 0;
 

@@ -80,16 +80,15 @@ void SnowCover::DrawSettings()
 	ImGui::Spacing();
 }
 
-
 //void SnowCover::Draw(const RE::BSShader*, const uint32_t){}
 
 SnowCover::PerFrame SnowCover::GetCommonBufferData()
 {
 	Reload();
 
-	static float delta = 0;                                       // size_t for precision
+	static float delta = 0;                       // size_t for precision
 	if (!RE::UI::GetSingleton()->GameIsPaused())  // from lightlimitfix
-		delta = RE::GetSecondsSinceLastFrame();  // BSTimer::delta is always 0 for some reason
+		delta = RE::GetSecondsSinceLastFrame();   // BSTimer::delta is always 0 for some reason
 	bool snowing = false;
 	bool raining = false;
 	if (wsettings.EnableSnowCover) {
@@ -101,15 +100,12 @@ SnowCover::PerFrame SnowCover::GetCommonBufferData()
 					float particleGravity = currentWeather->precipitationData->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kGravityVelocity).f;
 					snowAmount = particleDensity * particleGravity;
 					snowing = true;
-				} 
-				else if (currentWeather->precipitationData && currentWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy)) {
+				} else if (currentWeather->precipitationData && currentWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy)) {
 					raining = true;
 				}
-
-				
 			}
 		}
-	} else{
+	} else {
 		snowAmount = 0;
 	}
 	PerFrame data{};
@@ -117,7 +113,7 @@ SnowCover::PerFrame SnowCover::GetCommonBufferData()
 		auto h = calendar->GetHour();
 		auto diff = h < lastHour ? h + 24 - lastHour : h - lastHour;
 		if (snowing)
-			timeSnowing += diff*snowing_speed;
+			timeSnowing += diff * snowing_speed;
 		else {
 			if (raining)
 				diff *= 4;
@@ -180,31 +176,29 @@ void SnowCover::SaveConfig()
 	if (last_worldspace.length() == 0)
 		return;
 	json config = {
-		{ "FoliageHeightOffset" , wsettings.FoliageHeightOffset },
-		{ "UVScale" , wsettings.UVScale },
-		{ "MaxSummerMonth" , wsettings.MaxSummerMonth },
-		{ "MaxWinterMonth" , wsettings.MaxWinterMonth },
-		{ "SummerHeightOffset" , wsettings.SummerHeightOffset },
-		{ "WinterHeightOffset" , wsettings.WinterHeightOffset },
-		{ "Equation" , wsettings.Equation },
-		{ "ScreenSpaceScale" , wsettings.ScreenSpaceScale },
-		{ "LogMicrofacetDensity" , wsettings.LogMicrofacetDensity },
-		{ "MicrofacetRoughness" , wsettings.MicrofacetRoughness },
-		{ "DensityRandomization" , wsettings.DensityRandomization },
-		{ "MainTexture" , main_tex },
-		{ "AltTexture" , alt_tex },
-		{ "MainTint", json::array({
-						  wsettings.MainTint.x,
+		{ "FoliageHeightOffset", wsettings.FoliageHeightOffset },
+		{ "UVScale", wsettings.UVScale },
+		{ "MaxSummerMonth", wsettings.MaxSummerMonth },
+		{ "MaxWinterMonth", wsettings.MaxWinterMonth },
+		{ "SummerHeightOffset", wsettings.SummerHeightOffset },
+		{ "WinterHeightOffset", wsettings.WinterHeightOffset },
+		{ "Equation", wsettings.Equation },
+		{ "ScreenSpaceScale", wsettings.ScreenSpaceScale },
+		{ "LogMicrofacetDensity", wsettings.LogMicrofacetDensity },
+		{ "MicrofacetRoughness", wsettings.MicrofacetRoughness },
+		{ "DensityRandomization", wsettings.DensityRandomization },
+		{ "MainTexture", main_tex },
+		{ "AltTexture", alt_tex },
+		{ "MainTint", json::array({ wsettings.MainTint.x,
 						  wsettings.MainTint.y,
 						  wsettings.MainTint.z,
-						  wsettings.MainTint.w
-					  }) },
+						  wsettings.MainTint.w }) },
 		{ "AltTint", json::array({ wsettings.AltTint.x,
 						 wsettings.AltTint.y,
 						 wsettings.AltTint.z,
 						 wsettings.AltTint.w }) },
-		{ "SnowingSpeed" , snowing_speed },
-		{ "MeltingSpeed" , melting_speed },
+		{ "SnowingSpeed", snowing_speed },
+		{ "MeltingSpeed", melting_speed },
 	};
 
 	if (alt_tex.length() != 0)
