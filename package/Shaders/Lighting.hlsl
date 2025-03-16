@@ -1808,7 +1808,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 waterData = SharedData::GetWaterData(input.WorldPosition.xyz);
 	float waterHeight = waterData.w;
 
-#	if defined(SNOW_COVER) && !defined(MODELSPACENORMALS)
+#	if defined(SNOW_COVER)
 #		if defined(SKYLIGHTING)
 	float snowOcclusion = inWorld ? pow(saturate(SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1))), 2) : 0;
 #		else
@@ -1818,43 +1818,40 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	snowOcclusion *= 0.9 + noise * 0.1;
 #		endif
 
-#		if !defined(MODELSPACENORMALS)
-	float3 viewDirTS = normalize(mul(tbnTr, viewDirection));
-	viewDirTS.xy /= viewDirTS.z * 0.7 + 0.3;  // Fix for objects at extreme viewing angles
-#		else
-	float3 viewDirTS = 0;
-#		endif
+
 	float3 pos = (input.WorldPosition + FrameBuffer::CameraPosAdjust[eyeIndex]).xyz;
 
 	float snowFactor = 0;
-	float3 snowDiffuse = baseColor.rgb;
-	if (SharedData::snowCoverSettings.EnableSnowCover){
+	if (SharedData::snowCoverSettings.EnableSnowCover && !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsMobile) && !(Permutation::VertexShaderDescriptor & Permutation::LightingFlags::Skinned)){
 #		if defined(TRUE_PBR)
 #			if defined(LANDSCAPE)
-		float disp = sh0 * max(displacementParams[0].HeightScale * input.LandBlendWeights1.x, max(displacementParams[1].HeightScale * input.LandBlendWeights1.y, max(displacementParams[2].HeightScale * input.LandBlendWeights1.z, max(displacementParams[3].HeightScale * input.LandBlendWeights1.w, max(displacementParams[4].HeightScale * input.LandBlendWeights2.x, displacementParams[5].HeightScale * input.LandBlendWeights2.y)))));
-#			else
-		float disp = (sh0 - 0.5)*displacementParams.HeightScale;
+		float disp = 0.1*sh0 * max(displacementParams[0].HeightScale * input.LandBlendWeights1.x, max(displacementParams[1].HeightScale * input.LandBlendWeights1.y, max(displacementParams[2].HeightScale * input.LandBlendWeights1.z, max(displacementParams[3].HeightScale * input.LandBlendWeights1.w, max(displacementParams[4].HeightScale * input.LandBlendWeights2.x, displacementParams[5].HeightScale * input.LandBlendWeights2.y)))));
+#			elif defined(EMAT)
+		float disp = 0.1*(sh0 - 0.5)*displacementParams.HeightScale;
 #			endif
 #		else
-		float disp = sh0 - 0.5;
+		float disp = 0.1*(sh0 - 0.5);
 #		endif
+		float3 snowNormal = worldSpaceNormal;
 #		if defined(TRUE_PBR)
-		pbrSurfaceProperties = SnowCover::ApplySnowPBR(snowDiffuse, worldSpaceNormal, snowFactor, disp, pos, snowOcclusion, input.WorldPosition.z - waterHeight, float3(viewDirTS.x, viewDirTS.y, viewPosition.z), pbrSurfaceProperties, uv-uvOriginal, tbn);
+		pbrSurfaceProperties = SnowCover::ApplySnowPBR(baseColor.rgb, snowNormal, snowFactor, disp, pos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, pbrSurfaceProperties, uv-uvOriginal);
 #		else
-		snowFactor = SnowCover::ApplySnow(snowDiffuse, worldSpaceNormal, glossiness.x, shininess, disp, pos, snowOcclusion, input.WorldPosition.z - waterHeight, float3(viewDirTS.x, viewDirTS.y, viewPosition.z), uv-uvOriginal, tbn);
+		snowFactor = SnowCover::ApplySnow(baseColor.rgb, snowNormal, glossiness.x, shininess, disp, pos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, uv-uvOriginal);
 		glossiness = glossiness.xxxx;
+#		endif
+#		if !defined(MODELSPACENORMALS)
+		worldSpaceNormal = normalize(lerp(worldSpaceNormal, SnowCover::MyReorientNormal(worldSpaceNormal, normalize(mul(tbn, snowNormal))), snowFactor));
+#		else
+		worldSpaceNormal = normalize(lerp(worldSpaceNormal, SnowCover::MyReorientNormal(worldSpaceNormal, snowNormal), snowFactor));
+#		endif
+#		if defined(LOD_LAND_BLEND)
+		lodLandColor.rgb = lerp(lodLandColor, baseColor.rgb, snowFactor);
 #		endif
 		}
 
 #		if defined(TREE_ANIM)
 	SnowCover::ApplyFoliageColor(baseColor.rgb, SnowCover::GetEnvironmentalMultiplier(pos));
 #		endif
-	baseColor.rgb = lerp(baseColor.rgb, snowDiffuse, snowFactor);
-
-#		if defined(LOD_LAND_BLEND)
-	lodLandColor.rgb = lerp(lodLandColor.rgb, snowDiffuse, snowFactor);
-
-#		endif  // LOD_LAND_BLEND
 
 #		if !defined(DRAW_IN_WORLDSPACE)  // && (defined(SKINNED) || !defined(MODELSPACENORMALS))
 	[flatten] if (!input.WorldSpace)
@@ -1864,8 +1861,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		modelNormal.xyz = worldSpaceNormal;
 	modelNormal.xyz = normalize(modelNormal.xyz);
 #	endif                                                                       // SNOW_COVER
-	if (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsMobile)  // TESTING TODO REMOVE
-		baseColor.rgb = float3(1, 0, 0);
 	float waterRoughnessSpecular = 1;
 
 #	if defined(WETNESS_EFFECTS)
