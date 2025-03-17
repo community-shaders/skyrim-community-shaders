@@ -6,6 +6,7 @@
 #include "FidelityFX.h"
 #include "Streamline.h"
 #include "Upscaling.h"
+#include "HDR.h"
 
 void DX12SwapChain::CreateD3D12Device(IDXGIAdapter* a_adapter)
 {
@@ -34,8 +35,7 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	swapChainDesc = {};
 	swapChainDesc.Width = a_swapChainDesc.BufferDesc.Width;
 	swapChainDesc.Height = a_swapChainDesc.BufferDesc.Height;
-	// Use HDR format for the swap chain
-	swapChainDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+	swapChainDesc.Format = a_swapChainDesc.BufferDesc.Format;
 	swapChainDesc.SampleDesc.Count = 1;
 	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	swapChainDesc.BufferCount = 2;
@@ -60,8 +60,9 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	DX::ThrowIfFailed(swapChain->GetBuffer(0, IID_PPV_ARGS(&swapChainBuffers[0])));
 	DX::ThrowIfFailed(swapChain->GetBuffer(1, IID_PPV_ARGS(&swapChainBuffers[1])));
 
-	// Set the color space to HDR10
-	DX::ThrowIfFailed(swapChain->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020));
+	if (globals::hdr->settings.enabled) {
+		DX::ThrowIfFailed(swapChain->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020));
+	}
 
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
 

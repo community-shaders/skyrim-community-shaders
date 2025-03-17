@@ -16,6 +16,7 @@
 #include "Streamline.h"
 #include "TruePBR.h"
 #include "Upscaling.h"
+#include "HDR.h"
 
 #include "Features/LightLimitFix/ParticleLights.h"
 
@@ -240,7 +241,7 @@ void Menu::Init()
 
 void Menu::DrawSettings()
 {
-	ImGui::DockSpaceOverViewport(NULL, ImGuiDockNodeFlags_PassthruCentralNode);
+	ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
 
 	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
 	ImGui::SetNextWindowSize(Util::GetNativeViewportSizeScaled(0.8f), ImGuiCond_FirstUseEver);
@@ -318,7 +319,7 @@ void Menu::DrawSettings()
 		ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 3.0f);
 		ImGui::Spacing();
 
-		float footer_height = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3 + 3.0f;  // text + separator
+		float footer_height = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3 + 3.0f; // text + separator
 
 		ImGui::BeginChild("Menus Table", ImVec2(0, -footer_height));
 		if (ImGui::BeginTable("Menus Table", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable)) {
@@ -343,10 +344,12 @@ void Menu::DrawSettings()
 					if (ImGui::Selectable(fmt::format(" {} ", menu.name).c_str(), selectedMenu == listId, ImGuiSelectableFlags_SpanAllColumns))
 						selectedMenu = listId;
 				}
+
 				void operator()(const std::string& label)
 				{
 					ImGui::SeparatorText(label.c_str());
 				}
+
 				void operator()(Feature* feat)
 				{
 					const auto featureName = feat->GetShortName();
@@ -406,11 +409,13 @@ void Menu::DrawSettings()
 					}
 					ImGui::EndChild();
 				}
+
 				void operator()(const std::string&)
 				{
 					// std::unreachable() from c++23
 					// you are not supposed to have selected a label!
 				}
+
 				void operator()(Feature* feat)
 				{
 					const auto featureName = feat->GetShortName();
@@ -482,7 +487,7 @@ void Menu::DrawSettings()
 			};
 
 			auto& featureList = Feature::GetFeatureList();
-			auto sortedFeatureList{ featureList };  // need a copy so the load order is not lost
+			auto sortedFeatureList{ featureList }; // need a copy so the load order is not lost
 			std::ranges::sort(sortedFeatureList, [](Feature* a, Feature* b) {
 				return a->GetName() < b->GetName();
 			});
@@ -678,7 +683,7 @@ void Menu::DrawGeneralSettings()
 				ImGui::SliderAngle("Table Angled Headers Angle", &style.TableAngledHeadersAngle, -50.0f, +50.0f);
 
 				ImGui::SeparatorText("Widgets");
-				ImGui::Combo("ColorButtonPosition", (int*)&style.ColorButtonPosition, "Left\0Right\0");
+				ImGui::Combo("ColorButtonPosition", &style.ColorButtonPosition, "Left\0Right\0");
 				ImGui::SliderFloat2("Button Text Align", (float*)&style.ButtonTextAlign, 0.0f, 1.0f, "%.2f");
 				if (auto _tt = Util::HoverTooltipWrapper())
 					ImGui::Text("Alignment applies when a button is larger than its text content.");
@@ -757,7 +762,7 @@ void Menu::DrawAdvancedSettings()
 			"critical",
 			"off"
 		};
-		static int item_current = static_cast<int>(logLevel);
+		static int item_current = logLevel;
 		if (ImGui::Combo("Log Level", &item_current, items, IM_ARRAYSIZE(items))) {
 			ImGui::SameLine();
 			globals::state->SetLogLevel(static_cast<spdlog::level::level_enum>(item_current));
@@ -771,8 +776,8 @@ void Menu::DrawAdvancedSettings()
 			globals::state->SetDefines(shaderDefines);
 		}
 		if (ImGui::IsItemDeactivatedAfterEdit() || (ImGui::IsItemActive() &&
-													   (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Enter)) ||
-														   ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_KeypadEnter))))) {
+		                                            (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Enter)) ||
+		                                             ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_KeypadEnter))))) {
 			globals::state->SetDefines(shaderDefines);
 			shaderCache->Clear();
 		}
@@ -798,7 +803,7 @@ void Menu::DrawAdvancedSettings()
 			if (testInterval == 0) {
 				inTestMode = false;
 				logger::info("Disabling test mode.");
-				globals::state->Load(State::ConfigMode::TEST);  // restore last settings before entering test mode
+				globals::state->Load(State::ConfigMode::TEST); // restore last settings before entering test mode
 			} else if (!inTestMode) {
 				logger::info("Saving current settings for test mode and starting test with interval {}.", testInterval);
 				globals::state->Save(State::ConfigMode::TEST);
@@ -863,7 +868,7 @@ void Menu::DrawAdvancedSettings()
 			for (int classIndex = 0; classIndex < RE::BSShader::Type::Total - 1; ++classIndex) {
 				ImGui::TableNextColumn();
 
-				auto type = (RE::BSShader::Type)(classIndex + 1);
+				auto type = static_cast<RE::BSShader::Type>(classIndex + 1);
 				if (!(SIE::ShaderCache::IsSupportedShader(type) || state->IsDeveloperMode())) {
 					ImGui::BeginDisabled();
 					ImGui::Checkbox(std::format("{}", magic_enum::enum_name(type)).c_str(), &state->enabledClasses[classIndex]);
@@ -899,7 +904,7 @@ void Menu::DrawAdvancedSettings()
 	}
 
 	globals::truePBR->DrawSettings();
-	Menu::DrawDisableAtBootSettings();
+	DrawDisableAtBootSettings();
 }
 
 void Menu::DrawDisableAtBootSettings()
@@ -961,7 +966,8 @@ void Menu::DrawDisplaySettings()
 		auto& themeSettings = settings.Theme;
 
 		const std::vector<std::pair<std::string, std::function<void()>>> features = {
-			{ "Upscaling", []() { globals::upscaling->DrawSettings(); } }
+			{ "Upscaling", []() { globals::upscaling->DrawSettings(); } },
+			{ "High Dynamic Range", []() { globals::hdr->DrawSettings(); } }
 		};
 
 		for (const auto& [featureName, drawFunc] : features) {
@@ -1016,7 +1022,7 @@ void Menu::DrawFooter()
 
 void Menu::DrawOverlay()
 {
-	ProcessInputEventQueue();  //Synchronize Inputs to frame
+	ProcessInputEventQueue(); //Synchronize Inputs to frame
 
 	auto shaderCache = globals::shaderCache;
 	auto failed = shaderCache->GetFailedTasks();
@@ -1049,7 +1055,7 @@ void Menu::DrawOverlay()
 	auto progressTitle = fmt::format("{}Compiling Shaders: {}",
 		shaderCache->backgroundCompilation ? "Background " : "",
 		shaderCache->GetShaderStatsString(!state->IsDeveloperMode()).c_str());
-	auto percent = (float)compiledShaders / (float)totalShaders;
+	auto percent = static_cast<float>(compiledShaders) / static_cast<float>(totalShaders);
 	auto progressOverlay = fmt::format("{}/{} ({:2.1f}%)", compiledShaders, totalShaders, 100 * percent);
 	if (shaderCache->IsCompiling()) {
 		ImGui::SetNextWindowPos(ImVec2(10, 10));
@@ -1088,9 +1094,10 @@ void Menu::DrawOverlay()
 		ImGui::GetIO().MouseDrawCursor = false;
 	}
 
-	if (inTestMode) {  // In test mode
-		float seconds = (float)duration_cast<std::chrono::milliseconds>(high_resolution_clock::now() - lastTestSwitch).count() / 1000;
-		auto remaining = (float)testInterval - seconds;
+	if (inTestMode) {
+		// In test mode
+		float seconds = static_cast<float>(duration_cast<milliseconds>(high_resolution_clock::now() - lastTestSwitch).count()) / 1000;
+		auto remaining = static_cast<float>(testInterval) - seconds;
 		if (remaining < 0) {
 			usingTestConfig = !usingTestConfig;
 			logger::info("Swapping mode to {}", usingTestConfig ? "test" : "user");
@@ -1327,7 +1334,7 @@ const ImGuiKey Menu::VirtualKeyToImGuiKey(WPARAM vkKey)
 		return ImGuiKey_F12;
 	default:
 		return ImGuiKey_None;
-	};
+	}
 }
 
 inline const uint32_t Menu::DIKToVK(uint32_t DIK)
@@ -1346,11 +1353,11 @@ inline const uint32_t Menu::DIKToVK(uint32_t DIK)
 	case DIK_END:
 		return VK_END;
 	case DIK_HOME:
-		return VK_HOME;  // pos1
+		return VK_HOME; // pos1
 	case DIK_PRIOR:
-		return VK_PRIOR;  // page up
+		return VK_PRIOR; // page up
 	case DIK_NEXT:
-		return VK_NEXT;  // page down
+		return VK_NEXT; // page down
 	case DIK_INSERT:
 		return VK_INSERT;
 	case DIK_NUMPAD0:
@@ -1378,13 +1385,13 @@ inline const uint32_t Menu::DIKToVK(uint32_t DIK)
 	case DIK_NUMPADENTER:
 		return IM_VK_KEYPAD_ENTER;
 	case DIK_RMENU:
-		return VK_RMENU;  // right alt
+		return VK_RMENU; // right alt
 	case DIK_RCONTROL:
-		return VK_RCONTROL;  // right control
+		return VK_RCONTROL; // right control
 	case DIK_LWIN:
-		return VK_LWIN;  // left win
+		return VK_LWIN; // left win
 	case DIK_RWIN:
-		return VK_RWIN;  // right win
+		return VK_RWIN; // right win
 	case DIK_APPS:
 		return VK_APPS;
 	default:
@@ -1405,7 +1412,8 @@ void Menu::ProcessInputEventQueue()
 
 		if (event.device == RE::INPUT_DEVICE::kMouse) {
 			logger::trace("Detect mouse scan code {} value {} pressed: {}", event.keyCode, event.value, event.IsPressed());
-			if (event.keyCode > 7) {  // middle scroll
+			if (event.keyCode > 7) {
+				// middle scroll
 				io.AddMouseWheelEvent(0, event.value * (event.keyCode == 8 ? 1 : -1));
 			} else {
 				if (event.keyCode > 5)
@@ -1478,7 +1486,7 @@ void Menu::OnFocusLost()
 void Menu::ProcessInputEvents(RE::InputEvent* const* a_events)
 {
 	for (auto it = *a_events; it; it = it->next) {
-		if (it->GetEventType() != RE::INPUT_EVENT_TYPE::kButton && it->GetEventType() != RE::INPUT_EVENT_TYPE::kChar)  // we do not care about non button or char events
+		if (it->GetEventType() != RE::INPUT_EVENT_TYPE::kButton && it->GetEventType() != RE::INPUT_EVENT_TYPE::kChar) // we do not care about non button or char events
 			continue;
 
 		auto event = it->GetEventType() == RE::INPUT_EVENT_TYPE::kButton ? KeyEvent(static_cast<RE::ButtonEvent*>(it)) : KeyEvent(static_cast<CharEvent*>(it));

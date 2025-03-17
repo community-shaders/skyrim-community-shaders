@@ -14,6 +14,7 @@
 #include "FidelityFX.h"
 #include "Streamline.h"
 #include "Upscaling.h"
+#include "HDR.h"
 
 std::unordered_map<void*, std::pair<std::unique_ptr<uint8_t[]>, size_t>> ShaderBytecodeMap;
 
@@ -166,6 +167,7 @@ namespace EffectExtensions
 				}
 			}
 		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 }
@@ -185,6 +187,7 @@ namespace LightingExtensions
 				if (userData->GetBaseObject()->As<RE::TESObjectTREE>())
 					globals::state->isTree = true;
 		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 }
@@ -225,6 +228,7 @@ struct IDXGISwapChain_Present
 
 		return retval;
 	}
+
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
@@ -245,6 +249,7 @@ struct ID3D11Device_CreateVertexShader
 
 		return hr;
 	}
+
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
@@ -259,6 +264,7 @@ struct ID3D11Device_CreatePixelShader
 
 		return hr;
 	}
+
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
@@ -294,8 +300,9 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	pAdapter->GetDesc(&adapterDesc);
 	globals::state->SetAdapterDescription(adapterDesc.Description);
 
-	// Set HDR format for the swap chain
-	pSwapChainDesc->BufferDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+	if (globals::hdr->settings.enabled) {
+		pSwapChainDesc->BufferDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+	}
 
 	if (!REL::Module::IsVR()) {
 		pSwapChainDesc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
@@ -447,27 +454,10 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 		streamline->PostDevice();
 	}
 
-	// After creating the swap chain, set HDR color space and metadata
-	if (*ppSwapChain) {
+	if (*ppSwapChain && globals::hdr->settings.enabled) {
 		IDXGISwapChain4* swapChain4 = nullptr;
 		if (SUCCEEDED((*ppSwapChain)->QueryInterface(IID_PPV_ARGS(&swapChain4)))) {
 			swapChain4->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
-
-			DXGI_HDR_METADATA_HDR10 hdrMetadata = {};
-			hdrMetadata.RedPrimary[0] = 34000; // Display P3 primaries
-			hdrMetadata.RedPrimary[1] = 16000;
-			hdrMetadata.GreenPrimary[0] = 13250;
-			hdrMetadata.GreenPrimary[1] = 34500;
-			hdrMetadata.BluePrimary[0] = 7500;
-			hdrMetadata.BluePrimary[1] = 3000;
-			hdrMetadata.WhitePoint[0] = 15635;
-			hdrMetadata.WhitePoint[1] = 16450;
-			hdrMetadata.MaxMasteringLuminance = 1000 * 10000;
-			hdrMetadata.MinMasteringLuminance = 100;
-			hdrMetadata.MaxContentLightLevel = 1000;
-			hdrMetadata.MaxFrameAverageLightLevel = 400;
-
-			swapChain4->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10, sizeof(hdrMetadata), &hdrMetadata);
 			swapChain4->Release();
 		}
 	}
@@ -483,6 +473,7 @@ struct BSShaderRenderTargets_Create
 		globals::ReInit();
 		globals::state->Setup();
 	}
+
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
@@ -523,6 +514,7 @@ struct BSInputDeviceManager_PollInputDevices
 
 		func(a_dispatcher, a_events);
 	}
+
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
@@ -549,6 +541,7 @@ namespace Hooks
 			}
 			globals::menu->Init();
 		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -565,6 +558,7 @@ namespace Hooks
 			}
 			return func(a_hwnd, a_msg, a_wParam, a_lParam);
 		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -577,6 +571,7 @@ namespace Hooks
 
 			return func(a_wndClass);
 		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -584,9 +579,83 @@ namespace Hooks
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
+			a_properties->format = RE::BSGraphics::Format::kR16G16B16A16_FLOAT;
 			globals::state->ModifyRenderTarget(a_target, a_properties);
 			func(This, a_target, a_properties);
 		}
+
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct CreateRenderTarget_ImagespaceTempCopy
+	{
+		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
+		{
+			a_properties->format = RE::BSGraphics::Format::kR16G16B16A16_FLOAT;
+			globals::state->ModifyRenderTarget(a_target, a_properties);
+			func(This, a_target, a_properties);
+		}
+
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct CreateRenderTarget_ImagespaceTempCopy2
+	{
+		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
+		{
+			a_properties->format = RE::BSGraphics::Format::kR16G16B16A16_FLOAT;
+			globals::state->ModifyRenderTarget(a_target, a_properties);
+			func(This, a_target, a_properties);
+		}
+
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct CreateRenderTarget_LDRBlurSwap
+	{
+		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
+		{
+			a_properties->format = RE::BSGraphics::Format::kR16G16B16A16_FLOAT;
+			globals::state->ModifyRenderTarget(a_target, a_properties);
+			func(This, a_target, a_properties);
+		}
+
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct CreateRenderTarget_LDRDownsample
+	{
+		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
+		{
+			a_properties->format = RE::BSGraphics::Format::kR16G16B16A16_FLOAT;
+			globals::state->ModifyRenderTarget(a_target, a_properties);
+			func(This, a_target, a_properties);
+		}
+
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct CreateRenderTarget_TemporalAAAccumulation0
+	{
+		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
+		{
+			a_properties->format = RE::BSGraphics::Format::kR16G16B16A16_FLOAT;
+			globals::state->ModifyRenderTarget(a_target, a_properties);
+			func(This, a_target, a_properties);
+		}
+
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct CreateRenderTarget_TemporalAAAccumulation1
+	{
+		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
+		{
+			a_properties->format = RE::BSGraphics::Format::kR16G16B16A16_FLOAT;
+			globals::state->ModifyRenderTarget(a_target, a_properties);
+			func(This, a_target, a_properties);
+		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -597,6 +666,7 @@ namespace Hooks
 			globals::state->ModifyRenderTarget(a_target, a_properties);
 			func(This, a_target, a_properties);
 		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -607,6 +677,7 @@ namespace Hooks
 			globals::state->ModifyRenderTarget(a_target, a_properties);
 			func(This, a_target, a_properties);
 		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -617,6 +688,7 @@ namespace Hooks
 			globals::state->ModifyRenderTarget(a_target, a_properties);
 			func(This, a_target, a_properties);
 		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -627,6 +699,7 @@ namespace Hooks
 			globals::state->ModifyRenderTarget(a_target, a_properties);
 			func(This, a_target, a_properties);
 		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -660,6 +733,7 @@ namespace Hooks
 			*globals::game::currentVertexShader = a_vertexShader;
 			globals::d3d::context->VSSetShader(reinterpret_cast<ID3D11VertexShader*>(a_vertexShader->shader), nullptr, NULL);
 		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -692,6 +766,7 @@ namespace Hooks
 			if (a_pixelShader)
 				globals::d3d::context->PSSetShader(reinterpret_cast<ID3D11PixelShader*>(a_pixelShader->shader), nullptr, NULL);
 		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -703,6 +778,7 @@ namespace Hooks
 			a_properties->stencil = false;
 			func(This, a_target, a_properties);
 		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -714,6 +790,7 @@ namespace Hooks
 			a_properties->width = 128;
 			func(This, a_target, a_properties);
 		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -725,6 +802,7 @@ namespace Hooks
 			a_properties->width = 128;
 			func(This, a_target, a_properties);
 		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -742,6 +820,7 @@ namespace Hooks
 
 			return ret;
 		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -802,6 +881,7 @@ namespace Hooks
 				func(shader, threadGroupCountX, threadGroupCountY, threadGroupCountZ);
 				CurrentlyDispatchedShader = nullptr;
 			}
+
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
@@ -815,6 +895,7 @@ namespace Hooks
 				CurrentlyDispatchedComputeShader = nullptr;
 				CurrentComputeShaderTechniqueId = 0;
 			}
+
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
@@ -843,6 +924,7 @@ namespace Hooks
 				}
 				func(renderer, shader, threadGroupCountX, threadGroupCountY, threadGroupCountZ);
 			}
+
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 	}
@@ -893,6 +975,12 @@ namespace Hooks
 
 		logger::info("Hooking BSShaderRenderTargets::Create::CreateRenderTarget(s)");
 		stl::write_thunk_call<CreateRenderTarget_Main>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x3F0, 0x3F3, 0x548));
+		stl::write_thunk_call<CreateRenderTarget_ImagespaceTempCopy>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x62F, 0x62E));
+		stl::write_thunk_call<CreateRenderTarget_ImagespaceTempCopy2>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x642, 0x641));
+		stl::write_thunk_call<CreateRenderTarget_LDRBlurSwap>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x529, 0x528));
+		stl::write_thunk_call<CreateRenderTarget_LDRDownsample>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0xB2E, 0xB2E));
+		stl::write_thunk_call<CreateRenderTarget_TemporalAAAccumulation0>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0xE68, 0xE6A));
+		stl::write_thunk_call<CreateRenderTarget_TemporalAAAccumulation1>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0xE7E, 0xE80));
 		stl::write_thunk_call<CreateRenderTarget_Normals>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x458, 0x45B, 0x5B0));
 		stl::write_thunk_call<CreateRenderTarget_NormalsSwap>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x46B, 0x46E, 0x5C3));
 		stl::write_thunk_call<CreateRenderTarget_Snow>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x406, 0x409, 0x55e));

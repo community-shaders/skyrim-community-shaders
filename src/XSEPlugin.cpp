@@ -1,4 +1,3 @@
-
 #include "DX12SwapChain.h"
 #include "Deferred.h"
 #include "FrameAnnotations.h"
@@ -9,6 +8,7 @@
 #include "State.h"
 #include "TruePBR.h"
 #include "Upscaling.h"
+#include "HDR.h"
 
 #include "ENB/ENBSeriesAPI.h"
 
@@ -42,18 +42,18 @@ void InitializeLog([[maybe_unused]] spdlog::level::level_enum a_level = spdlog::
 	log->set_level(level);
 	log->flush_on(spdlog::level::info);
 
-	spdlog::set_default_logger(std::move(log));
+	set_default_logger(std::move(log));
 	spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%l] [%t] [%s:%#] %v");
 }
 
 extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_skse)
 {
 #ifndef NDEBUG
-	while (!REX::W32::IsDebuggerPresent()) {};
+	while (!REX::W32::IsDebuggerPresent()) {}
 #endif
 	InitializeLog();
 	logger::info("Loaded {} {}", Plugin::NAME, Plugin::VERSION.string());
-	SKSE::Init(a_skse);
+	Init(a_skse);
 	return Load();
 }
 
@@ -78,68 +78,69 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 {
 	switch (message->type) {
 	case SKSE::MessagingInterface::kPostPostLoad:
-		{
-			if (errors.empty()) {
-				auto state = globals::state;
-				state->PostPostLoad();  // state should load first so basic information is populated
-				Deferred::Hooks::Install();
-				globals::truePBR->PostPostLoad();
-				Upscaling::InstallHooks();
-				Hooks::Install();
-				FrameAnnotations::OnPostPostLoad();
+	{
+		if (errors.empty()) {
+			auto state = globals::state;
+			state->PostPostLoad(); // state should load first so basic information is populated
+			Deferred::Hooks::Install();
+			globals::truePBR->PostPostLoad();
+			Upscaling::InstallHooks();
+			HDR::InstallHooks();
+			Hooks::Install();
+			FrameAnnotations::OnPostPostLoad();
 
-				auto shaderCache = globals::shaderCache;
+			auto shaderCache = globals::shaderCache;
 
-				shaderCache->ValidateDiskCache();
+			shaderCache->ValidateDiskCache();
 
-				if (shaderCache->UseFileWatcher())
-					shaderCache->StartFileWatcher();
+			if (shaderCache->UseFileWatcher())
+				shaderCache->StartFileWatcher();
 
-				for (auto* feature : Feature::GetFeatureList()) {
-					if (feature->loaded) {
-						feature->PostPostLoad();
-					}
+			for (auto* feature : Feature::GetFeatureList()) {
+				if (feature->loaded) {
+					feature->PostPostLoad();
 				}
 			}
-
-			break;
 		}
+
+		break;
+	}
 	case SKSE::MessagingInterface::kDataLoaded:
-		{
-			for (auto it = errors.begin(); it != errors.end(); ++it) {
-				auto& errorMessage = *it;
-				RE::DebugMessageBox(std::format("Community Shaders\n{}, will disable all hooks and features", errorMessage).c_str());
-			}
-
-			if (errors.empty()) {
-				globals::OnDataLoaded();
-				FrameAnnotations::OnDataLoaded();
-
-				auto shaderCache = globals::shaderCache;
-				shaderCache->menuLoaded = true;
-				while (shaderCache->IsCompiling() && !shaderCache->backgroundCompilation) {
-					std::this_thread::sleep_for(100ms);
-				}
-
-				if (shaderCache->IsDiskCache()) {
-					shaderCache->WriteDiskCacheInfo();
-				}
-
-				if (!REL::Module::IsVR()) {
-					RE::GetINISetting("bEnableImprovedSnow:Display")->data.b = false;
-					RE::GetINISetting("bIBLFEnable:Display")->data.b = false;
-				}
-
-				globals::truePBR->DataLoaded();
-				for (auto* feature : Feature::GetFeatureList()) {
-					if (feature->loaded) {
-						feature->DataLoaded();
-					}
-				}
-			}
-
-			break;
+	{
+		for (auto it = errors.begin(); it != errors.end(); ++it) {
+			auto& errorMessage = *it;
+			RE::DebugMessageBox(std::format("Community Shaders\n{}, will disable all hooks and features", errorMessage).c_str());
 		}
+
+		if (errors.empty()) {
+			globals::OnDataLoaded();
+			FrameAnnotations::OnDataLoaded();
+
+			auto shaderCache = globals::shaderCache;
+			shaderCache->menuLoaded = true;
+			while (shaderCache->IsCompiling() && !shaderCache->backgroundCompilation) {
+				std::this_thread::sleep_for(100ms);
+			}
+
+			if (shaderCache->IsDiskCache()) {
+				shaderCache->WriteDiskCacheInfo();
+			}
+
+			if (!REL::Module::IsVR()) {
+				RE::GetINISetting("bEnableImprovedSnow:Display")->data.b = false;
+				RE::GetINISetting("bIBLFEnable:Display")->data.b = false;
+			}
+
+			globals::truePBR->DataLoaded();
+			for (auto* feature : Feature::GetFeatureList()) {
+				if (feature->loaded) {
+					feature->DataLoaded();
+				}
+			}
+		}
+
+		break;
+	}
 	}
 }
 

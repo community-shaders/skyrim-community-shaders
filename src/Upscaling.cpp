@@ -3,6 +3,8 @@
 #include "DX12SwapChain.h"
 #include "Hooks.h"
 #include "State.h"
+#include "HDR.h"
+
 #include <reshade/reshade.hpp>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -454,7 +456,11 @@ void Upscaling::CreateUpscalingResources()
 
 	texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
-	texDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+	if (globals::hdr->settings.enabled) {
+		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	} else {
+		texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	}
 	srvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
 
@@ -506,8 +512,11 @@ void Upscaling::CreateFrameGenerationResources()
 
 	texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
-	// Change this to HDR format to match the swap chain
-	texDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM; // Was DXGI_FORMAT_R8G8B8A8_UNORM
+	if (globals::hdr->settings.enabled) {
+		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	} else {
+		texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	}
 	srvDesc.Format = texDesc.Format;
 	rtvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;

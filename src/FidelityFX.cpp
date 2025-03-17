@@ -4,6 +4,8 @@
 #include "Upscaling.h"
 
 #include "DX12SwapChain.h"
+#include "HDR.h"
+
 #include <dx12/ffx_api_dx12.hpp>
 
 ffxFunctions ffxModule;
@@ -41,8 +43,13 @@ void FidelityFX::SetupFrameGeneration()
 	ffx::CreateContextDescFrameGeneration createFg{};
 	createFg.displaySize = { swapChain->swapChainDesc.Width, swapChain->swapChainDesc.Height };
 	createFg.maxRenderSize = createFg.displaySize;
-	createFg.flags = FFX_FRAMEGENERATION_ENABLE_ASYNC_WORKLOAD_SUPPORT;
-	createFg.backBufferFormat = FFX_API_SURFACE_FORMAT_R10G10B10A2_UNORM;
+	if (globals::hdr->settings.enabled) {
+		createFg.flags = FFX_FRAMEGENERATION_ENABLE_ASYNC_WORKLOAD_SUPPORT | FFX_FRAMEGENERATION_ENABLE_HIGH_DYNAMIC_RANGE;
+		createFg.backBufferFormat = FFX_API_SURFACE_FORMAT_R16G16B16A16_FLOAT;
+	} else {
+		createFg.flags = FFX_FRAMEGENERATION_ENABLE_ASYNC_WORKLOAD_SUPPORT;
+		createFg.backBufferFormat = FFX_API_SURFACE_FORMAT_R8G8B8A8_UNORM;
+	}
 
 	ffx::CreateBackendDX12Desc createBackend{};
 	createBackend.device = swapChain->d3d12Device.get();
@@ -174,8 +181,13 @@ void FidelityFX::CreateFSRResources()
 	contextDescription.maxUpscaleSize.height = static_cast<uint>(state->screenSize.y);
 	contextDescription.displaySize.width = static_cast<uint>(state->screenSize.x);
 	contextDescription.displaySize.height = static_cast<uint>(state->screenSize.y);
-	contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE;
-	contextDescription.backBufferFormat = FFX_SURFACE_FORMAT_R10G10B10A2_UNORM;
+	if (globals::hdr->settings.enabled) {
+		contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE | FFX_FSR3_ENABLE_HIGH_DYNAMIC_RANGE;
+		contextDescription.backBufferFormat = FFX_SURFACE_FORMAT_R16G16B16A16_FLOAT;
+	} else {
+		contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE;
+		contextDescription.backBufferFormat = FFX_SURFACE_FORMAT_R8G8B8A8_UNORM;
+	}
 
 	contextDescription.backendInterfaceUpscaling = fsrInterface;
 

@@ -484,9 +484,6 @@ void State::ModifyRenderTarget(RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::B
 {
 	a_properties->supportUnorderedAccess = true;
 	logger::debug("Adding UAV access to {}", magic_enum::enum_name(a_target));
-	if (a_target == RE::RENDER_TARGETS::kMAIN || a_target == RE::RENDER_TARGETS::kFRAMEBUFFER) {
-		a_properties->format = RE::BSGraphics::Format::kR10G10B10A2_UNORM;
-	}
 }
 
 void State::SetupResources()

@@ -35,7 +35,7 @@ public:
 	uint32_t currentPixelDescriptor = 0;
 	spdlog::level::level_enum logLevel = spdlog::level::info;
 	std::string shaderDefinesString = "";
-	std::vector<std::pair<std::string, std::string>> shaderDefines{};  // data structure to parse string into; needed to avoid dangling pointers
+	std::vector<std::pair<std::string, std::string>> shaderDefines{}; // data structure to parse string into; needed to avoid dangling pointers
 	const std::string folderPath = "Data\\SKSE\\Plugins\\CommunityShaders";
 	const std::string testConfigPath = "Data\\SKSE\\Plugins\\CommunityShaders\\SettingsTest.json";
 	const std::string userConfigPath = "Data\\SKSE\\Plugins\\CommunityShaders\\SettingsUser.json";
@@ -56,8 +56,8 @@ public:
 	void Reset();
 	void Setup();
 
-	void Load(ConfigMode a_configMode = ConfigMode::USER, bool a_allowReload = true);
-	void Save(ConfigMode a_configMode = ConfigMode::USER);
+	void Load(ConfigMode a_configMode = USER, bool a_allowReload = true);
+	void Save(ConfigMode a_configMode = USER);
 	void PostPostLoad();
 
 	bool ValidateCache(CSimpleIniA& a_ini);
@@ -75,7 +75,7 @@ public:
      * @param a_type The type of shader to check
      * @return Whether the shader has been enabled.
      */
-	bool ShaderEnabled(const RE::BSShader::Type a_type);
+	bool ShaderEnabled(RE::BSShader::Type a_type);
 
 	/*
      * Whether a_shader is currently enabled in Community Shaders
@@ -160,6 +160,7 @@ public:
 		uint HideSky;
 		float MipBias;
 		float pad0;
+		float4 HDRData;
 	};
 
 	ConstantBuffer* sharedDataCB = nullptr;
@@ -172,7 +173,7 @@ public:
 	float2 screenSize = {};
 	D3D_FEATURE_LEVEL featureLevel;
 
-	TracyD3D11Ctx tracyCtx = nullptr;  // Tracy context
+	TracyD3D11Ctx tracyCtx = nullptr; // Tracy context
 
 	void ClearDisabledFeatures();
 	bool SetFeatureDisabled(const std::string& featureName, bool isDisabled);
@@ -195,7 +196,7 @@ public:
 	};
 	std::unordered_map<std::string, bool> disabledFeatures;
 
-	inline ~State()
+	~State()
 	{
 #ifdef TRACY_ENABLE
 		if (tracyCtx)

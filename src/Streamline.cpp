@@ -10,6 +10,7 @@
 #include "DX12SwapChain.h"
 #include "Deferred.h"
 #include "Upscaling.h"
+#include "HDR.h"
 
 void LoggingCallback(sl::LogType type, const char* msg)
 {
@@ -35,9 +36,8 @@ void Streamline::LoadInterposer()
 		DWORD errorCode = GetLastError();
 		logger::info("[Streamline] Failed to load interposer: Error Code {0:x}", errorCode);
 		return;
-	} else {
-		logger::info("[Streamline] Interposer loaded at address: {0:p}", static_cast<void*>(interposer));
 	}
+	logger::info("[Streamline] Interposer loaded at address: {0:p}", static_cast<void*>(interposer));
 
 	logger::info("[Streamline] Initializing Streamline");
 
@@ -255,9 +255,13 @@ void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl
 	{
 		sl::DLSSOptions dlssOptions{};
 		dlssOptions.mode = sl::DLSSMode::eMaxQuality;
-		dlssOptions.outputWidth = (uint)state->screenSize.x;
-		dlssOptions.outputHeight = (uint)state->screenSize.y;
-		dlssOptions.colorBuffersHDR = sl::Boolean::eFalse;
+		dlssOptions.outputWidth = static_cast<uint>(state->screenSize.x);
+		dlssOptions.outputHeight = static_cast<uint>(state->screenSize.y);
+		if (globals::hdr->settings.enabled) {
+			dlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
+		} else {
+			dlssOptions.colorBuffersHDR = sl::Boolean::eFalse;
+		}
 		dlssOptions.preExposure = 1.0f;
 		dlssOptions.sharpness = 0.0f;
 
@@ -273,22 +277,22 @@ void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl
 	}
 
 	{
-		sl::Extent fullExtent{ 0, 0, (uint)state->screenSize.x, (uint)state->screenSize.y };
+		sl::Extent fullExtent{ 0, 0, static_cast<uint>(state->screenSize.x), static_cast<uint>(state->screenSize.y) };
 
 		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_upscaleTexture->resource.get(), 0 };
 		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_upscaleTexture->resource.get(), 0 };
 		sl::Resource depth = { sl::ResourceType::eTex2d, depthTexture.texture, 0 };
 		sl::Resource mvec = { sl::ResourceType::eTex2d, motionVectorsTexture.texture, 0 };
 
-		sl::ResourceTag colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
-		sl::ResourceTag colorOutTag = sl::ResourceTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
-		sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
-		sl::ResourceTag mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
+		auto colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
+		auto colorOutTag = sl::ResourceTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
+		auto depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
+		auto mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
 
 		bool needsMask = a_preset != sl::DLSSPreset::ePresetA && a_preset != sl::DLSSPreset::ePresetB;
 
 		sl::Resource alpha = { sl::ResourceType::eTex2d, needsMask ? a_alphaMask->resource.get() : nullptr, 0 };
-		sl::ResourceTag alphaTag = sl::ResourceTag{ &alpha, sl::kBufferTypeBiasCurrentColorHint, sl::ResourceLifecycle::eValidUntilPresent, &fullExtent };
+		auto alphaTag = sl::ResourceTag{ &alpha, sl::kBufferTypeBiasCurrentColorHint, sl::ResourceLifecycle::eValidUntilPresent, &fullExtent };
 
 		sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag, depthTag, mvecTag, alphaTag };
 		slSetTag(viewport, resourceTags, _countof(resourceTags), globals::d3d::context);
@@ -333,22 +337,22 @@ void Streamline::Present()
 	slReflexSetMarker(sl::ReflexMarker::ePresentStart, *frameToken);
 	slReflexSetMarker(sl::ReflexMarker::ePresentEnd, *frameToken);
 
-	sl::Extent fullExtent{ 0, 0, (uint)state->screenSize.x, (uint)state->screenSize.y };
+	sl::Extent fullExtent{ 0, 0, static_cast<uint>(state->screenSize.x), static_cast<uint>(state->screenSize.y) };
 
 	float2 dynamicScreenSize = Util::ConvertToDynamic(state->screenSize);
-	sl::Extent dynamicExtent{ 0, 0, (uint)dynamicScreenSize.x, (uint)dynamicScreenSize.y };
+	sl::Extent dynamicExtent{ 0, 0, static_cast<uint>(dynamicScreenSize.x), static_cast<uint>(dynamicScreenSize.y) };
 
 	sl::Resource depth = { sl::ResourceType::eTex2d, upscaling->depthBufferShared->resource.get(), 0 };
-	sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &dynamicExtent };
+	auto depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &dynamicExtent };
 
 	sl::Resource mvec = { sl::ResourceType::eTex2d, upscaling->motionVectorBufferShared->resource.get(), 0 };
-	sl::ResourceTag mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &dynamicExtent };
+	auto mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &dynamicExtent };
 
 	sl::Resource hudLess = { sl::ResourceType::eTex2d, upscaling->HUDLessBufferShared->resource.get(), 0 };
-	sl::ResourceTag hudLessTag = sl::ResourceTag{ &hudLess, sl::kBufferTypeHUDLessColor, sl::ResourceLifecycle::eValidUntilPresent, &fullExtent };
+	auto hudLessTag = sl::ResourceTag{ &hudLess, sl::kBufferTypeHUDLessColor, sl::ResourceLifecycle::eValidUntilPresent, &fullExtent };
 
 	sl::Resource ui = { sl::ResourceType::eTex2d, nullptr, 0 };
-	sl::ResourceTag uiTag = sl::ResourceTag{ &ui, sl::kBufferTypeUIColorAndAlpha, sl::ResourceLifecycle::eValidUntilPresent, &fullExtent };
+	auto uiTag = sl::ResourceTag{ &ui, sl::kBufferTypeUIColorAndAlpha, sl::ResourceLifecycle::eValidUntilPresent, &fullExtent };
 
 	sl::ResourceTag inputs[] = { depthTag, mvecTag, hudLessTag, uiTag };
 	slSetTag(viewport, inputs, _countof(inputs), globals::d3d::context);
@@ -387,7 +391,7 @@ void Streamline::ID3D11DeviceContext_Unmap::thunk(ID3D11DeviceContext* This, ID3
 
 void Streamline::CacheFramebuffer()
 {
-	auto frameBuffer = (FrameBuffer*)mappedFrameBuffer->pData;
+	auto frameBuffer = static_cast<FrameBuffer*>(mappedFrameBuffer->pData);
 	frameBufferCached = *frameBuffer;
 	mappedFrameBuffer = nullptr;
 }
