@@ -38,7 +38,7 @@ struct ScreenSpaceGI : Feature
 
 	bool recompileFlag = false;
 	uint outputAoIdx = 0;
-	uint outputIlIdx = 0;
+	uint outputGiIdx = 0;
 
 	struct Settings
 	{
@@ -122,8 +122,7 @@ struct ScreenSpaceGI : Feature
 	eastl::unique_ptr<Texture2D> texRadiance = nullptr;
 	eastl::unique_ptr<Texture2D> texAccumFrames[2] = { nullptr };
 	eastl::unique_ptr<Texture2D> texAo[2] = { nullptr };
-	eastl::unique_ptr<Texture2D> texIlY[2] = { nullptr };
-	eastl::unique_ptr<Texture2D> texIlCoCg[2] = { nullptr };
+	eastl::unique_ptr<Texture2D> texGi[2] = { nullptr };
 	eastl::unique_ptr<Texture2D> texGiSpecular[2] = { nullptr };
 
 	inline auto GetOutputTextures()
@@ -131,10 +130,9 @@ struct ScreenSpaceGI : Feature
 		return (loaded && settings.Enabled) ?
 		           std::make_tuple(
 					   texAo[outputAoIdx]->srv.get(),
-					   texIlY[outputIlIdx]->srv.get(),
-					   texIlCoCg[outputIlIdx]->srv.get(),
+					   texGi[outputGiIdx]->srv.get(),
 					   texGiSpecular[outputAoIdx]->srv.get()) :
-		           std::make_tuple(nullptr, nullptr, nullptr, nullptr);
+		           std::make_tuple(nullptr, nullptr, nullptr);
 	}
 
 	winrt::com_ptr<ID3D11SamplerState> linearClampSampler = nullptr;

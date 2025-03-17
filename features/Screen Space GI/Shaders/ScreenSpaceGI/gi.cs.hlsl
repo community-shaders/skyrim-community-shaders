@@ -42,15 +42,13 @@ Texture2D<float3> srcRadiance : register(t2);  // maybe half-res
 Texture2D<unorm float2> srcNoise : register(t3);
 Texture2D<unorm float> srcAccumFrames : register(t4);  // maybe half-res
 Texture2D<float> srcPrevAo : register(t5);             // maybe half-res
-Texture2D<float4> srcPrevY : register(t6);             // maybe half-res
-Texture2D<float2> srcPrevCoCg : register(t7);          // maybe half-res
-Texture2D<float4> srcPrevGISpecular : register(t8);    // maybe half-res
+Texture2D<float3> srcPrevGI : register(t6);             // maybe half-res
+Texture2D<float4> srcPrevGISpecular : register(t7);    // maybe half-res
 
 RWTexture2D<unorm float> outAo : register(u0);
-RWTexture2D<float4> outY : register(u1);
-RWTexture2D<float2> outCoCg : register(u2);
-RWTexture2D<float4> outGISpecular : register(u3);
-RWTexture2D<half3> outPrevGeo : register(u4);
+RWTexture2D<float3> outGI : register(u1);
+RWTexture2D<float4> outGISpecular : register(u2);
+RWTexture2D<half3> outPrevGeo : register(u3);
 
 float GetDepthFade(float depth)
 {
@@ -87,7 +85,7 @@ float GetVisibilityFunctionSmithJointApprox(float roughness, float NdotV, float 
 
 void CalculateGI(
 	uint2 dtid, float2 uv, float viewspaceZ, float3 viewspaceNormal,
-	out float o_ao, out sh2 o_currY, out float2 o_currCoCg, out float4 o_currGIAOSpecular)
+	out float o_ao, out float3 o_currGI, out float4 o_currGIAOSpecular)
 {
 	const float2 frameScale = FrameDim * RcpTexDim;
 
@@ -127,8 +125,7 @@ void CalculateGI(
 
 	float visibility = 0;
 	float visibilitySpecular = 0;
-	float4 radianceY = 0;
-	float2 radianceCoCg = 0;
+	float3 radiance = 0;
 	float3 radianceSpecular = 0;
 
 #ifdef GI_SPECULAR
@@ -239,7 +236,7 @@ void CalculateGI(
 #	endif
 
 				if (checkGI) {
-					float giBoost = 4.0 * Math::PI * (1 + GIDistanceCompensation * smoothstep(0, GICompensationMaxDist, s * EffectRadius));
+					float giBoost = (1 + GIDistanceCompensation * smoothstep(0, GICompensationMaxDist, s * EffectRadius));
 
 					// IL
 					float3 normalSample = GBuffer::DecodeNormal(srcNormalRoughness.SampleLevel(samplerPointClamp, sampleUV * frameScale, 0).xy);
@@ -253,10 +250,8 @@ void CalculateGI(
 
 						float3 sampleRadiance = srcRadiance.SampleLevel(samplerPointClamp, sampleUV * OUT_FRAME_SCALE, mipLevel).rgb * frontBackMult * giBoost * countbits(validBits) * 0.03125;
 						sampleRadiance = max(sampleRadiance, 0);
-						float3 sampleRadianceYCoCg = Color::RGBToYCoCg(sampleRadiance);
 
-						radianceY += sampleRadianceYCoCg.r * SphericalHarmonics::Evaluate(sampleHorizonVecWS);
-						radianceCoCg += sampleRadianceYCoCg.gb;
+						radiance += sampleRadiance * 10.0;
 
 #	ifdef GI_SPECULAR
 						// thank u Olivier!
@@ -294,10 +289,10 @@ void CalculateGI(
 	visibility = 1 - pow(abs(1 - visibility), AOPower);
 
 #ifdef GI
-	radianceY *= rcpNumSlices;
-	radianceY = lerp(radianceY, 0, depthFade);
-
-	radianceCoCg *= rcpNumSlices * GISaturation;
+	
+	radiance *= rcpNumSlices;
+	radiance *= GIStrength;
+	radiance = lerp(radiance, 0, depthFade);
 
 #	ifdef GI_SPECULAR
 	radianceSpecular *= rcpNumSlices;
@@ -309,8 +304,7 @@ void CalculateGI(
 #endif
 
 	o_ao = visibility;
-	o_currY = radianceY;
-	o_currCoCg = radianceCoCg;
+	o_currGI = radiance;
 	o_currGIAOSpecular = float4(radianceSpecular, visibilitySpecular);
 }
 
@@ -335,33 +329,25 @@ void CalculateGI(
 	viewspaceZ *= 0.99920h;  // this is good for FP16 depth buffer
 
 	float currAo = 0;
-	float4 currY = 0;
-	float2 currCoCg = 0;
+	float3 currGI = 0;
 	float4 currGIAOSpecular = float4(0, 0, 0, 0);
 
 	bool needGI = viewspaceZ > FP_Z && viewspaceZ < DepthFadeRange.y;
 	if (needGI) {
 		CalculateGI(
 			pxCoord, uv, viewspaceZ, viewspaceNormal,
-			currAo, currY, currCoCg, currGIAOSpecular);
-
+			currAo, currGI, currGIAOSpecular);
 #ifdef TEMPORAL_DENOISER
 		float lerpFactor = rcp(srcAccumFrames[pxCoord] * 255);
-
-		currY = lerp(srcPrevY[pxCoord], currY, lerpFactor);
-		currCoCg = lerp(srcPrevCoCg[pxCoord], currCoCg, lerpFactor);
+		currGI = lerp(srcPrevGI[pxCoord], currGI, lerpFactor);
 #	ifdef GI_SPECULAR
 		currGIAOSpecular = lerp(srcPrevGISpecular[pxCoord], currGIAOSpecular, lerpFactor);
 #	endif
 #endif
 	}
-	currY = filterNaN(currY);
-	currCoCg = filterNaN(currCoCg);
 	currGIAOSpecular = filterNaN(currGIAOSpecular);
-
 	outAo[pxCoord] = currAo;
-	outY[pxCoord] = currY;
-	outCoCg[pxCoord] = currCoCg;
+	outGI[pxCoord] = currGI;
 #ifdef GI_SPECULAR
 	outGISpecular[pxCoord] = currGIAOSpecular;
 #endif

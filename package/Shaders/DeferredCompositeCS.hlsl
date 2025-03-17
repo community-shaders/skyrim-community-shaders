@@ -35,9 +35,8 @@ Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t9);
 
 #if defined(SSGI)
 Texture2D<float4> SsgiAoTexture : register(t10);
-Texture2D<float4> SsgiYTexture : register(t11);
-Texture2D<float4> SsgiCoCgTexture : register(t12);
-Texture2D<float4> SsgiSpecularTexture : register(t13);
+Texture2D<float4> SsgiGiTexture : register(t11);
+Texture2D<float4> SsgiSpecularTexture : register(t12);
 
 void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, in float3 normal, in float3 view)
 {
@@ -47,18 +46,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	float NdotV = dot(normal, view);
 	float s = saturate(-0.3 + NdotV * NdotV);
 	ao = lerp(pow(ao, SpecularPow), 1.0, s);
-
-	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
-	float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, lobe);
-	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord];
-	// specular is a bit too saturated, because CoCg are average over hemisphere
-	// we just cheese this bit
-	ssgiIlCoCg *= 0.8;
-
-	// pi to compensate for the /pi in specularLobe
-	// i don't think there really should be a 1/PI but without it the specular is too strong
-	// reflectance being ambient reflectance doesn't help either
-	il = max(0, Color::YCoCgToRGB(float3(ssgiIlY, ssgiIlCoCg / Math::PI)));
+	il = SsgiGiTexture[pixCoord];
 
 	// HQ spec
 	float4 hq_spec = SsgiSpecularTexture[pixCoord];

@@ -394,7 +394,7 @@ void Deferred::DeferredPasses()
 	auto ssgi = globals::features::screenSpaceGI;
 	if (ssgi->loaded)
 		ssgi->DrawSSGI(prevDiffuseAmbientTexture);
-	auto [ssgi_ao, ssgi_y, ssgi_cocg, ssgi_gi_spec] = ssgi->GetOutputTextures();
+	auto [ssgi_ao, ssgi_gi, ssgi_gi_spec] = ssgi->GetOutputTextures();
 	bool ssgi_hq_spec = ssgi->settings.EnableExperimentalSpecularGI;
 
 	auto dispatchCount = Util::GetScreenDispatchCount();
@@ -411,8 +411,7 @@ void Deferred::DeferredPasses()
 				skylighting->loaded ? skylighting->texProbeArray->srv.get() : nullptr,
 				skylighting->loaded ? skylighting->stbn_vec3_2Dx1D_128x128x64.get() : nullptr,
 				ssgi_ao,
-				ssgi_y,
-				ssgi_cocg,
+				ssgi_gi
 			};
 
 			context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
@@ -464,8 +463,7 @@ void Deferred::DeferredPasses()
 			dynamicCubemaps->loaded && skylighting->loaded ? skylighting->texProbeArray->srv.get() : nullptr,
 			dynamicCubemaps->loaded && skylighting->loaded ? skylighting->stbn_vec3_2Dx1D_128x128x64.get() : nullptr,
 			ssgi_ao,
-			ssgi_hq_spec ? nullptr : ssgi_y,
-			ssgi_hq_spec ? nullptr : ssgi_cocg,
+			ssgi_hq_spec ? nullptr : ssgi_gi,
 			ssgi_hq_spec ? ssgi_gi_spec : nullptr,
 		};
 

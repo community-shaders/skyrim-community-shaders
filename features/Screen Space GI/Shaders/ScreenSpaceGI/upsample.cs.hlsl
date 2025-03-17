@@ -5,13 +5,11 @@
 
 Texture2D<half> srcDepth : register(t0);
 Texture2D<half> srcAo : register(t1);           // half-res
-Texture2D<half4> srcIlY : register(t2);         // half-res
-Texture2D<half2> srcIlCoCg : register(t3);      // half-res
-Texture2D<half4> srcGiSpecular : register(t4);  // half-res
+Texture2D<half3> srcGI: register(t2);         // half-res
+Texture2D<half4> srcGiSpecular : register(t3);  // half-res
 
 RWTexture2D<half> outAo : register(u0);
-RWTexture2D<half4> outIlY : register(u1);
-RWTexture2D<half2> outIlCoCg : register(u2);
+RWTexture2D<half3> outGI : register(u1);
 RWTexture2D<half4> outGiSpecular : register(u3);
 
 #define min4(v) min(min(v.x, v.y), min(v.z, v.w))
@@ -44,35 +42,31 @@ RWTexture2D<half4> outGiSpecular : register(u3);
 	bool d_edge = (diffd / avg) < 0.1;
 
 	float ao;
-	float4 y;
-	float2 coCg;
+	float3 gi;
 	float4 giSpecular;
 
 	[branch] if (d_edge)
 	{
 		float bgdepth = srcDepth[dtid];
 
-		//note: depth weighing from https://www.ppsloan.org/publications/ProxyPG.pdf#page=5
+		//note: depth weighting from https://www.ppsloan.org/publications/ProxyPG.pdf#page=5
 		float4 dd = abs(d - bgdepth);
 		float4 w = 1.0 / (dd + 0.00001);
 		float sumw = w.x + w.y + w.z + w.w;
 
 		ao = BLEND_WEIGHT(srcAo[px00], srcAo[px01], srcAo[px10], srcAo[px11], w, sumw);
-		y = BLEND_WEIGHT(srcIlY[px00], srcIlY[px01], srcIlY[px10], srcIlY[px11], w, sumw);
-		coCg = BLEND_WEIGHT(srcIlCoCg[px00], srcIlCoCg[px01], srcIlCoCg[px10], srcIlCoCg[px11], w, sumw);
+		gi = BLEND_WEIGHT(srcGI[px00], srcGI[px01], srcGI[px10], srcGI[px11], w, sumw);
 		giSpecular = BLEND_WEIGHT(srcGiSpecular[px00], srcGiSpecular[px01], srcGiSpecular[px10], srcGiSpecular[px11], w, sumw);
 	}
 	else
 	{
 		float2 uv = (dtid + .5) * RcpFrameDim * OUT_FRAME_DIM * RcpTexDim;
 		ao = srcAo.SampleLevel(samplerLinearClamp, uv, 0);
-		y = srcIlY.SampleLevel(samplerLinearClamp, uv, 0);
-		coCg = srcIlCoCg.SampleLevel(samplerLinearClamp, uv, 0);
+		gi = srcGI.SampleLevel(samplerLinearClamp, uv, 0);
 		giSpecular = srcGiSpecular.SampleLevel(samplerLinearClamp, uv, 0);
 	}
 
 	outAo[dtid] = ao;
-	outIlY[dtid] = y;
-	outIlCoCg[dtid] = coCg;
+	outGI[dtid] = gi;
 	outGiSpecular[dtid] = giSpecular;
 }

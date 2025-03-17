@@ -12,16 +12,14 @@ Texture2D<float4> srcMotionVec : register(t4);
 Texture2D<half3> srcPrevAmbient : register(t5);
 Texture2D<unorm float> srcAccumFrames : register(t6);  // maybe half-res
 Texture2D<half> srcPrevAo : register(t7);              // maybe half-res
-Texture2D<half4> srcPrevIlY : register(t8);            // maybe half-res
-Texture2D<half2> srcPrevIlCoCg : register(t9);         // maybe half-res
-Texture2D<half4> srcPrevGISpecular : register(t10);    // maybe half-res
+Texture2D<half3> srcPrevGI : register(t8);            // maybe half-res
+Texture2D<half4> srcPrevGISpecular : register(t9);    // maybe half-res
 
 RWTexture2D<float3> outRadianceDisocc : register(u0);
 RWTexture2D<unorm float> outAccumFrames : register(u1);
 RWTexture2D<float> outRemappedAo : register(u2);
-RWTexture2D<float4> outRemappedIlY : register(u3);
-RWTexture2D<float2> outRemappedIlCoCg : register(u4);
-RWTexture2D<float4> outRemappedPrevGISpecular : register(u5);
+RWTexture2D<float3> outRemappedGI : register(u3);
+RWTexture2D<float4> outRemappedPrevGISpecular : register(u4);
 
 #if (defined(GI) && defined(GI_BOUNCE)) || defined(TEMPORAL_DENOISER) || defined(HALF_RATE)
 #	define REPROJECTION
@@ -29,7 +27,7 @@ RWTexture2D<float4> outRemappedPrevGISpecular : register(u5);
 
 void readHistory(
 	uint eyeIndex, float curr_depth, float3 curr_pos, int2 pixCoord, float bilinear_weight,
-	inout half prev_ao, inout half4 prev_y, inout half2 prev_co_cg, inout half3 prev_ambient, inout float accum_frames, inout half4 prev_gi_specular, inout float wsum)
+	inout half prev_ao, inout half3 prev_gi, inout half3 prev_ambient, inout float accum_frames, inout half4 prev_gi_specular, inout float wsum)
 {
 	const float2 uv = (pixCoord + .5) * RCP_OUT_FRAME_DIM;
 	const float2 screen_pos = Stereo::ConvertFromStereoUV(uv, eyeIndex);
@@ -55,8 +53,7 @@ void readHistory(
 #endif
 #ifdef TEMPORAL_DENOISER
 		prev_ao += srcPrevAo[pixCoord] * bilinear_weight;
-		prev_y += srcPrevIlY[pixCoord] * bilinear_weight;
-		prev_co_cg += srcPrevIlCoCg[pixCoord] * bilinear_weight;
+		prev_gi += srcPrevGI[pixCoord] * bilinear_weight;
 		accum_frames += srcAccumFrames[pixCoord] * bilinear_weight;
 #	ifdef GI_SPECULAR
 		prev_gi_specular += srcPrevGISpecular[pixCoord] * bilinear_weight;
@@ -82,8 +79,7 @@ void readHistory(
 
 	half3 prev_ambient = 0;
 	half prev_ao = 0;
-	half4 prev_y = 0;
-	half2 prev_co_cg = 0;
+	half3 prev_gi = 0;
 	half4 prev_gi_specular = 0;
 	float accum_frames = 0;
 	float wsum = 0;
@@ -93,10 +89,12 @@ void readHistory(
 	if (curr_depth < FP_Z) {
 		outRadianceDisocc[pixCoord] = half3(0, 0, 0);
 		outAccumFrames[pixCoord] = 1.0 / 255.0;
-		outRemappedIlY[pixCoord] = half4(0, 0, 0, 0);
-		outRemappedIlCoCg[pixCoord] = half2(0, 0);
+		outRemappedGI[pixCoord] = half3(0, 0, 0);
 		return;
 	}
+
+	half3 radiance = 0;
+	bool useCurrentRadiance = true;
 
 #ifdef REPROJECTION
 	if ((curr_depth <= DepthFadeRange.y) && !(any(prev_screen_pos < 0) || any(prev_screen_pos > 1))) {
@@ -111,23 +109,22 @@ void readHistory(
 
 		readHistory(eyeIndex, curr_depth, curr_pos,
 			prev_px_lu, (1 - bilinear_weights.x) * (1 - bilinear_weights.y),
-			prev_ao, prev_y, prev_co_cg, prev_ambient, accum_frames, prev_gi_specular, wsum);
+			prev_ao, prev_gi, prev_ambient, accum_frames, prev_gi_specular, wsum);
 		readHistory(eyeIndex, curr_depth, curr_pos,
 			prev_px_lu + int2(1, 0), bilinear_weights.x * (1 - bilinear_weights.y),
-			prev_ao, prev_y, prev_co_cg, prev_ambient, accum_frames, prev_gi_specular, wsum);
+			prev_ao, prev_gi, prev_ambient, accum_frames, prev_gi_specular, wsum);
 		readHistory(eyeIndex, curr_depth, curr_pos,
 			prev_px_lu + int2(0, 1), (1 - bilinear_weights.x) * bilinear_weights.y,
-			prev_ao, prev_y, prev_co_cg, prev_ambient, accum_frames, prev_gi_specular, wsum);
+			prev_ao, prev_gi, prev_ambient, accum_frames, prev_gi_specular, wsum);
 		readHistory(eyeIndex, curr_depth, curr_pos,
 			prev_px_lu + int2(1, 1), bilinear_weights.x * bilinear_weights.y,
-			prev_ao, prev_y, prev_co_cg, prev_ambient, accum_frames, prev_gi_specular, wsum);
+			prev_ao, prev_gi, prev_ambient, accum_frames, prev_gi_specular, wsum);
 
 		if (wsum > 1e-2) {
 			float rcpWsum = rcp(wsum + 1e-10);
 #	ifdef TEMPORAL_DENOISER
 			prev_ao *= rcpWsum;
-			prev_y *= rcpWsum;
-			prev_co_cg *= rcpWsum;
+			prev_gi *= rcpWsum;
 			accum_frames *= rcpWsum;
 #		ifdef GI_SPECULAR
 			prev_gi_specular *= rcpWsum;
@@ -135,17 +132,17 @@ void readHistory(
 #	endif
 #	if defined(GI) && defined(GI_BOUNCE)
 			prev_ambient *= rcpWsum;
+			radiance = prev_ambient;
+			radiance = lerp(Color::GammaToLinear(FULLRES_LOAD(srcDiffuse, pixCoord, uv * frameScale, samplerLinearClamp).rgb * GIStrength), radiance, GIBounceFade);
+			useCurrentRadiance = false;
 #	endif
 		}
-	}
+	} 
 #endif
 
-	half3 radiance = 0;
 #ifdef GI
-	radiance = Color::GammaToLinear(FULLRES_LOAD(srcDiffuse, pixCoord, uv * frameScale, samplerLinearClamp).rgb * GIStrength);
-#	ifdef GI_BOUNCE
-	radiance += prev_ambient.rgb * GIBounceFade;
-#	endif
+	if (useCurrentRadiance)
+		radiance = Color::GammaToLinear(FULLRES_LOAD(srcDiffuse, pixCoord, uv * frameScale, samplerLinearClamp).rgb * GIStrength);
 	outRadianceDisocc[pixCoord] = radiance;
 #endif
 
@@ -153,8 +150,7 @@ void readHistory(
 	accum_frames = max(1, min(accum_frames * 255 + 1, MaxAccumFrames));
 	outAccumFrames[pixCoord] = accum_frames / 255.0;
 	outRemappedAo[pixCoord] = prev_ao;
-	outRemappedIlY[pixCoord] = prev_y;
-	outRemappedIlCoCg[pixCoord] = prev_co_cg;
+	outRemappedGI[pixCoord] = prev_gi;
 	outRemappedPrevGISpecular[pixCoord] = prev_gi_specular;
 #endif
 }

@@ -20,8 +20,7 @@ Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t4);
 
 #if defined(SSGI)
 Texture2D<float> SsgiAoTexture : register(t5);
-Texture2D<float4> SsgiYTexture : register(t6);
-Texture2D<float2> SsgiCoCgTexture : register(t7);
+Texture2D<float3> SsgiGiTexture : register(t6);
 #endif
 
 RWTexture2D<float4> MainRW : register(u0);
@@ -30,12 +29,7 @@ RWTexture2D<float3> DiffuseAmbientRW : register(u1);
 void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 {
 	ao = 1 - SsgiAoTexture[pixCoord];
-	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
-	// without ZH hallucination
-	// float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, SphericalHarmonics::EvaluateCosineLobe(normalWS));
-	float ssgiIlY = SphericalHarmonics::SHHallucinateZH3Irradiance(ssgiIlYSh, normalWS);
-	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord];
-	il = max(0, Color::YCoCgToRGB(float3(ssgiIlY, ssgiIlCoCg)));
+	il = SsgiGiTexture[pixCoord];
 }
 #endif
 
@@ -130,7 +124,7 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 	diffuseColor = diffuseColor + directionalAmbientColor * albedo;
 
 #if defined(SSGI)
-	DiffuseAmbientRW[dispatchID.xy] = Color::GammaToLinear(diffuseColor - originalDiffuseColor);
+	DiffuseAmbientRW[dispatchID.xy] = Color::GammaToLinear(diffuseColor);
 #endif
 
 	MainRW[dispatchID.xy] = float4(diffuseColor, 1);
