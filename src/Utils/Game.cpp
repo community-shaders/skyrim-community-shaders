@@ -177,4 +177,9 @@ namespace Util
 		bool* bDynamicResolution = reinterpret_cast<bool*>(address);
 		return *bDynamicResolution;
 	}
+
+	bool FrameChecker::IsNewFrame()
+	{
+		return IsNewFrame(globals::state->frameCount);
+	}
 }  // namespace Util

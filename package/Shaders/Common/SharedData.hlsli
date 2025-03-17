@@ -22,6 +22,7 @@ namespace SharedData
 		bool InInterior;  // If the area lacks a directional shadow light e.g. the sun or moon
 		bool InMapMenu;   // If the world/local map is open (note that the renderer is still deferred here)
 		bool HideSky;     // HideSky flag in WorldSpace, e.g. Blackreach
+		float MipBias;    // Offset to mip level for TAA sharpness
 	};
 
 	struct GrassLightingSettings
@@ -130,6 +131,12 @@ namespace SharedData
 		uint2 pad0;
 	};
 
+	struct CloudShadowsSettings
+	{
+		float Opacity;
+		float3 pad0;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -139,6 +146,7 @@ namespace SharedData
 		LightLimitFixSettings lightLimitFixSettings;
 		WetnessEffectsSettings wetnessEffectsSettings;
 		SkylightingSettings skylightingSettings;
+		CloudShadowsSettings cloudShadowsSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);

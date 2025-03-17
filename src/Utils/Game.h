@@ -69,12 +69,12 @@ namespace Util
 		uint32_t last_frame = UINT32_MAX;
 
 	public:
-		inline bool IsNewFrame(uint32_t frame)
+		bool IsNewFrame(uint32_t frame)
 		{
 			bool retval = last_frame != frame;
 			last_frame = frame;
 			return retval;
 		}
-		inline bool IsNewFrame() { return IsNewFrame(globals::game::graphicsState->frameCount); }
+		bool IsNewFrame();
 	};
 }  // namespace Util

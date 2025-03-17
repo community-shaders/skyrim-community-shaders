@@ -30,6 +30,7 @@ struct VS_OUTPUT
 {
 	float4 HPosition : SV_POSITION0;
 	float4 VertexColor : COLOR0;
+	float VertexMult : COLOR1;
 	float3 TexCoord : TEXCOORD0;
 	float3 ViewSpacePosition :
 #	if !defined(VR)
@@ -57,7 +58,8 @@ struct VS_OUTPUT
 struct VS_OUTPUT
 {
 	float4 HPosition : SV_POSITION0;
-	float4 DiffuseColor : COLOR0;
+	float4 VertexColor : COLOR0;
+	float VertexMult : COLOR1;
 	float3 TexCoord : TEXCOORD0;
 	float4 AmbientColor : TEXCOORD1;
 	float3 ViewSpacePosition : TEXCOORD2;
@@ -186,7 +188,7 @@ VS_OUTPUT main(VS_INPUT input)
 	float4 msPosition = GetMSPosition(input, WindTimer, world3x3);
 
 #		ifdef GRASS_COLLISION
-	float3 displacement = GrassCollision::GetDisplacedPosition(msPosition.xyz, input.Color.w, eyeIndex);
+	float3 displacement = GrassCollision::GetDisplacedPosition(input, msPosition.xyz, eyeIndex);
 	msPosition.xyz += displacement;
 #		endif  // GRASS_COLLISION
 
@@ -208,8 +210,9 @@ VS_OUTPUT main(VS_INPUT input)
 #		endif
 
 	// Note: input.Color.w is used for wind speed
-	vsout.VertexColor.xyz = input.Color.xyz * input.InstanceData1.www;
+	vsout.VertexColor.xyz = input.Color.xyz;
 	vsout.VertexColor.w = distanceFade * perInstanceFade;
+	vsout.VertexMult = input.InstanceData1.w;
 
 	vsout.TexCoord.xy = input.TexCoord.xy;
 	vsout.TexCoord.z = FogNearColor.w;
@@ -251,7 +254,7 @@ VS_OUTPUT main(VS_INPUT input)
 	float4 msPosition = GetMSPosition(input, WindTimer);
 
 #		ifdef GRASS_COLLISION
-	float3 displacement = GrassCollision::GetDisplacedPosition(msPosition.xyz, input.Color.w, 0);
+	float3 displacement = GrassCollision::GetDisplacedPosition(input, msPosition.xyz, eyeIndex);
 	msPosition.xyz += displacement;
 #		endif  // GRASS_COLLISION
 
@@ -276,8 +279,9 @@ VS_OUTPUT main(VS_INPUT input)
 	float distanceFade = 1 - saturate((length(projSpacePosition.xyz) - AlphaParam1) / AlphaParam2);
 #		endif
 
-	vsout.DiffuseColor.xyz = diffuseMultiplier;
-	vsout.DiffuseColor.w = distanceFade * perInstanceFade;
+	vsout.VertexColor.xyz = input.Color.xyz;
+	vsout.VertexColor.w = distanceFade * perInstanceFade;
+	vsout.VertexMult = input.InstanceData1.w;
 
 	vsout.TexCoord.xy = input.TexCoord.xy;
 	vsout.TexCoord.z = FogNearColor.w;
@@ -450,14 +454,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 baseColor;
 #		if !defined(TRUE_PBR)
 	if (complex) {
-		baseColor = TexBaseSampler.Sample(SampBaseSampler, float2(input.TexCoord.x, input.TexCoord.y * 0.5));
+		baseColor = TexBaseSampler.SampleBias(SampBaseSampler, float2(input.TexCoord.x, input.TexCoord.y * 0.5), SharedData::MipBias);
 	} else
 #		endif  // !TRUE_PBR
 	{
-		baseColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord.xy);
+		baseColor = TexBaseSampler.SampleBias(SampBaseSampler, input.TexCoord.xy, SharedData::MipBias);
 	}
 
-#		if defined(RENDER_DEPTH) || defined(DO_ALPHA_TEST)
+#		if defined(RENDER_DEPTH)
 	float diffuseAlpha = input.VertexColor.w * baseColor.w;
 	if ((diffuseAlpha - AlphaTestRefRS) < 0) {
 		discard;
@@ -470,9 +474,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	psout.PS.w = diffuseAlpha;
 #		else
 #			if !defined(TRUE_PBR)
-	float4 specColor = complex ? TexBaseSampler.Sample(SampBaseSampler, float2(input.TexCoord.x, 0.5 + input.TexCoord.y * 0.5)) : 1;
+	float4 specColor = complex ? TexBaseSampler.SampleBias(SampBaseSampler, float2(input.TexCoord.x, 0.5 + input.TexCoord.y * 0.5), SharedData::MipBias) : 1;
 #			else
-	float4 specColor = TexNormalSampler.Sample(SampNormalSampler, input.TexCoord.xy);
+	float4 specColor = TexNormalSampler.SampleBias(SampNormalSampler, input.TexCoord.xy, SharedData::MipBias);
 #			endif
 
 	uint eyeIndex = Stereo::GetEyeIndexPS(input.HPosition, VPOSOffset);
@@ -508,7 +512,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #			endif  // !TRUE_PBR
 
 #			if defined(TRUE_PBR)
-	float4 rawRMAOS = TexRMAOSSampler.Sample(SampRMAOSSampler, input.TexCoord.xy) * float4(PBRParams1.x, 1, 1, PBRParams1.y);
+	float4 rawRMAOS = TexRMAOSSampler.SampleBias(SampRMAOSSampler, input.TexCoord.xy, SharedData::MipBias) * float4(PBRParams1.x, 1, 1, PBRParams1.y);
 
 	PBR::SurfaceProperties pbrSurfaceProperties = PBR::InitSurfaceProperties();
 
@@ -545,11 +549,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float dirDetailShadow = 1.0;
 
 	if (dirShadow > 0.0 && !SharedData::InInterior) {
-		if (dirLightAngle > 0.0) {
 #			if defined(SCREEN_SPACE_SHADOWS)
-			dirDetailShadow = ScreenSpaceShadows::GetScreenSpaceShadow(input.HPosition.xyz, screenUV, screenNoise, eyeIndex);
+		dirDetailShadow = ScreenSpaceShadows::GetScreenSpaceShadow(input.HPosition.xyz, screenUV, screenNoise, eyeIndex);
 #			endif  // SCREEN_SPACE_SHADOWS
-		}
 
 		if (dirShadow != 0.0)
 			dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition, FrameBuffer::CameraPosAdjust[eyeIndex], eyeIndex);
@@ -581,13 +583,30 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	dirLightColor *= dirLightColorMultiplier;
 	dirLightColor *= dirShadow;
 
-	lightsDiffuseColor += dirLightColor * saturate(dirLightAngle) * dirDetailShadow;
+	float wrapAmount = saturate(input.VertexNormal.w * 10.0);
 
-	float3 albedo = max(0, baseColor.xyz * input.VertexColor.xyz);
+	float dirNoL = dot(SharedData::DirLightDirection.xyz, viewDirection);
+	float dirViewWrap = -dirNoL * 0.5 + 0.5;
+	float wrappedDirLight = saturate(dirLightAngle + wrapAmount * dirViewWrap) / (1.0 + wrapAmount * dirViewWrap);
+	lightsDiffuseColor += dirLightColor * saturate(wrappedDirLight) * dirDetailShadow;
 
-	float3 subsurfaceColor = lerp(Color::RGBToLuminance(albedo.xyz), albedo.xyz, 2.0) * saturate(input.VertexNormal.w * 10.0);
+	float3 vertexColor = input.VertexColor.xyz;
 
-	float3 sss = dirLightColor * saturate(-dirLightAngle);
+#				if defined(SKYLIGHTING)
+	float skylightingFadeOutFactor = 1.0;
+	if (!SharedData::InInterior) {
+		skylightingFadeOutFactor = Skylighting::getFadeOutFactor(input.WorldPosition.xyz);
+		vertexColor = lerp(input.VertexColor.xyz * input.VertexMult, vertexColor, skylightingFadeOutFactor);
+	}
+#				endif
+
+	float3 albedo = max(0, baseColor.xyz * vertexColor);
+
+	float3 subsurfaceColor = albedo.xyz * albedo.xyz * saturate(input.VertexNormal.w * 10.0);
+
+	float dirBacklighting = 1.0 + saturate(-dirNoL);
+
+	float3 sss = dirBacklighting * dirLightColor * saturate(-dirLightAngle);
 
 	if (complex)
 		lightsSpecularColor += GrassLighting::GetLightSpecularInput(DirLightDirection, viewDirection, normal, dirLightColor, SharedData::grassLightingSettings.Glossiness);
@@ -626,8 +645,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 				float3 normalizedLightDirection = normalize(lightDirection);
 
-				float lightAngle = dot(normal, normalizedLightDirection);
-
 #				if defined(TRUE_PBR)
 				{
 					PBR::LightProperties lightProperties = PBR::InitLightProperties(lightColor, lightShadow, 1);
@@ -640,8 +657,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #				else
 				lightColor *= lightShadow;
 
-				float3 lightDiffuseColor = lightColor * saturate(dirLightAngle);
-				sss += lightColor * saturate(-lightAngle);
+				float lightAngle = dot(normal, normalizedLightDirection);
+				float lightNoL = dot(normalizedLightDirection.xyz, viewDirection);
+				float lightViewWrap = -lightNoL * 0.5 + 0.5;
+				float wrappedLight = saturate(lightAngle + wrapAmount * lightViewWrap) / (1.0 + wrapAmount * lightViewWrap);
+
+				float3 lightDiffuseColor = lightColor * wrappedLight;
+
+				float lightBacklighting = 1.0 + saturate(-lightNoL);
+
+				sss += lightBacklighting * lightColor * saturate(-lightAngle);
 
 				lightsDiffuseColor += lightDiffuseColor;
 
@@ -665,34 +690,45 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	diffuseColor.xyz = Color::LinearToGamma(diffuseColor.xyz);
 #			else
 
+	normal = normalize(float3(normal.xy, max(0, normal.z)));
+
+	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
+
+#				if defined(SKYLIGHTING)
+	if (!SharedData::InInterior) {
+		float3 skylightingNormal = normal;
+
+#					if defined(VR)
+		float3 positionMSSkylight = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
+#					else
+		float3 positionMSSkylight = input.WorldPosition.xyz;
+#					endif
+
+		sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, normal);
+		float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(skylightingNormal)) / Math::PI;
+		skylightingDiffuse = saturate(skylightingDiffuse);
+
+		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
+		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+
+		directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
+
+		directionalAmbientColor *= skylightingDiffuse;
+		directionalAmbientColor *= 1.0 + saturate(normal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
+		directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
+	}
+#				endif  // SKYLIGHTING
+
 #				if !defined(SSGI)
-	float3 directionalAmbientColor = mul(SharedData::DirectionalAmbient, float4(normal, 1.0));
-
-#					if defined(SKYLIGHTING)
-#						if defined(VR)
-	float3 positionMSSkylight = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
-#						else
-	float3 positionMSSkylight = input.WorldPosition.xyz;
-#						endif
-
-	sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, normal);
-	float skylighting = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(normal.xy, normal.z * 0.5 + 0.5))) / Math::PI;
-	skylighting = lerp(1.0, skylighting, Skylighting::getFadeOutFactor(input.WorldPosition));
-	skylighting = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylighting);
-
-	directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor) / Color::LightPreMult;
-	directionalAmbientColor *= skylighting;
-	directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor * Color::LightPreMult);
-#					endif  // SKYLIGHTING
-
 	diffuseColor += directionalAmbientColor;
-#				endif      // !SSGI
+#				endif
 
 	diffuseColor *= albedo;
 	diffuseColor += max(0, sss * subsurfaceColor * SharedData::grassLightingSettings.SubsurfaceScatteringAmount);
 
 	specularColor += lightsSpecularColor;
 	specularColor *= specColor.w * SharedData::grassLightingSettings.SpecularStrength;
+	specularColor = Color::GammaToLinear(specularColor);
 #			endif
 
 #			if defined(LIGHT_LIMIT_FIX) && defined(LLFDEBUG)
@@ -713,7 +749,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	float3 normalVS = normalize(FrameBuffer::WorldToView(normal, false, eyeIndex));
 #			if defined(TRUE_PBR)
-	psout.Albedo = float4(Color::LinearToGamma(indirectDiffuseLobeWeight * Color::AlbedoPreMult), 1);
+	psout.Albedo = float4(Color::LinearToGamma(indirectDiffuseLobeWeight), 1);
 	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(normalVS), 1 - pbrSurfaceProperties.Roughness, 1);
 	psout.Reflectance = float4(indirectSpecularLobeWeight, 1);
 	psout.Parameters = float4(0, 0, 1, 1);
@@ -732,10 +768,10 @@ PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
 
-	float4 baseColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord.xy);
+	float4 baseColor = TexBaseSampler.SampleBias(SampBaseSampler, input.TexCoord.xy, SharedData::MipBias);
 
-#		if defined(RENDER_DEPTH) || defined(DO_ALPHA_TEST)
-	float diffuseAlpha = input.DiffuseColor.w * baseColor.w;
+#		if defined(RENDER_DEPTH)
+	float diffuseAlpha = input.VertexColor.w * baseColor.w;
 
 	if ((diffuseAlpha - AlphaTestRefRS) < 0) {
 		discard;
@@ -820,32 +856,51 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 ddy = ddy_coarse(input.WorldPosition);
 	float3 normal = normalize(cross(ddx, ddy));
 
-	normal = float3(normal.xy, normal.z * 0.5 + 0.5);
+	normal = normalize(float3(normal.xy, max(0, normal.z)));
+
+	float3 vertexColor = input.VertexColor.xyz;
+
+#			if defined(SKYLIGHTING)
+	float skylightingFadeOutFactor = 1.0;
+	if (!SharedData::InInterior) {
+		skylightingFadeOutFactor = Skylighting::getFadeOutFactor(input.WorldPosition.xyz);
+		vertexColor = lerp(input.VertexColor.xyz * input.VertexMult, vertexColor, skylightingFadeOutFactor);
+	}
+#			endif
+
+	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
+
+#			if defined(SKYLIGHTING)
+	if (!SharedData::InInterior) {
+		float3 skylightingNormal = normal;
+
+#				if defined(VR)
+		float3 positionMSSkylight = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
+#				else
+		float3 positionMSSkylight = input.WorldPosition.xyz;
+#				endif
+
+		sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, normal);
+		float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(skylightingNormal)) / Math::PI;
+		skylightingDiffuse = saturate(skylightingDiffuse);
+
+		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
+		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+
+		directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
+
+		directionalAmbientColor *= skylightingDiffuse;
+		directionalAmbientColor *= 1.0 + saturate(normal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
+
+		directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
+	}
+#			endif  // SKYLIGHTING
 
 #			if !defined(SSGI)
-	float3 directionalAmbientColor = mul(SharedData::DirectionalAmbient, float4(normal, 1.0));
-
-#				if defined(SKYLIGHTING)
-#					if defined(VR)
-	float3 positionMSSkylight = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
-#					else
-	float3 positionMSSkylight = input.WorldPosition.xyz;
-#					endif
-
-	sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, normal);
-	float skylighting = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(normal.xy, normal.z * 0.5 + 0.5))) / Math::PI;
-	skylighting = lerp(1.0, skylighting, Skylighting::getFadeOutFactor(input.WorldPosition));
-	skylighting = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylighting);
-
-	directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor) / Color::LightPreMult;
-	directionalAmbientColor *= skylighting;
-	directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor * Color::LightPreMult);
-#				endif  // SKYLIGHTING
-
 	diffuseColor += directionalAmbientColor;
-#			endif      // !SSGI
+#			endif
 
-	float3 albedo = baseColor.xyz * input.DiffuseColor.xyz;
+	float3 albedo = baseColor.xyz * vertexColor;
 	psout.Diffuse.xyz = diffuseColor * albedo;
 
 	psout.Diffuse.w = 1;

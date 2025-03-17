@@ -451,7 +451,7 @@ PS_OUTPUT main(PS_INPUT input)
 	baseTexCoord = input.TexCoord0.xy;
 #		endif
 #	endif
-	float4 baseColor = TexBaseSampler.Sample(SampBaseSampler, baseTexCoord);
+	float4 baseColor = TexBaseSampler.SampleBias(SampBaseSampler, baseTexCoord, SharedData::MipBias);
 
 #	if defined(RENDER_SHADOWMAP_PB)
 	if (input.TexCoord1.z < 0) {
@@ -474,7 +474,7 @@ PS_OUTPUT main(PS_INPUT input)
 	alpha *= input.Alpha.y;
 #		endif
 #		if defined(GRAYSCALE_TO_ALPHA)
-	float grayScaleColor = TexGrayscaleSampler.Sample(SampGrayscaleSampler, float2(baseColor.w, alpha)).w;
+	float grayScaleColor = TexGrayscaleSampler.SampleBias(SampGrayscaleSampler, float2(baseColor.w, alpha), SharedData::MipBias).w;
 	if (grayScaleColor - AlphaTestRef.x < 0) {
 		discard;
 	}

@@ -1,5 +1,6 @@
 #include "FeatureBuffer.h"
 
+#include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExtendedMaterials.h"
 #include "Features/GrassLighting.h"
@@ -35,5 +36,6 @@ std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 		globals::features::terrainShadows->GetCommonBufferData(),
 		globals::features::lightLimitFix->GetCommonBufferData(),
 		globals::features::wetnessEffects->GetCommonBufferData(),
-		globals::features::skylighting->GetCommonBufferData(a_inWorld));
+		globals::features::skylighting->GetCommonBufferData(a_inWorld),
+		globals::features::cloudShadows->settings);
 }

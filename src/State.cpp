@@ -4,6 +4,7 @@
 
 #include <pystring/pystring.h>
 
+#include "DX12SwapChain.h"
 #include "Deferred.h"
 #include "Features/CloudShadows.h"
 #include "Features/TerrainBlending.h"
@@ -46,6 +47,9 @@ void State::Draw()
 
 		if (deferred->inDecals)
 			currentExtraDescriptor |= (uint32_t)ExtraShaderDescriptors::IsDecal;
+
+		if (isTree)
+			currentExtraDescriptor |= (uint32_t)ExtraShaderDescriptors::IsTree;
 
 		if (forceUpdatePermutationBuffer || currentPixelDescriptor != lastPixelDescriptor || currentExtraDescriptor != lastExtraDescriptor) {
 			PermutationCB data{};
@@ -108,6 +112,7 @@ void State::Reset()
 	lastVertexDescriptor = 0;
 	initialized = false;
 	forceUpdatePermutationBuffer = true;
+	frameCount++;
 }
 
 void State::Setup()
@@ -118,9 +123,9 @@ void State::Setup()
 		if (feature->loaded)
 			feature->SetupResources();
 	globals::deferred->SetupResources();
-	globals::streamline->SetupResources();
 	if (!upscalerLoaded)
 		globals::upscaling->CreateUpscalingResources();
+	SetupReShade();
 	if (initialized)
 		return;
 	initialized = true;
@@ -282,20 +287,6 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 			logger::warn("Missing settings for Upscaling, using default.");
 		}
 
-		auto streamline = globals::streamline;
-		auto& streamlineJson = settings[streamline->GetShortName()];
-		if (streamlineJson.is_object()) {
-			logger::info("Loading Streamline settings");
-			try {
-				streamline->LoadSettings(streamlineJson);
-			} catch (...) {
-				logger::warn("Invalid settings for Streamline, using default.");
-				streamline->RestoreDefaultSettings();
-			}
-		} else {
-			logger::warn("Missing settings for Streamline, using default.");
-		}
-
 		for (auto* feature : Feature::GetFeatureList()) {
 			try {
 				const std::string featureName = feature->GetShortName();
@@ -375,10 +366,6 @@ void State::Save(ConfigMode a_configMode)
 	auto upscaling = globals::upscaling;
 	auto& upscalingJson = settings[upscaling->GetShortName()];
 	upscaling->SaveSettings(upscalingJson);
-
-	auto streamline = globals::streamline;
-	auto& streamlineJson = settings[streamline->GetShortName()];
-	streamline->SaveSettings(streamlineJson);
 
 	json originalShaders;
 	for (int classIndex = 0; classIndex < RE::BSShader::Type::Total - 1; ++classIndex) {
@@ -653,7 +640,7 @@ void State::SetAdapterDescription(const std::wstring& description)
 	adapterDescription = converter.to_bytes(description);
 }
 
-void State::UpdateSharedData(bool a_inWorld)
+void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 {
 	{
 		SharedDataCB data{};
@@ -678,13 +665,11 @@ void State::UpdateSharedData(bool a_inWorld)
 		data.BufferDim = { screenSize.x, screenSize.y, 1.0f / screenSize.x, 1.0f / screenSize.y };
 		data.Timer = timer;
 
-		auto viewport = globals::game::graphicsState;
-
 		auto bTAA = !globals::game::isVR ? imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled :
 		                                   imageSpaceManager->GetVRRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled;
 
-		data.FrameCount = viewport->frameCount * (bTAA || globals::state->upscalerLoaded);
-		data.FrameCountAlwaysActive = viewport->frameCount;
+		data.FrameCount = frameCount * (bTAA || globals::state->upscalerLoaded);
+		data.FrameCountAlwaysActive = frameCount;
 
 		if (a_inWorld) {
 			for (int i = -2; i <= 2; i++) {
@@ -707,6 +692,13 @@ void State::UpdateSharedData(bool a_inWorld)
 			data.InMapMenu = ui->IsMenuOpen(RE::MapMenu::MENU_NAME);
 		else
 			data.InMapMenu = true;
+
+		if (!globals::game::isVR && bTAA && (a_inWorld || a_prepass)) {
+			auto renderSize = Util::ConvertToDynamic(screenSize);
+			data.MipBias = std::log2f(renderSize.x / screenSize.x) - 1.0f;
+		} else {
+			data.MipBias = 0;
+		}
 
 		sharedDataCB->Update(data);
 	}
@@ -754,4 +746,51 @@ bool State::IsFeatureDisabled(const std::string& featureName)
 std::unordered_map<std::string, bool>& State::GetDisabledFeatures()
 {
 	return disabledFeatures;
+}
+
+void State::SetupReShade()
+{
+	SetEnvironmentVariableW(L"RESHADE_DISABLE_GRAPHICS_HOOK", L"1");
+	LoadLibraryW(L"ReShade64.dll");
+
+	auto device = globals::d3d::device;
+	auto context = globals::d3d::context;
+	auto swapChain = globals::d3d::swapChain;
+
+	if (reshade::create_effect_runtime(reshade::api::device_api::d3d11, device, context, swapChain, "ReShade", &reShadeRuntime)) {
+		auto renderer = globals::game::renderer;
+		auto& swapChainRTV = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER].RTV;
+
+		auto reShadeDevice = reShadeRuntime->get_device();
+
+		reshade::api::resource reShadeSwapChainResource = reShadeDevice->get_resource_from_view(reshade::api::resource_view{ reinterpret_cast<uintptr_t>(swapChainRTV) });
+		reshade::api::resource_desc reShadeSwapChainDesc = reShadeDevice->get_resource_desc(reShadeSwapChainResource);
+
+		reShadeDevice->create_resource_view(reShadeSwapChainResource, reshade::api::resource_usage::render_target, reshade::api::resource_view_desc(reshade::api::format_to_default_typed(reShadeSwapChainDesc.texture.format, 0), 0, 1, 0, 1), &reshadeSwapChainRTV);
+		reShadeDevice->create_resource_view(reShadeSwapChainResource, reshade::api::resource_usage::render_target, reshade::api::resource_view_desc(reshade::api::format_to_default_typed(reShadeSwapChainDesc.texture.format, 1), 0, 1, 0, 1), &reshadeSwapChainRTVsRGB);
+
+		auto& depth = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+
+		auto depthRTV = reshade::api::resource_view{ reinterpret_cast<uintptr_t>(depth.depthSRV) };
+		reShadeRuntime->update_texture_bindings("DEPTH", depthRTV, depthRTV);
+
+		reShadeRuntime->enumerate_uniform_variables(nullptr, [](reshade::api::effect_runtime* runtime, reshade::api::effect_uniform_variable variable) {
+			char source[32];
+			if (runtime->get_annotation_string_from_uniform_variable(variable, "source", source) &&
+				std::strcmp(source, "bufready_depth") == 0)
+				runtime->set_uniform_value_bool(variable, true);
+		});
+	}
+}
+
+void State::RenderReShade()
+{
+	if (reShadeRuntime) {
+		reShadeRuntime->render_effects(reShadeRuntime->get_command_queue()->get_immediate_command_list(), reshadeSwapChainRTV, reshadeSwapChainRTVsRGB);
+	}
+}
+
+void State::PresentReShade()
+{
+	reshade::update_and_present_effect_runtime(reShadeRuntime);
 }

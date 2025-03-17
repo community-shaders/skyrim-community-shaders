@@ -102,6 +102,12 @@ void TerrainBlending::PostPostLoad()
 	Hooks::Install();
 }
 
+void TerrainBlending::DataLoaded()
+{
+	auto bEnableLandFade = RE::GetINISetting("bEnableLandFade:Display");
+	bEnableLandFade->data.b = false;
+}
+
 void TerrainBlending::TerrainShaderHacks()
 {
 	if (renderTerrainDepth) {

@@ -12,6 +12,8 @@
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
 
+#include "Streamline.h"
+
 struct DepthStates
 {
 	ID3D11DepthStencilState* a[6][40];
@@ -103,8 +105,6 @@ void Deferred::SetupResources()
 		SetupRenderTarget(NORMALROUGHNESS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Masks
 		SetupRenderTarget(MASKS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
-		// Additional Masks
-		SetupRenderTarget(MASKS2, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 	}
 
 	{
@@ -232,7 +232,7 @@ void Deferred::ReflectionsPrepasses()
 	if (!shaderCache->IsEnabled())
 		return;
 
-	globals::state->UpdateSharedData(false);
+	globals::state->UpdateSharedData(false, false);
 
 	ZoneScoped;
 	TracyD3D11Zone(globals::game::graphicsState->tracyCtx, "Early Prepass");
@@ -256,7 +256,7 @@ void Deferred::EarlyPrepasses()
 	if (!shaderCache->IsEnabled())
 		return;
 
-	globals::state->UpdateSharedData(false);
+	globals::state->UpdateSharedData(false, true);
 
 	ZoneScoped;
 	TracyD3D11Zone(globals::game::graphicsState->tracyCtx, "Early Prepass");
@@ -298,7 +298,7 @@ void Deferred::PrepassPasses()
 
 void Deferred::StartDeferred()
 {
-	globals::state->UpdateSharedData(true);
+	globals::state->UpdateSharedData(true, false);
 
 	auto shadowState = globals::game::shadowState;
 	GET_INSTANCE_MEMBER(renderTargets, shadowState)
@@ -318,7 +318,7 @@ void Deferred::StartDeferred()
 		SPECULAR,
 		REFLECTANCE,
 		MASKS,
-		MASKS2
+		RE::RENDER_TARGET::kNONE
 	};
 
 	for (uint i = 2; i < 8; i++) {
@@ -357,6 +357,8 @@ void Deferred::StartDeferred()
 
 void Deferred::DeferredPasses()
 {
+	globals::streamline->CheckFrameConstants();
+
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "Deferred");
 
@@ -364,8 +366,7 @@ void Deferred::DeferredPasses()
 	auto context = globals::d3d::context;
 
 	{
-		static REL::Relocation<ID3D11Buffer**> perFrame{ REL::RelocationID(524768, 411384) };
-		ID3D11Buffer* buffers[1] = { *perFrame.get() };
+		ID3D11Buffer* buffers[1] = { *globals::game::perFrame };
 		ID3D11Buffer* vrBuffer = nullptr;
 
 		if (REL::Module::IsVR()) {
@@ -384,7 +385,6 @@ void Deferred::DeferredPasses()
 	auto albedo = renderer->GetRuntimeData().renderTargets[ALBEDO];
 	auto normalRoughness = renderer->GetRuntimeData().renderTargets[NORMALROUGHNESS];
 	auto masks = renderer->GetRuntimeData().renderTargets[MASKS];
-	auto masks2 = renderer->GetRuntimeData().renderTargets[MASKS2];
 
 	auto main = renderer->GetRuntimeData().renderTargets[forwardRenderTargets[0]];
 	auto normals = renderer->GetRuntimeData().renderTargets[forwardRenderTargets[2]];
@@ -412,13 +412,12 @@ void Deferred::DeferredPasses()
 		{
 			TracyD3D11Zone(globals::state->tracyCtx, "Ambient Composite");
 
-			ID3D11ShaderResourceView* srvs[9]{
+			ID3D11ShaderResourceView* srvs[8]{
 				albedo.SRV,
 				normalRoughness.SRV,
 				skylighting->loaded || REL::Module::IsVR() ? depth.depthSRV : nullptr,
 				skylighting->loaded ? skylighting->texProbeArray->srv.get() : nullptr,
 				skylighting->loaded ? skylighting->stbn_vec3_2Dx1D_128x128x64.get() : nullptr,
-				masks2.SRV,
 				ssgi_ao,
 				ssgi_y,
 				ssgi_cocg,
@@ -437,7 +436,7 @@ void Deferred::DeferredPasses()
 
 		// Clear
 		{
-			ID3D11ShaderResourceView* views[6]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+			ID3D11ShaderResourceView* views[8]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
 			ID3D11UnorderedAccessView* uavs[2]{ nullptr, nullptr };
@@ -461,12 +460,11 @@ void Deferred::DeferredPasses()
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite");
 
-		ID3D11ShaderResourceView* srvs[15]{
+		ID3D11ShaderResourceView* srvs[14]{
 			specular.SRV,
 			albedo.SRV,
 			normalRoughness.SRV,
 			masks.SRV,
-			masks2.SRV,
 			dynamicCubemaps->loaded || REL::Module::IsVR() ? (terrainBlending->loaded ? terrainBlending->blendedDepthTexture16->srv.get() : depth.depthSRV) : nullptr,
 			dynamicCubemaps->loaded ? reflectance.SRV : nullptr,
 			dynamicCubemaps->loaded ? dynamicCubemaps->envTexture->srv.get() : nullptr,
@@ -495,7 +493,7 @@ void Deferred::DeferredPasses()
 
 	// Clear
 	{
-		ID3D11ShaderResourceView* views[10]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+		ID3D11ShaderResourceView* views[14]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
 		ID3D11UnorderedAccessView* uavs[3]{ nullptr, nullptr, nullptr };

@@ -25,6 +25,7 @@ public:
 	ID3D11ComputeShader* GetDepthBlendShader();
 
 	virtual void PostPostLoad() override;
+	virtual void DataLoaded() override;
 
 	bool renderDepth = false;
 	bool renderTerrainDepth = false;

@@ -110,7 +110,7 @@ PS_OUTPUT main(PS_INPUT input)
 		float3 blendedColor;
 		[branch] if (Param.z > 0.5)
 		{
-			blendedColor = DisplayMapping::HuePreservingHejlBurgessDawson(inputColor);
+			blendedColor = DisplayMapping::HuePreservingHejlBurgessDawson(inputColor, bloomColor);
 		}
 		else
 		{
@@ -118,9 +118,8 @@ PS_OUTPUT main(PS_INPUT input)
 			float mappedMax = GetTonemapFactorReinhard(maxCol);
 			float3 compressedHuePreserving = inputColor * mappedMax / maxCol;
 			blendedColor = compressedHuePreserving;
+			blendedColor += saturate(Param.x - blendedColor) * bloomColor;
 		}
-
-		blendedColor += saturate(Param.x - blendedColor) * bloomColor;
 
 		gameSdrColor = blendedColor;
 

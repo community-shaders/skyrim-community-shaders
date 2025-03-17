@@ -33,10 +33,10 @@ struct Skylighting : Feature
 
 	struct Settings
 	{
-		float MaxZenith = 3.1415926f / 4.f;  // 45 deg
+		float MaxZenith = 3.1415926f / 2.f;  // 90 deg
 		float MinDiffuseVisibility = 0.1f;
-		float MinSpecularVisibility = 0.01f;
-		float SSGIAmbientDimmer = 1.0f;
+		float MinSpecularVisibility = 0.1f;
+		float SSGIAmbientDimmer = 0.5f;
 	} settings;
 
 	struct SkylightingCB
@@ -106,6 +106,12 @@ struct Skylighting : Feature
 	struct SetViewFrustum
 	{
 		static void thunk(RE::NiCamera* a_camera, RE::NiFrustum* a_frustum);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct SetViewFrustumVR
+	{
+		static void thunk(RE::NiCamera* a_camera, RE::NiFrustum* a_frustum, uint a_eyeIndex);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 

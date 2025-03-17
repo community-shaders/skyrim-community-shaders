@@ -156,11 +156,8 @@ namespace ShadowSampling
 #endif
 
 #if defined(CLOUD_SHADOWS)
-		if (!SharedData::InMapMenu) {
+		if (!SharedData::InMapMenu)
 			worldShadow *= CloudShadows::GetCloudShadowMult(positionWS, LinearSampler);
-			if (worldShadow == 0.0)
-				return worldShadow;
-		}
 #endif
 
 		return worldShadow;
@@ -193,7 +190,7 @@ namespace ShadowSampling
 			sincos(Math::TAU * noise, rotation.y, rotation.x);
 			float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 			float shadow = Get2DFilteredShadow(noise, rotationMatrix, worldPosition, eyeIndex);
-			return shadow;
+			return worldShadow * shadow;
 		}
 
 		return worldShadow;

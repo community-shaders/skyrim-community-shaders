@@ -1,5 +1,33 @@
 #include "CloudShadows.h"
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	CloudShadows::Settings,
+	Opacity)
+
+void CloudShadows::DrawSettings()
+{
+	ImGui::SliderFloat("Opacity", &settings.Opacity, 0.0f, 1.0f, "%.1f");
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text(
+			"Higher values make cloud shadows darker.");
+	}
+}
+
+void CloudShadows::LoadSettings(json& o_json)
+{
+	settings = o_json;
+}
+
+void CloudShadows::SaveSettings(json& o_json)
+{
+	o_json = settings;
+}
+
+void CloudShadows::RestoreDefaultSettings()
+{
+	settings = {};
+}
+
 void CloudShadows::CheckResourcesSide(int side)
 {
 	static Util::FrameChecker frame_checker[6];
@@ -71,8 +99,8 @@ void CloudShadows::ReflectionsPrepass()
 {
 	Util::FrameChecker frameChecker;
 	if (frameChecker.IsNewFrame()) {
-		if ((RE::Sky::GetSingleton()->mode.get() != RE::Sky::Mode::kFull) ||
-			!RE::Sky::GetSingleton()->currentClimate)
+		if ((globals::game::sky->mode.get() != RE::Sky::Mode::kFull) ||
+			!globals::game::sky->currentClimate)
 			return;
 
 		auto context = globals::d3d::context;

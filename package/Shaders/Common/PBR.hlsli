@@ -74,7 +74,8 @@ namespace PBR
 		float GlintLogMicrofacetDensity;
 		float GlintMicrofacetRoughness;
 		float GlintDensityRandomization;
-		Glints::GlintCachedVars GlintCache[4];
+		Glints::GlintCachedVars GlintCache;
+		float Noise;
 	};
 
 	SurfaceProperties InitSurfaceProperties()
@@ -84,7 +85,7 @@ namespace PBR
 		surfaceProperties.Roughness = 1;
 		surfaceProperties.Metallic = 0;
 		surfaceProperties.AO = 1;
-		surfaceProperties.F0 = 0.04;
+		surfaceProperties.F0 = 0;
 
 		surfaceProperties.SubsurfaceColor = 0;
 		surfaceProperties.Thickness = 0;
@@ -92,7 +93,7 @@ namespace PBR
 		surfaceProperties.CoatColor = 0;
 		surfaceProperties.CoatStrength = 0;
 		surfaceProperties.CoatRoughness = 0;
-		surfaceProperties.CoatF0 = 0.04;
+		surfaceProperties.CoatF0 = 0;
 
 		surfaceProperties.FuzzColor = 0;
 		surfaceProperties.FuzzWeight = 0;
@@ -103,12 +104,10 @@ namespace PBR
 		surfaceProperties.GlintDensityRandomization = 2.0;
 
 #ifdef GLINT
-		surfaceProperties.GlintCache[0].uv = 0;
-		surfaceProperties.GlintCache[0].gridSeed = 0;
-		surfaceProperties.GlintCache[0].footprintArea = surfaceProperties.GlintCache[0].gridWeight = 0;
-		surfaceProperties.GlintCache[1] = surfaceProperties.GlintCache[2] = surfaceProperties.GlintCache[3] = surfaceProperties.GlintCache[0];
-#else
-		surfaceProperties.GlintCache[0] = surfaceProperties.GlintCache[1] = surfaceProperties.GlintCache[2] = surfaceProperties.GlintCache[3] = 0;
+		surfaceProperties.GlintCache.uv = 0;
+		surfaceProperties.GlintCache.gridSeed = 0;
+		surfaceProperties.GlintCache.footprintArea = 0;
+		surfaceProperties.Noise = 0;
 #endif
 
 		return surfaceProperties;
@@ -116,21 +115,21 @@ namespace PBR
 
 	struct LightProperties
 	{
-		float3 LinearLightColor;
-		float3 LinearCoatLightColor;
+		float3 LightColor;
+		float3 CoatLightColor;
 	};
 
 	LightProperties InitLightProperties(float3 lightColor, float3 nonParallaxShadow, float3 parallaxShadow)
 	{
 		LightProperties result;
-		result.LinearLightColor = Color::GammaToLinear(lightColor) * nonParallaxShadow * parallaxShadow / Color::LightPreMult;
+		result.LightColor = lightColor * nonParallaxShadow * parallaxShadow;
 		[branch] if ((PBRFlags & Flags::InterlayerParallax) != 0)
 		{
-			result.LinearCoatLightColor = Color::GammaToLinear(lightColor) * nonParallaxShadow / Color::LightPreMult;
+			result.CoatLightColor = lightColor * nonParallaxShadow;
 		}
 		else
 		{
-			result.LinearCoatLightColor = result.LinearLightColor;
+			result.CoatLightColor = result.LightColor;
 		}
 		return result;
 	}
@@ -190,15 +189,15 @@ namespace PBR
 	}
 
 #if defined(GLINT)
-	float3 GetSpecularDirectLightMultiplierMicrofacetWithGlint(float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH, float glintH,
-		float logDensity, float microfacetRoughness, float densityRandomization, Glints::GlintCachedVars glintCache[4],
+	float3 GetSpecularDirectLightMultiplierMicrofacetWithGlint(float noise, float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH, float glintH,
+		float logDensity, float microfacetRoughness, float densityRandomization, Glints::GlintCachedVars glintCache,
 		out float3 F)
 	{
 		float D = GetNormalDistributionFunctionGGX(roughness, NdotH);
 		[branch] if (logDensity > 1.1)
 		{
 			float D_max = GetNormalDistributionFunctionGGX(roughness, 1);
-			D = Glints::SampleGlints2023NDF(logDensity, microfacetRoughness, densityRandomization, glintCache, glintH, D, D_max);
+			D = Glints::SampleGlints2023NDF(noise, logDensity, microfacetRoughness, densityRandomization, glintCache, glintH, D, D_max);
 		}
 		float G = GetVisibilityFunctionSmithJointApprox(roughness, NdotV, NdotL);
 		F = GetFresnelFactorSchlick(specularColor, VdotH);
@@ -431,20 +430,20 @@ namespace PBR
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 		[branch] if ((PBRFlags & Flags::HairMarschner) != 0)
 		{
-			transmission += lightProperties.LinearLightColor * GetHairColorMarschner(N, V, L, NdotL, NdotV, VdotL, 0, 1, 0, surfaceProperties);
+			transmission += lightProperties.LightColor * GetHairColorMarschner(N, V, L, NdotL, NdotV, VdotL, 0, 1, 0, surfaceProperties);
 		}
 		else
 #endif
 		{
-			diffuse += lightProperties.LinearLightColor * satNdotL * GetDiffuseDirectLightMultiplierLambert();
+			diffuse += lightProperties.LightColor * satNdotL * GetDiffuseDirectLightMultiplierLambert();
 
 			float3 F;
 #if defined(GLINT)
-			specular += GetSpecularDirectLightMultiplierMicrofacetWithGlint(surfaceProperties.Roughness, surfaceProperties.F0, satNdotL, satNdotV, satNdotH, satVdotH, mul(tbnTr, H),
+			specular += GetSpecularDirectLightMultiplierMicrofacetWithGlint(surfaceProperties.Noise, surfaceProperties.Roughness, surfaceProperties.F0, satNdotL, satNdotV, satNdotH, satVdotH, mul(tbnTr, H),
 							surfaceProperties.GlintLogMicrofacetDensity, surfaceProperties.GlintMicrofacetRoughness, surfaceProperties.GlintDensityRandomization, surfaceProperties.GlintCache, F) *
-			            lightProperties.LinearLightColor * satNdotL;
+			            lightProperties.LightColor * satNdotL;
 #else
-			specular += GetSpecularDirectLightMultiplierMicrofacet(surfaceProperties.Roughness, surfaceProperties.F0, satNdotL, satNdotV, satNdotH, satVdotH, F) * lightProperties.LinearLightColor * satNdotL;
+			specular += GetSpecularDirectLightMultiplierMicrofacet(surfaceProperties.Roughness, surfaceProperties.F0, satNdotL, satNdotV, satNdotH, satVdotH, F) * lightProperties.LightColor * satNdotL;
 #endif
 
 			float2 specularBRDF = GetEnvBRDFApproxLazarov(surfaceProperties.Roughness, satNdotV);
@@ -453,7 +452,7 @@ namespace PBR
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 			[branch] if ((PBRFlags & Flags::Fuzz) != 0)
 			{
-				float3 fuzzSpecular = GetSpecularDirectLightMultiplierMicroflakes(surfaceProperties.Roughness, surfaceProperties.FuzzColor, satNdotL, satNdotV, satNdotH, satVdotH) * lightProperties.LinearLightColor * satNdotL;
+				float3 fuzzSpecular = GetSpecularDirectLightMultiplierMicroflakes(surfaceProperties.Roughness, surfaceProperties.FuzzColor, satNdotL, satNdotV, satNdotH, satVdotH) * lightProperties.LightColor * satNdotL;
 				fuzzSpecular *= 1 + surfaceProperties.FuzzColor * (1 / (specularBRDF.x + specularBRDF.y) - 1);
 
 				specular = lerp(specular, fuzzSpecular, surfaceProperties.FuzzWeight);
@@ -465,7 +464,7 @@ namespace PBR
 				float forwardScatter = exp2(saturate(-VdotL) * subsurfacePower - subsurfacePower);
 				float backScatter = saturate(satNdotL * surfaceProperties.Thickness + (1.0 - surfaceProperties.Thickness)) * 0.5;
 				float subsurface = lerp(backScatter, 1, forwardScatter) * (1.0 - surfaceProperties.Thickness);
-				transmission += surfaceProperties.SubsurfaceColor * subsurface * lightProperties.LinearLightColor * GetDiffuseDirectLightMultiplierLambert();
+				transmission += surfaceProperties.SubsurfaceColor * subsurface * lightProperties.LightColor * GetDiffuseDirectLightMultiplierLambert();
 			}
 			else if ((PBRFlags & Flags::TwoLayer) != 0)
 			{
@@ -484,13 +483,13 @@ namespace PBR
 				}
 
 				float3 coatF;
-				float3 coatSpecular = GetSpecularDirectLightMultiplierMicrofacet(surfaceProperties.CoatRoughness, surfaceProperties.CoatF0, coatNdotL, coatNdotV, coatNdotH, coatVdotH, coatF) * lightProperties.LinearCoatLightColor * coatNdotL;
+				float3 coatSpecular = GetSpecularDirectLightMultiplierMicrofacet(surfaceProperties.CoatRoughness, surfaceProperties.CoatF0, coatNdotL, coatNdotV, coatNdotH, coatVdotH, coatF) * lightProperties.CoatLightColor * coatNdotL;
 
 				float3 layerAttenuation = 1 - coatF * surfaceProperties.CoatStrength;
 				diffuse *= layerAttenuation;
 				specular *= layerAttenuation;
 
-				coatDiffuse += lightProperties.LinearCoatLightColor * coatNdotL * GetDiffuseDirectLightMultiplierLambert();
+				coatDiffuse += lightProperties.CoatLightColor * coatNdotL * GetDiffuseDirectLightMultiplierLambert();
 				specular += coatSpecular * surfaceProperties.CoatStrength;
 			}
 #endif
@@ -587,7 +586,7 @@ namespace PBR
 		diffuseAO = MultiBounceAO(diffuseColor, diffuseAO.x).y;
 		specularAO = MultiBounceAO(surfaceProperties.F0, specularAO.x).y;
 
-		diffuseLobeWeight *= diffuseAO / Math::PI;
+		diffuseLobeWeight *= diffuseAO * Color::PBRLightingScale;
 		specularLobeWeight *= specularAO;
 	}
 

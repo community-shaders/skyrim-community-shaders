@@ -2,7 +2,9 @@
 
 #include "Utils/Game.h"
 
+#include "DX12SwapChain.h"
 #include "Deferred.h"
+#include "FidelityFX.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -35,7 +37,7 @@ namespace globals
 	{
 		ID3D11Device* device = nullptr;
 		ID3D11DeviceContext* context = nullptr;
-		IDXGISwapChain* swapchain = nullptr;
+		IDXGISwapChain* swapChain = nullptr;
 	}
 
 	namespace features
@@ -76,6 +78,7 @@ namespace globals
 		RE::GameSettingCollection* gameSettingCollection = nullptr;
 		float* cameraNear = nullptr;
 		float* cameraFar = nullptr;
+		float* deltaTime = nullptr;
 		RE::BSUtilityShader* utilityShader = nullptr;
 		RE::Sky* sky = nullptr;
 		RE::UI* ui = nullptr;
@@ -87,6 +90,8 @@ namespace globals
 		RE::Setting* bEnableLandFade = nullptr;
 		RE::Setting* bShadowsOnGrass = nullptr;
 		RE::Setting* shadowMaskQuarter = nullptr;
+
+		REL::Relocation<ID3D11Buffer**> perFrame;
 	}
 
 	State* state = nullptr;
@@ -96,42 +101,20 @@ namespace globals
 	SIE::ShaderCache* shaderCache = nullptr;
 	Streamline* streamline = nullptr;
 	Upscaling* upscaling = nullptr;
+	DX12SwapChain* dx12SwapChain = nullptr;
+	FidelityFX* fidelityFX = nullptr;
 
-	void ReInit()
+	void OnInit()
 	{
-		{
-			using namespace game;
-
-			shadowState = RE::BSGraphics::RendererShadowState::GetSingleton();
-			graphicsState = RE::BSGraphics::State::GetSingleton();
-			renderer = RE::BSGraphics::Renderer::GetSingleton();
-			smState = &RE::BSShaderManager::State::GetSingleton();
-			isVR = REL::Module::IsVR();
-			memoryManager = RE::MemoryManager::GetSingleton();
-			iniSettingCollection = RE::INISettingCollection::GetSingleton();
-			iniPrefSettingCollection = RE::INIPrefSettingCollection::GetSingleton();
-			gameSettingCollection = RE::GameSettingCollection::GetSingleton();
-			cameraNear = (float*)(REL::RelocationID(517032, 403540).address() + 0x40);
-			cameraFar = (float*)(REL::RelocationID(517032, 403540).address() + 0x44);
-
-			currentPixelShader = GET_INSTANCE_MEMBER_PTR(currentPixelShader, shadowState);
-			currentVertexShader = GET_INSTANCE_MEMBER_PTR(currentVertexShader, shadowState);
-			stateUpdateFlags = GET_INSTANCE_MEMBER_PTR(stateUpdateFlags, shadowState);
-
-			ui = RE::UI::GetSingleton();
-		}
-
-		d3d::device = reinterpret_cast<ID3D11Device*>(game::renderer->GetRuntimeData().forwarder);
-		d3d::context = reinterpret_cast<ID3D11DeviceContext*>(game::renderer->GetRuntimeData().context);
-		d3d::swapchain = reinterpret_cast<IDXGISwapChain*>(game::renderer->GetRuntimeData().renderWindows->swapChain);
-
+		shaderCache = &SIE::ShaderCache::Instance();
 		state = State::GetSingleton();
 		menu = Menu::GetSingleton();
-		shaderCache = &SIE::ShaderCache::Instance();
 		deferred = Deferred::GetSingleton();
 		truePBR = TruePBR::GetSingleton();
 		streamline = Streamline::GetSingleton();
 		upscaling = Upscaling::GetSingleton();
+		dx12SwapChain = DX12SwapChain::GetSingleton();
+		fidelityFX = FidelityFX::GetSingleton();
 
 		features::cloudShadows = CloudShadows::GetSingleton();
 		features::dynamicCubemaps = DynamicCubemaps::GetSingleton();
@@ -150,6 +133,37 @@ namespace globals
 		features::wetnessEffects = WetnessEffects::GetSingleton();
 
 		features::llf::particleLights = ParticleLights::GetSingleton();
+	}
+
+	void ReInit()
+	{
+		{
+			using namespace game;
+
+			shadowState = RE::BSGraphics::RendererShadowState::GetSingleton();
+			graphicsState = RE::BSGraphics::State::GetSingleton();
+			renderer = RE::BSGraphics::Renderer::GetSingleton();
+			smState = &RE::BSShaderManager::State::GetSingleton();
+			isVR = REL::Module::IsVR();
+			memoryManager = RE::MemoryManager::GetSingleton();
+			iniSettingCollection = RE::INISettingCollection::GetSingleton();
+			iniPrefSettingCollection = RE::INIPrefSettingCollection::GetSingleton();
+			gameSettingCollection = RE::GameSettingCollection::GetSingleton();
+			cameraNear = (float*)(REL::RelocationID(517032, 403540).address() + 0x40);
+			cameraFar = (float*)(REL::RelocationID(517032, 403540).address() + 0x44);
+			deltaTime = (float*)REL::RelocationID(523660, 410199).address();
+
+			currentPixelShader = GET_INSTANCE_MEMBER_PTR(currentPixelShader, shadowState);
+			currentVertexShader = GET_INSTANCE_MEMBER_PTR(currentVertexShader, shadowState);
+			stateUpdateFlags = GET_INSTANCE_MEMBER_PTR(stateUpdateFlags, shadowState);
+
+			ui = RE::UI::GetSingleton();
+			perFrame = { REL::RelocationID(524768, 411384) };
+		}
+
+		d3d::device = reinterpret_cast<ID3D11Device*>(game::renderer->GetRuntimeData().forwarder);
+		d3d::context = reinterpret_cast<ID3D11DeviceContext*>(game::renderer->GetRuntimeData().context);
+		d3d::swapChain = reinterpret_cast<IDXGISwapChain*>(game::renderer->GetRuntimeData().renderWindows->swapChain);
 	}
 
 	void OnDataLoaded()

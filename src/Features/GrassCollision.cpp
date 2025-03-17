@@ -79,7 +79,7 @@ static bool GetShapeBound(RE::bhkNiCollisionObject* Colliedobj, RE::NiPoint3& ce
 		centerPos = RE::NiPoint3(massTrans[0], massTrans[1], massTrans[2]) * RE::bhkWorld::GetWorldScaleInverse();
 
 		const RE::hkpShape* shape = hkpRigid->collidable.GetShape();
-		if (shape) {
+		if (shape && shape->type == RE::hkpShapeType::kCapsule) {
 			float upExtent = shape->GetMaximumProjection(RE::hkVector4{ 0.0f, 0.0f, 1.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
 			float downExtent = shape->GetMaximumProjection(RE::hkVector4{ 0.0f, 0.0f, -1.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
 			auto z_extent = (upExtent + downExtent) / 2.0f;

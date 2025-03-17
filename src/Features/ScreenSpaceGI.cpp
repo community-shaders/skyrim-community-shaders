@@ -76,7 +76,7 @@ void ScreenSpaceGI::DrawSettings()
 		if (ImGui::Button("AO only", { -1, 0 })) {
 			settings.NumSlices = 1;
 			settings.NumSteps = 6;
-			settings.EnableBlur = false;
+			settings.EnableBlur = true;
 			settings.EnableGI = false;
 			recompileFlag = true;
 		}
@@ -96,8 +96,8 @@ void ScreenSpaceGI::DrawSettings()
 			ImGui::Text("Quarter res and blurry.");
 
 		ImGui::TableNextColumn();
-		if (ImGui::Button("Medium", { -1, 0 })) {
-			settings.NumSlices = 5;
+		if (ImGui::Button("Standard", { -1, 0 })) {
+			settings.NumSlices = 4;
 			settings.NumSteps = 8;
 			settings.ResolutionMode = 1;
 			settings.EnableBlur = true;
@@ -108,7 +108,7 @@ void ScreenSpaceGI::DrawSettings()
 			ImGui::Text("Half res and somewhat stable.");
 
 		ImGui::TableNextColumn();
-		if (ImGui::Button("High", { -1, 0 })) {
+		if (ImGui::Button("Extreme", { -1, 0 })) {
 			settings.NumSlices = 4;
 			settings.NumSteps = 8;
 			settings.ResolutionMode = 0;
@@ -120,11 +120,11 @@ void ScreenSpaceGI::DrawSettings()
 			ImGui::Text("Full res and clean.");
 
 		ImGui::TableNextColumn();
-		if (ImGui::Button("Ultra", { -1, 0 })) {
+		if (ImGui::Button("Reference", { -1, 0 })) {
 			settings.NumSlices = 8;
 			settings.NumSteps = 10;
 			settings.ResolutionMode = 0;
-			settings.EnableBlur = false;
+			settings.EnableBlur = true;
 			settings.EnableGI = true;
 			recompileFlag = true;
 		}
@@ -171,14 +171,14 @@ void ScreenSpaceGI::DrawSettings()
 
 	ImGui::Separator();
 
-	ImGui::SliderFloat("AO radius", &settings.AORadius, 10.f, 800.0f, "%.1f game units");
+	ImGui::SliderFloat("AO radius", &settings.AORadius, 10.f, 1024.0f, "%.1f game units");
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("A smaller radius produces tighter AO.");
 
 	{
 		auto _ = Util::DisableGuard(!settings.EnableGI);
 
-		ImGui::SliderFloat("IL radius", &settings.GIRadius, 10.f, 800.0f, "%.1f game units");
+		ImGui::SliderFloat("IL radius", &settings.GIRadius, 10.f, 1024.0f, "%.1f game units");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("A larger radius produces wider IL.");
 	}
@@ -194,7 +194,7 @@ void ScreenSpaceGI::DrawSettings()
 	if (showAdvanced) {
 		ImGui::Separator();
 
-		ImGui::SliderFloat("Thickness", &settings.Thickness, 0.f, 500.0f, "%.1f game units");
+		ImGui::SliderFloat("Thickness", &settings.Thickness, 0.f, 128.0f, "%.1f game units");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("How thick the occluders are. Only affects AO.");
 	}
@@ -562,8 +562,6 @@ bool ScreenSpaceGI::ShadersOK()
 
 void ScreenSpaceGI::UpdateSB()
 {
-	auto viewport = globals::game::graphicsState;
-
 	float2 res = { (float)texRadiance->desc.Width, (float)texRadiance->desc.Height };
 	float2 dynres = Util::ConvertToDynamic(res);
 	dynres = { floor(dynres.x), floor(dynres.y) };
@@ -588,7 +586,7 @@ void ScreenSpaceGI::UpdateSB()
 		data.RcpTexDim = float2(1.0f) / res;
 		data.FrameDim = dynres;
 		data.RcpFrameDim = float2(1.0f) / dynres;
-		data.FrameIndex = viewport->frameCount;
+		data.FrameIndex = globals::state->frameCount;
 
 		data.NumSlices = settings.NumSlices;
 		data.NumSteps = settings.NumSteps;

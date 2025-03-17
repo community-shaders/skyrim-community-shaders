@@ -275,7 +275,12 @@ void Skylighting::PostPostLoad()
 	logger::info("[SKYLIGHTING] Hooking BSLightingShaderProperty::GetPrecipitationOcclusionMapRenderPassesImp");
 	stl::write_vfunc<0x2D, BSLightingShaderProperty_GetPrecipitationOcclusionMapRenderPassesImpl>(RE::VTABLE_BSLightingShaderProperty[0]);
 	stl::write_thunk_call<Main_Precipitation_RenderOcclusion>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x3A1, 0x3A1, 0x2FA));
-	stl::write_thunk_call<SetViewFrustum>(REL::RelocationID(25643, 26185).address() + REL::Relocate(0x5D9, 0x59D, 0x5DC));
+
+	if (REL::Module::IsVR())
+		stl::write_thunk_call<SetViewFrustumVR>(REL::RelocationID(25643, 26185).address() + REL::Relocate(0x5D9, 0x59D, 0x5DC));
+	else
+		stl::write_thunk_call<SetViewFrustum>(REL::RelocationID(25643, 26185).address() + REL::Relocate(0x5D9, 0x59D, 0x5DC));
+
 	MenuOpenCloseEventHandler::Register();
 }
 
@@ -412,7 +417,15 @@ RE::BSLightingShaderProperty::Data* Skylighting::BSLightingShaderProperty_GetPre
 		}
 	}
 
-	if (property->flags.any(kZBufferWrite) && property->flags.none(kRefraction, kTempRefraction, kMultiTextureLandscape, kNoLODLandBlend, kLODLandscape, kEyeReflect, kDecal, kDynamicDecal)) {
+	bool valid = false;
+
+	if (skylighting->inOcclusion) {
+		valid = property->flags.any(kZBufferWrite) && property->flags.none(kRefraction, kTempRefraction, kLODLandscape, kEyeReflect, kDecal, kDynamicDecal);
+	} else {
+		valid = property->flags.any(kZBufferWrite) && property->flags.none(kRefraction, kTempRefraction, kMultiTextureLandscape, kNoLODLandBlend, kLODLandscape, kEyeReflect, kDecal, kDynamicDecal);
+	}
+
+	if (valid) {
 		if (geometry->worldBound.radius > 32) {
 			stl::enumeration<RE::BSUtilityShader::Flags> technique;
 			technique.set(RenderDepth);
@@ -452,7 +465,7 @@ void Skylighting::SetViewFrustum::thunk(RE::NiCamera* a_camera, RE::NiFrustum* a
 	if (skylighting->inOcclusion) {
 		uint corner = skylighting->frameCount % 4;
 
-		float frustumSize = a_frustum->fTop * 0.5f;
+		float frustumSize = a_frustum->fTop;
 
 		a_frustum->fBottom = (corner == 0 || corner == 1) ? -frustumSize : 0.0f;
 		a_frustum->fLeft = (corner == 0 || corner == 2) ? -frustumSize : 0.0f;
@@ -461,6 +474,24 @@ void Skylighting::SetViewFrustum::thunk(RE::NiCamera* a_camera, RE::NiFrustum* a
 	}
 
 	func(a_camera, a_frustum);
+}
+
+void Skylighting::SetViewFrustumVR::thunk(RE::NiCamera* a_camera, RE::NiFrustum* a_frustum, uint a_eyeIndex)
+{
+	auto skylighting = globals::features::skylighting;
+
+	if (skylighting->inOcclusion) {
+		uint corner = skylighting->frameCount % 4;
+
+		float frustumSize = a_frustum->fTop;
+
+		a_frustum->fBottom = (corner == 0 || corner == 1) ? -frustumSize : 0.0f;
+		a_frustum->fLeft = (corner == 0 || corner == 2) ? -frustumSize : 0.0f;
+		a_frustum->fRight = (corner == 1 || corner == 3) ? frustumSize : 0.0f;
+		a_frustum->fTop = (corner == 2 || corner == 3) ? frustumSize : 0.0f;
+	}
+
+	func(a_camera, a_frustum, a_eyeIndex);
 }
 
 void Skylighting::RenderOcclusion()

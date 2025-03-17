@@ -41,17 +41,45 @@ namespace Color
 			tmp - color.y);
 	}
 
-	const static float AlbedoPreMult = 1 / 1.7;                        // greater value -> brighter pbr
-	const static float LightPreMult = 1 / (Math::PI * AlbedoPreMult);  // ensure 1/PI as product
+	// Attempt to match vanilla materials tha are a darker than PBR
+	const static float PBRLightingScale = 0.666;
 
 	float3 GammaToLinear(float3 color)
 	{
-		return pow(abs(color), 2.2);
+		return pow(color, 1.8);
 	}
 
 	float3 LinearToGamma(float3 color)
 	{
+		return pow(color, 1.0 / 1.8);
+	}
+
+	float3 GammaToTrueLinear(float3 color)
+	{
+		return pow(color, 2.2);
+	}
+
+	float3 TrueLinearToGamma(float3 color)
+	{
+		return pow(color, 1.0 / 2.2);
+	}
+
+	float3 Diffuse(float3 color)
+	{
+#if defined(TRUE_PBR)
 		return pow(abs(color), 1.0 / 2.2);
+#else
+		return color;
+#endif
+	}
+
+	float3 Light(float3 color)
+	{
+#if defined(TRUE_PBR)
+		return color * Math::PI;  // Compensate for traditional Lambertian diffuse
+#else
+		return color;
+#endif
 	}
 }
 
