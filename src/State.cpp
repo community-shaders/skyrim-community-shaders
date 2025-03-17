@@ -6,6 +6,7 @@
 
 #include "DX12SwapChain.h"
 #include "Deferred.h"
+#include "HDR.h"
 #include "Features/CloudShadows.h"
 #include "Features/TerrainBlending.h"
 #include "Menu.h"
@@ -125,6 +126,7 @@ void State::Setup()
 	globals::deferred->SetupResources();
 	if (!upscalerLoaded)
 		globals::upscaling->CreateUpscalingResources();
+	globals::hdr->GetSingleton()->SetupResources();
 	SetupReShade();
 	if (initialized)
 		return;

@@ -2,8 +2,7 @@
 #define __COLOR_DEPENDENCY_HLSL__
 
 #include "Common/Math.hlsli"
-
-#include <cfloat>
+#define FLT_MIN asfloat(0x00800000) // 1.175494351e-38f
 
 namespace Color
 {
