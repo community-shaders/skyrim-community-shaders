@@ -12,8 +12,8 @@ Texture2D<float4> srcMotionVec : register(t4);
 Texture2D<half3> srcPrevAmbient : register(t5);
 Texture2D<unorm float> srcAccumFrames : register(t6);  // maybe half-res
 Texture2D<half> srcPrevAo : register(t7);              // maybe half-res
-Texture2D<half3> srcPrevGI : register(t8);            // maybe half-res
-Texture2D<half4> srcPrevGISpecular : register(t9);    // maybe half-res
+Texture2D<half3> srcPrevGI : register(t8);             // maybe half-res
+Texture2D<half4> srcPrevGISpecular : register(t9);     // maybe half-res
 
 RWTexture2D<float3> outRadianceDisocc : register(u0);
 RWTexture2D<unorm float> outAccumFrames : register(u1);
@@ -137,7 +137,7 @@ void readHistory(
 			useCurrentRadiance = false;
 #	endif
 		}
-	} 
+	}
 #endif
 
 #ifdef GI

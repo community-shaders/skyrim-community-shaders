@@ -12,7 +12,7 @@
 Texture2D<half> srcDepth : register(t0);
 Texture2D<half4> srcNormalRoughness : register(t1);
 Texture2D<unorm float> srcAccumFrames : register(t2);  // maybe half-res
-Texture2D<float3> srcGI : register(t3);               // maybe half-res
+Texture2D<float3> srcGI : register(t3);                // maybe half-res
 
 RWTexture2D<unorm float> outAccumFrames : register(u0);
 RWTexture2D<float3> outGI : register(u1);

@@ -42,7 +42,7 @@ Texture2D<float3> srcRadiance : register(t2);  // maybe half-res
 Texture2D<unorm float2> srcNoise : register(t3);
 Texture2D<unorm float> srcAccumFrames : register(t4);  // maybe half-res
 Texture2D<float> srcPrevAo : register(t5);             // maybe half-res
-Texture2D<float3> srcPrevGI : register(t6);             // maybe half-res
+Texture2D<float3> srcPrevGI : register(t6);            // maybe half-res
 Texture2D<float4> srcPrevGISpecular : register(t7);    // maybe half-res
 
 RWTexture2D<unorm float> outAo : register(u0);
@@ -289,7 +289,7 @@ void CalculateGI(
 	visibility = 1 - pow(abs(1 - visibility), AOPower);
 
 #ifdef GI
-	
+
 	radiance *= rcpNumSlices;
 	radiance *= GIStrength;
 	radiance = lerp(radiance, 0, depthFade);

@@ -5,7 +5,7 @@
 
 Texture2D<half> srcDepth : register(t0);
 Texture2D<half> srcAo : register(t1);           // half-res
-Texture2D<half3> srcGI: register(t2);         // half-res
+Texture2D<half3> srcGI : register(t2);          // half-res
 Texture2D<half4> srcGiSpecular : register(t3);  // half-res
 
 RWTexture2D<half> outAo : register(u0);
