@@ -167,9 +167,9 @@ public:
 		// Interface seems to be somewhat broken rn
 		//stl::write_thunk_call<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084).address() + REL::Relocate(0x7E, 0x83, 0x17F));
 		//stl::write_thunk_call<MenuManagerDrawInterfaceEndHook>(REL::RelocationID(79947, 82084).address() + REL::Relocate(0x277, 0x2EA, 0x17F));
-		stl::write_thunk_call<RenderMenuImagespace>(REL::RelocationID(51855, 52727).address() + REL::Relocate(0x7A1, 0x7A4, 0x17F));
-		stl::write_thunk_call<BSGraphics_Begin_Unk>(REL::RelocationID(75460, 52727).address() + REL::Relocate(0x1D3, 0x7A4, 0x17F));
-		stl::write_thunk_call<BSGraphics_End_Unk>(REL::RelocationID(75461, 52727).address() + REL::Relocate(0x9, 0x7A4, 0x17F));
+		//stl::write_thunk_call<RenderMenuImagespace>(REL::RelocationID(51855, 52727).address() + REL::Relocate(0x7A1, 0x7A4, 0x17F));
+		//stl::write_thunk_call<BSGraphics_Begin_Unk>(REL::RelocationID(75460, 52727).address() + REL::Relocate(0x1D3, 0x7A4, 0x17F));
+		//stl::write_thunk_call<BSGraphics_End_Unk>(REL::RelocationID(75461, 52727).address() + REL::Relocate(0x9, 0x7A4, 0x17F));
 		logger::info("[HDR] Installed hooks");
 	}
 };
