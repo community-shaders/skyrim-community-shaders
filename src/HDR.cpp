@@ -1,5 +1,9 @@
-#include "C:/Users/micro/source/repos/skyrim-community-shaders/build/ALL/CMakeFiles/CommunityShaders.dir/Debug/cmake_pch.hxx"
 #include "HDR.h"
+
+#include "PCH.h"
+#include "State.h"
+
+#include <imgui.h>
 
 void HDR::DrawSettings()
 {
@@ -75,6 +79,17 @@ void HDR::SetupResources()
 	hdrDataCB = new ConstantBuffer(ConstantBufferDesc<HDRDataCB>());
 }
 
+void HDR::CheckSwapchain()
+{
+	if (!swapChainResource) {
+		auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+		auto& swapChain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+		if (swapChain.SRV) {
+			swapChain.SRV->GetResource(&swapChainResource);
+		}
+	}
+}
+
 void HDR::ClearShaderCache()
 {
 	if (hdrOutputCS) {
@@ -95,7 +110,7 @@ ID3D11ComputeShader* HDR::GetHDROutputCS()
 void HDR::HDROutput()
 {
 	static auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-	auto context = globals::d3d::context;
+	static auto& context = globals::d3d::context;
 	static auto& swapChain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 
 	context->OMSetRenderTargets(0, nullptr, nullptr); // Unbind all bound render targets

@@ -1,4 +1,5 @@
 #pragma once
+
 #include "Menu.h"
 
 class HDR
@@ -24,6 +25,7 @@ public:
 
 	void DrawSettings();
 	void SetupResources();
+	void CheckSwapchain();
 	void ClearShaderCache();
 	void HDROutput();
 
@@ -40,6 +42,7 @@ public:
 	Texture2D* hdrTexture = nullptr;
 	Texture2D* outputTexture = nullptr;
 
+	ID3D11Resource* swapChainResource;
 	ID3D11ComputeShader* hdrOutputCS = nullptr;
 	ID3D11ComputeShader* GetHDROutputCS();
 
