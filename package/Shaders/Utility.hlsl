@@ -131,11 +131,7 @@ VS_OUTPUT main(VS_INPUT input)
 
 #	if (defined(RENDER_DEPTH) && defined(RENDER_SHADOWMASK_ANY)) || SHADOWFILTER == 2
 	vsout.PositionCS.xy = input.PositionMS.xy;
-#		if defined(RENDER_SHADOWMASKDPB)
 	vsout.PositionCS.z = ShadowFadeParam.z;
-#		else
-	vsout.PositionCS.z = HighDetailRange[eyeIndex].x;
-#		endif
 	vsout.PositionCS.w = 1;
 #	elif defined(STENCIL_ABOVE_WATER)
 	vsout.PositionCS.y = WaterParams.x * 2 + input.PositionMS.y;
