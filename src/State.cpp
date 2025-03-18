@@ -369,6 +369,10 @@ void State::Save(ConfigMode a_configMode)
 	auto& upscalingJson = settings[upscaling->GetShortName()];
 	upscaling->SaveSettings(upscalingJson);
 
+	auto hdr = globals::hdr;
+	auto& hdrJson = settings[hdr->GetShortName()];
+	hdr->SaveSettings(hdrJson);
+
 	json originalShaders;
 	for (int classIndex = 0; classIndex < RE::BSShader::Type::Total - 1; ++classIndex) {
 		originalShaders[magic_enum::enum_name(static_cast<RE::BSShader::Type>(classIndex + 1))] = enabledClasses[classIndex];
@@ -646,6 +650,9 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 {
 	{
 		SharedDataCB data{};
+
+		const auto hdr = globals::hdr;
+		data.HDRData = hdr->GetHDRData();
 
 		const auto shaderManager = globals::game::smState;
 		const RE::NiTransform& dalcTransform = shaderManager->directionalAmbientTransform;

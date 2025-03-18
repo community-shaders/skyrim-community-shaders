@@ -60,10 +60,6 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	DX::ThrowIfFailed(swapChain->GetBuffer(0, IID_PPV_ARGS(&swapChainBuffers[0])));
 	DX::ThrowIfFailed(swapChain->GetBuffer(1, IID_PPV_ARGS(&swapChainBuffers[1])));
 
-	if (globals::hdr->settings.enabled) {
-		DX::ThrowIfFailed(swapChain->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020));
-	}
-
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
 
 	fidelityFX->SetupFrameGeneration();

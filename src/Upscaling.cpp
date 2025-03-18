@@ -610,6 +610,16 @@ void Upscaling::CreateFrameGenerationResources()
 		}
 	}
 
+	{
+		IDXGIResource1* dxgiResource = nullptr;
+
+		if (dxgiResource && globals::hdr->settings.enabled) {
+			if (SUCCEEDED(HUDLessBufferShared->resource->QueryInterface(IID_PPV_ARGS(&dxgiResource)))) {
+				DX::ThrowIfFailed(globals::dx12SwapChain->swapChain->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020));
+			}
+		}
+	}
+
 	copyDepthToSharedBufferCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\FrameGeneration\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0"));
 }
 
@@ -677,6 +687,35 @@ void Upscaling::PostDisplay()
 	ID3D11Resource* swapChainResource;
 	swapChain.SRV->GetResource(&swapChainResource);
 	context->CopyResource(HUDLessBufferShared->resource.get(), swapChainResource);
+
+	auto hdr = HDR::GetSingleton();
+	if (hdr->settings.enabled) {
+		hdr->UpdateHDRData();
+		{
+			ID3D11ShaderResourceView* srvs[1]{ hdr->hdrTexture->srv.get() };
+			ID3D11UnorderedAccessView* uavs[1]{ hdr->outputTexture->uav.get() };
+			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+			ID3D11Buffer* cbs[1]{ hdr->hdrDataCB->CB() };
+			context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
+
+			context->CSSetShader(hdr->GetHDROutputCS(), nullptr, 0);
+
+			auto dispatchCount = Util::GetScreenDispatchCount(false);
+			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+
+			srvs[0] = nullptr;
+			context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
+
+			uavs[0] = nullptr;
+			context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
+
+			cbs[0] = nullptr;
+			context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
+		}
+
+		context->CopyResource(swapChainResource, hdr->outputTexture->resource.get());
+	}
 
 	useHUDLess = true;
 }

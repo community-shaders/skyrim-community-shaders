@@ -85,7 +85,6 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 			Deferred::Hooks::Install();
 			globals::truePBR->PostPostLoad();
 			Upscaling::InstallHooks();
-			HDR::InstallHooks();
 			Hooks::Install();
 			FrameAnnotations::OnPostPostLoad();
 

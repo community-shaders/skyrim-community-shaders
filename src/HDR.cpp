@@ -1,9 +1,20 @@
 #include "HDR.h"
 
 #include "PCH.h"
-#include "State.h"
 
+#include "Buffer.h"
+#include "State.h"
+#include "Util.h"
+
+#include <dxgi1_4.h>
+#include <dxgi1_6.h>
 #include <imgui.h>
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	HDR::Settings,
+	displayPeakBrightness,
+	gameBrightness,
+	uiBrightness);
 
 void HDR::DrawSettings()
 {
@@ -15,12 +26,21 @@ void HDR::DrawSettings()
 		settings.uiBrightness = 200;
 	}
 
-	ImGui::SliderInt("Display Peak Brightness (nits)", &settings.displayPeakBrightness, 400, 10000);
-	ImGui::SliderInt("Game Brightness (nits)", &settings.gameBrightness, 100, 400);
-	ImGui::SliderInt("UI Brightness (nits)", &settings.uiBrightness, 100, 400);
+	ImGui::SliderInt("Display Peak Brightness (nits)", (int*)&settings.displayPeakBrightness, 400, 2000);
+	ImGui::SliderInt("Game Brightness (nits)", (int*)&settings.gameBrightness, 100, 400);
+	ImGui::SliderInt("UI Brightness (nits)", (int*)&settings.uiBrightness, 100, 400);
+
+	UpdateHDRData();
 }
 
-float4 HDR::GetHDRData()
+void HDR::SaveSettings(json& o_json)
+{
+	std::lock_guard<std::mutex> lock(settingsMutex);
+
+	o_json = settings;
+}
+
+float4 HDR::GetHDRData() const
 {
 	float4 data;
 	data.x = static_cast<float>(settings.enabled);
@@ -32,8 +52,7 @@ float4 HDR::GetHDRData()
 
 void HDR::SetupResources()
 {
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-
+	auto renderer = globals::game::renderer;
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
 	D3D11_TEXTURE2D_DESC texDesc{};
@@ -46,17 +65,7 @@ void HDR::SetupResources()
 	main.RTV->GetDesc(&rtvDesc);
 	main.UAV->GetDesc(&uavDesc);
 
-	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	srvDesc.Format = texDesc.Format;
-	rtvDesc.Format = texDesc.Format;
-	uavDesc.Format = texDesc.Format;
-
-	uiTexture = new Texture2D(texDesc);
-	uiTexture->CreateSRV(srvDesc);
-	uiTexture->CreateRTV(rtvDesc);
-	uiTexture->CreateUAV(uavDesc);
-
-	texDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 	srvDesc.Format = texDesc.Format;
 	rtvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
@@ -79,17 +88,6 @@ void HDR::SetupResources()
 	hdrDataCB = new ConstantBuffer(ConstantBufferDesc<HDRDataCB>());
 }
 
-void HDR::CheckSwapchain()
-{
-	if (!swapChainResource) {
-		auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-		auto& swapChain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-		if (swapChain.SRV) {
-			swapChain.SRV->GetResource(&swapChainResource);
-		}
-	}
-}
-
 void HDR::ClearShaderCache()
 {
 	if (hdrOutputCS) {
@@ -107,52 +105,8 @@ ID3D11ComputeShader* HDR::GetHDROutputCS()
 	return hdrOutputCS;
 }
 
-void HDR::HDROutput()
+void HDR::UpdateHDRData() const
 {
-	static auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-	static auto& context = globals::d3d::context;
-	static auto& swapChain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-
-	context->OMSetRenderTargets(0, nullptr, nullptr); // Unbind all bound render targets
-
-	{
-		HDRDataCB data = { GetHDRData() };
-		hdrDataCB->Update(data);
-	}
-
-	{
-		ID3D11ShaderResourceView* srvs[2]{ hdrTexture->srv.get(), uiTexture->srv.get() };
-		context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
-
-		ID3D11UnorderedAccessView* uavs[1]{ outputTexture->uav.get() };
-		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
-
-		ID3D11Buffer* cbs[1]{ hdrDataCB->CB() };
-		context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
-
-		context->CSSetShader(GetHDROutputCS(), nullptr, 0);
-
-		auto dispatchCount = Util::GetScreenDispatchCount(false);
-		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
-
-		srvs[0] = nullptr;
-		srvs[1] = nullptr;
-		context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
-
-		uavs[0] = nullptr;
-		context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
-
-		cbs[0] = nullptr;
-		context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
-	}
-
-	// Copy fake swapchain into real one
-	context->CopyResource(swapChainResource, outputTexture->resource.get());
-
-	// Reset UI buffer
-	float clearColor[4] = { 0, 0, 0, 0 };
-	context->ClearRenderTargetView(uiTexture->rtv.get(), clearColor);
-
-	// Set render target for compatibility
-	context->OMSetRenderTargets(1, &swapChain.RTV, nullptr);
+	HDRDataCB data = { GetHDRData() };
+	hdrDataCB->Update(data);
 }
