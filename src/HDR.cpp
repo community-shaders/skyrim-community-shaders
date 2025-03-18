@@ -40,6 +40,17 @@ void HDR::SaveSettings(json& o_json)
 	o_json = settings;
 }
 
+void HDR::LoadSettings(json& o_json)
+{
+	std::lock_guard<std::mutex> lock(settingsMutex);
+	settings = o_json;
+}
+
+void HDR::RestoreDefaultSettings()
+{
+	settings = {};
+}
+
 float4 HDR::GetHDRData() const
 {
 	float4 data;

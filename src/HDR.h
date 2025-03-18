@@ -26,6 +26,8 @@ public:
 
 	void DrawSettings();
 	void SaveSettings(json& o_json);
+	void LoadSettings(json& o_json);
+	void RestoreDefaultSettings();
 	void SetupResources();
 	void UpdateHDRData() const;
 	void ClearShaderCache();

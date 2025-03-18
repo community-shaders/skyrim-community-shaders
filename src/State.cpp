@@ -289,6 +289,20 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 			logger::warn("Missing settings for Upscaling, using default.");
 		}
 
+		auto hdr = globals::hdr;
+		auto& hdrJson = settings[hdr->GetShortName()];
+		if (hdrJson.is_object()) {
+			logger::info("Loading HDR settings");
+			try {
+				hdr->LoadSettings(hdrJson);
+			} catch (...) {
+				logger::warn("Invalid settings for HDR, using default.");
+				hdr->RestoreDefaultSettings();
+			}
+		} else {
+			logger::warn("Missing settings for HDR, using default.");
+		}
+
 		for (auto* feature : Feature::GetFeatureList()) {
 			try {
 				const std::string featureName = feature->GetShortName();
