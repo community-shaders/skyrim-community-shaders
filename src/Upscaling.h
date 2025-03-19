@@ -12,7 +12,7 @@ public:
 		return &singleton;
 	}
 
-	inline std::string GetShortName() { return "Upscaling"; }
+	std::string GetShortName() { return "Upscaling"; }
 
 	float2 jitter = { 0, 0 };
 
@@ -26,9 +26,9 @@ public:
 
 	struct Settings
 	{
-		uint upscaleMethod = (uint)UpscaleMethod::kTAA;
-		uint upscaleMethodNoDLSS = (uint)UpscaleMethod::kTAA;
-		uint upscaleMethodNoFSR = (uint)UpscaleMethod::kTAA;
+		uint upscaleMethod = static_cast<uint>(UpscaleMethod::kTAA);
+		uint upscaleMethodNoDLSS = static_cast<uint>(UpscaleMethod::kTAA);
+		uint upscaleMethodNoFSR = static_cast<uint>(UpscaleMethod::kTAA);
 		float sharpness = 0.0f;
 		uint dlssPreset = 1;
 		uint frameLimitMode = 1;
@@ -65,6 +65,7 @@ public:
 	void UpdateJitter();
 	void Upscale();
 	void SharpenTAA();
+	void ApplyHDR();
 
 	Texture2D* upscalingTexture;
 	Texture2D* alphaMaskTexture;
@@ -101,11 +102,12 @@ public:
 			func(a_state);
 			GetSingleton()->UpdateJitter();
 		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
 	bool validTaaPass = false;
-	std::mutex settingsMutex;  // Mutex to protect settings access
+	std::mutex settingsMutex; // Mutex to protect settings access
 
 	struct TAA_BeginTechnique
 	{
@@ -114,6 +116,7 @@ public:
 			func(a_shader, a_null);
 			GetSingleton()->validTaaPass = true;
 		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -128,6 +131,7 @@ public:
 			else
 				func(a_shader, a_null);
 		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -142,6 +146,7 @@ public:
 				singleton->SharpenTAA();
 			singleton->validTaaPass = false;
 		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -152,6 +157,7 @@ public:
 			GetSingleton()->PostDisplay();
 			func(a1);
 		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 

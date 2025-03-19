@@ -372,11 +372,45 @@ void Upscaling::Upscale()
 		state->EndPerfEvent();
 	}
 
-	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
-
-	auto hdr = globals::hdr;
+	auto hdr = HDR::GetSingleton();
 	if (hdr->settings.enabled) {
-		context->CopyResource(hdr->hdrTexture->resource.get(), upscalingTexture->resource.get());
+		std::lock_guard<std::mutex> lockHDR(hdr->settingsMutex);
+		context->CopyResource(inputTextureResource, upscalingTexture->resource.get());
+
+		state->BeginPerfEvent("HDR");
+		{
+			{
+				ID3D11ShaderResourceView* views[1] = { inputTextureSRV };
+				context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+				ID3D11UnorderedAccessView* uavs[1] = { hdr->outputTexture->uav.get() };
+				context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+				ID3D11Buffer* cbs[1]{ hdr->hdrDataCB->CB() };
+				context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
+
+				context->CSSetShader(hdr->GetHDROutputCS(), nullptr, 0);
+
+				context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+			}
+
+			ID3D11ShaderResourceView* views[1] = { nullptr };
+			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+			ID3D11UnorderedAccessView* uavs[1] = { nullptr };
+			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+			ID3D11ComputeShader* shader = nullptr;
+			context->CSSetShader(shader, nullptr, 0);
+
+			ID3D11Buffer* cbs[1]{ nullptr };
+			context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
+		}
+		state->EndPerfEvent();
+
+		context->CopyResource(outputTextureResource, hdr->outputTexture->resource.get());
+	} else {
+		context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
 	}
 }
 
@@ -441,12 +475,130 @@ void Upscaling::SharpenTAA()
 
 	state->EndPerfEvent();
 
-	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
-
-	auto hdr = globals::hdr;
+	auto hdr = HDR::GetSingleton();
 	if (hdr->settings.enabled) {
-		context->CopyResource(hdr->hdrTexture->resource.get(), upscalingTexture->resource.get());
+		std::lock_guard<std::mutex> lockHDR(hdr->settingsMutex);
+		context->CopyResource(inputTextureResource, upscalingTexture->resource.get());
+
+		state->BeginPerfEvent("HDR");
+		{
+			{
+				ID3D11ShaderResourceView* views[1] = { inputTextureSRV };
+				context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+				ID3D11UnorderedAccessView* uavs[1] = { hdr->outputTexture->uav.get() };
+				context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+				ID3D11Buffer* cbs[1]{ hdr->hdrDataCB->CB() };
+				context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
+
+				context->CSSetShader(hdr->GetHDROutputCS(), nullptr, 0);
+
+				context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+			}
+
+			ID3D11ShaderResourceView* views[1] = { nullptr };
+			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+			ID3D11UnorderedAccessView* uavs[1] = { nullptr };
+			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+			ID3D11ComputeShader* shader = nullptr;
+			context->CSSetShader(shader, nullptr, 0);
+
+			ID3D11Buffer* cbs[1]{ nullptr };
+			context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
+		}
+		state->EndPerfEvent();
+
+		context->CopyResource(outputTextureResource, hdr->outputTexture->resource.get());
+	} else {
+		context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
 	}
+
+	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET); // Run OMSetRenderTargets again
+}
+
+void Upscaling::ApplyHDR()
+{
+	auto hdr = HDR::GetSingleton();
+	if (!hdr->settings.enabled) {
+		return;
+	}
+
+	std::lock_guard<std::mutex> lock(hdr->settingsMutex); // Lock for the duration of this function
+
+	CheckResources();
+
+	auto state = globals::state;
+	auto context = globals::d3d::context;
+
+	ID3D11ShaderResourceView* inputTextureSRV;
+	context->PSGetShaderResources(0, 1, &inputTextureSRV);
+
+	if (!inputTextureSRV) {
+		return;
+	}
+
+	inputTextureSRV->Release();
+
+	ID3D11RenderTargetView* outputTextureRTV;
+	ID3D11DepthStencilView* dsv;
+	context->OMGetRenderTargets(1, &outputTextureRTV, &dsv);
+	context->OMSetRenderTargets(0, nullptr, nullptr);
+
+	if (!outputTextureRTV) {
+		return;
+	}
+
+	outputTextureRTV->Release();
+
+	if (dsv)
+		dsv->Release();
+
+	ID3D11Resource* inputTextureResource;
+	inputTextureSRV->GetResource(&inputTextureResource);
+
+	ID3D11Resource* outputTextureResource;
+	outputTextureRTV->GetResource(&outputTextureResource);
+
+	auto dispatchCount = Util::GetScreenDispatchCount(false);
+
+	std::lock_guard<std::mutex> lockHDR(hdr->settingsMutex);
+	context->CopyResource(inputTextureResource, upscalingTexture->resource.get());
+
+	state->BeginPerfEvent("HDR");
+	{
+		{
+			ID3D11ShaderResourceView* views[1] = { inputTextureSRV };
+			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+			ID3D11UnorderedAccessView* uavs[1] = { hdr->outputTexture->uav.get() };
+			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+			ID3D11Buffer* cbs[1]{ hdr->hdrDataCB->CB() };
+			context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
+
+			context->CSSetShader(hdr->GetHDROutputCS(), nullptr, 0);
+
+			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+		}
+
+		ID3D11ShaderResourceView* views[1] = { nullptr };
+		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+		ID3D11UnorderedAccessView* uavs[1] = { nullptr };
+		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+		ID3D11ComputeShader* shader = nullptr;
+		context->CSSetShader(shader, nullptr, 0);
+
+		ID3D11Buffer* cbs[1]{ nullptr };
+		context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
+	}
+	state->EndPerfEvent();
+
+	context->CopyResource(outputTextureResource, hdr->outputTexture->resource.get());
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET); // Run OMSetRenderTargets again
 }
@@ -681,51 +833,27 @@ void Upscaling::CopyBuffersToSharedResources()
 
 void Upscaling::PostDisplay()
 {
-	auto context = globals::d3d::context;
-
-	auto hdr = HDR::GetSingleton();
-	if (hdr->settings.enabled) {
-		globals::state->BeginPerfEvent("HDR");
-		{
-			ID3D11ShaderResourceView* srvs[1]{ hdr->hdrTexture->srv.get() };
-			ID3D11UnorderedAccessView* uavs[1]{ hdr->outputTexture->uav.get() };
-			ID3D11Buffer* cbs[1]{ hdr->hdrDataCB->CB() };
-
-			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
-			context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
-
-			context->CSSetShader(hdr->GetHDROutputCS(), nullptr, 0);
-
-			auto dispatchCount = Util::GetScreenDispatchCount(false);
-			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
-
-			srvs[0] = nullptr;
-			context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
-
-			uavs[0] = nullptr;
-			context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
-
-			cbs[0] = nullptr;
-			context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
-
-			context->CopyResource(upscalingTexture->resource.get(), hdr->outputTexture->resource.get());
-		}
-		globals::state->EndPerfEvent();
+	auto upscaleMethod = GetUpscaleMethod();
+	if (upscaleMethod == UpscaleMethod::kNONE) {
+		ApplyHDR();
 	}
+
+	if (!d3d12Interop || !settings.frameGenerationMode) {
+		return;
+	}
+
+	auto context = globals::d3d::context;
+	auto renderer = globals::game::renderer;
+	auto& swapChain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+
+	ID3D11Resource* swapChainResource;
+	swapChain.SRV->GetResource(&swapChainResource);
 
 	globals::state->RenderReShade();
 
-	if (d3d12Interop && settings.frameGenerationMode) {
-		auto renderer = globals::game::renderer;
-		auto& swapChain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+	context->CopyResource(HUDLessBufferShared->resource.get(), swapChainResource);
 
-		ID3D11Resource* swapChainResource;
-		swapChain.SRV->GetResource(&swapChainResource);
-
-		context->CopyResource(HUDLessBufferShared->resource.get(), swapChainResource);
-
-		useHUDLess = true;
-	}
+	useHUDLess = true;
 }
 
 void Upscaling::TimerSleepQPC(int64_t targetQPC)

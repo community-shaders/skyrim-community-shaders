@@ -26,9 +26,9 @@ void HDR::DrawSettings()
 		settings.uiBrightness = 200;
 	}
 
-	ImGui::SliderInt("Display Peak Brightness (nits)", (int*)&settings.displayPeakBrightness, 400, 2000);
-	ImGui::SliderInt("Game Brightness (nits)", (int*)&settings.gameBrightness, 100, 400);
-	ImGui::SliderInt("UI Brightness (nits)", (int*)&settings.uiBrightness, 100, 400);
+	ImGui::SliderInt("Display Peak Brightness (nits)", (int*)&settings.displayPeakBrightness, 400, 10000);
+	ImGui::SliderInt("Game Brightness (nits)", (int*)&settings.gameBrightness, 100, 500);
+	ImGui::SliderInt("UI Brightness (nits)", (int*)&settings.uiBrightness, 100, 500);
 
 	UpdateHDRData();
 }
@@ -76,27 +76,22 @@ void HDR::SetupResources()
 	main.RTV->GetDesc(&rtvDesc);
 	main.UAV->GetDesc(&uavDesc);
 
+	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	srvDesc.Format = texDesc.Format;
+	uavDesc.Format = texDesc.Format;
+	rtvDesc.Format = texDesc.Format;
+
+	hdrTexture = new Texture2D(texDesc);
+	hdrTexture->CreateSRV(srvDesc);
+	hdrTexture->CreateUAV(uavDesc);
+
 	texDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
 	srvDesc.Format = texDesc.Format;
-	rtvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
 
 	outputTexture = new Texture2D(texDesc);
 	outputTexture->CreateSRV(srvDesc);
-	outputTexture->CreateRTV(rtvDesc);
 	outputTexture->CreateUAV(uavDesc);
-
-	texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_RENDER_TARGET;
-
-	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-	srvDesc.Format = texDesc.Format;
-	rtvDesc.Format = texDesc.Format;
-	uavDesc.Format = texDesc.Format;
-
-	hdrTexture = new Texture2D(texDesc);
-	hdrTexture->CreateSRV(srvDesc);
-	hdrTexture->CreateRTV(rtvDesc);
-	hdrTexture->CreateUAV(uavDesc);
 
 	hdrDataCB = new ConstantBuffer(ConstantBufferDesc<HDRDataCB>());
 }
