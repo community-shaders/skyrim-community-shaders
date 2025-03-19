@@ -7,7 +7,6 @@
 #include "Util.h"
 
 #include <dxgi1_4.h>
-#include <dxgi1_6.h>
 #include <imgui.h>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -18,6 +17,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void HDR::DrawSettings()
 {
+	ImGui::Text("Toggling this setting requires a restart to work correctly!");
 	ImGui::Checkbox("HDR Enabled", &settings.enabled);
 
 	if (ImGui::Button("Reset HDR Settings", { -1, 0 })) {
@@ -28,7 +28,11 @@ void HDR::DrawSettings()
 
 	ImGui::SliderInt("Display Peak Brightness (nits)", (int*)&settings.displayPeakBrightness, 400, 10000);
 	ImGui::SliderInt("Game Brightness (nits)", (int*)&settings.gameBrightness, 100, 500);
+
+	ImGui::BeginDisabled();
+	ImGui::Text("Setting UI brightness is currently not supported.");
 	ImGui::SliderInt("UI Brightness (nits)", (int*)&settings.uiBrightness, 100, 500);
+	ImGui::EndDisabled();
 
 	UpdateHDRData();
 }
