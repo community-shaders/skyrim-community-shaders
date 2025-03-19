@@ -386,8 +386,11 @@ void Deferred::DeferredPasses()
 	auto motionVectors = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
 	bool interior = true;
-	if (auto sky = globals::game::sky)
-		interior = sky->mode.get() != RE::Sky::Mode::kFull;
+	if (auto player = RE::PlayerCharacter::GetSingleton()) {
+		if (auto parentCell = player->GetParentCell()) {
+			interior = parentCell->IsInteriorCell();
+		}
+	}
 
 	auto skylighting = globals::features::skylighting;
 

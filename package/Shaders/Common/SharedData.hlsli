@@ -138,6 +138,14 @@ namespace SharedData
 		float3 pad0;
 	};
 
+	struct LODBlendingSettings
+	{
+		float LODTerrainBrightness;
+		float LODObjectBrightness;
+		float LODObjectSnowBrightness;
+		bool DisableTerrainVertexColors;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -148,6 +156,7 @@ namespace SharedData
 		WetnessEffectsSettings wetnessEffectsSettings;
 		SkylightingSettings skylightingSettings;
 		CloudShadowsSettings cloudShadowsSettings;
+		LODBlendingSettings lodBlendingSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);
