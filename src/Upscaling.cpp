@@ -519,62 +519,6 @@ void Upscaling::SharpenTAA()
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
 }
 
-void Upscaling::ApplyHDR()
-{
-	auto hdr = HDR::GetSingleton();
-	if (!hdr->settings.enabled) {
-		return;
-	}
-
-	std::lock_guard<std::mutex> lock(hdr->settingsMutex);  // Lock for the duration of this function
-
-	auto state = globals::state;
-	auto context = globals::d3d::context;
-	auto renderer = globals::game::renderer;
-	auto& swapChainMain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kMAIN];
-	auto& swapChainBuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-
-	ID3D11Resource* swapChainResource;
-	swapChainBuffer.SRV->GetResource(&swapChainResource);
-
-	auto dispatchCount = Util::GetScreenDispatchCount(false);
-
-	state->BeginPerfEvent("HDR");
-	{
-		{
-			ID3D11ShaderResourceView* views[1] = { swapChainMain.SRV };
-			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
-
-			ID3D11UnorderedAccessView* uavs[1] = { hdr->outputTexture->uav.get() };
-			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
-
-			ID3D11Buffer* cbs[1]{ hdr->hdrDataCB->CB() };
-			context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
-
-			context->CSSetShader(hdr->GetHDROutputCS(), nullptr, 0);
-
-			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
-		}
-
-		ID3D11ShaderResourceView* views[1] = { nullptr };
-		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
-
-		ID3D11UnorderedAccessView* uavs[1] = { nullptr };
-		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
-
-		ID3D11ComputeShader* shader = nullptr;
-		context->CSSetShader(shader, nullptr, 0);
-
-		ID3D11Buffer* cbs[1]{ nullptr };
-		context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
-	}
-	state->EndPerfEvent();
-
-	context->CopyResource(swapChainResource, hdr->outputTexture->resource.get());
-
-	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
-}
-
 void Upscaling::CreateUpscalingResources()
 {
 	auto renderer = globals::game::renderer;
@@ -807,7 +751,7 @@ void Upscaling::PostDisplay()
 {
 	auto upscaleMethod = GetUpscaleMethod();
 	if (upscaleMethod == UpscaleMethod::kNONE && globals::hdr->settings.enabled) {
-		ApplyHDR();
+		globals::hdr->ApplyHDR();
 	}
 
 	if (!d3d12Interop || !settings.frameGenerationMode) {

@@ -25,9 +25,9 @@ void HDR::DrawSettings()
 	}
 
 	if (ImGui::Button("Reset HDR Settings", { -1, 0 })) {
-		settings.displayPeakBrightness = 400;
-		settings.gameBrightness = 200;
-		settings.uiBrightness = 200;
+		settings.displayPeakBrightness = 1000;
+		settings.gameBrightness = 400;
+		settings.uiBrightness = 400;
 	}
 
 	ImGui::SliderInt("Display Peak Brightness (nits)", (int*)&settings.displayPeakBrightness, 400, 10000);
@@ -44,8 +44,9 @@ void HDR::DrawSettings()
 void HDR::SaveSettings(json& o_json)
 {
 	std::lock_guard<std::mutex> lock(settingsMutex);
-	settings.enabled = enabledSaveLater;
-	o_json = settings;
+	auto settingsCopy = settings;
+	settingsCopy.enabled = enabledSaveLater;
+	o_json = settingsCopy;
 }
 
 void HDR::LoadSettings(json& o_json)
@@ -77,17 +78,14 @@ void HDR::SetupResources()
 	D3D11_TEXTURE2D_DESC texDesc{};
 	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
 
 	main.texture->GetDesc(&texDesc);
 	main.SRV->GetDesc(&srvDesc);
-	main.RTV->GetDesc(&rtvDesc);
 	main.UAV->GetDesc(&uavDesc);
 
 	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 	srvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
-	rtvDesc.Format = texDesc.Format;
 
 	hdrTexture = new Texture2D(texDesc);
 	hdrTexture->CreateSRV(srvDesc);
@@ -104,17 +102,68 @@ void HDR::SetupResources()
 	hdrDataCB = new ConstantBuffer(ConstantBufferDesc<HDRDataCB>());
 }
 
+
+void HDR::ApplyHDR()
+{
+	std::lock_guard<std::mutex> lock(settingsMutex);
+
+	auto state = globals::state;
+	auto context = globals::d3d::context;
+	auto renderer = globals::game::renderer;
+
+	auto& swapChainMain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kMAIN];
+	auto& swapChainBuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+
+	ID3D11Resource* swapChainBufferResource;
+	swapChainBuffer.SRV->GetResource(&swapChainBufferResource);
+
+	auto dispatchCount = Util::GetScreenDispatchCount(false);
+
+	state->BeginPerfEvent("HDR");
+	{
+		{
+			ID3D11ShaderResourceView* views[1] = { swapChainMain.SRV };
+			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+			ID3D11UnorderedAccessView* uavs[1] = { outputTexture->uav.get() };
+			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+			ID3D11Buffer* cbs[1]{ hdrDataCB->CB() };
+			context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
+
+			context->CSSetShader(GetHDROutputCS(), nullptr, 0);
+
+			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+		}
+
+		ID3D11ShaderResourceView* views[1] = { nullptr };
+		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+		ID3D11UnorderedAccessView* uavs[1] = { nullptr };
+		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+		ID3D11ComputeShader* shader = nullptr;
+		context->CSSetShader(shader, nullptr, 0);
+
+		ID3D11Buffer* cbs[1]{ nullptr };
+		context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
+	}
+	state->EndPerfEvent();
+
+	context->CopyResource(swapChainBufferResource, outputTexture->resource.get());
+
+	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);
+}
+
 void HDR::DestroyResources() const
 {
 	hdrTexture->srv = nullptr;
 	hdrTexture->uav = nullptr;
-	hdrTexture->rtv = nullptr;
 	hdrTexture->resource = nullptr;
 	delete hdrTexture;
 
 	outputTexture->srv = nullptr;
 	outputTexture->uav = nullptr;
-	outputTexture->rtv = nullptr;
 	outputTexture->resource = nullptr;
 	delete outputTexture;
 }

@@ -33,9 +33,11 @@ public:
 	void RestoreDefaultSettings();
 
 	void SetupResources();
-	void DestroyResources() const;
-
 	void UpdateHDRData() const;
+
+	void ApplyHDR();
+
+	void DestroyResources() const;
 	void ClearShaderCache();
 
 	float4 GetHDRData() const;
