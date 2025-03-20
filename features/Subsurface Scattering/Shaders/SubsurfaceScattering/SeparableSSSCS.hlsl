@@ -3,6 +3,7 @@ RWTexture2D<float4> SSSRW : register(u0);
 Texture2D<float4> ColorTexture : register(t0);
 Texture2D<float4> DepthTexture : register(t1);
 Texture2D<float4> MaskTexture : register(t2);
+Texture2D<float4> AlbedoTexture : register(t3);
 
 #define SSSS_N_SAMPLES 21
 
@@ -40,6 +41,7 @@ cbuffer PerFrameSSS : register(b1)
 		bool humanProfile = MaskTexture[DTid.xy].y > 0.0;
 
 		float4 color = SSSSBlurCS(DTid.xy, texCoord, float2(0.0, 1.0), sssAmount, humanProfile);
+		color.rgb *= AlbedoTexture[DTid.xy].rgb;
 		color.rgb = Color::TrueLinearToGamma(color.rgb);
 		SSSRW[DTid.xy] = float4(color.rgb, 1.0);
 	}

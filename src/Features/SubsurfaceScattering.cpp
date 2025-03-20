@@ -190,18 +190,20 @@ void SubsurfaceScattering::DrawSSS()
 
 		auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 		auto mask = renderer->GetRuntimeData().renderTargets[MASKS];
+		auto albedo = renderer->GetRuntimeData().renderTargets[ALBEDO];
 
 		ID3D11UnorderedAccessView* uav = blurHorizontalTemp->uav.get();
 		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 
 		auto terrainBlending = globals::features::terrainBlending;
 
-		ID3D11ShaderResourceView* views[3];
+		ID3D11ShaderResourceView* views[4];
 		views[0] = main.SRV;
 		views[1] = terrainBlending->loaded ? terrainBlending->blendedDepthTexture16->srv.get() : depth.depthSRV,
 		views[2] = mask.SRV;
+		views[3] = albedo.SRV;
 
-		context->CSSetShaderResources(0, 3, views);
+		context->CSSetShaderResources(0, 4, views);
 
 		// Horizontal pass to temporary texture
 		{
@@ -221,7 +223,8 @@ void SubsurfaceScattering::DrawSSS()
 			TracyD3D11Zone(globals::state->tracyCtx, "Subsurface Scattering - Vertical");
 
 			views[0] = blurHorizontalTemp->srv.get();
-			context->CSSetShaderResources(0, 1, views);
+			views[3] = albedo.SRV;
+			context->CSSetShaderResources(0, 4, views);
 
 			ID3D11UnorderedAccessView* uavs[1] = { main.UAV };
 			context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
@@ -236,8 +239,8 @@ void SubsurfaceScattering::DrawSSS()
 	ID3D11Buffer* buffer = nullptr;
 	context->CSSetConstantBuffers(1, 1, &buffer);
 
-	ID3D11ShaderResourceView* views[3]{ nullptr, nullptr, nullptr };
-	context->CSSetShaderResources(0, 3, views);
+	ID3D11ShaderResourceView* views[4]{ nullptr, nullptr, nullptr, nullptr };
+	context->CSSetShaderResources(0, 4, views);
 
 	ID3D11UnorderedAccessView* uavs[1]{ nullptr };
 	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
