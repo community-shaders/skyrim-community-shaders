@@ -131,7 +131,7 @@ VS_OUTPUT main(VS_INPUT input)
 
 #	if (defined(RENDER_DEPTH) && defined(RENDER_SHADOWMASK_ANY)) || SHADOWFILTER == 2
 	vsout.PositionCS.xy = input.PositionMS.xy;
-#		if defined(RENDER_SHADOWMASKDPB)
+#		if defined(RENDER_SHADOWMASKDPB) || defined(RENDER_SHADOWMASKSPOT) || defined(RENDER_SHADOWMASKPB)
 	vsout.PositionCS.z = ShadowFadeParam.z;
 #		else
 	vsout.PositionCS.z = HighDetailRange[eyeIndex].x;
