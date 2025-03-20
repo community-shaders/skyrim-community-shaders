@@ -56,9 +56,9 @@ struct ScreenSpaceGI : Feature
 		float Thickness = 32.f;
 		float2 DepthFadeRange = { 4e4, 5e4 };
 		// gi
-		float GISaturation = 1.0f;
+		float GISaturation = 0.9f;
 		bool EnableGIBounce = true;
-		float GIBounceFade = 0.5f;
+		float GIBounceFade = 0.3f;
 		float GIDistanceCompensation = 0.f;
 		// mix
 		float AOPower = 1.0f;

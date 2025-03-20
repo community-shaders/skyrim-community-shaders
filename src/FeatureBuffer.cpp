@@ -4,6 +4,7 @@
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExtendedMaterials.h"
 #include "Features/GrassLighting.h"
+#include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
 #include "Features/Skin.h"
 #include "Features/Skylighting.h"
@@ -39,5 +40,6 @@ std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 		globals::features::wetnessEffects->GetCommonBufferData(),
 		globals::features::skylighting->GetCommonBufferData(a_inWorld),
 		globals::features::cloudShadows->settings,
+		globals::features::lodBlending->settings,
 		globals::features::skin->GetCommonBufferData());
 }
