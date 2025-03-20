@@ -102,7 +102,6 @@ void HDR::SetupResources()
 	hdrDataCB = new ConstantBuffer(ConstantBufferDesc<HDRDataCB>());
 }
 
-
 void HDR::ApplyHDR()
 {
 	std::lock_guard<std::mutex> lock(settingsMutex);
