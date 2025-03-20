@@ -123,57 +123,57 @@ namespace SIE
 			size_t lastIndex = 0;
 			switch (technique) {
 			case SunOcclude:
-			{
-				defines[lastIndex++] = { "OCCLUSION", nullptr };
-				break;
-			}
+				{
+					defines[lastIndex++] = { "OCCLUSION", nullptr };
+					break;
+				}
 			case SunGlare:
-			{
-				defines[lastIndex++] = { "TEX", nullptr };
-				defines[lastIndex++] = { "DITHER", nullptr };
-				break;
-			}
+				{
+					defines[lastIndex++] = { "TEX", nullptr };
+					defines[lastIndex++] = { "DITHER", nullptr };
+					break;
+				}
 			case MoonAndStarsMask:
-			{
-				defines[lastIndex++] = { "TEX", nullptr };
-				defines[lastIndex++] = { "MOONMASK", nullptr };
-				break;
-			}
+				{
+					defines[lastIndex++] = { "TEX", nullptr };
+					defines[lastIndex++] = { "MOONMASK", nullptr };
+					break;
+				}
 			case Stars:
-			{
-				defines[lastIndex++] = { "HORIZFADE", nullptr };
-				break;
-			}
+				{
+					defines[lastIndex++] = { "HORIZFADE", nullptr };
+					break;
+				}
 			case Clouds:
-			{
-				defines[lastIndex++] = { "TEX", nullptr };
-				defines[lastIndex++] = { "CLOUDS", nullptr };
-				break;
-			}
+				{
+					defines[lastIndex++] = { "TEX", nullptr };
+					defines[lastIndex++] = { "CLOUDS", nullptr };
+					break;
+				}
 			case CloudsLerp:
-			{
-				defines[lastIndex++] = { "TEX", nullptr };
-				defines[lastIndex++] = { "CLOUDS", nullptr };
-				defines[lastIndex++] = { "TEXLERP", nullptr };
-				break;
-			}
+				{
+					defines[lastIndex++] = { "TEX", nullptr };
+					defines[lastIndex++] = { "CLOUDS", nullptr };
+					defines[lastIndex++] = { "TEXLERP", nullptr };
+					break;
+				}
 			case CloudsFade:
-			{
-				defines[lastIndex++] = { "TEX", nullptr };
-				defines[lastIndex++] = { "CLOUDS", nullptr };
-				defines[lastIndex++] = { "TEXFADE", nullptr };
-				break;
-			}
+				{
+					defines[lastIndex++] = { "TEX", nullptr };
+					defines[lastIndex++] = { "CLOUDS", nullptr };
+					defines[lastIndex++] = { "TEXFADE", nullptr };
+					break;
+				}
 			case Texture:
-			{
-				defines[lastIndex++] = { "TEX", nullptr };
-				break;
-			}
+				{
+					defines[lastIndex++] = { "TEX", nullptr };
+					break;
+				}
 			case Sky:
-			{
-				defines[lastIndex++] = { "DITHER", nullptr };
-				break;
-			}
+				{
+					defines[lastIndex++] = { "DITHER", nullptr };
+					break;
+				}
 			}
 
 			uint32_t flags = descriptor >> 8;
@@ -221,33 +221,33 @@ namespace SIE
 			size_t lastIndex = 0;
 			switch (technique) {
 			case ParticlesGryColor:
-			{
-				defines[lastIndex++] = { "GRAYSCALE_TO_COLOR", nullptr };
-				break;
-			}
+				{
+					defines[lastIndex++] = { "GRAYSCALE_TO_COLOR", nullptr };
+					break;
+				}
 			case ParticlesGryAlpha:
-			{
-				defines[lastIndex++] = { "GRAYSCALE_TO_ALPHA", nullptr };
-				break;
-			}
+				{
+					defines[lastIndex++] = { "GRAYSCALE_TO_ALPHA", nullptr };
+					break;
+				}
 			case ParticlesGryColorAlpha:
-			{
-				defines[lastIndex++] = { "GRAYSCALE_TO_COLOR", nullptr };
-				defines[lastIndex++] = { "GRAYSCALE_TO_ALPHA", nullptr };
-				break;
-			}
+				{
+					defines[lastIndex++] = { "GRAYSCALE_TO_COLOR", nullptr };
+					defines[lastIndex++] = { "GRAYSCALE_TO_ALPHA", nullptr };
+					break;
+				}
 			case EnvCubeSnow:
-			{
-				defines[lastIndex++] = { "ENVCUBE", nullptr };
-				defines[lastIndex++] = { "SNOW", nullptr };
-				break;
-			}
+				{
+					defines[lastIndex++] = { "ENVCUBE", nullptr };
+					defines[lastIndex++] = { "SNOW", nullptr };
+					break;
+				}
 			case EnvCubeRain:
-			{
-				defines[lastIndex++] = { "ENVCUBE", nullptr };
-				defines[lastIndex++] = { "RAIN", nullptr };
-				break;
-			}
+				{
+					defines[lastIndex++] = { "ENVCUBE", nullptr };
+					defines[lastIndex++] = { "RAIN", nullptr };
+					break;
+				}
 			}
 
 			for (auto* feature : Feature::GetFeatureList()) {
@@ -406,7 +406,7 @@ namespace SIE
 				defines[lastIndex++] = { "SIMPLE", nullptr };
 			} else if (technique < 8) {
 				static constexpr std::array<const char*, 8> numLightDefines = { { "0", "1", "2", "3", "4",
-																				"5", "6", "7" } };
+					"5", "6", "7" } };
 				defines[lastIndex++] = { "SPECULAR", nullptr };
 				defines[lastIndex++] = { "NUM_SPECULAR_LIGHTS", numLightDefines[technique] };
 			}
@@ -445,7 +445,7 @@ namespace SIE
 			if (descriptor & static_cast<uint32_t>(LodLandscape)) {
 				if (descriptor &
 					(static_cast<uint32_t>(RenderShadowmask) |
-					static_cast<uint32_t>(RenderShadowmaskSpot))) {
+						static_cast<uint32_t>(RenderShadowmaskSpot))) {
 					defines[lastIndex++] = { "FOCUS_SHADOW", nullptr };
 				} else {
 					defines[lastIndex++] = { "LOD_LANDSCAPE", nullptr };
@@ -456,10 +456,10 @@ namespace SIE
 				!(descriptor & static_cast<uint32_t>(RenderNormalClear))) {
 				defines[lastIndex++] = { "RENDER_NORMAL", nullptr };
 			} else if (!(descriptor & static_cast<uint32_t>(RenderNormal)) &&
-						(descriptor & static_cast<uint32_t>(RenderNormalClear))) {
+					   (descriptor & static_cast<uint32_t>(RenderNormalClear))) {
 				defines[lastIndex++] = { "RENDER_NORMAL_CLEAR", nullptr };
 			} else if ((descriptor & static_cast<uint32_t>(RenderNormal)) &&
-						(descriptor & static_cast<uint32_t>(RenderNormalClear))) {
+					   (descriptor & static_cast<uint32_t>(RenderNormalClear))) {
 				defines[lastIndex++] = { "STENCIL_ABOVE_WATER", nullptr };
 			}
 
@@ -491,7 +491,7 @@ namespace SIE
 						defines[lastIndex++] = { "RENDER_SHADOWMAP_PB", nullptr };
 					}
 				} else if (descriptor &
-							static_cast<uint32_t>(AdditionalAlphaMask)) {
+						   static_cast<uint32_t>(AdditionalAlphaMask)) {
 					defines[lastIndex++] = { "ADDITIONAL_ALPHA_MASK", nullptr };
 				}
 				if (descriptor & static_cast<uint32_t>(RenderShadowmapClamped)) {
@@ -528,23 +528,23 @@ namespace SIE
 			}
 
 			if (descriptor & (static_cast<uint32_t>(RenderShadowmask) |
-							static_cast<uint32_t>(RenderShadowmaskDpb) |
-							static_cast<uint32_t>(RenderShadowmaskPb) |
-							static_cast<uint32_t>(RenderShadowmaskSpot))) {
+								 static_cast<uint32_t>(RenderShadowmaskDpb) |
+								 static_cast<uint32_t>(RenderShadowmaskPb) |
+								 static_cast<uint32_t>(RenderShadowmaskSpot))) {
 				static constexpr std::array<const char*, 5> shadowFilters = { { "0", "1", "2",
-																				"3", "4" } };
+					"3", "4" } };
 				const size_t shadowFilterIndex = std::clamp((descriptor >> 17) & 0b111, 0u, 4u);
 				defines[lastIndex++] = { "SHADOWFILTER", shadowFilters[shadowFilterIndex] };
 			} else if ((!(descriptor & static_cast<uint32_t>(OpaqueEffect)) &&
-						(descriptor &
-						static_cast<uint32_t>(RenderShadowmap))) ||
-						(descriptor & static_cast<uint32_t>(RenderDepth))) {
+						   (descriptor &
+							   static_cast<uint32_t>(RenderShadowmap))) ||
+					   (descriptor & static_cast<uint32_t>(RenderDepth))) {
 				if (descriptor & static_cast<uint32_t>(DepthWriteDecals)) {
 					defines[lastIndex++] = { "DEPTH_WRITE_DECALS", nullptr };
 				}
 			} else {
 				if (descriptor & (static_cast<uint32_t>(DepthWriteDecals) |
-								static_cast<uint32_t>(DebugColor))) {
+									 static_cast<uint32_t>(DebugColor))) {
 					defines[lastIndex++] = { "DEBUG_COLOR", nullptr };
 				}
 				if (descriptor & static_cast<uint32_t>(DebugShadowSplit)) {
@@ -621,13 +621,13 @@ namespace SIE
 		}
 
 		static std::array<std::array<std::unordered_map<std::string, int32_t>,
-				static_cast<size_t>(ShaderClass::Total)>,
+							  static_cast<size_t>(ShaderClass::Total)>,
 			static_cast<size_t>(RE::BSShader::Type::Total)>
 			GetVariableIndices()
 		{
 			std::array<std::array<std::unordered_map<std::string, int32_t>,
-						static_cast<size_t>(ShaderClass::Total)>,
-					static_cast<size_t>(RE::BSShader::Type::Total)>
+						   static_cast<size_t>(ShaderClass::Total)>,
+				static_cast<size_t>(RE::BSShader::Type::Total)>
 				result;
 
 			auto& lightingVS =
@@ -655,7 +655,7 @@ namespace SIE
 			const auto& lightingPSConstants = ShaderConstants::LightingPS::Get();
 
 			auto& lightingPS = result[static_cast<size_t>(RE::BSShader::Type::Lighting)]
-				[static_cast<size_t>(ShaderClass::Pixel)];
+									 [static_cast<size_t>(ShaderClass::Pixel)];
 
 			lightingPS = {
 				{ "NumLightNumShadowLight", lightingPSConstants.NumLightNumShadowLight },
@@ -676,12 +676,12 @@ namespace SIE
 				{ "SplitDistance", lightingPSConstants.SplitDistance },
 				{ "SSRParams", lightingPSConstants.SSRParams },
 				{ "WorldMapOverlayParametersPS", lightingPSConstants.WorldMapOverlayParametersPS },
-				{ "ShadowSampleParam", lightingPSConstants.ShadowSampleParam },     // VR only
-				{ "EndSplitDistances", lightingPSConstants.EndSplitDistances },     // VR only
-				{ "StartSplitDistances", lightingPSConstants.StartSplitDistances }, // VR only
-				{ "DephBiasParam", lightingPSConstants.DephBiasParam },             // VR only
-				{ "ShadowLightParam", lightingPSConstants.ShadowLightParam },       // VR only
-				{ "ShadowMapProj", lightingPSConstants.ShadowMapProj },             // VR only
+				{ "ShadowSampleParam", lightingPSConstants.ShadowSampleParam },      // VR only
+				{ "EndSplitDistances", lightingPSConstants.EndSplitDistances },      // VR only
+				{ "StartSplitDistances", lightingPSConstants.StartSplitDistances },  // VR only
+				{ "DephBiasParam", lightingPSConstants.DephBiasParam },              // VR only
+				{ "ShadowLightParam", lightingPSConstants.ShadowLightParam },        // VR only
+				{ "ShadowMapProj", lightingPSConstants.ShadowMapProj },              // VR only
 				{ "AmbientColor", lightingPSConstants.AmbientColor },
 				{ "FogColor", lightingPSConstants.FogColor },
 				{ "ColourOutputClamp", lightingPSConstants.ColourOutputClamp },
@@ -700,8 +700,8 @@ namespace SIE
 				{ "LandscapeTexture5to6IsSpecPower", lightingPSConstants.LandscapeTexture5to6IsSpecPower },
 				{ "SnowRimLightParameters", lightingPSConstants.SnowRimLightParameters },
 				{ "CharacterLightParams", lightingPSConstants.CharacterLightParams },
-				{ "InvWorldMat", lightingPSConstants.InvWorldMat },           // VR only
-				{ "PreviousWorldMat", lightingPSConstants.PreviousWorldMat }, // VR only
+				{ "InvWorldMat", lightingPSConstants.InvWorldMat },            // VR only
+				{ "PreviousWorldMat", lightingPSConstants.PreviousWorldMat },  // VR only
 
 				{ "PBRFlags", lightingPSConstants.PBRFlags },
 				{ "PBRParams1", lightingPSConstants.PBRParams1 },
@@ -720,7 +720,7 @@ namespace SIE
 			};
 
 			auto& bloodSplatterVS = result[static_cast<size_t>(RE::BSShader::Type::BloodSplatter)]
-				[static_cast<size_t>(ShaderClass::Vertex)];
+										  [static_cast<size_t>(ShaderClass::Vertex)];
 			bloodSplatterVS = {
 				{ "WorldViewProj", 0 },
 				{ "LightLoc", 1 },
@@ -728,13 +728,13 @@ namespace SIE
 			};
 
 			auto& bloodSplatterPS = result[static_cast<size_t>(RE::BSShader::Type::BloodSplatter)]
-				[static_cast<size_t>(ShaderClass::Pixel)];
+										  [static_cast<size_t>(ShaderClass::Pixel)];
 			bloodSplatterPS = {
 				{ "Alpha", 0 },
 			};
 
 			auto& distantTreeVS = result[static_cast<size_t>(RE::BSShader::Type::DistantTree)]
-				[static_cast<size_t>(ShaderClass::Vertex)];
+										[static_cast<size_t>(ShaderClass::Vertex)];
 
 			distantTreeVS = {
 				{ "InstanceData", 0 },
@@ -749,14 +749,14 @@ namespace SIE
 			};
 
 			auto& distantTreePS = result[static_cast<size_t>(RE::BSShader::Type::DistantTree)]
-				[static_cast<size_t>(ShaderClass::Pixel)];
+										[static_cast<size_t>(ShaderClass::Pixel)];
 			distantTreePS = {
 				{ "DiffuseColor", 0 },
 				{ "AmbientColor", 1 },
 			};
 
 			auto& skyVS = result[static_cast<size_t>(RE::BSShader::Type::Sky)]
-				[static_cast<size_t>(ShaderClass::Vertex)];
+								[static_cast<size_t>(ShaderClass::Vertex)];
 			skyVS = {
 				{ "WorldViewProj", 0 },
 				{ "World", 1 },
@@ -768,13 +768,13 @@ namespace SIE
 			};
 
 			auto& skyPS = result[static_cast<size_t>(RE::BSShader::Type::Sky)]
-				[static_cast<size_t>(ShaderClass::Pixel)];
+								[static_cast<size_t>(ShaderClass::Pixel)];
 			skyPS = {
 				{ "PParams", 0 },
 			};
 
 			auto& grassVS = result[static_cast<size_t>(RE::BSShader::Type::Grass)]
-				[static_cast<size_t>(ShaderClass::Vertex)];
+								  [static_cast<size_t>(ShaderClass::Vertex)];
 			grassVS = {
 				{ "WorldViewProj", 0 },
 				{ "WorldView", 1 },
@@ -801,7 +801,7 @@ namespace SIE
 			const auto& grassPSConstants = ShaderConstants::GrassPS::Get();
 
 			auto& grassPS = result[static_cast<size_t>(RE::BSShader::Type::Grass)]
-				[static_cast<size_t>(ShaderClass::Pixel)];
+								  [static_cast<size_t>(ShaderClass::Pixel)];
 			grassPS = {
 				{ "PBRFlags", grassPSConstants.PBRFlags },
 				{ "PBRParams1", grassPSConstants.PBRParams1 },
@@ -809,7 +809,7 @@ namespace SIE
 			};
 
 			auto& particleVS = result[static_cast<size_t>(RE::BSShader::Type::Particle)]
-				[static_cast<size_t>(ShaderClass::Vertex)];
+									 [static_cast<size_t>(ShaderClass::Vertex)];
 			particleVS = {
 				{ "WorldViewProj", 0 },
 				{ "PrevWorldViewProj", 1 },
@@ -829,14 +829,14 @@ namespace SIE
 			};
 
 			auto& particlePS = result[static_cast<size_t>(RE::BSShader::Type::Particle)]
-				[static_cast<size_t>(ShaderClass::Pixel)];
+									 [static_cast<size_t>(ShaderClass::Pixel)];
 			particlePS = {
 				{ "ColorScale", 0 },
 				{ "TextureSize", 1 },
 			};
 
 			auto& effectVS = result[static_cast<size_t>(RE::BSShader::Type::Effect)]
-				[static_cast<size_t>(ShaderClass::Vertex)];
+								   [static_cast<size_t>(ShaderClass::Vertex)];
 			effectVS = {
 				{ "World", 0 },
 				{ "PreviousWorld", 1 },
@@ -857,7 +857,7 @@ namespace SIE
 			const auto& effectPSConstants = ShaderConstants::EffectPS::Get();
 
 			auto& effectPS = result[static_cast<size_t>(RE::BSShader::Type::Effect)]
-				[static_cast<size_t>(ShaderClass::Pixel)];
+								   [static_cast<size_t>(ShaderClass::Pixel)];
 			effectPS = {
 				{ "PropertyColor", effectPSConstants.PropertyColor },
 				{ "AlphaTestRef", effectPSConstants.AlphaTestRef },
@@ -882,7 +882,7 @@ namespace SIE
 			};
 
 			auto& waterVS = result[static_cast<size_t>(RE::BSShader::Type::Water)]
-				[static_cast<size_t>(ShaderClass::Vertex)];
+								  [static_cast<size_t>(ShaderClass::Vertex)];
 			waterVS = {
 				{ "WorldViewProj", 0 },
 				{ "World", 1 },
@@ -900,15 +900,15 @@ namespace SIE
 
 			if (!REL::Module::IsVR()) {
 				waterVS.insert(
-				{
-					{ "SubTexOffset", 12 },
-					{ "PosAdjust", 13 },
-					{ "MatProj", 14 },
-				});
+					{
+						{ "SubTexOffset", 12 },
+						{ "PosAdjust", 13 },
+						{ "MatProj", 14 },
+					});
 			}
 
 			auto& waterPS = result[static_cast<size_t>(RE::BSShader::Type::Water)]
-				[static_cast<size_t>(ShaderClass::Pixel)];
+								  [static_cast<size_t>(ShaderClass::Pixel)];
 			waterPS = {
 				{ "TextureProj", 0 },
 				{ "ShallowColor", 1 },
@@ -938,7 +938,7 @@ namespace SIE
 			};
 
 			auto& utilityVS = result[static_cast<size_t>(RE::BSShader::Type::Utility)]
-				[static_cast<size_t>(ShaderClass::Vertex)];
+									[static_cast<size_t>(ShaderClass::Vertex)];
 			utilityVS = {
 				{ "World", 0 },
 				{ "TexcoordOffset", 1 },
@@ -952,7 +952,7 @@ namespace SIE
 			};
 
 			auto& utilityPS = result[static_cast<size_t>(RE::BSShader::Type::Utility)]
-				[static_cast<size_t>(ShaderClass::Pixel)];
+									[static_cast<size_t>(ShaderClass::Pixel)];
 			utilityPS = {
 				{ "AlphaTestRef", 0 },
 				{ "RefractionPower", 1 },
@@ -967,23 +967,23 @@ namespace SIE
 
 			if (!REL::Module::IsVR()) {
 				utilityPS.insert(
-				{
-					{ "ShadowFadeParam", 9 },
-					{ "VPOSOffset", 10 },
-					{ "EndSplitDistances", 11 },
-					{ "StartSplitDistances", 12 },
-					{ "FocusShadowFadeParam", 13 },
-				});
+					{
+						{ "ShadowFadeParam", 9 },
+						{ "VPOSOffset", 10 },
+						{ "EndSplitDistances", 11 },
+						{ "StartSplitDistances", 12 },
+						{ "FocusShadowFadeParam", 13 },
+					});
 			} else {
 				utilityPS.insert(
-				{
-					{ "StereoClipRects", 9 }, // VR only
-					{ "ShadowFadeParam", 10 },
-					{ "VPOSOffset", 11 },
-					{ "EndSplitDistances", 12 },
-					{ "StartSplitDistances", 13 },
-					{ "FocusShadowFadeParam", 14 },
-				});
+					{
+						{ "StereoClipRects", 9 },  // VR only
+						{ "ShadowFadeParam", 10 },
+						{ "VPOSOffset", 11 },
+						{ "EndSplitDistances", 12 },
+						{ "StartSplitDistances", 13 },
+						{ "FocusShadowFadeParam", 14 },
+					});
 			}
 
 			return result;
@@ -996,7 +996,7 @@ namespace SIE
 
 				if (shaderClass == ShaderClass::Vertex) {
 					for (size_t nameIndex = 0; nameIndex < imagespaceShader.vsConstantNames.size();
-						++nameIndex) {
+						 ++nameIndex) {
 						if (std::string_view(imagespaceShader.vsConstantNames[static_cast<uint32_t>(nameIndex)].c_str()) ==
 							name) {
 							return static_cast<int32_t>(nameIndex);
@@ -1013,7 +1013,7 @@ namespace SIE
 				static auto variableNames = GetVariableIndices();
 
 				const auto& names = variableNames[static_cast<size_t>(shader.shaderType.get())]
-					[static_cast<size_t>(shaderClass)];
+												 [static_cast<size_t>(shaderClass)];
 				auto it = names.find(name);
 				if (it != names.cend()) {
 					return it->second;
@@ -1038,7 +1038,7 @@ namespace SIE
 					}
 					result += ' ';
 				} else {
-					if (a_sort) // sometimes the sort messes up so null entries get interspersed
+					if (a_sort)  // sometimes the sort messes up so null entries get interspersed
 						continue;
 					break;
 				}
@@ -1049,7 +1049,7 @@ namespace SIE
 		static void AddAttribute(uint64_t& desc, RE::BSGraphics::Vertex::Attribute attribute)
 		{
 			desc |= ((1ull << (44 + attribute)) | (1ull << (54 + attribute)) |
-					(0b1111ull << (4 * attribute + 4)));
+					 (0b1111ull << (4 * attribute + 4)));
 		}
 
 		template <size_t MaxOffsetsSize>
@@ -1084,25 +1084,25 @@ namespace SIE
 						if (semanticName == "POSITION" && inputDesc.SemanticIndex == 0) {
 							AddAttribute(vertexDesc, RE::BSGraphics::Vertex::VA_POSITION);
 						} else if (semanticName == "TEXCOORD" &&
-									inputDesc.SemanticIndex == 0) {
+								   inputDesc.SemanticIndex == 0) {
 							AddAttribute(vertexDesc, RE::BSGraphics::Vertex::VA_TEXCOORD0);
 						} else if (semanticName == "TEXCOORD" && inputDesc.SemanticIndex == 1) {
 							AddAttribute(vertexDesc, RE::BSGraphics::Vertex::VA_TEXCOORD1);
 						} else if (semanticName == "NORMAL" &&
-									inputDesc.SemanticIndex == 0) {
+								   inputDesc.SemanticIndex == 0) {
 							AddAttribute(vertexDesc, RE::BSGraphics::Vertex::VA_NORMAL);
 						} else if (semanticName == "BINORMAL" && inputDesc.SemanticIndex == 0) {
 							AddAttribute(vertexDesc, RE::BSGraphics::Vertex::VA_BINORMAL);
 						} else if (semanticName == "COLOR" &&
-									inputDesc.SemanticIndex == 0) {
+								   inputDesc.SemanticIndex == 0) {
 							AddAttribute(vertexDesc, RE::BSGraphics::Vertex::VA_COLOR);
 						} else if (semanticName == "BLENDWEIGHT" && inputDesc.SemanticIndex == 0) {
 							AddAttribute(vertexDesc, RE::BSGraphics::Vertex::VA_SKINNING);
 						} else if (semanticName == "TEXCOORD" && inputDesc.SemanticIndex >= 4 &&
-									inputDesc.SemanticIndex <= 7) {
+								   inputDesc.SemanticIndex <= 7) {
 							AddAttribute(vertexDesc, RE::BSGraphics::Vertex::VA_INSTANCEDATA);
 						} else if (semanticName == "TEXCOORD" &&
-									inputDesc.SemanticIndex == 2) {
+								   inputDesc.SemanticIndex == 2) {
 							hasTexcoord2 = true;
 						} else if (semanticName == "TEXCOORD" && inputDesc.SemanticIndex == 3) {
 							hasTexcoord3 = true;
@@ -1124,89 +1124,89 @@ namespace SIE
 
 			auto mapBufferConsts =
 				[&](const char* bufferName, size_t& bufferSize) {
-				auto bufferReflector = reflector.GetConstantBufferByName(bufferName);
-				if (bufferReflector == nullptr) {
-					logger::trace("Buffer {} not found for {} shader {}::{:X}",
-						bufferName, magic_enum::enum_name(shaderClass),
-						magic_enum::enum_name(shader.shaderType.get()),
-						descriptor);
-					return;
-				}
-
-				D3D11_SHADER_BUFFER_DESC bufferDesc;
-				if (FAILED(bufferReflector->GetDesc(&bufferDesc))) {
-					logger::trace("Failed to get buffer {} descriptor for {} shader {}::{:X}",
-						bufferName, magic_enum::enum_name(shaderClass),
-						magic_enum::enum_name(shader.shaderType.get()),
-						descriptor);
-					return;
-				}
-
-				for (uint32_t i = 0; i < bufferDesc.Variables; i++) {
-					ID3D11ShaderReflectionVariable* var = bufferReflector->GetVariableByIndex(i);
-
-					D3D11_SHADER_VARIABLE_DESC varDesc;
-					if (FAILED(var->GetDesc(&varDesc))) {
-						logger::trace("Failed to get variable descriptor for {} shader {}::{:X}",
-							magic_enum::enum_name(shaderClass), magic_enum::enum_name(shader.shaderType.get()),
-							descriptor);
-						continue;
-					}
-
-					const auto variableIndex =
-						GetVariableIndex(shaderClass, shader, varDesc.Name);
-					const bool variableFound = variableIndex != -1;
-					if (variableFound) {
-						constantOffsets[variableIndex] = static_cast<int8_t>(varDesc.StartOffset / 4);
-					} else {
-						logger::trace("Unknown variable name {} in {} shader {}::{:X}",
-							varDesc.Name, magic_enum::enum_name(shaderClass),
+					auto bufferReflector = reflector.GetConstantBufferByName(bufferName);
+					if (bufferReflector == nullptr) {
+						logger::trace("Buffer {} not found for {} shader {}::{:X}",
+							bufferName, magic_enum::enum_name(shaderClass),
 							magic_enum::enum_name(shader.shaderType.get()),
 							descriptor);
+						return;
 					}
 
-					if (shader.shaderType == RE::BSShader::Type::ImageSpace) {
-						D3D11_SHADER_TYPE_DESC varTypeDesc;
-						var->GetType()->GetDesc(&varTypeDesc);
-						if (varTypeDesc.Elements > 0) {
-							if (!variableFound) {
-								const std::string arrayName =
-									std::format("{}[{}]", varDesc.Name, varTypeDesc.Elements);
-								const auto variableArrayIndex =
-									GetVariableIndex(shaderClass, shader, arrayName.c_str());
-								if (variableArrayIndex != -1) {
-									constantOffsets[variableArrayIndex] = static_cast<int8_t>(varDesc.StartOffset / 4);
-								} else {
-									logger::debug("Unknown variable name {} in {} shader {}::{:X}",
-										arrayName, magic_enum::enum_name(shaderClass),
-										magic_enum::enum_name(shader.shaderType.get()), descriptor);
-								}
-							} else {
-								const auto elementSize = varDesc.Size / varTypeDesc.Elements;
-								for (uint32_t arrayIndex = 1; arrayIndex < varTypeDesc.Elements;
-									++arrayIndex) {
-									const std::string varName =
-										std::format("{}[{}]", varDesc.Name, arrayIndex);
-									const auto variableArrayElementIndex =
-										GetVariableIndex(shaderClass, shader, varName.c_str());
-									if (variableArrayElementIndex != -1) {
-										constantOffsets[variableArrayElementIndex] =
-											static_cast<int8_t>((varDesc.StartOffset + elementSize * arrayIndex) / 4);
+					D3D11_SHADER_BUFFER_DESC bufferDesc;
+					if (FAILED(bufferReflector->GetDesc(&bufferDesc))) {
+						logger::trace("Failed to get buffer {} descriptor for {} shader {}::{:X}",
+							bufferName, magic_enum::enum_name(shaderClass),
+							magic_enum::enum_name(shader.shaderType.get()),
+							descriptor);
+						return;
+					}
+
+					for (uint32_t i = 0; i < bufferDesc.Variables; i++) {
+						ID3D11ShaderReflectionVariable* var = bufferReflector->GetVariableByIndex(i);
+
+						D3D11_SHADER_VARIABLE_DESC varDesc;
+						if (FAILED(var->GetDesc(&varDesc))) {
+							logger::trace("Failed to get variable descriptor for {} shader {}::{:X}",
+								magic_enum::enum_name(shaderClass), magic_enum::enum_name(shader.shaderType.get()),
+								descriptor);
+							continue;
+						}
+
+						const auto variableIndex =
+							GetVariableIndex(shaderClass, shader, varDesc.Name);
+						const bool variableFound = variableIndex != -1;
+						if (variableFound) {
+							constantOffsets[variableIndex] = static_cast<int8_t>(varDesc.StartOffset / 4);
+						} else {
+							logger::trace("Unknown variable name {} in {} shader {}::{:X}",
+								varDesc.Name, magic_enum::enum_name(shaderClass),
+								magic_enum::enum_name(shader.shaderType.get()),
+								descriptor);
+						}
+
+						if (shader.shaderType == RE::BSShader::Type::ImageSpace) {
+							D3D11_SHADER_TYPE_DESC varTypeDesc;
+							var->GetType()->GetDesc(&varTypeDesc);
+							if (varTypeDesc.Elements > 0) {
+								if (!variableFound) {
+									const std::string arrayName =
+										std::format("{}[{}]", varDesc.Name, varTypeDesc.Elements);
+									const auto variableArrayIndex =
+										GetVariableIndex(shaderClass, shader, arrayName.c_str());
+									if (variableArrayIndex != -1) {
+										constantOffsets[variableArrayIndex] = static_cast<int8_t>(varDesc.StartOffset / 4);
 									} else {
-										logger::debug(
-											"Unknown variable name {} in {} shader {}::{:X}", varName,
-											magic_enum::enum_name(shaderClass),
-											magic_enum::enum_name(shader.shaderType.get()),
-											descriptor);
+										logger::debug("Unknown variable name {} in {} shader {}::{:X}",
+											arrayName, magic_enum::enum_name(shaderClass),
+											magic_enum::enum_name(shader.shaderType.get()), descriptor);
+									}
+								} else {
+									const auto elementSize = varDesc.Size / varTypeDesc.Elements;
+									for (uint32_t arrayIndex = 1; arrayIndex < varTypeDesc.Elements;
+										 ++arrayIndex) {
+										const std::string varName =
+											std::format("{}[{}]", varDesc.Name, arrayIndex);
+										const auto variableArrayElementIndex =
+											GetVariableIndex(shaderClass, shader, varName.c_str());
+										if (variableArrayElementIndex != -1) {
+											constantOffsets[variableArrayElementIndex] =
+												static_cast<int8_t>((varDesc.StartOffset + elementSize * arrayIndex) / 4);
+										} else {
+											logger::debug(
+												"Unknown variable name {} in {} shader {}::{:X}", varName,
+												magic_enum::enum_name(shaderClass),
+												magic_enum::enum_name(shader.shaderType.get()),
+												descriptor);
+										}
 									}
 								}
 							}
 						}
 					}
-				}
 
-				bufferSize = ((bufferDesc.Size + 15) & ~15) / 16;
-			};
+					bufferSize = ((bufferDesc.Size + 15) & ~15) / 16;
+				};
 
 			mapBufferConsts("PerTechnique", bufferSizes[0]);
 			mapBufferConsts("PerMaterial", bufferSizes[1]);
@@ -1232,7 +1232,7 @@ namespace SIE
 			std::array<D3D_SHADER_MACRO, 64> defines{};
 			GetShaderDefines(shader, descriptor, std::span{ defines });
 			std::string result;
-			if (hashkey) // generate hashkey so don't include descriptor
+			if (hashkey)  // generate hashkey so don't include descriptor
 				result = fmt::format("{}:{}:{}", sourceShaderFile, magic_enum::enum_name(shaderClass), MergeDefinesString(defines, true));
 			else
 				result = fmt::format("{}:{}:{:X}:{}", sourceShaderFile, magic_enum::enum_name(shaderClass), descriptor, MergeDefinesString(defines, true));
@@ -1246,7 +1246,7 @@ namespace SIE
 			if (pos != std::string::npos)
 				type = a_key.substr(0, pos);
 			if (type.starts_with("IS") || type == "ReflectionsRayTracing")
-				type = "ImageSpace"; // fix type for image space shaders
+				type = "ImageSpace";  // fix type for image space shaders
 			return type;
 		}
 
@@ -1306,7 +1306,7 @@ namespace SIE
 				for (unsigned int i = 0; i < shaderDefines->size(); i++)
 					defines[lastIndex++] = { shaderDefines->at(i).first.c_str(), shaderDefines->at(i).second.c_str() };
 			}
-			defines[lastIndex] = { nullptr, nullptr }; // do final entry
+			defines[lastIndex] = { nullptr, nullptr };  // do final entry
 			GetShaderDefines(shader, descriptor, std::span{ defines }.subspan(lastIndex));
 
 			const std::wstring path = GetShaderPath(
@@ -1352,8 +1352,8 @@ namespace SIE
 				ID3DBlob* strippedShaderBlob = nullptr;
 
 				const uint32_t stripFlags = D3DCOMPILER_STRIP_DEBUG_INFO |
-											D3DCOMPILER_STRIP_TEST_BLOBS |
-											D3DCOMPILER_STRIP_PRIVATE_DATA;
+				                            D3DCOMPILER_STRIP_TEST_BLOBS |
+				                            D3DCOMPILER_STRIP_PRIVATE_DATA;
 
 				D3DStripShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), stripFlags, &strippedShaderBlob);
 				std::swap(shaderBlob, strippedShaderBlob);
@@ -1395,7 +1395,7 @@ namespace SIE
 
 			auto rawPtr =
 				new uint8_t[sizeof(RE::BSGraphics::VertexShader) + shaderData.GetBufferSize()];
-			auto shaderPtr = new(rawPtr) RE::BSGraphics::VertexShader;
+			auto shaderPtr = new (rawPtr) RE::BSGraphics::VertexShader;
 			memcpy(rawPtr + sizeof(RE::BSGraphics::VertexShader), shaderData.GetBufferPointer(),
 				shaderData.GetBufferSize());
 			std::unique_ptr<RE::BSGraphics::VertexShader> newShader{ shaderPtr };
@@ -1545,11 +1545,11 @@ namespace SIE
 				// { "BSImagespaceShaderCopyDynamicFetchDisabled",
 				// 	static_cast<uint32_t>(ISCopyDynamicFetchDisabled) },
 				{ "BSImagespaceShaderISCompositeVolumetricLighting",
-				static_cast<uint32_t>(ISCompositeVolumetricLighting) },
+					static_cast<uint32_t>(ISCompositeVolumetricLighting) },
 				{ "BSImagespaceShaderISCompositeLensFlare",
-				static_cast<uint32_t>(ISCompositeLensFlare) },
+					static_cast<uint32_t>(ISCompositeLensFlare) },
 				{ "BSImagespaceShaderISCompositeLensFlareVolumetricLighting",
-				static_cast<uint32_t>(ISCompositeLensFlareVolumetricLighting) },
+					static_cast<uint32_t>(ISCompositeLensFlareVolumetricLighting) },
 				// { "BSImagespaceShaderISDebugSnow", static_cast<uint32_t>(ISDebugSnow) },
 				// { "BSImagespaceShaderDepthOfField", static_cast<uint32_t>(ISDepthOfField) },
 				// { "BSImagespaceShaderDepthOfFieldFogged",
@@ -1564,29 +1564,29 @@ namespace SIE
 				// { "BSImagespaceShaderDoubleVision", static_cast<uint32_t>(ISDoubleVision) },
 				{ "BSImagespaceShaderISDownsample", static_cast<uint32_t>(ISDownsample) },
 				{ "BSImagespaceShaderISDownsampleIgnoreBrightest",
-				static_cast<uint32_t>(ISDownsampleIgnoreBrightest) },
+					static_cast<uint32_t>(ISDownsampleIgnoreBrightest) },
 				// { "BSImagespaceShaderISUpsampleDynamicResolution",
 				// 	static_cast<uint32_t>(ISUpsampleDynamicResolution) },
 				{ "BSImageSpaceShaderVolumetricLighting",
-				static_cast<uint32_t>(ISVolumetricLighting) },
+					static_cast<uint32_t>(ISVolumetricLighting) },
 				{ "BSImagespaceShaderHDRDownSample4", static_cast<uint32_t>(ISHDRDownSample4) },
 				{ "BSImagespaceShaderHDRDownSample4LightAdapt",
-				static_cast<uint32_t>(ISHDRDownSample4LightAdapt) },
+					static_cast<uint32_t>(ISHDRDownSample4LightAdapt) },
 				{ "BSImagespaceShaderHDRDownSample4LumClamp",
-				static_cast<uint32_t>(ISHDRDownSample4LumClamp) },
+					static_cast<uint32_t>(ISHDRDownSample4LumClamp) },
 				{ "BSImagespaceShaderHDRDownSample4RGB2Lum",
-				static_cast<uint32_t>(ISHDRDownSample4RGB2Lum) },
+					static_cast<uint32_t>(ISHDRDownSample4RGB2Lum) },
 				{ "BSImagespaceShaderHDRDownSample16", static_cast<uint32_t>(ISHDRDownSample16) },
 				{ "BSImagespaceShaderHDRDownSample16LightAdapt",
-				static_cast<uint32_t>(ISHDRDownSample16LightAdapt) },
+					static_cast<uint32_t>(ISHDRDownSample16LightAdapt) },
 				{ "BSImagespaceShaderHDRDownSample16Lum",
-				static_cast<uint32_t>(ISHDRDownSample16Lum) },
+					static_cast<uint32_t>(ISHDRDownSample16Lum) },
 				{ "BSImagespaceShaderHDRDownSample16LumClamp",
-				static_cast<uint32_t>(ISHDRDownSample16LumClamp) },
+					static_cast<uint32_t>(ISHDRDownSample16LumClamp) },
 				{ "BSImagespaceShaderHDRTonemapBlendCinematic",
-				static_cast<uint32_t>(ISHDRTonemapBlendCinematic) },
+					static_cast<uint32_t>(ISHDRTonemapBlendCinematic) },
 				{ "BSImagespaceShaderHDRTonemapBlendCinematicFade",
-				static_cast<uint32_t>(ISHDRTonemapBlendCinematicFade) },
+					static_cast<uint32_t>(ISHDRTonemapBlendCinematicFade) },
 				// { "BSImagespaceShaderISIBLensFlares", static_cast<uint32_t>(ISIBLensFlares) },
 
 				// Those cause issue because of typo in shader name in vanilla code but at the same time they are not used by vanilla game.
@@ -1890,7 +1890,7 @@ namespace SIE
 				return false;
 			}
 
-			entries = it->second; // Copy the entries
+			entries = it->second;  // Copy the entries
 			hlslToShaderMap.erase(it);
 		}
 
@@ -2005,7 +2005,7 @@ namespace SIE
 						[&](const hlslRecord& r) { return r.key == key; });
 
 					if (existingRecord != entries.end()) {
-						entries.erase(existingRecord); // Remove the old record
+						entries.erase(existingRecord);  // Remove the old record
 					}
 
 					// Insert the new or updated record
@@ -2234,7 +2234,7 @@ namespace SIE
 			return false;
 		// Validate the shader type
 		if (a_type.empty() || !magic_enum::enum_cast<RE::BSShader::Type>(a_type, magic_enum::case_insensitive).has_value()) {
-			return false; // Invalid type
+			return false;  // Invalid type
 		}
 
 		std::lock_guard lockGuard(modifiedMapMutex);
@@ -2267,7 +2267,7 @@ namespace SIE
 			return false;
 		// Validate the shader type
 		if (a_type.empty() || !magic_enum::enum_cast<RE::BSShader::Type>(a_type, magic_enum::case_insensitive).has_value()) {
-			return false; // Invalid type
+			return false;  // Invalid type
 		}
 
 		std::lock_guard lockGuard(modifiedMapMutex);
@@ -2280,7 +2280,7 @@ namespace SIE
 		uint32_t descriptor)
 	{
 		if (const auto shaderBlob =
-			SShaderCache::CompileShader(ShaderClass::Vertex, shader, descriptor, isDiskCache)) {
+				SShaderCache::CompileShader(ShaderClass::Vertex, shader, descriptor, isDiskCache)) {
 			auto device = globals::d3d::device;
 
 			auto newShader = SShaderCache::CreateVertexShader(*shaderBlob, shader,
@@ -2298,8 +2298,8 @@ namespace SIE
 				}
 			} else {
 				return vertexShaders[static_cast<size_t>(shader.shaderType.get())]
-						.insert_or_assign(descriptor, std::move(newShader))
-						.first->second.get();
+				    .insert_or_assign(descriptor, std::move(newShader))
+				    .first->second.get();
 			}
 		}
 		return nullptr;
@@ -2309,7 +2309,7 @@ namespace SIE
 		uint32_t descriptor)
 	{
 		if (const auto shaderBlob =
-			SShaderCache::CompileShader(ShaderClass::Pixel, shader, descriptor, isDiskCache)) {
+				SShaderCache::CompileShader(ShaderClass::Pixel, shader, descriptor, isDiskCache)) {
 			auto device = globals::d3d::device;
 
 			auto newShader = SShaderCache::CreatePixelShader(*shaderBlob, shader,
@@ -2327,8 +2327,8 @@ namespace SIE
 				}
 			} else {
 				return pixelShaders[static_cast<size_t>(shader.shaderType.get())]
-						.insert_or_assign(descriptor, std::move(newShader))
-						.first->second.get();
+				    .insert_or_assign(descriptor, std::move(newShader))
+				    .first->second.get();
 			}
 		}
 		return nullptr;
@@ -2338,7 +2338,7 @@ namespace SIE
 		uint32_t descriptor)
 	{
 		if (const auto shaderBlob =
-			SShaderCache::CompileShader(ShaderClass::Compute, shader, descriptor, isDiskCache)) {
+				SShaderCache::CompileShader(ShaderClass::Compute, shader, descriptor, isDiskCache)) {
 			auto device = globals::d3d::device;
 
 			auto newShader = SShaderCache::CreateComputeShader(*shaderBlob, shader,
@@ -2356,8 +2356,8 @@ namespace SIE
 				}
 			} else {
 				return computeShaders[static_cast<size_t>(shader.shaderType.get())]
-						.insert_or_assign(descriptor, std::move(newShader))
-						.first->second.get();
+				    .insert_or_assign(descriptor, std::move(newShader))
+				    .first->second.get();
 			}
 		}
 		return nullptr;
@@ -2437,7 +2437,7 @@ namespace SIE
 	void ShaderCache::IterateShaderBlock(bool a_forward)
 	{
 		std::scoped_lock lockM{ mapMutex };
-		auto targetIndex = a_forward ? 0 : shaderMap.size() - 1; // default start or last element
+		auto targetIndex = a_forward ? 0 : shaderMap.size() - 1;  // default start or last element
 		if (blockedKeyIndex >= 0 && shaderMap.size() > blockedKeyIndex) {
 			// grab next element
 			targetIndex = (blockedKeyIndex + (a_forward ? 1 : -1)) % shaderMap.size();
@@ -2469,7 +2469,7 @@ namespace SIE
 		while (!stoken.stop_requested()) {
 			const auto& task = compilationSet.WaitTake(stoken);
 			if (!task.has_value())
-				break; // exit because thread told to end
+				break;  // exit because thread told to end
 			compilationPool.push_task(&ShaderCache::ProcessCompilationSet, this, stoken, task.value());
 		}
 	}
@@ -2501,7 +2501,7 @@ namespace SIE
 	size_t ShaderCompilationTask::GetId() const
 	{
 		return descriptor + (static_cast<size_t>(shader.shaderType.underlying()) << 32) +
-				(static_cast<size_t>(shaderClass) << 60);
+		       (static_cast<size_t>(shaderClass) << 60);
 	}
 
 	std::string ShaderCompilationTask::GetString() const
@@ -2519,13 +2519,13 @@ namespace SIE
 		std::unique_lock lock(compilationMutex);
 		auto shaderCache = globals::shaderCache;
 		if (!conditionVariable.wait(
-			lock, stoken,
-			[this, &shaderCache]() {
-				return !availableTasks.empty() &&
-						// check against all tasks in queue to trickle the work. It cannot be the active tasks count because the thread pool itself is maximum.
-						static_cast<int>(shaderCache->compilationPool.get_tasks_total()) <=
-						(!shaderCache->backgroundCompilation ? shaderCache->compilationThreadCount : shaderCache->backgroundCompilationThreadCount);
-			})) {
+				lock, stoken,
+				[this, &shaderCache]() {
+					return !availableTasks.empty() &&
+			               // check against all tasks in queue to trickle the work. It cannot be the active tasks count because the thread pool itself is maximum.
+			               static_cast<int>(shaderCache->compilationPool.get_tasks_total()) <=
+			                   (!shaderCache->backgroundCompilation ? shaderCache->compilationThreadCount : shaderCache->backgroundCompilationThreadCount);
+				})) {
 			/*Woke up because of a stop request. */
 			return std::nullopt;
 		}
