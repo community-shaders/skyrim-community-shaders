@@ -103,6 +103,7 @@ float4 SSSSBlurCS(
 
 #if defined(HORIZONTAL)
 	colorM.rgb = Color::GammaToLinear(colorM.rgb);
+	colorM.rgb = colorM.rgb / max(AlbedoTexture[DTid.xy].rgb, 0.0001);
 #endif
 
 	if (sssAmount == 0)
@@ -153,13 +154,14 @@ float4 SSSSBlurCS(
 
 #if defined(HORIZONTAL)
 		color.rgb = Color::GammaToLinear(color.rgb);
+		color.rgb = color.rgb / max(AlbedoTexture[coords].rgb, 0.0001);
 #endif
 
 		float depth = DepthTexture[coords].r;
 		depth = SharedData::GetScreenDepth(depth);
 
 		// If the difference in depth is huge, we lerp color back to "colorM":
-		float s = saturate(profile.y * distanceToProjectionWindow * abs(depthM - depth));
+		float s = saturate(max(profile.y, 0.0001) * distanceToProjectionWindow * abs(depthM - depth));
 		color = lerp(color, colorM.rgb, s * s);
 
 		// Accumulate:
