@@ -195,6 +195,64 @@ namespace ShadowSampling
 
 		return worldShadow;
 	}
+
+	float Get2DFilteredShadowCascadeAlt(float noise, float2x2 rotationMatrix, float sampleOffsetScale, float2 baseUV, float cascadeIndex, float compareValue, uint eyeIndex)
+	{
+		const uint sampleCount = 16;
+
+		float layerIndexRcp = rcp(1 + cascadeIndex);
+
+		float visibility = 0.0;
+
+		for (uint sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex) {
+			float2 sampleOffset = mul(Random::PoissonSampleOffsets16[sampleIndex], rotationMatrix);
+
+			float2 sampleUV = layerIndexRcp * sampleOffset * sampleOffsetScale + baseUV;
+
+			float4 depths = SharedShadowMap.GatherRed(LinearSampler, float3(saturate(sampleUV), cascadeIndex), 0);
+			visibility += compareValue - (depths.x + depths.y + depths.z + depths.w) * 0.25;
+		}
+
+		return visibility * rcp((float)sampleCount);
+	}
+
+	float CalculateThickness(float noise, float3 positionWS, uint eyeIndex, float SampleBias)
+	{
+		ShadowData sD = SharedShadowData[0];
+		float2 rotation;
+		sincos(Math::TAU * noise, rotation.y, rotation.x);
+		float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
+
+		float shadowMapDepth = GetShadowDepth(positionWS, eyeIndex);
+
+		if (sD.EndSplitDistances.z >= shadowMapDepth) {
+			float fadeFactor = 1 - pow(saturate(dot(positionWS.xyz, positionWS.xyz) / sD.ShadowLightParam.z), 8);
+
+			float4x3 lightProjectionMatrix = sD.ShadowMapProj[eyeIndex][0];
+			float cascadeIndex = 0;
+
+			if (sD.EndSplitDistances.x < shadowMapDepth) {
+				lightProjectionMatrix = sD.ShadowMapProj[eyeIndex][1];
+				cascadeIndex = 1;
+			}
+
+			float3 positionLS = mul(transpose(lightProjectionMatrix), float4(positionWS.xyz, 1)).xyz;
+
+			float shadowVisibility = Get2DFilteredShadowCascadeAlt(noise, rotationMatrix, SampleBias, positionLS.xy, cascadeIndex, positionLS.z, eyeIndex);
+
+			if (cascadeIndex < 1 && sD.StartSplitDistances.y < shadowMapDepth) {
+				float3 cascade1PositionLS = mul(transpose(sD.ShadowMapProj[eyeIndex][1]), float4(positionWS.xyz, 1)).xyz;
+
+				float cascade1ShadowVisibility = Get2DFilteredShadowCascadeAlt(noise, rotationMatrix, SampleBias, cascade1PositionLS.xy, 1, cascade1PositionLS.z, eyeIndex);
+
+				float cascade1BlendFactor = smoothstep(0, 1, (shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
+				shadowVisibility = lerp(shadowVisibility, cascade1ShadowVisibility, cascade1BlendFactor);
+			}
+
+			return saturate(max(shadowVisibility, 0.0001));
+		}
+		return 1.0;
+	}
 }
 
 #endif  // __SHADOW_SAMPLING_DEPENDENCY_HLSL__

@@ -37,7 +37,6 @@ struct Skin : Feature
 		float SkinSecondRoughness = 0.35f;
 		float SkinSpecularTexMultiplier = 1.0f;
 		float SecondarySpecularStrength = 0.15f;
-		float Thickness = 0.15f;
 		float F0 = 0.028f;
 		float SkinColorMultiplier = 1.0f;
 		bool EnableSkinDetail = true;
@@ -46,6 +45,8 @@ struct Skin : Feature
 		float BodyTilingMultiplier = 2.0f;
 		bool ApplySpecularToWetness = false;
 		float ExtraSkinWetness = 0.0f;
+		float Translucency = 0.5f;
+		float sssWidth = 0.5f;
 	} settings;
 
 	struct alignas(16) SkinData
@@ -53,6 +54,7 @@ struct Skin : Feature
 		float4 skinParams;
 		float4 skinParams2;
 		float4 skinDetailParams;
+		float4 sssParams;
 		uint ApplySpecularToWetness;
 		uint pad0[3];
 	};

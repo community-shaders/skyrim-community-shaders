@@ -50,6 +50,49 @@ namespace Skin
 		return fdv * fdl;
 	}
 
+	float3 SSSSTransmittance(float translucency, float sssWidth, float3 worldNormal, float3 light, float d)
+	{
+		/**
+		* Calculate the scale of the effect.
+		*/
+		float scale = 8.25 * (1.0 - translucency) / sssWidth;
+		
+		/**
+		* First we shrink the position inwards the surface to avoid artifacts:
+		* (Note that this can be done once for all the lights)
+		*/
+		// float4 shrinkedPos = float4(worldPosition - 0.005 * worldNormal, 1.0);
+
+		/**
+		* Now we calculate the thickness from the light point of view:
+		*/
+		// float4 shadowPosition = mul(shrinkedPos, lightViewProjection);
+		// float d1 = SSSSSampleShadowmap(shadowPosition.xy / shadowPosition.w).r; // 'd1' has a range of 0..1
+		// float d2 = shadowPosition.z; // 'd2' has a range of 0..'lightFarPlane'
+		// d1 *= lightFarPlane; // So we scale 'd1' accordingly:
+		// float d = scale * abs(d1 - d2);
+		d = scale * abs(d); // Use the passed 'd' value instead of calculating it here.
+
+		/**
+		* Armed with the thickness, we can now calculate the color by means of the
+		* precalculated transmittance profile.
+		* (It can be precomputed into a texture, for maximum performance):
+		*/
+		float dd = -d * d;
+		float3 profile = float3(0.233, 0.455, 0.649) * exp(dd / 0.0064) +
+						float3(0.1,   0.336, 0.344) * exp(dd / 0.0484) +
+						float3(0.118, 0.198, 0.0)   * exp(dd / 0.187)  +
+						float3(0.113, 0.007, 0.007) * exp(dd / 0.567)  +
+						float3(0.358, 0.004, 0.0)   * exp(dd / 1.99)   +
+						float3(0.078, 0.0,   0.0)   * exp(dd / 7.41);
+
+		/** 
+		* Using the profile, we finally approximate the transmitted lighting from
+		* the back of the object:
+		*/
+		return profile * saturate(0.3 + dot(light, -worldNormal));
+	}
+
 	float3 GetDualSpecularGGX(float AverageRoughness, float Lobe0Roughness, float Lobe1Roughness, float LobeMix, float3 SpecularColor, float NdotL, float NdotV, float NdotH, float VdotH, out float3 F)
 	{
 		float D = lerp(PBR::GetNormalDistributionFunctionGGX(Lobe0Roughness, NdotH), PBR::GetNormalDistributionFunctionGGX(Lobe1Roughness, NdotH), LobeMix);

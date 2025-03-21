@@ -150,6 +150,7 @@ namespace SharedData
 		float4 skinParams;
 		float4 skinParams2;
 		float4 skinDetailParams;
+		float4 sssParams;
 		uint ApplySpecularToWetness;
 	};
 

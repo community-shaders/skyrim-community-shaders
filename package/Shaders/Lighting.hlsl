@@ -2089,6 +2089,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		Skin::SkinDirectLightInput(dirDiffuseColor, dirTransmissionColor, dirSpecularColor, lightProperties, skinSurfaceProperties, modelNormal.xyz, viewDirection, DirLightDirection);
 		lightsDiffuseColor += dirDiffuseColor;
 		transmissionColor += dirTransmissionColor;
+		float thickness = ShadowSampling::CalculateThickness(screenNoise, input.WorldPosition.xyz, eyeIndex, 0.0064);
+		transmissionColor += min(Skin::SSSSTransmittance(SharedData::skinData.sssParams.x, SharedData::skinData.sssParams.y, modelNormal.xyz, DirLightDirection, thickness) * lightProperties.LightColor, lightProperties.LightColor);
 		specularColorPBR += dirSpecularColor * !SharedData::InInterior;
 #		if defined(WETNESS_EFFECTS)
 		if (waterRoughnessSpecular < 1.0)

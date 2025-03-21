@@ -12,7 +12,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkinSecondRoughness,
 	SkinSpecularTexMultiplier,
 	SecondarySpecularStrength,
-	Thickness,
 	F0,
 	SkinColorMultiplier,
 	EnableSkinDetail,
@@ -20,7 +19,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkinDetailTiling,
 	BodyTilingMultiplier,
 	ApplySpecularToWetness,
-	ExtraSkinWetness)
+	ExtraSkinWetness,
+	Translucency,
+	sssWidth)
 
 void Skin::DrawSettings()
 {
@@ -63,6 +64,18 @@ void Skin::DrawSettings()
 
 	ImGui::Spacing();
 
+	ImGui::SliderFloat("Translucency", &settings.Translucency, 0.0f, 1.0f);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Translucency of the SSS Transmittance effect");
+	}
+
+	ImGui::SliderFloat("SSS Width", &settings.sssWidth, 0.0f, 1.0f);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Width of the SSS Transmittance effect");
+	}
+
+	ImGui::Spacing();
+
 	ImGui::SliderFloat("Extra Skin Wetness", &settings.ExtraSkinWetness, 0.0f, 1.0f);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Extra wetness for skin adding to wetness feature");
@@ -72,6 +85,8 @@ void Skin::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Applies specular texture to wetness feature instead of roughness (needs Wetness Effects enabled)");
 	}
+
+	ImGui::Spacing();
 
 	ImGui::Checkbox("Enable Skin Detail", &settings.EnableSkinDetail);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -194,6 +209,7 @@ Skin::SkinData Skin::GetCommonBufferData()
 	data.skinParams = float4(settings.SkinMainRoughness, settings.SkinSecondRoughness, settings.SkinSpecularTexMultiplier, float(settings.EnableSkin));
 	data.skinParams2 = float4(settings.SecondarySpecularStrength, settings.ExtraSkinWetness, settings.F0, settings.SkinColorMultiplier);
 	data.skinDetailParams = float4(settings.SkinDetailTiling, settings.BodyTilingMultiplier, settings.SkinDetailStrength, float(settings.EnableSkinDetail));
+	data.sssParams = float4(settings.Translucency, settings.sssWidth, 0.0f, 0.0f);
 	data.ApplySpecularToWetness = uint(settings.ApplySpecularToWetness);
 	return data;
 }
