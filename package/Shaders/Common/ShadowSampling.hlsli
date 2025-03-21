@@ -259,18 +259,27 @@ namespace ShadowSampling
 
 			float2 sampleUV = layerIndexRcp * sampleOffset * sampleOffsetScale + baseUV;
 
-			float depths = SharedShadowMap.SampleLevel(LinearSampler, float3(saturate(sampleUV), cascadeIndex), 0);
+			const float4 depths = SharedShadowMap.GatherRed(LinearSampler, float3(saturate(sampleUV), cascadeIndex), 0);
+			const float depth[4] = { depths.x, depths.y, depths.z, depths.w };
+			float d2[4];
 
-			float3 sampledPoint = GetSampledPoint(depths, positionWS, SharedShadowData[0].ShadowMapProj[eyeIndex][cascadeIndex]);
-			d += max(length(positionWS - sampledPoint), 1e-5) * 1e-2;
+			for (uint i = 0; i < 4; ++i) {
+				float3 p = GetSampledPoint(depth[i], positionWS, SharedShadowData[0].ShadowMapProj[eyeIndex][cascadeIndex]);
+				d2[i] = max(length(p - positionWS), 1e-5);
+			}
+			// d += max(length(positionWS - sampledPoint), 1e-5) * 1e-2;
+			d = min(d2[0], d2[1]) + min(d2[2], d2[3]) * 0.5;
 		}
 
 		return d * rcp((float)sampleCount);
 	}
 
-	float CalculateThickness(float noise, float3 positionWS, uint eyeIndex, float SampleBias)
+	float CalculateThickness(float noise, float3 positionWS, float3 N, uint eyeIndex, float SampleBias)
 	{
 		ShadowData sD = SharedShadowData[0];
+
+		positionWS = positionWS - N;  // Shrink the position inwards the surface to avoid artifacts
+
 		float2 rotation;
 		sincos(Math::TAU * noise, rotation.y, rotation.x);
 		float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
