@@ -2064,7 +2064,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 lightsSpecularColor = 0.0.xxx;
 
 	float3 lodLandDiffuseColor = 0;
-	float thickness = ShadowSampling::CalculateThickness(screenNoise, input.WorldPosition.xyz, modelNormal.xyz * 0.66, eyeIndex, 0.0005) * 5;
+	float thickness = ShadowSampling::CalculateThickness(screenNoise, input.WorldPosition.xyz, modelNormal.xyz, eyeIndex, 0.0005) * 10;
 
 #	if defined(TRUE_PBR)
 	{
@@ -2090,7 +2090,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		Skin::SkinDirectLightInput(dirDiffuseColor, dirTransmissionColor, dirSpecularColor, lightProperties, skinSurfaceProperties, modelNormal.xyz, viewDirection, DirLightDirection);
 		lightsDiffuseColor += dirDiffuseColor;
 		transmissionColor += dirTransmissionColor;
-		transmissionColor += min(Skin::SSSSTransmittance(SharedData::skinData.sssParams.x, SharedData::skinData.sssParams.y, modelNormal.xyz, DirLightDirection, thickness) * dirLightColor * dirLightColorMultiplier, dirLightColor * dirLightColorMultiplier);
+		float3 sssTransmittance = Skin::SSSSTransmittanceBlurred(
+			SharedData::skinData.sssParams.x, 
+			SharedData::skinData.sssParams.y, 
+			modelNormal.xyz, 
+			DirLightDirection, 
+			thickness, 
+			SharedData::skinData.sssParams.z, 
+			screenNoise); // Use blurred version with power and noise
+		transmissionColor += min(sssTransmittance * dirLightColor * dirLightColorMultiplier, dirLightColor * dirLightColorMultiplier);
 		specularColorPBR += dirSpecularColor * !SharedData::InInterior;
 #		if defined(WETNESS_EFFECTS)
 		if (waterRoughnessSpecular < 1.0)

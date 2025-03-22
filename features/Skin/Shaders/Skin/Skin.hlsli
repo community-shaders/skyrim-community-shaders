@@ -93,6 +93,105 @@ namespace Skin
 		return profile * saturate(0.3 + dot(light, -worldNormal));
 	}
 
+	float3 SSSSTransmittanceBlurred(float translucency, float sssWidth, float3 worldNormal, float3 light, float d, float power, float noise)
+	{
+		// Create a wider blur with jittered samples to counteract dithering
+		float3 totalSSS = 0.0;
+		float totalWeight = 0.0;
+		
+		// Create a tangent space for sampling
+		float3 u, v;
+		if (abs(worldNormal.y) < 0.999)
+			u = normalize(cross(float3(0, 1, 0), worldNormal));
+		else
+			u = normalize(cross(worldNormal, float3(0, 0, 1)));
+		v = cross(worldNormal, u);
+		
+		// Use blue noise-based sampling with a large kernel
+		// First sample at the exact position (highest weight)
+		float3 baseSSS = SSSSTransmittance(translucency, sssWidth, worldNormal, light, d);
+		float baseWeight = 1.0;
+		totalSSS += baseSSS * baseWeight;
+		totalWeight += baseWeight;
+		
+		// Pre-defined rotation angles to distribute samples evenly
+		float rotations[6] = {
+			0.0, 1.0472, 2.0944, 3.1416, 4.1888, 5.236
+		};
+		
+		// Multi-ring sampling for better coverage and more blur integration
+		const int NUM_RINGS = 3;
+		const int SAMPLES_PER_RING = 6;
+		
+		for (int ring = 0; ring < NUM_RINGS; ring++) {
+			float ringRadius = (ring + 1) * 0.4; // Increase radius for each ring
+			
+			for (int sample = 0; sample < SAMPLES_PER_RING; sample++) {
+				// Create a rotated angle for this sample to distribute evenly
+				float angle = rotations[sample] + noise * 1.5 + ring * 0.7853;
+				
+				// Add some randomization to the radius too
+				float jitteredRadius = ringRadius * (1.0 + (frac(noise * 7.13 + sample * 3.578 + ring * 1.789) * 0.3 - 0.15));
+				
+				// Calculate offset direction
+				float2 offset = float2(cos(angle), sin(angle)) * jitteredRadius;
+				
+				// Vary the normal and light direction slightly to simulate view-dependent scattering
+				float3 offsetNormal = normalize(worldNormal + (u * offset.x + v * offset.y) * 0.25);
+				float3 offsetLight = normalize(light + (u * offset.y - v * offset.x) * 0.1);
+				
+				// Also vary thickness based on radius to simulate skin depth variance
+				float thicknessFactor = 1.0 + jitteredRadius * 0.6; // More thickness variation
+				float offsetThickness = d * thicknessFactor;
+				
+				// Calculate SSS with these modified parameters
+				float3 sampleSSS = SSSSTransmittance(
+					translucency,
+					sssWidth * (1.0 + jitteredRadius * 0.3), // Vary width too for more blur
+					offsetNormal,
+					offsetLight,
+					offsetThickness
+				);
+				
+				// Weight using a smoother falloff (not pure Gaussian but visually effective)
+				float weight = exp(-jitteredRadius * jitteredRadius * 2.0) / (1.0 + ring * 0.5);
+				
+				totalSSS += sampleSSS * weight;
+				totalWeight += weight;
+			}
+		}
+		
+		// Add one final wide-radius blur sample for extra softening
+		{
+			float angle = noise * 6.283;
+			float2 wideOffset = float2(cos(angle), sin(angle)) * 1.5;
+			
+			float3 wideNormal = normalize(worldNormal + (u * wideOffset.x + v * wideOffset.y) * 0.4);
+			float wideThickness = d * 2.0;
+			
+			float3 wideSample = SSSSTransmittance(
+				translucency,
+				sssWidth * 1.5,
+				wideNormal,
+				light,
+				wideThickness
+			);
+			
+			float wideWeight = 0.15; // Fixed low weight for the wide sample
+			totalSSS += wideSample * wideWeight;
+			totalWeight += wideWeight;
+		}
+		
+		// Apply color space transformation to reduce harsh transitions
+		float3 result = (totalSSS / totalWeight);
+		
+		// Slightly boost saturation of the result to compensate for the blur
+		float luminance = dot(result, float3(0.299, 0.587, 0.114));
+		result = lerp(float3(luminance, luminance, luminance), result, 1.2);
+		
+		return result * power;
+	}
+
 	float3 GetDualSpecularGGX(float AverageRoughness, float Lobe0Roughness, float Lobe1Roughness, float LobeMix, float3 SpecularColor, float NdotL, float NdotV, float NdotH, float VdotH, out float3 F)
 	{
 		float D = lerp(PBR::GetNormalDistributionFunctionGGX(Lobe0Roughness, NdotH), PBR::GetNormalDistributionFunctionGGX(Lobe1Roughness, NdotH), LobeMix);
