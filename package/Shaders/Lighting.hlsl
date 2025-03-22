@@ -1833,7 +1833,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	skinSurfaceProperties.RoughnessSecondary = SharedData::skinData.skinParams.y;
 	skinSurfaceProperties.SecondarySpecIntensity = SharedData::skinData.skinParams2.x;
 	float4 skinsk = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, uv);
-	skinSurfaceProperties.Thickness = skinsk.w;
+	skinSurfaceProperties.Thickness = 1 - skinsk.x;
+	if (SharedData::skinData.sssParams.z > 0.0f) {
+		skinSurfaceProperties.Thickness = ShadowSampling::CalculateThickness(screenNoise, input.WorldPosition.xyz, modelNormal.xyz, eyeIndex, 0.0005) * SharedData::skinData.sssParams.z;
+	}
 	skinSurfaceProperties.SubsurfaceColor = skinsk.xyz;
 	skinSurfaceProperties.F0 = SharedData::skinData.skinParams2.zzz;
 	skinSurfaceProperties.AO = SkinAO;
@@ -2064,7 +2067,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 lightsSpecularColor = 0.0.xxx;
 
 	float3 lodLandDiffuseColor = 0;
-	float thickness = ShadowSampling::CalculateThickness(screenNoise, input.WorldPosition.xyz, modelNormal.xyz, eyeIndex, 0.0005) * SharedData::skinData.sssParams.z;
+	// float thickness = ShadowSampling::CalculateThickness(screenNoise, input.WorldPosition.xyz, modelNormal.xyz, eyeIndex, 0.0005) * SharedData::skinData.sssParams.z;
 
 #	if defined(TRUE_PBR)
 	{
@@ -2095,7 +2098,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			SharedData::skinData.sssParams.y, 
 			modelNormal.xyz, 
 			DirLightDirection, 
-			thickness);
+			skinSurfaceProperties.Thickness) * SharedData::skinData.sssParams.w;
 		transmissionColor += min(sssTransmittance * dirLightColor * dirLightColorMultiplier, dirLightColor * dirLightColorMultiplier);
 		specularColorPBR += dirSpecularColor * !SharedData::InInterior;
 #		if defined(WETNESS_EFFECTS)
@@ -2201,6 +2204,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			Skin::SkinDirectLightInput(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, lightProperties, skinSurfaceProperties, modelNormal.xyz, viewDirection, normalizedLightDirection);
 			lightsDiffuseColor += pointDiffuseColor;
 			transmissionColor += pointTransmissionColor;
+			float3 sssTransmittance = Skin::SSSSTransmittance(
+				SharedData::skinData.sssParams.x, 
+				SharedData::skinData.sssParams.y, 
+				modelNormal.xyz, 
+				normalizedLightDirection, 
+				skinSurfaceProperties.Thickness) * SharedData::skinData.sssParams.w;
+			transmissionColor += min(sssTransmittance * lightProperties.LightColor, lightProperties.LightColor);
 			specularColorPBR += pointSpecularColor;
 		} else {
 			lightColor *= lightShadow;
@@ -2361,6 +2371,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			Skin::SkinDirectLightInput(pointDiffuseColor, pointTransmissionColor, pointSpecularColor, lightProperties, skinSurfaceProperties, worldSpaceNormal.xyz, worldSpaceViewDirection, normalizedLightDirection);
 			lightsDiffuseColor += pointDiffuseColor;
 			transmissionColor += pointTransmissionColor;
+			float3 sssTransmittance = Skin::SSSSTransmittance(
+				SharedData::skinData.sssParams.x, 
+				SharedData::skinData.sssParams.y, 
+				modelNormal.xyz, 
+				normalizedLightDirection, 
+				skinSurfaceProperties.Thickness) * SharedData::skinData.sssParams.w;
+			transmissionColor += min(sssTransmittance * lightProperties.LightColor, lightProperties.LightColor);
 			specularColorPBR += pointSpecularColor;
 #				if defined(WETNESS_EFFECTS)
 			if (waterRoughnessSpecular < 1.0)

@@ -48,6 +48,8 @@ struct Skin : Feature
 		float Translucency = 0.5f;
 		float sssWidth = 0.5f;
 		float thicknessMult = 20.0f;
+		bool UseSSS = true;
+		bool UseCalcThickness = false;
 	} settings;
 
 	struct alignas(16) SkinData

@@ -22,7 +22,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ExtraSkinWetness,
 	Translucency,
 	sssWidth,
-	thicknessMult)
+	thicknessMult,
+	UseSSS,
+	UseCalcThickness)
 
 void Skin::DrawSettings()
 {
@@ -64,6 +66,10 @@ void Skin::DrawSettings()
 	}
 
 	ImGui::Spacing();
+
+	ImGui::Checkbox("Enable SSS Transmission", &settings.UseSSS);
+
+	ImGui::Checkbox("Use Calculated Thickness", &settings.UseCalcThickness);
 
 	ImGui::SliderFloat("Translucency", &settings.Translucency, 0.0f, 1.0f);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -215,7 +221,7 @@ Skin::SkinData Skin::GetCommonBufferData()
 	data.skinParams = float4(settings.SkinMainRoughness, settings.SkinSecondRoughness, settings.SkinSpecularTexMultiplier, float(settings.EnableSkin));
 	data.skinParams2 = float4(settings.SecondarySpecularStrength, settings.ExtraSkinWetness, settings.F0, settings.SkinColorMultiplier);
 	data.skinDetailParams = float4(settings.SkinDetailTiling, settings.BodyTilingMultiplier, settings.SkinDetailStrength, float(settings.EnableSkinDetail));
-	data.sssParams = float4(settings.Translucency, settings.sssWidth, settings.thicknessMult, 0.0f);
+	data.sssParams = float4(settings.Translucency, settings.sssWidth, settings.thicknessMult * float(settings.UseCalcThickness), float(settings.UseSSS));
 	data.ApplySpecularToWetness = uint(settings.ApplySpecularToWetness);
 	return data;
 }
