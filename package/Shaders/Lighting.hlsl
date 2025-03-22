@@ -1833,7 +1833,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	skinSurfaceProperties.RoughnessSecondary = SharedData::skinData.skinParams.y;
 	skinSurfaceProperties.SecondarySpecIntensity = SharedData::skinData.skinParams2.x;
 	float4 skinsk = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, uv);
-	skinSurfaceProperties.Thickness = 1 - skinsk.x;
+	skinSurfaceProperties.Thickness = skinsk.x;
 	if (SharedData::skinData.sssParams.z > 0.0f) {
 		skinSurfaceProperties.Thickness = ShadowSampling::CalculateThickness(screenNoise, input.WorldPosition.xyz, modelNormal.xyz, eyeIndex, 0.0005) * SharedData::skinData.sssParams.z;
 	}
