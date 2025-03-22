@@ -268,7 +268,7 @@ namespace ShadowSampling
 				d2[i] = max(length(p - positionWS), 1e-5);
 			}
 			// d += max(length(positionWS - sampledPoint), 1e-5) * 1e-2;
-			d = min(d2[0], d2[1]) + min(d2[2], d2[3]) * 0.5;
+			d = (d2[0] + d2[1] + d2[2] + d2[3]) * 0.25;
 		}
 
 		return d * rcp((float)sampleCount);

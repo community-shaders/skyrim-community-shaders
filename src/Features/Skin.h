@@ -47,7 +47,7 @@ struct Skin : Feature
 		float ExtraSkinWetness = 0.0f;
 		float Translucency = 0.5f;
 		float sssWidth = 0.5f;
-		float SSSPower = 1.0f;
+		float thicknessMult = 20.0f;
 	} settings;
 
 	struct alignas(16) SkinData
