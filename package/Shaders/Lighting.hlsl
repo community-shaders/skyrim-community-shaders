@@ -2099,7 +2099,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			modelNormal.xyz, 
 			DirLightDirection, 
 			skinSurfaceProperties.Thickness) * SharedData::skinData.sssParams.w;
-		transmissionColor += min(sssTransmittance * dirLightColor * dirLightColorMultiplier, dirLightColor * dirLightColorMultiplier);
+		transmissionColor += min(sssTransmittance * lightProperties.LightColor, dirLightColor * dirLightColorMultiplier);
 		specularColorPBR += dirSpecularColor * !SharedData::InInterior;
 #		if defined(WETNESS_EFFECTS)
 		if (waterRoughnessSpecular < 1.0)
