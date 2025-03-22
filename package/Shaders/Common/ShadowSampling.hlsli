@@ -310,7 +310,7 @@ namespace ShadowSampling
 				shadowVisibility = lerp(shadowVisibility, cascade1ShadowVisibility, cascade1BlendFactor);
 			}
 
-			return saturate(shadowVisibility);
+			return shadowVisibility;
 		}
 		return 1.0;
 	}
