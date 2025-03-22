@@ -5,10 +5,10 @@
 namespace SnowCover
 {
 
-	Texture2D<float3> SnowRDAO : register(t73);    //snow_rdao
-	Texture2D<float3> SnowNormal : register(t74);  //snow_n
-	Texture2D<float3> IceRDAO : register(t75);     //ice_rdao
-	Texture2D<float3> IceNormal : register(t76);   //ice_n
+	Texture2D<float3> SnowRDAO : register(t73); //snow_rdao
+	Texture2D<float3> SnowNormal : register(t74); //snow_n
+	Texture2D<float3> IceRDAO : register(t75); //ice_rdao
+	Texture2D<float3> IceNormal : register(t76); //ice_n
 
 	// https://blog.selfshadow.com/publications/blending-in-detail/
 	// for when s = (0,0,1)
@@ -117,7 +117,7 @@ namespace SnowCover
 	float ApplySnowBase(inout float3 worldNormal, inout float2 uv, out bool alt, float disp, float3 p, float skylight, float waterDist, float viewDist)
 	{
 		waterDist = smoothstep(-64, 8, -waterDist - disp);
-		float weatherMult = SharedData::snowCoverSettings.TimeSnowing * SharedData::snowCoverSettings.SnowAmount / 3000;
+		float weatherMult = SharedData::snowCoverSettings.TimeSnowing*SharedData::snowCoverSettings.SnowAmount/3000;
 		float env_mult = max(0, saturate(GetEnvironmentalMultiplier(p) + disp) - waterDist);
 		float main_mult = skylight * saturate(smoothstep(0.1, 0.7, (max(0, worldNormal.z)) * (env_mult + max(0, saturate(weatherMult) - waterDist))));
 		float alt_env_mult = max(0, saturate(GetEnvironmentalMultiplier(p) - disp) - waterDist);
@@ -140,8 +140,8 @@ namespace SnowCover
 		if (mult <= 0.0)
 			return prop;
 		float3 rdao = alt ? IceRDAO.Sample(SampColorSampler, uv).rgb : SnowRDAO.Sample(SampColorSampler, uv).rgb;
-		float3 albedo = rdao.yyy * (alt ? SharedData::snowCoverSettings.AltTint.rgb : SharedData::snowCoverSettings.MainTint.rgb);
-		diffuse = lerp(diffuse, albedo, mult * (alt ? SharedData::snowCoverSettings.AltTint.w : SharedData::snowCoverSettings.MainTint.w));
+		float3 albedo = rdao.yyy*(alt ? SharedData::snowCoverSettings.AltTint.rgb :SharedData::snowCoverSettings.MainTint.rgb);
+		diffuse = lerp(diffuse, albedo, mult*(alt ? SharedData::snowCoverSettings.AltTint.w : SharedData::snowCoverSettings.MainTint.w));
 		//diffuse = frac(float3(uv.x, uv.y, 0));
 		worldNormal = TransformNormal(alt ? IceNormal.Sample(SampNormalSampler, uv).rgb : SnowNormal.Sample(SampNormalSampler, uv).rgb);
 		//worldNormal = normalize(lerp(worldNormal, normal, mult));
@@ -165,8 +165,8 @@ namespace SnowCover
 			return 0;
 		// apparently LOD landscape color sampler clamps uvs
 		float3 rdao = alt ? IceRDAO.Sample(SampColorSampler, uv).rgb : SnowRDAO.Sample(SampColorSampler, uv).rgb;
-		float3 albedo = rdao.yyy * (alt ? SharedData::snowCoverSettings.AltTint.rgb : SharedData::snowCoverSettings.MainTint.rgb);
-		diffuse = lerp(diffuse, albedo, mult * Color::PBRLightingScale * (alt ? SharedData::snowCoverSettings.AltTint.w : SharedData::snowCoverSettings.MainTint.w));
+		float3 albedo = rdao.yyy*(alt ? SharedData::snowCoverSettings.AltTint.rgb :SharedData::snowCoverSettings.MainTint.rgb);
+		diffuse = lerp(diffuse, albedo, mult*Color::PBRLightingScale*(alt ? SharedData::snowCoverSettings.AltTint.w : SharedData::snowCoverSettings.MainTint.w));
 		//diffuse = frac(float3(uv.x, uv.y, 0));
 		glossiness = lerp(glossiness, 1 - rdao.x, mult);  // yes these are named wrong not my fault bye
 		shininess = lerp(shininess, 25 * 500 * 0.02, mult);
