@@ -396,6 +396,10 @@ cbuffer AlphaTestRefCB : register(b11)
 #		include "LightLimitFix/LightLimitFix.hlsli"
 #	endif
 
+#	if defined(ISL) && defined(LIGHT_LIMIT_FIX)
+#		include "InverseSquareLighting/InverseSquareLighting.hlsli"
+#	endif
+
 #	define SampColorSampler SampBaseSampler
 
 #	if defined(DYNAMIC_CUBEMAPS)
@@ -628,11 +632,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 				float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WorldPosition.xyz;
 				float lightDist = length(lightDirection);
+
+#			    if defined(ISL)
+				float intensityMultiplier = InverseSquareLighting::GetAttenuation(lightDist, light);
+				if (intensityMultiplier < 1e-5)
+					continue;
+#				else
 				float intensityFactor = saturate(lightDist / light.radius);
 				if (intensityFactor == 1)
 					continue;
-
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
+#               endif
+
 				float3 lightColor = light.color.xyz * intensityMultiplier;
 
 				float lightShadow = 1.0;
@@ -829,11 +840,18 @@ PS_OUTPUT main(PS_INPUT input)
 
 				float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WorldPosition.xyz;
 				float lightDist = length(lightDirection);
+
+#			    if defined(ISL)
+				float intensityMultiplier = InverseSquareLighting::GetAttenuation(lightDist, light);
+				if (intensityMultiplier < 1e-5)
+					continue;
+#               else
 				float intensityFactor = saturate(lightDist / light.radius);
 				if (intensityFactor == 1)
 					continue;
-
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
+#               endif
+
 				float3 lightColor = light.color.xyz * intensityMultiplier;
 
 				float lightShadow = 1.0;

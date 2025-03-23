@@ -21,7 +21,11 @@ public:
 	{
 		PortalStrict = (1 << 0),
 		Shadow = (1 << 1),
-		Simple = (1 << 2)
+		Simple = (1 << 2),
+		
+		Initialised = (1 << 8),
+		Disabled = (1 << 9),
+		InverseSquare = (1 << 10),
 	};
 
 	struct PositionOpt

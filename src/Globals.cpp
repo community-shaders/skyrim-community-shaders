@@ -18,6 +18,7 @@
 #include "Features/GrassLighting.h"
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
+#include "Features/InverseSquareLighting.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/Skylighting.h"
@@ -50,6 +51,7 @@ namespace globals
 		GrassLighting* grassLighting = nullptr;
 		LightLimitFix* lightLimitFix = nullptr;
 		LODBlending* lodBlending = nullptr;
+		InverseSquareLighting* inverseSquareLighting = nullptr;
 		ScreenSpaceGI* screenSpaceGI = nullptr;
 		ScreenSpaceShadows* screenSpaceShadows = nullptr;
 		Skylighting* skylighting = nullptr;
@@ -125,6 +127,7 @@ namespace globals
 		features::grassLighting = GrassLighting::GetSingleton();
 		features::lightLimitFix = LightLimitFix::GetSingleton();
 		features::lodBlending = LODBlending::GetSingleton();
+		features::inverseSquareLighting = InverseSquareLighting::GetSingleton();
 		features::screenSpaceGI = ScreenSpaceGI::GetSingleton();
 		features::screenSpaceShadows = ScreenSpaceShadows::GetSingleton();
 		features::skylighting = Skylighting::GetSingleton();

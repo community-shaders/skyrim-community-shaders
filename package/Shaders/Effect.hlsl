@@ -504,6 +504,10 @@ cbuffer PerGeometry : register(b2)
 #		include "LightLimitFix/LightLimitFix.hlsli"
 #	endif
 
+#	if defined(ISL) && defined(LIGHT_LIMIT_FIX)
+#		include "InverseSquareLighting/InverseSquareLighting.hlsli"
+#	endif
+
 #	define LinearSampler SampBaseSampler
 
 #	if defined(TERRAIN_SHADOWS)
@@ -671,8 +675,14 @@ PS_OUTPUT main(PS_INPUT input)
 				}
 				float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WorldPosition.xyz;
 				float lightDist = length(lightDirection);
+
+#			if defined(ISL)
+				float intensityMultiplier = InverseSquareLighting::GetAttenuation(lightDist, light);
+#			else
 				float intensityFactor = saturate(lightDist / light.radius);
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
+#			endif
+
 				float3 lightColor = light.color.xyz * intensityMultiplier * 0.5;
 				propertyColor += lightColor;
 			}

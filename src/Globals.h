@@ -7,6 +7,7 @@ struct GrassCollision;
 struct GrassLighting;
 struct LightLimitFix;
 struct LODBlending;
+struct InverseSquareLighting;
 struct ScreenSpaceGI;
 struct ScreenSpaceShadows;
 struct Skylighting;
@@ -51,6 +52,7 @@ namespace globals
 		extern GrassLighting* grassLighting;
 		extern LightLimitFix* lightLimitFix;
 		extern LODBlending* lodBlending;
+		extern InverseSquareLighting* inverseSquareLighting;
 		extern ScreenSpaceGI* screenSpaceGI;
 		extern ScreenSpaceShadows* screenSpaceShadows;
 		extern Skylighting* skylighting;
