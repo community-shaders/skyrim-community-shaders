@@ -28,7 +28,7 @@ RWTexture2D<float> outDepth4 : register(u4);
 float ClampDepth(float depth)
 {
 #ifdef VR
-	if (depth == 0.0) // VR 0 indicates a mask
+	if (depth == 0.0)  // VR 0 indicates a mask
 		return 0.0;
 #endif
 	depth = ScreenToViewDepth(depth);
