@@ -371,7 +371,6 @@ float GetPoissonDiskFilteredShadowVisibility(uint3 seed, Texture2DArray<float4> 
 
 	float visibility = 0;
 	for (int sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex) {
-		
 		float3 sampleOffset = (Random::R3Modified(sampleIndex + SharedData::FrameCount * sampleCount, seed / 4294967295.f) * 2.0 - 1.0) * ShadowSampleParam.z * 2048;
 
 		float3 positionLS = mul(transpose(ShadowMapProj[eyeIndex][0]), float4(positionMS.xyz + sampleOffset, 1)).xyz;
@@ -395,16 +394,16 @@ float GetPoissonDiskFilteredShadowVisibility(float noise, float2x2 rotationMatri
 {
 	const int sampleCount = 16;
 
-#	if defined(RENDER_SHADOWMASK)
+#		if defined(RENDER_SHADOWMASK)
 	uint onePlusLayerIndex = 1.0 + layerIndex;
 	float layerIndexRcp = rcp(onePlusLayerIndex);
-#	endif
+#		endif
 
 	float visibility = 0;
 	for (int sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex) {
 		float2 sampleOffset = mul(Random::PoissonSampleOffsets16[sampleIndex], rotationMatrix);
 
-#	if defined(RENDER_SHADOWMASKDPB)
+#		if defined(RENDER_SHADOWMASKDPB)
 		float2 sampleUV = baseUV.xy + sampleOffset;
 		baseUV.z += noise * 0.5;
 
@@ -418,13 +417,13 @@ float GetPoissonDiskFilteredShadowVisibility(float noise, float2x2 rotationMatri
 
 		visibility += tex.SampleCmpLevelZero(samp, float3(shadowMapUV, layerIndex), compareValue).x;
 
-#	elif defined(RENDER_SHADOWMASK)
+#		elif defined(RENDER_SHADOWMASK)
 		float2 sampleUV = layerIndexRcp * sampleOffset * ShadowSampleParam.z + baseUV;
 		visibility += tex.SampleCmpLevelZero(samp, float3(sampleUV, layerIndex), compareValue).x;
-#	else
+#		else
 		float2 sampleUV = sampleOffset * ShadowSampleParam.z + baseUV;
 		visibility += tex.SampleCmpLevelZero(samp, float3(sampleUV, layerIndex), compareValue).x;
-#	endif
+#		endif
 	}
 	return visibility * rcp((float)sampleCount);
 }
