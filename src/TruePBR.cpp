@@ -38,6 +38,14 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	specularLevel,
 	glintParameters);
 
+#define CHECK_PBR_TEXTURE(textureName)                                                                         \
+	if (!(pbrMaterial->textureName)) {                                                                         \
+		logger::warn("[TruePBR] {} missing {}; treating as nonPBR", pbrMaterial->inputFilePath, #textureName); \
+	} else {                                                                                                   \
+		func(shader, material);                                                                                \
+		return;                                                                                                \
+	}
+
 namespace PNState
 {
 	void ReadPBRRecordConfigs(const std::string& rootPath, std::function<void(const std::string&, const json&)> recordReader)
@@ -573,6 +581,7 @@ struct BSLightingShaderProperty_LoadBinary
 			RE::BSLightingShaderMaterialBase* material = nullptr;
 			if (property->flags.any(kMenuScreen)) {
 				auto* pbrMaterial = BSLightingShaderMaterialPBR::Make();
+				pbrMaterial->inputFilePath = stream.inputFilePath;
 				pbrMaterial->loadedWithFeature = feature;
 				material = pbrMaterial;
 				isPbr = true;
@@ -806,6 +815,9 @@ struct BSLightingShader_SetupMaterial
 				}
 			} else if (lightingType == None || lightingType == TreeAnim) {
 				auto* pbrMaterial = static_cast<const BSLightingShaderMaterialPBR*>(material);
+				CHECK_PBR_TEXTURE(diffuseTexture);
+				CHECK_PBR_TEXTURE(normalTexture);
+				CHECK_PBR_TEXTURE(rmaosTexture);
 				if (pbrMaterial->diffuseRenderTargetSourceIndex != -1) {
 					shadowState->SetPSTexture(0, renderer->GetRuntimeData().renderTargets[pbrMaterial->diffuseRenderTargetSourceIndex]);
 				} else {
