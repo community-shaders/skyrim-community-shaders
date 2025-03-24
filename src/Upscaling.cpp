@@ -372,6 +372,10 @@ void Upscaling::Upscale()
 		state->EndPerfEvent();
 	}
 
+	if (globals::hdr->settings.enableHDR) {
+		return;
+	}
+
 	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
 }
 
@@ -435,6 +439,10 @@ void Upscaling::SharpenTAA()
 	}
 
 	state->EndPerfEvent();
+
+	if (globals::hdr->settings.enableHDR) {
+		return;
+	}
 
 	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
 
