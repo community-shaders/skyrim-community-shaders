@@ -2848,7 +2848,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 
 #	if !defined(DEFERRED)
+#		if defined(SKIN) && defined(CS_SKIN)
+	if (SharedData::skinData.skinParams.w > 0) {
+		color.xyz += specularColor;
+	} else {
+		color.xyz += Color::LinearToGamma(Color::GammaToLinear(color.xyz) + specularColor);
+	}
+#		else
 	color.xyz = Color::LinearToGamma(Color::GammaToLinear(color.xyz) + specularColor);
+#		endif
 	if (FrameBuffer::FrameParams.y && FrameBuffer::FrameParams.z)
 		color.xyz = lerp(color.xyz, input.FogParam.xyz, input.FogParam.w);
 #	endif
