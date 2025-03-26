@@ -1,5 +1,6 @@
 #include "TerrainHelper.h"
 
+#include "State.h"
 #include "ShaderCache.h"
 
 void TerrainHelper::DataLoaded()
@@ -117,23 +118,17 @@ void TerrainHelper::BSLightingShader_SetupMaterial(RE::BSLightingShaderMaterialB
 	}
 
 	const auto materialBase = extendedSlots[material->hashKey];
-
-	const auto& stateData = RE::BSGraphics::State::GetSingleton()->GetRuntimeData();
-
-	uint THFlags = 0;
+	const auto state = globals::state;
+	const auto& stateData = globals::game::graphicsState->GetRuntimeData();
 
 	// Populate extended slots
 	for (uint32_t textureI = 0; textureI < 6; ++textureI) {
 		if (materialBase.parallax[textureI] != nullptr && materialBase.parallax[textureI] != stateData.defaultTextureNormalMap) {
 			thExtendedRendererState.SetPSTexture(textureI, materialBase.parallax[textureI]->rendererTexture);
-			THFlags |= 1 << textureI;
+			state->currentExtraFeatureDescriptor |= 1 << textureI;
 		} else {
 			thExtendedRendererState.SetPSTexture(textureI, nullptr);
-			THFlags &= ~(1 << textureI);
+			state->currentExtraFeatureDescriptor &= ~(1 << textureI);
 		}
 	}
-
-	const auto& lightingPSConstants = ShaderConstants::LightingPS::Get();
-	const auto shadowState = globals::game::shadowState;
-	shadowState->SetPSConstant(THFlags, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.THFlags);
 }

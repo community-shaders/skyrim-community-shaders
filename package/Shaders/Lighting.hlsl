@@ -646,10 +646,6 @@ cbuffer PerMaterial : register(b1)
 	uint PBRFlags : packoffset(c15.x);
 	float3 PBRParams1 : packoffset(c15.y);  // roughness scale, displacement scale, specular level
 	float4 PBRParams2 : packoffset(c16);    // subsurface color, subsurface opacity
-
-#	if defined(LANDSCAPE) && !defined(TRUE_PBR)
-	uint THFlags : packoffset(c17.x);
-#	endif
 };
 
 cbuffer PerGeometry : register(b2)
@@ -968,13 +964,9 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "DynamicCubemaps/DynamicCubemaps.hlsli"
 #	endif
 
-#	if defined(LANDSCAPE)
-#		include "TerrainHelper/TerrainHelper.hlsli"
-#	endif
-
 #	if defined(TRUE_PBR)
 #		include "Common/PBR.hlsli"
-#	endif
+#   endif
 
 #	if defined(EMAT)
 #		include "ExtendedMaterials/ExtendedMaterials.hlsli"

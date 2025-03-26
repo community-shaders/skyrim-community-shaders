@@ -151,7 +151,7 @@ namespace ExtendedMaterials
 		float total = 0;
 		if (w1.x > 0.0) {
 			float h = 0.0;
-			[branch] if ((THFlags & TerrainHelper::LandTile0HasDisplacement) != 0)
+			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand0HasDisplacement) != 0)
 			{
 				h = ScaleDisplacement(TexLandTHDisp0Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).x, params[0]);
 			}
@@ -164,7 +164,7 @@ namespace ExtendedMaterials
 		}
 		if (w1.y > 0.0) {
 			float h = 0.0;
-			[branch] if ((THFlags & TerrainHelper::LandTile1HasDisplacement) != 0)
+			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand1HasDisplacement) != 0)
 			{
 				h = ScaleDisplacement(TexLandTHDisp1Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).x, params[1]);
 			}
@@ -177,7 +177,7 @@ namespace ExtendedMaterials
 		}
 		if (w1.z > 0.0) {
 			float h = 0.0;
-			[branch] if ((THFlags & TerrainHelper::LandTile2HasDisplacement) != 0)
+			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand2HasDisplacement) != 0)
 			{
 				h = ScaleDisplacement(TexLandTHDisp2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).x, params[2]);
 			}
@@ -190,7 +190,7 @@ namespace ExtendedMaterials
 		}
 		if (w1.w > 0.0) {
 			float h = 0.0;
-			[branch] if ((THFlags & TerrainHelper::LandTile3HasDisplacement) != 0)
+			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand3HasDisplacement) != 0)
 			{
 				h = ScaleDisplacement(TexLandTHDisp3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).x, params[3]);
 			}
@@ -203,7 +203,7 @@ namespace ExtendedMaterials
 		}
 		if (w2.x > 0.0) {
 			float h = 0.0;
-			[branch] if ((THFlags & TerrainHelper::LandTile4HasDisplacement) != 0)
+			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand4HasDisplacement) != 0)
 			{
 				h = ScaleDisplacement(TexLandTHDisp4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).x, params[4]);
 			}
@@ -216,7 +216,7 @@ namespace ExtendedMaterials
 		}
 		if (w2.y > 0.0) {
 			float h = 0.0;
-			[branch] if ((THFlags & TerrainHelper::LandTile5HasDisplacement) != 0)
+			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand5HasDisplacement) != 0)
 			{
 				h = ScaleDisplacement(TexLandTHDisp5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).x, params[5]);
 			}

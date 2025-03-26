@@ -61,17 +61,20 @@ void State::Draw()
 			data.VertexShaderDescriptor = currentVertexDescriptor;
 			data.PixelShaderDescriptor = currentPixelDescriptor;
 			data.ExtraShaderDescriptor = currentExtraDescriptor;
+			data.ExtraFeatureDescriptor = currentExtraFeatureDescriptor;
 
 			permutationCB->Update(data);
 
 			lastVertexDescriptor = currentVertexDescriptor;
 			lastPixelDescriptor = currentPixelDescriptor;
 			lastExtraDescriptor = currentExtraDescriptor;
+			lastExtraFeatureDescriptor = currentExtraFeatureDescriptor;
 
 			forceUpdatePermutationBuffer = false;
 		}
 
 		currentExtraDescriptor = 0;
+		currentExtraFeatureDescriptor = 0;
 
 		if (frameChecker.IsNewFrame()) {
 			ID3D11Buffer* buffers[3] = { permutationCB->CB(), sharedDataCB->CB(), featureDataCB->CB() };
