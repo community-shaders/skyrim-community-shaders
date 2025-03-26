@@ -38,6 +38,13 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	specularLevel,
 	glintParameters);
 
+#define CHECK_PBR_TEXTURE(textureName)                                                                         \
+	if (!(pbrMaterial->textureName)) {                                                                         \
+		logger::warn("[TruePBR] {} missing {}; treating as nonPBR", pbrMaterial->inputFilePath, #textureName); \
+		func(shader, material);                                                                                \
+		return;                                                                                                \
+	}
+
 namespace PNState
 {
 	void ReadPBRRecordConfigs(const std::string& rootPath, std::function<void(const std::string&, const json&)> recordReader)
@@ -573,6 +580,7 @@ struct BSLightingShaderProperty_LoadBinary
 			RE::BSLightingShaderMaterialBase* material = nullptr;
 			if (property->flags.any(kMenuScreen)) {
 				auto* pbrMaterial = BSLightingShaderMaterialPBR::Make();
+				pbrMaterial->inputFilePath = stream.inputFilePath;
 				pbrMaterial->loadedWithFeature = feature;
 				material = pbrMaterial;
 				isPbr = true;
@@ -823,15 +831,15 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 			stl::enumeration<PBRShaderFlags> shaderFlags;
 			if (pbrMaterial->pbrFlags.any(PBRFlags::TwoLayer)) {
 				shaderFlags.set(PBRShaderFlags::TwoLayer);
-				if (pbrMaterial->pbrFlags.any(PBRFlags::InterlayerParallax)) {
-					shaderFlags.set(PBRShaderFlags::InterlayerParallax);
-				}
-				if (pbrMaterial->pbrFlags.any(PBRFlags::CoatNormal)) {
-					shaderFlags.set(PBRShaderFlags::CoatNormal);
-				}
-				if (pbrMaterial->pbrFlags.any(PBRFlags::ColoredCoat)) {
-					shaderFlags.set(PBRShaderFlags::ColoredCoat);
-				}
+					if (pbrMaterial->pbrFlags.any(PBRFlags::InterlayerParallax)) {
+						shaderFlags.set(PBRShaderFlags::InterlayerParallax);
+					}
+					if (pbrMaterial->pbrFlags.any(PBRFlags::CoatNormal)) {
+						shaderFlags.set(PBRShaderFlags::CoatNormal);
+					}
+					if (pbrMaterial->pbrFlags.any(PBRFlags::ColoredCoat)) {
+						shaderFlags.set(PBRShaderFlags::ColoredCoat);
+					}
 
 				std::array<float, 4> PBRParams2;
 				PBRParams2[0] = pbrMaterial->GetCoatColor().red;

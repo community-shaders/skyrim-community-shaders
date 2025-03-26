@@ -102,7 +102,7 @@ float4 SSSSBlurCS(
 	float4 colorM = ColorTexture[DTid.xy];
 
 #if defined(HORIZONTAL)
-	colorM.rgb = Color::GammaToTrueLinear(colorM.rgb);
+	colorM.rgb = Color::GammaToLinear(colorM.rgb);
 #endif
 
 	if (sssAmount == 0)
@@ -140,16 +140,9 @@ float4 SSSSBlurCS(
 	uint2 maxCoord = uint2(SharedData::BufferDim.x, SharedData::BufferDim.y);
 #endif
 
-	float jitter = Random::InterleavedGradientNoise(DTid.xy, SharedData::FrameCount) * Math::TAU;
-	float2x2 rotationMatrix = float2x2((jitter), sin(jitter), -sin(jitter), cos(jitter));
-	float2x2 identityMatrix = float2x2(1.0, 0.0, 0.0, 1.0);
-
 	// Accumulate the other samples:
 	for (uint i = kernelOffset + 1; i < kernelOffset + SSSS_N_SAMPLES; i++) {
 		float2 offset = Kernels[i].a * finalStep;
-
-		// Apply randomized rotation
-		offset = mul(offset, rotationMatrix);
 
 		uint2 coords = DTid.xy + int2(offset + 0.5);
 
@@ -159,7 +152,7 @@ float4 SSSSBlurCS(
 		float3 color = ColorTexture[coords].rgb;
 
 #if defined(HORIZONTAL)
-		color.rgb = Color::GammaToTrueLinear(color.rgb);
+		color.rgb = Color::GammaToLinear(color.rgb);
 #endif
 
 		float depth = DepthTexture[coords].r;

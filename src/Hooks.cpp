@@ -183,10 +183,10 @@ namespace LightingExtensions
 
 			globals::state->isTree = false;
 
-			auto userData = pass->geometry->GetUserData();
-			if (userData)
-				if (userData->GetBaseObject()->As<RE::TESObjectTREE>())
-					globals::state->isTree = true;
+			if (auto userData = pass->geometry->GetUserData())
+				if (auto baseObject = userData->GetBaseObject())
+					if (baseObject->As<RE::TESObjectTREE>())
+						globals::state->isTree = true;
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};

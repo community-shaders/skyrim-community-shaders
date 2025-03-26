@@ -688,12 +688,15 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 			}
 		}
 
+		data.InInterior = true;
+		data.HideSky = true;
 		if (auto sky = globals::game::sky) {
-			data.InInterior = sky->mode.get() != RE::Sky::Mode::kFull;
-			data.HideSky = !data.InInterior && sky->flags.any(RE::Sky::Flags::kHideSky);
-		} else {
-			data.InInterior = true;
-			data.HideSky = true;
+			if (auto player = RE::PlayerCharacter::GetSingleton()) {
+				if (auto parentCell = player->GetParentCell()) {
+					data.InInterior = parentCell->IsInteriorCell();
+					data.HideSky = !data.InInterior && sky->flags.any(RE::Sky::Flags::kHideSky);
+				}
+			}
 		}
 
 		if (auto ui = globals::game::ui)
