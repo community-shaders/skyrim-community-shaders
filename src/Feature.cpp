@@ -137,7 +137,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		globals::features::terrainBlending,
 		globals::features::terrainHelper,
 		globals::features::volumetricLighting
-		globals::features::lodBlending
+			globals::features::lodBlending
 	};
 
 	static std::vector<Feature*> featuresVR(features);

@@ -831,15 +831,15 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 			stl::enumeration<PBRShaderFlags> shaderFlags;
 			if (pbrMaterial->pbrFlags.any(PBRFlags::TwoLayer)) {
 				shaderFlags.set(PBRShaderFlags::TwoLayer);
-					if (pbrMaterial->pbrFlags.any(PBRFlags::InterlayerParallax)) {
-						shaderFlags.set(PBRShaderFlags::InterlayerParallax);
-					}
-					if (pbrMaterial->pbrFlags.any(PBRFlags::CoatNormal)) {
-						shaderFlags.set(PBRShaderFlags::CoatNormal);
-					}
-					if (pbrMaterial->pbrFlags.any(PBRFlags::ColoredCoat)) {
-						shaderFlags.set(PBRShaderFlags::ColoredCoat);
-					}
+				if (pbrMaterial->pbrFlags.any(PBRFlags::InterlayerParallax)) {
+					shaderFlags.set(PBRShaderFlags::InterlayerParallax);
+				}
+				if (pbrMaterial->pbrFlags.any(PBRFlags::CoatNormal)) {
+					shaderFlags.set(PBRShaderFlags::CoatNormal);
+				}
+				if (pbrMaterial->pbrFlags.any(PBRFlags::ColoredCoat)) {
+					shaderFlags.set(PBRShaderFlags::ColoredCoat);
+				}
 
 				std::array<float, 4> PBRParams2;
 				PBRParams2[0] = pbrMaterial->GetCoatColor().red;
