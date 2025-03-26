@@ -966,7 +966,7 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 
 #	if defined(TRUE_PBR)
 #		include "Common/PBR.hlsli"
-#   endif
+#	endif
 
 #	if defined(EMAT)
 #		include "ExtendedMaterials/ExtendedMaterials.hlsli"

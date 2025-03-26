@@ -1,7 +1,7 @@
 #include "TerrainHelper.h"
 
-#include "State.h"
 #include "ShaderCache.h"
+#include "State.h"
 
 void TerrainHelper::DataLoaded()
 {
