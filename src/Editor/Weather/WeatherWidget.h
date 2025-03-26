@@ -33,7 +33,7 @@ public:
 		float fresnelPower;
 	};
 
-	struct Atmosphere
+	struct AtmosphereColors
 	{
 		float3 colorTimes[ColorTimes::kTotal];
 	};
@@ -54,7 +54,7 @@ public:
 		std::map<std::string, float3> weatherColors;
 		std::map<std::string, float> fogProperties;
 
-		Atmosphere atmosphereColors[ColorTypes::kTotal];
+		AtmosphereColors atmosphereColors[ColorTypes::kTotal];
 		DALC dalc[ColorTimes::kTotal];
 		Cloud clouds[TESWeather::kTotalLayers];
 	};
@@ -73,9 +73,9 @@ public:
 	void LoadWeatherValues();
 
 private:
-	void DrawDALCSettings();
-	void DrawWeatherColorSettings();
-	void DrawCloudSettings();
+	void DrawDALCProperties();
+	void DrawWeatherColorProperties();
+	void DrawCloudProperties();
 	void DrawProperties(std::string category, std::map<std::string, int> properties);
 	void InheritFromParent(const std::string& property);
 };

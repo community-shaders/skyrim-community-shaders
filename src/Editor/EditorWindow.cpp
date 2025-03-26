@@ -281,6 +281,8 @@ void EditorWindow::RenderUI()
 		ShowSettingsWindow();
 	}
 
+	ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Once);
+
 	ShowWidgetWindow();
 }
 

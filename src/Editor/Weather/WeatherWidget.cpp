@@ -7,7 +7,7 @@
 #include "State.h"
 #include "Util.h"
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::Atmosphere, colorTimes)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::AtmosphereColors, colorTimes)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::DirectionalColor, max, min)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::DALC, specular, fresnelPower, directional)
 
@@ -77,18 +77,18 @@ void WeatherWidget::DrawWidget()
 
 		DrawProperties("Sun", { { "Sun Glare", INT8_SLIDER }, { "Sun Damage", INT8_SLIDER } });
 		DrawProperties("Wind", { { "Wind Speed", UINT8_SLIDER }, { "Wind Direction", INT8_SLIDER }, { "Wind Direction Range", INT8_SLIDER } });
-		DrawProperties("Precipitation", { { "Precipitation Begin Fade In", INT8_SLIDER }, { "Precipitation Begin Fade Out", INT8_SLIDER } });
+		DrawProperties("Precipitation", { { "Precipitation Begin Fade In", INT8_SLIDER }, { "Precipitation End Fade Out", INT8_SLIDER } });
 		
 		DrawProperties("Lightning", { { "Thunder Lightning Begin Fade In", INT8_SLIDER }, { "Thunder Lightning End Fade Out", INT8_SLIDER },
 										{ "Thunder Lightning Frequency", INT8_SLIDER }, { "Lightning Color", COLOR3_PICKER } });
 
 		DrawProperties("Visual Effects", { { "Visual Effect Begin", INT8_SLIDER }, { "Visual Effect End", INT8_SLIDER } });
 
-		DrawDALCSettings();
+		DrawDALCProperties();
 
-		DrawWeatherColorSettings();
+		DrawWeatherColorProperties();
 
-		DrawCloudSettings();
+		DrawCloudProperties();
 
 		DrawProperties("Fog", { { "Day Near", FLOAT_SLIDER }, { "Day Far", FLOAT_SLIDER }, { "Day Power", FLOAT_SLIDER }, { "Day Max", FLOAT_SLIDER },
 								  { "Night Near", FLOAT_SLIDER }, { "Night Far", FLOAT_SLIDER }, { "Night Power", FLOAT_SLIDER }, { "Night Max", FLOAT_SLIDER } });
@@ -303,23 +303,22 @@ void WeatherWidget::LoadWeatherValues()
 	}
 }
 
-void WeatherWidget::DrawDALCSettings()
+void WeatherWidget::DrawDALCProperties()
 {
-	if (ImGui::CollapsingHeader("DALC settings", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
+	if (ImGui::CollapsingHeader("Directional Ambient Lighting Colors", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
 		bool& doesInherit = settings.inheritance["DALC"];
 		ImGui::Checkbox("Inherit From Parent##dalc", &doesInherit);
 
 		if (doesInherit && HasParent()) {
-			for (size_t i = 0; i < RE::TESWeather::ColorTimes::kTotal; i++) {
+			for (size_t i = 0; i < TESWeather::ColorTimes::kTotal; i++) {
 				settings.dalc[i] = GetParent()->settings.dalc[i];
 			}
 		} else {
 			doesInherit = false;
-			for (int i = 0; i < RE::TESWeather::ColorTimes::kTotal; i++) {
+			for (int i = 0; i < TESWeather::ColorTimes::kTotal; i++) {
 				std::string label = ColorTimeLabel(i);
 
 				if (ImGui::CollapsingHeader(label.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
-					ImGui::Spacing();
 					DrawColorEdit(std::format("Specular##{}", label), settings.dalc[i].specular);
 					ImGui::Spacing();
 					DrawSliderFloat(std::format("Fresnel Power##{}", label), settings.dalc[i].fresnelPower);
@@ -336,7 +335,7 @@ void WeatherWidget::DrawDALCSettings()
 	}
 }
 
-void WeatherWidget::DrawWeatherColorSettings()
+void WeatherWidget::DrawWeatherColorProperties()
 {
 	if (ImGui::CollapsingHeader("Atmosphere Colors", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
 		bool& doesInherit = settings.inheritance["Atmosphere Colors"];
@@ -363,7 +362,7 @@ void WeatherWidget::DrawWeatherColorSettings()
 	}
 }
 
-void WeatherWidget::DrawCloudSettings()
+void WeatherWidget::DrawCloudProperties()
 {
 	if (ImGui::CollapsingHeader("Clouds Properties", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
 		bool& doesInherit = settings.inheritance["Clouds"];
@@ -422,6 +421,7 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 					break;
 				case 2:
 					DrawSliderUint8(p.first, settings.weatherProperties[p.first]);
+					break;
 				case 3:
 					DrawSliderFloat(p.first, settings.fogProperties[p.first]);
 				default:
