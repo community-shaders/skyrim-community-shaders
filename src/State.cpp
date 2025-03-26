@@ -8,6 +8,7 @@
 #include "Deferred.h"
 #include "Features/CloudShadows.h"
 #include "Features/TerrainBlending.h"
+#include "Features/TerrainHelper.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "Streamline.h"
@@ -19,6 +20,7 @@ void State::Draw()
 	auto shaderCache = globals::shaderCache;
 	auto deferred = globals::deferred;
 	auto terrainBlending = globals::features::terrainBlending;
+	auto terrainHelper = globals::features::terrainHelper;
 	auto cloudShadows = globals::features::cloudShadows;
 	auto truePBR = globals::truePBR;
 	auto smState = globals::game::smState;
@@ -30,6 +32,9 @@ void State::Draw()
 
 		if (cloudShadows->loaded)
 			cloudShadows->SkyShaderHacks();
+
+		if (terrainHelper->loaded)
+			terrainHelper->SetShaderResouces(context);
 
 		truePBR->SetShaderResouces(context);
 
@@ -56,17 +61,20 @@ void State::Draw()
 			data.VertexShaderDescriptor = currentVertexDescriptor;
 			data.PixelShaderDescriptor = currentPixelDescriptor;
 			data.ExtraShaderDescriptor = currentExtraDescriptor;
+			data.ExtraFeatureDescriptor = currentExtraFeatureDescriptor;
 
 			permutationCB->Update(data);
 
 			lastVertexDescriptor = currentVertexDescriptor;
 			lastPixelDescriptor = currentPixelDescriptor;
 			lastExtraDescriptor = currentExtraDescriptor;
+			lastExtraFeatureDescriptor = currentExtraFeatureDescriptor;
 
 			forceUpdatePermutationBuffer = false;
 		}
 
 		currentExtraDescriptor = 0;
+		currentExtraFeatureDescriptor = 0;
 
 		if (frameChecker.IsNewFrame()) {
 			ID3D11Buffer* buffers[3] = { permutationCB->CB(), sharedDataCB->CB(), featureDataCB->CB() };
@@ -680,12 +688,15 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 			}
 		}
 
+		data.InInterior = true;
+		data.HideSky = true;
 		if (auto sky = globals::game::sky) {
-			data.InInterior = sky->mode.get() != RE::Sky::Mode::kFull;
-			data.HideSky = !data.InInterior && sky->flags.any(RE::Sky::Flags::kHideSky);
-		} else {
-			data.InInterior = true;
-			data.HideSky = true;
+			if (auto player = RE::PlayerCharacter::GetSingleton()) {
+				if (auto parentCell = player->GetParentCell()) {
+					data.InInterior = parentCell->IsInteriorCell();
+					data.HideSky = !data.InInterior && sky->flags.any(RE::Sky::Flags::kHideSky);
+				}
+			}
 		}
 
 		if (auto ui = globals::game::ui)

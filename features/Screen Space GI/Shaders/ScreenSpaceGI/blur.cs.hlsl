@@ -128,23 +128,25 @@ float2x2 getRotationMatrix(float noise)
 
 		float2 poissonOffset = g_Poisson8[i].xy;
 
+#if !defined(VR)
 		float3 posOffset = TvBv[0] * poissonOffset.x + TvBv[1] * poissonOffset.y;
 		float4 screenPosSample = mul(FrameBuffer::CameraProj[eyeIndex], float4(pos + posOffset, 1));
 		screenPosSample.xy /= screenPosSample.w;
 		screenPosSample.y = -screenPosSample.y;
 		screenPosSample.xy = screenPosSample.xy * .5 + .5;
 
-		// old method without kernel transform
-		// float2 pxOffset = radius * poissonOffset.xy;
-		// float2 pxSample = dtid + .5 + pxOffset;
-		// float2 uvSample = (floor(pxSample) + 0.5) * RCP_OUT_FRAME_DIM;  // Snap to the pixel centre
-		// float2 screenPosSample = Stereo::ConvertFromStereoUV(uvSample, eyeIndex);
-
-		if (any(screenPosSample.xy < 0) || any(screenPosSample.xy > 1))
-			continue;
-
 		float2 uvSample = Stereo::ConvertToStereoUV(screenPosSample.xy, eyeIndex);
 		uvSample = (floor(uvSample * OUT_FRAME_DIM) + 0.5) * RCP_OUT_FRAME_DIM;  // Snap to the pixel centre
+
+#else
+		// old method without kernel transform for VR
+		float2 pxOffset = radius * poissonOffset.xy;
+		float2 pxSample = dtid + .5 + pxOffset;
+		float2 uvSample = (floor(pxSample) + 0.5) * RCP_OUT_FRAME_DIM;  // Snap to the pixel centre
+		float2 screenPosSample = Stereo::ConvertFromStereoUV(uvSample, eyeIndex);
+#endif
+		if (any(screenPosSample.xy < 0) || any(screenPosSample.xy > 1))
+			continue;
 
 		float depthSample = srcDepth.SampleLevel(samplerPointClamp, uvSample * frameScale, RES_MIP);
 		float3 posSample = ScreenToViewPosition(screenPosSample.xy, depthSample, eyeIndex);

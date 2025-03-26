@@ -16,12 +16,14 @@
 #include "Features/ExtendedMaterials.h"
 #include "Features/GrassCollision.h"
 #include "Features/GrassLighting.h"
+#include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
+#include "Features/TerrainHelper.h"
 #include "Features/TerrainShadows.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
@@ -48,11 +50,13 @@ namespace globals
 		GrassCollision* grassCollision = nullptr;
 		GrassLighting* grassLighting = nullptr;
 		LightLimitFix* lightLimitFix = nullptr;
+		LODBlending* lodBlending = nullptr;
 		ScreenSpaceGI* screenSpaceGI = nullptr;
 		ScreenSpaceShadows* screenSpaceShadows = nullptr;
 		Skylighting* skylighting = nullptr;
 		SubsurfaceScattering* subsurfaceScattering = nullptr;
 		TerrainBlending* terrainBlending = nullptr;
+		TerrainHelper* terrainHelper = nullptr;
 		TerrainShadows* terrainShadows = nullptr;
 		VolumetricLighting* volumetricLighting = nullptr;
 		WaterEffects* waterEffects = nullptr;
@@ -122,11 +126,13 @@ namespace globals
 		features::grassCollision = GrassCollision::GetSingleton();
 		features::grassLighting = GrassLighting::GetSingleton();
 		features::lightLimitFix = LightLimitFix::GetSingleton();
+		features::lodBlending = LODBlending::GetSingleton();
 		features::screenSpaceGI = ScreenSpaceGI::GetSingleton();
 		features::screenSpaceShadows = ScreenSpaceShadows::GetSingleton();
 		features::skylighting = Skylighting::GetSingleton();
 		features::subsurfaceScattering = SubsurfaceScattering::GetSingleton();
 		features::terrainBlending = TerrainBlending::GetSingleton();
+		features::terrainHelper = TerrainHelper::GetSingleton();
 		features::terrainShadows = TerrainShadows::GetSingleton();
 		features::volumetricLighting = VolumetricLighting::GetSingleton();
 		features::waterEffects = WaterEffects::GetSingleton();
