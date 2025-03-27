@@ -27,6 +27,11 @@ struct Feature
 	 */
 	virtual bool IsCore() const { return false; }
 
+	/**
+	 * Whether the feature will show up in the GUI menu
+	 */
+	virtual bool IsInMenu() const { return true; }
+
 	virtual void SetupResources() {}
 	virtual void Reset() {}
 
