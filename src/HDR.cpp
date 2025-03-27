@@ -103,7 +103,6 @@ void HDR::SetupResources()
 	outputTexture->CreateUAV(uavDesc);
 
 	hdrDataCB = new ConstantBuffer(ConstantBufferDesc<HDRDataCB>());
-
 	UpdateHDRData();
 }
 
@@ -114,26 +113,17 @@ void HDR::ApplyHDR()
 	auto state = globals::state;
 	auto context = globals::d3d::context;
 	auto renderer = globals::game::renderer;
-	auto upscaling = globals::upscaling;
 	auto& swapChainBuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 
 	ID3D11Resource* swapChainBufferResource;
 	swapChainBuffer.SRV->GetResource(&swapChainBufferResource);
 
-	auto upscaleMethod = upscaling->GetUpscaleMethod();
 	auto dispatchCount = Util::GetScreenDispatchCount(false);
 
 	state->BeginPerfEvent("HDR");
 
 	{
 		{
-			if (upscaleMethod != Upscaling::UpscaleMethod::kNONE) {
-				context->CopyResource(hdrTexture->resource.get(), upscaling->upscalingTexture->resource.get());
-			} else {
-				auto& swapChainMain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kMAIN];
-				context->CopyResource(hdrTexture->resource.get(), swapChainMain.texture);
-			}
-
 			ID3D11ShaderResourceView* views[1] = { hdrTexture->srv.get() };
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
@@ -164,10 +154,6 @@ void HDR::ApplyHDR()
 	state->EndPerfEvent();
 
 	context->CopyResource(swapChainBufferResource, outputTexture->resource.get());
-
-	if (upscaleMethod == Upscaling::UpscaleMethod::kTAA) {
-		globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);
-	}
 }
 
 void HDR::DestroyResources() const

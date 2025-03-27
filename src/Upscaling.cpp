@@ -372,7 +372,9 @@ void Upscaling::Upscale()
 		state->EndPerfEvent();
 	}
 
-	if (globals::hdr->settings.enableHDR) {
+	auto hdr = globals::hdr;
+	if (hdr->settings.enableHDR) {
+		context->CopyResource(hdr->hdrTexture->resource.get(), upscalingTexture->resource.get());
 		return;
 	}
 
@@ -440,13 +442,13 @@ void Upscaling::SharpenTAA()
 
 	state->EndPerfEvent();
 
-	if (globals::hdr->settings.enableHDR) {
+	auto hdr = globals::hdr;
+	if (hdr->settings.enableHDR) {
+		context->CopyResource(hdr->hdrTexture->resource.get(), upscalingTexture->resource.get());
 		return;
 	}
 
 	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
-
-	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
 }
 
 void Upscaling::CreateUpscalingResources()
