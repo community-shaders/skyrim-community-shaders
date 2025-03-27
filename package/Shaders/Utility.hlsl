@@ -365,23 +365,45 @@ cbuffer AlphaTestRefCB : register(b11)
 #	endif  // !VR
 
 #	if defined(RENDER_SHADOWMASKDPB)
-float GetPoissonDiskFilteredShadowVisibility(float noise, float2x2 rotationMatrix, Texture2DArray<float4> tex, SamplerComparisonState samp, float3 baseUV, float layerIndex, float compareValue, bool asymmetric)
-#	else
-float GetPoissonDiskFilteredShadowVisibility(float noise, float2x2 rotationMatrix, Texture2DArray<float4> tex, SamplerComparisonState samp, float2 baseUV, float layerIndex, float compareValue, bool asymmetric)
-#	endif
+float GetPoissonDiskFilteredShadowVisibility(uint3 seed, Texture2DArray<float4> tex, SamplerComparisonState samp, float3 positionMS, float layerIndex, uint eyeIndex)
 {
 	const int sampleCount = 16;
 
-#	if defined(RENDER_SHADOWMASK)
+	float visibility = 0;
+	for (int sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex) {
+		float3 sampleOffset = (Random::R3Modified(sampleIndex + SharedData::FrameCount * sampleCount, seed / 4294967295.f) * 2.0 - 1.0) * ShadowSampleParam.z * 2048;
+
+		float3 positionLS = mul(transpose(ShadowMapProj[eyeIndex][0]), float4(positionMS.xyz + sampleOffset, 1)).xyz;
+
+		bool lowerHalf = positionLS.z * 0.5 + 0.5 < 0;
+		float3 normalizedPositionLS = normalize(positionLS);
+
+		float compareValue = saturate(length(positionLS) / ShadowLightParam.x) - AlphaTestRef.y;
+
+		float3 positionOffset = lowerHalf ? float3(0, 0, -1) : float3(0, 0, 1);
+		float3 lightDirection = normalize(normalizedPositionLS + positionOffset);
+		float2 shadowMapUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
+		shadowMapUV.y = lowerHalf ? 1 - 0.5 * shadowMapUV.y : 0.5 * shadowMapUV.y;
+
+		visibility += tex.SampleCmpLevelZero(samp, float3(shadowMapUV, layerIndex), compareValue).x;
+	}
+	return visibility * rcp((float)sampleCount);
+}
+#	else
+float GetPoissonDiskFilteredShadowVisibility(float noise, float2x2 rotationMatrix, Texture2DArray<float4> tex, SamplerComparisonState samp, float2 baseUV, float layerIndex, float compareValue, bool asymmetric)
+{
+	const int sampleCount = 16;
+
+#		if defined(RENDER_SHADOWMASK)
 	uint onePlusLayerIndex = 1.0 + layerIndex;
 	float layerIndexRcp = rcp(onePlusLayerIndex);
-#	endif
+#		endif
 
 	float visibility = 0;
 	for (int sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex) {
 		float2 sampleOffset = mul(Random::PoissonSampleOffsets16[sampleIndex], rotationMatrix);
 
-#	if defined(RENDER_SHADOWMASKDPB)
+#		if defined(RENDER_SHADOWMASKDPB)
 		float2 sampleUV = baseUV.xy + sampleOffset;
 		baseUV.z += noise * 0.5;
 
@@ -395,16 +417,17 @@ float GetPoissonDiskFilteredShadowVisibility(float noise, float2x2 rotationMatri
 
 		visibility += tex.SampleCmpLevelZero(samp, float3(shadowMapUV, layerIndex), compareValue).x;
 
-#	elif defined(RENDER_SHADOWMASK)
+#		elif defined(RENDER_SHADOWMASK)
 		float2 sampleUV = layerIndexRcp * sampleOffset * ShadowSampleParam.z + baseUV;
 		visibility += tex.SampleCmpLevelZero(samp, float3(sampleUV, layerIndex), compareValue).x;
-#	else
+#		else
 		float2 sampleUV = sampleOffset * ShadowSampleParam.z + baseUV;
 		visibility += tex.SampleCmpLevelZero(samp, float3(sampleUV, layerIndex), compareValue).x;
-#	endif
+#		endif
 	}
 	return visibility * rcp((float)sampleCount);
 }
+#	endif
 
 PS_OUTPUT main(PS_INPUT input)
 {
@@ -527,6 +550,8 @@ PS_OUTPUT main(PS_INPUT input)
 	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 
 	noise = noise * 2.0 - 1.0;
+
+	uint3 seed = Random::pcg3d(uint3(input.PositionCS.xy, input.PositionCS.x * Math::PI));
 
 #		if defined(RENDER_SHADOWMASK)
 	if (EndSplitDistances.z >= shadowMapDepth) {
@@ -681,7 +706,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			elif SHADOWFILTER == 1
 	shadowVisibility = TexShadowMapSamplerComp.SampleCmpLevelZero(SampShadowMapSamplerComp, float3(shadowMapUv, EndSplitDistances.x), shadowMapCompareValue).x;
 #			elif SHADOWFILTER == 3
-	shadowVisibility = GetPoissonDiskFilteredShadowVisibility(noise, rotationMatrix, TexShadowMapSamplerComp, SampShadowMapSamplerComp, positionLS.xyz, EndSplitDistances.x, shadowMapCompareValue, true);
+	shadowVisibility = GetPoissonDiskFilteredShadowVisibility(seed, TexShadowMapSamplerComp, SampShadowMapSamplerComp, positionMS.xyz, EndSplitDistances.x, eyeIndex);
 #			endif
 
 	shadowColor.xyzw = fadeFactor * shadowVisibility;
