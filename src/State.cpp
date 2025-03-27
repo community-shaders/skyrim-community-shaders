@@ -56,7 +56,7 @@ void State::Draw()
 		if (isTree)
 			currentExtraDescriptor |= (uint32_t)ExtraShaderDescriptors::IsTree;
 
-		if (forceUpdatePermutationBuffer || currentPixelDescriptor != lastPixelDescriptor || currentExtraDescriptor != lastExtraDescriptor) {
+		if (forceUpdatePermutationBuffer || currentPixelDescriptor != lastPixelDescriptor || currentExtraDescriptor != lastExtraDescriptor || currentExtraFeatureDescriptor != lastExtraFeatureDescriptor) {
 			PermutationCB data{};
 			data.VertexShaderDescriptor = currentVertexDescriptor;
 			data.PixelShaderDescriptor = currentPixelDescriptor;
