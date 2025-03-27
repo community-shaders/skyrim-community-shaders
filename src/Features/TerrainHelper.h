@@ -26,6 +26,7 @@ struct TerrainHelper : Feature
 
 	virtual void DataLoaded() override;
 	virtual bool SupportsVR() override { return true; };
+	virtual bool IsInMenu() const override { return false; };
 
 	void SetShaderResouces(ID3D11DeviceContext* a_context);
 	bool TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land);
