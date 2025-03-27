@@ -8,10 +8,10 @@ void TerrainHelper::DataLoaded()
 	// Get the default landscape texture set for terrain helper
 	const auto defaultLandTextureSet = RE::TESForm::LookupByEditorID<RE::BGSTextureSet>("LandscapeDefault");
 	if (defaultLandTextureSet != nullptr) {
-		spdlog::info("LandscapeDefault EDID texture set found");
+		spdlog::info("[Terrain Helper] LandscapeDefault EDID texture set found");
 		defaultLandTexture = defaultLandTextureSet;
 	} else {
-		spdlog::info("LandscapeDefault EDID texture set not found, using default");
+		spdlog::info("[Terrain Helper] LandscapeDefault EDID texture set not found, using default");
 		const auto bgsDefaultLandTex = *REL::Relocation<RE::TESLandTexture**>(RELOCATION_ID(514783, 400936));
 		defaultLandTexture = bgsDefaultLandTex->textureSet;
 	}
@@ -19,7 +19,7 @@ void TerrainHelper::DataLoaded()
 
 bool TerrainHelper::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 {
-	if (land->loadedData == nullptr || land->loadedData->mesh[0] == nullptr) {
+	if (land == nullptr || land->loadedData == nullptr || land->loadedData->mesh[0] == nullptr) {
 		// this is not terrain or vanilla material failed
 		return false;
 	}
@@ -27,6 +27,11 @@ bool TerrainHelper::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 	for (uint32_t quadI = 0; quadI < 4; ++quadI) {
 		// Get hash key of vanilla material
 		uint32_t hashKey = 0;
+
+		if (land->loadedData->mesh[quadI] == nullptr) {
+			// continue if cannot find mesh
+			continue;
+		}
 
 		const auto& children = land->loadedData->mesh[quadI]->GetChildren();
 		auto geometry = children.empty() ? nullptr : static_cast<RE::BSGeometry*>(children[0].get());
@@ -112,6 +117,10 @@ void TerrainHelper::SetShaderResouces(ID3D11DeviceContext* a_context)
 
 void TerrainHelper::BSLightingShader_SetupMaterial(RE::BSLightingShaderMaterialBase const* material)
 {
+	if (material == nullptr) {
+		return;
+	}
+
 	if (!extendedSlots.contains(material->hashKey)) {
 		// hash does not exists
 		return;
