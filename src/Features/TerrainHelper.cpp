@@ -53,18 +53,26 @@ bool TerrainHelper::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 
 		// Create array of texture sets (6 tiles)
 		std::array<RE::BGSTextureSet*, 6> textureSets;
-		if (auto defTexture = land->loadedData->defQuadTextures[quadI]->textureSet) {
-			textureSets[0] = defTexture;
+		auto defTexture = land->loadedData->defQuadTextures[quadI];
+		if (defTexture != nullptr && defTexture->formID != 0) {
+			textureSets[0] = defTexture->textureSet;
 		} else {
+			// this is a default texture
 			textureSets[0] = defaultLandTexture;
 		}
 		for (uint32_t textureI = 0; textureI < 5; ++textureI) {
-			if (land->loadedData->quadTextures[quadI][textureI] == nullptr) {
+			auto curTexture = land->loadedData->quadTextures[quadI][textureI];
+			if (curTexture == nullptr) {
 				textureSets[textureI + 1] = nullptr;
 				continue;
 			}
 
-			textureSets[textureI + 1] = land->loadedData->quadTextures[quadI][textureI]->textureSet;
+			if (curTexture->formID == 0) {
+				// this is a default texture
+				textureSets[textureI + 1] = defaultLandTexture;
+			} else {
+				textureSets[textureI + 1] = land->loadedData->quadTextures[quadI][textureI]->textureSet;
+			}
 		}
 
 		// Assign textures to material
