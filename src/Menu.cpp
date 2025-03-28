@@ -472,9 +472,25 @@ void Menu::DrawSettings()
 						ImGui::TextColored(themeSettings.StatusPalette.Error, feat->failedLoadedMessage.c_str());
 					}
 
-					if (!isDisabled && isLoaded) {
+					if (!isDisabled) {
 						if (ImGui::BeginChild("##FeatureConfigFrame", { 0, 0 }, true)) {
-							feat->DrawSettings();
+							if (isLoaded) {
+								// draw settings for loaded feature
+								feat->DrawSettings();
+							} else {
+								// draw any unloaded UI elements like help text about the feature
+								feat->DrawUnloadedUI();
+
+								// draw download link if available
+								if (!feat->GetFeatureModLink().empty()) {
+									// print feature download info
+									ImGui::Spacing();
+									const auto downloadText = fmt::format("Click here to download this feature ({})", feat->GetFeatureModLink());
+									if (ImGui::Selectable(downloadText.c_str())) {
+										ShellExecuteA(NULL, "open", feat->GetFeatureModLink().c_str(), NULL, NULL, SW_SHOWNORMAL);
+									}
+								}
+							}
 						}
 						ImGui::EndChild();
 					}
