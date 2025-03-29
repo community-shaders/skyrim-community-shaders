@@ -32,9 +32,7 @@ void HDR::DrawSettings()
 	};
 	const char* transferFunctions[] = {
 		"Linear",
-		"sRGB",
-		"ST2084",
-		"HDR10 sRGB"
+		"sRGB"
 	};
 	const char* rotationFunctions[] = {
 		"Rec.709/Rec.2020",
@@ -63,28 +61,23 @@ void HDR::DrawSettings()
 
 	ImGui::Checkbox("Use DirectXTK Tonemapping", &settings.useDXTonemapping);
 	if (settings.useDXTonemapping) {
+		ImGui::Text("Recommended Defaults: ACES Filmic operator, sRGB transfer function, and 0.5f exposure.");
 		ImGui::SliderInt("Operator", reinterpret_cast<int*>(&settings.dxOperator), 0, 3, std::format("{}", operators[settings.dxOperator]).c_str());
 
-		ImGui::SliderInt("Transfer Function", reinterpret_cast<int*>(&settings.dxTransferFunction), 0, 3, std::format("{}", transferFunctions[settings.dxTransferFunction]).c_str());
+		ImGui::SliderInt("Transfer Function", reinterpret_cast<int*>(&settings.dxTransferFunction), 0, 1, std::format("{}", transferFunctions[settings.dxTransferFunction]).c_str());
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
 				"Linear:\n"
 				"Pass-Through.\n"
 				"\n"
-				"sRGB (Recommended):\n"
-				"Rec.709 and approximate sRGB display curve.\n"
-				"\n"
-				"ST2084:\n"
-				"HDR10 / Rec.2020 color primaries and ST.2084 display curve.\n"
-				"\n"
-				"HDR10:\n"
-				"HDR10 / Rec.2020 color primaries and sRGB display curve.");
+				"sRGB:\n"
+				"Rec.709 and approximate sRGB display curve.");
 		}
 
 		ImGui::SliderInt("Color Rotation", reinterpret_cast<int*>(&settings.dxColorRotation), 0, 2, std::format("{}", rotationFunctions[settings.dxColorRotation]).c_str());
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
-				"Rec.709/Rec.2020 (Recommended):\n"
+				"Rec.709/Rec.2020:\n"
 				"Rec.709 color primaries into Rec.2020\n"
 				"\n"
 				"Rec.709/DCI-P3-D65:\n"
