@@ -28,8 +28,7 @@ float3 LinearToPQ(float3 linearCol, const float maxPqValue)
 	return pq;
 }
 
-[numthreads(8, 8, 1)] void main(uint3 dispatchID
-								: SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
 	float3 framebuffer = Framebuffer[dispatchID.xy];
 
 	// Tonemap game render before UI blending

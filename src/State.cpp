@@ -665,9 +665,6 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 	{
 		SharedDataCB data{};
 
-		const auto hdr = globals::hdr;
-		data.HDRData = hdr->GetHDRData();
-
 		const auto shaderManager = globals::game::smState;
 		const RE::NiTransform& dalcTransform = shaderManager->directionalAmbientTransform;
 		Util::StoreTransform3x4NoScale(data.DirectionalAmbient, dalcTransform);
