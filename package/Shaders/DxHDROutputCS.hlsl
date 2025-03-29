@@ -196,56 +196,57 @@ float4 CS_HDR10_ACESFilmic_SRGB(float4 bufferIn)
 [numthreads(8, 8, 1)] void main(uint3 dispatchID
 								: SV_DispatchThreadID) {
 	float4 framebuffer = Framebuffer[dispatchID.xy];
+	framebuffer = float4(mul(framebuffer.xyz, (float3x3)colorRotation), framebuffer.a);
 
 	switch ((int)tonemapSelector) {
 	default:
 	case 0:
-		framebuffer = CS_Copy(float4(mul(framebuffer.xyz, (float3x3)colorRotation), framebuffer.a));
+		framebuffer = CS_Copy(framebuffer);
 		break;
 	case 1:
-		framebuffer = CS_Saturate(float4(mul(framebuffer.xyz, (float3x3)colorRotation), framebuffer.a));
+		framebuffer = CS_Saturate(framebuffer);
 		break;
 	case 2:
-		framebuffer = CS_Reinhard(float4(mul(framebuffer.xyz, (float3x3)colorRotation), framebuffer.a));
+		framebuffer = CS_Reinhard(framebuffer);
 		break;
 	case 3:
-		framebuffer = CS_ACESFilmic(float4(mul(framebuffer.xyz, (float3x3)colorRotation), framebuffer.a));
+		framebuffer = CS_ACESFilmic(framebuffer);
 		break;
 	case 4:
-		framebuffer = CS_SRGB(float4(mul(framebuffer.xyz, (float3x3)colorRotation), framebuffer.a));
+		framebuffer = CS_SRGB(framebuffer);
 		break;
 	case 5:
-		framebuffer = CS_Saturate_SRGB(float4(mul(framebuffer.xyz, (float3x3)colorRotation), framebuffer.a));
+		framebuffer = CS_Saturate_SRGB(framebuffer);
 		break;
 	case 6:
-		framebuffer = CS_Reinhard_SRGB(float4(mul(framebuffer.xyz, (float3x3)colorRotation), framebuffer.a));
+		framebuffer = CS_Reinhard_SRGB(framebuffer);
 		break;
 	case 7:
-		framebuffer = CS_ACESFilmic_SRGB(float4(mul(framebuffer.xyz, (float3x3)colorRotation), framebuffer.a));
+		framebuffer = CS_ACESFilmic_SRGB(framebuffer);
 		break;
 	case 8:
-		framebuffer = CS_HDR10(float4(mul(framebuffer.xyz, (float3x3)colorRotation), framebuffer.a));
+		framebuffer = CS_HDR10(framebuffer);
 		break;
 	case 9:
-		framebuffer = CS_HDR10_Saturate(float4(mul(framebuffer.xyz, (float3x3)colorRotation), framebuffer.a));
+		framebuffer = CS_HDR10_Saturate(framebuffer);
 		break;
 	case 10:
-		framebuffer = CS_HDR10_Reinhard(float4(mul(framebuffer.xyz, (float3x3)colorRotation), framebuffer.a));
+		framebuffer = CS_HDR10_Reinhard(framebuffer);
 		break;
 	case 11:
-		framebuffer = CS_HDR10_ACESFilmic(float4(mul(framebuffer.xyz, (float3x3)colorRotation), framebuffer.a));
+		framebuffer = CS_HDR10_ACESFilmic(framebuffer);
 		break;
 	case 12:
-		framebuffer = CS_HDR10_SRGB(float4(mul(framebuffer.xyz, (float3x3)colorRotation), framebuffer.a));
+		framebuffer = CS_HDR10_SRGB(framebuffer);
 		break;
 	case 13:
-		framebuffer = CS_HDR10_Saturate_SRGB(float4(mul(framebuffer.xyz, (float3x3)colorRotation), framebuffer.a));
+		framebuffer = CS_HDR10_Saturate_SRGB(framebuffer);
 		break;
 	case 14:
-		framebuffer = CS_HDR10_Reinhard_SRGB(float4(mul(framebuffer.xyz, (float3x3)colorRotation), framebuffer.a));
+		framebuffer = CS_HDR10_Reinhard_SRGB(framebuffer);
 		break;
 	case 15:
-		framebuffer = CS_HDR10_ACESFilmic_SRGB(float4(mul(framebuffer.xyz, (float3x3)colorRotation), framebuffer.a));
+		framebuffer = CS_HDR10_ACESFilmic_SRGB(framebuffer);
 		break;
 	}
 
