@@ -34,12 +34,12 @@ void HDR::DrawSettings()
 	};
 	const char* transferFunctions[] = {
 		"Linear",
-		"sRGB"
+		"sRGB",
+		"ST2084",
 	};
 	const char* rotationFunctions[] = {
 		"Rec.709/Rec.2020",
-		"Rec.709/DCI-P3-D65",
-		"DCI-P3-D65/Rec.2020"
+		"Rec.709/DCI-P3-D65"
 	};
 
 	ImGui::Text("Toggling this setting requires a restart to work correctly!");
@@ -51,11 +51,12 @@ void HDR::DrawSettings()
 
 	if (ImGui::Button("Reset HDR Settings", { -1, 0 })) {
 		settings.useDXTonemapping = false;
-		settings.dxOperator = 3;
-		settings.dxTransferFunction = 1;
+		settings.dxOperator = 0;
+		settings.dxTransferFunction = 2;
 		settings.dxColorRotation = 0;
-		settings.dxExposure = 0.5f;
+		settings.dxExposure = 1.0f;
 		settings.dxPaperWhite = 1000;
+		settings.dxLinearToPq = false;
 		settings.displayPeakBrightness = 1000;
 		settings.gameBrightness = 400;
 		settings.uiBrightness = 400;
@@ -63,30 +64,31 @@ void HDR::DrawSettings()
 
 	ImGui::Checkbox("Use DirectXTK Tonemapping", &settings.useDXTonemapping);
 	if (settings.useDXTonemapping) {
-		ImGui::Text("Recommended Defaults: ACES Filmic operator, sRGB transfer function, and 0.5f exposure.");
+		ImGui::Checkbox("Apply LinearToPQ Transformation", &settings.dxLinearToPq);
+
 		ImGui::SliderInt("Operator", reinterpret_cast<int*>(&settings.dxOperator), 0, 5, std::format("{}", operators[settings.dxOperator]).c_str());
 
-		ImGui::SliderInt("Transfer Function", reinterpret_cast<int*>(&settings.dxTransferFunction), 0, 1, std::format("{}", transferFunctions[settings.dxTransferFunction]).c_str());
+		ImGui::SliderInt("Transfer Function", reinterpret_cast<int*>(&settings.dxTransferFunction), 0, 2, std::format("{}", transferFunctions[settings.dxTransferFunction]).c_str());
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
 				"Linear:\n"
 				"Pass-Through.\n"
 				"\n"
 				"sRGB:\n"
-				"Rec.709 and approximate sRGB display curve.");
+				"Rec.709 and approximate sRGB display curve."
+				"\n"
+				"ST2084:\n"
+				"Rec.2020 and ST.2084 display curve.");
 		}
 
-		ImGui::SliderInt("Color Rotation", reinterpret_cast<int*>(&settings.dxColorRotation), 0, 2, std::format("{}", rotationFunctions[settings.dxColorRotation]).c_str());
+		ImGui::SliderInt("Color Rotation", reinterpret_cast<int*>(&settings.dxColorRotation), 0, 1, std::format("{}", rotationFunctions[settings.dxColorRotation]).c_str());
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
 				"Rec.709/Rec.2020:\n"
 				"Rec.709 color primaries into Rec.2020\n"
 				"\n"
 				"Rec.709/DCI-P3-D65:\n"
-				"Rec.709 color primaries into DCI-P3-D65\n"
-				"\n"
-				"DCI-P3-D65/Rec.2020:\n"
-				"DCI-P3-D65 color primaries into Rec.2020");
+				"Rec.709 color primaries into DCI-P3-D65\n");
 		}
 
 		ImGui::SliderFloat("Exposure", &settings.dxExposure, 0.001, 2);
@@ -268,7 +270,7 @@ void HDR::UpdateHDRData() const
 {
 	if (settings.useDXTonemapping) {
 		HDRDxDataCB data = {};
-		data.parameters = DirectX::XMVectorSet(settings.dxExposure, static_cast<float>(settings.dxPaperWhite), static_cast<float>(static_cast<int>(settings.dxTransferFunction) * 6 + static_cast<int>(settings.dxOperator)), 0.f);
+		data.parameters = DirectX::XMVectorSet(settings.dxExposure, static_cast<float>(settings.dxPaperWhite), static_cast<float>(static_cast<int>(settings.dxTransferFunction) * 6 + static_cast<int>(settings.dxOperator)), settings.dxLinearToPq);
 		switch (settings.dxColorRotation) {
 		default:
 		case 0:
@@ -276,9 +278,6 @@ void HDR::UpdateHDRData() const
 			break;
 		case 1:
 			memcpy(data.colorRotation, c_from709toP3D65, sizeof(c_from709toP3D65));
-			break;
-		case 2:
-			memcpy(data.colorRotation, c_fromP3D65to2020, sizeof(c_fromP3D65to2020));
 			break;
 		}
 		hdrDxDataCB->Update(data);

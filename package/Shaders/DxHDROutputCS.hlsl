@@ -4,6 +4,9 @@
 //
 // http://go.microsoft.com/fwlink/?LinkId=248929
 
+#include "Common/Color.hlsli"
+#include "Common/PumboDICE.hlsli"
+
 Texture2D<float4> Framebuffer : register(t0);
 RWTexture2D<float4> HDROutput : register(u0);
 
@@ -12,6 +15,7 @@ cbuffer PerFrame : register(b0)
 	float linearExposure : packoffset(c0.x);
 	float paperWhiteNits : packoffset(c0.y);
 	float tonemapSelector : packoffset(c0.z);
+	float linearToPQ : packoffset(c0.w);
 	float4x3 colorRotation : packoffset(c1);
 }
 
@@ -48,46 +52,46 @@ static float3 ST2084ToLinear(float3 ST2084)
 // Reinhard tonemap operator
 // Reinhard et al. "Photographic tone reproduction for digital images." ACM Transactions on Graphics. 21. 2002.
 // http://www.cs.utah.edu/~reinhard/cdrom/tonemap.pdf
-float3 ToneMapReinhard(float3 color)
+static float3 ToneMapReinhard(float3 color)
 {
 	return color / (1.0f + color);
 }
 
 // ACES Filmic tonemap operator
 // https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/
-float3 ToneMapACESFilmic(float3 x)
+static float3 ToneMapACESFilmic(float3 x)
 {
-	float a = 2.51f;
-	float b = 0.03f;
-	float c = 2.43f;
-	float d = 0.59f;
-	float e = 0.14f;
+	const float a = 2.51f;
+	const float b = 0.03f;
+	const float c = 2.43f;
+	const float d = 0.59f;
+	const float e = 0.14f;
 	return saturate((x * (a * x + b)) / (x * (c * x + d) + e));
 }
 
 //--------------------------------------------------------------------------------------
 // Pass-through
-float4 CS_Copy(float4 bufferIn)
+static float4 CS_Copy(float4 bufferIn)
 {
 	return bufferIn;
 }
 
 // Saturate (clips above 1.0)
-float4 CS_Saturate(float4 bufferIn)
+static float4 CS_Saturate(float4 bufferIn)
 {
 	float3 sdr = saturate(bufferIn.xyz * linearExposure);
 	return float4(sdr, bufferIn.a);
 }
 
 // Reinhard operator
-float4 CS_Reinhard(float4 bufferIn)
+static float4 CS_Reinhard(float4 bufferIn)
 {
 	float3 sdr = ToneMapReinhard(bufferIn.xyz * linearExposure);
 	return float4(sdr, bufferIn.a);
 }
 
 // ACES filmic operator
-float4 CS_ACESFilmic(float4 bufferIn)
+static float4 CS_ACESFilmic(float4 bufferIn)
 {
 	float3 sdr = ToneMapACESFilmic(bufferIn.xyz * linearExposure);
 	return float4(sdr, bufferIn.a);
@@ -95,16 +99,14 @@ float4 CS_ACESFilmic(float4 bufferIn)
 
 //--------------------------------------------------------------------------------------
 // SRGB, using Rec.709 color primaries and a gamma 2.2 curve
-
-// sRGB
-float4 CS_SRGB(float4 bufferIn)
+static float4 CS_SRGB(float4 bufferIn)
 {
 	float3 srgb = LinearToSRGBEst(bufferIn.xyz);
 	return float4(srgb, bufferIn.a);
 }
 
 // Saturate (clips above 1.0)
-float4 CS_Saturate_SRGB(float4 bufferIn)
+static float4 CS_Saturate_SRGB(float4 bufferIn)
 {
 	float3 sdr = saturate(bufferIn.xyz * linearExposure);
 	float3 srgb = LinearToSRGBEst(sdr);
@@ -112,7 +114,7 @@ float4 CS_Saturate_SRGB(float4 bufferIn)
 }
 
 // Reinhard operator
-float4 CS_Reinhard_SRGB(float4 bufferIn)
+static float4 CS_Reinhard_SRGB(float4 bufferIn)
 {
 	float3 sdr = ToneMapReinhard(bufferIn.xyz * linearExposure);
 	float3 srgb = LinearToSRGBEst(sdr);
@@ -120,32 +122,84 @@ float4 CS_Reinhard_SRGB(float4 bufferIn)
 }
 
 // ACES filmic operator
-float4 CS_ACESFilmic_SRGB(float4 bufferIn)
+static float4 CS_ACESFilmic_SRGB(float4 bufferIn)
 {
 	float3 sdr = ToneMapACESFilmic(bufferIn.xyz * linearExposure);
 	float3 srgb = LinearToSRGBEst(sdr);
 	return float4(srgb, bufferIn.a);
 }
 
-// Non-DXTK Tonemapping
-float4 CS_Reinhard_Jodie(float4 bufferIn)
+//--------------------------------------------------------------------------------------
+// HDR10, using Rec.2020 color primaries and ST.2084 curve
+
+static float3 HDR10(float3 bufferIn)
 {
-	float3 exposedColor = bufferIn.xyz * linearExposure;
-	float l = dot(exposedColor, float3(0.2126f, 0.7152f, 0.0722f));
-	float3 tv = exposedColor / (1.0f + exposedColor);
-	return float4(lerp(exposedColor / (1.0f + l), tv, tv), bufferIn.a);
+	// ST.2084 spec defines max nits as 10,000 nits
+	float3 normalized = bufferIn.xyz * paperWhiteNits / 10000.f;
+
+	// Apply ST.2084 curve
+	return LinearToST2084(normalized);
 }
 
-float4 CS_Reinhard_Jodie_SRGB(float4 bufferIn)
+static float4 CS_HDR10(float4 bufferIn)
 {
-	float3 exposedColor = bufferIn.xyz * linearExposure;
-	float l = dot(exposedColor, float3(0.2126f, 0.7152f, 0.0722f));
-	float3 tv = exposedColor / (1.0f + exposedColor);
-	float3 srgb = LinearToSRGBEst(lerp(exposedColor / (1.0f + l), tv, tv));
+	float3 rgb = HDR10(bufferIn.xyz);
+	return float4(rgb, bufferIn.a);
+}
+
+static float4 CS_HDR10_Saturate(float4 bufferIn)
+{
+	float3 rgb = HDR10(bufferIn.xyz);
+	float3 sdr = saturate(rgb * linearExposure);
+	return float4(sdr, bufferIn.a);
+}
+
+static float4 CS_HDR10_Reinhard(float4 bufferIn)
+{
+	float3 rgb = HDR10(bufferIn.xyz);
+	float3 sdr = ToneMapReinhard(rgb * linearExposure);
+	return float4(sdr, bufferIn.a);
+}
+
+static float4 CS_HDR10_ACESFilmic(float4 bufferIn)
+{
+	float3 rgb = HDR10(bufferIn.xyz);
+	float3 sdr = ToneMapACESFilmic(rgb * linearExposure);
+	return float4(sdr, bufferIn.a);
+}
+
+// Non-DXTK Tonemapping
+
+// Reinhard-Jodie
+static float3 ToneMapReinhardJodie(float3 color)
+{
+	float l = dot(color, float3(0.2126f, 0.7152f, 0.0722f));
+	float3 tv = color / (1.0f + color);
+	return lerp(color / (1.0f + l), tv, tv);
+}
+
+static float4 CS_Reinhard_Jodie(float4 bufferIn)
+{
+	float3 sdr = ToneMapReinhardJodie(bufferIn.xyz * linearExposure);
+	return float4(sdr, bufferIn.a);
+}
+
+static float4 CS_Reinhard_Jodie_SRGB(float4 bufferIn)
+{
+	float3 sdr = ToneMapReinhardJodie(bufferIn.xyz * linearExposure);
+	float3 srgb = LinearToSRGBEst(sdr);
 	return float4(srgb, bufferIn.a);
 }
 
-float3 Uncharted2_Tonemap_Partial(float3 bufferIn)
+static float4 CS_HDR10_Reinhard_Jodie(float4 bufferIn)
+{
+	float3 rgb = HDR10(bufferIn.xyz);
+	float3 sdr = ToneMapReinhardJodie(rgb * linearExposure);
+	return float4(sdr, bufferIn.a);
+}
+
+// Uncharted2 Filmic
+static float3 Uncharted2_ToneMap_Partial(float3 color)
 {
 	const float A = 0.15f;
 	const float B = 0.50f;
@@ -153,29 +207,64 @@ float3 Uncharted2_Tonemap_Partial(float3 bufferIn)
 	const float D = 0.20f;
 	const float E = 0.02f;
 	const float F = 0.30f;
-	return ((bufferIn * (A * bufferIn + C * B) + D * E) / (bufferIn * (A * bufferIn + B) + D * F)) - E / F;
+	return ((color * (A * color + C * B) + D * E) / (color * (A * color + B) + D * F)) - E / F;
 }
 
-float4 CS_Uncharted2Filmic(float4 bufferIn)
+static float3 ToneMapUncharted2Filmic(float3 color)
 {
-	float3 curr = Uncharted2_Tonemap_Partial(bufferIn.xyz * linearExposure);
-	const float3 W = 11.2f;
-	float3 white_scale = 1.0f / Uncharted2_Tonemap_Partial(W);
-	return float4(curr * white_scale, bufferIn.a);
+	const float exposure_bias = 2.0f;
+	float3 curr = Uncharted2_ToneMap_Partial(color * exposure_bias);
+
+	const float3 w = 11.2f;
+	float3 white_scale = 1.0f / Uncharted2_ToneMap_Partial(w);
+	return curr * white_scale;
 }
 
-float4 CS_Uncharted2Filmic_SRGB(float4 bufferIn)
+static float4 CS_Uncharted2Filmic(float4 bufferIn)
 {
-	float3 curr = Uncharted2_Tonemap_Partial(bufferIn.xyz * linearExposure);
-	const float3 W = 11.2f;
-	float3 white_scale = 1.0f / Uncharted2_Tonemap_Partial(W);
-	float3 srgb = LinearToSRGBEst(curr * white_scale);
+	float3 sdr = ToneMapUncharted2Filmic(bufferIn.xyz * linearExposure);
+	return float4(sdr, bufferIn.a);
+}
+
+static float4 CS_Uncharted2Filmic_SRGB(float4 bufferIn)
+{
+	float3 sdr = ToneMapUncharted2Filmic(bufferIn.xyz * linearExposure);
+	float3 srgb = LinearToSRGBEst(sdr);
 	return float4(srgb, bufferIn.a);
+}
+
+static float4 CS_HDR10_Uncharted2Filmic(float4 bufferIn)
+{
+	float3 rgb = HDR10(bufferIn.xyz);
+	float3 sdr = ToneMapUncharted2Filmic(rgb * linearExposure);
+	return float4(sdr, bufferIn.a);
+}
+
+
+static const float PQ_constant_N = (2610.0 / 4096.0 / 4.0);
+static const float PQ_constant_M = (2523.0 / 4096.0 * 128.0);
+
+// PQ (Perceptual Quantiser; ST.2084) encode/decode used for HDR TV and grading
+float3 LinearToPQ(float3 linearCol, const float maxPqValue)
+{
+	linearCol /= maxPqValue;
+
+	float3 colToPow = pow(linearCol, PQ_constant_N);
+	float3 numerator = PQ_constant_C1 + PQ_constant_C2 * colToPow;
+	float3 denominator = 1.0 + PQ_constant_C3 * colToPow;
+	float3 pq = pow(numerator / denominator, PQ_constant_M);
+
+	return pq;
 }
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID
 								: SV_DispatchThreadID) {
 	float4 framebuffer = Framebuffer[dispatchID.xy];
+
+	// Untonemap the incoming HDR buffer
+	float exposureBias = 1.0;
+	framebuffer = float4(Color::GammaToLinearSafe(framebuffer.xyz) * exposureBias, framebuffer.a);
+	// Apply color rotation
 	framebuffer = float4(mul(framebuffer.xyz, (float3x3)colorRotation), framebuffer.a);
 
 	switch ((int)tonemapSelector) {
@@ -216,6 +305,28 @@ float4 CS_Uncharted2Filmic_SRGB(float4 bufferIn)
 	case 11:
 		framebuffer = CS_Uncharted2Filmic_SRGB(framebuffer);
 		break;
+	case 12:
+		framebuffer = CS_HDR10(framebuffer);
+		break;
+	case 13:
+		framebuffer = CS_HDR10_Saturate(framebuffer);
+		break;
+	case 14:
+		framebuffer = CS_HDR10_Reinhard(framebuffer);
+		break;
+	case 15:
+		framebuffer = CS_HDR10_Reinhard_Jodie(framebuffer);
+		break;
+	case 16:
+		framebuffer = CS_HDR10_ACESFilmic(framebuffer);
+		break;
+	case 17:
+		framebuffer = CS_HDR10_Uncharted2Filmic(framebuffer);
+		break;
+	}
+
+	if ((int)linearToPQ == 1) {
+		framebuffer = float4(LinearToPQ(framebuffer.xyz, 10000.f), framebuffer.a);
 	}
 
 	HDROutput[dispatchID.xy] = framebuffer;
