@@ -56,7 +56,6 @@ void HDR::DrawSettings()
 		settings.dxColorRotation = 0;
 		settings.dxExposure = 1.0f;
 		settings.dxPaperWhite = 1000;
-		settings.dxLinearToPq = false;
 		settings.displayPeakBrightness = 1000;
 		settings.gameBrightness = 400;
 		settings.uiBrightness = 400;
@@ -64,8 +63,6 @@ void HDR::DrawSettings()
 
 	ImGui::Checkbox("Use DirectXTK Tonemapping", &settings.useDXTonemapping);
 	if (settings.useDXTonemapping) {
-		ImGui::Checkbox("Apply LinearToPQ Transformation", &settings.dxLinearToPq);
-
 		ImGui::SliderInt("Operator", reinterpret_cast<int*>(&settings.dxOperator), 0, 5, std::format("{}", operators[settings.dxOperator]).c_str());
 
 		ImGui::SliderInt("Transfer Function", reinterpret_cast<int*>(&settings.dxTransferFunction), 0, 2, std::format("{}", transferFunctions[settings.dxTransferFunction]).c_str());
@@ -92,14 +89,14 @@ void HDR::DrawSettings()
 		}
 
 		ImGui::SliderFloat("Exposure", &settings.dxExposure, 0.001, 2);
-		ImGui::SliderInt("Paper White (nits)", reinterpret_cast<int*>(&settings.dxPaperWhite), 400, 10000);
+		ImGui::SliderInt("Paper White (nits)", reinterpret_cast<int*>(&settings.dxPaperWhite), 200, 10000);
 	} else {
-		ImGui::SliderInt("Display Peak Brightness (nits)", reinterpret_cast<int*>(&settings.displayPeakBrightness), 400, 10000);
-		ImGui::SliderInt("Game Brightness (nits)", reinterpret_cast<int*>(&settings.gameBrightness), 100, 500);
+		ImGui::SliderInt("Display Peak Brightness (nits)", reinterpret_cast<int*>(&settings.displayPeakBrightness), 200, 10000);
+		ImGui::SliderInt("Game Brightness (nits)", reinterpret_cast<int*>(&settings.gameBrightness), 100, 1000);
 
 		ImGui::BeginDisabled();
 		ImGui::Text("Setting UI brightness is currently not supported.");
-		ImGui::SliderInt("UI Brightness (nits)", reinterpret_cast<int*>(&settings.uiBrightness), 100, 500);
+		ImGui::SliderInt("UI Brightness (nits)", reinterpret_cast<int*>(&settings.uiBrightness), 100, 1000);
 		ImGui::EndDisabled();
 	}
 
@@ -270,7 +267,7 @@ void HDR::UpdateHDRData() const
 {
 	if (settings.useDXTonemapping) {
 		HDRDxDataCB data = {};
-		data.parameters = DirectX::XMVectorSet(settings.dxExposure, static_cast<float>(settings.dxPaperWhite), static_cast<float>(static_cast<int>(settings.dxTransferFunction) * 6 + static_cast<int>(settings.dxOperator)), settings.dxLinearToPq);
+		data.parameters = DirectX::XMVectorSet(settings.dxExposure, static_cast<float>(settings.dxPaperWhite), static_cast<float>(static_cast<int>(settings.dxTransferFunction) * 6 + static_cast<int>(settings.dxOperator)), 0.f);
 		switch (settings.dxColorRotation) {
 		default:
 		case 0:

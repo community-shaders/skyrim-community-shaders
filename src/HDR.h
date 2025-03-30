@@ -80,7 +80,6 @@ public:
 		uint dxColorRotation = 0;
 		float dxExposure = 1.0f;
 		uint dxPaperWhite = 1000;
-		bool dxLinearToPq = false;
 		// Settings for (old) CS tonemapper
 		uint displayPeakBrightness = 1000;
 		uint gameBrightness = 400;

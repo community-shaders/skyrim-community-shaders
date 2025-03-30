@@ -15,7 +15,6 @@ cbuffer PerFrame : register(b0)
 	float linearExposure : packoffset(c0.x);
 	float paperWhiteNits : packoffset(c0.y);
 	float tonemapSelector : packoffset(c0.z);
-	float linearToPQ : packoffset(c0.w);
 	float4x3 colorRotation : packoffset(c1);
 }
 
@@ -322,10 +321,6 @@ float3 LinearToPQ(float3 linearCol, const float maxPqValue)
 	case 17:
 		framebuffer = CS_HDR10_Uncharted2Filmic(framebuffer);
 		break;
-	}
-
-	if ((int)linearToPQ == 1) {
-		framebuffer = float4(LinearToPQ(framebuffer.xyz, 10000.f), framebuffer.a);
 	}
 
 	HDROutput[dispatchID.xy] = framebuffer;
