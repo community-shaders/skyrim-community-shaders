@@ -36,7 +36,7 @@ struct Feature
 	/**
 	 * Whether to print the INI version missing message when this feature is unloaded
 	 */
-	virtual bool PrintFailLoadMessage() { return true; }
+	virtual bool DrawFailLoadMessage() const { return true; }
 
 	virtual void SetupResources() {}
 	virtual void Reset() {}
