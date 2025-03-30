@@ -74,12 +74,13 @@ public:
 	{
 		bool enableHDR = false;
 		// Settings for the DXTK based tonemapper
-		bool useDXTonemapping = false;
-		uint dxOperator = 0;
-		uint dxTransferFunction = 2;
-		uint dxColorRotation = 0;
-		float dxExposure = 1.0f;
-		uint dxPaperWhite = 1000;
+		bool useAdvancedTonemapping = false;
+		uint advOperator = 0;
+		uint advTransferFunction = 2;
+		uint advColorRotation = 0;
+		float advExposure = 1.0f;
+		float advExposureBias = 1.0f;
+		uint advPaperWhite = 1000;
 		// Settings for (old) CS tonemapper
 		uint displayPeakBrightness = 1000;
 		uint gameBrightness = 400;
@@ -112,27 +113,27 @@ public:
 	static_assert((sizeof(HDRDataCB) % 16) == 0, "CB size not padded correctly");
 
 	XM_ALIGNED_STRUCT(16)
-	HDRDxDataCB
+	HDRAdvDataCB
 	{
 		// linearExposure is .x
-		// paperWhiteNits is .y
-		// tonemapSelection is .z
+		// exposureBias is .y
+		// paperWhiteNits is .z
+		// tonemapSelection is .w
 		DirectX::XMVECTOR parameters;
 		DirectX::XMVECTOR colorRotation[3];
 	};
 
-	static_assert((sizeof(HDRDxDataCB) % 16) == 0, "CB size not padded correctly");
+	static_assert((sizeof(HDRAdvDataCB) % 16) == 0, "CB size not padded correctly");
 
-	ConstantBuffer* hdrDxDataCB = nullptr;
+	ConstantBuffer* hdrAdvDataCB = nullptr;
 	ConstantBuffer* hdrDataCB = nullptr;
 
 	Texture2D* hdrTexture = nullptr;
 	Texture2D* outputTexture = nullptr;
 
 	ID3D11ComputeShader* hdrOutputCS = nullptr;
-	ID3D11ComputeShader* hdrDxOutputCS = nullptr;
+	ID3D11ComputeShader* hdrAdvOutputCS = nullptr;
 	ID3D11ComputeShader* GetHDROutputCS();
-	ID3D11ComputeShader* GetDxHDROutputCS();
 
 	// Format constants to be used elsewhere
 	static constexpr auto BSGraphics_HDR_Format = RE::BSGraphics::Format::kR16G16B16A16_FLOAT;

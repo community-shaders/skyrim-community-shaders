@@ -16,12 +16,13 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	gameBrightness,
 	uiBrightness,
 	enableHDR,
-	useDXTonemapping,
-	dxOperator,
-	dxTransferFunction,
-	dxExposure,
-	dxPaperWhite,
-	dxColorRotation);
+	useAdvancedTonemapping,
+	advOperator,
+	advTransferFunction,
+	advExposure,
+	advExposureBias,
+	advPaperWhite,
+	advColorRotation);
 
 void HDR::DrawSettings()
 {
@@ -51,22 +52,29 @@ void HDR::DrawSettings()
 	}
 
 	if (ImGui::Button("Reset HDR Settings", { -1, 0 })) {
-		settings.useDXTonemapping = false;
-		settings.dxOperator = 0;
-		settings.dxTransferFunction = 2;
-		settings.dxColorRotation = 0;
-		settings.dxExposure = 1.0f;
-		settings.dxPaperWhite = 1000;
+		settings.useAdvancedTonemapping = false;
+		settings.advOperator = 0;
+		settings.advTransferFunction = 2;
+		settings.advColorRotation = 0;
+		settings.advExposure = 1.0f;
+		settings.advExposureBias = 1.0f;
+		settings.advPaperWhite = 1000;
+
 		settings.displayPeakBrightness = 1000;
 		settings.gameBrightness = 400;
 		settings.uiBrightness = 400;
 	}
 
-	ImGui::Checkbox("Use DirectXTK Tonemapping", &settings.useDXTonemapping);
-	if (settings.useDXTonemapping) {
-		ImGui::SliderInt("Operator", reinterpret_cast<int*>(&settings.dxOperator), 0, 5, std::format("{}", operators[settings.dxOperator]).c_str());
+	if (ImGui::Button("Refresh HDR shaders", { -1, 0 })) {
+		ClearShaderCache();
+		GetHDROutputCS();
+	}
 
-		ImGui::SliderInt("Transfer Function", reinterpret_cast<int*>(&settings.dxTransferFunction), 0, 2, std::format("{}", transferFunctions[settings.dxTransferFunction]).c_str());
+	ImGui::Checkbox("Use DirectXTK Tonemapping", &settings.useAdvancedTonemapping);
+	if (settings.useAdvancedTonemapping) {
+		ImGui::SliderInt("Operator", reinterpret_cast<int*>(&settings.advOperator), 0, 5, std::format("{}", operators[settings.advOperator]).c_str());
+
+		ImGui::SliderInt("Transfer Function", reinterpret_cast<int*>(&settings.advTransferFunction), 0, 2, std::format("{}", transferFunctions[settings.advTransferFunction]).c_str());
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
 				"Linear:\n"
@@ -79,7 +87,7 @@ void HDR::DrawSettings()
 				"Rec.2020 and ST.2084 display curve.");
 		}
 
-		ImGui::SliderInt("Color Rotation", reinterpret_cast<int*>(&settings.dxColorRotation), 0, 1, std::format("{}", rotationFunctions[settings.dxColorRotation]).c_str());
+		ImGui::SliderInt("Color Rotation", reinterpret_cast<int*>(&settings.advColorRotation), 0, 1, std::format("{}", rotationFunctions[settings.advColorRotation]).c_str());
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
 				"Rec.709/Rec.2020:\n"
@@ -89,8 +97,9 @@ void HDR::DrawSettings()
 				"Rec.709 color primaries into DCI-P3-D65\n");
 		}
 
-		ImGui::SliderFloat("Exposure", &settings.dxExposure, 0.001, 2);
-		ImGui::SliderInt("Paper White (nits)", reinterpret_cast<int*>(&settings.dxPaperWhite), 200, 10000);
+		ImGui::SliderFloat("Linear Exposure", &settings.advExposure, 0.001, 2);
+		ImGui::SliderFloat("Exposure Bias", &settings.advExposureBias, 0.001, 2);
+		ImGui::SliderInt("Paper White (nits)", reinterpret_cast<int*>(&settings.advPaperWhite), 200, 10000);
 	} else {
 		ImGui::SliderInt("Display Peak Brightness (nits)", reinterpret_cast<int*>(&settings.displayPeakBrightness), 200, 10000);
 		ImGui::SliderInt("Game Brightness (nits)", reinterpret_cast<int*>(&settings.gameBrightness), 100, 1000);
@@ -154,7 +163,7 @@ void HDR::SetupResources()
 	outputTexture->CreateUAV(uavDesc);
 
 	hdrDataCB = new ConstantBuffer(ConstantBufferDesc<HDRDataCB>());
-	hdrDxDataCB = new ConstantBuffer(ConstantBufferDesc<HDRDxDataCB>());
+	hdrAdvDataCB = new ConstantBuffer(ConstantBufferDesc<HDRAdvDataCB>());
 
 	UpdateHDRData();
 }
@@ -175,44 +184,34 @@ void HDR::ApplyHDR()
 	state->BeginPerfEvent("HDR");
 
 	{
-		{
-			auto dispatchCount = Util::GetScreenDispatchCount(false);
+		auto dispatchCount = Util::GetScreenDispatchCount(false);
 
-			ID3D11ShaderResourceView* views[1] = { hdrTexture->srv.get() };
-			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+		ID3D11ShaderResourceView* views[1] = { hdrTexture->srv.get() };
+		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
-			ID3D11UnorderedAccessView* uavs[1] = { outputTexture->uav.get() };
-			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+		ID3D11UnorderedAccessView* uavs[1] = { outputTexture->uav.get() };
+		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
-			ID3D11Buffer* cbs[1]{ nullptr };
-			if (settings.useDXTonemapping) {
-				cbs[0] = hdrDxDataCB->CB();
-			} else {
-				cbs[0] = hdrDataCB->CB();
-			}
-			context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
+		ID3D11Buffer* cbs[1]{ settings.useAdvancedTonemapping ? hdrAdvDataCB->CB() : cbs[0] = hdrDataCB->CB() };
 
-			if (settings.useDXTonemapping) {
-				context->CSSetShader(GetDxHDROutputCS(), nullptr, 0);
-			} else {
-				context->CSSetShader(GetHDROutputCS(), nullptr, 0);
-			}
+		context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
 
-			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+		context->CSSetShader(GetHDROutputCS(), nullptr, 0);
 
-			// Cleanup
-			views[0] = { nullptr };
-			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
-			uavs[0] = { nullptr };
-			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+		// Cleanup
+		views[0] = { nullptr };
+		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
-			cbs[0] = { nullptr };
-			context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
+		uavs[0] = { nullptr };
+		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
-			ID3D11ComputeShader* shader = nullptr;
-			context->CSSetShader(shader, nullptr, 0);
-		}
+		cbs[0] = { nullptr };
+		context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
+
+		ID3D11ComputeShader* shader = nullptr;
+		context->CSSetShader(shader, nullptr, 0);
 	}
 
 	state->EndPerfEvent();
@@ -240,14 +239,23 @@ void HDR::ClearShaderCache()
 		hdrOutputCS = nullptr;
 	}
 
-	if (hdrDxOutputCS) {
-		hdrDxOutputCS->Release();
-		hdrDxOutputCS = nullptr;
+	if (hdrAdvOutputCS) {
+		hdrAdvOutputCS->Release();
+		hdrAdvOutputCS = nullptr;
 	}
 }
 
 ID3D11ComputeShader* HDR::GetHDROutputCS()
 {
+	if (settings.useAdvancedTonemapping) {
+		if (!hdrAdvOutputCS) {
+			logger::debug("Compiling HDRAdvOutputCS.hlsl");
+			hdrAdvOutputCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\HDRAdvOutputCS.hlsl", {}, "cs_5_0"));
+		}
+
+		return hdrAdvOutputCS;
+	}
+
 	if (!hdrOutputCS) {
 		logger::debug("Compiling HDROutputCS.hlsl");
 		hdrOutputCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\HDROutputCS.hlsl", {}, "cs_5_0"));
@@ -255,21 +263,12 @@ ID3D11ComputeShader* HDR::GetHDROutputCS()
 	return hdrOutputCS;
 }
 
-ID3D11ComputeShader* HDR::GetDxHDROutputCS()
-{
-	if (!hdrDxOutputCS) {
-		logger::debug("Compiling DxHDROutputCS.hlsl");
-		hdrDxOutputCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DxHDROutputCS.hlsl", {}, "cs_5_0"));
-	}
-	return hdrDxOutputCS;
-}
-
 void HDR::UpdateHDRData() const
 {
-	if (settings.useDXTonemapping) {
-		HDRDxDataCB data = {};
-		data.parameters = DirectX::XMVectorSet(settings.dxExposure, static_cast<float>(settings.dxPaperWhite), static_cast<float>(static_cast<int>(settings.dxTransferFunction) * 6 + static_cast<int>(settings.dxOperator)), 0.f);
-		switch (settings.dxColorRotation) {
+	if (settings.useAdvancedTonemapping) {
+		HDRAdvDataCB data = {};
+		data.parameters = DirectX::XMVectorSet(settings.advExposure, settings.advExposureBias, static_cast<float>(settings.advPaperWhite), static_cast<float>(static_cast<int>(settings.advTransferFunction) * 6 + static_cast<int>(settings.advOperator)));
+		switch (settings.advColorRotation) {
 		default:
 		case 0:
 			memcpy(data.colorRotation, c_from709to2020, sizeof(c_from709to2020));
@@ -278,7 +277,8 @@ void HDR::UpdateHDRData() const
 			memcpy(data.colorRotation, c_from709toP3D65, sizeof(c_from709toP3D65));
 			break;
 		}
-		hdrDxDataCB->Update(data);
+
+		hdrAdvDataCB->Update(data);
 	} else {
 		float4 parameters;
 		parameters.x = static_cast<float>(settings.enableHDR);
@@ -287,6 +287,7 @@ void HDR::UpdateHDRData() const
 		parameters.w = static_cast<float>(settings.uiBrightness);
 
 		HDRDataCB data = { parameters };
+
 		hdrDataCB->Update(data);
 	}
 }
