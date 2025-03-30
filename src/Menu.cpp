@@ -468,7 +468,7 @@ void Menu::DrawSettings()
 						ImGui::EndTable();
 					}
 
-					if (hasFailedMessage) {
+					if (hasFailedMessage && feat->PrintFailLoadMessage()) {
 						ImGui::TextColored(themeSettings.StatusPalette.Error, feat->failedLoadedMessage.c_str());
 					}
 
