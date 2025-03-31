@@ -2194,13 +2194,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float intensityMultiplier = InverseSquareLighting::GetAttenuation(lightDist, light);
 		if (intensityMultiplier < 1e-5)
 			continue;
-#           else
+#			else
 		float intensityFactor = saturate(lightDist / light.radius);
 		if (intensityFactor == 1)
 			continue;
 		float intensityMultiplier = 1 - intensityFactor * intensityFactor;
-#           endif
-		
+#			endif
+
 		float3 lightColor = Color::Light(light.color.xyz) * intensityMultiplier;
 		float lightShadow = 1.0;
 

@@ -1,6 +1,6 @@
 #pragma once
-#include "LightLimitFix.h"
 #include "Features/InverseSquareLighting/LightEditor.h"
+#include "LightLimitFix.h"
 
 struct InverseSquareLighting : Feature
 {
@@ -19,17 +19,17 @@ struct InverseSquareLighting : Feature
 	inline bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
 	virtual void DrawSettings() override;
-	
+
 	virtual void EarlyPrepass() override;
-	
+
 	virtual bool SupportsVR() override { return true; }
-	
+
 	virtual void PostPostLoad() override;
 
 	static float CalculateRadius(float intensity, bool shadowCaster, float cutoffOverride);
 
 	void ProcessLight(LightLimitFix::LightData& light, RE::BSLight* bsLight, RE::NiLight* niLight) const;
-	
+
 	static float GetAttenuation(float distance, float radius);
 
 	struct CreatePointLight
@@ -37,7 +37,7 @@ struct InverseSquareLighting : Feature
 		static RE::NiPointLight* thunk(RE::TESObjectLIGH* ligh, RE::TESObjectREFR* refr, RE::NiAVObject* root, bool forceDynamic, bool useLightRadius, bool affectRequesterOnly);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
-	
+
 private:
 	LightEditor editor = LightEditor();
 
@@ -50,6 +50,6 @@ private:
 	static constexpr float FadeZone = 0.175f;
 
 	static void SetExtLightData(RE::NiLight* niLight, const RE::TESObjectLIGH* ligh);
-	
+
 	static inline float SmoothStep(float edge0, float edge1, float x);
 };

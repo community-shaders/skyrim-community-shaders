@@ -892,12 +892,12 @@ PS_OUTPUT main(PS_INPUT input)
 			float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WPosition.xyz;
 			float lightDist = length(lightDirection);
 
-#			    if defined(ISL)
+#					if defined(ISL)
 			float intensityMultiplier = InverseSquareLighting::GetAttenuation(lightDist, light);
-#               else
+#					else
 			float intensityFactor = saturate(lightDist / light.radius);
 			float intensityMultiplier = 1 - intensityFactor * intensityFactor;
-#               endif
+#					endif
 
 			float3 normalizedLightDirection = normalize(lightDirection);
 

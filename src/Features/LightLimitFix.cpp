@@ -322,7 +322,7 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 		LightData light{};
 		light.color = { runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue };
 		light.lightFlags = std::bit_cast<LightFlags>(runtimeData.ambient.red);
-		
+
 		if (isl->loaded) {
 			isl->ProcessLight(light, bsLight, niLight);
 		} else {

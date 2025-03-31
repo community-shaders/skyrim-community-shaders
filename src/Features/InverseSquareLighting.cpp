@@ -1,6 +1,6 @@
 #include "InverseSquareLighting.h"
-#include "LightLimitFix.h"
 #include "Features/InverseSquareLighting/Common.h"
+#include "LightLimitFix.h"
 
 void InverseSquareLighting::DrawSettings()
 {
@@ -48,7 +48,7 @@ void InverseSquareLighting::ProcessLight(LightLimitFix::LightData& light, RE::BS
 		logger::debug("[InverseSquareLighting] FormID: 0x{:08X} | Light*: {:p} | Name: {} - light uninitialised", userData ? userData->formID : 0, static_cast<void*>(niLight), niLight->name);
 		runtimeData->flags.set(LightLimitFix::LightFlags::Initialised);
 	}
-	
+
 	const bool isInvSq = light.lightFlags.any(LightLimitFix::LightFlags::InverseSquare);
 	if (bsLight->pointLight && editor.enabled && ((isInvSq && editor.disableInvSqLights) || (!isInvSq && editor.disableRegularLights)))
 		light.lightFlags.set(LightLimitFix::LightFlags::Disabled);

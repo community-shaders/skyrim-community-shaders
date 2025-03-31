@@ -633,7 +633,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 				float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WorldPosition.xyz;
 				float lightDist = length(lightDirection);
 
-#			    if defined(ISL)
+#				if defined(ISL)
 				float intensityMultiplier = InverseSquareLighting::GetAttenuation(lightDist, light);
 				if (intensityMultiplier < 1e-5)
 					continue;
@@ -642,7 +642,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 				if (intensityFactor == 1)
 					continue;
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
-#               endif
+#				endif
 
 				float3 lightColor = light.color.xyz * intensityMultiplier;
 
@@ -841,16 +841,16 @@ PS_OUTPUT main(PS_INPUT input)
 				float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WorldPosition.xyz;
 				float lightDist = length(lightDirection);
 
-#			    if defined(ISL)
+#				if defined(ISL)
 				float intensityMultiplier = InverseSquareLighting::GetAttenuation(lightDist, light);
 				if (intensityMultiplier < 1e-5)
 					continue;
-#               else
+#				else
 				float intensityFactor = saturate(lightDist / light.radius);
 				if (intensityFactor == 1)
 					continue;
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
-#               endif
+#				endif
 
 				float3 lightColor = light.color.xyz * intensityMultiplier;
 

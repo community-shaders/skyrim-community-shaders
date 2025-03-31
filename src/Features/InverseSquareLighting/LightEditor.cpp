@@ -1,4 +1,4 @@
-﻿#include "Features/InverseSquareLighting/LightEditor.h" 
+﻿#include "Features/InverseSquareLighting/LightEditor.h"
 #include "Features/LightLimitFix.h"
 #include "Menu.h"
 
@@ -104,19 +104,19 @@ void LightEditor::DrawSettings()
 
 		ImGui::Spacing();
 		ImGui::Spacing();
-		
+
 		auto* flags = reinterpret_cast<uint32_t*>(&current.tesFlags);
 		ImGui::Spacing();
 		ImGui::Text("Light Flags");
 		if (ImGui::CheckboxFlags("Dynamic", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic)) ||
-		    ImGui::CheckboxFlags("Negative", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative)) ||
-		    ImGui::CheckboxFlags("Flicker", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker)) ||
-		    ImGui::CheckboxFlags("Flicker Slow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow)) ||
-		    ImGui::CheckboxFlags("Pulse", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse)) ||
-		    ImGui::CheckboxFlags("Pulse Slow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow)) ||
-		    ImGui::CheckboxFlags("Hemi Shadow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow)) ||
-		    ImGui::CheckboxFlags("Omni Shadow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow)) ||
-		    ImGui::CheckboxFlags("Portal Strict", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict))) {
+			ImGui::CheckboxFlags("Negative", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative)) ||
+			ImGui::CheckboxFlags("Flicker", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker)) ||
+			ImGui::CheckboxFlags("Flicker Slow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow)) ||
+			ImGui::CheckboxFlags("Pulse", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse)) ||
+			ImGui::CheckboxFlags("Pulse Slow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow)) ||
+			ImGui::CheckboxFlags("Hemi Shadow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow)) ||
+			ImGui::CheckboxFlags("Omni Shadow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow)) ||
+			ImGui::CheckboxFlags("Portal Strict", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict))) {
 		}
 	}
 }
@@ -157,7 +157,7 @@ void LightEditor::GatherLights()
 		if (refr) {
 			if (refr->IsDisabled())
 				return;
-			if (auto* objRef = refr->GetObjectReference()) {				
+			if (auto* objRef = refr->GetObjectReference()) {
 				if (objRef->GetFormType() == RE::FormType::Light)
 					ligh = objRef->As<RE::TESObjectLIGH>();
 				current.id = refr->GetFormID();
@@ -165,7 +165,7 @@ void LightEditor::GatherLights()
 				current.index = lightsAttached[refr]++;
 			}
 		}
-		
+
 		current.isRef = ligh != nullptr;
 
 		if (!current.isRef && runtimeData->lighFormId != 0)
@@ -308,13 +308,13 @@ void LightEditor::SortLights()
 
 	switch (sortOption) {
 	case SortOption::Distance:
-	{
-		const auto playerPos = RE::PlayerCharacter::GetSingleton()->GetPosition();
-		std::ranges::sort(lights, [&](const LightInfo& a, const LightInfo& b) {
-			return a.position.GetSquaredDistance(playerPos) < b.position.GetSquaredDistance(playerPos);
-		});
-		break;
-	}
+		{
+			const auto playerPos = RE::PlayerCharacter::GetSingleton()->GetPosition();
+			std::ranges::sort(lights, [&](const LightInfo& a, const LightInfo& b) {
+				return a.position.GetSquaredDistance(playerPos) < b.position.GetSquaredDistance(playerPos);
+			});
+			break;
+		}
 	case SortOption::FormID:
 		std::ranges::sort(lights, [](const LightInfo& a, const LightInfo& b) {
 			return (a.id * 10 + a.index) < (b.id * 10 + b.index);

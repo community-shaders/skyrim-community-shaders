@@ -9,7 +9,7 @@ struct LightEditor
 
 	void DrawSettings();
 	void GatherLights();
-	
+
 private:
 	struct LightInfo
 	{
@@ -47,12 +47,13 @@ private:
 		ISLCommon::RuntimeLightDataExt data = {};
 		RE::NiPoint3 pos = {};
 	};
-	
+
 	bool showAttachedLights = false;
 	bool showEffectLights = false;
 	int32_t waitFrames = 0;
 
-	enum class FilterOption {
+	enum class FilterOption
+	{
 		RefLights,
 		AttachedLights,
 		OtherLights,
@@ -65,7 +66,8 @@ private:
 		"Other Lights"
 	};
 
-	enum class SortOption {
+	enum class SortOption
+	{
 		None,
 		Distance,
 		FormID,
@@ -82,20 +84,20 @@ private:
 
 	FilterOption filterOption = FilterOption::RefLights;
 	SortOption sortOption = SortOption::Distance;
-	
+
 	std::vector<LightInfo> lights = {};
 	std::unordered_map<RE::TESObjectREFR*, uint32_t> lightsAttached = {};
-	
+
 	LightInfo selected = {};
 	LightInfo previous = {};
 
 	LightDisplayInfo displayInfo = {};
 	LightSettings original = {};
 	LightSettings current = {};
-	
+
 	void SortLights();
 
 	static std::string GetLightName(LightInfo& lightInfo);
-	
+
 	void UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight);
 };
