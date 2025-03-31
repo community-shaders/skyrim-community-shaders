@@ -65,12 +65,12 @@ void HDR::DrawSettings()
 		settings.uiBrightness = 400;
 	}
 
-	if (ImGui::Button("Refresh HDR shaders", { -1, 0 })) {
+	if (ImGui::Button("Reload HDR shaders", { -1, 0 })) {
 		ClearShaderCache();
 		GetHDROutputCS();
 	}
 
-	ImGui::Checkbox("Use DirectXTK Tonemapping", &settings.useAdvancedTonemapping);
+	ImGui::Checkbox("Use Advanced Tonemapping", &settings.useAdvancedTonemapping);
 	if (settings.useAdvancedTonemapping) {
 		ImGui::SliderInt("Operator", reinterpret_cast<int*>(&settings.advOperator), 0, 5, std::format("{}", operators[settings.advOperator]).c_str());
 
@@ -94,11 +94,21 @@ void HDR::DrawSettings()
 				"Rec.709 color primaries into Rec.2020\n"
 				"\n"
 				"Rec.709/DCI-P3-D65:\n"
-				"Rec.709 color primaries into DCI-P3-D65\n");
+				"Rec.709 color primaries into DCI-P3-D65");
 		}
 
 		ImGui::SliderFloat("Linear Exposure", &settings.advExposure, 0.001, 2);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"Linear Exposure:\n"
+				"Applied after converting to HDR10 color from linear color.");
+		}
 		ImGui::SliderFloat("Exposure Bias", &settings.advExposureBias, 0.001, 2);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"Exposure Bias:\n"
+				"Applied after converting to linear color, but before HDR10 conversion.");
+		}
 		ImGui::SliderInt("Paper White (nits)", reinterpret_cast<int*>(&settings.advPaperWhite), 200, 10000);
 	} else {
 		ImGui::SliderInt("Display Peak Brightness (nits)", reinterpret_cast<int*>(&settings.displayPeakBrightness), 200, 10000);
