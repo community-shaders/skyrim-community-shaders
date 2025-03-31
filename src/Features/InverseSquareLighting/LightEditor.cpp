@@ -97,7 +97,7 @@ void LightEditor::DrawSettings()
 	ImGui::Spacing();
 	ImGui::Spacing();
 
-	if (!selected.isOther) {
+	if (!selected.isOther && current.data.lighFormId != 0) {
 		ImGui::Text("X: %.2f, Y: %.2f, Z: %.2f", displayInfo.pos.x, displayInfo.pos.y, displayInfo.pos.z);
 		ImGui::Spacing();
 		ImGui::SliderFloat3("Position Offset", &current.pos.x, -500.f, 500.f, "%.0f");
@@ -236,10 +236,10 @@ void LightEditor::GatherLights()
 void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight)
 {
 	const auto runtimeData = ISLCommon::RuntimeLightDataExt::Get(niLight);
-	auto tesFlags = &ligh->data.flags;
+	auto tesFlags = ligh ? &ligh->data.flags : nullptr;
 
 	if (previous != selected) {
-		original.tesFlags = static_cast<ISLCommon::TES_LIGHT_FLAGS_EXT>(tesFlags->underlying());
+		original.tesFlags = tesFlags ? static_cast<ISLCommon::TES_LIGHT_FLAGS_EXT>(tesFlags->underlying()) : static_cast<ISLCommon::TES_LIGHT_FLAGS_EXT>(0);
 		original.data = *runtimeData;
 		original.pos = selected.isRef ? refr->GetPosition() : niLight->parent->local.translate;
 		current = original;
@@ -280,7 +280,7 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 		displayInfo.pos = newPos;
 	}
 
-	if (!selected.isOther && refr && current.tesFlags.underlying() != tesFlags->underlying()) {
+	if (!selected.isOther && refr && tesFlags && current.tesFlags.underlying() != tesFlags->underlying()) {
 		*tesFlags = static_cast<RE::TES_LIGHT_FLAGS>(current.tesFlags.underlying());
 		refr->Disable();
 		refr->Enable(false);
