@@ -59,7 +59,7 @@ void LightEditor::DrawSettings()
 		ImGui::Text("Cell: %s", displayInfo.cellEditorId.c_str());
 	} else {
 		ImGui::Text("Memory Address: %p", selected.ptr);
-		ImGui::Text("NiLight Name: %p", selected.name.c_str());
+		ImGui::Text("NiLight Name: %s", selected.name.c_str());
 	}
 
 	ImGui::Spacing();
@@ -108,16 +108,15 @@ void LightEditor::DrawSettings()
 		auto* flags = reinterpret_cast<uint32_t*>(&current.tesFlags);
 		ImGui::Spacing();
 		ImGui::Text("Light Flags");
-		if (ImGui::CheckboxFlags("Dynamic", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic)) ||
-			ImGui::CheckboxFlags("Negative", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative)) ||
-			ImGui::CheckboxFlags("Flicker", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker)) ||
-			ImGui::CheckboxFlags("Flicker Slow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow)) ||
-			ImGui::CheckboxFlags("Pulse", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse)) ||
-			ImGui::CheckboxFlags("Pulse Slow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow)) ||
-			ImGui::CheckboxFlags("Hemi Shadow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow)) ||
-			ImGui::CheckboxFlags("Omni Shadow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow)) ||
-			ImGui::CheckboxFlags("Portal Strict", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict))) {
-		}
+		ImGui::CheckboxFlags("Dynamic", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic));
+		ImGui::CheckboxFlags("Negative", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative));
+		ImGui::CheckboxFlags("Flicker", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker));
+		ImGui::CheckboxFlags("Flicker Slow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow));
+		ImGui::CheckboxFlags("Pulse", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse));
+		ImGui::CheckboxFlags("Pulse Slow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow));
+		ImGui::CheckboxFlags("Hemi Shadow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow));
+		ImGui::CheckboxFlags("Omni Shadow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow));
+		ImGui::CheckboxFlags("Portal Strict", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict));
 	}
 }
 
@@ -135,14 +134,16 @@ void LightEditor::GatherLights()
 	if (!enabled || !Menu::GetSingleton()->ShouldSwallowInput())
 		return;
 
-	if (waitFrames-- > 0)
+	if (waitFrames > 0) {
+		waitFrames--;
 		return;
+	}
 
 	bool foundSelected = false;
 
 	auto addLight = [&](const RE::NiPointer<RE::BSLight>& light) {
 		const auto bsLight = light.get();
-		if (!bsLight || bsLight->light->GetFlags().any(RE::NiAVObject::Flag::kHidden))
+		if (!bsLight)
 			return;
 
 		const auto niLight = bsLight->light.get();
