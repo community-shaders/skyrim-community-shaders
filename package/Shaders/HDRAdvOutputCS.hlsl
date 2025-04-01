@@ -50,6 +50,12 @@ float3 NormalizeHDRSceneValue(float3 hdrSceneValue, float paperWhiteNits)
 	return normalizedLinearValue;  // Don't clamp between [0..1], so we can still perform operations on scene values higher than 10,000 nits
 }
 
+float3 rescaleNits(float3 bufferIn)
+{
+	float scaleFactor = maxNits / 10000.0f;
+	return bufferIn * scaleFactor;
+}
+
 float3 ConvertToHDR10(float3 hdrSceneValue)
 {
 	float3 normalizedLinearValue = NormalizeHDRSceneValue(hdrSceneValue, paperWhiteNits);  // Normalize using paper white nits to prepare for ST.2084
@@ -208,8 +214,7 @@ static float3 CS_HDR10_Uncharted2Filmic(float3 bufferIn)
 	return ConvertToHDR10(ToneMapUncharted2Filmic(bufferIn));
 }
 
-[numthreads(8, 8, 1)] void main(uint3 dispatchID
-								: SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
 	float4 framebuffer = Framebuffer[dispatchID.xy];
 
 	// Untonemap the incoming HDR buffer
@@ -278,7 +283,7 @@ static float3 CS_HDR10_Uncharted2Filmic(float3 bufferIn)
 		break;
 	}
 
-	framebuffer = float4(tonemapped, framebuffer.w);
+	framebuffer = float4(rescaleNits(tonemapped), framebuffer.w);
 
 	HDROutput[dispatchID.xy] = framebuffer;
 }
