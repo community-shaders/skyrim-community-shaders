@@ -79,8 +79,8 @@ public:
 		uint advTransferFunction = 2;
 		uint advColorRotation = 0;
 		float advExposure = 1.0f;
-		float advExposureBias = 1.0f;
 		uint advPaperWhite = 1000;
+		uint advMaxNits = 1000;
 		// Settings for (old) CS tonemapper
 		uint displayPeakBrightness = 1000;
 		uint gameBrightness = 400;
@@ -116,8 +116,8 @@ public:
 	HDRAdvDataCB
 	{
 		// linearExposure is .x
-		// exposureBias is .y
-		// paperWhiteNits is .z
+		// paperWhiteNits is .y
+		// maxNits is .z
 		// tonemapSelection is .w
 		DirectX::XMVECTOR parameters;
 		DirectX::XMVECTOR colorRotation[3];

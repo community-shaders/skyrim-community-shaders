@@ -12,8 +12,8 @@ RWTexture2D<float4> HDROutput : register(u0);
 cbuffer PerFrame : register(b0)
 {
 	float linearExposure : packoffset(c0.x);
-	float exposureBias : packoffset(c0.y);
-	float paperWhiteNits : packoffset(c0.z);
+	float paperWhiteNits : packoffset(c0.y);
+	float maxNits : packoffset(c0.z);
 	float tonemapSelector : packoffset(c0.w);
 
 	float4x3 colorRotation : packoffset(c1);
@@ -179,7 +179,7 @@ static float3 CS_Uncharted2Filmic_SRGB(float3 bufferIn)
 static float3 HDR10(float3 bufferIn)
 {
 	// ST.2084 spec defines max nits as 10,000 nits
-	float3 normalized = bufferIn * paperWhiteNits / 10000.f;
+	float3 normalized = bufferIn * paperWhiteNits / min(max(maxNits, 1.f), 10000.f);
 
 	// Apply ST.2084 curve
 	return LinearToST2084(normalized);
@@ -225,6 +225,7 @@ static float3 CS_HDR10_Uncharted2Filmic(float3 bufferIn)
 	float4 framebuffer = Framebuffer[dispatchID.xy];
 
 	// Untonemap the incoming HDR buffer
+	float exposureBias = 1.0;
 	float3 untonemapped = Color::GammaToLinearSafe(framebuffer.xyz) * exposureBias;
 	// Apply color rotation
 	float3 colorRotated = mul(untonemapped, (float3x3)colorRotation);

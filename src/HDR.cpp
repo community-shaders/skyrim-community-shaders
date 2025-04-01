@@ -20,7 +20,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	advOperator,
 	advTransferFunction,
 	advExposure,
-	advExposureBias,
+	advMaxNits,
 	advPaperWhite,
 	advColorRotation);
 
@@ -57,8 +57,8 @@ void HDR::DrawSettings()
 		settings.advTransferFunction = 2;
 		settings.advColorRotation = 0;
 		settings.advExposure = 1.0f;
-		settings.advExposureBias = 1.0f;
 		settings.advPaperWhite = 1000;
+		settings.advMaxNits = 10000;
 
 		settings.displayPeakBrightness = 1000;
 		settings.gameBrightness = 400;
@@ -99,17 +99,18 @@ void HDR::DrawSettings()
 
 		ImGui::SliderFloat("Linear Exposure", &settings.advExposure, 0.001, 2);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Linear Exposure:\n"
-				"Applied after converting to HDR10 color from linear color.");
+			ImGui::Text("Linear exposure adjusts the brightness after converting to HDR10 color from linear color.");
 		}
-		ImGui::SliderFloat("Exposure Bias", &settings.advExposureBias, 0.001, 2);
+
+		ImGui::SliderInt("Paper White (nits)", reinterpret_cast<int*>(&settings.advPaperWhite), 1, 10000);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Exposure Bias:\n"
-				"Applied after converting to linear color, but before HDR10 conversion.");
+			ImGui::Text("Paper White sets the game's reference white brightness.");
 		}
-		ImGui::SliderInt("Paper White (nits)", reinterpret_cast<int*>(&settings.advPaperWhite), 200, 10000);
+
+		ImGui::SliderInt("Peak Brightness (nits)", reinterpret_cast<int*>(&settings.advMaxNits), 1, 10000);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Peak Brightness defines the maximum brightness level.");
+		}
 	} else {
 		ImGui::SliderInt("Display Peak Brightness (nits)", reinterpret_cast<int*>(&settings.displayPeakBrightness), 200, 10000);
 		ImGui::SliderInt("Game Brightness (nits)", reinterpret_cast<int*>(&settings.gameBrightness), 100, 1000);
@@ -277,7 +278,7 @@ void HDR::UpdateHDRData() const
 {
 	if (settings.useAdvancedTonemapping) {
 		HDRAdvDataCB data = {};
-		data.parameters = DirectX::XMVectorSet(settings.advExposure, settings.advExposureBias, static_cast<float>(settings.advPaperWhite), static_cast<float>(static_cast<int>(settings.advTransferFunction) * 6 + static_cast<int>(settings.advOperator)));
+		data.parameters = DirectX::XMVectorSet(settings.advExposure, static_cast<float>(settings.advPaperWhite), static_cast<float>(settings.advMaxNits), static_cast<float>(static_cast<int>(settings.advTransferFunction) * 6 + static_cast<int>(settings.advOperator)));
 		switch (settings.advColorRotation) {
 		default:
 		case 0:
