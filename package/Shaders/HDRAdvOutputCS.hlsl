@@ -214,7 +214,8 @@ static float3 CS_HDR10_Uncharted2Filmic(float3 bufferIn)
 	return ConvertToHDR10(ToneMapUncharted2Filmic(bufferIn));
 }
 
-[numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void main(uint3 dispatchID
+								: SV_DispatchThreadID) {
 	float4 framebuffer = Framebuffer[dispatchID.xy];
 
 	// Untonemap the incoming HDR buffer
