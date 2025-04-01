@@ -40,13 +40,20 @@ static float3 SRGBToLinearEst(float3 srgb)
 // Apply the ST.2084 curve to normalized linear values and outputs normalized non-linear values
 static float3 LinearToST2084(float3 normalizedLinearValue)
 {
-	return pow((0.8359375f + 18.8515625f * pow(abs(normalizedLinearValue), 0.1593017578f)) / (1.0f + 18.6875f * pow(abs(normalizedLinearValue), 0.1593017578f)), 78.84375f);
+	float3 ST2084 = pow((0.8359375f + 18.8515625f * pow(abs(normalizedLinearValue), 0.1593017578f)) / (1.0f + 18.6875f * pow(abs(normalizedLinearValue), 0.1593017578f)), 78.84375f);
+	return ST2084;  // Don't clamp between [0..1], so we can still perform operations on scene values higher than 10,000 nits
 }
 
-// ST.2084 to linear, resulting in a linear normalized value
-static float3 ST2084ToLinear(float3 ST2084)
+float3 NormalizeHDRSceneValue(float3 hdrSceneValue, float paperWhiteNits)
 {
-	return pow(max(pow(abs(ST2084), 1.0f / 78.84375f) - 0.8359375f, 0.0f) / (18.8515625f - 18.6875f * pow(abs(ST2084), 1.0f / 78.84375f)), 1.0f / 0.1593017578f);
+	float3 normalizedLinearValue = (hdrSceneValue * paperWhiteNits) / 10000.f;
+	return normalizedLinearValue;  // Don't clamp between [0..1], so we can still perform operations on scene values higher than 10,000 nits
+}
+
+float3 ConvertToHDR10(float3 hdrSceneValue)
+{
+	float3 normalizedLinearValue = NormalizeHDRSceneValue(hdrSceneValue, paperWhiteNits);  // Normalize using paper white nits to prepare for ST.2084
+	return LinearToST2084(normalizedLinearValue);
 }
 
 // Reinhard tonemap operator
@@ -109,29 +116,29 @@ static float3 CS_Copy(float3 bufferIn)
 // Saturate (clips above 1.0)
 static float3 CS_Saturate(float3 bufferIn)
 {
-	return saturate(bufferIn * linearExposure);
+	return saturate(bufferIn);
 }
 
 // Reinhard operator
 static float3 CS_Reinhard(float3 bufferIn)
 {
-	return ToneMapReinhard(bufferIn * linearExposure);
+	return ToneMapReinhard(bufferIn);
 }
 
 static float3 CS_Reinhard_Jodie(float3 bufferIn)
 {
-	return ToneMapReinhardJodie(bufferIn * linearExposure);
+	return ToneMapReinhardJodie(bufferIn);
 }
 
 // ACES filmic operator
 static float3 CS_ACESFilmic(float3 bufferIn)
 {
-	return ToneMapACESFilmic(bufferIn * linearExposure);
+	return ToneMapACESFilmic(bufferIn);
 }
 
 static float3 CS_Uncharted2Filmic(float3 bufferIn)
 {
-	return ToneMapUncharted2Filmic(bufferIn * linearExposure);
+	return ToneMapUncharted2Filmic(bufferIn);
 }
 
 //--------------------------------------------------------------------------------------
@@ -144,148 +151,129 @@ static float3 CS_SRGB(float3 bufferIn)
 // Saturate (clips above 1.0)
 static float3 CS_Saturate_SRGB(float3 bufferIn)
 {
-	float3 sdr = saturate(bufferIn * linearExposure);
-	return LinearToSRGBEst(sdr);
+	return LinearToSRGBEst(saturate(bufferIn));
 }
 
 // Reinhard operator
 static float3 CS_Reinhard_SRGB(float3 bufferIn)
 {
-	float3 sdr = ToneMapReinhard(bufferIn * linearExposure);
-	return LinearToSRGBEst(sdr);
+	return LinearToSRGBEst(ToneMapReinhard(bufferIn));
 }
 
 static float3 CS_Reinhard_Jodie_SRGB(float3 bufferIn)
 {
-	float3 sdr = ToneMapReinhardJodie(bufferIn * linearExposure);
-	return LinearToSRGBEst(sdr);
+	return LinearToSRGBEst(ToneMapReinhardJodie(bufferIn));
 }
 
 // ACES filmic operator
 static float3 CS_ACESFilmic_SRGB(float3 bufferIn)
 {
-	float3 sdr = ToneMapACESFilmic(bufferIn * linearExposure);
-	return LinearToSRGBEst(sdr);
+	return LinearToSRGBEst(ToneMapACESFilmic(bufferIn));
 }
 
 static float3 CS_Uncharted2Filmic_SRGB(float3 bufferIn)
 {
-	float3 sdr = ToneMapUncharted2Filmic(bufferIn * linearExposure);
-	return LinearToSRGBEst(sdr);
+	return LinearToSRGBEst(ToneMapUncharted2Filmic(bufferIn));
 }
 
 //--------------------------------------------------------------------------------------
 // HDR10, using Rec.2020 color primaries and ST.2084 curve
-static float3 HDR10(float3 bufferIn)
-{
-	// ST.2084 spec defines max nits as 10,000 nits
-	float3 normalized = bufferIn * paperWhiteNits / min(max(maxNits, 1.f), 10000.f);
-
-	// Apply ST.2084 curve
-	return LinearToST2084(normalized);
-}
-
 static float3 CS_HDR10(float3 bufferIn)
 {
-	return HDR10(bufferIn);
+	return ConvertToHDR10(bufferIn);
 }
 
 static float3 CS_HDR10_Saturate(float3 bufferIn)
 {
-	float3 rgb = HDR10(bufferIn);
-	return saturate(rgb * linearExposure);
+	return ConvertToHDR10(saturate(bufferIn));
 }
 
 static float3 CS_HDR10_Reinhard(float3 bufferIn)
 {
-	float3 rgb = HDR10(bufferIn);
-	return ToneMapReinhard(rgb * linearExposure);
+	return ConvertToHDR10(ToneMapReinhard(bufferIn));
 }
 
 static float3 CS_HDR10_Reinhard_Jodie(float3 bufferIn)
 {
-	float3 rgb = HDR10(bufferIn);
-	return ToneMapReinhardJodie(rgb * linearExposure);
+	return ConvertToHDR10(ToneMapReinhardJodie(bufferIn));
 }
 
 static float3 CS_HDR10_ACESFilmic(float3 bufferIn)
 {
-	float3 rgb = HDR10(bufferIn);
-	return ToneMapACESFilmic(rgb * linearExposure);
+	return ConvertToHDR10(ToneMapACESFilmic(bufferIn));
 }
 
 static float3 CS_HDR10_Uncharted2Filmic(float3 bufferIn)
 {
-	float3 rgb = HDR10(bufferIn);
-	return ToneMapUncharted2Filmic(rgb * linearExposure);
+	return ConvertToHDR10(ToneMapUncharted2Filmic(bufferIn));
 }
 
-[numthreads(8, 8, 1)] void main(uint3 dispatchID
-								: SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
 	float4 framebuffer = Framebuffer[dispatchID.xy];
 
 	// Untonemap the incoming HDR buffer
-	float exposureBias = 1.0;
-	float3 untonemapped = Color::GammaToLinearSafe(framebuffer.xyz) * exposureBias;
+	float3 untonemapped = Color::GammaToLinearSafe(framebuffer.xyz) * 1.0f;
 	// Apply color rotation
 	float3 colorRotated = mul(untonemapped, (float3x3)colorRotation);
+	// Apply linear exposure
+	float3 linearExposed = colorRotated * linearExposure;
 
 	float3 tonemapped;
 	switch ((int)tonemapSelector) {
 	default:
 	case 0:
-		tonemapped = CS_Copy(colorRotated);
+		tonemapped = CS_Copy(linearExposed);
 		break;
 	case 1:
-		tonemapped = CS_Saturate(colorRotated);
+		tonemapped = CS_Saturate(linearExposed);
 		break;
 	case 2:
-		tonemapped = CS_Reinhard(colorRotated);
+		tonemapped = CS_Reinhard(linearExposed);
 		break;
 	case 3:
-		tonemapped = CS_Reinhard_Jodie(colorRotated);
+		tonemapped = CS_Reinhard_Jodie(linearExposed);
 		break;
 	case 4:
-		tonemapped = CS_ACESFilmic(colorRotated);
+		tonemapped = CS_ACESFilmic(linearExposed);
 		break;
 	case 5:
-		tonemapped = CS_Uncharted2Filmic(colorRotated);
+		tonemapped = CS_Uncharted2Filmic(linearExposed);
 		break;
 	case 6:
-		tonemapped = CS_SRGB(colorRotated);
+		tonemapped = CS_SRGB(linearExposed);
 		break;
 	case 7:
-		tonemapped = CS_Saturate_SRGB(colorRotated);
+		tonemapped = CS_Saturate_SRGB(linearExposed);
 		break;
 	case 8:
-		tonemapped = CS_Reinhard_SRGB(colorRotated);
+		tonemapped = CS_Reinhard_SRGB(linearExposed);
 		break;
 	case 9:
-		tonemapped = CS_Reinhard_Jodie_SRGB(colorRotated);
+		tonemapped = CS_Reinhard_Jodie_SRGB(linearExposed);
 		break;
 	case 10:
-		tonemapped = CS_ACESFilmic_SRGB(colorRotated);
+		tonemapped = CS_ACESFilmic_SRGB(linearExposed);
 		break;
 	case 11:
-		tonemapped = CS_Uncharted2Filmic_SRGB(colorRotated);
+		tonemapped = CS_Uncharted2Filmic_SRGB(linearExposed);
 		break;
 	case 12:
-		tonemapped = CS_HDR10(colorRotated);
+		tonemapped = CS_HDR10(linearExposed);
 		break;
 	case 13:
-		tonemapped = CS_HDR10_Saturate(colorRotated);
+		tonemapped = CS_HDR10_Saturate(linearExposed);
 		break;
 	case 14:
-		tonemapped = CS_HDR10_Reinhard(colorRotated);
+		tonemapped = CS_HDR10_Reinhard(linearExposed);
 		break;
 	case 15:
-		tonemapped = CS_HDR10_Reinhard_Jodie(colorRotated);
+		tonemapped = CS_HDR10_Reinhard_Jodie(linearExposed);
 		break;
 	case 16:
-		tonemapped = CS_HDR10_ACESFilmic(colorRotated);
+		tonemapped = CS_HDR10_ACESFilmic(linearExposed);
 		break;
 	case 17:
-		tonemapped = CS_HDR10_Uncharted2Filmic(colorRotated);
+		tonemapped = CS_HDR10_Uncharted2Filmic(linearExposed);
 		break;
 	}
 

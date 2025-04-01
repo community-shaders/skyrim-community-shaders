@@ -73,7 +73,8 @@ public:
 	struct Settings
 	{
 		bool enableHDR = false;
-		// Settings for the DXTK based tonemapper
+
+		// Settings for the advanced tonemapper
 		bool useAdvancedTonemapping = false;
 		uint advOperator = 0;
 		uint advTransferFunction = 2;
@@ -81,6 +82,7 @@ public:
 		float advExposure = 1.0f;
 		uint advPaperWhite = 1000;
 		uint advMaxNits = 1000;
+
 		// Settings for (old) CS tonemapper
 		uint displayPeakBrightness = 1000;
 		uint gameBrightness = 400;
