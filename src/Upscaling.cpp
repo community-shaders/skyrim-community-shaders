@@ -26,7 +26,7 @@ void Upscaling::DrawSettings()
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	auto streamline = globals::streamline;
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
-	auto& bTAA = BSImagespaceShaderISTemporalAA->taaEnabled; // Setting used by shaders
+	auto& bTAA = BSImagespaceShaderISTemporalAA->taaEnabled;  // Setting used by shaders
 
 	// Update upscale mode based on TAA setting
 	settings.upscaleMethod = bTAA ? (settings.upscaleMethod == static_cast<uint>(UpscaleMethod::kNONE) ? static_cast<uint>(UpscaleMethod::kTAA) : settings.upscaleMethod) : static_cast<uint>(UpscaleMethod::kNONE);
@@ -260,7 +260,7 @@ void Upscaling::UpdateJitter()
 
 void Upscaling::Upscale()
 {
-	std::lock_guard<std::mutex> lock(settingsMutex); // Lock for the duration of this function
+	std::lock_guard<std::mutex> lock(settingsMutex);  // Lock for the duration of this function
 
 	auto upscaleMethod = GetUpscaleMethod();
 
@@ -391,7 +391,7 @@ void Upscaling::Upscale()
 
 void Upscaling::SharpenTAA()
 {
-	std::lock_guard<std::mutex> lock(settingsMutex); // Lock for the duration of this function
+	std::lock_guard<std::mutex> lock(settingsMutex);  // Lock for the duration of this function
 
 	CheckResources();
 
