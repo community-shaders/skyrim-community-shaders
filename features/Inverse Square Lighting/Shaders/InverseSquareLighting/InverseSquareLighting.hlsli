@@ -16,7 +16,9 @@ namespace InverseSquareLighting
 
 		float invSq = SCALED_UNITS_SQ * rcp(distance * distance + SCALED_UNITS_SQ);
 		float fadeZone = saturate(FADE_ZONE_BASE * invRadius);
-		invSq *= smoothstep(0, light.radius * fadeZone, light.radius - distance);
+		float t = saturate((light.radius - distance) * rcp(light.radius * fadeZone));
+		float fastSmoothstep = t * t * (3.0f - 2.0f * t);
+		invSq *= fastSmoothstep;
 
 		float intensityFactor = saturate(distance * invRadius);
 		float reg = 1.0f - intensityFactor * intensityFactor;
