@@ -65,6 +65,7 @@ public:
 	void UpdateJitter();
 	void Upscale();
 	void SharpenTAA();
+	void ApplyHDRtoNone();
 
 	Texture2D* upscalingTexture;
 	Texture2D* alphaMaskTexture;
