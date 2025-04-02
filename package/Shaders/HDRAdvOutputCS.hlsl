@@ -15,8 +15,6 @@ cbuffer PerFrame : register(b0)
 	float paperWhiteNits : packoffset(c0.y);
 	float maxNits : packoffset(c0.z);
 	float tonemapSelector : packoffset(c0.w);
-
-	float4x3 colorRotation : packoffset(c1);
 }
 
 // HDR10 Media Profile
@@ -136,7 +134,7 @@ static float3 CS_HDR10_Uncharted2Filmic(float3 bufferIn)
 	// Untonemap the incoming HDR buffer
 	float3 untonemapped = Color::GammaToLinearSafe(framebuffer.xyz) * 1.0f;
 	// Apply color rotation
-	float3 colorRotated = mul(untonemapped, (float3x3)colorRotation);
+	float3 colorRotated = Color::BT709ToBT2020(untonemapped);
 	// Apply linear exposure
 	float3 linearExposed = colorRotated * linearExposure;
 

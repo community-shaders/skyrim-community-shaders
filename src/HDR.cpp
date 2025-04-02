@@ -20,8 +20,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	advOperator,
 	advExposure,
 	advMaxNits,
-	advPaperWhite,
-	advColorRotation);
+	advPaperWhite);
 
 void HDR::DrawSettings()
 {
@@ -32,10 +31,6 @@ void HDR::DrawSettings()
 		"Reinhard-Jodie",
 		"ACES Filmic",
 		"Uncharted 2 Filmic"
-	};
-	const char* rotationFunctions[] = {
-		"Rec.709/Rec.2020",
-		"Rec.709/DCI-P3-D65"
 	};
 
 	ImGui::Text("Toggling this setting requires a restart to work correctly!");
@@ -48,7 +43,6 @@ void HDR::DrawSettings()
 	if (ImGui::Button("Reset HDR Settings", { -1, 0 })) {
 		settings.useAdvancedTonemapping = false;
 		settings.advOperator = 0;
-		settings.advColorRotation = 0;
 		settings.advExposure = 1.0f;
 		settings.advPaperWhite = 1000;
 		settings.advMaxNits = 10000;
@@ -66,16 +60,6 @@ void HDR::DrawSettings()
 	ImGui::Checkbox("Use Advanced Tonemapping", &settings.useAdvancedTonemapping);
 	if (settings.useAdvancedTonemapping) {
 		ImGui::SliderInt("Tonemap Operator", reinterpret_cast<int*>(&settings.advOperator), 0, 5, std::format("{}", operators[settings.advOperator]).c_str());
-
-		ImGui::SliderInt("Color Rotation", reinterpret_cast<int*>(&settings.advColorRotation), 0, 1, std::format("{}", rotationFunctions[settings.advColorRotation]).c_str());
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Rec.709/Rec.2020:\n"
-				"Rec.709 color primaries into Rec.2020\n"
-				"\n"
-				"Rec.709/DCI-P3-D65:\n"
-				"Rec.709 color primaries into DCI-P3-D65");
-		}
 
 		ImGui::SliderFloat("Linear Exposure", &settings.advExposure, 0.001, 2);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -163,16 +147,7 @@ void HDR::ApplyHDR()
 {
 	std::lock_guard<std::mutex> lock(settingsMutex);
 
-	auto state = globals::state;
 	auto context = globals::d3d::context;
-	auto renderer = globals::game::renderer;
-
-	auto& swapChainBuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-
-	ID3D11Resource* swapChainBufferResource;
-	swapChainBuffer.SRV->GetResource(&swapChainBufferResource);
-
-	state->BeginPerfEvent("HDR");
 
 	{
 		auto dispatchCount = Util::GetScreenDispatchCount(false);
@@ -204,10 +179,6 @@ void HDR::ApplyHDR()
 		ID3D11ComputeShader* shader = nullptr;
 		context->CSSetShader(shader, nullptr, 0);
 	}
-
-	state->EndPerfEvent();
-
-	context->CopyResource(swapChainBufferResource, outputTexture->resource.get());
 }
 
 void HDR::DestroyResources() const
@@ -257,17 +228,8 @@ ID3D11ComputeShader* HDR::GetHDROutputCS()
 void HDR::UpdateHDRData() const
 {
 	if (settings.useAdvancedTonemapping) {
-		HDRAdvDataCB data = {};
+		HDRAdvDataCB data;
 		data.parameters = DirectX::XMVectorSet(settings.advExposure, static_cast<float>(settings.advPaperWhite), static_cast<float>(settings.advMaxNits), static_cast<float>(settings.advOperator));
-		switch (settings.advColorRotation) {
-		default:
-		case 0:
-			memcpy(data.colorRotation, c_from709to2020, sizeof(c_from709to2020));
-			break;
-		case 1:
-			memcpy(data.colorRotation, c_from709toP3D65, sizeof(c_from709toP3D65));
-			break;
-		}
 
 		hdrAdvDataCB->Update(data);
 	} else {

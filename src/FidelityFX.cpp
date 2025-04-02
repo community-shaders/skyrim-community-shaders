@@ -43,13 +43,8 @@ void FidelityFX::SetupFrameGeneration()
 	ffx::CreateContextDescFrameGeneration createFg{};
 	createFg.displaySize = { swapChain->swapChainDesc.Width, swapChain->swapChainDesc.Height };
 	createFg.maxRenderSize = createFg.displaySize;
-	if (globals::hdr->settings.enableHDR) {
-		createFg.flags = FFX_FRAMEGENERATION_ENABLE_ASYNC_WORKLOAD_SUPPORT | FFX_FRAMEGENERATION_ENABLE_HIGH_DYNAMIC_RANGE;
-		createFg.backBufferFormat = HDR::FSR_FG_HDR_Format;
-	} else {
-		createFg.flags = FFX_FRAMEGENERATION_ENABLE_ASYNC_WORKLOAD_SUPPORT;
-		createFg.backBufferFormat = ffxApiGetSurfaceFormatDX12(swapChain->swapChainDesc.Format);
-	}
+	createFg.flags = FFX_FRAMEGENERATION_ENABLE_ASYNC_WORKLOAD_SUPPORT | FFX_FRAMEGENERATION_ENABLE_HIGH_DYNAMIC_RANGE;
+	createFg.backBufferFormat = ffxApiGetSurfaceFormatDX12(swapChain->swapChainDesc.Format);
 
 	ffx::CreateBackendDX12Desc createBackend{};
 	createBackend.device = swapChain->d3d12Device.get();
@@ -183,7 +178,7 @@ void FidelityFX::CreateFSRResources()
 	contextDescription.displaySize.height = static_cast<uint>(state->screenSize.y);
 	if (globals::hdr->settings.enableHDR) {
 		contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE | FFX_FSR3_ENABLE_HIGH_DYNAMIC_RANGE;
-		contextDescription.backBufferFormat = HDR::FSR_HDR_Format;
+		contextDescription.backBufferFormat = FFX_SURFACE_FORMAT_R16G16B16A16_FLOAT;
 	} else {
 		contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE;
 		contextDescription.backBufferFormat = FFX_SURFACE_FORMAT_R8G8B8A8_UNORM;

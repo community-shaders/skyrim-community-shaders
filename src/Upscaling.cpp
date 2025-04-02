@@ -26,7 +26,7 @@ void Upscaling::DrawSettings()
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	auto streamline = globals::streamline;
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
-	auto& bTAA = BSImagespaceShaderISTemporalAA->taaEnabled;  // Setting used by shaders
+	auto& bTAA = BSImagespaceShaderISTemporalAA->taaEnabled; // Setting used by shaders
 
 	// Update upscale mode based on TAA setting
 	settings.upscaleMethod = bTAA ? (settings.upscaleMethod == static_cast<uint>(UpscaleMethod::kNONE) ? static_cast<uint>(UpscaleMethod::kTAA) : settings.upscaleMethod) : static_cast<uint>(UpscaleMethod::kNONE);
@@ -260,7 +260,7 @@ void Upscaling::UpdateJitter()
 
 void Upscaling::Upscale()
 {
-	std::lock_guard<std::mutex> lock(settingsMutex);  // Lock for the duration of this function
+	std::lock_guard<std::mutex> lock(settingsMutex); // Lock for the duration of this function
 
 	auto upscaleMethod = GetUpscaleMethod();
 
@@ -374,7 +374,15 @@ void Upscaling::Upscale()
 
 	auto hdr = globals::hdr;
 	if (hdr->settings.enableHDR) {
+		state->BeginPerfEvent("HDR");
+
 		context->CopyResource(hdr->hdrTexture->resource.get(), upscalingTexture->resource.get());
+
+		hdr->ApplyHDR();
+
+		context->CopyResource(outputTextureResource, hdr->outputTexture->resource.get());
+
+		state->EndPerfEvent();
 		return;
 	}
 
@@ -383,7 +391,7 @@ void Upscaling::Upscale()
 
 void Upscaling::SharpenTAA()
 {
-	std::lock_guard<std::mutex> lock(settingsMutex);  // Lock for the duration of this function
+	std::lock_guard<std::mutex> lock(settingsMutex); // Lock for the duration of this function
 
 	CheckResources();
 
@@ -444,7 +452,15 @@ void Upscaling::SharpenTAA()
 
 	auto hdr = globals::hdr;
 	if (hdr->settings.enableHDR) {
+		state->BeginPerfEvent("HDR");
+
 		context->CopyResource(hdr->hdrTexture->resource.get(), upscalingTexture->resource.get());
+
+		hdr->ApplyHDR();
+
+		context->CopyResource(outputTextureResource, hdr->outputTexture->resource.get());
+
+		state->EndPerfEvent();
 		return;
 	}
 
@@ -467,7 +483,7 @@ void Upscaling::CreateUpscalingResources()
 	texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
 	if (globals::hdr->settings.enableHDR) {
-		texDesc.Format = HDR::DXGI_HDR_Format;
+		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 	} else {
 		texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	}
@@ -523,7 +539,7 @@ void Upscaling::CreateFrameGenerationResources()
 	texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
 	if (globals::hdr->settings.enableHDR) {
-		texDesc.Format = HDR::DXGI_HDR_Format;
+		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 	} else {
 		texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	}
@@ -681,31 +697,14 @@ void Upscaling::CopyBuffersToSharedResources()
 
 void Upscaling::PostDisplay()
 {
-	auto context = globals::d3d::context;
-	auto renderer = globals::game::renderer;
-	auto hdr = globals::hdr;
-
-	if (hdr->settings.enableHDR) {
-		auto upscaleMethod = GetUpscaleMethod();
-
-		// If we use no upscaling, we need to copy an input into the HDR texture, right now we pick kMAIN
-		if (upscaleMethod == UpscaleMethod::kNONE) {
-			auto& swapChain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kMAIN];
-
-			ID3D11Resource* swapChainResource;
-			swapChain.SRV->GetResource(&swapChainResource);
-
-			context->CopyResource(hdr->hdrTexture->resource.get(), swapChainResource);
-		}
-
-		hdr->ApplyHDR();
-	}
-
 	globals::state->RenderReShade();
 
 	if (!d3d12Interop || !settings.frameGenerationMode) {
 		return;
 	}
+
+	auto context = globals::d3d::context;
+	auto renderer = globals::game::renderer;
 
 	auto& swapChain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 

@@ -16,60 +16,6 @@ public:
 
 	static std::string GetShortName() { return "High Dynamic Range"; }
 
-	// Taken from the DirectX Toolkit
-	// Copyright (c) Microsoft Corporation.
-	// Licensed under the MIT License.
-	//
-	// http://go.microsoft.com/fwlink/?LinkId=248929
-	// HDTV to UHDTV (Rec.709 color primaries into Rec.2020)
-	const float c_from709to2020[12] = {
-		0.6274040f,
-		0.3292820f,
-		0.0433136f,
-		0.f,
-		0.0690970f,
-		0.9195400f,
-		0.0113612f,
-		0.f,
-		0.0163916f,
-		0.0880132f,
-		0.8955950f,
-		0.f,
-	};
-
-	// DCI-P3-D65 https://en.wikipedia.org/wiki/DCI-P3 to UHDTV (DCI-P3-D65 color primaries into Rec.2020)
-	const float c_fromP3D65to2020[12] = {
-		0.753845f,
-		0.198593f,
-		0.047562f,
-		0.f,
-		0.0457456f,
-		0.941777f,
-		0.0124772f,
-		0.f,
-		-0.00121055f,
-		0.0176041f,
-		0.983607f,
-		0.f,
-	};
-
-	// HDTV to DCI-P3-D65 (a.k.a. Display P3 or P3D65)
-	const float c_from709toP3D65[12] = {
-		0.822461969f,
-		0.1775380f,
-		0.f,
-		0.f,
-		0.033194199f,
-		0.9668058f,
-		0.f,
-		0.f,
-		0.017082631f,
-		0.0723974f,
-		0.9105199f,
-		0.f,
-	};
-	// End of DXTK
-
 	struct Settings
 	{
 		bool enableHDR = false;
@@ -77,7 +23,6 @@ public:
 		// Settings for the advanced tonemapper
 		bool useAdvancedTonemapping = false;
 		uint advOperator = 0;
-		uint advColorRotation = 0;
 		float advExposure = 1.0f;
 		uint advPaperWhite = 1000;
 		uint advMaxNits = 1000;
@@ -121,7 +66,6 @@ public:
 		// maxNits is .z
 		// tonemapSelection is .w
 		DirectX::XMVECTOR parameters;
-		DirectX::XMVECTOR colorRotation[3];
 	};
 
 	static_assert((sizeof(HDRAdvDataCB) % 16) == 0, "CB size not padded correctly");
@@ -138,8 +82,4 @@ public:
 
 	// Format constants to be used elsewhere
 	static constexpr auto BSGraphics_HDR_Format = RE::BSGraphics::Format::kR16G16B16A16_FLOAT;
-	static constexpr auto DXGI_HDR_Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-	static constexpr auto FSR_HDR_Format = FFX_SURFACE_FORMAT_R16G16B16A16_FLOAT;
-	static constexpr auto FSR_FG_HDR_Format = FFX_API_SURFACE_FORMAT_R16G16B16A16_FLOAT;
-	static constexpr auto ReShade_HDR_Format = reshade::api::format::r10g10b10a2_unorm;
 };
