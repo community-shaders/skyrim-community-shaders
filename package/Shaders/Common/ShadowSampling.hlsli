@@ -200,51 +200,49 @@ namespace ShadowSampling
 	{
 		float3 temp = mul(transpose(lightProjectionMatrix), float4(positionWS.xyz, 1.0));
 		float2 positionLS_xy = temp.xy;
-		
+
 		float3 sampledLS = float3(positionLS_xy, depth);
-		
+
 		float4 row0 = float4(lightProjectionMatrix[0][0], lightProjectionMatrix[1][0], lightProjectionMatrix[2][0], lightProjectionMatrix[3][0]);
 		float4 row1 = float4(lightProjectionMatrix[0][1], lightProjectionMatrix[1][1], lightProjectionMatrix[2][1], lightProjectionMatrix[3][1]);
 		float4 row2 = float4(lightProjectionMatrix[0][2], lightProjectionMatrix[1][2], lightProjectionMatrix[2][2], lightProjectionMatrix[3][2]);
-		
+
 		float3x4 augMatrix = float3x4(
 			row0.xyz, sampledLS.x - row0.w,
 			row1.xyz, sampledLS.y - row1.w,
-			row2.xyz, sampledLS.z - row2.w
-		);
-		
+			row2.xyz, sampledLS.z - row2.w);
+
 		float pivot = augMatrix[0][0];
 		augMatrix[0] /= pivot;
-		
+
 		float factor = augMatrix[1][0];
 		augMatrix[1] -= factor * augMatrix[0];
-		
+
 		factor = augMatrix[2][0];
 		augMatrix[2] -= factor * augMatrix[0];
-		
+
 		pivot = augMatrix[1][1];
 		augMatrix[1] /= pivot;
-		
+
 		factor = augMatrix[0][1];
 		augMatrix[0] -= factor * augMatrix[1];
-		
+
 		factor = augMatrix[2][1];
 		augMatrix[2] -= factor * augMatrix[1];
-		
+
 		pivot = augMatrix[2][2];
 		augMatrix[2] /= pivot;
-		
+
 		factor = augMatrix[0][2];
 		augMatrix[0] -= factor * augMatrix[2];
-		
+
 		factor = augMatrix[1][2];
 		augMatrix[1] -= factor * augMatrix[2];
-		
+
 		float3 resultWS = float3(augMatrix[0][3], augMatrix[1][3], augMatrix[2][3]);
-		
+
 		return resultWS;
 	}
-
 
 	float Get2DFilteredShadowCascadeAlt(float noise, float2x2 rotationMatrix, float sampleOffsetScale, float2 baseUV, float cascadeIndex, float compareValue, uint eyeIndex, float3 positionWS)
 	{
