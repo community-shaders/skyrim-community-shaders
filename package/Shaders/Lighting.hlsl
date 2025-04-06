@@ -8,6 +8,7 @@
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/Skinned.hlsli"
+#include "Common/StochasticTexturing.hlsli"
 
 #define LIGHTING
 
