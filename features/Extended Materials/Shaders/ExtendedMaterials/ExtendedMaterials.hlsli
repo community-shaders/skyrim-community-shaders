@@ -274,11 +274,11 @@ namespace ExtendedMaterials
 				float4 currHeight;
 #if defined(LANDSCAPE)
 #	if defined(TRUE_PBR)
-				 currHeight.x = GetTerrainHeight(input, currentOffset[0].xy, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, weights) * scalercp + 0.5;
+				currHeight.x = GetTerrainHeight(input, currentOffset[0].xy, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, weights) * scalercp + 0.5;
 				currHeight.y = GetTerrainHeight(input, currentOffset[0].zw, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, weights) * scalercp + 0.5;
 				currHeight.z = GetTerrainHeight(input, currentOffset[1].xy, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, weights) * scalercp + 0.5;
 				currHeight.w = GetTerrainHeight(input, currentOffset[1].zw, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, weights) * scalercp + 0.5;
-#    else
+#	else
 				currHeight.x = GetTerrainHeight(input, currentOffset[0].xy, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, weights) + 0.5;
 				currHeight.y = GetTerrainHeight(input, currentOffset[0].zw, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, weights) + 0.5;
 				currHeight.z = GetTerrainHeight(input, currentOffset[1].xy, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, weights) + 0.5;
@@ -400,58 +400,58 @@ namespace ExtendedMaterials
 	}
 
 #if defined(LANDSCAPE)
-float GetParallaxSoftShadowMultiplierTerrain(PS_INPUT input, float2 coords, float mipLevel[6], float3 L, float sh0, float quality, float noise, DisplacementParams params[6], StochasticOffsets offsets[6], float2 dx, float2 dy, float distance)
-{
-    if (quality > 0.0) {
-        float4 multipliers = rcp((float4(1, 2, 3, 4) + noise));
-        float4 sh;
-        float heights[6] = { 0, 0, 0, 0, 0, 0 };
-        float2 rayDir = L.xy * 0.1;
+	float GetParallaxSoftShadowMultiplierTerrain(PS_INPUT input, float2 coords, float mipLevel[6], float3 L, float sh0, float quality, float noise, DisplacementParams params[6], StochasticOffsets offsets[6], float2 dx, float2 dy, float distance)
+	{
+		if (quality > 0.0) {
+			float4 multipliers = rcp((float4(1, 2, 3, 4) + noise));
+			float4 sh;
+			float heights[6] = { 0, 0, 0, 0, 0, 0 };
+			float2 rayDir = L.xy * 0.1;
 
-#    if defined(TRUE_PBR)
-        float scale = max(params[0].HeightScale * input.LandBlendWeights1.x, max(params[1].HeightScale * input.LandBlendWeights1.y, max(params[2].HeightScale * input.LandBlendWeights1.z,
-                                                                                                                                         max(params[3].HeightScale * input.LandBlendWeights1.w, max(params[4].HeightScale * input.LandBlendWeights2.x, params[5].HeightScale * input.LandBlendWeights2.y)))));
-        if (scale < 0.01)
-            return 1.0;
-        rayDir *= scale;
-        sh.x = GetTerrainHeight(input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
-        if (quality > 0.25)
-            sh.y = GetTerrainHeight(input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
-        else
-            sh.y = sh.x; // Use the first sample if quality is low
-        if (quality > 0.5)
-            sh.z = GetTerrainHeight(input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
-        else
-            sh.z = sh.x; // Use the first sample if quality is low
-        if (quality > 0.75)
-            sh.w = GetTerrainHeight(input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
-        else
-            sh.w = sh.x; // Use the first sample if quality is low
-        // Average the height differences for smoother shadows
-        float avgHeightDiff = (max(0, sh.x - sh0) + max(0, sh.y - sh0) + max(0, sh.z - sh0) + max(0, sh.w - sh0)) * 1.5;
-        float shadow = pow(1.0 - saturate(avgHeightDiff / scale) * quality, 2.0);
-        return shadow;
-#    else
-        sh.x = GetTerrainHeight(input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
-        if (quality > 0.25)
-            sh.y = GetTerrainHeight(input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
-        else
-            sh.y = sh.x; // Use the first sample if quality is low
-        if (quality > 0.5)
-            sh.z = GetTerrainHeight(input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
-        else
-            sh.z = sh.x; // Use the first sample if quality is low
-        if (quality > 0.75)
-            sh.w = GetTerrainHeight(input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
-        else
-            sh.w = sh.x; // Use the first sample if quality is low
-        // Average the height differences for smoother shadows
-        float avgHeightDiff = (max(0, sh.x - sh0) + max(0, sh.y - sh0) + max(0, sh.z - sh0) + max(0, sh.w - sh0)) * 0.25;
-        float shadow = pow(1.0 - saturate(avgHeightDiff) * quality, 2.0);
-        return shadow;
-#    endif
-    }
-    return 1.0;
-}
+#	if defined(TRUE_PBR)
+			float scale = max(params[0].HeightScale * input.LandBlendWeights1.x, max(params[1].HeightScale * input.LandBlendWeights1.y, max(params[2].HeightScale * input.LandBlendWeights1.z,
+																																			max(params[3].HeightScale * input.LandBlendWeights1.w, max(params[4].HeightScale * input.LandBlendWeights2.x, params[5].HeightScale * input.LandBlendWeights2.y)))));
+			if (scale < 0.01)
+				return 1.0;
+			rayDir *= scale;
+			sh.x = GetTerrainHeight(input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+			if (quality > 0.25)
+				sh.y = GetTerrainHeight(input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+			else
+				sh.y = sh.x;  // Use the first sample if quality is low
+			if (quality > 0.5)
+				sh.z = GetTerrainHeight(input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+			else
+				sh.z = sh.x;  // Use the first sample if quality is low
+			if (quality > 0.75)
+				sh.w = GetTerrainHeight(input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+			else
+				sh.w = sh.x;  // Use the first sample if quality is low
+			// Average the height differences for smoother shadows
+			float avgHeightDiff = (max(0, sh.x - sh0) + max(0, sh.y - sh0) + max(0, sh.z - sh0) + max(0, sh.w - sh0)) * 1.5;
+			float shadow = pow(1.0 - saturate(avgHeightDiff / scale) * quality, 2.0);
+			return shadow;
+#	else
+			sh.x = GetTerrainHeight(input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+			if (quality > 0.25)
+				sh.y = GetTerrainHeight(input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+			else
+				sh.y = sh.x;  // Use the first sample if quality is low
+			if (quality > 0.5)
+				sh.z = GetTerrainHeight(input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+			else
+				sh.z = sh.x;  // Use the first sample if quality is low
+			if (quality > 0.75)
+				sh.w = GetTerrainHeight(input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+			else
+				sh.w = sh.x;  // Use the first sample if quality is low
+			// Average the height differences for smoother shadows
+			float avgHeightDiff = (max(0, sh.x - sh0) + max(0, sh.y - sh0) + max(0, sh.z - sh0) + max(0, sh.w - sh0)) * 0.25;
+			float shadow = pow(1.0 - saturate(avgHeightDiff) * quality, 2.0);
+			return shadow;
+#	endif
+		}
+		return 1.0;
+	}
 #endif
 }
