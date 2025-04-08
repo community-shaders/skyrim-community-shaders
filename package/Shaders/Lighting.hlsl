@@ -1314,11 +1314,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 normal1 = SampleWithOffsets(TexNormalSampler, SampNormalSampler, uv, offsets[0], dx, dy);
 	float3 normalRGB1 = normal1.rgb;
 	float normalAlpha1 = normal1.a;
-#	if defined(TRUE_PBR)
-    float4 rmaos1 = SampleWithOffsets(TexRMAOSSampler, SampRMAOSSampler, uv, offsets[0], dx, dy);
-    rmaos1.a = 1.0;
-    rmaos1 *= float4(PBRParams1.x, 1, 1, PBRParams1.z);
-#	endif
+#		if defined(TRUE_PBR)
+	float4 rmaos1 = SampleWithOffsets(TexRMAOSSampler, SampRMAOSSampler, uv, offsets[0], dx, dy);
+	rmaos1.a = 1.0;
+	rmaos1 *= float4(PBRParams1.x, 1, 1, PBRParams1.z);
+#		endif
 	// Layer 2
 	float4 diffuse2 = SampleWithOffsets(TexLandColor2Sampler, SampColorSampler, uv, offsets[1], dx, dy);
 	float3 diffuseRGB2 = diffuse2.rgb;
@@ -1326,11 +1326,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 normal2 = SampleWithOffsets(TexLandNormal2Sampler, SampNormalSampler, uv, offsets[1], dx, dy);
 	float3 normalRGB2 = normal2.rgb;
 	float normalAlpha2 = normal2.a;
-#	if defined(TRUE_PBR)
+#		if defined(TRUE_PBR)
 	float4 rmaos2 = SampleWithOffsets(TexLandRMAOS2Sampler, SampRMAOSSampler, uv, offsets[1], dx, dy);
 	rmaos2.a = 1.0;
 	rmaos2 *= float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
-#	endif
+#		endif
 	// Layer 3
 	float4 diffuse3 = SampleWithOffsets(TexLandColor3Sampler, SampColorSampler, uv, offsets[2], dx, dy);
 	float3 diffuseRGB3 = diffuse3.rgb;
@@ -1338,11 +1338,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 normal3 = SampleWithOffsets(TexLandNormal3Sampler, SampNormalSampler, uv, offsets[2], dx, dy);
 	float3 normalRGB3 = normal3.rgb;
 	float normalAlpha3 = normal3.a;
-#	if defined(TRUE_PBR)
+#		if defined(TRUE_PBR)
 	float4 rmaos3 = SampleWithOffsets(TexLandRMAOS3Sampler, SampRMAOSSampler, uv, offsets[2], dx, dy);
 	rmaos3.a = 1.0;
 	rmaos3 *= float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
-#	endif
+#		endif
 	// Layer 4
 	float4 diffuse4 = SampleWithOffsets(TexLandColor4Sampler, SampColorSampler, uv, offsets[3], dx, dy);
 	float3 diffuseRGB4 = diffuse4.rgb;
@@ -1350,11 +1350,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 normal4 = SampleWithOffsets(TexLandNormal4Sampler, SampNormalSampler, uv, offsets[3], dx, dy);
 	float3 normalRGB4 = normal4.rgb;
 	float normalAlpha4 = normal4.a;
-# 	if defined(TRUE_PBR)
+#		if defined(TRUE_PBR)
 	float4 rmaos4 = SampleWithOffsets(TexLandRMAOS4Sampler, SampRMAOSSampler, uv, offsets[3], dx, dy);
 	rmaos4.a = 1.0;
 	rmaos4 *= float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
-#	endif
+#		endif
 	// Layer 5
 	float4 diffuse5 = SampleWithOffsets(TexLandColor5Sampler, SampColorSampler, uv, offsets[4], dx, dy);
 	float3 diffuseRGB5 = diffuse5.rgb;
@@ -1362,11 +1362,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 normal5 = SampleWithOffsets(TexLandNormal5Sampler, SampNormalSampler, uv, offsets[4], dx, dy);
 	float3 normalRGB5 = normal5.rgb;
 	float normalAlpha5 = normal5.a;
-#	if defined(TRUE_PBR)
+#		if defined(TRUE_PBR)
 	float4 rmaos5 = SampleWithOffsets(TexLandRMAOS5Sampler, SampRMAOSSampler, uv, offsets[4], dx, dy);
 	rmaos5.a = 1.0;
 	rmaos5 *= float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
-#	endif
+#		endif
 	// Layer 6
 	float4 diffuse6 = SampleWithOffsets(TexLandColor6Sampler, SampColorSampler, uv, offsets[5], dx, dy);
 	float3 diffuseRGB6 = diffuse6.rgb;
@@ -1374,11 +1374,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 normal6 = SampleWithOffsets(TexLandNormal6Sampler, SampNormalSampler, uv, offsets[5], dx, dy);
 	float3 normalRGB6 = normal6.rgb;
 	float normalAlpha6 = normal6.a;
-#	if defined(TRUE_PBR)
+#		if defined(TRUE_PBR)
 	float4 rmaos6 = SampleWithOffsets(TexLandRMAOS6Sampler, SampRMAOSSampler, uv, offsets[5], dx, dy);
 	rmaos6.a = 1.0;
 	rmaos6 *= float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
-#	endif
+#		endif
 	// Normalize the raw LandBlendWeights to ensure they sum to 1
 	float wsum = input.LandBlendWeights1.x + input.LandBlendWeights1.y + input.LandBlendWeights1.z +
 	             input.LandBlendWeights1.w + input.LandBlendWeights2.x + input.LandBlendWeights2.y;
@@ -1416,7 +1416,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	                           normalAlpha5 * weights2.x +
 	                           normalAlpha6 * weights2.y;
 	normal = float4(blendedNormalRGB, blendedNormalAlpha);
-#	if defined(TRUE_PBR)
+#		if defined(TRUE_PBR)
 	// Blend RMAOS
 	float4 blendedRMAOS = rmaos1 * weights1.x +
 	                      rmaos2 * weights1.y +
@@ -1425,7 +1425,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	                      rmaos5 * weights2.x +
 	                      rmaos6 * weights2.y;
 	rawRMAOS = blendedRMAOS;
-#	endif
+#		endif
 #	else
 	// Non-landscape code
 	float4 rawBaseColor = TexColorSampler.SampleBias(SampColorSampler, diffuseUv, SharedData::MipBias);
@@ -1433,7 +1433,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 normalColor = TexNormalSampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias);
 	normal = normalColor;
 #		if defined(TRUE_PBR)
-		rawRMAOS = TexRMAOSSampler.SampleBias(SampRMAOSSampler, diffuseUv, SharedData::MipBias) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
+	rawRMAOS = TexRMAOSSampler.SampleBias(SampRMAOSSampler, diffuseUv, SharedData::MipBias) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
 #		endif
 #	endif
 
@@ -1640,21 +1640,21 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	elif defined(FACEGEN_RGB_TINT)
 	baseColor.xyz = GetFacegenRGBTintBaseColor(baseColor.xyz, uv);
 #	endif  // FACEGEN
-	// #		if defined(TRUE_PBR)
-	// 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile5PBR) != 0)
-	// 		{
-	// 			rawRMAOS += input.LandBlendWeights2.y * TexLandRMAOS6Sampler.SampleBias(SampLandRMAOS6Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
-	// 			if ((PBRFlags & PBR::TerrainFlags::LandTile5HasGlint) != 0) {
-	// 				glintParameters += input.LandBlendWeights2.y * LandscapeTexture6GlintParameters;
-	// 			}
-	// 		}
-	// 		else
-	// 		{
-	// 			rawRMAOS += input.LandBlendWeights2.y * float4(1 - landNormal6.w, 0, 1, 0);
-	// 		}
-	// #		endif
-	// 		baseColor += input.LandBlendWeights2.yyyy * landColor6;
-	// 	}
+			// #		if defined(TRUE_PBR)
+			// 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile5PBR) != 0)
+			// 		{
+			// 			rawRMAOS += input.LandBlendWeights2.y * TexLandRMAOS6Sampler.SampleBias(SampLandRMAOS6Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
+			// 			if ((PBRFlags & PBR::TerrainFlags::LandTile5HasGlint) != 0) {
+			// 				glintParameters += input.LandBlendWeights2.y * LandscapeTexture6GlintParameters;
+			// 			}
+			// 		}
+			// 		else
+			// 		{
+			// 			rawRMAOS += input.LandBlendWeights2.y * float4(1 - landNormal6.w, 0, 1, 0);
+			// 		}
+			// #		endif
+			// 		baseColor += input.LandBlendWeights2.yyyy * landColor6;
+			// 	}
 
 #	if defined(LOD_LAND_BLEND)
 	float4 lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
