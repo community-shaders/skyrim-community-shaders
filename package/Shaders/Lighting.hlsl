@@ -8,6 +8,7 @@
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/Skinned.hlsli"
+#include "Common/StochasticSampling.hlsli"
 
 
 
@@ -1238,7 +1239,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif  // SPARKLE
 
 #	if defined(LANDSCAPE)
-	// Normalize blend weights (Step 1)
+	// Normalize blend weights
 	float totalWeight = input.LandBlendWeights1.x + input.LandBlendWeights1.y + input.LandBlendWeights1.z +
 	                    input.LandBlendWeights1.w + input.LandBlendWeights2.x + input.LandBlendWeights2.y;
 	if (totalWeight > 0.0) {

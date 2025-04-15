@@ -1,6 +1,8 @@
 #ifndef TERRAINVARIATION_HLSLI
 #define TERRAINVARIATION_HLSLI
 
+#include "Common/StochasticSampling.hlsli"
+
 // Hash function for stochastic sampling
 inline float2 hash2D2D(float2 s)
 {
@@ -29,15 +31,6 @@ inline float3 StochasticSample(Texture2D tex, SamplerState samplerTex, float2 UV
     return sample1 * BW_vx[3].x + sample2 * BW_vx[3].y + sample3 * BW_vx[3].z;
 }
 
-// Structure to hold stochastic sampling offsets and weights
-struct StochasticOffsets
-{
-    float2 offset1;
-    float2 offset2;
-    float2 offset3;
-    float3 weights;
-};
-
 // Compute offsets for stochastic sampling
 inline StochasticOffsets ComputeStochasticOffsets(float2 UV)
 {
@@ -56,37 +49,6 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 UV)
     offsets.offset3 = hash2D2D(BW_vx[2].xy);
     offsets.weights = BW_vx[3];
     return offsets;
-}
-
-// Sample texture with stochastic offsets
-inline float4 SampleWithOffsets(Texture2D tex, SamplerState samplerTex, float2 UV, StochasticOffsets offsets, float2 dx, float2 dy)
-{
-    // Check if terrain variation is enabled in settings
-    bool useStochasticSampling = false;
-    
-    // Only in pixel/compute shaders can we access the feature buffer
-    #if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
-        // The EnableTilingFix flag comes directly from TerrainVariation::Settings::enabled in C++
-        useStochasticSampling = SharedData::terrainVariationSettings.EnableTilingFix;
-    #endif
-
-    // Apply stochastic sampling if enabled
-    if (useStochasticSampling) {
-        float4 sample1 = tex.SampleGrad(samplerTex, UV + offsets.offset1, dx, dy);
-        float4 sample2 = tex.SampleGrad(samplerTex, UV + offsets.offset2, dx, dy);
-        float4 sample3 = tex.SampleGrad(samplerTex, UV + offsets.offset3, dx, dy);
-        return sample1 * offsets.weights.x + sample2 * offsets.weights.y + sample3 * offsets.weights.z;
-    }
-    else {
-        // Fall back to standard sampling when the feature is disabled
-        return tex.SampleGrad(samplerTex, UV, dx, dy);
-    }
-}
-
-// Universal wrapper function that handles both standard and stochastic sampling
-inline float4 TerrainTextureSample(Texture2D tex, SamplerState samplerTex, float2 UV, StochasticOffsets offsets, float2 dx, float2 dy)
-{
-    return SampleWithOffsets(tex, samplerTex, UV, offsets, dx, dy);
 }
 
 #endif  // TERRAINVARIATION_HLSLI
