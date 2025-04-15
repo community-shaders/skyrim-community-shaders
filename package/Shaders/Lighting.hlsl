@@ -1317,6 +1317,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(TRUE_PBR)
     float4 rmaos1 = SampleWithOffsets(TexRMAOSSampler, SampRMAOSSampler, uv, offsets[0], dx, dy);
     rmaos1.a = 1.0;
+    //rmaos1.a = 1.0;
     rmaos1 *= float4(PBRParams1.x, 1, 1, PBRParams1.z);
 #	endif
 	// Layer 2
@@ -1329,6 +1330,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(TRUE_PBR)
 	float4 rmaos2 = SampleWithOffsets(TexLandRMAOS2Sampler, SampRMAOSSampler, uv, offsets[1], dx, dy);
 	rmaos2.a = 1.0;
+	//rmaos2.a = 1.0;
 	rmaos2 *= float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
 #	endif
 	// Layer 3
@@ -1341,6 +1343,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(TRUE_PBR)
 	float4 rmaos3 = SampleWithOffsets(TexLandRMAOS3Sampler, SampRMAOSSampler, uv, offsets[2], dx, dy);
 	rmaos3.a = 1.0;
+	//rmaos3.a = 1.0;
 	rmaos3 *= float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
 #	endif
 	// Layer 4
@@ -1353,6 +1356,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 # 	if defined(TRUE_PBR)
 	float4 rmaos4 = SampleWithOffsets(TexLandRMAOS4Sampler, SampRMAOSSampler, uv, offsets[3], dx, dy);
 	rmaos4.a = 1.0;
+	//rmaos4.a = 1.0;
 	rmaos4 *= float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
 #	endif
 	// Layer 5
@@ -1365,6 +1369,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(TRUE_PBR)
 	float4 rmaos5 = SampleWithOffsets(TexLandRMAOS5Sampler, SampRMAOSSampler, uv, offsets[4], dx, dy);
 	rmaos5.a = 1.0;
+	//rmaos5.a = 1.0;
 	rmaos5 *= float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
 #	endif
 	// Layer 6
@@ -1377,6 +1382,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(TRUE_PBR)
 	float4 rmaos6 = SampleWithOffsets(TexLandRMAOS6Sampler, SampRMAOSSampler, uv, offsets[5], dx, dy);
 	rmaos6.a = 1.0;
+	//rmaos6.a = 1.0;
 	rmaos6 *= float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
 #	endif
 	// Normalize the raw LandBlendWeights to ensure they sum to 1
