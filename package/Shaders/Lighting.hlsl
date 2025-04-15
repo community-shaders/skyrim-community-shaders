@@ -8,7 +8,8 @@
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/Skinned.hlsli"
-#include "Common/StochasticTexturing.hlsli"
+
+
 
 #define LIGHTING
 
@@ -1002,6 +1003,10 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "Skylighting/Skylighting.hlsli"
 #	endif
 
+#	if defined(TERRAIN_VARIATION)
+#		include "TerrainVariation/TerrainVariation.hlsli"
+#	endif
+
 #	define LinearSampler SampColorSampler
 
 #	include "Common/ShadowSampling.hlsli"
@@ -1308,7 +1313,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(LANDSCAPE)
 	// Layer 1
-	float4 diffuse1 = SampleWithOffsets(TexColorSampler, SampColorSampler, uv, offsets[0], dx, dy);
+	float4 diffuse1 = TerrainTextureSample(TexColorSampler, SampColorSampler, uv, offsets[0], dx, dy);
 	float3 diffuseRGB1 = diffuse1.rgb;
 #if defined(TRUE_PBR)
 	[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile0PBR) == 0)
@@ -1317,15 +1322,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	}
 #endif
 	float alpha1 = diffuse1.a;
-	float4 normal1 = SampleWithOffsets(TexNormalSampler, SampNormalSampler, uv, offsets[0], dx, dy);
+	float4 normal1 = TerrainTextureSample(TexNormalSampler, SampNormalSampler, uv, offsets[0], dx, dy);
 	float3 normalRGB1 = normal1.rgb;
 	float normalAlpha1 = normal1.a;
 #		if defined(TRUE_PBR)
-    float4 rmaos1 = SampleWithOffsets(TexRMAOSSampler, SampRMAOSSampler, uv, offsets[0], dx, dy);
+    float4 rmaos1 = TerrainTextureSample(TexRMAOSSampler, SampRMAOSSampler, uv, offsets[0], dx, dy);
     rmaos1 *= float4(PBRParams1.x, 1, 1, PBRParams1.z);
 #	endif
 	// Layer 2
-	float4 diffuse2 = SampleWithOffsets(TexLandColor2Sampler, SampColorSampler, uv, offsets[1], dx, dy);
+	float4 diffuse2 = TerrainTextureSample(TexLandColor2Sampler, SampColorSampler, uv, offsets[1], dx, dy);
 	float3 diffuseRGB2 = diffuse2.rgb;
 #if defined(TRUE_PBR)
 	[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile1PBR) == 0)
@@ -1334,15 +1339,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	}
 #endif
 	float alpha2 = diffuse2.a;
-	float4 normal2 = SampleWithOffsets(TexLandNormal2Sampler, SampNormalSampler, uv, offsets[1], dx, dy);
+	float4 normal2 = TerrainTextureSample(TexLandNormal2Sampler, SampNormalSampler, uv, offsets[1], dx, dy);
 	float3 normalRGB2 = normal2.rgb;
 	float normalAlpha2 = normal2.a;
 #		if defined(TRUE_PBR)
-	float4 rmaos2 = SampleWithOffsets(TexLandRMAOS2Sampler, SampRMAOSSampler, uv, offsets[1], dx, dy);
+	float4 rmaos2 = TerrainTextureSample(TexLandRMAOS2Sampler, SampRMAOSSampler, uv, offsets[1], dx, dy);
 	rmaos2 *= float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
 #		endif
 	// Layer 3
-	float4 diffuse3 = SampleWithOffsets(TexLandColor3Sampler, SampColorSampler, uv, offsets[2], dx, dy);
+	float4 diffuse3 = TerrainTextureSample(TexLandColor3Sampler, SampColorSampler, uv, offsets[2], dx, dy);
 	float3 diffuseRGB3 = diffuse3.rgb;
 #if defined(TRUE_PBR)
 	[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile2PBR) == 0)
@@ -1351,15 +1356,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	}
 #endif
 	float alpha3 = diffuse3.a;
-	float4 normal3 = SampleWithOffsets(TexLandNormal3Sampler, SampNormalSampler, uv, offsets[2], dx, dy);
+	float4 normal3 = TerrainTextureSample(TexLandNormal3Sampler, SampNormalSampler, uv, offsets[2], dx, dy);
 	float3 normalRGB3 = normal3.rgb;
 	float normalAlpha3 = normal3.a;
 #		if defined(TRUE_PBR)
-	float4 rmaos3 = SampleWithOffsets(TexLandRMAOS3Sampler, SampRMAOSSampler, uv, offsets[2], dx, dy);
+	float4 rmaos3 = TerrainTextureSample(TexLandRMAOS3Sampler, SampRMAOSSampler, uv, offsets[2], dx, dy);
 	rmaos3 *= float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
 #		endif
 	// Layer 4
-	float4 diffuse4 = SampleWithOffsets(TexLandColor4Sampler, SampColorSampler, uv, offsets[3], dx, dy);
+	float4 diffuse4 = TerrainTextureSample(TexLandColor4Sampler, SampColorSampler, uv, offsets[3], dx, dy);
 	float3 diffuseRGB4 = diffuse4.rgb;
 #if defined(TRUE_PBR)
 	[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile3PBR) == 0)
@@ -1368,15 +1373,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	}
 #endif
 	float alpha4 = diffuse4.a;
-	float4 normal4 = SampleWithOffsets(TexLandNormal4Sampler, SampNormalSampler, uv, offsets[3], dx, dy);
+	float4 normal4 = TerrainTextureSample(TexLandNormal4Sampler, SampNormalSampler, uv, offsets[3], dx, dy);
 	float3 normalRGB4 = normal4.rgb;
 	float normalAlpha4 = normal4.a;
 #		if defined(TRUE_PBR)
-	float4 rmaos4 = SampleWithOffsets(TexLandRMAOS4Sampler, SampRMAOSSampler, uv, offsets[3], dx, dy);
+	float4 rmaos4 = TerrainTextureSample(TexLandRMAOS4Sampler, SampRMAOSSampler, uv, offsets[3], dx, dy);
 	rmaos4 *= float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
 #		endif
 	// Layer 5
-	float4 diffuse5 = SampleWithOffsets(TexLandColor5Sampler, SampColorSampler, uv, offsets[4], dx, dy);
+	float4 diffuse5 = TerrainTextureSample(TexLandColor5Sampler, SampColorSampler, uv, offsets[4], dx, dy);
 	float3 diffuseRGB5 = diffuse5.rgb;
 #if defined(TRUE_PBR)
 	[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile4PBR) == 0)
@@ -1385,15 +1390,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	}
 #endif
 	float alpha5 = diffuse5.a;
-	float4 normal5 = SampleWithOffsets(TexLandNormal5Sampler, SampNormalSampler, uv, offsets[4], dx, dy);
+	float4 normal5 = TerrainTextureSample(TexLandNormal5Sampler, SampNormalSampler, uv, offsets[4], dx, dy);
 	float3 normalRGB5 = normal5.rgb;
 	float normalAlpha5 = normal5.a;
 #		if defined(TRUE_PBR)
-	float4 rmaos5 = SampleWithOffsets(TexLandRMAOS5Sampler, SampRMAOSSampler, uv, offsets[4], dx, dy);
+	float4 rmaos5 = TerrainTextureSample(TexLandRMAOS5Sampler, SampRMAOSSampler, uv, offsets[4], dx, dy);
 	rmaos5 *= float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
 #		endif
 	// Layer 6
-	float4 diffuse6 = SampleWithOffsets(TexLandColor6Sampler, SampColorSampler, uv, offsets[5], dx, dy);
+	float4 diffuse6 = TerrainTextureSample(TexLandColor6Sampler, SampColorSampler, uv, offsets[5], dx, dy);
 	float3 diffuseRGB6 = diffuse6.rgb;
 #if defined(TRUE_PBR)
 	[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile5PBR) == 0)
@@ -1402,11 +1407,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	}
 #endif
 	float alpha6 = diffuse6.a;
-	float4 normal6 = SampleWithOffsets(TexLandNormal6Sampler, SampNormalSampler, uv, offsets[5], dx, dy);
+	float4 normal6 = TerrainTextureSample(TexLandNormal6Sampler, SampNormalSampler, uv, offsets[5], dx, dy);
 	float3 normalRGB6 = normal6.rgb;
 	float normalAlpha6 = normal6.a;
 #		if defined(TRUE_PBR)
-	float4 rmaos6 = SampleWithOffsets(TexLandRMAOS6Sampler, SampRMAOSSampler, uv, offsets[5], dx, dy);
+	float4 rmaos6 = TerrainTextureSample(TexLandRMAOS6Sampler, SampRMAOSSampler, uv, offsets[5], dx, dy);
 	rmaos6 *= float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
 #		endif
 	// Normalize the raw LandBlendWeights to ensure they sum to 1

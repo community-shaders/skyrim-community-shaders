@@ -5,6 +5,37 @@
 // http://www.diva-portal.org/smash/get/diva2:831762/FULLTEXT01.pdf
 // https://bartwronski.files.wordpress.com/2014/03/ac4_gdc.pdf
 
+// Include TerrainVariation if needed in LANDSCAPE mode
+#if defined(LANDSCAPE) && defined(TERRAIN_VARIATION)
+#include "TerrainVariation/TerrainVariation.hlsli"
+#elif defined(LANDSCAPE)
+// Fallback StochasticOffsets implementation when TerrainVariation is not enabled
+struct StochasticOffsets
+{
+	float2 offset1;
+	float2 offset2;
+	float2 offset3;
+	float3 weights;
+};
+
+// Simple passthrough function when TerrainVariation is not enabled
+float4 SampleWithOffsets(Texture2D tex, SamplerState samplerTex, float2 UV, StochasticOffsets offsets, float2 dx, float2 dy)
+{
+    return tex.SampleGrad(samplerTex, UV, dx, dy);
+}
+
+// Create empty StochasticOffsets
+StochasticOffsets ComputeStochasticOffsets(float2 uv)
+{
+    StochasticOffsets offsets;
+    offsets.offset1 = float2(0, 0);
+    offsets.offset2 = float2(0, 0);
+    offsets.offset3 = float2(0, 0);
+    offsets.weights = float3(1, 0, 0);
+    return offsets;
+}
+#endif
+
 struct DisplacementParams
 {
 	float DisplacementScale;

@@ -11,6 +11,7 @@
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/Skylighting.h"
+#include "Features/TerrainVariation.h"
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainShadows.h"
@@ -135,7 +136,8 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		globals::features::skylighting,
 		globals::features::terrainBlending,
 		globals::features::volumetricLighting,
-		globals::features::lodBlending
+		globals::features::lodBlending,
+		globals::features::terrainVariation
 	};
 
 	static std::vector<Feature*> featuresVR(features);
