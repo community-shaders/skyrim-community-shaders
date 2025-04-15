@@ -1310,29 +1310,29 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	// Layer 1
 	float4 diffuse1 = SampleWithOffsets(TexColorSampler, SampColorSampler, uv, offsets[0], dx, dy);
 	float3 diffuseRGB1 = diffuse1.rgb;
-#if defined(TRUE_PBR)
+#		if defined(TRUE_PBR)
 	[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile0PBR) == 0)
 	{
 		diffuseRGB1 = diffuseRGB1 / Color::PBRLightingScale;
 	}
-#endif
+#		endif
 	float alpha1 = diffuse1.a;
 	float4 normal1 = SampleWithOffsets(TexNormalSampler, SampNormalSampler, uv, offsets[0], dx, dy);
 	float3 normalRGB1 = normal1.rgb;
 	float normalAlpha1 = normal1.a;
 #		if defined(TRUE_PBR)
-    float4 rmaos1 = SampleWithOffsets(TexRMAOSSampler, SampRMAOSSampler, uv, offsets[0], dx, dy);
-    rmaos1 *= float4(PBRParams1.x, 1, 1, PBRParams1.z);
-#	endif
+	float4 rmaos1 = SampleWithOffsets(TexRMAOSSampler, SampRMAOSSampler, uv, offsets[0], dx, dy);
+	rmaos1 *= float4(PBRParams1.x, 1, 1, PBRParams1.z);
+#		endif
 	// Layer 2
 	float4 diffuse2 = SampleWithOffsets(TexLandColor2Sampler, SampColorSampler, uv, offsets[1], dx, dy);
 	float3 diffuseRGB2 = diffuse2.rgb;
-#if defined(TRUE_PBR)
+#		if defined(TRUE_PBR)
 	[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile1PBR) == 0)
 	{
 		diffuseRGB2 = diffuseRGB2 / Color::PBRLightingScale;
 	}
-#endif
+#		endif
 	float alpha2 = diffuse2.a;
 	float4 normal2 = SampleWithOffsets(TexLandNormal2Sampler, SampNormalSampler, uv, offsets[1], dx, dy);
 	float3 normalRGB2 = normal2.rgb;
@@ -1344,12 +1344,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	// Layer 3
 	float4 diffuse3 = SampleWithOffsets(TexLandColor3Sampler, SampColorSampler, uv, offsets[2], dx, dy);
 	float3 diffuseRGB3 = diffuse3.rgb;
-#if defined(TRUE_PBR)
+#		if defined(TRUE_PBR)
 	[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile2PBR) == 0)
 	{
 		diffuseRGB3 = diffuseRGB3 / Color::PBRLightingScale;
 	}
-#endif
+#		endif
 	float alpha3 = diffuse3.a;
 	float4 normal3 = SampleWithOffsets(TexLandNormal3Sampler, SampNormalSampler, uv, offsets[2], dx, dy);
 	float3 normalRGB3 = normal3.rgb;
@@ -1361,12 +1361,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	// Layer 4
 	float4 diffuse4 = SampleWithOffsets(TexLandColor4Sampler, SampColorSampler, uv, offsets[3], dx, dy);
 	float3 diffuseRGB4 = diffuse4.rgb;
-#if defined(TRUE_PBR)
+#		if defined(TRUE_PBR)
 	[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile3PBR) == 0)
 	{
 		diffuseRGB4 = diffuseRGB4 / Color::PBRLightingScale;
 	}
-#endif
+#		endif
 	float alpha4 = diffuse4.a;
 	float4 normal4 = SampleWithOffsets(TexLandNormal4Sampler, SampNormalSampler, uv, offsets[3], dx, dy);
 	float3 normalRGB4 = normal4.rgb;
@@ -1378,12 +1378,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	// Layer 5
 	float4 diffuse5 = SampleWithOffsets(TexLandColor5Sampler, SampColorSampler, uv, offsets[4], dx, dy);
 	float3 diffuseRGB5 = diffuse5.rgb;
-#if defined(TRUE_PBR)
+#		if defined(TRUE_PBR)
 	[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile4PBR) == 0)
 	{
 		diffuseRGB5 = diffuseRGB5 / Color::PBRLightingScale;
 	}
-#endif
+#		endif
 	float alpha5 = diffuse5.a;
 	float4 normal5 = SampleWithOffsets(TexLandNormal5Sampler, SampNormalSampler, uv, offsets[4], dx, dy);
 	float3 normalRGB5 = normal5.rgb;
@@ -1395,12 +1395,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	// Layer 6
 	float4 diffuse6 = SampleWithOffsets(TexLandColor6Sampler, SampColorSampler, uv, offsets[5], dx, dy);
 	float3 diffuseRGB6 = diffuse6.rgb;
-#if defined(TRUE_PBR)
+#		if defined(TRUE_PBR)
 	[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile5PBR) == 0)
 	{
 		diffuseRGB6 = diffuseRGB6 / Color::PBRLightingScale;
 	}
-#endif
+#		endif
 	float alpha6 = diffuse6.a;
 	float4 normal6 = SampleWithOffsets(TexLandNormal6Sampler, SampNormalSampler, uv, offsets[5], dx, dy);
 	float3 normalRGB6 = normal6.rgb;
