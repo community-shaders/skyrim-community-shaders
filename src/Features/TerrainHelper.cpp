@@ -13,10 +13,10 @@ void TerrainHelper::DataLoaded()
 	// Get the default landscape texture set for terrain helper
 	const auto defaultLandTextureSet = RE::TESForm::LookupByEditorID<RE::BGSTextureSet>("LandscapeDefault");
 	if (defaultLandTextureSet != nullptr) {
-		spdlog::info("[Terrain Helper] LandscapeDefault EDID texture set found");
+		logger::info("[Terrain Helper] LandscapeDefault EDID texture set found");
 		defaultLandTexture = defaultLandTextureSet;
 	} else {
-		spdlog::info("[Terrain Helper] LandscapeDefault EDID texture set not found, using default");
+		logger::info("[Terrain Helper] LandscapeDefault EDID texture set not found, using default");
 		const auto bgsDefaultLandTex = *REL::Relocation<RE::TESLandTexture**>(RELOCATION_ID(514783, 400936));
 		defaultLandTexture = bgsDefaultLandTex->textureSet;
 	}
