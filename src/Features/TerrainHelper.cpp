@@ -3,6 +3,11 @@
 #include "ShaderCache.h"
 #include "State.h"
 
+void TerrainHelper::DrawUnloadedUI()
+{
+	ImGui::Text("Terrain Helper is only required if a terrain mod you are using requires it, otherwise it does nothing.");
+}
+
 void TerrainHelper::DataLoaded()
 {
 	// Get the default landscape texture set for terrain helper
