@@ -2325,6 +2325,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif  // EYE
 
 	float3 emitColor = EmitColor;
+#	if defined(LL)
+	emitColor = Color::GammaToTrueLinear(emitColor);
+#	endif
 #	if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 	bool hasEmissive = (0x3F & (Permutation::PixelShaderDescriptor >> 24)) == Permutation::LightingTechnique::Glowmap;
 #		if defined(TRUE_PBR)
