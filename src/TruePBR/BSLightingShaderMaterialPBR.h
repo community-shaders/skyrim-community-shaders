@@ -122,4 +122,5 @@ public:
 	float projectedMaterialRoughness = 1.f;
 	float projectedMaterialSpecularLevel = 0.04f;
 	GlintParameters projectedMaterialGlintParameters;
+	std::string inputFilePath = "";
 };

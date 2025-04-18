@@ -468,13 +468,29 @@ void Menu::DrawSettings()
 						ImGui::EndTable();
 					}
 
-					if (hasFailedMessage) {
+					if (hasFailedMessage && feat->DrawFailLoadMessage()) {
 						ImGui::TextColored(themeSettings.StatusPalette.Error, feat->failedLoadedMessage.c_str());
 					}
 
-					if (!isDisabled && isLoaded) {
+					if (!isDisabled) {
 						if (ImGui::BeginChild("##FeatureConfigFrame", { 0, 0 }, true)) {
-							feat->DrawSettings();
+							if (isLoaded) {
+								// draw settings for loaded feature
+								feat->DrawSettings();
+							} else {
+								// draw any unloaded UI elements like help text about the feature
+								feat->DrawUnloadedUI();
+
+								// draw download link if available
+								if (!feat->GetFeatureModLink().empty()) {
+									// print feature download info
+									ImGui::Spacing();
+									const auto downloadText = fmt::format("Click here to download this feature ({})", feat->GetFeatureModLink());
+									if (ImGui::Selectable(downloadText.c_str())) {
+										ShellExecuteA(NULL, "open", feat->GetFeatureModLink().c_str(), NULL, NULL, SW_SHOWNORMAL);
+									}
+								}
+							}
 						}
 						ImGui::EndChild();
 					}
@@ -496,19 +512,19 @@ void Menu::DrawSettings()
 			menuList.push_back("Core Features"s);
 			std::ranges::copy(
 				sortedFeatureList | std::ranges::views::filter([](Feature* feat) {
-					return feat->IsCore() && feat->loaded;
+					return feat->IsCore() && feat->IsInMenu() && feat->loaded;
 				}),
 				std::back_inserter(menuList));
 
 			menuList.push_back("Features"s);
 			std::ranges::copy(
 				sortedFeatureList | std::ranges::views::filter([](Feature* feat) {
-					return !feat->IsCore() && feat->loaded;
+					return !feat->IsCore() && feat->IsInMenu() && feat->loaded;
 				}),
 				std::back_inserter(menuList));
 
 			auto unloadedFeatures = sortedFeatureList | std::ranges::views::filter([](Feature* feat) {
-				return !feat->loaded;
+				return !feat->loaded && feat->IsInMenu();
 			});
 			if (std::ranges::distance(unloadedFeatures) != 0) {
 				menuList.push_back("Unloaded Features"s);

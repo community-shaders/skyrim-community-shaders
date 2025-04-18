@@ -168,6 +168,14 @@ namespace SharedData
 		float4 MainTint;
 		float4 AltTint;
 	};
+	
+	struct LODBlendingSettings
+	{
+		float LODTerrainBrightness;
+		float LODObjectBrightness;
+		float LODObjectSnowBrightness;
+		bool DisableTerrainVertexColors;
+	};
 
 	cbuffer FeatureData : register(b6)
 	{
@@ -180,6 +188,7 @@ namespace SharedData
 		WetnessEffectsSettings wetnessEffectsSettings;
 		SkylightingSettings skylightingSettings;
 		CloudShadowsSettings cloudShadowsSettings;
+		LODBlendingSettings lodBlendingSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);
