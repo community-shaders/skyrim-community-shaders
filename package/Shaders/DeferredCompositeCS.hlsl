@@ -91,7 +91,11 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 	float glossiness = normalGlossiness.z;
 
+#if !defined(LL)
 	float3 color = Color::GammaToLinear(diffuseColor) + specularColor;
+#else
+	float3 color = diffuseColor + specularColor;
+#endif
 
 #if defined(DYNAMIC_CUBEMAPS)
 
@@ -115,7 +119,11 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 		float3 finalIrradiance = 0;
 
 #	if defined(INTERIOR)
+#		if !defined(LL)
 		float3 specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(LinearSampler, R, level));
+#		else
+		float3 specularIrradiance = EnvTexture.SampleLevel(LinearSampler, R, level);
+#		endif
 
 		finalIrradiance += specularIrradiance;
 #	elif defined(SKYLIGHTING)
@@ -133,16 +141,28 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 		float3 specularIrradiance = 1;
 
 		if (skylightingSpecular < 1.0)
+#		if !defined(LL)
 			specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(LinearSampler, R, level));
+#		else
+			specularIrradiance = EnvTexture.SampleLevel(LinearSampler, R, level);
+#		endif
 
 		float3 specularIrradianceReflections = 1.0;
 
 		if (skylightingSpecular > 0.0)
+#		if !defined(LL)
 			specularIrradianceReflections = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(LinearSampler, R, level));
+#		else
+			specularIrradianceReflections = EnvReflectionsTexture.SampleLevel(LinearSampler, R, level);
+#		endif
 
 		finalIrradiance = lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
 #	else
+#		if (!defined(LL))
 		float3 specularIrradianceReflections = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(LinearSampler, R, level));
+#		else
+		float3 specularIrradianceReflections = EnvReflectionsTexture.SampleLevel(LinearSampler, R, level);
+#		endif
 
 		finalIrradiance += specularIrradianceReflections;
 #	endif
@@ -177,7 +197,9 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 #endif
 
+#if !defined(LL)
 	color = Color::LinearToGamma(color);
+#endif
 
 #if defined(DEBUG)
 

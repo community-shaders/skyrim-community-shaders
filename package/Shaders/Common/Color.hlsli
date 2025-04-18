@@ -66,15 +66,26 @@ namespace Color
 
 	float3 Diffuse(float3 color)
 	{
-#if defined(TRUE_PBR)
+#if !defined(LL)
+#	if defined(TRUE_PBR)
 		return pow(abs(color), 1.0 / 2.2);
-#else
+#	else
 		return color;
+#	endif
+#else
+#	if defined(TRUE_PBR)
+		return color;
+#	else
+		return pow(abs(color), 2.2);
+#	endif
 #endif
 	}
 
 	float3 Light(float3 color)
 	{
+#if defined(LL)
+	color = pow(color, 1.0 / 2.2);
+#endif
 #if defined(TRUE_PBR)
 		return color * Math::PI;  // Compensate for traditional Lambertian diffuse
 #else

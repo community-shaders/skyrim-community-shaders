@@ -1394,9 +1394,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif  // defined (EMAT) && defined(ENVMAP)
 
 #	if defined(FACEGEN)
+#		if !defined(LL)
 	baseColor.xyz = GetFacegenBaseColor(baseColor.xyz, uv);
+#		else
+	baseColor.xyz = Color::GammaToTrueLinear(GetFacegenBaseColor(Color::TrueLinearToGamma(baseColor.xyz), uv));
+#		endif  // LL
 #	elif defined(FACEGEN_RGB_TINT)
+#		if !defined(LL)
 	baseColor.xyz = GetFacegenRGBTintBaseColor(baseColor.xyz, uv);
+#		else
+	baseColor.xyz = Color::GammaToTrueLinear(GetFacegenRGBTintBaseColor(Color::TrueLinearToGamma(baseColor.xyz), uv));
+#		endif  // LL
 #	endif  // FACEGEN
 
 #	if defined(LANDSCAPE)
@@ -1737,7 +1745,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	pbrSurfaceProperties.Roughness = saturate(rawRMAOS.x);
 	pbrSurfaceProperties.Metallic = saturate(rawRMAOS.y);
 	pbrSurfaceProperties.AO = rawRMAOS.z;
+#		if !defined(LL)
 	pbrSurfaceProperties.F0 = lerp(saturate(rawRMAOS.w), Color::GammaToLinear(baseColor.xyz), pbrSurfaceProperties.Metallic);
+#		else
+	pbrSurfaceProperties.F0 = lerp(saturate(rawRMAOS.w), baseColor.xyz, pbrSurfaceProperties.Metallic);
+#		endif
 
 	pbrSurfaceProperties.GlintScreenSpaceScale = max(1, glintParameters.x);
 	pbrSurfaceProperties.GlintLogMicrofacetDensity = clamp(40.f - glintParameters.y, 1, 40);
@@ -2344,11 +2356,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 
+#		if !defined(LL)
 		directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
+#		endif
 
 		directionalAmbientColor *= skylightingDiffuse;
 		directionalAmbientColor *= 1.0 + saturate(worldSpaceNormal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
+#		if !defined(LL)
 		directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
+#		endif
 	}
 #	endif
 
@@ -2602,7 +2618,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(SPECULAR)
 #		if defined(EMAT_ENVMAP)
+#			if !defined(LL)
 	specularColor = (specularColor * glossiness * MaterialData.yyy) * lerp(SpecularColor.xyz, Color::LinearToGamma(complexSpecular), complexMaterial);
+#			else
+	specularColor = (specularColor * glossiness * MaterialData.yyy) * lerp(SpecularColor.xyz, complexSpecular, complexMaterial);
+#			endif
 #		else
 	specularColor = (specularColor * glossiness * MaterialData.yyy) * SpecularColor.xyz;
 #		endif
@@ -2615,7 +2635,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		specularColor = 0;
 #	endif
 
+#	if !defined(LL)
 	specularColor = Color::GammaToLinear(specularColor);
+#	endif
 
 	diffuseColor = reflectionDiffuseColor;
 
@@ -2623,7 +2645,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(DYNAMIC_CUBEMAPS)
 	if (!dynamicCubemap)
 #		endif
+#		if !defined(LL)
 		specularColor += envColor * Color::GammaToLinear(diffuseColor);
+#		else
+		specularColor += envColor * diffuseColor;
+#		endif
 #	endif
 
 #	if defined(EMAT_ENVMAP)
@@ -2660,7 +2686,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 
 #	if !defined(DEFERRED)
+#		if !defined(LL)
 	color.xyz = Color::LinearToGamma(Color::GammaToLinear(color.xyz) + specularColor);
+#		else
+	color.xyz = color.xyz + specularColor;
+#		endif
 	if (FrameBuffer::FrameParams.y && FrameBuffer::FrameParams.z)
 		color.xyz = lerp(color.xyz, input.FogParam.xyz, input.FogParam.w);
 #	endif

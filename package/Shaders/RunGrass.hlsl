@@ -461,6 +461,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		baseColor = TexBaseSampler.SampleBias(SampBaseSampler, input.TexCoord.xy, SharedData::MipBias);
 	}
 
+#		if defined(LL)
+	baseColor.xyz = Color::Diffuse(baseColor.xyz);
+#		endif  // LL
+
 #		if defined(RENDER_DEPTH)
 	float diffuseAlpha = input.VertexColor.w * baseColor.w;
 	if ((diffuseAlpha - AlphaTestRefRS) < 0) {
@@ -538,7 +542,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 transmissionColor = 0;
 #			endif  // TRUE_PBR
 
-	float3 dirLightColor = SharedData::DirLightColor.xyz;
+	float3 dirLightColor = Color::Light(SharedData::DirLightColor.xyz);
 	float3 dirLightColorMultiplier = 1;
 
 	float dirLightAngle = dot(normal, SharedData::DirLightDirection.xyz);
@@ -811,7 +815,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif
 	}
 
-	float3 diffuseColor = SharedData::DirLightColor.xyz * dirShadow * lerp(dirDetailShadow, 1.0, 0.5) * 0.5;
+	float3 diffuseColor = Color::Light(SharedData::DirLightColor.xyz) * dirShadow * lerp(dirDetailShadow, 1.0, 0.5) * 0.5;
 
 #			if defined(LIGHT_LIMIT_FIX)
 	uint clusterIndex = 0;

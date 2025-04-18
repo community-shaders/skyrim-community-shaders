@@ -262,6 +262,9 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float4 sourceColor = TexSourceTexture.Sample(SampSourceTexture, input.TexCoord0);
 	float4 baseColor = input.Color * sourceColor;
+#	if defined(LL)
+	baseColor.xyz = Color::GammaToTrueLinear(baseColor.xyz);
+#	endif
 #	if defined(GRAYSCALE_TO_COLOR)
 	float3 grayScaleColor =
 		TexGrayscaleTexture.Sample(SampGrayscaleTexture, float2(sourceColor.y, input.Color.x)).xyz;

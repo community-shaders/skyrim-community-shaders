@@ -56,12 +56,21 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normalWS, 1.0)));
 
-	float3 linAlbedo = Color::GammaToLinear(albedo);
-	float3 linDirectionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
-	float3 linDiffuseColor = Color::GammaToLinear(diffuseColor);
+	float3 linAlbedo = albedo;
+	float3 linDirectionalAmbientColor = directionalAmbientColor;
+	float3 linDiffuseColor = diffuseColor;
+#if !defined(LL)
+	linAlbedo = Color::GammaToLinear(linAlbedo);
+	linDirectionalAmbientColor = Color::GammaToLinear(linDirectionalAmbientColor);
+	linDiffuseColor = Color::GammaToLinear(linDiffuseColor);
+#endif
 	float3 originalDiffuseColor = linDiffuseColor;
 
+#if !defined(LL)
 	float3 linAmbient = Color::GammaToLinear(albedo * directionalAmbientColor);
+#else
+	float3 linAmbient = albedo * directionalAmbientColor;
+#endif
 
 	float visibility = 1.0;
 #if defined(SKYLIGHTING)
@@ -124,13 +133,22 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 #endif
 
 	linAmbient *= visibility;
+#if !defined(LL)
 	diffuseColor = Color::LinearToGamma(linDiffuseColor);
 	directionalAmbientColor = Color::LinearToGamma(linDirectionalAmbientColor * visibility);
+#else
+	diffuseColor = linDiffuseColor;
+	directionalAmbientColor = linDirectionalAmbientColor * visibility;
+#endif
 
 	diffuseColor = diffuseColor + directionalAmbientColor * albedo;
 
 #if defined(SSGI)
+#	if !defined(LL)
 	DiffuseAmbientRW[dispatchID.xy] = Color::GammaToLinear(diffuseColor - originalDiffuseColor);
+#	else
+	DiffuseAmbientRW[dispatchID.xy] = diffuseColor - originalDiffuseColor;
+#	endif
 #endif
 
 	MainRW[dispatchID.xy] = float4(diffuseColor, 1);
