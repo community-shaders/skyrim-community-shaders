@@ -228,14 +228,14 @@ PS_OUTPUT main(PS_INPUT input)
 #				if !defined(LL)
 	psout.Color.xyz = (input.Color.xyz * baseColor.xyz + PParams.yyy) + noiseGrad;
 #				else
-	psout.Color.xyz = (input.Color.xyz * baseColor.xyz + linearyyy) + noiseGrad;
+	psout.Color.xyz = (Color::GammaToTrueLinear(input.Color.xyz) * baseColor.xyz + linearyyy) + noiseGrad;
 #				endif  // LL
 	psout.Color.w = baseColor.w * input.Color.w;
 #			else
 #				if !defined(LL)
 	psout.Color.xyz = (PParams.yyy + input.Color.xyz) + noiseGrad;
 #				else
-	psout.Color.xyz = (linearyyy + input.Color.xyz) + noiseGrad;
+	psout.Color.xyz = (linearyyy + Color::GammaToTrueLinear(input.Color.xyz)) + noiseGrad;
 #				endif  // LL
 	psout.Color.w = input.Color.w;
 #			endif  // TEX
@@ -251,7 +251,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			if !defined(LL)
 	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (input.Color.xyz * baseColor.xyz + PParams.yyy);
 #			else
-	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (input.Color.xyz * baseColor.xyz + linearyyy);
+	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (Color::GammaToTrueLinear(input.Color.xyz) * baseColor.xyz + linearyyy);
 #			endif  // LL
 	psout.Color.w = input.TexCoord2.x * (baseColor.w * input.Color.w);
 #		else
