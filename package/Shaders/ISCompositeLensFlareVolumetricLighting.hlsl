@@ -33,7 +33,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		if !defined(LL)
 	color += VolumetricLightingColor.xyz * volumetricLightingPower;
 #		else
-	color += Color::GammaToTrueLinear(VolumetricLightingColor.xyz) * volumetricLightingPower;
+	color += Color::GammaToTrueLinear(VolumetricLightingColor.xyz) * pow(abs(volumetricLightingPower), 2.2);
 #		endif
 #	endif
 

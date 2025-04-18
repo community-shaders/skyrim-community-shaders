@@ -1,3 +1,4 @@
+#include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
 #include "Common/MotionBlur.hlsli"
@@ -205,6 +206,9 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Diffuse.w = 0;
 #	else
 	float4 baseColor = TexDiffuse.Sample(SampDiffuse, input.TexCoord.xy);
+#	if defined(LL)
+	baseColor.xyz = Color::GammaToTrueLinear(baseColor.xyz);
+#	endif
 
 	if ((baseColor.w - AlphaTestRefRS) < 0) {
 		discard;
@@ -224,14 +228,22 @@ PS_OUTPUT main(PS_INPUT input)
 	if (dirShadow != 0.0)
 		dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition, FrameBuffer::CameraPosAdjust[eyeIndex], eyeIndex);
 
+#			if !defined(LL)
 	float3 diffuseColor = SharedData::DirLightColor.xyz * dirShadow * 0.5;
+#			else
+	float3 diffuseColor = Color::Light(SharedData::DirLightColor.xyz) * dirShadow * 0.5;
+#			endif
 
 	float3 ddx = ddx_coarse(input.WorldPosition.xyz);
 	float3 ddy = ddy_coarse(input.WorldPosition.xyz);
 	float3 normal = normalize(cross(ddx, ddy));
 
 #			if !defined(SSGI)
+#				if !defined(LL)
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
+#				else
+	float3 directionalAmbientColor = max(0, mul(Color::GammaToTrueLinear(SharedData::DirectionalAmbient), float4(normal, 1.0)));
+#				endif
 	diffuseColor += directionalAmbientColor;
 #			endif
 
@@ -248,13 +260,21 @@ PS_OUTPUT main(PS_INPUT input)
 #		else
 	float dirShadow = ShadowSampling::GetWorldShadow(input.WorldPosition, FrameBuffer::CameraPosAdjust[eyeIndex], eyeIndex);
 
+#		if !defined(LL)
 	float3 diffuseColor = SharedData::DirLightColor.xyz * dirShadow * 0.5;
+#		else
+	float3 diffuseColor = Color::Light(SharedData::DirLightColor.xyz) * dirShadow * 0.5;
+#		endif
 
 	float3 ddx = ddx_coarse(input.WorldPosition.xyz);
 	float3 ddy = ddy_coarse(input.WorldPosition.xyz);
 	float3 normal = normalize(cross(ddx, ddy));
 
+#		if !defined(LL)
 	float3 directionalAmbientColor = mul(SharedData::DirectionalAmbient, float4(normal, 1.0));
+#		else
+	float3 directionalAmbientColor = mul(Color::GammaToTrueLinear(SharedData::DirectionalAmbient), float4(normal, 1.0));
+#		endif
 	diffuseColor += directionalAmbientColor;
 
 	float3 color = diffuseColor * baseColor.xyz;
