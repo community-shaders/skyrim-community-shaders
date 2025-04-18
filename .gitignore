@@ -1,0 +1,8 @@
+build/
+bin/
+dist/
+.idea/
+.vs*/
+CMakeUserPresets.json
+shadertoolsconfig.json
+.vscode
