@@ -164,11 +164,9 @@ std::string GetWorldspace()
 		auto worldspace = tes->GetRuntimeData2().worldSpace;
 		if (tes->interiorCell) {
 			curr_worldspace = std::string(tes->interiorCell->GetFullName());
-		}
-		else if (worldspace) {
+		} else if (worldspace) {
 			curr_worldspace = worldspace->GetFormEditorID();
-		} 
-		
+		}
 	}
 	return curr_worldspace;
 }
