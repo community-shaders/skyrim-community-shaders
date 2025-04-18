@@ -84,7 +84,7 @@ namespace Color
 	float3 Light(float3 color)
 	{
 #if defined(LL)
-	color = pow(color, 1.0 / 2.2);
+	color = GammaToTrueLinear(color);
 #endif
 #if defined(TRUE_PBR)
 		return color * Math::PI;  // Compensate for traditional Lambertian diffuse
