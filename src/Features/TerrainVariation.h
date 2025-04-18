@@ -26,7 +26,7 @@ struct TerrainVariation : Feature
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;
-	
+
 	// Add missing method declarations
 	virtual void PostPostLoad() override;
 	void UpdateShaderSettings();

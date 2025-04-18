@@ -1,8 +1,8 @@
 #include "TerrainVariation.h"
-#include "../Util.h"
+#include "../FeatureBuffer.h"
 #include "../Globals.h"
 #include "../State.h"
-#include "../FeatureBuffer.h"
+#include "../Util.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	TerrainVariation::Settings,
@@ -17,7 +17,7 @@ void TerrainVariation::DrawSettings()
 		UpdateShaderSettings();
 		logger::info("TerrainVariation setting changed to: {}", settings.enabled);
 	}
-	
+
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
 			"Reduces the repeating pattern effect on terrain textures.\n"
@@ -30,11 +30,11 @@ void TerrainVariation::UpdateShaderSettings()
 	if (!globals::state) {
 		return;
 	}
-	
+
 	// Update settings in the feature buffer and force a shader state update
 	// This approach doesn't directly access the buffer but tells the game to update it
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::DIRTY_VERTEX_DESC);
-	
+
 	logger::debug("TerrainVariation: Updated shader settings, enabled = {}", settings.enabled);
 }
 
