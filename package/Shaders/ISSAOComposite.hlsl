@@ -159,9 +159,13 @@ PS_OUTPUT main(PS_INPUT input)
 	if (EyePosition.w != 0 && 1e-5 < snowMask) {
 		ao = min(1, SparklesParameters3.x + ao);
 	}
+#		if !defined(LL)
 	composedColor.xyz = Color::GammaToLinear(composedColor.xyz);
 	composedColor.xyz *= Color::GammaToLinear(ao);
 	composedColor.xyz = Color::LinearToGamma(composedColor.xyz);
+#		else
+	composedColor.xyz *= ao;
+#		endif
 #	endif
 
 	float depth = depthTex.SampleLevel(depthSampler, screenPosition, 0).x;
@@ -169,7 +173,12 @@ PS_OUTPUT main(PS_INPUT input)
 #	if defined(APPLY_FOG)
 	float fogDistanceFactor = (2 * CameraNearFar.x * CameraNearFar.y) / ((CameraNearFar.y + CameraNearFar.x) - (2 * (1.01 * depth - 0.01) - 1) * (CameraNearFar.y - CameraNearFar.x));
 	float fogFactor = min(FogParam.w, pow(saturate(fogDistanceFactor * FogParam.y - FogParam.x), FogParam.z));
+#		if defined(LL)
+	fogFactor = Color::GammaToTrueLinear(fogFactor);
+	float3 fogColor = lerp(Color::GammaToTrueLinear(FogNearColor.xyz), Color::GammaToTrueLinear(FogFarColor.xyz), fogFactor);
+#		else
 	float3 fogColor = lerp(FogNearColor.xyz, FogFarColor.xyz, fogFactor);
+#		endif
 	if (depth < 0.999999) {
 		composedColor.xyz = FogNearColor.w * lerp(composedColor.xyz, fogColor, fogFactor);
 	}

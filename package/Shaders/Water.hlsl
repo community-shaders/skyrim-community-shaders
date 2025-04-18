@@ -622,6 +622,10 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 				float2 ssrReflectionUvDR = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(ssrReflectionUv);
 				float4 ssrReflectionColorBlurred = RawSSRReflectionTex.Sample(RawSSRReflectionSampler, ssrReflectionUvDR);
 				float4 ssrReflectionColorRaw = RawSSRReflectionTex.Sample(RawSSRReflectionSampler, ssrReflectionUvDR);
+#				if defined(LL)
+				ssrReflectionColorBlurred.xyz = Color::GammaToTrueLinear(ssrReflectionColorBlurred.xyz);
+				ssrReflectionColorRaw.xyz = Color::GammaToTrueLinear(ssrReflectionColorRaw.xyz);
+#				endif
 				float4 ssrReflectionColor = lerp(ssrReflectionColorBlurred, ssrReflectionColorRaw, ssrAmount * 0.7);
 
 				finalSsrReflectionColor = max(0, ssrReflectionColor.xyz);
@@ -952,16 +956,28 @@ PS_OUTPUT main(PS_INPUT input)
 #					if defined(VC)
 	float specularFraction = lerp(1, fresnel * diffuseOutput.refractionMul, distanceFactor);
 	float3 finalColorPreFog = lerp(diffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
+#						if !defined(LL)
 	float3 finalColor = lerp(finalColorPreFog, input.FogParam.xyz * PosAdjust[eyeIndex].w, input.FogParam.w);
+#						else
+	float3 finalColor = lerp(finalColorPreFog, Color::GammaToTrueLinear(input.FogParam.xyz) * PosAdjust[eyeIndex].w, Color::GammaToTrueLinear(input.FogParam.w));
+#						endif
 #					else
 	float specularFraction = lerp(1, fresnel, distanceFactor);
 	float3 finalColorPreFog = lerp(diffuseOutput.refractionDiffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
+#					if !defined(LL)
 	finalColorPreFog = lerp(finalColorPreFog, input.FogParam.xyz * PosAdjust[eyeIndex].w, input.FogParam.w);
+#					else
+	finalColorPreFog = lerp(finalColorPreFog, Color::GammaToTrueLinear(input.FogParam.xyz) * PosAdjust[eyeIndex].w, Color::GammaToTrueLinear(input.FogParam.w));
+#					endif
 
 	float3 refractionColor = diffuseOutput.refractionColor;
 
 	float fogFactor = min(FogParam.w, pow(saturate(-diffuseOutput.depth * FogParam.y - FogParam.x), FogParam.z));
+#					if !defined(LL)
 	float3 fogColor = lerp(FogNearColor.xyz, FogFarColor.xyz, fogFactor);
+#					else
+	float3 fogColor = lerp(Color::GammaToTrueLinear(FogNearColor.xyz), Color::GammaToTrueLinear(FogFarColor.xyz), fogFactor);
+#					endif
 	refractionColor = lerp(refractionColor, fogColor, fogFactor);
 
 	float3 finalColor = lerp(refractionColor, finalColorPreFog, diffuseOutput.refractionMul);

@@ -2695,7 +2695,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	color.xyz = color.xyz + specularColor;
 #		endif
 	if (FrameBuffer::FrameParams.y && FrameBuffer::FrameParams.z)
+#		if !defined(LL)
 		color.xyz = lerp(color.xyz, input.FogParam.xyz, input.FogParam.w);
+#		else
+		color.xyz = lerp(color.xyz, Color::GammaToTrueLinear(input.FogParam.xyz), Color::GammaToTrueLinear(input.FogParam.w));
+#		endif
 #	endif
 
 #	if defined(TESTCUBEMAP) && defined(ENVMAP) && defined(DYNAMIC_CUBEMAPS)
