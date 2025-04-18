@@ -5,13 +5,11 @@
 // http://www.diva-portal.org/smash/get/diva2:831762/FULLTEXT01.pdf
 // https://bartwronski.files.wordpress.com/2014/03/ac4_gdc.pdf
 
-// Include common stochastic sampling utilities
 #include "Common/StochasticSampling.hlsli"
 
-// Include TerrainVariation if needed in LANDSCAPE mode
-#if defined(LANDSCAPE) && defined(TERRAIN_VARIATION)
+#	if defined(LANDSCAPE) && defined(TERRAIN_VARIATION)
 #	include "TerrainVariation/TerrainVariation.hlsli"
-#endif
+#	endif
 
 struct DisplacementParams
 {
