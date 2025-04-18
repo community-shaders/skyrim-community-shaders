@@ -482,74 +482,70 @@ namespace ExtendedMaterials
 	}
 
 #if defined(LANDSCAPE)
-	float GetParallaxSoftShadowMultiplierTerrain(PS_INPUT input, float2 coords, float mipLevel[6], float3 L, float sh0, float quality, float noise, DisplacementParams params[6], 
-#if defined(TERRAIN_VARIATION)
-	StochasticOffsets offsets[6], float2 dx, float2 dy, 
-#endif
-	float distance)
-	{
-		if (quality > 0.0) {
-			float4 multipliers = rcp((float4(1, 2, 3, 4) + noise));
-			float4 sh = 0;
-			float heights[6] = { 0, 0, 0, 0, 0, 0 };
-			float2 rayDir = L.xy * 0.1;
+    #if defined(TERRAIN_VARIATION)
+    float GetParallaxSoftShadowMultiplierTerrain(PS_INPUT input, float2 coords, float mipLevel[6], float3 L, float sh0, float quality, float noise, DisplacementParams params[6], StochasticOffsets offsets[6], float2 dx, float2 dy, float distance)
+    #else
+    float GetParallaxSoftShadowMultiplierTerrain(PS_INPUT input, float2 coords, float mipLevel[6], float3 L, float sh0, float quality, float noise, DisplacementParams params[6])
+    #endif
+    {
+        if (quality > 0.0) {
+            float4 multipliers = rcp((float4(1, 2, 3, 4) + noise));
+            float4 sh = 0;
+            float heights[6] = { 0, 0, 0, 0, 0, 0 };
+            float2 rayDir = L.xy * 0.1;
 
-#if defined(TRUE_PBR)
-			float scale = max(params[0].HeightScale * input.LandBlendWeights1.x, max(params[1].HeightScale * input.LandBlendWeights1.y, max(params[2].HeightScale * input.LandBlendWeights1.z,
-																																			max(params[3].HeightScale * input.LandBlendWeights1.w, max(params[4].HeightScale * input.LandBlendWeights2.x, params[5].HeightScale * input.LandBlendWeights2.y)))));
-			if (scale < 0.01)
-				return 1.0;
-			rayDir *= scale;
-			
-#if defined(TERRAIN_VARIATION)
-			sh.x = GetTerrainHeight(input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
-			if (quality > 0.25)
-				sh.y = GetTerrainHeight(input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
-			if (quality > 0.5)
-				sh.z = GetTerrainHeight(input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
-			if (quality > 0.75)
-				sh.w = GetTerrainHeight(input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
-#else
-			sh.x = GetTerrainHeight(input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-			if (quality > 0.25)
-				sh.y = GetTerrainHeight(input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-			if (quality > 0.5)
-				sh.z = GetTerrainHeight(input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-			if (quality > 0.75)
-				sh.w = GetTerrainHeight(input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-#endif
-			return pow(1.0 - saturate(dot(max(0, sh - sh0) / scale, 1.0)) * quality, 2.0);
-#else
-#if defined(TERRAIN_VARIATION)
-			sh = GetTerrainHeight(input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
-			if (quality > 0.25)
-				sh.y = GetTerrainHeight(input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
-			if (quality > 0.5)
-				sh.z = GetTerrainHeight(input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
-			if (quality > 0.75)
-				sh.w = GetTerrainHeight(input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
-#else
-			sh = GetTerrainHeight(input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-			if (quality > 0.25)
-				sh.y = GetTerrainHeight(input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-			if (quality > 0.5)
-				sh.z = GetTerrainHeight(input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-			if (quality > 0.75)
-				sh.w = GetTerrainHeight(input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-#endif
-			return pow(1.0 - saturate(dot(max(0, sh - sh0), 1.0)) * quality, 2.0);
-#endif
-		}
-		return 1.0;
-	}
-#endif
-
-#if defined(LANDSCAPE) && defined(TERRAIN_VARIATION)
-	// Helper function to use stochastic sampling with proper textures/samplers
-	float4 SampleWithOffsets(Texture2D<float4> tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
-	{
-		return TerrainTextureSample(tex, samp, uv, offsets, dx, dy);
-	}
+            #if defined(TRUE_PBR)
+                float scale = max(params[0].HeightScale * input.LandBlendWeights1.x, 
+                             max(params[1].HeightScale * input.LandBlendWeights1.y, 
+                             max(params[2].HeightScale * input.LandBlendWeights1.z,
+                             max(params[3].HeightScale * input.LandBlendWeights1.w, 
+                             max(params[4].HeightScale * input.LandBlendWeights2.x, 
+                                 params[5].HeightScale * input.LandBlendWeights2.y)))));
+                if (scale < 0.01)
+                    return 1.0;
+                rayDir *= scale;
+                
+                #if defined(TERRAIN_VARIATION)
+                    sh.x = GetTerrainHeight(input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+                    if (quality > 0.25)
+                        sh.y = GetTerrainHeight(input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+                    if (quality > 0.5)
+                        sh.z = GetTerrainHeight(input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+                    if (quality > 0.75)
+                        sh.w = GetTerrainHeight(input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+                #else
+                    sh.x = GetTerrainHeight(input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
+                    if (quality > 0.25)
+                        sh.y = GetTerrainHeight(input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
+                    if (quality > 0.5)
+                        sh.z = GetTerrainHeight(input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
+                    if (quality > 0.75)
+                        sh.w = GetTerrainHeight(input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
+                #endif
+                return pow(1.0 - saturate(dot(max(0, sh - sh0) / scale, 1.0)) * quality, 2.0);
+            #else
+                #if defined(TERRAIN_VARIATION)
+                    sh.x = GetTerrainHeight(input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+                    if (quality > 0.25)
+                        sh.y = GetTerrainHeight(input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+                    if (quality > 0.5)
+                        sh.z = GetTerrainHeight(input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+                    if (quality > 0.75)
+                        sh.w = GetTerrainHeight(input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+                #else
+                    sh.x = GetTerrainHeight(input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
+                    if (quality > 0.25)
+                        sh.y = GetTerrainHeight(input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
+                    if (quality > 0.5)
+                        sh.z = GetTerrainHeight(input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
+                    if (quality > 0.75)
+                        sh.w = GetTerrainHeight(input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
+                #endif
+                return pow(1.0 - saturate(dot(max(0, sh - sh0), 1.0)) * quality, 2.0);
+            #endif
+        }
+        return 1.0;
+    }
 #endif
 
 }

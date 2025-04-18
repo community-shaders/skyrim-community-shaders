@@ -59,4 +59,18 @@ inline float4 TerrainTextureSample(Texture2D tex, SamplerState samplerTex, float
     return SampleWithOffsets(tex, samplerTex, UV, offsets, dx, dy);
 }
 
+// Main StochasticSample2D function that does the actual sampling
+float4 StochasticSample2D(Texture2D<float4> tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
+{
+    // Sample texture with offsets using explicit gradients for correct mip level selection
+    float4 sample1 = tex.SampleGrad(samp, uv + offsets.offset1, dx, dy);
+    float4 sample2 = tex.SampleGrad(samp, uv + offsets.offset2, dx, dy);
+    float4 sample3 = tex.SampleGrad(samp, uv + offsets.offset3, dx, dy);
+    
+    // Blend samples using barycentric weights
+    return sample1 * offsets.weights.x + 
+           sample2 * offsets.weights.y + 
+           sample3 * offsets.weights.z;
+}
+
 #endif // __STOCHASTIC_SAMPLING_HLSLI__

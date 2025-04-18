@@ -1,5 +1,12 @@
-#ifndef TERRAINVARIATION_HLSLI
-#define TERRAINVARIATION_HLSLI
+// TerrainVariation.hlsli
+// Implements stochastic noise sampling for terrain textures
+// to reduce tiling artifacts and improve visual quality
+
+// This feature requires StochasticSampling.hlsli and uses the
+// stochastic sampling methods to create more natural-looking terrain
+
+#ifndef TERRAIN_VARIATION_HLSLI
+#define TERRAIN_VARIATION_HLSLI
 
 #include "Common/StochasticSampling.hlsli"
 
@@ -51,4 +58,10 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 UV)
     return offsets;
 }
 
-#endif  // TERRAINVARIATION_HLSLI
+// Main stochastic sampling function with matching 6 parameter function signature
+float4 StochasticSample(Texture2D<float4> tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
+{
+    return StochasticSample2D(tex, samp, uv, offsets, dx, dy);
+}
+
+#endif // TERRAIN_VARIATION_HLSLI
