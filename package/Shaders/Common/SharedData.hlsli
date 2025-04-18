@@ -168,7 +168,7 @@ namespace SharedData
 		float4 MainTint;
 		float4 AltTint;
 	};
-	
+
 	struct LODBlendingSettings
 	{
 		float LODTerrainBrightness;
