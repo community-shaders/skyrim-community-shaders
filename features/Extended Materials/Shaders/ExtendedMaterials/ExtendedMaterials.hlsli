@@ -7,9 +7,9 @@
 
 #include "Common/StochasticSampling.hlsli"
 
-#	if defined(LANDSCAPE) && defined(TERRAIN_VARIATION)
+#if defined(LANDSCAPE) && defined(TERRAIN_VARIATION)
 #	include "TerrainVariation/TerrainVariation.hlsli"
-#	endif
+#endif
 
 struct DisplacementParams
 {
