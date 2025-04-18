@@ -162,11 +162,13 @@ std::string GetWorldspace()
 	auto tes = globals::game::tes;
 	if (tes) {
 		auto worldspace = tes->GetRuntimeData2().worldSpace;
-		if (worldspace) {
-			curr_worldspace = worldspace->GetFormEditorID();
-		} else if (tes->interiorCell) {
+		if (tes->interiorCell) {
 			curr_worldspace = std::string(tes->interiorCell->GetFullName());
 		}
+		else if (worldspace) {
+			curr_worldspace = worldspace->GetFormEditorID();
+		} 
+		
 	}
 	return curr_worldspace;
 }
@@ -226,13 +228,13 @@ void SnowCover::Reload()
 	std::ifstream fileStream(path);
 	if (!fileStream.is_open()) {
 		status = std::string("Cannot open config.");
+		wsettings.EnableSnowCover = false;
 		logger::error("[Snow Cover] Cannot open config at  {}", path);
 		return;
 	}
 	json config;
 	try {
 		fileStream >> config;
-		wsettings.EnableSnowCover = true;
 		wsettings.FoliageHeightOffset = config["FoliageHeightOffset"];
 		wsettings.UVScale = config["UVScale"];
 		wsettings.MaxSummerMonth = config["MaxSummerMonth"];
@@ -284,7 +286,7 @@ void SnowCover::Reload()
 			views[2] = views[0];
 			views[3] = views[1];
 		}
-
+		wsettings.EnableSnowCover = true;
 	} catch (const nlohmann::json::parse_error& e) {
 		logger::error("[Snow Cover] failed to parse {} : {}", path, e.what());
 		status = e.what();
