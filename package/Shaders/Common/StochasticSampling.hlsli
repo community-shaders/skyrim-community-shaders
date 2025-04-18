@@ -1,6 +1,5 @@
 // Stochastic sampling implementation for texture tiling reduction
-// Based on implementation from "Rendering Antialiased Edges with Barycentric Textures" 
-// and "Tiled Stochastic Texture" by Thomas Deliot & Eric Heitz
+// Based on papers "Rendering Antialiased Edges with Barycentric Textures" and "Tiled Stochastic Texture" by Thomas Deliot & Eric Heitz.
 
 #ifndef STOCHASTIC_SAMPLING_HLSLI
 #define STOCHASTIC_SAMPLING_HLSLI

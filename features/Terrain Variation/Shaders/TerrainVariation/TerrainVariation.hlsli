@@ -1,9 +1,6 @@
 // TerrainVariation.hlsli
-// Implements stochastic noise sampling for terrain textures
-// to reduce tiling artifacts and improve visual quality
-
-// This feature requires StochasticSampling.hlsli and uses the
-// stochastic sampling methods to create more natural-looking terrain
+// Implements stochastic noise sampling for terrain textures to reduce tiling artifacts and improve visual quality.
+// Utilises StochasticSampling.hlsli for the other functions.
 
 #ifndef TERRAIN_VARIATION_HLSLI
 #define TERRAIN_VARIATION_HLSLI
