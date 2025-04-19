@@ -603,9 +603,9 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 		color.y += dot(PLightColorG * lightFadeMul, 1.0.xxxx);
 		color.z += dot(PLightColorB * lightFadeMul, 1.0.xxxx);
 #		else
-		color.x += dot(Color::GammaToTrueLinear(PLightColorR) * lightFadeMul, 1.0.xxxx) * 0.5;
-		color.y += dot(Color::GammaToTrueLinear(PLightColorG) * lightFadeMul, 1.0.xxxx) * 0.5;
-		color.z += dot(Color::GammaToTrueLinear(PLightColorB) * lightFadeMul, 1.0.xxxx) * 0.5;
+		color.x += dot(Color::GammaToTrueLinear(PLightColorR) * lightFadeMul, 1.0.xxxx);
+		color.y += dot(Color::GammaToTrueLinear(PLightColorG) * lightFadeMul, 1.0.xxxx);
+		color.z += dot(Color::GammaToTrueLinear(PLightColorB) * lightFadeMul, 1.0.xxxx);
 #		endif
 	}
 
