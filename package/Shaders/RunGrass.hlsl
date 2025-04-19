@@ -641,6 +641,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 				float intensityFactor = saturate(lightDist / light.radius);
 				if (intensityFactor == 1)
 					continue;
+
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 #				endif
 
@@ -849,6 +850,7 @@ PS_OUTPUT main(PS_INPUT input)
 				float intensityFactor = saturate(lightDist / light.radius);
 				if (intensityFactor == 1)
 					continue;
+
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 #				endif
 
