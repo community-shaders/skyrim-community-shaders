@@ -1,5 +1,5 @@
 // Stochastic sampling implementation for texture tiling reduction
-// Based on paper "Procedural Stochastic Textures by Tiling and Blending" by Thomas Deliot & Eric Heitz. 
+// Based on paper "Procedural Stochastic Textures by Tiling and Blending" by Thomas Deliot & Eric Heitz.
 //https://eheitzresearch.wordpress.com/722-2/
 
 #ifndef STOCHASTIC_SAMPLING_HLSLI
