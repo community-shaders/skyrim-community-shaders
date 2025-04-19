@@ -273,7 +273,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		if !defined(LL)
 	float3 directionalAmbientColor = mul(SharedData::DirectionalAmbient, float4(normal, 1.0));
 #		else
-	float3 directionalAmbientColor = Color::GammaToTrueLinear(mul(SharedData::DirectionalAmbient), float4(normal, 1.0));
+	float3 directionalAmbientColor = Color::GammaToTrueLinear(mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
 #		endif
 	diffuseColor += directionalAmbientColor;
 
