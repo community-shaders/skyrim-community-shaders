@@ -2219,7 +2219,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			continue;
 
 		float intensityMultiplier = 1 - intensityFactor * intensityFactor;
-		float3 lightColor = Color::Light(light.color.xyz) * intensityMultiplier;
+		float3 lightColor = Color::Light(light.color.xyz) * intensityMultiplier * light.fade;
 		float lightShadow = 1.0;
 
 		float shadowComponent = 1.0;

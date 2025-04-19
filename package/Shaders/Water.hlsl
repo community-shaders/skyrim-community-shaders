@@ -925,9 +925,9 @@ PS_OUTPUT main(PS_INPUT input)
 			float HdotN = saturate(dot(H, normal));
 
 #					if !defined(LL)
-			float3 lightColor = light.color.xyz * pow(HdotN, FresnelRI.z);
+			float3 lightColor = light.color.xyz * pow(HdotN, FresnelRI.z) * light.fade;
 #					else
-			float3 lightColor = Color::GammaToTrueLinear(light.color.xyz) * pow(HdotN, FresnelRI.z);
+			float3 lightColor = Color::GammaToTrueLinear(light.color.xyz) * pow(HdotN, FresnelRI.z) * light.fade;
 #					endif
 			specularLighting += lightColor * intensityMultiplier;
 		}

@@ -319,8 +319,8 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 
 		LightData light{};
 		light.color = { runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue };
-		light.color *= runtimeData.fade;
-		light.color *= bsLight->lodDimmer;
+		light.fade = runtimeData.fade;
+		light.fade *= bsLight->lodDimmer;
 
 		light.radius = runtimeData.radius.x;
 
@@ -690,16 +690,16 @@ void LightLimitFix::AddCachedParticleLights(eastl::vector<LightData>& lightsData
 		dimmer = 0.0f;
 	}
 
-	light.color *= dimmer;
+	light.fade *= dimmer;
 
-	if ((light.color.x + light.color.y + light.color.z) > 1e-4 && light.radius > 1e-4) {
+	if (light.fade > 1e-4 && light.radius > 1e-4) {
 		for (int eyeIndex = 0; eyeIndex < eyeCount; eyeIndex++)
 			light.positionVS[eyeIndex].data = DirectX::SimpleMath::Vector3::Transform(light.positionWS[eyeIndex].data, viewMatrixCached[eyeIndex]);
 
 		lightsData.push_back(light);
 
 		CachedParticleLight cachedParticleLight{};
-		cachedParticleLight.grey = float3(light.color.x, light.color.y, light.color.z).Dot(float3(0.3f, 0.59f, 0.11f));
+		cachedParticleLight.grey = float3(light.color.x, light.color.y, light.color.z).Dot(float3(0.3f, 0.59f, 0.11f)) * light.fade;
 		cachedParticleLight.radius = light.radius;
 		cachedParticleLight.position = { light.positionWS[0].data.x + eyePositionCached[0].x, light.positionWS[0].data.y + eyePositionCached[0].y, light.positionWS[0].data.z + eyePositionCached[0].z };
 
@@ -765,8 +765,8 @@ void LightLimitFix::UpdateLights()
 
 					LightData light{};
 					light.color = { runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue };
-					light.color *= runtimeData.fade;
-					light.color *= bsLight->lodDimmer;
+					light.fade = runtimeData.fade;
+					light.fade *= bsLight->lodDimmer;
 
 					light.radius = runtimeData.radius.x;
 
@@ -795,7 +795,7 @@ void LightLimitFix::UpdateLights()
 					if (light.shadowMaskIndex != 255) {
 						SetLightPosition(light, niLight->world.translate);
 
-						if ((light.color.x + light.color.y + light.color.z) > 1e-4 && light.radius > 1e-4) {
+						if (light.fade > 1e-4 && light.radius > 1e-4) {
 							lightsData.push_back(light);
 						}
 					}

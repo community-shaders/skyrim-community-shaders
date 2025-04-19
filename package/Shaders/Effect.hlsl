@@ -703,9 +703,9 @@ PS_OUTPUT main(PS_INPUT input)
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 
 #			if !defined(LL)
-				float3 lightColor = light.color.xyz * intensityMultiplier * 0.5;
+				float3 lightColor = light.color.xyz * intensityMultiplier * 0.5 * light.fade;
 #			else
-				float3 lightColor = Color::GammaToTrueLinear(light.color.xyz) * intensityMultiplier * 0.5;
+				float3 lightColor = Color::GammaToTrueLinear(light.color.xyz) * intensityMultiplier * 0.5 * light.fade;
 #			endif
 				propertyColor += lightColor;
 			}

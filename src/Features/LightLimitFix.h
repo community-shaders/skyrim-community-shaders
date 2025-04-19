@@ -39,7 +39,8 @@ public:
 		uint128_t roomFlags = uint32_t(0);
 		stl::enumeration<LightFlags> lightFlags;
 		uint32_t shadowMaskIndex = 0;
-		float pad0[2];
+		float fade;
+		float pad0;
 	};
 
 	struct ClusterAABB
