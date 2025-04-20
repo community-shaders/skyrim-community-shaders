@@ -22,18 +22,17 @@ public:
 
 	struct UserSettings
 	{
-		uint AffectFoliageColor = true;
 		float SnowHeightOffset = 0.0f;
-		uint pad[2];
+		uint pad[3];
 	};
 	static_assert(sizeof(UserSettings) % 16 == 0);
 
 	struct WorldSettings
 	{
-		uint EnableSnowCover = true;
+		uint EnableSnowCover = false;
+		uint AffectFoliageColor = true;
 		float FoliageHeightOffset = -512.0f;
 		float UVScale = 1;
-		uint pad[1];
 
 		uint MaxSummerMonth = 6;
 		uint MaxWinterMonth = 0;
@@ -41,7 +40,12 @@ public:
 		float WinterHeightOffset = -10000.0f;
 
 		float Equation[9];
-		uint pad2[3];
+		float PeakMainAngle = 1.0f;
+		float PeakAltAngle = 0.0f; 
+		float MinAngle = 0.0f;
+
+		float MaxAngle = 1.0f;
+		uint pad[3];
 
 		//glint
 		float ScreenSpaceScale = 1.2f;
@@ -49,8 +53,8 @@ public:
 		float MicrofacetRoughness = .15f;
 		float DensityRandomization = 2.f;
 
-		float4 MainTint;
-		float4 AltTint;
+		float4 MainTint = float4(1.0f, 1.0f, 1.0f, 1.0f);
+		float4 AltTint = float4(1.0f, 1.0f, 1.0f, 1.0f);
 	};
 	static_assert(sizeof(WorldSettings) % 16 == 0);
 
@@ -58,7 +62,7 @@ public:
 	{
 		float Month;
 		float TimeSnowing;
-		float SnowAmount;
+		float SnowingDensity;
 		uint pad;
 
 		UserSettings settings;
@@ -71,7 +75,7 @@ public:
 
 	PerFrame GetCommonBufferData();
 
-	std::array<ID3D11ShaderResourceView*, 4> views;
+	std::array<ID3D11ShaderResourceView*, 6> views;
 
 	std::string status;
 	std::string last_worldspace;
@@ -79,12 +83,12 @@ public:
 	std::string alt_tex;
 	float snowing_speed;
 	float melting_speed;
-	char tbuf[128] = "snow";
-	char altbuf[128] = "";
+	char tbuf[256] = "";
+	char altbuf[256] = "";
 
 	float lastHour = 12;
 	float timeSnowing = 0.0f;
-	float snowAmount = 0.0f;
+	float snowingDensity = 0.0f;
 
 	virtual void SetupResources();
 	virtual void Reset();

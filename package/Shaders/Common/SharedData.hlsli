@@ -141,17 +141,16 @@ namespace SharedData
 	{
 		float Month;
 		float TimeSnowing;
-		float SnowAmount;
+		float SnowingDensity;
 		uint pad0;
 
-		uint AffectFoliageColor;
 		float SnowHeightOffset;
-		uint2 pad;
+		uint3 pad;
 
 		uint EnableSnowCover;
+		uint AffectFoliageColor;
 		float FoliageHeightOffset;
 		float UVScale;
-		uint pad2;
 
 		uint MaxSummerMonth;
 		uint MaxWinterMonth;
@@ -162,7 +161,12 @@ namespace SharedData
 		float4 equation2;
 
 		float equation3;
-		float3 pad3;
+		float peakMainAngle;
+		float peakAltAngle;
+		float minAngle;
+	
+		float maxAngle;
+		uint3 pad1;
 
 		float4 Glint;
 		float4 MainTint;

@@ -1340,6 +1340,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float lodLandNoiseParameter = GetLodLandBlendParameter(baseColor.xyz);
 		float noise = TexLandLodNoiseSampler.Sample(SampLandLodNoiseSampler, uv * 3.0.xx).x;
 		float lodLandNoiseMultiplier = GetLodLandBlendMultiplier(lodLandNoiseParameter, noise);
+#		if defined(SNOW_COVER)
+		if (!SharedData::snowCoverSettings.EnableSnowCover)
+#		endif
 		baseColor.xyz *= lodLandNoiseMultiplier;
 		normal.xyz *= 2;
 		normal.w = 1;
@@ -1857,9 +1860,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		else
 	float snowOcclusion = inWorld;
 #		endif
-#		if defined(LODLANDNOISE)
-	snowOcclusion *= 0.9 + noise * 0.1;
-#		endif
+
 
 	float3 pos = (input.WorldPosition + FrameBuffer::CameraPosAdjust[eyeIndex]).xyz;
 
@@ -1877,10 +1878,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float disp = 0.1 * (sh0 - 0.5);
 #		endif
 		float3 snowNormal = worldSpaceNormal;
+		float3 snowedColor = baseColor.rgb;
+#		if defined(TREE_ANIM)
+		if(SharedData::snowCoverSettings.AffectFoliageColor)
+		SnowCover::ApplyFoliageColor(snowedColor.rgb, SnowCover::GetEnvironmentalMultiplier(pos));
+#		endif
 #		if defined(TRUE_PBR)
-		pbrSurfaceProperties = SnowCover::ApplySnowPBR(baseColor.rgb, snowNormal, snowFactor, disp, pos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, pbrSurfaceProperties, uv - uvOriginal);
+		pbrSurfaceProperties = SnowCover::ApplySnowPBR(snowedColor, snowNormal, snowFactor, disp, pos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, pbrSurfaceProperties, uv - uvOriginal);
 #		else
-		snowFactor = SnowCover::ApplySnow(baseColor.rgb, snowNormal, glossiness.x, shininess, disp, pos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, uv - uvOriginal);
+		snowFactor = SnowCover::ApplySnow(snowedColor, snowNormal, glossiness.x, shininess, disp, pos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, uv - uvOriginal);
 		glossiness = glossiness.xxxx;
 #		endif
 #		if !defined(MODELSPACENORMALS)
@@ -1888,14 +1894,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		else
 		worldSpaceNormal = normalize(lerp(worldSpaceNormal, SnowCover::MyReorientNormal(worldSpaceNormal, snowNormal), snowFactor));
 #		endif
+#		if defined(LODLANDNOISE)
+		snowedColor *= lodLandNoiseMultiplier;
+#		endif
+		baseColor.rgb = snowedColor;
 #		if defined(LOD_LAND_BLEND)
-		lodLandColor.rgb = lerp(lodLandColor, baseColor.rgb, snowFactor);
+		lodLandColor.rgb = lerp(lodLandColor, snowedColor, snowFactor);
 #		endif
 	}
 
-#		if defined(TREE_ANIM)
-	SnowCover::ApplyFoliageColor(baseColor.rgb, SnowCover::GetEnvironmentalMultiplier(pos));
-#		endif
+
 
 #		if !defined(DRAW_IN_WORLDSPACE)  // && (defined(SKINNED) || !defined(MODELSPACENORMALS))
 	[flatten] if (!input.WorldSpace)
