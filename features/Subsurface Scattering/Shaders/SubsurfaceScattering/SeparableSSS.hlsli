@@ -130,7 +130,7 @@ float4 SSSSBlurCS(
 	finalStep *= 1.0 / 3.0;  // Divide by 3 as the kernels range from -3 to 3.
 
 #if defined(VR)
-	finalStep.x *= 0.5;               // Halve horizontal screen resolution
+	finalStep.x *= 0.5;                 // Halve horizontal screen resolution
 	uint eyeIndex = texcoord.x >= 0.5;  // 0 = left 1 = right
 	uint bufferDimHalfX = uint(SharedData::BufferDim.x * 0.5);
 	uint2 minCoord = uint2(eyeIndex ? bufferDimHalfX : 0, 0);
