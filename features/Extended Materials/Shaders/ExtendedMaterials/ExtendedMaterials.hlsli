@@ -122,7 +122,7 @@ namespace ExtendedMaterials
 		}
 		[unroll] for (int i = 0; i < 6; i++)
 		{
-			weights[i] = pow(weights[i], heightBlend);
+			weights[i] = min(100, pow(weights[i], heightBlend));
 		}
 		float wsum = 0;
 		[unroll] for (int i = 0; i < 6; i++)
@@ -181,7 +181,7 @@ namespace ExtendedMaterials
 		}
 		[unroll] for (int i = 0; i < 6; i++)
 		{
-			weights[i] = pow(weights[i], heightBlend);
+			weights[i] = min(100, pow(weights[i], heightBlend));
 		}
 		float wsum = 0;
 		[unroll] for (int i = 0; i < 6; i++)
