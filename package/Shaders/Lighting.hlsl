@@ -1340,10 +1340,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float lodLandNoiseParameter = GetLodLandBlendParameter(baseColor.xyz);
 		float noise = TexLandLodNoiseSampler.Sample(SampLandLodNoiseSampler, uv * 3.0.xx).x;
 		float lodLandNoiseMultiplier = GetLodLandBlendMultiplier(lodLandNoiseParameter, noise);
-#		if defined(SNOW_COVER)
+#			if defined(SNOW_COVER)
 		if (!SharedData::snowCoverSettings.EnableSnowCover)
-#		endif
-		baseColor.xyz *= lodLandNoiseMultiplier;
+#			endif
+			baseColor.xyz *= lodLandNoiseMultiplier;
 		normal.xyz *= 2;
 		normal.w = 1;
 		glossiness = 0;
@@ -1861,7 +1861,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float snowOcclusion = inWorld;
 #		endif
 
-
 	float3 pos = (input.WorldPosition + FrameBuffer::CameraPosAdjust[eyeIndex]).xyz;
 
 	float snowFactor = 0;
@@ -1880,8 +1879,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float3 snowNormal = worldSpaceNormal;
 		float3 snowedColor = baseColor.rgb;
 #		if defined(TREE_ANIM)
-		if(SharedData::snowCoverSettings.AffectFoliageColor)
-		SnowCover::ApplyFoliageColor(snowedColor.rgb, SnowCover::GetEnvironmentalMultiplier(pos));
+		if (SharedData::snowCoverSettings.AffectFoliageColor)
+			SnowCover::ApplyFoliageColor(snowedColor.rgb, SnowCover::GetEnvironmentalMultiplier(pos));
 #		endif
 #		if defined(TRUE_PBR)
 		pbrSurfaceProperties = SnowCover::ApplySnowPBR(snowedColor, snowNormal, snowFactor, disp, pos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, pbrSurfaceProperties, uv - uvOriginal);
@@ -1902,8 +1901,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		lodLandColor.rgb = lerp(lodLandColor, snowedColor, snowFactor);
 #		endif
 	}
-
-
 
 #		if !defined(DRAW_IN_WORLDSPACE)  // && (defined(SKINNED) || !defined(MODELSPACENORMALS))
 	[flatten] if (!input.WorldSpace)

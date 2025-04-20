@@ -41,7 +41,7 @@ public:
 
 		float Equation[9];
 		float PeakMainAngle = 1.0f;
-		float PeakAltAngle = 0.0f; 
+		float PeakAltAngle = 0.0f;
 		float MinAngle = 0.0f;
 
 		float MaxAngle = 1.0f;

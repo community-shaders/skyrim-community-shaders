@@ -5,12 +5,12 @@
 namespace SnowCover
 {
 
-	Texture2D<float4> SnowAlbedo : register(t73);    
-	Texture2D<float3> SnowNormal : register(t74);  
-	Texture2D<float4> SnowRmaos : register(t75);  
-	Texture2D<float4> IceAlbedo : register(t76);     
-	Texture2D<float3> IceNormal : register(t77);   
-	Texture2D<float4> IceRmaos : register(t78);   
+	Texture2D<float4> SnowAlbedo : register(t73);
+	Texture2D<float3> SnowNormal : register(t74);
+	Texture2D<float4> SnowRmaos : register(t75);
+	Texture2D<float4> IceAlbedo : register(t76);
+	Texture2D<float3> IceNormal : register(t77);
+	Texture2D<float4> IceRmaos : register(t78);
 
 	// https://blog.selfshadow.com/publications/blending-in-detail/
 	// for when s = (0,0,1)
@@ -92,9 +92,9 @@ namespace SnowCover
 		float gmult = pow(saturate(env_mult - SharedData::snowCoverSettings.FoliageHeightOffset / 10000), 0.25);
 		float3 hsv = RGBtoHSV(color);
 		if (hsv.x > 0.55)
-			hsv.x = frac(lerp(hsv.x, 1.1, gmult*(1.1-hsv.x))*4);
+			hsv.x = frac(lerp(hsv.x, 1.1, gmult * (1.1 - hsv.x)) * 4);
 		else
-			hsv.x = lerp(hsv.x, 0.1, gmult*(hsv.x+0.1)*4);
+			hsv.x = lerp(hsv.x, 0.1, gmult * (hsv.x + 0.1) * 4);
 		//hsv.z = pow(hsv.z, 1+gmult*0.5);
 		color = HSVtoRGB(hsv);
 	}
@@ -102,14 +102,14 @@ namespace SnowCover
 	void ApplySnowFoliage(inout float3 color, inout float3 worldNormal, float3 p, float skylight, float viewDist)
 	{
 		float env_mult = GetEnvironmentalMultiplier(p);
-		float distMult = 1-smoothstep(10000, 30000, viewDist);
-		float weatherMult = distMult*SharedData::snowCoverSettings.TimeSnowing * max(500, SharedData::snowCoverSettings.SnowingDensity)/100;		
+		float distMult = 1 - smoothstep(10000, 30000, viewDist);
+		float weatherMult = distMult * SharedData::snowCoverSettings.TimeSnowing * max(500, SharedData::snowCoverSettings.SnowingDensity) / 100;
 		float mult = SharedData::snowCoverSettings.MainTint.a * pow(saturate(env_mult), 0.25);
-		mult = skylight * saturate(mult + weatherMult) * smoothstep(SharedData::snowCoverSettings.minAngle, SharedData::snowCoverSettings.maxAngle, worldNormal.z*0.5);
+		mult = skylight * saturate(mult + weatherMult) * smoothstep(SharedData::snowCoverSettings.minAngle, SharedData::snowCoverSettings.maxAngle, worldNormal.z * 0.5);
 		if (SharedData::snowCoverSettings.AffectFoliageColor) {
 			ApplyFoliageColor(color, env_mult);
 		}
-		float2 uv = frac(SharedData::snowCoverSettings.UVScale * (p.xy + worldNormal.xy*2) / 100);
+		float2 uv = frac(SharedData::snowCoverSettings.UVScale * (p.xy + worldNormal.xy * 2) / 100);
 		float3 diffuse = Color::TrueLinearToGamma(SnowAlbedo.Sample(SampColorSampler, uv).rgb) * SharedData::snowCoverSettings.MainTint.rgb;
 
 		color = lerp(color, diffuse, mult);
@@ -119,13 +119,13 @@ namespace SnowCover
 	float ApplySnowBase(inout float3 worldNormal, inout float2 uv, out bool alt, float disp, float3 p, float skylight, float waterDist, float viewDist)
 	{
 		waterDist = smoothstep(-64, 8, -waterDist - disp);
-		float distMult = 1-smoothstep(10000, 30000 + 1000*sin(p.z*0.001 + cos(p.x*p.y*0.001)), viewDist);
-		float weatherMult = distMult*SharedData::snowCoverSettings.TimeSnowing * max(500, SharedData::snowCoverSettings.SnowingDensity)/100;
+		float distMult = 1 - smoothstep(10000, 30000 + 1000 * sin(p.z * 0.001 + cos(p.x * p.y * 0.001)), viewDist);
+		float weatherMult = distMult * SharedData::snowCoverSettings.TimeSnowing * max(500, SharedData::snowCoverSettings.SnowingDensity) / 100;
 		float env_mult = saturate(max(0, pow(saturate(GetEnvironmentalMultiplier(p) + disp), 0.25)) + clamp(-1, 1, weatherMult) - waterDist);
-		float main_mult = (1-abs(worldNormal.z-SharedData::snowCoverSettings.peakMainAngle));
-		float alt_mult = (1-abs(worldNormal.z-SharedData::snowCoverSettings.peakAltAngle)) + sin((p.x+p.z)*0.025)*0.05;
+		float main_mult = (1 - abs(worldNormal.z - SharedData::snowCoverSettings.peakMainAngle));
+		float alt_mult = (1 - abs(worldNormal.z - SharedData::snowCoverSettings.peakAltAngle)) + sin((p.x + p.z) * 0.025) * 0.05;
 		alt = alt_mult > main_mult;
-		float mult = skylight * env_mult*smoothstep(SharedData::snowCoverSettings.minAngle, SharedData::snowCoverSettings.maxAngle, worldNormal.z);
+		float mult = skylight * env_mult * smoothstep(SharedData::snowCoverSettings.minAngle, SharedData::snowCoverSettings.maxAngle, worldNormal.z);
 		if (mult < 0.01)
 			return 0;
 		//mult = step(0.5, mult);
@@ -153,7 +153,7 @@ namespace SnowCover
 		prop.Roughness = lerp(prop.Roughness, rmaos.x, mult);
 		prop.Metallic = lerp(prop.Metallic, rmaos.y, mult);
 		prop.AO = lerp(prop.AO, rmaos.z, mult);
-		prop.F0 = lerp(prop.F0, rmaos.w*0.04, mult);
+		prop.F0 = lerp(prop.F0, rmaos.w * 0.04, mult);
 		prop.GlintScreenSpaceScale = lerp(prop.GlintScreenSpaceScale, SharedData::snowCoverSettings.Glint.x, mult);
 		prop.GlintLogMicrofacetDensity = lerp(prop.GlintLogMicrofacetDensity, SharedData::snowCoverSettings.Glint.y, mult);
 		prop.GlintMicrofacetRoughness = lerp(prop.GlintMicrofacetRoughness, SharedData::snowCoverSettings.Glint.z, mult);

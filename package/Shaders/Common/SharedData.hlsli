@@ -164,7 +164,7 @@ namespace SharedData
 		float peakMainAngle;
 		float peakAltAngle;
 		float minAngle;
-	
+
 		float maxAngle;
 		uint3 pad1;
 

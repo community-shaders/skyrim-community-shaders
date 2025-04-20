@@ -28,14 +28,15 @@ void SnowCover::DrawSettings()
 	if (ImGui::TreeNodeEx("Worldspace Config", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Text(fmt::format("Current worldspace/cell: {}", last_worldspace).c_str());
 		ImGui::Text(fmt::format("Config status: {}", status).c_str());
-		
+
 		ImGui::SameLine();
 		if (ImGui::Button("Reload")) {
 			last_worldspace = "";
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Reloads the config for current worldspace from file."
-			"Reload is required to load new texture paths.");
+			ImGui::Text(
+				"Reloads the config for current worldspace from file."
+				"Reload is required to load new texture paths.");
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Save")) {
@@ -102,9 +103,9 @@ void SnowCover::DrawSettings()
 			ImGui::TreePop();
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("The 'snow line' is a curved plane controlled by a cubic equation. "
-						"These parameters control how the plane is curved."
-			);
+			ImGui::Text(
+				"The 'snow line' is a curved plane controlled by a cubic equation. "
+				"These parameters control how the plane is curved.");
 		}
 		if (ImGui::TreeNodeEx("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::SliderFloat("Min Angle", &wsettings.MinAngle, 0.0f, 1.0f);
@@ -196,7 +197,7 @@ SnowCover::PerFrame SnowCover::GetCommonBufferData()
 		else {
 			if (raining) {
 				timeSnowing -= 4 * diff * melting_speed;
-			} else{
+			} else {
 				if (timeSnowing > 0) {
 					timeSnowing -= diff * melting_speed;
 				} else {
