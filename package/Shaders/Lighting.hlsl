@@ -1940,7 +1940,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 dirLightColorMultiplier = 1;
 
 #	if defined(WATER_EFFECTS)
-	dirLightColorMultiplier *= WaterEffects::ComputeCaustics(waterData, input.WorldPosition.xyz, worldSpaceNormal);
+	dirLightColorMultiplier *= WaterEffects::ComputeCaustics(waterData, input.WorldPosition.xyz, eyeIndex);
 #	endif
 
 	float selfShadowFactor = 1.0f;
