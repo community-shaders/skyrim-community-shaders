@@ -16,6 +16,7 @@
 #include "Features/ExtendedMaterials.h"
 #include "Features/GrassCollision.h"
 #include "Features/GrassLighting.h"
+#include "Features/IBL.h"
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
 #include "Features/ScreenSpaceGI.h"

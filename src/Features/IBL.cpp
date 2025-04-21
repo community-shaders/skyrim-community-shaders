@@ -34,7 +34,7 @@ void IBL::RestoreDefaultSettings()
 void IBL::Bind()
 {
 	if (loaded) {
-		auto& context = State::GetSingleton()->context;
+		auto context = globals::d3d::context;
 
 		// Set PS shader resource
 		{
@@ -46,9 +46,9 @@ void IBL::Bind()
 
 void IBL::Prepass()
 {
-    auto& context = State::GetSingleton()->context;
+    auto context = globals::d3d::context;
 
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+	auto renderer = globals::game::renderer;
 	auto& reflections = renderer->GetRendererData().cubemapRenderTargets[RE::RENDER_TARGET_CUBEMAP::kREFLECTIONS];
 
 	std::array<ID3D11ShaderResourceView*, 1> srvs = { reflections.SRV };
