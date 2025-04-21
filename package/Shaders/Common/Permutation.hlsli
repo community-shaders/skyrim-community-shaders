@@ -65,11 +65,22 @@ namespace Permutation
 		static const uint IsMobile = (1 << 6);
 	}
 
+	namespace ExtraFeatureFlags
+	{
+		static const int THLand0HasDisplacement = (1 << 0);
+		static const int THLand1HasDisplacement = (1 << 1);
+		static const int THLand2HasDisplacement = (1 << 2);
+		static const int THLand3HasDisplacement = (1 << 3);
+		static const int THLand4HasDisplacement = (1 << 4);
+		static const int THLand5HasDisplacement = (1 << 5);
+	}
+
 	cbuffer PerShader : register(b4)
 	{
 		uint VertexShaderDescriptor;
 		uint PixelShaderDescriptor;
 		uint ExtraShaderDescriptor;
+		uint ExtraFeatureDescriptor;
 	};
 
 }
