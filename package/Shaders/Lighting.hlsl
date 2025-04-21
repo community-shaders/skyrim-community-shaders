@@ -1648,7 +1648,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(SKIN) && defined(CS_SKIN)
 	float SkinAO = 1.0;
 	if (SharedData::skinData.skinDetailParams.w > 0.0f) {
+#		if defined(MODELSPACENORMALS)
 		float3 tangentNormal = mul(modelNormal.xyz, tbn);
+#		else
+		float3 tangentNormal = normal.xyz;
+#		endif  // MODELSPACENORMALS
 #		if defined(FACEGEN)
 		float2 detailUV = input.TexCoord0.xy * SharedData::skinData.skinDetailParams.x;
 #		else
