@@ -1245,6 +1245,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		input.LandBlendWeights2.xy /= totalWeight;
 	}
 	float3 blendedRGB = 0;
+	float blendedAlpha = 0;
+	float3 blendedNormalRGB = 0;
 	float blendedNormalAlpha = 0;
 
 	#if defined(TRUE_PBR)
@@ -1352,7 +1354,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		else
 	float4 normal1 = TexNormalSampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias);
 #		endif
-
 	float3 normalRGB1 = normal1.rgb;
 	float normalAlpha1 = normal1.a;
 #	if defined(TRUE_PBR)
