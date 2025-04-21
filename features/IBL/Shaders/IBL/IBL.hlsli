@@ -3,7 +3,7 @@
 #include "Common/SharedData.hlsli"
 #include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
 
-namespace IBL
+namespace ImageBasedLighting
 {
 	Texture2D<sh2> DiffuseIBLTexture : register(t100);
 
