@@ -1237,13 +1237,22 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif  // SPARKLE
 
 #	if defined(LANDSCAPE)
-	// Normalize blend weights
+	// Normalise blend weights
 	float totalWeight = input.LandBlendWeights1.x + input.LandBlendWeights1.y + input.LandBlendWeights1.z +
 	                    input.LandBlendWeights1.w + input.LandBlendWeights2.x + input.LandBlendWeights2.y;
 	if (totalWeight > 0.0) {
 		input.LandBlendWeights1 /= totalWeight;
 		input.LandBlendWeights2.xy /= totalWeight;
 	}
+	float3 blendedRGB = 0;
+	float blendedNormalAlpha = 0;
+
+	#if defined(TRUE_PBR)
+	float4 blendedRMAOS = 0;
+	#endif
+
+	float invwsum = totalWeight > 0.0 ? rcp(totalWeight) : 1.0;
+
 	// Compute stochastic offsets and derivatives once for all layers
 #		if defined(TERRAIN_VARIATION)
 	float2 dx = ddx(uv);
@@ -1315,13 +1324,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 baseColor = 0;
 	float4 normal = 0;
 	float glossiness = 0;
-
+	
 	float4 rawRMAOS = 0;
 
 	float4 glintParameters = 0;
 
 #	if defined(LANDSCAPE)
-	// Layer 1
+	// Layer 1 (LandBlendWeights1.x)
+	if (input.LandBlendWeights1.x > 0.0) {
+    float weight = input.LandBlendWeights1.x * invwsum;
 #		if defined(TERRAIN_VARIATION)
 	float4 diffuse1 = TerrainTextureSample(TexColorSampler, SampColorSampler, uv, offsets[0], dx, dy);
 #		else
@@ -1331,7 +1342,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(TRUE_PBR)
 	[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile0PBR) == 0)
 	{
-		diffuseRGB1 = diffuseRGB1 / Color::PBRLightingScale;
+       diffuseRGB1 = diffuseRGB1 / Color::PBRLightingScale;
 	}
 #		endif
 	float alpha1 = diffuse1.a;
@@ -1344,16 +1355,24 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	float3 normalRGB1 = normal1.rgb;
 	float normalAlpha1 = normal1.a;
-#		if defined(TRUE_PBR)
-#			if defined(TERRAIN_VARIATION)
-	float4 rmaos1 = TerrainTextureSample(TexRMAOSSampler, SampRMAOSSampler, uv, offsets[0], dx, dy);
-#			else
-	float4 rmaos1 = TexRMAOSSampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias);
+#	if defined(TRUE_PBR)
+#   	if defined(TERRAIN_VARIATION)
+    float4 rmaos1 = TerrainTextureSample(TexRMAOSSampler, SampRMAOSSampler, uv, offsets[0], dx, dy);
+#   		else
+    float4 rmaos1 = TexRMAOSSampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias);
 #			endif
-	rmaos1 *= float4(PBRParams1.x, 1, 1, PBRParams1.z);
-#		endif
-
-// Layer 2
+    rmaos1 *= float4(PBRParams1.x, 1, 1, PBRParams1.z);
+    blendedRMAOS += rmaos1 * weight; // Blending Within Layers (Same for the rest of layers 2-6)
+#   	endif
+    blendedRGB += diffuseRGB1 * weight;
+    blendedAlpha += alpha1 * weight;
+    blendedNormalRGB += normalRGB1 * weight;
+    blendedNormalAlpha += normalAlpha1 * weight;
+	}
+	
+	// Layer 2 (LandBlendWeights1.y)
+	if (input.LandBlendWeights1.y > 0.0) {
+    float weight = input.LandBlendWeights1.y * invwsum;
 #		if defined(TERRAIN_VARIATION)
 	float4 diffuse2 = TerrainTextureSample(TexLandColor2Sampler, SampColorSampler, uv, offsets[1], dx, dy);
 #		else
@@ -1382,9 +1401,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 rmaos2 = TexLandRMAOS2Sampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias);
 #			endif
 	rmaos2 *= float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
+	blendedRMAOS += rmaos2 * weight;
 #		endif
+    blendedRGB += diffuseRGB2 * weight;
+    blendedAlpha += alpha2 * weight;
+    blendedNormalRGB += normalRGB2 * weight;
+    blendedNormalAlpha += normalAlpha2 * weight;
+	}
 
-// Layer 3
+	// Layer 3 (LandBlendWeights1.z)
+	if (input.LandBlendWeights1.z > 0.0) {
+	float weight = input.LandBlendWeights1.z * invwsum;
 #		if defined(TERRAIN_VARIATION)
 	float4 diffuse3 = TerrainTextureSample(TexLandColor3Sampler, SampColorSampler, uv, offsets[2], dx, dy);
 #		else
@@ -1413,9 +1440,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 rmaos3 = TexLandRMAOS3Sampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias);
 #			endif
 	rmaos3 *= float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
+	blendedRMAOS += rmaos3 * weight;
 #		endif
+    blendedRGB += diffuseRGB3 * weight;
+    blendedAlpha += alpha3 * weight;
+    blendedNormalRGB += normalRGB3 * weight;
+    blendedNormalAlpha += normalAlpha3 * weight;
+	}
 
-// Layer 4
+	// Layer 4 (LandBlendWeights1.w)
+	if (input.LandBlendWeights1.w > 0.0) {
+	float weight = input.LandBlendWeights1.w * invwsum;
 #		if defined(TERRAIN_VARIATION)
 	float4 diffuse4 = TerrainTextureSample(TexLandColor4Sampler, SampColorSampler, uv, offsets[3], dx, dy);
 #		else
@@ -1444,9 +1479,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 rmaos4 = TexLandRMAOS4Sampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias);
 #			endif
 	rmaos4 *= float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
+	blendedRMAOS += rmaos4 * weight;
 #		endif
+    blendedRGB += diffuseRGB4 * weight;
+    blendedAlpha += alpha4 * weight;
+    blendedNormalRGB += normalRGB4 * weight;
+    blendedNormalAlpha += normalAlpha4 * weight;
+	}
 
-// Layer 5
+	// Layer 5 (LandBlendWeights2.x)
+	if (input.LandBlendWeights2.x > 0.0) {
+	float weight = input.LandBlendWeights2.x * invwsum;
 #		if defined(TERRAIN_VARIATION)
 	float4 diffuse5 = TerrainTextureSample(TexLandColor5Sampler, SampColorSampler, uv, offsets[4], dx, dy);
 #		else
@@ -1475,9 +1518,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 rmaos5 = TexLandRMAOS5Sampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias);
 #			endif
 	rmaos5 *= float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
+	blendedRMAOS += rmaos5 * weight;
 #		endif
+    blendedRGB += diffuseRGB5 * weight;
+    blendedAlpha += alpha5 * weight;
+    blendedNormalRGB += normalRGB5 * weight;
+    blendedNormalAlpha += normalAlpha5 * weight;
+	}
 
-// Layer 6
+	// Layer 6 (LandBlendWeights2.y)
+	if (input.LandBlendWeights2.y > 0.0) {
+	float weight = input.LandBlendWeights2.y * invwsum;
 #		if defined(TERRAIN_VARIATION)
 	float4 diffuse6 = TerrainTextureSample(TexLandColor6Sampler, SampColorSampler, uv, offsets[5], dx, dy);
 #		else
@@ -1506,53 +1557,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 rmaos6 = TexLandRMAOS6Sampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias);
 #			endif
 	rmaos6 *= float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
+	blendedRMAOS += rmaos6 * weight;
 #		endif
+    blendedRGB += diffuseRGB6 * weight;
+    blendedAlpha += alpha6 * weight;
+    blendedNormalRGB += normalRGB6 * weight;
+    blendedNormalAlpha += normalAlpha6 * weight;
+	}
 
-	// Normalize the raw LandBlendWeights to ensure they sum to 1
-	float wsum = input.LandBlendWeights1.x + input.LandBlendWeights1.y + input.LandBlendWeights1.z +
-	             input.LandBlendWeights1.w + input.LandBlendWeights2.x + input.LandBlendWeights2.y;
-	float invwsum = wsum > 0.0 ? rcp(wsum) : 1.0;  // Avoid division by zero
-	float4 weights1 = input.LandBlendWeights1 * invwsum;
-	float2 weights2 = input.LandBlendWeights2.xy * invwsum;
-
-	// Blend diffuse
-	float3 blendedRGB = diffuseRGB1 * weights1.x +
-	                    diffuseRGB2 * weights1.y +
-	                    diffuseRGB3 * weights1.z +
-	                    diffuseRGB4 * weights1.w +
-	                    diffuseRGB5 * weights2.x +
-	                    diffuseRGB6 * weights2.y;
-	float blendedAlpha = alpha1 * weights1.x +
-	                     alpha2 * weights1.y +
-	                     alpha3 * weights1.z +
-	                     alpha4 * weights1.w +
-	                     alpha5 * weights2.x +
-	                     alpha6 * weights2.y;
-	float4 rawBaseColor = float4(blendedRGB, blendedAlpha);  // Define rawBaseColor for landscape
+	float4 rawBaseColor = float4(blendedRGB, blendedAlpha);
 	baseColor = float4(Color::Diffuse(blendedRGB), blendedAlpha);
-
-	// Blend normals
-	float3 blendedNormalRGB = normalRGB1 * weights1.x +
-	                          normalRGB2 * weights1.y +
-	                          normalRGB3 * weights1.z +
-	                          normalRGB4 * weights1.w +
-	                          normalRGB5 * weights2.x +
-	                          normalRGB6 * weights2.y;
-	float blendedNormalAlpha = normalAlpha1 * weights1.x +
-	                           normalAlpha2 * weights1.y +
-	                           normalAlpha3 * weights1.z +
-	                           normalAlpha4 * weights1.w +
-	                           normalAlpha5 * weights2.x +
-	                           normalAlpha6 * weights2.y;
 	normal = float4(blendedNormalRGB, blendedNormalAlpha);
 #		if defined(TRUE_PBR)
-	// Blend RMAOS
-	float4 blendedRMAOS = rmaos1 * weights1.x +
-	                      rmaos2 * weights1.y +
-	                      rmaos3 * weights1.z +
-	                      rmaos4 * weights1.w +
-	                      rmaos5 * weights2.x +
-	                      rmaos6 * weights2.y;
 	rawRMAOS = blendedRMAOS;
 #		endif
 #	else
