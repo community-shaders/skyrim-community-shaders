@@ -712,8 +712,46 @@ float ProcessSparkleColor(float color)
 }
 #	endif
 
+float3 D_KajiyaKay (float3 T, float3 H, float n)
+{
+    float TH = dot(T, H);
+    float sinTH = saturate(1 - TH * TH);
+    float dirAtten = saturate(TH + 1);
+    float norm = (n + 2) / (2 * Math::PI);
+    return dirAtten * norm * pow(sinTH, 0.5 * n);
+}
+
+float3 F_Schlick(float cosTheta, float3 F0)
+{
+    // R(θ) = R0 + (1 - R0) * (1 - cosθ)^5
+    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+}
+
+float3 GetHairDualSpecularScheuermann(float3 T, float3 N, float3 V, float3 L, float shininess, float3 lightColor)
+{
+	const float3 H = normalize(L + V);
+	const float3 NdotL = saturate(dot(N, L));
+	const float3 NdotV = saturate(dot(N, V));
+
+	const float3 specPrimary = D_KajiyaKay(T, H, shininess) * 0.7;
+	const float3 specSecondary = D_KajiyaKay(T, H, shininess * 0.5) * 0.3;
+	const float3 F = F_Schlick(saturate(dot(H, V)), float3(0.055, 0.055, 0.055));
+	float3 specR = 0.25 * F * (specPrimary + specSecondary) * NdotL * saturate(NdotV * (3.4e+38));
+	float scatterFresnel1 = pow(saturate(-dot(L, V)), 9) * pow(saturate(1 - NdotV * NdotV), 12);
+	float scatterFresnel2 = saturate(pow((1 - NdotV), 20));
+	float3 specT = scatterFresnel1 + scatterFresnel2;
+	float3 specTerm = specR + specT;
+    float3 dirSpecular = specTerm * lightColor;
+    return dirSpecular;
+}
+
 float3 GetLightSpecularInput(PS_INPUT input, float3 L, float3 V, float3 N, float3 lightColor, float shininess, float2 uv)
 {
+#	if defined(HAIR) && defined(CS_HAIR)
+	float3 T = normalize(float3(input.TBN0.y, input.TBN1.y, input.TBN2.y));
+	float3 specularHighlight = GetHairDualSpecularScheuermann(T, N, V, L, shininess * 2, lightColor);
+	return specularHighlight * Math::PI;
+#	endif
 	float3 H = normalize(V + L);
 	float HdotN = 1.0;
 #	if defined(ANISO_LIGHTING)
@@ -2299,6 +2337,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	diffuseColor += lightsDiffuseColor;
 	specularColor += lightsSpecularColor;
+
+#	if defined(HAIR) && defined(CS_HAIR)
+	diffuseColor *= 1 / Math::PI;
+#	endif
 
 #	if !defined(LANDSCAPE)
 	if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::CharacterLight) {
