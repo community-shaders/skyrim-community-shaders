@@ -259,7 +259,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			if !defined(LL)
 	psout.Color.xyz = input.Color.xyz * baseColor.xyz + PParams.yyy;
 #			else
-	psout.Color.xyz = input.Color.xyz * baseColor.xyz + linearyyy;
+	psout.Color.xyz = Color::GammaToTrueLinear(input.Color.xyz) * baseColor.xyz + linearyyy;
 #			endif  // LL
 #		endif
 
