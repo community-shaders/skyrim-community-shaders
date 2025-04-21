@@ -2362,6 +2362,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 
 	float3 directionalAmbientColor = max(0, mul(DirectionalAmbient, modelNormal));
+#	if defined(LL)
+	directionalAmbientColor = Color::GammaToTrueLinear(directionalAmbientColor);
+#	endif
 
 #	if defined(SKYLIGHTING)
 	float skylightingDiffuse = 1;
