@@ -3,17 +3,20 @@
 #include "Deferred.h"
 #include "Shadercache.h"
 #include "State.h"
+#include "DynamicCubemaps.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     IBL::Settings,
     EnableDiffuseIBL,
-    DiffuseIBLScale
+    DiffuseIBLScale,
+	DALCAmount
 )
 
 void IBL::DrawSettings()
 {
     ImGui::Checkbox("Enable Diffuse IBL", (bool*)&settings.EnableDiffuseIBL);
     ImGui::SliderFloat("Diffuse IBL Scale", &settings.DiffuseIBLScale, 0.0f, 10.0f, "%.2f");
+	ImGui::SliderFloat("DALC Amount", &settings.DALCAmount, 0.0f, 1.0f, "%.2f");
 }
 
 void IBL::LoadSettings(json& o_json)
@@ -51,7 +54,12 @@ void IBL::Prepass()
 	auto renderer = globals::game::renderer;
 	auto& reflections = renderer->GetRendererData().cubemapRenderTargets[RE::RENDER_TARGET_CUBEMAP::kREFLECTIONS];
 
-	std::array<ID3D11ShaderResourceView*, 1> srvs = { reflections.SRV };
+	auto dynamicCubemaps = globals::features::dynamicCubemaps;
+
+	const auto& envTexture = dynamicCubemaps->envTexture;
+	const auto& envReflectionsTexture = dynamicCubemaps->envReflectionsTexture;
+
+	std::array<ID3D11ShaderResourceView*, 3> srvs = { reflections.SRV, envTexture->srv.get(), envReflectionsTexture->srv.get() };
 	std::array<ID3D11UnorderedAccessView*, 1> uavs = { diffuseIBLTexture->uav.get() };
 	std::array<ID3D11SamplerState*, 1> samplers = { Deferred::GetSingleton()->linearSampler };
 
@@ -136,7 +144,10 @@ void IBL::ClearShaderCache()
 
 ID3D11ComputeShader* IBL::GetDiffuseIBLCS()
 {
+	std::vector<std::pair<const char*, const char*>> defines;
+	if (globals::features::dynamicCubemaps->loaded)
+		defines.push_back({ "DYNAMIC_CUBEMAPS", nullptr });
 	if (!diffuseIBLCS)
-		diffuseIBLCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\IBL\\DiffuseIBLCS.hlsl", {}, "cs_5_0"));
+		diffuseIBLCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\IBL\\DiffuseIBLCS.hlsl", defines, "cs_5_0"));
 	return diffuseIBLCS;
 }

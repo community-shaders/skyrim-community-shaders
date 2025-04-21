@@ -5,6 +5,11 @@
 TextureCube<float4> ReflectionTexture : register(t0);
 RWTexture2D<sh2> IBLTexture : register(u0);
 
+#if defined(DYNAMIC_CUBEMAPS)
+TextureCube<float3> EnvTexture : register(t1);
+TextureCube<float3> EnvReflectionsTexture : register(t2);
+#endif
+
 SamplerState LinearSampler : register(s0);
 
 [numthreads(1, 1, 1)] void main(uint3 dispatchID
@@ -21,7 +26,13 @@ SamplerState LinearSampler : register(s0);
 		for (float ze = 0.5; ze < axisSampleCount; ze += 1.0) {
 			float3 rayDir = SphericalHarmonics::GetUniformSphereSample(az / axisSampleCount, ze / axisSampleCount);
 
+#if !defined(DYNAMIC_CUBEMAPS)
 			float3 color = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0);
+#else
+			float3 colorEnv = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0);
+			float3 colorRef = EnvReflectionsTexture.SampleLevel(LinearSampler, -rayDir, 0);
+			float3 color = (colorEnv + colorRef) * 0.5;
+#endif
 
 			color = Color::GammaToLinear(color);
 
