@@ -738,7 +738,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	else
 	float4 baseColorMul = BaseColor;
 #		if defined(LL)
-	baseColorMul.xyz = Color::GammaToTrueLinear(baseColorMul.xyz);
+	baseColorMul.xyz = Color::GammaToTrueLinear(max(baseColorMul.xyz, 0));
 #		endif
 #		if defined(VC) && !defined(PROJECTED_UV)
 #			if !defined(LL)
