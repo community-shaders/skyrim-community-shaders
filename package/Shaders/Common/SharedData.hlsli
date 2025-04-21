@@ -145,6 +145,13 @@ namespace SharedData
 		bool DisableTerrainVertexColors;
 	};
 
+	struct IBLSettings
+	{
+		uint EnableDiffuseIBL;
+		float DiffuseIBLScale;
+		uint2 pad0;
+	}
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -156,6 +163,7 @@ namespace SharedData
 		SkylightingSettings skylightingSettings;
 		CloudShadowsSettings cloudShadowsSettings;
 		LODBlendingSettings lodBlendingSettings;
+		IBLSettings iblSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);

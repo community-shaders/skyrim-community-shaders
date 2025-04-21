@@ -48,6 +48,7 @@ namespace globals
 		ExtendedMaterials* extendedMaterials = nullptr;
 		GrassCollision* grassCollision = nullptr;
 		GrassLighting* grassLighting = nullptr;
+		IBL* ibl = nullptr;
 		LightLimitFix* lightLimitFix = nullptr;
 		LODBlending* lodBlending = nullptr;
 		ScreenSpaceGI* screenSpaceGI = nullptr;
@@ -123,6 +124,7 @@ namespace globals
 		features::extendedMaterials = ExtendedMaterials::GetSingleton();
 		features::grassCollision = GrassCollision::GetSingleton();
 		features::grassLighting = GrassLighting::GetSingleton();
+		features::ibl = IBL::GetSingleton();
 		features::lightLimitFix = LightLimitFix::GetSingleton();
 		features::lodBlending = LODBlending::GetSingleton();
 		features::screenSpaceGI = ScreenSpaceGI::GetSingleton();

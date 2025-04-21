@@ -18,6 +18,10 @@ Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t4);
 
 #endif
 
+#if defined(IBL)
+#	include "IBL/IBL.hlsli"
+#endif
+
 #if defined(SSGI)
 Texture2D<float> SsgiAoTexture : register(t5);
 Texture2D<float4> SsgiYTexture : register(t6);
@@ -56,8 +60,19 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normalWS, 1.0)));
 
+#if defined(IBL)
+	if (SharedData::iblSettings.EnableDiffuseIBL) {
+		directionalAmbientColor = IBL::GetDiffuseIBL(-normalWS) * SharedData::iblSettings.DiffuseIBLScale;
+	}
+#endif
+
 	float3 linAlbedo = Color::GammaToLinear(albedo);
 	float3 linDirectionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
+#if defined(IBL)
+	if (SharedData::iblSettings.EnableDiffuseIBL) {
+		linDirectionalAmbientColor = directionalAmbientColor;
+	}
+#endif
 	float3 linDiffuseColor = Color::GammaToLinear(diffuseColor);
 	float3 originalDiffuseColor = linDiffuseColor;
 

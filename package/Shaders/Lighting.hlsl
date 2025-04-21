@@ -1005,6 +1005,10 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 
 #	include "Common/ShadowSampling.hlsli"
 
+#	if defined(IBL)
+#		include "IBL/IBL.hlsli"
+#	endif
+
 PS_OUTPUT main(PS_INPUT input, bool frontFace
 			   : SV_IsFrontFace)
 {
@@ -2330,6 +2334,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 
 	float3 directionalAmbientColor = max(0, mul(DirectionalAmbient, modelNormal));
+
+#	if defined(IBL)
+	if (SharedData::iblSettings.EnableDiffuseIBL) {
+		directionalAmbientColor = IBL::GetDiffuseIBL(-worldSpaceNormal) * SharedData::iblSettings.DiffuseIBLScale;
+	}
+#	endif
 
 #	if defined(SKYLIGHTING)
 	float skylightingDiffuse = 1;

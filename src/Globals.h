@@ -5,6 +5,7 @@ struct DynamicCubemaps;
 struct ExtendedMaterials;
 struct GrassCollision;
 struct GrassLighting;
+struct IBL;
 struct LightLimitFix;
 struct LODBlending;
 struct ScreenSpaceGI;
@@ -49,6 +50,7 @@ namespace globals
 		extern ExtendedMaterials* extendedMaterials;
 		extern GrassCollision* grassCollision;
 		extern GrassLighting* grassLighting;
+		extern IBL* ibl;
 		extern LightLimitFix* lightLimitFix;
 		extern LODBlending* lodBlending;
 		extern ScreenSpaceGI* screenSpaceGI;
