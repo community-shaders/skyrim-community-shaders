@@ -31,8 +31,6 @@ void TerrainVariation::UpdateShaderSettings()
 		return;
 	}
 
-	// Update settings in the feature buffer and force a shader state update
-	// This approach doesn't directly access the buffer but tells the game to update it
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::DIRTY_VERTEX_DESC);
 
 	logger::debug("TerrainVariation: Updated shader settings, enabled = {}", settings.enabled);

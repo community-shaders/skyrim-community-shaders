@@ -8,7 +8,7 @@ struct TerrainVariation : Feature
 		return &singleton;
 	}
 
-	virtual inline std::string GetName() override { return "Terrain Tiling Fix"; }
+	virtual inline std::string GetName() override { return "Terrain Variation"; }
 	virtual inline std::string GetShortName() override { return "TerrainVariation"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_VARIATION"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type shaderType) override { return shaderType == RE::BSShader::Type::Lighting; }
@@ -26,8 +26,6 @@ struct TerrainVariation : Feature
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;
-
-	// Add missing method declarations
 	virtual void PostPostLoad() override;
 	void UpdateShaderSettings();
 };
