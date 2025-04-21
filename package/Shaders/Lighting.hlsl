@@ -516,13 +516,6 @@ Texture2D<float4> TexLandNormal4Sampler : register(t10);
 Texture2D<float4> TexLandNormal5Sampler : register(t11);
 Texture2D<float4> TexLandNormal6Sampler : register(t12);
 
-Texture2D<float4> TexLandTHDisp0Sampler : register(t92);
-Texture2D<float4> TexLandTHDisp1Sampler : register(t93);
-Texture2D<float4> TexLandTHDisp2Sampler : register(t94);
-Texture2D<float4> TexLandTHDisp3Sampler : register(t95);
-Texture2D<float4> TexLandTHDisp4Sampler : register(t96);
-Texture2D<float4> TexLandTHDisp5Sampler : register(t97);
-
 #		if defined(TRUE_PBR)
 
 Texture2D<float4> TexLandDisplacement0Sampler : register(t80);

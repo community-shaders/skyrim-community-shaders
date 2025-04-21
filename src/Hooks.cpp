@@ -9,8 +9,6 @@
 #include "TruePBR.h"
 #include "Util.h"
 
-#include "Features/TerrainHelper.h"
-
 #include "ShaderTools/BSShaderHooks.h"
 
 #include "DX12SwapChain.h"
@@ -734,13 +732,6 @@ namespace Hooks
 			}
 
 			bool vanillaResult = func(land);
-
-			// setup material for terrain helper
-			auto terrainHelper = globals::features::terrainHelper;
-			if (vanillaResult && terrainHelper->loaded) {
-				terrainHelper->TESObjectLAND_SetupMaterial(land);
-			}
-
 			return vanillaResult;
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -759,12 +750,6 @@ namespace Hooks
 
 			// vanilla
 			func(shader, material);
-
-			// terrain helper
-			auto terrainHelper = globals::features::terrainHelper;
-			if (terrainHelper->loaded) {
-				terrainHelper->BSLightingShader_SetupMaterial(material);
-			}
 		};
 		static inline REL::Relocation<decltype(thunk)> func;
 	};

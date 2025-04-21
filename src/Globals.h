@@ -13,7 +13,6 @@ struct ScreenSpaceShadows;
 struct Skylighting;
 struct SubsurfaceScattering;
 struct TerrainBlending;
-struct TerrainHelper;
 struct TerrainShadows;
 struct VolumetricLighting;
 struct WaterEffects;
@@ -59,7 +58,6 @@ namespace globals
 		extern Skylighting* skylighting;
 		extern SubsurfaceScattering* subsurfaceScattering;
 		extern TerrainBlending* terrainBlending;
-		extern TerrainHelper* terrainHelper;
 		extern TerrainShadows* terrainShadows;
 		extern VolumetricLighting* volumetricLighting;
 		extern WaterEffects* waterEffects;

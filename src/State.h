@@ -118,8 +118,6 @@ public:
 	uint lastModifiedPixelDescriptor = 0;
 	uint currentExtraDescriptor = 0;
 	uint lastExtraDescriptor = 0;
-	uint currentExtraFeatureDescriptor = 0;
-	uint lastExtraFeatureDescriptor = 0;
 	bool forceUpdatePermutationBuffer = true;
 
 	bool isTree = false;
@@ -135,16 +133,6 @@ public:
 		IsMobile = 1 << 6
 	};
 
-	enum class ExtraFeatureDescriptors : uint32_t
-	{
-		THLand0HasDisplacement = 1 << 0,
-		THLand1HasDisplacement = 1 << 1,
-		THLand2HasDisplacement = 1 << 2,
-		THLand3HasDisplacement = 1 << 3,
-		THLand4HasDisplacement = 1 << 4,
-		THLand5HasDisplacement = 1 << 5
-	};
-
 	void UpdateSharedData(bool a_inWorld, bool a_prepass);
 
 	struct alignas(16) PermutationCB
@@ -152,7 +140,7 @@ public:
 		uint VertexShaderDescriptor;
 		uint PixelShaderDescriptor;
 		uint ExtraShaderDescriptor;
-		uint ExtraFeatureDescriptor;
+		uint pad0[1];
 	};
 
 	ConstantBuffer* permutationCB = nullptr;
