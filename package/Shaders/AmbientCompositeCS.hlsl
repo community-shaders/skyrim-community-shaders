@@ -57,12 +57,14 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normalWS, 1.0)));
 
 	float3 linAlbedo = albedo;
-	float3 linDirectionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
+	float3 linDirectionalAmbientColor = directionalAmbientColor;
 	float3 linDiffuseColor = diffuseColor;
 #if !defined(LL)
 	linAlbedo = Color::GammaToLinear(linAlbedo);
-	// linDirectionalAmbientColor = Color::GammaToLinear(linDirectionalAmbientColor);
+	linDirectionalAmbientColor = Color::GammaToLinear(linDirectionalAmbientColor);
 	linDiffuseColor = Color::GammaToLinear(linDiffuseColor);
+#else
+	linDirectionalAmbientColor = Color::GammaToTrueLinear(linDirectionalAmbientColor);
 #endif
 	float3 originalDiffuseColor = linDiffuseColor;
 

@@ -704,6 +704,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	normal = normalize(float3(normal.xy, max(0, normal.z)));
 
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
+#				if defined(LL)
+	directionalAmbientColor = Color::GammaToTrueLinear(directionalAmbientColor);
+#				endif
 
 #				if defined(SKYLIGHTING)
 	if (!SharedData::InInterior) {
@@ -722,11 +725,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 
+#					if !defined(LL)
 		directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
+#					endif
 
 		directionalAmbientColor *= skylightingDiffuse;
 		directionalAmbientColor *= 1.0 + saturate(normal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
+#					if !defined(LL)
 		directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
+#					endif
 	}
 #				endif  // SKYLIGHTING
 
@@ -884,6 +891,9 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif
 
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
+#			if defined(LL)
+	directionalAmbientColor = Color::GammaToTrueLinear(directionalAmbientColor);
+#			endif
 
 #			if defined(SKYLIGHTING)
 	if (!SharedData::InInterior) {
@@ -902,12 +912,16 @@ PS_OUTPUT main(PS_INPUT input)
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 
+#				if !defined(LL)
 		directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
+#				endif
 
 		directionalAmbientColor *= skylightingDiffuse;
 		directionalAmbientColor *= 1.0 + saturate(normal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
 
+#				if !defined(LL)
 		directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
+#				endif
 	}
 #			endif  // SKYLIGHTING
 
