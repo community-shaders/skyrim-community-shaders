@@ -6,6 +6,7 @@
 #include "Features/ExtendedMaterials.h"
 #include "Features/GrassCollision.h"
 #include "Features/GrassLighting.h"
+#include "Features/IBL.h"
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
 #include "Features/ScreenSpaceGI.h"
@@ -135,7 +136,8 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		globals::features::skylighting,
 		globals::features::terrainBlending,
 		globals::features::volumetricLighting,
-		globals::features::lodBlending
+		globals::features::lodBlending,
+		globals::features::ibl
 	};
 
 	static std::vector<Feature*> featuresVR(features);

@@ -150,7 +150,7 @@ namespace SharedData
 		uint EnableDiffuseIBL;
 		float DiffuseIBLScale;
 		uint2 pad0;
-	}
+	};
 
 	cbuffer FeatureData : register(b6)
 	{
