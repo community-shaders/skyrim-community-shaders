@@ -150,7 +150,7 @@ namespace SharedData
 		uint EnableDiffuseIBL;
 		float DiffuseIBLScale;
 		float DALCAmount;
-		uint pad0;
+		uint SampleUnderHorizonFromDynCube;
 	};
 
 	cbuffer FeatureData : register(b6)

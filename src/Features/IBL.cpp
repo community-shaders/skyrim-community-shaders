@@ -9,7 +9,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     IBL::Settings,
     EnableDiffuseIBL,
     DiffuseIBLScale,
-	DALCAmount
+	DALCAmount,
+	SampleUnderHorizonFromDynCube
 )
 
 void IBL::DrawSettings()
@@ -17,6 +18,7 @@ void IBL::DrawSettings()
     ImGui::Checkbox("Enable Diffuse IBL", (bool*)&settings.EnableDiffuseIBL);
     ImGui::SliderFloat("Diffuse IBL Scale", &settings.DiffuseIBLScale, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("DALC Amount", &settings.DALCAmount, 0.0f, 1.0f, "%.2f");
+	ImGui::Checkbox("Sample Under Horizon From Dynamic Cubemaps", (bool*)&settings.SampleUnderHorizonFromDynCube);
 }
 
 void IBL::LoadSettings(json& o_json)

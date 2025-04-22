@@ -1,5 +1,6 @@
 #include "Common/Color.hlsli"
 #include "Common/Math.hlsli"
+#include "Common/SharedData.hlsli"
 #include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
 
 TextureCube<float4> ReflectionTexture : register(t0);
@@ -26,13 +27,12 @@ SamplerState LinearSampler : register(s0);
 		for (float ze = 0.5; ze < axisSampleCount; ze += 1.0) {
 			float3 rayDir = SphericalHarmonics::GetUniformSphereSample(az / axisSampleCount, ze / axisSampleCount);
 
-// #if !defined(DYNAMIC_CUBEMAPS)
 			float3 color = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0);
-// #else
-// 			float3 colorEnv = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0);
-// 			float3 colorRef = EnvReflectionsTexture.SampleLevel(LinearSampler, -rayDir, 0);
-// 			float3 color = (colorEnv + colorRef) * 0.5;
-// #endif
+#if defined(DYNAMIC_CUBEMAPS)
+			if (rayDir.z >= 0 && SharedData::iblSettings.SampleUnderHorizonFromDynCube) {
+				color = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0);
+			}
+#endif
 
 			color = Color::GammaToLinear(color);
 

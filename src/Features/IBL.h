@@ -36,7 +36,7 @@ public:
         uint EnableDiffuseIBL = 1;
         float DiffuseIBLScale = 1.0f;
         float DALCAmount = 0.0f;
-        uint pad;
+        uint SampleUnderHorizonFromDynCube = 0;
     } settings;
 
 	ID3D11ComputeShader* GetDiffuseIBLCS();
