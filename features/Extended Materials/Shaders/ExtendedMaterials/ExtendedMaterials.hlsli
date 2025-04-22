@@ -156,7 +156,7 @@ namespace ExtendedMaterials
 		}
 		[unroll] for (int i = 0; i < 6; i++)
 		{
-			weights[i] = pow(weights[i], heightBlend);
+			weights[i] = min(100, pow(weights[i], heightBlend));
 		}
 		float wsum = 0;
 		[unroll] for (int i = 0; i < 6; i++)
@@ -191,6 +191,7 @@ namespace ExtendedMaterials
 			float h = 0.0;
 			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand0HasDisplacement) != 0)
 			{
+
 #		if defined(TERRAIN_VARIATION)
 				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp0Sampler, SampTerrainParallaxSampler, coords, offsets[0], dx, dy).x, params[0]);
 #		else
@@ -212,6 +213,7 @@ namespace ExtendedMaterials
 			float h = 0.0;
 			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand1HasDisplacement) != 0)
 			{
+
 #		if defined(TERRAIN_VARIATION)
 				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp1Sampler, SampTerrainParallaxSampler, coords, offsets[1], dx, dy).x, params[1]);
 #		else
@@ -233,6 +235,7 @@ namespace ExtendedMaterials
 			float h = 0.0;
 			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand2HasDisplacement) != 0)
 			{
+
 #		if defined(TERRAIN_VARIATION)
 				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp2Sampler, SampTerrainParallaxSampler, coords, offsets[2], dx, dy).x, params[2]);
 #		else
@@ -254,6 +257,7 @@ namespace ExtendedMaterials
 			float h = 0.0;
 			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand3HasDisplacement) != 0)
 			{
+
 #		if defined(TERRAIN_VARIATION)
 				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp3Sampler, SampTerrainParallaxSampler, coords, offsets[3], dx, dy).x, params[3]);
 #		else
@@ -275,6 +279,7 @@ namespace ExtendedMaterials
 			float h = 0.0;
 			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand4HasDisplacement) != 0)
 			{
+
 #		if defined(TERRAIN_VARIATION)
 				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp4Sampler, SampTerrainParallaxSampler, coords, offsets[4], dx, dy).x, params[4]);
 #		else
@@ -296,6 +301,7 @@ namespace ExtendedMaterials
 			float h = 0.0;
 			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand5HasDisplacement) != 0)
 			{
+
 #		if defined(TERRAIN_VARIATION)
 				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp5Sampler, SampTerrainParallaxSampler, coords, offsets[5], dx, dy).x, params[5]);
 #		else
@@ -315,7 +321,7 @@ namespace ExtendedMaterials
 		}
 		[unroll] for (int i = 0; i < 6; i++)
 		{
-			weights[i] = pow(weights[i], heightBlend);
+			weights[i] = min(100, pow(weights[i], heightBlend));
 		}
 		float wsum = 0;
 		[unroll] for (int i = 0; i < 6; i++)

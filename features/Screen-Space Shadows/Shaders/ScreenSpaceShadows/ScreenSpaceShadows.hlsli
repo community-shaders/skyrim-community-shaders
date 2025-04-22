@@ -16,7 +16,7 @@ namespace ScreenSpaceShadows
 	float GetScreenSpaceShadow(float3 screenPosition, float2 uv, float noise, uint eyeIndex)
 	{
 #if defined(VR)
-		return ScreenSpaceShadowsTexture.Load(int3(screenPosition.xy, 0));
+		return ScreenSpaceShadowsTexture.Load(int3(int2(screenPosition.xy + 0.5f), 0)).x;
 #else
 		noise *= Math::TAU;
 
@@ -28,10 +28,10 @@ namespace ScreenSpaceShadows
 #	if defined(DEFERRED) && !defined(DO_ALPHA_TEST)
 		depthSamples[0] = screenPosition.z;
 #	else
-		depthSamples[0] = SharedData::DepthTexture.Load(int3(screenPosition.xy, 0));
+		depthSamples[0] = SharedData::DepthTexture.Load(int3(int2(screenPosition.xy + 0.5f), 0)).x;
 #	endif
 
-		shadowSamples[0] = ScreenSpaceShadowsTexture.Load(int3(screenPosition.xy, 0));
+		shadowSamples[0] = ScreenSpaceShadowsTexture.Load(int3(int2(screenPosition.xy + 0.5f), 0)).x;
 
 		static const float2 BlurOffsets[3] = {
 			float2(-0.6720635096678028f, 0.6601738628451107f),
