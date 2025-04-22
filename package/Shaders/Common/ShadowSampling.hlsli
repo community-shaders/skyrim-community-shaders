@@ -165,7 +165,7 @@ namespace ShadowSampling
 
 	float GetEffectShadow(float3 worldPosition, float3 viewDirection, float2 screenPosition, uint eyeIndex)
 	{
-		float worldShadow = GetWorldShadow(worldPosition, FrameBuffer::CameraPosAdjust[eyeIndex], eyeIndex);
+		float worldShadow = GetWorldShadow(worldPosition, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 		if (worldShadow != 0.0) {
 			float shadow = Get3DFilteredShadow(worldPosition, viewDirection, screenPosition, eyeIndex);
 			return min(worldShadow, shadow);
@@ -184,7 +184,7 @@ namespace ShadowSampling
 
 	float GetWaterShadow(float noise, float3 worldPosition, uint eyeIndex)
 	{
-		float worldShadow = GetWorldShadow(worldPosition, FrameBuffer::CameraPosAdjust[eyeIndex], eyeIndex);
+		float worldShadow = GetWorldShadow(worldPosition, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 		if (worldShadow != 0.0) {
 			float2 rotation;
 			sincos(Math::TAU * noise, rotation.y, rotation.x);
