@@ -1,22 +1,21 @@
 #include "IBL.h"
 
 #include "Deferred.h"
+#include "DynamicCubemaps.h"
 #include "Shadercache.h"
 #include "State.h"
-#include "DynamicCubemaps.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-    IBL::Settings,
-    EnableDiffuseIBL,
-    DiffuseIBLScale,
+	IBL::Settings,
+	EnableDiffuseIBL,
+	DiffuseIBLScale,
 	DALCAmount,
-	SampleUnderHorizonFromDynCube
-)
+	SampleUnderHorizonFromDynCube)
 
 void IBL::DrawSettings()
 {
-    ImGui::Checkbox("Enable Diffuse IBL", (bool*)&settings.EnableDiffuseIBL);
-    ImGui::SliderFloat("Diffuse IBL Scale", &settings.DiffuseIBLScale, 0.0f, 10.0f, "%.2f");
+	ImGui::Checkbox("Enable Diffuse IBL", (bool*)&settings.EnableDiffuseIBL);
+	ImGui::SliderFloat("Diffuse IBL Scale", &settings.DiffuseIBLScale, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("DALC Amount", &settings.DALCAmount, 0.0f, 1.0f, "%.2f");
 	ImGui::Checkbox("Sample Under Horizon From Dynamic Cubemaps", (bool*)&settings.SampleUnderHorizonFromDynCube);
 }
@@ -51,7 +50,7 @@ void IBL::Bind()
 
 void IBL::Prepass()
 {
-    auto context = globals::d3d::context;
+	auto context = globals::d3d::context;
 
 	auto renderer = globals::game::renderer;
 	auto& reflections = renderer->GetRendererData().cubemapRenderTargets[RE::RENDER_TARGET_CUBEMAP::kREFLECTIONS];
