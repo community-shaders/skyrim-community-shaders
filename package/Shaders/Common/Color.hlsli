@@ -46,22 +46,22 @@ namespace Color
 
 	float3 GammaToLinear(float3 color)
 	{
-		return pow(color, 1.8);
+		return pow(max(color, 0), 1.8);
 	}
 
 	float3 LinearToGamma(float3 color)
 	{
-		return pow(color, 1.0 / 1.8);
+		return pow(max(color, 0), 1.0 / 1.8);
 	}
 
 	float3 GammaToTrueLinear(float3 color)
 	{
-		return pow(color, 2.2);
+		return pow(max(color, 0), 2.2);
 	}
 
 	float3 TrueLinearToGamma(float3 color)
 	{
-		return pow(color, 1.0 / 2.2);
+		return pow(max(color, 0), 1.0 / 2.2);
 	}
 
 	float3 Diffuse(float3 color)
