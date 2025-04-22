@@ -42,7 +42,7 @@ Texture2D<float4> SsgiSpecularTexture : register(t13);
 void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, in float3 normal, in float3 view)
 {
 	// https://www.iryoku.com/stare-into-the-future/
-	ao = 1 - SsgiAoTexture[pixCoord];
+	ao = 1 - SsgiAoTexture[pixCoord].x;
 	const float SpecularPow = 8.0;
 	float NdotV = dot(normal, view);
 	float s = saturate(-0.3 + NdotV * NdotV);
@@ -50,7 +50,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
 	float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, lobe);
-	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord];
+	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord].xy;
 	// specular is a bit too saturated, because CoCg are average over hemisphere
 	// we just cheese this bit
 	ssgiIlCoCg *= 0.8;
@@ -77,7 +77,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	float3 normalGlossiness = NormalRoughnessTexture[dispatchID.xy];
 	float3 normalVS = GBuffer::DecodeNormal(normalGlossiness.xy);
 
-	float3 diffuseColor = MainRW[dispatchID.xy];
+	float3 diffuseColor = MainRW[dispatchID.xy].xyz;
 	float3 specularColor = SpecularTexture[dispatchID.xy];
 	float3 albedo = AlbedoTexture[dispatchID.xy];
 

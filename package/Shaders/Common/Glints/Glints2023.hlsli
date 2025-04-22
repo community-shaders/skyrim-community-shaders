@@ -265,7 +265,7 @@ namespace Glints
 		int selectedSample = 0;
 
 		{
-			float2 accumWeights = barycentrics;
+			float2 accumWeights = barycentrics.xy;
 			accumWeights.y += accumWeights.x;
 
 			if (noise < accumWeights.x)
@@ -485,7 +485,7 @@ namespace Glints
 			thetaBinLerp = Remap01To(thetaBinLerp, 0.0, ratioLerp);
 		float4 tetraBarycentricWeights = GetBarycentricWeightsTetrahedron(float3(thetaBinLerp, ratioLerp, lodLerp), tetras[0], tetras[1], tetras[2], tetras[3]);  // Compute barycentric coordinates within chosen tetrahedron
 
-		float3 accumWeights = normalize(tetraBarycentricWeights);
+		float3 accumWeights = normalize(tetraBarycentricWeights).xyz;
 		accumWeights.y += accumWeights.x;
 		accumWeights.z += accumWeights.y;
 

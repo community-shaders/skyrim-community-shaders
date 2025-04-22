@@ -49,7 +49,7 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 	float3 normalGlossiness = NormalRoughnessTexture[dispatchID.xy];
 	float3 normalVS = GBuffer::DecodeNormal(normalGlossiness.xy);
 
-	float3 diffuseColor = MainRW[dispatchID.xy];
+	float3 diffuseColor = MainRW[dispatchID.xy].xyz;
 	float3 albedo = AlbedoTexture[dispatchID.xy];
 
 	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);

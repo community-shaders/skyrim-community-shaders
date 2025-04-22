@@ -558,7 +558,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #			endif  // SCREEN_SPACE_SHADOWS
 
 		if (dirShadow != 0.0)
-			dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition, FrameBuffer::CameraPosAdjust[eyeIndex], eyeIndex);
+			dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
 #			if defined(WATER_LIGHTING)
 		if (dirShadow > 0.0) {

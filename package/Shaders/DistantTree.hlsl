@@ -226,7 +226,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif
 
 	if (dirShadow != 0.0)
-		dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition, FrameBuffer::CameraPosAdjust[eyeIndex], eyeIndex);
+		dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
 #			if !defined(LL)
 	float3 diffuseColor = SharedData::DirLightColor.xyz * dirShadow * 0.5;
@@ -258,7 +258,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Albedo = float4(baseColor.xyz, 1);
 	psout.Masks = float4(0, 0, 1, 0);
 #		else
-	float dirShadow = ShadowSampling::GetWorldShadow(input.WorldPosition, FrameBuffer::CameraPosAdjust[eyeIndex], eyeIndex);
+	float dirShadow = ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
 #		if !defined(LL)
 	float3 diffuseColor = SharedData::DirLightColor.xyz * dirShadow * 0.5;
