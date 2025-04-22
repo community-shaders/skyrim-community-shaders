@@ -2340,6 +2340,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(HAIR) && defined(CS_HAIR)
 	diffuseColor *= 1 / Math::PI;
+	specularColor *= baseColor.w;
 #	endif
 
 #	if !defined(LANDSCAPE)
