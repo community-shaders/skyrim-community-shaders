@@ -2336,7 +2336,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 directionalAmbientColor = max(0, mul(DirectionalAmbient, modelNormal));
 
 #	if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL) {
+	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
 		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
 		directionalAmbientColor += ImageBasedLighting::GetDiffuseIBL(-worldSpaceNormal) * SharedData::iblSettings.DiffuseIBLScale;
 	}

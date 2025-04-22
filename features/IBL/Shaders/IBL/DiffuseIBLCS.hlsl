@@ -26,13 +26,13 @@ SamplerState LinearSampler : register(s0);
 		for (float ze = 0.5; ze < axisSampleCount; ze += 1.0) {
 			float3 rayDir = SphericalHarmonics::GetUniformSphereSample(az / axisSampleCount, ze / axisSampleCount);
 
-#if !defined(DYNAMIC_CUBEMAPS)
+// #if !defined(DYNAMIC_CUBEMAPS)
 			float3 color = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0);
-#else
-			float3 colorEnv = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0);
-			float3 colorRef = EnvReflectionsTexture.SampleLevel(LinearSampler, -rayDir, 0);
-			float3 color = (colorEnv + colorRef) * 0.5;
-#endif
+// #else
+// 			float3 colorEnv = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0);
+// 			float3 colorRef = EnvReflectionsTexture.SampleLevel(LinearSampler, -rayDir, 0);
+// 			float3 color = (colorEnv + colorRef) * 0.5;
+// #endif
 
 			color = Color::GammaToLinear(color);
 
