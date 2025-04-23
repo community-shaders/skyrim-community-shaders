@@ -969,7 +969,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		finalColor = lerp(finalColorPreFog, input.FogParam.xyz * PosAdjust[eyeIndex].w, input.FogParam.w);
 	} else {
-		finalColor = lerp(finalColorPreFog, Color::GammaToTrueLinear(input.FogParam.xyz) * PosAdjust[eyeIndex].w, Color::GammaToTrueLinear(input.FogParam.w));
+		finalColor = lerp(finalColorPreFog, Color::GammaToTrueLinear(input.FogParam.xyz) * PosAdjust[eyeIndex].w, Color::GammaToLinear(input.FogParam.w));
 	}
 #					else
 	float specularFraction = lerp(1, fresnel, distanceFactor);
@@ -977,7 +977,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		finalColorPreFog = lerp(finalColorPreFog, input.FogParam.xyz * PosAdjust[eyeIndex].w, input.FogParam.w);
 	} else {
-		finalColorPreFog = lerp(finalColorPreFog, Color::GammaToTrueLinear(input.FogParam.xyz) * PosAdjust[eyeIndex].w, Color::GammaToTrueLinear(input.FogParam.w));
+		finalColorPreFog = lerp(finalColorPreFog, Color::GammaToTrueLinear(input.FogParam.xyz) * PosAdjust[eyeIndex].w, Color::GammaToLinear(input.FogParam.w));
 	}
 
 	float3 refractionColor = diffuseOutput.refractionColor;

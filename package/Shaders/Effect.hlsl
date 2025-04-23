@@ -830,7 +830,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		blendedColor = lightColor * (1 - input.FogParam.www);
 	} else {
-		blendedColor = lightColor * (1 - Color::GammaToTrueLinear(input.FogParam.www));
+		blendedColor = lightColor * (1 - Color::GammaToLinear(input.FogParam.www));
 	}
 #		elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * input.FogParam.w).xxx);
@@ -839,7 +839,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		blendedColor = lerp(lightColor, input.FogParam.xyz, input.FogParam.www);
 	} else {
-		blendedColor = lerp(lightColor, Color::GammaToTrueLinear(input.FogParam.xyz), Color::GammaToTrueLinear(input.FogParam.www));
+		blendedColor = lerp(lightColor, Color::GammaToTrueLinear(input.FogParam.xyz), Color::GammaToLinear(input.FogParam.www));
 	}
 #		endif
 #	else
