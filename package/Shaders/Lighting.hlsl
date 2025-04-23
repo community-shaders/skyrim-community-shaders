@@ -986,6 +986,10 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "LightLimitFix/LightLimitFix.hlsli"
 #	endif
 
+#	if defined(ISL) && defined(LIGHT_LIMIT_FIX)
+#		include "InverseSquareLighting/InverseSquareLighting.hlsli"
+#	endif
+
 #	if defined(TREE_ANIM)
 #		undef WETNESS_EFFECTS
 #	endif
@@ -2221,11 +2225,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 		float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WorldPosition.xyz;
 		float lightDist = length(lightDirection);
+
+#			if defined(ISL)
+		float intensityMultiplier = InverseSquareLighting::GetAttenuation(lightDist, light);
+		if (intensityMultiplier < 1e-5)
+			continue;
+#			else
 		float intensityFactor = saturate(lightDist / light.radius);
 		if (intensityFactor == 1)
 			continue;
-
 		float intensityMultiplier = 1 - intensityFactor * intensityFactor;
+#			endif
+
 		float3 lightColor = Color::Light(light.color.xyz) * intensityMultiplier * light.fade;
 		float lightShadow = 1.0;
 

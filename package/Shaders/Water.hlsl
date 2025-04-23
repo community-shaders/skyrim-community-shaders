@@ -803,6 +803,10 @@ float3 GetSunColor(float3 normal, float3 viewDirection)
 #			include "LightLimitFix/LightLimitFix.hlsli"
 #		endif
 
+#		if defined(ISL) && defined(LIGHT_LIMIT_FIX)
+#			include "InverseSquareLighting/InverseSquareLighting.hlsli"
+#		endif
+
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
@@ -915,9 +919,13 @@ PS_OUTPUT main(PS_INPUT input)
 
 			float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WPosition.xyz;
 			float lightDist = length(lightDirection);
-			float intensityFactor = saturate(lightDist / light.radius);
 
+#					if defined(ISL)
+			float intensityMultiplier = InverseSquareLighting::GetAttenuation(lightDist, light);
+#					else
+			float intensityFactor = saturate(lightDist / light.radius);
 			float intensityMultiplier = 1 - intensityFactor * intensityFactor;
+#					endif
 
 			float3 normalizedLightDirection = normalize(lightDirection);
 

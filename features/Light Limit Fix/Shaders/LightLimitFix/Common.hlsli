@@ -12,6 +12,10 @@ namespace LightFlags
 	static const uint PortalStrict = (1 << 0);
 	static const uint Shadow = (1 << 1);
 	static const uint Simple = (1 << 2);
+
+	static const uint Initialised = (1 << 8);
+	static const uint Disabled = (1 << 9);
+	static const uint InverseSquare = (1 << 10);
 }
 
 struct ClusterAABB
@@ -36,8 +40,10 @@ struct Light
 	uint4 roomFlags;
 	uint lightFlags;
 	uint shadowLightIndex;
+	float invRadius;
+	float fadeZone;
 	float fade;
-	uint pad0;
+	float pad0[3];
 };
 
 #endif  //__LLF_COMMON_DEPENDENCY_HLSL__
