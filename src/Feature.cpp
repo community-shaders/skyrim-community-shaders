@@ -9,6 +9,7 @@
 #include "Features/InverseSquareLighting.h"
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
+#include "Features/LinearLighting.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/Skylighting.h"
@@ -139,7 +140,8 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		globals::features::terrainHelper,
 		globals::features::volumetricLighting,
 		globals::features::lodBlending,
-		globals::features::inverseSquareLighting
+		globals::features::inverseSquareLighting,
+		globals::features::linearLighting
 	};
 
 	static std::vector<Feature*> featuresVR(features);

@@ -59,20 +59,21 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 	float3 linAlbedo = albedo;
 	float3 linDirectionalAmbientColor = directionalAmbientColor;
 	float3 linDiffuseColor = diffuseColor;
-#if !defined(LL)
-	linAlbedo = Color::GammaToLinear(linAlbedo);
-	linDirectionalAmbientColor = Color::GammaToLinear(linDirectionalAmbientColor);
-	linDiffuseColor = Color::GammaToLinear(linDiffuseColor);
-#else
-	linDirectionalAmbientColor = Color::GammaToTrueLinear(linDirectionalAmbientColor);
-#endif
+	if (!SharedData::linearLightingSettings.enableLinearLighting) {
+		linAlbedo = Color::GammaToLinear(linAlbedo);
+		linDirectionalAmbientColor = Color::GammaToLinear(linDirectionalAmbientColor);
+		linDiffuseColor = Color::GammaToLinear(linDiffuseColor);
+	} else {
+		linDirectionalAmbientColor = Color::GammaToTrueLinear(linDirectionalAmbientColor);
+	}
 	float3 originalDiffuseColor = linDiffuseColor;
 
-#if !defined(LL)
-	float3 linAmbient = Color::GammaToLinear(albedo * directionalAmbientColor);
-#else
-	float3 linAmbient = albedo * directionalAmbientColor;
-#endif
+	float3 linAmbient = 0;
+	if (!SharedData::linearLightingSettings.enableLinearLighting) {
+		linAmbient = Color::GammaToLinear(albedo * directionalAmbientColor);
+	} else {
+		linAmbient = albedo * directionalAmbientColor;
+	}
 
 	float visibility = 1.0;
 #if defined(SKYLIGHTING)
@@ -135,22 +136,22 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 #endif
 
 	linAmbient *= visibility;
-#if !defined(LL)
-	diffuseColor = Color::LinearToGamma(linDiffuseColor);
-	directionalAmbientColor = Color::LinearToGamma(linDirectionalAmbientColor * visibility);
-#else
-	diffuseColor = linDiffuseColor;
-	directionalAmbientColor = linDirectionalAmbientColor * visibility;
-#endif
+	if (!SharedData::linearLightingSettings.enableLinearLighting) {
+		diffuseColor = Color::LinearToGamma(linDiffuseColor);
+		directionalAmbientColor = Color::LinearToGamma(linDirectionalAmbientColor * visibility);
+	} else {
+		diffuseColor = linDiffuseColor;
+		directionalAmbientColor = linDirectionalAmbientColor * visibility;
+	}
 
 	diffuseColor = diffuseColor + directionalAmbientColor * albedo;
 
 #if defined(SSGI)
-#	if !defined(LL)
-	DiffuseAmbientRW[dispatchID.xy] = Color::GammaToLinear(diffuseColor - originalDiffuseColor);
-#	else
-	DiffuseAmbientRW[dispatchID.xy] = diffuseColor - originalDiffuseColor;
-#	endif
+	if (!SharedData::linearLightingSettings.enableLinearLighting) {
+		DiffuseAmbientRW[dispatchID.xy] = Color::GammaToLinear(diffuseColor - originalDiffuseColor);
+	} else {
+		DiffuseAmbientRW[dispatchID.xy] = diffuseColor - originalDiffuseColor;
+	}
 #endif
 
 	MainRW[dispatchID.xy] = float4(diffuseColor, 1);

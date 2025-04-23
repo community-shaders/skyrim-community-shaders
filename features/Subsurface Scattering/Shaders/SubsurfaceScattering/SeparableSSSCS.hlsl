@@ -40,9 +40,9 @@ cbuffer PerFrameSSS : register(b1)
 		bool humanProfile = MaskTexture[DTid.xy].y > 0.0;
 
 		float4 color = SSSSBlurCS(DTid.xy, texCoord, float2(0.0, 1.0), sssAmount, humanProfile);
-#	if !defined(LL)
-		color.rgb = Color::LinearToGamma(color.rgb);
-#	endif
+		if (!SharedData::linearLightingSettings.enableLinearLighting) {
+			color.rgb = Color::LinearToGamma(color.rgb);
+		}
 		SSSRW[DTid.xy] = float4(color.rgb, 1.0);
 	}
 

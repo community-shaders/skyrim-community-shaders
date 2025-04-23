@@ -203,19 +203,19 @@ PS_OUTPUT main(PS_INPUT input)
 #	ifndef OCCLUSION
 #		ifndef TEXLERP
 	float4 baseColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord0.xy);
-#			if defined(LL)
-	baseColor.xyz = Color::GammaToTrueLinear(baseColor.xyz);
-#			endif
+	if (SharedData::linearLightingSettings.enableLinearLighting) {
+		baseColor.xyz = Color::GammaToTrueLinear(baseColor.xyz);
+	}
 #			ifdef TEXFADE
 	baseColor.w *= PParams.x;
 #			endif
 #		else
 	float4 blendColor = TexBlendSampler.Sample(SampBlendSampler, input.TexCoord1.xy);
 	float4 baseColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord0.xy);
-#			if defined(LL)
-	blendColor.xyz = Color::GammaToTrueLinear(blendColor.xyz);
-	baseColor.xyz = Color::GammaToTrueLinear(baseColor.xyz);
-#			endif
+	if (SharedData::linearLightingSettings.enableLinearLighting) {
+		blendColor.xyz = Color::GammaToTrueLinear(blendColor.xyz);
+		baseColor.xyz = Color::GammaToTrueLinear(baseColor.xyz);
+	}
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
 #		endif
 
@@ -225,18 +225,18 @@ PS_OUTPUT main(PS_INPUT input)
 		TexNoiseGradSampler.Sample(SampNoiseGradSampler, noiseGradUv).x * 0.03125 + -0.0078125;
 
 #			ifdef TEX
-#				if !defined(LL)
-	psout.Color.xyz = (input.Color.xyz * baseColor.xyz + PParams.yyy) + noiseGrad;
-#				else
-	psout.Color.xyz = (Color::GammaToTrueLinear(input.Color.xyz) * baseColor.xyz + linearyyy) + noiseGrad;
-#				endif  // LL
+	if (!SharedData::linearLightingSettings.enableLinearLighting) {
+		psout.Color.xyz = (input.Color.xyz * baseColor.xyz + PParams.yyy) + noiseGrad;
+	} else {
+		psout.Color.xyz = (Color::GammaToTrueLinear(input.Color.xyz) * baseColor.xyz + linearyyy) + noiseGrad;
+	}
 	psout.Color.w = baseColor.w * input.Color.w;
 #			else
-#				if !defined(LL)
-	psout.Color.xyz = (PParams.yyy + input.Color.xyz) + noiseGrad;
-#				else
-	psout.Color.xyz = (linearyyy + Color::GammaToTrueLinear(input.Color.xyz)) + noiseGrad;
-#				endif  // LL
+	if (!SharedData::linearLightingSettings.enableLinearLighting) {
+		psout.Color.xyz = (PParams.yyy + input.Color.xyz) + noiseGrad;
+	} else {
+		psout.Color.xyz = (linearyyy + Color::GammaToTrueLinear(input.Color.xyz)) + noiseGrad;
+	}
 	psout.Color.w = input.Color.w;
 #			endif  // TEX
 
@@ -248,19 +248,19 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 #		elif defined(HORIZFADE)
-#			if !defined(LL)
-	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (input.Color.xyz * baseColor.xyz + PParams.yyy);
-#			else
-	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (Color::GammaToTrueLinear(input.Color.xyz) * baseColor.xyz + linearyyy);
-#			endif  // LL
+	if (!SharedData::linearLightingSettings.enableLinearLighting) {
+		psout.Color.xyz = float3(1.5, 1.5, 1.5) * (input.Color.xyz * baseColor.xyz + PParams.yyy);
+	} else {
+		psout.Color.xyz = float3(1.5, 1.5, 1.5) * (Color::GammaToTrueLinear(input.Color.xyz) * baseColor.xyz + linearyyy);
+	}
 	psout.Color.w = input.TexCoord2.x * (baseColor.w * input.Color.w);
 #		else
 	psout.Color.w = input.Color.w * baseColor.w;
-#			if !defined(LL)
-	psout.Color.xyz = input.Color.xyz * baseColor.xyz + PParams.yyy;
-#			else
-	psout.Color.xyz = Color::GammaToTrueLinear(input.Color.xyz) * baseColor.xyz + linearyyy;
-#			endif  // LL
+	if (!SharedData::linearLightingSettings.enableLinearLighting) {
+		psout.Color.xyz = input.Color.xyz * baseColor.xyz + PParams.yyy;
+	} else {
+		psout.Color.xyz = Color::GammaToTrueLinear(input.Color.xyz) * baseColor.xyz + linearyyy;
+	}
 #		endif
 
 #	else

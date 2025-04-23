@@ -2,6 +2,7 @@
 #define __COLOR_DEPENDENCY_HLSL__
 
 #include "Common/Math.hlsli"
+#include "Common/SharedData.hlsli"
 
 namespace Color
 {
@@ -64,34 +65,36 @@ namespace Color
 		return pow(max(color, 0), 1.0 / 2.2);
 	}
 
+#if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
 	float3 Diffuse(float3 color)
 	{
-#if !defined(LL)
-#	if defined(TRUE_PBR)
-		return pow(abs(color), 1.0 / 2.2);
-#	else
-		return color;
-#	endif
-#else
-#	if defined(TRUE_PBR)
-		return color;
-#	else
-		return pow(abs(color), 2.2);
-#	endif
-#endif
+		if (!SharedData::linearLightingSettings.enableLinearLighting) {
+	#	if defined(TRUE_PBR)
+			return pow(abs(color), 1.0 / 2.2);
+	#	else
+			return color;
+	#	endif
+		} else {
+	#	if defined(TRUE_PBR)
+			return color;
+	#	else
+			return pow(abs(color), 2.2);
+	#	endif
+		}
 	}
 
 	float3 Light(float3 color)
 	{
-#if defined(LL)
-	color = GammaToTrueLinear(color);
-#endif
-#if defined(TRUE_PBR)
+		if (SharedData::linearLightingSettings.enableLinearLighting) {
+			color = GammaToTrueLinear(color);
+		}
+	#if defined(TRUE_PBR)
 		return color * Math::PI;  // Compensate for traditional Lambertian diffuse
-#else
+	#else
 		return color;
-#endif
+	#endif
 	}
+#endif
 }
 
 #endif  //__COLOR_DEPENDENCY_HLSL__
