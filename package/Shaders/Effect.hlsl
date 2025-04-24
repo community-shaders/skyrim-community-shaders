@@ -504,6 +504,10 @@ cbuffer PerGeometry : register(b2)
 #		include "LightLimitFix/LightLimitFix.hlsli"
 #	endif
 
+#	if defined(ISL) && defined(LIGHT_LIMIT_FIX)
+#		include "InverseSquareLighting/InverseSquareLighting.hlsli"
+#	endif
+
 #	define LinearSampler SampBaseSampler
 
 #	if defined(TERRAIN_SHADOWS)
@@ -529,7 +533,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 	float3 color = DLightColor.xyz;
 
 	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::EffectShadows)) {
-		float3 dirLightColor = SharedData::DirLightColor * 0.5;
+		float3 dirLightColor = SharedData::DirLightColor.xyz * 0.5;
 		float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
 
 		color = ambientColor;
@@ -553,7 +557,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 #		endif
 
 		if (!SharedData::InInterior)
-			color += dirLightColor * ShadowSampling::GetEffectShadow(worldPosition, normalize(worldPosition), screenPosition, eyeIndex);
+			color += dirLightColor * ShadowSampling::GetEffectShadow(worldPosition.xyz, normalize(worldPosition.xyz), screenPosition.xy, eyeIndex);
 		else
 			color += dirLightColor;
 	} else {
@@ -671,8 +675,14 @@ PS_OUTPUT main(PS_INPUT input)
 				}
 				float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WorldPosition.xyz;
 				float lightDist = length(lightDirection);
+
+#			if defined(ISL)
+				float intensityMultiplier = InverseSquareLighting::GetAttenuation(lightDist, light);
+#			else
 				float intensityFactor = saturate(lightDist / light.radius);
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
+#			endif
+
 				float3 lightColor = light.color.xyz * intensityMultiplier * 0.5;
 				propertyColor += lightColor;
 			}
