@@ -148,7 +148,8 @@ namespace SharedData
 	struct LinearLightingSettings
 	{
 		uint enableLinearLighting;
-		uint pad[3];
+		uint enableGammaCorrection;
+		uint pad[2];
 	};
 
 	cbuffer FeatureData : register(b6)

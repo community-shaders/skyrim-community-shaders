@@ -17,7 +17,8 @@ struct LinearLighting : Feature
     struct Settings
     {
         uint enableLinearLighting = true;
-        uint pad[3];
+        uint enableGammaCorrection = true;
+        uint pad[2];
     } settings;
 
     virtual void DrawSettings() override;
