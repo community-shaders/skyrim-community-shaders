@@ -2426,7 +2426,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(HAIR) && defined(CS_HAIR)
 	if (SharedData::hairSpecularSettings.Enabled) {
+		diffuseColor = Color::GammaToLinear(diffuseColor);
 		diffuseColor *= (1 / Math::PI) * SharedData::hairSpecularSettings.DiffuseMult;
+		diffuseColor = Color::LinearToGamma(diffuseColor);
 		specularColor *= baseColor.w * SharedData::hairSpecularSettings.SpecularMult;
 	}
 #	endif
@@ -2464,7 +2466,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(HAIR) && defined(CS_HAIR)
 	if (SharedData::hairSpecularSettings.Enabled) {
+		directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
 		directionalAmbientColor *= (1 / Math::PI) * SharedData::hairSpecularSettings.DiffuseMult;
+		directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
 	}
 #	endif
 
