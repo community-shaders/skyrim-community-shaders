@@ -759,6 +759,7 @@ float3 GetHairDualSpecularScheuermann(float3 T, float3 N, float3 V, float3 L, fl
 #if defined(HAIR) && defined(CS_HAIR)
 float3 GetLightSpecularInputHair(PS_INPUT input, float3 L, float3 V, float3 N, float3 lightColor, float shininess, float3 baseColor)
 {
+	lightColor *= Math::PI;
 	float3 T = normalize(float3(input.TBN0.y, input.TBN1.y, input.TBN2.y));
 	const float3 H = normalize(L + V);
 	const float3 NdotL = saturate(dot(N, L));
