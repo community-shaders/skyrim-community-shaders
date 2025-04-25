@@ -1467,8 +1467,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(HAIR) && defined(CS_HAIR)
 	float3 hairTint = 0;
-	hairTint = lerp(1, TintColor.xyz, input.Color.y);
-	baseColor.xyz *= hairTint;
+	if (SharedData::hairSpecularSettings.Enabled) {
+		hairTint = lerp(1, TintColor.xyz, input.Color.y);
+		baseColor.xyz *= hairTint;
+	}
 #	endif
 
 #	if defined(LANDSCAPE)
@@ -2144,7 +2146,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif
 	} else {
 #		if defined(HAIR) && defined(CS_HAIR)
-		lightsSpecularColor = GetLightSpecularInputHair(input, DirLightDirection, viewDirection, modelNormal.xyz, dirLightColor.xyz * dirDetailShadow, 75, baseColor.xyz);
+		if (SharedData::hairSpecularSettings.Enabled)
+			lightsSpecularColor = GetLightSpecularInputHair(input, DirLightDirection, viewDirection, modelNormal.xyz, dirLightColor.xyz * dirDetailShadow, SharedData::hairSpecularSettings.Glossiness, baseColor.xyz);
+		else
+			lightsSpecularColor = GetLightSpecularInput(input, DirLightDirection, viewDirection, modelNormal.xyz, dirLightColor.xyz * dirDetailShadow, shininess, uv);
 #		elif defined(SPECULAR) || defined(SPARKLE)
 		lightsSpecularColor = GetLightSpecularInput(input, DirLightDirection, viewDirection, modelNormal.xyz, dirLightColor.xyz * dirDetailShadow, shininess, uv);
 #		endif
@@ -2216,7 +2221,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #				endif  // BACK_LIGHTING
 
 #				if defined(HAIR) && defined(CS_HAIR)
-		lightsSpecularColor += GetLightSpecularInputHair(input, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, 75, baseColor.xyz);
+		if (SharedData::hairSpecularSettings.Enabled)
+			lightsSpecularColor += GetLightSpecularInputHair(input, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, SharedData::hairSpecularSettings.Glossiness, baseColor.xyz);
+		else
+			lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, shininess, uv);
 #				elif defined(SPECULAR) || (defined(SPARKLE) && !defined(SNOW))
 		lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, shininess, uv);
 #				endif  // defined (SPECULAR) || (defined (SPARKLE) && !defined(SNOW))
@@ -2366,7 +2374,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #				endif
 
 #				if defined(HAIR) && defined(CS_HAIR) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
-		lightsSpecularColor += GetLightSpecularInputHair(input, normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz, lightColor, 75, baseColor.xyz);
+		if (SharedData::hairSpecularSettings.Enabled)
+			lightsSpecularColor += GetLightSpecularInputHair(input, normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz, lightColor, SharedData::hairSpecularSettings.Glossiness, baseColor.xyz);
+		else
+			lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz, lightColor, shininess, uv);
 #				elif defined(SPECULAR) || (defined(SPARKLE) && !defined(SNOW))
 		lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz, lightColor, shininess, uv);
 #				endif
@@ -2386,8 +2397,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	specularColor += lightsSpecularColor;
 
 #	if defined(HAIR) && defined(CS_HAIR)
-	diffuseColor *= 1 / Math::PI;
-	specularColor *= baseColor.w;
+	if (SharedData::hairSpecularSettings.Enabled) {
+		diffuseColor *= (1 / Math::PI) * SharedData::hairSpecularSettings.DiffuseMult;
+		specularColor *= baseColor.w * SharedData::hairSpecularSettings.SpecularMult;
+	}
 #	endif
 
 #	if !defined(LANDSCAPE)
@@ -2581,7 +2594,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(HAIR)
 	float3 vertexColor = lerp(1, TintColor.xyz, input.Color.y);
 #		if defined(CS_HAIR)
-	vertexColor = 1;
+	if (SharedData::hairSpecularSettings.Enabled)
+		vertexColor = 1;
 #		endif  // CS_HAIR
 #	elif defined(SKYLIGHTING)
 	float3 vertexColor = input.Color.xyz;
@@ -2697,6 +2711,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(EMAT_ENVMAP)
 	specularColor = (specularColor * glossiness * MaterialData.yyy) * lerp(SpecularColor.xyz, Color::LinearToGamma(complexSpecular), complexMaterial);
 #		elif defined(HAIR) && defined(CS_HAIR)
+	if (!SharedData::hairSpecularSettings.Enabled)
+		specularColor = (specularColor * glossiness * MaterialData.yyy) * SpecularColor.xyz;
 #		else
 	specularColor = (specularColor * glossiness * MaterialData.yyy) * SpecularColor.xyz;
 #		endif
