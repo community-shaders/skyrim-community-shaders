@@ -15,6 +15,10 @@
 #	define SKIN
 #endif
 
+#if defined(HAIR) && defined(CS_HAIR)
+#	define DYNAMIC_CUBEMAPS
+#endif
+
 #if defined(SKINNED) || defined(ENVMAP) || defined(EYE) || defined(MULTI_LAYER_PARALLAX)
 #	define DRAW_IN_WORLDSPACE
 #endif
@@ -771,6 +775,30 @@ float3 GetLightSpecularInputHair(PS_INPUT input, float3 L, float3 V, float3 N, f
 	float3 specTerm = specR + specT * baseColor;
     float3 dirSpecular = specTerm * lightColor;
     return dirSpecular;
+}
+
+
+float3 GetHairIndirectSpecularLobeWeights(float3 N, float3 V, float3 VN, float shininess)
+{	
+	const float roughness = 1 - 0.01 * shininess;
+	const float NdotV = saturate(dot(N, V));
+
+	float3 specularLobeWeight = 0;
+
+	const float4 c0 = { -1, -0.0275, -0.572, 0.022 };
+	const float4 c1 = { 1, 0.0425, 1.04, -0.04 };
+	float4 r = roughness * c0 + c1;
+	float a004 = min(r.x * r.x, exp2(-9.28 * NdotV)) * r.x + r.y;
+	float2 specularBRDF = float2(-1.04, 1.04) * a004 + r.zw;
+
+	const float3 F0 = { 0.046, 0.046, 0.046 };
+	specularLobeWeight = F0 * specularBRDF.x + specularBRDF.y;
+	specularLobeWeight *= 1 + F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
+
+	float3 R = reflect(-V, N);
+	float horizon = min(1.0 + dot(R, VN), 1.0);
+	horizon = horizon * horizon;
+	specularLobeWeight *= horizon;
 }
 #endif
 
@@ -2596,6 +2624,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(CS_HAIR)
 	if (SharedData::hairSpecularSettings.Enabled)
 		vertexColor = 1;
+	float3 indirectSpecularLobeWeight = GetHairIndirectSpecularLobeWeights(worldSpaceNormal.xyz, worldSpaceViewDirection, worldSpaceVertexNormal, SharedData::hairSpecularSettings.Glossiness);
 #		endif  // CS_HAIR
 #	elif defined(SKYLIGHTING)
 	float3 vertexColor = input.Color.xyz;
@@ -2680,6 +2709,23 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	color.xyz += transmissionColor;
 #	else
 	color.xyz += diffuseColor * baseColor.xyz;
+#	endif
+
+#	if defined(HAIR) && defined(CS_HAIR)
+#		if !defined(DEFERRED)
+#			if defined(DYNAMIC_CUBEMAPS)
+	if (SharedData::hairSpecularSettings.Enabled)
+#				if defined(SKYLIGHTING)
+	{
+		color.xyz += indirectSpecularLobeWeight * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, 1 - 0.01f * SharedData::hairSpecularSettings.Glossiness, skylightingSH);
+	}
+#				else
+	{
+		color.xyz += indirectSpecularLobeWeight * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, 1 - 0.01f * SharedData::hairSpecularSettings.Glossiness);
+	}
+#				endif
+#			endif
+#		endif
 #	endif
 
 	color.xyz *= vertexColor;
