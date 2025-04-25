@@ -777,10 +777,9 @@ float3 GetLightSpecularInputHair(PS_INPUT input, float3 L, float3 V, float3 N, f
     return dirSpecular;
 }
 
-
 float3 GetHairIndirectSpecularLobeWeights(float3 N, float3 V, float3 VN, float shininess)
 {	
-	const float roughness = 1 - 0.01 * shininess;
+	const float roughness = 1 - 0.01 * shininess * 0.75;
 	const float NdotV = saturate(dot(N, V));
 
 	float3 specularLobeWeight = 0;
@@ -799,6 +798,7 @@ float3 GetHairIndirectSpecularLobeWeights(float3 N, float3 V, float3 VN, float s
 	float horizon = min(1.0 + dot(R, VN), 1.0);
 	horizon = horizon * horizon;
 	specularLobeWeight *= horizon;
+	return specularLobeWeight;
 }
 #endif
 
@@ -2462,6 +2462,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	float3 directionalAmbientColor = max(0, mul(DirectionalAmbient, modelNormal));
 
+#	if defined(HAIR) && defined(CS_HAIR)
+	if (SharedData::hairSpecularSettings.Enabled) {
+		directionalAmbientColor *= (1 / Math::PI) * SharedData::hairSpecularSettings.DiffuseMult;
+	}
+#	endif
+
 #	if defined(SKYLIGHTING)
 	float skylightingDiffuse = 1;
 	float skylightingFadeOutFactor = 1.0;
@@ -2717,11 +2723,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	if (SharedData::hairSpecularSettings.Enabled)
 #				if defined(SKYLIGHTING)
 	{
-		color.xyz += indirectSpecularLobeWeight * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, 1 - 0.01f * SharedData::hairSpecularSettings.Glossiness, skylightingSH);
+		color.xyz += indirectSpecularLobeWeight * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, 1 - 0.01f * SharedData::hairSpecularSettings.Glossiness, skylightingSH) * SharedData::hairSpecularSettings.SpecularMult * 0.7;
+		color.xyz += indirectSpecularLobeWeight * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, 1 - 0.01f * SharedData::hairSpecularSettings.Glossiness * 0.5, skylightingSH) * SharedData::hairSpecularSettings.SpecularMult * 0.3;
 	}
 #				else
 	{
-		color.xyz += indirectSpecularLobeWeight * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, 1 - 0.01f * SharedData::hairSpecularSettings.Glossiness);
+		color.xyz += indirectSpecularLobeWeight * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, 1 - 0.01f * SharedData::hairSpecularSettings.Glossiness) * SharedData::hairSpecularSettings.SpecularMult * 0.7;
+		color.xyz += indirectSpecularLobeWeight * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, 1 - 0.01f * SharedData::hairSpecularSettings.Glossiness * 0.5) * SharedData::hairSpecularSettings.SpecularMult * 0.3;
 	}
 #				endif
 #			endif
