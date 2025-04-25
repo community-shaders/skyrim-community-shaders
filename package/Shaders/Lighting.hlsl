@@ -752,13 +752,29 @@ float3 GetHairDualSpecularScheuermann(float3 T, float3 N, float3 V, float3 L, fl
     return dirSpecular;
 }
 
+#if defined(HAIR) && defined(CS_HAIR)
+float3 GetLightSpecularInputHair(PS_INPUT input, float3 L, float3 V, float3 N, float3 lightColor, float shininess, float3 baseColor)
+{
+	float3 T = normalize(float3(input.TBN0.y, input.TBN1.y, input.TBN2.y));
+	const float3 H = normalize(L + V);
+	const float3 NdotL = saturate(dot(N, L));
+	const float3 NdotV = saturate(dot(N, V));
+
+	const float3 specPrimary = D_KajiyaKay(T, H, shininess) * 0.7;
+	const float3 specSecondary = D_KajiyaKay(T, H, shininess * 0.5) * 0.3;
+	const float3 F = F_Schlick(saturate(dot(H, V)), float3(0.046, 0.046, 0.046));
+	float3 specR = 0.25 * F * (specPrimary + specSecondary) * NdotL * saturate(NdotV * (3.4e+38));
+	float scatterFresnel1 = pow(saturate(-dot(L, V)), 9) * pow(saturate(1 - NdotV * NdotV), 12);
+	float scatterFresnel2 = saturate(pow((1 - NdotV), 20));
+	float3 specT = scatterFresnel1 + scatterFresnel2;
+	float3 specTerm = specR + specT * baseColor;
+    float3 dirSpecular = specTerm * lightColor;
+    return dirSpecular;
+}
+#endif
+
 float3 GetLightSpecularInput(PS_INPUT input, float3 L, float3 V, float3 N, float3 lightColor, float shininess, float2 uv)
 {
-#	if defined(HAIR) && defined(CS_HAIR)
-	float3 T = normalize(float3(input.TBN0.y, input.TBN1.y, input.TBN2.y));
-	float3 specularHighlight = GetHairDualSpecularScheuermann(T, N, V, L, shininess * 2, lightColor);
-	return specularHighlight * Math::PI;
-#	endif
 	float3 H = normalize(V + L);
 	float HdotN = 1.0;
 #	if defined(ANISO_LIGHTING)
@@ -1448,6 +1464,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	baseColor.xyz = GetFacegenRGBTintBaseColor(baseColor.xyz, uv);
 #	endif  // FACEGEN
 
+#	if defined(HAIR) && defined(CS_HAIR)
+	float3 hairTint = 0;
+	hairTint = lerp(1, TintColor.xyz, input.Color.y);
+	baseColor.xyz *= hairTint;
+#	endif
+
 #	if defined(LANDSCAPE)
 
 #		if defined(SNOW) && !defined(TRUE_PBR)
@@ -2120,7 +2142,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		lightsSpecularColor += GetSnowSpecularColor(input, modelNormal.xyz, viewDirection);
 #		endif
 	} else {
-#		if defined(SPECULAR) || defined(SPARKLE)
+#		if defined(HAIR) && defined(CS_HAIR)
+		lightsSpecularColor = GetLightSpecularInputHair(input, DirLightDirection, viewDirection, modelNormal.xyz, dirLightColor.xyz * dirDetailShadow, 75, baseColor.xyz);
+#		elif defined(SPECULAR) || defined(SPARKLE)
 		lightsSpecularColor = GetLightSpecularInput(input, DirLightDirection, viewDirection, modelNormal.xyz, dirLightColor.xyz * dirDetailShadow, shininess, uv);
 #		endif
 	}
@@ -2190,7 +2214,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		lightDiffuseColor += lightBacklighting * lightColor * saturate(-lightAngle) * backLightColor.xyz;
 #				endif  // BACK_LIGHTING
 
-#				if defined(SPECULAR) || (defined(SPARKLE) && !defined(SNOW))
+#				if defined(HAIR) && defined(CS_HAIR)
+		lightsSpecularColor += GetLightSpecularInputHair(input, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, 75, baseColor.xyz);
+#				elif defined(SPECULAR) || (defined(SPARKLE) && !defined(SNOW))
 		lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, shininess, uv);
 #				endif  // defined (SPECULAR) || (defined (SPARKLE) && !defined(SNOW))
 
@@ -2338,7 +2364,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		lightDiffuseColor += lightBacklighting * lightColor * saturate(-lightAngle) * backLightColor.xyz;
 #				endif
 
-#				if defined(SPECULAR) || (defined(SPARKLE) && !defined(SNOW))
+#				if defined(HAIR) && defined(CS_HAIR) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
+		lightsSpecularColor += GetLightSpecularInputHair(input, normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz, lightColor, 75, baseColor.xyz);
+#				elif defined(SPECULAR) || (defined(SPARKLE) && !defined(SNOW))
 		lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz, lightColor, shininess, uv);
 #				endif
 
@@ -2551,6 +2579,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(HAIR)
 	float3 vertexColor = lerp(1, TintColor.xyz, input.Color.y);
+#		if defined(CS_HAIR)
+	vertexColor = 1;
+#		endif  // CS_HAIR
 #	elif defined(SKYLIGHTING)
 	float3 vertexColor = input.Color.xyz;
 	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
@@ -2664,6 +2695,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(SPECULAR)
 #		if defined(EMAT_ENVMAP)
 	specularColor = (specularColor * glossiness * MaterialData.yyy) * lerp(SpecularColor.xyz, Color::LinearToGamma(complexSpecular), complexMaterial);
+#		elif defined(HAIR) && defined(CS_HAIR)
 #		else
 	specularColor = (specularColor * glossiness * MaterialData.yyy) * SpecularColor.xyz;
 #		endif
