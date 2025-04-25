@@ -2,7 +2,7 @@
 
 struct HairSpecular : Feature
 {
-    static HairSpecular* Singleton()
+    static HairSpecular* GetSingleton()
     {
         static HairSpecular singleton;
         return &singleton;
@@ -29,4 +29,4 @@ struct HairSpecular : Feature
     virtual void RestoreDefaultSettings() override;
 
     virtual bool SupportsVR() override { return true; };
-}
+};
