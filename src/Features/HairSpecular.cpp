@@ -77,7 +77,7 @@ void HairSpecular::Prepass()
 {
     auto context = globals::d3d::context;
 
-    if (settings.EnableTangentShift) {
+    if (texTangentShift) {
         ID3D11ShaderResourceView* srv = texTangentShift->srv.get();
         context->PSSetShaderResources(73, 1, &srv);
     }
