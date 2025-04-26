@@ -574,8 +574,8 @@ namespace ExtendedMaterials
 			float scale = max(params[0].HeightScale * input.LandBlendWeights1.x, max(params[1].HeightScale * input.LandBlendWeights1.y, max(params[2].HeightScale * input.LandBlendWeights1.z,
 																																			max(params[3].HeightScale * input.LandBlendWeights1.w, max(params[4].HeightScale * input.LandBlendWeights2.x, params[5].HeightScale * input.LandBlendWeights2.y)))));
 			if (scale < 0.01)
-			if (scale < 0.01)
-				return 1.0;
+				if (scale < 0.01)
+					return 1.0;
 			rayDir *= scale;
 
 #		if defined(TERRAIN_VARIATION)
