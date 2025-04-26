@@ -26,7 +26,7 @@ struct HairSpecular : Feature
         uint EnableTangentShift = true;
         float PrimaryTangentShift = 0.5f;
         float SecondaryTangentShift = -0.5f;
-        uint pad;
+        float HairSaturation = 1.0f;
     } settings;
 
     eastl::unique_ptr<Texture2D> texTangentShift = nullptr;

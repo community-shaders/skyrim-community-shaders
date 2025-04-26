@@ -154,7 +154,7 @@ namespace SharedData
 		uint EnableTangentShift;
 		float PrimaryShift;
 		float SecondaryShift;
-        uint pad;
+        float Saturation;
 	};
 
 	cbuffer FeatureData : register(b6)

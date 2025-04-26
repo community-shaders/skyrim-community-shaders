@@ -54,5 +54,11 @@ namespace Hair
         specularLobeWeight *= horizon;
         return specularLobeWeight;
     }
+
+    float3 Saturation(float3 color, float saturation)
+    {
+        float luminance = RGBToLuminance(color);
+        return lerp(float3(luminance, luminance, luminance), color, saturation);
+    }
 }
 #endif  //__HAIR_DEPENDENCY_HLSL__
