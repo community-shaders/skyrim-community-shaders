@@ -57,8 +57,8 @@ namespace Hair
 
     float3 Saturation(float3 color, float saturation)
     {
-        float luminance = RGBToLuminance(color);
-        return lerp(float3(luminance, luminance, luminance), color, saturation);
+        float luminance = Color::RGBToLuminance(color);
+        return saturate(lerp(float3(luminance, luminance, luminance), color, saturation));
     }
 }
 #endif  //__HAIR_DEPENDENCY_HLSL__
