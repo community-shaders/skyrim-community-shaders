@@ -1,11 +1,14 @@
 #include "HairSpecular.h"
 
+#include <DirectXTex.h>
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     HairSpecular::Settings,
     Enabled,
     HairGlossiness,
     SpecularMult,
-    DiffuseMult)
+    DiffuseMult,
+    EnableTangentShift)
 
 void HairSpecular::DrawSettings()
 {
@@ -13,6 +16,7 @@ void HairSpecular::DrawSettings()
     ImGui::SliderFloat("Glossiness", &settings.HairGlossiness, 0.0f, 100.0f, "%.0f");
     ImGui::SliderFloat("Specular Multiplier", &settings.SpecularMult, 0.0f, 10.0f);
     ImGui::SliderFloat("Diffuse Multiplier", &settings.DiffuseMult, 0.0f, 10.0f);
+    ImGui::Checkbox("Enable Tangent Shift", (bool*)&settings.EnableTangentShift);
 }
 
 void HairSpecular::LoadSettings(json& o_json)
@@ -28,4 +32,53 @@ void HairSpecular::SaveSettings(json& o_json)
 void HairSpecular::RestoreDefaultSettings()
 {
     settings = {};
+}
+
+void HairSpecular::SetupResources()
+{
+	auto device = globals::d3d::device;
+
+    logger::debug("Loading Hair Tangent Shift Texture...");
+	{
+		DirectX::ScratchImage image;
+		try {
+			std::filesystem::path path = "Data\\Shaders\\Hair\\TangentShift.dds";
+
+            DX::ThrowIfFailed(LoadFromDDSFile(path.c_str(), DirectX::DDS_FLAGS_NONE, nullptr, image));
+		} catch (const DX::com_exception& e) {
+			logger::error("{}", e.what());
+			return;
+		}
+
+		ID3D11Resource* pResource = nullptr;
+		try {
+			DX::ThrowIfFailed(CreateTexture(device,
+				image.GetImages(), image.GetImageCount(),
+				image.GetMetadata(), &pResource));
+		} catch (const DX::com_exception& e) {
+			logger::error("{}", e.what());
+			return;
+		}
+
+		texTangentShift = eastl::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource));
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+			.Format = texTangentShift->desc.Format,
+            .ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+			.Texture2D = {
+				.MostDetailedMip = 0,
+				.MipLevels = 10 }
+		};
+        texTangentShift->CreateSRV(srvDesc);
+    }
+}
+
+void HairSpecular::Prepass()
+{
+    auto context = globals::d3d::context;
+
+    if (settings.EnableTangentShift) {
+        ID3D11ShaderResourceView* srv = texTangentShift->srv.get();
+        context->PSSetShaderResources(73, 1, &srv);
+    }
 }
