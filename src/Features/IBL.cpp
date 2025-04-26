@@ -17,7 +17,13 @@ void IBL::DrawSettings()
 	ImGui::Checkbox("Enable Diffuse IBL", (bool*)&settings.EnableDiffuseIBL);
 	ImGui::SliderFloat("Diffuse IBL Scale", &settings.DiffuseIBLScale, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("DALC Amount", &settings.DALCAmount, 0.0f, 1.0f, "%.2f");
-	ImGui::Checkbox("Sample Under Horizon From Dynamic Cubemaps", (bool*)&settings.SampleUnderHorizonFromDynCube);
+	ImGui::Checkbox("[EXP] Sample Under Horizon From Dynamic Cubemaps", (bool*)&settings.SampleUnderHorizonFromDynCube);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Samples under the horizon from dynamic cubemaps.\n"
+			"Enables the use of dynamic cubemaps for IBL.\n"
+			"Requires the Dynamic Cubemaps feature to be enabled.\n"
+			"Warning: may cause dynamic cubemaps sampling accumulation issues.");
+	}
 }
 
 void IBL::LoadSettings(json& o_json)

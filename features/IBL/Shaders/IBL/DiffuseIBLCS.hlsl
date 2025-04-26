@@ -29,7 +29,7 @@ SamplerState LinearSampler : register(s0);
 
 			float3 color = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0);
 #if defined(DYNAMIC_CUBEMAPS)
-			if (rayDir.z >= 0 && SharedData::iblSettings.SampleUnderHorizonFromDynCube) {
+			if (rayDir.z >= 0 && SharedData::iblSettings.SampleUnderHorizonFromDynCube && abs(rayDir.z) > abs(rayDir.x) && abs(rayDir.z) > abs(rayDir.y)) {
 				color = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0);
 			}
 #endif
