@@ -17,7 +17,7 @@ namespace InverseSquareLighting
 		float fastSmoothstep = t * t * (3.0f - 2.0f * t);
 		invSq *= fastSmoothstep;
 
-		float intensityFactor = saturate(distance * light.invRadius);
+		float intensityFactor = saturate(distance * rcp(light.radius));
 		float reg = 1.0f - intensityFactor * intensityFactor;
 
 		return lerp(reg, invSq, isInvSq) * isEnabled;

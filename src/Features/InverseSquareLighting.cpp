@@ -56,8 +56,7 @@ void InverseSquareLighting::ProcessLight(LightLimitFix::LightData& light, RE::BS
 	if (bsLight->pointLight && isInvSq) {
 		const float intensity = runtimeData->fade * 4;
 		light.radius = CalculateRadius(intensity, bsLight->IsShadowLight(), runtimeData->cutoffOverride);
-		light.invRadius = 1.f / light.radius;
-		light.fadeZone = 1.f / (light.radius * std::clamp(FadeZoneBase * light.invRadius, 0.f, 1.f));
+		light.fadeZone = 1.f / (light.radius * std::clamp(FadeZoneBase / light.radius, 0.f, 1.f));
 		runtimeData->radius.x = light.radius;
 		runtimeData->radius.y = light.radius;
 		runtimeData->radius.z = light.radius;
@@ -65,7 +64,6 @@ void InverseSquareLighting::ProcessLight(LightLimitFix::LightData& light, RE::BS
 		light.fade = intensity;
 	} else {
 		light.radius = runtimeData->radius.x;
-		light.invRadius = 1.f / light.radius;
 		light.fade = runtimeData->fade;
 	}
 }
