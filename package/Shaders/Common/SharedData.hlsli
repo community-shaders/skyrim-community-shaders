@@ -152,7 +152,9 @@ namespace SharedData
         float SpecularMult;
         float DiffuseMult;
 		uint EnableTangentShift;
-        uint3 pad;
+		float PrimaryShift;
+		float SecondaryShift;
+        uint pad;
 	};
 
 	cbuffer FeatureData : register(b6)

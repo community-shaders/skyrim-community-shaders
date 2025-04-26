@@ -8,7 +8,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     HairGlossiness,
     SpecularMult,
     DiffuseMult,
-    EnableTangentShift)
+    EnableTangentShift,
+    PrimaryTangentShift,
+    SecondaryTangentShift)
 
 void HairSpecular::DrawSettings()
 {
@@ -17,6 +19,8 @@ void HairSpecular::DrawSettings()
     ImGui::SliderFloat("Specular Multiplier", &settings.SpecularMult, 0.0f, 10.0f);
     ImGui::SliderFloat("Diffuse Multiplier", &settings.DiffuseMult, 0.0f, 10.0f);
     ImGui::Checkbox("Enable Tangent Shift", (bool*)&settings.EnableTangentShift);
+    ImGui::SliderFloat("Primary Specular Tangent Shift", &settings.PrimaryTangentShift, -1.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("Secondary Specular Tangent Shift", &settings.SecondaryTangentShift, -1.0f, 1.0f, "%.2f");
 }
 
 void HairSpecular::LoadSettings(json& o_json)

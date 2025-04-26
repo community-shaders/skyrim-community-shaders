@@ -738,8 +738,8 @@ float3 GetLightSpecularInputHair(PS_INPUT input, float3 L, float3 V, float3 N, f
 	float3 TshiftSecondary = T;
 	if (SharedData::hairSpecularSettings.EnableTangentShift) {
 		const float shift = Hair::TexTangentShift.SampleBias(SampColorSampler, uv, SharedData::MipBias).x - 0.5;
-		TshiftPrimary = Hair::ShiftTangent(T, N, shift + 0.25);
-		TshiftSecondary = Hair::ShiftTangent(T, N, shift - 0.25);
+		TshiftPrimary = Hair::ShiftTangent(T, N, shift + SharedData::hairSpecularSettings.PrimaryShift);
+		TshiftSecondary = Hair::ShiftTangent(T, N, shift + SharedData::hairSpecularSettings.SecondaryShift);
 	}
 
 	const float3 specPrimary = Hair::D_KajiyaKay(TshiftPrimary, H, shininess) * 0.7;

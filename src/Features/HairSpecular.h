@@ -24,7 +24,9 @@ struct HairSpecular : Feature
         float SpecularMult = 1.0f;
         float DiffuseMult = 1.0f;
         uint EnableTangentShift = true;
-        uint pad[3];
+        float PrimaryTangentShift = 0.5f;
+        float SecondaryTangentShift = -0.5f;
+        uint pad;
     } settings;
 
     eastl::unique_ptr<Texture2D> texTangentShift = nullptr;
