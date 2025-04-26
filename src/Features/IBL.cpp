@@ -19,7 +19,8 @@ void IBL::DrawSettings()
 	ImGui::SliderFloat("DALC Amount", &settings.DALCAmount, 0.0f, 1.0f, "%.2f");
 	ImGui::Checkbox("[EXP] Sample Under Horizon From Dynamic Cubemaps", (bool*)&settings.SampleUnderHorizonFromDynCube);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Samples under the horizon from dynamic cubemaps.\n"
+		ImGui::Text(
+			"Samples under the horizon from dynamic cubemaps.\n"
 			"Enables the use of dynamic cubemaps for IBL.\n"
 			"Requires the Dynamic Cubemaps feature to be enabled.\n"
 			"Warning: may cause dynamic cubemaps sampling accumulation issues.");
