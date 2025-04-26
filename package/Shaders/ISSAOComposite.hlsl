@@ -177,7 +177,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 fogColor = 0;
 	if (SharedData::linearLightingSettings.enableLinearLighting) {
 		fogFactor = Color::GammaToLinear(fogFactor);
-		fogColor = lerp(Color::GammaToTrueLinear(FogNearColor.xyz), Color::GammaToTrueLinear(FogFarColor.xyz), fogFactor);
+		fogColor = lerp(Color::GammaToLinear(FogNearColor.xyz), Color::GammaToLinear(FogFarColor.xyz), fogFactor);
 	} else {
 		fogColor = lerp(FogNearColor.xyz, FogFarColor.xyz, fogFactor);
 	}

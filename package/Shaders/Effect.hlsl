@@ -839,7 +839,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		blendedColor = lerp(lightColor, input.FogParam.xyz, input.FogParam.www);
 	} else {
-		blendedColor = lerp(lightColor, Color::GammaToTrueLinear(input.FogParam.xyz), Color::GammaToLinear(input.FogParam.www));
+		blendedColor = lerp(lightColor, Color::GammaToLinear(input.FogParam.xyz), Color::GammaToLinear(input.FogParam.www));
 	}
 #		endif
 #	else

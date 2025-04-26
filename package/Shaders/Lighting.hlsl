@@ -2737,7 +2737,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		if (!SharedData::linearLightingSettings.enableLinearLighting) {
 			color.xyz = lerp(color.xyz, input.FogParam.xyz, input.FogParam.w);
 		} else {
-			color.xyz = lerp(color.xyz, Color::GammaToTrueLinear(input.FogParam.xyz), Color::GammaToLinear(input.FogParam.w));
+			color.xyz = lerp(color.xyz, Color::GammaToLinear(input.FogParam.xyz), Color::GammaToLinear(input.FogParam.w));
 		}
 #	endif
 
