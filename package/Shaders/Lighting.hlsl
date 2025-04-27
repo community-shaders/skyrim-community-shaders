@@ -2180,6 +2180,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		if (SharedData::hairSpecularSettings.Enabled) {
 			float3 lightSpecularColor = 0;
 			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, SharedData::hairSpecularSettings.Glossiness, uv, baseColor.xyz);
+			lightsSpecularColor += lightSpecularColor;
 		}
 		else
 			lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, shininess, uv);
@@ -2335,6 +2336,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		if (SharedData::hairSpecularSettings.Enabled) {
 			float3 lightSpecularColor = 0;
 			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, SharedData::hairSpecularSettings.Glossiness, uv, baseColor.xyz);
+			lightsSpecularColor += lightSpecularColor;
 		}
 		else
 			lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz, lightColor, shininess, uv);
