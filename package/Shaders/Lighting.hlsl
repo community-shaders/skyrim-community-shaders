@@ -723,38 +723,6 @@ float ProcessSparkleColor(float color)
 }
 #	endif
 
-#if defined(HAIR) && defined(CS_HAIR)
-#	include "Hair/Hair.hlsli"
-
-float3 GetLightSpecularInputHair(PS_INPUT input, float3 L, float3 V, float3 N, float3 lightColor, float shininess, float2 uv, float3 baseColor)
-{
-	float3 T = normalize(float3(input.TBN0.y, input.TBN1.y, input.TBN2.y));
-	const float3 H = normalize(L + V);
-	const float3 NdotL = saturate(dot(N, L));
-	const float3 NdotV = saturate(dot(N, V));
-
-	float3 TshiftPrimary = T;
-	float3 TshiftSecondary = T;
-	if (SharedData::hairSpecularSettings.EnableTangentShift) {
-		const float shift = Hair::TexTangentShift.SampleBias(SampColorSampler, uv, SharedData::MipBias).x - 0.5;
-		TshiftPrimary = Hair::ShiftTangent(T, N, shift + SharedData::hairSpecularSettings.PrimaryShift);
-		TshiftSecondary = Hair::ShiftTangent(T, N, shift + SharedData::hairSpecularSettings.SecondaryShift);
-	}
-
-	const float3 specPrimary = Hair::D_KajiyaKay(TshiftPrimary, H, shininess);
-	const float3 specSecondary = Hair::D_KajiyaKay(TshiftSecondary, H, shininess * 0.5);
-	const float3 F = Hair::F_Schlick(saturate(dot(H, V)), float3(0.046, 0.046, 0.046));
-	float3 specR = 0.25 * F * (specPrimary + specSecondary) * NdotL * saturate(NdotV * (3.4e+38));
-	specR = Color::LinearToGamma(specR);
-	float scatterFresnel1 = pow(saturate(-dot(L, V)), 9) * pow(saturate(1 - NdotV * NdotV), 12);
-	float scatterFresnel2 = saturate(pow((1 - NdotV), 20));
-	float3 specT = scatterFresnel1 + scatterFresnel2;
-	float3 specTerm = specR + specT * baseColor;
-    float3 dirSpecular = specTerm * lightColor;
-    return dirSpecular;
-}
-#endif
-
 float3 GetLightSpecularInput(PS_INPUT input, float3 L, float3 V, float3 N, float3 lightColor, float shininess, float2 uv)
 {
 	float3 H = normalize(V + L);
@@ -1046,6 +1014,10 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 
 #	if defined(SKYLIGHTING)
 #		include "Skylighting/Skylighting.hlsli"
+#	endif
+
+#	if defined(HAIR) && defined(CS_HAIR)
+#		include "Hair/Hair.hlsli"
 #	endif
 
 #	define LinearSampler SampColorSampler
@@ -1448,6 +1420,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(HAIR) && defined(CS_HAIR)
 	float3 hairTint = 0;
+	const float3 hairT = normalize(float3(input.TBN0.y, input.TBN1.y, input.TBN2.y));
+
 	if (SharedData::hairSpecularSettings.Enabled) {
 		hairTint = lerp(1, TintColor.xyz, input.Color.y);
 		baseColor.xyz *= hairTint;
@@ -2129,7 +2103,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	} else {
 #		if defined(HAIR) && defined(CS_HAIR)
 		if (SharedData::hairSpecularSettings.Enabled)
-			lightsSpecularColor = GetLightSpecularInputHair(input, DirLightDirection, viewDirection, modelNormal.xyz, dirLightColor.xyz * dirDetailShadow, SharedData::hairSpecularSettings.Glossiness, uv, baseColor.xyz);
+			GetHairDirectLight(dirDiffuseColor, lightsSpecularColor, hairT, DirLightDirection, viewDirection, modelNormal.xyz, dirLightColor.xyz * dirDetailShadow, SharedData::hairSpecularSettings.Glossiness, uv, baseColor.xyz);
 		else
 			lightsSpecularColor = GetLightSpecularInput(input, DirLightDirection, viewDirection, modelNormal.xyz, dirLightColor.xyz * dirDetailShadow, shininess, uv);
 #		elif defined(SPECULAR) || defined(SPARKLE)
@@ -2203,8 +2177,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #				endif  // BACK_LIGHTING
 
 #				if defined(HAIR) && defined(CS_HAIR)
-		if (SharedData::hairSpecularSettings.Enabled)
-			lightsSpecularColor += GetLightSpecularInputHair(input, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, SharedData::hairSpecularSettings.Glossiness, uv, baseColor.xyz);
+		if (SharedData::hairSpecularSettings.Enabled) {
+			float3 lightSpecularColor = 0;
+			GetHairDirectLight(lightDiffuseColor, lightSpecularColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, SharedData::hairSpecularSettings.Glossiness, uv, baseColor.xyz);
+		}
 		else
 			lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, shininess, uv);
 #				elif defined(SPECULAR) || (defined(SPARKLE) && !defined(SNOW))
@@ -2356,8 +2332,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #				endif
 
 #				if defined(HAIR) && defined(CS_HAIR) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
-		if (SharedData::hairSpecularSettings.Enabled)
-			lightsSpecularColor += GetLightSpecularInputHair(input, normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz, lightColor, SharedData::hairSpecularSettings.Glossiness, uv, baseColor.xyz);
+		if (SharedData::hairSpecularSettings.Enabled) {
+			float3 lightSpecularColor = 0;
+			GetHairDirectLight(lightDiffuseColor, lightSpecularColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, SharedData::hairSpecularSettings.Glossiness, uv, baseColor.xyz);
+		}
 		else
 			lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz, lightColor, shininess, uv);
 #				elif defined(SPECULAR) || (defined(SPARKLE) && !defined(SNOW))
