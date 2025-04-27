@@ -35,7 +35,7 @@ public:
 	{
 		uint EnableDiffuseIBL = 1;
 		float DiffuseIBLScale = 1.0f;
-		float DALCAmount = 0.0f;
+		float DALCAmount = 0.1f;
 		uint SampleUnderHorizonFromDynCube = 0;
 	} settings;
 
