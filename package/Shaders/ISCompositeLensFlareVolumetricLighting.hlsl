@@ -34,14 +34,14 @@ PS_OUTPUT main(PS_INPUT input)
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		color += VolumetricLightingColor.xyz * volumetricLightingPower;
 	} else {
-		color += Color::GammaToTrueLinear(VolumetricLightingColor.xyz) * pow(abs(volumetricLightingPower), 2.2);
+		color += Color::GammaToLinear(VolumetricLightingColor.xyz) * pow(abs(volumetricLightingPower), 1.8);
 	}
 #	endif
 
 #	if defined(LENS_FLARE)
 	float3 lensFlareColor = LFSourceTex.Sample(LFSourceSampler, input.TexCoord).xyz;
 	if (SharedData::linearLightingSettings.enableLinearLighting) {
-		color += Color::GammaToTrueLinear(lensFlareColor);
+		color += Color::GammaToLinear(lensFlareColor);
 	} else {
 		color += lensFlareColor;
 	}
