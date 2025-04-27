@@ -1697,11 +1697,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		if (!SharedData::linearLightingSettings.enableLinearLighting) {
 			projBaseColor = TexProjDiffuseSampler.Sample(SampProjDiffuseSampler, projNormalDiffuseUv).xyz * ProjectedUVParams2.xyz;
 		} else {
-			projBaseColor = Color::Diffuse(TexProjDiffuseSampler.Sample(SampProjDiffuseSampler, projNormalDiffuseUv).xyz) * Color::Diffuse(ProjectedUVParams2.xyz);
+			projBaseColor = Color::Diffuse(TexProjDiffuseSampler.Sample(SampProjDiffuseSampler, projNormalDiffuseUv).xyz) * ProjectedUVParams2.xyz;
 		}
 		projectedMaterialWeight = smoothstep(0, 1, 5 * (0.1 + projWeight));
 #			if defined(TRUE_PBR)
-		projBaseColor = saturate(EnvmapData.xyz * projBaseColor);
+		if (!SharedData::linearLightingSettings.enableLinearLighting) {
+			projBaseColor = saturate(EnvmapData.xyz * projBaseColor);
+		} else {
+			projBaseColor = Color::GammaToTrueLinear(EnvmapData.xyz * Color::TrueLinearToGamma(projBaseColor));
+		}
 		rawRMAOS.xyw = lerp(rawRMAOS.xyw, float3(ParallaxOccData.x, 0, ParallaxOccData.y), projectedMaterialWeight);
 		float4 projectedGlintParameters = 0;
 		if ((PBRFlags & PBR::Flags::ProjectedGlint) != 0) {
