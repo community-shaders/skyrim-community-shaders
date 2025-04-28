@@ -172,16 +172,16 @@ void VolumetricLighting::PostPostLoad()
 		stl::write_thunk_call<RenderDepth>(REL::RelocationID(35560, 0).address() + REL::Relocate(0x2EE, 0));
 	}
 
-	bEnableVolumetricLighting = reinterpret_cast<bool*>(REL::VariantOffset(0x3232EF0, 0x338C544, 0x3485362).address());
-	gVolumetricLightingSizeLow = reinterpret_cast<TextureSize*>(REL::VariantOffset(0x3233090, 0x338C550, 0x3485630).address());
-	gVolumetricLightingSizeMedium = reinterpret_cast<TextureSize*>(REL::VariantOffset(0x323309C, 0x338C55C, 0x348563C).address());
-	gVolumetricLightingSizeHigh = reinterpret_cast<TextureSize*>(REL::VariantOffset(0x32330A8, 0x338C568, 0x3485648).address());
+	bEnableVolumetricLighting = reinterpret_cast<bool*>(REL::RelocationID(527940, 414913).address());
+	gVolumetricLightingSizeLow = reinterpret_cast<TextureSize*>(REL::RelocationID(527970, 414916).address());
+	gVolumetricLightingSizeMedium = reinterpret_cast<TextureSize*>(REL::RelocationID(527973, 414919).address());
+	gVolumetricLightingSizeHigh = reinterpret_cast<TextureSize*>(REL::RelocationID(527976, 414922).address());
 	defaultSizeHigh = *gVolumetricLightingSizeHigh;
 }
 
 void VolumetricLighting::EarlyPrepass()
 {
-	const auto interiorCell = RE::TES::GetSingleton()->interiorCell;
+	const auto interiorCell = globals::game::tes->interiorCell;
 	const bool currentlyInInterior = interiorCell != nullptr;
 
 	if (initialised && currentlyInInterior == inInterior)

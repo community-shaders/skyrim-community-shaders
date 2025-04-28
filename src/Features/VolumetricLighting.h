@@ -11,9 +11,9 @@ public:
 
 	struct TextureSize
 	{
-		std::int32_t Width = 320;
-		std::int32_t Height = 192;
-		std::int32_t Depth = 90;
+		int32_t Width = 320;
+		int32_t Height = 192;
+		int32_t Depth = 90;
 	};
 
 	struct Settings
