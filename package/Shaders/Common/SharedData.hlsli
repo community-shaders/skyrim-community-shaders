@@ -148,13 +148,13 @@ namespace SharedData
 	struct HairSpecularSettings
 	{
 		uint Enabled;
-        float Glossiness;
-        float SpecularMult;
-        float DiffuseMult;
+		float Glossiness;
+		float SpecularMult;
+		float DiffuseMult;
 		uint EnableTangentShift;
 		float PrimaryShift;
 		float SecondaryShift;
-        float Saturation;
+		float Saturation;
 	};
 
 	cbuffer FeatureData : register(b6)

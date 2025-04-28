@@ -2181,8 +2181,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			float3 lightSpecularColor = 0;
 			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, SharedData::hairSpecularSettings.Glossiness, uv, baseColor.xyz);
 			lightsSpecularColor += lightSpecularColor;
-		}
-		else
+		} else
 			lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, shininess, uv);
 #				elif defined(SPECULAR) || (defined(SPARKLE) && !defined(SNOW))
 		lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, shininess, uv);
@@ -2337,8 +2336,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			float3 lightSpecularColor = 0;
 			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, SharedData::hairSpecularSettings.Glossiness, uv, baseColor.xyz);
 			lightsSpecularColor += lightSpecularColor;
-		}
-		else
+		} else
 			lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz, lightColor, shininess, uv);
 #				elif defined(SPECULAR) || (defined(SPARKLE) && !defined(SNOW))
 		lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz, lightColor, shininess, uv);
@@ -2572,7 +2570,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 indirectDiffuseLobeWeight, indirectSpecularLobeWeight;
 	if (SharedData::hairSpecularSettings.Enabled)
 		vertexColor = 1;
-		Hair::GetHairIndirectSpecularLobeWeights(indirectDiffuseLobeWeight, indirectSpecularLobeWeight, worldSpaceNormal.xyz, worldSpaceViewDirection, worldSpaceVertexNormal, SharedData::hairSpecularSettings.Glossiness, baseColor.xyz);
+	Hair::GetHairIndirectSpecularLobeWeights(indirectDiffuseLobeWeight, indirectSpecularLobeWeight, worldSpaceNormal.xyz, worldSpaceViewDirection, worldSpaceVertexNormal, SharedData::hairSpecularSettings.Glossiness, baseColor.xyz);
 #		endif  // CS_HAIR
 #	elif defined(SKYLIGHTING)
 	float3 vertexColor = input.Color.xyz;

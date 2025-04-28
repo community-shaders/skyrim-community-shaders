@@ -7,156 +7,154 @@
 
 namespace Hair
 {
-    Texture2D<float> TexTangentShift : register(t73);
+	Texture2D<float> TexTangentShift : register(t73);
 
-    float3 D_KajiyaKay(float3 T, float3 H, float n)
-    {
-        float TH = dot(T, H);
-        float sinTH = saturate(1 - TH * TH);
-        float dirAtten = saturate(TH + 1);
-        float norm = (n + 2) / (2 * Math::PI);
-        return dirAtten * norm * pow(sinTH, 0.5 * n);
-    }
+	float3 D_KajiyaKay(float3 T, float3 H, float n)
+	{
+		float TH = dot(T, H);
+		float sinTH = saturate(1 - TH * TH);
+		float dirAtten = saturate(TH + 1);
+		float norm = (n + 2) / (2 * Math::PI);
+		return dirAtten * norm * pow(sinTH, 0.5 * n);
+	}
 
-    float Hair_F(float CosTheta)
-    {
-        const float n = 1.55;
-        const float F0 = pow((1 - n) / (1 + n), 2);
-        return F0 + (1 - F0) * pow(1 - CosTheta, 5);
-    }
+	float Hair_F(float CosTheta)
+	{
+		const float n = 1.55;
+		const float F0 = pow((1 - n) / (1 + n), 2);
+		return F0 + (1 - F0) * pow(1 - CosTheta, 5);
+	}
 
-    float3 ShiftTangent(float3 T, float3 N, float shift)
-    {
-        return normalize(T + N * shift);
-    }
+	float3 ShiftTangent(float3 T, float3 N, float shift)
+	{
+		return normalize(T + N * shift);
+	}
 
-    void GetHairDirectLightScheuermann(out float3 dirDiffuse, out float3 dirSpecular, float3 T, float3 L, float3 V, float3 N, float3 lightColor, float shininess, float2 uv, float3 baseColor)
-    {
-        const float3 H = normalize(L + V);
-        const float3 NdotL = saturate(dot(N, L));
-        const float3 NdotV = saturate(dot(N, V));
+	void GetHairDirectLightScheuermann(out float3 dirDiffuse, out float3 dirSpecular, float3 T, float3 L, float3 V, float3 N, float3 lightColor, float shininess, float2 uv, float3 baseColor)
+	{
+		const float3 H = normalize(L + V);
+		const float3 NdotL = saturate(dot(N, L));
+		const float3 NdotV = saturate(dot(N, V));
 
-        dirDiffuse = NdotL * lightColor / Math::PI;
+		dirDiffuse = NdotL * lightColor / Math::PI;
 
-        float3 TshiftPrimary = T;
-        float3 TshiftSecondary = T;
-        if (SharedData::hairSpecularSettings.EnableTangentShift) {
-            const float shift = TexTangentShift.SampleBias(SampColorSampler, uv, SharedData::MipBias).x - 0.5;
-            TshiftPrimary = ShiftTangent(T, N, shift + SharedData::hairSpecularSettings.PrimaryShift);
-            TshiftSecondary = ShiftTangent(T, N, shift + SharedData::hairSpecularSettings.SecondaryShift);
-        }
+		float3 TshiftPrimary = T;
+		float3 TshiftSecondary = T;
+		if (SharedData::hairSpecularSettings.EnableTangentShift) {
+			const float shift = TexTangentShift.SampleBias(SampColorSampler, uv, SharedData::MipBias).x - 0.5;
+			TshiftPrimary = ShiftTangent(T, N, shift + SharedData::hairSpecularSettings.PrimaryShift);
+			TshiftSecondary = ShiftTangent(T, N, shift + SharedData::hairSpecularSettings.SecondaryShift);
+		}
 
-        const float3 specPrimary = D_KajiyaKay(TshiftPrimary, H, shininess);
-        const float3 specSecondary = D_KajiyaKay(TshiftSecondary, H, shininess * 0.5);
-        const float F = Hair_F(saturate(dot(H, V)));
-        float3 specR = 0.25 * F * (specPrimary + specSecondary) * NdotL * saturate(NdotV * (3.4e+38));
-        specR = Color::LinearToGamma(specR);
-        float scatterFresnel1 = pow(saturate(-dot(L, V)), 9) * pow(saturate(1 - NdotV * NdotV), 12);
-        float scatterFresnel2 = saturate(pow((1 - NdotV), 20));
-        float3 specT = scatterFresnel1 + scatterFresnel2;
-        float3 specTerm = specR + specT * baseColor;
-        dirSpecular = specTerm * lightColor;
-    }
+		const float3 specPrimary = D_KajiyaKay(TshiftPrimary, H, shininess);
+		const float3 specSecondary = D_KajiyaKay(TshiftSecondary, H, shininess * 0.5);
+		const float F = Hair_F(saturate(dot(H, V)));
+		float3 specR = 0.25 * F * (specPrimary + specSecondary) * NdotL * saturate(NdotV * (3.4e+38));
+		specR = Color::LinearToGamma(specR);
+		float scatterFresnel1 = pow(saturate(-dot(L, V)), 9) * pow(saturate(1 - NdotV * NdotV), 12);
+		float scatterFresnel2 = saturate(pow((1 - NdotV), 20));
+		float3 specT = scatterFresnel1 + scatterFresnel2;
+		float3 specTerm = specR + specT * baseColor;
+		dirSpecular = specTerm * lightColor;
+	}
 
-    float Hair_g(float B, float Theta)
-    {
-        // Clamp B for the denominator term, as otherwise the Gaussian normalization returns too high value.
-        // This clamps allow to prevent large value for low roughness, while keeping the highlight shape/sharpness 
-        // similar.
-        const float DenominatorB = max(B, 0.01f);
-        return exp(-0.5 * pow(Theta, 2) / (B * B)) / (sqrt(2 * Math::PI) * DenominatorB);
-    }
+	float Hair_g(float B, float Theta)
+	{
+		// Clamp B for the denominator term, as otherwise the Gaussian normalization returns too high value.
+		// This clamps allow to prevent large value for low roughness, while keeping the highlight shape/sharpness
+		// similar.
+		const float DenominatorB = max(B, 0.01f);
+		return exp(-0.5 * pow(Theta, 2) / (B * B)) / (sqrt(2 * Math::PI) * DenominatorB);
+	}
 
-    float3 D_Marschner(float3 L, float3 V, float3 N, float roughness, float3 baseColor, float Area, float Backlit)
-    {
-        const float VoL       = dot(V,L);
-        const float SinThetaL = dot(N,L);
-        const float SinThetaV = dot(N,V);
-        float CosThetaD = cos( 0.5 * abs( asin( SinThetaV ) - asin( SinThetaL ) ) );
+	float3 D_Marschner(float3 L, float3 V, float3 N, float roughness, float3 baseColor, float Area, float Backlit)
+	{
+		const float VoL = dot(V, L);
+		const float SinThetaL = dot(N, L);
+		const float SinThetaV = dot(N, V);
+		float CosThetaD = cos(0.5 * abs(asin(SinThetaV) - asin(SinThetaL)));
 
-        const float3 Lp = L - SinThetaL * N;
-        const float3 Vp = V - SinThetaV * N;
-        const float CosPhi = dot(Lp,Vp) * rsqrt( dot(Lp,Lp) * dot(Vp,Vp) + 1e-4 );
-        const float CosHalfPhi = sqrt( saturate( 0.5 + 0.5 * CosPhi ) );
+		const float3 Lp = L - SinThetaL * N;
+		const float3 Vp = V - SinThetaV * N;
+		const float CosPhi = dot(Lp, Vp) * rsqrt(dot(Lp, Lp) * dot(Vp, Vp) + 1e-4);
+		const float CosHalfPhi = sqrt(saturate(0.5 + 0.5 * CosPhi));
 
-        float n = 1.55;
-        float n_prime = 1.19 / CosThetaD + 0.36 * CosThetaD;
+		float n = 1.55;
+		float n_prime = 1.19 / CosThetaD + 0.36 * CosThetaD;
 
-        float Shift = 0.035;
-        float Alpha[] =
-        {
-            -Shift * 2,
-            Shift,
-            Shift * 4,
-        };
+		float Shift = 0.035;
+		float Alpha[] = {
+			-Shift * 2,
+			Shift,
+			Shift * 4,
+		};
 
-        float B[] =
-        {
-            Area + pow(roughness, 2),
-            Area + pow(roughness, 2) / 2,
-            Area + pow(roughness, 2) * 2,
-        };
+		float B[] = {
+			Area + pow(roughness, 2),
+			Area + pow(roughness, 2) / 2,
+			Area + pow(roughness, 2) * 2,
+		};
 
-        float3 R, TT, TRT = 0;
+		float3 R, TT, TRT = 0;
 
-        {
-            const float sa = sin( Alpha[0] );
-            const float ca = cos( Alpha[0] );
-            float Shift = 2*sa* ( ca * CosHalfPhi * sqrt( 1 - SinThetaV * SinThetaV ) + sa * SinThetaV );
+		{
+			const float sa = sin(Alpha[0]);
+			const float ca = cos(Alpha[0]);
+			float Shift = 2 * sa * (ca * CosHalfPhi * sqrt(1 - SinThetaV * SinThetaV) + sa * SinThetaV);
 
-            float Mp = Hair_g( B[0] * sqrt(2.0) * CosHalfPhi, SinThetaL + SinThetaV - Shift );
-            float Np = 0.25 * CosHalfPhi;
-            float Fp = Hair_F( sqrt( saturate( 0.5 + 0.5 * VoL ) ) );
-            R = Mp * Np * Fp * 2 * lerp( 1, Backlit, saturate(-VoL) );
-        }
+			float Mp = Hair_g(B[0] * sqrt(2.0) * CosHalfPhi, SinThetaL + SinThetaV - Shift);
+			float Np = 0.25 * CosHalfPhi;
+			float Fp = Hair_F(sqrt(saturate(0.5 + 0.5 * VoL)));
+			R = Mp * Np * Fp * 2 * lerp(1, Backlit, saturate(-VoL));
+		}
 
-        {
-            float Mp = Hair_g( B[1], SinThetaL + SinThetaV - Alpha[1] );
-            float a = 1 / n_prime;
-            float h = CosHalfPhi * ( 1 + a * ( 0.6 - 0.8 * CosPhi ) );
-            float f = Hair_F( CosThetaD * sqrt( saturate( 1 - h*h ) ) );
+		{
+			float Mp = Hair_g(B[1], SinThetaL + SinThetaV - Alpha[1]);
+			float a = 1 / n_prime;
+			float h = CosHalfPhi * (1 + a * (0.6 - 0.8 * CosPhi));
+			float f = Hair_F(CosThetaD * sqrt(saturate(1 - h * h)));
 
-            float Fp = pow(1 - f, 2);
-            float3 Tp = pow( baseColor, 0.5 * sqrt( 1 - pow(h * a, 2) ) / CosThetaD );
-            float Np = exp( -3.65 * CosPhi - 3.98 );
+			float Fp = pow(1 - f, 2);
+			float3 Tp = pow(baseColor, 0.5 * sqrt(1 - pow(h * a, 2)) / CosThetaD);
+			float Np = exp(-3.65 * CosPhi - 3.98);
 
-            TT = Mp * Np * Fp * Tp * Backlit;
-        }
+			TT = Mp * Np * Fp * Tp * Backlit;
+		}
 
-        {
-            float Mp = Hair_g( B[2], SinThetaL + SinThetaV - Alpha[2] );
+		{
+			float Mp = Hair_g(B[2], SinThetaL + SinThetaV - Alpha[2]);
 
-            float f = Hair_F( CosThetaD * 0.5 );
-		    float Fp = pow(1 - f, 2) * f;
-            float3 Tp = pow( baseColor, 0.8 / CosThetaD );
+			float f = Hair_F(CosThetaD * 0.5);
+			float Fp = pow(1 - f, 2) * f;
+			float3 Tp = pow(baseColor, 0.8 / CosThetaD);
 
-            float Np = exp( 17 * CosPhi - 16.78 );
+			float Np = exp(17 * CosPhi - 16.78);
 
-            TRT = Mp * Np * Fp * Tp;
-        }
+			TRT = Mp * Np * Fp * Tp;
+		}
 
-        return R + TT + TRT;
-    }
+		return R + TT + TRT;
+	}
 
-    void GetHairDirectLightMarschner(out float3 dirDiffuse, out float3 dirSpecular, float3 T, float3 L, float3 V, float3 N, float3 lightColor, float shininess, float2 uv, float3 baseColor)
-    {
-        lightColor *= Math::PI;
-        dirDiffuse = 0;
-        dirSpecular = 0;
-        const float roughness = 1 - 0.01 * shininess;
+	void GetHairDirectLightMarschner(out float3 dirDiffuse, out float3 dirSpecular, float3 T, float3 L, float3 V, float3 N, float3 lightColor, float shininess, float2 uv, float3 baseColor)
+	{
+		lightColor *= Math::PI;
+		dirDiffuse = 0;
+		dirSpecular = 0;
+		const float roughness = 1 - 0.01 * shininess;
 
-        dirSpecular += D_Marschner(L, V, N, roughness, baseColor, 0, 1) * lightColor;
-    }
+		dirSpecular += D_Marschner(L, V, N, roughness, baseColor, 0, 1) * lightColor;
+	}
 
-    void GetHairDirectLight(out float3 dirDiffuse, out float3 dirSpecular, float3 T, float3 L, float3 V, float3 N, float3 lightColor, float shininess, float2 uv, float3 baseColor)
-    {
-        if (!MARSCHNER)
-            GetHairDirectLightScheuermann(dirDiffuse, dirSpecular, T, L, V, N, lightColor, shininess, uv, baseColor);
-        else
-            GetHairDirectLightMarschner(dirDiffuse, dirSpecular, T, L, V, N, lightColor, shininess, uv, baseColor);
-    }
+	void GetHairDirectLight(out float3 dirDiffuse, out float3 dirSpecular, float3 T, float3 L, float3 V, float3 N, float3 lightColor, float shininess, float2 uv, float3 baseColor)
+	{
+		if (!MARSCHNER)
+			GetHairDirectLightScheuermann(dirDiffuse, dirSpecular, T, L, V, N, lightColor, shininess, uv, baseColor);
+		else
+			GetHairDirectLightMarschner(dirDiffuse, dirSpecular, T, L, V, N, lightColor, shininess, uv, baseColor);
+	}
 
-    float2 GetEnvBRDFApproxLazarov(float roughness, float NdotV)
+	float2 GetEnvBRDFApproxLazarov(float roughness, float NdotV)
 	{
 		const float4 c0 = { -1, -0.0275, -0.572, 0.022 };
 		const float4 c1 = { 1, 0.0425, 1.04, -0.04 };
@@ -166,41 +164,41 @@ namespace Hair
 		return AB;
 	}
 
-    void GetHairIndirectSpecularLobeWeights(out float3 diffuseLobeWeight, out float3 specularLobeWeight, float3 N, float3 V, float3 VN, float shininess, float3 baseColor)
-    {
-        const float roughness = 1 - 0.01 * shininess * 0.75;
-        const float NdotV = saturate(dot(N, V));
+	void GetHairIndirectSpecularLobeWeights(out float3 diffuseLobeWeight, out float3 specularLobeWeight, float3 N, float3 V, float3 VN, float shininess, float3 baseColor)
+	{
+		const float roughness = 1 - 0.01 * shininess * 0.75;
+		const float NdotV = saturate(dot(N, V));
 
-        if (MARSCHNER) {
-            specularLobeWeight = 0;
-            float3 L = normalize(V - N * dot(V, N));
+		if (MARSCHNER) {
+			specularLobeWeight = 0;
+			float3 L = normalize(V - N * dot(V, N));
 			float NdotL = dot(N, L);
 			float VdotL = dot(V, L);
 
-            diffuseLobeWeight = D_Marschner(L, V, N, roughness, baseColor * Math::PI, 0.2, 0);
-            return;
-        }
-        
-        diffuseLobeWeight = baseColor;
-        specularLobeWeight = 0;
+			diffuseLobeWeight = D_Marschner(L, V, N, roughness, baseColor * Math::PI, 0.2, 0);
+			return;
+		}
 
-        const float2 specularBRDF = GetEnvBRDFApproxLazarov(roughness, NdotV);
+		diffuseLobeWeight = baseColor;
+		specularLobeWeight = 0;
 
-        const float3 F0 = { 0.046, 0.046, 0.046 };
-        specularLobeWeight = F0 * specularBRDF.x + specularBRDF.y;
-        diffuseLobeWeight *= (1 - specularLobeWeight);
-        specularLobeWeight *= 1 + F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
+		const float2 specularBRDF = GetEnvBRDFApproxLazarov(roughness, NdotV);
 
-        float3 R = reflect(-V, N);
-        float horizon = min(1.0 + dot(R, VN), 1.0);
-        horizon = horizon * horizon;
-        specularLobeWeight *= horizon;
-    }
+		const float3 F0 = { 0.046, 0.046, 0.046 };
+		specularLobeWeight = F0 * specularBRDF.x + specularBRDF.y;
+		diffuseLobeWeight *= (1 - specularLobeWeight);
+		specularLobeWeight *= 1 + F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
 
-    float3 Saturation(float3 color, float saturation)
-    {
-        float luminance = Color::RGBToLuminance(color);
-        return saturate(lerp(float3(luminance, luminance, luminance), color, saturation));
-    }
+		float3 R = reflect(-V, N);
+		float horizon = min(1.0 + dot(R, VN), 1.0);
+		horizon = horizon * horizon;
+		specularLobeWeight *= horizon;
+	}
+
+	float3 Saturation(float3 color, float saturation)
+	{
+		float luminance = Color::RGBToLuminance(color);
+		return saturate(lerp(float3(luminance, luminance, luminance), color, saturation));
+	}
 }
 #endif  //__HAIR_DEPENDENCY_HLSL__
