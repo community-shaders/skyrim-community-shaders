@@ -18,7 +18,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	InteriorQuality,
 	InteriorCustomSize);
 
-
 void VolumetricLighting::DrawSettings()
 {
 	if (ImGui::TreeNodeEx("Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -33,7 +32,7 @@ void VolumetricLighting::DrawSettings()
 
 		if (settings.InteriorEnabled)
 			DrawVolumetricLightingSettings(settings.InteriorQuality, settings.InteriorCustomSize, true, inInterior);
-		
+
 		ImGui::Spacing();
 		ImGui::TreePop();
 	}
@@ -42,7 +41,7 @@ void VolumetricLighting::DrawSettings()
 void VolumetricLighting::DrawVolumetricLightingSettings(int32_t& quality, TextureSize& customSize, const bool isInterior, const bool inLocationType)
 {
 	auto& [Width, Height, Depth] = FetchCurrentSizeInUnits(isInterior);
-	
+
 	if (ImGui::SliderInt(isInterior ? "Interior Quality" : "Exterior Quality", &quality, 0, static_cast<uint8_t>(Quality::Count) - 1, QualityNames[quality])) {
 		if (inLocationType)
 			SetupVL();
@@ -74,7 +73,8 @@ void VolumetricLighting::DrawVolumetricLightingSettings(int32_t& quality, Textur
 		ImGui::EndDisabled();
 }
 
-inline const char* VolumetricLighting::FromUnits(const int32_t value, const int32_t unitScale) {
+inline const char* VolumetricLighting::FromUnits(const int32_t value, const int32_t unitScale)
+{
 	static std::string s;
 	s = std::to_string(value * unitScale);
 	return s.c_str();
@@ -165,11 +165,11 @@ void VolumetricLighting::PostPostLoad()
 		logger::info("[{}] Hooking CopyResource at {:x}", GetName(), address);
 		REL::safe_fill(address, REL::NOP, 7);
 		stl::write_thunk_call<CopyResource>(address);
-		
+
 		// Skip volumetric lighting rendering
 		REL::safe_write(REL::RelocationID(35560, 0).address() + REL::Relocate(0x254, 0), &REL::JMP8, 1);
 		// Move it to render after depth to ensure camera matches rest of scene
-		stl::write_thunk_call<RenderDepth>(REL::RelocationID(35560, 0).address() + REL::Relocate(0x2EE, 0));	
+		stl::write_thunk_call<RenderDepth>(REL::RelocationID(35560, 0).address() + REL::Relocate(0x2EE, 0));
 	}
 
 	bEnableVolumetricLighting = reinterpret_cast<bool*>(REL::VariantOffset(0x3232EF0, 0x338C544, 0x3485362).address());
@@ -202,8 +202,7 @@ void VolumetricLighting::SetupVL()
 			*bEnableVolumetricLighting = settings.InteriorEnabled && inInteriorWithSunShadows;
 		*gVolumetricLightingSizeHigh = static_cast<Quality>(settings.InteriorQuality) == Quality::Custom ? settings.InteriorCustomSize : defaultSizeHigh;
 		SetVLQuality(GetVLDescriptor(), settings.InteriorQuality);
-	}
-	else {
+	} else {
 		if (globals::game::isVR)
 			SetBooleanSettings(hiddenVRSettings, GetName(), settings.ExteriorEnabled);
 		else

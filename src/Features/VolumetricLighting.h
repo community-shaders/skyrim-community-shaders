@@ -89,9 +89,10 @@ public:
 		static void thunk();
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
-	
+
 private:
-	struct VolumetricLightingDescriptor {};
+	struct VolumetricLightingDescriptor
+	{};
 
 	static const char* FromUnits(int32_t value, int32_t unitScale);
 	static VolumetricLightingDescriptor& GetVLDescriptor();
