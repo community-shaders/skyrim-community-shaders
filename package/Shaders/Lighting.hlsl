@@ -1603,9 +1603,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(LOD_BLENDING)
 #		if defined(LODOBJECTS) || defined(LODOBJECTSHD)
-		baseColor.xyz *= SharedData::lodBlendingSettings.LODObjectBrightness;
+	baseColor.xyz *= SharedData::lodBlendingSettings.LODObjectBrightness;
 #		elif defined(LODLANDSCAPE)
-		baseColor.xyz *= SharedData::lodBlendingSettings.LODTerrainBrightness;
+	baseColor.xyz *= SharedData::lodBlendingSettings.LODTerrainBrightness;
 #		endif
 #	endif  // LOD_BLENDING
 
@@ -1613,22 +1613,22 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(MODELSPACENORMALS)
 #		if defined(LODLANDNOISE)
-		normal.xyz = normal.xzy - 0.5.xxx;
-		float lodLandNoiseParameter = GetLodLandBlendParameter(baseColor.xyz);
-		float noise = TexLandLodNoiseSampler.Sample(SampLandLodNoiseSampler, uv * 3.0.xx).x;
-		float lodLandNoiseMultiplier = GetLodLandBlendMultiplier(lodLandNoiseParameter, noise);
-		baseColor.xyz *= lodLandNoiseMultiplier;
-		normal.xyz *= 2;
-		normal.w = 1;
-		glossiness = 0;
+	normal.xyz = normal.xzy - 0.5.xxx;
+	float lodLandNoiseParameter = GetLodLandBlendParameter(baseColor.xyz);
+	float noise = TexLandLodNoiseSampler.Sample(SampLandLodNoiseSampler, uv * 3.0.xx).x;
+	float lodLandNoiseMultiplier = GetLodLandBlendMultiplier(lodLandNoiseParameter, noise);
+	baseColor.xyz *= lodLandNoiseMultiplier;
+	normal.xyz *= 2;
+	normal.w = 1;
+	glossiness = 0;
 #		elif defined(LODLANDSCAPE)
-		normal.xyz = 2.0.xxx * (-0.5.xxx + normal.xzy);
-		normal.w = 1;
-		glossiness = 0;
+	normal.xyz = 2.0.xxx * (-0.5.xxx + normal.xzy);
+	normal.w = 1;
+	glossiness = 0;
 #		else
-		normal.xyz = normal.xzy * 2.0.xxx + -1.0.xxx;
-		normal.w = 1;
-		glossiness = TexSpecularSampler.Sample(SampSpecularSampler, uv).x;
+	normal.xyz = normal.xzy * 2.0.xxx + -1.0.xxx;
+	normal.w = 1;
+	glossiness = TexSpecularSampler.Sample(SampSpecularSampler, uv).x;
 #		endif  // LODLANDNOISE
 #	elif (defined(SNOW) && defined(LANDSCAPE))
 	normal.xyz = GetLandNormal(landSnowMask1, normal.xyz, uv, SampNormalSampler, TexNormalSampler);
@@ -1639,13 +1639,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif  // MODELSPACENORMALS
 
 #	if defined(WORLD_MAP)
-			normal.xyz = GetWorldMapNormal(input, normal.xyz, rawBaseColor.xyz);
+	normal.xyz = GetWorldMapNormal(input, normal.xyz, rawBaseColor.xyz);
 #	endif  // WORLD_MAP
 
 #	if defined(LANDSCAPE)
-#	if defined(SNOW) && !defined(TRUE_PBR)
+#		if defined(SNOW) && !defined(TRUE_PBR)
 	float landSnowMask = LandscapeTexture1to4IsSnow.x * input.LandBlendWeights1.x;
-#	endif  // SNOW
+#		endif  // SNOW
 
 	// Layer 1 (LandBlendWeights1.x)
 	if (input.LandBlendWeights1.x > 0.0) {
