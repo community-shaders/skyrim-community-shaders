@@ -9,6 +9,7 @@ namespace Hair
 {
 	Texture2D<float> TexTangentShift : register(t73);
 
+	// [Kajiya et al. 1989, "Rendering fur with three dimensional textures."]
 	float3 D_KajiyaKay(float3 T, float3 H, float n)
 	{
 		float TH = dot(T, H);
@@ -18,6 +19,7 @@ namespace Hair
 		return dirAtten * norm * pow(sinTH, 0.5 * n);
 	}
 
+	// [Schlick et al. 1998, "An inexpensive brdf model for physically-based rendering."]
 	float Hair_F(float CosTheta)
 	{
 		const float n = 1.55;
@@ -29,7 +31,8 @@ namespace Hair
 	{
 		return normalize(T + N * shift);
 	}
-
+	
+	// [Scheuermann 2004, "Hair Rendering and Shading"]
 	void GetHairDirectLightScheuermann(out float3 dirDiffuse, out float3 dirSpecular, float3 T, float3 L, float3 V, float3 N, float3 lightColor, float shininess, float2 uv, float3 baseColor)
 	{
 		const float3 H = normalize(L + V);
@@ -60,13 +63,11 @@ namespace Hair
 
 	float Hair_g(float B, float Theta)
 	{
-		// Clamp B for the denominator term, as otherwise the Gaussian normalization returns too high value.
-		// This clamps allow to prevent large value for low roughness, while keeping the highlight shape/sharpness
-		// similar.
 		const float DenominatorB = max(B, 0.01f);
 		return exp(-0.5 * pow(Theta, 2) / (B * B)) / (sqrt(2 * Math::PI) * DenominatorB);
 	}
 
+	// [Marschner et al. 2003, "Light reflection from human hair fibers."]
 	float3 D_Marschner(float3 L, float3 V, float3 N, float roughness, float3 baseColor, float Area, float Backlit)
 	{
 		const float VoL = dot(V, L);
@@ -154,6 +155,7 @@ namespace Hair
 			GetHairDirectLightMarschner(dirDiffuse, dirSpecular, T, L, V, N, lightColor, shininess, uv, baseColor);
 	}
 
+	// [Lazarov 2013, "Getting More Physical in Call of Duty: Black Ops II"]
 	float2 GetEnvBRDFApproxLazarov(float roughness, float NdotV)
 	{
 		const float4 c0 = { -1, -0.0275, -0.572, 0.022 };
