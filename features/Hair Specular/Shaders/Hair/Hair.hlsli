@@ -31,7 +31,7 @@ namespace Hair
 	{
 		return normalize(T + N * shift);
 	}
-	
+
 	// [Scheuermann 2004, "Hair Rendering and Shading"]
 	void GetHairDirectLightScheuermann(out float3 dirDiffuse, out float3 dirSpecular, float3 T, float3 L, float3 V, float3 N, float3 lightColor, float shininess, float2 uv, float3 baseColor)
 	{
