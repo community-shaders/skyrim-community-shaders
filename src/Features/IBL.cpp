@@ -42,7 +42,7 @@ void IBL::RestoreDefaultSettings()
 	settings = {};
 }
 
-void IBL::Bind()
+void IBL::EarlyPrepass()
 {
 	if (loaded) {
 		auto context = globals::d3d::context;

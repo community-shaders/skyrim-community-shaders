@@ -27,6 +27,7 @@ public:
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 
+	virtual void EarlyPrepass() override;
 	virtual void Prepass() override;
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;

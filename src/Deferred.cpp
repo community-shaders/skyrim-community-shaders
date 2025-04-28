@@ -271,8 +271,6 @@ void Deferred::PrepassPasses()
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "Prepass");
 
-	globals::features::ibl->Bind();
-
 	auto shaderCache = globals::shaderCache;
 
 	if (!shaderCache->IsEnabled())
