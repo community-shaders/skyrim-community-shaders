@@ -19,8 +19,6 @@ public:
 	Texture2D* diffuseIBLTexture = nullptr;
 	ID3D11ComputeShader* diffuseIBLCS = nullptr;
 
-	void Bind();
-
 	virtual void RestoreDefaultSettings() override;
 	virtual void DrawSettings() override;
 
