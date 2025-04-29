@@ -47,8 +47,8 @@ namespace Hair
 		float3 TshiftPrimary = T;
 		float3 TshiftSecondary = T;
 
-		[branch]
-		if (SharedData::hairSpecularSettings.EnableTangentShift) {
+		[branch] if (SharedData::hairSpecularSettings.EnableTangentShift)
+		{
 			const float shift = TexTangentShift.SampleBias(SampColorSampler, uv, SharedData::MipBias).x - 0.5;
 			TshiftPrimary = ShiftTangent(T, N, shift + SharedData::hairSpecularSettings.PrimaryShift);
 			TshiftSecondary = ShiftTangent(T, N, shift + SharedData::hairSpecularSettings.SecondaryShift);
