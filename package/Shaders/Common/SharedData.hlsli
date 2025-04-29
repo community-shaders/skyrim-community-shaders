@@ -155,6 +155,10 @@ namespace SharedData
 		float PrimaryShift;
 		float SecondaryShift;
 		float Saturation;
+		float SpecularIndirectMult;
+		float DiffuseIndirectMult;
+		float BaseColorMult;
+		float pad;
 	};
 
 	cbuffer FeatureData : register(b6)
