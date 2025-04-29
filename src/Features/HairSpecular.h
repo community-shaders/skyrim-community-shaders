@@ -20,7 +20,7 @@ struct HairSpecular : Feature
 	struct alignas(16) Settings
 	{
 		uint Enabled = true;
-		float HairGlossiness = 70.0f;
+		float HairGlossiness = 60.0f;
 		float SpecularMult = 1.0f;
 		float DiffuseMult = 1.0f;
 		uint EnableTangentShift = true;
