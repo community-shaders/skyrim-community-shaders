@@ -10,6 +10,7 @@ namespace Hair
 	Texture2D<float> TexTangentShift : register(t73);
 
 	// [Kajiya et al. 1989, "Rendering fur with three dimensional textures."]
+	// https://doi.org/10.1145/74334.74361
 	float3 D_KajiyaKay(float3 T, float3 H, float n)
 	{
 		float TH = dot(T, H);
@@ -20,6 +21,7 @@ namespace Hair
 	}
 
 	// [Schlick et al. 1998, "An inexpensive brdf model for physically-based rendering."]
+	// https://doi.org/10.1111/1467-8659.1330233
 	float Hair_F(float CosTheta)
 	{
 		const float n = 1.55;
@@ -33,6 +35,7 @@ namespace Hair
 	}
 
 	// [Scheuermann 2004, "Hair Rendering and Shading"]
+	// https://web.engr.oregonstate.edu/~mjb/cs557/Projects/Papers/HairRendering.pdf
 	void GetHairDirectLightScheuermann(out float3 dirDiffuse, out float3 dirSpecular, float3 T, float3 L, float3 V, float3 N, float3 lightColor, float shininess, float2 uv, float3 baseColor)
 	{
 		const float3 H = normalize(L + V);
@@ -68,6 +71,7 @@ namespace Hair
 	}
 
 	// [Marschner et al. 2003, "Light reflection from human hair fibers."]
+	// https://graphics.stanford.edu/papers/hair/hair-sg03final.pdf
 	float3 D_Marschner(float3 L, float3 V, float3 N, float roughness, float3 baseColor, float Area, float Backlit)
 	{
 		const float VoL = dot(V, L);
@@ -156,6 +160,7 @@ namespace Hair
 	}
 
 	// [Lazarov 2013, "Getting More Physical in Call of Duty: Black Ops II"]
+	// https://blog.selfshadow.com/publications/s2013-shading-course/lazarov/s2013_pbs_black_ops_2_slides_v2.pdf
 	float2 GetEnvBRDFApproxLazarov(float roughness, float NdotV)
 	{
 		const float4 c0 = { -1, -0.0275, -0.572, 0.022 };
