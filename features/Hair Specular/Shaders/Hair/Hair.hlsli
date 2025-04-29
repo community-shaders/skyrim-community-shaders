@@ -39,13 +39,15 @@ namespace Hair
 	void GetHairDirectLightScheuermann(out float3 dirDiffuse, out float3 dirSpecular, float3 T, float3 L, float3 V, float3 N, float3 lightColor, float shininess, float2 uv, float3 baseColor)
 	{
 		const float3 H = normalize(L + V);
-		const float3 NdotL = saturate(dot(N, L));
-		const float3 NdotV = saturate(dot(N, V));
+		const float NdotL = saturate(dot(N, L));
+		const float NdotV = saturate(dot(N, V));
 
 		dirDiffuse = NdotL * lightColor / Math::PI;
 
 		float3 TshiftPrimary = T;
 		float3 TshiftSecondary = T;
+
+		[branch]
 		if (SharedData::hairSpecularSettings.EnableTangentShift) {
 			const float shift = TexTangentShift.SampleBias(SampColorSampler, uv, SharedData::MipBias).x - 0.5;
 			TshiftPrimary = ShiftTangent(T, N, shift + SharedData::hairSpecularSettings.PrimaryShift);
