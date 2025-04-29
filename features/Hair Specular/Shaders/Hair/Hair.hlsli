@@ -248,12 +248,12 @@ namespace Hair
 		return saturate(lerp(float3(luminance, luminance, luminance), color, saturation));
 	}
 
-#	if defined(DYNAMIC_CUBEMAPS)
-#		if defined(SKYLIGHTING)
+#if defined(DYNAMIC_CUBEMAPS)
+#	if defined(SKYLIGHTING)
 	float3 GetHairDynamicCubemapSpecularIrradiance(float2 uv, float2 ScreenUV, float3 T, float3 N, float3 VN, float3 V, float glossiness, float3 specLobePrim, float3 specLobeSec, sh2 skylighting)
-#		else
+#	else
 	float3 GetHairDynamicCubemapSpecularIrradiance(float2 uv, float2 ScreenUV, float3 T, float3 N, float3 VN, float3 V, float glossiness, float3 specLobePrim, float3 specLobeSec)
-#		endif
+#	endif
 	{
 		float3 SpecularIrradiance = 0;
 		float3 N1 = N;
@@ -268,15 +268,15 @@ namespace Hair
 			N2 = ShiftNormal(T, N, shift + SharedData::hairSpecularSettings.SecondaryShift);
 		}
 
-#		if defined(SKYLIGHTING)
+#	if defined(SKYLIGHTING)
 		SpecularIrradiance += DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(ScreenUV, N1, VN, V, roughnessPrimary, skylighting) * specLobePrim;
 		SpecularIrradiance += DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(ScreenUV, N2, VN, V, roughnessSecondary, skylighting) * specLobeSec;
-#		else
+#	else
 		SpecularIrradiance += DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(ScreenUV, N1, VN, V, roughnessPrimary) * specLobePrim;
 		SpecularIrradiance += DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(ScreenUV, N2, VN, V, roughnessSecondary) * specLobeSec;
-#		endif
+#	endif
 		return SpecularIrradiance;
 	}
-#	endif
+#endif
 }
 #endif  //__HAIR_DEPENDENCY_HLSL__
