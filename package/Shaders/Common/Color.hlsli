@@ -65,6 +65,23 @@ namespace Color
 		return pow(max(color, 0), 1.0 / 2.2);
 	}
 
+	float3 GammaToLinearLuminancePreserving(float3 color)
+	{
+		float originalLuminance = RGBToLuminance(color);
+		float3 linearColorRaw = GammaToLinear(color / originalLuminance);
+		float scale = 1.0;
+		if (originalLuminance > 1e-5)
+		{
+			scale = GammaToLinear(originalLuminance);
+		}
+		else if (originalLuminance <= 1e-5)
+		{
+			return float3(0.0, 0.0, 0.0);
+		}
+		float3 finalLinearColor = linearColorRaw * scale;
+		return finalLinearColor;
+	}
+
 #if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
 	float3 Diffuse(float3 color)
 	{
@@ -86,7 +103,7 @@ namespace Color
 	float3 Light(float3 color)
 	{
 		if (SharedData::linearLightingSettings.enableLinearLighting) {
-			color = GammaToTrueLinear(color);
+			color = GammaToLinearLuminancePreserving(color);
 		}
 	#if defined(TRUE_PBR)
 		return color * Math::PI;  // Compensate for traditional Lambertian diffuse
