@@ -926,7 +926,6 @@ void LightLimitFix::UpdateLights()
 
 				light.color *= particleLight.color.alpha * settings.BillboardBrightness;
 				light.radius = particleLight.node->worldBound.radius * particleLight.color.alpha * settings.BillboardRadius * 0.5f;
-				light.fade = 1.0f;
 
 				auto position = particleLight.node->world.translate;
 
