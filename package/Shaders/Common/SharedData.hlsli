@@ -148,6 +148,8 @@ namespace SharedData
 	struct TerrainVariationSettings
 	{
 		bool EnableTilingFix;
+		float startDistance;
+		float maxDistance;
 		float3 pad0;
 	};
 

@@ -18,6 +18,8 @@ struct TerrainVariation : Feature
 	struct Settings
 	{
 		bool enabled = true;
+		float startDistance = 100.0f;
+		float maxDistance = 1000.0f;
 	};
 
 	Settings settings;

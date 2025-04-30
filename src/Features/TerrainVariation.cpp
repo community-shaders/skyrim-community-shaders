@@ -6,7 +6,9 @@
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	TerrainVariation::Settings,
-	enabled)
+	enabled,
+	startDistance,
+	maxDistance)
 
 void TerrainVariation::DrawSettings()
 {
@@ -23,6 +25,27 @@ void TerrainVariation::DrawSettings()
 			"Reduces the repeating pattern effect on terrain textures.\n"
 			"This technique creates more natural-looking terrain by adding variation to texture sampling.");
 	}
+
+	if (settings.enabled) {
+		ImGui::Separator();
+		
+		bool paramsChanged = false;
+		
+		// Add UI controls for distance-based parameters
+		paramsChanged |= ImGui::SliderFloat("Start Distance", &settings.startDistance, 0.0f, settings.maxDistance - 1.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Distance from camera where variation begins to blend in.\nCloser than this will have no variation applied.");
+		}
+		
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Distance from camera where variation reaches maximum intensity.");
+		}
+		
+		if (paramsChanged) {
+			UpdateShaderSettings();
+			logger::info("TerrainVariation distance parameters updated");
+		}
+	}
 }
 
 void TerrainVariation::UpdateShaderSettings()
@@ -33,7 +56,11 @@ void TerrainVariation::UpdateShaderSettings()
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::DIRTY_VERTEX_DESC);
 
-	logger::debug("TerrainVariation: Updated shader settings, enabled = {}", settings.enabled);
+	// The settings are automatically passed to shaders through the FeatureBuffer system
+	// from the settings object, which is used in GetFeatureBufferData() in FeatureBuffer.cpp
+
+	logger::debug("TerrainVariation: Updated shader settings, enabled = {}, startDistance = {}, maxDistance = {}, maxIntensity = {}", 
+		settings.enabled, settings.startDistance, settings.maxDistance, settings.maxIntensity);
 }
 
 void TerrainVariation::PostPostLoad()
