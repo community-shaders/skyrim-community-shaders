@@ -716,7 +716,7 @@ PS_OUTPUT main(PS_INPUT input)
 				if (!SharedData::linearLightingSettings.enableLinearLighting) {
 					lightColor = light.color.xyz * intensityMultiplier * 0.5;
 				} else {
-					lightColor = Color::GammaToLinearLuminancePreserving(light.color.xyz) * intensityMultiplier * 0.5;
+					lightColor = Color::GammaToLinearLuminancePreservingLight(light.color.xyz) * intensityMultiplier * 0.5;
 				}
 				propertyColor += lightColor;
 			}

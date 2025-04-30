@@ -658,7 +658,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 				if (!SharedData::linearLightingSettings.enableLinearLighting) {
 					lightColor = light.color.xyz * intensityMultiplier;
 				} else {
-					lightColor = Color::GammaToLinearLuminancePreserving(light.color.xyz) * intensityMultiplier;
+					lightColor = Color::GammaToLinearLuminancePreservingLight(light.color.xyz) * intensityMultiplier;
 				}
 				float lightShadow = 1.0;
 
@@ -878,7 +878,7 @@ PS_OUTPUT main(PS_INPUT input)
 				if (!SharedData::linearLightingSettings.enableLinearLighting) {
 					lightColor = light.color.xyz * intensityMultiplier;
 				} else {
-					lightColor = Color::GammaToLinearLuminancePreserving(light.color.xyz) * intensityMultiplier;
+					lightColor = Color::GammaToLinearLuminancePreservingLight(light.color.xyz) * intensityMultiplier;
 				}
 
 				float lightShadow = 1.0;

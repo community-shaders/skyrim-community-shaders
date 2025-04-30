@@ -939,7 +939,7 @@ PS_OUTPUT main(PS_INPUT input)
 			if (!SharedData::linearLightingSettings.enableLinearLighting) {
 				lightColor = light.color.xyz * pow(HdotN, FresnelRI.z);
 			} else {
-				lightColor = Color::GammaToLinearLuminancePreserving(light.color.xyz) * pow(HdotN, FresnelRI.z);
+				lightColor = Color::GammaToLinearLuminancePreservingLight(light.color.xyz) * pow(HdotN, FresnelRI.z);
 			}
 			specularLighting += lightColor * intensityMultiplier;
 		}
