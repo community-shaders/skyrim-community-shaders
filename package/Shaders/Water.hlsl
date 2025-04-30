@@ -937,9 +937,9 @@ PS_OUTPUT main(PS_INPUT input)
 
 			float3 lightColor = 0.0.xxx;
 			if (!SharedData::linearLightingSettings.enableLinearLighting) {
-				lightColor = light.color.xyz * pow(HdotN, FresnelRI.z) * light.fade;
+				lightColor = light.color.xyz * pow(HdotN, FresnelRI.z);
 			} else {
-				lightColor = Color::GammaToTrueLinear(light.color.xyz) * pow(HdotN, FresnelRI.z) * light.fade;
+				lightColor = Color::GammaToLinearLuminancePreserving(light.color.xyz) * pow(HdotN, FresnelRI.z);
 			}
 			specularLighting += lightColor * intensityMultiplier;
 		}
