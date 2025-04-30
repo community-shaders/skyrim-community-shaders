@@ -828,7 +828,6 @@ void LightLimitFix::UpdateLights()
 		cachedParticleLights.clear();
 
 		LightData clusteredLight{};
-		clusteredLight.fade = 1.0f;
 		uint32_t clusteredLights = 0;
 
 		auto eyePositionOffset = eyePositionCached[0] - eyePositionCached[1];
