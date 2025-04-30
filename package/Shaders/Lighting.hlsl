@@ -1318,7 +1318,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		}
 		if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows)) {
 #			if defined(TERRAIN_VARIATION)
-			sh0 = ExtendedMaterials::GetTerrainHeight(input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, weights);
+			float viewDistance = length(viewPosition);
+			sh0 = ExtendedMaterials::GetTerrainHeight(input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, viewDistance, weights);
 			float shadowMultiplier = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, DirLightDirection, sh0, parallaxShadowQuality, screenNoise, displacementParams, offsets, dx, dy, viewDistance);
 #			else
 			sh0 = ExtendedMaterials::GetTerrainHeight(input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, weights);
@@ -2173,7 +2174,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		{
 #			if defined(TERRAIN_VARIATION)
 			float weights[6];
-			float sh0 = ExtendedMaterials::GetTerrainHeight(input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, pixelOffset, weights, viewDistance);
+			float viewDistance = length(viewPosition);
+			float sh0 = ExtendedMaterials::GetTerrainHeight(input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, viewDistance, weights);
 
 			parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, dirLightDirectionTS, sh0, parallaxShadowQuality, screenNoise, displacementParams, offsets, dx, dy, viewDistance);
 #			else
