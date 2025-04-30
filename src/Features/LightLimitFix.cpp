@@ -702,7 +702,6 @@ void LightLimitFix::AddCachedParticleLights(eastl::vector<LightData>& lightsData
 		for (int eyeIndex = 0; eyeIndex < eyeCount; eyeIndex++)
 			light.positionVS[eyeIndex].data = DirectX::SimpleMath::Vector3::Transform(light.positionWS[eyeIndex].data, viewMatrixCached[eyeIndex]);
 
-		light.invRadius = 1.f / light.radius;
 		lightsData.push_back(light);
 
 		CachedParticleLight cachedParticleLight{};
