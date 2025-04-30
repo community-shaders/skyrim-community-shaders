@@ -37,6 +37,7 @@ void TerrainVariation::DrawSettings()
 			ImGui::Text("Distance from camera where variation begins to blend in.\nCloser than this will have no variation applied.");
 		}
 		
+		paramsChanged |= ImGui::SliderFloat("Maximum Distance", &settings.maxDistance, settings.startDistance + 1.0f, 5000.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Distance from camera where variation reaches maximum intensity.");
 		}
