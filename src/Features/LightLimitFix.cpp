@@ -1,4 +1,5 @@
 #include "LightLimitFix.h"
+#include "InverseSquareLighting.h"
 
 #include "Shadercache.h"
 #include "State.h"
@@ -302,6 +303,7 @@ void LightLimitFix::BSLightingShader_SetupGeometry_Before(RE::BSRenderPass* a_pa
 void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(RE::BSRenderPass* a_pass, DirectX::XMMATRIX&, uint32_t, uint32_t, float, Space)
 {
 	auto shaderCache = globals::shaderCache;
+	auto isl = globals::features::inverseSquareLighting;
 
 	if (!shaderCache->IsEnabled())
 		return;
@@ -319,14 +321,18 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 
 		LightData light{};
 		light.color = { runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue };
-		light.color *= runtimeData.fade;
+		light.lightFlags = std::bit_cast<LightFlags>(runtimeData.ambient.red);
+
+		if (isl->loaded) {
+			isl->ProcessLight(light, bsLight, niLight);
+		} else {
+			light.radius = runtimeData.radius.x;
+			light.color *= runtimeData.fade;
+		}
+
 		light.color *= bsLight->lodDimmer;
 
-		light.radius = runtimeData.radius.x;
-
 		SetLightPosition(light, niLight->world.translate, inWorld);
-
-		light.lightFlags = std::bit_cast<LightFlags>(runtimeData.ambient.red);
 
 		if (bsLight->IsShadowLight()) {
 			auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
@@ -696,6 +702,7 @@ void LightLimitFix::AddCachedParticleLights(eastl::vector<LightData>& lightsData
 		for (int eyeIndex = 0; eyeIndex < eyeCount; eyeIndex++)
 			light.positionVS[eyeIndex].data = DirectX::SimpleMath::Vector3::Transform(light.positionWS[eyeIndex].data, viewMatrixCached[eyeIndex]);
 
+		light.invRadius = 1.f / light.radius;
 		lightsData.push_back(light);
 
 		CachedParticleLight cachedParticleLight{};
@@ -725,6 +732,7 @@ namespace RE
 void LightLimitFix::UpdateLights()
 {
 	auto smState = globals::game::smState;
+	auto isl = globals::features::inverseSquareLighting;
 
 	lightsNear = *globals::game::cameraNear;
 	lightsFar = *globals::game::cameraFar;
@@ -765,12 +773,16 @@ void LightLimitFix::UpdateLights()
 
 					LightData light{};
 					light.color = { runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue };
-					light.color *= runtimeData.fade;
-					light.color *= bsLight->lodDimmer;
-
-					light.radius = runtimeData.radius.x;
-
 					light.lightFlags = std::bit_cast<LightFlags>(runtimeData.ambient.red);
+
+					if (isl->loaded) {
+						isl->ProcessLight(light, bsLight, niLight);
+					} else {
+						light.radius = runtimeData.radius.x;
+						light.color *= runtimeData.fade;
+					}
+
+					light.color *= bsLight->lodDimmer;
 
 					if (!IsGlobalLight(bsLight)) {
 						// List of BSMultiBoundRooms affected by a light

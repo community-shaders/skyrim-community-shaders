@@ -57,10 +57,10 @@ bool LightIntersectsCluster(float3 position, float radius, ClusterAABB cluster)
 		float radius = light.radius * light.radius;
 
 #if defined(VR)
-		[branch] if (LightIntersectsCluster(light.positionVS[0], radius, cluster) || LightIntersectsCluster(light.positionVS[1], radius, cluster))
+		[branch] if (LightIntersectsCluster(light.positionVS[0].xyz, radius, cluster) || LightIntersectsCluster(light.positionVS[1].xyz, radius, cluster))
 		{
 #else
-		[branch] if (LightIntersectsCluster(light.positionVS[0], radius, cluster))
+		[branch] if (LightIntersectsCluster(light.positionVS[0].xyz, radius, cluster))
 		{
 #endif
 			visibleLightIndices[visibleLightCount] = i;

@@ -58,7 +58,7 @@ float4 GetReflectionColor(
 		if (FrameBuffer::IsOutsideFrame(raySample.xy))
 			return 0.0;
 
-		float iterationDepth = DepthTex.SampleLevel(DepthSampler, ConvertRaySample(raySample.xy, eyeIndex), 0);
+		float iterationDepth = DepthTex.SampleLevel(DepthSampler, ConvertRaySample(raySample.xy, eyeIndex), 0).x;
 
 		if (saturate((raySample.z - iterationDepth) / SSRParams.y) > 0.0) {
 			float3 binaryMinRaySample = prevRaySample;
@@ -69,7 +69,7 @@ float4 GetReflectionColor(
 			for (int k = 0; k < binaryIterations; k++) {
 				binaryRaySample = lerp(binaryMinRaySample, binaryMaxRaySample, 0.5);
 
-				iterationDepth = DepthTex.SampleLevel(DepthSampler, ConvertRaySample(binaryRaySample.xy, eyeIndex), 0);
+				iterationDepth = DepthTex.SampleLevel(DepthSampler, ConvertRaySample(binaryRaySample.xy, eyeIndex), 0).x;
 
 				// Compute expected depth vs actual depth
 				depthThicknessFactor = 1.0 - saturate(abs(binaryRaySample.z - iterationDepth) / SSRParams.y);
@@ -97,13 +97,13 @@ float4 GetReflectionColor(
 #	endif
 
 			// Fade out around screen edges
-			float2 centerDistanceFadeFactorX = smoothstep(0.0, 0.1, saturate(1.0 - centerDistance.x));
-			float2 centerDistanceFadeFactorY = smoothstep(0.0, 0.5, saturate(1.0 - centerDistance.y));
+			float centerDistanceFadeFactorX = smoothstep(0.0, 0.1, saturate(1.0 - centerDistance.x));
+			float centerDistanceFadeFactorY = smoothstep(0.0, 0.5, saturate(1.0 - centerDistance.y));
 
 			float fadeFactor = depthThicknessFactor * ssrMarchingRadiusFadeFactor * centerDistanceFadeFactorX * centerDistanceFadeFactorY;
 
 			if (fadeFactor > 0.0) {
-				float3 color = ColorTex.SampleLevel(ColorSampler, ConvertRaySample(binaryRaySample.xy, eyeIndex), 0);
+				float3 color = ColorTex.SampleLevel(ColorSampler, ConvertRaySample(binaryRaySample.xy, eyeIndex), 0).xyz;
 
 				// Final sample to world-space
 				float4 positionWS = float4(float2(binaryRaySample.x, 1.0 - binaryRaySample.y) * 2.0 - 1.0, iterationDepth, 1.0);
@@ -162,7 +162,7 @@ PS_OUTPUT main(PS_INPUT input)
 	positionVS = mul(FrameBuffer::CameraProjInverse[eyeIndex], positionVS);
 	positionVS.xyz = positionVS.xyz / positionVS.w;
 
-	float3 viewPosition = positionVS;
+	float3 viewPosition = positionVS.xyz;
 	float3 viewDirection = normalize(viewPosition);
 
 	float3 reflectionDirection = reflect(viewDirection, viewNormal);
