@@ -82,7 +82,7 @@ namespace ExtendedMaterials
 #		define HEIGHT_MULT 8
 	float GetTerrainHeight(PS_INPUT input, float2 coords, float mipLevels[6], DisplacementParams params[6], float blendFactor, float4 w1, float2 w2,
 #		if defined(TERRAIN_VARIATION)
-		StochasticOffsets offsets[6], float2 dx, float2 dy,
+		StochasticOffsets offsets[6], float2 dx, float2 dy, float distance,
 #		endif
 		out float weights[6])
 	{
@@ -94,10 +94,16 @@ namespace ExtendedMaterials
 		weights[4] = w2.x;
 		weights[5] = w2.y;
 		float total = 0;
+		
+#		if defined(TERRAIN_VARIATION)
+		// Calculate distance factor once for performance
+		float distanceFactor = ComputeDistanceFactor(distance);
+#		endif
+		
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile0HasDisplacement) != 0 && w1.x > 0.0)
 		{
 #		if defined(TERRAIN_VARIATION)
-			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement0Sampler, SampTerrainParallaxSampler, coords, offsets[0], dx, dy).x, params[0]);
+			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement0Sampler, SampTerrainParallaxSampler, coords, offsets[0], dx, dy, distanceFactor).x, params[0]);
 #		else
 			float h = ScaleDisplacement(TexLandDisplacement0Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).x, params[0]);
 #		endif
@@ -107,7 +113,7 @@ namespace ExtendedMaterials
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile1HasDisplacement) != 0 && w1.y > 0.0)
 		{
 #		if defined(TERRAIN_VARIATION)
-			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement1Sampler, SampTerrainParallaxSampler, coords, offsets[1], dx, dy).x, params[1]);
+			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement1Sampler, SampTerrainParallaxSampler, coords, offsets[1], dx, dy, distanceFactor).x, params[1]);
 #		else
 			float h = ScaleDisplacement(TexLandDisplacement1Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).x, params[1]);
 #		endif
@@ -117,7 +123,7 @@ namespace ExtendedMaterials
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile2HasDisplacement) != 0 && w1.z > 0.0)
 		{
 #		if defined(TERRAIN_VARIATION)
-			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement2Sampler, SampTerrainParallaxSampler, coords, offsets[2], dx, dy).x, params[2]);
+			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement2Sampler, SampTerrainParallaxSampler, coords, offsets[2], dx, dy, distanceFactor).x, params[2]);
 #		else
 			float h = ScaleDisplacement(TexLandDisplacement2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).x, params[2]);
 #		endif
@@ -127,7 +133,7 @@ namespace ExtendedMaterials
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile3HasDisplacement) != 0 && w1.w > 0.0)
 		{
 #		if defined(TERRAIN_VARIATION)
-			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement3Sampler, SampTerrainParallaxSampler, coords, offsets[3], dx, dy).x, params[3]);
+			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement3Sampler, SampTerrainParallaxSampler, coords, offsets[3], dx, dy, distanceFactor).x, params[3]);
 #		else
 			float h = ScaleDisplacement(TexLandDisplacement3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).x, params[3]);
 #		endif
@@ -137,7 +143,7 @@ namespace ExtendedMaterials
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile4HasDisplacement) != 0 && w2.x > 0.0)
 		{
 #		if defined(TERRAIN_VARIATION)
-			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement4Sampler, SampTerrainParallaxSampler, coords, offsets[4], dx, dy).x, params[4]);
+			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement4Sampler, SampTerrainParallaxSampler, coords, offsets[4], dx, dy, distanceFactor).x, params[4]);
 #		else
 			float h = ScaleDisplacement(TexLandDisplacement4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).x, params[4]);
 #		endif
@@ -147,7 +153,7 @@ namespace ExtendedMaterials
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile5HasDisplacement) != 0 && w2.y > 0.0)
 		{
 #		if defined(TERRAIN_VARIATION)
-			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement5Sampler, SampTerrainParallaxSampler, coords, offsets[5], dx, dy).x, params[5]);
+			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement5Sampler, SampTerrainParallaxSampler, coords, offsets[5], dx, dy, distanceFactor).x, params[5]);
 #		else
 			float h = ScaleDisplacement(TexLandDisplacement5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).x, params[5]);
 #		endif
@@ -175,7 +181,7 @@ namespace ExtendedMaterials
 #		define HEIGHT_MULT 8
 	float GetTerrainHeight(PS_INPUT input, float2 coords, float mipLevels[6], DisplacementParams params[6], float blendFactor, float4 w1, float2 w2,
 #		if defined(TERRAIN_VARIATION)
-		StochasticOffsets offsets[6], float2 dx, float2 dy,
+		StochasticOffsets offsets[6], float2 dx, float2 dy, float distance,
 #		endif
 		out float weights[6])
 	{
@@ -187,13 +193,19 @@ namespace ExtendedMaterials
 		weights[4] = w2.x;
 		weights[5] = w2.y;
 		float total = 0;
+		
+#		if defined(TERRAIN_VARIATION)
+		// Calculate distance factor once for performance
+		float distanceFactor = ComputeDistanceFactor(distance);
+#		endif
+		
 		if (w1.x > 0.0) {
 			float h = 0.0;
 			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand0HasDisplacement) != 0)
 			{
 
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp0Sampler, SampTerrainParallaxSampler, coords, offsets[0], dx, dy).x, params[0]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp0Sampler, SampTerrainParallaxSampler, coords, offsets[0], dx, dy, distanceFactor).x, params[0]);
 #		else
 				h = ScaleDisplacement(TexLandTHDisp0Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).x, params[0]);
 #		endif
@@ -201,7 +213,7 @@ namespace ExtendedMaterials
 			else
 			{
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexColorSampler, SampTerrainParallaxSampler, coords, offsets[0], dx, dy).w, params[0]);
+				h = ScaleDisplacement(SampleWithOffsets(TexColorSampler, SampTerrainParallaxSampler, coords, offsets[0], dx, dy, distanceFactor).w, params[0]);
 #		else
 				h = ScaleDisplacement(TexColorSampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).w, params[0]);
 #		endif
@@ -215,7 +227,7 @@ namespace ExtendedMaterials
 			{
 
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp1Sampler, SampTerrainParallaxSampler, coords, offsets[1], dx, dy).x, params[1]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp1Sampler, SampTerrainParallaxSampler, coords, offsets[1], dx, dy, distanceFactor).x, params[1]);
 #		else
 				h = ScaleDisplacement(TexLandTHDisp1Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).x, params[1]);
 #		endif
@@ -223,7 +235,7 @@ namespace ExtendedMaterials
 			else
 			{
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandColor2Sampler, SampTerrainParallaxSampler, coords, offsets[1], dx, dy).w, params[1]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandColor2Sampler, SampTerrainParallaxSampler, coords, offsets[1], dx, dy, distanceFactor).w, params[1]);
 #		else
 				h = ScaleDisplacement(TexLandColor2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).w, params[1]);
 #		endif
@@ -237,7 +249,7 @@ namespace ExtendedMaterials
 			{
 
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp2Sampler, SampTerrainParallaxSampler, coords, offsets[2], dx, dy).x, params[2]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp2Sampler, SampTerrainParallaxSampler, coords, offsets[2], dx, dy, distanceFactor).x, params[2]);
 #		else
 				h = ScaleDisplacement(TexLandTHDisp2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).x, params[2]);
 #		endif
@@ -245,7 +257,7 @@ namespace ExtendedMaterials
 			else
 			{
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandColor3Sampler, SampTerrainParallaxSampler, coords, offsets[2], dx, dy).w, params[2]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandColor3Sampler, SampTerrainParallaxSampler, coords, offsets[2], dx, dy, distanceFactor).w, params[2]);
 #		else
 				h = ScaleDisplacement(TexLandColor3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).w, params[2]);
 #		endif
@@ -259,7 +271,7 @@ namespace ExtendedMaterials
 			{
 
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp3Sampler, SampTerrainParallaxSampler, coords, offsets[3], dx, dy).x, params[3]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp3Sampler, SampTerrainParallaxSampler, coords, offsets[3], dx, dy, distanceFactor).x, params[3]);
 #		else
 				h = ScaleDisplacement(TexLandTHDisp3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).x, params[3]);
 #		endif
@@ -267,7 +279,7 @@ namespace ExtendedMaterials
 			else
 			{
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandColor4Sampler, SampTerrainParallaxSampler, coords, offsets[3], dx, dy).w, params[3]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandColor4Sampler, SampTerrainParallaxSampler, coords, offsets[3], dx, dy, distanceFactor).w, params[3]);
 #		else
 				h = ScaleDisplacement(TexLandColor4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).w, params[3]);
 #		endif
@@ -281,7 +293,7 @@ namespace ExtendedMaterials
 			{
 
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp4Sampler, SampTerrainParallaxSampler, coords, offsets[4], dx, dy).x, params[4]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp4Sampler, SampTerrainParallaxSampler, coords, offsets[4], dx, dy, distanceFactor).x, params[4]);
 #		else
 				h = ScaleDisplacement(TexLandTHDisp4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).x, params[4]);
 #		endif
@@ -289,7 +301,7 @@ namespace ExtendedMaterials
 			else
 			{
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandColor5Sampler, SampTerrainParallaxSampler, coords, offsets[4], dx, dy).w, params[4]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandColor5Sampler, SampTerrainParallaxSampler, coords, offsets[4], dx, dy, distanceFactor).w, params[4]);
 #		else
 				h = ScaleDisplacement(TexLandColor5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).w, params[4]);
 #		endif
@@ -303,7 +315,7 @@ namespace ExtendedMaterials
 			{
 
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp5Sampler, SampTerrainParallaxSampler, coords, offsets[5], dx, dy).x, params[5]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp5Sampler, SampTerrainParallaxSampler, coords, offsets[5], dx, dy, distanceFactor).x, params[5]);
 #		else
 				h = ScaleDisplacement(TexLandTHDisp5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).x, params[5]);
 #		endif
@@ -311,7 +323,7 @@ namespace ExtendedMaterials
 			else
 			{
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandColor6Sampler, SampTerrainParallaxSampler, coords, offsets[5], dx, dy).w, params[5]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandColor6Sampler, SampTerrainParallaxSampler, coords, offsets[5], dx, dy, distanceFactor).w, params[5]);
 #		else
 				h = ScaleDisplacement(TexLandColor6Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).w, params[5]);
 #		endif
@@ -419,10 +431,10 @@ namespace ExtendedMaterials
 #if defined(LANDSCAPE)
 #	if defined(TRUE_PBR)
 #		if defined(TERRAIN_VARIATION)
-				currHeight.x = GetTerrainHeight(input, currentOffset[0].xy, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, weights) * scalercp + 0.5;
-				currHeight.y = GetTerrainHeight(input, currentOffset[0].zw, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, weights) * scalercp + 0.5;
-				currHeight.z = GetTerrainHeight(input, currentOffset[1].xy, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, weights) * scalercp + 0.5;
-				currHeight.w = GetTerrainHeight(input, currentOffset[1].zw, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, weights) * scalercp + 0.5;
+				currHeight.x = GetTerrainHeight(input, currentOffset[0].xy, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, distance, weights) * scalercp + 0.5;
+				currHeight.y = GetTerrainHeight(input, currentOffset[0].zw, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, distance, weights) * scalercp + 0.5;
+				currHeight.z = GetTerrainHeight(input, currentOffset[1].xy, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, distance, weights) * scalercp + 0.5;
+				currHeight.w = GetTerrainHeight(input, currentOffset[1].zw, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, distance, weights) * scalercp + 0.5;
 #		else
 				currHeight.x = GetTerrainHeight(input, currentOffset[0].xy, mipLevels, params, blendFactor, w1, w2, weights) * scalercp + 0.5;
 				currHeight.y = GetTerrainHeight(input, currentOffset[0].zw, mipLevels, params, blendFactor, w1, w2, weights) * scalercp + 0.5;
@@ -431,10 +443,10 @@ namespace ExtendedMaterials
 #		endif
 #	else
 #		if defined(TERRAIN_VARIATION)
-				currHeight.x = GetTerrainHeight(input, currentOffset[0].xy, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, weights) + 0.5;
-				currHeight.y = GetTerrainHeight(input, currentOffset[0].zw, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, weights) + 0.5;
-				currHeight.z = GetTerrainHeight(input, currentOffset[1].xy, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, weights) + 0.5;
-				currHeight.w = GetTerrainHeight(input, currentOffset[1].zw, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, weights) + 0.5;
+				currHeight.x = GetTerrainHeight(input, currentOffset[0].xy, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, distance, weights) + 0.5;
+				currHeight.y = GetTerrainHeight(input, currentOffset[0].zw, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, distance, weights) + 0.5;
+				currHeight.z = GetTerrainHeight(input, currentOffset[1].xy, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, distance, weights) + 0.5;
+				currHeight.w = GetTerrainHeight(input, currentOffset[1].zw, mipLevels, params, blendFactor, w1, w2, offsets, dx, dy, distance, weights) + 0.5;
 #		else
 				currHeight.x = GetTerrainHeight(input, currentOffset[0].xy, mipLevels, params, blendFactor, w1, w2, weights) + 0.5;
 				currHeight.y = GetTerrainHeight(input, currentOffset[0].zw, mipLevels, params, blendFactor, w1, w2, weights) + 0.5;
@@ -579,13 +591,13 @@ namespace ExtendedMaterials
 			rayDir *= scale;
 
 #		if defined(TERRAIN_VARIATION)
-			sh = GetTerrainHeight(input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+			sh = GetTerrainHeight(input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, distance, heights);
 			if (quality > 0.25)
-				sh.y = GetTerrainHeight(input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+				sh.y = GetTerrainHeight(input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, distance, heights);
 			if (quality > 0.5)
-				sh.z = GetTerrainHeight(input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+				sh.z = GetTerrainHeight(input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, distance, heights);
 			if (quality > 0.75)
-				sh.w = GetTerrainHeight(input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+				sh.w = GetTerrainHeight(input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, distance, heights);
 #		else
 			sh = GetTerrainHeight(input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
 			if (quality > 0.25)
@@ -598,13 +610,13 @@ namespace ExtendedMaterials
 			return pow(1.0 - saturate(dot(max(0, sh - sh0) / scale, 1.0)) * quality, 2.0);
 #	else
 #		if defined(TERRAIN_VARIATION)
-			sh = GetTerrainHeight(input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+			sh = GetTerrainHeight(input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, distance, heights);
 			if (quality > 0.25)
-				sh.y = GetTerrainHeight(input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+				sh.y = GetTerrainHeight(input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, distance, heights);
 			if (quality > 0.5)
-				sh.z = GetTerrainHeight(input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+				sh.z = GetTerrainHeight(input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, distance, heights);
 			if (quality > 0.75)
-				sh.w = GetTerrainHeight(input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, heights);
+				sh.w = GetTerrainHeight(input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, offsets, dx, dy, distance, heights);
 #		else
 			sh = GetTerrainHeight(input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
 			if (quality > 0.25)

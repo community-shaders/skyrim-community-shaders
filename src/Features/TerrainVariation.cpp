@@ -60,8 +60,8 @@ void TerrainVariation::UpdateShaderSettings()
 	// The settings are automatically passed to shaders through the FeatureBuffer system
 	// from the settings object, which is used in GetFeatureBufferData() in FeatureBuffer.cpp
 
-	logger::debug("TerrainVariation: Updated shader settings, enabled = {}, startDistance = {}, maxDistance = {}, maxIntensity = {}", 
-		settings.enabled, settings.startDistance, settings.maxDistance, settings.maxIntensity);
+	logger::debug("TerrainVariation: Updated shader settings, enabled = {}, startDistance = {}, maxDistance = {}", 
+		settings.enabled, settings.startDistance, settings.maxDistance);
 }
 
 void TerrainVariation::PostPostLoad()

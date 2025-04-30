@@ -14,8 +14,10 @@ inline float2 hash2D2D(float2 s)
 }
 
 // Stochastic sampling algorithm
-inline float3 StochasticSample(Texture2D tex, SamplerState samplerTex, float2 UV)
+inline float3 StochasticSample(Texture2D tex, SamplerState samplerTex, float2 UV, float distance = 0.0)
 {
+	float distanceFactor = ComputeDistanceFactor(distance);
+	
 	float2 skewUV = mul(float2x2(1.0, 0.0, -0.57735027, 1.15470054), UV * 3.464);
 	float2 vxID = floor(skewUV);
 	float3 barry = float3(frac(skewUV), 0.0);
@@ -28,9 +30,14 @@ inline float3 StochasticSample(Texture2D tex, SamplerState samplerTex, float2 UV
 	float2 dx = ddx(UV);
 	float2 dy = ddy(UV);
 
-	float3 sample1 = tex.SampleGrad(samplerTex, UV + hash2D2D(BW_vx[0].xy), dx, dy).rgb;
-	float3 sample2 = tex.SampleGrad(samplerTex, UV + hash2D2D(BW_vx[1].xy), dx, dy).rgb;
-	float3 sample3 = tex.SampleGrad(samplerTex, UV + hash2D2D(BW_vx[2].xy), dx, dy).rgb;
+	// Scale offsets by distance factor
+	float2 offset1 = hash2D2D(BW_vx[0].xy) * distanceFactor;
+	float2 offset2 = hash2D2D(BW_vx[1].xy) * distanceFactor;
+	float2 offset3 = hash2D2D(BW_vx[2].xy) * distanceFactor;
+
+	float3 sample1 = tex.SampleGrad(samplerTex, UV + offset1, dx, dy).rgb;
+	float3 sample2 = tex.SampleGrad(samplerTex, UV + offset2, dx, dy).rgb;
+	float3 sample3 = tex.SampleGrad(samplerTex, UV + offset3, dx, dy).rgb;
 
 	return sample1 * BW_vx[3].x + sample2 * BW_vx[3].y + sample3 * BW_vx[3].z;
 }
@@ -55,10 +62,17 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 UV)
 	return offsets;
 }
 
-// Main stochastic sampling function with matching 6 parameter function signature
+// Main stochastic sampling function with distance parameter
+float4 StochasticSample(Texture2D<float4> tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy, float distance = 0.0)
+{
+	float distanceFactor = ComputeDistanceFactor(distance);
+	return StochasticSample2D(tex, samp, uv, offsets, dx, dy, distanceFactor);
+}
+
+// Legacy version for compatibility
 float4 StochasticSample(Texture2D<float4> tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
 {
-	return StochasticSample2D(tex, samp, uv, offsets, dx, dy);
+	return StochasticSample(tex, samp, uv, offsets, dx, dy, 0.0);
 }
 
 #endif  // TERRAIN_VARIATION_HLSLI
