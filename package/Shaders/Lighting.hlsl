@@ -1348,9 +1348,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	if (input.LandBlendWeights1.x > 0.0) {
 		float weight = input.LandBlendWeights1.x * invwsum;
 #		if defined(TERRAIN_VARIATION)
-		float4 diffuse1 = TerrainTextureSample(TexColorSampler, SampColorSampler, uv, offsets[0], dx, dy);
+		float viewDistance = length(viewPosition);
+		float4 diffuse1 = TerrainTextureSample(TexColorSampler, SampColorSampler, uv, offsets[0], dx, dy, viewDistance);
 #		else
-		float4 diffuse1 = TexColorSampler.SampleBias(SampColorSampler, uv, SharedData::MipBias);
+		float viewDistance = length(viewPosition);
+		float distanceFactor = smoothstep(0.0, 2048.0, viewDistance);
+		float4 diffuse1 = lerp(
+			TexColorSampler.SampleBias(SampColorSampler, uv, SharedData::MipBias),
+			TexColorSampler.SampleLevel(SampColorSampler, uv, distanceFactor * 3.0),
+			distanceFactor);
 #		endif
 		float3 diffuseRGB1 = diffuse1.rgb;
 #		if defined(TRUE_PBR)
@@ -1362,17 +1368,23 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float alpha1 = diffuse1.a;
 
 #		if defined(TERRAIN_VARIATION)
-		float4 normal1 = TerrainTextureSample(TexNormalSampler, SampNormalSampler, uv, offsets[0], dx, dy);
+		float4 normal1 = TerrainTextureSample(TexNormalSampler, SampNormalSampler, uv, offsets[0], dx, dy, viewDistance);
 #		else
-		float4 normal1 = TexNormalSampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias);
+		float4 normal1 = lerp(
+			TexNormalSampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias),
+			TexNormalSampler.SampleLevel(SampNormalSampler, uv, distanceFactor * 3.0),
+			distanceFactor);
 #		endif
 		float3 normalRGB1 = normal1.rgb;
 		float normalAlpha1 = normal1.a;
 #		if defined(TRUE_PBR)
 #			if defined(TERRAIN_VARIATION)
-		float4 rmaos1 = TerrainTextureSample(TexRMAOSSampler, SampRMAOSSampler, uv, offsets[0], dx, dy);
+		float4 rmaos1 = TerrainTextureSample(TexRMAOSSampler, SampRMAOSSampler, uv, offsets[0], dx, dy, viewDistance);
 #			else
-		float4 rmaos1 = TexRMAOSSampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias);
+		float4 rmaos1 = lerp(
+			TexRMAOSSampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias),
+			TexRMAOSSampler.SampleLevel(SampRMAOSSampler, uv, distanceFactor * 3.0),
+			distanceFactor);
 #			endif
 		rmaos1 *= float4(PBRParams1.x, 1, 1, PBRParams1.z);
 		blendedRMAOS += rmaos1 * weight;  // Blending Within Layers (Same for the rest of layers 2-6)
@@ -1387,9 +1399,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	if (input.LandBlendWeights1.y > 0.0) {
 		float weight = input.LandBlendWeights1.y * invwsum;
 #		if defined(TERRAIN_VARIATION)
-		float4 diffuse2 = TerrainTextureSample(TexLandColor2Sampler, SampColorSampler, uv, offsets[1], dx, dy);
+		float viewDistance = length(viewPosition);
+		float4 diffuse2 = TerrainTextureSample(TexLandColor2Sampler, SampColorSampler, uv, offsets[1], dx, dy, viewDistance);
 #		else
-		float4 diffuse2 = TexLandColor2Sampler.SampleBias(SampColorSampler, uv, SharedData::MipBias);
+		float viewDistance = length(viewPosition);
+		float distanceFactor = smoothstep(0.0, 2048.0, viewDistance);
+		float4 diffuse2 = lerp(
+			TexLandColor2Sampler.SampleBias(SampColorSampler, uv, SharedData::MipBias),
+			TexLandColor2Sampler.SampleLevel(SampColorSampler, uv, distanceFactor * 3.0),
+			distanceFactor);
 #		endif
 		float3 diffuseRGB2 = diffuse2.rgb;
 #		if defined(TRUE_PBR)
@@ -1401,17 +1419,23 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float alpha2 = diffuse2.a;
 
 #		if defined(TERRAIN_VARIATION)
-		float4 normal2 = TerrainTextureSample(TexLandNormal2Sampler, SampNormalSampler, uv, offsets[1], dx, dy);
+		float4 normal2 = TerrainTextureSample(TexLandNormal2Sampler, SampNormalSampler, uv, offsets[1], dx, dy, viewDistance);
 #		else
-		float4 normal2 = TexLandNormal2Sampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias);
+		float4 normal2 = lerp(
+			TexLandNormal2Sampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias),
+			TexLandNormal2Sampler.SampleLevel(SampNormalSampler, uv, distanceFactor * 3.0),
+			distanceFactor);
 #		endif
 		float3 normalRGB2 = normal2.rgb;
 		float normalAlpha2 = normal2.a;
 #		if defined(TRUE_PBR)
 #			if defined(TERRAIN_VARIATION)
-		float4 rmaos2 = TerrainTextureSample(TexLandRMAOS2Sampler, SampRMAOSSampler, uv, offsets[1], dx, dy);
+		float4 rmaos2 = TerrainTextureSample(TexLandRMAOS2Sampler, SampRMAOSSampler, uv, offsets[1], dx, dy, viewDistance);
 #			else
-		float4 rmaos2 = TexLandRMAOS2Sampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias);
+		float4 rmaos2 = lerp(
+			TexLandRMAOS2Sampler.SampleBias(SampRMAOSampler, uv, SharedData::MipBias),
+			TexLandRMAOS2Sampler.SampleLevel(SampRMAOSampler, uv, distanceFactor * 3.0),
+			distanceFactor);
 #			endif
 		rmaos2 *= float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
 		blendedRMAOS += rmaos2 * weight;
@@ -1426,9 +1450,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	if (input.LandBlendWeights1.z > 0.0) {
 		float weight = input.LandBlendWeights1.z * invwsum;
 #		if defined(TERRAIN_VARIATION)
-		float4 diffuse3 = TerrainTextureSample(TexLandColor3Sampler, SampColorSampler, uv, offsets[2], dx, dy);
+		float viewDistance = length(viewPosition);
+		float4 diffuse3 = TerrainTextureSample(TexLandColor3Sampler, SampColorSampler, uv, offsets[2], dx, dy, viewDistance);
 #		else
-		float4 diffuse3 = TexLandColor3Sampler.SampleBias(SampColorSampler, uv, SharedData::MipBias);
+		float viewDistance = length(viewPosition);
+		float distanceFactor = smoothstep(0.0, 2048.0, viewDistance);
+		float4 diffuse3 = lerp(
+			TexLandColor3Sampler.SampleBias(SampColorSampler, uv, SharedData::MipBias),
+			TexLandColor3Sampler.SampleLevel(SampColorSampler, uv, distanceFactor * 3.0),
+			distanceFactor);
 #		endif
 		float3 diffuseRGB3 = diffuse3.rgb;
 #		if defined(TRUE_PBR)
@@ -1440,17 +1470,23 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float alpha3 = diffuse3.a;
 
 #		if defined(TERRAIN_VARIATION)
-		float4 normal3 = TerrainTextureSample(TexLandNormal3Sampler, SampNormalSampler, uv, offsets[2], dx, dy);
+		float4 normal3 = TerrainTextureSample(TexLandNormal3Sampler, SampNormalSampler, uv, offsets[2], dx, dy, viewDistance);
 #		else
-		float4 normal3 = TexLandNormal3Sampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias);
+		float4 normal3 = lerp(
+			TexLandNormal3Sampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias),
+			TexLandNormal3Sampler.SampleLevel(SampNormalSampler, uv, distanceFactor * 3.0),
+			distanceFactor);
 #		endif
 		float3 normalRGB3 = normal3.rgb;
 		float normalAlpha3 = normal3.a;
 #		if defined(TRUE_PBR)
 #			if defined(TERRAIN_VARIATION)
-		float4 rmaos3 = TerrainTextureSample(TexLandRMAOS3Sampler, SampRMAOSSampler, uv, offsets[2], dx, dy);
+		float4 rmaos3 = TerrainTextureSample(TexLandRMAOS3Sampler, SampRMAOSSampler, uv, offsets[2], dx, dy, viewDistance);
 #			else
-		float4 rmaos3 = TexLandRMAOS3Sampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias);
+		float4 rmaos3 = lerp(
+			TexLandRMAOS3Sampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias),
+			TexLandRMAOS3Sampler.SampleLevel(SampRMAOSSampler, uv, distanceFactor * 3.0),
+			distanceFactor);
 #			endif
 		rmaos3 *= float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
 		blendedRMAOS += rmaos3 * weight;
@@ -1465,9 +1501,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	if (input.LandBlendWeights1.w > 0.0) {
 		float weight = input.LandBlendWeights1.w * invwsum;
 #		if defined(TERRAIN_VARIATION)
-		float4 diffuse4 = TerrainTextureSample(TexLandColor4Sampler, SampColorSampler, uv, offsets[3], dx, dy);
+		float viewDistance = length(viewPosition);
+		float4 diffuse4 = TerrainTextureSample(TexLandColor4Sampler, SampColorSampler, uv, offsets[3], dx, dy, viewDistance);
 #		else
-		float4 diffuse4 = TexLandColor4Sampler.SampleBias(SampColorSampler, uv, SharedData::MipBias);
+		float viewDistance = length(viewPosition);
+		float distanceFactor = smoothstep(0.0, 2048.0, viewDistance);
+		float4 diffuse4 = lerp(
+			TexLandColor4Sampler.SampleBias(SampColorSampler, uv, SharedData::MipBias),
+			TexLandColor4Sampler.SampleLevel(SampColorSampler, uv, distanceFactor * 3.0),
+			distanceFactor);
 #		endif
 		float3 diffuseRGB4 = diffuse4.rgb;
 #		if defined(TRUE_PBR)
@@ -1479,17 +1521,23 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float alpha4 = diffuse4.a;
 
 #		if defined(TERRAIN_VARIATION)
-		float4 normal4 = TerrainTextureSample(TexLandNormal4Sampler, SampNormalSampler, uv, offsets[3], dx, dy);
+		float4 normal4 = TerrainTextureSample(TexLandNormal4Sampler, SampNormalSampler, uv, offsets[3], dx, dy, viewDistance);
 #		else
-		float4 normal4 = TexLandNormal4Sampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias);
+		float4 normal4 = lerp(
+			TexLandNormal4Sampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias),
+			TexLandNormal4Sampler.SampleLevel(SampNormalSampler, uv, distanceFactor * 3.0),
+			distanceFactor);
 #		endif
 		float3 normalRGB4 = normal4.rgb;
 		float normalAlpha4 = normal4.a;
 #		if defined(TRUE_PBR)
 #			if defined(TERRAIN_VARIATION)
-		float4 rmaos4 = TerrainTextureSample(TexLandRMAOS4Sampler, SampRMAOSSampler, uv, offsets[3], dx, dy);
+		float4 rmaos4 = TerrainTextureSample(TexLandRMAOS4Sampler, SampRMAOSSampler, uv, offsets[3], dx, dy, viewDistance);
 #			else
-		float4 rmaos4 = TexLandRMAOS4Sampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias);
+		float4 rmaos4 = lerp(
+			TexLandRMAOS4Sampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias),
+			TexLandRMAOS4Sampler.SampleLevel(SampRMAOSSampler, uv, distanceFactor * 3.0),
+			distanceFactor);
 #			endif
 		rmaos4 *= float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
 		blendedRMAOS += rmaos4 * weight;
@@ -1504,9 +1552,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	if (input.LandBlendWeights2.x > 0.0) {
 		float weight = input.LandBlendWeights2.x * invwsum;
 #		if defined(TERRAIN_VARIATION)
-		float4 diffuse5 = TerrainTextureSample(TexLandColor5Sampler, SampColorSampler, uv, offsets[4], dx, dy);
+		float viewDistance = length(viewPosition);
+		float4 diffuse5 = TerrainTextureSample(TexLandColor5Sampler, SampColorSampler, uv, offsets[4], dx, dy, viewDistance);
 #		else
-		float4 diffuse5 = TexLandColor5Sampler.SampleBias(SampColorSampler, uv, SharedData::MipBias);
+		float viewDistance = length(viewPosition);
+		float distanceFactor = smoothstep(0.0, 2048.0, viewDistance);
+		float4 diffuse5 = lerp(
+			TexLandColor5Sampler.SampleBias(SampColorSampler, uv, SharedData::MipBias),
+			TexLandColor5Sampler.SampleLevel(SampColorSampler, uv, distanceFactor * 3.0),
+			distanceFactor);
 #		endif
 		float3 diffuseRGB5 = diffuse5.rgb;
 #		if defined(TRUE_PBR)
@@ -1518,17 +1572,23 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float alpha5 = diffuse5.a;
 
 #		if defined(TERRAIN_VARIATION)
-		float4 normal5 = TerrainTextureSample(TexLandNormal5Sampler, SampNormalSampler, uv, offsets[4], dx, dy);
+		float4 normal5 = TerrainTextureSample(TexLandNormal5Sampler, SampNormalSampler, uv, offsets[4], dx, dy, viewDistance);
 #		else
-		float4 normal5 = TexLandNormal5Sampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias);
+		float4 normal5 = lerp(
+			TexLandNormal5Sampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias),
+			TexLandNormal5Sampler.SampleLevel(SampNormalSampler, uv, distanceFactor * 3.0),
+			distanceFactor);
 #		endif
 		float3 normalRGB5 = normal5.rgb;
 		float normalAlpha5 = normal5.a;
 #		if defined(TRUE_PBR)
 #			if defined(TERRAIN_VARIATION)
-		float4 rmaos5 = TerrainTextureSample(TexLandRMAOS5Sampler, SampRMAOSSampler, uv, offsets[4], dx, dy);
+		float4 rmaos5 = TerrainTextureSample(TexLandRMAOS5Sampler, SampRMAOSSampler, uv, offsets[4], dx, dy, viewDistance);
 #			else
-		float4 rmaos5 = TexLandRMAOS5Sampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias);
+		float4 rmaos5 = lerp(
+			TexLandRMAOS5Sampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias),
+			TexLandRMAOS5Sampler.SampleLevel(SampRMAOSSampler, uv, distanceFactor * 3.0),
+			distanceFactor);
 #			endif
 		rmaos5 *= float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
 		blendedRMAOS += rmaos5 * weight;
@@ -1543,9 +1603,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	if (input.LandBlendWeights2.y > 0.0) {
 		float weight = input.LandBlendWeights2.y * invwsum;
 #		if defined(TERRAIN_VARIATION)
-		float4 diffuse6 = TerrainTextureSample(TexLandColor6Sampler, SampColorSampler, uv, offsets[5], dx, dy);
+		float viewDistance = length(viewPosition);
+		float4 diffuse6 = TerrainTextureSample(TexLandColor6Sampler, SampColorSampler, uv, offsets[5], dx, dy, viewDistance);
 #		else
-		float4 diffuse6 = TexLandColor6Sampler.SampleBias(SampColorSampler, uv, SharedData::MipBias);
+		float viewDistance = length(viewPosition);
+		float distanceFactor = smoothstep(0.0, 2048.0, viewDistance);
+		float4 diffuse6 = lerp(
+			TexLandColor6Sampler.SampleBias(SampColorSampler, uv, SharedData::MipBias),
+			TexLandColor6Sampler.SampleLevel(SampColorSampler, uv, distanceFactor * 3.0),
+			distanceFactor);
 #		endif
 		float3 diffuseRGB6 = diffuse6.rgb;
 #		if defined(TRUE_PBR)
@@ -1557,17 +1623,23 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float alpha6 = diffuse6.a;
 
 #		if defined(TERRAIN_VARIATION)
-		float4 normal6 = TerrainTextureSample(TexLandNormal6Sampler, SampNormalSampler, uv, offsets[5], dx, dy);
+		float4 normal6 = TerrainTextureSample(TexLandNormal6Sampler, SampNormalSampler, uv, offsets[5], dx, dy, viewDistance);
 #		else
-		float4 normal6 = TexLandNormal6Sampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias);
+		float4 normal6 = lerp(
+			TexLandNormal6Sampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias),
+			TexLandNormal6Sampler.SampleLevel(SampNormalSampler, uv, distanceFactor * 3.0),
+			distanceFactor);
 #		endif
 		float3 normalRGB6 = normal6.rgb;
 		float normalAlpha6 = normal6.a;
 #		if defined(TRUE_PBR)
 #			if defined(TERRAIN_VARIATION)
-		float4 rmaos6 = TerrainTextureSample(TexLandRMAOS6Sampler, SampRMAOSSampler, uv, offsets[5], dx, dy);
+		float4 rmaos6 = TerrainTextureSample(TexLandRMAOS6Sampler, SampRMAOSSampler, uv, offsets[5], dx, dy, viewDistance);
 #			else
-		float4 rmaos6 = TexLandRMAOS6Sampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias);
+		float4 rmaos6 = lerp(
+			TexLandRMAOS6Sampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias),
+			TexLandRMAOS6Sampler.SampleLevel(SampRMAOSSampler, uv, distanceFactor * 3.0),
+			distanceFactor);
 #			endif
 		rmaos6 *= float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
 		blendedRMAOS += rmaos6 * weight;

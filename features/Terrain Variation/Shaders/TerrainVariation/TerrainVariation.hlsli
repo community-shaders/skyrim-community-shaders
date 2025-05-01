@@ -62,17 +62,10 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 UV)
 	return offsets;
 }
 
-// Main stochastic sampling function with distance parameter
+// Main stochastic sampling function.
 float4 StochasticSample(Texture2D<float4> tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy, float distance = 0.0)
 {
-	float distanceFactor = ComputeDistanceFactor(distance);
-	return StochasticSample2D(tex, samp, uv, offsets, dx, dy, distanceFactor);
-}
-
-// Legacy version for compatibility
-float4 StochasticSample(Texture2D<float4> tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
-{
-	return StochasticSample(tex, samp, uv, offsets, dx, dy, 0.0);
+    return StochasticSample2D(tex, samp, uv, offsets, dx, dy, ComputeDistanceFactor(distance));
 }
 
 #endif  // TERRAIN_VARIATION_HLSLI
