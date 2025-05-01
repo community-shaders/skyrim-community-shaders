@@ -86,6 +86,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 				globals::truePBR->PostPostLoad();
 				Upscaling::InstallHooks();
 				Hooks::Install();
+				BugFix::InstallBugFixes();
 				FrameAnnotations::OnPostPostLoad();
 
 				auto shaderCache = globals::shaderCache;
