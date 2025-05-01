@@ -95,15 +95,10 @@ namespace ExtendedMaterials
 		weights[5] = w2.y;
 		float total = 0;
 		
-#		if defined(TERRAIN_VARIATION)
-		// Calculate distance factor once for performance
-		float distanceFactor = ComputeDistanceFactor(distance);
-#		endif
-		
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile0HasDisplacement) != 0 && w1.x > 0.0)
 		{
 #		if defined(TERRAIN_VARIATION)
-			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement0Sampler, SampTerrainParallaxSampler, coords, offsets[0], dx, dy, distanceFactor).x, params[0]);
+			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement0Sampler, SampTerrainParallaxSampler, coords, offsets[0], dx, dy, distance).x, params[0]);
 #		else
 			float h = ScaleDisplacement(TexLandDisplacement0Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).x, params[0]);
 #		endif
@@ -113,7 +108,7 @@ namespace ExtendedMaterials
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile1HasDisplacement) != 0 && w1.y > 0.0)
 		{
 #		if defined(TERRAIN_VARIATION)
-			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement1Sampler, SampTerrainParallaxSampler, coords, offsets[1], dx, dy, distanceFactor).x, params[1]);
+			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement1Sampler, SampTerrainParallaxSampler, coords, offsets[1], dx, dy, distance).x, params[1]);
 #		else
 			float h = ScaleDisplacement(TexLandDisplacement1Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).x, params[1]);
 #		endif
@@ -123,7 +118,7 @@ namespace ExtendedMaterials
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile2HasDisplacement) != 0 && w1.z > 0.0)
 		{
 #		if defined(TERRAIN_VARIATION)
-			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement2Sampler, SampTerrainParallaxSampler, coords, offsets[2], dx, dy, distanceFactor).x, params[2]);
+			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement2Sampler, SampTerrainParallaxSampler, coords, offsets[2], dx, dy, distance).x, params[2]);
 #		else
 			float h = ScaleDisplacement(TexLandDisplacement2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).x, params[2]);
 #		endif
@@ -133,7 +128,7 @@ namespace ExtendedMaterials
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile3HasDisplacement) != 0 && w1.w > 0.0)
 		{
 #		if defined(TERRAIN_VARIATION)
-			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement3Sampler, SampTerrainParallaxSampler, coords, offsets[3], dx, dy, distanceFactor).x, params[3]);
+			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement3Sampler, SampTerrainParallaxSampler, coords, offsets[3], dx, dy, distance).x, params[3]);
 #		else
 			float h = ScaleDisplacement(TexLandDisplacement3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).x, params[3]);
 #		endif
@@ -143,7 +138,7 @@ namespace ExtendedMaterials
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile4HasDisplacement) != 0 && w2.x > 0.0)
 		{
 #		if defined(TERRAIN_VARIATION)
-			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement4Sampler, SampTerrainParallaxSampler, coords, offsets[4], dx, dy, distanceFactor).x, params[4]);
+			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement4Sampler, SampTerrainParallaxSampler, coords, offsets[4], dx, dy, distance).x, params[4]);
 #		else
 			float h = ScaleDisplacement(TexLandDisplacement4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).x, params[4]);
 #		endif
@@ -153,7 +148,7 @@ namespace ExtendedMaterials
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile5HasDisplacement) != 0 && w2.y > 0.0)
 		{
 #		if defined(TERRAIN_VARIATION)
-			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement5Sampler, SampTerrainParallaxSampler, coords, offsets[5], dx, dy, distanceFactor).x, params[5]);
+			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement5Sampler, SampTerrainParallaxSampler, coords, offsets[5], dx, dy, distance).x, params[5]);
 #		else
 			float h = ScaleDisplacement(TexLandDisplacement5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).x, params[5]);
 #		endif
@@ -194,10 +189,6 @@ namespace ExtendedMaterials
 		weights[5] = w2.y;
 		float total = 0;
 		
-#		if defined(TERRAIN_VARIATION)
-		// Calculate distance factor once for performance
-		float distanceFactor = ComputeDistanceFactor(distance);
-#		endif
 		
 		if (w1.x > 0.0) {
 			float h = 0.0;
@@ -205,7 +196,7 @@ namespace ExtendedMaterials
 			{
 
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp0Sampler, SampTerrainParallaxSampler, coords, offsets[0], dx, dy, distanceFactor).x, params[0]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp0Sampler, SampTerrainParallaxSampler, coords, offsets[0], dx, dy, distance).x, params[0]);
 #		else
 				h = ScaleDisplacement(TexLandTHDisp0Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).x, params[0]);
 #		endif
@@ -213,7 +204,7 @@ namespace ExtendedMaterials
 			else
 			{
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexColorSampler, SampTerrainParallaxSampler, coords, offsets[0], dx, dy, distanceFactor).w, params[0]);
+				h = ScaleDisplacement(SampleWithOffsets(TexColorSampler, SampTerrainParallaxSampler, coords, offsets[0], dx, dy, distance).w, params[0]);
 #		else
 				h = ScaleDisplacement(TexColorSampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).w, params[0]);
 #		endif
@@ -227,7 +218,7 @@ namespace ExtendedMaterials
 			{
 
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp1Sampler, SampTerrainParallaxSampler, coords, offsets[1], dx, dy, distanceFactor).x, params[1]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp1Sampler, SampTerrainParallaxSampler, coords, offsets[1], dx, dy, distance).x, params[1]);
 #		else
 				h = ScaleDisplacement(TexLandTHDisp1Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).x, params[1]);
 #		endif
@@ -235,7 +226,7 @@ namespace ExtendedMaterials
 			else
 			{
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandColor2Sampler, SampTerrainParallaxSampler, coords, offsets[1], dx, dy, distanceFactor).w, params[1]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandColor2Sampler, SampTerrainParallaxSampler, coords, offsets[1], dx, dy, distance).w, params[1]);
 #		else
 				h = ScaleDisplacement(TexLandColor2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).w, params[1]);
 #		endif
@@ -249,7 +240,7 @@ namespace ExtendedMaterials
 			{
 
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp2Sampler, SampTerrainParallaxSampler, coords, offsets[2], dx, dy, distanceFactor).x, params[2]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp2Sampler, SampTerrainParallaxSampler, coords, offsets[2], dx, dy, distance).x, params[2]);
 #		else
 				h = ScaleDisplacement(TexLandTHDisp2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).x, params[2]);
 #		endif
@@ -257,7 +248,7 @@ namespace ExtendedMaterials
 			else
 			{
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandColor3Sampler, SampTerrainParallaxSampler, coords, offsets[2], dx, dy, distanceFactor).w, params[2]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandColor3Sampler, SampTerrainParallaxSampler, coords, offsets[2], dx, dy, distance).w, params[2]);
 #		else
 				h = ScaleDisplacement(TexLandColor3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).w, params[2]);
 #		endif
@@ -271,7 +262,7 @@ namespace ExtendedMaterials
 			{
 
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp3Sampler, SampTerrainParallaxSampler, coords, offsets[3], dx, dy, distanceFactor).x, params[3]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp3Sampler, SampTerrainParallaxSampler, coords, offsets[3], dx, dy, distance).x, params[3]);
 #		else
 				h = ScaleDisplacement(TexLandTHDisp3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).x, params[3]);
 #		endif
@@ -279,7 +270,7 @@ namespace ExtendedMaterials
 			else
 			{
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandColor4Sampler, SampTerrainParallaxSampler, coords, offsets[3], dx, dy, distanceFactor).w, params[3]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandColor4Sampler, SampTerrainParallaxSampler, coords, offsets[3], dx, dy, distance).w, params[3]);
 #		else
 				h = ScaleDisplacement(TexLandColor4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).w, params[3]);
 #		endif
@@ -293,7 +284,7 @@ namespace ExtendedMaterials
 			{
 
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp4Sampler, SampTerrainParallaxSampler, coords, offsets[4], dx, dy, distanceFactor).x, params[4]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp4Sampler, SampTerrainParallaxSampler, coords, offsets[4], dx, dy, distance).x, params[4]);
 #		else
 				h = ScaleDisplacement(TexLandTHDisp4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).x, params[4]);
 #		endif
@@ -301,7 +292,7 @@ namespace ExtendedMaterials
 			else
 			{
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandColor5Sampler, SampTerrainParallaxSampler, coords, offsets[4], dx, dy, distanceFactor).w, params[4]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandColor5Sampler, SampTerrainParallaxSampler, coords, offsets[4], dx, dy, distance).w, params[4]);
 #		else
 				h = ScaleDisplacement(TexLandColor5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).w, params[4]);
 #		endif
@@ -315,7 +306,7 @@ namespace ExtendedMaterials
 			{
 
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp5Sampler, SampTerrainParallaxSampler, coords, offsets[5], dx, dy, distanceFactor).x, params[5]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp5Sampler, SampTerrainParallaxSampler, coords, offsets[5], dx, dy, distance).x, params[5]);
 #		else
 				h = ScaleDisplacement(TexLandTHDisp5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).x, params[5]);
 #		endif
@@ -323,7 +314,7 @@ namespace ExtendedMaterials
 			else
 			{
 #		if defined(TERRAIN_VARIATION)
-				h = ScaleDisplacement(SampleWithOffsets(TexLandColor6Sampler, SampTerrainParallaxSampler, coords, offsets[5], dx, dy, distanceFactor).w, params[5]);
+				h = ScaleDisplacement(SampleWithOffsets(TexLandColor6Sampler, SampTerrainParallaxSampler, coords, offsets[5], dx, dy, distance).w, params[5]);
 #		else
 				h = ScaleDisplacement(TexLandColor6Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).w, params[5]);
 #		endif
