@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-struct ShadowmapCascadeCullingFix : BugFix
+struct ShadowmapCascadeCullingFix : EngineFix
 {
 	std::string GetName() override { return "Shadowmap Cascade Culling Fix"; }
 
