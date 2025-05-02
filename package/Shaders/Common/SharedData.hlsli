@@ -150,7 +150,9 @@ namespace SharedData
 		bool EnableTilingFix;
 		float startDistance;
 		float maxDistance;
-		float3 pad0;
+		float heightCompensationFactor; // Compensation multiplier for terrain parallax
+		float shadowRayDirFactor; // Shadow ray direction multiplier
+		float pad0;
 	};
 
 	cbuffer FeatureData : register(b6)

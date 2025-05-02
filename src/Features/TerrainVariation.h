@@ -20,9 +20,12 @@ struct TerrainVariation : Feature
 		bool enabled = true;
 		float startDistance = 200.0f;
 		float maxDistance = 2000.0f;
+		float heightCompensationFactor = 1.15f; // Compensation for terrain parallax when enabled
+		float shadowRayDirFactor = 1.5f; // Shadow ray direction multiplier for parallax shadows
 	};
 
 	Settings settings;
+	bool showAdvanced = false;
 
 	virtual void DrawSettings() override;
 	virtual void LoadSettings(json& o_json) override;

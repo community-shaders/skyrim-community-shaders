@@ -8,7 +8,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	TerrainVariation::Settings,
 	enabled,
 	startDistance,
-	maxDistance)
+	maxDistance,
+	heightCompensationFactor,
+	shadowRayDirFactor)
 
 void TerrainVariation::DrawSettings()
 {
@@ -42,9 +44,37 @@ void TerrainVariation::DrawSettings()
 			ImGui::Text("Distance from camera where variation reaches maximum intensity.");
 		}
 		
+		ImGui::SeparatorText("Advanced Options");
+		
+		ImGui::Checkbox("Show Advanced Options", &showAdvanced);
+		
+		if (showAdvanced) {
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.7f, 0.0f, 1.0f)); // Warning color
+			ImGui::TextWrapped("Warning: Only modify these values if you know what you're doing!\n"
+								"The default values should work for most use cases.");
+			ImGui::PopStyleColor();
+			
+			paramsChanged |= ImGui::SliderFloat("Height Compensation Factor", &settings.heightCompensationFactor, 0.5f, 2.0f, "%.2f");
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text(
+					"Increasing the number will increase the height of all terrain parallax.\n"
+					"Compensation multiplier for terrain parallax when Terrain Variation is enabled.\n"
+					"By default, Terrain Variation can cause slightly lower parallax terrain.\n"
+					"This setting only applies when both Terrain Variation and Extended Materials' terrain parallax are enabled.");
+				}
+			
+			paramsChanged |= ImGui::SliderFloat("Shadow Ray Direction Factor", &settings.shadowRayDirFactor, 0.5f, 3.0f, "%.2f");
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text(
+					"Multiplier for shadow ray direction when calculating terrain parallax shadows.\n"
+					"Higher values make shadows appear stronger but may cause artifacts.\n"
+					"This setting only applies when both Terrain Variation and Extended Materials' terrain parallax are enabled.");
+			}
+		}
+		
 		if (paramsChanged) {
 			UpdateShaderSettings();
-			logger::info("TerrainVariation distance parameters updated");
+			logger::info("TerrainVariation parameters updated");
 		}
 	}
 }
