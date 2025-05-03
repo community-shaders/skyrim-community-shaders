@@ -21,7 +21,11 @@ public:
 	{
 		PortalStrict = (1 << 0),
 		Shadow = (1 << 1),
-		Simple = (1 << 2)
+		Simple = (1 << 2),
+
+		Initialised = (1 << 8),
+		Disabled = (1 << 9),
+		InverseSquare = (1 << 10),
 	};
 
 	struct PositionOpt
@@ -39,7 +43,8 @@ public:
 		uint128_t roomFlags = uint32_t(0);
 		stl::enumeration<LightFlags> lightFlags;
 		uint32_t shadowMaskIndex = 0;
-		float pad0[2];
+		float invRadius;
+		float fadeZone;
 	};
 
 	struct ClusterAABB
