@@ -749,13 +749,13 @@ PS_OUTPUT main(PS_INPUT input)
 #	else
 	float4 baseColorMul = BaseColor;
 	if (SharedData::linearLightingSettings.enableLinearLighting) {
-		baseColorMul.xyz = Color::GammaToTrueLinear(max(baseColorMul.xyz, 0));
+		baseColorMul.xyz = Color::GammaToLinearLuminancePreservingLight(max(baseColorMul.xyz, 0));
 	}
 #		if defined(VC) && !defined(PROJECTED_UV)
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		baseColorMul *= input.Color;
 	} else {
-		baseColorMul *= float4(Color::GammaToTrueLinear(input.Color.xyz), input.Color.w);
+		baseColorMul *= float4(Color::GammaToLinearLuminancePreservingLight(input.Color.xyz), input.Color.w);
 	}
 #		endif
 #	endif
