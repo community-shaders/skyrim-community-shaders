@@ -49,7 +49,7 @@ void TerrainVariation::DrawSettings()
 		ImGui::Checkbox("Show Advanced Options", &showAdvanced);
 		
 		if (showAdvanced) {
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.7f, 0.0f, 1.0f)); // Warning color
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.7f, 0.0f, 1.0f));
 			ImGui::TextWrapped("Warning: Only modify these values if you know what you're doing!\n"
 								"The default values should work for most use cases.");
 			ImGui::PopStyleColor();
@@ -86,12 +86,6 @@ void TerrainVariation::UpdateShaderSettings()
 	}
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::DIRTY_VERTEX_DESC);
-
-	// The settings are automatically passed to shaders through the FeatureBuffer system
-	// from the settings object, which is used in GetFeatureBufferData() in FeatureBuffer.cpp
-
-	logger::debug("TerrainVariation: Updated shader settings, enableTilingFix = {}, startDistance = {}, maxDistance = {}", 
-		settings.enableTilingFix, settings.startDistance, settings.maxDistance);
 }
 
 void TerrainVariation::PostPostLoad()
@@ -109,10 +103,4 @@ void TerrainVariation::LoadSettings(json& o_json)
 void TerrainVariation::SaveSettings(json& o_json)
 {
 	o_json = settings;
-}
-
-void TerrainVariation::RestoreDefaultSettings()
-{
-	settings = {};
-	UpdateShaderSettings();
 }

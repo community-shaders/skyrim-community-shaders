@@ -217,7 +217,7 @@ namespace ExtendedMaterials
                 float blendProgress = saturate(distance / SharedData::terrainVariationSettings.maxDistance);
                 float dynamicHeightFactor = lerp(
                     SharedData::terrainVariationSettings.heightCompensationFactor,
-                    SharedData::terrainVariationSettings.heightCompensationFactor * 1.75, // 50% more compensation at max distance
+                    SharedData::terrainVariationSettings.heightCompensationFactor * 1.5,
                     blendProgress);
                 h *= dynamicHeightFactor;
             }
@@ -623,11 +623,10 @@ namespace ExtendedMaterials
             // Only apply the shadowRayDirFactor when tiling fix is enabled
             if (SharedData::terrainVariationSettings.enableTilingFix) {
                 // Calculate a dynamic shadow ray factor that increases with distance
-                // This compensates for the reduced contrast in shadow at medium distances
                 float blendProgress = saturate(distance / SharedData::terrainVariationSettings.maxDistance);
                 float dynamicShadowFactor = lerp(
                     SharedData::terrainVariationSettings.shadowRayDirFactor,
-                    SharedData::terrainVariationSettings.shadowRayDirFactor * 2.5,
+                    SharedData::terrainVariationSettings.shadowRayDirFactor * 1.75,
                     blendProgress);
                 rayDir *= dynamicShadowFactor;
             }
