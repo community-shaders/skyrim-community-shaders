@@ -99,8 +99,10 @@ namespace ExtendedMaterials
 		{
 #		if defined(TERRAIN_VARIATION)
 			float h = ScaleDisplacement(SampleWithOffsets(TexLandDisplacement0Sampler, SampTerrainParallaxSampler, coords, offsets[0], dx, dy, distance).x, params[0]);
+#           if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
             if (SharedData::terrainVariationSettings.EnableTilingFix)
-                h *= SharedData::terrainVariationSettings.heightCompensationFactor; // Use value from settings		
+                h *= SharedData::terrainVariationSettings.heightCompensationFactor;
+#           endif
 #		else
 			float h = ScaleDisplacement(TexLandDisplacement0Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).x, params[0]);
 #		endif
@@ -609,7 +611,8 @@ namespace ExtendedMaterials
 			float heights[6] = { 0, 0, 0, 0, 0, 0 };
 			float2 rayDir = L.xy * 0.1;
 
-#			if defined(TERRAIN_VARIATION)
+#			if defined(TERRAIN_VARIATION) && (defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER))
+            // Only apply the shadowRayDirFactor when tiling fix is enabled
             if (SharedData::terrainVariationSettings.EnableTilingFix)
                 rayDir *= SharedData::terrainVariationSettings.shadowRayDirFactor;
 #			endif
