@@ -211,8 +211,16 @@ namespace ExtendedMaterials
 
 #		if defined(TERRAIN_VARIATION)
 				h = ScaleDisplacement(SampleWithOffsets(TexLandTHDisp0Sampler, SampTerrainParallaxSampler, coords, offsets[0], dx, dy, distance).x, params[0]);
-            if (SharedData::terrainVariationSettings.enableTilingFix)
-                h *= SharedData::terrainVariationSettings.heightCompensationFactor;
+            if (SharedData::terrainVariationSettings.enableTilingFix) {
+                // Calculate a dynamic compensation factor that increases with distance
+                // As stochastic sampling blend increases, increase compensation to maintain contrast
+                float blendProgress = saturate(distance / SharedData::terrainVariationSettings.maxDistance);
+                float dynamicHeightFactor = lerp(
+                    SharedData::terrainVariationSettings.heightCompensationFactor,
+                    SharedData::terrainVariationSettings.heightCompensationFactor * 1.75, // 50% more compensation at max distance
+                    blendProgress);
+                h *= dynamicHeightFactor;
+            }
 #		else
 				h = ScaleDisplacement(TexLandTHDisp0Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).x, params[0]);
 #		endif
@@ -613,8 +621,16 @@ namespace ExtendedMaterials
 
 #			if defined(TERRAIN_VARIATION) && (defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER))
             // Only apply the shadowRayDirFactor when tiling fix is enabled
-            if (SharedData::terrainVariationSettings.enableTilingFix)
-                rayDir *= SharedData::terrainVariationSettings.shadowRayDirFactor;
+            if (SharedData::terrainVariationSettings.enableTilingFix) {
+                // Calculate a dynamic shadow ray factor that increases with distance
+                // This compensates for the reduced contrast in shadow at medium distances
+                float blendProgress = saturate(distance / SharedData::terrainVariationSettings.maxDistance);
+                float dynamicShadowFactor = lerp(
+                    SharedData::terrainVariationSettings.shadowRayDirFactor,
+                    SharedData::terrainVariationSettings.shadowRayDirFactor * 2.5,
+                    blendProgress);
+                rayDir *= dynamicShadowFactor;
+            }
 #			endif
 
 #	if defined(TRUE_PBR)
