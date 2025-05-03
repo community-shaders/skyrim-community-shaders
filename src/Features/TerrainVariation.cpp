@@ -6,7 +6,7 @@
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	TerrainVariation::Settings,
-	enabled,
+	enableTilingFix,
 	startDistance,
 	maxDistance,
 	heightCompensationFactor,
@@ -14,12 +14,12 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void TerrainVariation::DrawSettings()
 {
-	bool oldEnabled = settings.enabled;
-	ImGui::Checkbox("Enable Terrain Tiling Fix", &settings.enabled);
-	if (oldEnabled != settings.enabled) {
+	bool oldEnabled = settings.enableTilingFix;
+	ImGui::Checkbox("Enable Terrain Tiling Fix", &settings.enableTilingFix);
+	if (oldEnabled != settings.enableTilingFix) {
 		// Update the shader settings when the checkbox is toggled
 		UpdateShaderSettings();
-		logger::info("TerrainVariation setting changed to: {}", settings.enabled);
+		logger::info("TerrainVariation setting changed to: {}", settings.enableTilingFix);
 	}
 
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -28,7 +28,7 @@ void TerrainVariation::DrawSettings()
 			"This technique creates more natural-looking terrain by adding variation to texture sampling.");
 	}
 
-	if (settings.enabled) {
+	if (settings.enableTilingFix) {
 		ImGui::Separator();
 		
 		bool paramsChanged = false;
@@ -90,8 +90,8 @@ void TerrainVariation::UpdateShaderSettings()
 	// The settings are automatically passed to shaders through the FeatureBuffer system
 	// from the settings object, which is used in GetFeatureBufferData() in FeatureBuffer.cpp
 
-	logger::debug("TerrainVariation: Updated shader settings, enabled = {}, startDistance = {}, maxDistance = {}", 
-		settings.enabled, settings.startDistance, settings.maxDistance);
+	logger::debug("TerrainVariation: Updated shader settings, enableTilingFix = {}, startDistance = {}, maxDistance = {}", 
+		settings.enableTilingFix, settings.startDistance, settings.maxDistance);
 }
 
 void TerrainVariation::PostPostLoad()

@@ -35,7 +35,7 @@ inline float ComputeDistanceFactor(float distance)
 {
 	float factor = 0.0;
 #if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
-	if (SharedData::terrainVariationSettings.EnableTilingFix) {
+	if (SharedData::terrainVariationSettings.enableTilingFix) {
 		float startDist = SharedData::terrainVariationSettings.startDistance;
 		float maxDist = SharedData::terrainVariationSettings.maxDistance;
 		// Ensure we don't divide by zero
@@ -55,7 +55,7 @@ inline float4 SampleWithOffsets(Texture2D tex, SamplerState samplerTex, float2 U
     // Only in pixel/compute shaders can we access the feature buffer
     #if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
         // The EnableTilingFix flag comes directly from TerrainVariation::Settings::enabled in C++
-        useStochasticSampling = SharedData::terrainVariationSettings.EnableTilingFix;
+        useStochasticSampling = SharedData::terrainVariationSettings.enableTilingFix;
     #endif
 
     // Apply stochastic sampling if enabled
@@ -108,7 +108,7 @@ float4 TerrainTextureSample(Texture2D<float4> tex, SamplerState samp, float2 uv,
     // Check if the feature is enabled
     bool useStochastic = false;
     #if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
-        useStochastic = SharedData::terrainVariationSettings.EnableTilingFix;
+        useStochastic = SharedData::terrainVariationSettings.enableTilingFix;
     #endif
     
     if (!useStochastic) {
@@ -119,10 +119,8 @@ float4 TerrainTextureSample(Texture2D<float4> tex, SamplerState samp, float2 uv,
         #endif
     }
     
-    // Calculate distance factor directly here
     float distanceFactor = ComputeDistanceFactor(distance);
     
-    // If we're close, don't apply stochastic sampling
     if (distanceFactor < 0.001f) {
         #if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
             return tex.SampleBias(samp, uv, SharedData::MipBias);
@@ -151,24 +149,19 @@ float4 TerrainTextureSample(Texture2D<float4> tex, SamplerState samp, float2 uv,
         float4 standardSample = tex.Sample(samp, uv);
     #endif
     
-    // Blend between standard and stochastic based on distance
     return lerp(standardSample, stochasticSample, distanceFactor);
 }
 
 // Main StochasticSample2D function that does the actual sampling
 float4 StochasticSample2D(Texture2D<float4> tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy, float distanceFactor = 1.0)
 {
-	// Scale offsets by the distance factor
 	float2 scaledOffset1 = offsets.offset1 * distanceFactor;
 	float2 scaledOffset2 = offsets.offset2 * distanceFactor;
 	float2 scaledOffset3 = offsets.offset3 * distanceFactor;
-	
-	// Sample texture with offsets using explicit gradients for correct mip level selection
 	float4 sample1 = tex.SampleGrad(samp, uv + scaledOffset1, dx, dy);
 	float4 sample2 = tex.SampleGrad(samp, uv + scaledOffset2, dx, dy);
 	float4 sample3 = tex.SampleGrad(samp, uv + scaledOffset3, dx, dy);
 
-	// Blend samples using barycentric weights
 	return sample1 * offsets.weights.x +
 	       sample2 * offsets.weights.y +
 	       sample3 * offsets.weights.z;

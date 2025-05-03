@@ -17,7 +17,7 @@ struct TerrainVariation : Feature
 
 	struct Settings
 	{
-		bool enabled = true;
+		bool enableTilingFix = true;
 		float startDistance = 200.0f;
 		float maxDistance = 2000.0f;
 		float heightCompensationFactor = 1.15f; // Compensation for terrain parallax when enabled

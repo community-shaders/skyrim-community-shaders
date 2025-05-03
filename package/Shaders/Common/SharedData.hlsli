@@ -147,7 +147,7 @@ namespace SharedData
 
 	struct TerrainVariationSettings
 	{
-		bool EnableTilingFix;
+		bool enableTilingFix;
 		float startDistance;
 		float maxDistance;
 		float heightCompensationFactor; // Compensation multiplier for terrain parallax
