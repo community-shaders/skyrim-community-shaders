@@ -38,7 +38,6 @@ inline float ComputeDistanceFactor(float distance)
 	if (SharedData::terrainVariationSettings.enableTilingFix) {
 		float startDist = SharedData::terrainVariationSettings.startDistance;
 		float maxDist = SharedData::terrainVariationSettings.maxDistance;
-		// Ensure we don't divide by zero
 		float range = max(0.001, maxDist - startDist);
 		factor = saturate((distance - startDist) / range);
 	}
@@ -52,9 +51,7 @@ inline float4 SampleWithOffsets(Texture2D tex, SamplerState samplerTex, float2 U
     // Check if terrain variation is enabled in settings
     bool useStochasticSampling = false;
 
-    // Only in pixel/compute shaders can we access the feature buffer
     #if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
-        // The EnableTilingFix flag comes directly from TerrainVariation::Settings::enabled in C++
         useStochasticSampling = SharedData::terrainVariationSettings.enableTilingFix;
     #endif
 
