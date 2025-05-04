@@ -20,8 +20,8 @@ struct TerrainVariation : Feature
 		bool enableTilingFix = true;
 		float startDistance = 200.0f; // No offset will be applied under this distance
 		float maxDistance = 2000.0f; // Maximum distance that the terrain will blend the stochastic effect to
-		float heightCompensationFactor = 1.15f; // Compensation for terrain parallax when enabled
-		float shadowRayDirFactor = 1.5f; // Shadow ray direction multiplier for parallax shadows
+		float heightCompensationFactor = 1.0f; // Compensation for terrain parallax when enabled
+		float shadowRayDirFactor = 1.0f; // Shadow ray direction multiplier for parallax shadows
 	};
 
 	Settings settings;
@@ -31,8 +31,8 @@ struct TerrainVariation : Feature
 		true,    // enableTilingFix
 		200.0f,  // startDistance
 		2000.0f, // maxDistance
-		1.15f,   // heightCompensationFactor
-		1.5f     // shadowRayDirFactor
+		1.0f,   // heightCompensationFactor
+		1.0f     // shadowRayDirFactor
 	};
 
 	virtual void DrawSettings() override;

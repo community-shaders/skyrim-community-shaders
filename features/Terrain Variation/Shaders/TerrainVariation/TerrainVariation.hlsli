@@ -78,7 +78,7 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 UV)
 	return offsets;
 }
 
-// Main stochastic sampling function.
+// Main stochastic sampling function
 float4 StochasticSample(Texture2D<float4> tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy, float distance = 0.0)
 {
     float distanceFactor = ComputeDistanceFactor(distance);

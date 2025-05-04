@@ -41,7 +41,8 @@ void TerrainVariation::DrawSettings()
 		
 		paramsChanged |= ImGui::SliderFloat("Maximum Distance", &settings.maxDistance, settings.startDistance + 1.0f, 5000.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Distance from camera where variation reaches maximum intensity.");
+			ImGui::Text("Distance from camera where variation reaches maximum intensity.\n"
+				"Generally, a distance of atleast 1000 between values is recommended for a smooth transition.");
 		}
 		
 		ImGui::SeparatorText("Advanced Options");
@@ -51,7 +52,7 @@ void TerrainVariation::DrawSettings()
 		if (showAdvanced) {
 			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.7f, 0.0f, 1.0f));
 			ImGui::TextWrapped("Warning: Only modify these values if you know what you're doing!\n"
-								"The default values should work for most use cases.");
+								"You may break the intended look of textures.");
 			ImGui::PopStyleColor();
 			
 			paramsChanged |= ImGui::SliderFloat("Height Compensation Factor", &settings.heightCompensationFactor, 0.5f, 2.0f, "%.2f");
@@ -59,7 +60,6 @@ void TerrainVariation::DrawSettings()
 				ImGui::Text(
 					"Increasing the number will increase the height of all terrain parallax.\n"
 					"Compensation multiplier for terrain parallax when Terrain Variation is enabled.\n"
-					"By default, Terrain Variation can cause slightly lower parallax terrain.\n"
 					"This setting only applies when both Terrain Variation and Extended Materials' terrain parallax are enabled.");
 				}
 			
@@ -68,7 +68,7 @@ void TerrainVariation::DrawSettings()
 				ImGui::Text(
 					"Multiplier for shadow ray direction when calculating terrain parallax shadows.\n"
 					"Higher values make shadows appear stronger but may cause artifacts.\n"
-					"This setting only applies when both Terrain Variation and Extended Materials' terrain parallax are enabled.");
+					"This setting only applies when both Terrain Variation and Extended Materials' terrain parallax are enabled."); // davo yappage
 			}
 		}
 		
