@@ -1342,6 +1342,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	float4 glintParameters = 0;
 
+#	if defined(SNOW) // Earlier snow definition for Terrain Variation rework.
+#		if !defined(TRUE_PBR)
+		float landSnowMask = 0.0;
+#			if defined(LANDSCAPE)
+		landSnowMask = GetLandSnowMaskValue(baseColor.w);
+#			endif
+#		endif
+#	endif
+
 #	if defined(LANDSCAPE)
 	// Layer 1 (LandBlendWeights1.x)
 	if (input.LandBlendWeights1.x > 0.0) {
@@ -1716,7 +1725,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(LANDSCAPE)
 #		if defined(SNOW) && !defined(TRUE_PBR)
-	float landSnowMask = LandscapeTexture1to4IsSnow.x * input.LandBlendWeights1.x;
+		landSnowMask = LandscapeTexture1to4IsSnow.x * input.LandBlendWeights1.x;
 #		endif  // SNOW
 
 	// Layer 1 (LandBlendWeights1.x)
@@ -1736,7 +1745,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	// Layer 2 (LandBlendWeights1.y)
 	if (input.LandBlendWeights1.y > 0.0) {
 #		if defined(SNOW) && !defined(TRUE_PBR)
-		float landSnowMask2 = GetLandSnowMaskValue(landColor2.w);
+		float landSnowMask2 = GetLandSnowMaskValue(baseColor.w);
 		landSnowMask += LandscapeTexture1to4IsSnow.y * input.LandBlendWeights1.y * landSnowMask2;
 #		endif
 #		if defined(TRUE_PBR)
@@ -1750,7 +1759,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	// Layer 3 (LandBlendWeights1.z)
 	if (input.LandBlendWeights1.z > 0.0) {
 #		if defined(SNOW) && !defined(TRUE_PBR)
-		float landSnowMask3 = GetLandSnowMaskValue(landColor3.w);
+		float landSnowMask3 = GetLandSnowMaskValue(baseColor.w);
 		landSnowMask += LandscapeTexture1to4IsSnow.z * input.LandBlendWeights1.z * landSnowMask3;
 #		endif
 #		if defined(TRUE_PBR)
@@ -1764,7 +1773,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	// Layer 4 (LandBlendWeights1.w)
 	if (input.LandBlendWeights1.w > 0.0) {
 #		if defined(SNOW) && !defined(TRUE_PBR)
-		float landSnowMask4 = GetLandSnowMaskValue(landColor4.w);
+		float landSnowMask4 = GetLandSnowMaskValue(baseColor.w);
 		landSnowMask += LandscapeTexture1to4IsSnow.w * input.LandBlendWeights1.w * landSnowMask4;
 #		endif
 #		if defined(TRUE_PBR)
@@ -1778,7 +1787,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	// Layer 5 (LandBlendWeights2.x)
 	if (input.LandBlendWeights2.x > 0.0) {
 #		if defined(SNOW) && !defined(TRUE_PBR)
-		float landSnowMask5 = GetLandSnowMaskValue(landColor5.w);
+		float landSnowMask5 = GetLandSnowMaskValue(baseColor.w);
 		landSnowMask += LandscapeTexture5to6IsSnow.x * input.LandBlendWeights2.x * landSnowMask5;
 #		endif
 #		if defined(TRUE_PBR)
@@ -1792,7 +1801,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	// Layer 6 (LandBlendWeights2.y)
 	if (input.LandBlendWeights2.y > 0.0) {
 #		if defined(SNOW) && !defined(TRUE_PBR)
-		float landSnowMask6 = GetLandSnowMaskValue(landColor6.w);
+		float landSnowMask6 = GetLandSnowMaskValue(baseColor.w);
 		landSnowMask += LandscapeTexture5to6IsSnow.y * input.LandBlendWeights2.y * landSnowMask6;
 #		endif
 #		if defined(TRUE_PBR)
