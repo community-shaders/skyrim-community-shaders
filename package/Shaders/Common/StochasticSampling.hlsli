@@ -63,7 +63,6 @@ inline float4 SampleWithOffsets(Texture2D tex, SamplerState samplerTex, float2 U
         // Calculate distance factor (0 when close, 1 when far)
         float distanceFactor = ComputeDistanceFactor(distance);
         
-        // If we're close enough, don't use stochastic sampling at all
         if (distanceFactor < 0.001f) {
             #if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
                 return tex.SampleBias(samplerTex, UV, SharedData::MipBias);
@@ -72,15 +71,10 @@ inline float4 SampleWithOffsets(Texture2D tex, SamplerState samplerTex, float2 U
             #endif
         }
         
-        // Scale offsets by the distance factor
-        float2 scaledOffset1 = offsets.offset1 * distanceFactor;
-        float2 scaledOffset2 = offsets.offset2 * distanceFactor;
-        float2 scaledOffset3 = offsets.offset3 * distanceFactor;
-        
         // Get stochastic sample
-        float4 sample1 = tex.SampleGrad(samplerTex, UV + scaledOffset1, dx, dy);
-        float4 sample2 = tex.SampleGrad(samplerTex, UV + scaledOffset2, dx, dy);
-        float4 sample3 = tex.SampleGrad(samplerTex, UV + scaledOffset3, dx, dy);
+        float4 sample1 = tex.SampleGrad(samplerTex, UV + offsets.offset1, dx, dy);
+        float4 sample2 = tex.SampleGrad(samplerTex, UV + offsets.offset2, dx, dy);
+        float4 sample3 = tex.SampleGrad(samplerTex, UV + offsets.offset3, dx, dy);
         float4 stochasticSample = sample1 * offsets.weights.x + sample2 * offsets.weights.y + sample3 * offsets.weights.z;
         
         // Get standard sample for blending
@@ -129,18 +123,13 @@ float4 TerrainTextureSample(Texture2D<float4> tex, SamplerState samp, float2 uv,
         #endif
     }
     
-    // Apply stochastic sampling with distance factor
-    float2 scaledOffset1 = offsets.offset1 * distanceFactor;
-    float2 scaledOffset2 = offsets.offset2 * distanceFactor;
-    float2 scaledOffset3 = offsets.offset3 * distanceFactor;
-    
-    float4 sample1 = tex.SampleGrad(samp, uv + scaledOffset1, dx, dy);
-    float4 sample2 = tex.SampleGrad(samp, uv + scaledOffset2, dx, dy);
-    float4 sample3 = tex.SampleGrad(samp, uv + scaledOffset3, dx, dy);
+    float4 sample1 = tex.SampleGrad(samp, uv + offsets.offset1, dx, dy);
+    float4 sample2 = tex.SampleGrad(samp, uv + offsets.offset2, dx, dy);
+    float4 sample3 = tex.SampleGrad(samp, uv + offsets.offset3, dx, dy);
     
     float4 stochasticSample = sample1 * offsets.weights.x + 
-                              sample2 * offsets.weights.y + 
-                              sample3 * offsets.weights.z;
+                            sample2 * offsets.weights.y + 
+                            sample3 * offsets.weights.z;
     
     // Get standard sample for blending
     #if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
@@ -155,16 +144,21 @@ float4 TerrainTextureSample(Texture2D<float4> tex, SamplerState samp, float2 uv,
 // Main StochasticSample2D function that does the actual sampling
 float4 StochasticSample2D(Texture2D<float4> tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy, float distanceFactor = 1.0)
 {
-	float2 scaledOffset1 = offsets.offset1 * distanceFactor;
-	float2 scaledOffset2 = offsets.offset2 * distanceFactor;
-	float2 scaledOffset3 = offsets.offset3 * distanceFactor;
-	float4 sample1 = tex.SampleGrad(samp, uv + scaledOffset1, dx, dy);
-	float4 sample2 = tex.SampleGrad(samp, uv + scaledOffset2, dx, dy);
-	float4 sample3 = tex.SampleGrad(samp, uv + scaledOffset3, dx, dy);
-
-	return sample1 * offsets.weights.x +
+	float4 sample1 = tex.SampleGrad(samp, uv + offsets.offset1, dx, dy);
+	float4 sample2 = tex.SampleGrad(samp, uv + offsets.offset2, dx, dy);
+	float4 sample3 = tex.SampleGrad(samp, uv + offsets.offset3, dx, dy);
+	
+	float4 stochasticSample = sample1 * offsets.weights.x +
 	       sample2 * offsets.weights.y +
 	       sample3 * offsets.weights.z;
+           
+    #if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
+        float4 standardSample = tex.SampleBias(samp, uv, SharedData::MipBias);
+    #else
+        float4 standardSample = tex.Sample(samp, uv);
+    #endif
+    
+    return lerp(standardSample, stochasticSample, distanceFactor);
 }
 
 #endif  // __STOCHASTIC_SAMPLING_HLSLI__
