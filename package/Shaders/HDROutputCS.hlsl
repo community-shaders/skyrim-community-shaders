@@ -220,10 +220,10 @@ float3 ApplyUncharted2HDR(float3 untonemapped)
 	case 5:  // Uncharted 2
 		tonemapped = ApplyUncharted2HDR(linearExposed);
 		break;
-	case 6: // DICE Plus
+	case 6:  // DICE Plus
 		tonemapped = ApplyDICEPlus(linearExposed);
 		break;
-	case 7: // RenoDRT
+	case 7:  // RenoDRT
 		tonemapped = ApplyRenoDRT(linearExposed);
 		break;
 	}
