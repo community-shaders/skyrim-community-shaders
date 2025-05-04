@@ -92,15 +92,15 @@ namespace ExtendedMaterials
 		weights[4] = w2.x;
 		weights[5] = w2.y;
 		float total = 0;
-		
+
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile0HasDisplacement) != 0 && w1.x > 0.0)
 		{
 #		if defined(TERRAIN_VARIATION)
 			float h = ScaleDisplacement(StochasticEffect(TexLandDisplacement0Sampler, SampTerrainParallaxSampler, coords, offsets[0], dx, dy, distance).x, params[0]);
-#           if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
-            if (SharedData::terrainVariationSettings.enableTilingFix)
-                h *= SharedData::terrainVariationSettings.heightCompensationFactor;
-#           endif
+#			if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
+			if (SharedData::terrainVariationSettings.enableTilingFix)
+				h *= SharedData::terrainVariationSettings.heightCompensationFactor;
+#			endif
 #		else
 			float h = ScaleDisplacement(TexLandDisplacement0Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).x, params[0]);
 #		endif
@@ -111,8 +111,8 @@ namespace ExtendedMaterials
 		{
 #		if defined(TERRAIN_VARIATION)
 			float h = ScaleDisplacement(StochasticEffect(TexLandDisplacement1Sampler, SampTerrainParallaxSampler, coords, offsets[1], dx, dy, distance).x, params[1]);
-            if (SharedData::terrainVariationSettings.enableTilingFix)
-                h *= SharedData::terrainVariationSettings.heightCompensationFactor; // Use value from settings
+			if (SharedData::terrainVariationSettings.enableTilingFix)
+				h *= SharedData::terrainVariationSettings.heightCompensationFactor;  // Use value from settings
 #		else
 			float h = ScaleDisplacement(TexLandDisplacement1Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).x, params[1]);
 #		endif
@@ -123,8 +123,8 @@ namespace ExtendedMaterials
 		{
 #		if defined(TERRAIN_VARIATION)
 			float h = ScaleDisplacement(StochasticEffect(TexLandDisplacement2Sampler, SampTerrainParallaxSampler, coords, offsets[2], dx, dy, distance).x, params[2]);
-            if (SharedData::terrainVariationSettings.enableTilingFix)
-                h *= SharedData::terrainVariationSettings.heightCompensationFactor; // Use value from settings
+			if (SharedData::terrainVariationSettings.enableTilingFix)
+				h *= SharedData::terrainVariationSettings.heightCompensationFactor;  // Use value from settings
 #		else
 			float h = ScaleDisplacement(TexLandDisplacement2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).x, params[2]);
 #		endif
@@ -135,8 +135,8 @@ namespace ExtendedMaterials
 		{
 #		if defined(TERRAIN_VARIATION)
 			float h = ScaleDisplacement(StochasticEffect(TexLandDisplacement3Sampler, SampTerrainParallaxSampler, coords, offsets[3], dx, dy, distance).x, params[3]);
-            if (SharedData::terrainVariationSettings.enableTilingFix)
-                h *= SharedData::terrainVariationSettings.heightCompensationFactor; // Use value from settings
+			if (SharedData::terrainVariationSettings.enableTilingFix)
+				h *= SharedData::terrainVariationSettings.heightCompensationFactor;  // Use value from settings
 #		else
 			float h = ScaleDisplacement(TexLandDisplacement3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).x, params[3]);
 #		endif
@@ -147,8 +147,8 @@ namespace ExtendedMaterials
 		{
 #		if defined(TERRAIN_VARIATION)
 			float h = ScaleDisplacement(StochasticEffect(TexLandDisplacement4Sampler, SampTerrainParallaxSampler, coords, offsets[4], dx, dy, distance).x, params[4]);
-            if (SharedData::terrainVariationSettings.enableTilingFix)
-                h *= SharedData::terrainVariationSettings.heightCompensationFactor; // Use value from settings
+			if (SharedData::terrainVariationSettings.enableTilingFix)
+				h *= SharedData::terrainVariationSettings.heightCompensationFactor;  // Use value from settings
 #		else
 			float h = ScaleDisplacement(TexLandDisplacement4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).x, params[4]);
 #		endif
@@ -159,8 +159,8 @@ namespace ExtendedMaterials
 		{
 #		if defined(TERRAIN_VARIATION)
 			float h = ScaleDisplacement(StochasticEffect(TexLandDisplacement5Sampler, SampTerrainParallaxSampler, coords, offsets[5], dx, dy, distance).x, params[5]);
-            if (SharedData::terrainVariationSettings.enableTilingFix)
-                h *= SharedData::terrainVariationSettings.heightCompensationFactor; // Use value from settings	
+			if (SharedData::terrainVariationSettings.enableTilingFix)
+				h *= SharedData::terrainVariationSettings.heightCompensationFactor;  // Use value from settings
 #		else
 			float h = ScaleDisplacement(TexLandDisplacement5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).x, params[5]);
 #		endif
@@ -200,8 +200,7 @@ namespace ExtendedMaterials
 		weights[4] = w2.x;
 		weights[5] = w2.y;
 		float total = 0;
-		
-		
+
 		if (w1.x > 0.0) {
 			float h = 0.0;
 			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand0HasDisplacement) != 0)
@@ -209,16 +208,16 @@ namespace ExtendedMaterials
 
 #		if defined(TERRAIN_VARIATION)
 				h = ScaleDisplacement(StochasticEffect(TexLandTHDisp0Sampler, SampTerrainParallaxSampler, coords, offsets[0], dx, dy, distance).x, params[0]);
-            if (SharedData::terrainVariationSettings.enableTilingFix) {
-                // Calculate a dynamic compensation factor that increases with distance
-                // As stochastic sampling blend increases, increase compensation to maintain contrast
-                float blendProgress = saturate(distance / SharedData::terrainVariationSettings.maxDistance);
-                float dynamicHeightFactor = lerp(
-                    SharedData::terrainVariationSettings.heightCompensationFactor,
-                    SharedData::terrainVariationSettings.heightCompensationFactor * 1.5,
-                    blendProgress);
-                h *= dynamicHeightFactor;
-            }
+				if (SharedData::terrainVariationSettings.enableTilingFix) {
+					// Calculate a dynamic compensation factor that increases with distance
+					// As stochastic sampling blend increases, increase compensation to maintain contrast
+					float blendProgress = saturate(distance / SharedData::terrainVariationSettings.maxDistance);
+					float dynamicHeightFactor = lerp(
+						SharedData::terrainVariationSettings.heightCompensationFactor,
+						SharedData::terrainVariationSettings.heightCompensationFactor * 1.5,
+						blendProgress);
+					h *= dynamicHeightFactor;
+				}
 #		else
 				h = ScaleDisplacement(TexLandTHDisp0Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).x, params[0]);
 #		endif
@@ -227,8 +226,8 @@ namespace ExtendedMaterials
 			{
 #		if defined(TERRAIN_VARIATION)
 				h = ScaleDisplacement(StochasticEffect(TexColorSampler, SampTerrainParallaxSampler, coords, offsets[0], dx, dy, distance).w, params[0]);
-            if (SharedData::terrainVariationSettings.enableTilingFix)
-                h *= SharedData::terrainVariationSettings.heightCompensationFactor;	
+				if (SharedData::terrainVariationSettings.enableTilingFix)
+					h *= SharedData::terrainVariationSettings.heightCompensationFactor;
 #		else
 				h = ScaleDisplacement(TexColorSampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).w, params[0]);
 #		endif
@@ -243,8 +242,8 @@ namespace ExtendedMaterials
 
 #		if defined(TERRAIN_VARIATION)
 				h = ScaleDisplacement(StochasticEffect(TexLandTHDisp1Sampler, SampTerrainParallaxSampler, coords, offsets[1], dx, dy, distance).x, params[1]);
-            if (SharedData::terrainVariationSettings.enableTilingFix)
-                h *= SharedData::terrainVariationSettings.heightCompensationFactor;	
+				if (SharedData::terrainVariationSettings.enableTilingFix)
+					h *= SharedData::terrainVariationSettings.heightCompensationFactor;
 #		else
 				h = ScaleDisplacement(TexLandTHDisp1Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).x, params[1]);
 #		endif
@@ -253,8 +252,8 @@ namespace ExtendedMaterials
 			{
 #		if defined(TERRAIN_VARIATION)
 				h = ScaleDisplacement(StochasticEffect(TexLandColor2Sampler, SampTerrainParallaxSampler, coords, offsets[1], dx, dy, distance).w, params[1]);
-            if (SharedData::terrainVariationSettings.enableTilingFix)
-                h *= SharedData::terrainVariationSettings.heightCompensationFactor;	
+				if (SharedData::terrainVariationSettings.enableTilingFix)
+					h *= SharedData::terrainVariationSettings.heightCompensationFactor;
 #		else
 				h = ScaleDisplacement(TexLandColor2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).w, params[1]);
 #		endif
@@ -269,8 +268,8 @@ namespace ExtendedMaterials
 
 #		if defined(TERRAIN_VARIATION)
 				h = ScaleDisplacement(StochasticEffect(TexLandTHDisp2Sampler, SampTerrainParallaxSampler, coords, offsets[2], dx, dy, distance).x, params[2]);
-            if (SharedData::terrainVariationSettings.enableTilingFix)
-                h *= SharedData::terrainVariationSettings.heightCompensationFactor;	
+				if (SharedData::terrainVariationSettings.enableTilingFix)
+					h *= SharedData::terrainVariationSettings.heightCompensationFactor;
 #		else
 				h = ScaleDisplacement(TexLandTHDisp2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).x, params[2]);
 #		endif
@@ -279,8 +278,8 @@ namespace ExtendedMaterials
 			{
 #		if defined(TERRAIN_VARIATION)
 				h = ScaleDisplacement(StochasticEffect(TexLandColor3Sampler, SampTerrainParallaxSampler, coords, offsets[2], dx, dy, distance).w, params[2]);
-            if (SharedData::terrainVariationSettings.enableTilingFix)
-                h *= SharedData::terrainVariationSettings.heightCompensationFactor;	
+				if (SharedData::terrainVariationSettings.enableTilingFix)
+					h *= SharedData::terrainVariationSettings.heightCompensationFactor;
 #		else
 				h = ScaleDisplacement(TexLandColor3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).w, params[2]);
 #		endif
@@ -295,8 +294,8 @@ namespace ExtendedMaterials
 
 #		if defined(TERRAIN_VARIATION)
 				h = ScaleDisplacement(StochasticEffect(TexLandTHDisp3Sampler, SampTerrainParallaxSampler, coords, offsets[3], dx, dy, distance).x, params[3]);
-            if (SharedData::terrainVariationSettings.enableTilingFix)
-                h *= SharedData::terrainVariationSettings.heightCompensationFactor;	
+				if (SharedData::terrainVariationSettings.enableTilingFix)
+					h *= SharedData::terrainVariationSettings.heightCompensationFactor;
 #		else
 				h = ScaleDisplacement(TexLandTHDisp3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).x, params[3]);
 #		endif
@@ -305,8 +304,8 @@ namespace ExtendedMaterials
 			{
 #		if defined(TERRAIN_VARIATION)
 				h = ScaleDisplacement(StochasticEffect(TexLandColor4Sampler, SampTerrainParallaxSampler, coords, offsets[3], dx, dy, distance).w, params[3]);
-            if (SharedData::terrainVariationSettings.enableTilingFix)
-                h *= SharedData::terrainVariationSettings.heightCompensationFactor;
+				if (SharedData::terrainVariationSettings.enableTilingFix)
+					h *= SharedData::terrainVariationSettings.heightCompensationFactor;
 #		else
 				h = ScaleDisplacement(TexLandColor4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).w, params[3]);
 #		endif
@@ -321,8 +320,8 @@ namespace ExtendedMaterials
 
 #		if defined(TERRAIN_VARIATION)
 				h = ScaleDisplacement(StochasticEffect(TexLandTHDisp4Sampler, SampTerrainParallaxSampler, coords, offsets[4], dx, dy, distance).x, params[4]);
-            if (SharedData::terrainVariationSettings.enableTilingFix)
-                h *= SharedData::terrainVariationSettings.heightCompensationFactor;
+				if (SharedData::terrainVariationSettings.enableTilingFix)
+					h *= SharedData::terrainVariationSettings.heightCompensationFactor;
 #		else
 				h = ScaleDisplacement(TexLandTHDisp4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).x, params[4]);
 #		endif
@@ -331,8 +330,8 @@ namespace ExtendedMaterials
 			{
 #		if defined(TERRAIN_VARIATION)
 				h = ScaleDisplacement(StochasticEffect(TexLandColor5Sampler, SampTerrainParallaxSampler, coords, offsets[4], dx, dy, distance).w, params[4]);
-            if (SharedData::terrainVariationSettings.enableTilingFix)
-                h *= SharedData::terrainVariationSettings.heightCompensationFactor;
+				if (SharedData::terrainVariationSettings.enableTilingFix)
+					h *= SharedData::terrainVariationSettings.heightCompensationFactor;
 #		else
 				h = ScaleDisplacement(TexLandColor5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).w, params[4]);
 #		endif
@@ -347,8 +346,8 @@ namespace ExtendedMaterials
 
 #		if defined(TERRAIN_VARIATION)
 				h = ScaleDisplacement(StochasticEffect(TexLandTHDisp5Sampler, SampTerrainParallaxSampler, coords, offsets[5], dx, dy, distance).x, params[5]);
-            if (SharedData::terrainVariationSettings.enableTilingFix)
-                h *= SharedData::terrainVariationSettings.heightCompensationFactor;
+				if (SharedData::terrainVariationSettings.enableTilingFix)
+					h *= SharedData::terrainVariationSettings.heightCompensationFactor;
 #		else
 				h = ScaleDisplacement(TexLandTHDisp5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).x, params[5]);
 #		endif
@@ -357,8 +356,8 @@ namespace ExtendedMaterials
 			{
 #		if defined(TERRAIN_VARIATION)
 				h = ScaleDisplacement(StochasticEffect(TexLandColor6Sampler, SampTerrainParallaxSampler, coords, offsets[5], dx, dy, distance).w, params[5]);
-            if (SharedData::terrainVariationSettings.enableTilingFix)
-                h *= SharedData::terrainVariationSettings.heightCompensationFactor;
+				if (SharedData::terrainVariationSettings.enableTilingFix)
+					h *= SharedData::terrainVariationSettings.heightCompensationFactor;
 #		else
 				h = ScaleDisplacement(TexLandColor6Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).w, params[5]);
 #		endif
@@ -617,18 +616,18 @@ namespace ExtendedMaterials
 			float heights[6] = { 0, 0, 0, 0, 0, 0 };
 			float2 rayDir = L.xy * 0.1;
 
-#			if defined(TERRAIN_VARIATION) && (defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER))
-            // Only apply the shadowRayDirFactor when tiling fix is enabled
-            if (SharedData::terrainVariationSettings.enableTilingFix) {
-                // Calculate a dynamic shadow ray factor that increases with distance
-                float blendProgress = saturate(distance / SharedData::terrainVariationSettings.maxDistance);
-                float dynamicShadowFactor = lerp(
-                    SharedData::terrainVariationSettings.shadowRayDirFactor,
-                    SharedData::terrainVariationSettings.shadowRayDirFactor * 1.75,
-                    blendProgress);
-                rayDir *= dynamicShadowFactor;
-            }
-#			endif
+#	if defined(TERRAIN_VARIATION) && (defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER))
+			// Only apply the shadowRayDirFactor when tiling fix is enabled
+			if (SharedData::terrainVariationSettings.enableTilingFix) {
+				// Calculate a dynamic shadow ray factor that increases with distance
+				float blendProgress = saturate(distance / SharedData::terrainVariationSettings.maxDistance);
+				float dynamicShadowFactor = lerp(
+					SharedData::terrainVariationSettings.shadowRayDirFactor,
+					SharedData::terrainVariationSettings.shadowRayDirFactor * 1.75,
+					blendProgress);
+				rayDir *= dynamicShadowFactor;
+			}
+#	endif
 
 #	if defined(TRUE_PBR)
 			float scale = max(params[0].HeightScale * input.LandBlendWeights1.x, max(params[1].HeightScale * input.LandBlendWeights1.y, max(params[2].HeightScale * input.LandBlendWeights1.z,

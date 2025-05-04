@@ -1342,11 +1342,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	float4 glintParameters = 0;
 
-#	if defined(SNOW) // Earlier snow definition for Terrain Variation rework.
+#	if defined(SNOW)  // Earlier snow definition for Terrain Variation rework.
 #		if !defined(TRUE_PBR)
-		float landSnowMask = 0.0;
+	float landSnowMask = 0.0;
 #			if defined(LANDSCAPE)
-		landSnowMask = GetLandSnowMaskValue(baseColor.w);
+	landSnowMask = GetLandSnowMaskValue(baseColor.w);
 #			endif
 #		endif
 #	endif
@@ -1725,7 +1725,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(LANDSCAPE)
 #		if defined(SNOW) && !defined(TRUE_PBR)
-		landSnowMask = LandscapeTexture1to4IsSnow.x * input.LandBlendWeights1.x;
+	landSnowMask = LandscapeTexture1to4IsSnow.x * input.LandBlendWeights1.x;
 #		endif  // SNOW
 
 	// Layer 1 (LandBlendWeights1.x)

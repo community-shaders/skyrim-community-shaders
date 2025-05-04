@@ -18,31 +18,32 @@ struct TerrainVariation : Feature
 	struct Settings
 	{
 		bool enableTilingFix = true;
-		float startDistance = 200.0f; // No offset will be applied under this distance
-		float maxDistance = 2000.0f; // Maximum distance that the terrain will blend the stochastic effect to
-		float heightCompensationFactor = 1.0f; // Compensation for terrain parallax when enabled
-		float shadowRayDirFactor = 1.0f; // Shadow ray direction multiplier for parallax shadows
+		float startDistance = 200.0f;           // No offset will be applied under this distance
+		float maxDistance = 2000.0f;            // Maximum distance that the terrain will blend the stochastic effect to
+		float heightCompensationFactor = 1.0f;  // Compensation for terrain parallax when enabled
+		float shadowRayDirFactor = 1.0f;        // Shadow ray direction multiplier for parallax shadows
 	};
 
 	Settings settings;
 	bool showAdvanced = false;
-	
+
 	Settings defaultSettings = {
-		true,    // enableTilingFix
-		200.0f,  // startDistance
-		2000.0f, // maxDistance
-		1.0f,   // heightCompensationFactor
-		1.0f     // shadowRayDirFactor
+		true,     // enableTilingFix
+		200.0f,   // startDistance
+		2000.0f,  // maxDistance
+		1.0f,     // heightCompensationFactor
+		1.0f      // shadowRayDirFactor
 	};
 
 	virtual void DrawSettings() override;
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
-	virtual void RestoreDefaultSettings() override {
+	virtual void RestoreDefaultSettings() override
+	{
 		settings = defaultSettings;
 		UpdateShaderSettings();
 	}
-	
+
 	virtual void PostPostLoad() override;
 	void UpdateShaderSettings();
 };

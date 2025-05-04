@@ -63,53 +63,53 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 UV)
 // Main stochastic sampling function - combined implementation that replaces all previous variations
 inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy, float distance = 0.0)
 {
-    // Check if terrain variation is enabled in settings
-    bool useStochasticSampling = false;
+	// Check if terrain variation is enabled in settings
+	bool useStochasticSampling = false;
 
-    #if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
-        useStochasticSampling = SharedData::terrainVariationSettings.enableTilingFix;
-    #endif
+#if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
+	useStochasticSampling = SharedData::terrainVariationSettings.enableTilingFix;
+#endif
 
-    // If feature is disabled, return standard sample
-    if (!useStochasticSampling) {
-        #if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
-            return tex.SampleBias(samp, uv, SharedData::MipBias);
-        #else
-            return tex.Sample(samp, uv);
-        #endif
-    }
-    
-    // Calculate distance factor (0 when close, 1 when far)
-    float distanceFactor = ComputeDistanceFactor(distance);
-    
-    // If too close, use standard sampling
-    if (distanceFactor < 0.001f) {
-        #if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
-            return tex.SampleBias(samp, uv, SharedData::MipBias);
-        #else
-            return tex.Sample(samp, uv);
-        #endif
-    }
-    
-    // Get stochastic samples
-    float4 sample1 = tex.SampleGrad(samp, uv + offsets.offset1, dx, dy);
-    float4 sample2 = tex.SampleGrad(samp, uv + offsets.offset2, dx, dy);
-    float4 sample3 = tex.SampleGrad(samp, uv + offsets.offset3, dx, dy);
-    
-    // Weight samples according to offsets
-    float4 stochasticSample = sample1 * offsets.weights.x + 
-                              sample2 * offsets.weights.y + 
-                              sample3 * offsets.weights.z;
-    
-    // Get standard sample for blending
-    #if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
-        float4 standardSample = tex.SampleBias(samp, uv, SharedData::MipBias);
-    #else
-        float4 standardSample = tex.Sample(samp, uv);
-    #endif
-    
-    // Blend between standard and stochastic based on distance
-    return lerp(standardSample, stochasticSample, distanceFactor);
+	// If feature is disabled, return standard sample
+	if (!useStochasticSampling) {
+#if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
+		return tex.SampleBias(samp, uv, SharedData::MipBias);
+#else
+		return tex.Sample(samp, uv);
+#endif
+	}
+
+	// Calculate distance factor (0 when close, 1 when far)
+	float distanceFactor = ComputeDistanceFactor(distance);
+
+	// If too close, use standard sampling
+	if (distanceFactor < 0.001f) {
+#if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
+		return tex.SampleBias(samp, uv, SharedData::MipBias);
+#else
+		return tex.Sample(samp, uv);
+#endif
+	}
+
+	// Get stochastic samples
+	float4 sample1 = tex.SampleGrad(samp, uv + offsets.offset1, dx, dy);
+	float4 sample2 = tex.SampleGrad(samp, uv + offsets.offset2, dx, dy);
+	float4 sample3 = tex.SampleGrad(samp, uv + offsets.offset3, dx, dy);
+
+	// Weight samples according to offsets
+	float4 stochasticSample = sample1 * offsets.weights.x +
+	                          sample2 * offsets.weights.y +
+	                          sample3 * offsets.weights.z;
+
+// Get standard sample for blending
+#if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
+	float4 standardSample = tex.SampleBias(samp, uv, SharedData::MipBias);
+#else
+	float4 standardSample = tex.Sample(samp, uv);
+#endif
+
+	// Blend between standard and stochastic based on distance
+	return lerp(standardSample, stochasticSample, distanceFactor);
 }
 #define StochasticSample(tex, samp, uv, dist) StochasticEffect(tex, samp, uv, ComputeStochasticOffsets(uv), ddx(uv), ddy(uv), dist).rgb
 

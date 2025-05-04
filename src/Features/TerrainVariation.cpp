@@ -30,48 +30,50 @@ void TerrainVariation::DrawSettings()
 
 	if (settings.enableTilingFix) {
 		ImGui::Separator();
-		
+
 		bool paramsChanged = false;
-		
+
 		// Add UI controls for distance-based parameters
 		paramsChanged |= ImGui::SliderFloat("Start Distance", &settings.startDistance, 0.0f, settings.maxDistance - 1.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Distance from camera where variation begins to blend in.\nCloser than this will have no variation applied.");
 		}
-		
+
 		paramsChanged |= ImGui::SliderFloat("Maximum Distance", &settings.maxDistance, settings.startDistance + 1.0f, 5000.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Distance from camera where variation reaches maximum intensity.\n"
+			ImGui::Text(
+				"Distance from camera where variation reaches maximum intensity.\n"
 				"Generally, a distance of atleast 1000 between values is recommended for a smooth transition.");
 		}
-		
+
 		ImGui::SeparatorText("Advanced Options");
-		
+
 		ImGui::Checkbox("Show Advanced Options", &showAdvanced);
-		
+
 		if (showAdvanced) {
 			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.7f, 0.0f, 1.0f));
-			ImGui::TextWrapped("Warning: Only modify these values if you know what you're doing!\n"
-								"You may break the intended look of textures.");
+			ImGui::TextWrapped(
+				"Warning: Only modify these values if you know what you're doing!\n"
+				"You may break the intended look of textures.");
 			ImGui::PopStyleColor();
-			
+
 			paramsChanged |= ImGui::SliderFloat("Height Compensation Factor", &settings.heightCompensationFactor, 0.5f, 2.0f, "%.2f");
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text(
 					"Increasing the number will increase the height of all terrain parallax.\n"
 					"Compensation multiplier for terrain parallax when Terrain Variation is enabled.\n"
 					"This setting only applies when both Terrain Variation and Extended Materials' terrain parallax are enabled.");
-				}
-			
+			}
+
 			paramsChanged |= ImGui::SliderFloat("Shadow Ray Direction Factor", &settings.shadowRayDirFactor, 0.5f, 3.0f, "%.2f");
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text(
 					"Multiplier for shadow ray direction when calculating terrain parallax shadows.\n"
 					"Higher values make shadows appear stronger but may cause artifacts.\n"
-					"This setting only applies when both Terrain Variation and Extended Materials' terrain parallax are enabled."); // davo yappage
+					"This setting only applies when both Terrain Variation and Extended Materials' terrain parallax are enabled.");  // davo yappage
 			}
 		}
-		
+
 		if (paramsChanged) {
 			UpdateShaderSettings();
 			logger::info("TerrainVariation parameters updated");
