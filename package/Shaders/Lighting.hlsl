@@ -1441,8 +1441,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float4 rmaos2 = StochasticEffect(TexLandRMAOS2Sampler, SampRMAOSSampler, uv, offsets[1], dx, dy, viewDistance);
 #			else
 		float4 rmaos2 = lerp(
-			TexLandRMAOS2Sampler.SampleBias(SampRMAOSampler, uv, SharedData::MipBias),
-			TexLandRMAOS2Sampler.SampleLevel(SampRMAOSampler, uv, distanceFactor * 3.0),
+			TexLandRMAOS2Sampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias),
+			TexLandRMAOS2Sampler.SampleLevel(SampRMAOSSampler, uv, distanceFactor * 3.0),
 			distanceFactor);
 #			endif
 		rmaos2 *= float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
