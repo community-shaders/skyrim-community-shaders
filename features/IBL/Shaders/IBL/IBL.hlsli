@@ -5,7 +5,7 @@
 
 namespace ImageBasedLighting
 {
-	Texture2D<sh2> DiffuseIBLTexture : register(t100);
+	Texture2D<sh2> DiffuseIBLTexture : register(t76);
 
 	float3 GetDiffuseIBL(float3 rayDir)
 	{

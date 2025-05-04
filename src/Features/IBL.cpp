@@ -50,7 +50,7 @@ void IBL::EarlyPrepass()
 		// Set PS shader resource
 		{
 			ID3D11ShaderResourceView* srv = diffuseIBLTexture->srv.get();
-			context->PSSetShaderResources(100, 1, &srv);
+			context->PSSetShaderResources(76, 1, &srv);
 		}
 	}
 }
@@ -74,7 +74,7 @@ void IBL::Prepass()
 	// Unset PS shader resource
 	{
 		ID3D11ShaderResourceView* srv = nullptr;
-		context->PSSetShaderResources(100, 1, &srv);
+		context->PSSetShaderResources(76, 1, &srv);
 	}
 
 	// IBL
@@ -103,7 +103,7 @@ void IBL::Prepass()
 	// Set PS shader resource
 	{
 		ID3D11ShaderResourceView* srv = diffuseIBLTexture->srv.get();
-		context->PSSetShaderResources(100, 1, &srv);
+		context->PSSetShaderResources(76, 1, &srv);
 	}
 }
 
