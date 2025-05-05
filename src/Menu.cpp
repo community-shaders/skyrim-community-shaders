@@ -33,6 +33,18 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	CurrentHotkey)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	Menu::Settings::PerfOverlaySettings,
+	Enabled,
+	ShowDrawCalls,
+	ShowVRAM,
+	ShowFPS,
+	Size,
+	BackgroundOpacity,
+	ShowBorder,
+	Position,
+	PositionSet)
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ImGuiStyle,
 	WindowPadding,
 	WindowRounding,
@@ -82,7 +94,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ToggleKey,
 	SkipCompilationKey,
 	EffectToggleKey,
-	Theme)
+	Theme,
+	PerfOverlay)
 
 void Menu::SetupImGuiStyle() const
 {
@@ -211,9 +224,9 @@ void Menu::Init()
 	imgui_io.BackendFlags = ImGuiBackendFlags_HasMouseCursors | ImGuiBackendFlags_RendererHasVtxOffset;
 
 	ImFontConfig font_config;
-	font_config.GlyphExtraSpacing.x = -0.5;
+	font_config.GlyphExtraSpacing.x = -0.5f;
 
-	imgui_io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\Jost-Regular.ttf", 36, &font_config);
+	imgui_io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\Jost-Regular.ttf", 36.0f, &font_config);
 
 	DXGI_SWAP_CHAIN_DESC desc;
 	globals::d3d::swapChain->GetDesc(&desc);
@@ -252,7 +265,7 @@ void Menu::DrawSettings()
 		if (!ImGui::IsWindowDocked()) {
 			ImGui::SetWindowFontScale(1.5f);
 			ImGui::TextUnformatted(title.c_str());
-			ImGui::SetWindowFontScale(1.f);
+			ImGui::SetWindowFontScale(1.0f);
 
 			ImGui::Spacing();
 			ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 3.0f);
@@ -596,8 +609,8 @@ void Menu::DrawGeneralSettings()
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Skips a shader being replaced if it hasn't been compiled yet. Also makes compilation blazingly fast!");
-			}
-
+				}
+			
 			ImGui::EndTable();
 		}
 	}
@@ -656,7 +669,7 @@ void Menu::DrawGeneralSettings()
 
 		if (ImGui::BeginTabBar("##tabs", ImGuiTabBarFlags_None)) {
 			if (ImGui::BeginTabItem("Sizes")) {
-				if (ImGui::SliderFloat("Global Scale", &themeSettings.GlobalScale, -1.f, 1.f, "%.2f")) {
+				if (ImGui::SliderFloat("Global Scale", &themeSettings.GlobalScale, -1.0f, 1.0f, "%.2f")) {
 					float trueScale = exp2(themeSettings.GlobalScale);
 
 					auto& io = ImGui::GetIO();
@@ -973,39 +986,40 @@ void Menu::DrawDisableAtBootSettings()
 
 void Menu::DrawDisplaySettings()
 {
-	if (!globals::state->upscalerLoaded) {
-		auto& themeSettings = settings.Theme;
+    if (!globals::state->upscalerLoaded) {
+        auto& themeSettings = settings.Theme;
 
-		const std::vector<std::pair<std::string, std::function<void()>>> features = {
-			{ "Upscaling", []() { globals::upscaling->DrawSettings(); } }
-		};
+        const std::vector<std::pair<std::string, std::function<void()>>> features = {
+            { "Upscaling", []() { globals::upscaling->DrawSettings(); } },
+            { "Performance Overlay", [this]() { DrawPerformanceOverlaySettings(); } }
+        };
 
-		for (const auto& [featureName, drawFunc] : features) {
-			bool isDisabled = globals::state->IsFeatureDisabled(featureName);
+        for (const auto& [featureName, drawFunc] : features) {
+            bool isDisabled = globals::state->IsFeatureDisabled(featureName);
 
-			if (featureName == "Frame Generation" && REL::Module::IsVR()) {
-				isDisabled = true;
-			}
+            if (featureName == "Frame Generation" && REL::Module::IsVR()) {
+                isDisabled = true;
+            }
 
-			if (!isDisabled) {
-				if (ImGui::CollapsingHeader(featureName.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
-					drawFunc();
-				}
-			} else {
-				ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.Disable);
-				ImGui::CollapsingHeader(featureName.c_str(), ImGuiTreeNodeFlags_NoTreePushOnOpen);
-				ImGui::PopStyleColor();
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text(
-						"%s has been disabled at boot. "
-						"Reenable in the Advanced -> Disable at Boot Menu.",
-						featureName.c_str());
-				}
-			}
-		}
-	} else {
-		ImGui::Text("Display options disabled due to Skyrim Upscaler");
-	}
+            if (!isDisabled) {
+                if (ImGui::CollapsingHeader(featureName.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
+                    drawFunc();
+                }
+            } else {
+                ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.Disable);
+                ImGui::CollapsingHeader(featureName.c_str(), ImGuiTreeNodeFlags_NoTreePushOnOpen);
+                ImGui::PopStyleColor();
+                if (auto _tt = Util::HoverTooltipWrapper()) {
+                    ImGui::Text(
+                        "%s has been disabled at boot. "
+                        "Reenable in the Advanced -> Disable at Boot Menu.",
+                        featureName.c_str());
+                }
+            }
+        }
+    } else {
+        ImGui::Text("Display options disabled due to Skyrim Upscaler");
+    }
 }
 
 void Menu::DrawFooter()
@@ -1037,6 +1051,9 @@ void Menu::DrawOverlay()
 	auto shaderCache = globals::shaderCache;
 	auto failed = shaderCache->GetFailedTasks();
 	auto hide = shaderCache->IsHideErrors();
+
+	// Update ShowPerfOverlay based on settings
+	ShowPerfOverlay = settings.PerfOverlay.Enabled;
 
 	if (!(shaderCache->IsCompiling() || IsEnabled || inTestMode || (failed && !hide))) {
 		auto& io = ImGui::GetIO();
@@ -1105,15 +1122,15 @@ void Menu::DrawOverlay()
 	}
 
 	if (inTestMode) {  // In test mode
-		float seconds = (float)duration_cast<std::chrono::milliseconds>(high_resolution_clock::now() - lastTestSwitch).count() / 1000;
+		float seconds = (float)duration_cast<std::chrono::milliseconds>(high_resolution_clock::now() - lastTestSwitch).count() / 1000.0f;
 		auto remaining = (float)testInterval - seconds;
-		if (remaining < 0) {
+		if (remaining < 0.0f) {
 			usingTestConfig = !usingTestConfig;
 			logger::info("Swapping mode to {}", usingTestConfig ? "test" : "user");
 			globals::state->Load(usingTestConfig ? State::ConfigMode::TEST : State::ConfigMode::USER);
 			lastTestSwitch = high_resolution_clock::now();
 		}
-		ImGui::SetNextWindowBgAlpha(1);
+		ImGui::SetNextWindowBgAlpha(1.0f);
 		ImGui::SetNextWindowPos(ImVec2(10, 10));
 		if (!ImGui::Begin("Testing", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
 			ImGui::End();
@@ -1128,6 +1145,41 @@ void Menu::DrawOverlay()
 
 	ImGui::Render();
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+}
+
+void Menu::DrawPerfOverlay()
+{
+	ImGui::SetNextWindowPos(ImVec2(Util::GetNativeViewportSizeScaled(1.f).x, Util::GetNativeViewportSizeScaled(0.f).y + 20.f), ImGuiCond_Always, ImVec2(1.f, 0.f));
+	ImGui::SetNextWindowSize(Util::GetNativeViewportSizeScaled(0.2f), ImGuiCond_Appearing);
+	ImGui::Begin("PerformanceOverlay", NULL, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize);
+	{
+		ImGui::Text("Draw Calls:");
+		//ImGui::Text(std::format("None: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::None])).c_str());
+		ImGui::Text(std::format("Grass: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Grass])).c_str());
+		ImGui::Text(std::format("Sky: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Sky])).c_str());
+		ImGui::Text(std::format("Water: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Water])).c_str());
+		ImGui::Text(std::format("BloodSplatter: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::BloodSplatter])).c_str());
+		ImGui::Text(std::format("ImageSpace: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::ImageSpace])).c_str());
+		ImGui::Text(std::format("Lighting: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Lighting])).c_str());
+		ImGui::Text(std::format("Effect: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Effect])).c_str());
+		ImGui::Text(std::format("Utility: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Utility])).c_str());
+		ImGui::Text(std::format("DistantTree: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::DistantTree])).c_str());
+		ImGui::Text(std::format("Particle: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Particle])).c_str());
+		ImGui::Text(std::format("Total: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Total])).c_str());
+
+		if (dxgiAdapter3) {
+			DXGI_QUERY_VIDEO_MEMORY_INFO videoMemoryInfo;
+			dxgiAdapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &videoMemoryInfo);
+
+			float currentGpuUsage = videoMemoryInfo.CurrentUsage / (1024.f * 1024.f * 1024.f);
+			float totalGpuMemory = videoMemoryInfo.Budget / (1024.f * 1024.f * 1024.f);
+			float percent = currentGpuUsage / totalGpuMemory;
+
+			auto progressOverlay = std::format("GPU: {:.02f}GB/{:.02f}GB ({:2.1f}%) ", currentGpuUsage, totalGpuMemory, 100 * percent);
+			ImGui::ProgressBar(percent, ImVec2(200.f, ImGui::GetTextLineHeight()), progressOverlay.c_str());
+		}
+		ImGui::End();
+	}
 }
 
 const ImGuiKey Menu::VirtualKeyToImGuiKey(WPARAM vkKey)

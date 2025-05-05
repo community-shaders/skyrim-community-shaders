@@ -143,6 +143,22 @@ public:
 		uint32_t SkipCompilationKey = VK_ESCAPE;
 		uint32_t EffectToggleKey = VK_MULTIPLY;  // toggle all effects
 		ThemeSettings Theme;
+		
+		struct PerfOverlaySettings 
+		{
+			bool Enabled = false;
+			bool ShowDrawCalls = true;
+			bool ShowVRAM = true;
+			bool ShowFPS = true;
+			
+			enum class TextSize { Small, Medium, Large };
+			TextSize Size = TextSize::Medium;
+			
+			float BackgroundOpacity = 0.5f;
+			bool ShowBorder = true;
+			ImVec2 Position = ImVec2(10.f, 10.f);
+			bool PositionSet = false;
+		} PerfOverlay;
 	};
 
 private:
@@ -170,6 +186,7 @@ private:
 	void DrawDisplaySettings();
 	void DrawDisableAtBootSettings();
 	void DrawFooter();
+	void DrawPerformanceOverlaySettings();
 
 	class CharEvent : public RE::InputEvent
 	{
