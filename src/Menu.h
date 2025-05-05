@@ -159,6 +159,7 @@ public:
 			bool ShowBorder = true;
 			ImVec2 Position = ImVec2(10.f, 10.f);
 			bool PositionSet = false;
+			uint32_t ToggleKey = VK_F11;
 		} PerfOverlay;
 	};
 

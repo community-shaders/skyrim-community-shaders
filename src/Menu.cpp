@@ -42,7 +42,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	BackgroundOpacity,
 	ShowBorder,
 	Position,
-	PositionSet)
+	PositionSet,
+	ToggleKey)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ImGuiStyle,
@@ -1256,7 +1257,6 @@ void Menu::DrawPerfOverlay()
         ImGui::Unindent();
     }
     
-    // Show VRAM usage if enabled
     if (settings.PerfOverlay.ShowVRAM && dxgiAdapter3) {
         DXGI_QUERY_VIDEO_MEMORY_INFO videoMemoryInfo;
         dxgiAdapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &videoMemoryInfo);
@@ -1294,8 +1294,34 @@ void Menu::DrawPerformanceOverlaySettings()
         ImGui::Checkbox("Show Draw Calls", &settings.PerfOverlay.ShowDrawCalls);
         ImGui::Checkbox("Show VRAM Usage", &settings.PerfOverlay.ShowVRAM);
         ImGui::Unindent();
+ 		
+		// Hotkey settings
+        ImGui::Text("Hotkeys:");
+        ImGui::Indent();
         
-        // Appearance options
+        // Add hotkey configuration for toggling overlay
+        static bool settingOverlayToggleKey = false;
+        if (settingOverlayToggleKey) {
+            ImGui::Text("Press any key to set as Performance Overlay toggle key...");
+        } else {
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("Toggle Key:");
+            ImGui::SameLine();
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(settings.Theme.StatusPalette.CurrentHotkey, "%s", KeyIdToString(settings.PerfOverlay.ToggleKey));
+            
+            ImGui::AlignTextToFramePadding();
+            ImGui::SameLine();
+            if (ImGui::Button("Change##overlayToggle")) {
+                settingOverlayToggleKey = true;
+            }
+            if (auto _tt = Util::HoverTooltipWrapper()) {
+                ImGui::Text("Set a key to show/hide the performance overlay");
+            }
+        }
+        ImGui::Unindent();
+
+        // Appearance settings
         ImGui::Text("Appearance:");
         ImGui::Indent();
         
@@ -1658,7 +1684,9 @@ void Menu::ProcessInputEventQueue()
 				} else if (key == nextShaderKey && globals::state->IsDeveloperMode()) {
 					auto shaderCache = globals::shaderCache;
 					shaderCache->IterateShaderBlock(false);
-				}
+				} else if (key == settings.PerfOverlay.ToggleKey) {
+                    settings.PerfOverlay.Enabled = !settings.PerfOverlay.Enabled;
+                }
 				if (key == VK_ESCAPE && IsEnabled) {
 					IsEnabled = false;
 				}
