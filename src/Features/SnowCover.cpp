@@ -175,12 +175,15 @@ SnowCover::PerFrame SnowCover::GetCommonBufferData()
 		if (auto sky = RE::Sky::GetSingleton()) {
 			//data.Sky = static_cast<uint>(sky->mode.get());
 			if (auto currentWeather = sky->currentWeather) {
-				if (currentWeather->precipitationData && currentWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kSnow)) {
+				if (currentWeather->precipitationData) {
 					float particleDensity = currentWeather->precipitationData->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;
 					float particleGravity = currentWeather->precipitationData->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kGravityVelocity).f;
 					snowingDensity = particleDensity * particleGravity;
+				}
+				if (currentWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kSnow)) {
 					snowing = true;
-				} else if (currentWeather->precipitationData && currentWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy)) {
+				}
+				else if (currentWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy)) {
 					raining = true;
 				}
 			}
@@ -196,16 +199,18 @@ SnowCover::PerFrame SnowCover::GetCommonBufferData()
 			timeSnowing += diff * snowing_speed;
 		else {
 			if (raining) {
-				timeSnowing -= 4 * diff * melting_speed;
+				timeSnowing -= 8 * diff * melting_speed;
 			} else {
-				if (timeSnowing > 0) {
+				if (timeSnowing > diff * melting_speed) {
 					timeSnowing -= diff * melting_speed;
-				} else {
+				} else if (timeSnowing < -diff * melting_speed) {
 					timeSnowing += diff * melting_speed;
+				} else {
+					timeSnowing = 0;
 				}
 			}
 		}
-		timeSnowing = std::clamp(timeSnowing, -1.0f, 2.0f);
+		timeSnowing = std::clamp(timeSnowing, -2.0f, 2.0f);
 		lastHour = h;
 
 		auto time = calendar->GetTime();
