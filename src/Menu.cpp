@@ -179,6 +179,7 @@ void Menu::SetupImGuiStyle() const
 }
 
 bool IsEnabled = false;
+bool ShowPerfOverlay = false;
 
 Menu::~Menu()
 {
@@ -597,6 +598,11 @@ void Menu::DrawGeneralSettings()
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Skips a shader being replaced if it hasn't been compiled yet. Also makes compilation blazingly fast!");
 			}
+			ImGui::TableNextColumn();
+			ImGui::Checkbox("Perf Overlay", &ShowPerfOverlay);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Shows an overlay with performance statistics.");
+			}
 
 			ImGui::EndTable();
 		}
@@ -1014,20 +1020,7 @@ void Menu::DrawFooter()
 	ImGui::SameLine();
 	ImGui::BulletText(std::format("D3D12 Interop: {}", globals::upscaling->d3d12Interop ? "Active" : "Inactive").c_str());
 	ImGui::SameLine();
-	ImGui::BulletText(std::format("GPU: {}", globals::state->adapterDescription.c_str()).c_str());
-
-	if (dxgiAdapter3) {
-		ImGui::SameLine();
-		DXGI_QUERY_VIDEO_MEMORY_INFO videoMemoryInfo;
-		dxgiAdapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &videoMemoryInfo);
-
-		float currentGpuUsage = videoMemoryInfo.CurrentUsage / (1024.f * 1024.f * 1024.f);
-		float totalGpuMemory = videoMemoryInfo.Budget / (1024.f * 1024.f * 1024.f);
-		float percent = currentGpuUsage / totalGpuMemory;
-
-		auto progressOverlay = std::format("GPU Usage: {:.02f}GB/{:.02f}GB ({:2.1f}%) ", currentGpuUsage, totalGpuMemory, 100 * percent);
-		ImGui::ProgressBar(percent, ImVec2(500.f, ImGui::GetTextLineHeight()), progressOverlay.c_str());
-	}
+	ImGui::Text(std::format("GPU: {}", globals::state->adapterDescription.c_str()).c_str());
 }
 
 void Menu::DrawOverlay()
@@ -1038,7 +1031,7 @@ void Menu::DrawOverlay()
 	auto failed = shaderCache->GetFailedTasks();
 	auto hide = shaderCache->IsHideErrors();
 
-	if (!(shaderCache->IsCompiling() || IsEnabled || inTestMode || (failed && !hide))) {
+	if (!(shaderCache->IsCompiling() || IsEnabled || inTestMode || (failed && !hide) || ShowPerfOverlay)) {
 		auto& io = ImGui::GetIO();
 		io.ClearInputKeys();
 		io.ClearEventsQueue();
@@ -1104,6 +1097,9 @@ void Menu::DrawOverlay()
 		ImGui::GetIO().MouseDrawCursor = false;
 	}
 
+	if (ShowPerfOverlay)
+		DrawPerfOverlay();
+
 	if (inTestMode) {  // In test mode
 		float seconds = (float)duration_cast<std::chrono::milliseconds>(high_resolution_clock::now() - lastTestSwitch).count() / 1000;
 		auto remaining = (float)testInterval - seconds;
@@ -1128,6 +1124,41 @@ void Menu::DrawOverlay()
 
 	ImGui::Render();
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+}
+
+void Menu::DrawPerfOverlay()
+{
+	ImGui::SetNextWindowPos(ImVec2(Util::GetNativeViewportSizeScaled(1.f).x, Util::GetNativeViewportSizeScaled(0.f).y + 20.f), ImGuiCond_Always, ImVec2(1.f, 0.f));
+	ImGui::SetNextWindowSize(Util::GetNativeViewportSizeScaled(0.2f), ImGuiCond_Appearing);
+	ImGui::Begin("PerformanceOverlay", NULL, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize);
+	{
+		ImGui::Text("Draw Calls:");
+		//ImGui::Text(std::format("None: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::None])).c_str());
+		ImGui::Text(std::format("Grass: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Grass])).c_str());
+		ImGui::Text(std::format("Sky: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Sky])).c_str());
+		ImGui::Text(std::format("Water: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Water])).c_str());
+		ImGui::Text(std::format("BloodSplatter: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::BloodSplatter])).c_str());
+		ImGui::Text(std::format("ImageSpace: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::ImageSpace])).c_str());
+		ImGui::Text(std::format("Lighting: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Lighting])).c_str());
+		ImGui::Text(std::format("Effect: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Effect])).c_str());
+		ImGui::Text(std::format("Utility: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Utility])).c_str());
+		ImGui::Text(std::format("DistantTree: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::DistantTree])).c_str());
+		ImGui::Text(std::format("Particle: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Particle])).c_str());
+		ImGui::Text(std::format("Total: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Total])).c_str());
+
+		if (dxgiAdapter3) {
+			DXGI_QUERY_VIDEO_MEMORY_INFO videoMemoryInfo;
+			dxgiAdapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &videoMemoryInfo);
+
+			float currentGpuUsage = videoMemoryInfo.CurrentUsage / (1024.f * 1024.f * 1024.f);
+			float totalGpuMemory = videoMemoryInfo.Budget / (1024.f * 1024.f * 1024.f);
+			float percent = currentGpuUsage / totalGpuMemory;
+
+			auto progressOverlay = std::format("GPU: {:.02f}GB/{:.02f}GB ({:2.1f}%) ", currentGpuUsage, totalGpuMemory, 100 * percent);
+			ImGui::ProgressBar(percent, ImVec2(200.f, ImGui::GetTextLineHeight()), progressOverlay.c_str());
+		}
+		ImGui::End();
+	}
 }
 
 const ImGuiKey Menu::VirtualKeyToImGuiKey(WPARAM vkKey)
