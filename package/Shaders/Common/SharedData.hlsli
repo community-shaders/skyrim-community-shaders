@@ -145,12 +145,6 @@ namespace SharedData
 		bool DisableTerrainVertexColors;
 	};
 
-	struct TerrainVariationSettings
-	{
-		bool EnableTilingFix;
-		float3 pad0;
-	};
-
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -162,7 +156,6 @@ namespace SharedData
 		SkylightingSettings skylightingSettings;
 		CloudShadowsSettings cloudShadowsSettings;
 		LODBlendingSettings lodBlendingSettings;
-		TerrainVariationSettings terrainVariationSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);
