@@ -42,7 +42,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	BackgroundOpacity,
 	ShowBorder,
 	Position,
-	PositionSet)
+	PositionSet,
+	ToggleKey)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ImGuiStyle,
@@ -1145,37 +1146,192 @@ void Menu::DrawOverlay()
 
 void Menu::DrawPerfOverlay()
 {
-	ImGui::SetNextWindowPos(ImVec2(Util::GetNativeViewportSizeScaled(1.f).x, Util::GetNativeViewportSizeScaled(0.f).y + 20.f), ImGuiCond_Always, ImVec2(1.f, 0.f));
-	ImGui::SetNextWindowSize(Util::GetNativeViewportSizeScaled(0.2f), ImGuiCond_Appearing);
-	ImGui::Begin("PerformanceOverlay", NULL, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize);
-	{
-		ImGui::Text("Draw Calls:");
-		//ImGui::Text(std::format("None: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::None])).c_str());
-		ImGui::Text(std::format("Grass: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Grass])).c_str());
-		ImGui::Text(std::format("Sky: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Sky])).c_str());
-		ImGui::Text(std::format("Water: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Water])).c_str());
-		ImGui::Text(std::format("BloodSplatter: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::BloodSplatter])).c_str());
-		ImGui::Text(std::format("ImageSpace: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::ImageSpace])).c_str());
-		ImGui::Text(std::format("Lighting: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Lighting])).c_str());
-		ImGui::Text(std::format("Effect: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Effect])).c_str());
-		ImGui::Text(std::format("Utility: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Utility])).c_str());
-		ImGui::Text(std::format("DistantTree: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::DistantTree])).c_str());
-		ImGui::Text(std::format("Particle: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Particle])).c_str());
-		ImGui::Text(std::format("Total: {}", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Total])).c_str());
-
-		if (dxgiAdapter3) {
-			DXGI_QUERY_VIDEO_MEMORY_INFO videoMemoryInfo;
-			dxgiAdapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &videoMemoryInfo);
+    if (!settings.PerfOverlay.Enabled) {
+        return;
+    }
+    
+    // Set window flags - no decoration and only movable when ShowBorder is true
+    ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize;
+    
+    if (!settings.PerfOverlay.ShowBorder) {
+        windowFlags |= ImGuiWindowFlags_NoBackground;
+    } else {
+        windowFlags &= ~ImGuiWindowFlags_NoDecoration;
+        windowFlags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize;
+    }
+    
+    // Set background opacity
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, 
+        ImVec4(ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).x, 
+               ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).y, 
+               ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).z, 
+               settings.PerfOverlay.BackgroundOpacity));
+    
+    // Set text size based on user preference
+    float textScale = 1.0f;
+    switch (settings.PerfOverlay.Size) {
+    case Settings::PerfOverlaySettings::TextSize::Small:
+        textScale = 0.8f;
+        break;
+    case Settings::PerfOverlaySettings::TextSize::Medium:
+        textScale = 1.0f;
+        break;
+    case Settings::PerfOverlaySettings::TextSize::Large:
+        textScale = 1.2f;
+        break;
+    }
+    
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, settings.PerfOverlay.ShowBorder ? 1.0f : 0.0f);
+    
+    // Set initial position if not already set
+    if (!settings.PerfOverlay.PositionSet) {
+        ImGui::SetNextWindowPos(ImVec2(10.0f, 10.0f));
+        settings.PerfOverlay.Position = ImVec2(10.0f, 10.0f);
+        settings.PerfOverlay.PositionSet = true;
+    } else {
+        ImGui::SetNextWindowPos(settings.PerfOverlay.Position, ImGuiCond_FirstUseEver);
+    }
+    
+    // Create the window
+    ImGui::Begin("Performance Overlay", NULL, windowFlags);
+    
+    // Remember window position for next frame
+    if (ImGui::IsWindowAppearing()) {
+        ImGui::SetWindowPos(settings.PerfOverlay.Position);
+    }
+    
+    // Track if window has been moved
+    ImVec2 currentPos = ImGui::GetWindowPos();
+    if (currentPos.x != settings.PerfOverlay.Position.x || currentPos.y != settings.PerfOverlay.Position.y) {
+        settings.PerfOverlay.Position = currentPos;
+    }
+    
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 1.0f)); // Tighter spacing
+    ImGui::SetWindowFontScale(textScale);
+    
+    // FPS calculation
+    static float fpsValues[120] = { 0 };
+    static int fpsIndex = 0;
+    static float fpsTime = 0.0f;
+    static float averageFps = 0.0f;
+    
+    // Calculate FPS
+    static float lastFrameTime = static_cast<float>(ImGui::GetTime());
+    float currentTime = static_cast<float>(ImGui::GetTime());
+    float deltaTime = currentTime - lastFrameTime;
+    lastFrameTime = currentTime;
+    
+    // Update FPS values
+    fpsTime += deltaTime;
+    if (fpsTime >= 0.25f) { // Update every 250ms
+        float fps = 1.0f / deltaTime;
+        fpsValues[fpsIndex] = fps;
+        fpsIndex = (fpsIndex + 1) % IM_ARRAYSIZE(fpsValues);
+        
+        // Calculate average FPS
+        averageFps = 0.0f;
+        int count = 0;
+        for (int i = 0; i < IM_ARRAYSIZE(fpsValues); i++) {
+            if (fpsValues[i] > 0.0f) {
+                averageFps += fpsValues[i];
+                count++;
+            }
+        }
+        averageFps /= (float)count;
+        fpsTime = 0.0f;
+    }
+    
+    // Show FPS counter if enabled
+    if (settings.PerfOverlay.ShowFPS) {
+        ImGui::Text("FPS: %.1f", averageFps);
+    }
+    
+    // Show Draw Calls if enabled
+    if (settings.PerfOverlay.ShowDrawCalls) {
+        ImGui::Text("Draw Calls:");
+        ImGui::Indent();
+        ImGui::Text("Grass: %d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Grass]));
+        ImGui::Text("Sky: %d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Sky]));
+        ImGui::Text("Water: %d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Water]));
+        ImGui::Text("Lighting: %d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Lighting]));
+        ImGui::Text("Effect: %d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Effect]));
+        ImGui::Text("Utility: %d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Utility]));
+        ImGui::Text("DistantTree: %d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::DistantTree]));
+        ImGui::Text("Particle: %d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Particle]));
+        ImGui::Text("Total: %d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Total]));
+        ImGui::Unindent();
+    }
+    
+    if (settings.PerfOverlay.ShowVRAM && dxgiAdapter3) {
+        DXGI_QUERY_VIDEO_MEMORY_INFO videoMemoryInfo;
+        dxgiAdapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &videoMemoryInfo);
 
 			float currentGpuUsage = videoMemoryInfo.CurrentUsage / (1024.f * 1024.f * 1024.f);
 			float totalGpuMemory = videoMemoryInfo.Budget / (1024.f * 1024.f * 1024.f);
 			float percent = currentGpuUsage / totalGpuMemory;
 
-			auto progressOverlay = std::format("GPU: {:.02f}GB/{:.02f}GB ({:2.1f}%) ", currentGpuUsage, totalGpuMemory, 100 * percent);
-			ImGui::ProgressBar(percent, ImVec2(200.f, ImGui::GetTextLineHeight()), progressOverlay.c_str());
-		}
-		ImGui::End();
-	}
+        ImGui::Text("VRAM Usage:");
+        // Use a fixed-width progress bar to avoid text cutoff issues
+        ImGui::ProgressBar(percent, ImVec2(ImGui::GetWindowWidth() * 0.9f, 0.0f), 
+            std::format("{:.2f}GB/{:.2f}GB ({:.1f}%%)", 
+            currentGpuUsage, totalGpuMemory, 100 * percent).c_str());
+    }
+    
+    ImGui::PopStyleVar(); // ItemSpacing
+    ImGui::SetWindowFontScale(1.0f); // Reset font scale
+    
+    ImGui::End();
+    ImGui::PopStyleVar(); // WindowBorderSize
+    ImGui::PopStyleColor(); // WindowBg
+}
+
+void Menu::DrawPerformanceOverlaySettings()
+{
+    ImGui::Checkbox("Enable Performance Overlay", &settings.PerfOverlay.Enabled);
+    
+    if (settings.PerfOverlay.Enabled) {
+        ImGui::Indent();
+        
+        // Display options
+        ImGui::Text("Display Options:");
+        ImGui::Indent();
+        ImGui::Checkbox("Show FPS Counter", &settings.PerfOverlay.ShowFPS);
+        ImGui::Checkbox("Show Draw Calls", &settings.PerfOverlay.ShowDrawCalls);
+        ImGui::Checkbox("Show VRAM Usage", &settings.PerfOverlay.ShowVRAM);
+        ImGui::Unindent();
+        
+        // Appearance options
+        ImGui::Text("Appearance:");
+        ImGui::Indent();
+        
+        // Text size options
+        const char* sizes[] = { "Small", "Medium", "Large" };
+        int currentSize = static_cast<int>(settings.PerfOverlay.Size);
+        if (ImGui::Combo("Text Size", &currentSize, sizes, IM_ARRAYSIZE(sizes))) {
+            settings.PerfOverlay.Size = static_cast<Settings::PerfOverlaySettings::TextSize>(currentSize);
+        }
+        
+        // Background opacity slider
+        ImGui::SliderFloat("Background Opacity", &settings.PerfOverlay.BackgroundOpacity, 0.0f, 1.0f, "%.2f");
+        
+        // Border toggle
+        ImGui::Checkbox("Show Border", &settings.PerfOverlay.ShowBorder);
+        ImGui::Unindent();
+        
+        // Position options
+        ImGui::Text("Position:");
+        ImGui::Indent();
+        // Reset position button
+        if (ImGui::Button("Reset Position")) {
+            settings.PerfOverlay.PositionSet = false;
+        }
+        if (auto _tt = Util::HoverTooltipWrapper()) {
+            ImGui::Text("Reset the position of the performance overlay to default");
+        }
+        ImGui::Unindent();
+        
+        ImGui::Unindent();
+    }
 }
 
 const ImGuiKey Menu::VirtualKeyToImGuiKey(WPARAM vkKey)
@@ -1507,7 +1663,9 @@ void Menu::ProcessInputEventQueue()
 				} else if (key == nextShaderKey && globals::state->IsDeveloperMode()) {
 					auto shaderCache = globals::shaderCache;
 					shaderCache->IterateShaderBlock(false);
-				}
+				} else if (key == settings.PerfOverlay.ToggleKey) {
+                    settings.PerfOverlay.Enabled = !settings.PerfOverlay.Enabled;
+                }
 				if (key == VK_ESCAPE && IsEnabled) {
 					IsEnabled = false;
 				}
