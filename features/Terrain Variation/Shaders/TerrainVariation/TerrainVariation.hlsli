@@ -1,4 +1,3 @@
-// TerrainVariation.hlsli
 // Implements stochastic noise sampling for terrain textures to reduce tiling artifacts and improve visual quality.
 // Based on paper "Procedural Stochastic Textures by Tiling and Blending" by Thomas Deliot & Eric Heitz.
 // https://eheitzresearch.wordpress.com/722-2/
@@ -60,10 +59,9 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 UV)
 	return offsets;
 }
 
-// Main stochastic sampling function - combined implementation that replaces all previous variations
+// Main stochastic sampling function
 inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy, float distance = 0.0)
 {
-	// Check if terrain variation is enabled in settings
 	bool useStochasticSampling = false;
 
 #if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
