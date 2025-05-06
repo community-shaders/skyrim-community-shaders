@@ -43,10 +43,10 @@ namespace Color
 
 	float3 Saturation(float3 color, float saturation)
 	{
-		float grey = RGBToLuminanceAlternative(color);
-		color.x = std::max(std::lerp(grey, color.x, saturation), 0.0f);
-		color.y = std::max(std::lerp(grey, color.y, saturation), 0.0f);
-		color.z = std::max(std::lerp(grey, color.z, saturation), 0.0f);
+		float grey = RGBToLuminance(color);
+		color.x = max(lerp(grey, color.x, saturation), 0.0f);
+		color.y = max(lerp(grey, color.y, saturation), 0.0f);
+		color.z = max(lerp(grey, color.z, saturation), 0.0f);
 		return color;
 	}
 
