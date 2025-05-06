@@ -760,3 +760,22 @@ double Upscaling::GetRefreshRate(HWND a_window)
 	logger::error("Failed to retrieve refresh rate from swap chain");
 	return 60;
 }
+
+bool Upscaling::IsFrameGenerationActive() const
+{
+    return d3d12Interop && settings.frameGenerationMode;
+}
+
+float Upscaling::GetFrameGenerationFrameTime() const
+{
+    if (!IsFrameGenerationActive())
+        return 0.0f;
+    
+    // Get the current frame time from D3D12 swapchain
+    if (globals::dx12SwapChain && globals::dx12SwapChain->swapChain) {
+        // Get frame time from the D3D12 SwapChain
+        return globals::dx12SwapChain->GetFrameTime();
+    }
+    
+    return 0.0f;
+}

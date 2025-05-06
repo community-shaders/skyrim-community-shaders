@@ -93,6 +93,9 @@ public:
 	double refreshRate = 0;
 
 	DXGISwapChainProxy* swapChainProxy = nullptr;
+	
+	// Returns the current frame time (in seconds) for accurate FPS calculation when frame generation is active
+	float GetFrameTime() const;
 
 	void CreateD3D12Device(IDXGIAdapter* a_adapter);
 	void CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC swapChainDesc);

@@ -47,6 +47,10 @@ public:
 	bool d3d12Interop = false;
 	double refreshRate = 0.0f;
 
+	// FG FPS Measurement for Overlay
+	bool IsFrameGenerationActive() const;
+	float GetFrameGenerationFrameTime() const;
+
 	void DrawSettings();
 	void SaveSettings(json& o_json);
 	void LoadSettings(json& o_json);
