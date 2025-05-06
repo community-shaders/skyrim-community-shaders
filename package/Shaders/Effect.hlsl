@@ -541,10 +541,10 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 		float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
 
 #		if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
-		ambientColor *= SharedData::iblSettings.DALCAmount;
-		ambientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-	}
+		if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+			ambientColor *= SharedData::iblSettings.DALCAmount;
+			ambientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+		}
 #		endif
 
 		color = ambientColor;
