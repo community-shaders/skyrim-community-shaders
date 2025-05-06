@@ -190,8 +190,7 @@ SnowCover::PerFrame SnowCover::GetCommonBufferData()
 				}
 				if (currentWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kSnow)) {
 					snowing = true;
-				}
-				else if (currentWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy)) {
+				} else if (currentWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy)) {
 					raining = true;
 				}
 			}
