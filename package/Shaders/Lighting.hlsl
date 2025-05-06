@@ -2356,7 +2356,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
 		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-		directionalAmbientColor += ImageBasedLighting::GetDiffuseIBL(-worldSpaceNormal) * SharedData::iblSettings.DiffuseIBLScale;
+		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(-worldSpaceNormal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 	}
 #	endif
 

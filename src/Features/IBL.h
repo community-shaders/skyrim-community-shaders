@@ -30,12 +30,14 @@ public:
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
 
-	struct Settings
+	struct alignas(16) Settings
 	{
 		uint EnableDiffuseIBL = 1;
 		float DiffuseIBLScale = 1.0f;
 		float DALCAmount = 0.1f;
+		float IBLSaturation = 1.0f;
 		uint SampleUnderHorizonFromDynCube = 0;
+		uint pad[3];
 	} settings;
 
 	ID3D11ComputeShader* GetDiffuseIBLCS();
