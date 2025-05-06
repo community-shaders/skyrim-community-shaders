@@ -1426,6 +1426,7 @@ void Menu::DrawPerfOverlay()
                 
                 ImGui::TableNextColumn();
                 ImGui::Text("60 FPS: 16.7 ms");
+                
                 ImGui::TableNextColumn();
                 ImGui::Text("120 FPS: 8.3 ms");
                 
