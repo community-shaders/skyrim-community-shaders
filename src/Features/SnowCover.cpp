@@ -130,9 +130,17 @@ void SnowCover::DrawSettings()
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Tint for the main texture. Alpha only affects the color but not roughness etc.");
 			}
+			ImGui::InputFloat("Main Specular", &wsettings.MainSpec, 0.0f, 1.0f);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("The main specular multiplier. Most materials = 0.04, snow = 0.02");
+			}
 			ImGui::ColorEdit4("Alt Tint", &wsettings.AltTint.x);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Tint for the alternative texture. Alpha only affects the color but not roughness etc.");
+			}
+			ImGui::InputFloat("Alt Specular", &wsettings.AltSpec, 0.0f, 1.0f);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("The alternative specular multiplier. Most materials = 0.04, snow = 0.02");
 			}
 			ImGui::SliderFloat("Peak Main Angle", &wsettings.PeakMainAngle, 0.0f, 1.0f);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -295,6 +303,8 @@ void SnowCover::SaveConfig()
 		{ "PeakAltAngle", wsettings.PeakAltAngle },
 		{ "MinAngle", wsettings.MinAngle },
 		{ "MaxAngle", wsettings.MaxAngle },
+		{ "MainSpec", wsettings.MainSpec },
+		{ "AltSpec", wsettings.AltSpec },
 	};
 
 	if (alt_tex.length() != 0)
@@ -350,6 +360,8 @@ void SnowCover::Reload()
 		wsettings.PeakAltAngle = config["PeakAltAngle"];
 		wsettings.MinAngle = config["MinAngle"];
 		wsettings.MaxAngle = config["MaxAngle"];
+		wsettings.MainSpec = config["MainSpec"];
+		wsettings.AltSpec = config["AltSpec"];
 
 		main_tex = config["MainTexture"];
 		std::wstring tname = strtowstr(main_tex);

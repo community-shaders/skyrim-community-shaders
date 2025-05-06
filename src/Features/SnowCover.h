@@ -45,7 +45,9 @@ public:
 		float MinAngle = 0.0f;
 
 		float MaxAngle = 1.0f;
-		uint pad[3];
+		float MainSpec = 0.02f;
+		float AltSpec = 0.02f;
+		uint pad[1];
 
 		//glint
 		float ScreenSpaceScale = 1.2f;

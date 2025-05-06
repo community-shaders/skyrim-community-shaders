@@ -31,6 +31,12 @@
 #	undef SNOW_COVER
 #endif
 
+#	if defined(SNOW_COVER)
+#		if defined(TRUE_PBR)
+			#define GLINT
+#		endif
+#	endif
+
 struct VS_INPUT
 {
 	float4 Position : POSITION0;
@@ -1864,7 +1870,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 pos = (input.WorldPosition + FrameBuffer::CameraPosAdjust[eyeIndex]).xyz;
 
 	float snowFactor = 0;
-	if (SharedData::snowCoverSettings.EnableSnowCover && !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsMobile) && !(Permutation::VertexShaderDescriptor & Permutation::LightingFlags::Skinned)) {
+	if (SharedData::snowCoverSettings.EnableSnowCover 
+#		if !defined(TREE_ANIM)
+	&& !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsMobile) && !(Permutation::VertexShaderDescriptor & Permutation::LightingFlags::Skinned)
+#		endif
+	) {
 #		if defined(TRUE_PBR)
 #			if defined(LANDSCAPE)
 		float disp = 0.1 * sh0 * max(displacementParams[0].HeightScale * input.LandBlendWeights1.x, max(displacementParams[1].HeightScale * input.LandBlendWeights1.y, max(displacementParams[2].HeightScale * input.LandBlendWeights1.z, max(displacementParams[3].HeightScale * input.LandBlendWeights1.w, max(displacementParams[4].HeightScale * input.LandBlendWeights2.x, displacementParams[5].HeightScale * input.LandBlendWeights2.y)))));
@@ -1876,7 +1886,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		else
 		float disp = 0.1 * (sh0 - 0.5);
 #		endif
-		float3 snowNormal = worldSpaceNormal;
+		float3 snowNormal = normalize(worldSpaceNormal);
 		float3 snowedColor = baseColor.rgb;
 #		if defined(TREE_ANIM)
 		if (SharedData::snowCoverSettings.AffectFoliageColor)
@@ -1894,11 +1904,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		worldSpaceNormal = normalize(lerp(worldSpaceNormal, SnowCover::MyReorientNormal(worldSpaceNormal, snowNormal), snowFactor));
 #		endif
 #		if defined(LODLANDNOISE)
-		snowedColor *= lodLandNoiseMultiplier;
+		snowedColor *= snowFactor + (1-snowFactor)*lodLandNoiseMultiplier;
 #		endif
 		baseColor.rgb = snowedColor;
-#		if defined(LOD_LAND_BLEND)
-		lodLandColor.rgb = lerp(lodLandColor, snowedColor, snowFactor);
+#		if defined(LOD_LAND_BLEND) && defined(TRUE_PBR)
+		lodLandFadeFactor = snowFactor + (1-snowFactor)*lodLandFadeFactor;
+		lodLandColor.rgb = lerp(lodLandColor, snowedColor*Color::PBRLightingScale, snowFactor);
 #		endif
 	}
 

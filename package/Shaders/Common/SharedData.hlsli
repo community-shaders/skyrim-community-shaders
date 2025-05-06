@@ -166,7 +166,9 @@ namespace SharedData
 		float minAngle;
 
 		float maxAngle;
-		uint3 pad1;
+		float mainSpec;
+		float altSpec;
+		uint pad1;
 
 		float4 Glint;
 		float4 MainTint;
