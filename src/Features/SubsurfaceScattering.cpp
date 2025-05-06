@@ -11,6 +11,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(SubsurfaceScattering::DiffusionP
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SubsurfaceScattering::Settings,
 	EnableCharacterLighting,
+	CharacterLightingStrength,
 	BaseProfile,
 	HumanProfile)
 
@@ -20,6 +21,9 @@ void SubsurfaceScattering::DrawSettings()
 		ImGui::Checkbox("Enable Character Lighting", (bool*)&settings.EnableCharacterLighting);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Vanilla feature, not recommended.");
+		}
+		if (settings.EnableCharacterLighting) {
+			ImGui::SliderFloat("Strength", &settings.CharacterLightingStrength, 0, 5, "%.2f");
 		}
 
 		if (ImGui::TreeNodeEx("Base Profile", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -279,6 +283,12 @@ void SubsurfaceScattering::Reset()
 	auto shaderManager = globals::game::smState;
 	auto shaderCache = globals::shaderCache;
 	shaderManager->characterLightEnabled = shaderCache->IsEnabled() ? settings.EnableCharacterLighting : true;
+	if (shaderManager->characterLightEnabled) {
+		if (CharacterLightingStrengthOriginal == -1.0f) {
+			CharacterLightingStrengthOriginal = shaderManager->characterLightParams[2];
+		}
+		shaderManager->characterLightParams[2] = settings.CharacterLightingStrength * CharacterLightingStrengthOriginal;
+	}
 
 	if (updateKernels) {
 		updateKernels = false;
