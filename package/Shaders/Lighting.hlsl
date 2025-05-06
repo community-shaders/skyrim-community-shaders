@@ -31,11 +31,11 @@
 #	undef SNOW_COVER
 #endif
 
-#	if defined(SNOW_COVER)
-#		if defined(TRUE_PBR)
-			#define GLINT
-#		endif
+#if defined(SNOW_COVER)
+#	if defined(TRUE_PBR)
+#		define GLINT
 #	endif
+#endif
 
 struct VS_INPUT
 {
@@ -1870,9 +1870,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 pos = (input.WorldPosition + FrameBuffer::CameraPosAdjust[eyeIndex]).xyz;
 
 	float snowFactor = 0;
-	if (SharedData::snowCoverSettings.EnableSnowCover 
+	if (SharedData::snowCoverSettings.EnableSnowCover
 #		if !defined(TREE_ANIM)
-	&& !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsMobile) && !(Permutation::VertexShaderDescriptor & Permutation::LightingFlags::Skinned)
+		&& !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsMobile) && !(Permutation::VertexShaderDescriptor & Permutation::LightingFlags::Skinned)
 #		endif
 	) {
 #		if defined(TRUE_PBR)
@@ -1904,12 +1904,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		worldSpaceNormal = normalize(lerp(worldSpaceNormal, SnowCover::MyReorientNormal(worldSpaceNormal, snowNormal), snowFactor));
 #		endif
 #		if defined(LODLANDNOISE)
-		snowedColor *= snowFactor + (1-snowFactor)*lodLandNoiseMultiplier;
+		snowedColor *= snowFactor + (1 - snowFactor) * lodLandNoiseMultiplier;
 #		endif
 		baseColor.rgb = snowedColor;
 #		if defined(LOD_LAND_BLEND) && defined(TRUE_PBR)
-		lodLandFadeFactor = snowFactor + (1-snowFactor)*lodLandFadeFactor;
-		lodLandColor.rgb = lerp(lodLandColor, snowedColor*Color::PBRLightingScale, snowFactor);
+		lodLandFadeFactor = snowFactor + (1 - snowFactor) * lodLandFadeFactor;
+		lodLandColor.rgb = lerp(lodLandColor, snowedColor * Color::PBRLightingScale, snowFactor);
 #		endif
 	}
 

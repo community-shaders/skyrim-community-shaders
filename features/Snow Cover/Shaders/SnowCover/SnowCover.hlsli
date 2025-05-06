@@ -121,7 +121,7 @@ namespace SnowCover
 		waterDist = smoothstep(-64, 8, -waterDist - disp);
 		float distMult = 1 - smoothstep(10000, 30000 + 1000 * sin(p.z * 0.001 + cos(p.x * p.y * 0.001)), viewDist);
 		float weatherMult = distMult * SharedData::snowCoverSettings.TimeSnowing * max(500, SharedData::snowCoverSettings.SnowingDensity) / 500;
-		weatherMult = clamp(-1, 1, (weatherMult+disp*0.1)*max(SharedData::snowCoverSettings.minAngle, worldNormal.z));
+		weatherMult = clamp(-1, 1, (weatherMult + disp * 0.1) * max(SharedData::snowCoverSettings.minAngle, worldNormal.z));
 		float env_mult = saturate(max(max(0, pow(saturate(GetEnvironmentalMultiplier(p) + disp), 0.25)), weatherMult) - waterDist);
 		float main_mult = (1 - abs(worldNormal.z - SharedData::snowCoverSettings.peakMainAngle));
 		float alt_mult = (1 - abs(worldNormal.z - SharedData::snowCoverSettings.peakAltAngle)) + sin(p.z * 0.01 + cos(p.x * p.y * 0.01) * 0.025) * 0.05;

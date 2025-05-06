@@ -538,15 +538,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float snowOcclusion = 1;
 #			endif
 #			if defined(SNOW_COVER)
-	if (SharedData::snowCoverSettings.EnableSnowCover){
+	if (SharedData::snowCoverSettings.EnableSnowCover) {
 		snowOcclusion *= saturate(input.WorldPosition.z - SharedData::GetWaterData(input.WorldPosition.xyz).w);
-#		if !defined(TRUE_PBR)
+#				if !defined(TRUE_PBR)
 		if (complex) {
-			snowOcclusion *= 1 - TexBaseSampler.SampleBias(SampBaseSampler, float2(input.TexCoord.x, input.TexCoord.y * 0.5 - 1./512.), SharedData::MipBias).a;
+			snowOcclusion *= 1 - TexBaseSampler.SampleBias(SampBaseSampler, float2(input.TexCoord.x, input.TexCoord.y * 0.5 - 1. / 512.), SharedData::MipBias).a;
 		} else
-#		endif  // !TRUE_PBR
+#				endif  // !TRUE_PBR
 		{
-			snowOcclusion *= 1 - TexBaseSampler.SampleBias(SampBaseSampler, input.TexCoord.xy - float2(0, 1./256.), SharedData::MipBias).a;
+			snowOcclusion *= 1 - TexBaseSampler.SampleBias(SampBaseSampler, input.TexCoord.xy - float2(0, 1. / 256.), SharedData::MipBias).a;
 		}
 		SnowCover::ApplySnowFoliage(baseColor.xyz, float3(normal.xy, normal.z * 0.5 + 0.5), input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz, snowOcclusion, viewPosition.z);
 	}
