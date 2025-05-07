@@ -80,7 +80,6 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	                          sample3 * offsets.weights.z;
 
 	return stochasticSample;
-
 }
 #define StochasticSample(rnd, tex, samp, uv, dist) StochasticEffect(rnd, tex, samp, uv, ComputeStochasticOffsets(uv), ddx(uv), ddy(uv), dist).rgb
 
