@@ -79,7 +79,8 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	                          sample2 * offsets.weights.y +
 	                          sample3 * offsets.weights.z;
 
-	return stochasticSample;
+	float4 standardSample = tex.SampleLevel(samp, uv, mipLevel);
+	return lerp(standardSample, stochasticSample, distanceFactor);
 }
 #define StochasticSample(rnd, tex, samp, uv, dist) StochasticEffect(rnd, tex, samp, uv, ComputeStochasticOffsets(uv), ddx(uv), ddy(uv), dist).rgb
 
