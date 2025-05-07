@@ -1266,12 +1266,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float invwsum = totalWeight > 0.0 ? rcp(totalWeight) : 1.0;
 
 	// Compute stochastic offsets and derivatives once for all layers
-#if defined(TERRAIN_VARIATION)
-    float2 dx = ddx(uv);
-    float2 dy = ddy(uv);
-    StochasticOffsets sharedOffset = ComputeStochasticOffsets(uv);
-    float viewDistance = length(viewPosition);
-#endif
+#		if defined(TERRAIN_VARIATION)
+	float2 dx = ddx(uv);
+	float2 dy = ddy(uv);
+	StochasticOffsets sharedOffset = ComputeStochasticOffsets(uv);
+	float viewDistance = length(viewPosition);
+#		endif
 
 #		if defined(EMAT)
 	if (SharedData::extendedMaterialSettings.EnableTerrainParallax) {
