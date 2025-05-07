@@ -60,55 +60,28 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 UV)
 }
 
 // Main stochastic sampling function
-inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy, float distance = 0.0)
+inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy, float distance = 0.0)
 {
-	bool useStochasticSampling = false;
-
-#if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
-	useStochasticSampling = SharedData::terrainVariationSettings.enableTilingFix;
-#endif
-
 	// If feature is disabled, return standard sample
-	if (!useStochasticSampling) {
-#if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
-		return tex.SampleBias(samp, uv, SharedData::MipBias);
-#else
-		return tex.Sample(samp, uv);
-#endif
-	}
+	if (!SharedData::terrainVariationSettings.enableTilingFix)
+		return tex.SampleLevel(samp, uv, mipLevel);
 
 	// Calculate distance factor (0 when close, 1 when far)
 	float distanceFactor = ComputeDistanceFactor(distance);
 
-	// If too close, use standard sampling
-	if (distanceFactor < 0.001f) {
-#if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
-		return tex.SampleBias(samp, uv, SharedData::MipBias);
-#else
-		return tex.Sample(samp, uv);
-#endif
-	}
-
 	// Get stochastic samples
-	float4 sample1 = tex.SampleGrad(samp, uv + offsets.offset1, dx, dy);
-	float4 sample2 = tex.SampleGrad(samp, uv + offsets.offset2, dx, dy);
-	float4 sample3 = tex.SampleGrad(samp, uv + offsets.offset3, dx, dy);
+	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
+	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
 
 	// Weight samples according to offsets
 	float4 stochasticSample = sample1 * offsets.weights.x +
 	                          sample2 * offsets.weights.y +
 	                          sample3 * offsets.weights.z;
 
-// Get standard sample for blending
-#if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
-	float4 standardSample = tex.SampleBias(samp, uv, SharedData::MipBias);
-#else
-	float4 standardSample = tex.Sample(samp, uv);
-#endif
+	return stochasticSample;
 
-	// Blend between standard and stochastic based on distance
-	return lerp(standardSample, stochasticSample, distanceFactor);
 }
-#define StochasticSample(tex, samp, uv, dist) StochasticEffect(tex, samp, uv, ComputeStochasticOffsets(uv), ddx(uv), ddy(uv), dist).rgb
+#define StochasticSample(rnd, tex, samp, uv, dist) StochasticEffect(rnd, tex, samp, uv, ComputeStochasticOffsets(uv), ddx(uv), ddy(uv), dist).rgb
 
 #endif  // TERRAIN_VARIATION_HLSLI
