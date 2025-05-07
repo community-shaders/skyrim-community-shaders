@@ -1348,7 +1348,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(LANDSCAPE)
 	// Layer 1 (LandBlendWeights1.x)
-	if (input.LandBlendWeights1.x > 0.0) {
+	if (input.LandBlendWeights1.x > 0.01) {
 		float weight = input.LandBlendWeights1.x * invwsum;
 #		if defined(TERRAIN_VARIATION)
 		float viewDistance = length(viewPosition);
@@ -1399,7 +1399,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	}
 
 	// Layer 2 (LandBlendWeights1.y)
-	if (input.LandBlendWeights1.y > 0.0) {
+	if (input.LandBlendWeights1.y > 0.01) {
 		float weight = input.LandBlendWeights1.y * invwsum;
 #		if defined(TERRAIN_VARIATION)
 		float viewDistance = length(viewPosition);
@@ -1450,7 +1450,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	}
 
 	// Layer 3 (LandBlendWeights1.z)
-	if (input.LandBlendWeights1.z > 0.0) {
+	if (input.LandBlendWeights1.z > 0.01) {
 		float weight = input.LandBlendWeights1.z * invwsum;
 #		if defined(TERRAIN_VARIATION)
 		float viewDistance = length(viewPosition);
@@ -1501,7 +1501,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	}
 
 	// Layer 4 (LandBlendWeights1.w)
-	if (input.LandBlendWeights1.w > 0.0) {
+	if (input.LandBlendWeights1.w > 0.01) {
 		float weight = input.LandBlendWeights1.w * invwsum;
 #		if defined(TERRAIN_VARIATION)
 		float viewDistance = length(viewPosition);
@@ -1552,7 +1552,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	}
 
 	// Layer 5 (LandBlendWeights2.x)
-	if (input.LandBlendWeights2.x > 0.0) {
+	if (input.LandBlendWeights2.x > 0.01) {
 		float weight = input.LandBlendWeights2.x * invwsum;
 #		if defined(TERRAIN_VARIATION)
 		float viewDistance = length(viewPosition);
@@ -1603,7 +1603,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	}
 
 	// Layer 6 (LandBlendWeights2.y)
-	if (input.LandBlendWeights2.y > 0.0) {
+	if (input.LandBlendWeights2.y > 0.01) {
 		float weight = input.LandBlendWeights2.y * invwsum;
 #		if defined(TERRAIN_VARIATION)
 		float viewDistance = length(viewPosition);
