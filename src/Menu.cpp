@@ -192,6 +192,7 @@ void Menu::SetupImGuiStyle() const
 }
 
 bool IsEnabled = false;
+bool ShowPerfOverlay = false;
 
 Menu::~Menu()
 {
@@ -609,8 +610,13 @@ void Menu::DrawGeneralSettings()
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Skips a shader being replaced if it hasn't been compiled yet. Also makes compilation blazingly fast!");
-				}
-			
+			}
+			ImGui::TableNextColumn();
+			ImGui::Checkbox("Perf Overlay", &ShowPerfOverlay);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Shows an overlay with performance statistics.");
+			}
+
 			ImGui::EndTable();
 		}
 	}
@@ -1028,20 +1034,7 @@ void Menu::DrawFooter()
 	ImGui::SameLine();
 	ImGui::BulletText(std::format("D3D12 Interop: {}", globals::upscaling->d3d12Interop ? "Active" : "Inactive").c_str());
 	ImGui::SameLine();
-	ImGui::BulletText(std::format("GPU: {}", globals::state->adapterDescription.c_str()).c_str());
-
-	if (dxgiAdapter3) {
-		ImGui::SameLine();
-		DXGI_QUERY_VIDEO_MEMORY_INFO videoMemoryInfo;
-		dxgiAdapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &videoMemoryInfo);
-
-		float currentGpuUsage = videoMemoryInfo.CurrentUsage / (1024.f * 1024.f * 1024.f);
-		float totalGpuMemory = videoMemoryInfo.Budget / (1024.f * 1024.f * 1024.f);
-		float percent = currentGpuUsage / totalGpuMemory;
-
-		auto progressOverlay = std::format("GPU Usage: {:.02f}GB/{:.02f}GB ({:2.1f}%) ", currentGpuUsage, totalGpuMemory, 100 * percent);
-		ImGui::ProgressBar(percent, ImVec2(500.f, ImGui::GetTextLineHeight()), progressOverlay.c_str());
-	}
+	ImGui::Text(std::format("GPU: {}", globals::state->adapterDescription.c_str()).c_str());
 }
 
 void Menu::DrawOverlay()
@@ -1055,7 +1048,7 @@ void Menu::DrawOverlay()
 	// Update ShowPerfOverlay based on settings
 	ShowPerfOverlay = settings.PerfOverlay.Enabled;
 
-	if (!(shaderCache->IsCompiling() || IsEnabled || inTestMode || (failed && !hide))) {
+	if (!(shaderCache->IsCompiling() || IsEnabled || inTestMode || (failed && !hide) || ShowPerfOverlay)) {
 		auto& io = ImGui::GetIO();
 		io.ClearInputKeys();
 		io.ClearEventsQueue();
@@ -1120,6 +1113,9 @@ void Menu::DrawOverlay()
 	} else {
 		ImGui::GetIO().MouseDrawCursor = false;
 	}
+
+	if (ShowPerfOverlay)
+		DrawPerfOverlay();
 
 	if (inTestMode) {  // In test mode
 		float seconds = (float)duration_cast<std::chrono::milliseconds>(high_resolution_clock::now() - lastTestSwitch).count() / 1000.0f;
