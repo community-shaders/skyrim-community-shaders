@@ -836,10 +836,6 @@ float3 GetFacegenBaseColor(float3 rawBaseColor, float2 uv)
 {
 	float3 detailColor = TexDetailSampler.Sample(SampDetailSampler, uv).xyz;
 	detailColor = float3(3.984375, 3.984375, 3.984375) * (float3(0.00392156886, 0, 0.00392156886) + detailColor);
-	float3 tintColor = TexTintSampler.Sample(SampTintSampler, uv).xyz;
-#		if defined(CS_SKIN)
-	// tintColor = Color::GammaToLinear(tintColor);
-#		endif
 	tintColor = tintColor * rawBaseColor * 2.0.xxx;
 	tintColor = tintColor - tintColor * rawBaseColor;
 	return (rawBaseColor * rawBaseColor + tintColor) * detailColor;
@@ -850,9 +846,6 @@ float3 GetFacegenBaseColor(float3 rawBaseColor, float2 uv)
 float3 GetFacegenRGBTintBaseColor(float3 rawBaseColor, float2 uv)
 {
 	float3 tintColor = TintColor.xyz * rawBaseColor * 2.0.xxx;
-#		if defined(CS_SKIN)
-	// tintColor = Color::GammaToLinear(tintColor);
-#		endif
 	tintColor = tintColor - tintColor * rawBaseColor;
 	return float3(1.01171875, 0.99609375, 1.01171875) * (rawBaseColor * rawBaseColor + tintColor);
 }
@@ -1427,7 +1420,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(SKIN) && defined(CS_SKIN)
 	if (SharedData::skinData.skinParams.w > 0.0f) {
 		baseColor.xyz = baseColor.xyz * SharedData::skinData.skinParams2.www;
-		baseColor.xyz = Color::GammaToLinear(baseColor.xyz);
 	}
 #	endif  // CS_SKIN
 
@@ -2906,22 +2898,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	specularColor = specularColorPBR;
 #	elif defined(SKIN) && defined(CS_SKIN)
 	if (SharedData::skinData.skinParams.w > 0) {
-		// color.xyz *= Color::PBRLightingScale;
-		// specularColorPBR *= Color::PBRLightingScale;
 		specularColor = specularColorPBR;
 	}
 #	endif
 
 #	if !defined(DEFERRED)
-#		if defined(SKIN) && defined(CS_SKIN)
-	if (SharedData::skinData.skinParams.w > 0) {
-		color.xyz += specularColor;
-	} else {
-		color.xyz += Color::LinearToGamma(Color::GammaToLinear(color.xyz) + specularColor);
-	}
-#		else
 	color.xyz = Color::LinearToGamma(Color::GammaToLinear(color.xyz) + specularColor);
-#		endif
 	if (FrameBuffer::FrameParams.y && FrameBuffer::FrameParams.z)
 		color.xyz = lerp(color.xyz, input.FogParam.xyz, input.FogParam.w);
 #	endif
@@ -3137,17 +3119,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		else
 	psout.Masks = float4(0, 0, 0, psout.Diffuse.w);
 #		endif
-#	endif
-
-#	if defined(SKIN) && defined(CS_SKIN)
-	if (SharedData::skinData.skinParams.w > 0) {
-		psout.Diffuse.xyz = Color::LinearToGamma(psout.Diffuse.xyz);
-#		if defined(DEFERRED)
-		// psout.Specular.xyz = Color::LinearToGamma(psout.Specular.xyz);
-		psout.Albedo.xyz = Color::LinearToGamma(psout.Albedo.xyz);
-		// psout.Reflectance.xyz = Color::LinearToGamma(psout.Reflectance.xyz);
-#		endif
-	}
 #	endif
 
 	return psout;
