@@ -37,8 +37,8 @@ inline float2 hash2D2D(float2 s)
     // Choose hash implementation based on quality setting
     if (SharedData::terrainVariationSettings.hashQuality == 0) {
         // Low quality, no fmod, slight tiling, saves a few fps.
-        s = float2(dot(s, float2(127.1, 311.7)), dot(s, float2(269.5, 183.3)));
-        return frac(sin(s) * 43758.5453);
+        s = s * float2(1271.5151, 3337.8237);
+        return frac(sin(s.x + s.y) * float2(43758.5453, 28637.1369));
     } else {
         // High quality, better blend with fmod funct.
         return frac(sin(fmod(float2(dot(s, float2(127.1, 311.7)), dot(s, float2(269.5, 183.3))), 3.14159)) * 43758.5453);
