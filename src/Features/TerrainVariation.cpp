@@ -10,7 +10,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	startDistance,
 	maxDistance,
 	heightCompensationFactor,
-	shadowRayDirFactor)
+	shadowRayDirFactor,
+	hashQuality)
 
 void TerrainVariation::DrawSettings()
 {
@@ -71,6 +72,15 @@ void TerrainVariation::DrawSettings()
 					"Multiplier for shadow ray direction when calculating terrain parallax shadows.\n"
 					"Higher values make shadows appear stronger but may cause artifacts.\n"
 					"This setting only applies when both Terrain Variation and Extended Materials' terrain parallax are enabled.");  // davo yappage
+				}
+			
+			const char* hashQualityItems[] = {"Low Quality", "High Quality"};
+			paramsChanged |= ImGui::Combo("Hash Quality", &settings.hashQuality, hashQualityItems, IM_ARRAYSIZE(hashQualityItems));
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text(
+					"Low quality reduces most terrain tiling with a cheaper formula.\n"
+					"High quality is a more complex formula that completely removes terrain tiling.\n"
+					"Choose low quality if you experience performance issues.");
 			}
 		}
 

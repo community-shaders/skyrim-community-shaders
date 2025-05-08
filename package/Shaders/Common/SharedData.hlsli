@@ -152,7 +152,7 @@ namespace SharedData
 		float maxDistance;
 		float heightCompensationFactor;  // Compensation multiplier for terrain parallax
 		float shadowRayDirFactor;        // Shadow ray direction multiplier
-		float pad0;
+		int hashQuality;                 // 0 = Low quality hash, 1 = High quality hash
 	};
 
 	cbuffer FeatureData : register(b6)

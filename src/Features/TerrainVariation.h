@@ -23,6 +23,7 @@ struct TerrainVariation : Feature
 		float maxDistance = 2000.0f;            // Maximum distance that the terrain will blend the stochastic effect to
 		float heightCompensationFactor = 1.0f;  // Compensation for terrain parallax when enabled
 		float shadowRayDirFactor = 1.0f;        // Shadow ray direction multiplier for parallax shadows
+		int hashQuality = 1;                    // 0 = Low quality hash, 1 = High quality hash
 	};
 
 	Settings settings;
@@ -33,7 +34,8 @@ struct TerrainVariation : Feature
 		200.0f,   // startDistance
 		2000.0f,  // maxDistance
 		1.0f,     // heightCompensationFactor
-		1.0f      // shadowRayDirFactor
+		1.0f,     // shadowRayDirFactor
+		1         // hashQuality - default to high quality
 	};
 
 	virtual void DrawSettings() override;

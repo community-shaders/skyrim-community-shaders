@@ -36,7 +36,15 @@ inline float ComputeDistanceFactor(float distance)
 // Hash function for stochastic sampling
 inline float2 hash2D2D(float2 s)
 {
-	return frac(sin(fmod(float2(dot(s, float2(127.1, 311.7)), dot(s, float2(269.5, 183.3))), 3.14159)) * 43758.5453);
+    // Choose hash implementation based on quality setting
+    if (SharedData::terrainVariationSettings.hashQuality == 0) {
+        // Low quality, no fmod, slight tiling, saves a few fps.
+        s = float2(dot(s, float2(127.1, 311.7)), dot(s, float2(269.5, 183.3)));
+        return frac(sin(s) * 43758.5453);
+    } else {
+        // High quality, better blend with fmod funct.
+        return frac(sin(fmod(float2(dot(s, float2(127.1, 311.7)), dot(s, float2(269.5, 183.3))), 3.14159)) * 43758.5453);
+    }
 }
 
 // Compute offsets for stochastic sampling
