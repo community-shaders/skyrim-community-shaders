@@ -39,6 +39,7 @@ public:
 	void Init();
 	void DrawSettings();
 	void DrawOverlay();
+	void DrawPerfOverlay();
 
 	void ProcessInputEvents(RE::InputEvent* const* a_events);
 	bool ShouldSwallowInput();
