@@ -93,7 +93,7 @@ public:
 	double refreshRate = 0;
 
 	DXGISwapChainProxy* swapChainProxy = nullptr;
-	
+
 	// Returns the current frame time (in seconds) for accurate FPS calculation when frame generation is active
 	float GetFrameTime() const;
 
