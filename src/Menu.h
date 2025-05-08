@@ -144,8 +144,8 @@ public:
 		uint32_t SkipCompilationKey = VK_ESCAPE;
 		uint32_t EffectToggleKey = VK_MULTIPLY;  // toggle all effects
 		ThemeSettings Theme;
-		
-		struct PerfOverlaySettings 
+
+		struct PerfOverlaySettings
 		{
 			bool Enabled = false;
 			bool ShowDrawCalls = true;
@@ -153,14 +153,19 @@ public:
 			bool ShowFPS = true;
 			bool ShowPreFGFrameTime = true;
 			bool ShowPreFGFrameTimeGraph = true;
-            bool ShowPreFGFPS = true; 
-            bool ShowPostFGFPS = true;
+			bool ShowPreFGFPS = true;
+			bool ShowPostFGFPS = true;
 			bool ShowPostFGFrameTime = true;
-            bool ShowPostFGFrameTimeGraph = true;
-            float UpdateInterval = 0.5f;
-			enum class TextSize { Small, Medium, Large };
+			bool ShowPostFGFrameTimeGraph = true;
+			float UpdateInterval = 0.5f;
+			enum class TextSize
+			{
+				Small,
+				Medium,
+				Large
+			};
 			TextSize Size = TextSize::Medium;
-			
+
 			float BackgroundOpacity = 0.5f;
 			bool ShowBorder = true;
 			ImVec2 Position = ImVec2(10.f, 10.f);
