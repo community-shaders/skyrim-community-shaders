@@ -72,9 +72,9 @@ void TerrainVariation::DrawSettings()
 					"Multiplier for shadow ray direction when calculating terrain parallax shadows.\n"
 					"Higher values make shadows appear stronger but may cause artifacts.\n"
 					"This setting only applies when both Terrain Variation and Extended Materials' terrain parallax are enabled.");  // davo yappage
-				}
-			
-			const char* hashQualityItems[] = {"Low Quality", "High Quality"};
+			}
+
+			const char* hashQualityItems[] = { "Low Quality", "High Quality" };
 			paramsChanged |= ImGui::Combo("Hash Quality", &settings.hashQuality, hashQualityItems, IM_ARRAYSIZE(hashQualityItems));
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text(
@@ -89,7 +89,7 @@ void TerrainVariation::DrawSettings()
 			if (settings.maxDistance - settings.startDistance < 1.0f) {
 				settings.maxDistance = settings.startDistance + 1.0f;
 			}
-			
+
 			UpdateShaderSettings();
 			logger::info("TerrainVariation parameters updated");
 		}
@@ -98,26 +98,26 @@ void TerrainVariation::DrawSettings()
 
 void TerrainVariation::UpdateShaderSettings()
 {
-    if (!globals::state) {
-        return;
-    }
+	if (!globals::state) {
+		return;
+	}
 
-    // Calculate invDistanceRange for shader optimization
-    float distanceRange = settings.maxDistance - settings.startDistance;
-    if (distanceRange <= 0.0f) {
-        // Prevent division by zero - use a sensible default
-        distanceRange = 1.0f;
-    }
-    float invDistanceRange = 1.0f / distanceRange;
+	// Calculate invDistanceRange for shader optimization
+	float distanceRange = settings.maxDistance - settings.startDistance;
+	if (distanceRange <= 0.0f) {
+		// Prevent division by zero - use a sensible default
+		distanceRange = 1.0f;
+	}
+	float invDistanceRange = 1.0f / distanceRange;
 
-    // Update the settings struct with calculated values
-    // These will be picked up automatically by the feature buffer
-    settings.invDistanceRange = invDistanceRange;
+	// Update the settings struct with calculated values
+	// These will be picked up automatically by the feature buffer
+	settings.invDistanceRange = invDistanceRange;
 
-    // Mark the vertex descriptor as dirty to trigger an update
-    if (globals::game::stateUpdateFlags) {
-        globals::game::stateUpdateFlags->set(RE::BSGraphics::DIRTY_VERTEX_DESC);
-    }
+	// Mark the vertex descriptor as dirty to trigger an update
+	if (globals::game::stateUpdateFlags) {
+		globals::game::stateUpdateFlags->set(RE::BSGraphics::DIRTY_VERTEX_DESC);
+	}
 }
 
 void TerrainVariation::PostPostLoad()

@@ -1272,7 +1272,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float2 dy = ddy(uv);
 	StochasticOffsets sharedOffset = ComputeStochasticOffsets(uv);
 #		else
-    distanceFactor = saturate(viewDistance * 0.00048828125);
+	distanceFactor = saturate(viewDistance * 0.00048828125);
 #		endif
 
 #		if defined(EMAT)
