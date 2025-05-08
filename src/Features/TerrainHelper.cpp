@@ -52,8 +52,11 @@ bool TerrainHelper::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 			continue;
 		}
 
-		if (!extendedSlots.contains(hashKey)) {
-			extendedSlots[hashKey] = {};
+		{
+			const std::lock_guard<std::mutex> lock(extendedSlotsMutex);
+			if (!extendedSlots.contains(hashKey)) {
+				extendedSlots[hashKey] = {};
+			}
 		}
 
 		// Create array of texture sets (6 tiles)
@@ -88,6 +91,7 @@ bool TerrainHelper::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 
 			auto txSet = textureSets[textureI];
 			if (txSet->GetTexturePath(static_cast<RE::BSTextureSet::Texture>(3)) != nullptr) {
+				const std::lock_guard<std::mutex> lock(extendedSlotsMutex);
 				txSet->SetTexture(static_cast<RE::BSTextureSet::Texture>(3), extendedSlots[hashKey].parallax[textureI]);
 			}
 		}
@@ -134,12 +138,17 @@ void TerrainHelper::BSLightingShader_SetupMaterial(RE::BSLightingShaderMaterialB
 		return;
 	}
 
-	if (!extendedSlots.contains(material->hashKey)) {
-		// hash does not exists
-		return;
+	ExtendedSlots materialBase;
+	{
+		const std::lock_guard<std::mutex> lock(extendedSlotsMutex);
+
+		if (!extendedSlots.contains(material->hashKey)) {
+			// hash does not exists
+			return;
+		}
+		materialBase = extendedSlots[material->hashKey];
 	}
 
-	const auto materialBase = extendedSlots[material->hashKey];
 	const auto state = globals::state;
 	const auto& stateData = globals::game::graphicsState->GetRuntimeData();
 
