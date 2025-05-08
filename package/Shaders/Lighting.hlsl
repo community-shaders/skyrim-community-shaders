@@ -836,7 +836,7 @@ float3 GetFacegenBaseColor(float3 rawBaseColor, float2 uv)
 {
 	float3 detailColor = TexDetailSampler.Sample(SampDetailSampler, uv).xyz;
 	detailColor = float3(3.984375, 3.984375, 3.984375) * (float3(0.00392156886, 0, 0.00392156886) + detailColor);
-	tintColor = tintColor * rawBaseColor * 2.0.xxx;
+	float3 tintColor = TexTintSampler.Sample(SampTintSampler, uv).xyz * rawBaseColor * 2.0.xxx;
 	tintColor = tintColor - tintColor * rawBaseColor;
 	return (rawBaseColor * rawBaseColor + tintColor) * detailColor;
 }
