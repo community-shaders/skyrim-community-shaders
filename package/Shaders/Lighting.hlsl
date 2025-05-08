@@ -1265,12 +1265,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	float invwsum = totalWeight > 0.0 ? rcp(totalWeight) : 1.0;
 	float viewDistance = length(viewPosition);
-	float distanceFactor = 0.0;
 	// Compute stochastic offsets and derivatives once for all layers
 #		if defined(TERRAIN_VARIATION)
 	float2 dx = ddx(uv);
 	float2 dy = ddy(uv);
 	StochasticOffsets sharedOffset = ComputeStochasticOffsets(uv);
+	float distanceFactor = saturate(viewDistance * 0.00048828125);
 #		else
 	distanceFactor = saturate(viewDistance * 0.00048828125);
 #		endif
@@ -1354,7 +1354,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(TERRAIN_VARIATION)
 		float4 diffuse1 = StochasticEffect(screenNoise, mipLevels[0], TexColorSampler, SampColorSampler, uv, sharedOffset, dx, dy, viewDistance);
 #		else
-		float distanceFactor = smoothstep(0.0, 2048.0, viewDistance);
 		float4 diffuse1 = lerp(
 			TexColorSampler.SampleBias(SampColorSampler, uv, SharedData::MipBias),
 			TexColorSampler.SampleLevel(SampColorSampler, uv, distanceFactor * 3.0),
@@ -1403,7 +1402,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(TERRAIN_VARIATION)
 		float4 diffuse2 = StochasticEffect(screenNoise, mipLevels[1], TexLandColor2Sampler, SampColorSampler, uv, sharedOffset, dx, dy, viewDistance);
 #		else
-		float distanceFactor = smoothstep(0.0, 2048.0, viewDistance);
 		float4 diffuse2 = lerp(
 			TexLandColor2Sampler.SampleBias(SampColorSampler, uv, SharedData::MipBias),
 			TexLandColor2Sampler.SampleLevel(SampColorSampler, uv, distanceFactor * 3.0),
@@ -1452,7 +1450,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(TERRAIN_VARIATION)
 		float4 diffuse3 = StochasticEffect(screenNoise, mipLevels[2], TexLandColor3Sampler, SampColorSampler, uv, sharedOffset, dx, dy, viewDistance);
 #		else
-		float distanceFactor = smoothstep(0.0, 2048.0, viewDistance);
 		float4 diffuse3 = lerp(
 			TexLandColor3Sampler.SampleBias(SampColorSampler, uv, SharedData::MipBias),
 			TexLandColor3Sampler.SampleLevel(SampColorSampler, uv, distanceFactor * 3.0),
@@ -1501,7 +1498,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(TERRAIN_VARIATION)
 		float4 diffuse4 = StochasticEffect(screenNoise, mipLevels[3], TexLandColor4Sampler, SampColorSampler, uv, sharedOffset, dx, dy, viewDistance);
 #		else
-		float distanceFactor = smoothstep(0.0, 2048.0, viewDistance);
 		float4 diffuse4 = lerp(
 			TexLandColor4Sampler.SampleBias(SampColorSampler, uv, SharedData::MipBias),
 			TexLandColor4Sampler.SampleLevel(SampColorSampler, uv, distanceFactor * 3.0),
@@ -1550,7 +1546,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(TERRAIN_VARIATION)
 		float4 diffuse5 = StochasticEffect(screenNoise, mipLevels[4], TexLandColor5Sampler, SampColorSampler, uv, sharedOffset, dx, dy, viewDistance);
 #		else
-		float distanceFactor = smoothstep(0.0, 2048.0, viewDistance);
 		float4 diffuse5 = lerp(
 			TexLandColor5Sampler.SampleBias(SampColorSampler, uv, SharedData::MipBias),
 			TexLandColor5Sampler.SampleLevel(SampColorSampler, uv, distanceFactor * 3.0),
@@ -1599,7 +1594,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(TERRAIN_VARIATION)
 		float4 diffuse6 = StochasticEffect(screenNoise, mipLevels[5], TexLandColor6Sampler, SampColorSampler, uv, sharedOffset, dx, dy, viewDistance);
 #		else
-		float distanceFactor = smoothstep(0.0, 2048.0, viewDistance);
 		float4 diffuse6 = lerp(
 			TexLandColor6Sampler.SampleBias(SampColorSampler, uv, SharedData::MipBias),
 			TexLandColor6Sampler.SampleLevel(SampColorSampler, uv, distanceFactor * 3.0),
