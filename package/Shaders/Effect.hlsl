@@ -659,7 +659,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		membraneColor = MembraneRimColor * membraneColorMul;
 	} else {
-		membraneColor = float4(Color::GammaToTrueLinear(MembraneRimColor.xyz), MembraneRimColor.w) * membraneColorMul;
+		membraneColor = float4(Color::GammaToLinear(MembraneRimColor.xyz), Color::GammaToLinear(MembraneRimColor.w).x) * membraneColorMul.x;
 	}
 #	elif defined(PROJECTED_UV) && defined(NORMALS)
 	float2 noiseTexCoord = 0.00333333341 * input.TexCoord0.xy;
