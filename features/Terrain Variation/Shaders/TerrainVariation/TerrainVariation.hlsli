@@ -20,15 +20,12 @@ struct StochasticOffsets
 // Compute a distance factor for scaling stochastic effect strength (0-1)
 // Returns 0 for distances <= startDistance, 1 for distances >= maxDistance
 inline float ComputeDistanceFactor(float distance)
-	{
-    float factor = 0.0;
-		if (SharedData::terrainVariationSettings.enableTilingFix) {
-			// Use pre-computed inverse distance range
-			factor = (distance - SharedData::terrainVariationSettings.startDistance) * 
-					SharedData::terrainVariationSettings.invDistanceRange;
-			factor = saturate(factor); // Equivalent to clamp(factor, 0.0, 1.0)
-		}
-    	return factor;
+{
+    if (!SharedData::terrainVariationSettings.enableTilingFix)
+        return 0.0;
+        
+    return saturate((distance - SharedData::terrainVariationSettings.startDistance) * 
+                   SharedData::terrainVariationSettings.invDistanceRange);
 }
 
 // Hash function for stochastic sampling
@@ -100,6 +97,6 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 
     return lerp(standardSample, stochasticSample, distanceFactor);
 }
-#define StochasticSample(rnd, tex, samp, uv, dist) StochasticEffect(rnd, tex, samp, uv, ComputeStochasticOffsets(uv), ddx(uv), ddy(uv), dist).rgb
+#define StochasticSample(rnd, mipLevel, tex, samp, uv, dist) StochasticEffect(rnd, mipLevel, tex, samp, uv, ComputeStochasticOffsets(uv), ddx(uv), ddy(uv), dist).rgb
 
 #endif  // TERRAIN_VARIATION_HLSLI
