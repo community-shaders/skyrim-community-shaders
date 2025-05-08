@@ -2386,7 +2386,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	float3 directionalAmbientColor = max(0, mul(DirectionalAmbient, modelNormal));
 	if (SharedData::linearLightingSettings.enableLinearLighting) {
-		directionalAmbientColor = Color::GammaToTrueLinear(directionalAmbientColor);
+		directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
 	}
 
 #	if defined(SKYLIGHTING)

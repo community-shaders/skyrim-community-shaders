@@ -244,7 +244,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
 	} else {
-		directionalAmbientColor = max(0, mul(Color::GammaToTrueLinear(SharedData::DirectionalAmbient), float4(normal, 1.0)));
+		directionalAmbientColor = max(0, mul(Color::GammaToLinear(SharedData::DirectionalAmbient), float4(normal, 1.0)));
 	}
 	diffuseColor += directionalAmbientColor;
 #			endif
@@ -277,7 +277,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		directionalAmbientColor = mul(SharedData::DirectionalAmbient, float4(normal, 1.0));
 	} else {
-		directionalAmbientColor = Color::GammaToTrueLinear(mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
+		directionalAmbientColor = Color::GammaToLinear(mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
 	}
 	diffuseColor += directionalAmbientColor;
 

@@ -540,7 +540,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 		float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
 		if (SharedData::linearLightingSettings.enableLinearLighting) {
 			dirLightColor = Color::GammaToTrueLinear(dirLightColor);
-			ambientColor = Color::GammaToTrueLinear(ambientColor);
+			ambientColor = Color::GammaToLinear(ambientColor);
 		}
 
 		color = ambientColor;
