@@ -85,6 +85,11 @@ void TerrainVariation::DrawSettings()
 		}
 
 		if (paramsChanged) {
+			// Ensure minimum distance between values for numerical stability
+			if (settings.maxDistance - settings.startDistance < 1.0f) {
+				settings.maxDistance = settings.startDistance + 1.0f;
+			}
+			
 			UpdateShaderSettings();
 			logger::info("TerrainVariation parameters updated");
 		}
@@ -93,11 +98,26 @@ void TerrainVariation::DrawSettings()
 
 void TerrainVariation::UpdateShaderSettings()
 {
-	if (!globals::state) {
-		return;
-	}
+    if (!globals::state) {
+        return;
+    }
 
-	globals::game::stateUpdateFlags->set(RE::BSGraphics::DIRTY_VERTEX_DESC);
+    // Calculate invDistanceRange for shader optimization
+    float distanceRange = settings.maxDistance - settings.startDistance;
+    if (distanceRange <= 0.0f) {
+        // Prevent division by zero - use a sensible default
+        distanceRange = 1.0f;
+    }
+    float invDistanceRange = 1.0f / distanceRange;
+
+    // Update the settings struct with calculated values
+    // These will be picked up automatically by the feature buffer
+    settings.invDistanceRange = invDistanceRange;
+
+    // Mark the vertex descriptor as dirty to trigger an update
+    if (globals::game::stateUpdateFlags) {
+        globals::game::stateUpdateFlags->set(RE::BSGraphics::DIRTY_VERTEX_DESC);
+    }
 }
 
 void TerrainVariation::PostPostLoad()

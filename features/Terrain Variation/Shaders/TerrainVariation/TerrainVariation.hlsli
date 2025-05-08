@@ -20,17 +20,15 @@ struct StochasticOffsets
 // Compute a distance factor for scaling stochastic effect strength (0-1)
 // Returns 0 for distances <= startDistance, 1 for distances >= maxDistance
 inline float ComputeDistanceFactor(float distance)
-{
-	float factor = 0.0;
-#if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
-	if (SharedData::terrainVariationSettings.enableTilingFix) {
-		float startDist = SharedData::terrainVariationSettings.startDistance;
-		float maxDist = SharedData::terrainVariationSettings.maxDistance;
-		float range = max(0.001, maxDist - startDist);
-		factor = saturate((distance - startDist) / range);
-	}
-#endif
-	return factor;
+	{
+    float factor = 0.0;
+		if (SharedData::terrainVariationSettings.enableTilingFix) {
+			// Use pre-computed inverse distance range
+			factor = (distance - SharedData::terrainVariationSettings.startDistance) * 
+					SharedData::terrainVariationSettings.invDistanceRange;
+			factor = saturate(factor); // Equivalent to clamp(factor, 0.0, 1.0)
+		}
+    	return factor;
 }
 
 // Hash function for stochastic sampling
@@ -77,18 +75,30 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	// Calculate distance factor (0 when close, 1 when far)
 	float distanceFactor = ComputeDistanceFactor(distance);
 
-	// Get stochastic samples
-	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
-	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
-	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
+    bool useParallax = SharedData::extendedMaterialSettings.EnableTerrainParallax;
+    float4 sample1, sample2, sample3, standardSample;
 
-	// Weight samples according to offsets
-	float4 stochasticSample = sample1 * offsets.weights.x +
-	                          sample2 * offsets.weights.y +
-	                          sample3 * offsets.weights.z;
+    // Get stochastic samples
+    if (useParallax) {
+        // Parallax enabled, can use SampleLevel for better perf
+        sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+        sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
+        sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
+        standardSample = tex.SampleLevel(samp, uv, mipLevel);
+    } else {
+        // When parallax disabled, samplelevel causes mipmap issues, it uses too low a mipmap level up close.
+        sample1 = tex.SampleGrad(samp, uv + offsets.offset1, dx, dy);
+        sample2 = tex.SampleGrad(samp, uv + offsets.offset2, dx, dy);
+        sample3 = tex.SampleGrad(samp, uv + offsets.offset3, dx, dy);
+        standardSample = tex.SampleGrad(samp, uv, dx, dy);
+    }
+    
+    // Weight samples according to offsets
+    float4 stochasticSample = sample1 * offsets.weights.x +
+                              sample2 * offsets.weights.y +
+                              sample3 * offsets.weights.z;
 
-	float4 standardSample = tex.SampleLevel(samp, uv, mipLevel);
-	return lerp(standardSample, stochasticSample, distanceFactor);
+    return lerp(standardSample, stochasticSample, distanceFactor);
 }
 #define StochasticSample(rnd, tex, samp, uv, dist) StochasticEffect(rnd, tex, samp, uv, ComputeStochasticOffsets(uv), ddx(uv), ddy(uv), dist).rgb
 

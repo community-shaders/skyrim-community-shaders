@@ -150,6 +150,7 @@ namespace SharedData
 		bool enableTilingFix;
 		float startDistance;
 		float maxDistance;
+		float invDistanceRange;			 // For distance calc optimisation
 		float heightCompensationFactor;  // Compensation multiplier for terrain parallax
 		float shadowRayDirFactor;        // Shadow ray direction multiplier
 		int hashQuality;                 // 0 = Low quality hash, 1 = High quality hash
