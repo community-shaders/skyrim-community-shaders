@@ -44,6 +44,7 @@ struct PostProcessing : Feature
 	/////////////////////////////////////////////////////////////////////////////////
 
 	bool bypass = false;
+	bool isrefraction = false;
 
 	std::vector<std::unique_ptr<PostProcessFeature>> feats = {};
 
@@ -73,4 +74,15 @@ struct PostProcessing : Feature
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
+
+	struct BSImagespaceShaderRefraction_SetupTechnique
+	{
+		static void thunk(RE::BSShader* a_shader, RE::BSShaderMaterial* a_material)
+		{
+			GetSingleton()->isrefraction = true;
+			func(a_shader, a_material);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+	
 };
