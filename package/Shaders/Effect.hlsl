@@ -907,6 +907,10 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color2 = finalColor;
 #	endif
 
+	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld) && SharedData::linearLightingSettings.enableLinearLighting) {
+		psout.Diffuse.xyz = Color::TrueLinearToGamma(psout.Diffuse.xyz);
+	}
+
 	return psout;
 }
 #endif

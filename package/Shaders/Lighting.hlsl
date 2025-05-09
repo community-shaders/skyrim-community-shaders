@@ -2933,6 +2933,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif
 #	endif
 
+	if (!inWorld && SharedData::linearLightingSettings.enableLinearLighting) {
+		psout.Diffuse.xyz = Color::TrueLinearToGamma(psout.Diffuse.xyz);
+	}
+
 	return psout;
 }
 #endif  // PSHADER
