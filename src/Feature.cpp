@@ -33,6 +33,8 @@ void Feature::Load(json& o_json)
 			logger::warn("Invalid settings for {}, using default.", GetName());
 			RestoreDefaultSettings();
 		}
+	} else {
+		RestoreDefaultSettings();
 	}
 
 	// Convert string to wstring

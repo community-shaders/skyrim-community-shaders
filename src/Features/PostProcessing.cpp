@@ -5,233 +5,6 @@
 
 #include "State.h"
 
-constexpr auto def_settings = R"(
-[
-	{
-		"enabled": true,
-		"name": "Half Gamma to Linear",
-		"settings": {
-		"Params": [
-		[
-		1.5,
-		1.5,
-		1.5,
-		0.0
-		],
-		[
-		0.0,
-		0.0,
-		0.0,
-		0.0
-		],
-		[
-		1.0,
-		1.0,
-		1.0,
-		1.0
-		],
-		[
-		0.0,
-		0.0,
-		0.0,
-		0.0
-		],
-		[
-		0.0,
-		0.0,
-		0.0,
-		0.0
-		],
-		[
-		0.0,
-		0.0,
-		0.0,
-		0.0
-		],
-		[
-		0.0,
-		0.0,
-		0.0,
-		0.0
-		],
-		[
-		0.0,
-		0.0,
-		0.0,
-		0.0
-		]
-		],
-		"TransformType": "Gamma"
-		},
-		"type": "Colour Transforms"
-	},
-	{
-		"enabled": true,
-		"name": "COD Bloom",
-		"settings": {
-		"BlendFactor": 0.05000000074505806,
-		"MipBlendFactor": [
-		1.0,
-		1.0,
-		1.0,
-		1.0,
-		1.0,
-		1.0,
-		0.0,
-		0.0
-		],
-		"Threshold": -6.0,
-		"UpsampleRadius": 2.0
-		},
-		"type": "COD Bloom"
-	},
-	{
-		"enabled": true,
-		"name": "Histogram Auto Exposure",
-		"settings": {
-		"AdaptArea": [
-		0.6000000238418579,
-		0.6000000238418579
-		],
-		"AdaptSpeed": 1.5,
-		"AdaptationRange": [
-		-0.20000000298023224,
-		1.0
-		],
-		"ExposureCompensation": 0.0,
-		"PurkinjeMaxEV": -6.0,
-		"PurkinjeStartEV": -4.0,
-		"PurkinjeStrength": 0.5
-		},
-		"type": "Histogram Auto Exposure"
-	},
-	{
-		"enabled": true,
-		"name": "Vignette",
-		"settings": {
-		"FocalLength": 1.0,
-		"Power": 3.0
-		},
-		"type": "Vignette"
-	},
-	{
-		"enabled": true,
-		"name": "Tonemapper",
-		"settings": {
-		"Params": [
-		[
-		2.0,
-		0.0,
-		0.0,
-		0.0
-		],
-		[
-		0.0,
-		0.0,
-		0.0,
-		0.0
-		],
-		[
-		0.0,
-		0.0,
-		0.0,
-		0.0
-		],
-		[
-		0.0,
-		0.0,
-		0.0,
-		0.0
-		],
-		[
-		0.0,
-		0.0,
-		0.0,
-		0.0
-		],
-		[
-		0.0,
-		0.0,
-		0.0,
-		0.0
-		],
-		[
-		0.0,
-		0.0,
-		0.0,
-		0.0
-		],
-		[
-		0.0,
-		0.0,
-		0.0,
-		0.0
-		]
-		],
-		"TransformType": "Melon"
-		},
-		"type": "Colour Transforms"
-	},
-	{
-		"enabled": true,
-		"name": "Linear to Gamma",
-		"settings": {
-		"Params": [
-		[
-		0.4399999976158142,
-		0.4399999976158142,
-		0.4399999976158142,
-		0.0
-		],
-		[
-		0.0,
-		0.0,
-		0.0,
-		0.0
-		],
-		[
-		1.0,
-		1.0,
-		1.0,
-		1.0
-		],
-		[
-		0.0,
-		0.0,
-		0.0,
-		0.0
-		],
-		[
-		0.0,
-		0.0,
-		0.0,
-		0.0
-		],
-		[
-		0.0,
-		0.0,
-		0.0,
-		0.0
-		],
-		[
-		0.0,
-		0.0,
-		0.0,
-		0.0
-		],
-		[
-		0.0,
-		0.0,
-		0.0,
-		0.0
-		]
-		],
-		"TransformType": "Gamma"
-		},
-		"type": "Colour Transforms"
-	}
-])";
-
 void PostProcessing::DrawSettings()
 {
 	// 0 for list of feats
@@ -475,8 +248,11 @@ void PostProcessing::LoadSettings(json& o_json)
 	logger::info("Loading post processing settings...");
 
 	auto effects = o_json["effects"];
-	if (!effects.is_array())
-		effects = json::parse(def_settings);
+	if (!effects.is_array()) {
+		RestoreDefaultSettings();
+		logger::warn("Invalid post processing settings, restoring defaults.");
+		return;
+	}
 
 	feats.clear();
 
@@ -595,8 +371,7 @@ void PostProcessing::SavePresetTo(std::string a_name)
 
 void PostProcessing::RestoreDefaultSettings()
 {
-	auto bogus = json();
-	LoadSettings(bogus);
+	LoadPresetFrom("default");
 }
 
 void PostProcessing::ClearShaderCache()

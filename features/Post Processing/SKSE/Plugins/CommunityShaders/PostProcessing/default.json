@@ -1,0 +1,262 @@
+{
+    "effects": [
+        {
+            "enabled": true,
+            "name": "To Linear (Set to Gamma 1.5 if not using LL)",
+            "settings": {
+                "Params": [
+                    [
+                        1.0,
+                        1.0,
+                        1.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        1.0,
+                        1.0,
+                        1.0,
+                        1.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "TransformType": "Gamma"
+            },
+            "type": "Colour Transforms"
+        },
+        {
+            "enabled": true,
+            "name": "Histogram Auto Exposure",
+            "settings": {
+                "AdaptArea": [
+                    0.30000001192092896,
+                    0.6000000238418579
+                ],
+                "AdaptSpeed": 1.5,
+                "AdaptationRange": [
+                    -0.75,
+                    0.20000000298023224
+                ],
+                "ExposureCompensation": 0.0,
+                "PurkinjeMaxEV": -4.0,
+                "PurkinjeStartEV": -1.5,
+                "PurkinjeStrength": 0.0
+            },
+            "type": "Histogram Auto Exposure"
+        },
+        {
+            "enabled": true,
+            "name": "COD Bloom",
+            "settings": {
+                "BlendFactor": 0.05000000074505806,
+                "MipBlendFactor": [
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    0.0,
+                    0.0
+                ],
+                "Threshold": 1.0,
+                "UpsampleRadius": 2.0
+            },
+            "type": "COD Bloom"
+        },
+        {
+            "enabled": true,
+            "name": "Vanilla Imagespace",
+            "settings": {
+                "ExteriorMultiplier": [
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "ExteriorOverride": [
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "InteriorMultiplier": [
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "InteriorOverride": [
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "blendFactor": [
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "enableInExMultiplier": false,
+                "enableInExOverride": false
+            },
+            "type": "Vanilla Imagespace"
+        },
+        {
+            "enabled": true,
+            "name": "Tonemapper",
+            "settings": {
+                "Params": [
+                    [
+                        2.0,
+                        1.0,
+                        1.0,
+                        0.0
+                    ],
+                    [
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "TransformType": "AgX Minimal"
+            },
+            "type": "Colour Transforms"
+        },
+        {
+            "enabled": true,
+            "name": "To sRGB (Set to 0.45 if not using LL)",
+            "settings": {
+                "Params": [
+                    [
+                        1.0,
+                        1.0,
+                        1.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        1.0,
+                        1.0,
+                        1.0,
+                        1.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "TransformType": "Gamma"
+            },
+            "type": "Colour Transforms"
+        },
+        {
+            "enabled": true,
+            "name": "Vignette",
+            "settings": {
+                "FocalLength": 1.0,
+                "Power": 3.0
+            },
+            "type": "Vignette"
+        }
+    ],
+    "preset_name": "default"
+}
