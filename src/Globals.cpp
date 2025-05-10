@@ -22,6 +22,7 @@
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/Skylighting.h"
+#include "Features/SkySync.h"
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
@@ -56,6 +57,7 @@ namespace globals
 		ScreenSpaceGI* screenSpaceGI = nullptr;
 		ScreenSpaceShadows* screenSpaceShadows = nullptr;
 		Skylighting* skylighting = nullptr;
+		SkySync* skySync = nullptr;
 		SubsurfaceScattering* subsurfaceScattering = nullptr;
 		TerrainBlending* terrainBlending = nullptr;
 		TerrainHelper* terrainHelper = nullptr;
@@ -133,6 +135,7 @@ namespace globals
 		features::screenSpaceGI = ScreenSpaceGI::GetSingleton();
 		features::screenSpaceShadows = ScreenSpaceShadows::GetSingleton();
 		features::skylighting = Skylighting::GetSingleton();
+		features::skySync = SkySync::GetSingleton();
 		features::subsurfaceScattering = SubsurfaceScattering::GetSingleton();
 		features::terrainBlending = TerrainBlending::GetSingleton();
 		features::terrainHelper = TerrainHelper::GetSingleton();

@@ -11,6 +11,7 @@ struct InverseSquareLighting;
 struct ScreenSpaceGI;
 struct ScreenSpaceShadows;
 struct Skylighting;
+struct SkySync;
 struct SubsurfaceScattering;
 struct TerrainBlending;
 struct TerrainHelper;
@@ -57,6 +58,7 @@ namespace globals
 		extern ScreenSpaceGI* screenSpaceGI;
 		extern ScreenSpaceShadows* screenSpaceShadows;
 		extern Skylighting* skylighting;
+		extern SkySync* skySync;
 		extern SubsurfaceScattering* subsurfaceScattering;
 		extern TerrainBlending* terrainBlending;
 		extern TerrainHelper* terrainHelper;
