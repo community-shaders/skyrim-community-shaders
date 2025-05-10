@@ -139,7 +139,7 @@ void TerrainVariation::SaveSettings(json& o_json)
 
 bool TerrainVariation::DrawFailLoadMessage() const
 {
-    return false;
+	return false;
 }
 
 void TerrainVariation::DrawUnloadedUI()
