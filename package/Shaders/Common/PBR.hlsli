@@ -197,7 +197,7 @@ namespace PBR
 		[branch] if (logDensity > 1.1)
 		{
 			float D_max = GetNormalDistributionFunctionGGX(roughness, 1);
-			D = Glints::SampleGlints2023NDF(noise, logDensity, microfacetRoughness, densityRandomization, glintCache, glintH, D, D_max);
+			D = Glints::SampleGlints2023NDF(noise, logDensity, microfacetRoughness, densityRandomization, glintCache, glintH, D, D_max).x;
 		}
 		float G = GetVisibilityFunctionSmithJointApprox(roughness, NdotV, NdotL);
 		F = GetFresnelFactorSchlick(specularColor, VdotH);
@@ -439,7 +439,7 @@ namespace PBR
 
 			float3 F;
 #if defined(GLINT)
-			specular += GetSpecularDirectLightMultiplierMicrofacetWithGlint(surfaceProperties.Noise, surfaceProperties.Roughness, surfaceProperties.F0, satNdotL, satNdotV, satNdotH, satVdotH, mul(tbnTr, H),
+			specular += GetSpecularDirectLightMultiplierMicrofacetWithGlint(surfaceProperties.Noise, surfaceProperties.Roughness, surfaceProperties.F0, satNdotL, satNdotV, satNdotH, satVdotH, mul(tbnTr, H).x,
 							surfaceProperties.GlintLogMicrofacetDensity, surfaceProperties.GlintMicrofacetRoughness, surfaceProperties.GlintDensityRandomization, surfaceProperties.GlintCache, F) *
 			            lightProperties.LightColor * satNdotL;
 #else

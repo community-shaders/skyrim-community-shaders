@@ -138,7 +138,7 @@ namespace DisplayMapping
 
 		// Hue preserving mapping
 		float maxCol = Color::RGBToLuminance(col);
-		float mappedMax = GetTonemapFactorHejlBurgessDawson(maxCol);
+		float mappedMax = GetTonemapFactorHejlBurgessDawson(maxCol).x;
 		float3 compressedHuePreserving = col * mappedMax / maxCol;
 
 		compressedHuePreserving += saturate(Param.x - mappedMax) * bloomCol;

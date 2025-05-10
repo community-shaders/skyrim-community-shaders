@@ -522,6 +522,13 @@ Texture2D<float4> TexLandNormal4Sampler : register(t10);
 Texture2D<float4> TexLandNormal5Sampler : register(t11);
 Texture2D<float4> TexLandNormal6Sampler : register(t12);
 
+Texture2D<float4> TexLandTHDisp0Sampler : register(t92);
+Texture2D<float4> TexLandTHDisp1Sampler : register(t93);
+Texture2D<float4> TexLandTHDisp2Sampler : register(t94);
+Texture2D<float4> TexLandTHDisp3Sampler : register(t95);
+Texture2D<float4> TexLandTHDisp4Sampler : register(t96);
+Texture2D<float4> TexLandTHDisp5Sampler : register(t97);
+
 #		if defined(TRUE_PBR)
 
 Texture2D<float4> TexLandDisplacement0Sampler : register(t80);
@@ -983,6 +990,10 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "LightLimitFix/LightLimitFix.hlsli"
 #	endif
 
+#	if defined(ISL) && defined(LIGHT_LIMIT_FIX)
+#		include "InverseSquareLighting/InverseSquareLighting.hlsli"
+#	endif
+
 #	if defined(TREE_ANIM)
 #		undef WETNESS_EFFECTS
 #	endif
@@ -1060,7 +1071,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 
 #	if defined(TERRAIN_BLENDING)
-	float depthSampled = TerrainBlending::TerrainBlendingMaskTexture[input.Position.xy];
+	float depthSampled = TerrainBlending::TerrainBlendingMaskTexture[input.Position.xy].x;
 
 	float depthSampledLinear = SharedData::GetScreenDepth(depthSampled);
 	float depthPixelLinear = SharedData::GetScreenDepth(input.Position.z);
@@ -1763,7 +1774,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	pbrSurfaceProperties.GlintDensityRandomization = clamp(glintParameters.w, 0, 5);
 
 #		if defined(GLINT)
-	float glintNoise = Random::R1Modified(SharedData::FrameCount, Random::pcg2d(uint2(input.Position.xy)) / 4294967296.0);
+	float glintNoise = Random::R1Modified(float(SharedData::FrameCount), (Random::pcg2d(uint2(input.Position.xy)) / 4294967296.0).x);
 	PBR::Glints::PrecomputeGlints(glintNoise, uvOriginal, ddx(uvOriginal), ddy(uvOriginal), pbrSurfaceProperties.GlintScreenSpaceScale, pbrSurfaceProperties.GlintCache);
 #		endif
 
@@ -2019,7 +2030,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float3 dirLightColorMultiplier = 1;
 
 #	if defined(WATER_EFFECTS)
-	dirLightColorMultiplier *= WaterEffects::ComputeCaustics(waterData, input.WorldPosition.xyz, worldSpaceNormal);
+	dirLightColorMultiplier *= WaterEffects::ComputeCaustics(waterData, input.WorldPosition.xyz, eyeIndex);
 #	endif
 
 	float selfShadowFactor = 1.0f;
@@ -2096,7 +2107,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 				// (MODELSPACENORMALS))
 
 	if (dirShadow != 0.0 && (inWorld || inReflection))
-		dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition, FrameBuffer::CameraPosAdjust[eyeIndex], eyeIndex);
+		dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
 	dirLightColorMultiplier *= dirShadow;
 
@@ -2264,11 +2275,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 		float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WorldPosition.xyz;
 		float lightDist = length(lightDirection);
+
+#			if defined(ISL)
+		float intensityMultiplier = InverseSquareLighting::GetAttenuation(lightDist, light);
+		if (intensityMultiplier < 1e-5)
+			continue;
+#			else
 		float intensityFactor = saturate(lightDist / light.radius);
 		if (intensityFactor == 1)
 			continue;
-
 		float intensityMultiplier = 1 - intensityFactor * intensityFactor;
+#			endif
+
 		float3 lightColor = Color::Light(light.color.xyz) * intensityMultiplier;
 		float lightShadow = 1.0;
 
@@ -2484,7 +2502,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #			endif
 			{
 				// Dynamic Cubemap Creator sets this value to black, if it is anything but black it is wrong
-				float3 envColorTest = TexEnvSampler.SampleLevel(SampEnvSampler, float3(0.0, 1.0, 0.0), 15);
+				float3 envColorTest = TexEnvSampler.SampleLevel(SampEnvSampler, float3(0.0, 1.0, 0.0), 15).xyz;
 				dynamicCubemap = all(envColorTest == 0.0);
 			}
 
@@ -2531,7 +2549,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif
 
 		if (!dynamicCubemap) {
-			float3 envColorBase = Color::GammaToLinear(TexEnvSampler.Sample(SampEnvSampler, envSamplingPoint));
+			float3 envColorBase = Color::GammaToLinear(TexEnvSampler.Sample(SampEnvSampler, envSamplingPoint).xyz);
 			envColor = envColorBase.xyz * envMask;
 		}
 	}
@@ -2728,11 +2746,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		else
 		lodLandDiffuseColor += directionalAmbientColor;
 #		endif
-		float3 litLodLandColor = vertexColor * lodLandColor * lodLandFadeFactor * lodLandDiffuseColor;
+		float3 litLodLandColor = vertexColor * lodLandColor.xyz * lodLandFadeFactor * lodLandDiffuseColor;
 		color.xyz = lerp(color.xyz * Color::PBRLightingScale, litLodLandColor, lodLandBlendFactor);
 
 		specularColor = lerp(specularColorPBR * Color::PBRLightingScale, 0, lodLandBlendFactor);
-		indirectDiffuseLobeWeight = lerp(indirectDiffuseLobeWeight, vertexColor * lodLandColor * lodLandFadeFactor, lodLandBlendFactor);
+		indirectDiffuseLobeWeight = lerp(indirectDiffuseLobeWeight, vertexColor * lodLandColor.xyz * lodLandFadeFactor, lodLandBlendFactor);
 		indirectSpecularLobeWeight = lerp(indirectSpecularLobeWeight, 0, lodLandBlendFactor);
 		pbrGlossiness = lerp(pbrGlossiness, 0, lodLandBlendFactor);
 	}
