@@ -151,5 +151,4 @@ void TerrainVariation::DrawUnloadedUI()
 	ImGui::BulletText("Reduces terrain texture tiling");
 	ImGui::BulletText("Adjustable distance-based blending");
 	ImGui::Spacing();
-	ImGui::TextWrapped("Click the download link below to install this feature from Nexus Mods.");
 }
