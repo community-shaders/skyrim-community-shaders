@@ -103,14 +103,14 @@ namespace SnowCover
 	{
 		float env_mult = GetEnvironmentalMultiplier(p);
 		float distMult = 1 - smoothstep(10000, 30000, viewDist);
-		float weatherMult = distMult * SharedData::snowCoverSettings.TimeSnowing * max(500, SharedData::snowCoverSettings.SnowingDensity) / 100;
-		float mult = SharedData::snowCoverSettings.MainTint.a * pow(saturate(env_mult), 0.25);
+		float weatherMult = distMult * SharedData::snowCoverSettings.TimeSnowing * max(500, SharedData::snowCoverSettings.SnowingDensity) / 500;
+		float mult = SharedData::snowCoverSettings.MainTint.a * saturate(env_mult);
 		mult = skylight * saturate(mult + weatherMult) * smoothstep(SharedData::snowCoverSettings.minAngle, SharedData::snowCoverSettings.maxAngle, worldNormal.z);
 		if (SharedData::snowCoverSettings.AffectFoliageColor) {
 			ApplyFoliageColor(color, env_mult);
 		}
 		float2 uv = frac(SharedData::snowCoverSettings.UVScale * (p.xy + worldNormal.xy * 2) / 100);
-		float3 diffuse = Color::TrueLinearToGamma(SnowAlbedo.Sample(SampColorSampler, uv).rgb) * SharedData::snowCoverSettings.MainTint.rgb;
+		float3 diffuse = Color::TrueLinearToGamma(SnowAlbedo.Sample(SampColorSampler, uv).rgb) * SharedData::snowCoverSettings.MainTint.rgb * Color::PBRLightingScale;
 
 		color = lerp(color, diffuse, mult);
 	}

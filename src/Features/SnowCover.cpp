@@ -17,6 +17,10 @@ void copyString(const std::string& input, char* dst, size_t dst_size)
 
 void SnowCover::DrawSettings()
 {
+	ImGui::Checkbox("Enable Nicer Foliage", (bool*)&settings.EnableExpensiveFoliage);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Uses one more texture sample to put snow on edges of tree lods and grass.");
+	}
 	ImGui::SliderFloat("Snow Offset", &settings.SnowHeightOffset, -20000.0f, 20000.0f);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Moves the altitude that snow appears at. For testing purposes.");
@@ -55,111 +59,113 @@ void SnowCover::DrawSettings()
 		ImGui::Separator();
 		ImGui::Checkbox("Enable Snow Cover", (bool*)&wsettings.EnableSnowCover);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Enables the feature. This is enabled automatically when a config is found.");
+			ImGui::Text("Enables the feature. This is set automatically when a config is found.");
 		}
-		ImGui::Checkbox("Foliage Color Affected", (bool*)&wsettings.AffectFoliageColor);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Should grass and trees turn yellow?");
-		}
-		ImGui::SliderFloat("Foliage Color Height Offset", &wsettings.FoliageHeightOffset, -2000.0f, 2000.0f);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("How far below/above the snow line should the foliage color start changing?");
-		}
-		ImGui::Separator();
-		ImGui::SliderInt("Maximum Summer Month", (int*)&wsettings.MaxSummerMonth, 0, 11);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("In which month is the snow line highest?");
-		}
-		ImGui::SliderInt("Maximum Winter Month", (int*)&wsettings.MaxWinterMonth, 0, 11);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("In which month is the snow line lowest?");
-		}
-		ImGui::SliderFloat("Summer Height Offset", &wsettings.SummerHeightOffset, -20000.0f, 20000.0f);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("What is the snow line altitude in summer?");
-		}
-		ImGui::SliderFloat("Winter Height Offset", &wsettings.WinterHeightOffset, -20000.0f, 20000.0f);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("What is the snow line altitude in winter?");
-		}
-		ImGui::SliderFloat("Snowing speed", &snowing_speed, 0.01f, 10.0f);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("How fast snowy weather accumulates snow. Also depends on the weather settings.");
-		}
-		ImGui::SliderFloat("Melting speed", &melting_speed, 0.01f, 10.0f);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("How fast snow (under snow line) disappears when it is not snowing.");
-		}
-		if (ImGui::TreeNodeEx("Height Equation")) {
-			ImGui::InputFloat("x", &wsettings.Equation[0], 0.0f, 0.0f, "%.20f");
-			ImGui::InputFloat("y", &wsettings.Equation[1], 0.0f, 0.0f, "%.20f");
-			ImGui::InputFloat("xx", &wsettings.Equation[2], 0.0f, 0.0f, "%.20f");
-			ImGui::InputFloat("xy", &wsettings.Equation[3], 0.0f, 0.0f, "%.20f");
-			ImGui::InputFloat("yy", &wsettings.Equation[4], 0.0f, 0.0f, "%.20f");
-			ImGui::InputFloat("xxx", &wsettings.Equation[5], 0.0f, 0.0f, "%.20f");
-			ImGui::InputFloat("xxy", &wsettings.Equation[6], 0.0f, 0.0f, "%.20f");
-			ImGui::InputFloat("xyy", &wsettings.Equation[7], 0.0f, 0.0f, "%.20f");
-			ImGui::InputFloat("yyy", &wsettings.Equation[8], 0.0f, 0.0f, "%.20f");
-			ImGui::TreePop();
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"The 'snow line' is a curved plane controlled by a cubic equation. "
-				"These parameters control how the plane is curved.");
-		}
-		if (ImGui::TreeNodeEx("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::SliderFloat("Min Angle", &wsettings.MinAngle, 0.0f, 1.0f);
+		if (wsettings.EnableSnowCover) {
+			ImGui::Checkbox("Foliage Color Affected", (bool*)&wsettings.AffectFoliageColor);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("The angle snow starts appearing at. 0 = horizontal, 1 = vertical.");
+				ImGui::Text("Should grass and trees turn yellow?");
 			}
-			ImGui::SliderFloat("Max Angle", &wsettings.MaxAngle, 0.0f, 1.0f);
+			ImGui::SliderFloat("Foliage Color Height Offset", &wsettings.FoliageHeightOffset, -2000.0f, 2000.0f);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("The angle snow is fully visible at. 0 = horizontal, 1 = vertical.");
+				ImGui::Text("How far below/above the snow line should the foliage color start changing?");
 			}
-			ImGui::InputText("Main texture", tbuf, 128);
+			ImGui::Separator();
+			ImGui::SliderInt("Maximum Summer Month", (int*)&wsettings.MaxSummerMonth, 0, 11);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Path to the main texture relative to Data folder. Needs to be a PBR texture with a diffuse, _n, and _rmaos.");
+				ImGui::Text("In which month is the snow line highest?");
 			}
-			main_tex = std::string(tbuf);
-			ImGui::InputText("Alt texture", altbuf, 128);
+			ImGui::SliderInt("Maximum Winter Month", (int*)&wsettings.MaxWinterMonth, 0, 11);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Path to the alternative texture relative to Data folder. Needs to be a PBR texture with a diffuse, _n, and _rmaos.");
+				ImGui::Text("In which month is the snow line lowest?");
 			}
-			alt_tex = std::string(altbuf);
-			ImGui::ColorEdit4("Main Tint", &wsettings.MainTint.x);
+			ImGui::SliderFloat("Summer Height Offset", &wsettings.SummerHeightOffset, -20000.0f, 20000.0f);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Tint for the main texture. Alpha only affects the color but not roughness etc.");
+				ImGui::Text("What is the snow line altitude in summer?");
 			}
-			ImGui::InputFloat("Main Specular", &wsettings.MainSpec, 0.0f, 1.0f);
+			ImGui::SliderFloat("Winter Height Offset", &wsettings.WinterHeightOffset, -20000.0f, 20000.0f);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("The main specular multiplier. Most materials = 0.04, snow = 0.02");
+				ImGui::Text("What is the snow line altitude in winter?");
 			}
-			ImGui::ColorEdit4("Alt Tint", &wsettings.AltTint.x);
+			ImGui::SliderFloat("Snowing speed", &snowing_speed, 0.01f, 10.0f);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Tint for the alternative texture. Alpha only affects the color but not roughness etc.");
+				ImGui::Text("How fast snowy weather accumulates snow. Also depends on the weather settings.");
 			}
-			ImGui::InputFloat("Alt Specular", &wsettings.AltSpec, 0.0f, 1.0f);
+			ImGui::SliderFloat("Melting speed", &melting_speed, 0.01f, 10.0f);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("The alternative specular multiplier. Most materials = 0.04, snow = 0.02");
+				ImGui::Text("How fast snow (under snow line) disappears when it is not snowing.");
 			}
-			ImGui::SliderFloat("Peak Main Angle", &wsettings.PeakMainAngle, 0.0f, 1.0f);
+			if (ImGui::TreeNodeEx("Height Equation")) {
+				ImGui::InputFloat("x", &wsettings.Equation[0], 0.0f, 0.0f, "%.20f");
+				ImGui::InputFloat("y", &wsettings.Equation[1], 0.0f, 0.0f, "%.20f");
+				ImGui::InputFloat("xx", &wsettings.Equation[2], 0.0f, 0.0f, "%.20f");
+				ImGui::InputFloat("xy", &wsettings.Equation[3], 0.0f, 0.0f, "%.20f");
+				ImGui::InputFloat("yy", &wsettings.Equation[4], 0.0f, 0.0f, "%.20f");
+				ImGui::InputFloat("xxx", &wsettings.Equation[5], 0.0f, 0.0f, "%.20f");
+				ImGui::InputFloat("xxy", &wsettings.Equation[6], 0.0f, 0.0f, "%.20f");
+				ImGui::InputFloat("xyy", &wsettings.Equation[7], 0.0f, 0.0f, "%.20f");
+				ImGui::InputFloat("yyy", &wsettings.Equation[8], 0.0f, 0.0f, "%.20f");
+				ImGui::TreePop();
+			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("The angle at which the main texture is the strongest. The stronger wins. 0 = horizontal, 1 = vertical.");
+				ImGui::Text(
+					"The 'snow line' is a curved plane controlled by a cubic equation. "
+					"These parameters control how the plane is curved.");
 			}
-			ImGui::SliderFloat("Peak Alt Angle", &wsettings.PeakAltAngle, 0.0f, 1.0f);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("The angle at which the alternative texture is the strongest. The stronger wins. 0 = horizontal, 1 = vertical.");
+			if (ImGui::TreeNodeEx("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::SliderFloat("Min Angle", &wsettings.MinAngle, 0.0f, 1.0f);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("The angle snow starts appearing at. 0 = horizontal, 1 = vertical.");
+				}
+				ImGui::SliderFloat("Max Angle", &wsettings.MaxAngle, 0.0f, 1.0f);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("The angle snow is fully visible at. 0 = horizontal, 1 = vertical.");
+				}
+				ImGui::InputText("Main texture", tbuf, 128);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Path to the main texture relative to Data folder. Needs to be a PBR texture with a diffuse, _n, and _rmaos.");
+				}
+				main_tex = std::string(tbuf);
+				ImGui::InputText("Alt texture", altbuf, 128);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Path to the alternative texture relative to Data folder. Needs to be a PBR texture with a diffuse, _n, and _rmaos.");
+				}
+				alt_tex = std::string(altbuf);
+				ImGui::ColorEdit4("Main Tint", &wsettings.MainTint.x);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Tint for the main texture. Alpha only affects the color but not roughness etc.");
+				}
+				ImGui::InputFloat("Main Specular", &wsettings.MainSpec, 0.0f, 1.0f);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("The main specular multiplier. Most materials = 0.04, snow = 0.02");
+				}
+				ImGui::ColorEdit4("Alt Tint", &wsettings.AltTint.x);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Tint for the alternative texture. Alpha only affects the color but not roughness etc.");
+				}
+				ImGui::InputFloat("Alt Specular", &wsettings.AltSpec, 0.0f, 1.0f);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("The alternative specular multiplier. Most materials = 0.04, snow = 0.02");
+				}
+				ImGui::SliderFloat("Peak Main Angle", &wsettings.PeakMainAngle, 0.0f, 1.0f);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("The angle at which the main texture is the strongest. The stronger wins. 0 = horizontal, 1 = vertical.");
+				}
+				ImGui::SliderFloat("Peak Alt Angle", &wsettings.PeakAltAngle, 0.0f, 1.0f);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("The angle at which the alternative texture is the strongest. The stronger wins. 0 = horizontal, 1 = vertical.");
+				}
+				ImGui::SliderFloat("UV Scale", &wsettings.UVScale, 0.1f, 10.f, "%.1f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("The UV scale of both textures.");
+				}
+				ImGui::Text("Glint");
+				ImGui::SliderFloat("Screenspace Scale", &wsettings.ScreenSpaceScale, 0.f, 3.f, "%.3f");
+				ImGui::SliderFloat("Log Microfacet Density", &wsettings.LogMicrofacetDensity, 0.f, 40.f, "%.3f");
+				ImGui::SliderFloat("Microfacet Roughness", &wsettings.MicrofacetRoughness, 0.f, 1.f, "%.3f");
+				ImGui::SliderFloat("Density Randomization", &wsettings.DensityRandomization, 0.f, 5.f, "%.3f");
+				ImGui::TreePop();
 			}
-			ImGui::SliderFloat("UV Scale", &wsettings.UVScale, 0.1f, 10.f, "%.1f");
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("The UV scale of both textures.");
-			}
-			ImGui::Text("Glint");
-			ImGui::SliderFloat("Screenspace Scale", &wsettings.ScreenSpaceScale, 0.f, 3.f, "%.3f");
-			ImGui::SliderFloat("Log Microfacet Density", &wsettings.LogMicrofacetDensity, 0.f, 40.f, "%.3f");
-			ImGui::SliderFloat("Microfacet Roughness", &wsettings.MicrofacetRoughness, 0.f, 1.f, "%.3f");
-			ImGui::SliderFloat("Density Randomization", &wsettings.DensityRandomization, 0.f, 5.f, "%.3f");
-			ImGui::TreePop();
 		}
 		ImGui::TreePop();
 	}

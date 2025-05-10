@@ -144,8 +144,9 @@ namespace SharedData
 		float SnowingDensity;
 		uint pad0;
 
+		uint EnableExpensiveFoliage;
 		float SnowHeightOffset;
-		uint3 pad;
+		uint2 pad;
 
 		uint EnableSnowCover;
 		uint AffectFoliageColor;

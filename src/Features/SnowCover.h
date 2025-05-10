@@ -22,8 +22,9 @@ public:
 
 	struct UserSettings
 	{
+		uint EnableExpensiveFoliage = 1;
 		float SnowHeightOffset = 0.0f;
-		uint pad[3];
+		uint pad[2];
 	};
 	static_assert(sizeof(UserSettings) % 16 == 0);
 

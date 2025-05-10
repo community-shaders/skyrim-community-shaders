@@ -223,7 +223,10 @@ PS_OUTPUT main(PS_INPUT input)
 
 #		if defined(SNOW_COVER)
 	if (SharedData::snowCoverSettings.EnableSnowCover) {
-		float skylight = 1 - TexDiffuse.Sample(SampDiffuse, input.TexCoord.xy - float2(0, 1. / 256.)).a;
+		float skylight = 0.15;
+		if (SharedData::snowCoverSettings.EnableExpensiveFoliage) {
+			skylight = 1 - TexDiffuse.Sample(SampDiffuse, input.TexCoord.xy - float2(0, 1. / 256.)).a;
+		}
 		SnowCover::ApplySnowFoliage(baseColor.xyz, normal, input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz, skylight, mul(FrameBuffer::CameraView[eyeIndex], float4(input.WorldPosition.xyz, 1)).z);
 	}
 #		endif
