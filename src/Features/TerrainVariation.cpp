@@ -137,6 +137,11 @@ void TerrainVariation::SaveSettings(json& o_json)
 	o_json = settings;
 }
 
+bool TerrainVariation::DrawFailLoadMessage() const
+{
+    return false;
+}
+
 void TerrainVariation::DrawUnloadedUI()
 {
 	ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "This feature is not installed!");
