@@ -94,7 +94,7 @@ private:
 
 		void Update(const RE::TESClimate* climate);
 	};
-	
+
 	struct ShadowFader
 	{
 		enum class Phase : uint8_t
@@ -104,7 +104,7 @@ private:
 			FadeIn
 		};
 
-		static constexpr float FadeTime = 100.0f; // 5 seconds at timescale 20
+		static constexpr float FadeTime = 100.0f;  // 5 seconds at timescale 20
 
 		Phase fadePhase = Phase::None;
 		Caster current = Caster::None;
@@ -124,7 +124,7 @@ private:
 	static constexpr float SunPeakDistance = 400.0f;
 	static constexpr float SunScaleFactor = 48.0f / 2048.0f;
 	static constexpr float MinElevation = 0.25f;
-	
+
 	static constexpr float SecundaIntensityFactor = 0.67f;
 	static constexpr float NewMoonIntensityFactor = 0.05f;
 	static constexpr float CrescentMoonIntensityFactor = 0.25f;
@@ -144,7 +144,7 @@ private:
 	float secundaPhaseIntensityFactor = 0.0f;
 
 	ClimateTimings timings = {};
-	
+
 	RE::NiPoint3 directions[3];
 	float intensities[3] = {};
 	ShadowFader shadowFader;
@@ -152,9 +152,9 @@ private:
 	void Update(const RE::Sky* sky);
 
 	void SetSkyRotation(const RE::Sky* sky, RE::TESObjectCELL* cell);
-	
+
 	void ProcessSun(const RE::Sun* sun, float time, float altitude, bool isDayTime);
-	
+
 	void ProcessMoon(const RE::Moon* moon, float time, Caster type, float altitude, bool isDayTime);
 
 	static void CalculateSunDirectionAndDistance(const RE::Sun* sun, RE::NiPoint3& outDir, float& outDistance);

@@ -6,7 +6,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UseAlternateSunPath,
 	MoonLightSource)
 
-
 void SkySync::DrawSettings()
 {
 	ImGui::Checkbox("Enabled", &settings.Enabled);
@@ -34,14 +33,14 @@ void SkySync::PostPostLoad()
 	moonAndStarsLoaded = GetModuleHandle(L"po3_MoonMod.dll");
 	if (moonAndStarsLoaded)
 		logger::info("[Sky Sync] Moon and Stars detected, compatibility enabled");
-	
+
 	if (GetModuleHandle(L"EVLaS.dll")) {
 		loaded = false;
 		failedLoadedMessage = "Sky Sync has been disabled as EVLaS has been detected, both cannot be used together";
 		logger::warn("{}", failedLoadedMessage);
 		return;
 	}
-	
+
 	stl::detour_thunk<Moon_Update>(REL::RelocationID(25626, 26169));
 	stl::detour_thunk<Sky_Update>(REL::RelocationID(25682, 26229));
 	stl::detour_thunk<Sky_OnNewClimate>(REL::RelocationID(25695, 26242));
@@ -157,7 +156,7 @@ void SkySync::ProcessMoon(const RE::Moon* moon, const float time, const Caster t
 
 	const float moonRadius = type == Caster::Masser ? static_cast<float>(*gMasserSize) : static_cast<float>(*gSecundaSize);
 	float intensity = CalculateVisibility(dir, moon->moonMesh->local.translate.y, moonRadius);
-	
+
 	if (type == Caster::Masser)
 		intensity *= masserPhaseIntensityFactor;
 	else if (type == Caster::Secunda)
@@ -324,7 +323,7 @@ void SkySync::ShadowFader::Update(const RE::Sun* sun, RE::NiPoint3 dirs[3], floa
 void SkySync::ShadowFader::SetLighting(const RE::Sun* sun, RE::NiPoint3 dir, float intensity)
 {
 	ClampDirection(dir);
-	
+
 	RE::NiMatrix3& m = sun->light->local.rotate;
 	m.entry[0][0] = -dir.x;
 	m.entry[1][0] = -dir.y;
