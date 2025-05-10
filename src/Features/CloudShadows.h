@@ -18,6 +18,7 @@ struct CloudShadows : Feature
 
 	virtual inline std::string GetName() override { return "Cloud Shadows"; }
 	virtual inline std::string GetShortName() override { return "CloudShadows"; }
+	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/139185"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "CLOUD_SHADOWS"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
 
@@ -64,4 +65,5 @@ struct CloudShadows : Feature
 		}
 	};
 	virtual bool SupportsVR() override { return true; };
+	virtual void DrawUnloadedUI() override;
 };

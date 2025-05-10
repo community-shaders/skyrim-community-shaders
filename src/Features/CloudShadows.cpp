@@ -184,3 +184,26 @@ void CloudShadows::Hooks::BSSkyShader_SetupMaterial::thunk(RE::BSShader* This, R
 	globals::features::cloudShadows->ModifySky(Pass);
 	func(This, Pass, RenderFlags);
 }
+
+bool CloudShadows::DrawFailLoadMessage() const
+{
+    return false;
+}
+
+void CloudShadows::DrawUnloadedUI()
+{
+	ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "This feature is not installed!");
+
+	ImGui::Spacing();
+	ImGui::TextWrapped(
+		"Cloud Shadows adds shadows cast from clouds.\n"
+		"The cloud shadows are aligned with the sun, using the actual clouds system rather than a scrolling texture,\n"
+		"meaning that when clouds cover it the player will be shrouded in darkness.");
+
+	ImGui::Spacing();
+	ImGui::TextWrapped("Key features:");
+	ImGui::BulletText("More realistic daytime lighting");
+	ImGui::BulletText("Compatible with all weathers");
+	ImGui::BulletText("Utilizes volumetric lighting for a visually striking effect.");
+	ImGui::Spacing();
+}
