@@ -62,6 +62,8 @@ void GrassLighting::DrawSettings()
 
 		ImGui::TreePop();
 	}
+	// Display version info at the bottom
+	Util::DisplayVersionInfo(version);
 }
 
 void GrassLighting::LoadSettings(json& o_json)
@@ -77,6 +79,11 @@ void GrassLighting::SaveSettings(json& o_json)
 void GrassLighting::RestoreDefaultSettings()
 {
 	settings = {};
+}
+
+bool GrassLighting::DrawFailLoadMessage() const
+{
+    return false;
 }
 
 void GrassLighting::DrawUnloadedUI()

@@ -252,6 +252,11 @@ void ScreenSpaceShadows::RestoreDefaultSettings()
 	bendSettings = {};
 }
 
+bool ScreenSpaceShadows::DrawFailLoadMessage() const
+{
+    return false;
+}
+
 void ScreenSpaceShadows::DrawUnloadedUI()
 {
 	// Call base class implementation for standard "not installed" message

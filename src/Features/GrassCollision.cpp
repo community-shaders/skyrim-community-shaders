@@ -21,6 +21,8 @@ void GrassCollision::DrawSettings()
 		ImGui::Text(std::format("Total Collisions : {}", currentCollisionCount).c_str());
 		ImGui::TreePop();
 	}
+	// Display version info at the bottom
+	Util::DisplayVersionInfo(version);
 }
 
 static bool GetShapeBound(RE::NiAVObject* a_node, RE::NiPoint3& centerPos, float& radius)
@@ -236,6 +238,11 @@ void GrassCollision::Hooks::BSGrassShader_SetupGeometry::thunk(RE::BSShader* Thi
 {
 	globals::features::grassCollision->Update();
 	func(This, Pass, RenderFlags);
+}
+
+bool GrassCollision::DrawFailLoadMessage() const
+{
+    return false;
 }
 
 void GrassCollision::DrawUnloadedUI()

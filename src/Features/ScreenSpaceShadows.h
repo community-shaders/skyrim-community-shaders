@@ -1,15 +1,14 @@
 #pragma once
 
 struct ScreenSpaceShadows : Feature
-{
-	static ScreenSpaceShadows* GetSingleton()
+{	static ScreenSpaceShadows* GetSingleton()
 	{
 		static ScreenSpaceShadows singleton;
 		return &singleton;
-	}	virtual inline std::string GetName() const override { return "Screen Space Shadows"; }
-	virtual inline std::string GetShortName() const override { return "ScreenSpaceShadows"; }
-	virtual inline std::string GetFeatureModLink() const override { return "https://www.nexusmods.com/skyrimspecialedition/mods/93209"; }
-	virtual inline std::string_view GetShaderDefineName() const override { return "SCREEN_SPACE_SHADOWS"; }
+	}	virtual inline std::string GetName() override { return "Screen Space Shadows"; }
+	virtual inline std::string GetShortName() override { return "ScreenSpaceShadows"; }
+	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/93209"; }
+	virtual inline std::string_view GetShaderDefineName() override { return "SCREEN_SPACE_SHADOWS"; }
 	bool HasShaderDefine(RE::BSShader::Type shaderType) override;
 
 	struct BendSettings
@@ -69,6 +68,6 @@ struct ScreenSpaceShadows : Feature
 	virtual void RestoreDefaultSettings() override;
 	
 	virtual void DrawUnloadedUI() override;
-
+	virtual bool DrawFailLoadMessage() const override;
 	virtual bool SupportsVR() override { return true; };
 };

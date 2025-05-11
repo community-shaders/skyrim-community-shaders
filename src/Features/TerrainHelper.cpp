@@ -3,13 +3,21 @@
 #include "ShaderCache.h"
 #include "State.h"
 
+void TerrainHelper::DrawSettings()
+{
+	// Display version info at the bottom
+	Util::DisplayVersionInfo(version);
+}
+
 void TerrainHelper::DrawUnloadedUI()
 {
 	// Call base class implementation for standard "not installed" message
 	Feature::DrawUnloadedUI();
 	
 	// Feature-specific description
-	ImGui::Text("Terrain Helper is only required if a terrain mod you are using requires it, otherwise it does nothing.");
+	ImGui::Text("Terrain Helper is only required if a terrain mod you are using requires it, otherwise it does nothing.\n"
+				"Terrain Helper adds the ability for texture mods to store the parallax texture in a separate map, instead of embedded in the alpha of the diffuse map.\n"
+				"Can help improve performance as the loaded parallax textures can be lower quality. Pre-supported by PBR.");
 }
 
 void TerrainHelper::DataLoaded()

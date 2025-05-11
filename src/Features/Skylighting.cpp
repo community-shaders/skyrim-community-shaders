@@ -36,6 +36,11 @@ void Skylighting::ResetSkylighting()
 	queuedResetSkylighting = false;
 }
 
+bool Skylighting::DrawFailLoadMessage() const
+{
+    return false;
+}
+
 void Skylighting::DrawSettings()
 {
 	ImGui::Text("Minimum visibility values. Diffuse darkens objects. Specular removes the sky from reflections.");
@@ -58,6 +63,9 @@ void Skylighting::DrawSettings()
 	ImGui::SliderAngle("Max Zenith Angle", &settings.MaxZenith, 0, 90);
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("Smaller angles creates more focused top-down shadow.");
+	
+	// Display version info at the bottom
+	Util::DisplayVersionInfo(version);
 }
 
 void Skylighting::SetupResources()

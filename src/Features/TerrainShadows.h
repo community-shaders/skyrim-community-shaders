@@ -8,10 +8,10 @@ struct TerrainShadows : public Feature
 	{
 		static TerrainShadows singleton;
 		return std::addressof(singleton);
-	}	virtual inline std::string GetName() const override { return "Terrain Shadows"; }
-	virtual inline std::string GetShortName() const override { return "TerrainShadows"; }
-	virtual inline std::string GetFeatureModLink() const override { return "https://www.nexusmods.com/skyrimspecialedition/mods/135817"; }
-	virtual inline std::string_view GetShaderDefineName() const override { return "TERRAIN_SHADOWS"; }
+	}	virtual inline std::string GetName() override { return "Terrain Shadows"; }
+	virtual inline std::string GetShortName() override { return "TerrainShadows"; }
+	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/135817"; }
+	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_SHADOWS"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
 
 	struct Settings

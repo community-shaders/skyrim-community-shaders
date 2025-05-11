@@ -9,10 +9,10 @@ public:
 	{
 		static LightLimitFix render;
 		return &render;
-	}	virtual inline std::string GetName() const override { return "Light Limit Fix"; }
-	virtual inline std::string GetShortName() const override { return "LightLimitFix"; }
-	virtual inline std::string GetFeatureModLink() const override { return "https://www.nexusmods.com/skyrimspecialedition/mods/99548"; }
-	virtual inline std::string_view GetShaderDefineName() const override { return "LIGHT_LIMIT_FIX"; }
+	}	virtual inline std::string GetName() override { return "Light Limit Fix"; }
+	virtual inline std::string GetShortName() override { return "LightLimitFix"; }
+	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/99548"; }
+	virtual inline std::string_view GetShaderDefineName() override { return "LIGHT_LIMIT_FIX"; }
 
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
@@ -162,6 +162,9 @@ public:
 	virtual void RestoreDefaultSettings() override;
 
 	virtual void DrawSettings() override;
+
+	virtual bool DrawFailLoadMessage() const override;
+	
 	virtual void DrawUnloadedUI() override;
 
 	virtual void PostPostLoad() override;

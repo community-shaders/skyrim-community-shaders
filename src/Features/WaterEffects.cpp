@@ -22,6 +22,12 @@ bool WaterEffects::HasShaderDefine(RE::BSShader::Type)
 	return true;
 }
 
+void WaterEffects::DrawSettings()
+{
+	// Display version info at the bottom
+	Util::DisplayVersionInfo(version);
+}
+
 void WaterEffects::DrawUnloadedUI()
 {
 	// Call base class implementation for standard "not installed" message

@@ -109,6 +109,8 @@ void LightLimitFix::DrawSettings()
 
 		ImGui::TreePop();
 	}
+	// Display version info at the bottom
+	Util::DisplayVersionInfo(version);
 }
 
 void LightLimitFix::DrawUnloadedUI()
@@ -1091,4 +1093,9 @@ void LightLimitFix::Hooks::NiNode_Destroy::thunk(RE::NiNode* This)
 {
 	globals::features::lightLimitFix->CleanupParticleLights(This);
 	func(This);
+}
+
+bool InverseSquareLighting::DrawFailLoadMessage() const
+{
+    return false;
 }

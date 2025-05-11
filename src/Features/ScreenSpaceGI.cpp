@@ -305,6 +305,13 @@ void ScreenSpaceGI::DrawSettings()
 
 		ImGui::TreePop();
 	}
+	// Display version info at the bottom
+	Util::DisplayVersionInfo(version);
+}
+
+bool ScreenSpaceGI::DrawFailLoadMessage() const
+{
+    return false;
 }
 
 void ScreenSpaceGI::DrawUnloadedUI()

@@ -2,15 +2,14 @@
 
 struct WetnessEffects : Feature
 {
-public:
-	static WetnessEffects* GetSingleton()
+public:	static WetnessEffects* GetSingleton()
 	{
 		static WetnessEffects singleton;
 		return &singleton;
-	}	virtual inline std::string GetName() const override { return "Wetness Effects"; }
-	virtual inline std::string GetShortName() const override { return "WetnessEffects"; }
-	virtual inline std::string GetFeatureModLink() const override { return "https://www.nexusmods.com/skyrimspecialedition/mods/112739"; }
-	virtual inline std::string_view GetShaderDefineName() const override { return "WETNESS_EFFECTS"; }
+	}	virtual inline std::string GetName() override { return "Wetness Effects"; }
+	virtual inline std::string GetShortName() override { return "WetnessEffects"; }
+	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/112739"; }
+	virtual inline std::string_view GetShaderDefineName() override { return "WETNESS_EFFECTS"; }
 
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 

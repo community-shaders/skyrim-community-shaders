@@ -56,7 +56,7 @@ struct GrassCollision : Feature
 	virtual void RestoreDefaultSettings() override;
 
 	virtual void PostPostLoad() override;
-
+	virtual bool DrawFailLoadMessage() const override;
 	virtual bool SupportsVR() override { return true; };
 
 	struct Hooks

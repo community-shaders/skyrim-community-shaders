@@ -328,3 +328,19 @@ void TerrainBlending::RenderTerrainBlendingPasses()
 	auto& mainDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 	mainDepth.depthSRV = depthSRVBackup;
 }
+
+void TerrainBlending::DrawUnloadedUI()
+{
+	// Call base class implementation for standard "not installed" message
+	Feature::DrawUnloadedUI();
+
+	// Feature-specific description
+	ImGui::TextWrapped(
+		"Terrain Blending blends the terrain with any meshes that reside on top, such as rocks or dirt cliffs.\n"
+		"This feature is currently a work in progress, and does not have a nexus release.");
+
+	ImGui::Spacing();
+	ImGui::TextWrapped("Key features:");
+	ImGui::BulletText("Blends Terrain with meshes to avoid harsh lines between the two.");
+	ImGui::BulletText("Creates a more natural scene and a smoother transition between objects.");
+}

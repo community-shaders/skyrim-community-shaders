@@ -15,7 +15,6 @@ struct CloudShadows : Feature
 	};
 
 	Settings settings;
-
 	virtual inline std::string GetName() override { return "Cloud Shadows"; }
 	virtual inline std::string GetShortName() override { return "CloudShadows"; }
 	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/139185"; }

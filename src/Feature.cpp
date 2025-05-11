@@ -25,7 +25,8 @@
 std::string Feature::GetRequiredVersion() const
 {
     try {
-        std::string shortName = GetShortName();
+        std::string shortName = const_cast<Feature*>(this)->GetShortName();
+        
         if (FeatureVersions::FEATURE_MINIMAL_VERSIONS.contains(shortName)) {
             const auto& minimalFeatureVersion = FeatureVersions::FEATURE_MINIMAL_VERSIONS.at(shortName);
             std::string minimalVersionString = minimalFeatureVersion.string();
@@ -138,18 +139,18 @@ void Feature::WriteDiskCacheInfo(CSimpleIniA& a_ini)
 	a_ini.SetValue(ini_name.c_str(), "Version", version.c_str());
 }
 
-void Feature::DrawUnloadedUI()
-{
-    ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "%s", GetNotInstalledMessage().c_str());
-    ImGui::Spacing();
+// void Feature::DrawUnloadedUI()
+// {
+//     ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "%s", GetNotInstalledMessage().c_str());
+//     ImGui::Spacing();
     
-    // Show link to download if there is one
-    std::string featureModLink = GetFeatureModLink();
-    if (!featureModLink.empty()) {
-        ImGui::TextWrapped("You can download this feature from: %s", featureModLink.c_str());
-        ImGui::Spacing();
-    }
-}
+//     // Show link to download if there is one
+//     std::string featureModLink = GetFeatureModLink();
+//     if (!featureModLink.empty()) {
+//         ImGui::TextWrapped("You can download this feature from: %s", featureModLink.c_str());
+//         ImGui::Spacing();
+//     }
+// }
 
 const std::vector<Feature*>& Feature::GetFeatureList()
 {

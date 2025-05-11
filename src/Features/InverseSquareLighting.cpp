@@ -5,6 +5,8 @@
 void InverseSquareLighting::DrawSettings()
 {
 	editor.DrawSettings();
+	// Display version info at the bottom
+	Util::DisplayVersionInfo(version);
 }
 
 void InverseSquareLighting::EarlyPrepass()
@@ -68,6 +70,27 @@ void InverseSquareLighting::ProcessLight(LightLimitFix::LightData& light, RE::BS
 		light.invRadius = 1.f / light.radius;
 		light.color *= runtimeData->fade;
 	}
+}
+
+bool InverseSquareLighting::DrawFailLoadMessage() const
+{
+    return false;
+}
+
+void InverseSquareLighting::DrawUnloadedUI()
+{
+	// Call base class implementation for standard "not installed" message
+	Feature::DrawUnloadedUI();
+
+	// Feature-specific description
+	ImGui::TextWrapped(
+		"Inverse Square Lighting uses a more complex mathematical equation for light falloff, creating more realistic lighting in scenes.\n");
+
+	ImGui::Spacing();
+	ImGui::TextWrapped("Key features:");
+	ImGui::BulletText("Lorem Ipsum");
+	ImGui::BulletText("Lorem Ipsum");
+	ImGui::BulletText("Lorem Ipsum");
 }
 
 float InverseSquareLighting::CalculateRadius(const float intensity, const bool shadowCaster, const float cutoffOverride)

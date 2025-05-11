@@ -149,6 +149,8 @@ void WetnessEffects::DrawSettings()
 
 	ImGui::Spacing();
 	ImGui::Spacing();
+	// Display version info at the bottom
+	Util::DisplayVersionInfo(version);
 }
 
 void WetnessEffects::DrawUnloadedUI()

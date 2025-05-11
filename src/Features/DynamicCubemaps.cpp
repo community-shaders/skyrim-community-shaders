@@ -133,6 +133,9 @@ void DynamicCubemaps::DrawSettings()
 
 		ImGui::TreePop();
 	}
+	
+	// Display version info at the bottom
+	Util::DisplayVersionInfo(version);
 }
 
 void DynamicCubemaps::LoadSettings(json& o_json)
@@ -660,21 +663,4 @@ void DynamicCubemaps::Reset()
 		activeReflections = false;
 		fakeReflections = false;
 	}
-}
-
-void DynamicCubemaps::DrawUnloadedUI()
-{
-    // Call base class implementation for standard "not installed" message
-    Feature::DrawUnloadedUI();
-    
-    // Feature-specific description
-    ImGui::TextWrapped(
-        "Dynamic Cubemaps enhances reflections in Skyrim by creating and updating real-time reflection maps that show the actual surroundings.");
-    
-    ImGui::Spacing();
-    ImGui::TextWrapped("Key features:");
-    ImGui::BulletText("Real-time reflections on surfaces like water, metal, and glass");
-    ImGui::BulletText("Screen Space Reflections for detailed close-up reflections");
-    ImGui::BulletText("Environment-aware reflections showing actual surroundings");
-    ImGui::BulletText("Cubemap creator tool for custom reflection effects");
 }
