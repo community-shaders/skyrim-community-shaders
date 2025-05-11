@@ -36,6 +36,9 @@ void VolumetricLighting::DrawSettings()
 		ImGui::Spacing();
 		ImGui::TreePop();
 	}
+	
+	// Display version info at the bottom
+	Util::DisplayVersionInfo(version);
 }
 
 void VolumetricLighting::DrawVolumetricLightingSettings(int32_t& quality, TextureSize& customSize, const bool isInterior, const bool inLocationType)

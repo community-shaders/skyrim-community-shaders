@@ -80,11 +80,13 @@ void ExtendedMaterials::DrawSettings()
 			ImGui::Text(
 				"Extends parallax shadows beyond the range of parallax. Small performance impact.");
 		}
-
 		ImGui::Spacing();
 		ImGui::Spacing();
 		ImGui::TreePop();
 	}
+	
+	// Display version info at the bottom
+	Util::DisplayVersionInfo(version);
 }
 
 void ExtendedMaterials::LoadSettings(json& o_json)

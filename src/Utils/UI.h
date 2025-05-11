@@ -35,8 +35,7 @@ namespace Util
 	public:
 		DisableGuard(bool disable);
 		~DisableGuard();
-	};
-
-	bool PercentageSlider(const char* label, float* data, float lb = 0.f, float ub = 100.f, const char* format = "%.1f %%");
+	};	bool PercentageSlider(const char* label, float* data, float lb = 0.f, float ub = 100.f, const char* format = "%.1f %%");
 	ImVec2 GetNativeViewportSizeScaled(float scale);
+	void DisplayVersionInfo(const std::string& version);
 }  // namespace Util

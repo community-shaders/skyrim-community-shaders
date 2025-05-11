@@ -30,6 +30,9 @@ void ScreenSpaceShadows::DrawSettings()
 		ImGui::Spacing();
 		ImGui::TreePop();
 	}
+	
+	// Display version info at the bottom
+	Util::DisplayVersionInfo(version);
 }
 
 void ScreenSpaceShadows::ClearShaderCache()

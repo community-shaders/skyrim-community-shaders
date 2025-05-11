@@ -44,4 +44,24 @@ namespace Util
 		const auto Size = ImGui::GetMainViewport()->Size;
 		return { Size.x * scale, Size.y * scale };
 	}
+
+	void DisplayVersionInfo(const std::string& version)
+	{
+		// Add spacing and separator before version display
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		// Push gray text color for version info
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
+		
+		// Position the text at the bottom of the current window
+		ImGui::SetCursorPosY(ImGui::GetWindowHeight() - ImGui::GetTextLineHeightWithSpacing() - 5.0f);
+		
+		// Display the version info
+		ImGui::Text("v%s", version.c_str());
+		
+		// Pop the color style
+		ImGui::PopStyleColor();
+	}
 }  // namespace Util

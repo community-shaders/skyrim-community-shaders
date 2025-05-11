@@ -6,6 +6,13 @@ struct Feature
 	std::string version;
 	std::string failedLoadedMessage;
 
+	/**
+	 * Helper method to display version info at the bottom of the settings UI
+	 */
+	void DisplayVersionInfo() const {
+		Util::DisplayVersionInfo(version);
+	}
+
 	virtual std::string GetName() = 0;
 	virtual std::string GetShortName() = 0;
 	virtual std::string GetFeatureModLink() { return ""; }

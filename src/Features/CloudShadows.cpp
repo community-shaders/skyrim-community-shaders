@@ -11,6 +11,9 @@ void CloudShadows::DrawSettings()
 		ImGui::Text(
 			"Higher values make cloud shadows darker.");
 	}
+	
+	// Display version info at the bottom
+	Util::DisplayVersionInfo(version);
 }
 
 void CloudShadows::LoadSettings(json& o_json)

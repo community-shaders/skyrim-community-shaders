@@ -61,6 +61,9 @@ void SubsurfaceScattering::DrawSettings()
 
 		ImGui::TreePop();
 	}
+	
+	// Display version info at the bottom
+	Util::DisplayVersionInfo(version);
 }
 
 float3 SubsurfaceScattering::Gaussian(DiffusionProfile& a_profile, float variance, float r)
