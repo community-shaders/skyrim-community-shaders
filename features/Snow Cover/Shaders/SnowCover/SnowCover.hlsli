@@ -122,8 +122,7 @@ namespace SnowCover
 	// All the magic values you see were determined by testing in game, in other words, pulled from ass
 	float ApplySnowBase(float3 worldNormal, inout float2 uv, out bool alt, float disp, float3 p, float skylight, float waterDist, float viewDist)
 	{
-		
-		// the range in which water level affects snow	
+		// the range in which water level affects snow
 		waterDist = smoothstep(-64, 8, -waterDist - disp);
 		// distance from the camera in which weather has effect, this extends far beyond where lod starts
 		float distMult = 1 - smoothstep(10000, 30000 + 1000 * sin(p.z * 0.001 + cos(p.x * p.y * 0.001)), viewDist);
@@ -139,7 +138,7 @@ namespace SnowCover
 		float alt_mult = (1 - abs(worldNormal.z - SharedData::snowCoverSettings.peakAltAngle)) + sin(p.z * 0.01 + cos(p.x * p.y * 0.01) * 0.025) * 0.05;
 		alt = alt_mult > main_mult;
 		// apparently LOD landscape color sampler clamps uvs
-		uv = frac(SharedData::snowCoverSettings.UVScale * (p.xy / 100 + worldNormal.xy*disp));
+		uv = frac(SharedData::snowCoverSettings.UVScale * (p.xy / 100 + worldNormal.xy * disp));
 		return mult;
 	}
 

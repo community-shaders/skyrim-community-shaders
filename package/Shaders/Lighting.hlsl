@@ -1929,12 +1929,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	modelNormal.xyz = normalize(modelNormal.xyz);
 #	endif  // SNOW_COVER
 
-#			if defined(GLINT)
-		if(pbrSurfaceProperties.GlintLogMicrofacetDensity > 1.1){
-			float glintNoise = Random::R1Modified(float(SharedData::FrameCount), (Random::pcg2d(uint2(input.Position.xy)) / 4294967296.0).x);
-			PBR::Glints::PrecomputeGlints(glintNoise, uvOriginal, ddx(uvOriginal), ddy(uvOriginal), pbrSurfaceProperties.GlintScreenSpaceScale, pbrSurfaceProperties.GlintCache);
-		}
-#			endif
+#	if defined(GLINT)
+	if (pbrSurfaceProperties.GlintLogMicrofacetDensity > 1.1) {
+		float glintNoise = Random::R1Modified(float(SharedData::FrameCount), (Random::pcg2d(uint2(input.Position.xy)) / 4294967296.0).x);
+		PBR::Glints::PrecomputeGlints(glintNoise, uvOriginal, ddx(uvOriginal), ddy(uvOriginal), pbrSurfaceProperties.GlintScreenSpaceScale, pbrSurfaceProperties.GlintCache);
+	}
+#	endif
 
 	float waterRoughnessSpecular = 1;
 
