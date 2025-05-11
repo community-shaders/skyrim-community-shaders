@@ -1773,11 +1773,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	pbrSurfaceProperties.GlintMicrofacetRoughness = clamp(glintParameters.z, 0.005, 0.3);
 	pbrSurfaceProperties.GlintDensityRandomization = clamp(glintParameters.w, 0, 5);
 
-#		if defined(GLINT)
-	float glintNoise = Random::R1Modified(float(SharedData::FrameCount), (Random::pcg2d(uint2(input.Position.xy)) / 4294967296.0).x);
-	PBR::Glints::PrecomputeGlints(glintNoise, uvOriginal, ddx(uvOriginal), ddy(uvOriginal), pbrSurfaceProperties.GlintScreenSpaceScale, pbrSurfaceProperties.GlintCache);
-#		endif
-
 	baseColor.xyz *= 1 - pbrSurfaceProperties.Metallic;
 
 	pbrSurfaceProperties.BaseColor = baseColor.xyz;
@@ -1878,7 +1873,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float snowOcclusion = inWorld;
 #		endif
 
-	float3 pos = (input.WorldPosition + FrameBuffer::CameraPosAdjust[eyeIndex]).xyz;
+	float3 adjustedWorldPos = (input.WorldPosition + FrameBuffer::CameraPosAdjust[eyeIndex]).xyz;
 
 	float snowFactor = 0;
 	if (SharedData::snowCoverSettings.EnableSnowCover
@@ -1897,16 +1892,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		else
 		float disp = 0.1 * (sh0 - 0.5);
 #		endif
-		float3 snowNormal = normalize(worldSpaceNormal);
+		float3 snowNormal = worldSpaceNormal;
 		float3 snowedColor = baseColor.rgb;
 #		if defined(TREE_ANIM)
 		if (SharedData::snowCoverSettings.AffectFoliageColor)
-			SnowCover::ApplyFoliageColor(snowedColor.rgb, SnowCover::GetEnvironmentalMultiplier(pos));
+			SnowCover::ApplyFoliageColor(snowedColor.rgb, SnowCover::GetEnvironmentalMultiplier(adjustedWorldPos));
 #		endif
 #		if defined(TRUE_PBR)
-		pbrSurfaceProperties = SnowCover::ApplySnowPBR(snowedColor, snowNormal, snowFactor, disp, pos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, pbrSurfaceProperties, uv - uvOriginal);
+		pbrSurfaceProperties = SnowCover::ApplySnowPBR(snowedColor, snowNormal, snowFactor, disp, adjustedWorldPos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, pbrSurfaceProperties, uv - uvOriginal);
 #		else
-		snowFactor = SnowCover::ApplySnow(snowedColor, snowNormal, glossiness.x, shininess, disp, pos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, uv - uvOriginal);
+		snowFactor = SnowCover::ApplySnow(snowedColor, snowNormal, glossiness.x, shininess, disp, adjustedWorldPos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, uv - uvOriginal);
+		// why is glossiness not just a float anyway?
 		glossiness = glossiness.xxxx;
 #		endif
 #		if !defined(MODELSPACENORMALS)
@@ -1932,6 +1928,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		modelNormal.xyz = worldSpaceNormal;
 	modelNormal.xyz = normalize(modelNormal.xyz);
 #	endif  // SNOW_COVER
+
+#			if defined(GLINT)
+		if(pbrSurfaceProperties.GlintLogMicrofacetDensity > 1.1){
+			float glintNoise = Random::R1Modified(float(SharedData::FrameCount), (Random::pcg2d(uint2(input.Position.xy)) / 4294967296.0).x);
+			PBR::Glints::PrecomputeGlints(glintNoise, uvOriginal, ddx(uvOriginal), ddy(uvOriginal), pbrSurfaceProperties.GlintScreenSpaceScale, pbrSurfaceProperties.GlintCache);
+		}
+#			endif
+
 	float waterRoughnessSpecular = 1;
 
 #	if defined(WETNESS_EFFECTS)

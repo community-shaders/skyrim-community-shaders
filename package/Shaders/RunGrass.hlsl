@@ -535,25 +535,25 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, normal);
 	float skylighting = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(normal.xy, normal.z * 0.5 + 0.5))) / Math::PI;
 	skylighting = lerp(1.0, skylighting, Skylighting::getFadeOutFactor(input.WorldPosition));
-	skylighting = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylighting);
+	skylighting = saturate(Skylighting::mixDiffuse(SharedData::skylightingSettings, skylighting));
 
-	float snowOcclusion = SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1));
+	float snowOcclusion = skylighting * 0.25;
 #			else
-	float snowOcclusion = 1;
+	float snowOcclusion = 0.25;
 #			endif
 #			if defined(SNOW_COVER)
 	if (SharedData::snowCoverSettings.EnableSnowCover) {
-		snowOcclusion *= saturate(input.WorldPosition.z - SharedData::GetWaterData(input.WorldPosition.xyz).w);
 		if (SharedData::snowCoverSettings.EnableExpensiveFoliage) {
 #				if !defined(TRUE_PBR)
 			if (complex) {
-				snowOcclusion *= 1 - TexBaseSampler.SampleBias(SampBaseSampler, float2(input.TexCoord.x, input.TexCoord.y * 0.5 - 1. / 512.), SharedData::MipBias).a;
+				snowOcclusion = max(snowOcclusion, 1 - TexBaseSampler.SampleBias(SampBaseSampler, float2(input.TexCoord.x, input.TexCoord.y * 0.5 - 1. / 512.), SharedData::MipBias).a);
 			} else
 #				endif  // !TRUE_PBR
 			{
-				snowOcclusion *= 1 - TexBaseSampler.SampleBias(SampBaseSampler, input.TexCoord.xy - float2(0, 1. / 256.), SharedData::MipBias).a;
+				snowOcclusion = max(snowOcclusion, 1 - TexBaseSampler.SampleBias(SampBaseSampler, input.TexCoord.xy - float2(0, 1. / 256.), SharedData::MipBias).a);
 			}
 		}
+		snowOcclusion *= saturate(input.WorldPosition.z - SharedData::GetWaterData(input.WorldPosition.xyz).w);
 		SnowCover::ApplySnowFoliage(baseColor.xyz, float3(normal.xy, normal.z * 0.5 + 0.5), input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz, snowOcclusion, viewPosition.z);
 	}
 #			endif

@@ -109,30 +109,37 @@ namespace SnowCover
 		if (SharedData::snowCoverSettings.AffectFoliageColor) {
 			ApplyFoliageColor(color, env_mult);
 		}
-		float2 uv = frac(SharedData::snowCoverSettings.UVScale * (p.xy + worldNormal.xy * 2) / 100);
+		if (mult < 0.01)
+			return;
+		float2 uv = frac(SharedData::snowCoverSettings.UVScale * (p.xy + worldNormal.xy) / 100);
 		float3 diffuse = Color::TrueLinearToGamma(SnowAlbedo.Sample(SampColorSampler, uv).rgb) * SharedData::snowCoverSettings.MainTint.rgb * Color::PBRLightingScale;
 
 		color = lerp(color, diffuse, mult);
 	}
 
 #	if !defined(BASIC_SNOW_COVER)
-	float ApplySnowBase(inout float3 worldNormal, inout float2 uv, out bool alt, float disp, float3 p, float skylight, float waterDist, float viewDist)
+	// The main function calculating the amount of snow used (mult) and whether to use the main or the alt texture
+	// All the magic values you see were determined by testing in game, in other words, pulled from ass
+	float ApplySnowBase(float3 worldNormal, inout float2 uv, out bool alt, float disp, float3 p, float skylight, float waterDist, float viewDist)
 	{
+		
+		// the range in which water level affects snow	
 		waterDist = smoothstep(-64, 8, -waterDist - disp);
+		// distance from the camera in which weather has effect, this extends far beyond where lod starts
 		float distMult = 1 - smoothstep(10000, 30000 + 1000 * sin(p.z * 0.001 + cos(p.x * p.y * 0.001)), viewDist);
+		// the amount of snow based on weather, TimeSnowing transitions smoothly between -1 in rain and 1 when snowing
 		float weatherMult = distMult * SharedData::snowCoverSettings.TimeSnowing * max(500, SharedData::snowCoverSettings.SnowingDensity) / 500;
 		weatherMult = clamp(-1, 1, (weatherMult + disp * 0.1) * max(SharedData::snowCoverSettings.minAngle, worldNormal.z));
+		// the amount of snow based on season and weather
 		float env_mult = saturate(max(max(0, pow(saturate(GetEnvironmentalMultiplier(p) + disp), 0.25)), weatherMult) - waterDist);
-		float main_mult = (1 - abs(worldNormal.z - SharedData::snowCoverSettings.peakMainAngle));
-		float alt_mult = (1 - abs(worldNormal.z - SharedData::snowCoverSettings.peakAltAngle)) + sin(p.z * 0.01 + cos(p.x * p.y * 0.01) * 0.025) * 0.05;
-		alt = alt_mult > main_mult;
 		float mult = skylight * env_mult * smoothstep(SharedData::snowCoverSettings.minAngle, SharedData::snowCoverSettings.maxAngle, worldNormal.z);
 		if (mult < 0.01)
 			return 0;
-		//mult = step(0.5, mult);
-		uv = frac(SharedData::snowCoverSettings.UVScale * (uv + p.xy / 100));
-
-		//sh0 = saturate(sh0 + mult * parallax);
+		float main_mult = (1 - abs(worldNormal.z - SharedData::snowCoverSettings.peakMainAngle));
+		float alt_mult = (1 - abs(worldNormal.z - SharedData::snowCoverSettings.peakAltAngle)) + sin(p.z * 0.01 + cos(p.x * p.y * 0.01) * 0.025) * 0.05;
+		alt = alt_mult > main_mult;
+		// apparently LOD landscape color sampler clamps uvs
+		uv = frac(SharedData::snowCoverSettings.UVScale * (p.xy / 100 + worldNormal.xy*disp));
 		return mult;
 	}
 
@@ -140,17 +147,14 @@ namespace SnowCover
 	PBR::SurfaceProperties ApplySnowPBR(inout float3 diffuse, inout float3 worldNormal, out float mult, float disp, float3 p, float skylight, float waterDist, float viewDist, PBR::SurfaceProperties prop, float2 uv)
 	{
 		bool alt;
-		mult = max(0.0, ApplySnowBase(worldNormal, uv, alt, disp, p, skylight, waterDist, viewDist));
+		mult = ApplySnowBase(worldNormal, uv, alt, disp, p, skylight, waterDist, viewDist);
 		if (mult <= 0.0)
 			return prop;
-		//diffuse = Color::Diffuse(alt ? IceAlbedo.Sample(SampColorSampler, uv).rgb : SnowAlbedo.Sample(SampColorSampler, uv).rgb)*(alt ? SharedData::snowCoverSettings.AltTint.rgb : SharedData::snowCoverSettings.MainTint.rgb); return prop;
 		float3 albedo = alt ? IceAlbedo.Sample(SampColorSampler, uv).rgb : SnowAlbedo.Sample(SampColorSampler, uv).rgb;
 		albedo = Color::Diffuse(albedo) * (alt ? SharedData::snowCoverSettings.AltTint.rgb : SharedData::snowCoverSettings.MainTint.rgb);
 		diffuse = lerp(diffuse, albedo, mult * (alt ? SharedData::snowCoverSettings.AltTint.w : SharedData::snowCoverSettings.MainTint.w));
 		float4 rmaos = alt ? IceRmaos.Sample(SampColorSampler, uv) : SnowRmaos.Sample(SampColorSampler, uv);
-		//diffuse = frac(float3(uv.x, uv.y, 0));
 		worldNormal = TransformNormal(alt ? IceNormal.Sample(SampNormalSampler, uv).rgb : SnowNormal.Sample(SampNormalSampler, uv).rgb);
-		//worldNormal = normalize(lerp(worldNormal, normal, mult));
 		prop.Roughness = lerp(prop.Roughness, rmaos.x, mult);
 		prop.Metallic = lerp(prop.Metallic, rmaos.y, mult);
 		prop.AO = lerp(prop.AO, rmaos.z, mult);
@@ -169,17 +173,13 @@ namespace SnowCover
 		float mult = ApplySnowBase(worldNormal, uv, alt, disp, p, skylight, waterDist, viewDist);
 		if (mult <= 0.0)
 			return 0;
-		// apparently LOD landscape color sampler clamps uvs
 		float3 albedo = alt ? IceAlbedo.Sample(SampColorSampler, uv).rgb : SnowAlbedo.Sample(SampColorSampler, uv).rgb;
 		albedo = Color::TrueLinearToGamma(albedo) * (alt ? SharedData::snowCoverSettings.AltTint.rgb : SharedData::snowCoverSettings.MainTint.rgb) * Color::PBRLightingScale;
 		float4 rmaos = alt ? IceRmaos.Sample(SampColorSampler, uv) : SnowRmaos.Sample(SampColorSampler, uv);
 		diffuse = lerp(diffuse, rmaos.z * albedo, mult * (alt ? SharedData::snowCoverSettings.AltTint.w : SharedData::snowCoverSettings.MainTint.w));
-		//diffuse = frac(float3(uv.x, uv.y, 0));
 		glossiness = lerp(glossiness, 1 - rmaos.x, mult);
 		shininess = lerp(shininess, 25 * 500 * (alt ? SharedData::snowCoverSettings.altSpec : SharedData::snowCoverSettings.mainSpec) * rmaos.w, mult);
 		worldNormal = TransformNormal(alt ? IceNormal.Sample(SampNormalSampler, uv).rgb : SnowNormal.Sample(SampNormalSampler, uv).rgb);
-		//glossiness = lerp(glossiness, 0.5 * pow(v * s, 3.0), mult);
-		//shininess = lerp(shininess, max(1, pow(1 - v, 3.0) * 100), mult);
 		mult *= alt ? SharedData::snowCoverSettings.AltTint.w : SharedData::snowCoverSettings.MainTint.w;
 		return mult;
 	}
