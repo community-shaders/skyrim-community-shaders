@@ -28,18 +28,28 @@ void SkySync::RestoreDefaultSettings()
 	settings = {};
 }
 
-void SkySync::PostPostLoad()
+void SkySync::DataLoaded()
 {
 	moonAndStarsLoaded = GetModuleHandle(L"po3_MoonMod.dll");
 	if (moonAndStarsLoaded)
 		logger::info("[Sky Sync] Moon and Stars detected, compatibility enabled");
 
-	if (GetModuleHandle(L"EVLaS.dll")) {
+	auto disableDueToConflict = [&](std::string_view conflictName) {
+		failedLoadedMessage = fmt::format("Sky Sync has been disabled as {} has been detected, both cannot be used together", conflictName);
 		loaded = false;
-		failedLoadedMessage = "Sky Sync has been disabled as EVLaS has been detected, both cannot be used together";
 		logger::warn("{}", failedLoadedMessage);
+	};
+
+	auto data = RE::TESDataHandler::GetSingleton();
+	if (data && (data->LookupLoadedModByName("DVLaSS.esp"sv) || data->LookupLoadedLightModByName("DVLaSS.esp"sv))) {
+		disableDueToConflict("DVLaSS");
 		return;
 	}
+	if (GetModuleHandle(L"EVLaS.dll")) {
+		disableDueToConflict("EVLaS");
+		return;
+	}
+
 
 	stl::detour_thunk<Moon_Update>(REL::RelocationID(25626, 26169));
 	stl::detour_thunk<Sky_Update>(REL::RelocationID(25682, 26229));
