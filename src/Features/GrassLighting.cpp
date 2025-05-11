@@ -78,3 +78,20 @@ void GrassLighting::RestoreDefaultSettings()
 {
 	settings = {};
 }
+
+void GrassLighting::DrawUnloadedUI()
+{
+	// Call base class implementation for standard "not installed" message
+	Feature::DrawUnloadedUI();
+
+	// Feature-specific description
+	ImGui::TextWrapped(
+		"Grass Lighting enhances the visual appearance of grass in Skyrim by adding more realistic lighting effects.\n"
+		"It allows grass to properly receive shadows, display specular highlights, and simulate light transmission through blades of grass.");
+
+	ImGui::Spacing();
+	ImGui::TextWrapped("Key features:");
+	ImGui::BulletText("Proper specular highlights on grass");
+	ImGui::BulletText("Subsurface scattering for realistic light transmission");
+	ImGui::BulletText("Consistent grass shading with the rest of the environment");
+}

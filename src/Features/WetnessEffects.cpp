@@ -151,6 +151,24 @@ void WetnessEffects::DrawSettings()
 	ImGui::Spacing();
 }
 
+void WetnessEffects::DrawUnloadedUI()
+{
+	// Call base class implementation for standard "not installed" message
+	Feature::DrawUnloadedUI();
+
+	// Feature-specific description
+	ImGui::TextWrapped(
+		"Wetness Effects enhances Skyrim's weather system by adding realistic surface wetness during and after rain.\n"
+		"The mod makes surfaces appear wet, adds dynamic puddles, and creates realistic water effects such as ripples and splashes.");
+
+	ImGui::Spacing();
+	ImGui::TextWrapped("Key features:");
+	ImGui::BulletText("Dynamic surface wetness during rain");
+	ImGui::BulletText("Realistic puddles that form in appropriate locations");
+	ImGui::BulletText("Dynamic raindrop effects with ripples and splashes");
+	ImGui::BulletText("Shore wetness effects near water bodies");
+}
+
 WetnessEffects::PerFrame WetnessEffects::GetCommonBufferData()
 {
 	PerFrame data{};

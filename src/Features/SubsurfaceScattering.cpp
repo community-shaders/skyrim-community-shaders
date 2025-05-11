@@ -66,6 +66,24 @@ void SubsurfaceScattering::DrawSettings()
 	Util::DisplayVersionInfo(version);
 }
 
+void SubsurfaceScattering::DrawUnloadedUI()
+{
+	// Call base class implementation for standard "not installed" message
+	Feature::DrawUnloadedUI();
+
+	// Feature-specific description
+	ImGui::TextWrapped(
+		"Subsurface Scattering simulates how light penetrates and scatters through translucent materials like skin and wax.\n"
+		"This creates more realistic and softer looking character skin by simulating how light penetrates the surface and scatters underneath.");
+
+	ImGui::Spacing();
+	ImGui::TextWrapped("Key features:");
+	ImGui::BulletText("More realistic skin rendering with light diffusion");
+	ImGui::BulletText("Customizable diffusion profiles for different material types");
+	ImGui::BulletText("Separate profiles for humans and other races");
+	ImGui::BulletText("Improves visual quality of characters and certain objects");
+}
+
 float3 SubsurfaceScattering::Gaussian(DiffusionProfile& a_profile, float variance, float r)
 {
 	/**

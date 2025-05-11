@@ -22,6 +22,25 @@
 
 #include "State.h"
 
+std::string Feature::GetRequiredVersion() const
+{
+    try {
+        std::string shortName = GetShortName();
+        if (FeatureVersions::FEATURE_MINIMAL_VERSIONS.contains(shortName)) {
+            const auto& minimalFeatureVersion = FeatureVersions::FEATURE_MINIMAL_VERSIONS.at(shortName);
+            std::string minimalVersionString = minimalFeatureVersion.string();
+            // Remove trailing .0 if present
+            if (minimalVersionString.size() >= 2 && minimalVersionString.substr(minimalVersionString.size() - 2) == ".0") {
+                minimalVersionString = minimalVersionString.substr(0, minimalVersionString.size() - 2);
+            }
+            return minimalVersionString;
+        }
+        return "Unknown";
+    } catch (const std::exception&) {
+        return "Unknown";
+    }
+}
+
 void Feature::Load(json& o_json)
 {
 	if (o_json[GetName()].is_structured()) {
@@ -117,6 +136,19 @@ void Feature::WriteDiskCacheInfo(CSimpleIniA& a_ini)
 	auto ini_name = GetShortName();
 	a_ini.SetBoolValue(ini_name.c_str(), "Enabled", loaded);
 	a_ini.SetValue(ini_name.c_str(), "Version", version.c_str());
+}
+
+void Feature::DrawUnloadedUI()
+{
+    ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "%s", GetNotInstalledMessage().c_str());
+    ImGui::Spacing();
+    
+    // Show link to download if there is one
+    std::string featureModLink = GetFeatureModLink();
+    if (!featureModLink.empty()) {
+        ImGui::TextWrapped("You can download this feature from: %s", featureModLink.c_str());
+        ImGui::Spacing();
+    }
 }
 
 const std::vector<Feature*>& Feature::GetFeatureList()

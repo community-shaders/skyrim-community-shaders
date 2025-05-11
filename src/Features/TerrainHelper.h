@@ -7,10 +7,9 @@ struct TerrainHelper : Feature
 		static TerrainHelper singleton;
 		return &singleton;
 	}
-
-	virtual inline std::string GetName() override { return "Terrain Helper"; }
-	virtual inline std::string GetShortName() override { return "TerrainHelper"; }
-	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_HELPER"; }
+	virtual inline std::string GetName() const override { return "Terrain Helper"; }
+	virtual inline std::string GetShortName() const override { return "TerrainHelper"; }
+	virtual inline std::string_view GetShaderDefineName() const override { return "TERRAIN_HELPER"; }
 
 	struct Settings
 	{
@@ -23,10 +22,9 @@ struct TerrainHelper : Feature
 
 	std::unordered_map<uint32_t, ExtendedSlots> extendedSlots;
 	RE::BGSTextureSet* defaultLandTexture;
-
 	virtual void DataLoaded() override;
 	virtual bool SupportsVR() override { return true; };
-	virtual std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/143149"; };
+	virtual std::string GetFeatureModLink() const override { return "https://www.nexusmods.com/skyrimspecialedition/mods/143149"; };
 	virtual void DrawUnloadedUI() override;
 	virtual bool DrawFailLoadMessage() const override { return false; };
 

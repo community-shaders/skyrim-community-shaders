@@ -237,3 +237,20 @@ void GrassCollision::Hooks::BSGrassShader_SetupGeometry::thunk(RE::BSShader* Thi
 	globals::features::grassCollision->Update();
 	func(This, Pass, RenderFlags);
 }
+
+void GrassCollision::DrawUnloadedUI()
+{
+	// Call base class implementation for standard "not installed" message
+	Feature::DrawUnloadedUI();
+
+	// Feature-specific description
+	ImGui::TextWrapped(
+		"Grass Collision makes grass react to characters walking through it by bending and moving away.\n"
+		"The mod creates a realistic interaction between characters and the environment, enhancing immersion.");
+
+	ImGui::Spacing();
+	ImGui::TextWrapped("Key features:");
+	ImGui::BulletText("Grass bends away as characters move through it");
+	ImGui::BulletText("Works with all grass mods");
+	ImGui::BulletText("Creates more realistic environment interaction");
+}

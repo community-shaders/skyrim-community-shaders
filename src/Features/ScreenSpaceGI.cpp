@@ -307,6 +307,24 @@ void ScreenSpaceGI::DrawSettings()
 	}
 }
 
+void ScreenSpaceGI::DrawUnloadedUI()
+{
+	// Call base class implementation for standard "not installed" message
+	Feature::DrawUnloadedUI();
+
+	// Feature-specific description
+	ImGui::TextWrapped(
+		"Screen Space Global Illumination (SSGI) adds indirect lighting that bounces from surfaces to create more realistic illumination.\n"
+		"This creates more natural lighting by simulating how light bounces from one surface to another, improving depth and realism.");
+
+	ImGui::Spacing();
+	ImGui::TextWrapped("Key features:");
+	ImGui::BulletText("Realistic indirect lighting and color bleeding");
+	ImGui::BulletText("Ambient occlusion for improved depth perception");
+	ImGui::BulletText("Enhanced visual quality in interior spaces");
+	ImGui::BulletText("Customizable settings for performance and visual quality");
+}
+
 void ScreenSpaceGI::LoadSettings(json& o_json)
 {
 	settings = o_json;

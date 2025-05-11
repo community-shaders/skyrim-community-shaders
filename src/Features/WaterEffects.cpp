@@ -21,3 +21,20 @@ bool WaterEffects::HasShaderDefine(RE::BSShader::Type)
 {
 	return true;
 }
+
+void WaterEffects::DrawUnloadedUI()
+{
+	// Call base class implementation for standard "not installed" message
+	Feature::DrawUnloadedUI();
+
+	// Feature-specific description
+	ImGui::TextWrapped(
+		"Water Effects enhances Skyrim's water rendering by adding caustic light effects and improved water visuals.\n"
+		"Caustics are the patterns of light that form when light passes through a water surface and creates rippling effects on surfaces below.");
+
+	ImGui::Spacing();
+	ImGui::TextWrapped("Key features:");
+	ImGui::BulletText("Realistic underwater caustic lighting");
+	ImGui::BulletText("Enhanced water surface appearance");
+	ImGui::BulletText("Improved visual immersion near water bodies");
+}

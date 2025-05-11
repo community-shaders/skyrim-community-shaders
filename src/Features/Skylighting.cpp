@@ -620,3 +620,21 @@ void Skylighting::RenderOcclusion()
 		}
 	}
 }
+
+void Skylighting::DrawUnloadedUI()
+{
+	// Call base class implementation for standard "not installed" message
+	Feature::DrawUnloadedUI();
+
+	// Feature-specific description
+	ImGui::TextWrapped(
+		"Skylighting enhances Skyrim's environmental lighting by adding realistic sky occlusion and improved outdoor illumination.\n"
+		"It calculates how much of the sky dome is visible from each point in the world, creating more realistic outdoor lighting.");
+
+	ImGui::Spacing();
+	ImGui::TextWrapped("Key features:");
+	ImGui::BulletText("Dynamic lighting based on sky visibility");
+	ImGui::BulletText("More realistic shadows in valleys and under overhangs");
+	ImGui::BulletText("Improved ambient lighting in exteriors");
+	ImGui::BulletText("Better visual transition between interiors and exteriors");
+}

@@ -111,6 +111,22 @@ void LightLimitFix::DrawSettings()
 	}
 }
 
+void LightLimitFix::DrawUnloadedUI()
+{
+	// Call base class implementation for standard "not installed" message
+	Feature::DrawUnloadedUI();
+
+	// Feature-specific description
+	ImGui::TextWrapped(
+		"Light Limit Fix significantly improves Skyrim's lighting system by making lights unlimited, adding particle lights, contact shadows and more.\n");
+	ImGui::Spacing();
+	ImGui::TextWrapped("Key features:");
+	ImGui::BulletText("More realistic lighting with unlimited light sources");
+	ImGui::BulletText("Advanced particle lighting system");
+	ImGui::BulletText("Proper light detection for stealth gameplay");
+	ImGui::BulletText("Contact shadows that improve visual depth");
+}
+
 LightLimitFix::PerFrame LightLimitFix::GetCommonBufferData()
 {
 	PerFrame perFrame{};

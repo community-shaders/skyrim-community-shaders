@@ -195,9 +195,10 @@ bool CloudShadows::DrawFailLoadMessage() const
 
 void CloudShadows::DrawUnloadedUI()
 {
-	ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "This feature is not installed!");
+	// Call base class implementation for standard "not installed" message
+	Feature::DrawUnloadedUI();
 
-	ImGui::Spacing();
+	// Feature-specific description
 	ImGui::TextWrapped(
 		"Cloud Shadows adds shadows cast from clouds.\n"
 		"The cloud shadows are aligned with the sun, using the actual clouds system rather than a scrolling texture,\n"

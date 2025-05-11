@@ -5,6 +5,10 @@
 
 void TerrainHelper::DrawUnloadedUI()
 {
+	// Call base class implementation for standard "not installed" message
+	Feature::DrawUnloadedUI();
+	
+	// Feature-specific description
 	ImGui::Text("Terrain Helper is only required if a terrain mod you are using requires it, otherwise it does nothing.");
 }
 

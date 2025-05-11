@@ -65,6 +65,24 @@ void TerrainShadows::DrawSettings()
 	Util::DisplayVersionInfo(version);
 }
 
+void TerrainShadows::DrawUnloadedUI()
+{
+	// Call base class implementation for standard "not installed" message
+	Feature::DrawUnloadedUI();
+
+	// Feature-specific description
+	ImGui::TextWrapped(
+		"Terrain Shadows adds distant terrain shadowing to Skyrim's landscape using heightmap data.\n"
+		"This creates realistic shadowing of mountains and terrain features that the vanilla game cannot reproduce.");
+
+	ImGui::Spacing();
+	ImGui::TextWrapped("Key features:");
+	ImGui::BulletText("Realistic shadows cast by distant mountains");
+	ImGui::BulletText("Dynamic shadows that change with time of day");
+	ImGui::BulletText("Significantly improves visual depth of landscapes");
+	ImGui::BulletText("Compatible with terrain heightmaps from various landscape mods");
+}
+
 void TerrainShadows::ClearShaderCache()
 {
 	if (shadowUpdateProgram) {

@@ -252,6 +252,23 @@ void ScreenSpaceShadows::RestoreDefaultSettings()
 	bendSettings = {};
 }
 
+void ScreenSpaceShadows::DrawUnloadedUI()
+{
+	// Call base class implementation for standard "not installed" message
+	Feature::DrawUnloadedUI();
+
+	// Feature-specific description
+	ImGui::TextWrapped(
+		"Screen Space Shadows enhances shadow rendering by ray-marching through the depth buffer to create more accurate shadows.\n"
+		"This approach fills in shadows that might be missed by the game's standard shadow maps, improving visual quality and realism.");
+
+	ImGui::Spacing();
+	ImGui::TextWrapped("Key features:");
+	ImGui::BulletText("More accurate contact shadows");
+	ImGui::BulletText("Improved shadow detail for objects close to each other");
+	ImGui::BulletText("Enhances visual quality of shadows in areas the vanilla game misses");
+}
+
 bool ScreenSpaceShadows::HasShaderDefine(RE::BSShader::Type)
 {
 	return true;

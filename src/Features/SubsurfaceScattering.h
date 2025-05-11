@@ -4,12 +4,14 @@
 
 struct SubsurfaceScattering : Feature
 {
-public:
-	static SubsurfaceScattering* GetSingleton()
+public:	static SubsurfaceScattering* GetSingleton()
 	{
 		static SubsurfaceScattering singleton;
 		return &singleton;
 	}
+		virtual inline std::string GetName() const override { return "Subsurface Scattering"; }
+	virtual inline std::string GetShortName() const override { return "SubsurfaceScattering"; }
+	virtual inline std::string GetFeatureModLink() const override { return "https://www.nexusmods.com/skyrimspecialedition/mods/114114"; }
 
 	struct DiffusionProfile
 	{
@@ -55,9 +57,6 @@ public:
 	ID3D11ComputeShader* horizontalSSBlur = nullptr;
 	ID3D11ComputeShader* verticalSSBlur = nullptr;
 	RE::BGSKeyword* isBeastRaceKeyword = nullptr;
-
-	virtual inline std::string GetName() override { return "Subsurface Scattering"; }
-	virtual inline std::string GetShortName() override { return "SubsurfaceScattering"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "SSS"; }
 
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
@@ -85,7 +84,6 @@ public:
 	virtual void PostPostLoad() override;
 
 	void BSLightingShader_SetupSkin(RE::BSRenderPass* Pass);
-
 	struct Hooks
 	{
 		struct BSLightingShader_SetupGeometry
@@ -101,5 +99,7 @@ public:
 		}
 	};
 
+	virtual void DrawUnloadedUI() override;
+	
 	virtual bool SupportsVR() override { return true; };
 };

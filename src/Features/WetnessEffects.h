@@ -7,11 +7,10 @@ public:
 	{
 		static WetnessEffects singleton;
 		return &singleton;
-	}
-
-	virtual inline std::string GetName() override { return "Wetness Effects"; }
-	virtual inline std::string GetShortName() override { return "WetnessEffects"; }
-	virtual inline std::string_view GetShaderDefineName() override { return "WETNESS_EFFECTS"; }
+	}	virtual inline std::string GetName() const override { return "Wetness Effects"; }
+	virtual inline std::string GetShortName() const override { return "WetnessEffects"; }
+	virtual inline std::string GetFeatureModLink() const override { return "https://www.nexusmods.com/skyrimspecialedition/mods/112739"; }
+	virtual inline std::string_view GetShaderDefineName() const override { return "WETNESS_EFFECTS"; }
 
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
@@ -67,8 +66,9 @@ public:
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
-
 	virtual void RestoreDefaultSettings() override;
+	
+	virtual void DrawUnloadedUI() override;
 
 	virtual bool SupportsVR() override { return true; };
 };

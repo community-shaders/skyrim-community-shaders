@@ -7,18 +7,18 @@ struct ScreenSpaceGI : Feature
 		static ScreenSpaceGI singleton;
 		return &singleton;
 	}
-
 	bool inline SupportsVR() override { return true; }
-
-	virtual inline std::string GetName() override { return "Screen Space GI"; }
-	virtual inline std::string GetShortName() override { return "ScreenSpaceGI"; }
-	virtual inline std::string_view GetShaderDefineName() override { return "SSGI"; }
-	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override
+	virtual inline std::string GetName() const override { return "Screen Space GI"; }
+	virtual inline std::string GetShortName() const override { return "ScreenSpaceGI"; }
+	virtual inline std::string GetFeatureModLink() const override { return "https://www.nexusmods.com/skyrimspecialedition/mods/130375"; }
+	virtual inline std::string_view GetShaderDefineName() const override { return "SSGI"; }virtual inline bool HasShaderDefine(RE::BSShader::Type t) override
 	{
 		return t == RE::BSShader::Type::Lighting ||
 		       t == RE::BSShader::Type::Grass ||
 		       t == RE::BSShader::Type::DistantTree;
 	};
+
+	virtual void DrawUnloadedUI() override;
 
 	virtual void RestoreDefaultSettings() override;
 	virtual void DrawSettings() override;

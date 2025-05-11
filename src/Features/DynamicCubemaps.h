@@ -149,4 +149,5 @@ public:
 
 	virtual bool SupportsVR() override { return true; };
 	virtual bool IsCore() const override { return true; };
+	virtual std::string GetFeatureModLink() const override { return "https://www.nexusmods.com/skyrimspecialedition/mods/86465"; };
 };

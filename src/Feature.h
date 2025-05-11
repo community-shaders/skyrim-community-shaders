@@ -18,6 +18,19 @@ struct Feature
 	virtual std::string GetFeatureModLink() { return ""; }
 	virtual std::string_view GetShaderDefineName() { return ""; }
 	virtual std::vector<std::pair<std::string_view, std::string_view>> GetShaderDefineOptions() { return {}; }
+	/**
+	 * Gets the minimum required version string for this feature
+	 * @return The minimum version string required by the Community Shaders
+	 */
+	std::string GetRequiredVersion() const;
+
+	/**
+	 * Gets a formatted message indicating this feature is not installed with the required version
+	 * @return A formatted message string
+	 */	std::string GetNotInstalledMessage() const {
+		return std::format("This feature is not installed! Version required: {}", GetRequiredVersion());
+	}
+
 
 	virtual bool HasShaderDefine(RE::BSShader::Type) { return false; }
 	/**
@@ -49,7 +62,7 @@ struct Feature
 	virtual void Reset() {}
 
 	virtual void DrawSettings() {}
-	virtual void DrawUnloadedUI() {}
+	virtual void DrawUnloadedUI();
 
 	virtual void ReflectionsPrepass(){};
 	virtual void Prepass() {}

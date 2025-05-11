@@ -45,8 +45,8 @@ struct GrassCollision : Feature
 
 	virtual void SetupResources() override;
 	virtual void Reset() override;
-
 	virtual void DrawSettings() override;
+	virtual void DrawUnloadedUI() override;
 	void UpdateCollisions(PerFrame& perFrame);
 	void Update();
 
