@@ -40,16 +40,15 @@ void SkySync::DataLoaded()
 		logger::warn("{}", failedLoadedMessage);
 	};
 
-	auto data = RE::TESDataHandler::GetSingleton();
-	if (data && (data->LookupLoadedModByName("DVLaSS.esp"sv) || data->LookupLoadedLightModByName("DVLaSS.esp"sv))) {
+	const auto data = RE::TESDataHandler::GetSingleton();
+	if (data && (data->LookupLoadedModByName("DVLaSS.esp"sv) || data->LookupLoadedLightModByName("DVLaSS.esp"sv)))
 		disableDueToConflict("DVLaSS");
-		return;
-	}
-	if (GetModuleHandle(L"EVLaS.dll")) {
+	else if (GetModuleHandle(L"EVLaS.dll"))
 		disableDueToConflict("EVLaS");
-		return;
-	}
+}
 
+void SkySync::PostPostLoad()
+{
 	stl::detour_thunk<Moon_Update>(REL::RelocationID(25626, 26169));
 	stl::detour_thunk<Sky_Update>(REL::RelocationID(25682, 26229));
 	stl::detour_thunk<Sky_OnNewClimate>(REL::RelocationID(25695, 26242));

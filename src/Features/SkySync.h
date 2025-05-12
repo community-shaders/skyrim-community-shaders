@@ -30,6 +30,7 @@ struct SkySync : Feature
 	virtual bool SupportsVR() override { return true; }
 
 	virtual void DataLoaded() override;
+	virtual void PostPostLoad() override;
 
 	struct Sky_Update
 	{
