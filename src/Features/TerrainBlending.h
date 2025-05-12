@@ -21,6 +21,7 @@ public:
 	ID3D11VertexShader* terrainOffsetVertexShader = nullptr;
 
 	ID3D11ComputeShader* GetDepthBlendShader();
+	virtual void DrawSettings() override;
 	virtual void DrawUnloadedUI() override;
 	virtual bool DrawFailLoadMessage() const override;
 	virtual void PostPostLoad() override;
