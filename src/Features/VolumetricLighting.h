@@ -32,6 +32,7 @@ public:
 
 	virtual inline std::string GetName() override { return "Volumetric Lighting"; }
 	virtual inline std::string GetShortName() override { return "VolumetricLighting"; }
+	virtual inline std::string GetFeatureDescription() override { return "Volumetric Lighting is a technique that simulates the way light interacts with and is scattered by particles in the air, creating visible beams of light."; }
 
 	virtual void SaveSettings(json&) override;
 	virtual void LoadSettings(json&) override;

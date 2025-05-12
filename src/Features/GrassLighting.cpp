@@ -10,6 +10,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void GrassLighting::DrawSettings()
 {
+	// Display feature description at the top
+	Util::DisplayFeatureDescription(GetFeatureDescription());
+	
 	if (ImGui::TreeNodeEx("Complex Grass", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::TextWrapped("Specular highlights for complex grass");
 		ImGui::SliderFloat("Glossiness", &settings.Glossiness, 1.0f, 100.0f);

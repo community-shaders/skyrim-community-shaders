@@ -9,6 +9,7 @@ public:
 		return &singleton;
 	}	virtual inline std::string GetName() override { return "Terrain Blending"; }
 	virtual inline std::string GetShortName() override { return "TerrainBlending"; }
+	virtual inline std::string GetFeatureDescription() override { return "Terrain Blending blends the terrain with any meshes that reside on top, such as rocks or dirt cliffs."; }
 	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_BLENDING"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
 

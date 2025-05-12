@@ -9,6 +9,7 @@ public:	static WetnessEffects* GetSingleton()
 	}	virtual inline std::string GetName() override { return "Wetness Effects"; }
 	virtual inline std::string GetShortName() override { return "WetnessEffects"; }
 	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/112739"; }
+	virtual inline std::string GetFeatureDescription() override { return "Wetness Effects enhances the weather system by adding realistic surface wetness during and after rain."; }
 	virtual inline std::string_view GetShaderDefineName() override { return "WETNESS_EFFECTS"; }
 
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };

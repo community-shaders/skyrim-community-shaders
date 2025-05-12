@@ -38,4 +38,10 @@ namespace Util
 	};	bool PercentageSlider(const char* label, float* data, float lb = 0.f, float ub = 100.f, const char* format = "%.1f %%");
 	ImVec2 GetNativeViewportSizeScaled(float scale);
 	void DisplayVersionInfo(const std::string& version);
+	
+	/**
+	 * Displays a feature description header at the top of settings
+	 * @param description The feature description text
+	 */
+	void DisplayFeatureDescription(const std::string& description);
 }  // namespace Util

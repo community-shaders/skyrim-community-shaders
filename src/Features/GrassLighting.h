@@ -12,6 +12,7 @@ struct GrassLighting : Feature
 	virtual inline std::string GetShortName() override { return "GrassLighting"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "GRASS_LIGHTING"; }
 	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/86502"; }
+	virtual inline std::string GetFeatureDescription() override { return "Grass Lighting replaces grass shaders to add more advanced shading including Complex Grass support, proper shadows, and light transmission."; }
 	virtual bool HasShaderDefine(RE::BSShader::Type shaderType) override { return shaderType == RE::BSShader::Type::Grass; };
 
 	struct alignas(16) Settings

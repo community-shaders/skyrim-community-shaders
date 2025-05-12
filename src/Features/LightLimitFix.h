@@ -12,6 +12,7 @@ public:
 	}	virtual inline std::string GetName() override { return "Light Limit Fix"; }
 	virtual inline std::string GetShortName() override { return "LightLimitFix"; }
 	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/99548"; }
+	virtual inline std::string GetFeatureDescription() override { return "Light Limit Fix significantly improves Skyrim's lighting system by making lights unlimited, adding particle lights, contact shadows and more."; }
 	virtual inline std::string_view GetShaderDefineName() override { return "LIGHT_LIMIT_FIX"; }
 
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };

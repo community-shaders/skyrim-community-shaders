@@ -27,6 +27,9 @@ bool TerrainShadows::DrawFailLoadMessage() const
 
 void TerrainShadows::DrawSettings()
 {
+	// Display feature description at the top
+	Util::DisplayFeatureDescription(GetFeatureDescription());
+	
 	ImGui::Checkbox("Enable Terrain Shadow", &settings.EnableTerrainShadow);
 
 	if (ImGui::CollapsingHeader("Debug")) {
@@ -84,8 +87,6 @@ void TerrainShadows::DrawUnloadedUI()
 	ImGui::TextWrapped("Key features:");
 	ImGui::BulletText("Realistic shadows cast by distant mountains");
 	ImGui::BulletText("Dynamic shadows that change with time of day");
-	ImGui::TextWrapped("Requirements:");
-	ImGui::BulletText("Parallax Water requires a water mod with displacement textures.");
 }
 
 void TerrainShadows::ClearShaderCache()

@@ -6,10 +6,11 @@ struct ScreenSpaceGI : Feature
 	{
 		static ScreenSpaceGI singleton;
 		return &singleton;
-	}
-	bool inline SupportsVR() override { return true; }	virtual inline std::string GetName() override { return "Screen Space GI"; }
+	}	bool inline SupportsVR() override { return true; }	
+	virtual inline std::string GetName() override { return "Screen Space GI"; }
 	virtual inline std::string GetShortName() override { return "ScreenSpaceGI"; }
 	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/130375"; }
+	virtual inline std::string GetFeatureDescription() override { return "Screen Space Global Illumination (SSGI) adds indirect lighting that bounces from surfaces to create more realistic illumination."; }
 	virtual inline std::string_view GetShaderDefineName() override { return "SSGI"; }virtual inline bool HasShaderDefine(RE::BSShader::Type t) override
 	{
 		return t == RE::BSShader::Type::Lighting ||

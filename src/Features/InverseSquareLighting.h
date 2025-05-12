@@ -13,6 +13,7 @@ struct InverseSquareLighting : Feature
 	virtual inline std::string GetName() override { return "Inverse Square Lighting"; }
 	virtual inline std::string GetShortName() override { return "InverseSquareLighting"; }
 	virtual inline std::string GetFeatureModLink() override { return "TEMP erm what the sigma"; }
+	virtual inline std::string GetFeatureDescription() override { return "Inverse Square Lighting uses a more complex mathematical equation for light falloff, creating more realistic lighting in scenes."; }
 	virtual inline std::string_view GetShaderDefineName() override { return "ISL"; }
 
 	inline bool HasShaderDefine(RE::BSShader::Type) override { return true; };

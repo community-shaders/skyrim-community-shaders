@@ -6,6 +6,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void CloudShadows::DrawSettings()
 {
+	// Display feature description at the top
+	Util::DisplayFeatureDescription(GetFeatureDescription());
+	
 	ImGui::SliderFloat("Opacity", &settings.Opacity, 0.0f, 1.0f, "%.1f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(

@@ -43,6 +43,9 @@ void ScreenSpaceGI::RestoreDefaultSettings()
 
 void ScreenSpaceGI::DrawSettings()
 {
+	// Display feature description at the top
+	Util::DisplayFeatureDescription(GetFeatureDescription());
+	
 	static bool showAdvanced;
 
 	if (!ShadersOK())

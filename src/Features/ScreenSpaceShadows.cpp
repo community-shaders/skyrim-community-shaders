@@ -19,6 +19,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void ScreenSpaceShadows::DrawSettings()
 {
+	// Display feature description at the top
+	Util::DisplayFeatureDescription(GetFeatureDescription());
+
 	if (ImGui::TreeNodeEx("General", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Checkbox("Enable", (bool*)&bendSettings.Enable);
 		ImGui::SliderInt("Sample Count Multiplier", (int*)&bendSettings.SampleCount, 1, 4);

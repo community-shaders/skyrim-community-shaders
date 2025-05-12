@@ -11,6 +11,7 @@ public:	static SubsurfaceScattering* GetSingleton()
 	}
 	virtual inline std::string GetName() override { return "Subsurface Scattering"; }
 	virtual inline std::string GetShortName() override { return "SubsurfaceScattering"; }
+	virtual inline std::string GetFeatureDescription() override { return "Subsurface Scattering adds screen-space subsurface scattering to characters, to simulate realistic skin."; }
 	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/114114"; }
 
 	struct DiffusionProfile
