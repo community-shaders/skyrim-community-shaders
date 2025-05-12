@@ -24,22 +24,22 @@
 
 std::string Feature::GetRequiredVersion() const
 {
-    try {
-        std::string shortName = const_cast<Feature*>(this)->GetShortName();
-        
-        if (FeatureVersions::FEATURE_MINIMAL_VERSIONS.contains(shortName)) {
-            const auto& minimalFeatureVersion = FeatureVersions::FEATURE_MINIMAL_VERSIONS.at(shortName);
-            std::string minimalVersionString = minimalFeatureVersion.string();
-            // Remove trailing .0 if present
-            if (minimalVersionString.size() >= 2 && minimalVersionString.substr(minimalVersionString.size() - 2) == "-0") {
-                minimalVersionString = minimalVersionString.substr(0, minimalVersionString.size() - 2);
-            }
-            return minimalVersionString;
-        }
-        return "Unknown";
-    } catch (const std::exception&) {
-        return "Unknown";
-    }
+	try {
+		std::string shortName = const_cast<Feature*>(this)->GetShortName();
+
+		if (FeatureVersions::FEATURE_MINIMAL_VERSIONS.contains(shortName)) {
+			const auto& minimalFeatureVersion = FeatureVersions::FEATURE_MINIMAL_VERSIONS.at(shortName);
+			std::string minimalVersionString = minimalFeatureVersion.string();
+			// Remove trailing .0 if present
+			if (minimalVersionString.size() >= 2 && minimalVersionString.substr(minimalVersionString.size() - 2) == "-0") {
+				minimalVersionString = minimalVersionString.substr(0, minimalVersionString.size() - 2);
+			}
+			return minimalVersionString;
+		}
+		return "Unknown";
+	} catch (const std::exception&) {
+		return "Unknown";
+	}
 }
 
 void Feature::Load(json& o_json)
@@ -139,7 +139,6 @@ void Feature::WriteDiskCacheInfo(CSimpleIniA& a_ini)
 	a_ini.SetValue(ini_name.c_str(), "Version", version.c_str());
 }
 
-
 const std::vector<Feature*>& Feature::GetFeatureList()
 {
 	static std::vector<Feature*> features = {
@@ -172,9 +171,9 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 
 void Feature::DrawUnloadedUI()
 {
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.86f, 0.27f, 0.33f, 1.0f)); // Red
-    ImGui::TextWrapped(GetNotInstalledMessage().c_str());
-    ImGui::PopStyleColor();
+	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.86f, 0.27f, 0.33f, 1.0f));  // Red
+	ImGui::TextWrapped(GetNotInstalledMessage().c_str());
+	ImGui::PopStyleColor();
 }
 
 bool Feature::ToggleAtBootSetting()

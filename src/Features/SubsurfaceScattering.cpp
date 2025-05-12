@@ -61,13 +61,14 @@ void SubsurfaceScattering::DrawSettings()
 
 		ImGui::TreePop();
 	}
-	
+
 	// Display version info at the bottom
 	Util::DisplayVersionInfo(version);
 }
 
-bool SubsurfaceScattering::DrawFailLoadMessage() const {
-    return false;
+bool SubsurfaceScattering::DrawFailLoadMessage() const
+{
+	return false;
 }
 
 void SubsurfaceScattering::DrawUnloadedUI()

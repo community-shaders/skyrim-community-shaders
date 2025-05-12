@@ -74,7 +74,7 @@ void InverseSquareLighting::ProcessLight(LightLimitFix::LightData& light, RE::BS
 
 bool InverseSquareLighting::DrawFailLoadMessage() const
 {
-    return false;
+	return false;
 }
 
 void InverseSquareLighting::DrawUnloadedUI()

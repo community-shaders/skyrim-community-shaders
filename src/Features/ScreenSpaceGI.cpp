@@ -311,7 +311,7 @@ void ScreenSpaceGI::DrawSettings()
 
 bool ScreenSpaceGI::DrawFailLoadMessage() const
 {
-    return false;
+	return false;
 }
 
 void ScreenSpaceGI::DrawUnloadedUI()

@@ -22,7 +22,7 @@ void TerrainShadows::SaveSettings(json& o_json)
 
 bool TerrainShadows::DrawFailLoadMessage() const
 {
-    return false;
+	return false;
 }
 
 void TerrainShadows::DrawSettings()
@@ -65,7 +65,7 @@ void TerrainShadows::DrawSettings()
 			ImGui::TreePop();
 		}
 	}
-	
+
 	// Display version info at the bottom
 	Util::DisplayVersionInfo(version);
 }

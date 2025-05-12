@@ -26,7 +26,6 @@ struct InverseSquareLighting : Feature
 
 	virtual void PostPostLoad() override;
 
-	
 	static float CalculateRadius(float intensity, bool shadowCaster, float cutoffOverride);
 
 	void ProcessLight(LightLimitFix::LightData& light, RE::BSLight* bsLight, RE::NiLight* niLight) const;

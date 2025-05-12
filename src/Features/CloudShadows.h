@@ -61,7 +61,8 @@ struct CloudShadows : Feature
 		{
 			stl::write_vfunc<0x6, BSSkyShader_SetupMaterial>(RE::VTABLE_BSSkyShader[0]);
 			logger::info("[Cloud Shadows] Installed hooks");
-		}	};
+		}
+	};
 	virtual bool SupportsVR() override { return true; };
 	virtual bool DrawFailLoadMessage() const override;
 	virtual void DrawUnloadedUI() override;

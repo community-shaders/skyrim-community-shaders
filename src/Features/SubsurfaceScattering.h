@@ -4,7 +4,8 @@
 
 struct SubsurfaceScattering : Feature
 {
-public:	static SubsurfaceScattering* GetSingleton()
+public:
+	static SubsurfaceScattering* GetSingleton()
 	{
 		static SubsurfaceScattering singleton;
 		return &singleton;
@@ -100,6 +101,6 @@ public:	static SubsurfaceScattering* GetSingleton()
 	};
 
 	virtual void DrawUnloadedUI() override;
-	
+
 	virtual bool SupportsVR() override { return true; };
 };

@@ -11,7 +11,7 @@ void CloudShadows::DrawSettings()
 		ImGui::Text(
 			"Higher values make cloud shadows darker.");
 	}
-	
+
 	// Display version info at the bottom
 	Util::DisplayVersionInfo(version);
 }
@@ -190,7 +190,7 @@ void CloudShadows::Hooks::BSSkyShader_SetupMaterial::thunk(RE::BSShader* This, R
 
 bool CloudShadows::DrawFailLoadMessage() const
 {
-    return false;
+	return false;
 }
 
 void CloudShadows::DrawUnloadedUI()

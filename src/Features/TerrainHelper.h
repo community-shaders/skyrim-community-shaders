@@ -6,7 +6,8 @@ struct TerrainHelper : Feature
 	{
 		static TerrainHelper singleton;
 		return &singleton;
-	}	virtual inline std::string GetName() override { return "Terrain Helper"; }
+	}
+	virtual inline std::string GetName() override { return "Terrain Helper"; }
 	virtual inline std::string GetShortName() override { return "TerrainHelper"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_HELPER"; }
 
