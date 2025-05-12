@@ -64,25 +64,25 @@ namespace Util
 		// Pop the color style
 		ImGui::PopStyleColor();
 	}
-	
+
 	void DisplayFeatureDescription(const std::string& description)
 	{
 		if (description.empty())
 			return;
-			
+
 		// Style the description as an info box
 		ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15f, 0.15f, 0.18f, 0.6f));
-		
+
 		// Create a child window for the description
 		ImGui::BeginChild("FeatureDescription", ImVec2(ImGui::GetContentRegionAvail().x, 0), true);
-		
+
 		// Display the description text
 		ImGui::TextWrapped("%s", description.c_str());
-		
+
 		ImGui::EndChild();
-		
+
 		ImGui::PopStyleColor();
-		
+
 		// Add spacing after the description
 		ImGui::Spacing();
 		ImGui::Separator();

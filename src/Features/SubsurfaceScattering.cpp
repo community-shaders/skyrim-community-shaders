@@ -18,7 +18,7 @@ void SubsurfaceScattering::DrawSettings()
 {
 	// Display feature description at the top
 	Util::DisplayFeatureDescription(GetFeatureDescription());
-	
+
 	if (ImGui::TreeNodeEx("Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Checkbox("Enable Character Lighting", (bool*)&settings.EnableCharacterLighting);
 		if (auto _tt = Util::HoverTooltipWrapper()) {

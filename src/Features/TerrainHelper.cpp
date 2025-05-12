@@ -7,7 +7,7 @@ void TerrainHelper::DrawSettings()
 {
 	// Display feature description at the top
 	Util::DisplayFeatureDescription(GetFeatureDescription());
-	
+
 	// Display version info at the bottom
 	Util::DisplayVersionInfo(version);
 }

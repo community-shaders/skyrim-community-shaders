@@ -45,7 +45,7 @@ void Skylighting::DrawSettings()
 {
 	// Display feature description at the top
 	Util::DisplayFeatureDescription(GetFeatureDescription());
-	
+
 	ImGui::Text("Minimum visibility values. Diffuse darkens objects. Specular removes the sky from reflections.");
 	ImGui::SliderFloat("Diffuse Min Visibility", &settings.MinDiffuseVisibility, 0.01f, 1.f, "%.2f");
 	ImGui::SliderFloat("Specular Min Visibility", &settings.MinSpecularVisibility, 0.01f, 1.f, "%.2f");

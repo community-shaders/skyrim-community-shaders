@@ -6,7 +6,7 @@ void InverseSquareLighting::DrawSettings()
 {
 	// Display feature description at the top
 	Util::DisplayFeatureDescription(GetFeatureDescription());
-	
+
 	editor.DrawSettings();
 	// Display version info at the bottom
 	Util::DisplayVersionInfo(version);

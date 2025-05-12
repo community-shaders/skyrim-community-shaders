@@ -29,7 +29,7 @@ void TerrainShadows::DrawSettings()
 {
 	// Display feature description at the top
 	Util::DisplayFeatureDescription(GetFeatureDescription());
-	
+
 	ImGui::Checkbox("Enable Terrain Shadow", &settings.EnableTerrainShadow);
 
 	if (ImGui::CollapsingHeader("Debug")) {
