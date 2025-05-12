@@ -33,12 +33,12 @@ void SkySync::PostPostLoad()
 	moonAndStarsLoaded = GetModuleHandle(L"po3_MoonMod.dll");
 	if (moonAndStarsLoaded)
 		logger::info("[Sky Sync] Moon and Stars detected, compatibility enabled");
-	
+
 	if (GetModuleHandle(L"EVLaS.dll")) {
 		DisableOnConflict("EVLaS");
 		return;
 	}
-	
+
 	stl::detour_thunk<Moon_Update>(REL::RelocationID(25626, 26169));
 	stl::detour_thunk<Sky_Update>(REL::RelocationID(25682, 26229));
 	stl::detour_thunk<Sky_OnNewClimate>(REL::RelocationID(25695, 26242));
@@ -398,7 +398,7 @@ void SkySync::Moon_Update::thunk(RE::Moon* moon, RE::Sky* sky)
 	const auto updateMoonTexture = moon->updateMoonTexture;
 
 	func(moon, sky);
-	
+
 	if (const auto singleton = GetSingleton(); singleton->settings.Enabled && updateMoonTexture != moon->updateMoonTexture) {
 		// Gets the texture name of the current moon phase when it changes rather than reading direct global variables
 		// Allows for compatability with other mods that don't directly update the in-game phase values
