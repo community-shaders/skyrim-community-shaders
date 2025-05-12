@@ -84,8 +84,8 @@ void TerrainShadows::DrawUnloadedUI()
 	ImGui::TextWrapped("Key features:");
 	ImGui::BulletText("Realistic shadows cast by distant mountains");
 	ImGui::BulletText("Dynamic shadows that change with time of day");
-	ImGui::BulletText("Significantly improves visual depth of landscapes");
-	ImGui::BulletText("Compatible with terrain heightmaps from various landscape mods");
+	ImGui::TextWrapped("Requirements:");
+	ImGui::BulletText("Parallax Water requires a water mod with displacement textures.");
 }
 
 void TerrainShadows::ClearShaderCache()

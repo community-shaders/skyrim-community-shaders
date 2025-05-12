@@ -321,8 +321,7 @@ void ScreenSpaceGI::DrawUnloadedUI()
 
 	// Feature-specific description
 	ImGui::TextWrapped(
-		"Screen Space Global Illumination (SSGI) adds indirect lighting that bounces from surfaces to create more realistic illumination.\n"
-		"This creates more natural lighting by simulating how light bounces from one surface to another, improving depth and realism.");
+		"Screen Space Global Illumination (SSGI) adds indirect lighting that bounces from surfaces to create more realistic illumination.\n");
 
 	ImGui::Spacing();
 	ImGui::TextWrapped("Key features:");

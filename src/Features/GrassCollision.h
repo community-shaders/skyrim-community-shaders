@@ -10,6 +10,7 @@ struct GrassCollision : Feature
 
 	virtual inline std::string GetName() override { return "Grass Collision"; }
 	virtual inline std::string GetShortName() override { return "GrassCollision"; }
+	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/87816"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "GRASS_COLLISION"; }
 
 	bool HasShaderDefine(RE::BSShader::Type shaderType) override;

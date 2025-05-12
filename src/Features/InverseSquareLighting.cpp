@@ -81,16 +81,15 @@ void InverseSquareLighting::DrawUnloadedUI()
 {
 	// Call base class implementation for standard "not installed" message
 	Feature::DrawUnloadedUI();
-
 	// Feature-specific description
 	ImGui::TextWrapped(
 		"Inverse Square Lighting uses a more complex mathematical equation for light falloff, creating more realistic lighting in scenes.\n");
 
 	ImGui::Spacing();
 	ImGui::TextWrapped("Key features:");
-	ImGui::BulletText("Lorem Ipsum");
-	ImGui::BulletText("Lorem Ipsum");
-	ImGui::BulletText("Lorem Ipsum");
+	ImGui::BulletText("Physically accurate light attenuation based on real-world physics");
+	ImGui::BulletText("More dynamic and realistic illumination with proper distance falloff");
+	ImGui::BulletText("Enhanced atmosphere with lights that behave naturally in both indoor and outdoor environments");
 }
 
 float InverseSquareLighting::CalculateRadius(const float intensity, const bool shadowCaster, const float cutoffOverride)

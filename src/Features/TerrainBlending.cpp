@@ -347,7 +347,8 @@ void TerrainBlending::DrawUnloadedUI()
 	// Feature-specific description
 	ImGui::TextWrapped(
 		"Terrain Blending blends the terrain with any meshes that reside on top, such as rocks or dirt cliffs.\n"
-		"This feature is currently a work in progress, and does not have a nexus release.");
+		"This feature is currently a **work in progress**, and **does not have a nexus release.\n"
+		"Any current Nexus releases are NOT supported by the Community Shaders team. They will break other features.**");
 
 	ImGui::Spacing();
 	ImGui::TextWrapped("Key features:");

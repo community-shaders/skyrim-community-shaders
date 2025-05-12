@@ -252,8 +252,7 @@ void GrassCollision::DrawUnloadedUI()
 
 	// Feature-specific description
 	ImGui::TextWrapped(
-		"Grass Collision makes grass react to characters walking through it by bending and moving away.\n"
-		"The mod creates a realistic interaction between characters and the environment, enhancing immersion.");
+		"Grass Collision makes grass react to actors walking through it by bending and moving away.");
 
 	ImGui::Spacing();
 	ImGui::TextWrapped("Key features:");

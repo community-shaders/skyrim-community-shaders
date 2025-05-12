@@ -77,15 +77,14 @@ void SubsurfaceScattering::DrawUnloadedUI()
 
 	// Feature-specific description
 	ImGui::TextWrapped(
-		"Subsurface Scattering simulates how light penetrates and scatters through translucent materials like skin and wax.\n"
-		"This creates more realistic and softer looking character skin by simulating how light penetrates the surface and scatters underneath.");
+		"Subsurface Scattering adds screen-space subsurface scattering to characters, to simulate realistic skin.\n"
+		"This creates softer looking character skin by simulating how light penetrates the surface and scatters underneath.");
 
 	ImGui::Spacing();
 	ImGui::TextWrapped("Key features:");
 	ImGui::BulletText("More realistic skin rendering with light diffusion");
-	ImGui::BulletText("Customizable diffusion profiles for different material types");
 	ImGui::BulletText("Separate profiles for humans and other races");
-	ImGui::BulletText("Improves visual quality of characters and certain objects");
+	ImGui::BulletText("Compatible will all skin and body mods");
 }
 
 float3 SubsurfaceScattering::Gaussian(DiffusionProfile& a_profile, float variance, float r)

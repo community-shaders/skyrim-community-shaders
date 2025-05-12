@@ -201,13 +201,11 @@ void CloudShadows::DrawUnloadedUI()
 	// Feature-specific description
 	ImGui::TextWrapped(
 		"Cloud Shadows adds shadows cast from clouds.\n"
-		"The cloud shadows are aligned with the sun, using the actual clouds system rather than a scrolling texture,\n"
-		"meaning that when clouds cover it the player will be shrouded in darkness.");
+		"The cloud shadows are aligned with the sun, using the actual clouds system rather than a scrolling texture, meaning that when clouds cover it the player will be shrouded in darkness.");
 
 	ImGui::Spacing();
 	ImGui::TextWrapped("Key features:");
 	ImGui::BulletText("More realistic daytime lighting");
 	ImGui::BulletText("Compatible with all weathers");
 	ImGui::BulletText("Utilizes volumetric lighting for a visually striking effect.");
-	ImGui::Spacing();
 }

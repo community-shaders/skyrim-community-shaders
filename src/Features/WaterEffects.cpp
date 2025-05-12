@@ -45,7 +45,6 @@ void WaterEffects::DrawUnloadedUI()
 	ImGui::Spacing();
 	ImGui::TextWrapped("Key features:");
 	ImGui::BulletText("Realistic underwater caustic lighting");
-	ImGui::BulletText("Enhanced water surface appearance");
-	ImGui::BulletText("Improved visual immersion near water bodies");
+	ImGui::BulletText("3D water surface appearance via parallax");
 }
 

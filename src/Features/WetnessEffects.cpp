@@ -160,8 +160,7 @@ void WetnessEffects::DrawUnloadedUI()
 
 	// Feature-specific description
 	ImGui::TextWrapped(
-		"Wetness Effects enhances Skyrim's weather system by adding realistic surface wetness during and after rain.\n"
-		"The mod makes surfaces appear wet, adds dynamic puddles, and creates realistic water effects such as ripples and splashes.");
+		"Wetness Effects enhances the weather system by adding realistic surface wetness during and after rain.");
 
 	ImGui::Spacing();
 	ImGui::TextWrapped("Key features:");

@@ -631,13 +631,11 @@ void Skylighting::RenderOcclusion()
 
 void Skylighting::DrawUnloadedUI()
 {
-	// Call base class implementation for standard "not installed" message
 	Feature::DrawUnloadedUI();
 
 	// Feature-specific description
 	ImGui::TextWrapped(
-		"Skylighting enhances Skyrim's environmental lighting by adding realistic sky occlusion and improved outdoor illumination.\n"
-		"It calculates how much of the sky dome is visible from each point in the world, creating more realistic outdoor lighting.");
+		"Skylighting enhances Skyrim's environmental lighting by adding realistic sky occlusion and improved outdoor illumination.");
 
 	ImGui::Spacing();
 	ImGui::TextWrapped("Key features:");
