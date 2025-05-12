@@ -46,5 +46,7 @@ void WaterEffects::DrawUnloadedUI()
 	ImGui::TextWrapped("Key features:");
 	ImGui::BulletText("Realistic underwater caustic lighting");
 	ImGui::BulletText("3D water surface appearance via parallax");
+	ImGui::TextWrapped("Requirements:");
+	ImGui::BulletText("Parallax Water requires a water mod with displacement textures.");
 }
 

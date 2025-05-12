@@ -172,8 +172,9 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 
 void Feature::DrawUnloadedUI()
 {
-	ImGui::TextWrapped(GetNotInstalledMessage().c_str());
-	ImGui::Spacing();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.86f, 0.27f, 0.33f, 1.0f)); // Red
+    ImGui::TextWrapped(GetNotInstalledMessage().c_str());
+    ImGui::PopStyleColor();
 }
 
 bool Feature::ToggleAtBootSetting()
