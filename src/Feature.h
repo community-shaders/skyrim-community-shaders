@@ -33,7 +33,6 @@ struct Feature
 		return std::format("This feature is not installed! Version required: {}", GetRequiredVersion());
 	}
 
-
 	virtual bool HasShaderDefine(RE::BSShader::Type) { return false; }
 	/**
 	 * Whether the feature supports VR.
