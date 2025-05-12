@@ -20,6 +20,11 @@ void TerrainShadows::SaveSettings(json& o_json)
 	o_json = settings;
 }
 
+bool TerrainShadows::DrawFailLoadMessage() const
+{
+    return false;
+}
+
 void TerrainShadows::DrawSettings()
 {
 	ImGui::Checkbox("Enable Terrain Shadow", &settings.EnableTerrainShadow);

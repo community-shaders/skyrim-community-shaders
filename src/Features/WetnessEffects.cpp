@@ -171,6 +171,10 @@ void WetnessEffects::DrawUnloadedUI()
 	ImGui::BulletText("Shore wetness effects near water bodies");
 }
 
+bool WetnessEffects::DrawFailLoadMessage() const {
+    return false;
+}
+
 WetnessEffects::PerFrame WetnessEffects::GetCommonBufferData()
 {
 	PerFrame data{};

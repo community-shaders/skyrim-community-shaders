@@ -242,3 +242,24 @@ void VolumetricLighting::RenderDepth::thunk()
 	if (*GetSingleton()->bEnableVolumetricLighting)
 		RenderVolumetricLighting(&GetVLDescriptor(), RE::Main::WorldRootCamera(), false);
 }
+
+bool VolumetricLighting::DrawFailLoadMessage() const {
+    return false; 
+}
+
+void VolumetricLighting::DrawUnloadedUI()
+{
+	Feature::DrawUnloadedUI();
+
+	// Feature-specific description
+	ImGui::TextWrapped(
+		"Volumetric Lighting is a technique that simulates the way light interacts with and\n"
+		"is scattered by particles in the air, creating visible beams of light.");
+
+	ImGui::Spacing();
+	ImGui::TextWrapped("Key features:");
+	ImGui::BulletText("Realistic God Rays");
+	ImGui::BulletText("Applies in interiors and exteriors");
+	ImGui::BulletText("Affected by day and night cycles");
+}
+

@@ -64,7 +64,7 @@ public:	static SubsurfaceScattering* GetSingleton()
 	virtual void SetupResources() override;
 	virtual void Reset() override;
 	virtual void RestoreDefaultSettings() override;
-
+	virtual bool DrawFailLoadMessage() const override;
 	virtual void DrawSettings() override;
 
 	float3 Gaussian(DiffusionProfile& a_profile, float variance, float r);

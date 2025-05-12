@@ -28,6 +28,10 @@ void WaterEffects::DrawSettings()
 	Util::DisplayVersionInfo(version);
 }
 
+bool WaterEffects::DrawFailLoadMessage() const {
+    return false;
+}
+
 void WaterEffects::DrawUnloadedUI()
 {
 	// Call base class implementation for standard "not installed" message
@@ -44,3 +48,4 @@ void WaterEffects::DrawUnloadedUI()
 	ImGui::BulletText("Enhanced water surface appearance");
 	ImGui::BulletText("Improved visual immersion near water bodies");
 }
+

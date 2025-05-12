@@ -19,9 +19,11 @@ public:
 
 	virtual void SetupResources() override;
 	virtual void Prepass() override;
-	
+	virtual void DrawSettings() override;
 	virtual void DrawUnloadedUI() override;
+	virtual bool DrawFailLoadMessage() const override;
 
 	virtual bool SupportsVR() override { return true; };
 };
+
 

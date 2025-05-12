@@ -19,14 +19,14 @@ struct InverseSquareLighting : Feature
 	inline bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
 	virtual void DrawSettings() override;
-
+	virtual void DrawUnloadedUI() override;
+	virtual bool DrawFailLoadMessage() const override;
 	virtual void EarlyPrepass() override;
 
 	virtual bool SupportsVR() override { return true; }
 
 	virtual void PostPostLoad() override;
 
-	virtual bool DrawFailLoadMessage() const override;
 	
 	static float CalculateRadius(float intensity, bool shadowCaster, float cutoffOverride);
 

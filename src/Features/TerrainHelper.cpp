@@ -9,6 +9,11 @@ void TerrainHelper::DrawSettings()
 	Util::DisplayVersionInfo(version);
 }
 
+bool TerrainHelper::DrawFailLoadMessage() const {
+    // Default implementation
+    return false; // or true, depending on your needs
+}
+
 void TerrainHelper::DrawUnloadedUI()
 {
 	// Call base class implementation for standard "not installed" message

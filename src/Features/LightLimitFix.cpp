@@ -115,7 +115,6 @@ void LightLimitFix::DrawSettings()
 
 void LightLimitFix::DrawUnloadedUI()
 {
-	// Call base class implementation for standard "not installed" message
 	Feature::DrawUnloadedUI();
 
 	// Feature-specific description
@@ -1095,7 +1094,8 @@ void LightLimitFix::Hooks::NiNode_Destroy::thunk(RE::NiNode* This)
 	func(This);
 }
 
-bool InverseSquareLighting::DrawFailLoadMessage() const
+bool LightLimitFix::DrawFailLoadMessage() const
 {
     return false;
 }
+

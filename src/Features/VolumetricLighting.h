@@ -38,6 +38,8 @@ public:
 	virtual void RestoreDefaultSettings() override;
 	virtual void DrawSettings() override;
 	virtual void DataLoaded() override;
+	virtual void DrawUnloadedUI() override;
+	virtual bool DrawFailLoadMessage() const override;
 	virtual void PostPostLoad() override;
 	virtual void EarlyPrepass() override;
 

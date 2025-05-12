@@ -31,7 +31,7 @@ std::string Feature::GetRequiredVersion() const
             const auto& minimalFeatureVersion = FeatureVersions::FEATURE_MINIMAL_VERSIONS.at(shortName);
             std::string minimalVersionString = minimalFeatureVersion.string();
             // Remove trailing .0 if present
-            if (minimalVersionString.size() >= 2 && minimalVersionString.substr(minimalVersionString.size() - 2) == ".0") {
+            if (minimalVersionString.size() >= 2 && minimalVersionString.substr(minimalVersionString.size() - 2) == "-0") {
                 minimalVersionString = minimalVersionString.substr(0, minimalVersionString.size() - 2);
             }
             return minimalVersionString;
@@ -139,18 +139,6 @@ void Feature::WriteDiskCacheInfo(CSimpleIniA& a_ini)
 	a_ini.SetValue(ini_name.c_str(), "Version", version.c_str());
 }
 
-// void Feature::DrawUnloadedUI()
-// {
-//     ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "%s", GetNotInstalledMessage().c_str());
-//     ImGui::Spacing();
-    
-//     // Show link to download if there is one
-//     std::string featureModLink = GetFeatureModLink();
-//     if (!featureModLink.empty()) {
-//         ImGui::TextWrapped("You can download this feature from: %s", featureModLink.c_str());
-//         ImGui::Spacing();
-//     }
-// }
 
 const std::vector<Feature*>& Feature::GetFeatureList()
 {
@@ -180,6 +168,12 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		return !a->SupportsVR();
 	});
 	return (REL::Module::IsVR() && !globals::state->IsDeveloperMode()) ? featuresVR : features;
+}
+
+void Feature::DrawUnloadedUI()
+{
+	ImGui::TextWrapped(GetNotInstalledMessage().c_str());
+	ImGui::Spacing();
 }
 
 bool Feature::ToggleAtBootSetting()

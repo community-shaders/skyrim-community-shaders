@@ -66,6 +66,10 @@ void SubsurfaceScattering::DrawSettings()
 	Util::DisplayVersionInfo(version);
 }
 
+bool SubsurfaceScattering::DrawFailLoadMessage() const {
+    return false;
+}
+
 void SubsurfaceScattering::DrawUnloadedUI()
 {
 	// Call base class implementation for standard "not installed" message

@@ -329,6 +329,16 @@ void TerrainBlending::RenderTerrainBlendingPasses()
 	mainDepth.depthSRV = depthSRVBackup;
 }
 
+void TerrainBlending::DrawSettings()
+{
+	// Display version info at the bottom
+	Util::DisplayVersionInfo(version);
+}
+
+bool TerrainBlending::DrawFailLoadMessage() const {
+    return false;
+}
+
 void TerrainBlending::DrawUnloadedUI()
 {
 	// Call base class implementation for standard "not installed" message

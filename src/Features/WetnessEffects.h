@@ -66,6 +66,7 @@ public:	static WetnessEffects* GetSingleton()
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;
+	virtual bool DrawFailLoadMessage() const override;
 	
 	virtual void DrawUnloadedUI() override;
 

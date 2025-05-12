@@ -25,7 +25,8 @@ struct TerrainHelper : Feature
 	virtual bool SupportsVR() override { return true; };
 	virtual std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/143149"; };
 	virtual void DrawUnloadedUI() override;
-	virtual bool DrawFailLoadMessage() const override { return false; };
+	virtual bool DrawFailLoadMessage() const override;
+	virtual void DrawSettings() override;
 
 	void SetShaderResouces(ID3D11DeviceContext* a_context);
 	bool TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land);

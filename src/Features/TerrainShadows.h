@@ -81,5 +81,6 @@ struct TerrainShadows : public Feature
 	virtual inline void RestoreDefaultSettings() override { settings = {}; }
 	virtual void ClearShaderCache() override;
 	virtual void DrawUnloadedUI() override;
+	virtual bool DrawFailLoadMessage() const override;
 	virtual bool SupportsVR() override { return true; };
 };
