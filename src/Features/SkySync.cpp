@@ -28,27 +28,17 @@ void SkySync::RestoreDefaultSettings()
 	settings = {};
 }
 
-void SkySync::DataLoaded()
+void SkySync::PostPostLoad()
 {
 	moonAndStarsLoaded = GetModuleHandle(L"po3_MoonMod.dll");
 	if (moonAndStarsLoaded)
 		logger::info("[Sky Sync] Moon and Stars detected, compatibility enabled");
-
-	auto disableDueToConflict = [&](std::string_view conflictName) {
-		failedLoadedMessage = fmt::format("Sky Sync has been disabled as {} has been detected, both cannot be used together", conflictName);
-		loaded = false;
-		logger::warn("{}", failedLoadedMessage);
-	};
-
-	const auto data = RE::TESDataHandler::GetSingleton();
-	if (data && (data->LookupLoadedModByName("DVLaSS.esp"sv) || data->LookupLoadedLightModByName("DVLaSS.esp"sv)))
-		disableDueToConflict("DVLaSS");
-	else if (GetModuleHandle(L"EVLaS.dll"))
-		disableDueToConflict("EVLaS");
-}
-
-void SkySync::PostPostLoad()
-{
+	
+	if (GetModuleHandle(L"EVLaS.dll")) {
+		DisableOnConflict("EVLaS");
+		return;
+	}
+	
 	stl::detour_thunk<Moon_Update>(REL::RelocationID(25626, 26169));
 	stl::detour_thunk<Sky_Update>(REL::RelocationID(25682, 26229));
 	stl::detour_thunk<Sky_OnNewClimate>(REL::RelocationID(25695, 26242));
@@ -60,6 +50,21 @@ void SkySync::PostPostLoad()
 	gSecundaSize = reinterpret_cast<uint32_t*>(REL::RelocationID(502570, 370173).address());
 
 	logger::info("[Sky Sync] Installed hooks");
+}
+
+void SkySync::DataLoaded()
+{
+	const auto data = RE::TESDataHandler::GetSingleton();
+	if (data && (data->LookupLoadedModByName("DVLaSS.esp"sv) || data->LookupLoadedLightModByName("DVLaSS.esp"sv)))
+		DisableOnConflict("DVLaSS");
+}
+
+void SkySync::DisableOnConflict(std::string_view conflictName)
+{
+	failedLoadedMessage = fmt::format("Disabled as {} has been detected, both cannot be used together", conflictName);
+	loaded = false;
+	settings.Enabled = false;
+	logger::warn("[Sky Sync] {}", failedLoadedMessage);
 }
 
 void SkySync::Sky_Update::thunk(RE::Sky* sky)
@@ -362,7 +367,8 @@ inline void SkySync::ShadowFader::ClampDirection(RE::NiPoint3& dir)
 SkySync::VolumetricLightingDescriptor* SkySync::ApplyVolumetricLighting_VolumetricLightingDescriptor_Get::thunk()
 {
 	const auto volumetricLightingDescriptor = func();
-	volumetricLightingDescriptor->lightingIntensity *= volumetricLightingIntensityFactor;
+	if (const auto singleton = GetSingleton(); singleton->settings.Enabled)
+		volumetricLightingDescriptor->lightingIntensity *= volumetricLightingIntensityFactor;
 	return volumetricLightingDescriptor;
 }
 
@@ -382,7 +388,8 @@ void SkySync::ClimateTimings::Update(const RE::TESClimate* climate)
 
 void SkySync::Sky_OnNewClimate::thunk(RE::Sky* sky)
 {
-	GetSingleton()->timings.Update(sky->currentClimate);
+	if (const auto singleton = GetSingleton(); singleton->settings.Enabled)
+		singleton->timings.Update(sky->currentClimate);
 	func(sky);
 }
 
@@ -391,8 +398,8 @@ void SkySync::Moon_Update::thunk(RE::Moon* moon, RE::Sky* sky)
 	const auto updateMoonTexture = moon->updateMoonTexture;
 
 	func(moon, sky);
-
-	if (updateMoonTexture != moon->updateMoonTexture) {
+	
+	if (const auto singleton = GetSingleton(); singleton->settings.Enabled && updateMoonTexture != moon->updateMoonTexture) {
 		// Gets the texture name of the current moon phase when it changes rather than reading direct global variables
 		// Allows for compatability with other mods that don't directly update the in-game phase values
 		const auto moonShaderProperty = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().properties[1].get());
@@ -424,7 +431,7 @@ void SkySync::Moon_Update::thunk(RE::Moon* moon, RE::Sky* sky)
 			}
 		}
 
-		float* intensityFactor = moon == sky->masser ? &GetSingleton()->masserPhaseIntensityFactor : &GetSingleton()->secundaPhaseIntensityFactor;
+		float* intensityFactor = moon == sky->masser ? &singleton->masserPhaseIntensityFactor : &singleton->secundaPhaseIntensityFactor;
 		if (phase == RE::Moon::Phases::Phase::kNewMoon) {
 			*intensityFactor = NewMoonIntensityFactor;
 		} else {

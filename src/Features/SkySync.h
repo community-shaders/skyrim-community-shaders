@@ -29,8 +29,8 @@ struct SkySync : Feature
 
 	virtual bool SupportsVR() override { return true; }
 
-	virtual void DataLoaded() override;
 	virtual void PostPostLoad() override;
+	virtual void DataLoaded() override;
 
 	struct Sky_Update
 	{
@@ -149,6 +149,8 @@ private:
 	RE::NiPoint3 directions[3];
 	float intensities[3] = {};
 	ShadowFader shadowFader;
+
+	void DisableOnConflict(std::string_view conflictName);
 
 	void Update(const RE::Sky* sky);
 
