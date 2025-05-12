@@ -1096,6 +1096,5 @@ void LightLimitFix::Hooks::NiNode_Destroy::thunk(RE::NiNode* This)
 
 bool LightLimitFix::DrawFailLoadMessage() const
 {
-    return false;
+	return false;
 }
-

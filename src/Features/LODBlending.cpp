@@ -18,7 +18,7 @@ void LODBlending::DrawSettings()
 			"Disables vertex coloring on nearby terrain. "
 			"Best combined with terrain LOD generated in xLODGen with Vertex Color Intensity set to 0. ");
 	}
-	
+
 	// Display version info at the bottom
 	Util::DisplayVersionInfo(version);
 }

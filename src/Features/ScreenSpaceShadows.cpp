@@ -33,7 +33,7 @@ void ScreenSpaceShadows::DrawSettings()
 		ImGui::Spacing();
 		ImGui::TreePop();
 	}
-	
+
 	// Display version info at the bottom
 	Util::DisplayVersionInfo(version);
 }
@@ -257,7 +257,7 @@ void ScreenSpaceShadows::RestoreDefaultSettings()
 
 bool ScreenSpaceShadows::DrawFailLoadMessage() const
 {
-    return false;
+	return false;
 }
 
 void ScreenSpaceShadows::DrawUnloadedUI()

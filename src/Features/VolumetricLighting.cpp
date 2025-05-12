@@ -39,7 +39,7 @@ void VolumetricLighting::DrawSettings()
 		ImGui::Spacing();
 		ImGui::TreePop();
 	}
-	
+
 	// Display version info at the bottom
 	Util::DisplayVersionInfo(version);
 }
@@ -246,8 +246,9 @@ void VolumetricLighting::RenderDepth::thunk()
 		RenderVolumetricLighting(&GetVLDescriptor(), RE::Main::WorldRootCamera(), false);
 }
 
-bool VolumetricLighting::DrawFailLoadMessage() const {
-    return false; 
+bool VolumetricLighting::DrawFailLoadMessage() const
+{
+	return false;
 }
 
 void VolumetricLighting::DrawUnloadedUI()
@@ -265,4 +266,3 @@ void VolumetricLighting::DrawUnloadedUI()
 	ImGui::BulletText("Applies in interiors and exteriors");
 	ImGui::BulletText("Affected by day and night cycles");
 }
-

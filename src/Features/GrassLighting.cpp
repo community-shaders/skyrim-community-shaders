@@ -86,7 +86,7 @@ void GrassLighting::RestoreDefaultSettings()
 
 bool GrassLighting::DrawFailLoadMessage() const
 {
-    return false;
+	return false;
 }
 
 void GrassLighting::DrawUnloadedUI()

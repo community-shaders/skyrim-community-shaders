@@ -8,7 +8,8 @@ struct TerrainShadows : public Feature
 	{
 		static TerrainShadows singleton;
 		return std::addressof(singleton);
-	}	virtual inline std::string GetName() override { return "Terrain Shadows"; }
+	}
+	virtual inline std::string GetName() override { return "Terrain Shadows"; }
 	virtual inline std::string GetShortName() override { return "TerrainShadows"; }
 	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/135817"; }
 	virtual inline std::string GetFeatureDescription() override { return "Terrain Shadows adds distant terrain shadowing to Skyrim's landscape using heightmap data."; }

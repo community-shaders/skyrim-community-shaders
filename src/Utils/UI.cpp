@@ -54,13 +54,13 @@ namespace Util
 
 		// Push gray text color for version info
 		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
-		
+
 		// Position the text at the bottom of the current window
 		ImGui::SetCursorPosY(ImGui::GetWindowHeight() - ImGui::GetTextLineHeightWithSpacing() - 5.0f);
-		
+
 		// Display the version info
 		ImGui::Text("v%s", version.c_str());
-		
+
 		// Pop the color style
 		ImGui::PopStyleColor();
 	}

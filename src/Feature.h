@@ -9,7 +9,8 @@ struct Feature
 	/**
 	 * Helper method to display version info at the bottom of the settings UI
 	 */
-	void DisplayVersionInfo() const {
+	void DisplayVersionInfo() const
+	{
 		Util::DisplayVersionInfo(version);
 	}	virtual std::string GetName() = 0;
 	virtual std::string GetShortName() = 0;
@@ -26,7 +27,9 @@ struct Feature
 	/**
 	 * Gets a formatted message indicating this feature is not installed with the required version
 	 * @return A formatted message string
-	 */	std::string GetNotInstalledMessage() const {
+	 */
+	std::string GetNotInstalledMessage() const
+	{
 		return std::format("This feature is not installed! Version required: {}", GetRequiredVersion());
 	}
 

@@ -6,14 +6,15 @@ struct Skylighting : Feature
 	{
 		static Skylighting singleton;
 		return &singleton;
-	}	virtual bool SupportsVR() override { return true; };	
+	}
+	virtual bool SupportsVR() override { return true; };
 	virtual inline std::string GetName() override { return "Skylighting"; }
 	virtual inline std::string GetShortName() override { return "Skylighting"; }
 	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/139352"; }
 	virtual inline std::string GetFeatureDescription() override { return "Skylighting improves outdoor illumination by simulating realistic atmospheric scattering and bounce lighting based on sky conditions."; }
 	virtual inline std::string_view GetShaderDefineName() override { return "SKYLIGHTING"; }
 	virtual bool HasShaderDefine(RE::BSShader::Type) override { return true; };
-	
+
 	virtual void DrawUnloadedUI() override;
 	virtual bool DrawFailLoadMessage() const override;
 	virtual void RestoreDefaultSettings() override;

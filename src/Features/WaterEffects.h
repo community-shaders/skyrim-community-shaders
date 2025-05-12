@@ -10,7 +10,8 @@ public:
 		static WaterEffects singleton;
 		return &singleton;
 	}
-	winrt::com_ptr<ID3D11ShaderResourceView> causticsView;	virtual inline std::string GetName() override { return "Water Effects"; }
+	winrt::com_ptr<ID3D11ShaderResourceView> causticsView;
+	virtual inline std::string GetName() override { return "Water Effects"; }
 	virtual inline std::string GetShortName() override { return "WaterEffects"; }
 	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/112762"; }
 	virtual inline std::string GetFeatureDescription() override { return "Water Effects enhances Skyrim's water rendering by adding caustic light effects and improved water visuals."; }
@@ -26,5 +27,3 @@ public:
 
 	virtual bool SupportsVR() override { return true; };
 };
-
-

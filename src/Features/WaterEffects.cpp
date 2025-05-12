@@ -31,8 +31,9 @@ void WaterEffects::DrawSettings()
 	Util::DisplayVersionInfo(version);
 }
 
-bool WaterEffects::DrawFailLoadMessage() const {
-    return false;
+bool WaterEffects::DrawFailLoadMessage() const
+{
+	return false;
 }
 
 void WaterEffects::DrawUnloadedUI()
@@ -52,4 +53,3 @@ void WaterEffects::DrawUnloadedUI()
 	ImGui::TextWrapped("Requirements:");
 	ImGui::BulletText("Parallax Water requires a water mod with displacement textures.");
 }
-

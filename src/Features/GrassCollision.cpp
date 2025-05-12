@@ -242,7 +242,7 @@ void GrassCollision::Hooks::BSGrassShader_SetupGeometry::thunk(RE::BSShader* Thi
 
 bool GrassCollision::DrawFailLoadMessage() const
 {
-    return false;
+	return false;
 }
 
 void GrassCollision::DrawUnloadedUI()

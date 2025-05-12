@@ -1,11 +1,13 @@
 #pragma once
 
 struct ScreenSpaceShadows : Feature
-{	static ScreenSpaceShadows* GetSingleton()
+{
+	static ScreenSpaceShadows* GetSingleton()
 	{
 		static ScreenSpaceShadows singleton;
 		return &singleton;
-	}	virtual inline std::string GetName() override { return "Screen Space Shadows"; }
+	}
+	virtual inline std::string GetName() override { return "Screen Space Shadows"; }
 	virtual inline std::string GetShortName() override { return "ScreenSpaceShadows"; }
 	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/93209"; }
 	virtual inline std::string GetFeatureDescription() override { return "Screen Space Shadows enhances shadow rendering by ray-marching through the depth buffer to create more accurate shadows."; }
@@ -67,7 +69,7 @@ struct ScreenSpaceShadows : Feature
 
 	void DrawShadows();
 	virtual void RestoreDefaultSettings() override;
-	
+
 	virtual void DrawUnloadedUI() override;
 	virtual bool DrawFailLoadMessage() const override;
 	virtual bool SupportsVR() override { return true; };

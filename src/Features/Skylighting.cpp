@@ -38,7 +38,7 @@ void Skylighting::ResetSkylighting()
 
 bool Skylighting::DrawFailLoadMessage() const
 {
-    return false;
+	return false;
 }
 
 void Skylighting::DrawSettings()
@@ -66,7 +66,7 @@ void Skylighting::DrawSettings()
 	ImGui::SliderAngle("Max Zenith Angle", &settings.MaxZenith, 0, 90);
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("Smaller angles creates more focused top-down shadow.");
-	
+
 	// Display version info at the bottom
 	Util::DisplayVersionInfo(version);
 }

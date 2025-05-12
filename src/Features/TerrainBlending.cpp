@@ -338,8 +338,9 @@ void TerrainBlending::DrawSettings()
 	Util::DisplayVersionInfo(version);
 }
 
-bool TerrainBlending::DrawFailLoadMessage() const {
-    return false;
+bool TerrainBlending::DrawFailLoadMessage() const
+{
+	return false;
 }
 
 void TerrainBlending::DrawUnloadedUI()

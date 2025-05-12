@@ -9,7 +9,8 @@ public:
 	{
 		static LightLimitFix render;
 		return &render;
-	}	virtual inline std::string GetName() override { return "Light Limit Fix"; }
+	}
+	virtual inline std::string GetName() override { return "Light Limit Fix"; }
 	virtual inline std::string GetShortName() override { return "LightLimitFix"; }
 	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/99548"; }
 	virtual inline std::string GetFeatureDescription() override { return "Light Limit Fix significantly improves Skyrim's lighting system by making lights unlimited, adding particle lights, contact shadows and more."; }
@@ -165,7 +166,7 @@ public:
 	virtual void DrawSettings() override;
 
 	virtual bool DrawFailLoadMessage() const override;
-	
+
 	virtual void DrawUnloadedUI() override;
 
 	virtual void PostPostLoad() override;
