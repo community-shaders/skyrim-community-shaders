@@ -2348,7 +2348,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #				if defined(HAIR) && defined(CS_HAIR) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
 		if (SharedData::hairSpecularSettings.Enabled) {
 			float3 lightSpecularColor = 0;
-			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, SharedData::hairSpecularSettings.Glossiness, uv, baseColor.xyz);
+			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor * contactShadow, SharedData::hairSpecularSettings.Glossiness, uv, baseColor.xyz);
 			lightsSpecularColor += lightSpecularColor;
 		} else {
 #					if defined(SPECULAR)
