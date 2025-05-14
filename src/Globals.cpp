@@ -28,6 +28,7 @@
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
 #include "Features/TerrainShadows.h"
+#include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
 #include "Features/WetnessEffects.h"
@@ -65,6 +66,7 @@ namespace globals
 		TerrainHelper* terrainHelper = nullptr;
 		TerrainShadows* terrainShadows = nullptr;
 		VolumetricLighting* volumetricLighting = nullptr;
+		VR* vr = nullptr;
 		WaterEffects* waterEffects = nullptr;
 		WetnessEffects* wetnessEffects = nullptr;
 
@@ -144,6 +146,7 @@ namespace globals
 		features::terrainHelper = TerrainHelper::GetSingleton();
 		features::terrainShadows = TerrainShadows::GetSingleton();
 		features::volumetricLighting = VolumetricLighting::GetSingleton();
+		features::vr = VR::GetSingleton();
 		features::waterEffects = WaterEffects::GetSingleton();
 		features::wetnessEffects = WetnessEffects::GetSingleton();
 

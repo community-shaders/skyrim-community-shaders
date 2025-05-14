@@ -18,6 +18,7 @@ struct TerrainBlending;
 struct TerrainHelper;
 struct TerrainShadows;
 struct VolumetricLighting;
+struct VR;
 struct WaterEffects;
 struct WetnessEffects;
 
@@ -66,6 +67,7 @@ namespace globals
 		extern TerrainHelper* terrainHelper;
 		extern TerrainShadows* terrainShadows;
 		extern VolumetricLighting* volumetricLighting;
+		extern VR* vr;
 		extern WaterEffects* waterEffects;
 		extern WetnessEffects* wetnessEffects;
 
