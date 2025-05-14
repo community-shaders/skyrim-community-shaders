@@ -2249,12 +2249,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			lightsDiffuseColor += pointDiffuseColor;
 			transmissionColor += pointTransmissionColor;
 			float3 sssTransmittance = Skin::SSSSTransmittance(
-											SharedData::skinData.sssParams.x,
-											SharedData::skinData.sssParams.y,
-											modelNormal.xyz,
-											normalizedLightDirection,
-											skinSurfaceProperties.Thickness) *
-										SharedData::skinData.sssParams.w;
+										  SharedData::skinData.sssParams.x,
+										  SharedData::skinData.sssParams.y,
+										  modelNormal.xyz,
+										  normalizedLightDirection,
+										  skinSurfaceProperties.Thickness) *
+			                          SharedData::skinData.sssParams.w;
 			transmissionColor += min(sssTransmittance * lightProperties.LightColor, lightProperties.LightColor);
 			specularColorPBR += pointSpecularColor;
 		} else {
@@ -2424,12 +2424,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			lightsDiffuseColor += pointDiffuseColor;
 			transmissionColor += pointTransmissionColor;
 			float3 sssTransmittance = Skin::SSSSTransmittance(
-											SharedData::skinData.sssParams.x,
-											SharedData::skinData.sssParams.y,
-											modelNormal.xyz,
-											normalizedLightDirection,
-											skinSurfaceProperties.Thickness) *
-										SharedData::skinData.sssParams.w;
+										  SharedData::skinData.sssParams.x,
+										  SharedData::skinData.sssParams.y,
+										  modelNormal.xyz,
+										  normalizedLightDirection,
+										  skinSurfaceProperties.Thickness) *
+			                          SharedData::skinData.sssParams.w;
 			transmissionColor += min(sssTransmittance * lightProperties.LightColor, lightProperties.LightColor);
 			specularColorPBR += pointSpecularColor;
 #				if defined(WETNESS_EFFECTS)
