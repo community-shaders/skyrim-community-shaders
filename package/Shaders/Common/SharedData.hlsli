@@ -149,7 +149,7 @@ namespace SharedData
 	{
 		uint enableLinearLighting;
 		uint enableGammaCorrection;
-		uint pad[2];
+		uint2 pad;
 	};
 
 	cbuffer FeatureData : register(b6)
