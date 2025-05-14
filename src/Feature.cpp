@@ -18,6 +18,7 @@
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
 #include "Features/TerrainShadows.h"
+#include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
 #include "Features/WetnessEffects.h"
@@ -149,10 +150,13 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		globals::features::hairSpecular
 	};
 
-	static std::vector<Feature*> featuresVR(features);
-	std::erase_if(featuresVR, [](Feature* a) {
-		return !a->SupportsVR();
-	});
+	static std::vector<Feature*> featuresVR = [] {
+		auto v = features;
+		v.push_back(globals::features::vr);
+		std::erase_if(v, [](Feature* a) { return !a->SupportsVR(); });
+		return v;
+	}();
+
 	return (REL::Module::IsVR() && !globals::state->IsDeveloperMode()) ? featuresVR : features;
 }
 
