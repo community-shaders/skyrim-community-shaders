@@ -200,7 +200,6 @@ void Menu::SetupImGuiStyle() const
 }
 
 bool IsEnabled = false;
-bool ShowPerfOverlay = false;
 
 Menu::~Menu()
 {
@@ -609,20 +608,13 @@ void Menu::DrawGeneralSettings()
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Disabling this stops shaders from being loaded from disk, as well as stops shaders from being saved to it.");
-			}
-
-			bool useAsync = shaderCache->IsAsync();
+			}			bool useAsync = shaderCache->IsAsync();
 			ImGui::TableNextColumn();
 			if (ImGui::Checkbox("Enable Async", &useAsync)) {
 				shaderCache->SetAsync(useAsync);
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Skips a shader being replaced if it hasn't been compiled yet. Also makes compilation blazingly fast!");
-			}
-			ImGui::TableNextColumn();
-			ImGui::Checkbox("Perf Overlay", &ShowPerfOverlay);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Shows an overlay with performance statistics.");
 			}
 
 			ImGui::EndTable();
@@ -1052,11 +1044,7 @@ void Menu::DrawOverlay()
 	auto shaderCache = globals::shaderCache;
 	auto failed = shaderCache->GetFailedTasks();
 	auto hide = shaderCache->IsHideErrors();
-
-	// Update ShowPerfOverlay based on settings
-	ShowPerfOverlay = settings.PerfOverlay.Enabled;
-
-	if (!(shaderCache->IsCompiling() || IsEnabled || inTestMode || (failed && !hide) || ShowPerfOverlay)) {
+	if (!(shaderCache->IsCompiling() || IsEnabled || inTestMode || (failed && !hide) || settings.PerfOverlay.Enabled)) {
 		auto& io = ImGui::GetIO();
 		io.ClearInputKeys();
 		io.ClearEventsQueue();
@@ -1121,8 +1109,7 @@ void Menu::DrawOverlay()
 	} else {
 		ImGui::GetIO().MouseDrawCursor = false;
 	}
-
-	if (ShowPerfOverlay)
+	if (settings.PerfOverlay.Enabled)
 		DrawPerfOverlay();
 
 	if (inTestMode) {  // In test mode
@@ -1495,6 +1482,8 @@ void Menu::DrawPerfOverlay()
 
 void Menu::DrawPerformanceOverlaySettings()
 {
+	auto& themeSettings = settings.Theme;
+	
 	ImGui::Checkbox("Enable Performance Overlay", &settings.PerfOverlay.Enabled);
 
 	if (settings.PerfOverlay.Enabled) {
@@ -1549,36 +1538,31 @@ void Menu::DrawPerformanceOverlaySettings()
 
 			ImGui::Unindent();
 		}
-
 		// Hotkey settings
 		if (ImGui::CollapsingHeader("Hotkeys", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Indent();
 
 			// Add hotkey configuration for toggling overlay
-			static bool _settingOverlayToggleKey = false;
-
-			if (_settingOverlayToggleKey) {
+			if (settingOverlayToggleKey) {
 				ImGui::Text("Press any key to set as Performance Overlay toggle key...");
 			} else {
 				ImGui::AlignTextToFramePadding();
 				ImGui::Text("Toggle Key:");
 				ImGui::SameLine();
 				ImGui::AlignTextToFramePadding();
-				ImGui::TextColored(settings.Theme.StatusPalette.CurrentHotkey, "%s", KeyIdToString(settings.PerfOverlay.OverlayToggleKey));
-
+				ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", KeyIdToString(settings.PerfOverlay.OverlayToggleKey));
 				ImGui::AlignTextToFramePadding();
 				ImGui::SameLine();
 				if (ImGui::Button("Change##overlayToggle")) {
-					_settingOverlayToggleKey = true;
-					_keyEventQueue.clear();  // Clear queued events
+					settingOverlayToggleKey = true;
 				}
+			}
+					
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Set a key to show/hide the performance overlay");
 				}
+				ImGui::Unindent();
 			}
-
-			ImGui::Unindent();
-		}
 
 		// Appearance settings
 		if (ImGui::CollapsingHeader("Appearance", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -1926,8 +1910,7 @@ void Menu::ProcessInputEventQueue()
 			uint32_t key = DIKToVK(event.keyCode);
 			logger::trace("Detected key code {} ({})", event.keyCode, key);
 			if (key == event.keyCode)
-				key = MapVirtualKeyEx(event.keyCode, MAPVK_VSC_TO_VK_EX, GetKeyboardLayout(0));
-			if (!event.IsPressed()) {
+				key = MapVirtualKeyEx(event.keyCode, MAPVK_VSC_TO_VK_EX, GetKeyboardLayout(0));			if (!event.IsPressed()) {
 				if (settingToggleKey) {
 					settings.ToggleKey = key;
 					settingToggleKey = false;
@@ -1937,6 +1920,9 @@ void Menu::ProcessInputEventQueue()
 				} else if (settingsEffectsToggle) {
 					settings.EffectToggleKey = key;
 					settingsEffectsToggle = false;
+				} else if (settingOverlayToggleKey) {
+					settings.PerfOverlay.OverlayToggleKey = key;
+					settingOverlayToggleKey = false;
 				} else if (key == settings.ToggleKey) {
 					IsEnabled = !IsEnabled;
 				} else if (key == settings.SkipCompilationKey) {
