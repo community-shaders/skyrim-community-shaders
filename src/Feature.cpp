@@ -6,17 +6,20 @@
 #include "Features/ExtendedMaterials.h"
 #include "Features/GrassCollision.h"
 #include "Features/GrassLighting.h"
+#include "Features/HairSpecular.h"
 #include "Features/InverseSquareLighting.h"
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
+#include "Features/SkySync.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
 #include "Features/TerrainShadows.h"
 #include "Features/TerrainVariation.h"
+#include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
 #include "Features/WetnessEffects.h"
@@ -33,6 +36,9 @@ void Feature::Load(json& o_json)
 			logger::warn("Invalid settings for {}, using default.", GetName());
 			RestoreDefaultSettings();
 		}
+	} else {
+		logger::info("Loading default settings for {}", GetName());
+		RestoreDefaultSettings();
 	}
 
 	// Convert string to wstring
@@ -136,18 +142,23 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		globals::features::terrainShadows,
 		globals::features::screenSpaceGI,
 		globals::features::skylighting,
+		globals::features::skySync,
 		globals::features::terrainBlending,
 		globals::features::terrainHelper,
 		globals::features::volumetricLighting,
 		globals::features::lodBlending,
 		globals::features::terrainVariation,
-		globals::features::inverseSquareLighting
+		globals::features::inverseSquareLighting,
+		globals::features::hairSpecular
 	};
 
-	static std::vector<Feature*> featuresVR(features);
-	std::erase_if(featuresVR, [](Feature* a) {
-		return !a->SupportsVR();
-	});
+	static std::vector<Feature*> featuresVR = [] {
+		auto v = features;
+		v.push_back(globals::features::vr);
+		std::erase_if(v, [](Feature* a) { return !a->SupportsVR(); });
+		return v;
+	}();
+
 	return (REL::Module::IsVR() && !globals::state->IsDeveloperMode()) ? featuresVR : features;
 }
 
