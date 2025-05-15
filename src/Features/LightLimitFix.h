@@ -203,6 +203,7 @@ public:
 	bool CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t a_technique);
 
 	void BSLightingShader_SetupGeometry_Before(RE::BSRenderPass* a_pass);
+	bool BSBatchRenderer_RenderPassImmediately(RE::BSRenderPass* pass, uint32_t technique);
 
 	enum class Space
 	{
@@ -224,12 +225,6 @@ public:
 
 	struct Hooks
 	{
-		struct BSBatchRenderer_RenderPassImmediately
-		{
-			static void thunk(RE::BSRenderPass* Pass, uint32_t Technique, bool AlphaTest, uint32_t RenderFlags);
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
 		struct BSLightingShader_SetupGeometry
 		{
 			static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags);
@@ -268,10 +263,6 @@ public:
 
 		static void Install()
 		{
-			stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately>(REL::RelocationID(100877, 107673).address() + REL::Relocate(0x1E5, 0x1EE));
-			stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
-			stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately>(REL::RelocationID(100871, 107667).address() + REL::Relocate(0xEE, 0xED));
-
 			stl::write_thunk_call<AIProcess_CalculateLightValue_GetLuminance>(REL::RelocationID(38900, 39946).address() + REL::Relocate(0x1C9, 0x1D3));
 
 			stl::write_vfunc<0x6, BSLightingShader_SetupGeometry>(RE::VTABLE_BSLightingShader[0]);
