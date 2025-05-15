@@ -42,6 +42,6 @@ std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 		globals::features::skylighting->GetCommonBufferData(a_inWorld),
 		globals::features::cloudShadows->settings,
 		globals::features::lodBlending->settings,
+		globals::features::hairSpecular->settings,
 		globals::features::terrainVariation->settings);
-		globals::features::hairSpecular->settings);
 }
