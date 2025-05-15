@@ -25,3 +25,8 @@ void LinearLighting::RestoreDefaultSettings()
 {
     settings = {};
 }
+
+void LinearLighting::PostPostLoad()
+{
+    MenuOpenCloseEventHandler::Register();
+}
