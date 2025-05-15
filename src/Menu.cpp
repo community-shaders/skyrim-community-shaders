@@ -608,7 +608,8 @@ void Menu::DrawGeneralSettings()
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Disabling this stops shaders from being loaded from disk, as well as stops shaders from being saved to it.");
-			}			bool useAsync = shaderCache->IsAsync();
+			}
+			bool useAsync = shaderCache->IsAsync();
 			ImGui::TableNextColumn();
 			if (ImGui::Checkbox("Enable Async", &useAsync)) {
 				shaderCache->SetAsync(useAsync);
@@ -1483,7 +1484,7 @@ void Menu::DrawPerfOverlay()
 void Menu::DrawPerformanceOverlaySettings()
 {
 	auto& themeSettings = settings.Theme;
-	
+
 	ImGui::Checkbox("Enable Performance Overlay", &settings.PerfOverlay.Enabled);
 
 	if (settings.PerfOverlay.Enabled) {
@@ -1557,12 +1558,12 @@ void Menu::DrawPerformanceOverlaySettings()
 					settingOverlayToggleKey = true;
 				}
 			}
-					
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Set a key to show/hide the performance overlay");
-				}
-				ImGui::Unindent();
+
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Set a key to show/hide the performance overlay");
 			}
+			ImGui::Unindent();
+		}
 
 		// Appearance settings
 		if (ImGui::CollapsingHeader("Appearance", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -1910,7 +1911,8 @@ void Menu::ProcessInputEventQueue()
 			uint32_t key = DIKToVK(event.keyCode);
 			logger::trace("Detected key code {} ({})", event.keyCode, key);
 			if (key == event.keyCode)
-				key = MapVirtualKeyEx(event.keyCode, MAPVK_VSC_TO_VK_EX, GetKeyboardLayout(0));			if (!event.IsPressed()) {
+				key = MapVirtualKeyEx(event.keyCode, MAPVK_VSC_TO_VK_EX, GetKeyboardLayout(0));
+			if (!event.IsPressed()) {
 				if (settingToggleKey) {
 					settings.ToggleKey = key;
 					settingToggleKey = false;
