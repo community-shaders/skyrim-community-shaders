@@ -1886,6 +1886,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	skinSurfaceProperties.SubsurfaceColor = skinsk.xyz;
 	skinSurfaceProperties.F0 = SharedData::skinData.skinParams2.zzz;
 	skinSurfaceProperties.AO = SkinAO;
+	skinSurfaceProperties.Curvature = Skin::CalculateCurvature(modelNormal.xyz);
 
 	float3 specularColorPBR = 0;
 	float3 transmissionColor = 0;

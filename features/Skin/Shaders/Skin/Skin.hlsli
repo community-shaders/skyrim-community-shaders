@@ -13,7 +13,7 @@ namespace Skin
 		float RoughnessSecondary;
 		float3 F0;
 		float SecondarySpecIntensity;
-		float CurvatureScale;
+		float Curvature;
 		float3 Albedo;
 		float Thickness;
 		float3 SubsurfaceColor;
@@ -27,12 +27,19 @@ namespace Skin
 		skin.RoughnessSecondary = 0.35;
 		skin.F0 = float3(0.0277, 0.0277, 0.0277);
 		skin.SecondarySpecIntensity = 0.15;
-		skin.CurvatureScale = 1.0;
+		skin.Curvature = 0.0;
 		skin.Albedo = float3(0.8, 0.6, 0.5);
 		skin.Thickness = 0.15;
 		skin.SubsurfaceColor = float3(0.6, 0.3, 0.2);
 		skin.AO = 0.0;
 		return skin;
+	}
+
+	float CalculateCurvature(float3 N)
+	{
+		const float3 dNdx = ddx(N);
+		const float3 dNdy = ddy(N);
+		return length(float2(dot(dNdx, dNdx), dot(dNdy, dNdy)));
 	}
 
 	// [Jorge Jimenez, Diego Gutierrez 2015, "Separable Subsurface Scattering"]
@@ -121,6 +128,8 @@ namespace Skin
 
 		float2 specularBRDF = PBR::GetEnvBRDFApproxLazarov(averageRoughness, NdotV);
 		specular *= 1 + skin.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
+
+		specular *= 1 - skin.Curvature;
 	}
 
 	void SkinIndirectLobeWeights(
@@ -152,5 +161,7 @@ namespace Skin
 
 		diffuseWeight *= diffuseAO;
 		specularWeight *= specularAO;
+
+		specularWeight *= 1 - skin.Curvature;
 	}
 }
