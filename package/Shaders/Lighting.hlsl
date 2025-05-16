@@ -1026,7 +1026,7 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 
 #	define LinearSampler SampColorSampler
 
-#		include "Common/ShadowSampling.hlsli"
+#	include "Common/ShadowSampling.hlsli"
 
 PS_OUTPUT main(PS_INPUT input, bool frontFace
 			   : SV_IsFrontFace)
@@ -1042,19 +1042,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	const bool inWorld = true;
 #	else
 	const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
-#		endif
 #	endif
 
 	float nearFactor = smoothstep(4096.0 * 2.5, 0.0, viewPosition.z);
 
-#		if defined(SKINNED) || !defined(MODELSPACENORMALS)
+#	if defined(SKINNED) || !defined(MODELSPACENORMALS)
 	float3x3 tbn = float3x3(input.TBN0.xyz, input.TBN1.xyz, input.TBN2.xyz);
 
 #		if !defined(TREE_ANIM) && !defined(LOD)
 	// Fix incorrect vertex normals on double-sided meshes
 	if (!frontFace)
 		tbn = lerp(tbn, -tbn, nearFactor);
-#			endif
 #		endif
 
 	float3x3 tbnTr = transpose(tbn);
