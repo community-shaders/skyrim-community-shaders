@@ -5,8 +5,13 @@
 
 namespace ImageBasedLighting
 {
+#if defined(IBL_AMBIENTCOMPOSITE)
+	Texture2D<sh2> DiffuseIBLTexture : register(t8);
+#elif defined(IBL_DEFERRED)
+	Texture2D<sh2> DiffuseIBLTexture : register(t14);
+#else
 	Texture2D<sh2> DiffuseIBLTexture : register(t76);
-
+#endif
 	float3 GetDiffuseIBL(float3 rayDir)
 	{
 		sh2 shR = DiffuseIBLTexture.Load(int3(0, 0, 0));
@@ -15,6 +20,6 @@ namespace ImageBasedLighting
 		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(shR, rayDir);
 		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(shG, rayDir);
 		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(shB, rayDir);
-		return float3(colorR, colorG, colorB) / Math::PI;
+		return float3(colorR, colorG, colorB);
 	}
 }

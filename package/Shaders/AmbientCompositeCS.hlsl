@@ -25,18 +25,8 @@ Texture2D<float2> SsgiCoCgTexture : register(t7);
 #endif
 
 #if defined(IBL)
-Texture2D<sh2> DiffuseIBLTexture : register(t8);
-
-float3 GetDiffuseIBL(float3 rayDir)
-{
-	sh2 shR = DiffuseIBLTexture.Load(int3(0, 0, 0));
-	sh2 shG = DiffuseIBLTexture.Load(int3(1, 0, 0));
-	sh2 shB = DiffuseIBLTexture.Load(int3(2, 0, 0));
-	float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(shR, rayDir);
-	float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(shG, rayDir);
-	float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(shB, rayDir);
-	return float3(colorR, colorG, colorB) / Math::PI;
-}
+#	define IBL_AMBIENTCOMPOSITE
+#	include "IBL/IBL.hlsli"
 #endif
 
 RWTexture2D<float4> MainRW : register(u0);
@@ -74,7 +64,7 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 #if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-		directionalAmbientColor += Color::Saturation(GetDiffuseIBL(-normalWS), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(-normalWS), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 	}
 #endif
 
