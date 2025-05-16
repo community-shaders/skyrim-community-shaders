@@ -804,7 +804,7 @@ namespace Hooks
 		{
 			if (globals::features::lightLimitFix->loaded && !globals::features::lightLimitFix->BSBatchRenderer_RenderPassImmediately(pass, technique))
 				return;
-			
+
 			func(pass, technique, alphaTest, renderFlags);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;

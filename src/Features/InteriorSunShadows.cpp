@@ -91,7 +91,7 @@ void InteriorSunShadows::ClearArrays()
 {
 	if (arraysCleared)
 		return;
-	
+
 	currentCellRoomsAndPortals.clear();
 
 	for (auto& jobArray : replacementJobArrays)
