@@ -4,6 +4,7 @@
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExtendedMaterials.h"
 #include "Features/GrassLighting.h"
+#include "Features/HairSpecular.h"
 #include "Features/IBL.h"
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
@@ -41,5 +42,6 @@ std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 		globals::features::skylighting->GetCommonBufferData(a_inWorld),
 		globals::features::cloudShadows->settings,
 		globals::features::lodBlending->settings,
+		globals::features::hairSpecular->settings,
 		globals::features::ibl->settings);
 }

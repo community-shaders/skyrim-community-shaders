@@ -86,6 +86,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 				globals::truePBR->PostPostLoad();
 				Upscaling::InstallHooks();
 				Hooks::Install();
+				EngineFix::InstallOnPostPostLoadFixes();
 				FrameAnnotations::OnPostPostLoad();
 
 				auto shaderCache = globals::shaderCache;
@@ -113,6 +114,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 
 			if (errors.empty()) {
 				globals::OnDataLoaded();
+				EngineFix::InstallOnDataLoadedFixes();
 				FrameAnnotations::OnDataLoaded();
 
 				auto shaderCache = globals::shaderCache;
@@ -151,7 +153,7 @@ bool Load()
 	}
 
 	if (REL::Module::IsVR()) {
-		REL::IDDatabase::get().IsVRAddressLibraryAtLeastVersion("0.160.0", true);
+		REL::IDDatabase::get().IsVRAddressLibraryAtLeastVersion("0.175.0", true);
 	}
 
 	auto privateProfileRedirectorVersion = Util::GetDllVersion(L"Data/SKSE/Plugins/PrivateProfileRedirector.dll");
