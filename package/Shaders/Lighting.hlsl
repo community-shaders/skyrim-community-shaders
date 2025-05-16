@@ -2265,7 +2265,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		{
 #			if defined(TERRAIN_VARIATION)
 			float weights[6];
-			
+
 			float sh0 = ExtendedMaterials::GetTerrainHeight(screenNoise, input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, viewDistance, weights);
 
 			parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, dirLightDirectionTS, sh0, parallaxShadowQuality, screenNoise, displacementParams, sharedOffset, dx, dy, viewDistance);
@@ -2780,7 +2780,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(HAIR)
 	float3 vertexColor = lerp(1, TintColor.xyz, input.Color.y);
-	#		if defined(CS_HAIR)
+#		if defined(CS_HAIR)
 	float3 indirectDiffuseLobeWeight, indirectSpecularLobeWeightPrim, indirectSpecularLobeWeightSec;
 	if (SharedData::hairSpecularSettings.Enabled)
 		vertexColor = 1;
@@ -2870,7 +2870,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		color.xyz += emitColor.xyz;
 	}
 	color.xyz += transmissionColor;
-	#	elif defined(HAIR) && defined(CS_HAIR)
+#	elif defined(HAIR) && defined(CS_HAIR)
 	color.xyz += diffuseColor * baseColor.xyz;
 	if (SharedData::hairSpecularSettings.Enabled) {
 #		if defined(DEFERRED) && defined(SSGI)
@@ -2931,7 +2931,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(SPECULAR)
 #		if defined(EMAT_ENVMAP)
 	specularColor = (specularColor * glossiness * MaterialData.yyy) * lerp(SpecularColor.xyz, Color::LinearToGamma(complexSpecular), complexMaterial);
-	#		elif defined(HAIR) && defined(CS_HAIR)
+#		elif defined(HAIR) && defined(CS_HAIR)
 	if (!SharedData::hairSpecularSettings.Enabled)
 		specularColor = (specularColor * glossiness * MaterialData.yyy) * SpecularColor.xyz;
 #		else
