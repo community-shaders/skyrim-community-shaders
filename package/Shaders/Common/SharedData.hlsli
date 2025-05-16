@@ -145,6 +145,22 @@ namespace SharedData
 		bool DisableTerrainVertexColors;
 	};
 
+	struct HairSpecularSettings
+	{
+		uint Enabled;
+		float Glossiness;
+		float SpecularMult;	
+		float DiffuseMult;
+		uint EnableTangentShift;
+		float PrimaryShift;
+		float SecondaryShift;
+		float Saturation;
+		float SpecularIndirectMult;
+		float DiffuseIndirectMult;
+		float BaseColorMult;
+		float pad;
+	};
+		
 	struct TerrainVariationSettings
 	{
 		bool enableTilingFix;
@@ -154,23 +170,8 @@ namespace SharedData
 		float heightCompensationFactor;  // Compensation multiplier for terrain parallax
 		float shadowRayDirFactor;        // Shadow ray direction multiplier
 		int hashQuality;                 // 0 = Low quality hash, 1 = High quality hash
-		};
+	};
 
-struct HairSpecularSettings
-		{
-			uint Enabled;
-			float Glossiness;
-			float SpecularMult;
-			float DiffuseMult;
-			uint EnableTangentShift;
-			float PrimaryShift;
-			float SecondaryShift;
-			float Saturation;
-			float SpecularIndirectMult;
-			float DiffuseIndirectMult;
-			float BaseColorMult;
-			float pad;
-		};
 		
 		cbuffer FeatureData : register(b6)
 		{
@@ -183,8 +184,8 @@ struct HairSpecularSettings
 			SkylightingSettings skylightingSettings;
 			CloudShadowsSettings cloudShadowsSettings;
 			LODBlendingSettings lodBlendingSettings;
-			TerrainVariationSettings terrainVariationSettings;
 			HairSpecularSettings hairSpecularSettings;
+			TerrainVariationSettings terrainVariationSettings;
 		};
 
 		Texture2D<float4> DepthTexture : register(t17);
