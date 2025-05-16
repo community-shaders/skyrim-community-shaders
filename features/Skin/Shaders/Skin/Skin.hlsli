@@ -1,6 +1,7 @@
 #include "Common/Color.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/PBR.hlsli"
+#include "Common/SharedData.hlsli"
 
 namespace Skin
 {
@@ -32,13 +33,6 @@ namespace Skin
 		skin.SubsurfaceColor = float3(0.6, 0.3, 0.2);
 		skin.AO = 0.0;
 		return skin;
-	}
-
-	float CalculateCurvature(float3 N)
-	{
-		const float3 dNdx = ddx(N);
-		const float3 dNdy = ddy(N);
-		return length(float2(dot(dNdx, dNdx), dot(dNdy, dNdy)));
 	}
 
 	// [Jorge Jimenez, Diego Gutierrez 2015, "Separable Subsurface Scattering"]
@@ -119,7 +113,7 @@ namespace Skin
 
 		float averageRoughness = lerp(skin.RoughnessPrimary, skin.RoughnessSecondary, skin.SecondarySpecIntensity);
 
-		diffuse += light.LightColor * NdotL * PBR::GetDiffuseDirectLightMultiplierBurley(averageRoughness, NdotV, NdotL, VdotH);
+		diffuse += light.LightColor * NdotL * PBR::GetDiffuseDirectLightMultiplierChan(averageRoughness, NdotV, NdotL, VdotH, NdotH);
 
 		float3 F;
 
@@ -127,9 +121,6 @@ namespace Skin
 
 		float2 specularBRDF = PBR::GetEnvBRDFApproxLazarov(averageRoughness, NdotV);
 		specular *= 1 + skin.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
-
-		const float curvature = CalculateCurvature(N);
-		specular *= saturate(curvature);
 	}
 
 	void SkinIndirectLobeWeights(
@@ -146,9 +137,6 @@ namespace Skin
 		specularWeight = skin.F0 * specularBRDF.x + specularBRDF.y;
 
 		diffuseWeight = skin.Albedo * (1.0 - specularWeight);
-
-		const float curvature = CalculateCurvature(N);
-		specularWeight *= 1.0 - saturate(curvature * skin.CurvatureScale);
 
 		specularWeight *= 1 + skin.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
 		float3 R = reflect(-V, N);
