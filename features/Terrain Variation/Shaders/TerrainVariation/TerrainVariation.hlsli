@@ -21,11 +21,11 @@ struct StochasticOffsets
 // Returns 0 for distances <= startDistance, 1 for distances >= maxDistance
 inline float ComputeDistanceFactor(float distance)
 {
-	if (!SharedData::terrainVariationSettings.enableTilingFix)
-		return 0.0;
-
-	return saturate((distance - SharedData::terrainVariationSettings.startDistance) *
-					SharedData::terrainVariationSettings.invDistanceRange);
+    if (!SharedData::terrainVariationSettings.enableTilingFix)
+        return 0.0;
+        
+    return saturate((distance - SharedData::terrainVariationSettings.startDistance) * 
+                   SharedData::terrainVariationSettings.invDistanceRange);
 }
 
 // Hash function for stochastic sampling
