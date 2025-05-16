@@ -145,6 +145,22 @@ namespace SharedData
 		bool DisableTerrainVertexColors;
 	};
 
+	struct HairSpecularSettings
+	{
+		uint Enabled;
+		float Glossiness;
+		float SpecularMult;
+		float DiffuseMult;
+		uint EnableTangentShift;
+		float PrimaryShift;
+		float SecondaryShift;
+		float Saturation;
+		float SpecularIndirectMult;
+		float DiffuseIndirectMult;
+		float BaseColorMult;
+		float pad;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -156,6 +172,7 @@ namespace SharedData
 		SkylightingSettings skylightingSettings;
 		CloudShadowsSettings cloudShadowsSettings;
 		LODBlendingSettings lodBlendingSettings;
+		HairSpecularSettings hairSpecularSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);
