@@ -123,13 +123,12 @@ namespace Skin
 		diffuse += light.LightColor * NdotL * PBR::GetDiffuseDirectLightMultiplierChan(averageRoughness, NdotV, NdotL, VdotH, NdotH);
 
 		float3 F;
+		float3 F0 = skin.F0 * (1 - skin.Curvature);
 
-		specular += GetDualSpecularGGX(averageRoughness, skin.RoughnessPrimary, skin.RoughnessSecondary, skin.SecondarySpecIntensity, skin.F0, NdotL, NdotV, NdotH, VdotH, F) * light.LightColor * NdotL;
+		specular += GetDualSpecularGGX(averageRoughness, skin.RoughnessPrimary, skin.RoughnessSecondary, skin.SecondarySpecIntensity, F0, NdotL, NdotV, NdotH, VdotH, F) * light.LightColor * NdotL;
 
 		float2 specularBRDF = PBR::GetEnvBRDFApproxLazarov(averageRoughness, NdotV);
-		specular *= 1 + skin.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
-
-		specular *= 1 - skin.Curvature;
+		specular *= 1 + F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
 	}
 
 	void SkinIndirectLobeWeights(
