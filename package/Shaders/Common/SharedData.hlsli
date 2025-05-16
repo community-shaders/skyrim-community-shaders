@@ -154,8 +154,9 @@ namespace SharedData
 		float heightCompensationFactor;  // Compensation multiplier for terrain parallax
 		float shadowRayDirFactor;        // Shadow ray direction multiplier
 		int hashQuality;                 // 0 = Low quality hash, 1 = High quality hash
+		};
 
-		struct HairSpecularSettings
+struct HairSpecularSettings
 		{
 			uint Enabled;
 			float Glossiness;
@@ -170,7 +171,7 @@ namespace SharedData
 			float BaseColorMult;
 			float pad;
 		};
-
+		
 		cbuffer FeatureData : register(b6)
 		{
 			GrassLightingSettings grassLightingSettings;
