@@ -30,3 +30,11 @@ void LinearLighting::PostPostLoad()
 {
     MenuOpenCloseEventHandler::Register();
 }
+
+LinearLighting::Settings LinearLighting::GetCommonBufferData()
+{
+    auto data = settings;
+    data.enableLinearLighting = settings.enableLinearLighting && !tempDisable;
+    data.enableGammaCorrection = settings.enableGammaCorrection;
+    return data;
+}

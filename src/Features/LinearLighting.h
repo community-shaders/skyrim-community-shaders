@@ -21,6 +21,8 @@ struct LinearLighting : Feature
         uint pad[2];
     } settings;
 
+	uint tempDisable = false;
+
     virtual void DrawSettings() override;
 
 	virtual void LoadSettings(json& o_json) override;
@@ -30,6 +32,8 @@ struct LinearLighting : Feature
 
     virtual void PostPostLoad() override;
 
+	Settings GetCommonBufferData();
+
     // Event handler
 	class MenuOpenCloseEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
 	{
@@ -38,11 +42,10 @@ struct LinearLighting : Feature
 		{
 			// Disable linear lighting when entering the loading screen
 			if (a_event->menuName == RE::LoadingMenu::MENU_NAME) {
-				bool original = GetSingleton()->settings.enableLinearLighting;
 				if (a_event->opening)
-					GetSingleton()->settings.enableLinearLighting = false;
+					GetSingleton()->tempDisable = true;
                 else
-                    GetSingleton()->settings.enableLinearLighting = true && original;
+					GetSingleton()->tempDisable = false;
 			}
 
 			return RE::BSEventNotifyControl::kContinue;
