@@ -1,3 +1,4 @@
+#include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
 #include "Common/MotionBlur.hlsli"
