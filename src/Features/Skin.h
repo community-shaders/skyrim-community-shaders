@@ -38,7 +38,7 @@ struct Skin : Feature
 		float SkinSpecularTexMultiplier = 1.0f;
 		float SecondarySpecularStrength = 0.15f;
 		float F0 = 0.028f;
-		float SkinColorMultiplier = 1.0f;
+		float ExtraEdgeRoughness = 0.25f;
 		bool EnableSkinDetail = true;
 		float SkinDetailStrength = 0.15f;
 		float SkinDetailTiling = 5.0f;

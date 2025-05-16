@@ -1419,7 +1419,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(SKIN) && defined(CS_SKIN)
 	if (SharedData::skinData.skinParams.w > 0.0f) {
-		baseColor.xyz = baseColor.xyz * SharedData::skinData.skinParams2.www;
+		baseColor.xyz = baseColor.xyz;
 	}
 #	endif  // CS_SKIN
 
@@ -1870,10 +1870,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	skinSurfaceProperties.Albedo = baseColor.xyz;
 
+	const float ExtraRoughness = PBR::GetFresnelFactorSchlick(0.04, saturate(dot(modelNormal.xyz, viewDirection))) * SharedData::skinData.skinParams2.w;
 	skinSurfaceProperties.RoughnessPrimary = SharedData::skinData.skinParams.x;
 	if (!SharedData::skinData.ApplySpecularToWetness)
 		skinSurfaceProperties.RoughnessPrimary = saturate(SharedData::skinData.skinParams.x - SharedData::skinData.skinParams.z * glossiness);
 	skinSurfaceProperties.RoughnessSecondary = SharedData::skinData.skinParams.y;
+	skinSurfaceProperties.RoughnessPrimary = min(1.0, skinSurfaceProperties.RoughnessPrimary + ExtraRoughness);
+	skinSurfaceProperties.RoughnessSecondary = min(1.0, skinSurfaceProperties.RoughnessSecondary + ExtraRoughness);
 	skinSurfaceProperties.SecondarySpecIntensity = SharedData::skinData.skinParams2.x;
 	float4 skinsk = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, uv);
 	skinSurfaceProperties.Thickness = 1 - skinsk.x;

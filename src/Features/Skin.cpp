@@ -13,7 +13,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkinSpecularTexMultiplier,
 	SecondarySpecularStrength,
 	F0,
-	SkinColorMultiplier,
+	ExtraEdgeRoughness,
 	EnableSkinDetail,
 	SkinDetailStrength,
 	SkinDetailTiling,
@@ -60,9 +60,9 @@ void Skin::DrawSettings()
 		ImGui::Text("Fresnel reflectance");
 	}
 
-	ImGui::SliderFloat("Skin Color Multiplier", &settings.SkinColorMultiplier, 0.0f, 5.0f);
+	ImGui::SliderFloat("Extra Edge Roughness", &settings.ExtraEdgeRoughness, 0.0f, 1.0f);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Multiplier for skin color (1.0 to keep original color)");
+		ImGui::Text("Extra roughness at the edges of the skin, to approximate peach fuzz on the face.");
 	}
 
 	ImGui::Spacing();
@@ -219,7 +219,7 @@ Skin::SkinData Skin::GetCommonBufferData()
 {
 	SkinData data{};
 	data.skinParams = float4(settings.SkinMainRoughness, settings.SkinSecondRoughness, settings.SkinSpecularTexMultiplier, float(settings.EnableSkin));
-	data.skinParams2 = float4(settings.SecondarySpecularStrength, settings.ExtraSkinWetness, settings.F0, settings.SkinColorMultiplier);
+	data.skinParams2 = float4(settings.SecondarySpecularStrength, settings.ExtraSkinWetness, settings.F0, settings.ExtraEdgeRoughness);
 	data.skinDetailParams = float4(settings.SkinDetailTiling, settings.BodyTilingMultiplier, settings.SkinDetailStrength, float(settings.EnableSkinDetail));
 	data.sssParams = float4(settings.Translucency, settings.sssWidth, settings.thicknessMult * float(settings.UseCalcThickness), float(settings.UseSSS));
 	data.ApplySpecularToWetness = uint(settings.ApplySpecularToWetness);
