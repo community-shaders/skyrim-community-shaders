@@ -67,6 +67,7 @@ jobs:
           artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
           generateReleaseNotes: true
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          allowUpdates: true
 
       - name: comment on PR
         if: success()
