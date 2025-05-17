@@ -29,7 +29,6 @@ jobs:
           with:
             configurePreset: ALL
             buildPreset: ALL
-            buildPresetAdditionalArgs: "['--config', 'Release']"
 
         - name: create a tagged release and upload the archive
           uses: ncipollo/release-action@v1
