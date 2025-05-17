@@ -24,7 +24,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	sssWidth,
 	thicknessMult,
 	UseSSS,
-	UseCalcThickness)
+	UseCalcThickness,
+	FuzzStrength,
+	FuzzRoughness,
+	FuzzF0);
 
 void Skin::DrawSettings()
 {
@@ -55,7 +58,7 @@ void Skin::DrawSettings()
 		ImGui::Text("Intensity of secondary specular highlights");
 	}
 
-	ImGui::SliderFloat("Fresnel F0", &settings.F0, 0.0f, 0.1f);
+	ImGui::SliderFloat("Fresnel F0", &settings.F0, 0.0f, 0.1f, "%.4f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Fresnel reflectance");
 	}
@@ -64,6 +67,12 @@ void Skin::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Extra roughness at the edges of the skin, to approximate peach fuzz on the face.");
 	}
+
+	ImGui::SliderFloat("Fuzz Strength", &settings.FuzzStrength, 0.0f, 1.0f);
+
+	ImGui::SliderFloat("Fuzz Roughness", &settings.FuzzRoughness, 0.0f, 1.0f);
+
+	ImGui::SliderFloat("Fuzz F0", &settings.FuzzF0, 0.0f, 0.1f);
 
 	ImGui::Spacing();
 
@@ -105,7 +114,7 @@ void Skin::DrawSettings()
 		ImGui::Text("Enable skin detail texture");
 	}
 
-	ImGui::SliderFloat("Skin Detail Strength", &settings.SkinDetailStrength, 0.0f, 1.0f);
+	ImGui::SliderFloat("Skin Detail Strength", &settings.SkinDetailStrength, 0.0f, 2.0f);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Strength of skin detail texture");
 	}
@@ -222,6 +231,7 @@ Skin::SkinData Skin::GetCommonBufferData()
 	data.skinParams2 = float4(settings.SecondarySpecularStrength, settings.ExtraSkinWetness, settings.F0, settings.ExtraEdgeRoughness);
 	data.skinDetailParams = float4(settings.SkinDetailTiling, settings.BodyTilingMultiplier, settings.SkinDetailStrength, float(settings.EnableSkinDetail));
 	data.sssParams = float4(settings.Translucency, settings.sssWidth, settings.thicknessMult * float(settings.UseCalcThickness), float(settings.UseSSS));
+	data.fuzzParams = float4(settings.FuzzStrength, settings.FuzzRoughness, settings.FuzzF0, 0.0f);
 	data.ApplySpecularToWetness = uint(settings.ApplySpecularToWetness);
 	return data;
 }

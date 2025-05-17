@@ -1888,6 +1888,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	skinSurfaceProperties.AO = SkinAO;
 	skinSurfaceProperties.Curvature = Skin::CalculateCurvature(modelNormal.xyz);
 
+	skinSurfaceProperties.FuzzWeight = SharedData::skinData.fuzzParams.x;
+	skinSurfaceProperties.FuzzRoughness = SharedData::skinData.fuzzParams.y;
+	skinSurfaceProperties.FuzzColor = SharedData::skinData.fuzzParams.zzz;
+
 	float3 specularColorPBR = 0;
 	float3 transmissionColor = 0;
 

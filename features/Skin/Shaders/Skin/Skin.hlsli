@@ -18,6 +18,9 @@ namespace Skin
 		float Thickness;
 		float3 SubsurfaceColor;
 		float AO;
+		float FuzzRoughness;
+		float3 FuzzColor;
+		float FuzzWeight;
 	};
 
 	SkinSurfaceProperties InitSkinSurfaceProperties()
@@ -25,13 +28,16 @@ namespace Skin
 		SkinSurfaceProperties skin;
 		skin.RoughnessPrimary = 0.55;
 		skin.RoughnessSecondary = 0.35;
-		skin.F0 = float3(0.0277, 0.0277, 0.0277);
+		skin.F0 = float3(0.0278, 0.0278, 0.0278);
 		skin.SecondarySpecIntensity = 0.15;
 		skin.Curvature = 0.0;
 		skin.Albedo = float3(0.8, 0.6, 0.5);
 		skin.Thickness = 0.15;
 		skin.SubsurfaceColor = float3(0.6, 0.3, 0.2);
 		skin.AO = 0.0;
+		skin.FuzzRoughness = 0.35;
+		skin.FuzzColor = float3(0.045, 0.045, 0.045);
+		skin.FuzzWeight = 0.0;
 		return skin;
 	}
 
@@ -129,6 +135,14 @@ namespace Skin
 
 		float2 specularBRDF = PBR::GetEnvBRDFApproxLazarov(averageRoughness, NdotV);
 		specular *= 1 + F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
+
+		if (skin.FuzzWeight > 0.0) {
+			float3 fuzzSpecular = PBR::GetSpecularDirectLightMultiplierMicroflakes(skin.FuzzRoughness, skin.FuzzColor, NdotL, NdotV, NdotH, VdotH) * light.LightColor * NdotL;
+			float2 fuzzSpecularBRDF = PBR::GetEnvBRDFApproxLazarov(skin.FuzzRoughness, NdotV);
+			fuzzSpecular *= 1 + skin.FuzzColor * (1 / (fuzzSpecularBRDF.x + fuzzSpecularBRDF.y) - 1);
+
+			specular = lerp(specular, fuzzSpecular, skin.FuzzWeight);
+		}
 	}
 
 	void SkinIndirectLobeWeights(
