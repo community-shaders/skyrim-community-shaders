@@ -81,6 +81,7 @@ jobs:
           generateReleaseNotes: true
           allowUpdates: true
           replacesArtifacts: true
+          removeArtifacts: true
 
       - name: comment on PR
         if: success()
@@ -111,3 +112,4 @@ jobs:
           artifacts: "${{ github.workspace }}/dist/*.7z"
           generateReleaseNotes: true
           replacesArtifacts: true
+          removeArtifacts: true
