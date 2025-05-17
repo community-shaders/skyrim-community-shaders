@@ -35,6 +35,7 @@ jobs:
 
         - name: extract version from CMake
           id: get_version
+          shell: bash
           run: |
             VERSION=$(grep 'CMAKE_PROJECT_VERSION:STATIC' build/ALL/CMakeCache.txt | cut -d= -f2)
             echo "version=$VERSION" >> $GITHUB_OUTPUT
