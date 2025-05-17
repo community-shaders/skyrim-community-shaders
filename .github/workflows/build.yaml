@@ -5,6 +5,10 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      cache-key-suffix:
+        description: 'Optional suffix to invalidate the build cache'
+        required: false
   pull_request_target:
 
 permissions:
@@ -27,6 +31,14 @@ jobs:
         - uses: lukka/run-vcpkg@v11.5
           with:
             vcpkgJsonGlob: vcpkg.json
+
+        - name: Cache CMake build output
+          uses: actions/cache@v3
+          with:
+            path: build/ALL
+            key: ${{ runner.os }}-build-${{ inputs.cache-key-suffix || 'default' }}-${{ hashFiles('**/CMakeLists.txt', '**/*.cpp', '**/*.h') }}
+            restore-keys: |
+              ${{ runner.os }}-build-
 
         - name: Build using run-cmake with ALL preset
           uses: lukka/run-cmake@v10
