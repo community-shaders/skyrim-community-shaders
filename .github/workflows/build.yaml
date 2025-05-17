@@ -40,11 +40,24 @@ jobs:
             VERSION=$(grep 'CMAKE_PROJECT_VERSION:STATIC' build/ALL/CMakeCache.txt | cut -d= -f2)
             echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+        - name: Upload dist artifacts
+          if: success()
+          uses: actions/upload-artifact@v4
+          with:
+            name: dist-artifacts
+            path: dist/
+
   prerelease:
     needs: build
     if: github.event_name == 'pull_request'
     runs-on: windows-latest
     steps:
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-artifacts
+          path: dist/
+
       - name: upload prerelease
         uses: ncipollo/release-action@v1
         with:
@@ -68,6 +81,12 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
     steps:
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-artifacts
+          path: dist/
+
       - name: create tagged release
         uses: ncipollo/release-action@v1
         with:
