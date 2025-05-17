@@ -50,7 +50,7 @@ jobs:
 
   prerelease:
     needs: build
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request_target'
     runs-on: windows-latest
     steps:
       - name: Download dist artifacts
@@ -62,7 +62,7 @@ jobs:
       - name: upload prerelease
         uses: ncipollo/release-action@v1
         with:
-          name: Community Shaders ${{ needs.build.outputs.version }} PR #${{ github.event.pull_request.number }}
+          name: "Community Shaders ${{ needs.build.outputs.version }} PR #${{ github.event.pull_request.number }}""
           tag: v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }}
           prerelease: true
           artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
@@ -91,9 +91,8 @@ jobs:
       - name: create tagged release
         uses: ncipollo/release-action@v1
         with:
-          name: Community Shaders ${{ github.ref_name }}
+          name: "Community Shaders ${{ github.ref_name }}"
           draft: true
           tag: ${{ github.ref_name }}
           artifacts: "${{ github.workspace }}/dist/*.7z"
           generateReleaseNotes: true
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
