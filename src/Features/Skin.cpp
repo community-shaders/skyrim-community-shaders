@@ -36,24 +36,24 @@ void Skin::DrawSettings()
 	ImGui::Text("Advanced Skin Shader using dual specular lobes.");
 
 	ImGui::Spacing();
-	ImGui::SliderFloat("Primary Roughness", &settings.SkinMainRoughness, 0.0f, 1.0f);
+	ImGui::SliderFloat("Primary Roughness", &settings.SkinMainRoughness, 0.0f, 1.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Controls microscopic roughness of stratum corneum layer");
 	}
 
-	ImGui::SliderFloat("Secondary Roughness", &settings.SkinSecondRoughness, 0.0f, 1.0f);
+	ImGui::SliderFloat("Secondary Roughness", &settings.SkinSecondRoughness, 0.0f, 1.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Smoothness of epidermal cell layer reflections");
 		ImGui::BulletText("Should be 30-50%% lower than Primary");
 	}
 
-	ImGui::SliderFloat("Specular Texture Multiplier", &settings.SkinSpecularTexMultiplier, 0.0f, 10.0f);
+	ImGui::SliderFloat("Specular Texture Multiplier", &settings.SkinSpecularTexMultiplier, 0.0f, 10.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Multiplier for specular map");
 		ImGui::BulletText("A multiplier for the vanilla specular map, applied to the first layer's roughness");
 	}
 
-	ImGui::SliderFloat("Secondary Specular Strength", &settings.SecondarySpecularStrength, 0.0f, 1.0f);
+	ImGui::SliderFloat("Secondary Specular Strength", &settings.SecondarySpecularStrength, 0.0f, 1.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Intensity of secondary specular highlights");
 	}
@@ -63,41 +63,44 @@ void Skin::DrawSettings()
 		ImGui::Text("Fresnel reflectance");
 	}
 
-	ImGui::SliderFloat("Extra Edge Roughness", &settings.ExtraEdgeRoughness, 0.0f, 1.0f);
+	ImGui::SliderFloat("Extra Edge Roughness", &settings.ExtraEdgeRoughness, 0.0f, 1.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Extra roughness at the edges of the skin, to approximate peach fuzz on the face.");
 	}
 
-	ImGui::SliderFloat("Fuzz Strength", &settings.FuzzStrength, 0.0f, 1.0f);
+	ImGui::SliderFloat("Fuzz Strength", &settings.FuzzStrength, 0.0f, 2.0f, "%.2f");
 
-	ImGui::SliderFloat("Fuzz Roughness", &settings.FuzzRoughness, 0.0f, 1.0f);
+	ImGui::SliderFloat("Fuzz Roughness", &settings.FuzzRoughness, 0.1f, 1.0f, "%.2f");
 
-	ImGui::SliderFloat("Fuzz F0", &settings.FuzzF0, 0.0f, 0.1f);
+	ImGui::SliderFloat("Fuzz F0", &settings.FuzzF0, 0.0f, 0.5f, "%.4f");
 
 	ImGui::Spacing();
 
 	ImGui::Checkbox("Enable SSS Transmission", &settings.UseSSS);
 
 	ImGui::Checkbox("Use Calculated Thickness", &settings.UseCalcThickness);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("This will only work for exterior directional light. And it's far from precise. I don't recommend using it.");
+	}
 
-	ImGui::SliderFloat("Translucency", &settings.Translucency, 0.0f, 1.0f);
+	ImGui::SliderFloat("Translucency", &settings.Translucency, 0.0f, 1.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Translucency of the SSS Transmittance effect");
 	}
 
-	ImGui::SliderFloat("SSS Width", &settings.sssWidth, 0.0f, 1.0f);
+	ImGui::SliderFloat("SSS Width", &settings.sssWidth, 0.0f, 1.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Width of the SSS Transmittance effect");
 	}
 
-	ImGui::SliderFloat("Thickness Multiplier", &settings.thicknessMult, 0.0f, 50.0f);
+	ImGui::SliderFloat("Calculated Thickness Multiplier", &settings.thicknessMult, 0.0f, 50.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Multiplier for the calculated thickness");
 	}
 
 	ImGui::Spacing();
 
-	ImGui::SliderFloat("Extra Skin Wetness", &settings.ExtraSkinWetness, 0.0f, 1.0f);
+	ImGui::SliderFloat("Extra Skin Wetness", &settings.ExtraSkinWetness, 0.0f, 1.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Extra wetness for skin adding to wetness feature");
 	}

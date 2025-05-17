@@ -45,12 +45,12 @@ struct Skin : Feature
 		float BodyTilingMultiplier = 2.0f;
 		bool ApplySpecularToWetness = false;
 		float ExtraSkinWetness = 0.0f;
-		float Translucency = 0.5f;
-		float sssWidth = 0.5f;
+		float Translucency = 0.1f;
+		float sssWidth = 0.2f;
 		float thicknessMult = 20.0f;
 		bool UseSSS = true;
 		bool UseCalcThickness = false;
-		float FuzzStrength = 0.05f;
+		float FuzzStrength = 1.0f;
 		float FuzzRoughness = 0.35f;
 		float FuzzF0 = 0.045f;
 	} settings;
