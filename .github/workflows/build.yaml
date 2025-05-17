@@ -30,7 +30,35 @@ jobs:
             configurePreset: ALL
             buildPreset: ALL
 
+        - name: extract version from CMake
+          id: get_version
+          run: |
+            VERSION=$(grep 'CMAKE_PROJECT_VERSION:STATIC' build/ALL/CMakeCache.txt | cut -d= -f2)
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+        - name: create a prerelease for PR and comment
+          if: github.event_name == 'pull_request'
+          uses: ncipollo/release-action@v1
+          with:
+            name: Community Shaders ${{ steps.get_version.outputs.version }} PR #${{ github.event.pull_request.number }}
+            tag: v${{ steps.get_version.outputs.version }}-pr${{ github.event.pull_request.number }}
+            prerelease: true
+            artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
+            generateReleaseNotes: true
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+        - name: comment on PR with release info
+          if: github.event_name == 'pull_request'
+          uses: thollander/actions-comment-pull-request@v3
+          with:
+            message: |
+              ✅ A pre-release build is available for this PR:
+              [Download](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.get_version.outputs.version }}-pr${{ github.event.pull_request.number }})
+            pr_number: ${{ github.event.pull_request.number }}
+
         - name: create a tagged release and upload the archive
+          if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
           uses: ncipollo/release-action@v1
           env:
               GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -39,3 +67,4 @@ jobs:
             draft: true
             tag: ${{ github.ref_name }}
             artifacts: "${{ github.workspace }}/dist/*.7z"
+            generateReleaseNotes: true
