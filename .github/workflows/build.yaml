@@ -24,11 +24,12 @@ jobs:
           with:
             vcpkgJsonGlob: vcpkg.json
 
-        - name: cmake configure
-          run: cmake -S . --preset=ALL --check-stamp-file "build\CMakeFiles\generate.stamp"
-
-        - name: cmake build
-          run: cmake --build build/ALL --config Release
+        - name: Build using run-cmake with ALL preset
+          uses: lukka/run-cmake@v10
+          with:
+            configurePreset: ALL
+            buildPreset: ALL
+            buildPresetAdditionalArgs: "['--config', 'Release']"
 
         - name: create a tagged release and upload the archive
           uses: ncipollo/release-action@v1
