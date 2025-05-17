@@ -117,7 +117,7 @@ void Skin::DrawSettings()
 		ImGui::Text("Enable skin detail texture");
 	}
 
-	ImGui::SliderFloat("Skin Detail Strength", &settings.SkinDetailStrength, 0.0f, 2.0f);
+	ImGui::SliderFloat("Skin Detail Strength", &settings.SkinDetailStrength, -2.0f, 2.0f);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Strength of skin detail texture");
 	}
