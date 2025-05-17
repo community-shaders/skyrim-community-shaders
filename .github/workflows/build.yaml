@@ -36,7 +36,7 @@ jobs:
           uses: actions/cache@v3
           with:
             path: build/ALL
-            key: ${{ runner.os }}-build-${{ inputs.cache-key-suffix || 'default' }}-${{ hashFiles('**/CMakeLists.txt', '**/*.cpp', '**/*.h') }}
+            key: ${{ runner.os }}-build-${{ inputs.cache-key-suffix || 'default' }}-${{ hashFiles('CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json', '**/CMakeLists.txt', '**/*.cpp', '**/*.c', '**/*.h', '**/*.hpp') }}
             restore-keys: |
               ${{ runner.os }}-build-
 
@@ -80,6 +80,7 @@ jobs:
           artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
           generateReleaseNotes: true
           allowUpdates: true
+          replacesArtifacts: true
 
       - name: comment on PR
         if: success()
@@ -109,3 +110,4 @@ jobs:
           tag: ${{ github.ref_name }}
           artifacts: "${{ github.workspace }}/dist/*.7z"
           generateReleaseNotes: true
+          replacesArtifacts: true
