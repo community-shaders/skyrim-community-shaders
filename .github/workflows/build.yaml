@@ -5,6 +5,7 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+  pull_request:
 
 permissions:
   contents: write
