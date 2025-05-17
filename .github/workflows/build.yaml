@@ -62,7 +62,6 @@ jobs:
           message: |
             ✅ A pre-release build is available for this PR:
             [Download](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }})
-          pr_number: ${{ github.event.pull_request.number }}
 
   release:
     needs: build
