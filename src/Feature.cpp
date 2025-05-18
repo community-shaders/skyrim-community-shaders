@@ -18,6 +18,7 @@
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
 #include "Features/TerrainShadows.h"
+#include "Features/TerrainVariation.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
@@ -147,7 +148,8 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		globals::features::volumetricLighting,
 		globals::features::lodBlending,
 		globals::features::inverseSquareLighting,
-		globals::features::hairSpecular
+		globals::features::hairSpecular,
+		globals::features::terrainVariation
 	};
 
 	static std::vector<Feature*> featuresVR = [] {
