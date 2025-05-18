@@ -1694,10 +1694,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif  // LOD_BLENDING
 
 #	if defined(SKIN) && defined(CS_SKIN)
-		if (baseColor.w < 0.98) {
-			skinRoughness = baseColor.w;
-			skinRoughnessSet = true;
-		}
+	if (baseColor.w < 0.98) {
+		skinRoughness = baseColor.w;
+		skinRoughnessSet = true;
+	}
 #	endif
 
 	float landSnowMask1 = GetLandSnowMaskValue(baseColor.w);
