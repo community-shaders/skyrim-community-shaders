@@ -5,6 +5,7 @@ struct DynamicCubemaps;
 struct ExtendedMaterials;
 struct GrassCollision;
 struct GrassLighting;
+struct HairSpecular;
 struct LightLimitFix;
 struct LinearLighting;
 struct LODBlending;
@@ -12,11 +13,14 @@ struct InverseSquareLighting;
 struct ScreenSpaceGI;
 struct ScreenSpaceShadows;
 struct Skylighting;
+struct TerrainVariation;
+struct SkySync;
 struct SubsurfaceScattering;
 struct TerrainBlending;
 struct TerrainHelper;
 struct TerrainShadows;
 struct VolumetricLighting;
+struct VR;
 struct WaterEffects;
 struct WetnessEffects;
 
@@ -52,6 +56,7 @@ namespace globals
 		extern ExtendedMaterials* extendedMaterials;
 		extern GrassCollision* grassCollision;
 		extern GrassLighting* grassLighting;
+		extern HairSpecular* hairSpecular;
 		extern LightLimitFix* lightLimitFix;
 		extern LinearLighting* linearLighting;
 		extern LODBlending* lodBlending;
@@ -59,11 +64,14 @@ namespace globals
 		extern ScreenSpaceGI* screenSpaceGI;
 		extern ScreenSpaceShadows* screenSpaceShadows;
 		extern Skylighting* skylighting;
+		extern TerrainVariation* terrainVariation;
+		extern SkySync* skySync;
 		extern SubsurfaceScattering* subsurfaceScattering;
 		extern TerrainBlending* terrainBlending;
 		extern TerrainHelper* terrainHelper;
 		extern TerrainShadows* terrainShadows;
 		extern VolumetricLighting* volumetricLighting;
+		extern VR* vr;
 		extern WaterEffects* waterEffects;
 		extern WetnessEffects* wetnessEffects;
 

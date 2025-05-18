@@ -21,6 +21,7 @@ struct TerrainHelper : Feature
 		std::array<RE::NiSourceTexturePtr, 6> parallax;
 	};
 
+	std::shared_mutex extendedSlotsMutex;
 	std::unordered_map<uint32_t, ExtendedSlots> extendedSlots;
 	RE::BGSTextureSet* defaultLandTexture;
 

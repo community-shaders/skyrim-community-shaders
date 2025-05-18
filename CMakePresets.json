@@ -117,5 +117,12 @@
 			},
 			"inherits": "ALL"
 		}
+	],
+		"buildPresets": [
+	{
+		"name": "ALL",
+		"configurePreset": "ALL",
+		"configuration": "Release"
+	}
 	]
 }
