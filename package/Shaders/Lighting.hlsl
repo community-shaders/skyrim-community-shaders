@@ -1665,8 +1665,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float3 detailNormal = float3(Skin::TexSkinDetailNormal.SampleBias(SampNormalSampler, detailUV, SharedData::MipBias).xy, 0.5f);
 		SkinAO = Skin::TexSkinDetailNormal.Sample(SampNormalSampler, detailUV).w;
 		detailNormal = (detailNormal * 2.0 - 1.0) * SharedData::skinData.skinDetailParams.z;
-		float3 combinedTangentNormal = tangentNormal + detailNormal;
-		modelNormal.xyz = normalize(mul(tbn, combinedTangentNormal));
+		float3 combinedTangentNormal = (tangentNormal * 2.0 - 1.0) + detailNormal;
+		combinedTangentNormal = (combinedTangentNormal + 1.0) * 0.5;
+		modelNormal = float4(normalize(mul(tbn, combinedTangentNormal.xyz)), 1);
 	}
 #	endif  // CS_SKIN
 
