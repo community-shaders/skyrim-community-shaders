@@ -145,6 +145,34 @@ namespace SharedData
 		bool DisableTerrainVertexColors;
 	};
 
+	struct HairSpecularSettings
+	{
+		uint Enabled;
+		float Glossiness;
+		float SpecularMult;
+		float DiffuseMult;
+		uint EnableTangentShift;
+		float PrimaryShift;
+		float SecondaryShift;
+		float Saturation;
+		float SpecularIndirectMult;
+		float DiffuseIndirectMult;
+		float BaseColorMult;
+		float pad;
+	};
+
+	struct TerrainVariationSettings
+	{
+		bool enableTilingFix;
+		float startDistance;
+		float maxDistance;
+		float invDistanceRange;          // For distance calc optimisation
+		float heightCompensationFactor;  // Compensation multiplier for terrain parallax
+		float shadowRayDirFactor;        // Shadow ray direction multiplier
+		int hashQuality;                 // 0 = Low quality hash, 1 = High quality hash
+		float pad;
+	};
+
 	struct SkinData
 	{
 		float4 skinParams;
@@ -167,6 +195,8 @@ namespace SharedData
 		SkylightingSettings skylightingSettings;
 		CloudShadowsSettings cloudShadowsSettings;
 		LODBlendingSettings lodBlendingSettings;
+		HairSpecularSettings hairSpecularSettings;
+		TerrainVariationSettings terrainVariationSettings;
 		SkinData skinData;
 	};
 

@@ -52,10 +52,6 @@ bool TerrainHelper::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 			continue;
 		}
 
-		if (!extendedSlots.contains(hashKey)) {
-			extendedSlots[hashKey] = {};
-		}
-
 		// Create array of texture sets (6 tiles)
 		std::array<RE::BGSTextureSet*, 6> textureSets;
 		auto defTexture = land->loadedData->defQuadTextures[quadI];
@@ -81,14 +77,19 @@ bool TerrainHelper::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 		}
 
 		// Assign textures to material
-		for (uint32_t textureI = 0; textureI < 6; ++textureI) {
-			if (textureSets[textureI] == nullptr) {
-				continue;
-			}
+		{
+			const std::unique_lock lock(extendedSlotsMutex);
+			auto& slot = extendedSlots.try_emplace(hashKey).first->second;
 
-			auto txSet = textureSets[textureI];
-			if (txSet->GetTexturePath(static_cast<RE::BSTextureSet::Texture>(3)) != nullptr) {
-				txSet->SetTexture(static_cast<RE::BSTextureSet::Texture>(3), extendedSlots[hashKey].parallax[textureI]);
+			for (uint32_t textureI = 0; textureI < 6; ++textureI) {
+				if (textureSets[textureI] == nullptr) {
+					continue;
+				}
+
+				auto txSet = textureSets[textureI];
+				if (txSet->GetTexturePath(static_cast<RE::BSTextureSet::Texture>(3)) != nullptr) {
+					txSet->SetTexture(static_cast<RE::BSTextureSet::Texture>(3), slot.parallax[textureI]);
+				}
 			}
 		}
 	}
@@ -134,12 +135,17 @@ void TerrainHelper::BSLightingShader_SetupMaterial(RE::BSLightingShaderMaterialB
 		return;
 	}
 
-	if (!extendedSlots.contains(material->hashKey)) {
-		// hash does not exists
-		return;
+	ExtendedSlots materialBase;
+	{
+		const std::shared_lock lock(extendedSlotsMutex);
+
+		if (!extendedSlots.contains(material->hashKey)) {
+			// hash does not exists
+			return;
+		}
+		materialBase = extendedSlots[material->hashKey];
 	}
 
-	const auto materialBase = extendedSlots[material->hashKey];
 	const auto state = globals::state;
 	const auto& stateData = globals::game::graphicsState->GetRuntimeData();
 

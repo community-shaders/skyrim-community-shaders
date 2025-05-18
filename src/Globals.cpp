@@ -16,17 +16,21 @@
 #include "Features/ExtendedMaterials.h"
 #include "Features/GrassCollision.h"
 #include "Features/GrassLighting.h"
+#include "Features/HairSpecular.h"
 #include "Features/InverseSquareLighting.h"
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/Skin.h"
+#include "Features/SkySync.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
 #include "Features/TerrainShadows.h"
+#include "Features/TerrainVariation.h"
+#include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
 #include "Features/WetnessEffects.h"
@@ -53,15 +57,19 @@ namespace globals
 		GrassLighting* grassLighting = nullptr;
 		LightLimitFix* lightLimitFix = nullptr;
 		LODBlending* lodBlending = nullptr;
+		HairSpecular* hairSpecular = nullptr;
 		InverseSquareLighting* inverseSquareLighting = nullptr;
 		ScreenSpaceGI* screenSpaceGI = nullptr;
 		ScreenSpaceShadows* screenSpaceShadows = nullptr;
 		Skylighting* skylighting = nullptr;
+		TerrainVariation* terrainVariation = nullptr;
+		SkySync* skySync = nullptr;
 		SubsurfaceScattering* subsurfaceScattering = nullptr;
 		TerrainBlending* terrainBlending = nullptr;
 		TerrainHelper* terrainHelper = nullptr;
 		TerrainShadows* terrainShadows = nullptr;
 		VolumetricLighting* volumetricLighting = nullptr;
+		VR* vr = nullptr;
 		WaterEffects* waterEffects = nullptr;
 		WetnessEffects* wetnessEffects = nullptr;
 		Skin* skin = nullptr;
@@ -129,6 +137,7 @@ namespace globals
 		features::extendedMaterials = ExtendedMaterials::GetSingleton();
 		features::grassCollision = GrassCollision::GetSingleton();
 		features::grassLighting = GrassLighting::GetSingleton();
+		features::hairSpecular = HairSpecular::GetSingleton();
 		features::lightLimitFix = LightLimitFix::GetSingleton();
 		features::lodBlending = LODBlending::GetSingleton();
 		features::inverseSquareLighting = InverseSquareLighting::GetSingleton();
@@ -136,11 +145,14 @@ namespace globals
 		features::screenSpaceShadows = ScreenSpaceShadows::GetSingleton();
 		features::skin = Skin::GetSingleton();
 		features::skylighting = Skylighting::GetSingleton();
+		features::terrainVariation = TerrainVariation::GetSingleton();
+		features::skySync = SkySync::GetSingleton();
 		features::subsurfaceScattering = SubsurfaceScattering::GetSingleton();
 		features::terrainBlending = TerrainBlending::GetSingleton();
 		features::terrainHelper = TerrainHelper::GetSingleton();
 		features::terrainShadows = TerrainShadows::GetSingleton();
 		features::volumetricLighting = VolumetricLighting::GetSingleton();
+		features::vr = VR::GetSingleton();
 		features::waterEffects = WaterEffects::GetSingleton();
 		features::wetnessEffects = WetnessEffects::GetSingleton();
 

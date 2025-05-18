@@ -9,9 +9,21 @@ public:
 		return &singleton;
 	}
 
+	struct TextureSize
+	{
+		int32_t Width = 320;
+		int32_t Height = 192;
+		int32_t Depth = 90;
+	};
+
 	struct Settings
 	{
-		uint EnabledVL = true;
+		bool ExteriorEnabled = true;
+		int32_t ExteriorQuality = 2;
+		TextureSize ExteriorCustomSize;
+		bool InteriorEnabled = true;
+		int32_t InteriorQuality = 2;
+		TextureSize InteriorCustomSize;
 	};
 
 	Settings settings;
@@ -21,18 +33,13 @@ public:
 	virtual inline std::string GetName() override { return "Volumetric Lighting"; }
 	virtual inline std::string GetShortName() override { return "VolumetricLighting"; }
 
-	virtual void Reset() override;
-
 	virtual void SaveSettings(json&) override;
 	virtual void LoadSettings(json&) override;
 	virtual void RestoreDefaultSettings() override;
 	virtual void DrawSettings() override;
 	virtual void DataLoaded() override;
 	virtual void PostPostLoad() override;
-
-	std::map<std::string, Util::GameSetting> VLSettings{
-		{ "iVolumetricLightingQuality:Display", { "Lighting Quality", "Adjusts the quality of volumetric lighting. [-1,-2] (off, low, mid, high).", REL::Relocate<uintptr_t>(0, 0, 0x1ed4030), 1, -1, 2 } },
-	};
+	virtual void EarlyPrepass() override;
 
 	std::map<std::string, Util::GameSetting> hiddenVRSettings{
 		{ "bEnableVolumetricLighting:Display", { "Enable VL Shaders (INI) ",
@@ -70,10 +77,53 @@ public:
 			// used in the next frame.
 
 			auto* singleton = GetSingleton();
-			if (singleton && !(Util::IsDynamicResolution() && singleton->settings.EnabledVL)) {
+			if (singleton && !(Util::IsDynamicResolution() && *singleton->bEnableVolumetricLighting)) {
 				a_this->CopyResource(a_renderTarget, a_renderTargetSource);
 			}
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
+
+	struct RenderDepth
+	{
+		static void thunk();
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+private:
+	struct VolumetricLightingDescriptor
+	{};
+
+	static const char* FromUnits(int32_t value, int32_t unitScale);
+	static VolumetricLightingDescriptor& GetVLDescriptor();
+	static void SetVLQuality(VolumetricLightingDescriptor& descriptor, std::uint32_t quality);
+	static void RenderVolumetricLighting(VolumetricLightingDescriptor* descriptor, RE::NiCamera* camera, bool flag);
+
+	void DrawVolumetricLightingSettings(int32_t& quality, TextureSize& customSize, bool isInterior, bool inLocationType);
+	TextureSize& FetchCurrentSizeInUnits(bool interior);
+	void SetupVL();
+
+	enum class Quality : uint8_t
+	{
+		Low,
+		Medium,
+		High,
+		Custom,
+		Count
+	};
+
+	const char* QualityNames[static_cast<uint8_t>(Quality::Count)] = { "Low", "Medium", "High", "Custom" };
+
+	TextureSize exteriorSizeInUnits;
+	TextureSize interiorSizeInUnits;
+	TextureSize defaultSizeHigh;
+
+	bool* bEnableVolumetricLighting = nullptr;
+	TextureSize* gVolumetricLightingSizeHigh = nullptr;
+	TextureSize* gVolumetricLightingSizeMedium = nullptr;
+	TextureSize* gVolumetricLightingSizeLow = nullptr;
+
+	bool initialised = false;
+	bool inInterior = false;
+	bool inInteriorWithSunShadows = false;
 };
