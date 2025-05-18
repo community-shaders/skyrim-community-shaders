@@ -13,6 +13,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkinSpecularTexMultiplier,
 	SecondarySpecularStrength,
 	F0,
+	PhysicalMainRoughnessMultiplier,
+	PhysicalSecondRoughnessMultiplier,
+	PhysicalSpecularStrength,
 	ExtraEdgeRoughness,
 	EnableSkinDetail,
 	SkinDetailStrength,
@@ -62,6 +65,15 @@ void Skin::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Fresnel reflectance");
 	}
+
+	ImGui::Spacing();
+	ImGui::Text("Options for additional roughness and specular maps.");
+
+	ImGui::SliderFloat("Physical Main Roughness Multiplier", &settings.PhysicalMainRoughnessMultiplier, 0.0f, 2.0f, "%.2f");
+	ImGui::SliderFloat("Physical Second Roughness Multiplier", &settings.PhysicalSecondRoughnessMultiplier, 0.0f, 2.0f, "%.2f");
+	ImGui::SliderFloat("Physical Specular Multiplier", &settings.PhysicalSpecularStrength, 0.0f, 2.0f, "%.2f");
+
+	ImGui::Spacing();
 
 	ImGui::SliderFloat("Extra Edge Roughness", &settings.ExtraEdgeRoughness, 0.0f, 1.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -235,6 +247,7 @@ Skin::SkinData Skin::GetCommonBufferData()
 	data.skinDetailParams = float4(settings.SkinDetailTiling, settings.BodyTilingMultiplier, settings.SkinDetailStrength, float(settings.EnableSkinDetail));
 	data.sssParams = float4(settings.Translucency, settings.sssWidth, settings.thicknessMult * float(settings.UseCalcThickness), float(settings.UseSSS));
 	data.fuzzParams = float4(settings.FuzzStrength, settings.FuzzRoughness, settings.FuzzF0, 0.0f);
+	data.physicalParams = float4(settings.PhysicalMainRoughnessMultiplier, settings.PhysicalSecondRoughnessMultiplier, settings.PhysicalSpecularStrength, 0.0f);
 	data.ApplySpecularToWetness = uint(settings.ApplySpecularToWetness);
 	return data;
 }

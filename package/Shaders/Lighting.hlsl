@@ -1313,7 +1313,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 normal = 0;
 	float glossiness = 0;
 #	if defined(SKIN) && defined(CS_SKIN)
-	float skinRoughness = -1;
+	float skinRoughness = 0;
+	bool skinRoughnessSet = false;
 #	endif
 
 	float4 rawRMAOS = 0;
@@ -1345,7 +1346,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(SKIN) && defined(CS_SKIN)
 		if (baseColor.w < 0.98) {
 			skinRoughness = baseColor.w;
-			baseColor.w = 1;
+			skinRoughnessSet = true;
 		}
 #	endif
 
@@ -1887,9 +1888,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	if (!SharedData::skinData.ApplySpecularToWetness)
 		skinSurfaceProperties.RoughnessPrimary = saturate(SharedData::skinData.skinParams.x - SharedData::skinData.skinParams.z * glossiness);
 	skinSurfaceProperties.RoughnessSecondary = SharedData::skinData.skinParams.y;
-	if (skinRoughness >= 0.0f) {
-		skinSurfaceProperties.RoughnessPrimary = skinRoughness;
-		skinSurfaceProperties.RoughnessSecondary = skinRoughness * SharedData::skinData.skinParams.y / SharedData::skinData.skinParams.x;
+	if (skinRoughnessSet) {
+		skinSurfaceProperties.RoughnessPrimary = skinRoughness * SharedData::skinData.physicalParams.x;
+		skinSurfaceProperties.RoughnessSecondary = skinRoughness * SharedData::skinData.physicalParams.y;
 	}
 	skinSurfaceProperties.RoughnessPrimary = min(1.0, skinSurfaceProperties.RoughnessPrimary + ExtraRoughness);
 	skinSurfaceProperties.RoughnessSecondary = min(1.0, skinSurfaceProperties.RoughnessSecondary + ExtraRoughness);
@@ -1901,8 +1902,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	}
 	skinSurfaceProperties.SubsurfaceColor = skinsk.xyz;
 	skinSurfaceProperties.F0 = SharedData::skinData.skinParams2.zzz;
-	if (skinRoughness >= 0.0f) {
-		skinSurfaceProperties.F0 = 0.1 * glossiness;
+	if (skinRoughnessSet) {
+		skinSurfaceProperties.F0 = 0.08f * glossiness * SharedData::skinData.physicalParams.z;
 	}
 	skinSurfaceProperties.AO = SkinAO;
 	skinSurfaceProperties.Curvature = Skin::CalculateCurvature(modelNormal.xyz);
