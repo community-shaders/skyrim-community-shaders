@@ -1312,6 +1312,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float4 baseColor = 0;
 	float4 normal = 0;
 	float glossiness = 0;
+#	if defined(SKIN) && defined(CS_SKIN)
+	float skinRoughness = -1;
+#	endif
 
 	float4 rawRMAOS = 0;
 
@@ -1338,6 +1341,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		baseColor.xyz *= SharedData::lodBlendingSettings.LODTerrainBrightness;
 #		endif
 #	endif  // LOD_BLENDING
+
+#	if defined(SKIN) && defined(CS_SKIN)
+		if (baseColor.w < 0.98) {
+			skinRoughness = baseColor.w;
+			baseColor.w = 1;
+		}
+#	endif
 
 		float landSnowMask1 = GetLandSnowMaskValue(baseColor.w);
 		float4 normalColor = TexNormalSampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias);
@@ -1877,6 +1887,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	if (!SharedData::skinData.ApplySpecularToWetness)
 		skinSurfaceProperties.RoughnessPrimary = saturate(SharedData::skinData.skinParams.x - SharedData::skinData.skinParams.z * glossiness);
 	skinSurfaceProperties.RoughnessSecondary = SharedData::skinData.skinParams.y;
+	if (skinRoughness >= 0.0f) {
+		skinSurfaceProperties.RoughnessPrimary = skinRoughness;
+		skinSurfaceProperties.RoughnessSecondary = skinRoughness * SharedData::skinData.skinParams.y / SharedData::skinData.skinParams.x;
+	}
 	skinSurfaceProperties.RoughnessPrimary = min(1.0, skinSurfaceProperties.RoughnessPrimary + ExtraRoughness);
 	skinSurfaceProperties.RoughnessSecondary = min(1.0, skinSurfaceProperties.RoughnessSecondary + ExtraRoughness);
 	skinSurfaceProperties.SecondarySpecIntensity = SharedData::skinData.skinParams2.x;
@@ -1887,6 +1901,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	}
 	skinSurfaceProperties.SubsurfaceColor = skinsk.xyz;
 	skinSurfaceProperties.F0 = SharedData::skinData.skinParams2.zzz;
+	if (skinRoughness >= 0.0f) {
+		skinSurfaceProperties.F0 = 0.1 * glossiness;
+	}
 	skinSurfaceProperties.AO = SkinAO;
 	skinSurfaceProperties.Curvature = Skin::CalculateCurvature(modelNormal.xyz);
 
