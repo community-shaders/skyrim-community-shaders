@@ -11,8 +11,8 @@ public:
 
 	virtual bool SupportsVR() override { return true; };
 
-	virtual inline std::string GetName() override { return "IBL"; }
-	virtual inline std::string GetShortName() override { return "IBL"; }
+	virtual inline std::string GetName() override { return "Image Based Lighting"; }
+	virtual inline std::string GetShortName() override { return "ImageBasedLighting"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "IBL"; }
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
