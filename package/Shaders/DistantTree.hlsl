@@ -171,6 +171,10 @@ const static float DepthOffsets[16] = {
 #		include "CloudShadows/CloudShadows.hlsli"
 #	endif
 
+#	if defined(IBL)
+#		include "IBL/IBL.hlsli"
+#	endif
+
 #	define LinearSampler SampDiffuse
 
 #	include "Common/ShadowSampling.hlsli"
@@ -246,6 +250,12 @@ PS_OUTPUT main(PS_INPUT input)
 	} else {
 		directionalAmbientColor = max(0, mul(Color::GammaToLinear(SharedData::DirectionalAmbient), float4(normal, 1.0)));
 	}
+#				if defined(IBL)
+	if (SharedData::iblSettings.EnableDiffuseIBL) {
+		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
+		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+	}
+#				endif
 	diffuseColor += directionalAmbientColor;
 #			endif
 
@@ -279,6 +289,12 @@ PS_OUTPUT main(PS_INPUT input)
 	} else {
 		directionalAmbientColor = Color::GammaToLinear(mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
 	}
+#			if defined(IBL)
+	if (SharedData::iblSettings.EnableDiffuseIBL) {
+		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
+		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+	}
+#			endif
 	diffuseColor += directionalAmbientColor;
 
 	float3 color = diffuseColor * baseColor.xyz;

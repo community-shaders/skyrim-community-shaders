@@ -522,6 +522,10 @@ cbuffer PerGeometry : register(b2)
 #		include "Skylighting/Skylighting.hlsli"
 #	endif
 
+#	if defined(IBL)
+#		include "IBL/IBL.hlsli"
+#	endif
+
 #	include "Common/ShadowSampling.hlsli"
 
 #	if defined(LIGHTING)
@@ -542,6 +546,13 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 			dirLightColor = Color::GammaToTrueLinear(dirLightColor);
 			ambientColor = Color::GammaToLinear(ambientColor);
 		}
+
+#		if defined(IBL)
+		if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+			ambientColor *= SharedData::iblSettings.DALCAmount;
+			ambientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+		}
+#		endif
 
 		color = ambientColor;
 

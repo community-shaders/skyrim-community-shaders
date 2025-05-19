@@ -173,6 +173,16 @@ namespace SharedData
 		float pad;
 	};
 
+	struct IBLSettings
+	{
+		uint EnableDiffuseIBL;
+		float DiffuseIBLScale;
+		float DALCAmount;
+		float IBLSaturation;
+		uint SampleUnderHorizonFromDynCube;
+		uint3 pad;
+	};
+
 	struct LinearLightingSettings
 	{
 		uint enableLinearLighting;
@@ -193,6 +203,7 @@ namespace SharedData
 		LODBlendingSettings lodBlendingSettings;
 		HairSpecularSettings hairSpecularSettings;
 		TerrainVariationSettings terrainVariationSettings;
+		IBLSettings iblSettings;
 		LinearLightingSettings linearLightingSettings;
 	};
 
