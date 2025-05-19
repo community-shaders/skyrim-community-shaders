@@ -10,13 +10,27 @@ on:
         description: 'Optional suffix to invalidate the build cache'
         required: false
   pull_request_target:
-
+    paths:
+      - '**.cpp'
+      - '**.h'
+      - '**.hpp'
+      - '**.c'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - 'vcpkg.json'
+      - 'vcpkg-configuration.json'
+      - '.gitmodules'
+      - 'extern/**'
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
   build:
+    if: >
+      github.event_name != 'pull_request_target' ||
+      github.event.pull_request.draft == false ||
+      contains(github.event.pull_request.labels.*.name, 'force-build')
     name: build plugin and addons
     runs-on: windows-latest
     outputs:
