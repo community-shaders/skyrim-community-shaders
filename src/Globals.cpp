@@ -101,7 +101,7 @@ namespace globals
 
 		RE::BSGraphics::PixelShader** currentPixelShader = nullptr;
 		RE::BSGraphics::VertexShader** currentVertexShader = nullptr;
-		stl::enumeration<RE::BSGraphics::ShaderFlags, uint32_t>* stateUpdateFlags = nullptr;
+		REX::EnumSet<RE::BSGraphics::ShaderFlags, uint32_t>* stateUpdateFlags = nullptr;
 
 		RE::Setting* bEnableLandFade = nullptr;
 		RE::Setting* bShadowsOnGrass = nullptr;

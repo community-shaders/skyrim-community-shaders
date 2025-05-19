@@ -102,7 +102,7 @@ namespace globals
 
 		extern RE::BSGraphics::PixelShader** currentPixelShader;
 		extern RE::BSGraphics::VertexShader** currentVertexShader;
-		extern stl::enumeration<RE::BSGraphics::ShaderFlags, uint32_t>* stateUpdateFlags;
+		extern REX::EnumSet<RE::BSGraphics::ShaderFlags, uint32_t>* stateUpdateFlags;
 
 		extern RE::Setting* bEnableLandFade;
 		extern RE::Setting* bShadowsOnGrass;
