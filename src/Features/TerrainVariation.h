@@ -18,13 +18,14 @@ struct TerrainVariation : Feature
 
 	struct Settings
 	{
-		bool enableTilingFix = true;
+		uint enableTilingFix = true;
 		float startDistance = 200.0f;           // No offset will be applied under this distance
 		float maxDistance = 2000.0f;            // Maximum distance that the terrain will blend the stochastic effect to
 		float invDistanceRange = 0.00056f;      // Precalculated 1.0f / (maxDistance - startDistance) for shader optimization
 		float heightCompensationFactor = 1.0f;  // Compensation for terrain parallax when enabled
 		float shadowRayDirFactor = 1.0f;        // Shadow ray direction multiplier for parallax shadows
 		int hashQuality = 1;                    // 0 = Low quality hash, 1 = High quality hash
+		float pad;
 	};
 
 	Settings settings;
