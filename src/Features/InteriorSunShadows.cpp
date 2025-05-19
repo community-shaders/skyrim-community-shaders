@@ -46,7 +46,7 @@ void InteriorSunShadows::EarlyPrepass()
 
 inline bool InteriorSunShadows::IsInteriorWithSun(const RE::TESObjectCELL* cell)
 {
-	return cell && cell->cellFlags.all(RE::TESObjectCELL::Flag::kIsInteriorCell, RE::TESObjectCELL::Flag::kShowSky, RE::TESObjectCELL::Flag::kUseSkyLighting);
+	return cell && cell->cellFlags.all(RE::TESObjectCELL::Flag::kIsInteriorCell, RE::TESObjectCELL::Flag::kShowSky, RE::TESObjectCELL::Flag::kUseSkyLighting, static_cast<RE::TESObjectCELL::Flag>(CellFlagExt::kSunlightShadows));
 }
 
 RE::TESWorldSpace* InteriorSunShadows::GetWorldSpace::thunk(RE::TES* tes)
