@@ -17,6 +17,7 @@
 #include "Features/GrassCollision.h"
 #include "Features/GrassLighting.h"
 #include "Features/HairSpecular.h"
+#include "Features/IBL.h"
 #include "Features/InteriorSunShadows.h"
 #include "Features/InverseSquareLighting.h"
 #include "Features/LODBlending.h"
@@ -56,6 +57,7 @@ namespace globals
 		ExtendedMaterials* extendedMaterials = nullptr;
 		GrassCollision* grassCollision = nullptr;
 		GrassLighting* grassLighting = nullptr;
+		IBL* ibl = nullptr;
 		LightLimitFix* lightLimitFix = nullptr;
 		LODBlending* lodBlending = nullptr;
 		HairSpecular* hairSpecular = nullptr;
@@ -140,6 +142,7 @@ namespace globals
 		features::grassCollision = GrassCollision::GetSingleton();
 		features::grassLighting = GrassLighting::GetSingleton();
 		features::hairSpecular = HairSpecular::GetSingleton();
+		features::ibl = IBL::GetSingleton();
 		features::lightLimitFix = LightLimitFix::GetSingleton();
 		features::lodBlending = LODBlending::GetSingleton();
 		features::interiorSunShadows = InteriorSunShadows::GetSingleton();
