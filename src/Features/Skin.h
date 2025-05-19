@@ -44,7 +44,7 @@ struct Skin : Feature
 		float ExtraEdgeRoughness = 0.25f;
 		bool EnableSkinDetail = true;
 		float SkinDetailStrength = 0.5f;
-		float SkinDetailTiling = 5.0f;
+		float SkinDetailTiling = 20.0f;
 		float BodyTilingMultiplier = 2.0f;
 		bool ApplySpecularToWetness = false;
 		float ExtraSkinWetness = 0.0f;

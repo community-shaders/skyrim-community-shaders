@@ -134,7 +134,7 @@ void Skin::DrawSettings()
 		ImGui::Text("Strength of skin detail texture");
 	}
 
-	ImGui::SliderFloat("Skin Detail Tiling", &settings.SkinDetailTiling, 1.0f, 20.0f, "%.1f");
+	ImGui::SliderFloat("Skin Detail Tiling", &settings.SkinDetailTiling, 1.0f, 50.0f, "%1.f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("The more tiling, the more detailed the skin will be");
 	}
