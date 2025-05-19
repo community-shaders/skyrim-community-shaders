@@ -24,6 +24,11 @@ Texture2D<float4> SsgiYTexture : register(t6);
 Texture2D<float2> SsgiCoCgTexture : register(t7);
 #endif
 
+#if defined(IBL)
+#	define IBL_AMBIENTCOMPOSITE
+#	include "IBL/IBL.hlsli"
+#endif
+
 RWTexture2D<float4> MainRW : register(u0);
 #if defined(SSGI)
 RWTexture2D<float3> DiffuseAmbientRW : register(u1);
@@ -56,8 +61,20 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normalWS, 1.0)));
 
+#if defined(IBL)
+	if (SharedData::iblSettings.EnableDiffuseIBL) {
+		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
+		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(-normalWS), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+	}
+#endif
+
 	float3 linAlbedo = Color::GammaToLinear(albedo);
 	float3 linDirectionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
+#if defined(IBL)
+	if (SharedData::iblSettings.EnableDiffuseIBL) {
+		linDirectionalAmbientColor = directionalAmbientColor;
+	}
+#endif
 	float3 linDiffuseColor = Color::GammaToLinear(diffuseColor);
 	float3 originalDiffuseColor = linDiffuseColor;
 

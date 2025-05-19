@@ -3,6 +3,7 @@
 #include "TruePBR/BSLightingShaderMaterialPBR.h"
 #include "TruePBR/BSLightingShaderMaterialPBRLandscape.h"
 
+#include "Features/InteriorSunShadows.h"
 #include "Hooks.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -666,6 +667,8 @@ struct BSLightingShaderProperty_GetRenderPasses
 			return renderPasses;
 		}
 
+		const auto issEnabledAndInteriorWithSun = globals::features::interiorSunShadows->loaded && globals::features::interiorSunShadows->isInteriorWithSun;
+
 		bool isPbr = false;
 
 		if (property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting) && (property->material->GetFeature() == RE::BSShaderMaterial::Feature::kDefault || property->material->GetFeature() == RE::BSShaderMaterial::Feature::kMultiTexLandLODBlend)) {
@@ -695,6 +698,10 @@ struct BSLightingShaderProperty_GetRenderPasses
 						}
 					}
 				}
+
+				if (issEnabledAndInteriorWithSun)
+					lightingFlags |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::ShadowDir) | static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::DefShadow);
+
 				lightingTechnique = (static_cast<uint32_t>(lightingType) << 24) | lightingFlags;
 				currentPass->passEnum = lightingTechnique + LightingTechniqueStart;
 
