@@ -1824,9 +1824,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif  // defined (EMAT) && defined(ENVMAP)
 
 #	if defined(FACEGEN)
-	baseColor.xyz = GetFacegenBaseColor(baseColor.xyz, uv);
+	if (!SharedData::linearLightingSettings.enableLinearLighting) {
+		baseColor.xyz = GetFacegenBaseColor(baseColor.xyz, uv);
+	} else {
+		baseColor.xyz = Color::GammaToTrueLinear(GetFacegenBaseColor(Color::TrueLinearToGamma(baseColor.xyz), uv));
+	}
 #	elif defined(FACEGEN_RGB_TINT)
-	baseColor.xyz = GetFacegenRGBTintBaseColor(baseColor.xyz, uv);
+	if (!SharedData::linearLightingSettings.enableLinearLighting) {
+		baseColor.xyz = GetFacegenRGBTintBaseColor(baseColor.xyz, uv);
+	} else {
+		baseColor.xyz = Color::GammaToTrueLinear(GetFacegenRGBTintBaseColor(Color::TrueLinearToGamma(baseColor.xyz), uv));
+	}
 #	endif  // FACEGEN
 
 #	if defined(HAIR) && defined(CS_HAIR)
