@@ -1,4 +1,4 @@
-﻿#include "InteriorSunShadows.h"
+#include "InteriorSunShadows.h"
 #include "State.h"
 
 #include <numbers>
@@ -44,11 +44,27 @@ void InteriorSunShadows::EarlyPrepass()
 	isInteriorWithSun = IsInteriorWithSun(globals::game::tes->interiorCell);
 }
 
+/**
+ * @brief Determines if a cell is an interior that supports sun lighting and shadows.
+ *
+ * Returns true if the given cell is non-null and has the flags for interior cell, show sky, use sky lighting, and sunlight shadows all set.
+ *
+ * @param cell Pointer to the cell to check.
+ * @return true if the cell is an interior with sun lighting and shadows enabled; false otherwise.
+ */
 inline bool InteriorSunShadows::IsInteriorWithSun(const RE::TESObjectCELL* cell)
 {
-	return cell && cell->cellFlags.all(RE::TESObjectCELL::Flag::kIsInteriorCell, RE::TESObjectCELL::Flag::kShowSky, RE::TESObjectCELL::Flag::kUseSkyLighting);
+	return cell && cell->cellFlags.all(RE::TESObjectCELL::Flag::kIsInteriorCell, RE::TESObjectCELL::Flag::kShowSky, RE::TESObjectCELL::Flag::kUseSkyLighting, static_cast<RE::TESObjectCELL::Flag>(CellFlagExt::kSunlightShadows));
 }
 
+/**
+ * @brief Returns a dummy TESWorldSpace object based on whether the TES object's interior cell supports sun shadows.
+ *
+ * If the TES object's interior cell exists and qualifies as an interior with sun (per IsInteriorWithSun), returns a special dummy TESWorldSpace to enable sun shadows. Otherwise, returns a dummy TESWorldSpace that disables sun shadows. Falls back to the original GetWorldSpace function if no interior cell is present.
+ *
+ * @param tes The TES object whose world space is being queried.
+ * @return TESWorldSpace* A pointer to the appropriate dummy TESWorldSpace or the result of the original function.
+ */
 RE::TESWorldSpace* InteriorSunShadows::GetWorldSpace::thunk(RE::TES* tes)
 {
 	if (const auto cell = tes->interiorCell)

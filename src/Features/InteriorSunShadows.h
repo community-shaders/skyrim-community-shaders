@@ -1,6 +1,12 @@
-﻿#pragma once
+#pragma once
 #include "ShaderCache.h"
 
+/**
+ * @brief Determines if the specified cell is an interior that receives sunlight.
+ *
+ * @param cell Pointer to the cell to check.
+ * @return true if the cell is an interior with sunlight; otherwise, false.
+ */
 struct InteriorSunShadows : Feature
 {
 	static InteriorSunShadows* GetSingleton()
@@ -51,7 +57,14 @@ struct InteriorSunShadows : Feature
 		}
 	}
 
+	static bool IsInteriorWithSun(const RE::TESObjectCELL* cell);
+
 private:
+	enum class CellFlagExt : uint16_t
+	{
+		kSunlightShadows = 1 << 15,
+	};
+
 	float* gShadowDistance = nullptr;
 	uint32_t* rasterStateCullMode = nullptr;
 
@@ -68,8 +81,6 @@ private:
 	void ClearArrays();
 
 	void InitialiseOnNewCell(const RE::NiPointer<RE::BSPortalGraph>& portalGraph);
-
-	static bool IsInteriorWithSun(const RE::TESObjectCELL* cell);
 
 	bool IsInSunDirectionAndWithinShadowDistance(const RE::NiPointer<RE::NiAVObject>& object, const RE::NiPoint3& lightDir, const RE::NiPoint3& playerPos) const;
 

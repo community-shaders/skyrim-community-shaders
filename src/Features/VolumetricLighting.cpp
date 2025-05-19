@@ -1,5 +1,6 @@
 #include "VolumetricLighting.h"
 
+#include "InteriorSunShadows.h"
 #include "ShaderCache.h"
 #include "State.h"
 
@@ -179,6 +180,11 @@ void VolumetricLighting::PostPostLoad()
 	defaultSizeHigh = *gVolumetricLightingSizeHigh;
 }
 
+/**
+ * @brief Updates volumetric lighting state based on the player's current location.
+ *
+ * Detects whether the player has entered or exited an interior cell and whether the interior supports sun shadows. Applies appropriate volumetric lighting settings if the state has changed.
+ */
 void VolumetricLighting::EarlyPrepass()
 {
 	const auto interiorCell = globals::game::tes->interiorCell;
@@ -189,7 +195,7 @@ void VolumetricLighting::EarlyPrepass()
 
 	initialised = true;
 	inInterior = currentlyInInterior;
-	inInteriorWithSunShadows = interiorCell && interiorCell->cellFlags.all(RE::TESObjectCELL::Flag::kIsInteriorCell, RE::TESObjectCELL::Flag::kShowSky, RE::TESObjectCELL::Flag::kUseSkyLighting);
+	inInteriorWithSunShadows = InteriorSunShadows::IsInteriorWithSun(interiorCell);
 	SetupVL();
 }
 
