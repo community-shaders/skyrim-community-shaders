@@ -9,6 +9,7 @@ struct HairSpecular;
 struct IBL;
 struct LightLimitFix;
 struct LODBlending;
+struct InteriorSunShadows;
 struct InverseSquareLighting;
 struct ScreenSpaceGI;
 struct ScreenSpaceShadows;
@@ -60,6 +61,7 @@ namespace globals
 		extern IBL* ibl;
 		extern LightLimitFix* lightLimitFix;
 		extern LODBlending* lodBlending;
+		extern InteriorSunShadows* interiorSunShadows;
 		extern InverseSquareLighting* inverseSquareLighting;
 		extern ScreenSpaceGI* screenSpaceGI;
 		extern ScreenSpaceShadows* screenSpaceShadows;
@@ -102,7 +104,7 @@ namespace globals
 
 		extern RE::BSGraphics::PixelShader** currentPixelShader;
 		extern RE::BSGraphics::VertexShader** currentVertexShader;
-		extern stl::enumeration<RE::BSGraphics::ShaderFlags, uint32_t>* stateUpdateFlags;
+		extern REX::EnumSet<RE::BSGraphics::ShaderFlags, uint32_t>* stateUpdateFlags;
 
 		extern RE::Setting* bEnableLandFade;
 		extern RE::Setting* bShadowsOnGrass;
