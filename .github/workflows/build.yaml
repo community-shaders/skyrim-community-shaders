@@ -36,7 +36,7 @@ jobs:
           uses: actions/cache@v3
           with:
             path: build/ALL
-            key: ${{ runner.os }}-build-${{ inputs.cache-key-suffix || 'default' }}-${{ hashFiles('CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json', '**/CMakeLists.txt', '**/*.cpp', '**/*.c', '**/*.h', '**/*.hpp') }}
+            key: ${{ runner.os }}-build-${{ inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json', '**/CMakeLists.txt', '**/*.cpp', '**/*.c', '**/*.h', '**/*.hpp') }}
             restore-keys: |
               ${{ runner.os }}-build-
 
