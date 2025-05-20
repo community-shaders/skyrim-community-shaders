@@ -534,16 +534,13 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 	float4 lightDistanceSquared = (PLightPositionX[eyeIndex] - msPosition.xxxx) * (PLightPositionX[eyeIndex] - msPosition.xxxx) + (PLightPositionY[eyeIndex] - msPosition.yyyy) * (PLightPositionY[eyeIndex] - msPosition.yyyy) + (PLightPositionZ[eyeIndex] - msPosition.zzzz) * (PLightPositionZ[eyeIndex] - msPosition.zzzz);
 	float4 lightFadeMul = 1.0.xxxx - saturate(PLightingRadiusInverseSquared * lightDistanceSquared);
 
-	float3 color = DLightColor.xyz;
-	if (SharedData::linearLightingSettings.enableLinearLighting) {
-		color = Color::GammaToTrueLinear(color);
-	}
+	float3 color = Color::Light(DLightColor.xyz);
 
 	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::EffectShadows)) {
 		float3 dirLightColor = SharedData::DirLightColor.xyz * 0.5;
 		float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
 		if (SharedData::linearLightingSettings.enableLinearLighting) {
-			dirLightColor = Color::GammaToTrueLinear(dirLightColor);
+			dirLightColor = Color::Light(dirLightColor);
 			ambientColor = Color::GammaToLinear(ambientColor);
 		}
 
@@ -618,9 +615,9 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 			color.y += dot(PLightColorG * lightFadeMul, 1.0.xxxx);
 			color.z += dot(PLightColorB * lightFadeMul, 1.0.xxxx);
 		} else {
-			color.x += dot(Color::GammaToTrueLinear(PLightColorR) * lightFadeMul, 1.0.xxxx);
-			color.y += dot(Color::GammaToTrueLinear(PLightColorG) * lightFadeMul, 1.0.xxxx);
-			color.z += dot(Color::GammaToTrueLinear(PLightColorB) * lightFadeMul, 1.0.xxxx);
+			color.x += dot(Color::Light(PLightColorR) * lightFadeMul, 1.0.xxxx);
+			color.y += dot(Color::Light(PLightColorG) * lightFadeMul, 1.0.xxxx);
+			color.z += dot(Color::Light(PLightColorB) * lightFadeMul, 1.0.xxxx);
 		}
 	}
 
@@ -723,12 +720,7 @@ PS_OUTPUT main(PS_INPUT input)
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 #			endif
 
-				float3 lightColor = 0;
-				if (!SharedData::linearLightingSettings.enableLinearLighting) {
-					lightColor = light.color.xyz * intensityMultiplier * 0.5;
-				} else {
-					lightColor = Color::GammaToLinearLuminancePreservingLight(light.color.xyz) * intensityMultiplier * 0.5;
-				}
+				float3 lightColor = Color::Light(light.color.xyz) * intensityMultiplier * 0.5;
 				propertyColor += lightColor;
 			}
 		}
