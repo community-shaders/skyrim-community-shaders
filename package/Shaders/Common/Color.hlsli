@@ -94,7 +94,7 @@ namespace Color
 	float3 GammaToLinearLuminancePreservingLight(float3 color)
 	{
 		float originalLuminance = RGBToLuminance(color);
-		float3 linearColorRaw = GammaToLinear(color / originalLuminance);
+		float3 linearColorRaw = pow(color / originalLuminance, 1.0 / SharedData::linearLightingSettings.lightGamma);
 		float scale = 1.0;
 		if (originalLuminance > 1e-5)
 		{
@@ -121,7 +121,7 @@ namespace Color
 	#	if defined(TRUE_PBR)
 			return color;
 	#	else
-			return pow(abs(color), 2.2);
+			return pow(abs(color), SharedData::linearLightingSettings.colorGamma);
 	#	endif
 		}
 	}
