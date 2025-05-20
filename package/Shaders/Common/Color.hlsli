@@ -92,7 +92,7 @@ namespace Color
 	float3 GammaToLinearLuminancePreservingLight(float3 color)
 	{
 		float originalLuminance = RGBToLuminance(color);
-		float3 linearColorRaw = pow(color / originalLuminance, 1.0 / SharedData::linearLightingSettings.lightGamma);
+		float3 linearColorRaw = pow(color / originalLuminance, SharedData::linearLightingSettings.lightGamma);
 		float scale = 1.0;
 		if (originalLuminance > 1e-5) {
 			scale = originalLuminance;
@@ -126,7 +126,7 @@ namespace Color
 			if (SharedData::linearLightingSettings.preserveLightLuminance) {
 				color = GammaToLinearLuminancePreservingLight(color);
 			} else {
-				color = pow(abs(color), 1.0 / SharedData::linearLightingSettings.lightGamma);
+				color = pow(abs(color), SharedData::linearLightingSettings.lightGamma);
 			}
 		}
 #	if defined(TRUE_PBR)
@@ -139,7 +139,7 @@ namespace Color
 	float3 Ambient(float3 color)
 	{
 		if (SharedData::linearLightingSettings.enableLinearLighting) {
-			color = pow(abs(color), 1.0 / SharedData::linearLightingSettings.ambientGamma);
+			color = pow(abs(color), SharedData::linearLightingSettings.ambientGamma);
 		}
 		return color;
 	}
