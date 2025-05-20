@@ -25,9 +25,7 @@ void PostProcessing::DrawSettings()
 	//}
 
 	ImGui::BeginGroup();
-	std::string currentPreset = (presetIdx >= 0 && presetIdx < presets.size()) 
-                                ? presets[presetIdx] 
-                                : "Select a preset";
+	std::string currentPreset = (presetIdx >= 0 && presetIdx < presets.size()) ? presets[presetIdx] : "Select a preset";
 
 	if (ImGui::BeginCombo("##PresetCombo", currentPreset.c_str())) {
 		presets = LoadPresets();
@@ -44,8 +42,7 @@ void PostProcessing::DrawSettings()
 
 	ImGui::SameLine();
 	if (ImGui::Button("Load")) {
-		if (presetIdx >= 0 && presetIdx < presets.size())
-		{
+		if (presetIdx >= 0 && presetIdx < presets.size()) {
 			LoadPresetFrom(presets[presetIdx]);
 		}
 	}
@@ -223,7 +220,7 @@ void PostProcessing::DrawSettings()
 			ImGui::Spacing();
 
 			ImGui::InputText("Name", &feat->name);
-	
+
 			ImGui::SeparatorText(std::format("{} ({})", feat->name, feat->GetType()).c_str());
 
 			ImGui::TextWrapped(feat->GetDesc().c_str());

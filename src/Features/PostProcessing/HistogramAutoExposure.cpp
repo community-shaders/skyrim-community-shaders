@@ -188,14 +188,14 @@ void HistogramAutoExposure::Draw(TextureInfo& inout_tex)
 		// Calculate histogram - optimized for 32x32 threads
 		// Reduced number of dispatches due to increased thread count and sampling optimization
 		context->CSSetShader(histogramCS.get(), nullptr, 0);
-		uint32_t dispatchX = ((texAdapt->desc.Width - 1) >> 5) + 1; 
+		uint32_t dispatchX = ((texAdapt->desc.Width - 1) >> 5) + 1;
 		uint32_t dispatchY = ((texAdapt->desc.Height - 1) >> 5) + 1;
-		
+
 		// Further reduce dispatches based on our sampling pattern
 		// Since we're sampling at 8x spacing, we can reduce dispatches by 8x
-		dispatchX = (dispatchX + 7) / 8; 
+		dispatchX = (dispatchX + 7) / 8;
 		dispatchY = (dispatchY + 7) / 8;
-		
+
 		context->Dispatch(dispatchX, dispatchY, 1);
 
 		// Calculate average

@@ -84,5 +84,4 @@ struct PostProcessing : Feature
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
-	
 };

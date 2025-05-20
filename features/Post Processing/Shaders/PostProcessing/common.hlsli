@@ -197,65 +197,65 @@ float3 OklabToRgb(float3 c)
 
 float4 SampleCA(Texture2D tex, SamplerState samp, float2 texcoord, float strength, uint mipLevel)
 {
-    float3 influence = float3(0.04, 0.0, 0.03);
-    float2 CAr = (texcoord - 0.5) * (1.0 - strength * influence.r) + 0.5;
-    float2 CAb = (texcoord - 0.5) * (1.0 + strength * influence.b) + 0.5;
+	float3 influence = float3(0.04, 0.0, 0.03);
+	float2 CAr = (texcoord - 0.5) * (1.0 - strength * influence.r) + 0.5;
+	float2 CAb = (texcoord - 0.5) * (1.0 + strength * influence.b) + 0.5;
 
-    float4 color;
-    color.r = tex.SampleLevel(samp, CAr, mipLevel).r;
-    color.ga = tex.SampleLevel(samp, texcoord, mipLevel).ga;
-    color.b = tex.SampleLevel(samp, CAb, mipLevel).b;
+	float4 color;
+	color.r = tex.SampleLevel(samp, CAr, mipLevel).r;
+	color.ga = tex.SampleLevel(samp, texcoord, mipLevel).ga;
+	color.b = tex.SampleLevel(samp, CAb, mipLevel).b;
 
-    return color;
+	return color;
 }
 
 float4 KawaseBlurDownSample(Texture2D tex, SamplerState samp, uint2 DTid, int scale, float ScreenWidth, float ScreenHeight)
 {
-    int DownsizeFrom = max(scale, 1);
-    float2 texcoord = (floor((DTid.xy / DownsizeFrom)) * DownsizeFrom + DownsizeFrom * 0.5f) / float2(ScreenWidth, ScreenHeight);
-    float2 HALF_TEXEL = float2(1.0f / float2(ScreenWidth, ScreenHeight)) * float(DownsizeFrom);
+	int DownsizeFrom = max(scale, 1);
+	float2 texcoord = (floor((DTid.xy / DownsizeFrom)) * DownsizeFrom + DownsizeFrom * 0.5f) / float2(ScreenWidth, ScreenHeight);
+	float2 HALF_TEXEL = float2(1.0f / float2(ScreenWidth, ScreenHeight)) * float(DownsizeFrom);
 
-    float2 DirDiag1 = float2(-HALF_TEXEL.x,  HALF_TEXEL.y); // Top left
-    float2 DirDiag2 = float2( HALF_TEXEL.x,  HALF_TEXEL.y); // Top right
-    float2 DirDiag3 = float2( HALF_TEXEL.x, -HALF_TEXEL.y); // Bottom right
-    float2 DirDiag4 = float2(-HALF_TEXEL.x, -HALF_TEXEL.y); // Bottom left
+	float2 DirDiag1 = float2(-HALF_TEXEL.x, HALF_TEXEL.y);   // Top left
+	float2 DirDiag2 = float2(HALF_TEXEL.x, HALF_TEXEL.y);    // Top right
+	float2 DirDiag3 = float2(HALF_TEXEL.x, -HALF_TEXEL.y);   // Bottom right
+	float2 DirDiag4 = float2(-HALF_TEXEL.x, -HALF_TEXEL.y);  // Bottom left
 
-    float4 color = tex.SampleLevel(samp, texcoord, 0) * 4.0f;
-    color += tex.SampleLevel(samp, texcoord + DirDiag1, 0);
-    color += tex.SampleLevel(samp, texcoord + DirDiag2, 0);
-    color += tex.SampleLevel(samp, texcoord + DirDiag3, 0);
-    color += tex.SampleLevel(samp, texcoord + DirDiag4, 0);
+	float4 color = tex.SampleLevel(samp, texcoord, 0) * 4.0f;
+	color += tex.SampleLevel(samp, texcoord + DirDiag1, 0);
+	color += tex.SampleLevel(samp, texcoord + DirDiag2, 0);
+	color += tex.SampleLevel(samp, texcoord + DirDiag3, 0);
+	color += tex.SampleLevel(samp, texcoord + DirDiag4, 0);
 
-    return color * 0.125f;
+	return color * 0.125f;
 }
 
 float4 KawaseBlurUpSample(Texture2D tex, SamplerState samp, uint2 DTid, int scale, float ScreenWidth, float ScreenHeight)
 {
-    int Upscale = max(scale, 1);
-    float2 texcoord = (floor((DTid.xy / Upscale)) * Upscale + Upscale * 0.5f) / float2(ScreenWidth, ScreenHeight);
-    float2 HALF_TEXEL = float2(1.0f / float2(ScreenWidth, ScreenHeight)) * Upscale;
+	int Upscale = max(scale, 1);
+	float2 texcoord = (floor((DTid.xy / Upscale)) * Upscale + Upscale * 0.5f) / float2(ScreenWidth, ScreenHeight);
+	float2 HALF_TEXEL = float2(1.0f / float2(ScreenWidth, ScreenHeight)) * Upscale;
 
-    float2 DirDiag1 = float2(-HALF_TEXEL.x,  HALF_TEXEL.y); // Top left
-    float2 DirDiag2 = float2( HALF_TEXEL.x,  HALF_TEXEL.y); // Top right
-    float2 DirDiag3 = float2( HALF_TEXEL.x, -HALF_TEXEL.y); // Bottom right
-    float2 DirDiag4 = float2(-HALF_TEXEL.x, -HALF_TEXEL.y); // Bottom left
-    float2 DirAxis1 = float2(-HALF_TEXEL.x,  0.0f);          // Left
-    float2 DirAxis2 = float2( HALF_TEXEL.x,  0.0f);          // Right
-    float2 DirAxis3 = float2(0.0f,  HALF_TEXEL.y);           // Top
-    float2 DirAxis4 = float2(0.0f, -HALF_TEXEL.y);           // Bottom
+	float2 DirDiag1 = float2(-HALF_TEXEL.x, HALF_TEXEL.y);   // Top left
+	float2 DirDiag2 = float2(HALF_TEXEL.x, HALF_TEXEL.y);    // Top right
+	float2 DirDiag3 = float2(HALF_TEXEL.x, -HALF_TEXEL.y);   // Bottom right
+	float2 DirDiag4 = float2(-HALF_TEXEL.x, -HALF_TEXEL.y);  // Bottom left
+	float2 DirAxis1 = float2(-HALF_TEXEL.x, 0.0f);           // Left
+	float2 DirAxis2 = float2(HALF_TEXEL.x, 0.0f);            // Right
+	float2 DirAxis3 = float2(0.0f, HALF_TEXEL.y);            // Top
+	float2 DirAxis4 = float2(0.0f, -HALF_TEXEL.y);           // Bottom
 
-    float4 color = 0.0;
-    color += tex.SampleLevel(samp, texcoord + DirDiag1, 2);
-    color += tex.SampleLevel(samp, texcoord + DirDiag2, 2);
-    color += tex.SampleLevel(samp, texcoord + DirDiag3, 2);
-    color += tex.SampleLevel(samp, texcoord + DirDiag4, 2);
+	float4 color = 0.0;
+	color += tex.SampleLevel(samp, texcoord + DirDiag1, 2);
+	color += tex.SampleLevel(samp, texcoord + DirDiag2, 2);
+	color += tex.SampleLevel(samp, texcoord + DirDiag3, 2);
+	color += tex.SampleLevel(samp, texcoord + DirDiag4, 2);
 
-    color += tex.SampleLevel(samp, texcoord + DirAxis1, 2) * 2.0f;
-    color += tex.SampleLevel(samp, texcoord + DirAxis2, 2) * 2.0f;
-    color += tex.SampleLevel(samp, texcoord + DirAxis3, 2) * 2.0f;
-    color += tex.SampleLevel(samp, texcoord + DirAxis4, 2) * 2.0f;
+	color += tex.SampleLevel(samp, texcoord + DirAxis1, 2) * 2.0f;
+	color += tex.SampleLevel(samp, texcoord + DirAxis2, 2) * 2.0f;
+	color += tex.SampleLevel(samp, texcoord + DirAxis3, 2) * 2.0f;
+	color += tex.SampleLevel(samp, texcoord + DirAxis4, 2) * 2.0f;
 
-    return color / 12.0f;
+	return color / 12.0f;
 }
 
 float wnoise(float2 uv, float2 d)

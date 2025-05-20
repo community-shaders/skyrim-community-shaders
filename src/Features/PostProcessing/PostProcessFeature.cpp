@@ -2,14 +2,14 @@
 
 #include "CODBloom.h"
 #include "ColourTransforms.h"
+#include "DoF.h"
 #include "HistogramAutoExposure.h"
 #include "LUT.h"
+#include "LensFlare.h"
 #include "MotionBlur.h"
+#include "VanillaImagespace.h"
 #include "Vignette.h"
 #include "pCamera.h"
-#include "LensFlare.h"
-#include "VanillaImagespace.h"
-#include "DoF.h"
 
 template <class T>
 std::pair<std::string, PostProcessFeatureConstructor> GetFeatureConstructorPair()

@@ -35,8 +35,7 @@ float4 ComputeBoxBounds(float2 dims)
 		dims.x * box.r,
 		dims.y * box.g,
 		dims.x * box.b,
-		dims.y * box.a
-	);
+		dims.y * box.a);
 }
 
 [numthreads(32, 32, 1)] void CS_Histogram(uint2 tid
@@ -52,29 +51,29 @@ float4 ComputeBoxBounds(float2 dims)
 	GroupMemoryBarrierWithGroupSync();
 
 	// Sample spacing - take fewer samples (1 out of N pixels)
-	const uint SAMPLE_SPACING = 8; // Sample every 8th pixel for 64x reduction in samples
+	const uint SAMPLE_SPACING = 8;  // Sample every 8th pixel for 64x reduction in samples
 
 	// Compute base pixel coordinate with spacing
 	uint2 pxCoord = tid * (2 * SAMPLE_SPACING);
-	
+
 	// Calculate jitter offset using blue noise distribution
 	float2 jitter = hash2D(tid) * (SAMPLE_SPACING - 0.5) * 2.0;
 	int2 jitterOffset = int2(jitter);
-	
+
 	// Optimized bounds checking
 	pxCoord = uint2(max(0, min(int2(pxCoord) + jitterOffset, int2(dims) - 1)));
 
 	// Precompute box bounds
 	float4 boxBounds = ComputeBoxBounds(dims);
-	
+
 	// Optimized box check using precomputed bounds
 	bool inBox = (pxCoord.x > boxBounds.x) && (pxCoord.x < boxBounds.z) &&
-				 (pxCoord.y > boxBounds.y) && (pxCoord.y < boxBounds.w);
+	             (pxCoord.y > boxBounds.y) && (pxCoord.y < boxBounds.w);
 
 	if (inBox) {
 		float3 color = TexColor[pxCoord].rgb;
 		float luma = Color::RGBToLuminance(color);
-		
+
 		// Optimized bin calculation - avoid unnecessary saturate
 		if (luma > 1e-10) {
 			float logLuma = (log2(luma) - MinLogLum) * RcpLogLumRange;
