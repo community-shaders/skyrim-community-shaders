@@ -2,17 +2,17 @@
 
 struct LinearLighting : Feature
 {
-    static LinearLighting* GetSingleton()
-    {
-        static LinearLighting singleton;
-        return &singleton;
-    }
+	static LinearLighting* GetSingleton()
+	{
+		static LinearLighting singleton;
+		return &singleton;
+	}
 
-    virtual inline std::string GetName() override { return "Linear Lighting"; }
-    virtual inline std::string GetShortName() override { return "LinearLighting"; }
+	virtual inline std::string GetName() override { return "Linear Lighting"; }
+	virtual inline std::string GetShortName() override { return "LinearLighting"; }
 
-    virtual bool SupportsVR() override { return true; };
-    virtual bool IsCore() const override { return true; };
+	virtual bool SupportsVR() override { return true; };
+	virtual bool IsCore() const override { return true; };
 
     struct alignas(16) Settings
     {
@@ -27,18 +27,18 @@ struct LinearLighting : Feature
 
 	uint tempDisable = false;
 
-    virtual void DrawSettings() override;
+	virtual void DrawSettings() override;
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 
 	virtual void RestoreDefaultSettings() override;
 
-    virtual void PostPostLoad() override;
+	virtual void PostPostLoad() override;
 
 	Settings GetCommonBufferData();
 
-    // Event handler
+	// Event handler
 	class MenuOpenCloseEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
 	{
 	public:
@@ -48,7 +48,7 @@ struct LinearLighting : Feature
 			if (a_event->menuName == RE::LoadingMenu::MENU_NAME) {
 				if (a_event->opening)
 					GetSingleton()->tempDisable = true;
-                else
+				else
 					GetSingleton()->tempDisable = false;
 			}
 

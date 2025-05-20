@@ -22,22 +22,22 @@ void LinearLighting::DrawSettings()
 
 void LinearLighting::LoadSettings(json& o_json)
 {
-    settings = o_json;
+	settings = o_json;
 }
 
 void LinearLighting::SaveSettings(json& o_json)
 {
-    o_json = settings;
+	o_json = settings;
 }
 
 void LinearLighting::RestoreDefaultSettings()
 {
-    settings = {};
+	settings = {};
 }
 
 void LinearLighting::PostPostLoad()
 {
-    MenuOpenCloseEventHandler::Register();
+	MenuOpenCloseEventHandler::Register();
 }
 
 LinearLighting::Settings LinearLighting::GetCommonBufferData()

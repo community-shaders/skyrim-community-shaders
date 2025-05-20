@@ -1,6 +1,6 @@
+#include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/VR.hlsli"
-#include "Common/Color.hlsli"
 
 struct VS_INPUT
 {

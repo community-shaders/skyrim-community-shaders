@@ -79,12 +79,9 @@ namespace Color
 		float originalLuminance = RGBToLuminance(color);
 		float3 linearColorRaw = GammaToLinear(color / originalLuminance);
 		float scale = 1.0;
-		if (originalLuminance > 1e-5)
-		{
+		if (originalLuminance > 1e-5) {
 			scale = GammaToLinear(originalLuminance);
-		}
-		else if (originalLuminance <= 1e-5)
-		{
+		} else if (originalLuminance <= 1e-5) {
 			return float3(0.0, 0.0, 0.0);
 		}
 		float3 finalLinearColor = linearColorRaw * scale;
@@ -97,12 +94,9 @@ namespace Color
 		float originalLuminance = RGBToLuminance(color);
 		float3 linearColorRaw = pow(color / originalLuminance, 1.0 / SharedData::linearLightingSettings.lightGamma);
 		float scale = 1.0;
-		if (originalLuminance > 1e-5)
-		{
+		if (originalLuminance > 1e-5) {
 			scale = originalLuminance;
-		}
-		else if (originalLuminance <= 1e-5)
-		{
+		} else if (originalLuminance <= 1e-5) {
 			return float3(0.0, 0.0, 0.0);
 		}
 		float3 finalLinearColor = linearColorRaw * scale;
@@ -112,13 +106,13 @@ namespace Color
 	float3 Diffuse(float3 color)
 	{
 		if (!SharedData::linearLightingSettings.enableLinearLighting) {
-	#	if defined(TRUE_PBR)
+#	if defined(TRUE_PBR)
 			return pow(abs(color), 1.0 / 2.2);
-	#	else
+#	else
 			return color;
-	#	endif
+#	endif
 		} else {
-	#	if defined(TRUE_PBR)
+#	if defined(TRUE_PBR)
 			return color;
 	#	else
 			return pow(abs(color), SharedData::linearLightingSettings.colorGamma);
@@ -135,7 +129,7 @@ namespace Color
 				color = pow(abs(color), 1.0 / SharedData::linearLightingSettings.lightGamma);
 			}
 		}
-	#if defined(TRUE_PBR)
+#	if defined(TRUE_PBR)
 		return color * Math::PI;  // Compensate for traditional Lambertian diffuse
 	#else
 		return color;
