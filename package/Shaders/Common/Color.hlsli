@@ -114,9 +114,9 @@ namespace Color
 		} else {
 #	if defined(TRUE_PBR)
 			return color;
-	#	else
+#	else
 			return pow(abs(color), SharedData::linearLightingSettings.colorGamma);
-	#	endif
+#	endif
 		}
 	}
 
@@ -131,9 +131,9 @@ namespace Color
 		}
 #	if defined(TRUE_PBR)
 		return color * Math::PI;  // Compensate for traditional Lambertian diffuse
-	#else
+#	else
 		return color;
-	#endif
+#	endif
 	}
 
 	float3 Ambient(float3 color)
