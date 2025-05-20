@@ -1,40 +1,40 @@
 #include "LinearLighting.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-    LinearLighting::Settings,
-    enableLinearLighting,
-    enableGammaCorrection);
+	LinearLighting::Settings,
+	enableLinearLighting,
+	enableGammaCorrection);
 
 void LinearLighting::DrawSettings()
 {
-    ImGui::Checkbox("Enable Linear Lighting", (bool*)&settings.enableLinearLighting);
-    ImGui::Checkbox("Enable Gamma Correction", (bool*)&settings.enableGammaCorrection);
+	ImGui::Checkbox("Enable Linear Lighting", (bool*)&settings.enableLinearLighting);
+	ImGui::Checkbox("Enable Gamma Correction", (bool*)&settings.enableGammaCorrection);
 }
 
 void LinearLighting::LoadSettings(json& o_json)
 {
-    settings = o_json;
+	settings = o_json;
 }
 
 void LinearLighting::SaveSettings(json& o_json)
 {
-    o_json = settings;
+	o_json = settings;
 }
 
 void LinearLighting::RestoreDefaultSettings()
 {
-    settings = {};
+	settings = {};
 }
 
 void LinearLighting::PostPostLoad()
 {
-    MenuOpenCloseEventHandler::Register();
+	MenuOpenCloseEventHandler::Register();
 }
 
 LinearLighting::Settings LinearLighting::GetCommonBufferData()
 {
-    auto data = settings;
-    data.enableLinearLighting = settings.enableLinearLighting && !tempDisable;
-    data.enableGammaCorrection = settings.enableGammaCorrection;
-    return data;
+	auto data = settings;
+	data.enableLinearLighting = settings.enableLinearLighting && !tempDisable;
+	data.enableGammaCorrection = settings.enableGammaCorrection;
+	return data;
 }
