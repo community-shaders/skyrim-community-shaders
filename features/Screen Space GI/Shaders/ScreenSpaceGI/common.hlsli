@@ -81,7 +81,7 @@ float2 filterNaN(float2 v) { return float2(filterNaN(v.x), filterNaN(v.y)); }
 float4 filterNaN(float4 v) { return float4(filterNaN(v.x), filterNaN(v.y), filterNaN(v.z), filterNaN(v.w)); }
 
 float filterInf(float v) { return isinf(v) ? 0 : v; }
-float3 filterInf(float3 v) { float3(filterInf(v.x), filterInf(v.y), filterInf(v.z)); }
+float3 filterInf(float3 v) { return float3(filterInf(v.x), filterInf(v.y), filterInf(v.z)); }
 
 // screenPos - normalised position in FrameDim, one eye only
 // uv - normalised position in FrameDim, both eye
