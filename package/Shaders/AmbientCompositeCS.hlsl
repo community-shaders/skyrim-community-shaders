@@ -76,7 +76,7 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 		linDirectionalAmbientColor = Color::GammaToLinear(linDirectionalAmbientColor);
 		linDiffuseColor = Color::GammaToLinear(linDiffuseColor);
 	} else {
-		linDirectionalAmbientColor = Color::GammaToLinear(linDirectionalAmbientColor);
+		linDirectionalAmbientColor = Color::Ambient(linDirectionalAmbientColor);
 	}
 #if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL) {

@@ -129,13 +129,25 @@ namespace Color
 	float3 Light(float3 color)
 	{
 		if (SharedData::linearLightingSettings.enableLinearLighting) {
-			color = GammaToLinearLuminancePreservingLight(color);
+			if (SharedData::linearLightingSettings.preserveLightLuminance) {
+				color = GammaToLinearLuminancePreservingLight(color);
+			} else {
+				color = pow(abs(color), 1.0 / SharedData::linearLightingSettings.lightGamma);
+			}
 		}
 	#if defined(TRUE_PBR)
 		return color * Math::PI;  // Compensate for traditional Lambertian diffuse
 	#else
 		return color;
 	#endif
+	}
+
+	float3 Ambient(float3 color)
+	{
+		if (SharedData::linearLightingSettings.enableLinearLighting) {
+			color = pow(abs(color), 1.0 / SharedData::linearLightingSettings.ambientGamma);
+		}
+		return color;
 	}
 #endif
 }

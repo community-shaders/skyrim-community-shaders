@@ -187,8 +187,11 @@ namespace SharedData
 	{
 		uint enableLinearLighting;
 		uint enableGammaCorrection;
+		uint preserveLightLuminance;
 		float lightGamma;
 		float colorGamma;
+		float ambientGamma;
+		float2 pad;
 	};
 
 	cbuffer FeatureData : register(b6)

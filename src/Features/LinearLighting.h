@@ -14,12 +14,15 @@ struct LinearLighting : Feature
     virtual bool SupportsVR() override { return true; };
     virtual bool IsCore() const override { return true; };
 
-    struct Settings
+    struct alignas(16) Settings
     {
         uint enableLinearLighting = true;
         uint enableGammaCorrection = true;
+		uint preserveLightLuminance = false;
         float lightGamma = 1.8f;
 		float colorGamma = 2.2f;
+		float ambientGamma = 1.8f;
+		float pad[2];
     } settings;
 
 	uint tempDisable = false;
