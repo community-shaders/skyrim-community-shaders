@@ -91,6 +91,7 @@ namespace Color
 		return finalLinearColor;
 	}
 
+#if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
 	float3 GammaToLinearLuminancePreservingLight(float3 color)
 	{
 		float originalLuminance = RGBToLuminance(color);
@@ -108,7 +109,6 @@ namespace Color
 		return finalLinearColor;
 	}
 
-#if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
 	float3 Diffuse(float3 color)
 	{
 		if (!SharedData::linearLightingSettings.enableLinearLighting) {
