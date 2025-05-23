@@ -1698,8 +1698,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif  // LOD_BLENDING
 
 #	if defined(SKIN) && defined(CS_SKIN)
-	if (baseColor.w < 0.98) {
-		skinRoughness = baseColor.w;
+	float4 skinsk = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, uv);
+	if (skinsk.w < 0.99) {
+		skinRoughness = skinsk.w;
 		skinRoughnessSet = true;
 	}
 #	endif
@@ -2149,7 +2150,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	skinSurfaceProperties.RoughnessPrimary = min(1.0, skinSurfaceProperties.RoughnessPrimary + ExtraRoughness);
 	skinSurfaceProperties.RoughnessSecondary = min(1.0, skinSurfaceProperties.RoughnessSecondary + ExtraRoughness);
 	skinSurfaceProperties.SecondarySpecIntensity = SharedData::skinData.skinParams2.x;
-	float4 skinsk = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, uv);
 	skinSurfaceProperties.Thickness = 1 - skinsk.x;
 	if (SharedData::skinData.sssParams.z > 0.0f) {
 		skinSurfaceProperties.Thickness = ShadowSampling::CalculateThickness(screenNoise, input.WorldPosition.xyz, modelNormal.xyz, eyeIndex, 0.0005) * SharedData::skinData.sssParams.z;
