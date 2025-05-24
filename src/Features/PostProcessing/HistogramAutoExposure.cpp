@@ -151,6 +151,7 @@ void HistogramAutoExposure::CompileComputeShaders()
 void HistogramAutoExposure::Draw(TextureInfo& inout_tex)
 {
 	auto context = globals::d3d::context;
+	auto state = globals::state;
 
 	AutoExposureCB cbData = {
 		.AdaptArea = settings.AdaptArea,
@@ -176,8 +177,10 @@ void HistogramAutoExposure::Draw(TextureInfo& inout_tex)
 	};
 
 	context->CSSetConstantBuffers(1, 1, &cb);
+	state->BeginPerfEvent("Histogram Auto Exposure");
 
 	{
+		state->BeginPerfEvent("Calculate Histogram");
 		srvs[0] = inout_tex.srv;
 		uavs[0] = histogramSB->UAV();
 		uavs[1] = adaptationSB->UAV();
@@ -201,11 +204,13 @@ void HistogramAutoExposure::Draw(TextureInfo& inout_tex)
 		// Calculate average
 		context->CSSetShader(histogramAvgCS.get(), nullptr, 0);
 		context->Dispatch(1, 1, 1);
+		state->EndPerfEvent();
 	}
 
 	// Adapt
 	{
 		resetViews();
+		state->BeginPerfEvent("Adapt Exposure");
 
 		srvs[0] = inout_tex.srv;
 		srvs[1] = adaptationSB->SRV();
@@ -218,6 +223,7 @@ void HistogramAutoExposure::Draw(TextureInfo& inout_tex)
 		// Maintain the same number of threads for the adapt shader
 		// Since we're not changing the sampling pattern of the adapt shader
 		context->Dispatch(((texAdapt->desc.Width - 1) >> 5) + 1, ((texAdapt->desc.Height - 1) >> 5) + 1, 1);
+		state->EndPerfEvent();
 	}
 
 	// Clean up
@@ -227,4 +233,5 @@ void HistogramAutoExposure::Draw(TextureInfo& inout_tex)
 	context->CSSetShader(nullptr, nullptr, 0);
 
 	inout_tex = { texAdapt->resource.get(), texAdapt->srv.get() };
+	state->EndPerfEvent();
 }

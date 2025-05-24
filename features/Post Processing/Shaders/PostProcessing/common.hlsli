@@ -209,6 +209,7 @@ float4 SampleCA(Texture2D tex, SamplerState samp, float2 texcoord, float strengt
 	return color;
 }
 
+// https://www.intel.com/content/www/us/en/developer/articles/technical/an-investigation-of-fast-real-time-gpu-based-image-blur-algorithms.html
 float4 KawaseBlurDownSample(Texture2D tex, SamplerState samp, uint2 DTid, int scale, float ScreenWidth, float ScreenHeight)
 {
 	int DownsizeFrom = max(scale, 1);
