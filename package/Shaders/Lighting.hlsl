@@ -3292,7 +3292,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif
 #	endif
 
-	if (!inWorld && SharedData::linearLightingSettings.enableLinearLighting) {
+	if (!inWorld && SharedData::linearLightingSettings.enableLinearLighting && !(Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow)) {
 		psout.Diffuse.xyz = Color::TrueLinearToGamma(psout.Diffuse.xyz);
 	}
 
