@@ -38,7 +38,7 @@ jobs:
                 # Remove release and cleanup the Git tag (requires GH CLI ≥2.3.0)
                 gh release delete "$tag" --yes --cleanup-tag \
                   || git push --delete origin "$tag"
-                gh tag delete "$tag"
+                git tag -d "$tag" || true
               else
                 echo "PR #$pr_number is still open. Keeping tag $tag"
               fi
