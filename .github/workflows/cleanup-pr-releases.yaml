@@ -1,0 +1,41 @@
+name: Cleanup Closed PR Releases
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'  # Optional: runs daily at 2am UTC
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup-prereleases:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete closed PR prereleases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Fetching all prereleases..."
+          releases=$(gh release list --limit 1000 --json tagName,isPrerelease --jq '.[] | select(.isPrerelease) | .tagName')
+
+          for tag in $releases; do
+            if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-pr([0-9]+)$ ]]; then
+              pr_number="${BASH_REMATCH[1]}"
+              echo "Checking PR #$pr_number for tag $tag"
+
+              pr_status=$(gh pr view "$pr_number" --json state --jq .state 2>/dev/null || echo "NOT_FOUND")
+
+              if [[ "$pr_status" != "OPEN" ]]; then
+                echo "Deleting prerelease with tag $tag (PR #$pr_number is $pr_status)"
+                gh release delete "$tag" --yes
+                gh tag delete "$tag"
+              else
+                echo "PR #$pr_number is still open. Keeping tag $tag"
+              fi
+            else
+              echo "Skipping non-PR tag $tag"
+            fi
+          done
