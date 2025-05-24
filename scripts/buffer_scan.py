@@ -4,19 +4,19 @@ import re
 from py_markdown_table.markdown_table import markdown_table
 from operator import itemgetter
 import urllib.parse
+from datetime import datetime
 
 
 def create_link(text):
-    return "https://github.com/doodlum/skyrim-community-shaders/blob/dev" + text
+    return f"https://github.com/doodlum/skyrim-community-shaders/blob/dev/{text}"
 
 
 # https://stackoverflow.com/questions/16673778/python-regex-match-in-multiline-but-still-want-to-get-the-line-number
 def finditer_with_line_numbers(pattern, string, flags=0):
     """
     A version of 're.finditer' that returns '(match, line_number)' pairs.
+    It handles line number adjustments based on '#line' directives in the source.
     """
-    import re
-
     # handle pcpp info on skipped lines
     line_offsets = {}
     for line_number, line in enumerate(string.splitlines()):
@@ -91,60 +91,72 @@ def capture_pattern(text, pattern):
     return results
 
 
-defines_list = [
-    {"PSHADER": ""},
-    {"PSHADER": "", "VR": ""},
-    {"VSHADER": ""},
-    {"VSHADER": "", "VR": ""},
-]
-# https://learn.microsoft.com/en-us/windows/win32/direct3d12/resource-binding-in-hlsl
-hlsl_types = {"t": "SRV", "u": "UAV", "s": "Sampler", "b": "CBV"}
-# Get the current directory path
-cwd = os.getcwd()
-pattern = r"(?P<filename>\w+)\.(?P<extension>hlsli?)"
-feature_pattern = r".*features/(?P<feature>[\w -]*)/.*"
-shader_pattern = r"(?P<type>[\w<> ]+)\s+(?P<name>[\w]+)\s+:\s+register\(\s*(?P<buffer_type>[a-z]*)(?P<buffer_number>[0-9]+)\s*\)"
-feature = ""
-filename = ""
-results = []
-result_map = {}  # used to prune duplicates
-# Iterate over the files in the current directory and all of its subdirectories
-for root, dirs, files in os.walk(cwd):
-    # Iterate over the files in the current directory
-    for file in files:
-        # Match the regex pattern against the filename
-        match = re.match(pattern, file)
+def main():
+    defines_list = [
+        {"PSHADER": ""},
+        {"PSHADER": "", "VR": ""},
+        {"VSHADER": ""},
+        {"VSHADER": "", "VR": ""},
+    ]
+    # https://learn.microsoft.com/en-us/windows/win32/direct3d12/resource-binding-in-hlsl
+    hlsl_types = {"t": "SRV", "u": "UAV", "s": "Sampler", "b": "CBV"}
+    # Get the current directory path
+    cwd = os.getcwd()
+    pattern = re.compile(r"(?P<filename>\w+)\.(?P<extension>hlsli?)")
+    feature_pattern = re.compile(r".*features/(?P<feature>[\w -]*)/.*")
+    shader_pattern = re.compile(
+        r"(?P<type>[\w<> ]+)\s+(?P<name>[\w]+)\s+:\s+register\(\s*(?P<buffer_type>[a-z]*)(?P<buffer_number>[0-9]+)\s*\)"
+    )
+    feature = ""
+    filename = ""
+    results = []
+    result_map = {}  # used to prune duplicates
 
-        # If there is a match, print the filename and extension
-        if match:
-            feature_match = re.match(feature_pattern, root)
-            if "package" in root.lower():
-                feature = match.group("filename")
-            elif feature_match:
-                feature = feature_match.group("feature")
-            # print(root, feature, match.group("filename"), match.group("extension"))
-            path = os.path.join(root, file)
-            short_path = path[
-                path.lower().find("skyrim-community-shaders")
-                + len("skyrim-community-shaders") :
-            ]
-            for defines in defines_list:
-                arg_list = []
-                for define in [f"{k}" for k, v in defines.items()]:
-                    arg_list += ["-D"] + [define]
-                    result = subprocess.run(
-                        [
-                            "pcpp",
-                            path,
-                            "--passthru-unfound-includes",
-                            "--passthru-defines",
-                            # "--passthru-unknown-exprs",
-                        ]
-                        + arg_list,
-                        stdout=subprocess.PIPE,
-                    )
-                    if result.stdout:
-                        contents = result.stdout.decode()
+    # New dictionary to track register usage per (file, defines) compilation unit
+    compilation_units = {}
+
+    # Iterate over the files in the current directory and all of its subdirectories
+    for root, dirs, files in os.walk(cwd):
+        if "extern" in dirs:
+            dirs.remove("extern")
+        # Iterate over the files in the current directory
+        for file in files:
+            # Match the regex pattern against the filename
+            match = pattern.match(file)
+
+            # If there is a match, print the filename and extension
+            if match:
+                feature_match = feature_pattern.match(root)
+                if "package" in root.lower():
+                    feature = match.group("filename")
+                elif feature_match:
+                    feature = feature_match.group("feature")
+                # print(root, feature, match.group("filename"), match.group("extension"))
+                path = os.path.join(root, file)
+                short_path = path[
+                    path.lower().find("skyrim-community-shaders")
+                    + len("skyrim-community-shaders") :
+                ]
+                for defines in defines_list:
+                    arg_list = []
+                    for define in defines.keys():
+                        arg_list += ["-D", define]
+                    try:
+                        proc_result = subprocess.run(
+                            [
+                                "pcpp",
+                                path,
+                                "--passthru-unfound-includes",
+                                "--passthru-defines",
+                                # "--passthru-unknown-exprs",
+                            ]
+                            + arg_list,
+                            stdout=subprocess.PIPE,
+                        )
+                    except Exception:
+                        continue
+                    if proc_result.stdout:
+                        contents = proc_result.stdout.decode()
                         if contents:
                             capturelist = finditer_with_line_numbers(
                                 shader_pattern,
@@ -152,6 +164,7 @@ for root, dirs, files in os.walk(cwd):
                             )
                             for line_number, result in capturelist:
                                 path_with_line_no = f"{short_path}:{line_number}"
+                                entry_key = (path_with_line_no.lower(), frozenset(defines.keys()))
                                 entry = result_map.get(path_with_line_no.lower())
                                 if not entry:
                                     entry = {
@@ -173,13 +186,42 @@ for root, dirs, files in os.walk(cwd):
                                     for key in defines.keys():
                                         entry[key] = True
                                     result_map[path_with_line_no.lower()] = entry
-results = [v for v in result_map.values()]
-# print(results)
-if results:
-    results = sorted(results, key=itemgetter("Buffer Type", "Number", "File"))
-    markdown = (
-        markdown_table(results)
-        .set_params(row_sep="markdown", quote=False)
-        .get_markdown()
-    )
-    print(markdown)
+
+                                # Track register usage per compilation unit
+                                compilation_unit_key = (short_path.lower(), frozenset(defines.keys()))
+                                if compilation_unit_key not in compilation_units:
+                                    compilation_units[compilation_unit_key] = {}
+                                reg = f'{result.group("buffer_type").lower()}{result.group("buffer_number")}'
+                                if reg not in compilation_units[compilation_unit_key]:
+                                    compilation_units[compilation_unit_key][reg] = set()
+                                compilation_units[compilation_unit_key][reg].add(feature)
+
+    results = [v for v in result_map.values()]
+    # print(results)
+    if results:
+        results = sorted(results, key=itemgetter("Buffer Type", "Number", "File"))
+        markdown = (
+            markdown_table(results)
+            .set_params(row_sep="markdown", quote=False)
+            .get_markdown()
+        )
+        print(f"## Table generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        print(markdown)
+
+    # Detect conflicts per compilation unit
+    conflicts = []
+    for (compilation_path, defines_set), reg_map in compilation_units.items():
+        for reg, features_set in reg_map.items():
+            if len(features_set) > 1:
+                conflicts.append((compilation_path, defines_set, reg, features_set))
+
+    if conflicts:
+        print("\n## Conflicts Detected\n")
+        for compilation_path, defines_set, reg, features_set in conflicts:
+            defines_str = ", ".join(sorted(defines_set)) if defines_set else "No defines"
+            features_str = ", ".join(sorted(features_set))
+            print(f"- Register `{reg}` in `{compilation_path}` with defines [{defines_str}] is used by multiple features: {features_str}") 
+
+
+if __name__ == "__main__":
+    main()
