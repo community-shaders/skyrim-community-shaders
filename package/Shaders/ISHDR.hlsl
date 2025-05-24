@@ -1,6 +1,7 @@
 #include "Common/Color.hlsli"
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
+#include "Common/SharedData.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
 
@@ -90,6 +91,13 @@ PS_OUTPUT main(PS_INPUT input)
 	float2 uv = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 
 	float3 inputColor = BlendTex.Sample(BlendSampler, uv).xyz;
+
+#		if defined(POSTPROCESS)
+	if(SharedData::postProcessingSettings.DisableVanillaTonemapping) {
+		psout.Color = float4(inputColor, 1.0);
+		return psout;
+	}
+#		endif
 
 	float3 bloomColor = 0;
 	if (Flags.x > 0.5) {

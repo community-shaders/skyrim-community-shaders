@@ -10,6 +10,13 @@ struct PostProcessing : Feature
 		return &singleton;
 	}
 
+	struct alignas(16) Settings
+	{
+		uint DisableVanillaTonemapping = 0;
+		uint AdvancedMode = 0; // placeholder
+		uint pad[2];
+	} settings;
+
 	const std::string ppPresetPath = "Data\\SKSE\\Plugins\\CommunityShaders\\PostProcessing";
 
 	virtual inline std::string GetName() override { return "Post Processing"; }

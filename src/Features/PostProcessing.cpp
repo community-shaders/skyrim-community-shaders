@@ -5,6 +5,10 @@
 
 #include "State.h"
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	PostProcessing::Settings,
+	DisableVanillaTonemapping)
+
 void PostProcessing::DrawSettings()
 {
 	// 0 for list of feats
@@ -107,6 +111,10 @@ void PostProcessing::DrawSettings()
 		ImGui::SameLine();
 
 		ImGui::Checkbox("Bypass", &bypass);
+		ImGui::SameLine();
+		ImGui::Checkbox("Disable Vanilla Tonemapping", (bool*)&settings.DisableVanillaTonemapping);
+		// ImGui::SameLine();
+		// ImGui::Checkbox("Advanced Mode", (bool*)&settings.AdvancedMode);
 
 		ImGui::Spacing();
 
@@ -277,6 +285,9 @@ void PostProcessing::LoadSettings(json& o_json)
 				feats.pop_back();
 		}
 	}
+
+	if (o_json.contains("ppsettings"))
+		settings = o_json["ppsettings"];
 }
 
 void PostProcessing::SaveSettings(json& o_json)
@@ -295,6 +306,7 @@ void PostProcessing::SaveSettings(json& o_json)
 	}
 
 	o_json["effects"] = arr;
+	o_json["ppsettings"] = settings;
 }
 
 std::vector<std::string> PostProcessing::LoadPresets()

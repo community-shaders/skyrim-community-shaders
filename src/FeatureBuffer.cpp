@@ -8,6 +8,7 @@
 #include "Features/IBL.h"
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
+#include "Features/PostProcessing.h"
 #include "Features/Skylighting.h"
 #include "Features/TerrainShadows.h"
 #include "Features/TerrainVariation.h"
@@ -45,5 +46,6 @@ std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 		globals::features::lodBlending->settings,
 		globals::features::hairSpecular->settings,
 		globals::features::terrainVariation->settings,
-		globals::features::ibl->settings);
+		globals::features::ibl->settings,
+		globals::features::postProcessing->settings);
 }
