@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read
 
 jobs:
   cleanup-prereleases:
@@ -27,10 +28,11 @@ jobs:
               echo "Checking PR #$pr_number for tag $tag"
 
               pr_status=$(gh pr view "$pr_number" --json state --jq .state 2>/dev/null || echo "NOT_FOUND")
-
               if [[ "$pr_status" != "OPEN" ]]; then
                 echo "Deleting prerelease with tag $tag (PR #$pr_number is $pr_status)"
-                gh release delete "$tag" --yes
+                # Remove release and cleanup the Git tag (requires GH CLI ≥2.3.0)
+                gh release delete "$tag" --yes --cleanup-tag \
+                  || git push --delete origin "$tag"
                 gh tag delete "$tag"
               else
                 echo "PR #$pr_number is still open. Keeping tag $tag"
