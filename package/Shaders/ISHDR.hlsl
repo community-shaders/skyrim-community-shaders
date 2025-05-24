@@ -93,7 +93,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 inputColor = BlendTex.Sample(BlendSampler, uv).xyz;
 
 #		if defined(POSTPROCESS)
-	if(SharedData::postProcessingSettings.DisableVanillaTonemapping) {
+	if (SharedData::postProcessingSettings.DisableVanillaTonemapping) {
 		psout.Color = float4(inputColor, 1.0);
 		return psout;
 	}
