@@ -159,18 +159,12 @@ namespace SharedData
 		float DiffuseIndirectMult;
 		float BaseColorMult;
 		float pad;
-	};
-
+	};	
+	
 	struct TerrainVariationSettings
 	{
 		bool enableTilingFix;
-		float startDistance;
-		float maxDistance;
-		float invDistanceRange;          // For distance calc optimisation
-		float heightCompensationFactor;  // Compensation multiplier for terrain parallax
-		float shadowRayDirFactor;        // Shadow ray direction multiplier
-		int hashQuality;                 // 0 = Low quality hash, 1 = High quality hash
-		float pad;
+		float3 pad0;
 	};
 
 	struct IBLSettings

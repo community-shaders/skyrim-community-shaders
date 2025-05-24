@@ -2467,7 +2467,7 @@ namespace SIE
 		}
 	}
 
-	void ShaderCache::ProcessCompilationSet(std::stop_token stoken, SIE::ShaderCompilationTask task)
+	void ShaderCache::ProcessCompilationSet([[maybe_unused]] std::stop_token stoken, SIE::ShaderCompilationTask task)
 	{
 		SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
 		task.Perform();

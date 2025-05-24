@@ -17,29 +17,22 @@ struct StochasticOffsets
 	float3 weights;
 };
 
-// Compute a distance factor for scaling stochastic effect strength (0-1)
-// Returns 0 for distances <= startDistance, 1 for distances >= maxDistance
-inline float ComputeDistanceFactor(float distance)
+// Compute terrain variation blend factor
+// Returns blend factor between 0.0 (no stochastic) and 1.0 (full stochastic)
+inline float ComputeTerrainVariationBlend(float viewDistance)
 {
 	if (!SharedData::terrainVariationSettings.enableTilingFix)
 		return 0.0;
 
-	return saturate((distance - SharedData::terrainVariationSettings.startDistance) *
-					SharedData::terrainVariationSettings.invDistanceRange);
+	float blendFactor = saturate((viewDistance - 1200.0) / 1000.0);
+	return smoothstep(0.0, 1.0, blendFactor);
 }
 
 // Hash function for stochastic sampling
 inline float2 hash2D2D(float2 s)
 {
-	// Choose hash implementation based on quality setting
-	if (SharedData::terrainVariationSettings.hashQuality == 0) {
-		// Low quality, no fmod, slight tiling, almost negligible difference, 0.05ms or so.
 		s = s * float2(1271.5151, 3337.8237);
 		return frac(sin(s.x + s.y) * float2(43758.5453, 28637.1369));
-	} else {
-		// High quality, better blend with fmod funct.
-		return frac(sin(fmod(float2(dot(s, float2(127.1, 311.7)), dot(s, float2(269.5, 183.3))), 3.14159)) * 43758.5453);
-	}
 }
 
 // Compute offsets for stochastic sampling
@@ -67,35 +60,28 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 {
 	// If feature is disabled, return standard sample
 	if (!SharedData::terrainVariationSettings.enableTilingFix)
-		return tex.SampleLevel(samp, uv, mipLevel);
+		return tex.SampleLevel(samp, uv, mipLevel);	// Compute terrain variation blend factor (0.0 = no stochastic, 1.0 = full stochastic)
+	float terrainVariationBlend = ComputeTerrainVariationBlend(distance);
+	float4 standardSample = tex.SampleLevel(samp, uv, mipLevel);
 
-	// Calculate distance factor (0 when close, 1 when far)
-	float distanceFactor = ComputeDistanceFactor(distance);
-
-	bool useParallax = SharedData::extendedMaterialSettings.EnableTerrainParallax;
-	float4 sample1, sample2, sample3, standardSample;
-
-	// Get stochastic samples
-	if (useParallax) {
-		// Parallax enabled, can use SampleLevel for better perf
-		sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
-		sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
-		sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
-		standardSample = tex.SampleLevel(samp, uv, mipLevel);
-	} else {
-		// When parallax disabled, samplelevel causes mipmap issues, it uses too low a mipmap level up close.
-		sample1 = tex.SampleGrad(samp, uv + offsets.offset1, dx, dy);
-		sample2 = tex.SampleGrad(samp, uv + offsets.offset2, dx, dy);
-		sample3 = tex.SampleGrad(samp, uv + offsets.offset3, dx, dy);
-		standardSample = tex.SampleGrad(samp, uv, dx, dy);
+	// If no terrain variation blend, return standard sample
+	if (terrainVariationBlend <= 0.0) {
+		return standardSample;
 	}
+
+	// Get stochastic samples only when needed (at distance where parallax fades out)
+	// Use SampleLevel since we're at distance where mipmap issues don't matter
+	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
+	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
 
 	// Weight samples according to offsets
 	float4 stochasticSample = sample1 * offsets.weights.x +
 	                          sample2 * offsets.weights.y +
 	                          sample3 * offsets.weights.z;
 
-	return lerp(standardSample, stochasticSample, distanceFactor);
+	// Smooth blend: lerp from standard to stochastic based on distance
+	return lerp(standardSample, stochasticSample, terrainVariationBlend);
 }
 #define StochasticSample(rnd, mipLevel, tex, samp, uv, dist) StochasticEffect(rnd, mipLevel, tex, samp, uv, ComputeStochasticOffsets(uv), ddx(uv), ddy(uv), dist).rgb
 

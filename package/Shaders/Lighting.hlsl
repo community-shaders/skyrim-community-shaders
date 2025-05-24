@@ -1274,7 +1274,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(TRUE_PBR)
 	float4 blendedRMAOS = 0;
 #		endif
-
 	float invwsum = totalWeight > 0.0 ? rcp(totalWeight) : 1.0;
 	float viewDistance = length(viewPosition);
 	float distanceFactor = 0.0;
@@ -1283,6 +1282,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	float2 dx = ddx(uv);
 	float2 dy = ddy(uv);
 	StochasticOffsets sharedOffset = ComputeStochasticOffsets(uv);
+	// Create terrain variation distance for smooth blend (2000-2048 units)
+	float terrainVariationDistance = viewDistance;
 #		else
 	distanceFactor = saturate(viewDistance * 0.00048828125);
 #		endif
@@ -1311,11 +1312,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #			endif
 
 		float weights[6];
-#			if defined(TERRAIN_VARIATION)
-		uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, sharedOffset, dx, dy, pixelOffset, weights);
-#			else
 		uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, pixelOffset, weights);
-#			endif
 		if (SharedData::extendedMaterialSettings.EnableHeightBlending) {
 			input.LandBlendWeights1.x = weights[0];
 			input.LandBlendWeights1.y = weights[1];
@@ -1323,14 +1320,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			input.LandBlendWeights1.w = weights[3];
 			input.LandBlendWeights2.x = weights[4];
 			input.LandBlendWeights2.y = weights[5];
-		}
+	}
 		if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows)) {
-#			if defined(TERRAIN_VARIATION)
-			sh0 = ExtendedMaterials::GetTerrainHeight(screenNoise, input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, viewDistance, weights);
-			float shadowMultiplier = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, DirLightDirection, sh0, parallaxShadowQuality, screenNoise, displacementParams, sharedOffset, dx, dy, viewDistance);
-#			else
-			sh0 = ExtendedMaterials::GetTerrainHeight(screenNoise, input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, weights);
-#			endif
+			sh0 = ExtendedMaterials::GetTerrainHeight(input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, weights);
 		}
 	}
 #		endif  // EMAT
@@ -1364,7 +1356,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	if (input.LandBlendWeights1.x > 0.01) {
 		float weight = input.LandBlendWeights1.x * invwsum;
 #		if defined(TERRAIN_VARIATION)
-		float4 diffuse1 = StochasticEffect(screenNoise, mipLevels[0], TexColorSampler, SampColorSampler, uv, sharedOffset, dx, dy, viewDistance);
+		float4 diffuse1 = StochasticEffect(screenNoise, mipLevels[0], TexColorSampler, SampColorSampler, uv, sharedOffset, dx, dy, terrainVariationDistance);
 #		else
 		float distanceFactor = smoothstep(0.0, 2048.0, viewDistance);
 		float4 diffuse1 = lerp(
@@ -1382,7 +1374,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float alpha1 = diffuse1.a;
 
 #		if defined(TERRAIN_VARIATION)
-		float4 normal1 = StochasticEffect(screenNoise, mipLevels[0], TexNormalSampler, SampNormalSampler, uv, sharedOffset, dx, dy, viewDistance);
+		float4 normal1 = StochasticEffect(screenNoise, mipLevels[0], TexNormalSampler, SampNormalSampler, uv, sharedOffset, dx, dy, terrainVariationDistance);
 #		else
 		float4 normal1 = lerp(
 			TexNormalSampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias),
@@ -1393,7 +1385,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float normalAlpha1 = normal1.a;
 #		if defined(TRUE_PBR)
 #			if defined(TERRAIN_VARIATION)
-		float4 rmaos1 = StochasticEffect(screenNoise, mipLevels[0], TexRMAOSSampler, SampRMAOSSampler, uv, sharedOffset, dx, dy, viewDistance);
+		float4 rmaos1 = StochasticEffect(screenNoise, mipLevels[0], TexRMAOSSampler, SampRMAOSSampler, uv, sharedOffset, dx, dy, terrainVariationDistance);
 #			else
 		float4 rmaos1 = lerp(
 			TexRMAOSSampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias),
@@ -1413,7 +1405,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	if (input.LandBlendWeights1.y > 0.01) {
 		float weight = input.LandBlendWeights1.y * invwsum;
 #		if defined(TERRAIN_VARIATION)
-		float4 diffuse2 = StochasticEffect(screenNoise, mipLevels[1], TexLandColor2Sampler, SampColorSampler, uv, sharedOffset, dx, dy, viewDistance);
+		float4 diffuse2 = StochasticEffect(screenNoise, mipLevels[1], TexLandColor2Sampler, SampColorSampler, uv, sharedOffset, dx, dy, terrainVariationDistance);
 #		else
 		float distanceFactor = smoothstep(0.0, 2048.0, viewDistance);
 		float4 diffuse2 = lerp(
@@ -1431,7 +1423,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float alpha2 = diffuse2.a;
 
 #		if defined(TERRAIN_VARIATION)
-		float4 normal2 = StochasticEffect(screenNoise, mipLevels[1], TexLandNormal2Sampler, SampNormalSampler, uv, sharedOffset, dx, dy, viewDistance);
+		float4 normal2 = StochasticEffect(screenNoise, mipLevels[1], TexLandNormal2Sampler, SampNormalSampler, uv, sharedOffset, dx, dy, terrainVariationDistance);
 #		else
 		float4 normal2 = lerp(
 			TexLandNormal2Sampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias),
@@ -1442,7 +1434,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float normalAlpha2 = normal2.a;
 #		if defined(TRUE_PBR)
 #			if defined(TERRAIN_VARIATION)
-		float4 rmaos2 = StochasticEffect(screenNoise, mipLevels[1], TexLandRMAOS2Sampler, SampRMAOSSampler, uv, sharedOffset, dx, dy, viewDistance);
+		float4 rmaos2 = StochasticEffect(screenNoise, mipLevels[1], TexLandRMAOS2Sampler, SampRMAOSSampler, uv, sharedOffset, dx, dy, terrainVariationDistance);
 #			else
 		float4 rmaos2 = lerp(
 			TexLandRMAOS2Sampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias),
@@ -1462,7 +1454,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	if (input.LandBlendWeights1.z > 0.01) {
 		float weight = input.LandBlendWeights1.z * invwsum;
 #		if defined(TERRAIN_VARIATION)
-		float4 diffuse3 = StochasticEffect(screenNoise, mipLevels[2], TexLandColor3Sampler, SampColorSampler, uv, sharedOffset, dx, dy, viewDistance);
+		float4 diffuse3 = StochasticEffect(screenNoise, mipLevels[2], TexLandColor3Sampler, SampColorSampler, uv, sharedOffset, dx, dy, terrainVariationDistance);
 #		else
 		float distanceFactor = smoothstep(0.0, 2048.0, viewDistance);
 		float4 diffuse3 = lerp(
@@ -1480,7 +1472,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float alpha3 = diffuse3.a;
 
 #		if defined(TERRAIN_VARIATION)
-		float4 normal3 = StochasticEffect(screenNoise, mipLevels[2], TexLandNormal3Sampler, SampNormalSampler, uv, sharedOffset, dx, dy, viewDistance);
+		float4 normal3 = StochasticEffect(screenNoise, mipLevels[2], TexLandNormal3Sampler, SampNormalSampler, uv, sharedOffset, dx, dy, terrainVariationDistance);
 #		else
 		float4 normal3 = lerp(
 			TexLandNormal3Sampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias),
@@ -1491,7 +1483,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float normalAlpha3 = normal3.a;
 #		if defined(TRUE_PBR)
 #			if defined(TERRAIN_VARIATION)
-		float4 rmaos3 = StochasticEffect(screenNoise, mipLevels[2], TexLandRMAOS3Sampler, SampRMAOSSampler, uv, sharedOffset, dx, dy, viewDistance);
+		float4 rmaos3 = StochasticEffect(screenNoise, mipLevels[2], TexLandRMAOS3Sampler, SampRMAOSSampler, uv, sharedOffset, dx, dy, terrainVariationDistance);
 #			else
 		float4 rmaos3 = lerp(
 			TexLandRMAOS3Sampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias),
@@ -1511,7 +1503,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	if (input.LandBlendWeights1.w > 0.01) {
 		float weight = input.LandBlendWeights1.w * invwsum;
 #		if defined(TERRAIN_VARIATION)
-		float4 diffuse4 = StochasticEffect(screenNoise, mipLevels[3], TexLandColor4Sampler, SampColorSampler, uv, sharedOffset, dx, dy, viewDistance);
+		float4 diffuse4 = StochasticEffect(screenNoise, mipLevels[3], TexLandColor4Sampler, SampColorSampler, uv, sharedOffset, dx, dy, terrainVariationDistance);
 #		else
 		float distanceFactor = smoothstep(0.0, 2048.0, viewDistance);
 		float4 diffuse4 = lerp(
@@ -1529,7 +1521,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float alpha4 = diffuse4.a;
 
 #		if defined(TERRAIN_VARIATION)
-		float4 normal4 = StochasticEffect(screenNoise, mipLevels[3], TexLandNormal4Sampler, SampNormalSampler, uv, sharedOffset, dx, dy, viewDistance);
+		float4 normal4 = StochasticEffect(screenNoise, mipLevels[3], TexLandNormal4Sampler, SampNormalSampler, uv, sharedOffset, dx, dy, terrainVariationDistance);
 #		else
 		float4 normal4 = lerp(
 			TexLandNormal4Sampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias),
@@ -1540,7 +1532,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float normalAlpha4 = normal4.a;
 #		if defined(TRUE_PBR)
 #			if defined(TERRAIN_VARIATION)
-		float4 rmaos4 = StochasticEffect(screenNoise, mipLevels[3], TexLandRMAOS4Sampler, SampRMAOSSampler, uv, sharedOffset, dx, dy, viewDistance);
+		float4 rmaos4 = StochasticEffect(screenNoise, mipLevels[3], TexLandRMAOS4Sampler, SampRMAOSSampler, uv, sharedOffset, dx, dy, terrainVariationDistance);
 #			else
 		float4 rmaos4 = lerp(
 			TexLandRMAOS4Sampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias),
@@ -1560,7 +1552,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	if (input.LandBlendWeights2.x > 0.01) {
 		float weight = input.LandBlendWeights2.x * invwsum;
 #		if defined(TERRAIN_VARIATION)
-		float4 diffuse5 = StochasticEffect(screenNoise, mipLevels[4], TexLandColor5Sampler, SampColorSampler, uv, sharedOffset, dx, dy, viewDistance);
+		float4 diffuse5 = StochasticEffect(screenNoise, mipLevels[4], TexLandColor5Sampler, SampColorSampler, uv, sharedOffset, dx, dy, terrainVariationDistance);
 #		else
 		float distanceFactor = smoothstep(0.0, 2048.0, viewDistance);
 		float4 diffuse5 = lerp(
@@ -1578,7 +1570,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float alpha5 = diffuse5.a;
 
 #		if defined(TERRAIN_VARIATION)
-		float4 normal5 = StochasticEffect(screenNoise, mipLevels[4], TexLandNormal5Sampler, SampNormalSampler, uv, sharedOffset, dx, dy, viewDistance);
+		float4 normal5 = StochasticEffect(screenNoise, mipLevels[4], TexLandNormal5Sampler, SampNormalSampler, uv, sharedOffset, dx, dy, terrainVariationDistance);
 #		else
 		float4 normal5 = lerp(
 			TexLandNormal5Sampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias),
@@ -1589,7 +1581,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float normalAlpha5 = normal5.a;
 #		if defined(TRUE_PBR)
 #			if defined(TERRAIN_VARIATION)
-		float4 rmaos5 = StochasticEffect(screenNoise, mipLevels[4], TexLandRMAOS5Sampler, SampRMAOSSampler, uv, sharedOffset, dx, dy, viewDistance);
+		float4 rmaos5 = StochasticEffect(screenNoise, mipLevels[4], TexLandRMAOS5Sampler, SampRMAOSSampler, uv, sharedOffset, dx, dy, terrainVariationDistance);
 #			else
 		float4 rmaos5 = lerp(
 			TexLandRMAOS5Sampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias),
@@ -1609,7 +1601,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	if (input.LandBlendWeights2.y > 0.01) {
 		float weight = input.LandBlendWeights2.y * invwsum;
 #		if defined(TERRAIN_VARIATION)
-		float4 diffuse6 = StochasticEffect(screenNoise, mipLevels[5], TexLandColor6Sampler, SampColorSampler, uv, sharedOffset, dx, dy, viewDistance);
+		float4 diffuse6 = StochasticEffect(screenNoise, mipLevels[5], TexLandColor6Sampler, SampColorSampler, uv, sharedOffset, dx, dy, terrainVariationDistance);
 #		else
 		float distanceFactor = smoothstep(0.0, 2048.0, viewDistance);
 		float4 diffuse6 = lerp(
@@ -1627,7 +1619,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float alpha6 = diffuse6.a;
 
 #		if defined(TERRAIN_VARIATION)
-		float4 normal6 = StochasticEffect(screenNoise, mipLevels[5], TexLandNormal6Sampler, SampNormalSampler, uv, sharedOffset, dx, dy, viewDistance);
+		float4 normal6 = StochasticEffect(screenNoise, mipLevels[5], TexLandNormal6Sampler, SampNormalSampler, uv, sharedOffset, dx, dy, terrainVariationDistance);
 #		else
 		float4 normal6 = lerp(
 			TexLandNormal6Sampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias),
@@ -1638,7 +1630,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float normalAlpha6 = normal6.a;
 #		if defined(TRUE_PBR)
 #			if defined(TERRAIN_VARIATION)
-		float4 rmaos6 = StochasticEffect(screenNoise, mipLevels[5], TexLandRMAOS6Sampler, SampRMAOSSampler, uv, sharedOffset, dx, dy, viewDistance);
+		float4 rmaos6 = StochasticEffect(screenNoise, mipLevels[5], TexLandRMAOS6Sampler, SampRMAOSSampler, uv, sharedOffset, dx, dy, terrainVariationDistance);
 #			else
 		float4 rmaos6 = lerp(
 			TexLandRMAOS6Sampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias),
@@ -2267,16 +2259,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(LANDSCAPE)
 		[branch] if (SharedData::extendedMaterialSettings.EnableTerrainParallax)
 		{
-#			if defined(TERRAIN_VARIATION)
-			float weights[6];
-
-			float sh0 = ExtendedMaterials::GetTerrainHeight(screenNoise, input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, viewDistance, weights);
-
-			parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, dirLightDirectionTS, sh0, parallaxShadowQuality, screenNoise, displacementParams, sharedOffset, dx, dy, viewDistance);
-#			else
-			// Standard terrain parallax shadow without stochastic sampling
 			parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, dirLightDirectionTS, sh0, parallaxShadowQuality, screenNoise, displacementParams);
-#			endif
 		}
 #		elif defined(PARALLAX)
 		[branch] if (SharedData::extendedMaterialSettings.EnableParallax)
