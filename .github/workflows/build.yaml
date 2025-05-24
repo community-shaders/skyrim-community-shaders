@@ -3,27 +3,28 @@ name: build Community Shaders and addons
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
     inputs:
       cache-key-suffix:
-        description: 'Optional suffix to invalidate the build cache'
+        description: "Optional suffix to invalidate the build cache"
         required: false
   pull_request_target:
     paths:
-      - '**.cpp'
-      - '**.h'
-      - '**.hpp'
-      - '**.c'
-      - 'CMakeLists.txt'
-      - 'CMakePresets.json'
-      - 'vcpkg.json'
-      - 'vcpkg-configuration.json'
-      - '.gitmodules'
-      - 'extern/**'
+      - "**.cpp"
+      - "**.h"
+      - "**.hpp"
+      - "**.c"
+      - "CMakeLists.txt"
+      - "CMakePresets.json"
+      - "vcpkg.json"
+      - "vcpkg-configuration.json"
+      - ".gitmodules"
+      - "extern/**"
+
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+  pull-requests: read
 
 jobs:
   build:
@@ -31,61 +32,75 @@ jobs:
       github.event_name != 'pull_request_target' ||
       github.event.pull_request.draft == false ||
       contains(github.event.pull_request.labels.*.name, 'force-build')
-    name: build plugin and addons
+    name: Build plugin and addons
     runs-on: windows-latest
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.get_version.outputs.version }}
     steps:
-        - uses: actions/checkout@v3
-          with:
-            submodules: recursive
+      - name: Checkout PR code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          submodules: recursive
 
-        - uses: ilammy/msvc-dev-cmd@v1.10.0
+      - uses: ilammy/msvc-dev-cmd@v1.10.0
 
-        - uses: lukka/run-vcpkg@v11.5
-          with:
-            vcpkgJsonGlob: vcpkg.json
+      - uses: lukka/run-vcpkg@v11.5
+        with:
+          vcpkgJsonGlob: vcpkg.json
 
-        - name: Cache CMake build output
-          uses: actions/cache@v3
-          with:
-            path: build/ALL
-            key: ${{ runner.os }}-build-${{ inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json', '**/CMakeLists.txt', '**/*.cpp', '**/*.c', '**/*.h', '**/*.hpp') }}
-            restore-keys: |
-              ${{ runner.os }}-build-
+      - name: Cache CMake build output
+        uses: actions/cache@v3
+        with:
+          path: build/ALL
+          key: ${{ runner.os }}-build-${{ inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json', '**/CMakeLists.txt', '**/*.cpp', '**/*.c', '**/*.h', '**/*.hpp') }}
+          restore-keys: |
+            ${{ runner.os }}-build-
 
-        - name: Build using run-cmake with ALL preset
-          uses: lukka/run-cmake@v10
-          with:
-            configurePreset: ALL
-            buildPreset: ALL
+      - name: Build using run-cmake with ALL preset
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: ALL
+          buildPreset: ALL
 
-        - name: extract version from CMake
-          id: get_version
-          shell: bash
-          run: |
-            VERSION=$(grep 'CMAKE_PROJECT_VERSION:STATIC' build/ALL/CMakeCache.txt | cut -d= -f2)
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
+      - name: Extract version from CMake
+        id: get_version
+        shell: bash
+        run: |
+          VERSION=$(grep 'CMAKE_PROJECT_VERSION:STATIC' build/ALL/CMakeCache.txt | cut -d= -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-        - name: Upload dist artifacts
-          if: success()
-          uses: actions/upload-artifact@v4
-          with:
-            name: dist-artifacts
-            path: dist/
+      - name: Upload dist artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-artifacts
+          path: dist/
 
   prerelease:
-    needs: build
     if: github.event_name == 'pull_request_target'
+    needs: build
     runs-on: windows-latest
+    permissions:
+      contents: write
+      pull-requests: read
     steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          submodules: recursive
+
       - name: Download dist artifacts
         uses: actions/download-artifact@v4
         with:
           name: dist-artifacts
           path: dist/
 
-      - name: upload prerelease
+      - name: Upload prerelease
         uses: ncipollo/release-action@v1
         with:
           name: "Community Shaders ${{ needs.build.outputs.version }} PR #${{ github.event.pull_request.number }}"
@@ -97,7 +112,7 @@ jobs:
           replacesArtifacts: true
           removeArtifacts: true
 
-      - name: comment on PR
+      - name: Comment on PR
         if: success()
         uses: thollander/actions-comment-pull-request@v3
         with:
@@ -111,13 +126,19 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
     steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          submodules: recursive
+
       - name: Download dist artifacts
         uses: actions/download-artifact@v4
         with:
           name: dist-artifacts
           path: dist/
 
-      - name: create tagged release
+      - name: Create tagged release
         uses: ncipollo/release-action@v1
         with:
           name: "Community Shaders ${{ github.ref_name }}"
