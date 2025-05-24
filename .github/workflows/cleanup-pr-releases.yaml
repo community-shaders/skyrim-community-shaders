@@ -15,6 +15,11 @@ jobs:
   cleanup-prereleases:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
       - name: Delete closed PR prereleases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
