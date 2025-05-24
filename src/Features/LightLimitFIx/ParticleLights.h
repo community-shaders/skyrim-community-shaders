@@ -9,12 +9,6 @@ public:
 		return &singleton;
 	}
 
-	enum class Flicker
-	{
-		None = 0,
-		Normal = 1
-	};
-
 	struct Config
 	{
 		bool cull = false;

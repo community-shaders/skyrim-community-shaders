@@ -1,4 +1,4 @@
-#include "Common.hlsli"
+#include "LightLimitFix/Common.hlsli"
 
 cbuffer PerFrame : register(b0)
 {
@@ -9,20 +9,20 @@ cbuffer PerFrame : register(b0)
 //https://github.com/pezcode/Cluster
 
 StructuredBuffer<ClusterAABB> clusters : register(t0);
-StructuredBuffer<StructuredLight> lights : register(t1);
+StructuredBuffer<Light> lights : register(t1);
 
 RWStructuredBuffer<uint> lightIndexCounter : register(u0);
 RWStructuredBuffer<uint> lightIndexList : register(u1);
 RWStructuredBuffer<LightGrid> lightGrid : register(u2);
 
-groupshared StructuredLight sharedLights[GROUP_SIZE];
+groupshared Light sharedLights[GROUP_SIZE];
 
-bool LightIntersectsCluster(StructuredLight light, ClusterAABB cluster, int eyeIndex = 0)
+bool LightIntersectsCluster(float3 position, float radius, ClusterAABB cluster)
 {
-	float3 closest = max(cluster.minPoint.xyz, min(light.positionVS[eyeIndex].xyz, cluster.maxPoint.xyz));
+	float3 closest = max(cluster.minPoint.xyz, min(position, cluster.maxPoint.xyz));
 
-	float3 dist = closest - light.positionVS[eyeIndex].xyz;
-	return dot(dist, dist) <= (light.radius * light.radius);
+	float3 dist = closest - position;
+	return dot(dist, dist) <= radius;
 }
 
 [numthreads(NUMTHREAD_X, NUMTHREAD_Y, NUMTHREAD_Z)] void main(
@@ -34,10 +34,6 @@ bool LightIntersectsCluster(StructuredLight light, ClusterAABB cluster, int eyeI
 	if (any(dispatchThreadId >= uint3(CLUSTER_BUILDING_DISPATCH_SIZE_X, CLUSTER_BUILDING_DISPATCH_SIZE_Y, CLUSTER_BUILDING_DISPATCH_SIZE_Z)))
 		return;
 
-	if (all(dispatchThreadId == 0)) {
-		lightIndexCounter[0] = 0;
-	}
-
 	uint visibleLightCount = 0;
 	uint visibleLightIndices[MAX_CLUSTER_LIGHTS];
 
@@ -47,36 +43,31 @@ bool LightIntersectsCluster(StructuredLight light, ClusterAABB cluster, int eyeI
 
 	ClusterAABB cluster = clusters[clusterIndex];
 
-	uint lightOffset = 0;
-	uint lightCount = LightCount;
+	if (groupIndex < LightCount) {
+		uint lightIndex = groupIndex;
+		Light light = lights[lightIndex];
+		sharedLights[groupIndex] = light;
+	}
 
-	while (lightOffset < lightCount) {
-		uint batchSize = min(GROUP_SIZE, lightCount - lightOffset);
+	GroupMemoryBarrierWithGroupSync();
 
-		if (groupIndex < batchSize) {
-			uint lightIndex = lightOffset + groupIndex;
-			StructuredLight light = lights[lightIndex];
-			sharedLights[groupIndex] = light;
+	for (uint i = 0; i < LightCount; i++) {
+		Light light = lights[i];
+
+		float radius = light.radius * light.radius;
+
+#if defined(VR)
+		[branch] if (LightIntersectsCluster(light.positionVS[0].xyz, radius, cluster) || LightIntersectsCluster(light.positionVS[1].xyz, radius, cluster))
+		{
+#else
+		[branch] if (LightIntersectsCluster(light.positionVS[0].xyz, radius, cluster))
+		{
+#endif
+			visibleLightIndices[visibleLightCount] = i;
+			visibleLightCount++;
+			if (visibleLightCount >= MAX_CLUSTER_LIGHTS)
+				break;
 		}
-
-		GroupMemoryBarrierWithGroupSync();
-
-		for (uint i = 0; i < batchSize; i++) {
-			StructuredLight light = lights[i];
-
-			bool updateCluster = LightIntersectsCluster(light, cluster);
-#ifdef VR
-			updateCluster = updateCluster || LightIntersectsCluster(light, cluster, 1);
-#endif  // VR
-			updateCluster = updateCluster && (visibleLightCount < MAX_CLUSTER_LIGHTS);
-
-			if (updateCluster) {
-				visibleLightIndices[visibleLightCount] = lightOffset + i;
-				visibleLightCount++;
-			}
-		}
-
-		lightOffset += batchSize;
 	}
 
 	GroupMemoryBarrierWithGroupSync();

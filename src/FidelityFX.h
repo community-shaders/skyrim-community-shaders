@@ -4,6 +4,12 @@
 #include <FidelityFX/host/ffx_fsr3.h>
 #include <FidelityFX/host/ffx_interface.h>
 
+#include <dx12/ffx_api_dx12.h>
+#include <ffx_api.hpp>
+#include <ffx_api_loader.h>
+#include <ffx_api_types.h>
+#include <ffx_framegeneration.hpp>
+
 #include "Buffer.h"
 #include "State.h"
 
@@ -16,9 +22,20 @@ public:
 		return &singleton;
 	}
 
+	HMODULE module = nullptr;
+
+	ffx::Context swapChainContext{};
+	ffx::Context frameGenContext;
+
 	FfxFsr3Context fsrContext;
+
+	void LoadFFX();
+
+	void SetupFrameGeneration();
+
+	void Present(bool a_useFrameGeneration);
 
 	void CreateFSRResources();
 	void DestroyFSRResources();
-	void Upscale(Texture2D* a_color);
+	void Upscale(Texture2D* a_color, Texture2D* a_alphaMask, float2 a_jitter, float a_sharpness);
 };

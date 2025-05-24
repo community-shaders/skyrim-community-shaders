@@ -48,7 +48,7 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 	float4 colorCC = ImageTex.Sample(ImageSampler, input.TexCoord);
-	float luminance = RGBToLuminanceAlternative(colorCC.xyz);
+	float luminance = Color::RGBToLuminanceAlternative(colorCC.xyz);
 
 	float alpha = (dot(4 * (pow(colorLR, 2) + pow(colorBT, 2)), 1.75) + luminance) * (1 - colorCC.w);
 	float2 edgeFadeFactor = 1 - pow(2 * abs(input.TexCoord - 0.5), 5);

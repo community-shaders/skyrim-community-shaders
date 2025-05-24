@@ -1,147 +1,183 @@
 
 #include "Common/Color.hlsli"
-#include "Common/DeferredShared.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
+#include "Common/MotionBlur.hlsli"
+#include "Common/SharedData.hlsli"
+#include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
 #include "Common/VR.hlsli"
 
-Texture2D<half3> SpecularTexture : register(t0);
-Texture2D<unorm half3> AlbedoTexture : register(t1);
-Texture2D<unorm half3> NormalRoughnessTexture : register(t2);
-Texture2D<unorm half3> MasksTexture : register(t3);
-Texture2D<unorm half3> Masks2Texture : register(t4);
+Texture2D<float3> SpecularTexture : register(t0);
+Texture2D<unorm float3> AlbedoTexture : register(t1);
+Texture2D<unorm float3> NormalRoughnessTexture : register(t2);
+Texture2D<unorm float3> MasksTexture : register(t3);
 
-RWTexture2D<half3> MainRW : register(u0);
-RWTexture2D<half4> NormalTAAMaskSpecularMaskRW : register(u1);
-RWTexture2D<half2> SnowParametersRW : register(u2);
+RWTexture2D<float4> MainRW : register(u0);
+RWTexture2D<float4> NormalTAAMaskSpecularMaskRW : register(u1);
+RWTexture2D<float2> MotionVectorsRW : register(u2);
+Texture2D<float> DepthTexture : register(t4);
 
 #if defined(DYNAMIC_CUBEMAPS)
-Texture2D<float> DepthTexture : register(t5);
-Texture2D<half3> ReflectanceTexture : register(t6);
-TextureCube<half3> EnvTexture : register(t7);
-TextureCube<half3> EnvReflectionsTexture : register(t8);
+Texture2D<float3> ReflectanceTexture : register(t5);
+TextureCube<float3> EnvTexture : register(t6);
+TextureCube<float3> EnvReflectionsTexture : register(t7);
 
 SamplerState LinearSampler : register(s0);
 #endif
 
 #if defined(SKYLIGHTING)
-#	define SL_INCL_STRUCT
-#	define SL_INCL_METHODS
 #	include "Skylighting/Skylighting.hlsli"
 
-cbuffer SkylightingCB : register(b1)
-{
-	SkylightingSettings skylightingSettings;
-};
+Texture3D<sh2> SkylightingProbeArray : register(t8);
+Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t9);
 
-Texture3D<sh2> SkylightingProbeArray : register(t9);
 #endif
 
 #if defined(SSGI)
-Texture2D<half4> SpecularSSGITexture : register(t10);
+Texture2D<float4> SsgiAoTexture : register(t10);
+Texture2D<float4> SsgiYTexture : register(t11);
+Texture2D<float4> SsgiCoCgTexture : register(t12);
+Texture2D<float4> SsgiSpecularTexture : register(t13);
+
+void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, in float3 normal, in float3 view)
+{
+	// https://www.iryoku.com/stare-into-the-future/
+	ao = 1 - SsgiAoTexture[pixCoord].x;
+	const float SpecularPow = 8.0;
+	float NdotV = dot(normal, view);
+	float s = saturate(-0.3 + NdotV * NdotV);
+	ao = lerp(pow(ao, SpecularPow), 1.0, s);
+
+	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
+	float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, lobe);
+	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord].xy;
+	// specular is a bit too saturated, because CoCg are average over hemisphere
+	// we just cheese this bit
+	ssgiIlCoCg *= 0.8;
+
+	// pi to compensate for the /pi in specularLobe
+	// i don't think there really should be a 1/PI but without it the specular is too strong
+	// reflectance being ambient reflectance doesn't help either
+	il = max(0, Color::YCoCgToRGB(float3(ssgiIlY, ssgiIlCoCg / Math::PI)));
+
+	// HQ spec
+	float4 hq_spec = SsgiSpecularTexture[pixCoord];
+	ao *= 1 - hq_spec.a;
+	il += hq_spec.rgb;
+}
 #endif
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID
 								: SV_DispatchThreadID) {
-	half2 uv = half2(dispatchID.xy + 0.5) * BufferDim.zw * DynamicResolutionParams2.xy;
-	uint eyeIndex = GetEyeIndexFromTexCoord(uv);
-	uv = ConvertFromStereoUV(uv, eyeIndex);
+	float2 uv = float2(dispatchID.xy + 0.5) * SharedData::BufferDim.zw;
+	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
+	uv *= FrameBuffer::DynamicResolutionParams2.xy;  // Adjust for dynamic res
+	uv = Stereo::ConvertFromStereoUV(uv, eyeIndex);
 
-	half3 normalGlossiness = NormalRoughnessTexture[dispatchID.xy];
-	half3 normalVS = DecodeNormal(normalGlossiness.xy);
+	float3 normalGlossiness = NormalRoughnessTexture[dispatchID.xy];
+	float3 normalVS = GBuffer::DecodeNormal(normalGlossiness.xy);
 
-	half3 diffuseColor = MainRW[dispatchID.xy];
-	half3 specularColor = SpecularTexture[dispatchID.xy];
-	half3 albedo = AlbedoTexture[dispatchID.xy];
-	half3 masks2 = Masks2Texture[dispatchID.xy];
+	float3 diffuseColor = MainRW[dispatchID.xy].xyz;
+	float3 specularColor = SpecularTexture[dispatchID.xy];
+	float3 albedo = AlbedoTexture[dispatchID.xy];
 
-	half2 snowParameters = masks2.xy;
-	half pbrWeight = masks2.z;
+	float depth = DepthTexture[dispatchID.xy];
+	float4 positionWS = float4(2 * float2(uv.x, -uv.y + 1) - 1, depth, 1);
+	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
+	positionWS.xyz = positionWS.xyz / positionWS.w;
 
-	half glossiness = normalGlossiness.z;
+	if (depth == 1.0)
+		MotionVectorsRW[dispatchID.xy] = MotionBlur::GetSSMotionVector(positionWS, positionWS, eyeIndex);  // Apply sky motion vectors
 
-	half3 color = lerp(diffuseColor + specularColor, LinearToGamma(GammaToLinear(diffuseColor) + GammaToLinear(specularColor)), pbrWeight);
+	float glossiness = normalGlossiness.z;
+
+	float3 color = Color::GammaToLinear(diffuseColor) + specularColor;
 
 #if defined(DYNAMIC_CUBEMAPS)
 
-	half3 reflectance = ReflectanceTexture[dispatchID.xy];
+	float3 reflectance = ReflectanceTexture[dispatchID.xy];
 
 	if (reflectance.x > 0.0 || reflectance.y > 0.0 || reflectance.z > 0.0) {
-		half3 normalWS = normalize(mul(CameraViewInverse[eyeIndex], half4(normalVS, 0)).xyz);
+		float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
 
-		half wetnessMask = MasksTexture[dispatchID.xy].z;
+		float wetnessMask = MasksTexture[dispatchID.xy].z;
 
 		normalWS = lerp(normalWS, float3(0, 0, 1), wetnessMask);
 
-		color = GammaToLinear(color);
+		float3 V = normalize(positionWS.xyz);
+		float3 R = reflect(V, normalWS);
 
-		half depth = DepthTexture[dispatchID.xy];
+		float roughness = 1.0 - glossiness;
+		float level = roughness * 7.0;
 
-		half4 positionCS = half4(2 * half2(uv.x, -uv.y + 1) - 1, depth, 1);
-		positionCS = mul(CameraViewProjInverse[eyeIndex], positionCS);
-		positionCS.xyz = positionCS.xyz / positionCS.w;
+		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(normalWS, -V, roughness);
 
-		half3 positionWS = positionCS.xyz;
-
-		half3 V = normalize(positionWS);
-		half3 R = reflect(V, normalWS);
-
-		half roughness = 1.0 - glossiness;
-		half level = roughness * 7.0;
-
-		half3 directionalAmbientColor = GammaToLinear(mul(DirectionalAmbient, half4(R, 1.0))) / LightPreMult;
-		half3 finalIrradiance = 0;
+		float3 finalIrradiance = 0;
 
 #	if defined(INTERIOR)
-		half3 specularIrradiance = EnvTexture.SampleLevel(LinearSampler, R, level).xyz;
-		specularIrradiance = GammaToLinear(specularIrradiance);
+		float3 specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(LinearSampler, R, level));
 
 		finalIrradiance += specularIrradiance;
 #	elif defined(SKYLIGHTING)
 #		if defined(VR)
-		float3 positionMS = positionWS + CameraPosAdjust[eyeIndex] - CameraPosAdjust[0];
+		float3 positionMS = positionWS.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
 #		else
-		float3 positionMS = positionWS;
+		float3 positionMS = positionWS.xyz;
 #		endif
 
-		sh2 skylighting = Skylighting::sample(skylightingSettings, SkylightingProbeArray, positionMS.xyz, normalWS);
-		sh2 specularLobe = Skylighting::fauxSpecularLobeSH(normalWS, -V, roughness);
+		sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, SkylightingProbeArray, stbn_vec3_2Dx1D_128x128x64, dispatchID.xy, positionMS.xyz, R);
 
-		half skylightingSpecular = shFuncProductIntegral(skylighting, specularLobe);
-		skylightingSpecular = Skylighting::mixSpecular(skylightingSettings, skylightingSpecular);
+		float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
+		skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
 
-		half3 specularIrradiance = 1;
+		float3 specularIrradiance = 1;
 
-		if (skylightingSpecular < 1.0) {
-			specularIrradiance = EnvTexture.SampleLevel(LinearSampler, R, level).xyz;
-			specularIrradiance = GammaToLinear(specularIrradiance);
-		}
+		if (skylightingSpecular < 1.0)
+			specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(LinearSampler, R, level));
 
-		half3 specularIrradianceReflections = 1.0;
+		float3 specularIrradianceReflections = 1.0;
 
-		if (skylightingSpecular > 0.0) {
-			specularIrradianceReflections = EnvReflectionsTexture.SampleLevel(LinearSampler, R, level).xyz;
-			specularIrradianceReflections = GammaToLinear(specularIrradianceReflections);
-		}
-		finalIrradiance = finalIrradiance * skylightingSpecular + lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
+		if (skylightingSpecular > 0.0)
+			specularIrradianceReflections = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(LinearSampler, R, level));
+
+		finalIrradiance = lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
 #	else
-		half3 specularIrradianceReflections = EnvReflectionsTexture.SampleLevel(LinearSampler, R, level).xyz;
-		specularIrradianceReflections = GammaToLinear(specularIrradianceReflections);
+		float3 specularIrradianceReflections = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(LinearSampler, R, level));
 
 		finalIrradiance += specularIrradianceReflections;
 #	endif
 
 #	if defined(SSGI)
-		half4 ssgiSpecular = SpecularSSGITexture[dispatchID.xy];
-		finalIrradiance = finalIrradiance * (1 - ssgiSpecular.a) + ssgiSpecular.rgb;
+#		if defined(VR)
+		float3 uvF = float3((dispatchID.xy + 0.5) * SharedData::BufferDim.zw, DepthTexture[dispatchID.xy]);  // calculate high precision uv of initial eye
+		float3 uv2 = Stereo::ConvertStereoUVToOtherEyeStereoUV(uvF, eyeIndex, false);                        // calculate other eye uv
+		float3 uv1Mono = Stereo::ConvertFromStereoUV(uvF, eyeIndex);
+		float3 uv2Mono = Stereo::ConvertFromStereoUV(uv2, (1 - eyeIndex));
+		uint2 pixCoord2 = (uint2)(uv2.xy / SharedData::BufferDim.zw - 0.5);
+#		endif
+
+		float ssgiAo;
+		float3 ssgiIlSpecular;
+		SampleSSGISpecular(dispatchID.xy, specularLobe, ssgiAo, ssgiIlSpecular, normalWS, V);
+
+#		if defined(VR)
+		float ssgiAo2;
+		float3 ssgiIlSpecular2;
+		SampleSSGISpecular(pixCoord2, specularLobe, ssgiAo2, ssgiIlSpecular2, normalWS, V);
+		float4 ssgiMixed = Stereo::BlendEyeColors(uv1Mono, float4(ssgiIlSpecular, ssgiAo), uv2Mono, float4(ssgiIlSpecular2, ssgiAo2));
+		ssgiAo = ssgiMixed.a;
+		ssgiIlSpecular = ssgiMixed.rgb;
+#		endif
+
+		finalIrradiance = (finalIrradiance * ssgiAo) + ssgiIlSpecular;
 #	endif
 
 		color += reflectance * finalIrradiance;
-
-		color = LinearToGamma(color);
 	}
 
 #endif
+
+	color = Color::LinearToGamma(color);
 
 #if defined(DEBUG)
 
@@ -161,7 +197,6 @@ Texture2D<half4> SpecularSSGITexture : register(t10);
 
 #endif
 
-	MainRW[dispatchID.xy] = min(color, 250);  // Vanilla bloom fix
-	NormalTAAMaskSpecularMaskRW[dispatchID.xy] = half4(EncodeNormalVanilla(normalVS), 0.0, 0.0);
-	SnowParametersRW[dispatchID.xy] = snowParameters;
+	MainRW[dispatchID.xy] = float4(color, 1.0);
+	NormalTAAMaskSpecularMaskRW[dispatchID.xy] = float4(GBuffer::EncodeNormalVanilla(normalVS), 0.0, 0.0);
 }

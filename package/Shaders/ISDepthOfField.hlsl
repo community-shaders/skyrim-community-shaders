@@ -37,7 +37,7 @@ void CheckOffsetDepth(float2 center, float2 offset, inout float crossSection,
 	inout float totalDepth)
 {
 	float depth = DepthTex
-	                  .Sample(DepthSampler, GetDynamicResolutionAdjustedScreenPosition(
+	                  .Sample(DepthSampler, FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(
 												invScreenRes.xy * offset + center))
 	                  .x;
 
@@ -58,7 +58,7 @@ PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
 
-	float2 adjustedTexCoord = GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
+	float2 adjustedTexCoord = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 
 	float3 imageColor = ImageTex.Sample(ImageSampler, adjustedTexCoord).xyz;
 	float3 blurColor = BlurredTex.Sample(BlurredSampler, adjustedTexCoord).xyz;
@@ -84,7 +84,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif
 
 	float depthCC =
-		DepthTex.Sample(DepthSampler, GetDynamicResolutionAdjustedScreenPosition(input.TexCoord)).x;
+		DepthTex.Sample(DepthSampler, FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord)).x;
 
 	float crossSection = 0;
 	float avgDepth = depthCC;

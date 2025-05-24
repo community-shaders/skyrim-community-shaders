@@ -42,7 +42,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float4 color = 0;
 	for (float sampleIndex = -NUM_STEPS; sampleIndex <= NUM_STEPS; ++sampleIndex) {
 		float2 texCoord = input.TexCoord + sampleDelta * sampleIndex;
-		float2 adjustedTexCoord = GetDynamicResolutionAdjustedScreenPosition(texCoord);
+		float2 adjustedTexCoord = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(texCoord);
 		float4 currentColor = ImageTex.SampleLevel(ImageSampler, adjustedTexCoord, 0);
 		color += currentColor;
 	}

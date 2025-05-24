@@ -1,30 +1,5 @@
 #include "WetnessEffects.h"
 
-#include "Util.h"
-
-const float MIN_START_PERCENTAGE = 0.05f;
-const float DEFAULT_TRANSITION_PERCENTAGE = 1.0f;
-const float TRANSITION_CURVE_MULTIPLIER = 2.0f;
-const float TRANSITION_DENOMINATOR = 256.0f;
-const float DRY_WETNESS = 0.0f;
-const float RAIN_DELTA_PER_SECOND = 2.0f / 3600.0f;
-const float SNOWY_DAY_DELTA_PER_SECOND = -0.489f / 3600.0f;  // Only doing evaporation until snow wetness feature is added
-const float CLOUDY_DAY_DELTA_PER_SECOND = -0.735f / 3600.0f;
-const float CLEAR_DAY_DELTA_PER_SECOND = -1.518f / 3600.0f;
-const float WETNESS_SCALE = 2.0;  // Speed at which wetness builds up and drys.
-const float PUDDLE_SCALE = 1.0;   // Speed at which puddles build up and dry
-const float MAX_PUDDLE_DEPTH = 3.0f;
-const float MAX_WETNESS_DEPTH = 2.0f;
-const float MAX_PUDDLE_WETNESS = 1.0f;
-const float MAX_WETNESS = 1.0f;
-const float SECONDS_IN_A_DAY = 86400;
-const float MAX_TIME_DELTA = SECONDS_IN_A_DAY - 30;
-const float MIN_WEATHER_TRANSITION_SPEED = 0.0f;
-const float MAX_WEATHER_TRANSITION_SPEED = 500.0f;
-const float AVERAGE_RAIN_VOLUME = 4000.0f;
-const float MIN_RAINDROP_CHANCE_MULTIPLIER = 0.1f;
-const float MAX_RAINDROP_CHANCE_MULTIPLIER = 2.0f;
-
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	WetnessEffects::Settings,
 	EnableWetnessEffects,
@@ -41,8 +16,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EnableRaindropFx,
 	EnableSplashes,
 	EnableRipples,
-	EnableChaoticRipples,
-	RaindropFxRange,
 	RaindropGridSize,
 	RaindropInterval,
 	RaindropChance,
@@ -53,10 +26,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	RippleStrength,
 	RippleRadius,
 	RippleBreadth,
-	RippleLifetime,
-	ChaoticRippleStrength,
-	ChaoticRippleScale,
-	ChaoticRippleSpeed)
+	RippleLifetime)
 
 void WetnessEffects::DrawSettings()
 {
@@ -86,17 +56,11 @@ void WetnessEffects::DrawSettings()
 		ImGui::Checkbox("Enable Ripples", (bool*)&settings.EnableRipples);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("Enables circular ripples on puddles, and to a less extent other wet surfaces");
-		ImGui::Checkbox("Enable Chaotic Ripples", (bool*)&settings.EnableChaoticRipples);
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("Enables an additional layer of disturbance to wet surfaces.");
-
-		ImGui::SliderFloat("Effect Range", &settings.RaindropFxRange, 1e2f, 2e3f, "%.0f game unit(s)");
 
 		if (ImGui::TreeNodeEx("Raindrops")) {
 			ImGui::BulletText(
 				"At every interval, a raindrop is placed within each grid cell.\n"
-				"Only a set portion of raindrops will actually trigger splashes and ripples.\n"
-				"Chaotic ripples are not affected by raindrop settings.");
+				"Only a set portion of raindrops will actually trigger splashes and ripples.\n");
 
 			ImGui::SliderFloat("Grid Size", &settings.RaindropGridSize, 1.f, 10.f, "%.1f game unit(s)");
 			ImGui::SliderFloat("Interval", &settings.RaindropInterval, 0.1f, 2.f, "%.1f sec");
@@ -125,13 +89,6 @@ void WetnessEffects::DrawSettings()
 				ImGui::Text("As portion of grid size.");
 			ImGui::SliderFloat("Breadth", &settings.RippleBreadth, 0.f, 1.f, "%.2f");
 			ImGui::SliderFloat("Lifetime", &settings.RippleLifetime, 0.f, settings.RaindropInterval, "%.2f sec", ImGuiSliderFlags_AlwaysClamp);
-			ImGui::TreePop();
-		}
-
-		if (ImGui::TreeNodeEx("Chaotic Ripples")) {
-			ImGui::SliderFloat("Strength", &settings.ChaoticRippleStrength, 0.f, .5f, "%.2f");
-			ImGui::SliderFloat("Scale", &settings.ChaoticRippleScale, 0.1f, 5.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-			ImGui::SliderFloat("Speed", &settings.ChaoticRippleSpeed, 0.f, 50.f, "%.1f");
 			ImGui::TreePop();
 		}
 
@@ -192,161 +149,126 @@ void WetnessEffects::DrawSettings()
 
 	ImGui::Spacing();
 	ImGui::Spacing();
-
-	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Text(std::format("Wetness depth : {:.2f}", wetnessDepth / WETNESS_SCALE).c_str());
-		ImGui::Text(std::format("Puddle depth : {:.2f}", puddleDepth / PUDDLE_SCALE).c_str());
-		ImGui::Spacing();
-		ImGui::Spacing();
-		ImGui::Text(std::format("Current weather : {0:X}", currentWeatherID).c_str());
-		ImGui::Text(std::format("Previous weather : {0:X}", lastWeatherID).c_str());
-		ImGui::TreePop();
-	}
-}
-
-float WetnessEffects::CalculateWeatherTransitionPercentage(float skyCurrentWeatherPct, float beginFade, bool fadeIn)
-{
-	float weatherTransitionPercentage = DEFAULT_TRANSITION_PERCENTAGE;
-	// Correct if beginFade is zero or negative
-	beginFade = beginFade > 0 ? beginFade : beginFade + TRANSITION_DENOMINATOR;
-	// Wait to start transition until precipitation begins/ends
-	float startPercentage = 1 - ((TRANSITION_DENOMINATOR - beginFade) * (1.0f / TRANSITION_DENOMINATOR));
-
-	if (fadeIn) {
-		float currentPercentage = (skyCurrentWeatherPct - startPercentage) / (1 - startPercentage);
-		weatherTransitionPercentage = std::clamp(currentPercentage, 0.0f, 1.0f);
-	} else {
-		float currentPercentage = (startPercentage - skyCurrentWeatherPct) / (startPercentage);
-		weatherTransitionPercentage = 1 - std::clamp(currentPercentage, 0.0f, 1.0f);
-	}
-	return weatherTransitionPercentage;
-}
-
-void WetnessEffects::CalculateWetness(RE::TESWeather* weather, RE::Sky* sky, float seconds, float& weatherWetnessDepth, float& weatherPuddleDepth)
-{
-	float wetnessDepthDelta = CLEAR_DAY_DELTA_PER_SECOND * WETNESS_SCALE * seconds;
-	float puddleDepthDelta = CLEAR_DAY_DELTA_PER_SECOND * PUDDLE_SCALE * seconds;
-	if (weather && sky) {
-		// Figure out the weather type and set the wetness
-		if (weather->precipitationData && weather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy)) {
-			// Raining
-			wetnessDepthDelta = RAIN_DELTA_PER_SECOND * WETNESS_SCALE * seconds;
-			puddleDepthDelta = RAIN_DELTA_PER_SECOND * PUDDLE_SCALE * seconds;
-		} else if (weather->precipitationData && weather->data.flags.any(RE::TESWeather::WeatherDataFlag::kSnow)) {
-			wetnessDepthDelta = SNOWY_DAY_DELTA_PER_SECOND * WETNESS_SCALE * seconds;
-			puddleDepthDelta = SNOWY_DAY_DELTA_PER_SECOND * PUDDLE_SCALE * seconds;
-		} else if (weather->data.flags.any(RE::TESWeather::WeatherDataFlag::kCloudy)) {
-			wetnessDepthDelta = CLOUDY_DAY_DELTA_PER_SECOND * WETNESS_SCALE * seconds;
-			puddleDepthDelta = CLOUDY_DAY_DELTA_PER_SECOND * PUDDLE_SCALE * seconds;
-		}
-	}
-
-	weatherWetnessDepth = wetnessDepthDelta > 0 ? std::min(weatherWetnessDepth + wetnessDepthDelta, MAX_WETNESS_DEPTH) : std::max(weatherWetnessDepth + wetnessDepthDelta, 0.0f);
-	weatherPuddleDepth = puddleDepthDelta > 0 ? std::min(weatherPuddleDepth + puddleDepthDelta, MAX_PUDDLE_DEPTH) : std::max(weatherPuddleDepth + puddleDepthDelta, 0.0f);
 }
 
 WetnessEffects::PerFrame WetnessEffects::GetCommonBufferData()
 {
 	PerFrame data{};
-	data.Wetness = DRY_WETNESS;
-	data.PuddleWetness = DRY_WETNESS;
-	currentWeatherID = 0;
-	uint32_t previousLastWeatherID = lastWeatherID;
-	lastWeatherID = 0;
-	float currentWeatherRaining = 0.0f;
-	float lastWeatherRaining = 0.0f;
-	float weatherTransitionPercentage = previousWeatherTransitionPercentage;
+
+	data.Raining = 0.0f;
+	data.Wetness = 0.0f;
+	data.PuddleWetness = 0.0f;
 
 	if (settings.EnableWetnessEffects) {
-		if (auto sky = RE::Sky::GetSingleton()) {
+		if (auto sky = globals::game::sky) {
 			if (sky->mode.get() == RE::Sky::Mode::kFull) {
-				if (auto currentWeather = sky->currentWeather) {
-					if (currentWeather->precipitationData && currentWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy)) {
-						float rainDensity = currentWeather->precipitationData->data[static_cast<int>(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity)].f;
-						float rainGravity = currentWeather->precipitationData->data[static_cast<int>(RE::BGSShaderParticleGeometryData::DataID::kGravityVelocity)].f;
-						currentWeatherRaining = std::clamp(((rainDensity * rainGravity) / AVERAGE_RAIN_VOLUME), MIN_RAINDROP_CHANCE_MULTIPLIER, MAX_RAINDROP_CHANCE_MULTIPLIER);
-					}
-					currentWeatherID = currentWeather->GetFormID();
-					if (auto calendar = RE::Calendar::GetSingleton()) {
-						float currentWeatherWetnessDepth = wetnessDepth;
-						float currentWeatherPuddleDepth = puddleDepth;
-						float currentGameTime = calendar->GetCurrentGameTime() * SECONDS_IN_A_DAY;
-						lastGameTimeValue = lastGameTimeValue == 0 ? currentGameTime : lastGameTimeValue;
-						float seconds = currentGameTime - lastGameTimeValue;
-						lastGameTimeValue = currentGameTime;
+				if (auto precip = sky->precip) {
+					float currentRaining = 0.0f;
+					float lastRaining = 0.0f;
 
-						if (abs(seconds) >= MAX_TIME_DELTA) {
-							// If too much time has passed, snap wetness depths to the current weather.
-							seconds = 0.0f;
-							currentWeatherWetnessDepth = 0.0f;
-							currentWeatherPuddleDepth = 0.0f;
-							weatherTransitionPercentage = DEFAULT_TRANSITION_PERCENTAGE;
-							CalculateWetness(currentWeather, sky, 1.0f, currentWeatherWetnessDepth, currentWeatherPuddleDepth);
-							wetnessDepth = currentWeatherWetnessDepth > 0 ? MAX_WETNESS_DEPTH : 0.0f;
-							puddleDepth = currentWeatherPuddleDepth > 0 ? MAX_PUDDLE_DEPTH : 0.0f;
+					{
+						auto precipObject = precip->currentPrecip;
+						if (!precipObject) {
+							precipObject = precip->lastPrecip;
 						}
-
-						if (seconds > 0 || (seconds < 0 && (wetnessDepth > 0 || puddleDepth > 0))) {
-							weatherTransitionPercentage = DEFAULT_TRANSITION_PERCENTAGE;
-							float lastWeatherWetnessDepth = wetnessDepth;
-							float lastWeatherPuddleDepth = puddleDepth;
-							seconds *= std::clamp(settings.WeatherTransitionSpeed, MIN_WEATHER_TRANSITION_SPEED, MAX_WEATHER_TRANSITION_SPEED);
-							CalculateWetness(currentWeather, sky, seconds, currentWeatherWetnessDepth, currentWeatherPuddleDepth);
-							// If there is a lastWeather, figure out what type it is and set the wetness
-							if (auto lastWeather = sky->lastWeather) {
-								lastWeatherID = lastWeather->GetFormID();
-								CalculateWetness(lastWeather, sky, seconds, lastWeatherWetnessDepth, lastWeatherPuddleDepth);
-								// If it was raining, wait to transition until precipitation ends, otherwise use the current weather's fade in
-								if (lastWeather->precipitationData && lastWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy)) {
-									float rainDensity = lastWeather->precipitationData->data[static_cast<int>(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity)].f;
-									float rainGravity = lastWeather->precipitationData->data[static_cast<int>(RE::BGSShaderParticleGeometryData::DataID::kGravityVelocity)].f;
-									lastWeatherRaining = std::clamp(((rainDensity * rainGravity) / AVERAGE_RAIN_VOLUME), MIN_RAINDROP_CHANCE_MULTIPLIER, MAX_RAINDROP_CHANCE_MULTIPLIER);
-									weatherTransitionPercentage = CalculateWeatherTransitionPercentage(sky->currentWeatherPct, lastWeather->data.precipitationEndFadeOut, false);
-								} else {
-									weatherTransitionPercentage = CalculateWeatherTransitionPercentage(sky->currentWeatherPct, currentWeather->data.precipitationBeginFadeIn, true);
-								}
-							}
-
-							// Transition between CurrentWeather and LastWeather depth values
-							wetnessDepth = std::lerp(lastWeatherWetnessDepth, currentWeatherWetnessDepth, weatherTransitionPercentage);
-							puddleDepth = std::lerp(lastWeatherPuddleDepth, currentWeatherPuddleDepth, weatherTransitionPercentage);
-						} else {
-							lastWeatherID = previousLastWeatherID;
+						if (precipObject) {
+							auto& effect = precipObject->GetGeometryRuntimeData().properties[RE::BSGeometry::States::kEffect];
+							auto shaderProp = netimmerse_cast<RE::BSShaderProperty*>(effect.get());
+							auto particleShaderProperty = netimmerse_cast<RE::BSParticleShaderProperty*>(shaderProp);
+							auto rain = (RE::BSParticleShaderRainEmitter*)(particleShaderProperty->particleEmitter);
+							data.OcclusionViewProj = rain->occlusionProjection;
 						}
-
-						// Calculate the wetness value from the water depth
-						data.Wetness = std::min(wetnessDepth, MAX_WETNESS);
-						data.PuddleWetness = std::min(puddleDepth, MAX_PUDDLE_WETNESS);
-						data.Raining = std::lerp(lastWeatherRaining, currentWeatherRaining, weatherTransitionPercentage);
-						previousWeatherTransitionPercentage = weatherTransitionPercentage;
 					}
+
+					if (precip->currentPrecip && sky->currentWeather && sky->currentWeather->precipitationData) {
+						auto& precipObject = precip->currentPrecip;
+						auto weather = sky->currentWeather;
+
+						auto& effect = precipObject->GetGeometryRuntimeData().properties[RE::BSGeometry::States::kEffect];
+						auto shaderProp = netimmerse_cast<RE::BSShaderProperty*>(effect.get());
+						auto particleShaderProperty = netimmerse_cast<RE::BSParticleShaderProperty*>(shaderProp);
+
+						auto rain = (RE::BSParticleShaderRainEmitter*)(particleShaderProperty->particleEmitter);
+						if (rain->emitterType.any(RE::BSParticleShaderEmitter::EMITTER_TYPE::kRain)) {
+							auto maxDensity = weather->precipitationData->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;
+							if (maxDensity > 0.0f)
+								currentRaining = rain->density / maxDensity;
+						}
+					}
+
+					if (precip->lastPrecip && sky->lastWeather && sky->lastWeather->precipitationData) {
+						auto& precipObject = precip->lastPrecip;
+						auto weather = sky->lastWeather;
+
+						auto& effect = precipObject->GetGeometryRuntimeData().properties[RE::BSGeometry::States::kEffect];
+						auto shaderProp = netimmerse_cast<RE::BSShaderProperty*>(effect.get());
+						auto particleShaderProperty = netimmerse_cast<RE::BSParticleShaderProperty*>(shaderProp);
+						auto rain = (RE::BSParticleShaderRainEmitter*)(particleShaderProperty->particleEmitter);
+						if (rain->emitterType.any(RE::BSParticleShaderEmitter::EMITTER_TYPE::kRain)) {
+							auto maxDensity = weather->precipitationData->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;
+							if (maxDensity > 0.0f)
+								lastRaining = rain->density / maxDensity;
+						}
+					}
+
+					data.Raining = std::min(1.0f, currentRaining + lastRaining);
 				}
+
+				auto linearstep = [](float edge0, float edge1, float x) {
+					return std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+				};
+
+				float wetnessCurrentWeather = 0.0f;
+				float puddleCurrentWeather = 0.0f;
+
+				if (sky->currentWeather && sky->currentWeather->precipitationData && sky->currentWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy)) {
+					wetnessCurrentWeather = linearstep(255.0f + (float)sky->currentWeather->data.precipitationBeginFadeIn, 255, sky->currentWeatherPct * 255);
+					puddleCurrentWeather = pow(wetnessCurrentWeather, 2.0f);
+				}
+
+				float wetnessLastWeather = 0.0f;
+				float puddleLastWeather = 0.0f;
+
+				if (sky->lastWeather && sky->lastWeather->precipitationData && sky->lastWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy)) {
+					wetnessLastWeather = 1.0f - linearstep((float)sky->lastWeather->data.precipitationEndFadeOut, 255, sky->currentWeatherPct * 255);
+					puddleLastWeather = pow(std::max(wetnessLastWeather, 1.0f - sky->currentWeatherPct), 0.25f);
+				}
+
+				float wetness = std::min(1.0f, wetnessCurrentWeather + wetnessLastWeather);
+				float puddleWetness = std::min(1.0f, puddleCurrentWeather + puddleLastWeather);
+
+				data.Wetness = wetness;
+				data.PuddleWetness = puddleWetness;
 			}
 		}
 	}
 
-	static size_t rainTimer = 0;                                       // size_t for precision
-	if (!RE::UI::GetSingleton()->GameIsPaused())                       // from lightlimitfix
+	static size_t rainTimer = 0;  // size_t for precision
+	if (!globals::game::ui->GameIsPaused())
 		rainTimer += (size_t)(RE::GetSecondsSinceLastFrame() * 1000);  // BSTimer::delta is always 0 for some reason
 	data.Time = rainTimer / 1000.f;
 
 	data.settings = settings;
 	// Disable Shore Wetness if Wetness Effects are Disabled
 	data.settings.MaxShoreWetness = settings.EnableWetnessEffects ? settings.MaxShoreWetness : 0.0f;
-	// calculating some parameters on cpu
-	data.settings.RaindropChance *= data.Raining;
-	data.settings.RaindropGridSize = 1.f / settings.RaindropGridSize;
-	data.settings.RaindropInterval = 1.f / settings.RaindropInterval;
+
+	// Calculating some parameters on cpu
+	data.settings.RaindropChance *= data.Raining * data.Raining;
+	data.settings.RaindropGridSize = 1.0f / settings.RaindropGridSize;
+	data.settings.RaindropInterval = 1.0f / settings.RaindropInterval;
 	data.settings.RippleLifetime = settings.RaindropInterval / settings.RippleLifetime;
-	data.settings.ChaoticRippleStrength *= std::clamp(data.Raining, 0.f, 1.f);
-	data.settings.ChaoticRippleScale = 1.f / settings.ChaoticRippleScale;
 
 	return data;
 }
 
-void WetnessEffects::Reset()
+void WetnessEffects::Prepass()
 {
-	requiresUpdate = true;
+	static auto renderer = globals::game::renderer;
+	static auto& precipOcclusionTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPRECIPITATION_OCCLUSION_MAP];
+
+	auto context = globals::d3d::context;
+
+	context->PSSetShaderResources(70, 1, &precipOcclusionTexture.depthSRV);
 }
 
 void WetnessEffects::LoadSettings(json& o_json)

@@ -1,5 +1,4 @@
 #include "Common/Color.hlsli"
-#include "Common/DICETonemapper.hlsli"
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
 
@@ -39,17 +38,19 @@ cbuffer PerGeometry : register(b2)
 	float4 BlurOffsets[16] : packoffset(c7);
 };
 
-float GetTonemapFactorReinhard(float luminance)
+float3 GetTonemapFactorReinhard(float3 luminance)
 {
 	return (luminance * (luminance * Param.y + 1)) / (luminance + 1);
 }
 
-float GetTonemapFactorHejlBurgessDawson(float luminance)
+float3 GetTonemapFactorHejlBurgessDawson(float3 luminance)
 {
-	float tmp = max(0, luminance - 0.004);
+	float3 tmp = max(0, luminance - 0.004);
 	return Param.y *
-	       pow(((tmp * 6.2 + 0.5) * tmp) / (tmp * (tmp * 6.2 + 1.7) + 0.06), GammaCorrectionValue);
+	       pow(((tmp * 6.2 + 0.5) * tmp) / (tmp * (tmp * 6.2 + 1.7) + 0.06), Color::GammaCorrectionValue);
 }
+
+#	include "Common/DisplayMapping.hlsli"
 
 PS_OUTPUT main(PS_INPUT input)
 {
@@ -61,11 +62,11 @@ PS_OUTPUT main(PS_INPUT input)
 		float2 texCoord = BlurOffsets[sampleIndex].xy * BlurScale.xy + input.TexCoord;
 		[branch] if (Flags.x > 0.5)
 		{
-			texCoord = GetDynamicResolutionAdjustedScreenPosition(texCoord);
+			texCoord = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(texCoord);
 		}
 		float3 imageColor = ImageTex.Sample(ImageSampler, texCoord).xyz;
 #		if defined(RGB2LUM)
-		imageColor = RGBToLuminance(imageColor);
+		imageColor = Color::RGBToLuminance(imageColor);
 #		elif (defined(LUM) || defined(LUMCLAMP)) && !defined(DOWNADAPT)
 		imageColor = imageColor.x;
 #		endif
@@ -86,7 +87,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color = float4(downsampledColor, BlurScale.z);
 
 #	elif defined(BLEND)
-	float2 uv = GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
+	float2 uv = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 
 	float3 inputColor = BlendTex.Sample(BlendSampler, uv).xyz;
 
@@ -103,39 +104,41 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 gameSdrColor = 0.0;
 	float3 ppColor = 0.0;
 	{
-		float luminance = max(1e-5, RGBToLuminance(inputColor));
-		float exposureAdjustedLuminance = (avgValue.y / avgValue.x) * luminance;
-		float blendFactor;
-		if (Param.z > 0.5) {
-			blendFactor = GetTonemapFactorHejlBurgessDawson(exposureAdjustedLuminance);
-		} else {
-			blendFactor = GetTonemapFactorReinhard(exposureAdjustedLuminance);
-		}
+		inputColor *= avgValue.y / avgValue.x;
+		inputColor = max(0, inputColor);
 
-		float3 blendedColor = inputColor * (blendFactor / luminance);
-		blendedColor += saturate(Param.x - blendFactor) * bloomColor;
+		float3 blendedColor;
+		[branch] if (Param.z > 0.5)
+		{
+			blendedColor = DisplayMapping::HuePreservingHejlBurgessDawson(inputColor, bloomColor);
+		}
+		else
+		{
+			float maxCol = Color::RGBToLuminance(inputColor);
+			float mappedMax = GetTonemapFactorReinhard(maxCol).x;
+			float3 compressedHuePreserving = inputColor * mappedMax / maxCol;
+			blendedColor = compressedHuePreserving;
+			blendedColor += saturate(Param.x - blendedColor) * bloomColor;
+		}
 
 		gameSdrColor = blendedColor;
 
-		float blendedLuminance = RGBToLuminance(blendedColor);
+		float blendedLuminance = Color::RGBToLuminance(blendedColor);
 
-		float3 linearColor = Cinematic.w * lerp(lerp(blendedLuminance, float4(blendedColor, 1), Cinematic.x), blendedLuminance * Tint, Tint.w);
+		float3 linearColor = Cinematic.w * lerp(lerp(blendedLuminance, blendedColor, Cinematic.x), blendedLuminance * Tint.xyz, Tint.w).xyz;
 
-		// Contrast modified to fix crushed shadows
-		linearColor = pow(abs(linearColor) / avgValue.x, Cinematic.z) * avgValue.x * sign(linearColor);
+		linearColor = lerp(avgValue.x, linearColor, Cinematic.z);
 
-		gameSdrColor = max(0, gameSdrColor);
 		ppColor = max(0, linearColor);
 	}
 
-	// HDR tonemapping
-	float3 srgbColor = ApplyHuePreservingShoulder(ppColor, 0.5);
+	float3 srgbColor = ppColor;
 
 #		if defined(FADE)
 	srgbColor = lerp(srgbColor, Fade.xyz, Fade.w);
 #		endif
 
-	srgbColor = ToSRGBColor(srgbColor);
+	srgbColor = FrameBuffer::ToSRGBColor(srgbColor);
 
 	psout.Color = float4(srgbColor, 1.0);
 

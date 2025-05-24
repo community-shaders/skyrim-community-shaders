@@ -9,6 +9,9 @@ using json = nlohmann::json;
 
 #include <FeatureBuffer.h>
 
+#include "reshade/reshade_api.hpp"
+#include <reshade/reshade.hpp>
+
 class State
 {
 public:
@@ -26,15 +29,17 @@ public:
 	bool updateShader = true;
 	bool settingCustomShader = false;
 	RE::BSShader* currentShader = nullptr;
+	std::string adapterDescription = "";
 
 	uint32_t currentVertexDescriptor = 0;
 	uint32_t currentPixelDescriptor = 0;
 	spdlog::level::level_enum logLevel = spdlog::level::info;
 	std::string shaderDefinesString = "";
 	std::vector<std::pair<std::string, std::string>> shaderDefines{};  // data structure to parse string into; needed to avoid dangling pointers
-	const std::string testConfigPath = "Data\\SKSE\\Plugins\\CommunityShadersTEST.json";
-	const std::string userConfigPath = "Data\\SKSE\\Plugins\\CommunityShadersUSER.json";
-	const std::string defaultConfigPath = "Data\\SKSE\\Plugins\\CommunityShaders.json";
+	const std::string folderPath = "Data\\SKSE\\Plugins\\CommunityShaders";
+	const std::string testConfigPath = "Data\\SKSE\\Plugins\\CommunityShaders\\SettingsTest.json";
+	const std::string userConfigPath = "Data\\SKSE\\Plugins\\CommunityShaders\\SettingsUser.json";
+	const std::string defaultConfigPath = "Data\\SKSE\\Plugins\\CommunityShaders\\SettingsDefault.json";
 
 	bool upscalerLoaded = false;
 
@@ -51,7 +56,7 @@ public:
 	void Reset();
 	void Setup();
 
-	void Load(ConfigMode a_configMode = ConfigMode::USER);
+	void Load(ConfigMode a_configMode = ConfigMode::USER, bool a_allowReload = true);
 	void Save(ConfigMode a_configMode = ConfigMode::USER);
 	void PostPostLoad();
 
@@ -101,7 +106,9 @@ public:
 	void EndPerfEvent();
 	void SetPerfMarker(std::string_view title);
 
-	bool extendedFrameAnnotations = false;
+	void SetAdapterDescription(const std::wstring& description);
+
+	bool frameAnnotations = false;
 
 	uint lastVertexDescriptor = 0;
 	uint lastPixelDescriptor = 0;
@@ -111,22 +118,40 @@ public:
 	uint lastModifiedPixelDescriptor = 0;
 	uint currentExtraDescriptor = 0;
 	uint lastExtraDescriptor = 0;
+	uint currentExtraFeatureDescriptor = 0;
+	uint lastExtraFeatureDescriptor = 0;
 	bool forceUpdatePermutationBuffer = true;
+
+	bool isTree = false;
 
 	enum class ExtraShaderDescriptors : uint32_t
 	{
 		InWorld = 1 << 0,
-		IsBeastRace = 1 << 1,
+		IsReflections = 1 << 1,
+		IsBeastRace = 1 << 2,
+		EffectShadows = 1 << 3,
+		IsDecal = 1 << 4,
+		IsTree = 1 << 5
 	};
 
-	void UpdateSharedData();
+	enum class ExtraFeatureDescriptors : uint32_t
+	{
+		THLand0HasDisplacement = 1 << 0,
+		THLand1HasDisplacement = 1 << 1,
+		THLand2HasDisplacement = 1 << 2,
+		THLand3HasDisplacement = 1 << 3,
+		THLand4HasDisplacement = 1 << 4,
+		THLand5HasDisplacement = 1 << 5
+	};
+
+	void UpdateSharedData(bool a_inWorld, bool a_prepass);
 
 	struct alignas(16) PermutationCB
 	{
 		uint VertexShaderDescriptor;
 		uint PixelShaderDescriptor;
 		uint ExtraShaderDescriptor;
-		uint pad0[1];
+		uint ExtraFeatureDescriptor;
 	};
 
 	ConstantBuffer* permutationCB = nullptr;
@@ -141,20 +166,46 @@ public:
 		float4 BufferDim;
 		float Timer;
 		uint FrameCount;
+		uint FrameCountAlwaysActive;
 		uint InInterior;
 		uint InMapMenu;
+		uint HideSky;
+		float MipBias;
+		float pad0;
 	};
 
 	ConstantBuffer* sharedDataCB = nullptr;
 	ConstantBuffer* featureDataCB = nullptr;
 
+	Util::FrameChecker frameChecker;
+	uint frameCount = 0;
+
 	// Skyrim constants
-	bool isVR = false;
 	float2 screenSize = {};
-	ID3D11DeviceContext* context = nullptr;
-	ID3D11Device* device = nullptr;
+	D3D_FEATURE_LEVEL featureLevel;
 
 	TracyD3D11Ctx tracyCtx = nullptr;  // Tracy context
+
+	void ClearDisabledFeatures();
+	bool SetFeatureDisabled(const std::string& featureName, bool isDisabled);
+	bool IsFeatureDisabled(const std::string& featureName);
+	std::unordered_map<std::string, bool>& GetDisabledFeatures();
+
+	reshade::api::effect_runtime* reShadeRuntime = nullptr;
+	reshade::api::resource_view reshadeSwapChainRTV;
+	reshade::api::resource_view reshadeSwapChainRTVsRGB;
+
+	void SetupReShade();
+	void RenderReShade();
+	void PresentReShade();
+
+	bool useFrameAnnotations = false;
+
+	// Features that are more special then others
+	std::unordered_map<std::string, bool> specialFeatures = {
+		{ "TruePBR", false }
+	};
+	std::unordered_map<std::string, bool> disabledFeatures;
 
 	inline ~State()
 	{

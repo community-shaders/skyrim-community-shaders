@@ -1,8 +1,13 @@
-TextureCube<float4> specularTexture : register(t64);
-TextureCube<float4> specularTextureNoReflections : register(t65);
+
+#if defined(SKYLIGHTING)
+#	include "Skylighting/Skylighting.hlsli"
+#endif
 
 namespace DynamicCubemaps
 {
+	TextureCube<float4> EnvReflectionsTexture : register(t30);
+	TextureCube<float4> EnvTexture : register(t31);
+
 	// https://www.unrealengine.com/en-US/blog/physically-based-shading-on-mobile
 	half2 EnvBRDFApprox(half Roughness, half NoV)
 	{
@@ -16,24 +21,65 @@ namespace DynamicCubemaps
 
 #if !defined(WATER)
 
-	float3 GetDynamicCubemapSpecularIrradiance(float2 uv, float3 N, float3 VN, float3 V, float roughness, float distance)
+#	if defined(SKYLIGHTING)
+	float3 GetDynamicCubemapSpecularIrradiance(float2 uv, float3 N, float3 VN, float3 V, float roughness, sh2 skylighting)
+#	else
+	float3 GetDynamicCubemapSpecularIrradiance(float2 uv, float3 N, float3 VN, float3 V, float roughness)
+#	endif
 	{
 		float3 R = reflect(-V, N);
-		float level = roughness * 9.0;
+		float NoV = saturate(dot(N, V));
+
+		float level = roughness * 7.0;
 
 		// Horizon specular occlusion
 		// https://marmosetco.tumblr.com/post/81245981087
 		float horizon = min(1.0 + dot(R, VN), 1.0);
 		horizon *= horizon * horizon;
 
-		float3 specularIrradiance = specularTexture.SampleLevel(SampColorSampler, R, level).xyz;
-		specularIrradiance *= horizon;
-		specularIrradiance = GammaToLinear(specularIrradiance);
+#	if defined(DEFERRED)
+		return horizon;
+#	else
 
-		return specularIrradiance;
+		float3 finalIrradiance = 0;
+
+#		if defined(SKYLIGHTING)
+		if (SharedData::InInterior) {
+			float3 specularIrradiance = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
+
+			return finalIrradiance;
+		}
+
+		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(N, -V, roughness);
+
+		float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
+		skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
+
+		float3 specularIrradiance = 1;
+
+		if (skylightingSpecular < 1.0)
+			specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, level).xyz);
+
+		float3 specularIrradianceReflections = 1.0;
+
+		if (skylightingSpecular > 0.0)
+			specularIrradianceReflections = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
+
+		finalIrradiance = lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
+#		else
+		float3 specularIrradiance = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
+
+		finalIrradiance += specularIrradiance;
+#		endif
+		return finalIrradiance;
+#	endif
 	}
 
-	float3 GetDynamicCubemap(float2 uv, float3 N, float3 VN, float3 V, float roughness, float3 F0, float3 diffuseColor, float distance)
+#	if defined(SKYLIGHTING)
+	float3 GetDynamicCubemap(float3 N, float3 VN, float3 V, float roughness, float3 F0, sh2 skylighting)
+#	else
+	float3 GetDynamicCubemap(float3 N, float3 VN, float3 V, float roughness, float3 F0)
+#	endif
 	{
 		float3 R = reflect(-V, N);
 		float NoV = saturate(dot(N, V));
@@ -47,37 +93,44 @@ namespace DynamicCubemaps
 		float horizon = min(1.0 + dot(R, VN), 1.0);
 		horizon *= horizon * horizon;
 
-		// Roughness dependent fresnel
-		// https://www.jcgt.org/published/0008/01/03/paper.pdf
-		float3 Fr = max(1.0.xxx - roughness.xxx, F0) - F0;
-		float3 S = Fr * pow(1.0 - NoV, 5.0);
-
 #	if defined(DEFERRED)
-		return horizon * ((F0 + S) * specularBRDF.x + specularBRDF.y);
+		return horizon * (F0 * specularBRDF.x + specularBRDF.y);
 #	else
-		float3 specularIrradiance = specularTexture.SampleLevel(SampColorSampler, R, level).xyz;
-		specularIrradiance = GammaToLinear(specularIrradiance);
 
-		return specularIrradiance * ((F0 + S) * specularBRDF.x + specularBRDF.y);
-#	endif
-	}
+		float3 finalIrradiance = 0;
 
-	float3 GetDynamicCubemapFresnel(float2 uv, float3 N, float3 VN, float3 V, float roughness, float level, float3 diffuseColor, float distance)
-	{
-		float NoV = saturate(dot(N, V));
-		float2 specularBRDF = EnvBRDFApprox(roughness, NoV);
-		if (specularBRDF.y > 0.001) {
-			float3 R = reflect(-V, N);
-			float3 specularIrradiance = specularTexture.SampleLevel(SampColorSampler, R, level).xyz;
+#		if defined(SKYLIGHTING)
+		if (SharedData::InInterior) {
+			float3 specularIrradiance = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
 
-			// Horizon specular occlusion
-			// https://marmosetco.tumblr.com/post/81245981087
-			float horizon = min(1.0 + dot(R, VN), 1.0);
-			specularIrradiance *= horizon * horizon;
+			finalIrradiance += specularIrradiance;
 
-			return specularIrradiance * specularBRDF.y;
+			return horizon * (F0 * specularBRDF.x + specularBRDF.y) * finalIrradiance;
 		}
-		return 0.0;
+
+		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(N, -V, roughness);
+
+		float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
+		skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
+
+		float3 specularIrradiance = 1;
+
+		if (skylightingSpecular < 1.0)
+			specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, level).xyz);
+
+		float3 specularIrradianceReflections = 1.0;
+
+		if (skylightingSpecular > 0.0)
+			specularIrradianceReflections = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
+
+		finalIrradiance = lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
+#		else
+		float3 specularIrradiance = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level));
+
+		finalIrradiance += specularIrradiance;
+#		endif
+		return horizon * (F0 * specularBRDF.x + specularBRDF.y) * finalIrradiance;
+#	endif
 	}
 #endif  // !WATER
 }

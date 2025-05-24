@@ -1,8 +1,5 @@
 #pragma once
 
-#include "Buffer.h"
-#include "Feature.h"
-
 struct ScreenSpaceGI : Feature
 {
 	static ScreenSpaceGI* GetSingleton()
@@ -40,40 +37,39 @@ struct ScreenSpaceGI : Feature
 	//////////////////////////////////////////////////////////////////////////////////
 
 	bool recompileFlag = false;
-	uint outputGIIdx = 0;
+	uint outputAoIdx = 0;
+	uint outputIlIdx = 0;
 
 	struct Settings
 	{
 		bool Enabled = true;
 		bool EnableGI = true;
-		bool EnableSpecularGI = false;
+		bool EnableExperimentalSpecularGI = false;
 		// performance/quality
-		uint NumSlices = 2;
-		uint NumSteps = 4;
-		bool HalfRes = true;
-		bool HalfRate = true;
+		uint NumSlices = 4;
+		uint NumSteps = 8;
+		int ResolutionMode = 1;  // 0-full, 1-half, 2-quarter
 		// visual
 		float MinScreenRadius = 0.01f;
-		float AORadius = 50.f;
-		float GIRadius = 500.f;
-		float Thickness = 75.f;
+		float AORadius = 256.f;
+		float GIRadius = 256.f;
+		float Thickness = 32.f;
 		float2 DepthFadeRange = { 4e4, 5e4 };
 		// gi
-		float BackfaceStrength = 0.f;
+		float GISaturation = 0.9f;
 		bool EnableGIBounce = true;
-		float GIBounceFade = 1.f;
+		float GIBounceFade = 0.3f;
 		float GIDistanceCompensation = 0.f;
 		// mix
-		float AOPower = 2.f;
-		float GIStrength = 3.f;
+		float AOPower = 1.0f;
+		float GIStrength = 1.0f;
 		// denoise
 		bool EnableTemporalDenoiser = true;
 		bool EnableBlur = true;
-		float DepthDisocclusion = .03f;
+		float DepthDisocclusion = .1f;
 		float NormalDisocclusion = .1f;
 		uint MaxAccumFrames = 16;
-		float BlurRadius = 15.f;
-		uint BlurPasses = 1;
+		float BlurRadius = 2.f;
 		float DistanceNormalisation = 2.f;
 	} settings;
 
@@ -100,7 +96,7 @@ struct ScreenSpaceGI : Feature
 		float2 DepthFadeRange;
 		float DepthFadeScaleConst;
 
-		float BackfaceStrength;  //
+		float GISaturation;  //
 		float GIBounceFade;
 		float GIDistanceCompensation;
 		float GICompensationMaxDist;
@@ -125,8 +121,21 @@ struct ScreenSpaceGI : Feature
 	eastl::unique_ptr<Texture2D> texPrevGeo = nullptr;
 	eastl::unique_ptr<Texture2D> texRadiance = nullptr;
 	eastl::unique_ptr<Texture2D> texAccumFrames[2] = { nullptr };
-	eastl::unique_ptr<Texture2D> texGI[2] = { nullptr };
-	eastl::unique_ptr<Texture2D> texGISpecular[2] = { nullptr };
+	eastl::unique_ptr<Texture2D> texAo[2] = { nullptr };
+	eastl::unique_ptr<Texture2D> texIlY[2] = { nullptr };
+	eastl::unique_ptr<Texture2D> texIlCoCg[2] = { nullptr };
+	eastl::unique_ptr<Texture2D> texGiSpecular[2] = { nullptr };
+
+	inline auto GetOutputTextures()
+	{
+		return (loaded && settings.Enabled) ?
+		           std::make_tuple(
+					   texAo[outputAoIdx]->srv.get(),
+					   texIlY[outputIlIdx]->srv.get(),
+					   texIlCoCg[outputIlIdx]->srv.get(),
+					   texGiSpecular[outputAoIdx]->srv.get()) :
+		           std::make_tuple(nullptr, nullptr, nullptr, nullptr);
+	}
 
 	winrt::com_ptr<ID3D11SamplerState> linearClampSampler = nullptr;
 	winrt::com_ptr<ID3D11SamplerState> pointClampSampler = nullptr;
@@ -135,6 +144,5 @@ struct ScreenSpaceGI : Feature
 	winrt::com_ptr<ID3D11ComputeShader> radianceDisoccCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> giCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> blurCompute = nullptr;
-	winrt::com_ptr<ID3D11ComputeShader> blurSpecularCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> upsampleCompute = nullptr;
 };

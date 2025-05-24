@@ -27,15 +27,15 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float2 texCoord0 = float2(max(0, -doubleVisParams.x + input.TexCoord.x),
 		max(-doubleVisParams.y + input.TexCoord.y, 1 - doubleVisParams.w));
-	float2 adjustedTexCoord0 = GetDynamicResolutionAdjustedScreenPosition(texCoord0);
+	float2 adjustedTexCoord0 = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(texCoord0);
 	float3 src0Color0 = Src0Tex.Sample(Src0Sampler, adjustedTexCoord0).xyz;
 
 	float2 texCoord1 = float2(min(doubleVisParams.z, doubleVisParams.x + input.TexCoord.x),
 		min(1, doubleVisParams.y + input.TexCoord.y));
-	float2 adjustedTexCoord1 = GetDynamicResolutionAdjustedScreenPosition(texCoord1);
+	float2 adjustedTexCoord1 = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(texCoord1);
 	float3 src0Color1 = Src0Tex.Sample(Src0Sampler, adjustedTexCoord1).xyz;
 
-	float2 adjustedTexCoord2 = GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
+	float2 adjustedTexCoord2 = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 	float3 src1Color = Src1Tex.Sample(Src1Sampler, adjustedTexCoord2).xyz;
 
 	float src1Factor = min(1,

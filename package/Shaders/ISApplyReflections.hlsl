@@ -26,7 +26,7 @@ PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
 
-	float2 adjustedScreenPosition = GetDynamicResolutionAdjustedScreenPosition(input.TexCoord.xy);
+	float2 adjustedScreenPosition = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord.xy);
 
 	float2 waterMask = WaterMaskTex.SampleLevel(WaterMaskSampler, adjustedScreenPosition, 0).zw;
 	float3 mainColor = MainBufferTex.Sample(MainBufferSampler, adjustedScreenPosition).xyz;

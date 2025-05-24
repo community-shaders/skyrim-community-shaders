@@ -1,4 +1,3 @@
-#include "Common/Constants.hlsli"
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/VR.hlsli"
@@ -32,8 +31,8 @@ cbuffer PerGeometry : register(b2)
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
-	uint eyeIndex = GetEyeIndexFromTexCoord(input.TexCoord);
-	float2 adjustedScreenPosition = GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
+	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(input.TexCoord);
+	float2 adjustedScreenPosition = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 	float waterMask = waterMaskTex.Sample(waterMaskSampler, adjustedScreenPosition).z;
 	if (waterMask < 1e-4) {
 		discard;
@@ -41,9 +40,9 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 sourceColor = sourceTex.Sample(sourceSampler, adjustedScreenPosition).xyz;
 	float2 motion = motionBufferTex.Sample(motionBufferSampler, adjustedScreenPosition).xy;
-	float2 motionScreenPosition = ConvertToStereoUV(ConvertFromStereoUV(input.TexCoord, eyeIndex) + motion, eyeIndex);
+	float2 motionScreenPosition = Stereo::ConvertToStereoUV(Stereo::ConvertFromStereoUV(input.TexCoord, eyeIndex) + motion, eyeIndex);
 	float2 motionAdjustedScreenPosition =
-		GetPreviousDynamicResolutionAdjustedScreenPosition(motionScreenPosition);
+		FrameBuffer::GetPreviousDynamicResolutionAdjustedScreenPosition(motionScreenPosition);
 	float4 waterHistory =
 		waterHistoryTex.Sample(waterHistorySampler, motionAdjustedScreenPosition).xyzw;
 

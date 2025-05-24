@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.21)
 
 project(
 	CommunityShaders
-	VERSION 0.8.7
+	VERSION 1.2.1
 	LANGUAGES CXX
 )
 
@@ -44,15 +44,7 @@ find_package(unordered_dense CONFIG REQUIRED)
 find_package(efsw CONFIG REQUIRED)
 find_package(Tracy CONFIG REQUIRED)
 add_subdirectory(${CMAKE_SOURCE_DIR}/cmake/Streamline)
-
-set(FFX_API_VK OFF)
-set(FFX_API_DX12 OFF)
-set(FFX_ALL OFF)
-set(FFX_FSR3 ON)
-set(FFX_FSR ON)
-set(FFX_AUTO_COMPILE_SHADERS 1)
-
-add_subdirectory(${CMAKE_SOURCE_DIR}/extern/FidelityFX-SDK/sdk)
+include(FidelityFX-SDK)
 
 target_compile_definitions(
 	${PROJECT_NAME}
@@ -85,11 +77,7 @@ target_link_libraries(
 	efsw::efsw
 	Tracy::TracyClient
 	Streamline
-	ffx_backend_dx11_x64
-	ffx_frameinterpolation_x64
-	ffx_fsr3_x64
-	ffx_fsr3upscaler_x64
-	ffx_opticalflow_x64
+	d3d12.lib
 )
 
 # https://gitlab.kitware.com/cmake/cmake/-/issues/24922#note_1371990
@@ -175,6 +163,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
 		COMMAND ${CMAKE_COMMAND} -E copy_directory ${FEATURE_PATHS} "${AIO_DIR}"
 		COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}> "${AIO_DIR}/SKSE/Plugins/"
 		COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_PDB_FILE:${PROJECT_NAME}> "${AIO_DIR}/SKSE/Plugins/"
+		COMMAND ${CMAKE_COMMAND} -E remove "${AIO_DIR}/CORE"
 	)
 
 	add_custom_command(
@@ -222,16 +211,23 @@ endif()
 # Zip base CommunityShaders and all addons as their own 7z in dist folder
 if(ZIP_TO_DIST)
 	set(ZIP_DIR "${CMAKE_CURRENT_BINARY_DIR}/zip")
+	message("Copying base CommunityShader into ${ZIP_DIR}.")
 	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E remove_directory "${ZIP_DIR}" ${CMAKE_SOURCE_DIR}/dist
 		COMMAND ${CMAKE_COMMAND} -E make_directory "${ZIP_DIR}/SKSE/Plugins" ${CMAKE_SOURCE_DIR}/dist
-	)
-
-	message("Copying base CommunityShader into ${ZIP_DIR}.")
-	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/package "${ZIP_DIR}"
 		COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}> "${ZIP_DIR}/SKSE/Plugins/"
 		COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_PDB_FILE:${PROJECT_NAME}> "${ZIP_DIR}/SKSE/Plugins/"
+	)
+	foreach(FEATURE_PATH ${FEATURE_PATHS})
+		if (EXISTS "${FEATURE_PATH}/CORE")
+			add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+				COMMAND ${CMAKE_COMMAND} -E copy_directory ${FEATURE_PATH} "${ZIP_DIR}"
+			)
+		endif()
+	endforeach()
+	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E remove "${ZIP_DIR}/CORE"
 	)
 
 	set(TARGET_ZIP "${PROJECT_NAME}-${UTC_NOW}.7z")
@@ -242,6 +238,9 @@ if(ZIP_TO_DIST)
 	)
 
 	foreach(FEATURE_PATH ${FEATURE_PATHS})
+		if (EXISTS "${FEATURE_PATH}/CORE")
+			continue()
+		endif()
 		get_filename_component(FEATURE ${FEATURE_PATH} NAME)
 		message("Zipping ${FEATURE_PATH} to ${CMAKE_SOURCE_DIR}/dist/${FEATURE}-${UTC_NOW}.7z")
 		add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD

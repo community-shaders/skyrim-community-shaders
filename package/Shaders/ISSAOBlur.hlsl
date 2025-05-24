@@ -41,7 +41,7 @@ PS_OUTPUT main(PS_INPUT input)
 	[unroll] for (uint sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex)
 	{
 		float2 offsetTexCoord = g_ScreenInfos.zw * texCoordOffsets[sampleIndex] + input.TexCoord;
-		float2 adjustedOffsetTexCoord = GetDynamicResolutionAdjustedScreenPosition(offsetTexCoord);
+		float2 adjustedOffsetTexCoord = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(offsetTexCoord);
 		offsetColors[sampleIndex] = sourceTex.Sample(sourceSampler, adjustedOffsetTexCoord).xyz;
 	}
 

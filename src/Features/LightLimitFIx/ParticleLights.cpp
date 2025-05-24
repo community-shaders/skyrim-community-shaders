@@ -47,10 +47,7 @@ void ParticleLights::GetConfigs()
 				}
 
 				filename.erase(filename.length() - 4);  // Remove ".ini"
-#pragma warning(push)
-#pragma warning(disable: 4244)
-				std::transform(filename.begin(), filename.end(), filename.begin(), ::tolower);
-#pragma warning(pop)
+				std::transform(filename.begin(), filename.end(), filename.begin(), [](auto c) { return (char)::tolower(c); });
 
 				logger::debug("[LLF] Inserting {}", filename);
 
@@ -126,10 +123,7 @@ void ParticleLights::GetConfigs()
 				}
 
 				filename.erase(filename.length() - 4);  // Remove ".ini"
-#pragma warning(push)
-#pragma warning(disable: 4244)
-				std::transform(filename.begin(), filename.end(), filename.begin(), ::tolower);
-#pragma warning(pop)
+				std::transform(filename.begin(), filename.end(), filename.begin(), [](auto c) { return (char)::tolower(c); });
 
 				logger::debug("[LLF] Inserting {}", filename);
 

@@ -26,7 +26,7 @@ PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
 
-	float2 adjustedTexCoord = GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
+	float2 adjustedTexCoord = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 
 	float depth = DepthTex.Sample(DepthSampler, adjustedTexCoord).x;
 
@@ -45,7 +45,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float4 color = 0;
 	for (int i = 0; i < 7; ++i) {
 		for (int j = 0; j < 7; ++j) {
-			float2 currentTexCoord = GetDynamicResolutionAdjustedScreenPosition(
+			float2 currentTexCoord = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(
 				startOffset + CameraParams.xy * offsetDelta * float2(i, j));
 			float4 currentColor = ImageTex.Sample(ImageSampler, currentTexCoord);
 			color += currentColor;

@@ -54,7 +54,7 @@ PS_OUTPUT main(PS_INPUT input)
 	for (int sampleIndex = -asint(lateralRepeat); sampleIndex <= asint(lateralRepeat); ++sampleIndex) {
 		float4 sampleColor;
 		if (dynamicSource > 0.5) {
-			sampleColor = GetSampleColor(GetDynamicResolutionAdjustedScreenPosition(
+			sampleColor = GetSampleColor(FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(
 				input.TexCoord + float2(texelOffsetX * sampleIndex, 0)));
 		} else {
 			sampleColor = GetSampleColor(input.TexCoord + float2(texelOffsetX * sampleIndex, 0));

@@ -1,42 +1,58 @@
-#define TruePBR_HasEmissive (1 << 0)
-#define TruePBR_HasDisplacement (1 << 1)
-#define TruePBR_HasFeatureTexture0 (1 << 2)
-#define TruePBR_HasFeatureTexture1 (1 << 3)
-#define TruePBR_Subsurface (1 << 4)
-#define TruePBR_TwoLayer (1 << 5)
-#define TruePBR_ColoredCoat (1 << 6)
-#define TruePBR_InterlayerParallax (1 << 7)
-#define TruePBR_CoatNormal (1 << 8)
-#define TruePBR_Fuzz (1 << 9)
-#define TruePBR_HairMarschner (1 << 10)
-#define TruePBR_Glint (1 << 11)
-#define TruePBR_ProjectedGlint (1 << 12)
+#ifndef __PBR_DEPENDENCY_HLSL__
+#define __PBR_DEPENDENCY_HLSL__
 
-#define TruePBR_LandTile0PBR (1 << 0)
-#define TruePBR_LandTile1PBR (1 << 1)
-#define TruePBR_LandTile2PBR (1 << 2)
-#define TruePBR_LandTile3PBR (1 << 3)
-#define TruePBR_LandTile4PBR (1 << 4)
-#define TruePBR_LandTile5PBR (1 << 5)
-#define TruePBR_LandTile0HasDisplacement (1 << 6)
-#define TruePBR_LandTile1HasDisplacement (1 << 7)
-#define TruePBR_LandTile2HasDisplacement (1 << 8)
-#define TruePBR_LandTile3HasDisplacement (1 << 9)
-#define TruePBR_LandTile4HasDisplacement (1 << 10)
-#define TruePBR_LandTile5HasDisplacement (1 << 11)
-#define TruePBR_LandTile0HasGlint (1 << 12)
-#define TruePBR_LandTile1HasGlint (1 << 13)
-#define TruePBR_LandTile2HasGlint (1 << 14)
-#define TruePBR_LandTile3HasGlint (1 << 15)
-#define TruePBR_LandTile4HasGlint (1 << 16)
-#define TruePBR_LandTile5HasGlint (1 << 17)
+#include "Common/Color.hlsli"
+#include "Common/Math.hlsli"
+#include "Common/SharedData.hlsli"
 
 namespace PBR
 {
+	namespace Flags
+	{
+		static const uint HasEmissive = (1 << 0);
+		static const uint HasDisplacement = (1 << 1);
+		static const uint HasFeatureTexture0 = (1 << 2);
+		static const uint HasFeatureTexture1 = (1 << 3);
+		static const uint Subsurface = (1 << 4);
+		static const uint TwoLayer = (1 << 5);
+		static const uint ColoredCoat = (1 << 6);
+		static const uint InterlayerParallax = (1 << 7);
+		static const uint CoatNormal = (1 << 8);
+		static const uint Fuzz = (1 << 9);
+		static const uint HairMarschner = (1 << 10);
+		static const uint Glint = (1 << 11);
+		static const uint ProjectedGlint = (1 << 12);
+	}
+
+	namespace TerrainFlags
+	{
+		static const uint LandTile0PBR = (1 << 0);
+		static const uint LandTile1PBR = (1 << 1);
+		static const uint LandTile2PBR = (1 << 2);
+		static const uint LandTile3PBR = (1 << 3);
+		static const uint LandTile4PBR = (1 << 4);
+		static const uint LandTile5PBR = (1 << 5);
+		static const uint LandTile0HasDisplacement = (1 << 6);
+		static const uint LandTile1HasDisplacement = (1 << 7);
+		static const uint LandTile2HasDisplacement = (1 << 8);
+		static const uint LandTile3HasDisplacement = (1 << 9);
+		static const uint LandTile4HasDisplacement = (1 << 10);
+		static const uint LandTile5HasDisplacement = (1 << 11);
+		static const uint LandTile0HasGlint = (1 << 12);
+		static const uint LandTile1HasGlint = (1 << 13);
+		static const uint LandTile2HasGlint = (1 << 14);
+		static const uint LandTile3HasGlint = (1 << 15);
+		static const uint LandTile4HasGlint = (1 << 16);
+		static const uint LandTile5HasGlint = (1 << 17);
+	}
+
 #if defined(GLINT)
 #	include "Common/Glints/Glints2023.hlsli"
 #else
-	typedef float GlintCachedVars;
+	namespace Glints
+	{
+		typedef float GlintCachedVars;
+	}
 #endif
 
 	struct SurfaceProperties
@@ -58,7 +74,8 @@ namespace PBR
 		float GlintLogMicrofacetDensity;
 		float GlintMicrofacetRoughness;
 		float GlintDensityRandomization;
-		GlintCachedVars GlintCache[4];
+		Glints::GlintCachedVars GlintCache;
+		float Noise;
 	};
 
 	SurfaceProperties InitSurfaceProperties()
@@ -68,7 +85,7 @@ namespace PBR
 		surfaceProperties.Roughness = 1;
 		surfaceProperties.Metallic = 0;
 		surfaceProperties.AO = 1;
-		surfaceProperties.F0 = 0.04;
+		surfaceProperties.F0 = 0;
 
 		surfaceProperties.SubsurfaceColor = 0;
 		surfaceProperties.Thickness = 0;
@@ -76,7 +93,7 @@ namespace PBR
 		surfaceProperties.CoatColor = 0;
 		surfaceProperties.CoatStrength = 0;
 		surfaceProperties.CoatRoughness = 0;
-		surfaceProperties.CoatF0 = 0.04;
+		surfaceProperties.CoatF0 = 0;
 
 		surfaceProperties.FuzzColor = 0;
 		surfaceProperties.FuzzWeight = 0;
@@ -87,12 +104,10 @@ namespace PBR
 		surfaceProperties.GlintDensityRandomization = 2.0;
 
 #ifdef GLINT
-		surfaceProperties.GlintCache[0].uv = 0;
-		surfaceProperties.GlintCache[0].gridSeed = 0;
-		surfaceProperties.GlintCache[0].footprintArea = surfaceProperties.GlintCache[0].gridWeight = 0;
-		surfaceProperties.GlintCache[1] = surfaceProperties.GlintCache[2] = surfaceProperties.GlintCache[3] = surfaceProperties.GlintCache[0];
-#else
-		surfaceProperties.GlintCache[0] = surfaceProperties.GlintCache[1] = surfaceProperties.GlintCache[2] = surfaceProperties.GlintCache[3] = 0;
+		surfaceProperties.GlintCache.uv = 0;
+		surfaceProperties.GlintCache.gridSeed = 0;
+		surfaceProperties.GlintCache.footprintArea = 0;
+		surfaceProperties.Noise = 0;
 #endif
 
 		return surfaceProperties;
@@ -100,21 +115,21 @@ namespace PBR
 
 	struct LightProperties
 	{
-		float3 LinearLightColor;
-		float3 LinearCoatLightColor;
+		float3 LightColor;
+		float3 CoatLightColor;
 	};
 
 	LightProperties InitLightProperties(float3 lightColor, float3 nonParallaxShadow, float3 parallaxShadow)
 	{
 		LightProperties result;
-		result.LinearLightColor = GammaToLinear(lightColor) * nonParallaxShadow * parallaxShadow / LightPreMult;
-		[branch] if ((PBRFlags & TruePBR_InterlayerParallax) != 0)
+		result.LightColor = lightColor * nonParallaxShadow * parallaxShadow;
+		[branch] if ((PBRFlags & Flags::InterlayerParallax) != 0)
 		{
-			result.LinearCoatLightColor = GammaToLinear(lightColor) * nonParallaxShadow / LightPreMult;
+			result.CoatLightColor = lightColor * nonParallaxShadow;
 		}
 		else
 		{
-			result.LinearCoatLightColor = result.LinearLightColor;
+			result.CoatLightColor = result.LightColor;
 		}
 		return result;
 	}
@@ -161,7 +176,7 @@ namespace PBR
 	{
 		float a2 = pow(roughness, 4);
 		float d = max((NdotH * a2 - NdotH) * NdotH + 1, 1e-5);
-		return a2 / (PI * d * d);
+		return a2 / (Math::PI * d * d);
 	}
 
 	// [Estevez et al. 2017, "Production Friendly Microfacet Sheen BRDF"]
@@ -170,19 +185,19 @@ namespace PBR
 		float invAlpha = pow(roughness, -4);
 		float cos2h = NdotH * NdotH;
 		float sin2h = max(1.0 - cos2h, 1e-5);
-		return (2.0 + invAlpha) * pow(sin2h, invAlpha * 0.5) / (2.0 * PI);
+		return (2.0 + invAlpha) * pow(sin2h, invAlpha * 0.5) / Math::TAU;
 	}
 
 #if defined(GLINT)
-	float3 GetSpecularDirectLightMultiplierMicrofacetWithGlint(float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH, float glintH,
-		float logDensity, float microfacetRoughness, float densityRandomization, GlintCachedVars glintCache[4],
+	float3 GetSpecularDirectLightMultiplierMicrofacetWithGlint(float noise, float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH, float glintH,
+		float logDensity, float microfacetRoughness, float densityRandomization, Glints::GlintCachedVars glintCache,
 		out float3 F)
 	{
 		float D = GetNormalDistributionFunctionGGX(roughness, NdotH);
 		[branch] if (logDensity > 1.1)
 		{
 			float D_max = GetNormalDistributionFunctionGGX(roughness, 1);
-			D = SampleGlints2023NDF(logDensity, microfacetRoughness, densityRandomization, glintCache, glintH, D, D_max);
+			D = Glints::SampleGlints2023NDF(noise, logDensity, microfacetRoughness, densityRandomization, glintCache, glintH, D, D_max).x;
 		}
 		float G = GetVisibilityFunctionSmithJointApprox(roughness, NdotV, NdotL);
 		F = GetFresnelFactorSchlick(specularColor, VdotH);
@@ -211,7 +226,7 @@ namespace PBR
 
 	float GetDiffuseDirectLightMultiplierLambert()
 	{
-		return 1 / PI;
+		return 1 / Math::PI;
 	}
 
 	// [Burley 2012, "Physically-Based Shading at Disney"]
@@ -220,7 +235,7 @@ namespace PBR
 		float Fd90 = 0.5 + 2 * VdotH * VdotH * roughness;
 		float FdV = 1 + (Fd90 - 1) * pow(1 - NdotV, 5);
 		float FdL = 1 + (Fd90 - 1) * pow(1 - NdotL, 5);
-		return (1 / PI) * FdV * FdL;
+		return (1 / Math::PI) * FdV * FdL;
 	}
 
 	// [Oren et al. 1994, "Generalization of Lambert’s Reflectance Model"]
@@ -236,7 +251,7 @@ namespace PBR
 		float2 sin_alpha_beta = sqrt(saturate(1.0 - cos_alpha_beta * cos_alpha_beta));
 		float C = sin_alpha_beta.x * sin_alpha_beta.y / (1e-6 + cos_alpha_beta.y);
 
-		return (1 / PI) * (A + B * max(0.0, gamma) * C);
+		return (1 / Math::PI) * (A + B * max(0.0, gamma) * C);
 	}
 
 	// [Gotanda 2014, "Designing Reflectance Models for New Consoles"]
@@ -251,7 +266,7 @@ namespace PBR
 		float Vd = (a2 / ((a2 + 0.09) * (1.31072 + 0.995584 * NdotV))) * (1 - pow(1 - NdotL, (1 - 0.3726732 * NdotV * NdotV) / (0.188566 + 0.38841 * NdotV)));
 		float Bp = Cosri < 0 ? 1.4 * NdotV * NdotL * Cosri : Cosri;
 		float Lr = (21.0 / 20.0) * (1 - F0) * (Fr * Lm + Vd + Bp);
-		return (1 / PI) * Lr;
+		return (1 / Math::PI) * Lr;
 	}
 
 	// [Chan 2018, "Material Advances in Call of Duty: WWII"]
@@ -269,7 +284,7 @@ namespace PBR
 
 		float Fb = ((34.5 * g - 59) * g + 24.5) * VdotH * exp2(-max(73.2 * g - 21.2, 8.9) * sqrt(NdotH));
 
-		return (1 / PI) * (Fd + Fb);
+		return (1 / Math::PI) * (Fd + Fb);
 	}
 
 	// [Lazarov 2013, "Getting More Physical in Call of Duty: Black Ops II"]
@@ -300,7 +315,7 @@ namespace PBR
 
 	inline float HairGaussian(float B, float Theta)
 	{
-		return exp(-0.5 * Theta * Theta / (B * B)) / (sqrt(2 * PI) * B);
+		return exp(-0.5 * Theta * Theta / (B * B)) / (sqrt(Math::TAU) * B);
 	}
 
 	float3 GetHairDiffuseColorMarschner(float3 N, float3 V, float3 L, float NdotL, float NdotV, float VdotL, float backlit, float area, SurfaceProperties surfaceProperties)
@@ -339,14 +354,14 @@ namespace PBR
 		// R
 		Mp = HairGaussian(B[0], ThetaH - Alpha[0]);
 		Np = 0.25 * cosHalfPhi;
-		Fp = GetFresnelFactorSchlick(specularColor, sqrt(saturate(0.5 + 0.5 * VdotL)));
+		Fp = GetFresnelFactorSchlick(specularColor, sqrt(saturate(0.5 + 0.5 * VdotL))).x;
 		S += (Mp * Np) * (Fp * lerp(1, backlit, saturate(-VdotL)));
 
 		// TT
 		Mp = HairGaussian(B[1], ThetaH - Alpha[1]);
 		a = (1.55f / hairIOR) * rcp(n_prime);
 		h = cosHalfPhi * (1 + a * (0.6 - 0.8 * cosPhi));
-		f = GetFresnelFactorSchlick(specularColor, cosThetaD * sqrt(saturate(1 - h * h)));
+		f = GetFresnelFactorSchlick(specularColor, cosThetaD * sqrt(saturate(1 - h * h))).x;
 		Fp = (1 - f) * (1 - f);
 		Tp = pow(surfaceProperties.BaseColor, 0.5 * sqrt(1 - (h * a) * (h * a)) / cosThetaD);
 		Np = exp(-3.65 * cosPhi - 3.98);
@@ -354,7 +369,7 @@ namespace PBR
 
 		// TRT
 		Mp = HairGaussian(B[2], ThetaH - Alpha[2]);
-		f = GetFresnelFactorSchlick(specularColor, cosThetaD * 0.5f);
+		f = GetFresnelFactorSchlick(specularColor, cosThetaD * 0.5f).x;
 		Fp = (1 - f) * (1 - f) * f;
 		Tp = pow(surfaceProperties.BaseColor, 0.8 / cosThetaD);
 		Np = exp(17 * cosPhi - 16.78);
@@ -372,8 +387,8 @@ namespace PBR
 		float3 fakeN = normalize(V - N * NdotV);
 		const float wrap = 1;
 		float wrappedNdotL = saturate((dot(fakeN, L) + wrap) / ((1 + wrap) * (1 + wrap)));
-		float diffuseScatter = (1 / PI) * lerp(wrappedNdotL, diffuseKajiya, 0.33);
-		float luma = RGBToLuminance(surfaceProperties.BaseColor);
+		float diffuseScatter = (1 / Math::PI) * lerp(wrappedNdotL, diffuseKajiya, 0.33);
+		float luma = Color::RGBToLuminance(surfaceProperties.BaseColor);
 		float3 scatterTint = pow(surfaceProperties.BaseColor / luma, 1 - shadow);
 		S += sqrt(surfaceProperties.BaseColor) * diffuseScatter * scatterTint;
 
@@ -385,10 +400,7 @@ namespace PBR
 		float3 color = 0;
 
 		color += GetHairDiffuseColorMarschner(N, V, L, NdotL, NdotV, VdotL, backlit, area, surfaceProperties);
-		[branch] if (pbrSettings.UseMultipleScattering)
-		{
-			color += GetHairDiffuseAttenuationKajiyaKay(N, V, L, NdotL, NdotV, shadow, surfaceProperties);
-		}
+		color += GetHairDiffuseAttenuationKajiyaKay(N, V, L, NdotL, NdotV, shadow, surfaceProperties);
 
 		return color;
 	}
@@ -416,52 +428,45 @@ namespace PBR
 		float satVdotH = saturate(VdotH);
 
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
-		[branch] if ((PBRFlags & TruePBR_HairMarschner) != 0)
+		[branch] if ((PBRFlags & Flags::HairMarschner) != 0)
 		{
-			transmission += lightProperties.LinearLightColor * GetHairColorMarschner(N, V, L, NdotL, NdotV, VdotL, 0, 1, 0, surfaceProperties);
+			transmission += lightProperties.LightColor * GetHairColorMarschner(N, V, L, NdotL, NdotV, VdotL, 0, 1, 0, surfaceProperties);
 		}
 		else
 #endif
 		{
-			diffuse += lightProperties.LinearLightColor * satNdotL * GetDiffuseDirectLightMultiplierLambert();
+			diffuse += lightProperties.LightColor * satNdotL * GetDiffuseDirectLightMultiplierLambert();
 
 			float3 F;
 #if defined(GLINT)
-			specular += GetSpecularDirectLightMultiplierMicrofacetWithGlint(surfaceProperties.Roughness, surfaceProperties.F0, satNdotL, satNdotV, satNdotH, satVdotH, mul(tbnTr, H),
+			specular += GetSpecularDirectLightMultiplierMicrofacetWithGlint(surfaceProperties.Noise, surfaceProperties.Roughness, surfaceProperties.F0, satNdotL, satNdotV, satNdotH, satVdotH, mul(tbnTr, H).x,
 							surfaceProperties.GlintLogMicrofacetDensity, surfaceProperties.GlintMicrofacetRoughness, surfaceProperties.GlintDensityRandomization, surfaceProperties.GlintCache, F) *
-			            lightProperties.LinearLightColor * satNdotL;
+			            lightProperties.LightColor * satNdotL;
 #else
-			specular += GetSpecularDirectLightMultiplierMicrofacet(surfaceProperties.Roughness, surfaceProperties.F0, satNdotL, satNdotV, satNdotH, satVdotH, F) * lightProperties.LinearLightColor * satNdotL;
+			specular += GetSpecularDirectLightMultiplierMicrofacet(surfaceProperties.Roughness, surfaceProperties.F0, satNdotL, satNdotV, satNdotH, satVdotH, F) * lightProperties.LightColor * satNdotL;
 #endif
 
-			float2 specularBRDF = 0;
-			[branch] if (pbrSettings.UseMultipleScattering)
-			{
-				specularBRDF = GetEnvBRDFApproxLazarov(surfaceProperties.Roughness, satNdotV);
-				specular *= 1 + surfaceProperties.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
-			}
+			float2 specularBRDF = GetEnvBRDFApproxLazarov(surfaceProperties.Roughness, satNdotV);
+			specular *= 1 + surfaceProperties.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
 
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
-			[branch] if ((PBRFlags & TruePBR_Fuzz) != 0)
+			[branch] if ((PBRFlags & Flags::Fuzz) != 0)
 			{
-				float3 fuzzSpecular = GetSpecularDirectLightMultiplierMicroflakes(surfaceProperties.Roughness, surfaceProperties.FuzzColor, satNdotL, satNdotV, satNdotH, satVdotH) * lightProperties.LinearLightColor * satNdotL;
-				[branch] if (pbrSettings.UseMultipleScattering)
-				{
-					fuzzSpecular *= 1 + surfaceProperties.FuzzColor * (1 / (specularBRDF.x + specularBRDF.y) - 1);
-				}
+				float3 fuzzSpecular = GetSpecularDirectLightMultiplierMicroflakes(surfaceProperties.Roughness, surfaceProperties.FuzzColor, satNdotL, satNdotV, satNdotH, satVdotH) * lightProperties.LightColor * satNdotL;
+				fuzzSpecular *= 1 + surfaceProperties.FuzzColor * (1 / (specularBRDF.x + specularBRDF.y) - 1);
 
 				specular = lerp(specular, fuzzSpecular, surfaceProperties.FuzzWeight);
 			}
 
-			[branch] if ((PBRFlags & TruePBR_Subsurface) != 0)
+			[branch] if ((PBRFlags & Flags::Subsurface) != 0)
 			{
 				const float subsurfacePower = 12.234;
 				float forwardScatter = exp2(saturate(-VdotL) * subsurfacePower - subsurfacePower);
 				float backScatter = saturate(satNdotL * surfaceProperties.Thickness + (1.0 - surfaceProperties.Thickness)) * 0.5;
 				float subsurface = lerp(backScatter, 1, forwardScatter) * (1.0 - surfaceProperties.Thickness);
-				transmission += surfaceProperties.SubsurfaceColor * subsurface * lightProperties.LinearLightColor * GetDiffuseDirectLightMultiplierLambert();
+				transmission += surfaceProperties.SubsurfaceColor * subsurface * lightProperties.LightColor * GetDiffuseDirectLightMultiplierLambert();
 			}
-			else if ((PBRFlags & TruePBR_TwoLayer) != 0)
+			else if ((PBRFlags & Flags::TwoLayer) != 0)
 			{
 				float3 coatH = normalize(coatV + coatL);
 
@@ -469,7 +474,7 @@ namespace PBR
 				float coatNdotV = satNdotV;
 				float coatNdotH = satNdotH;
 				float coatVdotH = satVdotH;
-				[branch] if ((PBRFlags & TruePBR_CoatNormal) != 0)
+				[branch] if ((PBRFlags & Flags::CoatNormal) != 0)
 				{
 					coatNdotL = clamp(dot(coatN, coatL), 1e-5, 1);
 					coatNdotV = saturate(abs(dot(coatN, coatV)) + 1e-5);
@@ -478,13 +483,13 @@ namespace PBR
 				}
 
 				float3 coatF;
-				float3 coatSpecular = GetSpecularDirectLightMultiplierMicrofacet(surfaceProperties.CoatRoughness, surfaceProperties.CoatF0, coatNdotL, coatNdotV, coatNdotH, coatVdotH, coatF) * lightProperties.LinearCoatLightColor * coatNdotL;
+				float3 coatSpecular = GetSpecularDirectLightMultiplierMicrofacet(surfaceProperties.CoatRoughness, surfaceProperties.CoatF0, coatNdotL, coatNdotV, coatNdotH, coatVdotH, coatF) * lightProperties.CoatLightColor * coatNdotL;
 
 				float3 layerAttenuation = 1 - coatF * surfaceProperties.CoatStrength;
 				diffuse *= layerAttenuation;
 				specular *= layerAttenuation;
 
-				coatDiffuse += lightProperties.LinearCoatLightColor * coatNdotL * GetDiffuseDirectLightMultiplierLambert();
+				coatDiffuse += lightProperties.CoatLightColor * coatNdotL * GetDiffuseDirectLightMultiplierLambert();
 				specular += coatSpecular * surfaceProperties.CoatStrength;
 			}
 #endif
@@ -516,7 +521,7 @@ namespace PBR
 		float NdotV = saturate(dot(N, V));
 
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
-		[branch] if ((PBRFlags & TruePBR_HairMarschner) != 0)
+		[branch] if ((PBRFlags & Flags::HairMarschner) != 0)
 		{
 			float3 L = normalize(V - N * dot(V, N));
 			float NdotL = dot(N, L);
@@ -529,11 +534,11 @@ namespace PBR
 			diffuseLobeWeight = diffuseColor;
 
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
-			[branch] if ((PBRFlags & TruePBR_Subsurface) != 0)
+			[branch] if ((PBRFlags & Flags::Subsurface) != 0)
 			{
-				diffuseLobeWeight += surfaceProperties.SubsurfaceColor * (1 - surfaceProperties.Thickness) / PI;
+				diffuseLobeWeight += surfaceProperties.SubsurfaceColor * (1 - surfaceProperties.Thickness) / Math::PI;
 			}
-			[branch] if ((PBRFlags & TruePBR_Fuzz) != 0)
+			[branch] if ((PBRFlags & Flags::Fuzz) != 0)
 			{
 				diffuseLobeWeight += surfaceProperties.FuzzColor * surfaceProperties.FuzzWeight;
 			}
@@ -543,28 +548,22 @@ namespace PBR
 			specularLobeWeight = surfaceProperties.F0 * specularBRDF.x + specularBRDF.y;
 
 			diffuseLobeWeight *= (1 - specularLobeWeight);
-
-			[branch] if (pbrSettings.UseMultipleScattering)
-			{
-				specularLobeWeight *= 1 + surfaceProperties.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
-			}
+			specularLobeWeight *= 1 + surfaceProperties.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
 
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
-			[branch] if ((PBRFlags & TruePBR_TwoLayer) != 0)
+			[branch] if ((PBRFlags & Flags::TwoLayer) != 0)
 			{
 				float2 coatSpecularBRDF = GetEnvBRDFApproxLazarov(surfaceProperties.CoatRoughness, NdotV);
 				float3 coatSpecularLobeWeight = surfaceProperties.CoatF0 * coatSpecularBRDF.x + coatSpecularBRDF.y;
-				[branch] if (pbrSettings.UseMultipleScattering)
-				{
-					coatSpecularLobeWeight *= 1 + surfaceProperties.CoatF0 * (1 / (coatSpecularBRDF.x + coatSpecularBRDF.y) - 1);
-				}
+				coatSpecularLobeWeight *= 1 + surfaceProperties.CoatF0 * (1 / (coatSpecularBRDF.x + coatSpecularBRDF.y) - 1);
+
 				float3 coatF = GetFresnelFactorSchlick(surfaceProperties.CoatF0, NdotV);
 
 				float3 layerAttenuation = 1 - coatF * surfaceProperties.CoatStrength;
 				diffuseLobeWeight *= layerAttenuation;
 				specularLobeWeight *= layerAttenuation;
 
-				[branch] if ((PBRFlags & TruePBR_ColoredCoat) != 0)
+				[branch] if ((PBRFlags & Flags::ColoredCoat) != 0)
 				{
 					float3 coatDiffuseLobeWeight = surfaceProperties.CoatColor * (1 - coatSpecularLobeWeight);
 					diffuseLobeWeight += coatDiffuseLobeWeight * surfaceProperties.CoatStrength;
@@ -583,13 +582,11 @@ namespace PBR
 
 		float3 diffuseAO = surfaceProperties.AO;
 		float3 specularAO = SpecularAOLagarde(NdotV, surfaceProperties.AO, surfaceProperties.Roughness);
-		[branch] if (pbrSettings.UseMultiBounceAO)
-		{
-			diffuseAO = MultiBounceAO(diffuseColor, diffuseAO.x).y;
-			specularAO = MultiBounceAO(surfaceProperties.F0, specularAO.x).y;
-		}
 
-		diffuseLobeWeight *= diffuseAO / PI;
+		diffuseAO = MultiBounceAO(diffuseColor, diffuseAO.x).y;
+		specularAO = MultiBounceAO(surfaceProperties.F0, specularAO.x).y;
+
+		diffuseLobeWeight *= diffuseAO * Color::PBRLightingScale;
 		specularLobeWeight *= specularAO;
 	}
 
@@ -612,3 +609,5 @@ namespace PBR
 		return specularLobeWeight * wetnessStrength;
 	}
 }
+
+#endif  // __PBR_DEPENDENCY_HLSL__

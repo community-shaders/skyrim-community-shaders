@@ -1,27 +1,31 @@
-#include "LightLimitFix\Common.hlsli"
-struct StrictLightData
-{
-	StructuredLight StrictLights[15];
-	uint NumStrictLights;
-	uint pad0[3];
-};
-
-StructuredBuffer<StructuredLight> lights : register(t50);
-StructuredBuffer<uint> lightList : register(t51);       //MAX_CLUSTER_LIGHTS * 16^3
-StructuredBuffer<LightGrid> lightGrid : register(t52);  //16^3
-StructuredBuffer<StrictLightData> strictLights : register(t53);
 
 namespace LightLimitFix
 {
+
+#include "LightLimitFix/Common.hlsli"
+
+	cbuffer StrictLightData : register(b3)
+	{
+		uint NumStrictLights;
+		int RoomIndex;
+		Light StrictLights[15];
+	};
+
+	StructuredBuffer<Light> lights : register(t35);
+	StructuredBuffer<uint> lightList : register(t36);       //MAX_CLUSTER_LIGHTS * 16^3
+	StructuredBuffer<LightGrid> lightGrid : register(t37);  //16^3
+
 	bool GetClusterIndex(in float2 uv, in float z, inout uint clusterIndex)
 	{
-		const uint3 clusterSize = lightLimitFixSettings.ClusterSize.xyz;
+		const uint3 clusterSize = SharedData::lightLimitFixSettings.ClusterSize.xyz;
 
-		if (z < CameraData.y || z > CameraData.x)
+		z = max(z, SharedData::CameraData.y);
+
+		if (z > SharedData::CameraData.x)
 			return false;
 
-		float clampedZ = clamp(z, CameraData.y, CameraData.x);
-		uint clusterZ = uint(max((log2(z) - log2(CameraData.y)) * clusterSize.z / log2(CameraData.x / CameraData.y), 0.0));
+		float clampedZ = clamp(z, SharedData::CameraData.y, SharedData::CameraData.x);
+		uint clusterZ = uint(max((log2(z) - log2(SharedData::CameraData.y)) * clusterSize.z / log2(SharedData::CameraData.x / SharedData::CameraData.y), 0.0));
 		uint3 cluster = uint3(uint2(uv * clusterSize.xy), clusterZ);
 
 		clusterIndex = cluster.x + (clusterSize.x * cluster.y) + (clusterSize.x * clusterSize.y * cluster.z);
@@ -43,7 +47,7 @@ namespace LightLimitFix
 		if (contactShadowSteps == 0)
 			return 1.0;
 
-		float2 depthDeltaMult = float2(1.0, 0.05);
+		float2 depthDeltaMult = float2(0.20, 0.05);
 
 		// Extend contact shadow distance
 		lightDirectionVS *= 2.0;
@@ -57,22 +61,24 @@ namespace LightLimitFix
 			// Step the ray
 			viewPosition += lightDirectionVS;
 
-			float2 rayUV = ViewToUV(viewPosition, true, a_eyeIndex);
+			float2 rayUV = FrameBuffer::ViewToUV(viewPosition, true, a_eyeIndex);
 
 			// Ensure the UV coordinates are inside the screen
 			if (!IsSaturated(rayUV))
 				break;
 
 			// Compute the difference between the ray's and the camera's depth
-			float rayDepth = GetScreenDepth(rayUV, a_eyeIndex);
+			float rayDepth = SharedData::GetScreenDepth(rayUV, a_eyeIndex);
 
 			// Difference between the current ray distance and the marched light
 			float depthDelta = viewPosition.z - rayDepth;
 			if (rayDepth > 16.5)  // First person
-				contactShadow += saturate(depthDelta * depthDeltaMult.x) - saturate(depthDelta * depthDeltaMult.y);
+				contactShadow = max(contactShadow, saturate(depthDelta * depthDeltaMult.x) - saturate(depthDelta * depthDeltaMult.y));
+			if (contactShadow == 1.0)
+				break;
 		}
 
-		return 1.0 - saturate(contactShadow * 0.5);
+		return 1.0 - saturate(contactShadow);
 	}
 
 	// Copyright 2019 Google LLC.
@@ -103,5 +109,25 @@ namespace LightLimitFix
 			dot(v4, kRedVec4) + dot(v2, kRedVec2),
 			dot(v4, kGreenVec4) + dot(v2, kGreenVec2),
 			dot(v4, kBlueVec4) + dot(v2, kBlueVec2));
+	}
+
+	bool IsLightIgnored(Light light)
+	{
+		bool lightIgnored = false;
+		if ((light.lightFlags & LightFlags::PortalStrict) && RoomIndex >= 0) {
+			lightIgnored = true;
+			int roomIndex = RoomIndex;
+			[unroll] for (int flagsIndex = 0; flagsIndex < 4; ++flagsIndex)
+			{
+				if (roomIndex < 32) {
+					if (((light.roomFlags[flagsIndex] >> roomIndex) & 1) == 1) {
+						lightIgnored = false;
+					}
+					break;
+				}
+				roomIndex -= 32;
+			}
+		}
+		return lightIgnored;
 	}
 }

@@ -1,7 +1,7 @@
 
-#include "../Common/DeferredShared.hlsli"
+#include "Common/SharedData.hlsli"
 
-#include "bend_sss_gpu.hlsli"
+#include "ScreenSpaceShadows/bend_sss_gpu.hlsli"
 
 Texture2D<unorm half> DepthTexture : register(t0);     // Depth Buffer Texture (rasterized non-linear depth)
 RWTexture2D<unorm half> OutputTexture : register(u0);  // Output screen-space shadow buffer (typically single-channel, 8bit)

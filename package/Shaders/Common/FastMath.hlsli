@@ -44,6 +44,8 @@
 #ifndef SHADER_FAST_MATH_INC_FX
 #define SHADER_FAST_MATH_INC_FX
 
+#include "Common/Math.hlsli"
+
 // Define switch for PC compilation
 #ifdef _PC
 #	define asint(_x) *reinterpret_cast<int*>(&_x);
@@ -82,260 +84,263 @@
 //#define IEEE_INT_SQRT_CONST_NR0_SNORM       0x1FBD22DF
 //#define IEEE_INT_RCP_SQRT_CONST_NR0_SNORM   0x5F33E79F
 
-//
-// RCP SQRT
-//
-
-// Approximate guess using integer float arithmetics based on IEEE floating point standard
-float rcpSqrtIEEEIntApproximation(float inX, const int inRcpSqrtConst)
+namespace FastMath
 {
-	int x = asint(inX);
-	x = inRcpSqrtConst - (x >> 1);
-	return asfloat(x);
-}
 
-float rcpSqrtNewtonRaphson(float inXHalf, float inRcpX)
-{
-	return inRcpX * (-inXHalf * (inRcpX * inRcpX) + 1.5f);
-}
+	//
+	// RCP SQRT
+	//
 
-//
-// Using 0 Newton Raphson iterations
-// Relative error : ~3.4% over full
-// Precise format : ~small float
-// 2 ALU
-//
-float fastRcpSqrtNR0(float inX)
-{
-	float xRcpSqrt = rcpSqrtIEEEIntApproximation(inX, IEEE_INT_RCP_SQRT_CONST_NR0);
-	return xRcpSqrt;
-}
+	// Approximate guess using integer float arithmetics based on IEEE floating point standard
+	float rcpSqrtIEEEIntApproximation(float inX, const int inRcpSqrtConst)
+	{
+		int x = asint(inX);
+		x = inRcpSqrtConst - (x >> 1);
+		return asfloat(x);
+	}
 
-//
-// Using 1 Newton Raphson iterations
-// Relative error : ~0.2% over full
-// Precise format : ~half float
-// 6 ALU
-//
-float fastRcpSqrtNR1(float inX)
-{
-	float xhalf = 0.5f * inX;
-	float xRcpSqrt = rcpSqrtIEEEIntApproximation(inX, IEEE_INT_RCP_SQRT_CONST_NR1);
-	xRcpSqrt = rcpSqrtNewtonRaphson(xhalf, xRcpSqrt);
-	return xRcpSqrt;
-}
+	float rcpSqrtNewtonRaphson(float inXHalf, float inRcpX)
+	{
+		return inRcpX * (-inXHalf * (inRcpX * inRcpX) + 1.5f);
+	}
 
-//
-// Using 2 Newton Raphson iterations
-// Relative error : ~4.6e-004%  over full
-// Precise format : ~full float
-// 9 ALU
-//
-float fastRcpSqrtNR2(float inX)
-{
-	float xhalf = 0.5f * inX;
-	float xRcpSqrt = rcpSqrtIEEEIntApproximation(inX, IEEE_INT_RCP_SQRT_CONST_NR2);
-	xRcpSqrt = rcpSqrtNewtonRaphson(xhalf, xRcpSqrt);
-	xRcpSqrt = rcpSqrtNewtonRaphson(xhalf, xRcpSqrt);
-	return xRcpSqrt;
-}
+	//
+	// Using 0 Newton Raphson iterations
+	// Relative error : ~3.4% over full
+	// Precise format : ~small float
+	// 2 ALU
+	//
+	float fastRcpSqrtNR0(float inX)
+	{
+		float xRcpSqrt = rcpSqrtIEEEIntApproximation(inX, IEEE_INT_RCP_SQRT_CONST_NR0);
+		return xRcpSqrt;
+	}
 
-//
-// SQRT
-//
-float sqrtIEEEIntApproximation(float inX, const int inSqrtConst)
-{
-	int x = asint(inX);
-	x = inSqrtConst + (x >> 1);
-	return asfloat(x);
-}
+	//
+	// Using 1 Newton Raphson iterations
+	// Relative error : ~0.2% over full
+	// Precise format : ~half float
+	// 6 ALU
+	//
+	float fastRcpSqrtNR1(float inX)
+	{
+		float xhalf = 0.5f * inX;
+		float xRcpSqrt = rcpSqrtIEEEIntApproximation(inX, IEEE_INT_RCP_SQRT_CONST_NR1);
+		xRcpSqrt = rcpSqrtNewtonRaphson(xhalf, xRcpSqrt);
+		return xRcpSqrt;
+	}
 
-//
-// Using 0 Newton Raphson iterations
-// Relative error : < 0.7% over full
-// Precise format : ~small float
-// 1 ALU
-//
-float fastSqrtNR0(float inX)
-{
-	float xRcp = sqrtIEEEIntApproximation(inX, IEEE_INT_SQRT_CONST_NR0);
-	return xRcp;
-}
+	//
+	// Using 2 Newton Raphson iterations
+	// Relative error : ~4.6e-004%  over full
+	// Precise format : ~full float
+	// 9 ALU
+	//
+	float fastRcpSqrtNR2(float inX)
+	{
+		float xhalf = 0.5f * inX;
+		float xRcpSqrt = rcpSqrtIEEEIntApproximation(inX, IEEE_INT_RCP_SQRT_CONST_NR2);
+		xRcpSqrt = rcpSqrtNewtonRaphson(xhalf, xRcpSqrt);
+		xRcpSqrt = rcpSqrtNewtonRaphson(xhalf, xRcpSqrt);
+		return xRcpSqrt;
+	}
 
-//
-// Use inverse Rcp Sqrt
-// Using 1 Newton Raphson iterations
-// Relative error : ~0.2% over full
-// Precise format : ~half float
-// 6 ALU
-//
-float fastSqrtNR1(float inX)
-{
-	// Inverse Rcp Sqrt
-	return inX * fastRcpSqrtNR1(inX);
-}
+	//
+	// SQRT
+	//
+	float sqrtIEEEIntApproximation(float inX, const int inSqrtConst)
+	{
+		int x = asint(inX);
+		x = inSqrtConst + (x >> 1);
+		return asfloat(x);
+	}
 
-//
-// Use inverse Rcp Sqrt
-// Using 2 Newton Raphson iterations
-// Relative error : ~4.6e-004%  over full
-// Precise format : ~full float
-// 9 ALU
-//
-float fastSqrtNR2(float inX)
-{
-	// Inverse Rcp Sqrt
-	return inX * fastRcpSqrtNR2(inX);
-}
+	//
+	// Using 0 Newton Raphson iterations
+	// Relative error : < 0.7% over full
+	// Precise format : ~small float
+	// 1 ALU
+	//
+	float fastSqrtNR0(float inX)
+	{
+		float xRcp = sqrtIEEEIntApproximation(inX, IEEE_INT_SQRT_CONST_NR0);
+		return xRcp;
+	}
 
-//
-// RCP
-//
+	//
+	// Use inverse Rcp Sqrt
+	// Using 1 Newton Raphson iterations
+	// Relative error : ~0.2% over full
+	// Precise format : ~half float
+	// 6 ALU
+	//
+	float fastSqrtNR1(float inX)
+	{
+		// Inverse Rcp Sqrt
+		return inX * fastRcpSqrtNR1(inX);
+	}
 
-float rcpIEEEIntApproximation(float inX, const int inRcpConst)
-{
-	int x = asint(inX);
-	x = inRcpConst - x;
-	return asfloat(x);
-}
+	//
+	// Use inverse Rcp Sqrt
+	// Using 2 Newton Raphson iterations
+	// Relative error : ~4.6e-004%  over full
+	// Precise format : ~full float
+	// 9 ALU
+	//
+	float fastSqrtNR2(float inX)
+	{
+		// Inverse Rcp Sqrt
+		return inX * fastRcpSqrtNR2(inX);
+	}
 
-float rcpNewtonRaphson(float inX, float inRcpX)
-{
-	return inRcpX * (-inRcpX * inX + 2.0f);
-}
+	//
+	// RCP
+	//
 
-//
-// Using 0 Newton Raphson iterations
-// Relative error : < 0.4% over full
-// Precise format : ~small float
-// 1 ALU
-//
-float fastRcpNR0(float inX)
-{
-	float xRcp = rcpIEEEIntApproximation(inX, IEEE_INT_RCP_CONST_NR0);
-	return xRcp;
-}
+	float rcpIEEEIntApproximation(float inX, const int inRcpConst)
+	{
+		int x = asint(inX);
+		x = inRcpConst - x;
+		return asfloat(x);
+	}
 
-//
-// Using 1 Newton Raphson iterations
-// Relative error : < 0.02% over full
-// Precise format : ~half float
-// 3 ALU
-//
-float fastRcpNR1(float inX)
-{
-	float xRcp = rcpIEEEIntApproximation(inX, IEEE_INT_RCP_CONST_NR1);
-	xRcp = rcpNewtonRaphson(inX, xRcp);
-	return xRcp;
-}
+	float rcpNewtonRaphson(float inX, float inRcpX)
+	{
+		return inRcpX * (-inRcpX * inX + 2.0f);
+	}
 
-//
-// Using 2 Newton Raphson iterations
-// Relative error : < 5.0e-005%  over full
-// Precise format : ~full float
-// 5 ALU
-//
-float fastRcpNR2(float inX)
-{
-	float xRcp = rcpIEEEIntApproximation(inX, IEEE_INT_RCP_CONST_NR2);
-	xRcp = rcpNewtonRaphson(inX, xRcp);
-	xRcp = rcpNewtonRaphson(inX, xRcp);
-	return xRcp;
-}
+	//
+	// Using 0 Newton Raphson iterations
+	// Relative error : < 0.4% over full
+	// Precise format : ~small float
+	// 1 ALU
+	//
+	float fastRcpNR0(float inX)
+	{
+		float xRcp = rcpIEEEIntApproximation(inX, IEEE_INT_RCP_CONST_NR0);
+		return xRcp;
+	}
 
-//
-// Trigonometric functions
-//
-static const float fsl_PI = 3.1415926535897932384626433f;
-static const float fsl_HALF_PI = 0.5f * fsl_PI;
+	//
+	// Using 1 Newton Raphson iterations
+	// Relative error : < 0.02% over full
+	// Precise format : ~half float
+	// 3 ALU
+	//
+	float fastRcpNR1(float inX)
+	{
+		float xRcp = rcpIEEEIntApproximation(inX, IEEE_INT_RCP_CONST_NR1);
+		xRcp = rcpNewtonRaphson(inX, xRcp);
+		return xRcp;
+	}
 
-// 4th order polynomial approximation
-// 4 VGRP, 16 ALU Full Rate
-// 7 * 10^-5 radians precision
-// Reference : Handbook of Mathematical Functions (chapter : Elementary Transcendental Functions), M. Abramowitz and I.A. Stegun, Ed.
-float acosFast4(float inX)
-{
-	float x1 = abs(inX);
-	float x2 = x1 * x1;
-	float x3 = x2 * x1;
-	float s;
+	//
+	// Using 2 Newton Raphson iterations
+	// Relative error : < 5.0e-005%  over full
+	// Precise format : ~full float
+	// 5 ALU
+	//
+	float fastRcpNR2(float inX)
+	{
+		float xRcp = rcpIEEEIntApproximation(inX, IEEE_INT_RCP_CONST_NR2);
+		xRcp = rcpNewtonRaphson(inX, xRcp);
+		xRcp = rcpNewtonRaphson(inX, xRcp);
+		return xRcp;
+	}
 
-	s = -0.2121144f * x1 + 1.5707288f;
-	s = 0.0742610f * x2 + s;
-	s = -0.0187293f * x3 + s;
-	s = sqrt(1.0f - x1) * s;
+	//
+	// Trigonometric functions
+	//
 
-	// acos function mirroring
-	// check per platform if compiles to a selector - no branch neeeded
-	return inX >= 0.0f ? s : fsl_PI - s;
-}
+	// 4th order polynomial approximation
+	// 4 VGRP, 16 ALU Full Rate
+	// 7 * 10^-5 radians precision
+	// Reference : Handbook of Mathematical Functions (chapter : Elementary Transcendental Functions), M. Abramowitz and I.A. Stegun, Ed.
+	float acosFast4(float inX)
+	{
+		float x1 = abs(inX);
+		float x2 = x1 * x1;
+		float x3 = x2 * x1;
+		float s;
 
-// 4th order polynomial approximation
-// 4 VGRP, 16 ALU Full Rate
-// 7 * 10^-5 radians precision
-float asinFast4(float inX)
-{
-	float x = inX;
+		s = -0.2121144f * x1 + 1.5707288f;
+		s = 0.0742610f * x2 + s;
+		s = -0.0187293f * x3 + s;
+		s = sqrt(1.0f - x1) * s;
 
-	// asin is offset of acos
-	return fsl_HALF_PI - acosFast4(x);
-}
+		// acos function mirroring
+		// check per platform if compiles to a selector - no branch neeeded
+		return inX >= 0.0f ? s : Math::PI - s;
+	}
 
-// 4th order hyperbolical approximation
-// 4 VGRP, 12 ALU Full Rate
-// 7 * 10^-5 radians precision
-// Reference : Efficient approximations for the arctangent function, Rajan, S. Sichun Wang Inkol, R. Joyal, A., May 2006
-float atanFast4(float inX)
-{
-	float x = inX;
-	return x * (-0.1784f * abs(x) - 0.0663f * x * x + 1.0301f);
-}
+	// 4th order polynomial approximation
+	// 4 VGRP, 16 ALU Full Rate
+	// 7 * 10^-5 radians precision
+	float asinFast4(float inX)
+	{
+		float x = inX;
 
-////////////////////////////////////////////////////////////////////////////////////////////////
+		// asin is offset of acos
+		return Math::HALF_PI - acosFast4(x);
+	}
 
-// https://seblagarde.wordpress.com/2014/12/01/inverse-trigonometric-functions-gpu-optimization-for-amd-gcn-architecture/
+	// 4th order hyperbolical approximation
+	// 4 VGRP, 12 ALU Full Rate
+	// 7 * 10^-5 radians precision
+	// Reference : Efficient approximations for the arctangent function, Rajan, S. Sichun Wang Inkol, R. Joyal, A., May 2006
+	float atanFast4(float inX)
+	{
+		float x = inX;
+		return x * (-0.1784f * abs(x) - 0.0663f * x * x + 1.0301f);
+	}
 
-// max absolute error 9.0x10^-3
-// Eberly's polynomial degree 1 - respect bounds
-// 4 VGPR, 12 FR (8 FR, 1 QR), 1 scalar
-// input [-1, 1] and output [0, PI]
-float ACos(float inX)
-{
-	float x = abs(inX);
-	float res = -0.156583f * x + fsl_HALF_PI;
-	res *= fastSqrtNR0(1.0f - x);
-	return (inX >= 0) ? res : fsl_PI - res;
-}
+	////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Same cost as Acos + 1 FR
-// Same error
-// input [-1, 1] and output [-PI/2, PI/2]
-float ASin(float x)
-{
-	return fsl_HALF_PI - ACos(x);
-}
+	// https://seblagarde.wordpress.com/2014/12/01/inverse-trigonometric-functions-gpu-optimization-for-amd-gcn-architecture/
 
-// max absolute error 1.3x10^-3
-// Eberly's odd polynomial degree 5 - respect bounds
-// 4 VGPR, 14 FR (10 FR, 1 QR), 2 scalar
-// input [0, infinity] and output [0, PI/2]
-float ATanPos(float x)
-{
-	float t0 = (x < 1.0f) ? x : 1.0f / x;
-	float t1 = t0 * t0;
-	float poly = 0.0872929f;
-	poly = -0.301895f + poly * t1;
-	poly = 1.0f + poly * t1;
-	poly = poly * t0;
-	return (x < 1.0f) ? poly : fsl_HALF_PI - poly;
-}
+	// max absolute error 9.0x10^-3
+	// Eberly's polynomial degree 1 - respect bounds
+	// 4 VGPR, 12 FR (8 FR, 1 QR), 1 scalar
+	// input [-1, 1] and output [0, PI]
+	float ACos(float inX)
+	{
+		float x = abs(inX);
+		float res = -0.156583f * x + Math::HALF_PI;
+		res *= fastSqrtNR0(1.0f - x);
+		return (inX >= 0) ? res : Math::PI - res;
+	}
 
-// 4 VGPR, 16 FR (12 FR, 1 QR), 2 scalar
-// input [-infinity, infinity] and output [-PI/2, PI/2]
-float ATan(float x)
-{
-	float t0 = ATanPos(abs(x));
-	return (x < 0.0f) ? -t0 : t0;
+	// Same cost as Acos + 1 FR
+	// Same error
+	// input [-1, 1] and output [-PI/2, PI/2]
+	float ASin(float x)
+	{
+		return Math::HALF_PI - ACos(x);
+	}
+
+	// max absolute error 1.3x10^-3
+	// Eberly's odd polynomial degree 5 - respect bounds
+	// 4 VGPR, 14 FR (10 FR, 1 QR), 2 scalar
+	// input [0, infinity] and output [0, PI/2]
+	float ATanPos(float x)
+	{
+		float t0 = (x < 1.0f) ? x : 1.0f / x;
+		float t1 = t0 * t0;
+		float poly = 0.0872929f;
+		poly = -0.301895f + poly * t1;
+		poly = 1.0f + poly * t1;
+		poly = poly * t0;
+		return (x < 1.0f) ? poly : Math::HALF_PI - poly;
+	}
+
+	// 4 VGPR, 16 FR (12 FR, 1 QR), 2 scalar
+	// input [-infinity, infinity] and output [-PI/2, PI/2]
+	float ATan(float x)
+	{
+		float t0 = ATanPos(abs(x));
+		return (x < 0.0f) ? -t0 : t0;
+	}
+
 }
 
 #endif  //SHADER_FAST_MATH_INC_FX

@@ -50,7 +50,7 @@ PS_OUTPUT main(PS_INPUT input)
 		float4 imageColor = 0;
 		[branch] if (BlurScale.x < 0.5)
 		{
-			imageColor = GetImageColor(GetDynamicResolutionAdjustedScreenPosition(screenPosition), blurScale.y);
+			imageColor = GetImageColor(FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(screenPosition), blurScale.y);
 		}
 		else
 		{
@@ -63,7 +63,7 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 #	if defined(BRIGHTPASS)
-	float avgLum = RGBToLuminance(AvgLumTex.Sample(AvgLumSampler, input.TexCoord.xy).xyz);
+	float avgLum = Color::RGBToLuminance(AvgLumTex.Sample(AvgLumSampler, input.TexCoord.xy).xyz);
 	color.w = avgLum;
 #	endif
 

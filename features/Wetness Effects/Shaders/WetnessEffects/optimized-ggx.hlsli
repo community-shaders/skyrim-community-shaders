@@ -32,6 +32,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 For more information, please refer to <http://unlicense.org/>
 */
 
+#include "Common/Math.hlsli"
+
 float G1V(float dotNV, float k)
 {
 	return 1.0f / (dotNV * (1.0f - k) + k);
@@ -52,9 +54,8 @@ float LightingFuncGGX_REF(float3 N, float3 V, float3 L, float roughness, float F
 
 	// D
 	float alphaSqr = alpha * alpha;
-	float pi = 3.14159f;
 	float denom = dotNH * dotNH * (alphaSqr - 1.0) + 1.0f;
-	D = alphaSqr / (pi * denom * denom);
+	D = alphaSqr / (Math::PI * denom * denom);
 
 	// F
 	float dotLH5 = pow(1.0f - dotLH, 5);
@@ -82,9 +83,8 @@ float LightingFuncGGX_OPT1(float3 N, float3 V, float3 L, float roughness, float 
 
 	// D
 	float alphaSqr = alpha * alpha;
-	float pi = 3.14159f;
 	float denom = dotNH * dotNH * (alphaSqr - 1.0) + 1.0f;
-	D = alphaSqr / (pi * denom * denom);
+	D = alphaSqr / (Math::PI * denom * denom);
 
 	// F
 	float dotLH5 = pow(1.0f - dotLH, 5);
@@ -113,9 +113,8 @@ float LightingFuncGGX_OPT2(float3 N, float3 V, float3 L, float roughness, float 
 
 	// D
 	float alphaSqr = alpha * alpha;
-	float pi = 3.14159f;
 	float denom = dotNH * dotNH * (alphaSqr - 1.0) + 1.0f;
-	D = alphaSqr / (pi * denom * denom);
+	D = alphaSqr / (Math::PI * denom * denom);
 
 	// F
 	float dotLH5 = pow(1.0f - dotLH, 5);
@@ -155,10 +154,9 @@ float LightingFuncGGX_D(float dotNH, float roughness)
 {
 	float alpha = roughness * roughness;
 	float alphaSqr = alpha * alpha;
-	float pi = 3.14159f;
 	float denom = dotNH * dotNH * (alphaSqr - 1.0) + 1.0f;
 
-	float D = alphaSqr / (pi * denom * denom);
+	float D = alphaSqr / (Math::PI * denom * denom);
 	return D;
 }
 

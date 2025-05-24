@@ -35,13 +35,13 @@ PS_OUTPUT main(PS_INPUT input)
 	for (uint sampleIndex = 0; sampleIndex < asuint(SamplesCount); ++sampleIndex) {
 		float2 texCoord = OffsetsAndWeights[sampleIndex].xy * TexelSize.xy + input.TexCoord;
 #	if defined(DYNAMIC_SOURCE)
-		texCoord = GetDynamicResolutionAdjustedScreenPosition(texCoord);
+		texCoord = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(texCoord);
 #	endif
 		float4 sourceColor = SourceTex.Sample(SourceSampler, texCoord);
 #	if defined(DYNAMIC_SOURCE)
 		downsampledColor += sourceColor;
 #	else
-		float sampleLuminance = RGBToLuminanceAlternative(sourceColor.xyz);
+		float sampleLuminance = Color::RGBToLuminanceAlternative(sourceColor.xyz);
 		if (sampleLuminance > luminance) {
 			downsampledColor = sourceColor;
 			luminance = sampleLuminance;
@@ -52,7 +52,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color = downsampledColor / asuint(SamplesCount);
 #	else
 	if (CompensateJittering) {
-		float2 adjustedTexCoord = GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
+		float2 adjustedTexCoord = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 		float2 motion = MotionVectorsTex.Sample(MotionVectorsSampler, adjustedTexCoord).xy;
 		float4 previousFrameColor =
 			PreviousFrameSourceTex.Sample(PreviousFrameSourceSampler, input.TexCoord + motion).xyzw;

@@ -1,8 +1,5 @@
 #pragma once
 
-#include "Buffer.h"
-#include "Feature.h"
-
 struct CloudShadows : Feature
 {
 	static CloudShadows* GetSingleton()
@@ -11,25 +8,44 @@ struct CloudShadows : Feature
 		return &singleton;
 	}
 
+	struct alignas(16) Settings
+	{
+		float Opacity = 0.8f;
+		float pad[3];
+	};
+
+	Settings settings;
+
 	virtual inline std::string GetName() override { return "Cloud Shadows"; }
 	virtual inline std::string GetShortName() override { return "CloudShadows"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "CLOUD_SHADOWS"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
 
-	bool isCubemapPass = false;
-	ID3D11BlendState* resetBlendState = nullptr;
-	std::set<ID3D11BlendState*> mappedBlendStates;
-	std::map<ID3D11BlendState*, ID3D11BlendState*> modifiedBlendStates;
+	bool overrideSky = false;
+	void SkyShaderHacks();
 
 	Texture2D* texCubemapCloudOcc = nullptr;
+	Texture2D* texCubemapCloudOccCopy = nullptr;
+
 	ID3D11RenderTargetView* cubemapCloudOccRTVs[6] = { nullptr };
+	ID3D11RenderTargetView* cubemapCloudOccCopyRTVs[6] = { nullptr };
+
+	ID3D11BlendState* cloudShadowBlendState = nullptr;
 
 	virtual void SetupResources() override;
+
+	virtual void DrawSettings() override;
+
+	virtual void LoadSettings(json& o_json) override;
+	virtual void SaveSettings(json& o_json) override;
+
+	virtual void RestoreDefaultSettings() override;
 
 	void CheckResourcesSide(int side);
 	void ModifySky(RE::BSRenderPass* Pass);
 
-	virtual void Prepass() override;
+	virtual void ReflectionsPrepass() override;
+	virtual void EarlyPrepass() override;
 
 	virtual inline void PostPostLoad() override { Hooks::Install(); }
 
@@ -37,11 +53,7 @@ struct CloudShadows : Feature
 	{
 		struct BSSkyShader_SetupMaterial
 		{
-			static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
-			{
-				GetSingleton()->ModifySky(Pass);
-				func(This, Pass, RenderFlags);
-			}
+			static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags);
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 

@@ -1,9 +1,5 @@
 #pragma once
 
-#include "Buffer.h"
-#include "State.h"
-#include "Util.h"
-
 #define ALBEDO RE::RENDER_TARGETS::kINDIRECT
 #define SPECULAR RE::RENDER_TARGETS::kINDIRECT_DOWNSCALED
 #define REFLECTANCE RE::RENDER_TARGETS::kRAWINDIRECT
@@ -22,12 +18,13 @@ public:
 
 	void SetupResources();
 	void CopyShadowData();
+	void ReflectionsPrepasses();
+	void EarlyPrepasses();
 	void StartDeferred();
 	void OverrideBlendStates();
 	void ResetBlendStates();
 	void DeferredPasses();
 	void EndDeferred();
-	void UpdateConstantBuffer();
 
 	void PrepassPasses();
 
@@ -38,8 +35,9 @@ public:
 
 	ID3D11ComputeShader* GetComputeMainCompositeInterior();
 
-	ID3D11BlendState* deferredBlendStates[7];
-	ID3D11BlendState* forwardBlendStates[7];
+	ID3D11BlendState* deferredBlendStates[7][2][13][2];
+	ID3D11BlendState* forwardBlendStates[7][2][13][2];
+
 	RE::RENDER_TARGET forwardRenderTargets[4];
 
 	ID3D11ComputeShader* ambientCompositeCS = nullptr;
@@ -49,21 +47,12 @@ public:
 	ID3D11ComputeShader* mainCompositeInteriorCS = nullptr;
 
 	bool inWorld = false;
+	bool inBlendedDecals = false;
+	bool inDecals = false;
+	bool inReflections = false;
 	bool deferredPass = false;
 
 	Texture2D* prevDiffuseAmbientTexture = nullptr;
-
-	struct alignas(16) DeferredCB
-	{
-		float4 BufferDim;
-		float4 CameraData;
-		DirectX::XMFLOAT3X4 DirectionalAmbient;
-		uint FrameCount;
-		uint FrameCountAlwaysActive;
-		uint pad0[2];
-	};
-
-	ConstantBuffer* deferredCB = nullptr;
 
 	ID3D11SamplerState* linearSampler = nullptr;
 
@@ -90,60 +79,68 @@ public:
 
 	struct Hooks
 	{
+		struct Main_RenderShadowMaps
+		{
+			static void thunk();
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
 		struct Main_RenderWorld
 		{
-			static void thunk(bool a1)
-			{
-				GetSingleton()->inWorld = true;
-				func(a1);
-				GetSingleton()->inWorld = false;
-			}
-
+			static void thunk(bool a1);
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
 		struct Main_RenderWorld_Start
 		{
-			static void thunk(RE::BSBatchRenderer* This, uint32_t StartRange, uint32_t EndRanges, uint32_t RenderFlags, int GeometryGroup)
-			{
-				// Here is where the first opaque objects start rendering
-				GetSingleton()->OverrideBlendStates();
-				GetSingleton()->StartDeferred();
-				func(This, StartRange, EndRanges, RenderFlags, GeometryGroup);  // RenderBatches
-			}
+			static void thunk(RE::BSBatchRenderer* This, uint32_t StartRange, uint32_t EndRanges, uint32_t RenderFlags, int GeometryGroup);
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
-		struct Main_RenderWorld_End
+		struct Main_RenderWorld_BlendedDecals
 		{
-			static void thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags)
-			{
-				func(This, RenderFlags);
-				// After this point, water starts rendering
-				GetSingleton()->ResetBlendStates();
-				GetSingleton()->EndDeferred();
-			}
+			static void thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags);
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
-		struct Main_RenderWorld_End_Decals
+		struct BSShaderAccumulator_BlendedDecals_RenderGeometryGroup
 		{
-			static void thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags)
-			{
-				GetSingleton()->ResetBlendStates();
-				GetSingleton()->EndDeferred();
-				// After this point, decals start rendering
-				func(This, RenderFlags);
-			}
+			static void thunk(RE::BSBatchRenderer* This, uint32_t StartRange, uint32_t EndRanges, uint32_t RenderFlags, int GeometryGroup);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSShaderAccumulator_FirstPerson_BlendedDecals
+		{
+			static void thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSShaderAccumulator_ShadowMapOrMask_BlendedDecals
+		{
+			static void thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSCubeMapCamera_RenderCubemap
+		{
+			static void thunk(RE::NiAVObject* camera, int a2, bool a3, bool a4, bool a5);
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
 		static void Install()
 		{
+			stl::write_vfunc<0x35, BSCubeMapCamera_RenderCubemap>(RE::VTABLE_BSCubeMapCamera[0]);
+
+			stl::write_thunk_call<Main_RenderShadowMaps>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x2EC, 0x2EC, 0x248));
+
 			stl::write_thunk_call<Main_RenderWorld>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x831, 0x841, 0x791));
 			stl::write_thunk_call<Main_RenderWorld_Start>(REL::RelocationID(99938, 106583).address() + REL::Relocate(0x8E, 0x84));
-			stl::write_thunk_call<Main_RenderWorld_End>(REL::RelocationID(99938, 106583).address() + REL::Relocate(0x319, 0x308, 0x321));
-			//stl::write_thunk_call<Main_RenderWorld_End>(REL::RelocationID(99938, 106583).address() + REL::Relocate(0x2F2, 0x2E1, 0x321));
+			stl::write_thunk_call<Main_RenderWorld_BlendedDecals>(REL::RelocationID(99938, 106583).address() + REL::Relocate(0x319, 0x308, 0x321));
+
+			stl::write_thunk_call<BSShaderAccumulator_BlendedDecals_RenderGeometryGroup>(REL::RelocationID(99942, 106587).address() + REL::Relocate(0x111, 0x112));
+
+			stl::write_thunk_call<BSShaderAccumulator_FirstPerson_BlendedDecals>(REL::RelocationID(99943, 106588).address() + REL::Relocate(0xFE, 0xF4));
+			stl::write_thunk_call<BSShaderAccumulator_ShadowMapOrMask_BlendedDecals>(REL::RelocationID(99947, 106592).address() + 0x107);
 
 			logger::info("[Deferred] Installed hooks");
 		}

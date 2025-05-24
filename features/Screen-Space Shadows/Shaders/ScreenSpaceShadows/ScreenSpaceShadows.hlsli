@@ -1,7 +1,10 @@
-Texture2D<unorm half> ScreenSpaceShadowsTexture : register(t17);
+#include "Common/Math.hlsli"
 
 namespace ScreenSpaceShadows
 {
+
+	Texture2D<unorm half> ScreenSpaceShadowsTexture : register(t45);
+
 	float4 GetBlurWeights(float4 depths, float centerDepth)
 	{
 		centerDepth += 1.0;
@@ -10,22 +13,30 @@ namespace ScreenSpaceShadows
 		return exp2(-depthDifference * depthDifference);
 	}
 
-	float GetScreenSpaceShadow(float3 screenPosition, float2 uv, float noise, float3 viewPosition, uint eyeIndex)
+	float GetScreenSpaceShadow(float3 screenPosition, float2 uv, float noise, uint eyeIndex)
 	{
-		noise *= 2.0 * M_PI;
+#if defined(VR)
+		return ScreenSpaceShadowsTexture.Load(int3(int2(screenPosition.xy + 0.5f), 0)).x;
+#else
+		noise *= Math::TAU;
 
 		half2x2 rotationMatrix = half2x2(cos(noise), sin(noise), -sin(noise), cos(noise));
 
 		float4 shadowSamples = 0;
 		float4 depthSamples = 0;
 
+#	if defined(DEFERRED) && !defined(DO_ALPHA_TEST)
 		depthSamples[0] = screenPosition.z;
-		shadowSamples[0] = ScreenSpaceShadowsTexture.Load(int3(screenPosition.xy, 0));
+#	else
+		depthSamples[0] = SharedData::DepthTexture.Load(int3(int2(screenPosition.xy + 0.5f), 0)).x;
+#	endif
+
+		shadowSamples[0] = ScreenSpaceShadowsTexture.Load(int3(int2(screenPosition.xy + 0.5f), 0)).x;
 
 		static const float2 BlurOffsets[3] = {
-			float2(0.555528, 0.869625) * 2.0 - 1.0,
-			float2(0.939970, 0.362499) * 2.0 - 1.0,
-			float2(0.347453, 0.065981) * 2.0 - 1.0
+			float2(-0.6720635096678028f, 0.6601738628451107f),
+			float2(0.6110340335380645f, 0.5269905984201742f),
+			float2(0.20239029763403027f, -0.7841160574831084f),
 		};
 
 		[unroll] for (uint i = 1; i < 4; i++)
@@ -35,15 +46,15 @@ namespace ScreenSpaceShadows
 			float2 sampleUV = uv + offset;
 			sampleUV = saturate(sampleUV);
 
-			int3 sampleCoord = ConvertUVToSampleCoord(sampleUV, eyeIndex);
+			int3 sampleCoord = SharedData::ConvertUVToSampleCoord(sampleUV, eyeIndex);
 
-			depthSamples[i] = TexDepthSampler.Load(sampleCoord).x;
+			depthSamples[i] = SharedData::DepthTexture.Load(sampleCoord).x;
 			shadowSamples[i] = ScreenSpaceShadowsTexture.Load(sampleCoord);
 		}
 
-		depthSamples = GetScreenDepths(depthSamples);
+		depthSamples = SharedData::GetScreenDepths(depthSamples);
 
-		float4 blurWeights = GetBlurWeights(depthSamples, viewPosition.z);
+		float4 blurWeights = GetBlurWeights(depthSamples, depthSamples[0]);
 		float shadow = dot(shadowSamples, blurWeights);
 
 		float blurWeightsTotal = dot(blurWeights, 1.0);
@@ -51,5 +62,6 @@ namespace ScreenSpaceShadows
 			shadow = shadow / blurWeightsTotal;
 
 		return shadow;
+#endif
 	}
 }

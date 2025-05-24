@@ -27,7 +27,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 color = 0.0.xxx;
 
 #	if defined(VOLUMETRIC_LIGHTING)
-	float2 screenPosition = GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
+	float2 screenPosition = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 	float volumetricLightingPower = VLSourceTex.Sample(VLSourceSampler, screenPosition).x;
 	color += VolumetricLightingColor.xyz * volumetricLightingPower;
 #	endif

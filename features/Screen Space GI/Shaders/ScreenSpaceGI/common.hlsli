@@ -20,7 +20,8 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "../Common/DeferredShared.hlsli"
+#include "Common/Math.hlsli"
+#include "Common/SharedData.hlsli"
 
 cbuffer SSGICB : register(b1)
 {
@@ -46,7 +47,7 @@ cbuffer SSGICB : register(b1)
 	float2 DepthFadeRange;
 	float DepthFadeScaleConst;
 
-	float BackfaceStrength;
+	float GISaturation;
 	float GIBounceFade;
 	float GIDistanceCompensation;
 	float GICompensationMaxDist;
@@ -72,18 +73,36 @@ SamplerState samplerLinearClamp : register(s1);
 #define FP_Z (18.0)
 
 #define ISNAN(x) (!(x < 0.f || x > 0.f || x == 0.f))
+float filterNaN(float v)
+{
+	return ISNAN(v) ? 0 : v;
+}
+float2 filterNaN(float2 v) { return float2(filterNaN(v.x), filterNaN(v.y)); }
+float4 filterNaN(float4 v) { return float4(filterNaN(v.x), filterNaN(v.y), filterNaN(v.z), filterNaN(v.w)); }
+
+float filterInf(float v) { return isinf(v) ? 0 : v; }
+float3 filterInf(float3 v) { return float3(filterInf(v.x), filterInf(v.y), filterInf(v.z)); }
 
 // screenPos - normalised position in FrameDim, one eye only
 // uv - normalised position in FrameDim, both eye
 // texCoord - texture coordinate
 
 #ifdef HALF_RES
-#	define READ_DEPTH(tex, px) tex.Load(int3(px, 1))
+#	define RES_MIP 1
+#	define READ_DEPTH(tex, px) tex.Load(int3(px, RES_MIP))
 #	define FULLRES_LOAD(tex, px, texCoord, samp) tex.SampleLevel(samp, texCoord, 0)
 #	define OUT_FRAME_DIM (FrameDim * 0.5)
 #	define RCP_OUT_FRAME_DIM (RcpFrameDim * 2)
 #	define OUT_FRAME_SCALE (frameScale * 0.5)
+#elif defined(QUARTER_RES)
+#	define RES_MIP 2
+#	define READ_DEPTH(tex, px) tex.Load(int3(px, RES_MIP))
+#	define FULLRES_LOAD(tex, px, texCoord, samp) tex.SampleLevel(samp, texCoord, 0)
+#	define OUT_FRAME_DIM (FrameDim * 0.25)
+#	define RCP_OUT_FRAME_DIM (RcpFrameDim * 4)
+#	define OUT_FRAME_SCALE (frameScale * 0.25)
 #else
+#	define RES_MIP 0
 #	define READ_DEPTH(tex, px) tex[px]
 #	define FULLRES_LOAD(tex, px, texCoord, samp) tex[px]
 #	define OUT_FRAME_DIM FrameDim
@@ -107,7 +126,7 @@ float3 ScreenToViewPosition(const float2 screenPos, const float viewspaceDepth, 
 
 float ScreenToViewDepth(const float screenDepth)
 {
-	return (CameraData.w / (-screenDepth * CameraData.z + CameraData.x));
+	return (SharedData::CameraData.w / (-screenDepth * SharedData::CameraData.z + SharedData::CameraData.x));
 }
 
 float3 ViewToWorldPosition(const float3 pos, const float4x4 invView)
@@ -166,7 +185,7 @@ float3x3 RotFromToMatrix(float3 from, float3 to)
 float specularLobeHalfAngle(float roughness)
 {
 	float roughness2 = roughness * roughness;
-	return clamp(4.1679 * roughness2 * roughness2 - 9.0127 * roughness2 * roughness + 4.6161 * roughness2 + 1.7048 * roughness + 0.1, 0, 1.57079632679);
+	return clamp(4.1679 * roughness2 * roughness2 - 9.0127 * roughness2 * roughness + 4.6161 * roughness2 + 1.7048 * roughness + 0.1, 0, Math::HALF_PI);
 }
 
 // https://www.gdcvault.com/play/1026701/Fast-Denoising-With-Self-Stabilizing

@@ -3,13 +3,21 @@
 #include "Buffer.h"
 #include "State.h"
 
+#include <d3d11_4.h>
+#include <d3d12.h>
+
 #define NV_WINDOWS
+
+#pragma warning(push)
+#pragma warning(disable: 4471)
 #include <sl.h>
 #include <sl_consts.h>
 #include <sl_dlss.h>
 #include <sl_dlss_g.h>
 #include <sl_matrix_helpers.h>
 #include <sl_reflex.h>
+#include <sl_version.h>
+#pragma warning(pop)
 
 class Streamline
 {
@@ -24,15 +32,13 @@ public:
 
 	bool enabledAtBoot = false;
 	bool initialized = false;
+	bool triedInitialization = false;
 
 	bool featureDLSS = false;
 	bool featureDLSSG = false;
 	bool featureReflex = false;
 
 	sl::ViewportHandle viewport{ 0 };
-	sl::FrameToken* frameToken;
-
-	sl::DLSSGMode frameGenerationMode = sl::DLSSGMode::eAuto;
 
 	HMODULE interposer = NULL;
 
@@ -70,68 +76,59 @@ public:
 	PFun_slReflexSleep* slReflexSleep{};
 	PFun_slReflexSetOptions* slReflexSetOptions{};
 
-	Texture2D* colorBufferShared;
-	Texture2D* depthBufferShared;
+	Util::FrameChecker frameChecker;
+	sl::FrameToken* frameToken;
 
-	ID3D11ComputeShader* copyDepthToSharedBufferCS;
-
-	void DrawSettings();
+	decltype(&CreateDXGIFactory1) slCreateDXGIFactory1{};
+	decltype(&D3D11CreateDeviceAndSwapChain) slD3D11CreateDeviceAndSwapChain{};
 
 	void LoadInterposer();
-	void Initialize();
+
+	void CheckFeatures(IDXGIAdapter* a_adapter);
+
 	void PostDevice();
 
-	HRESULT CreateDXGIFactory(REFIID riid, void** ppFactory);
+	void CheckFrameConstants();
 
-	HRESULT CreateDeviceAndSwapChain(IDXGIAdapter* pAdapter,
-		D3D_DRIVER_TYPE DriverType,
-		HMODULE Software,
-		UINT Flags,
-		const D3D_FEATURE_LEVEL* pFeatureLevels,
-		UINT FeatureLevels,
-		UINT SDKVersion,
-		const DXGI_SWAP_CHAIN_DESC* pSwapChainDesc,
-		IDXGISwapChain** ppSwapChain,
-		ID3D11Device** ppDevice,
-		D3D_FEATURE_LEVEL* pFeatureLevel,
-		ID3D11DeviceContext** ppImmediateContext);
-
-	void SetupResources();
-
-	void CopyResourcesToSharedBuffers();
-
+	void Upscale(Texture2D* a_color, Texture2D* a_alphaMask, sl::DLSSPreset a_preset);
 	void Present();
-	void Upscale(Texture2D* a_color);
-
-	void UpdateConstants();
-
 	void DestroyDLSSResources();
 
-	struct Main_RenderWorld
+	void InstallHooks(ID3D11DeviceContext* a_context);
+
+	struct FrameBuffer
 	{
-		static void thunk(bool a1)
-		{
-			GetSingleton()->UpdateConstants();
-			func(a1);
-		}
+		Matrix CameraView;
+		Matrix CameraProj;
+		Matrix CameraViewProj;
+		Matrix CameraViewProjUnjittered;
+		Matrix CameraPreviousViewProjUnjittered;
+		Matrix CameraProjUnjittered;
+		Matrix CameraProjUnjitteredInverse;
+		Matrix CameraViewInverse;
+		Matrix CameraViewProjInverse;
+		Matrix CameraProjInverse;
+		float4 CameraPosAdjust;
+		float4 CameraPreviousPosAdjust;
+		float4 FrameParams;
+		float4 DynamicResolutionParams1;
+		float4 DynamicResolutionParams2;
+	};
+
+	D3D11_MAPPED_SUBRESOURCE* mappedFrameBuffer = nullptr;
+	FrameBuffer frameBufferCached{};
+
+	void CacheFramebuffer();
+
+	struct ID3D11DeviceContext_Map
+	{
+		static HRESULT thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource, D3D11_MAP MapType, UINT MapFlags, D3D11_MAPPED_SUBRESOURCE* pMappedResource);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	struct MenuManagerDrawInterfaceStartHook
+	struct ID3D11DeviceContext_Unmap
 	{
-		static void thunk(int64_t a1)
-		{
-			GetSingleton()->CopyResourcesToSharedBuffers();
-			func(a1);
-		}
+		static void thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
-
-	static void InstallHooks()
-	{
-		if (!REL::Module::IsVR()) {
-			stl::write_thunk_call<Main_RenderWorld>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x831, 0x841, 0x791));
-			stl::write_thunk_call<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084).address() + REL::Relocate(0x7E, 0x83, 0x97));
-		}
-	}
 };

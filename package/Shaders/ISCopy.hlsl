@@ -5,7 +5,11 @@ typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
+#if defined(DEPTHBUFFER_COPY)
+	float Depth : SV_Depth;
+#else
 	float4 Color : SV_Target0;
+#endif
 };
 
 #if defined(PSHADER)
@@ -24,8 +28,8 @@ PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
 
-#	if !defined(DISABLE_DYNAMIC)
-	float2 screenPosition = GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
+#	if !defined(DISABLE_DYNAMIC) || (defined(DEPTHBUFFER_COPY) && defined(DEPTHBUFFER_4X_DOWNSAMPLE))
+	float2 screenPosition = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 #	else
 	float2 screenPosition = input.TexCoord;
 #	endif
@@ -38,7 +42,11 @@ PS_OUTPUT main(PS_INPUT input)
 	color.w = 1 - color.x;
 #	endif
 
+#	if defined(DEPTHBUFFER_COPY)
+	psout.Depth = color.x;
+#	else
 	psout.Color = color;
+#	endif
 
 	return psout;
 }

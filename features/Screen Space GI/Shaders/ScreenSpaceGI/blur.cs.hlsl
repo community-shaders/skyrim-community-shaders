@@ -1,19 +1,23 @@
 // FAST DENOISING WITH SELF-STABILIZING RECURRENT BLURS
 // 	https://developer.download.nvidia.com/video/gputechconf/gtc/2020/presentations/s22699-fast-denoising-with-self-stabilizing-recurrent-blurs.pdf
 
-#include "../Common/FastMath.hlsli"
-#include "../Common/FrameBuffer.hlsli"
-#include "../Common/GBuffer.hlsli"
-#include "../Common/VR.hlsli"
-#include "common.hlsli"
+#include "Common/FastMath.hlsli"
+#include "Common/FrameBuffer.hlsli"
+#include "Common/GBuffer.hlsli"
+#include "Common/Math.hlsli"
+#include "Common/Random.hlsli"
+#include "Common/VR.hlsli"
+#include "ScreenSpaceGI/common.hlsli"
 
-Texture2D<float4> srcGI : register(t0);                // maybe half-res
-Texture2D<unorm float> srcAccumFrames : register(t1);  // maybe half-res
-Texture2D<half> srcDepth : register(t2);
-Texture2D<half4> srcNormalRoughness : register(t3);
+Texture2D<half> srcDepth : register(t0);
+Texture2D<half4> srcNormalRoughness : register(t1);
+Texture2D<unorm float> srcAccumFrames : register(t2);  // maybe half-res
+Texture2D<float4> srcIlY : register(t3);               // maybe half-res
+Texture2D<float2> srcIlCoCg : register(t4);            // maybe half-res
 
-RWTexture2D<float4> outGI : register(u0);
-RWTexture2D<unorm float> outAccumFrames : register(u1);
+RWTexture2D<unorm float> outAccumFrames : register(u0);
+RWTexture2D<float4> outIlY : register(u1);
+RWTexture2D<float2> outIlCoCg : register(u2);
 
 // samples = 8, min distance = 0.5, average samples on radius = 2
 static const float3 g_Poisson8[8] = {
@@ -72,6 +76,14 @@ float2x3 getKernelBasis(float3 D, float3 N, float roughness = 1.0, float anisoFa
 	return float2x3(T, B);
 }
 
+// TODO: spinning blur
+float2x2 getRotationMatrix(float noise)
+{
+	float2 sin_cos;
+	sincos(noise * Math::PI * 2, sin_cos.y, sin_cos.x);
+	return float2x2(sin_cos.x, sin_cos.y, -sin_cos.y, sin_cos.x);
+}
+
 [numthreads(8, 8, 1)] void main(const uint2 dtid
 								: SV_DispatchThreadID) {
 	const float2 frameScale = FrameDim * RcpTexDim;
@@ -84,91 +96,84 @@ float2x3 getKernelBasis(float3 D, float3 N, float roughness = 1.0, float anisoFa
 	const uint numSamples = 8;
 
 	const float2 uv = (dtid + .5) * RCP_OUT_FRAME_DIM;
-	uint eyeIndex = GetEyeIndexFromTexCoord(uv);
-	const float2 screenPos = ConvertFromStereoUV(uv, eyeIndex);
+	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
+	const float2 screenPos = Stereo::ConvertFromStereoUV(uv, eyeIndex);
 
 	float depth = READ_DEPTH(srcDepth, dtid);
 	float3 pos = ScreenToViewPosition(screenPos, depth, eyeIndex);
-	float4 normalRoughness = FULLRES_LOAD(srcNormalRoughness, dtid, uv, samplerLinearClamp);
-	float3 normal = DecodeNormal(normalRoughness.xy);
-#ifdef SPECULAR_BLUR
-	float roughness = 1 - normalRoughness.z;
-#endif
+	float3 normal = GBuffer::DecodeNormal(FULLRES_LOAD(srcNormalRoughness, dtid, uv, samplerLinearClamp).xy);
 
 	const float2 pixelDirRBViewspaceSizeAtCenterZ = depth.xx * (eyeIndex == 0 ? NDCToViewMul.xy : NDCToViewMul.zw) * RCP_OUT_FRAME_DIM;
 	const float worldRadius = radius * pixelDirRBViewspaceSizeAtCenterZ.x;
-#ifdef SPECULAR_BLUR
-	float2x3 TvBv = getKernelBasis(getSpecularDominantDirection(normal, -normalize(pos), roughness), normal, roughness);
-	float halfAngle = specularLobeHalfAngle(roughness);
-#else
 	float2x3 TvBv = getKernelBasis(normal, normal);  // D = N
-	float halfAngle = fsl_HALF_PI * .5f;
-#endif
+	float halfAngle = Math::HALF_PI;
+
 	TvBv[0] *= worldRadius;
 	TvBv[1] *= worldRadius;
 #ifdef TEMPORAL_DENOISER
 	halfAngle *= 1 - lerp(0, 0.8, sqrt(accumFrames / (float)MaxAccumFrames));
 #endif
 
-	float4 gi = srcGI[dtid];
+	const float4 ilY = srcIlY[dtid];
+	const float2 ilCoCg = srcIlCoCg[dtid];
 
-	float4 sum = gi;
-#if defined(TEMPORAL_DENOISER) && !defined(SPECULAR_BLUR)
-	float fsum = accumFrames;
+	float4 ySum = ilY;
+	float2 coCgSum = ilCoCg;
+#if defined(TEMPORAL_DENOISER)
+	float fSum = accumFrames;
 #endif
-	float wsum = 1;
+	float wSum = 1;
 	for (uint i = 0; i < numSamples; i++) {
 		float w = GaussianWeight(g_Poisson8[i].z);
 
 		float2 poissonOffset = g_Poisson8[i].xy;
 
+#if !defined(VR)
 		float3 posOffset = TvBv[0] * poissonOffset.x + TvBv[1] * poissonOffset.y;
-		float4 screenPosSample = mul(CameraProj[eyeIndex], float4(pos + posOffset, 1));
+		float4 screenPosSample = mul(FrameBuffer::CameraProj[eyeIndex], float4(pos + posOffset, 1));
 		screenPosSample.xy /= screenPosSample.w;
 		screenPosSample.y = -screenPosSample.y;
 		screenPosSample.xy = screenPosSample.xy * .5 + .5;
 
-		// old method without kernel transform
-		// float2 pxOffset = radius * poissonOffset.xy;
-		// float2 pxSample = dtid + .5 + pxOffset;
-		// float2 uvSample = (floor(pxSample) + 0.5) * RCP_OUT_FRAME_DIM;  // Snap to the pixel centre
-		// float2 screenPosSample = ConvertFromStereoUV(uvSample, eyeIndex);
+		float2 uvSample = Stereo::ConvertToStereoUV(screenPosSample.xy, eyeIndex);
+		uvSample = (floor(uvSample * OUT_FRAME_DIM) + 0.5) * RCP_OUT_FRAME_DIM;  // Snap to the pixel centre
 
+#else
+		// old method without kernel transform for VR
+		float2 pxOffset = radius * poissonOffset.xy;
+		float2 pxSample = dtid + .5 + pxOffset;
+		float2 uvSample = (floor(pxSample) + 0.5) * RCP_OUT_FRAME_DIM;  // Snap to the pixel centre
+		float2 screenPosSample = Stereo::ConvertFromStereoUV(uvSample, eyeIndex);
+#endif
 		if (any(screenPosSample.xy < 0) || any(screenPosSample.xy > 1))
 			continue;
 
-		float2 uvSample = ConvertToStereoUV(screenPosSample.xy, eyeIndex);
-		uvSample = (floor(uvSample * OUT_FRAME_DIM) + 0.5) * RCP_OUT_FRAME_DIM;  // Snap to the pixel centre
+		float depthSample = srcDepth.SampleLevel(samplerPointClamp, uvSample * frameScale, RES_MIP);
+		float3 posSample = ScreenToViewPosition(screenPosSample.xy, depthSample, eyeIndex);
 
-		float depthSample = srcDepth.SampleLevel(samplerLinearClamp, uvSample * frameScale, 0);
-		float3 posSample = ScreenToViewPosition(screenPosSample, depthSample, eyeIndex);
-
-		float4 normalRoughnessSample = srcNormalRoughness.SampleLevel(samplerLinearClamp, uvSample * frameScale, 0);
-		float3 normalSample = DecodeNormal(normalRoughnessSample.xy);
-#ifdef SPECULAR_BLUR
-		float roughnessSample = 1 - normalRoughnessSample.z;
-#endif
-
-		float4 giSample = srcGI.SampleLevel(samplerLinearClamp, uvSample * OUT_FRAME_SCALE, 0);
+		float4 normalRoughnessSample = srcNormalRoughness.SampleLevel(samplerPointClamp, uvSample * frameScale, 0);
+		float3 normalSample = GBuffer::DecodeNormal(normalRoughnessSample.xy);
 
 		// geometry weight
 		w *= saturate(1 - abs(dot(normal, posSample - pos)) * DistanceNormalisation);
 		// normal weight
-		w *= 1 - saturate(acosFast4(saturate(dot(normalSample, normal))) / halfAngle);
-#ifdef SPECULAR_BLUR
-		// roughness weight
-		w *= abs(roughness - roughnessSample) / (roughness * roughness * 0.99 + 0.01);
-#endif
+		w *= 1 - saturate(FastMath::acosFast4(saturate(dot(normalSample, normal))) / halfAngle);
 
-		sum += giSample * w;
-#if defined(TEMPORAL_DENOISER) && !defined(SPECULAR_BLUR)
-		fsum += srcAccumFrames.SampleLevel(samplerLinearClamp, uvSample * OUT_FRAME_SCALE, 0) * w;
+		w = max(w, 0.01);
+
+		if (w > 1e-8) {
+			ySum += srcIlY.SampleLevel(samplerPointClamp, uvSample * OUT_FRAME_SCALE, 0) * w;
+			coCgSum += srcIlCoCg.SampleLevel(samplerPointClamp, uvSample * OUT_FRAME_SCALE, 0) * w;
+#if defined(TEMPORAL_DENOISER)
+			fSum += srcAccumFrames.SampleLevel(samplerPointClamp, uvSample * OUT_FRAME_SCALE, 0) * w;
 #endif
-		wsum += w;
+			wSum += w;
+		}
 	}
 
-	outGI[dtid] = sum / wsum;
-#if defined(TEMPORAL_DENOISER) && !defined(SPECULAR_BLUR)
-	outAccumFrames[dtid] = fsum / wsum;
+	outIlY[dtid] = ySum / wSum;
+	outIlCoCg[dtid] = coCgSum / wSum;
+#if defined(TEMPORAL_DENOISER)
+	outAccumFrames[dtid] = fSum / wSum;
 #endif
 }

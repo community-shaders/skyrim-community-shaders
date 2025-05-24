@@ -59,7 +59,8 @@ If you want an example CMakeUserPreset to start off with you can copy the `CMake
 #### ZIP_TO_DIST
 * This option is default `"ON"`
 * Make sure `"ZIP_TO_DIST"` is set to `"ON"` in `CMakeUserPresets.json`
-* This will create a zip for each feature and one for the base Community shaders in /dist containing
+* This will create a zip for each feature and one for the base Community shaders in /dist
+* If having a file with name `CORE` in the root of the features folder it will instead be merged into the core zip
 #### TRACY_SUPPORT
 * This option is default `"OFF"`
 * This will enable tracy support, might need to delete build folder when this option is changed
@@ -84,6 +85,12 @@ docker run -it --rm -v .:C:/skyrim-community-shaders skyrim-community-shaders:la
 ```
 4. Retrieve the generated build files from the `build/aio` folder.
 5. In subsequent builds only run the build step (3.)
+
+#### Troubleshooting Build with Docker
+If you run into `Access violation` build errors during step 3, you can try adding [`--isolation=process`](https://learn.microsoft.com/en-us/virtualization/windowscontainers/manage-containers/hyperv-container):
+```pwsh
+docker run -it --rm --isolation=process -v .:C:/skyrim-community-shaders skyrim-community-shaders:latest
+```
 
 ## License
 

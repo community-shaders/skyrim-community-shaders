@@ -1,7 +1,5 @@
 #pragma once
 
-#include "Buffer.h"
-
 struct GlintParameters
 {
 	bool enabled = false;
@@ -9,16 +7,7 @@ struct GlintParameters
 	float logMicrofacetDensity = 40.f;
 	float microfacetRoughness = .015f;
 	float densityRandomization = 2.f;
-
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GlintParameters, enabled, screenSpaceScale, logMicrofacetDensity,
-		microfacetRoughness, densityRandomization);
 };
-
-namespace nlohmann
-{
-	void to_json(json&, const RE::NiColor&);
-	void from_json(const json&, RE::NiColor&);
-}
 
 struct TruePBR
 {
@@ -33,27 +22,19 @@ public:
 
 	void DrawSettings();
 	void SetupResources();
-	void LoadSettings(json& o_json);
-	void SaveSettings(json& o_json);
 	void PrePass();
 	void PostPostLoad();
 	void DataLoaded();
+	bool TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land);
+	bool BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material);
 
-	void SetShaderResouces();
+	void SetShaderResouces(ID3D11DeviceContext* a_context);
 	void GenerateShaderPermutations(RE::BSShader* shader);
 
 	void SetupGlintsTexture();
 	eastl::unique_ptr<Texture2D> glintsNoiseTexture = nullptr;
 
 	std::unordered_map<uint32_t, std::string> editorIDs;
-
-	struct Settings
-	{
-		uint32_t useMultipleScattering = true;
-		uint32_t useMultiBounceAO = true;
-		uint32_t pad[2];
-	} settings{};
-	static_assert(sizeof(Settings) % 16 == 0);
 
 	struct PBRTextureSetData
 	{
@@ -74,10 +55,6 @@ public:
 		float fuzzWeight = 0.f;
 
 		GlintParameters glintParameters;
-
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(PBRTextureSetData, roughnessScale, displacementScale, specularLevel,
-			subsurfaceColor, subsurfaceOpacity, coatColor, coatStrength, coatRoughness, coatSpecularLevel,
-			innerLayerDisplacementOffset, fuzzColor, fuzzWeight, glintParameters);
 	};
 
 	void SetupFrame();
@@ -87,8 +64,11 @@ public:
 	PBRTextureSetData* GetPBRTextureSetData(const RE::TESForm* textureSet);
 	bool IsPBRTextureSet(const RE::TESForm* textureSet);
 
+	void SetupDefaultPBRLandTextureSet();
+
 	std::unordered_map<std::string, PBRTextureSetData> pbrTextureSets;
 	RE::BGSTextureSet* defaultPbrLandTextureSet = nullptr;
+	bool defaultLandTextureSetReplaced = false;
 	std::string selectedPbrTextureSetName;
 	PBRTextureSetData* selectedPbrTextureSet = nullptr;
 
@@ -99,8 +79,6 @@ public:
 		float specularLevel = 1.f;
 
 		GlintParameters glintParameters;
-
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(PBRMaterialObjectData, baseColorScale, roughness, specularLevel, glintParameters);
 	};
 
 	void SetupMaterialObjectData();

@@ -40,7 +40,7 @@ PS_OUTPUT main(PS_INPUT input)
 		{ 0.000842, 0.002820, 0.019283, 1.280000 },
 		{ 0.000051, 0.000185, 0.004717, 2.000000 } };
 
-	float2 screenPosition = GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
+	float2 screenPosition = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 	float snowMask = snowAlphaSpecTex.Sample(snowAlphaSpecSampler, screenPosition).y;
 	float3 sourceColor = snowDiffuseTex.SampleLevel(snowDiffuseSampler, screenPosition, 0).xyz;
 
@@ -56,14 +56,14 @@ PS_OUTPUT main(PS_INPUT input)
 	float depthDiffFactor = 0.1 * g_SSSParameters.y;
 	for (uint iterationIndex = 1; iterationIndex < 11; ++iterationIndex) {
 		float2 iterationTexCoord = iterationParameters[iterationIndex].w * texCoordStep + input.TexCoord;
-		float2 adjustedIterationTexCoord = GetDynamicResolutionAdjustedScreenPosition(iterationTexCoord);
+		float2 adjustedIterationTexCoord = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(iterationTexCoord);
 		float3 iterationSourceColor = snowDiffuseTex.SampleLevel(snowDiffuseSampler, adjustedIterationTexCoord, 0).xyz;
 		float iterationDepth = depthTex.SampleLevel(depthSampler, adjustedIterationTexCoord, 0).x;
 		float iterationDiffuseFactor = min(1, depthDiffFactor * abs(depth - iterationDepth));
 
 		sssColor += iterationParameters[iterationIndex].xyz * lerp(iterationSourceColor, sourceColor, iterationDiffuseFactor);
 	}
-	float sssLuminance = RGBToLuminanceAlternative(sssColor);
+	float sssLuminance = Color::RGBToLuminanceAlternative(sssColor);
 	float3 darkColor = max(0, lerp(g_SSSDarkColor.xyz * g_SSSDarkColor.w, sourceColor, sssLuminance));
 	float3 snowColor = lerp(darkColor, sssColor, sssLuminance);
 

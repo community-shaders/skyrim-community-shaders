@@ -89,6 +89,8 @@
 
 //-----------------------------------------------------------------------------
 
+#include "Common/Math.hlsli"
+
 float4 SSSSBlurCS(
 	uint2 DTid,
 	float2 texcoord,
@@ -100,7 +102,7 @@ float4 SSSSBlurCS(
 	float4 colorM = ColorTexture[DTid.xy];
 
 #if defined(HORIZONTAL)
-	colorM.rgb = GammaToLinear(colorM.rgb);
+	colorM.rgb = Color::GammaToLinear(colorM.rgb);
 #endif
 
 	if (sssAmount == 0)
@@ -108,7 +110,7 @@ float4 SSSSBlurCS(
 
 	// Fetch linear depth of current pixel:
 	float depthM = DepthTexture[DTid.xy].r;
-	depthM = GetScreenDepth(depthM);
+	depthM = SharedData::GetScreenDepth(depthM);
 
 	float2 profile = humanProfile ? HumanProfile.xy : BaseProfile.xy;
 	uint kernelOffset = humanProfile ? SSSS_N_SAMPLES : 0;
@@ -122,32 +124,25 @@ float4 SSSSBlurCS(
 	float scale = distanceToProjectionWindow / depthM;
 
 	// Calculate the final step to fetch the surrounding pixels:
-	float2 finalStep = scale * BufferDim.xy * dir;
+	float2 finalStep = scale * SharedData::BufferDim.xy * dir;
 	finalStep *= sssAmount;
 	finalStep *= profile.x;  // Modulate it using the profile
 	finalStep *= 1.0 / 3.0;  // Divide by 3 as the kernels range from -3 to 3.
 
 #if defined(VR)
-	finalStep.x *= 0.5;               // Halve horizontal screen resolution
-	uint eyeIndex = texcoord >= 0.5;  // 0 = left 1 = right
-	uint bufferDimHalfX = uint(BufferDim.x * 0.5);
+	finalStep.x *= 0.5;                 // Halve horizontal screen resolution
+	uint eyeIndex = texcoord.x >= 0.5;  // 0 = left 1 = right
+	uint bufferDimHalfX = uint(SharedData::BufferDim.x * 0.5);
 	uint2 minCoord = uint2(eyeIndex ? bufferDimHalfX : 0, 0);
-	uint2 maxCoord = uint2(eyeIndex ? BufferDim.x : bufferDimHalfX, BufferDim.y);
+	uint2 maxCoord = uint2(eyeIndex ? SharedData::BufferDim.x : bufferDimHalfX, SharedData::BufferDim.y);
 #else
 	uint2 minCoord = uint2(0, 0);
-	uint2 maxCoord = uint2(BufferDim.x, BufferDim.y);
+	uint2 maxCoord = uint2(SharedData::BufferDim.x, SharedData::BufferDim.y);
 #endif
-
-	float jitter = InterleavedGradientNoise(DTid.xy, FrameCount) * M_2PI;
-	float2x2 rotationMatrix = float2x2((jitter), sin(jitter), -sin(jitter), cos(jitter));
-	float2x2 identityMatrix = float2x2(1.0, 0.0, 0.0, 1.0);
 
 	// Accumulate the other samples:
 	for (uint i = kernelOffset + 1; i < kernelOffset + SSSS_N_SAMPLES; i++) {
 		float2 offset = Kernels[i].a * finalStep;
-
-		// Apply randomized rotation
-		offset = mul(offset, rotationMatrix);
 
 		uint2 coords = DTid.xy + int2(offset + 0.5);
 
@@ -157,11 +152,11 @@ float4 SSSSBlurCS(
 		float3 color = ColorTexture[coords].rgb;
 
 #if defined(HORIZONTAL)
-		color.rgb = GammaToLinear(color.rgb);
+		color.rgb = Color::GammaToLinear(color.rgb);
 #endif
 
 		float depth = DepthTexture[coords].r;
-		depth = GetScreenDepth(depth);
+		depth = SharedData::GetScreenDepth(depth);
 
 		// If the difference in depth is huge, we lerp color back to "colorM":
 		float s = saturate(profile.y * distanceToProjectionWindow * abs(depthM - depth));
