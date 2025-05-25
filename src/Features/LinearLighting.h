@@ -21,7 +21,7 @@ struct LinearLighting : Feature
 		uint preserveLightLuminance = false;
 		float lightGamma = 1.8f;
 		float colorGamma = 2.2f;
-		float am1ientGamma = 1.8f;
+		float ambientGamma = 1.8f;
 		float fogGamma = 1.8f;
 		float effectGamma = 1.8f;
 	} settings;
