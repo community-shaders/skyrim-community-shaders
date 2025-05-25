@@ -8,10 +8,10 @@
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 
-// Height blend operator settings
+// Height blend operator settings - DO NOT CHANGE THESE VALUES.
 static const float HEIGHT_BLEND_CONTRAST = 16.0; // Controls sharpness of height-based transitions
-static const float CULLING_THRESHOLD = 0.01;     // Minimum weight threshold for sample culling
-static const float HEIGHT_INFLUENCE = 0.5;       // How much height affects blending (0=pure stochastic, 1=pure height)
+static const float CULLING_THRESHOLD = 0.001;    // Minimum weight threshold for sample culling
+static const float HEIGHT_INFLUENCE = 0.3;      // How much height affects blending (0=pure stochastic, 1=pure height)
 
 // Structure to hold stochastic sampling offsets and weights
 struct StochasticOffsets
@@ -21,12 +21,6 @@ struct StochasticOffsets
 	float2 offset3;
 	float3 weights;
 };
-
-// Check if terrain variation is enabled
-inline bool IsTerrainVariationEnabled()
-{
-	return SharedData::terrainVariationSettings.enableTilingFix;
-}
 
 // Hash function for stochastic sampling
 inline float2 hash2D2D(float2 s)
@@ -58,33 +52,23 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 UV)
 // Main stochastic sampling function
 inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
 {
-	// If feature is disabled, return standard sample
-	[branch] if (!IsTerrainVariationEnabled())
-		return tex.SampleLevel(samp, uv, mipLevel);
-
-	bool useParallax = SharedData::extendedMaterialSettings.EnableTerrainParallax;
-	float4 sample1, sample2, sample3;
-	// Get stochastic samples
-	[branch] if (useParallax) {
-		// Parallax enabled, can use SampleLevel for better perf
-		sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
-		sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
-		sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
-	} else {
-		// When parallax disabled, samplelevel causes mipmap issues, it uses too low a mipmap level up close.
-		sample1 = tex.SampleGrad(samp, uv + offsets.offset1, dx, dy);
-		sample2 = tex.SampleGrad(samp, uv + offsets.offset2, dx, dy);
-		sample3 = tex.SampleGrad(samp, uv + offsets.offset3, dx, dy);
+	// Early return if terrain variation is disabled - provides zero overhead
+	[branch] if (!SharedData::terrainVariationSettings.enableTilingFix) {
+		return tex.SampleBias(samp, uv, SharedData::MipBias);
 	}
-
+	
+	float4 sample1, sample2, sample3;
+	// Get stochastic samples using SampleLevel for consistent mip selection
+	sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+	sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
+	sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
 	// Extract height information from samples (use alpha channel if available, otherwise luminance)
 	float3 heights = float3(
-		sample1.a > 0 ? sample1.a : dot(sample1.rgb, float3(0.299, 0.587, 0.114)),
-		sample2.a > 0 ? sample2.a : dot(sample2.rgb, float3(0.299, 0.587, 0.114)),
-		sample3.a > 0 ? sample3.a : dot(sample3.rgb, float3(0.299, 0.587, 0.114))
+		sample1.a > 0 ? sample1.a : dot(sample1.rgb, float3(0.2126, 0.7152, 0.0722)),
+		sample2.a > 0 ? sample2.a : dot(sample2.rgb, float3(0.2126, 0.7152, 0.0722)),
+		sample3.a > 0 ? sample3.a : dot(sample3.rgb, float3(0.2126, 0.7152, 0.0722))
 	);
 
-	// Compute height-based blend weights
 	float3 heightBlendWeights = lerp(offsets.weights, heights, HEIGHT_INFLUENCE);
 	heightBlendWeights = pow(saturate(heightBlendWeights), HEIGHT_BLEND_CONTRAST);
 	
@@ -116,11 +100,13 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	} else {
 		stochasticSample = sample1; // Fallback
 	}
-
 	return stochasticSample;
 }
 
-#define StochasticSample(rnd, mipLevel, tex, samp, uv) StochasticEffect(rnd, mipLevel, tex, samp, uv, ComputeStochasticOffsets(uv), ddx(uv), ddy(uv)).rgb
-
+// Runtime macro that checks enableTilingFix and falls back to regular sampling when disabled
+#define StochasticSample(rnd, mipLevel, tex, samp, uv) \
+	(SharedData::terrainVariationSettings.enableTilingFix ? \
+		StochasticEffect(rnd, mipLevel, tex, samp, uv, ComputeStochasticOffsets(uv), ddx(uv), ddy(uv)).rgb : \
+		tex.SampleLevel(samp, uv, mipLevel).rgb)
 
 #endif  // TERRAIN_VARIATION_HLSLI
