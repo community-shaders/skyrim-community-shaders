@@ -1831,13 +1831,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		baseColor.xyz = GetFacegenBaseColor(baseColor.xyz, uv);
 	} else {
-		baseColor.xyz = Color::GammaToTrueLinear(GetFacegenBaseColor(Color::TrueLinearToGamma(baseColor.xyz), uv));
+		baseColor.xyz = Color::GammaToLinear(GetFacegenBaseColor(Color::LinearToGamma(baseColor.xyz), uv));
 	}
 #	elif defined(FACEGEN_RGB_TINT)
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		baseColor.xyz = GetFacegenRGBTintBaseColor(baseColor.xyz, uv);
 	} else {
-		baseColor.xyz = Color::GammaToTrueLinear(GetFacegenRGBTintBaseColor(Color::TrueLinearToGamma(baseColor.xyz), uv));
+		baseColor.xyz = Color::GammaToLinear(GetFacegenRGBTintBaseColor(Color::LinearToGamma(baseColor.xyz), uv));
 	}
 #	endif  // FACEGEN
 
@@ -1847,7 +1847,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 	if (SharedData::hairSpecularSettings.Enabled) {
 		if (SharedData::linearLightingSettings.enableLinearLighting) {
-			hairTint = lerp(1, Color::GammaToLinear(TintColor.xyz), Color::GammaToLinear(input.Color.y));
+			hairTint = lerp(1, Color::Diffuse(TintColor.xyz), Color::Diffuse(input.Color.y));
 		} else {
 			hairTint = lerp(1, TintColor.xyz, input.Color.y);
 		}
@@ -1860,7 +1860,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(LOD_LAND_BLEND)
 	float4 lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
 	if (SharedData::linearLightingSettings.enableLinearLighting) {
-		lodLandColor.xyz = Color::GammaToTrueLinear(lodLandColor.xyz);
+		lodLandColor.xyz = Color::Diffuse(lodLandColor.xyz);
 	}
 #		if defined(LOD_BLENDING)
 	lodLandColor.xyz *= SharedData::lodBlendingSettings.LODTerrainBrightness;
@@ -1955,7 +1955,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		if (!SharedData::linearLightingSettings.enableLinearLighting) {
 			projBaseColor = saturate(EnvmapData.xyz * projBaseColor);
 		} else {
-			projBaseColor = Color::GammaToTrueLinear(saturate(EnvmapData.xyz * projBaseColor));
+			projBaseColor = saturate(Color::GammaToTrueLinear(saturate(EnvmapData.xyz)) * projBaseColor);
 		}
 		rawRMAOS.xyw = lerp(rawRMAOS.xyw, float3(ParallaxOccData.x, 0, ParallaxOccData.y), projectedMaterialWeight);
 		float4 projectedGlintParameters = 0;
@@ -2948,13 +2948,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #				if defined(SKYLIGHTING)
 	{
 		float3 indirectSpecular = Hair::GetHairDynamicCubemapSpecularIrradiance(uv, screenUV, hairT, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, SharedData::hairSpecularSettings.Glossiness, indirectSpecularLobeWeightPrim, indirectSpecularLobeWeightSec, skylightingSH);
-		indirectSpecular = Color::LinearToGamma(indirectSpecular);
+		if (!SharedData::linearLightingSettings.enableLinearLighting)
+			indirectSpecular = Color::LinearToGamma(indirectSpecular);
 		color.xyz += indirectSpecular;
 	}
 #				else
 	{
 		float3 indirectSpecular = Hair::GetHairDynamicCubemapSpecularIrradiance(uv, screenUV, hairT, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, SharedData::hairSpecularSettings.Glossiness, indirectSpecularLobeWeightPrim, indirectSpecularLobeWeightSec);
-		indirectSpecular = Color::LinearToGamma(indirectSpecular);
+		if (!SharedData::linearLightingSettings.enableLinearLighting)
+			indirectSpecular = Color::LinearToGamma(indirectSpecular);
 		color.xyz += indirectSpecular;
 	}
 #				endif
