@@ -1955,7 +1955,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		if (!SharedData::linearLightingSettings.enableLinearLighting) {
 			projBaseColor = saturate(EnvmapData.xyz * projBaseColor);
 		} else {
-			projBaseColor = saturate(Color::GammaToTrueLinear(saturate(EnvmapData.xyz)) * projBaseColor);
+			projBaseColor = Color::GammaToTrueLinear(saturate(EnvmapData.xyz * projBaseColor));
 		}
 		rawRMAOS.xyw = lerp(rawRMAOS.xyw, float3(ParallaxOccData.x, 0, ParallaxOccData.y), projectedMaterialWeight);
 		float4 projectedGlintParameters = 0;
