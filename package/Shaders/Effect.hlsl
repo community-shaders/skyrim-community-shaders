@@ -667,7 +667,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		membraneColor = MembraneRimColor * membraneColorMul;
 	} else {
-		membraneColor = float4(Color::GammaToLinear(MembraneRimColor.xyz), Color::GammaToLinear(MembraneRimColor.w).x) * membraneColorMul.x;
+		membraneColor = float4(Color::Effect(MembraneRimColor.xyz), Color::Effect(MembraneRimColor.w).x) * membraneColorMul.x;
 	}
 #	elif defined(PROJECTED_UV) && defined(NORMALS)
 	float2 noiseTexCoord = 0.00333333341 * input.TexCoord0.xy;
@@ -686,7 +686,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float lightingInfluence = LightingInfluence.x;
 	float3 propertyColor = PropertyColor.xyz;
 	if (SharedData::linearLightingSettings.enableLinearLighting) {
-		propertyColor = Color::GammaToTrueLinear(propertyColor);
+		propertyColor = Color::Effect(propertyColor);
 	}
 
 #	if defined(LIGHTING)
@@ -739,7 +739,7 @@ PS_OUTPUT main(PS_INPUT input)
 	{
 		baseTexColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord0.xy);
 		if (SharedData::linearLightingSettings.enableLinearLighting) {
-			baseTexColor.xyz = Color::GammaToTrueLinear(baseTexColor.xyz);
+			baseTexColor.xyz = Color::Effect(baseTexColor.xyz);
 		}
 		baseColor *= baseTexColor;
 		if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::IgnoreTexAlpha || Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha) {
@@ -752,13 +752,13 @@ PS_OUTPUT main(PS_INPUT input)
 #	else
 	float4 baseColorMul = BaseColor;
 	if (SharedData::linearLightingSettings.enableLinearLighting) {
-		baseColorMul.xyz = Color::GammaToLinear(max(baseColorMul.xyz, 0));
+		baseColorMul.xyz = Color::Effect(max(baseColorMul.xyz, 0));
 	}
 #		if defined(VC) && !defined(PROJECTED_UV)
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		baseColorMul *= input.Color;
 	} else {
-		baseColorMul *= float4(Color::GammaToLinearLuminancePreservingLight(input.Color.xyz), input.Color.w);
+		baseColorMul *= float4(Color::Effect(input.Color.xyz), input.Color.w);
 	}
 #		endif
 #	endif
@@ -801,7 +801,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		baseColor.xyz = (PropertyColor.xyz + baseColor.xyz) * alpha + membraneColor.xyz * membraneColor.w;
 	} else {
-		baseColor.xyz = (Color::GammaToTrueLinear(PropertyColor.xyz) + baseColor.xyz) * alpha + membraneColor.xyz * membraneColor.w;
+		baseColor.xyz = (Color::Effect(PropertyColor.xyz) + baseColor.xyz) * alpha + membraneColor.xyz * membraneColor.w;
 	}
 	alpha += membraneColor.w;
 	baseColorScale = MembraneVars.z;
@@ -829,21 +829,11 @@ PS_OUTPUT main(PS_INPUT input)
 
 #	if !defined(MOTIONVECTORS_NORMALS)
 #		if defined(ADDBLEND)
-	float3 blendedColor = 0;
-	if (!SharedData::linearLightingSettings.enableLinearLighting) {
-		blendedColor = lightColor * (1 - input.FogParam.www);
-	} else {
-		blendedColor = lightColor * (1 - Color::GammaToLinear(input.FogParam.www));
-	}
+	float3 blendedColor = lightColor * (1 - Color::Fog(input.FogParam.www));
 #		elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)
-	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * input.FogParam.w).xxx);
+	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * Color::Fog(input.FogParam.w)).xxx);
 #		else
-	float3 blendedColor = 0;
-	if (!SharedData::linearLightingSettings.enableLinearLighting) {
-		blendedColor = lerp(lightColor, input.FogParam.xyz, input.FogParam.www);
-	} else {
-		blendedColor = lerp(lightColor, Color::GammaToLinear(input.FogParam.xyz), Color::GammaToLinear(input.FogParam.www));
-	}
+	float3 blendedColor = lerp(lightColor, Color::Fog(input.FogParam.xyz), Color::Fog(input.FogParam.www));
 #		endif
 #	else
 	float3 blendedColor = lightColor.xyz;

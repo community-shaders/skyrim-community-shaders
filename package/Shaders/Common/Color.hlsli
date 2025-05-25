@@ -143,6 +143,22 @@ namespace Color
 		}
 		return color;
 	}
+
+	float3 Fog(float3 color)
+	{
+		if (SharedData::linearLightingSettings.enableLinearLighting) {
+			color = pow(abs(color), SharedData::linearLightingSettings.fogGamma);
+		}
+		return color;
+	}
+
+	float3 Effect(float3 color)
+	{
+		if (SharedData::linearLightingSettings.enableLinearLighting) {
+			color = pow(abs(color), SharedData::linearLightingSettings.effectGamma);
+		}
+		return color;
+	}
 #endif
 }
 
