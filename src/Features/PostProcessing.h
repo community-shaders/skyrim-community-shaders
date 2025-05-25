@@ -12,7 +12,7 @@ struct PostProcessing : Feature
 
 	struct alignas(16) Settings
 	{
-		uint DisableVanillaTonemapping = 0;
+		uint DisableVanillaTonemapping = 1;
 		uint AdvancedMode = 0;  // placeholder
 		uint pad[2];
 	} settings;
