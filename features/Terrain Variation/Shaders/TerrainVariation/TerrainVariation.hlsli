@@ -52,53 +52,67 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 UV)
 // Main stochastic sampling function
 inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
 {
-	// Early return if terrain variation is disabled - provides zero overhead
+	// Early return if terrain variation is disabled
 	[branch] if (!SharedData::terrainVariationSettings.enableTilingFix) {
 		return tex.SampleBias(samp, uv, SharedData::MipBias);
 	}
 	
-	float4 sample1, sample2, sample3;
-	// Get stochastic samples using SampleLevel for consistent mip selection
-	sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
-	sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
-	sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
-	// Extract height information from samples (use alpha channel if available, otherwise luminance)
-	float3 heights = float3(
-		sample1.a > 0 ? sample1.a : dot(sample1.rgb, float3(0.2126, 0.7152, 0.0722)),
-		sample2.a > 0 ? sample2.a : dot(sample2.rgb, float3(0.2126, 0.7152, 0.0722)),
-		sample3.a > 0 ? sample3.a : dot(sample3.rgb, float3(0.2126, 0.7152, 0.0722))
-	);
-
-	float3 heightBlendWeights = lerp(offsets.weights, heights, HEIGHT_INFLUENCE);
-	heightBlendWeights = pow(saturate(heightBlendWeights), HEIGHT_BLEND_CONTRAST);
+	// First determine the weights based only on the offset weights (without height influence)
+	float3 blendWeights = offsets.weights;
 	
-	// Renormalize weights
-	float totalWeight = heightBlendWeights.x + heightBlendWeights.y + heightBlendWeights.z;
-	heightBlendWeights = (totalWeight > 0.0) ? heightBlendWeights / totalWeight : float3(0.33, 0.33, 0.34);
-
-	// Adaptive culling - only blend samples that contribute meaningfully
+	// Apply contrast and saturation to the initial blend weights
+	blendWeights = pow(saturate(blendWeights), HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE));
+	
+	// Renormalize the weights
+	float totalWeight = blendWeights.x + blendWeights.y + blendWeights.z;
+	blendWeights = (totalWeight > 0.0) ? blendWeights / totalWeight : float3(0.33, 0.33, 0.34);
+	
+	// Storage for samples and accumulated results
 	float4 stochasticSample = float4(0, 0, 0, 0);
 	float culledWeightSum = 0.0;
+	float4 sample;
 	
-	[branch] if (heightBlendWeights.x > CULLING_THRESHOLD) {
-		stochasticSample += sample1 * heightBlendWeights.x;
-		culledWeightSum += heightBlendWeights.x;
+	// Only sample textures when their weight exceeds the culling threshold
+	// This avoids fetching textures that would be discarded anyway
+	[branch] if (blendWeights.x > CULLING_THRESHOLD) {
+		sample = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+		
+		// Adjust weight based on height if needed
+		float height = sample.a > 0 ? sample.a : dot(sample.rgb, float3(0.2126, 0.7152, 0.0722));
+		float weight = lerp(blendWeights.x, height * blendWeights.x, HEIGHT_INFLUENCE);
+		
+		stochasticSample += sample * weight;
+		culledWeightSum += weight;
 	}
 	
-	[branch] if (heightBlendWeights.y > CULLING_THRESHOLD) {
-		stochasticSample += sample2 * heightBlendWeights.y;
-		culledWeightSum += heightBlendWeights.y;
+	[branch] if (blendWeights.y > CULLING_THRESHOLD) {
+		sample = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
+		
+		// Adjust weight based on height if needed
+		float height = sample.a > 0 ? sample.a : dot(sample.rgb, float3(0.2126, 0.7152, 0.0722));
+		float weight = lerp(blendWeights.y, height * blendWeights.y, HEIGHT_INFLUENCE);
+		
+		stochasticSample += sample * weight;
+		culledWeightSum += weight;
 	}
 	
-	[branch] if (heightBlendWeights.z > CULLING_THRESHOLD) {
-		stochasticSample += sample3 * heightBlendWeights.z;
-		culledWeightSum += heightBlendWeights.z;
+	[branch] if (blendWeights.z > CULLING_THRESHOLD) {
+		sample = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
+		
+		// Adjust weight based on height if needed
+		float height = sample.a > 0 ? sample.a : dot(sample.rgb, float3(0.2126, 0.7152, 0.0722));
+		float weight = lerp(blendWeights.z, height * blendWeights.z, HEIGHT_INFLUENCE);
+		
+		stochasticSample += sample * weight;
+		culledWeightSum += weight;
 	}
-		// Renormalize after culling, fallback to first sample if all culled
+	
+	// Renormalize after culling
 	if (culledWeightSum > 0.0) {
 		stochasticSample /= culledWeightSum;
 	} else {
-		stochasticSample = sample1; // Fallback
+		// If all samples were culled, get a single sample as fallback
+		stochasticSample = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel); // Fallback
 	}
 	return stochasticSample;
 }
