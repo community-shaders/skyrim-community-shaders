@@ -8,6 +8,11 @@
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 
+// Height blend operator settings
+static const float HEIGHT_BLEND_CONTRAST = 16.0; // Controls sharpness of height-based transitions
+static const float CULLING_THRESHOLD = 0.01;     // Minimum weight threshold for sample culling
+static const float HEIGHT_INFLUENCE = 0.5;       // How much height affects blending (0=pure stochastic, 1=pure height)
+
 // Structure to hold stochastic sampling offsets and weights
 struct StochasticOffsets
 {
@@ -17,15 +22,10 @@ struct StochasticOffsets
 	float3 weights;
 };
 
-// Compute terrain variation blend factor
-// Returns blend factor between 0.0 (no stochastic) and 1.0 (full stochastic)
-inline float ComputeTerrainVariationBlend(float viewDistance)
+// Check if terrain variation is enabled
+inline bool IsTerrainVariationEnabled()
 {
-	if (!SharedData::terrainVariationSettings.enableTilingFix)
-		return 0.0;
-
-	float blendFactor = saturate((viewDistance - 1200.0) / 1000.0);
-	return smoothstep(0.0, 1.0, blendFactor);
+	return SharedData::terrainVariationSettings.enableTilingFix;
 }
 
 // Hash function for stochastic sampling
@@ -56,33 +56,71 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 UV)
 }
 
 // Main stochastic sampling function
-inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy, float distance = 0.0)
+inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
 {
 	// If feature is disabled, return standard sample
-	if (!SharedData::terrainVariationSettings.enableTilingFix)
-		return tex.SampleLevel(samp, uv, mipLevel);	// Compute terrain variation blend factor (0.0 = no stochastic, 1.0 = full stochastic)
-	float terrainVariationBlend = ComputeTerrainVariationBlend(distance);
-	float4 standardSample = tex.SampleLevel(samp, uv, mipLevel);
+	[branch] if (!IsTerrainVariationEnabled())
+		return tex.SampleLevel(samp, uv, mipLevel);
 
-	// If no terrain variation blend, return standard sample
-	if (terrainVariationBlend <= 0.0) {
-		return standardSample;
+	bool useParallax = SharedData::extendedMaterialSettings.EnableTerrainParallax;
+	float4 sample1, sample2, sample3;
+	// Get stochastic samples
+	[branch] if (useParallax) {
+		// Parallax enabled, can use SampleLevel for better perf
+		sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+		sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
+		sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
+	} else {
+		// When parallax disabled, samplelevel causes mipmap issues, it uses too low a mipmap level up close.
+		sample1 = tex.SampleGrad(samp, uv + offsets.offset1, dx, dy);
+		sample2 = tex.SampleGrad(samp, uv + offsets.offset2, dx, dy);
+		sample3 = tex.SampleGrad(samp, uv + offsets.offset3, dx, dy);
 	}
 
-	// Get stochastic samples only when needed (at distance where parallax fades out)
-	// Use SampleLevel since we're at distance where mipmap issues don't matter
-	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
-	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
-	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
+	// Extract height information from samples (use alpha channel if available, otherwise luminance)
+	float3 heights = float3(
+		sample1.a > 0 ? sample1.a : dot(sample1.rgb, float3(0.299, 0.587, 0.114)),
+		sample2.a > 0 ? sample2.a : dot(sample2.rgb, float3(0.299, 0.587, 0.114)),
+		sample3.a > 0 ? sample3.a : dot(sample3.rgb, float3(0.299, 0.587, 0.114))
+	);
 
-	// Weight samples according to offsets
-	float4 stochasticSample = sample1 * offsets.weights.x +
-	                          sample2 * offsets.weights.y +
-	                          sample3 * offsets.weights.z;
+	// Compute height-based blend weights
+	float3 heightBlendWeights = lerp(offsets.weights, heights, HEIGHT_INFLUENCE);
+	heightBlendWeights = pow(saturate(heightBlendWeights), HEIGHT_BLEND_CONTRAST);
+	
+	// Renormalize weights
+	float totalWeight = heightBlendWeights.x + heightBlendWeights.y + heightBlendWeights.z;
+	heightBlendWeights = (totalWeight > 0.0) ? heightBlendWeights / totalWeight : float3(0.33, 0.33, 0.34);
 
-	// Smooth blend: lerp from standard to stochastic based on distance
-	return lerp(standardSample, stochasticSample, terrainVariationBlend);
+	// Adaptive culling - only blend samples that contribute meaningfully
+	float4 stochasticSample = float4(0, 0, 0, 0);
+	float culledWeightSum = 0.0;
+	
+	[branch] if (heightBlendWeights.x > CULLING_THRESHOLD) {
+		stochasticSample += sample1 * heightBlendWeights.x;
+		culledWeightSum += heightBlendWeights.x;
+	}
+	
+	[branch] if (heightBlendWeights.y > CULLING_THRESHOLD) {
+		stochasticSample += sample2 * heightBlendWeights.y;
+		culledWeightSum += heightBlendWeights.y;
+	}
+	
+	[branch] if (heightBlendWeights.z > CULLING_THRESHOLD) {
+		stochasticSample += sample3 * heightBlendWeights.z;
+		culledWeightSum += heightBlendWeights.z;
+	}
+		// Renormalize after culling, fallback to first sample if all culled
+	if (culledWeightSum > 0.0) {
+		stochasticSample /= culledWeightSum;
+	} else {
+		stochasticSample = sample1; // Fallback
+	}
+
+	return stochasticSample;
 }
-#define StochasticSample(rnd, mipLevel, tex, samp, uv, dist) StochasticEffect(rnd, mipLevel, tex, samp, uv, ComputeStochasticOffsets(uv), ddx(uv), ddy(uv), dist).rgb
+
+#define StochasticSample(rnd, mipLevel, tex, samp, uv) StochasticEffect(rnd, mipLevel, tex, samp, uv, ComputeStochasticOffsets(uv), ddx(uv), ddy(uv)).rgb
+
 
 #endif  // TERRAIN_VARIATION_HLSLI
