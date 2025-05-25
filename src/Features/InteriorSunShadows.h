@@ -51,7 +51,14 @@ struct InteriorSunShadows : Feature
 		}
 	}
 
+	static bool IsInteriorWithSun(const RE::TESObjectCELL* cell);
+
 private:
+	enum class CellFlagExt : uint16_t
+	{
+		kSunlightShadows = 1 << 15,
+	};
+
 	float* gShadowDistance = nullptr;
 	uint32_t* rasterStateCullMode = nullptr;
 
@@ -68,8 +75,6 @@ private:
 	void ClearArrays();
 
 	void InitialiseOnNewCell(const RE::NiPointer<RE::BSPortalGraph>& portalGraph);
-
-	static bool IsInteriorWithSun(const RE::TESObjectCELL* cell);
 
 	bool IsInSunDirectionAndWithinShadowDistance(const RE::NiPointer<RE::NiAVObject>& object, const RE::NiPoint3& lightDir, const RE::NiPoint3& playerPos) const;
 
