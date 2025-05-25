@@ -174,13 +174,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	if defined(APPLY_FOG)
 	float fogDistanceFactor = (2 * CameraNearFar.x * CameraNearFar.y) / ((CameraNearFar.y + CameraNearFar.x) - (2 * (1.01 * depth - 0.01) - 1) * (CameraNearFar.y - CameraNearFar.x));
 	float fogFactor = min(FogParam.w, pow(saturate(fogDistanceFactor * FogParam.y - FogParam.x), FogParam.z));
-	float3 fogColor = 0;
-	if (SharedData::linearLightingSettings.enableLinearLighting) {
-		fogFactor = Color::Fog(fogFactor).x;
-		fogColor = lerp(Color::Fog(FogNearColor.xyz), Color::Fog(FogFarColor.xyz), fogFactor);
-	} else {
-		fogColor = lerp(FogNearColor.xyz, FogFarColor.xyz, fogFactor);
-	}
+	float3 fogColor = lerp(Color::Fog(FogNearColor.xyz), Color::Fog(FogFarColor.xyz), fogFactor);
 	if (depth < 0.999999) {
 		composedColor.xyz = FogNearColor.w * lerp(composedColor.xyz, fogColor, fogFactor);
 	}

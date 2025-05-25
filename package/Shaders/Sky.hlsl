@@ -193,7 +193,7 @@ Texture2D<float> TexDepthSampler : register(t17);
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
-	float3 linearyyy = Color::GammaToLinear(PParams.yyy);
+	float3 yyy = Color::Sky(PParams.yyy);
 #	if !defined(VR)
 	uint eyeIndex = 0;
 #	else
@@ -204,7 +204,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		ifndef TEXLERP
 	float4 baseColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord0.xy);
 	if (SharedData::linearLightingSettings.enableLinearLighting) {
-		baseColor.xyz = Color::GammaToLinear(baseColor.xyz);
+		baseColor.xyz = Color::Sky(baseColor.xyz);
 	}
 #			ifdef TEXFADE
 	baseColor.w *= PParams.x;
@@ -213,8 +213,8 @@ PS_OUTPUT main(PS_INPUT input)
 	float4 blendColor = TexBlendSampler.Sample(SampBlendSampler, input.TexCoord1.xy);
 	float4 baseColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord0.xy);
 	if (SharedData::linearLightingSettings.enableLinearLighting) {
-		blendColor.xyz = Color::GammaToLinear(blendColor.xyz);
-		baseColor.xyz = Color::GammaToLinear(baseColor.xyz);
+		blendColor.xyz = Color::Sky(blendColor.xyz);
+		baseColor.xyz = Color::Sky(baseColor.xyz);
 	}
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
 #		endif
@@ -225,18 +225,10 @@ PS_OUTPUT main(PS_INPUT input)
 		TexNoiseGradSampler.Sample(SampNoiseGradSampler, noiseGradUv).x * 0.03125 + -0.0078125;
 
 #			ifdef TEX
-	if (!SharedData::linearLightingSettings.enableLinearLighting) {
-		psout.Color.xyz = (input.Color.xyz * baseColor.xyz + PParams.yyy) + noiseGrad;
-	} else {
-		psout.Color.xyz = (Color::GammaToLinear(input.Color.xyz) * baseColor.xyz + linearyyy) + noiseGrad;
-	}
+	psout.Color.xyz = (Color::Sky(input.Color.xyz) * baseColor.xyz + yyy) + noiseGrad;
 	psout.Color.w = baseColor.w * input.Color.w;
 #			else
-	if (!SharedData::linearLightingSettings.enableLinearLighting) {
-		psout.Color.xyz = (PParams.yyy + input.Color.xyz) + noiseGrad;
-	} else {
-		psout.Color.xyz = (linearyyy + Color::GammaToLinear(input.Color.xyz)) + noiseGrad;
-	}
+	psout.Color.xyz = (linearyyy + Color::Sky(input.Color.xyz)) + noiseGrad;
 	psout.Color.w = input.Color.w;
 #			endif  // TEX
 
@@ -248,19 +240,11 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 #		elif defined(HORIZFADE)
-	if (!SharedData::linearLightingSettings.enableLinearLighting) {
-		psout.Color.xyz = float3(1.5, 1.5, 1.5) * (input.Color.xyz * baseColor.xyz + PParams.yyy);
-	} else {
-		psout.Color.xyz = float3(1.5, 1.5, 1.5) * (Color::GammaToLinear(input.Color.xyz) * baseColor.xyz + linearyyy);
-	}
+	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (Color::Sky(input.Color.xyz) * baseColor.xyz + yyy);
 	psout.Color.w = input.TexCoord2.x * (baseColor.w * input.Color.w);
 #		else
 	psout.Color.w = input.Color.w * baseColor.w;
-	if (!SharedData::linearLightingSettings.enableLinearLighting) {
-		psout.Color.xyz = input.Color.xyz * baseColor.xyz + PParams.yyy;
-	} else {
-		psout.Color.xyz = Color::GammaToLinear(input.Color.xyz) * baseColor.xyz + linearyyy;
-	}
+	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + yyy;
 #		endif
 
 #	else

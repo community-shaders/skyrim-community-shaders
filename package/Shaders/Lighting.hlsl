@@ -1860,7 +1860,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(LOD_LAND_BLEND)
 	float4 lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
 	if (SharedData::linearLightingSettings.enableLinearLighting) {
-		lodLandColor.xyz = Color::Diffuse(lodLandColor.xyz);
+		lodLandColor.xyz = Color::GammaToTrueLinear(lodLandColor.xyz);
 	}
 #		if defined(LOD_BLENDING)
 	lodLandColor.xyz *= SharedData::lodBlendingSettings.LODTerrainBrightness;
@@ -3068,7 +3068,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		color.xyz = color.xyz + specularColor;
 	}
 	if (FrameBuffer::FrameParams.y && FrameBuffer::FrameParams.z)
-		color.xyz = lerp(color.xyz, Color::Fog(input.FogParam.xyz), Color::Fog(input.FogParam.w));
+		color.xyz = lerp(color.xyz, Color::Fog(input.FogParam.xyz), input.FogParam.w);
 #	endif
 
 #	if defined(TESTCUBEMAP) && defined(ENVMAP) && defined(DYNAMIC_CUBEMAPS)

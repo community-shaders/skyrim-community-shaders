@@ -965,12 +965,12 @@ PS_OUTPUT main(PS_INPUT input)
 #					if defined(VC)
 	float specularFraction = lerp(1, fresnel * diffuseOutput.refractionMul, distanceFactor);
 	float3 finalColorPreFog = lerp(diffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
-	float3 finalColor = lerp(finalColorPreFog, Color::Fog(input.FogParam.xyz) * PosAdjust[eyeIndex].w, Color::Fog(input.FogParam.w));
+	float3 finalColor = lerp(finalColorPreFog, Color::Fog(input.FogParam.xyz) * PosAdjust[eyeIndex].w, input.FogParam.w);
 
 #					else
 	float specularFraction = lerp(1, fresnel, distanceFactor);
 	float3 finalColorPreFog = lerp(diffuseOutput.refractionDiffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
-	finalColorPreFog = lerp(finalColorPreFog, Color::Fog(input.FogParam.xyz) * PosAdjust[eyeIndex].w, Color::Fog(input.FogParam.w));
+	finalColorPreFog = lerp(finalColorPreFog, Color::Fog(input.FogParam.xyz) * PosAdjust[eyeIndex].w, input.FogParam.w);
 
 	float3 refractionColor = diffuseOutput.refractionColor;
 

@@ -9,7 +9,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	colorGamma,
 	ambientGamma,
 	fogGamma,
-	effectGamma);
+	effectGamma,
+	skyGamma)
 
 void LinearLighting::DrawSettings()
 {
@@ -22,6 +23,7 @@ void LinearLighting::DrawSettings()
 	ImGui::SliderFloat("Ambient Gamma", &settings.ambientGamma, 1.0f, 3.0f, "%.2f");
 	ImGui::SliderFloat("Fog Gamma", &settings.fogGamma, 1.0f, 3.0f, "%.2f");
 	ImGui::SliderFloat("Effect Gamma", &settings.effectGamma, 1.0f, 3.0f, "%.2f");
+	ImGui::SliderFloat("Sky Gamma", &settings.skyGamma, 1.0f, 3.0f, "%.2f");
 }
 
 void LinearLighting::LoadSettings(json& o_json)
@@ -55,5 +57,6 @@ LinearLighting::Settings LinearLighting::GetCommonBufferData()
 	data.ambientGamma = settings.ambientGamma;
 	data.fogGamma = settings.fogGamma;
 	data.effectGamma = settings.effectGamma;
+	data.skyGamma = settings.skyGamma;
 	return data;
 }

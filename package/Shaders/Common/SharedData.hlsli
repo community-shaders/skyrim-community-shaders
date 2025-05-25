@@ -193,6 +193,8 @@ namespace SharedData
 		float ambientGamma;
 		float fogGamma;
 		float effectGamma;
+		float skyGamma;
+		float3 pad;
 	};
 
 	cbuffer FeatureData : register(b6)

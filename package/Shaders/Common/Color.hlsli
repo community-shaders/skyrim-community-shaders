@@ -159,6 +159,14 @@ namespace Color
 		}
 		return color;
 	}
+
+	float3 Sky(float3 color)
+	{
+		if (SharedData::linearLightingSettings.enableLinearLighting) {
+			color = pow(abs(color), SharedData::linearLightingSettings.skyGamma);
+		}
+		return color;
+	}
 #endif
 }
 
