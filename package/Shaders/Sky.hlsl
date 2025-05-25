@@ -228,7 +228,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color.xyz = (Color::Sky(input.Color.xyz) * baseColor.xyz + yyy) + noiseGrad;
 	psout.Color.w = baseColor.w * input.Color.w;
 #			else
-	psout.Color.xyz = (linearyyy + Color::Sky(input.Color.xyz)) + noiseGrad;
+	psout.Color.xyz = (yyy + Color::Sky(input.Color.xyz)) + noiseGrad;
 	psout.Color.w = input.Color.w;
 #			endif  // TEX
 
