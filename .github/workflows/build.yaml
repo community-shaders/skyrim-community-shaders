@@ -110,30 +110,15 @@ jobs:
           BASE_TAG="v${{ needs.build.outputs.version }}"
           PR_URL="https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
 
-          # Create temporary tag and release to generate notes
-          gh release create "$TAG-temp" \
-            --repo "$GITHUB_REPOSITORY" \
-            --notes-start-tag "$BASE_TAG" \
-            --generate-notes \
-            --title "Temporary for notes only" \
-            --draft
+          echo "🔍 Comparing $BASE_SHA...$HEAD_SHA"
 
-          # Extract body
-          gh release view "$TAG-temp" \
-            --repo "$GITHUB_REPOSITORY" \
-            --json body \
-            --jq .body > release-notes.md
+          NOTES=$(gh api repos/$REPO/compare/$BASE_SHA...$HEAD_SHA | jq -r '
+            .commits[] | "- \(.commit.message | split("\n")[0]) by @\(.author.login // $author)"
+          ')
 
-          # Append PR link
-          {
-            echo ""
-            echo "---"
-            echo "[View Pull Request]($PR_URL)"
-          } >> release-notes.md
-
-          # Clean up temporary tag
-          gh release delete "$TAG-temp" --repo "$GITHUB_REPOSITORY" --yes
-          git tag -d "$TAG-temp" || true  # Local delete if created
+          echo "$NOTES" > release-notes.md
+          echo -e "\n[View Pull Request](https://github.com/$REPO/pull/$PR_NUMBER)" >> release-notes.md
+          echo "bodyfile=release-notes.md" >> "$GITHUB_OUTPUT"
 
       - name: Upload prerelease
         uses: ncipollo/release-action@v1
@@ -143,6 +128,7 @@ jobs:
           prerelease: true
           artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
           bodyFile: release-notes.md
+          generateReleaseNotes: false
           allowUpdates: true
           replacesArtifacts: true
           removeArtifacts: true
