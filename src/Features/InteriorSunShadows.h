@@ -43,7 +43,8 @@ struct InteriorSunShadows : Feature
 	void UpdateRasterStateCullMode(const RE::BSRenderPass* pass, const uint32_t technique) const
 	{
 		if (isInteriorWithSun && settings.ForceDoubleSidedRendering && technique & static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmap)) {
-			const auto renderTwoSided = pass->shaderProperty->flags.none(RE::BSShaderProperty::EShaderPropertyFlag::kAssumeShadowmask, RE::BSShaderProperty::EShaderPropertyFlag::kSkinned);
+			const auto flags = pass->shaderProperty->flags;
+			const auto renderTwoSided = flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kTwoSided) || flags.none(RE::BSShaderProperty::EShaderPropertyFlag::kAssumeShadowmask, RE::BSShaderProperty::EShaderPropertyFlag::kSkinned);
 			if (renderTwoSided && *rasterStateCullMode != 0) {
 				*rasterStateCullMode = 0;
 				globals::game::stateUpdateFlags->set(RE::BSGraphics::DIRTY_RASTER_CULL_MODE);
