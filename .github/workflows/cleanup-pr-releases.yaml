@@ -32,15 +32,21 @@ jobs:
               pr_number="${BASH_REMATCH[1]}"
               echo "Checking PR #$pr_number for tag $tag"
 
-              pr_status=$(gh pr view "$pr_number" --json state --jq .state 2>/dev/null || echo "NOT_FOUND")
-              if [[ "$pr_status" != "OPEN" ]]; then
-                echo "Deleting prerelease with tag $tag (PR #$pr_number is $pr_status)"
-                # Remove release and cleanup the Git tag (requires GH CLI ≥2.3.0)
-                gh release delete "$tag" --yes --cleanup-tag \
-                  || git push --delete origin "$tag"
-                git tag -d "$tag" || true
+              pr_info=$(gh pr view "$pr_number" --json state,isDraft 2>/dev/null || echo "NOT_FOUND")
+              if [[ "$pr_info" == "NOT_FOUND" ]]; then
+                echo "PR #$pr_number not found. Deleting prerelease tag $tag"
+                gh release delete "$tag" --yes --cleanup-tag
+                continue
+              fi
+
+              pr_state=$(echo "$pr_info" | jq -r '.state')
+              pr_draft=$(echo "$pr_info" | jq -r '.isDraft')
+
+              if [[ "$pr_state" != "OPEN" || "$pr_draft" == "true" ]]; then
+                echo "PR #$pr_number is $pr_state${pr_draft:+ (draft)}. Deleting prerelease tag $tag"
+                gh release delete "$tag" --yes --cleanup-tag
               else
-                echo "PR #$pr_number is still open. Keeping tag $tag"
+                echo "PR #$pr_number is open and not draft. Keeping tag $tag"
               fi
             else
               echo "Skipping non-PR tag $tag"
