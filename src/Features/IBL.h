@@ -33,9 +33,9 @@ public:
 	struct alignas(16) Settings
 	{
 		uint EnableDiffuseIBL = 1;
-		float DiffuseIBLScale = 1.0f;
-		float DALCAmount = 0.3f;
-		float IBLSaturation = 0.75f;
+		float DiffuseIBLScale = 0.5f;
+		float DALCAmount = 0.5f;
+		float IBLSaturation = 0.65f;
 		uint SampleUnderHorizonFromDynCube = 0;
 		uint pad[3];
 	} settings;

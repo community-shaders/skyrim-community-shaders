@@ -1,0 +1,54 @@
+name: Cleanup Closed PR Releases
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'  # Optional: runs daily at 2am UTC
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  cleanup-prereleases:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Delete closed PR prereleases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Fetching all prereleases..."
+          releases=$(gh release list --limit 1000 --json tagName,isPrerelease --jq '.[] | select(.isPrerelease) | .tagName')
+
+          for tag in $releases; do
+            if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-pr([0-9]+)$ ]]; then
+              pr_number="${BASH_REMATCH[1]}"
+              echo "Checking PR #$pr_number for tag $tag"
+
+              pr_info=$(gh pr view "$pr_number" --json state,isDraft 2>/dev/null || echo "NOT_FOUND")
+              if [[ "$pr_info" == "NOT_FOUND" ]]; then
+                echo "PR #$pr_number not found. Deleting prerelease tag $tag"
+                gh release delete "$tag" --yes --cleanup-tag
+                continue
+              fi
+
+              pr_state=$(echo "$pr_info" | jq -r '.state')
+              pr_draft=$(echo "$pr_info" | jq -r '.isDraft')
+
+              if [[ "$pr_state" != "OPEN" || "$pr_draft" == "true" ]]; then
+                echo "PR #$pr_number is $pr_state${pr_draft:+ (draft)}. Deleting prerelease tag $tag"
+                gh release delete "$tag" --yes --cleanup-tag
+              else
+                echo "PR #$pr_number is open and not draft. Keeping tag $tag"
+              fi
+            else
+              echo "Skipping non-PR tag $tag"
+            fi
+          done
