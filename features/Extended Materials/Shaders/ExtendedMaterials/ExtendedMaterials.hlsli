@@ -301,7 +301,8 @@ namespace ExtendedMaterials
 			}
 			total += h * weights[2];
 			weights[2] *= pow(heightBlend, HEIGHT_MULT * h);
-		}		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile3HasDisplacement) != 0 && w1.w > 0.0)
+		}		
+		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile3HasDisplacement) != 0 && w1.w > 0.0)
 		{
 			float h;
 #		if defined(TERRAIN_VARIATION)
@@ -315,7 +316,8 @@ namespace ExtendedMaterials
 #		endif
 			total += h * weights[3];
 			weights[3] *= pow(heightBlend, HEIGHT_MULT * h);
-		}		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile4HasDisplacement) != 0 && w2.x > 0.0)
+		}		
+		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile4HasDisplacement) != 0 && w2.x > 0.0)
 		{
 			float h;
 #		if defined(TERRAIN_VARIATION)
@@ -329,7 +331,8 @@ namespace ExtendedMaterials
 #		endif
 			total += h * weights[4];
 			weights[4] *= pow(heightBlend, HEIGHT_MULT * h);
-		}		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile5HasDisplacement) != 0 && w2.y > 0.0)
+		}		
+		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile5HasDisplacement) != 0 && w2.y > 0.0)
 		{
 			float h;
 #		if defined(TERRAIN_VARIATION)

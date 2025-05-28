@@ -160,11 +160,11 @@ namespace SharedData
 		float BaseColorMult;
 		float pad;
 	};	
-	
-	struct TerrainVariationSettings
+		struct TerrainVariationSettings
 	{
 		bool enableTilingFix;
-		float3 pad0;
+		bool enableLODTerrainTilingFix;
+		float2 pad0;
 	};
 
 	struct IBLSettings

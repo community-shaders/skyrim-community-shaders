@@ -44,6 +44,37 @@ inline float2 ComputeStochasticOffsets1(float2 UV)
 	return hash2D2D(firstVertexID);
 }
 
+inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 UV)
+{
+    // Use a much smaller scale factor for LOD terrain to create subtle variation
+    // instead of dramatic pattern changes
+    float2 skewUV = mul(float2x2(1.0, 0.0, -0.57735027, 1.15470054), UV * 1.5);
+    float2 vxID = floor(skewUV);
+    float3 barry = float3(frac(skewUV), 0.0);
+    barry.z = 1.0 - barry.x - barry.y;
+
+    // Create a more stable triangle pattern
+    float4x3 BW_vx = (barry.z > 0) ?
+                       float4x3(float3(vxID, 0), float3(vxID + float2(0, 1), 0), float3(vxID + float2(1, 0), 0), barry.zyx) :
+                       float4x3(float3(vxID + float2(1, 1), 0), float3(vxID + float2(1, 0), 0), float3(vxID + float2(0, 1), 0), float3(-barry.z, 1.0 - barry.y, 1.0 - barry.x));
+
+    // Generate smaller offsets for more subtle variation
+    StochasticOffsets offsetsLOD;
+    offsetsLOD.offset1 = hash2D2D(BW_vx[0].xy) * 0.15; // Reduced offset magnitude
+    offsetsLOD.offset2 = hash2D2D(BW_vx[1].xy) * 0.15;
+    offsetsLOD.offset3 = hash2D2D(BW_vx[2].xy) * 0.15;
+    
+    // Use smoother weights with less contrast
+    float3 smoothWeights = BW_vx[3];
+    // Apply mild smoothing to weights
+    smoothWeights = pow(smoothWeights, 0.8);
+    // Renormalize
+    smoothWeights /= (smoothWeights.x + smoothWeights.y + smoothWeights.z);
+    
+    offsetsLOD.weights = smoothWeights;
+    return offsetsLOD;
+}
+
 // Compute offsets for stochastic sampling
 inline StochasticOffsets ComputeStochasticOffsets(float2 UV)
 {
@@ -105,11 +136,13 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	return result;
 }
 
+// Cheap Stochastic Effect for single sample. Used for RMAOS.
 inline float4 StochasticSample1(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy) // Used for RMAOS (maybe LOD in future)
 {
 	return tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 }
 
+// Same as StochasticEffect but no height/luminescence influence, so much cheaper but worse quality, doesn't matter for the use case.
 inline float4 StochasticSample3(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy) // Used for parallaxcoords & getheight funct.
 {
 	// Sample the three texture offsets using the provided mip level
@@ -123,6 +156,73 @@ inline float4 StochasticSample3(float rnd, float mipLevel, Texture2D tex, Sample
 	                sample3 * offsets.weights.z;
 	
 	return result;
+}
+
+// Special version for LOD mask textures that should have minimal blurring
+inline float4 StochasticSampleLODMask(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
+{
+ 	float offsetScale = 0.04; 
+    
+    // Add simple rotation to each offset (using the random value to vary rotation per pixel)
+    float angle1 = rnd * 3.14;            // Random base angle between 0-2π
+    float angle2 = angle1 + 1.04;         // ~120° offset
+    float angle3 = angle1 + 2.09;         // ~240° offset
+    
+    // Create rotation matrices
+    float2x2 rot1 = float2x2(cos(angle1), -sin(angle1), sin(angle1), cos(angle1));
+    float2x2 rot2 = float2x2(cos(angle2), -sin(angle2), sin(angle2), cos(angle2));
+    float2x2 rot3 = float2x2(cos(angle3), -sin(angle3), sin(angle3), cos(angle3));
+    
+    // Apply rotation to offsets before scaling them down
+    float2 microOffset1 = mul(rot1, offsets.offset1) * offsetScale;
+    float2 microOffset2 = mul(rot2, offsets.offset2) * offsetScale;
+    float2 microOffset3 = mul(rot3, offsets.offset3) * offsetScale;
+    
+    // Sample with rotated micro-offsets
+	float tinyMipBias = 0.05;
+    float4 sample1 = tex.SampleLevel(samp, uv + microOffset1, mipLevel + tinyMipBias);
+    float4 sample2 = tex.SampleLevel(samp, uv + microOffset2, mipLevel + tinyMipBias);
+    float4 sample3 = tex.SampleLevel(samp, uv + microOffset3, mipLevel + tinyMipBias);
+    
+    // Blend using the barycentric weights (unchanged)
+    float4 result = sample1 * offsets.weights.x + 
+                  sample2 * offsets.weights.y + 
+                  sample3 * offsets.weights.z;
+    
+    return result;
+}
+
+// Stochastic sampling function for Full Terrain LOD. Uses rotated offsets for more variation.
+inline float4 StochasticSampleLOD(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
+{
+	float offsetScale = 0.15; 
+    
+    // Add simple rotation to each offset (using the random value to vary rotation per pixel)
+    float angle1 = rnd * 6.28;            // Random base angle between 0-2π
+    float angle2 = angle1 + 2.09;         // ~120° offset
+    float angle3 = angle1 + 4.18;         // ~240° offset
+    
+    // Create rotation matrices
+    float2x2 rot1 = float2x2(cos(angle1), -sin(angle1), sin(angle1), cos(angle1));
+    float2x2 rot2 = float2x2(cos(angle2), -sin(angle2), sin(angle2), cos(angle2));
+    float2x2 rot3 = float2x2(cos(angle3), -sin(angle3), sin(angle3), cos(angle3));
+    
+    // Apply rotation to offsets before scaling them down
+    float2 microOffset1 = mul(rot1, offsets.offset1) * offsetScale;
+    float2 microOffset2 = mul(rot2, offsets.offset2) * offsetScale;
+    float2 microOffset3 = mul(rot3, offsets.offset3) * offsetScale;
+    
+    // Sample with rotated micro-offsets (everything else stays the same)
+    float4 sample1 = tex.SampleLevel(samp, uv + microOffset1, mipLevel);
+    float4 sample2 = tex.SampleLevel(samp, uv + microOffset2, mipLevel);
+    float4 sample3 = tex.SampleLevel(samp, uv + microOffset3, mipLevel);
+    
+    // Blend using the barycentric weights (unchanged)
+    float4 result = sample1 * offsets.weights.x + 
+                  sample2 * offsets.weights.y + 
+                  sample3 * offsets.weights.z;
+    
+    return result;
 }
 
 #endif  // TERRAIN_VARIATION_HLSLI

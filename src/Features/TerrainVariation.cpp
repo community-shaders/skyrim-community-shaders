@@ -6,7 +6,8 @@
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	TerrainVariation::Settings,
-	enableTilingFix)
+	enableTilingFix,
+	enableLODTerrainTilingFix)
 
 void TerrainVariation::DrawSettings()
 {
@@ -24,6 +25,20 @@ void TerrainVariation::DrawSettings()
 			"Stochastic texturing is applied only when parallax effects are not active (beyond 2048 units from camera).");
 	}
 	if (settings.enableTilingFix) {
+		ImGui::Separator();
+
+		bool oldLODEnabled = settings.enableLODTerrainTilingFix;
+		ImGui::Checkbox("Apply to LOD Terrain", (bool*)&settings.enableLODTerrainTilingFix);
+		if (oldLODEnabled != (bool)settings.enableLODTerrainTilingFix) {
+			UpdateShaderSettings();
+			logger::info("TerrainVariation LOD setting changed to: {}", settings.enableLODTerrainTilingFix);
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"Applies the tiling fix to LOD terrain objects.\n"
+				"This helps reduce the visible tiling effect on distant terrain.");
+		}
+
 		ImGui::Separator();
 
 		bool paramsChanged = false;
@@ -64,6 +79,11 @@ void TerrainVariation::SaveSettings(json& o_json)
 	o_json = settings;
 }
 
+void TerrainVariation::RestoreDefaultSettings()
+{
+	settings = {};
+}
+
 bool TerrainVariation::DrawFailLoadMessage() const
 {
 	return false;
@@ -83,5 +103,6 @@ void TerrainVariation::DrawUnloadedUI()
 	ImGui::TextWrapped("Key features:");
 	ImGui::BulletText("Reduces terrain texture tiling");
 	ImGui::BulletText("Automatically activates when parallax effects end");
+	ImGui::BulletText("Can be applied to LOD terrain for more consistent appearance");
 	ImGui::Spacing();
 }
