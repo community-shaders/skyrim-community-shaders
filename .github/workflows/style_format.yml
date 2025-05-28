@@ -36,10 +36,11 @@ jobs:
                   clangFormatVersion: 20
                   inplace: True # commit the changes (if there are any)
             - name: Commit changes
-              uses: stefanzweifel/git-auto-commit-action@v4
+              uses: stefanzweifel/git-auto-commit-action@v5
               with:
                   commit_message: "style: 🎨 apply clang-format changes"
                   branch: ${{ github.head_ref }}
+                  skip_fetch: true
 
     prettier_format:
         needs: format
@@ -58,7 +59,8 @@ jobs:
             - name: Pull latest formatting changes
               run: git pull --rebase
             - name: Commit changes
-              uses: stefanzweifel/git-auto-commit-action@v4
+              uses: stefanzweifel/git-auto-commit-action@v5
               with:
                   commit_message: "style: 🎨 apply Prettier formatting"
                   branch: ${{ github.head_ref }}
+                  skip_fetch: true
