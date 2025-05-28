@@ -40,7 +40,7 @@ jobs:
       version: ${{ steps.get_version.outputs.version }}
     steps:
       - name: Checkout PR code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           repository: ${{ github.event.pull_request.head.repo.full_name }}
@@ -53,11 +53,12 @@ jobs:
           vcpkgJsonGlob: vcpkg.json
 
       - name: Cache CMake build output
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: build/ALL
-          key: ${{ runner.os }}-build-${{ inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json', '**/CMakeLists.txt', '**/*.cpp', '**/*.c', '**/*.h', '**/*.hpp') }}
+          key: ${{ runner.os }}-build-${{ inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
           restore-keys: |
+            ${{ runner.os }}-build-${{ inputs.cache-key-suffix || 'default' }}-
             ${{ runner.os }}-build-
 
       - name: Build using run-cmake with ALL preset
@@ -86,14 +87,8 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
-      pull-requests: read
+      pull-requests: write
     steps:
-      - name: Checkout default branch
-        uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          submodules: recursive
-
       - name: Download dist artifacts
         uses: actions/download-artifact@v4
         with:
@@ -102,25 +97,45 @@ jobs:
 
       - name: Generate release notes comparing against base version tag
         id: gen_notes
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           TAG="v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }}"
           BASE_TAG="v${{ needs.build.outputs.version }}"
-          PR_URL="https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
+          REPO="${{ github.repository }}"
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          PR_URL="https://github.com/$REPO/pull/$PR_NUMBER"
+          
+          # Get PR author with fallback
+          if PR_AUTHOR=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json author -q '.author.login' 2>/dev/null); then
+            echo "✅ Found PR author: $PR_AUTHOR"
+          else
+            PR_AUTHOR="${{ github.event.pull_request.user.login }}"
+            echo "⚠️ Using fallback PR author: $PR_AUTHOR"
+          fi
 
           echo "🔍 Comparing $BASE_SHA...$HEAD_SHA"
 
-          NOTES=$(gh api repos/$REPO/compare/$BASE_SHA...$HEAD_SHA | jq -r '
-            .commits[] | "- \(.commit.message | split("\n")[0]) by @\(.author.login // $author)"
-          ')
+          # Generate commit-based release notes
+          if NOTES=$(gh api repos/$REPO/compare/$BASE_SHA...$HEAD_SHA 2>/dev/null | jq -r --arg author "$PR_AUTHOR" '
+            .commits[] 
+            | "- \(.commit.message | split("\n")[0]) by @\(.author.login // $author)"
+          ' 2>/dev/null) && [[ -n "$NOTES" ]]; then
+            echo "$NOTES" > release-notes.md
+            echo -e "\n[View Pull Request]($PR_URL)" >> release-notes.md
+            echo "notes_generated=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Generated custom release notes"
+          else
+            echo "⚠️ Failed to generate notes from commit diff. Will use GitHub autogeneration." >&2
+            echo "notes_generated=false" >> "$GITHUB_OUTPUT"
+          fi
 
-          echo "$NOTES" > release-notes.md
-          echo -e "\n[View Pull Request](https://github.com/$REPO/pull/$PR_NUMBER)" >> release-notes.md
-          echo "bodyfile=release-notes.md" >> "$GITHUB_OUTPUT"
-
-      - name: Upload prerelease
+      - name: Upload prerelease (custom notes)
+        if: steps.gen_notes.outputs.notes_generated == 'true'
         uses: ncipollo/release-action@v1
         with:
           name: "Community Shaders ${{ needs.build.outputs.version }} PR #${{ github.event.pull_request.number }}"
@@ -128,7 +143,19 @@ jobs:
           prerelease: true
           artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
           bodyFile: release-notes.md
-          generateReleaseNotes: false
+          allowUpdates: true
+          replacesArtifacts: true
+          removeArtifacts: true
+
+      - name: Upload prerelease (auto-generated notes)
+        if: steps.gen_notes.outputs.notes_generated != 'true'
+        uses: ncipollo/release-action@v1
+        with:
+          name: "Community Shaders ${{ needs.build.outputs.version }} PR #${{ github.event.pull_request.number }}"
+          tag: v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }}
+          prerelease: true
+          artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
+          generateReleaseNotes: true
           allowUpdates: true
           replacesArtifacts: true
           removeArtifacts: true
@@ -146,13 +173,9 @@ jobs:
     needs: build
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
-      - name: Checkout default branch
-        uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          submodules: recursive
-
       - name: Download dist artifacts
         uses: actions/download-artifact@v4
         with:
