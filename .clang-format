@@ -108,6 +108,3 @@ PenaltyBreakBeforeFirstCallParameter: 1000
 PenaltyBreakFunctionDeclaration: 1000
 BraceWrapping:
   AfterFunction: true
-ForFiles:
-  - "*.hlsl"
-  - "*.hlsli"
