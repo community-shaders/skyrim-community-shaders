@@ -28,7 +28,7 @@ jobs:
                   source: "."
                   exclude: "extern include"
                   extensions: "h,cpp,c,hlsl,hlsli"
-                  clangFormatVersion: 16
+                  clangFormatVersion: 20
                   inplace: True # commit the changes (if there are any)
             - name: Commit changes
               uses: stefanzweifel/git-auto-commit-action@v4
