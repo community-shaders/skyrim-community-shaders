@@ -98,8 +98,7 @@ float InvCDF(float U, float mu, float sigma)
 	return x;
 }
 
-[numthreads(32, 32, 1)] void main(const uint2 tid
-								  : SV_DispatchThreadID) {
+[numthreads(32, 32, 1)] void main(const uint2 tid : SV_DispatchThreadID) {
 	uint2 size;
 	tex_noise.GetDimensions(size.x, size.y);
 	int offset = size.x * size.y * 0x69420;
