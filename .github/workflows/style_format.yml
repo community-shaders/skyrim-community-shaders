@@ -1,6 +1,6 @@
 name: Run Formatters
 on:
-    push:
+    #push:
     pull_request_target:
         branches:
             - main
