@@ -6,6 +6,11 @@ on:
             - main
             - dev
     workflow_dispatch:
+        inputs:
+            format-all:
+                description: "Run full auto-formatting on this branch"
+                required: false
+                default: "true"
 
 permissions:
     contents: write
@@ -16,12 +21,12 @@ jobs:
         steps:
             - uses: actions/checkout@v4
               with:
-                  # check out HEAD on the branch
-                  ref: ${{ github.head_ref }}
-                  repository: ${{ github.event.pull_request.head.repo.full_name }}
-                  # make sure the parent commit is grabbed as well, because
-                  # that's what will get formatted (i.e. the most recent commit)
+                  ref: ${{ github.ref_name || github.head_ref }}
+                  repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
                   fetch-depth: 2
+            - name: Notice for manual workflow trigger
+              if: github.event_name == 'workflow_dispatch'
+              run: echo "ℹ️ Running format workflow manually. If this is your fork, formatting changes will be committed to your branch."
             # format the latest commit
             - uses: DoozyX/clang-format-lint-action@v0.16.2
               with:
@@ -42,9 +47,12 @@ jobs:
         steps:
             - uses: actions/checkout@v4
               with:
-                  ref: ${{ github.head_ref }}
-                  repository: ${{ github.event.pull_request.head.repo.full_name }}
+                  ref: ${{ github.ref_name || github.head_ref }}
+                  repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
                   fetch-depth: 2
+            - name: Notice for manual workflow trigger
+              if: github.event_name == 'workflow_dispatch'
+              run: echo "ℹ️ Running format workflow manually. If this is your fork, formatting changes will be committed to your branch."
             - name: Run Prettier
               run: npx prettier --write .
             - name: Pull latest formatting changes
