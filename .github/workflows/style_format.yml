@@ -28,7 +28,7 @@ jobs:
               if: github.event_name == 'workflow_dispatch'
               run: echo "ℹ️ Running format workflow manually. If this is your fork, formatting changes will be committed to your branch."
             # format the latest commit
-            - uses: DoozyX/clang-format-lint-action@v0.16.2
+            - uses: DoozyX/clang-format-lint-action@v0.20
               with:
                   source: "."
                   exclude: "extern include"
