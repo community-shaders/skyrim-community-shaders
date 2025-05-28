@@ -65,7 +65,7 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 UV)
 }
 
 // Main stochastic sampling function
-inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
+inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy) // Used for normal/diffuse text. Luminence-based blending helps preserve details close to camera.
 {
 	// Early return if terrain variation is disabled
 	[branch] if (!SharedData::terrainVariationSettings.enableTilingFix) {
@@ -105,15 +105,12 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	return result;
 }
 
-inline float4 StochasticSample1(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
+inline float4 StochasticSample1(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy) // Used for RMAOS (maybe LOD in future)
 {
-	// Use the first offset from the provided offsets struct
-	// This maintains compatibility while still allowing the calling code to choose
-	// between ComputeStochasticOffsets() for full offsets or the optimized version
 	return tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 }
 
-inline float4 StochasticSample3(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
+inline float4 StochasticSample3(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy) // Used for parallaxcoords & getheight funct.
 {
 	// Sample the three texture offsets using the provided mip level
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
