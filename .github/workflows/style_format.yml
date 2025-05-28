@@ -1,0 +1,56 @@
+name: Run Formatters
+on:
+    push:
+    pull_request_target:
+        branches:
+            - main
+            - dev
+    workflow_dispatch:
+
+permissions:
+    contents: write
+
+jobs:
+    format:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  # check out HEAD on the branch
+                  ref: ${{ github.head_ref }}
+                  repository: ${{ github.event.pull_request.head.repo.full_name }}
+                  # make sure the parent commit is grabbed as well, because
+                  # that's what will get formatted (i.e. the most recent commit)
+                  fetch-depth: 2
+            # format the latest commit
+            - uses: DoozyX/clang-format-lint-action@v0.16.2
+              with:
+                  source: "."
+                  exclude: "extern include"
+                  extensions: "h,cpp,c,hlsl,hlsli"
+                  clangFormatVersion: 16
+                  inplace: True # commit the changes (if there are any)
+            - name: Commit changes
+              uses: stefanzweifel/git-auto-commit-action@v4
+              with:
+                  commit_message: "style: 🎨 apply clang-format changes"
+                  branch: ${{ github.head_ref }}
+
+    prettier_format:
+        needs: format
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.head_ref }}
+                  repository: ${{ github.event.pull_request.head.repo.full_name }}
+                  fetch-depth: 2
+            - name: Run Prettier
+              run: npx prettier --write .
+            - name: Pull latest formatting changes
+              run: git pull --rebase
+            - name: Commit changes
+              uses: stefanzweifel/git-auto-commit-action@v4
+              with:
+                  commit_message: "style: 🎨 apply Prettier formatting"
+                  branch: ${{ github.head_ref }}
