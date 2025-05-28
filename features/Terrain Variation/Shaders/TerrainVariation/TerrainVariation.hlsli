@@ -9,9 +9,9 @@
 #include "Common/SharedData.hlsli"
 
 // Height blend operator settings - DO NOT CHANGE THESE VALUES.
-static const float HEIGHT_BLEND_CONTRAST = 16.0; // Controls sharpness of height-based transitions
-static const float CULLING_THRESHOLD = 0.001;    // Minimum weight threshold for sample culling
-static const float HEIGHT_INFLUENCE = 0.3;      // How much height affects blending (0=pure stochastic, 1=pure height)
+static const float HEIGHT_BLEND_CONTRAST = 16.0;  // Controls sharpness of height-based transitions
+static const float CULLING_THRESHOLD = 0.001;     // Minimum weight threshold for sample culling
+static const float HEIGHT_INFLUENCE = 0.3;        // How much height affects blending (0=pure stochastic, 1=pure height)
 
 // Structure to hold stochastic sampling offsets and weights
 struct StochasticOffsets
@@ -25,8 +25,8 @@ struct StochasticOffsets
 // Hash function for stochastic sampling
 inline float2 hash2D2D(float2 s)
 {
-		s = s * float2(1271.5151, 3337.8237);
-		return frac(sin(s.x + s.y) * float2(43758.5453, 28637.1369));
+	s = s * float2(1271.5151, 3337.8237);
+	return frac(sin(s.x + s.y) * float2(43758.5453, 28637.1369));
 }
 
 // Compute single offset for stochastic sampling (optimized for single sample)
@@ -39,7 +39,7 @@ inline float2 ComputeStochasticOffsets1(float2 UV)
 
 	// Only compute the first vertex ID based on barycentric coordinates
 	float2 firstVertexID = (barry.z > 0) ? vxID : (vxID + float2(1, 1));
-	
+
 	// Return only the first hash offset
 	return hash2D2D(firstVertexID);
 }
@@ -65,63 +65,64 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 UV)
 }
 
 // Main stochastic sampling function
-inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy) // Used for normal/diffuse text. Luminence-based blending helps preserve details close to camera.
+inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)  // Used for normal/diffuse text. Luminence-based blending helps preserve details close to camera.
 {
 	// Early return if terrain variation is disabled
-	[branch] if (!SharedData::terrainVariationSettings.enableTilingFix) {
+	[branch] if (!SharedData::terrainVariationSettings.enableTilingFix)
+	{
 		return tex.SampleBias(samp, uv, SharedData::MipBias);
 	}
-	
+
 	// Apply contrast to the initial blend weights (without height influence)
 	float3 blendWeights = pow(saturate(offsets.weights), HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE));
-	
+
 	// Renormalize the weights
 	float totalWeight = blendWeights.x + blendWeights.y + blendWeights.z;
 	blendWeights = (totalWeight > 0.0) ? blendWeights / totalWeight : float3(0.33, 0.33, 0.34);
-	
+
 	// Sample all three locations
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
-	
+
 	// Apply height-based weight adjustments
 	float height1 = sample1.a > 0 ? sample1.a : dot(sample1.rgb, float3(0.2126, 0.7152, 0.0722));
 	float height2 = sample2.a > 0 ? sample2.a : dot(sample2.rgb, float3(0.2126, 0.7152, 0.0722));
 	float height3 = sample3.a > 0 ? sample3.a : dot(sample3.rgb, float3(0.2126, 0.7152, 0.0722));
-	
+
 	float weight1 = lerp(blendWeights.x, height1 * blendWeights.x, HEIGHT_INFLUENCE);
 	float weight2 = lerp(blendWeights.y, height2 * blendWeights.y, HEIGHT_INFLUENCE);
 	float weight3 = lerp(blendWeights.z, height3 * blendWeights.z, HEIGHT_INFLUENCE);
-	
+
 	// Blend samples with height-adjusted weights
 	float4 result = sample1 * weight1 + sample2 * weight2 + sample3 * weight3;
-	
+
 	// Renormalize final result
 	float finalWeightSum = weight1 + weight2 + weight3;
 	if (finalWeightSum > 0.0) {
 		result /= finalWeightSum;
 	}
-	
+
 	return result;
 }
 
-inline float4 StochasticSample1(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy) // Used for RMAOS (maybe LOD in future)
+inline float4 StochasticSample1(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)  // Used for RMAOS (maybe LOD in future)
 {
 	return tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 }
 
-inline float4 StochasticSample3(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy) // Used for parallaxcoords & getheight funct.
+inline float4 StochasticSample3(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)  // Used for parallaxcoords & getheight funct.
 {
 	// Sample the three texture offsets using the provided mip level
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
-	
+
 	// Blend using the barycentric weights
-	float4 result = sample1 * offsets.weights.x + 
-	                sample2 * offsets.weights.y + 
+	float4 result = sample1 * offsets.weights.x +
+	                sample2 * offsets.weights.y +
 	                sample3 * offsets.weights.z;
-	
+
 	return result;
 }
 
