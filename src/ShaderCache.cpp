@@ -625,7 +625,7 @@ namespace SIE
 		static std::array<std::array<std::unordered_map<std::string, int32_t>,
 							  static_cast<size_t>(ShaderClass::Total)>,
 			static_cast<size_t>(RE::BSShader::Type::Total)>
-			GetVariableIndices()
+		GetVariableIndices()
 		{
 			std::array<std::array<std::unordered_map<std::string, int32_t>,
 						   static_cast<size_t>(ShaderClass::Total)>,
