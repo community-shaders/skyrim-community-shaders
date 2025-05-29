@@ -16,8 +16,8 @@ struct TerrainVariation : Feature
 		return (shaderType == RE::BSShader::Type::Lighting);
 	}
 	virtual bool IsCore() const override { return false; };
-	virtual bool SupportsVR() override { return true; }	
-	
+	virtual bool SupportsVR() override { return true; }
+
 	struct alignas(16) Settings
 	{
 		uint enableTilingFix = true;
@@ -28,7 +28,7 @@ struct TerrainVariation : Feature
 	virtual void DrawSettings() override;
 	virtual bool DrawFailLoadMessage() const override;
 	virtual void LoadSettings(json& o_json) override;
-	virtual void SaveSettings(json& o_json) override;	
+	virtual void SaveSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;
 
 	virtual void PostPostLoad() override;

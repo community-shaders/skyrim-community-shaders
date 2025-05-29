@@ -1342,9 +1342,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 			{
 				sh0 = ExtendedMaterials::GetTerrainHeight(input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, weights);
 			}
-#		else
+#			else
 			sh0 = ExtendedMaterials::GetTerrainHeight(screenNoise, input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, weights);
-#		endif
+#			endif
 		}
 	}
 #		endif  // EMAT
@@ -1861,24 +1861,23 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #	if defined(LOD_BLENDING)
 #		if defined(LODOBJECTS) || defined(LODOBJECTSHD)
-    baseColor.xyz *= SharedData::lodBlendingSettings.LODObjectBrightness;
+	baseColor.xyz *= SharedData::lodBlendingSettings.LODObjectBrightness;
 #		elif defined(LODLANDSCAPE)
-    // First apply terrain variation if enabled
-    #   if defined(TERRAIN_VARIATION)
-    if (SharedData::terrainVariationSettings.enableLODTerrainTilingFix) {
-        float2 dx = ddx(uv);
-        float2 dy = ddy(uv);
-        StochasticOffsets lodOffset = ComputeStochasticOffsetsLOD(uv);
-        float4 lodStochasticColor = StochasticSampleLOD(screenNoise, 0, TexColorSampler, SampColorSampler, uv, lodOffset, dx, dy);
-        
-        // Apply the stochastic result directly
-        baseColor.xyz = Color::Diffuse(lodStochasticColor.rgb);
-    }
-    #   endif
-    baseColor.xyz *= SharedData::lodBlendingSettings.LODTerrainBrightness;
+// First apply terrain variation if enabled
+#			if defined(TERRAIN_VARIATION)
+	if (SharedData::terrainVariationSettings.enableLODTerrainTilingFix) {
+		float2 dx = ddx(uv);
+		float2 dy = ddy(uv);
+		StochasticOffsets lodOffset = ComputeStochasticOffsetsLOD(uv);
+		float4 lodStochasticColor = StochasticSampleLOD(screenNoise, 0, TexColorSampler, SampColorSampler, uv, lodOffset, dx, dy);
+
+		// Apply the stochastic result directly
+		baseColor.xyz = Color::Diffuse(lodStochasticColor.rgb);
+	}
+#			endif
+	baseColor.xyz *= SharedData::lodBlendingSettings.LODTerrainBrightness;
 #		endif
 #	endif  // LOD_BLENDING
-
 
 #	if defined(MODELSPACENORMALS)
 #		if defined(LODLANDNOISE)
@@ -1946,25 +1945,25 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	endif
 
 #	if defined(LOD_LAND_BLEND)
-    float4 lodLandColor;
-    
-    #   if defined(TERRAIN_VARIATION)
-    if (SharedData::terrainVariationSettings.enableLODTerrainTilingFix) {
-        // Apply stochastic sampling to LOD_LAND_BLEND color texture
-        float2 blendColorUV = input.TexCoord0.zw;
-        float2 dx = ddx(blendColorUV);
-        float2 dy = ddy(blendColorUV);
-        StochasticOffsets lodBlendColorOffset = ComputeStochasticOffsetsLOD(blendColorUV);
-        lodLandColor = StochasticSampleLODMask(screenNoise, 0, TexLandLodBlend1Sampler, SampLandLodBlend1Sampler, blendColorUV, lodBlendColorOffset, dx, dy);
-    } else {
-        lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
-    }
-    #   else
-    lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
-    #   endif
-    
+	float4 lodLandColor;
+
+#		if defined(TERRAIN_VARIATION)
+	if (SharedData::terrainVariationSettings.enableLODTerrainTilingFix) {
+		// Apply stochastic sampling to LOD_LAND_BLEND color texture
+		float2 blendColorUV = input.TexCoord0.zw;
+		float2 dx = ddx(blendColorUV);
+		float2 dy = ddy(blendColorUV);
+		StochasticOffsets lodBlendColorOffset = ComputeStochasticOffsetsLOD(blendColorUV);
+		lodLandColor = StochasticSampleLODMask(screenNoise, 0, TexLandLodBlend1Sampler, SampLandLodBlend1Sampler, blendColorUV, lodBlendColorOffset, dx, dy);
+	} else {
+		lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
+	}
+#		else
+	lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
+#		endif
+
 #		if defined(LOD_BLENDING)
-    lodLandColor.xyz *= SharedData::lodBlendingSettings.LODTerrainBrightness;
+	lodLandColor.xyz *= SharedData::lodBlendingSettings.LODTerrainBrightness;
 #		endif  // LOD_BLENDING
 
 	float lodBlendParameter = GetLodLandBlendParameter(lodLandColor.xyz);
@@ -1974,9 +1973,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	normal.xyz = lerp(normal.xyz, float3(0, 0, 1), lodLandBlendFactor);
 
 #		if !defined(TRUE_PBR)
-    baseColor.w = 0;
-    baseColor = lerp(baseColor, lodLandColor * lodLandFadeFactor, lodLandBlendFactor);
-    glossiness = lerp(glossiness, 0, lodLandBlendFactor);
+	baseColor.w = 0;
+	baseColor = lerp(baseColor, lodLandColor * lodLandFadeFactor, lodLandBlendFactor);
+	glossiness = lerp(glossiness, 0, lodLandBlendFactor);
 #		endif
 #	endif  // LOD_LAND_BLEND
 
