@@ -1,10 +1,11 @@
 name: Run Formatters
 on:
     #push:
-    pull_request_target:
+    pull_request:
         branches:
             - main
             - dev
+        types: [opened, synchronize, reopened]
     workflow_dispatch:
         inputs:
             format-all:
@@ -17,29 +18,36 @@ permissions:
 
 jobs:
     format:
+        # Only run on PRs from the same repo or manual dispatch
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
               with:
-                  ref: ${{ github.ref_name || github.head_ref }}
+                  ref: ${{ github.head_ref || github.ref }}
                   repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-                  fetch-depth: 2
+                  token: ${{ secrets.GITHUB_TOKEN }}
+                  fetch-depth: 0
+
             - name: Notice for manual workflow trigger
               if: github.event_name == 'workflow_dispatch'
-              run: echo "ℹ️ Running format workflow manually. If this is your fork, formatting changes will be committed to your branch."
+              run: echo "ℹ️ Running format workflow manually on branch ${{ github.ref_name }}"
+
             # format the latest commit
             - uses: DoozyX/clang-format-lint-action@v0.20
               with:
                   source: "."
-                  exclude: "extern include"
                   extensions: "h,cpp,c,hlsl,hlsli"
                   clangFormatVersion: 20
-                  inplace: True # commit the changes (if there are any)
+                  inplace: True
+
             - name: Commit changes
-              uses: stefanzweifel/git-auto-commit-action@v4
+              uses: stefanzweifel/git-auto-commit-action@v5
               with:
                   commit_message: "style: 🎨 apply clang-format changes"
-                  branch: ${{ github.head_ref }}
+                  branch: ${{ github.head_ref || github.ref_name }}
+                  skip_checkout: true
+                  disable_globbing: true
 
     prettier_format:
         needs: format
@@ -47,18 +55,25 @@ jobs:
         steps:
             - uses: actions/checkout@v4
               with:
-                  ref: ${{ github.ref_name || github.head_ref }}
+                  ref: ${{ github.head_ref || github.ref }}
                   repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-                  fetch-depth: 2
+                  token: ${{ secrets.GITHUB_TOKEN }}
+                  fetch-depth: 0
+
             - name: Notice for manual workflow trigger
               if: github.event_name == 'workflow_dispatch'
-              run: echo "ℹ️ Running format workflow manually. If this is your fork, formatting changes will be committed to your branch."
+              run: echo "ℹ️ Running format workflow manually on branch ${{ github.ref_name }}"
+
             - name: Run Prettier
-              run: npx prettier --write .
-            - name: Pull latest formatting changes
-              run: git pull --rebase
+              uses: creyD/prettier_action@v4.3
+              with:
+                  prettier_options: --write .
+                  only_changed: ${{ github.event_name != 'workflow_dispatch' }}
+
             - name: Commit changes
-              uses: stefanzweifel/git-auto-commit-action@v4
+              uses: stefanzweifel/git-auto-commit-action@v5
               with:
                   commit_message: "style: 🎨 apply Prettier formatting"
-                  branch: ${{ github.head_ref }}
+                  branch: ${{ github.head_ref || github.ref_name }}
+                  skip_checkout: true
+                  disable_globbing: true
