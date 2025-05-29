@@ -111,9 +111,18 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	blendWeights = (totalWeight > 0.0) ? blendWeights / totalWeight : float3(0.33, 0.33, 0.34);
 	
 	// Sample all three locations
-	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
-	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
-	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
+	float4 sample1, sample2, sample3;
+	[branch] if (SharedData::extendedMaterialSettings.EnableTerrainParallax) {
+		// Parallax enabled, can use SampleLevel for better perf
+		sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+		sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
+		sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
+	} else {
+		// When parallax disabled, samplelevel causes mipmap issues, it uses too low a mipmap level up close.
+		sample1 = tex.SampleGrad(samp, uv + offsets.offset1, dx, dy);
+		sample2 = tex.SampleGrad(samp, uv + offsets.offset2, dx, dy);
+		sample3 = tex.SampleGrad(samp, uv + offsets.offset3, dx, dy);
+	}
 	
 	// Apply height-based weight adjustments
 	float height1 = sample1.a > 0 ? sample1.a : dot(sample1.rgb, float3(0.2126, 0.7152, 0.0722));
@@ -212,12 +221,12 @@ inline float4 StochasticSampleLOD(float rnd, float mipLevel, Texture2D tex, Samp
     float2 microOffset2 = mul(rot2, offsets.offset2) * offsetScale;
     float2 microOffset3 = mul(rot3, offsets.offset3) * offsetScale;
     
-    // Sample with rotated micro-offsets (everything else stays the same)
+    // Sample with rotated micro-offsets
     float4 sample1 = tex.SampleLevel(samp, uv + microOffset1, mipLevel);
     float4 sample2 = tex.SampleLevel(samp, uv + microOffset2, mipLevel);
     float4 sample3 = tex.SampleLevel(samp, uv + microOffset3, mipLevel);
     
-    // Blend using the barycentric weights (unchanged)
+    // Blend using the barycentric weights
     float4 result = sample1 * offsets.weights.x + 
                   sample2 * offsets.weights.y + 
                   sample3 * offsets.weights.z;
