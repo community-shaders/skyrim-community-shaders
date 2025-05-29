@@ -159,8 +159,9 @@ namespace SharedData
 		float DiffuseIndirectMult;
 		float BaseColorMult;
 		float pad;
-	};	
-		struct TerrainVariationSettings
+	};
+
+	struct TerrainVariationSettings
 	{
 		bool enableTilingFix;
 		bool enableLODTerrainTilingFix;
