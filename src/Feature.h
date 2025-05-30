@@ -66,7 +66,7 @@ struct Feature
 	virtual void DrawSettings() {}
 	virtual void DrawUnloadedUI();
 
-	virtual void ReflectionsPrepass(){};
+	virtual void ReflectionsPrepass() {};
 	virtual void Prepass() {}
 	virtual void EarlyPrepass() {}
 

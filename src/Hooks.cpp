@@ -9,6 +9,8 @@
 #include "TruePBR.h"
 #include "Util.h"
 
+#include "Features/InteriorSunShadows.h"
+#include "Features/LightLimitFix.h"
 #include "Features/TerrainHelper.h"
 
 #include "ShaderTools/BSShaderHooks.h"
@@ -59,7 +61,7 @@ void DumpShader(const REX::BSShader* thisClass, const ShaderType* shader, const 
 		}
 	}
 
-	if (FILE * file; fopen_s(&file, dumpDir.c_str(), "wb") == 0) {
+	if (FILE* file; fopen_s(&file, dumpDir.c_str(), "wb") == 0) {
 		fwrite(dxbcData, 1, dxbcLen, file);
 		fclose(file);
 	}
@@ -769,6 +771,45 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	struct BSBatchRenderer_RenderPassImmediately1
+	{
+		static void thunk(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags)
+		{
+			if (globals::features::lightLimitFix->loaded && !globals::features::lightLimitFix->CheckParticleLights(pass, technique))
+				return;
+
+			func(pass, technique, alphaTest, renderFlags);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct BSBatchRenderer_RenderPassImmediately2
+	{
+		static void thunk(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags)
+		{
+			if (globals::features::lightLimitFix->loaded && !globals::features::lightLimitFix->CheckParticleLights(pass, technique))
+				return;
+
+			if (globals::features::interiorSunShadows->loaded)
+				globals::features::interiorSunShadows->UpdateRasterStateCullMode(pass, technique);
+
+			func(pass, technique, alphaTest, renderFlags);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct BSBatchRenderer_RenderPassImmediately3
+	{
+		static void thunk(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags)
+		{
+			if (globals::features::lightLimitFix->loaded && !globals::features::lightLimitFix->CheckParticleLights(pass, technique))
+				return;
+
+			func(pass, technique, alphaTest, renderFlags);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 #ifdef TRACY_ENABLE
 	struct Main_Update
 	{
@@ -950,6 +991,11 @@ namespace Hooks
 
 		logger::info("Hooking BSLightingShader");
 		stl::write_vfunc<0x4, BSLightingShader_SetupMaterial>(RE::VTABLE_BSLightingShader[0]);
+
+		logger::info("Hooking BSBatchRenderer::RenderPassImmediately");
+		stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately1>(REL::RelocationID(100877, 107673).address() + REL::Relocate(0x1E5, 0x1EE));
+		stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately2>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
+		stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately3>(REL::RelocationID(100871, 107667).address() + REL::Relocate(0xEE, 0xED));
 
 		const auto renderPassCacheCtor = REL::VariantID(100720, 107500, 0x1340330);
 		const int32_t passCount = 4194240;

@@ -930,7 +930,7 @@ namespace FrameAnnotations
 		auto renderer = globals::game::renderer;
 
 		for (size_t renderTargetIndex = 0;
-			 renderTargetIndex < (!REL::Module::IsVR() ? RE::RENDER_TARGETS::kTOTAL : RE::RENDER_TARGETS::kVRTOTAL); ++renderTargetIndex) {
+			renderTargetIndex < (!REL::Module::IsVR() ? RE::RENDER_TARGETS::kTOTAL : RE::RENDER_TARGETS::kVRTOTAL); ++renderTargetIndex) {
 			const auto renderTargetName = magic_enum::enum_name(
 				static_cast<RE::RENDER_TARGETS::RENDER_TARGET>(renderTargetIndex));
 			if (auto texture = renderer->GetRuntimeData().renderTargets[renderTargetIndex].texture) {
@@ -940,8 +940,8 @@ namespace FrameAnnotations
 		}
 
 		for (size_t renderTargetIndex = 0;
-			 renderTargetIndex < RE::RENDER_TARGETS_CUBEMAP::kTOTAL;
-			 ++renderTargetIndex) {
+			renderTargetIndex < RE::RENDER_TARGETS_CUBEMAP::kTOTAL;
+			++renderTargetIndex) {
 			const auto renderTargetName = magic_enum::enum_name(
 				static_cast<RE::RENDER_TARGETS_CUBEMAP::RENDER_TARGET_CUBEMAP>(renderTargetIndex));
 			if (auto texture = renderer->GetRendererData().cubemapRenderTargets[renderTargetIndex].texture) {
@@ -951,8 +951,8 @@ namespace FrameAnnotations
 		}
 
 		for (size_t renderTargetIndex = 0;
-			 renderTargetIndex < (!REL::Module::IsVR() ? RE::RENDER_TARGETS_DEPTHSTENCIL::kTOTAL : RE::RENDER_TARGETS_DEPTHSTENCIL::kVRTOTAL);
-			 ++renderTargetIndex) {
+			renderTargetIndex < (!REL::Module::IsVR() ? RE::RENDER_TARGETS_DEPTHSTENCIL::kTOTAL : RE::RENDER_TARGETS_DEPTHSTENCIL::kVRTOTAL);
+			++renderTargetIndex) {
 			const auto renderTargetName = magic_enum::enum_name(
 				static_cast<RE::RENDER_TARGETS_DEPTHSTENCIL::RENDER_TARGET_DEPTHSTENCIL>(
 					renderTargetIndex));
