@@ -36,6 +36,7 @@ jobs:
           prettier_options: --write **/*.{json,md,yml,yaml}
           only_changed: false
           dry: false
+          no_commit: true
 
       - name: Check for changes
         id: check-changes
