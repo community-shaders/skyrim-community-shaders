@@ -11,8 +11,6 @@ permissions:
 
 jobs:
   format:
-    # Only run on PRs from same repo or manual dispatch
-    if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     
     steps:
