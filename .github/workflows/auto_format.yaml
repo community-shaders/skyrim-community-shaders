@@ -48,8 +48,17 @@ jobs:
             echo "✅ No formatting changes needed"
           fi
 
+      - name: Detect if PR is from a fork
+        id: fork-check
+        run: |
+          if [[ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]]; then
+            echo "is_fork=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_fork=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Attempt direct commit (fast path)
-        if: steps.check-changes.outputs.changes-detected == 'true'
+        if: steps.check-changes.outputs.changes-detected == 'true' && steps.fork-check.outputs.is_fork == 'false'
         id: direct-commit
         continue-on-error: true
         uses: stefanzweifel/git-auto-commit-action@v5
