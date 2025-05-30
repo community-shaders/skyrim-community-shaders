@@ -1446,31 +1446,37 @@ void Menu::DrawPerfOverlay()
 
 	// VRAM & GPU Usage
 	if (settings.PerfOverlay.ShowVRAM && dxgiAdapter3) {
-		DXGI_QUERY_VIDEO_MEMORY_INFO videoMemoryInfo;
-		dxgiAdapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &videoMemoryInfo);
+		DXGI_QUERY_VIDEO_MEMORY_INFO videoMemoryInfo{};
+		HRESULT hr = dxgiAdapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &videoMemoryInfo);
 
-		float currentGpuUsage = videoMemoryInfo.CurrentUsage / (1024.f * 1024.f * 1024.f);
-		float totalGpuMemory = videoMemoryInfo.Budget / (1024.f * 1024.f * 1024.f);
-		float percent = currentGpuUsage / totalGpuMemory;
+		// Only proceed if the call succeeded and Budget is not zero
+		if (SUCCEEDED(hr) && videoMemoryInfo.Budget > 0) {
+			float currentGpuUsage = videoMemoryInfo.CurrentUsage / (1024.f * 1024.f * 1024.f);
+			float totalGpuMemory = videoMemoryInfo.Budget / (1024.f * 1024.f * 1024.f);
+			float percent = currentGpuUsage / totalGpuMemory;
 
-		// Center the VRAM text
-		ImGui::Text("VRAM Usage:");
+			// Center the VRAM text
+			ImGui::Text("VRAM Usage:");
 
-		// Use a centered text format for the numeric values
-		std::string vramText = std::format("{:.2f}GB/{:.2f}GB ({:.1f}%)", currentGpuUsage, totalGpuMemory, 100 * percent);
-		float textWidth = ImGui::CalcTextSize(vramText.c_str()).x;
-		float windowWidth = ImGui::GetWindowWidth();
+			// Use a centered text format for the numeric values
+			std::string vramText = std::format("{:.2f}GB/{:.2f}GB ({:.1f}%)", currentGpuUsage, totalGpuMemory, 100 * percent);
+			float textWidth = ImGui::CalcTextSize(vramText.c_str()).x;
+			float windowWidth = ImGui::GetWindowWidth();
 
-		// Center the text if it fits within the window
-		if (textWidth < windowWidth) {
-			ImGui::SetCursorPosX((windowWidth - textWidth) * 0.5f);
-			ImGui::Text("%s", vramText.c_str());
+			// Center the text if it fits within the window
+			if (textWidth < windowWidth) {
+				ImGui::SetCursorPosX((windowWidth - textWidth) * 0.5f);
+				ImGui::Text("%s", vramText.c_str());
+			} else {
+				ImGui::Text("%s", vramText.c_str());
+			}
+
+			// Only move the progress bar, not the text
+			ImGui::ProgressBar(percent, ImVec2(ImGui::GetWindowWidth() * 0.9f, 0.0f), "");
 		} else {
-			ImGui::Text("%s", vramText.c_str());
+			// Display a fallback message if we couldn't get the VRAM info
+			ImGui::Text("VRAM Usage: Not available");
 		}
-
-		// Only move the progress bar, not the text
-		ImGui::ProgressBar(percent, ImVec2(ImGui::GetWindowWidth() * 0.9f, 0.0f), "");
 	}
 
 	ImGui::PopStyleVar();             // ItemSpacing
