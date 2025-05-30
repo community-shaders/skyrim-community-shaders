@@ -1,41 +1,194 @@
 name: build Community Shaders and addons
 
 on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
+    push:
+        tags:
+            - "v*"
+    workflow_dispatch:
+        inputs:
+            cache-key-suffix:
+                description: "Optional suffix to invalidate the build cache"
+                required: false
+    pull_request_target:
+        paths:
+            - "**.cpp"
+            - "**.h"
+            - "**.hpp"
+            - "**.c"
+            - "CMakeLists.txt"
+            - "CMakePresets.json"
+            - "vcpkg.json"
+            - "vcpkg-configuration.json"
+            - ".gitmodules"
+            - "extern/**"
 
 permissions:
-  contents: write
+    contents: read
+    pull-requests: read
 
 jobs:
-  compile:
-    name: build plugin and addons
-    runs-on: windows-latest
-    steps:
-        - uses: actions/checkout@v3
-          with:
-            submodules: recursive
+    build:
+        if: >
+            github.event_name != 'pull_request_target' ||
+            github.event.pull_request.draft == false ||
+            contains(github.event.pull_request.labels.*.name, 'force-build')
+        name: Build plugin and addons
+        runs-on: windows-latest
+        permissions:
+            contents: read
+        outputs:
+            version: ${{ steps.get_version.outputs.version }}
+        steps:
+            - name: Checkout PR code
+              uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event.pull_request.head.ref }}
+                  repository: ${{ github.event.pull_request.head.repo.full_name }}
+                  submodules: recursive
 
-        - uses: ilammy/msvc-dev-cmd@v1.10.0
+            - uses: ilammy/msvc-dev-cmd@v1.10.0
 
-        - uses: lukka/run-vcpkg@v11.5
-          with:
-            vcpkgJsonGlob: vcpkg.json
+            - uses: lukka/run-vcpkg@v11.5
+              with:
+                  vcpkgJsonGlob: vcpkg.json
 
-        - name: cmake configure
-          run: cmake -S . --preset=ALL --check-stamp-file "build\CMakeFiles\generate.stamp"
+            - name: Cache CMake build output
+              uses: actions/cache@v4
+              with:
+                  path: build/ALL
+                  key: ${{ runner.os }}-build-${{ inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
+                  restore-keys: |
+                      ${{ runner.os }}-build-${{ inputs.cache-key-suffix || 'default' }}-
+                      ${{ runner.os }}-build-
 
-        - name: cmake build
-          run: cmake --build build/ALL --config Release
+            - name: Build using run-cmake with ALL preset
+              uses: lukka/run-cmake@v10
+              with:
+                  configurePreset: ALL
+                  buildPreset: ALL
 
-        - name: create a tagged release and upload the archive
-          uses: ncipollo/release-action@v1
-          env:
-              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          with:
-            name: Community Shaders ${{ github.ref_name }}
-            draft: true
-            tag: ${{ github.ref_name }}
-            artifacts: "${{ github.workspace }}/dist/*.7z"
+            - name: Extract version from CMake
+              id: get_version
+              shell: bash
+              run: |
+                  VERSION=$(grep 'CMAKE_PROJECT_VERSION:STATIC' build/ALL/CMakeCache.txt | cut -d= -f2)
+                  echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+            - name: Upload dist artifacts
+              if: success()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: dist-artifacts
+                  path: dist/
+
+    prerelease:
+        if: github.event_name == 'pull_request_target'
+        needs: build
+        runs-on: windows-latest
+        permissions:
+            contents: write
+            pull-requests: write
+        steps:
+            - name: Download dist artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  name: dist-artifacts
+                  path: dist/
+
+            - name: Generate release notes comparing against base version tag
+              id: gen_notes
+              continue-on-error: true
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              shell: bash
+              run: |
+                  TAG="v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }}"
+                  BASE_TAG="v${{ needs.build.outputs.version }}"
+                  REPO="${{ github.repository }}"
+                  BASE_SHA="${{ github.event.pull_request.base.sha }}"
+                  HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+                  PR_NUMBER="${{ github.event.pull_request.number }}"
+                  PR_URL="https://github.com/$REPO/pull/$PR_NUMBER"
+
+                  # Get PR author with fallback
+                  if PR_AUTHOR=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json author -q '.author.login' 2>/dev/null); then
+                    echo "✅ Found PR author: $PR_AUTHOR"
+                  else
+                    PR_AUTHOR="${{ github.event.pull_request.user.login }}"
+                    echo "⚠️ Using fallback PR author: $PR_AUTHOR"
+                  fi
+
+                  echo "🔍 Comparing $BASE_SHA...$HEAD_SHA"
+
+                  # Generate commit-based release notes
+                  if NOTES=$(gh api repos/$REPO/compare/$BASE_SHA...$HEAD_SHA 2>/dev/null | jq -r --arg author "$PR_AUTHOR" '
+                    .commits[] 
+                    | "- \(.commit.message | split("\n")[0]) by @\(.author.login // $author)"
+                  ' 2>/dev/null) && [[ -n "$NOTES" ]]; then
+                    echo "$NOTES" > release-notes.md
+                    echo -e "\n[View Pull Request]($PR_URL)" >> release-notes.md
+                    echo "notes_generated=true" >> "$GITHUB_OUTPUT"
+                    echo "✅ Generated custom release notes"
+                  else
+                    echo "⚠️ Failed to generate notes from commit diff. Will use GitHub autogeneration." >&2
+                    echo "notes_generated=false" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Upload prerelease (custom notes)
+              if: steps.gen_notes.outputs.notes_generated == 'true'
+              uses: ncipollo/release-action@v1
+              with:
+                  name: "Community Shaders ${{ needs.build.outputs.version }} PR #${{ github.event.pull_request.number }}"
+                  tag: v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }}
+                  prerelease: true
+                  artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
+                  bodyFile: release-notes.md
+                  allowUpdates: true
+                  replacesArtifacts: true
+                  removeArtifacts: true
+
+            - name: Upload prerelease (auto-generated notes)
+              if: steps.gen_notes.outputs.notes_generated != 'true'
+              uses: ncipollo/release-action@v1
+              with:
+                  name: "Community Shaders ${{ needs.build.outputs.version }} PR #${{ github.event.pull_request.number }}"
+                  tag: v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }}
+                  prerelease: true
+                  artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
+                  generateReleaseNotes: true
+                  allowUpdates: true
+                  replacesArtifacts: true
+                  removeArtifacts: true
+
+            - name: Comment on PR
+              if: success()
+              uses: thollander/actions-comment-pull-request@v3
+              with:
+                  mode: upsert
+                  message: |
+                      ✅ A pre-release build is available for this PR:
+                      [Download](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }})
+
+    release:
+        needs: build
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+        runs-on: windows-latest
+        permissions:
+            contents: write
+        steps:
+            - name: Download dist artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  name: dist-artifacts
+                  path: dist/
+
+            - name: Create tagged release
+              uses: ncipollo/release-action@v1
+              with:
+                  name: "Community Shaders ${{ github.ref_name }}"
+                  draft: true
+                  tag: ${{ github.ref_name }}
+                  artifacts: "${{ github.workspace }}/dist/*.7z"
+                  generateReleaseNotes: true
+                  replacesArtifacts: true
+                  removeArtifacts: true
