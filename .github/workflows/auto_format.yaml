@@ -31,7 +31,7 @@ jobs:
           inplace: true
 
       - name: Run Prettier
-        uses: creyD/prettier_action@v4
+        uses: creyD/prettier_action@v4.5
         with:
           prettier_options: --write **/*.{json,md,yml,yaml}
           only_changed: false
