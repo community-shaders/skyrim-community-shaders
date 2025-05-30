@@ -1,110 +1,110 @@
 name: Auto Format Code
 on:
-  pull_request:
-    branches: [main, dev]
-    types: [opened, synchronize, reopened]
-  workflow_dispatch:
+    pull_request:
+        branches: [main, dev]
+        types: [opened, synchronize, reopened]
+    workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+    contents: write
+    pull-requests: write
 
 jobs:
-  format:
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref }}
-          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
+    format:
+        runs-on: ubuntu-latest
 
-      - name: Run clang-format
-        uses: DoozyX/clang-format-lint-action@v0.20
-        with:
-          source: "."
-          extensions: "h,cpp,c,hlsl,hlsli"
-          clangFormatVersion: 20
-          inplace: true
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.head_ref || github.ref }}
+                  repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+                  token: ${{ secrets.GITHUB_TOKEN }}
+                  fetch-depth: 0
 
-      - name: Run Prettier
-        uses: creyD/prettier_action@v4.5
-        with:
-          prettier_options: --write **/*.{json,md,yml,yaml}
-          only_changed: false
-          dry: false
-          no_commit: true
+            - name: Run clang-format
+              uses: DoozyX/clang-format-lint-action@v0.20
+              with:
+                  source: "."
+                  extensions: "h,cpp,c,hlsl,hlsli"
+                  clangFormatVersion: 20
+                  inplace: true
 
-      - name: Check for changes
-        id: check-changes
-        run: |
-          if [[ -n "$(git status --porcelain)" ]]; then
-            echo "changes-detected=true" >> $GITHUB_OUTPUT
-            echo "📝 Formatting changes detected"
-          else
-            echo "changes-detected=false" >> $GITHUB_OUTPUT
-            echo "✅ No formatting changes needed"
-          fi
+            - name: Run Prettier
+              uses: creyD/prettier_action@v4.5
+              with:
+                  prettier_options: --write **/*.{json,md,yml,yaml}
+                  only_changed: false
+                  dry: false
+                  no_commit: true
 
-      - name: Detect if PR is from a fork
-        id: fork-check
-        run: |
-          if [[ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]]; then
-            echo "is_fork=true" >> $GITHUB_OUTPUT
-          else
-            echo "is_fork=false" >> $GITHUB_OUTPUT
-          fi
+            - name: Check for changes
+              id: check-changes
+              run: |
+                  if [[ -n "$(git status --porcelain)" ]]; then
+                    echo "changes-detected=true" >> $GITHUB_OUTPUT
+                    echo "📝 Formatting changes detected"
+                  else
+                    echo "changes-detected=false" >> $GITHUB_OUTPUT
+                    echo "✅ No formatting changes needed"
+                  fi
+  
+            - name: Detect if PR is from a fork
+              id: fork-check
+              run: |
+                  if [[ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]]; then
+                    echo "is_fork=true" >> $GITHUB_OUTPUT
+                  else
+                    echo "is_fork=false" >> $GITHUB_OUTPUT
+                  fi
 
-      - name: Attempt direct commit (fast path)
-        if: steps.check-changes.outputs.changes-detected == 'true' && steps.fork-check.outputs.is_fork == 'false'
-        id: direct-commit
-        continue-on-error: true
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "style: 🎨 auto-format code"
-          branch: ${{ github.head_ref || github.ref_name }}
-          skip_checkout: true
+            - name: Attempt direct commit (fast path)
+              if: steps.check-changes.outputs.changes-detected == 'true' && steps.fork-check.outputs.is_fork == 'false'
+              id: direct-commit
+              continue-on-error: true
+              uses: stefanzweifel/git-auto-commit-action@v5
+              with:
+                  commit_message: "style: 🎨 auto-format code"
+                  branch: ${{ github.head_ref || github.ref_name }}
+                  skip_checkout: true
 
-      - name: Create PR if direct commit failed (fallback)
-        if: steps.check-changes.outputs.changes-detected == 'true' && steps.direct-commit.outcome == 'failure'
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "style: 🎨 auto-format code"
-          title: "🎨 Auto-format code for #${{ github.event.number || 'manual run' }}"
-          body: |
-            This PR contains automatic formatting changes${{ github.event.number && format(' for PR #{0}', github.event.number) || '' }} since direct commits to the branch were not possible (likely due to branch protection rules).
-            
-            **Changes applied:**
-            - clang-format for C/C++/HLSL files
-            - Prettier for JSON/Markdown/YAML files
-            
-            ${{ github.event.number && '**Original PR:** #' || '' }}${{ github.event.number || '' }}
-            
-            ---
-            *This PR was created automatically by the formatting workflow*
-          branch: auto-format/${{ github.head_ref || github.ref_name }}-${{ github.run_id }}
-          base: ${{ github.head_ref || github.ref_name }}
-          delete-branch: true
-          assignees: ${{ github.event.pull_request.user.login || github.actor }}
+            - name: Create PR if direct commit failed (fallback)
+              if: steps.check-changes.outputs.changes-detected == 'true' && (steps.direct-commit.outcome == 'failure' || steps.direct-commit.outcome == 'skipped')
+              uses: peter-evans/create-pull-request@v7
+              with:
+                  token: ${{ secrets.GITHUB_TOKEN }}
+                  commit-message: "style: 🎨 auto-format code"
+                  title: "🎨 Auto-format code for #${{ github.event.number || 'manual run' }}"
+                  body: |
+                      This PR contains automatic formatting changes${{ github.event.number && format(' for PR #{0}', github.event.number) || '' }} since direct commits to the branch were not possible (likely due to branch protection rules).
 
-      - name: Summary
-        run: |
-          if [[ "${{ steps.check-changes.outputs.changes-detected }}" == "false" ]]; then
-            echo "ℹ️ No formatting changes needed"
-          elif [[ "${{ steps.direct-commit.outcome }}" == "success" ]]; then
-            echo "✅ Formatting changes committed directly to branch"
-          elif [[ "${{ steps.direct-commit.outcome }}" == "failure" ]]; then
-            echo "📝 Direct commit failed (protected branch?), created formatting PR instead"
-          fi
+                      **Changes applied:**
+                      - clang-format for C/C++/HLSL files
+                      - Prettier for JSON/Markdown/YAML files
 
-      - name: Fail if formatting could not be auto-applied
-        if: steps.check-changes.outputs.changes-detected == 'true' && steps.direct-commit.outcome == 'failure'
-        run: |
-          echo "❌ Formatting issues found and could not be committed automatically."
-          echo "Please merge the formatting PR before merging this one."
-          echo "Original PR: https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
-          exit 1
+                      ${{ github.event.number && '**Original PR:** #' || '' }}${{ github.event.number || '' }}
+
+                      ---
+                      *This PR was created automatically by the formatting workflow*
+                  branch: auto-format/${{ github.head_ref || github.ref_name }}-${{ github.run_id }}
+                  base: ${{ github.head_ref || github.ref_name }}
+                  delete-branch: true
+                  assignees: ${{ github.event.pull_request.user.login || github.actor }}
+
+            - name: Summary
+              run: |
+                  if [[ "${{ steps.check-changes.outputs.changes-detected }}" == "false" ]]; then
+                    echo "ℹ️ No formatting changes needed"
+                  elif [[ "${{ steps.direct-commit.outcome }}" == "success" ]]; then
+                    echo "✅ Formatting changes committed directly to branch"
+                  elif [[ "${{ steps.direct-commit.outcome }}" == "failure" ]]; then
+                    echo "📝 Direct commit failed (protected branch?), created formatting PR instead"
+                  fi
+
+            - name: Fail if formatting could not be auto-applied
+              if: steps.check-changes.outputs.changes-detected == 'true' && (steps.direct-commit.outcome == 'failure' || steps.direct-commit.outcome == 'skipped')
+              run: |
+                  echo "❌ Formatting issues found and could not be committed automatically."
+                  echo "Please merge the formatting PR before merging this one."
+                  echo "Original PR: https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
+                  exit 1
