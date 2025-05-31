@@ -53,7 +53,10 @@ namespace UIIconLoader
         stbi_image_free(image_data);
 
         return true;
-    }    bool InitializeMenuIcons(Menu* menu)
+        return true;
+    }
+
+    bool InitializeMenuIcons(Menu* menu)
     {
         if (!menu) {
             return false;
