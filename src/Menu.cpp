@@ -221,6 +221,7 @@ void Menu::Init()
 	// Enhanced font configuration for sharper text rendering
 	ImFontConfig font_config;
 	font_config.GlyphExtraSpacing.x = 0.0f;      // Neutral spacing for cleaner look
+	font_config.OversampleH = 3;                 // Increased horizontal oversampling for sharper text
 	font_config.OversampleV = 2;                 // Increased vertical oversampling
 	font_config.PixelSnapH = true;               // Align to pixel grid for sharper rendering
 	font_config.RasterizerMultiply = 1.1f;       // Slightly darker font rendering
