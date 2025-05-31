@@ -43,12 +43,32 @@ public:
 	void ProcessInputEvents(RE::InputEvent* const* a_events);
 	bool ShouldSwallowInput();
 	void OnFocusLost();
-
+	// UI icon textures
+	struct UIIcon {
+		ID3D11ShaderResourceView* texture = nullptr;
+		ImVec2 size = ImVec2(32.0f, 32.0f);
+		
+		void Release() {
+			if (texture) {
+				texture->Release();
+				texture = nullptr;
+			}
+		}
+	};
+	struct UIIcons {
+		UIIcon saveSettings;
+		UIIcon loadSettings;
+		UIIcon clearCache;
+		UIIcon clearDiskCache;
+		UIIcon logo;          // New logo icon
+	} uiIcons;	
+	
 	struct ThemeSettings
 	{
 		float GlobalScale = REL::Module::IsVR() ? -0.5f : 0.f;  // exponential
 
 		bool UseSimplePalette = true;  // simple palette or full customization
+		bool ShowActionIcons = true;   // whether to show action buttons as icons
 		struct PaletteColors
 		{
 			ImVec4 Background{ 0.f, 0.f, 0.f, 0.5882353186607361f };

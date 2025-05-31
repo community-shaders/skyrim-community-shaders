@@ -23,6 +23,7 @@
         "magic-enum",
         "nlohmann-json",
         "pystring",
+        "stb",
         "tracy",
         "unordered-dense",
         "xbyak"
