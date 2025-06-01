@@ -60,14 +60,14 @@ inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 UV)
 
 	// Generate smaller offsets for more subtle variation
 	StochasticOffsets offsetsLOD;
-	offsetsLOD.offset1 = hash2D2D(BW_vx[0].xy) * 0.15;  // Reduced offset magnitude
-	offsetsLOD.offset2 = hash2D2D(BW_vx[1].xy) * 0.15;
-	offsetsLOD.offset3 = hash2D2D(BW_vx[2].xy) * 0.15;
+	offsetsLOD.offset1 = hash2D2D(BW_vx[0].xy) * 0.08;
+	offsetsLOD.offset2 = hash2D2D(BW_vx[1].xy) * 0.08;
+	offsetsLOD.offset3 = hash2D2D(BW_vx[2].xy) * 0.08;
 
 	// Use smoother weights with less contrast
 	float3 smoothWeights = BW_vx[3];
 	// Apply mild smoothing to weights
-	smoothWeights = pow(smoothWeights, 0.8);
+	smoothWeights = pow(smoothWeights, 0.15);
 	// Renormalize
 	smoothWeights /= (smoothWeights.x + smoothWeights.y + smoothWeights.z);
 

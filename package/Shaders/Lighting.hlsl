@@ -1274,8 +1274,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(TRUE_PBR)
 	float4 blendedRMAOS = 0;
 #		endif
-	float invwsum = 1.0;  // Weights are already normalized above, so invwsum should be 1.0
-						  // Compute stochastic offsets and derivatives once for all layers (only when terrain variation is enabled)
+		// Compute stochastic offsets and derivatives once for all layers (only when terrain variation is enabled)
 #		if defined(TERRAIN_VARIATION)
 	bool useTerrainVariation = SharedData::terrainVariationSettings.enableTilingFix;
 	float2 dx, dy;
@@ -1373,8 +1372,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #	if defined(LANDSCAPE)
 	// Layer 1 (LandBlendWeights1.x)
 	if (input.LandBlendWeights1.x > 0.01) {
-		float weight = input.LandBlendWeights1.x * invwsum;
-		// Sample layer 1 textures - use terrain variation if available and enabled
+		float weight = input.LandBlendWeights1.x;
+		
+		// Sample diffuse texture for layer 1
 #		if defined(TERRAIN_VARIATION)
 		float4 landColor1;
 		[branch] if (useTerrainVariation)
@@ -1416,23 +1416,24 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float landNormalAlpha1 = landNormal1.a;
 #		if defined(SNOW) && !defined(TRUE_PBR)
 		landSnowMask += LandscapeTexture1to4IsSnow.x * input.LandBlendWeights1.x * landSnowMask1;
-#		endif  // SNOW \
-			// Sample RMAOS texture for layer 1
+#		endif  // SNOW 
+		
+		// Sample RMAOS texture for layer 1
 #		if defined(TRUE_PBR)
-		float4 currentRMAOS = 0;
+		float4 landRMAOS1;
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile0PBR) != 0)
 		{
 #			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
-				currentRMAOS = StochasticSample1(screenNoise, mipLevels[0], TexRMAOSSampler, SampRMAOSSampler, uv, sharedOffset, dx, dy) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
+				landRMAOS1 = StochasticEffect(screenNoise, mipLevels[0], TexRMAOSSampler, SampRMAOSSampler, uv, sharedOffset, dx, dy) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
 			}
 			else
 			{
-				currentRMAOS = TexRMAOSSampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
+				landRMAOS1 = TexRMAOSSampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
 			}
 #			else
-			currentRMAOS = TexRMAOSSampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
+			landRMAOS1 = TexRMAOSSampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
 #			endif
 			if ((PBRFlags & PBR::TerrainFlags::LandTile0HasGlint) != 0) {
 				glintParameters += input.LandBlendWeights1.x * LandscapeTexture1GlintParameters;
@@ -1440,19 +1441,21 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		}
 		else
 		{
-			currentRMAOS = float4(1 - landNormal1.w, 0, 1, 0);
+			landRMAOS1 = float4(1 - landNormal1.w, 0, 1, 0);
 		}
-		blendedRMAOS += currentRMAOS * weight;
+		blendedRMAOS += landRMAOS1 * weight;
 #		endif
 		blendedRGB += landColorRGB1 * weight;
 		blendedAlpha += landAlpha1 * weight;
 		blendedNormalRGB += landNormalRGB1 * weight;
 		blendedNormalAlpha += landNormalAlpha1 * weight;
 	}
+
 	// Layer 2 (LandBlendWeights1.y)
 	if (input.LandBlendWeights1.y > 0.01) {
-		float weight = input.LandBlendWeights1.y * invwsum;
-// Sample layer 2 textures - use terrain variation if available and enabled
+		float weight = input.LandBlendWeights1.y;
+
+		// Sample diffuse texture for layer 2
 #		if defined(TERRAIN_VARIATION)
 		float4 landColor2;
 		[branch] if (useTerrainVariation)
@@ -1495,22 +1498,23 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(SNOW) && !defined(TRUE_PBR)
 		landSnowMask += LandscapeTexture1to4IsSnow.y * input.LandBlendWeights1.y * landSnowMask2;
 #		endif  // SNOW
+
+		// Sample RMAOS texture for layer 2
 #		if defined(TRUE_PBR)
-		float4 currentRMAOS = 0;
+		float4 landRMAOS2;
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile1PBR) != 0)
 		{
-			// Sample RMAOS texture for layer 2
 #			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
-				currentRMAOS = StochasticSample1(screenNoise, mipLevels[1], TexLandRMAOS2Sampler, SampLandRMAOS2Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
+				landRMAOS2 = StochasticEffect(screenNoise, mipLevels[1], TexLandRMAOS2Sampler, SampLandRMAOS2Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
 			}
 			else
 			{
-				currentRMAOS = TexLandRMAOS2Sampler.SampleBias(SampLandRMAOS2Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
+				landRMAOS2 = TexLandRMAOS2Sampler.SampleBias(SampLandRMAOS2Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
 			}
 #			else
-			currentRMAOS = TexLandRMAOS2Sampler.SampleBias(SampLandRMAOS2Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
+			landRMAOS2 = TexLandRMAOS2Sampler.SampleBias(SampLandRMAOS2Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
 #			endif
 			if ((PBRFlags & PBR::TerrainFlags::LandTile1HasGlint) != 0) {
 				glintParameters += input.LandBlendWeights1.y * LandscapeTexture2GlintParameters;
@@ -1518,19 +1522,20 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		}
 		else
 		{
-			currentRMAOS = float4(1 - landNormal2.w, 0, 1, 0);
+			landRMAOS2 = float4(1 - landNormal2.w, 0, 1, 0);
 		}
-		blendedRMAOS += currentRMAOS * weight;
+		blendedRMAOS += landRMAOS2 * weight;
 #		endif
 		blendedRGB += landColorRGB2 * weight;
 		blendedAlpha += landAlpha2 * weight;
 		blendedNormalRGB += landNormalRGB2 * weight;
 		blendedNormalAlpha += landNormalAlpha2 * weight;
-	}
+	}	
+	
 	// Layer 3 (LandBlendWeights1.z)
 	if (input.LandBlendWeights1.z > 0.01) {
-		float weight = input.LandBlendWeights1.z * invwsum;
-// Sample layer 3 textures - use terrain variation if available and enabled
+		float weight = input.LandBlendWeights1.z;
+		// Sample diffuse texture for layer 3
 #		if defined(TERRAIN_VARIATION)
 		float4 landColor3;
 		[branch] if (useTerrainVariation)
@@ -1574,22 +1579,22 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		landSnowMask += LandscapeTexture1to4IsSnow.z * input.LandBlendWeights1.z * landSnowMask3;
 #		endif  // SNOW
 
+		// Sample RMAOS texture for layer 3
 #		if defined(TRUE_PBR)
-		float4 currentRMAOS = 0;
+		float4 landRMAOS3;
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile2PBR) != 0)
 		{
-			// Sample RMAOS texture for layer 3
 #			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
-				currentRMAOS = StochasticSample1(screenNoise, mipLevels[2], TexLandRMAOS3Sampler, SampLandRMAOS3Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
+				landRMAOS3 = StochasticEffect(screenNoise, mipLevels[2], TexLandRMAOS3Sampler, SampLandRMAOS3Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
 			}
 			else
 			{
-				currentRMAOS = TexLandRMAOS3Sampler.SampleBias(SampLandRMAOS3Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
+				landRMAOS3 = TexLandRMAOS3Sampler.SampleBias(SampLandRMAOS3Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
 			}
 #			else
-			currentRMAOS = TexLandRMAOS3Sampler.SampleBias(SampLandRMAOS3Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
+			landRMAOS3 = TexLandRMAOS3Sampler.SampleBias(SampLandRMAOS3Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
 #			endif
 			if ((PBRFlags & PBR::TerrainFlags::LandTile2HasGlint) != 0) {
 				glintParameters += input.LandBlendWeights1.z * LandscapeTexture3GlintParameters;
@@ -1597,9 +1602,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		}
 		else
 		{
-			currentRMAOS = float4(1 - landNormal3.w, 0, 1, 0);
+			landRMAOS3 = float4(1 - landNormal3.w, 0, 1, 0);
 		}
-		blendedRMAOS += currentRMAOS * weight;
+		blendedRMAOS += landRMAOS3 * weight;
 #		endif
 		blendedRGB += landColorRGB3 * weight;
 		blendedAlpha += landAlpha3 * weight;
@@ -1608,8 +1613,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	}
 	// Layer 4 (LandBlendWeights1.w)
 	if (input.LandBlendWeights1.w > 0.01) {
-		float weight = input.LandBlendWeights1.w * invwsum;
-// Sample layer 4 textures - use terrain variation if available and enabled
+		float weight = input.LandBlendWeights1.w;
+		
+		// Sample diffuse texture for layer 4
 #		if defined(TERRAIN_VARIATION)
 		float4 landColor4;
 		[branch] if (useTerrainVariation)
@@ -1653,22 +1659,22 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		landSnowMask += LandscapeTexture1to4IsSnow.w * input.LandBlendWeights1.w * landSnowMask4;
 #		endif  // SNOW
 
+		// Sample RMAOS texture for layer 4
 #		if defined(TRUE_PBR)
-		float4 currentRMAOS = 0;
+		float4 landRMAOS4;
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile3PBR) != 0)
 		{
-			// Sample RMAOS texture for layer 4
 #			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
-				currentRMAOS = StochasticSample1(screenNoise, mipLevels[3], TexLandRMAOS4Sampler, SampLandRMAOS4Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
+				landRMAOS4 = StochasticEffect(screenNoise, mipLevels[3], TexLandRMAOS4Sampler, SampLandRMAOS4Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
 			}
 			else
 			{
-				currentRMAOS = TexLandRMAOS4Sampler.SampleBias(SampLandRMAOS4Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
+				landRMAOS4 = TexLandRMAOS4Sampler.SampleBias(SampLandRMAOS4Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
 			}
 #			else
-			currentRMAOS = TexLandRMAOS4Sampler.SampleBias(SampLandRMAOS4Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
+			landRMAOS4 = TexLandRMAOS4Sampler.SampleBias(SampLandRMAOS4Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
 #			endif
 			if ((PBRFlags & PBR::TerrainFlags::LandTile3HasGlint) != 0) {
 				glintParameters += input.LandBlendWeights1.w * LandscapeTexture4GlintParameters;
@@ -1676,19 +1682,20 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		}
 		else
 		{
-			currentRMAOS = float4(1 - landNormal4.w, 0, 1, 0);
+			landRMAOS4 = float4(1 - landNormal4.w, 0, 1, 0);
 		}
-		blendedRMAOS += currentRMAOS * weight;
+		blendedRMAOS += landRMAOS4 * weight;
 #		endif
 		blendedRGB += landColorRGB4 * weight;
 		blendedAlpha += landAlpha4 * weight;
 		blendedNormalRGB += landNormalRGB4 * weight;
 		blendedNormalAlpha += landNormalAlpha4 * weight;
 	}
+
 	// Layer 5 (LandBlendWeights2.x)
 	if (input.LandBlendWeights2.x > 0.01) {
-		float weight = input.LandBlendWeights2.x * invwsum;
-// Sample layer 5 textures - use terrain variation if available and enabled
+		float weight = input.LandBlendWeights2.x;
+		// Sample diffuse texture for layer 5
 #		if defined(TERRAIN_VARIATION)
 		float4 landColor5;
 		[branch] if (useTerrainVariation)
@@ -1733,22 +1740,22 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		landSnowMask += LandscapeTexture5to6IsSnow.x * input.LandBlendWeights2.x * landSnowMask5;
 #		endif  // SNOW
 
+		// Sample RMAOS texture for layer 5
 #		if defined(TRUE_PBR)
-		float4 currentRMAOS = 0;
+		float4 landRMAOS5;
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile4PBR) != 0)
 		{
-			// Sample RMAOS texture for layer 5
 #			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
-				currentRMAOS = StochasticSample1(screenNoise, mipLevels[4], TexLandRMAOS5Sampler, SampLandRMAOS5Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
+				landRMAOS5 = StochasticEffect(screenNoise, mipLevels[4], TexLandRMAOS5Sampler, SampLandRMAOS5Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
 			}
 			else
 			{
-				currentRMAOS = TexLandRMAOS5Sampler.SampleBias(SampLandRMAOS5Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
+				landRMAOS5 = TexLandRMAOS5Sampler.SampleBias(SampLandRMAOS5Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
 			}
 #			else
-			currentRMAOS = TexLandRMAOS5Sampler.SampleBias(SampLandRMAOS5Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
+			landRMAOS5 = TexLandRMAOS5Sampler.SampleBias(SampLandRMAOS5Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
 #			endif
 			if ((PBRFlags & PBR::TerrainFlags::LandTile4HasGlint) != 0) {
 				glintParameters += input.LandBlendWeights2.x * LandscapeTexture5GlintParameters;
@@ -1756,9 +1763,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		}
 		else
 		{
-			currentRMAOS = float4(1 - landNormal5.w, 0, 1, 0);
+			landRMAOS5 = float4(1 - landNormal5.w, 0, 1, 0);
 		}
-		blendedRMAOS += currentRMAOS * weight;
+		blendedRMAOS += landRMAOS5 * weight;
 #		endif
 		blendedRGB += landColorRGB5 * weight;
 		blendedAlpha += landAlpha5 * weight;
@@ -1767,8 +1774,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	}
 	// Layer 6 (LandBlendWeights2.y)
 	if (input.LandBlendWeights2.y > 0.01) {
-		float weight = input.LandBlendWeights2.y * invwsum;
-// Sample layer 6 textures - use terrain variation if available and enabled
+		float weight = input.LandBlendWeights2.y;
+		
+		// Sample layer 6 textures
 #		if defined(TERRAIN_VARIATION)
 		float4 landColor6;
 		[branch] if (useTerrainVariation)
@@ -1812,21 +1820,22 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		landSnowMask += LandscapeTexture5to6IsSnow.y * input.LandBlendWeights2.y * landSnowMask6;
 #		endif  // SNOW
 
+		// Sample RMAOS texture for layer 6
 #		if defined(TRUE_PBR)
-		float4 currentRMAOS = 0;
+		float4 landRMAOS6;
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile5PBR) != 0)
-		{  // Sample RMAOS texture for layer 6
+		{  
 #			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
-				currentRMAOS = StochasticSample1(screenNoise, mipLevels[5], TexLandRMAOS6Sampler, SampLandRMAOS6Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
+				landRMAOS6 = StochasticEffect(screenNoise, mipLevels[5], TexLandRMAOS6Sampler, SampLandRMAOS6Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
 			}
 			else
 			{
-				currentRMAOS = TexLandRMAOS6Sampler.SampleBias(SampLandRMAOS6Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
+				landRMAOS6 = TexLandRMAOS6Sampler.SampleBias(SampLandRMAOS6Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
 			}
 #			else
-			currentRMAOS = TexLandRMAOS6Sampler.SampleBias(SampLandRMAOS6Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
+			landRMAOS6 = TexLandRMAOS6Sampler.SampleBias(SampLandRMAOS6Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
 #			endif
 			if ((PBRFlags & PBR::TerrainFlags::LandTile5HasGlint) != 0) {
 				glintParameters += input.LandBlendWeights2.y * LandscapeTexture6GlintParameters;
@@ -1834,15 +1843,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		}
 		else
 		{
-			currentRMAOS = float4(1 - landNormal6.w, 0, 1, 0);
+			landRMAOS6 = float4(1 - landNormal6.w, 0, 1, 0);
 		}
-		blendedRMAOS += currentRMAOS * weight;
+		blendedRMAOS += landRMAOS6 * weight;
 #		endif
 		blendedRGB += landColorRGB6 * weight;
 		blendedAlpha += landAlpha6 * weight;
 		blendedNormalRGB += landNormalRGB6 * weight;
 		blendedNormalAlpha += landNormalAlpha6 * weight;
 	}
+	
 	float4 rawBaseColor = float4(blendedRGB, blendedAlpha);
 	baseColor = float4(Color::Diffuse(blendedRGB), blendedAlpha);
 	normal = float4(blendedNormalRGB, blendedNormalAlpha);
@@ -3126,8 +3136,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		indirectSpecularLobeWeight = lerp(indirectSpecularLobeWeight, 0, lodLandBlendFactor);
 		pbrGlossiness = lerp(pbrGlossiness, 0, lodLandBlendFactor);
 	}
-#	elif defined(TRUE_PBR) && !defined(LANDSCAPE)
-	// Only apply final PBR scaling for non-landscape materials
+#	elif defined(TRUE_PBR)
 	color.xyz *= Color::PBRLightingScale;
 	specularColorPBR *= Color::PBRLightingScale;
 	specularColor = specularColorPBR;
