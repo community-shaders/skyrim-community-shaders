@@ -1,0 +1,24 @@
+repos:
+    - repo: https://github.com/pre-commit/pre-commit-hooks
+      rev: v5.0.0
+      hooks:
+          - id: trailing-whitespace
+            args: [--markdown-linebreak-ext=md]
+          - id: check-yaml
+
+    - repo: https://github.com/pre-commit/mirrors-clang-format
+      rev: v20.1.5
+      hooks:
+          - id: clang-format
+            args: [--style=file]
+            files: \.(h|hpp|c|cpp|hlsl|hlsli)$
+            additional_dependencies: ["clang-format==20.1.5"]
+            exclude: ^(\.\/)?(extern|include)\/
+
+    - repo: https://github.com/pre-commit/mirrors-prettier
+      rev: v3.1.0
+      hooks:
+          - id: prettier
+            additional_dependencies: ["prettier@3.1.0"]
+            files: \.(json|md|yml|yaml)$
+            exclude: ^(\.\/)?(extern|include|build|dist)\/
