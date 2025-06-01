@@ -7,6 +7,7 @@
 
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
+#include "Common/FrameBuffer.hlsli"
 
 // Height blend operator settings - DO NOT CHANGE THESE VALUES.
 static const float HEIGHT_BLEND_CONTRAST = 16.0;  // Controls sharpness of height-based transitions
@@ -30,9 +31,11 @@ inline float2 hash2D2D(float2 s)
 }
 
 // Compute single offset for stochastic sampling (optimized for single sample)
-inline float2 ComputeStochasticOffsets1(float2 UV)
+inline float2 ComputeStochasticOffsets1(float3 worldPos, uint eyeIndex = 0)
 {
-	float2 skewUV = mul(float2x2(1.0, 0.0, -0.57735027, 1.15470054), UV * 3.464);
+	// Add CameraPosAdjust to stabilize pattern with camera movement
+    float2 worldUV = worldPos.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy; 
+	float2 skewUV = mul(float2x2(1.0, 0.0, -0.57735027, 1.15470054), worldUV * 0.03464);
 	float2 vxID = floor(skewUV);
 	float3 barry = float3(frac(skewUV), 0.0);
 	barry.z = 1.0 - barry.x - barry.y;
@@ -44,59 +47,32 @@ inline float2 ComputeStochasticOffsets1(float2 UV)
 	return hash2D2D(firstVertexID);
 }
 
-inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 UV)
+// Generate world-position based stochastic offsets for terrain. Fixes cell border issues.
+inline StochasticOffsets ComputeStochasticOffsets(float3 worldPos, uint eyeIndex = 0)
 {
-	// Use a much smaller scale factor for LOD terrain to create subtle variation
-	// instead of dramatic pattern changes
-	float2 skewUV = mul(float2x2(1.0, 0.0, -0.57735027, 1.15470054), UV * 1.5);
-	float2 vxID = floor(skewUV);
-	float3 barry = float3(frac(skewUV), 0.0);
-	barry.z = 1.0 - barry.x - barry.y;
-
-	// Create a more stable triangle pattern
-	float4x3 BW_vx = (barry.z > 0) ?
-	                     float4x3(float3(vxID, 0), float3(vxID + float2(0, 1), 0), float3(vxID + float2(1, 0), 0), barry.zyx) :
-	                     float4x3(float3(vxID + float2(1, 1), 0), float3(vxID + float2(1, 0), 0), float3(vxID + float2(0, 1), 0), float3(-barry.z, 1.0 - barry.y, 1.0 - barry.x));
-
-	// Generate smaller offsets for more subtle variation
-	StochasticOffsets offsetsLOD;
-	offsetsLOD.offset1 = hash2D2D(BW_vx[0].xy) * 0.08;
-	offsetsLOD.offset2 = hash2D2D(BW_vx[1].xy) * 0.08;
-	offsetsLOD.offset3 = hash2D2D(BW_vx[2].xy) * 0.08;
-
-	// Use smoother weights with less contrast
-	float3 smoothWeights = BW_vx[3];
-	// Apply mild smoothing to weights
-	smoothWeights = pow(smoothWeights, 0.15);
-	// Renormalize
-	smoothWeights /= (smoothWeights.x + smoothWeights.y + smoothWeights.z);
-
-	offsetsLOD.weights = smoothWeights;
-	return offsetsLOD;
+    float2 worldUV = worldPos.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy; 
+    
+    float2 skewUV = mul(float2x2(1.0, 0.0, -0.57735027, 1.15470054), worldUV * 0.03464);
+    float2 vxID = floor(skewUV);
+    float3 barry = float3(frac(skewUV), 0.0);
+    barry.z = 1.0 - barry.x - barry.y;
+    
+    float4x3 BW_vx = (barry.z > 0) ?
+                     float4x3(float3(vxID, 0), float3(vxID + float2(0, 1), 0), float3(vxID + float2(1, 0), 0), barry.zyx) :
+                     float4x3(float3(vxID + float2(1, 1), 0), float3(vxID + float2(1, 0), 0), float3(vxID + float2(0, 1), 0), float3(-barry.z, 1.0 - barry.y, 1.0 - barry.x));
+    
+    StochasticOffsets offsets;
+    offsets.offset1 = hash2D2D(BW_vx[0].xy);
+    offsets.offset2 = hash2D2D(BW_vx[1].xy);
+    offsets.offset3 = hash2D2D(BW_vx[2].xy);
+    offsets.weights = BW_vx[3];
+    
+    return offsets;
 }
 
-// Compute offsets for stochastic sampling
-inline StochasticOffsets ComputeStochasticOffsets(float2 UV)
-{
-	float2 skewUV = mul(float2x2(1.0, 0.0, -0.57735027, 1.15470054), UV * 3.464);
-	float2 vxID = floor(skewUV);
-	float3 barry = float3(frac(skewUV), 0.0);
-	barry.z = 1.0 - barry.x - barry.y;
-
-	float4x3 BW_vx = (barry.z > 0) ?
-	                     float4x3(float3(vxID, 0), float3(vxID + float2(0, 1), 0), float3(vxID + float2(1, 0), 0), barry.zyx) :
-	                     float4x3(float3(vxID + float2(1, 1), 0), float3(vxID + float2(1, 0), 0), float3(vxID + float2(0, 1), 0), float3(-barry.z, 1.0 - barry.y, 1.0 - barry.x));
-
-	StochasticOffsets offsets;
-	offsets.offset1 = hash2D2D(BW_vx[0].xy);
-	offsets.offset2 = hash2D2D(BW_vx[1].xy);
-	offsets.offset3 = hash2D2D(BW_vx[2].xy);
-	offsets.weights = BW_vx[3];
-	return offsets;
-}
 
 // Main stochastic sampling function
-inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)  // Used for normal/diffuse text. Luminence-based blending helps preserve details close to camera.
+inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy, float3 worldPos = float3(0,0,0))  // Used for normal/diffuse text. Luminence-based blending helps preserve details close to camera.
 {
 	// Early return if terrain variation is disabled
 	[branch] if (!SharedData::terrainVariationSettings.enableTilingFix)
@@ -150,9 +126,16 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 }
 
 // Cheap Stochastic Effect for single sample. Used for RMAOS.
-inline float4 StochasticSample1(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)  // Used for RMAOS (maybe LOD in future)
+inline float4 StochasticSample1(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy, float3 worldPos = float3(0,0,0), uint eyeIndex = 0)
 {
-	return tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+    // Directly compute a single offset using the faster dedicated function - use worldPos if available
+    float2 singleOffset;
+    if (worldPos.x != 0 || worldPos.y != 0 || worldPos.z != 0)
+        singleOffset = ComputeStochasticOffsets1(worldPos, eyeIndex);
+    else
+        singleOffset = offsets.offset1; // Fall back to pre-computed offset if no worldPos
+        
+    return tex.SampleLevel(samp, uv + singleOffset, mipLevel);
 }
 
 // Same as StochasticEffect but no height/luminescence influence, so much cheaper but worse quality, doesn't matter for the use case.
@@ -169,6 +152,39 @@ inline float4 StochasticSample3(float rnd, float mipLevel, Texture2D tex, Sample
 	                sample3 * offsets.weights.z;
 
 	return result;
+}
+
+// --------------------- LOD SAMPLING FUNCTIONS --------------------- //
+
+inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 UV)
+{
+	// Use a much smaller scale factor for LOD terrain to create subtle variation
+	// instead of dramatic pattern changes
+	float2 skewUV = mul(float2x2(1.0, 0.0, -0.57735027, 1.15470054), UV * 1.5);
+	float2 vxID = floor(skewUV);
+	float3 barry = float3(frac(skewUV), 0.0);
+	barry.z = 1.0 - barry.x - barry.y;
+
+	// Create a more stable triangle pattern
+	float4x3 BW_vx = (barry.z > 0) ?
+	                     float4x3(float3(vxID, 0), float3(vxID + float2(0, 1), 0), float3(vxID + float2(1, 0), 0), barry.zyx) :
+	                     float4x3(float3(vxID + float2(1, 1), 0), float3(vxID + float2(1, 0), 0), float3(vxID + float2(0, 1), 0), float3(-barry.z, 1.0 - barry.y, 1.0 - barry.x));
+
+	// Generate smaller offsets for more subtle variation
+	StochasticOffsets offsetsLOD;
+	offsetsLOD.offset1 = hash2D2D(BW_vx[0].xy) * 0.08;
+	offsetsLOD.offset2 = hash2D2D(BW_vx[1].xy) * 0.08;
+	offsetsLOD.offset3 = hash2D2D(BW_vx[2].xy) * 0.08;
+
+	// Use smoother weights with less contrast
+	float3 smoothWeights = BW_vx[3];
+	// Apply mild smoothing to weights
+	smoothWeights = pow(smoothWeights, 0.15);
+	// Renormalize
+	smoothWeights /= (smoothWeights.x + smoothWeights.y + smoothWeights.z);
+
+	offsetsLOD.weights = smoothWeights;
+	return offsetsLOD;
 }
 
 // Special version for LOD mask textures that should have minimal blurring

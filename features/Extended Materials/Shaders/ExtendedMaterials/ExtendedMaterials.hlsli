@@ -83,7 +83,7 @@ namespace ExtendedMaterials
 #		define HEIGHT_MULT 8
 	float GetTerrainHeight(float screenNoise, PS_INPUT input, float2 coords, float mipLevels[6], DisplacementParams params[6], float blendFactor, float4 w1, float2 w2,
 #		if defined(TERRAIN_VARIATION)
-		StochasticOffsets sharedOffset, float2 dx, float2 dy,
+		float2 dx, float2 dy, uint eyeIndex,
 #		endif
 		out float weights[6])
 	{
@@ -642,13 +642,6 @@ namespace ExtendedMaterials
 #	endif
 	{
 		if (quality > 0.0) {
-#	if defined(TERRAIN_VARIATION)
-			// Reduce shadow quality when terrain variation is enabled to improve performance
-			// The stochastic sampling cost for shadows is high, so we scale back quality
-			float effectiveQuality = quality * 0.5;
-#	else
-			float effectiveQuality = quality;
-#	endif
 			float4 multipliers = rcp((float4(1, 2, 3, 4) + noise));
 			float4 sh;
 			float heights[6] = { 0, 0, 0, 0, 0, 0 };
@@ -678,7 +671,7 @@ namespace ExtendedMaterials
 			if (effectiveQuality > 0.75)
 				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, effectiveQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
 #		endif
-			return pow(1.0 - saturate(dot(max(0, sh - sh0) / scale, 1.0)) * effectiveQuality, 2.0);
+			return pow(1.0 - saturate(dot(max(0, sh - sh0) / scale, 1.0)) * quality, 2.0);
 #	else
 #		if defined(TERRAIN_VARIATION)
 			sh = GetTerrainHeight(noise, input, coords + rayDir * multipliers.x, mipLevel, params, effectiveQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, heights);
@@ -697,7 +690,7 @@ namespace ExtendedMaterials
 			if (effectiveQuality > 0.75)
 				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, effectiveQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
 #		endif
-			return pow(1.0 - saturate(dot(max(0, sh - sh0), 1.0)) * effectiveQuality, 2.0);
+			return pow(1.0 - saturate(dot(max(0, sh - sh0), 1.0)) * quality, 2.0);
 #	endif
 		}
 		return 1.0;

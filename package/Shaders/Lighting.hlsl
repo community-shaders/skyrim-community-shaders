@@ -1283,7 +1283,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	{
 		dx = ddx(uv);
 		dy = ddy(uv);
-		sharedOffset = ComputeStochasticOffsets(uv);
+		sharedOffsets = ComputeStochasticOffsets(input.WorldPosition.xyz, eyeIndex);
 	}
 #		endif
 
