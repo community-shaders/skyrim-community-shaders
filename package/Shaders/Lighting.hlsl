@@ -1278,12 +1278,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(TERRAIN_VARIATION)
 	bool useTerrainVariation = SharedData::terrainVariationSettings.enableTilingFix;
 	float2 dx, dy;
+	float2 precomputedWorldUV;
 	StochasticOffsets sharedOffset;
 	[branch] if (useTerrainVariation)
 	{
 		dx = ddx(uv);
 		dy = ddy(uv);
-		sharedOffsets = ComputeStochasticOffsets(input.WorldPosition.xyz, eyeIndex);
+		precomputedWorldUV = ComputeWorldUV(input.WorldPosition.xyz, eyeIndex);
+		sharedOffset = ComputeStochasticOffsets(precomputedWorldUV);
 	}
 #		endif
 
