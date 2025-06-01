@@ -1274,7 +1274,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(TRUE_PBR)
 	float4 blendedRMAOS = 0;
 #		endif
-		// Compute stochastic offsets and derivatives once for all layers (only when terrain variation is enabled)
+	// Compute stochastic offsets and derivatives once for all layers (only when terrain variation is enabled)
 #		if defined(TERRAIN_VARIATION)
 	bool useTerrainVariation = SharedData::terrainVariationSettings.enableTilingFix;
 	float2 dx, dy;
@@ -1373,7 +1373,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	// Layer 1 (LandBlendWeights1.x)
 	if (input.LandBlendWeights1.x > 0.01) {
 		float weight = input.LandBlendWeights1.x;
-		
+
 		// Sample diffuse texture for layer 1
 #		if defined(TERRAIN_VARIATION)
 		float4 landColor1;
@@ -1416,8 +1416,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float landNormalAlpha1 = landNormal1.a;
 #		if defined(SNOW) && !defined(TRUE_PBR)
 		landSnowMask += LandscapeTexture1to4IsSnow.x * input.LandBlendWeights1.x * landSnowMask1;
-#		endif  // SNOW 
-		
+#		endif  // SNOW
+
 		// Sample RMAOS texture for layer 1
 #		if defined(TRUE_PBR)
 		float4 landRMAOS1;
@@ -1530,8 +1530,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		blendedAlpha += landAlpha2 * weight;
 		blendedNormalRGB += landNormalRGB2 * weight;
 		blendedNormalAlpha += landNormalAlpha2 * weight;
-	}	
-	
+	}
+
 	// Layer 3 (LandBlendWeights1.z)
 	if (input.LandBlendWeights1.z > 0.01) {
 		float weight = input.LandBlendWeights1.z;
@@ -1614,7 +1614,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	// Layer 4 (LandBlendWeights1.w)
 	if (input.LandBlendWeights1.w > 0.01) {
 		float weight = input.LandBlendWeights1.w;
-		
+
 		// Sample diffuse texture for layer 4
 #		if defined(TERRAIN_VARIATION)
 		float4 landColor4;
@@ -1775,7 +1775,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 	// Layer 6 (LandBlendWeights2.y)
 	if (input.LandBlendWeights2.y > 0.01) {
 		float weight = input.LandBlendWeights2.y;
-		
+
 		// Sample layer 6 textures
 #		if defined(TERRAIN_VARIATION)
 		float4 landColor6;
@@ -1824,7 +1824,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		if defined(TRUE_PBR)
 		float4 landRMAOS6;
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile5PBR) != 0)
-		{  
+		{
 #			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
@@ -1852,7 +1852,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		blendedNormalRGB += landNormalRGB6 * weight;
 		blendedNormalAlpha += landNormalAlpha6 * weight;
 	}
-	
+
 	float4 rawBaseColor = float4(blendedRGB, blendedAlpha);
 	baseColor = float4(Color::Diffuse(blendedRGB), blendedAlpha);
 	normal = float4(blendedNormalRGB, blendedNormalAlpha);
