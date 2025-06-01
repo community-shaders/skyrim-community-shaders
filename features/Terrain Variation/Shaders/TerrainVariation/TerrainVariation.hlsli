@@ -9,10 +9,21 @@
 #include "Common/SharedData.hlsli"
 #include "Common/FrameBuffer.hlsli"
 
+// --------------------- CONSTANTS AND STRUCTURES --------------------- //
 // Height blend operator settings - DO NOT CHANGE THESE VALUES.
 static const float HEIGHT_BLEND_CONTRAST = 16.0;  // Controls sharpness of height-based transitions
 static const float CULLING_THRESHOLD = 0.001;     // Minimum weight threshold for sample culling
 static const float HEIGHT_INFLUENCE = 0.3;        // How much height affects blending (0=pure stochastic, 1=pure height)
+// Pre-computed constants to avoid runtime calculations
+static const float2x2 SKEW_MATRIX = float2x2(1.0, 0.0, -0.57735027, 1.15470054);
+static const float WORLD_SCALE = 0.03464;
+static const float INV_SQRT3 = 0.57735027;
+// Blending constants
+static const float3 DEFAULT_WEIGHTS = float3(0.33, 0.33, 0.34);
+static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
+// Hash constants
+static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
+static const float2 HASH_SINE_MULTIPLIER = float2(43758.5453, 28637.1369);
 
 // Structure to hold stochastic sampling offsets and weights
 struct StochasticOffsets
@@ -26,12 +37,11 @@ struct StochasticOffsets
 // Hash function for stochastic sampling
 inline float2 hash2D2D(float2 s)
 {
-	s = s * float2(1271.5151, 3337.8237);
-	return frac(sin(s.x + s.y) * float2(43758.5453, 28637.1369));
+	s = s * HASH_MULTIPLIER;
+	return frac(sin(s.x + s.y) * HASH_SINE_MULTIPLIER);
 }
 
 // Compute single offset for stochastic sampling (optimized for single sample)
-inline float2 ComputeStochasticOffsets1(float3 worldPos, uint eyeIndex = 0)
 {
 	// Add CameraPosAdjust to stabilize pattern with camera movement
     float2 worldUV = worldPos.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy; 
@@ -45,7 +55,11 @@ inline float2 ComputeStochasticOffsets1(float3 worldPos, uint eyeIndex = 0)
 
 	// Return only the first hash offset
 	return hash2D2D(firstVertexID);
+inline float2 ComputeWorldUV(float3 worldPos, uint eyeIndex = 0)
+{
+    return (worldPos.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy) * WORLD_SCALE;
 }
+
 
 // Generate world-position based stochastic offsets for terrain. Fixes cell border issues.
 inline StochasticOffsets ComputeStochasticOffsets(float3 worldPos, uint eyeIndex = 0)
@@ -53,19 +67,41 @@ inline StochasticOffsets ComputeStochasticOffsets(float3 worldPos, uint eyeIndex
     float2 worldUV = worldPos.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy; 
     
     float2 skewUV = mul(float2x2(1.0, 0.0, -0.57735027, 1.15470054), worldUV * 0.03464);
+inline StochasticOffsets ComputeStochasticOffsets(float2 precomputedWorldUV, float2 screenPos = float2(0, 0))
+{   
+    float2 skewUV = mul(SKEW_MATRIX, precomputedWorldUV);
     float2 vxID = floor(skewUV);
     float3 barry = float3(frac(skewUV), 0.0);
     barry.z = 1.0 - barry.x - barry.y;
+    float2 frac_uv = frac(skewUV);
+    float barry_z = 1.0 - frac_uv.x - frac_uv.y;
+    float3 barry = float3(frac_uv, barry_z);
     
+    // Calculate vertex IDs and barycentric weights for the triangle
     float4x3 BW_vx = (barry.z > 0) ?
                      float4x3(float3(vxID, 0), float3(vxID + float2(0, 1), 0), float3(vxID + float2(1, 0), 0), barry.zyx) :
                      float4x3(float3(vxID + float2(1, 1), 0), float3(vxID + float2(1, 0), 0), float3(vxID + float2(0, 1), 0), float3(-barry.z, 1.0 - barry.y, 1.0 - barry.x));
     
+    // Generate offsets and store weights
     StochasticOffsets offsets;
     offsets.offset1 = hash2D2D(BW_vx[0].xy);
     offsets.offset2 = hash2D2D(BW_vx[1].xy);
     offsets.offset3 = hash2D2D(BW_vx[2].xy);
     offsets.weights = BW_vx[3];
+    
+    // Apply checkerboard dithering to reduce computation cost
+    [branch] if (SharedData::terrainVariationSettings.frameIndex > 10 && any(screenPos))
+    {
+        float ditherMask = ComputeCheckerboardDither(screenPos, SharedData::terrainVariationSettings.frameIndex);
+        
+        // For pixels that are "off" in the checkerboard, reduce computation by using simpler interpolation
+        if (ditherMask < 0.5)
+        {
+            // Use simplified sampling - blend first two offsets only for performance
+            offsets.offset3 = lerp(offsets.offset1, offsets.offset2, 0.5);
+            offsets.weights = float3(offsets.weights.x * 0.6, offsets.weights.y * 0.6, 0.4);
+        }
+    }
     
     return offsets;
 }
@@ -109,37 +145,41 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	float height2 = sample2.a > 0 ? sample2.a : dot(sample2.rgb, float3(0.2126, 0.7152, 0.0722));
 	float height3 = sample3.a > 0 ? sample3.a : dot(sample3.rgb, float3(0.2126, 0.7152, 0.0722));
 
-	float weight1 = lerp(blendWeights.x, height1 * blendWeights.x, HEIGHT_INFLUENCE);
-	float weight2 = lerp(blendWeights.y, height2 * blendWeights.y, HEIGHT_INFLUENCE);
-	float weight3 = lerp(blendWeights.z, height3 * blendWeights.z, HEIGHT_INFLUENCE);
+    float3 heights = float3(height1, height2, height3);
+	float3 weights = blendWeights * (1.0 + HEIGHT_INFLUENCE * (heights - 1.0));
 
 	// Blend samples with height-adjusted weights
-	float4 result = sample1 * weight1 + sample2 * weight2 + sample3 * weight3;
+	float4 result = sample1 * weights.x + sample2 * weights.y + sample3 * weights.z;
 
 	// Renormalize final result
-	float finalWeightSum = weight1 + weight2 + weight3;
-	if (finalWeightSum > 0.0) {
-		result /= finalWeightSum;
-	}
+	float finalWeightSum = weights.x + weights.y + weights.z;
 
 	return result;
 }
 
-// Cheap Stochastic Effect for single sample. Used for RMAOS.
-inline float4 StochasticSample1(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy, float3 worldPos = float3(0,0,0), uint eyeIndex = 0)
-{
-    // Directly compute a single offset using the faster dedicated function - use worldPos if available
-    float2 singleOffset;
-    if (worldPos.x != 0 || worldPos.y != 0 || worldPos.z != 0)
-        singleOffset = ComputeStochasticOffsets1(worldPos, eyeIndex);
-    else
-        singleOffset = offsets.offset1; // Fall back to pre-computed offset if no worldPos
-        
-    return tex.SampleLevel(samp, uv + singleOffset, mipLevel);
-}
+// --------------------- SPECIAL USE CASES --------------------- //
+
+// // Compute single offset for stochastic sampling (optimized for single sample)
+// inline float2 ComputeStochasticOffsets1(float2 precomputedWorldUV)
+// {
+//     float2 skewUV = mul(SKEW_MATRIX, precomputedWorldUV);
+//     float2 vxID = floor(skewUV);
+//     float3 barry = float3(frac(skewUV), 0.0);
+//     barry.z = 1.0 - barry.x - barry.y;
+
+//     float2 firstVertexID = (barry.z > 0) ? vxID : (vxID + float2(1, 1));
+//     return hash2D2D(firstVertexID);
+// }
+
+// // Cheap Stochastic Effect for single sample. Used for RMAOS.
+// inline float4 StochasticSample1(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
+// {
+//     float2 precomputedWorldUV = ComputeWorldUV(worldPos, eyeIndex);
+//     float2 singleOffset = ComputeStochasticOffsets1(precomputedWorldUV);
+//     return tex.SampleLevel(samp, uv + singleOffset, mipLevel);
+// }
 
 // Same as StochasticEffect but no height/luminescence influence, so much cheaper but worse quality, doesn't matter for the use case.
-inline float4 StochasticSample3(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)  // Used for parallaxcoords & getheight funct.
 {
 	// Sample the three texture offsets using the provided mip level
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
@@ -158,8 +198,7 @@ inline float4 StochasticSample3(float rnd, float mipLevel, Texture2D tex, Sample
 
 inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 UV)
 {
-	// Use a much smaller scale factor for LOD terrain to create subtle variation
-	// instead of dramatic pattern changes
+	// Use a much smaller scale factor for LOD terrain to create subtle variation instead of dramatic pattern changes
 	float2 skewUV = mul(float2x2(1.0, 0.0, -0.57735027, 1.15470054), UV * 1.5);
 	float2 vxID = floor(skewUV);
 	float3 barry = float3(frac(skewUV), 0.0);

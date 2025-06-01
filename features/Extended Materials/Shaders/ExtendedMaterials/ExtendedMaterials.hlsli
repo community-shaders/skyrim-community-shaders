@@ -83,7 +83,7 @@ namespace ExtendedMaterials
 #		define HEIGHT_MULT 8
 	float GetTerrainHeight(float screenNoise, PS_INPUT input, float2 coords, float mipLevels[6], DisplacementParams params[6], float blendFactor, float4 w1, float2 w2,
 #		if defined(TERRAIN_VARIATION)
-		float2 dx, float2 dy, uint eyeIndex,
+		StochasticOffsets sharedOffset, float2 dx, float2 dy,
 #		endif
 		out float weights[6])
 	{
@@ -655,40 +655,40 @@ namespace ExtendedMaterials
 			rayDir *= scale;
 
 #		if defined(TERRAIN_VARIATION)
-			sh = GetTerrainHeight(noise, input, coords + rayDir * multipliers.x, mipLevel, params, effectiveQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, heights);
-			if (effectiveQuality > 0.25)
-				sh.y = GetTerrainHeight(noise, input, coords + rayDir * multipliers.y, mipLevel, params, effectiveQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, heights);
-			if (effectiveQuality > 0.5)
-				sh.z = GetTerrainHeight(noise, input, coords + rayDir * multipliers.z, mipLevel, params, effectiveQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, heights);
-			if (effectiveQuality > 0.75)
-				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, effectiveQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, heights);
+			sh = GetTerrainHeight(noise, input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, heights);
+			if (quality > 0.25)
+				sh.y = GetTerrainHeight(noise, input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, heights);
+			if (quality > 0.5)
+				sh.z = GetTerrainHeight(noise, input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, heights);
+			if (quality > 0.75)
+				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, heights);
 #		else
-			sh = GetTerrainHeight(noise, input, coords + rayDir * multipliers.x, mipLevel, params, effectiveQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-			if (effectiveQuality > 0.25)
-				sh.y = GetTerrainHeight(noise, input, coords + rayDir * multipliers.y, mipLevel, params, effectiveQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-			if (effectiveQuality > 0.5)
-				sh.z = GetTerrainHeight(noise, input, coords + rayDir * multipliers.z, mipLevel, params, effectiveQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-			if (effectiveQuality > 0.75)
-				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, effectiveQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
+			sh = GetTerrainHeight(noise, input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
+			if (quality > 0.25)
+				sh.y = GetTerrainHeight(noise, input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
+			if (quality > 0.5)
+				sh.z = GetTerrainHeight(noise, input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
+			if (quality > 0.75)
+				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
 #		endif
 			return pow(1.0 - saturate(dot(max(0, sh - sh0) / scale, 1.0)) * quality, 2.0);
 #	else
 #		if defined(TERRAIN_VARIATION)
-			sh = GetTerrainHeight(noise, input, coords + rayDir * multipliers.x, mipLevel, params, effectiveQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, heights);
-			if (effectiveQuality > 0.25)
-				sh.y = GetTerrainHeight(noise, input, coords + rayDir * multipliers.y, mipLevel, params, effectiveQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, heights);
-			if (effectiveQuality > 0.5)
-				sh.z = GetTerrainHeight(noise, input, coords + rayDir * multipliers.z, mipLevel, params, effectiveQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, heights);
-			if (effectiveQuality > 0.75)
-				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, effectiveQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, heights);
+			sh = GetTerrainHeight(noise, input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, heights);
+			if (quality > 0.25)
+				sh.y = GetTerrainHeight(noise, input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, heights);
+			if (quality > 0.5)
+				sh.z = GetTerrainHeight(noise, input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, heights);
+			if (quality > 0.75)
+				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, heights);
 #		else
-			sh = GetTerrainHeight(noise, input, coords + rayDir * multipliers.x, mipLevel, params, effectiveQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-			if (effectiveQuality > 0.25)
-				sh.y = GetTerrainHeight(noise, input, coords + rayDir * multipliers.y, mipLevel, params, effectiveQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-			if (effectiveQuality > 0.5)
-				sh.z = GetTerrainHeight(noise, input, coords + rayDir * multipliers.z, mipLevel, params, effectiveQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-			if (effectiveQuality > 0.75)
-				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, effectiveQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
+			sh = GetTerrainHeight(noise, input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
+			if (quality > 0.25)
+				sh.y = GetTerrainHeight(noise, input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
+			if (quality > 0.5)
+				sh.z = GetTerrainHeight(noise, input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
+			if (quality > 0.75)
+				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
 #		endif
 			return pow(1.0 - saturate(dot(max(0, sh - sh0), 1.0)) * quality, 2.0);
 #	endif
