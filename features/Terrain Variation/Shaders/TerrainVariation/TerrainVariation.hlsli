@@ -41,20 +41,6 @@ inline float2 hash2D2D(float2 s)
 	return frac(sin(s.x + s.y) * HASH_SINE_MULTIPLIER);
 }
 
-// Compute single offset for stochastic sampling (optimized for single sample)
-{
-	// Add CameraPosAdjust to stabilize pattern with camera movement
-    float2 worldUV = worldPos.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy; 
-	float2 skewUV = mul(float2x2(1.0, 0.0, -0.57735027, 1.15470054), worldUV * 0.03464);
-	float2 vxID = floor(skewUV);
-	float3 barry = float3(frac(skewUV), 0.0);
-	barry.z = 1.0 - barry.x - barry.y;
-
-	// Only compute the first vertex ID based on barycentric coordinates
-	float2 firstVertexID = (barry.z > 0) ? vxID : (vxID + float2(1, 1));
-
-	// Return only the first hash offset
-	return hash2D2D(firstVertexID);
 inline float2 ComputeWorldUV(float3 worldPos, uint eyeIndex = 0)
 {
     return (worldPos.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy) * WORLD_SCALE;
@@ -62,17 +48,10 @@ inline float2 ComputeWorldUV(float3 worldPos, uint eyeIndex = 0)
 
 
 // Generate world-position based stochastic offsets for terrain. Fixes cell border issues.
-inline StochasticOffsets ComputeStochasticOffsets(float3 worldPos, uint eyeIndex = 0)
-{
-    float2 worldUV = worldPos.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy; 
-    
-    float2 skewUV = mul(float2x2(1.0, 0.0, -0.57735027, 1.15470054), worldUV * 0.03464);
 inline StochasticOffsets ComputeStochasticOffsets(float2 precomputedWorldUV, float2 screenPos = float2(0, 0))
 {   
     float2 skewUV = mul(SKEW_MATRIX, precomputedWorldUV);
     float2 vxID = floor(skewUV);
-    float3 barry = float3(frac(skewUV), 0.0);
-    barry.z = 1.0 - barry.x - barry.y;
     float2 frac_uv = frac(skewUV);
     float barry_z = 1.0 - frac_uv.x - frac_uv.y;
     float3 barry = float3(frac_uv, barry_z);
@@ -88,20 +67,6 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 precomputedWorldUV, flo
     offsets.offset2 = hash2D2D(BW_vx[1].xy);
     offsets.offset3 = hash2D2D(BW_vx[2].xy);
     offsets.weights = BW_vx[3];
-    
-    // Apply checkerboard dithering to reduce computation cost
-    [branch] if (SharedData::terrainVariationSettings.frameIndex > 10 && any(screenPos))
-    {
-        float ditherMask = ComputeCheckerboardDither(screenPos, SharedData::terrainVariationSettings.frameIndex);
-        
-        // For pixels that are "off" in the checkerboard, reduce computation by using simpler interpolation
-        if (ditherMask < 0.5)
-        {
-            // Use simplified sampling - blend first two offsets only for performance
-            offsets.offset3 = lerp(offsets.offset1, offsets.offset2, 0.5);
-            offsets.weights = float3(offsets.weights.x * 0.6, offsets.weights.y * 0.6, 0.4);
-        }
-    }
     
     return offsets;
 }
@@ -180,6 +145,7 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 // }
 
 // Same as StochasticEffect but no height/luminescence influence, so much cheaper but worse quality, doesn't matter for the use case.
+inline float4 StochasticSample3(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy, float2 screenPos = float2(0, 0))
 {
 	// Sample the three texture offsets using the provided mip level
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
