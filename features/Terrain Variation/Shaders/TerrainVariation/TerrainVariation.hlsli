@@ -5,9 +5,9 @@
 #ifndef TERRAIN_VARIATION_HLSLI
 #define TERRAIN_VARIATION_HLSLI
 
+#include "Common/FrameBuffer.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
-#include "Common/FrameBuffer.hlsli"
 
 // --------------------- CONSTANTS AND STRUCTURES --------------------- //
 // Height blend operator settings - DO NOT CHANGE THESE VALUES.
@@ -43,37 +43,35 @@ inline float2 hash2D2D(float2 s)
 
 inline float2 ComputeWorldUV(float3 worldPos, uint eyeIndex = 0)
 {
-    return (worldPos.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy) * WORLD_SCALE;
+	return (worldPos.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy) * WORLD_SCALE;
 }
-
 
 // Generate world-position based stochastic offsets for terrain. Fixes cell border issues.
 inline StochasticOffsets ComputeStochasticOffsets(float2 precomputedWorldUV, float2 screenPos = float2(0, 0))
-{   
-    float2 skewUV = mul(SKEW_MATRIX, precomputedWorldUV);
-    float2 vxID = floor(skewUV);
-    float2 frac_uv = frac(skewUV);
-    float barry_z = 1.0 - frac_uv.x - frac_uv.y;
-    float3 barry = float3(frac_uv, barry_z);
-    
-    // Calculate vertex IDs and barycentric weights for the triangle
-    float4x3 BW_vx = (barry.z > 0) ?
-                     float4x3(float3(vxID, 0), float3(vxID + float2(0, 1), 0), float3(vxID + float2(1, 0), 0), barry.zyx) :
-                     float4x3(float3(vxID + float2(1, 1), 0), float3(vxID + float2(1, 0), 0), float3(vxID + float2(0, 1), 0), float3(-barry.z, 1.0 - barry.y, 1.0 - barry.x));
-    
-    // Generate offsets and store weights
-    StochasticOffsets offsets;
-    offsets.offset1 = hash2D2D(BW_vx[0].xy);
-    offsets.offset2 = hash2D2D(BW_vx[1].xy);
-    offsets.offset3 = hash2D2D(BW_vx[2].xy);
-    offsets.weights = BW_vx[3];
-    
-    return offsets;
+{
+	float2 skewUV = mul(SKEW_MATRIX, precomputedWorldUV);
+	float2 vxID = floor(skewUV);
+	float2 frac_uv = frac(skewUV);
+	float barry_z = 1.0 - frac_uv.x - frac_uv.y;
+	float3 barry = float3(frac_uv, barry_z);
+
+	// Calculate vertex IDs and barycentric weights for the triangle
+	float4x3 BW_vx = (barry.z > 0) ?
+	                     float4x3(float3(vxID, 0), float3(vxID + float2(0, 1), 0), float3(vxID + float2(1, 0), 0), barry.zyx) :
+	                     float4x3(float3(vxID + float2(1, 1), 0), float3(vxID + float2(1, 0), 0), float3(vxID + float2(0, 1), 0), float3(-barry.z, 1.0 - barry.y, 1.0 - barry.x));
+
+	// Generate offsets and store weights
+	StochasticOffsets offsets;
+	offsets.offset1 = hash2D2D(BW_vx[0].xy);
+	offsets.offset2 = hash2D2D(BW_vx[1].xy);
+	offsets.offset3 = hash2D2D(BW_vx[2].xy);
+	offsets.weights = BW_vx[3];
+
+	return offsets;
 }
 
-
 // Main stochastic sampling function
-inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy, float3 worldPos = float3(0,0,0))  // Used for normal/diffuse text. Luminence-based blending helps preserve details close to camera.
+inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy, float3 worldPos = float3(0, 0, 0))  // Used for normal/diffuse text. Luminence-based blending helps preserve details close to camera.
 {
 	// Early return if terrain variation is disabled
 	[branch] if (!SharedData::terrainVariationSettings.enableTilingFix)
@@ -110,7 +108,7 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	float height2 = sample2.a > 0 ? sample2.a : dot(sample2.rgb, float3(0.2126, 0.7152, 0.0722));
 	float height3 = sample3.a > 0 ? sample3.a : dot(sample3.rgb, float3(0.2126, 0.7152, 0.0722));
 
-    float3 heights = float3(height1, height2, height3);
+	float3 heights = float3(height1, height2, height3);
 	float3 weights = blendWeights * (1.0 + HEIGHT_INFLUENCE * (heights - 1.0));
 
 	// Blend samples with height-adjusted weights
