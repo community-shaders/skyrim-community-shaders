@@ -16,6 +16,7 @@
 #include "Features/LightLimitFix.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/ScreenSpaceGI.h"
+#include "Features/ScreenSpaceReflections.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/SkySync.h"
 #include "Features/Skylighting.h"
@@ -213,6 +214,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::subsurfaceScattering,
 		&globals::features::terrainShadows,
 		&globals::features::screenSpaceGI,
+		&globals::features::screenSpaceReflections,
 		&globals::features::skylighting,
 		&globals::features::skySync,
 		&globals::features::terrainBlending,
