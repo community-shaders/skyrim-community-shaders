@@ -65,7 +65,7 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	// Early return if terrain variation is disabled
 	[branch] if (!SharedData::terrainVariationSettings.enableTilingFix)
 	{
-		return tex.SampleBias(samp, uv, SharedData::MipBias);
+		return tex.SampleLevel(samp, uv, mipLevel);
 	}
 	// Apply contrast to the initial blend weights (without height influence)
 	float3 blendWeights = pow(saturate(offsets.weights), HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE));
@@ -74,22 +74,9 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	float totalWeight = blendWeights.x + blendWeights.y + blendWeights.z;
 	blendWeights = (totalWeight > 0.0) ? blendWeights / totalWeight : DEFAULT_WEIGHTS;
 
-	// Sample all three locations using hash-based offsets
-	float4 sample1, sample2, sample3;
-	[branch] if (SharedData::extendedMaterialSettings.EnableTerrainParallax)
-	{
-		// Parallax enabled, can use SampleLevel for better perf
-		sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
-		sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
-		sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
-	}
-	else
-	{
-		// When parallax disabled, samplelevel causes mipmap issues, it uses too low a mipmap level up close.
-		sample1 = tex.SampleGrad(samp, uv + offsets.offset1, dx, dy);
-		sample2 = tex.SampleGrad(samp, uv + offsets.offset2, dx, dy);
-		sample3 = tex.SampleGrad(samp, uv + offsets.offset3, dx, dy);
-	}
+    float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
+	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
 
 	// Apply height-based weight adjustments
 	float height1 = sample1.a > 0 ? sample1.a : dot(sample1.rgb, LUMINANCE_WEIGHTS);
