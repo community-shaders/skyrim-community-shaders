@@ -1273,19 +1273,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #		if defined(TRUE_PBR)
 	float4 blendedRMAOS = 0;
-#		endif
-	// Compute stochastic offsets and derivatives once for all layers (only when terrain variation is enabled)
+#		endif	// Compute stochastic offsets and derivatives once for all layers (only when terrain variation is enabled)
 #		if defined(TERRAIN_VARIATION)
 	bool useTerrainVariation = SharedData::terrainVariationSettings.enableTilingFix;
 	float2 dx, dy;
-	float2 precomputedWorldUV;
 	StochasticOffsets sharedOffset;
 	[branch] if (useTerrainVariation)
 	{
-		dx = ddx(uv);
-		dy = ddy(uv);
-		precomputedWorldUV = ComputeWorldUV(input.WorldPosition.xyz, eyeIndex);
-		sharedOffset = ComputeStochasticOffsets(precomputedWorldUV);
+		dx = ddx(input.TexCoord0.zw);
+		dy = ddy(input.TexCoord0.zw);
+		sharedOffset = ComputeStochasticOffsets(input.TexCoord0.zw);
 	}
 #		endif
 
@@ -1966,7 +1963,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 		float2 dx = ddx(blendColorUV);
 		float2 dy = ddy(blendColorUV);
 		StochasticOffsets lodBlendColorOffset = ComputeStochasticOffsetsLOD(blendColorUV);
-		lodLandColor = StochasticSampleLODMask(screenNoise, 0, TexLandLodBlend1Sampler, SampLandLodBlend1Sampler, blendColorUV, lodBlendColorOffset, dx, dy);
+		lodLandColor = StochasticSampleLOD(screenNoise, 0, TexLandLodBlend1Sampler, SampLandLodBlend1Sampler, blendColorUV, lodBlendColorOffset, dx, dy);
 	} else {
 		lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
 	}
