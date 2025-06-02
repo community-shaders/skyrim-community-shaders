@@ -74,7 +74,7 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	float totalWeight = blendWeights.x + blendWeights.y + blendWeights.z;
 	blendWeights = (totalWeight > 0.0) ? blendWeights / totalWeight : DEFAULT_WEIGHTS;
 
-    float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
 

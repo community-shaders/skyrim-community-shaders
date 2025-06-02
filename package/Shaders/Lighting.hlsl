@@ -1287,15 +1287,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 #		endif
 // Calculate mip levels for terrain variation when parallax is disabled
 #		if defined(TERRAIN_VARIATION) && defined(EMAT) && defined(TRUE_PBR)
-    if (useTerrainVariation && !SharedData::extendedMaterialSettings.EnableTerrainParallax) {
-        // Calculate basic mip level for terrain textures
-        mipLevels[0] = ExtendedMaterials::GetMipLevel(uv, TexColorSampler);
-        mipLevels[1] = ExtendedMaterials::GetMipLevel(uv, TexLandColor2Sampler);
-        mipLevels[2] = ExtendedMaterials::GetMipLevel(uv, TexLandColor3Sampler);
-        mipLevels[3] = ExtendedMaterials::GetMipLevel(uv, TexLandColor4Sampler);
-        mipLevels[4] = ExtendedMaterials::GetMipLevel(uv, TexLandColor5Sampler);
-        mipLevels[5] = ExtendedMaterials::GetMipLevel(uv, TexLandColor6Sampler);
-    }
+	if (useTerrainVariation && !SharedData::extendedMaterialSettings.EnableTerrainParallax) {
+		// Calculate basic mip level for terrain textures
+		mipLevels[0] = ExtendedMaterials::GetMipLevel(uv, TexColorSampler);
+		mipLevels[1] = ExtendedMaterials::GetMipLevel(uv, TexLandColor2Sampler);
+		mipLevels[2] = ExtendedMaterials::GetMipLevel(uv, TexLandColor3Sampler);
+		mipLevels[3] = ExtendedMaterials::GetMipLevel(uv, TexLandColor4Sampler);
+		mipLevels[4] = ExtendedMaterials::GetMipLevel(uv, TexLandColor5Sampler);
+		mipLevels[5] = ExtendedMaterials::GetMipLevel(uv, TexLandColor6Sampler);
+	}
 #		endif
 #		if defined(EMAT)
 	if (SharedData::extendedMaterialSettings.EnableTerrainParallax) {
