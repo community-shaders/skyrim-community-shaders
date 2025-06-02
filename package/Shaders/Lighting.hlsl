@@ -1273,7 +1273,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace
 
 #		if defined(TRUE_PBR)
 	float4 blendedRMAOS = 0;
-#		endif	// Compute stochastic offsets and derivatives once for all layers (only when terrain variation is enabled)
+#		endif  // Compute stochastic offsets and derivatives once for all layers (only when terrain variation is enabled)
 #		if defined(TERRAIN_VARIATION)
 	bool useTerrainVariation = SharedData::terrainVariationSettings.enableTilingFix;
 	float2 dx, dy;

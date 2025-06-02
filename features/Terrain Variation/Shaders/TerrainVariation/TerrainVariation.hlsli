@@ -39,24 +39,24 @@ inline float2 hash2D2D(float2 s)
 }
 
 inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
-{   
+{
 	float2 scaledUV = landscapeUV * (WORLD_SCALE);
 	float2 skewUV = mul(SKEW_MATRIX, scaledUV);
-    float2 vxID = floor(skewUV);
-    float2 frac_uv = frac(skewUV);
-    float barry_z = 1.0 - frac_uv.x - frac_uv.y;
-    float3 barry = float3(frac_uv, barry_z);
-      float4x3 BW_vx = (barry.z > 0) ?
-                     float4x3(float3(vxID, 0), float3(vxID + float2(0, 1), 0), float3(vxID + float2(1, 0), 0), barry.zyx) :
-                     float4x3(float3(vxID + float2(1, 1), 0), float3(vxID + float2(1, 0), 0), float3(vxID + float2(0, 1), 0), float3(-barry.z, 1.0 - barry.y, 1.0 - barry.x));
-    
-    StochasticOffsets offsets;
-    offsets.offset1 = hash2D2D(BW_vx[0].xy);
-    offsets.offset2 = hash2D2D(BW_vx[1].xy);
-    offsets.offset3 = hash2D2D(BW_vx[2].xy);
-    offsets.weights = BW_vx[3];
-    
-    return offsets;
+	float2 vxID = floor(skewUV);
+	float2 frac_uv = frac(skewUV);
+	float barry_z = 1.0 - frac_uv.x - frac_uv.y;
+	float3 barry = float3(frac_uv, barry_z);
+	float4x3 BW_vx = (barry.z > 0) ?
+	                     float4x3(float3(vxID, 0), float3(vxID + float2(0, 1), 0), float3(vxID + float2(1, 0), 0), barry.zyx) :
+	                     float4x3(float3(vxID + float2(1, 1), 0), float3(vxID + float2(1, 0), 0), float3(vxID + float2(0, 1), 0), float3(-barry.z, 1.0 - barry.y, 1.0 - barry.x));
+
+	StochasticOffsets offsets;
+	offsets.offset1 = hash2D2D(BW_vx[0].xy);
+	offsets.offset2 = hash2D2D(BW_vx[1].xy);
+	offsets.offset3 = hash2D2D(BW_vx[2].xy);
+	offsets.weights = BW_vx[3];
+
+	return offsets;
 }
 
 // Main stochastic sampling function
@@ -96,7 +96,7 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	float height2 = sample2.a > 0 ? sample2.a : dot(sample2.rgb, LUMINANCE_WEIGHTS);
 	float height3 = sample3.a > 0 ? sample3.a : dot(sample3.rgb, LUMINANCE_WEIGHTS);
 
-    float3 heights = float3(height1, height2, height3);
+	float3 heights = float3(height1, height2, height3);
 	float3 weights = blendWeights * (1.0 + HEIGHT_INFLUENCE * (heights - 1.0));
 
 	// Blend samples with height-adjusted weights
@@ -128,8 +128,9 @@ inline float4 StochasticSample3(float rnd, float mipLevel, Texture2D tex, Sample
 
 // --------------------- LOD SAMPLING FUNCTIONS --------------------- //
 
-inline float2 hashLOD(float2 p) {
-   	p = frac(p * 0.318);
+inline float2 hashLOD(float2 p)
+{
+	p = frac(p * 0.318);
 	return frac(p.x + p.y * 17.0);
 }
 
@@ -137,14 +138,14 @@ inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV)
 {
 	float2 scaledUV = landscapeUV * (WORLD_SCALE / 0.010416667) * 8.0;
 	float2 cellID = floor(scaledUV);
-	
+
 	StochasticOffsets offsetsLOD;
 	offsetsLOD.offset1 = hashLOD(cellID) * 0.08;
 	offsetsLOD.offset2 = hashLOD(cellID + float2(1, 0)) * 0.08;
 
 	float3 simpleWeights = float3(0.4, 0.35, 0.25);
 	offsetsLOD.weights = simpleWeights;
-	
+
 	return offsetsLOD;
 }
 
@@ -173,7 +174,7 @@ inline float4 StochasticSampleLOD(float rnd, float mipLevel, Texture2D tex, Samp
 	// Sample with rotated micro-offsets (only two samples)
 	float4 sample1 = tex.SampleLevel(samp, uv + microOffset1, mipLevel);
 	float4 sample2 = tex.SampleLevel(samp, uv + microOffset2, mipLevel);
-	
+
 	// Interpolate the third sample from the first two
 	float4 sample3 = lerp(sample1, sample2, 0.5);
 
@@ -185,5 +186,4 @@ inline float4 StochasticSampleLOD(float rnd, float mipLevel, Texture2D tex, Samp
 	return result;
 }
 
-
-#endif  // TERRAIN_VARIATION_HLSLI	
+#endif  // TERRAIN_VARIATION_HLSLI
