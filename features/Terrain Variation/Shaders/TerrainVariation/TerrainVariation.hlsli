@@ -62,11 +62,6 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
 // Main stochastic sampling function
 inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)  // Used for normal/diffuse text. Luminence-based blending helps preserve details close to camera.
 {
-	// Early return if terrain variation is disabled
-	[branch] if (!SharedData::terrainVariationSettings.enableTilingFix)
-	{
-		return tex.SampleLevel(samp, uv, mipLevel);
-	}
 	// Apply contrast to the initial blend weights (without height influence)
 	float3 blendWeights = pow(saturate(offsets.weights), HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE));
 
@@ -74,7 +69,7 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	float totalWeight = blendWeights.x + blendWeights.y + blendWeights.z;
 	blendWeights = (totalWeight > 0.0) ? blendWeights / totalWeight : DEFAULT_WEIGHTS;
 
-	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+    float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
 
@@ -123,15 +118,22 @@ inline float2 hashLOD(float2 p)
 
 inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV)
 {
-	float2 scaledUV = landscapeUV * (WORLD_SCALE / 0.010416667) * 8.0;
+	// Precomputed scaling: (WORLD_SCALE / 0.010416667) * 8.0 = ~255437
+	static const float LOD_SCALE = 255437.0;
+	
+	float2 scaledUV = landscapeUV * LOD_SCALE;
 	float2 cellID = floor(scaledUV);
 
 	StochasticOffsets offsetsLOD;
-	offsetsLOD.offset1 = hashLOD(cellID) * 0.08;
-	offsetsLOD.offset2 = hashLOD(cellID + float2(1, 0)) * 0.08;
-
-	float3 simpleWeights = float3(0.4, 0.35, 0.25);
-	offsetsLOD.weights = simpleWeights;
+	// Generate both offsets from single hash to reduce calls
+	float2 hash1 = hashLOD(cellID);
+	float2 hash2 = hashLOD(cellID + 127.0); // Different offset for variation
+	
+	offsetsLOD.offset1 = hash1 * 0.08;
+	offsetsLOD.offset2 = hash2 * 0.08;
+	
+	// Simplified weights since we only use 2 samples now
+	offsetsLOD.weights = float3(0.65, 0.35, 0.0);
 
 	return offsetsLOD;
 }
@@ -139,38 +141,23 @@ inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV)
 // Stochastic sampling function for Terrain LOD & LOD Mask.
 inline float4 StochasticSampleLOD(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
 {
-	// Early return if terrain variation is disabled
-	[branch] if (!SharedData::terrainVariationSettings.enableTilingFix)
-	{
-		return tex.SampleBias(samp, uv, SharedData::MipBias);
-	}
-	float offsetScale = 0.15;
+	float offsetScale = 0.01;
 
-	// Add simple rotation to only two offsets (using the random value to vary rotation per pixel)
-	float angle1 = rnd * 6.28;     // Random base angle between 0-2π
-	float angle2 = angle1 + 2.09;  // ~120° offset
+	// Cheap pseudo-rotation using simple transforms
+	float2 dir1 = float2(rnd - 0.5, frac(rnd * 1.618) - 0.5);
+	float2 dir2 = float2(dir1.y, -dir1.x);
+	
+	// Apply simple scaled offsets
+	float2 microOffset1 = (offsets.offset1 + dir1) * offsetScale;
+	float2 microOffset2 = (offsets.offset2 + dir2) * offsetScale;
 
-	// Create rotation matrices for only two samples
-	float2x2 rot1 = float2x2(cos(angle1), -sin(angle1), sin(angle1), cos(angle1));
-	float2x2 rot2 = float2x2(cos(angle2), -sin(angle2), sin(angle2), cos(angle2));
-
-	// Apply rotation to offsets before scaling them down
-	float2 microOffset1 = mul(rot1, offsets.offset1) * offsetScale;
-	float2 microOffset2 = mul(rot2, offsets.offset2) * offsetScale;
-
-	// Sample with rotated micro-offsets (only two samples)
+	// Sample only two offsets
 	float4 sample1 = tex.SampleLevel(samp, uv + microOffset1, mipLevel);
 	float4 sample2 = tex.SampleLevel(samp, uv + microOffset2, mipLevel);
 
-	// Interpolate the third sample from the first two
-	float4 sample3 = lerp(sample1, sample2, 0.5);
-
-	// Blend using the barycentric weights
-	float4 result = sample1 * offsets.weights.x +
-	                sample2 * offsets.weights.y +
-	                sample3 * offsets.weights.z;
-
-	return result;
+	// Simple 2-sample blend weighted toward first sample
+	return lerp(sample2, sample1, 0.65);
 }
+
 
 #endif  // TERRAIN_VARIATION_HLSLI
