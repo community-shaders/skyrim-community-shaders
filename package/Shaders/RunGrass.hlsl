@@ -446,8 +446,7 @@ cbuffer PerMaterial : register(b1)
 
 #		include "GrassLighting/GrassLighting.hlsli"
 
-PS_OUTPUT main(PS_INPUT input, bool frontFace
-			   : SV_IsFrontFace)
+PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 {
 	PS_OUTPUT psout;
 
