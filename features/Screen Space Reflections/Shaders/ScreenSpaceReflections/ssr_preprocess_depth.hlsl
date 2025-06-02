@@ -6,5 +6,5 @@ Texture2D<float> DepthTexture : register(t4);
 
 [numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID)
 {
-    DepthOutput[DTid.xy] = DepthTexture[DTid.xy];
+    DepthOutput[DTid.xy] = SharedData::GetScreenDepth(DepthTexture[DTid.xy]);
 }

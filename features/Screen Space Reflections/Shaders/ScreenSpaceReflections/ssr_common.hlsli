@@ -4,8 +4,8 @@
 #include "Common/Math.hlsli"
 #include "Common/Random.hlsli"
 
-Texture2D<float4> DiffuseTexture : register(t0);
-Texture2D<float3> SpecularTexture : register(t1);
+#define Pow2(x) ((x) * (x))
+
 Texture2D<unorm float3> NormalRoughnessTexture : register(t2);
 
 SamplerState LinearSampler : register(s0);

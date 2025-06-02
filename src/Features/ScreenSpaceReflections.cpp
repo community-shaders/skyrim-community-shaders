@@ -69,7 +69,7 @@ void ScreenSpaceReflections::SetupResources()
         texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
         texDesc.MipLevels = 5;
         texDesc.MiscFlags |= D3D11_RESOURCE_MISC_GENERATE_MIPS;
-        texDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
+        texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 
         D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
 			.Format = texDesc.Format,
@@ -182,60 +182,74 @@ void ScreenSpaceReflections::DrawSSR()
     ID3D11Buffer* buffer[1] = { ssrCB->CB() };
     context->CSSetConstantBuffers(1, 1, buffer);
 
-    ID3D11ShaderResourceView* srvs[5] = {
-        main.SRV,
-        specular.SRV,
-        normal.SRV,
-        nullptr,
-        nullptr
-    };
+    std::array<ID3D11ShaderResourceView*, 6> srvs = { nullptr };
+	std::array<ID3D11UnorderedAccessView*, 2> uavs = { nullptr };
 
-    ID3D11UnorderedAccessView* uavs[2] = {
-        texColor->uav.get(),
-        nullptr
-    };
+    auto resetViews = [&]() {
+		srvs.fill(nullptr);
+		uavs.fill(nullptr);
+
+		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+	};
 
     std::array<ID3D11SamplerState*, 1> samplers = { linearSampler.get() };
 
     context->CSSetSamplers(0, 1, samplers.data());
 
-    context->CSSetShaderResources(0, 3, srvs);
-    context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+    // prepare color
+    srvs.at(0) = main.SRV;
+    srvs.at(1) = specular.SRV;
+    srvs.at(2) = normal.SRV;
+    uavs.at(0) = texColor->uav.get();
+
+    context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+    context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
     context->CSSetShader(prepareColorCS.get(), nullptr, 0);
 
     context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
 
-    uavs[0] = texDepth->uav.get();
-    srvs[4] = depth.depthSRV;
+    resetViews();
 
-    context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
-    context->CSSetShaderResources(0, 5, srvs);
+    // preprocess depth
+    uavs.at(0) = texDepth->uav.get();
+    srvs.at(0) = main.SRV;
+    srvs.at(1) = specular.SRV;
+    srvs.at(2) = normal.SRV;
+    srvs.at(3) = texColor->srv.get();
+    srvs.at(4) = depth.depthSRV;
+
+    context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+    context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
     context->CSSetShader(preprocessDepthCS.get(), nullptr, 0);
 
     context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
 
-    uavs[0] = texSSRColor->uav.get();
-    uavs[1] = texHitDistance->uav.get();
-    srvs[3] = texColor->srv.get();
-    srvs[4] = texDepth->srv.get();
+    context->GenerateMips(texDepth->srv.get());
+    context->GenerateMips(texColor->srv.get());
 
-    context->CSSetShaderResources(0, 5, srvs);
-    context->CSSetUnorderedAccessViews(0, 2, uavs, nullptr);
+    resetViews();
+
+    // raymarch
+    uavs.at(0) = texSSRColor->uav.get();
+    uavs.at(1) = texHitDistance->uav.get();
+
+    srvs.at(0) = main.SRV;
+    srvs.at(1) = specular.SRV;
+    srvs.at(2) = normal.SRV;
+    srvs.at(3) = texColor->srv.get();
+    srvs.at(4) = depth.depthSRV;
+    srvs.at(5) = texDepth->srv.get();
+
+    context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+    context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
     context->CSSetShader(raymarchCS.get(), nullptr, 0);
 
     context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.x, 1);
 
     context->CSSetShader(nullptr, nullptr, 0);
-    srvs[0] = nullptr;
-    srvs[1] = nullptr;
-    srvs[2] = nullptr;
-    srvs[3] = nullptr;
-    srvs[4] = nullptr;
-    uavs[0] = nullptr;
-    uavs[1] = nullptr;
     
-    context->CSSetShaderResources(0, 5, srvs);
-    context->CSSetUnorderedAccessViews(0, 2, uavs, nullptr);
+    resetViews();
 
     state->EndPerfEvent();
 }
