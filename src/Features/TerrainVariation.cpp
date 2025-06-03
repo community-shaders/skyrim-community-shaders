@@ -96,8 +96,7 @@ void TerrainVariation::DrawUnloadedUI()
 	ImGui::Spacing();
 	ImGui::TextWrapped(
 		"Terrain Variation reduces the repeating pattern effect on terrain textures.\n"
-		"This technique creates more natural-looking terrain by adding variation to texture sampling.\n"
-		"Stochastic texturing is applied only when parallax effects are not active (beyond 2048 units from camera).");
+		"This technique creates more natural-looking terrain by adding variation to texture sampling.");
 
 	ImGui::Spacing();
 	ImGui::TextWrapped("Key features:");
