@@ -1,7 +1,7 @@
 // This file is part of the FidelityFX SDK.
 //
 // Copyright (C) 2024 Advanced Micro Devices, Inc.
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -134,7 +134,7 @@ struct ffxDispatchDescFrameGenerationPrepare
     float                 cameraFovAngleVertical;  ///< The camera angle field of view in the vertical direction (expressed in radians).
     float                 viewSpaceToMetersFactor; ///< The scale factor to convert view space units to meters
     struct FfxApiResource depth;                   ///< The depth buffer data
-    struct FfxApiResource motionVectors;           ///< The motion vector data    
+    struct FfxApiResource motionVectors;           ///< The motion vector data
 };
 
 #define FFX_API_CONFIGURE_DESC_TYPE_FRAMEGENERATION_KEYVALUE 0x00020006u
@@ -162,7 +162,7 @@ struct ffxQueryDescFrameGenerationGetGPUMemoryUsage
 struct ffxConfigureDescFrameGenerationRegisterDistortionFieldResource
 {
     ffxConfigureDescHeader header;
-    struct FfxApiResource distortionField;            ///< A resource containing distortion offset data. Needs to be 2-component (ie. RG). Read by FG shaders via Sample. Resource's xy components encodes [UV coordinate of pixel after lens distortion effect- UV coordinate of pixel before lens distortion]. 
+    struct FfxApiResource distortionField;            ///< A resource containing distortion offset data. Needs to be 2-component (ie. RG). Read by FG shaders via Sample. Resource's xy components encodes [UV coordinate of pixel after lens distortion effect- UV coordinate of pixel before lens distortion].
 };
 
 #define FFX_API_CREATE_CONTEXT_DESC_TYPE_FRAMEGENERATION_HUDLESS 0x00020009u

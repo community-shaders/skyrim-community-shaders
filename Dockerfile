@@ -19,11 +19,11 @@ RUN \
         --remove Microsoft.VisualStudio.Component.Windows81SDK \
         || IF "%ERRORLEVEL%"=="3010" EXIT 0) \
     && del /q vs_buildtools.exe
- 
+
 RUN git clone https://github.com/microsoft/vcpkg.git C:/vcpkg && \
     cd C:/vcpkg && \
     bootstrap-vcpkg.bat
-   
+
 RUN setx /M VCPKG_ROOT "C:/vcpkg" && mkdir C:\skyrim-community-shaders
 
 WORKDIR C:/skyrim-community-shaders
