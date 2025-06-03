@@ -5,11 +5,8 @@
 // http://www.diva-portal.org/smash/get/diva2:831762/FULLTEXT01.pdf
 // https://bartwronski.files.wordpress.com/2014/03/ac4_gdc.pdf
 
-#if defined(LANDSCAPE) && defined(TERRAIN_VARIATION)
-#	define USE_TERRAIN_VARIATION 1
+#if defined(TERRAIN_VARIATION)
 #	include "TerrainVariation/TerrainVariation.hlsli"
-#else
-#	define USE_TERRAIN_VARIATION 0
 #endif
 
 struct DisplacementParams
@@ -110,14 +107,8 @@ namespace ExtendedMaterials
 		{
 			float h;
 #		if defined(TERRAIN_VARIATION)
-			[branch] if (USE_TERRAIN_VARIATION)
-			{
 				h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[0], TexLandDisplacement0Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[0]);
-			}
-			else
-			{
-				h = ScaleDisplacement(TexLandDisplacement0Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).x, params[0]);
-			}
+
 #		else
 			h = ScaleDisplacement(TexLandDisplacement0Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).x, params[0]);
 #		endif
@@ -128,14 +119,7 @@ namespace ExtendedMaterials
 		{
 			float h;
 #		if defined(TERRAIN_VARIATION)
-			[branch] if (USE_TERRAIN_VARIATION)
-			{
 				h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[1], TexLandDisplacement1Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[1]);
-			}
-			else
-			{
-				h = ScaleDisplacement(TexLandDisplacement1Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).x, params[1]);
-			}
 #		else
 			h = ScaleDisplacement(TexLandDisplacement1Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).x, params[1]);
 #		endif
@@ -146,14 +130,7 @@ namespace ExtendedMaterials
 		{
 			float h;
 #		if defined(TERRAIN_VARIATION)
-			[branch] if (USE_TERRAIN_VARIATION)
-			{
 				h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[2], TexLandDisplacement2Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[2]);
-			}
-			else
-			{
-				h = ScaleDisplacement(TexLandDisplacement2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).x, params[2]);
-			}
 #		else
 			h = ScaleDisplacement(TexLandDisplacement2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).x, params[2]);
 #		endif
@@ -164,14 +141,7 @@ namespace ExtendedMaterials
 		{
 			float h;
 #		if defined(TERRAIN_VARIATION)
-			[branch] if (USE_TERRAIN_VARIATION)
-			{
 				h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[3], TexLandDisplacement3Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[3]);
-			}
-			else
-			{
-				h = ScaleDisplacement(TexLandDisplacement3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).x, params[3]);
-			}
 #		else
 			h = ScaleDisplacement(TexLandDisplacement3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).x, params[3]);
 #		endif
@@ -182,14 +152,7 @@ namespace ExtendedMaterials
 		{
 			float h;
 #		if defined(TERRAIN_VARIATION)
-			[branch] if (USE_TERRAIN_VARIATION)
-			{
 				h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[4], TexLandDisplacement4Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[4]);
-			}
-			else
-			{
-				h = ScaleDisplacement(TexLandDisplacement4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).x, params[4]);
-			}
 #		else
 			h = ScaleDisplacement(TexLandDisplacement4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).x, params[4]);
 #		endif
@@ -200,14 +163,7 @@ namespace ExtendedMaterials
 		{
 			float h;
 #		if defined(TERRAIN_VARIATION)
-			[branch] if (USE_TERRAIN_VARIATION)
-			{
 				h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[5], TexLandDisplacement5Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[5]);
-			}
-			else
-			{
-				h = ScaleDisplacement(TexLandDisplacement5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).x, params[5]);
-			}
 #		else
 			h = ScaleDisplacement(TexLandDisplacement5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).x, params[5]);
 #		endif
@@ -253,14 +209,7 @@ namespace ExtendedMaterials
 			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand0HasDisplacement) != 0)
 			{
 #		if defined(TERRAIN_VARIATION)
-				[branch] if (USE_TERRAIN_VARIATION)
-				{
 					h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[0], TexLandTHDisp0Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[0]);
-				}
-				else
-				{
-					h = ScaleDisplacement(TexLandTHDisp0Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).x, params[0]);
-				}
 #		else
 				h = ScaleDisplacement(TexLandTHDisp0Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).x, params[0]);
 #		endif
@@ -268,14 +217,7 @@ namespace ExtendedMaterials
 			else
 			{
 #		if defined(TERRAIN_VARIATION)
-				[branch] if (USE_TERRAIN_VARIATION)
-				{
 					h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[0], TexColorSampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).w, params[0]);
-				}
-				else
-				{
-					h = ScaleDisplacement(TexColorSampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).w, params[0]);
-				}
 #		else
 				h = ScaleDisplacement(TexColorSampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).w, params[0]);
 #		endif
@@ -288,14 +230,7 @@ namespace ExtendedMaterials
 			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand1HasDisplacement) != 0)
 			{
 #		if defined(TERRAIN_VARIATION)
-				[branch] if (USE_TERRAIN_VARIATION)
-				{
 					h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[1], TexLandTHDisp1Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[1]);
-				}
-				else
-				{
-					h = ScaleDisplacement(TexLandTHDisp1Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).x, params[1]);
-				}
 #		else
 				h = ScaleDisplacement(TexLandTHDisp1Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).x, params[1]);
 #		endif
@@ -303,14 +238,7 @@ namespace ExtendedMaterials
 			else
 			{
 #		if defined(TERRAIN_VARIATION)
-				[branch] if (USE_TERRAIN_VARIATION)
-				{
 					h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[1], TexLandColor2Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).w, params[1]);
-				}
-				else
-				{
-					h = ScaleDisplacement(TexLandColor2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).w, params[1]);
-				}
 #		else
 				h = ScaleDisplacement(TexLandColor2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).w, params[1]);
 #		endif
@@ -323,14 +251,7 @@ namespace ExtendedMaterials
 			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand2HasDisplacement) != 0)
 			{
 #		if defined(TERRAIN_VARIATION)
-				[branch] if (USE_TERRAIN_VARIATION)
-				{
 					h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[2], TexLandTHDisp2Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[2]);
-				}
-				else
-				{
-					h = ScaleDisplacement(TexLandTHDisp2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).x, params[2]);
-				}
 #		else
 				h = ScaleDisplacement(TexLandTHDisp2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).x, params[2]);
 #		endif
@@ -338,14 +259,7 @@ namespace ExtendedMaterials
 			else
 			{
 #		if defined(TERRAIN_VARIATION)
-				[branch] if (USE_TERRAIN_VARIATION)
-				{
 					h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[2], TexLandColor3Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).w, params[2]);
-				}
-				else
-				{
-					h = ScaleDisplacement(TexLandColor3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).w, params[2]);
-				}
 #		else
 				h = ScaleDisplacement(TexLandColor3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).w, params[2]);
 #		endif
@@ -357,14 +271,7 @@ namespace ExtendedMaterials
 		{
 			float h;
 #		if defined(TERRAIN_VARIATION)
-			[branch] if (USE_TERRAIN_VARIATION)
-			{
 				h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[3], TexLandDisplacement3Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[3]);
-			}
-			else
-			{
-				h = ScaleDisplacement(TexLandDisplacement3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).x, params[3]);
-			}
 #		else
 			h = ScaleDisplacement(TexLandDisplacement3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).x, params[3]);
 #		endif
@@ -375,14 +282,7 @@ namespace ExtendedMaterials
 		{
 			float h;
 #		if defined(TERRAIN_VARIATION)
-			[branch] if (USE_TERRAIN_VARIATION)
-			{
 				h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[4], TexLandDisplacement4Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[4]);
-			}
-			else
-			{
-				h = ScaleDisplacement(TexLandDisplacement4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).x, params[4]);
-			}
 #		else
 			h = ScaleDisplacement(TexLandDisplacement4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).x, params[4]);
 #		endif
@@ -393,14 +293,7 @@ namespace ExtendedMaterials
 		{
 			float h;
 #		if defined(TERRAIN_VARIATION)
-			[branch] if (USE_TERRAIN_VARIATION)
-			{
 				h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[5], TexLandDisplacement5Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[5]);
-			}
-			else
-			{
-				h = ScaleDisplacement(TexLandDisplacement5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).x, params[5]);
-			}
 #		else
 			h = ScaleDisplacement(TexLandDisplacement5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).x, params[5]);
 #		endif
@@ -806,14 +699,7 @@ namespace ExtendedMaterials
 			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand1HasDisplacement) != 0)
 			{
 #		if defined(TERRAIN_VARIATION)
-				[branch] if (USE_TERRAIN_VARIATION)
-				{
 					h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[1], TexLandTHDisp1Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[1]);
-				}
-				else
-				{
-					h = ScaleDisplacement(TexLandTHDisp1Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).x, params[1]);
-				}
 #		else
 				h = ScaleDisplacement(TexLandTHDisp1Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).x, params[1]);
 #		endif
@@ -821,14 +707,7 @@ namespace ExtendedMaterials
 			else
 			{
 #		if defined(TERRAIN_VARIATION)
-				[branch] if (USE_TERRAIN_VARIATION)
-				{
 					h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[1], TexLandColor2Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).w, params[1]);
-				}
-				else
-				{
-					h = ScaleDisplacement(TexLandColor2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).w, params[1]);
-				}
 #		else
 				h = ScaleDisplacement(TexLandColor2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).w, params[1]);
 #		endif
@@ -841,14 +720,7 @@ namespace ExtendedMaterials
 			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand2HasDisplacement) != 0)
 			{
 #		if defined(TERRAIN_VARIATION)
-				[branch] if (USE_TERRAIN_VARIATION)
-				{
 					h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[2], TexLandTHDisp2Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[2]);
-				}
-				else
-				{
-					h = ScaleDisplacement(TexLandTHDisp2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).x, params[2]);
-				}
 #		else
 				h = ScaleDisplacement(TexLandTHDisp2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).x, params[2]);
 #		endif
@@ -856,14 +728,7 @@ namespace ExtendedMaterials
 			else
 			{
 #		if defined(TERRAIN_VARIATION)
-				[branch] if (USE_TERRAIN_VARIATION)
-				{
 					h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[2], TexLandColor3Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).w, params[2]);
-				}
-				else
-				{
-					h = ScaleDisplacement(TexLandColor3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).w, params[2]);
-				}
 #		else
 				h = ScaleDisplacement(TexLandColor3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).w, params[2]);
 #		endif
@@ -875,14 +740,7 @@ namespace ExtendedMaterials
 		{
 			float h;
 #		if defined(TERRAIN_VARIATION)
-			[branch] if (USE_TERRAIN_VARIATION)
-			{
 				h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[3], TexLandDisplacement3Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[3]);
-			}
-			else
-			{
-				h = ScaleDisplacement(TexLandDisplacement3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).x, params[3]);
-			}
 #		else
 			h = ScaleDisplacement(TexLandDisplacement3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).x, params[3]);
 #		endif
@@ -893,14 +751,7 @@ namespace ExtendedMaterials
 		{
 			float h;
 #		if defined(TERRAIN_VARIATION)
-			[branch] if (USE_TERRAIN_VARIATION)
-			{
 				h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[4], TexLandDisplacement4Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[4]);
-			}
-			else
-			{
-				h = ScaleDisplacement(TexLandDisplacement4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).x, params[4]);
-			}
 #		else
 			h = ScaleDisplacement(TexLandDisplacement4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).x, params[4]);
 #		endif
@@ -911,14 +762,7 @@ namespace ExtendedMaterials
 		{
 			float h;
 #		if defined(TERRAIN_VARIATION)
-			[branch] if (USE_TERRAIN_VARIATION)
-			{
 				h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[5], TexLandDisplacement5Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[5]);
-			}
-			else
-			{
-				h = ScaleDisplacement(TexLandDisplacement5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).x, params[5]);
-			}
 #		else
 			h = ScaleDisplacement(TexLandDisplacement5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).x, params[5]);
 #		endif
