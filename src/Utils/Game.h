@@ -77,4 +77,9 @@ namespace Util
 		}
 		bool IsNewFrame();
 	};
+
+	/**
+	 * Helper functions for seasons
+	 */
+	RE::BGSTextureSet* GetSeasonalSwap(RE::BGSTextureSet* textureSet);
 }  // namespace Util

@@ -182,4 +182,19 @@ namespace Util
 	{
 		return IsNewFrame(globals::state->frameCount);
 	}
+
+	RE::BGSTextureSet* GetSeasonalSwap(RE::BGSTextureSet* textureSet)
+	{
+		if (textureSet == nullptr) {
+			return nullptr;
+		}
+
+		if (textureSet->pad12C > 0) {
+			// this texture set was swapped from seasons
+			const auto swapTXST = RE::TESForm::LookupByID(textureSet->pad12C)->As<RE::BGSTextureSet>();
+			return swapTXST;
+		}
+
+		return textureSet;
+	}
 }  // namespace Util
