@@ -70,12 +70,8 @@ namespace ExtendedMaterials
 		#if !defined(PARALLAX) && !defined(TRUE_PBR)
 				mipLevel++;
 		#endif
-
 		#if defined(TERRAIN_VARIATION)
-			[branch] if (SharedData::extendedMaterialSettings.EnableTerrainParallax)
-			{
-				mipLevel++;
-			}
+				mipLevel += 1.5;
 		#endif
 
 		#if defined(VR)
@@ -267,7 +263,7 @@ namespace ExtendedMaterials
 			total += h * weights[2];
 			weights[2] *= pow(heightBlend, HEIGHT_MULT * h);
 		}
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile3HasDisplacement) != 0 && w1.w > 0.0)
+		[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand3HasDisplacement) != 0 && w1.w > 0.0)
 		{
 			float h;
 #		if defined(TERRAIN_VARIATION)
@@ -278,7 +274,7 @@ namespace ExtendedMaterials
 			total += h * weights[3];
 			weights[3] *= pow(heightBlend, HEIGHT_MULT * h);
 		}
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile4HasDisplacement) != 0 && w2.x > 0.0)
+		[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand4HasDisplacement) != 0 && w2.x > 0.0)
 		{
 			float h;
 #		if defined(TERRAIN_VARIATION)
@@ -289,7 +285,7 @@ namespace ExtendedMaterials
 			total += h * weights[4];
 			weights[4] *= pow(heightBlend, HEIGHT_MULT * h);
 		}
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile5HasDisplacement) != 0 && w2.y > 0.0)
+		[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand5HasDisplacement) != 0 && w2.y > 0.0)
 		{
 			float h;
 #		if defined(TERRAIN_VARIATION)
@@ -716,8 +712,7 @@ namespace ExtendedMaterials
 			weights[1] *= pow(heightBlend, HEIGHT_MULT * h);
 		}
 		if (w1.z > 0.0) {
-			float h = 0.0;
-			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand2HasDisplacement) != 0)
+			float h = 0.0;			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand2HasDisplacement) != 0)
 			{
 #		if defined(TERRAIN_VARIATION)
 					h = ScaleDisplacement(StochasticSample3(screenNoise, mipLevels[2], TexLandTHDisp2Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[2]);
@@ -736,7 +731,7 @@ namespace ExtendedMaterials
 			total += h * weights[2];
 			weights[2] *= pow(heightBlend, HEIGHT_MULT * h);
 		}
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile3HasDisplacement) != 0 && w1.w > 0.0)
+		[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand3HasDisplacement) != 0 && w1.w > 0.0)
 		{
 			float h;
 #		if defined(TERRAIN_VARIATION)
@@ -747,7 +742,7 @@ namespace ExtendedMaterials
 			total += h * weights[3];
 			weights[3] *= pow(heightBlend, HEIGHT_MULT * h);
 		}
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile4HasDisplacement) != 0 && w2.x > 0.0)
+		[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand4HasDisplacement) != 0 && w2.x > 0.0)
 		{
 			float h;
 #		if defined(TERRAIN_VARIATION)
@@ -758,7 +753,7 @@ namespace ExtendedMaterials
 			total += h * weights[4];
 			weights[4] *= pow(heightBlend, HEIGHT_MULT * h);
 		}
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile5HasDisplacement) != 0 && w2.y > 0.0)
+		[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand5HasDisplacement) != 0 && w2.y > 0.0)
 		{
 			float h;
 #		if defined(TERRAIN_VARIATION)
