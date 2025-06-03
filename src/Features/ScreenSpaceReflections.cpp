@@ -18,8 +18,8 @@ void ScreenSpaceReflections::DrawSettings()
 {
     ImGui::Checkbox("Enabled", &settings.Enabled);
     ImGui::Checkbox("Glossy", &settings.Glossy);
-    ImGui::SliderInt("Max Steps", reinterpret_cast<int*>(&settings.MaxSteps), 1, 16);
-    ImGui::SliderInt("Num Rays", reinterpret_cast<int*>(&settings.NumRays), 1, 16);
+    ImGui::SliderInt("Max Steps", (int*)&settings.MaxSteps, 1, 16);
+    ImGui::SliderInt("Num Rays", (int*)&settings.NumRays, 1, 16);
     ImGui::SliderFloat("Roughness Mask", &settings.RoughnessMask, 0.0f, 1.0f, "%.2f");
 
     ImGui::SeparatorText("Debug");
@@ -59,6 +59,7 @@ void ScreenSpaceReflections::SetupResources()
 	logger::debug("Creating buffers...");
 	{
         ssrCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<SSRCB>());
+        spdCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<SPDCB>());
     }
 
     logger::debug("Creating textures...");
@@ -98,6 +99,22 @@ void ScreenSpaceReflections::SetupResources()
         texHitDistance = eastl::make_unique<Texture2D>(texDesc);
         texHitDistance->CreateSRV(srvDesc);
         texHitDistance->CreateUAV(uavDesc);
+
+        for (uint i = 0; i < 5; i++) {
+			D3D11_SHADER_RESOURCE_VIEW_DESC mipSrvDesc = {
+				.Format = texDesc.Format,
+				.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+				.Texture2D = { .MostDetailedMip = i, .MipLevels = 1 }
+			};
+			DX::ThrowIfFailed(device->CreateShaderResourceView(texDepth->resource.get(), &mipSrvDesc, depthSRVs[i].put()));
+
+			D3D11_UNORDERED_ACCESS_VIEW_DESC mipUavDesc = {
+				.Format = texDesc.Format,
+				.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+				.Texture2D = { .MipSlice = i }
+			};
+			DX::ThrowIfFailed(device->CreateUnorderedAccessView(texDepth->resource.get(), &mipUavDesc, depthUAVs[i].put()));
+		}
     }
 
     logger::debug("Creating samplers...");
@@ -120,7 +137,7 @@ void ScreenSpaceReflections::SetupResources()
 void ScreenSpaceReflections::ClearShaderCache()
 {
     static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-        &raymarchCS, &prepareColorCS, &preprocessDepthCS
+        &raymarchCS, &prepareColorCS, &preprocessDepthCS, &spdCS
     };
 
     for (auto shader : shaderPtrs)
@@ -142,7 +159,8 @@ void ScreenSpaceReflections::CompileComputeShaders()
         shaderInfos = {
             { &raymarchCS, "ssr_raymarch.hlsl", {} },
             { &prepareColorCS, "ssr_prepare_color.hlsl", {} },
-            { &preprocessDepthCS, "ssr_preprocess_depth.hlsl", {} }
+            { &preprocessDepthCS, "ssr_preprocess_depth.hlsl", {} },
+            { &spdCS, "ssr_spd.hlsl", {} }
         };
 
     for (auto& info : shaderInfos) {
@@ -170,17 +188,32 @@ void ScreenSpaceReflections::DrawSSR()
 
     float2 size = Util::ConvertToDynamic(state->screenSize);
     float2 dispatchCount = { (size.x + 7) / 8, (size.y + 7) / 8 };
-    ssrCBData = {
-        settings.MaxSteps,
-        settings.NumRays,
-        settings.Glossy ? 1u : 0u,
-        0u,
-        settings.RoughnessMask,
-        { 0.0f, 0.0f, 0.0f } // padding
-    };
-    ssrCB->Update(&ssrCBData);
-    ID3D11Buffer* buffer[1] = { ssrCB->CB() };
-    context->CSSetConstantBuffers(1, 1, buffer);
+    
+    SSRCB ssrCBData;
+    {
+        ssrCBData.MaxSteps = settings.MaxSteps;
+        ssrCBData.NumRays = settings.NumRays;
+        ssrCBData.Glossy = settings.Glossy ? 1u : 0u;
+        ssrCBData.RoughnessMask = settings.RoughnessMask;
+    }
+    ssrCB->Update(ssrCBData);
+    auto buffer = ssrCB->CB();
+    context->CSSetConstantBuffers(1, 1, &buffer);
+
+    SPDCB spdCBData;
+    {
+        spdCBData.numMips = 5;
+        spdCBData.srcDimensions[0] = (uint)size.x;
+        spdCBData.srcDimensions[1] = (uint)size.y;
+        spdCBData.workGroupOffset[0] = 0;
+        spdCBData.workGroupOffset[1] = 0;
+        spdCBData.numWorkGroups = 256;
+        spdCBData.slice = 0; // unused
+        spdCBData._padding = 0; // padding
+    }
+    spdCB->Update(spdCBData);
+    auto spdBuffer = spdCB->CB();
+    context->CSSetConstantBuffers(2, 1, &spdBuffer);
 
     std::array<ID3D11ShaderResourceView*, 6> srvs = { nullptr };
 	std::array<ID3D11UnorderedAccessView*, 2> uavs = { nullptr };
@@ -230,6 +263,25 @@ void ScreenSpaceReflections::DrawSSR()
 
     resetViews();
 
+    // spd
+    std::array<ID3D11UnorderedAccessView*, 4> uavsSPD = { nullptr };
+    uavsSPD.at(0) = depthUAVs[1].get(); // mip 2
+    uavsSPD.at(1) = depthUAVs[2].get(); // mip 3
+    uavsSPD.at(2) = depthUAVs[3].get(); // mip 4
+    uavsSPD.at(3) = depthUAVs[4].get(); // mip 5
+    srvs.at(5) = depthSRVs[0].get(); // mip 0
+
+    context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+    context->CSSetUnorderedAccessViews(0, (uint)uavsSPD.size(), uavsSPD.data(), nullptr);
+    context->CSSetShader(spdCS.get(), nullptr, 0);
+
+    context->Dispatch((uint)dispatchCount.x >> 2, (uint)dispatchCount.y >> 2, 1);
+
+    srvs.fill(nullptr);
+    uavsSPD.fill(nullptr);
+    context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+    context->CSSetUnorderedAccessViews(0, (uint)uavsSPD.size(), uavsSPD.data(), nullptr);
+
     // raymarch
     uavs.at(0) = texSSRColor->uav.get();
     uavs.at(1) = texHitDistance->uav.get();
@@ -244,6 +296,7 @@ void ScreenSpaceReflections::DrawSSR()
     context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
     context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
     context->CSSetShader(raymarchCS.get(), nullptr, 0);
+    context->CSSetConstantBuffers(1, 1, &buffer);
 
     context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.x, 1);
 

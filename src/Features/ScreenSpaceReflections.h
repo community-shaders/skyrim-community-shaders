@@ -1,5 +1,4 @@
 #pragma once
-#pragma warning(disable : 4324)
 
 struct ScreenSpaceReflections : Feature
 {
@@ -37,14 +36,21 @@ struct ScreenSpaceReflections : Feature
         uint MaxSteps;
         uint NumRays;
         uint Glossy;
-        uint EyeIndex;
         float RoughnessMask;
-        float pad[3];
     };
 
-    SSRCB ssrCBData = {};
+    struct alignas(16) SPDCB
+    {
+        uint srcDimensions[2];
+        uint numMips;
+        uint slice;  // unused
+        uint workGroupOffset[2];
+        uint numWorkGroups;
+        uint _padding;
+    };
 
     eastl::unique_ptr<ConstantBuffer> ssrCB;
+    eastl::unique_ptr<ConstantBuffer> spdCB;
     
     void DrawSSR();
 
@@ -53,9 +59,13 @@ struct ScreenSpaceReflections : Feature
     eastl::unique_ptr<Texture2D> texSSRColor = nullptr;
     eastl::unique_ptr<Texture2D> texHitDistance = nullptr;
 
+    std::array<winrt::com_ptr<ID3D11ShaderResourceView>, 5> depthSRVs = { nullptr };
+	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, 5> depthUAVs = { nullptr };
+
     winrt::com_ptr<ID3D11SamplerState> linearSampler = nullptr;
 
     winrt::com_ptr<ID3D11ComputeShader> preprocessDepthCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> raymarchCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> prepareColorCS = nullptr;
+    winrt::com_ptr<ID3D11ComputeShader> spdCS = nullptr;
 };

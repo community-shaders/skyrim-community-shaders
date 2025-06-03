@@ -1,8 +1,5 @@
 #include "ScreenSpaceReflections/ssr_common.hlsli"
 
-#define SAMPLE_BATCH_SIZE 4
-#define MAX_DISTANCE 4096.f
-
 Texture2D<float4> ScreenColorTextureMips : register(t3);
 Texture2D<float> DepthTexture : register(t4);
 Texture2D<float> LinearDepthTextureMips : register(t5);
@@ -10,94 +7,143 @@ Texture2D<float> LinearDepthTextureMips : register(t5);
 RWTexture2D<float4> SSRColorOutput : register(u0);
 RWTexture2D<float> SSRHitDistanceOutput : register(u1);
 
-// cbuffer PerFrame : register(b1)
-// {
-//     uint MaxSteps;
-//     uint NumRays;
-//     uint Glossy;
-//     uint EyeIndex;
-//     float RoughnessMask;
-//     float3 pad;
-// };
-
-#define MaxSteps 16
-#define NumRays 4
-#define Glossy 1
-#define EyeIndex 0
-#define RoughnessMask 0.99f
-
-struct ssrRay
+cbuffer SSRCB : register(b1)
 {
-    float3 startVS;
-    float3 stepVS;
-    float maxDelta;
+    uint MaxSteps;
+    uint NumRays;
+    uint Glossy;
+    float RoughnessMask;
 };
 
-ssrRay InitRay(float3 rayStartWS, float3 dirWS, float depth, float maxDistance, uint eyeIndex, out float3 debug)
+float GetStepScreenFactorToClipAtScreenEdge(float2 RayStartScreen, float2 RayStepScreen)
 {
-    ssrRay ray;
-    debug = float3(0, 0, 0);
+	const float RayStepScreenInvFactor = 0.5 * length(RayStepScreen);
+	const float2 S = 1 - max(abs(RayStepScreen + RayStartScreen * RayStepScreenInvFactor) - RayStepScreenInvFactor, 0.0f) / abs(RayStepScreen);
+	const float RayStepFactor = min(S.x, S.y) / RayStepScreenInvFactor;
+	return RayStepFactor;
+}
 
-    float3 dirVS = FrameBuffer::WorldToView(dirWS, false, eyeIndex);
-    float rayDist = dirVS.z < 0.0 ? min(-depth / dirVS.z, maxDistance) : maxDistance;
-    float3 rayEndWS = rayStartWS + dirWS * rayDist;
-
-    ray.startVS = FrameBuffer::WorldToView(rayStartWS, true, eyeIndex);
-    float3 rayEndVS = FrameBuffer::WorldToView(rayEndWS, true, eyeIndex);
-
-    float3 rayDepth = ray.startVS + dirVS * (depth - ray.startVS.z);
-    ray.stepVS = rayEndVS - ray.startVS;
-
-    ray.maxDelta = max(
-        length(ray.stepVS),
-        (ray.startVS.z - rayDepth.z) * 4.f
-    );
-
-    return ray;
+float GetScreenFadeBord(float2 pos, float value)
+{
+    float borderDist = min(1 - max(pos.x, pos.y), min(pos.x, pos.y));
+    return saturate(borderDist > value ? 1 : borderDist / value);
 }
 
 bool RayMarch(float3 rayStartWS, float3 dirWS, float depth,
     float roughness, float maxDistance, uint maxSteps, float startMipLevel, float offset,
     out float3 hitPointUVz, out float mipLevel, out float3 debug, uint eyeIndex = 0)
 {
-    float3 rayEndWS = rayStartWS + dirWS * 2 * maxDistance;
+    mipLevel = startMipLevel;
+    debug = float3(0, 0, 0);
+    hitPointUVz = float3(0, 0, 0);
+
     float3 rayStartVS = FrameBuffer::WorldToView(rayStartWS, true, eyeIndex);
-    float3 rayEndVS = FrameBuffer::WorldToView(rayEndWS, true, eyeIndex);
-    float3 rayStepVS = rayEndVS - rayStartVS;
+    float3 dirVS = FrameBuffer::WorldToView(dirWS, false, eyeIndex);
+
+    float4 rayStartClip = mul(FrameBuffer::CameraProj[eyeIndex], float4(rayStartVS, 1));
+    float3 rayStartScreen = rayStartClip.xyz / rayStartClip.w;
+    float4 rayEndScreen = mul(FrameBuffer::CameraProj[eyeIndex], float4(dirVS, 0)) + rayStartClip;
+    rayEndScreen.xyz = rcp(max(rayEndScreen.w, 1e-6f)) * rayEndScreen.xyz;
+    float3 rayDepthScreen = 0.5 * (rayStartScreen + mul(FrameBuffer::CameraProj[eyeIndex], float4(0, 0, 1, 0)).xyz);
+    float3 rayStepScreen = rayEndScreen.xyz - rayStartScreen;
+    rayStepScreen *= GetStepScreenFactorToClipAtScreenEdge(rayStartScreen.xy, rayStepScreen.xy);
+    float compareTolerance = max(abs(rayStepScreen.z), (rayStartScreen.z - rayDepthScreen.z) * 2);
 
     float step = 1.0 / maxSteps;
+    compareTolerance *= step;
 
-    rayStepVS *= step;
+    float3 rayStartUVz = float3((rayStartScreen.xy * float2(0.5, -0.5) + 0.5), rayStartScreen.z);
+	float3 rayStepUVz  = float3(rayStepScreen.xy  * float2(0.5, -0.5), rayStepScreen.z);
+    rayStepUVz *= step;
+    float3 rayUVz = rayStartUVz + rayStepUVz * offset;
 
-    float maxDelta = max(
-        length(rayStepVS),
-        (rayStartVS.z - depth)
-    );
+    float lastDiff = 0;
+    bool hit = false;
 
-    float3 currentVS = rayStartVS + rayStepVS * 0.5f * offset;
-
+    [loop]
     for (uint i = 0; i < maxSteps; ++i)
     {
-        currentVS += rayStepVS;
-        float rayDepth = currentVS.z;
-        if (rayDepth < 0.0 || rayDepth > maxDistance)
-        {
-            debug = float3(0, 0, 1); // Out of bounds
-            return false;
-        }
-        float2 uv = FrameBuffer::ViewToUV(currentVS, eyeIndex);
-        float sampleDepth = LinearDepthTextureMips.SampleLevel(LinearSampler, uv, startMipLevel).x;
-        float depthDelta = rayDepth - sampleDepth;
-        if (abs(depthDelta - maxDelta) < maxDelta)
-        {
-            hitPointUVz = float3(uv, sampleDepth);
-            mipLevel = startMipLevel;
-            debug = float3(uv, 0);
-            return true;
-        }
-    }
+        // Vectorized to group fetches
+		float4 SampleUV0 = rayUVz.xyxy + rayStepUVz.xyxy * float4( 1, 1, 2, 2 );
+		float4 SampleUV1 = rayUVz.xyxy + rayStepUVz.xyxy * float4( 3, 3, 4, 4 );
+		float4 SampleZ   = rayUVz.zzzz + rayStepUVz.zzzz * float4( 1, 2, 3, 4 );
+		
+		// Use lower res for farther samples
+		float4 SampleDepth;
+		SampleDepth.x = LinearDepthTextureMips.SampleLevel(LinearSampler, (SampleUV0.xy), 0).r;
+		SampleDepth.y = LinearDepthTextureMips.SampleLevel(LinearSampler, (SampleUV0.zw), 0).r;
+		mipLevel += (8 / maxSteps) * roughness;
+		
+		SampleDepth.z = LinearDepthTextureMips.SampleLevel(LinearSampler, (SampleUV1.xy), 0).r;
+		SampleDepth.w = LinearDepthTextureMips.SampleLevel(LinearSampler, (SampleUV1.zw), 0).r;
+		mipLevel += (8 / maxSteps) * roughness;
 
-    return false;
+		float4 DepthDiff = SampleZ - SampleDepth;
+		bool4 Hit = abs(DepthDiff + compareTolerance) < compareTolerance;
+
+		[branch] 
+        if(any(Hit))
+		{
+			float DepthDiff0 = DepthDiff[2];
+			float DepthDiff1 = DepthDiff[3];
+			float Time0 = 3;
+
+			[flatten]  
+            if( Hit[2] ) 
+			{
+				DepthDiff0 = DepthDiff[1];
+				DepthDiff1 = DepthDiff[2];
+				Time0 = 2;
+			}
+
+			[flatten] 
+            if( Hit[1] ) 
+			{
+				DepthDiff0 = DepthDiff[0];
+				DepthDiff1 = DepthDiff[1];
+				Time0 = 1;
+			}
+
+			[flatten] 
+            if( Hit[0] ) 
+			{
+				DepthDiff0 = lastDiff;
+				DepthDiff1 = DepthDiff[0];
+				Time0 = 0;
+			}
+
+			float Time1 = Time0 + 1;
+		#if 1
+			// Binary search
+			for( uint j = 0; j < 4; j++ )
+			{
+				compareTolerance *= 0.5;
+
+				float  MidTime = 0.5 * ( Time0 + Time1 );
+				float3 MidUVz = rayUVz + rayStepUVz * MidTime;
+				float  MidDepth = LinearDepthTextureMips.SampleLevel( LinearSampler, MidUVz.xy, mipLevel ).r;
+				float  MidDepthDiff = MidUVz.z - MidDepth;
+
+				if( abs( MidDepthDiff + compareTolerance ) < compareTolerance ) {
+					DepthDiff1	= MidDepthDiff;
+					Time1		= MidTime;
+				} else {
+					DepthDiff0	= MidDepthDiff;
+					Time0		= MidTime;
+				}
+			}
+		#endif
+			float TimeLerp = saturate( DepthDiff0 * rcp(DepthDiff0 - DepthDiff1) );
+			float IntersectTime = Time0 + TimeLerp;
+			hitPointUVz = rayUVz + rayStepUVz * IntersectTime;
+
+			hit = true;
+			break;
+		}
+		lastDiff = DepthDiff.w;
+		rayUVz += 4 * rayStepUVz;
+    }
+    return hit;
 }
 
 [numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID)
@@ -115,39 +161,43 @@ bool RayMarch(float3 rayStartWS, float3 dirWS, float depth,
 
     float3 N = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
 
-    // if (roughness > RoughnessMask)
-    // {
-    //     SSRColorOutput[DTid.xy] = float4(0, 0, 0, 0);
-    //     return;
-    // }
+    if (roughness > RoughnessMask)
+    {
+        SSRColorOutput[DTid.xy] = float4(0, 0, 0, 0);
+        SSRHitDistanceOutput[DTid.xy] = 0;
+        return;
+    }
 
     float depth = DepthTexture[DTid.xy].x;
     float4 positionWS = float4(2 * float2(uv.x, -uv.y + 1) - 1, depth, 1);
-	positionWS = mul(FrameBuffer::CameraViewProjInverse[EyeIndex], positionWS);
+	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
 	positionWS.xyz = positionWS.xyz / positionWS.w;
 
-    depth = SharedData::GetScreenDepth(depth);
+    if (depth <= 1e-6f)
+    {
+        SSRColorOutput[DTid.xy] = float4(0, 0, 0, 0);
+        SSRHitDistanceOutput[DTid.xy] = 0;
+        return;
+    }
 
     const float3 V = normalize(positionWS.xyz);
 
     float a = roughness * roughness;
     float a2 = a * a;
-    float NdotV = saturate(dot(N, V));
-    float G_SmithV = 2 * NdotV / (NdotV + sqrt(a2 + (1 - a2) * NdotV * NdotV));
 
-    float closestDepthSqr = MAX_DISTANCE * MAX_DISTANCE;
-    uint maxSteps = MaxSteps;
-    uint numRays = NumRays;
+    float closestDepthSqr = 1e30f;
+    uint maxSteps = min(MaxSteps, 16u);
+    uint numRays = min(NumRays, 16u);
 
     float3 debug = float3(0, 0, 0);
 
     if (NumRays > 1)
     {
         float2 noise;
-        noise.x = Random::InterleavedGradientNoise(SharedData::ConvertUVToSampleCoord(uv, EyeIndex).xy, SharedData::FrameCountAlwaysActive);
-        noise.y = Random::InterleavedGradientNoise(SharedData::ConvertUVToSampleCoord(uv, EyeIndex).xy, SharedData::FrameCountAlwaysActive * 369);
+        noise.x = Random::InterleavedGradientNoise(SharedData::ConvertUVToSampleCoord(uv, eyeIndex).xy, SharedData::FrameCountAlwaysActive);
+        noise.y = Random::InterleavedGradientNoise(SharedData::ConvertUVToSampleCoord(uv, eyeIndex).xy, SharedData::FrameCountAlwaysActive * 167);
 
-        uint2 randomUint = Random::pcg3d(int3(SharedData::ConvertUVToSampleCoord(uv, EyeIndex).xy, SharedData::FrameCountAlwaysActive)).xy;
+        uint2 randomUint = Random::pcg3d(int3(SharedData::ConvertUVToSampleCoord(uv, eyeIndex).xy, SharedData::FrameCountAlwaysActive)).xy;
 
         float3x3 tangentBasis = GetTangentBasis(N);
         float3 tangentV = mul(tangentBasis, V);
@@ -164,7 +214,8 @@ bool RayMarch(float3 rayStartWS, float3 dirWS, float depth,
         {
             float stepOffset = noise.x - 0.5f;
             float2 xi = Hammersley16(i, numRays, randomUint);
-            float3 H = mul(ImportanceSampleGGX(xi, roughness), tangentBasis);
+            float4 PDF = ImportanceSampleGGX(xi, a2, roughness);
+            float3 H = mul(PDF.xyz, tangentBasis);
             float3 L = normalize(2 * dot(-V, H) * H + V);
 
             float3 hitUVz;
@@ -175,15 +226,20 @@ bool RayMarch(float3 rayStartWS, float3 dirWS, float depth,
                 L = reflect(V, N);
             }
 
-            bool hit = RayMarch(positionWS.xyz, L, depth, roughness, depth, maxSteps, 0.0f, stepOffset, hitUVz, mipLevel, debug, EyeIndex);
+            bool hit = RayMarch(positionWS.xyz, L, depth, roughness, depth, maxSteps, 1.0f, stepOffset, hitUVz, mipLevel, debug, eyeIndex);
 
             if (hit)
             {
                 closestDepthSqr = min(closestDepthSqr, hitUVz.z * hitUVz.z);
 
                 float2 hitUV = hitUVz.xy;
+                if (hitUV.x < -0.1 || hitUV.y < -0.1 || hitUV.x > 1.1 || hitUV.y > 1.1)
+                {
+                    break;
+                }
                 float4 hitColor = ScreenColorTextureMips.SampleLevel(LinearSampler, hitUV, mipLevel);
-                outColor += hitColor;
+                outColor += float4(hitColor.xyz, GetScreenFadeBord(hitUV, 0));
+                debug = float3(hitUV, mipLevel);
             }
         }
 
@@ -191,16 +247,16 @@ bool RayMarch(float3 rayStartWS, float3 dirWS, float depth,
     } 
     else
     {
-        float stepOffset = Random::InterleavedGradientNoise(SharedData::ConvertUVToSampleCoord(uv, EyeIndex).xy, SharedData::FrameCountAlwaysActive) - 0.5f;
+        float stepOffset = Random::InterleavedGradientNoise(SharedData::ConvertUVToSampleCoord(uv, eyeIndex).xy, SharedData::FrameCountAlwaysActive) - 0.5f;
         float3 hitUVz;
         float3 L;
         if (Glossy)
         {
-            float2 xi = Hammersley16(0, 1, Random::pcg3d(int3(SharedData::ConvertUVToSampleCoord(uv, EyeIndex).xy, SharedData::FrameCountAlwaysActive)).xy);
+            float2 xi = Hammersley16(0, 1, Random::pcg3d(int3(SharedData::ConvertUVToSampleCoord(uv, eyeIndex).xy, SharedData::FrameCountAlwaysActive)).xy);
             float3x3 tangentBasis = GetTangentBasis(N);
             float3 tangentV = mul(tangentBasis, V);
 
-            float3 H = mul(ImportanceSampleGGX(xi, roughness), tangentBasis);
+            float3 H = mul(ImportanceSampleGGX(xi, a2, roughness).xyz, tangentBasis);
             L = normalize(2 * dot(-V, H) * H + V);
         } 
         else 
@@ -209,25 +265,25 @@ bool RayMarch(float3 rayStartWS, float3 dirWS, float depth,
         }
 
         float mipLevel = 0.0f;
-        bool hit = RayMarch(positionWS.xyz, L, depth, roughness, depth, maxSteps, 0.0f, stepOffset, hitUVz, mipLevel, debug, EyeIndex);
-
-        debug = L;
+        bool hit = RayMarch(positionWS.xyz, L, depth, roughness, depth, maxSteps, 1.0f, stepOffset, hitUVz, mipLevel, debug, eyeIndex);
 
         if (hit)
         {
             closestDepthSqr = hitUVz.z * hitUVz.z;
 
             float2 hitUV = hitUVz.xy;
-            if (hitUV.x < 0 || hitUV.x > 1 || hitUV.y < 0 || hitUV.y > 1)
+            if (hitUV.x < -0.1 || hitUV.y < -0.1 || hitUV.x > 1.1 || hitUV.y > 1.1)
             {
-                outColor = float4(0, 0, 0, 0);
+                SSRColorOutput[DTid.xy] = float4(0, 0, 0, 0);
+                SSRHitDistanceOutput[DTid.xy] = 0;
+                return;
             }
             float4 hitColor = ScreenColorTextureMips.SampleLevel(LinearSampler, hitUV, mipLevel);
-            outColor = hitColor;
+            outColor += float4(hitColor.xyz, GetScreenFadeBord(hitUV, 0));
+            debug = float3(hitUV, mipLevel);
         }
     }
-    // SSRColorOutput[DTid.xy] = float4(0,0,0, 0);
     SSRColorOutput[DTid.xy] = outColor;
-    // SSRColorOutput[DTid.xy] = float4(debug, 1);
+    // SSRColorOutput[DTid.xy] = float4(debug.xy,0, 1);
     SSRHitDistanceOutput[DTid.xy] = sqrt(closestDepthSqr);
 }

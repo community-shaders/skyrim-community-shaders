@@ -11,13 +11,10 @@ Texture2D<unorm float3> NormalRoughnessTexture : register(t2);
 SamplerState LinearSampler : register(s0);
 
 // Brian Karis, Epic Games "Real Shading in Unreal Engine 4"
-float4 ImportanceSampleGGX(float2 Xi, float Roughness)
+float4 ImportanceSampleGGX(float2 Xi, float m2, float Roughness)
 {
-	float m = Roughness * Roughness;
-	float m2 = m * m;
-		
 	float Phi = 2 * Math::PI * Xi.x;
-				 
+
 	float CosTheta = sqrt((1.0 - Xi.y) / (1.0 + (m2 - 1.0) * Xi.y));
 	float SinTheta = sqrt(max(1e-5, 1.0 - CosTheta * CosTheta));
 				 
