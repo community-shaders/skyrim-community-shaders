@@ -44,35 +44,46 @@ namespace ExtendedMaterials
 		float2 textureDims;
 		tex.GetDimensions(textureDims.x, textureDims.y);
 
-#if !defined(PARALLAX) && !defined(TRUE_PBR)
-		textureDims /= 2.0;
-#endif
+		#if !defined(TERRAIN_VARIATION)
+				textureDims /= 2.0;
+		#endif
 
-#if defined(VR)
-		textureDims /= 2.0;
-#endif
+		#if !defined(PARALLAX) && !defined(TRUE_PBR)
+				textureDims /= 2.0;
+		#endif
 
-		float2 texCoordsPerSize = coords * textureDims;
+		#if defined(VR)
+				textureDims /= 2.0;
+		#endif
 
-		float2 dxSize = ddx(texCoordsPerSize);
-		float2 dySize = ddy(texCoordsPerSize);
+			float2 texCoordsPerSize = coords * textureDims;
 
-		// Find min of change in u and v across quad: compute du and dv magnitude across quad
-		//float2 dTexCoords = dxSize * dxSize + dySize * dySize;
+			float2 dxSize = ddx(texCoordsPerSize);
+			float2 dySize = ddy(texCoordsPerSize);
 
-		// Standard mipmapping uses max here
-		float minTexCoordDelta = min(dot(dxSize, dxSize), dot(dySize, dySize));
+			// Find min of change in u and v across quad: compute du and dv magnitude across quad
+			//float2 dTexCoords = dxSize * dxSize + dySize * dySize;
+			
+			// Standard mipmapping uses max here
+			float minTexCoordDelta = min(dot(dxSize, dxSize), dot(dySize, dySize));
 
-		// Compute the current mip level  (* 0.5 is effectively computing a square root before )
-		float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
+			// Compute the current mip level  (* 0.5 is effectively computing a square root before )
+			float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
+				
+		#if !defined(PARALLAX) && !defined(TRUE_PBR)
+				mipLevel++;
+		#endif
 
-#if !defined(PARALLAX) && !defined(TRUE_PBR)
-		mipLevel++;
-#endif
+		#if defined(TERRAIN_VARIATION)
+			[branch] if (SharedData::extendedMaterialSettings.EnableTerrainParallax)
+			{
+				mipLevel++;
+			}
+		#endif
 
-#if defined(VR)
-		mipLevel++;
-#endif
+		#if defined(VR)
+				mipLevel++;
+		#endif
 
 		return mipLevel;
 	}
