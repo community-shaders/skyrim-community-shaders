@@ -11,23 +11,76 @@ Texture2D<unorm float3> NormalRoughnessTexture : register(t2);
 SamplerState LinearSampler : register(s0);
 
 // Brian Karis, Epic Games "Real Shading in Unreal Engine 4"
-float4 ImportanceSampleGGX(float2 Xi, float m2, float Roughness)
+float4 ImportanceSampleGGX(float2 E, float a2)
 {
-	float Phi = 2 * Math::PI * Xi.x;
+	float Phi = 2 * Math::PI * E.x;
+	float CosTheta = sqrt( (1 - E.y) / ( 1 + (a2 - 1) * E.y ) );
+	float SinTheta = sqrt( 1 - CosTheta * CosTheta );
 
-	float CosTheta = sqrt((1.0 - Xi.y) / (1.0 + (m2 - 1.0) * Xi.y));
-	float SinTheta = sqrt(max(1e-5, 1.0 - CosTheta * CosTheta));
-				 
 	float3 H;
-	H.x = SinTheta * cos(Phi);
-	H.y = SinTheta * sin(Phi);
+	H.x = SinTheta * cos( Phi );
+	H.y = SinTheta * sin( Phi );
 	H.z = CosTheta;
-		
-	float d = (CosTheta * m2 - CosTheta) * CosTheta + 1;
-	float D = m2 / (Math::PI * d * d);
-	float pdf = D * CosTheta;
+	
+	float d = ( CosTheta * a2 - CosTheta ) * CosTheta + 1;
+	float D = a2 / ( Math::PI*d*d );
+	float PDF = D * CosTheta;
 
-	return float4(H, pdf);
+	return float4( H, PDF );
+}
+
+float VisibleGGXPDF_aniso(float3 V, float3 H, float2 Alpha, bool bLimitVDNFToReflection = true)
+{
+	float NoV = V.z;
+	float NoH = H.z;
+	float VoH = dot(V, H);
+	float a2 = Alpha.x * Alpha.y;
+	float3 Hs = float3(Alpha.y * H.x, Alpha.x * H.y, a2 * NoH);
+	float S = dot(Hs, Hs);
+	float D = (1.0f / Math::PI) * a2 * Pow2(a2 / S);
+	float LenV = length(float3(V.x * Alpha.x, V.y * Alpha.y, NoV));
+	float k = 1.0;
+	if (bLimitVDNFToReflection)
+	{
+		float a = saturate(min(Alpha.x, Alpha.y));
+		float s = 1.0f + length(V.xy);
+		float ka2 = a * a, s2 = s * s;
+		k = (s2 - ka2 * s2) / (s2 + ka2 * V.z * V.z); // Eq. 5
+	}
+	float Pdf = (2 * D * VoH) / (k * NoV + LenV);
+	return Pdf;
+}
+
+// PDF = G_SmithV * VoH * D / NoV / (4 * VoH)
+// PDF = G_SmithV * D / (4 * NoV)
+float4 ImportanceSampleVisibleGGX(float2 E, float2 Alpha, float3 V, bool bLimitVDNFToReflection = true)
+{
+	// stretch
+	float3 Vh = normalize(float3(Alpha * V.xy, V.z));
+
+	// "Sampling Visible GGX Normals with Spherical Caps"
+	// Jonathan Dupuy & Anis Benyoub - High Performance Graphics 2023
+	float Phi = (2 * Math::PI) * E.x;
+	float k = 1.0;
+	if (bLimitVDNFToReflection)
+	{
+		// If we know we will be reflecting the view vector around the sampled micronormal, we can
+		// tweak the range a bit more to eliminate some of the vectors that will point below the horizon
+		float a = saturate(min(Alpha.x, Alpha.y));
+		float s = 1.0 + length(V.xy);
+		float a2 = a * a, s2 = s * s;
+		k = (s2 - a2 * s2) / (s2 + a2 * V.z * V.z);
+	}
+	float Z = lerp(1.0, -k * Vh.z, E.y);
+	float SinTheta = sqrt(saturate(1 - Z * Z));
+	float X = SinTheta * cos(Phi);
+	float Y = SinTheta * sin(Phi);
+	float3 H = float3(X, Y, Z) + Vh;
+
+	// unstretch
+	H = normalize(float3(Alpha * H.xy, max(0.0, H.z)));
+
+	return float4(H, VisibleGGXPDF_aniso(V, H, Alpha));
 }
 
 void GetNormalRoughness(uint2 dtid, out float3 normal, out float roughness)
