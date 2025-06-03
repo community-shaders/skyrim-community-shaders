@@ -625,7 +625,7 @@ namespace SIE
 		static std::array<std::array<std::unordered_map<std::string, int32_t>,
 							  static_cast<size_t>(ShaderClass::Total)>,
 			static_cast<size_t>(RE::BSShader::Type::Total)>
-			GetVariableIndices()
+		GetVariableIndices()
 		{
 			std::array<std::array<std::unordered_map<std::string, int32_t>,
 						   static_cast<size_t>(ShaderClass::Total)>,
@@ -998,7 +998,7 @@ namespace SIE
 
 				if (shaderClass == ShaderClass::Vertex) {
 					for (size_t nameIndex = 0; nameIndex < imagespaceShader.vsConstantNames.size();
-						 ++nameIndex) {
+						++nameIndex) {
 						if (std::string_view(imagespaceShader.vsConstantNames[static_cast<uint32_t>(nameIndex)].c_str()) ==
 							name) {
 							return static_cast<int32_t>(nameIndex);
@@ -1186,7 +1186,7 @@ namespace SIE
 								} else {
 									const auto elementSize = varDesc.Size / varTypeDesc.Elements;
 									for (uint32_t arrayIndex = 1; arrayIndex < varTypeDesc.Elements;
-										 ++arrayIndex) {
+										++arrayIndex) {
 										const std::string varName =
 											std::format("{}[{}]", varDesc.Name, arrayIndex);
 										const auto variableArrayElementIndex =
