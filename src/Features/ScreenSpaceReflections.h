@@ -30,6 +30,9 @@ struct ScreenSpaceReflections : Feature
         bool Glossy = true;
         float RoughnessMask = 0.8f;
         uint SpatialFilterSteps = 4;
+        bool EnableTemporal = true;
+        float TemporalScale = 2.0f;
+        float TemporalWeight = 0.5f;
     } settings;
 
     struct alignas(16) SSRCB
@@ -39,7 +42,9 @@ struct ScreenSpaceReflections : Feature
         uint Glossy;
         uint SpatialFilterSteps;
         float RoughnessMask;
-        float padding[3];
+        float TemporalScale;
+        float TemporalWeight;
+        float _padding;
     };
 
     struct alignas(16) SPDCB
@@ -62,8 +67,9 @@ struct ScreenSpaceReflections : Feature
     eastl::unique_ptr<Texture2D> texSSRColor = nullptr;
     eastl::unique_ptr<Texture2D> texHitPDF = nullptr;
     eastl::unique_ptr<Texture2D> texSpatial = nullptr;
-    eastl::unique_ptr<Texture2D> texAccumulate = nullptr;
+    eastl::unique_ptr<Texture2D> texTemporal = nullptr;
     eastl::unique_ptr<Texture2D> texBilateral = nullptr;
+    eastl::unique_ptr<Texture2D> texHistory = nullptr;
 
     winrt::com_ptr<ID3D11ShaderResourceView> noiseSRV = nullptr;
 
@@ -77,4 +83,5 @@ struct ScreenSpaceReflections : Feature
     winrt::com_ptr<ID3D11ComputeShader> prepareColorCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> spdCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> spatialCS = nullptr;
+    winrt::com_ptr<ID3D11ComputeShader> temporalCS = nullptr;
 };

@@ -15,7 +15,8 @@ cbuffer SSRCB : register(b1)
     uint Glossy;
     uint SpatialFilterSteps;
     float RoughnessMask;
-    float3 pad;
+    float TemporalScale;
+    float TemporalWeight;
 };
 
 float GetStepScreenFactorToClipAtScreenEdge(float2 RayStartScreen, float2 RayStepScreen)

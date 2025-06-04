@@ -1,3 +1,4 @@
+#include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
 #include "Common/SharedData.hlsli"
@@ -112,3 +113,19 @@ float2 Hammersley16( uint Index, uint NumSamples, uint2 Random )
 }
 
 static const int2 kStackowiakSampleSet4[15] = { int2(0, 1), int2(-2, 1), int2(2, -3), int2(-3, 0), int2(1, 2), int2(-1, -2), int2(3, 0), int2(-3, 3), int2(0, -3), int2(-1, -1), int2(2, 1), int2(-2, -2), int2(1, 0), int2(0, 2), int2(3, -1) };
+
+float2 GetMotionVector(float sceneDepth, float2 screenUV, float4x4 matrix_LastViewProj, float4x4 matrix_ViewProj)
+{
+    float4 positionWS = float4(2 * float2(screenUV.x, -screenUV.y + 1) - 1, sceneDepth, 1);
+
+    float4 curClipPos = mul(matrix_ViewProj, worldPos);
+    float4 lastClipPos = mul(matrix_LastViewProj, worldPos);
+
+    float2 CurNDC = curClipPos.xy / curClipPos.w;
+    float2 LastNDC = lastClipPos.xy / lastClipPos.w;
+
+    float2 CurUV = CurNDC.xy * float2(0.5f, -0.5f) + 0.5;
+    float2 LastUV = LastNDC.xy * float2(0.5f, -0.5f) + 0.5;
+    
+    return CurUV - LastUV;
+}

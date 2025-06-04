@@ -13,17 +13,24 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     MaxSteps,
     NumRays,
     Glossy,
-    RoughnessMask
+    RoughnessMask,
+    SpatialFilterSteps,
+    EnableTemporal,
+    TemporalScale,
+    TemporalWeight
 )
 
 void ScreenSpaceReflections::DrawSettings()
 {
     ImGui::Checkbox("Enabled", &settings.Enabled);
-    ImGui::Checkbox("Glossy", &settings.Glossy);
+    ImGui::Checkbox("Roughness for Single Sample", &settings.Glossy);
     ImGui::SliderInt("Max Steps", (int*)&settings.MaxSteps, 1, 16);
     ImGui::SliderInt("Num Rays", (int*)&settings.NumRays, 1, 16);
     ImGui::SliderFloat("Roughness Mask", &settings.RoughnessMask, 0.0f, 1.0f, "%.2f");
     // ImGui::SliderInt("Spatial Filter Steps", (int*)&settings.SpatialFilterSteps, 1, 15);
+    ImGui::Checkbox("Enable Temporal Filtering", &settings.EnableTemporal);
+    ImGui::SliderFloat("Temporal Scale", &settings.TemporalScale, 0.0f, 5.0f, "%.2f");
+    ImGui::SliderFloat("Temporal Weight", &settings.TemporalWeight, 0.0f, 1.0f, "%.2f");
 
     ImGui::SeparatorText("Debug");
 
@@ -36,7 +43,7 @@ void ScreenSpaceReflections::DrawSettings()
         BUFFER_VIEWER_NODE(texSSRColor, debugRescale)
         BUFFER_VIEWER_NODE(texHitPDF, debugRescale)
         BUFFER_VIEWER_NODE(texSpatial, debugRescale)
-        BUFFER_VIEWER_NODE(texAccumulate, debugRescale)
+        BUFFER_VIEWER_NODE(texTemporal, debugRescale)
         BUFFER_VIEWER_NODE(texBilateral, debugRescale)
 
 		ImGui::TreePop();
@@ -104,12 +111,15 @@ void ScreenSpaceReflections::SetupResources()
         texSpatial = eastl::make_unique<Texture2D>(texDesc);
         texSpatial->CreateSRV(srvDesc);
         texSpatial->CreateUAV(uavDesc);
-        texAccumulate = eastl::make_unique<Texture2D>(texDesc);
-        texAccumulate->CreateSRV(srvDesc);
-        texAccumulate->CreateUAV(uavDesc);
+        texTemporal = eastl::make_unique<Texture2D>(texDesc);
+        texTemporal->CreateSRV(srvDesc);
+        texTemporal->CreateUAV(uavDesc);
         texBilateral = eastl::make_unique<Texture2D>(texDesc);
         texBilateral->CreateSRV(srvDesc);
         texBilateral->CreateUAV(uavDesc);
+        texHistory = eastl::make_unique<Texture2D>(texDesc);
+        texHistory->CreateSRV(srvDesc);
+        texHistory->CreateUAV(uavDesc);
 
         texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R32_FLOAT;
         texDepth = eastl::make_unique<Texture2D>(texDesc);
@@ -159,7 +169,7 @@ void ScreenSpaceReflections::SetupResources()
 void ScreenSpaceReflections::ClearShaderCache()
 {
     static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-        &raymarchCS, &prepareColorCS, &preprocessDepthCS, &spdCS, &spatialCS
+        &raymarchCS, &prepareColorCS, &preprocessDepthCS, &spdCS, &spatialCS, &temporalCS
     };
 
     for (auto shader : shaderPtrs)
@@ -183,7 +193,8 @@ void ScreenSpaceReflections::CompileComputeShaders()
             { &prepareColorCS, "ssr_prepare_color.hlsl", {} },
             { &preprocessDepthCS, "ssr_preprocess_depth.hlsl", {} },
             { &spdCS, "ssr_spd.hlsl", {} },
-            { &spatialCS, "ssr_spatial_filter.hlsl", {} }
+            { &spatialCS, "ssr_spatial_filter.hlsl", {} },
+            { &temporalCS, "ssr_temporal_filter.hlsl", {} }
         };
 
     for (auto& info : shaderInfos) {
@@ -220,6 +231,8 @@ void ScreenSpaceReflections::DrawSSR()
         ssrCBData.Glossy = settings.Glossy ? 1u : 0u;
         ssrCBData.SpatialFilterSteps = settings.SpatialFilterSteps;
         ssrCBData.RoughnessMask = settings.RoughnessMask;
+        ssrCBData.TemporalScale = settings.TemporalScale;
+        ssrCBData.TemporalWeight = settings.TemporalWeight;
     }
     ssrCB->Update(ssrCBData);
     auto buffer = ssrCB->CB();
@@ -289,6 +302,8 @@ void ScreenSpaceReflections::DrawSSR()
     resetViews();
 
     // spd
+    state->BeginPerfEvent("SPD");
+
     std::array<ID3D11UnorderedAccessView*, 4> uavsSPD = { nullptr };
     uavsSPD.at(0) = depthUAVs[1].get(); // mip 2
     uavsSPD.at(1) = depthUAVs[2].get(); // mip 3
@@ -307,7 +322,11 @@ void ScreenSpaceReflections::DrawSSR()
     context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
     context->CSSetUnorderedAccessViews(0, (uint)uavsSPD.size(), uavsSPD.data(), nullptr);
 
+    state->EndPerfEvent();
+
     // raymarch
+    state->BeginPerfEvent("Raymarch");
+    
     uavs.at(0) = texSSRColor->uav.get();
     uavs.at(1) = texHitPDF->uav.get();
 
@@ -325,6 +344,8 @@ void ScreenSpaceReflections::DrawSSR()
     context->CSSetConstantBuffers(1, 1, &buffer);
 
     context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
+
+    state->EndPerfEvent();
 
     resetViews();
 
@@ -344,7 +365,30 @@ void ScreenSpaceReflections::DrawSSR()
     // context->Dispatch((uint)dispatchCount.x >> 1, (uint)dispatchCount.y >> 1, 1);
     // context->CopyResource(texSSRColor->resource.get(), texSpatial->resource.get());
 
+    // temporal filter
+    if (settings.EnableTemporal) {
+        state->BeginPerfEvent("Temporal Filter");
+        uavs.at(0) = texTemporal->uav.get();
+        srvs.at(0) = texSSRColor->srv.get();
+        srvs.at(1) = motion.SRV;
+        srvs.at(4) = texHistory->srv.get();
+        srvs.at(5) = texDepth->srv.get();
+
+        context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+        context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+        context->CSSetShader(temporalCS.get(), nullptr, 0);
+        context->CSSetConstantBuffers(1, 1, &buffer);
+
+        context->Dispatch((uint)dispatchCount.x >> 1, (uint)dispatchCount.y >> 1, 1);
+        context->CopyResource(texSSRColor->resource.get(), texTemporal->resource.get());
+        
+        resetViews();
+        state->EndPerfEvent();
+    }
+
     context->CSSetShader(nullptr, nullptr, 0);
+
+    context->CopyResource(texHistory->resource.get(), texSSRColor->resource.get());
     
     // resetViews();
 
