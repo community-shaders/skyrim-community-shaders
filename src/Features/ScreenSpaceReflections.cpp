@@ -374,6 +374,7 @@ void ScreenSpaceReflections::DrawSSR()
         srvs.at(1) = motion.SRV;
         srvs.at(4) = texHistory->srv.get();
         srvs.at(5) = texDepth->srv.get();
+        srvs.at(6) = texHitPDF->srv.get();
 
         context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
         context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);

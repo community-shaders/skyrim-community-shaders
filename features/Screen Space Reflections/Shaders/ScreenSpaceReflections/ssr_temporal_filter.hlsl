@@ -1,11 +1,14 @@
 #include "ScreenSpaceReflections/ssr_common.hlsli"
 
+#include "Common/MotionBlur.hlsli"
+
 #define VARIANCE_THRESHOLD 0.0005
 
 Texture2D<float4> SSRColor : register(t0);
 Texture2D<float4> MotionVectors : register(t1);
 Texture2D<float4> HistoryRadiance : register(t4);
 Texture2D<float> DepthTextureMips : register(t5);
+Texture2D<float4> HitPDF : register(t6);
 
 RWTexture2D<float4> OutputTemporalRadiance : register(u0);
 
@@ -37,8 +40,13 @@ float ComputeTemporalVariance(float3 History_Radiance, float3 Radiance)
 	uv *= FrameBuffer::DynamicResolutionParams2.xy;  // Adjust for dynamic res
 	uv = Stereo::ConvertFromStereoUV(uv, eyeIndex);
 
-    float hitDepth = DepthTextureMips[DTid.xy];
-    float2 hitMotion = GetMotionVector(hitDepth, uv, FrameBuffer::CameraPreviousViewProjUnjittered[eyeIndex], FrameBuffer::CameraViewProjUnjittered[eyeIndex]);
+    float hitDepth = HitPDF[DTid.xy].z;
+
+    float4 positionWS = float4(2 * float2(uv.x, -uv.y + 1) - 1, hitDepth, 1);
+	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
+	positionWS.xyz = positionWS.xyz / positionWS.w;
+
+    float2 hitMotion = MotionBlur::GetSSMotionVector(positionWS, positionWS, eyeIndex);
     float2 depthMotion = MotionVectors[DTid.xy].xy;
 
     float4 sampleColors[9]; 
