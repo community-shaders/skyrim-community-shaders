@@ -1192,6 +1192,13 @@ void Menu::DrawPerfOverlay()
 		ImGui::SetNextWindowPos(settings.PerfOverlay.Position, ImGuiCond_FirstUseEver);
 	}
 
+	// Set window size based on whether graphs are shown, was rapidly changing size based on text
+	bool hasGraphs = settings.PerfOverlay.ShowPreFGFrameTimeGraph || settings.PerfOverlay.ShowPostFGFrameTimeGraph;
+	if (!hasGraphs) {
+		float fixedWidth = 325.0f * textScale;
+		ImGui::SetNextWindowSize(ImVec2(fixedWidth, 0), ImGuiCond_Always);
+	}
+
 	// Create the window
 	ImGui::Begin("Performance Overlay", NULL, windowFlags);
 
