@@ -12,7 +12,7 @@ RWTexture2D<float4> OutputHistory : register(u1);
     float4 hitPDF = HitPDF[DTid.xy];
     float4 temporalRadiance = TemporalRadiance[DTid.xy];
 
-    outputColor = temporalRadiance;
+    outputColor = temporalRadiance != 0 ? temporalRadiance : originColor;
 
     OutputSSR[DTid.xy] = outputColor;
     OutputHistory[DTid.xy] = outputColor;

@@ -55,7 +55,7 @@ float ComputeTemporalVariance(float3 History_Radiance, float3 Radiance)
     [loop]
     for (int i = 0; i < 9; ++i)
     {
-        float2 offset = TemportalOffsets[i] * FrameBuffer::DynamicResolutionParams2.zw;
+        float2 offset = TemportalOffsets[i] * SharedData::BufferDim.zw;
         sampleColors[i] = SSRColor.SampleLevel(LinearSampler, uv + offset, 0);
         momentA += sampleColors[i];
         momentB += sampleColors[i] * sampleColors[i];
@@ -73,7 +73,7 @@ float ComputeTemporalVariance(float3 History_Radiance, float3 Radiance)
     float2 prevUV = uv - depthMotion;
     float2 rayPrevUV = uv - hitMotion;
 
-    if (any(prevUV < 0.0) && any(prevUV > 1.0) ||
+    if (any(prevUV < 0.0) && any(prevUV > 1.0) &&
         any(rayPrevUV < 0.0) && any(rayPrevUV > 1.0))
     {
         prevColor = currColor;
@@ -81,11 +81,11 @@ float ComputeTemporalVariance(float3 History_Radiance, float3 Radiance)
     else
     {
         float4 rayProjPrevColor = HistoryRadiance.SampleLevel(LinearSampler, rayPrevUV, 0);
-        float4 rayProjDist = (rayProjPrevColor - mean) * stdev;
+        float4 rayProjDist = (rayProjPrevColor - mean) / stdev;
         float rayProjWeight = exp2(-10.0 * Color::RGBToLuminanceAlternative(rayProjDist));
 
         float4 depthProjPrevColor = HistoryRadiance.SampleLevel(LinearSampler, prevUV, 0);
-        float4 depthProjDist = (depthProjPrevColor - mean) * stdev;
+        float4 depthProjDist = (depthProjPrevColor - mean) / stdev;
         float depthProjWeight = exp2(-10.0 * Color::RGBToLuminanceAlternative(depthProjDist));
 
         prevColor = (rayProjPrevColor * rayProjWeight + depthProjPrevColor * depthProjWeight) / (rayProjWeight + depthProjWeight);
