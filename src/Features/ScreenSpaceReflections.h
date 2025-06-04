@@ -29,6 +29,7 @@ struct ScreenSpaceReflections : Feature
         uint NumRays = 1;
         bool Glossy = true;
         float RoughnessMask = 0.8f;
+        uint SpatialFilterSteps = 4;
     } settings;
 
     struct alignas(16) SSRCB
@@ -36,7 +37,9 @@ struct ScreenSpaceReflections : Feature
         uint MaxSteps;
         uint NumRays;
         uint Glossy;
+        uint SpatialFilterSteps;
         float RoughnessMask;
+        float padding[3];
     };
 
     struct alignas(16) SPDCB
@@ -57,7 +60,12 @@ struct ScreenSpaceReflections : Feature
     eastl::unique_ptr<Texture2D> texDepth = nullptr;
     eastl::unique_ptr<Texture2D> texColor = nullptr;
     eastl::unique_ptr<Texture2D> texSSRColor = nullptr;
-    eastl::unique_ptr<Texture2D> texHitDistance = nullptr;
+    eastl::unique_ptr<Texture2D> texHitPDF = nullptr;
+    eastl::unique_ptr<Texture2D> texSpatial = nullptr;
+    eastl::unique_ptr<Texture2D> texAccumulate = nullptr;
+    eastl::unique_ptr<Texture2D> texBilateral = nullptr;
+
+    winrt::com_ptr<ID3D11ShaderResourceView> noiseSRV = nullptr;
 
     std::array<winrt::com_ptr<ID3D11ShaderResourceView>, 5> depthSRVs = { nullptr };
 	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, 5> depthUAVs = { nullptr };
@@ -68,4 +76,5 @@ struct ScreenSpaceReflections : Feature
     winrt::com_ptr<ID3D11ComputeShader> raymarchCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> prepareColorCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> spdCS = nullptr;
+    winrt::com_ptr<ID3D11ComputeShader> spatialCS = nullptr;
 };

@@ -110,3 +110,5 @@ float2 Hammersley16( uint Index, uint NumSamples, uint2 Random )
 	float E2 = float( ( reversebits(Index) >> 16 ) ^ Random.y ) * (1.0 / 65536.0);
 	return float2( E1, E2 );
 }
+
+static const int2 kStackowiakSampleSet4[15] = { int2(0, 1), int2(-2, 1), int2(2, -3), int2(-3, 0), int2(1, 2), int2(-1, -2), int2(3, 0), int2(-3, 3), int2(0, -3), int2(-1, -1), int2(2, 1), int2(-2, -2), int2(1, 0), int2(0, 2), int2(3, -1) };

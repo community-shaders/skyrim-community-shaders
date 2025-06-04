@@ -206,6 +206,10 @@ Texture2D<float4> SSRTexture : register(t15);
 
 #endif
 
+#if defined(SSR) && defined(SSR_DEBUG)
+	color = SSRTexture[dispatchID.xy].rgb;
+#endif
+
 	MainRW[dispatchID.xy] = float4(color, 1.0);
 	NormalTAAMaskSpecularMaskRW[dispatchID.xy] = float4(GBuffer::EncodeNormalVanilla(normalVS), 0.0, 0.0);
 }

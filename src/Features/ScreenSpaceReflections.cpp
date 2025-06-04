@@ -1,5 +1,7 @@
 #include "ScreenSpaceReflections.h"
 
+#include <DDSTextureLoader.h>
+
 #include "Deferred.h"
 #include "Menu.h"
 #include "State.h"
@@ -21,6 +23,7 @@ void ScreenSpaceReflections::DrawSettings()
     ImGui::SliderInt("Max Steps", (int*)&settings.MaxSteps, 1, 16);
     ImGui::SliderInt("Num Rays", (int*)&settings.NumRays, 1, 16);
     ImGui::SliderFloat("Roughness Mask", &settings.RoughnessMask, 0.0f, 1.0f, "%.2f");
+    // ImGui::SliderInt("Spatial Filter Steps", (int*)&settings.SpatialFilterSteps, 1, 15);
 
     ImGui::SeparatorText("Debug");
 
@@ -31,6 +34,10 @@ void ScreenSpaceReflections::DrawSettings()
 		BUFFER_VIEWER_NODE(texDepth, debugRescale)
         BUFFER_VIEWER_NODE(texColor, debugRescale)
         BUFFER_VIEWER_NODE(texSSRColor, debugRescale)
+        BUFFER_VIEWER_NODE(texHitPDF, debugRescale)
+        BUFFER_VIEWER_NODE(texSpatial, debugRescale)
+        BUFFER_VIEWER_NODE(texAccumulate, debugRescale)
+        BUFFER_VIEWER_NODE(texBilateral, debugRescale)
 
 		ImGui::TreePop();
 	}
@@ -91,14 +98,23 @@ void ScreenSpaceReflections::SetupResources()
         texSSRColor = eastl::make_unique<Texture2D>(texDesc);
         texSSRColor->CreateSRV(srvDesc);
         texSSRColor->CreateUAV(uavDesc);
+        texHitPDF = eastl::make_unique<Texture2D>(texDesc);
+        texHitPDF->CreateSRV(srvDesc);
+        texHitPDF->CreateUAV(uavDesc);
+        texSpatial = eastl::make_unique<Texture2D>(texDesc);
+        texSpatial->CreateSRV(srvDesc);
+        texSpatial->CreateUAV(uavDesc);
+        texAccumulate = eastl::make_unique<Texture2D>(texDesc);
+        texAccumulate->CreateSRV(srvDesc);
+        texAccumulate->CreateUAV(uavDesc);
+        texBilateral = eastl::make_unique<Texture2D>(texDesc);
+        texBilateral->CreateSRV(srvDesc);
+        texBilateral->CreateUAV(uavDesc);
 
         texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R32_FLOAT;
         texDepth = eastl::make_unique<Texture2D>(texDesc);
         texDepth->CreateSRV(srvDesc);
         texDepth->CreateUAV(uavDesc);
-        texHitDistance = eastl::make_unique<Texture2D>(texDesc);
-        texHitDistance->CreateSRV(srvDesc);
-        texHitDistance->CreateUAV(uavDesc);
 
         for (uint i = 0; i < 5; i++) {
 			D3D11_SHADER_RESOURCE_VIEW_DESC mipSrvDesc = {
@@ -131,13 +147,19 @@ void ScreenSpaceReflections::SetupResources()
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, linearSampler.put()));
 	}
 
+    logger::debug("Loading noise texture...");
+    {
+        DirectX::CreateDDSTextureFromFile(device, globals::d3d::context, L"Data\\Shaders\\ScreenSpaceReflections\\noise.dds",
+            nullptr, noiseSRV.put());
+    }
+
 	CompileComputeShaders();
 }
 
 void ScreenSpaceReflections::ClearShaderCache()
 {
     static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-        &raymarchCS, &prepareColorCS, &preprocessDepthCS, &spdCS
+        &raymarchCS, &prepareColorCS, &preprocessDepthCS, &spdCS, &spatialCS
     };
 
     for (auto shader : shaderPtrs)
@@ -160,7 +182,8 @@ void ScreenSpaceReflections::CompileComputeShaders()
             { &raymarchCS, "ssr_raymarch.hlsl", {} },
             { &prepareColorCS, "ssr_prepare_color.hlsl", {} },
             { &preprocessDepthCS, "ssr_preprocess_depth.hlsl", {} },
-            { &spdCS, "ssr_spd.hlsl", {} }
+            { &spdCS, "ssr_spd.hlsl", {} },
+            { &spatialCS, "ssr_spatial_filter.hlsl", {} }
         };
 
     for (auto& info : shaderInfos) {
@@ -185,6 +208,7 @@ void ScreenSpaceReflections::DrawSSR()
     auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
     auto specular = renderer->GetRuntimeData().renderTargets[SPECULAR];
     auto normal = renderer->GetRuntimeData().renderTargets[NORMALROUGHNESS];
+    auto motion = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
     float2 size = Util::ConvertToDynamic(state->screenSize);
     float2 dispatchCount = { (size.x + 7) / 8, (size.y + 7) / 8 };
@@ -194,6 +218,7 @@ void ScreenSpaceReflections::DrawSSR()
         ssrCBData.MaxSteps = settings.MaxSteps;
         ssrCBData.NumRays = settings.NumRays;
         ssrCBData.Glossy = settings.Glossy ? 1u : 0u;
+        ssrCBData.SpatialFilterSteps = settings.SpatialFilterSteps;
         ssrCBData.RoughnessMask = settings.RoughnessMask;
     }
     ssrCB->Update(ssrCBData);
@@ -215,7 +240,7 @@ void ScreenSpaceReflections::DrawSSR()
     auto spdBuffer = spdCB->CB();
     context->CSSetConstantBuffers(2, 1, &spdBuffer);
 
-    std::array<ID3D11ShaderResourceView*, 6> srvs = { nullptr };
+    std::array<ID3D11ShaderResourceView*, 7> srvs = { nullptr };
 	std::array<ID3D11UnorderedAccessView*, 2> uavs = { nullptr };
 
     auto resetViews = [&]() {
@@ -284,7 +309,7 @@ void ScreenSpaceReflections::DrawSSR()
 
     // raymarch
     uavs.at(0) = texSSRColor->uav.get();
-    uavs.at(1) = texHitDistance->uav.get();
+    uavs.at(1) = texHitPDF->uav.get();
 
     srvs.at(0) = main.SRV;
     srvs.at(1) = specular.SRV;
@@ -292,17 +317,36 @@ void ScreenSpaceReflections::DrawSSR()
     srvs.at(3) = texColor->srv.get();
     srvs.at(4) = depth.depthSRV;
     srvs.at(5) = texDepth->srv.get();
+    srvs.at(6) = noiseSRV.get();
 
     context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
     context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
     context->CSSetShader(raymarchCS.get(), nullptr, 0);
     context->CSSetConstantBuffers(1, 1, &buffer);
 
-    context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.x, 1);
+    context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
+
+    resetViews();
+
+    // spartial filter
+    // uavs.at(0) = texSpatial->uav.get();
+
+    // srvs.at(0) = texSSRColor->srv.get();
+    // srvs.at(1) = texHitPDF->srv.get();
+    // srvs.at(2) = normal.SRV;
+    // srvs.at(5) = texDepth->srv.get();
+    // srvs.at(6) = noiseSRV.get();
+    // context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+    // context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+    // context->CSSetShader(spatialCS.get(), nullptr, 0);
+    // context->CSSetConstantBuffers(1, 1, &buffer);
+
+    // context->Dispatch((uint)dispatchCount.x >> 1, (uint)dispatchCount.y >> 1, 1);
+    // context->CopyResource(texSSRColor->resource.get(), texSpatial->resource.get());
 
     context->CSSetShader(nullptr, nullptr, 0);
     
-    resetViews();
+    // resetViews();
 
     state->EndPerfEvent();
 }
