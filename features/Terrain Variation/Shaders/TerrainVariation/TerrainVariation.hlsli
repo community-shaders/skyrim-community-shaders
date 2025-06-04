@@ -47,7 +47,7 @@ inline float4x3 ComputeBarycentricVerts(float2 landscapeUV)
     float2 frac_uv = frac(skewUV);
     float barry_z = 1.0 - frac_uv.x - frac_uv.y;
     float3 barry = float3(frac_uv, barry_z);
-    
+
     return (barry.z > 0) ?
         float4x3(float3(vxID, 0), float3(vxID + float2(0, 1), 0), float3(vxID + float2(1, 0), 0), barry.zyx) :
         float4x3(float3(vxID + float2(1, 1), 0), float3(vxID + float2(1, 0), 0), float3(vxID + float2(0, 1), 0), float3(-barry.z, 1.0 - barry.y, 1.0 - barry.x));
@@ -68,7 +68,7 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
 
 // Main stochastic sampling function
 inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)  // Used for normal/diffuse text. Luminence-based blending helps preserve details close to camera.
-{	
+{
 		// Apply contrast to the initial blend weights (without height influence)
 		float3 blendWeights = pow(saturate(offsets.weights), HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE));
 
@@ -101,7 +101,7 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 
 // Same as StochasticEffect but no height/luminescence influence, so much cheaper but worse quality, doesn't matter for the use case.
 inline float4 StochasticSample3(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
-{	
+{
 		// Sample the three texture offsets
 		float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 		float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
@@ -125,7 +125,7 @@ inline StochasticOffsets ComputeStochasticOffsets2(float2 landscapeUV)
     offsets2.offset2 = hash2D2D(BW_vx[1].xy);
     offsets2.offset3 = float2(0, 0);
     offsets2.weights = float3(BW_vx[3].x, BW_vx[3].y, 0.0);
-    
+
     return offsets2;
 }
 
@@ -135,7 +135,7 @@ inline float4 StochasticSample2(float rnd, float mipLevel, Texture2D tex, Sample
 	// Sample only two texture offsets using the provided mip level
     float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
     float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
-    
+
     // Use proper weight normalization to avoid artifacts
     float2 weights2D = offsets.weights.xy;
     float totalWeight = weights2D.x + weights2D.y;
@@ -144,7 +144,7 @@ inline float4 StochasticSample2(float rnd, float mipLevel, Texture2D tex, Sample
     } else {
         weights2D = float2(0.5, 0.5);
     }
-    
+
     // Direct blend without third interpolated sample
     float4 result = sample1 * weights2D.x + sample2 * weights2D.y;
 
@@ -163,7 +163,7 @@ inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV)
 {
 	// Precomputed scaling: (WORLD_SCALE / 0.010416667) * 8.0 = ~255437
 	static const float LOD_SCALE = 255437.0;
-	
+
 	float2 scaledUV = landscapeUV * LOD_SCALE;
 	float2 cellID = floor(scaledUV);
 
@@ -171,10 +171,10 @@ inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV)
 	// Generate both offsets from single hash to reduce calls
 	float2 hash1 = hashLOD(cellID);
 	float2 hash2 = hashLOD(cellID + 127.0);
-	
+
 	offsetsLOD.offset1 = hash1 * 0.08;
 	offsetsLOD.offset2 = hash2 * 0.08;
-	
+
 	// Simplified weights since we only use 2 samples now
 	offsetsLOD.weights = float3(0.65, 0.35, 0.0);
 
@@ -189,7 +189,7 @@ inline float4 StochasticSampleLOD(float rnd, float mipLevel, Texture2D tex, Samp
 	// Cheap pseudo-rotation using simple transforms
 	float2 dir1 = float2(rnd - 0.5, frac(rnd * 1.618) - 0.5);
 	float2 dir2 = float2(dir1.y, -dir1.x);
-	
+
 	// Apply simple scaled offsets
 	float2 microOffset1 = (offsets.offset1 + dir1) * offsetScale;
 	float2 microOffset2 = (offsets.offset2 + dir2) * offsetScale;
