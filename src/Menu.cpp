@@ -1147,7 +1147,7 @@ void Menu::DrawPerfOverlay()
 
 	// Set window flags - no decoration and only movable when ShowBorder is true
 	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize;
-	
+
 	// Only allow mouse interaction when the main menu is open
 	if (!IsEnabled) {
 		windowFlags |= ImGuiWindowFlags_NoInputs;
