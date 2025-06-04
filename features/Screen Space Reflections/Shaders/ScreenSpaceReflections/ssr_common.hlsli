@@ -118,8 +118,8 @@ float2 GetMotionVector(float sceneDepth, float2 screenUV, float4x4 matrix_LastVi
 {
     float4 positionWS = float4(2 * float2(screenUV.x, -screenUV.y + 1) - 1, sceneDepth, 1);
 
-    float4 curClipPos = mul(matrix_ViewProj, worldPos);
-    float4 lastClipPos = mul(matrix_LastViewProj, worldPos);
+    float4 curClipPos = mul(matrix_ViewProj, positionWS);
+    float4 lastClipPos = mul(matrix_LastViewProj, positionWS);
 
     float2 CurNDC = curClipPos.xy / curClipPos.w;
     float2 LastNDC = lastClipPos.xy / lastClipPos.w;

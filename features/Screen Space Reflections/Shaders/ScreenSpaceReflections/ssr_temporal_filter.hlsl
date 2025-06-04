@@ -25,8 +25,8 @@ static const int2 TemportalOffsets[9] = { int2(-1, -1), int2(0, -1), int2(1, -1)
 float ComputeTemporalVariance(float3 History_Radiance, float3 Radiance)
 {
     // Check temporal variance. 
-    float history_luminance = Luminance(History_Radiance);
-    float luminance = Luminance(Radiance);
+    float history_luminance = Color::RGBToLuminanceAlternative(History_Radiance);
+    float luminance = Color::RGBToLuminanceAlternative(Radiance);
     return abs(history_luminance - luminance) / max(max(history_luminance, luminance), 0.00001);
 }
 
@@ -73,7 +73,7 @@ float ComputeTemporalVariance(float3 History_Radiance, float3 Radiance)
     else
     {
         float4 rayProjPrevColor = HistoryRadiance.SampleLevel(LinearSampler, rayPrevUV, 0);
-        float4 rayProjDist = (rayProjPrevColor - maen) * stdev;
+        float4 rayProjDist = (rayProjPrevColor - mean) * stdev;
         float rayProjWeight = exp2(-10.0 * Color::RGBToLuminanceAlternative(rayProjDist));
 
         float4 depthProjPrevColor = HistoryRadiance.SampleLevel(LinearSampler, prevUV, 0);
@@ -89,5 +89,5 @@ float ComputeTemporalVariance(float3 History_Radiance, float3 Radiance)
     float4 radiance = max(1e-6, lerp(prevColor, currColor, BlendWeight));
     float variance = ComputeTemporalVariance(prevColor.xyz, radiance.xyz) > VARIANCE_THRESHOLD ? 0.0 : 1.0;
 
-    OutputTemporalRadiance[DTid.xy] = float4(radiance.xyz, variance);
+    OutputTemporalRadiance[DTid.xy] = radiance;
 }

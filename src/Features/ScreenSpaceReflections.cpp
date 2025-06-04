@@ -41,10 +41,11 @@ void ScreenSpaceReflections::DrawSettings()
 		BUFFER_VIEWER_NODE(texDepth, debugRescale)
         BUFFER_VIEWER_NODE(texColor, debugRescale)
         BUFFER_VIEWER_NODE(texSSRColor, debugRescale)
+        BUFFER_VIEWER_NODE(texHistory, debugRescale)
         BUFFER_VIEWER_NODE(texHitPDF, debugRescale)
-        BUFFER_VIEWER_NODE(texSpatial, debugRescale)
+        // BUFFER_VIEWER_NODE(texSpatial, debugRescale)
         BUFFER_VIEWER_NODE(texTemporal, debugRescale)
-        BUFFER_VIEWER_NODE(texBilateral, debugRescale)
+        // BUFFER_VIEWER_NODE(texBilateral, debugRescale)
 
 		ImGui::TreePop();
 	}
@@ -380,7 +381,6 @@ void ScreenSpaceReflections::DrawSSR()
         context->CSSetConstantBuffers(1, 1, &buffer);
 
         context->Dispatch((uint)dispatchCount.x >> 1, (uint)dispatchCount.y >> 1, 1);
-        context->CopyResource(texSSRColor->resource.get(), texTemporal->resource.get());
         
         resetViews();
         state->EndPerfEvent();
@@ -389,6 +389,9 @@ void ScreenSpaceReflections::DrawSSR()
     context->CSSetShader(nullptr, nullptr, 0);
 
     context->CopyResource(texHistory->resource.get(), texSSRColor->resource.get());
+    if (settings.EnableTemporal) {
+        context->CopyResource(texSSRColor->resource.get(), texTemporal->resource.get());
+    }
     
     // resetViews();
 
