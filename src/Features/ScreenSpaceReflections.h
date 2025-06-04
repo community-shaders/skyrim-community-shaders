@@ -70,6 +70,7 @@ struct ScreenSpaceReflections : Feature
     eastl::unique_ptr<Texture2D> texTemporal = nullptr;
     eastl::unique_ptr<Texture2D> texBilateral = nullptr;
     eastl::unique_ptr<Texture2D> texHistory = nullptr;
+    eastl::unique_ptr<Texture2D> texOutput = nullptr;
 
     winrt::com_ptr<ID3D11ShaderResourceView> noiseSRV = nullptr;
 
@@ -84,4 +85,5 @@ struct ScreenSpaceReflections : Feature
     winrt::com_ptr<ID3D11ComputeShader> spdCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> spatialCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> temporalCS = nullptr;
+    winrt::com_ptr<ID3D11ComputeShader> compositeCS = nullptr;
 };

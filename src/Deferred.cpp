@@ -489,7 +489,7 @@ void Deferred::DeferredPasses()
 			ssgi_hq_spec ? nullptr : ssgi_cocg,
 			ssgi_hq_spec ? ssgi_gi_spec : nullptr,
 			ibl.loaded ? ibl.diffuseIBLTexture->srv.get() : nullptr,
-			(ssr.loaded && ssr.settings.Enabled) ? ssr.texSSRColor->srv.get() : nullptr,
+			(ssr.loaded && ssr.settings.Enabled) ? ssr.texOutput->srv.get() : nullptr,
 		};
 
 		if (dynamicCubemaps.loaded)

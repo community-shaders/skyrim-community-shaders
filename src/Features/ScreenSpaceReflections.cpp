@@ -46,6 +46,7 @@ void ScreenSpaceReflections::DrawSettings()
         // BUFFER_VIEWER_NODE(texSpatial, debugRescale)
         BUFFER_VIEWER_NODE(texTemporal, debugRescale)
         // BUFFER_VIEWER_NODE(texBilateral, debugRescale)
+        BUFFER_VIEWER_NODE(texOutput, debugRescale)
 
 		ImGui::TreePop();
 	}
@@ -121,6 +122,9 @@ void ScreenSpaceReflections::SetupResources()
         texHistory = eastl::make_unique<Texture2D>(texDesc);
         texHistory->CreateSRV(srvDesc);
         texHistory->CreateUAV(uavDesc);
+        texOutput = eastl::make_unique<Texture2D>(texDesc);
+        texOutput->CreateSRV(srvDesc);
+        texOutput->CreateUAV(uavDesc);
 
         texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R32_FLOAT;
         texDepth = eastl::make_unique<Texture2D>(texDesc);
@@ -170,7 +174,7 @@ void ScreenSpaceReflections::SetupResources()
 void ScreenSpaceReflections::ClearShaderCache()
 {
     static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-        &raymarchCS, &prepareColorCS, &preprocessDepthCS, &spdCS, &spatialCS, &temporalCS
+        &raymarchCS, &prepareColorCS, &preprocessDepthCS, &spdCS, &spatialCS, &temporalCS, &compositeCS
     };
 
     for (auto shader : shaderPtrs)
@@ -195,7 +199,8 @@ void ScreenSpaceReflections::CompileComputeShaders()
             { &preprocessDepthCS, "ssr_preprocess_depth.hlsl", {} },
             { &spdCS, "ssr_spd.hlsl", {} },
             { &spatialCS, "ssr_spatial_filter.hlsl", {} },
-            { &temporalCS, "ssr_temporal_filter.hlsl", {} }
+            { &temporalCS, "ssr_temporal_filter.hlsl", {} },
+            { &compositeCS, "ssr_composite.hlsl", {} }
         };
 
     for (auto& info : shaderInfos) {
@@ -387,12 +392,23 @@ void ScreenSpaceReflections::DrawSSR()
         state->EndPerfEvent();
     }
 
-    context->CSSetShader(nullptr, nullptr, 0);
+    // composite
+    state->BeginPerfEvent("Composite");
+    uavs.at(0) = texOutput->uav.get();
+    uavs.at(1) = texHistory->uav.get();
+    srvs.at(0) = texSSRColor->srv.get();
+    srvs.at(1) = texHitPDF->srv.get();
+    srvs.at(2) = settings.EnableTemporal ? texTemporal->srv.get() : nullptr;
 
-    context->CopyResource(texHistory->resource.get(), texSSRColor->resource.get());
-    if (settings.EnableTemporal) {
-        context->CopyResource(texSSRColor->resource.get(), texTemporal->resource.get());
-    }
+    context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+    context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+    context->CSSetShader(compositeCS.get(), nullptr, 0);
+
+    context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
+    state->EndPerfEvent();
+    resetViews();
+
+    context->CSSetShader(nullptr, nullptr, 0);
     
     // resetViews();
 
