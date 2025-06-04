@@ -1382,7 +1382,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(LANDSCAPE)
 	// Layer 1 (LandBlendWeights1.x)
-	if (input.LandBlendWeights1.x > 0.01) {
+	if (input.LandBlendWeights1.x > 0.0) {
 		float weight = input.LandBlendWeights1.x;
 
 		// Sample diffuse texture for layer 1
@@ -1463,7 +1463,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 
 	// Layer 2 (LandBlendWeights1.y)
-	if (input.LandBlendWeights1.y > 0.01) {
+	if (input.LandBlendWeights1.y > 0.0) {
 		float weight = input.LandBlendWeights1.y;
 
 		// Sample diffuse texture for layer 2
@@ -1544,7 +1544,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 
 	// Layer 3 (LandBlendWeights1.z)
-	if (input.LandBlendWeights1.z > 0.01) {
+	if (input.LandBlendWeights1.z > 0.0) {
 		float weight = input.LandBlendWeights1.z;
 		// Sample diffuse texture for layer 3
 #		if defined(TERRAIN_VARIATION)
@@ -1623,7 +1623,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		blendedNormalAlpha += landNormalAlpha3 * weight;
 	}
 	// Layer 4 (LandBlendWeights1.w)
-	if (input.LandBlendWeights1.w > 0.01) {
+	if (input.LandBlendWeights1.w > 0.0) {
 		float weight = input.LandBlendWeights1.w;
 
 		// Sample diffuse texture for layer 4
@@ -1704,7 +1704,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 
 	// Layer 5 (LandBlendWeights2.x)
-	if (input.LandBlendWeights2.x > 0.01) {
+	if (input.LandBlendWeights2.x > 0.0) {
 		float weight = input.LandBlendWeights2.x;
 		// Sample diffuse texture for layer 5
 #		if defined(TERRAIN_VARIATION)
@@ -1784,7 +1784,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		blendedNormalAlpha += landNormalAlpha5 * weight;
 	}
 	// Layer 6 (LandBlendWeights2.y)
-	if (input.LandBlendWeights2.y > 0.01) {
+	if (input.LandBlendWeights2.y > 0.0) {
 		float weight = input.LandBlendWeights2.y;
 
 		// Sample layer 6 textures

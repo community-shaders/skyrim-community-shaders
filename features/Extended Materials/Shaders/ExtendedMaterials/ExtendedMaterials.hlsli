@@ -71,7 +71,7 @@ namespace ExtendedMaterials
 				mipLevel++;
 		#endif
 		#if defined(TERRAIN_VARIATION)
-				mipLevel += 1.5;
+				mipLevel++;
 		#endif
 
 		#if defined(VR)
