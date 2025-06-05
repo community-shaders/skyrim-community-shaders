@@ -17,13 +17,18 @@ cbuffer SSRCB : register(b1)
     uint MaxSteps;
     uint NumRays;
     uint Glossy;
-    uint SpatialFilterSteps;
+    float SpatialRadius;
     float RoughnessMask;
     float TemporalScale;
     float TemporalWeight;
+    float BilateralRadius;
+    float ColorWeight;
+    float DepthWeight;
+    float NormalWeight;
+    float BRDFBias;
 };
 
-static const int2 TemportalOffsets[9] = { int2(-1, -1), int2(0, -1), int2(1, -1), int2(-1, 0), int2(0, 0), int2(1, 0), int2(-1, 1), int2(0, 1), int2(1, 1) };
+static const int2 TemporalOffsets[9] = { int2(-1, -1), int2(0, -1), int2(1, -1), int2(-1, 0), int2(0, 0), int2(1, 0), int2(-1, 1), int2(0, 1), int2(1, 1) };
 
 float ComputeTemporalVariance(float3 History_Radiance, float3 Radiance)
 {
@@ -55,14 +60,14 @@ float ComputeTemporalVariance(float3 History_Radiance, float3 Radiance)
     [loop]
     for (int i = 0; i < 9; ++i)
     {
-        float2 offset = TemportalOffsets[i] * SharedData::BufferDim.zw;
+        float2 offset = TemporalOffsets[i] * SharedData::BufferDim.zw;
         sampleColors[i] = SSRColor.SampleLevel(LinearSampler, uv + offset, 0);
         momentA += sampleColors[i];
         momentB += sampleColors[i] * sampleColors[i];
     }
 
     float4 mean = momentA / 9.0;
-    float4 stdev = sqrt(max(momentB / 9.0 - mean * mean, 0.0));
+    float4 stdev = sqrt(max((momentB / 9.0) - (mean * mean), 0.0));
 
     currColor = sampleColors[4];
     float4 minColor = mean - stdev * TemporalScale;
@@ -94,7 +99,7 @@ float ComputeTemporalVariance(float3 History_Radiance, float3 Radiance)
 
     float BlendWeight = saturate(TemporalWeight * (1.0 - length(hitMotion) * 8) * (1.0 - length(depthMotion) * 8));
 
-    float4 radiance = max(1e-6, lerp(prevColor, currColor, BlendWeight));
+    float4 radiance = max(1e-6, lerp(currColor, prevColor, BlendWeight));
     float variance = ComputeTemporalVariance(prevColor.xyz, radiance.xyz) > VARIANCE_THRESHOLD ? 0.0 : 1.0;
 
     OutputTemporalRadiance[DTid.xy] = radiance;

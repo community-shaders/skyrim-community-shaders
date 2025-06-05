@@ -14,23 +14,37 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     NumRays,
     Glossy,
     RoughnessMask,
-    SpatialFilterSteps,
+    BRDFBias,
+    SpatialTimes,
+    SpatialRadius,
     EnableTemporal,
     TemporalScale,
-    TemporalWeight
+    TemporalWeight,
+    EnableBilateral,
+    BilateralScale,
+    BilateralColorWeight,
+    BilateralDepthWeight,
+    BilateralNormalWeight
 )
 
 void ScreenSpaceReflections::DrawSettings()
 {
     ImGui::Checkbox("Enabled", &settings.Enabled);
     ImGui::Checkbox("Roughness for Single Sample", &settings.Glossy);
-    ImGui::SliderInt("Max Steps", (int*)&settings.MaxSteps, 1, 16);
-    ImGui::SliderInt("Num Rays", (int*)&settings.NumRays, 1, 16);
+    ImGui::SliderInt("Max Steps", (int*)&settings.MaxSteps, 1, 32);
+    ImGui::SliderInt("Num Rays", (int*)&settings.NumRays, 1, 12);
     ImGui::SliderFloat("Roughness Mask", &settings.RoughnessMask, 0.0f, 1.0f, "%.2f");
-    // ImGui::SliderInt("Spatial Filter Steps", (int*)&settings.SpatialFilterSteps, 1, 15);
+    ImGui::SliderFloat("BRDF Bias", &settings.BRDFBias, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderInt("Spatial Times", &settings.SpatialTimes, 0, 2, "%d", ImGuiSliderFlags_AlwaysClamp);
+    ImGui::SliderFloat("Spatial Radius", &settings.SpatialRadius, 0.0f, 5.0f, "%.2f");
     ImGui::Checkbox("Enable Temporal Filtering", &settings.EnableTemporal);
-    ImGui::SliderFloat("Temporal Scale", &settings.TemporalScale, 0.0f, 5.0f, "%.2f");
-    ImGui::SliderFloat("Temporal Weight", &settings.TemporalWeight, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("Temporal Scale", &settings.TemporalScale, 0.0f, 8.0f, "%.2f");
+    ImGui::SliderFloat("Temporal Weight", &settings.TemporalWeight, 0.0f, 0.97f, "%.2f");
+    ImGui::Checkbox("Enable Bilateral Filtering", &settings.EnableBilateral);
+    ImGui::SliderFloat("Bilateral Scale", &settings.BilateralScale, 0.01f, 5.0f, "%.2f");
+    ImGui::SliderFloat("Bilateral Color Weight", &settings.BilateralColorWeight, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("Bilateral Depth Weight", &settings.BilateralDepthWeight, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("Bilateral Normal Weight", &settings.BilateralNormalWeight, 0.0f, 1.0f, "%.2f");
 
     ImGui::SeparatorText("Debug");
 
@@ -43,9 +57,9 @@ void ScreenSpaceReflections::DrawSettings()
         BUFFER_VIEWER_NODE(texSSRColor, debugRescale)
         BUFFER_VIEWER_NODE(texHistory, debugRescale)
         BUFFER_VIEWER_NODE(texHitPDF, debugRescale)
-        // BUFFER_VIEWER_NODE(texSpatial, debugRescale)
+        BUFFER_VIEWER_NODE(texSpatial, debugRescale)
         BUFFER_VIEWER_NODE(texTemporal, debugRescale)
-        // BUFFER_VIEWER_NODE(texBilateral, debugRescale)
+        BUFFER_VIEWER_NODE(texBilateral, debugRescale)
         BUFFER_VIEWER_NODE(texOutput, debugRescale)
 
 		ImGui::TreePop();
@@ -174,7 +188,7 @@ void ScreenSpaceReflections::SetupResources()
 void ScreenSpaceReflections::ClearShaderCache()
 {
     static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-        &raymarchCS, &prepareColorCS, &preprocessDepthCS, &spdCS, &spatialCS, &temporalCS, &compositeCS
+        &raymarchCS, &prepareColorCS, &preprocessDepthCS, &spdCS, &spatialCS, &temporalCS, &bilateralCS
     };
 
     for (auto shader : shaderPtrs)
@@ -200,7 +214,7 @@ void ScreenSpaceReflections::CompileComputeShaders()
             { &spdCS, "ssr_spd.hlsl", {} },
             { &spatialCS, "ssr_spatial_filter.hlsl", {} },
             { &temporalCS, "ssr_temporal_filter.hlsl", {} },
-            { &compositeCS, "ssr_composite.hlsl", {} }
+            { &bilateralCS, "ssr_bilateral_filter.hlsl", {} }
         };
 
     for (auto& info : shaderInfos) {
@@ -235,10 +249,15 @@ void ScreenSpaceReflections::DrawSSR()
         ssrCBData.MaxSteps = settings.MaxSteps;
         ssrCBData.NumRays = settings.NumRays;
         ssrCBData.Glossy = settings.Glossy ? 1u : 0u;
-        ssrCBData.SpatialFilterSteps = settings.SpatialFilterSteps;
+        ssrCBData.SpatialRadius = settings.SpatialRadius;
         ssrCBData.RoughnessMask = settings.RoughnessMask;
         ssrCBData.TemporalScale = settings.TemporalScale;
         ssrCBData.TemporalWeight = settings.TemporalWeight;
+        ssrCBData.BilateralScale = settings.BilateralScale;
+        ssrCBData.ColorWeight = settings.BilateralColorWeight;
+        ssrCBData.DepthWeight = settings.BilateralDepthWeight;
+        ssrCBData.NormalWeight = settings.BilateralNormalWeight;
+        ssrCBData.BRDFBias = settings.BRDFBias;
     }
     ssrCB->Update(ssrCBData);
     auto buffer = ssrCB->CB();
@@ -356,20 +375,39 @@ void ScreenSpaceReflections::DrawSSR()
     resetViews();
 
     // spartial filter
-    // uavs.at(0) = texSpatial->uav.get();
+    for(int i = 0; i < settings.SpatialTimes; ++i) {
+        state->BeginPerfEvent("Spatial Filter");
+        if ((i & 1) == 0) {
+            uavs.at(0) = texSpatial->uav.get();
 
-    // srvs.at(0) = texSSRColor->srv.get();
-    // srvs.at(1) = texHitPDF->srv.get();
-    // srvs.at(2) = normal.SRV;
-    // srvs.at(5) = texDepth->srv.get();
-    // srvs.at(6) = noiseSRV.get();
-    // context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-    // context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-    // context->CSSetShader(spatialCS.get(), nullptr, 0);
-    // context->CSSetConstantBuffers(1, 1, &buffer);
+            srvs.at(0) = texSSRColor->srv.get();
+            srvs.at(1) = texHitPDF->srv.get();
+            srvs.at(2) = normal.SRV;
+            srvs.at(5) = texDepth->srv.get();
+            srvs.at(6) = noiseSRV.get();
+        } else {
+            uavs.at(0) = texSSRColor->uav.get();
 
-    // context->Dispatch((uint)dispatchCount.x >> 1, (uint)dispatchCount.y >> 1, 1);
-    // context->CopyResource(texSSRColor->resource.get(), texSpatial->resource.get());
+            srvs.at(0) = texSpatial->srv.get();
+            srvs.at(1) = texHitPDF->srv.get();
+            srvs.at(2) = normal.SRV;
+            srvs.at(5) = texDepth->srv.get();
+            srvs.at(6) = noiseSRV.get();
+        }
+        context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+        context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+        context->CSSetShader(spatialCS.get(), nullptr, 0);
+        context->CSSetConstantBuffers(1, 1, &buffer);
+
+        context->Dispatch((uint)dispatchCount.x >> 1, (uint)dispatchCount.y >> 1, 1);
+        if ((i & 1) == 0) {
+            context->CopyResource(texSSRColor->resource.get(), texSpatial->resource.get());
+        } else {
+            context->CopyResource(texSpatial->resource.get(), texSSRColor->resource.get());
+        }
+        resetViews();
+        state->EndPerfEvent();
+    }
 
     // temporal filter
     if (settings.EnableTemporal) {
@@ -387,30 +425,37 @@ void ScreenSpaceReflections::DrawSSR()
         context->CSSetConstantBuffers(1, 1, &buffer);
 
         context->Dispatch((uint)dispatchCount.x >> 1, (uint)dispatchCount.y >> 1, 1);
+        context->CopyResource(texSSRColor->resource.get(), texTemporal->resource.get());
         
         resetViews();
         state->EndPerfEvent();
     }
 
-    // composite
-    state->BeginPerfEvent("Composite");
-    uavs.at(0) = texOutput->uav.get();
-    uavs.at(1) = texHistory->uav.get();
-    srvs.at(0) = texSSRColor->srv.get();
-    srvs.at(1) = texHitPDF->srv.get();
-    srvs.at(2) = settings.EnableTemporal ? texTemporal->srv.get() : nullptr;
+    // bilateral filter
+    if (settings.EnableBilateral) {
+        state->BeginPerfEvent("Bilateral Filter");
+        uavs.at(0) = texBilateral->uav.get();
+        srvs.at(0) = texSSRColor->srv.get();
+        srvs.at(2) = normal.SRV;
+        srvs.at(4) = depth.depthSRV;
 
-    context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-    context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-    context->CSSetShader(compositeCS.get(), nullptr, 0);
+        context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+        context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+        context->CSSetShader(bilateralCS.get(), nullptr, 0);
+        context->CSSetConstantBuffers(1, 1, &buffer);
 
-    context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
-    state->EndPerfEvent();
+        context->Dispatch((uint)dispatchCount.x >> 1, (uint)dispatchCount.y >> 1, 1);
+        context->CopyResource(texSSRColor->resource.get(), texBilateral->resource.get());
+        resetViews();
+        state->EndPerfEvent();
+    }
     resetViews();
 
+    // output
+    context->CopyResource(texOutput->resource.get(), texSSRColor->resource.get());
+    context->CopyResource(texHistory->resource.get(), texSSRColor->resource.get());
+
     context->CSSetShader(nullptr, nullptr, 0);
-    
-    // resetViews();
 
     state->EndPerfEvent();
 }

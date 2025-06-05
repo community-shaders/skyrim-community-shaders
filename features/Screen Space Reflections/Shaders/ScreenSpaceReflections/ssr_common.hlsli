@@ -92,6 +92,14 @@ void GetNormalRoughness(uint2 dtid, out float3 normal, out float roughness)
     roughness = 1.0f - normalGlossiness.z;
 }
 
+void GetNormalRoughnessUV(float2 uv, out float3 normal, out float roughness)
+{
+    float3 normalGlossiness = NormalRoughnessTexture.SampleLevel(LinearSampler, uv, 0);
+    // Normal is in view space
+    normal = GBuffer::DecodeNormal(normalGlossiness.xy);
+    roughness = 1.0f - normalGlossiness.z;
+}
+
 // [ Duff et al. 2017, "Building an Orthonormal Basis, Revisited" ]
 float3x3 GetTangentBasis( float3 TangentZ )
 {
@@ -128,4 +136,38 @@ float2 GetMotionVector(float sceneDepth, float2 screenUV, float4x4 matrix_LastVi
     float2 LastUV = LastNDC.xy * float2(0.5f, -0.5f) + 0.5;
     
     return CurUV - LastUV;
+}
+
+uint3 Rand3DPCG16(int3 p)
+{
+	// taking a signed int then reinterpreting as unsigned gives good behavior for negatives
+	uint3 v = uint3(p);
+
+	// Linear congruential step. These LCG constants are from Numerical Recipies
+	// For additional #'s, PCG would do multiple LCG steps and scramble each on output
+	// So v here is the RNG state
+	v = v * 1664525u + 1013904223u;
+
+	// PCG uses xorshift for the final shuffle, but it is expensive (and cheap
+	// versions of xorshift have visible artifacts). Instead, use simple MAD Feistel steps
+	//
+	// Feistel ciphers divide the state into separate parts (usually by bits)
+	// then apply a series of permutation steps one part at a time. The permutations
+	// use a reversible operation (usually ^) to part being updated with the result of
+	// a permutation function on the other parts and the key.
+	//
+	// In this case, I'm using v.x, v.y and v.z as the parts, using + instead of ^ for
+	// the combination function, and just multiplying the other two parts (no key) for 
+	// the permutation function.
+	//
+	// That gives a simple mad per round.
+	v.x += v.y*v.z;
+	v.y += v.z*v.x;
+	v.z += v.x*v.y;
+	v.x += v.y*v.z;
+	v.y += v.z*v.x;
+	v.z += v.x*v.y;
+
+	// only top 16 bits are well shuffled
+	return v >> 16u;
 }

@@ -29,10 +29,17 @@ struct ScreenSpaceReflections : Feature
         uint NumRays = 1;
         bool Glossy = true;
         float RoughnessMask = 0.8f;
-        uint SpatialFilterSteps = 4;
+        float BRDFBias = 0.7f;
+        int SpatialTimes = 2;
+        float SpatialRadius = 0.5f;
         bool EnableTemporal = true;
-        float TemporalScale = 2.0f;
-        float TemporalWeight = 0.5f;
+        float TemporalScale = 1.25f;
+        float TemporalWeight = 0.9f;
+        bool EnableBilateral = true;
+        float BilateralScale = 0.5f;
+        float BilateralColorWeight = 0.1f;
+        float BilateralDepthWeight = 0.1f;
+        float BilateralNormalWeight = 0.1f;
     } settings;
 
     struct alignas(16) SSRCB
@@ -40,11 +47,15 @@ struct ScreenSpaceReflections : Feature
         uint MaxSteps;
         uint NumRays;
         uint Glossy;
-        uint SpatialFilterSteps;
+        float SpatialRadius;
         float RoughnessMask;
         float TemporalScale;
         float TemporalWeight;
-        float _padding;
+        float BilateralScale;
+        float ColorWeight;
+        float DepthWeight;
+        float NormalWeight;
+        float BRDFBias;
     };
 
     struct alignas(16) SPDCB
@@ -85,5 +96,5 @@ struct ScreenSpaceReflections : Feature
     winrt::com_ptr<ID3D11ComputeShader> spdCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> spatialCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> temporalCS = nullptr;
-    winrt::com_ptr<ID3D11ComputeShader> compositeCS = nullptr;
+    winrt::com_ptr<ID3D11ComputeShader> bilateralCS = nullptr;
 };
