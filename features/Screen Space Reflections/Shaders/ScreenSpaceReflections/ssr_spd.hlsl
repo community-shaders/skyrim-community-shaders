@@ -21,7 +21,7 @@
 // THE SOFTWARE.
 
 #ifndef DOWNSAMPLE_FILTER
-#define DOWNSAMPLE_FILTER 2 // 0=Average, 1=Min, 2=Max
+#define DOWNSAMPLE_FILTER 1 // 0=Average, 1=Min, 2=Max
 #endif
 
 #ifndef USE_LINEAR_SAMPLER
