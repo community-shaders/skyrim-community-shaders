@@ -1,6 +1,7 @@
 #pragma once
 
 #include <dxgi1_4.h>
+#include "Utils/Serialize.h"
 
 using namespace std::chrono;
 #define BUFFER_VIEWER_NODE(a_value, a_scale)                                                                 \
