@@ -85,8 +85,8 @@ struct ScreenSpaceReflections : Feature
 
     winrt::com_ptr<ID3D11ShaderResourceView> noiseSRV = nullptr;
 
-    std::array<winrt::com_ptr<ID3D11ShaderResourceView>, 5> depthSRVs = { nullptr };
-	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, 5> depthUAVs = { nullptr };
+    std::array<winrt::com_ptr<ID3D11ShaderResourceView>, 9> depthSRVs = { nullptr };
+	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, 9> depthUAVs = { nullptr };
 
     winrt::com_ptr<ID3D11SamplerState> linearSampler = nullptr;
 

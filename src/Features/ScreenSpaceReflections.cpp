@@ -98,7 +98,7 @@ void ScreenSpaceReflections::SetupResources()
         D3D11_TEXTURE2D_DESC texDesc = {};
         mainTex.texture->GetDesc(&texDesc);
         texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-        texDesc.MipLevels = 5;
+        texDesc.MipLevels = 8;
         texDesc.MiscFlags |= D3D11_RESOURCE_MISC_GENERATE_MIPS;
         texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 
@@ -145,7 +145,7 @@ void ScreenSpaceReflections::SetupResources()
         texDepth->CreateSRV(srvDesc);
         texDepth->CreateUAV(uavDesc);
 
-        for (uint i = 0; i < 5; i++) {
+        for (uint i = 0; i < 9; i++) {
 			D3D11_SHADER_RESOURCE_VIEW_DESC mipSrvDesc = {
 				.Format = texDesc.Format,
 				.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
@@ -265,7 +265,7 @@ void ScreenSpaceReflections::DrawSSR()
 
     SPDCB spdCBData;
     {
-        spdCBData.numMips = 5;
+        spdCBData.numMips = 9;
         spdCBData.srcDimensions[0] = (uint)size.x;
         spdCBData.srcDimensions[1] = (uint)size.y;
         spdCBData.workGroupOffset[0] = 0;
@@ -329,11 +329,14 @@ void ScreenSpaceReflections::DrawSSR()
     // spd
     state->BeginPerfEvent("SPD");
 
-    std::array<ID3D11UnorderedAccessView*, 4> uavsSPD = { nullptr };
-    uavsSPD.at(0) = depthUAVs[1].get(); // mip 2
-    uavsSPD.at(1) = depthUAVs[2].get(); // mip 3
-    uavsSPD.at(2) = depthUAVs[3].get(); // mip 4
-    uavsSPD.at(3) = depthUAVs[4].get(); // mip 5
+    std::array<ID3D11UnorderedAccessView*, 8> uavsSPD = { nullptr };
+    // uavsSPD.at(0) = depthUAVs[1].get(); // mip 2
+    // uavsSPD.at(1) = depthUAVs[2].get(); // mip 3
+    // uavsSPD.at(2) = depthUAVs[3].get(); // mip 4
+    // uavsSPD.at(3) = depthUAVs[4].get(); // mip 5
+    for (int i = 0; i < 8; ++i) {
+        uavsSPD.at(i) = depthUAVs[i + 1].get(); // mip 1 to 8
+    }
     srvs.at(5) = depthSRVs[0].get(); // mip 0
 
     context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());

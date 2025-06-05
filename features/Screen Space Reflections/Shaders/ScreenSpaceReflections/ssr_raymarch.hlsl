@@ -1,5 +1,7 @@
 #include "ScreenSpaceReflections/ssr_common.hlsli"
 
+#define USE_HIZ 1
+
 Texture2D<float4> ScreenColorTextureMips : register(t3);
 Texture2D<float> DepthTexture : register(t4);
 Texture2D<float> DepthTextureMips : register(t5);
@@ -38,10 +40,151 @@ float GetScreenFadeBord(float2 pos, float value)
     return saturate(borderDist > value ? 1 : borderDist / value);
 }
 
+bool HiZRaymarch(float3 rayStartWS, float3 dirWS, float depth,
+    float roughness, float maxDistance, uint maxSteps, float startMipLevel, float offset,
+    out float3 hitPointUVz, out float mipLevel, out float3 debug, uint eyeIndex = 0)
+{
+    mipLevel = startMipLevel;
+    debug = float3(0, 0, 0);
+    hitPointUVz = float3(0, 0, 0);
+
+    float3 rayStartVS = FrameBuffer::WorldToView(rayStartWS, true, eyeIndex);
+    float3 dirVS = FrameBuffer::WorldToView(dirWS, false, eyeIndex);
+
+    float4 rayStartClip = mul(FrameBuffer::CameraProj[eyeIndex], float4(rayStartVS, 1));
+    float3 rayStartScreen = rayStartClip.xyz / rayStartClip.w;
+    float4 rayEndScreen = mul(FrameBuffer::CameraProj[eyeIndex], float4(dirVS, 0)) + rayStartClip;
+    rayEndScreen.xyz = rcp(max(rayEndScreen.w, 1e-6f)) * rayEndScreen.xyz;
+    float3 rayDepthScreen = 0.5 * (rayStartScreen + mul(FrameBuffer::CameraProj[eyeIndex], float4(0, 0, 1, 0)).xyz);
+    float3 rayStepScreen = rayEndScreen.xyz - rayStartScreen;
+    rayStepScreen *= GetStepScreenFactorToClipAtScreenEdge(rayStartScreen.xy, rayStepScreen.xy);
+
+    float3 rayStartUVz = float3((rayStartScreen.xy * float2(0.5, -0.5) + 0.5), rayStartScreen.z);
+	float3 rayStepUVz  = float3(rayStepScreen.xy  * float2(0.5, -0.5), rayStepScreen.z);
+
+    const int MAX_MIP = 5;
+    const float MIN_MIP = 0;
+
+    float currentMip = MAX_MIP;
+    float3 rayDirection = normalize(rayStepUVz);
+    float3 invRayDirection = rcp(max(abs(rayDirection), 1e-6f));
+
+    float currentT = 0;
+    float3 currentPos = rayStartUVz + currentT * rayStepUVz;
+
+    float2 uvOffset = float2(0.005, 0.005) * exp2(currentMip);
+    uvOffset.x = rayDirection.x < 0 ? -uvOffset.x : uvOffset.x;
+    uvOffset.y = rayDirection.y < 0 ? -uvOffset.y : uvOffset.y;
+
+    float2 floorOffset;
+    floorOffset.x = rayDirection.x < 0 ? 0.0 : 1.0;
+    floorOffset.y = rayDirection.y < 0 ? 0.0 : 1.0;
+    
+    bool hit = false;
+    uint iterations = 0;
+    float lastSurfaceZ = 0;
+    
+    [loop]
+    while (currentMip >= MIN_MIP && currentT < 1.0)
+    {
+        float2 currentMipSize = pow(0.5, currentMip) * SharedData::BufferDim.xy;
+        float2 currentMipSizeInv = rcp(currentMipSize);
+
+        if (any(currentPos.xy < 0) || any(currentPos.xy > 1))
+            break;
+        
+        float2 sampleUV = currentPos.xy;
+        float surfaceDepth = DepthTextureMips.SampleLevel(LinearSampler, sampleUV, currentMip).r;
+        
+        float depthDiff = surfaceDepth - currentPos.z;
+        bool isAboveSurface = depthDiff > 0;
+        
+        float2 currentMipPos = currentMipSize * currentPos.xy;
+        float2 xyPlane = floor(currentMipPos) + floorOffset;
+        xyPlane = xyPlane * currentMipSizeInv + uvOffset * currentMipSizeInv;
+        
+        float3 boundaryPlanes = float3(xyPlane, surfaceDepth);
+        float3 tIntersections = (boundaryPlanes - rayStartUVz) * invRayDirection;
+        
+        tIntersections.z = rayDirection.z > 0 ? tIntersections.z : 1e6;
+
+        float tMin = min(min(tIntersections.x, tIntersections.y), tIntersections.z);
+
+        bool skippedTile = (abs(tMin - tIntersections.z) > 1e-6) && isAboveSurface;
+
+        if (!skippedTile && currentMip <= MIN_MIP + 1)
+        {
+            float compareTolerance = max(abs(rayStepUVz.z) / maxSteps, 
+                                       abs(rayStartScreen.z - rayDepthScreen.z) * 2 / maxSteps);
+            
+            if (abs(depthDiff) < compareTolerance)
+            {
+                float intersectT = currentT;
+                
+                if (iterations > 0)
+                {
+                    float lastDepthDiff = lastSurfaceZ - (currentPos.z - rayDirection.z * 0.1);
+                    float lerpFactor = saturate(lastDepthDiff / (lastDepthDiff - depthDiff));
+                    intersectT = lerp(currentT - 0.1, currentT, lerpFactor);
+                }
+                
+                hitPointUVz = rayStartUVz + intersectT * rayStepUVz;
+                hit = true;
+                break;
+            }
+        }
+
+        if (skippedTile && currentMip < MAX_MIP)
+        {
+            currentMip = min(currentMip + 1, MAX_MIP);
+        }
+        else if (!skippedTile && currentMip > MIN_MIP)
+        {
+            currentMip = max(currentMip - 1, MIN_MIP);
+        }
+
+        if (isAboveSurface)
+        {
+            float stepSize = max(tMin - currentT, 1.0 / maxSteps);
+            currentT += stepSize;
+            currentPos = rayStartUVz + currentT * rayStepUVz;
+        }
+        else
+        {
+            currentT += 1.0 / maxSteps;
+            currentPos = rayStartUVz + currentT * rayStepUVz;
+        }
+
+        lastSurfaceZ = surfaceDepth;
+        iterations++;
+        
+        uvOffset = float2(0.005, 0.005) * exp2(currentMip);
+        uvOffset.x = rayDirection.x < 0 ? -uvOffset.x : uvOffset.x;
+        uvOffset.y = rayDirection.y < 0 ? -uvOffset.y : uvOffset.y;
+    }
+
+    if (!hit && iterations > 0 && currentT < 1.0)
+    {
+        hitPointUVz = currentPos;
+        hit = abs(lastSurfaceZ - currentPos.z) < 0.01;
+    }
+
+    debug.x = iterations / float(maxSteps);
+    debug.y = currentMip / MAX_MIP;
+    debug.z = currentT; 
+
+    mipLevel = currentMip;
+    
+    return hit;
+}
+
 bool RayMarch(float3 rayStartWS, float3 dirWS, float depth,
     float roughness, float maxDistance, uint maxSteps, float startMipLevel, float offset,
     out float3 hitPointUVz, out float mipLevel, out float3 debug, uint eyeIndex = 0)
 {
+#if USE_HIZ
+    return HiZRaymarch(rayStartWS, dirWS, depth, roughness, maxDistance, maxSteps, startMipLevel, offset, hitPointUVz, mipLevel, debug, eyeIndex);
+#else
     mipLevel = startMipLevel;
     debug = float3(0, 0, 0);
     hitPointUVz = float3(0, 0, 0);
@@ -153,6 +296,7 @@ bool RayMarch(float3 rayStartWS, float3 dirWS, float depth,
 		rayUVz += 4 * rayStepUVz;
     }
     return hit;
+#endif
 }
 
 [numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID)
@@ -245,7 +389,7 @@ bool RayMarch(float3 rayStartWS, float3 dirWS, float depth,
 #   endif
             float3 H = mul(PDF.xyz, tangentBasis);
             float3 L = normalize(2 * dot(V, H) * H - V);
-            debug = L * 0.5 + 0.5;
+            // debug = L * 0.5 + 0.5;
 
             if (roughness < 0.1f)
             {
@@ -272,7 +416,7 @@ bool RayMarch(float3 rayStartWS, float3 dirWS, float depth,
                     outColor += float4(hitColor.xyz, GetScreenFadeBord(hitUV, 0.25));
                 }
             }
-            debug = L * 0.5 + 0.5;
+            // debug = L * 0.5 + 0.5;
         }
 
         outPDF.w /= max(numRays, 0.0001f);
@@ -309,7 +453,7 @@ bool RayMarch(float3 rayStartWS, float3 dirWS, float depth,
         outPDF.xyz = max(hitUVz, outPDF.xyz);
         outPDF.w = PDF.w;
 
-        debug = normalize(L) * 0.5 + 0.5;
+        // debug = normalize(L) * 0.5 + 0.5;
         if (hit)
         {
             float2 hitUV = hitUVz.xy;
@@ -322,10 +466,11 @@ bool RayMarch(float3 rayStartWS, float3 dirWS, float depth,
             float4 hitColor = ScreenColorTextureMips.SampleLevel(LinearSampler, hitUV, mipLevel);
             outColor += float4(hitColor.xyz, GetScreenFadeBord(hitUV, 0.25));
         }
+        debug = L;
     }
     outColor.w = saturate(outColor.w * outColor.w);
     // outColor.xyz *= rcp(1 - Color::RGBToLuminanceAlternative(outColor.xyz));
     SSRColorOutput[DTid.xy] = outColor;
-    // SSRColorOutput[DTid.xy] = float4(debug.xyz, 1);
+    // SSRColorOutput[DTid.xy] = float4(debug.xy, 0, 1);
     SSRPDFOutput[DTid.xy] = outPDF;
 }
