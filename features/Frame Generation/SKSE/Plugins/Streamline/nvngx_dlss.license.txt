@@ -11,7 +11,7 @@ license on behalf of a company or other legal entity, you represent that you
 have legal authority and "you" will mean the entity you represent. By using the
 SDK, you affirm that you have reached the legal age of majority, you accept the
 terms of this license, and you take legal and financial responsibility for the
-actions of your permitted users. 
+actions of your permitted users.
 
 You agree to use the SDK only for purposes that are permitted by (a) this
 license, and (b) any applicable law, regulation or generally accepted practices
@@ -20,7 +20,7 @@ or guidelines in the relevant jurisdictions.
 1. LICENSE. Subject to the terms of this license and the terms in the supplement
 attached, NVIDIA hereby grants you a non-exclusive, non-transferable license,
 without the right to sublicense (except as expressly provided in this license)
-to: 
+to:
 
 (a) Install and use the SDK,
 
@@ -36,34 +36,34 @@ this license.
 exercise the grants above:
 
 (a) An application must have material additional functionality, beyond the
-included portions of the SDK. 
+included portions of the SDK.
 
 (b) The following notice shall be included in modifications and derivative works
 of source code distributed: "This software contains source code provided by
-NVIDIA Corporation." 
+NVIDIA Corporation."
 
 (c) You agree to distribute the SDK subject to the terms at least as protective
 as the terms of this license, including (without limitation) terms relating to
 the license grant, license restrictions and protection of NVIDIA's intellectual
 property rights. Additionally, you agree that you will protect the privacy,
-security and legal rights of your application users. 
+security and legal rights of your application users.
 
 (d) You agree to notify NVIDIA in writing of any known or suspected distribution
 or use of the SDK not in compliance with the requirements of this license, and
 to enforce the terms of your agreements with respect to the distributed portions
-of the SDK. 
+of the SDK.
 
 3. AUTHORIZED USERS. You may allow employees and contractors of your entity or
 of your subsidiary(ies) to access and use the SDK from your secure network to
 perform work on your behalf. If you are an academic institution you may allow
 users enrolled or employed by the academic institution to access and use the SDK
 from your secure network. You are responsible for the compliance with the terms
-of this license by your authorized users. 
+of this license by your authorized users.
 
 4. LIMITATIONS. Your license to use the SDK is restricted as follows:
 
 (a) You may not reverse engineer, decompile or disassemble, or remove copyright
-or other proprietary notices from any portion of the SDK or copies of the SDK. 
+or other proprietary notices from any portion of the SDK or copies of the SDK.
 
 (b) Except as expressly provided in this license, you may not copy, sell, rent,
 sublicense, transfer, distribute, modify, or create derivative works of any
@@ -76,7 +76,7 @@ NVIDIA.
 
 (d) You may not bypass, disable, or circumvent any technical limitation,
 encryption, security, digital rights management or authentication mechanism in
-the SDK. 
+the SDK.
 
 (e) You may not use the SDK in any manner that would cause it to become subject
 to an open source software license. As examples, licenses that require as a
@@ -91,7 +91,7 @@ death, or catastrophic loss. Examples include use in avionics, navigation,
 military, medical, life support or other life critical applications. NVIDIA does
 not design, test or manufacture the SDK for these critical uses and NVIDIA shall
 not be liable to you or any third party, in whole or in part, for any claims or
-damages arising from such uses. 
+damages arising from such uses.
 
 (g) You agree to defend, indemnify and hold harmless NVIDIA and its affiliates,
 and their respective employees, contractors, agents, officers and directors,
@@ -99,7 +99,7 @@ from and against any and all claims, damages, obligations, losses, liabilities,
 costs or debt, fines, restitutions and expenses (including but not limited to
 attorney's fees and costs incident to establishing the right of indemnification)
 arising out of or related to your use of the SDK outside of the scope of this
-license, or not in compliance with its terms. 
+license, or not in compliance with its terms.
 
 5. UPDATES. NVIDIA may, at its option, make available patches, workarounds or
 other updates to this SDK. Unless the updates are provided with their separate
@@ -124,9 +124,9 @@ without liability.
 separate legal notices or terms as may be described in proprietary notices
 accompanying the SDK. If and to the extent there is a conflict between the terms
 in this license and the third-party license terms, the third-party terms control
-only to the extent necessary to resolve the conflict. 
+only to the extent necessary to resolve the conflict.
 
-8. OWNERSHIP. 
+8. OWNERSHIP.
 
 8.1 NVIDIA reserves all rights, title and interest in and to the SDK not
 expressly granted to you under this license. NVIDIA and its suppliers hold all
@@ -137,8 +137,8 @@ of the United States and other countries, and international treaty provisions.
 8.2 Subject to the rights of NVIDIA and its suppliers in the SDK, you hold all
 rights, title and interest in and to your applications and your derivative works
 of the sample source code delivered in the SDK including their respective
-intellectual property rights. 
- 
+intellectual property rights.
+
 9. FEEDBACK. You may, but are not obligated to, provide Feedback to NVIDIA.
 "Feedback" means all suggestions, fixes, modifications, feature requests or
 other feedback regarding the SDK. Feedback, even if designated as confidential
@@ -155,7 +155,7 @@ ANY KIND OR NATURE, WHETHER EXPRESS, IMPLIED OR STATUTORY, INCLUDING, BUT NOT
 LIMITED TO, WARRANTIES OF MERCHANTABILITY, NON-INFRINGEMENT, OR FITNESS FOR A
 PARTICULAR PURPOSE. NVIDIA DOES NOT WARRANT THAT THE SDK WILL MEET YOUR
 REQUIREMENTS OR THAT THE OPERATION THEREOF WILL BE UNINTERRUPTED OR ERROR-FREE,
-OR THAT ALL ERRORS WILL BE CORRECTED. 
+OR THAT ALL ERRORS WILL BE CORRECTED.
 
 11. LIMITATIONS OF LIABILITY. TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW
 NVIDIA AND ITS AFFILIATES SHALL NOT BE LIABLE FOR ANY SPECIAL, INCIDENTAL,
@@ -169,7 +169,7 @@ HAS PREVIOUSLY BEEN ADVISED OF, OR COULD REASONABLY HAVE FORESEEN, THE
 POSSIBILITY OF SUCH DAMAGES. IN NO EVENT WILL NVIDIA'S AND ITS AFFILIATES TOTAL
 CUMULATIVE LIABILITY UNDER OR ARISING OUT OF THIS LICENSE EXCEED US$10.00. THE
 NATURE OF THE LIABILITY OR THE NUMBER OF CLAIMS OR SUITS SHALL NOT ENLARGE OR
-EXTEND THIS LIMIT. 
+EXTEND THIS LIMIT.
 
 12. TERMINATION. Your rights under this license will terminate automatically
 without notice from NVIDIA if you fail to comply with any term and condition of
@@ -181,7 +181,7 @@ commercially viable. Upon any termination of this license, you agree to promptly
 discontinue use of the SDK and destroy all copies in your possession or control.
 Your prior distributions in accordance with this license are not affected by the
 termination of this license. All provisions of this license will survive
-termination, except for the license granted to you. 
+termination, except for the license granted to you.
 
 13. APPLICABLE LAW. This license will be governed in all respects by the laws of
 the United States and of the State of Delaware, without regard to the conflicts
@@ -191,14 +191,14 @@ of this license in the English language. The state or federal courts residing in
 Santa Clara County, California shall have exclusive jurisdiction over any
 dispute or claim arising out of this license. Notwithstanding this, you agree
 that NVIDIA shall still be allowed to apply for injunctive remedies or urgent
-legal relief in any jurisdiction. 
+legal relief in any jurisdiction.
 
 14. NO ASSIGNMENT. This license and your rights and obligations thereunder may
 not be assigned by you by any means or operation of law without NVIDIA's
 permission. Any attempted assignment not approved by NVIDIA in writing shall be
 void and of no effect. NVIDIA may assign, delegate or transfer this license and
 its rights and obligations, and if to a non-affiliate you will be notified.
- 
+
 15. EXPORT. The SDK is subject to United States export laws and regulations. You
 agree to comply with all applicable U.S. and international export laws,
 including the Export Administration Regulations (EAR) administered by the U.S.
@@ -217,7 +217,7 @@ CFR §§ 227.7202 & 252.227-7014(a)(1). Use, duplication or disclosure by the U.
 Government or a U.S. Government subcontractor is subject to the restrictions in
 this license pursuant to 48 CFR § 12.212 or 48 CFR § 227.7202. In no event shall
 the US Government user acquire rights in the SDK beyond those specified in 48
-C.F.R. 52.227-19(b)(1)-(2). 
+C.F.R. 52.227-19(b)(1)-(2).
 
 17. NOTICES. You agree that any notices that NVIDIA sends you electronically,
 such as via email, will satisfy any legal communication requirements. Please
@@ -254,7 +254,7 @@ but not defined below have the meaning assigned to them in the Agreement.
 This supplement is an exhibit to the Agreement and is incorporated as an
 integral part of the Agreement. In the event of conflict between the terms in
 this supplement and the terms in the Agreement, the terms in this supplement
-govern. 
+govern.
 
 1. Interoperability. Your applications that incorporate, or are based on, the
 SDK must be fully interoperable with compatible GPU hardware products designed
@@ -268,7 +268,7 @@ use of such SDKs or their functionality is outside of the scope of the
 Agreement. For the purpose of this section, cloud services include application
 service providers or service bureaus, operators of hosted/virtual system
 environments, or hosting, time sharing or providing any other type of service to
-others. 
+others.
 
 3. Notification for the DLSS SDK and NGX SDK. You are required to notify NVIDIA
 prior to commercial release of an application (including a plug-in to a
@@ -276,7 +276,7 @@ commercial application) that incorporates, or is based on, the DLSS SDK or NGX
 SDK. Please send notifications to: https://developer.nvidia.com/sw-notification
 and provide the following information in the email: company name, publisher and
 developer name, NVIDIA SDK used, application name, platform (i.e. PC, Linux),
-scheduled ship date, and weblink to product/video. 
+scheduled ship date, and weblink to product/video.
 
 4. Audio and Video Encoders and Decoders. You acknowledge and agree that it is
 your sole responsibility to obtain any additional third-party licenses required
@@ -286,7 +286,7 @@ content relating to audio and/or video encoders and decoders from, including but
 not limited to, Microsoft, Thomson, Fraunhofer IIS, Sisvel S.p.A., MPEG-LA, and
 Coding Technologies. NVIDIA does not grant to you under this Agreement any
 necessary patent or other rights with respect to any audio and/or video encoders
-and decoders. 
+and decoders.
 
 5. DLSS SDK Terms. By installing or using the DLSS SDK you agree that NVIDIA can
 make over-the-air updates of DLSS in systems that have DLSS installed, including
@@ -309,9 +309,9 @@ collateral, trade-show displays and other retail packaging materials, as the
 supplier of the DLSS SDK or NGX SDK for the applications that were developed
 with use of such SDKs, provided that all such references to NVIDIA will be
 subject to NVIDIA's prior review and written approval, which will not be
-unreasonably withheld or delayed. 
+unreasonably withheld or delayed.
 
-(b) NVIDIA Trademark Placement in Applications with the DLSS SDK or NGX SDK. 
+(b) NVIDIA Trademark Placement in Applications with the DLSS SDK or NGX SDK.
 For applications that incorporate the DLSS SDK or NGX SDK or portions thereof,
 you must attribute the use of the applicable SDK and include the NVIDIA Marks
 on splash screens, in the about box of the application (if present), and in

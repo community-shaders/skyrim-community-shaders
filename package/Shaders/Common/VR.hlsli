@@ -57,7 +57,7 @@ namespace Stereo
 
 	/**
 	Converts from eye specific uv to general uv [0,1].
-	In VR, texture buffers include the left and right eye in the same buffer. 
+	In VR, texture buffers include the left and right eye in the same buffer.
 	This means the x value [0, .5] represents the left eye, and the x value (.5, 1] are the right eye.
 	This returns the adjusted value
 	@param uv - eye specific uv coords [0,1]; if uv.x < 0.5, it's a left eye; otherwise right
@@ -173,11 +173,11 @@ namespace Stereo
 	/**
 	* @brief Checks if the color is non zero by testing if the color is greater than 0 by epsilon.
 	*
-	* This function check is a color is non black. It uses a small epsilon value to allow for 
+	* This function check is a color is non black. It uses a small epsilon value to allow for
 	* floating point imprecision.
 	*
 	* For screen-space reflection (SSR), this acts as a mask and checks for an invalid reflection by
-	* checking if the reflection color is essentially black (close to zero). 
+	* checking if the reflection color is essentially black (close to zero).
 	*
 	* @param[in] ssrColor The color to check.
 	* @param[in] epsilon Small tolerance value used to determine if the color is close to zero.
@@ -193,11 +193,11 @@ namespace Stereo
 	* @brief Converts mono UV coordinates from one eye to the corresponding mono UV coordinates of the other eye.
 	*
 	* This function is used to transition UV coordinates from one eye's perspective to the other eye in a stereo rendering setup.
-	* It operates by converting the mono UV to clip space, transforming it into world space, and then reprojecting it 
-	* into the other eye's clip space before converting back to UV coordinates. It supports dynamic resolution adjustments 
+	* It operates by converting the mono UV to clip space, transforming it into world space, and then reprojecting it
+	* into the other eye's clip space before converting back to UV coordinates. It supports dynamic resolution adjustments
 	* and applies eye offset adjustments for correct stereo separation.
 	*
-	* The function considers the aspect of VR by modifying the NDC to view space conversion based on the stereo setup, 
+	* The function considers the aspect of VR by modifying the NDC to view space conversion based on the stereo setup,
 	* ensuring accurate rendering across both eyes.
 	*
 	* @param[in] monoUV The UV coordinates and depth value (Z component) for the current eye, in the range [0,1].
@@ -243,12 +243,12 @@ namespace Stereo
 	* If the UV coordinates are outside the frame of both eyes, it returns the adjusted UV coordinates for the current eye.
 	*
 	* The function ensures that the UV coordinates are correctly adjusted for stereo rendering, taking into account boundary conditions
-	* and preserving accurate reflections.  
+	* and preserving accurate reflections.
 	* Based on concepts from https://cuteloong.github.io/publications/scssr24/
 	* Wu, X., Xu, Y., & Wang, L. (2024). Stereo-consistent Screen Space Reflection. Computer Graphics Forum, 43(4).
 	*
 	* We do not have a backface depth so we may be ray marching even though the ray is in an object.
-	
+
 	* @param[in] monoUV Current UV coordinates with depth information, [0-1]. Must not be dynamic resolution adjusted.
 	* @param[in] eyeIndex Index of the current eye (0 or 1).
 	* @param[out] fromOtherEye Boolean indicating if the result UV coordinates are from the other eye.

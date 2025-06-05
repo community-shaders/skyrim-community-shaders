@@ -44,6 +44,8 @@ public:
 	bool upscalerLoaded = false;
 
 	float timer = 0;
+	double smoothDrawCalls[RE::BSShader::Type::Total + 1];
+	int drawCalls[RE::BSShader::Type::Total + 1];
 
 	enum ConfigMode
 	{
@@ -92,7 +94,7 @@ public:
 	 * <p>
 	 * Developer mode is active when the log level is trace or debug.
 	 * </p>
-	 * 
+	 *
      * @return Whether in developer mode.
      */
 	bool IsDeveloperMode();
