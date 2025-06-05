@@ -68,24 +68,24 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
 
 // Main stochastic sampling function
 inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)  // Used for normal/diffuse text. Luminence-based blending helps preserve details close to camera.
-{
-		// Apply contrast to the initial blend weights (without height influence)
+{		// Apply contrast to the initial blend weights (without height influence)
 		float3 blendWeights = pow(saturate(offsets.weights), HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE));
 
 		// Renormalize the weights
 		float totalWeight = blendWeights.x + blendWeights.y + blendWeights.z;
-		blendWeights = (totalWeight > 0.0) ? blendWeights / totalWeight : DEFAULT_WEIGHTS;
-
+		blendWeights /= totalWeight;
 		float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 		float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 		float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
 
 		// Apply height-based weight adjustments
-		float height1 = sample1.a > 0 ? sample1.a : dot(sample1.rgb, LUMINANCE_WEIGHTS);
-		float height2 = sample2.a > 0 ? sample2.a : dot(sample2.rgb, LUMINANCE_WEIGHTS);
-		float height3 = sample3.a > 0 ? sample3.a : dot(sample3.rgb, LUMINANCE_WEIGHTS);
-
-		float3 heights = float3(height1, height2, height3);
+		float3x3 rgbMatrix = float3x3(sample1.rgb, sample2.rgb, sample3.rgb);
+		float3 luminanceHeights = mul(rgbMatrix, LUMINANCE_WEIGHTS);
+		float3 heights = float3(
+			sample1.a > 0 ? sample1.a : luminanceHeights.x,
+			sample2.a > 0 ? sample2.a : luminanceHeights.y,
+			sample3.a > 0 ? sample3.a : luminanceHeights.z
+		);
 		float3 weights = blendWeights * (1.0 + HEIGHT_INFLUENCE * (heights - 1.0));
 
 		// Blend samples with height-adjusted weights
