@@ -25,6 +25,7 @@
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
 #include "Features/WetnessEffects.h"
+#include "Features/RayTracing.h"
 
 #include "State.h"
 
@@ -153,7 +154,8 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		globals::features::hairSpecular,
 		globals::features::interiorSunShadows,
 		globals::features::terrainVariation,
-		globals::features::ibl
+		globals::features::ibl,
+		globals::features::rayTracing
 	};
 
 	static std::vector<Feature*> featuresVR = [] {

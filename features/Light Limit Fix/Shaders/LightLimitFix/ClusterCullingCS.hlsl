@@ -17,6 +17,23 @@ RWStructuredBuffer<LightGrid> lightGrid : register(u2);
 
 groupshared Light sharedLights[GROUP_SIZE];
 
+struct Vector3 {
+	float x, y, z;
+
+	Vector3 operator-(Vector3& other) const {
+		return {x - other.x, y - other.y, z - other.z};
+	} 
+	
+	float dot(const Vector3& other) const {
+		return x * other.x + y * other.y + z * other.z;
+	}
+
+	Vector3 normalize() const {
+		float length = std::sqrt(x * x + y * y + z * z);
+		return {x / length, y / length, z / length};
+	}
+}
+
 bool LightIntersectsCluster(float3 position, float radius, ClusterAABB cluster)
 {
 	float3 closest = max(cluster.minPoint.xyz, min(position, cluster.maxPoint.xyz));
@@ -63,6 +80,11 @@ bool LightIntersectsCluster(float3 position, float radius, ClusterAABB cluster)
 		[branch] if (LightIntersectsCluster(light.positionVS[0].xyz, radius, cluster))
 		{
 #endif
+			// The light intersects the cluster area. Check if the light is obstructed.
+			// Draw a line from the light to the center of the cluster and check if it intersects any objects.
+			// If it does, the light is obstructed and should not be rendered within that cluster.
+			// This is a simplified implementation, and a good place to start.
+			
 			visibleLightIndices[visibleLightCount] = i;
 			visibleLightCount++;
 			if (visibleLightCount >= MAX_CLUSTER_LIGHTS)

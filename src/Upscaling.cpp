@@ -42,6 +42,10 @@ void Upscaling::DrawSettings()
 
 	// Slider for method selection
 	ImGui::SliderInt("Method", (int*)currentUpscaleMode, 0, availableModes, std::format("{}", upscaleModes[(uint)*currentUpscaleMode]).c_str());
+	ImGui::SameLine();
+	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
+	ImGui::Text("(?)");
+	ImGui::PopStyleColor();
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
 			"Disabled:\n"
@@ -82,6 +86,10 @@ void Upscaling::DrawSettings()
 		settings.dlssPreset = std::clamp(settings.dlssPreset, 0u, 1u);
 		ImGui::SliderInt("DLSS Super Resolution Preset", (int*)&settings.dlssPreset, 0, 1, std::format("{}", dlssPresets[settings.dlssPreset]).c_str());
 		settings.dlssPreset = std::clamp(settings.dlssPreset, 0u, 1u);
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
+		ImGui::Text("(?)");
+		ImGui::PopStyleColor();
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("The new DLSS Transformer model offers more image stability, less ghosting and improved anti-aliasing in comparison with the original DLSS Convolutional Neural Network model.");
 		}

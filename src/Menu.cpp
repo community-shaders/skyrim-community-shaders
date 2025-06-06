@@ -597,23 +597,40 @@ void Menu::DrawGeneralSettings()
 			if (ImGui::Checkbox("Enable Shaders", &useCustomShaders)) {
 				shaderCache->SetEnabled(useCustomShaders);
 			}
+			ImGui::SameLine();
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
+			ImGui::Text("(?)");
+			ImGui::PopStyleColor();
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Disabling this effectively disables all features.");
 			}
 
 			bool useDiskCache = shaderCache->IsDiskCache();
+			
 			ImGui::TableNextColumn();
+			
 			if (ImGui::Checkbox("Enable Disk Cache", &useDiskCache)) {
 				shaderCache->SetDiskCache(useDiskCache);
 			}
+			ImGui::SameLine();
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
+			ImGui::Text("(?)");
+			ImGui::PopStyleColor();
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Disabling this stops shaders from being loaded from disk, as well as stops shaders from being saved to it.");
 			}
+
 			bool useAsync = shaderCache->IsAsync();
+			
 			ImGui::TableNextColumn();
+
 			if (ImGui::Checkbox("Enable Async", &useAsync)) {
 				shaderCache->SetAsync(useAsync);
 			}
+			ImGui::SameLine();
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
+			ImGui::Text("(?)");
+			ImGui::PopStyleColor();
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Skips a shader being replaced if it hasn't been compiled yet. Also makes compilation blazingly fast!");
 			}
@@ -780,6 +797,10 @@ void Menu::DrawAdvancedSettings()
 		if (ImGui::Checkbox("Dump Shaders", &useDump)) {
 			shaderCache->SetDump(useDump);
 		}
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
+		ImGui::Text("(?)");
+		ImGui::PopStyleColor();
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Dump shaders at startup. This should be used only when reversing shaders. Normal users don't need this.");
 		}
@@ -798,6 +819,10 @@ void Menu::DrawAdvancedSettings()
 			ImGui::SameLine();
 			globals::state->SetLogLevel(static_cast<spdlog::level::level_enum>(item_current));
 		}
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
+		ImGui::Text("(?)");
+		ImGui::PopStyleColor();
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Log level. Trace is most verbose. Default is info.");
 		}
@@ -812,17 +837,29 @@ void Menu::DrawAdvancedSettings()
 			globals::state->SetDefines(shaderDefines);
 			shaderCache->Clear();
 		}
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
+		ImGui::Text("(?)");
+		ImGui::PopStyleColor();
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Defines for Shader Compiler. Semicolon \";\" separated. Clear with space. Rebuild shaders after making change. Compute Shaders require a restart to recompile.");
 		}
 		ImGui::Spacing();
 		ImGui::SliderInt("Compiler Threads", &shaderCache->compilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()));
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
+		ImGui::Text("(?)");
+		ImGui::PopStyleColor();
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
 				"Number of threads to use to compile shaders. "
 				"The more threads the faster compilation will finish but may make the system unresponsive. ");
 		}
 		ImGui::SliderInt("Background Compiler Threads", &shaderCache->backgroundCompilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()));
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
+		ImGui::Text("(?)");
+		ImGui::PopStyleColor();
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
 				"Number of threads to use to compile shaders while playing game. "
@@ -843,6 +880,10 @@ void Menu::DrawAdvancedSettings()
 				logger::info("Setting new interval {}.", testInterval);
 			}
 		}
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
+		ImGui::Text("(?)");
+		ImGui::PopStyleColor();
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
 				"Sets number of seconds before toggling between default USER and TEST config. "
@@ -855,6 +896,10 @@ void Menu::DrawAdvancedSettings()
 		if (ImGui::Checkbox("Enable File Watcher", &useFileWatcher)) {
 			shaderCache->SetFileWatcher(useFileWatcher);
 		}
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
+		ImGui::Text("(?)");
+		ImGui::PopStyleColor();
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
 				"Automatically recompile shaders on file change. "
@@ -869,6 +914,10 @@ void Menu::DrawAdvancedSettings()
 			if (ImGui::Button(blockingButtonString.c_str(), { -1, 0 })) {
 				shaderCache->DisableShaderBlocking();
 			}
+			ImGui::SameLine();
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
+			ImGui::Text("(?)");
+			ImGui::PopStyleColor();
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text(
 					"Stop blocking Community Shaders shader. "
@@ -909,20 +958,34 @@ void Menu::DrawAdvancedSettings()
 			}
 			if (state->IsDeveloperMode()) {
 				ImGui::Checkbox("Vertex", &state->enableVShaders);
+				ImGui::SameLine();
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
+				ImGui::Text("(?)");
+				ImGui::PopStyleColor();
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text(
 						"Replace Vertex Shaders. "
 						"When false, will disable the custom Vertex Shaders for the types above. "
 						"For developers to test whether CS shaders match vanilla behavior. ");
 				}
+
 				ImGui::Checkbox("Pixel", &state->enablePShaders);
+				ImGui::SameLine();
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
+				ImGui::Text("(?)");
+				ImGui::PopStyleColor();
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text(
 						"Replace Pixel Shaders. "
 						"When false, will disable the custom Pixel Shaders for the types above. "
 						"For developers to test whether CS shaders match vanilla behavior. ");
 				}
+
 				ImGui::Checkbox("Compute", &state->enableCShaders);
+				ImGui::SameLine();
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
+				ImGui::Text("(?)");
+				ImGui::PopStyleColor();
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text(
 						"Replace Compute Shaders. "

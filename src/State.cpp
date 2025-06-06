@@ -14,6 +14,7 @@
 #include "Streamline.h"
 #include "TruePBR.h"
 #include "Upscaling.h"
+#include "Features/RayTracing/RayTracing.h"
 
 void State::Draw()
 {
