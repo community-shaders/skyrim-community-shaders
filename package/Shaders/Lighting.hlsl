@@ -1272,7 +1272,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #		if defined(TRUE_PBR)
 	float4 blendedRMAOS = 0;
-#		endif  // Compute stochastic offsets and derivatives once for all layers (only when terrain variation is enabled)
+#		endif
+	
+	// Calculate view distance once for terrain optimizations
+	float distance = length(viewPosition);
+	
+	// Compute stochastic offsets and derivatives once for all layers (only when terrain variation is enabled)
 #		if defined(TERRAIN_VARIATION)
 	bool useTerrainVariation = SharedData::terrainVariationSettings.enableTilingFix;
 	float2 dx, dy;
@@ -1390,7 +1395,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landColor1;
 		[branch] if (useTerrainVariation)
 		{
-			landColor1 = StochasticEffect(screenNoise, mipLevels[0], TexColorSampler, SampColorSampler, uv, sharedOffset, dx, dy);
+			landColor1 = StochasticEffect(screenNoise, mipLevels[0], TexColorSampler, SampColorSampler, uv, sharedOffset, dx, dy, distance);
 		}
 		else
 		{
@@ -1414,7 +1419,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landNormal1;
 		[branch] if (useTerrainVariation)
 		{
-			landNormal1 = StochasticEffect(screenNoise, mipLevels[0], TexNormalSampler, SampNormalSampler, uv, sharedOffset, dx, dy);
+			landNormal1 = StochasticEffect(screenNoise, mipLevels[0], TexNormalSampler, SampNormalSampler, uv, sharedOffset, dx, dy, distance);
 		}
 		else
 		{
@@ -1471,7 +1476,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landColor2;
 		[branch] if (useTerrainVariation)
 		{
-			landColor2 = StochasticEffect(screenNoise, mipLevels[1], TexLandColor2Sampler, SampLandColor2Sampler, uv, sharedOffset, dx, dy);
+			landColor2 = StochasticEffect(screenNoise, mipLevels[1], TexLandColor2Sampler, SampLandColor2Sampler, uv, sharedOffset, dx, dy, distance);
 		}
 		else
 		{
@@ -1495,7 +1500,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landNormal2;
 		[branch] if (useTerrainVariation)
 		{
-			landNormal2 = StochasticEffect(screenNoise, mipLevels[1], TexLandNormal2Sampler, SampLandNormal2Sampler, uv, sharedOffset, dx, dy);
+			landNormal2 = StochasticEffect(screenNoise, mipLevels[1], TexLandNormal2Sampler, SampLandNormal2Sampler, uv, sharedOffset, dx, dy, distance);
 		}
 		else
 		{
@@ -1551,7 +1556,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landColor3;
 		[branch] if (useTerrainVariation)
 		{
-			landColor3 = StochasticEffect(screenNoise, mipLevels[2], TexLandColor3Sampler, SampLandColor3Sampler, uv, sharedOffset, dx, dy);
+			landColor3 = StochasticEffect(screenNoise, mipLevels[2], TexLandColor3Sampler, SampLandColor3Sampler, uv, sharedOffset, dx, dy, distance);
 		}
 		else
 		{
@@ -1575,7 +1580,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landNormal3;
 		[branch] if (useTerrainVariation)
 		{
-			landNormal3 = StochasticSample3(screenNoise, mipLevels[2], TexLandNormal3Sampler, SampLandNormal3Sampler, uv, sharedOffset, dx, dy);
+			landNormal3 = StochasticEffect(screenNoise, mipLevels[2], TexLandNormal3Sampler, SampLandNormal3Sampler, uv, sharedOffset, dx, dy, distance);
 		}
 		else
 		{
@@ -1631,7 +1636,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landColor4;
 		[branch] if (useTerrainVariation)
 		{
-			landColor4 = StochasticEffect(screenNoise, mipLevels[3], TexLandColor4Sampler, SampLandColor4Sampler, uv, sharedOffset, dx, dy);
+			landColor4 = StochasticEffect(screenNoise, mipLevels[3], TexLandColor4Sampler, SampLandColor4Sampler, uv, sharedOffset, dx, dy, distance);
 		}
 		else
 		{
@@ -1655,7 +1660,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landNormal4;
 		[branch] if (useTerrainVariation)
 		{
-			landNormal4 = StochasticEffect(screenNoise, mipLevels[3], TexLandNormal4Sampler, SampLandNormal4Sampler, uv, sharedOffset, dx, dy);
+			landNormal4 = StochasticEffect(screenNoise, mipLevels[3], TexLandNormal4Sampler, SampLandNormal4Sampler, uv, sharedOffset, dx, dy, distance);
 		}
 		else
 		{
@@ -1711,7 +1716,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landColor5;
 		[branch] if (useTerrainVariation)
 		{
-			landColor5 = StochasticEffect(screenNoise, mipLevels[4], TexLandColor5Sampler, SampLandColor5Sampler, uv, sharedOffset, dx, dy);
+			landColor5 = StochasticEffect(screenNoise, mipLevels[4], TexLandColor5Sampler, SampLandColor5Sampler, uv, sharedOffset, dx, dy, distance);
 		}
 		else
 		{
@@ -1735,7 +1740,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landNormal5;
 		[branch] if (useTerrainVariation)
 		{
-			landNormal5 = StochasticEffect(screenNoise, mipLevels[4], TexLandNormal5Sampler, SampLandNormal5Sampler, uv, sharedOffset, dx, dy);
+			landNormal5 = StochasticEffect(screenNoise, mipLevels[4], TexLandNormal5Sampler, SampLandNormal5Sampler, uv, sharedOffset, dx, dy, distance);
 		}
 		else
 		{
@@ -1792,7 +1797,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landColor6;
 		[branch] if (useTerrainVariation)
 		{
-			landColor6 = StochasticEffect(screenNoise, mipLevels[5], TexLandColor6Sampler, SampLandColor6Sampler, uv, sharedOffset, dx, dy);
+			landColor6 = StochasticEffect(screenNoise, mipLevels[5], TexLandColor6Sampler, SampLandColor6Sampler, uv, sharedOffset, dx, dy, distance);
 		}
 		else
 		{
@@ -1816,7 +1821,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landNormal6;
 		[branch] if (useTerrainVariation)
 		{
-			landNormal6 = StochasticEffect(screenNoise, mipLevels[5], TexLandNormal6Sampler, SampLandNormal6Sampler, uv, sharedOffset, dx, dy);
+			landNormal6 = StochasticEffect(screenNoise, mipLevels[5], TexLandNormal6Sampler, SampLandNormal6Sampler, uv, sharedOffset, dx, dy, distance);
 		}
 		else
 		{
@@ -1839,7 +1844,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
-				landRMAOS6 = StochasticEffect(screenNoise, mipLevels[5], TexLandRMAOS6Sampler, SampLandRMAOS6Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
+				landRMAOS6 = StochasticSample3(screenNoise, mipLevels[5], TexLandRMAOS6Sampler, SampLandRMAOS6Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
 			}
 			else
 			{
