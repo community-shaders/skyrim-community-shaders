@@ -19,7 +19,7 @@ static const float WORLD_SCALE = 332.54;
 static const float3 DEFAULT_WEIGHTS = float3(0.33, 0.33, 0.34);
 static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
 // Distance-based LOD optimization constants
-static const float DISTANCE_LOD_THRESHOLD = 4096.0;    // Distance threshold for fast path optimization
+static const float DISTANCE_LOD_THRESHOLD = 1024.0;    // Distance threshold for fast path optimization
 static const float DISTANCE_LOD_TRANSITION = 200.0;    // Transition zone width (units)
 // Hash constants
 static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
@@ -203,7 +203,7 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	// Distance-based LOD with smooth transition
 	float distanceFactor = saturate((distance - DISTANCE_LOD_THRESHOLD) / DISTANCE_LOD_TRANSITION);
 		// Low sample (always computed for transition)
-	float4 lowSample = StochasticSampleLow(rnd, max(mipLevel - 1.5, 0.0), tex, samp, uv, offsets, dx, dy);
+	float4 lowSample = StochasticSampleLow(rnd, mipLevel, tex, samp, uv, offsets, dx, dy);
 	
 	// Full quality path for near terrain
 	// Apply contrast to the initial blend weights (without height influence)
