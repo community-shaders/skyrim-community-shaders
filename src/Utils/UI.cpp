@@ -2,6 +2,8 @@
 
 namespace Util
 {
+	PerfomanceOverlay performanceOverlay;
+
 	HoverTooltipWrapper::HoverTooltipWrapper()
 	{
 		hovered = ImGui::IsItemHovered();
