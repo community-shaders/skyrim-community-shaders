@@ -1259,7 +1259,7 @@ void Menu::DrawPerfOverlay()
 
 	// Initialize Performance Counter if necessary
 	if (perfOverlayState.frequency == 0) {
-		LARGE_INTEGER temp; // LARGE_INTEGER is required for called QueryPerformanceCounter
+		LARGE_INTEGER temp;  // LARGE_INTEGER is required for called QueryPerformanceCounter
 		QueryPerformanceFrequency(&temp);
 		perfOverlayState.frequency = temp.QuadPart;
 		QueryPerformanceCounter(&temp);
