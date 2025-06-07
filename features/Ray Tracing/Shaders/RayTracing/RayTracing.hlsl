@@ -33,21 +33,21 @@ void RayGen()
     // Get dispatch dimensions
     uint2 launchIndex = DispatchRaysIndex().xy;
     uint2 launchDim = DispatchRaysDimensions().xy;
-    
+
     // Generate ray
     float2 d = (launchIndex.xy + 0.5f) / launchDim;
     float4 target = mul(projInverseMatrix, float4(d.x * 2 - 1, 1 - d.y * 2, 0, 1));
     target.xyz /= target.w;
-    
+
     RayDesc ray;
     ray.Origin = cameraPosition;
     ray.Direction = normalize(mul(viewInverseMatrix, float4(target.xyz, 0)).xyz);
     ray.TMin = 0.001;
     ray.TMax = 10000.0;
-    
+
     // Initialize payload
     RayPayload payload = { float3(0, 0, 0), -1 };
-    
+
     // Trace ray
     TraceRay(
         SceneBVH,
@@ -58,7 +58,7 @@ void RayGen()
         0,    // Miss shader index
         ray,
         payload);
-    
+
     // Write result
     gOutput[launchIndex] = float4(payload.color, 1.0f);
 }
@@ -69,7 +69,7 @@ void ClosestHit(inout RayPayload payload, in Attributes attrib)
     // Basic diffuse shading
     float3 hitNormal = normalize(HitWorldNormal());
     float3 lightDir = normalize(float3(0.5, 1, 0.25));
-    
+
     float NdotL = saturate(dot(hitNormal, lightDir));
     payload.color = float3(0.8, 0.8, 0.8) * NdotL;
     payload.hitDistance = HitT();

@@ -7,6 +7,7 @@
 #include "DX12SwapChain.h"
 #include "Deferred.h"
 #include "Features/CloudShadows.h"
+#include "Features/RayTracing/RayTracing.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
 #include "Menu.h"
@@ -14,7 +15,6 @@
 #include "Streamline.h"
 #include "TruePBR.h"
 #include "Upscaling.h"
-#include "Features/RayTracing/RayTracing.h"
 
 void State::Draw()
 {

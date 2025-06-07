@@ -139,7 +139,7 @@ void BottomLevelASGenerator::ComputeASBufferSizes(
 
   // Describe the work being requested, in this case the construction of a
   // (possibly dynamic) bottom-level hierarchy, with the given vertex buffers
-  
+
   D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS prebuildDesc;
   prebuildDesc.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
   prebuildDesc.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
