@@ -1458,11 +1458,11 @@ void Menu::PerfOverlayState::UpdateFGFrameTime(Settings::PerfOverlaySettings& se
         postFGFrameTimeMs = fgDeltaTime * 1000.0f;
         postFGFps = 1000.0f / postFGFrameTimeMs;
 
-        // Update post-FG smooth values when timer elapses
-        if (updateTimer <= 0.0f) {
-            postFGSmoothFps = postFGFps;
-            postFGSmoothFrameTimeMs = postFGFrameTimeMs;
-        }
+		// Update post-FG smooth values when timer elapses
+		if (updateTimer <= 0.0f) {
+			postFGSmoothFps = postFGFps;
+			postFGSmoothFrameTimeMs = postFGFrameTimeMs;
+		}
 
         // Update post-FG frametime history
         postFGFrameTimeHistory[postFGFrameTimeHistoryIndex] = postFGFrameTimeMs;
@@ -1472,11 +1472,11 @@ void Menu::PerfOverlayState::UpdateFGFrameTime(Settings::PerfOverlaySettings& se
         postFGFrameTimeMs = frameTimeMs / 2.0f;  // Approximate
         postFGFps = fps * 2.0f;                  // Approximate
 
-        // Update smooth values when timer elapses
-        if (updateTimer <= 0.0f) {
-            postFGSmoothFps = postFGFps;
-            postFGSmoothFrameTimeMs = postFGFrameTimeMs;
-        }
+		// Update smooth values when timer elapses
+		if (updateTimer <= 0.0f) {
+			postFGSmoothFps = postFGFps;
+			postFGSmoothFrameTimeMs = postFGFrameTimeMs;
+		}
 
         // Update post-FG frametime history with approximation
         postFGFrameTimeHistory[postFGFrameTimeHistoryIndex] = postFGFrameTimeMs;
