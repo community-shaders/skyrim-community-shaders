@@ -159,6 +159,9 @@ public:
 			bool ShowPostFGFrameTime = true;
 			bool ShowPostFGFrameTimeGraph = true;
 			float UpdateInterval = 0.5f;
+			int FrameHistorySize = 120; // Default 120 frames = 2s @ 60fps. Clamped using static values to prevent config file values going outside of slider bounds.
+			static constexpr int kMinFrameHistorySize = 60;	// 60 frames = 1s @ 60fps. Reasonable minimum.
+			static constexpr int kMaxFrameHistorySize = 480; // 480 frames = 10s @ 60fps or 2s @ 240fps. Reasonable maximum.
 			enum class TextSize
 			{
 				Small,
@@ -188,6 +191,43 @@ private:
 	uint32_t testInterval = 0;     // Seconds to wait before toggling user/test settings
 	bool inTestMode = false;       // Whether we're in test mode
 	bool usingTestConfig = false;  // Whether we're using the test config
+
+	class PerfOverlayState {
+		public:
+			std::vector<float> frameTimeHistory;
+			std::vector<float> postFGFrameTimeHistory;
+			bool hasGraphs = false;
+			int frameTimeHistoryIndex = 0;
+			int postFGFrameTimeHistoryIndex = 0;
+			bool isFrameGenerationActive = false;
+			LARGE_INTEGER frequency;
+			LARGE_INTEGER lastFrameCounter;
+			LARGE_INTEGER currentFrameCounter;
+			float frameTimeMs = 0.0f;
+			float fps = 0.0f;
+			float smoothFps = 0.0f;
+			float smoothFrameTimeMs = 0.0f;
+			float postFGSmoothFps = 0.0f;
+			float postFGSmoothFrameTimeMs = 0.0f;
+			float updateTimer = 0.0f;
+			float minFrameTime = 1000.0f;
+			float maxFrameTime = 0.0f;
+			float smoothedMinFrameTime = 0.0f;
+			float smoothedMaxFrameTime = 50.0f;
+			float textScale = 1.0f;
+			float kSmoothingFactor = 0.15f; // Smoothing factor: 0.1f = slow, 0.3f = fast.
+			std::chrono::steady_clock::time_point lastUpdateTime;
+			void UpdateGraphValues(Settings::PerfOverlaySettings& settings);
+			void UpdateFrameTimeHistorySizes(Settings::PerfOverlaySettings& settings);
+			void UpdateMinFrameTime();
+			void UpdateMaxFrameTime();
+			void UpdateFGFrameTime(Settings::PerfOverlaySettings& settings);
+			void DrawPostFGFrameTimeGraph(Settings::PerfOverlaySettings& settings);
+			float SetTextScale(Settings::PerfOverlaySettings& settings);
+			void DrawDrawCalls();
+			void DrawFPS(Settings::PerfOverlaySettings& settings);
+			void DrawVRAM(winrt::com_ptr<IDXGIAdapter3> dxgiAdapter3);
+	} perfOverlayState;
 
 	std::chrono::steady_clock::time_point lastTestSwitch = high_resolution_clock::now();  // Time of last test switch
 
