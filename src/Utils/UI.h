@@ -40,17 +40,17 @@ namespace Util
 	bool PercentageSlider(const char* label, float* data, float lb = 0.f, float ub = 100.f, const char* format = "%.1f %%");
 	ImVec2 GetNativeViewportSizeScaled(float scale);
 
-	class PerfomanceOverlay {
+	class PerformanceOverlay {
 		public:
-			float CalcFrameTime(LONGLONG timeElapsed, LARGE_INTEGER frequency)
+			static float CalcFrameTime(uint64_t timeElapsed, uint64_t frequency)
 			{
-				return 1000.0f * (float)timeElapsed / (float)frequency.QuadPart;
+				return 1000.0f * (float)timeElapsed / (float)frequency;
 			}
 
-			float CalcFPS(float frameTimeMs)
+			static float CalcFPS(float frameTimeMs)
 			{
 				return 1000.0f / frameTimeMs;
 			}
 	};
-	extern PerfomanceOverlay performanceOverlay;
+	extern PerformanceOverlay performanceOverlay;
 }  // namespace Util

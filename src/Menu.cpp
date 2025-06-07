@@ -1269,13 +1269,18 @@ void Menu::DrawPerfOverlay()
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 1.0f));  // Tighter spacing
 	ImGui::SetWindowFontScale(perfOverlayState.textScale);
 
-	if (perfOverlayState.frequency.QuadPart == 0) {
-		QueryPerformanceFrequency(&perfOverlayState.frequency);
-		QueryPerformanceCounter(&perfOverlayState.lastFrameCounter);
+	if (perfOverlayState.frequency == 0) {
+		LARGE_INTEGER temp;
+		QueryPerformanceFrequency(&temp);
+		perfOverlayState.frequency = temp.QuadPart;
+		QueryPerformanceCounter(&temp);
+		perfOverlayState.lastFrameCounter = temp.QuadPart;
 	}
 
-	QueryPerformanceCounter(&perfOverlayState.currentFrameCounter);
-	LONGLONG elapsedCounter = perfOverlayState.currentFrameCounter.QuadPart - perfOverlayState.lastFrameCounter.QuadPart;
+	LARGE_INTEGER temp;
+	QueryPerformanceCounter(&temp);
+	perfOverlayState.currentFrameCounter = temp.QuadPart;
+	int64_t elapsedCounter = perfOverlayState.currentFrameCounter - perfOverlayState.lastFrameCounter;
 	perfOverlayState.lastFrameCounter = perfOverlayState.currentFrameCounter;
 
 	// Get frametime and fps
@@ -1454,7 +1459,7 @@ void Menu::PerfOverlayState::UpdateFGFrameTime(Settings::PerfOverlaySettings& se
         postFGFps = 1000.0f / postFGFrameTimeMs;
 
         // Update post-FG smooth values when timer elapses
-        if (updateTimer == 0.0f) {
+        if (updateTimer <= 0.0f) {
             postFGSmoothFps = postFGFps;
             postFGSmoothFrameTimeMs = postFGFrameTimeMs;
         }
@@ -1468,7 +1473,7 @@ void Menu::PerfOverlayState::UpdateFGFrameTime(Settings::PerfOverlaySettings& se
         postFGFps = fps * 2.0f;                  // Approximate
 
         // Update smooth values when timer elapses
-        if (updateTimer == 0.0f) {
+        if (updateTimer <= 0.0f) {
             postFGSmoothFps = postFGFps;
             postFGSmoothFrameTimeMs = postFGFrameTimeMs;
         }

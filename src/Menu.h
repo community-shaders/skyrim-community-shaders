@@ -200,9 +200,9 @@ private:
 			int frameTimeHistoryIndex = 0;
 			int postFGFrameTimeHistoryIndex = 0;
 			bool isFrameGenerationActive = false;
-			LARGE_INTEGER frequency;
-			LARGE_INTEGER lastFrameCounter;
-			LARGE_INTEGER currentFrameCounter;
+			uint64_t frequency;
+			uint64_t lastFrameCounter;
+			uint64_t currentFrameCounter;
 			float frameTimeMs = 0.0f;
 			float fps = 0.0f;
 			float smoothFps = 0.0f;
@@ -215,15 +215,15 @@ private:
 			float smoothedMinFrameTime = 0.0f;
 			float smoothedMaxFrameTime = 50.0f;
 			float textScale = 1.0f;
-			float kSmoothingFactor = 0.15f; // Smoothing factor: 0.1f = slow, 0.3f = fast.
+			static constexpr float kSmoothingFactor = 0.15f; // Smoothing factor: 0.1f = slow, 0.3f = fast.
 			std::chrono::steady_clock::time_point lastUpdateTime;
+			float SetTextScale(Settings::PerfOverlaySettings& settings);
 			void UpdateGraphValues(Settings::PerfOverlaySettings& settings);
 			void UpdateFrameTimeHistorySizes(Settings::PerfOverlaySettings& settings);
 			void UpdateMinFrameTime();
 			void UpdateMaxFrameTime();
 			void UpdateFGFrameTime(Settings::PerfOverlaySettings& settings);
 			void DrawPostFGFrameTimeGraph(Settings::PerfOverlaySettings& settings);
-			float SetTextScale(Settings::PerfOverlaySettings& settings);
 			void DrawDrawCalls();
 			void DrawFPS(Settings::PerfOverlaySettings& settings);
 			void DrawVRAM(winrt::com_ptr<IDXGIAdapter3> dxgiAdapter3);

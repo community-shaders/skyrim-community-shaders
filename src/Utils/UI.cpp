@@ -2,7 +2,7 @@
 
 namespace Util
 {
-	PerfomanceOverlay performanceOverlay;
+	PerformanceOverlay performanceOverlay;
 
 	HoverTooltipWrapper::HoverTooltipWrapper()
 	{
