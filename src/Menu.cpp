@@ -1257,8 +1257,9 @@ void Menu::DrawPerfOverlay()
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 1.0f));  // Tighter spacing
 	ImGui::SetWindowFontScale(perfOverlayState.textScale);
 
+	// Initialize Performance Counter if necessary
 	if (perfOverlayState.frequency == 0) {
-		LARGE_INTEGER temp;
+		LARGE_INTEGER temp; // LARGE_INTEGER is required for called QueryPerformanceCounter
 		QueryPerformanceFrequency(&temp);
 		perfOverlayState.frequency = temp.QuadPart;
 		QueryPerformanceCounter(&temp);
@@ -1271,7 +1272,7 @@ void Menu::DrawPerfOverlay()
 	int64_t elapsedCounter = perfOverlayState.currentFrameCounter - perfOverlayState.lastFrameCounter;
 	perfOverlayState.lastFrameCounter = perfOverlayState.currentFrameCounter;
 
-	// Get frametime and fps
+	// Calculate frametime and fps
 	perfOverlayState.frameTimeMs = Util::performanceOverlay.CalcFrameTime(elapsedCounter, perfOverlayState.frequency);
 	perfOverlayState.fps = Util::performanceOverlay.CalcFPS(perfOverlayState.frameTimeMs);
 
