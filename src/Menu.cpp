@@ -598,10 +598,6 @@ void Menu::DrawGeneralSettings()
 			if (ImGui::Checkbox("Enable Shaders", &useCustomShaders)) {
 				shaderCache->SetEnabled(useCustomShaders);
 			}
-			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
-			ImGui::Text("(?)");
-			ImGui::PopStyleColor();
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Disabling this effectively disables all features.");
 			}
@@ -613,10 +609,6 @@ void Menu::DrawGeneralSettings()
 			if (ImGui::Checkbox("Enable Disk Cache", &useDiskCache)) {
 				shaderCache->SetDiskCache(useDiskCache);
 			}
-			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
-			ImGui::Text("(?)");
-			ImGui::PopStyleColor();
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Disabling this stops shaders from being loaded from disk, as well as stops shaders from being saved to it.");
 			}
@@ -628,10 +620,6 @@ void Menu::DrawGeneralSettings()
 			if (ImGui::Checkbox("Enable Async", &useAsync)) {
 				shaderCache->SetAsync(useAsync);
 			}
-			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
-			ImGui::Text("(?)");
-			ImGui::PopStyleColor();
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Skips a shader being replaced if it hasn't been compiled yet. Also makes compilation blazingly fast!");
 			}
