@@ -11,8 +11,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     ScreenSpaceReflections::Settings,
     Enabled,
     MaxSteps,
-    NumRays,
-    Glossy,
+    MaxMips,
+    Thickness,
     RoughnessMask,
     BRDFBias,
     SpatialTimes,
@@ -30,9 +30,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 void ScreenSpaceReflections::DrawSettings()
 {
     ImGui::Checkbox("Enabled", &settings.Enabled);
-    ImGui::Checkbox("Roughness for Single Sample", &settings.Glossy);
-    ImGui::SliderInt("Max Steps", (int*)&settings.MaxSteps, 1, 32);
-    ImGui::SliderInt("Num Rays", (int*)&settings.NumRays, 1, 12);
+    ImGui::SliderInt("Max Steps", (int*)&settings.MaxSteps, 1, 256);
+    ImGui::SliderInt("Max Mip Level", (int*)&settings.MaxMips, 1, maxMips, "%d", ImGuiSliderFlags_AlwaysClamp);
+    ImGui::SliderFloat("Thickness", &settings.Thickness, 0.0f, 50.0f, "%.2f");
     ImGui::SliderFloat("Roughness Mask", &settings.RoughnessMask, 0.0f, 1.0f, "%.2f");
     ImGui::SliderFloat("BRDF Bias", &settings.BRDFBias, 0.0f, 1.0f, "%.2f");
     ImGui::SliderInt("Spatial Times", &settings.SpatialTimes, 0, 2, "%d", ImGuiSliderFlags_AlwaysClamp);
@@ -98,7 +98,7 @@ void ScreenSpaceReflections::SetupResources()
         D3D11_TEXTURE2D_DESC texDesc = {};
         mainTex.texture->GetDesc(&texDesc);
         texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-        texDesc.MipLevels = 8;
+        texDesc.MipLevels = maxMips;
         texDesc.MiscFlags |= D3D11_RESOURCE_MISC_GENERATE_MIPS;
         texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 
@@ -145,7 +145,7 @@ void ScreenSpaceReflections::SetupResources()
         texDepth->CreateSRV(srvDesc);
         texDepth->CreateUAV(uavDesc);
 
-        for (uint i = 0; i < 9; i++) {
+        for (uint i = 0; i < maxMips; i++) {
 			D3D11_SHADER_RESOURCE_VIEW_DESC mipSrvDesc = {
 				.Format = texDesc.Format,
 				.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
@@ -188,7 +188,7 @@ void ScreenSpaceReflections::SetupResources()
 void ScreenSpaceReflections::ClearShaderCache()
 {
     static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-        &raymarchCS, &prepareColorCS, &preprocessDepthCS, &spdCS, &spatialCS, &temporalCS, &bilateralCS
+        &raymarchCS, &prepareColorCS, &preprocessDepthCS, &spdCS, &spatialCS, &temporalCS, &bilateralCS, &depthDownsampleCS
     };
 
     for (auto shader : shaderPtrs)
@@ -214,7 +214,8 @@ void ScreenSpaceReflections::CompileComputeShaders()
             { &spdCS, "ssr_spd.hlsl", {} },
             { &spatialCS, "ssr_spatial_filter.hlsl", {} },
             { &temporalCS, "ssr_temporal_filter.hlsl", {} },
-            { &bilateralCS, "ssr_bilateral_filter.hlsl", {} }
+            { &bilateralCS, "ssr_bilateral_filter.hlsl", {} },
+            { &depthDownsampleCS, "ssr_depth_downsample.hlsl", {} }
         };
 
     for (auto& info : shaderInfos) {
@@ -247,8 +248,8 @@ void ScreenSpaceReflections::DrawSSR()
     SSRCB ssrCBData;
     {
         ssrCBData.MaxSteps = settings.MaxSteps;
-        ssrCBData.NumRays = settings.NumRays;
-        ssrCBData.Glossy = settings.Glossy ? 1u : 0u;
+        ssrCBData.MaxMips = settings.MaxMips;
+        ssrCBData.Thickness = settings.Thickness;
         ssrCBData.SpatialRadius = settings.SpatialRadius;
         ssrCBData.RoughnessMask = settings.RoughnessMask;
         ssrCBData.TemporalScale = settings.TemporalScale;
@@ -265,7 +266,7 @@ void ScreenSpaceReflections::DrawSSR()
 
     SPDCB spdCBData;
     {
-        spdCBData.numMips = 9;
+        spdCBData.numMips = maxMips;
         spdCBData.srcDimensions[0] = (uint)size.x;
         spdCBData.srcDimensions[1] = (uint)size.y;
         spdCBData.workGroupOffset[0] = 0;
@@ -327,29 +328,41 @@ void ScreenSpaceReflections::DrawSSR()
     resetViews();
 
     // spd
-    state->BeginPerfEvent("SPD");
+    // state->BeginPerfEvent("SPD");
 
-    std::array<ID3D11UnorderedAccessView*, 8> uavsSPD = { nullptr };
-    // uavsSPD.at(0) = depthUAVs[1].get(); // mip 2
-    // uavsSPD.at(1) = depthUAVs[2].get(); // mip 3
-    // uavsSPD.at(2) = depthUAVs[3].get(); // mip 4
-    // uavsSPD.at(3) = depthUAVs[4].get(); // mip 5
-    for (int i = 0; i < 8; ++i) {
-        uavsSPD.at(i) = depthUAVs[i + 1].get(); // mip 1 to 8
+    // std::array<ID3D11UnorderedAccessView*, maxMips - 1> uavsSPD = { nullptr };
+    // for (int i = 0; i < maxMips - 1; ++i) {
+    //     uavsSPD.at(i) = depthUAVs[i + 1].get();
+    // }
+    // srvs.at(5) = depthSRVs[0].get();
+
+    // context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+    // context->CSSetUnorderedAccessViews(0, (uint)uavsSPD.size(), uavsSPD.data(), nullptr);
+    // context->CSSetShader(spdCS.get(), nullptr, 0);
+
+    // context->Dispatch((uint)dispatchCount.x >> 2, (uint)dispatchCount.y >> 2, 1);
+
+    // srvs.fill(nullptr);
+    // uavsSPD.fill(nullptr);
+    // context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+    // context->CSSetUnorderedAccessViews(0, (uint)uavsSPD.size(), uavsSPD.data(), nullptr);
+
+    // state->EndPerfEvent();
+    // resetViews();
+
+    // downsample depth
+    state->BeginPerfEvent("Downsample Depth");
+    for (int i = 0; i < maxMips - 1; ++i) {
+        uavs.at(0) = depthUAVs[i + 1].get();
+        srvs.at(0) = depthSRVs[i].get();
+
+        context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+        context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+        context->CSSetShader(depthDownsampleCS.get(), nullptr, 0);
+
+        context->Dispatch((uint)dispatchCount.x >> i, (uint)dispatchCount.y >> i, 1);
+        resetViews();
     }
-    srvs.at(5) = depthSRVs[0].get(); // mip 0
-
-    context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-    context->CSSetUnorderedAccessViews(0, (uint)uavsSPD.size(), uavsSPD.data(), nullptr);
-    context->CSSetShader(spdCS.get(), nullptr, 0);
-
-    context->Dispatch((uint)dispatchCount.x >> 2, (uint)dispatchCount.y >> 2, 1);
-
-    srvs.fill(nullptr);
-    uavsSPD.fill(nullptr);
-    context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-    context->CSSetUnorderedAccessViews(0, (uint)uavsSPD.size(), uavsSPD.data(), nullptr);
-
     state->EndPerfEvent();
 
     // raymarch

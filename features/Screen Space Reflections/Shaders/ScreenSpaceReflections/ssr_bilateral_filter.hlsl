@@ -8,8 +8,8 @@ RWTexture2D<float4> BilateralOutput : register(u0);
 cbuffer SSRCB : register(b1)
 {
     uint MaxSteps;
-    uint NumRays;
-    uint Glossy;
+    uint MaxMips;
+    float Thickness;
     float SpatialRadius;
     float RoughnessMask;
     float TemporalScale;

@@ -10,8 +10,8 @@ RWTexture2D<float4> SpatialOutput : register(u0);
 cbuffer SSRCB : register(b1)
 {
     uint MaxSteps;
-    uint NumRays;
-    uint Glossy;
+    uint MaxMips;
+    float Thickness;
     float SpatialRadius;
     float RoughnessMask;
     float TemporalScale;
@@ -20,6 +20,7 @@ cbuffer SSRCB : register(b1)
     float ColorWeight;
     float DepthWeight;
     float NormalWeight;
+    float BRDFBias;
 };
 
 float GetEdgeStoppNormalWeight(float3 normal_p, float3 normal_q, float sigma)

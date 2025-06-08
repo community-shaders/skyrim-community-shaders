@@ -25,17 +25,17 @@ struct ScreenSpaceReflections : Feature
     struct Settings
     {
         bool Enabled = true;
-        uint MaxSteps = 8;
-        uint NumRays = 1;
-        bool Glossy = true;
+        uint MaxSteps = 128;
+        uint MaxMips = 6;
+        float Thickness = 5.f;
         float RoughnessMask = 0.8f;
-        float BRDFBias = 0.7f;
-        int SpatialTimes = 2;
+        float BRDFBias = 0.25f;
+        int SpatialTimes = 0;
         float SpatialRadius = 0.5f;
-        bool EnableTemporal = true;
+        bool EnableTemporal = false;
         float TemporalScale = 1.25f;
-        float TemporalWeight = 0.9f;
-        bool EnableBilateral = true;
+        float TemporalWeight = 0.92f;
+        bool EnableBilateral = false;
         float BilateralScale = 0.5f;
         float BilateralColorWeight = 0.1f;
         float BilateralDepthWeight = 0.1f;
@@ -45,8 +45,8 @@ struct ScreenSpaceReflections : Feature
     struct alignas(16) SSRCB
     {
         uint MaxSteps;
-        uint NumRays;
-        uint Glossy;
+        uint MaxMips;
+        float Thickness;
         float SpatialRadius;
         float RoughnessMask;
         float TemporalScale;
@@ -85,8 +85,10 @@ struct ScreenSpaceReflections : Feature
 
     winrt::com_ptr<ID3D11ShaderResourceView> noiseSRV = nullptr;
 
-    std::array<winrt::com_ptr<ID3D11ShaderResourceView>, 9> depthSRVs = { nullptr };
-	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, 9> depthUAVs = { nullptr };
+    static const uint maxMips = 12;
+
+    std::array<winrt::com_ptr<ID3D11ShaderResourceView>, maxMips> depthSRVs = { nullptr };
+	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, maxMips> depthUAVs = { nullptr };
 
     winrt::com_ptr<ID3D11SamplerState> linearSampler = nullptr;
 
@@ -97,4 +99,5 @@ struct ScreenSpaceReflections : Feature
     winrt::com_ptr<ID3D11ComputeShader> spatialCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> temporalCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> bilateralCS = nullptr;
+    winrt::com_ptr<ID3D11ComputeShader> depthDownsampleCS = nullptr;
 };
