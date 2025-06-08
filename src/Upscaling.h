@@ -3,6 +3,13 @@
 #include "FidelityFX.h"
 #include "Streamline.h"
 
+/**
+ * @brief Installs hooks for Direct3D 11 device context operations.
+ *
+ * Sets up hooks on the provided ID3D11DeviceContext to intercept and extend D3D11 Map and Unmap operations, enabling custom frame buffer management and resource tracking.
+ *
+ * @param a_context Pointer to the Direct3D 11 device context to hook.
+ */
 class Upscaling
 {
 public:

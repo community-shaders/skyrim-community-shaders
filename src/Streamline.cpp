@@ -185,6 +185,11 @@ void Streamline::PostDevice()
 	}
 }
 
+/**
+ * @brief Updates and sets camera and frame constants for the current Streamline frame.
+ *
+ * Populates and submits camera parameters, projection matrices, motion vector settings, and other per-frame constants to the Streamline SDK for the current frame. Uses cached framebuffer data and global state to ensure correct configuration for upscaling and frame generation features.
+ */
 void Streamline::CheckFrameConstants()
 {
 	if (frameChecker.IsNewFrame() && globals::streamline->initialized) {
@@ -299,6 +304,11 @@ void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl
 	slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
 }
 
+/**
+ * @brief Submits frame resources and markers for DLSS-G frame generation and Reflex latency tracking.
+ *
+ * Updates DLSS-G frame generation mode if needed, sets Reflex simulation and render markers, and binds required resources (depth, motion vectors, HUD-less color, UI) for the current frame to the Streamline SDK. No action is taken if Streamline is uninitialized, DLSS-G is unavailable, VR mode is active, or D3D12 interop is not enabled.
+ */
 void Streamline::Present()
 {
 	if (!initialized || !featureDLSSG || globals::game::isVR || !globals::upscaling->d3d12Interop)
@@ -348,6 +358,11 @@ void Streamline::Present()
 	slSetTag(viewport, inputs, _countof(inputs), globals::d3d::context);
 }
 
+/**
+ * @brief Releases DLSS resources and disables DLSS for the current viewport.
+ *
+ * Sets the DLSS mode to off and frees all DLSS-related resources associated with the viewport.
+ */
 void Streamline::DestroyDLSSResources()
 {
 	sl::DLSSOptions dlssOptions{};

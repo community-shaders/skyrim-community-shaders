@@ -52,6 +52,13 @@ void FidelityFX::SetupFrameGeneration()
 	}
 }
 
+/**
+ * @brief Presents the current frame, optionally performing frame generation using FidelityFX.
+ *
+ * Configures and dispatches FidelityFX frame generation for the current swap chain frame if enabled. Sets up frame pacing, prepares resources, and issues dispatches for both frame generation parameters and camera information. Increments the internal frame ID after each call.
+ *
+ * @param a_useFrameGeneration If true, enables frame generation and dispatches the necessary workloads; otherwise, presents without frame generation.
+ */
 void FidelityFX::Present(bool a_useFrameGeneration)
 {
 	auto upscaling = globals::upscaling;

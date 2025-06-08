@@ -19,6 +19,76 @@
 #include <sl_version.h>
 #pragma warning(pop)
 
+/**
+ * @brief Returns the singleton instance of the Streamline class.
+ *
+ * Ensures only one instance of Streamline exists throughout the application's lifetime.
+ *
+ * @return Pointer to the singleton Streamline instance.
+ */
+static Streamline* GetSingleton();
+
+/**
+ * @brief Returns a short name identifier for the Streamline class.
+ *
+ * @return The string "Streamline".
+ */
+inline std::string GetShortName();
+
+/**
+ * @brief Loads the NVIDIA Streamline interposer DLL and initializes function pointers.
+ *
+ * Dynamically loads the required Streamline SDK library and sets up function pointers for feature management.
+ */
+void LoadInterposer();
+
+/**
+ * @brief Checks which NVIDIA Streamline features are supported on the given DXGI adapter.
+ *
+ * Updates internal flags for DLSS, DLSSG, and Reflex feature support based on the provided adapter.
+ *
+ * @param a_adapter Pointer to the DXGI adapter to query for feature support.
+ */
+void CheckFeatures(IDXGIAdapter* a_adapter);
+
+/**
+ * @brief Performs post-device creation setup for Streamline integration.
+ *
+ * Should be called after the Direct3D device is created to complete Streamline initialization.
+ */
+void PostDevice();
+
+/**
+ * @brief Validates or updates frame-related constants for Streamline operations.
+ *
+ * Ensures that frame constants required by Streamline features are current and correct.
+ */
+void CheckFrameConstants();
+
+/**
+ * @brief Performs DLSS upscaling on the provided color and alpha mask textures.
+ *
+ * Uses the specified DLSS preset to upscale the input textures via NVIDIA Streamline.
+ *
+ * @param a_color Pointer to the color texture to be upscaled.
+ * @param a_alphaMask Pointer to the alpha mask texture, if used.
+ * @param a_preset DLSS preset specifying the upscaling quality and performance settings.
+ */
+void Upscale(Texture2D* a_color, Texture2D* a_alphaMask, sl::DLSSPreset a_preset);
+
+/**
+ * @brief Handles presentation logic for Streamline, finalizing or submitting the current frame.
+ *
+ * Should be called at the end of the rendering pipeline to complete Streamline processing for the frame.
+ */
+void Present();
+
+/**
+ * @brief Releases and cleans up resources allocated for DLSS operations.
+ *
+ * Frees any memory or handles associated with DLSS to prevent resource leaks.
+ */
+void DestroyDLSSResources();
 class Streamline
 {
 public:
