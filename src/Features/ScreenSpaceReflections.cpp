@@ -372,7 +372,7 @@ void ScreenSpaceReflections::DrawSSR()
     uavs.at(1) = texHitPDF->uav.get();
 
     srvs.at(0) = main.SRV;
-    srvs.at(1) = specular.SRV;
+    srvs.at(1) = motion.SRV;
     srvs.at(2) = normal.SRV;
     srvs.at(3) = texColor->srv.get();
     srvs.at(4) = depth.depthSRV;

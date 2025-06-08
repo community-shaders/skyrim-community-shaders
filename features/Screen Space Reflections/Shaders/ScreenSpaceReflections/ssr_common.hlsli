@@ -200,3 +200,24 @@ float3 SampleGGXVNDF(float3 Ve, float alpha_x, float alpha_y, float U1, float U2
     float3 Ne = normalize(float3(alpha_x * Nh.x, alpha_y * Nh.y, max(0.0, Nh.z)));
     return Ne;
 }
+
+void ReprojectHit(Texture2D MotionTexture, SamplerState s, float3 hitUVz, uint eyeIndex, out float2 outPrevUV)
+{
+	// Camera motion for pixel (in ScreenPos space).
+	float2 thisScreen = (hitUVz.xy - 0.5f) * float2(2.0f, -2.0f);
+	float4 thisClip = float4(thisScreen, hitUVz.z, 1);
+    float4 thisView = mul(FrameBuffer::CameraProjUnjitteredInverse[eyeIndex], thisClip);
+    thisView.xyz = thisView.xyz / thisView.w;
+    float4 thisWorld = mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(thisView.xyz, 1.0f));
+    thisWorld.xyz = thisWorld.xyz / thisWorld.w;
+	float4 prevClip = mul(FrameBuffer::CameraPreviousViewProjUnjittered[eyeIndex], float4(thisWorld.xyz, 1.0f));
+	float2 prevScreen = prevClip.xy / prevClip.w;
+
+	float2 velocity = MotionTexture.SampleLevel(s, hitUVz.xy, 0).xy;
+
+	prevScreen = thisClip.xy - velocity * float2(2.f, -2.f);
+
+	float2 prevUV = prevScreen.xy * float2(0.5f, -0.5f) + 0.5f;
+	
+	outPrevUV = prevUV;
+}

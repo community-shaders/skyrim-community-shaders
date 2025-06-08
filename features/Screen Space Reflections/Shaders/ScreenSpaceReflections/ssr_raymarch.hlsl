@@ -22,6 +22,7 @@
 
 #include "ScreenSpaceReflections/ssr_common.hlsli"
 
+Texture2D<float4> MotionVectorTexture : register(t1);
 Texture2D<float4> ScreenColorTextureMips : register(t3);
 Texture2D<float> DepthTexture : register(t4);
 Texture2D<float> DepthTextureMips : register(t5);
@@ -461,7 +462,11 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
         
         if (confidence > 0.0f)
         {
-            outColor = ScreenColorTextureMips.SampleLevel(LinearSampler, hit.xy, 0);
+            float2 projUV;
+            ReprojectHit(MotionVectorTexture, hit, eyeIndex, projUV);
+
+            outColor = ScreenColorTextureMips.SampleLevel(LinearSampler, projUV, 0);
+
             outPDF.xyz = hit;
             outPDF.w = confidence;
             outColor.w *= confidence;
