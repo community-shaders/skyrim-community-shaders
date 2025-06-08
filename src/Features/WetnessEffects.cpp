@@ -356,7 +356,8 @@ void WetnessEffects::SaveSettings(json& o_json)
 
 void WetnessEffects::RestoreDefaultSettings()
 {
-	settings = {};
+    settings = {};
+    Ripples::UpdateSettings();  // Sync cached values after restoring defaults
 }
 
 void WetnessEffects::DrawUnloadedUI()
