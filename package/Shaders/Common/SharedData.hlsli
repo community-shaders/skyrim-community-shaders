@@ -99,22 +99,23 @@ namespace SharedData
 
 		bool EnableSplashes;
 		bool EnableRipples;
+		float EnableVanillaRipples;
+		float RaindropFxRange;
+
 		float RaindropGridSizeRcp;
 		float RaindropIntervalRcp;
-
 		float RaindropChance;
 		float SplashesLifetime;
+
 		float SplashesStrength;
 		float SplashesMinRadius;
-
 		float SplashesMaxRadius;
 		float RippleStrength;
+
 		float RippleRadius;
 		float RippleBreadth;
-
 		float RippleLifetimeRcp;
-
-		float3 pad0;
+		float pad0;
 	};
 
 	struct SkylightingSettings

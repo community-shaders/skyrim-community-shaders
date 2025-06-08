@@ -33,6 +33,8 @@ public:
 		uint EnableRaindropFx = true;
 		uint EnableSplashes = true;
 		uint EnableRipples = true;
+		uint EnableVanillaRipples = false;
+		float RaindropFxRange = 1000.f;
 		float RaindropGridSize = 4.f;
 		float RaindropInterval = .5f;
 		float RaindropChance = .3f;
@@ -54,7 +56,7 @@ public:
 		float Wetness;
 		float PuddleWetness;
 		Settings settings;
-		uint pad0[3];
+		uint pad0;
 	};
 
 	Settings settings;
@@ -62,8 +64,10 @@ public:
 	PerFrame GetCommonBufferData();
 
 	virtual void Prepass() override;
+	virtual void PostPostLoad() override;
 
 	virtual void DrawSettings() override;
+	virtual std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/112739"; };
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
@@ -71,4 +75,8 @@ public:
 	virtual void RestoreDefaultSettings() override;
 
 	virtual bool SupportsVR() override { return true; };
+	virtual void DrawUnloadedUI() override;
+
+private:
+	bool splashesOfStormsLoaded = false;
 };
