@@ -110,7 +110,6 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 	}
 
 	if (a_useFrameGeneration) {
-	
 		ffx::DispatchDescFrameGenerationPrepare dispatchParameters{};
 
 		dispatchParameters.commandList = commandList;
@@ -150,7 +149,7 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		if (ffx::Dispatch(frameGenContext, dispatchParameters) != ffx::ReturnCode::Ok) {
 			logger::critical("[FidelityFX] Failed to dispatch frame generation!");
 		}
-		
+
 		ffx::DispatchDescFrameGenerationPrepareCameraInfo cameraConfig{};
 
 		static auto viewMatrix = globals::upscaling->frameBufferCached.CameraViewInverse.Transpose();
@@ -159,7 +158,7 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		cameraConfig.cameraRight[0] = viewMatrix._11;
 		cameraConfig.cameraRight[1] = viewMatrix._12;
 		cameraConfig.cameraRight[2] = viewMatrix._13;
-	
+
 		cameraConfig.cameraUp[0] = viewMatrix._21;
 		cameraConfig.cameraUp[1] = viewMatrix._22;
 		cameraConfig.cameraUp[2] = viewMatrix._23;
@@ -174,7 +173,6 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 
 		if (ffx::Dispatch(frameGenContext, dispatchParameters, cameraConfig) != ffx::ReturnCode::Ok) {
 			logger::critical("[FidelityFX] Failed to dispatch frame generation camera info!");
-			
 		}
 	}
 
