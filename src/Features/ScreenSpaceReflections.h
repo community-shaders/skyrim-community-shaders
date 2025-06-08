@@ -85,7 +85,7 @@ struct ScreenSpaceReflections : Feature
 
     winrt::com_ptr<ID3D11ShaderResourceView> noiseSRV = nullptr;
 
-    static const uint maxMips = 12;
+    static const uint maxMips = 9;
 
     std::array<winrt::com_ptr<ID3D11ShaderResourceView>, maxMips> depthSRVs = { nullptr };
 	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, maxMips> depthUAVs = { nullptr };

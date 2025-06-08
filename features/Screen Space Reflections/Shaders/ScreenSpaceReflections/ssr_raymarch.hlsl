@@ -462,10 +462,10 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
         
         if (confidence > 0.0f)
         {
-            float2 projUV;
-            ReprojectHit(MotionVectorTexture, LinearSampler, hit, eyeIndex, projUV);
+            // float2 projUV;
+            // ReprojectHit(MotionVectorTexture, LinearSampler, hit, eyeIndex, projUV);
 
-            outColor = ScreenColorTextureMips.SampleLevel(LinearSampler, projUV, 0);
+            outColor = ScreenColorTextureMips.SampleLevel(LinearSampler, hit.xy, 0);
 
             outPDF.xyz = hit;
             outPDF.w = confidence;
