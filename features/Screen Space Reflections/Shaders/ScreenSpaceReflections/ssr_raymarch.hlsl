@@ -463,7 +463,7 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
         if (confidence > 0.0f)
         {
             float2 projUV;
-            ReprojectHit(MotionVectorTexture, hit, eyeIndex, projUV);
+            ReprojectHit(MotionVectorTexture, LinearSampler, hit, eyeIndex, projUV);
 
             outColor = ScreenColorTextureMips.SampleLevel(LinearSampler, projUV, 0);
 
