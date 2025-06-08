@@ -45,7 +45,7 @@ public:
 		float RippleStrength = 1.f;
 		float RippleRadius = 1.f;
 		float RippleBreadth = .5f;
-		float RippleLifetime = .15f;
+		float RippleLifetime = .5f;
 	};
 
 	struct alignas(16) PerFrame
@@ -67,7 +67,7 @@ public:
 	virtual void PostPostLoad() override;
 
 	virtual void DrawSettings() override;
-	virtual std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/112739"; };
+	virtual std::string GetFeatureModLink() override { return "https://www.nexusmods.com/Core/Libs/Common/Widgets/DownloadPopUp?id=604014&nmm=1&game_id=1704"; };
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;

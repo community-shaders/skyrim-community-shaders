@@ -31,7 +31,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	RippleLifetime)
 
 // Ripples code borrowed from po3 SplashesofStorms
-// https://github.com/powerof3/SplashesOfStorms/blob/master/src/Util.h under MIT License
+// https://github.com/powerof3/SplashesOfStorms/blob/master/src/Hooks.cpp under MIT License
 namespace Ripples
 {
 	// Cache settings to avoid repeated singleton access
@@ -46,8 +46,15 @@ namespace Ripples
 			if (s_isEnabled) {
 				a_enabled = a_enabled && s_vanillaRipplesEnabled;
 			}
+			for (auto& waterObject : a_waterSystem->waterObjects) {
+				if (waterObject) {
+					if (const auto& rippleObject = waterObject->waterRippleObject; rippleObject) {
+						rippleObject->SetAppCulled(!a_enabled);
+					}
+				}
+			}
 
-			return func(a_waterSystem, a_enabled, a_fadeAmount);
+			func(a_waterSystem, a_enabled, a_fadeAmount);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -58,6 +65,10 @@ namespace Ripples
 		if (WetnessEffects) {
 			s_isEnabled = WetnessEffects->settings.EnableWetnessEffects;
 			s_vanillaRipplesEnabled = WetnessEffects->settings.EnableVanillaRipples;
+			logger::debug("[{}] UpdateSettings: EnableWetnessEffects={}, EnableVanillaRipples={}",
+				WetnessEffects->GetName(), s_isEnabled, s_vanillaRipplesEnabled);
+		} else {
+			logger::debug("[WetnessEffects] UpdateSettings: WetnessEffects singleton not found");
 		}
 		return WetnessEffects;
 	}
@@ -125,7 +136,9 @@ void WetnessEffects::DrawSettings()
 			Ripples::UpdateSettings();  // Update cache when settings change
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Enables Skyrim's default ripples");
+			ImGui::Text(
+				"Enables default ripples (e.g., Ripples01).\n"
+				"Disabling may not take effect until the next weather change.\n");
 		}
 		ImGui::EndDisabled();
 		ImGui::SliderFloat("Effect Range", &settings.RaindropFxRange, 1e2f, 2e3f, "%.0f game unit(s)");

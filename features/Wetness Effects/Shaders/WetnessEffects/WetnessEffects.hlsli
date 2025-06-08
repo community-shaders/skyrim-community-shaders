@@ -106,7 +106,11 @@ namespace WetnessEffects
 							float distSqr = dot(vec2Centre, vec2Centre);
 							float rippleT = residual * SharedData::wetnessEffectsSettings.RippleLifetimeRcp;
 							if (rippleT < 1.) {
-								float ripple_r = lerp(0., SharedData::wetnessEffectsSettings.RippleRadius, rippleT);
+								// vary ripple size
+								float sizeRandom = frac(floatHash.x * floatHash.y * 1337.0);
+								float sizeVariation = lerp(0.7, 1.3, sizeRandom);
+
+								float ripple_r = lerp(0.f, SharedData::wetnessEffectsSettings.RippleRadius * sizeVariation, rippleT);
 								float ripple_inner_radius = ripple_r - SharedData::wetnessEffectsSettings.RippleBreadth;
 
 								float band_lerp = (sqrt(distSqr) - ripple_inner_radius) * rippleBreadthRcp;
