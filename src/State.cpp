@@ -773,13 +773,13 @@ std::unordered_map<std::string, bool>& State::GetDisabledFeatures()
 void State::SetupReShade()
 {
 	SetEnvironmentVariableW(L"RESHADE_DISABLE_GRAPHICS_HOOK", L"1");
-	LoadLibraryW(L"ReShade64.dll");
+	auto module = LoadLibraryW(L"ReShade64.dll");
 
 	auto device = globals::d3d::device;
 	auto context = globals::d3d::context;
 	auto swapChain = globals::d3d::swapChain;
 
-	if (reshade::create_effect_runtime(reshade::api::device_api::d3d11, device, context, swapChain, "ReShade", &reShadeRuntime)) {
+	if (module && reshade::create_effect_runtime(reshade::api::device_api::d3d11, device, context, swapChain, "ReShade", &reShadeRuntime)) {
 		auto renderer = globals::game::renderer;
 		auto& swapChainRTV = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER].RTV;
 
