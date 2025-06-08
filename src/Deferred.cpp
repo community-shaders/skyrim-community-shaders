@@ -727,7 +727,8 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 void Deferred::BindLUT()
 {
 	auto view = lutTexture.get();
-	globals::d3d::context->PSSetShaderResources(100, 1, &view);
+	if (view)
+		globals::d3d::context->PSSetShaderResources(100, 1, &view);
 }
 
 void Deferred::Hooks::Main_RenderShadowMaps::thunk()
