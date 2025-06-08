@@ -1234,7 +1234,13 @@ void Menu::DrawPerfOverlay()
 	}
 
 	// Set window size based on whether graphs are shown, was rapidly changing size based on text
-	perfOverlayState.hasGraphs = settings.PerfOverlay.ShowPreFGFrameTimeGraph || settings.PerfOverlay.ShowPostFGFrameTimeGraph;
+	perfOverlayState.hasGraphs = 
+		(settings.PerfOverlay.ShowPreFGFrameTimeGraph && 
+			(!perfOverlayState.isFrameGenerationActive || 
+			(perfOverlayState.isFrameGenerationActive && settings.PerfOverlay.ShowPreFGFPS))) || 
+		(settings.PerfOverlay.ShowPostFGFrameTimeGraph && 
+			perfOverlayState.isFrameGenerationActive && 
+			settings.PerfOverlay.ShowPostFGFPS);
 	if (!perfOverlayState.hasGraphs) {
 		float fixedWidth = 325.0f * perfOverlayState.textScale;
 		ImGui::SetNextWindowSize(ImVec2(fixedWidth, 0), ImGuiCond_Always);
