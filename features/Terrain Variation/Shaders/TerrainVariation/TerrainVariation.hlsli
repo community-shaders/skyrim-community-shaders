@@ -134,7 +134,7 @@ inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV)
 // Ultra-cheap stochastic sampling - 1 texture sample with hash-based offset variation
 inline float4 StochasticSampleLow(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsetsLow, float2 dx, float2 dy)
 {
-	// Single texture sample with stochastic offset - no blending, maximum performance
+	// Single texture sample with stochastic offset.
 	return tex.SampleLevel(samp, uv + offsetsLow.offset1, mipLevel);
 }
 
@@ -202,10 +202,17 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 {
 	// Distance-based LOD with smooth transition
 	float distanceFactor = saturate((distance - DISTANCE_LOD_THRESHOLD) / DISTANCE_LOD_TRANSITION);
-		// Low sample (always computed for transition)
+	
+	// Early exit for distant terrain - avoid computing high quality samples that would be discarded
+	if (distanceFactor >= 0.999)
+	{
+		return StochasticSampleLow(rnd, mipLevel, tex, samp, uv, offsets, dx, dy);
+	}
+	
+	// Low sample (always computed for partial transition)
 	float4 lowSample = StochasticSampleLow(rnd, mipLevel, tex, samp, uv, offsets, dx, dy);
 	
-	// Full quality path for near terrain
+	// Only do expensive computation if we're going to use at least some of it
 	// Apply contrast to the initial blend weights (without height influence)
 	float3 blendWeights = pow(saturate(offsets.weights), HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE));
 
