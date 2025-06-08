@@ -15,7 +15,7 @@ struct Feature
 	virtual bool HasShaderDefine(RE::BSShader::Type) { return false; }
 	/**
 	 * Whether the feature supports VR.
-	 * 
+	 *
 	 * \return true if VR supported; else false
 	 */
 	virtual bool SupportsVR() { return false; }
@@ -44,7 +44,7 @@ struct Feature
 	virtual void DrawSettings() {}
 	virtual void DrawUnloadedUI() {}
 
-	virtual void ReflectionsPrepass(){};
+	virtual void ReflectionsPrepass() {};
 	virtual void Prepass() {}
 	virtual void EarlyPrepass() {}
 

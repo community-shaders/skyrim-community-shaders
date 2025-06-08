@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Utils/Serialize.h"
 #include <dxgi1_4.h>
 
 using namespace std::chrono;
@@ -39,6 +40,7 @@ public:
 	void Init();
 	void DrawSettings();
 	void DrawOverlay();
+	void DrawPerfOverlay();
 
 	void ProcessInputEvents(RE::InputEvent* const* a_events);
 	bool ShouldSwallowInput();
@@ -143,6 +145,34 @@ public:
 		uint32_t SkipCompilationKey = VK_ESCAPE;
 		uint32_t EffectToggleKey = VK_MULTIPLY;  // toggle all effects
 		ThemeSettings Theme;
+
+		struct PerfOverlaySettings
+		{
+			bool Enabled = false;
+			bool ShowDrawCalls = true;
+			bool ShowVRAM = true;
+			bool ShowFPS = true;
+			bool ShowPreFGFrameTime = true;
+			bool ShowPreFGFrameTimeGraph = true;
+			bool ShowPreFGFPS = true;
+			bool ShowPostFGFPS = true;
+			bool ShowPostFGFrameTime = true;
+			bool ShowPostFGFrameTimeGraph = true;
+			float UpdateInterval = 0.5f;
+			enum class TextSize
+			{
+				Small,
+				Medium,
+				Large
+			};
+			TextSize Size = TextSize::Medium;
+
+			float BackgroundOpacity = 0.5f;
+			bool ShowBorder = true;
+			ImVec2 Position = ImVec2(10.f, 10.f);
+			bool PositionSet = false;
+			uint32_t OverlayToggleKey = VK_F10;
+		} PerfOverlay;
 	};
 
 private:
@@ -154,6 +184,7 @@ private:
 	bool settingToggleKey = false;
 	bool settingSkipCompilationKey = false;
 	bool settingsEffectsToggle = false;
+	bool settingOverlayToggleKey = false;
 	uint32_t testInterval = 0;     // Seconds to wait before toggling user/test settings
 	bool inTestMode = false;       // Whether we're in test mode
 	bool usingTestConfig = false;  // Whether we're using the test config
@@ -170,6 +201,7 @@ private:
 	void DrawDisplaySettings();
 	void DrawDisableAtBootSettings();
 	void DrawFooter();
+	void DrawPerformanceOverlaySettings();
 
 	class CharEvent : public RE::InputEvent
 	{

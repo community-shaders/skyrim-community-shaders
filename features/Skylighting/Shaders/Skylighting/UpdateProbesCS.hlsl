@@ -8,8 +8,7 @@ RWTexture3D<uint> outAccumFramesArray : register(u1);
 
 SamplerComparisonState comparisonSampler : register(s0);
 
-[numthreads(8, 8, 1)] void main(uint3 dtid
-								: SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void main(uint3 dtid : SV_DispatchThreadID) {
 	const float fadeInThreshold = 15;
 	const static sh2 unitSH = float4(sqrt(4.0 * Math::PI), 0, 0, 0);
 	const SharedData::SkylightingSettings settings = SharedData::skylightingSettings;

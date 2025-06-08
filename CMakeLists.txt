@@ -52,11 +52,25 @@ target_compile_definitions(
 	"$<$<BOOL:${TRACY_SUPPORT}>:TRACY_SUPPORT>"
 )
 
+file(GLOB FEATURE_SHADER_DIRS
+    RELATIVE "${CMAKE_SOURCE_DIR}"
+    "${CMAKE_SOURCE_DIR}/features/*/Shaders"
+)
+
+foreach(_dir IN LISTS FEATURE_SHADER_DIRS)
+    target_include_directories(
+        ${PROJECT_NAME}
+        PRIVATE
+          "${CMAKE_SOURCE_DIR}/${_dir}"
+    )
+endforeach()
+
 target_include_directories(
 	${PROJECT_NAME}
 	PRIVATE
 	${BSHOSHANY_THREAD_POOL_INCLUDE_DIRS}
 	${CLIB_UTIL_INCLUDE_DIRS}
+	"${CMAKE_SOURCE_DIR}/package/Shaders"
 )
 
 target_link_libraries(
@@ -202,7 +216,7 @@ if(AUTO_PLUGIN_DEPLOYMENT)
 			copy_shaders.stamp
 			${DEPLOY_TARGET_HASHES}
 	)
-	
+
 	if(NOT DEFINED ENV{CommunityShadersOutputDir})
 		message("When using AUTO_PLUGIN_DEPLOYMENT option, you need to set environment variable 'CommunityShadersOutputDir'")
 	endif()

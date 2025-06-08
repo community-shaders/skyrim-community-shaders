@@ -12,9 +12,24 @@ void InteriorSunShadows::DrawSettings()
 	ImGui::Checkbox("Force Double-Sided Rendering", &settings.ForceDoubleSidedRendering);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
-			"Forces double-sided vertices during sun shadowmap rendering on interiors. "
+			"Disables backface culling during sun shadowmap rendering in interiors. "
 			"Will prevent most light leaking through unmasked/unprepared interiors at a small performance cost. ");
 	}
+}
+
+void InteriorSunShadows::LoadSettings(json& o_json)
+{
+	settings = o_json;
+}
+
+void InteriorSunShadows::SaveSettings(json& o_json)
+{
+	o_json = settings;
+}
+
+void InteriorSunShadows::RestoreDefaultSettings()
+{
+	settings = {};
 }
 
 void InteriorSunShadows::PostPostLoad()
@@ -74,14 +89,18 @@ void InteriorSunShadows::DirShadowLightCulling::thunk(RE::BSShadowDirectionalLig
 	const auto cell = globals::game::tes->interiorCell;
 	auto* passedJobArrays = &jobArrays;
 
-	if (!cell) {
-		singleton->ClearArrays();
-	} else {
-		const auto portalGraph = cell->GetRuntimeData().loadedData->portalGraph;
-		if (singleton->isInteriorWithSun && portalGraph) {
+	if (cell && singleton->isInteriorWithSun) {
+		const auto* loadedData = cell->GetRuntimeData().loadedData;
+		const auto portalGraph = loadedData ? loadedData->portalGraph : nullptr;
+		if (portalGraph) {
 			singleton->PopulateReplacementJobArrays(cell, portalGraph, dirLight, jobArrays);
 			passedJobArrays = &singleton->replacementJobArrays;
-		}
+		} else
+			singleton->currentCell = nullptr;
+	} else {
+		if (!singleton->arraysCleared)
+			singleton->ClearArrays();
+		singleton->currentCell = nullptr;
 	}
 
 	func(dirLight, *passedJobArrays, nodes);
@@ -89,9 +108,6 @@ void InteriorSunShadows::DirShadowLightCulling::thunk(RE::BSShadowDirectionalLig
 
 void InteriorSunShadows::ClearArrays()
 {
-	if (arraysCleared)
-		return;
-
 	currentCellRoomsAndPortals.clear();
 
 	for (auto& jobArray : replacementJobArrays)
