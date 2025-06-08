@@ -202,16 +202,16 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 {
 	// Distance-based LOD with smooth transition
 	float distanceFactor = saturate((distance - DISTANCE_LOD_THRESHOLD) / DISTANCE_LOD_TRANSITION);
-	
+
 	// Early exit for distant terrain - avoid computing high quality samples that would be discarded
 	if (distanceFactor >= 0.999)
 	{
 		return StochasticSampleLow(rnd, mipLevel, tex, samp, uv, offsets, dx, dy);
 	}
-	
+
 	// Low sample (always computed for partial transition)
 	float4 lowSample = StochasticSampleLow(rnd, mipLevel, tex, samp, uv, offsets, dx, dy);
-	
+
 	// Only do expensive computation if we're going to use at least some of it
 	// Apply contrast to the initial blend weights (without height influence)
 	float3 blendWeights = pow(saturate(offsets.weights), HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE));
@@ -222,7 +222,7 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
-	
+
 	// Apply height-based weight adjustments
 	float3x3 rgbMatrix = float3x3(sample1.rgb, sample2.rgb, sample3.rgb);
 	float3 luminanceHeights = mul(rgbMatrix, LUMINANCE_WEIGHTS);

@@ -1273,10 +1273,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(TRUE_PBR)
 	float4 blendedRMAOS = 0;
 #		endif
-	
+
 	// Calculate view distance once for terrain optimizations
 	float distance = length(viewPosition);
-	
+
 	// Compute stochastic offsets and derivatives once for all layers (only when terrain variation is enabled)
 #		if defined(TERRAIN_VARIATION)
 	bool useTerrainVariation = SharedData::terrainVariationSettings.enableTilingFix;
@@ -1325,7 +1325,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		displacementParams[4].HeightScale *= LandscapeTexture5PBRParams.y;
 		displacementParams[5].HeightScale *= LandscapeTexture6PBRParams.y;
 #			endif
-		
+
 float weights[6];
 #		if defined(TERRAIN_VARIATION)
 		// Use stochastic parallax system for terrain variation when enabled
