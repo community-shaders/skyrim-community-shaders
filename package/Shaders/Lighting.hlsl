@@ -1273,10 +1273,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(TRUE_PBR)
 	float4 blendedRMAOS = 0;
 #		endif
-
+	
 	// Calculate view distance once for terrain optimizations
 	float distance = length(viewPosition);
-
+	
 	// Compute stochastic offsets and derivatives once for all layers (only when terrain variation is enabled)
 #		if defined(TERRAIN_VARIATION)
 	bool useTerrainVariation = SharedData::terrainVariationSettings.enableTilingFix;
@@ -1325,21 +1325,19 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		displacementParams[4].HeightScale *= LandscapeTexture5PBRParams.y;
 		displacementParams[5].HeightScale *= LandscapeTexture6PBRParams.y;
 #			endif
-
-float weights[6];
-#		if defined(TERRAIN_VARIATION)
-		// Use stochastic parallax system for terrain variation when enabled
+		float weights[6];
+#			if defined(TERRAIN_VARIATION)
 		[branch] if (useTerrainVariation)
 		{
-			uv = ExtendedMaterials::GetStochasticParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, sharedOffset, dx, dy, pixelOffset, weights);
+			uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, sharedOffset, dx, dy, pixelOffset, weights);
 		}
 		else
 		{
 			uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, pixelOffset, weights);
 		}
-#		else
+#			else
 		uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, pixelOffset, weights);
-#		endif
+#			endif
 
 		if (SharedData::extendedMaterialSettings.EnableHeightBlending) {
 			input.LandBlendWeights1.x = weights[0];
@@ -1350,20 +1348,18 @@ float weights[6];
 			input.LandBlendWeights2.y = weights[5];
 		}
 		if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows)) {
-			float weights[6];
-#		if defined(TERRAIN_VARIATION)
-			// Use stochastic terrain height system for terrain variation when enabled
+#			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
-				sh0 = ExtendedMaterials::GetStochasticTerrainHeight(input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, weights);
+				sh0 = ExtendedMaterials::GetTerrainHeight(screenNoise, input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, weights);
 			}
 			else
 			{
 				sh0 = ExtendedMaterials::GetTerrainHeight(input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, weights);
 			}
-#		else
-			sh0 = ExtendedMaterials::GetTerrainHeight(input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, weights);
-#		endif
+#			else
+			sh0 = ExtendedMaterials::GetTerrainHeight(screenNoise, input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, weights);
+#			endif
 		}
 	}
 #		endif  // EMAT
@@ -2418,34 +2414,26 @@ float weights[6];
 		float3 dirLightDirectionTS = mul(refractedDirLightDirection, tbn).xyz;
 #		if defined(LANDSCAPE)
 		[branch] if (SharedData::extendedMaterialSettings.EnableTerrainParallax)
-		{		float weights[6];
-#		if defined(TERRAIN_VARIATION)
-			// Use stochastic terrain height system for terrain variation when enabled
+		{
+#			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
-				sh0 = ExtendedMaterials::GetStochasticTerrainHeight(input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, weights);
-			}
-			else
-			{
-				sh0 = ExtendedMaterials::GetTerrainHeight(input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, weights);
-			}
-#		else
-			sh0 = ExtendedMaterials::GetTerrainHeight(input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, weights);
-#		endif
+				float weights[6];
+				sh0 = ExtendedMaterials::GetTerrainHeight(screenNoise, input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, weights);
 
-#		if defined(TERRAIN_VARIATION)
-			// Use stochastic parallax soft shadow system for terrain variation when enabled
-			[branch] if (useTerrainVariation)
-			{
-				parallaxShadow = ExtendedMaterials::GetStochasticParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, dirLightDirectionTS, sh0, parallaxShadowQuality, screenNoise, displacementParams, sharedOffset, dx, dy);
+				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, dirLightDirectionTS, sh0, parallaxShadowQuality, screenNoise, displacementParams, sharedOffset, dx, dy);
 			}
 			else
 			{
+				float weights[6];
+				sh0 = ExtendedMaterials::GetTerrainHeight(input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, weights);
+
 				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, dirLightDirectionTS, sh0, parallaxShadowQuality, screenNoise, displacementParams);
 			}
-#		else
+#			else
+			// Standard terrain parallax shadow without stochastic sampling
 			parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, dirLightDirectionTS, sh0, parallaxShadowQuality, screenNoise, displacementParams);
-#		endif
+#			endif
 		}
 #		elif defined(PARALLAX)
 		[branch] if (SharedData::extendedMaterialSettings.EnableParallax)
