@@ -197,15 +197,18 @@ private:
 	public:
 		std::vector<float> frameTimeHistory;
 		std::vector<float> postFGFrameTimeHistory;
+		bool initialized = false;
 		bool hasGraphs = false;
 		int frameTimeHistoryIndex = 0;
 		int postFGFrameTimeHistoryIndex = 0;
 		bool isFrameGenerationActive = false;
-		uint64_t frequency;
-		uint64_t lastFrameCounter;
-		uint64_t currentFrameCounter;
+		int64_t frequency;
+		int64_t lastFrameCounter;
+		int64_t currentFrameCounter;
 		float frameTimeMs = 0.0f;
 		float fps = 0.0f;
+		float postFGFrameTimeMs = 0.0f;
+		float postFGFps = 0.0f;
 		float smoothFps = 0.0f;
 		float smoothFrameTimeMs = 0.0f;
 		float postFGSmoothFps = 0.0f;

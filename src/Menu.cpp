@@ -1264,50 +1264,47 @@ void Menu::DrawPerfOverlay()
 	ImGui::SetWindowFontScale(perfOverlayState.textScale);
 
 	// Initialize Performance Counter if necessary
-	if (perfOverlayState.frequency == 0) {
-		LARGE_INTEGER temp;  // LARGE_INTEGER is required for called QueryPerformanceCounter
-		QueryPerformanceFrequency(&temp);
-		perfOverlayState.frequency = temp.QuadPart;
-		QueryPerformanceCounter(&temp);
-		perfOverlayState.lastFrameCounter = temp.QuadPart;
+	if (!perfOverlayState.initialized) {
+		REX::W32::QueryPerformanceFrequency(&perfOverlayState.frequency);
+		REX::W32::QueryPerformanceCounter(&perfOverlayState.lastFrameCounter);
+		perfOverlayState.initialized = true;
 	}
+	else {
+		REX::W32::QueryPerformanceCounter(&perfOverlayState.currentFrameCounter);
+		int64_t elapsedCounter = perfOverlayState.currentFrameCounter - perfOverlayState.lastFrameCounter;
+		perfOverlayState.lastFrameCounter = perfOverlayState.currentFrameCounter;
 
-	LARGE_INTEGER temp;
-	QueryPerformanceCounter(&temp);
-	perfOverlayState.currentFrameCounter = temp.QuadPart;
-	int64_t elapsedCounter = perfOverlayState.currentFrameCounter - perfOverlayState.lastFrameCounter;
-	perfOverlayState.lastFrameCounter = perfOverlayState.currentFrameCounter;
+		// Calculate frametime and fps
+		perfOverlayState.frameTimeMs = Util::performanceOverlay.CalcFrameTime(elapsedCounter, perfOverlayState.frequency);
+		perfOverlayState.fps = Util::performanceOverlay.CalcFPS(perfOverlayState.frameTimeMs);
 
-	// Calculate frametime and fps
-	perfOverlayState.frameTimeMs = Util::performanceOverlay.CalcFrameTime(elapsedCounter, perfOverlayState.frequency);
-	perfOverlayState.fps = Util::performanceOverlay.CalcFPS(perfOverlayState.frameTimeMs);
+		// Calculate smooth values for display using the user-defined update interval
+		auto now = std::chrono::steady_clock::now();
+		float deltaTime = std::chrono::duration<float>(now - perfOverlayState.lastUpdateTime).count();
+		perfOverlayState.lastUpdateTime = now;
 
-	// Calculate smooth values for display using the user-defined update interval
-	auto now = std::chrono::steady_clock::now();
-	float deltaTime = std::chrono::duration<float>(now - perfOverlayState.lastUpdateTime).count();
-	perfOverlayState.lastUpdateTime = now;
+		// Update graph values
+		perfOverlayState.UpdateGraphValues(settings.PerfOverlay);
 
-	// Update graph values
-	perfOverlayState.UpdateGraphValues(settings.PerfOverlay);
+		// Update smooth values with user-specified interval
+		perfOverlayState.updateTimer += deltaTime;
+		if (perfOverlayState.updateTimer >= settings.PerfOverlay.UpdateInterval) {
+			perfOverlayState.smoothFps = perfOverlayState.fps;
+			perfOverlayState.smoothFrameTimeMs = perfOverlayState.frameTimeMs;
+			perfOverlayState.updateTimer = 0.0f;
+		}
 
-	// Update smooth values with user-specified interval
-	perfOverlayState.updateTimer += deltaTime;
-	if (perfOverlayState.updateTimer >= settings.PerfOverlay.UpdateInterval) {
-		perfOverlayState.smoothFps = perfOverlayState.fps;
-		perfOverlayState.smoothFrameTimeMs = perfOverlayState.frameTimeMs;
-		perfOverlayState.updateTimer = 0.0f;
-	}
+		// Check if Frame Generation is active
+		perfOverlayState.isFrameGenerationActive = globals::upscaling && globals::upscaling->IsFrameGenerationActive();
 
-	// Check if Frame Generation is active
-	perfOverlayState.isFrameGenerationActive = globals::upscaling && globals::upscaling->IsFrameGenerationActive();
+		if (perfOverlayState.isFrameGenerationActive) {
+			perfOverlayState.UpdateFGFrameTime(settings.PerfOverlay);
+		}
 
-	if (perfOverlayState.isFrameGenerationActive) {
-		perfOverlayState.UpdateFGFrameTime(settings.PerfOverlay);
-	}
-
-	// Show FPS counter if enabled
-	if (settings.PerfOverlay.ShowFPS) {
-		perfOverlayState.DrawFPS(settings.PerfOverlay);
+		// Show FPS counter if enabled
+		if (settings.PerfOverlay.ShowFPS) {
+			perfOverlayState.DrawFPS(settings.PerfOverlay);
+		}
 	}
 
 	// Show Draw Calls if enabled
@@ -1445,8 +1442,6 @@ void Menu::PerfOverlayState::UpdateMaxFrameTime()
  */
 void Menu::PerfOverlayState::UpdateFGFrameTime(Settings::PerfOverlaySettings& settings)
 {
-    float postFGFrameTimeMs = 0.0f;
-    float postFGFps = 0.0f;
     // Get frametime directly from the Frame Generation system
     float fgDeltaTime = globals::upscaling->GetFrameGenerationFrameTime();
     if (fgDeltaTime > 0.0f) {
