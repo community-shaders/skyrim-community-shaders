@@ -41,10 +41,6 @@ namespace ExtendedMaterials
 		float2 textureDims;
 		tex.GetDimensions(textureDims.x, textureDims.y);
 
-		#if !defined(TERRAIN_VARIATION)
-				textureDims /= 2.0;
-		#endif
-
 		#if !defined(PARALLAX) && !defined(TRUE_PBR)
 				textureDims /= 2.0;
 		#endif
@@ -66,6 +62,7 @@ namespace ExtendedMaterials
 
 			// Compute the current mip level  (* 0.5 is effectively computing a square root before )
 			float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
+
 		#if !defined(PARALLAX) && !defined(TRUE_PBR)
 				mipLevel++;
 		#endif
