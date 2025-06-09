@@ -72,6 +72,7 @@ struct ScreenSpaceReflections : Feature
     eastl::unique_ptr<ConstantBuffer> spdCB;
     
     void DrawSSR();
+    virtual void Prepass() override;
 
     eastl::unique_ptr<Texture2D> texDepth = nullptr;
     eastl::unique_ptr<Texture2D> texColor = nullptr;

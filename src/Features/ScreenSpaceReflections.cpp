@@ -225,6 +225,110 @@ void ScreenSpaceReflections::CompileComputeShaders()
     }
 }
 
+void ScreenSpaceReflections::Prepass()
+{
+    auto renderer = globals::game::renderer;
+    auto context = globals::d3d::context;
+    auto state = globals::state;
+
+    auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+
+    float2 size = Util::ConvertToDynamic(state->screenSize);
+    float2 dispatchCount = { (size.x + 7) / 8, (size.y + 7) / 8 };
+
+    // SPDCB spdCBData;
+    // {
+    //     spdCBData.numMips = maxMips;
+    //     spdCBData.srcDimensions[0] = (uint)size.x;
+    //     spdCBData.srcDimensions[1] = (uint)size.y;
+    //     spdCBData.workGroupOffset[0] = 0;
+    //     spdCBData.workGroupOffset[1] = 0;
+    //     spdCBData.numWorkGroups = 256;
+    //     spdCBData.slice = 0; // unused
+    //     spdCBData._padding = 0; // padding
+    // }
+    // spdCB->Update(spdCBData);
+    // auto spdBuffer = spdCB->CB();
+    // context->CSSetConstantBuffers(2, 1, &spdBuffer);
+
+    std::array<ID3D11ShaderResourceView*, 7> srvs = { nullptr };
+	std::array<ID3D11UnorderedAccessView*, 2> uavs = { nullptr };
+
+    auto resetViews = [&]() {
+		srvs.fill(nullptr);
+		uavs.fill(nullptr);
+
+		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+	};
+
+    std::array<ID3D11SamplerState*, 1> samplers = { linearSampler.get() };
+    context->CSSetSamplers(0, 1, samplers.data());
+
+    state->BeginPerfEvent("SSR Prepass");
+
+    // preprocess depth
+    {
+        uavs.at(0) = texDepth->uav.get();
+        srvs.at(4) = depth.depthSRV;
+
+        context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+        context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+        context->CSSetShader(preprocessDepthCS.get(), nullptr, 0);
+
+        context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
+
+        context->GenerateMips(texDepth->srv.get());
+        context->GenerateMips(texColor->srv.get());
+
+        resetViews();
+    }
+
+    // spd
+    // state->BeginPerfEvent("SPD");
+
+    // std::array<ID3D11UnorderedAccessView*, maxMips - 1> uavsSPD = { nullptr };
+    // for (int i = 0; i < maxMips - 1; ++i) {
+    //     uavsSPD.at(i) = depthUAVs[i + 1].get();
+    // }
+    // srvs.at(5) = depthSRVs[0].get();
+
+    // context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+    // context->CSSetUnorderedAccessViews(0, (uint)uavsSPD.size(), uavsSPD.data(), nullptr);
+    // context->CSSetShader(spdCS.get(), nullptr, 0);
+
+    // context->Dispatch((uint)dispatchCount.x >> 2, (uint)dispatchCount.y >> 2, 1);
+
+    // srvs.fill(nullptr);
+    // uavsSPD.fill(nullptr);
+    // context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+    // context->CSSetUnorderedAccessViews(0, (uint)uavsSPD.size(), uavsSPD.data(), nullptr);
+
+    // state->EndPerfEvent();
+    // resetViews();
+
+    // downsample depth
+    {
+        state->BeginPerfEvent("Downsample Depth - HiZ Buffer");
+        for (int i = 0; i < maxMips - 1; ++i) {
+            uavs.at(0) = depthUAVs[i + 1].get();
+            srvs.at(0) = depthSRVs[i].get();
+
+            context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+            context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+            context->CSSetShader(depthDownsampleCS.get(), nullptr, 0);
+
+            context->Dispatch((uint)dispatchCount.x >> i, (uint)dispatchCount.y >> i, 1);
+            resetViews();
+        }
+        state->EndPerfEvent();
+    }
+
+    state->EndPerfEvent();
+
+    context->PSSetShaderResources(99, 1, &texDepth->srv.get());
+}
+
 void ScreenSpaceReflections::DrawSSR()
 {
     if (!settings.Enabled)
@@ -234,7 +338,7 @@ void ScreenSpaceReflections::DrawSSR()
     auto context = globals::d3d::context;
     auto state = globals::state;
 
-    state->BeginPerfEvent("SSR");
+    state->BeginPerfEvent("SSR Compute");
 
     auto main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
     auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
@@ -264,21 +368,6 @@ void ScreenSpaceReflections::DrawSSR()
     auto buffer = ssrCB->CB();
     context->CSSetConstantBuffers(1, 1, &buffer);
 
-    SPDCB spdCBData;
-    {
-        spdCBData.numMips = maxMips;
-        spdCBData.srcDimensions[0] = (uint)size.x;
-        spdCBData.srcDimensions[1] = (uint)size.y;
-        spdCBData.workGroupOffset[0] = 0;
-        spdCBData.workGroupOffset[1] = 0;
-        spdCBData.numWorkGroups = 256;
-        spdCBData.slice = 0; // unused
-        spdCBData._padding = 0; // padding
-    }
-    spdCB->Update(spdCBData);
-    auto spdBuffer = spdCB->CB();
-    context->CSSetConstantBuffers(2, 1, &spdBuffer);
-
     std::array<ID3D11ShaderResourceView*, 7> srvs = { nullptr };
 	std::array<ID3D11UnorderedAccessView*, 2> uavs = { nullptr };
 
@@ -307,63 +396,6 @@ void ScreenSpaceReflections::DrawSSR()
     context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
 
     resetViews();
-
-    // preprocess depth
-    uavs.at(0) = texDepth->uav.get();
-    srvs.at(0) = main.SRV;
-    srvs.at(1) = specular.SRV;
-    srvs.at(2) = normal.SRV;
-    srvs.at(3) = texColor->srv.get();
-    srvs.at(4) = depth.depthSRV;
-
-    context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-    context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-    context->CSSetShader(preprocessDepthCS.get(), nullptr, 0);
-
-    context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
-
-    context->GenerateMips(texDepth->srv.get());
-    context->GenerateMips(texColor->srv.get());
-
-    resetViews();
-
-    // spd
-    // state->BeginPerfEvent("SPD");
-
-    // std::array<ID3D11UnorderedAccessView*, maxMips - 1> uavsSPD = { nullptr };
-    // for (int i = 0; i < maxMips - 1; ++i) {
-    //     uavsSPD.at(i) = depthUAVs[i + 1].get();
-    // }
-    // srvs.at(5) = depthSRVs[0].get();
-
-    // context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-    // context->CSSetUnorderedAccessViews(0, (uint)uavsSPD.size(), uavsSPD.data(), nullptr);
-    // context->CSSetShader(spdCS.get(), nullptr, 0);
-
-    // context->Dispatch((uint)dispatchCount.x >> 2, (uint)dispatchCount.y >> 2, 1);
-
-    // srvs.fill(nullptr);
-    // uavsSPD.fill(nullptr);
-    // context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-    // context->CSSetUnorderedAccessViews(0, (uint)uavsSPD.size(), uavsSPD.data(), nullptr);
-
-    // state->EndPerfEvent();
-    // resetViews();
-
-    // downsample depth
-    state->BeginPerfEvent("Downsample Depth");
-    for (int i = 0; i < maxMips - 1; ++i) {
-        uavs.at(0) = depthUAVs[i + 1].get();
-        srvs.at(0) = depthSRVs[i].get();
-
-        context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-        context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-        context->CSSetShader(depthDownsampleCS.get(), nullptr, 0);
-
-        context->Dispatch((uint)dispatchCount.x >> i, (uint)dispatchCount.y >> i, 1);
-        resetViews();
-    }
-    state->EndPerfEvent();
 
     // raymarch
     state->BeginPerfEvent("Raymarch");
