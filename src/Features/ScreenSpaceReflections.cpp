@@ -278,8 +278,7 @@ void ScreenSpaceReflections::Prepass()
 
         context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
 
-        context->GenerateMips(texDepth->srv.get());
-        context->GenerateMips(texColor->srv.get());
+        // context->GenerateMips(texDepth->srv.get());
 
         resetViews();
     }
@@ -326,7 +325,8 @@ void ScreenSpaceReflections::Prepass()
 
     state->EndPerfEvent();
 
-    context->PSSetShaderResources(99, 1, &texDepth->srv.get());
+    auto view = texDepth->srv.get();
+    context->PSSetShaderResources(99, 1, &view);
 }
 
 void ScreenSpaceReflections::DrawSSR()
