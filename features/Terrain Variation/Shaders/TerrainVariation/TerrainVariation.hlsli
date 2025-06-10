@@ -156,16 +156,27 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 
 	// Early exit for distant terrain - avoid expensive computation
-	if (distanceFactor >= 0.9)
+	if (distanceFactor >= 0.7)
 	{
-		return sample1;
+		return sample1; // Miplevel at this distance should entirely hide any triangular artifacts.
 	}
 
 	// Take remaining samples for blending
 	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
 
-	// Pre-compute contrast factor
+	// Early exit for mid-distance - skip expensive height blending
+	if (distanceFactor >= 0.4)
+	{
+		// Simple barycentric blend without height influence
+		float3 weights = saturate(offsets.weights);
+		float rcpWeightSum = rcp(weights.x + weights.y + weights.z);
+		weights *= rcpWeightSum;
+		float4 simpleSample = sample1 * weights.x + sample2 * weights.y + sample3 * weights.z;
+		return lerp(simpleSample, sample1, distanceFactor);
+	}
+
+	// Full height-based blending for close terrain
 	float contrastFactor = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE);
 	float3 blendWeights = pow(saturate(offsets.weights), contrastFactor);
 
