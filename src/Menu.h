@@ -159,9 +159,9 @@ public:
 			bool ShowPostFGFrameTime = true;
 			bool ShowPostFGFrameTimeGraph = true;
 			float UpdateInterval = 0.5f;
-			int FrameHistorySize = 120; // Default 120 frames = 2s @ 60fps. Clamped using static values to prevent config file values going outside of slider bounds.
-			static constexpr int kMinFrameHistorySize = 60;	// 60 frames = 1s @ 60fps. Reasonable minimum.
-			static constexpr int kMaxFrameHistorySize = 480; // 480 frames = 10s @ 60fps or 2s @ 240fps. Reasonable maximum.
+			int FrameHistorySize = 120;                       // Default 120 frames = 2s @ 60fps. Clamped using static values to prevent config file values going outside of slider bounds.
+			static constexpr int kMinFrameHistorySize = 60;   // 60 frames = 1s @ 60fps. Reasonable minimum.
+			static constexpr int kMaxFrameHistorySize = 480;  // 480 frames = 10s @ 60fps or 2s @ 240fps. Reasonable maximum.
 			enum class TextSize
 			{
 				Small,
