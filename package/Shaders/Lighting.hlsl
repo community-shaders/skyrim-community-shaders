@@ -1288,7 +1288,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		dx = ddx(input.TexCoord0.zw);
 		dy = ddy(input.TexCoord0.zw);
 		sharedOffset = ComputeStochasticOffsets(input.TexCoord0.zw);
-		sharedOffset2 = ComputeStochasticOffsets2(input.TexCoord0.zw);
 	}
 #		endif
 // Calculate mip levels for terrain variation when parallax is disabled
