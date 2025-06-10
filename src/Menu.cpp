@@ -786,10 +786,6 @@ void Menu::DrawAdvancedSettings()
 		if (ImGui::Checkbox("Dump Shaders", &useDump)) {
 			shaderCache->SetDump(useDump);
 		}
-		ImGui::SameLine();
-		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
-		ImGui::Text("(?)");
-		ImGui::PopStyleColor();
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Dump shaders at startup. This should be used only when reversing shaders. Normal users don't need this.");
 		}
@@ -808,10 +804,6 @@ void Menu::DrawAdvancedSettings()
 			ImGui::SameLine();
 			globals::state->SetLogLevel(static_cast<spdlog::level::level_enum>(item_current));
 		}
-		ImGui::SameLine();
-		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
-		ImGui::Text("(?)");
-		ImGui::PopStyleColor();
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Log level. Trace is most verbose. Default is info.");
 		}
@@ -826,29 +818,17 @@ void Menu::DrawAdvancedSettings()
 			globals::state->SetDefines(shaderDefines);
 			shaderCache->Clear();
 		}
-		ImGui::SameLine();
-		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
-		ImGui::Text("(?)");
-		ImGui::PopStyleColor();
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Defines for Shader Compiler. Semicolon \";\" separated. Clear with space. Rebuild shaders after making change. Compute Shaders require a restart to recompile.");
 		}
 		ImGui::Spacing();
 		ImGui::SliderInt("Compiler Threads", &shaderCache->compilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()));
-		ImGui::SameLine();
-		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
-		ImGui::Text("(?)");
-		ImGui::PopStyleColor();
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
 				"Number of threads to use to compile shaders. "
 				"The more threads the faster compilation will finish but may make the system unresponsive. ");
 		}
 		ImGui::SliderInt("Background Compiler Threads", &shaderCache->backgroundCompilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()));
-		ImGui::SameLine();
-		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
-		ImGui::Text("(?)");
-		ImGui::PopStyleColor();
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
 				"Number of threads to use to compile shaders while playing game. "
@@ -869,10 +849,6 @@ void Menu::DrawAdvancedSettings()
 				logger::info("Setting new interval {}.", testInterval);
 			}
 		}
-		ImGui::SameLine();
-		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
-		ImGui::Text("(?)");
-		ImGui::PopStyleColor();
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
 				"Sets number of seconds before toggling between default USER and TEST config. "
@@ -885,10 +861,6 @@ void Menu::DrawAdvancedSettings()
 		if (ImGui::Checkbox("Enable File Watcher", &useFileWatcher)) {
 			shaderCache->SetFileWatcher(useFileWatcher);
 		}
-		ImGui::SameLine();
-		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
-		ImGui::Text("(?)");
-		ImGui::PopStyleColor();
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
 				"Automatically recompile shaders on file change. "
@@ -903,10 +875,6 @@ void Menu::DrawAdvancedSettings()
 			if (ImGui::Button(blockingButtonString.c_str(), { -1, 0 })) {
 				shaderCache->DisableShaderBlocking();
 			}
-			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
-			ImGui::Text("(?)");
-			ImGui::PopStyleColor();
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text(
 					"Stop blocking Community Shaders shader. "
@@ -947,10 +915,6 @@ void Menu::DrawAdvancedSettings()
 			}
 			if (state->IsDeveloperMode()) {
 				ImGui::Checkbox("Vertex", &state->enableVShaders);
-				ImGui::SameLine();
-				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
-				ImGui::Text("(?)");
-				ImGui::PopStyleColor();
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text(
 						"Replace Vertex Shaders. "
@@ -959,10 +923,6 @@ void Menu::DrawAdvancedSettings()
 				}
 
 				ImGui::Checkbox("Pixel", &state->enablePShaders);
-				ImGui::SameLine();
-				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
-				ImGui::Text("(?)");
-				ImGui::PopStyleColor();
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text(
 						"Replace Pixel Shaders. "
@@ -971,10 +931,6 @@ void Menu::DrawAdvancedSettings()
 				}
 
 				ImGui::Checkbox("Compute", &state->enableCShaders);
-				ImGui::SameLine();
-				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
-				ImGui::Text("(?)");
-				ImGui::PopStyleColor();
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text(
 						"Replace Compute Shaders. "
@@ -1799,20 +1755,12 @@ void Menu::DrawPerformanceOverlaySettings()
 
 			// FPS update interval slider - Make this slider affect all FPS and frametime displays
 			ImGui::SliderFloat("Update Interval", &settings.PerfOverlay.UpdateInterval, 0.001f, 2.0f, "%.2f seconds");
-			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-			ImGui::Text("?");
-			ImGui::PopStyleColor();
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("How frequently all performance metrics should update (FPS and frametime)");
 			}
 
 			// Frame history size slider
 			ImGui::SliderInt("Frame History Size", &settings.PerfOverlay.FrameHistorySize, Settings::PerfOverlaySettings::kMinFrameHistorySize, Settings::PerfOverlaySettings::kMaxFrameHistorySize);
-			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-			ImGui::Text("?");
-			ImGui::PopStyleColor();
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Number of frames to keep in history for graphing.\n"
 							"E.g. 60 frames = 1 second @ 60fps.");
@@ -1826,10 +1774,6 @@ void Menu::DrawPerformanceOverlaySettings()
 			if (ImGui::Button("Reset Position")) {
 				settings.PerfOverlay.PositionSet = false;
 			}
-			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-			ImGui::Text("?");
-			ImGui::PopStyleColor();
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Reset the position of the performance overlay to default");
 			}
