@@ -81,5 +81,5 @@ namespace Util
 	/**
 	 * Helper functions for seasons
 	 */
-	RE::BGSTextureSet* GetSeasonalSwap(RE::BGSTextureSet* textureSet);
+	[[nodiscard]] RE::BGSTextureSet* GetSeasonalSwap(RE::BGSTextureSet* textureSet);
 }  // namespace Util

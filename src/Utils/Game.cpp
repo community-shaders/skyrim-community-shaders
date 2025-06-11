@@ -190,9 +190,9 @@ namespace Util
 		}
 
 		if (textureSet->pad12C > 0) {
-			// this texture set was swapped from seasons
-			const auto swapTXST = RE::TESForm::LookupByID(textureSet->pad12C)->As<RE::BGSTextureSet>();
-			return swapTXST;
+			if (auto* form = RE::TESForm::LookupByID<RE::BGSTextureSet>(textureSet->pad12C)) {
+				return form;
+			}
 		}
 
 		return textureSet;
