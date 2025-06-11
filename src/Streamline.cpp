@@ -185,10 +185,15 @@ void Streamline::PostDevice()
 	}
 }
 
+/**
+ * @brief Updates and sets camera and frame constants for the current Streamline frame.
+ *
+ * Populates and submits camera parameters, projection matrices, motion vector settings, and other per-frame constants to the Streamline SDK for the current frame. Uses cached framebuffer data and global state to ensure correct configuration for upscaling and frame generation features.
+ */
 void Streamline::CheckFrameConstants()
 {
 	if (frameChecker.IsNewFrame() && globals::streamline->initialized) {
-		slGetNewFrameToken(frameToken, nullptr);
+		slGetNewFrameToken(frameToken, &globals::state->frameCount);
 
 		auto state = globals::state;
 
@@ -204,15 +209,15 @@ void Streamline::CheckFrameConstants()
 		slConstants.cameraNear = *globals::game::cameraNear;
 		slConstants.cameraFar = *globals::game::cameraFar;
 
-		auto viewMatrix = frameBufferCached.CameraViewInverse.Transpose();
-		auto cameraViewToClip = frameBufferCached.CameraProjUnjittered.Transpose();
+		auto viewMatrix = globals::upscaling->frameBufferCached.CameraViewInverse.Transpose();
+		auto cameraViewToClip = globals::upscaling->frameBufferCached.CameraProjUnjittered.Transpose();
 
 		slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
 		slConstants.cameraPinholeOffset = { 0.f, 0.f };
 		slConstants.cameraRight = { viewMatrix._11, viewMatrix._12, viewMatrix._13 };
 		slConstants.cameraUp = { viewMatrix._21, viewMatrix._22, viewMatrix._23 };
 		slConstants.cameraFwd = { viewMatrix._31, viewMatrix._32, viewMatrix._33 };
-		slConstants.cameraPos = *(sl::float3*)&frameBufferCached.CameraPosAdjust;
+		slConstants.cameraPos = *(sl::float3*)&globals::upscaling->frameBufferCached.CameraPosAdjust;
 		slConstants.cameraViewToClip = *(sl::float4x4*)&cameraViewToClip;
 		slConstants.depthInverted = sl::Boolean::eFalse;
 
@@ -299,6 +304,11 @@ void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl
 	slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
 }
 
+/**
+ * @brief Submits frame resources and markers for DLSS-G frame generation and Reflex latency tracking.
+ *
+ * Updates DLSS-G frame generation mode if needed, sets Reflex simulation and render markers, and binds required resources (depth, motion vectors, HUD-less color, UI) for the current frame to the Streamline SDK. No action is taken if Streamline is uninitialized, DLSS-G is unavailable, VR mode is active, or D3D12 interop is not enabled.
+ */
 void Streamline::Present()
 {
 	if (!initialized || !featureDLSSG || globals::game::isVR || !globals::upscaling->d3d12Interop)
@@ -324,14 +334,8 @@ void Streamline::Present()
 
 	auto state = globals::state;
 
-	// Fake NVIDIA Reflex to prevent DLSSG errors
-	slReflexSetMarker(sl::ReflexMarker::eInputSample, *frameToken);
-	slReflexSetMarker(sl::ReflexMarker::eSimulationStart, *frameToken);
 	slReflexSetMarker(sl::ReflexMarker::eSimulationEnd, *frameToken);
 	slReflexSetMarker(sl::ReflexMarker::eRenderSubmitStart, *frameToken);
-	slReflexSetMarker(sl::ReflexMarker::eRenderSubmitEnd, *frameToken);
-	slReflexSetMarker(sl::ReflexMarker::ePresentStart, *frameToken);
-	slReflexSetMarker(sl::ReflexMarker::ePresentEnd, *frameToken);
 
 	sl::Extent fullExtent{ 0, 0, (uint)state->screenSize.x, (uint)state->screenSize.y };
 
@@ -354,40 +358,15 @@ void Streamline::Present()
 	slSetTag(viewport, inputs, _countof(inputs), globals::d3d::context);
 }
 
+/**
+ * @brief Releases DLSS resources and disables DLSS for the current viewport.
+ *
+ * Sets the DLSS mode to off and frees all DLSS-related resources associated with the viewport.
+ */
 void Streamline::DestroyDLSSResources()
 {
 	sl::DLSSOptions dlssOptions{};
 	dlssOptions.mode = sl::DLSSMode::eOff;
 	slDLSSSetOptions(viewport, dlssOptions);
 	slFreeResources(sl::kFeatureDLSS, viewport);
-}
-
-void Streamline::InstallHooks(ID3D11DeviceContext* a_context)
-{
-	stl::detour_vfunc<14, ID3D11DeviceContext_Map>(a_context);
-	stl::detour_vfunc<15, ID3D11DeviceContext_Unmap>(a_context);
-}
-
-HRESULT Streamline::ID3D11DeviceContext_Map::thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource, D3D11_MAP MapType, UINT MapFlags, D3D11_MAPPED_SUBRESOURCE* pMappedResource)
-{
-	HRESULT hr = func(This, pResource, Subresource, MapType, MapFlags, pMappedResource);
-	if (hr == S_OK) {
-		if (*globals::game::perFrame.get() == pResource)
-			globals::streamline->mappedFrameBuffer = pMappedResource;
-	}
-	return hr;
-}
-
-void Streamline::ID3D11DeviceContext_Unmap::thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource)
-{
-	if (*globals::game::perFrame.get() == pResource && globals::streamline->mappedFrameBuffer)
-		globals::streamline->CacheFramebuffer();
-	func(This, pResource, Subresource);
-}
-
-void Streamline::CacheFramebuffer()
-{
-	auto frameBuffer = (FrameBuffer*)mappedFrameBuffer->pData;
-	frameBufferCached = *frameBuffer;
-	mappedFrameBuffer = nullptr;
 }

@@ -11,8 +11,7 @@ cbuffer PerTechnique : register(b0)
 	int StepIndex : packoffset(c1);
 }
 
-[numthreads(32, 32, 1)] void main(uint3 dispatchID
-								  : SV_DispatchThreadID) {
+[numthreads(32, 32, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
 	float3 previousPosition = (0.5 + float3(dispatchID.xy, StepIndex - 1)) / TextureDimensions.xyz;
 	float previousDensity = DensityTex.SampleLevel(DensitySampler, previousPosition, 0).x;
 	DensityRW[uint3(dispatchID.xy, StepIndex - 1)] = previousDensity;
