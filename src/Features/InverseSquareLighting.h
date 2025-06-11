@@ -16,6 +16,20 @@ struct InverseSquareLighting : Feature
 
 	virtual inline std::string_view GetShaderDefineName() override { return "ISL"; }
 
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Implements physically accurate inverse square falloff for lighting, making light attenuation behave realistically with distance for more natural illumination.",
+			{
+				"Physically accurate light attenuation based on distance",
+				"Automatic radius calculation for optimal performance",
+				"Enhanced light editor for fine-tuning light properties",
+				"Realistic shadow caster handling",
+				"Support for both point and directional lighting"
+			}
+		};
+	}
+
 	inline bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
 	virtual void DrawSettings() override;

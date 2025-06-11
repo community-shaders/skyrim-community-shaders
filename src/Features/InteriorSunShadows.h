@@ -11,6 +11,19 @@ struct InteriorSunShadows : Feature
 
 	virtual inline std::string GetName() override { return "Interior Sun Shadows"; }
 	virtual inline std::string GetShortName() override { return "InteriorSunShadows"; }
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Enables realistic sun shadows inside interior spaces that have openings to the exterior, such as windows and doors, bringing natural lighting indoors.",
+			{
+				"Sun shadow casting through windows and openings",
+				"Double-sided rendering for accurate interior shadows",
+				"Automatic detection of interiors with sun exposure",
+				"Enhanced directional light culling for interiors",
+				"Seamless integration with existing shadow systems"
+			}
+		};
+	}
 	virtual void DrawSettings() override;
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;

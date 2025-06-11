@@ -11,6 +11,19 @@ struct HairSpecular : Feature
 	virtual inline std::string GetName() override { return "Hair Specular"; }
 	virtual inline std::string GetShortName() override { return "HairSpecular"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "CS_HAIR"; }
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Provides physically-based hair shading with realistic specular highlights and tangent-based light interaction for more lifelike hair appearance.",
+			{
+				"Physically-based hair specular calculation",
+				"Configurable primary and secondary tangent shifts",
+				"Enhanced hair glossiness and saturation controls",
+				"Separate specular and diffuse lighting multipliers",
+				"Tangent shift texture support for varied hair highlights"
+			}
+		};
+	}
 	virtual bool HasShaderDefine(RE::BSShader::Type shaderType) override { return shaderType == RE::BSShader::Type::Lighting; };
 
 	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/149011"; }

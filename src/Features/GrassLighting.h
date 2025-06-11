@@ -13,6 +13,21 @@ struct GrassLighting : Feature
 	virtual inline std::string_view GetShaderDefineName() override { return "GRASS_LIGHTING"; }
 	virtual bool HasShaderDefine(RE::BSShader::Type shaderType) override { return shaderType == RE::BSShader::Type::Grass; };
 
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Grass Lighting enhances grass rendering with improved lighting, specularity, and subsurface scattering.\n"
+			"This makes grass appear more natural and responsive to lighting conditions.",
+			{
+				"Enhanced grass lighting model",
+				"Specular highlights on grass",
+				"Subsurface scattering effects",
+				"Improved grass visual quality",
+				"Configurable material properties"
+			}
+		};
+	}
+
 	struct alignas(16) Settings
 	{
 		float Glossiness = 20.0f;

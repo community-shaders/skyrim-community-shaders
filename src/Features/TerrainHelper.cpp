@@ -5,7 +5,22 @@
 
 void TerrainHelper::DrawUnloadedUI()
 {
-	ImGui::Text("Terrain Helper is only required if a terrain mod you are using requires it, otherwise it does nothing.");
+	auto [description, keyFeatures] = GetFeatureSummary();
+	
+	ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+	ImGui::Text("%s", description.c_str());
+	
+	if (!keyFeatures.empty()) {
+		ImGui::Spacing();
+		ImGui::Text("Key Features:");
+		for (const auto& feature : keyFeatures) {
+			ImGui::BulletText("%s", feature.c_str());
+		}
+	}
+	
+	ImGui::Spacing();
+	ImGui::TextWrapped("Note: This feature is only required if a terrain mod you are using specifically requires it, otherwise it does nothing.");
+	ImGui::PopTextWrapPos();
 }
 
 void TerrainHelper::DataLoaded()

@@ -13,6 +13,19 @@ struct Skylighting : Feature
 	virtual inline std::string GetName() override { return "Skylighting"; }
 	virtual inline std::string GetShortName() override { return "Skylighting"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "SKYLIGHTING"; }
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Simulates realistic ambient lighting by calculating sky occlusion and directional lighting, providing more accurate and natural illumination in outdoor environments.",
+			{
+				"Sky occlusion calculation for ambient lighting",
+				"Directional skylighting based on environment geometry",
+				"Enhanced ambient lighting for outdoor scenes",
+				"Support for varying sky illumination intensities",
+				"Integration with existing lighting systems"
+			}
+		};
+	}
 	virtual bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
 	virtual void RestoreDefaultSettings() override;

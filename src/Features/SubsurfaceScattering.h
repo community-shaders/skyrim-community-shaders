@@ -63,6 +63,21 @@ public:
 	virtual inline std::string GetShortName() override { return "SubsurfaceScattering"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "SSS"; }
 
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Subsurface Scattering simulates light penetration through translucent materials like skin, creating more realistic character lighting.\n"
+			"This technique makes organic materials appear more lifelike and natural.",
+			{
+				"Realistic skin lighting",
+				"Light penetration simulation",
+				"Separate profiles for different materials",
+				"Enhanced character appearance",
+				"Configurable scattering properties"
+			}
+		};
+	}
+
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
 	virtual void SetupResources() override;

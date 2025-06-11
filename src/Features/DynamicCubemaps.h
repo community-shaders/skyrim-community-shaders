@@ -102,6 +102,19 @@ public:
 	virtual inline std::string GetName() override { return "Dynamic Cubemaps"; }
 	virtual inline std::string GetShortName() override { return "DynamicCubemaps"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "DYNAMIC_CUBEMAPS"; }
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Provides real-time environment mapping and reflections by generating dynamic cube maps that capture the surrounding environment, enabling realistic reflections on surfaces.",
+			{
+				"Real-time environment capture for realistic reflections",
+				"Dynamic cube map generation based on camera position",
+				"Enhanced water reflections with environmental details",
+				"Support for both standard and VR rendering modes",
+				"Optimized cubemap inference and irradiance calculation"
+			}
+		};
+	}
 	virtual inline std::vector<std::pair<std::string_view, std::string_view>> GetShaderDefineOptions() override;
 
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
