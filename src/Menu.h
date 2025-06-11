@@ -179,7 +179,7 @@ public:
 		} PerfOverlay;
 	};
 
-	const ThemeSettings& GetTheme() const { return settings.Theme; } // Provide read-only access to the Theme.
+	const ThemeSettings& GetTheme() const { return settings.Theme; }  // Provide read-only access to the Theme.
 
 private:
 	Settings settings;
