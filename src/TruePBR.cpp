@@ -1059,13 +1059,14 @@ void SetupLandscapeTexture(BSLightingShaderMaterialPBRLandscape& material, RE::T
 		return;
 	}
 
-	auto textureSet = Util::GetSeasonalSwap(landTexture.textureSet);
+	const auto textureSet = landTexture.textureSet;
+	auto textureSet = Util::GetSeasonalSwap(textureSet);
 	if (textureSet == nullptr) {
 		return;
 	}
 
 	auto truePBR = globals::truePBR;
-	auto* textureSetData = truePBR->GetPBRTextureSetData(landTexture.textureSet);
+	auto* textureSetData = truePBR->GetPBRTextureSetData(textureSet);
 	const bool isPbr = textureSetData != nullptr;
 
 	textureSets[textureIndex] = textureSetData;
