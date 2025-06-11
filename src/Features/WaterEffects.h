@@ -22,13 +22,11 @@ public:
 		return {
 			"Water Effects enhances water rendering with realistic caustics and underwater lighting effects.\n"
 			"This feature adds dynamic light patterns and improved water visual quality.",
-			{
-				"Realistic water caustics",
+			{ "Realistic water caustics",
 				"Enhanced underwater lighting",
 				"Dynamic light patterns on water surfaces",
 				"Improved water visual fidelity",
-				"Atmospheric underwater effects"
-			}
+				"Atmospheric underwater effects" }
 		};
 	}
 

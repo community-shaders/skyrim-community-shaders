@@ -15,13 +15,11 @@ struct LODBlending : Feature
 	{
 		return {
 			"Provides seamless visual transitions between Level of Detail (LOD) objects and full-detail objects, eliminating harsh transitions and creating smooth visual continuity.",
-			{
-				"Smooth LOD object brightness blending",
+			{ "Smooth LOD object brightness blending",
 				"Enhanced terrain LOD appearance matching",
 				"Snow-specific LOD brightness adjustment",
 				"Optional terrain vertex color modification",
-				"Seamless transition between detail levels"
-			}
+				"Seamless transition between detail levels" }
 		};
 	}
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; };

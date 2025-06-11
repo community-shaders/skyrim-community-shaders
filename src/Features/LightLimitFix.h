@@ -20,13 +20,11 @@ public:
 		return {
 			"Light Limit Fix removes the vanilla game's 4-light limit, allowing unlimited dynamic lights in scenes.\n"
 			"This dramatically improves lighting quality and enables more realistic illumination scenarios.",
-			{
-				"Removes 4-light limit",
+			{ "Removes 4-light limit",
 				"Unlimited dynamic lights",
 				"Improved lighting quality",
 				"Enhanced visual realism",
-				"Support for particle lights"
-			}
+				"Support for particle lights" }
 		};
 	}
 

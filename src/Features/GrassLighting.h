@@ -18,13 +18,11 @@ struct GrassLighting : Feature
 		return {
 			"Grass Lighting enhances grass rendering with improved lighting, specularity, and subsurface scattering.\n"
 			"This makes grass appear more natural and responsive to lighting conditions.",
-			{
-				"Enhanced grass lighting model",
+			{ "Enhanced grass lighting model",
 				"Specular highlights on grass",
 				"Subsurface scattering effects",
 				"Improved grass visual quality",
-				"Configurable material properties"
-			}
+				"Configurable material properties" }
 		};
 	}
 

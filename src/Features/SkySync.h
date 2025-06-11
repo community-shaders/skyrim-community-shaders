@@ -16,13 +16,11 @@ struct SkySync : Feature
 	{
 		return {
 			"Synchronizes celestial lighting with the actual sky state, ensuring sun and moon lighting direction and intensity accurately match their visual position in the sky.",
-			{
-				"Accurate sun and moon lighting direction matching sky position",
+			{ "Accurate sun and moon lighting direction matching sky position",
 				"Alternative sun path calculation for improved realism",
 				"Configurable moon light source selection",
 				"Real-time celestial body tracking and updates",
-				"Enhanced sky and climate transition handling"
-			}
+				"Enhanced sky and climate transition handling" }
 		};
 	}
 

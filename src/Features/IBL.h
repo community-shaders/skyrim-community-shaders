@@ -19,13 +19,11 @@ public:
 	{
 		return {
 			"Image Based Lighting enhances environmental lighting by using precomputed environment maps for realistic reflections and ambient lighting. This technique provides accurate environmental reflections and improved material rendering.",
-			{
-				"Realistic environmental reflections",
+			{ "Realistic environmental reflections",
 				"Enhanced ambient lighting",
 				"Improved material appearance",
 				"Physically-based lighting",
-				"Dynamic environment integration"
-			}
+				"Dynamic environment integration" }
 		};
 	}
 

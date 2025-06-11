@@ -21,12 +21,10 @@ struct TerrainVariation : Feature
 		return {
 			"Terrain Variation reduces the repeating pattern effect on terrain textures.\n"
 			"This technique creates more natural-looking terrain by adding variation to texture sampling.",
-			{
-				"Reduces terrain texture tiling",
+			{ "Reduces terrain texture tiling",
 				"Adjustable distance-based blending",
 				"Improved terrain visual quality",
-				"Compatible with Extended Materials parallax"
-			}
+				"Compatible with Extended Materials parallax" }
 		};
 	}
 

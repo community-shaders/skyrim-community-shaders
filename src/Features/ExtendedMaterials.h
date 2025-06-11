@@ -17,13 +17,11 @@ struct ExtendedMaterials : Feature
 		return {
 			"Extended Materials adds advanced material effects including parallax occlusion mapping and complex material blending.\n"
 			"This feature enhances surface detail and depth perception for more realistic textures.",
-			{
-				"Parallax occlusion mapping for depth",
+			{ "Parallax occlusion mapping for depth",
 				"Complex material blending",
 				"Terrain heightmap support",
 				"Parallax shadows",
-				"Height-based texture blending"
-			}
+				"Height-based texture blending" }
 		};
 	}
 

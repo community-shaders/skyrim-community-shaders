@@ -15,13 +15,11 @@ struct InteriorSunShadows : Feature
 	{
 		return {
 			"Enables realistic sun shadows inside interior spaces that have openings to the exterior, such as windows and doors, bringing natural lighting indoors.",
-			{
-				"Sun shadow casting through windows and openings",
+			{ "Sun shadow casting through windows and openings",
 				"Double-sided rendering for accurate interior shadows",
 				"Automatic detection of interiors with sun exposure",
 				"Enhanced directional light culling for interiors",
-				"Seamless integration with existing shadow systems"
-			}
+				"Seamless integration with existing shadow systems" }
 		};
 	}
 	virtual void DrawSettings() override;

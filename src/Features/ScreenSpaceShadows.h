@@ -17,13 +17,11 @@ struct ScreenSpaceShadows : Feature
 		return {
 			"Screen Space Shadows enhances shadow quality by adding detailed contact shadows and improving shadow accuracy.\n"
 			"This technique adds fine-detail shadows that traditional shadow mapping might miss.",
-			{
-				"Enhanced contact shadows",
+			{ "Enhanced contact shadows",
 				"Improved shadow detail",
 				"Better shadow accuracy",
 				"Fine-scale shadow effects",
-				"Configurable shadow contrast"
-			}
+				"Configurable shadow contrast" }
 		};
 	}
 

@@ -15,13 +15,11 @@ struct VR : Feature
 	{
 		return {
 			"Provides VR-specific optimizations and enhancements for Community Shaders, improving performance and visual quality in virtual reality environments.",
-			{
-				"Depth buffer culling optimization for VR performance",
+			{ "Depth buffer culling optimization for VR performance",
 				"Configurable occlusion culling parameters",
 				"VR-specific rendering pipeline improvements",
 				"Performance optimizations for dual-eye rendering",
-				"Enhanced VR compatibility across all shader features"
-			}
+				"Enhanced VR compatibility across all shader features" }
 		};
 	}
 

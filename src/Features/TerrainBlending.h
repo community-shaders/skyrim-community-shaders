@@ -16,13 +16,11 @@ public:
 	{
 		return {
 			"Provides seamless blending between terrain and objects, eliminating harsh transitions where objects meet the ground for more natural-looking landscapes.",
-			{
-				"Seamless terrain-to-object blending transitions",
+			{ "Seamless terrain-to-object blending transitions",
 				"Advanced depth buffer manipulation for smooth integration",
 				"Support for alternative terrain rendering modes",
 				"Multi-pass rendering optimization for complex scenes",
-				"Enhanced visual continuity in landscape interactions"
-			}
+				"Enhanced visual continuity in landscape interactions" }
 		};
 	}
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }

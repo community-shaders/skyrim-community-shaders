@@ -16,13 +16,11 @@ struct TerrainHelper : Feature
 	{
 		return {
 			"Provides enhanced terrain material support for terrain mods that require additional texture slots and parallax mapping capabilities.",
-			{
-				"Extended texture slot support for terrain materials",
+			{ "Extended texture slot support for terrain materials",
 				"Parallax mapping integration for terrain textures",
 				"Automatic terrain material detection and setup",
 				"Support for advanced terrain modifications",
-				"Compatibility layer for terrain enhancement mods"
-			}
+				"Compatibility layer for terrain enhancement mods" }
 		};
 	}
 

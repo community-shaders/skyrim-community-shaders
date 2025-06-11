@@ -17,13 +17,11 @@ struct TerrainShadows : public Feature
 	{
 		return {
 			"Adds realistic shadow casting from terrain features using heightmap data to create accurate terrain shadows that enhance depth perception and visual realism.",
-			{
-				"Heightmap-based terrain shadow calculation",
+			{ "Heightmap-based terrain shadow calculation",
 				"Dynamic shadow updates based on sun position",
 				"Support for custom heightmap files",
 				"Real-time shadow preprocessing and computation",
-				"Integration with existing shadow systems"
-			}
+				"Integration with existing shadow systems" }
 		};
 	}
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }

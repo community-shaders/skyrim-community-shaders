@@ -25,13 +25,11 @@ struct ScreenSpaceGI : Feature
 		return {
 			"Screen Space Global Illumination adds realistic indirect lighting and ambient occlusion to the game.\n"
 			"This technique simulates how light bounces off surfaces to illuminate other objects naturally.",
-			{
-				"Realistic indirect lighting",
+			{ "Realistic indirect lighting",
 				"Enhanced ambient occlusion",
 				"Improved visual depth and atmosphere",
 				"Temporal denoising for smooth results",
-				"Configurable quality and performance settings"
-			}
+				"Configurable quality and performance settings" }
 		};
 	}
 

@@ -38,13 +38,11 @@ public:
 		return {
 			"Volumetric Lighting creates realistic light scattering effects through fog, dust, and atmospheric particles.\n"
 			"This adds dramatic god rays and atmospheric depth to both interior and exterior environments.",
-			{
-				"Realistic light scattering",
+			{ "Realistic light scattering",
 				"God rays and atmospheric effects",
 				"Separate interior/exterior settings",
 				"Configurable quality levels",
-				"Enhanced atmospheric immersion"
-			}
+				"Enhanced atmospheric immersion" }
 		};
 	}
 

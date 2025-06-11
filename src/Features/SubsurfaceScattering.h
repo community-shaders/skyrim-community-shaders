@@ -68,13 +68,11 @@ public:
 		return {
 			"Subsurface Scattering simulates light penetration through translucent materials like skin, creating more realistic character lighting.\n"
 			"This technique makes organic materials appear more lifelike and natural.",
-			{
-				"Realistic skin lighting",
+			{ "Realistic skin lighting",
 				"Light penetration simulation",
 				"Separate profiles for different materials",
 				"Enhanced character appearance",
-				"Configurable scattering properties"
-			}
+				"Configurable scattering properties" }
 		};
 	}
 

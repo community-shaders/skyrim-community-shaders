@@ -16,13 +16,11 @@ struct GrassCollision : Feature
 	{
 		return {
 			"Enables dynamic grass interactions where grass bends and moves in response to actors walking through it, creating more immersive environmental reactions.",
-			{
-				"Real-time grass deformation from actor movement",
+			{ "Real-time grass deformation from actor movement",
 				"Collision detection for up to 256 simultaneous interactions",
 				"Dynamic tracking of actor positions for grass response",
 				"Performance-optimized collision calculation",
-				"Seamless integration with existing grass rendering"
-			}
+				"Seamless integration with existing grass rendering" }
 		};
 	}
 

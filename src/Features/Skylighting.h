@@ -17,13 +17,11 @@ struct Skylighting : Feature
 	{
 		return {
 			"Simulates realistic ambient lighting by calculating sky occlusion and directional lighting, providing more accurate and natural illumination in outdoor environments.",
-			{
-				"Sky occlusion calculation for ambient lighting",
+			{ "Sky occlusion calculation for ambient lighting",
 				"Directional skylighting based on environment geometry",
 				"Enhanced ambient lighting for outdoor scenes",
 				"Support for varying sky illumination intensities",
-				"Integration with existing lighting systems"
-			}
+				"Integration with existing lighting systems" }
 		};
 	}
 	virtual bool HasShaderDefine(RE::BSShader::Type) override { return true; };
