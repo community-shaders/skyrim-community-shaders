@@ -12,6 +12,19 @@ struct ExtendedMaterials : Feature
 	virtual inline std::string GetShortName() override { return "ExtendedMaterials"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "EXTENDED_MATERIALS"; }
 
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Extended Materials adds advanced material effects including parallax occlusion mapping and complex material blending.\n"
+			"This feature enhances surface detail and depth perception for more realistic textures.",
+			{ "Parallax occlusion mapping for depth",
+				"Complex material blending",
+				"Terrain heightmap support",
+				"Parallax shadows",
+				"Height-based texture blending" }
+		};
+	}
+
 	bool HasShaderDefine(RE::BSShader::Type shaderType) override;
 
 	struct alignas(16) Settings

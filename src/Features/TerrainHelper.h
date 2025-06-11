@@ -12,6 +12,18 @@ struct TerrainHelper : Feature
 	virtual inline std::string GetShortName() override { return "TerrainHelper"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_HELPER"; }
 
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Provides enhanced terrain material support for terrain mods that require additional texture slots and parallax mapping capabilities.",
+			{ "Extended texture slot support for terrain materials",
+				"Parallax mapping integration for terrain textures",
+				"Automatic terrain material detection and setup",
+				"Support for advanced terrain modifications",
+				"Compatibility layer for terrain enhancement mods" }
+		};
+	}
+
 	struct Settings
 	{
 	} settings;

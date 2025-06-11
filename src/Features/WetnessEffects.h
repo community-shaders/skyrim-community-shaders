@@ -13,6 +13,18 @@ public:
 	virtual inline std::string GetShortName() override { return "WetnessEffects"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "WETNESS_EFFECTS"; }
 
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Adds realistic wetness effects including rain-based surface wetness, puddle formation, shore wetness, and dynamic raindrop effects for enhanced weather immersion.",
+			{ "Dynamic surface wetness based on weather conditions",
+				"Realistic puddle formation and shore wetness effects",
+				"Animated raindrop effects with splashes and ripples",
+				"Configurable wetness intensity and weather transitions",
+				"Support for skin wetness and material-specific responses" }
+		};
+	}
+
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
 	struct Settings

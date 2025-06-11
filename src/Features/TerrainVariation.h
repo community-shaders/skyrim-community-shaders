@@ -16,6 +16,18 @@ struct TerrainVariation : Feature
 	virtual bool IsCore() const override { return false; };
 	virtual bool SupportsVR() override { return true; }
 
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Terrain Variation reduces the repeating pattern effect on terrain textures.\n"
+			"This technique creates more natural-looking terrain by adding variation to texture sampling.",
+			{ "Reduces terrain texture tiling",
+				"Adjustable distance-based blending",
+				"Improved terrain visual quality",
+				"Compatible with Extended Materials parallax" }
+		};
+	}
+
 	struct Settings
 	{
 		uint enableTilingFix = true;
@@ -53,5 +65,4 @@ struct TerrainVariation : Feature
 
 	virtual void PostPostLoad() override;
 	void UpdateShaderSettings();
-	virtual void DrawUnloadedUI() override;
 };
