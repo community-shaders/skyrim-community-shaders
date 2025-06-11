@@ -38,11 +38,39 @@ struct Feature
 	 */
 	virtual bool DrawFailLoadMessage() const { return true; }
 
+	/**
+	 * Get feature summary and key features for hover tooltip and unloaded UI
+	 *
+	 * \return Pair containing feature summary description and vector of key feature bullet points
+	 */
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() { return {}; }
+
 	virtual void SetupResources() {}
 	virtual void Reset() {}
 
 	virtual void DrawSettings() {}
-	virtual void DrawUnloadedUI() {}
+	virtual void DrawUnloadedUI()
+	{
+		auto [description, keyFeatures] = GetFeatureSummary();
+
+		if (!description.empty() || !keyFeatures.empty()) {
+			ImGui::TextColored(globals::menu->settings.Theme.StatusPalette.Error, "This feature is not installed!");
+			ImGui::Spacing();
+
+			if (!description.empty()) {
+				ImGui::TextWrapped("%s", description.c_str());
+				ImGui::Spacing();
+			}
+
+			if (!keyFeatures.empty()) {
+				ImGui::TextWrapped("Key features:");
+				for (const auto& feature : keyFeatures) {
+					ImGui::BulletText("%s", feature.c_str());
+				}
+				ImGui::Spacing();
+			}
+		}
+	}
 
 	virtual void ReflectionsPrepass() {};
 	virtual void Prepass() {}

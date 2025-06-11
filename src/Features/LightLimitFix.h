@@ -15,6 +15,19 @@ public:
 	virtual inline std::string GetShortName() override { return "LightLimitFix"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "LIGHT_LIMIT_FIX"; }
 
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Light Limit Fix removes the vanilla game's 4-light limit, allowing unlimited dynamic lights in scenes.\n"
+			"This dramatically improves lighting quality and enables more realistic illumination scenarios.",
+			{ "Removes 4-light limit",
+				"Unlimited dynamic lights",
+				"Improved lighting quality",
+				"Enhanced visual realism",
+				"Support for particle lights" }
+		};
+	}
+
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
 	enum class LightFlags : std::uint32_t

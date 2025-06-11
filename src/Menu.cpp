@@ -410,6 +410,23 @@ void Menu::DrawSettings()
 						if (auto _tt = Util::HoverTooltipWrapper()) {
 							ImGui::Text(hasFailedMessage ? feat->failedLoadedMessage.c_str() : "Feature pending restart.");
 						}
+					} else if (isLoaded) {
+						// Show feature summary tooltip for loaded features
+						if (auto _tt = Util::HoverTooltipWrapper()) {
+							auto [description, keyFeatures] = feat->GetFeatureSummary();
+							if (!description.empty()) {
+								ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+								ImGui::Text("%s", description.c_str());
+								if (!keyFeatures.empty()) {
+									ImGui::Spacing();
+									ImGui::Text("Key Features:");
+									for (const auto& feature : keyFeatures) {
+										ImGui::BulletText("%s", feature.c_str());
+									}
+								}
+								ImGui::PopTextWrapPos();
+							}
+						}
 					}
 
 					// Display version if loaded

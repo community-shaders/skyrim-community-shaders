@@ -11,6 +11,18 @@ struct VR : Feature
 	virtual inline std::string GetName() override { return "VR"; }
 	virtual inline std::string GetShortName() override { return "VR"; }
 
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Provides VR-specific optimizations and enhancements for Community Shaders, improving performance and visual quality in virtual reality environments.",
+			{ "Depth buffer culling optimization for VR performance",
+				"Configurable occlusion culling parameters",
+				"VR-specific rendering pipeline improvements",
+				"Performance optimizations for dual-eye rendering",
+				"Enhanced VR compatibility across all shader features" }
+		};
+	}
+
 	struct Settings
 	{
 		bool EnableDepthBufferCulling = true;
