@@ -12,6 +12,7 @@ struct ScreenSpaceGI : Feature
 
 	virtual inline std::string GetName() override { return "Screen Space GI"; }
 	virtual inline std::string GetShortName() override { return "ScreenSpaceGI"; }
+	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/130375"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "SSGI"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override
 	{

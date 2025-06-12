@@ -18,6 +18,7 @@ struct CloudShadows : Feature
 
 	virtual inline std::string GetName() override { return "Cloud Shadows"; }
 	virtual inline std::string GetShortName() override { return "CloudShadows"; }
+	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/139185"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "CLOUD_SHADOWS"; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{

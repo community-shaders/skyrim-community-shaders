@@ -61,6 +61,7 @@ public:
 
 	virtual inline std::string GetName() override { return "Subsurface Scattering"; }
 	virtual inline std::string GetShortName() override { return "SubsurfaceScattering"; }
+	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/114114"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "SSS"; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override

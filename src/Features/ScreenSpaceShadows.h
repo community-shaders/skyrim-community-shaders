@@ -10,6 +10,7 @@ struct ScreenSpaceShadows : Feature
 
 	virtual inline std::string GetName() override { return "Screen Space Shadows"; }
 	virtual inline std::string GetShortName() override { return "ScreenSpaceShadows"; }
+	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/93209"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "SCREEN_SPACE_SHADOWS"; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
