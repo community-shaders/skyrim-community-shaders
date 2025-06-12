@@ -63,11 +63,10 @@ void Feature::Load(json& o_json)
 		errorVersion = "N/A";
 		errorType = FeatureIssues::FeatureIssueInfo::IssueType::OBSOLETE;
 		failedLoadedMessage = std::format("{} is an obsolete feature that has been removed", GetShortName());
-	}
-	else if (auto value = ini.GetValue("Info", "Version")) {
+	} else if (auto value = ini.GetValue("Info", "Version")) {
 		try {
 			REL::Version featureVersion(std::regex_replace(value, std::regex("-"), "."));
-			
+
 			// Check if feature exists in minimal versions
 			auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(GetShortName());
 			if (iter == FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
@@ -75,8 +74,7 @@ void Feature::Load(json& o_json)
 				errorVersion = value;
 				errorType = FeatureIssues::FeatureIssueInfo::IssueType::UNKNOWN;
 				failedLoadedMessage = std::format("{} {} is an unknown feature not supported by this CS version. This may be a feature from a development branch.", GetShortName(), value);
-			}
-			else {
+			} else {
 				// Version compatibility check
 				auto& minimalFeatureVersion = iter->second;
 				bool oldFeature = featureVersion.compare(minimalFeatureVersion) == std::strong_ordering::less;
@@ -100,10 +98,9 @@ void Feature::Load(json& o_json)
 					}
 				}
 			}
-			
+
 			version = value;
-		}
-		catch (const std::exception& e) {
+		} catch (const std::exception& e) {
 			hasError = true;
 			errorVersion = value;
 			errorType = FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH;

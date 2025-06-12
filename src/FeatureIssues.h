@@ -2,8 +2,8 @@
 
 #include "Globals.h"
 #include <filesystem>
-#include <vector>
 #include <string>
+#include <vector>
 
 /**
  * Centralized system for tracking and managing feature issues
@@ -14,14 +14,15 @@ namespace FeatureIssues
 	/**
 	 * Information about feature files and directories
 	 */
-	struct FeatureFileInfo {
-		std::string featureName;         // Short name of the feature
-		std::string deployedFolderPath;  // Path to deployed shader folder (Data/Shaders/FeatureName/)
-		std::string iniPath;            // Path to the INI file (Data/Shaders/Features/FeatureName.ini)
+	struct FeatureFileInfo
+	{
+		std::string featureName;             // Short name of the feature
+		std::string deployedFolderPath;      // Path to deployed shader folder (Data/Shaders/FeatureName/)
+		std::string iniPath;                 // Path to the INI file (Data/Shaders/Features/FeatureName.ini)
 		std::vector<std::string> hlslFiles;  // List of HLSL files for this feature
-		bool hasDeployedFolder;         // Whether the deployed shader folder exists  
-		bool hasINI;                   // Whether INI file exists in deployed location
-		
+		bool hasDeployedFolder;              // Whether the deployed shader folder exists
+		bool hasINI;                         // Whether INI file exists in deployed location
+
 		// Timestamp information for file tracking
 		std::filesystem::file_time_type latestTimestamp;  // Latest modification time across all files
 		std::string latestTimestampFile;                  // Path to the file with the latest timestamp
@@ -31,26 +32,28 @@ namespace FeatureIssues
 	/**
 	 * Comprehensive information about a feature that has issues
 	 */
-	struct FeatureIssueInfo {
+	struct FeatureIssueInfo
+	{
 		std::string shortName;           // Short name of the feature
 		std::string displayName;         // Display name of the feature (empty if unknown)
-		std::string version;            // Version found in INI (if any)
-		std::string iniPath;            // Full path to the INI file
-		std::string rejectionReason;    // Why it was rejected/obsolete
-		std::string replacementFeature; // What feature replaced it (if any)
-		std::string userMessage;        // Guidance message for user
-		REL::Version removedInVersion;  // CS version when it was removed (for obsolete features)
-		bool modifiedShaderDirectory;   // Whether this obsolete feature modified package/Shaders/ directly
-		FeatureFileInfo fileInfo;      // Detailed file information
-		
-		enum class IssueType {
-			OBSOLETE,           // Known obsolete feature with replacement info
-			VERSION_MISMATCH,   // Feature exists but version is incompatible
+		std::string version;             // Version found in INI (if any)
+		std::string iniPath;             // Full path to the INI file
+		std::string rejectionReason;     // Why it was rejected/obsolete
+		std::string replacementFeature;  // What feature replaced it (if any)
+		std::string userMessage;         // Guidance message for user
+		REL::Version removedInVersion;   // CS version when it was removed (for obsolete features)
+		bool modifiedShaderDirectory;    // Whether this obsolete feature modified package/Shaders/ directly
+		FeatureFileInfo fileInfo;        // Detailed file information
+
+		enum class IssueType
+		{
+			OBSOLETE,          // Known obsolete feature with replacement info
+			VERSION_MISMATCH,  // Feature exists but version is incompatible
 			UNKNOWN            // Feature not recognized by this CS version
 		};
-		
+
 		IssueType issueType;
-		
+
 		// Helper methods
 		bool IsObsolete() const { return issueType == IssueType::OBSOLETE; }
 		bool IsVersionMismatch() const { return issueType == IssueType::VERSION_MISMATCH; }
@@ -61,7 +64,7 @@ namespace FeatureIssues
 
 	/**
 	 * Get list of features with issues (obsolete, rejected, unknown, etc.)
-	 * 
+	 *
 	 * \return Reference to vector of feature issue information
 	 */
 	const std::vector<FeatureIssueInfo>& GetFeatureIssues();
@@ -87,7 +90,7 @@ namespace FeatureIssues
 	/**
 	 * Get detailed file information for a feature
 	 * This helps users understand the actual file structure
-	 * 
+	 *
 	 * \param featureName Short name of the feature to analyze
 	 * \return Feature file information
 	 */
@@ -95,16 +98,16 @@ namespace FeatureIssues
 
 	/**
 	 * Add a feature issue to the tracking system
-	 * 
+	 *
 	 * \param shortName Short name of the feature
 	 * \param version Version found in INI (if any)
 	 * \param reason Why it was rejected/obsolete
 	 * \param issueType Type of issue
 	 * \param fileInfo Detailed file information
 	 */
-	void AddFeatureIssue(const std::string& shortName, const std::string& version, 
-	                    const std::string& reason, FeatureIssueInfo::IssueType issueType,
-	                    const FeatureFileInfo& fileInfo = {});
+	void AddFeatureIssue(const std::string& shortName, const std::string& version,
+		const std::string& reason, FeatureIssueInfo::IssueType issueType,
+		const FeatureFileInfo& fileInfo = {});
 
 	/**
 	 * Draw UI for feature issues (rejected and obsolete features)
@@ -113,7 +116,7 @@ namespace FeatureIssues
 
 	/**
 	 * Delete feature directory and related files safely
-	 * 
+	 *
 	 * \param issue The feature issue containing file information
 	 * \return true if deletion was successful, false otherwise
 	 */
@@ -121,7 +124,7 @@ namespace FeatureIssues
 
 	/**
 	 * Check if a feature is obsolete
-	 * 
+	 *
 	 * \param featureName Short name of the feature
 	 * \return true if the feature is obsolete, false otherwise
 	 */
@@ -133,7 +136,7 @@ namespace FeatureIssues
 
 	/**
 	 * Get the mod download link for a replacement feature (if available and not core)
-	 * 
+	 *
 	 * \param featureName Short name of the feature to look up
 	 * \return Download link if available, empty string if feature is core or has no link
 	 */

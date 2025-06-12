@@ -577,8 +577,8 @@ void Menu::DrawSettings()
 			if (FeatureIssues::HasFeatureIssues()) {
 				menuList.push_back("Feature Issues"s);
 				menuList.push_back(BuiltInMenu{ "Feature Issues", []() {
-					FeatureIssues::DrawFeatureIssuesUI();
-				} });
+												   FeatureIssues::DrawFeatureIssuesUI();
+											   } });
 			}
 
 			ImGui::TableNextColumn();
@@ -1136,12 +1136,12 @@ void Menu::DrawOverlay()
 			}
 
 			ImGui::TextColored(themeSettings.StatusPalette.Error, "ERROR: %d shaders failed to compile. Check installation and CommunityShaders.log", failed, totalShaders);
-			
+
 			// Check for obsolete features that may cause shader compilation issues
 			if (FeatureIssues::HasObsoleteShaderModifyingFeatures()) {
 				ImGui::TextColored(themeSettings.StatusPalette.Error, "Obsolete features that modified shaders detected. Check Feature Issues in the Menu.");
 			}
-			
+
 			ImGui::End();
 		}
 	}
