@@ -11,11 +11,14 @@
 
 #include "DX12SwapChain.h"
 #include "Deferred.h"
+#include "Feature.h"
+#include "FeatureIssues.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Streamline.h"
 #include "TruePBR.h"
 #include "Upscaling.h"
+#include "Util.h"
 
 #include "Features/LightLimitFix/ParticleLights.h"
 
@@ -568,6 +571,14 @@ void Menu::DrawSettings()
 			if (std::ranges::distance(unloadedFeatures) != 0) {
 				menuList.push_back("Unloaded Features"s);
 				std::ranges::copy(unloadedFeatures, std::back_inserter(menuList));
+			}
+
+			// Add section for feature issues (rejected features, obsolete info, etc.)
+			if (FeatureIssues::HasFeatureIssues()) {
+				menuList.push_back("Feature Issues"s);
+				menuList.push_back(BuiltInMenu{ "Feature Issues", []() {
+					FeatureIssues::DrawFeatureIssuesUI();
+				} });
 			}
 
 			ImGui::TableNextColumn();
@@ -1125,6 +1136,12 @@ void Menu::DrawOverlay()
 			}
 
 			ImGui::TextColored(themeSettings.StatusPalette.Error, "ERROR: %d shaders failed to compile. Check installation and CommunityShaders.log", failed, totalShaders);
+			
+			// Check for obsolete features that may cause shader compilation issues
+			if (FeatureIssues::HasObsoleteShaderModifyingFeatures()) {
+				ImGui::TextColored(themeSettings.StatusPalette.Error, "Obsolete features that modified shaders detected. Check Feature Issues in the Menu.");
+			}
+			
 			ImGui::End();
 		}
 	}

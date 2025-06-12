@@ -1,5 +1,6 @@
 #include "Feature.h"
 
+#include "FeatureIssues.h"
 #include "FeatureVersions.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
@@ -52,36 +53,74 @@ void Feature::Load(json& o_json)
 	CSimpleIniA ini;
 	ini.SetUnicode();
 	ini.LoadFile(ini_path.c_str());
-	if (auto value = ini.GetValue("Info", "Version")) {
-		REL::Version featureVersion(std::regex_replace(value, std::regex("-"), "."));
 
-		auto& minimalFeatureVersion = FeatureVersions::FEATURE_MINIMAL_VERSIONS.at(GetShortName());
+	bool hasError = false;
+	std::string errorVersion;
+	FeatureIssues::FeatureIssueInfo::IssueType errorType;
 
-		bool oldFeature = featureVersion.compare(minimalFeatureVersion) == std::strong_ordering::less;
-		bool majorVersionMismatch = minimalFeatureVersion.major() < featureVersion.major();
-
-		if (!oldFeature && !majorVersionMismatch) {
-			loaded = true;
-			logger::info("{} {} successfully loaded", ini_filename, value);
-		} else {
-			loaded = false;
-
-			std::string minimalVersionString = minimalFeatureVersion.string();
-			minimalVersionString = minimalVersionString.substr(0, minimalVersionString.size() - 2);
-
-			if (majorVersionMismatch) {
-				failedLoadedMessage = std::format("{} {} requires a newer version of community shaders, the feature version should be {}", GetShortName(), value, minimalVersionString);
-			} else {
-				failedLoadedMessage = std::format("{} {} is an old feature version, required: {}", GetShortName(), value, minimalVersionString);
+	if (FeatureIssues::IsObsoleteFeature(GetShortName())) {
+		hasError = true;
+		errorVersion = "N/A";
+		errorType = FeatureIssues::FeatureIssueInfo::IssueType::OBSOLETE;
+		failedLoadedMessage = std::format("{} is an obsolete feature that has been removed", GetShortName());
+	}
+	else if (auto value = ini.GetValue("Info", "Version")) {
+		try {
+			REL::Version featureVersion(std::regex_replace(value, std::regex("-"), "."));
+			
+			// Check if feature exists in minimal versions
+			auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(GetShortName());
+			if (iter == FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
+				hasError = true;
+				errorVersion = value;
+				errorType = FeatureIssues::FeatureIssueInfo::IssueType::UNKNOWN;
+				failedLoadedMessage = std::format("{} {} is an unknown feature not supported by this CS version. This may be a feature from a development branch.", GetShortName(), value);
 			}
-			logger::warn("{}", failedLoadedMessage);
-		}
+			else {
+				// Version compatibility check
+				auto& minimalFeatureVersion = iter->second;
+				bool oldFeature = featureVersion.compare(minimalFeatureVersion) == std::strong_ordering::less;
+				bool majorVersionMismatch = minimalFeatureVersion.major() < featureVersion.major();
 
-		version = value;
+				if (!oldFeature && !majorVersionMismatch) {
+					loaded = true;
+					logger::info("{} {} successfully loaded", ini_filename, value);
+				} else {
+					hasError = true;
+					errorVersion = value;
+					errorType = FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH;
+
+					std::string minimalVersionString = minimalFeatureVersion.string();
+					minimalVersionString = minimalVersionString.substr(0, minimalVersionString.size() - 2);
+
+					if (majorVersionMismatch) {
+						failedLoadedMessage = std::format("{} {} requires a newer version of community shaders, the feature version should be {}", GetShortName(), value, minimalVersionString);
+					} else {
+						failedLoadedMessage = std::format("{} {} is an old feature version, required: {}", GetShortName(), value, minimalVersionString);
+					}
+				}
+			}
+			
+			version = value;
+		}
+		catch (const std::exception& e) {
+			hasError = true;
+			errorVersion = value;
+			errorType = FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH;
+			failedLoadedMessage = std::format("{} {} has invalid version format: {}", GetShortName(), value, e.what());
+		}
 	} else {
-		loaded = false;
+		hasError = true;
+		errorVersion = "unknown";
+		errorType = FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH;
 		failedLoadedMessage = std::format("{} missing version info; not successfully loaded", ini_filename);
+	}
+
+	if (hasError) {
+		loaded = false;
 		logger::warn("{}", failedLoadedMessage);
+		FeatureIssues::FeatureFileInfo fileInfo = FeatureIssues::GetFeatureFileInfo(GetShortName());
+		FeatureIssues::AddFeatureIssue(GetShortName(), errorVersion, failedLoadedMessage, errorType, fileInfo);
 	}
 }
 
