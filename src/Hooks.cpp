@@ -1116,10 +1116,9 @@ namespace Hooks
 				REL::Relocation<std::uintptr_t>(renderPassCacheCtor, 0x191 - 2).address(),
 				reinterpret_cast<const uint8_t*>(&passCountSE), 4);
 		}
-
 		if (!REL::Module::IsVR()) {
 			stl::write_thunk_call<Main_Update_Begin>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x53, 0x6E));
-			stl::write_thunk_call<Main_Update_Swap>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x5D2, 0xA92));
+			stl::write_thunk_call<Main_Update_Swap>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x5D2, 0xA97));
 		}
 	}
 
