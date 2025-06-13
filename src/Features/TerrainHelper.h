@@ -43,7 +43,7 @@ public:
 
 	virtual void DataLoaded() override;
 	virtual bool SupportsVR() override { return true; };
-	virtual std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); };
+	virtual std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual void DrawUnloadedUI() override;
 	virtual bool DrawFailLoadMessage() const override { return false; };
 
