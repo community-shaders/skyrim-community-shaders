@@ -98,29 +98,10 @@ inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV)
 
 // --------------------- STOCHASTIC SAMPLING FUNCTIONS --------------------- //
 
-// Same as StochasticEffect but no height/luminescence influence, so much cheaper but worse quality, doesn't matter for the use case.
-inline float4 StochasticSample3(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
+inline float3 NormalizeWeights(float3 weights)
 {
-	// // Distance-based LOD with smooth transition
-	// float distanceFactor = saturate((distance - DISTANCE_LOD_THRESHOLD) / DISTANCE_LOD_TRANSITION);
-
-	// Take 3 samples always
-	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
-	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
-	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
-
-	// // Early exit for distant terrain - return single sample with cheap offset
-	// if (distanceFactor >= 0.9)
-	// {
-	// 	return sample1;
-	// }
-
-		// Blend using the barycentric weights
-		float4 result = sample1 * offsets.weights.x +
-		                sample2 * offsets.weights.y +
-		                sample3 * offsets.weights.z;
-
-		return result;
+	float rcpWeightSum = rcp(weights.x + weights.y + weights.z);
+	return weights * rcpWeightSum;
 }
 
 // Stochastic sampling function for Terrain LOD & LOD Mask.
@@ -163,17 +144,6 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	// Use mip level to determine blending complexity
 	float mipFactor = saturate(mipLevel / 4.0);
 
-	// Early exit for mid-range mip levels - skip expensive height blending
-	if (mipLevel >= 2.0)
-	{
-		// Simple barycentric blend without height influence
-		float3 weights = saturate(offsets.weights);
-		float rcpWeightSum = rcp(weights.x + weights.y + weights.z);
-		weights *= rcpWeightSum;
-		float4 simpleSample = sample1 * weights.x + sample2 * weights.y + sample3 * weights.z;
-		return lerp(simpleSample, sample1, mipFactor);
-	}
-
 	// Full height-based blending for low mip levels (close terrain)
 	float contrastFactor = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE);
 	float3 blendWeights = pow(saturate(offsets.weights), contrastFactor);
@@ -189,15 +159,40 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	float3 heights = lerp(luminanceHeights, alphaValues, alphaMask);
 	
 	// Combined weight calculation and normalization
-	float3 weights = blendWeights * (1.0 + HEIGHT_INFLUENCE * heights);
-	float rcpWeightSum = rcp(weights.x + weights.y + weights.z);
-	weights *= rcpWeightSum;
+	float3 weights = NormalizeWeights(blendWeights * (1.0 + HEIGHT_INFLUENCE * heights));
 
 	// Direct blend without intermediate variable
 	float4 highQualitySample = sample1 * weights.x + sample2 * weights.y + sample3 * weights.z;
 
 	// Smooth transition between high quality and single sample based on mip level
 	return lerp(highQualitySample, sample1, mipFactor);
+}
+
+// Stochastic sampling function without height blending for better performance
+inline float4 StochasticEffectNoHeight(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
+{
+	// Take first sample (always needed)
+	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+
+	// Early exit for high mip levels - single sample is sufficient
+	if (mipLevel >= 4.0)
+	{
+		return sample1;
+	}
+
+	// Take remaining samples for blending
+	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
+	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
+
+	// Use mip level to determine blending complexity
+	float mipFactor = saturate(mipLevel / 4.0);
+
+	// Simple barycentric blend without height influence
+	float3 weights = NormalizeWeights(saturate(offsets.weights));
+	float4 blendedSample = sample1 * weights.x + sample2 * weights.y + sample3 * weights.z;
+
+	// Smooth transition between blended and single sample based on mip level
+	return lerp(blendedSample, sample1, mipFactor);
 }
 
 
