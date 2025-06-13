@@ -1059,8 +1059,7 @@ void SetupLandscapeTexture(BSLightingShaderMaterialPBRLandscape& material, RE::T
 		return;
 	}
 
-	const auto textureSet = landTexture.textureSet;
-	auto textureSet = Util::GetSeasonalSwap(textureSet);
+	auto textureSet = Util::GetSeasonalSwap(landTexture.textureSet);
 	if (textureSet == nullptr) {
 		return;
 	}
