@@ -2,6 +2,10 @@
 
 struct TerrainHelper : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "143149";
+
+public:
 	static TerrainHelper* GetSingleton()
 	{
 		static TerrainHelper singleton;
@@ -39,7 +43,7 @@ struct TerrainHelper : Feature
 
 	virtual void DataLoaded() override;
 	virtual bool SupportsVR() override { return true; };
-	virtual std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/143149"; };
+	virtual std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual void DrawUnloadedUI() override;
 	virtual bool DrawFailLoadMessage() const override { return false; };
 

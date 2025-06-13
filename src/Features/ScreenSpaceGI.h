@@ -2,6 +2,10 @@
 
 struct ScreenSpaceGI : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "130375";
+
+public:
 	static ScreenSpaceGI* GetSingleton()
 	{
 		static ScreenSpaceGI singleton;
@@ -12,6 +16,7 @@ struct ScreenSpaceGI : Feature
 
 	virtual inline std::string GetName() override { return "Screen Space GI"; }
 	virtual inline std::string GetShortName() override { return "ScreenSpaceGI"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "SSGI"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override
 	{

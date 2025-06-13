@@ -2,6 +2,10 @@
 
 struct HairSpecular : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "149011";
+
+public:
 	static HairSpecular* GetSingleton()
 	{
 		static HairSpecular singleton;
@@ -24,7 +28,7 @@ struct HairSpecular : Feature
 	}
 	virtual bool HasShaderDefine(RE::BSShader::Type shaderType) override { return shaderType == RE::BSShader::Type::Lighting; };
 
-	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/149011"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 
 	virtual void Prepass() override;
 

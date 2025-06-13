@@ -4,6 +4,8 @@
 
 struct Feature
 {
+	// Nexus Mods base URL for Skyrim Special Edition
+	static constexpr std::string_view NEXUS_BASE_URL = "https://www.nexusmods.com/skyrimspecialedition/mods/";
 	bool loaded = false;
 	std::string version;
 	std::string failedLoadedMessage;
@@ -14,6 +16,18 @@ struct Feature
 	virtual std::string_view GetShaderDefineName() { return ""; }
 	virtual std::vector<std::pair<std::string_view, std::string_view>> GetShaderDefineOptions() { return {}; }
 
+protected:
+	// Helper method to construct Nexus Mods URL from mod ID
+	static std::string MakeNexusModURL(std::string_view modId) noexcept
+	{
+		std::string url;
+		url.reserve(NEXUS_BASE_URL.size() + modId.size());
+		url.append(NEXUS_BASE_URL);
+		url.append(modId);
+		return url;
+	}
+
+public:
 	virtual bool HasShaderDefine(RE::BSShader::Type) { return false; }
 	/**
 	 * Whether the feature supports VR.
