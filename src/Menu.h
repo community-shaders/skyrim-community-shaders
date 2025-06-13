@@ -2,6 +2,7 @@
 
 #include "Utils/Serialize.h"
 #include <dxgi1_4.h>
+#include <winrt/base.h>
 
 using namespace std::chrono;
 #define BUFFER_VIEWER_NODE(a_value, a_scale)                                                                 \
@@ -177,6 +178,8 @@ public:
 			uint32_t OverlayToggleKey = VK_F10;
 		} PerfOverlay;
 	};
+
+	const ThemeSettings& GetTheme() const { return settings.Theme; }  // Provide read-only access to the Theme.
 
 private:
 	Settings settings;

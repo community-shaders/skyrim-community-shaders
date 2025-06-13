@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Menu.h"
+
 struct Feature
 {
 	bool loaded = false;
@@ -54,7 +56,7 @@ struct Feature
 		auto [description, keyFeatures] = GetFeatureSummary();
 
 		if (!description.empty() || !keyFeatures.empty()) {
-			ImGui::TextColored(globals::menu->settings.Theme.StatusPalette.Error, "This feature is not installed!");
+			ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.Error, "This feature is not installed!");
 			ImGui::Spacing();
 
 			if (!description.empty()) {
