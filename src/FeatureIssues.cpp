@@ -1,15 +1,5 @@
 #include "FeatureIssues.h"
-
-#include <algorithm>
-#include <chrono>
-#include <filesystem>
-#include <iomanip>
-#include <map>
-#include <set>
-#include <sstream>
-
-#include <SimpleIni.h>
-#include <imgui.h>
+#include "Feature.h"
 
 #include "Menu.h"
 #include "State.h"
@@ -22,7 +12,6 @@ namespace FeatureIssues
 
 	// Static storage for feature issues
 	static std::vector<FeatureIssueInfo> s_featureIssues;
-
 	// Known obsolete features data
 	static const std::map<std::string, FeatureIssueInfo> s_obsoleteFeatureData = {
 		{ "ComplexParallaxMaterials", { .shortName = "ComplexParallaxMaterials",
@@ -31,56 +20,56 @@ namespace FeatureIssues
 										  .replacementFeature = "ExtendedMaterials",
 										  .userMessage = "This functionality is now built into Community Shaders. Remove the old feature as it's no longer needed.",
 										  .removedInVersion = { 1, 0, 0 },
-										  .issueType = FeatureIssueInfo::IssueType::OBSOLETE,
-										  .modifiedShaderDirectory = false } },
+										  .modifiedShaderDirectory = false,
+										  .issueType = FeatureIssueInfo::IssueType::OBSOLETE } },
 		{ "TerrainBlending", { .shortName = "TerrainBlending",
 								 .displayName = "Terrain Blending",
 								 .rejectionReason = "Feature removed due to broken implementation causing visual artifacts",
 								 .replacementFeature = "",
 								 .userMessage = "This feature has been removed due to visual artifacts. No replacement is available.",
 								 .removedInVersion = { 1, 0, 0 },
-								 .issueType = FeatureIssueInfo::IssueType::OBSOLETE,
-								 .modifiedShaderDirectory = false } },
+								 .modifiedShaderDirectory = false,
+								 .issueType = FeatureIssueInfo::IssueType::OBSOLETE } },
 		{ "TreeLODLighting", { .shortName = "TreeLODLighting",
 								 .displayName = "Tree LOD Lighting",
 								 .rejectionReason = "Functionality integrated into base CS lighting system",
 								 .replacementFeature = "",
 								 .userMessage = "This functionality is now built into Community Shaders. Remove the old feature as it's no longer needed.",
 								 .removedInVersion = { 1, 0, 0 },
-								 .issueType = FeatureIssueInfo::IssueType::OBSOLETE,
-								 .modifiedShaderDirectory = true } },
+								 .modifiedShaderDirectory = true,
+								 .issueType = FeatureIssueInfo::IssueType::OBSOLETE } },
 		{ "WaterBlending", { .shortName = "WaterBlending",
 							   .displayName = "Water Blending",
 							   .rejectionReason = "Replaced by unified WaterEffects feature",
 							   .replacementFeature = "WaterEffects",
 							   .userMessage = "Water blending functionality is now part of WaterEffects. Install WaterEffects for comprehensive water improvements.",
 							   .removedInVersion = { 1, 0, 0 },
-							   .issueType = FeatureIssueInfo::IssueType::OBSOLETE,
-							   .modifiedShaderDirectory = true } },
+							   .modifiedShaderDirectory = true,
+							   .issueType = FeatureIssueInfo::IssueType::OBSOLETE } },
 		{ "WaterCaustics", { .shortName = "WaterCaustics",
 							   .displayName = "Water Caustics",
 							   .rejectionReason = "Replaced by unified WaterEffects feature",
 							   .replacementFeature = "WaterEffects",
 							   .userMessage = "Water caustics functionality is now part of WaterEffects. Install WaterEffects for comprehensive water improvements.",
 							   .removedInVersion = { 1, 0, 0 },
-							   .issueType = FeatureIssueInfo::IssueType::OBSOLETE,
-							   .modifiedShaderDirectory = true } },
+							   .modifiedShaderDirectory = true,
+							   .issueType = FeatureIssueInfo::IssueType::OBSOLETE } },
 		{ "WaterParallax", { .shortName = "WaterParallax",
 							   .displayName = "Water Parallax",
 							   .rejectionReason = "Replaced by unified WaterEffects feature",
 							   .replacementFeature = "WaterEffects",
 							   .userMessage = "Water parallax functionality is now part of WaterEffects. Install WaterEffects for comprehensive water improvements.",
 							   .removedInVersion = { 1, 0, 0 },
-							   .issueType = FeatureIssueInfo::IssueType::OBSOLETE,
-							   .modifiedShaderDirectory = true } },
+							   .modifiedShaderDirectory = true,
+							   .issueType = FeatureIssueInfo::IssueType::OBSOLETE } },
 		{ "DistantTreeLighting", { .shortName = "DistantTreeLighting",
 									 .displayName = "Distant Tree Lighting",
 									 .rejectionReason = "Replaced by TreeLODLighting, which was later integrated into CS core",
 									 .replacementFeature = "",
 									 .userMessage = "This functionality is now built into Community Shaders. Remove the old feature as it's no longer needed.",
 									 .removedInVersion = { 0, 8, 0 },
-									 .issueType = FeatureIssueInfo::IssueType::OBSOLETE,
-									 .modifiedShaderDirectory = true } }
+									 .modifiedShaderDirectory = true,
+									 .issueType = FeatureIssueInfo::IssueType::OBSOLETE } }
 	};
 
 	const std::vector<FeatureIssueInfo>& GetFeatureIssues()
@@ -533,11 +522,10 @@ namespace FeatureIssues
 		ImGui::SameLine();
 		std::string deleteButtonId = "Delete##" + issue.shortName;
 		std::string confirmPopupId = "Confirm Delete##" + issue.shortName;
-
 		// Use theme error color for delete button to indicate danger
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(errorColor.x, errorColor.y, errorColor.z, 0.6f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(errorColor.x, errorColor.y, errorColor.z, 0.8f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(errorColor.x, errorColor.y, errorColor.z, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(color.x, color.y, color.z, 0.6f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(color.x, color.y, color.z, 0.8f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(color.x, color.y, color.z, 1.0f));
 
 		if (ImGui::SmallButton(deleteButtonId.c_str())) {
 			ImGui::OpenPopup(confirmPopupId.c_str());
@@ -601,7 +589,7 @@ namespace FeatureIssues
 	{
 		// Get the feature list and find the matching feature
 		const auto& features = Feature::GetFeatureList();
-		for (const auto* feature : features) {
+		for (auto* feature : features) {
 			if (feature->GetShortName() == featureName) {
 				// Only return mod link if it's not a core feature
 				if (!feature->IsCore()) {
@@ -610,5 +598,11 @@ namespace FeatureIssues
 			}
 		}
 		return "";  // No link found or feature is core
+	}
+
+	bool IsObsoleteFeature(const std::string& featureName)
+	{
+		// Check if the feature is in our obsolete features map
+		return s_obsoleteFeatureData.find(featureName) != s_obsoleteFeatureData.end();
 	}
 }

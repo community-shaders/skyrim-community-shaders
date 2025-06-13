@@ -56,7 +56,7 @@ void Feature::Load(json& o_json)
 
 	bool hasError = false;
 	std::string errorVersion;
-	FeatureIssues::FeatureIssueInfo::IssueType errorType;
+	FeatureIssues::FeatureIssueInfo::IssueType errorType = FeatureIssues::FeatureIssueInfo::IssueType::UNKNOWN;
 
 	if (FeatureIssues::IsObsoleteFeature(GetShortName())) {
 		hasError = true;

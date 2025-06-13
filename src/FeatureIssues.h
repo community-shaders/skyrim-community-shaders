@@ -42,7 +42,7 @@ namespace FeatureIssues
 		std::string replacementFeature;  // What feature replaced it (if any)
 		std::string userMessage;         // Guidance message for user
 		REL::Version removedInVersion;   // CS version when it was removed (for obsolete features)
-		bool modifiedShaderDirectory;    // Whether this obsolete feature modified package/Shaders/ directly
+		bool modifiedShaderDirectory{ false };        // Whether this obsolete feature modified package/Shaders/ directly
 		FeatureFileInfo fileInfo;        // Detailed file information
 
 		enum class IssueType
@@ -121,18 +121,13 @@ namespace FeatureIssues
 	 * \return true if deletion was successful, false otherwise
 	 */
 	bool DeleteFeatureFiles(const FeatureIssueInfo& issue);
-
 	/**
 	 * Check if a feature is obsolete
 	 *
 	 * \param featureName Short name of the feature
 	 * \return true if the feature is obsolete, false otherwise
 	 */
-	static bool IsObsoleteFeature(const std::string& featureName)
-	{
-		// Check if the feature is in our obsolete features map
-		return s_obsoleteFeatureData.find(featureName) != s_obsoleteFeatureData.end();
-	}
+	bool IsObsoleteFeature(const std::string& featureName);
 
 	/**
 	 * Get the mod download link for a replacement feature (if available and not core)
