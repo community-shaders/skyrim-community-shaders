@@ -2,7 +2,7 @@
 
 #include "Utils/Serialize.h"
 #include <dxgi1_4.h>
-#include <winrt/Base.h>
+#include <winrt/base.h>
 
 using namespace std::chrono;
 #define BUFFER_VIEWER_NODE(a_value, a_scale)                                                                 \

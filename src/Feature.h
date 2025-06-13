@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Globals.h"
 #include "Menu.h"
 
 struct Feature
