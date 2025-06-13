@@ -18,12 +18,12 @@ struct Feature
 
 protected:
 	// Helper method to construct Nexus Mods URL from mod ID
-	static std::string MakeNexusModURL(std::string_view modId) {
+	static std::string MakeNexusModURL(std::string_view modId)
+	{
 		return std::string(NEXUS_BASE_URL) + std::string(modId);
 	}
 
 public:
-
 	virtual bool HasShaderDefine(RE::BSShader::Type) { return false; }
 	/**
 	 * Whether the feature supports VR.

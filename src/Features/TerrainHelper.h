@@ -39,8 +39,8 @@ public:
 
 	std::shared_mutex extendedSlotsMutex;
 	std::unordered_map<uint32_t, ExtendedSlots> extendedSlots;
-	RE::BGSTextureSet* defaultLandTexture;	
-	
+	RE::BGSTextureSet* defaultLandTexture;
+
 	virtual void DataLoaded() override;
 	virtual bool SupportsVR() override { return true; };
 	virtual std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); };
