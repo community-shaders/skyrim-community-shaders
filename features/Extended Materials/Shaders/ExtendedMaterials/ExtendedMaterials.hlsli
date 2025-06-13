@@ -121,7 +121,7 @@ namespace ExtendedMaterials
 		float heightBlend = 1 + blendFactor * HEIGHT_POWER;
 		float heights[6] = { 0, 0, 0, 0, 0, 0 };
 		
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile0HasDisplacement) != 0 && w1.x > 0.0)
+		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile0HasDisplacement) != 0 && w1.x > 0.01)
 		{
 #		if defined(TERRAIN_VARIATION)
 			heights[0] = ScaleDisplacement(StochasticEffectNoHeight(screenNoise, mipLevels[0], TexLandDisplacement0Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[0]);
@@ -129,7 +129,7 @@ namespace ExtendedMaterials
 			heights[0] = ScaleDisplacement(TexLandDisplacement0Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[0]).x, params[0]);
 #		endif
 		}
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile1HasDisplacement) != 0 && w1.y > 0.0)
+		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile1HasDisplacement) != 0 && w1.y > 0.01)
 		{
 #		if defined(TERRAIN_VARIATION)
 			heights[1] = ScaleDisplacement(StochasticEffectNoHeight(screenNoise, mipLevels[1], TexLandDisplacement1Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[1]);
@@ -137,7 +137,7 @@ namespace ExtendedMaterials
 			heights[1] = ScaleDisplacement(TexLandDisplacement1Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[1]).x, params[1]);
 #		endif
 		}
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile2HasDisplacement) != 0 && w1.z > 0.0)
+		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile2HasDisplacement) != 0 && w1.z > 0.01)
 		{
 #		if defined(TERRAIN_VARIATION)
 			heights[2] = ScaleDisplacement(StochasticEffectNoHeight(screenNoise, mipLevels[2], TexLandDisplacement2Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[2]);
@@ -145,7 +145,7 @@ namespace ExtendedMaterials
 			heights[2] = ScaleDisplacement(TexLandDisplacement2Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[2]).x, params[2]);
 #		endif
 		}
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile3HasDisplacement) != 0 && w1.w > 0.0)
+		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile3HasDisplacement) != 0 && w1.w > 0.01)
 		{
 #		if defined(TERRAIN_VARIATION)
 			heights[3] = ScaleDisplacement(StochasticEffectNoHeight(screenNoise, mipLevels[3], TexLandDisplacement3Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[3]);
@@ -153,7 +153,7 @@ namespace ExtendedMaterials
 			heights[3] = ScaleDisplacement(TexLandDisplacement3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).x, params[3]);
 #		endif
 		}
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile4HasDisplacement) != 0 && w2.x > 0.0)
+		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile4HasDisplacement) != 0 && w2.x > 0.01)
 		{
 #		if defined(TERRAIN_VARIATION)
 			heights[4] = ScaleDisplacement(StochasticEffectNoHeight(screenNoise, mipLevels[4], TexLandDisplacement4Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[4]);
@@ -161,7 +161,7 @@ namespace ExtendedMaterials
 			heights[4] = ScaleDisplacement(TexLandDisplacement4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).x, params[4]);
 #		endif
 		}
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile5HasDisplacement) != 0 && w2.y > 0.0)
+		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile5HasDisplacement) != 0 && w2.y > 0.01)
 		{
 #		if defined(TERRAIN_VARIATION)
 			heights[5] = ScaleDisplacement(StochasticEffectNoHeight(screenNoise, mipLevels[5], TexLandDisplacement5Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[5]);
@@ -182,8 +182,7 @@ namespace ExtendedMaterials
 	{
 		float heightBlend = 1 + blendFactor * HEIGHT_POWER;
 		float heights[6] = { 0, 0, 0, 0, 0, 0 };
-
-		if (w1.x > 0.0) {
+		if (w1.x > 0.01) {
 			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand0HasDisplacement) != 0)
 			{
 #		if defined(TERRAIN_VARIATION)
@@ -201,7 +200,7 @@ namespace ExtendedMaterials
 #		endif
 			}
 		}
-		if (w1.y > 0.0) {
+		if (w1.y > 0.01) {
 			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand1HasDisplacement) != 0)
 			{
 #		if defined(TERRAIN_VARIATION)
@@ -219,7 +218,7 @@ namespace ExtendedMaterials
 #		endif
 			}
 		}
-		if (w1.z > 0.0) {
+		if (w1.z > 0.01) {
 			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand2HasDisplacement) != 0)
 			{
 #		if defined(TERRAIN_VARIATION)
@@ -237,7 +236,7 @@ namespace ExtendedMaterials
 #		endif
 			}
 		}
-		[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand3HasDisplacement) != 0 && w1.w > 0.0)
+		[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand3HasDisplacement) != 0 && w1.w > 0.01)
 		{
 #		if defined(TERRAIN_VARIATION)
 			heights[3] = ScaleDisplacement(StochasticEffectNoHeight(screenNoise, mipLevels[3], TexLandTHDisp3Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[3]);
@@ -245,7 +244,7 @@ namespace ExtendedMaterials
 			heights[3] = ScaleDisplacement(TexLandTHDisp3Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[3]).x, params[3]);
 #		endif
 		}
-		[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand4HasDisplacement) != 0 && w2.x > 0.0)
+		[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand4HasDisplacement) != 0 && w2.x > 0.01)
 		{
 #		if defined(TERRAIN_VARIATION)
 			heights[4] = ScaleDisplacement(StochasticEffectNoHeight(screenNoise, mipLevels[4], TexLandTHDisp4Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[4]);
@@ -253,7 +252,7 @@ namespace ExtendedMaterials
 			heights[4] = ScaleDisplacement(TexLandTHDisp4Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[4]).x, params[4]);
 #		endif
 		}
-		[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand5HasDisplacement) != 0 && w2.y > 0.0)
+	[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand5HasDisplacement) != 0 && w2.y > 0.01)
 		{
 #		if defined(TERRAIN_VARIATION)
 			heights[5] = ScaleDisplacement(StochasticEffectNoHeight(screenNoise, mipLevels[5], TexLandTHDisp5Sampler, SampTerrainParallaxSampler, coords, sharedOffset, dx, dy).x, params[5]);
