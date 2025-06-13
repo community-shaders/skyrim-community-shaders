@@ -18,9 +18,13 @@ struct Feature
 
 protected:
 	// Helper method to construct Nexus Mods URL from mod ID
-	static std::string MakeNexusModURL(std::string_view modId)
+	static std::string MakeNexusModURL(std::string_view modId) noexcept
 	{
-		return std::string(NEXUS_BASE_URL) + std::string(modId);
+		std::string url;
+		url.reserve(NEXUS_BASE_URL.size() + modId.size());
+		url.append(NEXUS_BASE_URL);
+		url.append(modId);
+		return url;
 	}
 
 public:
