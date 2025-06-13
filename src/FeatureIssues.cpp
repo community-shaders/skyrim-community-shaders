@@ -8,10 +8,39 @@
 namespace FeatureIssues
 {
 	// Forward declarations
-	static void DrawFeatureIssue(const FeatureIssueInfo& issue, const ImVec4& color, const ImVec4& successColor, const ImVec4& infoColor);
+	static void DrawFeatureIssue(const FeatureIssueInfo& issue, const ImVec4& color);
 
 	// Static storage for feature issues
 	static std::vector<FeatureIssueInfo> s_featureIssues;
+
+	// Cache for feature lookup to avoid repeated iterations
+	struct FeatureLookupCache
+	{
+		std::unordered_map<std::string, Feature*> featuresByShortName;
+		bool initialized = false;
+
+		void Initialize()
+		{
+			if (initialized)
+				return;
+
+			const auto& features = Feature::GetFeatureList();
+			for (auto* feature : features) {
+				featuresByShortName[feature->GetShortName()] = feature;
+			}
+			initialized = true;
+		}
+
+		Feature* FindFeature(const std::string& shortName)
+		{
+			Initialize();
+			auto it = featuresByShortName.find(shortName);
+			return (it != featuresByShortName.end()) ? it->second : nullptr;
+		}
+	};
+
+	static FeatureLookupCache s_featureLookupCache;
+
 	// Known obsolete features data
 	static const std::map<std::string, FeatureIssueInfo> s_obsoleteFeatureData = {
 		{ "ComplexParallaxMaterials", { .shortName = "ComplexParallaxMaterials",
@@ -26,7 +55,7 @@ namespace FeatureIssues
 								 .displayName = "Terrain Blending",
 								 .rejectionReason = "Feature removed due to broken implementation causing visual artifacts",
 								 .replacementFeature = "",
-								 .userMessage = "This feature has been removed due to visual artifacts. No replacement is available.",
+								 .userMessage = "This feature has been removed due to visual artifacts. No replacement is available. Remove it from your setup.",
 								 .removedInVersion = { 1, 0, 0 },
 								 .modifiedShaderDirectory = false,
 								 .issueType = FeatureIssueInfo::IssueType::OBSOLETE } },
@@ -42,7 +71,7 @@ namespace FeatureIssues
 							   .displayName = "Water Blending",
 							   .rejectionReason = "Replaced by unified WaterEffects feature",
 							   .replacementFeature = "WaterEffects",
-							   .userMessage = "Water blending functionality is now part of WaterEffects. Install WaterEffects for comprehensive water improvements.",
+							   .userMessage = "Water blending functionality is now part of WaterEffects. Install WaterEffects instead for comprehensive water improvements.",
 							   .removedInVersion = { 1, 0, 0 },
 							   .modifiedShaderDirectory = true,
 							   .issueType = FeatureIssueInfo::IssueType::OBSOLETE } },
@@ -50,7 +79,7 @@ namespace FeatureIssues
 							   .displayName = "Water Caustics",
 							   .rejectionReason = "Replaced by unified WaterEffects feature",
 							   .replacementFeature = "WaterEffects",
-							   .userMessage = "Water caustics functionality is now part of WaterEffects. Install WaterEffects for comprehensive water improvements.",
+							   .userMessage = "Water caustics functionality is now part of WaterEffects. Install WaterEffects instead for comprehensive water improvements.",
 							   .removedInVersion = { 1, 0, 0 },
 							   .modifiedShaderDirectory = true,
 							   .issueType = FeatureIssueInfo::IssueType::OBSOLETE } },
@@ -58,7 +87,7 @@ namespace FeatureIssues
 							   .displayName = "Water Parallax",
 							   .rejectionReason = "Replaced by unified WaterEffects feature",
 							   .replacementFeature = "WaterEffects",
-							   .userMessage = "Water parallax functionality is now part of WaterEffects. Install WaterEffects for comprehensive water improvements.",
+							   .userMessage = "Water parallax functionality is now part of WaterEffects. Install WaterEffects instead for comprehensive water improvements.",
 							   .removedInVersion = { 1, 0, 0 },
 							   .modifiedShaderDirectory = true,
 							   .issueType = FeatureIssueInfo::IssueType::OBSOLETE } },
@@ -92,6 +121,15 @@ namespace FeatureIssues
 		return std::any_of(s_featureIssues.begin(), s_featureIssues.end(),
 			[](const auto& issue) {
 				return issue.issueType == FeatureIssueInfo::IssueType::OBSOLETE && issue.ModifiedShaderDirectory();
+			});
+	}
+
+	bool HasPotentialShaderModifyingFeatures()
+	{
+		return std::any_of(s_featureIssues.begin(), s_featureIssues.end(),
+			[](const auto& issue) {
+				return (issue.issueType == FeatureIssueInfo::IssueType::OBSOLETE && issue.ModifiedShaderDirectory()) ||
+			           issue.issueType == FeatureIssueInfo::IssueType::UNKNOWN;
 			});
 	}
 
@@ -169,7 +207,7 @@ namespace FeatureIssues
 
 	void AddFeatureIssue(const std::string& shortName, const std::string& version,
 		const std::string& reason, FeatureIssueInfo::IssueType issueType,
-		const FeatureFileInfo& fileInfo)
+		const FeatureFileInfo& fileInfo, const std::string& minimumVersionRequired)
 	{
 		FeatureIssueInfo issue;
 		issue.shortName = shortName;
@@ -177,6 +215,7 @@ namespace FeatureIssues
 		issue.rejectionReason = reason;
 		issue.issueType = issueType;
 		issue.fileInfo = fileInfo;
+		issue.minimumVersionRequired = minimumVersionRequired;
 
 		// Check if this "unknown" feature is actually a known obsolete feature
 		if (issueType == FeatureIssueInfo::IssueType::UNKNOWN) {
@@ -188,6 +227,7 @@ namespace FeatureIssues
 				issue.userMessage = it->second.userMessage;
 				issue.removedInVersion = it->second.removedInVersion;
 				issue.rejectionReason = it->second.rejectionReason;
+				issue.modifiedShaderDirectory = it->second.modifiedShaderDirectory;
 
 				// Log with obsolete-specific information
 				logger::warn("Found obsolete feature INI: {} version {}", shortName, version);
@@ -206,7 +246,37 @@ namespace FeatureIssues
 				issue.replacementFeature = it->second.replacementFeature;
 				issue.userMessage = it->second.userMessage;
 				issue.removedInVersion = it->second.removedInVersion;
+				issue.modifiedShaderDirectory = it->second.modifiedShaderDirectory;
 			}
+		}
+
+		// Cache replacement feature information for efficient access (only if there's actually a replacement)
+		if (!issue.replacementFeature.empty()) {
+			Feature* replacementFeatureObj = s_featureLookupCache.FindFeature(issue.replacementFeature);
+			if (replacementFeatureObj) {
+				issue.replacementFeatureDisplayName = replacementFeatureObj->GetName();
+				issue.replacementFeatureInstalled = replacementFeatureObj->loaded;
+				issue.replacementFeatureModLink = replacementFeatureObj->IsCore() ? "" : replacementFeatureObj->GetFeatureModLink();
+			} else {
+				issue.replacementFeatureDisplayName = issue.replacementFeature;  // Fallback to short name
+				issue.replacementFeatureInstalled = false;
+				issue.replacementFeatureModLink = "";
+			}
+		} else {
+			// For version mismatch features without replacement, cache the current feature's info for download links
+			if (issueType == FeatureIssueInfo::IssueType::VERSION_MISMATCH) {
+				Feature* featureObj = s_featureLookupCache.FindFeature(shortName);
+				if (featureObj) {
+					issue.replacementFeatureDisplayName = featureObj->GetName();
+					issue.replacementFeatureInstalled = false;  // Not installed (wrong version)
+					issue.replacementFeatureModLink = featureObj->IsCore() ? "" : featureObj->GetFeatureModLink();
+				} else {
+					issue.replacementFeatureDisplayName = shortName;  // Fallback to short name
+					issue.replacementFeatureInstalled = false;
+					issue.replacementFeatureModLink = "";
+				}
+			}
+			// For unknown features and obsolete without replacement, leave replacement fields empty
 		}
 
 		s_featureIssues.push_back(issue);
@@ -269,71 +339,86 @@ namespace FeatureIssues
 
 	void DrawFeatureIssuesUI()
 	{
-		// Get theme colors from Menu system instead of hard-coded values
-		auto menu = Menu::GetSingleton();
+		// Get theme colors from Menu system
+		const auto menu = Menu::GetSingleton();
 		const auto& theme = menu->GetTheme();
-
-		const ImVec4& errorColor = theme.StatusPalette.Error;
-		const ImVec4& warningColor = theme.StatusPalette.RestartNeeded;  // Reuse green for warnings/obsolete
-		const ImVec4& successColor = theme.StatusPalette.RestartNeeded;
-		const ImVec4& infoColor = theme.Palette.Text;
 
 		const auto& featureIssues = GetFeatureIssues();
 
 		if (featureIssues.empty()) {
-			ImGui::TextColored(successColor, "No feature issues found!");
+			ImGui::TextWrapped("No feature issues found!");
 			ImGui::TextWrapped("All feature INI files are loading successfully.");
 			return;
 		}
 
-		// Check if there are shader-modifying obsolete features and show prominent warning
-		bool hasShaderModifyingObsolete = HasObsoleteShaderModifyingFeatures();
-		if (hasShaderModifyingObsolete) {
-			ImGui::PushStyleColor(ImGuiCol_Border, errorColor);
-			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 2.0f);
-			ImGui::BeginChild("ShaderWarning", ImVec2(0, 0), true, ImGuiWindowFlags_AlwaysAutoResize);
+		// Separate issues by type for better organization
+		std::vector<const FeatureIssueInfo*> shaderBreakingIssues;
+		std::vector<const FeatureIssueInfo*> unknownIssues;
+		std::vector<const FeatureIssueInfo*> obsoleteIssues;
+		std::vector<const FeatureIssueInfo*> versionIssues;
 
-			ImGui::TextColored(errorColor, "⚠️ SHADER COMPILATION IMPACT");
+		for (const auto& issue : featureIssues) {
+			if (issue.IsObsolete() && issue.ModifiedShaderDirectory()) {
+				// Obsolete shader-modifying features are compilation breaking
+				shaderBreakingIssues.push_back(&issue);
+			} else if (issue.IsUnknown()) {
+				// Unknown features are potentially compilation breaking but separate
+				unknownIssues.push_back(&issue);
+			} else if (issue.IsObsolete()) {
+				obsoleteIssues.push_back(&issue);
+			} else if (issue.IsVersionMismatch()) {
+				versionIssues.push_back(&issue);
+			}
+		}
+
+		// Shader Breaking Features Section (most critical)
+		if (!shaderBreakingIssues.empty()) {
+			ImGui::TextColored(theme.StatusPalette.Error, "Compilation Breaking Features");
 			ImGui::Spacing();
 			ImGui::TextWrapped(
-				"Some obsolete features below modified shader files directly. "
-				"If you experience shader compilation errors, these obsolete features may be the cause. "
-				"Remove the obsolete feature INI files and check for leftover shader files.");
+				"The following features modified core shader files and must be completely uninstalled via your mod manager. "
+				"Deleting just the INI file will not fix compilation errors if core shaders were modified.");
+			ImGui::Spacing();
 
-			ImGui::EndChild();
-			ImGui::PopStyleVar();
-			ImGui::PopStyleColor();
+			for (const auto* issue : shaderBreakingIssues) {
+				DrawFeatureIssue(*issue, theme.StatusPalette.Error);
+			}
+
 			ImGui::Spacing();
 			ImGui::Separator();
 			ImGui::Spacing();
 		}
 
-		// Separate issues by type for better organization
-		std::vector<const FeatureIssueInfo*> obsoleteIssues;
-		std::vector<const FeatureIssueInfo*> versionIssues;
-		std::vector<const FeatureIssueInfo*> unknownIssues;
-
-		for (const auto& issue : featureIssues) {
-			if (issue.IsObsolete()) {
-				obsoleteIssues.push_back(&issue);
-			} else if (issue.IsVersionMismatch()) {
-				versionIssues.push_back(&issue);
-			} else {
-				unknownIssues.push_back(&issue);
-			}
-		}
-
-		// Obsolete Features Section
-		if (!obsoleteIssues.empty()) {
-			ImGui::TextColored(warningColor, "Obsolete Feature INI Files");
+		// Unknown Features Section (potentially compilation breaking)
+		if (!unknownIssues.empty()) {
+			ImGui::TextColored(theme.StatusPalette.Error, "Unknown Features");
 			ImGui::Spacing();
 			ImGui::TextWrapped(
-				"The following obsolete feature INI files were found. "
-				"These features have been removed or replaced in this CS version.");
+				"The following features are not recognized and were disabled automatically. "
+				"They may be from development branches or newer CS versions. Since we cannot determine what files they may have modified, "
+				"they should be removed as a precaution to prevent potential shader compilation issues.");
+			ImGui::Spacing();
+
+			for (const auto* issue : unknownIssues) {
+				DrawFeatureIssue(*issue, theme.StatusPalette.Error);
+			}
+
+			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
+		}
+
+		// Obsolete Features Section (non-shader-breaking)
+		if (!obsoleteIssues.empty()) {
+			ImGui::TextColored(theme.StatusPalette.Warning, "Obsolete Features");
+			ImGui::Spacing();
+			ImGui::TextWrapped(
+				"The following features are absolute and disabled automatically. "
+				"These features have been removed or replaced in this CS version but do not modify core shaders.");
 			ImGui::Spacing();
 
 			for (const auto* issue : obsoleteIssues) {
-				DrawFeatureIssue(*issue, warningColor, successColor, infoColor);
+				DrawFeatureIssue(*issue, theme.StatusPalette.Warning);
 			}
 
 			ImGui::Spacing();
@@ -343,32 +428,14 @@ namespace FeatureIssues
 
 		// Version Mismatch Section
 		if (!versionIssues.empty()) {
-			ImGui::TextColored(errorColor, "Version Mismatch Issues");
+			ImGui::TextColored(theme.StatusPalette.Warning, "Wrong Version Features");
 			ImGui::Spacing();
 			ImGui::TextWrapped(
-				"The following features have version compatibility issues.");
+				"The following features have version compatibility issues and were disabled automatically.");
 			ImGui::Spacing();
 
 			for (const auto* issue : versionIssues) {
-				DrawFeatureIssue(*issue, errorColor, successColor, infoColor);
-			}
-
-			ImGui::Spacing();
-			ImGui::Separator();
-			ImGui::Spacing();
-		}
-
-		// Unknown Features Section
-		if (!unknownIssues.empty()) {
-			ImGui::TextColored(errorColor, "Unknown Feature INI Files");
-			ImGui::Spacing();
-			ImGui::TextWrapped(
-				"The following feature INI files are not recognized by this CS version. "
-				"They may be from development branches or newer CS versions.");
-			ImGui::Spacing();
-
-			for (const auto* issue : unknownIssues) {
-				DrawFeatureIssue(*issue, errorColor, successColor, infoColor);
+				DrawFeatureIssue(*issue, theme.StatusPalette.Warning);
 			}
 
 			ImGui::Spacing();
@@ -377,7 +444,7 @@ namespace FeatureIssues
 		}
 
 		// Common cleanup actions section
-		ImGui::TextColored(infoColor, "Cleanup Actions:");
+		ImGui::TextColored(theme.Palette.Text, "Cleanup Actions:");
 
 		if (ImGui::Button("Open Features Folder")) {
 			std::filesystem::path featuresPath = std::filesystem::current_path() / "Data" / "Shaders" / "Features";
@@ -409,75 +476,70 @@ namespace FeatureIssues
 		ImGui::Spacing();
 
 		// Cleanup guidance
-		ImGui::TextColored(infoColor, "Cleanup Guidance:");
-		ImGui::TextWrapped("• Features Folder: Contains INI files - you can safely delete obsolete feature INI files");
-		ImGui::TextWrapped("• Shaders Directory: Contains HLSL directories - look for directories that don't match current features");
-		ImGui::TextWrapped("• Individual Delete: Each feature above has a 'Delete' button for convenient removal");
-		ImGui::TextWrapped("• Timestamps: Each feature shows its latest modification time for reference");
-		ImGui::TextWrapped("• Always backup your settings before deleting files");
-		ImGui::TextWrapped("• Obsolete features are marked in yellow/orange above");
-		ImGui::TextWrapped("• After cleanup, use 'Clear Issue List' to refresh the menu");
+		ImGui::TextColored(theme.Palette.Text, "General Actions:");
+		ImGui::BulletText("Use 'Open Features Folder' to manually review INI files");
+		ImGui::BulletText("Use 'Open Shaders Directory' to check for orphaned shader folders");
+		ImGui::BulletText("Use 'Clear Issue List' to refresh after manual cleanup");
 	}
 
-	static void DrawFeatureIssue(const FeatureIssueInfo& issue, const ImVec4& color, const ImVec4& successColor, const ImVec4& infoColor)
+	static void DrawFeatureIssue(const FeatureIssueInfo& issue, const ImVec4& color)
 	{
+		// Get theme colors directly
+		auto menu = Menu::GetSingleton();
+		const auto& theme = menu->GetTheme();
+
 		ImGui::PushID(issue.shortName.c_str());
 
 		// Show feature name with appropriate color
-		ImGui::TextColored(color, "• %s",
+		ImGui::Bullet();
+		ImGui::SameLine();
+		ImGui::TextColored(color, "%s",
 			issue.displayName.empty() ? issue.shortName.c_str() : issue.displayName.c_str());
-
-		// If this is an obsolete feature that modified shader directory, show warning indicator
-		if (issue.IsObsolete() && issue.ModifiedShaderDirectory()) {
-			ImGui::SameLine();
-			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.0f, 1.0f), "[Shader Impact]");
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("This obsolete feature directly modified shader files and may cause compilation issues.");
-			}
-		}
 
 		// Show detailed information in tooltip
 		if (auto _tt = Util::HoverTooltipWrapper()) {
+			// Show compilation failure warning at the top in red if applicable
+			if ((issue.IsObsolete() && issue.ModifiedShaderDirectory()) || issue.IsUnknown()) {
+				ImGui::TextColored(color, "POTENTIAL COMPILATION FAILURE");
+				if (issue.IsUnknown()) {
+					ImGui::TextWrapped("This unknown feature may have modified core shader files and could be causing compilation failures. Unknown features should be removed if failures continue.");
+				} else {
+					ImGui::TextWrapped("This obsolete feature modified core shader files and is causing compilation failures. It must be uninstalled via mod manager.");
+				}
+				ImGui::Spacing();
+				ImGui::Separator();
+				ImGui::Spacing();
+			}
+
 			if (!issue.iniPath.empty()) {
 				ImGui::TextWrapped("INI Path: %s", issue.iniPath.c_str());
 				ImGui::Spacing();
 			}
 			if (!issue.version.empty()) {
-				ImGui::TextWrapped("Version: %s", issue.version.c_str());
+				ImGui::TextWrapped("Current Version: %s", issue.version.c_str());
+				ImGui::Spacing();
+			}
+			if (issue.IsVersionMismatch() && !issue.minimumVersionRequired.empty()) {
+				ImGui::TextWrapped("Minimum Required: %s", issue.minimumVersionRequired.c_str());
 				ImGui::Spacing();
 			}
 			ImGui::TextWrapped("Issue: %s", issue.rejectionReason.c_str());
 
-			if (issue.IsObsolete()) {
-				// In DrawFeatureIssue function, after showing replacement text
-				if (!issue.replacementFeature.empty()) {
-					ImGui::Spacing();
-					ImGui::TextWrapped("Replacement: %s", issue.replacementFeature.c_str());
+			if (issue.IsObsolete() && !issue.replacementFeature.empty()) {
+				ImGui::Spacing();
+				ImGui::TextWrapped("Replacement: %s", issue.replacementFeatureDisplayName.c_str());
+			}
 
-					// Check if replacement feature has a download link (and isn't core)
-					std::string replacementModLink = GetFeatureModLink(issue.replacementFeature);
-					if (!replacementModLink.empty()) {
-						ImGui::SameLine();
-						if (ImGui::SmallButton(("Download " + issue.replacementFeature).c_str())) {
-							ShellExecuteA(0, 0, replacementModLink.c_str(), 0, 0, SW_SHOW);
-						}
-						if (ImGui::IsItemHovered()) {
-							ImGui::SetTooltip("Click to download the replacement feature");
-						}
-					}
-				}
-
-				if (!issue.userMessage.empty()) {
-					ImGui::Spacing();
-					ImGui::TextWrapped("Guidance: %s", issue.userMessage.c_str());
-				}
+			if (issue.IsObsolete() && !issue.userMessage.empty()) {
+				ImGui::Spacing();
+				ImGui::TextWrapped("Guidance: %s", issue.userMessage.c_str());
 			}
 
 			// Show file information
 			if (issue.fileInfo.hasINI || issue.fileInfo.hasDeployedFolder) {
 				ImGui::Spacing();
 				ImGui::Separator();
-				ImGui::TextColored(infoColor, "Files:");
+				ImGui::TextColored(theme.Palette.Text, "Files:");
 
 				if (issue.fileInfo.hasINI) {
 					ImGui::TextWrapped("INI: %s", issue.fileInfo.iniPath.c_str());
@@ -492,7 +554,7 @@ namespace FeatureIssues
 				// Show timestamp information
 				if (!issue.fileInfo.timestampDisplay.empty()) {
 					ImGui::Spacing();
-					ImGui::TextColored(infoColor, "Last Modified:");
+					ImGui::TextColored(theme.Palette.Text, "Last Modified:");
 					ImGui::TextWrapped("Time: %s", issue.fileInfo.timestampDisplay.c_str());
 					if (!issue.fileInfo.latestTimestampFile.empty()) {
 						ImGui::TextWrapped("File: %s", issue.fileInfo.latestTimestampFile.c_str());
@@ -501,108 +563,254 @@ namespace FeatureIssues
 			}
 		}
 
-		// Show inline action buttons
-		ImGui::SameLine();
-		if (ImGui::SmallButton("Show in Explorer")) {
-			std::string folderPath;
-			if (!issue.iniPath.empty()) {
-				folderPath = std::filesystem::path(issue.iniPath).parent_path().string();
-			} else if (issue.fileInfo.hasDeployedFolder) {
-				folderPath = issue.fileInfo.deployedFolderPath;
-			}
-			if (!folderPath.empty()) {
-				ShellExecuteA(NULL, "open", folderPath.c_str(), NULL, NULL, SW_SHOWNORMAL);
-			}
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Open the folder containing this feature's files in Windows Explorer");
-		}
-
-		// Add delete button for feature files
-		ImGui::SameLine();
-		std::string deleteButtonId = "Delete##" + issue.shortName;
-		std::string confirmPopupId = "Confirm Delete##" + issue.shortName;
-		// Use theme error color for delete button to indicate danger
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(color.x, color.y, color.z, 0.6f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(color.x, color.y, color.z, 0.8f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(color.x, color.y, color.z, 1.0f));
-
-		if (ImGui::SmallButton(deleteButtonId.c_str())) {
-			ImGui::OpenPopup(confirmPopupId.c_str());
-		}
-
-		ImGui::PopStyleColor(3);
-
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Delete all files associated with this feature (INI, shaders, etc.)");
-		}
-
-		// Confirmation popup for deletion
-		if (ImGui::BeginPopupModal(confirmPopupId.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-			ImGui::TextWrapped("Are you sure you want to delete all files for feature '%s'?",
-				issue.displayName.empty() ? issue.shortName.c_str() : issue.displayName.c_str());
-			ImGui::Spacing();
-
-			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "This will delete:");
-			if (issue.fileInfo.hasINI) {
-				ImGui::BulletText("INI file: %s", issue.fileInfo.iniPath.c_str());
-			}
-			if (issue.fileInfo.hasDeployedFolder) {
-				ImGui::BulletText("Shader directory: %s", issue.fileInfo.deployedFolderPath.c_str());
-				if (!issue.fileInfo.hlslFiles.empty()) {
-					ImGui::BulletText("%zu HLSL files", issue.fileInfo.hlslFiles.size());
-				}
-			}
-
-			ImGui::Spacing();
-			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "This action cannot be undone!");
-			ImGui::Spacing();
-
-			if (ImGui::Button("Delete All Files", ImVec2(120, 0))) {
-				if (DeleteFeatureFiles(issue)) {
-					// Remove from issues list after successful deletion
-					auto& issues = const_cast<std::vector<FeatureIssueInfo>&>(GetFeatureIssues());
-					issues.erase(std::remove_if(issues.begin(), issues.end(),
-									 [&issue](const FeatureIssueInfo& i) { return i.shortName == issue.shortName; }),
-						issues.end());
-				}
-				ImGui::CloseCurrentPopup();
-			}
-			ImGui::SetItemDefaultFocus();
-			ImGui::SameLine();
-			if (ImGui::Button("Cancel", ImVec2(120, 0))) {
-				ImGui::CloseCurrentPopup();
-			}
-			ImGui::EndPopup();
-		}
-
-		// Show replacement info for obsolete features
+		// Handle replacement feature actions for obsolete features
 		if (issue.IsObsolete() && !issue.replacementFeature.empty()) {
+			// Show replacement info using friendly name with emphasis
 			ImGui::SameLine();
-			ImGui::TextColored(successColor, "→ %s", issue.replacementFeature.c_str());
+			ImGui::Text("(replaced by ");
+			ImGui::SameLine(0, 0);  // No spacing
+			ImGui::TextColored(theme.StatusPalette.RestartNeeded, "%s", issue.replacementFeatureDisplayName.c_str());
+			ImGui::SameLine(0, 0);  // No spacing
+			ImGui::Text(")");
+
+			if (issue.replacementFeatureInstalled) {
+				// Show "Open" button to navigate to the replacement feature
+				ImGui::SameLine();
+
+				if (ImGui::SmallButton(("Open " + issue.replacementFeatureDisplayName + " Settings").c_str())) {
+					// Navigate to the replacement feature in the menu
+					menu->SelectFeatureMenu(issue.replacementFeature);
+					logger::debug("User requested to open {} feature menu", issue.replacementFeature);
+				}
+
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Open the installed %s feature settings", issue.replacementFeatureDisplayName.c_str());
+				}
+			} else {
+				// Check if replacement feature has a download link (cached)
+				if (!issue.replacementFeatureModLink.empty()) {
+					ImGui::SameLine();
+
+					if (ImGui::SmallButton(("Download " + issue.replacementFeatureDisplayName).c_str())) {
+						ShellExecuteA(0, 0, issue.replacementFeatureModLink.c_str(), 0, 0, SW_SHOW);
+					}
+
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text("Download the replacement feature: %s", issue.replacementFeatureDisplayName.c_str());
+					}
+				}
+			}
 		}
 
+		// Handle download action for version mismatch features
+		if (issue.IsVersionMismatch()) {
+			ImGui::SameLine();
+			
+			if (!issue.replacementFeatureModLink.empty()) {
+				std::string buttonText = issue.minimumVersionRequired.empty() ?
+				                             ("Download Latest " + issue.replacementFeatureDisplayName) :
+				                             ("Download " + issue.replacementFeatureDisplayName + " " + issue.minimumVersionRequired + "+");
+
+				if (ImGui::SmallButton(buttonText.c_str())) {
+					ShellExecuteA(0, 0, issue.replacementFeatureModLink.c_str(), 0, 0, SW_SHOW);
+				}
+
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					if (!issue.minimumVersionRequired.empty()) {
+						ImGui::Text("Download %s version %s or later", issue.replacementFeatureDisplayName.c_str(), issue.minimumVersionRequired.c_str());
+					} else {
+						ImGui::Text("Download the latest version of %s", issue.replacementFeatureDisplayName.c_str());
+					}
+				}
+			} else {
+				// Show message when no download link is available
+				std::string updateText = issue.minimumVersionRequired.empty() ?
+				                            "Update Required" :
+				                            ("Update to " + issue.minimumVersionRequired + "+ Required");
+				
+				ImGui::TextWrapped("%s", updateText.c_str());
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					if (!issue.minimumVersionRequired.empty()) {
+						ImGui::Text("This feature needs to be updated to version %s or later. Check the mod page manually.", issue.minimumVersionRequired.c_str());
+					} else {
+						ImGui::Text("This feature needs to be updated but no download link is available. Check the mod page manually.");
+					}
+				}
+			}
+		}
+
+		// Show download button for any feature with a download link (even if no replacement)
+		if (!issue.IsVersionMismatch() && !issue.IsObsolete() && !issue.replacementFeatureModLink.empty()) {
+			ImGui::SameLine();
+			
+			if (ImGui::SmallButton(("Download " + issue.replacementFeatureDisplayName).c_str())) {
+				ShellExecuteA(0, 0, issue.replacementFeatureModLink.c_str(), 0, 0, SW_SHOW);
+			}
+			
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Download %s", issue.replacementFeatureDisplayName.c_str());
+			}
+		}
+
+		// Only show delete button for features that don't modify shader directories (and we know they don't)
+		if (!issue.ModifiedShaderDirectory()) {
+			ImGui::SameLine();
+			std::string deleteButtonId = "Delete##" + issue.shortName;
+			std::string confirmPopupId = "Confirm Delete##" + issue.shortName;
+
+			if (ImGui::SmallButton(deleteButtonId.c_str())) {
+				ImGui::OpenPopup(confirmPopupId.c_str());
+			}
+
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				if (issue.IsUnknown()) {
+					ImGui::Text("Delete files for this unknown feature. WARNING: If this feature modified core shaders, deletion may not fix compilation issues.");
+				} else {
+					ImGui::Text("Delete all files associated with this feature (INI, shaders, etc.)");
+				}
+			}
+
+			// Confirmation popup for deletion
+			if (ImGui::BeginPopupModal(confirmPopupId.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+				ImGui::TextWrapped("Are you sure? This will delete all files for feature '%s'?",
+					issue.displayName.empty() ? issue.shortName.c_str() : issue.displayName.c_str());
+				ImGui::Spacing();
+
+				// Enhanced warning for unknown features
+				if (issue.IsUnknown()) {
+					ImGui::TextColored(theme.StatusPalette.Error, "WARNING:");
+					ImGui::TextWrapped("This is an UNKNOWN feature. If it modified core shader files (outside of its own folder), deleting these files alone will NOT fix shader compilation issues.");
+					ImGui::Spacing();
+					ImGui::TextColored(theme.StatusPalette.Warning, "If compilation issues persist after deletion:");
+					ImGui::BulletText("Completely uninstall the feature via your mod manager");
+					ImGui::BulletText("Check for modified files in Data/Shaders/ (not in feature subfolders)");
+					ImGui::BulletText("Consider reinstalling Community Shaders if issues persist");
+					ImGui::Spacing();
+					ImGui::Separator();
+					ImGui::Spacing();
+				}
+
+				ImGui::TextColored(theme.StatusPalette.Warning, "This will delete:");
+				if (issue.fileInfo.hasINI) {
+					ImGui::BulletText("INI file: %s", issue.fileInfo.iniPath.c_str());
+				}
+				if (issue.fileInfo.hasDeployedFolder) {
+					ImGui::BulletText("Shader directory: %s", issue.fileInfo.deployedFolderPath.c_str());
+					if (!issue.fileInfo.hlslFiles.empty()) {
+						ImGui::BulletText("%zu HLSL files", issue.fileInfo.hlslFiles.size());
+					}
+				}
+
+				ImGui::Spacing();
+				ImGui::TextColored(theme.StatusPalette.Error, "This action cannot be undone!");
+				ImGui::Spacing();
+
+				if (ImGui::Button("Delete", ImVec2(120, 0))) {
+					if (DeleteFeatureFiles(issue)) {
+						// Remove from issues list after successful deletion
+						auto& issues = const_cast<std::vector<FeatureIssueInfo>&>(GetFeatureIssues());
+						issues.erase(std::remove_if(issues.begin(), issues.end(),
+										 [&issue](const FeatureIssueInfo& i) { return i.shortName == issue.shortName; }),
+							issues.end());
+					}
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::SetItemDefaultFocus();
+				ImGui::SameLine();
+				if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::EndPopup();
+			}
+		}
 		ImGui::PopID();
+	}
+
+	bool IsReplacementFeatureInstalled(const std::string& featureName)
+	{
+		Feature* feature = s_featureLookupCache.FindFeature(featureName);
+		return feature ? feature->loaded : false;
 	}
 
 	std::string FeatureIssues::GetFeatureModLink(const std::string& featureName)
 	{
-		// Get the feature list and find the matching feature
-		const auto& features = Feature::GetFeatureList();
-		for (auto* feature : features) {
-			if (feature->GetShortName() == featureName) {
-				// Only return mod link if it's not a core feature
-				if (!feature->IsCore()) {
-					return feature->GetFeatureModLink();
-				}
-			}
+		Feature* feature = s_featureLookupCache.FindFeature(featureName);
+		if (feature && !feature->IsCore()) {
+			return feature->GetFeatureModLink();
 		}
-		return "";  // No link found or feature is core
+		return "";
 	}
 
 	bool IsObsoleteFeature(const std::string& featureName)
 	{
 		// Check if the feature is in our obsolete features map
 		return s_obsoleteFeatureData.find(featureName) != s_obsoleteFeatureData.end();
+	}
+
+	void ScanForOrphanedFeatureINIs()
+	{
+		std::filesystem::path currentPath = std::filesystem::current_path();
+		std::filesystem::path featuresPath = currentPath / "Data" / "Shaders" / "Features";
+
+		if (!std::filesystem::exists(featuresPath)) {
+			return;
+		}
+
+		// Get list of active feature names
+		std::set<std::string> activeFeatureNames;
+		const auto& features = Feature::GetFeatureList();
+		for (auto* feature : features) {
+			activeFeatureNames.insert(feature->GetShortName());
+		}
+
+		// Scan for INI files
+		try {
+			for (const auto& entry : std::filesystem::directory_iterator(featuresPath)) {
+				if (entry.is_regular_file() && entry.path().extension() == ".ini") {
+					std::string featureName = entry.path().stem().string();
+
+					// Skip if this feature is in the active list (it will be processed normally)
+					if (activeFeatureNames.find(featureName) != activeFeatureNames.end()) {
+						continue;
+					}
+
+					// Skip VR feature when not in VR mode (it's a core feature)
+					if (featureName == "VR" && !REL::Module::IsVR()) {
+						logger::info("Ignoring VR.ini in non-VR mode");
+						continue;
+					}
+
+					// This is an orphaned INI file - check if it's a known obsolete feature
+					if (IsObsoleteFeature(featureName)) {
+						// Read version from INI file
+						CSimpleIniA ini;
+						ini.SetUnicode();
+						ini.LoadFile(entry.path().c_str());
+
+						std::string version = "unknown";
+						if (auto value = ini.GetValue("Info", "Version")) {
+							version = value;
+						}
+
+						FeatureFileInfo fileInfo = GetFeatureFileInfo(featureName);
+						AddFeatureIssue(featureName, version,
+							std::format("{} is an obsolete feature that has been removed", featureName),
+							FeatureIssueInfo::IssueType::OBSOLETE, fileInfo);
+
+						logger::warn("Found orphaned obsolete feature INI: {} version {}", featureName, version);
+					} else {
+						// Unknown orphaned feature
+						FeatureFileInfo fileInfo = GetFeatureFileInfo(featureName);
+						AddFeatureIssue(featureName, "unknown",
+							std::format("{} is not recognized by this CS version", featureName),
+							FeatureIssueInfo::IssueType::UNKNOWN, fileInfo);
+
+						logger::warn("Found orphaned unknown feature INI: {}", featureName);
+					}
+				}
+			}
+		} catch (const std::filesystem::filesystem_error& e) {
+			logger::warn("Error scanning Features directory: {}", e.what());
+		}
 	}
 }

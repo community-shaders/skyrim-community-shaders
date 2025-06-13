@@ -78,7 +78,7 @@ void Feature::Load(json& o_json)
 				// Version compatibility check
 				auto& minimalFeatureVersion = iter->second;
 				bool oldFeature = featureVersion.compare(minimalFeatureVersion) == std::strong_ordering::less;
-				bool majorVersionMismatch = minimalFeatureVersion.major() < featureVersion.major();
+				bool majorVersionMismatch = featureVersion.major() < minimalFeatureVersion.major();
 
 				if (!oldFeature && !majorVersionMismatch) {
 					loaded = true;
@@ -92,7 +92,7 @@ void Feature::Load(json& o_json)
 					minimalVersionString = minimalVersionString.substr(0, minimalVersionString.size() - 2);
 
 					if (majorVersionMismatch) {
-						failedLoadedMessage = std::format("{} {} requires a newer version of community shaders, the feature version should be {}", GetShortName(), value, minimalVersionString);
+						failedLoadedMessage = std::format("{} {} is too old, major version incompatibility detected. Required: {}", GetShortName(), value, minimalVersionString);
 					} else {
 						failedLoadedMessage = std::format("{} {} is an old feature version, required: {}", GetShortName(), value, minimalVersionString);
 					}
@@ -116,8 +116,26 @@ void Feature::Load(json& o_json)
 	if (hasError) {
 		loaded = false;
 		logger::warn("{}", failedLoadedMessage);
-		FeatureIssues::FeatureFileInfo fileInfo = FeatureIssues::GetFeatureFileInfo(GetShortName());
-		FeatureIssues::AddFeatureIssue(GetShortName(), errorVersion, failedLoadedMessage, errorType, fileInfo);
+		
+		// Guard against empty shortName to prevent bogus filesystem access
+		std::string shortName = GetShortName();
+		if (!shortName.empty()) {
+			FeatureIssues::FeatureFileInfo fileInfo = FeatureIssues::GetFeatureFileInfo(shortName);
+			
+			// For version mismatch, also pass the minimum required version
+			std::string minimumVersion;
+			if (errorType == FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH) {
+				auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(shortName);
+				if (iter != FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
+					std::string minimalVersionString = iter->second.string();
+					minimumVersion = minimalVersionString.substr(0, minimalVersionString.size() - 2);
+				}
+			}
+			
+			FeatureIssues::AddFeatureIssue(shortName, errorVersion, failedLoadedMessage, errorType, fileInfo, minimumVersion);
+		} else {
+			logger::error("Feature has empty short name, cannot add to feature issues list");
+		}
 	}
 }
 

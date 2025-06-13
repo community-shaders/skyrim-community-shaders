@@ -6,6 +6,7 @@
 
 #include "DX12SwapChain.h"
 #include "Deferred.h"
+#include "FeatureIssues.h"
 #include "Features/CloudShadows.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
@@ -324,6 +325,8 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 			logger::info("Found older config for version {}; upgrading to {}", (std::string)settings["Version"], Plugin::VERSION.string());
 			Save(configMode);
 		}
+		FeatureIssues::ScanForOrphanedFeatureINIs();
+
 		logger::info("Loading Settings Complete");
 	} catch (const json::exception& e) {
 		logger::info("General JSON error accessing settings: {}; recreating config", e.what());

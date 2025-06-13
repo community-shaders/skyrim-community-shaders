@@ -20,8 +20,8 @@ namespace FeatureIssues
 		std::string deployedFolderPath;      // Path to deployed shader folder (Data/Shaders/FeatureName/)
 		std::string iniPath;                 // Path to the INI file (Data/Shaders/Features/FeatureName.ini)
 		std::vector<std::string> hlslFiles;  // List of HLSL files for this feature
-		bool hasDeployedFolder;              // Whether the deployed shader folder exists
-		bool hasINI;                         // Whether INI file exists in deployed location
+		bool hasDeployedFolder{ false };                // Whether the deployed shader folder exists
+		bool hasINI{ false};                         // Whether INI file exists in deployed location
 
 		// Timestamp information for file tracking
 		std::filesystem::file_time_type latestTimestamp;  // Latest modification time across all files
@@ -39,11 +39,19 @@ namespace FeatureIssues
 		std::string version;             // Version found in INI (if any)
 		std::string iniPath;             // Full path to the INI file
 		std::string rejectionReason;     // Why it was rejected/obsolete
-		std::string replacementFeature;  // What feature replaced it (if any)
+		std::string replacementFeature;  // What feature replaced it (short name)
 		std::string userMessage;         // Guidance message for user
 		REL::Version removedInVersion;   // CS version when it was removed (for obsolete features)
 		bool modifiedShaderDirectory{ false };        // Whether this obsolete feature modified package/Shaders/ directly
 		FeatureFileInfo fileInfo;        // Detailed file information
+
+		// Version mismatch specific information
+		std::string minimumVersionRequired; // For version mismatch issues, the minimum version required
+
+		// Cached replacement feature information (populated when issue is added)
+		std::string replacementFeatureDisplayName;  // Friendly name of replacement feature
+		bool replacementFeatureInstalled{ false };  // Whether replacement is installed and loaded
+		std::string replacementFeatureModLink;      // Download link for replacement (if available)
 
 		enum class IssueType
 		{
@@ -88,6 +96,13 @@ namespace FeatureIssues
 	bool HasObsoleteShaderModifyingFeatures();
 
 	/**
+	 * Check if any features that may have modified core shaders are present
+	 * This includes obsolete shader-modifying features and unknown features
+	 * @return true if any potentially shader-modifying features are detected
+	 */
+	bool HasPotentialShaderModifyingFeatures();
+
+	/**
 	 * Get detailed file information for a feature
 	 * This helps users understand the actual file structure
 	 *
@@ -104,10 +119,11 @@ namespace FeatureIssues
 	 * \param reason Why it was rejected/obsolete
 	 * \param issueType Type of issue
 	 * \param fileInfo Detailed file information
+	 * \param minimumVersionRequired For version mismatch issues, the minimum version required
 	 */
 	void AddFeatureIssue(const std::string& shortName, const std::string& version,
 		const std::string& reason, FeatureIssueInfo::IssueType issueType,
-		const FeatureFileInfo& fileInfo = {});
+		const FeatureFileInfo& fileInfo = {}, const std::string& minimumVersionRequired = "");
 
 	/**
 	 * Draw UI for feature issues (rejected and obsolete features)
@@ -136,4 +152,27 @@ namespace FeatureIssues
 	 * \return Download link if available, empty string if feature is core or has no link
 	 */
 	std::string GetFeatureModLink(const std::string& featureName);
+
+	/**
+	 * Check if a replacement feature is installed and loaded
+	 *
+	 * \param featureName Short name of the feature to check
+	 * \return true if the feature is installed and loaded, false otherwise
+	 */
+	bool IsReplacementFeatureInstalled(const std::string& featureName);
+
+	/**
+	 * Scan for orphaned feature INI files that are not in the active feature list
+	 * 
+	 * This function scans the Data/Shaders/Features/ directory for INI files that
+	 * correspond to features not currently in the active feature list (e.g., obsolete
+	 * features, VR features in non-VR mode, unknown features). It identifies whether
+	 * these orphaned INI files are known obsolete features or completely unknown features
+	 * and adds them to the feature issues tracking system.
+	 * 
+	 * Should be called after all active features have been loaded to detect leftover
+	 * INI files that might cause issues or confusion.
+	 */
+	void ScanForOrphanedFeatureINIs();
+
 }

@@ -62,6 +62,7 @@ public:
 		{
 			ImVec4 Disable{ 0.5f, 0.5f, 0.5f, 1.f };
 			ImVec4 Error{ 1.f, 0.5f, 0.5f, 1.f };
+			ImVec4 Warning{ 1.0f, 0.6f, 0.2f, 1.0f };
 			ImVec4 RestartNeeded{ 0.5f, 1.f, 0.5f, 1.f };
 			ImVec4 CurrentHotkey{ 1.f, 1.f, 0.f, 1.f };
 		} StatusPalette;
@@ -181,8 +182,13 @@ public:
 
 	const ThemeSettings& GetTheme() const { return settings.Theme; }  // Provide read-only access to the Theme.
 
+	void SelectFeatureMenu(const std::string& featureName);
+
 private:
 	Settings settings;
+
+	// Menu navigation
+	std::string pendingFeatureSelection;  // Feature to select on next frame
 
 	uint32_t priorShaderKey = VK_PRIOR;  // used for blocking shaders in debugging
 	uint32_t nextShaderKey = VK_NEXT;    // used for blocking shaders in debugging

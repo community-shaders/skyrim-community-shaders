@@ -362,11 +362,23 @@ void Menu::DrawSettings()
 			struct ListMenuVisitor
 			{
 				size_t listId;
+				size_t& selectedMenuRef;
 
 				void operator()(const BuiltInMenu& menu)
 				{
-					if (ImGui::Selectable(fmt::format(" {} ", menu.name).c_str(), selectedMenu == listId, ImGuiSelectableFlags_SpanAllColumns))
-						selectedMenu = listId;
+					// Use error color for Feature Issues menu item
+					bool isFeatureIssues = (menu.name == "Feature Issues");
+					if (isFeatureIssues) {
+						auto& themeSettings = globals::menu->settings.Theme;
+						ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.Error);
+					}
+
+					if (ImGui::Selectable(fmt::format(" {} ", menu.name).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns))
+						selectedMenuRef = listId;
+
+					if (isFeatureIssues) {
+						ImGui::PopStyleColor();
+					}
 				}
 				void operator()(const std::string& label)
 				{
@@ -397,8 +409,8 @@ void Menu::DrawSettings()
 					ImGui::PushStyleColor(ImGuiCol_Text, textColor);
 
 					// Create selectable item
-					if (ImGui::Selectable(fmt::format(" {} ", feat->GetName()).c_str(), selectedMenu == listId, ImGuiSelectableFlags_SpanAllColumns)) {
-						selectedMenu = listId;
+					if (ImGui::Selectable(fmt::format(" {} ", feat->GetName()).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns)) {
+						selectedMenuRef = listId;
 					}
 
 					// Restore original text color
@@ -572,13 +584,26 @@ void Menu::DrawSettings()
 				menuList.push_back("Unloaded Features"s);
 				std::ranges::copy(unloadedFeatures, std::back_inserter(menuList));
 			}
-
-			// Add section for feature issues (rejected features, obsolete info, etc.)
+			// Add top section for feature issues (rejected features, obsolete info, etc.)
 			if (FeatureIssues::HasFeatureIssues()) {
-				menuList.push_back("Feature Issues"s);
-				menuList.push_back(BuiltInMenu{ "Feature Issues", []() {
-												   FeatureIssues::DrawFeatureIssuesUI();
-											   } });
+				menuList.insert(menuList.begin(), BuiltInMenu{ "Feature Issues", []() {
+																  FeatureIssues::DrawFeatureIssuesUI();
+															  } });
+			}
+
+			// Handle pending feature selection
+			if (!pendingFeatureSelection.empty()) {
+				for (size_t i = 0; i < menuList.size(); ++i) {
+					if (std::holds_alternative<Feature*>(menuList[i])) {
+						Feature* feature = std::get<Feature*>(menuList[i]);
+						if (feature->GetShortName() == pendingFeatureSelection) {
+							selectedMenu = i;
+							logger::info("Navigated to {} feature menu", pendingFeatureSelection);
+							break;
+						}
+					}
+				}
+				pendingFeatureSelection.clear();  // Clear after processing
 			}
 
 			ImGui::TableNextColumn();
@@ -588,7 +613,7 @@ void Menu::DrawSettings()
 				ImGui::PopStyleVar();
 				ImGui::PopStyleColor();
 				for (size_t i = 0; i < menuList.size(); i++) {
-					std::visit(ListMenuVisitor{ i }, menuList[i]);
+					std::visit(ListMenuVisitor{ i, selectedMenu }, menuList[i]);
 				}
 				ImGui::EndListBox();
 			}
@@ -771,6 +796,7 @@ void Menu::DrawGeneralSettings()
 
 				ImGui::ColorEdit4("Disabled Text", (float*)&themeSettings.StatusPalette.Disable);
 				ImGui::ColorEdit4("Error Text", (float*)&themeSettings.StatusPalette.Error);
+				ImGui::ColorEdit4("Warning Text", (float*)&themeSettings.StatusPalette.Warning);
 				ImGui::ColorEdit4("Restart Needed Text", (float*)&themeSettings.StatusPalette.RestartNeeded);
 				ImGui::ColorEdit4("Current Hotkey Text", (float*)&themeSettings.StatusPalette.CurrentHotkey);
 
@@ -1137,9 +1163,9 @@ void Menu::DrawOverlay()
 
 			ImGui::TextColored(themeSettings.StatusPalette.Error, "ERROR: %d shaders failed to compile. Check installation and CommunityShaders.log", failed, totalShaders);
 
-			// Check for obsolete features that may cause shader compilation issues
-			if (FeatureIssues::HasObsoleteShaderModifyingFeatures()) {
-				ImGui::TextColored(themeSettings.StatusPalette.Error, "Obsolete features that modified shaders detected. Check Feature Issues in the Menu.");
+			// Check for features that may cause shader compilation issues
+			if (FeatureIssues::HasPotentialShaderModifyingFeatures()) {
+				ImGui::TextColored(themeSettings.StatusPalette.Error, "Features that may have modified shaders detected. Check Feature Issues in the Menu.");
 			}
 
 			ImGui::End();
@@ -1334,7 +1360,7 @@ float Menu::PerfOverlayState::SetTextScale(Settings::PerfOverlaySettings& settin
  * and computes the normalized Y-axis range for the frame time graph using statistical analysis.
  *
  * Steps performed:
- *   1. Resizes the frame time history buffer if the user has changed the setting.
+ *   1. Resizes the frameTimeHistory buffer if the user has changed the setting.
  *   2. Inserts the latest frame time into the circular history buffer.
  *   3. Updates instantaneous min/max frame time values, with full rescans if necessary.
  *   4. Calculates the average (mean) and standard deviation of frame times in the buffer.
@@ -1606,6 +1632,7 @@ void Menu::PerfOverlayState::DrawDrawCalls()
 	ImGui::Text("Distant Tree: %d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::DistantTree]));
 	ImGui::Text("Particle: %d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Particle]));
 	ImGui::Text("Total: %d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Total]));
+
 	ImGui::Unindent();
 }
 
@@ -2237,4 +2264,10 @@ const char* Menu::KeyIdToString(uint32_t key)
 	};
 
 	return keyboard_keys_international[key];
+}
+
+void Menu::SelectFeatureMenu(const std::string& featureName)
+{
+	pendingFeatureSelection = featureName;
+	logger::info("Queued navigation to {} feature menu", featureName);
 }
