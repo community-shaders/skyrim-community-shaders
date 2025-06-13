@@ -2,6 +2,10 @@
 
 struct TerrainVariation : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "148123";
+
+public:
 	static TerrainVariation* GetSingleton()
 	{
 		static TerrainVariation singleton;
@@ -10,7 +14,7 @@ struct TerrainVariation : Feature
 
 	virtual inline std::string GetName() override { return "Terrain Variation"; }
 	virtual inline std::string GetShortName() override { return "TerrainVariation"; }
-	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/148123"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_VARIATION"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type shaderType) override { return shaderType == RE::BSShader::Type::Lighting; }
 	virtual bool IsCore() const override { return false; };

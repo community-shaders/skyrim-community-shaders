@@ -2,6 +2,10 @@
 
 struct GrassCollision : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "87816";
+
+public:
 	static GrassCollision* GetSingleton()
 	{
 		static GrassCollision singleton;
@@ -10,7 +14,7 @@ struct GrassCollision : Feature
 
 	virtual inline std::string GetName() override { return "Grass Collision"; }
 	virtual inline std::string GetShortName() override { return "GrassCollision"; }
-	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/87816"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "GRASS_COLLISION"; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override

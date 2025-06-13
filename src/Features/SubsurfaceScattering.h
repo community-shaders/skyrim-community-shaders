@@ -4,6 +4,9 @@
 
 struct SubsurfaceScattering : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "114114";
+
 public:
 	static SubsurfaceScattering* GetSingleton()
 	{
@@ -57,11 +60,11 @@ public:
 
 	ID3D11ComputeShader* horizontalSSBlur = nullptr;
 	ID3D11ComputeShader* verticalSSBlur = nullptr;
-	RE::BGSKeyword* isBeastRaceKeyword = nullptr;
+	RE::BGSKeyword* isBeastRaceKeyword = nullptr;	
 
 	virtual inline std::string GetName() override { return "Subsurface Scattering"; }
 	virtual inline std::string GetShortName() override { return "SubsurfaceScattering"; }
-	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/114114"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "SSS"; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override

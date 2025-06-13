@@ -4,6 +4,9 @@
 
 struct WaterEffects : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "112762";
+
 public:
 	static WaterEffects* GetSingleton()
 	{
@@ -15,7 +18,7 @@ public:
 
 	virtual inline std::string GetName() override { return "Water Effects"; }
 	virtual inline std::string GetShortName() override { return "WaterEffects"; }
-	virtual inline std::string GetFeatureModLink() override { return "https://www.nexusmods.com/skyrimspecialedition/mods/112762"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "WATER_EFFECTS"; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
