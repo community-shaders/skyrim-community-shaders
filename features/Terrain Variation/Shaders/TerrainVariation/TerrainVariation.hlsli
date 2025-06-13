@@ -18,9 +18,6 @@ static const float WORLD_SCALE = 332.54;
 // Blending constants
 static const float3 DEFAULT_WEIGHTS = float3(0.33, 0.33, 0.34);
 static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
-// Distance-based LOD optimization constants
-static const float DISTANCE_LOD_THRESHOLD = 1024.0;    // Distance threshold for fast path optimization
-static const float DISTANCE_LOD_TRANSITION = 300.0;    // Transition zone width (units)
 // Hash constants
 static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
 static const float2 HASH_SINE_MULTIPLIER = float2(43758.5453, 28637.1369);
@@ -148,35 +145,36 @@ inline float4 StochasticSampleLOD(float rnd, float mipLevel, Texture2D tex, Samp
 }
 
 // Main stochastic sampling function
-inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy, float distance)
-{	// Distance-based LOD with smooth transition
-	float distanceFactor = saturate((distance - DISTANCE_LOD_THRESHOLD) / DISTANCE_LOD_TRANSITION);
-
+inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
+{
 	// Take first sample (always needed)
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 
-	// Early exit for distant terrain - avoid expensive computation
-	if (distanceFactor >= 0.7)
+	// Early exit for high mip levels - single sample is sufficient
+	if (mipLevel >= 4.0)
 	{
-		return sample1; // Miplevel at this distance should entirely hide any triangular artifacts.
+		return sample1;
 	}
 
 	// Take remaining samples for blending
 	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
 
-	// Early exit for mid-distance - skip expensive height blending
-	if (distanceFactor >= 0.4)
+	// Use mip level to determine blending complexity
+	float mipFactor = saturate(mipLevel / 4.0);
+
+	// Early exit for mid-range mip levels - skip expensive height blending
+	if (mipLevel >= 2.0)
 	{
 		// Simple barycentric blend without height influence
 		float3 weights = saturate(offsets.weights);
 		float rcpWeightSum = rcp(weights.x + weights.y + weights.z);
 		weights *= rcpWeightSum;
 		float4 simpleSample = sample1 * weights.x + sample2 * weights.y + sample3 * weights.z;
-		return lerp(simpleSample, sample1, distanceFactor);
+		return lerp(simpleSample, sample1, mipFactor);
 	}
 
-	// Full height-based blending for close terrain
+	// Full height-based blending for low mip levels (close terrain)
 	float contrastFactor = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE);
 	float3 blendWeights = pow(saturate(offsets.weights), contrastFactor);
 
@@ -198,8 +196,8 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	// Direct blend without intermediate variable
 	float4 highQualitySample = sample1 * weights.x + sample2 * weights.y + sample3 * weights.z;
 
-	// Smooth transition between high quality and single sample
-	return lerp(highQualitySample, sample1, distanceFactor);
+	// Smooth transition between high quality and single sample based on mip level
+	return lerp(highQualitySample, sample1, mipFactor);
 }
 
 
