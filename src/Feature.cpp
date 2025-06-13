@@ -116,12 +116,12 @@ void Feature::Load(json& o_json)
 	if (hasError) {
 		loaded = false;
 		logger::warn("{}", failedLoadedMessage);
-		
+
 		// Guard against empty shortName to prevent bogus filesystem access
 		std::string shortName = GetShortName();
 		if (!shortName.empty()) {
 			FeatureIssues::FeatureFileInfo fileInfo = FeatureIssues::GetFeatureFileInfo(shortName);
-			
+
 			// For version mismatch, also pass the minimum required version
 			std::string minimumVersion;
 			if (errorType == FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH) {
@@ -131,7 +131,7 @@ void Feature::Load(json& o_json)
 					minimumVersion = minimalVersionString.substr(0, minimalVersionString.size() - 2);
 				}
 			}
-			
+
 			FeatureIssues::AddFeatureIssue(shortName, errorVersion, failedLoadedMessage, errorType, fileInfo, minimumVersion);
 		} else {
 			logger::error("Feature has empty short name, cannot add to feature issues list");

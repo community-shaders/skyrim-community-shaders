@@ -605,7 +605,7 @@ namespace FeatureIssues
 		// Handle download action for version mismatch features
 		if (issue.IsVersionMismatch()) {
 			ImGui::SameLine();
-			
+
 			if (!issue.replacementFeatureModLink.empty()) {
 				std::string buttonText = issue.minimumVersionRequired.empty() ?
 				                             ("Download Latest " + issue.replacementFeatureDisplayName) :
@@ -625,9 +625,9 @@ namespace FeatureIssues
 			} else {
 				// Show message when no download link is available
 				std::string updateText = issue.minimumVersionRequired.empty() ?
-				                            "Update Required" :
-				                            ("Update to " + issue.minimumVersionRequired + "+ Required");
-				
+				                             "Update Required" :
+				                             ("Update to " + issue.minimumVersionRequired + "+ Required");
+
 				ImGui::TextWrapped("%s", updateText.c_str());
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					if (!issue.minimumVersionRequired.empty()) {
@@ -642,11 +642,11 @@ namespace FeatureIssues
 		// Show download button for any feature with a download link (even if no replacement)
 		if (!issue.IsVersionMismatch() && !issue.IsObsolete() && !issue.replacementFeatureModLink.empty()) {
 			ImGui::SameLine();
-			
+
 			if (ImGui::SmallButton(("Download " + issue.replacementFeatureDisplayName).c_str())) {
 				ShellExecuteA(0, 0, issue.replacementFeatureModLink.c_str(), 0, 0, SW_SHOW);
 			}
-			
+
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Download %s", issue.replacementFeatureDisplayName.c_str());
 			}

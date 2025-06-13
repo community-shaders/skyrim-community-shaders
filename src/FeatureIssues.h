@@ -20,8 +20,8 @@ namespace FeatureIssues
 		std::string deployedFolderPath;      // Path to deployed shader folder (Data/Shaders/FeatureName/)
 		std::string iniPath;                 // Path to the INI file (Data/Shaders/Features/FeatureName.ini)
 		std::vector<std::string> hlslFiles;  // List of HLSL files for this feature
-		bool hasDeployedFolder{ false };                // Whether the deployed shader folder exists
-		bool hasINI{ false};                         // Whether INI file exists in deployed location
+		bool hasDeployedFolder{ false };     // Whether the deployed shader folder exists
+		bool hasINI{ false };                // Whether INI file exists in deployed location
 
 		// Timestamp information for file tracking
 		std::filesystem::file_time_type latestTimestamp;  // Latest modification time across all files
@@ -34,19 +34,19 @@ namespace FeatureIssues
 	 */
 	struct FeatureIssueInfo
 	{
-		std::string shortName;           // Short name of the feature
-		std::string displayName;         // Display name of the feature (empty if unknown)
-		std::string version;             // Version found in INI (if any)
-		std::string iniPath;             // Full path to the INI file
-		std::string rejectionReason;     // Why it was rejected/obsolete
-		std::string replacementFeature;  // What feature replaced it (short name)
-		std::string userMessage;         // Guidance message for user
-		REL::Version removedInVersion;   // CS version when it was removed (for obsolete features)
-		bool modifiedShaderDirectory{ false };        // Whether this obsolete feature modified package/Shaders/ directly
-		FeatureFileInfo fileInfo;        // Detailed file information
+		std::string shortName;                  // Short name of the feature
+		std::string displayName;                // Display name of the feature (empty if unknown)
+		std::string version;                    // Version found in INI (if any)
+		std::string iniPath;                    // Full path to the INI file
+		std::string rejectionReason;            // Why it was rejected/obsolete
+		std::string replacementFeature;         // What feature replaced it (short name)
+		std::string userMessage;                // Guidance message for user
+		REL::Version removedInVersion;          // CS version when it was removed (for obsolete features)
+		bool modifiedShaderDirectory{ false };  // Whether this obsolete feature modified package/Shaders/ directly
+		FeatureFileInfo fileInfo;               // Detailed file information
 
 		// Version mismatch specific information
-		std::string minimumVersionRequired; // For version mismatch issues, the minimum version required
+		std::string minimumVersionRequired;  // For version mismatch issues, the minimum version required
 
 		// Cached replacement feature information (populated when issue is added)
 		std::string replacementFeatureDisplayName;  // Friendly name of replacement feature
@@ -163,13 +163,13 @@ namespace FeatureIssues
 
 	/**
 	 * Scan for orphaned feature INI files that are not in the active feature list
-	 * 
+	 *
 	 * This function scans the Data/Shaders/Features/ directory for INI files that
 	 * correspond to features not currently in the active feature list (e.g., obsolete
 	 * features, VR features in non-VR mode, unknown features). It identifies whether
 	 * these orphaned INI files are known obsolete features or completely unknown features
 	 * and adds them to the feature issues tracking system.
-	 * 
+	 *
 	 * Should be called after all active features have been loaded to detect leftover
 	 * INI files that might cause issues or confusion.
 	 */
