@@ -629,6 +629,20 @@ float3 GetWaterNormal(PS_INPUT input, float distanceFactor, float normalsDepthFa
 #				if defined(WATER_PARALLAX)
 		rippleWPosition.xy += parallaxOffset;
 #				endif
+
+		// Flow-following ripple enhancement: Makes raindrops follow water current
+#				if defined(FLOWMAP)
+		// Get flowmap data for ripple flow calculation
+		// Uses zero UV shift to sample current flow state at ripple location
+		FlowmapData flowData = GetFlowmapData(input, float2(0, 0));
+
+		// Apply time-based flow offset to ripple position
+		// This makes ripples drift downstream with the water current
+		float flowTimeScale = SharedData::wetnessEffectsSettings.Time * 0.1;         // Flow animation speed
+		float2 flowOffset = flowData.flowVector * flowTimeScale * flowData.color.w;  // Modulated by flow mask
+		rippleWPosition.xy += flowOffset;
+#				endif
+
 		raindropInfo = WetnessEffects::GetRainDrops(rippleWPosition + FrameBuffer::CameraPosAdjust[eyeIndex], SharedData::wetnessEffectsSettings.Time, finalNormal, rippleStrengthModifier);
 	}
 
