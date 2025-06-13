@@ -420,15 +420,87 @@ float CalculateDepthMultFromUV(float2 uv, float depth, uint eyeIndex = 0)
 
 #		if defined(SIMPLE) || defined(UNDERWATER) || defined(LOD) || defined(SPECULAR)
 #			if defined(FLOWMAP)
-float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float offset, uint eyeIndex)
+/**
+ * Calculates flow vector from flowmap texture data
+ * 
+ * @param input Pixel shader input containing texture coordinates
+ * @param uvShift UV offset for sampling the flowmap texture
+ * @return float2 The calculated flow vector in world space, rotated according to flowmap direction
+ * 
+ * @note This is a simplified version of GetFlowmapData() that only returns the flow vector
+ * @note Flow direction is encoded in flowmap RG channels, strength in B channel
+ */
+float2 GetFlowVector(PS_INPUT input, float2 uvShift)
 {
 	float4 flowmapColor = FlowMapTex.Sample(FlowMapSampler, input.TexCoord2.zw + uvShift);
 	float2 flowVector = (64 * input.TexCoord3.xy) * sqrt(1.01 - flowmapColor.z);
 	float2 flowSinCos = flowmapColor.xy * 2 - 1;
 	float2x2 flowRotationMatrix = float2x2(flowSinCos.x, flowSinCos.y, -flowSinCos.y, flowSinCos.x);
-	float2 rotatedFlowVector = mul(transpose(flowRotationMatrix), flowVector);
-	float2 uv = offset + (rotatedFlowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowmapColor.w), 0));
-	return float3(FlowMapNormalsTex.SampleBias(FlowMapNormalsSampler, uv, SharedData::MipBias).xy, flowmapColor.z);
+	return mul(transpose(flowRotationMatrix), flowVector);
+}
+
+/**
+ * Structure containing complete flowmap information
+ */
+struct FlowmapData
+{
+	float4 color;       // Raw flowmap color (R=flow_x, G=flow_y, B=flow_strength, A=flow_mask)
+	float2 flowVector;  // Calculated rotated flow vector in world space
+};
+
+/**
+ * Samples flowmap texture and calculates complete flow data
+ * 
+ * @param input Pixel shader input containing texture coordinates and world position data
+ * @param uvShift UV offset for sampling the flowmap texture (used for animation/variation)
+ * @return FlowmapData Complete flowmap information including raw color and calculated flow vector
+ * 
+ * @details This function:
+ *          - Samples the flowmap texture at the specified UV coordinates
+ *          - Decodes flow direction from RG channels (remapped from [0,1] to [-1,1])
+ *          - Calculates flow strength using the blue channel with sqrt falloff
+ *          - Applies rotation matrix to transform flow direction to world space
+ *          - Scales flow vector by world position and strength factors
+ * 
+ * @note Flowmap format:
+ *       - Red channel: Flow direction X component (0.5 = no flow, 0/1 = negative/positive flow)
+ *       - Green channel: Flow direction Y component (0.5 = no flow, 0/1 = negative/positive flow)  
+ *       - Blue channel: Flow strength (0 = no flow, 1 = maximum flow)
+ *       - Alpha channel: Flow mask/intensity multiplier
+ */
+FlowmapData GetFlowmapData(PS_INPUT input, float2 uvShift)
+{
+	FlowmapData data;
+	data.color = FlowMapTex.Sample(FlowMapSampler, input.TexCoord2.zw + uvShift);
+	float2 flowVector = (64 * input.TexCoord3.xy) * sqrt(1.01 - data.color.z);
+	float2 flowSinCos = data.color.xy * 2 - 1;
+	float2x2 flowRotationMatrix = float2x2(flowSinCos.x, flowSinCos.y, -flowSinCos.y, flowSinCos.x);
+	data.flowVector = mul(transpose(flowRotationMatrix), flowVector);
+	return data;
+}
+
+/**
+ * Generates flowmap-based normal perturbation for water surface
+ * 
+ * @param input Pixel shader input containing texture coordinates and world position
+ * @param uvShift UV offset for flowmap sampling (used for animation phases)
+ * @param multiplier Intensity multiplier for the flow effect
+ * @param offset Base UV offset for the normal texture sampling
+ * @return float3 Normal perturbation (XY=normal offset, Z=flow strength mask)
+ * 
+ * @details This function uses flowmap data to:
+ *          - Calculate flow-displaced UV coordinates for normal texture sampling
+ *          - Apply flow-based animation to water normal textures
+ *          - Return both the normal perturbation and flow strength information
+ * 
+ * @note The returned Z component contains the original flowmap strength value
+ *       which can be used for blending between flow and non-flow normals
+ */
+float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float offset)
+{
+	FlowmapData flowData = GetFlowmapData(input, uvShift);
+	float2 uv = offset + (flowData.flowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
+	return float3(FlowMapNormalsTex.SampleBias(FlowMapNormalsSampler, uv, SharedData::MipBias).xy, flowData.color.z);
 }
 #			endif
 
@@ -463,10 +535,10 @@ float3 GetWaterNormal(PS_INPUT input, float distanceFactor, float normalsDepthFa
 		0.5 + -(-0.5 + abs(frac(input.TexCoord2.zw * (64 * input.TexCoord4)) * 2 - 1));
 	float uvShift = 1 / (128 * input.TexCoord4);
 
-	float3 flowmapNormal0 = GetFlowmapNormal(input, uvShift.xx, 9.92, 0, eyeIndex);
-	float3 flowmapNormal1 = GetFlowmapNormal(input, float2(0, uvShift), 10.64, 0.27, eyeIndex);
-	float3 flowmapNormal2 = GetFlowmapNormal(input, 0.0.xx, 8, 0, eyeIndex);
-	float3 flowmapNormal3 = GetFlowmapNormal(input, float2(uvShift, 0), 8.48, 0.62, eyeIndex);
+	float3 flowmapNormal0 = GetFlowmapNormal(input, uvShift.xx, 9.92, 0);
+	float3 flowmapNormal1 = GetFlowmapNormal(input, float2(0, uvShift), 10.64, 0.27);
+	float3 flowmapNormal2 = GetFlowmapNormal(input, 0.0.xx, 8, 0);
+	float3 flowmapNormal3 = GetFlowmapNormal(input, float2(uvShift, 0), 8.48, 0.62);
 
 	float2 flowmapNormalWeighted =
 		normalMul.y * (normalMul.x * flowmapNormal2.xy + (1 - normalMul.x) * flowmapNormal3.xy) +
