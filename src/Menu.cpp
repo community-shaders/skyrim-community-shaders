@@ -998,6 +998,10 @@ void Menu::DrawAdvancedSettings()
 
 	globals::truePBR->DrawSettings();
 	Menu::DrawDisableAtBootSettings();
+	// Developer Mode Testing Section
+	if (globals::state->IsDeveloperMode()) {
+		FeatureIssues::Test::DrawDeveloperModeTestingUI();
+	}
 }
 
 void Menu::DrawDisableAtBootSettings()

@@ -1,9 +1,6 @@
 #pragma once
 
 #include "Globals.h"
-#include <filesystem>
-#include <string>
-#include <vector>
 
 /**
  * Centralized system for tracking and managing feature issues
@@ -160,7 +157,6 @@ namespace FeatureIssues
 	 * \return true if the feature is installed and loaded, false otherwise
 	 */
 	bool IsReplacementFeatureInstalled(const std::string& featureName);
-
 	/**
 	 * Scan for orphaned feature INI files that are not in the active feature list
 	 *
@@ -172,7 +168,99 @@ namespace FeatureIssues
 	 *
 	 * Should be called after all active features have been loaded to detect leftover
 	 * INI files that might cause issues or confusion.
+	 *
+	 * @param checkLoadedFeatures If true, also checks loaded features for issues like version mismatches.
+	 *                           Defaults to false to maintain backward compatibility for startup scans.
+	 *                           Should be set to true for refresh operations to ensure all errors are detected.
 	 */
-	void ScanForOrphanedFeatureINIs();
+	void ScanForOrphanedFeatureINIs(bool checkLoadedFeatures = false);
+
+	/**
+	 * Developer mode functionality for testing feature issues.
+	 * These functions are only available when IsDeveloperMode() returns true.
+	 */
+	namespace Test
+	{
+		/**
+		 * Structure to track test INI files and any backups made
+		 */
+		struct TestIniInfo
+		{
+			std::string testIniPath;      // Path to the test INI file created
+			std::string testMarkerPath;   // Path to .test marker file for tracking (new files only)
+			bool isNewFile{ true };       // Whether this is a completely new file or modified existing
+			std::string testType;         // Description of test type (obsolete, unknown, version mismatch)
+			std::string featureName;      // Name of the feature being tested
+			std::string originalVersion;  // Original version string (for version mismatch tests)
+
+			// Status tracking for cross-restart functionality
+			bool stillExists() const;         // Check if test INI still exists
+			bool wasManuallyDeleted() const;  // Check if user manually deleted the test INI
+		};
+
+		/**
+		 * Creates test INI files that trigger all known feature issue types.
+		 * This includes:
+		 * - Obsolete features (ComplexParallaxMaterials, TerrainBlending, etc.)
+		 * - Unknown features (fake non-existent features)
+		 * - Version mismatch (modify existing feature with incompatible version)
+		 *
+		 * @return Vector of created test INI information for cleanup
+		 */
+		std::vector<TestIniInfo> CreateTestInis();
+
+		/**
+		 * Restores the original state by removing test INI files and restoring backups.
+		 *
+		 * @param testInis Vector of test INI information from CreateTestInis()
+		 * @return true if all cleanup operations were successful
+		 */
+		bool RestoreOriginalState(const std::vector<TestIniInfo>& testInis);
+
+		/**
+		 * Get current test INI information (persistent across calls)
+		 * @return Reference to current test INI tracking
+		 */
+		std::vector<TestIniInfo>& GetCurrentTestInis();
+
+		/**
+		 * Check if test INIs are currently active
+		 * @return true if test INIs have been created and not yet restored
+		 */
+		bool HasActiveTestInis();
+
+		/**
+		 * Load persistent test INI tracking from disk (survives restarts)
+		 * @return true if any active test data was loaded
+		 */
+		bool LoadPersistentTestState();
+
+		/**
+		 * Save persistent test INI tracking to disk
+		 * @return true if successfully saved
+		 */
+		bool SavePersistentTestState();
+
+		/**
+		 * @brief
+		 *
+		 * Get detailed status of all test INIs for tooltip display
+		 * @return String describing current test state and any issues
+		 */
+		std::string GetTestStateDescription();
+
+		/**
+		 * Refresh test state from disk without triggering feature issue scan
+		 * This should be called when the UI is drawn to ensure current state
+		 * @return true if test state was successfully loaded/refreshed
+		 */
+		bool RefreshTestState();
+
+		/**
+		 * Draw the developer mode testing UI section
+		 * This includes test INI creation/restore functionality with proper theming
+		 */
+		void DrawDeveloperModeTestingUI();
+	}
 
 }

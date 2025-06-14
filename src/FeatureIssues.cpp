@@ -619,9 +619,11 @@ namespace FeatureIssues
 				ImGui::Text("Download %s", issue.replacementFeatureDisplayName.c_str());
 			}
 		}
-
-		// Only show delete button for features that don't modify shader directories (and we know they don't)
-		if (!issue.ModifiedShaderDirectory()) {
+		// Show delete button for:
+		// 1. Features that don't modify shader directories (safe to delete)
+		// 2. Obsolete features with replacements (user can install replacement after deletion)
+		bool canSafelyDelete = !issue.ModifiedShaderDirectory() || (issue.IsObsolete() && !issue.replacementFeature.empty());
+		if (canSafelyDelete) {
 			ImGui::SameLine();
 			std::string deleteButtonId = "Delete##" + issue.shortName;
 			std::string confirmPopupId = "Confirm Delete##" + issue.shortName;
@@ -714,7 +716,8 @@ namespace FeatureIssues
 		// Check if the feature is in our obsolete features map
 		return s_obsoleteFeatureData.find(featureName) != s_obsoleteFeatureData.end();
 	}
-	void ScanForOrphanedFeatureINIs()
+
+	void ScanForOrphanedFeatureINIs(bool checkLoadedFeatures)
 	{
 		std::filesystem::path featuresPath = Util::PathHelpers::GetFeaturesPath();
 
@@ -727,6 +730,20 @@ namespace FeatureIssues
 		const auto& features = Feature::GetFeatureList();
 		for (auto* feature : features) {
 			activeFeatureNames.insert(feature->GetShortName());
+		}
+
+		// If requested, check loaded features for issues (e.g., features that failed to load)
+		if (checkLoadedFeatures) {
+			for (auto* feature : features) {
+				// Re-add issues for features that were not successfully loaded
+				if (!feature->loaded && !feature->failedLoadedMessage.empty()) {
+					FeatureFileInfo fileInfo = GetFeatureFileInfo(feature->GetShortName());
+					// For features that failed to load, we'll assume version mismatch as the most common cause
+					// The original error message and details were already constructed during initial loading
+					AddFeatureIssue(feature->GetShortName(), feature->version, feature->failedLoadedMessage,
+						FeatureIssueInfo::IssueType::VERSION_MISMATCH, fileInfo);
+				}
+			}
 		}
 
 		// Scan for INI files
@@ -779,4 +796,757 @@ namespace FeatureIssues
 			logger::warn("Error scanning Features directory: {}", e.what());
 		}
 	}
+	// Developer mode test INI functionality
+	namespace Test
+	{
+		// Static storage for tracking test INIs across session
+		static std::vector<TestIniInfo> s_activeTestInis;
+
+		// Path for persistent test state file
+		static std::filesystem::path GetTestStateFilePath()
+		{
+			return Util::PathHelpers::GetFeaturesPath() / "CSDevTestState.test";
+		}
+
+		// TestIniInfo method implementations
+		bool TestIniInfo::stillExists() const
+		{
+			return std::filesystem::exists(testIniPath);
+		}
+
+		bool TestIniInfo::wasManuallyDeleted() const
+		{
+			// If marker exists but test INI doesn't, it was manually deleted
+			return std::filesystem::exists(testMarkerPath) && !std::filesystem::exists(testIniPath);
+		}
+
+		bool LoadPersistentTestState()
+		{
+			const auto stateFilePath = GetTestStateFilePath();
+			if (!std::filesystem::exists(stateFilePath)) {
+				return false;
+			}
+
+			try {
+				std::ifstream file(stateFilePath);
+				if (!file) {
+					return false;
+				}
+
+				nlohmann::json stateData;
+				file >> stateData;
+
+				s_activeTestInis.clear();
+				if (stateData.contains("testInis") && stateData["testInis"].is_array()) {
+					for (const auto& testData : stateData["testInis"]) {
+						TestIniInfo testInfo;
+						testInfo.testIniPath = testData["testIniPath"].get<std::string>();
+						testInfo.testMarkerPath = testData["testMarkerPath"].get<std::string>();
+						testInfo.isNewFile = testData["isNewFile"].get<bool>();
+						testInfo.testType = testData["testType"].get<std::string>();
+						testInfo.featureName = testData["featureName"].get<std::string>();
+						testInfo.originalVersion = testData["originalVersion"].get<std::string>();
+
+						s_activeTestInis.push_back(testInfo);
+					}
+				}
+
+				logger::debug("Loaded {} test INI records from persistent state", s_activeTestInis.size());
+				return !s_activeTestInis.empty();
+			} catch (const std::exception& e) {
+				logger::warn("Failed to load persistent test state: {}", e.what());
+				return false;
+			}
+		}
+		bool SavePersistentTestState()
+		{
+			const auto stateFilePath = GetTestStateFilePath();
+
+			try {
+				nlohmann::json stateData;
+				nlohmann::json testArray = nlohmann::json::array();
+
+				for (const auto& testInfo : s_activeTestInis) {
+					nlohmann::json testData;
+					testData["testIniPath"] = testInfo.testIniPath;
+					testData["testMarkerPath"] = testInfo.testMarkerPath;
+					testData["isNewFile"] = testInfo.isNewFile;
+					testData["testType"] = testInfo.testType;
+					testData["featureName"] = testInfo.featureName;
+					testData["originalVersion"] = testInfo.originalVersion;
+					testArray.push_back(testData);
+				}
+
+				stateData["testInis"] = testArray;
+				stateData["created"] = std::chrono::duration_cast<std::chrono::seconds>(
+					std::chrono::system_clock::now().time_since_epoch())
+				                           .count();
+
+				std::ofstream file(stateFilePath);
+				if (!file) {
+					return false;
+				}
+
+				file << stateData.dump(2);
+				logger::debug("Saved {} test INI records to persistent state", s_activeTestInis.size());
+				return true;
+			} catch (const std::exception& e) {
+				logger::warn("Failed to save persistent test state: {}", e.what());
+				return false;
+			}
+		}
+
+		std::string GetTestStateDescription()
+		{
+			// Always refresh from disk to get the most current state
+			LoadPersistentTestState();
+
+			if (s_activeTestInis.empty()) {
+				return "No test INI files are currently active.";
+			}
+
+			std::string description = std::format("Active test INI files ({}):\n", s_activeTestInis.size());
+
+			int activeCount = 0, deletedCount = 0, obsoleteCount = 0, unknownCount = 0, versionCount = 0;
+			std::vector<std::string> obsoleteFeatures, unknownFeatures, versionFeatures, deletedFeatures;
+
+			for (const auto& testInfo : s_activeTestInis) {
+				bool exists = testInfo.stillExists();
+				bool deleted = testInfo.wasManuallyDeleted();
+
+				if (exists) {
+					activeCount++;
+				} else if (deleted) {
+					deletedCount++;
+					deletedFeatures.push_back(testInfo.featureName);
+				}
+
+				if (testInfo.testType.find("obsolete") != std::string::npos) {
+					obsoleteCount++;
+					obsoleteFeatures.push_back(testInfo.featureName + (deleted ? " (deleted)" : ""));
+				} else if (testInfo.testType.find("unknown") != std::string::npos) {
+					unknownCount++;
+					unknownFeatures.push_back(testInfo.featureName + (deleted ? " (deleted)" : ""));
+				} else if (testInfo.testType.find("version") != std::string::npos) {
+					versionCount++;
+					std::string versionInfo = testInfo.featureName;
+					if (!testInfo.originalVersion.empty()) {
+						versionInfo += " (was: " + testInfo.originalVersion + ")";
+					}
+					if (deleted) {
+						versionInfo += " (deleted)";
+					} else if (!testInfo.isNewFile) {
+						versionInfo += " (modified)";
+					}
+					versionFeatures.push_back(versionInfo);
+				}
+			}
+
+			// Helper function to join vector elements with commas
+			auto joinWithCommas = [](const std::vector<std::string>& vec) -> std::string {
+				std::string result;
+				for (size_t i = 0; i < vec.size(); ++i) {
+					if (i > 0)
+						result += ", ";
+					result += vec[i];
+				}
+				return result;
+			};
+
+			// Detailed breakdown by type
+			if (obsoleteCount > 0) {
+				description += std::format("Obsolete features ({}): {}\n", obsoleteCount, joinWithCommas(obsoleteFeatures));
+			}
+
+			if (unknownCount > 0) {
+				description += std::format("Unknown features ({}): {}\n", unknownCount, joinWithCommas(unknownFeatures));
+			}
+
+			if (versionCount > 0) {
+				description += std::format("Version mismatch ({}): {}\n", versionCount, joinWithCommas(versionFeatures));
+			}
+
+			if (deletedCount > 0) {
+				description += std::format("\n {} test file(s) manually deleted - markers remain for cleanup", deletedCount);
+			}
+
+			if (activeCount < s_activeTestInis.size()) {
+				description += "\nSome test files modified - restore recommended to clean up";
+			}
+
+			return description;
+		}
+
+		std::vector<TestIniInfo>& GetCurrentTestInis()
+		{
+			// Load persistent state if we haven't already
+			if (s_activeTestInis.empty()) {
+				LoadPersistentTestState();
+			}
+			return s_activeTestInis;
+		}
+
+		bool HasActiveTestInis()
+		{
+			// Load persistent state if we haven't already
+			if (s_activeTestInis.empty()) {
+				LoadPersistentTestState();
+			}
+			return !s_activeTestInis.empty();
+		}
+
+		std::vector<TestIniInfo> CreateTestInis()
+		{
+			std::vector<TestIniInfo> createdInis;
+			const std::filesystem::path featuresPath = Util::PathHelpers::GetFeaturesPath();
+
+			// Ensure Features directory exists
+			if (!std::filesystem::create_directories(featuresPath) && !std::filesystem::exists(featuresPath)) {
+				logger::error("Failed to create Features directory: {}", featuresPath.string());
+				return createdInis;
+			}
+
+			logger::info("Creating comprehensive test INI files for feature issue testing...");
+
+			// Get list of loaded features for analysis
+			const auto& loadedFeatures = Feature::GetFeatureList();
+			std::unordered_map<std::string, Feature*> loadedFeatureMap;
+			for (auto* feature : loadedFeatures) {
+				loadedFeatureMap[feature->GetShortName()] = feature;
+			}
+			// 1. Dynamically select optimal obsolete features to cover all test cases
+			// We need to test all combinations: shader-breaking/non-shader-breaking × with/without replacement
+			struct ObsoleteTestCase
+			{
+				std::string category;
+				bool shaderBreaking;
+				bool hasReplacement;
+				std::string selectedFeature;
+			};
+
+			std::vector<ObsoleteTestCase> requiredTestCases = {
+				{ "non-shader-breaking with replacement", false, true, "" },
+				{ "non-shader-breaking without replacement", false, false, "" },
+				{ "shader-breaking with replacement", true, true, "" },
+				{ "shader-breaking without replacement", true, false, "" }
+			};
+
+			// Find the best obsolete feature for each test case
+			for (auto& testCase : requiredTestCases) {
+				for (const auto& [featureName, featureData] : s_obsoleteFeatureData) {
+					bool matches = (featureData.modifiedShaderDirectory == testCase.shaderBreaking) &&
+					               (!featureData.replacementFeature.empty() == testCase.hasReplacement);
+
+					if (matches && testCase.selectedFeature.empty()) {
+						testCase.selectedFeature = featureName;
+						logger::debug("Selected {} for test case: {}", featureName, testCase.category);
+						break;
+					}
+				}
+
+				if (testCase.selectedFeature.empty()) {
+					logger::warn("Could not find obsolete feature for test case: {}", testCase.category);
+				}
+			}
+			// Create test INIs for selected features
+			for (const auto& testCase : requiredTestCases) {
+				if (testCase.selectedFeature.empty())
+					continue;
+
+				const std::filesystem::path iniPath = featuresPath / (testCase.selectedFeature + ".ini");
+
+				// Skip if already exists to avoid overwriting real files
+				if (std::filesystem::exists(iniPath)) {
+					logger::warn("Skipping {} test INI creation - file already exists", testCase.selectedFeature);
+					continue;
+				}
+
+				try {
+					// Create test INI content
+					std::string iniContent = std::format(
+						"[Info]\n"
+						"Version = 1-0-0\n"
+						"\n"
+						"[Settings]\n"
+						"# Test INI created by CS Developer Mode for {}\n"
+						"# This feature is obsolete and will trigger feature issue detection\n"
+						"TestFeature = true\n",
+						testCase.category);
+
+					// Write the test INI file
+					std::ofstream outFile(iniPath, std::ios::out | std::ios::trunc);
+					if (!outFile) {
+						throw std::runtime_error("Failed to open file for writing");
+					}
+
+					outFile << iniContent;
+					outFile.close();
+
+					if (outFile.fail()) {
+						throw std::runtime_error("Failed to write file contents");
+					}
+
+					// Create marker file to track this test INI
+					const std::filesystem::path testMarkerPath = featuresPath / (testCase.selectedFeature + ".test");
+					std::ofstream markerFile(testMarkerPath);
+					markerFile << "# Test marker created by CS Developer Mode\n";
+					markerFile.close();
+
+					TestIniInfo testInfo;
+					testInfo.testIniPath = iniPath.string();
+					testInfo.testMarkerPath = testMarkerPath.string();
+					testInfo.isNewFile = true;
+					testInfo.testType = "obsolete";
+					testInfo.featureName = testCase.selectedFeature;
+					createdInis.push_back(testInfo);
+
+					logger::debug("Created {} test INI: {}", testCase.category, iniPath.string());
+				} catch (const std::exception& e) {
+					logger::warn("Failed to create test INI for {}: {}", testCase.selectedFeature, e.what());
+				}
+			}
+
+			// 2. Create unknown feature test INI
+			const std::string unknownFeature = "CSDevTestUnknownFeature";
+			const std::filesystem::path unknownIniPath = featuresPath / (unknownFeature + ".ini");
+			if (!std::filesystem::exists(unknownIniPath)) {
+				try {
+					std::string iniContent =
+						"[Info]\n"
+						"Version = 9-9-9\n"
+						"\n"
+						"[Settings]\n"
+						"# Unknown test feature created by CS Developer Mode\n"
+						"# This will trigger unknown feature issue detection\n"
+						"UnknownSetting = true\n";
+
+					std::ofstream outFile(unknownIniPath, std::ios::out | std::ios::trunc);
+					if (!outFile) {
+						throw std::runtime_error("Failed to open file for writing");
+					}
+
+					outFile << iniContent;
+					outFile.close();
+
+					if (outFile.fail()) {
+						throw std::runtime_error("Failed to write file contents");
+					}
+
+					// Create marker file
+					const std::filesystem::path testMarkerPath = featuresPath / (unknownFeature + ".test");
+					std::ofstream markerFile(testMarkerPath);
+					markerFile << "# Test marker created by CS Developer Mode\n";
+					markerFile.close();
+
+					TestIniInfo testInfo;
+					testInfo.testIniPath = unknownIniPath.string();
+					testInfo.testMarkerPath = testMarkerPath.string();
+					testInfo.isNewFile = true;
+					testInfo.testType = "unknown";
+					testInfo.featureName = unknownFeature;
+					createdInis.push_back(testInfo);
+
+					logger::debug("Created unknown feature test INI: {}", unknownIniPath.string());
+				} catch (const std::exception& e) {
+					logger::warn("Failed to create unknown test INI for {}: {}", unknownFeature, e.what());
+				}
+			} else {
+				logger::warn("Skipping {} test INI creation - file already exists", unknownFeature);
+			}  // 3. Create version mismatch tests - prioritize unloaded features to avoid disruption
+			struct VersionMismatchCandidate
+			{
+				std::string featureName;
+				bool hasModLink;
+				bool isLoaded;
+				bool hasExistingINI;
+				std::string reason;
+				int priority;  // Lower = higher priority (safer)
+			};
+
+			std::vector<VersionMismatchCandidate> versionCandidates;
+
+			// Analyze ALL features (loaded and unloaded) to find safe version mismatch candidates
+			for (const auto& [featureName, feature] : loadedFeatureMap) {
+				const std::filesystem::path iniPath = featuresPath / (featureName + ".ini");
+				const std::filesystem::path testStatePath = featuresPath / (featureName + ".test");
+
+				// Skip if we already have a test state for this feature
+				if (std::filesystem::exists(testStatePath)) {
+					continue;
+				}
+
+				std::string modLink = GetFeatureModLink(featureName);
+				bool hasModLink = !modLink.empty();
+				bool isLoaded = feature->loaded;
+				bool hasExistingINI = std::filesystem::exists(iniPath);
+
+				VersionMismatchCandidate candidate;
+				candidate.featureName = featureName;
+				candidate.hasModLink = hasModLink;
+				candidate.isLoaded = isLoaded;
+				candidate.hasExistingINI = hasExistingINI;
+
+				// Priority system: lower number = higher priority (safer)
+				if (!isLoaded && !hasExistingINI && hasModLink) {
+					candidate.priority = 1;
+					candidate.reason = "unloaded feature with mod link (safest - create new INI)";
+				} else if (!isLoaded && !hasExistingINI && !hasModLink) {
+					candidate.priority = 2;
+					candidate.reason = "unloaded feature without mod link (safe - create new INI)";
+				} else if (!isLoaded && hasExistingINI && hasModLink) {
+					candidate.priority = 3;
+					candidate.reason = "unloaded feature with mod link (modify existing INI)";
+				} else if (!isLoaded && hasExistingINI && !hasModLink) {
+					candidate.priority = 4;
+					candidate.reason = "unloaded feature without mod link (modify existing INI)";
+				} else if (isLoaded && hasExistingINI && hasModLink) {
+					candidate.priority = 5;
+					candidate.reason = "loaded feature with mod link (user can redownload if needed)";
+				} else if (isLoaded && hasExistingINI && !hasModLink) {
+					candidate.priority = 6;
+					candidate.reason = "loaded feature without mod link (risky - disrupts user setup)";
+				} else {
+					// Skip invalid combinations (loaded without INI, etc.)
+					continue;
+				}
+
+				versionCandidates.push_back(candidate);
+			}
+
+			// Sort candidates: by priority (safer first), then by mod link availability, then by name
+			std::sort(versionCandidates.begin(), versionCandidates.end(),
+				[](const auto& a, const auto& b) {
+					if (a.priority != b.priority)
+						return a.priority < b.priority;
+					if (a.hasModLink != b.hasModLink)
+						return a.hasModLink > b.hasModLink;
+					return a.featureName < b.featureName;
+				});
+			// Select best candidates for comprehensive testing
+			std::string withModLinkFeature, withoutModLinkFeature;
+			for (const auto& candidate : versionCandidates) {
+				if (candidate.hasModLink && withModLinkFeature.empty()) {
+					withModLinkFeature = candidate.featureName;
+				} else if (!candidate.hasModLink && withoutModLinkFeature.empty()) {
+					withoutModLinkFeature = candidate.featureName;
+				}
+
+				// Stop when we have both types (with and without mod links)
+				if (!withModLinkFeature.empty() && !withoutModLinkFeature.empty()) {
+					break;
+				}
+			}
+
+			// Create version mismatch tests for comprehensive coverage
+			std::vector<std::string> testFeatures;
+			if (!withModLinkFeature.empty())
+				testFeatures.push_back(withModLinkFeature);
+			if (!withoutModLinkFeature.empty() && withoutModLinkFeature != withModLinkFeature)
+				testFeatures.push_back(withoutModLinkFeature);
+
+			// Fallback to first available candidate if we don't have both types
+			if (testFeatures.empty() && !versionCandidates.empty()) {
+				testFeatures.push_back(versionCandidates[0].featureName);
+			}
+			bool versionMismatchCreated = false;
+			for (const auto& testFeatureName : testFeatures) {
+				const std::filesystem::path iniPath = featuresPath / (testFeatureName + ".ini");
+
+				// Find the candidate info for decision making
+				auto candidateIt = std::find_if(versionCandidates.begin(), versionCandidates.end(),
+					[&testFeatureName](const auto& c) { return c.featureName == testFeatureName; });
+
+				if (candidateIt == versionCandidates.end()) {
+					logger::warn("Could not find candidate info for {}, skipping", testFeatureName);
+					continue;
+				}
+
+				const auto& candidate = *candidateIt;
+
+				try {
+					if (candidate.hasExistingINI) {
+						// Modify existing INI file (safer for loaded features)
+						CSimpleIniA ini;
+						ini.SetUnicode();
+						SI_Error result = ini.LoadFile(iniPath.c_str());
+						if (result < 0) {
+							throw std::runtime_error("Failed to load existing INI file");
+						}
+
+						// Get the original version (if any)
+						std::string originalVersion = "none";
+						if (auto value = ini.GetValue("Info", "Version")) {
+							originalVersion = value;
+						}
+
+						// Set the incompatible version to trigger version mismatch
+						ini.SetValue("Info", "Version", "0-0-1");
+
+						// Save the modified INI file
+						result = ini.SaveFile(iniPath.c_str());
+						if (result < 0) {
+							throw std::runtime_error("Failed to save modified INI file");
+						}
+
+						TestIniInfo testInfo;
+						testInfo.testIniPath = iniPath.string();
+						testInfo.testMarkerPath = "";  // No marker needed for modified files
+						testInfo.isNewFile = false;
+						testInfo.testType = "version mismatch";
+						testInfo.featureName = testFeatureName;
+						testInfo.originalVersion = originalVersion;
+						createdInis.push_back(testInfo);
+
+						logger::debug("Modified existing INI for version mismatch test: {} ({})", iniPath.string(), candidate.reason);
+					} else {
+						// Create new INI file with incompatible version (safest for unloaded features)
+						std::string iniContent =
+							"[Info]\n"
+							"Version = 0-0-1\n"
+							"\n"
+							"[Settings]\n"
+							"# Test INI created by CS Developer Mode for version mismatch testing\n"
+							"# This version (0-0-1) is incompatible and will trigger version mismatch detection\n"
+							"TestFeature = true\n";
+
+						std::ofstream outFile(iniPath, std::ios::out | std::ios::trunc);
+						if (!outFile) {
+							throw std::runtime_error("Failed to open file for writing");
+						}
+
+						outFile << iniContent;
+						outFile.close();
+
+						if (outFile.fail()) {
+							throw std::runtime_error("Failed to write file contents");
+						}
+
+						// Create marker file to track this test INI
+						const std::filesystem::path testMarkerPath = featuresPath / (testFeatureName + ".test");
+						std::ofstream markerFile(testMarkerPath);
+						markerFile << "# Test marker created by CS Developer Mode\n";
+						markerFile.close();
+
+						TestIniInfo testInfo;
+						testInfo.testIniPath = iniPath.string();
+						testInfo.testMarkerPath = testMarkerPath.string();
+						testInfo.isNewFile = true;
+						testInfo.testType = "version mismatch";
+						testInfo.featureName = testFeatureName;
+						testInfo.originalVersion = "none";  // No original version for new files
+						createdInis.push_back(testInfo);
+
+						logger::debug("Created new INI for version mismatch test: {} ({})", iniPath.string(), candidate.reason);
+					}
+
+					versionMismatchCreated = true;
+				} catch (const std::exception& e) {
+					logger::warn("Failed to create version mismatch test for {}: {}", testFeatureName, e.what());
+				}
+			}
+
+			if (!versionMismatchCreated) {
+				logger::warn("Could not create version mismatch test - no suitable existing features found");
+			}
+			// Store the created test INIs for later cleanup and save to persistent state
+			s_activeTestInis = createdInis;
+			SavePersistentTestState();
+			// Immediately scan for feature issues to detect the newly created test INIs
+			// This allows the UI to show updated status without requiring a restart
+			if (!createdInis.empty()) {
+				ScanForOrphanedFeatureINIs();
+			}
+			// Log summary of what was created
+			if (createdInis.empty()) {
+				logger::warn("No test INI files were created - check for existing files or permission issues");
+			} else {
+				logger::info("Created {} test INI files covering all major feature issue test cases. Feature issues will be detected immediately.", createdInis.size());
+
+				int obsoleteCount = 0, unknownCount = 0, versionMismatchCount = 0;
+				for (const auto& testInfo : createdInis) {
+					std::filesystem::path path(testInfo.testIniPath);
+					std::string filename = path.filename().string();
+					if (filename.find("ComplexParallax") != std::string::npos ||
+						filename.find("WaterBlending") != std::string::npos ||
+						filename.find("TerrainBlending") != std::string::npos) {
+						obsoleteCount++;
+					} else if (filename.find("CSDevTestUnknown") != std::string::npos) {
+						unknownCount++;
+					} else if (!testInfo.isNewFile) {
+						versionMismatchCount++;
+					}
+				}
+
+				logger::info("Test coverage: {} obsolete, {} unknown, {} version mismatch",
+					obsoleteCount, unknownCount, versionMismatchCount);
+			}
+
+			return createdInis;
+		}
+
+		bool RestoreOriginalState(const std::vector<TestIniInfo>& testInis)
+		{
+			bool success = true;
+			logger::info("Restoring original state by cleaning up test INI files...");
+
+			for (const auto& testInfo : testInis) {
+				try {
+					if (testInfo.isNewFile) {
+						// Remove the test INI file we created
+						if (std::filesystem::exists(testInfo.testIniPath)) {
+							std::filesystem::remove(testInfo.testIniPath);
+							logger::debug("Removed test INI: {}", testInfo.testIniPath);
+						}
+						// Remove marker file
+						if (std::filesystem::exists(testInfo.testMarkerPath)) {
+							std::filesystem::remove(testInfo.testMarkerPath);
+							logger::debug("Removed test marker: {}", testInfo.testMarkerPath);
+						}
+					} else {
+						// Restore original version using INI functions
+						CSimpleIniA ini;
+						ini.SetUnicode();
+						SI_Error result = ini.LoadFile(testInfo.testIniPath.c_str());
+						if (result >= 0) {
+							// Restore the original version
+							if (testInfo.originalVersion == "none") {
+								// Remove the version key if it wasn't there originally
+								ini.Delete("Info", "Version");
+							} else {
+								// Restore the original version
+								ini.SetValue("Info", "Version", testInfo.originalVersion.c_str());
+							}
+
+							// Save the restored INI file
+							result = ini.SaveFile(testInfo.testIniPath.c_str());
+							if (result >= 0) {
+								logger::debug("Restored original version in INI: {}", testInfo.testIniPath);
+							} else {
+								throw std::runtime_error("Failed to save restored INI file");
+							}
+						} else {
+							throw std::runtime_error("Failed to load INI file for restoration");
+						}
+					}
+				} catch (const std::exception& e) {
+					logger::warn("Failed to restore INI {}: {}", testInfo.testIniPath, e.what());
+					success = false;
+				}
+			}  // Clear the active test INIs tracking and remove persistent state
+			s_activeTestInis.clear();
+			try {
+				const auto stateFilePath = GetTestStateFilePath();
+				if (std::filesystem::exists(stateFilePath)) {
+					std::filesystem::remove(stateFilePath);
+				}
+			} catch (const std::exception& e) {
+				logger::warn("Failed to remove persistent test state file: {}", e.what());
+			}
+			// Clear existing feature issues and rescan to update UI immediately
+			// This ensures the restored state is reflected without requiring a restart
+			// Use checkLoadedFeatures=true to detect all issues including from loaded features
+			ClearFeatureIssues();
+			ScanForOrphanedFeatureINIs(true);
+
+			if (success) {
+				logger::info("Successfully restored original state. Feature issues updated.");
+			} else {
+				logger::warn("Some test INI cleanup operations failed.");
+			}
+			return success;
+		}
+		void DrawDeveloperModeTestingUI()
+		{
+			// Refresh test state from disk and update feature issues to ensure current status
+			RefreshTestState();
+
+			// Get theme settings from Menu
+			auto* menu = Menu::GetSingleton();
+			const auto& themeSettings = menu->GetTheme();
+
+			if (ImGui::CollapsingHeader("Testing", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
+				{
+					auto sectionWrapper = Util::SectionWrapper("Feature Issue Testing",
+						"These tools create test INI files to trigger all known feature issue types for testing purposes.",
+						themeSettings.Palette.Text);
+
+					if (sectionWrapper) {
+						const bool hasActiveTests = HasActiveTestInis();
+						if (hasActiveTests) {  // Warning section using theme colors
+							ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.RestartNeeded);
+							ImGui::TextWrapped("Test INI files are currently active. Restart CS to see feature issues.");
+							ImGui::PopStyleColor();  // Show detailed test state information
+							ImGui::Spacing();
+							ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.RestartNeeded);
+							ImGui::TextWrapped(GetTestStateDescription().c_str());
+							ImGui::PopStyleColor();
+							ImGui::Spacing();
+						}
+
+						// Create Test INIs button
+						{
+							auto disableGuard = Util::DisableGuard(hasActiveTests);
+							auto buttonStyle = Util::StyledButtonWrapper(
+								themeSettings.Palette.Border,
+								themeSettings.StatusPalette.RestartNeeded,
+								themeSettings.StatusPalette.CurrentHotkey);
+
+							if (ImGui::Button("Create Test Inis", { -1, 0 })) {
+								auto testInis = CreateTestInis();
+								logger::info("Created {} test INI files for feature issue testing", testInis.size());
+							}
+						}
+
+						if (auto _tt = Util::HoverTooltipWrapper()) {
+							ImGui::Text(
+								"Creates test INI files that trigger all known feature issue cases:\n"
+								"- Obsolete features (ComplexParallaxMaterials, TerrainBlending, etc.)\n"
+								"- Unknown features (fake non-existent features)\n"
+								"- Version mismatch (modifies existing feature version)\n"
+								"Restart CS after creating to see the issues in action.");
+						}
+
+						// Restore button
+						{
+							auto disableGuard = Util::DisableGuard(!hasActiveTests);
+							auto buttonStyle = Util::StyledButtonWrapper(
+								themeSettings.Palette.Border,
+								themeSettings.StatusPalette.Error,
+								themeSettings.StatusPalette.CurrentHotkey);
+
+							if (ImGui::Button("Restore", { -1, 0 })) {
+								auto& testInis = GetCurrentTestInis();
+								if (RestoreOriginalState(testInis)) {
+									logger::info("Successfully restored original state");
+								} else {
+									logger::warn("Some restoration operations failed");
+								}
+							}
+						}
+
+						if (auto _tt = Util::HoverTooltipWrapper()) {
+							ImGui::Text(
+								"Removes all test INI files and restores any modified INI files to their original state.\n"
+								"This undoes all changes made by 'Create Test Inis'.\n"
+								"Restart CS after restoring to see normal operation.");
+						}
+					}
+				}
+			}
+		}
+		bool RefreshTestState()
+		{
+			// Load the latest test state from disk without triggering feature issue scan
+			// The scan should only be triggered when actual changes occur (create/restore)
+			bool stateLoaded = LoadPersistentTestState();
+
+			if (stateLoaded) {
+				logger::debug("Refreshed test state from disk");
+			}
+
+			return stateLoaded;
+		}
+
+	}  // namespace Test
+
 }
