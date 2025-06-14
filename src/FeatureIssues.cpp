@@ -150,11 +150,8 @@ namespace FeatureIssues
 				logger::warn("Error getting timestamp for {}: {}", filePath.string(), e.what());
 			}
 		};
-
-		std::filesystem::path currentPath = std::filesystem::current_path();
-		std::filesystem::path dataPath = currentPath / "Data";
-		std::filesystem::path deployedIniPath = dataPath / "Shaders" / "Features" / (featureName + ".ini");
-		std::filesystem::path deployedShaderDir = dataPath / "Shaders" / featureName;
+		std::filesystem::path deployedIniPath = Util::PathHelpers::GetFeatureIniPath(featureName);
+		std::filesystem::path deployedShaderDir = Util::PathHelpers::GetFeatureShaderPath(featureName);
 
 		// Check for deployed INI file
 		if (std::filesystem::exists(deployedIniPath)) {
@@ -281,42 +278,32 @@ namespace FeatureIssues
 
 		s_featureIssues.push_back(issue);
 	}
-
 	bool DeleteFeatureFiles(const FeatureIssueInfo& issue)
 	{
 		bool allSuccessful = true;
 		std::vector<std::string> deletedFiles;
 		std::vector<std::string> failedFiles;
 
-		// Helper function to safely delete a path
-		auto safeDelete = [&](const std::string& path, const std::string& description) {
-			if (path.empty() || !std::filesystem::exists(path)) {
-				return;
-			}
-
-			try {
-				if (std::filesystem::is_directory(path)) {
-					std::filesystem::remove_all(path);
-				} else {
-					std::filesystem::remove(path);
-				}
-				deletedFiles.push_back(description + ": " + path);
-				logger::info("Deleted {}: {}", description, path);
-			} catch (const std::filesystem::filesystem_error& e) {
-				failedFiles.push_back(description + ": " + path + " (" + e.what() + ")");
-				logger::error("Failed to delete {}: {} - {}", description, path, e.what());
-				allSuccessful = false;
-			}
-		};
-
 		// Delete INI file
 		if (issue.fileInfo.hasINI) {
-			safeDelete(issue.fileInfo.iniPath, "INI file");
+			auto result = Util::FileHelpers::SafeDelete(issue.fileInfo.iniPath, "INI file");
+			if (result.success) {
+				deletedFiles.push_back(result.deletedDescription);
+			} else {
+				failedFiles.push_back(result.deletedDescription + " (" + result.errorMessage + ")");
+				allSuccessful = false;
+			}
 		}
 
 		// Delete deployed shader directory
 		if (issue.fileInfo.hasDeployedFolder) {
-			safeDelete(issue.fileInfo.deployedFolderPath, "Shader directory");
+			auto result = Util::FileHelpers::SafeDelete(issue.fileInfo.deployedFolderPath, "Shader directory");
+			if (result.success) {
+				deletedFiles.push_back(result.deletedDescription);
+			} else {
+				failedFiles.push_back(result.deletedDescription + " (" + result.errorMessage + ")");
+				allSuccessful = false;
+			}
 		}
 
 		// Log summary
@@ -370,93 +357,55 @@ namespace FeatureIssues
 				versionIssues.push_back(&issue);
 			}
 		}
-
 		// Shader Breaking Features Section (most critical)
-		if (!shaderBreakingIssues.empty()) {
-			ImGui::TextColored(theme.StatusPalette.Error, "Compilation Breaking Features");
-			ImGui::Spacing();
-			ImGui::TextWrapped(
+		if (auto section = Util::SectionWrapper("Compilation Breaking Features",
 				"The following features modified core shader files and must be completely uninstalled via your mod manager. "
-				"Deleting just the INI file will not fix compilation errors if core shaders were modified.");
-			ImGui::Spacing();
-
+				"Deleting just the INI file will not fix compilation errors if core shaders were modified.",
+				theme.StatusPalette.Error, !shaderBreakingIssues.empty())) {
 			for (const auto* issue : shaderBreakingIssues) {
 				DrawFeatureIssue(*issue, theme.StatusPalette.Error);
 			}
-
-			ImGui::Spacing();
-			ImGui::Separator();
-			ImGui::Spacing();
 		}
-
 		// Unknown Features Section (potentially compilation breaking)
-		if (!unknownIssues.empty()) {
-			ImGui::TextColored(theme.StatusPalette.Error, "Unknown Features");
-			ImGui::Spacing();
-			ImGui::TextWrapped(
-				"The following features are not recognized and were disabled automatically. "
+		if (auto section = Util::SectionWrapper("Unknown Features",
+				"The following features are not recognized and we tried to disable automatically. "
 				"They may be from development branches or newer CS versions. Since we cannot determine what files they may have modified, "
-				"they should be removed as a precaution to prevent potential shader compilation issues.");
-			ImGui::Spacing();
-
+				"they should be removed as a precaution to prevent potential shader compilation failures.",
+				theme.StatusPalette.Error, !unknownIssues.empty())) {
 			for (const auto* issue : unknownIssues) {
 				DrawFeatureIssue(*issue, theme.StatusPalette.Error);
 			}
-
-			ImGui::Spacing();
-			ImGui::Separator();
-			ImGui::Spacing();
 		}
-
 		// Obsolete Features Section (non-shader-breaking)
-		if (!obsoleteIssues.empty()) {
-			ImGui::TextColored(theme.StatusPalette.Warning, "Obsolete Features");
-			ImGui::Spacing();
-			ImGui::TextWrapped(
-				"The following features are absolute and disabled automatically. "
-				"These features have been removed or replaced in this CS version but do not modify core shaders.");
-			ImGui::Spacing();
-
+		if (auto section = Util::SectionWrapper("Obsolete Features",
+				"The following features are obsolete and disabled automatically. "
+				"These features have been removed or replaced in this CS version but do not modify core shaders.",
+				theme.StatusPalette.Warning, !obsoleteIssues.empty())) {
 			for (const auto* issue : obsoleteIssues) {
 				DrawFeatureIssue(*issue, theme.StatusPalette.Warning);
 			}
-
-			ImGui::Spacing();
-			ImGui::Separator();
-			ImGui::Spacing();
 		}
-
 		// Version Mismatch Section
-		if (!versionIssues.empty()) {
-			ImGui::TextColored(theme.StatusPalette.Warning, "Wrong Version Features");
-			ImGui::Spacing();
-			ImGui::TextWrapped(
-				"The following features have version compatibility issues and were disabled automatically.");
-			ImGui::Spacing();
-
+		if (auto section = Util::SectionWrapper("Wrong Version Features",
+				"The following features have version compatibility issues and were disabled automatically. Updating them may resolve the issues.",
+				theme.StatusPalette.Warning, !versionIssues.empty())) {
 			for (const auto* issue : versionIssues) {
 				DrawFeatureIssue(*issue, theme.StatusPalette.Warning);
 			}
-
-			ImGui::Spacing();
-			ImGui::Separator();
-			ImGui::Spacing();
 		}
 
 		// Common cleanup actions section
 		ImGui::TextColored(theme.Palette.Text, "Cleanup Actions:");
-
 		if (ImGui::Button("Open Features Folder")) {
-			std::filesystem::path featuresPath = std::filesystem::current_path() / "Data" / "Shaders" / "Features";
+			std::filesystem::path featuresPath = Util::PathHelpers::GetFeaturesPath();
 			ShellExecuteA(NULL, "open", featuresPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Opens the Features folder containing INI files for manual review.");
 		}
-
 		ImGui::SameLine();
 		if (ImGui::Button("Open Shaders Directory")) {
-			std::filesystem::path shadersPath = std::filesystem::current_path() / "Data" / "Shaders";
+			std::filesystem::path shadersPath = Util::PathHelpers::GetShadersPath();
 			ShellExecuteA(NULL, "open", shadersPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -746,11 +695,9 @@ namespace FeatureIssues
 		// Check if the feature is in our obsolete features map
 		return s_obsoleteFeatureData.find(featureName) != s_obsoleteFeatureData.end();
 	}
-
 	void ScanForOrphanedFeatureINIs()
 	{
-		std::filesystem::path currentPath = std::filesystem::current_path();
-		std::filesystem::path featuresPath = currentPath / "Data" / "Shaders" / "Features";
+		std::filesystem::path featuresPath = Util::PathHelpers::GetFeaturesPath();
 
 		if (!std::filesystem::exists(featuresPath)) {
 			return;
