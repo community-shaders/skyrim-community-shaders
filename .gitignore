@@ -8,4 +8,4 @@ shadertoolsconfig.json
 .vscode
 
 # Folder view configuration files
-.DS_Store
+**/.DS_Store
