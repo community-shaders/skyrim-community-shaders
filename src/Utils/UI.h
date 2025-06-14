@@ -57,6 +57,12 @@ namespace Util
 		 */
 		~StyledButtonWrapper();
 
+		// Delete copy and move operations to prevent double pops
+		StyledButtonWrapper(const StyledButtonWrapper&) = delete;
+		StyledButtonWrapper& operator=(const StyledButtonWrapper&) = delete;
+		StyledButtonWrapper(StyledButtonWrapper&&) = delete;
+		StyledButtonWrapper& operator=(StyledButtonWrapper&&) = delete;
+
 	private:
 		int m_pushedStyles;
 	};
@@ -87,6 +93,12 @@ namespace Util
 		 * Conversion operator to check if section should be drawn
 		 */
 		operator bool() const;
+
+		// Delete copy and move operations to prevent double pops
+		SectionWrapper(const SectionWrapper&) = delete;
+		SectionWrapper& operator=(const SectionWrapper&) = delete;
+		SectionWrapper(SectionWrapper&&) = delete;
+		SectionWrapper& operator=(SectionWrapper&&) = delete;
 
 	private:
 		bool m_shouldDraw;

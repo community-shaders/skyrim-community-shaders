@@ -7,7 +7,23 @@ namespace Util
 	{
 		std::filesystem::path GetDataPath()
 		{
-			return std::filesystem::current_path() / "Data";
+			try {
+				// Get the current process (game) executable path
+				wchar_t buffer[MAX_PATH];
+				DWORD length = GetModuleFileNameW(nullptr, buffer, MAX_PATH);
+				if (length == 0 || length == MAX_PATH) {
+					throw std::runtime_error("Failed to get module filename");
+				}
+
+				auto executablePath = std::filesystem::path(buffer);
+
+				auto gamePath = executablePath.parent_path();
+				return gamePath / "Data";
+			} catch (const std::exception& e) {
+				// Fallback to current_path if Windows API method fails
+				logger::warn("Failed to get game path via Windows API, falling back to current_path: {}", e.what());
+				return std::filesystem::current_path() / "Data";
+			}
 		}
 
 		std::filesystem::path GetShadersPath()

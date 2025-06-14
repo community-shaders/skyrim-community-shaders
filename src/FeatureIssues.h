@@ -57,7 +57,7 @@ namespace FeatureIssues
 			UNKNOWN            // Feature not recognized by this CS version
 		};
 
-		IssueType issueType;
+		IssueType issueType{ IssueType::UNKNOWN };
 
 		// Helper methods
 		bool IsObsolete() const { return issueType == IssueType::OBSOLETE; }
