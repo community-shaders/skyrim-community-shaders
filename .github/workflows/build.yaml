@@ -32,11 +32,48 @@ concurrency:
     cancel-in-progress: true
 
 jobs:
+    check-changes:
+        runs-on: ubuntu-latest
+        if: ${{ github.event_name == 'pull_request_target' }}
+        outputs:
+            should-build: ${{ steps.changed-files.outputs.build_any_changed == 'true' || steps.changed-files.outputs.cpp_any_changed == 'true' }}
+            hlsl-should-build: ${{ steps.changed-files.outputs.hlsl_any_changed == 'true' }}
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Get changed files
+              id: changed-files
+              uses: tj-actions/changed-files@v46
+              with:
+                  files_yaml: |
+                      cpp:
+                        - '**.cpp'
+                        - '**.h'
+                        - '**.hpp'
+                        - '**.c'
+                        - 'src/**'
+                        - 'include/**'
+                        - '!**.hlsl'
+                        - '!**.hlsli'
+                      build:
+                        - 'CMakeLists.txt'
+                        - 'CMakePresets.json'
+                        - 'vcpkg.json'
+                        - 'vcpkg-configuration.json'
+                        - '.gitmodules'
+                        - 'extern/**'
+                      hlsl:
+                        - '**.hlsl'
+                        - '**.hlsli'
+                        - 'package/Shaders/**'
+                        - 'features/**/Shaders/**'
+                  base_sha: ${{ github.event.pull_request.base.sha }}
+                  sha: ${{ github.event.pull_request.head.sha }}
     build:
-        if: >
-            github.event_name != 'pull_request_target' ||
-            github.event.pull_request.draft == false ||
-            contains(github.event.pull_request.labels.*.name, 'force-build')
+        needs: [check-changes]
+        if: ${{ !github.event.pull_request.draft && (github.event_name != 'pull_request_target' || needs.check-changes.outputs.should-build == 'true') }}
         name: Build plugin and addons
         runs-on: windows-latest
         permissions:
