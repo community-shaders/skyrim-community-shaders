@@ -276,6 +276,25 @@ namespace FeatureIssues
 			// For unknown features and obsolete without replacement, leave replacement fields empty
 		}
 
+		// Check for duplicates before adding
+		auto existingIssue = std::find_if(s_featureIssues.begin(), s_featureIssues.end(),
+			[&shortName](const FeatureIssueInfo& existing) {
+				return existing.shortName == shortName;
+			});
+
+		if (existingIssue != s_featureIssues.end()) {
+			// Update existing issue with new information if this one has more details
+			if (issueType == FeatureIssueInfo::IssueType::OBSOLETE &&
+				existingIssue->issueType == FeatureIssueInfo::IssueType::UNKNOWN) {
+				// Upgrade unknown to obsolete with full details
+				*existingIssue = issue;
+				logger::debug("Updated existing unknown issue to obsolete for feature: {}", shortName);
+			} else {
+				logger::debug("Skipping duplicate feature issue for: {}", shortName);
+			}
+			return;
+		}
+
 		s_featureIssues.push_back(issue);
 	}
 	bool DeleteFeatureFiles(const FeatureIssueInfo& issue)
