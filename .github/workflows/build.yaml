@@ -49,16 +49,23 @@ jobs:
         runs-on: ubuntu-latest
         if: ${{ github.event_name == 'pull_request_target' }}
         outputs:
-            should-build: ${{ steps.changed-files.outputs.build_any_changed == 'true' || steps.changed-files.outputs.cpp_any_changed == 'true' }}
-            hlsl-should-build: ${{ steps.changed-files.outputs.hlsl_any_changed == 'true' }}
+            should-build: ${{ steps.changed-files.outputs.build_any_changed == 'true' || steps.changed-files.outputs.cpp_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
+            hlsl-should-build: ${{ steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
         steps:
             - uses: actions/checkout@v4
               with:
                   fetch-depth: 0
+                  token: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Fetch PR head and base
+              run: |
+                  git fetch origin ${{ github.event.pull_request.head.sha }}
+                  git fetch origin ${{ github.event.pull_request.base.sha }}
 
             - name: Get changed files
               id: changed-files
               uses: tj-actions/changed-files@v46
+              continue-on-error: true
               with:
                   files_yaml: |
                       cpp:
@@ -84,6 +91,13 @@ jobs:
                         - 'features/**/Shaders/**'
                   base_sha: ${{ github.event.pull_request.base.sha }}
                   sha: ${{ github.event.pull_request.head.sha }}
+
+            - name: Fallback - Set outputs if changed-files failed
+              if: failure()
+              run: |
+                  echo "should-build=true" >> $GITHUB_OUTPUT
+                  echo "hlsl-should-build=true" >> $GITHUB_OUTPUT
+
     cpp-build:
         needs: [check-changes]
         if: >
