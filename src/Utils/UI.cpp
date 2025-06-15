@@ -8,8 +8,8 @@
 #include "../Menu.h"
 
 #define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
 #include <cmath>
+#include <stb_image.h>
 
 namespace Util
 {
@@ -60,9 +60,9 @@ namespace Util
 
 	// Icon loading functions (moved from UIIconLoader)
 	bool LoadTextureFromFile(ID3D11Device* device,
-	                         const char* filename,
-	                         ID3D11ShaderResourceView** out_srv,
-	                         ImVec2& out_size)
+		const char* filename,
+		ID3D11ShaderResourceView** out_srv,
+		ImVec2& out_size)
 	{
 		// Validate input parameters
 		if (!device || !out_srv) {
@@ -85,7 +85,7 @@ namespace Util
 		ZeroMemory(&desc, sizeof(desc));
 		desc.Width = image_width;
 		desc.Height = image_height;
-		desc.MipLevels = 1; // Start with single mip level for initial data
+		desc.MipLevels = 1;  // Start with single mip level for initial data
 		desc.ArraySize = 1;
 		// Preserve icon colour fidelity
 		desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
@@ -112,7 +112,7 @@ namespace Util
 		ZeroMemory(&srvDesc, sizeof(srvDesc));
 		srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MipLevels = 0; // Use all available mip levels
+		srvDesc.Texture2D.MipLevels = 0;  // Use all available mip levels
 		srvDesc.Texture2D.MostDetailedMip = 0;
 
 		hr = device->CreateShaderResourceView(pTexture, &srvDesc, out_srv);
@@ -183,7 +183,7 @@ namespace Util
 		// All icons loaded successfully
 		return true;
 
-	cleanup_and_fail:
+cleanup_and_fail:
 		// Release any successfully loaded SRVs to prevent GPU memory leaks
 		if (menu->uiIcons.saveSettings.texture) {
 			menu->uiIcons.saveSettings.texture->Release();
@@ -213,7 +213,7 @@ namespace Util
 	ImVec2 DrawSharpText(const char* text, bool alignToPixelGrid, float scale)
 	{
 		ImVec2 startPos = ImGui::GetCursorPos();
-		
+
 		if (alignToPixelGrid) {
 			// Get current position
 			ImVec2 pos = ImGui::GetCursorPos();
@@ -239,7 +239,7 @@ namespace Util
 		// Restore original scale if needed
 		if (scale != 1.0f)
 			ImGui::SetWindowFontScale(originalScale);
-			
+
 		// Calculate and return the rendered size
 		ImVec2 endPos = ImGui::GetCursorPos();
 		return ImVec2(endPos.x - startPos.x, endPos.y - startPos.y);
@@ -278,11 +278,11 @@ namespace Util
 		// Restore style
 		ImGui::SetWindowFontScale(originalScale);
 		ImGui::PopStyleVar();
-		
+
 		// Calculate and return the total rendered size
 		ImVec2 endPos = ImGui::GetCursorPos();
 		return ImVec2(endPos.x - startPos.x, endPos.y - startPos.y);
-  }
+	}
 	// StyledButtonWrapper implementation
 	StyledButtonWrapper::StyledButtonWrapper(const ImVec4& normalColor, const ImVec4& hoveredColor, const ImVec4& activeColor) :
 		m_pushedStyles(0)

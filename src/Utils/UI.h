@@ -119,9 +119,9 @@ namespace Util
 	// Icon loading functions
 	// `device` must remain alive for the SRV lifetime. Caller owns *out_srv and must `Release()` it.
 	bool LoadTextureFromFile(ID3D11Device* device,
-	                         const char* filename,
-	                         ID3D11ShaderResourceView** out_srv,
-	                         ImVec2& out_size);
+		const char* filename,
+		ID3D11ShaderResourceView** out_srv,
+		ImVec2& out_size);
 	bool InitializeMenuIcons(Menu* menu);
 
 	// Text rendering helpers for clearer title text

@@ -47,25 +47,28 @@ public:
 	bool ShouldSwallowInput();
 	void OnFocusLost();
 	// UI icon textures
-	struct UIIcon {
+	struct UIIcon
+	{
 		ID3D11ShaderResourceView* texture = nullptr;
 		ImVec2 size = ImVec2(32.0f, 32.0f);
-		
-		void Release() {
+
+		void Release()
+		{
 			if (texture) {
 				texture->Release();
 				texture = nullptr;
 			}
 		}
 	};
-	struct UIIcons {
+	struct UIIcons
+	{
 		UIIcon saveSettings;
 		UIIcon loadSettings;
 		UIIcon clearCache;
 		UIIcon clearDiskCache;
-		UIIcon logo;          // New logo icon
-	} uiIcons;	
-	
+		UIIcon logo;  // New logo icon
+	} uiIcons;
+
 	struct ThemeSettings
 	{
 		float GlobalScale = REL::Module::IsVR() ? -0.5f : 0.f;  // exponential
