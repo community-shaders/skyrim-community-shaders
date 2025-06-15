@@ -181,7 +181,7 @@ jobs:
               with:
                   configurePreset: ALL
                   buildPreset: ALL
-                  buildPresetAdditionalArgs: "--target prepare_shaders"
+                  buildPresetAdditionalArgs: "['--target prepare_shaders']"
 
             - name: Setup hlslkit
               uses: alandtse/hlslkit/.github/actions/setup-hlslkit@main
