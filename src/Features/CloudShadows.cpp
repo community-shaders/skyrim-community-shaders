@@ -31,7 +31,7 @@ void CloudShadows::DrawSettings()
  */
 void CloudShadows::LoadSettings(json& o_json)
 {
-    settings = o_json;
+	settings = o_json;
 }
 
 /**
