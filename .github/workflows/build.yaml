@@ -40,6 +40,7 @@ concurrency:
 
 jobs:
     check-changes:
+        name: Check for changes in PRs
         runs-on: ubuntu-latest
         if: ${{ github.event_name == 'pull_request_target' }}
         outputs:
@@ -226,6 +227,7 @@ jobs:
                   suppress-warnings: X1519
 
     prerelease:
+        name: Post Prerelease from PR
         if: github.event_name == 'pull_request_target'
         needs: [cpp-build, shader-validation]
         runs-on: windows-latest
@@ -315,6 +317,7 @@ jobs:
                       [Download](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.setup-cmake.outputs.version }}-pr${{ github.event.pull_request.number }})
 
     release:
+        name: Post Release
         needs: [cpp-build, shader-validation]
         if: >
             github.event_name == 'workflow_dispatch' ||
