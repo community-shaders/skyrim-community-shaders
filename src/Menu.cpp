@@ -16,8 +16,7 @@
 #include "Streamline.h"
 #include "TruePBR.h"
 #include "Upscaling.h"
-#include "UIIconLoader.h"
-#include "UITextHelper.h"
+#include "Utils/UI.h"
 
 #include "Features/LightLimitFix/ParticleLights.h"
 
@@ -250,7 +249,7 @@ void Menu::Init()
 		}
 	}
 	// Load UI icons
-	if (!UIIconLoader::InitializeMenuIcons(this)) {
+	if (!Util::InitializeMenuIcons(this)) {
 		logger::warn("Failed to load UI icons. Will fallback to text buttons");
 	}
 
@@ -290,7 +289,7 @@ void Menu::DrawSettings()
                     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 5.0f);
                     
                     // Use our helper to render aligned logo and text with perfect vertical alignment
-                    UITextHelper::RenderAlignedTextWithLogo(
+                    Util::RenderAlignedTextWithLogo(
                         uiIcons.logo.texture,
                         logoSize,
                         title.c_str(),
@@ -300,7 +299,7 @@ void Menu::DrawSettings()
                     // No logo, just render the text with proper alignment
                     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
                     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 5.0f);
-                    UITextHelper::RenderSharpText(title.c_str(), true, textScaleFactor);
+                    Util::RenderSharpText(title.c_str(), true, textScaleFactor);
                     ImGui::PopStyleVar();
                 }
             }              // Buttons on the right
