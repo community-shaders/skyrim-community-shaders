@@ -105,9 +105,7 @@ jobs:
             ((github.event_name == 'workflow_dispatch' &&
               github.event.inputs.build-cpp == 'true') ||
             (github.event_name == 'pull_request_target' &&
-             !github.event.pull_request.draft &&
-             needs.check-changes.result == 'success' &&
-             needs.check-changes.outputs.should-build == 'true'))
+             !github.event.pull_request.draft))
         name: Build plugin and addons
         runs-on: windows-latest
         permissions:
@@ -122,14 +120,29 @@ jobs:
                   repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
                   submodules: recursive
 
+            - name: Check if C++ build needed
+              id: check-cpp
+              run: |
+                  if [ "${{ needs.check-changes.outputs.should-build }}" != "true" ]; then
+                    echo "No C++ changes detected, skipping build steps"
+                    echo "skip=true" >> $GITHUB_OUTPUT
+                  else
+                    echo "C++ changes detected, proceeding with build"
+                    echo "skip=false" >> $GITHUB_OUTPUT
+                  fi
+              shell: bash
+
             - uses: ilammy/msvc-dev-cmd@v1.10.0
+              if: steps.check-cpp.outputs.skip != 'true'
 
             - name: Setup vcpkg
+              if: steps.check-cpp.outputs.skip != 'true'
               uses: lukka/run-vcpkg@v11.5
               with:
                   vcpkgJsonGlob: vcpkg.json
 
             - name: Cache CMake build output
+              if: steps.check-cpp.outputs.skip != 'true'
               uses: actions/cache@v4
               with:
                   path: build/ALL
@@ -139,6 +152,7 @@ jobs:
                       ${{ runner.os }}-cmake-
 
             - name: Build using run-cmake
+              if: steps.check-cpp.outputs.skip != 'true'
               uses: lukka/run-cmake@v10
               with:
                   configurePreset: ALL
@@ -148,11 +162,17 @@ jobs:
               id: get_version
               shell: bash
               run: |
-                  VERSION=$(grep 'CMAKE_PROJECT_VERSION:STATIC' build/ALL/CMakeCache.txt | cut -d= -f2)
+                  if [ "${{ steps.check-cpp.outputs.skip }}" == "true" ]; then
+                    # When skipping build, extract version from CMakeLists.txt
+                    VERSION=$(grep 'project(.*VERSION' CMakeLists.txt | sed -E 's/.*VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+                  else
+                    # When building, extract version from CMakeCache.txt
+                    VERSION=$(grep 'CMAKE_PROJECT_VERSION:STATIC' build/ALL/CMakeCache.txt | cut -d= -f2)
+                  fi
                   echo "version=$VERSION" >> $GITHUB_OUTPUT
 
             - name: Upload dist artifacts
-              if: success()
+              if: success() && steps.check-cpp.outputs.skip != 'true'
               uses: actions/upload-artifact@v4
               with:
                   name: dist-artifacts
