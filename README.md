@@ -132,11 +132,7 @@ See LICENSE within each directory; if none, it's [Default](#default)
 - [Features Shaders](features)
 - [Package Shaders](package/Shaders/)
 
-### Community
-
 ### Icons
 
 - [Microsoft Icons](package/Interface/CommunityShaders/Icons/Microsoft%20Icons/) are subject to the [MIT License](package/Interface/CommunityShaders/Icons/Microsoft%20Icons/LICENSE)
 - [Community Shaders Logo](package/Interface/CommunityShaders/Icons/Community%20Shaders%20Logo/) is not subject to the GPL-3.0 license and may only be used in unmodified form for local use. No trademark license is granted for the logo's use.
-
-### Community
