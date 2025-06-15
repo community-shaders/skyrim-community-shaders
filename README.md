@@ -132,8 +132,6 @@ See LICENSE within each directory; if none, it's [Default](#default)
 - [Features Shaders](features)
 - [Package Shaders](package/Shaders/)
 
-### Community
-
 ### Icons
 
 - [Microsoft Icons](package/Interface/CommunityShaders/Icons/Microsoft%20Icons/) are subject to the [MIT License](package/Interface/CommunityShaders/Icons/Microsoft%20Icons/LICENSE)
