@@ -1,4 +1,4 @@
-name: build Community Shaders and addons
+name: Build Community Shaders and addons
 
 on:
     push:
@@ -9,6 +9,16 @@ on:
             cache-key-suffix:
                 description: "Optional suffix to invalidate the build cache"
                 required: false
+            build-cpp:
+                description: "Build C++ plugin and addons for manual dispatch"
+                type: boolean
+                required: false
+                default: true
+            validate-shaders:
+                description: "Run HLSL shader validation for manual dispatch"
+                type: boolean
+                required: false
+                default: true
     pull_request_target:
         types: [opened, synchronize, reopened, ready_for_review]
         paths:
@@ -16,6 +26,8 @@ on:
             - "**.h"
             - "**.hpp"
             - "**.c"
+            - "**.hlsl"
+            - "**.hlsli"
             - "CMakeLists.txt"
             - "CMakePresets.json"
             - "vcpkg.json"
@@ -33,6 +45,7 @@ concurrency:
 
 jobs:
     check-changes:
+        name: Check for changes in PRs
         runs-on: ubuntu-latest
         if: ${{ github.event_name == 'pull_request_target' }}
         outputs:
@@ -85,9 +98,16 @@ jobs:
                   echo "should-build=true" >> $GITHUB_OUTPUT
                   echo "hlsl-should-build=true" >> $GITHUB_OUTPUT
 
-    build:
+    cpp-build:
         needs: [check-changes]
-        if: ${{ !github.event.pull_request.draft && (github.event_name != 'pull_request_target' || needs.check-changes.outputs.should-build == 'true') }}
+        if: >
+            always() && !cancelled() &&
+            ((github.event_name == 'workflow_dispatch' &&
+              github.event.inputs.build-cpp == 'true') ||
+            (github.event_name == 'pull_request_target' &&
+             !github.event.pull_request.draft &&
+             needs.check-changes.result == 'success' &&
+             needs.check-changes.outputs.should-build == 'true'))
         name: Build plugin and addons
         runs-on: windows-latest
         permissions:
@@ -95,16 +115,17 @@ jobs:
         outputs:
             version: ${{ steps.get_version.outputs.version }}
         steps:
-            - name: Checkout PR code
+            - name: Checkout code
               uses: actions/checkout@v4
               with:
-                  ref: ${{ github.event.pull_request.head.ref }}
-                  repository: ${{ github.event.pull_request.head.repo.full_name }}
+                  ref: ${{ github.event.pull_request.head.ref || github.ref }}
+                  repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
                   submodules: recursive
 
             - uses: ilammy/msvc-dev-cmd@v1.10.0
 
-            - uses: lukka/run-vcpkg@v11.5
+            - name: Setup vcpkg
+              uses: lukka/run-vcpkg@v11.5
               with:
                   vcpkgJsonGlob: vcpkg.json
 
@@ -112,12 +133,12 @@ jobs:
               uses: actions/cache@v4
               with:
                   path: build/ALL
-                  key: ${{ runner.os }}-build-${{ inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
+                  key: ${{ runner.os }}-cmake-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
                   restore-keys: |
-                      ${{ runner.os }}-build-${{ inputs.cache-key-suffix || 'default' }}-
-                      ${{ runner.os }}-build-
+                      ${{ runner.os }}-cmake-${{ github.event.inputs.cache-key-suffix || 'default' }}-
+                      ${{ runner.os }}-cmake-
 
-            - name: Build using run-cmake with ALL preset
+            - name: Build using run-cmake
               uses: lukka/run-cmake@v10
               with:
                   configurePreset: ALL
@@ -136,10 +157,90 @@ jobs:
               with:
                   name: dist-artifacts
                   path: dist/
+                  retention-days: 30
+
+    shader-validation:
+        needs: [check-changes]
+        if: >
+            always() && !cancelled() &&
+            ((github.event_name == 'pull_request_target' &&
+              !github.event.pull_request.draft &&
+              needs.check-changes.result == 'success' &&
+              needs.check-changes.outputs.hlsl-should-build == 'true') ||
+             (github.event_name == 'workflow_dispatch' &&
+              github.event.inputs.validate-shaders == 'true'))
+        name: Validate shader compilation
+        runs-on: windows-latest
+        permissions:
+            contents: read
+        strategy:
+            matrix:
+                config:
+                    - name: "Flatrim"
+                      file: ".github/configs/shader-validation.yaml"
+                    - name: "VR"
+                      file: ".github/configs/shader-validation-vr.yaml"
+            fail-fast: false # Let both configs run to completion for full output
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event.pull_request.head.ref || github.ref }}
+                  repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+                  submodules: recursive
+
+            - uses: ilammy/msvc-dev-cmd@v1.10.0
+
+            - name: Setup vcpkg
+              uses: lukka/run-vcpkg@v11.5
+              with:
+                  vcpkgJsonGlob: vcpkg.json
+
+            - name: Cache CMake build output
+              uses: actions/cache@v4
+              with:
+                  path: build/ALL
+                  key: ${{ runner.os }}-cmake-${{ matrix.config.name }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
+                  restore-keys: |
+                      ${{ runner.os }}-cmake-${{ matrix.config.name }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-
+                      ${{ runner.os }}-cmake-${{ matrix.config.name }}-
+                      ${{ runner.os }}-cmake-
+
+            - name: Prepare shaders for validation
+              uses: lukka/run-cmake@v10
+              with:
+                  configurePreset: ALL
+                  buildPreset: ALL
+                  buildPresetAdditionalArgs: "['--target prepare_shaders']"
+
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Install hlslkit
+              run: pip install git+https://github.com/alandtse/hlslkit.git
+              shell: bash
+
+            - name: Validate shader compilation (${{ matrix.config.name }})
+              run: hlslkit-compile --shader-dir build/ALL/aio/Shaders --output-dir build/ShaderCache --config ${{ matrix.config.file }} --max-warnings 0 --suppress-warnings X1519
+              shell: bash
+
+            - name: Upload shader validation logs
+              if: failure()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: shader-validation-logs-${{ matrix.config.name }}
+                  path: |
+                      build/ShaderCache/new_issues.log
+                      build/ShaderCache/*.log
+                  retention-days: 7
+                  if-no-files-found: ignore
 
     prerelease:
+        name: Post Prerelease from PR
         if: github.event_name == 'pull_request_target'
-        needs: build
+        needs: [cpp-build, shader-validation]
         runs-on: windows-latest
         permissions:
             contents: write
@@ -158,8 +259,8 @@ jobs:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               shell: bash
               run: |
-                  TAG="v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }}"
-                  BASE_TAG="v${{ needs.build.outputs.version }}"
+                  TAG="v${{ needs.cpp-build.outputs.version }}-pr${{ github.event.pull_request.number }}"
+                  BASE_TAG="v${{ needs.cpp-build.outputs.version }}"
                   REPO="${{ github.repository }}"
                   BASE_SHA="${{ github.event.pull_request.base.sha }}"
                   HEAD_SHA="${{ github.event.pull_request.head.sha }}"
@@ -194,8 +295,8 @@ jobs:
               if: steps.gen_notes.outputs.notes_generated == 'true'
               uses: ncipollo/release-action@v1
               with:
-                  name: "Community Shaders ${{ needs.build.outputs.version }} PR #${{ github.event.pull_request.number }}"
-                  tag: v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }}
+                  name: "Community Shaders ${{ needs.cpp-build.outputs.version }} PR #${{ github.event.pull_request.number }}"
+                  tag: v${{ needs.cpp-build.outputs.version }}-pr${{ github.event.pull_request.number }}
                   prerelease: true
                   artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
                   bodyFile: release-notes.md
@@ -207,8 +308,8 @@ jobs:
               if: steps.gen_notes.outputs.notes_generated != 'true'
               uses: ncipollo/release-action@v1
               with:
-                  name: "Community Shaders ${{ needs.build.outputs.version }} PR #${{ github.event.pull_request.number }}"
-                  tag: v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }}
+                  name: "Community Shaders ${{ needs.cpp-build.outputs.version }} PR #${{ github.event.pull_request.number }}"
+                  tag: v${{ needs.cpp-build.outputs.version }}-pr${{ github.event.pull_request.number }}
                   prerelease: true
                   artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
                   generateReleaseNotes: true
@@ -224,11 +325,14 @@ jobs:
                   comment-tag: prerelease-build
                   message: |
                       ✅ A pre-release build is available for this PR:
-                      [Download](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }})
+                      [Download](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.cpp-build.outputs.version }}-pr${{ github.event.pull_request.number }})
 
     release:
-        needs: build
-        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+        name: Post Release from Manual Run or Tag
+        needs: [cpp-build, shader-validation]
+        if: >
+            github.event_name == 'workflow_dispatch' ||
+            startsWith(github.ref, 'refs/tags/v')
         runs-on: windows-latest
         permissions:
             contents: write
