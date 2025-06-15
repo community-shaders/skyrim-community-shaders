@@ -181,7 +181,7 @@ jobs:
               with:
                   configurePreset: ALL
                   buildPreset: ALL
-                  buildPresetAdditionalArgs: --target prepare_shaders
+                  buildPresetAdditionalArgs: "--target prepare_shaders"
 
             - name: Setup hlslkit
               uses: alandtse/hlslkit/.github/actions/setup-hlslkit@main
@@ -220,8 +220,8 @@ jobs:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               shell: bash
               run: |
-                  TAG="v${{ needs.build-matrix.outputs.version }}-pr${{ github.event.pull_request.number }}"
-                  BASE_TAG="v${{ needs.build-matrix.outputs.version }}"
+                  TAG="v${{ needs.cpp-build.outputs.version }}-pr${{ github.event.pull_request.number }}"
+                  BASE_TAG="v${{ needs.cpp-build.outputs.version }}"
                   REPO="${{ github.repository }}"
                   BASE_SHA="${{ github.event.pull_request.base.sha }}"
                   HEAD_SHA="${{ github.event.pull_request.head.sha }}"
@@ -256,8 +256,8 @@ jobs:
               if: steps.gen_notes.outputs.notes_generated == 'true'
               uses: ncipollo/release-action@v1
               with:
-                  name: "Community Shaders ${{ needs.build-matrix.outputs.version }} PR #${{ github.event.pull_request.number }}"
-                  tag: v${{ needs.build-matrix.outputs.version }}-pr${{ github.event.pull_request.number }}
+                  name: "Community Shaders ${{ needs.cpp-build.outputs.version }} PR #${{ github.event.pull_request.number }}"
+                  tag: v${{ needs.cpp-build.outputs.version }}-pr${{ github.event.pull_request.number }}
                   prerelease: true
                   artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
                   bodyFile: release-notes.md
@@ -269,8 +269,8 @@ jobs:
               if: steps.gen_notes.outputs.notes_generated != 'true'
               uses: ncipollo/release-action@v1
               with:
-                  name: "Community Shaders ${{ needs.build-matrix.outputs.version }} PR #${{ github.event.pull_request.number }}"
-                  tag: v${{ needs.build-matrix.outputs.version }}-pr${{ github.event.pull_request.number }}
+                  name: "Community Shaders ${{ needs.cpp-build.outputs.version }} PR #${{ github.event.pull_request.number }}"
+                  tag: v${{ needs.cpp-build.outputs.version }}-pr${{ github.event.pull_request.number }}
                   prerelease: true
                   artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
                   generateReleaseNotes: true
@@ -289,7 +289,7 @@ jobs:
                       [Download](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.cpp-build.outputs.version }}-pr${{ github.event.pull_request.number }})
 
     release:
-        name: Post Release
+        name: Post Release from Manual Run or Tag
         needs: [cpp-build, shader-validation]
         if: >
             github.event_name == 'workflow_dispatch' ||
