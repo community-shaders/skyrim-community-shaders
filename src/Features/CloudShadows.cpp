@@ -4,6 +4,11 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	CloudShadows::Settings,
 	Opacity)
 
+/**
+ * @brief Renders ImGui controls for cloud shadow settings.
+ *
+ * This function displays a slider to control the opacity of the cloud shadows.
+ */
 void CloudShadows::DrawSettings()
 {
 	ImGui::SliderFloat("Opacity", &settings.Opacity, 0.0f, 1.0f, "%.1f");
@@ -13,21 +18,56 @@ void CloudShadows::DrawSettings()
 	}
 }
 
+/**
+ * @brief Loads cloud shadow settings from a JSON object.
+ *
+ * This function assigns the provided JSON object to the internal settings structure.
+ * It expects the JSON to contain all necessary fields for CloudShadows::Settings.
+ *
+ * @param o_json Reference to a JSON object containing the settings to load.
+ *
+ * @note If the JSON object is missing required fields, default values (if any) will be used.
+ * @see CloudShadows::Settings
+ */
 void CloudShadows::LoadSettings(json& o_json)
 {
-	settings = o_json;
+    settings = o_json;
 }
 
+/**
+ * @brief Saves current cloud shadow settings to a JSON object.
+ *
+ * This function serializes the internal settings structure into the provided
+ * JSON object.
+ *
+ * @param o_json Reference to a JSON object where settings will be saved.
+ * @see CloudShadows::Settings
+ */
 void CloudShadows::SaveSettings(json& o_json)
 {
 	o_json = settings;
 }
 
+/**
+ * @brief Resets cloud shadow settings to their default values.
+ *
+ * This function reinitializes the internal settings structure to its default state.
+ * @see CloudShadows::Settings
+ */
 void CloudShadows::RestoreDefaultSettings()
 {
 	settings = {};
 }
 
+/**
+ * @brief Checks and prepares resources for a specific cubemap side.
+ *
+ * This function ensures that rendering operations for a given cubemap side
+ * are performed only once per frame. It clears the render target view
+ * for the specified side of the cloud occlusion cubemap.
+ *
+ * @param side The index of the cubemap side (0-5) to check and prepare.
+ */
 void CloudShadows::CheckResourcesSide(int side)
 {
 	static Util::FrameChecker frame_checker[6];
@@ -40,6 +80,14 @@ void CloudShadows::CheckResourcesSide(int side)
 	context->ClearRenderTargetView(cubemapCloudOccRTVs[side], black);
 }
 
+/**
+ * @brief Applies modifications to the sky rendering pipeline for cloud shadows.
+ *
+ * This function is called when `overrideSky` is true. It sets the appropriate
+ * render targets (including the cloud occlusion cubemap side) and blend state
+ * to allow cloud shadows to be rendered onto the sky cubemap. It also sets
+ * the cubemap depth stencil view as a shader resource.
+ */
 void CloudShadows::SkyShaderHacks()
 {
 	if (overrideSky) {
@@ -79,6 +127,15 @@ void CloudShadows::SkyShaderHacks()
 	}
 }
 
+/**
+ * @brief Modifies sky rendering properties based on the render pass.
+ *
+ * This function checks if the current render pass is for sky reflections and if
+ * the sky object being rendered is clouds. If so, it sets `overrideSky` to true,
+ * signaling `SkyShaderHacks` to apply modifications for cloud shadow rendering.
+ *
+ * @param Pass Pointer to the current `RE::BSRenderPass`.
+ */
 void CloudShadows::ModifySky(RE::BSRenderPass* Pass)
 {
 	auto shadowState = globals::game::shadowState;
@@ -95,6 +152,14 @@ void CloudShadows::ModifySky(RE::BSRenderPass* Pass)
 	}
 }
 
+/**
+ * @brief Performs prepass operations for reflections related to cloud shadows.
+ *
+ * This function is called once per frame before reflection rendering. If the sky
+ * is fully active, it copies the main cloud occlusion cubemap to a temporary
+ * cubemap and sets the temporary cubemap as a pixel and compute shader resource.
+ * This ensures that reflections use a consistent state of cloud shadows for the frame.
+ */
 void CloudShadows::ReflectionsPrepass()
 {
 	Util::FrameChecker frameChecker;
@@ -113,6 +178,12 @@ void CloudShadows::ReflectionsPrepass()
 	}
 }
 
+/**
+ * @brief Performs early prepass operations for cloud shadows.
+ *
+ * This function is called early in the frame. If the sky is fully active,
+ * it sets the main cloud occlusion cubemap as a pixel and compute shader resource.
+ */
 void CloudShadows::EarlyPrepass()
 {
 	if ((globals::game::sky->mode.get() != RE::Sky::Mode::kFull) ||
@@ -126,6 +197,13 @@ void CloudShadows::EarlyPrepass()
 	context->CSSetShaderResources(25, 1, &srv);
 }
 
+/**
+ * @brief Initializes and sets up D3D11 resources required for cloud shadows.
+ *
+ * This function creates the necessary textures (cubemap for cloud occlusion and its copy),
+ * their shader resource views, and render target views for each cubemap face.
+ * It also creates a custom blend state used for rendering cloud shadows.
+ */
 void CloudShadows::SetupResources()
 {
 	auto renderer = globals::game::renderer;
@@ -179,6 +257,17 @@ void CloudShadows::SetupResources()
 	}
 }
 
+/**
+ * @brief Hook for the BSSkyShader::SetupMaterial method.
+ *
+ * This thunk calls `CloudShadows::ModifySky` before invoking the original
+ * `BSSkyShader::SetupMaterial` function. This allows interception and modification
+ * of the sky rendering setup to integrate cloud shadows.
+ *
+ * @param This Pointer to the `RE::BSShader` instance.
+ * @param Pass Pointer to the `RE::BSRenderPass` being processed.
+ * @param RenderFlags Flags associated with the rendering operation.
+ */
 void CloudShadows::Hooks::BSSkyShader_SetupMaterial::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 {
 	globals::features::cloudShadows->ModifySky(Pass);

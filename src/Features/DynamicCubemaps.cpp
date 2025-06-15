@@ -13,6 +13,16 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EnabledSSR,
 	EnabledCreator);
 
+/**
+ * @brief Gets the shader define options based on current settings.
+ *
+ * This function checks the current settings (e.g., if SSR is enabled)
+ * and returns a vector of string pairs representing shader preprocessor defines.
+ * These defines are used to compile shaders with specific features enabled or disabled.
+ *
+ * @return std::vector<std::pair<std::string_view, std::string_view>> A list of shader define options.
+ *         Each pair consists of the define name and its value (often empty for boolean flags).
+ */
 std::vector<std::pair<std::string_view, std::string_view>> DynamicCubemaps::GetShaderDefineOptions()
 {
 	std::vector<std::pair<std::string_view, std::string_view>> result;
@@ -23,6 +33,14 @@ std::vector<std::pair<std::string_view, std::string_view>> DynamicCubemaps::GetS
 	return result;
 }
 
+/**
+ * @brief Renders the settings UI for the Dynamic Cubemaps feature.
+ *
+ * This function uses ImGui to display and manage user-configurable settings
+ * related to dynamic cubemaps, such as enabling/disabling features,
+ * adjusting parameters, and triggering actions like exporting cubemaps.
+ * It is typically called once per frame during the UI rendering phase.
+ */
 void DynamicCubemaps::DrawSettings()
 {
 	if (ImGui::TreeNodeEx("Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -135,6 +153,13 @@ void DynamicCubemaps::DrawSettings()
 	}
 }
 
+/**
+ * @brief Loads settings from a JSON object.
+ *
+ * Populates the internal settings structure from the provided JSON object.
+ * Also loads specific game settings for VR if applicable and flags shaders for recompile.
+ * @param o_json The JSON object containing the settings to load.
+ */
 void DynamicCubemaps::LoadSettings(json& o_json)
 {
 	settings = o_json;
@@ -144,6 +169,13 @@ void DynamicCubemaps::LoadSettings(json& o_json)
 	recompileFlag = true;
 }
 
+/**
+ * @brief Saves current settings to a JSON object.
+ *
+ * Serializes the internal settings structure into the provided JSON object.
+ * Also saves specific game settings for VR if applicable.
+ * @param o_json The JSON object where settings will be saved.
+ */
 void DynamicCubemaps::SaveSettings(json& o_json)
 {
 	o_json = settings;
@@ -152,6 +184,12 @@ void DynamicCubemaps::SaveSettings(json& o_json)
 	}
 }
 
+/**
+ * @brief Restores all settings to their default values.
+ *
+ * Resets the internal settings structure to default.
+ * Also resets specific game settings to their defaults for VR if applicable and flags shaders for recompile.
+ */
 void DynamicCubemaps::RestoreDefaultSettings()
 {
 	settings = {};
@@ -162,6 +200,12 @@ void DynamicCubemaps::RestoreDefaultSettings()
 	recompileFlag = true;
 }
 
+/**
+ * @brief Called after game data has been loaded.
+ *
+ * Enables necessary boolean game settings for VR if applicable.
+ * Registers the menu open/close event handler.
+ */
 void DynamicCubemaps::DataLoaded()
 {
 	if (REL::Module::IsVR()) {
@@ -172,6 +216,13 @@ void DynamicCubemaps::DataLoaded()
 	MenuOpenCloseEventHandler::Register();
 }
 
+/**
+ * @brief Called after all game loading processes (post-post load).
+ *
+ * For VR and if SSR is enabled, this function ensures certain hidden game settings
+ * required for dynamic cubemaps (like bScreenSpaceReflectionEnabled) are enabled.
+ * It logs changes made to these settings.
+ */
 void DynamicCubemaps::PostPostLoad()
 {
 	if (REL::Module::IsVR() && settings.EnabledSSR) {
@@ -191,6 +242,14 @@ void DynamicCubemaps::PostPostLoad()
 	}
 }
 
+/**
+ * @brief Processes menu open/close events.
+ *
+ * Resets the cubemap capture when a loading menu closes (i.e., when a new cell is entered).
+ * @param a_event The menu open/close event.
+ * @param Unused event source.
+ * @return RE::BSEventNotifyControl kContinue to allow other handlers to process the event.
+ */
 RE::BSEventNotifyControl MenuOpenCloseEventHandler::ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
 {
 	// When entering a new cell, reset the capture
@@ -204,6 +263,12 @@ RE::BSEventNotifyControl MenuOpenCloseEventHandler::ProcessEvent(const RE::MenuO
 	return RE::BSEventNotifyControl::kContinue;
 }
 
+/**
+ * @brief Registers the menu open/close event handler.
+ *
+ * Adds this handler to the list of sinks for menu open/close events.
+ * @return true if registration was successful, false otherwise.
+ */
 bool MenuOpenCloseEventHandler::Register()
 {
 	static MenuOpenCloseEventHandler singleton;
@@ -221,6 +286,12 @@ bool MenuOpenCloseEventHandler::Register()
 	return true;
 }
 
+/**
+ * @brief Clears the cached compute shaders.
+ *
+ * Releases and nullifies pointers to all compute shaders used for cubemap generation and processing.
+ * This is typically called when shader recompilation is needed.
+ */
 void DynamicCubemaps::ClearShaderCache()
 {
 	if (updateCubemapCS) {
@@ -253,6 +324,12 @@ void DynamicCubemaps::ClearShaderCache()
 	}
 }
 
+/**
+ * @brief Gets or compiles the compute shader for updating the base cubemap.
+ *
+ * Lazily compiles the shader if it hasn't been loaded yet.
+ * @return ID3D11ComputeShader* Pointer to the compiled compute shader.
+ */
 ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderUpdate()
 {
 	if (!updateCubemapCS) {
@@ -262,6 +339,13 @@ ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderUpdate()
 	return updateCubemapCS;
 }
 
+/**
+ * @brief Gets or compiles the compute shader for updating reflections cubemap.
+ *
+ * This version of the shader is compiled with the REFLECTIONS define.
+ * Lazily compiles the shader if it hasn't been loaded yet.
+ * @return ID3D11ComputeShader* Pointer to the compiled compute shader.
+ */
 ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderUpdateReflections()
 {
 	if (!updateCubemapReflectionsCS) {
@@ -271,6 +355,14 @@ ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderUpdateReflections()
 	return updateCubemapReflectionsCS;
 }
 
+/**
+ * @brief Gets or compiles the compute shader for updating fake reflections cubemap.
+ *
+ * This version of the shader is compiled with the FAKEREFLECTIONS define.
+ * Used when the sky is hidden but reflections are still desired.
+ * Lazily compiles the shader if it hasn't been loaded yet.
+ * @return ID3D11ComputeShader* Pointer to the compiled compute shader.
+ */
 ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderUpdateFakeReflections()
 {
 	if (!updateCubemapFakeReflectionsCS) {
@@ -280,6 +372,12 @@ ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderUpdateFakeReflections()
 	return updateCubemapFakeReflectionsCS;
 }
 
+/**
+ * @brief Gets or compiles the compute shader for inferring cubemap details.
+ *
+ * Lazily compiles the shader if it hasn't been loaded yet.
+ * @return ID3D11ComputeShader* Pointer to the compiled compute shader.
+ */
 ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderInferrence()
 {
 	if (!inferCubemapCS) {
@@ -289,6 +387,13 @@ ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderInferrence()
 	return inferCubemapCS;
 }
 
+/**
+ * @brief Gets or compiles the compute shader for inferring reflections cubemap details.
+ *
+ * This version of the shader is compiled with the REFLECTIONS define.
+ * Lazily compiles the shader if it hasn't been loaded yet.
+ * @return ID3D11ComputeShader* Pointer to the compiled compute shader.
+ */
 ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderInferrenceReflections()
 {
 	if (!inferCubemapReflectionsCS) {
@@ -298,6 +403,13 @@ ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderInferrenceReflections()
 	return inferCubemapReflectionsCS;
 }
 
+/**
+ * @brief Gets or compiles the compute shader for inferring fake reflections cubemap details.
+ *
+ * This version of the shader is compiled with the FAKEREFLECTIONS define.
+ * Lazily compiles the shader if it hasn't been loaded yet.
+ * @return ID3D11ComputeShader* Pointer to the compiled compute shader.
+ */
 ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderInferrenceFakeReflections()
 {
 	if (!inferCubemapFakeReflectionsCS) {
@@ -307,6 +419,13 @@ ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderInferrenceFakeReflections(
 	return inferCubemapFakeReflectionsCS;
 }
 
+/**
+ * @brief Gets or compiles the compute shader for calculating specular irradiance.
+ *
+ * This shader processes a cubemap to generate its specular irradiance map, used for image-based lighting.
+ * Lazily compiles the shader if it hasn't been loaded yet.
+ * @return ID3D11ComputeShader* Pointer to the compiled compute shader.
+ */
 ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderSpecularIrradiance()
 {
 	if (!specularIrradianceCS) {
@@ -316,6 +435,13 @@ ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderSpecularIrradiance()
 	return specularIrradianceCS;
 }
 
+/**
+ * @brief Updates the cubemap capture from the current scene view.
+ *
+ * This function dispatches a compute shader to capture the scene into a cubemap texture.
+ * It handles both regular environment cubemaps and reflection cubemaps.
+ * @param a_reflections True if capturing for reflections, false for standard environment cubemap.
+ */
 void DynamicCubemaps::UpdateCubemapCapture(bool a_reflections)
 {
 	auto renderer = globals::game::renderer;
@@ -388,6 +514,16 @@ void DynamicCubemaps::UpdateCubemapCapture(bool a_reflections)
 	context->CSSetSamplers(0, 1, &nullSampler);
 }
 
+/**
+ * @brief Performs the inference step for dynamic cubemaps.
+ *
+ * This function uses compute shaders to infer local reflection information from a captured cubemap.
+ * It processes either the standard environment cubemap or the reflections cubemap based on the input parameter.
+ * Mipmaps are generated for the input cubemap, and a specific inference compute shader is dispatched.
+ * The result is stored in the `envInferredTexture`.
+ *
+ * @param a_reflections True to process the reflections cubemap, false for the standard environment cubemap.
+ */
 void DynamicCubemaps::Inferrence(bool a_reflections)
 {
 	auto renderer = globals::game::renderer;
@@ -426,6 +562,16 @@ void DynamicCubemaps::Inferrence(bool a_reflections)
 	context->CSSetSamplers(0, 1, &sampler);
 }
 
+/**
+ * @brief Computes the pre-filtered specular environment map (irradiance) for a cubemap.
+ *
+ * This function first copies the content from `envInferredTexture` to the target cubemap
+ * (`envReflectionsTexture` or `envTexture`). It then generates mipmaps for `envInferredTexture`
+ * and dispatches a compute shader (`GetComputeShaderSpecularIrradiance`) iteratively for each mip level
+ * to produce a pre-filtered specular map. The results are written into the mip levels of the target cubemap.
+ *
+ * @param a_reflections True to process the reflections cubemap, false for the standard environment cubemap.
+ */
 void DynamicCubemaps::Irradiance(bool a_reflections)
 {
 	auto context = globals::d3d::context;
@@ -477,6 +623,14 @@ void DynamicCubemaps::Irradiance(bool a_reflections)
 	context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
 }
 
+/**
+ * @brief Manages the multi-stage process of updating dynamic cubemaps.
+ *
+ * This function acts as a state machine, cycling through tasks such as capturing, inferring,
+ * and calculating irradiance for both standard and reflection cubemaps.
+ * It calls the appropriate helper functions (`UpdateCubemapCapture`, `Inferrence`, `Irradiance`)
+ * based on the current `nextTask` state. It also handles shader recompilation if the `recompileFlag` is set.
+ */
 void DynamicCubemaps::UpdateCubemap()
 {
 	TracyD3D11Zone(globals::state->tracyCtx, "Cubemap Update");
@@ -525,6 +679,13 @@ void DynamicCubemaps::UpdateCubemap()
 	}
 }
 
+/**
+ * @brief Sets the generated cubemap textures for use in post-deferred rendering passes.
+ *
+ * Binds the active cubemap texture (`envReflectionsTexture` or `envTexture`, depending on `activeReflections`)
+ * and the base `envTexture` to pixel shader resource slots (starting at slot 30).
+ * This makes the cubemaps available for effects like screen-space reflections or image-based lighting.
+ */
 void DynamicCubemaps::PostDeferred()
 {
 	auto context = globals::d3d::context;
@@ -533,6 +694,15 @@ void DynamicCubemaps::PostDeferred()
 	context->PSSetShaderResources(30, 2, views);
 }
 
+/**
+ * @brief Initializes and sets up all D3D11 resources required for dynamic cubemap generation.
+ *
+ * This function ensures all necessary compute shaders are compiled. It creates sampler states,
+ * and allocates various Texture2D resources for capturing, processing, and storing cubemaps
+ * (e.g., `envCaptureTexture`, `envTexture`, `envReflectionsTexture`, `envInferredTexture`).
+ * It also sets up their Shader Resource Views (SRVs) and Unordered Access Views (UAVs),
+ * initializes constant buffers, and loads a default cubemap.
+ */
 void DynamicCubemaps::SetupResources()
 {
 	GetComputeShaderUpdate();
@@ -651,6 +821,13 @@ void DynamicCubemaps::SetupResources()
 	}
 }
 
+/**
+ * @brief Resets the active state of reflections based on the current sky mode.
+ *
+ * This function checks the game's current sky object and its mode to determine
+ * if reflections should be active. It also considers whether the sky is hidden,
+ * which might imply using fake reflections.
+ */
 void DynamicCubemaps::Reset()
 {
 	if (auto sky = globals::game::sky) {
