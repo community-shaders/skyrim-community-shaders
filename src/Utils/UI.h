@@ -1,10 +1,8 @@
 #pragma once
 
-#include <d3d11.h>
-#include <imgui.h>
-#include <imgui_internal.h>
-
 // Forward declarations
+struct ID3D11ShaderResourceView;
+struct ImVec2;
 class Menu;
 
 namespace Util
@@ -47,11 +45,11 @@ namespace Util
 	bool PercentageSlider(const char* label, float* data, float lb = 0.f, float ub = 100.f, const char* format = "%.1f %%");
 	ImVec2 GetNativeViewportSizeScaled(float scale);
 
-	// Icon loading functions (moved from UIIconLoader)
+	// Icon loading functions
 	bool LoadTextureFromFile(const char* filename, ID3D11ShaderResourceView** out_srv, ImVec2& out_size);
 	bool InitializeMenuIcons(Menu* menu);
 
-	// Text rendering helpers (moved from UITextHelper)
+	// Text rendering helpers for clearer title text
 	void RenderSharpText(const char* text, bool alignToPixelGrid = true, float scale = 1.0f);
 	void RenderAlignedTextWithLogo(ID3D11ShaderResourceView* logoTexture, const ImVec2& logoSize, const char* text, float textScale = 1.5f);
 }  // namespace Util

@@ -1,4 +1,9 @@
 #include "UI.h"
+
+#include <d3d11.h>
+#include <imgui.h>
+#include <imgui_internal.h>
+
 #include "../Globals.h"
 #include "../Menu.h"
 
@@ -54,6 +59,14 @@ namespace Util
 	// Icon loading functions (moved from UIIconLoader)
 	bool LoadTextureFromFile(const char* filename, ID3D11ShaderResourceView** out_srv, ImVec2& out_size)
 	{
+		// Validate output parameter
+		if (!out_srv) {
+			return false;
+		}
+
+		// Initialize output to nullptr
+		*out_srv = nullptr;
+
 		// Load from disk into a raw RGBA buffer
 		int image_width = 0;
 		int image_height = 0;
@@ -61,6 +74,12 @@ namespace Util
 		unsigned char* image_data = stbi_load(filename, &image_width, &image_height, &channels_in_file, 4);
 		if (image_data == NULL)
 			return false;
+
+		// Validate that we have a valid D3D device
+		if (!globals::d3d::device) {
+			stbi_image_free(image_data);
+			return false;
+		}
 
 		// Create texture
 		D3D11_TEXTURE2D_DESC desc;
@@ -75,12 +94,17 @@ namespace Util
 		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 		desc.CPUAccessFlags = 0;
 
-		ID3D11Texture2D* pTexture = NULL;
+		ID3D11Texture2D* pTexture = nullptr;
 		D3D11_SUBRESOURCE_DATA subResource;
 		subResource.pSysMem = image_data;
 		subResource.SysMemPitch = desc.Width * 4;
 		subResource.SysMemSlicePitch = 0;
-		globals::d3d::device->CreateTexture2D(&desc, &subResource, &pTexture);
+
+		HRESULT hr = globals::d3d::device->CreateTexture2D(&desc, &subResource, &pTexture);
+		if (FAILED(hr) || !pTexture) {
+			stbi_image_free(image_data);
+			return false;
+		}
 
 		// Create texture view
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
@@ -89,12 +113,21 @@ namespace Util
 		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
 		srvDesc.Texture2D.MipLevels = desc.MipLevels;
 		srvDesc.Texture2D.MostDetailedMip = 0;
-		globals::d3d::device->CreateShaderResourceView(pTexture, &srvDesc, out_srv);
-		pTexture->Release();
 
-		out_size = ImVec2((float)image_width, (float)image_height);
+		hr = globals::d3d::device->CreateShaderResourceView(pTexture, &srvDesc, out_srv);
+		if (FAILED(hr) || !*out_srv) {
+			// Clean up on failure
+			pTexture->Release();
+			stbi_image_free(image_data);
+			*out_srv = nullptr;
+			return false;
+		}
+
+		// Success - clean up intermediate resources
+		pTexture->Release();
 		stbi_image_free(image_data);
 
+		out_size = ImVec2((float)image_width, (float)image_height);
 		return true;
 	}
 
