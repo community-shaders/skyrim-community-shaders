@@ -212,6 +212,17 @@ jobs:
               run: hlslkit-compile --shader-dir build/ALL/aio/Shaders --output-dir build/ShaderCache --config ${{ matrix.config.file }} --max-warnings 0 --suppress-warnings X1519
               shell: bash
 
+            - name: Upload shader validation logs
+              if: failure()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: shader-validation-logs-${{ matrix.config.name }}
+                  path: |
+                      build/ShaderCache/new_issues.log
+                      build/ShaderCache/*.log
+                  retention-days: 7
+                  if-no-files-found: ignore
+
     prerelease:
         name: Post Prerelease from PR
         if: github.event_name == 'pull_request_target'
