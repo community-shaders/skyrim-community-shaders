@@ -134,9 +134,8 @@ jobs:
               with:
                   name: cmake-workspace
                   path: |
-                      build/ALL/
-                      !build/ALL/**/*.obj
-                      !build/ALL/**/*.o
+                      build/
+                      vcpkg/
                   retention-days: 1
 
     cpp-build:
@@ -164,7 +163,7 @@ jobs:
               uses: actions/download-artifact@v4
               with:
                   name: cmake-workspace
-                  path: build/ALL/
+                  path: .
 
             - uses: ilammy/msvc-dev-cmd@v1.10.0
 
@@ -207,7 +206,7 @@ jobs:
               uses: actions/download-artifact@v4
               with:
                   name: cmake-workspace
-                  path: build/ALL/
+                  path: .
 
             - uses: ilammy/msvc-dev-cmd@v1.10.0
 
