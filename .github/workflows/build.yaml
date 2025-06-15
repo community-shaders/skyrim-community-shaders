@@ -198,10 +198,6 @@ jobs:
               run: pip install git+https://github.com/alandtse/hlslkit.git
               shell: bash
 
-            - name: Verify fxc.exe is available
-              run: fxc.exe /?
-              shell: cmd
-
             - name: Validate shader compilation
               run: hlslkit-compile --shader-dir build/ALL/aio/Shaders --output-dir build/ShaderCache --config .github/configs/shader-validation.yaml --max-warnings 0 --suppress-warnings X1519
               shell: bash
