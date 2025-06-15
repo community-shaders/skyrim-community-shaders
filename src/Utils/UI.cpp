@@ -83,7 +83,7 @@ namespace Util
 		ZeroMemory(&desc, sizeof(desc));
 		desc.Width = image_width;
 		desc.Height = image_height;
-		desc.MipLevels = 0; // Generate full mip chain
+		desc.MipLevels = 1; // Start with single mip level for initial data
 		desc.ArraySize = 1;
 		// Preserve icon colour fidelity
 		desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
@@ -110,7 +110,7 @@ namespace Util
 		ZeroMemory(&srvDesc, sizeof(srvDesc));
 		srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MipLevels = -1; // Use all available mip levels
+		srvDesc.Texture2D.MipLevels = 0; // Use all available mip levels
 		srvDesc.Texture2D.MostDetailedMip = 0;
 
 		hr = device->CreateShaderResourceView(pTexture, &srvDesc, out_srv);
