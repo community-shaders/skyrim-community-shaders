@@ -1,12 +1,15 @@
 #pragma once
 
 // Forward declarations
+struct ID3D11Device;
 struct ID3D11ShaderResourceView;
 struct ImVec2;
 class Menu;
 
 namespace Util
 {
+	// Text rendering constants
+	constexpr float DefaultHeaderTextScale = 1.5f;  // Larger scale for header text to improve readability
 
 	/**
 	 * Usage:
@@ -46,10 +49,15 @@ namespace Util
 	ImVec2 GetNativeViewportSizeScaled(float scale);
 
 	// Icon loading functions
-	bool LoadTextureFromFile(const char* filename, ID3D11ShaderResourceView** out_srv, ImVec2& out_size);
+	// `device` must remain alive for the SRV lifetime. Caller owns *out_srv and must `Release()` it.
+	bool LoadTextureFromFile(ID3D11Device* device,
+	                         const char* filename,
+	                         ID3D11ShaderResourceView** out_srv,
+	                         ImVec2& out_size);
 	bool InitializeMenuIcons(Menu* menu);
 
 	// Text rendering helpers for clearer title text
-	void RenderSharpText(const char* text, bool alignToPixelGrid = true, float scale = 1.0f);
-	void RenderAlignedTextWithLogo(ID3D11ShaderResourceView* logoTexture, const ImVec2& logoSize, const char* text, float textScale = 1.5f);
+	// These functions modify ImGui rendering state and should be called within ImGui context
+	ImVec2 DrawSharpText(const char* text, bool alignToPixelGrid = true, float scale = 1.0f);
+	ImVec2 DrawAlignedTextWithLogo(ID3D11ShaderResourceView* logoTexture, const ImVec2& logoSize, const char* text, float textScale = DefaultHeaderTextScale);
 }  // namespace Util

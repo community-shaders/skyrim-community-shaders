@@ -57,10 +57,13 @@ namespace Util
 	}
 
 	// Icon loading functions (moved from UIIconLoader)
-	bool LoadTextureFromFile(const char* filename, ID3D11ShaderResourceView** out_srv, ImVec2& out_size)
+	bool LoadTextureFromFile(ID3D11Device* device,
+	                         const char* filename,
+	                         ID3D11ShaderResourceView** out_srv,
+	                         ImVec2& out_size)
 	{
-		// Validate output parameter
-		if (!out_srv) {
+		// Validate input parameters
+		if (!device || !out_srv) {
 			return false;
 		}
 
@@ -75,23 +78,19 @@ namespace Util
 		if (image_data == NULL)
 			return false;
 
-		// Validate that we have a valid D3D device
-		if (!globals::d3d::device) {
-			stbi_image_free(image_data);
-			return false;
-		}
-
 		// Create texture
 		D3D11_TEXTURE2D_DESC desc;
 		ZeroMemory(&desc, sizeof(desc));
 		desc.Width = image_width;
 		desc.Height = image_height;
-		desc.MipLevels = 1;
+		desc.MipLevels = 0; // Generate full mip chain
 		desc.ArraySize = 1;
-		desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		// Preserve icon colour fidelity
+		desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 		desc.SampleDesc.Count = 1;
 		desc.Usage = D3D11_USAGE_DEFAULT;
-		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+		desc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
 		desc.CPUAccessFlags = 0;
 
 		ID3D11Texture2D* pTexture = nullptr;
@@ -100,7 +99,7 @@ namespace Util
 		subResource.SysMemPitch = desc.Width * 4;
 		subResource.SysMemSlicePitch = 0;
 
-		HRESULT hr = globals::d3d::device->CreateTexture2D(&desc, &subResource, &pTexture);
+		HRESULT hr = device->CreateTexture2D(&desc, &subResource, &pTexture);
 		if (FAILED(hr) || !pTexture) {
 			stbi_image_free(image_data);
 			return false;
@@ -109,18 +108,23 @@ namespace Util
 		// Create texture view
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
 		ZeroMemory(&srvDesc, sizeof(srvDesc));
-		srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MipLevels = desc.MipLevels;
+		srvDesc.Texture2D.MipLevels = -1; // Use all available mip levels
 		srvDesc.Texture2D.MostDetailedMip = 0;
 
-		hr = globals::d3d::device->CreateShaderResourceView(pTexture, &srvDesc, out_srv);
+		hr = device->CreateShaderResourceView(pTexture, &srvDesc, out_srv);
 		if (FAILED(hr) || !*out_srv) {
 			// Clean up on failure
 			pTexture->Release();
 			stbi_image_free(image_data);
 			*out_srv = nullptr;
 			return false;
+		}
+
+		// Generate mipmaps for smooth scaling at different DPI levels
+		if (globals::d3d::context) {
+			globals::d3d::context->GenerateMips(*out_srv);
 		}
 
 		// Success - clean up intermediate resources
@@ -137,23 +141,77 @@ namespace Util
 			return false;
 		}
 
-		bool success = true;
+		// Get the D3D device from globals
+		ID3D11Device* device = globals::d3d::device;
+		if (!device) {
+			return false;
+		}
+
 		// Define path to icons
 		std::string basePath = "Data\\Interface\\CommunityShaders\\Icons\\";
 
-		// Load all required icons
-		success &= LoadTextureFromFile((basePath + "Microsoft Icons\\save-settings.png").c_str(), &menu->uiIcons.saveSettings.texture, menu->uiIcons.saveSettings.size);
-		success &= LoadTextureFromFile((basePath + "Microsoft Icons\\load-settings.png").c_str(), &menu->uiIcons.loadSettings.texture, menu->uiIcons.loadSettings.size);
-		success &= LoadTextureFromFile((basePath + "Microsoft Icons\\clear-cache.png").c_str(), &menu->uiIcons.clearCache.texture, menu->uiIcons.clearCache.size);
-		success &= LoadTextureFromFile((basePath + "Microsoft Icons\\clear-disk.png").c_str(), &menu->uiIcons.clearDiskCache.texture, menu->uiIcons.clearDiskCache.size);
-		success &= LoadTextureFromFile((basePath + "Community Shaders Logo\\cs-logo.png").c_str(), &menu->uiIcons.logo.texture, menu->uiIcons.logo.size);
+		// Initialize all texture pointers to nullptr for safe cleanup
+		menu->uiIcons.saveSettings.texture = nullptr;
+		menu->uiIcons.loadSettings.texture = nullptr;
+		menu->uiIcons.clearCache.texture = nullptr;
+		menu->uiIcons.clearDiskCache.texture = nullptr;
+		menu->uiIcons.logo.texture = nullptr;
 
-		return success;
+		// Load icons one by one, cleaning up on any failure
+		if (!LoadTextureFromFile(device, (basePath + "Microsoft Icons\\save-settings.png").c_str(), &menu->uiIcons.saveSettings.texture, menu->uiIcons.saveSettings.size)) {
+			goto cleanup_and_fail;
+		}
+
+		if (!LoadTextureFromFile(device, (basePath + "Microsoft Icons\\load-settings.png").c_str(), &menu->uiIcons.loadSettings.texture, menu->uiIcons.loadSettings.size)) {
+			goto cleanup_and_fail;
+		}
+
+		if (!LoadTextureFromFile(device, (basePath + "Microsoft Icons\\clear-cache.png").c_str(), &menu->uiIcons.clearCache.texture, menu->uiIcons.clearCache.size)) {
+			goto cleanup_and_fail;
+		}
+
+		if (!LoadTextureFromFile(device, (basePath + "Microsoft Icons\\clear-disk.png").c_str(), &menu->uiIcons.clearDiskCache.texture, menu->uiIcons.clearDiskCache.size)) {
+			goto cleanup_and_fail;
+		}
+
+		if (!LoadTextureFromFile(device, (basePath + "Community Shaders Logo\\cs-logo.png").c_str(), &menu->uiIcons.logo.texture, menu->uiIcons.logo.size)) {
+			goto cleanup_and_fail;
+		}
+
+		// All icons loaded successfully
+		return true;
+
+	cleanup_and_fail:
+		// Release any successfully loaded SRVs to prevent GPU memory leaks
+		if (menu->uiIcons.saveSettings.texture) {
+			menu->uiIcons.saveSettings.texture->Release();
+			menu->uiIcons.saveSettings.texture = nullptr;
+		}
+		if (menu->uiIcons.loadSettings.texture) {
+			menu->uiIcons.loadSettings.texture->Release();
+			menu->uiIcons.loadSettings.texture = nullptr;
+		}
+		if (menu->uiIcons.clearCache.texture) {
+			menu->uiIcons.clearCache.texture->Release();
+			menu->uiIcons.clearCache.texture = nullptr;
+		}
+		if (menu->uiIcons.clearDiskCache.texture) {
+			menu->uiIcons.clearDiskCache.texture->Release();
+			menu->uiIcons.clearDiskCache.texture = nullptr;
+		}
+		if (menu->uiIcons.logo.texture) {
+			menu->uiIcons.logo.texture->Release();
+			menu->uiIcons.logo.texture = nullptr;
+		}
+
+		return false;
 	}
 
 	// Text rendering helpers (moved from UITextHelper)
-	void RenderSharpText(const char* text, bool alignToPixelGrid, float scale)
+	ImVec2 DrawSharpText(const char* text, bool alignToPixelGrid, float scale)
 	{
+		ImVec2 startPos = ImGui::GetCursorPos();
+		
 		if (alignToPixelGrid) {
 			// Get current position
 			ImVec2 pos = ImGui::GetCursorPos();
@@ -167,18 +225,25 @@ namespace Util
 		}
 
 		// Apply scale if needed
-		if (scale != 1.0f)
+		float originalScale = 1.0f;
+		if (scale != 1.0f) {
+			originalScale = ImGui::GetWindowFontScale();
 			ImGui::SetWindowFontScale(scale);
+		}
 
 		// Use Text instead of TextUnformatted for better rendering
 		ImGui::Text("%s", text);
 
-		// Restore scale if needed
+		// Restore original scale if needed
 		if (scale != 1.0f)
-			ImGui::SetWindowFontScale(1.0f);
+			ImGui::SetWindowFontScale(originalScale);
+			
+		// Calculate and return the rendered size
+		ImVec2 endPos = ImGui::GetCursorPos();
+		return ImVec2(endPos.x - startPos.x, endPos.y - startPos.y);
 	}
 
-	void RenderAlignedTextWithLogo(ID3D11ShaderResourceView* logoTexture, const ImVec2& logoSize, const char* text, float textScale)
+	ImVec2 DrawAlignedTextWithLogo(ID3D11ShaderResourceView* logoTexture, const ImVec2& logoSize, const char* text, float textScale)
 	{
 		// Save current cursor position
 		ImVec2 startPos = ImGui::GetCursorPos();
@@ -202,13 +267,18 @@ namespace Util
 
 		// Use windowed font scale for sharper text
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+		float originalScale = ImGui::GetWindowFontScale();
 		ImGui::SetWindowFontScale(textScale);
 
 		// Render text aligned to pixel grid for sharpness
 		ImGui::Text("%s", text);
 
 		// Restore style
-		ImGui::SetWindowFontScale(1.0f);
+		ImGui::SetWindowFontScale(originalScale);
 		ImGui::PopStyleVar();
+		
+		// Calculate and return the total rendered size
+		ImVec2 endPos = ImGui::GetCursorPos();
+		return ImVec2(endPos.x - startPos.x, endPos.y - startPos.y);
 	}
 }  // namespace Util

@@ -289,7 +289,7 @@ void Menu::DrawSettings()
                     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 5.0f);
                     
                     // Use our helper to render aligned logo and text with perfect vertical alignment
-                    Util::RenderAlignedTextWithLogo(
+                    Util::DrawAlignedTextWithLogo(
                         uiIcons.logo.texture,
                         logoSize,
                         title.c_str(),
@@ -299,7 +299,7 @@ void Menu::DrawSettings()
                     // No logo, just render the text with proper alignment
                     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
                     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 5.0f);
-                    Util::RenderSharpText(title.c_str(), true, textScaleFactor);
+                    Util::DrawSharpText(title.c_str(), true, textScaleFactor);
                     ImGui::PopStyleVar();
                 }
             }              // Buttons on the right
@@ -377,8 +377,8 @@ void Menu::DrawSettings()
             ImGui::Spacing();
         }
 
-        // If icons are disabled, show action buttons as text between separators
-        if (!settings.Theme.ShowActionIcons) {
+        // If icons are disabled or missing textures, show action buttons as text between separators
+        if (!canShowIcons) {
             if (ImGui::BeginTable("##ActionButtons", 4, ImGuiTableFlags_SizingStretchSame)) {
                 // Save Settings Button
                 ImGui::TableNextColumn();
@@ -437,7 +437,7 @@ void Menu::DrawSettings()
                 ImGui::EndTable();
             }
             
-            // Second separator - only shown if icons are disabled or if there are failed tasks
+            // Second separator - only shown if icons are disabled/missing or if there are failed tasks
             if (!ImGui::IsWindowDocked()) {
                 ImGui::Spacing();
                 ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 3.0f);
