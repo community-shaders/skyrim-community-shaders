@@ -179,13 +179,19 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
 		COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_PDB_FILE:${PROJECT_NAME}> "${AIO_DIR}/SKSE/Plugins/"
 		COMMAND ${CMAKE_COMMAND} -E remove "${AIO_DIR}/CORE"
 	)
-
 	add_custom_command(
 		OUTPUT copy_shaders.stamp
 		COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/package "${AIO_DIR}"
 		COMMAND ${CMAKE_COMMAND} -E copy_directory ${FEATURE_PATHS} "${AIO_DIR}"
 		COMMAND ${CMAKE_COMMAND} -E touch copy_shaders.stamp
 		DEPENDS ${HLSL_FILES}
+	)
+
+	# Standalone target for preparing shaders for CI validation
+	# This allows shader validation to run without waiting for the full build
+	add_custom_target(prepare_shaders
+		DEPENDS copy_shaders.stamp
+		COMMENT "Preparing shaders for validation"
 	)
 
 endif()

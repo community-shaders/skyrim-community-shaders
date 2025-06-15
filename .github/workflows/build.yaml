@@ -1,4 +1,4 @@
-name: build Community Shaders and addons
+name: Build Community Shaders and addons
 
 on:
     push:
@@ -9,6 +9,11 @@ on:
             cache-key-suffix:
                 description: "Optional suffix to invalidate the build cache"
                 required: false
+            validate-shaders:
+                description: "Run shader validation even for manual builds"
+                type: boolean
+                required: false
+                default: true
     pull_request_target:
         types: [opened, synchronize, reopened, ready_for_review]
         paths:
@@ -16,6 +21,8 @@ on:
             - "**.h"
             - "**.hpp"
             - "**.c"
+            - "**.hlsl"
+            - "**.hlsli"
             - "CMakeLists.txt"
             - "CMakePresets.json"
             - "vcpkg.json"
@@ -71,21 +78,27 @@ jobs:
                         - 'features/**/Shaders/**'
                   base_sha: ${{ github.event.pull_request.base.sha }}
                   sha: ${{ github.event.pull_request.head.sha }}
-    build:
+    setup-cmake:
         needs: [check-changes]
-        if: ${{ !github.event.pull_request.draft && (github.event_name != 'pull_request_target' || needs.check-changes.outputs.should-build == 'true') }}
-        name: Build plugin and addons
+        if: >
+            always() &&
+            ((github.event_name == 'workflow_dispatch') ||
+             (!github.event.pull_request.draft &&
+              (needs.check-changes.result != 'skipped' &&
+               (needs.check-changes.outputs.should-build == 'true' ||
+                needs.check-changes.outputs.hlsl-should-build == 'true'))))
+        name: Setup CMake environment
         runs-on: windows-latest
         permissions:
             contents: read
         outputs:
             version: ${{ steps.get_version.outputs.version }}
         steps:
-            - name: Checkout PR code
+            - name: Checkout code
               uses: actions/checkout@v4
               with:
-                  ref: ${{ github.event.pull_request.head.ref }}
-                  repository: ${{ github.event.pull_request.head.repo.full_name }}
+                  ref: ${{ github.event.pull_request.head.ref || github.ref }}
+                  repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
                   submodules: recursive
 
             - uses: ilammy/msvc-dev-cmd@v1.10.0
@@ -98,16 +111,15 @@ jobs:
               uses: actions/cache@v4
               with:
                   path: build/ALL
-                  key: ${{ runner.os }}-build-${{ inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
+                  key: ${{ runner.os }}-cmake-${{ inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
                   restore-keys: |
-                      ${{ runner.os }}-build-${{ inputs.cache-key-suffix || 'default' }}-
-                      ${{ runner.os }}-build-
+                      ${{ runner.os }}-cmake-${{ inputs.cache-key-suffix || 'default' }}-
+                      ${{ runner.os }}-cmake-
 
-            - name: Build using run-cmake with ALL preset
+            - name: Configure CMake
               uses: lukka/run-cmake@v10
               with:
                   configurePreset: ALL
-                  buildPreset: ALL
 
             - name: Extract version from CMake
               id: get_version
@@ -116,16 +128,106 @@ jobs:
                   VERSION=$(grep 'CMAKE_PROJECT_VERSION:STATIC' build/ALL/CMakeCache.txt | cut -d= -f2)
                   echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+            - name: Upload configured workspace
+              uses: actions/upload-artifact@v4
+              with:
+                  name: cmake-workspace
+                  path: |
+                      build/ALL/
+                      !build/ALL/**/*.obj
+                      !build/ALL/**/*.o
+                  retention-days: 1
+
+    cpp-build:
+        needs: [check-changes, setup-cmake]
+        if: >
+            always() && needs.setup-cmake.result == 'success' &&
+            ((github.event_name == 'workflow_dispatch') ||
+             (!github.event.pull_request.draft &&
+              needs.check-changes.outputs.should-build == 'true'))
+        name: Build plugin and addons
+        runs-on: windows-latest
+        permissions:
+            contents: read
+        outputs:
+            version: ${{ needs.setup-cmake.outputs.version }}
+        steps:
+            - name: Download configured workspace
+              uses: actions/download-artifact@v4
+              with:
+                  name: cmake-workspace
+                  path: .
+
+            - uses: ilammy/msvc-dev-cmd@v1.10.0
+
+            - name: Build using run-cmake
+              uses: lukka/run-cmake@v10
+              with:
+                  configurePreset: ALL
+                  buildPreset: ALL
+
             - name: Upload dist artifacts
               if: success()
               uses: actions/upload-artifact@v4
               with:
                   name: dist-artifacts
                   path: dist/
+                  retention-days: 30
+
+    shader-validation:
+        needs: [check-changes, setup-cmake]
+        if: >
+            always() && needs.setup-cmake.result == 'success' &&
+            (((github.event_name == 'pull_request_target' || github.event_name == 'pull_request') &&
+              needs.check-changes.outputs.hlsl-should-build == 'true' &&
+              !github.event.pull_request.draft) ||
+             (github.event_name == 'workflow_dispatch' &&
+              github.event.inputs.validate-shaders == 'true'))
+        name: Validate shader compilation
+        runs-on: windows-latest
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event.pull_request.head.ref || github.ref }}
+                  repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+                  submodules: recursive
+
+            - name: Download configured workspace
+              uses: actions/download-artifact@v4
+              with:
+                  name: cmake-workspace
+                  path: .
+
+            - uses: ilammy/msvc-dev-cmd@v1.10.0
+
+            - name: Prepare shaders for validation
+              uses: lukka/run-cmake@v10
+              with:
+                  configurePreset: ALL
+                  buildPreset: ALL
+                  buildPresetAdditionalArgs: --target prepare_shaders
+
+            - name: Setup hlslkit
+              uses: alandtse/hlslkit/.github/actions/setup-hlslkit@main
+              with:
+                  install-fxc: true
+
+            - name: Validate shader compilation using hlslkit
+              uses: alandtse/hlslkit/.github/actions/shader-compile-test@main
+              with:
+                  shader-directory: build/ALL/aio/Shaders
+                  output-directory: build/ShaderCache
+                  config-files: .github/configs/shader-validation.yaml
+                  max-warnings: 0
+                  parallel-configs: false
+                  suppress-warnings: X1519
 
     prerelease:
         if: github.event_name == 'pull_request_target'
-        needs: build
+        needs: [cpp-build, shader-validation]
         runs-on: windows-latest
         permissions:
             contents: write
@@ -144,8 +246,8 @@ jobs:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               shell: bash
               run: |
-                  TAG="v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }}"
-                  BASE_TAG="v${{ needs.build.outputs.version }}"
+                  TAG="v${{ needs.build-matrix.outputs.version }}-pr${{ github.event.pull_request.number }}"
+                  BASE_TAG="v${{ needs.build-matrix.outputs.version }}"
                   REPO="${{ github.repository }}"
                   BASE_SHA="${{ github.event.pull_request.base.sha }}"
                   HEAD_SHA="${{ github.event.pull_request.head.sha }}"
@@ -180,8 +282,8 @@ jobs:
               if: steps.gen_notes.outputs.notes_generated == 'true'
               uses: ncipollo/release-action@v1
               with:
-                  name: "Community Shaders ${{ needs.build.outputs.version }} PR #${{ github.event.pull_request.number }}"
-                  tag: v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }}
+                  name: "Community Shaders ${{ needs.build-matrix.outputs.version }} PR #${{ github.event.pull_request.number }}"
+                  tag: v${{ needs.build-matrix.outputs.version }}-pr${{ github.event.pull_request.number }}
                   prerelease: true
                   artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
                   bodyFile: release-notes.md
@@ -193,8 +295,8 @@ jobs:
               if: steps.gen_notes.outputs.notes_generated != 'true'
               uses: ncipollo/release-action@v1
               with:
-                  name: "Community Shaders ${{ needs.build.outputs.version }} PR #${{ github.event.pull_request.number }}"
-                  tag: v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }}
+                  name: "Community Shaders ${{ needs.build-matrix.outputs.version }} PR #${{ github.event.pull_request.number }}"
+                  tag: v${{ needs.build-matrix.outputs.version }}-pr${{ github.event.pull_request.number }}
                   prerelease: true
                   artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
                   generateReleaseNotes: true
@@ -210,11 +312,13 @@ jobs:
                   comment-tag: prerelease-build
                   message: |
                       ✅ A pre-release build is available for this PR:
-                      [Download](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }})
+                      [Download](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.setup-cmake.outputs.version }}-pr${{ github.event.pull_request.number }})
 
     release:
-        needs: build
-        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+        needs: [cpp-build, shader-validation]
+        if: >
+            github.event_name == 'workflow_dispatch' ||
+            startsWith(github.ref, 'refs/tags/v')
         runs-on: windows-latest
         permissions:
             contents: write
