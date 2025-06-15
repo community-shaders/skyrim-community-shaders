@@ -79,16 +79,15 @@ jobs:
                         - 'features/**/Shaders/**'
                   base_sha: ${{ github.event.pull_request.base.sha }}
                   sha: ${{ github.event.pull_request.head.sha }}
-    setup-cmake:
+    cpp-build:
         needs: [check-changes]
         if: >
             always() &&
             ((github.event_name == 'workflow_dispatch') ||
              (!github.event.pull_request.draft &&
               (needs.check-changes.result != 'skipped' &&
-               (needs.check-changes.outputs.should-build == 'true' ||
-                needs.check-changes.outputs.hlsl-should-build == 'true'))))
-        name: Setup CMake environment
+               (needs.check-changes.outputs.should-build == 'true'))))
+        name: Build plugin and addons
         runs-on: windows-latest
         permissions:
             contents: read
@@ -104,7 +103,8 @@ jobs:
 
             - uses: ilammy/msvc-dev-cmd@v1.10.0
 
-            - uses: lukka/run-vcpkg@v11.5
+            - name: Setup vcpkg
+              uses: lukka/run-vcpkg@v11.5
               with:
                   vcpkgJsonGlob: vcpkg.json
 
@@ -117,10 +117,11 @@ jobs:
                       ${{ runner.os }}-cmake-${{ inputs.cache-key-suffix || 'default' }}-
                       ${{ runner.os }}-cmake-
 
-            - name: Configure CMake
+            - name: Build using run-cmake
               uses: lukka/run-cmake@v10
               with:
                   configurePreset: ALL
+                  buildPreset: ALL
 
             - name: Extract version from CMake
               id: get_version
@@ -128,50 +129,6 @@ jobs:
               run: |
                   VERSION=$(grep 'CMAKE_PROJECT_VERSION:STATIC' build/ALL/CMakeCache.txt | cut -d= -f2)
                   echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-            - name: Upload configured workspace
-              uses: actions/upload-artifact@v4
-              with:
-                  name: cmake-workspace
-                  path: |
-                      build/
-                      vcpkg/
-                  retention-days: 1
-
-    cpp-build:
-        needs: [check-changes, setup-cmake]
-        if: >
-            always() && needs.setup-cmake.result == 'success' &&
-            ((github.event_name == 'workflow_dispatch') ||
-             (!github.event.pull_request.draft &&
-              needs.check-changes.outputs.should-build == 'true'))
-        name: Build plugin and addons
-        runs-on: windows-latest
-        permissions:
-            contents: read
-        outputs:
-            version: ${{ needs.setup-cmake.outputs.version }}
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
-              with:
-                  ref: ${{ github.event.pull_request.head.ref || github.ref }}
-                  repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-                  submodules: recursive
-
-            - name: Download configured workspace
-              uses: actions/download-artifact@v4
-              with:
-                  name: cmake-workspace
-                  path: .
-
-            - uses: ilammy/msvc-dev-cmd@v1.10.0
-
-            - name: Build using run-cmake
-              uses: lukka/run-cmake@v10
-              with:
-                  configurePreset: ALL
-                  buildPreset: ALL
 
             - name: Upload dist artifacts
               if: success()
@@ -182,10 +139,11 @@ jobs:
                   retention-days: 30
 
     shader-validation:
-        needs: [check-changes, setup-cmake]
+        needs: [check-changes]
         if: >
-            always() && needs.setup-cmake.result == 'success' &&
+            always() &&
             (((github.event_name == 'pull_request_target' || github.event_name == 'pull_request') &&
+              needs.check-changes.result != 'skipped' &&
               needs.check-changes.outputs.hlsl-should-build == 'true' &&
               !github.event.pull_request.draft) ||
              (github.event_name == 'workflow_dispatch' &&
@@ -202,13 +160,21 @@ jobs:
                   repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
                   submodules: recursive
 
-            - name: Download configured workspace
-              uses: actions/download-artifact@v4
-              with:
-                  name: cmake-workspace
-                  path: .
-
             - uses: ilammy/msvc-dev-cmd@v1.10.0
+
+            - name: Setup vcpkg
+              uses: lukka/run-vcpkg@v11.5
+              with:
+                  vcpkgJsonGlob: vcpkg.json
+
+            - name: Cache CMake build output
+              uses: actions/cache@v4
+              with:
+                  path: build/ALL
+                  key: ${{ runner.os }}-cmake-${{ inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
+                  restore-keys: |
+                      ${{ runner.os }}-cmake-${{ inputs.cache-key-suffix || 'default' }}-
+                      ${{ runner.os }}-cmake-
 
             - name: Prepare shaders for validation
               uses: lukka/run-cmake@v10
@@ -320,7 +286,7 @@ jobs:
                   comment-tag: prerelease-build
                   message: |
                       ✅ A pre-release build is available for this PR:
-                      [Download](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.setup-cmake.outputs.version }}-pr${{ github.event.pull_request.number }})
+                      [Download](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.cpp-build.outputs.version }}-pr${{ github.event.pull_request.number }})
 
     release:
         name: Post Release
