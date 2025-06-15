@@ -9,6 +9,11 @@ on:
             cache-key-suffix:
                 description: "Optional suffix to invalidate the build cache"
                 required: false
+            build-cpp:
+                description: "Build C++ build for manual dispatch"
+                type: boolean
+                required: false
+                default: true
             validate-shaders:
                 description: "Run shader validation even for manual builds"
                 type: boolean
@@ -83,10 +88,11 @@ jobs:
         needs: [check-changes]
         if: >
             always() &&
-            ((github.event_name == 'workflow_dispatch') ||
-             (!github.event.pull_request.draft &&
+            ((github.event_name == 'workflow_dispatch' &&
+              github.event.inputs.build-cpp == 'true') ||
+            (!github.event.pull_request.draft &&
               (needs.check-changes.result != 'skipped' &&
-               (needs.check-changes.outputs.should-build == 'true'))))
+              (needs.check-changes.outputs.should-build == 'true'))))
         name: Build plugin and addons
         runs-on: windows-latest
         permissions:
@@ -183,20 +189,22 @@ jobs:
                   buildPreset: ALL
                   buildPresetAdditionalArgs: "['--target prepare_shaders']"
 
-            - name: Setup hlslkit
-              uses: alandtse/hlslkit/.github/actions/setup-hlslkit@main
+            - name: Setup Python
+              uses: actions/setup-python@v5
               with:
-                  install-fxc: true
+                  python-version: "3.11"
 
-            - name: Validate shader compilation using hlslkit
-              uses: alandtse/hlslkit/.github/actions/shader-compile-test@main
-              with:
-                  shader-directory: build/ALL/aio/Shaders
-                  output-directory: build/ShaderCache
-                  config-files: .github/configs/shader-validation.yaml
-                  max-warnings: 0
-                  parallel-configs: false
-                  suppress-warnings: X1519
+            - name: Install hlslkit
+              run: pip install git+https://github.com/alandtse/hlslkit.git
+              shell: bash
+
+            - name: Verify fxc.exe is available
+              run: fxc.exe /?
+              shell: cmd
+
+            - name: Validate shader compilation
+              run: hlslkit-compile --shader-dir build/ALL/aio/Shaders --output-dir build/ShaderCache --config .github/configs/shader-validation.yaml --max-warnings 0 --suppress-warnings X1519
+              shell: bash
 
     prerelease:
         name: Post Prerelease from PR
