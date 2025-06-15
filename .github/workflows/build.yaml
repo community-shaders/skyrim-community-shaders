@@ -164,9 +164,7 @@ jobs:
         if: >
             always() && !cancelled() &&
             ((github.event_name == 'pull_request_target' &&
-              !github.event.pull_request.draft &&
-              needs.check-changes.result == 'success' &&
-              needs.check-changes.outputs.hlsl-should-build == 'true') ||
+              !github.event.pull_request.draft) ||
              (github.event_name == 'workflow_dispatch' &&
               github.event.inputs.validate-shaders == 'true'))
         name: Validate shader compilation
@@ -182,7 +180,20 @@ jobs:
                       file: ".github/configs/shader-validation-vr.yaml"
             fail-fast: false # Let both configs run to completion for full output
         steps:
+            - name: Check if HLSL validation needed
+              id: check-hlsl
+              run: |
+                  if [ "${{ needs.check-changes.outputs.hlsl-should-build }}" != "true" ]; then
+                    echo "No HLSL changes detected, skipping validation steps"
+                    echo "skip=true" >> $GITHUB_OUTPUT
+                  else
+                    echo "HLSL changes detected, proceeding with validation"
+                    echo "skip=false" >> $GITHUB_OUTPUT
+                  fi
+              shell: bash
+
             - name: Checkout code
+              if: steps.check-hlsl.outputs.skip != 'true'
               uses: actions/checkout@v4
               with:
                   ref: ${{ github.event.pull_request.head.ref || github.ref }}
@@ -190,13 +201,16 @@ jobs:
                   submodules: recursive
 
             - uses: ilammy/msvc-dev-cmd@v1.10.0
+              if: steps.check-hlsl.outputs.skip != 'true'
 
             - name: Setup vcpkg
+              if: steps.check-hlsl.outputs.skip != 'true'
               uses: lukka/run-vcpkg@v11.5
               with:
                   vcpkgJsonGlob: vcpkg.json
 
             - name: Cache CMake build output
+              if: steps.check-hlsl.outputs.skip != 'true'
               uses: actions/cache@v4
               with:
                   path: build/ALL
@@ -207,6 +221,7 @@ jobs:
                       ${{ runner.os }}-cmake-
 
             - name: Prepare shaders for validation
+              if: steps.check-hlsl.outputs.skip != 'true'
               uses: lukka/run-cmake@v10
               with:
                   configurePreset: ALL
@@ -214,20 +229,23 @@ jobs:
                   buildPresetAdditionalArgs: "['--target prepare_shaders']"
 
             - name: Setup Python
+              if: steps.check-hlsl.outputs.skip != 'true'
               uses: actions/setup-python@v5
               with:
                   python-version: "3.11"
 
             - name: Install hlslkit
+              if: steps.check-hlsl.outputs.skip != 'true'
               run: pip install git+https://github.com/alandtse/hlslkit.git
               shell: bash
 
             - name: Validate shader compilation (${{ matrix.config.name }})
+              if: steps.check-hlsl.outputs.skip != 'true'
               run: hlslkit-compile --shader-dir build/ALL/aio/Shaders --output-dir build/ShaderCache --config ${{ matrix.config.file }} --max-warnings 0 --suppress-warnings X1519
               shell: bash
 
             - name: Upload shader validation logs
-              if: failure()
+              if: failure() && steps.check-hlsl.outputs.skip != 'true'
               uses: actions/upload-artifact@v4
               with:
                   name: shader-validation-logs-${{ matrix.config.name }}
