@@ -159,6 +159,14 @@ jobs:
         runs-on: windows-latest
         permissions:
             contents: read
+        strategy:
+            matrix:
+                config:
+                    - name: "Flatrim"
+                      file: ".github/configs/shader-validation.yaml"
+                    - name: "VR"
+                      file: ".github/configs/shader-validation-vr.yaml"
+            fail-fast: false # Let both configs run to completion for full output
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
@@ -178,9 +186,10 @@ jobs:
               uses: actions/cache@v4
               with:
                   path: build/ALL
-                  key: ${{ runner.os }}-cmake-${{ inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
+                  key: ${{ runner.os }}-cmake-${{ matrix.config.name }}-${{ inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
                   restore-keys: |
-                      ${{ runner.os }}-cmake-${{ inputs.cache-key-suffix || 'default' }}-
+                      ${{ runner.os }}-cmake-${{ matrix.config.name }}-${{ inputs.cache-key-suffix || 'default' }}-
+                      ${{ runner.os }}-cmake-${{ matrix.config.name }}-
                       ${{ runner.os }}-cmake-
 
             - name: Prepare shaders for validation
@@ -199,8 +208,8 @@ jobs:
               run: pip install git+https://github.com/alandtse/hlslkit.git
               shell: bash
 
-            - name: Validate shader compilation
-              run: hlslkit-compile --shader-dir build/ALL/aio/Shaders --output-dir build/ShaderCache --config .github/configs/shader-validation.yaml --max-warnings 0 --suppress-warnings X1519
+            - name: Validate shader compilation (${{ matrix.config.name }})
+              run: hlslkit-compile --shader-dir build/ALL/aio/Shaders --output-dir build/ShaderCache --config ${{ matrix.config.file }} --max-warnings 0 --suppress-warnings X1519
               shell: bash
 
     prerelease:
