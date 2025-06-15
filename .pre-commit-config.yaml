@@ -22,3 +22,10 @@ repos:
             additional_dependencies: ["prettier@3.1.0"]
             files: \.(json|md|yml|yaml)$
             exclude: ^(\.\/)?(extern|include|build|dist)\/
+ci:
+    autofix_commit_msg: |
+        style: 🎨 apply pre-commit.ci formatting
+
+        Automated formatting by clang-format, prettier, and other hooks.
+        See https://pre-commit.ci for details.
+    autofix_prs: true

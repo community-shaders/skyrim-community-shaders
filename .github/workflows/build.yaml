@@ -10,6 +10,7 @@ on:
                 description: "Optional suffix to invalidate the build cache"
                 required: false
     pull_request_target:
+        types: [opened, synchronize, reopened, ready_for_review]
         paths:
             - "**.cpp"
             - "**.h"
@@ -26,12 +27,67 @@ permissions:
     contents: read
     pull-requests: read
 
+concurrency:
+    group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
+
 jobs:
+    check-changes:
+        runs-on: ubuntu-latest
+        if: ${{ github.event_name == 'pull_request_target' }}
+        outputs:
+            should-build: ${{ steps.changed-files.outputs.build_any_changed == 'true' || steps.changed-files.outputs.cpp_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
+            hlsl-should-build: ${{ steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+                  token: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Fetch PR head and base
+              run: |
+                  git fetch origin ${{ github.event.pull_request.head.sha }}
+                  git fetch origin ${{ github.event.pull_request.base.sha }}
+
+            - name: Get changed files
+              id: changed-files
+              uses: tj-actions/changed-files@v46
+              continue-on-error: true
+              with:
+                  files_yaml: |
+                      cpp:
+                        - '**.cpp'
+                        - '**.h'
+                        - '**.hpp'
+                        - '**.c'
+                        - 'src/**'
+                        - 'include/**'
+                        - '!**.hlsl'
+                        - '!**.hlsli'
+                      build:
+                        - 'CMakeLists.txt'
+                        - 'CMakePresets.json'
+                        - 'vcpkg.json'
+                        - 'vcpkg-configuration.json'
+                        - '.gitmodules'
+                        - 'extern/**'
+                      hlsl:
+                        - '**.hlsl'
+                        - '**.hlsli'
+                        - 'package/Shaders/**'
+                        - 'features/**/Shaders/**'
+                  base_sha: ${{ github.event.pull_request.base.sha }}
+                  sha: ${{ github.event.pull_request.head.sha }}
+
+            - name: Fallback - Set outputs if changed-files failed
+              if: failure()
+              run: |
+                  echo "should-build=true" >> $GITHUB_OUTPUT
+                  echo "hlsl-should-build=true" >> $GITHUB_OUTPUT
+
     build:
-        if: >
-            github.event_name != 'pull_request_target' ||
-            github.event.pull_request.draft == false ||
-            contains(github.event.pull_request.labels.*.name, 'force-build')
+        needs: [check-changes]
+        if: ${{ !github.event.pull_request.draft && (github.event_name != 'pull_request_target' || needs.check-changes.outputs.should-build == 'true') }}
         name: Build plugin and addons
         runs-on: windows-latest
         permissions:
@@ -122,7 +178,7 @@ jobs:
 
                   # Generate commit-based release notes
                   if NOTES=$(gh api repos/$REPO/compare/$BASE_SHA...$HEAD_SHA 2>/dev/null | jq -r --arg author "$PR_AUTHOR" '
-                    .commits[] 
+                    .commits[]
                     | "- \(.commit.message | split("\n")[0]) by @\(.author.login // $author)"
                   ' 2>/dev/null) && [[ -n "$NOTES" ]]; then
                     echo "$NOTES" > release-notes.md
@@ -165,6 +221,7 @@ jobs:
               uses: thollander/actions-comment-pull-request@v3
               with:
                   mode: upsert
+                  comment-tag: prerelease-build
                   message: |
                       ✅ A pre-release build is available for this PR:
                       [Download](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }})

@@ -4,6 +4,10 @@
 
 struct TerrainShadows : public Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "135817";
+
+public:
 	static TerrainShadows* GetSingleton()
 	{
 		static TerrainShadows singleton;
@@ -12,7 +16,19 @@ struct TerrainShadows : public Feature
 
 	virtual inline std::string GetName() override { return "Terrain Shadows"; }
 	virtual inline std::string GetShortName() override { return "TerrainShadows"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_SHADOWS"; }
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Adds realistic shadow casting from terrain features using heightmap data to create accurate terrain shadows that enhance depth perception and visual realism.",
+			{ "Heightmap-based terrain shadow calculation",
+				"Dynamic shadow updates based on sun position",
+				"Support for custom heightmap files",
+				"Real-time shadow preprocessing and computation",
+				"Integration with existing shadow systems" }
+		};
+	}
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
 
 	struct Settings

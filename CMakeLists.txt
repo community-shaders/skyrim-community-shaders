@@ -216,7 +216,7 @@ if(AUTO_PLUGIN_DEPLOYMENT)
 			copy_shaders.stamp
 			${DEPLOY_TARGET_HASHES}
 	)
-	
+
 	if(NOT DEFINED ENV{CommunityShadersOutputDir})
 		message("When using AUTO_PLUGIN_DEPLOYMENT option, you need to set environment variable 'CommunityShadersOutputDir'")
 	endif()

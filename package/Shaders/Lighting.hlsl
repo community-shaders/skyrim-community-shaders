@@ -2523,6 +2523,35 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 		float parallaxShadow = 1;
 
+#			if defined(EMAT)
+		[branch] if (
+			SharedData::extendedMaterialSettings.EnableShadows &&
+			!(light.lightFlags & LightLimitFix::LightFlags::Simple) &&
+			lightAngle > 0.0 &&
+			shadowComponent != 0.0 &&
+			contactShadow != 0.0)
+		{
+			float3 lightDirectionTS = normalize(mul(refractedLightDirection, tbn).xyz);
+#				if defined(PARALLAX)
+			[branch] if (SharedData::extendedMaterialSettings.EnableParallax)
+				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, screenNoise, displacementParams);
+#				elif defined(LANDSCAPE)
+			[branch] if (SharedData::extendedMaterialSettings.EnableTerrainParallax)
+#					if defined(TERRAIN_VARIATION)
+				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, lightDirectionTS, sh0, parallaxShadowQuality, screenNoise, displacementParams, sharedOffset, dx, dy, viewDistance);
+#					else
+				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, lightDirectionTS, sh0, parallaxShadowQuality, screenNoise, displacementParams);
+#					endif
+#				elif defined(EMAT_ENVMAP)
+			[branch] if (complexMaterialParallax)
+				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, parallaxShadowQuality, screenNoise, displacementParams);
+#				elif defined(TRUE_PBR) && !defined(LODLANDSCAPE)
+			[branch] if (PBRParallax)
+				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, screenNoise, displacementParams);
+#				endif
+		}
+#			endif
+
 #			if defined(TRUE_PBR)
 		{
 			PBR::LightProperties lightProperties = PBR::InitLightProperties(lightColor, lightShadow * contactShadow, parallaxShadow);

@@ -1,5 +1,7 @@
 #include "Deferred.h"
 
+#include <DDSTextureLoader.h>
+
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
@@ -175,6 +177,13 @@ void Deferred::SetupResources()
 		prevDiffuseAmbientTexture = new Texture2D(texDesc);
 		prevDiffuseAmbientTexture->CreateSRV(srvDesc);
 		prevDiffuseAmbientTexture->CreateUAV(uavDesc);
+	}
+
+	// Testing code for imagespace shaders
+	{
+		auto device = globals::d3d::device;
+		auto context = globals::d3d::context;
+		DirectX::CreateDDSTextureFromFile(device, context, L"Data\\Shaders\\LUT.dds", nullptr, lutTexture.put());
 	}
 }
 
@@ -728,6 +737,14 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 		mainCompositeInteriorCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositeCS.hlsl", defines, "cs_5_0"));
 	}
 	return mainCompositeInteriorCS;
+}
+
+// Testing code for imagespace shaders
+void Deferred::BindLUT()
+{
+	auto view = lutTexture.get();
+	if (view)
+		globals::d3d::context->PSSetShaderResources(100, 1, &view);
 }
 
 void Deferred::Hooks::Main_RenderShadowMaps::thunk()
