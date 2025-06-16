@@ -136,6 +136,18 @@ namespace WetnessEffects
 		return float4(rippleNormal, wetness);
 	}
 
+	// Flow-aware version of GetRainDrops that applies flow offset to ripple positioning
+	// xyz - ripple normal, w - splotches
+	float4 GetRainDropsFlowAware(float3 worldPos, float2 flowOffset, float t, float3 normal, float rippleStrengthModifier = 1)
+	{
+		// Apply flow offset to world position before calculating ripples
+		float3 flowAwareWorldPos = worldPos;
+		flowAwareWorldPos.xy += flowOffset;
+
+		// Use the standard GetRainDrops function with the flow-adjusted position
+		return GetRainDrops(flowAwareWorldPos, t, normal, rippleStrengthModifier);
+	}
+
 	float3 GetWetnessAmbientSpecular(float2 uv, float3 N, float3 VN, float3 V, float roughness)
 	{
 		float3 R = reflect(-V, N);
@@ -172,4 +184,117 @@ namespace WetnessEffects
 	{
 		return LightingFuncGGX_OPT3(N, V, L, roughness, 0.02) * lightColor;
 	}
+
+	// Debug visualization functions for DEBUG_WETNESS_EFFECTS
+	#ifdef DEBUG_WETNESS_EFFECTS
+	/**
+	 * Calculates ripple and splash effect intensities from water ripple info
+	 *
+	 * @param rippleInfo float4 containing ripple normal (xyz) and splash intensity (w)
+	 * @param rippleMultiplier Multiplier for ripple effect intensity
+	 * @param splashMultiplier Multiplier for splash effect intensity
+	 * @return float2 where x=ripple effect, y=splash effect
+	 */
+	float2 GetDebugEffectIntensities(float4 rippleInfo, float rippleMultiplier, float splashMultiplier)
+	{
+		float rippleEffect = saturate(length(rippleInfo.xyz) * rippleMultiplier);
+		float splashEffect = saturate(rippleInfo.w * splashMultiplier);
+		return float2(rippleEffect, splashEffect);
+	}
+
+	/**
+	 * Generates debug color visualization for wetness effects
+	 *
+	 * @param effectIntensities float2 from GetDebugEffectIntensities()
+	 * @param rippleColor Color to use for ripple visualization
+	 * @param splashColor Color to use for splash visualization
+	 * @param baseColor Base color to start with (default black)
+	 * @param brightnessMultiplier Multiplier for effect brightness
+	 * @return float3 Debug color, or (0,0,0) if no effects are active
+	 */
+	float3 GetDebugWetnessColor(float2 effectIntensities, float3 rippleColor, float3 splashColor, float3 baseColor = float3(0, 0, 0), float brightnessMultiplier = 1.0)
+	{
+		float rippleEffect = effectIntensities.x;
+		float splashEffect = effectIntensities.y;
+
+		if (rippleEffect > 0.01 || splashEffect > 0.01) {
+			float3 debugColor = baseColor;
+			if (rippleEffect > 0.01) {
+				debugColor += rippleColor * rippleEffect * brightnessMultiplier;
+			}
+			if (splashEffect > 0.01) {
+				debugColor += splashColor * splashEffect * brightnessMultiplier;
+			}
+			return saturate(debugColor);
+		}
+		return float3(0, 0, 0);  // No debug override
+	}
+
+	/**
+	 * Convenience function for standard water debug colors
+	 */
+	float3 GetDebugWetnessColorStandard(float4 rippleInfo, float rippleMultiplier, float splashMultiplier)
+	{
+		float2 effects = GetDebugEffectIntensities(rippleInfo, rippleMultiplier, splashMultiplier);
+		float3 rippleColor = float3(1.0, 0.0, 1.0);  // BRIGHT MAGENTA
+		float3 splashColor = float3(0.0, 1.0, 0.0);  // BRIGHT GREEN
+		return GetDebugWetnessColor(effects, rippleColor, splashColor);
+	}
+
+	/**
+	 * Convenience function for specular debug colors (extra bright)
+	 */
+	float3 GetDebugWetnessColorSpecular(float4 rippleInfo, float rippleMultiplier, float splashMultiplier)
+	{
+		float2 effects = GetDebugEffectIntensities(rippleInfo, rippleMultiplier, splashMultiplier);
+		float3 rippleColor = float3(1.0, 0.0, 1.0);  // BRIGHT MAGENTA
+		float3 splashColor = float3(0.0, 1.0, 0.0);  // BRIGHT GREEN
+		return GetDebugWetnessColor(effects, rippleColor, splashColor, float3(0, 0, 0), 1.5);  // Extra bright
+	}
+
+	/**
+	 * Convenience function for underwater debug colors (darker)
+	 */
+	float3 GetDebugWetnessColorUnderwater(float4 rippleInfo, float rippleMultiplier, float splashMultiplier)
+	{
+		float2 effects = GetDebugEffectIntensities(rippleInfo, rippleMultiplier, splashMultiplier);
+		float3 rippleColor = float3(0.7, 0.0, 0.7);  // DARK MAGENTA
+		float3 splashColor = float3(0.0, 0.7, 0.0);  // DARK GREEN
+		return GetDebugWetnessColor(effects, rippleColor, splashColor, float3(0, 0, 0.2));  // Dark blue base
+	}
+	#endif
+
+	/**
+	 * Calculates flow-aware ripple positioning with proper timing synchronization
+	 *
+	 * @param worldFlowVector Flow vector in world coordinate space
+	 * @param flowStrength Flow strength (0-1) from flowmap alpha channel
+	 * @param reflectionTimingScale Timing scale factor (typically 0.001 * ReflectionColor.w)
+	 * @param avgFlowmapMultiplier Average multiplier from flowmap normal calculations
+	 * @param uvToWorldScale Scale factor converting UV coordinates to world positioning (typically 1/8)
+	 * @return float2 Flow offset to apply to ripple positioning
+	 *
+	 * @details This function synchronizes ripple movement timing with flowmap normal animations
+	 *          by using the same mathematical relationship and dual-phase smoothstep timing.
+	 *          The timing creates natural flow-based ripple movement that matches the water surface animation.
+	 */
+	float2 GetFlowAwareRippleOffset(float2 worldFlowVector, float flowStrength, float reflectionTimingScale, float avgFlowmapMultiplier = 9.26, float uvToWorldScale = 0.125)
+	{
+		// Calculate flow timing scale matching flowmap normal timing
+		// Mathematical relationship: avgMultiplier × uvToWorldScale gives base flow scaling
+		// uvToWorldScale (1/8) relates to the 64× texture coordinate scaling: 64 × (1/8) = 8
+		float baseFlowMultiplier = avgFlowmapMultiplier * uvToWorldScale;        // ≈ 1.16
+		float flowTimeScale = baseFlowMultiplier * reflectionTimingScale;       // Match flowmap timing
+
+		// Calculate base flow offset (strength-modulated)
+		float2 flowOffset = worldFlowVector * flowTimeScale * flowStrength;
+
+		// Apply dual-phase smoothstep timing for natural flow animation
+		// This creates the essential dual-phase animation pattern used in flowmap blending
+		float smoothTime = smoothstep(0.0, 1.0, frac(flowTimeScale));
+		smoothTime = 0.15 + 0.85 * smoothTime;  // Range: 0.15→1.0→0.15 (avoids complete stops)
+
+		return flowOffset * smoothTime;
+	}
+
 }

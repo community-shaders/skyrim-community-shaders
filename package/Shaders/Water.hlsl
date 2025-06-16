@@ -420,24 +420,6 @@ float CalculateDepthMultFromUV(float2 uv, float depth, uint eyeIndex = 0)
 
 #		if defined(SIMPLE) || defined(UNDERWATER) || defined(LOD) || defined(SPECULAR)
 #			if defined(FLOWMAP)
-/**
- * Calculates flow vector from flowmap texture data
- *
- * @param input Pixel shader input containing texture coordinates
- * @param uvShift UV offset for sampling the flowmap texture
- * @return float2 The calculated flow vector in world space, rotated according to flowmap direction
- *
- * @note This is a simplified version of GetFlowmapData() that only returns the flow vector
- * @note Flow direction is encoded in flowmap RG channels, strength in B channel
- */
-float2 GetFlowVector(PS_INPUT input, float2 uvShift)
-{
-	float4 flowmapColor = FlowMapTex.Sample(FlowMapSampler, input.TexCoord2.zw + uvShift);
-	float2 flowVector = (64 * input.TexCoord3.xy) * sqrt(1.01 - flowmapColor.z);
-	float2 flowSinCos = flowmapColor.xy * 2 - 1;
-	float2x2 flowRotationMatrix = float2x2(flowSinCos.x, flowSinCos.y, -flowSinCos.y, flowSinCos.x);
-	return mul(transpose(flowRotationMatrix), flowVector);
-}
 
 /**
  * Structure containing complete flowmap information
@@ -445,21 +427,49 @@ float2 GetFlowVector(PS_INPUT input, float2 uvShift)
 struct FlowmapData
 {
 	float4 color;       // Raw flowmap color (R=flow_x, G=flow_y, B=flow_strength, A=flow_mask)
-	float2 flowVector;  // Calculated rotated flow vector in world space
+	float2 flowVector;  // Flow vector (coordinate space depends on source function)
 };
 
 /**
- * Samples flowmap texture and calculates complete flow data
+ * Gets raw flowmap data before UV-space coordinate transformation
+ *
+ * @param input Pixel shader input containing texture coordinates
+ * @param uvShift UV offset for sampling the flowmap texture
+ * @return FlowmapData with raw components:
+ *         - color: Raw flowmap texture sample (RG=rotation, B=strength, A=mask)
+ *         - flowVector: Base flow vector before any coordinate transformation
+ *                      Ready for direct application of rotation matrix for world positioning
+ *
+ * @details This function provides flowmap data in its original coordinate space, suitable
+ *          for world-space positioning effects (like ripple movement). The flowVector has
+ *          NOT been transformed for UV-space normal sampling - that transformation is only
+ *          applied in GetFlowmapDataUV() which uses transpose for UV coordinate perturbation.
+ *
+ *          Use this function when you need to apply the rotation matrix directly for
+ *          world-space effects without needing to reverse any existing transformations.
+ *
+ * @see GetFlowmapDataUV() for UV-space normal sampling (applies transpose transformation)
+ */
+FlowmapData GetFlowmapDataTextureSpace(PS_INPUT input, float2 uvShift)
+{
+	FlowmapData data;
+	data.color = FlowMapTex.Sample(FlowMapSampler, input.TexCoord2.zw + uvShift);
+	data.flowVector = (64 * input.TexCoord3.xy) * sqrt(1.01 - data.color.z);
+	// NOTE: flowVector is NOT transformed yet - this is the raw vector before rotation matrix
+	return data;
+}
+/**
+ * Samples flowmap texture and calculates UV-space flow data for texture sampling
  *
  * @param input Pixel shader input containing texture coordinates and world position data
  * @param uvShift UV offset for sampling the flowmap texture (used for animation/variation)
- * @return FlowmapData Complete flowmap information including raw color and calculated flow vector
+ * @return FlowmapData Complete flowmap information with UV-space flow vector
  *
  * @details This function:
  *          - Samples the flowmap texture at the specified UV coordinates
  *          - Decodes flow direction from RG channels (remapped from [0,1] to [-1,1])
  *          - Calculates flow strength using the blue channel with sqrt falloff
- *          - Applies rotation matrix to transform flow direction to world space
+ *          - Applies transpose rotation matrix to transform flow direction to UV space
  *          - Scales flow vector by world position and strength factors
  *
  * @note Flowmap format:
@@ -468,14 +478,12 @@ struct FlowmapData
  *       - Blue channel: Flow strength (0 = no flow, 1 = maximum flow)
  *       - Alpha channel: Flow mask/intensity multiplier
  */
-FlowmapData GetFlowmapData(PS_INPUT input, float2 uvShift)
+FlowmapData GetFlowmapDataUV(PS_INPUT input, float2 uvShift)
 {
-	FlowmapData data;
-	data.color = FlowMapTex.Sample(FlowMapSampler, input.TexCoord2.zw + uvShift);
-	float2 flowVector = (64 * input.TexCoord3.xy) * sqrt(1.01 - data.color.z);
+	FlowmapData data = GetFlowmapDataTextureSpace(input, uvShift);
 	float2 flowSinCos = data.color.xy * 2 - 1;
 	float2x2 flowRotationMatrix = float2x2(flowSinCos.x, flowSinCos.y, -flowSinCos.y, flowSinCos.x);
-	data.flowVector = mul(transpose(flowRotationMatrix), flowVector);
+	data.flowVector = mul(transpose(flowRotationMatrix), data.flowVector);
 	return data;
 }
 
@@ -498,9 +506,49 @@ FlowmapData GetFlowmapData(PS_INPUT input, float2 uvShift)
  */
 float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float offset)
 {
-	FlowmapData flowData = GetFlowmapData(input, uvShift);
+	FlowmapData flowData = GetFlowmapDataUV(input, uvShift);
 	float2 uv = offset + (flowData.flowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
 	return float3(FlowMapNormalsTex.SampleBias(FlowMapNormalsSampler, uv, SharedData::MipBias).xy, flowData.color.z);
+}
+
+/**
+ * Gets flowmap data with world-space flow vector for positioning effects
+ *
+ * @param input Pixel shader input containing texture coordinates
+ * @param uvShift UV offset for flowmap sampling (used for animation phases)
+ * @return FlowmapData Complete flowmap information with world-space flow vector
+ *
+ * @details This function:
+ *          - Samples raw flowmap data (before UV-space transformations)
+ *          - Decodes flow direction from flowmap RG channels
+ *          - Applies component-wise directional transformation
+ *          - Returns complete flowmap data with world-space flow vector
+ *
+ * @note Use this for effects that need to move with water current (ripples, debris, foam, etc.)
+ *       For UV-space normal sampling, use GetFlowmapDataUV() instead
+ */
+FlowmapData GetFlowmapDataWorldSpace(PS_INPUT input, float2 uvShift)
+{
+	FlowmapData data = GetFlowmapDataTextureSpace(input, uvShift);
+	float2 flowDirection = -(data.color.xy * 2 - 1);    // Decode direction with 180° correction
+	data.flowVector = data.flowVector * flowDirection;  // Transform to world space
+	return data;
+}
+
+/**
+ * Converts existing texture-space flowmap data to world-space (avoids duplicate sampling)
+ *
+ * @param textureSpaceData FlowmapData from GetFlowmapDataTextureSpace()
+ * @return FlowmapData Complete flowmap data with world-space flow vector
+ *
+ * @note Use this overload when you already have texture-space flowmap data to avoid duplicate texture sampling
+ */
+FlowmapData GetFlowmapDataWorldSpace(FlowmapData textureSpaceData)
+{
+	FlowmapData data = textureSpaceData;
+	float2 flowDirection = -(data.color.xy * 2 - 1);    // Decode direction with 180° correction
+	data.flowVector = data.flowVector * flowDirection;  // Transform to world space
+	return data;
 }
 #			endif
 
@@ -522,8 +570,17 @@ float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float 
 #				include "WetnessEffects/WetnessEffects.hlsli"
 #			endif
 
-float3 GetWaterNormal(PS_INPUT input, float distanceFactor, float normalsDepthFactor, float3 viewDirection, float depth, uint eyeIndex)
+// Structure to return both normal and ripple/splash color information
+struct WaterNormalData
 {
+	float3 normal;
+	float4 rippleInfo;  // xyz = ripple effect intensity, w = splash effect intensity
+};
+
+WaterNormalData GetWaterNormalWithEffects(PS_INPUT input, float distanceFactor, float normalsDepthFactor, float3 viewDirection, float depth, uint eyeIndex)
+{
+	WaterNormalData result;
+	result.rippleInfo = float4(0, 0, 0, 0);
 	float3 normalScalesRcp = rcp(input.NormalsScale.xyz);
 
 #			if defined(WATER_PARALLAX)
@@ -560,8 +617,13 @@ float3 GetWaterNormal(PS_INPUT input, float distanceFactor, float normalsDepthFa
 #			endif
 
 #			if defined(FLOWMAP) && !defined(BLEND_NORMALS)
-	float3 finalNormal =
-		normalize(lerp(normals1 + float3(0, 0, 1), flowmapNormal, distanceFactor));
+#				ifdef DISABLE_FLOWMAP_NORMALS
+	// FLOWMAP NORMALS DISABLED: Using only base normals (flow system still active for ripples/splashes)
+	float3 finalNormal = normalize(normals1 + float3(0, 0, 1));
+#				else
+	// FLOWMAP NORMALS ENABLED: Blending flow-based normals with base normals
+	float3 finalNormal = normalize(lerp(normals1 + float3(0, 0, 1), flowmapNormal, distanceFactor));
+#				endif
 #			elif !defined(LOD)
 
 #				if defined(WATER_PARALLAX)
@@ -603,6 +665,9 @@ float3 GetWaterNormal(PS_INPUT input, float distanceFactor, float normalsDepthFa
 #			endif
 
 #			if defined(WETNESS_EFFECTS)
+	// Wetness Effects Debug System:
+	// DEBUG_WETNESS_EFFECTS Color Legend:
+	// - BRIGHT MAGENTA: Ripples, BRIGHT GREEN: Splashes, CYAN: Both effects
 	const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
 #				if defined(SKYLIGHTING)
 #					if defined(VR)
@@ -629,28 +694,39 @@ float3 GetWaterNormal(PS_INPUT input, float distanceFactor, float normalsDepthFa
 #				if defined(WATER_PARALLAX)
 		rippleWPosition.xy += parallaxOffset;
 #				endif
-
-		// Flow-following ripple enhancement: Makes raindrops follow water current
 #				if defined(FLOWMAP)
-		// Get flowmap data for ripple flow calculation
-		// Uses zero UV shift to sample current flow state at ripple location
-		FlowmapData flowData = GetFlowmapData(input, float2(0, 0));
+		// Flow-following ripple enhancement: Makes raindrops follow water current
+		FlowmapData worldFlowData = GetFlowmapDataWorldSpace(input, float2(0, 0));
 
-		// Apply time-based flow offset to ripple position
-		// This makes ripples drift downstream with the water current
-		float flowTimeScale = SharedData::wetnessEffectsSettings.Time * 0.1;         // Flow animation speed
-		float2 flowOffset = flowData.flowVector * flowTimeScale * flowData.color.w;  // Modulated by flow mask
+		// Calculate flow-aware ripple offset using centralized timing logic
+		// Parameters: avgFlowmapMultiplier=9.26 (average of GetWaterNormal flowmap normal multipliers: 9.92, 10.64, 8, 8.48)
+		// uvToWorldScale=0.125 (1/8 - relates to 64× texture coordinate scaling factor)
+		float2 flowOffset = WetnessEffects::GetFlowAwareRippleOffset(
+			worldFlowData.flowVector,
+			worldFlowData.color.w,      // Flow strength from flowmap alpha
+			0.001 * ReflectionColor.w,  // Reflection timing scale (matches GetFlowmapNormal)
+			9.26,                       // Average flowmap normal multiplier
+			0.125                       // UV-to-world scale factor (1/8)
+		);
+
 		rippleWPosition.xy += flowOffset;
 #				endif
-
 		raindropInfo = WetnessEffects::GetRainDrops(rippleWPosition + FrameBuffer::CameraPosAdjust[eyeIndex], SharedData::wetnessEffectsSettings.Time, finalNormal, rippleStrengthModifier);
-	}
 
+		// Calculate ripple and splash color intensities
+		float rippleIntensity = length(raindropInfo.xy) * rippleStrengthModifier;
+		float splashIntensity = raindropInfo.w * distanceFadeout;
+
+		// Store ripple and splash information for color effects
+		result.rippleInfo.xyz = raindropInfo.xyz * rippleIntensity;
+		result.rippleInfo.w = splashIntensity;
+	}
 	float3 rippleNormal = normalize(raindropInfo.xyz);
 	finalNormal = WetnessEffects::ReorientNormal(rippleNormal, finalNormal);
 #			endif
 
-	return finalNormal;
+	result.normal = finalNormal;
+	return result;
 }
 
 float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection,
@@ -960,11 +1036,11 @@ PS_OUTPUT main(PS_INPUT input)
 #			else
 	float4 depthControl = DepthControl * (distanceMul - 1) + 1;
 #			endif
-
 	float3 viewPosition = mul(FrameBuffer::CameraView[eyeIndex], float4(input.WPosition.xyz, 1)).xyz;
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
 
-	float3 normal = GetWaterNormal(input, distanceFactor, depthControl.z, viewDirection, depth, eyeIndex);
+	WaterNormalData waterData = GetWaterNormalWithEffects(input, distanceFactor, depthControl.z, viewDirection, depth, eyeIndex);
+	float3 normal = waterData.normal;
 
 	float fresnel = GetFresnelValue(normal, viewDirection);
 
@@ -980,8 +1056,14 @@ PS_OUTPUT main(PS_INPUT input)
 		float3 lightColor = (LightColor[lightIndex].xyz * pow(LdotN, FresnelRI.z)) * lightColorMul;
 		finalColor += lightColor;
 	}
-
 	finalColor *= fresnel;
+#				if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
+	// DEBUG MODE: Override specular color with debug visualization
+	float3 debugColor = WetnessEffects::GetDebugWetnessColorSpecular(waterData.rippleInfo, 2.5, 4.0);
+	if (any(debugColor)) {
+		finalColor = debugColor;
+	}
+#				endif
 
 	isSpecular = true;
 #			else
@@ -1039,6 +1121,14 @@ PS_OUTPUT main(PS_INPUT input)
 #				if defined(UNDERWATER)
 	float3 finalSpecularColor = lerp(ShallowColor.xyz, specularColor, 0.5);
 	float3 finalColor = saturate(1 - input.WPosition.w * 0.002) * ((1 - fresnel) * (diffuseColor - finalSpecularColor)) + finalSpecularColor;
+	// Add ripple and splash color effects for underwater
+#					if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
+	// DEBUG MODE: Override water color with debug visualization (darker for underwater)
+	float3 debugColor = WetnessEffects::GetDebugWetnessColorUnderwater(waterData.rippleInfo, 1.5, 2.0);
+	if (any(debugColor)) {
+		finalColor = debugColor;
+	}
+#					endif
 #				else
 	float3 sunColor = GetSunColor(normal, viewDirection);
 
@@ -1050,6 +1140,14 @@ PS_OUTPUT main(PS_INPUT input)
 	float specularFraction = lerp(1, fresnel * diffuseOutput.refractionMul, distanceFactor);
 	float3 finalColorPreFog = lerp(diffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
 	float3 finalColor = lerp(finalColorPreFog, input.FogParam.xyz * PosAdjust[eyeIndex].w, input.FogParam.w);
+#						if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
+	// DEBUG MODE: Override water color with debug visualization
+	float3 debugColor = WetnessEffects::GetDebugWetnessColorStandard(waterData.rippleInfo, 2.0, 3.0);
+	if (any(debugColor)) {
+		finalColor = debugColor;
+	}
+#						endif
+
 #					else
 	float specularFraction = lerp(1, fresnel, distanceFactor);
 	float3 finalColorPreFog = lerp(diffuseOutput.refractionDiffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
@@ -1062,6 +1160,13 @@ PS_OUTPUT main(PS_INPUT input)
 	refractionColor = lerp(refractionColor, fogColor, fogFactor);
 
 	float3 finalColor = lerp(refractionColor, finalColorPreFog, diffuseOutput.refractionMul);
+#						if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
+	// DEBUG MODE: Override water color with debug visualization
+	float3 debugColor = WetnessEffects::GetDebugWetnessColorStandard(waterData.rippleInfo, 2.0, 3.0);
+	if (any(debugColor)) {
+		finalColor = debugColor;
+	}
+#						endif
 #					endif
 
 #				endif
