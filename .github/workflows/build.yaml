@@ -173,6 +173,9 @@ jobs:
                     $versionLine = $content | Select-String -Pattern 'CMAKE_PROJECT_VERSION:STATIC'
                     $version = $versionLine -replace '.*=([0-9]+\.[0-9]+\.[0-9]+).*', '$1'
                   }
+                  if (-not $version -or $version -eq "") {
+                      Write-Error "Version extraction failed: no version found" -ErrorAction Stop
+                  }
                   echo "version=$version" >> $env:GITHUB_OUTPUT
 
             - name: Upload dist artifacts
