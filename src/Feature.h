@@ -57,6 +57,7 @@ public:
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() { return {}; }
 
 	/**
+	 * Gets the minimum required version string for this feature
 	 * @return The minimum version string required by the Community Shaders
 	 */
 	std::string GetRequiredVersion() const;
