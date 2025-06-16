@@ -77,6 +77,9 @@ public:
 	Buffer* perShadow = nullptr;
 	ID3D11ShaderResourceView* shadowView = nullptr;
 
+	winrt::com_ptr<ID3D11ShaderResourceView> lutTexture = nullptr;
+	void BindLUT();
+
 	struct Hooks
 	{
 		struct Main_RenderShadowMaps
@@ -127,6 +130,26 @@ public:
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		struct BSImagespaceShaderHDRTonemapBlendCinematic_SetupTechnique
+		{
+			static void thunk(RE::BSShader* a_shader, RE::BSShaderMaterial* a_material)
+			{
+				GetSingleton()->BindLUT();
+				func(a_shader, a_material);
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSImagespaceShaderHDRTonemapBlendCinematicFade_SetupTechnique
+		{
+			static void thunk(RE::BSShader* a_shader, RE::BSShaderMaterial* a_material)
+			{
+				GetSingleton()->BindLUT();
+				func(a_shader, a_material);
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
 		static void Install()
 		{
 			stl::write_vfunc<0x35, BSCubeMapCamera_RenderCubemap>(RE::VTABLE_BSCubeMapCamera[0]);
@@ -141,6 +164,9 @@ public:
 
 			stl::write_thunk_call<BSShaderAccumulator_FirstPerson_BlendedDecals>(REL::RelocationID(99943, 106588).address() + REL::Relocate(0xFE, 0xF4));
 			stl::write_thunk_call<BSShaderAccumulator_ShadowMapOrMask_BlendedDecals>(REL::RelocationID(99947, 106592).address() + 0x107);
+
+			stl::write_vfunc<0x2, BSImagespaceShaderHDRTonemapBlendCinematic_SetupTechnique>(RE::VTABLE_BSImagespaceShaderHDRTonemapBlendCinematic[0]);
+			stl::write_vfunc<0x2, BSImagespaceShaderHDRTonemapBlendCinematicFade_SetupTechnique>(RE::VTABLE_BSImagespaceShaderHDRTonemapBlendCinematicFade[0]);
 
 			logger::info("[Deferred] Installed hooks");
 		}

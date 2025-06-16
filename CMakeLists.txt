@@ -162,6 +162,21 @@ if(CLANG_FORMAT_PATH)
 endif()
 
 # #######################################################################################################################
+# # Shader validation config generation
+# #######################################################################################################################
+
+# Add target to generate shader validation configuration files
+# This requires hlslkit and valid Skyrim installations with recent log files
+find_program(POWERSHELL_PATH pwsh powershell)
+if(POWERSHELL_PATH)
+	add_custom_target(generate_shader_configs
+		COMMAND ${POWERSHELL_PATH} -ExecutionPolicy Bypass -File "${CMAKE_SOURCE_DIR}/.github/configs/generate-shader-configs.ps1" -OutputDir "${CMAKE_SOURCE_DIR}/.github/configs"
+		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+		COMMENT "Generating shader validation configuration files from Skyrim log files"
+	)
+endif()
+
+# #######################################################################################################################
 # # Automatic deployment
 # #######################################################################################################################
 file(GLOB FEATURE_PATHS LIST_DIRECTORIES true ${CMAKE_SOURCE_DIR}/features/*)
@@ -179,13 +194,19 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
 		COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_PDB_FILE:${PROJECT_NAME}> "${AIO_DIR}/SKSE/Plugins/"
 		COMMAND ${CMAKE_COMMAND} -E remove "${AIO_DIR}/CORE"
 	)
-
 	add_custom_command(
 		OUTPUT copy_shaders.stamp
 		COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/package "${AIO_DIR}"
 		COMMAND ${CMAKE_COMMAND} -E copy_directory ${FEATURE_PATHS} "${AIO_DIR}"
 		COMMAND ${CMAKE_COMMAND} -E touch copy_shaders.stamp
 		DEPENDS ${HLSL_FILES}
+	)
+
+	# Standalone target for preparing shaders for CI validation
+	# This allows shader validation to run without waiting for the full build
+	add_custom_target(prepare_shaders
+		DEPENDS copy_shaders.stamp
+		COMMENT "Preparing shaders for validation"
 	)
 
 endif()

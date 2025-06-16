@@ -67,7 +67,7 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 {
 	// If feature is disabled, return standard sample
 	if (!SharedData::terrainVariationSettings.enableTilingFix)
-		return tex.SampleLevel(samp, uv, mipLevel);
+		return tex.SampleGrad(samp, uv, dx, dy);
 
 	// Calculate distance factor (0 when close, 1 when far)
 	float distanceFactor = ComputeDistanceFactor(distance);
