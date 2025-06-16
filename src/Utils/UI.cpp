@@ -84,9 +84,9 @@ namespace Util
 			logger::warn("LoadTextureFromFile: Failed to load image data from {}", filename);
 			return false;
 		}
-
+		// Creates Textures for Icons with Mipmapping to support high DPI displays.
 		logger::debug("LoadTextureFromFile: Loaded image {}x{} with {} channels from {}",
-			image_width, image_height, channels_in_file, filename);  // Create texture with simpler setup to avoid HRESULT 0x80070057
+			image_width, image_height, channels_in_file, filename);
 		D3D11_TEXTURE2D_DESC desc;
 		ZeroMemory(&desc, sizeof(desc));
 		desc.Width = image_width;
@@ -97,8 +97,8 @@ namespace Util
 		desc.SampleDesc.Count = 1;
 		desc.SampleDesc.Quality = 0;
 		desc.Usage = D3D11_USAGE_DEFAULT;
-		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-		desc.MiscFlags = 0;  // Remove mipmap generation for now
+		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+		desc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
 		desc.CPUAccessFlags = 0;
 
 		ID3D11Texture2D* pTexture = nullptr;
@@ -113,7 +113,6 @@ namespace Util
 			stbi_image_free(image_data);
 			return false;
 		}
-
 		// Create simple shader resource view
 		hr = device->CreateShaderResourceView(pTexture, nullptr, out_srv);
 		if (FAILED(hr) || !*out_srv) {
@@ -122,6 +121,14 @@ namespace Util
 			stbi_image_free(image_data);
 			*out_srv = nullptr;
 			return false;
+		}
+
+		// Generate mipmaps for better icon quality at different scales
+		ID3D11DeviceContext* context = nullptr;
+		device->GetImmediateContext(&context);
+		if (context) {
+			context->GenerateMips(*out_srv);
+			context->Release();
 		}
 		// Success - clean up intermediate resources
 		pTexture->Release();
