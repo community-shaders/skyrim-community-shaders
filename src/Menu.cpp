@@ -300,10 +300,16 @@ void Menu::DrawSettings()
 			ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 3.0f);
 			ImGui::Spacing();
 		}
-
 		auto shaderCache = globals::shaderCache;
 		const float iconSize = 48.0f;
 		const ImVec2 buttonSize(iconSize, iconSize);  // No padding for header icons
+
+		// Only show icon buttons if setting is enabled and all icon textures are available
+		bool canShowIcons = settings.Theme.ShowActionIcons &&
+		                    uiIcons.saveSettings.texture &&
+		                    uiIcons.loadSettings.texture &&
+		                    uiIcons.clearCache.texture &&
+		                    uiIcons.clearDiskCache.texture;
 
 		// Begin a layout with title on the left and buttons on the right
 		if (ImGui::BeginTable("##HeaderLayout", 2, ImGuiTableFlags_SizingStretchProp)) {
@@ -339,13 +345,6 @@ void Menu::DrawSettings()
 				}
 			}  // Buttons on the right
 			ImGui::TableNextColumn();
-
-			// Only show icon buttons in the header if setting is enabled and all icon textures are available
-			bool canShowIcons = settings.Theme.ShowActionIcons &&
-			                    uiIcons.saveSettings.texture &&
-			                    uiIcons.loadSettings.texture &&
-			                    uiIcons.clearCache.texture &&
-			                    uiIcons.clearDiskCache.texture;
 
 			if (canShowIcons) {
 				// Create a horizontal layout for the buttons and remove button borders

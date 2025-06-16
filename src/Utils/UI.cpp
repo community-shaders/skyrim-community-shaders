@@ -225,20 +225,16 @@ cleanup_and_fail:
 			// Set aligned position
 			ImGui::SetCursorPos(pos);
 		}
-
 		// Apply scale if needed
-		float originalScale = 1.0f;
 		if (scale != 1.0f) {
-			originalScale = ImGui::GetWindowFontScale();
 			ImGui::SetWindowFontScale(scale);
 		}
 
 		// Use Text instead of TextUnformatted for better rendering
 		ImGui::Text("%s", text);
-
 		// Restore original scale if needed
 		if (scale != 1.0f)
-			ImGui::SetWindowFontScale(originalScale);
+			ImGui::SetWindowFontScale(1.0f);
 
 		// Calculate and return the rendered size
 		ImVec2 endPos = ImGui::GetCursorPos();
@@ -266,17 +262,14 @@ cleanup_and_fail:
 
 		// Reset cursor for text with proper vertical alignment
 		ImGui::SetCursorPos(ImVec2(ImGui::GetCursorPosX(), startPos.y));
-
 		// Use windowed font scale for sharper text
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-		float originalScale = ImGui::GetWindowFontScale();
 		ImGui::SetWindowFontScale(textScale);
 
 		// Render text aligned to pixel grid for sharpness
 		ImGui::Text("%s", text);
-
 		// Restore style
-		ImGui::SetWindowFontScale(originalScale);
+		ImGui::SetWindowFontScale(1.0f);
 		ImGui::PopStyleVar();
 
 		// Calculate and return the total rendered size
