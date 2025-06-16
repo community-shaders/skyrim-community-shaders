@@ -110,7 +110,7 @@ namespace Util
 
 		// Calculate line positions
 		float lineY = pos.y + textSize.y * 0.5f;
-		float lineLength = (availableWidth - textSize.x - 20.0f) * 0.5f; // 20px for padding
+		float lineLength = (availableWidth - textSize.x - 20.0f) * 0.5f;  // 20px for padding
 
 		// Create selectable area for the entire header
 		ImGui::PushID(categoryName);
@@ -166,7 +166,7 @@ namespace Util
 
 		// Calculate line positions
 		float lineY = pos.y + textSize.y * 0.5f;
-		float lineLength = (availableWidth - textSize.x - 20.0f) * 0.5f; // 20px for padding
+		float lineLength = (availableWidth - textSize.x - 20.0f) * 0.5f;  // 20px for padding
 
 		// Use normal text color (white) to differentiate from loaded features
 		ImU32 lineColor = IM_COL32(120, 120, 120, 255);

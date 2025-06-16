@@ -351,21 +351,21 @@ void Menu::DrawSettings()
 			ImGui::TableSetupColumn("##ListOfMenus", 0, 2);
 			ImGui::TableSetupColumn("##MenuConfig", 0, 8);
 
-			static size_t selectedMenu = 0;			// some type erasure bs for virtual-free polymorphism
+			static size_t selectedMenu = 0;  // some type erasure bs for virtual-free polymorphism
 			struct BuiltInMenu
 			{
 				std::string name;
 				std::function<void()> func;
 			};
-	struct CategoryHeader
+			struct CategoryHeader
 			{
 				std::string name;
 			};
 			using MenuFuncInfo = std::variant<BuiltInMenu, std::string, CategoryHeader, Feature*>;
-			
+
 			// Static storage for category expansion states
 			static std::map<std::string, bool> categoryExpansionStates;
-			
+
 			struct ListMenuVisitor
 			{
 				size_t listId;
@@ -388,7 +388,7 @@ void Menu::DrawSettings()
 					}
 				}
 				void operator()(const std::string& label)
-				{					
+				{
 					// Style "Unloaded Features" to match category headers
 					if (label == "Unloaded Features") {
 						Util::DrawSectionHeader(label.c_str(), true);
@@ -401,10 +401,10 @@ void Menu::DrawSettings()
 				{
 					// Get expansion state from static map
 					bool isExpanded = categoryExpansionStates[header.name];
-					
+
 					// Draw category header with custom styling using util:UI function
 					Util::DrawCategoryHeader(header.name.c_str(), isExpanded);
-					
+
 					// Update expansion state
 					categoryExpansionStates[header.name] = isExpanded;
 				}
@@ -590,10 +590,10 @@ void Menu::DrawSettings()
 				BuiltInMenu{ "General", [&]() { DrawGeneralSettings(); } },
 				BuiltInMenu{ "Advanced", [&]() { DrawAdvancedSettings(); } },
 				BuiltInMenu{ "Display", [&]() { DrawDisplaySettings(); } }
-			};			// NOTE: The menu list is rebuilt every frame, so category expansion states 
-			// persist correctly. This is acceptable since the list is small and built 
+			};  // NOTE: The menu list is rebuilt every frame, so category expansion states
+			// persist correctly. This is acceptable since the list is small and built
 			// infrequently, but could be optimized if performance becomes an issue.
-			
+
 			// Group features by category
 			std::map<std::string, std::vector<Feature*>> categorizedFeatures;
 			for (Feature* feat : sortedFeatureList) {
@@ -611,18 +611,18 @@ void Menu::DrawSettings()
 			}
 
 			// Define category order
-			std::vector<std::string> categoryOrder = {"Characters", "Grass", "Lighting", "Sky", "Landscape & Textures", "Water", "Other"};
-					// Add categorized features to menu with collapsible headers
+			std::vector<std::string> categoryOrder = { "Characters", "Grass", "Lighting", "Sky", "Landscape & Textures", "Water", "Other" };
+			// Add categorized features to menu with collapsible headers
 			for (const std::string& category : categoryOrder) {
 				if (categorizedFeatures.find(category) != categorizedFeatures.end() && !categorizedFeatures[category].empty()) {
 					// Initialize expansion state if not exists
 					if (categoryExpansionStates.find(category) == categoryExpansionStates.end()) {
-						categoryExpansionStates[category] = true; // Default to expanded
+						categoryExpansionStates[category] = true;  // Default to expanded
 					}
-					
+
 					// Add category header
 					menuList.push_back(CategoryHeader{ category });
-					
+
 					// Add features only if category is expanded
 					if (categoryExpansionStates[category]) {
 						std::ranges::copy(categorizedFeatures[category], std::back_inserter(menuList));
@@ -635,12 +635,12 @@ void Menu::DrawSettings()
 				if (std::find(categoryOrder.begin(), categoryOrder.end(), category) == categoryOrder.end() && !features.empty()) {
 					// Initialize expansion state if not exists
 					if (categoryExpansionStates.find(category) == categoryExpansionStates.end()) {
-						categoryExpansionStates[category] = true; // Default to expanded
+						categoryExpansionStates[category] = true;  // Default to expanded
 					}
-					
+
 					// Add category header
 					menuList.push_back(CategoryHeader{ category });
-					
+
 					// Add features only if category is expanded
 					if (categoryExpansionStates[category]) {
 						std::ranges::copy(features, std::back_inserter(menuList));
