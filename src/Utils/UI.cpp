@@ -151,17 +151,26 @@ namespace Util
 			logger::warn("InitializeMenuIcons: D3D device is null");
 			return false;
 		}
-
 		// Define path to icons
 		std::string basePath = "Data\\Interface\\CommunityShaders\\Icons\\";
 		logger::info("InitializeMenuIcons: Loading icons from base path: {}", basePath);
 
 		// Initialize all texture pointers to nullptr for safe cleanup
-		menu->uiIcons.saveSettings.texture = nullptr;
-		menu->uiIcons.loadSettings.texture = nullptr;
-		menu->uiIcons.clearCache.texture = nullptr;
-		menu->uiIcons.clearDiskCache.texture = nullptr;
-		menu->uiIcons.logo.texture = nullptr;
+		std::array<ID3D11ShaderResourceView**, 5> texturePointers = {
+			&menu->uiIcons.saveSettings.texture,
+			&menu->uiIcons.loadSettings.texture,
+			&menu->uiIcons.clearCache.texture,
+			&menu->uiIcons.clearDiskCache.texture,
+			&menu->uiIcons.logo.texture
+		};
+
+		// Safely release existing textures
+		for (auto* texturePtr : texturePointers) {
+			if (*texturePtr) {
+				(*texturePtr)->Release();
+				*texturePtr = nullptr;
+			}
+		}
 
 		// Instead of failing completely if one icon fails, try to load each one individually
 		bool anyIconLoaded = false;
