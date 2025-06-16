@@ -282,7 +282,7 @@ void Menu::Init()
 }
 
 void Menu::DrawSettings()
-{
+	{
 	ImGui::DockSpaceOverViewport(NULL, ImGuiDockNodeFlags_PassthruCentralNode);
 
 	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
@@ -296,6 +296,10 @@ void Menu::DrawSettings()
 
 		// Check if we can show icons - require setting enabled and at least some icons loaded
 		bool canShowIcons = settings.Theme.ShowActionIcons &&
+		                    (uiIcons.saveSettings.texture ||
+		                     uiIcons.loadSettings.texture ||
+		                     uiIcons.clearCache.texture ||
+		                     uiIcons.clearDiskCache.texture);
 
 		// Debug logging for icon availability
 		if (settings.Theme.ShowActionIcons) {
