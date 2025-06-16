@@ -65,7 +65,7 @@ namespace Util
 	{
 		// Validate input parameters
 		if (!device || !out_srv) {
-			logger::warn("LoadTextureFromFile: Invalid parameters - device: {}, out_srv: {}", 
+			logger::warn("LoadTextureFromFile: Invalid parameters - device: {}, out_srv: {}",
 				device ? "valid" : "null", out_srv ? "valid" : "null");
 			return false;
 		}
@@ -85,8 +85,8 @@ namespace Util
 			return false;
 		}
 
-		logger::debug("LoadTextureFromFile: Loaded image {}x{} with {} channels from {}", 
-			image_width, image_height, channels_in_file, filename);		// Create texture with simpler setup to avoid HRESULT 0x80070057
+		logger::debug("LoadTextureFromFile: Loaded image {}x{} with {} channels from {}",
+			image_width, image_height, channels_in_file, filename);  // Create texture with simpler setup to avoid HRESULT 0x80070057
 		D3D11_TEXTURE2D_DESC desc;
 		ZeroMemory(&desc, sizeof(desc));
 		desc.Width = image_width;
