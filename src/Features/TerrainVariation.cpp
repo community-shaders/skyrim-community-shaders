@@ -136,8 +136,3 @@ void TerrainVariation::SaveSettings(json& o_json)
 {
 	o_json = settings;
 }
-
-bool TerrainVariation::DrawFailLoadMessage() const
-{
-	return false;
-}

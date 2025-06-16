@@ -110,7 +110,7 @@ void Feature::Load(json& o_json)
 		hasError = true;
 		errorVersion = "unknown";
 		errorType = FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH;
-		failedLoadedMessage = std::format("{} missing version info; not successfully loaded", ini_filename);
+		failedLoadedMessage = std::format("The {} file is missing. This feature is not installed! Version required: {}", ini_filename, GetRequiredVersion());
 	}
 
 	if (hasError) {
@@ -228,4 +228,24 @@ bool Feature::ToggleAtBootSetting()
 	state->SetFeatureDisabled(featureName, !disabled);
 
 	return state->IsFeatureDisabled(featureName);  // Return the new state
+}
+
+std::string Feature::GetRequiredVersion() const
+{
+	try {
+		std::string shortName = const_cast<Feature*>(this)->GetShortName();
+
+		if (FeatureVersions::FEATURE_MINIMAL_VERSIONS.contains(shortName)) {
+			const auto& minimalFeatureVersion = FeatureVersions::FEATURE_MINIMAL_VERSIONS.at(shortName);
+			std::string minimalVersionString = minimalFeatureVersion.string();
+			// Remove trailing .0 if present
+			if (minimalVersionString.size() >= 2 && minimalVersionString.substr(minimalVersionString.size() - 2) == "-0") {
+				minimalVersionString = minimalVersionString.substr(0, minimalVersionString.size() - 2);
+			}
+			return minimalVersionString;
+		}
+		return "Unknown";
+	} catch (const std::exception&) {
+		return "Unknown";
+	}
 }

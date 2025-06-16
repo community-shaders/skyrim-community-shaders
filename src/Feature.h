@@ -50,28 +50,28 @@ public:
 	virtual bool IsInMenu() const { return true; }
 
 	/**
-	 * Whether to print the INI version missing message when this feature is unloaded
-	 */
-	virtual bool DrawFailLoadMessage() const { return true; }
-
-	/**
 	 * Get feature summary and key features for hover tooltip and unloaded UI
 	 *
 	 * \return Pair containing feature summary description and vector of key feature bullet points
 	 */
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() { return {}; }
 
+	/**
+	 * @return The minimum version string required by the Community Shaders
+	 */
+	std::string GetRequiredVersion() const;
+
 	virtual void SetupResources() {}
 	virtual void Reset() {}
-
 	virtual void DrawSettings() {}
 	virtual void DrawUnloadedUI()
 	{
 		auto [description, keyFeatures] = GetFeatureSummary();
 
-		if (!description.empty() || !keyFeatures.empty()) {
-			ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.Error, "This feature is not installed!");
+		if (!failedLoadedMessage.empty()) {
+			ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.Error, "%s", failedLoadedMessage.c_str());
 			ImGui::Spacing();
+		}
 
 			if (!description.empty()) {
 				ImGui::TextWrapped("%s", description.c_str());
@@ -84,7 +84,6 @@ public:
 					ImGui::BulletText("%s", feature.c_str());
 				}
 				ImGui::Spacing();
-			}
 		}
 	}
 

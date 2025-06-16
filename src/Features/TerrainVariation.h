@@ -25,7 +25,7 @@ public:
 		return {
 			"Terrain Variation reduces the repeating pattern effect on terrain textures.\n"
 			"This technique creates more natural-looking terrain by adding variation to texture sampling.",
-			{ "Reduces terrain texture tiling",
+			{ "Removes terrain texture tiling",
 				"Adjustable distance-based blending",
 				"Improved terrain visual quality",
 				"Compatible with Extended Materials parallax" }
@@ -56,9 +56,7 @@ public:
 		1.0f,      // shadowRayDirFactor
 		1          // hashQuality - default to high quality
 	};
-
 	virtual void DrawSettings() override;
-	virtual bool DrawFailLoadMessage() const override;
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override

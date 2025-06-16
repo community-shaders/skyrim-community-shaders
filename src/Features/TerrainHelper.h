@@ -44,8 +44,6 @@ public:
 	virtual void DataLoaded() override;
 	virtual bool SupportsVR() override { return true; };
 	virtual std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
-	virtual void DrawUnloadedUI() override;
-	virtual bool DrawFailLoadMessage() const override { return false; };
 
 	void SetShaderResouces(ID3D11DeviceContext* a_context);
 	bool TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land);

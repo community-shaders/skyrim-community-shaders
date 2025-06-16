@@ -519,14 +519,10 @@ void Menu::DrawSettings()
 							}
 						}
 
-						ImGui::EndTable();
-					}
+					ImGui::EndTable();
+				}
 
-					if (hasFailedMessage && feat->DrawFailLoadMessage()) {
-						ImGui::TextColored(themeSettings.StatusPalette.Error, feat->failedLoadedMessage.c_str());
-					}
-
-					if (!isDisabled) {
+				if (!isDisabled) {
 						if (ImGui::BeginChild("##FeatureConfigFrame", { 0, 0 }, true)) {
 							if (isLoaded) {
 								// draw settings for loaded feature
