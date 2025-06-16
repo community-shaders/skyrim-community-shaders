@@ -519,10 +519,10 @@ void Menu::DrawSettings()
 							}
 						}
 
-					ImGui::EndTable();
-				}
+						ImGui::EndTable();
+					}
 
-				if (!isDisabled) {
+					if (!isDisabled) {
 						if (ImGui::BeginChild("##FeatureConfigFrame", { 0, 0 }, true)) {
 							if (isLoaded) {
 								// draw settings for loaded feature

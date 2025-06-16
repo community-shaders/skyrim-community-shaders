@@ -74,17 +74,17 @@ public:
 			ImGui::Spacing();
 		}
 
-			if (!description.empty()) {
-				ImGui::TextWrapped("%s", description.c_str());
-				ImGui::Spacing();
-			}
+		if (!description.empty()) {
+			ImGui::TextWrapped("%s", description.c_str());
+			ImGui::Spacing();
+		}
 
-			if (!keyFeatures.empty()) {
-				ImGui::TextWrapped("Key features:");
-				for (const auto& feature : keyFeatures) {
-					ImGui::BulletText("%s", feature.c_str());
-				}
-				ImGui::Spacing();
+		if (!keyFeatures.empty()) {
+			ImGui::TextWrapped("Key features:");
+			for (const auto& feature : keyFeatures) {
+				ImGui::BulletText("%s", feature.c_str());
+			}
+			ImGui::Spacing();
 		}
 	}
 
