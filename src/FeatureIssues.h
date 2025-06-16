@@ -187,7 +187,6 @@ namespace FeatureIssues
 		struct TestIniInfo
 		{
 			std::string testIniPath;      // Path to the test INI file created
-			std::string testMarkerPath;   // Path to .test marker file for tracking (new files only)
 			bool isNewFile{ true };       // Whether this is a completely new file or modified existing
 			std::string testType;         // Description of test type (obsolete, unknown, version mismatch)
 			std::string featureName;      // Name of the feature being tested
