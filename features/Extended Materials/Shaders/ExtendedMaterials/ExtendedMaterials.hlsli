@@ -41,6 +41,10 @@ namespace ExtendedMaterials
 		float2 textureDims;
 		tex.GetDimensions(textureDims.x, textureDims.y);
 
+				#if !defined(TERRAIN_VARIATION)
+				textureDims /= 2.0;
+		#endif
+
 		#if !defined(PARALLAX) && !defined(TRUE_PBR)
 				textureDims /= 2.0;
 		#endif
@@ -67,8 +71,11 @@ namespace ExtendedMaterials
 				mipLevel++;
 		#endif
 
-		#if defined(VR)
+		#if defined(TERRAIN_VARIATION)
+			[branch] if (SharedData::extendedMaterialSettings.EnableTerrainParallax)
+			{
 				mipLevel++;
+			}
 		#endif
 
 		return mipLevel;	}
