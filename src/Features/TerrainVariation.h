@@ -11,7 +11,6 @@ public:
 		static TerrainVariation singleton;
 		return &singleton;
 	}
-
 	virtual inline std::string GetName() override { return "Terrain Variation"; }
 	virtual inline std::string GetShortName() override { return "TerrainVariation"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
@@ -19,6 +18,7 @@ public:
 	virtual inline bool HasShaderDefine(RE::BSShader::Type shaderType) override { return shaderType == RE::BSShader::Type::Lighting; }
 	virtual bool IsCore() const override { return false; };
 	virtual bool SupportsVR() override { return true; }
+	virtual std::string_view GetCategory() const override { return "Landscape & Textures"; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{

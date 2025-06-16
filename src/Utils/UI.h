@@ -1,5 +1,7 @@
 #pragma once
 
+#include <imgui.h>
+
 namespace Util
 {
 
@@ -107,6 +109,21 @@ namespace Util
 
 	bool PercentageSlider(const char* label, float* data, float lb = 0.f, float ub = 100.f, const char* format = "%.1f %%");
 	ImVec2 GetNativeViewportSizeScaled(float scale);
+
+	/**
+	 * Draws a custom styled collapsible category header with lines extending from both sides
+	 * @param categoryName The name of the category to display
+	 * @param isExpanded Reference to the expansion state
+	 * @return true if the expansion state was toggled
+	 */
+	bool DrawCategoryHeader(const char* categoryName, bool& isExpanded);
+
+	/**
+	 * Draws a custom styled section header (non-collapsible) with lines extending from both sides
+	 * @param sectionName The name of the section to display
+	 * @param useWhiteText Whether to use white text (for differentiation)
+	 */
+	void DrawSectionHeader(const char* sectionName, bool useWhiteText = false);
 
 	class PerformanceOverlay
 	{

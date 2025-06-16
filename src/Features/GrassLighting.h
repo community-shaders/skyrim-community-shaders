@@ -11,12 +11,12 @@ public:
 		static GrassLighting singleton;
 		return &singleton;
 	}
-
 	virtual inline std::string GetName() override { return "Grass Lighting"; }
 	virtual inline std::string GetShortName() override { return "GrassLighting"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "GRASS_LIGHTING"; }
 	virtual bool HasShaderDefine(RE::BSShader::Type shaderType) override { return shaderType == RE::BSShader::Type::Grass; };
+	virtual std::string_view GetCategory() const override { return "Grass"; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{

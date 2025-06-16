@@ -21,6 +21,7 @@
 #include "Util.h"
 
 #include "Features/LightLimitFix/ParticleLights.h"
+#include "Utils/UI.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::ThemeSettings::PaletteColors,
@@ -350,15 +351,21 @@ void Menu::DrawSettings()
 			ImGui::TableSetupColumn("##ListOfMenus", 0, 2);
 			ImGui::TableSetupColumn("##MenuConfig", 0, 8);
 
-			static size_t selectedMenu = 0;
-
-			// some type erasure bs for virtual-free polymorphism
+			static size_t selectedMenu = 0;			// some type erasure bs for virtual-free polymorphism
 			struct BuiltInMenu
 			{
 				std::string name;
 				std::function<void()> func;
 			};
-			using MenuFuncInfo = std::variant<BuiltInMenu, std::string, Feature*>;
+	struct CategoryHeader
+			{
+				std::string name;
+			};
+			using MenuFuncInfo = std::variant<BuiltInMenu, std::string, CategoryHeader, Feature*>;
+			
+			// Static storage for category expansion states
+			static std::map<std::string, bool> categoryExpansionStates;
+			
 			struct ListMenuVisitor
 			{
 				size_t listId;
@@ -381,8 +388,25 @@ void Menu::DrawSettings()
 					}
 				}
 				void operator()(const std::string& label)
+				{					
+					// Style "Unloaded Features" to match category headers
+					if (label == "Unloaded Features") {
+						Util::DrawSectionHeader(label.c_str(), true);
+					} else {
+						// Use default separator text for other labels
+						ImGui::SeparatorText(label.c_str());
+					}
+				}
+				void operator()(const CategoryHeader& header)
 				{
-					ImGui::SeparatorText(label.c_str());
+					// Get expansion state from static map
+					bool isExpanded = categoryExpansionStates[header.name];
+					
+					// Draw category header with custom styling using util:UI function
+					Util::DrawCategoryHeader(header.name.c_str(), isExpanded);
+					
+					// Update expansion state
+					categoryExpansionStates[header.name] = isExpanded;
 				}
 				void operator()(Feature* feat)
 				{
@@ -464,6 +488,11 @@ void Menu::DrawSettings()
 				{
 					// std::unreachable() from c++23
 					// you are not supposed to have selected a label!
+				}
+				void operator()(const CategoryHeader&)
+				{
+					// Category headers are not selectable in the right panel
+					ImGui::TextDisabled("Please select a feature from the left.");
 				}
 				void operator()(Feature* feat)
 				{
@@ -561,21 +590,63 @@ void Menu::DrawSettings()
 				BuiltInMenu{ "General", [&]() { DrawGeneralSettings(); } },
 				BuiltInMenu{ "Advanced", [&]() { DrawAdvancedSettings(); } },
 				BuiltInMenu{ "Display", [&]() { DrawDisplaySettings(); } }
-			};
+			};			// NOTE: The menu list is rebuilt every frame, so category expansion states 
+			// persist correctly. This is acceptable since the list is small and built 
+			// infrequently, but could be optimized if performance becomes an issue.
+			
+			// Group features by category
+			std::map<std::string, std::vector<Feature*>> categorizedFeatures;
+			for (Feature* feat : sortedFeatureList) {
+				if (feat->IsInMenu() && feat->loaded) {
+					std::string category(feat->GetCategory());
+					categorizedFeatures[category].push_back(feat);
+				}
+			}
 
-			menuList.push_back("Core Features"s);
-			std::ranges::copy(
-				sortedFeatureList | std::ranges::views::filter([](Feature* feat) {
-					return feat->IsCore() && feat->IsInMenu() && feat->loaded;
-				}),
-				std::back_inserter(menuList));
+			// Sort features within each category
+			for (auto& [category, features] : categorizedFeatures) {
+				std::ranges::sort(features, [](Feature* a, Feature* b) {
+					return a->GetName() < b->GetName();
+				});
+			}
 
-			menuList.push_back("Features"s);
-			std::ranges::copy(
-				sortedFeatureList | std::ranges::views::filter([](Feature* feat) {
-					return !feat->IsCore() && feat->IsInMenu() && feat->loaded;
-				}),
-				std::back_inserter(menuList));
+			// Define category order
+			std::vector<std::string> categoryOrder = {"Characters", "Grass", "Lighting", "Sky", "Landscape & Textures", "Water", "Other"};
+					// Add categorized features to menu with collapsible headers
+			for (const std::string& category : categoryOrder) {
+				if (categorizedFeatures.find(category) != categorizedFeatures.end() && !categorizedFeatures[category].empty()) {
+					// Initialize expansion state if not exists
+					if (categoryExpansionStates.find(category) == categoryExpansionStates.end()) {
+						categoryExpansionStates[category] = true; // Default to expanded
+					}
+					
+					// Add category header
+					menuList.push_back(CategoryHeader{ category });
+					
+					// Add features only if category is expanded
+					if (categoryExpansionStates[category]) {
+						std::ranges::copy(categorizedFeatures[category], std::back_inserter(menuList));
+					}
+				}
+			}
+
+			// Add any categories not in the predefined order
+			for (const auto& [category, features] : categorizedFeatures) {
+				if (std::find(categoryOrder.begin(), categoryOrder.end(), category) == categoryOrder.end() && !features.empty()) {
+					// Initialize expansion state if not exists
+					if (categoryExpansionStates.find(category) == categoryExpansionStates.end()) {
+						categoryExpansionStates[category] = true; // Default to expanded
+					}
+					
+					// Add category header
+					menuList.push_back(CategoryHeader{ category });
+					
+					// Add features only if category is expanded
+					if (categoryExpansionStates[category]) {
+						std::ranges::copy(features, std::back_inserter(menuList));
+					}
+				}
+			}
 
 			auto unloadedFeatures = sortedFeatureList | std::ranges::views::filter([](Feature* feat) {
 				return !feat->loaded && feat->IsInMenu();

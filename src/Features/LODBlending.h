@@ -11,6 +11,7 @@ struct LODBlending : Feature
 	virtual inline std::string GetName() override { return "LOD Blending"; }
 	virtual inline std::string GetShortName() override { return "LODBlending"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "LOD_BLENDING"; }
+	virtual std::string_view GetCategory() const override { return "Landscape & Textures"; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {

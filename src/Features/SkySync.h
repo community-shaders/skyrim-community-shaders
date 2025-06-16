@@ -11,6 +11,7 @@ struct SkySync : Feature
 
 	virtual inline std::string GetName() override { return "Sky Sync"; }
 	virtual inline std::string GetShortName() override { return "SkySync"; }
+	virtual std::string_view GetCategory() const override { return "Sky"; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{

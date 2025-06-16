@@ -1,4 +1,5 @@
 #include "UI.h"
+#include <imgui.h>
 
 namespace Util
 {
@@ -97,5 +98,96 @@ namespace Util
 	SectionWrapper::operator bool() const
 	{
 		return m_shouldDraw;
+	}
+
+	bool DrawCategoryHeader(const char* categoryName, bool& isExpanded)
+	{
+		// Draw category header with custom styling
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		ImVec2 pos = ImGui::GetCursorScreenPos();
+		float availableWidth = ImGui::GetContentRegionAvail().x;
+		ImVec2 textSize = ImGui::CalcTextSize(categoryName);
+
+		// Calculate line positions
+		float lineY = pos.y + textSize.y * 0.5f;
+		float lineLength = (availableWidth - textSize.x - 20.0f) * 0.5f; // 20px for padding
+
+		// Create selectable area for the entire header
+		ImGui::PushID(categoryName);
+		bool hovered = false;
+		bool clicked = false;
+
+		// Invisible button for hover detection and clicking
+		ImGui::SetCursorScreenPos(pos);
+		if (ImGui::InvisibleButton("##CategoryHeader", ImVec2(availableWidth, textSize.y + 4.0f))) {
+			clicked = true;
+		}
+		hovered = ImGui::IsItemHovered();
+
+		// Draw the lines and text
+		ImU32 lineColor = hovered ? IM_COL32(100, 100, 100, 255) : IM_COL32(120, 120, 120, 255);
+		ImU32 textColor = hovered ? IM_COL32(140, 140, 140, 255) : IM_COL32(180, 180, 180, 255);
+
+		// Left line
+		if (lineLength > 0) {
+			drawList->AddLine(ImVec2(pos.x, lineY), ImVec2(pos.x + lineLength, lineY), lineColor, 1.0f);
+		}
+
+		// Right line
+		float rightLineStart = pos.x + lineLength + 10.0f + textSize.x + 10.0f;
+		if (rightLineStart < pos.x + availableWidth) {
+			drawList->AddLine(ImVec2(rightLineStart, lineY), ImVec2(pos.x + availableWidth, lineY), lineColor, 1.0f);
+		}
+
+		// Center text
+		ImVec2 textPos = ImVec2(pos.x + lineLength + 10.0f, pos.y + 2.0f);
+		drawList->AddText(textPos, textColor, categoryName);
+
+		// Handle click to toggle expansion
+		if (clicked) {
+			isExpanded = !isExpanded;
+		}
+
+		ImGui::PopID();
+
+		// Move cursor to next line
+		ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + textSize.y + 8.0f));
+
+		return clicked;
+	}
+
+	void DrawSectionHeader(const char* sectionName, bool useWhiteText)
+	{
+		// Draw custom styled header similar to CategoryHeader but non-collapsible
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		ImVec2 pos = ImGui::GetCursorScreenPos();
+		float availableWidth = ImGui::GetContentRegionAvail().x;
+		ImVec2 textSize = ImGui::CalcTextSize(sectionName);
+
+		// Calculate line positions
+		float lineY = pos.y + textSize.y * 0.5f;
+		float lineLength = (availableWidth - textSize.x - 20.0f) * 0.5f; // 20px for padding
+
+		// Use normal text color (white) to differentiate from loaded features
+		ImU32 lineColor = IM_COL32(120, 120, 120, 255);
+		ImU32 textColor = useWhiteText ? IM_COL32(255, 255, 255, 255) : IM_COL32(180, 180, 180, 255);
+
+		// Left line
+		if (lineLength > 0) {
+			drawList->AddLine(ImVec2(pos.x, lineY), ImVec2(pos.x + lineLength, lineY), lineColor, 1.0f);
+		}
+
+		// Right line
+		float rightLineStart = pos.x + lineLength + 10.0f + textSize.x + 10.0f;
+		if (rightLineStart < pos.x + availableWidth) {
+			drawList->AddLine(ImVec2(rightLineStart, lineY), ImVec2(pos.x + availableWidth, lineY), lineColor, 1.0f);
+		}
+
+		// Center text
+		ImVec2 textPos = ImVec2(pos.x + lineLength + 10.0f, pos.y + 2.0f);
+		drawList->AddText(textPos, textColor, sectionName);
+
+		// Move cursor to next line
+		ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + textSize.y + 8.0f));
 	}
 }  // namespace Util
