@@ -157,26 +157,32 @@ jobs:
               with:
                   configurePreset: ALL
                   buildPreset: ALL
-
             - name: Extract version from CMake
               id: get_version
               shell: pwsh
               run: |
                   if ("${{ steps.check-cpp.outputs.skip }}" -eq "true") {
                     # When skipping build, extract version from CMakeLists.txt
-                    $content = Get-Content CMakeLists.txt
-                    $versionLine = $content | Select-String -Pattern 'project\(.*VERSION'
-                    $version = $versionLine -replace '.*VERSION ([0-9]+\.[0-9]+\.[0-9]+).*', '$1'
+                    $content = Get-Content CMakeLists.txt -Raw
+                    if ($content -match 'project\s*\(\s*\w+\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)') {
+                        $version = $matches[1]
+                    } else {
+                        Write-Error "Version extraction failed: VERSION pattern not found in CMakeLists.txt" -ErrorAction Stop
+                    }
                   } else {
                     # When building, extract version from CMakeCache.txt
                     $content = Get-Content build/ALL/CMakeCache.txt
                     $versionLine = $content | Select-String -Pattern 'CMAKE_PROJECT_VERSION:STATIC'
-                    $version = $versionLine -replace '.*=([0-9]+\.[0-9]+\.[0-9]+).*', '$1'
+                    if ($versionLine) {
+                        $version = ($versionLine -replace '.*=([0-9]+\.[0-9]+\.[0-9]+).*', '$1').ToString()
+                    } else {
+                        Write-Error "Version extraction failed: CMAKE_PROJECT_VERSION not found in CMakeCache.txt" -ErrorAction Stop
+                    }
                   }
                   if (-not $version -or $version -eq "") {
                       Write-Error "Version extraction failed: no version found" -ErrorAction Stop
                   }
-                  echo "version=$version" >> $env:GITHUB_OUTPUT
+                  "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
             - name: Upload dist artifacts
               if: success() && steps.check-cpp.outputs.skip != 'true'
