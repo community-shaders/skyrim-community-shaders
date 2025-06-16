@@ -57,7 +57,6 @@ namespace Util
 		const auto Size = ImGui::GetMainViewport()->Size;
 		return { Size.x * scale, Size.y * scale };
 	}
-
 	// Icon loading functions (moved from UIIconLoader)
 	bool LoadTextureFromFile(ID3D11Device* device,
 		const char* filename,
@@ -66,33 +65,40 @@ namespace Util
 	{
 		// Validate input parameters
 		if (!device || !out_srv) {
+			logger::warn("LoadTextureFromFile: Invalid parameters - device: {}, out_srv: {}", 
+				device ? "valid" : "null", out_srv ? "valid" : "null");
 			return false;
 		}
 
 		// Initialize output to nullptr
 		*out_srv = nullptr;
 
+		logger::debug("LoadTextureFromFile: Attempting to load {}", filename);
+
 		// Load from disk into a raw RGBA buffer
 		int image_width = 0;
 		int image_height = 0;
 		int channels_in_file;
 		unsigned char* image_data = stbi_load(filename, &image_width, &image_height, &channels_in_file, 4);
-		if (image_data == NULL)
+		if (image_data == NULL) {
+			logger::warn("LoadTextureFromFile: Failed to load image data from {}", filename);
 			return false;
+		}
 
-		// Create texture
+		logger::debug("LoadTextureFromFile: Loaded image {}x{} with {} channels from {}", 
+			image_width, image_height, channels_in_file, filename);		// Create texture with simpler setup to avoid HRESULT 0x80070057
 		D3D11_TEXTURE2D_DESC desc;
 		ZeroMemory(&desc, sizeof(desc));
 		desc.Width = image_width;
 		desc.Height = image_height;
-		desc.MipLevels = 1;  // Start with single mip level for initial data
+		desc.MipLevels = 1;  // Start with just one mip level
 		desc.ArraySize = 1;
-		// Preserve icon colour fidelity
-		desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+		desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 		desc.SampleDesc.Count = 1;
+		desc.SampleDesc.Quality = 0;
 		desc.Usage = D3D11_USAGE_DEFAULT;
-		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-		desc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
+		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		desc.MiscFlags = 0;  // Remove mipmap generation for now
 		desc.CPUAccessFlags = 0;
 
 		ID3D11Texture2D* pTexture = nullptr;
@@ -103,54 +109,45 @@ namespace Util
 
 		HRESULT hr = device->CreateTexture2D(&desc, &subResource, &pTexture);
 		if (FAILED(hr) || !pTexture) {
+			logger::warn("LoadTextureFromFile: Failed to create D3D11 texture, HRESULT: 0x{:08X}", static_cast<uint32_t>(hr));
 			stbi_image_free(image_data);
 			return false;
 		}
 
-		// Create texture view
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
-		ZeroMemory(&srvDesc, sizeof(srvDesc));
-		srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MipLevels = 0;  // Use all available mip levels
-		srvDesc.Texture2D.MostDetailedMip = 0;
-
-		hr = device->CreateShaderResourceView(pTexture, &srvDesc, out_srv);
+		// Create simple shader resource view
+		hr = device->CreateShaderResourceView(pTexture, nullptr, out_srv);
 		if (FAILED(hr) || !*out_srv) {
-			// Clean up on failure
+			logger::warn("LoadTextureFromFile: Failed to create shader resource view, HRESULT: 0x{:08X}", static_cast<uint32_t>(hr));
 			pTexture->Release();
 			stbi_image_free(image_data);
 			*out_srv = nullptr;
 			return false;
 		}
-
-		// Generate mipmaps for smooth scaling at different DPI levels
-		if (globals::d3d::context) {
-			globals::d3d::context->GenerateMips(*out_srv);
-		}
-
 		// Success - clean up intermediate resources
 		pTexture->Release();
 		stbi_image_free(image_data);
 
 		out_size = ImVec2((float)image_width, (float)image_height);
+		logger::debug("LoadTextureFromFile: Successfully loaded {} ({}x{})", filename, image_width, image_height);
 		return true;
 	}
-
 	bool InitializeMenuIcons(Menu* menu)
 	{
 		if (!menu) {
+			logger::warn("InitializeMenuIcons: Menu pointer is null");
 			return false;
 		}
 
 		// Get the D3D device from globals
 		ID3D11Device* device = globals::d3d::device;
 		if (!device) {
+			logger::warn("InitializeMenuIcons: D3D device is null");
 			return false;
 		}
 
 		// Define path to icons
 		std::string basePath = "Data\\Interface\\CommunityShaders\\Icons\\";
+		logger::info("InitializeMenuIcons: Loading icons from base path: {}", basePath);
 
 		// Initialize all texture pointers to nullptr for safe cleanup
 		menu->uiIcons.saveSettings.texture = nullptr;
@@ -159,54 +156,57 @@ namespace Util
 		menu->uiIcons.clearDiskCache.texture = nullptr;
 		menu->uiIcons.logo.texture = nullptr;
 
-		// Load icons one by one, cleaning up on any failure
-		if (!LoadTextureFromFile(device, (basePath + "Microsoft Icons\\save-settings.png").c_str(), &menu->uiIcons.saveSettings.texture, menu->uiIcons.saveSettings.size)) {
-			goto cleanup_and_fail;
+		// Instead of failing completely if one icon fails, try to load each one individually
+		bool anyIconLoaded = false;
+		int iconsLoaded = 0;
+
+		// Load save settings icon
+		if (LoadTextureFromFile(device, (basePath + "Microsoft Icons\\save-settings.png").c_str(), &menu->uiIcons.saveSettings.texture, menu->uiIcons.saveSettings.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded save-settings icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load save-settings icon from: {}", basePath + "Microsoft Icons\\save-settings.png");
 		}
 
-		if (!LoadTextureFromFile(device, (basePath + "Microsoft Icons\\load-settings.png").c_str(), &menu->uiIcons.loadSettings.texture, menu->uiIcons.loadSettings.size)) {
-			goto cleanup_and_fail;
+		// Load load settings icon
+		if (LoadTextureFromFile(device, (basePath + "Microsoft Icons\\load-settings.png").c_str(), &menu->uiIcons.loadSettings.texture, menu->uiIcons.loadSettings.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded load-settings icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load load-settings icon from: {}", basePath + "Microsoft Icons\\load-settings.png");
 		}
 
-		if (!LoadTextureFromFile(device, (basePath + "Microsoft Icons\\clear-cache.png").c_str(), &menu->uiIcons.clearCache.texture, menu->uiIcons.clearCache.size)) {
-			goto cleanup_and_fail;
+		// Load clear cache icon
+		if (LoadTextureFromFile(device, (basePath + "Microsoft Icons\\clear-cache.png").c_str(), &menu->uiIcons.clearCache.texture, menu->uiIcons.clearCache.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded clear-cache icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load clear-cache icon from: {}", basePath + "Microsoft Icons\\clear-cache.png");
 		}
 
-		if (!LoadTextureFromFile(device, (basePath + "Microsoft Icons\\clear-disk.png").c_str(), &menu->uiIcons.clearDiskCache.texture, menu->uiIcons.clearDiskCache.size)) {
-			goto cleanup_and_fail;
+		// Load clear disk cache icon
+		if (LoadTextureFromFile(device, (basePath + "Microsoft Icons\\clear-disk.png").c_str(), &menu->uiIcons.clearDiskCache.texture, menu->uiIcons.clearDiskCache.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded clear-disk icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load clear-disk icon from: {}", basePath + "Microsoft Icons\\clear-disk.png");
 		}
 
-		if (!LoadTextureFromFile(device, (basePath + "Community Shaders Logo\\cs-logo.png").c_str(), &menu->uiIcons.logo.texture, menu->uiIcons.logo.size)) {
-			goto cleanup_and_fail;
+		// Load logo icon
+		if (LoadTextureFromFile(device, (basePath + "Community Shaders Logo\\cs-logo.png").c_str(), &menu->uiIcons.logo.texture, menu->uiIcons.logo.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded logo icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load logo icon from: {}", basePath + "Community Shaders Logo\\cs-logo.png");
 		}
 
-		// All icons loaded successfully
-		return true;
-
-cleanup_and_fail:
-		// Release any successfully loaded SRVs to prevent GPU memory leaks
-		if (menu->uiIcons.saveSettings.texture) {
-			menu->uiIcons.saveSettings.texture->Release();
-			menu->uiIcons.saveSettings.texture = nullptr;
-		}
-		if (menu->uiIcons.loadSettings.texture) {
-			menu->uiIcons.loadSettings.texture->Release();
-			menu->uiIcons.loadSettings.texture = nullptr;
-		}
-		if (menu->uiIcons.clearCache.texture) {
-			menu->uiIcons.clearCache.texture->Release();
-			menu->uiIcons.clearCache.texture = nullptr;
-		}
-		if (menu->uiIcons.clearDiskCache.texture) {
-			menu->uiIcons.clearDiskCache.texture->Release();
-			menu->uiIcons.clearDiskCache.texture = nullptr;
-		}
-		if (menu->uiIcons.logo.texture) {
-			menu->uiIcons.logo.texture->Release();
-			menu->uiIcons.logo.texture = nullptr;
-		}
-
-		return false;
+		logger::info("InitializeMenuIcons: Loaded {}/5 icons successfully", iconsLoaded);
+		return anyIconLoaded;
 	}
 
 	// Text rendering helpers (moved from UITextHelper)
