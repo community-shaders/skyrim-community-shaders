@@ -294,7 +294,6 @@ void Menu::DrawSettings()
 		auto shaderCache = globals::shaderCache;
 		const float iconSize = 48.0f;
 		const ImVec2 buttonSize(iconSize, iconSize);  // No padding for header icons
-
 		// Check if we can show icons - require setting enabled and at least some icons loaded
 		bool canShowIcons = settings.Theme.ShowActionIcons &&
 		                    (uiIcons.saveSettings.texture ||
@@ -311,19 +310,22 @@ void Menu::DrawSettings()
 				uiIcons.clearDiskCache.texture ? "OK" : "NULL",
 				uiIcons.logo.texture ? "OK" : "NULL");
 		}
-		// Begin a layout with title on the left and buttons on the right (only if we have icons)
-		if (canShowIcons && ImGui::BeginTable("##HeaderLayout", 2, ImGuiTableFlags_SizingStretchProp)) {
+
+		// Always show logo if available, regardless of action icons setting
+		bool showLogo = uiIcons.logo.texture != nullptr;
+		
+		// Begin a layout - with or without action buttons depending on settings
+		if ((showLogo || canShowIcons) && ImGui::BeginTable("##HeaderLayout", 2, ImGuiTableFlags_SizingStretchProp)) {
 			ImGui::TableSetupColumn("Title", ImGuiTableColumnFlags_WidthStretch);
 			ImGui::TableSetupColumn("Buttons", ImGuiTableColumnFlags_WidthFixed);
 			ImGui::TableNextColumn();  // Title on the left with logo
 			if (!ImGui::IsWindowDocked()) {
-				// Calculate logo size with proper scaling
-				const float textScaleFactor = 1.5f;
-				const float logoHeightScale = 1.25f;
+				const float textScaleFactor = 1.7f;
+				const float logoHeightScale = 1.3f;
 				const float titleHeight = ImGui::GetFontSize() * logoHeightScale;
 
 				// Always display logo if texture is available
-				if (uiIcons.logo.texture) {
+				if (showLogo) {
 					float logoAspectRatio = uiIcons.logo.size.x / uiIcons.logo.size.y;
 					ImVec2 logoSize(titleHeight * logoAspectRatio, titleHeight);
 
@@ -345,12 +347,13 @@ void Menu::DrawSettings()
 				}
 			}  // Buttons on the right
 			ImGui::TableNextColumn();
-
-			// Create a horizontal layout for the buttons and remove button borders
-			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 0.0f));             // Tighter spacing for the icons
-			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);                       // Remove button borders
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));                     // Transparent button background
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.7f, 0.7f, 0.7f, 0.2f));  // Subtle hover effect
+			// Only show action buttons if canShowIcons is true
+			if (canShowIcons) {
+				// Create a horizontal layout for the buttons and remove button borders
+				ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 0.0f));             // Tighter spacing for the icons
+				ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);                       // Remove button borders
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));                     // Transparent button background
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.7f, 0.7f, 0.7f, 0.2f));  // Subtle hover effect
 
 			// Save Settings Button
 			if (uiIcons.saveSettings.texture) {
@@ -403,13 +406,15 @@ void Menu::DrawSettings()
 						"If you do not have a Disk Cache, or it is outdated or invalid, you will see \"Compiling Shaders\" in the upper-left corner. "
 						"After this has completed you will no longer see this message apart from when loading from the Disk Cache. "
 						"Only delete the Disk Cache manually if you are encountering issues. ");
+					}
 				}
-			}  // Restore default style
-			ImGui::PopStyleVar(2);    // Pop both style variables: ItemSpacing and FrameBorderSize
-			ImGui::PopStyleColor(2);  // Pop both style colors: Button and ButtonHovered
+				// Restore default style only if we pushed styles
+				ImGui::PopStyleVar(2);    // Pop both style variables: ItemSpacing and FrameBorderSize
+				ImGui::PopStyleColor(2);  // Pop both style colors: Button and ButtonHovered
+			}  // End of canShowIcons action buttons section
 
 			ImGui::EndTable();
-		} else if (!canShowIcons) {
+		} else if (!(showLogo || canShowIcons)) {
 			// No icons available - show just the title without the table layout
 			if (!ImGui::IsWindowDocked()) {
 				ImGui::SetWindowFontScale(1.5f);
@@ -419,7 +424,6 @@ void Menu::DrawSettings()
 		}
 		// First separator - always shown
 		if (!ImGui::IsWindowDocked()) {
-			ImGui::Spacing();
 			ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 3.0f);
 			ImGui::Spacing();
 		}

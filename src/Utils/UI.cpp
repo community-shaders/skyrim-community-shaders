@@ -325,9 +325,6 @@ namespace Util
 			ImGui::TextWrapped("%s", description);
 			ImGui::Spacing();
 		}
-
-		// Note: For this simplified version, we don't use TreeNode
-		// The sections are always expanded in FeatureIssues UI
 	}
 
 	SectionWrapper::~SectionWrapper()
