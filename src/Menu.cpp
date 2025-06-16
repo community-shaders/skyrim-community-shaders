@@ -313,7 +313,7 @@ void Menu::DrawSettings()
 
 		// Always show logo if available, regardless of action icons setting
 		bool showLogo = uiIcons.logo.texture != nullptr;
-		
+
 		// Begin a layout - with or without action buttons depending on settings
 		if ((showLogo || canShowIcons) && ImGui::BeginTable("##HeaderLayout", 2, ImGuiTableFlags_SizingStretchProp)) {
 			ImGui::TableSetupColumn("Title", ImGuiTableColumnFlags_WidthStretch);
@@ -355,57 +355,57 @@ void Menu::DrawSettings()
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));                     // Transparent button background
 				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.7f, 0.7f, 0.7f, 0.2f));  // Subtle hover effect
 
-			// Save Settings Button
-			if (uiIcons.saveSettings.texture) {
-				if (ImGui::ImageButton("##SaveSettingsBtn", uiIcons.saveSettings.texture, buttonSize)) {
-					globals::state->Save();
+				// Save Settings Button
+				if (uiIcons.saveSettings.texture) {
+					if (ImGui::ImageButton("##SaveSettingsBtn", uiIcons.saveSettings.texture, buttonSize)) {
+						globals::state->Save();
+					}
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text("Save Settings");
+					}
+					ImGui::SameLine();
 				}
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Save Settings");
-				}
-				ImGui::SameLine();
-			}
 
-			// Load Settings Button
-			if (uiIcons.loadSettings.texture) {
-				if (ImGui::ImageButton("##LoadSettingsBtn", uiIcons.loadSettings.texture, buttonSize)) {
-					globals::state->Load();
-					globals::features::llf::particleLights->GetConfigs();
+				// Load Settings Button
+				if (uiIcons.loadSettings.texture) {
+					if (ImGui::ImageButton("##LoadSettingsBtn", uiIcons.loadSettings.texture, buttonSize)) {
+						globals::state->Load();
+						globals::features::llf::particleLights->GetConfigs();
+					}
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text("Load Settings");
+					}
+					ImGui::SameLine();
 				}
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Load Settings");
-				}
-				ImGui::SameLine();
-			}
 
-			// Clear Shader Cache Button
-			if (uiIcons.clearCache.texture) {
-				if (ImGui::ImageButton("##ClearShaderCacheBtn", uiIcons.clearCache.texture, buttonSize)) {
-					shaderCache->Clear();
-					// any features should be added to shadercache's clear.
+				// Clear Shader Cache Button
+				if (uiIcons.clearCache.texture) {
+					if (ImGui::ImageButton("##ClearShaderCacheBtn", uiIcons.clearCache.texture, buttonSize)) {
+						shaderCache->Clear();
+						// any features should be added to shadercache's clear.
+					}
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text(
+							"Clear Shader Cache\n\n"
+							"The Shader Cache is the collection of compiled shaders which replace the vanilla shaders at runtime. "
+							"Clearing the shader cache will mean that shaders are recompiled only when the game re-encounters them. "
+							"This is only needed for hot-loading shaders for development purposes. ");
+					}
+					ImGui::SameLine();
 				}
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text(
-						"Clear Shader Cache\n\n"
-						"The Shader Cache is the collection of compiled shaders which replace the vanilla shaders at runtime. "
-						"Clearing the shader cache will mean that shaders are recompiled only when the game re-encounters them. "
-						"This is only needed for hot-loading shaders for development purposes. ");
-				}
-				ImGui::SameLine();
-			}
 
-			// Clear Disk Cache Button
-			if (uiIcons.clearDiskCache.texture) {
-				if (ImGui::ImageButton("##ClearDiskCacheBtn", uiIcons.clearDiskCache.texture, buttonSize)) {
-					shaderCache->DeleteDiskCache();
-				}
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text(
-						"Clear Disk Cache\n\n"
-						"The Disk Cache is a collection of compiled shaders on disk, which are automatically created when shaders are added to the Shader Cache. "
-						"If you do not have a Disk Cache, or it is outdated or invalid, you will see \"Compiling Shaders\" in the upper-left corner. "
-						"After this has completed you will no longer see this message apart from when loading from the Disk Cache. "
-						"Only delete the Disk Cache manually if you are encountering issues. ");
+				// Clear Disk Cache Button
+				if (uiIcons.clearDiskCache.texture) {
+					if (ImGui::ImageButton("##ClearDiskCacheBtn", uiIcons.clearDiskCache.texture, buttonSize)) {
+						shaderCache->DeleteDiskCache();
+					}
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text(
+							"Clear Disk Cache\n\n"
+							"The Disk Cache is a collection of compiled shaders on disk, which are automatically created when shaders are added to the Shader Cache. "
+							"If you do not have a Disk Cache, or it is outdated or invalid, you will see \"Compiling Shaders\" in the upper-left corner. "
+							"After this has completed you will no longer see this message apart from when loading from the Disk Cache. "
+							"Only delete the Disk Cache manually if you are encountering issues. ");
 					}
 				}
 				// Restore default style only if we pushed styles
