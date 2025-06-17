@@ -56,7 +56,7 @@ void Feature::Load(json& o_json)
 
 	bool hasError = false;
 	std::string errorVersion;
-	std::string requiredVersion = "Unknown"; // Store required version for later use
+	std::string requiredVersion = "Unknown";  // Store required version for later use
 	FeatureIssues::FeatureIssueInfo::IssueType errorType = FeatureIssues::FeatureIssueInfo::IssueType::UNKNOWN;
 
 	if (FeatureIssues::IsObsoleteFeature(GetShortName())) {
@@ -97,10 +97,10 @@ void Feature::Load(json& o_json)
 					errorType = FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH;
 
 					std::string minimalVersionString = minimalFeatureVersion.string();
-				// Remove trailing "-0" if present for error messages
-				if (minimalVersionString.size() >= 2 && minimalVersionString.substr(minimalVersionString.size() - 2) == "-0") {
-					minimalVersionString = minimalVersionString.substr(0, minimalVersionString.size() - 2);
-				}
+					// Remove trailing "-0" if present for error messages
+					if (minimalVersionString.size() >= 2 && minimalVersionString.substr(minimalVersionString.size() - 2) == "-0") {
+						minimalVersionString = minimalVersionString.substr(0, minimalVersionString.size() - 2);
+					}
 
 					if (majorVersionMismatch) {
 						failedLoadedMessage = std::format("{} {} is too old, major version incompatibility detected. Required: {}", GetShortName(), value, minimalVersionString);
@@ -121,7 +121,7 @@ void Feature::Load(json& o_json)
 		hasError = true;
 		errorVersion = "unknown";
 		errorType = FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH;
-		
+
 		// Look up the required version for the missing file error message
 		auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(GetShortName());
 		if (iter != FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
@@ -133,7 +133,7 @@ void Feature::Load(json& o_json)
 				requiredVersion = rawVersion;
 			}
 		}
-		
+
 		failedLoadedMessage = std::format("The {} file is missing. This feature is not installed! Version required: {}", ini_filename, requiredVersion);
 	}
 
