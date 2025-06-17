@@ -711,7 +711,7 @@ WaterNormalData GetWaterNormalWithEffects(PS_INPUT input, float distanceFactor, 
 
 		rippleWPosition.xy += flowOffset;
 #				endif
-		raindropInfo = WetnessEffects::GetRainDrops(rippleWPosition + FrameBuffer::CameraPosAdjust[eyeIndex], SharedData::wetnessEffectsSettings.Time, finalNormal, rippleStrengthModifier);
+		raindropInfo = WetnessEffects::GetRainDrops(rippleWPosition + FrameBuffer::CameraPosAdjust[eyeIndex].xyz, SharedData::wetnessEffectsSettings.Time, finalNormal, rippleStrengthModifier);
 
 		// Calculate ripple and splash color intensities
 		float rippleIntensity = length(raindropInfo.xy) * rippleStrengthModifier;
