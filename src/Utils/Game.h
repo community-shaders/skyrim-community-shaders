@@ -79,7 +79,17 @@ namespace Util
 	};
 
 	/**
-	 * Helper functions for seasons
-	 */
+     * @brief Retrieves the seasonal texture swap for a given texture set, if available.
+     * 
+     * This function checks if a given texture set has been swapped by Seasons of Skyrim.
+     * If swapped, pad12C will be > 0 and will be the formid of the swapped texture set.
+     * 
+     * @param textureSet Pointer to the original BGSTextureSet to check for seasonal swaps.
+     *                   Can be nullptr.
+     * 
+     * @return Pointer to the seasonal swap texture set if found and valid, otherwise
+     *         returns the original textureSet parameter. Returns nullptr if the input
+     *         textureSet is nullptr.
+     */
 	[[nodiscard]] RE::BGSTextureSet* GetSeasonalSwap(RE::BGSTextureSet* textureSet);
 }  // namespace Util
