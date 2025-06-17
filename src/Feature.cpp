@@ -32,15 +32,15 @@
 void Feature::Load(json& o_json)
 {
 	if (o_json[GetName()].is_structured()) {
-		logger::info("Loading {} settings.", GetName());
+		logger::info("Loading {} settings", GetName());
 		try {
 			LoadSettings(o_json[GetName()]);
 		} catch (...) {
-			logger::warn("Invalid settings for {}, using default.", GetName());
+			logger::warn("Invalid settings for {}, using default", GetName());
 			RestoreDefaultSettings();
 		}
 	} else {
-		logger::info("Loading default settings for {}.", GetName());
+		logger::info("Loading default settings for {}", GetName());
 		RestoreDefaultSettings();
 	}
 
@@ -158,7 +158,7 @@ void Feature::Load(json& o_json)
 
 			FeatureIssues::AddFeatureIssue(shortName, errorVersion, failedLoadedMessage, errorType, fileInfo, minimumVersion);
 		} else {
-			logger::error("Feature has empty short name, cannot add to feature issues list.");
+			logger::error("Feature has empty short name, cannot add to feature issues list");
 		}
 	}
 }
@@ -188,14 +188,14 @@ bool Feature::ValidateCache(CSimpleIniA& a_ini)
 	if (loaded) {
 		auto versionInCache = a_ini.GetValue(ini_name.c_str(), "Version");
 		if (strcmp(versionInCache, version.c_str()) != 0) {
-			logger::info("Change in version detected. Installed {} but {} in Disk Cache.", version, versionInCache);
+			logger::info("Change in version detected. Installed {} but {} in Disk Cache", version, versionInCache);
 			return false;
 		} else {
-			logger::info("Installed version and cached version match.");
+			logger::info("Installed version and cached version match");
 		}
 	}
 
-	logger::info("Cached feature is valid.");
+	logger::info("Cached feature is valid");
 	return true;
 }
 
