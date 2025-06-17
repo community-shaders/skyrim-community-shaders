@@ -47,6 +47,9 @@ public:
 	bool ShouldSwallowInput();
 	void OnFocusLost();
 
+	// Helper method to check if key events should be processed (not in debounce window)
+	bool ShouldProcessKeyEvents() const;
+
 	struct ThemeSettings
 	{
 		float GlobalScale = REL::Module::IsVR() ? -0.5f : 0.f;  // exponential
@@ -243,6 +246,11 @@ private:
 	} perfOverlayState;
 
 	std::chrono::steady_clock::time_point lastTestSwitch = high_resolution_clock::now();  // Time of last test switch
+
+	// Key debouncing and focus loss handling
+	std::unordered_set<uint32_t> pressedKeys;                                       // Track currently pressed keys
+	std::chrono::steady_clock::time_point lastFocusLossTime;                        // Time when focus was lost
+	static constexpr auto FOCUS_LOSS_DEBOUNCE_MS = std::chrono::milliseconds(100);  // Debounce period after focus loss
 
 	Menu() = default;
 	void SetupImGuiStyle() const;

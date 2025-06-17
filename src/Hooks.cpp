@@ -615,10 +615,8 @@ namespace Hooks
 		{
 			auto menu = globals::menu;
 			if (a_msg == WM_KILLFOCUS && menu->initialized) {
+				// Only call our OnFocusLost() method which handles everything properly
 				menu->OnFocusLost();
-				auto& io = ImGui::GetIO();
-				io.ClearInputKeys();
-				io.ClearEventsQueue();
 			}
 			return func(a_hwnd, a_msg, a_wParam, a_lParam);
 		}

@@ -2129,6 +2129,9 @@ void Menu::ProcessInputEventQueue()
 	std::unique_lock<std::shared_mutex> mutex(_inputEventMutex);
 	ImGuiIO& io = ImGui::GetIO();
 
+	// Check if we're in the focus loss debounce period
+	bool shouldProcessEvents = ShouldProcessKeyEvents();
+
 	for (auto& event : _keyEventQueue) {
 		if (event.eventType == RE::INPUT_EVENT_TYPE::kChar) {
 			io.AddInputCharacter(event.keyCode);
@@ -2151,6 +2154,22 @@ void Menu::ProcessInputEventQueue()
 			logger::trace("Detected key code {} ({})", event.keyCode, key);
 			if (key == event.keyCode)
 				key = MapVirtualKeyEx(event.keyCode, MAPVK_VSC_TO_VK_EX, GetKeyboardLayout(0));
+
+			// Track key press/release states for reliable cleanup on focus loss
+			if (event.IsPressed()) {
+				pressedKeys.insert(key);
+			} else {
+				pressedKeys.erase(key);
+			}
+
+			// Skip processing key actions during debounce window to prevent false triggers
+			if (!shouldProcessEvents) {
+				logger::trace("Skipping key event processing during focus loss debounce window");
+				// Still send to ImGui for UI consistency, but skip our application logic
+				io.AddKeyEvent(VirtualKeyToImGuiKey(key), event.IsPressed());
+				continue;
+			}
+
 			if (!event.IsPressed()) {
 				struct HotkeyAction
 				{
@@ -2200,6 +2219,7 @@ void Menu::ProcessInputEventQueue()
 				}
 			}
 
+			// Always send key events to ImGui for UI consistency
 			io.AddKeyEvent(VirtualKeyToImGuiKey(key), event.IsPressed());
 
 			if (key == VK_LCONTROL || key == VK_RCONTROL)
@@ -2224,6 +2244,48 @@ void Menu::OnFocusLost()
 {
 	std::unique_lock<std::shared_mutex> mutex(_inputEventMutex);
 	_keyEventQueue.clear();
+
+	// Reset all key states to prevent stuck keys after Alt+Tab or focus loss
+	ImGuiIO& io = ImGui::GetIO();
+
+	// Log the number of tracked keys before clearing
+	size_t keyCount = pressedKeys.size();
+
+	// Reset all tracked pressed keys by sending key-up events
+	for (uint32_t key : pressedKeys) {
+		ImGuiKey imguiKey = VirtualKeyToImGuiKey(key);
+		if (imguiKey != ImGuiKey_None) {
+			io.AddKeyEvent(imguiKey, false);  // Send key-up event
+		}
+	}
+	pressedKeys.clear();
+
+	// Reset modifier keys specifically (common culprits for sticking)
+	io.AddKeyEvent(ImGuiMod_Ctrl, false);
+	io.AddKeyEvent(ImGuiMod_Shift, false);
+	io.AddKeyEvent(ImGuiMod_Alt, false);
+
+	// Reset common problematic keys
+	io.AddKeyEvent(ImGuiKey_Tab, false);
+	io.AddKeyEvent(ImGuiKey_Escape, false);
+	io.AddKeyEvent(ImGuiKey_Space, false);
+	io.AddKeyEvent(ImGuiKey_Enter, false);
+
+	// Clear ImGui's internal navigation/active state to prevent infinite iteration
+	// This ensures that any active widget (input fields, dropdowns, etc.) loses focus
+	// and prevents navigation keys from getting stuck in infinite loops
+	ImGui::ClearActiveID();
+
+	// Record the focus loss time for debouncing
+	lastFocusLossTime = std::chrono::steady_clock::now();
+
+	logger::trace("Focus lost - cleared all key states ({} tracked keys), ImGui active ID, and event queue", keyCount);
+}
+
+bool Menu::ShouldProcessKeyEvents() const
+{
+	auto now = std::chrono::steady_clock::now();
+	return (now - lastFocusLossTime) >= FOCUS_LOSS_DEBOUNCE_MS;
 }
 
 void Menu::ProcessInputEvents(RE::InputEvent* const* a_events)
