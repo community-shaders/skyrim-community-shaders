@@ -31,19 +31,6 @@
 
 void Feature::Load(json& o_json)
 {
-	if (o_json[GetName()].is_structured()) {
-		logger::info("Loading {} settings", GetName());
-		try {
-			LoadSettings(o_json[GetName()]);
-		} catch (...) {
-			logger::warn("Invalid settings for {}, using default.", GetName());
-			RestoreDefaultSettings();
-		}
-	} else {
-		logger::info("Loading default settings for {}", GetName());
-		RestoreDefaultSettings();
-	}
-
 	// Convert string to wstring
 	auto ini_filename = std::format("{}.ini", GetShortName());
 	std::wstring ini_filename_w;
@@ -52,7 +39,14 @@ void Feature::Load(json& o_json)
 
 	CSimpleIniA ini;
 	ini.SetUnicode();
-	ini.LoadFile(ini_path.c_str());
+	SI_Error rc = ini.LoadFile(ini_path.c_str());
+
+	if (rc < 0) {
+		if (!FeatureIssues::IsObsoleteFeature(GetShortName()))
+			logger::info("{} failed to load, feature disabled", ini_filename);
+		loaded = false;
+		return;
+	}
 
 	bool hasError = false;
 	std::string errorVersion;
@@ -138,8 +132,23 @@ void Feature::Load(json& o_json)
 			}
 
 			FeatureIssues::AddFeatureIssue(shortName, errorVersion, failedLoadedMessage, errorType, fileInfo, minimumVersion);
+
 		} else {
 			logger::error("Feature has empty short name, cannot add to feature issues list");
+		}
+	} else {
+		// No errors, load settings now
+		if (o_json[GetName()].is_structured()) {
+			logger::info("Loading {} settings", GetName());
+			try {
+				LoadSettings(o_json[GetName()]);
+			} catch (...) {
+				logger::warn("Invalid settings for {}, using default.", GetName());
+				RestoreDefaultSettings();
+			}
+		} else {
+			logger::info("Loading default settings for {}", GetName());
+			RestoreDefaultSettings();
 		}
 	}
 }
