@@ -50,6 +50,13 @@ public:
 	virtual bool IsInMenu() const { return true; }
 
 	/**
+	 * Whether to print the INI version missing message when this feature is unloaded
+	 * Default false to prevent duplicate error messages. Retains functionality for author to include custom error message.
+	 * Set to "true" in header file of individual feature.
+	 */
+	virtual bool DrawFailLoadMessage() const { return false; }
+
+	/**
 	 * Get feature summary and key features for hover tooltip and unloaded UI
 	 *
 	 * \return Pair containing feature summary description and vector of key feature bullet points
