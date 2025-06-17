@@ -83,7 +83,6 @@ public:
 	virtual void PostPostLoad() override;
 
 	virtual void DrawSettings() override;
-	virtual std::string GetFeatureModLink() override { return "https://www.nexusmods.com/Core/Libs/Common/Widgets/DownloadPopUp?id=604014&nmm=1&game_id=1704"; };
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
