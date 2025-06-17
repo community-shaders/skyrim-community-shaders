@@ -66,6 +66,18 @@ public:
 			ImVec4 RestartNeeded{ 0.5f, 1.f, 0.5f, 1.f };
 			ImVec4 CurrentHotkey{ 1.f, 1.f, 0.f, 1.f };
 		} StatusPalette;
+		struct UITemplateColors
+		{
+			ImVec4 ErrorColor{ 1.0f, 0.0f, 0.0f, 1.0f };
+			ImVec4 WarningColor{ 1.0f, 0.7f, 0.0f, 1.0f };
+			ImVec4 SuccessColor{ 0.0f, 1.0f, 0.0f, 1.0f };
+			ImVec4 InfoColor{ 0.0f, 0.5f, 1.0f, 1.0f };
+			ImU32 LineColorDefault{ IM_COL32(120, 120, 120, 255) };
+			ImU32 LineColorHovered{ IM_COL32(100, 100, 100, 255) };
+			ImU32 TextColorDefault{ IM_COL32(180, 180, 180, 255) };
+			ImU32 TextColorHovered{ IM_COL32(140, 140, 140, 255) };
+			ImU32 TextColorWhite{ IM_COL32(255, 255, 255, 255) };
+		} UITemplate;
 
 		ImGuiStyle Style = []() {
 			ImGuiStyle style = {};

@@ -1,5 +1,5 @@
 #include "UI.h"
-#include <imgui.h>
+#include "Menu.h"
 
 namespace Util
 {
@@ -124,9 +124,10 @@ namespace Util
 		}
 		hovered = ImGui::IsItemHovered();
 
-		// Draw the lines and text
-		ImU32 lineColor = hovered ? IM_COL32(100, 100, 100, 255) : IM_COL32(120, 120, 120, 255);
-		ImU32 textColor = hovered ? IM_COL32(140, 140, 140, 255) : IM_COL32(180, 180, 180, 255);
+		// Draw the lines and text using Menu theme colors
+		auto& theme = Menu::GetSingleton()->GetTheme().UITemplate;
+		ImU32 lineColor = hovered ? theme.LineColorHovered : theme.LineColorDefault;
+		ImU32 textColor = hovered ? theme.TextColorHovered : theme.TextColorDefault;
 
 		// Left line
 		if (lineLength > 0) {
@@ -152,7 +153,6 @@ namespace Util
 
 		// Move cursor to next line
 		ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + textSize.y + 8.0f));
-
 		return clicked;
 	}
 
@@ -167,10 +167,10 @@ namespace Util
 		// Calculate line positions
 		float lineY = pos.y + textSize.y * 0.5f;
 		float lineLength = (availableWidth - textSize.x - 20.0f) * 0.5f;  // 20px for padding
-
-		// Use normal text color (white) to differentiate from loaded features
-		ImU32 lineColor = IM_COL32(120, 120, 120, 255);
-		ImU32 textColor = useWhiteText ? IM_COL32(255, 255, 255, 255) : IM_COL32(180, 180, 180, 255);
+		// Use Menu theme colors for consistent styling
+		auto& theme = Menu::GetSingleton()->GetTheme().UITemplate;
+		ImU32 lineColor = theme.LineColorDefault;
+		ImU32 textColor = useWhiteText ? theme.TextColorWhite : theme.TextColorDefault;
 
 		// Left line
 		if (lineLength > 0) {
