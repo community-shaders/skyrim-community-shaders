@@ -51,7 +51,8 @@ public:
 
 	/**
 	 * Whether to print the INI version missing message when this feature is unloaded
-	 * Default false to prevent duplicate error messages. Retains functionality for author to include custom error message.
+	 * Default false to prevent duplicate error messages. This is handled by failedLoadedMessage in Feature.cpp.
+	 * Retains functionality for author to include custom error message.
 	 * Set to "true" in header file of individual feature.
 	 */
 	virtual bool DrawFailLoadMessage() const { return false; }
