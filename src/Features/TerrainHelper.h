@@ -20,6 +20,7 @@ public:
 	{
 		return {
 			"Provides enhanced terrain material support for terrain mods that require additional texture slots and parallax mapping capabilities.",
+			"\n Note: This feature is only required if a terrain mod you are using specifically requires it, otherwise it does nothing.",
 			{ "Extended texture slot support for terrain materials",
 				"Parallax mapping integration for terrain textures",
 				"Automatic terrain material detection and setup",
