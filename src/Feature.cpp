@@ -56,6 +56,7 @@ void Feature::Load(json& o_json)
 
 	bool hasError = false;
 	std::string errorVersion;
+	std::string requiredVersion = "Unknown"; // Store required version for later use
 	FeatureIssues::FeatureIssueInfo::IssueType errorType = FeatureIssues::FeatureIssueInfo::IssueType::UNKNOWN;
 
 	if (FeatureIssues::IsObsoleteFeature(GetShortName())) {
@@ -77,6 +78,13 @@ void Feature::Load(json& o_json)
 			} else {
 				// Version compatibility check
 				auto& minimalFeatureVersion = iter->second;
+				std::string rawVersion = minimalFeatureVersion.string();
+				// Remove trailing "-0" if present
+				if (rawVersion.size() >= 2 && rawVersion.substr(rawVersion.size() - 2) == "-0") {
+					requiredVersion = rawVersion.substr(0, rawVersion.size() - 2);
+				} else {
+					requiredVersion = rawVersion;
+				}
 				bool oldFeature = featureVersion.compare(minimalFeatureVersion) == std::strong_ordering::less;
 				bool majorVersionMismatch = featureVersion.major() < minimalFeatureVersion.major();
 
@@ -89,7 +97,10 @@ void Feature::Load(json& o_json)
 					errorType = FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH;
 
 					std::string minimalVersionString = minimalFeatureVersion.string();
+				// Remove trailing "-0" if present for error messages
+				if (minimalVersionString.size() >= 2 && minimalVersionString.substr(minimalVersionString.size() - 2) == "-0") {
 					minimalVersionString = minimalVersionString.substr(0, minimalVersionString.size() - 2);
+				}
 
 					if (majorVersionMismatch) {
 						failedLoadedMessage = std::format("{} {} is too old, major version incompatibility detected. Required: {}", GetShortName(), value, minimalVersionString);
@@ -110,7 +121,20 @@ void Feature::Load(json& o_json)
 		hasError = true;
 		errorVersion = "unknown";
 		errorType = FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH;
-		failedLoadedMessage = std::format("The {} file is missing. This feature is not installed! Version required: {}", ini_filename, GetRequiredVersion());
+		
+		// Look up the required version for the missing file error message
+		auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(GetShortName());
+		if (iter != FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
+			std::string rawVersion = iter->second.string();
+			// Remove trailing "-0" if present
+			if (rawVersion.size() >= 2 && rawVersion.substr(rawVersion.size() - 2) == "-0") {
+				requiredVersion = rawVersion.substr(0, rawVersion.size() - 2);
+			} else {
+				requiredVersion = rawVersion;
+			}
+		}
+		
+		failedLoadedMessage = std::format("The {} file is missing. This feature is not installed! Version required: {}", ini_filename, requiredVersion);
 	}
 
 	if (hasError) {
@@ -228,24 +252,4 @@ bool Feature::ToggleAtBootSetting()
 	state->SetFeatureDisabled(featureName, !disabled);
 
 	return state->IsFeatureDisabled(featureName);  // Return the new state
-}
-
-std::string Feature::GetRequiredVersion() const
-{
-	try {
-		std::string shortName = const_cast<Feature*>(this)->GetShortName();
-
-		if (FeatureVersions::FEATURE_MINIMAL_VERSIONS.contains(shortName)) {
-			const auto& minimalFeatureVersion = FeatureVersions::FEATURE_MINIMAL_VERSIONS.at(shortName);
-			std::string minimalVersionString = minimalFeatureVersion.string();
-			// Remove trailing .0 if present
-			if (minimalVersionString.size() >= 2 && minimalVersionString.substr(minimalVersionString.size() - 2) == "-0") {
-				minimalVersionString = minimalVersionString.substr(0, minimalVersionString.size() - 2);
-			}
-			return minimalVersionString;
-		}
-		return "Unknown";
-	} catch (const std::exception&) {
-		return "Unknown";
-	}
 }
