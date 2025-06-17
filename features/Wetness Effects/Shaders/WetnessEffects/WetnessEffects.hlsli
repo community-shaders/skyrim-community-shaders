@@ -107,10 +107,10 @@ namespace WetnessEffects
 						if (floatHash.z < (SharedData::wetnessEffectsSettings.RaindropChance)) {
 							float2 vec2Centre = int2(i, j) + floatHash.xy - gridUV;
 							float distSqr = dot(vec2Centre, vec2Centre);
-							float rippleT = residual * SharedData::wetnessEffectsSettings.RippleLifetimeRcp;
-							if (rippleT < 1.) {
-								// vary ripple size using independent random value (floatHash.z is biased by RaindropChance test)
-								float sizeRandom = frac(dot(floatHash.xy, float2(12.9898, 78.233)));
+							float rippleT = residual * SharedData::wetnessEffectsSettings.RippleLifetimeRcp;							if (rippleT < 1.) {
+								// vary ripple size using high-quality random hash (preserves full entropy)
+								uint sizeHash = Random::iqint3(hash.xy);
+								float sizeRandom = float(sizeHash) * uintToFloat;
 								float sizeVariation = lerp(0.7, 1.3, sizeRandom);
 
 								float ripple_r = lerp(0.f, SharedData::wetnessEffectsSettings.RippleRadius * sizeVariation, rippleT);
