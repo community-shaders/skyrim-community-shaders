@@ -54,8 +54,11 @@ namespace WetnessEffects
 	}
 
 	// xyz - ripple normal, w - splotches
-	float4 GetRainDrops(float3 worldPos, float t, float3 normal, float rippleStrengthModifier = 1)
+	float4 GetRainDrops(float3 worldPos, float t, float3 normal, float rippleStrengthModifier = 1.0, float2 flowOffset = float2(0.0, 0.0))
 	{
+		// Apply flow offset to world position for flow-aware ripple positioning
+		worldPos.xy += flowOffset;
+
 		const static float uintToFloat = rcp(4294967295.0);
 		const float rippleBreadthRcp = rcp(SharedData::wetnessEffectsSettings.RippleBreadth);
 
@@ -106,8 +109,8 @@ namespace WetnessEffects
 							float distSqr = dot(vec2Centre, vec2Centre);
 							float rippleT = residual * SharedData::wetnessEffectsSettings.RippleLifetimeRcp;
 							if (rippleT < 1.) {
-								// vary ripple size
-								float sizeRandom = frac(floatHash.x * floatHash.y * 1337.0);
+								// vary ripple size using independent random value (floatHash.z is biased by RaindropChance test)
+								float sizeRandom = frac(dot(floatHash.xy, float2(12.9898, 78.233)));
 								float sizeVariation = lerp(0.7, 1.3, sizeRandom);
 
 								float ripple_r = lerp(0.f, SharedData::wetnessEffectsSettings.RippleRadius * sizeVariation, rippleT);
@@ -132,20 +135,7 @@ namespace WetnessEffects
 		}
 
 		wetness *= SharedData::wetnessEffectsSettings.SplashesStrength;
-
 		return float4(rippleNormal, wetness);
-	}
-
-	// Flow-aware version of GetRainDrops that applies flow offset to ripple positioning
-	// xyz - ripple normal, w - splotches
-	float4 GetRainDropsFlowAware(float3 worldPos, float2 flowOffset, float t, float3 normal, float rippleStrengthModifier = 1)
-	{
-		// Apply flow offset to world position before calculating ripples
-		float3 flowAwareWorldPos = worldPos;
-		flowAwareWorldPos.xy += flowOffset;
-
-		// Use the standard GetRainDrops function with the flow-adjusted position
-		return GetRainDrops(flowAwareWorldPos, t, normal, rippleStrengthModifier);
 	}
 
 	float3 GetWetnessAmbientSpecular(float2 uv, float3 N, float3 VN, float3 V, float roughness)
@@ -185,18 +175,21 @@ namespace WetnessEffects
 		return LightingFuncGGX_OPT3(N, V, L, roughness, 0.02) * lightColor;
 	}
 
-	// Debug visualization functions for DEBUG_WETNESS_EFFECTS
-	#ifdef DEBUG_WETNESS_EFFECTS
+// Debug visualization functions for DEBUG_WETNESS_EFFECTS
+#ifdef DEBUG_WETNESS_EFFECTS
 	/**
 	 * Calculates ripple and splash effect intensities from water ripple info
 	 *
-	 * @param rippleInfo float4 containing ripple normal (xyz) and splash intensity (w)
+	 * @param rippleInfo float4 containing scaled ripple normal (xyz) and splash intensity (w)
+	 *                   Note: xyz = normalized ripple normal * intensity multiplier
 	 * @param rippleMultiplier Multiplier for ripple effect intensity
 	 * @param splashMultiplier Multiplier for splash effect intensity
 	 * @return float2 where x=ripple effect, y=splash effect
 	 */
 	float2 GetDebugEffectIntensities(float4 rippleInfo, float rippleMultiplier, float splashMultiplier)
 	{
+		// rippleInfo.xyz is a scaled normal vector (normalized normal * intensity)
+		// length() gives us the intensity/magnitude of the ripple effect
 		float rippleEffect = saturate(length(rippleInfo.xyz) * rippleMultiplier);
 		float splashEffect = saturate(rippleInfo.w * splashMultiplier);
 		return float2(rippleEffect, splashEffect);
@@ -247,8 +240,8 @@ namespace WetnessEffects
 	float3 GetDebugWetnessColorSpecular(float4 rippleInfo, float rippleMultiplier, float splashMultiplier)
 	{
 		float2 effects = GetDebugEffectIntensities(rippleInfo, rippleMultiplier, splashMultiplier);
-		float3 rippleColor = float3(1.0, 0.0, 1.0);  // BRIGHT MAGENTA
-		float3 splashColor = float3(0.0, 1.0, 0.0);  // BRIGHT GREEN
+		float3 rippleColor = float3(1.0, 0.0, 1.0);                                            // BRIGHT MAGENTA
+		float3 splashColor = float3(0.0, 1.0, 0.0);                                            // BRIGHT GREEN
 		return GetDebugWetnessColor(effects, rippleColor, splashColor, float3(0, 0, 0), 1.5);  // Extra bright
 	}
 
@@ -258,11 +251,11 @@ namespace WetnessEffects
 	float3 GetDebugWetnessColorUnderwater(float4 rippleInfo, float rippleMultiplier, float splashMultiplier)
 	{
 		float2 effects = GetDebugEffectIntensities(rippleInfo, rippleMultiplier, splashMultiplier);
-		float3 rippleColor = float3(0.7, 0.0, 0.7);  // DARK MAGENTA
-		float3 splashColor = float3(0.0, 0.7, 0.0);  // DARK GREEN
+		float3 rippleColor = float3(0.7, 0.0, 0.7);                                         // DARK MAGENTA
+		float3 splashColor = float3(0.0, 0.7, 0.0);                                         // DARK GREEN
 		return GetDebugWetnessColor(effects, rippleColor, splashColor, float3(0, 0, 0.2));  // Dark blue base
 	}
-	#endif
+#endif
 
 	/**
 	 * Calculates flow-aware ripple positioning with proper timing synchronization
@@ -283,8 +276,8 @@ namespace WetnessEffects
 		// Calculate flow timing scale matching flowmap normal timing
 		// Mathematical relationship: avgMultiplier × uvToWorldScale gives base flow scaling
 		// uvToWorldScale (1/8) relates to the 64× texture coordinate scaling: 64 × (1/8) = 8
-		float baseFlowMultiplier = avgFlowmapMultiplier * uvToWorldScale;        // ≈ 1.16
-		float flowTimeScale = baseFlowMultiplier * reflectionTimingScale;       // Match flowmap timing
+		float baseFlowMultiplier = avgFlowmapMultiplier * uvToWorldScale;  // ≈ 1.16
+		float flowTimeScale = baseFlowMultiplier * reflectionTimingScale;  // Match flowmap timing
 
 		// Calculate base flow offset (strength-modulated)
 		float2 flowOffset = worldFlowVector * flowTimeScale * flowStrength;

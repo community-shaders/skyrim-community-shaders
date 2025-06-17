@@ -574,7 +574,7 @@ FlowmapData GetFlowmapDataWorldSpace(FlowmapData textureSpaceData)
 struct WaterNormalData
 {
 	float3 normal;
-	float4 rippleInfo;  // xyz = ripple effect intensity, w = splash effect intensity
+	float4 rippleInfo;  // xyz = scaled ripple normal (normalized normal * intensity), w = splash effect intensity
 };
 
 WaterNormalData GetWaterNormalWithEffects(PS_INPUT input, float distanceFactor, float normalsDepthFactor, float3 viewDirection, float depth, uint eyeIndex)
