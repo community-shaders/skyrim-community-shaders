@@ -11,6 +11,7 @@ struct InteriorSunShadows : Feature
 
 	virtual inline std::string GetName() override { return "Interior Sun Shadows"; }
 	virtual inline std::string GetShortName() override { return "InteriorSunShadows"; }
+	virtual std::string_view GetCategory() const override { return "Lighting"; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {

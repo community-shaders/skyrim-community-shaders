@@ -18,6 +18,7 @@ public:
 	virtual inline std::string GetShortName() override { return "ScreenSpaceGI"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "SSGI"; }
+	virtual std::string_view GetCategory() const override { return "Lighting"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override
 	{
 		return t == RE::BSShader::Type::Lighting ||

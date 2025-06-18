@@ -46,6 +46,12 @@ public:
 	virtual bool IsCore() const { return false; }
 
 	/**
+	 * Get the category for UI grouping (e.g., "Terrain", "Lighting", "Characters", etc.)
+	 * Core features will be distributed to their respective categories
+	 */
+	virtual std::string_view GetCategory() const { return "Other"; }
+
+	/**
 	 * Whether the feature will show up in the GUI menu
 	 */
 	virtual bool IsInMenu() const { return true; }

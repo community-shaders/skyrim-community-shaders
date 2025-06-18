@@ -14,6 +14,7 @@ public:
 	virtual inline std::string GetName() override { return "Image Based Lighting"; }
 	virtual inline std::string GetShortName() override { return "ImageBasedLighting"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "IBL"; }
+	virtual std::string_view GetCategory() const override { return "Lighting"; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{

@@ -66,6 +66,7 @@ public:
 	virtual inline std::string GetShortName() override { return "SubsurfaceScattering"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "SSS"; }
+	virtual std::string_view GetCategory() const override { return "Characters"; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
