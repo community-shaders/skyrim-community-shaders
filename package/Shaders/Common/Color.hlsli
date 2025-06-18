@@ -167,6 +167,22 @@ namespace Color
 		}
 		return color;
 	}
+
+	float3 Radiance(float3 color)
+	{
+		if (!SharedData::linearLightingSettings.enableLinearLighting) {
+			color = GammaToLinear(color);
+		}
+		return color;
+	}
+
+	float3 Irradiance(float3 color)
+	{
+		if (!SharedData::linearLightingSettings.enableLinearLighting) {
+			color = GammaToLinear(color);
+		}
+		return color;
+	}
 #endif
 }
 

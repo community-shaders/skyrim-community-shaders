@@ -143,7 +143,7 @@ namespace WetnessEffects
 		float3 specularIrradiance = 1.0;
 #	else
 		float level = roughness * 7.0;
-		float3 specularIrradiance = Color::GammaToLinear(DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).rgb);
+		float3 specularIrradiance = Color::Irradiance(DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).rgb);
 #	endif
 #else
 		float3 specularIrradiance = 1.0;

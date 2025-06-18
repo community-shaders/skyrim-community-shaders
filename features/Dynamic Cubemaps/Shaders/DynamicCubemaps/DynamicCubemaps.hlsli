@@ -45,7 +45,7 @@ namespace DynamicCubemaps
 
 #		if defined(SKYLIGHTING)
 		if (SharedData::InInterior) {
-			float3 specularIrradiance = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
+			float3 specularIrradiance = Color::Irradiance(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
 
 			return finalIrradiance;
 		}
@@ -58,16 +58,16 @@ namespace DynamicCubemaps
 		float3 specularIrradiance = 1;
 
 		if (skylightingSpecular < 1.0)
-			specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, level).xyz);
+			specularIrradiance = Color::Irradiance(EnvTexture.SampleLevel(SampColorSampler, R, level).xyz);
 
 		float3 specularIrradianceReflections = 1.0;
 
 		if (skylightingSpecular > 0.0)
-			specularIrradianceReflections = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
+			specularIrradianceReflections = Color::Irradiance(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
 
 		finalIrradiance = lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
 #		else
-		float3 specularIrradiance = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
+		float3 specularIrradiance = Color::Irradiance(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
 
 		finalIrradiance += specularIrradiance;
 #		endif
@@ -101,7 +101,7 @@ namespace DynamicCubemaps
 
 #		if defined(SKYLIGHTING)
 		if (SharedData::InInterior) {
-			float3 specularIrradiance = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
+			float3 specularIrradiance = Color::Irradiance(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
 
 			finalIrradiance += specularIrradiance;
 
@@ -116,16 +116,16 @@ namespace DynamicCubemaps
 		float3 specularIrradiance = 1;
 
 		if (skylightingSpecular < 1.0)
-			specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, level).xyz);
+			specularIrradiance = Color::Irradiance(EnvTexture.SampleLevel(SampColorSampler, R, level).xyz);
 
 		float3 specularIrradianceReflections = 1.0;
 
 		if (skylightingSpecular > 0.0)
-			specularIrradianceReflections = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
+			specularIrradianceReflections = Color::Irradiance(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
 
 		finalIrradiance = lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
 #		else
-		float3 specularIrradiance = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level));
+		float3 specularIrradiance = Color::Irradiance(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level));
 
 		finalIrradiance += specularIrradiance;
 #		endif

@@ -102,9 +102,7 @@ float4 SSSSBlurCS(
 	float4 colorM = ColorTexture[DTid.xy];
 
 #if defined(HORIZONTAL)
-	if (!SharedData::linearLightingSettings.enableLinearLighting) {
-		colorM.rgb = Color::GammaToLinear(colorM.rgb);
-	}
+	colorM.rgb = Color::Irradiance(colorM.rgb);
 #endif
 
 	if (sssAmount == 0)
@@ -154,9 +152,7 @@ float4 SSSSBlurCS(
 		float3 color = ColorTexture[coords].rgb;
 
 #if defined(HORIZONTAL)
-		if (!SharedData::linearLightingSettings.enableLinearLighting) {
-			color.rgb = Color::GammaToLinear(color.rgb);
-		}
+		color.rgb = Color::Irradiance(color.rgb);
 #endif
 
 		float depth = DepthTexture[coords].r;
