@@ -484,7 +484,7 @@ namespace FeatureIssues
 				ImGui::TextWrapped("INI Path: %s", issue.iniPath.c_str());
 				ImGui::Spacing();
 			}
-	if (!issue.version.empty()) {
+			if (!issue.version.empty()) {
 				ImGui::TextWrapped("Current Version: %s", Util::CleanVersionString(issue.version).c_str());
 				ImGui::Spacing();
 			}
@@ -584,7 +584,8 @@ namespace FeatureIssues
 					ShellExecuteA(0, 0, issue.replacementFeatureModLink.c_str(), 0, 0, SW_SHOW);
 				}
 
-				if (auto _tt = Util::HoverTooltipWrapper()) {					if (!issue.minimumVersionRequired.empty()) {
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					if (!issue.minimumVersionRequired.empty()) {
 						ImGui::Text("Download %s version %s or later", issue.replacementFeatureDisplayName.c_str(), Util::CleanVersionString(issue.minimumVersionRequired).c_str());
 					} else {
 						ImGui::Text("Download the latest version of %s", issue.replacementFeatureDisplayName.c_str());
@@ -598,7 +599,7 @@ namespace FeatureIssues
 
 				ImGui::TextWrapped("%s", updateText.c_str());
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-	if (!issue.minimumVersionRequired.empty()) {
+					if (!issue.minimumVersionRequired.empty()) {
 						ImGui::Text("This feature needs to be updated to version %s or later. Check the mod page manually.", Util::CleanVersionString(issue.minimumVersionRequired).c_str());
 					} else {
 						ImGui::Text("This feature needs to be updated but no download link is available. Check the mod page manually.");

@@ -2,7 +2,6 @@
 
 #include "FeatureIssues.h"
 #include "FeatureVersions.h"
-#include "Utils/Format.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExtendedMaterials.h"
@@ -27,6 +26,7 @@
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
 #include "Features/WetnessEffects.h"
+#include "Utils/Format.h"
 
 #include "State.h"
 
