@@ -2,6 +2,10 @@
 
 struct CloudShadows : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "139185";
+
+public:
 	static CloudShadows* GetSingleton()
 	{
 		static CloudShadows singleton;
@@ -18,7 +22,20 @@ struct CloudShadows : Feature
 
 	virtual inline std::string GetName() override { return "Cloud Shadows"; }
 	virtual inline std::string GetShortName() override { return "CloudShadows"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
+	virtual std::string_view GetCategory() const override { return "Sky"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "CLOUD_SHADOWS"; }
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Adds realistic cloud shadows that move across the landscape, creating dynamic lighting changes as clouds pass overhead, enhancing atmospheric immersion.",
+			{ "Dynamic cloud shadow projection on terrain and objects",
+				"Configurable shadow opacity for artistic control",
+				"Real-time shadow movement synchronized with cloud motion",
+				"Cubemap-based shadow calculation for accurate projection",
+				"Enhanced sky rendering integration" }
+		};
+	}
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
 
 	bool overrideSky = false;

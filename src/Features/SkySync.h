@@ -11,6 +11,19 @@ struct SkySync : Feature
 
 	virtual inline std::string GetName() override { return "Sky Sync"; }
 	virtual inline std::string GetShortName() override { return "SkySync"; }
+	virtual std::string_view GetCategory() const override { return "Sky"; }
+
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Synchronizes celestial lighting with the actual sky state, ensuring sun and moon lighting direction and intensity accurately match their visual position in the sky.",
+			{ "Accurate sun and moon lighting direction matching sky position",
+				"Alternative sun path calculation for improved realism",
+				"Configurable moon light source selection",
+				"Real-time celestial body tracking and updates",
+				"Enhanced sky and climate transition handling" }
+		};
+	}
 
 	struct Settings
 	{

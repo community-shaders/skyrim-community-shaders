@@ -1,5 +1,6 @@
 #include "Feature.h"
 
+#include "FeatureIssues.h"
 #include "FeatureVersions.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
@@ -31,19 +32,6 @@
 
 void Feature::Load(json& o_json)
 {
-	if (o_json[GetName()].is_structured()) {
-		logger::info("Loading {} settings", GetName());
-		try {
-			LoadSettings(o_json[GetName()]);
-		} catch (...) {
-			logger::warn("Invalid settings for {}, using default.", GetName());
-			RestoreDefaultSettings();
-		}
-	} else {
-		logger::info("Loading default settings for {}", GetName());
-		RestoreDefaultSettings();
-	}
-
 	// Convert string to wstring
 	auto ini_filename = std::format("{}.ini", GetShortName());
 	std::wstring ini_filename_w;
@@ -52,37 +40,117 @@ void Feature::Load(json& o_json)
 
 	CSimpleIniA ini;
 	ini.SetUnicode();
-	ini.LoadFile(ini_path.c_str());
-	if (auto value = ini.GetValue("Info", "Version")) {
-		REL::Version featureVersion(std::regex_replace(value, std::regex("-"), "."));
+	SI_Error rc = ini.LoadFile(ini_path.c_str());
 
-		auto& minimalFeatureVersion = FeatureVersions::FEATURE_MINIMAL_VERSIONS.at(GetShortName());
-
-		bool oldFeature = featureVersion.compare(minimalFeatureVersion) == std::strong_ordering::less;
-		bool majorVersionMismatch = minimalFeatureVersion.major() < featureVersion.major();
-
-		if (!oldFeature && !majorVersionMismatch) {
-			loaded = true;
-			logger::info("{} {} successfully loaded", ini_filename, value);
-		} else {
-			loaded = false;
-
-			std::string minimalVersionString = minimalFeatureVersion.string();
-			minimalVersionString = minimalVersionString.substr(0, minimalVersionString.size() - 2);
-
-			if (majorVersionMismatch) {
-				failedLoadedMessage = std::format("{} {} requires a newer version of community shaders, the feature version should be {}", GetShortName(), value, minimalVersionString);
-			} else {
-				failedLoadedMessage = std::format("{} {} is an old feature version, required: {}", GetShortName(), value, minimalVersionString);
-			}
-			logger::warn("{}", failedLoadedMessage);
-		}
-
-		version = value;
-	} else {
+	if (rc < 0) {
+		if (!FeatureIssues::IsObsoleteFeature(GetShortName()))
+			logger::info("{} failed to load, feature disabled", ini_filename);
 		loaded = false;
+		return;
+	}
+
+	bool hasError = false;
+	std::string errorVersion;
+	FeatureIssues::FeatureIssueInfo::IssueType errorType = FeatureIssues::FeatureIssueInfo::IssueType::UNKNOWN;
+
+	if (FeatureIssues::IsObsoleteFeature(GetShortName())) {
+		hasError = true;
+		errorVersion = "N/A";
+		errorType = FeatureIssues::FeatureIssueInfo::IssueType::OBSOLETE;
+		failedLoadedMessage = std::format("{} is an obsolete feature that has been removed", GetShortName());
+	} else if (auto value = ini.GetValue("Info", "Version")) {
+		try {
+			REL::Version featureVersion(std::regex_replace(value, std::regex("-"), "."));
+
+			// Check if feature exists in minimal versions
+			auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(GetShortName());
+			if (iter == FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
+				hasError = true;
+				errorVersion = value;
+				errorType = FeatureIssues::FeatureIssueInfo::IssueType::UNKNOWN;
+				failedLoadedMessage = std::format("{} {} is an unknown feature not supported by this CS version. This may be a feature from a development branch.", GetShortName(), value);
+			} else {
+				// Version compatibility check
+				auto& minimalFeatureVersion = iter->second;
+				bool oldFeature = featureVersion.compare(minimalFeatureVersion) == std::strong_ordering::less;
+				bool majorVersionMismatch = featureVersion.major() < minimalFeatureVersion.major();
+
+				if (!oldFeature && !majorVersionMismatch) {
+					loaded = true;
+					logger::info("{} {} successfully loaded", ini_filename, value);
+				} else {
+					hasError = true;
+					errorVersion = value;
+					errorType = FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH;
+
+					std::string minimalVersionString = minimalFeatureVersion.string();
+					minimalVersionString = minimalVersionString.substr(0, minimalVersionString.size() - 2);
+
+					if (majorVersionMismatch) {
+						failedLoadedMessage = std::format("{} {} is too old, major version incompatibility detected. Required: {}", GetShortName(), value, minimalVersionString);
+					} else {
+						failedLoadedMessage = std::format("{} {} is an old feature version, required: {}", GetShortName(), value, minimalVersionString);
+					}
+				}
+			}
+
+			version = value;
+		} catch (const std::exception& e) {
+			hasError = true;
+			errorVersion = value;
+			errorType = FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH;
+			failedLoadedMessage = std::format("{} {} has invalid version format: {}", GetShortName(), value, e.what());
+		}
+	} else {
+		hasError = true;
+		errorVersion = "unknown";
+		errorType = FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH;
 		failedLoadedMessage = std::format("{} missing version info; not successfully loaded", ini_filename);
+	}
+
+	if (hasError) {
+		loaded = false;
 		logger::warn("{}", failedLoadedMessage);
+
+		// Guard against empty shortName to prevent bogus filesystem access
+		std::string shortName = GetShortName();
+		if (!shortName.empty()) {
+			FeatureIssues::FeatureFileInfo fileInfo = FeatureIssues::GetFeatureFileInfo(shortName);
+
+			// For version mismatch, also pass the minimum required version
+			std::string minimumVersion;
+			if (errorType == FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH) {
+				auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(shortName);
+				if (iter != FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
+					std::string minimalVersionString = iter->second.string();
+					// Only remove trailing ".0" if it exists, don't truncate non-zero patch versions
+					if (minimalVersionString.ends_with(".0")) {
+						minimumVersion = minimalVersionString.substr(0, minimalVersionString.size() - 2);
+					} else {
+						minimumVersion = minimalVersionString;
+					}
+				}
+			}
+
+			FeatureIssues::AddFeatureIssue(shortName, errorVersion, failedLoadedMessage, errorType, fileInfo, minimumVersion);
+
+		} else {
+			logger::error("Feature has empty short name, cannot add to feature issues list");
+		}
+	} else {
+		// No errors, load settings now
+		if (o_json[GetName()].is_structured()) {
+			logger::info("Loading {} settings", GetName());
+			try {
+				LoadSettings(o_json[GetName()]);
+			} catch (...) {
+				logger::warn("Invalid settings for {}, using default.", GetName());
+				RestoreDefaultSettings();
+			}
+		} else {
+			logger::info("Loading default settings for {}", GetName());
+			RestoreDefaultSettings();
+		}
 	}
 }
 
@@ -158,14 +226,34 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		globals::features::postProcessing
 	};
 
-	static std::vector<Feature*> featuresVR = [] {
-		auto v = features;
-		v.push_back(globals::features::vr);
-		std::erase_if(v, [](Feature* a) { return !a->SupportsVR(); });
-		return v;
-	}();
+	if (REL::Module::IsVR()) {
+		// Helper function to build VR feature list
+		static auto BuildVRList = []() -> std::vector<Feature*> {
+			auto v = features;
+			v.push_back(globals::features::vr);
 
-	return (REL::Module::IsVR() && !globals::state->IsDeveloperMode()) ? featuresVR : features;
+			// In developer mode, keep all features for testing
+			// In production mode, filter to VR-compatible only
+			if (!globals::state->IsDeveloperMode()) {
+				std::erase_if(v, [](Feature* a) { return !a->SupportsVR(); });
+			}
+			return v;
+		};
+
+		// Cache the VR feature list but invalidate when developer mode changes
+		static std::vector<Feature*> featuresVR;
+		static bool cachedDevMode = false;
+
+		bool currentDevMode = globals::state->IsDeveloperMode();
+		if (featuresVR.empty() || currentDevMode != cachedDevMode) {
+			featuresVR = BuildVRList();
+			cachedDevMode = currentDevMode;
+		}
+
+		return featuresVR;
+	} else {
+		return features;
+	}
 }
 
 bool Feature::ToggleAtBootSetting()

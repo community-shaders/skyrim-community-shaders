@@ -5,9 +5,9 @@
 /**
  @def GET_INSTANCE_MEMBER
  @brief Set variable in current namespace based on instance member from GetRuntimeData or GetVRRuntimeData.
-  
+
  @warning The class must have both a GetRuntimeData() and GetVRRuntimeData() function.
-  
+
  @param a_value The instance member value to access (e.g., renderTargets).
  @param a_source The instance of the class (e.g., state).
  @result The a_value will be set as a variable in the current namespace. (e.g., auto& renderTargets = state->renderTargets;)
@@ -18,9 +18,9 @@
 /**
  @def GET_INSTANCE_MEMBER_PTR
  @brief Return refptr to runtimedata in current namespace based on instance member from GetRuntimeData or GetVRRuntimeData.
-  
+
  @warning The class must have both a GetRuntimeData() and GetVRRuntimeData() function.
-  
+
  @param a_value The instance member value to access (e.g., renderTargets).
  @param a_source The instance of the class (e.g., state).
  @result The a_value will be returned as a refptr. (e.g., &state->renderTargets;)
@@ -52,7 +52,7 @@ namespace Util
 
 	/**
 	 * @brief Checks if dynamic resolution is currently enabled.
-	 * 
+	 *
 	 * @return true if dynamic resolution is enabled, false otherwise.
 	 */
 	bool IsDynamicResolution();
@@ -77,4 +77,19 @@ namespace Util
 		}
 		bool IsNewFrame();
 	};
+
+	/**
+     * @brief Retrieves the seasonal texture swap for a given texture set, if available.
+     *
+     * This function checks if a given texture set has been swapped by Seasons of Skyrim.
+     * If swapped, pad12C will be > 0 and will be the formid of the swapped texture set.
+     *
+     * @param textureSet Pointer to the original BGSTextureSet to check for seasonal swaps.
+     *                   Can be nullptr.
+     *
+     * @return Pointer to the seasonal swap texture set if found and valid, otherwise
+     *         returns the original textureSet parameter. Returns nullptr if the input
+     *         textureSet is nullptr.
+     */
+	[[nodiscard]] RE::BGSTextureSet* GetSeasonalSwap(RE::BGSTextureSet* textureSet);
 }  // namespace Util

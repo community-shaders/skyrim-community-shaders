@@ -1,128 +1,123 @@
 {
-	"version": 3,
-	"cmakeMinimumRequired": {
-		"major": 3,
-		"minor": 21,
-		"patch": 0
-	},
-	"configurePresets": [
-		{
-			"name": "common",
-			"hidden": true,
-			"cacheVariables": {
-				"SKSE_SUPPORT_XBYAK": "ON"
-			},
-			"binaryDir": "${sourceDir}/build/${presetName}"
-		},
-		{
-			"name": "vcpkg",
-			"hidden": true,
-			"cacheVariables": {
-				"CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-				"VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/ports/",
-				"VCPKG_TARGET_TRIPLET": "x64-windows-static-md"
-			}
-		},
-		{
-			"name": "win64",
-			"hidden": true,
-			"architecture": "x64",
-			"cacheVariables": {
-				"CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
-			}
-		},
-		{
-			"name": "msvc",
-			"hidden": true,
-			"cacheVariables": {
-				"CMAKE_CXX_FLAGS": "/EHsc /MP /W4 /WX $penv{CXXFLAGS}"
-			},
-			"generator": "Visual Studio 17 2022",
-			"vendor": {
-				"microsoft.com/VisualStudioSettings/CMake/1.0": {
-					"intelliSenseMode": "windows-msvc-x64",
-					"enableMicrosoftCodeAnalysis": true,
-					"enableClangTidyCodeAnalysis": true
-				}
-			}
-		},
-		{
-			"name": "skyrim",
-			"hidden": true,
-			"inherits": [
-				"common",
-				"vcpkg",
-				"win64",
-				"msvc"
-			]
-		},
-		{
-			"name": "AE",
-			"cacheVariables": {
-				"ENABLE_SKYRIM_AE": "ON",
-				"ENABLE_SKYRIM_SE": "OFF",
-				"ENABLE_SKYRIM_VR": "OFF"
-			},
-			"inherits": "skyrim"
-		},
-		{
-			"name": "SE",
-			"cacheVariables": {
-				"ENABLE_SKYRIM_AE": "OFF",
-				"ENABLE_SKYRIM_SE": "ON",
-				"ENABLE_SKYRIM_VR": "OFF"
-			},
-			"inherits": "skyrim"
-		},
-		{
-			"name": "VR",
-			"cacheVariables": {
-				"ENABLE_SKYRIM_AE": "OFF",
-				"ENABLE_SKYRIM_SE": "OFF",
-				"ENABLE_SKYRIM_VR": "ON"
-			},
-			"inherits": "skyrim"
-		},
-		{
-			"name": "ALL",
-			"cacheVariables": {
-				"ENABLE_SKYRIM_AE": "ON",
-				"ENABLE_SKYRIM_SE": "ON",
-				"ENABLE_SKYRIM_VR": "ON"
-			},
-			"inherits": "skyrim"
-		},
-		{
-			"name": "PRE-AE",
-			"cacheVariables": {
-				"ENABLE_SKYRIM_AE": "OFF",
-				"ENABLE_SKYRIM_SE": "ON",
-				"ENABLE_SKYRIM_VR": "ON"
-			},
-			"inherits": "skyrim"
-		},
-		{
-			"name": "FLATRIM",
-			"cacheVariables": {
-				"ENABLE_SKYRIM_AE": "ON",
-				"ENABLE_SKYRIM_SE": "ON",
-				"ENABLE_SKYRIM_VR": "OFF"
-			},
-			"inherits": "skyrim"
-		},
-		{
-			"name": "ALL-TRACY",
-			"cacheVariables": {
-				"TRACY_SUPPORT": "ON"
-			},
-			"inherits": "ALL"
-		}
-	],
-		"buildPresets": [
-	{
-		"name": "ALL",
-		"configurePreset": "ALL",
-		"configuration": "Release"
-	}
-	]
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 21,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "common",
+            "hidden": true,
+            "cacheVariables": {
+                "SKSE_SUPPORT_XBYAK": "ON"
+            },
+            "binaryDir": "${sourceDir}/build/${presetName}"
+        },
+        {
+            "name": "vcpkg",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+                "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/ports/",
+                "VCPKG_TARGET_TRIPLET": "x64-windows-static-md"
+            }
+        },
+        {
+            "name": "win64",
+            "hidden": true,
+            "architecture": "x64",
+            "cacheVariables": {
+                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
+            }
+        },
+        {
+            "name": "msvc",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_CXX_FLAGS": "/EHsc /MP /W4 /WX $penv{CXXFLAGS}"
+            },
+            "generator": "Visual Studio 17 2022",
+            "vendor": {
+                "microsoft.com/VisualStudioSettings/CMake/1.0": {
+                    "intelliSenseMode": "windows-msvc-x64",
+                    "enableMicrosoftCodeAnalysis": true,
+                    "enableClangTidyCodeAnalysis": true
+                }
+            }
+        },
+        {
+            "name": "skyrim",
+            "hidden": true,
+            "inherits": ["common", "vcpkg", "win64", "msvc"]
+        },
+        {
+            "name": "AE",
+            "cacheVariables": {
+                "ENABLE_SKYRIM_AE": "ON",
+                "ENABLE_SKYRIM_SE": "OFF",
+                "ENABLE_SKYRIM_VR": "OFF"
+            },
+            "inherits": "skyrim"
+        },
+        {
+            "name": "SE",
+            "cacheVariables": {
+                "ENABLE_SKYRIM_AE": "OFF",
+                "ENABLE_SKYRIM_SE": "ON",
+                "ENABLE_SKYRIM_VR": "OFF"
+            },
+            "inherits": "skyrim"
+        },
+        {
+            "name": "VR",
+            "cacheVariables": {
+                "ENABLE_SKYRIM_AE": "OFF",
+                "ENABLE_SKYRIM_SE": "OFF",
+                "ENABLE_SKYRIM_VR": "ON"
+            },
+            "inherits": "skyrim"
+        },
+        {
+            "name": "ALL",
+            "cacheVariables": {
+                "ENABLE_SKYRIM_AE": "ON",
+                "ENABLE_SKYRIM_SE": "ON",
+                "ENABLE_SKYRIM_VR": "ON"
+            },
+            "inherits": "skyrim"
+        },
+        {
+            "name": "PRE-AE",
+            "cacheVariables": {
+                "ENABLE_SKYRIM_AE": "OFF",
+                "ENABLE_SKYRIM_SE": "ON",
+                "ENABLE_SKYRIM_VR": "ON"
+            },
+            "inherits": "skyrim"
+        },
+        {
+            "name": "FLATRIM",
+            "cacheVariables": {
+                "ENABLE_SKYRIM_AE": "ON",
+                "ENABLE_SKYRIM_SE": "ON",
+                "ENABLE_SKYRIM_VR": "OFF"
+            },
+            "inherits": "skyrim"
+        },
+        {
+            "name": "ALL-TRACY",
+            "cacheVariables": {
+                "TRACY_SUPPORT": "ON"
+            },
+            "inherits": "ALL"
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "ALL",
+            "configurePreset": "ALL",
+            "configuration": "Release"
+        }
+    ]
 }

@@ -1,5 +1,6 @@
 #include "VolumetricLighting.h"
 
+#include "InteriorSunShadows.h"
 #include "ShaderCache.h"
 #include "State.h"
 
@@ -189,7 +190,7 @@ void VolumetricLighting::EarlyPrepass()
 
 	initialised = true;
 	inInterior = currentlyInInterior;
-	inInteriorWithSunShadows = interiorCell && interiorCell->cellFlags.all(RE::TESObjectCELL::Flag::kIsInteriorCell, RE::TESObjectCELL::Flag::kShowSky, RE::TESObjectCELL::Flag::kUseSkyLighting);
+	inInteriorWithSunShadows = InteriorSunShadows::IsInteriorWithSun(interiorCell);
 	SetupVL();
 }
 

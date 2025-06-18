@@ -13,8 +13,7 @@ TextureCube<float3> EnvReflectionsTexture : register(t2);
 
 SamplerState LinearSampler : register(s0);
 
-[numthreads(1, 1, 1)] void main(uint3 dispatchID
-								: SV_DispatchThreadID) {
+[numthreads(1, 1, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
 	// Initialise sh to 0
 	sh2 shR = SphericalHarmonics::Zero();
 	sh2 shG = SphericalHarmonics::Zero();
