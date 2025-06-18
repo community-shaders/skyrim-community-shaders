@@ -7,7 +7,6 @@ struct ID3D11ShaderResourceView;
 struct ImVec2;
 class Menu;
 
-
 namespace Util
 {
 	// Text rendering constants
@@ -118,7 +117,6 @@ namespace Util
 	bool PercentageSlider(const char* label, float* data, float lb = 0.f, float ub = 100.f, const char* format = "%.1f %%");
 	ImVec2 GetNativeViewportSizeScaled(float scale);
 
-
 	// Icon loading functions
 	// `device` must remain alive for the SRV lifetime. Caller owns *out_srv and must `Release()` it.
 	bool LoadTextureFromFile(ID3D11Device* device,
@@ -146,7 +144,6 @@ namespace Util
 	 * @param useWhiteText Whether to use white text (for differentiation)
 	 */
 	void DrawSectionHeader(const char* sectionName, bool useWhiteText = false);
-
 
 	class PerformanceOverlay
 	{
