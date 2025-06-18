@@ -31,19 +31,6 @@
 
 void Feature::Load(json& o_json)
 {
-	if (o_json[GetName()].is_structured()) {
-		logger::info("Loading {} settings", GetName());
-		try {
-			LoadSettings(o_json[GetName()]);
-		} catch (...) {
-			logger::warn("Invalid settings for {}, using default.", GetName());
-			RestoreDefaultSettings();
-		}
-	} else {
-		logger::info("Loading default settings for {}", GetName());
-		RestoreDefaultSettings();
-	}
-
 	// Convert string to wstring
 	auto ini_filename = std::format("{}.ini", GetShortName());
 	std::wstring ini_filename_w;
@@ -52,7 +39,14 @@ void Feature::Load(json& o_json)
 
 	CSimpleIniA ini;
 	ini.SetUnicode();
-	ini.LoadFile(ini_path.c_str());
+	SI_Error rc = ini.LoadFile(ini_path.c_str());
+
+	if (rc < 0) {
+		if (!FeatureIssues::IsObsoleteFeature(GetShortName()))
+			logger::info("{} failed to load, feature disabled", ini_filename);
+		loaded = false;
+		return;
+	}
 
 	bool hasError = false;
 	std::string errorVersion;
@@ -128,13 +122,33 @@ void Feature::Load(json& o_json)
 				auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(shortName);
 				if (iter != FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
 					std::string minimalVersionString = iter->second.string();
-					minimumVersion = minimalVersionString.substr(0, minimalVersionString.size() - 2);
+					// Only remove trailing ".0" if it exists, don't truncate non-zero patch versions
+					if (minimalVersionString.ends_with(".0")) {
+						minimumVersion = minimalVersionString.substr(0, minimalVersionString.size() - 2);
+					} else {
+						minimumVersion = minimalVersionString;
+					}
 				}
 			}
 
 			FeatureIssues::AddFeatureIssue(shortName, errorVersion, failedLoadedMessage, errorType, fileInfo, minimumVersion);
+
 		} else {
 			logger::error("Feature has empty short name, cannot add to feature issues list");
+		}
+	} else {
+		// No errors, load settings now
+		if (o_json[GetName()].is_structured()) {
+			logger::info("Loading {} settings", GetName());
+			try {
+				LoadSettings(o_json[GetName()]);
+			} catch (...) {
+				logger::warn("Invalid settings for {}, using default.", GetName());
+				RestoreDefaultSettings();
+			}
+		} else {
+			logger::info("Loading default settings for {}", GetName());
+			RestoreDefaultSettings();
 		}
 	}
 }
@@ -210,14 +224,34 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		globals::features::ibl
 	};
 
-	static std::vector<Feature*> featuresVR = [] {
-		auto v = features;
-		v.push_back(globals::features::vr);
-		std::erase_if(v, [](Feature* a) { return !a->SupportsVR(); });
-		return v;
-	}();
+	if (REL::Module::IsVR()) {
+		// Helper function to build VR feature list
+		static auto BuildVRList = []() -> std::vector<Feature*> {
+			auto v = features;
+			v.push_back(globals::features::vr);
 
-	return (REL::Module::IsVR() && !globals::state->IsDeveloperMode()) ? featuresVR : features;
+			// In developer mode, keep all features for testing
+			// In production mode, filter to VR-compatible only
+			if (!globals::state->IsDeveloperMode()) {
+				std::erase_if(v, [](Feature* a) { return !a->SupportsVR(); });
+			}
+			return v;
+		};
+
+		// Cache the VR feature list but invalidate when developer mode changes
+		static std::vector<Feature*> featuresVR;
+		static bool cachedDevMode = false;
+
+		bool currentDevMode = globals::state->IsDeveloperMode();
+		if (featuresVR.empty() || currentDevMode != cachedDevMode) {
+			featuresVR = BuildVRList();
+			cachedDevMode = currentDevMode;
+		}
+
+		return featuresVR;
+	} else {
+		return features;
+	}
 }
 
 bool Feature::ToggleAtBootSetting()

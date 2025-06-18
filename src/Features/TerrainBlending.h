@@ -12,6 +12,7 @@ public:
 	virtual inline std::string GetName() override { return "Terrain Blending"; }
 	virtual inline std::string GetShortName() override { return "TerrainBlending"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_BLENDING"; }
+	virtual std::string_view GetCategory() const override { return "Landscape & Textures"; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {

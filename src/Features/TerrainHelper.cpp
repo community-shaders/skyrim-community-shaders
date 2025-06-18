@@ -71,10 +71,10 @@ bool TerrainHelper::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 		std::array<RE::BGSTextureSet*, 6> textureSets;
 		auto defTexture = land->loadedData->defQuadTextures[quadI];
 		if (defTexture != nullptr && defTexture->formID != 0) {
-			textureSets[0] = defTexture->textureSet;
+			textureSets[0] = Util::GetSeasonalSwap(defTexture->textureSet);
 		} else {
 			// this is a default texture
-			textureSets[0] = defaultLandTexture;
+			textureSets[0] = Util::GetSeasonalSwap(defaultLandTexture);
 		}
 		for (uint32_t textureI = 0; textureI < 5; ++textureI) {
 			auto curTexture = land->loadedData->quadTextures[quadI][textureI];
@@ -85,9 +85,9 @@ bool TerrainHelper::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 
 			if (curTexture->formID == 0) {
 				// this is a default texture
-				textureSets[textureI + 1] = defaultLandTexture;
+				textureSets[textureI + 1] = Util::GetSeasonalSwap(defaultLandTexture);
 			} else {
-				textureSets[textureI + 1] = land->loadedData->quadTextures[quadI][textureI]->textureSet;
+				textureSets[textureI + 1] = Util::GetSeasonalSwap(land->loadedData->quadTextures[quadI][textureI]->textureSet);
 			}
 		}
 

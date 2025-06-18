@@ -15,6 +15,7 @@ public:
 	virtual inline std::string GetName() override { return "Hair Specular"; }
 	virtual inline std::string GetShortName() override { return "HairSpecular"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "CS_HAIR"; }
+	virtual std::string_view GetCategory() const override { return "Characters"; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
