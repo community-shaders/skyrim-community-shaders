@@ -8,6 +8,14 @@ namespace Util
 		return v.substr(0, v.find_last_of("."));
 	}
 
+	std::string CleanVersionString(const std::string& versionString)
+	{
+		if (versionString.size() >= 2 && versionString.substr(versionString.size() - 2) == "-0") {
+			return versionString.substr(0, versionString.size() - 2);
+		}
+		return versionString;
+	}
+
 	std::string DefinesToString(const std::vector<std::pair<const char*, const char*>>& defines)
 	{
 		std::string result;

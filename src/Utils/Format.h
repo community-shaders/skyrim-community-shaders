@@ -6,6 +6,8 @@ namespace Util
 {
 	std::string GetFormattedVersion(const REL::Version& version);
 
+	std::string CleanVersionString(const std::string& versionString);
+
 	std::string DefinesToString(const std::vector<std::pair<const char*, const char*>>& defines);
 	std::string DefinesToString(const std::vector<D3D_SHADER_MACRO>& defines);
 

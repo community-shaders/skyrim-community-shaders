@@ -4,6 +4,7 @@
 #include "Menu.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/Format.h"
 
 namespace FeatureIssues
 {
@@ -483,12 +484,12 @@ namespace FeatureIssues
 				ImGui::TextWrapped("INI Path: %s", issue.iniPath.c_str());
 				ImGui::Spacing();
 			}
-			if (!issue.version.empty()) {
-				ImGui::TextWrapped("Current Version: %s", issue.version.c_str());
+	if (!issue.version.empty()) {
+				ImGui::TextWrapped("Current Version: %s", Util::CleanVersionString(issue.version).c_str());
 				ImGui::Spacing();
 			}
 			if (issue.IsVersionMismatch() && !issue.minimumVersionRequired.empty()) {
-				ImGui::TextWrapped("Minimum Required: %s", issue.minimumVersionRequired.c_str());
+				ImGui::TextWrapped("Minimum Required: %s", Util::CleanVersionString(issue.minimumVersionRequired).c_str());
 				ImGui::Spacing();
 			}
 			ImGui::TextWrapped("Issue: %s", issue.rejectionReason.c_str());
@@ -577,15 +578,14 @@ namespace FeatureIssues
 			if (!issue.replacementFeatureModLink.empty()) {
 				std::string buttonText = issue.minimumVersionRequired.empty() ?
 				                             ("Download Latest " + issue.replacementFeatureDisplayName) :
-				                             ("Download " + issue.replacementFeatureDisplayName + " " + issue.minimumVersionRequired + "+");
+				                             ("Download " + issue.replacementFeatureDisplayName + " " + Util::CleanVersionString(issue.minimumVersionRequired) + "+");
 
 				if (ImGui::SmallButton(buttonText.c_str())) {
 					ShellExecuteA(0, 0, issue.replacementFeatureModLink.c_str(), 0, 0, SW_SHOW);
 				}
 
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					if (!issue.minimumVersionRequired.empty()) {
-						ImGui::Text("Download %s version %s or later", issue.replacementFeatureDisplayName.c_str(), issue.minimumVersionRequired.c_str());
+				if (auto _tt = Util::HoverTooltipWrapper()) {					if (!issue.minimumVersionRequired.empty()) {
+						ImGui::Text("Download %s version %s or later", issue.replacementFeatureDisplayName.c_str(), Util::CleanVersionString(issue.minimumVersionRequired).c_str());
 					} else {
 						ImGui::Text("Download the latest version of %s", issue.replacementFeatureDisplayName.c_str());
 					}
@@ -594,12 +594,12 @@ namespace FeatureIssues
 				// Show message when no download link is available
 				std::string updateText = issue.minimumVersionRequired.empty() ?
 				                             "Update Required" :
-				                             ("Update to " + issue.minimumVersionRequired + "+ Required");
+				                             ("Update to " + Util::CleanVersionString(issue.minimumVersionRequired) + "+ Required");
 
 				ImGui::TextWrapped("%s", updateText.c_str());
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					if (!issue.minimumVersionRequired.empty()) {
-						ImGui::Text("This feature needs to be updated to version %s or later. Check the mod page manually.", issue.minimumVersionRequired.c_str());
+	if (!issue.minimumVersionRequired.empty()) {
+						ImGui::Text("This feature needs to be updated to version %s or later. Check the mod page manually.", Util::CleanVersionString(issue.minimumVersionRequired).c_str());
 					} else {
 						ImGui::Text("This feature needs to be updated but no download link is available. Check the mod page manually.");
 					}

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Menu.h"
+#include "Utils/Format.h"
 
 struct Feature
 {
