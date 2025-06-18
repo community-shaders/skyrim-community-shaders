@@ -30,17 +30,6 @@
 
 #include "State.h"
 
-namespace
-{
-	// Utility function to clean up version strings by removing trailing "-0"
-	std::string CleanVersionString(const std::string& versionString)
-	{
-		if (versionString.size() >= 2 && versionString.substr(versionString.size() - 2) == "-0") {
-			return versionString.substr(0, versionString.size() - 2);
-		}
-		return versionString;
-	}
-}
 
 void Feature::Load(json& o_json)
 {
