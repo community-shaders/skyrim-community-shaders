@@ -2,6 +2,10 @@
 
 struct ScreenSpaceGI : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "130375";
+
+public:
 	static ScreenSpaceGI* GetSingleton()
 	{
 		static ScreenSpaceGI singleton;
@@ -12,13 +16,28 @@ struct ScreenSpaceGI : Feature
 
 	virtual inline std::string GetName() override { return "Screen Space GI"; }
 	virtual inline std::string GetShortName() override { return "ScreenSpaceGI"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "SSGI"; }
+	virtual std::string_view GetCategory() const override { return "Lighting"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override
 	{
 		return t == RE::BSShader::Type::Lighting ||
 		       t == RE::BSShader::Type::Grass ||
 		       t == RE::BSShader::Type::DistantTree;
 	};
+
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Screen Space Global Illumination adds realistic indirect lighting and ambient occlusion to the game.\n"
+			"This technique simulates how light bounces off surfaces to illuminate other objects naturally.",
+			{ "Realistic indirect lighting",
+				"Enhanced ambient occlusion",
+				"Improved visual depth and atmosphere",
+				"Temporal denoising for smooth results",
+				"Configurable quality and performance settings" }
+		};
+	}
 
 	virtual void RestoreDefaultSettings() override;
 	virtual void DrawSettings() override;

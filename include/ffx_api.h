@@ -1,7 +1,7 @@
 // This file is part of the FidelityFX SDK.
 //
 // Copyright (C) 2024 Advanced Micro Devices, Inc.
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -98,6 +98,14 @@ struct ffxOverrideVersion
 {
     ffxApiHeader header;
     uint64_t versionId;  ///< Id of version to use. Must be a value returned from a query in ffxQueryDescGetVersions.versionIds array.
+};
+
+#define FFX_API_QUERY_DESC_TYPE_GET_PROVIDER_VERSION 6u
+struct ffxQueryGetProviderVersion
+{
+    ffxQueryDescHeader header;
+    uint64_t versionId;      ///< Id of provider being used for queried context. 0 if invalid.
+    const char* versionName; ///< Version name for display. If nullptr, the query was invalid.
 };
 
 // Memory allocation function. Must return a valid pointer to at least size bytes of memory aligned to hold any type.

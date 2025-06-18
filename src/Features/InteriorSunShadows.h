@@ -11,7 +11,22 @@ struct InteriorSunShadows : Feature
 
 	virtual inline std::string GetName() override { return "Interior Sun Shadows"; }
 	virtual inline std::string GetShortName() override { return "InteriorSunShadows"; }
+	virtual std::string_view GetCategory() const override { return "Lighting"; }
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Enables realistic sun shadows inside interior spaces that have openings to the exterior, such as windows and doors, bringing natural lighting indoors.",
+			{ "Sun shadow casting through windows and openings",
+				"Double-sided rendering for accurate interior shadows",
+				"Automatic detection of interiors with sun exposure",
+				"Enhanced directional light culling for interiors",
+				"Seamless integration with existing shadow systems" }
+		};
+	}
 	virtual void DrawSettings() override;
+	virtual void LoadSettings(json& o_json) override;
+	virtual void SaveSettings(json& o_json) override;
+	virtual void RestoreDefaultSettings() override;
 	virtual bool SupportsVR() override { return true; }
 	virtual void PostPostLoad() override;
 	virtual void EarlyPrepass() override;
@@ -40,7 +55,8 @@ struct InteriorSunShadows : Feature
 	void UpdateRasterStateCullMode(const RE::BSRenderPass* pass, const uint32_t technique) const
 	{
 		if (isInteriorWithSun && settings.ForceDoubleSidedRendering && technique & static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmap)) {
-			const auto renderTwoSided = pass->shaderProperty->flags.none(RE::BSShaderProperty::EShaderPropertyFlag::kAssumeShadowmask);
+			const auto flags = pass->shaderProperty->flags;
+			const auto renderTwoSided = flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kTwoSided) || flags.none(RE::BSShaderProperty::EShaderPropertyFlag::kAssumeShadowmask, RE::BSShaderProperty::EShaderPropertyFlag::kSkinned);
 			if (renderTwoSided && *rasterStateCullMode != 0) {
 				*rasterStateCullMode = 0;
 				globals::game::stateUpdateFlags->set(RE::BSGraphics::DIRTY_RASTER_CULL_MODE);
@@ -51,7 +67,14 @@ struct InteriorSunShadows : Feature
 		}
 	}
 
+	static bool IsInteriorWithSun(const RE::TESObjectCELL* cell);
+
 private:
+	enum class CellFlagExt : uint16_t
+	{
+		kSunlightShadows = 1 << 15,
+	};
+
 	float* gShadowDistance = nullptr;
 	uint32_t* rasterStateCullMode = nullptr;
 
@@ -68,8 +91,6 @@ private:
 	void ClearArrays();
 
 	void InitialiseOnNewCell(const RE::NiPointer<RE::BSPortalGraph>& portalGraph);
-
-	static bool IsInteriorWithSun(const RE::TESObjectCELL* cell);
 
 	bool IsInSunDirectionAndWithinShadowDistance(const RE::NiPointer<RE::NiAVObject>& object, const RE::NiPoint3& lightDir, const RE::NiPoint3& playerPos) const;
 

@@ -150,6 +150,8 @@ void readHistory(
 #	ifdef GI_BOUNCE
 	radiance += prev_ambient.rgb * GIBounceFade;
 #	endif
+	radiance = filterNaN(radiance);
+	radiance = filterInf(radiance);
 	outRadianceDisocc[pixCoord] = radiance;
 #endif
 

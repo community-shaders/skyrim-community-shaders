@@ -4,7 +4,7 @@
     Optimized and tested on AMD GCN architecture.
     Release notes:
     v0.41   minor bug fixes, missing references
-    
+
     v0.4    new constants calculated for new ranges, minor optimization and precision improvements
             Developed during production of : Far Cry 4, Ubisoft Montreal
     v0.3    added Newton Raphson 1 and 2 iterations
@@ -16,7 +16,7 @@
     Contact information:
     Michal Drobot - @MichalDrobot
     hello@drobot.org
-    Presented publicly part of a course: 
+    Presented publicly part of a course:
     Low Level Optimizations for AMD GCN
     (available @ http://michaldrobot.com/publications/)
 ********************************************************************************/

@@ -1,0 +1,5 @@
+# Ignore third-party and build files for Prettier
+extern/
+include/
+build/
+dist/
