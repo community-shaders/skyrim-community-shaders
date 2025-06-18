@@ -125,7 +125,7 @@ namespace Util
 		hovered = ImGui::IsItemHovered();
 
 		// Draw the lines and text using Menu theme colors
-		auto& theme = Menu::GetSingleton()->GetTheme().UITemplate;
+		auto& theme = Menu::GetSingleton()->GetTheme().FeatureHeading;
 		ImU32 lineColor = hovered ? theme.LineColorHovered : theme.LineColorDefault;
 		ImU32 textColor = hovered ? theme.TextColorHovered : theme.TextColorDefault;
 
@@ -168,7 +168,7 @@ namespace Util
 		float lineY = pos.y + textSize.y * 0.5f;
 		float lineLength = (availableWidth - textSize.x - 20.0f) * 0.5f;  // 20px for padding
 		// Use Menu theme colors for consistent styling
-		auto& theme = Menu::GetSingleton()->GetTheme().UITemplate;
+		auto& theme = Menu::GetSingleton()->GetTheme().FeatureHeading;
 		ImU32 lineColor = theme.LineColorDefault;
 		ImU32 textColor = useWhiteText ? theme.TextColorWhite : theme.TextColorDefault;
 

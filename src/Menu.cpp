@@ -32,9 +32,20 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::ThemeSettings::StatusPaletteColors,
 	Disable,
-	RestartNeeded,
 	Error,
-	CurrentHotkey)
+	Warning,
+	RestartNeeded,
+	CurrentHotkey,
+	SuccessColor,
+	InfoColor)
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	Menu::ThemeSettings::FeatureHeadingColors,
+	LineColorDefault,
+	LineColorHovered,
+	TextColorDefault,
+	TextColorHovered,
+	TextColorWhite)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::Settings::PerfOverlaySettings,
@@ -99,6 +110,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	GlobalScale,
 	UseSimplePalette,
 	Palette,
+	StatusPalette,
+	FeatureHeading,
 	Style,
 	FullPalette)
 
@@ -870,6 +883,16 @@ void Menu::DrawGeneralSettings()
 				ImGui::ColorEdit4("Warning Text", (float*)&themeSettings.StatusPalette.Warning);
 				ImGui::ColorEdit4("Restart Needed Text", (float*)&themeSettings.StatusPalette.RestartNeeded);
 				ImGui::ColorEdit4("Current Hotkey Text", (float*)&themeSettings.StatusPalette.CurrentHotkey);
+				ImGui::ColorEdit4("Success Text", (float*)&themeSettings.StatusPalette.SuccessColor);
+				ImGui::ColorEdit4("Info Text", (float*)&themeSettings.StatusPalette.InfoColor);
+
+				ImGui::SeparatorText("Feature Headings");
+
+				ImGui::ColorEdit4("Line Color Default", (float*)&themeSettings.FeatureHeading.LineColorDefault);
+				ImGui::ColorEdit4("Line Color Hovered", (float*)&themeSettings.FeatureHeading.LineColorHovered);
+				ImGui::ColorEdit4("Text Color Default", (float*)&themeSettings.FeatureHeading.TextColorDefault);
+				ImGui::ColorEdit4("Text Color Hovered", (float*)&themeSettings.FeatureHeading.TextColorHovered);
+				ImGui::ColorEdit4("Text Color White", (float*)&themeSettings.FeatureHeading.TextColorWhite);
 
 				ImGui::SeparatorText("Palette");
 
