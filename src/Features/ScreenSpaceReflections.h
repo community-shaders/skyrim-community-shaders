@@ -69,7 +69,7 @@ struct ScreenSpaceReflections : Feature
     };
 
     eastl::unique_ptr<ConstantBuffer> ssrCB;
-    eastl::unique_ptr<ConstantBuffer> spdCB;
+    // eastl::unique_ptr<ConstantBuffer> spdCB;
     
     void DrawSSR();
     virtual void Prepass() override;
@@ -96,7 +96,7 @@ struct ScreenSpaceReflections : Feature
     winrt::com_ptr<ID3D11ComputeShader> preprocessDepthCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> raymarchCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> prepareColorCS = nullptr;
-    winrt::com_ptr<ID3D11ComputeShader> spdCS = nullptr;
+    // winrt::com_ptr<ID3D11ComputeShader> spdCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> spatialCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> temporalCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> bilateralCS = nullptr;

@@ -89,7 +89,7 @@ void ScreenSpaceReflections::SetupResources()
 	logger::debug("Creating buffers...");
 	{
         ssrCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<SSRCB>());
-        spdCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<SPDCB>());
+        // spdCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<SPDCB>());
     }
 
     logger::debug("Creating textures...");
@@ -188,7 +188,7 @@ void ScreenSpaceReflections::SetupResources()
 void ScreenSpaceReflections::ClearShaderCache()
 {
     static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-        &raymarchCS, &prepareColorCS, &preprocessDepthCS, &spdCS, &spatialCS, &temporalCS, &bilateralCS, &depthDownsampleCS
+        &raymarchCS, &prepareColorCS, &preprocessDepthCS, &spatialCS, &temporalCS, &bilateralCS, &depthDownsampleCS
     };
 
     for (auto shader : shaderPtrs)
@@ -211,7 +211,7 @@ void ScreenSpaceReflections::CompileComputeShaders()
             { &raymarchCS, "ssr_raymarch.hlsl", {} },
             { &prepareColorCS, "ssr_prepare_color.hlsl", {} },
             { &preprocessDepthCS, "ssr_preprocess_depth.hlsl", {} },
-            { &spdCS, "ssr_spd.hlsl", {} },
+            // { &spdCS, "ssr_spd.hlsl", {} },
             { &spatialCS, "ssr_spatial_filter.hlsl", {} },
             { &temporalCS, "ssr_temporal_filter.hlsl", {} },
             { &bilateralCS, "ssr_bilateral_filter.hlsl", {} },
