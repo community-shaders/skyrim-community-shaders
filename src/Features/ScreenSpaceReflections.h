@@ -11,6 +11,18 @@ struct ScreenSpaceReflections : Feature
     virtual inline std::string GetName() override { return "Screen Space Reflections"; }
     virtual inline std::string GetShortName() override { return "ScreenSpaceReflections"; }
     virtual inline std::string_view GetShaderDefineName() override { return "SSSR"; }
+    virtual std::string_view GetCategory() const override { return "Lighting"; }
+    virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Screen Space Reflections based on AMD FidelityFX Stochastic Screen Space Reflections (SSSR) implementation.",
+            {
+                "Realistic reflections on surfaces",
+                "Importance sampling based on roughness",
+                "HiZ depth buffer for efficient ray marching"
+            }
+		};
+	}
 
     virtual void RestoreDefaultSettings() override;
 	virtual void DrawSettings() override;
