@@ -29,6 +29,16 @@
 
 #include "State.h"
 
+namespace {
+	// Utility function to clean up version strings by removing trailing "-0"
+	std::string CleanVersionString(const std::string& versionString) {
+		if (versionString.size() >= 2 && versionString.substr(versionString.size() - 2) == "-0") {
+			return versionString.substr(0, versionString.size() - 2);
+		}
+		return versionString;
+	}
+}
+
 void Feature::Load(json& o_json)
 {
 	if (o_json[GetName()].is_structured()) {
@@ -79,12 +89,7 @@ void Feature::Load(json& o_json)
 				// Version compatibility check
 				auto& minimalFeatureVersion = iter->second;
 				std::string rawVersion = minimalFeatureVersion.string();
-				// Remove trailing "-0" if present
-				if (rawVersion.size() >= 2 && rawVersion.substr(rawVersion.size() - 2) == "-0") {
-					requiredVersion = rawVersion.substr(0, rawVersion.size() - 2);
-				} else {
-					requiredVersion = rawVersion;
-				}
+				requiredVersion = CleanVersionString(rawVersion);
 				bool oldFeature = featureVersion.compare(minimalFeatureVersion) == std::strong_ordering::less;
 				bool majorVersionMismatch = featureVersion.major() < minimalFeatureVersion.major();
 
@@ -96,11 +101,7 @@ void Feature::Load(json& o_json)
 					errorVersion = value;
 					errorType = FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH;
 
-					std::string minimalVersionString = minimalFeatureVersion.string();
-					// Remove trailing "-0" if present for error messages
-					if (minimalVersionString.size() >= 2 && minimalVersionString.substr(minimalVersionString.size() - 2) == "-0") {
-						minimalVersionString = minimalVersionString.substr(0, minimalVersionString.size() - 2);
-					}
+					std::string minimalVersionString = CleanVersionString(minimalFeatureVersion.string());
 
 					if (majorVersionMismatch) {
 						failedLoadedMessage = std::format("{} {} is too old, major version incompatibility detected. Required: {}", GetShortName(), value, minimalVersionString);
@@ -125,13 +126,7 @@ void Feature::Load(json& o_json)
 		// Look up the required version for the missing file error message
 		auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(GetShortName());
 		if (iter != FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
-			std::string rawVersion = iter->second.string();
-			// Remove trailing "-0" if present
-			if (rawVersion.size() >= 2 && rawVersion.substr(rawVersion.size() - 2) == "-0") {
-				requiredVersion = rawVersion.substr(0, rawVersion.size() - 2);
-			} else {
-				requiredVersion = rawVersion;
-			}
+			requiredVersion = CleanVersionString(iter->second.string());
 		}
 
 		failedLoadedMessage = std::format("The {} file is missing. This feature is not installed! Version required: {}", ini_filename, requiredVersion);
