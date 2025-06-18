@@ -1809,7 +1809,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif  // LANDSCAPE
 
 #	if defined(EMAT_ENVMAP)
-	complexMaterial = complexMaterial && complexMaterialColor.y > (4.0 / 255.0) && (complexMaterialColor.y < (1.0 - (4.0 / 255.0)));
+	complexMaterial = complexMaterial && complexMaterialColor.y > (4.0 / 255.0);
 	shininess = lerp(shininess, shininess * complexMaterialColor.y, complexMaterial);
 	if (complexMaterial) {
 		if (complexMaterialColor.z > 0.0) {

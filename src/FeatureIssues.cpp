@@ -816,8 +816,7 @@ namespace FeatureIssues
 
 		bool TestIniInfo::wasManuallyDeleted() const
 		{
-			// If marker exists but test INI doesn't, it was manually deleted
-			return std::filesystem::exists(testMarkerPath) && !std::filesystem::exists(testIniPath);
+			return !std::filesystem::exists(testIniPath);
 		}
 
 		bool LoadPersistentTestState()
@@ -841,7 +840,6 @@ namespace FeatureIssues
 					for (const auto& testData : stateData["testInis"]) {
 						TestIniInfo testInfo;
 						testInfo.testIniPath = testData["testIniPath"].get<std::string>();
-						testInfo.testMarkerPath = testData["testMarkerPath"].get<std::string>();
 						testInfo.isNewFile = testData["isNewFile"].get<bool>();
 						testInfo.testType = testData["testType"].get<std::string>();
 						testInfo.featureName = testData["featureName"].get<std::string>();
@@ -869,7 +867,6 @@ namespace FeatureIssues
 				for (const auto& testInfo : s_activeTestInis) {
 					nlohmann::json testData;
 					testData["testIniPath"] = testInfo.testIniPath;
-					testData["testMarkerPath"] = testInfo.testMarkerPath;
 					testData["isNewFile"] = testInfo.isNewFile;
 					testData["testType"] = testInfo.testType;
 					testData["featureName"] = testInfo.featureName;
@@ -1085,16 +1082,8 @@ namespace FeatureIssues
 					if (outFile.fail()) {
 						throw std::runtime_error("Failed to write file contents");
 					}
-
-					// Create marker file to track this test INI
-					const std::filesystem::path testMarkerPath = featuresPath / (testCase.selectedFeature + ".test");
-					std::ofstream markerFile(testMarkerPath);
-					markerFile << "# Test marker created by CS Developer Mode\n";
-					markerFile.close();
-
 					TestIniInfo testInfo;
 					testInfo.testIniPath = iniPath.string();
-					testInfo.testMarkerPath = testMarkerPath.string();
 					testInfo.isNewFile = true;
 					testInfo.testType = "obsolete";
 					testInfo.featureName = testCase.selectedFeature;
@@ -1131,16 +1120,8 @@ namespace FeatureIssues
 					if (outFile.fail()) {
 						throw std::runtime_error("Failed to write file contents");
 					}
-
-					// Create marker file
-					const std::filesystem::path testMarkerPath = featuresPath / (unknownFeature + ".test");
-					std::ofstream markerFile(testMarkerPath);
-					markerFile << "# Test marker created by CS Developer Mode\n";
-					markerFile.close();
-
 					TestIniInfo testInfo;
 					testInfo.testIniPath = unknownIniPath.string();
-					testInfo.testMarkerPath = testMarkerPath.string();
 					testInfo.isNewFile = true;
 					testInfo.testType = "unknown";
 					testInfo.featureName = unknownFeature;
@@ -1168,12 +1149,6 @@ namespace FeatureIssues
 			// Analyze ALL features (loaded and unloaded) to find safe version mismatch candidates
 			for (const auto& [featureName, feature] : loadedFeatureMap) {
 				const std::filesystem::path iniPath = featuresPath / (featureName + ".ini");
-				const std::filesystem::path testStatePath = featuresPath / (featureName + ".test");
-
-				// Skip if we already have a test state for this feature
-				if (std::filesystem::exists(testStatePath)) {
-					continue;
-				}
 
 				std::string modLink = GetFeatureModLink(featureName);
 				bool hasModLink = !modLink.empty();
@@ -1290,7 +1265,6 @@ namespace FeatureIssues
 
 						TestIniInfo testInfo;
 						testInfo.testIniPath = iniPath.string();
-						testInfo.testMarkerPath = "";  // No marker needed for modified files
 						testInfo.isNewFile = false;
 						testInfo.testType = "version mismatch";
 						testInfo.featureName = testFeatureName;
@@ -1320,16 +1294,8 @@ namespace FeatureIssues
 						if (outFile.fail()) {
 							throw std::runtime_error("Failed to write file contents");
 						}
-
-						// Create marker file to track this test INI
-						const std::filesystem::path testMarkerPath = featuresPath / (testFeatureName + ".test");
-						std::ofstream markerFile(testMarkerPath);
-						markerFile << "# Test marker created by CS Developer Mode\n";
-						markerFile.close();
-
 						TestIniInfo testInfo;
 						testInfo.testIniPath = iniPath.string();
-						testInfo.testMarkerPath = testMarkerPath.string();
 						testInfo.isNewFile = true;
 						testInfo.testType = "version mismatch";
 						testInfo.featureName = testFeatureName;
@@ -1396,11 +1362,6 @@ namespace FeatureIssues
 						if (std::filesystem::exists(testInfo.testIniPath)) {
 							std::filesystem::remove(testInfo.testIniPath);
 							logger::debug("Removed test INI: {}", testInfo.testIniPath);
-						}
-						// Remove marker file
-						if (std::filesystem::exists(testInfo.testMarkerPath)) {
-							std::filesystem::remove(testInfo.testMarkerPath);
-							logger::debug("Removed test marker: {}", testInfo.testMarkerPath);
 						}
 					} else {
 						// Restore original version using INI functions
