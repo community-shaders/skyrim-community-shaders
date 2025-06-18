@@ -55,16 +55,16 @@ void Feature::Load(json& o_json)
 	SI_Error rc = ini.LoadFile(ini_path.c_str());
 
 	if (rc < 0) {
-	if (FeatureIssues::IsObsoleteFeature(GetShortName())) {
+		if (FeatureIssues::IsObsoleteFeature(GetShortName())) {
 			// Handle obsolete features
 			version = "obsolete";  // Set version so it shows error color in UI
 			failedLoadedMessage = std::format("{} is an obsolete feature that has been removed.", GetShortName());
 			FeatureIssues::FeatureFileInfo fileInfo = FeatureIssues::GetFeatureFileInfo(GetShortName());
-			FeatureIssues::AddFeatureIssue(GetShortName(), "N/A", failedLoadedMessage, 
+			FeatureIssues::AddFeatureIssue(GetShortName(), "N/A", failedLoadedMessage,
 				FeatureIssues::FeatureIssueInfo::IssueType::OBSOLETE, fileInfo, "");
 		} else {
 			logger::info("{} failed to load, feature disabled", ini_filename);
-			
+
 			// Set error message for missing file
 			std::string requiredVersion = "Unknown";
 			auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(GetShortName());
@@ -72,10 +72,10 @@ void Feature::Load(json& o_json)
 				requiredVersion = Util::CleanVersionString(iter->second.string());
 			}
 			failedLoadedMessage = std::format("The {} file is missing. This feature is not installed! Version required: {}", ini_filename, requiredVersion);
-			
+
 			// Add to feature issues
 			FeatureIssues::FeatureFileInfo fileInfo = FeatureIssues::GetFeatureFileInfo(GetShortName());
-			FeatureIssues::AddFeatureIssue(GetShortName(), "unknown", failedLoadedMessage, 
+			FeatureIssues::AddFeatureIssue(GetShortName(), "unknown", failedLoadedMessage,
 				FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH, fileInfo, requiredVersion);
 		}
 		loaded = false;
