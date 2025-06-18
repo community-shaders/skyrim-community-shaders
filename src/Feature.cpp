@@ -30,7 +30,6 @@
 
 #include "State.h"
 
-
 void Feature::Load(json& o_json)
 {
 	if (o_json[GetName()].is_structured()) {
