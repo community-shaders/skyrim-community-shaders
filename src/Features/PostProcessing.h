@@ -47,6 +47,10 @@ struct PostProcessing : Feature
 	virtual void SaveSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;
 
+	json pendingSettings = {};
+
+	void ProcessSettings(json& o_json);
+
 	std::vector<std::string> presets = {};
 	std::vector<std::string> LoadPresets();
 	void SavePresetTo(std::string a_name);

@@ -248,6 +248,11 @@ void PostProcessing::DrawSettings()
 
 void PostProcessing::LoadSettings(json& o_json)
 {
+	pendingSettings = o_json;
+}
+
+void PostProcessing::ProcessSettings(json& o_json)
+{
 	const auto& featConstructors = PostProcessFeatureConstructor::GetFeatureConstructors();
 
 	logger::info("Loading post processing settings...");
@@ -345,7 +350,7 @@ void PostProcessing::LoadPresetFrom(std::string a_name)
 		return;
 	}
 
-	LoadSettings(a_presets);
+	ProcessSettings(a_presets);
 }
 
 void PostProcessing::SavePresetTo(std::string a_name)
@@ -422,9 +427,10 @@ void PostProcessing::SetupResources()
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\PostProcessing\\copy.cs.hlsl", {}, "cs_5_0")))
 		copyCS.attach(rawPtr);
 
-	for (auto& feat : feats)
-		if (!REL::Module::IsVR() || feat->SupportsVR())
-			feat->SetupResources();
+	ProcessSettings(pendingSettings);
+	// for (auto& feat : feats)
+	// 	if (!REL::Module::IsVR() || feat->SupportsVR())
+	// 		feat->SetupResources();
 }
 
 void PostProcessing::Reset()
