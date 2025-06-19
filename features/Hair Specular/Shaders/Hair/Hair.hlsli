@@ -63,7 +63,9 @@ namespace Hair
 		const float3 specSecondary = D_KajiyaKay(TshiftSecondary, H, shininess * 0.5);
 		const float F = Hair_F(saturate(dot(H, V)));
 		float3 specR = 0.25 * F * (specPrimary + specSecondary) * NdotL * saturate(NdotV * (3.4e+38));
-		specR = Color::LinearToGamma(specR);
+		if (!SharedData::linearLightingSettings.enableLinearLighting) {
+			specR = Color::LinearToGamma(specR);
+		}
 		float scatterFresnel1 = pow(saturate(-dot(L, V)), 9) * pow(saturate(1 - NdotV * NdotV), 12);
 		float scatterFresnel2 = saturate(pow((1 - NdotV), 20));
 		float3 specT = scatterFresnel1 + scatterFresnel2;

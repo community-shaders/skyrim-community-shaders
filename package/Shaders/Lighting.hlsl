@@ -2866,7 +2866,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if defined(HAIR)
-	float3 vertexColor = lerp(1, TintColor.xyz, input.Color.y);
+	float3 vertexColor = lerp(1, Color::Diffuse(TintColor.xyz), Color::Diffuse(input.Color.y));
 #		if defined(CS_HAIR)
 	float3 indirectDiffuseLobeWeight, indirectSpecularLobeWeightPrim, indirectSpecularLobeWeightSec;
 	if (SharedData::hairSpecularSettings.Enabled)
