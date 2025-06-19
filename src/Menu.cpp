@@ -667,7 +667,7 @@ void Menu::DrawSettings()
 						if (ImGui::BeginTabItem("Settings")) {
 							if (ImGui::BeginChild("##FeatureSettingsFrame", { 0, 0 }, true)) {
 								ImGui::SeparatorText("Feature Management");
-								
+
 								// Disable/Enable at boot
 								ImVec4 textColor;
 								if (isDisabled) {
@@ -752,7 +752,7 @@ void Menu::DrawSettings()
 							if (ImGui::BeginChild("##FeatureAboutFrame", { 0, 0 }, true)) {
 								// Status Section
 								ImGui::SeparatorText("Status");
-								
+
 								ImVec4 statusColor;
 								const char* statusText;
 								if (isDisabled) {
