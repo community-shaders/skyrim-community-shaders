@@ -14,7 +14,12 @@ struct LinearLighting : Feature
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Linear Lighting does internal color space conversion to improve lighting calculation accuracy."
+			"Linear Lighting does internal color space conversion to improve lighting calculation accuracy.",
+			{
+				"Customizable gamma correction",
+				"Corrects lighting calculations",
+				"Makes PBR really work"
+			}
 		};
 	}
 
