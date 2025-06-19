@@ -26,6 +26,19 @@ struct PostProcessing : Feature
 	{
 		return t == RE::BSShader::Type::ImageSpace;
 	};
+	virtual std::string_view GetCategory() const override { return "Post Processing"; }
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Post Processing provides advanced image effects and enhancements to improve the visual quality of the game.",
+			{
+				"Customizable post-processing effects",
+				"Supports various presets for different visual styles",
+				"Improves overall image quality and immersion",
+				"Includes features like bloom, depth of field, and color grading"
+			}
+		};
+	}
 
 	virtual bool SupportsVR() { return true; }
 
