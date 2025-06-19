@@ -428,6 +428,7 @@ void PostProcessing::SetupResources()
 		copyCS.attach(rawPtr);
 
 	ProcessSettings(pendingSettings);
+	pendingSettings = {};
 	// for (auto& feat : feats)
 	// 	if (!REL::Module::IsVR() || feat->SupportsVR())
 	// 		feat->SetupResources();
@@ -485,6 +486,14 @@ void PostProcessing::PreProcess()
 	}
 
 	isrefraction = false;
+}
+
+void PostProcessing::Prepass()
+{
+	if (!pendingSettings.empty()) {
+		ProcessSettings(pendingSettings);
+		pendingSettings = {};
+	}
 }
 
 void PostProcessing::PostPostLoad()

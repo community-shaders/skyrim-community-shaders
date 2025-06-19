@@ -62,6 +62,7 @@ struct PostProcessing : Feature
 	virtual void Reset() override;
 
 	virtual void PostPostLoad() override;
+	virtual void Prepass() override;
 
 	void PreProcess();
 
