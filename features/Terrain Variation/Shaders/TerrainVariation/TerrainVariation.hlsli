@@ -22,14 +22,6 @@ static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
 static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
 static const float2 HASH_SINE_MULTIPLIER = float2(43758.5453, 28637.1369);
 
-// Early termination thresholds for progressive sampling - optimized for GPU performance
-static const float WEIGHT_THRESHOLD_SKIP = 0.005;        // Skip layer entirely if weight is below this
-static const float WEIGHT_THRESHOLD_MINIMAL = 0.02;      // Use minimal sampling if weight is below this
-
-// Default values for low-contribution layers
-static const float4 DEFAULT_NORMAL = float4(0.5, 0.5, 1.0, 1.0);    // Default normal map (pointing up)
-static const float4 DEFAULT_RMAOS = float4(1.0, 0.0, 1.0, 0.0);     // Default RMAOS (non-metallic, smooth)
-
 // Structure to hold stochastic sampling offsets and weights
 struct StochasticOffsets
 {
@@ -133,55 +125,74 @@ inline float4 StochasticSampleLOD(float rnd, float mipLevel, Texture2D tex, Samp
 	return lerp(sample2, sample1, 0.65);
 }
 
-// Unified stochastic sampling function with weight-aware optimization
-inline float4 StochasticEffect(uint blendingMode, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float mipLevel, float mipFactor, float layerWeight, float4 defaultValue, bool enableHeightBlend = true)
+// Main stochastic sampling function
+inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
 {
-	// Early termination for very low weights - blend with default
-	float minimalThreshold = step(layerWeight, WEIGHT_THRESHOLD_MINIMAL);
-	[branch] if (minimalThreshold > 0.5) {
-		float4 singleSample = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
-		return lerp(singleSample, defaultValue, saturate((WEIGHT_THRESHOLD_MINIMAL - layerWeight) / WEIGHT_THRESHOLD_MINIMAL));
-	}
-	
-	// Single sample for high mip levels or simple mode
-	if (blendingMode == 0 || mipLevel >= 4.0) {
-		return tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
-	}
-	
-	// Multi-sample stochastic blending
+	// Take first sample (always needed)
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+
+	// Calculate smooth transition factor - starts blending at mip 2.5, fully single sample at mip 5.0
+	float mipFactor = saturate((mipLevel - 2.5) / 2.5);
+
+	// Early exit for very high mip levels - single sample is sufficient
+	if (mipFactor >= 0.8)
+	{
+		return sample1;
+	}
+
+	// Take remaining samples for blending
 	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
+
+	// Full height-based blending for low mip levels (close terrain)
+	float contrastFactor = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE);
+	float3 blendWeights = pow(saturate(offsets.weights), contrastFactor);
+
+	// Direct height calculation without matrix
+	float3 luminanceHeights = float3(
+		dot(sample1.rgb, LUMINANCE_WEIGHTS),
+		dot(sample2.rgb, LUMINANCE_WEIGHTS),
+		dot(sample3.rgb, LUMINANCE_WEIGHTS)
+	);
+	float3 alphaValues = float3(sample1.a, sample2.a, sample3.a);
+	float3 alphaMask = step(0.001, alphaValues);
+	float3 heights = lerp(luminanceHeights, alphaValues, alphaMask);
 	
-	float3 weights;
-	if (enableHeightBlend && blendingMode == 2) {
-		// Height-based blending
-		float contrastFactor = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE);
-		float3 blendWeights = pow(saturate(offsets.weights), contrastFactor);
-		
-		float3 luminanceHeights = float3(
-			dot(sample1.rgb, LUMINANCE_WEIGHTS),
-			dot(sample2.rgb, LUMINANCE_WEIGHTS),
-			dot(sample3.rgb, LUMINANCE_WEIGHTS)
-		);
-		float3 alphaValues = float3(sample1.a, sample2.a, sample3.a);
-		float3 alphaMask = step(0.001, alphaValues);
-		float3 heights = lerp(luminanceHeights, alphaValues, alphaMask);
-		
-		weights = NormalizeWeights(blendWeights * (1.0 + HEIGHT_INFLUENCE * heights));
-	} else {
-		// Simple barycentric blending
-		weights = NormalizeWeights(saturate(offsets.weights));
-	}
-	
-	float4 blendedSample = sample1 * weights.x + sample2 * weights.y + sample3 * weights.z;
-	return lerp(blendedSample, sample1, mipFactor);
+	// Combined weight calculation and normalization
+	float3 weights = NormalizeWeights(blendWeights * (1.0 + HEIGHT_INFLUENCE * heights));
+
+	// Direct blend without intermediate variable
+	float4 highQualitySample = sample1 * weights.x + sample2 * weights.y + sample3 * weights.z;
+
+	// Smooth transition between high quality and single sample based on mip level
+	return lerp(highQualitySample, sample1, mipFactor);
 }
 
-// Simplified stochastic sampling for RMAOS textures (no height blending)
-inline float4 StochasticEffectNoHeight(uint blendingMode, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float mipLevel, float mipFactor, float layerWeight, float4 defaultValue)
+// Stochastic sampling function without height blending for better performance
+inline float4 StochasticEffectNoHeight(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
 {
-	return StochasticEffect(blendingMode, tex, samp, uv, offsets, mipLevel, mipFactor, layerWeight, defaultValue, false);
+	// Take first sample (always needed)
+	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+
+	// Calculate smooth transition factor - starts blending at mip 2.5, fully single sample at mip 5.0
+	float mipFactor = saturate((mipLevel - 2.5) / 2.5);
+
+	// Early exit for very high mip levels - single sample is sufficient
+	if (mipFactor >= 0.8)
+	{
+		return sample1;
+	}
+
+	// Take remaining samples for blending
+	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
+	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
+
+	// Simple barycentric blend without height influence
+	float3 weights = NormalizeWeights(saturate(offsets.weights));
+	float4 blendedSample = sample1 * weights.x + sample2 * weights.y + sample3 * weights.z;
+
+	// Smooth transition between blended and single sample based on mip level
+	return lerp(blendedSample, sample1, mipFactor);
 }
 
 
