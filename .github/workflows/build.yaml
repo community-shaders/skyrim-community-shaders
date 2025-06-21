@@ -120,13 +120,14 @@ jobs:
                   repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
                   submodules: recursive
 
-            - name: Setup MSBuild for VS2022
-              uses: microsoft/setup-msbuild@v1.3.1
+            - name: Setup MSVC environment (VS2022)
+              uses: ilammy/msvc-dev-cmd@v1
               with:
-                  vs-version: '[17.0,18.0)'
+                  arch: x64
     
             - name: Check cl.exe version
               run: cl.exe /Bv
+              shell: cmd
 
             - name: Setup vcpkg
               uses: lukka/run-vcpkg@v11.5
