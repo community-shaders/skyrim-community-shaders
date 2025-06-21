@@ -126,7 +126,7 @@ jobs:
                   arch: x64
     
             - name: Check cl.exe version
-              run: cl.exe /Bv
+              run: cl.exe /Bv 2>&1 || exit 0
               shell: cmd
 
             - name: Setup vcpkg
