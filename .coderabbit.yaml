@@ -1,0 +1,22 @@
+# CodeRabbit AI Configuration
+
+# Only adding custom instructions for conventional commit suggestions
+instructions: |
+    When reviewing PRs, please provide suggestions for:
+
+    1. **Conventional Commit Titles** (if not following https://www.conventionalcommits.org/):
+       Format: type(scope): description
+       Length: 50 characters preferred, 72 characters maximum
+       Style: lowercase description, no ending period
+       Examples:
+       - feat(vr): add cross-eye sampling
+       - fix(water): resolve flowmap bug
+       - docs: update shader documentation
+
+    2. **Issue References** (if PR fixes bugs or implements features):
+       Suggest adding appropriate GitHub keywords:
+       - "Fixes #123" or "Closes #123" for bug fixes
+       - "Implements #123" or "Addresses #123" for features
+       - "Related to #123" for partial implementations
+
+    Otherwise, use your standard review approach focusing on code quality.

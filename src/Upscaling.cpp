@@ -766,6 +766,13 @@ bool Upscaling::IsFrameGenerationActive() const
 	return d3d12Interop && settings.frameGenerationMode;
 }
 
+/**
+ * @brief Retrieves the current frame time for frame generation.
+ *
+ * Returns the frame time from the D3D12 swap chain if frame generation is active; otherwise, returns 0.
+ *
+ * @return float The current frame time in seconds, or 0 if frame generation is inactive.
+ */
 float Upscaling::GetFrameGenerationFrameTime() const
 {
 	if (!IsFrameGenerationActive())
@@ -778,4 +785,56 @@ float Upscaling::GetFrameGenerationFrameTime() const
 	}
 
 	return 0.0f;
+}
+
+/**
+ * @brief Installs hooks on the Map and Unmap methods of the provided D3D11 device context.
+ *
+ * This enables interception of resource mapping and unmapping operations for frame buffer caching.
+ */
+void Upscaling::InstallD3DHooks(ID3D11DeviceContext* a_context)
+{
+	stl::detour_vfunc<14, ID3D11DeviceContext_Map>(a_context);
+	stl::detour_vfunc<15, ID3D11DeviceContext_Unmap>(a_context);
+}
+
+/**
+ * @brief Hooks the ID3D11DeviceContext::Map method to track mapping of the per-frame resource.
+ *
+ * Calls the original Map function and, if the mapped resource matches the current per-frame buffer, stores the mapped subresource pointer for later use.
+ *
+ * @return HRESULT Result of the original Map call.
+ */
+HRESULT Upscaling::ID3D11DeviceContext_Map::thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource, D3D11_MAP MapType, UINT MapFlags, D3D11_MAPPED_SUBRESOURCE* pMappedResource)
+{
+	HRESULT hr = func(This, pResource, Subresource, MapType, MapFlags, pMappedResource);
+	if (hr == S_OK) {
+		if (*globals::game::perFrame.get() == pResource)
+			globals::upscaling->mappedFrameBuffer = pMappedResource;
+	}
+	return hr;
+}
+
+/**
+ * @brief Hooked implementation of ID3D11DeviceContext::Unmap that caches the frame buffer if applicable.
+ *
+ * If the resource being unmapped matches the current per-frame buffer and a mapped frame buffer is present, caches the frame buffer data before calling the original Unmap function.
+ */
+void Upscaling::ID3D11DeviceContext_Unmap::thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource)
+{
+	if (*globals::game::perFrame.get() == pResource && globals::upscaling->mappedFrameBuffer)
+		globals::upscaling->CacheFramebuffer();
+	func(This, pResource, Subresource);
+}
+
+/**
+ * @brief Caches the current frame buffer data and clears the mapped pointer.
+ *
+ * Copies the contents of the mapped frame buffer into an internal cache and resets the mapped frame buffer pointer.
+ */
+void Upscaling::CacheFramebuffer()
+{
+	auto frameBuffer = (FrameBuffer*)mappedFrameBuffer->pData;
+	frameBufferCached = *frameBuffer;
+	mappedFrameBuffer = nullptr;
 }

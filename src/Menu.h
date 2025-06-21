@@ -2,6 +2,7 @@
 
 #include "Utils/Serialize.h"
 #include <dxgi1_4.h>
+#include <winrt/base.h>
 
 using namespace std::chrono;
 #define BUFFER_VIEWER_NODE(a_value, a_scale)                                                                 \
@@ -45,12 +46,35 @@ public:
 	void ProcessInputEvents(RE::InputEvent* const* a_events);
 	bool ShouldSwallowInput();
 	void OnFocusLost();
+	// UI icon textures
+	struct UIIcon
+	{
+		ID3D11ShaderResourceView* texture = nullptr;
+		ImVec2 size = ImVec2(32.0f, 32.0f);
+
+		void Release()
+		{
+			if (texture) {
+				texture->Release();
+				texture = nullptr;
+			}
+		}
+	};
+	struct UIIcons
+	{
+		UIIcon saveSettings;
+		UIIcon loadSettings;
+		UIIcon clearCache;
+		UIIcon clearDiskCache;
+		UIIcon logo;  // New logo icon
+	} uiIcons;
 
 	struct ThemeSettings
 	{
 		float GlobalScale = REL::Module::IsVR() ? -0.5f : 0.f;  // exponential
 
 		bool UseSimplePalette = true;  // simple palette or full customization
+		bool ShowActionIcons = true;   // whether to show action buttons as icons
 		struct PaletteColors
 		{
 			ImVec4 Background{ 0.f, 0.f, 0.f, 0.5882353186607361f };
@@ -61,9 +85,20 @@ public:
 		{
 			ImVec4 Disable{ 0.5f, 0.5f, 0.5f, 1.f };
 			ImVec4 Error{ 1.f, 0.5f, 0.5f, 1.f };
+			ImVec4 Warning{ 1.0f, 0.6f, 0.2f, 1.0f };
 			ImVec4 RestartNeeded{ 0.5f, 1.f, 0.5f, 1.f };
 			ImVec4 CurrentHotkey{ 1.f, 1.f, 0.f, 1.f };
+			ImVec4 SuccessColor{ 0.0f, 1.0f, 0.0f, 1.0f };
+			ImVec4 InfoColor{ 0.0f, 0.5f, 1.0f, 1.0f };
 		} StatusPalette;
+		struct FeatureHeadingColors
+		{
+			ImU32 LineColorDefault{ IM_COL32(120, 120, 120, 255) };
+			ImU32 LineColorHovered{ IM_COL32(100, 100, 100, 255) };
+			ImU32 TextColorDefault{ IM_COL32(180, 180, 180, 255) };
+			ImU32 TextColorHovered{ IM_COL32(140, 140, 140, 255) };
+			ImU32 TextColorWhite{ IM_COL32(255, 255, 255, 255) };
+		} FeatureHeading;
 
 		ImGuiStyle Style = []() {
 			ImGuiStyle style = {};
@@ -159,6 +194,9 @@ public:
 			bool ShowPostFGFrameTime = true;
 			bool ShowPostFGFrameTimeGraph = true;
 			float UpdateInterval = 0.5f;
+			int FrameHistorySize = 120;                       // Default 120 frames = 2s @ 60fps. Clamped using static values to prevent config file values going outside of slider bounds.
+			static constexpr int kMinFrameHistorySize = 60;   // 60 frames = 1s @ 60fps. Reasonable minimum.
+			static constexpr int kMaxFrameHistorySize = 480;  // 480 frames = 10s @ 60fps or 2s @ 240fps. Reasonable maximum.
 			enum class TextSize
 			{
 				Small,
@@ -175,8 +213,15 @@ public:
 		} PerfOverlay;
 	};
 
+	const ThemeSettings& GetTheme() const { return settings.Theme; }  // Provide read-only access to the Theme.
+
+	void SelectFeatureMenu(const std::string& featureName);
+
 private:
 	Settings settings;
+
+	// Menu navigation
+	std::string pendingFeatureSelection;  // Feature to select on next frame
 
 	uint32_t priorShaderKey = VK_PRIOR;  // used for blocking shaders in debugging
 	uint32_t nextShaderKey = VK_NEXT;    // used for blocking shaders in debugging
@@ -188,6 +233,47 @@ private:
 	uint32_t testInterval = 0;     // Seconds to wait before toggling user/test settings
 	bool inTestMode = false;       // Whether we're in test mode
 	bool usingTestConfig = false;  // Whether we're using the test config
+
+	class PerfOverlayState
+	{
+	public:
+		std::vector<float> frameTimeHistory;
+		std::vector<float> postFGFrameTimeHistory;
+		bool initialized = false;
+		bool hasGraphs = false;
+		int frameTimeHistoryIndex = 0;
+		int postFGFrameTimeHistoryIndex = 0;
+		bool isFrameGenerationActive = false;
+		int64_t frequency;
+		int64_t lastFrameCounter;
+		int64_t currentFrameCounter;
+		float frameTimeMs = 0.0f;
+		float fps = 0.0f;
+		float postFGFrameTimeMs = 0.0f;
+		float postFGFps = 0.0f;
+		float smoothFps = 0.0f;
+		float smoothFrameTimeMs = 0.0f;
+		float postFGSmoothFps = 0.0f;
+		float postFGSmoothFrameTimeMs = 0.0f;
+		float updateTimer = 0.0f;
+		float minFrameTime = 1000.0f;
+		float maxFrameTime = 0.0f;
+		float smoothedMinFrameTime = 0.0f;
+		float smoothedMaxFrameTime = 50.0f;
+		float textScale = 1.0f;
+		static constexpr float kSmoothingFactor = 0.15f;  // Smoothing factor: 0.1f = slow, 0.3f = fast.
+		std::chrono::steady_clock::time_point lastUpdateTime;
+		float SetTextScale(Settings::PerfOverlaySettings& settings);
+		void UpdateGraphValues(Settings::PerfOverlaySettings& settings);
+		void UpdateFrameTimeHistorySizes(Settings::PerfOverlaySettings& settings);
+		void UpdateMinFrameTime();
+		void UpdateMaxFrameTime();
+		void UpdateFGFrameTime(Settings::PerfOverlaySettings& settings);
+		void DrawPostFGFrameTimeGraph(Settings::PerfOverlaySettings& settings);
+		void DrawDrawCalls();
+		void DrawFPS(Settings::PerfOverlaySettings& settings);
+		void DrawVRAM(winrt::com_ptr<IDXGIAdapter3> dxgiAdapter3);
+	} perfOverlayState;
 
 	std::chrono::steady_clock::time_point lastTestSwitch = high_resolution_clock::now();  // Time of last test switch
 

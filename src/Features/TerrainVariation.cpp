@@ -89,19 +89,3 @@ bool TerrainVariation::DrawFailLoadMessage() const
 	return false;
 }
 
-void TerrainVariation::DrawUnloadedUI()
-{
-	ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "This feature is not installed!");
-
-	ImGui::Spacing();
-	ImGui::TextWrapped(
-		"Terrain Variation reduces the repeating pattern effect on terrain textures.\n"
-		"This technique creates more natural-looking terrain by adding variation to texture sampling.");
-
-	ImGui::Spacing();
-	ImGui::TextWrapped("Key features:");
-	ImGui::BulletText("Reduces terrain texture tiling");
-	ImGui::BulletText("Automatically activates when parallax effects end");
-	ImGui::BulletText("Can be applied to LOD terrain for more consistent appearance");
-	ImGui::Spacing();
-}

@@ -16,6 +16,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EnableRaindropFx,
 	EnableSplashes,
 	EnableRipples,
+	EnableVanillaRipples,
+	RaindropFxRange,
 	RaindropGridSize,
 	RaindropInterval,
 	RaindropChance,
@@ -28,10 +30,78 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	RippleBreadth,
 	RippleLifetime)
 
+// Ripples code borrowed from po3 SplashesofStorms
+// https://github.com/powerof3/SplashesOfStorms/blob/master/src/Hooks.cpp under MIT License
+namespace Ripples
+{
+	// Cache settings to avoid repeated singleton access
+	static bool s_isEnabled = false;
+	static bool s_vanillaRipplesEnabled = false;
+
+	struct ToggleWaterSplashes
+	{
+		static void thunk(RE::TESWaterSystem* a_waterSystem, bool a_enabled, float a_fadeAmount)
+		{
+			// Apply our logic only if wetness effects are enabled
+			if (s_isEnabled) {
+				a_enabled = a_enabled && s_vanillaRipplesEnabled;
+			}
+			for (auto& waterObject : a_waterSystem->waterObjects) {
+				if (waterObject) {
+					if (const auto& rippleObject = waterObject->waterRippleObject; rippleObject) {
+						rippleObject->SetAppCulled(!a_enabled);
+					}
+				}
+			}
+
+			func(a_waterSystem, a_enabled, a_fadeAmount);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	WetnessEffects* UpdateSettings()
+	{
+		const auto WetnessEffects = WetnessEffects::GetSingleton();
+		if (WetnessEffects) {
+			s_isEnabled = WetnessEffects->settings.EnableWetnessEffects;
+			s_vanillaRipplesEnabled = WetnessEffects->settings.EnableVanillaRipples;
+			logger::debug("[{}] UpdateSettings: EnableWetnessEffects={}, EnableVanillaRipples={}",
+				WetnessEffects->GetName(), s_isEnabled, s_vanillaRipplesEnabled);
+		} else {
+			logger::debug("[WetnessEffects] UpdateSettings: WetnessEffects singleton not found");
+		}
+		return WetnessEffects;
+	}
+
+	void Install()
+	{
+		const auto WetnessEffects = UpdateSettings();  // Initialize cached values
+		if (!WetnessEffects)
+			return;
+		REL::Relocation<std::uintptr_t> target{ RELOCATION_ID(25638, 26179), REL::VariantOffset(0x238, 0x223, 0x238) };
+		stl::write_thunk_call<ToggleWaterSplashes>(target.address());
+		logger::info("[{}] Installed ripple hooks", WetnessEffects->GetName());
+	}
+}
+
+void WetnessEffects::PostPostLoad()
+{
+	splashesOfStormsLoaded = static_cast<bool>(GetModuleHandle(L"po3_SplashesOfStorms.dll"));
+	if (splashesOfStormsLoaded) {
+		logger::info("[{}] Splashes of Storms detected, compatibility enabled", GetName());
+		return;
+	}
+
+	// Only hook if SoS is not loaded
+	Ripples::Install();
+}
+
 void WetnessEffects::DrawSettings()
 {
 	if (ImGui::TreeNodeEx("Wetness Effects", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Checkbox("Enable Wetness", (bool*)&settings.EnableWetnessEffects);
+		if (ImGui::Checkbox("Enable Wetness", (bool*)&settings.EnableWetnessEffects)) {
+			Ripples::UpdateSettings();  // Update cache when settings change
+		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Enables a wetness effect near water and when it is raining.");
 		}
@@ -57,6 +127,21 @@ void WetnessEffects::DrawSettings()
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("Enables circular ripples on puddles, and to a less extent other wet surfaces");
 
+		ImGui::BeginDisabled(splashesOfStormsLoaded);
+		std::string checkboxLabel = splashesOfStormsLoaded ?
+		                                "Enable Vanilla Ripples - Controlled by Splashes of Storms" :
+		                                "Enable Vanilla Ripples";
+
+		if (ImGui::Checkbox(checkboxLabel.c_str(), (bool*)&settings.EnableVanillaRipples)) {
+			Ripples::UpdateSettings();  // Update cache when settings change
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"Enables default ripples (e.g., Ripples01).\n"
+				"Disabling may not take effect until the next weather change.\n");
+		}
+		ImGui::EndDisabled();
+		ImGui::SliderFloat("Effect Range", &settings.RaindropFxRange, 1e2f, 2e3f, "%.0f game unit(s)");
 		if (ImGui::TreeNodeEx("Raindrops")) {
 			ImGui::BulletText(
 				"At every interval, a raindrop is placed within each grid cell.\n"
@@ -274,6 +359,7 @@ void WetnessEffects::Prepass()
 void WetnessEffects::LoadSettings(json& o_json)
 {
 	settings = o_json;
+	Ripples::UpdateSettings();  // Sync cached values after loading
 }
 
 void WetnessEffects::SaveSettings(json& o_json)
@@ -284,4 +370,21 @@ void WetnessEffects::SaveSettings(json& o_json)
 void WetnessEffects::RestoreDefaultSettings()
 {
 	settings = {};
+	Ripples::UpdateSettings();  // Sync cached values after restoring defaults
+}
+
+void WetnessEffects::DrawUnloadedUI()
+{
+	ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "This feature is not installed!");
+
+	ImGui::Spacing();
+	ImGui::TextWrapped(
+		"Wetness Effects adds a collection of realistic wetness and weather effects to Skyrim.\n");
+	ImGui::Spacing();
+	ImGui::TextWrapped("Key features:");
+	ImGui::BulletText("Rain Wetness");
+	ImGui::BulletText("Puddles");
+	ImGui::BulletText("Raindrop Effects (Splashes and Ripples)");
+	ImGui::BulletText("Shore Wetness");
+	ImGui::Spacing();
 }

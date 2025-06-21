@@ -2,6 +2,9 @@
 
 struct WetnessEffects : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "112739";
+
 public:
 	static WetnessEffects* GetSingleton()
 	{
@@ -11,7 +14,21 @@ public:
 
 	virtual inline std::string GetName() override { return "Wetness Effects"; }
 	virtual inline std::string GetShortName() override { return "WetnessEffects"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "WETNESS_EFFECTS"; }
+	virtual std::string_view GetCategory() const override { return "Water"; }
+
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Adds realistic wetness effects including rain-based surface wetness, puddle formation, shore wetness, and dynamic raindrop effects for enhanced weather immersion.",
+			{ "Dynamic surface wetness based on weather conditions",
+				"Realistic puddle formation and shore wetness effects",
+				"Animated raindrop effects with splashes and ripples",
+				"Configurable wetness intensity and weather transitions",
+				"Support for skin wetness and material-specific responses" }
+		};
+	}
 
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
@@ -33,6 +50,8 @@ public:
 		uint EnableRaindropFx = true;
 		uint EnableSplashes = true;
 		uint EnableRipples = true;
+		uint EnableVanillaRipples = false;
+		float RaindropFxRange = 1000.f;
 		float RaindropGridSize = 4.f;
 		float RaindropInterval = .5f;
 		float RaindropChance = .3f;
@@ -43,7 +62,7 @@ public:
 		float RippleStrength = 1.f;
 		float RippleRadius = 1.f;
 		float RippleBreadth = .5f;
-		float RippleLifetime = .15f;
+		float RippleLifetime = .5f;
 	};
 
 	struct alignas(16) PerFrame
@@ -54,7 +73,7 @@ public:
 		float Wetness;
 		float PuddleWetness;
 		Settings settings;
-		uint pad0[3];
+		uint pad0;
 	};
 
 	Settings settings;
@@ -62,6 +81,7 @@ public:
 	PerFrame GetCommonBufferData();
 
 	virtual void Prepass() override;
+	virtual void PostPostLoad() override;
 
 	virtual void DrawSettings() override;
 
@@ -71,4 +91,8 @@ public:
 	virtual void RestoreDefaultSettings() override;
 
 	virtual bool SupportsVR() override { return true; };
+	virtual void DrawUnloadedUI() override;
+
+private:
+	bool splashesOfStormsLoaded = false;
 };

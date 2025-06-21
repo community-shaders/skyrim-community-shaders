@@ -130,6 +130,7 @@ inline float4 StochasticSampleLOD(float rnd, float mipLevel, Texture2D tex, Samp
 // Main stochastic sampling function
 inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
 {
+
 	// Apply mip bias to match normal sampling behavior
 	float adjustedMipLevel = mipLevel + SharedData::MipBias;
 	
