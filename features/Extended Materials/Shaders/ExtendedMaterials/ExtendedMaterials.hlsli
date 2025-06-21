@@ -96,25 +96,25 @@ namespace ExtendedMaterials
 		weights[3] = w1.w;
 		weights[4] = w2.x;
 		weights[5] = w2.y;
-		
+
 		totalHeight = 0;
 		[unroll] for (int i = 0; i < 6; i++)
 		{
 			totalHeight += heights[i] * weights[i];
 			weights[i] *= pow(heightBlend, HEIGHT_MULT * heights[i]);
 		}
-		
+
 		[unroll] for (int i = 0; i < 6; i++)
 		{
 			weights[i] = min(100, pow(weights[i], heightBlend));
 		}
-		
+
 		float wsum = 0;
 		[unroll] for (int i = 0; i < 6; i++)
 		{
 			wsum += weights[i];
 		}
-		
+
 		float invwsum = rcp(wsum);
 		[unroll] for (int i = 0; i < 6; i++)
 		{
@@ -131,7 +131,7 @@ namespace ExtendedMaterials
 	{
 		float heightBlend = 1 + blendFactor * HEIGHT_POWER;
 		float heights[6] = { 0, 0, 0, 0, 0, 0 };
-		
+
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile0HasDisplacement) != 0 && w1.x > 0.01)
 		{
 #		if defined(TERRAIN_VARIATION)
@@ -180,7 +180,7 @@ namespace ExtendedMaterials
 			heights[5] = ScaleDisplacement(TexLandDisplacement5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).x, params[5]);
 #		endif
 		}
-		
+
 		float total;
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, heights, weights, total);
 		return total;	}
@@ -296,7 +296,7 @@ namespace ExtendedMaterials
 			heights[5] = ScaleDisplacement(TexLandColor6Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).w, params[5]);
 #		endif
 		}
-		
+
 		float total;
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, heights, weights, total);
 		return total;
@@ -584,7 +584,7 @@ namespace ExtendedMaterials
 		}
 		return 1.0;
 	}
-	
+
 #if defined(LANDSCAPE) && defined(TERRAIN_VARIATION)
 	// Overload for GetTerrainHeight WITHOUT StochasticOffsets (when enableTilingFix is false)
 #	if defined(TRUE_PBR)
@@ -617,7 +617,7 @@ namespace ExtendedMaterials
 		{
 			heights[5] = ScaleDisplacement(TexLandDisplacement5Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).x, params[5]);
 		}
-		
+
 		float total;
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, heights, weights, total);
 		return total;
@@ -682,7 +682,7 @@ namespace ExtendedMaterials
 		{
 			heights[5] = ScaleDisplacement(TexLandColor6Sampler.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[5]).w, params[5]);
 		}
-		
+
 		float total;
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, heights, weights, total);
 		return total;

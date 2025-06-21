@@ -133,7 +133,7 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 
 	// Apply mip bias to match normal sampling behavior
 	float adjustedMipLevel = mipLevel + SharedData::MipBias;
-	
+
 	// Take first sample (always needed)
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
 
@@ -160,7 +160,7 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 		dot(sample2.rgb, LUMINANCE_WEIGHTS),
 		dot(sample3.rgb, LUMINANCE_WEIGHTS)
 	);
-	
+
 	// Use alpha for height only for PBR systems, fallback to luminance for Complex Material
 	#if defined(TRUE_PBR)
 	float3 alphaValues = float3(sample1.a, sample2.a, sample3.a);
@@ -170,7 +170,7 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	// For Complex Material systems, use luminance-based height to avoid alpha channel conflicts
 	float3 heights = luminanceHeights;
 	#endif
-	
+
 	// Combined weight calculation and normalization
 	float3 weights = NormalizeWeights(blendWeights * (1.0 + HEIGHT_INFLUENCE * heights));
 
@@ -186,7 +186,7 @@ inline float4 StochasticEffectNoHeight(float rnd, float mipLevel, Texture2D tex,
 {
 	// Apply mip bias to match normal sampling behavior
 	float adjustedMipLevel = mipLevel + SharedData::MipBias;
-	
+
 	// Take first sample (always needed)
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
 

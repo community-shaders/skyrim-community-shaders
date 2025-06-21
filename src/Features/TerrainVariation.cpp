@@ -88,4 +88,3 @@ bool TerrainVariation::DrawFailLoadMessage() const
 {
 	return false;
 }
-
