@@ -120,7 +120,7 @@ jobs:
                   repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
                   submodules: recursive
 
-            - uses: ilammy/msvc-dev-cmd@v1.10.0
+            - uses: ilammy/msvc-dev-cmd@v1
 
             - name: Setup vcpkg
               uses: lukka/run-vcpkg@v11.5
@@ -207,7 +207,7 @@ jobs:
                   repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
                   submodules: recursive
 
-            - uses: ilammy/msvc-dev-cmd@v1.10.0
+            - uses: ilammy/msvc-dev-cmd@v1
               if: steps.check-hlsl.outputs.skip != 'true'
 
             - name: Setup vcpkg
