@@ -1287,7 +1287,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #		endif
 // Calculate mip levels for terrain variation when parallax is disabled
-#		if defined(TERRAIN_VARIATION) && defined(EMAT) && defined(TRUE_PBR)
+#		if defined(TERRAIN_VARIATION) && defined(EMAT)
 	if (useTerrainVariation && !SharedData::extendedMaterialSettings.EnableTerrainParallax) {
 		// Calculate basic mip level for terrain textures
 		mipLevels[0] = ExtendedMaterials::GetMipLevel(uv, TexColorSampler);

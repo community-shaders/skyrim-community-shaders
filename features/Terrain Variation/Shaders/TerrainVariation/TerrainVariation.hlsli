@@ -107,6 +107,8 @@ inline float3 NormalizeWeights(float3 weights)
 // Stochastic sampling function for Terrain LOD & LOD Mask.
 inline float4 StochasticSampleLOD(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsetsLOD, float2 dx, float2 dy)
 {
+	// Apply mip bias to match normal sampling behavior
+	float adjustedMipLevel = mipLevel + SharedData::MipBias;
 	float offsetScale = 0.01;
 
 	// Cheap pseudo-rotation using simple transforms
@@ -118,8 +120,8 @@ inline float4 StochasticSampleLOD(float rnd, float mipLevel, Texture2D tex, Samp
 	float2 microOffset2 = (offsetsLOD.offset2 + dir2) * offsetScale;
 
 	// Sample only two offsets
-	float4 sample1 = tex.SampleLevel(samp, uv + microOffset1, mipLevel);
-	float4 sample2 = tex.SampleLevel(samp, uv + microOffset2, mipLevel);
+	float4 sample1 = tex.SampleLevel(samp, uv + microOffset1, adjustedMipLevel);
+	float4 sample2 = tex.SampleLevel(samp, uv + microOffset2, adjustedMipLevel);
 
 	// Simple 2-sample blend weighted toward first sample
 	return lerp(sample2, sample1, 0.65);
@@ -128,8 +130,11 @@ inline float4 StochasticSampleLOD(float rnd, float mipLevel, Texture2D tex, Samp
 // Main stochastic sampling function
 inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
 {
+	// Apply mip bias to match normal sampling behavior
+	float adjustedMipLevel = mipLevel + SharedData::MipBias;
+	
 	// Take first sample (always needed)
-	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
 
 	// Calculate smooth transition factor - starts blending at mip 2.5, fully single sample at mip 5.0
 	float mipFactor = saturate((mipLevel - 2.5) / 2.5);
@@ -141,8 +146,8 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	}
 
 	// Take remaining samples for blending
-	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
-	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
+	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, adjustedMipLevel);
+	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, adjustedMipLevel);
 
 	// Full height-based blending for low mip levels (close terrain)
 	float contrastFactor = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE);
@@ -154,9 +159,16 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 		dot(sample2.rgb, LUMINANCE_WEIGHTS),
 		dot(sample3.rgb, LUMINANCE_WEIGHTS)
 	);
+	
+	// Use alpha for height only for PBR systems, fallback to luminance for Complex Material
+	#if defined(TRUE_PBR)
 	float3 alphaValues = float3(sample1.a, sample2.a, sample3.a);
 	float3 alphaMask = step(0.001, alphaValues);
 	float3 heights = lerp(luminanceHeights, alphaValues, alphaMask);
+	#else
+	// For Complex Material systems, use luminance-based height to avoid alpha channel conflicts
+	float3 heights = luminanceHeights;
+	#endif
 	
 	// Combined weight calculation and normalization
 	float3 weights = NormalizeWeights(blendWeights * (1.0 + HEIGHT_INFLUENCE * heights));
@@ -171,8 +183,11 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 // Stochastic sampling function without height blending for better performance
 inline float4 StochasticEffectNoHeight(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
 {
+	// Apply mip bias to match normal sampling behavior
+	float adjustedMipLevel = mipLevel + SharedData::MipBias;
+	
 	// Take first sample (always needed)
-	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
 
 	// Calculate smooth transition factor - starts blending at mip 2.5, fully single sample at mip 5.0
 	float mipFactor = saturate((mipLevel - 2.5) / 2.5);
@@ -184,8 +199,8 @@ inline float4 StochasticEffectNoHeight(float rnd, float mipLevel, Texture2D tex,
 	}
 
 	// Take remaining samples for blending
-	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
-	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
+	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, adjustedMipLevel);
+	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, adjustedMipLevel);
 
 	// Simple barycentric blend without height influence
 	float3 weights = NormalizeWeights(saturate(offsets.weights));
