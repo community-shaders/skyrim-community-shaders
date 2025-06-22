@@ -130,12 +130,35 @@ jobs:
               shell: pwsh
               run: |
                   $output = & cl.exe /Bv 2>&1
-                  if ($output -match 'Compiler Version ([0-9\\.]+)') {
-                    $version = $Matches[1]
-                    Write-Host "MSVC version: $version"
-                    echo "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+                  Write-Host "Raw cl.exe output:"
+                  Write-Host $output
+
+                  # Try multiple patterns to extract version
+                  $version = $null
+
+                  # Pattern 1: "Compiler Version X.Y.Z"
+                  if ($output -match 'Compiler Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                      $version = $Matches[1]
+                      Write-Host "Found version using pattern 1: $version"
+                  }
+                  # Pattern 2: "Version X.Y.Z"
+                  elseif ($output -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                      $version = $Matches[1]
+                      Write-Host "Found version using pattern 2: $version"
+                  }
+                  # Pattern 3: "X.Y.Z" (any version-like string)
+                  elseif ($output -match '([0-9]+\.[0-9]+\.[0-9]+)') {
+                      $version = $Matches[1]
+                      Write-Host "Found version using pattern 3: $version"
+                  }
+
+                  if ($version) {
+                      Write-Host "MSVC version: $version"
+                      Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version" -Encoding UTF8
                   } else {
-                    throw "MSVC version not found"
+                      Write-Host "Failed to extract MSVC version from output:"
+                      Write-Host $output
+                      throw "MSVC version not found in output"
                   }
 
             - name: Setup vcpkg
@@ -251,12 +274,35 @@ jobs:
               shell: pwsh
               run: |
                   $output = & cl.exe /Bv 2>&1
-                  if ($output -match 'Compiler Version ([0-9\\.]+)') {
-                    $version = $Matches[1]
-                    Write-Host "MSVC version: $version"
-                    echo "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+                  Write-Host "Raw cl.exe output:"
+                  Write-Host $output
+
+                  # Try multiple patterns to extract version
+                  $version = $null
+
+                  # Pattern 1: "Compiler Version X.Y.Z"
+                  if ($output -match 'Compiler Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                      $version = $Matches[1]
+                      Write-Host "Found version using pattern 1: $version"
+                  }
+                  # Pattern 2: "Version X.Y.Z"
+                  elseif ($output -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                      $version = $Matches[1]
+                      Write-Host "Found version using pattern 2: $version"
+                  }
+                  # Pattern 3: "X.Y.Z" (any version-like string)
+                  elseif ($output -match '([0-9]+\.[0-9]+\.[0-9]+)') {
+                      $version = $Matches[1]
+                      Write-Host "Found version using pattern 3: $version"
+                  }
+
+                  if ($version) {
+                      Write-Host "MSVC version: $version"
+                      Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version" -Encoding UTF8
                   } else {
-                    throw "MSVC version not found"
+                      Write-Host "Failed to extract MSVC version from output:"
+                      Write-Host $output
+                      throw "MSVC version not found in output"
                   }
 
             - name: Setup vcpkg
