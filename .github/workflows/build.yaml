@@ -199,7 +199,6 @@ jobs:
                   restore-keys: |
                       ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-
                       ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-
-                      ${{ runner.os }}-cmake-
 
             - name: Remove stale CMake cache if drive letter changed
               shell: pwsh
@@ -370,8 +369,6 @@ jobs:
                   restore-keys: |
                       ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ matrix.config.name }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-
                       ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ matrix.config.name }}-
-                      ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-
-                      ${{ runner.os }}-cmake-
 
             - name: Remove stale CMake cache if drive letter changed
               if: steps.check-hlsl.outputs.skip != 'true'
