@@ -120,7 +120,14 @@ jobs:
                   repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
                   submodules: recursive
 
-            - uses: ilammy/msvc-dev-cmd@v1
+            - name: Setup MSVC environment (VS2022)
+              uses: ilammy/msvc-dev-cmd@v1
+              with:
+                  arch: x64
+
+            - name: Check cl.exe version
+              run: cl.exe /Bv 2>&1 || exit 0
+              shell: cmd
 
             - name: Setup vcpkg
               uses: lukka/run-vcpkg@v11.5
@@ -135,6 +142,24 @@ jobs:
                   restore-keys: |
                       ${{ runner.os }}-cmake-${{ github.event.inputs.cache-key-suffix || 'default' }}-
                       ${{ runner.os }}-cmake-
+
+            - name: Remove stale CMake cache if drive letter changed
+              shell: pwsh
+              run: |
+                  $cacheFile = "build/ALL/CMakeCache.txt"
+                  if (Test-Path $cacheFile) {
+                    $expected = (Resolve-Path .).Path.Substring(0,1)  # C or D
+                    $content = Get-Content $cacheFile -Raw
+                    if ($content -match 'CMAKE_HOME_DIRECTORY:INTERNAL=([A-Z]):') {
+                      $actual = $Matches[1]
+                      if ($actual -ne $expected) {
+                        Write-Host "❌ Cache drive mismatch. Removing stale build/ALL directory."
+                        Remove-Item -Recurse -Force "build/ALL"
+                      } else {
+                        Write-Host "✅ Cache path matches. Keeping build/ALL."
+                      }
+                    }
+                  }
 
             - name: Build using run-cmake
               uses: lukka/run-cmake@v10
@@ -226,6 +251,25 @@ jobs:
                       ${{ runner.os }}-cmake-${{ matrix.config.name }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-
                       ${{ runner.os }}-cmake-${{ matrix.config.name }}-
                       ${{ runner.os }}-cmake-
+
+            - name: Remove stale CMake cache if drive letter changed
+              if: steps.check-hlsl.outputs.skip != 'true'
+              shell: pwsh
+              run: |
+                  $cacheFile = "build/ALL/CMakeCache.txt"
+                  if (Test-Path $cacheFile) {
+                    $expected = (Resolve-Path .).Path.Substring(0,1)  # C or D
+                    $content = Get-Content $cacheFile -Raw
+                    if ($content -match 'CMAKE_HOME_DIRECTORY:INTERNAL=([A-Z]):') {
+                      $actual = $Matches[1]
+                      if ($actual -ne $expected) {
+                        Write-Host "❌ Cache drive mismatch. Removing stale build/ALL directory."
+                        Remove-Item -Recurse -Force "build/ALL"
+                      } else {
+                        Write-Host "✅ Cache path matches. Keeping build/ALL."
+                      }
+                    }
+                  }
 
             - name: Prepare shaders for validation
               if: steps.check-hlsl.outputs.skip != 'true'
