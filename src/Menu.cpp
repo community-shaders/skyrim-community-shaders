@@ -22,7 +22,6 @@
 #include "Utils/UI.h"
 
 #include "Features/LightLimitFix/ParticleLights.h"
-#include "Utils/UI.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::ThemeSettings::PaletteColors,
