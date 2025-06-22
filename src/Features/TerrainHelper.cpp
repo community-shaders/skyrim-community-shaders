@@ -30,11 +30,18 @@ void TerrainHelper::DataLoaded()
 	if (defaultLandTextureSet != nullptr) {
 		logger::info("[Terrain Helper] LandscapeDefault EDID texture set found");
 		defaultLandTexture = defaultLandTextureSet;
+		// only enable if TerrainHelper.esp is loaded
+		enabled = true;
 	}
 }
 
 bool TerrainHelper::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 {
+	if (!enabled) {
+		// terrain helper is not enabled
+		return false;
+	}
+
 	if (land == nullptr || land->loadedData == nullptr || land->loadedData->mesh[0] == nullptr) {
 		// this is not terrain or vanilla material failed
 		return false;
@@ -142,6 +149,11 @@ void TerrainHelper::SetShaderResouces(ID3D11DeviceContext* a_context)
 
 void TerrainHelper::BSLightingShader_SetupMaterial(RE::BSLightingShaderMaterialBase const* material)
 {
+	if (!enabled) {
+		// terrain helper is not enabled
+		return;
+	}
+
 	if (material == nullptr) {
 		return;
 	}
