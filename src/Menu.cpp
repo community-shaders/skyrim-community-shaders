@@ -660,7 +660,7 @@ void Menu::DrawSettings()
 						if (ImGui::BeginTabItem("Settings")) {
 							if (ImGui::BeginChild("##FeatureSettingsFrame", { 0, 0 }, true)) {
 								ImGui::SeparatorText("Feature Management");
-								
+
 								// Disable/Enable at boot
 								ImVec4 textColor;
 								if (isDisabled) {
@@ -745,7 +745,7 @@ void Menu::DrawSettings()
 							if (ImGui::BeginChild("##FeatureAboutFrame", { 0, 0 }, true)) {
 								// Status Section
 								ImGui::SeparatorText("Status");
-								
+
 								ImVec4 statusColor;
 								const char* statusText;
 								if (isDisabled) {
@@ -2588,9 +2588,10 @@ void Menu::SelectFeatureMenu(const std::string& featureName)
 	logger::info("Queued navigation to {} feature menu", featureName);
 }
 
-void Menu::BuildCategoryCounts() {
+void Menu::BuildCategoryCounts()
+{
 	const std::vector<Feature*>& features = Feature::GetFeatureList();
-	// Get the category of each feature, and if it is not in the featureGroups 
+	// Get the category of each feature, and if it is not in the featureGroups
 	// vector, add it and increment the count
 	for (auto& feature : features) {
 		std::string_view category = feature->GetCategory();
