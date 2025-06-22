@@ -173,7 +173,6 @@ jobs:
                   }
 
                   Write-Host "Final version result: $version"
-                  Write-Host "Matches array: $($Matches | ConvertTo-Json)"
 
                   if ($version) {
                       Write-Host "MSVC version: $version"
@@ -343,7 +342,6 @@ jobs:
                   }
 
                   Write-Host "Final version result: $version"
-                  Write-Host "Matches array: $($Matches | ConvertTo-Json)"
 
                   if ($version) {
                       Write-Host "MSVC version: $version"
