@@ -30,10 +30,6 @@ void TerrainHelper::DataLoaded()
 	if (defaultLandTextureSet != nullptr) {
 		logger::info("[Terrain Helper] LandscapeDefault EDID texture set found");
 		defaultLandTexture = defaultLandTextureSet;
-	} else {
-		logger::info("[Terrain Helper] LandscapeDefault EDID texture set not found, using default");
-		const auto bgsDefaultLandTex = *REL::Relocation<RE::TESLandTexture**>(RELOCATION_ID(514783, 400936));
-		defaultLandTexture = bgsDefaultLandTex->textureSet;
 	}
 }
 
