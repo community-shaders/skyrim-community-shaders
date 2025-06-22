@@ -120,7 +120,71 @@ jobs:
                   repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
                   submodules: recursive
 
-            - uses: ilammy/msvc-dev-cmd@v1
+            - name: Setup MSVC environment (VS2022)
+              uses: ilammy/msvc-dev-cmd@v1
+              with:
+                  arch: x64
+
+            - name: Get MSVC version
+              id: msvc_version
+              shell: pwsh
+              run: |
+                  # Create a dummy source file for cl.exe /Bv
+                  "int main() { return 0; }" | Out-File -FilePath "dummy.cpp" -Encoding ASCII
+
+                  $output = & cl.exe /Bv dummy.cpp 2>&1
+                  Write-Host "Raw cl.exe output:"
+                  Write-Host $output
+
+                  # More robust version extraction
+                  $version = $null
+
+                  # Split output into lines and search for version patterns
+                  $lines = $output -split "`n|`r"
+                  Write-Host "Number of lines: $($lines.Count)"
+
+                  foreach ($line in $lines) {
+                      Write-Host "Processing line: '$line'"
+
+                      # Try different patterns on each line
+                      if ($line -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found version in line: $version"
+                          break
+                      }
+                      elseif ($line -match '([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found generic version in line: $version"
+                          break
+                      }
+                  }
+
+                  # If still no version, try the whole output as a single string
+                  if (-not $version) {
+                      Write-Host "Trying whole output as single string..."
+                      if ($output -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found version in whole output: $version"
+                      }
+                      elseif ($output -match '([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found generic version in whole output: $version"
+                      }
+                  }
+
+                  Write-Host "Final version result: $version"
+
+                  if ($version) {
+                      Write-Host "MSVC version: $version"
+                      Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version" -Encoding UTF8
+                  } else {
+                      Write-Host "Failed to extract MSVC version from output:"
+                      Write-Host $output
+                      throw "MSVC version not found in output"
+                  }
+
+                  # Clean up dummy file
+                  Remove-Item "dummy.cpp" -ErrorAction SilentlyContinue
 
             - name: Setup vcpkg
               uses: lukka/run-vcpkg@v11.5
@@ -131,10 +195,29 @@ jobs:
               uses: actions/cache@v4
               with:
                   path: build/ALL
-                  key: ${{ runner.os }}-cmake-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
+                  key: ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
                   restore-keys: |
-                      ${{ runner.os }}-cmake-${{ github.event.inputs.cache-key-suffix || 'default' }}-
+                      ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-
+                      ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-
                       ${{ runner.os }}-cmake-
+
+            - name: Remove stale CMake cache if drive letter changed
+              shell: pwsh
+              run: |
+                  $cacheFile = "build/ALL/CMakeCache.txt"
+                  if (Test-Path $cacheFile) {
+                    $expected = (Resolve-Path .).Path.Substring(0,1)  # C or D
+                    $content = Get-Content $cacheFile -Raw
+                    if ($content -match 'CMAKE_HOME_DIRECTORY:INTERNAL=([A-Z]):') {
+                      $actual = $Matches[1]
+                      if ($actual -ne $expected) {
+                        Write-Host "❌ Cache drive mismatch. Removing stale build/ALL directory."
+                        Remove-Item -Recurse -Force "build/ALL"
+                      } else {
+                        Write-Host "✅ Cache path matches. Keeping build/ALL."
+                      }
+                    }
+                  }
 
             - name: Build using run-cmake
               uses: lukka/run-cmake@v10
@@ -210,6 +293,68 @@ jobs:
             - uses: ilammy/msvc-dev-cmd@v1
               if: steps.check-hlsl.outputs.skip != 'true'
 
+            - name: Get MSVC version
+              if: steps.check-hlsl.outputs.skip != 'true'
+              id: msvc_version
+              shell: pwsh
+              run: |
+                  # Create a dummy source file for cl.exe /Bv
+                  "int main() { return 0; }" | Out-File -FilePath "dummy.cpp" -Encoding ASCII
+
+                  $output = & cl.exe /Bv dummy.cpp 2>&1
+                  Write-Host "Raw cl.exe output:"
+                  Write-Host $output
+
+                  # More robust version extraction
+                  $version = $null
+
+                  # Split output into lines and search for version patterns
+                  $lines = $output -split "`n|`r"
+                  Write-Host "Number of lines: $($lines.Count)"
+
+                  foreach ($line in $lines) {
+                      Write-Host "Processing line: '$line'"
+
+                      # Try different patterns on each line
+                      if ($line -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found version in line: $version"
+                          break
+                      }
+                      elseif ($line -match '([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found generic version in line: $version"
+                          break
+                      }
+                  }
+
+                  # If still no version, try the whole output as a single string
+                  if (-not $version) {
+                      Write-Host "Trying whole output as single string..."
+                      if ($output -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found version in whole output: $version"
+                      }
+                      elseif ($output -match '([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found generic version in whole output: $version"
+                      }
+                  }
+
+                  Write-Host "Final version result: $version"
+
+                  if ($version) {
+                      Write-Host "MSVC version: $version"
+                      Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version" -Encoding UTF8
+                  } else {
+                      Write-Host "Failed to extract MSVC version from output:"
+                      Write-Host $output
+                      throw "MSVC version not found in output"
+                  }
+
+                  # Clean up dummy file
+                  Remove-Item "dummy.cpp" -ErrorAction SilentlyContinue
+
             - name: Setup vcpkg
               if: steps.check-hlsl.outputs.skip != 'true'
               uses: lukka/run-vcpkg@v11.5
@@ -221,11 +366,31 @@ jobs:
               uses: actions/cache@v4
               with:
                   path: build/ALL
-                  key: ${{ runner.os }}-cmake-${{ matrix.config.name }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
+                  key: ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ matrix.config.name }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
                   restore-keys: |
-                      ${{ runner.os }}-cmake-${{ matrix.config.name }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-
-                      ${{ runner.os }}-cmake-${{ matrix.config.name }}-
+                      ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ matrix.config.name }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-
+                      ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ matrix.config.name }}-
+                      ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-
                       ${{ runner.os }}-cmake-
+
+            - name: Remove stale CMake cache if drive letter changed
+              if: steps.check-hlsl.outputs.skip != 'true'
+              shell: pwsh
+              run: |
+                  $cacheFile = "build/ALL/CMakeCache.txt"
+                  if (Test-Path $cacheFile) {
+                    $expected = (Resolve-Path .).Path.Substring(0,1)  # C or D
+                    $content = Get-Content $cacheFile -Raw
+                    if ($content -match 'CMAKE_HOME_DIRECTORY:INTERNAL=([A-Z]):') {
+                      $actual = $Matches[1]
+                      if ($actual -ne $expected) {
+                        Write-Host "❌ Cache drive mismatch. Removing stale build/ALL directory."
+                        Remove-Item -Recurse -Force "build/ALL"
+                      } else {
+                        Write-Host "✅ Cache path matches. Keeping build/ALL."
+                      }
+                    }
+                  }
 
             - name: Prepare shaders for validation
               if: steps.check-hlsl.outputs.skip != 'true'
