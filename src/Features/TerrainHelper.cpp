@@ -32,6 +32,9 @@ void TerrainHelper::DataLoaded()
 		defaultLandTexture = defaultLandTextureSet;
 		// only enable if TerrainHelper.esp is loaded
 		enabled = true;
+	} else {
+		logger::warn("[Terrain Helper] LandscapeDefault EDID texture set from TerrainHelper.esp not found. Terrain helper is disabled.");
+		enabled = false;
 	}
 }
 
