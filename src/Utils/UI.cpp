@@ -342,20 +342,23 @@ namespace Util
 		return m_shouldDraw;
 	}
 
-	bool DrawCategoryHeader(const char* categoryName, bool& isExpanded)
+	bool DrawCategoryHeader(const char* categoryName, bool& isExpanded, int categoryCount)
 	{
+		// Add categoryCount to categoryName
+		std::string displayName = std::format("{} ({})", categoryName, categoryCount);
+
 		// Draw category header with custom styling
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 		ImVec2 pos = ImGui::GetCursorScreenPos();
 		float availableWidth = ImGui::GetContentRegionAvail().x;
-		ImVec2 textSize = ImGui::CalcTextSize(categoryName);
+		ImVec2 textSize = ImGui::CalcTextSize(displayName.c_str());
 
 		// Calculate line positions
 		float lineY = pos.y + textSize.y * 0.5f;
 		float lineLength = (availableWidth - textSize.x - 20.0f) * 0.5f;  // 20px for padding
 
 		// Create selectable area for the entire header
-		ImGui::PushID(categoryName);
+		ImGui::PushID(displayName.c_str());
 		bool hovered = false;
 		bool clicked = false;
 
@@ -384,7 +387,7 @@ namespace Util
 
 		// Center text
 		ImVec2 textPos = ImVec2(pos.x + lineLength + 10.0f, pos.y + 2.0f);
-		drawList->AddText(textPos, textColor, categoryName);
+		drawList->AddText(textPos, textColor, displayName.c_str());
 
 		// Handle click to toggle expansion
 		if (clicked) {

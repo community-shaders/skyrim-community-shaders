@@ -22,7 +22,6 @@
 #include "Utils/UI.h"
 
 #include "Features/LightLimitFix/ParticleLights.h"
-#include "Utils/UI.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::ThemeSettings::PaletteColors,
@@ -220,6 +219,7 @@ void Menu::SetupImGuiStyle() const
 }
 
 bool IsEnabled = false;
+std::unordered_map<std::string, int> Menu::categoryCounts;
 
 Menu::~Menu()
 {  // Release icon textures if loaded
@@ -291,6 +291,8 @@ void Menu::Init()
 	if (!Util::InitializeMenuIcons(this)) {
 		logger::warn("Failed to load UI icons. Will fallback to text buttons");
 	}
+
+	BuildCategoryCounts();
 
 	initialized = true;
 }
@@ -582,7 +584,8 @@ void Menu::DrawSettings()
 					bool isExpanded = categoryExpansionStates[header.name];
 
 					// Draw category header with custom styling using util:UI function
-					Util::DrawCategoryHeader(header.name.c_str(), isExpanded);
+					int count = categoryCounts[std::string(header.name)];
+					Util::DrawCategoryHeader(header.name.c_str(), isExpanded, count);
 
 					// Update expansion state
 					categoryExpansionStates[header.name] = isExpanded;
@@ -619,34 +622,6 @@ void Menu::DrawSettings()
 					// Restore original text color
 					ImGui::PopStyleColor();
 
-					// Show tooltip based on the state
-					if (isDisabled) {
-						if (auto _tt = Util::HoverTooltipWrapper()) {
-							ImGui::Text("Disabled at boot. Reenable, save settings, and restart.");
-						}
-					} else if (!isLoaded) {
-						if (auto _tt = Util::HoverTooltipWrapper()) {
-							ImGui::Text(hasFailedMessage ? feat->failedLoadedMessage.c_str() : "Feature pending restart.");
-						}
-					} else if (isLoaded) {
-						// Show feature summary tooltip for loaded features
-						if (auto _tt = Util::HoverTooltipWrapper()) {
-							auto [description, keyFeatures] = feat->GetFeatureSummary();
-							if (!description.empty()) {
-								ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-								ImGui::Text("%s", description.c_str());
-								if (!keyFeatures.empty()) {
-									ImGui::Spacing();
-									ImGui::Text("Key Features:");
-									for (const auto& feature : keyFeatures) {
-										ImGui::BulletText("%s", feature.c_str());
-									}
-								}
-								ImGui::PopTextWrapPos();
-							}
-						}
-					}
-
 					// Display version if loaded
 					if (isLoaded) {
 						ImGui::SameLine();
@@ -681,81 +656,146 @@ void Menu::DrawSettings()
 					bool hasFailedMessage = !feat->failedLoadedMessage.empty();
 					auto& themeSettings = globals::menu->settings.Theme;
 
-					if (ImGui::BeginTable("##FeatureButtons", 2, ImGuiTableFlags_SizingStretchSame)) {
-						ImGui::TableNextColumn();
+					if (ImGui::BeginTabBar("##FeatureTabs")) {
+						if (ImGui::BeginTabItem("Settings")) {
+							if (ImGui::BeginChild("##FeatureSettingsFrame", { 0, 0 }, true)) {
+								ImGui::SeparatorText("Feature Management");
+								
+								// Disable/Enable at boot
+								ImVec4 textColor;
+								if (isDisabled) {
+									textColor = themeSettings.StatusPalette.Disable;
+								} else if (hasFailedMessage) {
+									textColor = themeSettings.StatusPalette.Error;
+								} else {
+									textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+								}
+								ImGui::PushStyleColor(ImGuiCol_Text, textColor);
+								if (ImGui::Button(isDisabled ? "Enable at Boot" : "Disable at Boot", { -1, 0 })) {
+									bool newState = feat->ToggleAtBootSetting();
+									logger::info("{}: {} at boot.", featureName, newState ? "Enabled" : "Disabled");
+								}
+								ImGui::PopStyleColor();
+								if (auto _tt = Util::HoverTooltipWrapper()) {
+									ImGui::Text(
+										"Current State: %s\n"
+										"%s the feature settings at boot. "
+										"Restart will be required to reenable. "
+										"This is the same as deleting the ini file. "
+										"This should remove any performance impact for the feature.",
+										isDisabled ? "Disabled" : "Enabled",
+										isDisabled ? "Enable" : "Disable");
+								}
 
-						ImVec4 textColor;
-
-						// Determine the text color based on the state
-						if (isDisabled) {
-							textColor = themeSettings.StatusPalette.Disable;
-						} else if (hasFailedMessage) {
-							textColor = themeSettings.StatusPalette.Error;
-						} else {
-							textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-						}
-						ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-
-						if (ImGui::Button(isDisabled ? "Enable at Boot" : "Disable at Boot", { -1, 0 })) {
-							bool newState = feat->ToggleAtBootSetting();
-							logger::info("{}: {} at boot.", featureName, newState ? "Enabled" : "Disabled");
-						}
-
-						if (auto _tt = Util::HoverTooltipWrapper()) {
-							ImGui::Text(
-								"Current State: %s\n"
-								"%s the feature settings at boot. "
-								"Restart will be required to reenable. "
-								"This is the same as deleting the ini file. "
-								"This should remove any performance impact for the feature.",
-								isDisabled ? "Disabled" : "Enabled",
-								isDisabled ? "Enable" : "Disable");
-						}
-
-						ImGui::PopStyleColor();
-
-						ImGui::TableNextColumn();
-
-						if (!isDisabled && isLoaded) {
-							if (ImGui::Button("Restore Defaults", { -1, 0 })) {
-								feat->RestoreDefaultSettings();
-							}
-							if (auto _tt = Util::HoverTooltipWrapper()) {
-								ImGui::Text(
-									"Restores the feature's settings back to their default values. "
-									"You will still need to Save Settings to make these changes permanent.");
-							}
-						}
-
-						ImGui::EndTable();
-					}
-
-					if (hasFailedMessage && feat->DrawFailLoadMessage()) {
-						ImGui::TextColored(themeSettings.StatusPalette.Error, feat->failedLoadedMessage.c_str());
-					}
-
-					if (!isDisabled) {
-						if (ImGui::BeginChild("##FeatureConfigFrame", { 0, 0 }, true)) {
-							if (isLoaded) {
-								// draw settings for loaded feature
-								feat->DrawSettings();
-							} else {
-								// draw any unloaded UI elements like help text about the feature
-								feat->DrawUnloadedUI();
-
-								// draw download link if available
-								if (!feat->GetFeatureModLink().empty()) {
-									// print feature download info
+								// Restore Defaults buttons shows when feature is not disabled and is loaded
+								if (!isDisabled && isLoaded) {
 									ImGui::Spacing();
-									const auto downloadText = fmt::format("Click here to download this feature ({})", feat->GetFeatureModLink());
-									if (ImGui::Selectable(downloadText.c_str())) {
-										ShellExecuteA(NULL, "open", feat->GetFeatureModLink().c_str(), NULL, NULL, SW_SHOWNORMAL);
+									if (ImGui::Button("Restore Defaults", { -1, 0 })) {
+										feat->RestoreDefaultSettings();
+									}
+									if (auto _tt = Util::HoverTooltipWrapper()) {
+										ImGui::Text(
+											"Restores the feature's settings back to their default values. "
+											"You will still need to Save Settings to make these changes permanent.");
+									}
+								}
+
+								ImGui::Spacing();
+								ImGui::Spacing();
+
+								// Feature-specific settings section
+								ImGui::SeparatorText("Feature Settings");
+								if (isDisabled) {
+									// Show disabled message
+									ImGui::TextColored(themeSettings.StatusPalette.Disable, "Feature settings are hidden because this feature is disabled at boot.");
+									ImGui::Spacing();
+									ImGui::Text("Enable the feature above to access its configuration options.");
+								} else {
+									if (isLoaded) {
+										feat->DrawSettings();
+									} else {
+										feat->DrawUnloadedUI();
+										// Add download link if available
+										if (!feat->GetFeatureModLink().empty()) {
+											ImGui::Spacing();
+											const auto downloadText = fmt::format("Click here to download this feature ({})", feat->GetFeatureModLink());
+											if (ImGui::Selectable(downloadText.c_str())) {
+												ShellExecuteA(NULL, "open", feat->GetFeatureModLink().c_str(), NULL, NULL, SW_SHOWNORMAL);
+											}
+											if (auto _tt = Util::HoverTooltipWrapper()) {
+												ImGui::Text("Download the feature from the mod page.");
+											}
+										}
+									}
+								}
+
+								// Error Messages
+								if (hasFailedMessage && feat->DrawFailLoadMessage()) {
+									ImGui::Spacing();
+									ImGui::SeparatorText("Error");
+									ImGui::TextColored(themeSettings.StatusPalette.Error, feat->failedLoadedMessage.c_str());
+								}
+							}
+							ImGui::EndChild();
+							ImGui::EndTabItem();
+						}
+
+						// About Tab - Information about the feature and how it works
+						if (ImGui::BeginTabItem("About")) {
+							if (ImGui::BeginChild("##FeatureAboutFrame", { 0, 0 }, true)) {
+								// Status Section
+								ImGui::SeparatorText("Status");
+								
+								ImVec4 statusColor;
+								const char* statusText;
+								if (isDisabled) {
+									statusColor = themeSettings.StatusPalette.Disable;
+									statusText = "Disabled at boot.";
+								} else if (hasFailedMessage) {
+									statusColor = themeSettings.StatusPalette.Error;
+									statusText = "Failed to load.";
+								} else if (!isLoaded) {
+									statusColor = themeSettings.StatusPalette.RestartNeeded;
+									statusText = "Pending restart.";
+								} else {
+									statusColor = themeSettings.StatusPalette.SuccessColor;
+									statusText = "Active.";
+								}
+
+								ImGui::TextColored(statusColor, "Current State: %s", statusText);
+
+								// Feature Info - Description and key features
+								if (isLoaded) {
+									auto [description, keyFeatures] = feat->GetFeatureSummary();
+									if (!description.empty()) {
+										ImGui::Spacing();
+										ImGui::SeparatorText("Description");
+										ImGui::TextWrapped("%s", description.c_str());
+
+										if (!keyFeatures.empty()) {
+											ImGui::Spacing();
+											ImGui::SeparatorText("Key Features");
+											for (const auto& feature : keyFeatures) {
+												ImGui::BulletText("%s", feature.c_str());
+											}
+										}
+									}
+								} else {
+									// For unloaded features, show basic info if available
+									ImGui::Spacing();
+									ImGui::SeparatorText("Information");
+									ImGui::Text("This feature is not currently loaded.");
+									if (hasFailedMessage) {
+										ImGui::Spacing();
+										ImGui::TextColored(themeSettings.StatusPalette.Error, "%s", feat->failedLoadedMessage.c_str());
 									}
 								}
 							}
+							ImGui::EndChild();
+							ImGui::EndTabItem();
 						}
-						ImGui::EndChild();
 					}
+					ImGui::EndTabBar();
 				}
 			};
 
@@ -2546,4 +2586,14 @@ void Menu::SelectFeatureMenu(const std::string& featureName)
 {
 	pendingFeatureSelection = featureName;
 	logger::info("Queued navigation to {} feature menu", featureName);
+}
+
+void Menu::BuildCategoryCounts() {
+	const std::vector<Feature*>& features = Feature::GetFeatureList();
+	// Get the category of each feature, and if it is not in the featureGroups 
+	// vector, add it and increment the count
+	for (auto& feature : features) {
+		std::string_view category = feature->GetCategory();
+		categoryCounts[std::string(category)]++;
+	}
 }
