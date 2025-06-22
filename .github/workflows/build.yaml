@@ -139,18 +139,20 @@ jobs:
                   # Try multiple patterns to extract version
                   $version = $null
 
-                  # Pattern 1: "Microsoft (R) C/C++ Optimizing Compiler Version X.Y.Z"
-                  if ($output -match 'Microsoft \(R\) C/C\+\+ Optimizing Compiler Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                  Write-Host "Attempting to match patterns..."
+
+                  # Pattern 1: Simple "Version X.Y.Z" (most reliable)
+                  if ($output -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
                       $version = $Matches[1]
                       Write-Host "Found version using pattern 1: $version"
                   }
-                  # Pattern 2: "Compiler Version X.Y.Z"
-                  elseif ($output -match 'Compiler Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                  # Pattern 2: "Microsoft (R) C/C++ Optimizing Compiler Version X.Y.Z"
+                  elseif ($output -match 'Microsoft \(R\) C/C\+\+ Optimizing Compiler Version ([0-9]+\.[0-9]+\.[0-9]+)') {
                       $version = $Matches[1]
                       Write-Host "Found version using pattern 2: $version"
                   }
-                  # Pattern 3: "Version X.Y.Z"
-                  elseif ($output -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                  # Pattern 3: "Compiler Version X.Y.Z"
+                  elseif ($output -match 'Compiler Version ([0-9]+\.[0-9]+\.[0-9]+)') {
                       $version = $Matches[1]
                       Write-Host "Found version using pattern 3: $version"
                   }
@@ -159,6 +161,9 @@ jobs:
                       $version = $Matches[1]
                       Write-Host "Found version using pattern 4: $version"
                   }
+
+                  Write-Host "Final version result: $version"
+                  Write-Host "Matches array: $($Matches | ConvertTo-Json)"
 
                   if ($version) {
                       Write-Host "MSVC version: $version"
@@ -294,18 +299,20 @@ jobs:
                   # Try multiple patterns to extract version
                   $version = $null
 
-                  # Pattern 1: "Microsoft (R) C/C++ Optimizing Compiler Version X.Y.Z"
-                  if ($output -match 'Microsoft \(R\) C/C\+\+ Optimizing Compiler Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                  Write-Host "Attempting to match patterns..."
+
+                  # Pattern 1: Simple "Version X.Y.Z" (most reliable)
+                  if ($output -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
                       $version = $Matches[1]
                       Write-Host "Found version using pattern 1: $version"
                   }
-                  # Pattern 2: "Compiler Version X.Y.Z"
-                  elseif ($output -match 'Compiler Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                  # Pattern 2: "Microsoft (R) C/C++ Optimizing Compiler Version X.Y.Z"
+                  elseif ($output -match 'Microsoft \(R\) C/C\+\+ Optimizing Compiler Version ([0-9]+\.[0-9]+\.[0-9]+)') {
                       $version = $Matches[1]
                       Write-Host "Found version using pattern 2: $version"
                   }
-                  # Pattern 3: "Version X.Y.Z"
-                  elseif ($output -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                  # Pattern 3: "Compiler Version X.Y.Z"
+                  elseif ($output -match 'Compiler Version ([0-9]+\.[0-9]+\.[0-9]+)') {
                       $version = $Matches[1]
                       Write-Host "Found version using pattern 3: $version"
                   }
@@ -314,6 +321,9 @@ jobs:
                       $version = $Matches[1]
                       Write-Host "Found version using pattern 4: $version"
                   }
+
+                  Write-Host "Final version result: $version"
+                  Write-Host "Matches array: $($Matches | ConvertTo-Json)"
 
                   if ($version) {
                       Write-Host "MSVC version: $version"
