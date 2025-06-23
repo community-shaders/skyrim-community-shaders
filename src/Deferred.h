@@ -51,6 +51,7 @@ public:
 	bool inDecals = false;
 	bool inReflections = false;
 	bool deferredPass = false;
+	bool renderBlended = false;
 
 	Texture2D* prevDiffuseAmbientTexture = nullptr;
 
@@ -108,18 +109,6 @@ public:
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
-		struct BSShaderAccumulator_FirstPerson_BlendedDecals
-		{
-			static void thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags);
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		struct BSShaderAccumulator_ShadowMapOrMask_BlendedDecals
-		{
-			static void thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags);
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
 		struct BSCubeMapCamera_RenderCubemap
 		{
 			static void thunk(RE::NiAVObject* camera, int a2, bool a3, bool a4, bool a5);
@@ -155,9 +144,6 @@ public:
 			stl::write_thunk_call<Main_RenderWorld>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x831, 0x841, 0x791));
 			stl::write_thunk_call<Main_RenderWorld_Start>(REL::RelocationID(99938, 106583).address() + REL::Relocate(0x8E, 0x84));
 			stl::write_thunk_call<Main_RenderWorld_BlendedDecals>(REL::RelocationID(99938, 106583).address() + REL::Relocate(0x319, 0x308, 0x321));
-
-			stl::write_thunk_call<BSShaderAccumulator_FirstPerson_BlendedDecals>(REL::RelocationID(99943, 106588).address() + REL::Relocate(0xFE, 0xF4));
-			stl::write_thunk_call<BSShaderAccumulator_ShadowMapOrMask_BlendedDecals>(REL::RelocationID(99947, 106592).address() + 0x107);
 
 			stl::write_vfunc<0x2, BSImagespaceShaderHDRTonemapBlendCinematic_SetupTechnique>(RE::VTABLE_BSImagespaceShaderHDRTonemapBlendCinematic[0]);
 			stl::write_vfunc<0x2, BSImagespaceShaderHDRTonemapBlendCinematicFade_SetupTechnique>(RE::VTABLE_BSImagespaceShaderHDRTonemapBlendCinematicFade[0]);

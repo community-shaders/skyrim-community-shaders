@@ -787,8 +787,9 @@ void Deferred::RenderBlendedDecals()
 		shadowState->GetRuntimeData().alphaBlendWriteMode = 1;
 		stateUpdateFlags.set(RE::BSGraphics::ShaderFlags::DIRTY_ALPHA_BLEND);
 
-		for (auto& renderPass : globals::state->blendedDecalRenderPasses)
-			::Hooks::BSBatchRenderer_RenderPassImmediately1::func(renderPass.a_pass, renderPass.a_technique, renderPass.a_alphaTest, renderPass.a_renderFlags);
+		if (renderBlended)
+			for (auto& renderPass : globals::state->blendedDecalRenderPasses)
+				::Hooks::BSBatchRenderer_RenderPassImmediately1::func(renderPass.a_pass, renderPass.a_technique, renderPass.a_alphaTest, renderPass.a_renderFlags);
 
 		globals::state->blendedDecalRenderPasses.clear();
 	}
@@ -819,28 +820,6 @@ void Deferred::Hooks::Main_RenderWorld_BlendedDecals::thunk(RE::BSShaderAccumula
 	deferred->inDecals = false;
 
 	// After this point, water starts rendering
-};
-
-void Deferred::Hooks::BSShaderAccumulator_FirstPerson_BlendedDecals::thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags)
-{
-	auto deferred = globals::deferred;
-
-	deferred->inBlendedDecals = true;
-	func(This, RenderFlags);
-	deferred->inBlendedDecals = false;
-	func(This, RenderFlags);
-	deferred->inDecals = false;
-};
-
-void Deferred::Hooks::BSShaderAccumulator_ShadowMapOrMask_BlendedDecals::thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags)
-{
-	auto deferred = globals::deferred;
-
-	deferred->inBlendedDecals = true;
-	func(This, RenderFlags);
-	deferred->inBlendedDecals = false;
-	func(This, RenderFlags);
-	deferred->inDecals = false;
 };
 
 void Deferred::Hooks::BSCubeMapCamera_RenderCubemap::thunk(RE::NiAVObject* camera, int a2, bool a3, bool a4, bool a5)
