@@ -29,8 +29,12 @@ struct WeatherPicker : Feature
 
 	// Core weather display functions that other features can use
 	static void DisplayWeatherInfo(RE::TESWeather* weather, float weatherPct = -1.0f, bool showInteractiveElements = true);
-	static void RenderCoreWeatherDetails(bool isPopupWindow = false);
+	static void RenderCoreWeatherDetails(bool showInteractiveElements = true);
 	static void RenderFeatureWeatherAnalysis();
+
+	// --- Refactor helpers for RenderCoreWeatherDetails ---
+	static void RenderWeatherControls(RE::Sky* sky);
+	static void RenderWeatherInformationDisplay(RE::Sky* sky, bool showInteractiveElements = true);
 
 public:
 	/**
