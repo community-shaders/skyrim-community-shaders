@@ -168,6 +168,22 @@ namespace Color
 		return color;
 	}
 
+	float3 VolumetricLighting(float3 color)
+	{
+		if (SharedData::linearLightingSettings.enableLinearLighting) {
+			color = pow(abs(color), SharedData::linearLightingSettings.vlGamma);
+		}
+		return color;
+	}
+
+	float3 LensFlare(float3 color)
+	{
+		if (SharedData::linearLightingSettings.enableLinearLighting) {
+			color = pow(abs(color), SharedData::linearLightingSettings.lensFlareGamma);
+		}
+		return color;
+	}
+
 	float3 Radiance(float3 color)
 	{
 		if (!SharedData::linearLightingSettings.enableLinearLighting) {

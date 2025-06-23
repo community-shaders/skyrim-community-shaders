@@ -37,7 +37,9 @@ struct LinearLighting : Feature
 		float fogGamma = 2.2f;
 		float effectGamma = 1.8f;
 		float skyGamma = 1.8f;
-		float pad[3];
+		float vlGamma = 1.8f;
+		float lensFlareGamma = 1.8f;
+		float pad;
 	} settings;
 
 	uint tempDisable = false;
