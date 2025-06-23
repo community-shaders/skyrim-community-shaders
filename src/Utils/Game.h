@@ -92,24 +92,21 @@ namespace Util
 		}
 
 		// Formatted string helpers for tooltips
-		inline const char* FormatDistance(float gameUnits, char* buffer, size_t bufferSize)
+		inline std::string FormatDistance(float gameUnits)
 		{
-			snprintf(buffer, bufferSize, "%.1f units (%.2f m, %.1f ft)",
+			return std::format("{:.1f} units ({:.2f} m, {:.1f} ft)",
 				gameUnits, GameUnitsToMeters(gameUnits), GameUnitsToFeet(gameUnits));
-			return buffer;
 		}
-		inline const char* FormatWindSpeed(uint8_t rawWind, char* buffer, size_t bufferSize)
+		inline std::string FormatWindSpeed(uint8_t rawWind)
 		{
-			snprintf(buffer, bufferSize, "%.1f%% (raw %d, %.2f normalized)",
+			return std::format("{:.1f}% (raw {}, {:.2f} normalized)",
 				WindRawToPercent(rawWind), rawWind, WindRawToNormalized(rawWind));
-			return buffer;
 		}
 
-		inline const char* FormatDirection(uint8_t rawDirection, char* buffer, size_t bufferSize)
+		inline std::string FormatDirection(uint8_t rawDirection)
 		{
-			snprintf(buffer, bufferSize, "%.1f° (raw %d)",
+			return std::format("{:.1f}° (raw {})",
 				DirectionRawToDegrees(rawDirection), rawDirection);
-			return buffer;
 		}
 	}
 

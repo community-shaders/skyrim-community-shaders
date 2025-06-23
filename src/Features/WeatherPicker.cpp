@@ -229,9 +229,9 @@ void WeatherPicker::DisplayWeatherInfo(RE::TESWeather* weather, float weatherPct
 
 		if (colorChanged && showInteractiveElements) {
 			// Only update the weather's lightning color if interactive elements are enabled
-			weather->data.lightningColor.red = static_cast<std::int8_t>(static_cast<std::uint8_t>(lightningColor[0] * 255.0f));
-			weather->data.lightningColor.green = static_cast<std::int8_t>(static_cast<std::uint8_t>(lightningColor[1] * 255.0f));
-			weather->data.lightningColor.blue = static_cast<std::int8_t>(static_cast<std::uint8_t>(lightningColor[2] * 255.0f));
+			weather->data.lightningColor.red = static_cast<std::int8_t>(lightningColor[0] * 255.0f);
+			weather->data.lightningColor.green = static_cast<std::int8_t>(lightningColor[1] * 255.0f);
+			weather->data.lightningColor.blue = static_cast<std::int8_t>(lightningColor[2] * 255.0f);
 		}  // Thunder frequency as signed 8-bit with contextual information
 		int8_t thunderFreqRaw = weather->data.thunderLightningFrequency;
 
@@ -311,14 +311,11 @@ void WeatherPicker::DisplayWeatherInfo(RE::TESWeather* weather, float weatherPct
 	auto sky = globals::game::sky;
 	if (weather->data.windSpeed > 0 || (sky && sky->windSpeed > 0.0f)) {
 		float windSpeedDisplay = weather->data.windSpeed / 255.0f;
-		if (windSpeedDisplay < 0)
-			windSpeedDisplay = 0;  // Clamp to prevent negative values
 		ImGui::BulletText("Weather Wind Speed: %.2f (raw %d)", windSpeedDisplay, weather->data.windSpeed);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			char buffer[128];
-			Util::Units::FormatWindSpeed(weather->data.windSpeed, buffer, sizeof(buffer));
+			std::string windStr = Util::Units::FormatWindSpeed(weather->data.windSpeed);
 			Util::DrawMultiLineTooltip({ "Wind speed from weather definition",
-				buffer });
+				windStr.c_str() });
 		}
 		if (sky) {
 			ImGui::BulletText("Sky Wind Speed: %.2f", sky->windSpeed);
@@ -331,10 +328,9 @@ void WeatherPicker::DisplayWeatherInfo(RE::TESWeather* weather, float weatherPct
 		float weatherWindDirDegrees = Util::Units::DirectionRawToDegrees(weather->data.windDirection);
 		ImGui::BulletText("Wind Direction: %.1f° (raw %d)", weatherWindDirDegrees, weather->data.windDirection);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			char buffer[128];
-			Util::Units::FormatDirection(weather->data.windDirection, buffer, sizeof(buffer));
+			std::string dirStr = Util::Units::FormatDirection(weather->data.windDirection);
 			Util::DrawMultiLineTooltip({ "Wind direction from weather definition",
-				buffer });
+				dirStr.c_str() });
 		}
 		float weatherWindRangeDegrees = Util::Units::DirectionRangeToDegrees(weather->data.windDirectionRange);
 		ImGui::BulletText("Wind Direction Range: %.1f° (raw %d)", weatherWindRangeDegrees, weather->data.windDirectionRange);
@@ -429,7 +425,7 @@ void WeatherPicker::RenderCoreWeatherDetails(bool isPopupWindow)
 						{ "Aurora Sun", RE::TESWeather::WeatherDataFlag::kAuroraFollowsSun, false },
 						{ "None", RE::TESWeather::WeatherDataFlag::kNone, true }  // Special case for unclassified
 					};
-					for (int i = 0; i < filters.size(); ++i) {
+					for (size_t i = 0; i < filters.size(); ++i) {
 						if (i > 0 && i % checkboxesPerRow != 0) {
 							ImGui::SameLine();
 						}

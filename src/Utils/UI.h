@@ -167,7 +167,8 @@ namespace Util
 		const char* format = "%.1f%%";           // Printf-style format string for the value
 		const char* tooltipText = nullptr;       // Optional tooltip text
 		bool sameLine = true;                    // Whether to put value on same line as label
-												 // Helper methods for common patterns (implemented in UI.cpp to avoid header dependencies)
+
+		// Helper methods for common patterns (implemented in UI.cpp to avoid header dependencies)
 		// Use when higher values indicate problems/danger (intensity, errors, warnings)
 		static ColorCodedValueConfig HighIsBad(float low, float med, float high);
 		// Use when higher values indicate good things (performance, quality, progress)
@@ -177,11 +178,18 @@ namespace Util
 	 * Color-codes a value based on flexible thresholds and displays it with optional tooltip.
 	 * Common pattern for showing status values (percentages, intensities, etc.) with color feedback.
 	 *
-	 * @param label The label text to display before the value
-	 * @param value The numeric value to display and color-code
-	 * @param config Configuration struct containing thresholds, colors, format, and tooltip
+	 * @param label The label to display next to the value.
+	 * @param valueToCheck The numeric value to use for color-coding (compared to thresholds).
+	 * @param valueStr The string to display (can be formatted, units, or descriptive text).
+	 * @param config The configuration for thresholds, colors, formatting, and tooltip.
+	 * @param useBullet If true (default), use ImGui::BulletText for the label; if false, use ImGui::Text.
 	 */
-	void DrawColorCodedValue(const char* label, float value, const ColorCodedValueConfig& config);
+	void DrawColorCodedValue(
+		const std::string& label,
+		float valueToCheck,
+		const std::string& valueStr,
+		const ColorCodedValueConfig& config,
+		bool useBullet = true);
 
 	class PerformanceOverlay
 	{
@@ -199,9 +207,9 @@ namespace Util
 	extern PerformanceOverlay performanceOverlay;
 
 	/**
-	 * Helper function for drawing multi-line tooltips with better code readability.
-	 * @param lines Vector of strings, each will be displayed on its own line
-	 * @param colors Optional vector of colors for each line (if empty, uses default color)
+	 * @brief Draws a multi-line tooltip with optional per-line coloring.
+	 * @param lines The lines of text to display in the tooltip (as std::vector<std::string>).
+	 * @param colors Optional per-line colors (if empty, default color is used for all lines).
 	 */
-	void DrawMultiLineTooltip(const std::vector<const char*>& lines, const std::vector<ImVec4>& colors = {});
+	void DrawMultiLineTooltip(const std::vector<std::string>& lines, const std::vector<ImVec4>& colors = {});
 }  // namespace Util

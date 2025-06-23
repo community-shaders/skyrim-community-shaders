@@ -488,26 +488,34 @@ namespace Util
 		return config;
 	}
 
-	void DrawColorCodedValue(const char* label, float value, const ColorCodedValueConfig& config)
+	void DrawColorCodedValue(
+		const std::string& label,
+		float valueToCheck,
+		const std::string& valueStr,
+		const ColorCodedValueConfig& config,
+		bool useBullet)
 	{
 		// Display label
-		ImGui::BulletText("%s", label);
+		if (useBullet) {
+			ImGui::BulletText("%s", label.c_str());
+		} else {
+			ImGui::Text("%s", label.c_str());
+		}
 		if (config.sameLine) {
 			ImGui::SameLine();
 		}
 
 		// Determine color based on thresholds
 		ImVec4 valueColor = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);  // Default white
-
 		for (const auto& tc : config.thresholds) {
-			if (value < tc.threshold) {
+			if (valueToCheck < tc.threshold) {
 				valueColor = tc.color;
 				break;
 			}
 		}
 
-		// Display colored value
-		ImGui::TextColored(valueColor, config.format, value);
+		// Display colored value (arbitrary string)
+		ImGui::TextColored(valueColor, "%s", valueStr.c_str());
 
 		// Add tooltip if provided
 		if (config.tooltipText) {
@@ -517,15 +525,16 @@ namespace Util
 		}
 	}
 
-	void DrawMultiLineTooltip(const std::vector<const char*>& lines, const std::vector<ImVec4>& colors)
+	void DrawMultiLineTooltip(const std::vector<std::string>& lines, const std::vector<ImVec4>& colors)
 	{
 		for (size_t i = 0; i < lines.size(); ++i) {
+			const char* lineCStr = lines[i].c_str();
 			if (!colors.empty() && i < colors.size()) {
 				// Use provided color for this line
-				ImGui::TextColored(colors[i], "%s", lines[i]);
+				ImGui::TextColored(colors[i], "%s", lineCStr);
 			} else {
 				// Use default color
-				ImGui::Text("%s", lines[i]);
+				ImGui::Text("%s", lineCStr);
 			}
 		}
 	}
