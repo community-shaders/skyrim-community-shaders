@@ -14,6 +14,7 @@
 #include "Features/TerrainBlending.h"
 
 #include "Streamline.h"
+#include "Hooks.h"
 
 struct DepthStates
 {
@@ -757,8 +758,10 @@ void Deferred::Hooks::Main_RenderWorld::thunk(bool a1)
 {
 	auto deferred = globals::deferred;
 	deferred->inWorld = true;
+	globals::state->inWorld = true;
 	func(a1);
 	deferred->inWorld = false;
+	globals::state->inWorld = false;
 };
 
 void Deferred::Hooks::Main_RenderWorld_Start::thunk(RE::BSBatchRenderer* This, uint32_t StartRange, uint32_t EndRanges, uint32_t RenderFlags, int GeometryGroup)
@@ -774,6 +777,22 @@ void Deferred::Hooks::Main_RenderWorld_Start::thunk(RE::BSBatchRenderer* This, u
 		func(This, StartRange, EndRanges, RenderFlags, GeometryGroup);  // RenderBatches
 	}
 };
+
+void Deferred::RenderBlendedDecals()
+{
+	if (!globals::state->blendedDecalRenderPasses.empty()) {
+		static auto shadowState = RE::BSGraphics::RendererShadowState::GetSingleton();
+		auto stateUpdateFlags = shadowState->GetRuntimeData().stateUpdateFlags;
+
+		shadowState->GetRuntimeData().alphaBlendWriteMode = 1;
+		stateUpdateFlags.set(RE::BSGraphics::ShaderFlags::DIRTY_ALPHA_BLEND);
+
+		for (auto& renderPass : globals::state->blendedDecalRenderPasses)
+			::Hooks::BSBatchRenderer_RenderPassImmediately1::func(renderPass.a_pass, renderPass.a_technique, renderPass.a_alphaTest, renderPass.a_renderFlags);
+
+		globals::state->blendedDecalRenderPasses.clear();
+	}
+}
 
 void Deferred::Hooks::Main_RenderWorld_BlendedDecals::thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags)
 {
@@ -796,21 +815,10 @@ void Deferred::Hooks::Main_RenderWorld_BlendedDecals::thunk(RE::BSShaderAccumula
 
 	// Blended decals
 	deferred->inDecals = true;
-	func(This, RenderFlags);
+	deferred->RenderBlendedDecals();
 	deferred->inDecals = false;
 
 	// After this point, water starts rendering
-};
-
-void Deferred::Hooks::BSShaderAccumulator_BlendedDecals_RenderGeometryGroup::thunk(RE::BSBatchRenderer* This, uint32_t StartRange, uint32_t EndRanges, uint32_t RenderFlags, int GeometryGroup)
-{
-	auto deferred = globals::deferred;
-
-	if (deferred->inBlendedDecals) {
-		func(This, StartRange, EndRanges, RenderFlags, 12);
-	} else {
-		func(This, StartRange, EndRanges, RenderFlags, GeometryGroup);
-	}
 };
 
 void Deferred::Hooks::BSShaderAccumulator_FirstPerson_BlendedDecals::thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags)
