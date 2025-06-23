@@ -572,7 +572,7 @@ void WeatherPicker::RenderCoreWeatherDetails(bool isPopupWindow)
 
 					// Last Weather Column
 					ImGui::TableNextColumn();
-					DisplayWeatherInfo(displayLastWeather, abs(sky->currentWeatherPct - 1.0f), !isPopupWindow);
+					DisplayWeatherInfo(displayLastWeather, std::abs(sky->currentWeatherPct - 1.0f), !isPopupWindow);
 
 					ImGui::EndTable();
 				}
