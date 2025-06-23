@@ -131,30 +131,24 @@ ImVec4 WeatherPicker::GetWeatherTypeColor(RE::TESWeather* weather)
 	return theme.StatusPalette.InfoColor;  // Default blue
 }
 
-void WeatherPicker::DisplayWeatherInfo(RE::TESWeather* weather, float weatherPct, bool showInteractiveElements)
+// --- Helper: Display basic weather info (name, flags, percentage) ---
+void WeatherPicker::DisplayWeatherBasicInfo(RE::TESWeather* weather, float weatherPct)
 {
 	if (!weather) {
 		ImGui::BulletText("No Weather Found");
 		return;
 	}
-	auto menu = Menu::GetSingleton();
-	const auto& theme = menu->GetTheme();
-	// Display weather name with multi-color support and hover tooltip
 	std::string weatherText = Util::FormatWeather(weather);
 	ImGui::Bullet();
 	ImGui::SameLine();
-	bool showTooltip = RenderMultiColorWeatherName(weather, weatherText);
-	// Add hover tooltip for weather name (attached to the main weather name element)
+	bool showTooltip = WeatherPicker::RenderMultiColorWeatherName(weather, weatherText);
 	if (showTooltip) {
 		ImGui::BeginTooltip();
 		ImGui::Text("Name: %s", weather->GetName() ? weather->GetName() : "Unnamed");
 		ImGui::Text("Editor ID: %s", weather->GetFormEditorID() ? weather->GetFormEditorID() : "None");
 		ImGui::Text("Form ID: 0x%08X", weather->GetFormID());
-
-		// Show weather flags using magic_enum
-		auto flagNames = GetWeatherFlagNames(weather);
+		auto flagNames = WeatherPicker::GetWeatherFlagNames(weather);
 		if (!flagNames.empty()) {
-			// Use string joining algorithm for better performance
 			std::string joinedFlags = flagNames[0];
 			for (size_t j = 1; j < flagNames.size(); ++j) {
 				joinedFlags += ", " + flagNames[j];
@@ -165,219 +159,200 @@ void WeatherPicker::DisplayWeatherInfo(RE::TESWeather* weather, float weatherPct
 		}
 		ImGui::EndTooltip();
 	}
-
-	// Weather transition data (only show if percentage is provided)
 	if (weatherPct >= 0.0f) {
 		ImGui::BulletText("Weather Percentage: %.1f%%", weatherPct * 100.0f);
 	}
+}
 
-	// Precipitation data
-	if (weather->precipitationData) {
-		auto particleDensity = weather->precipitationData->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;
-		ImGui::BulletText("Particle Density: %.3f", particleDensity);
-
-		// Precipitation texture name
-		GET_INSTANCE_MEMBER(particleTexture, weather->precipitationData)
-		if (particleTexture.textureName.c_str()) {
-			ImGui::BulletText("Particle Texture: %s", particleTexture.textureName.c_str());
-		} else {
-			ImGui::BulletText("Particle Texture: None");
-		}
-
-		// Precipitation transition data
-		uint8_t precipBeginFadeIn = weather->data.precipitationBeginFadeIn;
-		uint8_t precipEndFadeOut = weather->data.precipitationEndFadeOut;
-		float precipBeginNormalized = precipBeginFadeIn / 255.0f;
-		float precipEndNormalized = precipEndFadeOut / 255.0f;
-
-		ImGui::BulletText("Precip Begin Fade-In: %.3f (raw %u)", precipBeginNormalized, precipBeginFadeIn);
-		ImGui::BulletText("Precip End Fade-Out: %.3f (raw %u)", precipEndNormalized, precipEndFadeOut);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			Util::DrawMultiLineTooltip({ "Precipitation fade transition parameters:",
-				"Begin Fade-In: Point where precipitation starts appearing",
-				"End Fade-Out: Point where precipitation fully disappears",
-				"Raw values: 0-255 (uint8), Normalized: 0.0-1.0" });
-		}
-	} else {
+void WeatherPicker::DisplayPrecipitationInfo(RE::TESWeather* weather)
+{
+	if (!weather || !weather->precipitationData) {
 		ImGui::BulletText("Particle Density: No precipitation data");
+		return;
 	}
+	auto particleDensity = weather->precipitationData->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;
+	ImGui::BulletText("Particle Density: %.3f", particleDensity);
+	GET_INSTANCE_MEMBER(particleTexture, weather->precipitationData)
+	if (particleTexture.textureName.c_str()) {
+		ImGui::BulletText("Particle Texture: %s", particleTexture.textureName.c_str());
+	} else {
+		ImGui::BulletText("Particle Texture: None");
+	}
+	uint8_t precipBeginFadeIn = weather->data.precipitationBeginFadeIn;
+	uint8_t precipEndFadeOut = weather->data.precipitationEndFadeOut;
+	float precipBeginNormalized = precipBeginFadeIn / 255.0f;
+	float precipEndNormalized = precipEndFadeOut / 255.0f;
+	ImGui::BulletText("Precip Begin Fade-In: %.3f (raw %u)", precipBeginNormalized, precipBeginFadeIn);
+	ImGui::BulletText("Precip End Fade-Out: %.3f (raw %u)", precipEndNormalized, precipEndFadeOut);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		Util::DrawMultiLineTooltip({ "Precipitation fade transition parameters:",
+			"Begin Fade-In: Point where precipitation starts appearing",
+			"End Fade-Out: Point where precipitation fully disappears",
+			"Raw values: 0-255 (uint8), Normalized: 0.0-1.0" });
+	}
+}
 
-	// Lightning color as color picker (only show if thunder frequency > 0)
-	if (weather->data.thunderLightningFrequency > 0) {
-		// Treat color values as unsigned 8-bit (0-255 range)
-		uint8_t lightningR = weather->data.lightningColor.red;
-		uint8_t lightningG = weather->data.lightningColor.green;
-		uint8_t lightningB = weather->data.lightningColor.blue;
-		ImGui::Text("Lightning Color:");
-
-		// Always show color picker, but disable interaction when not in interactive mode
-		ImGui::SameLine();
-		// Convert to 0-1 range for color picker
-		float lightningColor[3] = {
-			lightningR / 255.0f,
-			lightningG / 255.0f,
-			lightningB / 255.0f
-		};
-
-		// Configure color picker flags based on whether interaction is allowed
-		ImGuiColorEditFlags flags = ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel;
-		if (!showInteractiveElements) {
-			flags |= ImGuiColorEditFlags_NoPicker | ImGuiColorEditFlags_NoTooltip;  // Disable picker interaction but show color
-			// Style the disabled color picker with theme-based reduced alpha
-			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, theme.StatusPalette.Disable.w);
+void WeatherPicker::DisplayLightningInfo(RE::TESWeather* weather, bool showInteractiveElements)
+{
+	if (!weather || weather->data.thunderLightningFrequency <= 0)
+		return;
+	auto menu = Menu::GetSingleton();
+	const auto& theme = menu->GetTheme();
+	uint8_t lightningR = weather->data.lightningColor.red;
+	uint8_t lightningG = weather->data.lightningColor.green;
+	uint8_t lightningB = weather->data.lightningColor.blue;
+	ImGui::Text("Lightning Color:");
+	ImGui::SameLine();
+	float lightningColor[3] = { lightningR / 255.0f, lightningG / 255.0f, lightningB / 255.0f };
+	ImGuiColorEditFlags flags = ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel;
+	if (!showInteractiveElements) {
+		flags |= ImGuiColorEditFlags_NoPicker | ImGuiColorEditFlags_NoTooltip;
+		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, theme.StatusPalette.Disable.w);
+	}
+	bool colorChanged = ImGui::ColorEdit3("##LightningColor", lightningColor, flags);
+	if (!showInteractiveElements) {
+		ImGui::PopStyleVar();
+	}
+	if (colorChanged && showInteractiveElements) {
+		weather->data.lightningColor.red = static_cast<std::int8_t>(lightningColor[0] * 255.0f);
+		weather->data.lightningColor.green = static_cast<std::int8_t>(lightningColor[1] * 255.0f);
+		weather->data.lightningColor.blue = static_cast<std::int8_t>(lightningColor[2] * 255.0f);
+	}
+	int8_t thunderFreqRaw = weather->data.thunderLightningFrequency;
+	ImGui::BulletText("Thunder Frequency: %d (signed 8-bit)", static_cast<int>(thunderFreqRaw));
+	ImGui::Indent();
+	if (thunderFreqRaw >= 76) {
+		if (thunderFreqRaw == 76) {
+			ImGui::BulletText("This matches ~75%% frequency in Creation Kit");
+		} else if (thunderFreqRaw > 76) {
+			ImGui::BulletText("High frequency range: Above 75%% (raw > 76)");
 		}
-
-		// Always show the color picker, but conditionally handle interaction
-		bool colorChanged = ImGui::ColorEdit3("##LightningColor", lightningColor, flags);
-
-		if (!showInteractiveElements) {
-			ImGui::PopStyleVar();  // Restore normal alpha
-		}
-
-		if (colorChanged && showInteractiveElements) {
-			// Only update the weather's lightning color if interactive elements are enabled
-			weather->data.lightningColor.red = static_cast<std::int8_t>(lightningColor[0] * 255.0f);
-			weather->data.lightningColor.green = static_cast<std::int8_t>(lightningColor[1] * 255.0f);
-			weather->data.lightningColor.blue = static_cast<std::int8_t>(lightningColor[2] * 255.0f);
-		}  // Thunder frequency as signed 8-bit with contextual information
-		int8_t thunderFreqRaw = weather->data.thunderLightningFrequency;
-
-		// Display the raw value with context
-		ImGui::BulletText("Thunder Frequency: %d (signed 8-bit)", static_cast<int>(thunderFreqRaw));
-
-		// Show both signed and unsigned interpretations for debugging
-		ImGui::Indent();
-		if (thunderFreqRaw >= 76) {
-			if (thunderFreqRaw == 76) {
-				ImGui::BulletText("This matches ~75%% frequency in Creation Kit");
-			} else if (thunderFreqRaw > 76) {
-				ImGui::BulletText("High frequency range: Above 75%% (raw > 76)");
-			}
-		} else if (thunderFreqRaw >= 15) {
-			if (thunderFreqRaw == 15) {
-				ImGui::BulletText("This matches maximum observed frequency in Creation Kit");
-			} else {
-				ImGui::BulletText("High-medium frequency range: 75-100%% (raw 15-76)");
-			}
-		} else if (thunderFreqRaw >= 0) {
-			ImGui::BulletText("Medium frequency range: 25-75%% (raw 0-15)");
-		} else if (thunderFreqRaw >= -10) {
-			if (thunderFreqRaw == -1) {
-				ImGui::BulletText("This matches minimum frequency in Creation Kit (255 unsigned)");
-			} else if (thunderFreqRaw == -10) {
-				ImGui::BulletText("This matches ~5%% frequency in Creation Kit (246 unsigned)");
-			} else {
-				ImGui::BulletText("Low frequency range: 0-25%% (raw -10 to 0)");
-			}
-		} else if (thunderFreqRaw >= -53) {
-			if (thunderFreqRaw == -53) {
-				ImGui::BulletText("This matches ~20%% frequency in Creation Kit (203 unsigned)");
-			} else {
-				ImGui::BulletText("Low-medium frequency range: 5-20%% (raw -53 to -10)");
-			}
-		} else if (thunderFreqRaw >= -100) {
-			ImGui::BulletText("Very low frequency range: Near 0%% (raw -100 to -53)");
+	} else if (thunderFreqRaw >= 15) {
+		if (thunderFreqRaw == 15) {
+			ImGui::BulletText("This matches maximum observed frequency in Creation Kit");
 		} else {
-			ImGui::BulletText("Extreme low frequency: Likely no thunder (raw < -100)");
+			ImGui::BulletText("High-medium frequency range: 75-100%% (raw 15-76)");
 		}
-		ImGui::Unindent();
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			Util::DrawMultiLineTooltip({ "Thunder frequency raw value with observed Creation Kit behavior:",
-				"",
-				"Known data points from Creation Kit slider:",
-				"• Raw 15 = ~100% frequency (highest thunder)",
-				"• Raw 76 = ~75% frequency",
-				"• Raw -10 (246 unsigned) = ~5% frequency",
-				"• Raw -53 (203 unsigned) = ~20% frequency",
-				"• Raw -1 (255 unsigned) = ~0% frequency (lowest thunder)",
-				"",
-				"Pattern: Higher positive values = more frequent thunder",
-				"Lower/negative values = less frequent thunder",
-				"",
-				"Range: -128 to +127 (signed 8-bit integer)",
-				"Note: Creation Kit interprets this value non-linearly" });
+	} else if (thunderFreqRaw >= 0) {
+		ImGui::BulletText("Medium frequency range: 25-75%% (raw 0-15)");
+	} else if (thunderFreqRaw >= -10) {
+		if (thunderFreqRaw == -1) {
+			ImGui::BulletText("This matches minimum frequency in Creation Kit (255 unsigned)");
+		} else if (thunderFreqRaw == -10) {
+			ImGui::BulletText("This matches ~5%% frequency in Creation Kit (246 unsigned)");
+		} else {
+			ImGui::BulletText("Low frequency range: 0-25%% (raw -10 to 0)");
 		}
-
-		// Lightning transition data
-		uint8_t lightningBeginFadeIn = weather->data.thunderLightningBeginFadeIn;
-		uint8_t lightningEndFadeOut = weather->data.thunderLightningEndFadeOut;
-		float lightningBeginNormalized = lightningBeginFadeIn / 255.0f;
-		float lightningEndNormalized = lightningEndFadeOut / 255.0f;
-
-		ImGui::BulletText("Lightning Begin Fade-In: %.3f (raw %u)", lightningBeginNormalized, lightningBeginFadeIn);
-		ImGui::BulletText("Lightning End Fade-Out: %.3f (raw %u)", lightningEndNormalized, lightningEndFadeOut);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			Util::DrawMultiLineTooltip({ "Lightning fade transition parameters:",
-				"Begin Fade-In: Point where lightning starts appearing",
-				"End Fade-Out: Point where lightning fully disappears",
-				"Raw values: 0-255 (uint8), Normalized: 0.0-1.0" });
+	} else if (thunderFreqRaw >= -53) {
+		if (thunderFreqRaw == -53) {
+			ImGui::BulletText("This matches ~20%% frequency in Creation Kit (203 unsigned)");
+		} else {
+			ImGui::BulletText("Low-medium frequency range: 5-20%% (raw -53 to -10)");
 		}
+	} else if (thunderFreqRaw >= -100) {
+		ImGui::BulletText("Very low frequency range: Near 0%% (raw -100 to -53)");
+	} else {
+		ImGui::BulletText("Extreme low frequency: Likely no thunder (raw < -100)");
 	}
+	ImGui::Unindent();
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		Util::DrawMultiLineTooltip({ "Thunder frequency raw value with observed Creation Kit behavior:",
+			"",
+			"Known data points from Creation Kit slider:",
+			"- Raw 15 = ~100% frequency (highest thunder)",
+			"- Raw 76 = ~75% frequency",
+			"- Raw -10 (246 unsigned) = ~5% frequency",
+			"- Raw -53 (203 unsigned) = ~20% frequency",
+			"- Raw -1 (255 unsigned) = ~0% frequency (lowest thunder)",
+			"",
+			"Pattern: Higher positive values = more frequent thunder",
+			"Lower/negative values = less frequent thunder",
+			"",
+			"Range: -128 to +127 (signed 8-bit integer)",
+			"Note: Creation Kit interprets this value non-linearly" });
+	}
+	uint8_t lightningBeginFadeIn = weather->data.thunderLightningBeginFadeIn;
+	uint8_t lightningEndFadeOut = weather->data.thunderLightningEndFadeOut;
+	float lightningBeginNormalized = lightningBeginFadeIn / 255.0f;
+	float lightningEndNormalized = lightningEndFadeOut / 255.0f;
+	ImGui::BulletText("Lightning Begin Fade-In: %.3f (raw %u)", lightningBeginNormalized, lightningBeginFadeIn);
+	ImGui::BulletText("Lightning End Fade-Out: %.3f (raw %u)", lightningEndNormalized, lightningEndFadeOut);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		Util::DrawMultiLineTooltip({ "Lightning fade transition parameters:",
+			"Begin Fade-In: Point where lightning starts appearing",
+			"End Fade-Out: Point where lightning fully disappears",
+			"Raw values: 0-255 (uint8), Normalized: 0.0-1.0" });
+	}
+}
 
-	// Wind data with player comparison (only show if wind speed > 0)
+void WeatherPicker::DisplayWindInfo(RE::TESWeather* weather)
+{
 	auto sky = globals::game::sky;
-	if (weather->data.windSpeed > 0 || (sky && sky->windSpeed > 0.0f)) {
-		float windSpeedDisplay = weather->data.windSpeed / 255.0f;
-		ImGui::BulletText("Weather Wind Speed: %.2f (raw %d)", windSpeedDisplay, weather->data.windSpeed);
+	if (!weather || (weather->data.windSpeed <= 0 && (!sky || sky->windSpeed <= 0.0f)))
+		return;
+	auto menu = Menu::GetSingleton();
+	const auto& theme = menu->GetTheme();
+	float windSpeedDisplay = weather->data.windSpeed / 255.0f;
+	ImGui::BulletText("Weather Wind Speed: %.2f (raw %d)", windSpeedDisplay, weather->data.windSpeed);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		std::string windStr = Util::Units::FormatWindSpeed(weather->data.windSpeed);
+		Util::DrawMultiLineTooltip({ "Wind speed from weather definition",
+			windStr.c_str() });
+	}
+	if (sky) {
+		ImGui::BulletText("Sky Wind Speed: %.2f", sky->windSpeed);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			std::string windStr = Util::Units::FormatWindSpeed(weather->data.windSpeed);
-			Util::DrawMultiLineTooltip({ "Wind speed from weather definition",
-				windStr.c_str() });
-		}
-		if (sky) {
-			ImGui::BulletText("Sky Wind Speed: %.2f", sky->windSpeed);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				Util::DrawMultiLineTooltip({ "Current active wind speed from the sky system",
-					"This affects particle behavior and wind-based effects" });
-			}
-		}
-		// Convert weather wind direction from 0-256 scale to 0-360 degrees
-		float weatherWindDirDegrees = Util::Units::DirectionRawToDegrees(weather->data.windDirection);
-		ImGui::BulletText("Wind Direction: %.1f° (raw %d)", weatherWindDirDegrees, weather->data.windDirection);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			std::string dirStr = Util::Units::FormatDirection(weather->data.windDirection);
-			Util::DrawMultiLineTooltip({ "Wind direction from weather definition",
-				dirStr.c_str() });
-		}
-		float weatherWindRangeDegrees = Util::Units::DirectionRangeToDegrees(weather->data.windDirectionRange);
-		ImGui::BulletText("Wind Direction Range: %.1f° (raw %d)", weatherWindRangeDegrees, weather->data.windDirectionRange);
-
-		// Player direction for comparison
-		if (auto player = RE::PlayerCharacter::GetSingleton()) {
-			float playerAngleZ = player->GetAngleZ();
-			float playerAngleDegrees = Util::Units::NormalizeDegrees0To360(Util::Units::RadiansToDegrees(playerAngleZ));
-
-			ImGui::BulletText("Player Direction: %.1f°", playerAngleDegrees);
-			// Calculate raw difference between wind and player direction
-			float effectiveWindDirection = Util::Units::NormalizeDegrees0To360(weatherWindDirDegrees - 30.5f);
-
-			float rawDifference = Util::Units::NormalizeDegreesToSignedRange(effectiveWindDirection - playerAngleDegrees);
-
-			ImGui::BulletText("Effective Wind Dir: %.1f° (raw - 30.5°)", effectiveWindDirection);
-			ImGui::BulletText("Wind vs Player: %.1f°", rawDifference);
-			const char* windRelation;
-			if (std::abs(rawDifference) < 30.0f) {
-				windRelation = "Tailwind (wind behind player)";
-			} else if (std::abs(rawDifference) > 150.0f) {
-				windRelation = "Headwind (wind coming toward player)";
-			} else if (rawDifference > 0) {
-				windRelation = "Right crosswind";
-			} else {
-				windRelation = "Left crosswind";
-			}
-			ImGui::SameLine();
-			ImGui::TextColored(theme.StatusPalette.RestartNeeded, "(%s)", windRelation);
-
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				Util::DrawMultiLineTooltip({
-					"Wind relative to player direction:",
-					"- ~0° = Tailwind (wind behind player)",
-					"- ~±90° = Crosswind (left/right)",
-					"- ~±180° = Headwind (wind coming toward player)",
-				});
-			}
+			Util::DrawMultiLineTooltip({ "Current active wind speed from the sky system",
+				"This affects particle behavior and wind-based effects" });
 		}
 	}
+	float weatherWindDirDegrees = Util::Units::DirectionRawToDegrees(weather->data.windDirection);
+	ImGui::BulletText("Wind Direction: %.1f° (raw %d)", weatherWindDirDegrees, weather->data.windDirection);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		std::string dirStr = Util::Units::FormatDirection(weather->data.windDirection);
+		Util::DrawMultiLineTooltip({ "Wind direction from weather definition",
+			dirStr.c_str() });
+	}
+	float weatherWindRangeDegrees = Util::Units::DirectionRangeToDegrees(weather->data.windDirectionRange);
+	ImGui::BulletText("Wind Direction Range: %.1f° (raw %d)", weatherWindRangeDegrees, weather->data.windDirectionRange);
+
+	if (auto player = RE::PlayerCharacter::GetSingleton()) {
+		float playerAngleZ = player->GetAngleZ();
+		float playerAngleDegrees = Util::Units::NormalizeDegrees0To360(Util::Units::RadiansToDegrees(playerAngleZ));
+		ImGui::BulletText("Player Direction: %.1f°", playerAngleDegrees);
+		float effectiveWindDirection = Util::Units::NormalizeDegrees0To360(weatherWindDirDegrees - WIND_DIRECTION_OFFSET);
+		float rawDifference = Util::Units::NormalizeDegreesToSignedRange(effectiveWindDirection - playerAngleDegrees);
+		ImGui::BulletText("Effective Wind Dir: %.1f° (raw - %.1f°)", effectiveWindDirection, WIND_DIRECTION_OFFSET);
+		ImGui::BulletText("Wind vs Player: %.1f°", rawDifference);
+		const char* windRelation;
+		if (std::abs(rawDifference) < 30.0f) {
+			windRelation = "Tailwind (wind behind player)";
+		} else if (std::abs(rawDifference) > 150.0f) {
+			windRelation = "Headwind (wind coming toward player)";
+		} else if (rawDifference > 0) {
+			windRelation = "Right crosswind";
+		} else {
+			windRelation = "Left crosswind";
+		}
+		ImGui::SameLine();
+		ImGui::TextColored(theme.StatusPalette.RestartNeeded, "(%s)", windRelation);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			Util::DrawMultiLineTooltip({
+				"Wind relative to player direction:",
+				"- ~0° = Tailwind (wind behind player)",
+				"- ~±90° = Crosswind (left/right)",
+				"- ~±180° = Headwind (wind coming toward player)",
+			});
+		}
+	}
+}
+// --- Main function: now just delegates to helpers ---
+void WeatherPicker::DisplayWeatherInfo(RE::TESWeather* weather, float weatherPct, bool showInteractiveElements)
+{
+	WeatherPicker::DisplayWeatherBasicInfo(weather, weatherPct);
+	WeatherPicker::DisplayPrecipitationInfo(weather);
+	WeatherPicker::DisplayLightningInfo(weather, showInteractiveElements);
+	WeatherPicker::DisplayWindInfo(weather);
 }
 
 void WeatherPicker::RenderCoreWeatherDetails(bool isPopupWindow)

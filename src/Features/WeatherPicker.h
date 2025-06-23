@@ -64,6 +64,9 @@ public:
 	static ImVec4 GetWeatherFlagColorByName(const std::string& flagName);
 
 private:
+	// Wind direction offset to align with game's coordinate system
+	static constexpr float WIND_DIRECTION_OFFSET = 30.5f;
+
 	// Weather flag filter bits (for 7 weather types)
 	static constexpr uint32_t ALL_WEATHER_FLAGS = 0x7F;  // Bits 0-6 all enabled
 	static constexpr uint32_t UNCLASSIFIED_FLAG = 0x40;  // Bit 6 only
@@ -97,6 +100,12 @@ private:
 			return getDisplayName(a) < getDisplayName(b);
 		}
 	};
+
+	// --- Refactor helpers for DisplayWeatherInfo ---
+	static void DisplayWeatherBasicInfo(RE::TESWeather* weather, float weatherPct);
+	static void DisplayPrecipitationInfo(RE::TESWeather* weather);
+	static void DisplayLightningInfo(RE::TESWeather* weather, bool showInteractiveElements);
+	static void DisplayWindInfo(RE::TESWeather* weather);
 
 	// Helper functions
 	static void LoadAllWeathers();
