@@ -2587,10 +2587,11 @@ void Menu::SelectFeatureMenu(const std::string& featureName)
 void Menu::BuildCategoryCounts()
 {
 	const std::vector<Feature*>& features = Feature::GetFeatureList();
-	// Get the category of each feature, and if it is not in the featureGroups
-	// vector, add it and increment the count
+	// Get the category of each feature, and increment the count for that category
 	for (auto& feature : features) {
-		std::string_view category = feature->GetCategory();
-		categoryCounts[std::string(category)]++;
+		if (feature->IsInMenu() && feature->loaded) {
+			std::string_view category = feature->GetCategory();
+			categoryCounts[std::string(category)]++;
+		}
 	}
 }
