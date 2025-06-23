@@ -78,8 +78,20 @@ void WeatherPicker::RenderWeatherDetailsWindow(bool* open)
 			settings.WeatherDetailsWindow.Position = currentPos;
 		}
 
-		// Render core weather details (popup mode - no interactive elements)
-		RenderCoreWeatherDetails(true);  // true = popup window
+		// Render core weather details (popup mode)
+
+		// Determine if interactive elements should be enabled
+		bool menuOpen = false;
+		if (auto ui = globals::game::ui) {
+			static const std::array<std::string_view, 3> menuNames = {
+				RE::StatsMenu::MENU_NAME,
+				RE::JournalMenu::MENU_NAME,
+				RE::CursorMenu::MENU_NAME
+			};
+			menuOpen = std::any_of(menuNames.begin(), menuNames.end(),
+				[&](auto name) { return ui->IsMenuOpen(name); });
+		}
+		RenderCoreWeatherDetails(!menuOpen);
 
 		// Render weather analysis from features with collapsible headers
 		RenderFeatureWeatherAnalysis();
