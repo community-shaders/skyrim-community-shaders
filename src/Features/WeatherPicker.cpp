@@ -212,9 +212,9 @@ void WeatherPicker::DisplayLightningInfo(RE::TESWeather* weather, bool showInter
 		ImGui::PopStyleVar();
 	}
 	if (colorChanged && showInteractiveElements) {
-		weather->data.lightningColor.red = static_cast<std::int8_t>(lightningColor[0] * 255.0f);
-		weather->data.lightningColor.green = static_cast<std::int8_t>(lightningColor[1] * 255.0f);
-		weather->data.lightningColor.blue = static_cast<std::int8_t>(lightningColor[2] * 255.0f);
+		weather->data.lightningColor.red = static_cast<std::uint8_t>(lightningColor[0] * 255.0f);
+		weather->data.lightningColor.green = static_cast<std::uint8_t>(lightningColor[1] * 255.0f);
+		weather->data.lightningColor.blue = static_cast<std::uint8_t>(lightningColor[2] * 255.0f);
 	}
 	int8_t thunderFreqRaw = weather->data.thunderLightningFrequency;
 	ImGui::BulletText("Thunder Frequency: %d (signed 8-bit)", static_cast<int>(thunderFreqRaw));
