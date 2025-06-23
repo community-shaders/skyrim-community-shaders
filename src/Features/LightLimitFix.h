@@ -277,6 +277,33 @@ public:
 			static void thunk(RE::NiNode* This);
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
+		
+		struct ValidLight1
+		{
+			static bool thunk(RE::BSShaderProperty* a_property, RE::BSLight* a_light)
+			{
+				return func(a_property, a_light) && (a_light->portalStrict || !a_light->portalGraph);
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct ValidLight2
+		{
+			static bool thunk(RE::BSShaderProperty* a_property, RE::BSLight* a_light)
+			{
+				return func(a_property, a_light) && (a_light->portalStrict || !a_light->portalGraph);
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct ValidLight3
+		{
+			static bool thunk(RE::BSShaderProperty* a_property, RE::BSLight* a_light)
+			{
+				return func(a_property, a_light) && (a_light->portalStrict || !a_light->portalGraph);
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
 
 		static void Install()
 		{
@@ -289,6 +316,10 @@ public:
 			stl::write_thunk_call<BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights>(REL::RelocationID(100565, 107300).address() + REL::Relocate(0x523, 0xB0E, 0x5fe));
 
 			stl::detour_thunk<NiNode_Destroy>(REL::RelocationID(68937, 70288));
+
+			stl::write_thunk_call<ValidLight1>(REL::RelocationID(100994, 107781).address() + 0x92);
+			stl::write_thunk_call<ValidLight2>(REL::RelocationID(100997, 107784).address() + REL::Relocate(0x139, 0x12A));
+			stl::write_thunk_call<ValidLight3>(REL::RelocationID(101296, 108283).address() + REL::Relocate(0xB7, 0x7E));
 
 			logger::info("[LLF] Installed hooks");
 		}
