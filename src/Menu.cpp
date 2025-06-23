@@ -41,11 +41,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::ThemeSettings::FeatureHeadingColors,
-	LineColorDefault,
-	LineColorHovered,
-	TextColorDefault,
-	TextColorHovered,
-	TextColorWhite)
+	ColorDefault,
+	ColorHovered,
+	MinimizedFactor)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::Settings::PerfOverlaySettings,
@@ -1106,11 +1104,9 @@ void Menu::DrawGeneralSettings()
 
 				ImGui::SeparatorText("Feature Headings");
 
-				ImGui::ColorEdit4("Line Color Default", (float*)&themeSettings.FeatureHeading.LineColorDefault);
-				ImGui::ColorEdit4("Line Color Hovered", (float*)&themeSettings.FeatureHeading.LineColorHovered);
-				ImGui::ColorEdit4("Text Color Default", (float*)&themeSettings.FeatureHeading.TextColorDefault);
-				ImGui::ColorEdit4("Text Color Hovered", (float*)&themeSettings.FeatureHeading.TextColorHovered);
-				ImGui::ColorEdit4("Text Color White", (float*)&themeSettings.FeatureHeading.TextColorWhite);
+				ImGui::ColorEdit4("Regular", (float*)&themeSettings.FeatureHeading.ColorDefault);
+				ImGui::ColorEdit4("Hovered", (float*)&themeSettings.FeatureHeading.ColorHovered);
+				ImGui::SliderFloat("Minimized Alpha Factor", &themeSettings.FeatureHeading.MinimizedFactor, 0.0f, 1.0f, "%.2f");
 
 				ImGui::SeparatorText("Palette");
 
