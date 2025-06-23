@@ -338,7 +338,12 @@ void WetnessEffects::DrawSettings()
 					tooltipLines.push_back(*effect);
 				}
 
-				Util::DrawMultiLineTooltip(tooltipLines);
+				std::vector<std::string> tooltipLinesStr;
+				tooltipLinesStr.reserve(tooltipLines.size());
+				for (const char* line : tooltipLines) {
+					tooltipLinesStr.emplace_back(line);
+				}
+				Util::DrawMultiLineTooltip(tooltipLinesStr);
 			}
 		}
 	}
@@ -396,10 +401,12 @@ void WetnessEffects::DrawSettings()
 		ImGui::EndDisabled();
 		ImGui::SliderFloat("Effect Range", &settings.RaindropFxRange, 1e2f, 2e3f, "%.0f units");
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			char buffer[128];
-			Util::DrawMultiLineTooltip({ "Range for raindrop effects",
-				Util::Units::FormatDistance(settings.RaindropFxRange, buffer, sizeof(buffer)),
-				std::format("%.2f meters", Util::Units::GameUnitsToMeters(settings.RaindropFxRange)).c_str() });
+			std::vector<std::string> tooltipLines = {
+				"Range for raindrop effects",
+				Util::Units::FormatDistance(settings.RaindropFxRange),
+				std::format("{:.2f} meters", Util::Units::GameUnitsToMeters(settings.RaindropFxRange))
+			};
+			Util::DrawMultiLineTooltip(tooltipLines);
 		}
 		if (ImGui::TreeNodeEx("Raindrops")) {
 			ImGui::BulletText(
@@ -408,10 +415,12 @@ void WetnessEffects::DrawSettings()
 
 			ImGui::SliderFloat("Grid Size", &settings.RaindropGridSize, 1.0f, 10.0f, "%.1f units");
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				char buffer[128];
-				Util::DrawMultiLineTooltip({ "Spatial grid size for raindrop placement (smaller = more grid cells, higher GPU cost)",
+				std::vector<std::string> tooltipLines = {
+					"Spatial grid size for raindrop placement (smaller = more grid cells, higher GPU cost)",
 					"This is the most performance-sensitive setting. Lower only if needed for realism.",
-					Util::Units::FormatDistance(settings.RaindropGridSize, buffer, sizeof(buffer)) });
+					Util::Units::FormatDistance(settings.RaindropGridSize)
+				};
+				Util::DrawMultiLineTooltip(tooltipLines);
 			}
 			ImGui::SliderFloat("Interval", &settings.RaindropInterval, 0.1f, 2.0f, "%.1f sec");
 			if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -473,17 +482,21 @@ void WetnessEffects::DrawSettings()
 		}
 		ImGui::SliderInt("Shore Range", (int*)&settings.ShoreRange, 1, 64);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			char buffer[128];
-			Util::DrawMultiLineTooltip({ "The maximum distance from a body of water that Shore Wetness affects",
-				Util::Units::FormatDistance(static_cast<float>(settings.ShoreRange), buffer, sizeof(buffer)),
-				std::format("%.2f meters", Util::Units::GameUnitsToMeters(static_cast<float>(settings.ShoreRange))).c_str() });
+			std::vector<std::string> tooltipLines = {
+				"The maximum distance from a body of water that Shore Wetness affects",
+				Util::Units::FormatDistance(static_cast<float>(settings.ShoreRange)),
+				std::format("{:.2f} meters", Util::Units::GameUnitsToMeters(static_cast<float>(settings.ShoreRange)))
+			};
+			Util::DrawMultiLineTooltip(tooltipLines);
 		}
 		ImGui::SliderFloat("Puddle Radius", &settings.PuddleRadius, 0.3f, 3.0f);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			char buffer[128];
-			Util::DrawMultiLineTooltip({ "The radius used to determine puddle size and location",
-				Util::Units::FormatDistance(settings.PuddleRadius, buffer, sizeof(buffer)),
-				std::format("%.2f meters", Util::Units::GameUnitsToMeters(settings.PuddleRadius)).c_str() });
+			std::vector<std::string> tooltipLines = {
+				"The radius used to determine puddle size and location",
+				Util::Units::FormatDistance(settings.PuddleRadius),
+				std::format("{:.2f} meters", Util::Units::GameUnitsToMeters(settings.PuddleRadius))
+			};
+			Util::DrawMultiLineTooltip(tooltipLines);
 		}
 
 		ImGui::SliderFloat("Puddle Max Angle", &settings.PuddleMaxAngle, 0.6f, 1.0f);
@@ -871,9 +884,9 @@ void WetnessEffects::DrawWeatherAnalysis()
 				ImGui::TableNextRow();
 				ImGui::TableNextColumn();
 
-				Util::DrawColorCodedValue("Rain Intensity", frameData.Raining * 100.0f, Util::ColorCodedValueConfig::HighIsGood(10.0f, 50.0f, 80.0f));
-				Util::DrawColorCodedValue("Wetness", frameData.Wetness * 100.0f, Util::ColorCodedValueConfig::HighIsGood(25.0f, 60.0f, 85.0f));
-				Util::DrawColorCodedValue("Puddle Wetness", frameData.PuddleWetness * 100.0f, Util::ColorCodedValueConfig::HighIsGood(15.0f, 40.0f, 70.0f));
+				Util::DrawColorCodedValue("Rain Intensity", frameData.Raining * 100.0f, std::format("{:.1f}%", frameData.Raining * 100.0f), Util::ColorCodedValueConfig::HighIsGood(10.0f, 50.0f, 80.0f));
+				Util::DrawColorCodedValue("Wetness", frameData.Wetness * 100.0f, std::format("{:.1f}%", frameData.Wetness * 100.0f), Util::ColorCodedValueConfig::HighIsGood(25.0f, 60.0f, 85.0f));
+				Util::DrawColorCodedValue("Puddle Wetness", frameData.PuddleWetness * 100.0f, std::format("{:.1f}%", frameData.PuddleWetness * 100.0f), Util::ColorCodedValueConfig::HighIsGood(15.0f, 40.0f, 70.0f));
 				ImGui::Text("Puddle Formation: %.1f%% min wetness", frameData.settings.PuddleMinWetness * 100.0f);
 				ImGui::Text("Weather Transition: %.1f%%", sky->currentWeatherPct * 100.0f);
 				ImGui::Text("Raindrop Chance: %.1f%%", frameData.settings.RaindropChance * 100.0f);
