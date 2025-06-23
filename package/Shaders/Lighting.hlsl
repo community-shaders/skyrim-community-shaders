@@ -1667,6 +1667,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	normal = normalColor;
 #		if defined(TRUE_PBR)
 	rawRMAOS = TexRMAOSSampler.SampleBias(SampRMAOSSampler, diffuseUv, SharedData::MipBias) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
+	if ((PBRFlags & PBR::Flags::Glint) != 0) {
+				glintParameters = MultiLayerParallaxData;
+			}
 #		endif
 #	endif
 
