@@ -13,8 +13,8 @@
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
 
-#include "Streamline.h"
 #include "Hooks.h"
+#include "Streamline.h"
 
 struct DepthStates
 {

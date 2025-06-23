@@ -10,8 +10,8 @@ using json = nlohmann::json;
 #include <FeatureBuffer.h>
 
 #include "reshade/reshade_api.hpp"
-#include <reshade/reshade.hpp>
 #include <Hooks.h>
+#include <reshade/reshade.hpp>
 
 class State
 {
