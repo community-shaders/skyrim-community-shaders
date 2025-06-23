@@ -64,13 +64,17 @@ public:
 	static ImVec4 GetWeatherFlagColorByName(const std::string& flagName);
 
 private:
+	// Weather flag filter bits (for 7 weather types)
+	static constexpr uint32_t ALL_WEATHER_FLAGS = 0x7F;  // Bits 0-6 all enabled
+	static constexpr uint32_t UNCLASSIFIED_FLAG = 0x40;  // Bit 6 only
+
 	// Static state for weather picker and data
 	static inline bool s_weathersLoaded = false;
 	static inline std::vector<RE::TESWeather*> s_allWeathers;
 	static inline std::vector<RE::TESWeather*> s_filteredWeathers;
 	static inline int s_selectedWeatherIdx = -1;
-	static inline uint32_t s_weatherFlagFilter = 0x7F;  // Start with all filters enabled by default (bits 0-6)
-	static inline uint32_t s_lastWeatherFlagFilter = 0x40;
+	static inline uint32_t s_weatherFlagFilter = ALL_WEATHER_FLAGS;  // Start with all filters enabled by default (bits 0-6)
+	static inline uint32_t s_lastWeatherFlagFilter = UNCLASSIFIED_FLAG;
 	static inline bool s_accelerateWeatherChange = true;
 	static inline RE::TESWeather* s_cachedLastWeather = nullptr;
 

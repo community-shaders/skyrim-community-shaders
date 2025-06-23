@@ -409,7 +409,7 @@ void WeatherPicker::RenderCoreWeatherDetails(bool isPopupWindow)
 				if (weatherControlsExpanded) {
 					ImGui::Text("Filter by Weather Type:");
 					if (ImGui::Button("Select All")) {
-						s_weatherFlagFilter = 0x7F;  // All weather flags (bits 0-6, including unclassified)
+						s_weatherFlagFilter = ALL_WEATHER_FLAGS;  // All weather flags (bits 0-6, including unclassified)
 					}
 					ImGui::SameLine();
 					if (ImGui::Button("Clear All")) {
@@ -452,7 +452,7 @@ void WeatherPicker::RenderCoreWeatherDetails(bool isPopupWindow)
 						ImGui::PushStyleColor(ImGuiCol_Text, filterColor);
 						if (filters[i].isUnclassified) {
 							// Special handling for None filter - use CheckboxFlags for consistency
-							ImGui::CheckboxFlags(filters[i].label, &s_weatherFlagFilter, 0x40);
+							ImGui::CheckboxFlags(filters[i].label, &s_weatherFlagFilter, UNCLASSIFIED_FLAG);
 							if (auto _tt = Util::HoverTooltipWrapper()) {
 								Util::DrawMultiLineTooltip({ "Shows weathers that are not classified under any specific category.",
 									"Includes weathers with no flags or only untracked flags.",
@@ -631,7 +631,7 @@ void WeatherPicker::UpdateFilteredWeathers()
 		bool shouldInclude = false;
 
 		// Check if all filters are selected (0x7F = all 7 bits)
-		if (s_weatherFlagFilter == 0x7F) {
+		if (s_weatherFlagFilter == ALL_WEATHER_FLAGS) {
 			shouldInclude = true;
 		} else {
 			// Check regular weather flags
@@ -641,7 +641,7 @@ void WeatherPicker::UpdateFilteredWeathers()
 			}
 
 			// Check for None filter (bit 6) - includes weathers that don't match any of our tracked flags
-			if (s_weatherFlagFilter & 0x40) {
+			if (s_weatherFlagFilter & UNCLASSIFIED_FLAG) {
 				// Define the mask for all the specific weather flags we track
 				uint32_t trackedFlags = static_cast<uint32_t>(RE::TESWeather::WeatherDataFlag::kPleasant) |
 				                        static_cast<uint32_t>(RE::TESWeather::WeatherDataFlag::kCloudy) |
