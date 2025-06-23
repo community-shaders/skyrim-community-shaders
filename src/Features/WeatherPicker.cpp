@@ -841,3 +841,16 @@ ImVec4 WeatherPicker::GetWeatherFlagColorByName(const std::string& flagName)
 	// Default for unclassified or unknown flags
 	return ImVec4(0.9f, 0.85f, 0.7f, 1.0f);  // Light tan/beige for none/unclassified
 }
+
+std::string WeatherPicker::GetDisplayName(const RE::TESWeather* weather)
+{
+	const char* name = weather->GetName();
+	if (name && strlen(name) > 0) {
+		return std::string(name);
+	}
+	const char* editorID = weather->GetFormEditorID();
+	if (editorID && strlen(editorID) > 0) {
+		return std::string(editorID);
+	}
+	return std::to_string(weather->GetFormID());
+}

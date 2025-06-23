@@ -86,18 +86,7 @@ private:
 	static inline RE::TESWeather* s_cachedLastWeather = nullptr;
 
 	// Static helper for display name extraction
-	static std::string GetDisplayName(const RE::TESWeather* weather)
-	{
-		const char* name = weather->GetName();
-		if (name && strlen(name) > 0) {
-			return std::string(name);
-		}
-		const char* editorID = weather->GetFormEditorID();
-		if (editorID && strlen(editorID) > 0) {
-			return std::string(editorID);
-		}
-		return std::to_string(weather->GetFormID());
-	}
+	static std::string GetDisplayName(const RE::TESWeather* weather);
 
 	// Weather comparator for consistent sorting
 	struct WeatherNameComparator
