@@ -80,9 +80,13 @@ void WeatherPicker::RenderWeatherDetailsWindow(bool* open)
 
 		// Render core weather details (popup mode)
 
-		// Determine if interactive elements should be enabled
-		bool menuOpen = Menu::GetSingleton()->ShouldSwallowInput() || (globals::game::ui && globals::game::ui->IsMenuOpen(RE::CursorMenu::MENU_NAME));
-		RenderCoreWeatherDetails(!menuOpen);
+		// Helper function to determine if interactive elements should be enabled
+		auto shouldEnableInteractiveElements = []() -> bool {
+			return !(Menu::GetSingleton()->ShouldSwallowInput() ||
+					 (globals::game::ui && globals::game::ui->IsMenuOpen(RE::CursorMenu::MENU_NAME)));
+		};
+
+		RenderCoreWeatherDetails(shouldEnableInteractiveElements());
 
 		// Render weather analysis from features with collapsible headers
 		RenderFeatureWeatherAnalysis();
@@ -201,9 +205,9 @@ void WeatherPicker::DisplayWeatherInfo(RE::TESWeather* weather, float weatherPct
 	// Lightning color as color picker (only show if thunder frequency > 0)
 	if (weather->data.thunderLightningFrequency > 0) {
 		// Treat color values as unsigned 8-bit (0-255 range)
-		unsigned int lightningR = static_cast<unsigned int>(static_cast<std::uint8_t>(weather->data.lightningColor.red));
-		unsigned int lightningG = static_cast<unsigned int>(static_cast<std::uint8_t>(weather->data.lightningColor.green));
-		unsigned int lightningB = static_cast<unsigned int>(static_cast<std::uint8_t>(weather->data.lightningColor.blue));
+		uint8_t lightningR = weather->data.lightningColor.red;
+		uint8_t lightningG = weather->data.lightningColor.green;
+		uint8_t lightningB = weather->data.lightningColor.blue;
 		ImGui::Text("Lightning Color:");
 
 		// Always show color picker, but disable interaction when not in interactive mode
