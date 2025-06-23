@@ -322,16 +322,6 @@ void Menu::DrawSettings()
 								uiIcons.clearCache.texture ||
 								uiIcons.clearDiskCache.texture);
 
-		// // Debug logging for icon availability
-		// if (settings.Theme.ShowActionIcons) {
-		// 	logger::debug("Icon status - Save: {}, Load: {}, Cache: {}, Disk: {}, Logo: {}",
-		// 		uiIcons.saveSettings.texture ? "OK" : "NULL",
-		// 		uiIcons.loadSettings.texture ? "OK" : "NULL",
-		// 		uiIcons.clearCache.texture ? "OK" : "NULL",
-		// 		uiIcons.clearDiskCache.texture ? "OK" : "NULL",
-		// 		uiIcons.logo.texture ? "OK" : "NULL");
-		// }
-
 		// Always show logo if available, regardless of action icons setting
 		bool showLogo = uiIcons.logo.texture != nullptr;
 

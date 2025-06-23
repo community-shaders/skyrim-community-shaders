@@ -41,6 +41,7 @@ public:
 	std::shared_mutex extendedSlotsMutex;
 	std::unordered_map<uint32_t, ExtendedSlots> extendedSlots;
 	RE::BGSTextureSet* defaultLandTexture;
+	bool enabled = false;
 
 	virtual void DataLoaded() override;
 	virtual bool SupportsVR() override { return true; };
