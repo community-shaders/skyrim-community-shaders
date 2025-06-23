@@ -302,27 +302,27 @@ void Menu::DrawSettings()
 	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
 	ImGui::SetNextWindowSize(Util::GetNativeViewportSizeScaled(0.8f), ImGuiCond_FirstUseEver);
 	auto title = std::format("Community Shaders {}", Util::GetFormattedVersion(Plugin::VERSION));
-	
+
 	// Determine window flags based on docking state
 	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar;
 	// Check if this will be docked (we need to peek at the docking state)
 	static bool wasDocked = false;
-	bool willBeDocked = wasDocked; // Use previous frame's state as approximation
-	
+	bool willBeDocked = wasDocked;  // Use previous frame's state as approximation
+
 	// Only hide title bar when not docked
 	if (!willBeDocked) {
 		windowFlags |= ImGuiWindowFlags_NoTitleBar;
 	}
-	
+
 	ImGui::Begin(title.c_str(), &IsEnabled, windowFlags);
 	{
 		auto shaderCache = globals::shaderCache;
 		// Update docking state tracking
 		bool isDocked = ImGui::IsWindowDocked();
 		wasDocked = isDocked;
-		
+
 		const float uiScale = exp2(settings.Theme.GlobalScale);  // Get current UI scale
-				// Check if we can show icons - require setting enabled and at least some icons loaded (for undocked)
+																 // Check if we can show icons - require setting enabled and at least some icons loaded (for undocked)
 		// For docked mode, always show icons if textures are available
 		bool canShowIcons = settings.Theme.ShowActionIcons &&
 		                    (uiIcons.saveSettings.texture ||
@@ -333,46 +333,40 @@ void Menu::DrawSettings()
 		// Always show logo if available, regardless of action icons setting
 		bool showLogo = uiIcons.logo.texture != nullptr;
 		// Define action icon metadata and callbacks
-		struct ActionIcon {
+		struct ActionIcon
+		{
 			ID3D11ShaderResourceView* texture;
 			const char* tooltip;
 			std::function<void()> callback;
 		};
-				std::vector<ActionIcon> actionIcons;
+		std::vector<ActionIcon> actionIcons;
 		// Populate icons if user setting allows icons and textures are available
 		if (canShowIcons) {
 			// Build list of available action icons (in display order)
 			if (uiIcons.saveSettings.texture) {
-				actionIcons.push_back({
-					uiIcons.saveSettings.texture,
+				actionIcons.push_back({ uiIcons.saveSettings.texture,
 					"Save Settings",
-					[]() { globals::state->Save(); }
-				});
+					[]() { globals::state->Save(); } });
 			}
 			if (uiIcons.loadSettings.texture) {
-				actionIcons.push_back({
-					uiIcons.loadSettings.texture,
+				actionIcons.push_back({ uiIcons.loadSettings.texture,
 					"Load Settings",
-					[]() { 
+					[]() {
 						globals::state->Load();
 						globals::features::llf::particleLights->GetConfigs();
-					}
-				});
+					} });
 			}
 			if (uiIcons.clearCache.texture) {
-				actionIcons.push_back({
-					uiIcons.clearCache.texture,
+				actionIcons.push_back({ uiIcons.clearCache.texture,
 					"Clear Shader Cache\n\n"
 					"The Shader Cache is the collection of compiled shaders which replace\n"
 					"the vanilla shaders at runtime. Clearing the shader cache will mean\n"
 					"that shaders are recompiled only when the game re-encounters them.\n"
 					"This is only needed for hot-loading shaders for development purposes.",
-					[shaderCache]() { shaderCache->Clear(); }
-				});
+					[shaderCache]() { shaderCache->Clear(); } });
 			}
 			if (uiIcons.clearDiskCache.texture) {
-				actionIcons.push_back({
-					uiIcons.clearDiskCache.texture,
+				actionIcons.push_back({ uiIcons.clearDiskCache.texture,
 					"Clear Disk Cache\n\n"
 					"The Disk Cache is a collection of compiled shaders on disk, which\n"
 					"are automatically created when shaders are added to the Shader Cache.\n"
@@ -381,67 +375,67 @@ void Menu::DrawSettings()
 					"completed you will no longer see this message apart from when loading\n"
 					"from the Disk Cache. Only delete the Disk Cache manually if you are\n"
 					"encountering issues.",
-					[shaderCache]() { shaderCache->DeleteDiskCache(); }
-				});
+					[shaderCache]() { shaderCache->DeleteDiskCache(); } });
 			}
 		}
-		
+
 		// Unified function to render action icons for both docked and undocked states
 		auto renderActionIcons = [&](bool isDocked) {
-			if (actionIcons.empty()) return;
-			
+			if (actionIcons.empty())
+				return;
+
 			if (isDocked) {
 				// Docked: Draw larger icons in the title bar using foreground draw list
 				const float iconSize = 40.0f * uiScale;  // Increased by 10% for better visual balance
 				const float iconSpacing = 8.0f * uiScale;
 				const float rightMargin = 45.0f * uiScale;  // Space for close button
-				
+
 				// Get window position and calculate title bar area
 				ImVec2 windowPos = ImGui::GetWindowPos();
 				ImVec2 windowSize = ImGui::GetWindowSize();
 				float titleBarHeight = ImGui::GetFrameHeight();
-				
+
 				// Use foreground draw list to draw over the title bar
 				ImDrawList* fgDrawList = ImGui::GetForegroundDrawList();
-				
+
 				// Calculate icon positions (right to left from close button)
 				float iconX = windowPos.x + windowSize.x - rightMargin;
 				float iconY = windowPos.y + (titleBarHeight - iconSize) * 0.5f;
-						// Draw icons from right to left
+				// Draw icons from right to left
 				for (auto it = actionIcons.rbegin(); it != actionIcons.rend(); ++it) {
 					iconX -= iconSize + iconSpacing;
-					
+
 					// Slightly reduce the icon rendering area to minimize any transparent padding
 					const float paddingReduction = 2.0f * uiScale;
 					ImVec2 iconMin(iconX + paddingReduction, iconY + paddingReduction);
 					ImVec2 iconMax(iconX + iconSize - paddingReduction, iconY + iconSize - paddingReduction);
-					
+
 					// Use the full area for mouse interaction (including padding)
 					ImVec2 interactionMin(iconX, iconY);
 					ImVec2 interactionMax(iconX + iconSize, iconY + iconSize);
-					
+
 					// Check mouse interaction against full area
 					ImVec2 mousePos = ImGui::GetMousePos();
-					bool isHovered = mousePos.x >= interactionMin.x && mousePos.x <= interactionMax.x && 
-					                mousePos.y >= interactionMin.y && mousePos.y <= interactionMax.y;
-					
+					bool isHovered = mousePos.x >= interactionMin.x && mousePos.x <= interactionMax.x &&
+					                 mousePos.y >= interactionMin.y && mousePos.y <= interactionMax.y;
+
 					// Draw icon with hover effect, using reduced area to minimize padding
 					ImU32 tintColor = isHovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 220);
 					fgDrawList->AddImage(it->texture, iconMin, iconMax, ImVec2(0, 0), ImVec2(1, 1), tintColor);
-							// Handle interaction
+					// Handle interaction
 					if (isHovered) {
 						// Draw subtle background for hovered icon using interaction area
 						fgDrawList->AddRectFilled(interactionMin, interactionMax, IM_COL32(255, 255, 255, 40));
-						
+
 						if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
 							it->callback();
 						}
-						
+
 						// Set tooltip manually since we're drawing outside normal ImGui flow
 						ImGui::SetTooltip("%s", it->tooltip);
 					}
 				}
-			} else {				// Undocked: Draw icons as ImageButtons in a table column
+			} else {                               // Undocked: Draw icons as ImageButtons in a table column
 				const float baseIconSize = 48.0f;  // Reduced by 25% from 64.0f for better proportions
 				const float iconSize = baseIconSize * uiScale;
 				const float paddingReduction = 4.0f * uiScale;  // Reduce padding to minimize dead space
@@ -449,16 +443,16 @@ void Menu::DrawSettings()
 				const ImVec2 imageSize(iconSize - paddingReduction, iconSize - paddingReduction);
 
 				// Setup button styling for transparent background with hover effects
-				ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, 0.0f));             // Slightly increased spacing
-				ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);                       // Remove button borders
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));                     // Transparent button background
+				ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, 0.0f));              // Slightly increased spacing
+				ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);                        // Remove button borders
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));                      // Transparent button background
 				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.8f, 0.8f, 0.25f));  // Slightly more visible hover effect
 
 				// Draw action icons as ImageButtons
 				for (size_t i = 0; i < actionIcons.size(); ++i) {
 					const auto& icon = actionIcons[i];
 					std::string buttonId = std::format("##ActionBtn{}", i);
-					
+
 					// Use ImageButton with reduced image size to minimize padding
 					if (ImGui::ImageButton(buttonId.c_str(), icon.texture, imageSize)) {
 						icon.callback();
@@ -466,7 +460,7 @@ void Menu::DrawSettings()
 					if (auto _tt = Util::HoverTooltipWrapper()) {
 						ImGui::Text("%s", icon.tooltip);
 					}
-					
+
 					// Add SameLine except for the last button
 					if (i < actionIcons.size() - 1) {
 						ImGui::SameLine();
@@ -486,30 +480,30 @@ void Menu::DrawSettings()
 				ImVec2 windowPos = ImGui::GetWindowPos();
 				ImVec2 windowSize = ImGui::GetWindowSize();
 				float titleBarHeight = ImGui::GetFrameHeight();
-				
+
 				// Calculate content area (below title bar)
 				ImVec2 contentPos(windowPos.x, windowPos.y + titleBarHeight);
 				ImVec2 contentSize(windowSize.x, windowSize.y - titleBarHeight);
-						// Calculate watermark logo size - base it on height for consistent sizing
+				// Calculate watermark logo size - base it on height for consistent sizing
 				const float watermarkHeightPercent = 0.50f;  // 25% of content height
 				float watermarkHeight = contentSize.y * watermarkHeightPercent;
 				float logoAspectRatio = uiIcons.logo.size.x / uiIcons.logo.size.y;
 				float watermarkWidth = watermarkHeight * logoAspectRatio;
-				
+
 				// Position watermark in the center of the content area
-				float logoX = contentPos.x + (contentSize.x - watermarkWidth) * 0.5f;  // Horizontally centered
+				float logoX = contentPos.x + (contentSize.x - watermarkWidth) * 0.5f;   // Horizontally centered
 				float logoY = contentPos.y + (contentSize.y - watermarkHeight) * 0.5f;  // Vertically centered
-				
+
 				// Draw watermark logo with transparency and blending
 				ImDrawList* drawList = ImGui::GetWindowDrawList();
 				ImVec2 logoMin(logoX, logoY);
 				ImVec2 logoMax(logoX + watermarkWidth, logoY + watermarkHeight);
-				
+
 				// Use very low alpha for subtle watermark effect
 				ImU32 watermarkColor = IM_COL32(255, 255, 255, 45);
 				drawList->AddImage(uiIcons.logo.texture, logoMin, logoMax, ImVec2(0, 0), ImVec2(1, 1), watermarkColor);
 			}
-			
+
 			// Draw action icons in the title bar area
 			renderActionIcons(true);
 		} else {
@@ -520,11 +514,11 @@ void Menu::DrawSettings()
 				ImGui::TableSetupColumn("Title", ImGuiTableColumnFlags_WidthStretch);
 				ImGui::TableSetupColumn("Buttons", ImGuiTableColumnFlags_WidthFixed);
 				ImGui::TableNextColumn();  // Title on the left with logo
-				
+
 				// Determine scaling based on GlobalScale setting
 				const float baseTextScale = 1.7f;
 				const float baseIconSize = 48.0f;  // Reduced by 25% from 64.0f to match action icons
-				
+
 				// Apply UI scale to the base scaling factors
 				const float textScaleFactor = baseTextScale * uiScale;
 				const float logoSize = baseIconSize * uiScale;  // Match action icon size
@@ -550,17 +544,17 @@ void Menu::DrawSettings()
 					Util::DrawSharpText(title.c_str(), true, textScaleFactor);
 					ImGui::PopStyleVar();
 				}
-				
+
 				// Buttons on the right
 				ImGui::TableNextColumn();
 				renderActionIcons(false);
 
-			ImGui::EndTable();
-		} else if (!(showLogo || canShowIcons)) {
-			// No icons available - show just the title without the table layout
-			const float baseTextScale = 1.5f;			
-			const float textScaleFactor = baseTextScale * uiScale;  // Apply UI scale
-				
+				ImGui::EndTable();
+			} else if (!(showLogo || canShowIcons)) {
+				// No icons available - show just the title without the table layout
+				const float baseTextScale = 1.5f;
+				const float textScaleFactor = baseTextScale * uiScale;  // Apply UI scale
+
 				ImGui::SetWindowFontScale(textScaleFactor);
 				ImGui::TextUnformatted(title.c_str());
 				ImGui::SetWindowFontScale(1.0f);
@@ -653,9 +647,9 @@ void Menu::DrawSettings()
 			}
 
 			// Add second separator when showing error button
-				ImGui::Spacing();
-				ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 3.0f);
-				ImGui::Spacing();
+			ImGui::Spacing();
+			ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 3.0f);
+			ImGui::Spacing();
 		} else {  // No additional separator needed - already handled in the conditional block above
 		}
 
