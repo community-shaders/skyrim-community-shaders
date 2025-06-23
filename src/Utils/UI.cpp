@@ -371,7 +371,7 @@ namespace Util
 
 		// Draw the lines and text using Menu theme colors
 		auto& theme = Menu::GetSingleton()->GetTheme().FeatureHeading;
-		
+
 		// Get the color based on hover state
 		ImVec4 color = hovered ? theme.ColorHovered : theme.ColorDefault;
 		// If minimized, apply the minimized factor
