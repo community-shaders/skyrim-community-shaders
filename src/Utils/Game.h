@@ -79,6 +79,8 @@ namespace Util
 		// Angle normalization helpers
 		inline float NormalizeDegrees0To360(float degrees)
 		{
+			if (!std::isfinite(degrees))
+				return 0.0f;
 			while (degrees < 0.0f) degrees += 360.0f;
 			while (degrees >= 360.0f) degrees -= 360.0f;
 			return degrees;
@@ -86,6 +88,8 @@ namespace Util
 
 		inline float NormalizeDegreesToSignedRange(float degrees)
 		{
+			if (!std::isfinite(degrees))
+				return 0.0f;
 			while (degrees > 180.0f) degrees -= 360.0f;
 			while (degrees < -180.0f) degrees += 360.0f;
 			return degrees;
