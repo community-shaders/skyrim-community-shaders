@@ -94,9 +94,9 @@ public:
 		} StatusPalette;
 		struct FeatureHeadingColors
 		{
-			ImVec4 ColorDefault  { 0.47f, 0.47f, 0.47f, 1.00f };  // ~120, 120, 120
-			ImVec4 ColorHovered { 0.39f, 0.39f, 0.39f, 1.00f };  // ~100, 100, 100
-			float MinimizedFactor = 0.7f; // 70% of original alpha for when the header is minimized
+			ImVec4 ColorDefault{ 0.47f, 0.47f, 0.47f, 1.00f };  // ~120, 120, 120
+			ImVec4 ColorHovered{ 0.39f, 0.39f, 0.39f, 1.00f };  // ~100, 100, 100
+			float MinimizedFactor = 0.7f;                       // 70% of original alpha for when the header is minimized
 		} FeatureHeading;
 
 		ImGuiStyle Style = []() {
