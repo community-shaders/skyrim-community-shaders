@@ -259,52 +259,11 @@ void WetnessEffects::DrawSettings()
 		presetNames[i] = CLIMATE_PRESET_INFO[i].name;
 	}
 	// Map preset enum to combo index (Custom=0, Legacy=1, Nordic=2, Arctic=3, Coastal=4, Monsoon=5)
-	int currentComboIndex = 0;
-	switch (climatePreset) {
-	case ClimatePreset::Custom:
-		currentComboIndex = 0;
-		break;
-	case ClimatePreset::Legacy:
-		currentComboIndex = 1;
-		break;
-	case ClimatePreset::NordicStandard:
-		currentComboIndex = 2;
-		break;
-	case ClimatePreset::ArcticTundra:
-		currentComboIndex = 3;
-		break;
-	case ClimatePreset::TemperateCoastal:
-		currentComboIndex = 4;
-		break;
-	case ClimatePreset::MonsoonExtreme:
-		currentComboIndex = 5;
-		break;
-	}
+	int currentComboIndex = static_cast<int>(climatePreset);
+
 	if (ImGui::Combo("Climate Preset", &currentComboIndex, presetNames, static_cast<int>(CLIMATE_PRESET_INFO.size()))) {  // Map combo index back to preset enum
-		ClimatePreset newPreset;
-		switch (currentComboIndex) {
-		case 0:
-			newPreset = ClimatePreset::Custom;
-			break;
-		case 1:
-			newPreset = ClimatePreset::Legacy;
-			break;
-		case 2:
-			newPreset = ClimatePreset::NordicStandard;
-			break;
-		case 3:
-			newPreset = ClimatePreset::ArcticTundra;
-			break;
-		case 4:
-			newPreset = ClimatePreset::TemperateCoastal;
-			break;
-		case 5:
-			newPreset = ClimatePreset::MonsoonExtreme;
-			break;
-		default:
-			newPreset = defaultPreset;
-			break;
-		}
+		// Simplified: map combo index directly to enum, with bounds check
+		ClimatePreset newPreset = (currentComboIndex >= 0 && currentComboIndex < static_cast<int>(CLIMATE_PRESET_INFO.size())) ? static_cast<ClimatePreset>(currentComboIndex) : defaultPreset;
 
 		// Update the preset selection
 		climatePreset = newPreset;
