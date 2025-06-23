@@ -1,9 +1,9 @@
 #pragma once
 
+#include "Feature.h"
 #include "Utils/Serialize.h"
 #include <dxgi1_4.h>
 #include <winrt/base.h>
-#include "Feature.h"
 
 using namespace std::chrono;
 #define BUFFER_VIEWER_NODE(a_value, a_scale)                                                                 \
@@ -215,7 +215,7 @@ public:
 	const ThemeSettings& GetTheme() const { return settings.Theme; }  // Provide read-only access to the Theme.
 
 	void SelectFeatureMenu(const std::string& featureName);
-	static std::unordered_map<std::string, int> categoryCounts; // Number of features in each feature category
+	static std::unordered_map<std::string, int> categoryCounts;  // Number of features in each feature category
 
 private:
 	Settings settings;
