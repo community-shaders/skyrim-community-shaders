@@ -4,9 +4,10 @@
 instructions: |
     When reviewing PRs, please provide suggestions for:
 
-    1. **Conventional Commit Titles** (if not following https://www.conventionalcommits.org/):
+    1. **Conventional Commit Titles** (if not following https://www.conventionalcommits.org/ or 
+    if the existing title does not describe the code changes):
        Format: type(scope): description
-       Length: 50 characters preferred, 72 characters maximum
+       Length: 50 characters limit for title, 72 for body
        Style: lowercase description, no ending period
        Examples:
        - feat(vr): add cross-eye sampling
