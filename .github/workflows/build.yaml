@@ -566,7 +566,7 @@ jobs:
             - name: Comment on PR with audit results
               uses: thollander/actions-comment-pull-request@v3
               with:
-                  filePath: pr-feature-audit.md
+                  file-path: pr-feature-audit.md
                   mode: upsert
                   comment-tag: feature-version-audit
 
