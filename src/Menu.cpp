@@ -8,6 +8,7 @@
 #include <imgui_impl_win32.h>
 #include <imgui_internal.h>
 #include <imgui_stdlib.h>
+#include <Windows.h>
 
 #include "DX12SwapChain.h"
 #include "Deferred.h"
@@ -2718,6 +2719,16 @@ void Menu::ProcessInputEventQueue()
 	}
 
 	_keyEventQueue.clear();
+
+	// Fallback: release stuck Shift and Tab if OS reports them not pressed
+	if ((io.KeysDown[ImGuiKey_LeftShift] && !(GetAsyncKeyState(VK_LSHIFT) & 0x8000)) ||
+		(io.KeysDown[ImGuiKey_RightShift] && !(GetAsyncKeyState(VK_RSHIFT) & 0x8000))) {
+		io.AddKeyEvent(ImGuiKey_LeftShift, false);
+		io.AddKeyEvent(ImGuiKey_RightShift, false);
+	}
+	if (io.KeysDown[ImGuiKey_Tab] && !(GetAsyncKeyState(VK_TAB) & 0x8000)) {
+		io.AddKeyEvent(ImGuiKey_Tab, false);
+	}
 }
 
 void Menu::addToEventQueue(KeyEvent e)
