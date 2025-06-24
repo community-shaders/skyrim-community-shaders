@@ -131,3 +131,16 @@ void ExtendedTranslucency::RestoreDefaultSettings()
 {
 	settings = {};
 }
+
+std::pair<std::string, std::vector<std::string>> ExtendedTranslucency::GetFeatureSummary()
+{
+	return {
+		"Extended Translucency provides realistic rendering of thin fabric and other translucent materials.\n"
+		"This feature supports multiple material models for different types of translucent surfaces.",
+		{ "Multiple translucency material models (rim light, isotropic/anisotropic fabric)",
+			"Realistic fabric translucency with directional light transmission",
+			"Per-material override support via NIF extra data",
+			"Configurable transparency and softness controls",
+			"Performance-optimized translucency calculations" }
+	};
+}

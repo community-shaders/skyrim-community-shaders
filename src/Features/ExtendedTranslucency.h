@@ -18,6 +18,8 @@ struct ExtendedTranslucency final : Feature
 	virtual void RestoreDefaultSettings() override;
 	virtual bool SupportsVR() override { return true; };
 
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override;
+
 	// Future proof function for UI refactoring
 	std::string GetFeatureDescription() { return "Realistic rendering of thin fabric and other translucent materials"; }  // Feature description for settings page
 	std::string GetFeatureModLink() { return "https://www.nexusmods.com/skyrimspecialedition/mods/150755"; }
