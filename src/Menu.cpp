@@ -20,7 +20,6 @@
 #include "TruePBR.h"
 #include "Upscaling.h"
 #include "Util.h"
-#include "Utils/Format.h"
 #include "Utils/UI.h"
 
 #include "Features/LightLimitFix/ParticleLights.h"

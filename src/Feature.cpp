@@ -2,6 +2,8 @@
 
 #include "FeatureIssues.h"
 #include "FeatureVersions.h"
+#include "Menu.h"
+#include "Utils/Format.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExtendedMaterials.h"
@@ -257,4 +259,41 @@ bool Feature::ToggleAtBootSetting()
 	state->SetFeatureDisabled(featureName, !disabled);
 
 	return state->IsFeatureDisabled(featureName);  // Return the new state
+}
+
+void Feature::DrawUnloadedUI()
+{
+	// Prioritize detailed failure message if available
+	if (!failedLoadedMessage.empty()) {
+		// Use error color for all failure messages
+		auto& themeSettings = Menu::GetSingleton()->GetTheme();
+		ImGui::TextColored(themeSettings.StatusPalette.Error, failedLoadedMessage.c_str());
+		return;
+	}
+
+	// Fallback: Always show missing file message when no specific failure message exists
+	auto& themeSettings = Menu::GetSingleton()->GetTheme();
+	auto ini_filename = std::format("{}.ini", GetShortName());
+	// Get the minimum required version to include in the error message
+	std::string requiredVersion = Util::GetFeatureRequiredVersion(GetShortName());
+
+	auto missingFileMessage = std::format("The {} file is missing. This feature is not installed! Version required: {}", ini_filename, requiredVersion);
+	ImGui::TextColored(themeSettings.StatusPalette.Error, missingFileMessage.c_str());
+
+	// Also show feature summary if available
+	auto [description, keyFeatures] = GetFeatureSummary();
+	if (!description.empty()) {
+		ImGui::Spacing();
+		ImGui::TextWrapped("%s", description.c_str());
+	}
+
+	if (!keyFeatures.empty()) {
+		if (description.empty()) {
+			ImGui::Spacing();
+		}
+		ImGui::TextWrapped("Key features:");
+		for (const auto& feature : keyFeatures) {
+			ImGui::BulletText("%s", feature.c_str());
+		}
+	}
 }
