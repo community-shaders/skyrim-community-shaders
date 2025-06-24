@@ -20,7 +20,7 @@ public:
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Provides enhanced terrain material support for terrain mods that require additional texture slots and parallax mapping capabilities.\nNote: This feature is only required if a terrain mod you are using specifically requires it, otherwise it does nothing.",
+			"Provides enhanced terrain material support for terrain mods that require additional texture slots and parallax mapping capabilities.",
 			{ "Extended texture slot support for terrain materials",
 				"Parallax mapping integration for terrain textures",
 				"Automatic terrain material detection and setup",
@@ -41,6 +41,7 @@ public:
 	std::shared_mutex extendedSlotsMutex;
 	std::unordered_map<uint32_t, ExtendedSlots> extendedSlots;
 	RE::BGSTextureSet* defaultLandTexture;
+	bool enabled = false;
 
 	virtual void DataLoaded() override;
 	virtual bool SupportsVR() override { return true; };
