@@ -3,6 +3,10 @@
 
 struct InteriorSunShadows : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "153541";
+
+public:
 	static InteriorSunShadows* GetSingleton()
 	{
 		static InteriorSunShadows singleton;
@@ -15,12 +19,11 @@ struct InteriorSunShadows : Feature
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Enables realistic sun shadows inside interior spaces that have openings to the exterior, such as windows and doors, bringing natural lighting indoors.",
-			{ "Sun shadow casting through windows and openings",
-				"Double-sided rendering for accurate interior shadows",
-				"Automatic detection of interiors with sun exposure",
-				"Enhanced directional light culling for interiors",
-				"Seamless integration with existing shadow systems" }
+			"Allows for the sun and moon to cast light and shadows into interior spaces.",
+			{ "Functions only for explicitly enabled interiors",
+				"Utilizes existing sun, moon, and weather systems",
+				"Includes an option to force double-sided rendering for unprepared interiors",
+				"Fixes geometry culling issues that cause light leakage" }
 		};
 	}
 	virtual void DrawSettings() override;

@@ -5,6 +5,11 @@
 void LightEditor::DrawSettings()
 {
 	ImGui::Checkbox("Enable Light Editor", &enabled);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text(
+			"Allows for modifying lights in real-time to preview changes. "
+			"Changes cannot be saved directly and it is not intended for gameplay use.");
+	}
 
 	if (!enabled)
 		return;

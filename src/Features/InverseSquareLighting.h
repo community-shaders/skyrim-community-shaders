@@ -4,6 +4,10 @@
 
 struct InverseSquareLighting : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "153542";
+
+public:
 	static InverseSquareLighting* GetSingleton()
 	{
 		static InverseSquareLighting singleton;
@@ -21,12 +25,13 @@ struct InverseSquareLighting : Feature
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Implements physically accurate inverse square falloff for lighting, making light attenuation behave realistically with distance for more natural illumination.",
-			{ "Physically accurate light attenuation based on distance",
-				"Automatic radius calculation for optimal performance",
-				"Enhanced light editor for fine-tuning light properties",
-				"Realistic shadow caster handling",
-				"Support for both point and directional lighting" }
+			"Implements an additional inverse square falloff for lighting which allows for a more physically accurate and realistic looking light attenuation.",
+			{ "Automatic light radius calculation based on intensity",
+				"Lights smoothly fade out at a configurable cutoff, solving the infinite distance problem",
+				"Does not modify any existing lighting",
+				"Requires the use of mods with lights enabled for inverse square falloff.",
+				"Full integration with Light Placer",
+				"Built in Light Editor for mod authors to preview lighting changes in real-time" }
 		};
 	}
 
