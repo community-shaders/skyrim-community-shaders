@@ -7,36 +7,6 @@ namespace Util
 		const auto& v = version.string(".");
 		return v.substr(0, v.find_last_of("."));
 	}
-	std::string GetFeatureRequiredVersion(const std::string& shortName)
-	{
-		if (shortName.empty()) {
-			return "unknown";
-		}
-
-		auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(shortName);
-		if (iter != FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
-			return GetFormattedVersion(iter->second);
-		}
-
-		return "unknown";
-	}
-
-	bool IsFeatureKnown(const std::string& shortName, REL::Version* outVersion)
-	{
-		if (shortName.empty()) {
-			return false;
-		}
-
-		auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(shortName);
-		if (iter != FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
-			if (outVersion) {
-				*outVersion = iter->second;
-			}
-			return true;
-		}
-
-		return false;
-	}
 
 	std::string DefinesToString(const std::vector<std::pair<const char*, const char*>>& defines)
 	{

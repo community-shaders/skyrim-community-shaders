@@ -93,4 +93,29 @@ public:
 	virtual void ClearShaderCache() {}
 
 	static const std::vector<Feature*>& GetFeatureList();
+
+	// Feature utility functions
+	/**
+	 * @brief Gets the minimum required version for a feature.
+	 *
+	 * This function looks up the minimum required version for a feature
+	 * from FeatureVersions::FEATURE_MINIMAL_VERSIONS and returns it as a
+	 * formatted string. Returns "unknown" if the feature is not found.
+	 *
+	 * @param shortName The short name of the feature.
+	 * @return The formatted minimum required version string, or "unknown" if not found.
+	 */
+	static std::string GetFeatureRequiredVersion(const std::string& shortName);
+
+	/**
+	 * @brief Checks if a feature has a minimum required version defined.
+	 *
+	 * This function checks if a feature exists in the FeatureVersions::FEATURE_MINIMAL_VERSIONS
+	 * map and optionally returns the version.
+	 *
+	 * @param shortName The short name of the feature.
+	 * @param outVersion Pointer to REL::Version to store the version if found (optional).
+	 * @return True if the feature is found, false otherwise.
+	 */
+	static bool IsFeatureKnown(const std::string& shortName, REL::Version* outVersion = nullptr);
 };

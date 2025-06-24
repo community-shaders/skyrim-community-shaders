@@ -66,7 +66,7 @@ void Feature::Load(json& o_json)
 
 			// Check if feature exists in minimal versions
 			REL::Version minimalFeatureVersion;
-			if (!Util::IsFeatureKnown(GetShortName(), &minimalFeatureVersion)) {
+			if (!Feature::IsFeatureKnown(GetShortName(), &minimalFeatureVersion)) {
 				hasError = true;
 				errorVersion = value;
 				errorType = FeatureIssues::FeatureIssueInfo::IssueType::UNKNOWN;
@@ -107,7 +107,7 @@ void Feature::Load(json& o_json)
 		errorType = FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH;
 
 		// Get the minimum required version to include in the error message
-		std::string requiredVersion = Util::GetFeatureRequiredVersion(GetShortName());
+		std::string requiredVersion = Feature::GetFeatureRequiredVersion(GetShortName());
 
 		failedLoadedMessage = std::format("The {} file is missing. This feature is not installed! Version required: {}", ini_filename, requiredVersion);
 	}
@@ -124,7 +124,7 @@ void Feature::Load(json& o_json)
 			// For version mismatch, also pass the minimum required version
 			std::string minimumVersion;
 			if (errorType == FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH) {
-				minimumVersion = Util::GetFeatureRequiredVersion(shortName);
+				minimumVersion = Feature::GetFeatureRequiredVersion(shortName);
 			}
 
 			FeatureIssues::AddFeatureIssue(shortName, errorVersion, failedLoadedMessage, errorType, fileInfo, minimumVersion);
@@ -275,7 +275,7 @@ void Feature::DrawUnloadedUI()
 	auto& themeSettings = Menu::GetSingleton()->GetTheme();
 	auto ini_filename = std::format("{}.ini", GetShortName());
 	// Get the minimum required version to include in the error message
-	std::string requiredVersion = Util::GetFeatureRequiredVersion(GetShortName());
+	std::string requiredVersion = Feature::GetFeatureRequiredVersion(GetShortName());
 
 	auto missingFileMessage = std::format("The {} file is missing. This feature is not installed! Version required: {}", ini_filename, requiredVersion);
 	ImGui::TextColored(themeSettings.StatusPalette.Error, missingFileMessage.c_str());
@@ -296,4 +296,34 @@ void Feature::DrawUnloadedUI()
 			ImGui::BulletText("%s", feature.c_str());
 		}
 	}
+}
+
+std::string Feature::GetFeatureRequiredVersion(const std::string& shortName)
+{
+	if (shortName.empty()) {
+		return "unknown";
+	}
+	auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(shortName);
+	if (iter != FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
+		return Util::GetFormattedVersion(iter->second);
+	}
+
+	return "unknown";
+}
+
+bool Feature::IsFeatureKnown(const std::string& shortName, REL::Version* outVersion)
+{
+	if (shortName.empty()) {
+		return false;
+	}
+
+	auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(shortName);
+	if (iter != FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
+		if (outVersion) {
+			*outVersion = iter->second;
+		}
+		return true;
+	}
+
+	return false;
 }
