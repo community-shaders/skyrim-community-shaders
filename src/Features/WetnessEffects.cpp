@@ -372,19 +372,3 @@ void WetnessEffects::RestoreDefaultSettings()
 	settings = {};
 	Ripples::UpdateSettings();  // Sync cached values after restoring defaults
 }
-
-void WetnessEffects::DrawUnloadedUI()
-{
-	ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "This feature is not installed!");
-
-	ImGui::Spacing();
-	ImGui::TextWrapped(
-		"Wetness Effects adds a collection of realistic wetness and weather effects to Skyrim.\n");
-	ImGui::Spacing();
-	ImGui::TextWrapped("Key features:");
-	ImGui::BulletText("Rain Wetness");
-	ImGui::BulletText("Puddles");
-	ImGui::BulletText("Raindrop Effects (Splashes and Ripples)");
-	ImGui::BulletText("Shore Wetness");
-	ImGui::Spacing();
-}

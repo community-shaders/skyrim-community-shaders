@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Menu.h"
+#include "FeatureVersions.h"
+#include "Utils/Format.h"
 
 struct Feature
 {
@@ -73,23 +75,45 @@ public:
 	virtual void DrawSettings() {}
 	virtual void DrawUnloadedUI()
 	{
-		auto [description, keyFeatures] = GetFeatureSummary();
+		// Prioritize detailed failure message if available
+		if (!failedLoadedMessage.empty()) {
+			// Use error color for all failure messages
+			auto& themeSettings = Menu::GetSingleton()->GetTheme();
+			ImGui::TextColored(themeSettings.StatusPalette.Error, failedLoadedMessage.c_str());
+			return;
+		}
 
-		if (!description.empty() || !keyFeatures.empty()) {
-			ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.Error, "This feature is not installed!");
-			ImGui::Spacing();
+			// Fallback: Always show missing file message when no specific failure message exists
+			auto& themeSettings = Menu::GetSingleton()->GetTheme();
+			auto ini_filename = std::format("{}.ini", GetShortName());
+			
+			// Get the minimum required version to include in the error message
+			std::string requiredVersion = "unknown";
+			std::string shortName = GetShortName();
+			if (!shortName.empty()) {
+				auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(shortName);
+				if (iter != FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
+					requiredVersion = Util::GetFormattedVersion(iter->second);
+				}
+			}
+			
+			auto missingFileMessage = std::format("The {} file is missing. This feature is not installed! Version required: {}", ini_filename, requiredVersion);
+			ImGui::TextColored(themeSettings.StatusPalette.Error, missingFileMessage.c_str());
 
+			// Also show feature summary if available
+			auto [description, keyFeatures] = GetFeatureSummary();
 			if (!description.empty()) {
-				ImGui::TextWrapped("%s", description.c_str());
 				ImGui::Spacing();
+				ImGui::TextWrapped("%s", description.c_str());
 			}
 
 			if (!keyFeatures.empty()) {
+					if (description.empty()) {
+					ImGui::Spacing();
+				}
 				ImGui::TextWrapped("Key features:");
 				for (const auto& feature : keyFeatures) {
 					ImGui::BulletText("%s", feature.c_str());
-				}
-				ImGui::Spacing();
 			}
 		}
 	}

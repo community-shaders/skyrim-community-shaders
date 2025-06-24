@@ -3,25 +3,6 @@
 #include "ShaderCache.h"
 #include "State.h"
 
-void TerrainHelper::DrawUnloadedUI()
-{
-	auto [description, keyFeatures] = GetFeatureSummary();
-
-	ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-	ImGui::Text("%s", description.c_str());
-
-	if (!keyFeatures.empty()) {
-		ImGui::Spacing();
-		ImGui::Text("Key Features:");
-		for (const auto& feature : keyFeatures) {
-			ImGui::BulletText("%s", feature.c_str());
-		}
-	}
-
-	ImGui::Spacing();
-	ImGui::TextWrapped("Note: This feature is only required if a terrain mod you are using specifically requires it, otherwise it does nothing.");
-	ImGui::PopTextWrapPos();
-}
 
 void TerrainHelper::DataLoaded()
 {
@@ -30,21 +11,15 @@ void TerrainHelper::DataLoaded()
 	if (defaultLandTextureSet != nullptr) {
 		logger::info("[Terrain Helper] LandscapeDefault EDID texture set found");
 		defaultLandTexture = defaultLandTextureSet;
-		// only enable if TerrainHelper.esp is loaded
-		enabled = true;
 	} else {
-		logger::warn("[Terrain Helper] LandscapeDefault EDID texture set from TerrainHelper.esp not found. Terrain helper is disabled.");
-		enabled = false;
+		logger::info("[Terrain Helper] LandscapeDefault EDID texture set not found, using default");
+		const auto bgsDefaultLandTex = *REL::Relocation<RE::TESLandTexture**>(RELOCATION_ID(514783, 400936));
+		defaultLandTexture = bgsDefaultLandTex->textureSet;
 	}
 }
 
 bool TerrainHelper::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 {
-	if (!enabled) {
-		// terrain helper is not enabled
-		return false;
-	}
-
 	if (land == nullptr || land->loadedData == nullptr || land->loadedData->mesh[0] == nullptr) {
 		// this is not terrain or vanilla material failed
 		return false;
@@ -152,11 +127,6 @@ void TerrainHelper::SetShaderResouces(ID3D11DeviceContext* a_context)
 
 void TerrainHelper::BSLightingShader_SetupMaterial(RE::BSLightingShaderMaterialBase const* material)
 {
-	if (!enabled) {
-		// terrain helper is not enabled
-		return;
-	}
-
 	if (material == nullptr) {
 		return;
 	}
@@ -176,7 +146,6 @@ void TerrainHelper::BSLightingShader_SetupMaterial(RE::BSLightingShaderMaterialB
 	const auto& stateData = globals::game::graphicsState->GetRuntimeData();
 
 	// Populate extended slots
-	// Please update bits allocation in ExtraFeatureDescriptor/Permutation.hlsli and other feature code if you need to change the constant 6
 	for (uint32_t textureI = 0; textureI < 6; ++textureI) {
 		if (materialBase.parallax[textureI] != nullptr && materialBase.parallax[textureI] != stateData.defaultTextureNormalMap) {
 			thExtendedRendererState.SetPSTexture(textureI, materialBase.parallax[textureI]->rendererTexture);

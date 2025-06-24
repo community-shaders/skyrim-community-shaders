@@ -2,10 +2,10 @@
 
 #include "FeatureIssues.h"
 #include "FeatureVersions.h"
+#include "Utils/Format.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExtendedMaterials.h"
-#include "Features/ExtendedTranslucency.h"
 #include "Features/GrassCollision.h"
 #include "Features/GrassLighting.h"
 #include "Features/HairSpecular.h"
@@ -83,8 +83,7 @@ void Feature::Load(json& o_json)
 					errorVersion = value;
 					errorType = FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH;
 
-					std::string minimalVersionString = minimalFeatureVersion.string();
-					minimalVersionString = minimalVersionString.substr(0, minimalVersionString.size() - 2);
+					std::string minimalVersionString = Util::GetFormattedVersion(minimalFeatureVersion);
 
 					if (majorVersionMismatch) {
 						failedLoadedMessage = std::format("{} {} is too old, major version incompatibility detected. Required: {}", GetShortName(), value, minimalVersionString);
@@ -105,7 +104,18 @@ void Feature::Load(json& o_json)
 		hasError = true;
 		errorVersion = "unknown";
 		errorType = FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH;
-		failedLoadedMessage = std::format("{} missing version info; not successfully loaded", ini_filename);
+		
+		// Get the minimum required version to include in the error message
+		std::string requiredVersion = "unknown";
+		std::string shortName = GetShortName();
+		if (!shortName.empty()) {
+			auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(shortName);
+			if (iter != FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
+				requiredVersion = Util::GetFormattedVersion(iter->second);
+			}
+		}
+		
+		failedLoadedMessage = std::format("The {} file is missing. This feature is not installed! Version required: {}", ini_filename, requiredVersion);
 	}
 
 	if (hasError) {
@@ -122,13 +132,7 @@ void Feature::Load(json& o_json)
 			if (errorType == FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH) {
 				auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(shortName);
 				if (iter != FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
-					std::string minimalVersionString = iter->second.string();
-					// Only remove trailing ".0" if it exists, don't truncate non-zero patch versions
-					if (minimalVersionString.ends_with(".0")) {
-						minimumVersion = minimalVersionString.substr(0, minimalVersionString.size() - 2);
-					} else {
-						minimumVersion = minimalVersionString;
-					}
+					minimumVersion = Util::GetFormattedVersion(iter->second);
 				}
 			}
 
@@ -222,8 +226,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		globals::features::hairSpecular,
 		globals::features::interiorSunShadows,
 		globals::features::terrainVariation,
-		globals::features::ibl,
-		globals::features::extendedTranslucency
+		globals::features::ibl
 	};
 
 	if (REL::Module::IsVR()) {
