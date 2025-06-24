@@ -1,4 +1,5 @@
 #include "WetnessEffects.h"
+#include "Menu.h"
 #include "WeatherPicker.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -56,7 +57,7 @@ static constexpr const char* LEGACY_EFFECTS[] = {
 	"Original wetness accumulation (1.0x)",
 	"Original puddle formation (1.0x)",
 	"Original weather transitions (1.0x)",
-	"Original raindrop frequency (30% chance)",
+	"Original raindrop frequency (1.0x)",
 	nullptr
 };
 
@@ -72,7 +73,7 @@ static constexpr const char* ARCTIC_EFFECTS[] = {
 	"Slow wetness accumulation (0.5x)",
 	"Minimal puddle formation (0.3x)",
 	"Slow weather transitions (0.5x)",
-	"Sparse precipitation (30% chance)"
+	"Sparse precipitation (30% chance)",
 	"",
 	nullptr
 };
@@ -563,7 +564,7 @@ float WetnessEffects::GetRainIntensity(RE::NiPointer<RE::BSGeometry> precipObjec
 	return (maxDensity > 0.0f) ? (maxDensity / MAX_RAIN_PARTICLE_DENSITY) : 0.0f;
 }
 
-WetnessEffects::WeatherWetnessResult WetnessEffects::CalculateWeatherWetness(RE::TESWeather* weather, float weatherPct, bool isCurrentWeather)
+WetnessEffects::WeatherWetnessResult WetnessEffects::CalculateWeatherWetness(RE::TESWeather* weather, float weatherPct, bool isCurrentWeather) const
 {
 	WeatherWetnessResult result{};
 
@@ -603,8 +604,18 @@ WetnessEffects::WeatherWetnessResult WetnessEffects::CalculateWeatherWetness(RE:
 }
 
 // Helper function to calculate precipitation rate from shader data and settings
-float WetnessEffects::CalculatePrecipitationRate(float raindropChance, float raindropGridSizeGameUnits, float raindropIntervalSeconds, float mlPerDrop)
+float WetnessEffects::CalculatePrecipitationRate(float raindropChance, float raindropGridSizeGameUnits, float raindropIntervalSeconds, float mlPerDrop) const
 {
+	// Validate inputs to prevent division by zero and invalid calculations
+	if (raindropGridSizeGameUnits <= 0.0f || raindropIntervalSeconds <= 0.0f) {
+		logger::warn("[WetnessEffects] Invalid parameters: gridSize={}, interval={}", raindropGridSizeGameUnits, raindropIntervalSeconds);
+		return 0.0f;
+	}
+
+	if (raindropChance < 0.0f || raindropChance > 1.0f) {
+		logger::warn("[WetnessEffects] Invalid raindrop chance: {}, clamping to [0,1]", raindropChance);
+		raindropChance = std::clamp(raindropChance, 0.0f, 1.0f);
+	}
 	// Use physically realistic default if not specified (10 microliters typical for large raindrop)
 	if (mlPerDrop <= 0.0f)
 		mlPerDrop = 0.01f;
@@ -657,7 +668,7 @@ void WetnessEffects::ApplyClimatePreset(ClimatePreset preset)
 	// Removed clamping for all settings to allow full preset range
 }
 
-WetnessEffects::PerFrame WetnessEffects::GetCommonBufferData()
+WetnessEffects::PerFrame WetnessEffects::GetCommonBufferData() const
 {
 	PerFrame data{};
 
@@ -763,7 +774,7 @@ void WetnessEffects::RestoreDefaultSettings()
 	Ripples::UpdateSettings();  // Sync cached values after restoring defaults
 }
 
-void WetnessEffects::DrawWeatherAnalysis()
+void WetnessEffects::DrawWeatherAnalysis() const
 {
 	// Only show rain system analysis when it's raining and wetness effects are enabled
 	if (!settings.EnableWetnessEffects)

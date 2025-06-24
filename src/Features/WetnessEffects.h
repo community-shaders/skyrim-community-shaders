@@ -99,7 +99,7 @@ public:
 	static constexpr ClimatePreset defaultPreset = ClimatePreset::NordicStandard;
 	ClimatePreset climatePreset = defaultPreset;
 
-	PerFrame GetCommonBufferData();
+	PerFrame GetCommonBufferData() const;
 
 	virtual void Prepass() override;
 	virtual void PostPostLoad() override;
@@ -117,7 +117,7 @@ public:
 	virtual WeatherAnalysisConfig GetWeatherAnalysisConfig() const override
 	{
 		return WeatherAnalysisConfig("Rain & Wetness Analysis", [this]() {
-			const_cast<WetnessEffects*>(this)->DrawWeatherAnalysis();
+			this->DrawWeatherAnalysis();
 		});
 	}
 
@@ -126,14 +126,14 @@ public:
 
 	// Helper function to extract rain intensity from precipitation object and weather
 	static float GetRainIntensity(RE::NiPointer<RE::BSGeometry> precipObject, RE::TESWeather* weather);  // Helper function to calculate precipitation rate from shader data and settings
-	float CalculatePrecipitationRate(float raindropChance, float raindropGridSizeGameUnits, float raindropIntervalSeconds, float mlPerDrop = 0.01f);
+	float CalculatePrecipitationRate(float raindropChance, float raindropGridSizeGameUnits, float raindropIntervalSeconds, float mlPerDrop = 0.01f) const;
 	static const ClimateSettings& GetClimateSettings(ClimatePreset preset);
 	void ApplyClimatePreset(ClimatePreset preset);
 	bool DoesCurrentSettingsMatchPreset(ClimatePreset preset) const;
 	void DetectCurrentPreset();
 
 private:
-	void DrawWeatherAnalysis();
+	void DrawWeatherAnalysis() const;
 
 	bool splashesOfStormsLoaded = false;
 
@@ -144,5 +144,5 @@ private:
 		float puddleWetness = 0.0f;
 	};
 
-	WeatherWetnessResult CalculateWeatherWetness(RE::TESWeather* weather, float weatherPct, bool isCurrentWeather);
+	WeatherWetnessResult CalculateWeatherWetness(RE::TESWeather* weather, float weatherPct, bool isCurrentWeather) const;
 };
