@@ -867,7 +867,15 @@ void Menu::DrawSettings()
 									if (isLoaded) {
 										feat->DrawSettings();
 									} else {
-										feat->DrawUnloadedUI();
+										// Check if INI file exists to avoid showing obsolete "missing file" messages
+										// when feature was re-enabled after being disabled at boot
+										if (IsFeatureInstalled(feat->GetShortName())) {
+											// INI file exists - show simple pending restart message
+											ImGui::Text("This feature will be available after restart.");
+										} else {
+											// INI file missing - show detailed unloaded UI with installation info
+											feat->DrawUnloadedUI();
+										}
 										// Add download link if available
 										if (!feat->GetFeatureModLink().empty()) {
 											ImGui::Spacing();
