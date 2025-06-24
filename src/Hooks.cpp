@@ -806,14 +806,14 @@ namespace Hooks
 	{
 		static bool thunk(RE::TESObjectLAND* land)
 		{
-			bool vanillaResult = func(land);
-
 			// setup material for PBR
 			auto TruePBRSingleton = globals::truePBR;
 			if (TruePBRSingleton->TESObjectLAND_SetupMaterial(land)) {
 				// if PBR, we are done
 				return true;
 			}
+
+			bool vanillaResult = func(land);
 
 			// setup material for terrain helper
 			auto terrainHelper = globals::features::terrainHelper;
