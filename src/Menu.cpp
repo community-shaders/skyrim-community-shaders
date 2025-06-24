@@ -305,6 +305,10 @@ void Menu::Init()
 
 void Menu::DrawSettings()
 {
+	if (focusChanged) {
+		OnFocusChanged();
+		focusChanged = false;
+	}
 	ImGui::DockSpaceOverViewport(NULL, ImGuiDockNodeFlags_PassthruCentralNode);
 
 	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
@@ -2722,10 +2726,16 @@ void Menu::addToEventQueue(KeyEvent e)
 	_keyEventQueue.emplace_back(e);
 }
 
-void Menu::OnFocusLost()
+void Menu::OnFocusChanged()
 {
-	std::unique_lock<std::shared_mutex> mutex(_inputEventMutex);
-	_keyEventQueue.clear();
+	// Solves the alt+tab stuck issue, but disables tab after tabbing back in.
+	if (const auto& inputMgr = RE::BSInputDeviceManager::GetSingleton()) {
+		if (const auto& device = inputMgr->GetKeyboard()) {
+			device->Reset();
+		}
+	}
+	// Allows tab to work again after alt+tabbing back in.
+	ImGui::GetIO().ClearInputKeys();
 }
 
 void Menu::ProcessInputEvents(RE::InputEvent* const* a_events)

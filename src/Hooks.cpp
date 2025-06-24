@@ -614,11 +614,8 @@ namespace Hooks
 		static LRESULT thunk(HWND a_hwnd, UINT a_msg, WPARAM a_wParam, LPARAM a_lParam)
 		{
 			auto menu = globals::menu;
-			if (a_msg == WM_KILLFOCUS && menu->initialized) {
-				menu->OnFocusLost();
-				auto& io = ImGui::GetIO();
-				io.ClearInputKeys();
-				io.ClearEventsQueue();
+			if ((a_msg == WM_KILLFOCUS || a_msg == WM_SETFOCUS) && menu->initialized) {
+				menu->focusChanged = true;
 			}
 			return func(a_hwnd, a_msg, a_wParam, a_lParam);
 		}

@@ -47,7 +47,11 @@ public:
 
 	void ProcessInputEvents(RE::InputEvent* const* a_events);
 	bool ShouldSwallowInput();
-	void OnFocusLost();
+
+	// Used for resetting input keys to solve alt-tab stuck issue
+	bool focusChanged = false;
+	void OnFocusChanged();
+
 	// UI icon textures
 	struct UIIcon
 	{
