@@ -184,6 +184,14 @@ namespace SharedData
 		uint3 pad;
 	};
 
+	struct ExtendedTranslucencySettings
+	{
+		uint MaterialModel;  // [0,1,2,3] The MaterialModel
+		float Reduction;     // [0, 1.0] The factor to reduce the transparency to matain the average transparency [0,1]
+		float Softness;      // [0, 2.0] The soft remap upper limit [0,2]
+		float Strength;      // [0, 1.0] The inverse blend weight of the effect
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -198,6 +206,7 @@ namespace SharedData
 		HairSpecularSettings hairSpecularSettings;
 		TerrainVariationSettings terrainVariationSettings;
 		IBLSettings iblSettings;
+		ExtendedTranslucencySettings extendedTranslucencySettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);

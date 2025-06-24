@@ -342,20 +342,23 @@ namespace Util
 		return m_shouldDraw;
 	}
 
-	bool DrawCategoryHeader(const char* categoryName, bool& isExpanded)
+	bool DrawCategoryHeader(const char* categoryName, bool& isExpanded, int categoryCount)
 	{
+		// Add categoryCount to categoryName
+		std::string displayName = std::format("{} ({})", categoryName, categoryCount);
+
 		// Draw category header with custom styling
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 		ImVec2 pos = ImGui::GetCursorScreenPos();
 		float availableWidth = ImGui::GetContentRegionAvail().x;
-		ImVec2 textSize = ImGui::CalcTextSize(categoryName);
+		ImVec2 textSize = ImGui::CalcTextSize(displayName.c_str());
 
 		// Calculate line positions
 		float lineY = pos.y + textSize.y * 0.5f;
 		float lineLength = (availableWidth - textSize.x - 20.0f) * 0.5f;  // 20px for padding
 
 		// Create selectable area for the entire header
-		ImGui::PushID(categoryName);
+		ImGui::PushID(displayName.c_str());
 		bool hovered = false;
 		bool clicked = false;
 
@@ -368,23 +371,29 @@ namespace Util
 
 		// Draw the lines and text using Menu theme colors
 		auto& theme = Menu::GetSingleton()->GetTheme().FeatureHeading;
-		ImU32 lineColor = hovered ? theme.LineColorHovered : theme.LineColorDefault;
-		ImU32 textColor = hovered ? theme.TextColorHovered : theme.TextColorDefault;
+
+		// Get the color based on hover state
+		ImVec4 color = hovered ? theme.ColorHovered : theme.ColorDefault;
+		// If minimized, apply the minimized factor
+		if (!isExpanded) {
+			color.w *= theme.MinimizedFactor;
+		}
+		ImU32 headerColor = ImGui::GetColorU32(color);
 
 		// Left line
 		if (lineLength > 0) {
-			drawList->AddLine(ImVec2(pos.x, lineY), ImVec2(pos.x + lineLength, lineY), lineColor, 1.0f);
+			drawList->AddLine(ImVec2(pos.x, lineY), ImVec2(pos.x + lineLength, lineY), headerColor, 1.0f);
 		}
 
 		// Right line
 		float rightLineStart = pos.x + lineLength + 10.0f + textSize.x + 10.0f;
 		if (rightLineStart < pos.x + availableWidth) {
-			drawList->AddLine(ImVec2(rightLineStart, lineY), ImVec2(pos.x + availableWidth, lineY), lineColor, 1.0f);
+			drawList->AddLine(ImVec2(rightLineStart, lineY), ImVec2(pos.x + availableWidth, lineY), headerColor, 1.0f);
 		}
 
 		// Center text
 		ImVec2 textPos = ImVec2(pos.x + lineLength + 10.0f, pos.y + 2.0f);
-		drawList->AddText(textPos, textColor, categoryName);
+		drawList->AddText(textPos, headerColor, displayName.c_str());
 
 		// Handle click to toggle expansion
 		if (clicked) {
@@ -433,26 +442,28 @@ namespace Util
 			// Calculate line positions
 			float lineY = pos.y + textSize.y * 0.5f;
 			float lineLength = (availableWidth - textSize.x - 20.0f) * 0.5f;  // 20px for padding
-
 			// Use Menu theme colors for consistent styling
 			auto& theme = Menu::GetSingleton()->GetTheme().FeatureHeading;
-			ImU32 lineColor = theme.LineColorDefault;
-			ImU32 textColor = useWhiteText ? theme.TextColorWhite : theme.TextColorDefault;
+			ImVec4 color = theme.ColorDefault;
+			if (useWhiteText) {
+				color.w = color.w;
+			}
+			ImU32 headerColor = ImGui::GetColorU32(color);
 
 			// Left line
 			if (lineLength > 0) {
-				drawList->AddLine(ImVec2(pos.x, lineY), ImVec2(pos.x + lineLength, lineY), lineColor, 1.0f);
+				drawList->AddLine(ImVec2(pos.x, lineY), ImVec2(pos.x + lineLength, lineY), headerColor, 1.0f);
 			}
 
 			// Right line
 			float rightLineStart = pos.x + lineLength + 10.0f + textSize.x + 10.0f;
 			if (rightLineStart < pos.x + availableWidth) {
-				drawList->AddLine(ImVec2(rightLineStart, lineY), ImVec2(pos.x + availableWidth, lineY), lineColor, 1.0f);
+				drawList->AddLine(ImVec2(rightLineStart, lineY), ImVec2(pos.x + availableWidth, lineY), headerColor, 1.0f);
 			}
 
 			// Center text
 			ImVec2 textPos = ImVec2(pos.x + lineLength + 10.0f, pos.y + 2.0f);
-			drawList->AddText(textPos, textColor, sectionName);
+			drawList->AddText(textPos, headerColor, sectionName);
 
 			// Move cursor to next line
 			ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + textSize.y + 8.0f));

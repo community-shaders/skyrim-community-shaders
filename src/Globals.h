@@ -25,6 +25,7 @@ struct VR;
 struct WaterEffects;
 struct WeatherPicker;
 struct WetnessEffects;
+struct ExtendedTranslucency;
 
 class ParticleLights;
 
@@ -78,6 +79,7 @@ namespace globals
 		extern WaterEffects* waterEffects;
 		extern WeatherPicker* weatherPicker;
 		extern WetnessEffects* wetnessEffects;
+		extern ExtendedTranslucency* extendedTranslucency;
 
 		namespace llf
 		{

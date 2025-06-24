@@ -76,7 +76,7 @@ public:
 		float2 DepthFadeRange = { 4e4, 5e4 };
 		// gi
 		float GISaturation = 0.9f;
-		bool EnableGIBounce = true;
+		bool EnableGIBounce = false;
 		float GIBounceFade = 0.3f;
 		float GIDistanceCompensation = 0.f;
 		// mix

@@ -134,9 +134,10 @@ namespace Util
 	 * Draws a custom styled collapsible category header with lines extending from both sides
 	 * @param categoryName The name of the category to display
 	 * @param isExpanded Reference to the expansion state
+	 * @param categoryCount Number of features in the category
 	 * @return true if the expansion state was toggled
 	 */
-	bool DrawCategoryHeader(const char* categoryName, bool& isExpanded);
+	bool DrawCategoryHeader(const char* categoryName, bool& isExpanded, int categoryCount);
 
 	/**
 	 * Draws a custom styled section header with lines extending from both sides
