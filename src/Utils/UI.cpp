@@ -411,11 +411,16 @@ namespace Util
 	{
 		bool stateChanged = false;
 
+		// Use Menu theme colors for consistent styling
+		auto& theme = Menu::GetSingleton()->GetTheme().FeatureHeading;
+		ImVec4 color = useWhiteText ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : theme.ColorDefault;
+
+		ImU32 headerColor = ImGui::GetColorU32(color);
+
 		if (isCollapsible && isExpanded) {
 			// Use collapsible header similar to DrawCategoryHeader
 			ImGui::PushID(sectionName);
 
-			const ImVec4 headerColor = useWhiteText ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : ImVec4(0.8f, 0.8f, 0.8f, 1.0f);
 			ImGui::PushStyleColor(ImGuiCol_Text, headerColor);
 
 			if (ImGui::CollapsingHeader(sectionName, ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -442,13 +447,6 @@ namespace Util
 			// Calculate line positions
 			float lineY = pos.y + textSize.y * 0.5f;
 			float lineLength = (availableWidth - textSize.x - 20.0f) * 0.5f;  // 20px for padding
-			// Use Menu theme colors for consistent styling
-			auto& theme = Menu::GetSingleton()->GetTheme().FeatureHeading;
-			ImVec4 color = theme.ColorDefault;
-			if (useWhiteText) {
-				color.w = color.w;
-			}
-			ImU32 headerColor = ImGui::GetColorU32(color);
 
 			// Left line
 			if (lineLength > 0) {
