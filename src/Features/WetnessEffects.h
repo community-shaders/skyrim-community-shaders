@@ -77,8 +77,29 @@ public:
 	};
 
 	Settings settings;
+	// Climate preset system
+	enum class ClimatePreset : uint32_t
+	{
+		Custom = 0,
+		Legacy = 1,
+		NordicStandard = 2,
+		ArcticTundra = 3,
+		TemperateCoastal = 4,
+		MonsoonExtreme = 5
+	};
+	struct ClimateSettings
+	{
+		float wetnessMultiplier;
+		float puddleMultiplier;
+		float transitionSpeed;
+		float raindropChance;
+		float raindropGridSize;
+		float raindropInterval;
+	};
+	static constexpr ClimatePreset defaultPreset = ClimatePreset::NordicStandard;
+	ClimatePreset climatePreset = defaultPreset;
 
-	PerFrame GetCommonBufferData();
+	PerFrame GetCommonBufferData() const;
 
 	virtual void Prepass() override;
 	virtual void PostPostLoad() override;
@@ -92,6 +113,36 @@ public:
 
 	virtual bool SupportsVR() override { return true; };
 
+	// Override to provide weather analysis configuration
+	virtual WeatherAnalysisConfig GetWeatherAnalysisConfig() const override
+	{
+		return WeatherAnalysisConfig("Rain & Wetness Analysis", [this]() {
+			this->DrawWeatherAnalysis();
+		});
+	}
+
+	// Constants and utilities for rain intensity calculations
+	static constexpr float MAX_RAIN_PARTICLE_DENSITY = 3.0f;
+
+	// Helper function to extract rain intensity from precipitation object and weather
+	static float GetRainIntensity(RE::NiPointer<RE::BSGeometry> precipObject, RE::TESWeather* weather);  // Helper function to calculate precipitation rate from shader data and settings
+	float CalculatePrecipitationRate(float raindropChance, float raindropGridSizeGameUnits, float raindropIntervalSeconds, float mlPerDrop = 0.01f) const;
+	static const ClimateSettings& GetClimateSettings(ClimatePreset preset);
+	void ApplyClimatePreset(ClimatePreset preset);
+	bool DoesCurrentSettingsMatchPreset(ClimatePreset preset) const;
+	void DetectCurrentPreset();
+
 private:
+	void DrawWeatherAnalysis() const;
+
 	bool splashesOfStormsLoaded = false;
+
+	// Weather wetness calculation result for debug display
+	struct WeatherWetnessResult
+	{
+		float wetness = 0.0f;
+		float puddleWetness = 0.0f;
+	};
+
+	WeatherWetnessResult CalculateWeatherWetness(RE::TESWeather* weather, float weatherPct, bool isCurrentWeather) const;
 };
