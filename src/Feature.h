@@ -86,16 +86,8 @@ public:
 		// Fallback: Always show missing file message when no specific failure message exists
 		auto& themeSettings = Menu::GetSingleton()->GetTheme();
 		auto ini_filename = std::format("{}.ini", GetShortName());
-
 		// Get the minimum required version to include in the error message
-		std::string requiredVersion = "unknown";
-		std::string shortName = GetShortName();
-		if (!shortName.empty()) {
-			auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(shortName);
-			if (iter != FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
-				requiredVersion = Util::GetFormattedVersion(iter->second);
-			}
-		}
+		std::string requiredVersion = Util::GetFeatureRequiredVersion(GetShortName());
 
 		auto missingFileMessage = std::format("The {} file is missing. This feature is not installed! Version required: {}", ini_filename, requiredVersion);
 		ImGui::TextColored(themeSettings.StatusPalette.Error, missingFileMessage.c_str());

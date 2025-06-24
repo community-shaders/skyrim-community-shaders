@@ -1,5 +1,4 @@
 #include "Menu.h"
-#include <filesystem>
 
 #ifndef DIRECTINPUT_VERSION
 #	define DIRECTINPUT_VERSION 0x0800
@@ -124,21 +123,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EffectToggleKey,
 	Theme,
 	PerfOverlay)
-
-// Local helper function for INI file existence check
-namespace
-{
-	/**
-	 * Check if a feature's INI file exists
-	 * @param featureName The short name of the feature (e.g., "Wetness Effects")
-	 * @return true if the INI file exists, false otherwise
-	 */
-	bool IsFeatureInstalled(const std::string& featureName)
-	{
-		auto iniPath = std::string("Data/Shaders/Features/") + featureName + ".ini";
-		return std::filesystem::exists(iniPath);
-	}
-}
 
 void Menu::SetupImGuiStyle() const
 {
@@ -757,7 +741,7 @@ void Menu::DrawSettings()
 						textColor = feat->version.empty() ? themeSettings.StatusPalette.Disable : themeSettings.StatusPalette.Error;
 					} else {
 						// No failed message but not loaded - check if INI file exists
-						if (!IsFeatureInstalled(feat->GetShortName())) {
+						if (!std::filesystem::exists(Util::PathHelpers::GetFeatureIniPath(feat->GetShortName()))) {
 							// INI file missing - treat as missing feature (grey)
 							textColor = themeSettings.StatusPalette.Disable;
 						} else {
@@ -871,7 +855,7 @@ void Menu::DrawSettings()
 									} else {
 										// Check if INI file exists to avoid showing obsolete "missing file" messages
 										// when feature was re-enabled after being disabled at boot
-										if (IsFeatureInstalled(feat->GetShortName())) {
+										if (std::filesystem::exists(Util::PathHelpers::GetFeatureIniPath(feat->GetShortName()))) {
 											// INI file exists - show simple pending restart message
 											ImGui::Text("This feature will be available after restart.");
 										} else {
@@ -919,7 +903,7 @@ void Menu::DrawSettings()
 									statusText = "Failed to load.";
 								} else if (!isLoaded) {
 									// Check if INI file exists to determine actual status
-									if (!IsFeatureInstalled(feat->GetShortName())) {
+									if (!std::filesystem::exists(Util::PathHelpers::GetFeatureIniPath(feat->GetShortName()))) {
 										// INI file missing - feature not installed
 										statusColor = themeSettings.StatusPalette.Error;
 										statusText = "Not installed.";
@@ -961,7 +945,7 @@ void Menu::DrawSettings()
 										// For features that are pending restart or not installed,
 										// the detailed information is shown in the Settings tab.
 										// Here we just show a simple message directing users there.
-										if (!IsFeatureInstalled(feat->GetShortName())) {
+										if (!std::filesystem::exists(Util::PathHelpers::GetFeatureIniPath(feat->GetShortName()))) {
 											ImGui::Text("Feature installation details are available in the Settings tab.");
 										} else {
 											// INI file exists but feature not loaded - truly pending restart
