@@ -563,6 +563,26 @@ jobs:
               run: |
                   python tools/feature_version_audit.py --pr-check > pr-feature-audit.md
 
+            - name: Upload feature audit markdown (PR)
+              uses: actions/upload-artifact@v4
+              with:
+                  name: pr-feature-audit
+                  path: pr-feature-audit.md
+
+    feature-audit-pr-comment:
+        name: Comment on PR with audit results
+        if: github.event_name == 'pull_request_target'
+        needs: feature-audit-pr
+        runs-on: ubuntu-latest
+        permissions:
+            pull-requests: write
+        steps:
+            - name: Download feature audit markdown (PR)
+              uses: actions/download-artifact@v4
+              with:
+                  name: pr-feature-audit
+                  path: .
+
             - name: Comment on PR with audit results
               uses: thollander/actions-comment-pull-request@v3
               with:
