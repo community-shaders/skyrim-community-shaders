@@ -1093,6 +1093,10 @@ RE::TESLandTexture* GetDefaultLandTexture()
 
 bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 {
+	if (land == nullptr) {
+		return false;
+	}
+
 	auto singleton = globals::truePBR;
 
 	bool isPbr = false;
