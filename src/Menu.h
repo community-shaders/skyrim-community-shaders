@@ -49,7 +49,7 @@ public:
 	bool ShouldSwallowInput();
 
 	// Used for resetting input keys to solve alt-tab stuck issue
-	bool focusChanged = false;
+	std::atomic<bool> focusChanged = false;
 	void OnFocusChanged();
 
 	// UI icon textures
