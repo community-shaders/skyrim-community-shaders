@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Menu.h"
 #include "FeatureVersions.h"
+#include "Menu.h"
 #include "Utils/Format.h"
 
 struct Feature
@@ -83,37 +83,37 @@ public:
 			return;
 		}
 
-			// Fallback: Always show missing file message when no specific failure message exists
-			auto& themeSettings = Menu::GetSingleton()->GetTheme();
-			auto ini_filename = std::format("{}.ini", GetShortName());
-			
-			// Get the minimum required version to include in the error message
-			std::string requiredVersion = "unknown";
-			std::string shortName = GetShortName();
-			if (!shortName.empty()) {
-				auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(shortName);
-				if (iter != FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
-					requiredVersion = Util::GetFormattedVersion(iter->second);
-				}
-			}
-			
-			auto missingFileMessage = std::format("The {} file is missing. This feature is not installed! Version required: {}", ini_filename, requiredVersion);
-			ImGui::TextColored(themeSettings.StatusPalette.Error, missingFileMessage.c_str());
+		// Fallback: Always show missing file message when no specific failure message exists
+		auto& themeSettings = Menu::GetSingleton()->GetTheme();
+		auto ini_filename = std::format("{}.ini", GetShortName());
 
-			// Also show feature summary if available
-			auto [description, keyFeatures] = GetFeatureSummary();
-			if (!description.empty()) {
+		// Get the minimum required version to include in the error message
+		std::string requiredVersion = "unknown";
+		std::string shortName = GetShortName();
+		if (!shortName.empty()) {
+			auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(shortName);
+			if (iter != FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
+				requiredVersion = Util::GetFormattedVersion(iter->second);
+			}
+		}
+
+		auto missingFileMessage = std::format("The {} file is missing. This feature is not installed! Version required: {}", ini_filename, requiredVersion);
+		ImGui::TextColored(themeSettings.StatusPalette.Error, missingFileMessage.c_str());
+
+		// Also show feature summary if available
+		auto [description, keyFeatures] = GetFeatureSummary();
+		if (!description.empty()) {
+			ImGui::Spacing();
+			ImGui::TextWrapped("%s", description.c_str());
+		}
+
+		if (!keyFeatures.empty()) {
+			if (description.empty()) {
 				ImGui::Spacing();
-				ImGui::TextWrapped("%s", description.c_str());
 			}
-
-			if (!keyFeatures.empty()) {
-					if (description.empty()) {
-					ImGui::Spacing();
-				}
-				ImGui::TextWrapped("Key features:");
-				for (const auto& feature : keyFeatures) {
-					ImGui::BulletText("%s", feature.c_str());
+			ImGui::TextWrapped("Key features:");
+			for (const auto& feature : keyFeatures) {
+				ImGui::BulletText("%s", feature.c_str());
 			}
 		}
 	}

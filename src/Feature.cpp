@@ -2,7 +2,6 @@
 
 #include "FeatureIssues.h"
 #include "FeatureVersions.h"
-#include "Utils/Format.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExtendedMaterials.h"
@@ -27,6 +26,7 @@
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
 #include "Features/WetnessEffects.h"
+#include "Utils/Format.h"
 
 #include "State.h"
 
@@ -104,7 +104,7 @@ void Feature::Load(json& o_json)
 		hasError = true;
 		errorVersion = "unknown";
 		errorType = FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH;
-		
+
 		// Get the minimum required version to include in the error message
 		std::string requiredVersion = "unknown";
 		std::string shortName = GetShortName();
@@ -114,7 +114,7 @@ void Feature::Load(json& o_json)
 				requiredVersion = Util::GetFormattedVersion(iter->second);
 			}
 		}
-		
+
 		failedLoadedMessage = std::format("The {} file is missing. This feature is not installed! Version required: {}", ini_filename, requiredVersion);
 	}
 

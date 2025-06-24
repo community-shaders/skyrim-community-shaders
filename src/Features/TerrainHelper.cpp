@@ -3,7 +3,6 @@
 #include "ShaderCache.h"
 #include "State.h"
 
-
 void TerrainHelper::DataLoaded()
 {
 	// Get the default landscape texture set for terrain helper

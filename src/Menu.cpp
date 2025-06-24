@@ -21,8 +21,8 @@
 #include "TruePBR.h"
 #include "Upscaling.h"
 #include "Util.h"
-#include "Utils/UI.h"
 #include "Utils/Format.h"
+#include "Utils/UI.h"
 
 #include "Features/LightLimitFix/ParticleLights.h"
 
@@ -126,13 +126,15 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	PerfOverlay)
 
 // Local helper function for INI file existence check
-namespace {
+namespace
+{
 	/**
 	 * Check if a feature's INI file exists
 	 * @param featureName The short name of the feature (e.g., "Wetness Effects")
 	 * @return true if the INI file exists, false otherwise
-	 */	
-		bool IsFeatureInstalled(const std::string& featureName) {
+	 */
+	bool IsFeatureInstalled(const std::string& featureName)
+	{
 		auto iniPath = std::string("Data/Shaders/Features/") + featureName + ".ini";
 		return std::filesystem::exists(iniPath);
 	}
