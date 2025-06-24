@@ -23,7 +23,7 @@ public:
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Image Based Lighting enhances diffuse ambient lighting by precomputing spherical harmonics from environment maps.",
+			"Image Based Lighting provides realistic diffuse ambient lighting for exteriors.",
 			{ "Realistic diffuse ambient lighting from environment maps",
 				"Spherical harmonics-based ambient light calculation",
 				"Enhanced exterior ambient lighting quality",
