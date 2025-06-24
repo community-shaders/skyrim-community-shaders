@@ -27,7 +27,7 @@ namespace Util
 	 * @param outVersion Pointer to REL::Version to store the version if found (optional).
 	 * @return True if the feature is found, false otherwise.
 	 */
-	
+
 	bool IsFeatureKnown(const std::string& shortName, REL::Version* outVersion = nullptr);
 
 	std::string DefinesToString(const std::vector<std::pair<const char*, const char*>>& defines);
