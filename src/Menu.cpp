@@ -788,17 +788,17 @@ void Menu::DrawSettings()
 					// Calculate button widths based on text content
 					const char* bootButtonText = isDisabled ? "Enable at Boot" : "Disable at Boot";
 					const char* defaultsButtonText = "Restore Defaults";
-					
+
 					float buttonPadding = 16.0f;
 					float buttonSpacing = 8.0f;
 					float bootButtonWidth = ImGui::CalcTextSize(bootButtonText).x + buttonPadding;
 					float defaultsButtonWidth = ImGui::CalcTextSize(defaultsButtonText).x + buttonPadding;
-					
+
 					float totalButtonWidth = bootButtonWidth;
 					if (!isDisabled && isLoaded) {
 						totalButtonWidth += defaultsButtonWidth + buttonSpacing;
 					}
-					
+
 					if (ImGui::BeginTabBar("##FeatureTabs", ImGuiTabBarFlags_Reorderable)) {
 						// Draw standard tabs
 						if (ImGui::BeginTabItem("Settings")) {
@@ -894,7 +894,7 @@ void Menu::DrawSettings()
 							ImGui::EndChild();
 							ImGui::EndTabItem();
 						}
-						
+
 						// Position buttons on the right side of the tab bar
 						ImGui::SameLine();
 						float availableSpace = ImGui::GetContentRegionAvail().x;
@@ -902,7 +902,7 @@ void Menu::DrawSettings()
 						if (rightOffset > 0) {
 							ImGui::SetCursorPosX(ImGui::GetCursorPosX() + rightOffset);
 						}
-						
+
 						// Disable/Enable at boot button
 						ImVec4 textColor;
 						if (isDisabled) {
@@ -912,14 +912,14 @@ void Menu::DrawSettings()
 						} else {
 							textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
 						}
-						
+
 						ImGui::PushStyleColor(ImGuiCol_Text, textColor);
 						if (ImGui::Button(bootButtonText, { bootButtonWidth, 0 })) {
 							bool newState = feat->ToggleAtBootSetting();
 							logger::info("{}: {} at boot.", featureName, newState ? "Enabled" : "Disabled");
 						}
 						ImGui::PopStyleColor();
-						
+
 						if (auto _tt = Util::HoverTooltipWrapper()) {
 							ImGui::Text(
 								"Current State: %s\n"
@@ -937,7 +937,7 @@ void Menu::DrawSettings()
 							if (ImGui::Button(defaultsButtonText, { defaultsButtonWidth, 0 })) {
 								feat->RestoreDefaultSettings();
 							}
-							
+
 							if (auto _tt = Util::HoverTooltipWrapper()) {
 								ImGui::Text(
 									"Restores the feature's settings back to their default values. "
