@@ -785,54 +785,24 @@ void Menu::DrawSettings()
 					bool isLoaded = feat->loaded;
 					bool hasFailedMessage = !feat->failedLoadedMessage.empty();
 					auto& themeSettings = globals::menu->settings.Theme;
-
-					if (ImGui::BeginTabBar("##FeatureTabs")) {
+					// Calculate button widths based on text content
+					const char* bootButtonText = isDisabled ? "Enable at Boot" : "Disable at Boot";
+					const char* defaultsButtonText = "Restore Defaults";
+					
+					float buttonPadding = 16.0f;
+					float buttonSpacing = 8.0f;
+					float bootButtonWidth = ImGui::CalcTextSize(bootButtonText).x + buttonPadding;
+					float defaultsButtonWidth = ImGui::CalcTextSize(defaultsButtonText).x + buttonPadding;
+					
+					float totalButtonWidth = bootButtonWidth;
+					if (!isDisabled && isLoaded) {
+						totalButtonWidth += defaultsButtonWidth + buttonSpacing;
+					}
+					
+					if (ImGui::BeginTabBar("##FeatureTabs", ImGuiTabBarFlags_Reorderable)) {
+						// Draw standard tabs
 						if (ImGui::BeginTabItem("Settings")) {
 							if (ImGui::BeginChild("##FeatureSettingsFrame", { 0, 0 }, true)) {
-								ImGui::SeparatorText("Feature Management");
-
-								// Disable/Enable at boot
-								ImVec4 textColor;
-								if (isDisabled) {
-									textColor = themeSettings.StatusPalette.Disable;
-								} else if (hasFailedMessage) {
-									textColor = themeSettings.StatusPalette.Error;
-								} else {
-									textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-								}
-								ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-								if (ImGui::Button(isDisabled ? "Enable at Boot" : "Disable at Boot", { -1, 0 })) {
-									bool newState = feat->ToggleAtBootSetting();
-									logger::info("{}: {} at boot.", featureName, newState ? "Enabled" : "Disabled");
-								}
-								ImGui::PopStyleColor();
-								if (auto _tt = Util::HoverTooltipWrapper()) {
-									ImGui::Text(
-										"Current State: %s\n"
-										"%s the feature settings at boot. "
-										"Restart will be required to reenable. "
-										"This is the same as deleting the ini file. "
-										"This should remove any performance impact for the feature.",
-										isDisabled ? "Disabled" : "Enabled",
-										isDisabled ? "Enable" : "Disable");
-								}
-
-								// Restore Defaults buttons shows when feature is not disabled and is loaded
-								if (!isDisabled && isLoaded) {
-									ImGui::Spacing();
-									if (ImGui::Button("Restore Defaults", { -1, 0 })) {
-										feat->RestoreDefaultSettings();
-									}
-									if (auto _tt = Util::HoverTooltipWrapper()) {
-										ImGui::Text(
-											"Restores the feature's settings back to their default values. "
-											"You will still need to Save Settings to make these changes permanent.");
-									}
-								}
-
-								ImGui::Spacing();
-								ImGui::Spacing();
-
 								// Feature-specific settings section
 								ImGui::SeparatorText("Feature Settings");
 								if (isDisabled) {
@@ -923,6 +893,56 @@ void Menu::DrawSettings()
 							}
 							ImGui::EndChild();
 							ImGui::EndTabItem();
+						}
+						
+						// Position buttons on the right side of the tab bar
+						ImGui::SameLine();
+						float availableSpace = ImGui::GetContentRegionAvail().x;
+						float rightOffset = availableSpace - totalButtonWidth;
+						if (rightOffset > 0) {
+							ImGui::SetCursorPosX(ImGui::GetCursorPosX() + rightOffset);
+						}
+						
+						// Disable/Enable at boot button
+						ImVec4 textColor;
+						if (isDisabled) {
+							textColor = themeSettings.StatusPalette.Disable;
+						} else if (hasFailedMessage) {
+							textColor = themeSettings.StatusPalette.Error;
+						} else {
+							textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+						}
+						
+						ImGui::PushStyleColor(ImGuiCol_Text, textColor);
+						if (ImGui::Button(bootButtonText, { bootButtonWidth, 0 })) {
+							bool newState = feat->ToggleAtBootSetting();
+							logger::info("{}: {} at boot.", featureName, newState ? "Enabled" : "Disabled");
+						}
+						ImGui::PopStyleColor();
+						
+						if (auto _tt = Util::HoverTooltipWrapper()) {
+							ImGui::Text(
+								"Current State: %s\n"
+								"%s the feature settings at boot. "
+								"Restart will be required to reenable. "
+								"This is the same as deleting the ini file. "
+								"This should remove any performance impact for the feature.",
+								isDisabled ? "Disabled" : "Enabled",
+								isDisabled ? "Enable" : "Disable");
+						}
+
+						// Restore Defaults button (when feature is not disabled and is loaded)
+						if (!isDisabled && isLoaded) {
+							ImGui::SameLine();
+							if (ImGui::Button(defaultsButtonText, { defaultsButtonWidth, 0 })) {
+								feat->RestoreDefaultSettings();
+							}
+							
+							if (auto _tt = Util::HoverTooltipWrapper()) {
+								ImGui::Text(
+									"Restores the feature's settings back to their default values. "
+									"You will still need to Save Settings to make these changes permanent.");
+							}
 						}
 					}
 					ImGui::EndTabBar();
