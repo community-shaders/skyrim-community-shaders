@@ -282,7 +282,7 @@ public:
 		{
 			static bool thunk(RE::BSShaderProperty* a_property, RE::BSLight* a_light)
 			{
-				return func(a_property, a_light) && (a_light->portalStrict || !a_light->portalGraph);
+				return func(a_property, a_light) && (a_light->portalStrict || !a_light->portalGraph || a_light->IsShadowLight());
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
@@ -291,7 +291,7 @@ public:
 		{
 			static bool thunk(RE::BSShaderProperty* a_property, RE::BSLight* a_light)
 			{
-				return func(a_property, a_light) && (a_light->portalStrict || !a_light->portalGraph);
+				return func(a_property, a_light) && (a_light->portalStrict || !a_light->portalGraph || a_light->IsShadowLight());
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
@@ -300,7 +300,7 @@ public:
 		{
 			static bool thunk(RE::BSShaderProperty* a_property, RE::BSLight* a_light)
 			{
-				return func(a_property, a_light) && (a_light->portalStrict || !a_light->portalGraph);
+				return func(a_property, a_light) && (a_light->portalStrict || !a_light->portalGraph || a_light->IsShadowLight());
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
