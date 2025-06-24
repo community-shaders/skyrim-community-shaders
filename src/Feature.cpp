@@ -119,7 +119,7 @@ void Feature::Load(json& o_json)
 		if (!shortName.empty()) {
 			FeatureIssues::FeatureFileInfo fileInfo = FeatureIssues::GetFeatureFileInfo(shortName);
 
-	// For version mismatch, also pass the minimum required version
+			// For version mismatch, also pass the minimum required version
 			std::string minimumVersion;
 			if (errorType == FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH) {
 				minimumVersion = Util::GetFeatureRequiredVersion(shortName);
