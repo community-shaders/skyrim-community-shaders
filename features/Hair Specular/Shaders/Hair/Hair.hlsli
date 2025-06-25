@@ -21,11 +21,11 @@ namespace Hair
 		return dirAtten * norm * pow(sinTH, 0.5 * n);
 	}
 
-	float HairF0()
+	float3 HairF0()
 	{
 		const float n = 1.55;
 		const float F0 = pow((1 - n) / (1 + n), 2);
-		return F0;
+		return F0.xxx;
 	}
 
 	float3 ShiftTangent(float3 T, float3 N, float shift)
@@ -56,15 +56,15 @@ namespace Hair
 		float3 TshiftPrimary = T;
 		float3 TshiftSecondary = T;
 
+		const float shift = TexTangentShift.Sample(SampColorSampler, uv).x - 0.5;
 		if (SharedData::hairSpecularSettings.EnableTangentShift) {
-			const float shift = TexTangentShift.Sample(SampColorSampler, uv).x - 0.5;
 			TshiftPrimary = ShiftTangent(T, N, shift + SharedData::hairSpecularSettings.PrimaryShift);
 			TshiftSecondary = ShiftTangent(T, N, shift + SharedData::hairSpecularSettings.SecondaryShift);
 		}
 
 		const float3 specPrimary = D_KajiyaKay(TshiftPrimary, H, shininess);
 		const float3 specSecondary = D_KajiyaKay(TshiftSecondary, H, shininess * 0.5);
-		const float F = BRDF::F_Schlick(HairF0(), HdotL);
+		const float3 F = BRDF::F_Schlick(HairF0(), HdotL);
 		float3 specR = 0.25 * F * (specPrimary + specSecondary * scatterColor) * NdotL * saturate(VNdotV * (3.4e+38));
 		float scatterFresnel1 = pow(saturate(-dot(L, V)), 9) * pow(saturate(1 - VNdotV * VNdotV), 12);
 		float scatterFresnel2 = saturate(pow((1 - VNdotV), 20));
