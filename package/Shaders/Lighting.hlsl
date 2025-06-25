@@ -2355,7 +2355,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	} else {
 #		if defined(HAIR) && defined(CS_HAIR)
 		if (SharedData::hairSpecularSettings.Enabled)
-			Hair::GetHairDirectLight(dirDiffuseColor, lightsSpecularColor, hairT, DirLightDirection, viewDirection, modelNormal.xyz, dirLightColor.xyz * dirDetailShadow, SharedData::hairSpecularSettings.Glossiness, uv, baseColor.xyz);
+			Hair::GetHairDirectLight(dirDiffuseColor, lightsSpecularColor, hairT, DirLightDirection, viewDirection, modelNormal.xyz, worldSpaceVertexNormal.xyz, dirLightColor.xyz * dirDetailShadow, SharedData::hairSpecularSettings.Glossiness, uv, baseColor.xyz);
 		else {
 #			if defined(SPECULAR)
 			lightsSpecularColor = GetLightSpecularInput(input, DirLightDirection, viewDirection, modelNormal.xyz, dirLightColor.xyz * dirDetailShadow, shininess, uv);
@@ -2433,7 +2433,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				if defined(HAIR) && defined(CS_HAIR)
 		if (SharedData::hairSpecularSettings.Enabled) {
 			float3 lightSpecularColor = 0;
-			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, SharedData::hairSpecularSettings.Glossiness, uv, baseColor.xyz);
+			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, worldSpaceVertexNormal.xyz, lightColor, SharedData::hairSpecularSettings.Glossiness, uv, baseColor.xyz);
 			lightsSpecularColor += lightSpecularColor;
 		} else {
 #					if defined(SPECULAR)
@@ -2595,7 +2595,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				if defined(HAIR) && defined(CS_HAIR) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
 		if (SharedData::hairSpecularSettings.Enabled) {
 			float3 lightSpecularColor = 0;
-			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor * contactShadow, SharedData::hairSpecularSettings.Glossiness, uv, baseColor.xyz);
+			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, worldSpaceVertexNormal.xyz, lightColor * contactShadow, SharedData::hairSpecularSettings.Glossiness, uv, baseColor.xyz);
 			lightsSpecularColor += lightSpecularColor;
 		} else {
 #					if defined(SPECULAR)
@@ -2832,7 +2832,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (SharedData::hairSpecularSettings.Enabled)
 		vertexColor = 1;
 	Hair::GetHairIndirectSpecularLobeWeights(indirectDiffuseLobeWeight, indirectSpecularLobeWeightPrim, indirectSpecularLobeWeightSec, hairT, worldSpaceNormal.xyz, worldSpaceViewDirection, worldSpaceVertexNormal, SharedData::hairSpecularSettings.Glossiness, uv, baseColor.xyz);
-	indirectDiffuseLobeWeight *= SharedData::hairSpecularSettings.DiffuseIndirectMult * (1 / Math::PI);
+	indirectDiffuseLobeWeight *= SharedData::hairSpecularSettings.DiffuseIndirectMult;
 	indirectSpecularLobeWeightPrim *= SharedData::hairSpecularSettings.SpecularIndirectMult;
 	indirectSpecularLobeWeightSec *= SharedData::hairSpecularSettings.SpecularIndirectMult;
 #		endif  // CS_HAIR
@@ -2936,13 +2936,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				if defined(SKYLIGHTING)
 	{
 		float3 indirectSpecular = Hair::GetHairDynamicCubemapSpecularIrradiance(uv, screenUV, hairT, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, SharedData::hairSpecularSettings.Glossiness, indirectSpecularLobeWeightPrim, indirectSpecularLobeWeightSec, skylightingSH);
-		indirectSpecular = Color::LinearToGamma(indirectSpecular);
 		color.xyz += indirectSpecular;
 	}
 #				else
 	{
 		float3 indirectSpecular = Hair::GetHairDynamicCubemapSpecularIrradiance(uv, screenUV, hairT, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, SharedData::hairSpecularSettings.Glossiness, indirectSpecularLobeWeightPrim, indirectSpecularLobeWeightSec);
-		indirectSpecular = Color::LinearToGamma(indirectSpecular);
 		color.xyz += indirectSpecular;
 	}
 #				endif
@@ -3234,7 +3232,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #		if defined(HAIR) && defined(CS_HAIR)
 	if (SharedData::hairSpecularSettings.Enabled) {
-		outGlossiness = saturate(SharedData::hairSpecularSettings.Glossiness * 0.0075f * SSRParams.w);
+		outGlossiness = 1.0 - pow(2.0 / (glossiness * 0.5 + 2.0), 0.25);
 	}
 #		endif
 

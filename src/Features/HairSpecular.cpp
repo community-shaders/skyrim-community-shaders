@@ -14,18 +14,20 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	HairSaturation,
 	SpecularIndirectMult,
 	DiffuseIndirectMult,
-	BaseColorMult)
+	BaseColorMult,
+	Transmission)
 
 void HairSpecular::DrawSettings()
 {
 	ImGui::Checkbox("Enabled", (bool*)&settings.Enabled);
-	ImGui::SliderFloat("Glossiness", &settings.HairGlossiness, 0.0f, 100.0f, "%.0f");
+	ImGui::SliderFloat("Glossiness", &settings.HairGlossiness, 0.0f, 256.0f, "%.0f");
 	ImGui::SliderFloat("Specular Multiplier", &settings.SpecularMult, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("Diffuse Multiplier", &settings.DiffuseMult, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("Indirect Specular Multiplier", &settings.SpecularIndirectMult, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("Indirect Diffuse Multiplier", &settings.DiffuseIndirectMult, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("Hair Base Color Multiplier", &settings.BaseColorMult, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("Hair Saturation", &settings.HairSaturation, 0.0f, 5.0f, "%.2f");
+	ImGui::SliderFloat("Transmission", &settings.Transmission, 0.0f, 1.0f, "%.2f");
 	ImGui::Spacing();
 	ImGui::Checkbox("Enable Tangent Shift", (bool*)&settings.EnableTangentShift);
 	ImGui::SliderFloat("Primary Specular Tangent Shift", &settings.PrimaryTangentShift, -1.0f, 1.0f, "%.2f");

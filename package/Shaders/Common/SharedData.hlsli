@@ -159,7 +159,7 @@ namespace SharedData
 		float SpecularIndirectMult;
 		float DiffuseIndirectMult;
 		float BaseColorMult;
-		float pad;
+		float Transmission;
 	};
 
 	struct TerrainVariationSettings
