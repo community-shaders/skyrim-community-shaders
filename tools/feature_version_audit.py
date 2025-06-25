@@ -424,10 +424,10 @@ def format_feature_table(feature_analysis):
     lines = []
     lines.append("| Feature | Prior Ver | Proposed Ver | Needs Bump | Change Types | Note | Commit |")
     lines.append("|---------|-----------|--------------|------------|--------------|------|--------|")
+    def bold(val, is_attention):
+        return f"**{val}**" if is_attention and val != '' and val != '-' else val
     for fa in feature_analysis:
-        def bold(val, is_attention=fa['is_attention']):
-            return f"**{val}**" if is_attention and val != '' and val != '-' else val
-        lines.append(f"| {bold(fa['name'])} | {bold(fa['prior_ver_str'])} | {bold(fa['proposed_ver_str'])} | {bold(str(fa['needs_bump']))} | {bold(fa['change_types'])} | {bold(fa['note'])} | {fa['commit_link']} |")
+        lines.append(f"| {bold(fa['name'], fa['is_attention'])} | {bold(fa['prior_ver_str'], fa['is_attention'])} | {bold(fa['proposed_ver_str'], fa['is_attention'])} | {bold(str(fa['needs_bump']), fa['is_attention'])} | {bold(fa['change_types'], fa['is_attention'])} | {bold(fa['note'], fa['is_attention'])} | {fa['commit_link']} |")
     return lines
 
 def format_new_features_table(new_features, feature_meta_map, get_commit_author, normalize_name):
