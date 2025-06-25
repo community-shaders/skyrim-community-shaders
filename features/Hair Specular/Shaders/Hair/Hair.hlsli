@@ -53,13 +53,16 @@ namespace Hair
 		float3 scatterColor = lerp(float3(0.992, 0.808, 0.518), baseColor, 0.5);
 		dirDiffuse = saturate(scatterColor + NdotL) * dirDiffuse * lightColor;
 
-		float3 TshiftPrimary = T;
-		float3 TshiftSecondary = T;
+		float3 TshiftPrimary;
+		float3 TshiftSecondary;
 
 		const float shift = TexTangentShift.Sample(SampColorSampler, uv).x - 0.5;
 		if (SharedData::hairSpecularSettings.EnableTangentShift) {
 			TshiftPrimary = ShiftTangent(T, N, shift + SharedData::hairSpecularSettings.PrimaryShift);
 			TshiftSecondary = ShiftTangent(T, N, shift + SharedData::hairSpecularSettings.SecondaryShift);
+		} else {
+			TshiftPrimary = T;
+			TshiftSecondary = T;
 		}
 
 		const float3 specPrimary = D_KajiyaKay(TshiftPrimary, H, shininess);
@@ -111,7 +114,7 @@ namespace Hair
 		};
 
 		float hairIOR = 1.55;
-		float specularColor = HairF0();
+		float3 specularColor = HairF0();
 
 		float3 Tp;
 		float Mp, Np, Fp, a, h, f;
