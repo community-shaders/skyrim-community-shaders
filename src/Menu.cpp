@@ -770,7 +770,9 @@ void Menu::DrawSettings()
 					// Display version if loaded
 					if (isLoaded) {
 						ImGui::SameLine();
-						ImGui::TextDisabled(fmt::format("({})", feat->version).c_str());
+						std::string formattedVersion = feat->version;
+						std::replace(formattedVersion.begin(), formattedVersion.end(), '-', '.');
+						ImGui::TextDisabled(fmt::format("({})", formattedVersion).c_str());
 					}
 				}
 			};
