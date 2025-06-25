@@ -131,7 +131,7 @@ namespace Hair
 		h = cosHalfPhi * (1 + a * (0.6 - 0.8 * cosPhi));
 		f = BRDF::F_Schlick(specularColor, cosThetaD * sqrt(saturate(1 - h * h))).x;
 		Fp = (1 - f) * (1 - f);
-		Tp = pow(baseColor, 0.5 * sqrt(1 - (h * a) * (h * a)) / cosThetaD);
+		Tp = pow(abs(baseColor), 0.5 * sqrt(1 - (h * a) * (h * a)) / cosThetaD);
 		Np = exp(-3.65 * cosPhi - 3.98);
 		TT = (Mp * Np) * (Fp * Tp) * backlit;
 
@@ -139,7 +139,7 @@ namespace Hair
 		Mp = Hair_g(B[2], ThetaH - Alpha[2]);
 		f = BRDF::F_Schlick(specularColor, cosThetaD * 0.5f).x;
 		Fp = (1 - f) * (1 - f) * f;
-		Tp = pow(baseColor, 0.8 / cosThetaD);
+		Tp = pow(abs(baseColor), 0.8 / cosThetaD);
 		Np = exp(17 * cosPhi - 16.78);
 		TRT = (Mp * Np) * (Fp * Tp);
 
@@ -159,7 +159,7 @@ namespace Hair
 		float wrappedNdotL = saturate((dot(fakeN, L) + wrap) / ((1 + wrap) * (1 + wrap)));
 		float diffuseScatter = (1 / Math::PI) * lerp(wrappedNdotL, diffuseKajiya, 0.33);
 		float luma = Color::RGBToLuminance(baseColor);
-		float3 scatterTint = pow(baseColor / luma, 1 - shadow);
+		float3 scatterTint = pow(abs(baseColor / luma), 1 - shadow);
 		S += sqrt(baseColor) * diffuseScatter * scatterTint;
 
 		return S;
@@ -170,7 +170,7 @@ namespace Hair
 		lightColor *= Math::PI;
 		dirDiffuse = 0;
 		dirSpecular = 0;
-		const float roughness = pow(2.0 / (shininess + 2.0), 0.25);
+		const float roughness = pow(abs(2.0 / (shininess + 2.0)), 0.25);
 
 		dirSpecular += D_Marschner(L, V, N, roughness, baseColor, 0, SharedData::hairSpecularSettings.Transmission) * lightColor;
 		dirDiffuse += GetHairDiffuseAttenuationKajiyaKay(N, V, L, 0, baseColor) * lightColor;
@@ -204,8 +204,8 @@ namespace Hair
 
 	void GetHairIndirectSpecularLobeWeights(out float3 diffuseLobeWeight, out float3 specularLobeWeightPrimary, out float3 specularLobeWeightSecondary, float3 T, float3 N, float3 V, float3 VN, float shininess, float2 uv, float3 baseColor)
 	{
-		const float roughnessPrimary = pow(2.0 / (shininess + 2.0), 0.25);
-		const float roughnessSecondary = pow(2.0 / (shininess * 0.5 + 2.0), 0.25);
+		const float roughnessPrimary = pow(abs(2.0 / (shininess + 2.0)), 0.25);
+		const float roughnessSecondary = pow(abs(2.0 / (shininess * 0.5 + 2.0)), 0.25);
 		const float NdotV = saturate(dot(N, V));
 
 #ifdef MARSCHNER
@@ -270,8 +270,8 @@ namespace Hair
 		float3 N1 = N;
 		float3 N2 = N;
 
-		const float roughnessPrimary = pow(2.0 / (glossiness + 2.0), 0.25);
-		const float roughnessSecondary = pow(2.0 / (glossiness * 0.5 + 2.0), 0.25);
+		const float roughnessPrimary = pow(abs(2.0 / (glossiness + 2.0)), 0.25);
+		const float roughnessSecondary = pow(abs(2.0 / (glossiness * 0.5 + 2.0)), 0.25);
 
 		if (SharedData::hairSpecularSettings.EnableTangentShift) {
 			const float shift = TexTangentShift.Sample(SampColorSampler, uv).x - 0.5;
