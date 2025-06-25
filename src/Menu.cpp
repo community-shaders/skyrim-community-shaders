@@ -3,7 +3,6 @@
 #ifndef DIRECTINPUT_VERSION
 #	define DIRECTINPUT_VERSION 0x0800
 #endif
-#include <Windows.h>
 #include <dinput.h>
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
@@ -130,6 +129,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EffectToggleKey,
 	Theme,
 	PerfOverlay)
+
+constexpr std::uint16_t KEY_PRESSED_MASK = 0x8000;
 
 void Menu::SetupImGuiStyle() const
 {
@@ -2721,12 +2722,12 @@ void Menu::ProcessInputEventQueue()
 	_keyEventQueue.clear();
 
 	// Fallback: release stuck Shift and Tab if OS reports them not pressed
-	if ((io.KeysDown[ImGuiKey_LeftShift] && !(GetAsyncKeyState(VK_LSHIFT) & 0x8000)) ||
-		(io.KeysDown[ImGuiKey_RightShift] && !(GetAsyncKeyState(VK_RSHIFT) & 0x8000))) {
+	if ((io.KeysDown[ImGuiKey_LeftShift] && !(GetAsyncKeyState(VK_LSHIFT) & KEY_PRESSED_MASK)) ||
+		(io.KeysDown[ImGuiKey_RightShift] && !(GetAsyncKeyState(VK_RSHIFT) & KEY_PRESSED_MASK))) {
 		io.AddKeyEvent(ImGuiKey_LeftShift, false);
 		io.AddKeyEvent(ImGuiKey_RightShift, false);
 	}
-	if (io.KeysDown[ImGuiKey_Tab] && !(GetAsyncKeyState(VK_TAB) & 0x8000)) {
+	if (io.KeysDown[ImGuiKey_Tab] && !(GetAsyncKeyState(VK_TAB) & KEY_PRESSED_MASK)) {
 		io.AddKeyEvent(ImGuiKey_Tab, false);
 	}
 }
