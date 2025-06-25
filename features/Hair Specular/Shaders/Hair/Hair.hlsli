@@ -28,14 +28,6 @@ namespace Hair
 		return F0;
 	}
 
-	// [Schlick et al. 1998, "An inexpensive brdf model for physically-based rendering."]
-	// https://doi.org/10.1111/1467-8659.1330233
-	float Hair_F(float CosTheta)
-	{
-		const float F0 = HairF0();
-		return F0 + (1 - F0) * pow(1 - CosTheta, 5);
-	}
-
 	float3 ShiftTangent(float3 T, float3 N, float shift)
 	{
 		return normalize(T + N * shift);
@@ -72,11 +64,11 @@ namespace Hair
 
 		const float3 specPrimary = D_KajiyaKay(TshiftPrimary, H, shininess);
 		const float3 specSecondary = D_KajiyaKay(TshiftSecondary, H, shininess * 0.5);
-		const float F = Hair_F(HdotL);
+		const float F = BRDF::F_Schlick(HairF0(), HdotL);
 		float3 specR = 0.25 * F * (specPrimary + specSecondary * scatterColor) * NdotL * saturate(VNdotV * (3.4e+38));
 		float scatterFresnel1 = pow(saturate(-dot(L, V)), 9) * pow(saturate(1 - VNdotV * VNdotV), 12);
 		float scatterFresnel2 = saturate(pow((1 - VNdotV), 20));
-		float3 specT = scatterFresnel1 + scatterFresnel2 * SharedData::hairSpecularSettings.Transmission;
+		float3 specT = (scatterFresnel1 + scatterFresnel2) * SharedData::hairSpecularSettings.Transmission;
 		float3 specTerm = specR + specT;
 		// specTerm = Color::LinearToGamma(specTerm);
 		dirSpecular = specTerm * lightColor;
@@ -84,79 +76,93 @@ namespace Hair
 
 	float Hair_g(float B, float Theta)
 	{
-		const float DenominatorB = max(B, 0.01f);
-		return exp(-0.5 * pow(Theta, 2) / (B * B)) / (sqrt(2 * Math::PI) * DenominatorB);
+		return exp(-0.5 * Theta * Theta / (B * B)) / (sqrt(Math::TAU) * B);
 	}
 
 	// [Marschner et al. 2003, "Light reflection from human hair fibers."]
 	// https://graphics.stanford.edu/papers/hair/hair-sg03final.pdf
-	float3 D_Marschner(float3 L, float3 V, float3 N, float roughness, float3 baseColor, float Area, float Backlit)
+	float3 D_Marschner(float3 L, float3 V, float3 N, float roughness, float3 baseColor, float area, float backlit)
 	{
-		const float VoL = dot(V, L);
-		const float SinThetaL = dot(N, L);
-		const float SinThetaV = dot(N, V);
-		float CosThetaD = cos(0.5 * abs(asin(SinThetaV) - asin(SinThetaL)));
+		const float NdotL = dot(N, L);
+		const float NdotV = dot(N, V);
+		const float VdotL = dot(V, L);
 
-		const float3 Lp = L - SinThetaL * N;
-		const float3 Vp = V - SinThetaV * N;
-		const float CosPhi = dot(Lp, Vp) * rsqrt(dot(Lp, Lp) * dot(Vp, Vp) + 1e-4);
-		const float CosHalfPhi = sqrt(saturate(0.5 + 0.5 * CosPhi));
+		float cosThetaL = sqrt(max(0, 1 - NdotL * NdotL));
+		float cosThetaV = sqrt(max(0, 1 - NdotV * NdotV));
+		float cosThetaD = sqrt((1 + cosThetaL * cosThetaV + NdotV * NdotL) / 2.0);
 
-		float n = 1.55;
-		float n_prime = 1.19 / CosThetaD + 0.36 * CosThetaD;
+		const float3 Lp = L - NdotL * N;
+		const float3 Vp = V - NdotL * N;
+		const float cosPhi = dot(Lp, Vp) * rsqrt(dot(Lp, Lp) * dot(Vp, Vp) + 1e-4);
+		const float cosHalfPhi = sqrt(saturate(0.5 + 0.5 * cosPhi));
 
-		float Shift = 0.035;
-		float Alpha[] = {
+		float n_prime = 1.19 / cosThetaD + 0.36 * cosThetaD;
+
+		const float Shift = 0.0499f;
+		const float Alpha[] = {
 			-Shift * 2,
 			Shift,
-			Shift * 4,
+			Shift * 4
 		};
-
 		float B[] = {
-			Area + pow(roughness, 2),
-			Area + pow(roughness, 2) / 2,
-			Area + pow(roughness, 2) * 2,
+			area + roughness,
+			area + roughness / 2,
+			area + roughness * 2
 		};
 
-		float3 R, TT, TRT = 0;
+		float hairIOR = 1.55;
+		float specularColor = HairF0();
 
-		{
-			const float sa = sin(Alpha[0]);
-			const float ca = cos(Alpha[0]);
-			float Shift = 2 * sa * (ca * CosHalfPhi * sqrt(1 - SinThetaV * SinThetaV) + sa * SinThetaV);
+		float3 Tp;
+		float Mp, Np, Fp, a, h, f;
+		float ThetaH = NdotL + NdotV;
 
-			float Mp = Hair_g(B[0] * sqrt(2.0) * CosHalfPhi, SinThetaL + SinThetaV - Shift);
-			float Np = 0.25 * CosHalfPhi;
-			float Fp = Hair_F(sqrt(saturate(0.5 + 0.5 * VoL)));
-			R = Mp * Np * Fp * 2 * lerp(1, Backlit, saturate(-VoL));
-		}
+		float3 R, TT, TRT;
 
-		{
-			float Mp = Hair_g(B[1], SinThetaL + SinThetaV - Alpha[1]);
-			float a = 1 / n_prime;
-			float h = CosHalfPhi * (1 + a * (0.6 - 0.8 * CosPhi));
-			float f = Hair_F(CosThetaD * sqrt(saturate(1 - h * h)));
+		// R
+		Mp = Hair_g(B[0], ThetaH - Alpha[0]);
+		Np = 0.25 * cosHalfPhi;
+		Fp = BRDF::F_Schlick(specularColor, sqrt(saturate(0.5 + 0.5 * VdotL))).x;
+		R = (Mp * Np) * (Fp * lerp(1, backlit, saturate(-VdotL)));
 
-			float Fp = pow(1 - f, 2);
-			float3 Tp = pow(baseColor, 0.5 * sqrt(1 - pow(h * a, 2)) / CosThetaD);
-			float Np = exp(-3.65 * CosPhi - 3.98);
+		// TT
+		Mp = Hair_g(B[1], ThetaH - Alpha[1]);
+		a = (1.55f / hairIOR) * rcp(n_prime);
+		h = cosHalfPhi * (1 + a * (0.6 - 0.8 * cosPhi));
+		f = BRDF::F_Schlick(specularColor, cosThetaD * sqrt(saturate(1 - h * h))).x;
+		Fp = (1 - f) * (1 - f);
+		Tp = pow(baseColor, 0.5 * sqrt(1 - (h * a) * (h * a)) / cosThetaD);
+		Np = exp(-3.65 * cosPhi - 3.98);
+		TT = (Mp * Np) * (Fp * Tp) * backlit;
 
-			TT = Mp * Np * Fp * Tp * Backlit;
-		}
-
-		{
-			float Mp = Hair_g(B[2], SinThetaL + SinThetaV - Alpha[2]);
-
-			float f = Hair_F(CosThetaD * 0.5);
-			float Fp = pow(1 - f, 2) * f;
-			float3 Tp = pow(baseColor, 0.8 / CosThetaD);
-
-			float Np = exp(17 * CosPhi - 16.78);
-
-			TRT = Mp * Np * Fp * Tp;
-		}
+		// TRT
+		Mp = Hair_g(B[2], ThetaH - Alpha[2]);
+		f = BRDF::F_Schlick(specularColor, cosThetaD * 0.5f).x;
+		Fp = (1 - f) * (1 - f) * f;
+		Tp = pow(baseColor, 0.8 / cosThetaD);
+		Np = exp(17 * cosPhi - 16.78);
+		TRT = (Mp * Np) * (Fp * Tp);
 
 		return R + TT + TRT;
+	}
+
+	float3 GetHairDiffuseAttenuationKajiyaKay(float3 N, float3 V, float3 L, float shadow, float3 baseColor)
+	{
+		float NdotL = dot(N, L);
+		float NdotV = dot(N, V);
+		float3 S = 0;
+
+		float diffuseKajiya = 1 - abs(NdotL);
+
+		float3 fakeN = normalize(V - N * NdotV);
+		const float wrap = 1;
+		float wrappedNdotL = saturate((dot(fakeN, L) + wrap) / ((1 + wrap) * (1 + wrap)));
+		float diffuseScatter = (1 / Math::PI) * lerp(wrappedNdotL, diffuseKajiya, 0.33);
+		float luma = Color::RGBToLuminance(baseColor);
+		float3 scatterTint = pow(baseColor / luma, 1 - shadow);
+		S += sqrt(baseColor) * diffuseScatter * scatterTint;
+
+		return S;
 	}
 
 	void GetHairDirectLightMarschner(out float3 dirDiffuse, out float3 dirSpecular, float3 T, float3 L, float3 V, float3 N, float3 lightColor, float shininess, float2 uv, float3 baseColor)
@@ -164,9 +170,12 @@ namespace Hair
 		lightColor *= Math::PI;
 		dirDiffuse = 0;
 		dirSpecular = 0;
-		const float roughness = 1 - 0.01 * shininess;
+		const float roughness = pow(2.0 / (shininess + 2.0), 0.25);
 
-		dirSpecular += D_Marschner(L, V, N, roughness, baseColor, 0, 1) * lightColor;
+		dirSpecular += D_Marschner(L, V, N, roughness, baseColor, 0, SharedData::hairSpecularSettings.Transmission) * lightColor;
+		dirDiffuse += GetHairDiffuseAttenuationKajiyaKay(N, V, L, 0, baseColor) * lightColor;
+		dirSpecular = max(dirSpecular, 0);
+		dirDiffuse = max(dirDiffuse, 0);
 	}
 
 	void GetHairDirectLight(out float3 dirDiffuse, out float3 dirSpecular, float3 T, float3 L, float3 V, float3 N, float3 VN, float3 lightColor, float shininess, float2 uv, float3 baseColor)
