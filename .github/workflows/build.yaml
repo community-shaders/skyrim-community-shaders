@@ -514,9 +514,84 @@ jobs:
                       ✅ A pre-release build is available for this PR:
                       [Download](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.cpp-build.outputs.version }}-pr${{ github.event.pull_request.number }})
 
+    feature-audit:
+        name: Feature Version Audit (Release)
+        if: startsWith(github.ref, 'refs/tags/v')
+        runs-on: ubuntu-latest
+        continue-on-error: true
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+                  submodules: recursive
+
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Run feature version audit
+              run: |
+                  python tools/feature_version_audit.py --output feature-version-audit-latest.md 2>&1 | tee feature-version-audit-latest.md
+
+            - name: Upload feature audit markdown
+              uses: actions/upload-artifact@v4
+              with:
+                  name: feature-version-audit
+                  path: feature-version-audit-latest.md
+
+    feature-audit-pr:
+        name: Feature Version Audit (PR)
+        if: github.event_name == 'pull_request_target'
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+                  submodules: recursive
+
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Run feature version audit (PR check)
+              id: audit
+              continue-on-error: true
+              run: |
+                  python tools/feature_version_audit.py --pr-check --base ${{ github.event.pull_request.base.sha }} 2>&1 | tee pr-feature-audit.md
+            - name: Upload feature audit markdown (PR)
+              uses: actions/upload-artifact@v4
+              with:
+                  name: pr-feature-audit
+                  path: pr-feature-audit.md
+
+    feature-audit-pr-comment:
+        name: Comment on PR with audit results
+        if: github.event_name == 'pull_request_target'
+        needs: feature-audit-pr
+        runs-on: ubuntu-latest
+        permissions:
+            pull-requests: write
+        steps:
+            - name: Download feature audit markdown (PR)
+              uses: actions/download-artifact@v4
+              with:
+                  name: pr-feature-audit
+                  path: .
+
+            - name: Comment on PR with audit results
+              uses: thollander/actions-comment-pull-request@v3
+              with:
+                  file-path: pr-feature-audit.md
+                  mode: upsert
+                  comment-tag: feature-version-audit
+
     release:
         name: Post Release from Manual Run or Tag
-        needs: [cpp-build, shader-validation]
+        needs: [cpp-build, shader-validation, feature-audit]
         if: >
             github.event_name == 'workflow_dispatch' ||
             startsWith(github.ref, 'refs/tags/v')
@@ -530,6 +605,26 @@ jobs:
                   name: dist-artifacts
                   path: dist/
 
+            - name: Download feature audit artifact
+              continue-on-error: true
+              uses: actions/download-artifact@v4
+              with:
+                  name: feature-version-audit
+                  path: .
+
+            - name: Generate combined release notes
+              id: combined_notes
+              shell: bash
+              run: |
+                  # Generate GitHub release notes
+                  gh release view ${{ github.ref_name }} --json body -q .body > auto-release-notes.md || echo '' > auto-release-notes.md
+                  # Merge feature audit if present
+                  if [ -f feature-version-audit-latest.md ]; then
+                    echo -e "\n---\n\n" >> auto-release-notes.md
+                    cat feature-version-audit-latest.md >> auto-release-notes.md
+                  fi
+                  echo "body_file=auto-release-notes.md" >> $GITHUB_OUTPUT
+
             - name: Create tagged release
               uses: ncipollo/release-action@v1
               with:
@@ -537,6 +632,7 @@ jobs:
                   draft: true
                   tag: ${{ github.ref_name }}
                   artifacts: "${{ github.workspace }}/dist/*.7z"
-                  generateReleaseNotes: true
+                  bodyFile: ${{ steps.combined_notes.outputs.body_file }}
+                  generateReleaseNotes: false
                   replacesArtifacts: true
                   removeArtifacts: true
