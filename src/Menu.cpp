@@ -837,15 +837,16 @@ void Menu::DrawSettings()
 									if (isLoaded) {
 										feat->DrawSettings();
 									} else {
-										// Check if INI file exists to avoid showing obsolete "missing file" messages
-										// when feature was re-enabled after being disabled at boot
-										if (std::filesystem::exists(Util::PathHelpers::GetFeatureIniPath(feat->GetShortName()))) {
+										// Check if feature is obsolete first - always show error for obsolete features
+										if (FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
+											// Obsolete feature - show detailed unloaded UI with error info
+											feat->DrawUnloadedUI();
+										} else if (std::filesystem::exists(Util::PathHelpers::GetFeatureIniPath(feat->GetShortName()))) {
 											// INI file exists - show simple pending restart message
 											ImGui::Text("This feature will be available after restart.");
 										} else {
 											// INI file missing - show detailed unloaded UI with installation info
 											feat->DrawUnloadedUI();
-										}
 										// Add download link if available
 										if (!feat->GetFeatureModLink().empty()) {
 											ImGui::Spacing();
@@ -859,9 +860,10 @@ void Menu::DrawSettings()
 										}
 									}
 								}
+							}
 
-								// Error Messages
-								if (hasFailedMessage && feat->DrawFailLoadMessage()) {
+								// Error Messages (Not for obsolete features as this is already covered by DrawUnloadedUI)
+								if (hasFailedMessage && feat->DrawFailLoadMessage() && !FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
 									ImGui::Spacing();
 									ImGui::SeparatorText("Error");
 									ImGui::TextColored(themeSettings.StatusPalette.Error, feat->failedLoadedMessage.c_str());
