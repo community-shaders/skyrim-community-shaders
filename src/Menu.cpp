@@ -1067,7 +1067,7 @@ void Menu::DrawSettings()
 			}
 
 			auto unloadedFeatures = sortedFeatureList | std::ranges::views::filter([](Feature* feat) {
-				return !feat->loaded && feat->IsInMenu();
+				return !feat->loaded && feat->IsInMenu() && (!FeatureIssues::IsObsoleteFeature(feat->GetShortName()) || globals::state->IsDeveloperMode());
 			});
 			if (std::ranges::distance(unloadedFeatures) != 0) {
 				menuList.push_back("Unloaded Features"s);
