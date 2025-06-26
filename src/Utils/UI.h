@@ -1,9 +1,16 @@
 #pragma once
-
 #include <imgui.h>
+
+// Forward declarations
+struct ID3D11Device;
+struct ID3D11ShaderResourceView;
+struct ImVec2;
+class Menu;
 
 namespace Util
 {
+	// Text rendering constants
+	constexpr float DefaultHeaderTextScale = 1.5f;  // Larger scale for header text to improve readability
 
 	/**
 	 * Usage:
@@ -110,20 +117,80 @@ namespace Util
 	bool PercentageSlider(const char* label, float* data, float lb = 0.f, float ub = 100.f, const char* format = "%.1f %%");
 	ImVec2 GetNativeViewportSizeScaled(float scale);
 
+	// Icon loading functions
+	// `device` must remain alive for the SRV lifetime. Caller owns *out_srv and must `Release()` it.
+	bool LoadTextureFromFile(ID3D11Device* device,
+		const char* filename,
+		ID3D11ShaderResourceView** out_srv,
+		ImVec2& out_size);
+	bool InitializeMenuIcons(Menu* menu);
+
+	// Text rendering helpers for clearer title text
+	// These functions modify ImGui rendering state and should be called within ImGui context
+	ImVec2 DrawSharpText(const char* text, bool alignToPixelGrid = true, float scale = 1.0f);
+	ImVec2 DrawAlignedTextWithLogo(ID3D11ShaderResourceView* logoTexture, const ImVec2& logoSize, const char* text, float textScale = DefaultHeaderTextScale);
+
 	/**
 	 * Draws a custom styled collapsible category header with lines extending from both sides
 	 * @param categoryName The name of the category to display
 	 * @param isExpanded Reference to the expansion state
+	 * @param categoryCount Number of features in the category
 	 * @return true if the expansion state was toggled
 	 */
-	bool DrawCategoryHeader(const char* categoryName, bool& isExpanded);
+	bool DrawCategoryHeader(const char* categoryName, bool& isExpanded, int categoryCount);
 
 	/**
-	 * Draws a custom styled section header (non-collapsible) with lines extending from both sides
+	 * Draws a custom styled section header with lines extending from both sides
 	 * @param sectionName The name of the section to display
 	 * @param useWhiteText Whether to use white text (for differentiation)
+	 * @param isCollapsible Whether the header should be collapsible
+	 * @param isExpanded Reference to the expansion state (only used if collapsible)
+	 * @return true if the expansion state was toggled (only relevant if collapsible)
 	 */
-	void DrawSectionHeader(const char* sectionName, bool useWhiteText = false);
+	bool DrawSectionHeader(const char* sectionName, bool useWhiteText = false, bool isCollapsible = true, bool* isExpanded = nullptr);
+
+	/**
+	 * Configuration for color-coded value display with flexible thresholds and colors.
+	 * Supports variable number of thresholds and corresponding colors.
+	 */
+	struct ColorCodedValueConfig
+	{
+		struct ThresholdColor
+		{
+			float threshold;
+			ImVec4 color;
+
+			ThresholdColor(float t, const ImVec4& c) :
+				threshold(t), color(c) {}
+		};
+
+		std::vector<ThresholdColor> thresholds;  // Thresholds in ascending order with their colors
+		const char* format = "%.1f%%";           // Printf-style format string for the value
+		const char* tooltipText = nullptr;       // Optional tooltip text
+		bool sameLine = true;                    // Whether to put value on same line as label
+
+		// Helper methods for common patterns (implemented in UI.cpp to avoid header dependencies)
+		// Use when higher values indicate problems/danger (intensity, errors, warnings)
+		static ColorCodedValueConfig HighIsBad(float low, float med, float high);
+		// Use when higher values indicate good things (performance, quality, progress)
+		static ColorCodedValueConfig HighIsGood(float low, float med, float high);
+	};
+	/**
+	 * Color-codes a value based on flexible thresholds and displays it with optional tooltip.
+	 * Common pattern for showing status values (percentages, intensities, etc.) with color feedback.
+	 *
+	 * @param label The label to display next to the value.
+	 * @param valueToCheck The numeric value to use for color-coding (compared to thresholds).
+	 * @param valueStr The string to display (can be formatted, units, or descriptive text).
+	 * @param config The configuration for thresholds, colors, formatting, and tooltip.
+	 * @param useBullet If true (default), use ImGui::BulletText for the label; if false, use ImGui::Text.
+	 */
+	void DrawColorCodedValue(
+		const std::string& label,
+		float valueToCheck,
+		const std::string& valueStr,
+		const ColorCodedValueConfig& config,
+		bool useBullet = true);
 
 	class PerformanceOverlay
 	{
@@ -139,4 +206,11 @@ namespace Util
 		}
 	};
 	extern PerformanceOverlay performanceOverlay;
+
+	/**
+	 * @brief Draws a multi-line tooltip with optional per-line coloring.
+	 * @param lines The lines of text to display in the tooltip (as std::vector<std::string>).
+	 * @param colors Optional per-line colors (if empty, default color is used for all lines).
+	 */
+	void DrawMultiLineTooltip(const std::vector<std::string>& lines, const std::vector<ImVec4>& colors = {});
 }  // namespace Util

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Menu.h"
+#include "FeatureVersions.h"
 
 struct Feature
 {
@@ -66,33 +66,10 @@ public:
 	 * \return Pair containing feature summary description and vector of key feature bullet points
 	 */
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() { return {}; }
-
 	virtual void SetupResources() {}
 	virtual void Reset() {}
-
 	virtual void DrawSettings() {}
-	virtual void DrawUnloadedUI()
-	{
-		auto [description, keyFeatures] = GetFeatureSummary();
-
-		if (!description.empty() || !keyFeatures.empty()) {
-			ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.Error, "This feature is not installed!");
-			ImGui::Spacing();
-
-			if (!description.empty()) {
-				ImGui::TextWrapped("%s", description.c_str());
-				ImGui::Spacing();
-			}
-
-			if (!keyFeatures.empty()) {
-				ImGui::TextWrapped("Key features:");
-				for (const auto& feature : keyFeatures) {
-					ImGui::BulletText("%s", feature.c_str());
-				}
-				ImGui::Spacing();
-			}
-		}
-	}
+	virtual void DrawUnloadedUI();
 
 	virtual void ReflectionsPrepass() {};
 	virtual void Prepass() {}
@@ -110,9 +87,57 @@ public:
 	virtual void RestoreDefaultSettings() {}
 	virtual bool ToggleAtBootSetting();
 
+	/**
+	 * Weather analysis configuration for features that want to provide weather analysis.
+	 * If sectionName is empty, the feature will not appear in weather analysis UI.
+	 * Features should populate this struct to opt-in to weather analysis display.
+	 */
+	struct WeatherAnalysisConfig
+	{
+		std::string sectionName;             // Display name for the collapsible section (empty = no weather analysis)
+		std::function<void()> drawFunction;  // Custom draw function for weather analysis content
+
+		// Constructor for easy initialization
+		WeatherAnalysisConfig() = default;
+		WeatherAnalysisConfig(const std::string& name, std::function<void()> drawFunc) :
+			sectionName(name), drawFunction(std::move(drawFunc)) {}
+	};
+
+	/**
+	 * Get weather analysis configuration for this feature.
+	 * Returns empty sectionName by default (no weather analysis).
+	 * Features should override this to provide their weather analysis section name and draw function.
+	 */
+	virtual WeatherAnalysisConfig GetWeatherAnalysisConfig() const { return {}; }
+
 	virtual bool ValidateCache(CSimpleIniA& a_ini);
 	virtual void WriteDiskCacheInfo(CSimpleIniA& a_ini);
 	virtual void ClearShaderCache() {}
 
 	static const std::vector<Feature*>& GetFeatureList();
+
+	// Feature utility functions
+	/**
+	 * @brief Gets the minimum required version for a feature.
+	 *
+	 * This function looks up the minimum required version for a feature
+	 * from FeatureVersions::FEATURE_MINIMAL_VERSIONS and returns it as a
+	 * formatted string. Returns "unknown" if the feature is not found.
+	 *
+	 * @param shortName The short name of the feature.
+	 * @return The formatted minimum required version string, or "unknown" if not found.
+	 */
+	static std::string GetFeatureRequiredVersion(const std::string& shortName);
+
+	/**
+	 * @brief Checks if a feature has a minimum required version defined.
+	 *
+	 * This function checks if a feature exists in the FeatureVersions::FEATURE_MINIMAL_VERSIONS
+	 * map and optionally returns the version.
+	 *
+	 * @param shortName The short name of the feature.
+	 * @param outVersion Pointer to REL::Version to store the version if found (optional).
+	 * @return True if the feature is found, false otherwise.
+	 */
+	static bool IsFeatureKnown(const std::string& shortName, REL::Version* outVersion = nullptr);
 };

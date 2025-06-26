@@ -23,10 +23,10 @@ public:
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Terrain Variation reduces the repeating pattern effect on terrain textures.\n"
+			"Terrain Variation removes the repeating pattern effect on terrain textures.\n"
 			"This technique creates more natural-looking terrain by adding variation to texture sampling.",
-			{ "Reduces terrain texture tiling",
-				"Adjustable distance-based blending",
+			{ "A comprehensive fix for terrain tiling issues",
+				"Works with any terrain texture mod",
 				"Improved terrain visual quality",
 				"Compatible with Extended Materials parallax" }
 		};
@@ -58,7 +58,6 @@ public:
 	};
 
 	virtual void DrawSettings() override;
-	virtual bool DrawFailLoadMessage() const override;
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override

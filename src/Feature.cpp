@@ -5,6 +5,7 @@
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExtendedMaterials.h"
+#include "Features/ExtendedTranslucency.h"
 #include "Features/GrassCollision.h"
 #include "Features/GrassLighting.h"
 #include "Features/HairSpecular.h"
@@ -26,7 +27,10 @@
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
+#include "Features/WeatherPicker.h"
 #include "Features/WetnessEffects.h"
+#include "Menu.h"
+#include "Utils/Format.h"
 
 #include "State.h"
 
@@ -63,15 +67,14 @@ void Feature::Load(json& o_json)
 			REL::Version featureVersion(std::regex_replace(value, std::regex("-"), "."));
 
 			// Check if feature exists in minimal versions
-			auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(GetShortName());
-			if (iter == FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
+			REL::Version minimalFeatureVersion;
+			if (!Feature::IsFeatureKnown(GetShortName(), &minimalFeatureVersion)) {
 				hasError = true;
 				errorVersion = value;
 				errorType = FeatureIssues::FeatureIssueInfo::IssueType::UNKNOWN;
 				failedLoadedMessage = std::format("{} {} is an unknown feature not supported by this CS version. This may be a feature from a development branch.", GetShortName(), value);
 			} else {
 				// Version compatibility check
-				auto& minimalFeatureVersion = iter->second;
 				bool oldFeature = featureVersion.compare(minimalFeatureVersion) == std::strong_ordering::less;
 				bool majorVersionMismatch = featureVersion.major() < minimalFeatureVersion.major();
 
@@ -83,8 +86,7 @@ void Feature::Load(json& o_json)
 					errorVersion = value;
 					errorType = FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH;
 
-					std::string minimalVersionString = minimalFeatureVersion.string();
-					minimalVersionString = minimalVersionString.substr(0, minimalVersionString.size() - 2);
+					std::string minimalVersionString = Util::GetFormattedVersion(minimalFeatureVersion);
 
 					if (majorVersionMismatch) {
 						failedLoadedMessage = std::format("{} {} is too old, major version incompatibility detected. Required: {}", GetShortName(), value, minimalVersionString);
@@ -105,7 +107,11 @@ void Feature::Load(json& o_json)
 		hasError = true;
 		errorVersion = "unknown";
 		errorType = FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH;
-		failedLoadedMessage = std::format("{} missing version info; not successfully loaded", ini_filename);
+
+		// Get the minimum required version to include in the error message
+		std::string requiredVersion = Feature::GetFeatureRequiredVersion(GetShortName());
+
+		failedLoadedMessage = std::format("The {} file is missing. This feature is not installed! Version required: {}", ini_filename, requiredVersion);
 	}
 
 	if (hasError) {
@@ -120,16 +126,7 @@ void Feature::Load(json& o_json)
 			// For version mismatch, also pass the minimum required version
 			std::string minimumVersion;
 			if (errorType == FeatureIssues::FeatureIssueInfo::IssueType::VERSION_MISMATCH) {
-				auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(shortName);
-				if (iter != FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
-					std::string minimalVersionString = iter->second.string();
-					// Only remove trailing ".0" if it exists, don't truncate non-zero patch versions
-					if (minimalVersionString.ends_with(".0")) {
-						minimumVersion = minimalVersionString.substr(0, minimalVersionString.size() - 2);
-					} else {
-						minimumVersion = minimalVersionString;
-					}
-				}
+				minimumVersion = Feature::GetFeatureRequiredVersion(shortName);
 			}
 
 			FeatureIssues::AddFeatureIssue(shortName, errorVersion, failedLoadedMessage, errorType, fileInfo, minimumVersion);
@@ -209,6 +206,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		globals::features::dynamicCubemaps,
 		globals::features::cloudShadows,
 		globals::features::waterEffects,
+		globals::features::weatherPicker,
 		globals::features::subsurfaceScattering,
 		globals::features::terrainShadows,
 		globals::features::screenSpaceGI,
@@ -223,6 +221,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		globals::features::interiorSunShadows,
 		globals::features::terrainVariation,
 		globals::features::ibl,
+		globals::features::extendedTranslucency,
 		globals::features::linearLighting
 	};
 
@@ -264,4 +263,71 @@ bool Feature::ToggleAtBootSetting()
 	state->SetFeatureDisabled(featureName, !disabled);
 
 	return state->IsFeatureDisabled(featureName);  // Return the new state
+}
+
+void Feature::DrawUnloadedUI()
+{
+	// Prioritize detailed failure message if available
+	if (!failedLoadedMessage.empty()) {
+		// Use error color for all failure messages
+		auto& themeSettings = Menu::GetSingleton()->GetTheme();
+		ImGui::TextColored(themeSettings.StatusPalette.Error, failedLoadedMessage.c_str());
+		return;
+	}
+
+	// Fallback: Always show missing file message when no specific failure message exists
+	auto& themeSettings = Menu::GetSingleton()->GetTheme();
+	auto ini_filename = std::format("{}.ini", GetShortName());
+	// Get the minimum required version to include in the error message
+	std::string requiredVersion = Feature::GetFeatureRequiredVersion(GetShortName());
+
+	auto missingFileMessage = std::format("The {} file is missing. This feature is not installed! Version required: {}", ini_filename, requiredVersion);
+	ImGui::TextColored(themeSettings.StatusPalette.Error, missingFileMessage.c_str());
+
+	// Also show feature summary if available
+	auto [description, keyFeatures] = GetFeatureSummary();
+	if (!description.empty()) {
+		ImGui::Spacing();
+		ImGui::TextWrapped("%s", description.c_str());
+	}
+
+	if (!keyFeatures.empty()) {
+		if (description.empty()) {
+			ImGui::Spacing();
+		}
+		ImGui::TextWrapped("Key features:");
+		for (const auto& feature : keyFeatures) {
+			ImGui::BulletText("%s", feature.c_str());
+		}
+	}
+}
+
+std::string Feature::GetFeatureRequiredVersion(const std::string& shortName)
+{
+	if (shortName.empty()) {
+		return "unknown";
+	}
+	auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(shortName);
+	if (iter != FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
+		return Util::GetFormattedVersion(iter->second);
+	}
+
+	return "unknown";
+}
+
+bool Feature::IsFeatureKnown(const std::string& shortName, REL::Version* outVersion)
+{
+	if (shortName.empty()) {
+		return false;
+	}
+
+	auto iter = FeatureVersions::FEATURE_MINIMAL_VERSIONS.find(shortName);
+	if (iter != FeatureVersions::FEATURE_MINIMAL_VERSIONS.end()) {
+		if (outVersion) {
+			*outVersion = iter->second;
+		}
+		return true;
+	}
+
+	return false;
 }

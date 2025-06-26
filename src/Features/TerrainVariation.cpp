@@ -25,7 +25,7 @@ void TerrainVariation::DrawSettings()
 
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
-			"Reduces the repeating pattern effect on terrain textures.\n"
+			"Removes the repeating pattern effect on terrain textures.\n"
 			"This technique creates more natural-looking terrain by adding variation to texture sampling.");
 	}
 
@@ -135,9 +135,4 @@ void TerrainVariation::LoadSettings(json& o_json)
 void TerrainVariation::SaveSettings(json& o_json)
 {
 	o_json = settings;
-}
-
-bool TerrainVariation::DrawFailLoadMessage() const
-{
-	return false;
 }

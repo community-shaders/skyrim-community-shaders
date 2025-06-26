@@ -3,6 +3,10 @@
 
 struct SkySync : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "153543";
+
+public:
 	static SkySync* GetSingleton()
 	{
 		static SkySync singleton;
@@ -16,12 +20,13 @@ struct SkySync : Feature
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Synchronizes celestial lighting with the actual sky state, ensuring sun and moon lighting direction and intensity accurately match their visual position in the sky.",
-			{ "Accurate sun and moon lighting direction matching sky position",
-				"Alternative sun path calculation for improved realism",
-				"Configurable moon light source selection",
-				"Real-time celestial body tracking and updates",
-				"Enhanced sky and climate transition handling" }
+			"Synchronizes volumetric lighting and shadows with the actual sun and moon positions in the sky.",
+			{ "Fixes the mismatch between the positions of the sun and moons and the lighting direction",
+				"Includes an optional alternative southern sun path for more realistic and dramatic lighting",
+				"Smoothly switches the light source between the sun and moons based on visibility",
+				"Moon light source can be switched between Masser, Secunda, or the brightest",
+				"Automatic calculation of moon lighting intensity based on moon phase",
+				"Fixes the sun appearing higher on the horizon when the player gains altitude" }
 		};
 	}
 

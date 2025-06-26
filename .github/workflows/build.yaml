@@ -107,7 +107,7 @@ jobs:
             (github.event_name == 'pull_request_target' &&
              !github.event.pull_request.draft))
         name: Build plugin and addons
-        runs-on: windows-latest
+        runs-on: windows-2022
         permissions:
             contents: read
         outputs:
@@ -120,7 +120,71 @@ jobs:
                   repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
                   submodules: recursive
 
-            - uses: ilammy/msvc-dev-cmd@v1.10.0
+            - name: Setup MSVC environment (VS2022)
+              uses: ilammy/msvc-dev-cmd@v1
+              with:
+                  arch: x64
+
+            - name: Get MSVC version
+              id: msvc_version
+              shell: pwsh
+              run: |
+                  # Create a dummy source file for cl.exe /Bv
+                  "int main() { return 0; }" | Out-File -FilePath "dummy.cpp" -Encoding ASCII
+
+                  $output = & cl.exe /Bv dummy.cpp 2>&1
+                  Write-Host "Raw cl.exe output:"
+                  Write-Host $output
+
+                  # More robust version extraction
+                  $version = $null
+
+                  # Split output into lines and search for version patterns
+                  $lines = $output -split "`n|`r"
+                  Write-Host "Number of lines: $($lines.Count)"
+
+                  foreach ($line in $lines) {
+                      Write-Host "Processing line: '$line'"
+
+                      # Try different patterns on each line
+                      if ($line -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found version in line: $version"
+                          break
+                      }
+                      elseif ($line -match '([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found generic version in line: $version"
+                          break
+                      }
+                  }
+
+                  # If still no version, try the whole output as a single string
+                  if (-not $version) {
+                      Write-Host "Trying whole output as single string..."
+                      if ($output -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found version in whole output: $version"
+                      }
+                      elseif ($output -match '([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found generic version in whole output: $version"
+                      }
+                  }
+
+                  Write-Host "Final version result: $version"
+
+                  if ($version) {
+                      Write-Host "MSVC version: $version"
+                      Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version" -Encoding UTF8
+                  } else {
+                      Write-Host "Failed to extract MSVC version from output:"
+                      Write-Host $output
+                      throw "MSVC version not found in output"
+                  }
+
+                  # Clean up dummy file
+                  Remove-Item "dummy.cpp" -ErrorAction SilentlyContinue
 
             - name: Setup vcpkg
               uses: lukka/run-vcpkg@v11.5
@@ -131,10 +195,28 @@ jobs:
               uses: actions/cache@v4
               with:
                   path: build/ALL
-                  key: ${{ runner.os }}-cmake-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
+                  key: ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
                   restore-keys: |
-                      ${{ runner.os }}-cmake-${{ github.event.inputs.cache-key-suffix || 'default' }}-
-                      ${{ runner.os }}-cmake-
+                      ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-
+                      ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-
+
+            - name: Remove stale CMake cache if drive letter changed
+              shell: pwsh
+              run: |
+                  $cacheFile = "build/ALL/CMakeCache.txt"
+                  if (Test-Path $cacheFile) {
+                    $expected = (Resolve-Path .).Path.Substring(0,1)  # C or D
+                    $content = Get-Content $cacheFile -Raw
+                    if ($content -match 'CMAKE_HOME_DIRECTORY:INTERNAL=([A-Z]):') {
+                      $actual = $Matches[1]
+                      if ($actual -ne $expected) {
+                        Write-Host "❌ Cache drive mismatch. Removing stale build/ALL directory."
+                        Remove-Item -Recurse -Force "build/ALL"
+                      } else {
+                        Write-Host "✅ Cache path matches. Keeping build/ALL."
+                      }
+                    }
+                  }
 
             - name: Build using run-cmake
               uses: lukka/run-cmake@v10
@@ -175,7 +257,7 @@ jobs:
              (github.event_name == 'workflow_dispatch' &&
               github.event.inputs.validate-shaders == 'true'))
         name: Validate shader compilation
-        runs-on: windows-latest
+        runs-on: windows-2022
         permissions:
             contents: read
         strategy:
@@ -207,8 +289,70 @@ jobs:
                   repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
                   submodules: recursive
 
-            - uses: ilammy/msvc-dev-cmd@v1.10.0
+            - uses: ilammy/msvc-dev-cmd@v1
               if: steps.check-hlsl.outputs.skip != 'true'
+
+            - name: Get MSVC version
+              if: steps.check-hlsl.outputs.skip != 'true'
+              id: msvc_version
+              shell: pwsh
+              run: |
+                  # Create a dummy source file for cl.exe /Bv
+                  "int main() { return 0; }" | Out-File -FilePath "dummy.cpp" -Encoding ASCII
+
+                  $output = & cl.exe /Bv dummy.cpp 2>&1
+                  Write-Host "Raw cl.exe output:"
+                  Write-Host $output
+
+                  # More robust version extraction
+                  $version = $null
+
+                  # Split output into lines and search for version patterns
+                  $lines = $output -split "`n|`r"
+                  Write-Host "Number of lines: $($lines.Count)"
+
+                  foreach ($line in $lines) {
+                      Write-Host "Processing line: '$line'"
+
+                      # Try different patterns on each line
+                      if ($line -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found version in line: $version"
+                          break
+                      }
+                      elseif ($line -match '([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found generic version in line: $version"
+                          break
+                      }
+                  }
+
+                  # If still no version, try the whole output as a single string
+                  if (-not $version) {
+                      Write-Host "Trying whole output as single string..."
+                      if ($output -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found version in whole output: $version"
+                      }
+                      elseif ($output -match '([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found generic version in whole output: $version"
+                      }
+                  }
+
+                  Write-Host "Final version result: $version"
+
+                  if ($version) {
+                      Write-Host "MSVC version: $version"
+                      Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version" -Encoding UTF8
+                  } else {
+                      Write-Host "Failed to extract MSVC version from output:"
+                      Write-Host $output
+                      throw "MSVC version not found in output"
+                  }
+
+                  # Clean up dummy file
+                  Remove-Item "dummy.cpp" -ErrorAction SilentlyContinue
 
             - name: Setup vcpkg
               if: steps.check-hlsl.outputs.skip != 'true'
@@ -221,11 +365,29 @@ jobs:
               uses: actions/cache@v4
               with:
                   path: build/ALL
-                  key: ${{ runner.os }}-cmake-${{ matrix.config.name }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
+                  key: ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ matrix.config.name }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
                   restore-keys: |
-                      ${{ runner.os }}-cmake-${{ matrix.config.name }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-
-                      ${{ runner.os }}-cmake-${{ matrix.config.name }}-
-                      ${{ runner.os }}-cmake-
+                      ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ matrix.config.name }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-
+                      ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ matrix.config.name }}-
+
+            - name: Remove stale CMake cache if drive letter changed
+              if: steps.check-hlsl.outputs.skip != 'true'
+              shell: pwsh
+              run: |
+                  $cacheFile = "build/ALL/CMakeCache.txt"
+                  if (Test-Path $cacheFile) {
+                    $expected = (Resolve-Path .).Path.Substring(0,1)  # C or D
+                    $content = Get-Content $cacheFile -Raw
+                    if ($content -match 'CMAKE_HOME_DIRECTORY:INTERNAL=([A-Z]):') {
+                      $actual = $Matches[1]
+                      if ($actual -ne $expected) {
+                        Write-Host "❌ Cache drive mismatch. Removing stale build/ALL directory."
+                        Remove-Item -Recurse -Force "build/ALL"
+                      } else {
+                        Write-Host "✅ Cache path matches. Keeping build/ALL."
+                      }
+                    }
+                  }
 
             - name: Prepare shaders for validation
               if: steps.check-hlsl.outputs.skip != 'true'
@@ -266,7 +428,7 @@ jobs:
         name: Post Prerelease from PR
         if: github.event_name == 'pull_request_target'
         needs: [cpp-build, shader-validation]
-        runs-on: windows-latest
+        runs-on: windows-2022
         permissions:
             contents: write
             pull-requests: write
@@ -352,13 +514,88 @@ jobs:
                       ✅ A pre-release build is available for this PR:
                       [Download](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.cpp-build.outputs.version }}-pr${{ github.event.pull_request.number }})
 
+    feature-audit:
+        name: Feature Version Audit (Release)
+        if: startsWith(github.ref, 'refs/tags/v')
+        runs-on: ubuntu-latest
+        continue-on-error: true
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+                  submodules: recursive
+
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Run feature version audit
+              run: |
+                  python tools/feature_version_audit.py --output feature-version-audit-latest.md 2>&1 | tee feature-version-audit-latest.md
+
+            - name: Upload feature audit markdown
+              uses: actions/upload-artifact@v4
+              with:
+                  name: feature-version-audit
+                  path: feature-version-audit-latest.md
+
+    feature-audit-pr:
+        name: Feature Version Audit (PR)
+        if: github.event_name == 'pull_request_target'
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+                  submodules: recursive
+
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Run feature version audit (PR check)
+              id: audit
+              continue-on-error: true
+              run: |
+                  python tools/feature_version_audit.py --pr-check --base ${{ github.event.pull_request.base.sha }} 2>&1 | tee pr-feature-audit.md
+            - name: Upload feature audit markdown (PR)
+              uses: actions/upload-artifact@v4
+              with:
+                  name: pr-feature-audit
+                  path: pr-feature-audit.md
+
+    feature-audit-pr-comment:
+        name: Comment on PR with audit results
+        if: github.event_name == 'pull_request_target'
+        needs: feature-audit-pr
+        runs-on: ubuntu-latest
+        permissions:
+            pull-requests: write
+        steps:
+            - name: Download feature audit markdown (PR)
+              uses: actions/download-artifact@v4
+              with:
+                  name: pr-feature-audit
+                  path: .
+
+            - name: Comment on PR with audit results
+              uses: thollander/actions-comment-pull-request@v3
+              with:
+                  file-path: pr-feature-audit.md
+                  mode: upsert
+                  comment-tag: feature-version-audit
+
     release:
         name: Post Release from Manual Run or Tag
-        needs: [cpp-build, shader-validation]
+        needs: [cpp-build, shader-validation, feature-audit]
         if: >
             github.event_name == 'workflow_dispatch' ||
             startsWith(github.ref, 'refs/tags/v')
-        runs-on: windows-latest
+        runs-on: windows-2022
         permissions:
             contents: write
         steps:
@@ -368,6 +605,26 @@ jobs:
                   name: dist-artifacts
                   path: dist/
 
+            - name: Download feature audit artifact
+              continue-on-error: true
+              uses: actions/download-artifact@v4
+              with:
+                  name: feature-version-audit
+                  path: .
+
+            - name: Generate combined release notes
+              id: combined_notes
+              shell: bash
+              run: |
+                  # Generate GitHub release notes
+                  gh release view ${{ github.ref_name }} --json body -q .body > auto-release-notes.md || echo '' > auto-release-notes.md
+                  # Merge feature audit if present
+                  if [ -f feature-version-audit-latest.md ]; then
+                    echo -e "\n---\n\n" >> auto-release-notes.md
+                    cat feature-version-audit-latest.md >> auto-release-notes.md
+                  fi
+                  echo "body_file=auto-release-notes.md" >> $GITHUB_OUTPUT
+
             - name: Create tagged release
               uses: ncipollo/release-action@v1
               with:
@@ -375,6 +632,7 @@ jobs:
                   draft: true
                   tag: ${{ github.ref_name }}
                   artifacts: "${{ github.workspace }}/dist/*.7z"
-                  generateReleaseNotes: true
+                  bodyFile: ${{ steps.combined_notes.outputs.body_file }}
+                  generateReleaseNotes: false
                   replacesArtifacts: true
                   removeArtifacts: true

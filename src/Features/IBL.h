@@ -2,6 +2,9 @@
 
 struct IBL : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "153478";
+
 public:
 	static IBL* GetSingleton()
 	{
@@ -13,18 +16,18 @@ public:
 
 	virtual inline std::string GetName() override { return "Image Based Lighting"; }
 	virtual inline std::string GetShortName() override { return "ImageBasedLighting"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "IBL"; }
 	virtual std::string_view GetCategory() const override { return "Lighting"; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Image Based Lighting enhances environmental lighting by using precomputed environment maps for realistic reflections and ambient lighting. This technique provides accurate environmental reflections and improved material rendering.",
-			{ "Realistic environmental reflections",
-				"Enhanced ambient lighting",
-				"Improved material appearance",
-				"Physically-based lighting",
-				"Dynamic environment integration" }
+			"Image Based Lighting provides realistic diffuse ambient lighting for exteriors.",
+			{ "Realistic diffuse ambient lighting from environment maps",
+				"Spherical harmonics-based ambient light calculation",
+				"Enhanced exterior ambient lighting quality",
+				"Configurable intensity and saturation, mixing with DALC" }
 		};
 	}
 

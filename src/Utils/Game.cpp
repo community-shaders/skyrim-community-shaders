@@ -178,6 +178,104 @@ namespace Util
 		return *bDynamicResolution;
 	}
 
+	std::string FormatTESForm(const RE::TESForm* form)
+	{
+		if (!form) {
+			return "nullptr";
+		}
+
+		// Get name and editor ID
+		const char* rawName = form->GetName();
+		const char* rawEditorID = form->GetFormEditorID();
+
+		std::string name;
+		std::string editorID = rawEditorID ? rawEditorID : "Unknown";
+
+		// Check if name exists and is not just whitespace
+		if (rawName && strlen(rawName) > 0) {
+			std::string tempName(rawName);
+			// Check if name is only whitespace
+			bool isOnlyWhitespace = std::all_of(tempName.begin(), tempName.end(),
+				[](unsigned char c) { return std::isspace(c); });
+
+			if (!isOnlyWhitespace) {
+				name = tempName;
+			}
+		}
+		// Format the FormID part once
+		std::string formIDStr = " - 0x" + std::format("{:08X}", form->GetFormID());
+
+		// If no valid name, use editor ID as name and don't show it twice
+		if (name.empty()) {
+			return editorID + formIDStr;
+		} else {
+			return name + " " + editorID + formIDStr;
+		}
+	}
+	std::string FormatWeather(const RE::TESWeather* weather)
+	{
+		if (!weather) {
+			return "nullptr";
+		}
+
+		std::string baseFormat = FormatTESForm(weather);
+
+		// Get all flag names for this weather using magic_enum
+		std::vector<std::string> flagNames;
+		uint32_t flags = weather->data.flags.underlying();
+
+		if (flags == 0) {
+			flagNames.push_back("None");
+		} else {
+			// Use magic_enum to iterate through all weather flags
+			for (auto flagValue : magic_enum::enum_values<RE::TESWeather::WeatherDataFlag>()) {
+				if (flagValue != RE::TESWeather::WeatherDataFlag::kNone &&
+					weather->data.flags.any(flagValue)) {
+					// Convert enum name to human-readable format
+					std::string flagName = std::string(magic_enum::enum_name(flagValue));
+
+					// Remove 'k' prefix and convert to readable format
+					if (flagName.starts_with("k")) {
+						flagName = flagName.substr(1);
+					}
+
+					// Convert specific cases to more readable names
+					if (flagName == "PermAurora") {
+						flagName = "Aurora";
+					} else if (flagName == "AuroraFollowsSun") {
+						flagName = "Aurora Sun";
+					}
+
+					flagNames.push_back(flagName);
+				}
+			}
+
+			// Check for any unknown flags (flags not covered by the enum)
+			uint32_t knownFlags = 0;
+			for (auto flagValue : magic_enum::enum_values<RE::TESWeather::WeatherDataFlag>()) {
+				if (flagValue != RE::TESWeather::WeatherDataFlag::kNone) {
+					knownFlags |= static_cast<uint32_t>(flagValue);
+				}
+			}
+
+			uint32_t unknownFlags = flags & ~knownFlags;
+			if (unknownFlags != 0) {
+				flagNames.push_back("Unknown(" + std::to_string(unknownFlags) + ")");
+			}
+		}
+
+		// Join flag names with commas
+		std::string flagsStr;
+		for (size_t i = 0; i < flagNames.size(); ++i) {
+			if (i > 0) {
+				flagsStr += ", ";
+			}
+			flagsStr += flagNames[i];
+		}
+
+		return baseFormat + " [" + flagsStr + "]";
+	}
+
 	bool FrameChecker::IsNewFrame()
 	{
 		return IsNewFrame(globals::state->frameCount);

@@ -3,6 +3,7 @@
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExtendedMaterials.h"
+#include "Features/ExtendedTranslucency.h"
 #include "Features/GrassLighting.h"
 #include "Features/HairSpecular.h"
 #include "Features/IBL.h"
@@ -47,5 +48,6 @@ std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 		globals::features::hairSpecular->settings,
 		globals::features::terrainVariation->settings,
 		globals::features::ibl->settings,
+		globals::features::extendedTranslucency->settings,
 		globals::features::linearLighting->GetCommonBufferData());
 }

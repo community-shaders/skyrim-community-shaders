@@ -752,7 +752,7 @@ void LightLimitFix::UpdateLights()
 
 	// Process point lights
 
-	roomNodes.empty();
+	roomNodes.clear();
 
 	auto addRoom = [&](RE::NiNode* node, LightData& light) {
 		uint8_t roomIndex = 0;
