@@ -1841,7 +1841,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(HAIR) && defined(CS_HAIR)
 	float3 hairTint = 0;
-	const float3 hairT = normalize(float3(input.TBN0.y, input.TBN1.y, input.TBN2.y));
 
 	if (SharedData::hairSpecularSettings.Enabled) {
 		hairTint = lerp(1, TintColor.xyz, input.Color.y);
@@ -2000,6 +1999,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 screenSpaceNormal = normalize(FrameBuffer::WorldToView(worldSpaceNormal, false, eyeIndex));
 
 #	if defined(HAIR) && defined(CS_HAIR)
+	float3 hairB = normalize(float3(input.TBN0.y, input.TBN1.y, input.TBN2.y));
+	float3 hairT = normalize(float3(input.TBN0.x, input.TBN1.x, input.TBN2.x));
+	hairT = Hair::CalculateHairTangent(hairT, hairB, worldSpaceNormal);
+
 	if (SharedData::hairSpecularSettings.Enabled && SharedData::hairSpecularSettings.EnableTangentShift) {
 		float3 shiftedNormal = Hair::ShiftWorldNormal(hairT, worldSpaceNormal, 0, uv);
 		screenSpaceNormal = normalize(FrameBuffer::WorldToView(shiftedNormal, false, eyeIndex));
@@ -2361,8 +2364,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 	} else {
 #		if defined(HAIR) && defined(CS_HAIR)
-		if (SharedData::hairSpecularSettings.Enabled)
-			Hair::GetHairDirectLight(dirDiffuseColor, lightsSpecularColor, hairT, DirLightDirection, viewDirection, modelNormal.xyz, worldSpaceVertexNormal.xyz, dirLightColor.xyz * dirDetailShadow, SharedData::hairSpecularSettings.HairGlossiness, uv, baseColor.xyz);
+		if (SharedData::hairSpecularSettings.Enabled) {
+			float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, DirLightDirection, screenNoise, eyeIndex);
+			Hair::GetHairDirectLight(dirDiffuseColor, lightsSpecularColor, hairT, DirLightDirection, viewDirection, modelNormal.xyz, worldSpaceVertexNormal.xyz, dirLightColor.xyz * dirDetailShadow, SharedData::hairSpecularSettings.HairGlossiness, hairShadow, uv, baseColor.xyz);
+		}
 		else {
 #			if defined(SPECULAR)
 			lightsSpecularColor = GetLightSpecularInput(input, DirLightDirection, viewDirection, modelNormal.xyz, dirLightColor.xyz * dirDetailShadow, shininess, uv);
@@ -2440,7 +2445,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				if defined(HAIR) && defined(CS_HAIR)
 		if (SharedData::hairSpecularSettings.Enabled) {
 			float3 lightSpecularColor = 0;
-			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, worldSpaceVertexNormal.xyz, lightColor, SharedData::hairSpecularSettings.HairGlossiness, uv, baseColor.xyz);
+			float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, normalizedLightDirection, screenNoise, eyeIndex);
+			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, worldSpaceVertexNormal.xyz, lightColor, SharedData::hairSpecularSettings.HairGlossiness, hairShadow, uv, baseColor.xyz);
 			lightsSpecularColor += lightSpecularColor;
 		} else {
 #					if defined(SPECULAR)
@@ -2606,8 +2612,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #				if defined(HAIR) && defined(CS_HAIR) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
 		if (SharedData::hairSpecularSettings.Enabled) {
+			float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, normalizedLightDirection, screenNoise, eyeIndex);
 			float3 lightSpecularColor = 0;
-			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, worldSpaceVertexNormal.xyz, lightColor * contactShadow, SharedData::hairSpecularSettings.HairGlossiness, uv, baseColor.xyz);
+			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, worldSpaceVertexNormal.xyz, lightColor * contactShadow, SharedData::hairSpecularSettings.HairGlossiness, hairShadow, uv, baseColor.xyz);
 			lightsSpecularColor += lightSpecularColor;
 		} else {
 #					if defined(SPECULAR)

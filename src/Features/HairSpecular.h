@@ -47,7 +47,11 @@ public:
 		float SpecularIndirectMult = 1.0f;
 		float DiffuseIndirectMult = 1.0f;
 		float BaseColorMult = 1.0f;
-		float Transmission = 0.5f;
+		float Transmission = 1.0f;
+		uint EnableSelfShadow = true;
+		float SelfShadowStrength = 1.0f;
+		float SelfShadowExponent = 1.0f;
+		float SelfShadowScale = 1.0f;
 	} settings;
 
 	eastl::unique_ptr<Texture2D> texTangentShift = nullptr;

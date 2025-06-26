@@ -160,6 +160,10 @@ namespace SharedData
 		float DiffuseIndirectMult;
 		float BaseColorMult;
 		float Transmission;
+		uint EnableSelfShadow;
+		float SelfShadowStrength;
+		float SelfShadowExponent;
+		float SelfShadowScale;
 	};
 
 	struct TerrainVariationSettings

@@ -15,7 +15,11 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SpecularIndirectMult,
 	DiffuseIndirectMult,
 	BaseColorMult,
-	Transmission)
+	Transmission,
+	EnableSelfShadow,
+	SelfShadowStrength,
+	SelfShadowExponent,
+	SelfShadowScale);
 
 void HairSpecular::DrawSettings()
 {
@@ -32,6 +36,11 @@ void HairSpecular::DrawSettings()
 	ImGui::Checkbox("Enable Tangent Shift", (bool*)&settings.EnableTangentShift);
 	ImGui::SliderFloat("Primary Specular Tangent Shift", &settings.PrimaryTangentShift, -1.0f, 1.0f, "%.2f");
 	ImGui::SliderFloat("Secondary Specular Tangent Shift", &settings.SecondaryTangentShift, -1.0f, 1.0f, "%.2f");
+	ImGui::Spacing();
+	ImGui::Checkbox("Enable Screen-Space Self Shadow", (bool*)&settings.EnableSelfShadow);
+	ImGui::SliderFloat("Self Shadow Strength", &settings.SelfShadowStrength, 0.0f, 1.0f, "%.2f");
+	ImGui::SliderFloat("Self Shadow Exponent", &settings.SelfShadowExponent, 0.0f, 10.0f, "%.2f");
+	ImGui::SliderFloat("Self Shadow Scale", &settings.SelfShadowScale, 0.0f, 10.0f, "%.2f");
 }
 
 void HairSpecular::LoadSettings(json& o_json)
