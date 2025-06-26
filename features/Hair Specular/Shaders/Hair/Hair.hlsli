@@ -56,8 +56,8 @@ namespace Hair
 		float3 TshiftPrimary;
 		float3 TshiftSecondary;
 
-		const float shift = TexTangentShift.Sample(SampColorSampler, uv).x - 0.5;
 		if (SharedData::hairSpecularSettings.EnableTangentShift) {
+			const float shift = TexTangentShift.SampleLevel(SampColorSampler, uv, 0).x - 0.5;
 			TshiftPrimary = ShiftTangent(T, N, shift + SharedData::hairSpecularSettings.PrimaryShift);
 			TshiftSecondary = ShiftTangent(T, N, shift + SharedData::hairSpecularSettings.SecondaryShift);
 		} else {
@@ -199,7 +199,7 @@ namespace Hair
 
 	float3 ShiftWorldNormal(float3 T, float3 N, float n, float2 uv)
 	{
-		const float shift = TexTangentShift.Sample(SampColorSampler, uv).x - 0.5;
+		const float shift = TexTangentShift.SampleLevel(SampColorSampler, uv, 0).x - 0.5;
 		float3 T_shifted = ShiftTangent(T, N, shift + n);
 		float3 N_shifted = normalize(cross(T_shifted, cross(N, T_shifted)));
 		return N_shifted;
@@ -226,7 +226,7 @@ namespace Hair
 		float NdotVshifted2 = NdotV;
 
 		if (SharedData::hairSpecularSettings.EnableTangentShift) {
-			const float shift = TexTangentShift.Sample(SampColorSampler, uv).x - 0.5;
+			const float shift = TexTangentShift.SampleLevel(SampColorSampler, uv, 0).x - 0.5;
 			NdotVshifted = saturate(dot(ShiftNormal(T, N, shift + SharedData::hairSpecularSettings.PrimaryShift), V));
 			NdotVshifted2 = saturate(dot(ShiftNormal(T, N, shift + SharedData::hairSpecularSettings.SecondaryShift), V));
 		}
@@ -277,7 +277,7 @@ namespace Hair
 		const float roughnessSecondary = pow(abs(2.0 / (glossiness * 0.5 + 2.0)), 0.25);
 
 		if (SharedData::hairSpecularSettings.EnableTangentShift) {
-			const float shift = TexTangentShift.Sample(SampColorSampler, uv).x - 0.5;
+			const float shift = TexTangentShift.SampleLevel(SampColorSampler, uv, 0).x - 0.5;
 			N1 = ShiftNormal(T, N, shift + SharedData::hairSpecularSettings.PrimaryShift);
 			N2 = ShiftNormal(T, N, shift + SharedData::hairSpecularSettings.SecondaryShift);
 		}
