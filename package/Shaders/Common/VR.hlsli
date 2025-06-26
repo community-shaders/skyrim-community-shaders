@@ -2,6 +2,13 @@
 #define __VR_DEPENDENCY_HLSL__
 #ifdef VR
 
+
+// First person model depth threshold for VR occlusion logic
+#ifndef VR_FP_Z
+#define VR_FP_Z 18.0
+#endif
+
+
 #	if defined(VSHADER)
 #		include "Common/Math.hlsli"
 #	endif  // VSHADER
@@ -308,10 +315,31 @@ namespace Stereo
 	}
 
 	/**
+	* @brief Returns a smooth fade factor for UVs near the edge of the frame.
+	*
+	* This helps avoid abrupt transitions when one eye's SSGI is out of frame or occluded.
+	* Fade width is tunable; 0.02 is 2% of the frame.
+	*/
+	float IsOutsideFrameFade(float2 uv, bool dynamicres = false)
+	{
+		float2 max = dynamicres ? FrameBuffer::DynamicResolutionParams1.xy : float2(1, 1);
+		float2 min = float2(0, 0);
+		float fadeWidth = 0.02;
+		float edgeFade = 1.0;
+		edgeFade *= smoothstep(min.x, min.x + fadeWidth, uv.x);
+		edgeFade *= smoothstep(max.x, max.x - fadeWidth, uv.x);
+		edgeFade *= smoothstep(min.y, min.y + fadeWidth, uv.y);
+		edgeFade *= smoothstep(max.y, max.y - fadeWidth, uv.y);
+		return edgeFade;
+	}
+
+	/**
 	* @brief Blends color data from two eyes based on their UV coordinates and validity.
 	*
 	* This function checks the validity of the colors based on their UV coordinates and
 	* alpha values. It blends the colors while ensuring proper handling of transparency.
+	* If one eye sees the first person model (depth < VR_FP_Z) and the other sees world geometry (depth > VR_FP_Z),
+	* the first person model's color is dropped from the blend to avoid outlines.
 	*
 	* @param uv1 UV coordinates for the first eye.
 	* @param color1 Color from the first eye.
@@ -327,25 +355,36 @@ namespace Stereo
 		float4 color2,
 		bool dynamicres = false)
 	{
-		// Check validity for color1
-		bool validColor1 = IsNonZeroColor(color1) && !FrameBuffer::IsOutsideFrame(uv1.xy, dynamicres);
-		// Check validity for color2
-		bool validColor2 = IsNonZeroColor(color2) && !FrameBuffer::IsOutsideFrame(uv2.xy, dynamicres);
+		// Use smooth fade at edge for each eye
+		float fade1 = IsOutsideFrameFade(uv1.xy, dynamicres);
+		float fade2 = IsOutsideFrameFade(uv2.xy, dynamicres);
 
-		// Calculate alpha values
-		float alpha1 = validColor1 ? color1.a : 0.0f;
-		float alpha2 = validColor2 ? color2.a : 0.0f;
+		// Stereo-consistent edge fade: use maximum fade so either eye can keep color if in bounds
+		float edgeFade = max(fade1, fade2);
 
-		// Total alpha
-		float totalAlpha = alpha1 + alpha2;
+		// Occlusion-aware confidence based on depth difference
+		float depthDiff = abs(uv1.z - uv2.z);
+		float confidence = 1.0 - smoothstep(0.01, 0.05, depthDiff);
 
-		// Blend based on higher alpha
-		float4 blendedColor = (validColor1 ? color1 * (alpha1 / max(totalAlpha, 1e-5)) : float4(0, 0, 0, 0)) +
-		                      (validColor2 ? color2 * (alpha2 / max(totalAlpha, 1e-5)) : float4(0, 0, 0, 0));
+		// Soft first person model mask: fade out FP model near threshold
+		float fp_fade1 = 1.0 - smoothstep(VR_FP_Z - 1.0, VR_FP_Z + 1.0, uv1.z); // fades from 1 to 0 as depth crosses VR_FP_Z
+		float fp_fade2 = 1.0 - smoothstep(VR_FP_Z - 1.0, VR_FP_Z + 1.0, uv2.z);
 
-		// Final alpha determination
-		blendedColor.a = max(color1.a, color2.a);
+		// If one eye is world and the other is FP, fade out FP smoothly
+		bool eye1_is_fp = uv1.z < VR_FP_Z;
+		bool eye2_is_fp = uv2.z < VR_FP_Z;
+		bool eyes_disagree = eye1_is_fp != eye2_is_fp;
+		if (eyes_disagree) {
+			if (eye1_is_fp) fade1 *= fp_fade1;
+			if (eye2_is_fp) fade2 *= fp_fade2;
+		}
 
+		fade1 *= confidence * edgeFade;
+		fade2 *= confidence * edgeFade;
+
+		float totalFade = fade1 + fade2 + 1e-5;
+		float4 blendedColor = (color1 * fade1 + color2 * fade2) / totalFade;
+		blendedColor.a = max(color1.a * fade1, color2.a * fade2);
 		return blendedColor;
 	}
 
