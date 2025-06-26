@@ -58,8 +58,8 @@ namespace Hair
 
 		if (SharedData::hairSpecularSettings.EnableTangentShift) {
 			const float shift = TexTangentShift.SampleLevel(SampColorSampler, uv, 0).x - 0.5;
-			TshiftPrimary = ShiftTangent(T, N, shift + SharedData::hairSpecularSettings.PrimaryShift);
-			TshiftSecondary = ShiftTangent(T, N, shift + SharedData::hairSpecularSettings.SecondaryShift);
+			TshiftPrimary = ShiftTangent(T, N, shift + SharedData::hairSpecularSettings.PrimaryTangentShift);
+			TshiftSecondary = ShiftTangent(T, N, shift + SharedData::hairSpecularSettings.SecondaryTangentShift);
 		} else {
 			TshiftPrimary = T;
 			TshiftSecondary = T;
@@ -227,8 +227,8 @@ namespace Hair
 
 		if (SharedData::hairSpecularSettings.EnableTangentShift) {
 			const float shift = TexTangentShift.SampleLevel(SampColorSampler, uv, 0).x - 0.5;
-			NdotVshifted = saturate(dot(ShiftNormal(T, N, shift + SharedData::hairSpecularSettings.PrimaryShift), V));
-			NdotVshifted2 = saturate(dot(ShiftNormal(T, N, shift + SharedData::hairSpecularSettings.SecondaryShift), V));
+			NdotVshifted = saturate(dot(ShiftNormal(T, N, shift + SharedData::hairSpecularSettings.PrimaryTangentShift), V));
+			NdotVshifted2 = saturate(dot(ShiftNormal(T, N, shift + SharedData::hairSpecularSettings.SecondaryTangentShift), V));
 		}
 
 		diffuseLobeWeight = baseColor;
@@ -278,8 +278,8 @@ namespace Hair
 
 		if (SharedData::hairSpecularSettings.EnableTangentShift) {
 			const float shift = TexTangentShift.SampleLevel(SampColorSampler, uv, 0).x - 0.5;
-			N1 = ShiftNormal(T, N, shift + SharedData::hairSpecularSettings.PrimaryShift);
-			N2 = ShiftNormal(T, N, shift + SharedData::hairSpecularSettings.SecondaryShift);
+			N1 = ShiftNormal(T, N, shift + SharedData::hairSpecularSettings.PrimaryTangentShift);
+			N2 = ShiftNormal(T, N, shift + SharedData::hairSpecularSettings.SecondaryTangentShift);
 		}
 
 #	if defined(SKYLIGHTING)

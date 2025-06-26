@@ -149,13 +149,13 @@ namespace SharedData
 	struct HairSpecularSettings
 	{
 		uint Enabled;
-		float Glossiness;
+		float HairGlossiness;
 		float SpecularMult;
 		float DiffuseMult;
 		uint EnableTangentShift;
-		float PrimaryShift;
-		float SecondaryShift;
-		float Saturation;
+		float PrimaryTangentShift;
+		float SecondaryTangentShift;
+		float HairSaturation;
 		float SpecularIndirectMult;
 		float DiffuseIndirectMult;
 		float BaseColorMult;
