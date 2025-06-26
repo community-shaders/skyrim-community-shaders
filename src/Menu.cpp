@@ -847,20 +847,20 @@ void Menu::DrawSettings()
 										} else {
 											// INI file missing - show detailed unloaded UI with installation info
 											feat->DrawUnloadedUI();
-										// Add download link if available
-										if (!feat->GetFeatureModLink().empty()) {
-											ImGui::Spacing();
-											const auto downloadText = fmt::format("Click here to download this feature ({})", feat->GetFeatureModLink());
-											if (ImGui::Selectable(downloadText.c_str())) {
-												ShellExecuteA(NULL, "open", feat->GetFeatureModLink().c_str(), NULL, NULL, SW_SHOWNORMAL);
-											}
-											if (auto _tt = Util::HoverTooltipWrapper()) {
-												ImGui::Text("Download the feature from the mod page.");
+											// Add download link if available
+											if (!feat->GetFeatureModLink().empty()) {
+												ImGui::Spacing();
+												const auto downloadText = fmt::format("Click here to download this feature ({})", feat->GetFeatureModLink());
+												if (ImGui::Selectable(downloadText.c_str())) {
+													ShellExecuteA(NULL, "open", feat->GetFeatureModLink().c_str(), NULL, NULL, SW_SHOWNORMAL);
+												}
+												if (auto _tt = Util::HoverTooltipWrapper()) {
+													ImGui::Text("Download the feature from the mod page.");
+												}
 											}
 										}
 									}
 								}
-							}
 
 								// Error Messages (Not for obsolete features as this is already covered by DrawUnloadedUI)
 								if (hasFailedMessage && feat->DrawFailLoadMessage() && !FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
