@@ -835,7 +835,20 @@ void Menu::DrawSettings()
 									ImGui::Text("Enable the feature above to access its configuration options.");
 								} else {
 									if (isLoaded) {
+										// Check if the feature has any settings by monitoring cursor position (if the feature draws settings, the imgui cursor position will change)
+										ImVec2 cursorPosBefore = ImGui::GetCursorPos();
+										
 										feat->DrawSettings();
+										
+										ImVec2 cursorPosAfter = ImGui::GetCursorPos();
+										
+										// If cursor position hasn't changed significantly, no visible settings were drawn
+										const float epsilon = 0.1f; // Simple check to ensure we don't trigger on minor cursor movements / weird imgui math
+										bool cursorMoved = (std::abs(cursorPosAfter.x - cursorPosBefore.x) > epsilon || 
+										                   std::abs(cursorPosAfter.y - cursorPosBefore.y) > epsilon);
+										if (!cursorMoved) {
+											ImGui::TextColored(themeSettings.StatusPalette.Disable, "There are no settings available for this feature.");
+										}
 									} else {
 										// Check if INI file exists to avoid showing obsolete "missing file" messages
 										// when feature was re-enabled after being disabled at boot
