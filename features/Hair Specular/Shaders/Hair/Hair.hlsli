@@ -307,6 +307,8 @@ namespace Hair
 		for(int i = 0; i < stepCount; ++i) {
 			ray += lightDirVS * stepSize;
 			float2 rayUV = FrameBuffer::ViewToUV(ray, true, eyeIndex);
+			if (FrameBuffer::IsOutsideFrame(rayUV))
+				continue;
 			float rayDepth = ray.z;
 			float sampleDepth = SharedData::GetScreenDepth(rayUV, eyeIndex);
 			if (sampleDepth < rayDepth) {
