@@ -1,6 +1,3 @@
-#define CSHADER
-
-#if defined(CSHADER)
 SamplerState DensitySampler : register(s0);
 RWTexture3D<float> DensityRW : register(u0);
 
@@ -19,4 +16,3 @@ cbuffer PerTechnique : register(b0)
 		DensityRW[currCoord] = acc;
 	}
 }
-#endif
