@@ -1321,6 +1321,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			endif
 
 		float weights[6];
+		// Initialize weights array
+		weights[0] = weights[1] = weights[2] = weights[3] = weights[4] = weights[5] = 0.0;
 #			if defined(TERRAIN_VARIATION)
 		uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, sharedOffset, dx, dy, pixelOffset, weights);
 #			else
@@ -1344,6 +1346,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 	}
 #		endif  // EMAT
+	// Initialize mip levels for non-EMAT case
+	mipLevels[0] = mipLevels[1] = mipLevels[2] = mipLevels[3] = mipLevels[4] = mipLevels[5] = 0.0;
 #	endif      // LANDSCAPE
 
 #	if defined(SPARKLE)
@@ -2314,6 +2318,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		{
 #			if defined(TERRAIN_VARIATION)
 			float weights[6];
+			// Initialize weights array
+			weights[0] = weights[1] = weights[2] = weights[3] = weights[4] = weights[5] = 0.0;
 
 			float sh0 = ExtendedMaterials::GetTerrainHeight(screenNoise, input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, viewDistance, weights);
 
