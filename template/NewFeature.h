@@ -31,7 +31,7 @@ struct NewFeature : public Feature
 	virtual inline std::string GetShortName() override { return "NewFeature"; }
 	virtual inline std::string_view GetCategory() const override { return "Lighting"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL("999999"); }
-	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	virtual inline std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
 			"This is a terse description.",
