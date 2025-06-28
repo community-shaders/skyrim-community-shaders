@@ -8,6 +8,9 @@
 
 #include "NewFeature.h"
 
+#include "Globals.h"
+#include "State.h"
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	NewFeature::Settings,
 	ColorA,
