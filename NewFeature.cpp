@@ -27,12 +27,12 @@ void NewFeature::RestoreDefaultSettings()
 void NewFeature::LoadSettings(json& o_json)
 {
 	settings = o_json;
-};
+}
 
 void NewFeature::SaveSettings(json& o_json)
 {
 	o_json = settings;
-};
+}
 
 void NewFeature::DrawSettings()
 {
@@ -41,7 +41,7 @@ void NewFeature::DrawSettings()
 	uint step = 1;
 	ImGui::InputScalarN("Id A", ImGuiDataType_U32, &settings.IdA[0], 2, &step, NULL, "%u annoying uints");
 	ImGui::InputFloat2("UV A", &settings.UvA.x);
-};
+}
 
 void NewFeature::SetupResources()
 {
