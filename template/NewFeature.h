@@ -4,7 +4,7 @@
 * Copy the .h and .cpp files to src/Features and rename them to your feature's name.
 * Replace all NewFeature occurances in both files as well, and change the metadata accordingly.
 * Don't forget to add the feature to the feature list in src/Feature.cpp,
-* and create the feature folder and .ini under features/ so your feature gets registered.
+* and copy and rename the "New Feature" folder and contents to features/ so it gets registered.
 *
 * The naming and coding style are adapted to my personal practice,
 * but we don't really have a strict, solidified guideline on that.
