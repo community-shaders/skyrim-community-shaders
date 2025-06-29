@@ -2025,7 +2025,7 @@ void Menu::PerfOverlayState::DrawFPS(Settings::PerfOverlaySettings& settings)
 		ImGui::TableSetupColumn("##value");
 
 		ImGui::TableNextColumn();
-		ImGui::Text("Raw FPS:");
+		ImGui::Text(isFrameGenerationActive ? "Raw FPS:" : "FPS:");
 		ImGui::TableNextColumn();
 		ImGui::Text("%.1f (%.2f ms)", smoothFps, smoothFrameTimeMs);
 
