@@ -9,9 +9,6 @@
 #include "Common/SharedData.hlsli"
 #include "Common/Skinned.hlsli"
 
-#define LIGHT_INTENSITY_EARLY_EXIT_THRESHOLD 0.001f        // Skip lights with negligible contribution
-#define CONTACT_SHADOW_EARLY_EXIT_THRESHOLD 0.01f          // Skip contact shadow ray marching for dim lights
-#define CONTACT_SHADOW_FULL_RAY_THRESHOLD 0.1f             // Only do full ray marching for significant lights
 #define LANDSCAPE_BLEND_WEIGHT_THRESHOLD 0.01f             // Minimum landscape blend weight to process layer
 #define LANDSCAPE_DISTANCE_OPTIMIZATION_THRESHOLD 2048.0f  // Switch to cheap sampling for distant terrain ~29m / 96ft
 #define TERRAIN_DISTANT_MIP_LEVEL 6                        // Mip level for distant terrain textures
@@ -756,8 +753,6 @@ float3 GetLightSpecularInput(PS_INPUT input, float3 L, float3 V, float3 N, float
 #	endif
 
 #	if defined(SPARKLE) && !defined(SNOW)
-	// Skip expensive sparkle texture sampling for dim lights
-	if (lightColor.x + lightColor.y + lightColor.z > CONTACT_SHADOW_EARLY_EXIT_THRESHOLD) {
 		float3 sparkleUvScale = exp2(float3(1.3, 1.6, 1.9) * log2(abs(SparkleParams.x)).xxx);
 
 		float sparkleColor1 = TexProjDetail.Sample(SampProjDetailSampler, uv * sparkleUvScale.xx).z;
@@ -769,7 +764,7 @@ float3 GetLightSpecularInput(PS_INPUT input, float3 L, float3 V, float3 N, float
 		float sparkleMultiplier = exp2(SparkleParams.w * log2(saturate(dot(V, -L)))) * (SparkleParams.z * sparkleColor);
 		sparkleMultiplier = sparkleMultiplier >= 0.5 ? 1 : 0;
 		lightColorMultiplier += sparkleMultiplier * HdotN;
-	}
+
 #	endif
 	return lightColor * lightColorMultiplier;
 }
@@ -2389,9 +2384,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 		float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 		float3 lightColor = Color::Light(PointLightColor[lightIndex].xyz) * intensityMultiplier;
-		if (lightColor.x + lightColor.y + lightColor.z < LIGHT_INTENSITY_EARLY_EXIT_THRESHOLD) {
-			continue;  // Skip this dim light entirely
-		}
 		float lightShadow = 1.f;
 		if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) {
 			if (lightIndex < numShadowLights) {
@@ -2483,8 +2475,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		lightOffset = LightLimitFix::lightGrid[clusterIndex].offset;
 	}
 
-	// Calculate once per pixel (outside all light loops)
-	uint baseContactShadowSteps = round(4.0 * (1.0 - saturate(viewPosition.z / 1024.0)));
+	uint contactShadowSteps = round(4.0 * (1.0 - saturate(viewPosition.z / 1024.0)));
 
 	[loop] for (uint lightIndex = 0; lightIndex < totalLightCount; lightIndex++)
 	{
@@ -2515,9 +2506,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			endif
 
 		float3 lightColor = Color::Light(light.color.xyz) * intensityMultiplier;
-		if (lightColor.x + lightColor.y + lightColor.z < LIGHT_INTENSITY_EARLY_EXIT_THRESHOLD) {
-			continue;  // Skip this dim light entirely
-		}
 
 		float lightShadow = 1.0;
 
@@ -2532,7 +2520,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 		float contactShadow = 1.0;
 		[branch] if (
-			(lightColor.x + lightColor.y + lightColor.z) > CONTACT_SHADOW_EARLY_EXIT_THRESHOLD &&  // Early exit for dim lights
 			inWorld && !FrameBuffer::FrameParams.z &&
 			SharedData::lightLimitFixSettings.EnableContactShadows &&
 			!(light.lightFlags & LightLimitFix::LightFlags::Simple) &&
@@ -2545,7 +2532,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		)
 		{
 			float3 normalizedLightDirectionVS = normalize(light.positionVS[eyeIndex].xyz - viewPosition.xyz);
-			uint contactShadowSteps = (lightColor.x + lightColor.y + lightColor.z < CONTACT_SHADOW_FULL_RAY_THRESHOLD) ? 2 : baseContactShadowSteps;
 			contactShadow = LightLimitFix::ContactShadows(viewPosition, screenNoise, normalizedLightDirectionVS, contactShadowSteps, eyeIndex);
 		}
 
