@@ -56,8 +56,15 @@ void ScreenSpaceGI::DrawSettings()
 	if (ImGui::BeginTable("Toggles", 3)) {
 		ImGui::TableNextColumn();
 		ImGui::Checkbox("Enabled", &settings.Enabled);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Enable Screen Space Global Illumination. When disabled, all other settings are ignored.");
+		}
+
 		ImGui::TableNextColumn();
-		recompileFlag |= ImGui::Checkbox("Indirect Lighting (IL)", &settings.EnableGI);
+		{
+			auto ilToggleGuard = Util::DisableGuard(!settings.Enabled);
+			recompileFlag |= ImGui::Checkbox("Indirect Lighting (IL)", &settings.EnableGI);
+		}
 		ImGui::TableNextColumn();
 		if (showAdvanced) {
 			recompileFlag |= ImGui::Checkbox("(Experimental) HQ Specular IL", &settings.EnableExperimentalSpecularGI);
@@ -71,139 +78,171 @@ void ScreenSpaceGI::DrawSettings()
 	///////////////////////////////
 	ImGui::SeparatorText("Quality/Performance");
 
-	if (ImGui::BeginTable("Presets", 5)) {
-		ImGui::TableNextColumn();
-		if (ImGui::Button("AO only", { -1, 0 })) {
-			settings.NumSlices = 1;
-			settings.NumSteps = 6;
-			settings.EnableBlur = true;
-			settings.EnableGI = false;
-			recompileFlag = true;
+	{
+		auto qualityGuard = Util::DisableGuard(!settings.Enabled);
+
+		if (ImGui::BeginTable("Presets", 5)) {
+			ImGui::TableNextColumn();
+			if (ImGui::Button("AO only", { -1, 0 })) {
+				settings.NumSlices = 1;
+				settings.NumSteps = 6;
+				settings.EnableBlur = true;
+				settings.EnableGI = false;
+				recompileFlag = true;
+			}
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("1 Slice, 6 Steps, no blur, no GI\n");
+
+			ImGui::TableNextColumn();
+			if (ImGui::Button("Low", { -1, 0 })) {
+				settings.NumSlices = 10;
+				settings.NumSteps = 12;
+				settings.ResolutionMode = 2;
+				settings.EnableBlur = true;
+				settings.EnableGI = true;
+				recompileFlag = true;
+			}
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("Quarter res and blurry.");
+
+			ImGui::TableNextColumn();
+			if (ImGui::Button("Standard", { -1, 0 })) {
+				settings.NumSlices = 4;
+				settings.NumSteps = 8;
+				settings.ResolutionMode = 1;
+				settings.EnableBlur = true;
+				settings.EnableGI = true;
+				recompileFlag = true;
+			}
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("Half res and somewhat stable.");
+
+			ImGui::TableNextColumn();
+			if (ImGui::Button("Extreme", { -1, 0 })) {
+				settings.NumSlices = 4;
+				settings.NumSteps = 8;
+				settings.ResolutionMode = 0;
+				settings.EnableBlur = true;
+				settings.EnableGI = true;
+				recompileFlag = true;
+			}
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("Full res and clean.");
+
+			ImGui::TableNextColumn();
+			if (ImGui::Button("Reference", { -1, 0 })) {
+				settings.NumSlices = 8;
+				settings.NumSteps = 10;
+				settings.ResolutionMode = 0;
+				settings.EnableBlur = true;
+				settings.EnableGI = true;
+				recompileFlag = true;
+			}
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("Reference mode.");
+
+			ImGui::EndTable();
 		}
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("1 Slice, 6 Steps, no blur, no GI\n");
 
-		ImGui::TableNextColumn();
-		if (ImGui::Button("Low", { -1, 0 })) {
-			settings.NumSlices = 10;
-			settings.NumSteps = 12;
-			settings.ResolutionMode = 2;
-			settings.EnableBlur = true;
-			settings.EnableGI = true;
-			recompileFlag = true;
+		if (showAdvanced) {
+			ImGui::SliderInt("Slices", (int*)&settings.NumSlices, 1, 10);
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text(
+					"How many directions do the samples take.\n"
+					"Controls noise.");
+
+			ImGui::SliderInt("Steps Per Slice", (int*)&settings.NumSteps, 1, 20);
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text(
+					"How many samples does it take in one direction.\n"
+					"Controls accuracy of lighting, and noise when effect radius is large.");
 		}
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("Quarter res and blurry.");
 
-		ImGui::TableNextColumn();
-		if (ImGui::Button("Standard", { -1, 0 })) {
-			settings.NumSlices = 4;
-			settings.NumSteps = 8;
-			settings.ResolutionMode = 1;
-			settings.EnableBlur = true;
-			settings.EnableGI = true;
-			recompileFlag = true;
+		if (ImGui::BeginTable("Less Work", 3)) {
+			ImGui::TableNextColumn();
+			recompileFlag |= ImGui::RadioButton("Full Res", &settings.ResolutionMode, 0);
+			ImGui::TableNextColumn();
+			recompileFlag |= ImGui::RadioButton("Half Res", &settings.ResolutionMode, 1);
+			ImGui::TableNextColumn();
+			recompileFlag |= ImGui::RadioButton("Quarter Res", &settings.ResolutionMode, 2);
+
+			ImGui::EndTable();
 		}
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("Half res and somewhat stable.");
-
-		ImGui::TableNextColumn();
-		if (ImGui::Button("Extreme", { -1, 0 })) {
-			settings.NumSlices = 4;
-			settings.NumSteps = 8;
-			settings.ResolutionMode = 0;
-			settings.EnableBlur = true;
-			settings.EnableGI = true;
-			recompileFlag = true;
-		}
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("Full res and clean.");
-
-		ImGui::TableNextColumn();
-		if (ImGui::Button("Reference", { -1, 0 })) {
-			settings.NumSlices = 8;
-			settings.NumSteps = 10;
-			settings.ResolutionMode = 0;
-			settings.EnableBlur = true;
-			settings.EnableGI = true;
-			recompileFlag = true;
-		}
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("Reference mode.");
-
-		ImGui::EndTable();
-	}
-
-	if (showAdvanced) {
-		ImGui::SliderInt("Slices", (int*)&settings.NumSlices, 1, 10);
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(
-				"How many directions do the samples take.\n"
-				"Controls noise.");
-
-		ImGui::SliderInt("Steps Per Slice", (int*)&settings.NumSteps, 1, 20);
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(
-				"How many samples does it take in one direction.\n"
-				"Controls accuracy of lighting, and noise when effect radius is large.");
-	}
-
-	if (ImGui::BeginTable("Less Work", 3)) {
-		ImGui::TableNextColumn();
-		recompileFlag |= ImGui::RadioButton("Full Res", &settings.ResolutionMode, 0);
-		ImGui::TableNextColumn();
-		recompileFlag |= ImGui::RadioButton("Half Res", &settings.ResolutionMode, 1);
-		ImGui::TableNextColumn();
-		recompileFlag |= ImGui::RadioButton("Quarter Res", &settings.ResolutionMode, 2);
-
-		ImGui::EndTable();
 	}
 
 	///////////////////////////////
 	ImGui::SeparatorText("Visual");
 
-	ImGui::SliderFloat("AO Power", &settings.AOPower, 0.f, 6.f, "%.2f");
-
 	{
-		auto _ = Util::DisableGuard(!settings.EnableGI);
-		ImGui::SliderFloat("IL Source Brightness", &settings.GIStrength, 0.f, 6.f, "%.2f");
-	}
+		auto visualGuard = Util::DisableGuard(!settings.Enabled);
 
-	ImGui::Separator();
+		ImGui::SliderFloat("AO Power", &settings.AOPower, 0.f, 6.f, "%.2f");
 
-	ImGui::SliderFloat("AO radius", &settings.AORadius, 10.f, 1024.0f, "%.1f game units");
-	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text("A smaller radius produces tighter AO.");
+		{
+			auto ilGuard = Util::DisableGuard(!settings.EnableGI);
+			ImGui::SliderFloat("IL Source Brightness", &settings.GIStrength, 0.f, 6.f, "%.2f");
+		}
 
-	{
-		auto _ = Util::DisableGuard(!settings.EnableGI);
-
-		ImGui::SliderFloat("IL radius", &settings.GIRadius, 10.f, 1024.0f, "%.1f game units");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("A larger radius produces wider IL.");
-	}
-
-	if (showAdvanced) {
-		ImGui::SliderFloat("Min Screen Radius", &settings.MinScreenRadius, 0.f, 0.05f, "%.3f");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("The minimum screen-space effect radius as proportion of display width, to prevent far field AO being too small.");
-	}
-
-	ImGui::SliderFloat2("Depth Fade Range", &settings.DepthFadeRange.x, 1e4, 5e4, "%.0f game units");
-
-	if (showAdvanced) {
 		ImGui::Separator();
 
-		ImGui::SliderFloat("Thickness", &settings.Thickness, 0.f, 128.0f, "%.1f game units");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("How thick the occluders are. Only affects AO.");
+		ImGui::SliderFloat("AO radius", &settings.AORadius, 10.f, 1024.0f, "%.1f units");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			std::vector<std::string> tooltipLines = {
+				"A smaller radius produces tighter AO.",
+				Util::Units::FormatDistance(settings.AORadius)
+			};
+			Util::DrawMultiLineTooltip(tooltipLines);
+		}
+
+		{
+			auto ilRadiusGuard = Util::DisableGuard(!settings.EnableGI);
+
+			ImGui::SliderFloat("IL radius", &settings.GIRadius, 10.f, 1024.0f, "%.1f units");
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				std::vector<std::string> tooltipLines = {
+					"A larger radius produces wider IL.",
+					Util::Units::FormatDistance(settings.GIRadius)
+				};
+				Util::DrawMultiLineTooltip(tooltipLines);
+			}
+		}
+
+		if (showAdvanced) {
+			ImGui::SliderFloat("Min Screen Radius", &settings.MinScreenRadius, 0.f, 0.05f, "%.3f");
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text(
+					"The minimum screen-space effect radius as proportion of display width, to prevent far field AO being too small.");
+		}
+
+		ImGui::SliderFloat2("Depth Fade Range", &settings.DepthFadeRange.x, 1e4, 5e4, "%.0f units");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			std::vector<std::string> tooltipLines = {
+				"Distance range where depth-based effects fade out.",
+				"Near: " + Util::Units::FormatDistance(settings.DepthFadeRange.x),
+				"Far: " + Util::Units::FormatDistance(settings.DepthFadeRange.y)
+			};
+			Util::DrawMultiLineTooltip(tooltipLines);
+		}
+
+		if (showAdvanced) {
+			ImGui::Separator();
+
+			ImGui::SliderFloat("Thickness", &settings.Thickness, 0.f, 128.0f, "%.1f units");
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				std::vector<std::string> tooltipLines = {
+					"How thick the occluders are. Only affects AO.",
+					Util::Units::FormatDistance(settings.Thickness)
+				};
+				Util::DrawMultiLineTooltip(tooltipLines);
+			}
+		}
 	}
 
 	///////////////////////////////
 	ImGui::SeparatorText("Visual - IL");
 
 	{
-		auto _ = Util::DisableGuard(!settings.EnableGI);
+		auto visualILGuard = Util::DisableGuard(!settings.Enabled || !settings.EnableGI);
 
 		if (showAdvanced) {
 			ImGui::SliderFloat("IL Distance Compensation", &settings.GIDistanceCompensation, -5.0f, 5.0f, "%.1f");
@@ -222,7 +261,7 @@ void ScreenSpaceGI::DrawSettings()
 				"Mandatory if you want ambient as part of the light source for IL calculation.");
 
 		{
-			auto __ = Util::DisableGuard(!settings.EnableGIBounce);
+			auto bounceGuard = Util::DisableGuard(!settings.EnableGIBounce);
 			ImGui::Indent();
 			Util::PercentageSlider("Ambient Bounce Strength", &settings.GIBounceFade);
 			ImGui::Unindent();
@@ -234,49 +273,53 @@ void ScreenSpaceGI::DrawSettings()
 	///////////////////////////////
 	ImGui::SeparatorText("Denoising");
 
-	if (ImGui::BeginTable("denoisers", 2)) {
-		ImGui::TableNextColumn();
-		recompileFlag |= ImGui::Checkbox("Temporal Denoiser", &settings.EnableTemporalDenoiser);
+	{
+		auto denoiseGuard = Util::DisableGuard(!settings.Enabled);
 
-		ImGui::TableNextColumn();
-		ImGui::Checkbox("Blur", &settings.EnableBlur);
+		if (ImGui::BeginTable("denoisers", 2)) {
+			ImGui::TableNextColumn();
+			recompileFlag |= ImGui::Checkbox("Temporal Denoiser", &settings.EnableTemporalDenoiser);
 
-		ImGui::EndTable();
-	}
+			ImGui::TableNextColumn();
+			ImGui::Checkbox("Blur", &settings.EnableBlur);
 
-	if (showAdvanced) {
-		ImGui::Separator();
-
-		{
-			auto _ = Util::DisableGuard(!settings.EnableTemporalDenoiser);
-			ImGui::SliderInt("Max Frame Accumulation", (int*)&settings.MaxAccumFrames, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("How many past frames to accumulate results with. Higher values are less noisy but potentially cause ghosting.");
+			ImGui::EndTable();
 		}
 
-		ImGui::Separator();
+		if (showAdvanced) {
+			ImGui::Separator();
 
-		{
-			auto _ = Util::DisableGuard(!settings.EnableTemporalDenoiser && !(settings.EnableGI || settings.EnableGIBounce));
-
-			Util::PercentageSlider("Movement Disocclusion", &settings.DepthDisocclusion, 0.f, 20.f);
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text(
-					"If a pixel has moved too far from the last frame, its radiance will not be carried to this frame.\n"
-					"Lower values are stricter.");
+			{
+				auto temporalGuard = Util::DisableGuard(!settings.EnableTemporalDenoiser);
+				ImGui::SliderInt("Max Frame Accumulation", (int*)&settings.MaxAccumFrames, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text("How many past frames to accumulate results with. Higher values are less noisy but potentially cause ghosting.");
+			}
 
 			ImGui::Separator();
-		}
 
-		{
-			auto _ = Util::DisableGuard(!settings.EnableBlur);
-			ImGui::SliderFloat("Blur Radius", &settings.BlurRadius, 0.f, 30.f, "%.1f px");
+			{
+				auto disocclusionGuard = Util::DisableGuard(!settings.EnableTemporalDenoiser && !(settings.EnableGI || settings.EnableGIBounce));
 
-			if (showAdvanced) {
-				ImGui::SliderFloat("Geometry Weight", &settings.DistanceNormalisation, 0.f, 5.f, "%.2f");
+				Util::PercentageSlider("Movement Disocclusion", &settings.DepthDisocclusion, 0.f, 20.f);
 				if (auto _tt = Util::HoverTooltipWrapper())
 					ImGui::Text(
-						"Higher value makes the blur more sensitive to differences in geometry.");
+						"If a pixel has moved too far from the last frame, its radiance will not be carried to this frame.\n"
+						"Lower values are stricter.");
+
+				ImGui::Separator();
+			}
+
+			{
+				auto blurGuard = Util::DisableGuard(!settings.EnableBlur);
+				ImGui::SliderFloat("Blur Radius", &settings.BlurRadius, 0.f, 30.f, "%.1f px");
+
+				if (showAdvanced) {
+					ImGui::SliderFloat("Geometry Weight", &settings.DistanceNormalisation, 0.f, 5.f, "%.2f");
+					if (auto _tt = Util::HoverTooltipWrapper())
+						ImGui::Text(
+							"Higher value makes the blur more sensitive to differences in geometry.");
+				}
 			}
 		}
 	}
