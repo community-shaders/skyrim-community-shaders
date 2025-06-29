@@ -191,11 +191,7 @@ public:
 			bool ShowDrawCalls = true;
 			bool ShowVRAM = true;
 			bool ShowFPS = true;
-			bool ShowPreFGFrameTime = true;
 			bool ShowPreFGFrameTimeGraph = true;
-			bool ShowPreFGFPS = true;
-			bool ShowPostFGFPS = true;
-			bool ShowPostFGFrameTime = true;
 			bool ShowPostFGFrameTimeGraph = true;
 			float UpdateInterval = 0.5f;
 			int FrameHistorySize = 120;                       // Default 120 frames = 2s @ 60fps. Clamped using static values to prevent config file values going outside of slider bounds.
