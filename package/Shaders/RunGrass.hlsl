@@ -547,7 +547,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			endif  // TRUE_PBR
 
 	float3 dirLightColor = SharedData::DirLightColor.xyz;
-	float3 dirLightColorMultiplier = 1;
+	float dirLightColorMultiplier = 1;
 
 	float dirLightAngle = dot(normal, SharedData::DirLightDirection.xyz);
 
