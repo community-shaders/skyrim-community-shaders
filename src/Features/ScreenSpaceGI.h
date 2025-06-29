@@ -70,13 +70,13 @@ public:
 
 	struct Settings
 	{
-		bool Enabled = true;
-		bool EnableGI = true;
+		bool Enabled = REL::Module::IsVR() ? false : true;   // disabled in VR by default
+		bool EnableGI = REL::Module::IsVR() ? false : true;  // AO only for VR by default
 		bool EnableExperimentalSpecularGI = false;
 		// performance/quality
-		uint NumSlices = 4;
-		uint NumSteps = 8;
-		int ResolutionMode = 1;  // 0-full, 1-half, 2-quarter
+		uint NumSlices = REL::Module::IsVR() ? 1u : 4u;  // AO preset for VR
+		uint NumSteps = REL::Module::IsVR() ? 6u : 8u;   // AO preset for VR
+		int ResolutionMode = 1;                          // 0-full, 1-half, 2-quarter
 		// visual
 		float MinScreenRadius = 0.01f;
 		float AORadius = 256.f;
