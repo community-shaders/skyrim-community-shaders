@@ -83,15 +83,15 @@ void ScreenSpaceGI::DrawSettings()
 
 		if (ImGui::BeginTable("Presets", 5)) {
 			ImGui::TableNextColumn();
-			if (ImGui::Button("AO only", { -1, 0 })) {
-				settings.NumSlices = 1;
-				settings.NumSteps = 6;
-				settings.EnableBlur = true;
-				settings.EnableGI = false;
-				recompileFlag = true;
-			}
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("1 Slice, 6 Steps, no blur, no GI\n");
+            if (ImGui::Button("AO only", { -1, 0 })) {
+                settings.NumSlices = 1;
+                settings.NumSteps = 6;
+                settings.EnableBlur = true;
+                settings.EnableGI = false;
+                recompileFlag = true;
+            }
+            if (auto _tt = Util::HoverTooltipWrapper())
+                ImGui::Text("1 Slice, 6 Steps, blur enabled, no GI\n");
 
 			ImGui::TableNextColumn();
 			if (ImGui::Button("Low", { -1, 0 })) {
