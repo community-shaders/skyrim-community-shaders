@@ -202,10 +202,14 @@ namespace SharedData
 		float ambientGamma;
 		float fogGamma;
 		float effectGamma;
+		float effectAlphaGamma;
 		float skyGamma;
 		float vlGamma;
-		float lensFlareGamma;
-		float pad;
+		float membraneEffectMult;
+		float bloodEffectMult;
+		float projectedEffectMult;
+		float deferredEffectMult;
+		float otherEffectMult;
 	};
 
 	cbuffer FeatureData : register(b6)

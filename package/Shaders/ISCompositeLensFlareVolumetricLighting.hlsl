@@ -36,7 +36,11 @@ PS_OUTPUT main(PS_INPUT input)
 
 #	if defined(LENS_FLARE)
 	float3 lensFlareColor = LFSourceTex.Sample(LFSourceSampler, input.TexCoord).xyz;
-	color += Color::LensFlare(lensFlareColor);
+	if (SharedData::linearLightingSettings.enableLinearLighting) {
+		color += Color::GammaToLinear(lensFlareColor);
+	} else {
+		color += lensFlareColor;
+	}
 #	endif
 
 	psout.Color = color;

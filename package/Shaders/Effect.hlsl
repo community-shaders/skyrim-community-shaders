@@ -855,7 +855,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color2 = finalColor;
 #	endif
 
-	psout.Diffuse = float4(Color::Effect(psout.Diffuse.xyz), Color::Effect(psout.Diffuse.w).x);
+	psout.Diffuse = float4(Color::Effect(psout.Diffuse.xyz), Color::EffectAlpha(psout.Diffuse.w).x);
 	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld) && SharedData::linearLightingSettings.enableLinearLighting) {
 		psout.Diffuse.xyz = Color::TrueLinearToGamma(psout.Diffuse.xyz);
 	}

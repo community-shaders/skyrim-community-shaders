@@ -156,8 +156,27 @@ namespace Color
 	{
 		if (SharedData::linearLightingSettings.enableLinearLighting) {
 			color = pow(abs(color), SharedData::linearLightingSettings.effectGamma);
+#	if defined(MEMBRANE)
+			color *= SharedData::linearLightingSettings.membraneEffectMult;
+#	elif defined(BLOOD)
+			color *= SharedData::linearLightingSettings.bloodEffectMult;
+#	elif defined(PROJECTED_UV)
+			color *= SharedData::linearLightingSettings.projectedEffectMult;
+#	elif defined(DEFERRED)
+			color *= SharedData::linearLightingSettings.deferredEffectMult;
+#	else
+			color *= SharedData::linearLightingSettings.otherEffectMult;
+#	endif
 		}
 		return color;
+	}
+
+	float EffectAlpha(float alpha)
+	{
+		if (SharedData::linearLightingSettings.enableLinearLighting) {
+			alpha = pow(abs(alpha), SharedData::linearLightingSettings.effectAlphaGamma);
+		}
+		return alpha;
 	}
 
 	float3 Sky(float3 color)
@@ -172,14 +191,6 @@ namespace Color
 	{
 		if (SharedData::linearLightingSettings.enableLinearLighting) {
 			color = pow(abs(color), SharedData::linearLightingSettings.vlGamma);
-		}
-		return color;
-	}
-
-	float3 LensFlare(float3 color)
-	{
-		if (SharedData::linearLightingSettings.enableLinearLighting) {
-			color = pow(abs(color), SharedData::linearLightingSettings.lensFlareGamma);
 		}
 		return color;
 	}

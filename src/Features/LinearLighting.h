@@ -36,10 +36,16 @@ struct LinearLighting : Feature
 		float ambientGamma = 1.8f;
 		float fogGamma = 2.2f;
 		float effectGamma = 1.8f;
+		float effectAlphaGamma = 1.8f;
 		float skyGamma = 1.8f;
 		float vlGamma = 1.8f;
-		float lensFlareGamma = 1.8f;
-		float pad;
+
+		// Effect multipliers
+		float membraneEffectMult = 1.0f;
+		float bloodEffectMult = 1.0f;
+		float projectedEffectMult = 1.0f;
+		float deferredEffectMult = 1.0f;
+		float otherEffectMult = 1.0f;
 	} settings;
 
 	uint tempDisable = false;

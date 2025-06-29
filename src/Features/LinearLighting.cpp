@@ -10,9 +10,14 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ambientGamma,
 	fogGamma,
 	effectGamma,
+	effectAlphaGamma,
 	skyGamma,
 	vlGamma,
-	lensFlareGamma)
+	membraneEffectMult,
+	bloodEffectMult,
+	projectedEffectMult,
+	deferredEffectMult,
+	otherEffectMult)
 
 void LinearLighting::DrawSettings()
 {
@@ -25,9 +30,19 @@ void LinearLighting::DrawSettings()
 	ImGui::SliderFloat("Ambient Gamma", &settings.ambientGamma, 1.0f, 3.0f, "%.2f");
 	ImGui::SliderFloat("Fog Gamma", &settings.fogGamma, 1.0f, 3.0f, "%.2f");
 	ImGui::SliderFloat("Effect Gamma", &settings.effectGamma, 1.0f, 3.0f, "%.2f");
+	ImGui::SliderFloat("Effect Transparency Gamma", &settings.effectAlphaGamma, 1.0f, 3.0f, "%.2f");
 	ImGui::SliderFloat("Sky Gamma", &settings.skyGamma, 1.0f, 3.0f, "%.2f");
 	ImGui::SliderFloat("Volumetric Lighting Gamma", &settings.vlGamma, 1.0f, 3.0f, "%.2f");
-	ImGui::SliderFloat("Lens Flare Gamma", &settings.lensFlareGamma, 1.0f, 3.0f, "%.2f");
+
+	ImGui::SeparatorText("Multipliers");
+	if (ImGui::TreeNode("Effects")) {
+		ImGui::SliderFloat("Membrane Effects Multiplier", &settings.membraneEffectMult, 0.0f, 10.0f, "%.2f");
+		ImGui::SliderFloat("Blood Effects Multiplier", &settings.bloodEffectMult, 0.0f, 10.0f, "%.2f");
+		ImGui::SliderFloat("Projected Effects Multiplier", &settings.projectedEffectMult, 0.0f, 10.0f, "%.2f");
+		ImGui::SliderFloat("Deferred Effects Multiplier", &settings.deferredEffectMult, 0.0f, 10.0f, "%.2f");
+		ImGui::SliderFloat("Other Effects Multiplier", &settings.otherEffectMult, 0.0f, 10.0f, "%.2f");
+		ImGui::TreePop();
+	}
 }
 
 void LinearLighting::LoadSettings(json& o_json)
@@ -61,8 +76,13 @@ LinearLighting::Settings LinearLighting::GetCommonBufferData()
 	data.ambientGamma = settings.ambientGamma;
 	data.fogGamma = settings.fogGamma;
 	data.effectGamma = settings.effectGamma;
+	data.effectAlphaGamma = settings.effectAlphaGamma;
 	data.skyGamma = settings.skyGamma;
 	data.vlGamma = settings.vlGamma;
-	data.lensFlareGamma = settings.lensFlareGamma;
+	data.membraneEffectMult = settings.membraneEffectMult;
+	data.bloodEffectMult = settings.bloodEffectMult;
+	data.projectedEffectMult = settings.projectedEffectMult;
+	data.deferredEffectMult = settings.deferredEffectMult;
+	data.otherEffectMult = settings.otherEffectMult;
 	return data;
 }
