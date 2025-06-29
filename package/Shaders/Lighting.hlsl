@@ -1848,6 +1848,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		baseColor.xyz = Hair::Saturation(baseColor.xyz, SharedData::hairSpecularSettings.HairSaturation);
 		baseColor.xyz *= SharedData::hairSpecularSettings.BaseColorMult;
 	}
+
+	float3 sampledHairFlow = 0;
+	bool useHairFlowMap = false;
+#		if defined(BACK_LIGHTING)
+	if (SharedData::hairSpecularSettings.Enabled) {
+		uint2 hairFlowDimensions = uint2(0, 0);
+		sampledHairFlow = float3(TexBackLightSampler.Sample(SampBackLightSampler, uv).xy, 0.5f);
+		TexBackLightSampler.GetDimensions(hairFlowDimensions.x, hairFlowDimensions.y);
+		useHairFlowMap = (sampledHairFlow.x > 0.0 || sampledHairFlow.y > 0.0) && hairFlowDimensions.x > 32 && hairFlowDimensions.y > 32;
+		sampledHairFlow = useHairFlowMap ? sampledHairFlow * 2.0f - 1.0f : float3(0.5f, 0.5f, 0.5f);
+	}
+#		endif
 #	endif
 
 #	if defined(LOD_LAND_BLEND)
@@ -2001,7 +2013,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(HAIR) && defined(CS_HAIR)
 	float3 hairB = normalize(float3(input.TBN0.y, input.TBN1.y, input.TBN2.y));
 	float3 hairT = normalize(float3(input.TBN0.x, input.TBN1.x, input.TBN2.x));
+#		if defined(BACK_LIGHTING)
+	hairT = useHairFlowMap ? normalize(mul(tbn, sampledHairFlow)) : Hair::CalculateHairTangent(hairT, hairB, worldSpaceNormal);
+#		else
 	hairT = Hair::CalculateHairTangent(hairT, hairB, worldSpaceNormal);
+#		endif
 
 	if (SharedData::hairSpecularSettings.Enabled && SharedData::hairSpecularSettings.EnableTangentShift) {
 		float3 shiftedNormal = Hair::ShiftWorldNormal(hairT, worldSpaceNormal, 0, uv);
