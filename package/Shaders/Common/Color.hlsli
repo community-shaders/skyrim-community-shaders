@@ -89,6 +89,7 @@ namespace Color
 	}
 
 #if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
+#	define ENABLE_LL SharedData::linearLightingSettings.enableLinearLighting
 	float3 GammaToLinearLuminancePreservingLight(float3 color)
 	{
 		float originalLuminance = RGBToLuminance(color);
@@ -105,30 +106,17 @@ namespace Color
 
 	float3 Diffuse(float3 color)
 	{
-		if (!SharedData::linearLightingSettings.enableLinearLighting) {
 #	if defined(TRUE_PBR)
-			return pow(abs(color), 1.0 / 2.2);
+		return ENABLE_LL ? color : pow(abs(color), 1.0 / 2.2);
 #	else
-			return color;
+		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.colorGamma) : color;
 #	endif
-		} else {
-#	if defined(TRUE_PBR)
-			return color;
-#	else
-			return pow(abs(color), SharedData::linearLightingSettings.colorGamma);
-#	endif
-		}
 	}
 
 	float3 Light(float3 color)
 	{
-		if (SharedData::linearLightingSettings.enableLinearLighting) {
-			if (SharedData::linearLightingSettings.preserveLightLuminance) {
-				color = GammaToLinearLuminancePreservingLight(color);
-			} else {
-				color = pow(abs(color), SharedData::linearLightingSettings.lightGamma);
-			}
-		}
+		color = ENABLE_LL ? (SharedData::linearLightingSettings.preserveLightLuminance ? GammaToLinearLuminancePreservingLight(color) 
+			: pow(abs(color), SharedData::linearLightingSettings.lightGamma)) : color;
 #	if defined(TRUE_PBR)
 		return color * Math::PI;  // Compensate for traditional Lambertian diffuse
 #	else
@@ -138,23 +126,17 @@ namespace Color
 
 	float3 Ambient(float3 color)
 	{
-		if (SharedData::linearLightingSettings.enableLinearLighting) {
-			color = pow(abs(color), SharedData::linearLightingSettings.ambientGamma);
-		}
-		return color;
+		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.ambientGamma) : color;
 	}
 
 	float3 Fog(float3 color)
 	{
-		if (SharedData::linearLightingSettings.enableLinearLighting) {
-			color = pow(abs(color), SharedData::linearLightingSettings.fogGamma);
-		}
-		return color;
+		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.fogGamma) : color;
 	}
 
 	float3 Effect(float3 color)
 	{
-		if (SharedData::linearLightingSettings.enableLinearLighting) {
+		if (ENABLE_LL) {
 			color = pow(abs(color), SharedData::linearLightingSettings.effectGamma);
 #	if defined(MEMBRANE)
 			color *= SharedData::linearLightingSettings.membraneEffectMult;
@@ -173,42 +155,27 @@ namespace Color
 
 	float EffectAlpha(float alpha)
 	{
-		if (SharedData::linearLightingSettings.enableLinearLighting) {
-			alpha = pow(abs(alpha), SharedData::linearLightingSettings.effectAlphaGamma);
-		}
-		return alpha;
+		return ENABLE_LL ? pow(abs(alpha), SharedData::linearLightingSettings.effectAlphaGamma) : alpha;
 	}
 
 	float3 Sky(float3 color)
 	{
-		if (SharedData::linearLightingSettings.enableLinearLighting) {
-			color = pow(abs(color), SharedData::linearLightingSettings.skyGamma);
-		}
-		return color;
+		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.skyGamma) : color;
 	}
 
 	float3 VolumetricLighting(float3 color)
 	{
-		if (SharedData::linearLightingSettings.enableLinearLighting) {
-			color = pow(abs(color), SharedData::linearLightingSettings.vlGamma);
-		}
-		return color;
+		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.vlGamma) : color;
 	}
 
 	float3 Radiance(float3 color)
 	{
-		if (!SharedData::linearLightingSettings.enableLinearLighting) {
-			color = GammaToLinear(color);
-		}
-		return color;
+		return ENABLE_LL ? color : GammaToLinear(color);
 	}
 
 	float3 Irradiance(float3 color)
 	{
-		if (!SharedData::linearLightingSettings.enableLinearLighting) {
-			color = GammaToLinear(color);
-		}
-		return color;
+		return ENABLE_LL ? color : GammaToLinear(color);
 	}
 #endif
 }
