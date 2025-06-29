@@ -178,10 +178,40 @@ void VolumetricLighting::PostPostLoad()
 	gVolumetricLightingSizeMedium = reinterpret_cast<TextureSize*>(REL::RelocationID(527973, 414919).address());
 	gVolumetricLightingSizeHigh = reinterpret_cast<TextureSize*>(REL::RelocationID(527976, 414922).address());
 	defaultSizeHigh = *gVolumetricLightingSizeHigh;
+
+	// Ensure the VL raymarch compute shader is only dispatched once, rather than once for every level of depth
+	// The updated raymarch shader iterates through the depth now instead
+	// Skip the first call, the second call has read/write texture setup in the correct order
+	REL::safe_fill(REL::RelocationID(100309, 107023).address() + REL::Relocate(0xA4, 0x406), REL::NOP, 3);
+	// Exit the loop after the first iteration
+	REL::safe_fill(REL::RelocationID(100309, 107023).address() + REL::Relocate(0x147, 0x4A9), REL::NOP, 6);
+}
+
+void VolumetricLighting::SetupResources()
+{
+	vlDataCB = new ConstantBuffer(ConstantBufferDesc<VLData>());
 }
 
 void VolumetricLighting::EarlyPrepass()
 {
+	const auto& mainDepth = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+	D3D11_TEXTURE2D_DESC texDesc;
+	mainDepth.texture->GetDesc(&texDesc);
+
+	int32_t width = static_cast<int32_t>(texDesc.Width);
+	int32_t height = static_cast<int32_t>(texDesc.Height);
+
+	if (width != vlData.screenX || height != vlData.screenY) {
+		blurHCS = nullptr;
+		blurVCS = nullptr;
+	}
+
+	vlData.screenX = texDesc.Width;
+	vlData.screenY = texDesc.Height;
+	vlData.screenXMin1 = texDesc.Width - 1;
+	vlData.screenYMin1 = texDesc.Height - 1;
+	vlDataCB->Update(vlData);
+
 	const auto interiorCell = globals::game::tes->interiorCell;
 	const bool currentlyInInterior = interiorCell != nullptr;
 
@@ -239,4 +269,60 @@ void VolumetricLighting::RenderDepth::thunk()
 	func();
 	if (*GetSingleton()->bEnableVolumetricLighting)
 		RenderVolumetricLighting(&GetVLDescriptor(), RE::Main::WorldRootCamera(), false);
+}
+
+RE::BSImagespaceShader* VolumetricLighting::CreateShader(const std::string_view& name, const std::string_view& fileName, RE::BSComputeShader* computeShader)
+{
+	auto shader = RE::BSImagespaceShader::Create();
+	shader->shaderType = RE::BSShader::Type::ImageSpace;
+	shader->fxpFilename = fileName.data();
+	shader->name = name.data();
+	shader->originalShaderName = fileName.data();
+	shader->computeShader = computeShader;
+	shader->isComputeShader = true;
+	return shader;
+}
+
+RE::BSImagespaceShader* VolumetricLighting::GetOrCreateGenerateCS(RE::BSComputeShader* computeShader)
+{
+	if (generateCS == nullptr)
+		generateCS = CreateShader("BSImagespaceShaderVolumetricLightingGenerateCS", "ISVolumetricLightingGenerateCS", computeShader);
+	return generateCS;
+}
+
+RE::BSImagespaceShader* VolumetricLighting::GetOrCreateRaymarchCS(RE::BSComputeShader* computeShader)
+{
+	if (raymarchCS == nullptr)
+		raymarchCS = CreateShader("BSImagespaceShaderVolumetricLightingRaymarchCS", "ISVolumetricLightingRaymarchCS", computeShader);
+	return raymarchCS;
+}
+
+RE::BSImagespaceShader* VolumetricLighting::GetOrCreateBlurHCS(RE::BSComputeShader* computeShader)
+{
+	if (blurHCS == nullptr)
+		blurHCS = CreateShader("BSImagespaceShaderVolumetricLightingBlurHCS", "ISVolumetricLightingBlurHCS", computeShader);
+	return blurHCS;
+}
+
+RE::BSImagespaceShader* VolumetricLighting::GetOrCreateBlurVCS(RE::BSComputeShader* computeShader)
+{
+	if (blurVCS == nullptr)
+		blurVCS = CreateShader("BSImagespaceShaderVolumetricLightingBlurVCS", "ISVolumetricLightingBlurVCS", computeShader);
+	return blurVCS;
+}
+
+void VolumetricLighting::SetDimensionsCB() const
+{
+	auto cb = vlDataCB->CB();
+	globals::d3d::context->CSSetConstantBuffers(1, 1, &cb);
+}
+
+void VolumetricLighting::SetGroupCountsHCS(uint32_t& threadGroupCountX) const
+{
+	threadGroupCountX = (vlData.screenX + BlurThreadGroupSizeX - BlurWindow * 2u - 1u) / (BlurThreadGroupSizeX - BlurWindow * 2u);
+}
+
+void VolumetricLighting::SetGroupCountsVCS(uint32_t& threadGroupCountY) const
+{
+	threadGroupCountY = (vlData.screenY + BlurThreadGroupSizeY - BlurWindow * 2u - 1u) / (BlurThreadGroupSizeY - BlurWindow * 2u);
 }
