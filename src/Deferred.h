@@ -50,7 +50,6 @@ public:
 	bool inDecals = false;
 	bool inReflections = false;
 	bool deferredPass = false;
-	bool renderBlended = false;
 
 	Texture2D* prevDiffuseAmbientTexture = nullptr;
 
