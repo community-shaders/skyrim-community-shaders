@@ -778,7 +778,6 @@ void Deferred::Hooks::Main_RenderWorld_Start::thunk(RE::BSBatchRenderer* This, u
 void Deferred::RenderBlendedDecals()
 {
 	if (!globals::state->blendedDecalRenderPasses.empty()) {
-
 		globals::game::shadowState->GetRuntimeData().alphaBlendWriteMode = 1;
 		globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_ALPHA_BLEND);
 
