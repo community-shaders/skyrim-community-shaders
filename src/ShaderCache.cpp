@@ -1924,14 +1924,14 @@ namespace SIE
 			{
 				std::scoped_lock lockD{ compilationSet.compilationMutex };
 				try {
-					if (std::filesystem::exists(filePath)) {
-						std::filesystem::remove(filePath);
+					bool removed = std::filesystem::remove(filePath);
+					if (!removed) {
+						logger::warn("Failed to delete file {}", filePathString);
+					} else {
 						logger::debug("Deleted {}", filePathString);
 					}
 				} catch (const std::exception& e) {
-					logger::warn("Failed to delete file {}: {}", filePathString, e.what());
-				} catch (...) {
-					logger::warn("An unknown error occurred while trying to delete file '{}'", filePathString);
+					logger::warn("Expected to delete {}, but ran into exception: {}", filePathString, e.what());
 				}
 			}
 

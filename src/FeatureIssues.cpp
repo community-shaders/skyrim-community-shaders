@@ -1359,10 +1359,16 @@ namespace FeatureIssues
 				try {
 					if (testInfo.isNewFile) {
 						// Remove the test INI file we created
-						if (std::filesystem::exists(testInfo.testIniPath)) {
-							std::filesystem::remove(testInfo.testIniPath);
-							logger::debug("Removed test INI: {}", testInfo.testIniPath);
-						}
+						try {
+							bool removed = std::filesystem::remove(testInfo.testIniPath);
+							if (!removed) {
+								logger::warn("Failed to delete file {}", testInfo.testIniPath);
+							} else {
+								logger::debug("Deleted {}", testInfo.testIniPath);
+							}
+						} catch (const std::exception& e) {
+							logger::warn("Expected to delete {}, but ran into exception: {}", testInfo.testIniPath, e.what());
+						}					
 					} else {
 						// Restore original version using INI functions
 						CSimpleIniA ini;
@@ -1395,13 +1401,17 @@ namespace FeatureIssues
 				}
 			}  // Clear the active test INIs tracking and remove persistent state
 			s_activeTestInis.clear();
+			const auto stateFilePath = GetTestStateFilePath();
+			const auto& stateFilePathString = Util::WStringToString(stateFilePath);
 			try {
-				const auto stateFilePath = GetTestStateFilePath();
-				if (std::filesystem::exists(stateFilePath)) {
-					std::filesystem::remove(stateFilePath);
+				bool removed = std::filesystem::remove(stateFilePath);
+				if (!removed) {
+					logger::warn("Failed to delete file {}", stateFilePathString);
+				} else {
+					logger::debug("Deleted {}", stateFilePathString);
 				}
 			} catch (const std::exception& e) {
-				logger::warn("Failed to remove persistent test state file: {}", e.what());
+				logger::warn("Expected to delete {}, but ran into exception: {}", stateFilePathString, e.what());
 			}
 			// Clear existing feature issues and rescan to update UI immediately
 			// This ensures the restored state is reflected without requiring a restart
