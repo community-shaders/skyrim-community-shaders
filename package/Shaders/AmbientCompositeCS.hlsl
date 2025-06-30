@@ -9,6 +9,7 @@
 Texture2D<float3> AlbedoTexture : register(t0);
 Texture2D<float3> NormalRoughnessTexture : register(t1);
 Texture2D<float> DepthTexture : register(t2);
+Texture2D<float3> MasksTexture : register(t9);
 
 #if defined(SKYLIGHTING)
 #	include "Skylighting/Skylighting.hlsli"
@@ -55,6 +56,12 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 
 	float3 diffuseColor = MainRW[dispatchID.xy].xyz;
 	float3 albedo = AlbedoTexture[dispatchID.xy];
+#if defined(SSS)
+	float3 mask = MasksTexture[dispatchID.xy];
+	if (mask.x > 0.001) {
+		albedo = float3(1.0, 1.0, 1.0);
+	}
+#endif
 
 	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
 

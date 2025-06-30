@@ -73,8 +73,6 @@ BurleySampleDiffuseNormal SampleSSSColor(float2 CenterUV, float2 UVOffset, float
 	Sample.WorldNormal = 0.0;
 
 	Sample.DiffuseLighting = ColorTexture[pixCoord];
-	float3 Albedo = AlbedoTexture[pixCoord].rgb;
-	Sample.DiffuseLighting.rgb = Sample.DiffuseLighting.rgb * Albedo < 0.0001 ? 0.0 : Sample.DiffuseLighting.rgb / max(Albedo, 0.0001);
 	Sample.DiffuseLighting.rgb = Color::GammaToLinear(Sample.DiffuseLighting.rgb);
 
 	float3 ViewNormal = GBuffer::DecodeNormal(NormalTexture[pixCoord].xy);

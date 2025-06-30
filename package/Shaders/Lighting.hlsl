@@ -3004,6 +3004,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 		color.xyz += transmissionColor;
 	}
+#	elif defined(SKIN) && defined(SSS) && defined(DEFERRED)
+	color.xyz += diffuseColor;
 #	else
 	color.xyz += diffuseColor * baseColor.xyz;
 #	endif
