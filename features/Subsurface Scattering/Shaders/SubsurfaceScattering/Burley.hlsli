@@ -1,25 +1,23 @@
+#include "Common/GBuffer.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/Math.hlsli"
 
-#define BURLEY_NUM_SAMPLES	64
-#define BURLEY_INV_NUM_SAMPLES (1.0f/BURLEY_NUM_SAMPLES)
-
-#define EXPONENTIAL_WEIGHT 0.2f
-
 // Threshold value at which model switches from SSS to default lit
 #define SSSS_OPACITY_THRESHOLD_EPS 0.10
 
+///////////////////////////////////////////////////////////////////////////////////////////////
 // Burley constants
 #define BURLEY_MM_2_CM		0.1f
 #define BURLEY_CM_2_MM      10.0f
 
-// Required if we use a texture format with limited size but want to express a larger radius
-#define SUBSURFACE_RADIUS_SCALE 1024;
+#define GAME_UNIT_TO_CM 1.428f
 
- // The kernels range from -3 to 3
-#define SUBSURFACE_KERNEL_SIZE 3;
+#define SUBSURFACE_RADIUS_SCALE 1024
+#define SUBSURFACE_KERNEL_SIZE 3
 
+// Without clamp, the result will be zero which will lead to infinity for R/pdf. and Nan for the weighted sum.
+// We need to clamp pdf to a very small value. this clamp is based on value below
 #define CLAMP_PDF 0.00001
 
 struct FBurleyParameter
@@ -45,9 +43,67 @@ struct BurleySampleDiffuseNormal
 	float3 WorldNormal;
 };
 
-float GetDiffuseMeanFreePathForSampling(float4 DiffuseMeanFreePath)
+uint2 UVtoPixCoord(float2 UV)
 {
-	return DiffuseMeanFreePath.a;
+	return uint2(UV * SharedData::BufferDim.xy);
+}
+
+FBurleyParameter GetBurleyParameters(uint2 pixCoord, float sssAmount, float4 MeanFreePath)
+{
+	FBurleyParameter Out = (FBurleyParameter)0;
+	Out.SurfaceAlbedo = AlbedoTexture[pixCoord];
+	Out.DiffuseMeanFreePath = MeanFreePath;
+	for (int i = 0; i < 3; ++i)
+	{
+		Out.DiffuseMeanFreePath[i] = max(Out.DiffuseMeanFreePath[i], 0.00001f);
+	}
+	Out.WorldUnitScale = GAME_UNIT_TO_CM;
+	Out.SurfaceOpacity = sssAmount;
+	Out.DiffuseMeanFreePath *= Out.SurfaceOpacity;
+
+	return Out;
+}
+
+BurleySampleDiffuseNormal SampleSSSColor(float2 CenterUV, float2 UVOffset, float MipLevel, uint eyeIndex)
+{
+	float2 ClampedUV = clamp(CenterUV + UVOffset, float2(0.0, 0.0), float2(1.0, 1.0));
+	uint2 pixCoord = UVtoPixCoord(ClampedUV);
+	BurleySampleDiffuseNormal Sample;
+	Sample.DiffuseLighting = 0.0;
+	Sample.WorldNormal = 0.0;
+
+	Sample.DiffuseLighting = ColorTexture[pixCoord];
+	float3 Albedo = AlbedoTexture[pixCoord].rgb;
+	Sample.DiffuseLighting.rgb = Sample.DiffuseLighting.rgb * Albedo < 0.0001 ? 0.0 : Sample.DiffuseLighting.rgb / max(Albedo, 0.0001);
+	Sample.DiffuseLighting.rgb = Color::GammaToLinear(Sample.DiffuseLighting.rgb);
+
+	float3 ViewNormal = GBuffer::DecodeNormal(NormalTexture[pixCoord].xy);
+	Sample.WorldNormal = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(ViewNormal, 0)).xyz);
+
+	return Sample;
+}
+
+float3 GetCDF3D(float3 D, float X)
+{
+	return 1 - 0.25 * exp(-X / D) - 0.75 * exp(-X / (3 * D));
+}
+
+float GetCDF(float D, float X, float XI)
+{
+	return 1 - 0.25*exp(-X / D) - 0.75*exp(-X / (3 * D)) - XI;
+}
+float GetCDFDeriv1(float D, float X)
+{
+	return 0.25 / D * (exp(-X / D) + exp(-X / (3 * D)));
+}
+float GetCDFDeriv1InversD(float InvD, float X)
+{
+	return 0.25 * InvD * (exp(-X*InvD)+exp(-3*X*InvD));
+}
+
+float GetCDFDeriv2(float D, float X)
+{
+	return exp(-X / D)*(-0.0833333*exp(2 * X / (3 * D)) - 0.25) / (D*D);
 }
 
 float GetComponentForScalingFactorEstimation(float4 SurfaceAlbedo)
@@ -55,19 +111,9 @@ float GetComponentForScalingFactorEstimation(float4 SurfaceAlbedo)
 	return SurfaceAlbedo.a;
 }
 
-float3 GetSubsurfaceProfileBoundaryColorBleed(uint SubsurfaceProfileInt)
+float GetDiffuseMeanFreePathForSampling(float4 DiffuseMeanFreePath)
 {
-    return float3(1.f, 1.f, 1.f);
-}
-
-float3 GetDiffuseReflectProfileWithDiffuseMeanFreePath(float3 L, float3 S3D, float Radius)
-{
-	//rR(r)
-	float3 D = 1 / S3D;
-	float3 R = Radius / L;
-	const float Inv8Pi = 1.0 / (8 * Math::PI);
-	float3 NegRbyD = -R / D;
-	return max((exp(NegRbyD) + exp(NegRbyD / 3.0)) / (D * L) * Inv8Pi, 0.000000000001f /*Fix color shift due to precision issue for substrate per-pixel MFP SSS*/);
+	return DiffuseMeanFreePath.a;
 }
 
 float GetSearchLightDiffuseScalingFactor(float SurfaceAlbedo)
@@ -84,7 +130,6 @@ float3 GetSearchLightDiffuseScalingFactor3D(float3 SurfaceAlbedo)
 
 float GetScalingFactor(float A)
 {
-
 	float S = GetSearchLightDiffuseScalingFactor(A);
 	return S;
 }
@@ -95,6 +140,180 @@ float3 GetScalingFactor3D(float3 SurfaceAlbedo)
 	return S3D;
 }
 
+// Brian's approximation.
+float RadiusRootFindByApproximation(float D, float RandomNumber)
+{
+	return D * ((2 - 2.6)*RandomNumber - 2)*log(1 - RandomNumber);
+}
+
+// Get the probability to sample a disk.
+float GetPdf(float Radius, float L, float S)
+{
+	//without clamp, the result will be zero which will lead to infinity for R/pdf. and Nan for the weighted sum.
+	//we need to clamp this to a very small pdf.
+
+	float Pdf = GetCDFDeriv1(L / S, Radius);
+	return  max(Pdf, CLAMP_PDF);
+}
+
+FBurleySampleInfo GenerateSampleInfo(float2 Rand0T1, float DiffuseMeanFreePathForSample, float SpectralForSample, uint SequenceId)
+{
+	FBurleySampleInfo BurleySampleInfo;
+
+	// Direct sampling of angle is more efficient and fast in test when the dmfp is small.
+	// However, FIB has better quality when dmfp and world unit scale is large.
+
+	// Sample radius
+	//Approximation
+	float FoundRoot = RadiusRootFindByApproximation(DiffuseMeanFreePathForSample / SpectralForSample, Rand0T1.x);
+
+	BurleySampleInfo.RadiusInMM = max(FoundRoot, 0.00001f);
+	
+	// Sample angle
+	BurleySampleInfo.Theta = Rand0T1.y * 2 * Math::PI;
+
+	BurleySampleInfo.CosTheta = cos(BurleySampleInfo.Theta);
+	BurleySampleInfo.SinTheta = sin(BurleySampleInfo.Theta);
+
+	// Estimate Pdf
+	BurleySampleInfo.Pdf = GetPdf(BurleySampleInfo.RadiusInMM, DiffuseMeanFreePathForSample, SpectralForSample);
+
+	return BurleySampleInfo;
+}
+
+// The extent is for the subsurface texture.
+float2 CalculateBurleyScale(float WorldUnitScale, float DepthAtCenter)
+{
+	float2 BurleyScale = WorldUnitScale;
+
+	// SSSScalex = DistanceToProjectionWindow * 0.5
+	BurleyScale *= SSSScaleX / DepthAtCenter;
+
+	BurleyScale *= 1 / BURLEY_CM_2_MM;
+
+	return BurleyScale;
+}
+
+// Given the Depth and the BurleyParameter, figure out the actual radius of the center pixel in MM,
+// taking into account the depth and screen dimensions.
+float CalculateCenterSampleRadiusInMM(FBurleyParameter BurleyParameter, float2 BurleyScale, float2 ExtentInverse)
+{
+	float DiffuseMeanFreePath = GetDiffuseMeanFreePathForSampling(BurleyParameter.DiffuseMeanFreePath);
+
+	float A = GetComponentForScalingFactorEstimation(BurleyParameter.SurfaceAlbedo);
+	float S = GetScalingFactor(A);
+	float3 S3D = GetScalingFactor3D(BurleyParameter.SurfaceAlbedo.xyz);
+
+	// In the reference function, UVOffset = BurleyScale * RadiusInMM
+	//      float2 UVOffset = BurleyScale*BurleySampleInfo.RadiusInMM;
+	// So, given the UV offset, we can find the distance in mm as:
+	//      float DistInMM = UvOffset.x/BurleyScale.x + UvOffset.y/BurleyScale.y;
+	// But for stability, we can just average them.
+	float CenterSampleRadiusInMM = 0.5f * (ExtentInverse.x/BurleyScale.x + ExtentInverse.y/BurleyScale.y);
+
+	return CenterSampleRadiusInMM;
+}
+
+// Given the Depth and the BurleyParameter, figure out the actual radius of the center pixel in MM,
+// taking into account the depth and screen dimensions.
+float CalculateCenterSampleRadiusInMM(FBurleyParameter BurleyParameter, float Depth)
+{
+	float DiffuseMeanFreePath = GetDiffuseMeanFreePathForSampling(BurleyParameter.DiffuseMeanFreePath);
+
+	float A = GetComponentForScalingFactorEstimation(BurleyParameter.SurfaceAlbedo);
+	float S = GetScalingFactor(A);
+	float3 S3D = GetScalingFactor3D(BurleyParameter.SurfaceAlbedo.xyz);
+
+	float2 BurleyScale = CalculateBurleyScale(BurleyParameter.WorldUnitScale, Depth);
+
+	// In the reference function, UVOffset = BurleyScale * RadiusInMM
+	//      float2 UVOffset = BurleyScale*BurleySampleInfo.RadiusInMM;
+	// So, given the UV offset, we can find the distance in mm as:
+	//      float DistInMM = UvOffset.x/BurleyScale.x + UvOffset.y/BurleyScale.y;
+	// But for stability, we can just average them.
+	float CenterSampleRadiusInMM = 0.5f * (SharedData::BufferDim.z/BurleyScale.x + SharedData::BufferDim.w/BurleyScale.y);
+
+	return CenterSampleRadiusInMM;
+}
+
+float CalculateCenterSampleCdf(FBurleyParameter BurleyParameter, float CenterSampleRadiusInMM)
+{
+	float DiffuseMeanFreePathForSampling = GetDiffuseMeanFreePathForSampling(BurleyParameter.DiffuseMeanFreePath);
+	float A = GetComponentForScalingFactorEstimation(BurleyParameter.SurfaceAlbedo);
+	float S = GetScalingFactor(A);
+
+	float D = DiffuseMeanFreePathForSampling / S;
+	float CenterSampleRadiusCdf = GetCDF(D.x,CenterSampleRadiusInMM,0);
+
+	return CenterSampleRadiusCdf;
+}
+
+// Given the UV and BurleyParameter, determine how much RGB weight should be assigned to the center 
+// pixel. The rest of the weight would be applied from the blur.
+float3 CalculateCenterSampleWeight(float Depth, FBurleyParameter BurleyParameter)
+{
+	float CenterSampleRadiusInMM = CalculateCenterSampleRadiusInMM(BurleyParameter, Depth);
+
+	float DiffuseMeanFreePath = GetDiffuseMeanFreePathForSampling(BurleyParameter.DiffuseMeanFreePath);
+
+	// To calculate the surface free path from albedo, use the default scaling.
+	float3 D = DiffuseMeanFreePath / GetScalingFactor3D(BurleyParameter.SurfaceAlbedo.xyz);
+
+	float3 CenterSampleWeight;
+
+	CenterSampleWeight.x = GetCDF(D.x,CenterSampleRadiusInMM,0);
+	CenterSampleWeight.y = GetCDF(D.y,CenterSampleRadiusInMM,0);
+	CenterSampleWeight.z = GetCDF(D.z,CenterSampleRadiusInMM,0);
+
+	return CenterSampleWeight;
+}
+
+inline float3 Burley_Profile(float Radius, float3 Albedo, float3 S3D, float L)
+{   //R(r)r
+	float3 D = 1 / S3D;
+	float R = Radius / L;
+	const float Inv8Pi = 1.0 / (8 * Math::PI);
+	float3 NegRbyD = -R / D;
+	return Albedo * max((exp(NegRbyD) + exp(NegRbyD / 3.0)) / (D*L)*Inv8Pi, 0);
+}
+
+//Diffuse profile basic formula
+//    D : shapes the height and width of the profile curve.
+//	  Radius : the distance between the entering surface point and the exit surface point.
+//Assume: r and d >0
+float GetDiffuseReflectProfile(float D, float Radius)
+{
+	//The diffuse reflectance profile:
+	//R(d,r) = \frac{e^{-r/d}+e^{-r/(3d)}}{8*pi*d*r}
+	const float Inv8Pi = 1.0 / (8 * Math::PI);
+	float NegRbyD = -Radius / D;
+	return (exp(NegRbyD) + exp(NegRbyD / 3.0)) / (D*Radius)*Inv8Pi;
+}
+
+float3 GetDiffuseReflectProfileWithDiffuseMeanFreePath(float3 L, float3 S3D, float Radius)
+{
+	//rR(r)
+	float3 D = 1 / S3D;
+	float3 R = Radius / L;
+	const float Inv8Pi = 1.0 / (8 * Math::PI);
+	float3 NegRbyD = -R / D;
+	return max((exp(NegRbyD) + exp(NegRbyD / 3.0)) / (D * L) * Inv8Pi, 0.000000000001f /*Fix color shift due to precision issue for substrate per-pixel MFP SSS*/);
+}
+
+float2 R2Sequence( uint Index )
+{
+	const float Phi = 1.324717957244746;
+	const float2 a = float2( 1.0 / Phi, 1.0 / pow(Phi, 2) );
+	return frac( a * Index );
+}
+
+// 3D random number generator inspired by PCGs (permuted congruential generator)
+// Using a **simple** Feistel cipher in place of the usual xor shift permutation step
+// @param v = 3D integer coordinate
+// @return three elements w/ 16 random bits each (0-0xffff).
+// ~8 ALU operations for result.x    (7 mad, 1 >>)
+// ~10 ALU operations for result.xy  (8 mad, 2 >>)
+// ~12 ALU operations for result.xyz (9 mad, 3 >>)
 uint3 Rand3DPCG16(int3 p)
 {
 	// taking a signed int then reinterpreting as unsigned gives good behavior for negatives
@@ -131,129 +350,17 @@ uint3 Rand3DPCG16(int3 p)
 
 float2 Generate2DRandomNumber(int3 Seed)
 {
-	// return Random::R2Sequence(Seed.z);
+#if SAMPLE_ROOT_ANGLE_R2SEQUENCE
+	return R2Sequence(Seed.z);
+#else
 	return float2(Rand3DPCG16(Seed).xy) / 0x10000;
+#endif
 }
 
-float GetCDF(float D, float X, float XI)
+float GetDepth(uint2 pixCoord)
 {
-	return 1 - 0.25*exp(-X / D) - 0.75*exp(-X / (3 * D)) - XI;
-}
-float GetCDFDeriv1(float D, float X)
-{
-	return 0.25 / D * (exp(-X / D) + exp(-X / (3 * D)));
-}
-float GetCDFDeriv1InversD(float InvD, float X)
-{
-	return 0.25 * InvD * (exp(-X*InvD)+exp(-3*X*InvD));
-}
-
-float GetCDFDeriv2(float D, float X)
-{
-	return exp(-X / D)*(-0.0833333*exp(2 * X / (3 * D)) - 0.25) / (D*D);
-}
-
-
-BurleySampleDiffuseNormal SampleSSSColorConsideringLocalShared(float2 CenterUV, float2 UVOffset, uint2 CenterGroupThreadID, float MipLevel)
-{
-	// Fix border flickering when mipmaps got garbage data.
-	float2 ClampedUV = clamp(CenterUV + UVOffset, 0, 1);
-
-	BurleySampleDiffuseNormal Sample;
-	uint2 DTid = uint2(ClampedUV / SharedData::BufferDim.zw - 0.5f);
-	Sample.DiffuseLighting = ColorTexture[DTid];
-	Sample.WorldNormal = NormalTexture[DTid].xyz;
-
-	return Sample;
-}
-
-float2 CalculateBurleyScale(float WorldUnitScale, float DepthAtCenter)
-{
-	float2 BurleyScale = WorldUnitScale;
-
-	float distanceToProjectionWindow = 1.0 / tan(0.5 * radians(SSSS_FOVY));
-	BurleyScale *= distanceToProjectionWindow / DepthAtCenter;
-	
-	// cast from cm to mm for depth, and remove the effect of SUBSURFACE_KERNEL_SIZE. 
-	BurleyScale *= 1 / BURLEY_CM_2_MM;
-
-	// account for Screen Percentage/Dyanmic Resolution Scaling
-	// BurleyScale *= (SubsurfaceInput0_ViewportSize.x * SubsurfaceInput0_ExtentInverse.x);
-	// BurleyScale.y *= (SubsurfaceInput0_Extent.x * SubsurfaceInput0_ExtentInverse.y);
-
-	return BurleyScale;
-}
-
-// Brian's approximation.
-float RadiusRootFindByApproximation(float D, float RandomNumber)
-{
-	return D * ((2 - 2.6)*RandomNumber - 2)*log(1 - RandomNumber);
-}
-
-// Get the probability to sample a disk.
-float GetPdf(float Radius, float L, float S)
-{
-	//without clamp, the result will be zero which will lead to infinity for R/pdf. and Nan for the weighted sum.
-	//we need to clamp this to a very small pdf.
-
-	float Pdf = GetCDFDeriv1(L / S, Radius);
-	return  max(Pdf, CLAMP_PDF);
-}
-
-// Given the Depth and the BurleyParameter, figure out the actual radius of the center pixel in MM,
-// taking into account the depth and screen dimensions.
-float CalculateCenterSampleRadiusInMM(FBurleyParameter BurleyParameter, float Depth, float2 texCoord)
-{
-	float DiffuseMeanFreePath = GetDiffuseMeanFreePathForSampling(BurleyParameter.DiffuseMeanFreePath);
-
-	float A = GetComponentForScalingFactorEstimation(BurleyParameter.SurfaceAlbedo);
-	float S = GetScalingFactor(A);
-	float3 S3D = GetScalingFactor3D(BurleyParameter.SurfaceAlbedo.xyz);
-
-	float2 BurleyScale = CalculateBurleyScale(BurleyParameter.WorldUnitScale,Depth);
-
-	// In the reference function, UVOffset = BurleyScale * RadiusInMM
-	//      float2 UVOffset = BurleyScale*BurleySampleInfo.RadiusInMM;
-	// So, given the UV offset, we can find the distance in mm as:
-	//      float DistInMM = UvOffset.x/BurleyScale.x + UvOffset.y/BurleyScale.y;
-	// But for stability, we can just average them.
-	float CenterSampleRadiusInMM = 0.5f * (texCoord.x/BurleyScale.x + texCoord.y/BurleyScale.y);
-
-	return CenterSampleRadiusInMM;
-}
-
-// Given the UV and BurleyParameter, determine how much RGB weight should be assigned to the center 
-// pixel. The rest of the weight would be applied from the blur.
-float3 CalculateCenterSampleWeight(float Depth, FBurleyParameter BurleyParameter, float2 texCoord)
-{
-	float CenterSampleRadiusInMM = CalculateCenterSampleRadiusInMM(BurleyParameter, Depth, texCoord);
-
-	float DiffuseMeanFreePath = GetDiffuseMeanFreePathForSampling(BurleyParameter.DiffuseMeanFreePath);
-
-	// To calculate the surface free path from albedo, use the default scaling.
-	float3 D = DiffuseMeanFreePath / GetScalingFactor3D(BurleyParameter.SurfaceAlbedo.xyz);
-
-	float3 CenterSampleWeight;
-
-	CenterSampleWeight.x = GetCDF(D.x,CenterSampleRadiusInMM,0);
-	CenterSampleWeight.y = GetCDF(D.y,CenterSampleRadiusInMM,0);
-	CenterSampleWeight.z = GetCDF(D.z,CenterSampleRadiusInMM,0);
-
-	return CenterSampleWeight;
-}
-
-float CalculateCenterSampleCdf(FBurleyParameter BurleyParameter, float Depth, float2 texCoord)
-{
-	float CenterSampleRadiusInMM = CalculateCenterSampleRadiusInMM(BurleyParameter, Depth, texCoord);
-
-	float DiffuseMeanFreePathForSampling = GetDiffuseMeanFreePathForSampling(BurleyParameter.DiffuseMeanFreePath);
-	float A = GetComponentForScalingFactorEstimation(BurleyParameter.SurfaceAlbedo);
-	float S = GetScalingFactor(A);
-
-	float D = DiffuseMeanFreePathForSampling / S;
-	float CenterSampleRadiusCdf = GetCDF(D.x,CenterSampleRadiusInMM,0);
-
-	return CenterSampleRadiusCdf;
+	float depth = DepthTexture[pixCoord];
+	return SharedData::GetScreenDepth(depth);
 }
 
 void UpdateSeed(int3 Seed3D, inout int StartSeed)
@@ -264,88 +371,44 @@ void UpdateSeed(int3 Seed3D, inout int StartSeed)
 	StartSeed = Rand3DPCG16(int3(Seed3D.xy, StartSeed)).x;
 }
 
-FBurleySampleInfo GenerateSampleInfo(float2 Rand0T1, float DiffuseMeanFreePathForSample, float SpectralForSample, uint SequenceId)
+float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssAmount, bool humanProfile)
 {
-	FBurleySampleInfo BurleySampleInfo;
+    float4 MeanFreePath = humanProfile ? MeanFreePathHuman : MeanFreePathBase;
+	BurleySampleDiffuseNormal CenterSample = SampleSSSColor(texCoord, 0, 0, eyeIndex);
+	float DepthAtDiscCenter = GetDepth(DTid);
+	float3 OriginalColor = CenterSample.DiffuseLighting.xyz;
 
-	// Direct sampling of angle is more efficient and fast in test when the dmfp is small.
-	// However, FIB has better quality when dmfp and world unit scale is large.
-
-
-	//Approximation
-	float FoundRoot = RadiusRootFindByApproximation(DiffuseMeanFreePathForSample / SpectralForSample, Rand0T1.x);
-
-	BurleySampleInfo.RadiusInMM = max(FoundRoot, 0.00001f);
-	
-	// Sample angle
-	BurleySampleInfo.Theta = Rand0T1.y * 2 * Math::PI;
-
-	BurleySampleInfo.CosTheta = cos(BurleySampleInfo.Theta);
-	BurleySampleInfo.SinTheta = sin(BurleySampleInfo.Theta);
-
-	// Estimate Pdf
-	BurleySampleInfo.Pdf = GetPdf(BurleySampleInfo.RadiusInMM, DiffuseMeanFreePathForSample, SpectralForSample);
-
-	return BurleySampleInfo;
-}
-
-float GetDepth(uint2 DTid, float scale)
-{
-	float Depth = DepthTexture[DTid].x;
-	Depth = SharedData::GetScreenDepth(Depth) * scale;
-	return Depth;
-}
-
-float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, float sssAmount, bool humanProfile) {
-    float4 profile = humanProfile ? HumanProfile : BaseProfile;
-	float scale = pow(10, profile.y * 10 - 15);
-	BurleySampleDiffuseNormal CenterSample = SampleSSSColorConsideringLocalShared(texCoord, 0, DTid, 0);
-    float DepthAtDiscCenter = GetDepth(DTid, scale);
-
-    float3 OriginalColor = CenterSample.DiffuseLighting.rgb;
     float4 OutColor = 0;
 
-    [branch] if (sssAmount == 0)
+    [branch] if (sssAmount == 0 || DepthAtDiscCenter <= 0)
 	{
-		return ColorTexture[DTid.xy];
+		return ColorTexture[DTid];
 	}
 
-    const float3 WorldNormal = NormalTexture[DTid.xy].xyz;
-    FBurleyParameter BurleyParameter = (FBurleyParameter)0;
-	BurleyParameter.SurfaceAlbedo = AlbedoTexture[DTid.xy];
-	BurleyParameter.DiffuseMeanFreePath = float4(0.6f, 0.3f, 0.1f, 1.0f);
-	BurleyParameter.WorldUnitScale = 1.0f;
-	BurleyParameter.SurfaceOpacity = sssAmount;
-	float3 debugColor = DepthAtDiscCenter.xxx;
-    float DiffuseMeanFreePathForSampling = GetDiffuseMeanFreePathForSampling(BurleyParameter.DiffuseMeanFreePath);
-	// float A = GetComponentForScalingFactorEstimation(BurleyParameter.SurfaceAlbedo);
-	float A = profile.x;
-	float3 BoundaryColorBleed = GetSubsurfaceProfileBoundaryColorBleed(1).xyz;
+    const float3 ViewNormal = GBuffer::DecodeNormal(NormalTexture[DTid].xy);
+	const float3 WorldNormal = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(ViewNormal, 0)).xyz);
+    const FBurleyParameter BurleyParameter = GetBurleyParameters(DTid.xy, sssAmount, MeanFreePath);
 
-    float S = GetScalingFactor(A);
+	float DiffuseMeanFreePathForSampling = GetDiffuseMeanFreePathForSampling(BurleyParameter.DiffuseMeanFreePath);
+	float A = GetComponentForScalingFactorEstimation(BurleyParameter.SurfaceAlbedo);
+	float3 BoundaryColorBleed = float3(1, 1, 1);
+
+	float S = GetScalingFactor(A);
 	float3 S3D = GetScalingFactor3D(BurleyParameter.SurfaceAlbedo.xyz);
 
-    uint SeedStart = SharedData::FrameCount;
+	int SeedStart = SharedData::FrameCount;
 	float3 WeightingFactor = 0.0f;
 	float4 RadianceAccumulated = float4(0.0f, 0.0f, 0.0f, 1.0f);
 	float Mask = 1.0f;
 	float3 BoundaryColorBleedAccum = float3(0.0f, 0.0f, 0.0f);
 
-    int NumOfSamples = BURLEY_NUM_SAMPLES;
-	float InvNumOfSamples = BURLEY_INV_NUM_SAMPLES;
+	int NumOfSamples = BurleySamples;
+	float InvNumOfSamples = 1.0f / NumOfSamples;
 
-    const int SSSOverrideNumSamples = 8;
-	if (SSSOverrideNumSamples > 0)
-	{
-		NumOfSamples = SSSOverrideNumSamples;
-		InvNumOfSamples = 1.0f / float(SSSOverrideNumSamples);
-	}
+	int3 Seed3D = int3(DTid.xy, 0);
+	UpdateSeed(Seed3D,SeedStart);
 
-	int3 Seed3D = int3(texCoord * SeedStart, 0);
-
-	UpdateSeed(Seed3D, SeedStart);
-
-    float2 BurleyScale = CalculateBurleyScale(BurleyParameter.WorldUnitScale,DepthAtDiscCenter);
+	float2 BurleyScale = CalculateBurleyScale(BurleyParameter.WorldUnitScale, DepthAtDiscCenter);
 
 	/*************************************************************************************
 	 * Center Sample Reweighting
@@ -365,10 +428,12 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, float sssAmount, bool hum
 	 * by (1-T). There shouldn't be any bias, except for small errors due to precision.
 	 **************************************************************************************/
 
-	float CenterSampleRadiusCdf = CalculateCenterSampleCdf(BurleyParameter, DepthAtDiscCenter, texCoord);
-	float3 CenterSampleWeight = CalculateCenterSampleWeight(DepthAtDiscCenter, BurleyParameter, texCoord);
+	float CenterSampleRadiusInMM = CalculateCenterSampleRadiusInMM(BurleyParameter, BurleyScale, SharedData::BufferDim.zw);
+	float CenterSampleRadiusCdf = CalculateCenterSampleCdf(BurleyParameter, CenterSampleRadiusInMM);
+	float3 CenterSampleWeight = CalculateCenterSampleWeight(DepthAtDiscCenter, BurleyParameter);
 
-    for (int i = 0; i < NumOfSamples; ++i)
+	[loop]
+	for (int i = 0; i < NumOfSamples; ++i)
 	{
 		// Step 1: sample generation
 		// Create an 2d disk sampling pattern (we can load from the disk as a texture or buffer).
@@ -380,9 +445,9 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, float sssAmount, bool hum
 		// range [CenterSampleRadiusCdf,1] instead of [0,1]
 		Random0T1.x = CenterSampleRadiusCdf + Random0T1.x*(1.0f - CenterSampleRadiusCdf);
 
-        FBurleySampleInfo BurleySampleInfo = GenerateSampleInfo(Random0T1, DiffuseMeanFreePathForSampling, S, i);
+		FBurleySampleInfo BurleySampleInfo = GenerateSampleInfo(Random0T1, DiffuseMeanFreePathForSampling, S, i);
 
-        // Step 2: get the light radiance and depth at the offset
+		// Step 2: get the light radiance and depth at the offset
 		// and estimate the scale from the random disk sampling space to sceen space.
 		
 		// World unit to screen space unit
@@ -390,62 +455,60 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, float sssAmount, bool hum
 		UVOffset.x *= BurleySampleInfo.CosTheta;
 		UVOffset.y *= BurleySampleInfo.SinTheta;
 
-        // Sampling
+		// Sampling
 		{
-			float2 SampledDiscUV = texCoord + UVOffset;
-			uint2 SampledDTid = uint2(saturate(SampledDiscUV) / SharedData::BufferDim.zw - 0.5f);
+			BurleySampleDiffuseNormal Sample = SampleSSSColor(texCoord, UVOffset, 0, eyeIndex);
+			float DepthAtSample = GetDepth(UVtoPixCoord(texCoord + UVOffset));
 
-			float3 SampledDiffuse = ColorTexture[SampledDTid].xyz;
-			float SampledDepth = GetDepth(SampledDTid, scale);
-			SampledDepth = SharedData::GetScreenDepth(SampledDepth);
-			float4 SampledRadianceAndDepth = float4(SampledDiffuse, SampledDepth);
+			float3 SampleWorldNormal = Sample.WorldNormal;
+			float4 SampledRadianceAndDepth = float4(Sample.DiffuseLighting.rgb, DepthAtSample);
 
-			const float3 SampleWorldNormal = NormalTexture[SampledDTid].xyz;
-
-            // Step 3: Get weight from normal similarity
+			// Step 3: Get weight from normal similarity
 			float NormalWeight = sqrt(saturate(dot(SampleWorldNormal,WorldNormal)*.5f + .5f));
 
-            // Step 4: create the bilateral filtering weighted Distance between entry and exit.
-            // Bring DeltaDepth into the normalized kernal space.
+			// Step 4: create the bilateral filtering weighted Distance between entry and exit.
+			// Bring DeltaDepth into the normalized kernal space.
 			// 
 			// Without the division of world unit scale, we add too much penalty to the sample weight when world unit scale is 
 			// large. E.g., when we have a 1 cm world unit scale (i.e., 1cm is regarded as 1mm), if we get 1mm depth difference, 
 			// it should be treated as 0.1mm instead of 1mm to reduce the weight contribution.
 			float DeltaDepth = (SampledRadianceAndDepth.w - DepthAtDiscCenter) * BURLEY_CM_2_MM / BurleyParameter.WorldUnitScale;
 			float RadiusSampledInMM = sqrt(BurleySampleInfo.RadiusInMM * BurleySampleInfo.RadiusInMM + DeltaDepth * DeltaDepth);
-            BurleySampleInfo.Pdf = GetPdf(RadiusSampledInMM, DiffuseMeanFreePathForSampling, S);
 
 			// Determine the tint color, if the sampling pixel is not subsurface, we use tint color
 			// to mask out the sampling. Unless we specifically want the shadowing region.
-			BoundaryColorBleedAccum += BoundaryColorBleed;
+			Mask = MaskTexture[UVtoPixCoord(texCoord + UVOffset)].x > 0.00001f ? 1.f : 0.f;
+			BoundaryColorBleedAccum += Mask > 0.f ? 1.f : BoundaryColorBleed;
 
 			// Step 4: accumulate radiance from the diffusion profile rR(r)
 			// make sure the DiffuseMeanFreePath is not zero and in mm.
 			float3 DiffusionProfile = GetDiffuseReflectProfileWithDiffuseMeanFreePath(BurleyParameter.DiffuseMeanFreePath.xyz, S3D.xyz, RadiusSampledInMM);
-			float3 SampleWeight = (DiffusionProfile / BurleySampleInfo.Pdf) * NormalWeight;
+			float3 SampleWeight = (DiffusionProfile / BurleySampleInfo.Pdf) * Mask * pow(NormalWeight, 0.1);
 
 			RadianceAccumulated.xyz += SampleWeight * (SampledRadianceAndDepth.xyz);
 
-            WeightingFactor += SampleWeight;
-        }
+			WeightingFactor += SampleWeight;
+		}
 	}
 
-    // 0.99995f is a compensitation to make it energe conservation.
-    RadianceAccumulated.xyz *= 0.99995f;
+	// 0.99995f is a compensitation to make it energe conservation.
+	const float EnergyNormalization = 1.0f / 0.99995f;
 
-    RadianceAccumulated.xyz *= BoundaryColorBleedAccum * InvNumOfSamples;
+	RadianceAccumulated.xyz *= WeightingFactor == 0 ? 0.0 : 1.0f /WeightingFactor*EnergyNormalization;
+
+	RadianceAccumulated.xyz *= BoundaryColorBleedAccum*InvNumOfSamples;
 
 	// Apply lerp with center pixel
 	RadianceAccumulated.xyz = lerp(RadianceAccumulated.xyz,OriginalColor,CenterSampleWeight);
 
-    // The opacity works by reducing the radius based on opacity, but this runs into precision issues with low opacity values.
+	// The opacity works by reducing the radius based on opacity, but this runs into precision issues with low opacity values.
 	// So as the opacity goes to SSSS_OPACITY_THRESHOLD_EPS, we transition to fully disabling SSS by the time we get there.
 	float LowOpacityEps = SSSS_OPACITY_THRESHOLD_EPS;
 
 	float OriginalLerp = saturate((BurleyParameter.SurfaceOpacity - LowOpacityEps) / LowOpacityEps);
 
 	OutColor.xyz = lerp(OriginalColor,RadianceAccumulated.xyz,OriginalLerp);
-	// OutColor.xyz = debugColor;
+	OutColor.xyz = Color::LinearToGamma(OutColor.xyz) * AlbedoTexture[DTid.xy].xyz;
 	OutColor.w = ColorTexture[DTid.xy].w;
 
 	return OutColor;

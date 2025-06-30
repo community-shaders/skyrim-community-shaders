@@ -14,7 +14,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	CharacterLightingStrength,
 	SSMode,
 	BaseProfile,
-	HumanProfile)
+	HumanProfile,
+	BurleySamples,
+	MeanFreePathBase,
+	MeanFreePathHuman)
 
 void SubsurfaceScattering::DrawSettings()
 {
@@ -31,38 +34,53 @@ void SubsurfaceScattering::DrawSettings()
 		ImGui::SameLine();
 		ImGui::RadioButton("Burley", &settings.SSMode, 1);
 
-		if (ImGui::TreeNodeEx("Base Profile", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::SliderFloat("Blur Radius", &settings.BaseProfile.BlurRadius, 0, 3, "%.2f");
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Blur radius.");
+		if (settings.SSMode == 0) {
+			if (ImGui::TreeNodeEx("Base Profile", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::SliderFloat("Blur Radius", &settings.BaseProfile.BlurRadius, 0, 3, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Blur radius.");
+				}
+
+				ImGui::SliderFloat("Thickness", &settings.BaseProfile.Thickness, 0, 3, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Blur radius relative to depth.");
+				}
+
+				updateKernels = updateKernels || ImGui::ColorEdit3("Strength", (float*)&settings.BaseProfile.Strength);
+				updateKernels = updateKernels || ImGui::ColorEdit3("Falloff", (float*)&settings.BaseProfile.Falloff);
+
+				ImGui::TreePop();
 			}
 
-			ImGui::SliderFloat("Thickness", &settings.BaseProfile.Thickness, 0, 3, "%.2f");
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Blur radius relative to depth.");
+			if (ImGui::TreeNodeEx("Human Profile", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::SliderFloat("Blur Radius", &settings.HumanProfile.BlurRadius, 0, 3, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Blur radius.");
+				}
+
+				ImGui::SliderFloat("Thickness", &settings.HumanProfile.Thickness, 0, 3, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Blur radius relative to depth.");
+				}
+
+				updateKernels = updateKernels || ImGui::ColorEdit3("Strength", (float*)&settings.HumanProfile.Strength);
+				updateKernels = updateKernels || ImGui::ColorEdit3("Falloff", (float*)&settings.HumanProfile.Falloff);
+
+				ImGui::TreePop();
+			}
+		} else if (settings.SSMode == 1) {
+			ImGui::SliderFloat("Burley Samples", &settings.BurleySamples, 1.0f, 64.0f, "%.0f", ImGuiSliderFlags_AlwaysClamp);
+			if (ImGui::TreeNodeEx("Base Profile", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::ColorEdit3("Mean Free Path Color", (float*)&settings.MeanFreePathBase);
+				ImGui::SliderFloat("Mean Free Path Distance", &settings.MeanFreePathBase.w, 0.01f, 10.0f, "%.2f");
+				ImGui::TreePop();
 			}
 
-			updateKernels = updateKernels || ImGui::ColorEdit3("Strength", (float*)&settings.BaseProfile.Strength);
-			updateKernels = updateKernels || ImGui::ColorEdit3("Falloff", (float*)&settings.BaseProfile.Falloff);
-
-			ImGui::TreePop();
-		}
-
-		if (ImGui::TreeNodeEx("Human Profile", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::SliderFloat("Blur Radius", &settings.HumanProfile.BlurRadius, 0, 3, "%.2f");
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Blur radius.");
+			if (ImGui::TreeNodeEx("Human Profile", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::ColorEdit3("Mean Free Path Color", (float*)&settings.MeanFreePathHuman);
+				ImGui::SliderFloat("Mean Free Path Distance", &settings.MeanFreePathHuman.w, 0.01f, 10.0f, "%.2f");
+				ImGui::TreePop();
 			}
-
-			ImGui::SliderFloat("Thickness", &settings.HumanProfile.Thickness, 0, 3, "%.2f");
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Blur radius relative to depth.");
-			}
-
-			updateKernels = updateKernels || ImGui::ColorEdit3("Strength", (float*)&settings.HumanProfile.Strength);
-			updateKernels = updateKernels || ImGui::ColorEdit3("Falloff", (float*)&settings.HumanProfile.Falloff);
-
-			ImGui::TreePop();
 		}
 
 		ImGui::Spacing();
@@ -180,10 +198,22 @@ void SubsurfaceScattering::DrawSSS()
 	{
 		auto cameraData = Util::GetCameraData(0);
 
-		blurCBData.SSSS_FOVY = atan(1.0f / cameraData.projMat.m[0][0]) * 2.0f * (180.0f / 3.14159265359f);
+		const float distanceToProjectionWindow = cameraData.projMat.m[0][0];
+
+		blurCBData.SSSS_FOVY = atan(1.0f / distanceToProjectionWindow) * 2.0f * (180.0f / 3.14159265359f);
+		const float SSSScaleZ = distanceToProjectionWindow;
+		const float SSSScaleX = SSSScaleZ * 0.5f;
+
+		blurCBData.SSSScaleX = SSSScaleX;
+		blurCBData.SSSScaleZ = SSSScaleZ;
 
 		blurCBData.BaseProfile = { settings.BaseProfile.BlurRadius, settings.BaseProfile.Thickness, 0, 0 };
 		blurCBData.HumanProfile = { settings.HumanProfile.BlurRadius, settings.HumanProfile.Thickness, 0, 0 };
+
+		blurCBData.BurleySamples = settings.BurleySamples;
+
+		blurCBData.MeanFreePathBase = settings.MeanFreePathBase;
+		blurCBData.MeanFreePathHuman = settings.MeanFreePathHuman;
 
 		blurCB->Update(blurCBData);
 	}

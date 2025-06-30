@@ -102,8 +102,9 @@ float4 SSSSBlurCS(
 	float4 colorM = ColorTexture[DTid.xy];
 
 #if defined(HORIZONTAL)
+	float3 albedo = AlbedoTexture[DTid.xy].rgb;
+	colorM.rgb = colorM.rgb * albedo < 0.0001 ? 0.0 : colorM.rgb / max(albedo, 0.0001);
 	colorM.rgb = Color::GammaToLinear(colorM.rgb);
-	colorM.rgb = colorM.rgb / max(AlbedoTexture[DTid.xy].rgb, 0.0001);
 #endif
 
 	if (sssAmount == 0)
@@ -153,8 +154,9 @@ float4 SSSSBlurCS(
 		float3 color = ColorTexture[coords].rgb;
 
 #if defined(HORIZONTAL)
+		float3 albedo = AlbedoTexture[coords].rgb;
+		color.rgb = color.rgb * albedo < 0.0001 ? 0.0 : color.rgb / max(albedo, 0.0001);
 		color.rgb = Color::GammaToLinear(color.rgb);
-		color.rgb = color.rgb / max(AlbedoTexture[coords].rgb, 0.0001);
 #endif
 
 		float depth = DepthTexture[coords].r;
