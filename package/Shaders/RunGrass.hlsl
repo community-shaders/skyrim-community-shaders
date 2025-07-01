@@ -543,11 +543,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 specularColorPBR = 0;
 	float3 transmissionColor = 0;
-	float3 coatLightsDiffuseColor = 0;  // unused - grass has no coat layer
 #			endif  // TRUE_PBR
 
 	float3 dirLightColor = SharedData::DirLightColor.xyz;
-	float dirLightColorMultiplier = 1;
+	float3 dirLightColorMultiplier = 1;
 
 	float dirLightAngle = dot(normal, SharedData::DirLightDirection.xyz);
 
@@ -580,23 +579,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #			if defined(TRUE_PBR)
 	{
-		PBR::LightProperties lightProperties = PBR::ProcessPBRDirectLight(
-			DirLightColor.xyz,
-			dirLightColorMultiplier * dirShadow,
-			1.0f,  // no parallax shadow - grass doesn't use POM
-			normal,
-			normal,
-			viewDirection,
-			viewDirection,
-			DirLightDirection,
-			DirLightDirection,
-			pbrSurfaceProperties,
-			tbn,
-			input.TexCoord.xy,
-			lightsDiffuseColor,
-			coatLightsDiffuseColor,  // unused - grass has no coat layer
-			transmissionColor,
-			specularColorPBR);
+		PBR::LightProperties lightProperties = PBR::InitLightProperties(SharedData::DirLightColor.xyz, dirLightColorMultiplier * dirShadow, 1);
+		float3 dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor;
+		PBR::GetDirectLightInput(dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor, normal, normal, viewDirection, viewDirection, DirLightDirection, DirLightDirection, lightProperties, pbrSurfaceProperties, tbn, input.TexCoord.xy);
+		lightsDiffuseColor += dirDiffuseColor;
+		transmissionColor += dirTransmissionColor;
+		specularColorPBR += dirSpecularColor;
 	}
 #			else
 	dirLightColor *= dirLightColorMultiplier;
@@ -674,23 +662,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #				if defined(TRUE_PBR)
 				{
-					PBR::LightProperties lightProperties = PBR::ProcessPBRDirectLight(
-						lightColor,
-						lightShadow,
-						1.0f,  // no parallax shadow - grass doesn't use POM
-						normal,
-						normal,
-						viewDirection,
-						viewDirection,
-						normalizedLightDirection,
-						normalizedLightDirection,
-						pbrSurfaceProperties,
-						tbn,
-						input.TexCoord.xy,
-						lightsDiffuseColor,
-						coatLightsDiffuseColor,  // unused - grass has no coat layer
-						transmissionColor,
-						specularColorPBR);
+					PBR::LightProperties lightProperties = PBR::InitLightProperties(lightColor, lightShadow, 1);
+					float3 pointDiffuseColor, coatDirDiffuseColor, pointTransmissionColor, pointSpecularColor;
+					PBR::GetDirectLightInput(pointDiffuseColor, coatDirDiffuseColor, pointTransmissionColor, pointSpecularColor, normal, normal, viewDirection, viewDirection, normalizedLightDirection, normalizedLightDirection, lightProperties, pbrSurfaceProperties, tbn, input.TexCoord.xy);
+					lightsDiffuseColor += pointDiffuseColor;
+					transmissionColor += pointTransmissionColor;
+					specularColorPBR += pointSpecularColor;
 				}
 #				else
 				lightColor *= lightShadow;
