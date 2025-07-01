@@ -38,7 +38,6 @@ void TerrainVariation::DrawSettings()
 				"Applies the tiling fix to LOD terrain objects.\n"
 				"This helps reduce the visible tiling effect on distant terrain.");
 		}
-
 	}
 }
 
