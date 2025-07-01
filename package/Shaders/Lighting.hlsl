@@ -1905,6 +1905,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(LODOBJECTS) || defined(LODOBJECTSHD)
 	baseColor.xyz *= SharedData::lodBlendingSettings.LODObjectBrightness;
 #		elif defined(LODLANDSCAPE)
+	// First apply terrain variation if enabled
+	#			if defined(TERRAIN_VARIATION)
+		if (SharedData::terrainVariationSettings.enableLODTerrainTilingFix) {
+			float2 dx = ddx(uv);
+			float2 dy = ddy(uv);
+			StochasticOffsets lodOffset = ComputeStochasticOffsetsLOD(uv);
+			float4 lodStochasticColor = StochasticSampleLOD(screenNoise, 0, TexColorSampler, SampColorSampler, uv, lodOffset, dx, dy);
+
+			// Apply the stochastic result directly
+			baseColor.xyz = Color::Diffuse(lodStochasticColor.rgb);
+		}
+#			endif
 	baseColor.xyz *= SharedData::lodBlendingSettings.LODTerrainBrightness;
 #		endif
 #	endif  // LOD_BLENDING
@@ -2063,7 +2075,23 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if defined(LOD_LAND_BLEND)
-	float4 lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
+	float4 lodLandColor;
+
+#		if defined(TERRAIN_VARIATION)
+	if (SharedData::terrainVariationSettings.enableLODTerrainTilingFix) {
+		// Apply stochastic sampling to LOD_LAND_BLEND color texture
+		float2 blendColorUV = input.TexCoord0.zw;
+		float2 dx = ddx(blendColorUV);
+		float2 dy = ddy(blendColorUV);
+		StochasticOffsets lodBlendColorOffset = ComputeStochasticOffsetsLOD(blendColorUV);
+		lodLandColor = StochasticSampleLOD(screenNoise, 0, TexLandLodBlend1Sampler, SampLandLodBlend1Sampler, blendColorUV, lodBlendColorOffset, dx, dy);
+	} else {
+		lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
+	}
+#		else
+	lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
+#		endif
+
 #		if defined(LOD_BLENDING)
 	lodLandColor.xyz *= SharedData::lodBlendingSettings.LODTerrainBrightness;
 #		endif  // LOD_BLENDING
