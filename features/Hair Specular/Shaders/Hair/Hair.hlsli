@@ -317,7 +317,7 @@ namespace Hair
 				hitCount++;
 			}
 		}
-		
+
 		if (hitCount > 0) {
 			shadow -= pow(abs((float)hitCount / (float)stepCount), SharedData::hairSpecularSettings.SelfShadowExponent);
 		}
