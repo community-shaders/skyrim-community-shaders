@@ -137,8 +137,8 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	// Take first sample (always needed)
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
 
-	// Calculate smooth transition factor - starts blending at mip 2.5, fully single sample at mip 5.0
-	float mipFactor = saturate((mipLevel - 2.5) / 2.5);
+	// Calculate smooth transition factor - starts blending at mip 3.5, fully single sample at mip 6.0
+	float mipFactor = saturate((mipLevel - 3.5) / 2.5);
 
 	// Early exit for very high mip levels - single sample is sufficient
 	if (mipFactor >= 0.8)
@@ -191,8 +191,8 @@ inline float4 StochasticEffectNoHeight(float rnd, float mipLevel, Texture2D tex,
 	// Take first sample (always needed)
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
 
-	// Calculate smooth transition factor - starts blending at mip 2.5, fully single sample at mip 5.0
-	float mipFactor = saturate((mipLevel - 2.5) / 2.5);
+	// Calculate smooth transition factor - starts blending at mip 3.5, fully single sample at mip 6.0
+	float mipFactor = saturate((mipLevel - 3.5) / 2.5);
 
 	// Early exit for very high mip levels - single sample is sufficient
 	if (mipFactor >= 0.8)
