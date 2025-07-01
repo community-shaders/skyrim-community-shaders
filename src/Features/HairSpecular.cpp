@@ -51,6 +51,11 @@ void HairSpecular::DrawSettings()
 	ImGui::SliderFloat("Transmission", &settings.Transmission, 0.0f, 1.0f, "%.2f");
 	ImGui::Spacing();
 	ImGui::Checkbox("Enable Tangent Shift", (bool*)&settings.EnableTangentShift);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Enables the use of a tangent shift texture to vary specular highlights across hair strands.\n"
+			"Result may vary based on the hair model used.\n"
+		);
+	}
 	if (settings.HairMode == 0) {
 		ImGui::SliderFloat("Primary Specular Tangent Shift", &settings.PrimaryTangentShift, -1.0f, 1.0f, "%.2f");
 		ImGui::SliderFloat("Secondary Specular Tangent Shift", &settings.SecondaryTangentShift, -1.0f, 1.0f, "%.2f");

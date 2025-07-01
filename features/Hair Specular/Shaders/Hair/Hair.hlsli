@@ -219,6 +219,7 @@ namespace Hair
 			GetHairDirectLightScheuermann(dirDiffuse, dirSpecular, T, L, V, N, VN, lightColor, shininess, selfShadow, uv, baseColor);
 		} else {
 			GetHairDirectLightMarschner(dirDiffuse, dirSpecular, T, L, V, N, VN, lightColor, shininess, selfShadow, uv, baseColor);
+			dirDiffuse = Color::LinearToGamma(dirDiffuse);
 			dirSpecular = Color::LinearToGamma(dirSpecular);
 		}
 	}
@@ -243,6 +244,7 @@ namespace Hair
 
 			diffuseLobeWeight = D_Marschner(L, V, T, roughnessPrimary, baseColor, 0.2, 0);
 			diffuseLobeWeight += GetHairDiffuseAttenuationKajiyaKay(T, V, L, 0, baseColor);
+			diffuseLobeWeight = Color::LinearToGamma(diffuseLobeWeight);
 			return;
 		} else {
 			float NdotVshifted = NdotV;
