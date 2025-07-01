@@ -1282,8 +1282,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	// Compute stochastic offsets and derivatives once for all layers (only when terrain variation is enabled)
 #		if defined(TERRAIN_VARIATION)
 			bool useTerrainVariation = SharedData::terrainVariationSettings.enableTilingFix;
-			float2 dx, dy;
-			StochasticOffsets sharedOffset;
+			float2 dx = 0, dy = 0;
+			StochasticOffsets sharedOffset = (StochasticOffsets)0;
 			[branch] if (useTerrainVariation)
 			{
 				dx = ddx(input.TexCoord0.zw);
@@ -1340,9 +1340,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			endif
 		}
 	}
-#		endif  // EMAT
+#		else
 	// Initialize mip levels for non-EMAT case
 	mipLevels[0] = mipLevels[1] = mipLevels[2] = mipLevels[3] = mipLevels[4] = mipLevels[5] = 0.0;
+#		endif  // EMAT
 #	endif      // LANDSCAPE
 
 #	if defined(SPARKLE)

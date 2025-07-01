@@ -45,10 +45,6 @@ namespace ExtendedMaterials
 				textureDims /= 2.0;
 		#endif
 
-		#if !defined(TERRAIN_VARIATION)
-				textureDims /= 2.0;
-		#endif
-
 		#if defined(VR)
 				textureDims /= 2.0;
 		#endif
@@ -67,33 +63,19 @@ namespace ExtendedMaterials
 			// Compute the current mip level  (* 0.5 is effectively computing a square root before )
 			float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
 
-		// Consolidate mipLevel adjustments to avoid stacking issues
-		int mipAdjustment = 0;
-
 		#if !defined(PARALLAX) && !defined(TRUE_PBR)
-			mipAdjustment++;
+				mipLevel++;
 		#endif
 
-		// VR and Terrain Variation adjustments - avoid double increment
-		#if defined(VR) && defined(TERRAIN_VARIATION)
-			[branch] if (SharedData::extendedMaterialSettings.EnableTerrainParallax)
-			{
-				mipAdjustment++; // Single increment for VR + Terrain Parallax
-			}
-			else
-			{
-				mipAdjustment++; // VR only
-			}
-		#elif defined(VR)
-			mipAdjustment++; // VR only
-		#elif defined(TERRAIN_VARIATION)
-			[branch] if (SharedData::extendedMaterialSettings.EnableTerrainParallax)
-			{
-				mipAdjustment++; // Terrain Parallax only
-			}
+		#if defined(VR)
+				mipLevel++;
 		#endif
 
-		return mipLevel + mipAdjustment;
+		#if defined(TERRAIN_VARIATION) && defined(LANDSCAPE)
+			mipLevel ++;
+		#endif
+
+		return mipLevel;
 	}
 
 #if defined(LANDSCAPE)
