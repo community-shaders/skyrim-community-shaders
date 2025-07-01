@@ -50,8 +50,8 @@ public:
 		float Transmission = 1.0f;
 		uint EnableSelfShadow = true;
 		float SelfShadowStrength = 1.0f;
-		float SelfShadowExponent = 1.0f;
-		float SelfShadowScale = 1.0f;
+		float SelfShadowExponent = 0.1f;
+		float SelfShadowScale = 5.0f;
 		uint HairMode = 0; // 0: Kajiya-Kay, 1: Marschner
 		uint pad[3];
 	} settings;
