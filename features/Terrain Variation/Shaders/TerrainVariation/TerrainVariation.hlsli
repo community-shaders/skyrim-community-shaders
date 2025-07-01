@@ -195,7 +195,7 @@ inline float4 StochasticEffectNoHeight(float rnd, float mipLevel, Texture2D tex,
 	float mipFactor = saturate((mipLevel - 3.5) / 2.5);
 
 	// Early exit for very high mip levels - single sample is sufficient
-	if (mipFactor >= 0.8)
+	[branch] if (mipFactor >= 0.8)
 	{
 		return sample1;
 	}

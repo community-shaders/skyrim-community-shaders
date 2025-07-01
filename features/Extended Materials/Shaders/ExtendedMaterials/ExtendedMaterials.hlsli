@@ -108,21 +108,21 @@ namespace ExtendedMaterials
 			weights[i] *= pow(heightBlend, HEIGHT_MULT * heights[i]);
 		}
 
-		[unroll] for (int i = 0; i < 6; i++)
+		[unroll] for (int j = 0; j < 6; j++)
 		{
-			weights[i] = min(100, pow(weights[i], heightBlend));
+			weights[j] = min(100, pow(weights[j], heightBlend));
 		}
 
 		float wsum = 0;
-		[unroll] for (int i = 0; i < 6; i++)
+		[unroll] for (int k = 0; k < 6; k++)
 		{
-			wsum += weights[i];
+			wsum += weights[k];
 		}
 
 		float invwsum = rcp(wsum);
-		[unroll] for (int i = 0; i < 6; i++)
+		[unroll] for (int l = 0; l < 6; l++)
 		{
-			weights[i] *= invwsum;
+			weights[l] *= invwsum;
 		}
 	}
 
