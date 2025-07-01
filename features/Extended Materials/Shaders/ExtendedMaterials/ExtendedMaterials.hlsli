@@ -78,7 +78,7 @@ namespace ExtendedMaterials
 
 		#if defined(TERRAIN_VARIATION) && defined(LANDSCAPE)
 			#if !defined(VR)
-				mipLevel++;
+				mipLevel += 2.0; // Increase mip level to match vanilla appearance since terrain variation tends to be sharper than vanilla.
 			#else
 				// Additional terrain variation penalty already applied above for VR case
 				mipLevel += 0.5;
@@ -564,7 +564,14 @@ namespace ExtendedMaterials
 			if (quality > 0.75)
 				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
 #		endif
+#		if defined(TERRAIN_VARIATION)
+			// Enhance shadow contrast for terrain variation to maintain visual quality
+			float shadowIntensity = saturate(dot(max(0, sh - sh0) / scale, 1.0)) * quality;
+			shadowIntensity = pow(shadowIntensity, 1.15); // Slight contrast boost
+			return pow(1.0 - shadowIntensity, 2.0);
+#		else
 			return pow(1.0 - saturate(dot(max(0, sh - sh0) / scale, 1.0)) * quality, 2.0);
+#		endif
 #	else
 #		if defined(TERRAIN_VARIATION)
 			sh = GetTerrainHeight(noise, input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, heights);
@@ -583,7 +590,14 @@ namespace ExtendedMaterials
 			if (quality > 0.75)
 				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
 #		endif
+#		if defined(TERRAIN_VARIATION)
+			// Enhance shadow contrast for terrain variation to maintain visual quality
+			float shadowIntensity = saturate(dot(max(0, sh - sh0), 1.0)) * quality;
+			shadowIntensity = pow(shadowIntensity, 1.15); // Slight contrast boost
+			return pow(1.0 - shadowIntensity, 2.0);
+#		else
 			return pow(1.0 - saturate(dot(max(0, sh - sh0), 1.0)) * quality, 2.0);
+#		endif
 #	endif
 		}
 		return 1.0;
