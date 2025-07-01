@@ -187,6 +187,12 @@ namespace ExtendedMaterials
 
 		float total;
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, heights, weights, total);
+#		if defined(TERRAIN_VARIATION)
+		// Boost height by 30% when terrain variation is enabled to enhance depth perception
+		[branch] if (SharedData::terrainVariationSettings.enableTilingFix) {
+			total *= 1.3;
+		}
+#		endif
 		return total;	}
 #	else
 	float GetTerrainHeight(float screenNoise, PS_INPUT input, float2 coords, float mipLevels[6], DisplacementParams params[6], float blendFactor, float4 w1, float2 w2,
@@ -303,6 +309,12 @@ namespace ExtendedMaterials
 
 		float total;
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, heights, weights, total);
+#		if defined(TERRAIN_VARIATION)
+		// Boost height by 30% when terrain variation is enabled to enhance depth perception
+		[branch] if (SharedData::terrainVariationSettings.enableTilingFix) {
+			total *= 1.3;
+		}
+#		endif
 		return total;
 	}
 #	endif
@@ -566,9 +578,13 @@ namespace ExtendedMaterials
 #		endif
 #		if defined(TERRAIN_VARIATION)
 			// Enhance shadow contrast for terrain variation to maintain visual quality
-			float shadowIntensity = saturate(dot(max(0, sh - sh0) / scale, 1.0)) * quality;
-			shadowIntensity = pow(shadowIntensity, 1.15); // Slight contrast boost
-			return pow(1.0 - shadowIntensity, 2.0);
+			[branch] if (SharedData::terrainVariationSettings.enableTilingFix) {
+				float shadowIntensity = saturate(dot(max(0, sh - sh0), 1.0)) * quality;
+				shadowIntensity = pow(shadowIntensity, 0.8); // Slight contrast boost
+				return pow(1.0 - shadowIntensity, 2.0);
+			} else {
+				return pow(1.0 - saturate(dot(max(0, sh - sh0), 1.0)) * quality, 2.0);
+			}
 #		else
 			return pow(1.0 - saturate(dot(max(0, sh - sh0) / scale, 1.0)) * quality, 2.0);
 #		endif
@@ -592,9 +608,13 @@ namespace ExtendedMaterials
 #		endif
 #		if defined(TERRAIN_VARIATION)
 			// Enhance shadow contrast for terrain variation to maintain visual quality
-			float shadowIntensity = saturate(dot(max(0, sh - sh0), 1.0)) * quality;
-			shadowIntensity = pow(shadowIntensity, 1.15); // Slight contrast boost
-			return pow(1.0 - shadowIntensity, 2.0);
+			[branch] if (SharedData::terrainVariationSettings.enableTilingFix) {
+				float shadowIntensity = saturate(dot(max(0, sh - sh0), 1.0)) * quality;
+				shadowIntensity = pow(shadowIntensity, 0.8); // Slight contrast boost
+				return pow(1.0 - shadowIntensity, 2.0);
+			} else {
+				return pow(1.0 - saturate(dot(max(0, sh - sh0), 1.0)) * quality, 2.0);
+			}
 #		else
 			return pow(1.0 - saturate(dot(max(0, sh - sh0), 1.0)) * quality, 2.0);
 #		endif
