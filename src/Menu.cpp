@@ -53,11 +53,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ShowDrawCalls,
 	ShowVRAM,
 	ShowFPS,
-	ShowPreFGFrameTime,
 	ShowPreFGFrameTimeGraph,
-	ShowPreFGFPS,
-	ShowPostFGFPS,
-	ShowPostFGFrameTime,
 	ShowPostFGFrameTimeGraph,
 	UpdateInterval,
 	FrameHistorySize,
@@ -1779,13 +1775,8 @@ void Menu::DrawPerfOverlay()
 	}
 
 	// Set window size based on whether graphs are shown, was rapidly changing size based on text
-	perfOverlayState.hasGraphs =
-		(settings.PerfOverlay.ShowPreFGFrameTimeGraph &&
-			(!perfOverlayState.isFrameGenerationActive ||
-				(perfOverlayState.isFrameGenerationActive && settings.PerfOverlay.ShowPreFGFPS))) ||
-		(settings.PerfOverlay.ShowPostFGFrameTimeGraph &&
-			perfOverlayState.isFrameGenerationActive &&
-			settings.PerfOverlay.ShowPostFGFPS);
+	perfOverlayState.hasGraphs = settings.PerfOverlay.ShowPreFGFrameTimeGraph ||
+	                             (settings.PerfOverlay.ShowPostFGFrameTimeGraph && perfOverlayState.isFrameGenerationActive);
 	if (!perfOverlayState.hasGraphs) {
 		float fixedWidth = 325.0f * perfOverlayState.textScale;
 		ImGui::SetNextWindowSize(ImVec2(fixedWidth, 0), ImGuiCond_Always);
@@ -1853,7 +1844,9 @@ void Menu::DrawPerfOverlay()
 
 	// Show Draw Calls if enabled
 	if (settings.PerfOverlay.ShowDrawCalls) {
+		ImGui::Separator();
 		perfOverlayState.DrawDrawCalls();
+		ImGui::Separator();
 	}
 
 	// VRAM & GPU Usage
@@ -2027,34 +2020,27 @@ void Menu::PerfOverlayState::UpdateFGFrameTime(Settings::PerfOverlaySettings& se
  */
 void Menu::PerfOverlayState::DrawFPS(Settings::PerfOverlaySettings& settings)
 {
-	if (isFrameGenerationActive) {
-		if (settings.ShowPostFGFPS) {
-			ImGui::Text("FPS: %.1f", postFGSmoothFps);
+	if (ImGui::BeginTable("FrametimeTargets", 2, ImGuiTableFlags_SizingStretchProp)) {
+		ImGui::TableSetupColumn("##prop", ImGuiTableColumnFlags_WidthFixed, ImGui::GetTextLineHeight() * 5);
+		ImGui::TableSetupColumn("##value");
+
+		ImGui::TableNextColumn();
+		ImGui::Text(isFrameGenerationActive ? "Raw FPS:" : "FPS:");
+		ImGui::TableNextColumn();
+		ImGui::Text("%.1f (%.2f ms)", smoothFps, smoothFrameTimeMs);
+
+		if (isFrameGenerationActive) {
+			ImGui::TableNextColumn();
+			ImGui::Text("Post-FG FPS:");
+			ImGui::TableNextColumn();
+			ImGui::Text("%.1f (%.2f ms)", postFGSmoothFps, postFGSmoothFrameTimeMs);
 		}
 
-		if (settings.ShowPreFGFPS) {
-			ImGui::Text("Pre-FG FPS: %.1f", smoothFps);
-		}
-	} else {
-		ImGui::Text("FPS: %.1f", smoothFps);
-	}
-
-	if (isFrameGenerationActive) {
-		if (settings.ShowPostFGFPS && settings.ShowPostFGFrameTime) {
-			ImGui::Text("Frametime: %.2f ms", postFGSmoothFrameTimeMs);
-		}
-		if (settings.ShowPreFGFPS && settings.ShowPreFGFrameTime) {
-			ImGui::Text("Pre-FG Frametime: %.2f ms", smoothFrameTimeMs);
-		}
-	} else {
-		if (settings.ShowPreFGFrameTime) {
-			ImGui::Text("Frametime: %.2f ms", smoothFrameTimeMs);
-		}
+		ImGui::EndTable();
 	}
 
 	// Show Pre-FG frametime graph if enabled
-	if (settings.ShowPreFGFrameTimeGraph &&
-		(!isFrameGenerationActive || (isFrameGenerationActive && settings.ShowPreFGFPS))) {
+	if (settings.ShowPreFGFrameTimeGraph) {
 		// Prepare overlay text
 		char overlay_text[128];
 		snprintf(overlay_text, IM_ARRAYSIZE(overlay_text),
@@ -2072,7 +2058,7 @@ void Menu::PerfOverlayState::DrawFPS(Settings::PerfOverlaySettings& settings)
 			frameTimeHistoryIndex,
 			overlay_text,
 			smoothedMinFrameTime, smoothedMaxFrameTime,
-			ImVec2(ImGui::GetWindowWidth() * 0.9f, 50.0f * textScale));
+			ImVec2(-FLT_MIN, 50.0f * textScale));
 
 		ImGui::PopStyleColor();
 
@@ -2092,7 +2078,7 @@ void Menu::PerfOverlayState::DrawFPS(Settings::PerfOverlaySettings& settings)
 	}
 
 	// Show Post-FG frametime graph if enabled
-	if (settings.ShowPostFGFrameTimeGraph && isFrameGenerationActive && settings.ShowPostFGFPS) {
+	if (settings.ShowPostFGFrameTimeGraph && isFrameGenerationActive) {
 		DrawPostFGFrameTimeGraph(settings);
 	}
 }
@@ -2150,19 +2136,51 @@ void Menu::PerfOverlayState::DrawPostFGFrameTimeGraph(Settings::PerfOverlaySetti
  */
 void Menu::PerfOverlayState::DrawDrawCalls()
 {
-	ImGui::Text("Draw Calls:");
-	ImGui::Indent();
-	ImGui::Text("Grass: %d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Grass]));
-	ImGui::Text("Sky: %d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Sky]));
-	ImGui::Text("Water: %d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Water]));
-	ImGui::Text("Lighting: %d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Lighting]));
-	ImGui::Text("Effect: %d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Effect]));
-	ImGui::Text("Utility: %d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Utility]));
-	ImGui::Text("Distant Tree: %d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::DistantTree]));
-	ImGui::Text("Particle: %d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Particle]));
-	ImGui::Text("Total: %d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Total]));
+	if (ImGui::BeginTable("Draw Call Table", 2, ImGuiTableFlags_SizingStretchProp, { -FLT_MIN, 0 })) {
+		ImGui::TableSetupColumn("Shader Type", ImGuiTableColumnFlags_WidthFixed, ImGui::GetTextLineHeight() * 5);
+		ImGui::TableSetupColumn("Draw Calls");
 
-	ImGui::Unindent();
+		ImGui::TableHeadersRow();
+
+		ImGui::TableNextColumn();
+		ImGui::Text("Grass:");
+		ImGui::TableNextColumn();
+		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Grass]));
+		ImGui::TableNextColumn();
+		ImGui::Text("Sky:");
+		ImGui::TableNextColumn();
+		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Sky]));
+		ImGui::TableNextColumn();
+		ImGui::Text("Water:");
+		ImGui::TableNextColumn();
+		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Water]));
+		ImGui::TableNextColumn();
+		ImGui::Text("Lighting:");
+		ImGui::TableNextColumn();
+		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Lighting]));
+		ImGui::TableNextColumn();
+		ImGui::Text("Effect:");
+		ImGui::TableNextColumn();
+		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Effect]));
+		ImGui::TableNextColumn();
+		ImGui::Text("Utility:");
+		ImGui::TableNextColumn();
+		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Utility]));
+		ImGui::TableNextColumn();
+		ImGui::Text("Distant Tree:");
+		ImGui::TableNextColumn();
+		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::DistantTree]));
+		ImGui::TableNextColumn();
+		ImGui::Text("Particle:");
+		ImGui::TableNextColumn();
+		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Particle]));
+		ImGui::TableNextColumn();
+		ImGui::Text("Total:");
+		ImGui::TableNextColumn();
+		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Total]));
+
+		ImGui::EndTable();
+	}
 }
 
 /**
@@ -2259,31 +2277,10 @@ void Menu::DrawPerformanceOverlaySettings()
 
 				if (isFrameGenerationActive) {
 					// Pre-Frame Generation FPS
-					if (ImGui::TreeNodeEx("Pre-Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
-						ImGui::Checkbox("Show Pre-FG FPS", &settings.PerfOverlay.ShowPreFGFPS);
-						if (settings.PerfOverlay.ShowPreFGFPS) {
-							ImGui::Indent();
-							ImGui::Checkbox("Show Pre-FG Frametime", &settings.PerfOverlay.ShowPreFGFrameTime);
-							ImGui::Checkbox("Show Pre-FG Frametime Graph", &settings.PerfOverlay.ShowPreFGFrameTimeGraph);
-							ImGui::Unindent();
-						}
-						ImGui::TreePop();
-					}
-
-					// Post-Frame Generation FPS
-					if (ImGui::TreeNodeEx("Post-Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
-						ImGui::Checkbox("Show Post-FG FPS", &settings.PerfOverlay.ShowPostFGFPS);
-						if (settings.PerfOverlay.ShowPostFGFPS) {
-							ImGui::Indent();
-							ImGui::Checkbox("Show Post-FG Frametime", &settings.PerfOverlay.ShowPostFGFrameTime);
-							ImGui::Checkbox("Show Post-FG Frametime Graph", &settings.PerfOverlay.ShowPostFGFrameTimeGraph);
-							ImGui::Unindent();
-						}
-						ImGui::TreePop();
-					}
+					ImGui::Checkbox("Show Pre-FG Frametime Graph", &settings.PerfOverlay.ShowPreFGFrameTimeGraph);
+					ImGui::Checkbox("Show Post-FG Frametime Graph", &settings.PerfOverlay.ShowPostFGFrameTimeGraph);
 				} else {
 					// Regular FPS options when frame generation is not active
-					ImGui::Checkbox("Show Frametime", &settings.PerfOverlay.ShowPreFGFrameTime);
 					ImGui::Checkbox("Show Frametime Graph", &settings.PerfOverlay.ShowPreFGFrameTimeGraph);
 				}
 

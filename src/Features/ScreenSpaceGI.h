@@ -28,15 +28,24 @@ public:
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Screen Space Global Illumination adds realistic indirect lighting and ambient occlusion to the game.\n"
-			"This technique simulates how light bounces off surfaces to illuminate other objects naturally.",
-			{ "Realistic indirect lighting",
+		std::string desc =
+			"Screen Space Global Illumination adds realistic indirect lighting and "
+			"ambient occlusion to the game. This technique simulates how light "
+			"bounces off surfaces to illuminate other objects naturally.";
+		if (REL::Module::IsVR()) {
+			desc +=
+				"\n\nWarning: In VR, this feature may have visual artifacts and "
+				"can have a significant performance impact due to the nature of "
+				"screen space effects.";
+		}
+		return std::make_pair(
+			desc,
+			std::vector<std::string>{
+				"Realistic indirect lighting",
 				"Enhanced ambient occlusion",
 				"Improved visual depth and atmosphere",
 				"Temporal denoising for smooth results",
-				"Configurable quality and performance settings" }
-		};
+				"Configurable quality and performance settings" });
 	}
 
 	virtual void RestoreDefaultSettings() override;
@@ -61,13 +70,13 @@ public:
 
 	struct Settings
 	{
-		bool Enabled = true;
-		bool EnableGI = true;
+		bool Enabled = REL::Module::IsVR() ? false : true;   // disabled in VR by default
+		bool EnableGI = REL::Module::IsVR() ? false : true;  // AO only for VR by default
 		bool EnableExperimentalSpecularGI = false;
 		// performance/quality
-		uint NumSlices = 4;
-		uint NumSteps = 8;
-		int ResolutionMode = 1;  // 0-full, 1-half, 2-quarter
+		uint NumSlices = REL::Module::IsVR() ? 1u : 4u;  // AO preset for VR
+		uint NumSteps = REL::Module::IsVR() ? 6u : 8u;   // AO preset for VR
+		int ResolutionMode = 1;                          // 0-full, 1-half, 2-quarter
 		// visual
 		float MinScreenRadius = 0.01f;
 		float AORadius = 256.f;

@@ -12,6 +12,7 @@
 #include "Features/InteriorSunShadows.h"
 #include "Features/LightLimitFix.h"
 #include "Features/TerrainHelper.h"
+#include "Features/VolumetricLighting.h"
 
 #include "ShaderTools/BSShaderHooks.h"
 
@@ -903,37 +904,6 @@ namespace Hooks
 		RE::BSComputeShader* CurrentlyDispatchedComputeShader = nullptr;
 		uint32_t CurrentComputeShaderTechniqueId = 0;
 
-		RE::BSImagespaceShader* vlGenerateShader = nullptr;
-		RE::BSImagespaceShader* vlRaymarchShader = nullptr;
-
-		RE::BSImagespaceShader* CreateVLShader(const std::string_view& name, const std::string_view& fileName, RE::BSComputeShader* computeShader)
-		{
-			auto shader = RE::BSImagespaceShader::Create();
-			shader->shaderType = RE::BSShader::Type::ImageSpace;
-			shader->fxpFilename = fileName.data();
-			shader->name = name.data();
-			shader->originalShaderName = fileName.data();
-			shader->computeShader = computeShader;
-			shader->isComputeShader = true;
-			return shader;
-		}
-
-		RE::BSImagespaceShader* GetOrCreateVLGenerateShader(RE::BSComputeShader* computeShader)
-		{
-			if (vlGenerateShader == nullptr) {
-				vlGenerateShader = CreateVLShader("BSImagespaceShaderVolumetricLightingGenerateCS", "ISVolumetricLightingGenerateCS", computeShader);
-			}
-			return vlGenerateShader;
-		}
-
-		RE::BSImagespaceShader* GetOrCreateVLRaymarchShader(RE::BSComputeShader* computeShader)
-		{
-			if (vlRaymarchShader == nullptr) {
-				vlRaymarchShader = CreateVLShader("BSImagespaceShaderVolumetricLightingRaymarchCS", "ISVolumetricLightingRaymarchCS", computeShader);
-			}
-			return vlRaymarchShader;
-		}
-
 		struct BSImagespaceShader_DispatchComputeShader
 		{
 			static void thunk(RE::BSImagespaceShader* shader, uint32_t threadGroupCountX, uint32_t threadGroupCountY, uint32_t threadGroupCountZ)
@@ -964,16 +934,28 @@ namespace Hooks
 			{
 				auto state = globals::state;
 				auto shaderCache = globals::shaderCache;
+				auto vl = globals::features::volumetricLighting;
+
 				if (state->enabledClasses[RE::BSShader::Type::ImageSpace]) {
 					RE::BSImagespaceShader* isShader = CurrentlyDispatchedShader;
 					uint32_t techniqueId = CurrentComputeShaderTechniqueId;
 					if (CurrentlyDispatchedShader == nullptr) {
 						techniqueId = 0;
 						if (CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingGenerateCS")) {
-							isShader = GetOrCreateVLGenerateShader(CurrentlyDispatchedComputeShader);
+							isShader = globals::features::volumetricLighting->GetOrCreateGenerateCS(CurrentlyDispatchedComputeShader);
 						} else if (CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingRaymarchCS")) {
-							isShader = GetOrCreateVLRaymarchShader(CurrentlyDispatchedComputeShader);
+							isShader = globals::features::volumetricLighting->GetOrCreateRaymarchCS(CurrentlyDispatchedComputeShader);
 						}
+					} else if (CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingBlurHCS")) {
+						techniqueId = 0;
+						isShader = vl->GetOrCreateBlurHCS(CurrentlyDispatchedComputeShader);
+						vl->SetDimensionsCB();
+						vl->SetGroupCountsHCS(threadGroupCountX);
+					} else if (CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingBlurVCS")) {
+						techniqueId = 0;
+						isShader = vl->GetOrCreateBlurVCS(CurrentlyDispatchedComputeShader);
+						vl->SetDimensionsCB();
+						vl->SetGroupCountsVCS(threadGroupCountY);
 					}
 					if (isShader != nullptr) {
 						if (auto* computeShader = shaderCache->GetComputeShader(*isShader, techniqueId)) {
