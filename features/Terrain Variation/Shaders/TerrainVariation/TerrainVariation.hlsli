@@ -177,7 +177,7 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 }
 
 // Stochastic sampling function without height blending for better performance
-inline float4 StochasticEffectNoHeight(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
+inline float4 StochasticEffectNoHeight(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets)
 {
 	// Check if terrain variation is actually enabled at runtime
 	[branch] if (!SharedData::terrainVariationSettings.enableTilingFix)
