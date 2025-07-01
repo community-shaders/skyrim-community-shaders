@@ -2016,13 +2016,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 screenSpaceNormal = normalize(FrameBuffer::WorldToView(worldSpaceNormal, false, eyeIndex));
 
 #	if defined(HAIR) && defined(CS_HAIR)
-	float3 hairB = normalize(float3(input.TBN0.y, input.TBN1.y, input.TBN2.y));
-	float3 hairT = normalize(float3(input.TBN0.x, input.TBN1.x, input.TBN2.x));
+	float3 Bitangent = normalize(float3(input.TBN0.y, input.TBN1.y, input.TBN2.y));
+	float3 hairT = 0;
 #		if defined(BACK_LIGHTING)
-	hairT = useHairFlowMap ? normalize(mul(tbn, sampledHairFlow)) : Hair::CalculateHairTangent(hairT, hairB, worldSpaceNormal);
+	hairT = useHairFlowMap ? normalize(mul(tbn, sampledHairFlow)) : Bitangent;
 #		else
-	hairT = Hair::CalculateHairTangent(hairT, hairB, worldSpaceNormal);
+	hairT = Bitangent;
 #		endif
+	hairT = Hair::ReorientTangent(hairT, worldSpaceNormal);
 
 	if (SharedData::hairSpecularSettings.Enabled && SharedData::hairSpecularSettings.EnableTangentShift) {
 		float3 shiftedNormal = Hair::ShiftWorldNormal(hairT, worldSpaceNormal, 0, uv);

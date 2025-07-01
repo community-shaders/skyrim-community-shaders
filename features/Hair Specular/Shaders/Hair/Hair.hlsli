@@ -11,11 +11,11 @@ namespace Hair
 {
 	Texture2D<float> TexTangentShift : register(t73);
 
-	float3 CalculateHairTangent(float3 T, float3 B, float3 N)
+	float3 ReorientTangent(float3 T, float3 N)
 	{
-		// TODO: Choose from T or B
-		B = normalize(B - N * dot(B, N));
-		return B;
+		// Reorient tangent to be orthogonal to normal
+		float3 T_reoriented = normalize(T - N * dot(T, N));
+		return T_reoriented;
 	}
 
 	// [Kajiya et al. 1989, "Rendering fur with three dimensional textures."]
