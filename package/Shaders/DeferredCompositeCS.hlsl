@@ -90,7 +90,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 	float glossiness = normalGlossiness.z;
 
-	float3 color = Color::Irradiance(diffuseColor) + specularColor;
+	float3 color = Color::IrradianceToLinear(diffuseColor) + specularColor;
 
 #if defined(DYNAMIC_CUBEMAPS)
 
@@ -114,7 +114,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 		float3 finalIrradiance = 0;
 
 #	if defined(INTERIOR)
-		float3 specularIrradiance = Color::Irradiance(EnvTexture.SampleLevel(LinearSampler, R, level));
+		float3 specularIrradiance = Color::IrradianceToLinear(EnvTexture.SampleLevel(LinearSampler, R, level));
 
 		finalIrradiance += specularIrradiance;
 #	elif defined(SKYLIGHTING)
@@ -132,16 +132,16 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 		float3 specularIrradiance = 1;
 
 		if (skylightingSpecular < 1.0)
-			specularIrradiance = Color::Irradiance(EnvTexture.SampleLevel(LinearSampler, R, level));
+			specularIrradiance = Color::IrradianceToLinear(EnvTexture.SampleLevel(LinearSampler, R, level));
 
 		float3 specularIrradianceReflections = 1.0;
 
 		if (skylightingSpecular > 0.0)
-			specularIrradianceReflections = Color::Irradiance(EnvReflectionsTexture.SampleLevel(LinearSampler, R, level));
+			specularIrradianceReflections = Color::IrradianceToLinear(EnvReflectionsTexture.SampleLevel(LinearSampler, R, level));
 
 		finalIrradiance = lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
 #	else
-		float3 specularIrradianceReflections = Color::Irradiance(EnvReflectionsTexture.SampleLevel(LinearSampler, R, level));
+		float3 specularIrradianceReflections = Color::IrradianceToLinear(EnvReflectionsTexture.SampleLevel(LinearSampler, R, level));
 
 		finalIrradiance += specularIrradianceReflections;
 #	endif
@@ -176,9 +176,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 #endif
 
-	if (!SharedData::linearLightingSettings.enableLinearLighting) {
-		color = Color::LinearToGamma(color);
-	}
+	color = Color::IrradianceToGamma(color);
 
 #if defined(DEBUG)
 

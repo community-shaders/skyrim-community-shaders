@@ -160,13 +160,9 @@ PS_OUTPUT main(PS_INPUT input)
 	if (EyePosition.w != 0 && 1e-5 < snowMask) {
 		ao = min(1, SparklesParameters3.x + ao);
 	}
-	if (!SharedData::linearLightingSettings.enableLinearLighting) {
-		composedColor.xyz = Color::GammaToLinear(composedColor.xyz);
-		composedColor.xyz *= Color::GammaToLinear(ao);
-		composedColor.xyz = Color::LinearToGamma(composedColor.xyz);
-	} else {
-		composedColor.xyz *= ao;
-	}
+	composedColor.xyz = Color::IrradianceToLinear(composedColor.xyz);
+	composedColor.xyz *= Color::IrradianceToLinear(ao);
+	composedColor.xyz = Color::IrradianceToGamma(composedColor.xyz);
 #	endif
 
 	float depth = depthTex.SampleLevel(depthSampler, screenPosition, 0).x;

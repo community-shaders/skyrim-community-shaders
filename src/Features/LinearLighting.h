@@ -38,6 +38,7 @@ struct LinearLighting : Feature
 		float effectGamma = 1.8f;
 		float effectAlphaGamma = 1.8f;
 		float skyGamma = 1.8f;
+		float waterGamma = 1.8f;
 		float vlGamma = 1.8f;
 
 		// Effect multipliers
@@ -46,6 +47,7 @@ struct LinearLighting : Feature
 		float projectedEffectMult = 1.0f;
 		float deferredEffectMult = 1.0f;
 		float otherEffectMult = 1.0f;
+		float pad[3];
 	} settings;
 
 	uint tempDisable = false;

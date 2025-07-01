@@ -12,6 +12,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	effectGamma,
 	effectAlphaGamma,
 	skyGamma,
+	waterGamma,
 	vlGamma,
 	membraneEffectMult,
 	bloodEffectMult,
@@ -32,6 +33,7 @@ void LinearLighting::DrawSettings()
 	ImGui::SliderFloat("Effect Gamma", &settings.effectGamma, 1.0f, 3.0f, "%.2f");
 	ImGui::SliderFloat("Effect Transparency Gamma", &settings.effectAlphaGamma, 1.0f, 3.0f, "%.2f");
 	ImGui::SliderFloat("Sky Gamma", &settings.skyGamma, 1.0f, 3.0f, "%.2f");
+	ImGui::SliderFloat("Water Gamma", &settings.waterGamma, 1.0f, 3.0f, "%.2f");
 	ImGui::SliderFloat("Volumetric Lighting Gamma", &settings.vlGamma, 1.0f, 3.0f, "%.2f");
 
 	ImGui::SeparatorText("Multipliers");
@@ -78,6 +80,7 @@ LinearLighting::Settings LinearLighting::GetCommonBufferData()
 	data.effectGamma = settings.effectGamma;
 	data.effectAlphaGamma = settings.effectAlphaGamma;
 	data.skyGamma = settings.skyGamma;
+	data.waterGamma = settings.waterGamma;
 	data.vlGamma = settings.vlGamma;
 	data.membraneEffectMult = settings.membraneEffectMult;
 	data.bloodEffectMult = settings.bloodEffectMult;

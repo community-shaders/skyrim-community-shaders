@@ -92,6 +92,9 @@ namespace Color
 #	define ENABLE_LL SharedData::linearLightingSettings.enableLinearLighting
 	float3 GammaToLinearLuminancePreservingLight(float3 color)
 	{
+		if (!ENABLE_LL) {
+			return color;
+		}
 		float originalLuminance = RGBToLuminance(color);
 		float3 linearColorRaw = pow(color / originalLuminance, SharedData::linearLightingSettings.lightGamma);
 		float scale = 1.0;
@@ -163,19 +166,34 @@ namespace Color
 		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.skyGamma) : color;
 	}
 
+	float3 Water(float3 color)
+	{
+		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.waterGamma) : color;
+	}
+
 	float3 VolumetricLighting(float3 color)
 	{
 		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.vlGamma) : color;
 	}
 
-	float3 Radiance(float3 color)
+	float3 ColorToLinear(float3 color)
+	{
+		return ENABLE_LL ? GammaToLinear(color) : color;
+	}
+
+	float3 RadianceToLinear(float3 color)
 	{
 		return ENABLE_LL ? color : GammaToLinear(color);
 	}
 
-	float3 Irradiance(float3 color)
+	float3 IrradianceToLinear(float3 color)
 	{
 		return ENABLE_LL ? color : GammaToLinear(color);
+	}
+
+	float3 IrradianceToGamma(float3 color)
+	{
+		return ENABLE_LL ? color : LinearToGamma(color);
 	}
 #endif
 }

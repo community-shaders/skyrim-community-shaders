@@ -203,19 +203,15 @@ PS_OUTPUT main(PS_INPUT input)
 #	ifndef OCCLUSION
 #		ifndef TEXLERP
 	float4 baseColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord0.xy);
-	if (SharedData::linearLightingSettings.enableLinearLighting) {
-		baseColor.xyz = Color::Sky(baseColor.xyz);
-	}
+	baseColor.xyz = Color::Sky(baseColor.xyz);
 #			ifdef TEXFADE
 	baseColor.w *= PParams.x;
 #			endif
 #		else
 	float4 blendColor = TexBlendSampler.Sample(SampBlendSampler, input.TexCoord1.xy);
 	float4 baseColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord0.xy);
-	if (SharedData::linearLightingSettings.enableLinearLighting) {
-		blendColor.xyz = Color::Sky(blendColor.xyz);
-		baseColor.xyz = Color::Sky(baseColor.xyz);
-	}
+	blendColor.xyz = Color::Sky(blendColor.xyz);
+	baseColor.xyz = Color::Sky(baseColor.xyz);
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
 #		endif
 

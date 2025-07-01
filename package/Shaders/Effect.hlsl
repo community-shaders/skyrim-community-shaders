@@ -562,9 +562,9 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(worldPosition));
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 
-		color = Color::GammaToLinear(color);
+		color = Color::IrradianceToLinear(color);
 		color *= skylightingDiffuse;
-		color = Color::LinearToGamma(color);
+		color = Color::IrradianceToGamma(color);
 #		endif
 
 		if (!SharedData::InInterior)
@@ -587,9 +587,9 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 			skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(worldPosition));
 			skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 
-			color = Color::GammaToLinear(color);
+			color = Color::IrradianceToLinear(color);
 			color *= skylightingDiffuse;
-			color = Color::LinearToGamma(color);
+			color = Color::IrradianceToGamma(color);
 		}
 #		endif
 	}

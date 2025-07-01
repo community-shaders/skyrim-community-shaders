@@ -210,9 +210,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Diffuse.w = 0;
 #	else
 	float4 baseColor = TexDiffuse.Sample(SampDiffuse, input.TexCoord.xy);
-	if (SharedData::linearLightingSettings.enableLinearLighting) {
-		baseColor.xyz = Color::GammaToTrueLinear(baseColor.xyz);
-	}
+	baseColor.xyz = Color::Diffuse(baseColor.xyz);
 
 	if ((baseColor.w - AlphaTestRefRS) < 0) {
 		discard;
@@ -232,24 +230,14 @@ PS_OUTPUT main(PS_INPUT input)
 	if (dirShadow != 0.0)
 		dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
-	float3 diffuseColor = 0;
-	if (!SharedData::linearLightingSettings.enableLinearLighting) {
-		diffuseColor = SharedData::DirLightColor.xyz * dirShadow * 0.5;
-	} else {
-		diffuseColor = Color::Light(SharedData::DirLightColor.xyz) * dirShadow * 0.5;
-	}
+	float3 diffuseColor = Color::Light(SharedData::DirLightColor.xyz) * dirShadow * 0.5;
 
 	float3 ddx = ddx_coarse(input.WorldPosition.xyz);
 	float3 ddy = ddy_coarse(input.WorldPosition.xyz);
 	float3 normal = normalize(cross(ddx, ddy));
 
 #			if !defined(SSGI)
-	float3 directionalAmbientColor = 0;
-	if (!SharedData::linearLightingSettings.enableLinearLighting) {
-		directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
-	} else {
-		directionalAmbientColor = max(0, Color::Ambient(mul(SharedData::DirectionalAmbient, float4(normal, 1.0))));
-	}
+	float3 directionalAmbientColor = max(0, Color::Ambient(mul(SharedData::DirectionalAmbient, float4(normal, 1.0))));
 #				if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
@@ -272,23 +260,13 @@ PS_OUTPUT main(PS_INPUT input)
 #		else
 	float dirShadow = ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
-	float3 diffuseColor = 0;
-	if (!SharedData::linearLightingSettings.enableLinearLighting) {
-		diffuseColor = SharedData::DirLightColor.xyz * dirShadow * 0.5;
-	} else {
-		diffuseColor = Color::Light(SharedData::DirLightColor.xyz) * dirShadow * 0.5;
-	}
+	float3 diffuseColor = Color::Light(SharedData::DirLightColor.xyz) * dirShadow * 0.5;
 
 	float3 ddx = ddx_coarse(input.WorldPosition.xyz);
 	float3 ddy = ddy_coarse(input.WorldPosition.xyz);
 	float3 normal = normalize(cross(ddx, ddy));
 
-	float3 directionalAmbientColor = 0;
-	if (!SharedData::linearLightingSettings.enableLinearLighting) {
-		directionalAmbientColor = mul(SharedData::DirectionalAmbient, float4(normal, 1.0));
-	} else {
-		directionalAmbientColor = Color::Ambient(mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
-	}
+	float3 directionalAmbientColor = Color::Ambient(mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
 #			if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
