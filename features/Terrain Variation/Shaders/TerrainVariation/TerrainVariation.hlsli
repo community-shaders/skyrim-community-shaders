@@ -137,11 +137,11 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	// Take first sample (always needed)
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
 
-	// Calculate smooth transition factor - starts blending at mip 3.5, fully single sample at mip 6.0
-	float mipFactor = saturate((mipLevel - 3.5) / 2.5);
+	// Calculate smooth transition factor - starts blending at mip 4.5, fully single sample at mip 7.0
+	float mipFactor = saturate((mipLevel - 5) / 2);
 
 	// Early exit for very high mip levels - single sample is sufficient
-	if (mipFactor >= 0.8)
+	if (mipFactor >= 0.6)
 	{
 		return sample1;
 	}
@@ -172,7 +172,8 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	float4 highQualitySample = sample1 * weights.x + sample2 * weights.y + sample3 * weights.z;
 
 	// Smooth transition between high quality and single sample based on mip level
-	return lerp(highQualitySample, sample1, mipFactor);
+	float smoothFactor = smoothstep(0.0, 1.0, mipFactor);
+	return lerp(highQualitySample, sample1, smoothFactor);
 }
 
 // Stochastic sampling function without height blending for better performance
@@ -191,11 +192,11 @@ inline float4 StochasticEffectNoHeight(float rnd, float mipLevel, Texture2D tex,
 	// Take first sample (always needed)
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
 
-	// Calculate smooth transition factor - starts blending at mip 3.5, fully single sample at mip 6.0
-	float mipFactor = saturate((mipLevel - 3.5) / 2.5);
+	// Calculate smooth transition factor - starts blending at mip 4.5, fully single sample at mip 7.0
+	float mipFactor = saturate((mipLevel - 5) / 2);
 
 	// Early exit for very high mip levels - single sample is sufficient
-	[branch] if (mipFactor >= 0.8)
+	[branch] if (mipFactor >= 0.6)
 	{
 		return sample1;
 	}
@@ -209,7 +210,8 @@ inline float4 StochasticEffectNoHeight(float rnd, float mipLevel, Texture2D tex,
 	float4 blendedSample = sample1 * weights.x + sample2 * weights.y + sample3 * weights.z;
 
 	// Smooth transition between blended and single sample based on mip level
-	return lerp(blendedSample, sample1, mipFactor);
+	float smoothFactor = smoothstep(0.0, 1.0, mipFactor);
+	return lerp(blendedSample, sample1, smoothFactor);
 }
 
 
