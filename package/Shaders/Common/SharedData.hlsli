@@ -164,6 +164,8 @@ namespace SharedData
 		float SelfShadowStrength;
 		float SelfShadowExponent;
 		float SelfShadowScale;
+		uint HairMode;  // 0: Kajiya-Kay, 1: Marschner
+		uint3 pad;
 	};
 
 	struct TerrainVariationSettings

@@ -215,12 +215,12 @@ namespace Hair
 
 	void GetHairDirectLight(out float3 dirDiffuse, out float3 dirSpecular, float3 T, float3 L, float3 V, float3 N, float3 VN, float3 lightColor, float shininess, float selfShadow, float2 uv, float3 baseColor)
 	{
-#ifndef MARSCHNER
-		GetHairDirectLightScheuermann(dirDiffuse, dirSpecular, T, L, V, N, VN, lightColor, shininess, selfShadow, uv, baseColor);
-#else
-		GetHairDirectLightMarschner(dirDiffuse, dirSpecular, T, L, V, N, VN, lightColor, shininess, selfShadow, uv, baseColor);
-		dirSpecular = Color::LinearToGamma(dirSpecular);
-#endif
+		if (SharedData::hairSpecularSettings.HairMode == 0) {
+			GetHairDirectLightScheuermann(dirDiffuse, dirSpecular, T, L, V, N, VN, lightColor, shininess, selfShadow, uv, baseColor);
+		} else {
+			GetHairDirectLightMarschner(dirDiffuse, dirSpecular, T, L, V, N, VN, lightColor, shininess, selfShadow, uv, baseColor);
+			dirSpecular = Color::LinearToGamma(dirSpecular);
+		}
 	}
 
 	void GetHairIndirectSpecularLobeWeights(out float3 diffuseLobeWeight, out float3 specularLobeWeightPrimary, out float3 specularLobeWeightSecondary, float3 T, float3 N, float3 V, float3 VN, float shininess, float2 uv, float3 baseColor)
@@ -229,55 +229,54 @@ namespace Hair
 		const float roughnessSecondary = pow(abs(2.0 / (shininess * 0.5 + 2.0)), 0.25);
 		const float NdotV = saturate(dot(N, V));
 
-#ifdef MARSCHNER
-		specularLobeWeightPrimary = 0;
-		specularLobeWeightSecondary = 0;
-		float3 L = normalize(V - N * dot(V, N));
-		// float NdotL = dot(N, L);
-		// float VdotL = dot(V, L);
+		if (SharedData::hairSpecularSettings.HairMode == 1) {
+			specularLobeWeightPrimary = 0;
+			specularLobeWeightSecondary = 0;
+			float3 L = normalize(V - N * dot(V, N));
+			// float NdotL = dot(N, L);
+			// float VdotL = dot(V, L);
 
-		if (SharedData::hairSpecularSettings.EnableTangentShift) {
-			const float shift = TexTangentShift.SampleLevel(SampColorSampler, uv, 0).x - 0.5;
-			T = ShiftTangent(T, N, shift);
+			if (SharedData::hairSpecularSettings.EnableTangentShift) {
+				const float shift = TexTangentShift.SampleLevel(SampColorSampler, uv, 0).x - 0.5;
+				T = ShiftTangent(T, N, shift);
+			}
+
+			diffuseLobeWeight = D_Marschner(L, V, T, roughnessPrimary, baseColor, 0.2, 0);
+			diffuseLobeWeight += GetHairDiffuseAttenuationKajiyaKay(T, V, L, 0, baseColor);
+			return;
+		} else {
+			float NdotVshifted = NdotV;
+			float NdotVshifted2 = NdotV;
+
+			if (SharedData::hairSpecularSettings.EnableTangentShift) {
+				const float shift = TexTangentShift.SampleLevel(SampColorSampler, uv, 0).x - 0.5;
+				NdotVshifted = saturate(dot(ShiftNormal(T, N, shift + SharedData::hairSpecularSettings.PrimaryTangentShift), V));
+				NdotVshifted2 = saturate(dot(ShiftNormal(T, N, shift + SharedData::hairSpecularSettings.SecondaryTangentShift), V));
+			}
+
+			diffuseLobeWeight = baseColor;
+			specularLobeWeightPrimary = 0;
+			specularLobeWeightSecondary = 0;
+
+			const float2 specularBRDFPrimary = BRDF::EnvBRDFApproxLazarov(roughnessPrimary, NdotVshifted);
+			const float2 specularBRDFSecondary = BRDF::EnvBRDFApproxLazarov(roughnessSecondary, NdotVshifted2);
+
+			const float3 F0 = HairF0();
+			specularLobeWeightPrimary = F0 * specularBRDFPrimary.x + specularBRDFPrimary.y;
+			diffuseLobeWeight *= (1 - specularLobeWeightPrimary);
+			diffuseLobeWeight = saturate(diffuseLobeWeight);
+			specularLobeWeightPrimary *= 1 + F0 * (1 / (specularBRDFPrimary.x + specularBRDFPrimary.y) - 1);
+
+			specularLobeWeightSecondary = F0 * specularBRDFSecondary.x + specularBRDFSecondary.y;
+			specularLobeWeightSecondary *= 1 + F0 * (1 / (specularBRDFSecondary.x + specularBRDFSecondary.y) - 1);
+			specularLobeWeightSecondary *= baseColor;
+
+			float3 R = reflect(-V, N);
+			float horizon = min(1.0 + dot(R, VN), 1.0);
+			horizon = horizon * horizon;
+			specularLobeWeightPrimary *= horizon;
+			specularLobeWeightSecondary *= horizon;
 		}
-
-		diffuseLobeWeight = D_Marschner(L, V, T, roughnessPrimary, baseColor, 0.2, 0);
-		diffuseLobeWeight += GetHairDiffuseAttenuationKajiyaKay(T, V, L, 0, baseColor);
-		return;
-#else
-
-		float NdotVshifted = NdotV;
-		float NdotVshifted2 = NdotV;
-
-		if (SharedData::hairSpecularSettings.EnableTangentShift) {
-			const float shift = TexTangentShift.SampleLevel(SampColorSampler, uv, 0).x - 0.5;
-			NdotVshifted = saturate(dot(ShiftNormal(T, N, shift + SharedData::hairSpecularSettings.PrimaryTangentShift), V));
-			NdotVshifted2 = saturate(dot(ShiftNormal(T, N, shift + SharedData::hairSpecularSettings.SecondaryTangentShift), V));
-		}
-
-		diffuseLobeWeight = baseColor;
-		specularLobeWeightPrimary = 0;
-		specularLobeWeightSecondary = 0;
-
-		const float2 specularBRDFPrimary = BRDF::EnvBRDFApproxLazarov(roughnessPrimary, NdotVshifted);
-		const float2 specularBRDFSecondary = BRDF::EnvBRDFApproxLazarov(roughnessSecondary, NdotVshifted2);
-
-		const float3 F0 = HairF0();
-		specularLobeWeightPrimary = F0 * specularBRDFPrimary.x + specularBRDFPrimary.y;
-		diffuseLobeWeight *= (1 - specularLobeWeightPrimary);
-		diffuseLobeWeight = saturate(diffuseLobeWeight);
-		specularLobeWeightPrimary *= 1 + F0 * (1 / (specularBRDFPrimary.x + specularBRDFPrimary.y) - 1);
-
-		specularLobeWeightSecondary = F0 * specularBRDFSecondary.x + specularBRDFSecondary.y;
-		specularLobeWeightSecondary *= 1 + F0 * (1 / (specularBRDFSecondary.x + specularBRDFSecondary.y) - 1);
-		specularLobeWeightSecondary *= baseColor;
-
-		float3 R = reflect(-V, N);
-		float horizon = min(1.0 + dot(R, VN), 1.0);
-		horizon = horizon * horizon;
-		specularLobeWeightPrimary *= horizon;
-		specularLobeWeightSecondary *= horizon;
-#endif
 	}
 
 	float3 Saturation(float3 color, float saturation)

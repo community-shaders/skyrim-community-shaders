@@ -52,6 +52,8 @@ public:
 		float SelfShadowStrength = 1.0f;
 		float SelfShadowExponent = 1.0f;
 		float SelfShadowScale = 1.0f;
+		uint HairMode = 0; // 0: Kajiya-Kay, 1: Marschner
+		uint pad[3];
 	} settings;
 
 	eastl::unique_ptr<Texture2D> texTangentShift = nullptr;
