@@ -21,8 +21,7 @@ void TerrainVariation::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
 			"Reduces the repeating pattern effect on terrain textures.\n"
-			"This technique creates more natural-looking terrain by adding variation to texture sampling.\n"
-			"Stochastic texturing is applied only when parallax effects are not active (beyond 2048 units from camera).");
+			"This technique creates more natural-looking terrain by adding variation to texture sampling.");
 	}
 	if (settings.enableTilingFix) {
 		ImGui::Separator();
