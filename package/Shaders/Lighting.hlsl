@@ -1340,6 +1340,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			endif
 		}
 	}
+
 #		if defined(TERRAIN_VARIATION)
 	else if (useTerrainVariation) {
 		// Calculate proper mip levels for terrain variation when parallax is disabled but EMAT is available
