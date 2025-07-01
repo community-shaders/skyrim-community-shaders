@@ -68,11 +68,21 @@ namespace ExtendedMaterials
 		#endif
 
 		#if defined(VR)
+			#if defined(TERRAIN_VARIATION) && defined(LANDSCAPE)
+				// Reduce VR mip level penalty when terrain variation is active to prevent over-blurring
+				mipLevel += 0.5;
+			#else
 				mipLevel++;
+			#endif
 		#endif
 
 		#if defined(TERRAIN_VARIATION) && defined(LANDSCAPE)
-			mipLevel ++;
+			#if !defined(VR)
+				mipLevel++;
+			#else
+				// Additional terrain variation penalty already applied above for VR case
+				mipLevel += 0.5;
+			#endif
 		#endif
 
 		return mipLevel;
