@@ -778,8 +778,8 @@ void Deferred::Hooks::Main_RenderWorld_Start::thunk(RE::BSBatchRenderer* This, u
 void Deferred::RenderBlendedDecals()
 {
 	if (!globals::state->blendedDecalRenderPasses.empty()) {
-		globals::game::shadowState->GetRuntimeData().alphaBlendWriteMode = 1;
-		globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_ALPHA_BLEND);
+		auto& runtimeData = globals::game::shadowState->GetRuntimeData();
+		runtimeData.rasterStateDepthBiasMode = 10;
 
 		for (auto& renderPass : globals::state->blendedDecalRenderPasses)
 			::Hooks::BSBatchRenderer_RenderPassImmediately1::func(renderPass.a_pass, renderPass.a_technique, renderPass.a_alphaTest, renderPass.a_renderFlags);
