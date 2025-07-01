@@ -1339,9 +1339,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			endif
 		}
 	}
-#		endif  // EMAT
+#		else
 	// Initialize mip levels for non-EMAT case
 	mipLevels[0] = mipLevels[1] = mipLevels[2] = mipLevels[3] = mipLevels[4] = mipLevels[5] = 0.0;
+#		endif  // EMAT
 #	endif      // LANDSCAPE
 
 #	if defined(SPARKLE)
