@@ -39,14 +39,6 @@ void TerrainVariation::DrawSettings()
 				"This helps reduce the visible tiling effect on distant terrain.");
 		}
 
-		ImGui::Separator();
-
-		bool paramsChanged = false;
-
-		if (paramsChanged) {
-			UpdateShaderSettings();
-			logger::info("TerrainVariation parameters updated");
-		}
 	}
 }
 

@@ -164,8 +164,8 @@ namespace SharedData
 
 	struct TerrainVariationSettings
 	{
-		bool enableTilingFix;
-		bool enableLODTerrainTilingFix;
+		uint enableTilingFix;
+		uint enableLODTerrainTilingFix;
 		float2 pad0;
 	};
 
