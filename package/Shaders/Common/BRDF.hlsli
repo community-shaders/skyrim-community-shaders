@@ -145,7 +145,7 @@ namespace BRDF
         float a2 = a * a;
         float Vis_SmithV = NdotV + sqrt(a2 + (1.0 - a2) * NdotV * NdotV);
         float Vis_SmithL = NdotL + sqrt(a2 + (1.0 - a2) * NdotL * NdotL);
-        return rcp(Vis_SmithV * Vis_SmithL);
+        return rcp(max(Vis_SmithV * Vis_SmithL, 1e-6f));
     }
 
     // Appoximation of joint Smith term for GGX
@@ -155,7 +155,7 @@ namespace BRDF
         float a = roughness * roughness;
         float Vis_SmithV = NdotL * (NdotV * (1.0 + a) + a);
         float Vis_SmithL = NdotV * (NdotL * (1.0 + a) + a);
-        return rcp(Vis_SmithV + Vis_SmithL) * 0.5;
+        return rcp(max(Vis_SmithV + Vis_SmithL, 1e-6f)) * 0.5;
     }
 
     float Vis_SmithJoint(float roughness, float NdotV, float NdotL)
@@ -164,14 +164,14 @@ namespace BRDF
         float a2 = a * a;
         float Vis_SmithV = NdotL * sqrt(a2 + (1.0 - a2) * NdotV * NdotV);
         float Vis_SmithL = NdotV * sqrt(a2 + (1.0 - a2) * NdotL * NdotL);
-        return rcp(Vis_SmithV + Vis_SmithL) * 0.5;
+        return rcp(max(Vis_SmithV + Vis_SmithL, 1e-6f)) * 0.5;
     }
 
     float Vis_SmithJointAniso(float alphaX, float alphaY, float NdotL, float NdotV, float XdotL, float YdotL, float XdotV, float YdotV)
     {
         float Vis_SmithV = NdotL * length(float3(alphaX * XdotV, alphaY * YdotV, NdotV));
         float Vis_SmithL = NdotV * length(float3(alphaX * XdotL, alphaY * YdotL, NdotL));
-        return rcp(Vis_SmithV + Vis_SmithL) * 0.5;
+        return rcp(max(Vis_SmithV + Vis_SmithL, 1e-6f)) * 0.5;
     }
 
     // [Estevez and Kulla 2017, "Production Friendly Microfacet Sheen BRDF"]
@@ -192,13 +192,13 @@ namespace BRDF
     {
         float visV = NdotV < 0.5 ? exp(Vis_Charlie_L(NdotV, roughness)) : exp(2.0 * Vis_Charlie_L(0.5, roughness) - Vis_Charlie_L(1.0 - NdotV, roughness));
         float visL = NdotL < 0.5 ? exp(Vis_Charlie_L(NdotL, roughness)) : exp(2.0 * Vis_Charlie_L(0.5, roughness) - Vis_Charlie_L(1.0 - NdotL, roughness));
-        return rcp(((1.0 + visV + visL) * (4.0 * NdotL * NdotV)));
+        return rcp(((1.0 + visV + visL) * max(4.0 * NdotL * NdotV, 1e-6f)));
     }
 
     // [Neubelt et al. 2013, "Crafting a Next-gen Material Pipeline for The Order: 1886"]
     float Vis_Neubelt(float NdotV, float NdotL)
     {
-        return rcp(4.0 * (NdotL + NdotV - NdotL * NdotV));
+        return rcp(4.0 * max(NdotL + NdotV - NdotL * NdotV, 1e-6f));
     }
 
     // [Lazarov 2013, "Getting More Physical in Call of Duty: Black Ops II"]
