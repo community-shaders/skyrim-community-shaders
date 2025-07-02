@@ -2,10 +2,10 @@
 #define __HAIR_DEPENDENCY_HLSL__
 
 #include "Common/BRDF.hlsli"
+#include "Common/Game.hlsli"
 #include "Common/Math.hlsli"
 
 #define HAIR_LIGHTING_MULTIPLIER Math::PI  // Compensating to adapt to vanilla lighting model
-#define GAME_UNIT_TO_CM 1.428f
 
 namespace Hair
 {
