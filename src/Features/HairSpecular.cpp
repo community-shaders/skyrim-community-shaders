@@ -32,7 +32,8 @@ void HairSpecular::DrawSettings()
 			"Kajiya-Kay is an empirical model that simulates hair specular highlights.\n"
 			"Marschner is a more physically-based model that simulates hair light interaction.\n"
 			"Both models are anisotropic and support tangent-based shading.\n"
-			"Note that colors in Marschner mode may appear darker and more saturated.\n");
+			"Note that colors in Marschner mode may appear darker and more saturated.\n"
+			"Also, without self-shadowing enabled, Marschner mode may look overly bright because of transmission.\n");
 	}
 	ImGui::Spacing();
 	ImGui::SliderFloat("Glossiness", &settings.HairGlossiness, 0.0f, settings.HairMode == 0 ? 256.0f : 100.0f, "%.0f");
@@ -65,7 +66,7 @@ void HairSpecular::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
 			"Enables screen-space self-shadowing for hair.\n"
-			"Marschner hair model requires this to be enabled for proper self-shadowing.\n");
+			"Marschner hair model might have overly bright transmission without self-shadowing.\n");
 	}
 	ImGui::SliderFloat("Self Shadow Strength", &settings.SelfShadowStrength, 0.0f, 1.0f, "%.2f");
 	ImGui::SliderFloat("Self Shadow Exponent", &settings.SelfShadowExponent, 0.0f, 10.0f, "%.2f");

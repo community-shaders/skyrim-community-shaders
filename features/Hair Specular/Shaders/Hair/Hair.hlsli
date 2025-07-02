@@ -197,7 +197,6 @@ namespace Hair
 		lightColor *= HAIR_LIGHTING_MULTIPLIER * selfShadow;
 		dirDiffuse = 0;
 		dirSpecular = 0;
-		// const float roughness = pow(abs(2.0 / (shininess + 2.0)), 0.25);
 		const float roughness = 1 - saturate(shininess * 0.01);
 
 		if (SharedData::hairSpecularSettings.EnableTangentShift) {
