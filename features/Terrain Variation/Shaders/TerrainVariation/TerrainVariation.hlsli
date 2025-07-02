@@ -140,7 +140,6 @@ inline float4 StochasticSampleLOD(float rnd, float mipLevel, Texture2D tex, Samp
 // Main stochastic sampling function
 inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
 {
-
 	// Apply mip bias to match normal sampling behavior
 	float adjustedMipLevel = mipLevel + SharedData::MipBias;
 
@@ -190,15 +189,14 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 // Stochastic sampling function without height blending for better performance
 inline float4 StochasticEffectNoHeight(float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets)
 {
-	// Check if terrain variation is actually enabled at runtime
-	[branch] if (!SharedData::terrainVariationSettings.enableTilingFix)
-	{
-		// Fall back to regular sampling when terrain variation is disabled
-		return tex.SampleLevel(samp, uv, mipLevel + SharedData::MipBias);
-	}
-
 	// Apply mip bias to match normal sampling behavior
 	float adjustedMipLevel = mipLevel + SharedData::MipBias;
+	
+	// Early exit for disabled terrain variation - avoid all other computations
+	if (!SharedData::terrainVariationSettings.enableTilingFix)
+	{
+		return tex.SampleLevel(samp, uv, adjustedMipLevel);
+	}
 
 	// Take first sample (always needed)
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
