@@ -35,6 +35,11 @@ struct StochasticOffsets
 	float3 weights;
 };
 
+// --------------------- FUNCTION DECLARATIONS --------------------- //
+float4 StochasticSampleLOD(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsetsLOD, float2 dx, float2 dy);
+float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy);
+float4 StochasticEffectNoHeight(float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets);
+
 // --------------------- COMPUTE FUNCTIONS --------------------- //
 
 // Hash function for stochastic sampling
