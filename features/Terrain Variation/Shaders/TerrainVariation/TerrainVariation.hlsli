@@ -191,7 +191,7 @@ inline float4 StochasticEffectNoHeight(float mipLevel, Texture2D tex, SamplerSta
 {
 	// Apply mip bias to match normal sampling behavior
 	float adjustedMipLevel = mipLevel + SharedData::MipBias;
-	
+
 	// Early exit for disabled terrain variation - avoid all other computations
 	if (!SharedData::terrainVariationSettings.enableTilingFix)
 	{
