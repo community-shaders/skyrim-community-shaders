@@ -216,7 +216,7 @@ namespace PBR
 
 		const float3 Lp = L - NdotL * N;
 		const float3 Vp = V - NdotL * N;
-		const float cosPhi = dot(Lp, Vp) * rsqrt(dot(Lp, Lp) * dot(Vp, Vp) + 1e-4);
+		const float cosPhi = dot(Lp, Vp) * rsqrt(dot(Lp, Lp) * dot(Vp, Vp) + EPSILON_DIVISION);
 		const float cosHalfPhi = sqrt(saturate(0.5 + 0.5 * cosPhi));
 
 		float n_prime = 1.19 / cosThetaD + 0.36 * cosThetaD;
@@ -309,8 +309,8 @@ namespace PBR
 		float NdotH = dot(N, H);
 		float VdotH = dot(V, H);
 
-		float satNdotL = clamp(NdotL, 1e-5, 1);
-		float satNdotV = saturate(abs(NdotV) + 1e-5);
+		float satNdotL = clamp(NdotL, EPSILON_DOT_CLAMP, 1);
+		float satNdotV = saturate(abs(NdotV) + EPSILON_DOT_CLAMP);
 		float satVdotL = saturate(VdotL);
 		float satNdotH = saturate(NdotH);
 		float satVdotH = saturate(VdotH);
@@ -364,8 +364,8 @@ namespace PBR
 				float coatVdotH = satVdotH;
 				[branch] if ((PBRFlags & Flags::CoatNormal) != 0)
 				{
-					coatNdotL = clamp(dot(coatN, coatL), 1e-5, 1);
-					coatNdotV = saturate(abs(dot(coatN, coatV)) + 1e-5);
+					coatNdotL = clamp(dot(coatN, coatL), EPSILON_DOT_CLAMP, 1);
+					coatNdotV = saturate(abs(dot(coatN, coatV)) + EPSILON_DOT_CLAMP);
 					coatNdotH = saturate(dot(coatN, coatH));
 					coatVdotH = saturate(dot(coatV, coatH));
 				}
@@ -390,8 +390,8 @@ namespace PBR
 		const float wetnessF0 = 0.02;
 
 		float3 H = normalize(V + L);
-		float NdotL = clamp(dot(N, L), 1e-5, 1);
-		float NdotV = saturate(abs(dot(N, V)) + 1e-5);
+		float NdotL = clamp(dot(N, L), EPSILON_DOT_CLAMP, 1);
+		float NdotV = saturate(abs(dot(N, V)) + EPSILON_DOT_CLAMP);
 		float NdotH = saturate(dot(N, H));
 		float VdotH = saturate(dot(V, H));
 
@@ -483,7 +483,7 @@ namespace PBR
 		const float wetnessStrength = 1;
 		const float wetnessF0 = 0.02;
 
-		float NdotV = saturate(abs(dot(N, V)) + 1e-5);
+		float NdotV = saturate(abs(dot(N, V)) + EPSILON_DOT_CLAMP);
 		float2 specularBRDF = BRDF::EnvBRDFApproxLazarov(roughness, NdotV);
 		float3 specularLobeWeight = wetnessF0 * specularBRDF.x + specularBRDF.y;
 

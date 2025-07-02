@@ -96,7 +96,7 @@ namespace Hair
 
 		const float3 Lp = L - NdotL * N;
 		const float3 Vp = V - NdotL * N;
-		const float cosPhi = dot(Lp, Vp) * rsqrt(dot(Lp, Lp) * dot(Vp, Vp) + 1e-4);
+		const float cosPhi = dot(Lp, Vp) * rsqrt(dot(Lp, Lp) * dot(Vp, Vp) + EPSILON_DIVISION);
 		const float cosHalfPhi = sqrt(saturate(0.5 + 0.5 * cosPhi));
 
 		float n_prime = 1.19 / cosThetaD + 0.36 * cosThetaD;

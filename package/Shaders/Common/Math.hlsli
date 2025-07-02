@@ -1,6 +1,9 @@
 #ifndef __MATH_DEPENDENCY_HLSL__
 #define __MATH_DEPENDENCY_HLSL__
 
+#define EPSILON_DOT_CLAMP 1e-5f  // For dot product clamping
+#define EPSILON_DIVISION  1e-6f	 // For division to avoid division by zero
+
 namespace Math
 {
 	static const float4x4 IdentityMatrix = {
