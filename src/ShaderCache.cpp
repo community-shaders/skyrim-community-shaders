@@ -1923,16 +1923,12 @@ namespace SIE
 			const auto& filePathString = Util::WStringToString(filePath);
 			{
 				std::scoped_lock lockD{ compilationSet.compilationMutex };
-				try {
-					bool removed = std::filesystem::remove(filePath);
-					if (!removed) {
-						logger::warn("Failed to delete file {}", filePathString);
-					} else {
-						logger::debug("Deleted {}", filePathString);
-					}
-				} catch (const std::exception& e) {
-					logger::warn("Expected to delete {}, but ran into exception: {}", filePathString, e.what());
-				}
+				std::error_code ec; // Use the error_code overload to avoid exceptions for non-critical errors like the file not existing.
+				if (const bool removed = std::filesystem::remove(filePath, ec); ec) {
+					logger::warn("Error while trying to delete {}: {}", filePathString, ec.message());
+				} else if (removed) {
+					logger::debug("Deleted {}", filePathString);
+				} // If !removed and no error, the file didn't exist, which is fine.
 			}
 
 			logger::debug("Marking recompile for shader: {}", entry.key);
