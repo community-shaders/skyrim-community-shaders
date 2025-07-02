@@ -23,20 +23,19 @@ void TerrainVariation::DrawSettings()
 			"Reduces the repeating pattern effect on terrain textures.\n"
 			"This technique creates more natural-looking terrain by adding variation to texture sampling.");
 	}
-	if (settings.enableTilingFix) {
-		ImGui::Separator();
 
-		bool oldLODEnabled = settings.enableLODTerrainTilingFix;
-		ImGui::Checkbox("Apply to LOD Terrain", (bool*)&settings.enableLODTerrainTilingFix);
-		if (oldLODEnabled != (bool)settings.enableLODTerrainTilingFix) {
-			UpdateShaderSettings();
-			logger::info("TerrainVariation LOD setting changed to: {}", settings.enableLODTerrainTilingFix);
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Applies the tiling fix to LOD terrain objects.\n"
-				"This helps reduce the visible tiling effect on distant terrain.");
-		}
+	ImGui::Separator();
+
+	bool oldLODEnabled = settings.enableLODTerrainTilingFix;
+	ImGui::Checkbox("Apply to LOD Terrain", (bool*)&settings.enableLODTerrainTilingFix);
+	if (oldLODEnabled != (bool)settings.enableLODTerrainTilingFix) {
+		UpdateShaderSettings();
+		logger::info("TerrainVariation LOD setting changed to: {}", settings.enableLODTerrainTilingFix);
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text(
+			"Applies the tiling fix to LOD terrain objects.\n"
+			"This helps reduce the visible tiling effect on distant terrain.");
 	}
 }
 
