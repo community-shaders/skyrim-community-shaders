@@ -1282,8 +1282,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	// Compute stochastic offsets and derivatives once for all layers (only when terrain variation is enabled)
 #		if defined(TERRAIN_VARIATION)
 			bool useTerrainVariation = SharedData::terrainVariationSettings.enableTilingFix;
+			// Initialise dx, dy, and sharedOffset for when Terrain Variation is disabled via enableTilingFix but still #defined
 			float2 dx = 0, dy = 0;
-			StochasticOffsets sharedOffset = (StochasticOffsets)0;
+			StochasticOffsets sharedOffset;
+			sharedOffset.offset1 = float2(0, 0);
+			sharedOffset.offset2 = float2(0, 0);
+			sharedOffset.offset3 = float2(0, 0);
+			sharedOffset.weights = float3(0, 0, 0);
 			[branch] if (useTerrainVariation)
 			{
 				dx = ddx(input.TexCoord0.zw);
