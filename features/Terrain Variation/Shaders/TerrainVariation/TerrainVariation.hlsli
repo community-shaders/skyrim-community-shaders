@@ -23,8 +23,8 @@ static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
 static const float2 HASH_SINE_MULTIPLIER = float2(43758.5453, 28637.1369);
 // Mip level transition thresholds - DO NOT CHANGE THESE VALUES.
 static const float MIP_BLEND_START = 5.0;         // Mip level where blending starts transitioning to single sample
-static const float MIP_BLEND_RANGE = 2.0;         // Range over which blending transitions to single sample
-static const float MIP_EARLY_EXIT_THRESHOLD = 0.6; // Threshold for early exit to single sample optimization
+static const float MIP_BLEND_RANGE = 1.5;         // Range over which blending transitions to single sample (5.0 to 6.5)
+static const float MIP_EARLY_EXIT_THRESHOLD = 1.0; // Threshold for early exit to single sample optimization
 
 // Structure to hold stochastic sampling offsets and weights
 struct StochasticOffsets
@@ -52,7 +52,8 @@ inline float2 hashLOD(float2 p)
 
 inline float3 NormalizeWeights(float3 weights)
 {
-	float rcpWeightSum = rcp(weights.x + weights.y + weights.z);
+	float weightSum = weights.x + weights.y + weights.z;
+	float rcpWeightSum = rcp(max(weightSum, 1e-6));
 	return weights * rcpWeightSum;
 }
 
@@ -141,13 +142,14 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	// Take first sample (always needed)
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
 
-	// Calculate smooth transition factor - starts blending at mip 5.0, fully single sample at mip 7.0
+	// Calculate smooth transition factor - starts at mip 5.0, early exit at mip 6.5
 	float mipFactor = saturate((mipLevel - MIP_BLEND_START) / MIP_BLEND_RANGE);
 
-	// Early exit for very high mip levels - single sample is sufficient
+	// Early exit for very high mip levels - single sample is sufficient. Miplevels hide the artifacts.
 	if (mipFactor >= MIP_EARLY_EXIT_THRESHOLD)
 	{
 		return sample1;
+		// Wasted ALU since there are still 3 hash calls computed for the pixel, but doesn't really hurt performance and also avoids recalculating when moving closer/further away.
 	}
 
 	// Take remaining samples for blending
@@ -196,10 +198,10 @@ inline float4 StochasticEffectNoHeight(float mipLevel, Texture2D tex, SamplerSta
 	// Take first sample (always needed)
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
 
-	// Calculate smooth transition factor - starts blending at mip 5.0, fully single sample at mip 7.0
+	// Calculate smooth transition factor - starts at mip 5.0, early exit at mip 6.5
 	float mipFactor = saturate((mipLevel - MIP_BLEND_START) / MIP_BLEND_RANGE);
 
-	// Early exit for very high mip levels - single sample is sufficient
+	// Early exit for very high mip levels - single sample is sufficient. Miplevels hide the artifacts.
 	[branch] if (mipFactor >= MIP_EARLY_EXIT_THRESHOLD)
 	{
 		return sample1;
