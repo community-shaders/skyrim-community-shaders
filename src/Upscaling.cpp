@@ -5,6 +5,7 @@
 #include "State.h"
 #include <Windows.h>
 #include <reshade/reshade.hpp>
+#include <sl_dlss.h>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Upscaling::Settings,
@@ -388,7 +389,7 @@ void Upscaling::Upscale()
 		context->CopyResource(upscalingTexture->resource.get(), inputTextureResource);
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			globals::streamline->Upscale(upscalingTexture, alphaMaskTexture, settings.dlssPreset == 0 ? (sl::DLSSPreset)11u : sl::DLSSPreset::ePresetE);
+			globals::streamline->Upscale(upscalingTexture, alphaMaskTexture, settings.dlssPreset == 0 ? sl::DLSSPreset::ePresetK : sl::DLSSPreset::eDefault);
 		else if (upscaleMethod == UpscaleMethod::kFSR)
 			globals::fidelityFX->Upscale(upscalingTexture, alphaMaskTexture, jitter, settings.sharpness);
 

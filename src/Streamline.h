@@ -15,6 +15,7 @@
 #include <sl_dlss.h>
 #include <sl_dlss_g.h>
 #include <sl_matrix_helpers.h>
+#include <sl_pcl.h>
 #include <sl_reflex.h>
 #include <sl_version.h>
 #pragma warning(pop)
@@ -109,6 +110,7 @@ public:
 	bool featureDLSS = false;
 	bool featureDLSSG = false;
 	bool featureReflex = false;
+	bool featurePCL = false;
 
 	// Track if Streamline is currently being used for frame generation
 	bool isFrameGenActive = false;
@@ -147,9 +149,12 @@ public:
 
 	// Reflex specific functions
 	PFun_slReflexGetState* slReflexGetState{};
-	PFun_slReflexSetMarker* slReflexSetMarker{};
 	PFun_slReflexSleep* slReflexSleep{};
 	PFun_slReflexSetOptions* slReflexSetOptions{};
+
+	// PCL (PC Latency) marker API for Streamline 2.8.0+
+	PFun_slPCLSetMarker* slPCLSetMarker{};
+	PFun_slPCLSetOptions* slPCLSetOptions{};
 
 	Util::FrameChecker frameChecker;
 	sl::FrameToken* frameToken;

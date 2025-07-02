@@ -11,6 +11,91 @@
 #include "Deferred.h"
 #include "Upscaling.h"
 
+#include <sl.h>
+#include <sl_consts.h>
+#include <sl_dlss.h>
+#include <sl_dlss_g.h>
+#include <sl_matrix_helpers.h>
+#include <sl_pcl.h>
+#include <sl_reflex.h>
+#include <sl_version.h>
+
+#include <magic_enum.hpp>
+#include <string>
+
+// Helper to provide user-friendly explanations for sl::Result error codes
+static std::string StreamlineResultExplanation(sl::Result result)
+{
+	switch (result) {
+	case sl::Result::eOk:
+		return "Success";
+	case sl::Result::eErrorExceptionHandler:
+		return "An unhandled exception occurred inside the Streamline SDK or plugin. This may indicate a missing or incompatible DLL, a bug in the SDK, or a problem with the driver. Check that all required DLLs are present and compatible, and try enabling Streamline's verbose logging for more details.";
+	case sl::Result::eErrorFeatureNotSupported:
+		return "Feature is not supported on this hardware or driver.";
+	case sl::Result::eErrorDriverOutOfDate:
+		return "GPU driver is too old for this feature.";
+	case sl::Result::eErrorNoPlugins:
+		return "Required plugin DLL is missing or failed to load.";
+	case sl::Result::eErrorAdapterNotSupported:
+		return "The current GPU/adapter is not supported for this feature.";
+	case sl::Result::eErrorOSOutOfDate:
+		return "Operating system is too old for this feature.";
+	case sl::Result::eErrorInvalidParameter:
+		return "Invalid parameter passed to Streamline API.";
+	case sl::Result::eErrorMissingInputParameter:
+		return "A required input parameter was missing.";
+	case sl::Result::eErrorInitNotCalled:
+		return "Streamline was not initialized before use.";
+	case sl::Result::eErrorNotInitialized:
+		return "Streamline is not initialized.";
+	case sl::Result::eErrorFeatureFailedToLoad:
+		return "Feature plugin failed to load (possibly missing DLL or dependency).";
+	case sl::Result::eErrorNoSupportedAdapterFound:
+		return "No supported GPU/adapter found for this feature (older or non-NVIDIA GPU, etc).";
+	case sl::Result::eErrorOSDisabledHWS:
+		return "Hardware-accelerated GPU scheduling (HWS) is disabled. Enable it in Windows graphics settings.";
+	case sl::Result::eErrorDeviceNotCreated:
+		return "D3D/Vulkan device was not created or is invalid.";
+	case sl::Result::eErrorVulkanAPI:
+		return "Vulkan API error occurred.";
+	case sl::Result::eErrorDXGIAPI:
+		return "DXGI API error occurred.";
+	case sl::Result::eErrorD3DAPI:
+		return "Direct3D API error occurred.";
+	case sl::Result::eErrorMissingProxy:
+		return "Missing required proxy DLL for Streamline integration.";
+	case sl::Result::eErrorMissingResourceState:
+		return "Missing required resource state for Streamline operation.";
+	case sl::Result::eErrorInvalidIntegration:
+		return "Invalid Streamline integration detected.";
+	case sl::Result::eErrorComputeFailed:
+		return "Compute operation failed in Streamline plugin.";
+	case sl::Result::eErrorFeatureMissing:
+		return "Requested feature is missing from the loaded plugins.";
+	case sl::Result::eErrorFeatureMissingHooks:
+		return "Feature is missing required hooks for operation.";
+	case sl::Result::eErrorFeatureWrongPriority:
+		return "Feature priority is incorrect or conflicts with another feature.";
+	case sl::Result::eErrorFeatureMissingDependency:
+		return "Feature is missing a required dependency plugin.";
+	case sl::Result::eErrorFeatureManagerInvalidState:
+		return "Feature manager is in an invalid state.";
+	case sl::Result::eErrorInvalidState:
+		return "Streamline is in an invalid state.";
+	case sl::Result::eWarnOutOfVRAM:
+		return "Warning: Out of VRAM. Performance or quality may be degraded.";
+	default:
+		{
+			std::string enumName = std::string(magic_enum::enum_name(result));
+			if (enumName.empty())
+				enumName = "unknown";
+			return std::format("Unknown error code ({}: {}). See Streamline SDK documentation for this error code.",
+				std::to_underlying(result), enumName);
+		}
+	}
+}
+
 void LoggingCallback(sl::LogType type, const char* msg)
 {
 	// Remove trailing newlines from the raw message
@@ -103,7 +188,7 @@ void Streamline::LoadInterposer()
 
 	sl::Preferences pref;
 
-	sl::Feature featuresToLoad[] = { sl::kFeatureDLSS, sl::kFeatureDLSS_G, sl::kFeatureReflex };
+	sl::Feature featuresToLoad[] = { sl::kFeatureDLSS, sl::kFeatureDLSS_G, sl::kFeatureReflex, sl::kFeaturePCL };
 	sl::Feature featuresToLoadVR[] = { sl::kFeatureDLSS };
 
 	pref.featuresToLoad = REL::Module::IsVR() ? featuresToLoadVR : featuresToLoad;
@@ -172,52 +257,75 @@ void Streamline::CheckFeatures(IDXGIAdapter* a_adapter)
 	adapterInfo.deviceLUID = (uint8_t*)&adapterDesc.AdapterLuid;
 	adapterInfo.deviceLUIDSizeInBytes = sizeof(LUID);
 
-	slIsFeatureLoaded(sl::kFeatureDLSS, featureDLSS);
-	if (featureDLSS) {
-		logger::info("[Streamline] DLSS feature is loaded");
-		featureDLSS = slIsFeatureSupported(sl::kFeatureDLSS, adapterInfo) == sl::Result::eOk;
-	} else {
-		logger::info("[Streamline] DLSS feature is not loaded");
-		sl::FeatureRequirements featureRequirements;
-		sl::Result result = slGetFeatureRequirements(sl::kFeatureDLSS, featureRequirements);
-		if (result != sl::Result::eOk) {
-			logger::info("[Streamline] DLSS feature failed to load due to: {}", magic_enum::enum_name(result));
+	auto logFeatureStatus = [&](sl::Feature feature, const char* name, bool& outAvailable) {
+		// First, check if the feature is supported on this system
+		sl::Result supportResult = slIsFeatureSupported(feature, adapterInfo);
+		if (supportResult != sl::Result::eOk) {
+			std::string reason = StreamlineResultExplanation(supportResult);
+			logger::warn("[Streamline] {}: NOT SUPPORTED - {}", name, reason);
+			outAvailable = false;
+			return;
 		}
-	}
 
-	slIsFeatureLoaded(sl::kFeatureDLSS_G, featureDLSSG);
+		// Check requirements
+		sl::FeatureRequirements reqs{};
+		sl::Result reqResult = slGetFeatureRequirements(feature, reqs);
+		std::string reqStr;
+		if (reqResult == sl::Result::eOk) {
+			reqStr = "OK";
+		} else {
+			reqStr = std::string("NOT MET (") + std::string(magic_enum::enum_name(reqResult)) + ")";
+		}
+
+		// Check loaded status only if requirements are OK
+		bool loaded = false;
+		sl::Result loadedResult = sl::Result::eErrorFeatureMissing;  // default to missing
+		if (reqResult == sl::Result::eOk) {
+			loadedResult = slIsFeatureLoaded(feature, loaded);
+			if (loadedResult != sl::Result::eOk) {
+				logger::warn("[Streamline] {}: Feature load check failed - {}", name, StreamlineResultExplanation(loadedResult));
+				outAvailable = false;
+				return;
+			}
+		}
+		outAvailable = loaded;
+
+		// Get version (SL and NGX)
+		sl::FeatureVersion version{};
+		std::string versionSLStr = "unknown";
+		std::string versionNGXStr = "n/a";
+		if (slGetFeatureVersion(feature, version) == sl::Result::eOk) {
+			versionSLStr = std::format("{}.{}.{}", version.versionSL.major, version.versionSL.minor, version.versionSL.build);
+			if (version.versionNGX.major != 0 || version.versionNGX.minor != 0 || version.versionNGX.build != 0) {
+				versionNGXStr = std::format("{}.{}.{}", version.versionNGX.major, version.versionNGX.minor, version.versionNGX.build);
+			}
+		}
+
+		logger::info("[Streamline] {}: {}, requirements {}, version SL {}, NGX {}",
+			name,
+			loaded ? "loaded" : "not loaded",
+			reqStr,
+			versionSLStr,
+			versionNGXStr);
+	};
+
+	logFeatureStatus(sl::kFeatureDLSS, "DLSS", featureDLSS);
+
 	if (REL::Module::IsVR()) {
 		featureDLSSG = false;
-	} else if (featureDLSSG) {
-		logger::info("[Streamline] DLSSG feature is loaded");
-		featureDLSSG = slIsFeatureSupported(sl::kFeatureDLSS_G, adapterInfo) == sl::Result::eOk;
-	} else {
-		logger::info("[Streamline] DLSSG feature is not loaded");
-		sl::FeatureRequirements featureRequirements;
-		sl::Result result = slGetFeatureRequirements(sl::kFeatureDLSS_G, featureRequirements);
-		if (result != sl::Result::eOk) {
-			logger::info("[Streamline] DLSSG feature failed to load due to: {}", magic_enum::enum_name(result));
-		}
-	}
-
-	slIsFeatureLoaded(sl::kFeatureReflex, featureReflex);
-	if (REL::Module::IsVR()) {
 		featureReflex = false;
-	} else if (featureReflex) {
-		logger::info("[Streamline] Reflex feature is loaded");
-		featureReflex = slIsFeatureSupported(sl::kFeatureReflex, adapterInfo) == sl::Result::eOk;
+		featurePCL = false;
 	} else {
-		logger::info("[Streamline] Reflex feature is not loaded");
-		sl::FeatureRequirements featureRequirements;
-		sl::Result result = slGetFeatureRequirements(sl::kFeatureReflex, featureRequirements);
-		if (result != sl::Result::eOk) {
-			logger::info("[Streamline] Reflex feature failed to load due to: {}", magic_enum::enum_name(result));
-		}
+		logFeatureStatus(sl::kFeatureDLSS_G, "DLSS-G", featureDLSSG);
+		logFeatureStatus(sl::kFeatureReflex, "Reflex", featureReflex);
+		logFeatureStatus(sl::kFeaturePCL, "PCL", featurePCL);
 	}
 
-	logger::info("[Streamline] DLSS {} available", featureDLSS ? "is" : "is not");
-	logger::info("[Streamline] DLSSG {} available", featureDLSSG && !REL::Module::IsVR() ? "is" : "is not");
-	logger::info("[Streamline] Reflex {} available", featureReflex && !REL::Module::IsVR() ? "is" : "is not");
+	logger::info("[Streamline] Feature summary: DLSS [{}], DLSS-G [{}], Reflex [{}], PCL [{}]",
+		featureDLSS ? "Available" : "Unavailable",
+		featureDLSSG ? "Available" : "Unavailable",
+		featureReflex ? "Available" : "Unavailable",
+		featurePCL ? "Available" : "Unavailable");
 }
 
 void Streamline::PostDevice()
@@ -225,21 +333,21 @@ void Streamline::PostDevice()
 	// Hook up all of the feature functions using the sl function slGetFeatureFunction
 
 	if (featureDLSS) {
-		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetOptimalSettings", (void*&)slDLSSGetOptimalSettings);
-		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetState", (void*&)slDLSSGetState);
-		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSSetOptions", (void*&)slDLSSSetOptions);
+		this->slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetOptimalSettings", (void*&)slDLSSGetOptimalSettings);
+		this->slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetState", (void*&)slDLSSGetState);
+		this->slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSSetOptions", (void*&)slDLSSSetOptions);
 	}
 
 	if (featureDLSSG) {
-		slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGGetState", (void*&)slDLSSGGetState);
-		slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGSetOptions", (void*&)slDLSSGSetOptions);
+		this->slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGGetState", (void*&)slDLSSGGetState);
+		this->slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGSetOptions", (void*&)slDLSSGSetOptions);
 	}
 
+	// Reflex Low Latency (NVIDIA only)
 	if (featureReflex) {
-		slGetFeatureFunction(sl::kFeatureReflex, "slReflexGetState", (void*&)slReflexGetState);
-		slGetFeatureFunction(sl::kFeatureReflex, "slReflexSetMarker", (void*&)slReflexSetMarker);
-		slGetFeatureFunction(sl::kFeatureReflex, "slReflexSleep", (void*&)slReflexSleep);
-		slGetFeatureFunction(sl::kFeatureReflex, "slReflexSetOptions", (void*&)slReflexSetOptions);
+		this->slGetFeatureFunction(sl::kFeatureReflex, "slReflexGetState", (void*&)slReflexGetState);
+		this->slGetFeatureFunction(sl::kFeatureReflex, "slReflexSleep", (void*&)slReflexSleep);
+		this->slGetFeatureFunction(sl::kFeatureReflex, "slReflexSetOptions", (void*&)slReflexSetOptions);
 
 		if (featureDLSSG) {
 			sl::ReflexOptions reflexOptions{};
@@ -253,6 +361,20 @@ void Streamline::PostDevice()
 			} else {
 				logger::info("[Streamline] Successfully set reflex options");
 			}
+		}
+	}
+
+	// PCL marker API (universal)
+	if (featurePCL) {
+		this->slGetFeatureFunction(sl::kFeaturePCL, "slPCLSetMarker", (void*&)slPCLSetMarker);
+		this->slGetFeatureFunction(sl::kFeaturePCL, "slPCLSetOptions", (void*&)slPCLSetOptions);
+		sl::PCLOptions pclOptions{};
+		pclOptions.virtualKey = sl::PCLHotKey::eUsePingMessage;
+		pclOptions.idThread = 0;
+		if (SL_FAILED(res, this->slPCLSetOptions(pclOptions))) {
+			logger::error("[Streamline] Failed to set PCL options");
+		} else {
+			logger::info("[Streamline] Successfully set PCL options");
 		}
 	}
 }
@@ -307,7 +429,7 @@ void Streamline::CheckFrameConstants()
 		slConstants.motionVectorsDilated = sl::Boolean::eFalse;
 		slConstants.motionVectorsJittered = sl::Boolean::eFalse;
 
-		if (SL_FAILED(res, slSetConstants(slConstants, *frameToken, viewport))) {
+		if (SL_FAILED(res, this->slSetConstants(slConstants, *frameToken, viewport))) {
 			logger::error("[Streamline] Could not set constants");
 		}
 	}
@@ -344,7 +466,7 @@ void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl
 		dlssOptions.performancePreset = a_preset;
 		dlssOptions.ultraPerformancePreset = a_preset;
 
-		if (SL_FAILED(result, slDLSSSetOptions(viewport, dlssOptions))) {
+		if (SL_FAILED(result, this->slDLSSSetOptions(viewport, dlssOptions))) {
 			logger::critical("[Streamline] Could not enable DLSS");
 		}
 	}
@@ -368,7 +490,7 @@ void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl
 		sl::ResourceTag alphaTag = sl::ResourceTag{ &alpha, sl::kBufferTypeBiasCurrentColorHint, sl::ResourceLifecycle::eValidUntilPresent, &fullExtent };
 
 		sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag, depthTag, mvecTag, alphaTag };
-		slSetTag(viewport, resourceTags, _countof(resourceTags), globals::d3d::context);
+		this->slSetTag(viewport, resourceTags, _countof(resourceTags), globals::d3d::context);
 	}
 
 	sl::ViewportHandle view(viewport);
@@ -402,15 +524,15 @@ void Streamline::Present()
 		sl::DLSSGOptions options{};
 		options.mode = upscaling->settings.frameGenerationMode ? sl::DLSSGMode::eOn : sl::DLSSGMode::eOff;
 
-		if (SL_FAILED(result, slDLSSGSetOptions(viewport, options))) {
+		if (SL_FAILED(result, this->slDLSSGSetOptions(viewport, options))) {
 			logger::error("[Streamline] Could not set DLSSG");
 		}
 	}
 
 	auto state = globals::state;
 
-	slReflexSetMarker(sl::ReflexMarker::eSimulationEnd, *frameToken);
-	slReflexSetMarker(sl::ReflexMarker::eRenderSubmitStart, *frameToken);
+	slPCLSetMarker(sl::PCLMarker::eSimulationEnd, *frameToken);
+	slPCLSetMarker(sl::PCLMarker::eRenderSubmitStart, *frameToken);
 
 	sl::Extent fullExtent{ 0, 0, (uint)state->screenSize.x, (uint)state->screenSize.y };
 
@@ -430,7 +552,7 @@ void Streamline::Present()
 	sl::ResourceTag uiTag = sl::ResourceTag{ &ui, sl::kBufferTypeUIColorAndAlpha, sl::ResourceLifecycle::eValidUntilPresent, &fullExtent };
 
 	sl::ResourceTag inputs[] = { depthTag, mvecTag, hudLessTag, uiTag };
-	slSetTag(viewport, inputs, _countof(inputs), globals::d3d::context);
+	this->slSetTag(viewport, inputs, _countof(inputs), globals::d3d::context);
 }
 
 /**
@@ -442,6 +564,6 @@ void Streamline::DestroyDLSSResources()
 {
 	sl::DLSSOptions dlssOptions{};
 	dlssOptions.mode = sl::DLSSMode::eOff;
-	slDLSSSetOptions(viewport, dlssOptions);
-	slFreeResources(sl::kFeatureDLSS, viewport);
+	this->slDLSSSetOptions(viewport, dlssOptions);
+	this->slFreeResources(sl::kFeatureDLSS, viewport);
 }

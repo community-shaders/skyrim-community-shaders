@@ -239,12 +239,12 @@ struct IDXGISwapChain_Present
 			sl::FrameToken* frameToken;
 			globals::streamline->slGetNewFrameToken(frameToken, &globals::state->frameCount);
 
-			globals::streamline->slReflexSetMarker(sl::ReflexMarker::eRenderSubmitEnd, *frameToken);
-			globals::streamline->slReflexSetMarker(sl::ReflexMarker::ePresentStart, *frameToken);
+			globals::streamline->slPCLSetMarker(sl::PCLMarker::eRenderSubmitEnd, *frameToken);
+			globals::streamline->slPCLSetMarker(sl::PCLMarker::ePresentStart, *frameToken);
 
 			retval = func(This, SyncInterval, Flags);
 
-			globals::streamline->slReflexSetMarker(sl::ReflexMarker::ePresentEnd, *frameToken);
+			globals::streamline->slPCLSetMarker(sl::PCLMarker::ePresentEnd, *frameToken);
 		} else {
 			retval = func(This, SyncInterval, Flags);
 		}
@@ -501,8 +501,7 @@ struct Main_Update_Begin
 		if (globals::streamline->featureReflex) {
 			sl::FrameToken* frameToken;
 			globals::streamline->slGetNewFrameToken(frameToken, &globals::state->frameCount);
-			globals::streamline->slReflexSetMarker(sl::ReflexMarker::eInputSample, *frameToken);
-			globals::streamline->slReflexSetMarker(sl::ReflexMarker::eSimulationStart, *frameToken);
+			globals::streamline->slPCLSetMarker(sl::PCLMarker::eSimulationStart, *frameToken);
 		}
 		func(a_player);
 	}
@@ -521,8 +520,8 @@ struct Main_Update_Swap
 		if (globals::streamline->featureReflex) {
 			sl::FrameToken* frameToken;
 			globals::streamline->slGetNewFrameToken(frameToken, &globals::state->frameCount);
-			globals::streamline->slReflexSetMarker(sl::ReflexMarker::eSimulationEnd, *frameToken);
-			globals::streamline->slReflexSetMarker(sl::ReflexMarker::eRenderSubmitStart, *frameToken);
+			globals::streamline->slPCLSetMarker(sl::PCLMarker::eSimulationEnd, *frameToken);
+			globals::streamline->slPCLSetMarker(sl::PCLMarker::eRenderSubmitStart, *frameToken);
 		}
 		func(This);
 	}
