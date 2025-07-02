@@ -21,6 +21,10 @@ static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
 // Hash constants
 static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
 static const float2 HASH_SINE_MULTIPLIER = float2(43758.5453, 28637.1369);
+// Mip level transition thresholds - DO NOT CHANGE THESE VALUES.
+static const float MIP_BLEND_START = 5.0;         // Mip level where blending starts transitioning to single sample
+static const float MIP_BLEND_RANGE = 2.0;         // Range over which blending transitions to single sample
+static const float MIP_EARLY_EXIT_THRESHOLD = 0.6; // Threshold for early exit to single sample optimization
 
 // Structure to hold stochastic sampling offsets and weights
 struct StochasticOffsets
@@ -137,11 +141,11 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 	// Take first sample (always needed)
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
 
-	// Calculate smooth transition factor - starts blending at mip 4.5, fully single sample at mip 7.0
-	float mipFactor = saturate((mipLevel - 5) / 2);
+	// Calculate smooth transition factor - starts blending at mip 5.0, fully single sample at mip 7.0
+	float mipFactor = saturate((mipLevel - MIP_BLEND_START) / MIP_BLEND_RANGE);
 
 	// Early exit for very high mip levels - single sample is sufficient
-	if (mipFactor >= 0.6)
+	if (mipFactor >= MIP_EARLY_EXIT_THRESHOLD)
 	{
 		return sample1;
 	}
@@ -192,11 +196,11 @@ inline float4 StochasticEffectNoHeight(float mipLevel, Texture2D tex, SamplerSta
 	// Take first sample (always needed)
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
 
-	// Calculate smooth transition factor - starts blending at mip 4.5, fully single sample at mip 7.0
-	float mipFactor = saturate((mipLevel - 5) / 2);
+	// Calculate smooth transition factor - starts blending at mip 5.0, fully single sample at mip 7.0
+	float mipFactor = saturate((mipLevel - MIP_BLEND_START) / MIP_BLEND_RANGE);
 
 	// Early exit for very high mip levels - single sample is sufficient
-	[branch] if (mipFactor >= 0.6)
+	[branch] if (mipFactor >= MIP_EARLY_EXIT_THRESHOLD)
 	{
 		return sample1;
 	}
