@@ -47,7 +47,7 @@ inline float2 hash2D2D(float2 s)
 inline float2 hashLOD(float2 p)
 {
 	p = frac(p * 0.318);
-	return frac(p.x + p.y * 17.0);
+	return frac(p.x + p.y * float2(17.0, 23.0));
 }
 
 inline float3 NormalizeWeights(float3 weights)
