@@ -35,7 +35,7 @@ public:
 		};
 	}
 
-	struct alignas(16) Settings
+	struct Settings
 	{
 		uint enableTilingFix = true;
 		uint enableLODTerrainTilingFix = true;
