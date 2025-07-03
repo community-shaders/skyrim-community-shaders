@@ -1,4 +1,5 @@
 #include "Common/GBuffer.hlsli"
+#include "Common/Game.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/Math.hlsli"
@@ -10,8 +11,6 @@
 // Burley constants
 #define BURLEY_MM_2_CM		0.1f
 #define BURLEY_CM_2_MM      10.0f
-
-#define GAME_UNIT_TO_CM 1.428f
 
 #define SUBSURFACE_RADIUS_SCALE 1024
 #define SUBSURFACE_KERNEL_SIZE 3

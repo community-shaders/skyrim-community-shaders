@@ -32,8 +32,6 @@ cbuffer PerFrameSSS : register(b1)
 								: SV_DispatchThreadID) {
 	float2 texCoord = (DTid.xy + 0.5) * SharedData::BufferDim.zw;
 	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(texCoord);
-	texCoord *= FrameBuffer::DynamicResolutionParams2.xy;
-	texCoord = Stereo::ConvertFromStereoUV(texCoord, eyeIndex);
 
 #if defined(BURLEY)
 
