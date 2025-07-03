@@ -1,5 +1,9 @@
 #pragma once
+#include <algorithm>
+#include <functional>
 #include <imgui.h>
+#include <string>
+#include <vector>
 
 // Forward declarations
 struct ID3D11Device;
@@ -213,4 +217,55 @@ namespace Util
 	 * @param colors Optional per-line colors (if empty, default color is used for all lines).
 	 */
 	void DrawMultiLineTooltip(const std::vector<std::string>& lines, const std::vector<ImVec4>& colors = {});
+
+	/**
+	 * @brief Comparator function type for table sorting.
+	 *
+	 * Should return true if the first value should come before the second, given the sort direction.
+	 * @param a First string value (cell content).
+	 * @param b Second string value (cell content).
+	 * @param ascending True if sorting ascending, false for descending.
+	 * @return True if a should come before b, false otherwise.
+	 */
+	using TableSortFunc = std::function<bool(const std::string&, const std::string&, bool)>;
+
+	/**
+	 * @brief Sorts table rows by the specified column using a default string comparison.
+	 * @param rows The table data (vector of rows).
+	 * @param column The column index to sort by.
+	 * @param ascending True for ascending, false for descending.
+	 */
+	void SortTableRowsByColumn(std::vector<std::vector<std::string>>& rows, size_t column, bool ascending = true);
+
+	/**
+	 * @brief Renders a sortable ImGui table with arbitrary columns and per-column custom sorting.
+	 *
+	 * @param table_id Unique ImGui table ID.
+	 * @param headers Column headers.
+	 * @param rows Table data, each row is a vector of strings.
+	 * @param sortColumn Default sort column index.
+	 * @param ascending Default sort direction.
+	 * @param customSorts Vector of custom comparator functions, one per column (nullptr for default string sort).
+	 */
+	void ShowSortedStringTable(
+		const char* table_id,
+		const std::vector<std::string>& headers,
+		std::vector<std::vector<std::string>> rows,
+		size_t sortColumn = 0,
+		bool ascending = true,
+		const std::vector<TableSortFunc>& customSorts = {});
+
+	/**
+	 * @brief Compares two version strings (e.g., "1.2.3") numerically.
+	 * @param a First version string.
+	 * @param b Second version string.
+	 * @param ascending True for ascending, false for descending.
+	 * @return True if a < b (or a > b if ascending is false).
+	 */
+	bool VersionStringLess(const std::string& a, const std::string& b, bool ascending = true);
+
+	/**
+	 * @brief TableSortFunc for version strings, using VersionStringLess.
+	 */
+	extern const TableSortFunc VersionSortComparator;
 }  // namespace Util

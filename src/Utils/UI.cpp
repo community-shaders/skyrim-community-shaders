@@ -9,8 +9,12 @@
 #include "../Menu.h"
 
 #define STB_IMAGE_IMPLEMENTATION
+#include <algorithm>
 #include <cmath>
+#include <functional>
 #include <stb_image.h>
+#include <string>
+#include <vector>
 
 namespace Util
 {
@@ -548,4 +552,97 @@ namespace Util
 		}
 	}
 
+	void SortTableRowsByColumn(std::vector<std::vector<std::string>>& rows, size_t column, bool ascending)
+	{
+		std::sort(rows.begin(), rows.end(), [column, ascending](const auto& a, const auto& b) {
+			if (column >= a.size() || column >= b.size())
+				return false;
+			return ascending ? (a[column] < b[column]) : (a[column] > b[column]);
+		});
+	}
+
+	bool VersionStringLess(const std::string& a, const std::string& b, bool ascending)
+	{
+		auto split = [](const std::string& s) {
+			std::vector<int> parts;
+			size_t start = 0, end = 0;
+			while ((end = s.find('.', start)) != std::string::npos) {
+				try {
+					parts.push_back(std::stoi(s.substr(start, end - start)));
+				} catch (...) {
+					parts.push_back(0);
+				}
+				start = end + 1;
+			}
+			if (start < s.size()) {
+				try {
+					parts.push_back(std::stoi(s.substr(start)));
+				} catch (...) {
+					parts.push_back(0);
+				}
+			}
+			return parts;
+		};
+		auto va = split(a), vb = split(b);
+		for (size_t i = 0; i < std::max(va.size(), vb.size()); ++i) {
+			int ai = i < va.size() ? va[i] : 0;
+			int bi = i < vb.size() ? vb[i] : 0;
+			if (ai != bi)
+				return ascending ? (ai < bi) : (ai > bi);
+		}
+		return false;
+	}
+
+	const TableSortFunc VersionSortComparator = [](const std::string& a, const std::string& b, bool asc) {
+		return VersionStringLess(a, b, asc);
+	};
+
+	void ShowSortedStringTable(
+		const char* table_id,
+		const std::vector<std::string>& headers,
+		std::vector<std::vector<std::string>> rows,
+		size_t sortColumn,
+		bool ascending,
+		const std::vector<TableSortFunc>& customSorts)
+	{
+		ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable;
+		if (ImGui::BeginTable(table_id, static_cast<int>(headers.size()), flags)) {
+			for (const auto& header : headers)
+				ImGui::TableSetupColumn(header.c_str());
+			ImGui::TableHeadersRow();
+
+			// Interactive sorting
+			int sortCol = static_cast<int>(sortColumn);
+			bool sortAsc = ascending;
+			if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
+				if (sortSpecs->SpecsCount > 0) {
+					sortCol = sortSpecs->Specs->ColumnIndex;
+					sortAsc = sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending;
+				}
+			}
+			if (sortCol >= 0 && static_cast<size_t>(sortCol) < headers.size()) {
+				if (sortCol < static_cast<int>(customSorts.size()) && customSorts[sortCol]) {
+					auto cmp = customSorts[sortCol];
+					std::sort(rows.begin(), rows.end(), [sortCol, sortAsc, &cmp](const auto& a, const auto& b) {
+						return cmp(a[sortCol], b[sortCol], sortAsc);
+					});
+				} else {
+					std::sort(rows.begin(), rows.end(), [sortCol, sortAsc](const auto& a, const auto& b) {
+						return sortAsc ? (a[sortCol] < b[sortCol]) : (a[sortCol] > b[sortCol]);
+					});
+				}
+			}
+			// else: no sorting if sortCol is invalid
+
+			for (const auto& row : rows) {
+				ImGui::TableNextRow();
+				for (size_t col = 0; col < headers.size(); ++col) {
+					ImGui::TableSetColumnIndex(static_cast<int>(col));
+					if (col < row.size())
+						ImGui::TextUnformatted(row[col].c_str());
+				}
+			}
+			ImGui::EndTable();
+		}
+	}
 }  // namespace Util

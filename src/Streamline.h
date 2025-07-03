@@ -92,6 +92,8 @@ void DestroyDLSSResources();
 class Streamline
 {
 public:
+	static constexpr const wchar_t* PluginDir = L"Data\\SKSE\\Plugins\\Streamline";
+
 	static Streamline* GetSingleton()
 	{
 		static Streamline singleton;
@@ -107,6 +109,9 @@ public:
 	bool featureDLSS = false;
 	bool featureDLSSG = false;
 	bool featureReflex = false;
+
+	// Track if Streamline is currently being used for frame generation
+	bool isFrameGenActive = false;
 
 	sl::ViewportHandle viewport{ 0 };
 
@@ -151,6 +156,9 @@ public:
 
 	decltype(&CreateDXGIFactory1) slCreateDXGIFactory1{};
 	decltype(&D3D11CreateDeviceAndSwapChain) slD3D11CreateDeviceAndSwapChain{};
+
+	// Cached DLL version info for Streamline plugin directory
+	static std::vector<std::pair<std::string, std::string>> dllVersions;
 
 	void LoadInterposer();
 
