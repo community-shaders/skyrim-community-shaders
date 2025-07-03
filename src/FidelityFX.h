@@ -16,6 +16,8 @@
 class FidelityFX
 {
 public:
+	static constexpr const wchar_t* PluginDir = L"Data\\SKSE\\Plugins\\FidelityFX";
+
 	static FidelityFX* GetSingleton()
 	{
 		static FidelityFX singleton;
@@ -28,6 +30,14 @@ public:
 	ffx::Context frameGenContext;
 
 	FfxFsr3Context fsrContext;
+
+	bool featureFSR3FG = false;  // whether enabled
+
+	// Track if FidelityFX is currently being used for frame generation
+	bool isFrameGenActive = false;
+
+	// Cached DLL version info for FidelityFX plugin directory
+	static std::vector<std::pair<std::string, std::string>> dllVersions;
 
 	void LoadFFX();
 

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.21)
 
 project(
 	CommunityShaders
-	VERSION 1.2.1
+	VERSION 1.3.0
 	LANGUAGES CXX
 )
 
@@ -126,11 +126,20 @@ file(GLOB_RECURSE FEATURE_CONFIG_FILES
 foreach(FEATURE_PATH ${FEATURE_CONFIG_FILES})
 	get_filename_component(FEATURE ${FEATURE_PATH} NAME_WE)
 	file(READ "${FEATURE_PATH}" CONFIG_VALUE)
-	string(REGEX MATCH "Version = ([0-9]*)-([0-9]*)-([0-9]*)" _ ${CONFIG_VALUE})
-	set(ver_major ${CMAKE_MATCH_1})
-	set(ver_minor ${CMAKE_MATCH_2})
-	set(ver_patch ${CMAKE_MATCH_3})
-	list(APPEND FEATURE_VERSIONS \t\t{\ \"${FEATURE}\"sv,\ {${ver_major},${ver_minor},${ver_patch}}\ })
+	string(STRIP "${CONFIG_VALUE}" CONFIG_VALUE)
+	if(CONFIG_VALUE)
+		string(REGEX MATCH "Version = ([0-9]+)-([0-9]+)-([0-9]+)" _ "${CONFIG_VALUE}")
+		if(DEFINED CMAKE_MATCH_1 AND DEFINED CMAKE_MATCH_2 AND DEFINED CMAKE_MATCH_3)
+			set(ver_major ${CMAKE_MATCH_1})
+			set(ver_minor ${CMAKE_MATCH_2})
+			set(ver_patch ${CMAKE_MATCH_3})
+			list(APPEND FEATURE_VERSIONS "\t\t{\"${FEATURE}\"sv, {${ver_major},${ver_minor},${ver_patch}}}")
+		else()
+			message(WARNING "Feature config file '${FEATURE_PATH}' does not contain a valid version string. Skipping.")
+		endif()
+	else()
+		message(WARNING "Feature config file '${FEATURE_PATH}' is empty or contains only whitespace. Skipping version detection for this feature.")
+	endif()
 endforeach()
 
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FEATURE_CONFIG_FILES}")

@@ -3,6 +3,7 @@
 #include "DX12SwapChain.h"
 #include "Hooks.h"
 #include "State.h"
+#include <Windows.h>
 #include <reshade/reshade.hpp>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -14,7 +15,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	dlssPreset,
 	frameLimitMode,
 	frameGenerationMode,
-	frameGenerationForceEnable);
+	frameGenerationForceEnable,
+	streamlineLogLevel);
 
 void Upscaling::DrawSettings()
 {
@@ -88,54 +90,108 @@ void Upscaling::DrawSettings()
 	}
 
 	if (!globals::game::isVR) {
-		if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Text("Frame Generation interpolates real frames with generated ones for a smoother experience");
-			ImGui::Text("Uses AMD FSR 3.1 Frame Generation and NVIDIA DLSS Frame Generation technology");
-			ImGui::Text("Requires a D3D11 to D3D12 proxy which can create compatibility issues");
-			ImGui::Text("Toggling this setting requires a restart to work correctly");
+		bool frameGenAvailable = d3d12Interop && ((globals::streamline && globals::streamline->featureDLSSG) ||
+													 (globals::fidelityFX && globals::fidelityFX->featureFSR3FG));
+		if (frameGenAvailable) {
+			if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::Text("Frame Generation interpolates real frames with generated ones for a smoother experience");
+				ImGui::Text("Uses AMD FSR 3.1 Frame Generation and NVIDIA DLSS Frame Generation technology");
+				if (globals::streamline && globals::streamline->featureDLSSG)
+					ImGui::Text("NVIDIA DLSS-G Frame Generation is available.");
+				if (globals::fidelityFX && globals::fidelityFX->featureFSR3FG)
+					ImGui::Text("AMD FSR 3.1 Frame Generation is available.");
+				ImGui::Text("Requires a D3D11 to D3D12 proxy which can create compatibility issues");
+				ImGui::Text("Toggling this setting requires a restart to work correctly");
 
-			bool onlyRequiresRestart = true;
+				bool onlyRequiresRestart = true;
 
-			if (!isWindowed) {
-				ImGui::Text("Warning: Requires windowed mode");
-				onlyRequiresRestart = false;
+				if (!isWindowed) {
+					ImGui::Text("Warning: Requires windowed mode");
+					onlyRequiresRestart = false;
+				}
+
+				if (lowRefreshRate && !settings.frameGenerationForceEnable) {
+					ImGui::Text("Warning: Requires a high refresh rate monitor or Force Enable Frame Generation");
+					onlyRequiresRestart = false;
+				}
+
+				if (streamlineMissing) {
+					ImGui::Text("Warning: Streamline is not loaded");
+					onlyRequiresRestart = false;
+				}
+
+				if (fidelityFXMissing) {
+					ImGui::Text("Warning: amd_fidelityfx_dx12.dll is not loaded");
+					onlyRequiresRestart = false;
+				}
+
+				if (onlyRequiresRestart && settings.frameGenerationMode && !d3d12Interop)
+					ImGui::Text("Warning: Requires restart");
+
+				std::string backendLabel =
+					(globals::streamline && globals::streamline->isFrameGenActive) ? "DLSSG" :
+					(globals::fidelityFX && globals::fidelityFX->isFrameGenActive) ? "FSR3" :
+																					 "None";
+				std::string enabledLabel = "Enabled (" + backendLabel + ")";
+				const char* toggleModes[] = { "Disabled", "Enabled" };
+				const char* toggleModesFG[] = { "Disabled", enabledLabel.c_str() };
+
+				ImGui::SliderInt("Frame Generation", (int*)&settings.frameGenerationMode, 0, 1, toggleModesFG[settings.frameGenerationMode]);
+
+				if (!d3d12Interop)
+					ImGui::BeginDisabled();
+
+				ImGui::SliderInt("Frame Limit (Variable Refresh Rate)", (int*)&settings.frameLimitMode, 0, 1, std::format("{}", toggleModes[settings.frameLimitMode]).c_str());
+
+				if (!d3d12Interop)
+					ImGui::EndDisabled();
+
+				ImGui::Text("Allows frame generation to function on low refresh rate monitors");
+				ImGui::SliderInt("Force Enable Frame Generation", (int*)&settings.frameGenerationForceEnable, 0, 1, std::format("{}", toggleModes[settings.frameGenerationForceEnable]).c_str());
+
+				ImGui::TreePop();
 			}
-
-			if (lowRefreshRate && !settings.frameGenerationForceEnable) {
-				ImGui::Text("Warning: Requires a high refresh rate monitor or Force Enable Frame Generation");
-				onlyRequiresRestart = false;
+		} else {
+			if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::Text("Frame Generation is not available on your system.\nThis requires either NVIDIA DLSS-G or AMD FSR 3.1 Frame Generation support and D3D12 interop.");
+				ImGui::TreePop();
 			}
-
-			if (streamlineMissing) {
-				ImGui::Text("Warning: amd_fidelityfx_dx12.dll is not loaded");
-				onlyRequiresRestart = false;
-			}
-
-			if (fidelityFXMissing) {
-				ImGui::Text("Warning: Streamline is not loaded");
-				onlyRequiresRestart = false;
-			}
-
-			if (onlyRequiresRestart && settings.frameGenerationMode && !d3d12Interop)
-				ImGui::Text("Warning: Requires restart");
-
-			const char* toggleModes[] = { "Disabled", "Enabled" };
-
-			ImGui::SliderInt("Frame Generation", (int*)&settings.frameGenerationMode, 0, 1, std::format("{}", toggleModes[settings.frameGenerationMode]).c_str());
-
-			if (!d3d12Interop)
-				ImGui::BeginDisabled();
-
-			ImGui::SliderInt("Frame Limit (Variable Refresh Rate)", (int*)&settings.frameLimitMode, 0, 1, std::format("{}", toggleModes[settings.frameLimitMode]).c_str());
-
-			if (!d3d12Interop)
-				ImGui::EndDisabled();
-
-			ImGui::Text("Allows frame generation to function on low refresh rate monitors");
-			ImGui::SliderInt("Force Enable Frame Generation", (int*)&settings.frameGenerationForceEnable, 0, 1, std::format("{}", toggleModes[settings.frameGenerationForceEnable]).c_str());
-
-			ImGui::TreePop();
 		}
+	}
+
+	if (ImGui::TreeNodeEx("Backend Diagnostics")) {
+		// Streamline log level selection
+		const char* logLevels[] = { "Off", "Default", "Verbose" };
+		int logLevelIdx = static_cast<int>(settings.streamlineLogLevel);
+		if (ImGui::Combo("Streamline Logging", &logLevelIdx, logLevels, IM_ARRAYSIZE(logLevels))) {
+			settings.streamlineLogLevel = static_cast<uint>(logLevelIdx);
+		}
+		ImGui::TextUnformatted("Changing this requires a restart to take effect.");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Streamline logging controls the verbosity of NVIDIA Streamline backend logs. Useful for debugging issues with DLSS/DLSS-G.");
+		}
+		ImGui::Separator();
+		// FidelityFX section
+		if (ImGui::Selectable("AMD FidelityFX DLLs (click to open folder)")) {
+			ShellExecuteW(nullptr, L"open", FidelityFX::PluginDir, nullptr, nullptr, SW_SHOWNORMAL);
+		}
+		std::vector<std::string> headers = { "DLL Name", "Version" };
+		std::vector<std::vector<std::string>> ffRows;
+		for (const auto& [name, version] : FidelityFX::dllVersions)
+			ffRows.push_back({ name, version });
+		std::vector<Util::TableSortFunc> ffSorters = { nullptr, Util::VersionSortComparator };
+		Util::ShowSortedStringTable("ffx_dll_versions", headers, ffRows, 0, true, ffSorters);
+
+		// Streamline section
+		if (ImGui::Selectable("NVIDIA Streamline DLLs (click to open folder)")) {
+			ShellExecuteW(nullptr, L"open", Streamline::PluginDir, nullptr, nullptr, SW_SHOWNORMAL);
+		}
+		std::vector<std::vector<std::string>> slRows;
+		for (const auto& [name, version] : Streamline::dllVersions)
+			slRows.push_back({ name, version });
+		std::vector<Util::TableSortFunc> slSorters = { nullptr, Util::VersionSortComparator };
+		Util::ShowSortedStringTable("sl_dll_versions", headers, slRows, 0, true, slSorters);
+		ImGui::TreePop();
 	}
 }
 

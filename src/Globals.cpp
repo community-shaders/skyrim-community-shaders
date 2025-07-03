@@ -14,6 +14,7 @@
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExtendedMaterials.h"
+#include "Features/ExtendedTranslucency.h"
 #include "Features/GrassCollision.h"
 #include "Features/GrassLighting.h"
 #include "Features/HairSpecular.h"
@@ -35,6 +36,7 @@
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
+#include "Features/WeatherPicker.h"
 #include "Features/WetnessEffects.h"
 
 #include "Features/LightLimitFix/ParticleLights.h"
@@ -75,7 +77,9 @@ namespace globals
 		VolumetricLighting* volumetricLighting = nullptr;
 		VR* vr = nullptr;
 		WaterEffects* waterEffects = nullptr;
+		WeatherPicker* weatherPicker = nullptr;
 		WetnessEffects* wetnessEffects = nullptr;
+		ExtendedTranslucency* extendedTranslucency = nullptr;
 		PostProcessing* postProcessing = nullptr;
 
 		namespace llf
@@ -159,7 +163,9 @@ namespace globals
 		features::volumetricLighting = VolumetricLighting::GetSingleton();
 		features::vr = VR::GetSingleton();
 		features::waterEffects = WaterEffects::GetSingleton();
+		features::weatherPicker = WeatherPicker::GetSingleton();
 		features::wetnessEffects = WetnessEffects::GetSingleton();
+		features::extendedTranslucency = ExtendedTranslucency::GetSingleton();
 		features::postProcessing = PostProcessing::GetSingleton();
 
 		features::llf::particleLights = ParticleLights::GetSingleton();

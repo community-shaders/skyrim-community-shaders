@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Feature.h"
 #include "Utils/Serialize.h"
 #include <dxgi1_4.h>
 #include <winrt/base.h>
@@ -42,16 +43,44 @@ public:
 	void DrawSettings();
 	void DrawOverlay();
 	void DrawPerfOverlay();
+	void DrawWeatherDetailsWindow();
 
 	void ProcessInputEvents(RE::InputEvent* const* a_events);
 	bool ShouldSwallowInput();
-	void OnFocusLost();
+
+	// Used for resetting input keys to solve alt-tab stuck issue
+	std::atomic<bool> focusChanged = false;
+	void OnFocusChanged();
+
+	// UI icon textures
+	struct UIIcon
+	{
+		ID3D11ShaderResourceView* texture = nullptr;
+		ImVec2 size = ImVec2(32.0f, 32.0f);
+
+		void Release()
+		{
+			if (texture) {
+				texture->Release();
+				texture = nullptr;
+			}
+		}
+	};
+	struct UIIcons
+	{
+		UIIcon saveSettings;
+		UIIcon loadSettings;
+		UIIcon clearCache;
+		UIIcon clearDiskCache;
+		UIIcon logo;  // New logo icon
+	} uiIcons;
 
 	struct ThemeSettings
 	{
 		float GlobalScale = REL::Module::IsVR() ? -0.5f : 0.f;  // exponential
 
 		bool UseSimplePalette = true;  // simple palette or full customization
+		bool ShowActionIcons = true;   // whether to show action buttons as icons
 		struct PaletteColors
 		{
 			ImVec4 Background{ 0.f, 0.f, 0.f, 0.5882353186607361f };
@@ -70,11 +99,9 @@ public:
 		} StatusPalette;
 		struct FeatureHeadingColors
 		{
-			ImU32 LineColorDefault{ IM_COL32(120, 120, 120, 255) };
-			ImU32 LineColorHovered{ IM_COL32(100, 100, 100, 255) };
-			ImU32 TextColorDefault{ IM_COL32(180, 180, 180, 255) };
-			ImU32 TextColorHovered{ IM_COL32(140, 140, 140, 255) };
-			ImU32 TextColorWhite{ IM_COL32(255, 255, 255, 255) };
+			ImVec4 ColorDefault{ 0.47f, 0.47f, 0.47f, 1.00f };  // ~120, 120, 120
+			ImVec4 ColorHovered{ 0.39f, 0.39f, 0.39f, 1.00f };  // ~100, 100, 100
+			float MinimizedFactor = 0.7f;                       // 70% of original alpha for when the header is minimized
 		} FeatureHeading;
 
 		ImGuiStyle Style = []() {
@@ -164,11 +191,7 @@ public:
 			bool ShowDrawCalls = true;
 			bool ShowVRAM = true;
 			bool ShowFPS = true;
-			bool ShowPreFGFrameTime = true;
 			bool ShowPreFGFrameTimeGraph = true;
-			bool ShowPreFGFPS = true;
-			bool ShowPostFGFPS = true;
-			bool ShowPostFGFrameTime = true;
 			bool ShowPostFGFrameTimeGraph = true;
 			float UpdateInterval = 0.5f;
 			int FrameHistorySize = 120;                       // Default 120 frames = 2s @ 60fps. Clamped using static values to prevent config file values going outside of slider bounds.
@@ -188,11 +211,22 @@ public:
 			bool PositionSet = false;
 			uint32_t OverlayToggleKey = VK_F10;
 		} PerfOverlay;
-	};
 
+		struct WeatherDetailsWindowSettings
+		{
+			bool Enabled = false;
+			ImVec2 Position = ImVec2(50.f, 50.f);
+			bool PositionSet = false;
+		} WeatherDetailsWindow;
+	};
 	const ThemeSettings& GetTheme() const { return settings.Theme; }  // Provide read-only access to the Theme.
+	Settings& GetSettings() { return settings; }                      // Provide access to settings for other components
 
 	void SelectFeatureMenu(const std::string& featureName);
+	static std::unordered_map<std::string, int> categoryCounts;  // Number of features in each feature category
+
+	// Static utility functions
+	static const char* KeyIdToString(uint32_t key);
 
 private:
 	Settings settings;
@@ -256,7 +290,6 @@ private:
 
 	Menu() = default;
 	void SetupImGuiStyle() const;
-	const char* KeyIdToString(uint32_t key);
 	const ImGuiKey VirtualKeyToImGuiKey(WPARAM vkKey);
 
 	void DrawGeneralSettings();
@@ -265,6 +298,7 @@ private:
 	void DrawDisableAtBootSettings();
 	void DrawFooter();
 	void DrawPerformanceOverlaySettings();
+	void BuildCategoryCounts();
 
 	class CharEvent : public RE::InputEvent
 	{

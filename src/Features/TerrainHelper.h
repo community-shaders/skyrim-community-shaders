@@ -41,12 +41,11 @@ public:
 	std::shared_mutex extendedSlotsMutex;
 	std::unordered_map<uint32_t, ExtendedSlots> extendedSlots;
 	RE::BGSTextureSet* defaultLandTexture;
+	bool enabled = false;
 
 	virtual void DataLoaded() override;
 	virtual bool SupportsVR() override { return true; };
 	virtual std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
-	virtual void DrawUnloadedUI() override;
-	virtual bool DrawFailLoadMessage() const override { return false; };
 
 	void SetShaderResouces(ID3D11DeviceContext* a_context);
 	bool TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land);

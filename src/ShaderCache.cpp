@@ -1643,6 +1643,8 @@ namespace SIE
 
 				{ "BSImagespaceShaderVolumetricLightingRaymarchCS", 256 },
 				{ "BSImagespaceShaderVolumetricLightingGenerateCS", 257 },
+				{ "BSImagespaceShaderVolumetricLightingBlurHCS", static_cast<uint32_t>(ISVolumetricLightingBlurHCS) },
+				{ "BSImagespaceShaderVolumetricLightingBlurVCS", static_cast<uint32_t>(ISVolumetricLightingBlurVCS) },
 				{ "BSImagespaceShaderCopyDepthBuffer", 98 },
 				{ "BSImagespaceShaderCopyDepthBuffer", 99 },
 				{ "BSImagespaceShaderCopyDepthBuffer", 100 },
