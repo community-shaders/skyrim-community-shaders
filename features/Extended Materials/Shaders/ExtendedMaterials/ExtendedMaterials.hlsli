@@ -67,10 +67,10 @@ namespace ExtendedMaterials
 				mipLevel++;
 		#endif
 
+		// VR: Apply more conservative mipmap level adjustments to reduce over-blurring and shimmering
 		#if defined(VR)
 			#if defined(TERRAIN_VARIATION) && defined(LANDSCAPE)
-				// Reduce VR mip level penalty when terrain variation is active to prevent over-blurring
-				mipLevel += 0.5;
+				// No additional VR mip penalty when terrain variation is active - let TV handle mip adjustments
 			#else
 				mipLevel++;
 			#endif
@@ -80,8 +80,7 @@ namespace ExtendedMaterials
 			#if !defined(VR)
 				mipLevel += 2.0; // Increase mip level to match vanilla appearance since terrain variation tends to be sharper than vanilla.
 			#else
-				// Additional terrain variation penalty already applied above for VR case
-				mipLevel += 0.5;
+				// When VR + terrain variation are both active, no additional mip penalty - VR gets only TV features without mip changes
 			#endif
 		#endif
 
