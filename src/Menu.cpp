@@ -269,11 +269,18 @@ void Menu::Init()
 	font_config.RasterizerMultiply = 1.1f;   // Slightly darker font rendering
 	font_config.FontBuilderFlags = 0;        // No additional flags needed
 
-	// Add high-quality font with improved settings
-	imgui_io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\Jost-Regular.ttf", 36, &font_config);
-
+	// Load font
 	DXGI_SWAP_CHAIN_DESC desc;
 	globals::d3d::swapChain->GetDesc(&desc);
+	UINT height = desc.BufferDesc.Height; // Screen pixel height
+	// Calculate base font size based on screen height (e.g., 2% of screen height)
+	const float baseFontSize = height * 0.02f;
+	// Clamp between reasonable min/max values
+	const float fontSize = std::clamp(baseFontSize, 24.0f, 48.0f);
+
+	// Add font with dynamic size
+	imgui_io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\Jost-Regular.ttf", 
+											std::round(fontSize), &font_config);
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplWin32_Init(desc.OutputWindow);
