@@ -129,6 +129,7 @@ public:
 	PFun_slAllocateResources* slAllocateResources{};
 	PFun_slFreeResources* slFreeResources{};
 	PFun_slSetTag* slSetTag{};
+	PFun_slSetTagForFrame* slSetTagForFrame{};
 	PFun_slGetFeatureRequirements* slGetFeatureRequirements{};
 	PFun_slGetFeatureVersion* slGetFeatureVersion{};
 	PFun_slUpgradeInterface* slUpgradeInterface{};

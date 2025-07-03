@@ -215,7 +215,7 @@ void Streamline::LoadInterposer()
 	pref.projectId = "f8776929-c969-43bd-ac2b-294b4de58aac";
 
 	pref.renderAPI = sl::RenderAPI::eD3D11;
-	pref.flags = sl::PreferenceFlags::eDisableCLStateTracking | sl::PreferenceFlags::eUseDXGIFactoryProxy;
+	pref.flags = sl::PreferenceFlags::eDisableCLStateTracking | sl::PreferenceFlags::eUseDXGIFactoryProxy | sl::PreferenceFlags::eUseFrameBasedResourceTagging;
 
 	// Hook up all of the functions exported by the SL Interposer Library
 	slInit = (PFun_slInit*)GetProcAddress(interposer, "slInit");
@@ -227,6 +227,7 @@ void Streamline::LoadInterposer()
 	slAllocateResources = (PFun_slAllocateResources*)GetProcAddress(interposer, "slAllocateResources");
 	slFreeResources = (PFun_slFreeResources*)GetProcAddress(interposer, "slFreeResources");
 	slSetTag = (PFun_slSetTag*)GetProcAddress(interposer, "slSetTag");
+	slSetTagForFrame = (PFun_slSetTagForFrame*)GetProcAddress(interposer, "slSetTagForFrame");
 	slGetFeatureRequirements = (PFun_slGetFeatureRequirements*)GetProcAddress(interposer, "slGetFeatureRequirements");
 	slGetFeatureVersion = (PFun_slGetFeatureVersion*)GetProcAddress(interposer, "slGetFeatureVersion");
 	slUpgradeInterface = (PFun_slUpgradeInterface*)GetProcAddress(interposer, "slUpgradeInterface");
@@ -490,7 +491,7 @@ void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl
 		sl::ResourceTag alphaTag = sl::ResourceTag{ &alpha, sl::kBufferTypeBiasCurrentColorHint, sl::ResourceLifecycle::eValidUntilPresent, &fullExtent };
 
 		sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag, depthTag, mvecTag, alphaTag };
-		this->slSetTag(viewport, resourceTags, _countof(resourceTags), globals::d3d::context);
+		this->slSetTagForFrame(*frameToken, viewport, resourceTags, _countof(resourceTags), globals::d3d::context);
 	}
 
 	sl::ViewportHandle view(viewport);
@@ -552,7 +553,7 @@ void Streamline::Present()
 	sl::ResourceTag uiTag = sl::ResourceTag{ &ui, sl::kBufferTypeUIColorAndAlpha, sl::ResourceLifecycle::eValidUntilPresent, &fullExtent };
 
 	sl::ResourceTag inputs[] = { depthTag, mvecTag, hudLessTag, uiTag };
-	this->slSetTag(viewport, inputs, _countof(inputs), globals::d3d::context);
+	this->slSetTagForFrame(*frameToken, viewport, inputs, _countof(inputs), globals::d3d::context);
 }
 
 /**
