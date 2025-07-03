@@ -187,6 +187,10 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 }
 
 // Stochastic sampling function without height blending for better performance
+// Disable X4000 warning: FXC incorrectly reports potentially uninitialized variables
+// due to complex control flow with early returns and conditional sampling
+#pragma warning(push)
+#pragma warning(disable : 4000)
 inline float4 StochasticEffectNoHeight(float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets)
 {
 	// Apply mip bias to match normal sampling behavior
@@ -222,6 +226,7 @@ inline float4 StochasticEffectNoHeight(float mipLevel, Texture2D tex, SamplerSta
 	float smoothFactor = smoothstep(0.0, 1.0, mipFactor);
 	return lerp(blendedSample, sample1, smoothFactor);
 }
+#pragma warning(pop)
 
 
 #endif  // TERRAIN_VARIATION_HLSLI
