@@ -178,7 +178,7 @@ namespace Color
 
 	float3 ColorToLinear(float3 color)
 	{
-		return ENABLE_LL ? GammaToLinear(color) : color;
+		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.colorGamma) : color;
 	}
 
 	float3 RadianceToLinear(float3 color)
