@@ -35,7 +35,7 @@ struct VanillaImagespace : public PostProcessFeature
 
 	winrt::com_ptr<ID3D11SamplerState> colorSampler = nullptr;
 
-	VanillaImagespaceCB vanillaImagespaceData;
+	RE::ImageSpaceData imageSpaceData;
 
 	float3 actualValues = float3(1.0f, 1.0f, 1.0f);
 	bool isInInterior = false;

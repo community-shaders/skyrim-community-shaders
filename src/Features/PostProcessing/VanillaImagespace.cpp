@@ -52,10 +52,55 @@ void VanillaImagespace::DrawSettings()
 		}
 	}
 
-	ImGui::Text("Original ImageSpace Values:");
-	ImGui::Text("Saturation: %.3f", vanillaImagespaceData.cinematic.x);
-	ImGui::Text("Brightness: %.3f", vanillaImagespaceData.cinematic.y);
-	ImGui::Text("Contrast: %.3f", vanillaImagespaceData.cinematic.z);
+	if (ImGui::TreeNode("Original ImageSpace Values")) {
+		ImGui::Text("Base Amount: %.3f", imageSpaceData.baseData.baseAmount);
+		ImGui::Text("Base Data:");
+		ImGui::Text("Cinematic Values:");
+		ImGui::Text("Saturation: %.3f", imageSpaceData.baseData.cinematic.saturation);
+		ImGui::Text("Brightness: %.3f", imageSpaceData.baseData.cinematic.brightness);
+		ImGui::Text("Contrast: %.3f", imageSpaceData.baseData.cinematic.contrast);
+
+		ImGui::Text("HDR Values:");
+		ImGui::Text("Eye Adapt Speed: %.3f", imageSpaceData.baseData.hdr.eyeAdaptSpeed);
+		ImGui::Text("Bloom Blur Radius: %.3f", imageSpaceData.baseData.hdr.bloomBlurRadius);
+		ImGui::Text("Bloom Threshold: %.3f", imageSpaceData.baseData.hdr.bloomThreshold);
+		ImGui::Text("Bloom Scale: %.3f", imageSpaceData.baseData.hdr.bloomScale);
+		ImGui::Text("Receive Bloom Threshold: %.3f", imageSpaceData.baseData.hdr.receiveBloomThreshold);
+		ImGui::Text("White: %.3f", imageSpaceData.baseData.hdr.white);
+		ImGui::Text("Sunlight Scale: %.3f", imageSpaceData.baseData.hdr.sunlightScale);
+		ImGui::Text("Sky Scale: %.3f", imageSpaceData.baseData.hdr.skyScale);
+		ImGui::Text("Eye Adapt Strength: %.3f", imageSpaceData.baseData.hdr.eyeAdaptStrength);
+
+		ImGui::Text("Tint Values:");
+		ImGui::Text("Tint Amount: %.3f", imageSpaceData.baseData.tint.amount);
+		ImGui::Text("Tint Color: (%.3f, %.3f, %.3f)", imageSpaceData.baseData.tint.color.red, imageSpaceData.baseData.tint.color.green, imageSpaceData.baseData.tint.color.blue);
+
+		ImGui::Text("Depth of Field Values:");
+		ImGui::Text("DOF Strength: %.3f", imageSpaceData.baseData.depthOfField.strength);
+		ImGui::Text("DOF Distance: %.3f", imageSpaceData.baseData.depthOfField.distance);
+		ImGui::Text("DOF Range: %.3f", imageSpaceData.baseData.depthOfField.range);
+		ImGui::Text("DOF Flags: %d", imageSpaceData.baseData.depthOfField.flags);
+		ImGui::Text("DOF Sky Blur Radius: %d", static_cast<int>(imageSpaceData.baseData.depthOfField.skyBlurRadius.get()));
+
+		ImGui::Text("Mod Amount: %.3f", imageSpaceData.modAmount);
+		ImGui::Text("Mod Data:");
+		ImGui::Text("Fade Amount: %.3f", imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeAmount]);
+		ImGui::Text("Fade Color: (%.3f, %.3f, %.3f)", imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeR], imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeG], imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeB]);
+		ImGui::Text("Blur Radius: %.3f", imageSpaceData.modData.data[RE::ImageSpaceModData::kBlurRadius]);
+		ImGui::Text("Double Vision Strength: %.3f", imageSpaceData.modData.data[RE::ImageSpaceModData::kDoubleVisionStrength]);
+		ImGui::Text("Radial Blur Strength: %.3f", imageSpaceData.modData.data[RE::ImageSpaceModData::kRadialBlurStrength]);
+		ImGui::Text("Radial Blur Rampup: %.3f", imageSpaceData.modData.data[RE::ImageSpaceModData::kRadialBlurRampup]);
+		ImGui::Text("Radial Blur Start: %.3f", imageSpaceData.modData.data[RE::ImageSpaceModData::kRadialBlurStart]);
+		ImGui::Text("Radial Blur Rampdown: %.3f", imageSpaceData.modData.data[RE::ImageSpaceModData::kRadialBlurRampdown]);
+		ImGui::Text("Radial Blur Down Start: %.3f", imageSpaceData.modData.data[RE::ImageSpaceModData::kRadialBlurDownStart]);
+		ImGui::Text("Radial Blur Center: (%.3f, %.3f)", imageSpaceData.modData.data[RE::ImageSpaceModData::kRadialBlurCenterX], imageSpaceData.modData.data[RE::ImageSpaceModData::kRadialBlurCenterY]);
+		ImGui::Text("DOF Strength: %.3f", imageSpaceData.modData.data[RE::ImageSpaceModData::kDOFStrength]);
+		ImGui::Text("DOF Distance: %.3f", imageSpaceData.modData.data[RE::ImageSpaceModData::kDOFDistance]);
+		ImGui::Text("DOF Range: %.3f", imageSpaceData.modData.data[RE::ImageSpaceModData::kDOFRange]);
+		ImGui::Text("DOF Mode: %d", imageSpaceData.modData.data[RE::ImageSpaceModData::kDOFMode]);
+		ImGui::Text("Motion Blur Strength: %.3f", imageSpaceData.modData.data[RE::ImageSpaceModData::kMotionBlurStrength]);
+		ImGui::TreePop();
+	}
 
 	ImGui::Text("Current Location: %s", isInInterior ? "Interior" : "Exterior");
 	ImGui::Text("Actual Values:");
@@ -186,20 +231,21 @@ void VanillaImagespace::Draw(TextureInfo& inout_tex)
 	float2 res = { (float)texOutput->desc.Width, (float)texOutput->desc.Height };
 	float3 cinematic;
 	auto ImageSpace = RE::ImageSpaceManager::GetSingleton();
-	RE::ImageSpaceBaseData::Cinematic cinematicdata;
 	if (globals::game::isVR) {
 		const auto& iSRuntimeData = ImageSpace->GetVRRuntimeData();
+		imageSpaceData = iSRuntimeData.data;
 		if (const auto& overrideBaseData = iSRuntimeData.overrideBaseData) {
-			cinematicdata = overrideBaseData->cinematic;
+			imageSpaceData.baseData = overrideBaseData;
 		} else {
-			cinematicdata = iSRuntimeData.currentBaseData->cinematic;
+			imageSpaceData.baseData = iSRuntimeData.currentBaseData;
 		}
 	} else {
 		const auto& iSRuntimeData = ImageSpace->GetRuntimeData();
+		imageSpaceData = iSRuntimeData.data;
 		if (const auto& overrideBaseData = iSRuntimeData.overrideBaseData) {
-			cinematicdata = overrideBaseData->cinematic;
+			imageSpaceData.baseData = overrideBaseData;
 		} else {
-			cinematicdata = iSRuntimeData.currentBaseData->cinematic;
+			imageSpaceData.baseData = iSRuntimeData.currentBaseData;
 		}
 	}
 
@@ -207,18 +253,17 @@ void VanillaImagespace::Draw(TextureInfo& inout_tex)
 		isInInterior = sky->mode.get() != RE::Sky::Mode::kFull;
 	else
 		isInInterior = true;
-	cinematic.x = cinematicdata.saturation;
-	cinematic.y = cinematicdata.brightness;
-	cinematic.z = cinematicdata.contrast;
+	cinematic.x = imageSpaceData.baseData.cinematic.saturation;
+	cinematic.y = imageSpaceData.baseData.cinematic.brightness;
+	cinematic.z = imageSpaceData.baseData.cinematic.contrast;
 
 	VanillaImagespaceCB data = {
 		.cinematic = cinematic,
 		.width = res.x,
 		.height = res.y
 	};
-	vanillaImagespaceData = data;
 
-	actualValues = (float3(1.0f) - settings.blendFactor) + vanillaImagespaceData.cinematic * settings.blendFactor;
+	actualValues = (float3(1.0f) - settings.blendFactor) + cinematic * settings.blendFactor;
 
 	actualValues = actualValues * (settings.enableInExMultiplier ? (isInInterior ? settings.InteriorMultiplier : settings.ExteriorMultiplier) : float3(1.0f));
 	if (cinematic.x == 0.0f && cinematic.y == 0.0f && cinematic.z == 0.0f) {
