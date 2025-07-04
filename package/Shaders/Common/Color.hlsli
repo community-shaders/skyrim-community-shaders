@@ -107,6 +107,16 @@ namespace Color
 		return finalLinearColor;
 	}
 
+	float3 LLGammaToLinear(float3 color)
+	{
+		return ENABLE_LL ? GammaToLinear(color) : color;
+	}
+
+	float3 LLLinearToGamma(float3 color)
+	{
+		return ENABLE_LL ? LinearToGamma(color) : color;
+	}
+
 	float3 Diffuse(float3 color)
 	{
 #	if defined(TRUE_PBR)
