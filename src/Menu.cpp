@@ -270,17 +270,23 @@ void Menu::Init()
 	font_config.FontBuilderFlags = 0;        // No additional flags needed
 
 	// Load font
-	DXGI_SWAP_CHAIN_DESC desc;
-	globals::d3d::swapChain->GetDesc(&desc);
-	UINT height = desc.BufferDesc.Height; // Screen pixel height
+	DXGI_SWAP_CHAIN_DESC desc{};
+	if (FAILED(globals::d3d::swapChain->GetDesc(&desc)) || desc.BufferDesc.Height == 0) {
+		logger::warn("Failed to get swap chain description. Using default 1080p font size.");
+		desc.BufferDesc.Height = 1080;
+	}
+	uint32_t height = desc.BufferDesc.Height; // Screen pixel height
 	// Calculate base font size based on screen height (e.g., 2% of screen height)
 	const float baseFontSize = height * 0.02f;
 	// Clamp between reasonable min/max values
 	const float fontSize = std::clamp(baseFontSize, 24.0f, 48.0f);
 
 	// Add font with dynamic size
-	imgui_io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\Jost-Regular.ttf", 
-											std::round(fontSize), &font_config);
+	if (!imgui_io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\Jost-Regular.ttf", 
+											std::round(fontSize), &font_config)) {
+		logger::warn("Failed to load custom font. Using default font.");
+		imgui_io.Fonts->AddFontDefault();
+	}
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplWin32_Init(desc.OutputWindow);
