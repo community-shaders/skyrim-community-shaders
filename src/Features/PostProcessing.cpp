@@ -4,6 +4,7 @@
 #include "imgui_stdlib.h"
 
 #include "State.h"
+#include "Upscaling.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	PostProcessing::Settings,
@@ -422,6 +423,14 @@ void PostProcessing::SetupResources()
 
 		texCopy = eastl::make_unique<Texture2D>(texDesc);
 		texCopy->CreateUAV(uavDesc);
+
+		texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		srvDesc.Format = texDesc.Format;
+		uavDesc.Format = texDesc.Format;
+
+		texAfterTAA = eastl::make_unique<Texture2D>(texDesc);
+		texAfterTAA->CreateSRV(srvDesc);
+		texAfterTAA->CreateUAV(uavDesc);
 	}
 
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\PostProcessing\\copy.cs.hlsl", {}, "cs_5_0")))
@@ -449,13 +458,17 @@ void PostProcessing::PreProcess()
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
 
+	auto upscaling = globals::upscaling;
+
 	auto gameTexMain = isrefraction ? renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY] : renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 	PostProcessFeature::TextureInfo lastTexColor = { gameTexMain.texture, gameTexMain.SRV };
 	auto gameTexMainAlt = isrefraction ? renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN] : renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
 
+	auto upscaleMethod = upscaling->GetUpscaleMethod();
+	bool useAfterTAA = upscaleMethod != Upscaling::UpscaleMethod::kNONE && !globals::state->upscalerLoaded;
 	// go through each fx
 	for (auto& feat : feats)
-		if (feat->enabled && (!REL::Module::IsVR() || feat->SupportsVR()))
+		if (feat->enabled && (!REL::Module::IsVR() || feat->SupportsVR()) && (!feat->DrawAfterTAA() || !useAfterTAA))
 			feat->Draw(lastTexColor);
 
 	D3D11_TEXTURE2D_DESC desc;
@@ -486,6 +499,38 @@ void PostProcessing::PreProcess()
 	}
 
 	isrefraction = false;
+}
+
+void PostProcessing::DrawAfterTAA(Texture2D* inout_tex)
+{
+	if (bypass || inout_tex == nullptr)
+		return;
+
+	auto context = globals::d3d::context;
+
+	context->CopyResource(texAfterTAA->resource.get(), inout_tex->resource.get());
+
+	PostProcessFeature::TextureInfo lastTexColor = { texAfterTAA->resource.get(), texAfterTAA->srv.get() };
+
+	// go through each fx
+	for (auto& feat : feats)
+		if (feat->enabled && (!REL::Module::IsVR() || feat->SupportsVR()) && feat->DrawAfterTAA())
+			feat->Draw(lastTexColor);
+
+	ID3D11ShaderResourceView* srv = lastTexColor.srv;
+	ID3D11UnorderedAccessView* uav = inout_tex->uav.get();
+
+	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+	context->CSSetShaderResources(0, 1, &srv);
+	context->CSSetShader(copyCS.get(), nullptr, 0);
+	context->Dispatch((inout_tex->desc.Width + 7) >> 3, (inout_tex->desc.Height + 7) >> 3, 1);
+
+	srv = nullptr;
+	uav = nullptr;
+
+	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+	context->CSSetShaderResources(0, 1, &srv);
+	context->CSSetShader(nullptr, nullptr, 0);
 }
 
 void PostProcessing::Prepass()

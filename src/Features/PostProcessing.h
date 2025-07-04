@@ -66,6 +66,8 @@ struct PostProcessing : Feature
 
 	void PreProcess();
 
+	void DrawAfterTAA(Texture2D* inout_tex);
+
 	/////////////////////////////////////////////////////////////////////////////////
 
 	bool bypass = false;
@@ -74,6 +76,7 @@ struct PostProcessing : Feature
 	std::vector<std::unique_ptr<PostProcessFeature>> feats = {};
 
 	eastl::unique_ptr<Texture2D> texCopy = nullptr;
+	eastl::unique_ptr<Texture2D> texAfterTAA = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> copyCS = nullptr;
 
 	/////////////////////////////////////////////////////////////////////////////////
