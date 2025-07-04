@@ -53,7 +53,7 @@ void VanillaImagespace::DrawSettings()
 	}
 
 	if (ImGui::TreeNode("Original ImageSpace Values")) {
-		ImGui::Text("Base Amount: %.3f", imageSpaceData.baseData.baseAmount);
+		ImGui::Text("Base Amount: %.3f", imageSpaceData.baseAmount);
 		ImGui::Text("Base Data:");
 		ImGui::Text("Cinematic Values:");
 		ImGui::Text("Saturation: %.3f", imageSpaceData.baseData.cinematic.saturation);
@@ -235,17 +235,17 @@ void VanillaImagespace::Draw(TextureInfo& inout_tex)
 		const auto& iSRuntimeData = ImageSpace->GetVRRuntimeData();
 		imageSpaceData = iSRuntimeData.data;
 		if (const auto& overrideBaseData = iSRuntimeData.overrideBaseData) {
-			imageSpaceData.baseData = overrideBaseData;
+			imageSpaceData.baseData = *overrideBaseData;
 		} else {
-			imageSpaceData.baseData = iSRuntimeData.currentBaseData;
+			imageSpaceData.baseData = *iSRuntimeData.currentBaseData;
 		}
 	} else {
 		const auto& iSRuntimeData = ImageSpace->GetRuntimeData();
 		imageSpaceData = iSRuntimeData.data;
 		if (const auto& overrideBaseData = iSRuntimeData.overrideBaseData) {
-			imageSpaceData.baseData = overrideBaseData;
+			imageSpaceData.baseData = *overrideBaseData;
 		} else {
-			imageSpaceData.baseData = iSRuntimeData.currentBaseData;
+			imageSpaceData.baseData = *iSRuntimeData.currentBaseData;
 		}
 	}
 
