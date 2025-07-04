@@ -4,38 +4,35 @@
 
 RWTexture2D<float4> RWTexOut : register(u0);
 
-SamplerState ImageSampler : register(s0);
-
 Texture2D<float4> TexColor : register(t0);
 
 cbuffer VanillaISCB : register(b1)
 {
-	float3 Cinematic;
-	float Width;
-	float Height;
+	float4 Cinematic;
+	float4 Fade;
+	float4 Tint;
 };
-
-#define EPSILON 1e-6
 
 [numthreads(8, 8, 1)] void main(uint3 DTid
 								: SV_DispatchThreadID) {
 	if (DTid.x >= (uint)Width || DTid.y >= (uint)Height)
 		return;
-	float2 uv = (DTid.xy + 0.5f) / float2(Width, Height);
-	float4 color = TexColor.SampleLevel(ImageSampler, uv, 0);
+	float4 color = TexColor[DTid.xy];
 
-	if (Cinematic.y + Cinematic.z < EPSILON) {
+	if (Cinematic.y + Cinematic.z == 0) {
 		RWTexOut[DTid.xy] = color;
 		return;
 	}
 
-	float luminance = Color::RGBToLuminance(color.rgb);
-	float3 ppColor = color.rgb;
+	float luminance = Color::RGBToLuminance2(color.xyz);
+	float3 ppColor = color.xyz;
 
-	float grayPoint = 0.1f;
-
-	ppColor = Cinematic.y * lerp(luminance, ppColor, Cinematic.x);
+	ppColor = Cinematic.y * lerp(lerp(luminance, ppColor, Cinematic.x), luminance * Tint.xyz, Tint.w);
 	ppColor = clamp(pow(clamp(ppColor, 0.0f, 16.0f), pow(2.0f, Cinematic.z - 1.0f)), 0.0f, 16.0f);
+
+	if (Fade.w > 0) {
+		ppColor = lerp(ppColor, Fade.xyz, Fade.w);
+	}
 
 	RWTexOut[DTid.xy] = float4(ppColor, color.a);
 }

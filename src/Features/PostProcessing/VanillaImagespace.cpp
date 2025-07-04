@@ -12,7 +12,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	InteriorOverride,
 	ExteriorOverride,
 	enableInExMultiplier,
-	enableInExOverride)
+	enableInExOverride,
+	enableFade,
+	enableTint)
 
 void VanillaImagespace::DrawSettings()
 {
@@ -20,6 +22,9 @@ void VanillaImagespace::DrawSettings()
 	if (ImGui::IsItemHovered()) {
 		ImGui::SetTooltip("Blend factor for the vanilla imagespace (saturation, brightness, contrast).");
 	}
+
+	ImGui::Checkbox("Enable Fade", &settings.enableFade);
+	ImGui::Checkbox("Enable Tint", &settings.enableTint);
 
 	ImGui::Checkbox("Enable Interior/Exterior Multiplier", &settings.enableInExMultiplier);
 
@@ -162,21 +167,6 @@ void VanillaImagespace::SetupResources()
 		texOutput->CreateUAV(uavDesc);
 	}
 
-	logger::debug("Creating samplers...");
-	{
-		D3D11_SAMPLER_DESC samplerDesc = {
-			.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR,
-			.AddressU = D3D11_TEXTURE_ADDRESS_BORDER,
-			.AddressV = D3D11_TEXTURE_ADDRESS_BORDER,
-			.AddressW = D3D11_TEXTURE_ADDRESS_BORDER,
-			.MaxAnisotropy = 1,
-			.MinLOD = 0,
-			.MaxLOD = D3D11_FLOAT32_MAX
-		};
-
-		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, colorSampler.put()));
-	}
-
 	logger::debug("Creating compute shaders...");
 	{
 		CompileComputeShaders();
@@ -229,7 +219,9 @@ void VanillaImagespace::Draw(TextureInfo& inout_tex)
 {
 	auto context = globals::d3d::context;
 	float2 res = { (float)texOutput->desc.Width, (float)texOutput->desc.Height };
-	float3 cinematic;
+	float4 cinematic = { 1.0f, 1.0f, 1.0f, 1.0f };
+	float4 fade = { 0.0f, 0.0f, 0.0f, 0.0f };
+	float4 tint = { 0.0f, 0.0f, 0.0f, 0.0f };
 	auto ImageSpace = RE::ImageSpaceManager::GetSingleton();
 	if (globals::game::isVR) {
 		const auto& iSRuntimeData = ImageSpace->GetVRRuntimeData();
@@ -256,11 +248,26 @@ void VanillaImagespace::Draw(TextureInfo& inout_tex)
 	cinematic.x = imageSpaceData.baseData.cinematic.saturation;
 	cinematic.y = imageSpaceData.baseData.cinematic.brightness;
 	cinematic.z = imageSpaceData.baseData.cinematic.contrast;
+	cinematic.w = imageSpaceData.baseAmount;
+
+	if (settings.enableFade) {
+		fade.x = imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeR];
+		fade.y = imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeG];
+		fade.z = imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeB];
+		fade.w = imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeAmount];
+	}
+
+	if (settings.enableTint) {
+		tint.x = imageSpaceData.baseData.tint.color.red;
+		tint.y = imageSpaceData.baseData.tint.color.green;
+		tint.z = imageSpaceData.baseData.tint.color.blue;
+		tint.w = imageSpaceData.baseData.tint.amount;
+	}
 
 	VanillaImagespaceCB data = {
 		.cinematic = cinematic,
-		.width = res.x,
-		.height = res.y
+		.fade = fade,
+		.tint = tint
 	};
 
 	actualValues = (float3(1.0f) - settings.blendFactor) + cinematic * settings.blendFactor;

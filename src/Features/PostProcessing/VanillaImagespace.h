@@ -16,15 +16,15 @@ struct VanillaImagespace : public PostProcessFeature
 		float3 ExteriorOverride = float3(1.0f, 1.0f, 1.0f);
 		bool enableInExMultiplier = false;
 		bool enableInExOverride = false;
-		uint8_t pad[2];
+		bool enableFade = true;
+		bool enableTint = true;
 	} settings;
 
 	struct alignas(16) VanillaImagespaceCB
 	{
-		float3 cinematic;
-		float width;
-		float height;
-		uint8_t pad[12];
+		float4 cinematic;
+		float4 fade;
+		float4 tint;
 	};
 
 	eastl::unique_ptr<ConstantBuffer> vanillaImagespaceCB = nullptr;
@@ -32,8 +32,6 @@ struct VanillaImagespace : public PostProcessFeature
 	eastl::unique_ptr<Texture2D> texOutput = nullptr;
 
 	winrt::com_ptr<ID3D11ComputeShader> vanillaImagespaceCS = nullptr;
-
-	winrt::com_ptr<ID3D11SamplerState> colorSampler = nullptr;
 
 	RE::ImageSpaceData imageSpaceData;
 
