@@ -15,8 +15,6 @@ cbuffer VanillaISCB : register(b1)
 
 [numthreads(8, 8, 1)] void main(uint3 DTid
 								: SV_DispatchThreadID) {
-	if (DTid.x >= (uint)Width || DTid.y >= (uint)Height)
-		return;
 	float4 color = TexColor[DTid.xy];
 
 	if (Cinematic.y + Cinematic.z == 0) {

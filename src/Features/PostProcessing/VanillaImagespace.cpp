@@ -132,7 +132,6 @@ void VanillaImagespace::SaveSettings(json& o_json)
 void VanillaImagespace::SetupResources()
 {
 	auto renderer = globals::game::renderer;
-	auto device = globals::d3d::device;
 
 	logger::debug("Creating buffers...");
 	{
@@ -270,7 +269,7 @@ void VanillaImagespace::Draw(TextureInfo& inout_tex)
 		.tint = tint
 	};
 
-	actualValues = (float3(1.0f) - settings.blendFactor) + cinematic * settings.blendFactor;
+	actualValues = (float3(1.0f) - settings.blendFactor) + float3(cinematic.x, cinematic.y, cinematic.z) * settings.blendFactor;
 
 	actualValues = actualValues * (settings.enableInExMultiplier ? (isInInterior ? settings.InteriorMultiplier : settings.ExteriorMultiplier) : float3(1.0f));
 	if (cinematic.x == 0.0f && cinematic.y == 0.0f && cinematic.z == 0.0f) {
@@ -280,7 +279,9 @@ void VanillaImagespace::Draw(TextureInfo& inout_tex)
 	if (settings.enableInExOverride) {
 		actualValues = isInInterior ? settings.InteriorOverride : settings.ExteriorOverride;
 	}
-	data.cinematic = actualValues;
+	data.cinematic.x = actualValues.x;
+	data.cinematic.y = actualValues.y;
+	data.cinematic.z = actualValues.z;
 	vanillaImagespaceCB->Update(data);
 
 	ID3D11ShaderResourceView* srv = inout_tex.srv;
