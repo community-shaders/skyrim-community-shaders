@@ -1359,14 +1359,14 @@ namespace FeatureIssues
 				try {
 					if (testInfo.isNewFile) {
 						// Remove the test INI file we created.
-						std::error_code ec; // Use the error_code overload to avoid exceptions for non-critical errors like the file not existing.
+						std::error_code ec;  // Use the error_code overload to avoid exceptions for non-critical errors like the file not existing.
 						if (const bool removed = std::filesystem::remove(testInfo.testIniPath, ec); ec) {
 							logger::warn("Error while trying to delete {}: {}", testInfo.testIniPath, ec.message());
 							success = false;
 						} else if (removed) {
 							// Successfully deleted.
 							logger::debug("Deleted {}", testInfo.testIniPath);
-						} // If !removed and no error, the file didn't exist, which is fine.			
+						}  // If !removed and no error, the file didn't exist, which is fine.
 					} else {
 						// Restore original version using INI functions
 						CSimpleIniA ini;
