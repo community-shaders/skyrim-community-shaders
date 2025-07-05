@@ -81,6 +81,7 @@ public:
 
 		bool UseSimplePalette = true;  // simple palette or full customization
 		bool ShowActionIcons = true;   // whether to show action buttons as icons
+		float TooltipHoverDelay = 0.5f;  // tooltip hover delay in seconds
 		struct PaletteColors
 		{
 			ImVec4 Background{ 0.f, 0.f, 0.f, 0.5882353186607361f };
