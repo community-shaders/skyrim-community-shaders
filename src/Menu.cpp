@@ -1194,7 +1194,7 @@ void Menu::DrawGeneralSettings()
 				ImGui::SameLine();
 				ImGui::AlignTextToFramePadding();
 				ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", KeyIdToString(settings.ToggleKey));
-	
+
 				ImGui::AlignTextToFramePadding();
 				ImGui::SameLine();
 				if (ImGui::Button("Change##toggle")) {
@@ -1209,7 +1209,7 @@ void Menu::DrawGeneralSettings()
 				ImGui::SameLine();
 				ImGui::AlignTextToFramePadding();
 				ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", KeyIdToString(settings.EffectToggleKey));
-	
+
 				ImGui::AlignTextToFramePadding();
 				ImGui::SameLine();
 				if (ImGui::Button("Change##EffectToggle")) {
@@ -1224,7 +1224,7 @@ void Menu::DrawGeneralSettings()
 				ImGui::SameLine();
 				ImGui::AlignTextToFramePadding();
 				ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", KeyIdToString(settings.SkipCompilationKey));
-	
+
 				ImGui::AlignTextToFramePadding();
 				ImGui::SameLine();
 				if (ImGui::Button("Change##skip")) {
@@ -1236,16 +1236,16 @@ void Menu::DrawGeneralSettings()
 		if (ImGui::BeginTabItem("Interface")) {
 			auto& style = themeSettings.Style;
 			auto& colors = themeSettings.FullPalette;
-	
+
 			if (ImGui::BeginTabBar("##tabs", ImGuiTabBarFlags_None)) {
 				if (ImGui::BeginTabItem("UI Options")) {
 					if (ImGui::SliderFloat("Global Scale", &themeSettings.GlobalScale, -1.f, 1.f, "%.2f")) {
 						float trueScale = exp2(themeSettings.GlobalScale);
-	
+
 						auto& io = ImGui::GetIO();
 						io.FontGlobalScale = trueScale;
 					}
-	
+
 					ImGui::SeparatorText("UI Elements");
 					ImGui::Checkbox("Use Icon Buttons in Header", &themeSettings.ShowActionIcons);
 					if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -1258,10 +1258,10 @@ void Menu::DrawGeneralSettings()
 					if (auto _tt = Util::HoverTooltipWrapper()) {
 						ImGui::TextUnformatted("Time in seconds to wait before a tooltip appears when hovering over an item.");
 					}
-	
+
 					ImGui::EndTabItem();
 				}
-	
+
 				if (ImGui::BeginTabItem("Sizes")) {
 					ImGui::SeparatorText("Main");
 					ImGui::SliderFloat2("Window Padding", (float*)&style.WindowPadding, 0.0f, 20.0f, "%.0f");
@@ -1271,7 +1271,7 @@ void Menu::DrawGeneralSettings()
 					ImGui::SliderFloat("Indent Spacing", &style.IndentSpacing, 0.0f, 30.0f, "%.0f");
 					ImGui::SliderFloat("Scrollbar Size", &style.ScrollbarSize, 1.0f, 20.0f, "%.0f");
 					ImGui::SliderFloat("Grab Min Size", &style.GrabMinSize, 1.0f, 20.0f, "%.0f");
-	
+
 					ImGui::SeparatorText("Borders");
 					ImGui::SliderFloat("Window Border Size", &style.WindowBorderSize, 0.0f, 5.0f, "%.0f");
 					ImGui::SliderFloat("Child Border Size", &style.ChildBorderSize, 0.0f, 5.0f, "%.0f");
@@ -1279,7 +1279,7 @@ void Menu::DrawGeneralSettings()
 					ImGui::SliderFloat("Frame Border Size", &style.FrameBorderSize, 0.0f, 5.0f, "%.0f");
 					ImGui::SliderFloat("Tab Border Size", &style.TabBorderSize, 0.0f, 5.0f, "%.0f");
 					ImGui::SliderFloat("Tab Bar Border Size", &style.TabBarBorderSize, 0.0f, 5.0f, "%.0f");
-	
+
 					ImGui::SeparatorText("Rounding");
 					ImGui::SliderFloat("Window Rounding", &style.WindowRounding, 0.0f, 12.0f, "%.0f");
 					ImGui::SliderFloat("Child Rounding", &style.ChildRounding, 0.0f, 12.0f, "%.0f");
@@ -1288,11 +1288,11 @@ void Menu::DrawGeneralSettings()
 					ImGui::SliderFloat("Scrollbar Rounding", &style.ScrollbarRounding, 0.0f, 12.0f, "%.0f");
 					ImGui::SliderFloat("Grab Rounding", &style.GrabRounding, 0.0f, 12.0f, "%.0f");
 					ImGui::SliderFloat("Tab Rounding", &style.TabRounding, 0.0f, 12.0f, "%.0f");
-	
+
 					ImGui::SeparatorText("Tables");
 					ImGui::SliderFloat2("Cell Padding", (float*)&style.CellPadding, 0.0f, 20.0f, "%.0f");
 					ImGui::SliderAngle("Table Angled Headers Angle", &style.TableAngledHeadersAngle, -50.0f, +50.0f);
-	
+
 					ImGui::SeparatorText("Widgets");
 					ImGui::Combo("ColorButtonPosition", (int*)&style.ColorButtonPosition, "Left\0Right\0");
 					ImGui::SliderFloat2("Button Text Align", (float*)&style.ButtonTextAlign, 0.0f, 1.0f, "%.2f");
@@ -1305,16 +1305,16 @@ void Menu::DrawGeneralSettings()
 					ImGui::SliderFloat2("Separator Text Align", (float*)&style.SeparatorTextAlign, 0.0f, 1.0f, "%.2f");
 					ImGui::SliderFloat2("Separator Text Padding", (float*)&style.SeparatorTextPadding, 0.0f, 40.0f, "%.0f");
 					ImGui::SliderFloat("Log Slider Deadzone", &style.LogSliderDeadzone, 0.0f, 12.0f, "%.0f");
-	
+
 					ImGui::SeparatorText("Docking");
 					ImGui::SliderFloat("Docking Splitter Size", &style.DockingSeparatorSize, 0.0f, 12.0f, "%.0f");
-	
+
 					ImGui::EndTabItem();
 				}
-	
+
 				if (ImGui::BeginTabItem("Colors")) {
 					ImGui::SeparatorText("Status");
-	
+
 					ImGui::ColorEdit4("Disabled Text", (float*)&themeSettings.StatusPalette.Disable);
 					ImGui::ColorEdit4("Error Text", (float*)&themeSettings.StatusPalette.Error);
 					ImGui::ColorEdit4("Warning Text", (float*)&themeSettings.StatusPalette.Warning);
@@ -1322,21 +1322,21 @@ void Menu::DrawGeneralSettings()
 					ImGui::ColorEdit4("Current Hotkey Text", (float*)&themeSettings.StatusPalette.CurrentHotkey);
 					ImGui::ColorEdit4("Success Text", (float*)&themeSettings.StatusPalette.SuccessColor);
 					ImGui::ColorEdit4("Info Text", (float*)&themeSettings.StatusPalette.InfoColor);
-	
+
 					ImGui::SeparatorText("Feature Headings");
-	
+
 					ImGui::ColorEdit4("Regular", (float*)&themeSettings.FeatureHeading.ColorDefault);
 					ImGui::ColorEdit4("Hovered", (float*)&themeSettings.FeatureHeading.ColorHovered);
 					ImGui::SliderFloat("Minimized Alpha Factor", &themeSettings.FeatureHeading.MinimizedFactor, 0.0f, 1.0f, "%.2f");
-	
+
 					ImGui::SeparatorText("Palette");
-	
+
 					if (ImGui::RadioButton("Simple Palette", themeSettings.UseSimplePalette))
 						themeSettings.UseSimplePalette = true;
 					ImGui::SameLine();
 					if (ImGui::RadioButton("Full Palette", !themeSettings.UseSimplePalette))
 						themeSettings.UseSimplePalette = false;
-	
+
 					if (themeSettings.UseSimplePalette) {
 						ImGui::ColorEdit4("Background", (float*)&themeSettings.Palette.Background);
 						ImGui::ColorEdit4("Text", (float*)&themeSettings.Palette.Text);
@@ -1344,7 +1344,7 @@ void Menu::DrawGeneralSettings()
 					} else {
 						static ImGuiTextFilter filter;
 						filter.Draw("Filter colors", ImGui::GetFontSize() * 16);
-	
+
 						for (int i = 0; i < ImGuiCol_COUNT; i++) {
 							const char* name = ImGui::GetStyleColorName(i);
 							if (!filter.PassFilter(name))
@@ -1352,10 +1352,10 @@ void Menu::DrawGeneralSettings()
 							ImGui::ColorEdit4(name, (float*)&colors[i], ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf);
 						}
 					}
-	
+
 					ImGui::EndTabItem();
 				}
-	
+
 				ImGui::EndTabBar();
 			}
 			ImGui::EndTabItem();
