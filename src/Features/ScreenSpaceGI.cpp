@@ -3,8 +3,8 @@
 #include <DirectXTex.h>
 
 #include "Deferred.h"
-#include "Menu.h"
 #include "State.h"
+#include "Util.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ScreenSpaceGI::Settings,

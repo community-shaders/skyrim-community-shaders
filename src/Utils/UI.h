@@ -11,6 +11,16 @@ struct ID3D11ShaderResourceView;
 struct ImVec2;
 class Menu;
 
+#define BUFFER_VIEWER_NODE(a_value, a_scale)                                                                 \
+	if (ImGui::TreeNode(#a_value)) {                                                                         \
+		ImGui::Image(a_value->srv.get(), { a_value->desc.Width * a_scale, a_value->desc.Height * a_scale }); \
+		ImGui::TreePop();                                                                                    \
+	}
+
+#define BUFFER_VIEWER_NODE_BULLET(a_value, a_scale) \
+	ImGui::BulletText(#a_value);                    \
+	ImGui::Image(a_value->srv.get(), { a_value->desc.Width * a_scale, a_value->desc.Height * a_scale });
+
 namespace Util
 {
 	// Text rendering constants
