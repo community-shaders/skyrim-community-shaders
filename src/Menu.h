@@ -5,7 +5,6 @@
 #include <dxgi1_4.h>
 #include <winrt/base.h>
 
-using namespace std::chrono;
 #define BUFFER_VIEWER_NODE(a_value, a_scale)                                                                 \
 	if (ImGui::TreeNode(#a_value)) {                                                                         \
 		ImGui::Image(a_value->srv.get(), { a_value->desc.Width * a_scale, a_value->desc.Height * a_scale }); \
@@ -286,7 +285,7 @@ private:
 		void DrawVRAM(winrt::com_ptr<IDXGIAdapter3> dxgiAdapter3);
 	} perfOverlayState;
 
-	std::chrono::steady_clock::time_point lastTestSwitch = high_resolution_clock::now();  // Time of last test switch
+	std::chrono::steady_clock::time_point lastTestSwitch = std::chrono::high_resolution_clock::now();  // Time of last test switch
 
 	Menu() = default;
 	void SetupImGuiStyle() const;
