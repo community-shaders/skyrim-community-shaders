@@ -218,7 +218,6 @@ namespace Hair
 			GetHairDirectLightScheuermann(dirDiffuse, dirSpecular, T, L, V, N, VN, lightColor, shininess, selfShadow, uv, baseColor);
 		} else {
 			GetHairDirectLightMarschner(dirDiffuse, dirSpecular, T, L, V, N, VN, lightColor, shininess, selfShadow, uv, baseColor);
-			dirDiffuse = Color::LinearToGamma(dirDiffuse);
 			dirSpecular = Color::LinearToGamma(dirSpecular);
 		}
 	}
@@ -233,8 +232,6 @@ namespace Hair
 			specularLobeWeightPrimary = 0;
 			specularLobeWeightSecondary = 0;
 			float3 L = normalize(V - N * dot(V, N));
-			// float NdotL = dot(N, L);
-			// float VdotL = dot(V, L);
 
 			if (SharedData::hairSpecularSettings.EnableTangentShift) {
 				const float shift = TexTangentShift.SampleLevel(SampColorSampler, uv, 0).x - 0.5;
