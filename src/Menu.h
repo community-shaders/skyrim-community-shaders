@@ -5,23 +5,6 @@
 #include <dxgi1_4.h>
 #include <winrt/base.h>
 
-#define BUFFER_VIEWER_NODE(a_value, a_scale)                                                                 \
-	if (ImGui::TreeNode(#a_value)) {                                                                         \
-		ImGui::Image(a_value->srv.get(), { a_value->desc.Width * a_scale, a_value->desc.Height * a_scale }); \
-		ImGui::TreePop();                                                                                    \
-	}
-
-#define BUFFER_VIEWER_NODE_BULLET(a_value, a_scale) \
-	ImGui::BulletText(#a_value);                    \
-	ImGui::Image(a_value->srv.get(), { a_value->desc.Width * a_scale, a_value->desc.Height * a_scale });
-
-#define ADDRESS_NODE(a_value)                                                                        \
-	if (ImGui::Button(#a_value)) {                                                                   \
-		ImGui::SetClipboardText(std::format("{0:x}", reinterpret_cast<uintptr_t>(a_value)).c_str()); \
-	}                                                                                                \
-	if (ImGui::IsItemHovered())                                                                      \
-		ImGui::SetTooltip(std::format("Copy {} Address to Clipboard", #a_value).c_str());
-
 class Menu
 {
 public:
@@ -78,8 +61,9 @@ public:
 	{
 		float GlobalScale = REL::Module::IsVR() ? -0.5f : 0.f;  // exponential
 
-		bool UseSimplePalette = true;  // simple palette or full customization
-		bool ShowActionIcons = true;   // whether to show action buttons as icons
+		bool UseSimplePalette = true;    // simple palette or full customization
+		bool ShowActionIcons = true;     // whether to show action buttons as icons
+		float TooltipHoverDelay = 0.5f;  // tooltip hover delay in seconds
 		struct PaletteColors
 		{
 			ImVec4 Background{ 0.f, 0.f, 0.f, 0.5882353186607361f };
