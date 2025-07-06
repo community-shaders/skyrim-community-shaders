@@ -7,13 +7,6 @@
 
 using namespace std::chrono;
 
-#define ADDRESS_NODE(a_value)                                                                        \
-	if (ImGui::Button(#a_value)) {                                                                   \
-		ImGui::SetClipboardText(std::format("{0:x}", reinterpret_cast<uintptr_t>(a_value)).c_str()); \
-	}                                                                                                \
-	if (ImGui::IsItemHovered())                                                                      \
-		ImGui::SetTooltip(std::format("Copy {} Address to Clipboard", #a_value).c_str());
-
 class Menu
 {
 public:
