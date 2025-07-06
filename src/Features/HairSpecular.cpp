@@ -32,7 +32,7 @@ void HairSpecular::DrawSettings()
 			"Kajiya-Kay is an empirical model that simulates hair specular highlights.\n"
 			"Marschner is a more physically-based model that simulates hair light interaction.\n"
 			"Both models are anisotropic and support tangent-based shading.\n"
-			"Note that colors in Marschner mode may appear darker and more saturated.\n"
+			"Note that colors in Marschner mode may appear different.\n"
 			"Also, without self-shadowing enabled, Marschner mode may look overly bright because of transmission.\n");
 	}
 	ImGui::Spacing();
