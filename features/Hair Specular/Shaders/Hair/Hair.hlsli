@@ -5,7 +5,7 @@
 #include "Common/Game.hlsli"
 #include "Common/Math.hlsli"
 
-#define HAIR_LIGHTING_MULTIPLIER 1  // Compensating to adapt to vanilla lighting model
+#define HAIR_LIGHTING_MULTIPLIER Math::PI  // Compensating to adapt to vanilla lighting model
 
 namespace Hair
 {
@@ -186,7 +186,7 @@ namespace Hair
 		float wrappedNdotL = saturate((dot(fakeN, L) + wrap) / ((1 + wrap) * (1 + wrap)));
 		float diffuseScatter = (1 / Math::PI) * lerp(wrappedNdotL, diffuseKajiya, 0.33);
 		float luma = Color::RGBToLuminance2(baseColor);
-		float3 scatterTint = pow(abs(baseColor / luma), 1 - shadow);
+		float3 scatterTint = shadow < 1 ? pow(abs(baseColor / luma), 1 - shadow) : 1;
 		S += sqrt(baseColor) * diffuseScatter * scatterTint;
 
 		return max(S, 0);
@@ -240,8 +240,9 @@ namespace Hair
 			}
 
 			specularLobeWeightPrimary = D_Marschner(L, V, T, roughnessPrimary, baseColor, 0.2, 0) * Math::PI;
-			diffuseLobeWeight = GetHairDiffuseAttenuationKajiyaKay(T, V, L, 1, baseColor);
+			diffuseLobeWeight = GetHairDiffuseAttenuationKajiyaKay(T, V, L, 1, baseColor) * Math::PI;
 			diffuseLobeWeight = Color::LinearToGamma(diffuseLobeWeight);
+			specularLobeWeightPrimary = Color::LinearToGamma(specularLobeWeightPrimary);
 			return;
 		} else {
 			float NdotVshifted = NdotV;
