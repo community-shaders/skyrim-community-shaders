@@ -351,7 +351,7 @@ void PostProcessing::LoadPresetFrom(std::string a_name)
 		return;
 	}
 
-	ProcessSettings(a_presets);
+	LoadSettings(a_presets);
 }
 
 void PostProcessing::SavePresetTo(std::string a_name)
