@@ -623,7 +623,7 @@ namespace SIE
 		static std::array<std::array<std::unordered_map<std::string, int32_t>,
 							  static_cast<size_t>(ShaderClass::Total)>,
 			static_cast<size_t>(RE::BSShader::Type::Total)>
-			GetVariableIndices()
+		GetVariableIndices()
 		{
 			std::array<std::array<std::unordered_map<std::string, int32_t>,
 						   static_cast<size_t>(ShaderClass::Total)>,
@@ -996,7 +996,7 @@ namespace SIE
 
 				if (shaderClass == ShaderClass::Vertex) {
 					for (size_t nameIndex = 0; nameIndex < imagespaceShader.vsConstantNames.size();
-						 ++nameIndex) {
+						++nameIndex) {
 						if (std::string_view(imagespaceShader.vsConstantNames[static_cast<uint32_t>(nameIndex)].c_str()) ==
 							name) {
 							return static_cast<int32_t>(nameIndex);
@@ -1184,7 +1184,7 @@ namespace SIE
 								} else {
 									const auto elementSize = varDesc.Size / varTypeDesc.Elements;
 									for (uint32_t arrayIndex = 1; arrayIndex < varTypeDesc.Elements;
-										 ++arrayIndex) {
+										++arrayIndex) {
 										const std::string varName =
 											std::format("{}[{}]", varDesc.Name, arrayIndex);
 										const auto variableArrayElementIndex =
@@ -1643,6 +1643,8 @@ namespace SIE
 
 				{ "BSImagespaceShaderVolumetricLightingRaymarchCS", 256 },
 				{ "BSImagespaceShaderVolumetricLightingGenerateCS", 257 },
+				{ "BSImagespaceShaderVolumetricLightingBlurHCS", static_cast<uint32_t>(ISVolumetricLightingBlurHCS) },
+				{ "BSImagespaceShaderVolumetricLightingBlurVCS", static_cast<uint32_t>(ISVolumetricLightingBlurVCS) },
 				{ "BSImagespaceShaderCopyDepthBuffer", 98 },
 				{ "BSImagespaceShaderCopyDepthBuffer", 99 },
 				{ "BSImagespaceShaderCopyDepthBuffer", 100 },
@@ -1923,16 +1925,12 @@ namespace SIE
 			const auto& filePathString = Util::WStringToString(filePath);
 			{
 				std::scoped_lock lockD{ compilationSet.compilationMutex };
-				try {
-					if (std::filesystem::exists(filePath)) {
-						std::filesystem::remove(filePath);
-						logger::debug("Deleted {}", filePathString);
-					}
-				} catch (const std::exception& e) {
-					logger::warn("Failed to delete file {}: {}", filePathString, e.what());
-				} catch (...) {
-					logger::warn("An unknown error occurred while trying to delete file '{}'", filePathString);
-				}
+				std::error_code ec;  // Use the error_code overload to avoid exceptions for non-critical errors like the file not existing.
+				if (const bool removed = std::filesystem::remove(filePath, ec); ec) {
+					logger::warn("Error while trying to delete {}: {}", filePathString, ec.message());
+				} else if (removed) {
+					logger::debug("Deleted {}", filePathString);
+				}  // If !removed and no error, the file didn't exist, which is fine.
 			}
 
 			logger::debug("Marking recompile for shader: {}", entry.key);
@@ -2476,8 +2474,17 @@ namespace SIE
 
 	void ShaderCache::ProcessCompilationSet(std::stop_token stoken, ShaderCompilationTask task)
 	{
+		if (stoken.stop_requested()) {
+			return;
+		}
+
 		SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
 		task.Perform();
+
+		if (stoken.stop_requested()) {
+			return;
+		}
+
 		compilationSet.Complete(task);
 	}
 

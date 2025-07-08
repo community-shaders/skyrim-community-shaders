@@ -14,30 +14,90 @@
 
 void LoggingCallback(sl::LogType type, const char* msg)
 {
+	// Remove trailing newlines from the raw message
+	std::string rawMsg(msg);
+	while (!rawMsg.empty() && (rawMsg.back() == '\n' || rawMsg.back() == '\r'))
+		rawMsg.pop_back();
+
+	// Remove leading bracketed metadata
+	const char* p = msg;
+	while (*p == '[') {
+		const char* close = strchr(p, ']');
+		if (!close)
+			break;
+		p = close + 1;
+		// Skip whitespace after each bracketed section
+		while (*p == ' ' || *p == '\t') ++p;
+	}
+	// Now p points to the first non-bracketed section (file/line info or message)
+	std::string cleanMsg(p);
+	// Trim leading/trailing whitespace and newlines
+	size_t start = cleanMsg.find_first_not_of(" \t\r\n");
+	size_t end = cleanMsg.find_last_not_of(" \t\r\n");
+	if (start != std::string::npos && end != std::string::npos)
+		cleanMsg = cleanMsg.substr(start, end - start + 1);
+	else
+		cleanMsg.clear();
+
+	// If the cleaned message is empty or only bracketed tokens, log the raw message
+	bool onlyBrackets = true;
+	for (char c : cleanMsg) {
+		if (c != '[' && c != ']' && c != ' ' && c != '\t') {
+			onlyBrackets = false;
+			break;
+		}
+	}
+	if (cleanMsg.empty() || onlyBrackets) {
+		logger::info("[StreamlineSDK:RAW] {}", rawMsg);
+		return;
+	}
+
+	// Use a clear prefix
+	const char* prefix = "[StreamlineSDK]";
 	switch (type) {
 	case sl::LogType::eInfo:
-		logger::info("{}", msg);
+		logger::info("{} {}", prefix, cleanMsg);
 		break;
 	case sl::LogType::eWarn:
-		logger::warn("{}", msg);
+		logger::warn("{} {}", prefix, cleanMsg);
 		break;
 	case sl::LogType::eError:
-		logger::error("{}", msg);
+		logger::error("{} {}", prefix, cleanMsg);
 		break;
 	}
 }
+
+std::vector<std::pair<std::string, std::string>> Streamline::dllVersions = {};
 
 void Streamline::LoadInterposer()
 {
 	triedInitialization = true;
 
-	interposer = LoadLibraryW(L"Data/SKSE/Plugins/Streamline/sl.interposer.dll");
+	std::wstring interposerPath = std::wstring(Streamline::PluginDir) + L"\\sl.interposer.dll";
+	interposer = LoadLibraryW(interposerPath.c_str());
 	if (interposer == nullptr) {
 		DWORD errorCode = GetLastError();
 		logger::info("[Streamline] Failed to load interposer: Error Code {0:x}", errorCode);
 		return;
 	}
 	logger::info("[Streamline] Interposer loaded at address: {0:p}", static_cast<void*>(interposer));
+
+	// Dynamically log all DLL versions in the Streamline plugin directory
+	std::filesystem::path pluginDir = std::filesystem::path(Streamline::PluginDir);
+	Streamline::dllVersions.clear();
+	for (const auto& entry : std::filesystem::directory_iterator(pluginDir)) {
+		if (entry.is_regular_file() && entry.path().extension() == L".dll") {
+			const auto& path = entry.path();
+			auto version = Util::GetDllVersion(path.c_str());
+			auto name = path.filename().string();
+			std::string versionStr = version ? Util::GetFormattedVersion(*version) : "Unknown";
+			Streamline::dllVersions.emplace_back(name, versionStr);
+			if (version)
+				logger::info("[Streamline] {} version: {}", name, versionStr);
+			else
+				logger::info("[Streamline] {} version: Unknown", name);
+		}
+	}
 
 	logger::info("[Streamline] Initializing Streamline");
 
@@ -49,7 +109,19 @@ void Streamline::LoadInterposer()
 	pref.featuresToLoad = REL::Module::IsVR() ? featuresToLoadVR : featuresToLoad;
 	pref.numFeaturesToLoad = _countof(featuresToLoad);
 
-	pref.logLevel = sl::LogLevel::eOff;
+	// Set log level from settings
+	switch (globals::upscaling->settings.streamlineLogLevel) {
+	case 2:
+		pref.logLevel = sl::LogLevel::eVerbose;
+		break;
+	case 1:
+		pref.logLevel = sl::LogLevel::eDefault;
+		break;
+	case 0:
+	default:
+		pref.logLevel = sl::LogLevel::eOff;
+		break;
+	}
 	pref.logMessageCallback = LoggingCallback;
 	pref.showConsole = false;
 
@@ -185,10 +257,15 @@ void Streamline::PostDevice()
 	}
 }
 
+/**
+ * @brief Updates and sets camera and frame constants for the current Streamline frame.
+ *
+ * Populates and submits camera parameters, projection matrices, motion vector settings, and other per-frame constants to the Streamline SDK for the current frame. Uses cached framebuffer data and global state to ensure correct configuration for upscaling and frame generation features.
+ */
 void Streamline::CheckFrameConstants()
 {
 	if (frameChecker.IsNewFrame() && globals::streamline->initialized) {
-		slGetNewFrameToken(frameToken, nullptr);
+		slGetNewFrameToken(frameToken, &globals::state->frameCount);
 
 		auto state = globals::state;
 
@@ -204,15 +281,15 @@ void Streamline::CheckFrameConstants()
 		slConstants.cameraNear = *globals::game::cameraNear;
 		slConstants.cameraFar = *globals::game::cameraFar;
 
-		auto viewMatrix = frameBufferCached.CameraViewInverse.Transpose();
-		auto cameraViewToClip = frameBufferCached.CameraProjUnjittered.Transpose();
+		auto viewMatrix = globals::upscaling->frameBufferCached.CameraViewInverse.Transpose();
+		auto cameraViewToClip = globals::upscaling->frameBufferCached.CameraProjUnjittered.Transpose();
 
 		slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
 		slConstants.cameraPinholeOffset = { 0.f, 0.f };
 		slConstants.cameraRight = { viewMatrix._11, viewMatrix._12, viewMatrix._13 };
 		slConstants.cameraUp = { viewMatrix._21, viewMatrix._22, viewMatrix._23 };
 		slConstants.cameraFwd = { viewMatrix._31, viewMatrix._32, viewMatrix._33 };
-		slConstants.cameraPos = *(sl::float3*)&frameBufferCached.CameraPosAdjust;
+		slConstants.cameraPos = *(sl::float3*)&globals::upscaling->frameBufferCached.CameraPosAdjust;
 		slConstants.cameraViewToClip = *(sl::float4x4*)&cameraViewToClip;
 		slConstants.depthInverted = sl::Boolean::eFalse;
 
@@ -303,6 +380,11 @@ void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl
 	slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
 }
 
+/**
+ * @brief Submits frame resources and markers for DLSS-G frame generation and Reflex latency tracking.
+ *
+ * Updates DLSS-G frame generation mode if needed, sets Reflex simulation and render markers, and binds required resources (depth, motion vectors, HUD-less color, UI) for the current frame to the Streamline SDK. No action is taken if Streamline is uninitialized, DLSS-G is unavailable, VR mode is active, or D3D12 interop is not enabled.
+ */
 void Streamline::Present()
 {
 	if (!initialized || !featureDLSSG || globals::game::isVR || !globals::upscaling->d3d12Interop)
@@ -314,6 +396,9 @@ void Streamline::Present()
 
 	static auto currentFrameGenerationMode = sl::DLSSGMode::eOff;
 	auto frameGenerationMode = upscaling->settings.frameGenerationMode ? sl::DLSSGMode::eOn : sl::DLSSGMode::eOff;
+
+	// Set isFrameGenActive based on whether DLSS-G frame generation is enabled
+	isFrameGenActive = (frameGenerationMode == sl::DLSSGMode::eOn);
 
 	if (currentFrameGenerationMode != frameGenerationMode) {
 		currentFrameGenerationMode = frameGenerationMode;
@@ -328,14 +413,8 @@ void Streamline::Present()
 
 	auto state = globals::state;
 
-	// Fake NVIDIA Reflex to prevent DLSSG errors
-	slReflexSetMarker(sl::ReflexMarker::eInputSample, *frameToken);
-	slReflexSetMarker(sl::ReflexMarker::eSimulationStart, *frameToken);
 	slReflexSetMarker(sl::ReflexMarker::eSimulationEnd, *frameToken);
 	slReflexSetMarker(sl::ReflexMarker::eRenderSubmitStart, *frameToken);
-	slReflexSetMarker(sl::ReflexMarker::eRenderSubmitEnd, *frameToken);
-	slReflexSetMarker(sl::ReflexMarker::ePresentStart, *frameToken);
-	slReflexSetMarker(sl::ReflexMarker::ePresentEnd, *frameToken);
 
 	sl::Extent fullExtent{ 0, 0, static_cast<uint>(state->screenSize.x), static_cast<uint>(state->screenSize.y) };
 
@@ -358,40 +437,15 @@ void Streamline::Present()
 	slSetTag(viewport, inputs, _countof(inputs), globals::d3d::context);
 }
 
+/**
+ * @brief Releases DLSS resources and disables DLSS for the current viewport.
+ *
+ * Sets the DLSS mode to off and frees all DLSS-related resources associated with the viewport.
+ */
 void Streamline::DestroyDLSSResources()
 {
 	sl::DLSSOptions dlssOptions{};
 	dlssOptions.mode = sl::DLSSMode::eOff;
 	slDLSSSetOptions(viewport, dlssOptions);
 	slFreeResources(sl::kFeatureDLSS, viewport);
-}
-
-void Streamline::InstallHooks(ID3D11DeviceContext* a_context)
-{
-	stl::detour_vfunc<14, ID3D11DeviceContext_Map>(a_context);
-	stl::detour_vfunc<15, ID3D11DeviceContext_Unmap>(a_context);
-}
-
-HRESULT Streamline::ID3D11DeviceContext_Map::thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource, D3D11_MAP MapType, UINT MapFlags, D3D11_MAPPED_SUBRESOURCE* pMappedResource)
-{
-	HRESULT hr = func(This, pResource, Subresource, MapType, MapFlags, pMappedResource);
-	if (hr == S_OK) {
-		if (*globals::game::perFrame.get() == pResource)
-			globals::streamline->mappedFrameBuffer = pMappedResource;
-	}
-	return hr;
-}
-
-void Streamline::ID3D11DeviceContext_Unmap::thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource)
-{
-	if (*globals::game::perFrame.get() == pResource && globals::streamline->mappedFrameBuffer)
-		globals::streamline->CacheFramebuffer();
-	func(This, pResource, Subresource);
-}
-
-void Streamline::CacheFramebuffer()
-{
-	auto frameBuffer = static_cast<FrameBuffer*>(mappedFrameBuffer->pData);
-	frameBufferCached = *frameBuffer;
-	mappedFrameBuffer = nullptr;
 }

@@ -42,6 +42,15 @@ namespace Color
 			tmp - color.y);
 	}
 
+	float3 Saturation(float3 color, float saturation)
+	{
+		float grey = RGBToLuminance(color);
+		color.x = max(lerp(grey, color.x, saturation), 0.0f);
+		color.y = max(lerp(grey, color.y, saturation), 0.0f);
+		color.z = max(lerp(grey, color.z, saturation), 0.0f);
+		return color;
+	}
+
 	// Attempt to match vanilla materials tha are a darker than PBR
 	const static float PBRLightingScale = 0.666;
 

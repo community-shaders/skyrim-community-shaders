@@ -3,6 +3,7 @@
 #include "TruePBR/BSLightingShaderMaterialPBR.h"
 #include "TruePBR/BSLightingShaderMaterialPBRLandscape.h"
 
+#include "Features/InteriorSunShadows.h"
 #include "Hooks.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -666,6 +667,8 @@ struct BSLightingShaderProperty_GetRenderPasses
 			return renderPasses;
 		}
 
+		const auto issEnabledAndInteriorWithSun = globals::features::interiorSunShadows->loaded && globals::features::interiorSunShadows->isInteriorWithSun;
+
 		bool isPbr = false;
 
 		if (property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting) && (property->material->GetFeature() == RE::BSShaderMaterial::Feature::kDefault || property->material->GetFeature() == RE::BSShaderMaterial::Feature::kMultiTexLandLODBlend)) {
@@ -695,6 +698,10 @@ struct BSLightingShaderProperty_GetRenderPasses
 						}
 					}
 				}
+
+				if (issEnabledAndInteriorWithSun)
+					lightingFlags |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::ShadowDir) | static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::DefShadow);
+
 				lightingTechnique = (static_cast<uint32_t>(lightingType) << 24) | lightingFlags;
 				currentPass->passEnum = lightingTechnique + LightingTechniqueStart;
 
@@ -1052,13 +1059,13 @@ void SetupLandscapeTexture(BSLightingShaderMaterialPBRLandscape& material, RE::T
 		return;
 	}
 
-	auto textureSet = landTexture.textureSet;
+	auto textureSet = Util::GetSeasonalSwap(landTexture.textureSet);
 	if (textureSet == nullptr) {
 		return;
 	}
 
 	auto truePBR = globals::truePBR;
-	auto* textureSetData = truePBR->GetPBRTextureSetData(landTexture.textureSet);
+	auto* textureSetData = truePBR->GetPBRTextureSetData(textureSet);
 	const bool isPbr = textureSetData != nullptr;
 
 	textureSets[textureIndex] = textureSetData;
@@ -1086,13 +1093,17 @@ RE::TESLandTexture* GetDefaultLandTexture()
 
 bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 {
+	if (land == nullptr) {
+		return false;
+	}
+
 	auto singleton = globals::truePBR;
 
 	bool isPbr = false;
 	if (land->loadedData != nullptr) {
 		for (uint32_t quadIndex = 0; quadIndex < 4; ++quadIndex) {
 			if (land->loadedData->defQuadTextures[quadIndex] != nullptr) {
-				if (singleton->IsPBRTextureSet(land->loadedData->defQuadTextures[quadIndex]->textureSet)) {
+				if (singleton->IsPBRTextureSet(Util::GetSeasonalSwap(land->loadedData->defQuadTextures[quadIndex]->textureSet))) {
 					isPbr = true;
 					break;
 				}
@@ -1101,7 +1112,7 @@ bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 			}
 			for (uint32_t textureIndex = 0; textureIndex < 6; ++textureIndex) {
 				if (land->loadedData->quadTextures[quadIndex][textureIndex] != nullptr) {
-					if (singleton->IsPBRTextureSet(land->loadedData->quadTextures[quadIndex][textureIndex]->textureSet)) {
+					if (singleton->IsPBRTextureSet(Util::GetSeasonalSwap(land->loadedData->quadTextures[quadIndex][textureIndex]->textureSet))) {
 						isPbr = true;
 						break;
 					}

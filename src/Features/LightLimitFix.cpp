@@ -752,7 +752,7 @@ void LightLimitFix::UpdateLights()
 
 	// Process point lights
 
-	roomNodes.empty();
+	roomNodes.clear();
 
 	auto addRoom = [&](RE::NiNode* node, LightData& light) {
 		uint8_t roomIndex = 0;
@@ -1026,12 +1026,6 @@ void LightLimitFix::UpdateLights()
 
 	ID3D11UnorderedAccessView* null_uavs[3] = { nullptr };
 	context->CSSetUnorderedAccessViews(0, 3, null_uavs, nullptr);
-}
-
-void LightLimitFix::Hooks::BSBatchRenderer_RenderPassImmediately::thunk(RE::BSRenderPass* Pass, uint32_t Technique, bool AlphaTest, uint32_t RenderFlags)
-{
-	if (globals::features::lightLimitFix->CheckParticleLights(Pass, Technique))
-		func(Pass, Technique, AlphaTest, RenderFlags);
 }
 
 void LightLimitFix::Hooks::BSLightingShader_SetupGeometry::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)

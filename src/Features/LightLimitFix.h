@@ -4,6 +4,9 @@
 
 struct LightLimitFix : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "99548";
+
 public:
 	static LightLimitFix* GetSingleton()
 	{
@@ -13,7 +16,22 @@ public:
 
 	virtual inline std::string GetName() override { return "Light Limit Fix"; }
 	virtual inline std::string GetShortName() override { return "LightLimitFix"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "LIGHT_LIMIT_FIX"; }
+	virtual std::string_view GetCategory() const override { return "Lighting"; }
+
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Light Limit Fix removes the vanilla game's 4-light limit, allowing unlimited dynamic lights in scenes.\n"
+			"This dramatically improves lighting quality and enables more realistic illumination scenarios.",
+			{ "Removes 4-light limit",
+				"Unlimited dynamic lights",
+				"Improved lighting quality",
+				"Enhanced visual realism",
+				"Support for particle lights" }
+		};
+	}
 
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
@@ -224,12 +242,6 @@ public:
 
 	struct Hooks
 	{
-		struct BSBatchRenderer_RenderPassImmediately
-		{
-			static void thunk(RE::BSRenderPass* Pass, uint32_t Technique, bool AlphaTest, uint32_t RenderFlags);
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
 		struct BSLightingShader_SetupGeometry
 		{
 			static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags);
@@ -266,12 +278,22 @@ public:
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		template <int N>
+		struct ValidLight
+		{
+			static bool thunk(RE::BSShaderProperty* a_property, RE::BSLight* a_light)
+			{
+				return func(a_property, a_light) && (a_light->portalStrict || !a_light->portalGraph || a_light->IsShadowLight());
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		using ValidLight1 = ValidLight<1>;
+		using ValidLight2 = ValidLight<2>;
+		using ValidLight3 = ValidLight<3>;
+
 		static void Install()
 		{
-			stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately>(REL::RelocationID(100877, 107673).address() + REL::Relocate(0x1E5, 0x1EE));
-			stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
-			stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately>(REL::RelocationID(100871, 107667).address() + REL::Relocate(0xEE, 0xED));
-
 			stl::write_thunk_call<AIProcess_CalculateLightValue_GetLuminance>(REL::RelocationID(38900, 39946).address() + REL::Relocate(0x1C9, 0x1D3));
 
 			stl::write_vfunc<0x6, BSLightingShader_SetupGeometry>(RE::VTABLE_BSLightingShader[0]);
@@ -281,6 +303,10 @@ public:
 			stl::write_thunk_call<BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights>(REL::RelocationID(100565, 107300).address() + REL::Relocate(0x523, 0xB0E, 0x5fe));
 
 			stl::detour_thunk<NiNode_Destroy>(REL::RelocationID(68937, 70288));
+
+			stl::write_thunk_call<ValidLight1>(REL::RelocationID(100994, 107781).address() + 0x92);
+			stl::write_thunk_call<ValidLight2>(REL::RelocationID(100997, 107784).address() + REL::Relocate(0x139, 0x12A));
+			stl::write_thunk_call<ValidLight3>(REL::RelocationID(101296, 108283).address() + REL::Relocate(0xB7, 0x7E));
 
 			logger::info("[LLF] Installed hooks");
 		}

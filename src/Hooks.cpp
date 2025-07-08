@@ -9,7 +9,10 @@
 #include "TruePBR.h"
 #include "Util.h"
 
+#include "Features/InteriorSunShadows.h"
+#include "Features/LightLimitFix.h"
 #include "Features/TerrainHelper.h"
+#include "Features/VolumetricLighting.h"
 
 #include "ShaderTools/BSShaderHooks.h"
 
@@ -60,7 +63,7 @@ void DumpShader(const REX::BSShader* thisClass, const ShaderType* shader, const 
 		}
 	}
 
-	if (FILE * file; fopen_s(&file, dumpDir.c_str(), "wb") == 0) {
+	if (FILE* file; fopen_s(&file, dumpDir.c_str(), "wb") == 0) {
 		fwrite(dxbcData, 1, dxbcLen, file);
 		fclose(file);
 	}
@@ -197,7 +200,17 @@ namespace LightingExtensions
 
 struct IDXGISwapChain_Present
 {
-	static HRESULT WINAPI thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
+	static HRESULT WINAPI /**
+	 * @brief Presents the swap chain with additional upscaling, overlay, and Reflex marker integration.
+	 *
+	 * Copies frame buffers for upscaling, processes overlays, manages tearing flags, and integrates Streamline Reflex markers for frame timing if enabled. Also collects profiling data and applies frame limiting after presentation.
+	 *
+	 * @param This The swap chain instance to present.
+	 * @param SyncInterval The vertical sync interval.
+	 * @param Flags Presentation flags, possibly modified for tearing support.
+	 * @return HRESULT Result of the present operation.
+	 */
+	thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
 	{
 		auto state = globals::state;
 		auto streamline = globals::streamline;
@@ -223,7 +236,21 @@ struct IDXGISwapChain_Present
 			}
 		}
 
-		auto retval = func(This, SyncInterval, Flags);
+		HRESULT retval = S_OK;
+
+		if (globals::streamline->featureReflex) {
+			sl::FrameToken* frameToken;
+			globals::streamline->slGetNewFrameToken(frameToken, &globals::state->frameCount);
+
+			globals::streamline->slReflexSetMarker(sl::ReflexMarker::eRenderSubmitEnd, *frameToken);
+			globals::streamline->slReflexSetMarker(sl::ReflexMarker::ePresentStart, *frameToken);
+
+			retval = func(This, SyncInterval, Flags);
+
+			globals::streamline->slReflexSetMarker(sl::ReflexMarker::ePresentEnd, *frameToken);
+		} else {
+			retval = func(This, SyncInterval, Flags);
+		}
 
 		TracyD3D11Collect(state->tracyCtx);
 
@@ -285,6 +312,13 @@ HRESULT WINAPI hk_CreateDXGIFactory(REFIID, void** ppFactory)
 
 decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChain;
 
+/**
+ * @brief Creates a Direct3D 11 device and swap chain, with support for advanced upscaling and frame generation features.
+ *
+ * This function intercepts the standard D3D11 device and swap chain creation process to enable integration with Streamline and FidelityFX technologies, as well as optional D3D12 proxying for frame generation. It adjusts swap chain flags for tearing support, manages feature checks, and conditionally routes device creation through Streamline or FidelityFX proxies based on runtime settings and hardware capabilities. If frame generation is enabled and supported, a D3D12 proxy is used; otherwise, the standard D3D11 creation path is followed.
+ *
+ * @return HRESULT indicating the success or failure of device and swap chain creation.
+ */
 HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	IDXGIAdapter* pAdapter,
 	D3D_DRIVER_TYPE DriverType,
@@ -384,7 +418,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 			upscaling->d3d12Interop = true;
 
 			streamline->PostDevice();
-			streamline->InstallHooks(*ppImmediateContext);
+			upscaling->InstallD3DHooks(*ppImmediateContext);
 
 			IDXGIFactory* factory = nullptr;
 			if (SUCCEEDED((*ppSwapChain)->GetParent(IID_PPV_ARGS(&factory)))) {
@@ -468,8 +502,55 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	return ret;
 }
 
+struct Main_Update_Begin
+{
+	/**
+	 * @brief Wraps the player character update with Reflex frame timing markers.
+	 *
+	 * If the Reflex feature is enabled, obtains a new frame token and sets markers for input sampling and simulation start before invoking the original update function.
+	 *
+	 * @param a_player Pointer to the player character being updated.
+	 */
+	static void thunk(RE::PlayerCharacter* a_player)
+	{
+		if (globals::streamline->featureReflex) {
+			sl::FrameToken* frameToken;
+			globals::streamline->slGetNewFrameToken(frameToken, &globals::state->frameCount);
+			globals::streamline->slReflexSetMarker(sl::ReflexMarker::eInputSample, *frameToken);
+			globals::streamline->slReflexSetMarker(sl::ReflexMarker::eSimulationStart, *frameToken);
+		}
+		func(a_player);
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
+struct Main_Update_Swap
+{
+	/**
+	 * @brief Wraps a function call with Streamline Reflex simulation and render submit markers.
+	 *
+	 * If the Reflex feature is enabled, obtains a new frame token and sets markers for simulation end and render submit start before invoking the original function.
+	 */
+	static void thunk(void* This)
+	{
+		if (globals::streamline->featureReflex) {
+			sl::FrameToken* frameToken;
+			globals::streamline->slGetNewFrameToken(frameToken, &globals::state->frameCount);
+			globals::streamline->slReflexSetMarker(sl::ReflexMarker::eSimulationEnd, *frameToken);
+			globals::streamline->slReflexSetMarker(sl::ReflexMarker::eRenderSubmitStart, *frameToken);
+		}
+		func(This);
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
 struct BSShaderRenderTargets_Create
 {
+	/**
+	 * @brief Calls the original render target creation function and reinitializes global rendering state.
+	 *
+	 * Invokes the original function, then reinitializes global state and performs necessary setup for rendering targets.
+	 */
 	static void thunk()
 	{
 		func();
@@ -553,11 +634,8 @@ namespace Hooks
 		static LRESULT thunk(HWND a_hwnd, UINT a_msg, WPARAM a_wParam, LPARAM a_lParam)
 		{
 			auto menu = globals::menu;
-			if (a_msg == WM_KILLFOCUS && menu->initialized) {
-				menu->OnFocusLost();
-				auto& io = ImGui::GetIO();
-				io.ClearInputKeys();
-				io.ClearEventsQueue();
+			if ((a_msg == WM_KILLFOCUS || a_msg == WM_SETFOCUS) && menu->initialized) {
+				menu->focusChanged = true;
 			}
 			return func(a_hwnd, a_msg, a_wParam, a_lParam);
 		}
@@ -845,14 +923,14 @@ namespace Hooks
 	{
 		static bool thunk(RE::TESObjectLAND* land)
 		{
+			bool vanillaResult = func(land);
+
 			// setup material for PBR
 			auto TruePBRSingleton = globals::truePBR;
 			if (TruePBRSingleton->TESObjectLAND_SetupMaterial(land)) {
 				// if PBR, we are done
 				return true;
 			}
-
-			bool vanillaResult = func(land);
 
 			// setup material for terrain helper
 			auto terrainHelper = globals::features::terrainHelper;
@@ -888,6 +966,45 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	struct BSBatchRenderer_RenderPassImmediately1
+	{
+		static void thunk(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags)
+		{
+			if (globals::features::lightLimitFix->loaded && !globals::features::lightLimitFix->CheckParticleLights(pass, technique))
+				return;
+
+			func(pass, technique, alphaTest, renderFlags);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct BSBatchRenderer_RenderPassImmediately2
+	{
+		static void thunk(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags)
+		{
+			if (globals::features::lightLimitFix->loaded && !globals::features::lightLimitFix->CheckParticleLights(pass, technique))
+				return;
+
+			if (globals::features::interiorSunShadows->loaded)
+				globals::features::interiorSunShadows->UpdateRasterStateCullMode(pass, technique);
+
+			func(pass, technique, alphaTest, renderFlags);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct BSBatchRenderer_RenderPassImmediately3
+	{
+		static void thunk(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags)
+		{
+			if (globals::features::lightLimitFix->loaded && !globals::features::lightLimitFix->CheckParticleLights(pass, technique))
+				return;
+
+			func(pass, technique, alphaTest, renderFlags);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 #ifdef TRACY_ENABLE
 	struct Main_Update
 	{
@@ -905,37 +1022,6 @@ namespace Hooks
 		RE::BSImagespaceShader* CurrentlyDispatchedShader = nullptr;
 		RE::BSComputeShader* CurrentlyDispatchedComputeShader = nullptr;
 		uint32_t CurrentComputeShaderTechniqueId = 0;
-
-		RE::BSImagespaceShader* vlGenerateShader = nullptr;
-		RE::BSImagespaceShader* vlRaymarchShader = nullptr;
-
-		RE::BSImagespaceShader* CreateVLShader(const std::string_view& name, const std::string_view& fileName, RE::BSComputeShader* computeShader)
-		{
-			auto shader = RE::BSImagespaceShader::Create();
-			shader->shaderType = RE::BSShader::Type::ImageSpace;
-			shader->fxpFilename = fileName.data();
-			shader->name = name.data();
-			shader->originalShaderName = fileName.data();
-			shader->computeShader = computeShader;
-			shader->isComputeShader = true;
-			return shader;
-		}
-
-		RE::BSImagespaceShader* GetOrCreateVLGenerateShader(RE::BSComputeShader* computeShader)
-		{
-			if (vlGenerateShader == nullptr) {
-				vlGenerateShader = CreateVLShader("BSImagespaceShaderVolumetricLightingGenerateCS", "ISVolumetricLightingGenerateCS", computeShader);
-			}
-			return vlGenerateShader;
-		}
-
-		RE::BSImagespaceShader* GetOrCreateVLRaymarchShader(RE::BSComputeShader* computeShader)
-		{
-			if (vlRaymarchShader == nullptr) {
-				vlRaymarchShader = CreateVLShader("BSImagespaceShaderVolumetricLightingRaymarchCS", "ISVolumetricLightingRaymarchCS", computeShader);
-			}
-			return vlRaymarchShader;
-		}
 
 		struct BSImagespaceShader_DispatchComputeShader
 		{
@@ -969,16 +1055,28 @@ namespace Hooks
 			{
 				auto state = globals::state;
 				auto shaderCache = globals::shaderCache;
+				auto vl = globals::features::volumetricLighting;
+
 				if (state->enabledClasses[RE::BSShader::Type::ImageSpace]) {
 					RE::BSImagespaceShader* isShader = CurrentlyDispatchedShader;
 					uint32_t techniqueId = CurrentComputeShaderTechniqueId;
 					if (CurrentlyDispatchedShader == nullptr) {
 						techniqueId = 0;
 						if (CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingGenerateCS")) {
-							isShader = GetOrCreateVLGenerateShader(CurrentlyDispatchedComputeShader);
+							isShader = globals::features::volumetricLighting->GetOrCreateGenerateCS(CurrentlyDispatchedComputeShader);
 						} else if (CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingRaymarchCS")) {
-							isShader = GetOrCreateVLRaymarchShader(CurrentlyDispatchedComputeShader);
+							isShader = globals::features::volumetricLighting->GetOrCreateRaymarchCS(CurrentlyDispatchedComputeShader);
 						}
+					} else if (CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingBlurHCS")) {
+						techniqueId = 0;
+						isShader = vl->GetOrCreateBlurHCS(CurrentlyDispatchedComputeShader);
+						vl->SetDimensionsCB();
+						vl->SetGroupCountsHCS(threadGroupCountX);
+					} else if (CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingBlurVCS")) {
+						techniqueId = 0;
+						isShader = vl->GetOrCreateBlurVCS(CurrentlyDispatchedComputeShader);
+						vl->SetDimensionsCB();
+						vl->SetGroupCountsVCS(threadGroupCountY);
 					}
 					if (isShader != nullptr) {
 						if (auto* computeShader = shaderCache->GetComputeShader(*isShader, techniqueId)) {
@@ -1011,6 +1109,11 @@ namespace Hooks
 		PatchMemory(Address, Data.begin(), Data.size());
 	}
 
+	/**
+	 * @brief Installs hooks, detours, and memory patches for graphics, input, and rendering subsystems.
+	 *
+	 * Sets up function hooks and virtual method overrides for shader management, input polling, rendering pipeline stages, compute shader dispatch, material setup, batch rendering, and window procedure handling. Applies memory patches to adjust render pass cache sizes and offsets. Installs additional update hooks for frame timing and Reflex marker integration when not in VR mode.
+	 */
 	void Install()
 	{
 		logger::info("Hooking BSInputDeviceManager::PollInputDevices");
@@ -1079,6 +1182,11 @@ namespace Hooks
 		logger::info("Hooking BSLightingShader");
 		stl::write_vfunc<0x4, BSLightingShader_SetupMaterial>(RE::VTABLE_BSLightingShader[0]);
 
+		logger::info("Hooking BSBatchRenderer::RenderPassImmediately");
+		stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately1>(REL::RelocationID(100877, 107673).address() + REL::Relocate(0x1E5, 0x1EE));
+		stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately2>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
+		stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately3>(REL::RelocationID(100871, 107667).address() + REL::Relocate(0xEE, 0xED));
+
 		const auto renderPassCacheCtor = REL::VariantID(100720, 107500, 0x1340330);
 		const int32_t passCount = 4194240;
 		const int32_t passCountSE = 4194240 * 16;
@@ -1115,8 +1223,17 @@ namespace Hooks
 				REL::Relocation<std::uintptr_t>(renderPassCacheCtor, 0x191 - 2).address(),
 				reinterpret_cast<const uint8_t*>(&passCountSE), 4);
 		}
+		if (!REL::Module::IsVR()) {
+			stl::write_thunk_call<Main_Update_Begin>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x53, 0x6E));
+			stl::write_thunk_call<Main_Update_Swap>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x5D2, 0xA97));
+		}
 	}
 
+	/**
+	 * @brief Installs Direct3D-related hooks for device and factory creation.
+	 *
+	 * Loads FidelityFX support and patches the import address table (IAT) to redirect D3D11 device and DXGI factory creation functions to custom hook implementations.
+	 */
 	void InstallD3DHooks()
 	{
 		globals::fidelityFX->LoadFFX();

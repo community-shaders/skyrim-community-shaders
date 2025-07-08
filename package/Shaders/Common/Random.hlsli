@@ -102,10 +102,11 @@ namespace Random
 		return fmix(h);
 	}
 
-	uint pcg(uint v)
+	uint pcg(inout uint state)
 	{
-		uint state = v * 747796405u + 2891336453u;
-		uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+		uint prevState = state;
+		state = state * 747796405u + 2891336453u;
+		uint word = ((prevState >> ((prevState >> 28u) + 4u)) ^ prevState) * 277803737u;
 		return (word >> 22u) ^ word;
 	}
 
@@ -149,6 +150,64 @@ namespace Random
 		uint n = 1103515245U * ((q.x) ^ (q.y >> 3U));
 
 		return n;
+	}
+
+	float f1(inout uint state, out uint randBits)
+	{
+		randBits = pcg(state);
+		uint bits = randBits & 0x007FFFFFu | 0x3F800000u;
+		return asfloat(bits) - 1.0f;
+	}
+
+	float f1(inout uint state)
+	{
+		uint randBits;
+		return f1(state, randBits);
+	}
+
+	float2 f2(inout uint state, out uint randBits)
+	{
+		randBits = pcg(state);
+		uint bits0 = randBits & 0x007FFFFFu | 0x3F800000u;
+		uint bits1 = randBits >> 9 | 0x3F800000u;
+		return float2(asfloat(bits0), asfloat(bits1)) - 1.0f;
+	}
+
+	float2 f2(inout uint state)
+	{
+		uint randBits;
+		return f2(state, randBits);
+	}
+
+	float3 f3(inout uint state, out uint randBits)
+	{
+		randBits = pcg(state);
+		uint bits0 = randBits & 0x007FFFFFu | 0x3F800000u;
+		uint bits1 = (randBits << 22 | randBits >> 10) & 0x007FFFFFu | 0x3F800000u;
+		uint bits2 = (randBits << 11 | randBits >> 21) & 0x007FFFFFu | 0x3F800000u;
+		return float3(asfloat(bits0), asfloat(bits1), asfloat(bits2)) - 1.0f;
+	}
+
+	float3 f3(inout uint state)
+	{
+		uint randBits;
+		return f3(state, randBits);
+	}
+
+	float4 f4(inout uint state, out uint randBits)
+	{
+		randBits = pcg(state);
+		uint bits0 = randBits & 0x007FFFFFu | 0x3F800000u;
+		uint bits1 = (randBits << 24 | randBits >> 8) & 0x007FFFFFu | 0x3F800000u;
+		uint bits2 = (randBits << 16 | randBits >> 16) & 0x007FFFFFu | 0x3F800000u;
+		uint bits3 = (randBits << 8 | randBits >> 24) & 0x007FFFFFu | 0x3F800000u;
+		return float4(asfloat(bits0), asfloat(bits1), asfloat(bits2), asfloat(bits3)) - 1.0f;
+	}
+
+	float4 f4(inout uint state)
+	{
+		uint randBits;
+		return f4(state, randBits);
 	}
 
 	///////////////////////////////////////////////////////////

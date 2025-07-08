@@ -2,6 +2,10 @@
 
 struct ScreenSpaceShadows : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "93209";
+
+public:
 	static ScreenSpaceShadows* GetSingleton()
 	{
 		static ScreenSpaceShadows singleton;
@@ -10,7 +14,23 @@ struct ScreenSpaceShadows : Feature
 
 	virtual inline std::string GetName() override { return "Screen Space Shadows"; }
 	virtual inline std::string GetShortName() override { return "ScreenSpaceShadows"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "SCREEN_SPACE_SHADOWS"; }
+	virtual std::string_view GetCategory() const override { return "Lighting"; }
+
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Screen Space Shadows enhances shadow quality by adding detailed contact shadows and improving shadow accuracy.\n"
+			"This technique adds fine-detail shadows that traditional shadow mapping might miss.",
+			{ "Enhanced contact shadows",
+				"Improved shadow detail",
+				"Better shadow accuracy",
+				"Fine-scale shadow effects",
+				"Configurable shadow contrast" }
+		};
+	}
+
 	bool HasShaderDefine(RE::BSShader::Type shaderType) override;
 
 	struct BendSettings

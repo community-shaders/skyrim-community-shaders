@@ -1,41 +1,667 @@
-name: build Community Shaders and addons
+name: Build Community Shaders and addons
 
 on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
+    push:
+        tags:
+            - "v*"
+    release:
+        types: [created]
+    workflow_dispatch:
+        inputs:
+            cache-key-suffix:
+                description: "Optional suffix to invalidate the build cache"
+                required: false
+            build-cpp:
+                description: "Build C++ plugin and addons for manual dispatch"
+                type: boolean
+                required: false
+                default: true
+            validate-shaders:
+                description: "Run HLSL shader validation for manual dispatch"
+                type: boolean
+                required: false
+                default: true
+    pull_request_target:
+        types: [opened, synchronize, reopened, ready_for_review]
+        paths:
+            - "**.cpp"
+            - "**.h"
+            - "**.hpp"
+            - "**.c"
+            - "**.hlsl"
+            - "**.hlsli"
+            - "CMakeLists.txt"
+            - "CMakePresets.json"
+            - "vcpkg.json"
+            - "vcpkg-configuration.json"
+            - ".gitmodules"
+            - "extern/**"
 
 permissions:
-  contents: write
+    contents: read
+    pull-requests: read
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
 
 jobs:
-  compile:
-    name: build plugin and addons
-    runs-on: windows-latest
-    steps:
-        - uses: actions/checkout@v3
-          with:
-            submodules: recursive
+    check-changes:
+        name: Check for changes in PRs
+        runs-on: ubuntu-latest
+        if: ${{ github.event_name == 'pull_request_target' }}
+        outputs:
+            should-build: ${{ steps.changed-files.outputs.build_any_changed == 'true' || steps.changed-files.outputs.cpp_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
+            hlsl-should-build: ${{ steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+                  token: ${{ secrets.GITHUB_TOKEN }}
 
-        - uses: ilammy/msvc-dev-cmd@v1.10.0
+            - name: Fetch PR head and base
+              run: |
+                  git fetch origin ${{ github.event.pull_request.head.sha }}
+                  git fetch origin ${{ github.event.pull_request.base.sha }}
 
-        - uses: lukka/run-vcpkg@v11.5
-          with:
-            vcpkgJsonGlob: vcpkg.json
+            - name: Get changed files
+              id: changed-files
+              uses: tj-actions/changed-files@v46
+              continue-on-error: true
+              with:
+                  files_yaml: |
+                      cpp:
+                        - '**.cpp'
+                        - '**.h'
+                        - '**.hpp'
+                        - '**.c'
+                        - 'src/**'
+                        - 'include/**'
+                        - '!**.hlsl'
+                        - '!**.hlsli'
+                      build:
+                        - 'CMakeLists.txt'
+                        - 'CMakePresets.json'
+                        - 'vcpkg.json'
+                        - 'vcpkg-configuration.json'
+                        - '.gitmodules'
+                        - 'extern/**'
+                      hlsl:
+                        - '**.hlsl'
+                        - '**.hlsli'
+                        - 'package/Shaders/**'
+                        - 'features/**/Shaders/**'
+                  base_sha: ${{ github.event.pull_request.base.sha }}
+                  sha: ${{ github.event.pull_request.head.sha }}
 
-        - name: cmake configure
-          run: cmake -S . --preset=ALL --check-stamp-file "build\CMakeFiles\generate.stamp"
+            - name: Fallback - Set outputs if changed-files failed
+              if: failure()
+              run: |
+                  echo "should-build=true" >> $GITHUB_OUTPUT
+                  echo "hlsl-should-build=true" >> $GITHUB_OUTPUT
 
-        - name: cmake build
-          run: cmake --build build/ALL --config Release
+    cpp-build:
+        needs: [check-changes]
+        if: >
+            always() && !cancelled() &&
+            ((github.event_name == 'workflow_dispatch' &&
+              github.event.inputs.build-cpp == 'true') ||
+            (github.event_name == 'pull_request_target' &&
+             !github.event.pull_request.draft) ||
+            (github.event_name == 'release'))
+        name: Build plugin and addons
+        runs-on: windows-2022
+        permissions:
+            contents: read
+        outputs:
+            version: ${{ steps.get_version.outputs.version }}
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event.pull_request.head.ref || github.ref }}
+                  repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+                  submodules: recursive
 
-        - name: create a tagged release and upload the archive
-          uses: ncipollo/release-action@v1
-          env:
-              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          with:
-            name: Community Shaders ${{ github.ref_name }}
-            draft: true
-            tag: ${{ github.ref_name }}
-            artifacts: "${{ github.workspace }}/dist/*.7z"
+            - name: Setup MSVC environment (VS2022)
+              uses: ilammy/msvc-dev-cmd@v1
+              with:
+                  arch: x64
+
+            - name: Get MSVC version
+              id: msvc_version
+              shell: pwsh
+              run: |
+                  # Create a dummy source file for cl.exe /Bv
+                  "int main() { return 0; }" | Out-File -FilePath "dummy.cpp" -Encoding ASCII
+
+                  $output = & cl.exe /Bv dummy.cpp 2>&1
+                  Write-Host "Raw cl.exe output:"
+                  Write-Host $output
+
+                  # More robust version extraction
+                  $version = $null
+
+                  # Split output into lines and search for version patterns
+                  $lines = $output -split "`n|`r"
+                  Write-Host "Number of lines: $($lines.Count)"
+
+                  foreach ($line in $lines) {
+                      Write-Host "Processing line: '$line'"
+
+                      # Try different patterns on each line
+                      if ($line -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found version in line: $version"
+                          break
+                      }
+                      elseif ($line -match '([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found generic version in line: $version"
+                          break
+                      }
+                  }
+
+                  # If still no version, try the whole output as a single string
+                  if (-not $version) {
+                      Write-Host "Trying whole output as single string..."
+                      if ($output -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found version in whole output: $version"
+                      }
+                      elseif ($output -match '([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found generic version in whole output: $version"
+                      }
+                  }
+
+                  Write-Host "Final version result: $version"
+
+                  if ($version) {
+                      Write-Host "MSVC version: $version"
+                      Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version" -Encoding UTF8
+                  } else {
+                      Write-Host "Failed to extract MSVC version from output:"
+                      Write-Host $output
+                      throw "MSVC version not found in output"
+                  }
+
+                  # Clean up dummy file
+                  Remove-Item "dummy.cpp" -ErrorAction SilentlyContinue
+
+            - name: Setup vcpkg
+              uses: lukka/run-vcpkg@v11.5
+              with:
+                  vcpkgJsonGlob: vcpkg.json
+
+            - name: Cache CMake build output
+              uses: actions/cache@v4
+              with:
+                  path: build/ALL
+                  key: ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
+                  restore-keys: |
+                      ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-
+                      ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-
+
+            - name: Remove stale CMake cache if drive letter changed
+              shell: pwsh
+              run: |
+                  $cacheFile = "build/ALL/CMakeCache.txt"
+                  if (Test-Path $cacheFile) {
+                    $expected = (Resolve-Path .).Path.Substring(0,1)  # C or D
+                    $content = Get-Content $cacheFile -Raw
+                    if ($content -match 'CMAKE_HOME_DIRECTORY:INTERNAL=([A-Z]):') {
+                      $actual = $Matches[1]
+                      if ($actual -ne $expected) {
+                        Write-Host "❌ Cache drive mismatch. Removing stale build/ALL directory."
+                        Remove-Item -Recurse -Force "build/ALL"
+                      } else {
+                        Write-Host "✅ Cache path matches. Keeping build/ALL."
+                      }
+                    }
+                  }
+
+            - name: Build using run-cmake
+              uses: lukka/run-cmake@v10
+              with:
+                  configurePreset: ALL
+                  buildPreset: ALL
+
+            - name: Extract version from CMake
+              id: get_version
+              shell: pwsh
+              run: |
+                  $content = Get-Content build/ALL/CMakeCache.txt
+                  $versionLine = $content | Select-String -Pattern 'CMAKE_PROJECT_VERSION:STATIC'
+                  if ($versionLine) {
+                      $version = ($versionLine -replace '.*=([0-9]+\.[0-9]+\.[0-9]+).*', '$1').ToString()
+                  } else {
+                      Write-Error "Version extraction failed: CMAKE_PROJECT_VERSION not found in CMakeCache.txt" -ErrorAction Stop
+                  }
+                  if (-not $version -or $version -eq "") {
+                      Write-Error "Version extraction failed: no version found" -ErrorAction Stop
+                  }
+                  "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+            - name: Upload dist artifacts
+              if: success()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: dist-artifacts
+                  path: dist/
+                  retention-days: 30
+
+    shader-validation:
+        needs: [check-changes]
+        if: >
+            always() && !cancelled() &&
+            ((github.event_name == 'pull_request_target' &&
+              !github.event.pull_request.draft) ||
+             (github.event_name == 'workflow_dispatch' &&
+              github.event.inputs.validate-shaders == 'true') ||
+             (github.event_name == 'release'))
+        name: Validate shader compilation
+        runs-on: windows-2022
+        permissions:
+            contents: read
+        strategy:
+            matrix:
+                config:
+                    - name: "Flatrim"
+                      file: ".github/configs/shader-validation.yaml"
+                    - name: "VR"
+                      file: ".github/configs/shader-validation-vr.yaml"
+            fail-fast: false # Let both configs run to completion for full output
+        steps:
+            - name: Check if HLSL validation needed
+              id: check-hlsl
+              run: |
+                  # For release events and non-PR events, always run validation
+                  if [ "${{ github.event_name }}" = "release" ] || [ "${{ github.event_name }}" != "pull_request_target" ]; then
+                    echo "Non-PR event detected, proceeding with validation"
+                    echo "skip=false" >> $GITHUB_OUTPUT
+                  else
+                    # Only check for changes on PR events
+                    if [ "${{ needs.check-changes.outputs.hlsl-should-build }}" != "true" ]; then
+                      echo "No HLSL changes detected, skipping validation steps"
+                      echo "skip=true" >> $GITHUB_OUTPUT
+                    else
+                      echo "HLSL changes detected, proceeding with validation"
+                      echo "skip=false" >> $GITHUB_OUTPUT
+                    fi
+                  fi
+              shell: bash
+
+            - name: Checkout code
+              if: steps.check-hlsl.outputs.skip != 'true'
+              uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event.pull_request.head.ref || github.ref }}
+                  repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+                  submodules: recursive
+
+            - uses: ilammy/msvc-dev-cmd@v1
+              if: steps.check-hlsl.outputs.skip != 'true'
+
+            - name: Get MSVC version
+              if: steps.check-hlsl.outputs.skip != 'true'
+              id: msvc_version
+              shell: pwsh
+              run: |
+                  # Create a dummy source file for cl.exe /Bv
+                  "int main() { return 0; }" | Out-File -FilePath "dummy.cpp" -Encoding ASCII
+
+                  $output = & cl.exe /Bv dummy.cpp 2>&1
+                  Write-Host "Raw cl.exe output:"
+                  Write-Host $output
+
+                  # More robust version extraction
+                  $version = $null
+
+                  # Split output into lines and search for version patterns
+                  $lines = $output -split "`n|`r"
+                  Write-Host "Number of lines: $($lines.Count)"
+
+                  foreach ($line in $lines) {
+                      Write-Host "Processing line: '$line'"
+
+                      # Try different patterns on each line
+                      if ($line -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found version in line: $version"
+                          break
+                      }
+                      elseif ($line -match '([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found generic version in line: $version"
+                          break
+                      }
+                  }
+
+                  # If still no version, try the whole output as a single string
+                  if (-not $version) {
+                      Write-Host "Trying whole output as single string..."
+                      if ($output -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found version in whole output: $version"
+                      }
+                      elseif ($output -match '([0-9]+\.[0-9]+\.[0-9]+)') {
+                          $version = $Matches[1]
+                          Write-Host "Found generic version in whole output: $version"
+                      }
+                  }
+
+                  Write-Host "Final version result: $version"
+
+                  if ($version) {
+                      Write-Host "MSVC version: $version"
+                      Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version" -Encoding UTF8
+                  } else {
+                      Write-Host "Failed to extract MSVC version from output:"
+                      Write-Host $output
+                      throw "MSVC version not found in output"
+                  }
+
+                  # Clean up dummy file
+                  Remove-Item "dummy.cpp" -ErrorAction SilentlyContinue
+
+            - name: Setup vcpkg
+              if: steps.check-hlsl.outputs.skip != 'true'
+              uses: lukka/run-vcpkg@v11.5
+              with:
+                  vcpkgJsonGlob: vcpkg.json
+
+            - name: Cache CMake build output
+              if: steps.check-hlsl.outputs.skip != 'true'
+              uses: actions/cache@v4
+              with:
+                  path: build/ALL
+                  key: ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ matrix.config.name }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
+                  restore-keys: |
+                      ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ matrix.config.name }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-
+                      ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ matrix.config.name }}-
+
+            - name: Remove stale CMake cache if drive letter changed
+              if: steps.check-hlsl.outputs.skip != 'true'
+              shell: pwsh
+              run: |
+                  $cacheFile = "build/ALL/CMakeCache.txt"
+                  if (Test-Path $cacheFile) {
+                    $expected = (Resolve-Path .).Path.Substring(0,1)  # C or D
+                    $content = Get-Content $cacheFile -Raw
+                    if ($content -match 'CMAKE_HOME_DIRECTORY:INTERNAL=([A-Z]):') {
+                      $actual = $Matches[1]
+                      if ($actual -ne $expected) {
+                        Write-Host "❌ Cache drive mismatch. Removing stale build/ALL directory."
+                        Remove-Item -Recurse -Force "build/ALL"
+                      } else {
+                        Write-Host "✅ Cache path matches. Keeping build/ALL."
+                      }
+                    }
+                  }
+
+            - name: Prepare shaders for validation
+              if: steps.check-hlsl.outputs.skip != 'true'
+              uses: lukka/run-cmake@v10
+              with:
+                  configurePreset: ALL
+                  buildPreset: ALL
+                  buildPresetAdditionalArgs: "['--target prepare_shaders']"
+
+            - name: Setup Python
+              if: steps.check-hlsl.outputs.skip != 'true'
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Install hlslkit
+              if: steps.check-hlsl.outputs.skip != 'true'
+              run: pip install git+https://github.com/alandtse/hlslkit.git
+              shell: bash
+
+            - name: Validate shader compilation (${{ matrix.config.name }})
+              if: steps.check-hlsl.outputs.skip != 'true'
+              run: hlslkit-compile --shader-dir build/ALL/aio/Shaders --output-dir build/ShaderCache --config ${{ matrix.config.file }} --max-warnings 0 --suppress-warnings X1519
+              shell: bash
+
+            - name: Upload shader validation logs
+              if: failure() && steps.check-hlsl.outputs.skip != 'true'
+              uses: actions/upload-artifact@v4
+              with:
+                  name: shader-validation-logs-${{ matrix.config.name }}
+                  path: |
+                      build/ShaderCache/new_issues.log
+                      build/ShaderCache/*.log
+                  retention-days: 7
+                  if-no-files-found: ignore
+
+    prerelease:
+        name: Post Prerelease from PR
+        if: github.event_name == 'pull_request_target'
+        needs: [cpp-build, shader-validation]
+        runs-on: windows-2022
+        permissions:
+            contents: write
+            pull-requests: write
+        steps:
+            - name: Download dist artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  name: dist-artifacts
+                  path: dist/
+
+            - name: Generate release notes comparing against base version tag
+              id: gen_notes
+              continue-on-error: true
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              shell: bash
+              run: |
+                  TAG="v${{ needs.cpp-build.outputs.version }}-pr${{ github.event.pull_request.number }}"
+                  BASE_TAG="v${{ needs.cpp-build.outputs.version }}"
+                  REPO="${{ github.repository }}"
+                  BASE_SHA="${{ github.event.pull_request.base.sha }}"
+                  HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+                  PR_NUMBER="${{ github.event.pull_request.number }}"
+                  PR_URL="https://github.com/$REPO/pull/$PR_NUMBER"
+
+                  # Get PR author with fallback
+                  if PR_AUTHOR=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json author -q '.author.login' 2>/dev/null); then
+                    echo "✅ Found PR author: $PR_AUTHOR"
+                  else
+                    PR_AUTHOR="${{ github.event.pull_request.user.login }}"
+                    echo "⚠️ Using fallback PR author: $PR_AUTHOR"
+                  fi
+
+                  echo "🔍 Comparing $BASE_SHA...$HEAD_SHA"
+
+                  # Generate commit-based release notes
+                  if NOTES=$(gh api repos/$REPO/compare/$BASE_SHA...$HEAD_SHA 2>/dev/null | jq -r --arg author "$PR_AUTHOR" '
+                    .commits[]
+                    | "- \(.commit.message | split("\n")[0]) by @\(.author.login // $author)"
+                  ' 2>/dev/null) && [[ -n "$NOTES" ]]; then
+                    echo "$NOTES" > release-notes.md
+                    echo -e "\n[View Pull Request]($PR_URL)" >> release-notes.md
+                    echo "notes_generated=true" >> "$GITHUB_OUTPUT"
+                    echo "✅ Generated custom release notes"
+                  else
+                    echo "⚠️ Failed to generate notes from commit diff. Will use GitHub autogeneration." >&2
+                    echo "notes_generated=false" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Upload prerelease (custom notes)
+              if: steps.gen_notes.outputs.notes_generated == 'true'
+              uses: ncipollo/release-action@v1
+              with:
+                  name: "Community Shaders ${{ needs.cpp-build.outputs.version }} PR #${{ github.event.pull_request.number }}"
+                  tag: v${{ needs.cpp-build.outputs.version }}-pr${{ github.event.pull_request.number }}
+                  prerelease: true
+                  artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
+                  bodyFile: release-notes.md
+                  allowUpdates: true
+                  replacesArtifacts: true
+                  removeArtifacts: true
+
+            - name: Upload prerelease (auto-generated notes)
+              if: steps.gen_notes.outputs.notes_generated != 'true'
+              uses: ncipollo/release-action@v1
+              with:
+                  name: "Community Shaders ${{ needs.cpp-build.outputs.version }} PR #${{ github.event.pull_request.number }}"
+                  tag: v${{ needs.cpp-build.outputs.version }}-pr${{ github.event.pull_request.number }}
+                  prerelease: true
+                  artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
+                  generateReleaseNotes: true
+                  allowUpdates: true
+                  replacesArtifacts: true
+                  removeArtifacts: true
+
+            - name: Comment on PR
+              if: success()
+              uses: thollander/actions-comment-pull-request@v3
+              with:
+                  mode: upsert
+                  comment-tag: prerelease-build
+                  message: |
+                      ✅ A pre-release build is available for this PR:
+                      [Download](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.cpp-build.outputs.version }}-pr${{ github.event.pull_request.number }})
+
+    feature-audit:
+        name: Feature Version Audit (Release)
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release'
+        runs-on: ubuntu-latest
+        continue-on-error: true
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+                  submodules: recursive
+
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Run feature version audit
+              run: |
+                  python tools/feature_version_audit.py --output feature-version-audit-latest.md 2>&1 | tee feature-version-audit-latest.md
+
+            - name: Upload feature audit markdown
+              uses: actions/upload-artifact@v4
+              with:
+                  name: feature-version-audit
+                  path: feature-version-audit-latest.md
+
+    feature-audit-pr:
+        name: Feature Version Audit (PR)
+        if: github.event_name == 'pull_request_target'
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+                  submodules: recursive
+
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Run feature version audit (PR check)
+              id: audit
+              continue-on-error: true
+              run: |
+                  python tools/feature_version_audit.py --pr-check --base ${{ github.event.pull_request.base.sha }} 2>&1 | tee pr-feature-audit.md
+            - name: Upload feature audit markdown (PR)
+              uses: actions/upload-artifact@v4
+              with:
+                  name: pr-feature-audit
+                  path: pr-feature-audit.md
+
+    feature-audit-pr-comment:
+        name: Comment on PR with audit results
+        if: github.event_name == 'pull_request_target'
+        needs: feature-audit-pr
+        runs-on: ubuntu-latest
+        permissions:
+            pull-requests: write
+        steps:
+            - name: Download feature audit markdown (PR)
+              uses: actions/download-artifact@v4
+              with:
+                  name: pr-feature-audit
+                  path: .
+
+            - name: Comment on PR with audit results
+              uses: thollander/actions-comment-pull-request@v3
+              with:
+                  file-path: pr-feature-audit.md
+                  mode: upsert
+                  comment-tag: feature-version-audit
+
+    release:
+        name: Post Release for Draft, Manual Run, or Tag
+        needs: [cpp-build, shader-validation, feature-audit]
+        if: >
+            github.event_name == 'workflow_dispatch' ||
+            startsWith(github.ref, 'refs/tags/v') ||
+            github.event_name == 'release'
+        runs-on: windows-2022
+        permissions:
+            contents: write
+        steps:
+            - name: Ensure ref is a tag
+              if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+              run: |
+                  if [ "${{ github.ref_type }}" != "tag" ]; then
+                    echo "This workflow must be run on a tag, not a branch."
+                    exit 1
+                  fi
+
+            - name: Download dist artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  name: dist-artifacts
+                  path: dist/
+
+            - name: Download feature audit artifact
+              continue-on-error: true
+              uses: actions/download-artifact@v4
+              with:
+                  name: feature-version-audit
+                  path: .
+
+            - name: Generate combined release notes
+              id: combined_notes
+              shell: bash
+              run: |
+                  # For release events, use the release tag name
+                  if [ "${{ github.event_name }}" = "release" ]; then
+                    RELEASE_TAG="${{ github.event.release.tag_name }}"
+                  else
+                    RELEASE_TAG="${{ github.ref_name }}"
+                  fi
+
+                  # Generate GitHub release notes
+                  gh release view $RELEASE_TAG --json body -q .body > auto-release-notes.md || echo '' > auto-release-notes.md
+                  # Merge feature audit if present
+                  if [ -f feature-version-audit-latest.md ]; then
+                    echo -e "\n---\n\n" >> auto-release-notes.md
+                    cat feature-version-audit-latest.md >> auto-release-notes.md
+                  fi
+                  echo "body_file=auto-release-notes.md" >> $GITHUB_OUTPUT
+                  echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
+
+            - name: Create or Update Release
+              uses: ncipollo/release-action@v1
+              with:
+                  name: "Community Shaders ${{ steps.combined_notes.outputs.release_tag }}"
+                  draft: true
+                  tag: ${{ steps.combined_notes.outputs.release_tag }}
+                  artifacts: "${{ github.workspace }}/dist/*.7z"
+                  bodyFile: ${{ steps.combined_notes.outputs.body_file }}
+                  generateReleaseNotes: false
+                  replacesArtifacts: true
+                  removeArtifacts: true
+                  allowUpdates: true

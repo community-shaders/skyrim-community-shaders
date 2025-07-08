@@ -1,10 +1,13 @@
 #include "Deferred.h"
 
+#include <DDSTextureLoader.h>
+
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
 
 #include "Features/DynamicCubemaps.h"
+#include "Features/IBL.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
@@ -174,6 +177,13 @@ void Deferred::SetupResources()
 		prevDiffuseAmbientTexture = new Texture2D(texDesc);
 		prevDiffuseAmbientTexture->CreateSRV(srvDesc);
 		prevDiffuseAmbientTexture->CreateUAV(uavDesc);
+	}
+
+	// Testing code for imagespace shaders
+	{
+		auto device = globals::d3d::device;
+		auto context = globals::d3d::context;
+		DirectX::CreateDDSTextureFromFile(device, context, L"Data\\Shaders\\LUT.dds", nullptr, lutTexture.put());
 	}
 }
 
@@ -400,6 +410,8 @@ void Deferred::DeferredPasses()
 	auto [ssgi_ao, ssgi_y, ssgi_cocg, ssgi_gi_spec] = ssgi->GetOutputTextures();
 	bool ssgi_hq_spec = ssgi->settings.EnableExperimentalSpecularGI;
 
+	auto ibl = globals::features::ibl;
+
 	auto dispatchCount = Util::GetScreenDispatchCount();
 
 	if (ssgi->loaded) {
@@ -407,7 +419,7 @@ void Deferred::DeferredPasses()
 		{
 			TracyD3D11Zone(globals::state->tracyCtx, "Ambient Composite");
 
-			ID3D11ShaderResourceView* srvs[8]{
+			ID3D11ShaderResourceView* srvs[9]{
 				albedo.SRV,
 				normalRoughness.SRV,
 				skylighting->loaded || REL::Module::IsVR() ? depth.depthSRV : nullptr,
@@ -416,6 +428,7 @@ void Deferred::DeferredPasses()
 				ssgi_ao,
 				ssgi_y,
 				ssgi_cocg,
+				ibl->loaded ? ibl->diffuseIBLTexture->srv.get() : nullptr,
 			};
 
 			context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
@@ -431,7 +444,7 @@ void Deferred::DeferredPasses()
 
 		// Clear
 		{
-			ID3D11ShaderResourceView* views[8]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+			ID3D11ShaderResourceView* views[9]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
 			ID3D11UnorderedAccessView* uavs[2]{ nullptr, nullptr };
@@ -455,7 +468,7 @@ void Deferred::DeferredPasses()
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite");
 
-		ID3D11ShaderResourceView* srvs[14]{
+		ID3D11ShaderResourceView* srvs[15]{
 			specular.SRV,
 			albedo.SRV,
 			normalRoughness.SRV,
@@ -470,6 +483,7 @@ void Deferred::DeferredPasses()
 			ssgi_hq_spec ? nullptr : ssgi_y,
 			ssgi_hq_spec ? nullptr : ssgi_cocg,
 			ssgi_hq_spec ? ssgi_gi_spec : nullptr,
+			ibl->loaded ? ibl->diffuseIBLTexture->srv.get() : nullptr,
 		};
 
 		if (dynamicCubemaps->loaded)
@@ -488,7 +502,7 @@ void Deferred::DeferredPasses()
 
 	// Clear
 	{
-		ID3D11ShaderResourceView* views[14]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+		ID3D11ShaderResourceView* views[15]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
 		ID3D11UnorderedAccessView* uavs[3]{ nullptr, nullptr, nullptr };
@@ -649,6 +663,9 @@ ID3D11ComputeShader* Deferred::GetComputeAmbientComposite()
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });
 
+		if (globals::features::ibl->loaded)
+			defines.push_back({ "IBL", nullptr });
+
 		ambientCompositeCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\AmbientCompositeCS.hlsl", defines, "cs_5_0"));
 	}
 	return ambientCompositeCS;
@@ -689,6 +706,9 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 		if (globals::features::screenSpaceGI->loaded)
 			defines.push_back({ "SSGI", nullptr });
 
+		if (globals::features::ibl->loaded)
+			defines.push_back({ "IBL", nullptr });
+
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });
 
@@ -717,6 +737,14 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 		mainCompositeInteriorCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositeCS.hlsl", defines, "cs_5_0"));
 	}
 	return mainCompositeInteriorCS;
+}
+
+// Testing code for imagespace shaders
+void Deferred::BindLUT()
+{
+	auto view = lutTexture.get();
+	if (view)
+		globals::d3d::context->PSSetShaderResources(100, 1, &view);
 }
 
 void Deferred::Hooks::Main_RenderShadowMaps::thunk()

@@ -44,6 +44,8 @@ public:
 	bool upscalerLoaded = false;
 
 	float timer = 0;
+	double smoothDrawCalls[RE::BSShader::Type::Total + 1];
+	int drawCalls[RE::BSShader::Type::Total + 1];
 
 	enum ConfigMode
 	{
@@ -92,7 +94,7 @@ public:
 	 * <p>
 	 * Developer mode is active when the log level is trace or debug.
 	 * </p>
-	 * 
+	 *
      * @return Whether in developer mode.
      */
 	bool IsDeveloperMode();
@@ -141,7 +143,8 @@ public:
 		THLand2HasDisplacement = 1 << 2,
 		THLand3HasDisplacement = 1 << 3,
 		THLand4HasDisplacement = 1 << 4,
-		THLand5HasDisplacement = 1 << 5
+		THLand5HasDisplacement = 1 << 5,
+		ETMaterialModel = 0b111 << 6,
 	};
 
 	void UpdateSharedData(bool a_inWorld, bool a_prepass);
