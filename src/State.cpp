@@ -78,15 +78,37 @@ void State::Draw()
 		currentExtraFeatureDescriptor = 0;
 
 		if (frameChecker.IsNewFrame()) {
-			for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) + 1; ++i)
-				smoothDrawCalls[i] = smoothDrawCalls[i] * 0.95 + drawCalls[i] * 0.05;
+			for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) + 1; ++i) {
+				smoothDrawCalls[i] = smoothDrawCalls[i] * static_cast<float>(0.95) + drawCalls[i] * static_cast<float>(0.05);
+				smoothFrameTimePerType[i] = smoothFrameTimePerType[i] * static_cast<float>(0.95) + frameTimePerType[i] * static_cast<float>(0.05);
+			}
 			for (auto& c : drawCalls)
 				c = 0;
+			for (auto& ft : frameTimePerType)
+				ft = 0.0f;
+
+			// Start timing for this frame
+			frameStartTime = std::chrono::high_resolution_clock::now();
+			frameTimingActive = true;
+
 			ID3D11Buffer* buffers[3] = { permutationCB->CB(), sharedDataCB->CB(), featureDataCB->CB() };
 			context->PSSetConstantBuffers(4, 3, buffers);
 			context->CSSetConstantBuffers(5, 2, buffers + 1);
 		}
-		drawCalls[RE::BSShader::Type::Total]++;
+
+		// Track time for current shader type if timing is active
+		if (frameTimingActive && currentShader) {
+			auto currentTime = std::chrono::high_resolution_clock::now();
+			auto elapsed = std::chrono::duration<float, std::milli>(currentTime - frameStartTime).count();
+
+			// Add elapsed time to the current shader type
+			frameTimePerType[magic_enum::enum_integer(currentShader->shaderType.get())] += elapsed;
+			frameTimePerType[magic_enum::enum_integer(RE::BSShader::Type::Total)] += elapsed;
+
+			// Update start time for next measurement
+			frameStartTime = currentTime;
+		}
+
 		if (currentShader)
 			drawCalls[magic_enum::enum_integer(currentShader->shaderType.get())]++;
 
@@ -510,6 +532,13 @@ void State::SetupResources()
 		c = 0;
 	for (auto& c : smoothDrawCalls)
 		c = 0;
+	for (auto& ft : frameTimePerType)
+		ft = 0.0f;
+	for (auto& sft : smoothFrameTimePerType)
+		sft = 0.0f;
+
+	frameTimingActive = false;
+
 	auto renderer = globals::game::renderer;
 
 	permutationCB = new ConstantBuffer(ConstantBufferDesc<PermutationCB>());

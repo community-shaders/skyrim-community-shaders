@@ -4,7 +4,9 @@
 #include <Tracy/TracyD3D11.hpp>
 
 #include <Buffer.h>
+#include <chrono>
 #include <nlohmann/json.hpp>
+
 using json = nlohmann::json;
 
 #include <FeatureBuffer.h>
@@ -47,6 +49,14 @@ public:
 	float timer = 0;
 	double smoothDrawCalls[RE::BSShader::Type::Total + 1];
 	int drawCalls[RE::BSShader::Type::Total + 1];
+
+	// Frame time tracking per shader type (in milliseconds)
+	float frameTimePerType[RE::BSShader::Type::Total];
+	float smoothFrameTimePerType[RE::BSShader::Type::Total];
+
+	// Timing state for per-type frame time tracking
+	std::chrono::high_resolution_clock::time_point frameStartTime;
+	bool frameTimingActive = false;
 
 	enum ConfigMode
 	{

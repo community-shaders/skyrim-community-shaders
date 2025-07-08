@@ -129,6 +129,37 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 constexpr std::uint16_t KEY_PRESSED_MASK = 0x8000;
 
+// Struct for draw call overlay table row data
+struct DrawCallRow
+{
+	std::string label;
+	int shaderType;
+	int drawCalls;
+	float frameTime;
+	float percent;
+	float costPerCall;
+	std::string tooltip;
+	bool enabled;
+};
+
+typedef RE::BSShader::Type ShaderTypeEnum;
+struct ShaderRow
+{
+	std::string label;
+	ShaderTypeEnum type;
+	std::string tooltip;
+};
+
+// Define an enum for table columns for clarity and maintainability
+enum DrawCallTableColumn
+{
+	Col_Label = 0,
+	Col_DrawCalls,
+	Col_FrameTime,
+	Col_CostPerCall,
+	Col_Count  // always last, gives you the number of columns
+};
+
 void Menu::SetupImGuiStyle() const
 {
 	auto& style = ImGui::GetStyle();
@@ -145,17 +176,17 @@ void Menu::SetupImGuiStyle() const
 	style.HoverDelayNormal = themeSettings.TooltipHoverDelay;
 
 	if (themeSettings.UseSimplePalette) {
-		float hovoredAlpha{ 0.1f };
+		float hoveredAlpha{ 0.1f };
 
 		ImVec4 resizeGripHovered = themeSettings.Palette.Border;
-		resizeGripHovered.w = hovoredAlpha;
+		resizeGripHovered.w = hoveredAlpha;
 
 		ImVec4 textDisabled = themeSettings.Palette.Text;
 		textDisabled.w = 0.3f;
 
 		ImVec4 header{ 1.0f, 1.0f, 1.0f, 0.15f };
 		ImVec4 headerHovered = header;
-		headerHovered.w = hovoredAlpha;
+		headerHovered.w = hoveredAlpha;
 
 		ImVec4 tabHovered{ 0.2f, 0.2f, 0.2f, 1.0f };
 
@@ -2164,49 +2195,312 @@ void Menu::PerfOverlayState::DrawPostFGFrameTimeGraph(Settings::PerfOverlaySetti
  */
 void Menu::PerfOverlayState::DrawDrawCalls()
 {
-	if (ImGui::BeginTable("Draw Call Table", 2, ImGuiTableFlags_SizingStretchProp, { -FLT_MIN, 0 })) {
-		ImGui::TableSetupColumn("Shader Type", ImGuiTableColumnFlags_WidthFixed, ImGui::GetTextLineHeight() * 5);
-		ImGui::TableSetupColumn("Draw Calls");
+	std::vector<std::string> headers = { "Shader Type", "Draw Calls", "Frame Time (%)", "Cost/Call" };
+	std::vector<DrawCallRow> rows;
 
+	// Tooltip map for shader types
+	static const std::unordered_map<RE::BSShader::Type, std::string> kShaderTypeTooltips = {
+		{ RE::BSShader::Type::Grass, "Draw calls using the Grass shader. Typically many, but each is usually cheap." },
+		{ RE::BSShader::Type::Sky, "Draw calls for the sky dome, clouds, and related effects." },
+		{ RE::BSShader::Type::Water, "Draw calls for water surfaces and effects." },
+		{ RE::BSShader::Type::Lighting, "Draw calls for dynamic and static lighting passes." },
+		{ RE::BSShader::Type::Effect, "Draw calls for special effects, particles, and post-processing." },
+		{ RE::BSShader::Type::Utility, "Draw calls for utility passes, such as shadow masks or G-buffer fills." },
+		{ RE::BSShader::Type::DistantTree, "Draw calls for distant tree rendering (LOD vegetation)." },
+		{ RE::BSShader::Type::Particle, "Draw calls for particle systems (smoke, sparks, etc.)." },
+		{ RE::BSShader::Type::BloodSplatter, "Draw calls for blood splatter effects." },
+		{ RE::BSShader::Type::ImageSpace, "Draw calls for image space post-processing effects." }
+	};
+	std::vector<ShaderRow> shaderTypes;
+	for (auto type : magic_enum::enum_values<RE::BSShader::Type>()) {
+		if (type == RE::BSShader::Type::None || type == RE::BSShader::Type::Total)
+			continue;
+		std::string label = std::string(magic_enum::enum_name(type)) + ":";
+		auto it = kShaderTypeTooltips.find(type);
+		std::string tooltip = (it != kShaderTypeTooltips.end()) ? it->second : "Draw calls for this shader type.";
+		tooltip += "\nClick to ";
+		tooltip += (globals::state->enabledClasses[magic_enum::enum_integer(type) - 1]) ? "disable" : "enable";
+		tooltip += " this shader.";
+		shaderTypes.push_back({ label, type, tooltip });
+	}
+
+	// Sorting state (declare all at the top)
+	static int sortColumn = 0;
+	static bool sortAscending = false;
+	static bool isSorted = false;
+	static std::vector<DrawCallRow> originalRows;
+
+	// Use the smoothed frame time for all calculations
+	float smoothedFrameTime = static_cast<float>(Menu::GetSingleton()->perfOverlayState.smoothFrameTimeMs);
+	// Build main rows: all shader types
+	std::vector<DrawCallRow> mainRows;
+	float measuredSum = 0.0f;
+	for (const auto& row : shaderTypes) {
+		auto typeIndex = magic_enum::enum_integer(row.type);  // safer than static_cast<int>
+		float drawCalls = static_cast<float>(globals::state->smoothDrawCalls[typeIndex]);
+		float frameTime = static_cast<float>(globals::state->smoothFrameTimePerType[typeIndex]);
+		float percent = 0.0f;  // We'll fill this in after we know the total
+		float costPerCall = (drawCalls > 0.0f) ? (frameTime / drawCalls) : 0.0f;
+		// Clamp small negative values to zero
+		if (std::abs(frameTime) < 1e-4f)
+			frameTime = 0.0f;
+		if (std::abs(costPerCall) < 1e-6f)
+			costPerCall = 0.0f;
+		bool enabled = globals::state->enabledClasses[typeIndex - 1];  // -1 for enabledClasses
+		mainRows.push_back({ row.label, typeIndex, static_cast<int>(drawCalls), frameTime, percent, costPerCall, row.tooltip, enabled });
+		measuredSum += frameTime;
+	}
+
+	// Add summary rows (not part of main sorting)
+	float otherFrameTime = smoothedFrameTime - measuredSum;
+	if (std::abs(otherFrameTime) < 1e-4f)
+		otherFrameTime = 0.0f;
+
+	DrawCallRow otherRow = {
+		"Other:", -2, 0, otherFrameTime,
+		(smoothedFrameTime > 0.0f ? static_cast<float>((otherFrameTime / smoothedFrameTime) * 100.0f) : 0.0f),
+		0.0f,
+		std::string("Frame time not attributed to any measured shader type. This includes UI, post-processing, engine work, and any GPU activity not directly measured by the overlay.")
+	};
+
+	float totalSmoothedDrawCalls = static_cast<float>(globals::state->smoothDrawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]);
+	DrawCallRow totalRow = {
+		"Total:", -1, static_cast<int>(totalSmoothedDrawCalls), smoothedFrameTime, 100.0f,
+		(totalSmoothedDrawCalls > 0.0f ? static_cast<float>(smoothedFrameTime / totalSmoothedDrawCalls) : 0.0f),
+		std::string("Sum of all measured shader types.\nClick to enable or disable all shaders.")
+	};
+	// Now update percent and costPerCall for all measured rows
+	for (auto& row : mainRows) {
+		row.percent = (smoothedFrameTime > 0.0f) ? (row.frameTime / smoothedFrameTime) * 100.0f : 0.0f;
+		row.costPerCall = (row.drawCalls > 0) ? (row.frameTime / row.drawCalls) : 0.0f;
+	}
+
+	// Always start the main table sorted alphabetically by label on first display
+	static bool firstTableDisplay = true;
+	if (firstTableDisplay) {
+		std::sort(mainRows.begin(), mainRows.end(), [](const DrawCallRow& a, const DrawCallRow& b) {
+			return a.label < b.label;
+		});
+		firstTableDisplay = false;
+	}
+
+	// Handle sorting: only sort mainRows, never summary rows
+	if (ImGui::BeginTable("DrawCallOverlayTable##", Col_Count, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable)) {
+		for (const auto& header : headers)
+			ImGui::TableSetupColumn(header.c_str());
 		ImGui::TableHeadersRow();
 
-		ImGui::TableNextColumn();
-		ImGui::Text("Grass:");
-		ImGui::TableNextColumn();
-		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Grass]));
-		ImGui::TableNextColumn();
-		ImGui::Text("Sky:");
-		ImGui::TableNextColumn();
-		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Sky]));
-		ImGui::TableNextColumn();
-		ImGui::Text("Water:");
-		ImGui::TableNextColumn();
-		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Water]));
-		ImGui::TableNextColumn();
-		ImGui::Text("Lighting:");
-		ImGui::TableNextColumn();
-		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Lighting]));
-		ImGui::TableNextColumn();
-		ImGui::Text("Effect:");
-		ImGui::TableNextColumn();
-		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Effect]));
-		ImGui::TableNextColumn();
-		ImGui::Text("Utility:");
-		ImGui::TableNextColumn();
-		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Utility]));
-		ImGui::TableNextColumn();
-		ImGui::Text("Distant Tree:");
-		ImGui::TableNextColumn();
-		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::DistantTree]));
-		ImGui::TableNextColumn();
-		ImGui::Text("Particle:");
-		ImGui::TableNextColumn();
-		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Particle]));
-		ImGui::TableNextColumn();
-		ImGui::Text("Total:");
-		ImGui::TableNextColumn();
-		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Total]));
+		if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
+			if (sortSpecs->SpecsCount > 0) {
+				sortColumn = sortSpecs->Specs->ColumnIndex;
+				sortAscending = sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending;
+				// Sort using real data
+				switch (sortColumn) {
+				case Col_Label:  // label (shader type name)
+					std::sort(mainRows.begin(), mainRows.end(), [=](const DrawCallRow& a, const DrawCallRow& b) {
+						return sortAscending ? (a.label < b.label) : (a.label > b.label);
+					});
+					break;
+				case Col_DrawCalls:  // drawCalls (number of draw calls)
+					std::sort(mainRows.begin(), mainRows.end(), [=](const DrawCallRow& a, const DrawCallRow& b) {
+						return sortAscending ? (a.drawCalls < b.drawCalls) : (a.drawCalls > b.drawCalls);
+					});
+					break;
+				case Col_FrameTime:  // percent (frame time %)
+					std::sort(mainRows.begin(), mainRows.end(), [=](const DrawCallRow& a, const DrawCallRow& b) {
+						return sortAscending ? (a.percent < b.percent) : (a.percent > b.percent);
+					});
+					break;
+				case Col_CostPerCall:  // costPerCall (ms per draw call)
+					std::sort(mainRows.begin(), mainRows.end(), [=](const DrawCallRow& a, const DrawCallRow& b) {
+						return sortAscending ? (a.costPerCall < b.costPerCall) : (a.costPerCall > b.costPerCall);
+					});
+					break;
+				}
+			}
+		}
 
+		// --- Main table cell rendering switch: renders each cell based on column ---
+		for (size_t rowIdx = 0; rowIdx < mainRows.size(); ++rowIdx) {
+			const auto& row = mainRows[rowIdx];
+			ImGui::TableNextRow();
+			for (int col = 0; col < Col_Count; ++col) {
+				ImGui::TableSetColumnIndex(col);
+				ImVec4 color = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+				bool useColor = false;
+				switch (col) {
+				case Col_FrameTime:  // percent coloring
+					if (row.percent < 30.0f)
+						color = Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor;
+					else if (row.percent < 60.0f)
+						color = Menu::GetSingleton()->GetTheme().StatusPalette.Warning;
+					else
+						color = Menu::GetSingleton()->GetTheme().StatusPalette.Error;
+					useColor = true;
+					break;
+				case Col_CostPerCall:  // costPerCall coloring (ms per draw call)
+					if (row.costPerCall < 0.05f)
+						color = Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor;
+					else if (row.costPerCall < 0.2f)
+						color = Menu::GetSingleton()->GetTheme().StatusPalette.Warning;
+					else
+						color = Menu::GetSingleton()->GetTheme().StatusPalette.Error;
+					useColor = true;
+					break;
+				}
+				// --- Cell rendering switch: draws the actual cell content ---
+				bool wasEnabled = false;
+				switch (col) {
+				case Col_Label:  // Label (shader type name)
+					if (!row.enabled) {
+						ImGui::PushStyleColor(ImGuiCol_Text, Menu::GetSingleton()->GetTheme().StatusPalette.Disable);
+					}
+					wasEnabled = row.enabled;
+					if (ImGui::Selectable(row.label.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
+						// Use magic_enum::enum_cast for safety
+						auto maybeType = magic_enum::enum_cast<RE::BSShader::Type>(row.shaderType);
+						if (maybeType.has_value()) {
+							auto classIndex = magic_enum::enum_integer(*maybeType) - 1;
+							if (classIndex >= 0 && classIndex < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1) {
+								globals::state->enabledClasses[classIndex] = !wasEnabled;
+							}
+						}
+					}
+					// Show tooltip if hovered
+					if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)) {
+						ImGui::SetTooltip("%s", row.tooltip.c_str());
+					}
+					if (!row.enabled) {
+						ImGui::PopStyleColor();
+					}
+					break;
+				case Col_DrawCalls:  // Draw Calls (number of draw calls)
+					if (useColor)
+						ImGui::TextColored(color, "%d", row.drawCalls);
+					else
+						ImGui::Text("%d", row.drawCalls);
+					break;
+				case Col_FrameTime:  // Frame Time (ms and %)
+					if (useColor)
+						ImGui::TextColored(color, "%.2f ms (%.1f%%)", row.frameTime, row.percent);
+					else
+						ImGui::Text("%.2f ms (%.1f%%)", row.frameTime, row.percent);
+					break;
+				case Col_CostPerCall:  // Cost/Call (ms or us per draw call)
+					if (row.costPerCall < 0.01f && row.costPerCall > 0.0f) {
+						if (useColor)
+							ImGui::TextColored(color, "%.2f us", row.costPerCall * 1000.0f);
+						else
+							ImGui::Text("%.2f us", row.costPerCall * 1000.0f);
+					} else {
+						if (useColor)
+							ImGui::TextColored(color, "%.3f ms", row.costPerCall);
+						else
+							ImGui::Text("%.3f ms", row.costPerCall);
+					}
+					break;
+				}
+			}
+		}
+
+		// Separator row (optional, for visual separation)
+		ImGui::TableNextRow(ImGuiTableRowFlags_None, 4.0f);
+		for (int col = 0; col < Col_Count; ++col) {
+			ImGui::TableSetColumnIndex(col);
+			if (col == Col_Label)
+				ImGui::Separator();
+		}
+
+		// --- Summary row rendering switch: handles Other and Total rows ---
+		for (const DrawCallRow& row : { otherRow, totalRow }) {
+			ImGui::TableNextRow();
+			for (int col = 0; col < Col_Count; ++col) {
+				ImGui::TableSetColumnIndex(col);
+				ImVec4 color = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+				bool useColor = false;
+				// Set color and useColor for percent and costPerCall columns before the switch
+				if (col == Col_FrameTime) {  // percent coloring (frame time %)
+					if (row.percent < 30.0f)
+						color = Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor;
+					else if (row.percent < 60.0f)
+						color = Menu::GetSingleton()->GetTheme().StatusPalette.Warning;
+					else
+						color = Menu::GetSingleton()->GetTheme().StatusPalette.Error;
+					useColor = true;
+				} else if (col == Col_CostPerCall) {  // costPerCall coloring (ms per draw call)
+					if (row.costPerCall < 0.05f)
+						color = Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor;
+					else if (row.costPerCall < 0.2f)
+						color = Menu::GetSingleton()->GetTheme().StatusPalette.Warning;
+					else
+						color = Menu::GetSingleton()->GetTheme().StatusPalette.Error;
+					useColor = true;
+				}
+				// --- Cell rendering for summary rows ---
+				switch (col) {
+				case Col_Label:  // Label (Other/Total)
+					// Make Total row clickable to toggle all shaders
+					if (row.label == std::string("Total:")) {
+						if (ImGui::Selectable(row.label.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
+							// If any are disabled, enable all; else disable all
+							bool anyDisabled = false;
+							for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1; ++i) {
+								if (!globals::state->enabledClasses[i]) {
+									anyDisabled = true;
+									break;
+								}
+							}
+							for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1; ++i) {
+								globals::state->enabledClasses[i] = anyDisabled;
+							}
+						}
+					} else {
+						ImGui::TextUnformatted(row.label.c_str());
+					}
+					if (!row.tooltip.empty() && ImGui::IsItemHovered()) {
+						if (auto _tt = Util::HoverTooltipWrapper()) {
+							ImGui::TextUnformatted(row.tooltip.c_str());
+						}
+					}
+					break;
+				case Col_DrawCalls:  // Draw Calls (Other/Total)
+					if (row.label == "Other:" && row.drawCalls <= 0) {
+						ImGui::TextUnformatted("N/A");
+					} else {
+						if (useColor)
+							ImGui::TextColored(color, "%d", row.drawCalls);
+						else
+							ImGui::Text("%d", row.drawCalls);
+					}
+					break;
+				case Col_FrameTime:  // Frame Time (Other/Total)
+					if (row.label == "Other:" && row.frameTime <= 0.0f) {
+						ImGui::TextUnformatted("N/A");
+					} else {
+						if (useColor)
+							ImGui::TextColored(color, "%.2f ms (%.1f%%)", row.frameTime, row.percent);
+						else
+							ImGui::Text("%.2f ms (%.1f%%)", row.frameTime, row.percent);
+					}
+					break;
+				case Col_CostPerCall:  // Cost/Call (Other/Total)
+					if (row.label == "Other:" && row.costPerCall <= 0.0f) {
+						ImGui::TextUnformatted("N/A");
+					} else if (row.costPerCall < 0.01f && row.costPerCall > 0.0f) {
+						if (useColor)
+							ImGui::TextColored(color, "%.2f us", row.costPerCall * 1000.0f);
+						else
+							ImGui::Text("%.2f us", row.costPerCall * 1000.0f);
+					} else {
+						if (useColor)
+							ImGui::TextColored(color, "%.3f ms", row.costPerCall);
+						else
+							ImGui::Text("%.3f ms", row.costPerCall);
+					}
+					break;
+				}
+			}
+		}
 		ImGui::EndTable();
 	}
 }
