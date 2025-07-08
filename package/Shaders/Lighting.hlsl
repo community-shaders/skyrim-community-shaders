@@ -1900,12 +1900,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 #	endif
 
-#	if defined(TRUE_PBR) && defined(LANDSCAPE)
-	[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile0PBR) == 0)
-	{
-		baseColor = float4(rawBaseColor.rgb / Color::PBRLightingScale, rawBaseColor.a);
-	}
-#	endif
 
 #	if defined(LOD_BLENDING)
 #		if defined(LODOBJECTS) || defined(LODOBJECTSHD)
@@ -1964,90 +1958,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(SNOW) && !defined(TRUE_PBR)
 	landSnowMask = LandscapeTexture1to4IsSnow.x * input.LandBlendWeights1.x;
 #		endif  // SNOW
-
-	// Layer 1 (LandBlendWeights1.x)
-	if (input.LandBlendWeights1.x > 0.01) {
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		float landSnowMask1 = GetLandSnowMaskValue(baseColor.w);
-		landSnowMask += LandscapeTexture1to4IsSnow.x * input.LandBlendWeights1.x * landSnowMask1;
-#		endif
-#		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile0HasGlint) != 0)
-		{
-			glintParameters += input.LandBlendWeights1.x * LandscapeTexture1GlintParameters;
-		}
-#		endif
-	}
-
-	// Layer 2 (LandBlendWeights1.y)
-	if (input.LandBlendWeights1.y > 0.01) {
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		float landSnowMask2 = GetLandSnowMaskValue(baseColor.w);
-		landSnowMask += LandscapeTexture1to4IsSnow.y * input.LandBlendWeights1.y * landSnowMask2;
-#		endif
-#		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile1HasGlint) != 0)
-		{
-			glintParameters += input.LandBlendWeights1.y * LandscapeTexture2GlintParameters;
-		}
-#		endif
-	}
-
-	// Layer 3 (LandBlendWeights1.z)
-	if (input.LandBlendWeights1.z > 0.01) {
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		float landSnowMask3 = GetLandSnowMaskValue(baseColor.w);
-		landSnowMask += LandscapeTexture1to4IsSnow.z * input.LandBlendWeights1.z * landSnowMask3;
-#		endif
-#		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile2HasGlint) != 0)
-		{
-			glintParameters += input.LandBlendWeights1.z * LandscapeTexture3GlintParameters;
-		}
-#		endif
-	}
-
-	// Layer 4 (LandBlendWeights1.w)
-	if (input.LandBlendWeights1.w > 0.01) {
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		float landSnowMask4 = GetLandSnowMaskValue(baseColor.w);
-		landSnowMask += LandscapeTexture1to4IsSnow.w * input.LandBlendWeights1.w * landSnowMask4;
-#		endif
-#		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile3HasGlint) != 0)
-		{
-			glintParameters += input.LandBlendWeights1.w * LandscapeTexture4GlintParameters;
-		}
-#		endif
-	}
-
-	// Layer 5 (LandBlendWeights2.x)
-	if (input.LandBlendWeights2.x > 0.01) {
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		float landSnowMask5 = GetLandSnowMaskValue(baseColor.w);
-		landSnowMask += LandscapeTexture5to6IsSnow.x * input.LandBlendWeights2.x * landSnowMask5;
-#		endif
-#		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile4HasGlint) != 0)
-		{
-			glintParameters += input.LandBlendWeights2.x * LandscapeTexture5GlintParameters;
-		}
-#		endif
-	}
-
-	// Layer 6 (LandBlendWeights2.y)
-	if (input.LandBlendWeights2.y > 0.01) {
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		float landSnowMask6 = GetLandSnowMaskValue(baseColor.w);
-		landSnowMask += LandscapeTexture5to6IsSnow.y * input.LandBlendWeights2.y * landSnowMask6;
-#		endif
-#		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile5HasGlint) != 0)
-		{
-			glintParameters += input.LandBlendWeights2.y * LandscapeTexture6GlintParameters;
-		}
-#		endif
-	}
 #	endif  // LANDSCAPE
 
 #	if defined(EMAT_ENVMAP)
