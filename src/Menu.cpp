@@ -172,11 +172,47 @@ struct TestData
 	float costPerCall;
 	float percent;
 };
+
+// Test data source tracking
+enum class TestDataSource
+{
+	None,
+	ABTest_VariantB,
+	ManualShaderToggle
+};
+static TestDataSource s_testDataSource = TestDataSource::None;
+static std::chrono::steady_clock::time_point s_testDataLastUpdated;
+static std::string TimeAgoString(std::chrono::steady_clock::time_point a_last)
+{
+	using namespace std::chrono;
+	auto now = steady_clock::now();
+	auto diff = duration_cast<seconds>(now - a_last).count();
+	if (diff < 60)
+		return std::to_string(diff) + "s";
+	return std::to_string(diff / 60) + "m";
+}
+
 static std::unordered_map<int, TestData> s_testData;
 static bool abTestingEnabled = false;
 static void UpdateShaderTestData(int shaderType, float frameTime, float costPerCall)
 {
 	s_testData[shaderType] = { frameTime, costPerCall };
+	// Compute and save 'Other' and 'Total' test data
+	float smoothedFrameTime = static_cast<float>(Menu::GetSingleton()->perfOverlayState.smoothFrameTimeMs);
+	float measuredSum = 0.0f;
+	for (const auto& [type, data] : s_testData) {
+		if (type >= 0)
+			measuredSum += data.frameTime;
+	}
+	float otherFrameTime = smoothedFrameTime - measuredSum;
+	float otherPercent = (smoothedFrameTime > 0.0f) ? (otherFrameTime / smoothedFrameTime) * 100.0f : 0.0f;
+	s_testData[-2] = { otherFrameTime, 0.0f, otherPercent };
+	float totalSmoothedDrawCalls = static_cast<float>(globals::state->smoothDrawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]);
+	float totalCostPerCall = (totalSmoothedDrawCalls > 0.0f) ? (smoothedFrameTime / totalSmoothedDrawCalls) : 0.0f;
+	s_testData[-1] = { smoothedFrameTime, totalCostPerCall, 100.0f };
+
+	s_testDataSource = TestDataSource::ManualShaderToggle;
+	s_testDataLastUpdated = std::chrono::steady_clock::now();
 }
 
 // Add this function near the top of Menu.cpp (after abTestingEnabled, usingTestConfig, etc.)
@@ -204,6 +240,20 @@ static void UpdateAllShaderTestData()
 	s_testData[-2] = { otherFrameTime, 0.0f, otherPercent };
 	float totalCostPerCall = (totalSmoothedDrawCalls > 0.0f) ? (smoothedFrameTime / totalSmoothedDrawCalls) : 0.0f;
 	s_testData[-1] = { smoothedFrameTime, totalCostPerCall, 100.0f };
+	s_testDataSource = TestDataSource::ABTest_VariantB;
+	s_testDataLastUpdated = std::chrono::steady_clock::now();
+}
+
+static std::string GetTestDataTooltip()
+{
+	switch (s_testDataSource) {
+	case TestDataSource::ABTest_VariantB:
+		return std::string("Test data from Test (Variant B).\nLast updated: ") + TimeAgoString(s_testDataLastUpdated) + " ago.";
+	case TestDataSource::ManualShaderToggle:
+		return std::string("Test data from manual shader toggle.\nLast updated: ") + TimeAgoString(s_testDataLastUpdated) + " ago.";
+	default:
+		return "No test data available.";
+	}
 }
 
 void Menu::SetupImGuiStyle() const
@@ -2250,6 +2300,14 @@ void Menu::PerfOverlayState::DrawPostFGFrameTimeGraph(Settings::PerfOverlaySetti
 void Menu::PerfOverlayState::DrawDrawCalls()
 {
 	static bool clearTestDataRequested = false;
+	bool abTestActive = (abTestingEnabled && Menu::GetSingleton()->usingTestConfig);
+	bool anyShaderDisabled = false;
+	for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1; ++i) {
+		if (!globals::state->enabledClasses[i]) {
+			anyShaderDisabled = true;
+			break;
+		}
+	}
 	if (!s_testData.empty()) {
 		if (ImGui::Button("Clear Test Data")) {
 			clearTestDataRequested = true;
@@ -2301,12 +2359,12 @@ void Menu::PerfOverlayState::DrawDrawCalls()
 
 	// Use the smoothed frame time for all calculations
 	float smoothedFrameTime = static_cast<float>(Menu::GetSingleton()->perfOverlayState.smoothFrameTimeMs);
-
-	// --- TEST DATA RECORDING IN TEST MODE ---
 	float measuredSum = 0.0f;
-	float otherFrameTime = 0.0f;
 	float totalSmoothedDrawCalls = static_cast<float>(globals::state->smoothDrawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]);
-	if (abTestingEnabled && Menu::GetSingleton()->usingTestConfig) {
+
+	// --- TEST DATA SNAPSHOT LOGIC ---
+	if (abTestActive) {
+		measuredSum = 0.0f;
 		for (const auto& row : shaderTypes) {
 			auto typeIndex = magic_enum::enum_integer(row.type);
 			float drawCalls = static_cast<float>(globals::state->smoothDrawCalls[typeIndex]);
@@ -2316,7 +2374,26 @@ void Menu::PerfOverlayState::DrawDrawCalls()
 			s_testData[typeIndex] = { frameTime, costPerCall, percent };
 			measuredSum += frameTime;
 		}
-		otherFrameTime = smoothedFrameTime - measuredSum;
+		float otherFrameTime = smoothedFrameTime - measuredSum;
+		float otherPercent = (smoothedFrameTime > 0.0f) ? (otherFrameTime / smoothedFrameTime) * 100.0f : 0.0f;
+		s_testData[-2] = { otherFrameTime, 0.0f, otherPercent };
+		float totalCostPerCall = (totalSmoothedDrawCalls > 0.0f) ? (smoothedFrameTime / totalSmoothedDrawCalls) : 0.0f;
+		s_testData[-1] = { smoothedFrameTime, totalCostPerCall, 100.0f };
+	} else if (anyShaderDisabled) {
+		measuredSum = 0.0f;
+		for (const auto& row : shaderTypes) {
+			auto typeIndex = magic_enum::enum_integer(row.type);
+			bool enabled = globals::state->enabledClasses[typeIndex - 1];
+			if (!enabled) {
+				float drawCalls = static_cast<float>(globals::state->smoothDrawCalls[typeIndex]);
+				float frameTime = static_cast<float>(globals::state->smoothFrameTimePerType[typeIndex]);
+				float percent = (smoothedFrameTime > 0.0f) ? (frameTime / smoothedFrameTime) * 100.0f : 0.0f;
+				float costPerCall = (drawCalls > 0.0f) ? (frameTime / drawCalls) : 0.0f;
+				s_testData[typeIndex] = { frameTime, costPerCall, percent };
+			}
+			measuredSum += static_cast<float>(globals::state->smoothFrameTimePerType[typeIndex]);
+		}
+		float otherFrameTime = smoothedFrameTime - measuredSum;
 		float otherPercent = (smoothedFrameTime > 0.0f) ? (otherFrameTime / smoothedFrameTime) * 100.0f : 0.0f;
 		s_testData[-2] = { otherFrameTime, 0.0f, otherPercent };
 		float totalCostPerCall = (totalSmoothedDrawCalls > 0.0f) ? (smoothedFrameTime / totalSmoothedDrawCalls) : 0.0f;
@@ -2339,9 +2416,6 @@ void Menu::PerfOverlayState::DrawDrawCalls()
 			costPerCall = 0.0f;
 		bool enabled = globals::state->enabledClasses[typeIndex - 1];
 		std::optional<float> testFrameTime, testCostPerCall;
-		if ((abTestingEnabled && Menu::GetSingleton()->usingTestConfig) || !enabled) {
-			s_testData[typeIndex] = { frameTime, costPerCall, percent };
-		}
 		auto it = s_testData.find(typeIndex);
 		if (it != s_testData.end()) {
 			testFrameTime = it->second.frameTime;
@@ -2354,7 +2428,7 @@ void Menu::PerfOverlayState::DrawDrawCalls()
 	}
 
 	// Add summary rows (not part of main sorting)
-	otherFrameTime = smoothedFrameTime - measuredSum;
+	float otherFrameTime = smoothedFrameTime - measuredSum;
 	if (std::abs(otherFrameTime) < 1e-4f)
 		otherFrameTime = 0.0f;
 
@@ -2387,11 +2461,7 @@ void Menu::PerfOverlayState::DrawDrawCalls()
 			ImGui::TableSetupColumn(headers[i].c_str());
 			if (anyTestData && (headers[i] == "Test Frame Time" || headers[i] == "Test Cost/Call")) {
 				if (ImGui::IsItemHovered()) {
-					if (abTestingEnabled) {
-						ImGui::SetTooltip("A/B Test: This data was recorded during the last TEST phase (Variant B). It is frozen until the next TEST phase.\nVariant A = USER config, Variant B = TEST config.");
-					} else {
-						ImGui::SetTooltip("Test data is recorded when a shader is disabled. Green = better, Red = worse vs. regular column.\nA/B Test: Variant A = USER config, Variant B = TEST config.");
-					}
+					ImGui::SetTooltip("%s", GetTestDataTooltip().c_str());
 				}
 			}
 		}
@@ -2511,11 +2581,7 @@ void Menu::PerfOverlayState::DrawDrawCalls()
 					ImGui::Text("%.2f ms (%.1f%%)", *row.testFrameTime, s_testData[row.shaderType].percent);
 					ImGui::PopStyleColor();
 					if (ImGui::IsItemHovered()) {
-						if (abTestingEnabled) {
-							ImGui::SetTooltip("A/B Test: This data was recorded during the last TEST phase (Variant B). It is frozen until the next TEST phase.\nVariant A = USER config, Variant B = TEST config.");
-						} else {
-							ImGui::SetTooltip("Test data is recorded when a shader is disabled. Green = better, Red = worse vs. regular column.\nA/B Test: Variant A = USER config, Variant B = TEST config.");
-						}
+						ImGui::SetTooltip("%s", GetTestDataTooltip().c_str());
 					}
 				} else {
 					ImGui::TextDisabled("-");
@@ -2535,11 +2601,7 @@ void Menu::PerfOverlayState::DrawDrawCalls()
 						ImGui::Text("%.3f ms", *row.testCostPerCall);
 					ImGui::PopStyleColor();
 					if (ImGui::IsItemHovered()) {
-						if (abTestingEnabled) {
-							ImGui::SetTooltip("A/B Test: This data was recorded during the last TEST phase (Variant B). It is frozen until the next TEST phase.\nVariant A = USER config, Variant B = TEST config.");
-						} else {
-							ImGui::SetTooltip("Test data is recorded when a shader is disabled. Green = better, Red = worse vs. regular column.\nA/B Test: Variant A = USER config, Variant B = TEST config.");
-						}
+						ImGui::SetTooltip("%s", GetTestDataTooltip().c_str());
 					}
 				} else {
 					ImGui::TextDisabled("-");
@@ -2618,11 +2680,7 @@ void Menu::PerfOverlayState::DrawDrawCalls()
 					ImGui::Text("%.2f ms (%.1f%%)", testIt->second.frameTime, testIt->second.percent);
 					ImGui::PopStyleColor();
 					if (ImGui::IsItemHovered()) {
-						if (abTestingEnabled) {
-							ImGui::SetTooltip("A/B Test: This data was recorded during the last TEST phase (Variant B). It is frozen until the next TEST phase.\nVariant A = USER config, Variant B = TEST config.");
-						} else {
-							ImGui::SetTooltip("Test data is recorded when a shader is disabled. Green = better, Red = worse vs. regular column.\nA/B Test: Variant A = USER config, Variant B = TEST config.");
-						}
+						ImGui::SetTooltip("%s", GetTestDataTooltip().c_str());
 						// Show FPS for test frame time
 						float _fps = testIt->second.frameTime > 0.0f ? 1000.0f / testIt->second.frameTime : 0.0f;
 						if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -2646,11 +2704,7 @@ void Menu::PerfOverlayState::DrawDrawCalls()
 						ImGui::Text("%.3f ms", testIt->second.costPerCall);
 					ImGui::PopStyleColor();
 					if (ImGui::IsItemHovered()) {
-						if (abTestingEnabled) {
-							ImGui::SetTooltip("A/B Test: This data was recorded during the last TEST phase (Variant B). It is frozen until the next TEST phase.\nVariant A = USER config, Variant B = TEST config.");
-						} else {
-							ImGui::SetTooltip("Test data is recorded when a shader is disabled. Green = better, Red = worse vs. regular column.\nA/B Test: Variant A = USER config, Variant B = TEST config.");
-						}
+						ImGui::SetTooltip("%s", GetTestDataTooltip().c_str());
 					}
 				} else {
 					ImGui::TextUnformatted("N/A");
@@ -2663,6 +2717,7 @@ void Menu::PerfOverlayState::DrawDrawCalls()
 	if (clearTestDataRequested) {
 		s_testData.clear();
 		clearTestDataRequested = false;
+		s_testDataSource = TestDataSource::None;
 	}
 }
 
