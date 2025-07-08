@@ -1488,10 +1488,10 @@ void Menu::DrawAdvancedSettings()
 	if (ImGui::CollapsingHeader("Replace Original Shaders", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
 		auto state = globals::state;
 		if (ImGui::BeginTable("##ReplaceToggles", 3, ImGuiTableFlags_SizingStretchSame)) {
-			for (int classIndex = 0; classIndex < RE::BSShader::Type::Total - 1; ++classIndex) {
+			for (int classIndex = 0; classIndex < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1; ++classIndex) {
 				ImGui::TableNextColumn();
 
-				auto type = (RE::BSShader::Type)(classIndex + 1);
+				auto type = magic_enum::enum_value<RE::BSShader::Type>(classIndex + 1);
 				if (!(SIE::ShaderCache::IsSupportedShader(type) || state->IsDeveloperMode())) {
 					ImGui::BeginDisabled();
 					ImGui::Checkbox(std::format("{}", magic_enum::enum_name(type)).c_str(), &state->enabledClasses[classIndex]);
