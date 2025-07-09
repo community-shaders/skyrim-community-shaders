@@ -254,6 +254,8 @@ namespace Util
 	 */
 	void SortTableRowsByColumn(std::vector<std::vector<std::string>>& rows, size_t column, bool ascending = true);
 
+	using TableCellRenderFunc = std::function<void(int row, int col, const std::string& value)>;
+
 	/**
 	 * @brief Renders a sortable ImGui table with arbitrary columns and per-column custom sorting.
 	 *
@@ -263,6 +265,7 @@ namespace Util
 	 * @param sortColumn Default sort column index.
 	 * @param ascending Default sort direction.
 	 * @param customSorts Vector of custom comparator functions, one per column (nullptr for default string sort).
+	 * @param cellRender Optional cell renderer function for custom cell rendering.
 	 */
 	void ShowSortedStringTable(
 		const char* table_id,
@@ -270,7 +273,8 @@ namespace Util
 		std::vector<std::vector<std::string>> rows,
 		size_t sortColumn = 0,
 		bool ascending = true,
-		const std::vector<TableSortFunc>& customSorts = {});
+		const std::vector<TableSortFunc>& customSorts = {},
+		TableCellRenderFunc cellRender = nullptr);
 
 	/**
 	 * @brief Compares two version strings (e.g., "1.2.3") numerically.
@@ -285,4 +289,11 @@ namespace Util
 	 * @brief TableSortFunc for version strings, using VersionStringLess.
 	 */
 	extern const TableSortFunc VersionSortComparator;
+
+	// Performance overlay formatting and color helpers
+	std::string FormatMilliseconds(float ms);
+	std::string FormatMicroseconds(float us);
+	std::string FormatPercent(float percent);
+	ImVec4 GetThresholdColor(float value, float good, float warn, ImVec4 goodColor, ImVec4 warnColor, ImVec4 badColor);
+	std::string TimeAgoString(std::chrono::steady_clock::time_point last);
 }  // namespace Util

@@ -23,6 +23,7 @@
 #include "Features/InverseSquareLighting.h"
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
+#include "Features/PerformanceOverlay.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/SkySync.h"
@@ -77,6 +78,7 @@ namespace globals
 		VR* vr = nullptr;
 		WaterEffects* waterEffects = nullptr;
 		WeatherPicker* weatherPicker = nullptr;
+		PerformanceOverlay* performanceOverlay = nullptr;
 		WetnessEffects* wetnessEffects = nullptr;
 		ExtendedTranslucency* extendedTranslucency = nullptr;
 
@@ -162,6 +164,7 @@ namespace globals
 		features::vr = VR::GetSingleton();
 		features::waterEffects = WaterEffects::GetSingleton();
 		features::weatherPicker = WeatherPicker::GetSingleton();
+		features::performanceOverlay = PerformanceOverlay::GetSingleton();
 		features::wetnessEffects = WetnessEffects::GetSingleton();
 		features::extendedTranslucency = ExtendedTranslucency::GetSingleton();
 

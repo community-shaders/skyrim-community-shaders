@@ -10,8 +10,11 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <functional>
+#include <iomanip>
+#include <sstream>
 #include <stb_image.h>
 #include <string>
 #include <vector>
@@ -597,13 +600,16 @@ namespace Util
 		return VersionStringLess(a, b, asc);
 	};
 
+	using TableCellRenderFunc = std::function<void(int row, int col, const std::string& value)>;
+
 	void ShowSortedStringTable(
 		const char* table_id,
 		const std::vector<std::string>& headers,
 		std::vector<std::vector<std::string>> rows,
 		size_t sortColumn,
 		bool ascending,
-		const std::vector<TableSortFunc>& customSorts)
+		const std::vector<TableSortFunc>& customSorts,
+		TableCellRenderFunc cellRender)
 	{
 		ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable;
 		if (ImGui::BeginTable(table_id, static_cast<int>(headers.size()), flags)) {
@@ -634,15 +640,115 @@ namespace Util
 			}
 			// else: no sorting if sortCol is invalid
 
-			for (const auto& row : rows) {
+			for (size_t rowIdx = 0; rowIdx < rows.size(); ++rowIdx) {
+				const auto& row = rows[rowIdx];
 				ImGui::TableNextRow();
 				for (size_t col = 0; col < headers.size(); ++col) {
 					ImGui::TableSetColumnIndex(static_cast<int>(col));
-					if (col < row.size())
-						ImGui::TextUnformatted(row[col].c_str());
+					if (col < row.size()) {
+						if (cellRender) {
+							cellRender(static_cast<int>(rowIdx), static_cast<int>(col), row[col]);
+						} else {
+							ImGui::TextUnformatted(row[col].c_str());
+						}
+					}
 				}
 			}
 			ImGui::EndTable();
 		}
+	}
+
+	template <typename T>
+	void ShowSortedStringTable(
+		const char* table_id,
+		const std::vector<std::string>& headers,
+		std::vector<T>& rows,
+		size_t sortColumn,
+		bool ascending,
+		const std::vector<std::function<bool(const T&, const T&, bool)>>& customSorts,
+		std::function<void(int, int, const T&)> cellRender)
+	{
+		ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable;
+		if (ImGui::BeginTable(table_id, static_cast<int>(headers.size()), flags)) {
+			for (const auto& header : headers)
+				ImGui::TableSetupColumn(header.c_str());
+			ImGui::TableHeadersRow();
+
+			// Interactive sorting
+			int sortCol = static_cast<int>(sortColumn);
+			bool sortAsc = ascending;
+			if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
+				if (sortSpecs->SpecsCount > 0) {
+					sortCol = sortSpecs->Specs->ColumnIndex;
+					sortAsc = sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending;
+				}
+			}
+			if (sortCol >= 0 && static_cast<size_t>(sortCol) < headers.size()) {
+				if (sortCol < static_cast<int>(customSorts.size()) && customSorts[sortCol]) {
+					auto cmp = customSorts[sortCol];
+					std::sort(rows.begin(), rows.end(), [sortCol, sortAsc, &cmp](const T& a, const T& b) {
+						return cmp(a, b, sortAsc);
+					});
+				}
+			}
+
+			for (size_t rowIdx = 0; rowIdx < rows.size(); ++rowIdx) {
+				const auto& row = rows[rowIdx];
+				ImGui::TableNextRow();
+				for (size_t col = 0; col < headers.size(); ++col) {
+					ImGui::TableSetColumnIndex(static_cast<int>(col));
+					if (cellRender) {
+						cellRender(static_cast<int>(rowIdx), static_cast<int>(col), row);
+					}
+				}
+			}
+			ImGui::EndTable();
+		}
+	}
+
+	std::string FormatMilliseconds(float ms)
+	{
+		std::ostringstream oss;
+		if (ms < 0.1f)
+			oss << std::fixed << std::setprecision(3) << ms << " ms";
+		else
+			oss << std::fixed << std::setprecision(2) << ms << " ms";
+		return oss.str();
+	}
+
+	std::string FormatMicroseconds(float us)
+	{
+		std::ostringstream oss;
+		oss << std::fixed << std::setprecision(2) << us << " us";
+		return oss.str();
+	}
+
+	std::string FormatPercent(float percent)
+	{
+		std::ostringstream oss;
+		oss << std::fixed << std::setprecision(1) << percent << "%";
+		return oss.str();
+	}
+
+	ImVec4 GetThresholdColor(float value, float good, float warn, ImVec4 goodColor, ImVec4 warnColor, ImVec4 badColor)
+	{
+		if (value < good)
+			return goodColor;
+		else if (value < warn)
+			return warnColor;
+		else
+			return badColor;
+	}
+
+	std::string TimeAgoString(std::chrono::steady_clock::time_point last)
+	{
+		using namespace std::chrono;
+		auto now = steady_clock::now();
+		auto diff = duration_cast<seconds>(now - last).count();
+		if (diff < 60)
+			return std::to_string(diff) + "s";
+		if (diff < 3600)
+			return std::to_string(diff / 60) + "m";
+		return std::to_string(diff / 3600) + "h";
 	}
 }  // namespace Util

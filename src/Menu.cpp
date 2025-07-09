@@ -23,6 +23,7 @@
 #include "Utils/UI.h"
 
 #include "Features/LightLimitFix/ParticleLights.h"
+#include "Features/PerformanceOverlay.h"
 #include "Features/WeatherPicker.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -46,29 +47,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ColorDefault,
 	ColorHovered,
 	MinimizedFactor)
-
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-	Menu::Settings::PerfOverlaySettings,
-	Enabled,
-	ShowDrawCalls,
-	ShowVRAM,
-	ShowFPS,
-	ShowPreFGFrameTimeGraph,
-	ShowPostFGFrameTimeGraph,
-	UpdateInterval,
-	FrameHistorySize,
-	Size,
-	BackgroundOpacity,
-	ShowBorder,
-	Position,
-	PositionSet,
-	OverlayToggleKey)
-
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-	Menu::Settings::WeatherDetailsWindowSettings,
-	Enabled,
-	Position,
-	PositionSet)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ImGuiStyle,
@@ -124,137 +102,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ToggleKey,
 	SkipCompilationKey,
 	EffectToggleKey,
-	Theme,
-	PerfOverlay)
+	OverlayToggleKey,
+	Theme)
 
 constexpr std::uint16_t KEY_PRESSED_MASK = 0x8000;
-
-// Struct for draw call overlay table row data
-struct DrawCallRow
-{
-	std::string label;
-	int shaderType;
-	int drawCalls;
-	float frameTime;
-	float percent;
-	float costPerCall;
-	std::string tooltip;
-	bool enabled;
-	// Test data columns
-	std::optional<float> testFrameTime;
-	std::optional<float> testCostPerCall;
-};
-
-typedef RE::BSShader::Type ShaderTypeEnum;
-struct ShaderRow
-{
-	std::string label;
-	ShaderTypeEnum type;
-	std::string tooltip;
-};
-
-// Define an enum for table columns for clarity and maintainability
-enum DrawCallTableColumn
-{
-	Col_Label = 0,
-	Col_DrawCalls,
-	Col_FrameTime,
-	Col_CostPerCall,
-	Col_TestFrameTime,    // Optional: Test Frame Time (ms)
-	Col_TestCostPerCall,  // Optional: Test Cost/Call (ms)
-	Col_Count             // always last, gives you the number of columns (not including test columns)
-};
-
-// Runtime-only test data storage
-struct TestData
-{
-	float frameTime;
-	float costPerCall;
-	float percent;
-};
-
-// Test data source tracking
-enum class TestDataSource
-{
-	None,
-	ABTest_VariantB,
-	ManualShaderToggle
-};
-static TestDataSource s_testDataSource = TestDataSource::None;
-static std::chrono::steady_clock::time_point s_testDataLastUpdated;
-static std::string TimeAgoString(std::chrono::steady_clock::time_point a_last)
-{
-	using namespace std::chrono;
-	auto now = steady_clock::now();
-	auto diff = duration_cast<seconds>(now - a_last).count();
-	if (diff < 60)
-		return std::to_string(diff) + "s";
-	return std::to_string(diff / 60) + "m";
-}
-
-static std::unordered_map<int, TestData> s_testData;
-static bool abTestingEnabled = false;
-static void UpdateShaderTestData(int shaderType, float frameTime, float costPerCall)
-{
-	s_testData[shaderType] = { frameTime, costPerCall };
-	// Compute and save 'Other' and 'Total' test data
-	float smoothedFrameTime = static_cast<float>(Menu::GetSingleton()->perfOverlayState.smoothFrameTimeMs);
-	float measuredSum = 0.0f;
-	for (const auto& [type, data] : s_testData) {
-		if (type >= 0)
-			measuredSum += data.frameTime;
-	}
-	float otherFrameTime = smoothedFrameTime - measuredSum;
-	float otherPercent = (smoothedFrameTime > 0.0f) ? (otherFrameTime / smoothedFrameTime) * 100.0f : 0.0f;
-	s_testData[-2] = { otherFrameTime, 0.0f, otherPercent };
-	float totalSmoothedDrawCalls = static_cast<float>(globals::state->smoothDrawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]);
-	float totalCostPerCall = (totalSmoothedDrawCalls > 0.0f) ? (smoothedFrameTime / totalSmoothedDrawCalls) : 0.0f;
-	s_testData[-1] = { smoothedFrameTime, totalCostPerCall, 100.0f };
-
-	s_testDataSource = TestDataSource::ManualShaderToggle;
-	s_testDataLastUpdated = std::chrono::steady_clock::now();
-}
-
-// Add this function near the top of Menu.cpp (after abTestingEnabled, usingTestConfig, etc.)
-static void UpdateAllShaderTestData()
-{
-	if (!(abTestingEnabled && Menu::GetSingleton()->usingTestConfig))
-		return;
-	// Use the smoothed frame time for all calculations
-	float smoothedFrameTime = static_cast<float>(Menu::GetSingleton()->perfOverlayState.smoothFrameTimeMs);
-	float measuredSum = 0.0f;
-	float totalSmoothedDrawCalls = static_cast<float>(globals::state->smoothDrawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]);
-	for (auto type : magic_enum::enum_values<RE::BSShader::Type>()) {
-		if (type == RE::BSShader::Type::None || type == RE::BSShader::Type::Total)
-			continue;
-		int typeIndex = magic_enum::enum_integer(type);
-		float drawCalls = static_cast<float>(globals::state->smoothDrawCalls[typeIndex]);
-		float frameTime = static_cast<float>(globals::state->smoothFrameTimePerType[typeIndex]);
-		float percent = (smoothedFrameTime > 0.0f) ? (frameTime / smoothedFrameTime) * 100.0f : 0.0f;
-		float costPerCall = (drawCalls > 0.0f) ? (frameTime / drawCalls) : 0.0f;
-		s_testData[typeIndex] = { frameTime, costPerCall, percent };
-		measuredSum += frameTime;
-	}
-	float otherFrameTime = smoothedFrameTime - measuredSum;
-	float otherPercent = (smoothedFrameTime > 0.0f) ? (otherFrameTime / smoothedFrameTime) * 100.0f : 0.0f;
-	s_testData[-2] = { otherFrameTime, 0.0f, otherPercent };
-	float totalCostPerCall = (totalSmoothedDrawCalls > 0.0f) ? (smoothedFrameTime / totalSmoothedDrawCalls) : 0.0f;
-	s_testData[-1] = { smoothedFrameTime, totalCostPerCall, 100.0f };
-	s_testDataSource = TestDataSource::ABTest_VariantB;
-	s_testDataLastUpdated = std::chrono::steady_clock::now();
-}
-
-static std::string GetTestDataTooltip()
-{
-	switch (s_testDataSource) {
-	case TestDataSource::ABTest_VariantB:
-		return std::string("Test data from Test (Variant B).\nLast updated: ") + TimeAgoString(s_testDataLastUpdated) + " ago.";
-	case TestDataSource::ManualShaderToggle:
-		return std::string("Test data from manual shader toggle.\nLast updated: ") + TimeAgoString(s_testDataLastUpdated) + " ago.";
-	default:
-		return "No test data available.";
-	}
-}
 
 void Menu::SetupImGuiStyle() const
 {
@@ -1358,6 +1209,21 @@ void Menu::DrawGeneralSettings()
 					settingSkipCompilationKey = true;
 				}
 			}
+			if (settingOverlayToggleKey) {
+				ImGui::Text("Press any key to set as a toggle key for displaying the overlay...");
+			} else {
+				ImGui::AlignTextToFramePadding();
+				ImGui::Text("Overlay Toggle Key:");
+				ImGui::SameLine();
+				ImGui::AlignTextToFramePadding();
+				ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", KeyIdToString(settings.OverlayToggleKey));
+
+				ImGui::AlignTextToFramePadding();
+				ImGui::SameLine();
+				if (ImGui::Button("Change##OverlayToggle")) {
+					settingOverlayToggleKey = true;
+				}
+			}
 			ImGui::EndTabItem();
 		}
 		if (ImGui::BeginTabItem("Interface")) {
@@ -1550,7 +1416,7 @@ void Menu::DrawAdvancedSettings()
 		}
 
 		if (ImGui::SliderInt("A/B Test Interval", reinterpret_cast<int*>(&testInterval), 0, 10)) {
-			bool overlayWasEnabled = settings.PerfOverlay.Enabled;
+			bool overlayWasEnabled = PerformanceOverlay::GetSingleton()->settings.ShowInOverlay;
 			if (testInterval == 0) {
 				abTestingEnabled = false;
 				logger::info("Disabling A/B testing. Will restore to Variant B (TEST) config.");
@@ -1562,7 +1428,7 @@ void Menu::DrawAdvancedSettings()
 			} else {
 				logger::info("Setting new A/B test interval {}.", testInterval);
 			}
-			settings.PerfOverlay.Enabled = overlayWasEnabled;
+			PerformanceOverlay::GetSingleton()->settings.ShowInOverlay = overlayWasEnabled;
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
@@ -1725,8 +1591,7 @@ void Menu::DrawDisplaySettings()
 		auto& themeSettings = settings.Theme;
 
 		const std::vector<std::pair<std::string, std::function<void()>>> features = {
-			{ "Upscaling", []() { globals::upscaling->DrawSettings(); } },
-			{ "Performance Overlay", [this]() { DrawPerformanceOverlaySettings(); } }
+			{ "Upscaling", []() { globals::upscaling->DrawSettings(); } }
 		};
 
 		for (const auto& [featureName, drawFunc] : features) {
@@ -1773,7 +1638,7 @@ void Menu::DrawOverlay()
 	auto shaderCache = globals::shaderCache;
 	auto failed = shaderCache->GetFailedTasks();
 	auto hide = shaderCache->IsHideErrors();
-	if (!(shaderCache->IsCompiling() || IsEnabled || abTestingEnabled || (failed && !hide) || settings.PerfOverlay.Enabled)) {
+	if (!(shaderCache->IsCompiling() || IsEnabled || abTestingEnabled || (failed && !hide) || PerformanceOverlay::GetSingleton()->settings.ShowInOverlay)) {
 		auto& io = ImGui::GetIO();
 		io.ClearInputKeys();
 		io.ClearEventsQueue();
@@ -1844,26 +1709,29 @@ void Menu::DrawOverlay()
 	} else {
 		ImGui::GetIO().MouseDrawCursor = false;
 	}
-	if (settings.PerfOverlay.Enabled)
-		DrawPerfOverlay();
-
-	// Draw weather details window independently of main menu
-	DrawWeatherDetailsWindow();
+	// load overlays
+	for (Feature* feat : Feature::GetFeatureList()) {
+		if (feat && feat->loaded) {
+			if (auto* overlay = dynamic_cast<OverlayFeature*>(feat)) {
+				overlay->DrawOverlay();
+			}
+		}
+	}
 
 	if (abTestingEnabled) {  // In test mode
 		// Preserve overlay enabled state when switching configs
 		float seconds = (float)duration_cast<std::chrono::milliseconds>(high_resolution_clock::now() - lastTestSwitch).count() / 1000.0f;
 		auto remaining = (float)testInterval - seconds;
 		if (remaining < 0.0f) {
-			bool overlayWasEnabled = settings.PerfOverlay.Enabled;
+			bool overlayWasEnabled = PerformanceOverlay::GetSingleton()->settings.ShowInOverlay;
 			Menu::GetSingleton()->usingTestConfig = !Menu::GetSingleton()->usingTestConfig;
 			logger::info("Swapping to {} (A/B Test): {}", Menu::GetSingleton()->usingTestConfig ? "Variant B (TEST)" : "Variant A (USER)", Menu::GetSingleton()->usingTestConfig ? "TEST config" : "USER config");
 			globals::state->Load(Menu::GetSingleton()->usingTestConfig ? State::ConfigMode::TEST : State::ConfigMode::USER);
-			settings.PerfOverlay.Enabled = overlayWasEnabled;  // Restore overlay state
+			PerformanceOverlay::GetSingleton()->settings.ShowInOverlay = overlayWasEnabled;  // Restore overlay state
 			lastTestSwitch = high_resolution_clock::now();
 		}
 		// Always update test data during TEST phase, regardless of overlay visibility
-		UpdateAllShaderTestData();
+		PerformanceOverlay::UpdateAllShaderTestData();
 		ImGui::SetNextWindowBgAlpha(1.0f);
 		ImGui::SetNextWindowPos(ImVec2(10, 10));
 		if (!ImGui::Begin("Testing", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
@@ -1881,1043 +1749,12 @@ void Menu::DrawOverlay()
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 }
 
-void Menu::DrawPerfOverlay()
-{
-	if (!settings.PerfOverlay.Enabled) {
-		return;
-	}
-
-	// Set window flags - no decoration and only movable when ShowBorder is true
-	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize;
-
-	// Only allow mouse interaction when the main menu is open
-	if (!IsEnabled) {
-		windowFlags |= ImGuiWindowFlags_NoInputs;
-	}
-
-	if (!settings.PerfOverlay.ShowBorder) {
-		windowFlags |= ImGuiWindowFlags_NoBackground;
-	} else {
-		windowFlags &= ~ImGuiWindowFlags_NoDecoration;
-		windowFlags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize;
-	}
-
-	// Set background opacity
-	ImGui::PushStyleColor(ImGuiCol_WindowBg,
-		ImVec4(ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).x,
-			ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).y,
-			ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).z,
-			settings.PerfOverlay.BackgroundOpacity));
-
-	// Set text size based on user preference
-	perfOverlayState.textScale = perfOverlayState.SetTextScale(settings.PerfOverlay);
-
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, settings.PerfOverlay.ShowBorder ? 1.0f : 0.0f);
-
-	// Set initial position if not already set
-	if (!settings.PerfOverlay.PositionSet) {
-		ImGui::SetNextWindowPos(ImVec2(10.0f, 10.0f));
-		settings.PerfOverlay.Position = ImVec2(10.0f, 10.0f);
-		settings.PerfOverlay.PositionSet = true;
-	} else {
-		ImGui::SetNextWindowPos(settings.PerfOverlay.Position, ImGuiCond_FirstUseEver);
-	}
-
-	// Set window size based on whether graphs are shown, was rapidly changing size based on text
-	perfOverlayState.hasGraphs = settings.PerfOverlay.ShowPreFGFrameTimeGraph ||
-	                             (settings.PerfOverlay.ShowPostFGFrameTimeGraph && perfOverlayState.isFrameGenerationActive);
-	if (!perfOverlayState.hasGraphs) {
-		float fixedWidth = 325.0f * perfOverlayState.textScale;
-		ImGui::SetNextWindowSize(ImVec2(fixedWidth, 0), ImGuiCond_Always);
-	}
-
-	// Create the window
-	ImGui::Begin("Performance Overlay", NULL, windowFlags);
-
-	// Remember window position for next frame
-	if (ImGui::IsWindowAppearing()) {
-		ImGui::SetWindowPos(settings.PerfOverlay.Position);
-	}
-
-	// Track if window has been moved
-	ImVec2 currentPos = ImGui::GetWindowPos();
-	if (currentPos.x != settings.PerfOverlay.Position.x || currentPos.y != settings.PerfOverlay.Position.y) {
-		settings.PerfOverlay.Position = currentPos;
-	}
-
-	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 1.0f));  // Tighter spacing
-	ImGui::SetWindowFontScale(perfOverlayState.textScale);
-
-	// Initialize Performance Counter if necessary
-	if (!perfOverlayState.initialized) {
-		REX::W32::QueryPerformanceFrequency(&perfOverlayState.frequency);
-		REX::W32::QueryPerformanceCounter(&perfOverlayState.lastFrameCounter);
-		perfOverlayState.initialized = true;
-	} else {
-		REX::W32::QueryPerformanceCounter(&perfOverlayState.currentFrameCounter);
-		int64_t elapsedCounter = perfOverlayState.currentFrameCounter - perfOverlayState.lastFrameCounter;
-		perfOverlayState.lastFrameCounter = perfOverlayState.currentFrameCounter;
-
-		// Calculate frametime and fps
-		perfOverlayState.frameTimeMs = Util::performanceOverlay.CalcFrameTime(elapsedCounter, perfOverlayState.frequency);
-		perfOverlayState.fps = Util::performanceOverlay.CalcFPS(perfOverlayState.frameTimeMs);
-
-		// Calculate smooth values for display using the user-defined update interval
-		auto now = std::chrono::steady_clock::now();
-		float deltaTime = std::chrono::duration<float>(now - perfOverlayState.lastUpdateTime).count();
-		perfOverlayState.lastUpdateTime = now;
-
-		// Update graph values
-		perfOverlayState.UpdateGraphValues(settings.PerfOverlay);
-
-		// Update smooth values with user-specified interval
-		perfOverlayState.updateTimer += deltaTime;
-		if (perfOverlayState.updateTimer >= settings.PerfOverlay.UpdateInterval) {
-			perfOverlayState.smoothFps = perfOverlayState.fps;
-			perfOverlayState.smoothFrameTimeMs = perfOverlayState.frameTimeMs;
-			perfOverlayState.updateTimer = 0.0f;
-		}
-
-		// Check if Frame Generation is active
-		perfOverlayState.isFrameGenerationActive = globals::upscaling && globals::upscaling->IsFrameGenerationActive();
-
-		if (perfOverlayState.isFrameGenerationActive) {
-			perfOverlayState.UpdateFGFrameTime(settings.PerfOverlay);
-		}
-
-		// Show FPS counter if enabled
-		if (settings.PerfOverlay.ShowFPS) {
-			perfOverlayState.DrawFPS(settings.PerfOverlay);
-		}
-	}
-
-	// Show Draw Calls if enabled
-	if (settings.PerfOverlay.ShowDrawCalls) {
-		ImGui::Separator();
-		perfOverlayState.DrawDrawCalls();
-		ImGui::Separator();
-	}
-
-	// VRAM & GPU Usage
-	if (settings.PerfOverlay.ShowVRAM && dxgiAdapter3) {
-		perfOverlayState.DrawVRAM(dxgiAdapter3);
-	}
-
-	ImGui::PopStyleVar();             // ItemSpacing
-	ImGui::SetWindowFontScale(1.0f);  // Reset font scale
-
-	ImGui::End();
-	ImGui::PopStyleVar();    // WindowBorderSize
-	ImGui::PopStyleColor();  // WindowBg
-}
-
-float Menu::PerfOverlayState::SetTextScale(Settings::PerfOverlaySettings& settings)
-{
-	switch (settings.Size) {
-	case Settings::PerfOverlaySettings::TextSize::Small:
-		return 0.8f;
-	case Settings::PerfOverlaySettings::TextSize::Medium:
-		return 1.0f;
-	case Settings::PerfOverlaySettings::TextSize::Large:
-		return 1.2f;
-	}
-	return 1.0f;
-}
-
-/**
- * @brief Updates all runtime state related to the performance overlay graph.
- *
- * This function synchronizes the frame time history buffer, tracks min/max frame times,
- * and computes the normalized Y-axis range for the frame time graph using statistical analysis.
- *
- * Steps performed:
- *   1. Resizes the frameTimeHistory buffer if the user has changed the setting.
- *   2. Inserts the latest frame time into the circular history buffer.
- *   3. Updates instantaneous min/max frame time values, with full rescans if necessary.
- *   4. Calculates the average (mean) and standard deviation of frame times in the buffer.
- *   5. Sets the graph Y-axis range to be centered on the average, with a spread of ±2 standard deviations,
- *      clamped to user-friendly minimum and maximum values.
- *   6. Smooths the min/max Y-axis values for visual stability using exponential smoothing.
- *
- *
- * @param settings Reference to the current performance overlay settings (controls buffer size, etc.).
- */
-void Menu::PerfOverlayState::UpdateGraphValues(Settings::PerfOverlaySettings& settings)
-{
-	// Sync frame history buffer size with user settings
-	UpdateFrameTimeHistorySizes(settings);
-
-	// Insert latest frame time into circular buffer
-	float oldFrameTime = frameTimeHistory[frameTimeHistoryIndex];
-	frameTimeHistory[frameTimeHistoryIndex] = frameTimeMs;
-	frameTimeHistoryIndex = (frameTimeHistoryIndex + 1) % settings.FrameHistorySize;
-
-	// Maintain instantaneous min/max tracking
-	if (frameTimeMs > maxFrameTime) {
-		maxFrameTime = frameTimeMs;
-	} else if (frameTimeMs < minFrameTime) {
-		minFrameTime = frameTimeMs;
-	} else if (oldFrameTime == minFrameTime) {
-		UpdateMinFrameTime();
-	} else if (oldFrameTime == maxFrameTime) {
-		UpdateMaxFrameTime();
-	}
-
-	float avgFrameTime, stdDev, graphMin, graphMax;
-	// Calculate mean and standard deviation for normalized graph range
-	if (frameTimeHistory.empty()) {
-		// Default to 60 FPS
-		avgFrameTime = 16.67f;
-		stdDev = 0.0f;
-		graphMin = 0.0f;
-		graphMax = 33.0f;
-	} else {
-		// Calculate average frame time
-		avgFrameTime = std::accumulate(frameTimeHistory.begin(), frameTimeHistory.end(), 0.0f) / frameTimeHistory.size();
-
-		// Calculate standard deviation
-		float variance = 0.0f;
-		for (float ft : frameTimeHistory) {
-			float diff = ft - avgFrameTime;
-			variance += diff * diff;
-		}
-		variance /= frameTimeHistory.size();
-		stdDev = std::sqrt(variance);
-
-		// Calculate graph range
-		float spread = std::clamp(stdDev * 2.0f, 2.0f, 20.0f);
-		graphMin = std::max(0.0f, avgFrameTime - spread);
-		graphMax = avgFrameTime + spread;
-	}
-
-	// Exponential smoothing for stable graph scaling
-	smoothedMinFrameTime += kSmoothingFactor * (graphMin - smoothedMinFrameTime);
-	smoothedMaxFrameTime += kSmoothingFactor * (graphMax - smoothedMaxFrameTime);
-}
-
-/**
- * @brief Updates the minimum frame time value by scanning the frame time history buffer.
- *
- * Finds the smallest frame time currently in the frameTimeHistory buffer and updates minFrameTime accordingly.
- * Assumes frameTimeHistory is non-empty.
- */
-void Menu::PerfOverlayState::UpdateMinFrameTime()
-{
-	minFrameTime = *std::min_element(frameTimeHistory.begin(), frameTimeHistory.end());
-}
-
-/**
- * @brief Updates the maximum frame time value by scanning the frame time history buffer.
- *
- * Finds the largest frame time currently in the frameTimeHistory buffer and updates maxFrameTime accordingly.
- * Assumes frameTimeHistory is non-empty.
- */
-void Menu::PerfOverlayState::UpdateMaxFrameTime()
-{
-	maxFrameTime = *std::max_element(frameTimeHistory.begin(), frameTimeHistory.end());
-}
-
-/**
- * @brief Updates post-frame generation (FG) frame time and FPS history values.
- *
- * Retrieves the latest frame time from the Frame Generation system if available, updates smoothed values,
- * and maintains a circular buffer of post-FG frame times. Falls back to an approximation if FG timing is unavailable.
- *
- * @param settings Reference to the current performance overlay settings (controls buffer size, etc.).
- */
-void Menu::PerfOverlayState::UpdateFGFrameTime(Settings::PerfOverlaySettings& settings)
-{
-	// Get frametime directly from the Frame Generation system
-	float fgDeltaTime = globals::upscaling->GetFrameGenerationFrameTime();
-	if (fgDeltaTime > 0.0f) {
-		postFGFrameTimeMs = fgDeltaTime * 1000.0f;
-		postFGFps = 1000.0f / postFGFrameTimeMs;
-
-		// Update post-FG smooth values when timer elapses
-		if (updateTimer <= 0.0f) {
-			postFGSmoothFps = postFGFps;
-			postFGSmoothFrameTimeMs = postFGFrameTimeMs;
-		}
-
-		// Update post-FG frametime history
-		postFGFrameTimeHistory[postFGFrameTimeHistoryIndex] = postFGFrameTimeMs;
-		postFGFrameTimeHistoryIndex = (postFGFrameTimeHistoryIndex + 1) % settings.FrameHistorySize;
-	} else {
-		// Fallback if FG time is not available
-		postFGFrameTimeMs = frameTimeMs / 2.0f;  // Approximate
-		postFGFps = fps * 2.0f;                  // Approximate
-
-		// Update smooth values when timer elapses
-		if (updateTimer <= 0.0f) {
-			postFGSmoothFps = postFGFps;
-			postFGSmoothFrameTimeMs = postFGFrameTimeMs;
-		}
-
-		// Update post-FG frametime history with approximation
-		postFGFrameTimeHistory[postFGFrameTimeHistoryIndex] = postFGFrameTimeMs;
-		postFGFrameTimeHistoryIndex = (postFGFrameTimeHistoryIndex + 1) % settings.FrameHistorySize;
-	}
-}
-
-/**
- * @brief Renders the FPS and frametime statistics using ImGui, including graphs and reference lines.
- *
- * Displays pre- and post-frame generation FPS and frametime values, as well as line graphs if enabled in settings.
- * Handles both standard and frame generation rendering modes, and draws reference lines for common FPS targets.
- *
- * @param settings Reference to the current performance overlay settings (controls what is displayed).
- */
-void Menu::PerfOverlayState::DrawFPS(Settings::PerfOverlaySettings& settings)
-{
-	if (ImGui::BeginTable("FrametimeTargets", 2, ImGuiTableFlags_SizingStretchProp)) {
-		ImGui::TableSetupColumn("##prop", ImGuiTableColumnFlags_WidthFixed, ImGui::GetTextLineHeight() * 5);
-		ImGui::TableSetupColumn("##value");
-
-		ImGui::TableNextColumn();
-		ImGui::Text(isFrameGenerationActive ? "Raw FPS:" : "FPS:");
-		ImGui::TableNextColumn();
-		ImGui::Text("%.1f (%.2f ms)", smoothFps, smoothFrameTimeMs);
-
-		if (isFrameGenerationActive) {
-			ImGui::TableNextColumn();
-			ImGui::Text("Post-FG FPS:");
-			ImGui::TableNextColumn();
-			ImGui::Text("%.1f (%.2f ms)", postFGSmoothFps, postFGSmoothFrameTimeMs);
-		}
-
-		ImGui::EndTable();
-	}
-
-	// Show Pre-FG frametime graph if enabled
-	if (settings.ShowPreFGFrameTimeGraph) {
-		// Prepare overlay text
-		char overlay_text[128];
-		snprintf(overlay_text, IM_ARRAYSIZE(overlay_text),
-			"%s%.2f ms (%.1f FPS)",
-			isFrameGenerationActive ? "Pre-FG: " : "",
-			smoothFrameTimeMs, smoothFps);
-
-		// Set graph colors
-		ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));  // Green line
-
-		// Draw the graph
-		float graphWidth = ImGui::GetWindowWidth() * 0.9f;
-		ImGui::PlotLines("##frametime",
-			frameTimeHistory.data(),
-			settings.FrameHistorySize,
-			frameTimeHistoryIndex,
-			overlay_text,
-			smoothedMinFrameTime, smoothedMaxFrameTime,
-			ImVec2(graphWidth, 50.0f * textScale));
-
-		ImGui::PopStyleColor();
-
-		// Draw frametime target reference lines
-		if (ImGui::BeginTable("FrametimeTargets", 3, ImGuiTableFlags_SizingStretchSame)) {
-			ImGui::TableNextColumn();
-			ImGui::Text("30 FPS: 33.3 ms");
-
-			ImGui::TableNextColumn();
-			ImGui::Text("60 FPS: 16.7 ms");
-
-			ImGui::TableNextColumn();
-			ImGui::Text("120 FPS: 8.3 ms");
-
-			ImGui::EndTable();
-		}
-	}
-
-	// Show Post-FG frametime graph if enabled
-	if (settings.ShowPostFGFrameTimeGraph && isFrameGenerationActive) {
-		// Check if FSR frame generation is active (FSR doesn't provide timing data)
-		bool isFSRFrameGen = globals::fidelityFX && globals::fidelityFX->isFrameGenActive;
-
-		if (isFSRFrameGen) {
-			// Show note that post-FG timing isn't available with FSR
-			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Post-FG timing not available with FSR3 Framegen");
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("AMD FSR Frame Generation doesn't provide internal timing data.\nPost-FG performance metrics are only available with NVIDIA DLSS Frame Generation.");
-			}
-		} else {
-			// Show post-FG graph for DLSS
-			DrawPostFGFrameTimeGraph(settings);
-		}
-	}
-}
-
-/**
- * @brief Renders the post-frame generation frametime graph using ImGui.
- *
- * Plots the post-FG frametime history and displays reference lines for common FPS targets.
- * Only called if frame generation is active and the relevant settings are enabled.
- *
- * @param settings Reference to the current performance overlay settings (controls graph appearance and size).
- */
-void Menu::PerfOverlayState::DrawPostFGFrameTimeGraph(Settings::PerfOverlaySettings& settings)
-{
-	// Prepare overlay text
-	char overlay_text[128];
-	snprintf(overlay_text, IM_ARRAYSIZE(overlay_text),
-		"Post-FG: %.2f ms (%.1f FPS)",
-		postFGSmoothFrameTimeMs, postFGSmoothFps);
-
-	// Set graph colors - blue for post-FG
-	ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.0f, 0.5f, 1.0f, 1.0f));  // Blue line
-
-	// Draw the graph
-	float graphWidth = ImGui::GetWindowWidth() * 0.9f;
-	ImGui::PlotLines("##postfgframetime",
-		postFGFrameTimeHistory.data(),
-		settings.FrameHistorySize,
-		postFGFrameTimeHistoryIndex,
-		overlay_text,
-		smoothedMinFrameTime, smoothedMaxFrameTime,
-		ImVec2(graphWidth, 50.0f * textScale));
-
-	ImGui::PopStyleColor();
-
-	// Draw frametime target reference lines
-	if (ImGui::BeginTable("PostFGFrametimeTargets", 3, ImGuiTableFlags_SizingStretchSame)) {
-		ImGui::TableNextColumn();
-		ImGui::Text("30 FPS: 33.3 ms");
-
-		ImGui::TableNextColumn();
-		ImGui::Text("60 FPS: 16.7 ms");
-
-		ImGui::TableNextColumn();
-		ImGui::Text("120 FPS: 8.3 ms");
-
-		ImGui::EndTable();
-	}
-}
-
 /**
  * @brief Renders the current draw call counts for various shader types using ImGui.
  *
  * Displays a breakdown of draw calls by type (e.g., Grass, Sky, Water, etc.) and the total count.
  * Values are sourced from the global state.
  */
-void Menu::PerfOverlayState::DrawDrawCalls()
-{
-	static bool clearTestDataRequested = false;
-	bool abTestActive = (abTestingEnabled && Menu::GetSingleton()->usingTestConfig);
-	bool anyShaderDisabled = false;
-	for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1; ++i) {
-		if (!globals::state->enabledClasses[i]) {
-			anyShaderDisabled = true;
-			break;
-		}
-	}
-	if (!s_testData.empty()) {
-		if (ImGui::Button("Clear Test Data")) {
-			clearTestDataRequested = true;
-		}
-		ImGui::SameLine();
-		ImGui::TextDisabled("Test columns are shown only when test data is present.");
-	}
-
-	// Build headers and column count dynamically
-	std::vector<std::string> headers = { "Shader Type", "Draw Calls", "Frame Time (%)", "Cost/Call" };
-	bool anyTestData = !s_testData.empty();
-	if (anyTestData) {
-		headers.push_back("Test Frame Time (%)");
-		headers.push_back("Test Cost/Call");
-	}
-	int columnCount = static_cast<int>(headers.size());
-
-	// Tooltip map for shader types
-	static const std::unordered_map<RE::BSShader::Type, std::string> kShaderTypeTooltips = {
-		{ RE::BSShader::Type::Grass, "Draw calls using the Grass shader. Typically many, but each is usually cheap." },
-		{ RE::BSShader::Type::Sky, "Draw calls for the sky dome, clouds, and related effects." },
-		{ RE::BSShader::Type::Water, "Draw calls for water surfaces and effects." },
-		{ RE::BSShader::Type::Lighting, "Draw calls for dynamic and static lighting passes." },
-		{ RE::BSShader::Type::Effect, "Draw calls for special effects, particles, and post-processing." },
-		{ RE::BSShader::Type::Utility, "Draw calls for utility passes, such as shadow masks or G-buffer fills." },
-		{ RE::BSShader::Type::DistantTree, "Draw calls for distant tree rendering (LOD vegetation)." },
-		{ RE::BSShader::Type::Particle, "Draw calls for particle systems (smoke, sparks, etc.)." },
-		{ RE::BSShader::Type::BloodSplatter, "Draw calls for blood splatter effects." },
-		{ RE::BSShader::Type::ImageSpace, "Draw calls for image space post-processing effects." }
-	};
-	std::vector<ShaderRow> shaderTypes;
-	for (auto type : magic_enum::enum_values<RE::BSShader::Type>()) {
-		if (type == RE::BSShader::Type::None || type == RE::BSShader::Type::Total)
-			continue;
-		std::string label = std::string(magic_enum::enum_name(type)) + ":";
-		auto it = kShaderTypeTooltips.find(type);
-		std::string tooltip = (it != kShaderTypeTooltips.end()) ? it->second : "Draw calls for this shader type.";
-		tooltip += "\nClick to ";
-		tooltip += (globals::state->enabledClasses[magic_enum::enum_integer(type) - 1]) ? "disable" : "enable";
-		tooltip += " this shader.";
-		shaderTypes.push_back({ label, type, tooltip });
-	}
-
-	// Sorting state (declare all at the top)
-	static int sortColumn = 0;
-	static bool sortAscending = false;
-	static bool isSorted = false;
-	static std::vector<DrawCallRow> originalRows;
-
-	// Use the smoothed frame time for all calculations
-	float smoothedFrameTime = static_cast<float>(Menu::GetSingleton()->perfOverlayState.smoothFrameTimeMs);
-	float measuredSum = 0.0f;
-	float totalSmoothedDrawCalls = static_cast<float>(globals::state->smoothDrawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]);
-
-	// --- TEST DATA SNAPSHOT LOGIC ---
-	if (abTestActive) {
-		measuredSum = 0.0f;
-		for (const auto& row : shaderTypes) {
-			auto typeIndex = magic_enum::enum_integer(row.type);
-			float drawCalls = static_cast<float>(globals::state->smoothDrawCalls[typeIndex]);
-			float frameTime = static_cast<float>(globals::state->smoothFrameTimePerType[typeIndex]);
-			float percent = (smoothedFrameTime > 0.0f) ? (frameTime / smoothedFrameTime) * 100.0f : 0.0f;
-			float costPerCall = (drawCalls > 0.0f) ? (frameTime / drawCalls) : 0.0f;
-			s_testData[typeIndex] = { frameTime, costPerCall, percent };
-			measuredSum += frameTime;
-		}
-		float otherFrameTime = smoothedFrameTime - measuredSum;
-		float otherPercent = (smoothedFrameTime > 0.0f) ? (otherFrameTime / smoothedFrameTime) * 100.0f : 0.0f;
-		s_testData[-2] = { otherFrameTime, 0.0f, otherPercent };
-		float totalCostPerCall = (totalSmoothedDrawCalls > 0.0f) ? (smoothedFrameTime / totalSmoothedDrawCalls) : 0.0f;
-		s_testData[-1] = { smoothedFrameTime, totalCostPerCall, 100.0f };
-	} else if (anyShaderDisabled) {
-		measuredSum = 0.0f;
-		for (const auto& row : shaderTypes) {
-			auto typeIndex = magic_enum::enum_integer(row.type);
-			bool enabled = globals::state->enabledClasses[typeIndex - 1];
-			if (!enabled) {
-				float drawCalls = static_cast<float>(globals::state->smoothDrawCalls[typeIndex]);
-				float frameTime = static_cast<float>(globals::state->smoothFrameTimePerType[typeIndex]);
-				float percent = (smoothedFrameTime > 0.0f) ? (frameTime / smoothedFrameTime) * 100.0f : 0.0f;
-				float costPerCall = (drawCalls > 0.0f) ? (frameTime / drawCalls) : 0.0f;
-				s_testData[typeIndex] = { frameTime, costPerCall, percent };
-			}
-			measuredSum += static_cast<float>(globals::state->smoothFrameTimePerType[typeIndex]);
-		}
-		float otherFrameTime = smoothedFrameTime - measuredSum;
-		float otherPercent = (smoothedFrameTime > 0.0f) ? (otherFrameTime / smoothedFrameTime) * 100.0f : 0.0f;
-		s_testData[-2] = { otherFrameTime, 0.0f, otherPercent };
-		float totalCostPerCall = (totalSmoothedDrawCalls > 0.0f) ? (smoothedFrameTime / totalSmoothedDrawCalls) : 0.0f;
-		s_testData[-1] = { smoothedFrameTime, totalCostPerCall, 100.0f };
-	}
-
-	// Build main rows: all shader types
-	std::vector<DrawCallRow> mainRows;
-	measuredSum = 0.0f;
-	for (const auto& row : shaderTypes) {
-		auto typeIndex = magic_enum::enum_integer(row.type);
-		float drawCalls = static_cast<float>(globals::state->smoothDrawCalls[typeIndex]);
-		float frameTime = static_cast<float>(globals::state->smoothFrameTimePerType[typeIndex]);
-		float percent = (smoothedFrameTime > 0.0f) ? (frameTime / smoothedFrameTime) * 100.0f : 0.0f;
-		float costPerCall = (drawCalls > 0.0f) ? (frameTime / drawCalls) : 0.0f;
-		// Clamp small negative values to zero
-		if (std::abs(frameTime) < 1e-4f)
-			frameTime = 0.0f;
-		if (std::abs(costPerCall) < 1e-6f)
-			costPerCall = 0.0f;
-		bool enabled = globals::state->enabledClasses[typeIndex - 1];
-		std::optional<float> testFrameTime, testCostPerCall;
-		auto it = s_testData.find(typeIndex);
-		if (it != s_testData.end()) {
-			testFrameTime = it->second.frameTime;
-			testCostPerCall = it->second.costPerCall;
-			anyTestData = true;
-		}
-		DrawCallRow rowObj{ row.label, typeIndex, static_cast<int>(drawCalls), frameTime, percent, costPerCall, row.tooltip, enabled, testFrameTime, testCostPerCall };
-		mainRows.push_back(rowObj);
-		measuredSum += frameTime;
-	}
-
-	// Add summary rows (not part of main sorting)
-	float otherFrameTime = smoothedFrameTime - measuredSum;
-	if (std::abs(otherFrameTime) < 1e-4f)
-		otherFrameTime = 0.0f;
-
-	DrawCallRow otherRow = {
-		"Other:", -2, 0, otherFrameTime,
-		(smoothedFrameTime > 0.0f ? static_cast<float>((otherFrameTime / smoothedFrameTime) * 100.0f) : 0.0f),
-		0.0f,
-		std::string("Frame time not attributed to any measured shader type. This includes UI, post-processing, engine work, and any GPU activity not directly measured by the overlay.")
-	};
-
-	DrawCallRow totalRow = {
-		"Total:", -1, static_cast<int>(totalSmoothedDrawCalls), smoothedFrameTime, 100.0f,
-		(totalSmoothedDrawCalls > 0.0f ? static_cast<float>(smoothedFrameTime / totalSmoothedDrawCalls) : 0.0f),
-		std::string("Sum of all measured shader types.\nClick to enable or disable all shaders.")
-	};
-
-	// Always start the main table sorted alphabetically by label on first display
-	static bool firstTableDisplay = true;
-	if (firstTableDisplay) {
-		std::sort(mainRows.begin(), mainRows.end(), [](const DrawCallRow& a, const DrawCallRow& b) {
-			return a.label < b.label;
-		});
-		firstTableDisplay = false;
-	}
-
-	// Handle sorting: only sort mainRows, never summary rows
-	if (ImGui::BeginTable("DrawCallOverlayTable##", columnCount, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable)) {
-		// --- HEADER SETUP WITH TOOLTIP ---
-		for (int i = 0; i < headers.size(); ++i) {
-			ImGui::TableSetupColumn(headers[i].c_str());
-			if (anyTestData && (headers[i] == "Test Frame Time" || headers[i] == "Test Cost/Call")) {
-				if (ImGui::IsItemHovered()) {
-					ImGui::SetTooltip("%s", GetTestDataTooltip().c_str());
-				}
-			}
-		}
-		ImGui::TableHeadersRow();
-
-		if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
-			if (sortSpecs->SpecsCount > 0) {
-				sortColumn = sortSpecs->Specs->ColumnIndex;
-				sortAscending = sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending;
-				switch (sortColumn) {
-				case Col_Label:
-					std::sort(mainRows.begin(), mainRows.end(), [=](const DrawCallRow& a, const DrawCallRow& b) {
-						return sortAscending ? (a.label < b.label) : (a.label > b.label);
-					});
-					break;
-				case Col_DrawCalls:
-					std::sort(mainRows.begin(), mainRows.end(), [=](const DrawCallRow& a, const DrawCallRow& b) {
-						return sortAscending ? (a.drawCalls < b.drawCalls) : (a.drawCalls > b.drawCalls);
-					});
-					break;
-				case Col_FrameTime:
-					std::sort(mainRows.begin(), mainRows.end(), [=](const DrawCallRow& a, const DrawCallRow& b) {
-						return sortAscending ? (a.percent < b.percent) : (a.percent > b.percent);
-					});
-					break;
-				case Col_CostPerCall:
-					std::sort(mainRows.begin(), mainRows.end(), [=](const DrawCallRow& a, const DrawCallRow& b) {
-						return sortAscending ? (a.costPerCall < b.costPerCall) : (a.costPerCall > b.costPerCall);
-					});
-					break;
-				case Col_TestFrameTime:
-					std::sort(mainRows.begin(), mainRows.end(), [=](const DrawCallRow& a, const DrawCallRow& b) {
-						float aVal = a.testFrameTime.value_or(FLT_MAX);
-						float bVal = b.testFrameTime.value_or(FLT_MAX);
-						return sortAscending ? (aVal < bVal) : (aVal > bVal);
-					});
-					break;
-				case Col_TestCostPerCall:
-					std::sort(mainRows.begin(), mainRows.end(), [=](const DrawCallRow& a, const DrawCallRow& b) {
-						float aVal = a.testCostPerCall.value_or(FLT_MAX);
-						float bVal = b.testCostPerCall.value_or(FLT_MAX);
-						return sortAscending ? (aVal < bVal) : (aVal > bVal);
-					});
-					break;
-				}
-			}
-		}
-
-		// --- Main table cell rendering switch: renders each cell based on column ---
-		for (size_t rowIdx = 0; rowIdx < mainRows.size(); ++rowIdx) {
-			const auto& row = mainRows[rowIdx];
-			ImGui::TableNextRow();
-			int colIdx = 0;
-			// Label
-			ImGui::TableSetColumnIndex(colIdx++);
-			if (!row.enabled) {
-				ImGui::PushStyleColor(ImGuiCol_Text, Menu::GetSingleton()->GetTheme().StatusPalette.Disable);
-			}
-			bool wasEnabled = row.enabled;
-			if (ImGui::Selectable(row.label.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
-				auto maybeType = magic_enum::enum_cast<RE::BSShader::Type>(row.shaderType);
-				if (maybeType.has_value()) {
-					auto classIndex = magic_enum::enum_integer(*maybeType) - 1;
-					if (classIndex >= 0 && classIndex < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1) {
-						globals::state->enabledClasses[classIndex] = !wasEnabled;
-						// Also update test data when toggled
-						UpdateShaderTestData(row.shaderType, row.frameTime, row.costPerCall);
-					}
-				}
-			}
-			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)) {
-				ImGui::SetTooltip("%s", row.tooltip.c_str());
-			}
-			if (!row.enabled) {
-				ImGui::PopStyleColor();
-			}
-			// Draw Calls
-			ImGui::TableSetColumnIndex(colIdx++);
-			ImGui::Text("%d", row.drawCalls);
-			// Frame Time (%)
-			ImGui::TableSetColumnIndex(colIdx++);
-			ImVec4 color = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-			if (row.percent < 30.0f)
-				color = Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor;
-			else if (row.percent < 60.0f)
-				color = Menu::GetSingleton()->GetTheme().StatusPalette.Warning;
-			else
-				color = Menu::GetSingleton()->GetTheme().StatusPalette.Error;
-			ImGui::PushStyleColor(ImGuiCol_Text, color);
-			ImGui::Text("%.2f ms (%.1f%%)", row.frameTime, row.percent);
-			ImGui::PopStyleColor();
-			// Cost/Call
-			ImGui::TableSetColumnIndex(colIdx++);
-			if (row.costPerCall < 0.05f)
-				color = Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor;
-			else if (row.costPerCall < 0.2f)
-				color = Menu::GetSingleton()->GetTheme().StatusPalette.Warning;
-			else
-				color = Menu::GetSingleton()->GetTheme().StatusPalette.Error;
-			ImGui::PushStyleColor(ImGuiCol_Text, color);
-			if (row.costPerCall < 0.01f && row.costPerCall > 0.0f)
-				ImGui::Text("%.2f us", row.costPerCall * 1000.0f);
-			else
-				ImGui::Text("%.3f ms", row.costPerCall);
-			ImGui::PopStyleColor();
-			// Test columns if present
-			if (anyTestData) {
-				// Test Frame Time
-				ImGui::TableSetColumnIndex(colIdx++);
-				if (row.testFrameTime.has_value()) {
-					ImVec4 testColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-					if (*row.testFrameTime < row.frameTime)
-						testColor = Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor;
-					else if (*row.testFrameTime > row.frameTime)
-						testColor = Menu::GetSingleton()->GetTheme().StatusPalette.Error;
-					ImGui::PushStyleColor(ImGuiCol_Text, testColor);
-					ImGui::Text("%.2f ms (%.1f%%)", *row.testFrameTime, s_testData[row.shaderType].percent);
-					ImGui::PopStyleColor();
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip("%s", GetTestDataTooltip().c_str());
-					}
-				} else {
-					ImGui::TextDisabled("-");
-				}
-				// Test Cost/Call
-				ImGui::TableSetColumnIndex(colIdx++);
-				if (row.testCostPerCall.has_value()) {
-					ImVec4 testColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-					if (*row.testCostPerCall < row.costPerCall)
-						testColor = Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor;
-					else if (*row.testCostPerCall > row.costPerCall)
-						testColor = Menu::GetSingleton()->GetTheme().StatusPalette.Error;
-					ImGui::PushStyleColor(ImGuiCol_Text, testColor);
-					if (*row.testCostPerCall < 0.01f && *row.testCostPerCall > 0.0f)
-						ImGui::Text("%.2f us", *row.testCostPerCall * 1000.0f);
-					else
-						ImGui::Text("%.3f ms", *row.testCostPerCall);
-					ImGui::PopStyleColor();
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip("%s", GetTestDataTooltip().c_str());
-					}
-				} else {
-					ImGui::TextDisabled("-");
-				}
-			}
-		}
-		// Separator row (optional, for visual separation)
-		ImGui::TableNextRow(ImGuiTableRowFlags_None, 4.0f);
-		for (int col = 0; col < columnCount; ++col) {
-			ImGui::TableSetColumnIndex(col);
-			if (col == 0)
-				ImGui::Separator();
-		}
-		// Summary rows (Other, Total)
-		for (const DrawCallRow& row : { otherRow, totalRow }) {
-			ImGui::TableNextRow();
-			int colIdx = 0;
-			ImGui::TableSetColumnIndex(colIdx++);
-			if (row.label == std::string("Total:")) {
-				if (ImGui::Selectable(row.label.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
-					bool anyDisabled = false;
-					for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1; ++i) {
-						if (!globals::state->enabledClasses[i]) {
-							anyDisabled = true;
-							break;
-						}
-					}
-					for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1; ++i) {
-						globals::state->enabledClasses[i] = anyDisabled;
-					}
-				}
-			} else {
-				ImGui::TextUnformatted(row.label.c_str());
-			}
-			if (!row.tooltip.empty() && ImGui::IsItemHovered()) {
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::TextUnformatted(row.tooltip.c_str());
-				}
-			}
-			ImGui::TableSetColumnIndex(colIdx++);
-			if (row.label == "Other:" && row.drawCalls <= 0) {
-				ImGui::TextUnformatted("N/A");
-			} else {
-				ImGui::Text("%d", row.drawCalls);
-			}
-			ImGui::TableSetColumnIndex(colIdx++);
-			if (row.label == "Other:" && row.frameTime <= 0.0f) {
-				ImGui::TextUnformatted("N/A");
-			} else {
-				ImGui::Text("%.2f ms (%.1f%%)", row.frameTime, row.percent);
-				if (row.label == "Total:" && ImGui::IsItemHovered()) {
-					float _fps = row.frameTime > 0.0f ? 1000.0f / row.frameTime : 0.0f;
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						ImGui::Text("FPS: %.2f", _fps);
-					}
-				}
-			}
-			ImGui::TableSetColumnIndex(colIdx++);
-			if (row.label == "Other:" && row.costPerCall <= 0.0f) {
-				ImGui::TextUnformatted("N/A");
-			} else if (row.costPerCall < 0.01f && row.costPerCall > 0.0f) {
-				ImGui::Text("%.2f us", row.costPerCall * 1000.0f);
-			} else {
-				ImGui::Text("%.3f ms", row.costPerCall);
-			}
-			if (anyTestData) {
-				ImGui::TableSetColumnIndex(colIdx++);
-				auto testIt = s_testData.find(row.shaderType);
-				if (testIt != s_testData.end()) {
-					ImVec4 testColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-					if (testIt->second.frameTime < row.frameTime)
-						testColor = Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor;
-					else if (testIt->second.frameTime > row.frameTime)
-						testColor = Menu::GetSingleton()->GetTheme().StatusPalette.Error;
-					ImGui::PushStyleColor(ImGuiCol_Text, testColor);
-					ImGui::Text("%.2f ms (%.1f%%)", testIt->second.frameTime, testIt->second.percent);
-					ImGui::PopStyleColor();
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip("%s", GetTestDataTooltip().c_str());
-						// Show FPS for test frame time
-						float _fps = testIt->second.frameTime > 0.0f ? 1000.0f / testIt->second.frameTime : 0.0f;
-						if (auto _tt = Util::HoverTooltipWrapper()) {
-							ImGui::Text("FPS: %.2f", _fps);
-						}
-					}
-				} else {
-					ImGui::TextUnformatted("N/A");
-				}
-				ImGui::TableSetColumnIndex(colIdx++);
-				if (testIt != s_testData.end()) {
-					ImVec4 testColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-					if (testIt->second.costPerCall < row.costPerCall)
-						testColor = Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor;
-					else if (testIt->second.costPerCall > row.costPerCall)
-						testColor = Menu::GetSingleton()->GetTheme().StatusPalette.Error;
-					ImGui::PushStyleColor(ImGuiCol_Text, testColor);
-					if (testIt->second.costPerCall < 0.01f && testIt->second.costPerCall > 0.0f)
-						ImGui::Text("%.2f us", testIt->second.costPerCall * 1000.0f);
-					else
-						ImGui::Text("%.3f ms", testIt->second.costPerCall);
-					ImGui::PopStyleColor();
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip("%s", GetTestDataTooltip().c_str());
-					}
-				} else {
-					ImGui::TextUnformatted("N/A");
-				}
-			}
-		}
-		ImGui::EndTable();
-	}
-
-	if (clearTestDataRequested) {
-		s_testData.clear();
-		clearTestDataRequested = false;
-		s_testDataSource = TestDataSource::None;
-	}
-}
-
-/**
- * @brief Renders the current GPU VRAM usage using ImGui.
- *
- * Queries the DXGI adapter for video memory info and displays current usage, total budget, and a progress bar.
- * Falls back to a message if VRAM info is unavailable.
- *
- * @param dxgiAdapter3 A COM pointer to the IDXGIAdapter3 interface for querying video memory info.
- */
-void Menu::PerfOverlayState::DrawVRAM(winrt::com_ptr<IDXGIAdapter3> dxgiAdapter3)
-{
-	DXGI_QUERY_VIDEO_MEMORY_INFO videoMemoryInfo{};
-	HRESULT hr = dxgiAdapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &videoMemoryInfo);
-
-	// Only proceed if the call succeeded and Budget is not zero
-	if (SUCCEEDED(hr) && videoMemoryInfo.Budget > 0) {
-		float currentGpuUsage = videoMemoryInfo.CurrentUsage / (1024.f * 1024.f * 1024.f);
-		float totalGpuMemory = videoMemoryInfo.Budget / (1024.f * 1024.f * 1024.f);
-		float percent = currentGpuUsage / totalGpuMemory;
-
-		// Center the VRAM text
-		ImGui::Text("VRAM Usage:");
-
-		// Use a centered text format for the numeric values
-		std::string vramText = std::format("{:.2f}GB/{:.2f}GB ({:.1f}%)", currentGpuUsage, totalGpuMemory, 100 * percent);
-		float textWidth = ImGui::CalcTextSize(vramText.c_str()).x;
-		float windowWidth = ImGui::GetWindowWidth();
-
-		// Center the text if it fits within the window
-		if (textWidth < windowWidth) {
-			ImGui::SetCursorPosX((windowWidth - textWidth) * 0.5f);
-			ImGui::Text("%s", vramText.c_str());
-		} else {
-			ImGui::Text("%s", vramText.c_str());
-		}
-
-		// Only move the progress bar, not the text
-		ImGui::ProgressBar(percent, ImVec2(ImGui::GetWindowWidth() * 0.9f, 0.0f), "");
-	} else {
-		// Display a fallback message if we couldn't get the VRAM info
-		ImGui::Text("VRAM Usage: Not available");
-	}
-}
-
-/**
- * @brief Ensures frame time history buffers are sized according to the current settings.
- *
- * Resizes the frameTimeHistory and postFGFrameTimeHistory buffers to match the user-configured history size,
- * clamping the size within allowed bounds. Resets indices if they are out of bounds after resizing.
- *
- * @param settings Reference to the current performance overlay settings (controls buffer size and limits).
- */
-void Menu::PerfOverlayState::UpdateFrameTimeHistorySizes(Settings::PerfOverlaySettings& settings)
-{
-	settings.FrameHistorySize = std::clamp(
-		settings.FrameHistorySize,
-		settings.kMinFrameHistorySize,
-		settings.kMaxFrameHistorySize);
-
-	if (frameTimeHistory.size() != static_cast<size_t>(settings.FrameHistorySize)) {
-		frameTimeHistory.resize(settings.FrameHistorySize, 0.0f);
-		if (frameTimeHistoryIndex >= settings.FrameHistorySize) {  // Reset index if it's out of new bounds
-			frameTimeHistoryIndex = 0;
-		}
-	}
-	if (postFGFrameTimeHistory.size() != static_cast<size_t>(settings.FrameHistorySize)) {
-		postFGFrameTimeHistory.resize(settings.FrameHistorySize, 0.0f);
-		if (postFGFrameTimeHistoryIndex >= settings.FrameHistorySize) {
-			postFGFrameTimeHistoryIndex = 0;
-		}
-	}
-}
-
-void Menu::DrawPerformanceOverlaySettings()
-{
-	auto& themeSettings = settings.Theme;
-
-	ImGui::Checkbox("Enable Performance Overlay", &settings.PerfOverlay.Enabled);
-
-	if (settings.PerfOverlay.Enabled) {
-		ImGui::Indent();
-
-		// Display options
-		if (ImGui::CollapsingHeader("Display Options", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Indent();
-
-			// FPS options
-			ImGui::Checkbox("Show FPS Counter", &settings.PerfOverlay.ShowFPS);
-
-			bool isFrameGenerationActive = globals::upscaling && globals::upscaling->IsFrameGenerationActive();
-			if (settings.PerfOverlay.ShowFPS) {
-				ImGui::Indent();
-
-				if (isFrameGenerationActive) {
-					// Pre-Frame Generation FPS
-					ImGui::Checkbox("Show Pre-FG Frametime Graph", &settings.PerfOverlay.ShowPreFGFrameTimeGraph);
-					// Check if FSR frame generation is active
-					bool isFSRFrameGen = globals::fidelityFX && globals::fidelityFX->isFrameGenActive;
-					if (isFSRFrameGen) {
-						// Disable post-FG option for FSR and show note
-						ImGui::BeginDisabled();
-						ImGui::Checkbox("Show Post-FG Frametime Graph", &settings.PerfOverlay.ShowPostFGFrameTimeGraph);
-						ImGui::EndDisabled();
-						if (auto _tt = Util::HoverTooltipWrapper()) {
-							ImGui::Text("Post-FG timing not available with AMD FSR Frame Generation.\nThis option is only available with NVIDIA DLSS Frame Generation.");
-						}
-					} else {
-						// Enable post-FG option for DLSS
-						ImGui::Checkbox("Show Post-FG Frametime Graph", &settings.PerfOverlay.ShowPostFGFrameTimeGraph);
-					}
-				} else {
-					// Regular FPS options when frame generation is not active
-					ImGui::Checkbox("Show Frametime Graph", &settings.PerfOverlay.ShowPreFGFrameTimeGraph);
-				}
-
-				ImGui::Unindent();
-			}
-
-			ImGui::Checkbox("Show Draw Calls", &settings.PerfOverlay.ShowDrawCalls);
-			ImGui::Checkbox("Show VRAM Usage", &settings.PerfOverlay.ShowVRAM);
-
-			ImGui::Unindent();
-		}
-		// Hotkey settings
-		if (ImGui::CollapsingHeader("Hotkeys", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Indent();
-
-			// Add hotkey configuration for toggling overlay
-			if (settingOverlayToggleKey) {
-				ImGui::Text("Press any key to set as Performance Overlay toggle key...");
-			} else {
-				ImGui::AlignTextToFramePadding();
-				ImGui::Text("Toggle Key:");
-				ImGui::SameLine();
-				ImGui::AlignTextToFramePadding();
-				ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", KeyIdToString(settings.PerfOverlay.OverlayToggleKey));
-				ImGui::AlignTextToFramePadding();
-				ImGui::SameLine();
-				if (ImGui::Button("Change##overlayToggle")) {
-					settingOverlayToggleKey = true;
-				}
-			}
-
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Set a key to show/hide the performance overlay");
-			}
-			ImGui::Unindent();
-		}
-
-		// Appearance settings
-		if (ImGui::CollapsingHeader("Appearance", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Indent();
-
-			// Text size options
-			const char* sizes[] = { "Small", "Medium", "Large" };
-			int currentSize = static_cast<int>(settings.PerfOverlay.Size);
-			if (ImGui::Combo("Text Size", &currentSize, sizes, IM_ARRAYSIZE(sizes))) {
-				settings.PerfOverlay.Size = static_cast<Settings::PerfOverlaySettings::TextSize>(currentSize);
-			}
-
-			// Background opacity slider
-			ImGui::SliderFloat("Background Opacity", &settings.PerfOverlay.BackgroundOpacity, 0.0f, 1.0f, "%.2f");
-
-			// Border toggle
-			ImGui::Checkbox("Show Border", &settings.PerfOverlay.ShowBorder);
-
-			// FPS update interval slider - Make this slider affect all FPS and frametime displays
-			ImGui::SliderFloat("Update Interval", &settings.PerfOverlay.UpdateInterval, 0.001f, 2.0f, "%.2f seconds");
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("How frequently all performance metrics should update (FPS and frametime)");
-			}
-
-			// Frame history size slider
-			ImGui::SliderInt("Frame History Size", &settings.PerfOverlay.FrameHistorySize, Settings::PerfOverlaySettings::kMinFrameHistorySize, Settings::PerfOverlaySettings::kMaxFrameHistorySize);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text(
-					"Number of frames to keep in history for graphing.\n"
-					"E.g. 60 frames = 1 second @ 60fps.");
-			}
-
-			// Position options - moved inside appearance section
-			ImGui::Separator();
-			ImGui::Text("Position:");
-
-			// Reset position button
-			if (ImGui::Button("Reset Position")) {
-				settings.PerfOverlay.PositionSet = false;
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Reset the position of the performance overlay to default");
-			}
-
-			ImGui::Unindent();
-		}
-
-		ImGui::Unindent();
-	}
-}
 
 const ImGuiKey Menu::VirtualKeyToImGuiKey(WPARAM vkKey)
 {
@@ -3237,7 +2074,7 @@ void Menu::ProcessInputEventQueue()
 					{ &settings.ToggleKey, &settingToggleKey, [this](uint32_t key) { settings.ToggleKey = key; settingToggleKey = false; } },
 					{ &settings.SkipCompilationKey, &settingSkipCompilationKey, [this](uint32_t key) { settings.SkipCompilationKey = key; settingSkipCompilationKey = false; } },
 					{ &settings.EffectToggleKey, &settingsEffectsToggle, [this](uint32_t key) { settings.EffectToggleKey = key; settingsEffectsToggle = false; } },
-					{ &settings.PerfOverlay.OverlayToggleKey, &settingOverlayToggleKey, [this](uint32_t key) { settings.PerfOverlay.OverlayToggleKey = key; settingOverlayToggleKey = false; } },
+					{ &settings.OverlayToggleKey, &settingOverlayToggleKey, [this](uint32_t key) { settings.OverlayToggleKey = key; settingOverlayToggleKey = false; } },
 				};
 				bool handled = false;
 				for (auto& h : hotkeyActions) {
@@ -3259,7 +2096,9 @@ void Menu::ProcessInputEventQueue()
 						{ settings.EffectToggleKey, [shaderCache]() { shaderCache->SetEnabled(!shaderCache->IsEnabled()); } },
 						{ priorShaderKey, [shaderCache, devMode]() { if (devMode) shaderCache->IterateShaderBlock(); } },
 						{ nextShaderKey, [shaderCache, devMode]() { if (devMode) shaderCache->IterateShaderBlock(false); } },
-						{ settings.PerfOverlay.OverlayToggleKey, [this]() { settings.PerfOverlay.Enabled = !settings.PerfOverlay.Enabled; } },
+						{ settings.OverlayToggleKey, []() {
+							 Menu::GetSingleton()->overlayVisible = !Menu::GetSingleton()->overlayVisible;
+						 } },
 					};
 					for (auto& ka : keyActions) {
 						if (key == ka.settingKey) {
@@ -3367,14 +2206,14 @@ void Menu::SelectFeatureMenu(const std::string& featureName)
 
 void Menu::DrawWeatherDetailsWindow()
 {
-	if (!settings.WeatherDetailsWindow.Enabled) {
+	if (!WeatherPicker::GetSingleton()->WeatherDetailsWindow.Enabled) {
 		return;
 	}
 
 	// Use Weather core feature for all window management and rendering
 	auto weather = globals::features::weatherPicker;
 	if (weather) {
-		bool* p_open = &settings.WeatherDetailsWindow.Enabled;
+		bool* p_open = &WeatherPicker::GetSingleton()->WeatherDetailsWindow.Enabled;
 		weather->RenderWeatherDetailsWindow(p_open);
 	}
 }
