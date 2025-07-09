@@ -41,14 +41,14 @@ namespace WaterEffects
 		float3 heights;
 		heights.x = Normals01Tex.SampleLevel(Normals01Sampler, input.TexCoord1.xy + currentOffset * normalScalesRcp.x, mipLevels.x).w;
 		heights.y = Normals02Tex.SampleLevel(Normals02Sampler, input.TexCoord1.zw + currentOffset * normalScalesRcp.y, mipLevels.y).w;
-		
+
 #if defined(LOD)
 		// For LOD water, only use the first two normal samples
 		heights.z = 0;
 #else
 		heights.z = Normals03Tex.SampleLevel(Normals03Sampler, input.TexCoord2.xy + currentOffset * normalScalesRcp.z, mipLevels.z).w;
 #endif
-		
+
 		heights *= NormalsAmplitude.xyz;
 		return 1.0 - (heights.x + heights.y + heights.z);
 	}
@@ -64,7 +64,7 @@ namespace WaterEffects
 		float3 mipLevels;
 		mipLevels.x = GetMipLevel(input.TexCoord1.xy, Normals01Tex);
 		mipLevels.y = GetMipLevel(input.TexCoord1.zw, Normals02Tex);
-		
+
 		// Check if the struct has TexCoord2 (non-LOD water)
 #if defined(LOD)
 		mipLevels.z = 0;

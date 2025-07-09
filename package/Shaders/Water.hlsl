@@ -654,15 +654,15 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 	// LOD water fix: Simple blended normal calculation for LOD water
 	// Enhanced LOD water normals with distance-based amplitude adjustment
 	float lodDistanceFactor = saturate((distanceFactor - 0.6) / 0.4);
-	
+
 	// Gradually reduce normal map amplitude at distance to better match non-LOD transition
 	float adjustedAmplitude = lerp(NormalsAmplitude.x, NormalsAmplitude.x * 0.7, lodDistanceFactor);
 	float3 finalNormal = normalize(float3(0, 0, 1) + adjustedAmplitude * normals1);
-	
+
 	// Apply subtle wave smoothing at far distances for more natural appearance
 	finalNormal.xy *= lerp(1.0, 0.85, lodDistanceFactor * lodDistanceFactor);
 	finalNormal = normalize(finalNormal);
-	
+
 	// Use an adjusted depth-based blending for LOD water to create smoother transitions
 	float adjustedNormalsDepthFactor = normalsDepthFactor;
 	// Gradually reduce normal strength near LOD transitions for better blending with close water
@@ -1049,10 +1049,10 @@ PS_OUTPUT main(PS_INPUT input)
 #			elif defined(LOD)
 	// Enhanced LOD water fix: Use dynamic depth control values that better match regular water
 	// Creates a smoother transition between close (parallax) water and LOD water
-	
+
 	// Calculate a distance-based blend factor for LOD transitions
 	float lodBlendFactor = saturate((distanceFactor - 0.65) / 0.35);
-	
+
 	float4 depthControl = float4(
 		1.0,  // Reflection depth factor - same as default
 		0.0,  // No refraction in LOD water to ensure full opacity (LOD water only)
@@ -1180,34 +1180,34 @@ PS_OUTPUT main(PS_INPUT input)
 #					else
 	float specularFraction;
 	float3 finalColorPreFog;
-	
+
 	// LOD water fix: Enhanced blending for better visual transition
 #if defined(LOD)
 	// Enhanced LOD water blending - creates smoother transition from close to distant water
 	// Gradually reduce the effect of fresnel at LOD boundaries to minimize normal map differences
-	
+
 	// Create a transition zone for smoother LOD blending
 	float lodDistBlendFactor = saturate((distanceFactor - 0.65) / 0.35);
-	
+
 	// Blend the fresnel based on the transition factor - reduces the wave height appearance at the transition
 	float adjustedFresnel = lerp(fresnel, fresnel * 0.8, lodDistBlendFactor);
 	specularFraction = lerp(1, adjustedFresnel, distanceFactor);
-	
+
 	// Slightly modify normal contribution based on distance to better match non-parallax water
 	float normalBlendFactor = lerp(1.0, 0.85, lodDistBlendFactor);
 	float3 adjustedSpecularColor = lerp(specularColor, specularColor * normalBlendFactor, lodDistBlendFactor);
-	
+
 	// Force LOD water to be fully opaque to match the LOD texture
 	// This ensures no transparency in LOD water, eliminating the transition seam
 	diffuseOutput.refractionMul = 1.0;
-	
+
 	// Enhanced color blending with adjusted specular to better match non-LOD water
 	finalColorPreFog = lerp(diffuseOutput.refractionDiffuseColor, adjustedSpecularColor, specularFraction) + sunColor * depthControl.w;
 #else
 	specularFraction = lerp(1, fresnel, distanceFactor);
 	finalColorPreFog = lerp(diffuseOutput.refractionDiffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
 #endif
-	
+
 	finalColorPreFog = lerp(finalColorPreFog, input.FogParam.xyz * PosAdjust[eyeIndex].w, input.FogParam.w);
 
 	float3 refractionColor = diffuseOutput.refractionColor;
@@ -1215,7 +1215,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float fogFactor = min(FogParam.w, pow(saturate(-diffuseOutput.depth * FogParam.y - FogParam.x), FogParam.z));
 	float3 fogColor = lerp(FogNearColor.xyz, FogFarColor.xyz, fogFactor);
 	refractionColor = lerp(refractionColor, fogColor, fogFactor);
-	
+
 	// Apply color blending based on the opacity calculated in GetWaterDiffuseColor
 		float3 finalColor = lerp(refractionColor, finalColorPreFog, diffuseOutput.refractionMul);
 #						if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
@@ -1234,15 +1234,15 @@ PS_OUTPUT main(PS_INPUT input)
 
 #		if defined(STENCIL)
 	float3 viewDirection = normalize(input.WorldPosition.xyz);
-	
+
 	// Enhanced normal calculation for stencil to better support LOD transitions
 	float3 normal = normalize(cross(ddx_coarse(input.WorldPosition.xyz), ddy_coarse(input.WorldPosition.xyz)));
-	
+
 #			if defined(LOD)
 	// For LOD water, slightly adjust the normal to better blend with close water at transitions
 	float lodViewDistance = length(input.WorldPosition.xyz);
 	float lodTransitionBlend = saturate((lodViewDistance - 7000.0) / 2000.0);
-	
+
 	// Slightly flatten the normal at transition boundaries to reduce seam visibility
 	normal = normalize(lerp(normal, float3(normal.xy * 0.9, normal.z), lodTransitionBlend));
 #			else
@@ -1250,13 +1250,13 @@ PS_OUTPUT main(PS_INPUT input)
 	// to maintain visual consistency with LOD water
 	float transitionDistance = length(input.WorldPosition.xyz);
 	float transitionOpacityFactor = saturate((transitionDistance - 6500.0) / 1000.0);
-	
+
 	// Apply an extremely subtle normal adjustment only at the immediate transition boundary
 	if (transitionOpacityFactor > 0.8) {
 		normal = normalize(lerp(normal, float3(normal.xy * 0.98, normal.z), (transitionOpacityFactor - 0.8) * 5.0));
 	}
 #			endif
-	
+
 	float VdotN = dot(viewDirection, normal);
 	psout.WaterMask = float4(0, 0, VdotN, 0);
 
