@@ -778,7 +778,7 @@ void Deferred::Hooks::Main_RenderWorld_Start::thunk(RE::BSBatchRenderer* This, u
 void Deferred::RenderBlendedDecals()
 {
 	if (!globals::state->blendedDecalRenderPasses.empty()) {
-		if (globals::game::isVR){
+		if (globals::game::isVR) {
 			auto& runtimeData = globals::game::shadowState->GetVRRuntimeData();
 			auto runtimeDataCopy = runtimeData;
 			runtimeData.rasterStateDepthBiasMode = 10;
@@ -790,7 +790,7 @@ void Deferred::RenderBlendedDecals()
 
 			runtimeData = runtimeDataCopy;
 		} else {
-						auto& runtimeData = globals::game::shadowState->GetRuntimeData();
+			auto& runtimeData = globals::game::shadowState->GetRuntimeData();
 			auto runtimeDataCopy = runtimeData;
 			runtimeData.rasterStateDepthBiasMode = 10;
 
