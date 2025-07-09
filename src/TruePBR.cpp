@@ -704,11 +704,6 @@ struct BSLightingShaderProperty_GetRenderPasses
 
 				lightingTechnique = (static_cast<uint32_t>(lightingType) << 24) | lightingFlags;
 				currentPass->passEnum = lightingTechnique + LightingTechniqueStart;
-
-				// Separate deferred and forward blended decals
-				if (currentPass->accumulationHint == 3 && currentPass->shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kZBufferWrite)) {
-					currentPass->accumulationHint = 16;
-				}
 			}
 			currentPass = currentPass->next;
 		}

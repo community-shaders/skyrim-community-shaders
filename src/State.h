@@ -10,6 +10,7 @@ using json = nlohmann::json;
 #include <FeatureBuffer.h>
 
 #include "reshade/reshade_api.hpp"
+#include <Hooks.h>
 #include <reshade/reshade.hpp>
 
 class State
@@ -146,6 +147,9 @@ public:
 		THLand5HasDisplacement = 1 << 5,
 		ETMaterialModel = 0b111 << 6,
 	};
+
+	std::vector<::Hooks::RenderPass> blendedDecalRenderPasses;
+	bool inWorld = false;
 
 	void UpdateSharedData(bool a_inWorld, bool a_prepass);
 
