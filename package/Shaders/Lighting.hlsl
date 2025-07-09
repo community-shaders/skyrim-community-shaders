@@ -1463,8 +1463,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			else
 			landRMAOS1 = TexRMAOSSampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
 #			endif
-				glintParameters += weight * LandscapeTexture1GlintParameters;
 			if ((PBRFlags & PBR::TerrainFlags::LandTile0HasGlint) != 0) {
+				glintParameters += weight * LandscapeTexture1GlintParameters;
 			}
 		}
 		else
@@ -1544,8 +1544,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			else
 			landRMAOS2 = TexLandRMAOS2Sampler.SampleBias(SampLandRMAOS2Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
 #			endif
-				glintParameters += weight * LandscapeTexture2GlintParameters;
 			if ((PBRFlags & PBR::TerrainFlags::LandTile1HasGlint) != 0) {
+				glintParameters += weight * LandscapeTexture2GlintParameters;
 			}
 		}
 		else
@@ -1624,8 +1624,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			else
 			landRMAOS3 = TexLandRMAOS3Sampler.SampleBias(SampLandRMAOS3Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
 #			endif
-				glintParameters += weight * LandscapeTexture3GlintParameters;
 			if ((PBRFlags & PBR::TerrainFlags::LandTile2HasGlint) != 0) {
+				glintParameters += weight * LandscapeTexture3GlintParameters;
 			}
 		}
 		else
@@ -1704,8 +1704,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			else
 			landRMAOS4 = TexLandRMAOS4Sampler.SampleBias(SampLandRMAOS4Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
 #			endif
+			if ((PBRFlags & PBR::TerrainFlags::LandTile3HasGlint) != 0) {\
 				glintParameters += weight * LandscapeTexture4GlintParameters;
-			if ((PBRFlags & PBR::TerrainFlags::LandTile3HasGlint) != 0) {
 			}
 		}
 		else
@@ -1785,8 +1785,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			else
 			landRMAOS5 = TexLandRMAOS5Sampler.SampleBias(SampLandRMAOS5Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
 #			endif
-				glintParameters += weight * LandscapeTexture5GlintParameters;
 			if ((PBRFlags & PBR::TerrainFlags::LandTile4HasGlint) != 0) {
+				glintParameters += weight * LandscapeTexture5GlintParameters;
 			}
 		}
 		else
@@ -1865,8 +1865,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			else
 			landRMAOS6 = TexLandRMAOS6Sampler.SampleBias(SampLandRMAOS6Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
 #			endif
-				glintParameters += weight * LandscapeTexture6GlintParameters;
 			if ((PBRFlags & PBR::TerrainFlags::LandTile5HasGlint) != 0) {
+				glintParameters += weight * LandscapeTexture6GlintParameters;
 			}
 		}
 		else
