@@ -1047,7 +1047,6 @@ PS_OUTPUT main(PS_INPUT input)
 #			if defined(UNDERWATER)
 	float4 depthControl = float4(0, 1, 1, 0);
 #			elif defined(LOD)
-	float4 depthControl = float4(1, 0, 0, 1);
 	// Enhanced LOD water fix: Use dynamic depth control values that better match regular water
 	// Creates a smoother transition between close (parallax) water and LOD water
 	
@@ -1056,6 +1055,8 @@ PS_OUTPUT main(PS_INPUT input)
 	
 	float4 depthControl = float4(
 		1.0,  // Reflection depth factor - same as default
+		0.0,  // No refraction in LOD water to ensure full opacity (LOD water only)
+		lerp(0.65, 0.40, lodBlendFactor),  // Dynamic normal depth factor - stronger near LOD transition, weaker at distance
 		1.0   // Specular lighting factor - full strength
 	);
 #			elif defined(SPECULAR) && (NUM_SPECULAR_LIGHTS != 0)
@@ -1177,7 +1178,6 @@ PS_OUTPUT main(PS_INPUT input)
 #						endif
 
 #					else
-	float specularFraction = lerp(1, fresnel, distanceFactor);
 	float specularFraction;
 	float3 finalColorPreFog;
 	
