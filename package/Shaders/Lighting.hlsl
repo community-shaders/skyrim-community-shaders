@@ -1469,7 +1469,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 		else
 		{
-			landRMAOS1 = float4(1 - glossiness.x, 0, 1, 0);
+			landRMAOS1 = input.LandBlendWeights1.x * float4(1 - glossiness.x, 0, 1, 0);
 		}
 		blendedRMAOS += landRMAOS1 * weight;
 #		endif
