@@ -35,9 +35,20 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Position,
 	PositionSet)
 
+static const std::unordered_map<RE::BSShader::Type, std::string> kShaderTypeTooltips = {
+	{ RE::BSShader::Type::Grass, "Draw calls using the Grass shader. Typically many, but each is usually cheap." },
+	{ RE::BSShader::Type::Sky, "Draw calls for the sky dome, clouds, and related effects." },
+	{ RE::BSShader::Type::Water, "Draw calls for water surfaces and effects." },
+	{ RE::BSShader::Type::Lighting, "Draw calls for dynamic and static lighting passes." },
+	{ RE::BSShader::Type::Effect, "Draw calls for special effects, particles, and post-processing." },
+	{ RE::BSShader::Type::Utility, "Draw calls for utility passes, such as shadow masks or G-buffer fills." },
+	{ RE::BSShader::Type::DistantTree, "Draw calls for distant tree rendering (LOD vegetation)." },
+	{ RE::BSShader::Type::Particle, "Draw calls for particle systems (smoke, sparks, etc.)." },
+	{ RE::BSShader::Type::BloodSplatter, "Draw calls for blood splatter effects." },
+	{ RE::BSShader::Type::ImageSpace, "Draw calls for image space post-processing effects." }
+};
+
 // Static test data state
-// Remove global static variables and functions for test data
-// Add static member variable definitions
 PerformanceOverlay::TestDataSource PerformanceOverlay::s_testDataSource = PerformanceOverlay::TestDataSource::None;
 std::chrono::steady_clock::time_point PerformanceOverlay::s_testDataLastUpdated;
 std::unordered_map<int, PerformanceOverlay::TestData> PerformanceOverlay::s_testData;
@@ -65,8 +76,27 @@ void PerformanceOverlay::UpdateShaderTestData(int shaderType, float frameTime, f
 
 void PerformanceOverlay::UpdateAllShaderTestData()
 {
-	if (!(Menu::GetSingleton() && Menu::GetSingleton()->abTestingEnabled && Menu::GetSingleton()->usingTestConfig))
+	// Check if all shaders are disabled
+	bool allDisabled = true;
+	for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1; ++i) {
+		if (globals::state->enabledClasses[i]) {
+			allDisabled = false;
+			break;
+		}
+	}
+	if (allDisabled) {
+		s_testData.clear();
+		s_testDataSource = TestDataSource::None;
 		return;
+	}
+
+	// Only capture test data if we're in A/B test mode AND using Variant B (test config)
+	bool abTest = Menu::GetSingleton() && Menu::GetSingleton()->abTestingEnabled && Menu::GetSingleton()->usingTestConfig;
+	if (!abTest) {
+		// If not in A/B test Variant B, don't capture test data
+		return;
+	}
+
 	float smoothedFrameTime = static_cast<float>(GetSingleton()->perfOverlayState.smoothFrameTimeMs);
 	float measuredSum = 0.0f;
 	float totalSmoothedDrawCalls = static_cast<float>(globals::state->smoothDrawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]);
@@ -203,17 +233,19 @@ void PerformanceOverlay::DrawSettings()
 
 void PerformanceOverlay::DrawOverlay()
 {
+	auto* menu = Menu::GetSingleton();
+
 	// Defensive: Check for required global state and ImGui context
-	if (!globals::state || !Menu::GetSingleton()) {
+	if (!globals::state || !menu) {
 		return;
 	}
 	// Check global overlay visibility
-	if (!Menu::GetSingleton()->overlayVisible) {
+	if (!menu->overlayVisible) {
 		return;
 	}
 	// Defensive: Check for upscaling if you use it
 	// (Not strictly needed here, but safe for future use)
-	if (this->settings.ShowVRAM && (!Menu::GetSingleton()->GetDXGIAdapter3())) {
+	if (this->settings.ShowVRAM && (!menu->GetDXGIAdapter3())) {
 		return;
 	}
 	// Defensive: Check ImGui context
@@ -228,7 +260,7 @@ void PerformanceOverlay::DrawOverlay()
 	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize;
 
 	// Only allow mouse interaction when the main menu is open
-	if (!PerformanceOverlay::GetSingleton()->settings.ShowInOverlay) {
+	if (!this->settings.ShowInOverlay) {
 		windowFlags |= ImGuiWindowFlags_NoInputs;
 	}
 
@@ -296,8 +328,8 @@ void PerformanceOverlay::DrawOverlay()
 		this->perfOverlayState.lastFrameCounter = this->perfOverlayState.currentFrameCounter;
 
 		// Calculate frametime and fps
-		this->perfOverlayState.frameTimeMs = Util::performanceOverlay.CalcFrameTime(elapsedCounter, this->perfOverlayState.frequency);
-		this->perfOverlayState.fps = Util::performanceOverlay.CalcFPS(this->perfOverlayState.frameTimeMs);
+		this->perfOverlayState.frameTimeMs = Util::CalcFrameTime(elapsedCounter, this->perfOverlayState.frequency);
+		this->perfOverlayState.fps = Util::CalcFPS(this->perfOverlayState.frameTimeMs);
 
 		// Calculate smooth values for display using the user-defined update interval
 		auto now = std::chrono::steady_clock::now();
@@ -336,7 +368,7 @@ void PerformanceOverlay::DrawOverlay()
 	}
 
 	// VRAM & GPU Usage
-	if (this->settings.ShowVRAM && Menu::GetSingleton()->GetDXGIAdapter3()) {
+	if (this->settings.ShowVRAM && menu->GetDXGIAdapter3()) {
 		DrawVRAM();
 	}
 
@@ -354,70 +386,77 @@ void PerformanceOverlay::PerfOverlayState::UpdateFGFrameTime()
 	if (!globals::upscaling)
 		return;
 
+	auto* overlay = GetSingleton();
+
 	// Get frametime directly from the Frame Generation system
 	float fgDeltaTime = globals::upscaling->GetFrameGenerationFrameTime();
 	if (fgDeltaTime > 0.0f) {
-		GetSingleton()->perfOverlayState.postFGFrameTimeMs = fgDeltaTime * 1000.0f;
-		GetSingleton()->perfOverlayState.postFGFps = 1000.0f / GetSingleton()->perfOverlayState.postFGFrameTimeMs;
+		overlay->perfOverlayState.postFGFrameTimeMs = fgDeltaTime * 1000.0f;
+		overlay->perfOverlayState.postFGFps = 1000.0f / overlay->perfOverlayState.postFGFrameTimeMs;
 
 		// Update post-FG smooth values when timer elapses
-		if (GetSingleton()->perfOverlayState.updateTimer <= 0.0f) {
-			GetSingleton()->perfOverlayState.postFGSmoothFps = GetSingleton()->perfOverlayState.postFGFps;
-			GetSingleton()->perfOverlayState.postFGSmoothFrameTimeMs = GetSingleton()->perfOverlayState.postFGFrameTimeMs;
+		if (overlay->perfOverlayState.updateTimer <= 0.0f) {
+			overlay->perfOverlayState.postFGSmoothFps = overlay->perfOverlayState.postFGFps;
+			overlay->perfOverlayState.postFGSmoothFrameTimeMs = overlay->perfOverlayState.postFGFrameTimeMs;
 		}
 
 		// Update post-FG frametime history
-		GetSingleton()->perfOverlayState.postFGFrameTimeHistory[GetSingleton()->perfOverlayState.postFGFrameTimeHistoryIndex] = GetSingleton()->perfOverlayState.postFGFrameTimeMs;
-		GetSingleton()->perfOverlayState.postFGFrameTimeHistoryIndex = (GetSingleton()->perfOverlayState.postFGFrameTimeHistoryIndex + 1) % GetSingleton()->settings.FrameHistorySize;
+		overlay->perfOverlayState.postFGFrameTimeHistory[overlay->perfOverlayState.postFGFrameTimeHistoryIndex] = overlay->perfOverlayState.postFGFrameTimeMs;
+		overlay->perfOverlayState.postFGFrameTimeHistoryIndex = (overlay->perfOverlayState.postFGFrameTimeHistoryIndex + 1) % overlay->settings.FrameHistorySize;
 	} else {
 		// Fallback if FG time is not available
-		GetSingleton()->perfOverlayState.postFGFrameTimeMs = GetSingleton()->perfOverlayState.frameTimeMs / 2.0f;
-		GetSingleton()->perfOverlayState.postFGFps = GetSingleton()->perfOverlayState.fps * 2.0f;
+		overlay->perfOverlayState.postFGFrameTimeMs = overlay->perfOverlayState.frameTimeMs / 2.0f;
+		overlay->perfOverlayState.postFGFps = overlay->perfOverlayState.fps * 2.0f;
 
-		if (GetSingleton()->perfOverlayState.updateTimer <= 0.0f) {
-			GetSingleton()->perfOverlayState.postFGSmoothFps = GetSingleton()->perfOverlayState.postFGFps;
-			GetSingleton()->perfOverlayState.postFGSmoothFrameTimeMs = GetSingleton()->perfOverlayState.postFGFrameTimeMs;
+		if (overlay->perfOverlayState.updateTimer <= 0.0f) {
+			overlay->perfOverlayState.postFGSmoothFps = overlay->perfOverlayState.postFGFps;
+			overlay->perfOverlayState.postFGSmoothFrameTimeMs = overlay->perfOverlayState.postFGFrameTimeMs;
 		}
 
-		GetSingleton()->perfOverlayState.postFGFrameTimeHistory[GetSingleton()->perfOverlayState.postFGFrameTimeHistoryIndex] = GetSingleton()->perfOverlayState.postFGFrameTimeMs;
-		GetSingleton()->perfOverlayState.postFGFrameTimeHistoryIndex = (GetSingleton()->perfOverlayState.postFGFrameTimeHistoryIndex + 1) % GetSingleton()->settings.FrameHistorySize;
+		overlay->perfOverlayState.postFGFrameTimeHistory[overlay->perfOverlayState.postFGFrameTimeHistoryIndex] = overlay->perfOverlayState.postFGFrameTimeMs;
+		overlay->perfOverlayState.postFGFrameTimeHistoryIndex = (overlay->perfOverlayState.postFGFrameTimeHistoryIndex + 1) % overlay->settings.FrameHistorySize;
 	}
 }
 
 void PerformanceOverlay::PerfOverlayState::UpdateFrameTimeHistorySizes()
 {
-	GetSingleton()->settings.FrameHistorySize = std::clamp(
-		GetSingleton()->settings.FrameHistorySize,
-		GetSingleton()->settings.kMinFrameHistorySize,
-		GetSingleton()->settings.kMaxFrameHistorySize);
+	auto* overlay = GetSingleton();
 
-	if (GetSingleton()->perfOverlayState.frameTimeHistory.size() != static_cast<size_t>(GetSingleton()->settings.FrameHistorySize)) {
-		GetSingleton()->perfOverlayState.frameTimeHistory.resize(GetSingleton()->settings.FrameHistorySize, 0.0f);
-		if (GetSingleton()->perfOverlayState.frameTimeHistoryIndex >= GetSingleton()->settings.FrameHistorySize) {
-			GetSingleton()->perfOverlayState.frameTimeHistoryIndex = 0;
+	overlay->settings.FrameHistorySize = std::clamp(
+		overlay->settings.FrameHistorySize,
+		overlay->settings.kMinFrameHistorySize,
+		overlay->settings.kMaxFrameHistorySize);
+
+	if (overlay->perfOverlayState.frameTimeHistory.size() != static_cast<size_t>(overlay->settings.FrameHistorySize)) {
+		overlay->perfOverlayState.frameTimeHistory.resize(overlay->settings.FrameHistorySize, 0.0f);
+		if (overlay->perfOverlayState.frameTimeHistoryIndex >= overlay->settings.FrameHistorySize) {
+			overlay->perfOverlayState.frameTimeHistoryIndex = 0;
 		}
 	}
-	if (GetSingleton()->perfOverlayState.postFGFrameTimeHistory.size() != static_cast<size_t>(GetSingleton()->settings.FrameHistorySize)) {
-		GetSingleton()->perfOverlayState.postFGFrameTimeHistory.resize(GetSingleton()->settings.FrameHistorySize, 0.0f);
-		if (GetSingleton()->perfOverlayState.postFGFrameTimeHistoryIndex >= GetSingleton()->settings.FrameHistorySize) {
-			GetSingleton()->perfOverlayState.postFGFrameTimeHistoryIndex = 0;
+	if (overlay->perfOverlayState.postFGFrameTimeHistory.size() != static_cast<size_t>(overlay->settings.FrameHistorySize)) {
+		overlay->perfOverlayState.postFGFrameTimeHistory.resize(overlay->settings.FrameHistorySize, 0.0f);
+		if (overlay->perfOverlayState.postFGFrameTimeHistoryIndex >= overlay->settings.FrameHistorySize) {
+			overlay->perfOverlayState.postFGFrameTimeHistoryIndex = 0;
 		}
 	}
 }
 
 void PerformanceOverlay::PerfOverlayState::UpdateMinFrameTime()
 {
-	GetSingleton()->perfOverlayState.minFrameTime = *std::min_element(GetSingleton()->perfOverlayState.frameTimeHistory.begin(), GetSingleton()->perfOverlayState.frameTimeHistory.end());
+	auto* overlay = GetSingleton();
+	overlay->perfOverlayState.minFrameTime = *std::min_element(overlay->perfOverlayState.frameTimeHistory.begin(), overlay->perfOverlayState.frameTimeHistory.end());
 }
 
 void PerformanceOverlay::PerfOverlayState::UpdateMaxFrameTime()
 {
-	GetSingleton()->perfOverlayState.maxFrameTime = *std::max_element(GetSingleton()->perfOverlayState.frameTimeHistory.begin(), GetSingleton()->perfOverlayState.frameTimeHistory.end());
+	auto* overlay = GetSingleton();
+	overlay->perfOverlayState.maxFrameTime = *std::max_element(overlay->perfOverlayState.frameTimeHistory.begin(), overlay->perfOverlayState.frameTimeHistory.end());
 }
 
 float PerformanceOverlay::PerfOverlayState::SetTextScale()
 {
-	switch (GetSingleton()->settings.Size) {
+	auto* overlay = GetSingleton();
+	switch (overlay->settings.Size) {
 	case PerfOverlaySettings::TextSize::Small:
 		return 0.8f;
 	case PerfOverlaySettings::TextSize::Medium:
@@ -544,10 +583,19 @@ void PerformanceOverlay::PerfOverlayState::DrawPostFGFrameTimeGraph()
 	}
 }
 
-void PerformanceOverlay::DrawDrawCalls()
+// --- TEST DATA CAPTURE LOGIC ---
+// Test data is captured in two scenarios:
+// 1. A/B Test Mode (Variant B): If abTestingEnabled && usingTestConfig, we continuously capture test data
+//    for all shader types, "Other", and "Total" every frame. This allows live comparison between
+//    Variant A (user config) and Variant B (test config).
+// 2. Manual Shader Toggle: If any shader is disabled, we capture test data for the disabled shaders
+//    (and summary rows) at the moment of disabling, and keep it until cleared. This allows users to
+//    compare performance with/without specific shaders enabled.
+// Test data is only cleared by the "Clear Test Data" button or if all shaders are disabled (rare edge case).
+void PerformanceOverlay::CaptureTestData()
 {
-	static bool clearTestDataRequested = false;
-	bool abTestActive = (Menu::GetSingleton() && Menu::GetSingleton()->abTestingEnabled && Menu::GetSingleton()->usingTestConfig);
+	auto* menu = Menu::GetSingleton();
+	bool abTestActive = (menu && menu->abTestingEnabled && menu->usingTestConfig);
 	bool anyShaderDisabled = false;
 	for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1; ++i) {
 		if (!globals::state->enabledClasses[i]) {
@@ -555,65 +603,15 @@ void PerformanceOverlay::DrawDrawCalls()
 			break;
 		}
 	}
-	if (!s_testData.empty()) {
-		if (ImGui::Button("Clear Test Data")) {
-			clearTestDataRequested = true;
-		}
-		ImGui::SameLine();
-		ImGui::TextDisabled("Test columns are shown only when test data is present.");
-	}
-
-	// Build headers and column count dynamically
-	std::vector<std::string> headers = { "Shader Type", "Draw Calls", "Frame Time (%)", "Cost/Call" };
-	bool anyTestData = !s_testData.empty();
-	if (anyTestData) {
-		headers.push_back("Test Frame Time (%)");
-		headers.push_back("Test Cost/Call");
-	}
-	int columnCount = static_cast<int>(headers.size());
-
-	// Tooltip map for shader types
-	static const std::unordered_map<RE::BSShader::Type, std::string> kShaderTypeTooltips = {
-		{ RE::BSShader::Type::Grass, "Draw calls using the Grass shader. Typically many, but each is usually cheap." },
-		{ RE::BSShader::Type::Sky, "Draw calls for the sky dome, clouds, and related effects." },
-		{ RE::BSShader::Type::Water, "Draw calls for water surfaces and effects." },
-		{ RE::BSShader::Type::Lighting, "Draw calls for dynamic and static lighting passes." },
-		{ RE::BSShader::Type::Effect, "Draw calls for special effects, particles, and post-processing." },
-		{ RE::BSShader::Type::Utility, "Draw calls for utility passes, such as shadow masks or G-buffer fills." },
-		{ RE::BSShader::Type::DistantTree, "Draw calls for distant tree rendering (LOD vegetation)." },
-		{ RE::BSShader::Type::Particle, "Draw calls for particle systems (smoke, sparks, etc.)." },
-		{ RE::BSShader::Type::BloodSplatter, "Draw calls for blood splatter effects." },
-		{ RE::BSShader::Type::ImageSpace, "Draw calls for image space post-processing effects." }
-	};
-	std::vector<ShaderRow> shaderTypes;
-	for (auto type : magic_enum::enum_values<RE::BSShader::Type>()) {
-		if (type == RE::BSShader::Type::None || type == RE::BSShader::Type::Total)
-			continue;
-		std::string label = std::string(magic_enum::enum_name(type)) + ":";
-		auto it = kShaderTypeTooltips.find(type);
-		std::string tooltip = (it != kShaderTypeTooltips.end()) ? it->second : "Draw calls for this shader type.";
-		tooltip += "\nClick to ";
-		tooltip += (globals::state->enabledClasses[magic_enum::enum_integer(type) - 1]) ? "disable" : "enable";
-		tooltip += " this shader.";
-		shaderTypes.push_back({ label, type, tooltip });
-	}
-
-	// Sorting state (declare all at the top)
-	static int sortColumn = 0;
-	static bool sortAscending = false;
-	static bool isSorted = false;
-	static std::vector<DrawCallRow> originalRows;
-
-	// Use the smoothed frame time for all calculations
 	float smoothedFrameTime = static_cast<float>(this->perfOverlayState.smoothFrameTimeMs);
 	float measuredSum = 0.0f;
 	float totalSmoothedDrawCalls = static_cast<float>(globals::state->smoothDrawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]);
-
-	// --- TEST DATA SNAPSHOT LOGIC ---
 	if (abTestActive) {
 		measuredSum = 0.0f;
-		for (const auto& row : shaderTypes) {
-			auto typeIndex = magic_enum::enum_integer(static_cast<RE::BSShader::Type>(row.type));
+		for (auto type : magic_enum::enum_values<RE::BSShader::Type>()) {
+			if (type == RE::BSShader::Type::None || type == RE::BSShader::Type::Total)
+				continue;
+			int typeIndex = magic_enum::enum_integer(type);
 			float drawCalls = static_cast<float>(globals::state->smoothDrawCalls[typeIndex]);
 			float frameTime = static_cast<float>(globals::state->smoothFrameTimePerType[typeIndex]);
 			float percent = (smoothedFrameTime > 0.0f) ? (frameTime / smoothedFrameTime) * 100.0f : 0.0f;
@@ -626,10 +624,14 @@ void PerformanceOverlay::DrawDrawCalls()
 		s_testData[-2] = { otherFrameTime, 0.0f, otherPercent };
 		float totalCostPerCall = (totalSmoothedDrawCalls > 0.0f) ? (smoothedFrameTime / totalSmoothedDrawCalls) : 0.0f;
 		s_testData[-1] = { smoothedFrameTime, totalCostPerCall, 100.0f };
+		s_testDataSource = TestDataSource::ABTest_VariantB;
+		s_testDataLastUpdated = std::chrono::steady_clock::now();
 	} else if (anyShaderDisabled) {
 		measuredSum = 0.0f;
-		for (const auto& row : shaderTypes) {
-			auto typeIndex = magic_enum::enum_integer(static_cast<RE::BSShader::Type>(row.type));
+		for (auto type : magic_enum::enum_values<RE::BSShader::Type>()) {
+			if (type == RE::BSShader::Type::None || type == RE::BSShader::Type::Total)
+				continue;
+			int typeIndex = magic_enum::enum_integer(type);
 			bool enabled = globals::state->enabledClasses[typeIndex - 1];
 			if (!enabled) {
 				float drawCalls = static_cast<float>(globals::state->smoothDrawCalls[typeIndex]);
@@ -645,325 +647,366 @@ void PerformanceOverlay::DrawDrawCalls()
 		s_testData[-2] = { otherFrameTime, 0.0f, otherPercent };
 		float totalCostPerCall = (totalSmoothedDrawCalls > 0.0f) ? (smoothedFrameTime / totalSmoothedDrawCalls) : 0.0f;
 		s_testData[-1] = { smoothedFrameTime, totalCostPerCall, 100.0f };
+		s_testDataSource = TestDataSource::ManualShaderToggle;
+		s_testDataLastUpdated = std::chrono::steady_clock::now();
 	}
+}
 
-	// Build main rows: all shader types
+void PerformanceOverlay::ClearTestData()
+{
+	s_testData.clear();
+	s_testDataSource = TestDataSource::None;
+}
+
+std::pair<std::vector<DrawCallRow>, std::vector<DrawCallRow>> PerformanceOverlay::BuildDrawCallRows() const
+{
 	std::vector<DrawCallRow> mainRows;
-	measuredSum = 0.0f;
-	for (const auto& row : shaderTypes) {
-		auto typeIndex = magic_enum::enum_integer(static_cast<RE::BSShader::Type>(row.type));
+	float smoothedFrameTime = static_cast<float>(this->perfOverlayState.smoothFrameTimeMs);
+	float measuredSum = 0.0f;
+	for (auto type : magic_enum::enum_values<RE::BSShader::Type>()) {
+		if (type == RE::BSShader::Type::None || type == RE::BSShader::Type::Total)
+			continue;
+		int typeIndex = magic_enum::enum_integer(type);
 		float drawCalls = static_cast<float>(globals::state->smoothDrawCalls[typeIndex]);
 		float frameTime = static_cast<float>(globals::state->smoothFrameTimePerType[typeIndex]);
 		float percent = (smoothedFrameTime > 0.0f) ? (frameTime / smoothedFrameTime) * 100.0f : 0.0f;
 		float costPerCall = (drawCalls > 0.0f) ? (frameTime / drawCalls) : 0.0f;
-		// Clamp small negative values to zero
-		if (std::abs(frameTime) < 1e-4f)
-			frameTime = 0.0f;
-		if (std::abs(costPerCall) < 1e-6f)
-			costPerCall = 0.0f;
 		bool enabled = globals::state->enabledClasses[typeIndex - 1];
 		std::optional<float> testFrameTime, testCostPerCall;
 		auto it = s_testData.find(typeIndex);
 		if (it != s_testData.end()) {
 			testFrameTime = it->second.frameTime;
 			testCostPerCall = it->second.costPerCall;
-			anyTestData = true;
 		}
-		DrawCallRow rowObj{ row.label, typeIndex, static_cast<int>(drawCalls), frameTime, percent, costPerCall, row.tooltip, enabled, testFrameTime, testCostPerCall };
-		mainRows.push_back(rowObj);
+		std::string label = std::string(magic_enum::enum_name(type)) + ":";
+		std::string tooltip = "Draw calls for this shader type.";
+		auto tipIt = kShaderTypeTooltips.find(type);
+		if (tipIt != kShaderTypeTooltips.end()) {
+			tooltip = tipIt->second;
+		}
+		mainRows.push_back({ label, typeIndex, static_cast<int>(drawCalls), frameTime, percent, costPerCall, tooltip, enabled, testFrameTime, testCostPerCall });
 		measuredSum += frameTime;
 	}
-
-	// Add summary rows (not part of main sorting)
+	float totalSmoothedDrawCalls = static_cast<float>(globals::state->smoothDrawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]);
 	float otherFrameTime = smoothedFrameTime - measuredSum;
 	if (std::abs(otherFrameTime) < 1e-4f)
 		otherFrameTime = 0.0f;
-
+	std::optional<float> otherTestFrameTime, otherTestCostPerCall, totalTestFrameTime, totalTestCostPerCall;
+	auto itOther = s_testData.find(-2);
+	if (itOther != s_testData.end()) {
+		otherTestFrameTime = itOther->second.frameTime;
+		otherTestCostPerCall = itOther->second.costPerCall;
+	}
+	auto itTotal = s_testData.find(-1);
+	if (itTotal != s_testData.end()) {
+		totalTestFrameTime = itTotal->second.frameTime;
+		totalTestCostPerCall = itTotal->second.costPerCall;
+	}
 	DrawCallRow otherRow = {
 		"Other:", -2, 0, otherFrameTime,
 		(smoothedFrameTime > 0.0f ? static_cast<float>((otherFrameTime / smoothedFrameTime) * 100.0f) : 0.0f),
 		0.0f,
-		std::string("Frame time not attributed to any measured shader type. This includes UI, post-processing, engine work, and any GPU activity not directly measured by the overlay.")
+		std::string("Frame time not attributed to any measured shader type. This includes UI, post-processing, engine work, and any GPU activity not directly measured by the overlay."),
+		true, otherTestFrameTime, otherTestCostPerCall
 	};
-
 	DrawCallRow totalRow = {
 		"Total:", -1, static_cast<int>(totalSmoothedDrawCalls), smoothedFrameTime, 100.0f,
 		(totalSmoothedDrawCalls > 0.0f ? static_cast<float>(smoothedFrameTime / totalSmoothedDrawCalls) : 0.0f),
-		std::string("Sum of all measured shader types.\nClick to enable or disable all shaders.")
+		std::string("Sum of all measured shader types. Click to enable or disable all shaders."),
+		true, totalTestFrameTime, totalTestCostPerCall
+	};
+	std::vector<DrawCallRow> summaryRows = { otherRow, totalRow };
+	return { mainRows, summaryRows };
+}
+
+void PerformanceOverlay::DrawDrawCalls()
+{
+	static bool clearTestDataRequested = false;
+	auto* menu = Menu::GetSingleton();
+	const auto& theme = menu->GetTheme();
+
+	// helper for creating columns
+	auto makeLiveMetricColumn = [&](auto valueGetter, auto colorGetter, auto formatter, const std::vector<std::string>& tooltipLines, const std::vector<ImVec4>& tooltipColors) {
+		return [theme, valueGetter, colorGetter, formatter, tooltipLines, tooltipColors](const DrawCallRow& row, int) {
+			float value = valueGetter(row);
+			ImVec4 color = colorGetter(theme, value, row);
+			std::string valueStr = formatter(value, row);
+			ImGui::PushStyleColor(ImGuiCol_Text, color);
+			ImGui::Text("%s", valueStr.c_str());
+			ImGui::PopStyleColor();
+			if (ImGui::IsItemHovered()) {
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					Util::DrawMultiLineTooltip(tooltipLines, tooltipColors);
+				}
+			}
+		};
 	};
 
-	// Always start the main table sorted alphabetically by label on first display
-	static bool firstTableDisplay = true;
-	if (firstTableDisplay) {
-		std::sort(mainRows.begin(), mainRows.end(), [](const DrawCallRow& a, const DrawCallRow& b) {
-			return a.label < b.label;
-		});
-		firstTableDisplay = false;
+	auto makeTestMetricColumn = [&](auto valueGetter, auto colorGetter, auto formatter, const std::vector<std::string>& tooltipLines, const std::vector<ImVec4>& tooltipColors) {
+		return [theme, valueGetter, colorGetter, formatter, tooltipLines, tooltipColors](const DrawCallRow& row, int) {
+			auto opt = valueGetter(row);
+			if (!opt.has_value()) {
+				ImGui::TextDisabled("-");
+				return;
+			}
+			float value = *opt;
+			ImVec4 color = colorGetter(theme, value, row);
+			std::string valueStr = formatter(value, row);
+			ImGui::PushStyleColor(ImGuiCol_Text, color);
+			ImGui::Text("%s", valueStr.c_str());
+			ImGui::PopStyleColor();
+			if (ImGui::IsItemHovered()) {
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					Util::DrawMultiLineTooltip(tooltipLines, tooltipColors);
+				}
+			}
+		};
+	};
+
+	this->CaptureTestData();
+
+	bool anyTestData = !s_testData.empty();
+	if (anyTestData) {
+		if (ImGui::Button("Clear Test Data")) {
+			clearTestDataRequested = true;
+		}
 	}
 
-	// Handle sorting: only sort mainRows, never summary rows
-	if (ImGui::BeginTable("DrawCallOverlayTable##", columnCount, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable)) {
-		// --- HEADER SETUP WITH TOOLTIP ---
-		for (int i = 0; i < headers.size(); ++i) {
-			ImGui::TableSetupColumn(headers[i].c_str());
-			if (anyTestData && (headers[i] == "Test Frame Time" || headers[i] == "Test Cost/Call")) {
-				if (ImGui::IsItemHovered()) {
-					ImGui::SetTooltip("%s", GetTestDataTooltip().c_str());
-				}
-			}
-		}
-		ImGui::TableHeadersRow();
+	// --- COLUMN CONFIG ---
+	struct ColumnConfig
+	{
+		std::string header;
+		std::function<void(const DrawCallRow&, int colIdx)> cellRender;
+		std::function<bool(const DrawCallRow&, const DrawCallRow&, bool)> sortFunc;
+		std::function<void()> headerTooltip;
+	};
 
-		if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
-			if (sortSpecs->SpecsCount > 0) {
-				sortColumn = sortSpecs->Specs->ColumnIndex;
-				sortAscending = sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending;
-				switch (sortColumn) {
-				case Col_Label:
-					std::sort(mainRows.begin(), mainRows.end(), [=](const DrawCallRow& a, const DrawCallRow& b) {
-						return sortAscending ? (a.label < b.label) : (a.label > b.label);
-					});
-					break;
-				case Col_DrawCalls:
-					std::sort(mainRows.begin(), mainRows.end(), [=](const DrawCallRow& a, const DrawCallRow& b) {
-						return sortAscending ? (a.drawCalls < b.drawCalls) : (a.drawCalls > b.drawCalls);
-					});
-					break;
-				case Col_FrameTime:
-					std::sort(mainRows.begin(), mainRows.end(), [=](const DrawCallRow& a, const DrawCallRow& b) {
-						return sortAscending ? (a.percent < b.percent) : (a.percent > b.percent);
-					});
-					break;
-				case Col_CostPerCall:
-					std::sort(mainRows.begin(), mainRows.end(), [=](const DrawCallRow& a, const DrawCallRow& b) {
-						return sortAscending ? (a.costPerCall < b.costPerCall) : (a.costPerCall > b.costPerCall);
-					});
-					break;
-				case Col_TestFrameTime:
-					std::sort(mainRows.begin(), mainRows.end(), [=](const DrawCallRow& a, const DrawCallRow& b) {
-						float aVal = a.testFrameTime.value_or(FLT_MAX);
-						float bVal = b.testFrameTime.value_or(FLT_MAX);
-						return sortAscending ? (aVal < bVal) : (aVal > bVal);
-					});
-					break;
-				case Col_TestCostPerCall:
-					std::sort(mainRows.begin(), mainRows.end(), [=](const DrawCallRow& a, const DrawCallRow& b) {
-						float aVal = a.testCostPerCall.value_or(FLT_MAX);
-						float bVal = b.testCostPerCall.value_or(FLT_MAX);
-						return sortAscending ? (aVal < bVal) : (aVal > bVal);
-					});
-					break;
-				}
-			}
-		}
-
-		// --- Main table cell rendering switch: renders each cell based on column ---
-		for (size_t rowIdx = 0; rowIdx < mainRows.size(); ++rowIdx) {
-			const auto& row = mainRows[rowIdx];
-			ImGui::TableNextRow();
-			int colIdx = 0;
-			// Label
-			ImGui::TableSetColumnIndex(colIdx++);
-			if (!row.enabled) {
-				ImGui::PushStyleColor(ImGuiCol_Text, Menu::GetSingleton()->GetTheme().StatusPalette.Disable);
-			}
-			bool wasEnabled = row.enabled;
-			if (ImGui::Selectable(row.label.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
-				auto maybeType = magic_enum::enum_cast<RE::BSShader::Type>(row.shaderType);
-				if (maybeType.has_value()) {
-					auto classIndex = magic_enum::enum_integer(*maybeType) - 1;
-					if (classIndex >= 0 && classIndex < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1) {
-						globals::state->enabledClasses[classIndex] = !wasEnabled;
-						// Also update test data when toggled
-						UpdateShaderTestData(row.shaderType, row.frameTime, row.costPerCall);
-					}
-				}
-			}
-			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)) {
-				ImGui::SetTooltip("%s", row.tooltip.c_str());
-			}
-			if (!row.enabled) {
-				ImGui::PopStyleColor();
-			}
-			// Draw Calls
-			ImGui::TableSetColumnIndex(colIdx++);
-			ImGui::Text("%d", row.drawCalls);
-			// Frame Time (%)
-			ImGui::TableSetColumnIndex(colIdx++);
-			{
-				std::string frameTimeStr = Util::FormatMilliseconds(row.frameTime) + " (" + Util::FormatPercent(row.percent) + ")";
-				ImVec4 color = Util::GetThresholdColor(row.percent, 30.0f, 60.0f,
-					Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor,
-					Menu::GetSingleton()->GetTheme().StatusPalette.Warning,
-					Menu::GetSingleton()->GetTheme().StatusPalette.Error);
-				ImGui::PushStyleColor(ImGuiCol_Text, color);
-				ImGui::Text("%s", frameTimeStr.c_str());
-				ImGui::PopStyleColor();
-			}
-			// Cost/Call
-			ImGui::TableSetColumnIndex(colIdx++);
-			{
-				ImVec4 color = Util::GetThresholdColor(row.costPerCall, 0.05f, 0.2f,
-					Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor,
-					Menu::GetSingleton()->GetTheme().StatusPalette.Warning,
-					Menu::GetSingleton()->GetTheme().StatusPalette.Error);
-				ImGui::PushStyleColor(ImGuiCol_Text, color);
-				if (row.costPerCall < 0.01f && row.costPerCall > 0.0f)
-					ImGui::Text("%s", Util::FormatMicroseconds(row.costPerCall * 1000.0f).c_str());
-				else
-					ImGui::Text("%s", Util::FormatMilliseconds(row.costPerCall).c_str());
-				ImGui::PopStyleColor();
-			}
-			// Test columns if present
-			if (anyTestData) {
-				// Test Frame Time
-				ImGui::TableSetColumnIndex(colIdx++);
-				if (row.testFrameTime.has_value()) {
-					ImVec4 testColor = Util::GetThresholdColor(*row.testFrameTime, row.frameTime, row.frameTime + 0.01f,
-						Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor,
-						Menu::GetSingleton()->GetTheme().StatusPalette.Warning,
-						Menu::GetSingleton()->GetTheme().StatusPalette.Error);
-					ImGui::PushStyleColor(ImGuiCol_Text, testColor);
-					std::string testFrameTimeStr = Util::FormatMilliseconds(*row.testFrameTime) + " (" + Util::FormatPercent(s_testData[row.shaderType].percent) + ")";
-					ImGui::Text("%s", testFrameTimeStr.c_str());
-					ImGui::PopStyleColor();
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip("%s", GetTestDataTooltip().c_str());
-					}
-				} else {
-					ImGui::TextDisabled("-");
-				}
-				// Test Cost/Call
-				ImGui::TableSetColumnIndex(colIdx++);
-				if (row.testCostPerCall.has_value()) {
-					ImVec4 testColor = Util::GetThresholdColor(*row.testCostPerCall, row.costPerCall, row.costPerCall + 0.01f,
-						Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor,
-						Menu::GetSingleton()->GetTheme().StatusPalette.Warning,
-						Menu::GetSingleton()->GetTheme().StatusPalette.Error);
-					ImGui::PushStyleColor(ImGuiCol_Text, testColor);
-					if (*row.testCostPerCall < 0.01f && *row.testCostPerCall > 0.0f)
-						ImGui::Text("%s", Util::FormatMicroseconds(*row.testCostPerCall * 1000.0f).c_str());
-					else
-						ImGui::Text("%s", Util::FormatMilliseconds(*row.testCostPerCall).c_str());
-					ImGui::PopStyleColor();
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip("%s", GetTestDataTooltip().c_str());
-					}
-				} else {
-					ImGui::TextDisabled("-");
-				}
-			}
-		}
-		// Separator row (optional, for visual separation)
-		ImGui::TableNextRow(ImGuiTableRowFlags_None, 4.0f);
-		for (int col = 0; col < columnCount; ++col) {
-			ImGui::TableSetColumnIndex(col);
-			if (col == 0)
-				ImGui::Separator();
-		}
-		// Summary rows (Other, Total)
-		for (const DrawCallRow& row : { otherRow, totalRow }) {
-			ImGui::TableNextRow();
-			int colIdx = 0;
-			ImGui::TableSetColumnIndex(colIdx++);
-			if (row.label == std::string("Total:")) {
-				if (ImGui::Selectable(row.label.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
-					bool anyDisabled = false;
-					for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1; ++i) {
-						if (!globals::state->enabledClasses[i]) {
-							anyDisabled = true;
-							break;
+	// --- BUILD HEADERS AND CONFIG ---
+	std::vector<ColumnConfig> columns = {
+		{ "Shader Type",
+			[theme](const DrawCallRow& row, int) {
+				if (!row.enabled)
+					ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.Disable);
+				bool wasEnabled = row.enabled;
+				if (ImGui::Selectable(row.label.c_str(), false)) {
+					auto maybeType = magic_enum::enum_cast<RE::BSShader::Type>(row.shaderType);
+					if (maybeType.has_value()) {
+						auto classIndex = magic_enum::enum_integer(*maybeType) - 1;
+						if (classIndex >= 0 && classIndex < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1) {
+							bool isDisabling = wasEnabled;
+							float prevFrameTime = row.frameTime;
+							float prevCostPerCall = row.costPerCall;
+							// Capture live data for Total and Other before toggling
+							float smoothedFrameTime = static_cast<float>(PerformanceOverlay::GetSingleton()->perfOverlayState.smoothFrameTimeMs);
+							float totalSmoothedDrawCalls = static_cast<float>(globals::state->smoothDrawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]);
+							float totalCostPerCall = (totalSmoothedDrawCalls > 0.0f) ? (smoothedFrameTime / totalSmoothedDrawCalls) : 0.0f;
+							float measuredSum = 0.0f;
+							for (auto type : magic_enum::enum_values<RE::BSShader::Type>()) {
+								if (type == RE::BSShader::Type::None || type == RE::BSShader::Type::Total)
+									continue;
+								int typeIndex = magic_enum::enum_integer(type);
+								measuredSum += static_cast<float>(globals::state->smoothFrameTimePerType[typeIndex]);
+							}
+							float otherFrameTime = smoothedFrameTime - measuredSum;
+							float otherPercent = (smoothedFrameTime > 0.0f) ? (otherFrameTime / smoothedFrameTime) * 100.0f : 0.0f;
+							globals::state->enabledClasses[classIndex] = !wasEnabled;
+							if (isDisabling) {
+								// Save the last live value before disabling
+								UpdateShaderTestData(row.shaderType, prevFrameTime, prevCostPerCall);
+								// Save Total and Other test data as well
+								PerformanceOverlay::s_testData[-1] = { smoothedFrameTime, totalCostPerCall, 100.0f };
+								PerformanceOverlay::s_testData[-2] = { otherFrameTime, 0.0f, otherPercent };
+								PerformanceOverlay::s_testDataSource = PerformanceOverlay::TestDataSource::ManualShaderToggle;
+								PerformanceOverlay::s_testDataLastUpdated = std::chrono::steady_clock::now();
+							}
 						}
 					}
-					for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1; ++i) {
-						globals::state->enabledClasses[i] = anyDisabled;
-					}
 				}
-			} else {
-				ImGui::TextUnformatted(row.label.c_str());
-			}
-			if (!row.tooltip.empty() && ImGui::IsItemHovered()) {
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::TextUnformatted(row.tooltip.c_str());
-				}
-			}
-			ImGui::TableSetColumnIndex(colIdx++);
-			if (row.label == "Other:" && row.drawCalls <= 0) {
-				ImGui::TextUnformatted("N/A");
-			} else {
-				ImGui::Text("%d", row.drawCalls);
-			}
-			ImGui::TableSetColumnIndex(colIdx++);
-			if (row.label == "Other:" && row.frameTime <= 0.0f) {
-				ImGui::TextUnformatted("N/A");
-			} else {
-				ImGui::Text("%.2f ms (%.1f%%)", row.frameTime, row.percent);
-				if (row.label == "Total:" && ImGui::IsItemHovered()) {
-					float _fps = row.frameTime > 0.0f ? 1000.0f / row.frameTime : 0.0f;
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)) {
 					if (auto _tt = Util::HoverTooltipWrapper()) {
-						ImGui::Text("FPS: %.2f", _fps);
+						ImGui::TextUnformatted(row.tooltip.c_str());
 					}
 				}
-			}
-			ImGui::TableSetColumnIndex(colIdx++);
-			if (row.label == "Other:" && row.costPerCall <= 0.0f) {
-				ImGui::TextUnformatted("N/A");
-			} else if (row.costPerCall < 0.01f && row.costPerCall > 0.0f) {
-				ImGui::Text("%.2f us", row.costPerCall * 1000.0f);
-			} else {
-				ImGui::Text("%.3f ms", row.costPerCall);
-			}
-			if (anyTestData) {
-				ImGui::TableSetColumnIndex(colIdx++);
-				auto testIt = s_testData.find(row.shaderType);
-				if (testIt != s_testData.end()) {
-					ImVec4 testColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-					if (testIt->second.frameTime < row.frameTime)
-						testColor = Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor;
-					else if (testIt->second.frameTime > row.frameTime)
-						testColor = Menu::GetSingleton()->GetTheme().StatusPalette.Error;
-					ImGui::PushStyleColor(ImGuiCol_Text, testColor);
-					ImGui::Text("%.2f ms (%.1f%%)", testIt->second.frameTime, testIt->second.percent);
+				if (!row.enabled)
 					ImGui::PopStyleColor();
+			},
+			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.label < b.label) : (a.label > b.label); },
+			nullptr },
+		{ "Draw Calls",
+			[](const DrawCallRow& row, int) {
+				ImGui::Text("%d", row.drawCalls);
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::TextUnformatted("Draw Calls: Number of draw calls for this shader type in the current frame.");
+					}
+				}
+			},
+			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.drawCalls < b.drawCalls) : (a.drawCalls > b.drawCalls); },
+			[]() {
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::TextUnformatted("Draw Calls: Number of draw calls for this shader type in the current frame.");
+					}
+				}
+			} }
+
+	};
+	columns.push_back(ColumnConfig{
+		"Frame Time (%)",
+		makeLiveMetricColumn(
+			[](const DrawCallRow& row) { return row.frameTime; },
+			[](const auto& theme, float value, const DrawCallRow&) { return Util::GetThresholdColor(value, 2.0f, 5.0f, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error); },
+			[](float /*value*/, const DrawCallRow& row) {
+				return Util::FormatMilliseconds(row.frameTime) + " (" + Util::FormatPercent(row.percent) + ")";
+			},
+			{ "Frame Time: Time spent on this shader type (ms and % of total frame time).", "", "Reference thresholds (ms):", "  < 2 ms", "  >= 2 ms and < 5 ms", "  >= 5 ms" },
+			{ theme.Palette.Text, theme.Palette.Text, theme.Palette.Text, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error }),
+		[](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.percent < b.percent) : (a.percent > b.percent); },
+		[theme]() {
+			if (ImGui::IsItemHovered()) {
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					std::vector<std::string> lines = { "Frame Time: Time spent on this shader type (ms and % of total frame time).", "", "Performance Color Legend (ms):", "  <= 2 ms", "  > 2 ms and <= 5 ms", "  > 5 ms" };
+					std::vector<ImVec4> colors = { theme.Palette.Text, theme.Palette.Text, theme.Palette.Text, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error };
+					Util::DrawMultiLineTooltip(lines, colors);
+				}
+			}
+		} });
+
+	columns.push_back(ColumnConfig{
+		"Cost/Call",
+		makeLiveMetricColumn(
+			[](const DrawCallRow& row) { return row.costPerCall; },
+			[](const auto& theme, float value, const DrawCallRow&) { return Util::GetThresholdColor(value, 0.05f, 0.2f, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error); },
+			[](float value, const DrawCallRow&) { return (value < 0.01f && value > 0.0f) ? Util::FormatMicroseconds(value * 1000.0f) : Util::FormatMilliseconds(value); },
+			{ "Cost/Call: Average time per draw call for this shader type.", "", "Reference thresholds (ms/call):", "  <= 0.05 ms/call", "  > 0.05 ms and <= 0.2 ms/call", "  > 0.2 ms/call" },
+			{ theme.Palette.Text, theme.Palette.Text, theme.Palette.Text, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error }),
+		[](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.costPerCall < b.costPerCall) : (a.costPerCall > b.costPerCall); },
+		[theme]() {
+			if (ImGui::IsItemHovered()) {
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					std::vector<std::string> lines = { "Cost/Call: Average time per draw call for this shader type.", "", "Performance Color Legend (ms/call):", "  <= 0.05 ms/call", "  > 0.05 ms and <= 0.2 ms/call", "  > 0.2 ms/call" };
+					std::vector<ImVec4> colors = { theme.Palette.Text, theme.Palette.Text, theme.Palette.Text, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error };
+					Util::DrawMultiLineTooltip(lines, colors);
+				}
+			}
+		} });
+
+	// Add test columns if present
+	if (anyTestData) {
+		columns.push_back(ColumnConfig{
+			"Test Frame Time (%)",
+			makeTestMetricColumn(
+				[](const DrawCallRow& row) { return row.testFrameTime; },
+				[](const auto& theme, float value, const DrawCallRow& row) {
+					if (value < row.frameTime)
+						return theme.StatusPalette.SuccessColor;
+					if (value > row.frameTime)
+						return theme.StatusPalette.Error;
+					return theme.Palette.Text;
+				},
+				[](float value, const DrawCallRow& row) { return Util::FormatMilliseconds(value) + " (" + Util::FormatPercent(PerformanceOverlay::s_testData[row.shaderType].percent) + ")"; },
+				{ PerformanceOverlay::GetTestDataTooltip(), "", "Color legend (compared to live data):" },
+				{ theme.Palette.Text, theme.Palette.Text, theme.Palette.Text }),
+			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
+				float aVal = a.testFrameTime.value_or(FLT_MAX);
+				float bVal = b.testFrameTime.value_or(FLT_MAX);
+				return asc ? (aVal < bVal) : (aVal > bVal);
+			},
+			[theme]() {
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::TextUnformatted(PerformanceOverlay::GetTestDataTooltip().c_str());
+					}
+				}
+			} });
+
+		columns.push_back(ColumnConfig{
+			"Test Cost/Call",
+			makeTestMetricColumn(
+				[](const DrawCallRow& row) { return row.testCostPerCall; },
+				[](const auto& theme, float value, const DrawCallRow& row) {
+					if (value < row.costPerCall)
+						return theme.StatusPalette.SuccessColor;
+					if (value > row.costPerCall)
+						return theme.StatusPalette.Error;
+					return theme.Palette.Text;
+				},
+				[](float value, const DrawCallRow&) { return (value < 0.01f && value > 0.0f) ? Util::FormatMicroseconds(value * 1000.0f) : Util::FormatMilliseconds(value); },
+				{ PerformanceOverlay::GetTestDataTooltip(), "", "Color legend (compared to live data):" },
+				{ theme.Palette.Text, theme.Palette.Text, theme.Palette.Text }),
+			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
+				float aVal = a.testCostPerCall.value_or(FLT_MAX);
+				float bVal = b.testCostPerCall.value_or(FLT_MAX);
+				return asc ? (aVal < bVal) : (aVal > bVal);
+			},
+			[theme]() {
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::TextUnformatted(PerformanceOverlay::GetTestDataTooltip().c_str());
+					}
+				}
+			} });
+	}
+
+	// --- BUILD ROWS ---
+	auto [mainRows, summaryRows] = this->BuildDrawCallRows();
+
+	// --- TABLE RENDER: MAIN ROWS + FOOTER ROWS ---
+	std::vector<std::function<bool(const DrawCallRow&, const DrawCallRow&, bool)>> sorters;
+	for (const auto& col : columns) sorters.push_back(col.sortFunc);
+	Util::ShowSortedStringTable<DrawCallRow>(
+		"DrawCallOverlayTable",
+		[&columns]() { std::vector<std::string> h; for (const auto& c : columns) h.push_back(c.header); return h; }(),
+		mainRows,
+		0,
+		true,
+		sorters,
+		[&columns](int rowIdx, int colIdx, const DrawCallRow& row) {
+			(void)rowIdx;
+			// Special handling for summary rows
+			if ((row.label == "Total:" || row.label == "Other:") && colIdx == 0) {
+				if (row.label == "Total:") {
+					if (ImGui::Selectable(row.label.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
+						bool anyDisabled = false;
+						for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1; ++i) {
+							if (!globals::state->enabledClasses[i]) {
+								anyDisabled = true;
+								break;
+							}
+						}
+						for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1; ++i) {
+							globals::state->enabledClasses[i] = anyDisabled;
+						}
+						UpdateAllShaderTestData();
+					}
 					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip("%s", GetTestDataTooltip().c_str());
-						// Show FPS for test frame time
-						float _fps = testIt->second.frameTime > 0.0f ? 1000.0f / testIt->second.frameTime : 0.0f;
 						if (auto _tt = Util::HoverTooltipWrapper()) {
+							ImGui::TextUnformatted(row.tooltip.c_str());
+							float _fps = row.frameTime > 0.0f ? 1000.0f / row.frameTime : 0.0f;
 							ImGui::Text("FPS: %.2f", _fps);
 						}
 					}
-				} else {
-					ImGui::TextUnformatted("N/A");
-				}
-				ImGui::TableSetColumnIndex(colIdx++);
-				if (testIt != s_testData.end()) {
-					ImVec4 testColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-					if (testIt->second.costPerCall < row.costPerCall)
-						testColor = Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor;
-					else if (testIt->second.costPerCall > row.costPerCall)
-						testColor = Menu::GetSingleton()->GetTheme().StatusPalette.Error;
-					ImGui::PushStyleColor(ImGuiCol_Text, testColor);
-					if (testIt->second.costPerCall < 0.01f && testIt->second.costPerCall > 0.0f)
-						ImGui::Text("%.2f us", testIt->second.costPerCall * 1000.0f);
-					else
-						ImGui::Text("%.3f ms", testIt->second.costPerCall);
-					ImGui::PopStyleColor();
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip("%s", GetTestDataTooltip().c_str());
+				} else if (row.label == "Other:") {
+					ImGui::TextUnformatted(row.label.c_str());
+					if (!row.tooltip.empty() && ImGui::IsItemHovered()) {
+						if (auto _tt = Util::HoverTooltipWrapper()) {
+							ImGui::TextUnformatted(row.tooltip.c_str());
+						}
 					}
-				} else {
-					ImGui::TextUnformatted("N/A");
 				}
+			} else if (row.label == "Total:" || row.label == "Other:") {
+				// No tooltip for summary rows in non-label columns
+				columns[colIdx].cellRender(row, colIdx);
+			} else {
+				// Normal row: ensure tooltips never modify cell content
+				columns[colIdx].cellRender(row, colIdx);
 			}
-		}
-		ImGui::EndTable();
-	}
+		},
+		summaryRows);
 
-	if (clearTestDataRequested) {
-		s_testData.clear();
+	if (clearTestDataRequested) {  // clear after all drawing complete.
+		ClearTestData();
 		clearTestDataRequested = false;
-		s_testDataSource = TestDataSource::None;
 	}
 }
 
@@ -1008,68 +1051,6 @@ void PerformanceOverlay::DrawVRAM()
 	}
 }
 
-ImVec4 PerformanceOverlay::GetPerformanceColor(float value, float lowThreshold, float highThreshold)
-{
-	auto menu = Menu::GetSingleton();
-	const auto& theme = menu->GetTheme();
-
-	if (value <= lowThreshold) {
-		return theme.StatusPalette.SuccessColor;
-	} else if (value <= highThreshold) {
-		return theme.StatusPalette.Warning;
-	} else {
-		return theme.StatusPalette.Error;
-	}
-}
-
-ImVec4 PerformanceOverlay::GetPerformanceStatusColor(int status)
-{
-	auto menu = Menu::GetSingleton();
-	const auto& theme = menu->GetTheme();
-
-	switch (status) {
-	case 0:  // Good
-		return theme.StatusPalette.SuccessColor;
-	case 1:  // Warning
-		return theme.StatusPalette.Warning;
-	case 2:  // Error
-		return theme.StatusPalette.Error;
-	case 3:  // Info
-		return theme.StatusPalette.InfoColor;
-	default:
-		return theme.StatusPalette.InfoColor;
-	}
-}
-
-bool PerformanceOverlay::RenderColorCodedMetric(const char* label, float value, float lowThreshold, float highThreshold, const char* format)
-{
-	ImVec4 color = GetPerformanceColor(value, lowThreshold, highThreshold);
-	ImGui::PushStyleColor(ImGuiCol_Text, color);
-	ImGui::Text(label);
-	ImGui::SameLine();
-	ImGui::Text(format, value);
-	ImGui::PopStyleColor();
-	return ImGui::IsItemHovered();
-}
-
-/**
- * @brief Updates all runtime state related to the performance overlay graph.
- *
- * This function synchronizes the frame time history buffer, tracks min/max frame times,
- * and computes the normalized Y-axis range for the frame time graph using statistical analysis.
- *
- * Steps performed:
- *   1. Resizes the frameTimeHistory buffer if the user has changed the setting.
- *   2. Inserts the latest frame time into the circular history buffer.
- *   3. Updates instantaneous min/max frame time values, with full rescans if necessary.
- *   4. Calculates the average (mean) and standard deviation of frame times in the buffer.
- *   5. Sets the graph Y-axis range to be centered on the average, with a spread of ±2 standard deviations,
- *      clamped to user-friendly minimum and maximum values.
- *   6. Smooths the min/max Y-axis values for visual stability using exponential smoothing.
- *
- *
- * No parameters; uses settings from the singleton.
- */
 void PerformanceOverlay::PerfOverlayState::UpdateGraphValues()
 {
 	// Get settings from the singleton

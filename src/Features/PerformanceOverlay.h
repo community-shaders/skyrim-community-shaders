@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../Utils/PerfUtils.h"
 #include "OverlayFeature.h"
 #include <chrono>
 #include <optional>
@@ -103,6 +104,24 @@ public:
 		std::chrono::steady_clock::time_point lastUpdateTime;
 
 		float SetTextScale();
+		/**
+		* @brief Updates all runtime state related to the performance overlay graph.
+		*
+		* This function synchronizes the frame time history buffer, tracks min/max frame times,
+		* and computes the normalized Y-axis range for the frame time graph using statistical analysis.
+		*
+		* Steps performed:
+		*   1. Resizes the frameTimeHistory buffer if the user has changed the setting.
+		*   2. Inserts the latest frame time into the circular history buffer.
+		*   3. Updates instantaneous min/max frame time values, with full rescans if necessary.
+		*   4. Calculates the average (mean) and standard deviation of frame times in the buffer.
+		*   5. Sets the graph Y-axis range to be centered on the average, with a spread of ±2 standard deviations,
+		*      clamped to user-friendly minimum and maximum values.
+		*   6. Smooths the min/max Y-axis values for visual stability using exponential smoothing.
+		*
+		*
+		* No parameters; uses settings from the singleton.
+		*/
 		void UpdateGraphValues();
 		void UpdateFrameTimeHistorySizes();
 		void UpdateMinFrameTime();
@@ -148,6 +167,43 @@ public:
 	PerfOverlaySettings settings;
 
 private:
+	/**
+	 * @brief Captures test data for the performance overlay table.
+	 *
+	 * This function is responsible for updating the static test data used for A/B comparison and manual shader toggling.
+	 *
+	 * - In A/B Test Mode (Variant B): If abTestingEnabled && usingTestConfig, this function continuously captures
+	 *   test data for all shader types, as well as the 'Other' and 'Total' summary rows, every frame.
+	 * - In Manual Shader Toggle mode: If any shader is disabled, this function captures test data for the disabled
+	 *   shaders and summary rows at the moment of disabling, and keeps it until cleared.
+	 * - Test data is NOT cleared when shaders are re-enabled; it is only cleared by the 'Clear Test Data' button
+	 *   or if all shaders are disabled (rare edge case).
+	 *
+	 * Side effects:
+	 * - Updates s_testData, s_testDataSource, and s_testDataLastUpdated.
+	 */
+	void CaptureTestData();
+
+	/**
+	 * @brief Clears all captured test data and resets the test data source.
+	 *
+	 * This should be called when the user clicks the 'Clear Test Data' button,
+	 * or in rare cases where all shaders are disabled.
+	 *
+	 * Side effects:
+	 * - Empties s_testData and resets s_testDataSource.
+	 */
+	void ClearTestData();
+
+	/**
+	 * @brief Builds the main and summary rows for the performance overlay table.
+	 *
+	 * @return A pair of vectors: (mainRows, summaryRows).
+	 *         - mainRows: One row per shader type, with live and (if present) test data.
+	 *         - summaryRows: 'Other' and 'Total' rows, with live and (if present) test data.
+	 */
+	std::pair<std::vector<DrawCallRow>, std::vector<DrawCallRow>> BuildDrawCallRows() const;
+
 	struct TestData
 	{
 		float frameTime;
@@ -165,8 +221,4 @@ private:
 	static TestDataSource s_testDataSource;
 	static std::chrono::steady_clock::time_point s_testDataLastUpdated;
 	static std::unordered_map<int, TestData> s_testData;
-
-	static ImVec4 GetPerformanceColor(float value, float lowThreshold, float highThreshold);
-	static ImVec4 GetPerformanceStatusColor(int status);  // Use int for now if PerformanceStatus is not defined
-	static bool RenderColorCodedMetric(const char* label, float value, float lowThreshold, float highThreshold, const char* format);
 };

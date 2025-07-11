@@ -213,27 +213,29 @@ namespace Util
 		const ColorCodedValueConfig& config,
 		bool useBullet = true);
 
-	class PerformanceOverlay
-	{
-	public:
-		static float CalcFrameTime(uint64_t timeElapsed, uint64_t frequency)
-		{
-			return 1000.0f * (float)timeElapsed / (float)frequency;
-		}
-
-		static float CalcFPS(float frameTimeMs)
-		{
-			return 1000.0f / frameTimeMs;
-		}
-	};
-	extern PerformanceOverlay performanceOverlay;
-
 	/**
 	 * @brief Draws a multi-line tooltip with optional per-line coloring.
+	 *
+	 * IMPORTANT: This function should only be called from within a tooltip context
+	 * (e.g., from within a HoverTooltipWrapper or BeginTooltip/EndTooltip block).
+	 * Do not call this function directly without proper tooltip context.
+	 *
 	 * @param lines The lines of text to display in the tooltip (as std::vector<std::string>).
 	 * @param colors Optional per-line colors (if empty, default color is used for all lines).
 	 */
 	void DrawMultiLineTooltip(const std::vector<std::string>& lines, const std::vector<ImVec4>& colors = {});
+
+	/**
+	 * Draws a color legend tooltip for overlay color meanings (e.g., green = better, red = worse, white = similar).
+	 *
+	 * IMPORTANT: This function should only be called from within a tooltip context
+	 * (e.g., from within a HoverTooltipWrapper or BeginTooltip/EndTooltip block).
+	 * Do not call this function directly without proper tooltip context.
+	 *
+	 * @param items Vector of (label, color) pairs.
+	 * @param title Optional title for the legend.
+	 */
+	void DrawColorLegendTooltip(const std::vector<std::pair<const char*, ImVec4>>& items, const char* title = nullptr);
 
 	/**
 	 * @brief Comparator function type for table sorting.
@@ -257,7 +259,92 @@ namespace Util
 	using TableCellRenderFunc = std::function<void(int row, int col, const std::string& value)>;
 
 	/**
+	 * @brief Renders a sortable ImGui table with arbitrary columns and per-column custom sorting for custom row types.
+	 *
+	 * @tparam T The row type. Must be copyable and compatible with the provided cellRender and customSorts functions.
+	 * @param table_id Unique ImGui table ID.
+	 * @param headers Column headers.
+	 * @param rows Table data, each row is of type T.
+	 * @param sortColumn Default sort column index.
+	 * @param ascending Default sort direction.
+	 * @param customSorts Vector of custom comparator functions, one per column.
+	 *        Each function should compare two rows and return true if the first should come before the second.
+	 * @param cellRender Function to render a cell: (rowIdx, colIdx, const T& row).
+	 * @param footerRows Optional static footer rows (not sorted, rendered after main rows).
+	 *
+	 * Example usage:
+	 *   struct MyRow { ... };
+	 *   Util::ShowSortedStringTable<MyRow>(..., rows, ..., customSorts, cellRender, footerRows);
+	 */
+	template <typename T>
+	void ShowSortedStringTable(
+		const char* table_id,
+		const std::vector<std::string>& headers,
+		std::vector<T>& rows,
+		size_t sortColumn,
+		bool ascending,
+		const std::vector<std::function<bool(const T&, const T&, bool)>>& customSorts,
+		std::function<void(int, int, const T&)> cellRender,
+		const std::vector<T>& footerRows = {})
+	{
+		ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable;
+		if (ImGui::BeginTable(table_id, static_cast<int>(headers.size()), flags)) {
+			for (const auto& header : headers)
+				ImGui::TableSetupColumn(header.c_str());
+			ImGui::TableHeadersRow();
+
+			// Interactive sorting
+			int sortCol = static_cast<int>(sortColumn);
+			bool sortAsc = ascending;
+			if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
+				if (sortSpecs->SpecsCount > 0) {
+					sortCol = sortSpecs->Specs->ColumnIndex;
+					sortAsc = sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending;
+				}
+			}
+			if (sortCol >= 0 && static_cast<size_t>(sortCol) < headers.size()) {
+				if (sortCol < static_cast<int>(customSorts.size()) && customSorts[sortCol]) {
+					auto cmp = customSorts[sortCol];
+					std::sort(rows.begin(), rows.end(), [sortCol, sortAsc, &cmp](const T& a, const T& b) {
+						return cmp(a, b, sortAsc);
+					});
+				}
+			}
+
+			// Render main (sorted) rows
+			for (size_t rowIdx = 0; rowIdx < rows.size(); ++rowIdx) {
+				const auto& row = rows[rowIdx];
+				ImGui::TableNextRow();
+				for (size_t col = 0; col < headers.size(); ++col) {
+					ImGui::TableSetColumnIndex(static_cast<int>(col));
+					if (cellRender) {
+						cellRender(static_cast<int>(rowIdx), static_cast<int>(col), row);
+					} else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
+						if (col < row.size())
+							ImGui::TextUnformatted(row[col].c_str());
+					}
+				}
+			}
+			// Render static footer rows (not sorted)
+			for (size_t rowIdx = 0; rowIdx < footerRows.size(); ++rowIdx) {
+				const auto& row = footerRows[rowIdx];
+				ImGui::TableNextRow();
+				for (size_t col = 0; col < headers.size(); ++col) {
+					ImGui::TableSetColumnIndex(static_cast<int>(col));
+					if (cellRender) {
+						cellRender(static_cast<int>(rows.size() + rowIdx), static_cast<int>(col), row);
+					}
+				}
+			}
+			ImGui::EndTable();
+		}
+	}
+
+	/**
 	 * @brief Renders a sortable ImGui table with arbitrary columns and per-column custom sorting.
+	 *
+	 * This overload is for tables where each row is a std::vector<std::string>.
+	 * For custom row types, use the template version above.
 	 *
 	 * @param table_id Unique ImGui table ID.
 	 * @param headers Column headers.
@@ -265,16 +352,51 @@ namespace Util
 	 * @param sortColumn Default sort column index.
 	 * @param ascending Default sort direction.
 	 * @param customSorts Vector of custom comparator functions, one per column (nullptr for default string sort).
-	 * @param cellRender Optional cell renderer function for custom cell rendering.
+	 *        Each function should compare two strings and return true if the first should come before the second.
+	 * @param cellRender Optional cell renderer function for custom cell rendering. Signature: (row, col, value)
 	 */
-	void ShowSortedStringTable(
+	inline void ShowSortedStringTable(
 		const char* table_id,
 		const std::vector<std::string>& headers,
 		std::vector<std::vector<std::string>> rows,
 		size_t sortColumn = 0,
 		bool ascending = true,
 		const std::vector<TableSortFunc>& customSorts = {},
-		TableCellRenderFunc cellRender = nullptr);
+		TableCellRenderFunc cellRender = nullptr)
+	{
+		// Adapt TableSortFunc to std::function<bool(const std::vector<std::string>&, const std::vector<std::string>&, bool)>
+		std::vector<std::function<bool(const std::vector<std::string>&, const std::vector<std::string>&, bool)>> adaptedSorts;
+		adaptedSorts.reserve(customSorts.size());
+		for (size_t i = 0; i < customSorts.size(); ++i) {
+			const auto& sort = customSorts[i];
+			if (sort) {
+				adaptedSorts.push_back([i, sort](const std::vector<std::string>& a, const std::vector<std::string>& b, bool asc) {
+					// Use the i-th column for comparison if available
+					const std::string& aVal = (i < a.size()) ? a[i] : std::string();
+					const std::string& bVal = (i < b.size()) ? b[i] : std::string();
+					return sort(aVal, bVal, asc);
+				});
+			} else {
+				adaptedSorts.push_back(nullptr);
+			}
+		}
+		// Adapt TableCellRenderFunc to std::function<void(int, int, const std::vector<std::string>&)>
+		std::function<void(int, int, const std::vector<std::string>&)> adaptedCellRender = nullptr;
+		if (cellRender) {
+			adaptedCellRender = [cellRender](int row, int col, const std::vector<std::string>& value) {
+				if (col < value.size())
+					cellRender(row, col, value[col]);
+			};
+		}
+		ShowSortedStringTable<std::vector<std::string>>(
+			table_id,
+			headers,
+			rows,
+			sortColumn,
+			ascending,
+			adaptedSorts,
+			adaptedCellRender);
+	}
 
 	/**
 	 * @brief Compares two version strings (e.g., "1.2.3") numerically.
@@ -291,9 +413,5 @@ namespace Util
 	extern const TableSortFunc VersionSortComparator;
 
 	// Performance overlay formatting and color helpers
-	std::string FormatMilliseconds(float ms);
-	std::string FormatMicroseconds(float us);
-	std::string FormatPercent(float percent);
 	ImVec4 GetThresholdColor(float value, float good, float warn, ImVec4 goodColor, ImVec4 warnColor, ImVec4 badColor);
-	std::string TimeAgoString(std::chrono::steady_clock::time_point last);
 }  // namespace Util

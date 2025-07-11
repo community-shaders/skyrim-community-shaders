@@ -22,4 +22,23 @@ namespace Util
 	 */
 	std::string FixFilePath(const std::string& a_path);
 	std::string WStringToString(const std::wstring& wideString);
+
+	/**
+	 * Formats a float value as milliseconds, using 2 or 3 decimal places as appropriate.
+	 * Returns '0 ms' for exact zero values.
+	 */
+	std::string FormatMilliseconds(float ms);
+	/**
+	 * Formats a float value as microseconds, using 2 decimal places.
+	 * Returns '0 us' for exact zero values.
+	 */
+	std::string FormatMicroseconds(float us);
+	/**
+	 * Formats a float value as a percentage string with 1 decimal place.
+	 */
+	std::string FormatPercent(float percent);
+	/**
+	 * Returns a human-readable string for the time elapsed since the given time point (e.g., '5s', '2m', '1h').
+	 */
+	std::string TimeAgoString(std::chrono::steady_clock::time_point last);
 }  // namespace Util
