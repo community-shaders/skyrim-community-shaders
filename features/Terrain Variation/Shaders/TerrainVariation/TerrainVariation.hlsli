@@ -117,8 +117,6 @@ inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV)
 // Stochastic sampling function for Terrain LOD & LOD Mask.
 inline float4 StochasticSampleLOD(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsetsLOD, float2 dx, float2 dy)
 {
-	// Apply mip bias to match normal sampling behavior
-	float adjustedMipLevel = mipLevel + SharedData::MipBias;
 	float offsetScale = 0.01;
 
 	// Cheap pseudo-rotation using simple transforms
@@ -130,8 +128,8 @@ inline float4 StochasticSampleLOD(float rnd, float mipLevel, Texture2D tex, Samp
 	float2 microOffset2 = (offsetsLOD.offset2 + dir2) * offsetScale;
 
 	// Sample only two offsets
-	float4 sample1 = tex.SampleLevel(samp, uv + microOffset1, adjustedMipLevel);
-	float4 sample2 = tex.SampleLevel(samp, uv + microOffset2, adjustedMipLevel);
+	float4 sample1 = tex.SampleLevel(samp, uv + microOffset1, mipLevel);
+	float4 sample2 = tex.SampleLevel(samp, uv + microOffset2, mipLevel);
 
 	// Simple 2-sample blend weighted toward first sample
 	return lerp(sample2, sample1, 0.65);
@@ -141,8 +139,8 @@ inline float4 StochasticSampleLOD(float rnd, float mipLevel, Texture2D tex, Samp
 inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
 {
 	// Apply mip bias to match normal sampling behavior
-	float adjustedMipLevel = mipLevel + SharedData::MipBias;
 
+	float adjustedMipLevel = mipLevel + (SharedData::MipBias == 0 ? -1.8 : SharedData::MipBias);
 	// Take first sample (always needed)
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
 
@@ -194,7 +192,8 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 inline float4 StochasticEffectNoHeight(float mipLevel, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets)
 {
 	// Apply mip bias to match normal sampling behavior
-	float adjustedMipLevel = mipLevel + SharedData::MipBias;
+	// When TAA is disabled (MipBias = 0), apply negative bias to maintain sharpness
+	float adjustedMipLevel = mipLevel + (SharedData::MipBias == 0 ? -1.8 : SharedData::MipBias);
 
 	// Early exit for disabled terrain variation - avoid all other computations
 	if (!SharedData::terrainVariationSettings.enableTilingFix)
