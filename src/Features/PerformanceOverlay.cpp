@@ -725,39 +725,63 @@ void PerformanceOverlay::DrawDrawCalls()
 	auto* menu = Menu::GetSingleton();
 	const auto& theme = menu->GetTheme();
 
-	// helper for creating columns
-	auto makeLiveMetricColumn = [&](auto valueGetter, auto colorGetter, auto formatter, const std::vector<std::string>& tooltipLines, const std::vector<ImVec4>& tooltipColors) {
-		return [theme, valueGetter, colorGetter, formatter, tooltipLines, tooltipColors](const DrawCallRow& row, int) {
-			float value = valueGetter(row);
-			ImVec4 color = colorGetter(theme, value, row);
-			std::string valueStr = formatter(value, row);
-			ImGui::PushStyleColor(ImGuiCol_Text, color);
-			ImGui::Text("%s", valueStr.c_str());
-			ImGui::PopStyleColor();
-			if (ImGui::IsItemHovered()) {
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					Util::DrawMultiLineTooltip(tooltipLines, tooltipColors);
-				}
-			}
-		};
-	};
+	// --- COLUMN CONFIG ---
+	using ColoredTextLines = Util::ColoredTextLines;
 
-	auto makeTestMetricColumn = [&](auto valueGetter, auto colorGetter, auto formatter, const std::vector<std::string>& tooltipLines, const std::vector<ImVec4>& tooltipColors) {
-		return [theme, valueGetter, colorGetter, formatter, tooltipLines, tooltipColors](const DrawCallRow& row, int) {
-			auto opt = valueGetter(row);
-			if (!opt.has_value()) {
-				ImGui::TextDisabled("-");
-				return;
+	// --- BUILD LEGENDS ---
+	const ColoredTextLines frameTimeLegend = {
+		{ "Frame Time: Time spent on this shader type (ms and % of total frame time).", theme.Palette.Text },
+		{ "", theme.Palette.Text },
+		{ "Performance Color Legend (ms):", theme.Palette.Text },
+		{ "  <= 2 ms", theme.StatusPalette.SuccessColor },
+		{ "  > 2 ms and <= 5 ms", theme.StatusPalette.Warning },
+		{ "  > 5 ms", theme.StatusPalette.Error }
+	};
+	const ColoredTextLines costPerCallLegend = {
+		{ "Cost/Call: Average time per draw call for this shader type.", theme.Palette.Text },
+		{ "", theme.Palette.Text },
+		{ "Color Legend (ms/call):", theme.Palette.Text },
+		{ "  <= 0.05 ms/call", theme.StatusPalette.SuccessColor },
+		{ "  > 0.05 ms and <= 0.2 ms/call", theme.StatusPalette.Warning },
+		{ "  > 0.2 ms/call", theme.StatusPalette.Error }
+	};
+	const ColoredTextLines testFrameTimeLegend = {
+		{ PerformanceOverlay::GetTestDataTooltip(), theme.Palette.Text },
+		{ "", theme.Palette.Text },
+		{ "Color Legend (compared to live data):", theme.Palette.Text },
+		{ "  Better (lower than live)", theme.StatusPalette.SuccessColor },
+		{ "  Worse (higher than live)", theme.StatusPalette.Error },
+		{ "  Same as live", theme.Palette.Text }
+	};
+	const ColoredTextLines testCostPerCallLegend = testFrameTimeLegend;
+
+	// --- COLUMN HELPERS ---
+	auto makeMetricColumn = [&](auto valueGetter, auto colorGetter, auto formatter, const ColoredTextLines& legend, const ColoredTextLines* cellLegend = nullptr) {
+		return [theme, valueGetter, colorGetter, formatter, legend, cellLegend](const DrawCallRow& row, int) {
+			using ValueType = decltype(valueGetter(row));
+			if constexpr (std::is_same_v<ValueType, std::optional<float>>) {
+				if (!valueGetter(row).has_value()) {
+					ImGui::TextDisabled("-");
+					return;
+				}
+				float value = *valueGetter(row);
+				ImVec4 color = colorGetter(theme, value, row);
+				std::string valueStr = formatter(value, row);
+				ImGui::PushStyleColor(ImGuiCol_Text, color);
+				ImGui::Text("%s", valueStr.c_str());
+				ImGui::PopStyleColor();
+			} else {
+				float value = valueGetter(row);
+				ImVec4 color = colorGetter(theme, value, row);
+				std::string valueStr = formatter(value, row);
+				ImGui::PushStyleColor(ImGuiCol_Text, color);
+				ImGui::Text("%s", valueStr.c_str());
+				ImGui::PopStyleColor();
 			}
-			float value = *opt;
-			ImVec4 color = colorGetter(theme, value, row);
-			std::string valueStr = formatter(value, row);
-			ImGui::PushStyleColor(ImGuiCol_Text, color);
-			ImGui::Text("%s", valueStr.c_str());
-			ImGui::PopStyleColor();
 			if (ImGui::IsItemHovered()) {
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					Util::DrawMultiLineTooltip(tooltipLines, tooltipColors);
+					const ColoredTextLines& useLegend = cellLegend ? *cellLegend : legend;
+					Util::DrawColoredMultiLineTooltip(useLegend);
 				}
 			}
 		};
@@ -853,40 +877,34 @@ void PerformanceOverlay::DrawDrawCalls()
 	};
 	columns.push_back(ColumnConfig{
 		"Frame Time (%)",
-		makeLiveMetricColumn(
+		makeMetricColumn(
 			[](const DrawCallRow& row) { return row.frameTime; },
 			[](const auto& theme, float value, const DrawCallRow&) { return Util::GetThresholdColor(value, 2.0f, 5.0f, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error); },
 			[](float /*value*/, const DrawCallRow& row) {
 				return Util::FormatMilliseconds(row.frameTime) + " (" + Util::FormatPercent(row.percent) + ")";
 			},
-			{ "Frame Time: Time spent on this shader type (ms and % of total frame time).", "", "Reference thresholds (ms):", "  < 2 ms", "  >= 2 ms and < 5 ms", "  >= 5 ms" },
-			{ theme.Palette.Text, theme.Palette.Text, theme.Palette.Text, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error }),
+			frameTimeLegend),
 		[](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.percent < b.percent) : (a.percent > b.percent); },
-		[theme]() {
+		[frameTimeLegend]() {
 			if (ImGui::IsItemHovered()) {
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					std::vector<std::string> lines = { "Frame Time: Time spent on this shader type (ms and % of total frame time).", "", "Performance Color Legend (ms):", "  <= 2 ms", "  > 2 ms and <= 5 ms", "  > 5 ms" };
-					std::vector<ImVec4> colors = { theme.Palette.Text, theme.Palette.Text, theme.Palette.Text, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error };
-					Util::DrawMultiLineTooltip(lines, colors);
+					Util::DrawColoredMultiLineTooltip(frameTimeLegend);
 				}
 			}
 		} });
 
 	columns.push_back(ColumnConfig{
 		"Cost/Call",
-		makeLiveMetricColumn(
+		makeMetricColumn(
 			[](const DrawCallRow& row) { return row.costPerCall; },
 			[](const auto& theme, float value, const DrawCallRow&) { return Util::GetThresholdColor(value, 0.05f, 0.2f, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error); },
 			[](float value, const DrawCallRow&) { return (value < 0.01f && value > 0.0f) ? Util::FormatMicroseconds(value * 1000.0f) : Util::FormatMilliseconds(value); },
-			{ "Cost/Call: Average time per draw call for this shader type.", "", "Reference thresholds (ms/call):", "  <= 0.05 ms/call", "  > 0.05 ms and <= 0.2 ms/call", "  > 0.2 ms/call" },
-			{ theme.Palette.Text, theme.Palette.Text, theme.Palette.Text, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error }),
+			costPerCallLegend),
 		[](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.costPerCall < b.costPerCall) : (a.costPerCall > b.costPerCall); },
-		[theme]() {
+		[costPerCallLegend]() {
 			if (ImGui::IsItemHovered()) {
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					std::vector<std::string> lines = { "Cost/Call: Average time per draw call for this shader type.", "", "Performance Color Legend (ms/call):", "  <= 0.05 ms/call", "  > 0.05 ms and <= 0.2 ms/call", "  > 0.2 ms/call" };
-					std::vector<ImVec4> colors = { theme.Palette.Text, theme.Palette.Text, theme.Palette.Text, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error };
-					Util::DrawMultiLineTooltip(lines, colors);
+					Util::DrawColoredMultiLineTooltip(costPerCallLegend);
 				}
 			}
 		} });
@@ -895,7 +913,7 @@ void PerformanceOverlay::DrawDrawCalls()
 	if (anyTestData) {
 		columns.push_back(ColumnConfig{
 			"Test Frame Time (%)",
-			makeTestMetricColumn(
+			makeMetricColumn(
 				[](const DrawCallRow& row) { return row.testFrameTime; },
 				[](const auto& theme, float value, const DrawCallRow& row) {
 					if (value < row.frameTime)
@@ -905,24 +923,25 @@ void PerformanceOverlay::DrawDrawCalls()
 					return theme.Palette.Text;
 				},
 				[](float value, const DrawCallRow& row) { return Util::FormatMilliseconds(value) + " (" + Util::FormatPercent(PerformanceOverlay::s_testData[row.shaderType].percent) + ")"; },
-				{ PerformanceOverlay::GetTestDataTooltip(), "", "Color legend (compared to live data):" },
-				{ theme.Palette.Text, theme.Palette.Text, theme.Palette.Text }),
+				testFrameTimeLegend),
 			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
 				float aVal = a.testFrameTime.value_or(FLT_MAX);
 				float bVal = b.testFrameTime.value_or(FLT_MAX);
 				return asc ? (aVal < bVal) : (aVal > bVal);
 			},
-			[theme]() {
+			[testFrameTimeLegend]() {
 				if (ImGui::IsItemHovered()) {
 					if (auto _tt = Util::HoverTooltipWrapper()) {
 						ImGui::TextUnformatted(PerformanceOverlay::GetTestDataTooltip().c_str());
+						ImGui::Separator();
+						Util::DrawColoredMultiLineTooltip(testFrameTimeLegend);
 					}
 				}
 			} });
 
 		columns.push_back(ColumnConfig{
 			"Test Cost/Call",
-			makeTestMetricColumn(
+			makeMetricColumn(
 				[](const DrawCallRow& row) { return row.testCostPerCall; },
 				[](const auto& theme, float value, const DrawCallRow& row) {
 					if (value < row.costPerCall)
@@ -932,17 +951,18 @@ void PerformanceOverlay::DrawDrawCalls()
 					return theme.Palette.Text;
 				},
 				[](float value, const DrawCallRow&) { return (value < 0.01f && value > 0.0f) ? Util::FormatMicroseconds(value * 1000.0f) : Util::FormatMilliseconds(value); },
-				{ PerformanceOverlay::GetTestDataTooltip(), "", "Color legend (compared to live data):" },
-				{ theme.Palette.Text, theme.Palette.Text, theme.Palette.Text }),
+				testCostPerCallLegend),
 			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
 				float aVal = a.testCostPerCall.value_or(FLT_MAX);
 				float bVal = b.testCostPerCall.value_or(FLT_MAX);
 				return asc ? (aVal < bVal) : (aVal > bVal);
 			},
-			[theme]() {
+			[testCostPerCallLegend]() {
 				if (ImGui::IsItemHovered()) {
 					if (auto _tt = Util::HoverTooltipWrapper()) {
 						ImGui::TextUnformatted(PerformanceOverlay::GetTestDataTooltip().c_str());
+						ImGui::Separator();
+						Util::DrawColoredMultiLineTooltip(testCostPerCallLegend);
 					}
 				}
 			} });
@@ -977,7 +997,29 @@ void PerformanceOverlay::DrawDrawCalls()
 						for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1; ++i) {
 							globals::state->enabledClasses[i] = anyDisabled;
 						}
-						UpdateAllShaderTestData();
+						// Update test data and timestamp for manual toggling (not just A/B test mode)
+						bool abTest = Menu::GetSingleton() && Menu::GetSingleton()->abTestingEnabled && Menu::GetSingleton()->usingTestConfig;
+						if (abTest) {
+							UpdateAllShaderTestData();
+						} else {
+							// Manual toggle: update test data and timestamp
+							float smoothedFrameTime = static_cast<float>(PerformanceOverlay::GetSingleton()->perfOverlayState.smoothFrameTimeMs);
+							float totalSmoothedDrawCalls = static_cast<float>(globals::state->smoothDrawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]);
+							float totalCostPerCall = (totalSmoothedDrawCalls > 0.0f) ? (smoothedFrameTime / totalSmoothedDrawCalls) : 0.0f;
+							float measuredSum = 0.0f;
+							for (auto type : magic_enum::enum_values<RE::BSShader::Type>()) {
+								if (type == RE::BSShader::Type::None || type == RE::BSShader::Type::Total)
+									continue;
+								int typeIndex = magic_enum::enum_integer(type);
+								measuredSum += static_cast<float>(globals::state->smoothFrameTimePerType[typeIndex]);
+							}
+							float otherFrameTime = smoothedFrameTime - measuredSum;
+							float otherPercent = (smoothedFrameTime > 0.0f) ? (otherFrameTime / smoothedFrameTime) * 100.0f : 0.0f;
+							PerformanceOverlay::s_testData[-1] = { smoothedFrameTime, totalCostPerCall, 100.0f };
+							PerformanceOverlay::s_testData[-2] = { otherFrameTime, 0.0f, otherPercent };
+							PerformanceOverlay::s_testDataSource = PerformanceOverlay::TestDataSource::ManualShaderToggle;
+							PerformanceOverlay::s_testDataLastUpdated = std::chrono::steady_clock::now();
+						}
 					}
 					if (ImGui::IsItemHovered()) {
 						if (auto _tt = Util::HoverTooltipWrapper()) {

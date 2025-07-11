@@ -553,14 +553,10 @@ namespace Util
 		}
 	}
 
-	void DrawColorLegendTooltip(const std::vector<std::pair<const char*, ImVec4>>& items, const char* title)
+	void DrawColoredMultiLineTooltip(const ColoredTextLines& lines)
 	{
-		if (title) {
-			ImGui::TextUnformatted(title);
-			ImGui::Separator();
-		}
-		for (const auto& [label, color] : items) {
-			ImGui::TextColored(color, "%s", label);
+		for (const auto& line : lines) {
+			ImGui::TextColored(line.color, "%s", line.text.c_str());
 		}
 	}
 

@@ -30,6 +30,16 @@ class Menu;
 
 namespace Util
 {
+	/**
+	 * Represents a single line and its color for any colored text rendering (tooltips, legends, etc.).
+	 */
+	struct ColoredTextLine
+	{
+		std::string text;
+		ImVec4 color;
+	};
+	using ColoredTextLines = std::vector<ColoredTextLine>;
+
 	// Text rendering constants
 	constexpr float DefaultHeaderTextScale = 1.5f;  // Larger scale for header text to improve readability
 
@@ -226,16 +236,11 @@ namespace Util
 	void DrawMultiLineTooltip(const std::vector<std::string>& lines, const std::vector<ImVec4>& colors = {});
 
 	/**
-	 * Draws a color legend tooltip for overlay color meanings (e.g., green = better, red = worse, white = similar).
+	 * @brief Draws a multi-line tooltip with optional per-line coloring.
 	 *
-	 * IMPORTANT: This function should only be called from within a tooltip context
-	 * (e.g., from within a HoverTooltipWrapper or BeginTooltip/EndTooltip block).
-	 * Do not call this function directly without proper tooltip context.
-	 *
-	 * @param items Vector of (label, color) pairs.
-	 * @param title Optional title for the legend.
+	 * Expects a vector of {text, color} pairs. Should be called from within a tooltip context.
 	 */
-	void DrawColorLegendTooltip(const std::vector<std::pair<const char*, ImVec4>>& items, const char* title = nullptr);
+	void DrawColoredMultiLineTooltip(const ColoredTextLines& lines);
 
 	/**
 	 * @brief Comparator function type for table sorting.
