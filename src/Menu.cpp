@@ -109,6 +109,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::ThemeSettings,
+	FontSize,
 	GlobalScale,
 	UseSimplePalette,
 	ShowActionIcons,
@@ -273,29 +274,49 @@ void Menu::Init()
 
 	// Load font
 	DXGI_SWAP_CHAIN_DESC desc{};
-	if (FAILED(globals::d3d::swapChain->GetDesc(&desc)) || desc.BufferDesc.Height == 0) {
-		logger::warn("Failed to get swap chain description. Using default 1080p font size.");
-		desc.BufferDesc.Height = 1080;
-	}
-	uint32_t height = desc.BufferDesc.Height;  // Screen pixel height
-	// Calculate base font size based on screen height (e.g., 2% of screen height)
-	const float baseFontSize = height * 0.02f;
-	// Clamp between reasonable min/max values
-	const float fontSize = std::clamp(baseFontSize, 24.0f, 48.0f);
+	globals::d3d::swapChain->GetDesc(&desc);
 
-	// Add font with dynamic size
+	float fontSize = 0.f;
+	// Only bother doing auto font fize if user has not changed font px size setting (new)
+	if (settings.Theme.FontSize == settings.Theme.constants.DEFAULT_SCREEN_HEIGHT 
+								* settings.Theme.constants.DEFAULT_FONT_RATIO) 
+	{
+		uint32_t gameScreenHeight = desc.BufferDesc.Height;
+		if (gameScreenHeight > 0) {
+			fontSize = gameScreenHeight * settings.Theme.constants.DEFAULT_FONT_RATIO;
+		}
+		else {
+			// Try CommonLib functions
+			const auto* const state = RE::BSGraphics::State::GetSingleton();
+			if (state) {
+				const auto height = static_cast<double>(state->screenHeight);
+				if (height > 0) {
+					gameScreenHeight = static_cast<uint32_t>(height);
+				} else {
+					logger::warn("Menu::Init() - Failed to get game resolution from RE::BSGraphics::State::GetSingleton().");
+					fontSize = settings.Theme.FontSize; // fallback to default 1080p value
+				}
+			}
+		}
+	} else {
+		fontSize = settings.Theme.FontSize;
+	}
+	
+	fontSize = std::clamp(fontSize, settings.Theme.constants.MIN_FONT_SIZE, 
+									settings.Theme.constants.MAX_FONT_SIZE);
+	
 	if (!imgui_io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\Jost-Regular.ttf",
-			std::round(fontSize), &font_config)) {
-		logger::warn("Failed to load custom font. Using default font.");
+			std::round(fontSize), &font_config)) 
+	{
+		logger::warn("Menu::Init() - Failed to load custom font. Using default font.");
 		imgui_io.Fonts->AddFontDefault();
 	}
+
+	imgui_io.FontGlobalScale = exp2(settings.Theme.GlobalScale);
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplWin32_Init(desc.OutputWindow);
 	ImGui_ImplDX11_Init(globals::d3d::device, globals::d3d::context);
-
-	auto& io = ImGui::GetIO();
-	io.FontGlobalScale = exp2(settings.Theme.GlobalScale);
 
 	{
 		winrt::com_ptr<IDXGIDevice> dxgiDevice;
@@ -308,7 +329,7 @@ void Menu::Init()
 	}
 	// Load UI icons
 	if (!Util::InitializeMenuIcons(this)) {
-		logger::warn("Failed to load UI icons. Will fallback to text buttons");
+		logger::warn("Menu::Init() - Failed to load UI icons. Will fallback to text buttons");
 	}
 
 	BuildCategoryCounts();
@@ -1239,13 +1260,6 @@ void Menu::DrawGeneralSettings()
 
 			if (ImGui::BeginTabBar("##tabs", ImGuiTabBarFlags_None)) {
 				if (ImGui::BeginTabItem("UI Options")) {
-					if (ImGui::SliderFloat("Global Scale", &themeSettings.GlobalScale, -1.f, 1.f, "%.2f")) {
-						float trueScale = exp2(themeSettings.GlobalScale);
-
-						auto& io = ImGui::GetIO();
-						io.FontGlobalScale = trueScale;
-					}
-
 					ImGui::SeparatorText("UI Elements");
 					ImGui::Checkbox("Use Icon Buttons in Header", &themeSettings.ShowActionIcons);
 					if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -1264,6 +1278,15 @@ void Menu::DrawGeneralSettings()
 
 				if (ImGui::BeginTabItem("Sizes")) {
 					ImGui::SeparatorText("Main");
+					if (ImGui::SliderFloat("Global Scale", &themeSettings.GlobalScale, -1.f, 1.f, "%.2f")) {
+						float trueScale = exp2(themeSettings.GlobalScale);
+
+						auto& io = ImGui::GetIO();
+						io.FontGlobalScale = trueScale;
+					}
+					if (ImGui::SliderFloat("Font Size", &themeSettings.FontSize, themeSettings.constants.MIN_FONT_SIZE, themeSettings.constants.MAX_FONT_SIZE, "%.0f")) {
+						pendingFontChange = true;
+					}
 					ImGui::SliderFloat2("Window Padding", (float*)&style.WindowPadding, 0.0f, 20.0f, "%.0f");
 					ImGui::SliderFloat2("Frame Padding", (float*)&style.FramePadding, 0.0f, 20.0f, "%.0f");
 					ImGui::SliderFloat2("Item Spacing", (float*)&style.ItemSpacing, 0.0f, 20.0f, "%.0f");
@@ -1648,6 +1671,11 @@ void Menu::DrawOverlay()
 		io.ClearInputKeys();
 		io.ClearEventsQueue();
 		return;
+	}
+
+	// Reload font if user changed something
+	if (pendingFontChange || ImGui::GetFontSize() != settings.Theme.FontSize) {
+		ReloadFont();
 	}
 
 	// Start the Dear ImGui frame
@@ -2852,4 +2880,37 @@ void Menu::BuildCategoryCounts()
 			categoryCounts[std::string(category)]++;
 		}
 	}
+}
+
+void Menu::ReloadFont() {
+	ImGuiIO& io = ImGui::GetIO();
+	io.Fonts->Clear();
+
+	ImFontConfig font_config;
+	
+	font_config.GlyphExtraSpacing.x = 0.0f;  // Neutral spacing for cleaner look
+	font_config.OversampleH = 3;             // Increased horizontal oversampling for sharper text
+	font_config.OversampleV = 2;             // Increased vertical oversampling
+	font_config.PixelSnapH = true;           // Align to pixel grid for sharper rendering
+	font_config.RasterizerMultiply = 1.1f;   // Slightly darker font rendering
+	font_config.FontBuilderFlags = 0;        // No additional flags needed
+
+	float fontSize = settings.Theme.FontSize;
+	fontSize = std::clamp(fontSize, settings.Theme.constants.MIN_FONT_SIZE, 
+									settings.Theme.constants.MAX_FONT_SIZE);
+
+	if (!io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\Jost-Regular.ttf",
+		std::round(fontSize), &font_config)) 
+	{
+		logger::warn("Menu::ReloadFont() - Failed to load custom font. Using default font.");
+		io.Fonts->AddFontDefault();
+	}
+
+	io.Fonts->Build();
+
+	ImGui_ImplDX11_InvalidateDeviceObjects();
+
+	io.FontGlobalScale = exp2(settings.Theme.GlobalScale);
+
+	pendingFontChange = false;
 }

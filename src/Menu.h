@@ -59,6 +59,15 @@ public:
 
 	struct ThemeSettings
 	{
+		struct Constants
+		{
+			static constexpr float DEFAULT_SCREEN_HEIGHT = 1080.0f; // Default screen resolution to use for subsequent calculations
+			static constexpr float DEFAULT_FONT_RATIO = 0.025f; // Default 2.5% of screen height
+			static constexpr float MIN_FONT_SIZE = 16.0f; // ~1.5% @ 1080px height
+			static constexpr float MAX_FONT_SIZE = 108.0f; // 5.0% @ 2160px height
+		} constants;
+
+		float FontSize = constants.DEFAULT_FONT_RATIO * constants.DEFAULT_SCREEN_HEIGHT;
 		float GlobalScale = REL::Module::IsVR() ? -0.5f : 0.f;  // exponential
 
 		bool UseSimplePalette = true;    // simple palette or full customization
@@ -213,6 +222,9 @@ public:
 
 private:
 	Settings settings;
+
+	bool pendingFontChange = false; // Tracks whether font has been modified and may require reloading
+	void ReloadFont(); // Credit to user patchuli: https://github.com/Patchu1i/ModExplorerMenu/tree/master
 
 	// Menu navigation
 	std::string pendingFeatureSelection;  // Feature to select on next frame
