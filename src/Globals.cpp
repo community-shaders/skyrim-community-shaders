@@ -194,7 +194,6 @@ namespace globals
 			perFrame = { REL::RelocationID(524768, 411384) };
 		}
 
-
 		{
 			using namespace rtti;
 			NiIntegerExtraDataRTTI = { RE::NiIntegerExtraData::Ni_RTTI };

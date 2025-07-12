@@ -492,7 +492,7 @@ LightLimitFix::ParticleLightReference LightLimitFix::GetParticleLightConfigs(RE:
 				if (auto material = shaderProperty->GetMaterial()) {
 					// Check if it's a valid particle light
 					bool billboard = false;
-					if (a_pass->geometry->GetRTTI() != globals::rtti::NiParticleSystemRTTI.get()){
+					if (a_pass->geometry->GetRTTI() != globals::rtti::NiParticleSystemRTTI.get()) {
 						if (auto parent = a_pass->geometry->parent) {
 							if (auto billboardNode = parent->GetRTTI() == globals::rtti::NiBillboardNodeRTTI.get() ? static_cast<RE::NiBillboardNode*>(parent) : nullptr) {
 								billboard = true;
