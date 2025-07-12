@@ -3318,7 +3318,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			float AlphaMaterialReduction = 0.f;
 			float AlphaMaterialSoftness = 0.f;
 			float AlphaMaterialStrength = 0.f;
-			
+
 			if (AlphaMaterialModel == ExtendedTranslucency::MaterialModel::Default) {
 				AlphaMaterialModel = SharedData::extendedTranslucencySettings.MaterialModel;
 				AlphaMaterialReduction = SharedData::extendedTranslucencySettings.Reduction;
