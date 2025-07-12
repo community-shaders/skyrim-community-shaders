@@ -10,7 +10,6 @@
 #include "Features/CloudShadows.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
-#include "Features/TerrainVariation.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "Streamline.h"
@@ -726,17 +725,6 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 			data.MipBias = std::log2f(renderSize.x / screenSize.x) - 1.0f;
 		} else {
 			data.MipBias = 0;
-		}
-
-		// Apply TAA-equivalent mip bias when terrain variation is enabled and TAA is disabled to prevent texture blurring
-		auto terrainVariation = globals::features::terrainVariation;
-		if (terrainVariation && terrainVariation->loaded && terrainVariation->settings.enableTilingFix) {
-			if (!bTAA) {
-				// Apply same sharpening calculation as TAA when TAA is disabled
-				auto renderSize = Util::ConvertToDynamic(screenSize);
-				data.MipBias = std::log2f(renderSize.x / screenSize.x) - 1.0f;
-			}
-			// When TAA is enabled, keep the existing TAA mip bias calculation
 		}
 
 		sharedDataCB->Update(data);
