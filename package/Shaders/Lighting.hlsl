@@ -1299,13 +1299,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #		if defined(EMAT)
 	if (SharedData::extendedMaterialSettings.EnableTerrainParallax) {
-		mipLevels[0] = ExtendedMaterials::GetMipLevel(uv, TexColorSampler);
-		mipLevels[1] = ExtendedMaterials::GetMipLevel(uv, TexLandColor2Sampler);
-		mipLevels[2] = ExtendedMaterials::GetMipLevel(uv, TexLandColor3Sampler);
-		mipLevels[3] = ExtendedMaterials::GetMipLevel(uv, TexLandColor4Sampler);
-		mipLevels[4] = ExtendedMaterials::GetMipLevel(uv, TexLandColor5Sampler);
-		mipLevels[5] = ExtendedMaterials::GetMipLevel(uv, TexLandColor6Sampler);
-
 		displacementParams[1] = displacementParams[0];
 		displacementParams[2] = displacementParams[0];
 		displacementParams[3] = displacementParams[0];
@@ -1324,8 +1317,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		// Initialize weights array
 		weights[0] = weights[1] = weights[2] = weights[3] = weights[4] = weights[5] = 0.0;
 #			if defined(TERRAIN_VARIATION)
+		float mipLevels[6] = { 0, 0, 0, 0, 0, 0 }; // Dummy array for parallax compatibility
 		uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, sharedOffset, dx, dy, pixelOffset, weights);
 #			else
+		float mipLevels[6] = { 0, 0, 0, 0, 0, 0 }; // Dummy array for parallax compatibility
 		uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, pixelOffset, weights);
 #			endif
 		if (SharedData::extendedMaterialSettings.EnableHeightBlending) {
@@ -1345,33 +1340,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			endif
 		}
 	}
-
-#		if defined(TERRAIN_VARIATION)
-	else if (useTerrainVariation) {
-		// Calculate proper mip levels for terrain variation when parallax is disabled but EMAT is available
-		mipLevels[0] = ExtendedMaterials::GetMipLevel(uv, TexColorSampler);
-		mipLevels[1] = ExtendedMaterials::GetMipLevel(uv, TexLandColor2Sampler);
-		mipLevels[2] = ExtendedMaterials::GetMipLevel(uv, TexLandColor3Sampler);
-		mipLevels[3] = ExtendedMaterials::GetMipLevel(uv, TexLandColor4Sampler);
-		mipLevels[4] = ExtendedMaterials::GetMipLevel(uv, TexLandColor5Sampler);
-		mipLevels[5] = ExtendedMaterials::GetMipLevel(uv, TexLandColor6Sampler);
-	}
-#		endif
 #		else
-	// Initialize mip levels for non-EMAT case
+	// Initialize mip levels for non-EMAT case (no longer needed)
 	mipLevels[0] = mipLevels[1] = mipLevels[2] = mipLevels[3] = mipLevels[4] = mipLevels[5] = 0.0;
 #		endif  // EMAT
-	// When terrain variation is enabled but parallax is disabled, calculate proper mip levels for stochastic sampling
-#		if defined(TERRAIN_VARIATION)
-	[branch] if (useTerrainVariation && !SharedData::extendedMaterialSettings.EnableTerrainParallax) {
-		mipLevels[0] = ExtendedMaterials::GetMipLevel(uv, TexColorSampler);
-		mipLevels[1] = ExtendedMaterials::GetMipLevel(uv, TexLandColor2Sampler);
-		mipLevels[2] = ExtendedMaterials::GetMipLevel(uv, TexLandColor3Sampler);
-		mipLevels[3] = ExtendedMaterials::GetMipLevel(uv, TexLandColor4Sampler);
-		mipLevels[4] = ExtendedMaterials::GetMipLevel(uv, TexLandColor5Sampler);
-		mipLevels[5] = ExtendedMaterials::GetMipLevel(uv, TexLandColor6Sampler);
-	}
-#		endif
 #	endif      // LANDSCAPE
 
 #	if defined(SPARKLE)
@@ -1407,7 +1379,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landColor1;
 		[branch] if (useTerrainVariation)
 		{
-			landColor1 = StochasticEffect(screenNoise, mipLevels[0], TexColorSampler, SampColorSampler, uv, sharedOffset, dx, dy);
+			landColor1 = StochasticEffect(screenNoise, TexColorSampler, SampColorSampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1431,7 +1403,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landNormal1;
 		[branch] if (useTerrainVariation)
 		{
-			landNormal1 = StochasticEffect(screenNoise, mipLevels[0], TexNormalSampler, SampNormalSampler, uv, sharedOffset, dx, dy);
+			landNormal1 = StochasticEffect(screenNoise, TexNormalSampler, SampNormalSampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1454,7 +1426,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
-				landRMAOS1 = StochasticEffectNoHeight(mipLevels[0], TexRMAOSSampler, SampRMAOSSampler, uv, sharedOffset) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
+				landRMAOS1 = StochasticEffectNoHeight(TexRMAOSSampler, SampRMAOSSampler, uv, sharedOffset) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
 			}
 			else
 			{
@@ -1488,7 +1460,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landColor2;
 		[branch] if (useTerrainVariation)
 		{
-			landColor2 = StochasticEffect(screenNoise, mipLevels[1], TexLandColor2Sampler, SampLandColor2Sampler, uv, sharedOffset, dx, dy);
+			landColor2 = StochasticEffect(screenNoise, TexLandColor2Sampler, SampLandColor2Sampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1512,7 +1484,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landNormal2;
 		[branch] if (useTerrainVariation)
 		{
-			landNormal2 = StochasticEffect(screenNoise, mipLevels[1], TexLandNormal2Sampler, SampLandNormal2Sampler, uv, sharedOffset, dx, dy);
+			landNormal2 = StochasticEffect(screenNoise, TexLandNormal2Sampler, SampLandNormal2Sampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1535,7 +1507,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
-				landRMAOS2 = StochasticEffectNoHeight(mipLevels[1], TexLandRMAOS2Sampler, SampLandRMAOS2Sampler, uv, sharedOffset) * float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
+				landRMAOS2 = StochasticEffectNoHeight(TexLandRMAOS2Sampler, SampLandRMAOS2Sampler, uv, sharedOffset) * float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
 			}
 			else
 			{
@@ -1568,7 +1540,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landColor3;
 		[branch] if (useTerrainVariation)
 		{
-			landColor3 = StochasticEffect(screenNoise, mipLevels[2], TexLandColor3Sampler, SampLandColor3Sampler, uv, sharedOffset, dx, dy);
+			landColor3 = StochasticEffect(screenNoise, TexLandColor3Sampler, SampLandColor3Sampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1592,7 +1564,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landNormal3;
 		[branch] if (useTerrainVariation)
 		{
-			landNormal3 = StochasticEffect(screenNoise, mipLevels[2], TexLandNormal3Sampler, SampLandNormal3Sampler, uv, sharedOffset, dx, dy);
+			landNormal3 = StochasticEffect(screenNoise, TexLandNormal3Sampler, SampLandNormal3Sampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1615,7 +1587,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
-				landRMAOS3 = StochasticEffectNoHeight(mipLevels[2], TexLandRMAOS3Sampler, SampLandRMAOS3Sampler, uv, sharedOffset) * float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
+				landRMAOS3 = StochasticEffectNoHeight(TexLandRMAOS3Sampler, SampLandRMAOS3Sampler, uv, sharedOffset) * float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
 			}
 			else
 			{
@@ -1648,7 +1620,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landColor4;
 		[branch] if (useTerrainVariation)
 		{
-			landColor4 = StochasticEffect(screenNoise, mipLevels[3], TexLandColor4Sampler, SampLandColor4Sampler, uv, sharedOffset, dx, dy);
+			landColor4 = StochasticEffect(screenNoise, TexLandColor4Sampler, SampLandColor4Sampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1672,7 +1644,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landNormal4;
 		[branch] if (useTerrainVariation)
 		{
-			landNormal4 = StochasticEffect(screenNoise, mipLevels[3], TexLandNormal4Sampler, SampLandNormal4Sampler, uv, sharedOffset, dx, dy);
+			landNormal4 = StochasticEffect(screenNoise, TexLandNormal4Sampler, SampLandNormal4Sampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1695,7 +1667,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
-				landRMAOS4 = StochasticEffectNoHeight(mipLevels[3], TexLandRMAOS4Sampler, SampLandRMAOS4Sampler, uv, sharedOffset) * float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
+				landRMAOS4 = StochasticEffectNoHeight(TexLandRMAOS4Sampler, SampLandRMAOS4Sampler, uv, sharedOffset) * float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
 			}
 			else
 			{
@@ -1728,7 +1700,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landColor5;
 		[branch] if (useTerrainVariation)
 		{
-			landColor5 = StochasticEffect(screenNoise, mipLevels[4], TexLandColor5Sampler, SampLandColor5Sampler, uv, sharedOffset, dx, dy);
+			landColor5 = StochasticEffect(screenNoise, TexLandColor5Sampler, SampLandColor5Sampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1752,7 +1724,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landNormal5;
 		[branch] if (useTerrainVariation)
 		{
-			landNormal5 = StochasticEffect(screenNoise, mipLevels[4], TexLandNormal5Sampler, SampLandNormal5Sampler, uv, sharedOffset, dx, dy);
+			landNormal5 = StochasticEffect(screenNoise, TexLandNormal5Sampler, SampLandNormal5Sampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1776,7 +1748,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
-				landRMAOS5 = StochasticEffectNoHeight(mipLevels[4], TexLandRMAOS5Sampler, SampLandRMAOS5Sampler, uv, sharedOffset) * float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
+				landRMAOS5 = StochasticEffectNoHeight(TexLandRMAOS5Sampler, SampLandRMAOS5Sampler, uv, sharedOffset) * float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
 			}
 			else
 			{
@@ -1809,7 +1781,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landColor6;
 		[branch] if (useTerrainVariation)
 		{
-			landColor6 = StochasticEffect(screenNoise, mipLevels[5], TexLandColor6Sampler, SampLandColor6Sampler, uv, sharedOffset, dx, dy);
+			landColor6 = StochasticEffect(screenNoise, TexLandColor6Sampler, SampLandColor6Sampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1833,7 +1805,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landNormal6;
 		[branch] if (useTerrainVariation)
 		{
-			landNormal6 = StochasticEffect(screenNoise, mipLevels[5], TexLandNormal6Sampler, SampLandNormal6Sampler, uv, sharedOffset, dx, dy);
+			landNormal6 = StochasticEffect(screenNoise, TexLandNormal6Sampler, SampLandNormal6Sampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1856,7 +1828,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
-				landRMAOS6 = StochasticEffectNoHeight(mipLevels[5], TexLandRMAOS6Sampler, SampLandRMAOS6Sampler, uv, sharedOffset) * float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
+				landRMAOS6 = StochasticEffectNoHeight(TexLandRMAOS6Sampler, SampLandRMAOS6Sampler, uv, sharedOffset) * float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
 			}
 			else
 			{
@@ -1917,7 +1889,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			float2 dx = ddx(uv);
 			float2 dy = ddy(uv);
 			StochasticOffsets lodOffset = ComputeStochasticOffsetsLOD(uv);
-			float4 lodStochasticColor = StochasticSampleLOD(screenNoise, 0, TexColorSampler, SampColorSampler, uv, lodOffset, dx, dy);
+			float4 lodStochasticColor = StochasticSampleLOD(screenNoise, TexColorSampler, SampColorSampler, uv, lodOffset, dx, dy);
 
 			// Apply the stochastic result directly
 			baseColor.xyz = Color::Diffuse(lodStochasticColor.rgb);
@@ -2102,7 +2074,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float2 dx = ddx(blendColorUV);
 		float2 dy = ddy(blendColorUV);
 		StochasticOffsets lodBlendColorOffset = ComputeStochasticOffsetsLOD(blendColorUV);
-		lodLandColor = StochasticSampleLOD(screenNoise, 0, TexLandLodBlend1Sampler, SampLandLodBlend1Sampler, blendColorUV, lodBlendColorOffset, dx, dy);
+		lodLandColor = StochasticSampleLOD(screenNoise, TexLandLodBlend1Sampler, SampLandLodBlend1Sampler, blendColorUV, lodBlendColorOffset, dx, dy);
 	} else {
 		lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
 	}
