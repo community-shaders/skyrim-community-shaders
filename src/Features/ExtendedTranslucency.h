@@ -35,7 +35,7 @@ struct ExtendedTranslucency final : Feature
 		RimLight = 1,           // Similar effect like rim light
 		IsotropicFabric = 2,    // 1D fabric model, respect normal map
 		AnisotropicFabric = 3,  // 2D fabric model alone tangent and binormal, ignores normal map
-		ForceDisabled = 7,      // In ExtraFeatureDescriptor, value >= 4 means 'Disabled'
+		ForceDisabled = 4,      // In ExtraFeatureDescriptor, value >= 4 means 'Disabled'
 	};
 
 	static constexpr uint32_t ExtraFeatureDescriptorShift = 6;
