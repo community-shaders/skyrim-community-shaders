@@ -27,7 +27,7 @@ void ExtendedTranslucency::BSLightingShader_SetupGeometry(RE::BSRenderPass* pass
 	static const REL::Relocation<const RE::NiRTTI*> NiAlphaPropertyRTTI{ RE::NiAlphaProperty::Ni_RTTI };
 	auto alphaProperty = unknownProperty && unknownProperty->GetRTTI() == NiAlphaPropertyRTTI.get() ? static_cast<RE::NiAlphaProperty*>(unknownProperty.get()) : nullptr;
 	// Check alpha property exists and blending is enabled
-	if (alphaProperty && alphaProperty->GetAlphaBlending()){
+	if (alphaProperty && alphaProperty->GetAlphaBlending()) {
 		if (auto* data = pass->geometry->GetExtraData(NiExtraDataName_AnisotropicAlphaMaterial)) {
 			static const REL::Relocation<const RE::NiRTTI*> NiIntegerExtraDataRTTI{ RE::NiIntegerExtraData::Ni_RTTI };
 			if (data->GetRTTI() == NiIntegerExtraDataRTTI.get()) {
