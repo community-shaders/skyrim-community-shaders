@@ -140,7 +140,7 @@ inline float4 StochasticEffect(float rnd, float mipLevel, Texture2D tex, Sampler
 {
 	// Use standard mip bias - terrain variation disables MipBias at source when enabled
 	float adjustedMipLevel = mipLevel + SharedData::MipBias;
-	
+
 	// Take first sample (always needed)
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
 
