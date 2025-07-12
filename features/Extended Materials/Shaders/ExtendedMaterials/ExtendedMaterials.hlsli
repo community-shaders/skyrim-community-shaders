@@ -63,26 +63,21 @@ namespace ExtendedMaterials
 			// Compute the current mip level  (* 0.5 is effectively computing a square root before )
 			float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
 
-		#if !defined(PARALLAX) && !defined(TRUE_PBR) && !defined(TERRAIN_VARIATION)
+		#if !defined(PARALLAX) && !defined(TRUE_PBR)
 				mipLevel++;
 		#endif
 
 		// VR: Apply more conservative mipmap level adjustments to reduce over-blurring and shimmering
-		#if defined(VR)
-			#if defined(TERRAIN_VARIATION) && defined(LANDSCAPE)
-				// No additional VR mip penalty when terrain variation is active - let TV handle mip adjustments
-			#else
+		#if defined(VR) && !defined(TERRAIN_VARIATION)
 				mipLevel++;
-			#endif
 		#endif
 
-		#if defined(TERRAIN_VARIATION) && defined(LANDSCAPE)
-			#if !defined(VR)
+	#if defined(TERRAIN_VARIATION) && defined(LANDSCAPE) && !defined(VR)
+			// Only increase mip level when TAA is enabled (MipBias > 0 indicates TAA is active)
+			if (SharedData::MipBias > 0.0) {
 				mipLevel++; // Increase mip level to match vanilla appearance since terrain variation tends to be sharper than vanilla.
-			#else
-				// When VR + terrain variation are both active, no additional mip penalty - VR gets only TV features without mip changes
-			#endif
-		#endif
+			}
+	#endif
 
 		return mipLevel;
 	}
