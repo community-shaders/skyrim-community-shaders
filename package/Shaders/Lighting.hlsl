@@ -3312,19 +3312,20 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(ANISOTROPIC_ALPHA)
 	// Uniform alpha material settings
 	uint AlphaMaterialModel = ExtendedTranslucency::GetMaterialModelFromDescriptor(Permutation::ExtraFeatureDescriptor);
-	float AlphaMaterialReduction = 0.f;
-	float AlphaMaterialSoftness = 0.f;
-	float AlphaMaterialStrength = 0.f;
-	if (AlphaMaterialModel == ExtendedTranslucency::MaterialModel::Default) {
-		AlphaMaterialModel = SharedData::extendedTranslucencySettings.MaterialModel;
-		AlphaMaterialReduction = SharedData::extendedTranslucencySettings.Reduction;
-		AlphaMaterialSoftness = SharedData::extendedTranslucencySettings.Softness;
-		AlphaMaterialStrength = SharedData::extendedTranslucencySettings.Strength;
-	}
-
 	[branch] if (ExtendedTranslucency::IsValidMaterial(AlphaMaterialModel))
 	{
 		if (alpha >= 0.0156862754 && alpha < 1.0) {
+			float AlphaMaterialReduction = 0.f;
+			float AlphaMaterialSoftness = 0.f;
+			float AlphaMaterialStrength = 0.f;
+			
+			if (AlphaMaterialModel == ExtendedTranslucency::MaterialModel::Default) {
+				AlphaMaterialModel = SharedData::extendedTranslucencySettings.MaterialModel;
+				AlphaMaterialReduction = SharedData::extendedTranslucencySettings.Reduction;
+				AlphaMaterialSoftness = SharedData::extendedTranslucencySettings.Softness;
+				AlphaMaterialStrength = SharedData::extendedTranslucencySettings.Strength;
+			}
+
 			float originalAlpha = alpha;
 			alpha = alpha * (1.0 - AlphaMaterialReduction);
 			[branch] if (AlphaMaterialModel == ExtendedTranslucency::MaterialModel::AnisotropicFabric)
