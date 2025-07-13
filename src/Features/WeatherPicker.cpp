@@ -2,6 +2,14 @@
 #include "Feature.h"
 #include "Menu.h"
 #include "Utils/Game.h"
+#include <nlohmann/json.hpp>
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	WeatherPicker::WeatherDetailsWindowSettings,
+	Enabled,
+	ShowInOverlay,
+	Position,
+	PositionSet)
 
 void WeatherPicker::DataLoaded()
 {
@@ -26,20 +34,19 @@ std::pair<std::string, std::vector<std::string>> WeatherPicker::GetFeatureSummar
 void WeatherPicker::DrawSettings()
 {
 	if (ImGui::TreeNodeEx("Weather Details", ImGuiTreeNodeFlags_DefaultOpen)) {
-		auto menu = Menu::GetSingleton();
-		const auto& themeSettings = menu->GetTheme();
-		const auto& menuSettings = menu->GetSettings();
+		const auto& themeSettings = Menu::GetSingleton()->GetTheme();
+		const auto& menuSettings = Menu::GetSingleton()->GetSettings();
 
 		// Show as Overlay checkbox
-		bool windowEnabled = menuSettings.WeatherDetailsWindow.Enabled;
-		if (ImGui::Checkbox("Show as Overlay", &windowEnabled)) {
-			menu->GetSettings().WeatherDetailsWindow.Enabled = windowEnabled;
+		bool showInOverlay = WeatherPicker::GetSingleton()->WeatherDetailsWindow.ShowInOverlay;
+		if (ImGui::Checkbox("Show in Overlay", &showInOverlay)) {
+			WeatherPicker::GetSingleton()->WeatherDetailsWindow.ShowInOverlay = showInOverlay;
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Opens weather details in a separate window that stays open\neven when the main menu is closed. ");
 			ImGui::Text("Toggle with ");
 			ImGui::SameLine();
-			ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Menu::KeyIdToString(menuSettings.PerfOverlay.OverlayToggleKey));
+			ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Menu::KeyIdToString(menuSettings.OverlayToggleKey));
 		}
 		ImGui::Spacing();
 
@@ -58,24 +65,21 @@ void WeatherPicker::RenderWeatherDetailsWindow(bool* open)
 	if (!*open)
 		return;
 
-	auto menu = Menu::GetSingleton();
-	auto& settings = menu->GetSettings();
-
 	// Set initial position if not already set
-	if (!settings.WeatherDetailsWindow.PositionSet) {
+	if (!WeatherDetailsWindow.PositionSet) {
 		ImGui::SetNextWindowPos(ImVec2(50.0f, 50.0f));
-		settings.WeatherDetailsWindow.Position = ImVec2(50.0f, 50.0f);
-		settings.WeatherDetailsWindow.PositionSet = true;
+		WeatherDetailsWindow.Position = ImVec2(50.0f, 50.0f);
+		WeatherDetailsWindow.PositionSet = true;
 	} else {
-		ImGui::SetNextWindowPos(settings.WeatherDetailsWindow.Position, ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowPos(WeatherDetailsWindow.Position, ImGuiCond_FirstUseEver);
 	}
 
 	ImGui::SetNextWindowSize(ImVec2(600, 800), ImGuiCond_FirstUseEver);
 	if (ImGui::Begin("Weather Details##Popup", open, ImGuiWindowFlags_None)) {
 		// Remember window position for next frame
 		ImVec2 currentPos = ImGui::GetWindowPos();
-		if (currentPos.x != settings.WeatherDetailsWindow.Position.x || currentPos.y != settings.WeatherDetailsWindow.Position.y) {
-			settings.WeatherDetailsWindow.Position = currentPos;
+		if (currentPos.x != WeatherDetailsWindow.Position.x || currentPos.y != WeatherDetailsWindow.Position.y) {
+			WeatherDetailsWindow.Position = currentPos;
 		}
 
 		// Enable interactive elements when a menu is open
@@ -194,8 +198,7 @@ void WeatherPicker::DisplayLightningInfo(RE::TESWeather* weather, bool showInter
 {
 	if (!weather || weather->data.thunderLightningFrequency <= 0)
 		return;
-	auto menu = Menu::GetSingleton();
-	const auto& theme = menu->GetTheme();
+	const auto& theme = Menu::GetSingleton()->GetTheme();
 	uint8_t lightningR = weather->data.lightningColor.red;
 	uint8_t lightningG = weather->data.lightningColor.green;
 	uint8_t lightningB = weather->data.lightningColor.blue;
@@ -288,8 +291,7 @@ void WeatherPicker::DisplayWindInfo(RE::TESWeather* weather)
 	auto sky = globals::game::sky;
 	if (!weather || (weather->data.windSpeed <= 0 && (!sky || sky->windSpeed <= 0.0f)))
 		return;
-	auto menu = Menu::GetSingleton();
-	const auto& theme = menu->GetTheme();
+	const auto& theme = Menu::GetSingleton()->GetTheme();
 	float windSpeedDisplay = weather->data.windSpeed / 255.0f;
 	ImGui::BulletText("Weather Wind Speed: %.2f (raw %d)", windSpeedDisplay, weather->data.windSpeed);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -853,4 +855,22 @@ std::string WeatherPicker::GetDisplayName(const RE::TESWeather* weather)
 		return std::string(editorID);
 	}
 	return std::to_string(weather->GetFormID());
+}
+
+void WeatherPicker::DrawOverlay()
+{
+	bool overlayVisible = Menu::GetSingleton()->overlayVisible;
+	// If ShowInOverlay is true and overlay is visible, auto-enable the window if not already enabled
+	if (WeatherDetailsWindow.ShowInOverlay && overlayVisible) {
+		if (!WeatherDetailsWindow.Enabled) {
+			WeatherDetailsWindow.Enabled = true;
+		}
+		bool* p_open = &WeatherDetailsWindow.Enabled;
+		RenderWeatherDetailsWindow(p_open);
+	}
+}
+
+bool WeatherPicker::IsOverlayVisible() const
+{
+	return WeatherDetailsWindow.ShowInOverlay;
 }

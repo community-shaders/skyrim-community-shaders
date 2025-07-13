@@ -10,16 +10,17 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <functional>
+#include <iomanip>
+#include <sstream>
 #include <stb_image.h>
 #include <string>
 #include <vector>
 
 namespace Util
 {
-	PerformanceOverlay performanceOverlay;
-
 	HoverTooltipWrapper::HoverTooltipWrapper()
 	{
 		hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal);
@@ -552,6 +553,13 @@ namespace Util
 		}
 	}
 
+	void DrawColoredMultiLineTooltip(const ColoredTextLines& lines)
+	{
+		for (const auto& line : lines) {
+			ImGui::TextColored(line.color, "%s", line.text.c_str());
+		}
+	}
+
 	void SortTableRowsByColumn(std::vector<std::vector<std::string>>& rows, size_t column, bool ascending)
 	{
 		std::sort(rows.begin(), rows.end(), [column, ascending](const auto& a, const auto& b) {
@@ -597,52 +605,13 @@ namespace Util
 		return VersionStringLess(a, b, asc);
 	};
 
-	void ShowSortedStringTable(
-		const char* table_id,
-		const std::vector<std::string>& headers,
-		std::vector<std::vector<std::string>> rows,
-		size_t sortColumn,
-		bool ascending,
-		const std::vector<TableSortFunc>& customSorts)
+	ImVec4 GetThresholdColor(float value, float good, float warn, ImVec4 goodColor, ImVec4 warnColor, ImVec4 badColor)
 	{
-		ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable;
-		if (ImGui::BeginTable(table_id, static_cast<int>(headers.size()), flags)) {
-			for (const auto& header : headers)
-				ImGui::TableSetupColumn(header.c_str());
-			ImGui::TableHeadersRow();
-
-			// Interactive sorting
-			int sortCol = static_cast<int>(sortColumn);
-			bool sortAsc = ascending;
-			if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
-				if (sortSpecs->SpecsCount > 0) {
-					sortCol = sortSpecs->Specs->ColumnIndex;
-					sortAsc = sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending;
-				}
-			}
-			if (sortCol >= 0 && static_cast<size_t>(sortCol) < headers.size()) {
-				if (sortCol < static_cast<int>(customSorts.size()) && customSorts[sortCol]) {
-					auto cmp = customSorts[sortCol];
-					std::sort(rows.begin(), rows.end(), [sortCol, sortAsc, &cmp](const auto& a, const auto& b) {
-						return cmp(a[sortCol], b[sortCol], sortAsc);
-					});
-				} else {
-					std::sort(rows.begin(), rows.end(), [sortCol, sortAsc](const auto& a, const auto& b) {
-						return sortAsc ? (a[sortCol] < b[sortCol]) : (a[sortCol] > b[sortCol]);
-					});
-				}
-			}
-			// else: no sorting if sortCol is invalid
-
-			for (const auto& row : rows) {
-				ImGui::TableNextRow();
-				for (size_t col = 0; col < headers.size(); ++col) {
-					ImGui::TableSetColumnIndex(static_cast<int>(col));
-					if (col < row.size())
-						ImGui::TextUnformatted(row[col].c_str());
-				}
-			}
-			ImGui::EndTable();
-		}
+		if (value < good)
+			return goodColor;
+		else if (value < warn)
+			return warnColor;
+		else
+			return badColor;
 	}
 }  // namespace Util

@@ -14,6 +14,7 @@
 #include "Features/InverseSquareLighting.h"
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
+#include "Features/PerformanceOverlay.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/SkySync.h"
@@ -206,6 +207,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		globals::features::cloudShadows,
 		globals::features::waterEffects,
 		globals::features::weatherPicker,
+		globals::features::performanceOverlay,
 		globals::features::subsurfaceScattering,
 		globals::features::terrainShadows,
 		globals::features::screenSpaceGI,

@@ -1,8 +1,9 @@
 #pragma once
 
-#include "Feature.h"
+#include "Menu.h"
+#include "OverlayFeature.h"
 
-struct WeatherPicker : Feature
+struct WeatherPicker : OverlayFeature
 {
 	static WeatherPicker* GetSingleton()
 	{
@@ -35,6 +36,14 @@ struct WeatherPicker : Feature
 	// --- Refactor helpers for RenderCoreWeatherDetails ---
 	static void RenderWeatherControls(RE::Sky* sky);
 	static void RenderWeatherInformationDisplay(RE::Sky* sky, bool showInteractiveElements = true);
+
+	struct WeatherDetailsWindowSettings
+	{
+		bool Enabled = false;
+		bool ShowInOverlay = false;
+		ImVec2 Position = ImVec2(50.f, 50.f);
+		bool PositionSet = false;
+	} WeatherDetailsWindow;
 
 public:
 	/**
@@ -108,4 +117,8 @@ private:
 	static void UpdateFilteredWeathers();
 	static int FindWeatherIndex(RE::TESWeather* targetWeather);
 	static std::vector<std::string> GetWeatherFlagNames(RE::TESWeather* weather);
+
+	// Implement OverlayFeature interface
+	void DrawOverlay() override;
+	bool IsOverlayVisible() const override;
 };

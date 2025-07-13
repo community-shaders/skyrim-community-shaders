@@ -23,6 +23,9 @@
 #include "Utils/UI.h"
 
 #include "Features/LightLimitFix/ParticleLights.h"
+#include "Features/PerformanceOverlay.h"
+#include "Features/PerformanceOverlay/ABTesting/ABTestAggregator.h"
+#include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
 #include "Features/WeatherPicker.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -46,29 +49,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ColorDefault,
 	ColorHovered,
 	MinimizedFactor)
-
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-	Menu::Settings::PerfOverlaySettings,
-	Enabled,
-	ShowDrawCalls,
-	ShowVRAM,
-	ShowFPS,
-	ShowPreFGFrameTimeGraph,
-	ShowPostFGFrameTimeGraph,
-	UpdateInterval,
-	FrameHistorySize,
-	Size,
-	BackgroundOpacity,
-	ShowBorder,
-	Position,
-	PositionSet,
-	OverlayToggleKey)
-
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-	Menu::Settings::WeatherDetailsWindowSettings,
-	Enabled,
-	Position,
-	PositionSet)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ImGuiStyle,
@@ -124,8 +104,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ToggleKey,
 	SkipCompilationKey,
 	EffectToggleKey,
-	Theme,
-	PerfOverlay)
+	OverlayToggleKey,
+	Theme)
 
 constexpr std::uint16_t KEY_PRESSED_MASK = 0x8000;
 
@@ -145,17 +125,17 @@ void Menu::SetupImGuiStyle() const
 	style.HoverDelayNormal = themeSettings.TooltipHoverDelay;
 
 	if (themeSettings.UseSimplePalette) {
-		float hovoredAlpha{ 0.1f };
+		float hoveredAlpha{ 0.1f };
 
 		ImVec4 resizeGripHovered = themeSettings.Palette.Border;
-		resizeGripHovered.w = hovoredAlpha;
+		resizeGripHovered.w = hoveredAlpha;
 
 		ImVec4 textDisabled = themeSettings.Palette.Text;
 		textDisabled.w = 0.3f;
 
 		ImVec4 header{ 1.0f, 1.0f, 1.0f, 0.15f };
 		ImVec4 headerHovered = header;
-		headerHovered.w = hovoredAlpha;
+		headerHovered.w = hoveredAlpha;
 
 		ImVec4 tabHovered{ 0.2f, 0.2f, 0.2f, 1.0f };
 
@@ -1231,6 +1211,21 @@ void Menu::DrawGeneralSettings()
 					settingSkipCompilationKey = true;
 				}
 			}
+			if (settingOverlayToggleKey) {
+				ImGui::Text("Press any key to set as a toggle key for displaying the overlay...");
+			} else {
+				ImGui::AlignTextToFramePadding();
+				ImGui::Text("Overlay Toggle Key:");
+				ImGui::SameLine();
+				ImGui::AlignTextToFramePadding();
+				ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", KeyIdToString(settings.OverlayToggleKey));
+
+				ImGui::AlignTextToFramePadding();
+				ImGui::SameLine();
+				if (ImGui::Button("Change##OverlayToggle")) {
+					settingOverlayToggleKey = true;
+				}
+			}
 			ImGui::EndTabItem();
 		}
 		if (ImGui::BeginTabItem("Interface")) {
@@ -1422,26 +1417,9 @@ void Menu::DrawAdvancedSettings()
 				"The more threads the faster compilation will finish but may make the system unresponsive. ");
 		}
 
-		if (ImGui::SliderInt("Test Interval", reinterpret_cast<int*>(&testInterval), 0, 10)) {
-			if (testInterval == 0) {
-				inTestMode = false;
-				logger::info("Disabling test mode.");
-				globals::state->Load(State::ConfigMode::TEST);  // restore last settings before entering test mode
-			} else if (!inTestMode) {
-				logger::info("Saving current settings for test mode and starting test with interval {}.", testInterval);
-				globals::state->Save(State::ConfigMode::TEST);
-				inTestMode = true;
-			} else {
-				logger::info("Setting new interval {}.", testInterval);
-			}
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Sets number of seconds before toggling between default USER and TEST config. "
-				"0 disables. Non-zero will enable testing mode. "
-				"Enabling will save current settings as TEST config. "
-				"This has no impact if no settings are changed. ");
-		}
+		// A/B Testing settings
+		auto* abTestingManager = ABTestingManager::GetSingleton();
+		abTestingManager->DrawSettingsUI();
 		bool useFileWatcher = shaderCache->UseFileWatcher();
 		ImGui::TableNextColumn();
 		if (ImGui::Checkbox("Enable File Watcher", &useFileWatcher)) {
@@ -1488,17 +1466,16 @@ void Menu::DrawAdvancedSettings()
 	if (ImGui::CollapsingHeader("Replace Original Shaders", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
 		auto state = globals::state;
 		if (ImGui::BeginTable("##ReplaceToggles", 3, ImGuiTableFlags_SizingStretchSame)) {
-			for (int classIndex = 0; classIndex < RE::BSShader::Type::Total - 1; ++classIndex) {
+			globals::state->ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
 				ImGui::TableNextColumn();
 
-				auto type = (RE::BSShader::Type)(classIndex + 1);
 				if (!(SIE::ShaderCache::IsSupportedShader(type) || state->IsDeveloperMode())) {
 					ImGui::BeginDisabled();
 					ImGui::Checkbox(std::format("{}", magic_enum::enum_name(type)).c_str(), &state->enabledClasses[classIndex]);
 					ImGui::EndDisabled();
 				} else
 					ImGui::Checkbox(std::format("{}", magic_enum::enum_name(type)).c_str(), &state->enabledClasses[classIndex]);
-			}
+			});
 			if (state->IsDeveloperMode()) {
 				ImGui::Checkbox("Vertex", &state->enableVShaders);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -1595,8 +1572,7 @@ void Menu::DrawDisplaySettings()
 		auto& themeSettings = settings.Theme;
 
 		const std::vector<std::pair<std::string, std::function<void()>>> features = {
-			{ "Upscaling", []() { globals::upscaling->DrawSettings(); } },
-			{ "Performance Overlay", [this]() { DrawPerformanceOverlaySettings(); } }
+			{ "Upscaling", []() { globals::upscaling->DrawSettings(); } }
 		};
 
 		for (const auto& [featureName, drawFunc] : features) {
@@ -1643,7 +1619,8 @@ void Menu::DrawOverlay()
 	auto shaderCache = globals::shaderCache;
 	auto failed = shaderCache->GetFailedTasks();
 	auto hide = shaderCache->IsHideErrors();
-	if (!(shaderCache->IsCompiling() || IsEnabled || inTestMode || (failed && !hide) || settings.PerfOverlay.Enabled)) {
+	auto* abTestingManager = ABTestingManager::GetSingleton();
+	if (!(shaderCache->IsCompiling() || IsEnabled || abTestingManager->IsEnabled() || (failed && !hide) || PerformanceOverlay::GetSingleton()->settings.ShowInOverlay)) {
 		auto& io = ImGui::GetIO();
 		io.ClearInputKeys();
 		io.ClearEventsQueue();
@@ -1714,30 +1691,35 @@ void Menu::DrawOverlay()
 	} else {
 		ImGui::GetIO().MouseDrawCursor = false;
 	}
-	if (settings.PerfOverlay.Enabled)
-		DrawPerfOverlay();
-
-	// Draw weather details window independently of main menu
-	DrawWeatherDetailsWindow();
-
-	if (inTestMode) {  // In test mode
-		float seconds = (float)duration_cast<std::chrono::milliseconds>(high_resolution_clock::now() - lastTestSwitch).count() / 1000.0f;
-		auto remaining = (float)testInterval - seconds;
-		if (remaining < 0.0f) {
-			usingTestConfig = !usingTestConfig;
-			logger::info("Swapping mode to {}", usingTestConfig ? "test" : "user");
-			globals::state->Load(usingTestConfig ? State::ConfigMode::TEST : State::ConfigMode::USER);
-			lastTestSwitch = high_resolution_clock::now();
+	// load overlays
+	for (Feature* feat : Feature::GetFeatureList()) {
+		if (feat && feat->loaded) {
+			if (auto* overlay = dynamic_cast<OverlayFeature*>(feat)) {
+				overlay->DrawOverlay();
+			}
 		}
-		ImGui::SetNextWindowBgAlpha(1.0f);
-		ImGui::SetNextWindowPos(ImVec2(10, 10));
-		if (!ImGui::Begin("Testing", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
-			ImGui::End();
-			return;
-		}
-		ImGui::Text(fmt::format("{} Mode : {:.1f} seconds left", usingTestConfig ? "Test" : "User", remaining).c_str());
-		ImGui::End();
 	}
+
+	// A/B Testing management
+	abTestingManager->Update();
+
+	// Always update test data during TEST phase, regardless of overlay visibility
+	if (abTestingManager->IsEnabled()) {
+		PerformanceOverlay::GetSingleton()->UpdateAllShaderTestData();
+
+		// Add A/B test aggregator data collection here
+		if (auto* overlay = PerformanceOverlay::GetSingleton()) {
+			auto [mainRows, summaryRows] = overlay->BuildDrawCallRows();
+			std::vector<DrawCallRow> allRows = mainRows;
+			allRows.insert(allRows.end(), summaryRows.begin(), summaryRows.end());
+
+			// Update the A/B test aggregator with current frame data
+			abTestingManager->GetAggregator().OnFrame(allRows);
+		}
+	}
+
+	// Draw A/B testing overlay
+	abTestingManager->DrawOverlayUI();
 
 	ImGuiStyle& style = ImGui::GetStyle();
 	style = oldStyle;
@@ -1746,641 +1728,12 @@ void Menu::DrawOverlay()
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 }
 
-void Menu::DrawPerfOverlay()
-{
-	if (!settings.PerfOverlay.Enabled) {
-		return;
-	}
-
-	// Set window flags - no decoration and only movable when ShowBorder is true
-	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize;
-
-	// Only allow mouse interaction when the main menu is open
-	if (!IsEnabled) {
-		windowFlags |= ImGuiWindowFlags_NoInputs;
-	}
-
-	if (!settings.PerfOverlay.ShowBorder) {
-		windowFlags |= ImGuiWindowFlags_NoBackground;
-	} else {
-		windowFlags &= ~ImGuiWindowFlags_NoDecoration;
-		windowFlags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize;
-	}
-
-	// Set background opacity
-	ImGui::PushStyleColor(ImGuiCol_WindowBg,
-		ImVec4(ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).x,
-			ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).y,
-			ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).z,
-			settings.PerfOverlay.BackgroundOpacity));
-
-	// Set text size based on user preference
-	perfOverlayState.textScale = perfOverlayState.SetTextScale(settings.PerfOverlay);
-
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, settings.PerfOverlay.ShowBorder ? 1.0f : 0.0f);
-
-	// Set initial position if not already set
-	if (!settings.PerfOverlay.PositionSet) {
-		ImGui::SetNextWindowPos(ImVec2(10.0f, 10.0f));
-		settings.PerfOverlay.Position = ImVec2(10.0f, 10.0f);
-		settings.PerfOverlay.PositionSet = true;
-	} else {
-		ImGui::SetNextWindowPos(settings.PerfOverlay.Position, ImGuiCond_FirstUseEver);
-	}
-
-	// Set window size based on whether graphs are shown, was rapidly changing size based on text
-	perfOverlayState.hasGraphs = settings.PerfOverlay.ShowPreFGFrameTimeGraph ||
-	                             (settings.PerfOverlay.ShowPostFGFrameTimeGraph && perfOverlayState.isFrameGenerationActive);
-	if (!perfOverlayState.hasGraphs) {
-		float fixedWidth = 325.0f * perfOverlayState.textScale;
-		ImGui::SetNextWindowSize(ImVec2(fixedWidth, 0), ImGuiCond_Always);
-	}
-
-	// Create the window
-	ImGui::Begin("Performance Overlay", NULL, windowFlags);
-
-	// Remember window position for next frame
-	if (ImGui::IsWindowAppearing()) {
-		ImGui::SetWindowPos(settings.PerfOverlay.Position);
-	}
-
-	// Track if window has been moved
-	ImVec2 currentPos = ImGui::GetWindowPos();
-	if (currentPos.x != settings.PerfOverlay.Position.x || currentPos.y != settings.PerfOverlay.Position.y) {
-		settings.PerfOverlay.Position = currentPos;
-	}
-
-	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 1.0f));  // Tighter spacing
-	ImGui::SetWindowFontScale(perfOverlayState.textScale);
-
-	// Initialize Performance Counter if necessary
-	if (!perfOverlayState.initialized) {
-		REX::W32::QueryPerformanceFrequency(&perfOverlayState.frequency);
-		REX::W32::QueryPerformanceCounter(&perfOverlayState.lastFrameCounter);
-		perfOverlayState.initialized = true;
-	} else {
-		REX::W32::QueryPerformanceCounter(&perfOverlayState.currentFrameCounter);
-		int64_t elapsedCounter = perfOverlayState.currentFrameCounter - perfOverlayState.lastFrameCounter;
-		perfOverlayState.lastFrameCounter = perfOverlayState.currentFrameCounter;
-
-		// Calculate frametime and fps
-		perfOverlayState.frameTimeMs = Util::performanceOverlay.CalcFrameTime(elapsedCounter, perfOverlayState.frequency);
-		perfOverlayState.fps = Util::performanceOverlay.CalcFPS(perfOverlayState.frameTimeMs);
-
-		// Calculate smooth values for display using the user-defined update interval
-		auto now = std::chrono::steady_clock::now();
-		float deltaTime = std::chrono::duration<float>(now - perfOverlayState.lastUpdateTime).count();
-		perfOverlayState.lastUpdateTime = now;
-
-		// Update graph values
-		perfOverlayState.UpdateGraphValues(settings.PerfOverlay);
-
-		// Update smooth values with user-specified interval
-		perfOverlayState.updateTimer += deltaTime;
-		if (perfOverlayState.updateTimer >= settings.PerfOverlay.UpdateInterval) {
-			perfOverlayState.smoothFps = perfOverlayState.fps;
-			perfOverlayState.smoothFrameTimeMs = perfOverlayState.frameTimeMs;
-			perfOverlayState.updateTimer = 0.0f;
-		}
-
-		// Check if Frame Generation is active
-		perfOverlayState.isFrameGenerationActive = globals::upscaling && globals::upscaling->IsFrameGenerationActive();
-
-		if (perfOverlayState.isFrameGenerationActive) {
-			perfOverlayState.UpdateFGFrameTime(settings.PerfOverlay);
-		}
-
-		// Show FPS counter if enabled
-		if (settings.PerfOverlay.ShowFPS) {
-			perfOverlayState.DrawFPS(settings.PerfOverlay);
-		}
-	}
-
-	// Show Draw Calls if enabled
-	if (settings.PerfOverlay.ShowDrawCalls) {
-		ImGui::Separator();
-		perfOverlayState.DrawDrawCalls();
-		ImGui::Separator();
-	}
-
-	// VRAM & GPU Usage
-	if (settings.PerfOverlay.ShowVRAM && dxgiAdapter3) {
-		perfOverlayState.DrawVRAM(dxgiAdapter3);
-	}
-
-	ImGui::PopStyleVar();             // ItemSpacing
-	ImGui::SetWindowFontScale(1.0f);  // Reset font scale
-
-	ImGui::End();
-	ImGui::PopStyleVar();    // WindowBorderSize
-	ImGui::PopStyleColor();  // WindowBg
-}
-
-float Menu::PerfOverlayState::SetTextScale(Settings::PerfOverlaySettings& settings)
-{
-	switch (settings.Size) {
-	case Settings::PerfOverlaySettings::TextSize::Small:
-		return 0.8f;
-	case Settings::PerfOverlaySettings::TextSize::Medium:
-		return 1.0f;
-	case Settings::PerfOverlaySettings::TextSize::Large:
-		return 1.2f;
-	}
-	return 1.0f;
-}
-
-/**
- * @brief Updates all runtime state related to the performance overlay graph.
- *
- * This function synchronizes the frame time history buffer, tracks min/max frame times,
- * and computes the normalized Y-axis range for the frame time graph using statistical analysis.
- *
- * Steps performed:
- *   1. Resizes the frameTimeHistory buffer if the user has changed the setting.
- *   2. Inserts the latest frame time into the circular history buffer.
- *   3. Updates instantaneous min/max frame time values, with full rescans if necessary.
- *   4. Calculates the average (mean) and standard deviation of frame times in the buffer.
- *   5. Sets the graph Y-axis range to be centered on the average, with a spread of ±2 standard deviations,
- *      clamped to user-friendly minimum and maximum values.
- *   6. Smooths the min/max Y-axis values for visual stability using exponential smoothing.
- *
- *
- * @param settings Reference to the current performance overlay settings (controls buffer size, etc.).
- */
-void Menu::PerfOverlayState::UpdateGraphValues(Settings::PerfOverlaySettings& settings)
-{
-	// Sync frame history buffer size with user settings
-	UpdateFrameTimeHistorySizes(settings);
-
-	// Insert latest frame time into circular buffer
-	float oldFrameTime = frameTimeHistory[frameTimeHistoryIndex];
-	frameTimeHistory[frameTimeHistoryIndex] = frameTimeMs;
-	frameTimeHistoryIndex = (frameTimeHistoryIndex + 1) % settings.FrameHistorySize;
-
-	// Maintain instantaneous min/max tracking
-	if (frameTimeMs > maxFrameTime) {
-		maxFrameTime = frameTimeMs;
-	} else if (frameTimeMs < minFrameTime) {
-		minFrameTime = frameTimeMs;
-	} else if (oldFrameTime == minFrameTime) {
-		UpdateMinFrameTime();
-	} else if (oldFrameTime == maxFrameTime) {
-		UpdateMaxFrameTime();
-	}
-
-	float avgFrameTime, stdDev, graphMin, graphMax;
-	// Calculate mean and standard deviation for normalized graph range
-	if (frameTimeHistory.empty()) {
-		// Default to 60 FPS
-		avgFrameTime = 16.67f;
-		stdDev = 0.0f;
-		graphMin = 0.0f;
-		graphMax = 33.0f;
-	} else {
-		// Calculate average frame time
-		avgFrameTime = std::accumulate(frameTimeHistory.begin(), frameTimeHistory.end(), 0.0f) / frameTimeHistory.size();
-
-		// Calculate standard deviation
-		float variance = 0.0f;
-		for (float ft : frameTimeHistory) {
-			float diff = ft - avgFrameTime;
-			variance += diff * diff;
-		}
-		variance /= frameTimeHistory.size();
-		stdDev = std::sqrt(variance);
-
-		// Calculate graph range
-		float spread = std::clamp(stdDev * 2.0f, 2.0f, 20.0f);
-		graphMin = std::max(0.0f, avgFrameTime - spread);
-		graphMax = avgFrameTime + spread;
-	}
-
-	// Exponential smoothing for stable graph scaling
-	smoothedMinFrameTime += kSmoothingFactor * (graphMin - smoothedMinFrameTime);
-	smoothedMaxFrameTime += kSmoothingFactor * (graphMax - smoothedMaxFrameTime);
-}
-
-/**
- * @brief Updates the minimum frame time value by scanning the frame time history buffer.
- *
- * Finds the smallest frame time currently in the frameTimeHistory buffer and updates minFrameTime accordingly.
- * Assumes frameTimeHistory is non-empty.
- */
-void Menu::PerfOverlayState::UpdateMinFrameTime()
-{
-	minFrameTime = *std::min_element(frameTimeHistory.begin(), frameTimeHistory.end());
-}
-
-/**
- * @brief Updates the maximum frame time value by scanning the frame time history buffer.
- *
- * Finds the largest frame time currently in the frameTimeHistory buffer and updates maxFrameTime accordingly.
- * Assumes frameTimeHistory is non-empty.
- */
-void Menu::PerfOverlayState::UpdateMaxFrameTime()
-{
-	maxFrameTime = *std::max_element(frameTimeHistory.begin(), frameTimeHistory.end());
-}
-
-/**
- * @brief Updates post-frame generation (FG) frame time and FPS history values.
- *
- * Retrieves the latest frame time from the Frame Generation system if available, updates smoothed values,
- * and maintains a circular buffer of post-FG frame times. Falls back to an approximation if FG timing is unavailable.
- *
- * @param settings Reference to the current performance overlay settings (controls buffer size, etc.).
- */
-void Menu::PerfOverlayState::UpdateFGFrameTime(Settings::PerfOverlaySettings& settings)
-{
-	// Get frametime directly from the Frame Generation system
-	float fgDeltaTime = globals::upscaling->GetFrameGenerationFrameTime();
-	if (fgDeltaTime > 0.0f) {
-		postFGFrameTimeMs = fgDeltaTime * 1000.0f;
-		postFGFps = 1000.0f / postFGFrameTimeMs;
-
-		// Update post-FG smooth values when timer elapses
-		if (updateTimer <= 0.0f) {
-			postFGSmoothFps = postFGFps;
-			postFGSmoothFrameTimeMs = postFGFrameTimeMs;
-		}
-
-		// Update post-FG frametime history
-		postFGFrameTimeHistory[postFGFrameTimeHistoryIndex] = postFGFrameTimeMs;
-		postFGFrameTimeHistoryIndex = (postFGFrameTimeHistoryIndex + 1) % settings.FrameHistorySize;
-	} else {
-		// Fallback if FG time is not available
-		postFGFrameTimeMs = frameTimeMs / 2.0f;  // Approximate
-		postFGFps = fps * 2.0f;                  // Approximate
-
-		// Update smooth values when timer elapses
-		if (updateTimer <= 0.0f) {
-			postFGSmoothFps = postFGFps;
-			postFGSmoothFrameTimeMs = postFGFrameTimeMs;
-		}
-
-		// Update post-FG frametime history with approximation
-		postFGFrameTimeHistory[postFGFrameTimeHistoryIndex] = postFGFrameTimeMs;
-		postFGFrameTimeHistoryIndex = (postFGFrameTimeHistoryIndex + 1) % settings.FrameHistorySize;
-	}
-}
-
-/**
- * @brief Renders the FPS and frametime statistics using ImGui, including graphs and reference lines.
- *
- * Displays pre- and post-frame generation FPS and frametime values, as well as line graphs if enabled in settings.
- * Handles both standard and frame generation rendering modes, and draws reference lines for common FPS targets.
- *
- * @param settings Reference to the current performance overlay settings (controls what is displayed).
- */
-void Menu::PerfOverlayState::DrawFPS(Settings::PerfOverlaySettings& settings)
-{
-	if (ImGui::BeginTable("FrametimeTargets", 2, ImGuiTableFlags_SizingStretchProp)) {
-		ImGui::TableSetupColumn("##prop", ImGuiTableColumnFlags_WidthFixed, ImGui::GetTextLineHeight() * 5);
-		ImGui::TableSetupColumn("##value");
-
-		ImGui::TableNextColumn();
-		ImGui::Text(isFrameGenerationActive ? "Raw FPS:" : "FPS:");
-		ImGui::TableNextColumn();
-		ImGui::Text("%.1f (%.2f ms)", smoothFps, smoothFrameTimeMs);
-
-		if (isFrameGenerationActive) {
-			ImGui::TableNextColumn();
-			ImGui::Text("Post-FG FPS:");
-			ImGui::TableNextColumn();
-			ImGui::Text("%.1f (%.2f ms)", postFGSmoothFps, postFGSmoothFrameTimeMs);
-		}
-
-		ImGui::EndTable();
-	}
-
-	// Show Pre-FG frametime graph if enabled
-	if (settings.ShowPreFGFrameTimeGraph) {
-		// Prepare overlay text
-		char overlay_text[128];
-		snprintf(overlay_text, IM_ARRAYSIZE(overlay_text),
-			"%s%.2f ms (%.1f FPS)",
-			isFrameGenerationActive ? "Pre-FG: " : "",
-			smoothFrameTimeMs, smoothFps);
-
-		// Set graph colors
-		ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));  // Green line
-
-		// Draw the graph
-		ImGui::PlotLines("##frametime",
-			frameTimeHistory.data(),
-			settings.FrameHistorySize,
-			frameTimeHistoryIndex,
-			overlay_text,
-			smoothedMinFrameTime, smoothedMaxFrameTime,
-			ImVec2(-FLT_MIN, 50.0f * textScale));
-
-		ImGui::PopStyleColor();
-
-		// Draw frametime target reference lines
-		if (ImGui::BeginTable("FrametimeTargets", 3, ImGuiTableFlags_SizingStretchSame)) {
-			ImGui::TableNextColumn();
-			ImGui::Text("30 FPS: 33.3 ms");
-
-			ImGui::TableNextColumn();
-			ImGui::Text("60 FPS: 16.7 ms");
-
-			ImGui::TableNextColumn();
-			ImGui::Text("120 FPS: 8.3 ms");
-
-			ImGui::EndTable();
-		}
-	}
-
-	// Show Post-FG frametime graph if enabled
-	if (settings.ShowPostFGFrameTimeGraph && isFrameGenerationActive) {
-		DrawPostFGFrameTimeGraph(settings);
-	}
-}
-
-/**
- * @brief Renders the post-frame generation frametime graph using ImGui.
- *
- * Plots the post-FG frametime history and displays reference lines for common FPS targets.
- * Only called if frame generation is active and the relevant settings are enabled.
- *
- * @param settings Reference to the current performance overlay settings (controls graph appearance and size).
- */
-void Menu::PerfOverlayState::DrawPostFGFrameTimeGraph(Settings::PerfOverlaySettings& settings)
-{
-	// Prepare overlay text
-	char overlay_text[128];
-	snprintf(overlay_text, IM_ARRAYSIZE(overlay_text),
-		"Post-FG: %.2f ms (%.1f FPS)",
-		postFGSmoothFrameTimeMs, postFGSmoothFps);
-
-	// Set graph colors - blue for post-FG
-	ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.0f, 0.5f, 1.0f, 1.0f));  // Blue line
-
-	// Draw the graph
-	ImGui::PlotLines("##postfgframetime",
-		postFGFrameTimeHistory.data(),
-		settings.FrameHistorySize,
-		postFGFrameTimeHistoryIndex,
-		overlay_text,
-		smoothedMinFrameTime, smoothedMaxFrameTime,
-		ImVec2(ImGui::GetWindowWidth() * 0.9f, 50.0f * textScale));
-
-	ImGui::PopStyleColor();
-
-	// Draw frametime target reference lines
-	if (ImGui::BeginTable("PostFGFrametimeTargets", 3, ImGuiTableFlags_SizingStretchSame)) {
-		ImGui::TableNextColumn();
-		ImGui::Text("30 FPS: 33.3 ms");
-
-		ImGui::TableNextColumn();
-		ImGui::Text("60 FPS: 16.7 ms");
-
-		ImGui::TableNextColumn();
-		ImGui::Text("120 FPS: 8.3 ms");
-
-		ImGui::EndTable();
-	}
-}
-
 /**
  * @brief Renders the current draw call counts for various shader types using ImGui.
  *
  * Displays a breakdown of draw calls by type (e.g., Grass, Sky, Water, etc.) and the total count.
  * Values are sourced from the global state.
  */
-void Menu::PerfOverlayState::DrawDrawCalls()
-{
-	if (ImGui::BeginTable("Draw Call Table", 2, ImGuiTableFlags_SizingStretchProp, { -FLT_MIN, 0 })) {
-		ImGui::TableSetupColumn("Shader Type", ImGuiTableColumnFlags_WidthFixed, ImGui::GetTextLineHeight() * 5);
-		ImGui::TableSetupColumn("Draw Calls");
-
-		ImGui::TableHeadersRow();
-
-		ImGui::TableNextColumn();
-		ImGui::Text("Grass:");
-		ImGui::TableNextColumn();
-		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Grass]));
-		ImGui::TableNextColumn();
-		ImGui::Text("Sky:");
-		ImGui::TableNextColumn();
-		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Sky]));
-		ImGui::TableNextColumn();
-		ImGui::Text("Water:");
-		ImGui::TableNextColumn();
-		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Water]));
-		ImGui::TableNextColumn();
-		ImGui::Text("Lighting:");
-		ImGui::TableNextColumn();
-		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Lighting]));
-		ImGui::TableNextColumn();
-		ImGui::Text("Effect:");
-		ImGui::TableNextColumn();
-		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Effect]));
-		ImGui::TableNextColumn();
-		ImGui::Text("Utility:");
-		ImGui::TableNextColumn();
-		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Utility]));
-		ImGui::TableNextColumn();
-		ImGui::Text("Distant Tree:");
-		ImGui::TableNextColumn();
-		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::DistantTree]));
-		ImGui::TableNextColumn();
-		ImGui::Text("Particle:");
-		ImGui::TableNextColumn();
-		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Particle]));
-		ImGui::TableNextColumn();
-		ImGui::Text("Total:");
-		ImGui::TableNextColumn();
-		ImGui::Text("%d", int(globals::state->smoothDrawCalls[RE::BSShader::Type::Total]));
-
-		ImGui::EndTable();
-	}
-}
-
-/**
- * @brief Renders the current GPU VRAM usage using ImGui.
- *
- * Queries the DXGI adapter for video memory info and displays current usage, total budget, and a progress bar.
- * Falls back to a message if VRAM info is unavailable.
- *
- * @param dxgiAdapter3 A COM pointer to the IDXGIAdapter3 interface for querying video memory info.
- */
-void Menu::PerfOverlayState::DrawVRAM(winrt::com_ptr<IDXGIAdapter3> dxgiAdapter3)
-{
-	DXGI_QUERY_VIDEO_MEMORY_INFO videoMemoryInfo{};
-	HRESULT hr = dxgiAdapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &videoMemoryInfo);
-
-	// Only proceed if the call succeeded and Budget is not zero
-	if (SUCCEEDED(hr) && videoMemoryInfo.Budget > 0) {
-		float currentGpuUsage = videoMemoryInfo.CurrentUsage / (1024.f * 1024.f * 1024.f);
-		float totalGpuMemory = videoMemoryInfo.Budget / (1024.f * 1024.f * 1024.f);
-		float percent = currentGpuUsage / totalGpuMemory;
-
-		// Center the VRAM text
-		ImGui::Text("VRAM Usage:");
-
-		// Use a centered text format for the numeric values
-		std::string vramText = std::format("{:.2f}GB/{:.2f}GB ({:.1f}%)", currentGpuUsage, totalGpuMemory, 100 * percent);
-		float textWidth = ImGui::CalcTextSize(vramText.c_str()).x;
-		float windowWidth = ImGui::GetWindowWidth();
-
-		// Center the text if it fits within the window
-		if (textWidth < windowWidth) {
-			ImGui::SetCursorPosX((windowWidth - textWidth) * 0.5f);
-			ImGui::Text("%s", vramText.c_str());
-		} else {
-			ImGui::Text("%s", vramText.c_str());
-		}
-
-		// Only move the progress bar, not the text
-		ImGui::ProgressBar(percent, ImVec2(ImGui::GetWindowWidth() * 0.9f, 0.0f), "");
-	} else {
-		// Display a fallback message if we couldn't get the VRAM info
-		ImGui::Text("VRAM Usage: Not available");
-	}
-}
-
-/**
- * @brief Ensures frame time history buffers are sized according to the current settings.
- *
- * Resizes the frameTimeHistory and postFGFrameTimeHistory buffers to match the user-configured history size,
- * clamping the size within allowed bounds. Resets indices if they are out of bounds after resizing.
- *
- * @param settings Reference to the current performance overlay settings (controls buffer size and limits).
- */
-void Menu::PerfOverlayState::UpdateFrameTimeHistorySizes(Settings::PerfOverlaySettings& settings)
-{
-	settings.FrameHistorySize = std::clamp(
-		settings.FrameHistorySize,
-		settings.kMinFrameHistorySize,
-		settings.kMaxFrameHistorySize);
-
-	if (frameTimeHistory.size() != static_cast<size_t>(settings.FrameHistorySize)) {
-		frameTimeHistory.resize(settings.FrameHistorySize, 0.0f);
-		if (frameTimeHistoryIndex >= settings.FrameHistorySize) {  // Reset index if it's out of new bounds
-			frameTimeHistoryIndex = 0;
-		}
-	}
-	if (postFGFrameTimeHistory.size() != static_cast<size_t>(settings.FrameHistorySize)) {
-		postFGFrameTimeHistory.resize(settings.FrameHistorySize, 0.0f);
-		if (postFGFrameTimeHistoryIndex >= settings.FrameHistorySize) {
-			postFGFrameTimeHistoryIndex = 0;
-		}
-	}
-}
-
-void Menu::DrawPerformanceOverlaySettings()
-{
-	auto& themeSettings = settings.Theme;
-
-	ImGui::Checkbox("Enable Performance Overlay", &settings.PerfOverlay.Enabled);
-
-	if (settings.PerfOverlay.Enabled) {
-		ImGui::Indent();
-
-		// Display options
-		if (ImGui::CollapsingHeader("Display Options", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Indent();
-
-			// FPS options
-			ImGui::Checkbox("Show FPS Counter", &settings.PerfOverlay.ShowFPS);
-
-			bool isFrameGenerationActive = globals::upscaling && globals::upscaling->IsFrameGenerationActive();
-			if (settings.PerfOverlay.ShowFPS) {
-				ImGui::Indent();
-
-				if (isFrameGenerationActive) {
-					// Pre-Frame Generation FPS
-					ImGui::Checkbox("Show Pre-FG Frametime Graph", &settings.PerfOverlay.ShowPreFGFrameTimeGraph);
-					ImGui::Checkbox("Show Post-FG Frametime Graph", &settings.PerfOverlay.ShowPostFGFrameTimeGraph);
-				} else {
-					// Regular FPS options when frame generation is not active
-					ImGui::Checkbox("Show Frametime Graph", &settings.PerfOverlay.ShowPreFGFrameTimeGraph);
-				}
-
-				ImGui::Unindent();
-			}
-
-			ImGui::Checkbox("Show Draw Calls", &settings.PerfOverlay.ShowDrawCalls);
-			ImGui::Checkbox("Show VRAM Usage", &settings.PerfOverlay.ShowVRAM);
-
-			ImGui::Unindent();
-		}
-		// Hotkey settings
-		if (ImGui::CollapsingHeader("Hotkeys", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Indent();
-
-			// Add hotkey configuration for toggling overlay
-			if (settingOverlayToggleKey) {
-				ImGui::Text("Press any key to set as Performance Overlay toggle key...");
-			} else {
-				ImGui::AlignTextToFramePadding();
-				ImGui::Text("Toggle Key:");
-				ImGui::SameLine();
-				ImGui::AlignTextToFramePadding();
-				ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", KeyIdToString(settings.PerfOverlay.OverlayToggleKey));
-				ImGui::AlignTextToFramePadding();
-				ImGui::SameLine();
-				if (ImGui::Button("Change##overlayToggle")) {
-					settingOverlayToggleKey = true;
-				}
-			}
-
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Set a key to show/hide the performance overlay");
-			}
-			ImGui::Unindent();
-		}
-
-		// Appearance settings
-		if (ImGui::CollapsingHeader("Appearance", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Indent();
-
-			// Text size options
-			const char* sizes[] = { "Small", "Medium", "Large" };
-			int currentSize = static_cast<int>(settings.PerfOverlay.Size);
-			if (ImGui::Combo("Text Size", &currentSize, sizes, IM_ARRAYSIZE(sizes))) {
-				settings.PerfOverlay.Size = static_cast<Settings::PerfOverlaySettings::TextSize>(currentSize);
-			}
-
-			// Background opacity slider
-			ImGui::SliderFloat("Background Opacity", &settings.PerfOverlay.BackgroundOpacity, 0.0f, 1.0f, "%.2f");
-
-			// Border toggle
-			ImGui::Checkbox("Show Border", &settings.PerfOverlay.ShowBorder);
-
-			// FPS update interval slider - Make this slider affect all FPS and frametime displays
-			ImGui::SliderFloat("Update Interval", &settings.PerfOverlay.UpdateInterval, 0.001f, 2.0f, "%.2f seconds");
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("How frequently all performance metrics should update (FPS and frametime)");
-			}
-
-			// Frame history size slider
-			ImGui::SliderInt("Frame History Size", &settings.PerfOverlay.FrameHistorySize, Settings::PerfOverlaySettings::kMinFrameHistorySize, Settings::PerfOverlaySettings::kMaxFrameHistorySize);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text(
-					"Number of frames to keep in history for graphing.\n"
-					"E.g. 60 frames = 1 second @ 60fps.");
-			}
-
-			// Position options - moved inside appearance section
-			ImGui::Separator();
-			ImGui::Text("Position:");
-
-			// Reset position button
-			if (ImGui::Button("Reset Position")) {
-				settings.PerfOverlay.PositionSet = false;
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Reset the position of the performance overlay to default");
-			}
-
-			ImGui::Unindent();
-		}
-
-		ImGui::Unindent();
-	}
-}
 
 const ImGuiKey Menu::VirtualKeyToImGuiKey(WPARAM vkKey)
 {
@@ -2700,7 +2053,7 @@ void Menu::ProcessInputEventQueue()
 					{ &settings.ToggleKey, &settingToggleKey, [this](uint32_t key) { settings.ToggleKey = key; settingToggleKey = false; } },
 					{ &settings.SkipCompilationKey, &settingSkipCompilationKey, [this](uint32_t key) { settings.SkipCompilationKey = key; settingSkipCompilationKey = false; } },
 					{ &settings.EffectToggleKey, &settingsEffectsToggle, [this](uint32_t key) { settings.EffectToggleKey = key; settingsEffectsToggle = false; } },
-					{ &settings.PerfOverlay.OverlayToggleKey, &settingOverlayToggleKey, [this](uint32_t key) { settings.PerfOverlay.OverlayToggleKey = key; settingOverlayToggleKey = false; } },
+					{ &settings.OverlayToggleKey, &settingOverlayToggleKey, [this](uint32_t key) { settings.OverlayToggleKey = key; settingOverlayToggleKey = false; } },
 				};
 				bool handled = false;
 				for (auto& h : hotkeyActions) {
@@ -2722,7 +2075,9 @@ void Menu::ProcessInputEventQueue()
 						{ settings.EffectToggleKey, [shaderCache]() { shaderCache->SetEnabled(!shaderCache->IsEnabled()); } },
 						{ priorShaderKey, [shaderCache, devMode]() { if (devMode) shaderCache->IterateShaderBlock(); } },
 						{ nextShaderKey, [shaderCache, devMode]() { if (devMode) shaderCache->IterateShaderBlock(false); } },
-						{ settings.PerfOverlay.OverlayToggleKey, [this]() { settings.PerfOverlay.Enabled = !settings.PerfOverlay.Enabled; } },
+						{ settings.OverlayToggleKey, []() {
+							 Menu::GetSingleton()->overlayVisible = !Menu::GetSingleton()->overlayVisible;
+						 } },
 					};
 					for (auto& ka : keyActions) {
 						if (key == ka.settingKey) {
@@ -2830,14 +2185,14 @@ void Menu::SelectFeatureMenu(const std::string& featureName)
 
 void Menu::DrawWeatherDetailsWindow()
 {
-	if (!settings.WeatherDetailsWindow.Enabled) {
+	if (!WeatherPicker::GetSingleton()->WeatherDetailsWindow.Enabled) {
 		return;
 	}
 
 	// Use Weather core feature for all window management and rendering
 	auto weather = globals::features::weatherPicker;
 	if (weather) {
-		bool* p_open = &settings.WeatherDetailsWindow.Enabled;
+		bool* p_open = &WeatherPicker::GetSingleton()->WeatherDetailsWindow.Enabled;
 		weather->RenderWeatherDetailsWindow(p_open);
 	}
 }

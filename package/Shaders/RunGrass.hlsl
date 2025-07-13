@@ -884,7 +884,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 ddx = ddx_coarse(input.WorldPosition);
 	float3 ddy = ddy_coarse(input.WorldPosition);
-	float3 normal = normalize(cross(ddx, ddy));
+	float3 normal = -normalize(cross(ddx, ddy));
 
 	normal = normalize(float3(normal.xy, max(0, normal.z)));
 
