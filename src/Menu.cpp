@@ -277,7 +277,7 @@ void Menu::Init()
 	globals::d3d::swapChain->GetDesc(&desc);
 
 	float fontSize = 0.f;
-	// Only bother doing auto font fize if user has not changed font px size setting (new)
+	// Only bother doing auto font size if user has not changed font px size setting (new)
 	if (settings.Theme.FontSize == settings.Theme.constants.DEFAULT_SCREEN_HEIGHT 
 								* settings.Theme.constants.DEFAULT_FONT_RATIO) 
 	{
