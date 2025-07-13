@@ -49,13 +49,6 @@ constexpr float kDefaultFPS = 60.0f;
 constexpr float kDefaultFrameTimeMs = 1000.0f / kDefaultFPS;
 
 // --- Helper Structures and Functions ---
-struct ColumnConfig
-{
-	std::string header;
-	std::function<void(const DrawCallRow&, int colIdx)> cellRender;
-	std::function<bool(const DrawCallRow&, const DrawCallRow&, bool)> sortFunc;
-	std::function<void()> headerTooltip;
-};
 
 // Helper function to create metric columns with consistent formatting
 auto MakeMetricColumn(const auto& theme, auto valueGetter, auto colorGetter, auto formatter, const Util::ColoredTextLines& legend, const Util::ColoredTextLines* cellLegend = nullptr)
@@ -91,14 +84,12 @@ auto MakeMetricColumn(const auto& theme, auto valueGetter, auto colorGetter, aut
 }
 
 // --- Helper Functions ---
-
-// --- Helper Functions ---
 /**
- * @brief Calculates summary data (Other frame time, percentages, cost per call) from measured sum
- * @param smoothedFrameTime The total smoothed frame time
- * @param measuredSum The sum of measured frame times
- * @return Tuple of (otherFrameTime, otherPercent, totalCostPerCall)
- */
+  * @brief Calculates summary data (Other frame time, percentages, cost per call) from measured sum
+  * @param smoothedFrameTime The total smoothed frame time
+  * @param measuredSum The sum of measured frame times
+  * @return Tuple of (otherFrameTime, otherPercent, totalCostPerCall)
+  */
 static std::tuple<float, float, float> CalculateSummaryData(float smoothedFrameTime, float measuredSum)
 {
 	float totalSmoothedDrawCalls = globals::state->GetTotalSmoothedDrawCalls();
@@ -136,580 +127,9 @@ static const std::unordered_map<RE::BSShader::Type, std::string> kShaderTypeTool
 	{ RE::BSShader::Type::BloodSplatter, "Draw calls for blood splatter effects." },
 	{ RE::BSShader::Type::ImageSpace, "Draw calls for image space post-processing effects." }
 };
-
-// --- ABTestAggregator integration ---
-ABTestAggregator& PerformanceOverlay::GetABTestAggregator()
-{
-	auto* abTestingManager = ABTestingManager::GetSingleton();
-	return abTestingManager->GetAggregator();
-}
-
-/**
- * @brief Draws the A/B test results table with comprehensive performance comparison
- *
- * This function renders a detailed table showing performance metrics for both Variant A (USER config)
- * and Variant B (TEST config), including:
- * - Average and median frame times for each shader type
- * - Performance deltas and percentage differences
- * - Color-coded indicators for better/worse performance
- * - Statistical validity assessment with tooltips
- * - Sortable columns for easy analysis
- *
- * The table provides both main rows (individual shader types) and summary rows (Total, Other)
- * to give users a complete picture of performance differences between configurations.
- *
- * @note This function requires an active A/B test with aggregated results
- */
-void PerformanceOverlay::DrawABTestResultsTable()
-{
-	auto* abTestingManager = ABTestingManager::GetSingleton();
-	auto& aggregator = abTestingManager->GetAggregator();
-	auto results = aggregator.GetAggregatedResults();
-	if (results.empty())
-		return;
-
-	auto* menu = Menu::GetSingleton();
-	const auto& theme = menu->GetTheme();
-
-	// Test statistics header
-	float totalDuration = aggregator.GetTotalTestDuration();
-	int totalFrames = aggregator.GetTotalFrameCount();
-	int excludedFrames = 0;
-	for (const auto& interval : aggregator.GetIntervals()) {
-		excludedFrames += interval.excludedFrames;
-	}
-	int validFrames = totalFrames;
-	int totalWithExcluded = totalFrames + excludedFrames;
-	float validPercent = (totalWithExcluded > 0) ? (100.0f * validFrames / totalWithExcluded) : 100.0f;
-
-	// Statistical validity assessment
-	bool hasEnoughSamples = validFrames >= kMinimumSamplesForValidity;
-	bool hasGoodDuration = totalDuration >= kMinimumTestDuration;
-	bool hasLowExclusionRate = validPercent >= kMinimumValidFramesPercent;
-	bool isStatisticallyValid = hasEnoughSamples && hasGoodDuration && hasLowExclusionRate;
-
-	// Color coding for statistical validity
-	ImVec4 validityColor = theme.Palette.Text;
-	if (isStatisticallyValid) {
-		validityColor = theme.StatusPalette.SuccessColor;  // Green for valid
-	} else if (validFrames >= kMinimumSamplesForMarginal && totalDuration >= kMinimumDurationForMarginal) {
-		validityColor = theme.StatusPalette.Warning;  // Yellow for marginal
-	} else {
-		validityColor = theme.StatusPalette.Error;  // Red for insufficient
-	}
-
-	ImGui::PushStyleColor(ImGuiCol_Text, validityColor);
-	ImGui::Text("Test Duration: %.1f seconds | Valid Frames: %d/%d (%.1f%%) | Excluded: %d",
-		totalDuration, validFrames, totalWithExcluded, validPercent, excludedFrames);
-	ImGui::PopStyleColor();
-	if (ImGui::IsItemHovered()) {
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			char validStr[128], marginalStr[128];
-			snprintf(validStr, sizeof(validStr), "Statistically valid (>%d samples, >%.0fs duration, >%.0f%% valid)", kMinimumSamplesForValidity, static_cast<float>(kMinimumTestDuration), kMinimumValidFramesPercent);
-			snprintf(marginalStr, sizeof(marginalStr), "Marginal validity (>%d samples, >%.0fs duration)", kMinimumSamplesForMarginal, static_cast<float>(kMinimumDurationForMarginal));
-			Util::ColoredTextLines validityLegend = {
-				{ "Valid frames are those not excluded as outliers.\nA low percentage may indicate instability or test interruptions.\nExcluded frames are those with frame times > 3x median or > 100ms.\nThis removes shader compilation spikes, JSON loading overhead, and other anomalies\nthat would skew the performance comparison.", theme.Palette.Text },
-				{ "", theme.Palette.Text },
-				{ validStr, theme.StatusPalette.SuccessColor },
-				{ marginalStr, theme.StatusPalette.Warning },
-				{ "Insufficient data for reliable results", theme.StatusPalette.Error }
-			};
-			Util::DrawColoredMultiLineTooltip(validityLegend);
-		}
-	}
-
-	// Convert to DrawCallRow format for proper sorting and footer handling
-	std::vector<DrawCallRow> mainRows;
-	std::vector<DrawCallRow> summaryRows;
-
-	for (const auto& stat : results) {
-		DrawCallRow row;
-		row.label = stat.label;
-		row.shaderType = stat.shaderType;  // Just assign the int directly
-		row.frameTime = stat.meanA;        // Use A as primary frame time
-		row.percent = (stat.meanA > 0.0f) ? (stat.meanA / (stat.meanA + stat.meanB) * 100.0f) : 0.0f;
-		row.costPerCall = stat.medianA;  // Use A median as primary cost per call
-		row.enabled = true;
-
-		// Store B values in test data fields for comparison
-		row.testFrameTime = stat.meanB;
-		row.testCostPerCall = stat.medianB;  // Store B median in testCostPerCall field
-
-		// Add tooltip based on shader type
-		if (row.shaderType >= 0) {
-			// Regular shader type
-			auto shaderType = static_cast<RE::BSShader::Type>(row.shaderType);
-			auto tipIt = kShaderTypeTooltips.find(shaderType);
-			if (tipIt != kShaderTypeTooltips.end()) {
-				row.tooltip = tipIt->second;
-			} else {
-				row.tooltip = "Draw calls for this shader type.";
-			}
-		} else {
-			// Special shader type (Total or Other)
-			if (row.shaderType == static_cast<int>(SpecialShaderType::Total)) {
-				row.tooltip = "Total frame time.";
-			} else if (row.shaderType == static_cast<int>(SpecialShaderType::Other)) {
-				row.tooltip = "Frame time not attributed to any measured shader type. This includes UI, post-processing, engine work, and any GPU activity not directly measured by the overlay.";
-			}
-		}
-
-		// Separate main rows from summary rows
-		if (row.shaderType < 0) {
-			summaryRows.push_back(row);
-		} else {
-			mainRows.push_back(row);
-		}
-	}
-
-	// --- BUILD LEGENDS ---
-	const Util::ColoredTextLines aAvgLegend = {
-		{ "A Avg (ms): Average frame time for Variant A (USER config).", theme.Palette.Text },
-		{ "", theme.Palette.Text },
-		{ "Color Legend (compared to Variant B):", theme.Palette.Text },
-		{ "  Better (lower than B)", theme.StatusPalette.SuccessColor },
-		{ "  Worse (higher than B)", theme.StatusPalette.Error },
-		{ "  Same as B", theme.Palette.Text }
-	};
-	const Util::ColoredTextLines bAvgLegend = {
-		{ "B Avg (ms): Average frame time for Variant B (TEST config).", theme.Palette.Text },
-		{ "", theme.Palette.Text },
-		{ "Color Legend (compared to Variant A):", theme.Palette.Text },
-		{ "  Better (lower than A)", theme.StatusPalette.SuccessColor },
-		{ "  Worse (higher than A)", theme.StatusPalette.Error },
-		{ "  Same as A", theme.Palette.Text }
-	};
-	const Util::ColoredTextLines deltaLegend = {
-		{ "Delta (ms): Difference between Variant B and Variant A (B - A).", theme.Palette.Text },
-		{ "Negative values indicate Variant B is better (lower frame time).", theme.Palette.Text },
-		{ "Positive values indicate Variant A is better (lower frame time).", theme.Palette.Text },
-		{ "Percentage shows relative performance difference.", theme.Palette.Text },
-		{ "", theme.Palette.Text },
-		{ "Color Legend:", theme.Palette.Text },
-		{ "  Negative (B better)", theme.StatusPalette.SuccessColor },
-		{ "  Positive (A better)", theme.StatusPalette.Error },
-		{ "  Zero (same)", theme.Palette.Text }
-	};
-	const Util::ColoredTextLines aMedianLegend = {
-		{ "A Median: Median frame time for Variant A (USER config).", theme.Palette.Text },
-		{ "Median is less sensitive to outliers than average.", theme.Palette.Text },
-		{ "", theme.Palette.Text },
-		{ "Color Legend (compared to Variant B median):", theme.Palette.Text },
-		{ "  Better (lower than B)", theme.StatusPalette.SuccessColor },
-		{ "  Worse (higher than B)", theme.StatusPalette.Error },
-		{ "  Same as B", theme.Palette.Text }
-	};
-	const Util::ColoredTextLines bMedianLegend = {
-		{ "B Median: Median frame time for Variant B (TEST config).", theme.Palette.Text },
-		{ "Median is less sensitive to outliers than average.", theme.Palette.Text },
-		{ "", theme.Palette.Text },
-		{ "Color Legend (compared to Variant A median):", theme.Palette.Text },
-		{ "  Better (lower than A)", theme.StatusPalette.SuccessColor },
-		{ "  Worse (higher than A)", theme.StatusPalette.Error },
-		{ "  Same as A", theme.Palette.Text }
-	};
-	const Util::ColoredTextLines medianDeltaLegend = {
-		{ "Median Delta: Difference between Variant B and Variant A medians (B - A).", theme.Palette.Text },
-		{ "Negative values indicate Variant B is better (lower median).", theme.Palette.Text },
-		{ "Positive values indicate Variant A is better (lower median).", theme.Palette.Text },
-		{ "", theme.Palette.Text },
-		{ "Color Legend:", theme.Palette.Text },
-		{ "  Negative (B better)", theme.StatusPalette.SuccessColor },
-		{ "  Positive (A better)", theme.StatusPalette.Error },
-		{ "  Zero (same)", theme.Palette.Text }
-	};
-
-	// --- BUILD HEADERS AND CONFIG ---
-	std::vector<ColumnConfig> columns = {
-		{ "Shader Type",
-			[theme](const DrawCallRow& row, int) {
-				ImGui::TextUnformatted(row.label.c_str());
-				if (ImGui::IsItemHovered()) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						ImGui::TextUnformatted(row.tooltip.c_str());
-						// Add FPS for Total row
-						if (row.label == "Total:") {
-							float fps = row.frameTime > 0.0f ? 1000.0f / row.frameTime : 0.0f;
-							ImGui::Text("FPS: %.2f", fps);
-						}
-					}
-				}
-			},
-			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.label < b.label) : (a.label > b.label); },
-			nullptr },
-		{ "A Avg (ms)",
-			[theme, aAvgLegend](const DrawCallRow& row, int) {
-				float value = row.frameTime;
-				// Color A relative to B
-				ImVec4 color = theme.Palette.Text;
-				if (row.testFrameTime.has_value()) {
-					if (value < *row.testFrameTime) {
-						color = theme.StatusPalette.SuccessColor;  // A is better (lower) than B
-					} else if (value > *row.testFrameTime) {
-						color = theme.StatusPalette.Error;  // A is worse (higher) than B
-					}
-				}
-				ImGui::PushStyleColor(ImGuiCol_Text, color);
-				ImGui::Text("%s", Util::FormatMilliseconds(value).c_str());
-				ImGui::PopStyleColor();
-				if (ImGui::IsItemHovered()) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						if (row.label == "Total:") {
-							ImGui::Text("A (USER) FPS: %.2f", Util::CalcFPS(value));
-						} else {
-							Util::DrawColoredMultiLineTooltip(aAvgLegend);
-						}
-					}
-				}
-			},
-			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.frameTime < b.frameTime) : (a.frameTime > b.frameTime); },
-			[aAvgLegend]() {
-				if (ImGui::IsItemHovered()) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						Util::DrawColoredMultiLineTooltip(aAvgLegend);
-					}
-				}
-			} },
-		{ "B Avg (ms)",
-			[theme, bAvgLegend](const DrawCallRow& row, int) {
-				if (!row.testFrameTime.has_value()) {
-					ImGui::TextDisabled("-");
-					return;
-				}
-				float value = *row.testFrameTime;
-				// Color B relative to A
-				ImVec4 color = theme.Palette.Text;
-				if (value < row.frameTime) {
-					color = theme.StatusPalette.SuccessColor;  // B is better (lower) than A
-				} else if (value > row.frameTime) {
-					color = theme.StatusPalette.Error;  // B is worse (higher) than A
-				}
-				ImGui::PushStyleColor(ImGuiCol_Text, color);
-				ImGui::Text("%s", Util::FormatMilliseconds(value).c_str());
-				ImGui::PopStyleColor();
-				if (ImGui::IsItemHovered()) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						if (row.label == "Total:") {
-							ImGui::Text("B (TEST) FPS: %.2f", Util::CalcFPS(value));
-						} else {
-							Util::DrawColoredMultiLineTooltip(bAvgLegend);
-						}
-					}
-				}
-			},
-			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
-				float aVal = a.testFrameTime.value_or(FLT_MAX);
-				float bVal = b.testFrameTime.value_or(FLT_MAX);
-				return asc ? (aVal < bVal) : (aVal > bVal);
-			},
-			[bAvgLegend]() {
-				if (ImGui::IsItemHovered()) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						Util::DrawColoredMultiLineTooltip(bAvgLegend);
-					}
-				}
-			} },
-		{ "Delta (ms)",
-			[theme, deltaLegend](const DrawCallRow& row, int) {
-				if (!row.testFrameTime.has_value()) {
-					ImGui::TextDisabled("-");
-					return;
-				}
-				float delta = *row.testFrameTime - row.frameTime;
-				// Color based on delta
-				ImVec4 color = theme.Palette.Text;
-				if (delta < 0.0f) {
-					color = theme.StatusPalette.SuccessColor;  // Better performance (negative delta)
-				} else if (delta > 0.0f) {
-					color = theme.StatusPalette.Error;  // Worse performance (positive delta)
-				}
-				ImGui::PushStyleColor(ImGuiCol_Text, color);
-				ImGui::Text("%s", Util::FormatDeltaWithPercent(row.frameTime, *row.testFrameTime, PerformanceOverlay::PerfOverlayState::kPercentDisplayThreshold).c_str());
-				ImGui::PopStyleColor();
-				if (ImGui::IsItemHovered()) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						if (row.testFrameTime.has_value()) {
-							// Show detailed values for rows with test data
-							if (row.label == "Total:") {
-								ImGui::TextUnformatted("Delta (B - A):");
-								ImGui::Separator();
-								ImGui::Text("A (USER) FPS: %.2f", Util::CalcFPS(row.frameTime));
-								ImGui::Text("B (TEST) FPS: %.2f", Util::CalcFPS(*row.testFrameTime));
-							} else {
-								ImGui::TextUnformatted("Delta (B - A):");
-								ImGui::Separator();
-								ImGui::Text("A (USER): %.3f ms", row.frameTime);
-								ImGui::Text("B (TEST): %.3f ms", *row.testFrameTime);
-							}
-							ImGui::Separator();
-						}
-						// Always show the delta legend for explanation
-						Util::DrawColoredMultiLineTooltip(deltaLegend);
-					}
-				}
-			},
-			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
-				float aDelta = a.testFrameTime.value_or(0.0f) - a.frameTime;
-				float bDelta = b.testFrameTime.value_or(0.0f) - b.frameTime;
-				return asc ? (aDelta < bDelta) : (aDelta > bDelta);
-			},
-			[deltaLegend]() {
-				if (ImGui::IsItemHovered()) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						Util::DrawColoredMultiLineTooltip(deltaLegend);
-					}
-				}
-			} },
-		{ "A Median (ms)",
-			[theme, aMedianLegend](const DrawCallRow& row, int) {
-				float value = row.costPerCall;
-				// Color A median relative to B median (stored in testCostPerCall for now)
-				ImVec4 color = theme.Palette.Text;
-				if (row.testCostPerCall.has_value()) {
-					if (value < *row.testCostPerCall) {
-						color = theme.StatusPalette.SuccessColor;  // A is better (lower) than B
-					} else if (value > *row.testCostPerCall) {
-						color = theme.StatusPalette.Error;  // A is worse (higher) than B
-					}
-				}
-				ImGui::PushStyleColor(ImGuiCol_Text, color);
-				ImGui::Text("%s", Util::FormatMilliseconds(value).c_str());
-				ImGui::PopStyleColor();
-				if (ImGui::IsItemHovered()) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						if (row.label == "Total:") {
-							Util::ColoredTextLines fpsTooltip{
-								{ std::format("A (USER) Median FPS: {:.2f}", Util::CalcFPS(value)), ImVec4(1.0f, 1.0f, 1.0f, 1.0f) }
-							};
-							Util::DrawColoredMultiLineTooltip(fpsTooltip);
-						} else {
-							Util::DrawColoredMultiLineTooltip(aMedianLegend);
-						}
-					}
-				}
-			},
-			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.costPerCall < b.costPerCall) : (a.costPerCall > b.costPerCall); },
-			[aMedianLegend]() {
-				if (ImGui::IsItemHovered()) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						Util::DrawColoredMultiLineTooltip(aMedianLegend);
-					}
-				}
-			} },
-		{ "B Median (ms)",
-			[theme, bMedianLegend](const DrawCallRow& row, int) {
-				if (!row.testCostPerCall.has_value()) {
-					ImGui::TextDisabled("-");
-					return;
-				}
-				float value = *row.testCostPerCall;
-				// Color B median relative to A median
-				ImVec4 color = theme.Palette.Text;
-				if (value < row.costPerCall) {
-					color = theme.StatusPalette.SuccessColor;  // B is better (lower) than A
-				} else if (value > row.costPerCall) {
-					color = theme.StatusPalette.Error;  // B is worse (higher) than A
-				}
-				ImGui::PushStyleColor(ImGuiCol_Text, color);
-				ImGui::Text("%s", Util::FormatMilliseconds(value).c_str());
-				ImGui::PopStyleColor();
-				if (ImGui::IsItemHovered()) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						if (row.label == "Total:") {
-							Util::ColoredTextLines fpsTooltip{
-								{ std::format("B (TEST) Median FPS: {:.2f}", Util::CalcFPS(value)), ImVec4(1.0f, 1.0f, 1.0f, 1.0f) }
-							};
-							Util::DrawColoredMultiLineTooltip(fpsTooltip);
-						} else {
-							Util::DrawColoredMultiLineTooltip(bMedianLegend);
-						}
-					}
-				}
-			},
-			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
-				float aVal = a.testCostPerCall.value_or(FLT_MAX);
-				float bVal = b.testCostPerCall.value_or(FLT_MAX);
-				return asc ? (aVal < bVal) : (aVal > bVal);
-			},
-			[bMedianLegend]() {
-				if (ImGui::IsItemHovered()) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						Util::DrawColoredMultiLineTooltip(bMedianLegend);
-					}
-				}
-			} },
-		{ "Median Delta (ms)",
-			[theme, medianDeltaLegend](const DrawCallRow& row, int) {
-				if (!row.testCostPerCall.has_value()) {
-					ImGui::TextDisabled("-");
-					return;
-				}
-				float delta = *row.testCostPerCall - row.costPerCall;
-				// Color based on delta
-				ImVec4 color = theme.Palette.Text;
-				if (delta < 0.0f) {
-					color = theme.StatusPalette.SuccessColor;  // Better performance (negative delta)
-				} else if (delta > 0.0f) {
-					color = theme.StatusPalette.Error;  // Worse performance (positive delta)
-				}
-				ImGui::PushStyleColor(ImGuiCol_Text, color);
-				std::string deltaStr = (delta > 0.0f) ? "+" + Util::FormatMilliseconds(delta) : Util::FormatMilliseconds(delta);
-				ImGui::Text("%s", deltaStr.c_str());
-				ImGui::PopStyleColor();
-				if (ImGui::IsItemHovered()) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						if (row.label == "Total:" && row.testCostPerCall.has_value()) {
-							Util::ColoredTextLines fpsTooltip{
-								{ "Median Delta (B - A):", ImVec4(1.0f, 1.0f, 1.0f, 1.0f) },
-								{ "", ImVec4(1.0f, 1.0f, 1.0f, 1.0f) },
-								{ std::format("A (USER) Median FPS: {:.2f}", Util::CalcFPS(row.costPerCall)), ImVec4(1.0f, 1.0f, 1.0f, 1.0f) },
-								{ std::format("B (TEST) Median FPS: {:.2f}", Util::CalcFPS(*row.testCostPerCall)), ImVec4(1.0f, 1.0f, 1.0f, 1.0f) },
-								{ "", ImVec4(1.0f, 1.0f, 1.0f, 1.0f) },
-								{ "Median is less sensitive to outliers than average.", ImVec4(1.0f, 1.0f, 1.0f, 1.0f) }
-							};
-							Util::DrawColoredMultiLineTooltip(fpsTooltip);
-						} else {
-							Util::DrawColoredMultiLineTooltip(medianDeltaLegend);
-						}
-					}
-				}
-			},
-			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
-				float aDelta = a.testCostPerCall.value_or(0.0f) - a.costPerCall;
-				float bDelta = b.testCostPerCall.value_or(0.0f) - b.costPerCall;
-				return asc ? (aDelta < bDelta) : (aDelta > bDelta);
-			},
-			[medianDeltaLegend]() {
-				if (ImGui::IsItemHovered()) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						Util::DrawColoredMultiLineTooltip(medianDeltaLegend);
-					}
-				}
-			} }
-	};
-
-	// --- TABLE RENDER: MAIN ROWS + FOOTER ROWS ---
-	std::vector<std::function<bool(const DrawCallRow&, const DrawCallRow&, bool)>> sorters;
-	for (const auto& col : columns) sorters.push_back(col.sortFunc);
-
-	std::vector<DrawCallRow> mainRowsCopy = mainRows;
-	std::vector<DrawCallRow> summaryRowsCopy = summaryRows;
-
-	Util::ShowSortedStringTable<DrawCallRow>(
-		"ABTestResultsTable",
-		[&columns]() { std::vector<std::string> h; for (const auto& c : columns) h.push_back(c.header); return h; }(),
-		mainRowsCopy,
-		0,     // Default sort column (Shader Type)
-		true,  // Default ascending
-		sorters,
-		[&columns](int rowIdx, int colIdx, const DrawCallRow& row) {
-			(void)rowIdx;
-			columns[colIdx].cellRender(row, colIdx);
-		},
-		summaryRowsCopy);
-}
-
-// Static test data state
-
-// Implement static member functions
-/**
- * @brief Updates test data for a specific shader type during manual shader toggling
- *
- * This function captures performance data for a shader type when it's manually disabled,
- * allowing users to compare performance with/without specific shaders enabled.
- *
- * @param shaderType The shader type index to update test data for
- * @param frameTime The frame time contribution of this shader type (ms)
- * @param costPerCall The cost per draw call for this shader type (ms/call)
- *
- * @note This function also updates the Total and Other summary rows to maintain
- *       consistency with the current performance state
- */
-void PerformanceOverlay::UpdateShaderTestData(int shaderType, float frameTime, float costPerCall)
-{
-	UpdateShaderTestDataEntry(shaderType, frameTime, costPerCall);
-
-	float smoothedFrameTime = static_cast<float>(this->perfOverlayState.GetSmoothFrameTimeMs());
-	float measuredSum = 0.0f;
-	for (const auto& [type, data] : testData) {
-		if (type >= 0)
-			measuredSum += data.frameTime;
-	}
-
-	auto [otherFrameTime, otherPercent, totalCostPerCall] = CalculateSummaryData(smoothedFrameTime, measuredSum);
-	UpdateSummaryTestData(smoothedFrameTime, otherFrameTime, otherPercent, totalCostPerCall);
-
-	testDataSource = TestDataSource::ManualShaderToggle;
-	testDataLastUpdated = std::chrono::steady_clock::now();
-}
-
-/**
- * @brief Updates test data for all shader types during A/B test Variant B execution
- *
- * This function captures comprehensive performance data for all shader types when
- * running in A/B test mode with Variant B (test config) active. It ensures that
- * all shader types, including Total and Other summary rows, have current test data
- * for accurate performance comparison.
- *
- * @note This function only captures data when A/B testing is enabled and using
- *       Variant B (test config). It does nothing in manual shader toggle mode.
- */
-void PerformanceOverlay::UpdateAllShaderTestData()
-{
-	// Check if all shaders are disabled
-	bool allDisabled = true;
-	globals::state->ForEachShaderTypeWithIndex([&allDisabled]([[maybe_unused]] auto type, int classIndex) {
-		if (globals::state->enabledClasses[classIndex]) {
-			allDisabled = false;
-		}
-	});
-	if (allDisabled) {
-		testData.clear();
-		testDataSource = TestDataSource::None;
-		return;
-	}
-
-	// Only capture test data if we're in A/B test mode AND using Variant B (test config)
-	auto* abTestingManager = ABTestingManager::GetSingleton();
-	bool abTest = abTestingManager && abTestingManager->IsEnabled() && abTestingManager->IsUsingTestConfig();
-	if (!abTest) {
-		// If not in A/B test Variant B, don't capture test data
-		return;
-	}
-
-	float smoothedFrameTime = static_cast<float>(this->perfOverlayState.GetSmoothFrameTimeMs());
-	float measuredSum = 0.0f;
-
-	globals::state->ForEachShaderTypeWithMetrics([&measuredSum, smoothedFrameTime, this]([[maybe_unused]] auto type, int typeIndex, [[maybe_unused]] float drawCalls, float frameTime, float percent, float costPerCall) {
-		this->UpdateShaderTestDataEntry(typeIndex, frameTime, costPerCall, percent);
-		measuredSum += frameTime;
-	});
-
-	auto [otherFrameTime, otherPercent, totalCostPerCall] = CalculateSummaryData(smoothedFrameTime, measuredSum);
-	UpdateSummaryTestData(smoothedFrameTime, otherFrameTime, otherPercent, totalCostPerCall);
-	testDataSource = TestDataSource::ABTest_VariantB;
-	testDataLastUpdated = std::chrono::steady_clock::now();
-}
-
-std::string PerformanceOverlay::GetTestDataTooltip()
-{
-	switch (testDataSource) {
-	case TestDataSource::ABTest_VariantB:
-		return std::string("Test data from Test (Variant B).\nLast updated: ") + Util::TimeAgoString(testDataLastUpdated) + " ago.";
-	case TestDataSource::ManualShaderToggle:
-		return std::string("Test data from manual shader toggle.\nLast updated: ") + Util::TimeAgoString(testDataLastUpdated) + " ago.";
-	default:
-		return "No test data available.";
-	}
-}
-
-void PerformanceOverlay::DataLoaded()
-{
-	// Initialize performance overlay state
-	this->perfOverlayState.SetInitialized(false);
-	this->perfOverlayState.ResizeFrameTimeHistory(this->settings.FrameHistorySize, 0.0f);
-	this->perfOverlayState.ResizePostFGFrameTimeHistory(this->settings.FrameHistorySize, 0.0f);
-}
+// ============================================================================
+// VIRTUAL OVERRIDES (Feature.h interface)
+// ============================================================================
 
 std::pair<std::string, std::vector<std::string>> PerformanceOverlay::GetFeatureSummary()
 {
@@ -800,6 +220,14 @@ void PerformanceOverlay::DrawSettings()
 		}
 		ImGui::Unindent();
 	}
+}
+
+void PerformanceOverlay::DataLoaded()
+{
+	// Initialize performance overlay state
+	this->perfOverlayState.SetInitialized(false);
+	this->perfOverlayState.ResizeFrameTimeHistory(this->settings.FrameHistorySize, 0.0f);
+	this->perfOverlayState.ResizePostFGFrameTimeHistory(this->settings.FrameHistorySize, 0.0f);
 }
 
 void PerformanceOverlay::DrawOverlay()
@@ -998,93 +426,9 @@ void PerformanceOverlay::DrawOverlay()
 		ImGui::PopStyleColor();  // WindowBg
 	}
 }
-
-void PerformanceOverlay::PerfOverlayState::UpdateFGFrameTime()
-{
-	// Defensive: Check for upscaling pointer
-	if (!globals::upscaling)
-		return;
-
-	auto* overlay = GetSingleton();
-
-	// Get frametime directly from the Frame Generation system
-	float fgDeltaTime = globals::upscaling->GetFrameGenerationFrameTime();
-	if (fgDeltaTime > 0.0f) {
-		overlay->perfOverlayState.SetPostFGFrameTimeMs(fgDeltaTime * 1000.0f);
-		overlay->perfOverlayState.SetPostFGFps(1000.0f / overlay->perfOverlayState.GetPostFGFrameTimeMs());
-
-		// Update post-FG smooth values when timer elapses
-		if (overlay->perfOverlayState.GetUpdateTimer() <= 0.0f) {
-			overlay->perfOverlayState.SetPostFGSmoothFps(overlay->perfOverlayState.GetPostFGFps());
-			overlay->perfOverlayState.SetPostFGSmoothFrameTimeMs(overlay->perfOverlayState.GetPostFGFrameTimeMs());
-		}
-
-		// Update post-FG frametime history
-		overlay->perfOverlayState.GetPostFGFrameTimeHistoryRef()[overlay->perfOverlayState.GetPostFGFrameTimeHistoryIndex()] = overlay->perfOverlayState.GetPostFGFrameTimeMs();
-		overlay->perfOverlayState.SetPostFGFrameTimeHistoryIndex((overlay->perfOverlayState.GetPostFGFrameTimeHistoryIndex() + 1) % overlay->settings.FrameHistorySize);
-	} else {
-		// Fallback if FG time is not available
-		overlay->perfOverlayState.SetPostFGFrameTimeMs(overlay->perfOverlayState.GetFrameTimeMs() / PerformanceOverlay::PerfOverlayState::kFrameGenerationMultiplier);
-		overlay->perfOverlayState.SetPostFGFps(overlay->perfOverlayState.GetFps() * PerformanceOverlay::PerfOverlayState::kFrameGenerationMultiplier);
-
-		if (overlay->perfOverlayState.GetUpdateTimer() <= 0.0f) {
-			overlay->perfOverlayState.SetPostFGSmoothFps(overlay->perfOverlayState.GetPostFGFps());
-			overlay->perfOverlayState.SetPostFGSmoothFrameTimeMs(overlay->perfOverlayState.GetPostFGFrameTimeMs());
-		}
-
-		overlay->perfOverlayState.GetPostFGFrameTimeHistoryRef()[overlay->perfOverlayState.GetPostFGFrameTimeHistoryIndex()] = overlay->perfOverlayState.GetPostFGFrameTimeMs();
-		overlay->perfOverlayState.SetPostFGFrameTimeHistoryIndex((overlay->perfOverlayState.GetPostFGFrameTimeHistoryIndex() + 1) % overlay->settings.FrameHistorySize);
-	}
-}
-
-void PerformanceOverlay::PerfOverlayState::UpdateFrameTimeHistorySizes()
-{
-	auto* overlay = GetSingleton();
-
-	overlay->settings.FrameHistorySize = std::clamp(
-		overlay->settings.FrameHistorySize,
-		overlay->settings.kMinFrameHistorySize,
-		overlay->settings.kMaxFrameHistorySize);
-
-	if (overlay->perfOverlayState.GetFrameTimeHistory().size() != static_cast<size_t>(overlay->settings.FrameHistorySize)) {
-		overlay->perfOverlayState.ResizeFrameTimeHistory(overlay->settings.FrameHistorySize, 0.0f);
-		if (overlay->perfOverlayState.GetFrameTimeHistoryIndex() >= overlay->settings.FrameHistorySize) {
-			overlay->perfOverlayState.SetFrameTimeHistoryIndex(0);
-		}
-	}
-	if (overlay->perfOverlayState.GetPostFGFrameTimeHistory().size() != static_cast<size_t>(overlay->settings.FrameHistorySize)) {
-		overlay->perfOverlayState.ResizePostFGFrameTimeHistory(overlay->settings.FrameHistorySize, 0.0f);
-		if (overlay->perfOverlayState.GetPostFGFrameTimeHistoryIndex() >= overlay->settings.FrameHistorySize) {
-			overlay->perfOverlayState.SetPostFGFrameTimeHistoryIndex(0);
-		}
-	}
-}
-
-void PerformanceOverlay::PerfOverlayState::UpdateMinFrameTime()
-{
-	auto* overlay = GetSingleton();
-	overlay->perfOverlayState.SetMinFrameTime(*std::min_element(overlay->perfOverlayState.GetFrameTimeHistory().begin(), overlay->perfOverlayState.GetFrameTimeHistory().end()));
-}
-
-void PerformanceOverlay::PerfOverlayState::UpdateMaxFrameTime()
-{
-	auto* overlay = GetSingleton();
-	overlay->perfOverlayState.SetMaxFrameTime(*std::max_element(overlay->perfOverlayState.GetFrameTimeHistory().begin(), overlay->perfOverlayState.GetFrameTimeHistory().end()));
-}
-
-float PerformanceOverlay::PerfOverlayState::SetTextScale()
-{
-	auto* overlay = GetSingleton();
-	switch (overlay->settings.Size) {
-	case PerfOverlaySettings::TextSize::Small:
-		return 0.8f;
-	case PerfOverlaySettings::TextSize::Medium:
-		return 1.0f;
-	case PerfOverlaySettings::TextSize::Large:
-		return 1.2f;
-	}
-	return 1.0f;
-}
+// ============================================================================
+// CORE PERFORMANCE DISPLAY FUNCTIONS
+// ============================================================================
 
 void PerformanceOverlay::DrawFPS()
 {
@@ -1164,157 +508,6 @@ void PerformanceOverlay::DrawFPS()
 	}
 }
 
-void PerformanceOverlay::PerfOverlayState::DrawPostFGFrameTimeGraph()
-{
-	// Prepare overlay text
-	char overlay_text[128];
-	snprintf(overlay_text, IM_ARRAYSIZE(overlay_text),
-		"Post-FG: %.2f ms (%.1f FPS)",
-		GetPostFGSmoothFrameTimeMs(), GetPostFGSmoothFps());
-
-	// Set graph colors - blue for post-FG
-	ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.0f, 0.5f, 1.0f, 1.0f));  // Blue line
-
-	// Draw the graph
-	float graphWidth = ImGui::GetWindowWidth() * 0.9f;
-	ImGui::PlotLines("##postfgframetime",
-		GetPostFGFrameTimeHistory().data(),
-		PerformanceOverlay::GetSingleton()->settings.FrameHistorySize,
-		GetPostFGFrameTimeHistoryIndex(),
-		overlay_text,
-		GetSmoothedMinFrameTime(), GetSmoothedMaxFrameTime(),
-		ImVec2(graphWidth, 50.0f * GetTextScale()));
-
-	ImGui::PopStyleColor();
-
-	// Draw frametime target reference lines
-	if (ImGui::BeginTable("PostFGFrametimeTargets", 3, ImGuiTableFlags_SizingStretchSame)) {
-		ImGui::TableNextColumn();
-		ImGui::Text("30 FPS: 33.3 ms");
-
-		ImGui::TableNextColumn();
-		ImGui::Text("60 FPS: 16.7 ms");
-
-		ImGui::TableNextColumn();
-		ImGui::Text("120 FPS: 8.3 ms");
-
-		ImGui::EndTable();
-	}
-}
-
-// --- TEST DATA CAPTURE LOGIC ---
-// Test data is captured in two scenarios:
-// 1. A/B Test Mode (Variant B): If abTestingEnabled && usingTestConfig, we continuously capture test data
-//    for all shader types, "Other", and "Total" every frame. This allows live comparison between
-//    Variant A (user config) and Variant B (test config).
-// 2. Manual Shader Toggle: If any shader is disabled, we capture test data for the disabled shaders
-//    (and summary rows) at the moment of disabling, and keep it until cleared. This allows users to
-//    compare performance with/without specific shaders enabled.
-// Test data is only cleared by the "Clear Test Data" button or if all shaders are disabled (rare edge case).
-void PerformanceOverlay::CaptureTestData()
-{
-	auto* abTestingManager = ABTestingManager::GetSingleton();
-	bool abTestActive = (abTestingManager && abTestingManager->IsEnabled() && abTestingManager->IsUsingTestConfig());
-	bool anyShaderDisabled = false;
-	globals::state->ForEachShaderTypeWithIndex([&anyShaderDisabled]([[maybe_unused]] auto type, int classIndex) {
-		if (!globals::state->enabledClasses[classIndex]) {
-			anyShaderDisabled = true;
-		}
-	});
-	float smoothedFrameTime = static_cast<float>(this->perfOverlayState.GetSmoothFrameTimeMs());
-	float measuredSum = 0.0f;
-	if (abTestActive) {
-		measuredSum = 0.0f;
-		globals::state->ForEachShaderTypeWithMetrics([&measuredSum, smoothedFrameTime, this]([[maybe_unused]] auto type, int typeIndex, [[maybe_unused]] float drawCalls, float frameTime, float percent, float costPerCall) {
-			this->UpdateShaderTestDataEntry(typeIndex, frameTime, costPerCall, percent);
-			measuredSum += frameTime;
-		});
-		auto [otherFrameTime, otherPercent, totalCostPerCall] = CalculateSummaryData(smoothedFrameTime, measuredSum);
-		UpdateSummaryTestData(smoothedFrameTime, otherFrameTime, otherPercent, totalCostPerCall);
-		testDataSource = TestDataSource::ABTest_VariantB;
-		testDataLastUpdated = std::chrono::steady_clock::now();
-	} else if (anyShaderDisabled) {
-		measuredSum = 0.0f;
-		globals::state->ForEachShaderTypeWithMetrics([&measuredSum, smoothedFrameTime, this]([[maybe_unused]] auto type, int typeIndex, [[maybe_unused]] float drawCalls, float frameTime, float percent, float costPerCall) {
-			bool enabled = globals::state->enabledClasses[typeIndex - 1];
-			if (!enabled) {
-				this->UpdateShaderTestDataEntry(typeIndex, frameTime, costPerCall, percent);
-			}
-			measuredSum += frameTime;
-		});
-		auto [otherFrameTime, otherPercent, totalCostPerCall] = CalculateSummaryData(smoothedFrameTime, measuredSum);
-		UpdateSummaryTestData(smoothedFrameTime, otherFrameTime, otherPercent, totalCostPerCall);
-		testDataSource = TestDataSource::ManualShaderToggle;
-		testDataLastUpdated = std::chrono::steady_clock::now();
-	}
-}
-
-void PerformanceOverlay::ClearTestData()
-{
-	testData.clear();
-	testDataSource = TestDataSource::None;
-}
-
-std::pair<std::vector<DrawCallRow>, std::vector<DrawCallRow>> PerformanceOverlay::BuildDrawCallRows() const
-{
-	std::vector<DrawCallRow> mainRows;
-	float smoothedFrameTime = static_cast<float>(this->perfOverlayState.GetSmoothFrameTimeMs());
-	float measuredSum = 0.0f;
-
-	globals::state->ForEachShaderTypeWithMetrics([&mainRows, &measuredSum, smoothedFrameTime, this](auto type, int typeIndex, float drawCalls, float frameTime, float percent, float costPerCall) {
-		bool enabled = globals::state->enabledClasses[typeIndex - 1];
-		std::optional<float> testFrameTime, testCostPerCall;
-		auto it = this->testData.find(typeIndex);
-		if (it != this->testData.end()) {
-			testFrameTime = it->second.frameTime;
-			testCostPerCall = it->second.costPerCall;
-		}
-		std::string label = std::string(magic_enum::enum_name(type)) + ":";
-		std::string tooltip = "Draw calls for this shader type.";
-		auto tipIt = kShaderTypeTooltips.find(type);
-		if (tipIt != kShaderTypeTooltips.end()) {
-			tooltip = tipIt->second;
-		}
-		mainRows.push_back({ label, typeIndex, static_cast<int>(drawCalls), frameTime, percent, costPerCall, tooltip, enabled, testFrameTime, testCostPerCall });
-		measuredSum += frameTime;
-	});
-
-	auto [otherFrameTime, otherPercent, totalCostPerCall] = CalculateSummaryData(smoothedFrameTime, measuredSum);
-	if (std::abs(otherFrameTime) < 1e-4f)
-		otherFrameTime = 0.0f;
-	std::optional<float> otherTestFrameTime, otherTestCostPerCall, totalTestFrameTime, totalTestCostPerCall;
-	auto itOther = this->testData.find(static_cast<int>(SpecialShaderType::Other));
-	if (itOther != this->testData.end()) {
-		otherTestFrameTime = itOther->second.frameTime;
-		otherTestCostPerCall = itOther->second.costPerCall;
-	}
-	auto itTotal = this->testData.find(static_cast<int>(SpecialShaderType::Total));
-	if (itTotal != this->testData.end()) {
-		totalTestFrameTime = itTotal->second.frameTime;
-		totalTestCostPerCall = itTotal->second.costPerCall;
-	}
-	DrawCallRow otherRow = {
-		"Other:", static_cast<int>(SpecialShaderType::Other), 0, otherFrameTime, otherPercent,
-		0.0f,
-		std::string("Frame time not attributed to any measured shader type. This includes UI, post-processing, engine work, and any GPU activity not directly measured by the overlay."),
-		true, otherTestFrameTime, otherTestCostPerCall
-	};
-	// Always use the actual total frame time for live data
-	float totalFrameTime = smoothedFrameTime;
-	float totalPercent = 100.0f;  // Total is always 100% of total
-
-	DrawCallRow totalRow = {
-		"Total:", static_cast<int>(SpecialShaderType::Total), static_cast<int>(globals::state->GetTotalSmoothedDrawCalls()), totalFrameTime, totalPercent,
-		totalCostPerCall,
-		std::string("Total frame time."),
-		true, totalTestFrameTime, totalTestCostPerCall
-	};
-	std::vector<DrawCallRow> summaryRows;
-	summaryRows.push_back(otherRow);
-	summaryRows.push_back(totalRow);
-	return { mainRows, summaryRows };
-}
-
 void PerformanceOverlay::DrawVRAM()
 {
 	auto menu = Menu::GetSingleton();
@@ -1355,324 +548,568 @@ void PerformanceOverlay::DrawVRAM()
 		ImGui::Text("VRAM Usage: Not available");
 	}
 }
+// ============================================================================
+// A/B TESTING FUNCTIONS
+// ============================================================================
 
-void PerformanceOverlay::PerfOverlayState::UpdateGraphValues()
+// --- ABTestAggregator integration ---
+ABTestAggregator& PerformanceOverlay::GetABTestAggregator()
 {
-	// Get settings from the singleton
-	const auto& overlaySettings = PerformanceOverlay::GetSingleton()->settings;
-
-	// Sync frame history buffer size with user settings
-	UpdateFrameTimeHistorySizes();
-
-	// Insert latest frame time into circular buffer
-	float oldFrameTime = GetFrameTimeHistory()[GetFrameTimeHistoryIndex()];
-	GetFrameTimeHistoryRef()[GetFrameTimeHistoryIndex()] = GetFrameTimeMs();
-	SetFrameTimeHistoryIndex((GetFrameTimeHistoryIndex() + 1) % overlaySettings.FrameHistorySize);
-
-	// Maintain instantaneous min/max tracking
-	if (GetFrameTimeMs() > GetMaxFrameTime()) {
-		SetMaxFrameTime(GetFrameTimeMs());
-	} else if (GetFrameTimeMs() < GetMinFrameTime()) {
-		SetMinFrameTime(GetFrameTimeMs());
-	} else if (oldFrameTime == GetMinFrameTime()) {
-		UpdateMinFrameTime();
-	} else if (oldFrameTime == GetMaxFrameTime()) {
-		UpdateMaxFrameTime();
-	}
-
-	float avgFrameTime, stdDev, graphMin, graphMax;
-	// Calculate mean and standard deviation for normalized graph range
-	if (GetFrameTimeHistory().empty()) {
-		// Default to 60 FPS
-		avgFrameTime = kDefaultFrameTimeMs;
-		stdDev = 0.0f;
-		graphMin = 0.0f;
-		graphMax = PerformanceOverlay::PerfOverlayState::kGraphSpreadMultiplier * kDefaultFrameTimeMs;
-	} else {
-		// Calculate average frame time
-		avgFrameTime = std::accumulate(GetFrameTimeHistory().begin(), GetFrameTimeHistory().end(), 0.0f) / GetFrameTimeHistory().size();
-
-		// Calculate standard deviation
-		float variance = 0.0f;
-		for (float ft : GetFrameTimeHistory()) {
-			float diff = ft - avgFrameTime;
-			variance += diff * diff;
-		}
-		variance /= GetFrameTimeHistory().size();
-		stdDev = std::sqrt(variance);
-
-		// Calculate graph range
-		float spread = std::clamp(stdDev * PerformanceOverlay::PerfOverlayState::kGraphSpreadMultiplier, PerformanceOverlay::PerfOverlayState::kGraphMinSpread, PerformanceOverlay::PerfOverlayState::kGraphMaxSpread);
-		graphMin = std::max(0.0f, avgFrameTime - spread);
-		graphMax = avgFrameTime + spread;
-	}
-
-	// Exponential smoothing for stable graph scaling
-	SetSmoothedMinFrameTime(GetSmoothedMinFrameTime() + kSmoothingFactor * (graphMin - GetSmoothedMinFrameTime()));
-	SetSmoothedMaxFrameTime(GetSmoothedMaxFrameTime() + kSmoothingFactor * (graphMax - GetSmoothedMaxFrameTime()));
+	auto* abTestingManager = ABTestingManager::GetSingleton();
+	return abTestingManager->GetAggregator();
 }
 
-// Private helper for table rendering
-void PerformanceOverlay::DrawDrawCallsTable(const std::vector<DrawCallRow>& mainRows, const std::vector<DrawCallRow>& summaryRows)
+/**
+  * @brief Draws the A/B test results table with comprehensive performance comparison
+  *
+  * This function renders a detailed table showing performance metrics for both Variant A (USER config)
+  * and Variant B (TEST config), including:
+  * - Average and median frame times for each shader type
+  * - Performance deltas and percentage differences
+  * - Color-coded indicators for better/worse performance
+  * - Statistical validity assessment with tooltips
+  * - Sortable columns for easy analysis
+  *
+  * The table provides both main rows (individual shader types) and summary rows (Total, Other)
+  * to give users a complete picture of performance differences between configurations.
+  *
+  * @note This function requires an active A/B test with aggregated results
+  */
+void PerformanceOverlay::DrawABTestResultsTable()
 {
-	static bool clearTestDataRequested = false;
-	auto* overlay = PerformanceOverlay::GetSingleton();
+	auto* abTestingManager = ABTestingManager::GetSingleton();
+	auto& aggregator = abTestingManager->GetAggregator();
+	auto results = aggregator.GetAggregatedResults();
+	if (results.empty())
+		return;
+
 	auto* menu = Menu::GetSingleton();
 	const auto& theme = menu->GetTheme();
 
-	// --- COLUMN CONFIG ---
-	using ColoredTextLines = Util::ColoredTextLines;
+	DrawABTestStatisticalValidity(theme, aggregator);
 
-	// --- BUILD LEGENDS ---
-	const ColoredTextLines frameTimeLegend = {
-		{ "Frame Time: Time spent on this shader type (ms and % of total frame time).", theme.Palette.Text },
-		{ "", theme.Palette.Text },
-		{ "Performance Color Legend (ms):", theme.Palette.Text },
-		{ "  <= 2 ms", theme.StatusPalette.SuccessColor },
-		{ "  > 2 ms and <= 5 ms", theme.StatusPalette.Warning },
-		{ "  > 5 ms", theme.StatusPalette.Error }
-	};
-	const ColoredTextLines costPerCallLegend = {
-		{ "Cost/Call: Average time per draw call for this shader type.", theme.Palette.Text },
-		{ "", theme.Palette.Text },
-		{ "Color Legend (ms/call):", theme.Palette.Text },
-		{ "  <= 0.05 ms/call", theme.StatusPalette.SuccessColor },
-		{ "  > 0.05 ms and <= 0.2 ms/call", theme.StatusPalette.Warning },
-		{ "  > 0.2 ms/call", theme.StatusPalette.Error }
-	};
-	const ColoredTextLines testFrameTimeLegend = {
-		{ PerformanceOverlay::GetTestDataTooltip(), theme.Palette.Text },
-		{ "", theme.Palette.Text },
-		{ "Color Legend (compared to live data):", theme.Palette.Text },
-		{ "  Better (lower than live)", theme.StatusPalette.SuccessColor },
-		{ "  Worse (higher than live)", theme.StatusPalette.Error },
-		{ "  Same as live", theme.Palette.Text }
-	};
-	const Util::ColoredTextLines testCostPerCallLegend = testFrameTimeLegend;
+	std::vector<DrawCallRow> mainRows, summaryRows;
+	ConvertABTestResultsToRows(results, mainRows, summaryRows);
 
-	overlay->CaptureTestData();
+	ABTestLegends legends = BuildABTestLegends(theme);
 
-	bool anyTestData = !overlay->testData.empty();
-	if (anyTestData) {
-		if (ImGui::Button("Clear Test Data")) {
-			clearTestDataRequested = true;
-		}
-	}
+	auto columns = BuildABTestResultsTableColumns(theme, legends);
 
-	// --- BUILD HEADERS AND CONFIG ---
-	std::vector<ColumnConfig> columns = {
-		{ "Shader Type",
-			[theme](const DrawCallRow& row, int) {
-				if (!row.enabled)
-					ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.Disable);
-				bool wasEnabled = row.enabled;
-				if (ImGui::Selectable(row.label.c_str(), false)) {
-					auto maybeType = magic_enum::enum_cast<RE::BSShader::Type>(row.shaderType);
-					if (maybeType.has_value()) {
-						auto classIndex = magic_enum::enum_integer(*maybeType) - 1;
-						if (classIndex >= 0 && classIndex < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1) {
-							bool isDisabling = wasEnabled;
-							float prevFrameTime = row.frameTime;
-							float prevCostPerCall = row.costPerCall;
-							// Capture live data for Total and Other before toggling
-							float smoothedFrameTime = static_cast<float>(PerformanceOverlay::GetSingleton()->perfOverlayState.GetSmoothFrameTimeMs());
-							float measuredSum = 0.0f;
-							globals::state->ForEachShaderTypeWithMetrics([&measuredSum]([[maybe_unused]] auto type, [[maybe_unused]] int typeIndex, [[maybe_unused]] float drawCalls, float frameTime, [[maybe_unused]] float percent, [[maybe_unused]] float costPerCall) {
-								measuredSum += frameTime;
-							});
-							auto [otherFrameTime, otherPercent, totalCostPerCall] = CalculateSummaryData(smoothedFrameTime, measuredSum);
-							globals::state->enabledClasses[classIndex] = !wasEnabled;
-							if (isDisabling) {
-								// Save the last live value before disabling
-								PerformanceOverlay::GetSingleton()->UpdateShaderTestData(row.shaderType, prevFrameTime, prevCostPerCall);
-								// Save Total and Other test data as well
-								PerformanceOverlay::GetSingleton()->testData[static_cast<int>(SpecialShaderType::Total)] = { smoothedFrameTime, totalCostPerCall, 100.0f };
-								PerformanceOverlay::GetSingleton()->testData[static_cast<int>(SpecialShaderType::Other)] = { otherFrameTime, 0.0f, otherPercent };
-								PerformanceOverlay::GetSingleton()->testDataSource = PerformanceOverlay::TestDataSource::ManualShaderToggle;
-								PerformanceOverlay::GetSingleton()->testDataLastUpdated = std::chrono::steady_clock::now();
-							}
-						}
-					}
-				}
-				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						ImGui::TextUnformatted(row.tooltip.c_str());
-					}
-				}
-				if (!row.enabled)
-					ImGui::PopStyleColor();
-			},
-			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.label < b.label) : (a.label > b.label); },
-			nullptr },
-		{ "Draw Calls",
-			[](const DrawCallRow& row, int) {
-				ImGui::Text("%d", row.drawCalls);
-				if (ImGui::IsItemHovered()) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						ImGui::TextUnformatted("Draw Calls: Number of draw calls for this shader type in the current frame.");
-					}
-				}
-			},
-			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.drawCalls < b.drawCalls) : (a.drawCalls > b.drawCalls); },
-			[]() {
-				if (ImGui::IsItemHovered()) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						ImGui::TextUnformatted("Draw Calls: Number of draw calls for this shader type in the current frame.");
-					}
-				}
-			} }
-	};
-	columns.push_back(ColumnConfig{
-		"Frame Time (%)",
-		MakeMetricColumn(theme, [](const DrawCallRow& row) { return row.frameTime; }, [](const auto& theme, float value, const DrawCallRow&) { return Util::GetThresholdColor(value, PerformanceOverlay::PerfOverlayState::kFrameTimeGoodThreshold, PerformanceOverlay::PerfOverlayState::kFrameTimeWarningThreshold, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error); }, [](float /*value*/, const DrawCallRow& row) { return Util::FormatMilliseconds(row.frameTime) + " (" + Util::FormatPercent(row.percent) + ")"; }, frameTimeLegend), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.percent < b.percent) : (a.percent > b.percent); }, [frameTimeLegend]() {
-			if (ImGui::IsItemHovered()) {
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					Util::DrawColoredMultiLineTooltip(frameTimeLegend);
-				}
-			} } });
-
-	columns.push_back(ColumnConfig{
-		"Cost/Call",
-		MakeMetricColumn(theme, [](const DrawCallRow& row) { return row.costPerCall; }, [](const auto& theme, float value, const DrawCallRow&) { return Util::GetThresholdColor(value, PerformanceOverlay::PerfOverlayState::kCostPerCallGoodThreshold, PerformanceOverlay::PerfOverlayState::kCostPerCallWarningThreshold, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error); }, [](float value, const DrawCallRow&) { return (value < PerformanceOverlay::PerfOverlayState::kMicrosecondThreshold && value > 0.0f) ? Util::FormatMicroseconds(value * 1000.0f) : Util::FormatMilliseconds(value); }, costPerCallLegend), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.costPerCall < b.costPerCall) : (a.costPerCall > b.costPerCall); }, [costPerCallLegend]() {
-			if (ImGui::IsItemHovered()) {
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					Util::DrawColoredMultiLineTooltip(costPerCallLegend);
-				}
-			} } });
-
-	// Add test columns if present
-	if (anyTestData) {
-		columns.push_back(ColumnConfig{
-			"Test Frame Time (%)",
-			MakeMetricColumn(theme, [](const DrawCallRow& row) { return row.testFrameTime; }, [](const auto& theme, float value, const DrawCallRow& row) {
-					if (value < row.frameTime)
-						return theme.StatusPalette.SuccessColor;
-					if (value > row.frameTime)
-						return theme.StatusPalette.Error;
-					return theme.Palette.Text; }, [overlay](float value, const DrawCallRow& row) { return Util::FormatMilliseconds(value) + " (" + Util::FormatPercent(overlay->testData[row.shaderType].percent) + ")"; }, testFrameTimeLegend), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
-				float aVal = a.testFrameTime.value_or(FLT_MAX);
-				float bVal = b.testFrameTime.value_or(FLT_MAX);
-				return asc ? (aVal < bVal) : (aVal > bVal); }, [overlay, testFrameTimeLegend]() {
-				if (ImGui::IsItemHovered()) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						ImGui::TextUnformatted(overlay->GetTestDataTooltip().c_str());
-						ImGui::Separator();
-						Util::DrawColoredMultiLineTooltip(testFrameTimeLegend);
-					}
-				} } });
-
-		columns.push_back(ColumnConfig{
-			"Test Cost/Call",
-			MakeMetricColumn(theme, [](const DrawCallRow& row) { return row.testCostPerCall; }, [](const auto& theme, float value, const DrawCallRow& row) {
-					if (value < row.costPerCall)
-						return theme.StatusPalette.SuccessColor;
-					if (value > row.costPerCall)
-						return theme.StatusPalette.Error;
-					return theme.Palette.Text; }, [](float value, const DrawCallRow&) { return (value < PerformanceOverlay::PerfOverlayState::kMicrosecondThreshold && value > 0.0f) ? Util::FormatMicroseconds(value * 1000.0f) : Util::FormatMilliseconds(value); }, testCostPerCallLegend), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
-				float aVal = a.testCostPerCall.value_or(FLT_MAX);
-				float bVal = b.testCostPerCall.value_or(FLT_MAX);
-				return asc ? (aVal < bVal) : (aVal > bVal); }, [overlay, testCostPerCallLegend]() {
-				if (ImGui::IsItemHovered()) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						ImGui::TextUnformatted(overlay->GetTestDataTooltip().c_str());
-						ImGui::Separator();
-						Util::DrawColoredMultiLineTooltip(testCostPerCallLegend);
-					}
-				} } });
-	}
-
-	// --- TABLE RENDER: MAIN ROWS + FOOTER ROWS ---
 	std::vector<std::function<bool(const DrawCallRow&, const DrawCallRow&, bool)>> sorters;
 	for (const auto& col : columns) sorters.push_back(col.sortFunc);
-
-	// Create non-const copies for the table function
 	std::vector<DrawCallRow> mainRowsCopy = mainRows;
 	std::vector<DrawCallRow> summaryRowsCopy = summaryRows;
-
 	Util::ShowSortedStringTable<DrawCallRow>(
-		"DrawCallOverlayTable",
+		"ABTestResultsTable",
 		[&columns]() { std::vector<std::string> h; for (const auto& c : columns) h.push_back(c.header); return h; }(),
 		mainRowsCopy,
 		0,     // Default sort column (Shader Type)
 		true,  // Default ascending
 		sorters,
-		[&columns, overlay](int rowIdx, int colIdx, const DrawCallRow& row) {
+		[&columns](int rowIdx, int colIdx, const DrawCallRow& row) {
 			(void)rowIdx;
-			// Special handling for summary rows
-			if ((row.label == "Total:" || row.label == "Other:") && colIdx == 0) {
-				if (row.label == "Total:") {
-					if (ImGui::Selectable(row.label.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
-						bool anyDisabled = false;
-						globals::state->ForEachShaderTypeWithIndex([&anyDisabled]([[maybe_unused]] auto type, int classIndex) {
-							if (!globals::state->enabledClasses[classIndex]) {
-								anyDisabled = true;
-							}
-						});
-						globals::state->ForEachShaderTypeWithIndex([&anyDisabled]([[maybe_unused]] auto type, int classIndex) {
-							globals::state->enabledClasses[classIndex] = anyDisabled;
-						});
-						// Update test data and timestamp for manual toggling (not just A/B test mode)
-						auto* abTestingManager = ABTestingManager::GetSingleton();
-						bool abTest = abTestingManager && abTestingManager->IsEnabled() && abTestingManager->IsUsingTestConfig();
-						if (abTest) {
-							overlay->UpdateAllShaderTestData();
-						} else {
-							// Manual toggle: update test data and timestamp
-							float smoothedFrameTime = static_cast<float>(overlay->perfOverlayState.GetSmoothFrameTimeMs());
-							float measuredSum = 0.0f;
-							globals::state->ForEachShaderTypeWithMetrics([&measuredSum]([[maybe_unused]] auto type, [[maybe_unused]] int typeIndex, [[maybe_unused]] float drawCalls, float frameTime, [[maybe_unused]] float percent, [[maybe_unused]] float costPerCall) {
-								measuredSum += frameTime;
-							});
-							auto [otherFrameTime, otherPercent, totalCostPerCall] = CalculateSummaryData(smoothedFrameTime, measuredSum);
-							overlay->testData[static_cast<int>(SpecialShaderType::Total)] = { smoothedFrameTime, totalCostPerCall, 100.0f };
-							overlay->testData[static_cast<int>(SpecialShaderType::Other)] = { otherFrameTime, 0.0f, otherPercent };
-							overlay->testDataSource = PerformanceOverlay::TestDataSource::ManualShaderToggle;
-							overlay->testDataLastUpdated = std::chrono::steady_clock::now();
-						}
-					}
-					if (ImGui::IsItemHovered()) {
-						if (auto _tt = Util::HoverTooltipWrapper()) {
-							ImGui::TextUnformatted(row.tooltip.c_str());
-							float _fps = row.frameTime > 0.0f ? 1000.0f / row.frameTime : 0.0f;
-							ImGui::Text("FPS: %.2f", _fps);
-						}
-					}
-				} else if (row.label == "Other:") {
-					ImGui::TextUnformatted(row.label.c_str());
-					if (!row.tooltip.empty() && ImGui::IsItemHovered()) {
-						if (auto _tt = Util::HoverTooltipWrapper()) {
-							ImGui::TextUnformatted(row.tooltip.c_str());
-						}
-					}
-				}
-			} else if (row.label == "Total:" || row.label == "Other:") {
-				// No tooltip for summary rows in non-label columns
-				columns[colIdx].cellRender(row, colIdx);
-			} else {
-				// Normal row: ensure tooltips never modify cell content
-				columns[colIdx].cellRender(row, colIdx);
-			}
+			columns[colIdx].cellRender(row, colIdx);
 		},
 		summaryRowsCopy);
+}
 
-	if (clearTestDataRequested) {
-		overlay->ClearTestData();
-		clearTestDataRequested = false;
+/**
+  * @brief Draws statistical validity information for A/B test results
+  *
+  * This function displays test duration, valid frame counts, and exclusion rates
+  * with color-coded indicators for statistical validity. It helps users understand
+  * whether the A/B test results are reliable and statistically significant.
+  *
+  * @param theme The current UI theme settings
+  * @param aggregator The A/B test aggregator containing test statistics
+  */
+void PerformanceOverlay::DrawABTestStatisticalValidity(const Menu::ThemeSettings& theme, const ABTestAggregator& aggregator) const
+{
+	float totalDuration = aggregator.GetTotalTestDuration();
+	int totalFrames = aggregator.GetTotalFrameCount();
+	int excludedFrames = 0;
+	for (const auto& interval : aggregator.GetIntervals()) {
+		excludedFrames += interval.excludedFrames;
+	}
+	int validFrames = totalFrames;
+	int totalWithExcluded = totalFrames + excludedFrames;
+	float validPercent = (totalWithExcluded > 0) ? (100.0f * validFrames / totalWithExcluded) : 100.0f;
+
+	bool hasEnoughSamples = validFrames >= kMinimumSamplesForValidity;
+	bool hasGoodDuration = totalDuration >= kMinimumTestDuration;
+	bool hasLowExclusionRate = validPercent >= kMinimumValidFramesPercent;
+	bool isStatisticallyValid = hasEnoughSamples && hasGoodDuration && hasLowExclusionRate;
+
+	ImVec4 validityColor = theme.Palette.Text;
+	if (isStatisticallyValid) {
+		validityColor = theme.StatusPalette.SuccessColor;
+	} else if (validFrames >= kMinimumSamplesForMarginal && totalDuration >= kMinimumDurationForMarginal) {
+		validityColor = theme.StatusPalette.Warning;
+	} else {
+		validityColor = theme.StatusPalette.Error;
+	}
+
+	ImGui::PushStyleColor(ImGuiCol_Text, validityColor);
+	ImGui::Text("Test Duration: %.1f seconds | Valid Frames: %d/%d (%.1f%%) | Excluded: %d",
+		totalDuration, validFrames, totalWithExcluded, validPercent, excludedFrames);
+	ImGui::PopStyleColor();
+	if (ImGui::IsItemHovered()) {
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			char validStr[128], marginalStr[128];
+			snprintf(validStr, sizeof(validStr), "Statistically valid (>%d samples, >%.0fs duration, >%.0f%% valid)", kMinimumSamplesForValidity, static_cast<float>(kMinimumTestDuration), kMinimumValidFramesPercent);
+			snprintf(marginalStr, sizeof(marginalStr), "Marginal validity (>%d samples, >%.0fs duration)", kMinimumSamplesForMarginal, static_cast<float>(kMinimumDurationForMarginal));
+			Util::ColoredTextLines validityLegend = {
+				{ "Valid frames are those not excluded as outliers.\nA low percentage may indicate instability or test interruptions.\nExcluded frames are those with frame times > 3x median or > 100ms.\nThis removes shader compilation spikes, JSON loading overhead, and other anomalies\nthat would skew the performance comparison.", theme.Palette.Text },
+				{ "", theme.Palette.Text },
+				{ validStr, theme.StatusPalette.SuccessColor },
+				{ marginalStr, theme.StatusPalette.Warning },
+				{ "Insufficient data for reliable results", theme.StatusPalette.Error }
+			};
+			Util::DrawColoredMultiLineTooltip(validityLegend);
+		}
 	}
 }
 
 /**
- * @brief Draws the A/B testing section of the performance overlay
- *
- * This function handles all A/B testing related UI including:
- * - A/B test state management and data collection
- * - Display of aggregated A/B test results
- * - Settings difference comparison table
- * - A/B test controls (clear results, show/hide settings diff)
- *
- * @param allRows The current draw call rows for data collection
- * @param showCollapsibleSections Whether to show collapsible section headers
- */
+  * @brief Converts A/B test aggregated results into table rows
+  *
+  * This function transforms aggregated A/B test statistics into DrawCallRow structures
+  * suitable for display in the performance overlay table. It separates main shader type
+  * rows from summary rows (Total, Other) and assigns appropriate tooltips.
+  *
+  * @param results The aggregated A/B test results
+  * @param mainRows Output vector for individual shader type rows
+  * @param summaryRows Output vector for summary rows (Total, Other)
+  */
+void PerformanceOverlay::ConvertABTestResultsToRows(const std::vector<AggregatedDrawCallStats>& results, std::vector<DrawCallRow>& mainRows, std::vector<DrawCallRow>& summaryRows) const
+{
+	mainRows.clear();
+	summaryRows.clear();
+	for (const auto& stat : results) {
+		DrawCallRow row;
+		row.label = stat.label;
+		row.shaderType = stat.shaderType;
+		row.frameTime = stat.meanA;
+		row.percent = (stat.meanA > 0.0f) ? (stat.meanA / (stat.meanA + stat.meanB) * 100.0f) : 0.0f;
+		row.costPerCall = stat.medianA;
+		row.enabled = true;
+		row.testFrameTime = stat.meanB;
+		row.testCostPerCall = stat.medianB;
+		if (row.shaderType >= 0) {
+			auto shaderType = static_cast<RE::BSShader::Type>(row.shaderType);
+			auto tipIt = kShaderTypeTooltips.find(shaderType);
+			if (tipIt != kShaderTypeTooltips.end()) {
+				row.tooltip = tipIt->second;
+			} else {
+				row.tooltip = "Draw calls for this shader type.";
+			}
+		} else {
+			if (row.shaderType == static_cast<int>(SpecialShaderType::Total)) {
+				row.tooltip = "Total frame time.";
+			} else if (row.shaderType == static_cast<int>(SpecialShaderType::Other)) {
+				row.tooltip = "Frame time not attributed to any measured shader type. This includes UI, post-processing, engine work, and any GPU activity not directly measured by the overlay.";
+			}
+		}
+		if (row.shaderType < 0) {
+			summaryRows.push_back(row);
+		} else {
+			mainRows.push_back(row);
+		}
+	}
+}
+
+/**
+  * @brief Builds color-coded legends for A/B test table columns
+  *
+  * This function creates comprehensive tooltip legends for each A/B test column,
+  * explaining the meaning of colors and values. The legends help users understand
+  * performance comparisons between Variant A (USER) and Variant B (TEST) configurations.
+  *
+  * @param theme The current UI theme settings
+  * @return ABTestLegends structure containing all column legends
+  */
+ABTestLegends PerformanceOverlay::BuildABTestLegends(const Menu::ThemeSettings& theme) const
+{
+	ABTestLegends legends;
+
+	legends.shaderType = {
+		"Shader Type",
+		{ { "Shader Type: The type of shader being measured.", theme.Palette.Text },
+			{ "Click to toggle shader on/off for performance testing.", theme.Palette.Text } }
+	};
+
+	legends.aAvg = {
+		"A Avg (ms)",
+		{ { "A Avg (ms): Average frame time for Variant A (USER config).", theme.Palette.Text },
+			{ "", theme.Palette.Text },
+			{ "Color Legend (compared to Variant B):", theme.Palette.Text },
+			{ "  Better (lower than B)", theme.StatusPalette.SuccessColor },
+			{ "  Worse (higher than B)", theme.StatusPalette.Error },
+			{ "  Same as B", theme.Palette.Text } }
+	};
+
+	legends.bAvg = {
+		"B Avg (ms)",
+		{ { "B Avg (ms): Average frame time for Variant B (TEST config).", theme.Palette.Text },
+			{ "", theme.Palette.Text },
+			{ "Color Legend (compared to Variant A):", theme.Palette.Text },
+			{ "  Better (lower than A)", theme.StatusPalette.SuccessColor },
+			{ "  Worse (higher than A)", theme.StatusPalette.Error },
+			{ "  Same as A", theme.Palette.Text } }
+	};
+
+	legends.delta = {
+		"Delta (ms)",
+		{ { "Delta (ms): Difference between Variant B and Variant A (B - A).", theme.Palette.Text },
+			{ "Negative values indicate Variant B is better (lower frame time).", theme.Palette.Text },
+			{ "Positive values indicate Variant A is better (lower frame time).", theme.Palette.Text },
+			{ "Percentage shows relative performance difference.", theme.Palette.Text },
+			{ "", theme.Palette.Text },
+			{ "Color Legend:", theme.Palette.Text },
+			{ "  Negative (B better)", theme.StatusPalette.SuccessColor },
+			{ "  Positive (A better)", theme.StatusPalette.Error },
+			{ "  Zero (same)", theme.Palette.Text } }
+	};
+
+	legends.aMedian = {
+		"A Median (ms)",
+		{ { "A Median: Median frame time for Variant A (USER config).", theme.Palette.Text },
+			{ "Median is less sensitive to outliers than average.", theme.Palette.Text },
+			{ "", theme.Palette.Text },
+			{ "Color Legend (compared to Variant B median):", theme.Palette.Text },
+			{ "  Better (lower than B)", theme.StatusPalette.SuccessColor },
+			{ "  Worse (higher than B)", theme.StatusPalette.Error },
+			{ "  Same as B", theme.Palette.Text } }
+	};
+
+	legends.bMedian = {
+		"B Median (ms)",
+		{ { "B Median: Median frame time for Variant B (TEST config).", theme.Palette.Text },
+			{ "Median is less sensitive to outliers than average.", theme.Palette.Text },
+			{ "", theme.Palette.Text },
+			{ "Color Legend (compared to Variant A median):", theme.Palette.Text },
+			{ "  Better (lower than A)", theme.StatusPalette.SuccessColor },
+			{ "  Worse (higher than A)", theme.StatusPalette.Error },
+			{ "  Same as A", theme.Palette.Text } }
+	};
+
+	legends.medianDelta = {
+		"Median Delta (ms)",
+		{ { "Median Delta: Difference between Variant B and Variant A medians (B - A).", theme.Palette.Text },
+			{ "Negative values indicate Variant B is better (lower median).", theme.Palette.Text },
+			{ "Positive values indicate Variant A is better (lower median).", theme.Palette.Text },
+			{ "", theme.Palette.Text },
+			{ "Color Legend:", theme.Palette.Text },
+			{ "  Negative (B better)", theme.StatusPalette.SuccessColor },
+			{ "  Positive (A better)", theme.StatusPalette.Error },
+			{ "  Zero (same)", theme.Palette.Text } }
+	};
+
+	return legends;
+}
+
+/**
+  * @brief Builds column configurations for the A/B test results table
+  *
+  * This function creates column configurations for displaying A/B test results,
+  * including average and median frame times for both variants, performance deltas,
+  * and color-coded indicators for better/worse performance comparisons.
+  *
+  * @param theme The current UI theme settings
+  * @param legends The color-coded legends for tooltips
+  * @return Vector of column configurations for the table
+  */
+std::vector<ColumnConfig> PerformanceOverlay::BuildABTestResultsTableColumns(const Menu::ThemeSettings& theme, const ABTestLegends& legends) const
+{
+	std::vector<ColumnConfig> columns = {
+		{ legends.shaderType.header,
+			[theme](const DrawCallRow& row, int) {
+				ImGui::TextUnformatted(row.label.c_str());
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::TextUnformatted(row.tooltip.c_str());
+						// Add FPS for Total row
+						if (row.label == "Total:") {
+							float fps = row.frameTime > 0.0f ? 1000.0f / row.frameTime : 0.0f;
+							ImGui::Text("FPS: %.2f", fps);
+						}
+					}
+				}
+			},
+			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.label < b.label) : (a.label > b.label); },
+			[legends]() {
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						Util::DrawColoredMultiLineTooltip(legends.shaderType.tooltip);
+					}
+				}
+			} },
+		{ legends.aAvg.header,
+			[theme, legends](const DrawCallRow& row, int) {
+				float value = row.frameTime;
+				// Color A relative to B
+				ImVec4 color = theme.Palette.Text;
+				if (row.testFrameTime.has_value()) {
+					if (value < *row.testFrameTime) {
+						color = theme.StatusPalette.SuccessColor;  // A is better (lower) than B
+					} else if (value > *row.testFrameTime) {
+						color = theme.StatusPalette.Error;  // A is worse (higher) than B
+					}
+				}
+				ImGui::PushStyleColor(ImGuiCol_Text, color);
+				ImGui::Text("%s", Util::FormatMilliseconds(value).c_str());
+				ImGui::PopStyleColor();
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						if (row.label == "Total:") {
+							ImGui::Text("A (USER) FPS: %.2f", Util::CalcFPS(value));
+						} else {
+							Util::DrawColoredMultiLineTooltip(legends.aAvg.tooltip);
+						}
+					}
+				}
+			},
+			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.frameTime < b.frameTime) : (a.frameTime > b.frameTime); },
+			[legends]() {
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						Util::DrawColoredMultiLineTooltip(legends.aAvg.tooltip);
+					}
+				}
+			} },
+		{ legends.bAvg.header,
+			[theme, legends](const DrawCallRow& row, int) {
+				if (!row.testFrameTime.has_value()) {
+					ImGui::TextDisabled("-");
+					return;
+				}
+				float value = *row.testFrameTime;
+				// Color B relative to A
+				ImVec4 color = theme.Palette.Text;
+				if (value < row.frameTime) {
+					color = theme.StatusPalette.SuccessColor;  // B is better (lower) than A
+				} else if (value > row.frameTime) {
+					color = theme.StatusPalette.Error;  // B is worse (higher) than A
+				}
+				ImGui::PushStyleColor(ImGuiCol_Text, color);
+				ImGui::Text("%s", Util::FormatMilliseconds(value).c_str());
+				ImGui::PopStyleColor();
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						if (row.label == "Total:") {
+							ImGui::Text("B (TEST) FPS: %.2f", Util::CalcFPS(value));
+						} else {
+							Util::DrawColoredMultiLineTooltip(legends.bAvg.tooltip);
+						}
+					}
+				}
+			},
+			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
+				float aVal = a.testFrameTime.value_or(FLT_MAX);
+				float bVal = b.testFrameTime.value_or(FLT_MAX);
+				return asc ? (aVal < bVal) : (aVal > bVal);
+			},
+			[legends]() {
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						Util::DrawColoredMultiLineTooltip(legends.bAvg.tooltip);
+					}
+				}
+			} },
+		{ legends.delta.header,
+			[theme, legends](const DrawCallRow& row, int) {
+				if (!row.testFrameTime.has_value()) {
+					ImGui::TextDisabled("-");
+					return;
+				}
+				float delta = *row.testFrameTime - row.frameTime;
+				// Color based on delta
+				ImVec4 color = theme.Palette.Text;
+				if (delta < 0.0f) {
+					color = theme.StatusPalette.SuccessColor;  // Better performance (negative delta)
+				} else if (delta > 0.0f) {
+					color = theme.StatusPalette.Error;  // Worse performance (positive delta)
+				}
+				ImGui::PushStyleColor(ImGuiCol_Text, color);
+				ImGui::Text("%s", Util::FormatDeltaWithPercent(row.frameTime, *row.testFrameTime, PerformanceOverlay::PerfOverlayState::kPercentDisplayThreshold).c_str());
+				ImGui::PopStyleColor();
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						if (row.testFrameTime.has_value()) {
+							// Show detailed values for rows with test data
+							if (row.label == "Total:") {
+								ImGui::TextUnformatted("Delta (B - A):");
+								ImGui::Separator();
+								ImGui::Text("A (USER) FPS: %.2f", Util::CalcFPS(row.frameTime));
+								ImGui::Text("B (TEST) FPS: %.2f", Util::CalcFPS(*row.testFrameTime));
+							} else {
+								ImGui::TextUnformatted("Delta (B - A):");
+								ImGui::Separator();
+								ImGui::Text("A (USER): %.3f ms", row.frameTime);
+								ImGui::Text("B (TEST): %.3f ms", *row.testFrameTime);
+							}
+							ImGui::Separator();
+						}
+						// Always show the delta legend for explanation
+						Util::DrawColoredMultiLineTooltip(legends.delta.tooltip);
+					}
+				}
+			},
+			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
+				float aDelta = a.testFrameTime.value_or(0.0f) - a.frameTime;
+				float bDelta = b.testFrameTime.value_or(0.0f) - b.frameTime;
+				return asc ? (aDelta < bDelta) : (aDelta > bDelta);
+			},
+			[legends]() {
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						Util::DrawColoredMultiLineTooltip(legends.delta.tooltip);
+					}
+				}
+			} },
+		{ legends.aMedian.header,
+			[theme, legends](const DrawCallRow& row, int) {
+				float value = row.costPerCall;
+				// Color A median relative to B median (stored in testCostPerCall for now)
+				ImVec4 color = theme.Palette.Text;
+				if (row.testCostPerCall.has_value()) {
+					if (value < *row.testCostPerCall) {
+						color = theme.StatusPalette.SuccessColor;  // A is better (lower) than B
+					} else if (value > *row.testCostPerCall) {
+						color = theme.StatusPalette.Error;  // A is worse (higher) than B
+					}
+				}
+				ImGui::PushStyleColor(ImGuiCol_Text, color);
+				ImGui::Text("%s", Util::FormatMilliseconds(value).c_str());
+				ImGui::PopStyleColor();
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						if (row.label == "Total:") {
+							Util::ColoredTextLines fpsTooltip{
+								{ std::format("A (USER) Median FPS: {:.2f}", Util::CalcFPS(value)), ImVec4(1.0f, 1.0f, 1.0f, 1.0f) }
+							};
+							Util::DrawColoredMultiLineTooltip(fpsTooltip);
+						} else {
+							Util::DrawColoredMultiLineTooltip(legends.aMedian.tooltip);
+						}
+					}
+				}
+			},
+			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.costPerCall < b.costPerCall) : (a.costPerCall > b.costPerCall); },
+			[legends]() {
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						Util::DrawColoredMultiLineTooltip(legends.aMedian.tooltip);
+					}
+				}
+			} },
+		{ legends.bMedian.header,
+			[theme, legends](const DrawCallRow& row, int) {
+				if (!row.testCostPerCall.has_value()) {
+					ImGui::TextDisabled("-");
+					return;
+				}
+				float value = *row.testCostPerCall;
+				// Color B median relative to A median
+				ImVec4 color = theme.Palette.Text;
+				if (value < row.costPerCall) {
+					color = theme.StatusPalette.SuccessColor;  // B is better (lower) than A
+				} else if (value > row.costPerCall) {
+					color = theme.StatusPalette.Error;  // B is worse (higher) than A
+				}
+				ImGui::PushStyleColor(ImGuiCol_Text, color);
+				ImGui::Text("%s", Util::FormatMilliseconds(value).c_str());
+				ImGui::PopStyleColor();
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						if (row.label == "Total:") {
+							Util::ColoredTextLines fpsTooltip{
+								{ std::format("B (TEST) Median FPS: {:.2f}", Util::CalcFPS(value)), ImVec4(1.0f, 1.0f, 1.0f, 1.0f) }
+							};
+							Util::DrawColoredMultiLineTooltip(fpsTooltip);
+						} else {
+							Util::DrawColoredMultiLineTooltip(legends.bMedian.tooltip);
+						}
+					}
+				}
+			},
+			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
+				float aVal = a.testCostPerCall.value_or(FLT_MAX);
+				float bVal = b.testCostPerCall.value_or(FLT_MAX);
+				return asc ? (aVal < bVal) : (aVal > bVal);
+			},
+			[legends]() {
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						Util::DrawColoredMultiLineTooltip(legends.bMedian.tooltip);
+					}
+				}
+			} },
+		{ legends.medianDelta.header,
+			[theme, legends](const DrawCallRow& row, int) {
+				if (!row.testCostPerCall.has_value()) {
+					ImGui::TextDisabled("-");
+					return;
+				}
+				float delta = *row.testCostPerCall - row.costPerCall;
+				// Color based on delta
+				ImVec4 color = theme.Palette.Text;
+				if (delta < 0.0f) {
+					color = theme.StatusPalette.SuccessColor;  // Better performance (negative delta)
+				} else if (delta > 0.0f) {
+					color = theme.StatusPalette.Error;  // Worse performance (positive delta)
+				}
+				ImGui::PushStyleColor(ImGuiCol_Text, color);
+				std::string deltaStr = (delta > 0.0f) ? "+" + Util::FormatMilliseconds(delta) : Util::FormatMilliseconds(delta);
+				ImGui::Text("%s", deltaStr.c_str());
+				ImGui::PopStyleColor();
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						if (row.label == "Total:" && row.testCostPerCall.has_value()) {
+							Util::ColoredTextLines fpsTooltip{
+								{ "Median Delta (B - A):", ImVec4(1.0f, 1.0f, 1.0f, 1.0f) },
+								{ "", ImVec4(1.0f, 1.0f, 1.0f, 1.0f) },
+								{ std::format("A (USER) Median FPS: {:.2f}", Util::CalcFPS(row.costPerCall)), ImVec4(1.0f, 1.0f, 1.0f, 1.0f) },
+								{ std::format("B (TEST) Median FPS: {:.2f}", Util::CalcFPS(*row.testCostPerCall)), ImVec4(1.0f, 1.0f, 1.0f, 1.0f) },
+								{ "", ImVec4(1.0f, 1.0f, 1.0f, 1.0f) },
+								{ "Median is less sensitive to outliers than average.", ImVec4(1.0f, 1.0f, 1.0f, 1.0f) }
+							};
+							Util::DrawColoredMultiLineTooltip(fpsTooltip);
+						} else {
+							Util::DrawColoredMultiLineTooltip(legends.medianDelta.tooltip);
+						}
+					}
+				}
+			},
+			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
+				float aDelta = a.testCostPerCall.value_or(0.0f) - a.costPerCall;
+				float bDelta = b.testCostPerCall.value_or(0.0f) - b.costPerCall;
+				return asc ? (aDelta < bDelta) : (aDelta > bDelta);
+			},
+			[legends]() {
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						Util::DrawColoredMultiLineTooltip(legends.medianDelta.tooltip);
+					}
+				}
+			} }
+	};
+
+	return columns;
+}
+
+/**
+  * @brief Draws the A/B testing section of the performance overlay
+  *
+  * This function handles all A/B testing related UI including:
+  * - A/B test state management and data collection
+  * - Display of aggregated A/B test results
+  * - Settings difference comparison table
+  * - A/B test controls (clear results, show/hide settings diff)
+  *
+  * @param allRows The current draw call rows for data collection
+  * @param showCollapsibleSections Whether to show collapsible section headers
+  */
 void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRows, bool showCollapsibleSections)
 {
 	auto* menu = Menu::GetSingleton();
@@ -1837,6 +1274,576 @@ void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRo
 		}
 	}
 }
+// ============================================================================
+// TABLE BUILDING AND RENDERING FUNCTIONS
+// ============================================================================
+
+// Private helper for table rendering
+void PerformanceOverlay::DrawDrawCallsTable(const std::vector<DrawCallRow>& mainRows, const std::vector<DrawCallRow>& summaryRows)
+{
+	static bool clearTestDataRequested = false;
+	auto* overlay = PerformanceOverlay::GetSingleton();
+	auto* menu = Menu::GetSingleton();
+	const auto& theme = menu->GetTheme();
+
+	// Capture test data and handle clear button
+	overlay->CaptureTestData();
+	bool anyTestData = !overlay->testData.empty();
+	if (anyTestData) {
+		if (ImGui::Button("Clear Test Data")) {
+			clearTestDataRequested = true;
+		}
+	}
+
+	// Build legends and column configurations
+	auto legends = overlay->BuildDrawCallLegends(theme, anyTestData, overlay);
+	auto columns = overlay->BuildDrawCallTableColumns(theme, legends, anyTestData, overlay);
+
+	// Build sorters
+	std::vector<std::function<bool(const DrawCallRow&, const DrawCallRow&, bool)>> sorters;
+	for (const auto& col : columns) sorters.push_back(col.sortFunc);
+
+	// Create non-const copies for the table function
+	std::vector<DrawCallRow> mainRowsCopy = mainRows;
+	std::vector<DrawCallRow> summaryRowsCopy = summaryRows;
+
+	// Create table row handler
+	auto rowHandler = overlay->CreateTableRowHandler(columns, overlay);
+
+	// Render the table
+	Util::ShowSortedStringTable<DrawCallRow>(
+		"DrawCallOverlayTable",
+		[&columns]() { std::vector<std::string> h; for (const auto& c : columns) h.push_back(c.header); return h; }(),
+		mainRowsCopy,
+		0,     // Default sort column (Shader Type)
+		true,  // Default ascending
+		sorters,
+		rowHandler,
+		summaryRowsCopy);
+
+	// Handle clear test data request
+	if (clearTestDataRequested) {
+		overlay->ClearTestData();
+		clearTestDataRequested = false;
+	}
+}
+
+DrawCallLegends PerformanceOverlay::BuildDrawCallLegends(const Menu::ThemeSettings& theme, bool anyTestData, PerformanceOverlay* overlay) const
+{
+	(void)anyTestData;
+	DrawCallLegends legends;
+
+	legends.shaderType = {
+		"Shader Type",
+		{ { "Shader Type: The type of shader being measured.", theme.Palette.Text },
+			{ "Click to toggle shader on/off for performance testing.", theme.Palette.Text } }
+	};
+
+	legends.drawCalls = {
+		"Draw Calls",
+		{ { "Draw Calls: Number of draw calls for this shader type in the current frame.", theme.Palette.Text } }
+	};
+
+	legends.frameTime = {
+		"Frame Time (%)",
+		{ { overlay->GetTestDataTooltip(), theme.Palette.Text },
+			{ "", theme.Palette.Text },
+			{ "Performance Color Legend (ms):", theme.Palette.Text },
+			{ "  <= 2 ms", theme.StatusPalette.SuccessColor },
+			{ "  > 2 ms and <= 5 ms", theme.StatusPalette.Warning },
+			{ "  > 5 ms", theme.StatusPalette.Error } }
+	};
+
+	legends.costPerCall = {
+		"Cost/Call",
+		{ { "Cost/Call: Average time per draw call for this shader type.", theme.Palette.Text },
+			{ "", theme.Palette.Text },
+			{ "Color Legend (ms/call):", theme.Palette.Text },
+			{ "  <= 0.05 ms/call", theme.StatusPalette.SuccessColor },
+			{ "  > 0.05 ms and <= 0.2 ms/call", theme.StatusPalette.Warning },
+			{ "  > 0.2 ms/call", theme.StatusPalette.Error } }
+	};
+
+	legends.testFrameTime = {
+		"Test Frame Time (%)",
+		{ { overlay->GetTestDataTooltip(), theme.Palette.Text },
+			{ "", theme.Palette.Text },
+			{ "Color Legend (compared to live data):", theme.Palette.Text },
+			{ "  Better (lower than live)", theme.StatusPalette.SuccessColor },
+			{ "  Worse (higher than live)", theme.StatusPalette.Error },
+			{ "  Same as live", theme.Palette.Text } }
+	};
+
+	legends.testCostPerCall = {
+		"Test Cost/Call",
+		{ { overlay->GetTestDataTooltip(), theme.Palette.Text },
+			{ "", theme.Palette.Text },
+			{ "Color Legend (compared to live data):", theme.Palette.Text },
+			{ "  Better (lower than live)", theme.StatusPalette.SuccessColor },
+			{ "  Worse (higher than live)", theme.StatusPalette.Error },
+			{ "  Same as live", theme.Palette.Text } }
+	};
+
+	return legends;
+}
+
+std::vector<ColumnConfig> PerformanceOverlay::BuildDrawCallTableColumns(const Menu::ThemeSettings& theme, const DrawCallLegends& legends, bool anyTestData, PerformanceOverlay* overlay)
+{
+	// Build column configurations
+	std::vector<ColumnConfig> columns = {
+		{ legends.shaderType.header,
+			[theme](const DrawCallRow& row, int) {
+				if (!row.enabled)
+					ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.Disable);
+				bool wasEnabled = row.enabled;
+				if (ImGui::Selectable(row.label.c_str(), false)) {
+					auto maybeType = magic_enum::enum_cast<RE::BSShader::Type>(row.shaderType);
+					if (maybeType.has_value()) {
+						auto classIndex = magic_enum::enum_integer(*maybeType) - 1;
+						if (classIndex >= 0 && classIndex < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1) {
+							PerformanceOverlay::GetSingleton()->HandleShaderToggle(row, wasEnabled);
+						}
+					}
+				}
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::TextUnformatted(row.tooltip.c_str());
+					}
+				}
+				if (!row.enabled)
+					ImGui::PopStyleColor();
+			},
+			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.label < b.label) : (a.label > b.label); },
+			[legends]() {
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						Util::DrawColoredMultiLineTooltip(legends.shaderType.tooltip);
+					}
+				}
+			} },
+		{ legends.drawCalls.header,
+			[](const DrawCallRow& row, int) {
+				ImGui::Text("%d", row.drawCalls);
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::TextUnformatted("Draw Calls: Number of draw calls for this shader type in the current frame.");
+					}
+				}
+			},
+			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.drawCalls < b.drawCalls) : (a.drawCalls > b.drawCalls); },
+			[legends]() {
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						Util::DrawColoredMultiLineTooltip(legends.drawCalls.tooltip);
+					}
+				}
+			} }
+	};
+
+	columns.push_back(ColumnConfig{
+		legends.frameTime.header,
+		MakeMetricColumn(theme, [](const DrawCallRow& row) { return row.frameTime; }, [](const auto& theme, float value, const DrawCallRow&) { return Util::GetThresholdColor(value, PerformanceOverlay::PerfOverlayState::kFrameTimeGoodThreshold, PerformanceOverlay::PerfOverlayState::kFrameTimeWarningThreshold, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error); }, [](float /*value*/, const DrawCallRow& row) { return Util::FormatMilliseconds(row.frameTime) + " (" + Util::FormatPercent(row.percent) + ")"; }, legends.frameTime.tooltip), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.percent < b.percent) : (a.percent > b.percent); }, [legends]() {
+			 if (ImGui::IsItemHovered()) {
+				 if (auto _tt = Util::HoverTooltipWrapper()) {
+					 Util::DrawColoredMultiLineTooltip(legends.frameTime.tooltip);
+				 }
+			 } } });
+
+	columns.push_back(ColumnConfig{
+		legends.costPerCall.header,
+		MakeMetricColumn(theme, [](const DrawCallRow& row) { return row.costPerCall; }, [](const auto& theme, float value, const DrawCallRow&) { return Util::GetThresholdColor(value, PerformanceOverlay::PerfOverlayState::kCostPerCallGoodThreshold, PerformanceOverlay::PerfOverlayState::kCostPerCallWarningThreshold, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error); }, [](float value, const DrawCallRow&) { return (value < PerformanceOverlay::PerfOverlayState::kMicrosecondThreshold && value > 0.0f) ? Util::FormatMicroseconds(value * 1000.0f) : Util::FormatMilliseconds(value); }, legends.costPerCall.tooltip), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.costPerCall < b.costPerCall) : (a.costPerCall > b.costPerCall); }, [legends]() {
+			 if (ImGui::IsItemHovered()) {
+				 if (auto _tt = Util::HoverTooltipWrapper()) {
+					 Util::DrawColoredMultiLineTooltip(legends.costPerCall.tooltip);
+				 }
+			 } } });
+
+	// Add test columns if present
+	if (anyTestData) {
+		columns.push_back(ColumnConfig{
+			legends.testFrameTime.header,
+			MakeMetricColumn(theme, [](const DrawCallRow& row) { return row.testFrameTime; }, [](const auto& theme, float value, const DrawCallRow& row) {
+					 if (value < row.frameTime)
+						 return theme.StatusPalette.SuccessColor;
+					 if (value > row.frameTime)
+						 return theme.StatusPalette.Error;
+					 return theme.Palette.Text; }, [overlay](float value, const DrawCallRow& row) { return Util::FormatMilliseconds(value) + " (" + Util::FormatPercent(overlay->testData[row.shaderType].percent) + ")"; }, legends.testFrameTime.tooltip), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
+				 float aVal = a.testFrameTime.value_or(FLT_MAX);
+				 float bVal = b.testFrameTime.value_or(FLT_MAX);
+				 return asc ? (aVal < bVal) : (aVal > bVal); }, [legends]() {
+				 if (ImGui::IsItemHovered()) {
+					 if (auto _tt = Util::HoverTooltipWrapper()) {
+						 Util::DrawColoredMultiLineTooltip(legends.testFrameTime.tooltip);
+					 }
+				 } } });
+
+		columns.push_back(ColumnConfig{
+			legends.testCostPerCall.header,
+			MakeMetricColumn(theme, [](const DrawCallRow& row) { return row.testCostPerCall; }, [](const auto& theme, float value, const DrawCallRow& row) {
+					 if (value < row.costPerCall)
+						 return theme.StatusPalette.SuccessColor;
+					 if (value > row.costPerCall)
+						 return theme.StatusPalette.Error;
+					 return theme.Palette.Text; }, [](float value, const DrawCallRow&) { return (value < PerformanceOverlay::PerfOverlayState::kMicrosecondThreshold && value > 0.0f) ? Util::FormatMicroseconds(value * 1000.0f) : Util::FormatMilliseconds(value); }, legends.testCostPerCall.tooltip), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
+				 float aVal = a.testCostPerCall.value_or(FLT_MAX);
+				 float bVal = b.testCostPerCall.value_or(FLT_MAX);
+				 return asc ? (aVal < bVal) : (aVal > bVal); }, [legends]() {
+				 if (ImGui::IsItemHovered()) {
+					 if (auto _tt = Util::HoverTooltipWrapper()) {
+						 Util::DrawColoredMultiLineTooltip(legends.testCostPerCall.tooltip);
+					 }
+				 } } });
+	}
+
+	return columns;
+}
+
+std::pair<std::vector<DrawCallRow>, std::vector<DrawCallRow>> PerformanceOverlay::BuildDrawCallRows() const
+{
+	std::vector<DrawCallRow> mainRows;
+	float smoothedFrameTime = static_cast<float>(this->perfOverlayState.GetSmoothFrameTimeMs());
+	float measuredSum = 0.0f;
+
+	globals::state->ForEachShaderTypeWithMetrics([&mainRows, &measuredSum, smoothedFrameTime, this](auto type, int typeIndex, float drawCalls, float frameTime, float percent, float costPerCall) {
+		bool enabled = globals::state->enabledClasses[typeIndex - 1];
+		std::optional<float> testFrameTime, testCostPerCall;
+		auto it = this->testData.find(typeIndex);
+		if (it != this->testData.end()) {
+			testFrameTime = it->second.frameTime;
+			testCostPerCall = it->second.costPerCall;
+		}
+		std::string label = std::string(magic_enum::enum_name(type)) + ":";
+		std::string tooltip = "Draw calls for this shader type.";
+		auto tipIt = kShaderTypeTooltips.find(type);
+		if (tipIt != kShaderTypeTooltips.end()) {
+			tooltip = tipIt->second;
+		}
+		mainRows.push_back({ label, typeIndex, static_cast<int>(drawCalls), frameTime, percent, costPerCall, tooltip, enabled, testFrameTime, testCostPerCall });
+		measuredSum += frameTime;
+	});
+
+	auto [otherFrameTime, otherPercent, totalCostPerCall] = CalculateSummaryData(smoothedFrameTime, measuredSum);
+	if (std::abs(otherFrameTime) < 1e-4f)
+		otherFrameTime = 0.0f;
+	std::optional<float> otherTestFrameTime, otherTestCostPerCall, totalTestFrameTime, totalTestCostPerCall;
+	auto itOther = this->testData.find(static_cast<int>(SpecialShaderType::Other));
+	if (itOther != this->testData.end()) {
+		otherTestFrameTime = itOther->second.frameTime;
+		otherTestCostPerCall = itOther->second.costPerCall;
+	}
+	auto itTotal = this->testData.find(static_cast<int>(SpecialShaderType::Total));
+	if (itTotal != this->testData.end()) {
+		totalTestFrameTime = itTotal->second.frameTime;
+		totalTestCostPerCall = itTotal->second.costPerCall;
+	}
+	DrawCallRow otherRow = {
+		"Other:", static_cast<int>(SpecialShaderType::Other), 0, otherFrameTime, otherPercent,
+		0.0f,
+		std::string("Frame time not attributed to any measured shader type. This includes UI, post-processing, engine work, and any GPU activity not directly measured by the overlay."),
+		true, otherTestFrameTime, otherTestCostPerCall
+	};
+	// Always use the actual total frame time for live data
+	float totalFrameTime = smoothedFrameTime;
+	float totalPercent = 100.0f;  // Total is always 100% of total
+
+	DrawCallRow totalRow = {
+		"Total:", static_cast<int>(SpecialShaderType::Total), static_cast<int>(globals::state->GetTotalSmoothedDrawCalls()), totalFrameTime, totalPercent,
+		totalCostPerCall,
+		std::string("Total frame time."),
+		true, totalTestFrameTime, totalTestCostPerCall
+	};
+	std::vector<DrawCallRow> summaryRows;
+	summaryRows.push_back(otherRow);
+	summaryRows.push_back(totalRow);
+	return { mainRows, summaryRows };
+}
+
+/**
+  * @brief Creates a table row handler for the draw calls table
+  *
+  * This function creates a lambda that handles rendering individual table rows,
+  * including special handling for summary rows (Total, Other) and normal shader
+  * type rows. It ensures proper tooltip display and click handling for each row type.
+  *
+  * @param columns The column configurations for the table
+  * @param overlay Pointer to the performance overlay instance
+  * @return Function that handles row rendering and interaction
+  */
+std::function<void(int, int, const DrawCallRow&)> PerformanceOverlay::CreateTableRowHandler(const std::vector<ColumnConfig>& columns, PerformanceOverlay* overlay)
+{
+	return [&columns, overlay](int rowIdx, int colIdx, const DrawCallRow& row) {
+		(void)rowIdx;
+		// Special handling for summary rows
+		if ((row.label == "Total:" || row.label == "Other:") && colIdx == 0) {
+			if (row.label == "Total:") {
+				if (ImGui::Selectable(row.label.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
+					overlay->HandleTotalRowToggle();
+				}
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::TextUnformatted(row.tooltip.c_str());
+						float _fps = row.frameTime > 0.0f ? 1000.0f / row.frameTime : 0.0f;
+						ImGui::Text("FPS: %.2f", _fps);
+					}
+				}
+			} else if (row.label == "Other:") {
+				ImGui::TextUnformatted(row.label.c_str());
+				if (!row.tooltip.empty() && ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::TextUnformatted(row.tooltip.c_str());
+					}
+				}
+			}
+		} else if (row.label == "Total:" || row.label == "Other:") {
+			// No tooltip for summary rows in non-label columns
+			columns[colIdx].cellRender(row, colIdx);
+		} else {
+			// Normal row: ensure tooltips never modify cell content
+			columns[colIdx].cellRender(row, colIdx);
+		}
+	};
+}
+// ============================================================================
+// EVENT HANDLING FUNCTIONS
+// ============================================================================
+
+/**
+  * @brief Handles shader type toggle functionality
+  *
+  * This function processes user clicks on shader type rows in the performance table.
+  * When a shader is disabled, it captures the current performance data as test data
+  * for comparison. This allows users to see the performance impact of disabling
+  * specific shader types.
+  *
+  * @param row The draw call row that was clicked
+  * @param wasEnabled Whether the shader was enabled before the click
+  */
+void PerformanceOverlay::HandleShaderToggle(const DrawCallRow& row, bool wasEnabled)
+{
+	auto maybeType = magic_enum::enum_cast<RE::BSShader::Type>(row.shaderType);
+	if (!maybeType.has_value()) {
+		return;
+	}
+
+	auto classIndex = magic_enum::enum_integer(*maybeType) - 1;
+	if (classIndex < 0 || classIndex >= magic_enum::enum_integer(RE::BSShader::Type::Total) - 1) {
+		return;
+	}
+
+	bool isDisabling = wasEnabled;
+	float prevFrameTime = row.frameTime;
+	float prevCostPerCall = row.costPerCall;
+
+	// Capture live data for Total and Other before toggling
+	float smoothedFrameTime = static_cast<float>(this->perfOverlayState.GetSmoothFrameTimeMs());
+	float measuredSum = 0.0f;
+	globals::state->ForEachShaderTypeWithMetrics([&measuredSum]([[maybe_unused]] auto type, [[maybe_unused]] int typeIndex, [[maybe_unused]] float drawCalls, float frameTime, [[maybe_unused]] float percent, [[maybe_unused]] float costPerCall) {
+		measuredSum += frameTime;
+	});
+	auto [otherFrameTime, otherPercent, totalCostPerCall] = CalculateSummaryData(smoothedFrameTime, measuredSum);
+
+	// Toggle the shader
+	globals::state->enabledClasses[classIndex] = !wasEnabled;
+
+	if (isDisabling) {
+		// Save the last live value before disabling
+		this->UpdateShaderTestData(row.shaderType, prevFrameTime, prevCostPerCall);
+		// Save Total and Other test data as well
+		this->testData[static_cast<int>(SpecialShaderType::Total)] = { smoothedFrameTime, totalCostPerCall, 100.0f };
+		this->testData[static_cast<int>(SpecialShaderType::Other)] = { otherFrameTime, 0.0f, otherPercent };
+		this->testDataSource = TestDataSource::ManualShaderToggle;
+		this->testDataLastUpdated = std::chrono::steady_clock::now();
+	}
+}
+
+/**
+  * @brief Handles the Total row toggle functionality
+  *
+  * This function processes clicks on the Total row in the performance table.
+  * It toggles all shader types on/off simultaneously, allowing users to quickly
+  * enable or disable all shaders for performance testing.
+  */
+void PerformanceOverlay::HandleTotalRowToggle()
+{
+	bool anyDisabled = false;
+	globals::state->ForEachShaderTypeWithIndex([&anyDisabled]([[maybe_unused]] auto type, int classIndex) {
+		if (!globals::state->enabledClasses[classIndex]) {
+			anyDisabled = true;
+		}
+	});
+	globals::state->ForEachShaderTypeWithIndex([&anyDisabled]([[maybe_unused]] auto type, int classIndex) {
+		globals::state->enabledClasses[classIndex] = anyDisabled;
+	});
+
+	// Update test data and timestamp for manual toggling (not just A/B test mode)
+	auto* abTestingManager = ABTestingManager::GetSingleton();
+	bool abTest = abTestingManager && abTestingManager->IsEnabled() && abTestingManager->IsUsingTestConfig();
+	if (abTest) {
+		this->UpdateAllShaderTestData();
+	} else {
+		// Manual toggle: update test data and timestamp
+		float smoothedFrameTime = static_cast<float>(this->perfOverlayState.GetSmoothFrameTimeMs());
+		float measuredSum = 0.0f;
+		globals::state->ForEachShaderTypeWithMetrics([&measuredSum]([[maybe_unused]] auto type, [[maybe_unused]] int typeIndex, [[maybe_unused]] float drawCalls, float frameTime, [[maybe_unused]] float percent, [[maybe_unused]] float costPerCall) {
+			measuredSum += frameTime;
+		});
+		auto [otherFrameTime, otherPercent, totalCostPerCall] = CalculateSummaryData(smoothedFrameTime, measuredSum);
+		this->testData[static_cast<int>(SpecialShaderType::Total)] = { smoothedFrameTime, totalCostPerCall, 100.0f };
+		this->testData[static_cast<int>(SpecialShaderType::Other)] = { otherFrameTime, 0.0f, otherPercent };
+		this->testDataSource = TestDataSource::ManualShaderToggle;
+		this->testDataLastUpdated = std::chrono::steady_clock::now();
+	}
+}
+// ============================================================================
+// TEST DATA MANAGEMENT FUNCTIONS
+// ============================================================================
+
+// Static test data state
+
+// Implement static member functions
+/**
+  * @brief Updates test data for a specific shader type during manual shader toggling
+  *
+  * This function captures performance data for a shader type when it's manually disabled,
+  * allowing users to compare performance with/without specific shaders enabled.
+  *
+  * @param shaderType The shader type index to update test data for
+  * @param frameTime The frame time contribution of this shader type (ms)
+  * @param costPerCall The cost per draw call for this shader type (ms/call)
+  *
+  * @note This function also updates the Total and Other summary rows to maintain
+  *       consistency with the current performance state
+  */
+void PerformanceOverlay::UpdateShaderTestData(int shaderType, float frameTime, float costPerCall)
+{
+	UpdateShaderTestDataEntry(shaderType, frameTime, costPerCall);
+
+	float smoothedFrameTime = static_cast<float>(this->perfOverlayState.GetSmoothFrameTimeMs());
+	float measuredSum = 0.0f;
+	for (const auto& [type, data] : testData) {
+		if (type >= 0)
+			measuredSum += data.frameTime;
+	}
+
+	auto [otherFrameTime, otherPercent, totalCostPerCall] = CalculateSummaryData(smoothedFrameTime, measuredSum);
+	UpdateSummaryTestData(smoothedFrameTime, otherFrameTime, otherPercent, totalCostPerCall);
+
+	testDataSource = TestDataSource::ManualShaderToggle;
+	testDataLastUpdated = std::chrono::steady_clock::now();
+}
+
+/**
+  * @brief Updates test data for all shader types during A/B test Variant B execution
+  *
+  * This function captures comprehensive performance data for all shader types when
+  * running in A/B test mode with Variant B (test config) active. It ensures that
+  * all shader types, including Total and Other summary rows, have current test data
+  * for accurate performance comparison.
+  *
+  * @note This function only captures data when A/B testing is enabled and using
+  *       Variant B (test config). It does nothing in manual shader toggle mode.
+  */
+void PerformanceOverlay::UpdateAllShaderTestData()
+{
+	// Check if all shaders are disabled
+	bool allDisabled = true;
+	globals::state->ForEachShaderTypeWithIndex([&allDisabled]([[maybe_unused]] auto type, int classIndex) {
+		if (globals::state->enabledClasses[classIndex]) {
+			allDisabled = false;
+		}
+	});
+	if (allDisabled) {
+		testData.clear();
+		testDataSource = TestDataSource::None;
+		return;
+	}
+
+	// Only capture test data if we're in A/B test mode AND using Variant B (test config)
+	auto* abTestingManager = ABTestingManager::GetSingleton();
+	bool abTest = abTestingManager && abTestingManager->IsEnabled() && abTestingManager->IsUsingTestConfig();
+	if (!abTest) {
+		// If not in A/B test Variant B, don't capture test data
+		return;
+	}
+
+	float smoothedFrameTime = static_cast<float>(this->perfOverlayState.GetSmoothFrameTimeMs());
+	float measuredSum = 0.0f;
+
+	globals::state->ForEachShaderTypeWithMetrics([&measuredSum, smoothedFrameTime, this]([[maybe_unused]] auto type, int typeIndex, [[maybe_unused]] float drawCalls, float frameTime, float percent, float costPerCall) {
+		this->UpdateShaderTestDataEntry(typeIndex, frameTime, costPerCall, percent);
+		measuredSum += frameTime;
+	});
+
+	auto [otherFrameTime, otherPercent, totalCostPerCall] = CalculateSummaryData(smoothedFrameTime, measuredSum);
+	UpdateSummaryTestData(smoothedFrameTime, otherFrameTime, otherPercent, totalCostPerCall);
+	testDataSource = TestDataSource::ABTest_VariantB;
+	testDataLastUpdated = std::chrono::steady_clock::now();
+}
+
+std::string PerformanceOverlay::GetTestDataTooltip()
+{
+	switch (testDataSource) {
+	case TestDataSource::ABTest_VariantB:
+		return std::string("Test data from Test (Variant B).\nLast updated: ") + Util::TimeAgoString(testDataLastUpdated) + " ago.";
+	case TestDataSource::ManualShaderToggle:
+		return std::string("Test data from manual shader toggle.\nLast updated: ") + Util::TimeAgoString(testDataLastUpdated) + " ago.";
+	default:
+		return "No test data available.";
+	}
+}
+
+// --- TEST DATA CAPTURE LOGIC ---
+// Test data is captured in two scenarios:
+// 1. A/B Test Mode (Variant B): If abTestingEnabled && usingTestConfig, we continuously capture test data
+//    for all shader types, "Other", and "Total" every frame. This allows live comparison between
+//    Variant A (user config) and Variant B (test config).
+// 2. Manual Shader Toggle: If any shader is disabled, we capture test data for the disabled shaders
+//    (and summary rows) at the moment of disabling, and keep it until cleared. This allows users to
+//    compare performance with/without specific shaders enabled.
+// Test data is only cleared by the "Clear Test Data" button or if all shaders are disabled (rare edge case).
+void PerformanceOverlay::CaptureTestData()
+{
+	auto* abTestingManager = ABTestingManager::GetSingleton();
+	bool abTestActive = (abTestingManager && abTestingManager->IsEnabled() && abTestingManager->IsUsingTestConfig());
+	bool anyShaderDisabled = false;
+	globals::state->ForEachShaderTypeWithIndex([&anyShaderDisabled]([[maybe_unused]] auto type, int classIndex) {
+		if (!globals::state->enabledClasses[classIndex]) {
+			anyShaderDisabled = true;
+		}
+	});
+	float smoothedFrameTime = static_cast<float>(this->perfOverlayState.GetSmoothFrameTimeMs());
+	float measuredSum = 0.0f;
+	if (abTestActive) {
+		measuredSum = 0.0f;
+		globals::state->ForEachShaderTypeWithMetrics([&measuredSum, smoothedFrameTime, this]([[maybe_unused]] auto type, int typeIndex, [[maybe_unused]] float drawCalls, float frameTime, float percent, float costPerCall) {
+			this->UpdateShaderTestDataEntry(typeIndex, frameTime, costPerCall, percent);
+			measuredSum += frameTime;
+		});
+		auto [otherFrameTime, otherPercent, totalCostPerCall] = CalculateSummaryData(smoothedFrameTime, measuredSum);
+		UpdateSummaryTestData(smoothedFrameTime, otherFrameTime, otherPercent, totalCostPerCall);
+		testDataSource = TestDataSource::ABTest_VariantB;
+		testDataLastUpdated = std::chrono::steady_clock::now();
+	} else if (anyShaderDisabled) {
+		measuredSum = 0.0f;
+		globals::state->ForEachShaderTypeWithMetrics([&measuredSum, smoothedFrameTime, this]([[maybe_unused]] auto type, int typeIndex, [[maybe_unused]] float drawCalls, float frameTime, float percent, float costPerCall) {
+			bool enabled = globals::state->enabledClasses[typeIndex - 1];
+			if (!enabled) {
+				this->UpdateShaderTestDataEntry(typeIndex, frameTime, costPerCall, percent);
+			}
+			measuredSum += frameTime;
+		});
+		auto [otherFrameTime, otherPercent, totalCostPerCall] = CalculateSummaryData(smoothedFrameTime, measuredSum);
+		UpdateSummaryTestData(smoothedFrameTime, otherFrameTime, otherPercent, totalCostPerCall);
+		testDataSource = TestDataSource::ManualShaderToggle;
+		testDataLastUpdated = std::chrono::steady_clock::now();
+	}
+}
+
+void PerformanceOverlay::ClearTestData()
+{
+	testData.clear();
+	testDataSource = TestDataSource::None;
+}
 
 // Static helper method implementations
 void PerformanceOverlay::UpdateShaderTestDataEntry(int shaderType, float frameTime, float costPerCall, float percent)
@@ -1848,4 +1855,188 @@ void PerformanceOverlay::UpdateSummaryTestData(float smoothedFrameTime, float ot
 {
 	testData[static_cast<int>(SpecialShaderType::Other)] = { otherFrameTime, 0.0f, otherPercent };
 	testData[static_cast<int>(SpecialShaderType::Total)] = { smoothedFrameTime, totalCostPerCall, 100.0f };
+}
+// ============================================================================
+// PERFORMANCE OVERLAY STATE MANAGEMENT
+// ============================================================================
+
+void PerformanceOverlay::PerfOverlayState::UpdateFGFrameTime()
+{
+	// Defensive: Check for upscaling pointer
+	if (!globals::upscaling)
+		return;
+
+	auto* overlay = GetSingleton();
+
+	// Get frametime directly from the Frame Generation system
+	float fgDeltaTime = globals::upscaling->GetFrameGenerationFrameTime();
+	if (fgDeltaTime > 0.0f) {
+		overlay->perfOverlayState.SetPostFGFrameTimeMs(fgDeltaTime * 1000.0f);
+		overlay->perfOverlayState.SetPostFGFps(1000.0f / overlay->perfOverlayState.GetPostFGFrameTimeMs());
+
+		// Update post-FG smooth values when timer elapses
+		if (overlay->perfOverlayState.GetUpdateTimer() <= 0.0f) {
+			overlay->perfOverlayState.SetPostFGSmoothFps(overlay->perfOverlayState.GetPostFGFps());
+			overlay->perfOverlayState.SetPostFGSmoothFrameTimeMs(overlay->perfOverlayState.GetPostFGFrameTimeMs());
+		}
+
+		// Update post-FG frametime history
+		overlay->perfOverlayState.GetPostFGFrameTimeHistoryRef()[overlay->perfOverlayState.GetPostFGFrameTimeHistoryIndex()] = overlay->perfOverlayState.GetPostFGFrameTimeMs();
+		overlay->perfOverlayState.SetPostFGFrameTimeHistoryIndex((overlay->perfOverlayState.GetPostFGFrameTimeHistoryIndex() + 1) % overlay->settings.FrameHistorySize);
+	} else {
+		// Fallback if FG time is not available
+		overlay->perfOverlayState.SetPostFGFrameTimeMs(overlay->perfOverlayState.GetFrameTimeMs() / PerformanceOverlay::PerfOverlayState::kFrameGenerationMultiplier);
+		overlay->perfOverlayState.SetPostFGFps(overlay->perfOverlayState.GetFps() * PerformanceOverlay::PerfOverlayState::kFrameGenerationMultiplier);
+
+		if (overlay->perfOverlayState.GetUpdateTimer() <= 0.0f) {
+			overlay->perfOverlayState.SetPostFGSmoothFps(overlay->perfOverlayState.GetPostFGFps());
+			overlay->perfOverlayState.SetPostFGSmoothFrameTimeMs(overlay->perfOverlayState.GetPostFGFrameTimeMs());
+		}
+
+		overlay->perfOverlayState.GetPostFGFrameTimeHistoryRef()[overlay->perfOverlayState.GetPostFGFrameTimeHistoryIndex()] = overlay->perfOverlayState.GetPostFGFrameTimeMs();
+		overlay->perfOverlayState.SetPostFGFrameTimeHistoryIndex((overlay->perfOverlayState.GetPostFGFrameTimeHistoryIndex() + 1) % overlay->settings.FrameHistorySize);
+	}
+}
+
+void PerformanceOverlay::PerfOverlayState::UpdateFrameTimeHistorySizes()
+{
+	auto* overlay = GetSingleton();
+
+	overlay->settings.FrameHistorySize = std::clamp(
+		overlay->settings.FrameHistorySize,
+		overlay->settings.kMinFrameHistorySize,
+		overlay->settings.kMaxFrameHistorySize);
+
+	if (overlay->perfOverlayState.GetFrameTimeHistory().size() != static_cast<size_t>(overlay->settings.FrameHistorySize)) {
+		overlay->perfOverlayState.ResizeFrameTimeHistory(overlay->settings.FrameHistorySize, 0.0f);
+		if (overlay->perfOverlayState.GetFrameTimeHistoryIndex() >= overlay->settings.FrameHistorySize) {
+			overlay->perfOverlayState.SetFrameTimeHistoryIndex(0);
+		}
+	}
+	if (overlay->perfOverlayState.GetPostFGFrameTimeHistory().size() != static_cast<size_t>(overlay->settings.FrameHistorySize)) {
+		overlay->perfOverlayState.ResizePostFGFrameTimeHistory(overlay->settings.FrameHistorySize, 0.0f);
+		if (overlay->perfOverlayState.GetPostFGFrameTimeHistoryIndex() >= overlay->settings.FrameHistorySize) {
+			overlay->perfOverlayState.SetPostFGFrameTimeHistoryIndex(0);
+		}
+	}
+}
+
+void PerformanceOverlay::PerfOverlayState::UpdateMinFrameTime()
+{
+	auto* overlay = GetSingleton();
+	overlay->perfOverlayState.SetMinFrameTime(*std::min_element(overlay->perfOverlayState.GetFrameTimeHistory().begin(), overlay->perfOverlayState.GetFrameTimeHistory().end()));
+}
+
+void PerformanceOverlay::PerfOverlayState::UpdateMaxFrameTime()
+{
+	auto* overlay = GetSingleton();
+	overlay->perfOverlayState.SetMaxFrameTime(*std::max_element(overlay->perfOverlayState.GetFrameTimeHistory().begin(), overlay->perfOverlayState.GetFrameTimeHistory().end()));
+}
+
+float PerformanceOverlay::PerfOverlayState::SetTextScale()
+{
+	auto* overlay = GetSingleton();
+	switch (overlay->settings.Size) {
+	case PerfOverlaySettings::TextSize::Small:
+		return 0.8f;
+	case PerfOverlaySettings::TextSize::Medium:
+		return 1.0f;
+	case PerfOverlaySettings::TextSize::Large:
+		return 1.2f;
+	}
+	return 1.0f;
+}
+
+void PerformanceOverlay::PerfOverlayState::UpdateGraphValues()
+{
+	// Get settings from the singleton
+	const auto& overlaySettings = PerformanceOverlay::GetSingleton()->settings;
+
+	// Sync frame history buffer size with user settings
+	UpdateFrameTimeHistorySizes();
+
+	// Insert latest frame time into circular buffer
+	float oldFrameTime = GetFrameTimeHistory()[GetFrameTimeHistoryIndex()];
+	GetFrameTimeHistoryRef()[GetFrameTimeHistoryIndex()] = GetFrameTimeMs();
+	SetFrameTimeHistoryIndex((GetFrameTimeHistoryIndex() + 1) % overlaySettings.FrameHistorySize);
+
+	// Maintain instantaneous min/max tracking
+	if (GetFrameTimeMs() > GetMaxFrameTime()) {
+		SetMaxFrameTime(GetFrameTimeMs());
+	} else if (GetFrameTimeMs() < GetMinFrameTime()) {
+		SetMinFrameTime(GetFrameTimeMs());
+	} else if (oldFrameTime == GetMinFrameTime()) {
+		UpdateMinFrameTime();
+	} else if (oldFrameTime == GetMaxFrameTime()) {
+		UpdateMaxFrameTime();
+	}
+
+	float avgFrameTime, stdDev, graphMin, graphMax;
+	// Calculate mean and standard deviation for normalized graph range
+	if (GetFrameTimeHistory().empty()) {
+		// Default to 60 FPS
+		avgFrameTime = kDefaultFrameTimeMs;
+		stdDev = 0.0f;
+		graphMin = 0.0f;
+		graphMax = PerformanceOverlay::PerfOverlayState::kGraphSpreadMultiplier * kDefaultFrameTimeMs;
+	} else {
+		// Calculate average frame time
+		avgFrameTime = std::accumulate(GetFrameTimeHistory().begin(), GetFrameTimeHistory().end(), 0.0f) / GetFrameTimeHistory().size();
+
+		// Calculate standard deviation
+		float variance = 0.0f;
+		for (float ft : GetFrameTimeHistory()) {
+			float diff = ft - avgFrameTime;
+			variance += diff * diff;
+		}
+		variance /= GetFrameTimeHistory().size();
+		stdDev = std::sqrt(variance);
+
+		// Calculate graph range
+		float spread = std::clamp(stdDev * PerformanceOverlay::PerfOverlayState::kGraphSpreadMultiplier, PerformanceOverlay::PerfOverlayState::kGraphMinSpread, PerformanceOverlay::PerfOverlayState::kGraphMaxSpread);
+		graphMin = std::max(0.0f, avgFrameTime - spread);
+		graphMax = avgFrameTime + spread;
+	}
+
+	// Exponential smoothing for stable graph scaling
+	SetSmoothedMinFrameTime(GetSmoothedMinFrameTime() + kSmoothingFactor * (graphMin - GetSmoothedMinFrameTime()));
+	SetSmoothedMaxFrameTime(GetSmoothedMaxFrameTime() + kSmoothingFactor * (graphMax - GetSmoothedMaxFrameTime()));
+}
+
+void PerformanceOverlay::PerfOverlayState::DrawPostFGFrameTimeGraph()
+{
+	// Prepare overlay text
+	char overlay_text[128];
+	snprintf(overlay_text, IM_ARRAYSIZE(overlay_text),
+		"Post-FG: %.2f ms (%.1f FPS)",
+		GetPostFGSmoothFrameTimeMs(), GetPostFGSmoothFps());
+
+	// Set graph colors - blue for post-FG
+	ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.0f, 0.5f, 1.0f, 1.0f));  // Blue line
+
+	// Draw the graph
+	float graphWidth = ImGui::GetWindowWidth() * 0.9f;
+	ImGui::PlotLines("##postfgframetime",
+		GetPostFGFrameTimeHistory().data(),
+		PerformanceOverlay::GetSingleton()->settings.FrameHistorySize,
+		GetPostFGFrameTimeHistoryIndex(),
+		overlay_text,
+		GetSmoothedMinFrameTime(), GetSmoothedMaxFrameTime(),
+		ImVec2(graphWidth, 50.0f * GetTextScale()));
+
+	ImGui::PopStyleColor();
+
+	// Draw frametime target reference lines
+	if (ImGui::BeginTable("PostFGFrametimeTargets", 3, ImGuiTableFlags_SizingStretchSame)) {
+		ImGui::TableNextColumn();
+		ImGui::Text("30 FPS: 33.3 ms");
+
+		ImGui::TableNextColumn();
+		ImGui::Text("60 FPS: 16.7 ms");
+
+		ImGui::TableNextColumn();
+		ImGui::Text("120 FPS: 8.3 ms");
+
+		ImGui::EndTable();
+	}
 }

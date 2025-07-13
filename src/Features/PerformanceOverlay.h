@@ -1,7 +1,9 @@
 #pragma once
 
-#include "../Utils/PerfUtils.h"
+#include "Menu.h"
 #include "OverlayFeature.h"
+#include "PerformanceOverlay/ABTesting/ABTestAggregator.h"
+#include "Utils/PerfUtils.h"
 #include <chrono>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -10,7 +12,6 @@
 
 // Forward declarations
 struct DrawCallRow;
-class ABTestAggregator;
 
 // Special shader type enum for summary rows
 enum class SpecialShaderType
@@ -40,6 +41,42 @@ struct ShaderRow
 	std::string tooltip;
 };
 
+// Legend and configuration structures
+struct ColumnLegend
+{
+	std::string header;
+	Util::ColoredTextLines tooltip;
+};
+
+struct ABTestLegends
+{
+	ColumnLegend shaderType;
+	ColumnLegend aAvg;
+	ColumnLegend bAvg;
+	ColumnLegend delta;
+	ColumnLegend aMedian;
+	ColumnLegend bMedian;
+	ColumnLegend medianDelta;
+};
+
+struct DrawCallLegends
+{
+	ColumnLegend shaderType;
+	ColumnLegend drawCalls;
+	ColumnLegend frameTime;
+	ColumnLegend costPerCall;
+	ColumnLegend testFrameTime;
+	ColumnLegend testCostPerCall;
+};
+
+struct ColumnConfig
+{
+	std::string header;
+	std::function<void(const DrawCallRow&, int colIdx)> cellRender;
+	std::function<bool(const DrawCallRow&, const DrawCallRow&, bool)> sortFunc;
+	std::function<void()> headerTooltip;
+};
+
 struct PerformanceOverlay : OverlayFeature
 {
 	static PerformanceOverlay* GetSingleton()
@@ -48,54 +85,64 @@ struct PerformanceOverlay : OverlayFeature
 		return &singleton;
 	}
 
-	// Virtual overrides in Feature.h order
+	// ============================================================================
+	// VIRTUAL OVERRIDES (Feature.h interface)
+	// ============================================================================
 	std::string GetName() override { return "Performance Overlay"; }
 	std::string GetShortName() override { return "PerformanceOverlay"; }
-
 	virtual bool SupportsVR() override { return true; }
 	virtual bool IsCore() const override { return true; }
 	virtual bool IsInMenu() const override { return true; }
-
+	bool IsOverlayVisible() const override { return settings.ShowInOverlay; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override;
 	virtual void DrawSettings() override;
-
 	virtual void DataLoaded() override;
+	void DrawOverlay() override;
 
-	// Core performance display functions
+	// ============================================================================
+	// CORE PERFORMANCE DISPLAY FUNCTIONS
+	// ============================================================================
 	void DrawFPS();
 	void DrawVRAM();
 
-	// Private helper for table rendering
-	void DrawDrawCallsTable(const std::vector<DrawCallRow>& mainRows, const std::vector<DrawCallRow>& summaryRows);
-
-	// Private helper for A/B testing section
+	// ============================================================================
+	// A/B TESTING FUNCTIONS
+	// ============================================================================
 	void DrawABTestSection(const std::vector<DrawCallRow>& allRows, bool showCollapsibleSections);
 	void DrawABTestResultsTable();
-
-	// Test data management
-	void UpdateShaderTestData(int shaderType, float frameTime, float costPerCall);
-	std::string GetTestDataTooltip();
-
-public:
-	void UpdateAllShaderTestData();
-
-	// A/B Test aggregator access
+	void DrawABTestStatisticalValidity(const Menu::ThemeSettings& theme, const ABTestAggregator& aggregator) const;
+	void ConvertABTestResultsToRows(const std::vector<AggregatedDrawCallStats>& results, std::vector<DrawCallRow>& mainRows, std::vector<DrawCallRow>& summaryRows) const;
+	ABTestLegends BuildABTestLegends(const Menu::ThemeSettings& theme) const;
+	std::vector<ColumnConfig> BuildABTestResultsTableColumns(const Menu::ThemeSettings& theme, const ABTestLegends& legends) const;
 	static ABTestAggregator& GetABTestAggregator();
 
-	// Test data management helpers
+	// ============================================================================
+	// TABLE BUILDING AND RENDERING FUNCTIONS
+	// ============================================================================
+	void DrawDrawCallsTable(const std::vector<DrawCallRow>& mainRows, const std::vector<DrawCallRow>& summaryRows);
+	DrawCallLegends BuildDrawCallLegends(const Menu::ThemeSettings& theme, bool anyTestData, PerformanceOverlay* overlay) const;
+	std::vector<ColumnConfig> BuildDrawCallTableColumns(const Menu::ThemeSettings& theme, const DrawCallLegends& legends, bool anyTestData, PerformanceOverlay* overlay);
+	std::pair<std::vector<DrawCallRow>, std::vector<DrawCallRow>> BuildDrawCallRows() const;
+	std::function<void(int, int, const DrawCallRow&)> CreateTableRowHandler(const std::vector<ColumnConfig>& columns, PerformanceOverlay* overlay);
+
+	// ============================================================================
+	// EVENT HANDLING FUNCTIONS
+	// ============================================================================
+	void HandleShaderToggle(const DrawCallRow& row, bool wasEnabled);
+	void HandleTotalRowToggle();
+
+	// ============================================================================
+	// TEST DATA MANAGEMENT FUNCTIONS
+	// ============================================================================
+	void UpdateShaderTestData(int shaderType, float frameTime, float costPerCall);
+	void UpdateAllShaderTestData();
 	void UpdateShaderTestDataEntry(int shaderType, float frameTime, float costPerCall, float percent = 0.0f);
 	void UpdateSummaryTestData(float smoothedFrameTime, float otherFrameTime, float otherPercent, float totalCostPerCall);
+	std::string GetTestDataTooltip();
 
-	/**
-	 * @brief Builds the main and summary rows for the performance overlay table.
-	 *
-	 * @return A pair of vectors: (mainRows, summaryRows).
-	 *         - mainRows: One row per shader type, with live and (if present) test data.
-	 *         - summaryRows: 'Other' and 'Total' rows, with live and (if present) test data.
-	 */
-	std::pair<std::vector<DrawCallRow>, std::vector<DrawCallRow>> BuildDrawCallRows() const;
-
-	// Performance overlay state management
+	// ============================================================================
+	// PERFORMANCE OVERLAY STATE MANAGEMENT
+	// ============================================================================
 	class PerfOverlayState
 	{
 	private:
@@ -261,11 +308,9 @@ public:
 
 	PerfOverlayState perfOverlayState;
 
-	// Implement OverlayFeature interface
-	void DrawOverlay() override;
-	bool IsOverlayVisible() const override { return settings.ShowInOverlay; }
-
-	// Settings structure
+	// ============================================================================
+	// SETTINGS STRUCTURE
+	// ============================================================================
 	struct PerfOverlaySettings
 	{
 		bool ShowInOverlay = true;  // was: Enabled
@@ -296,34 +341,9 @@ public:
 	PerfOverlaySettings settings;
 
 private:
-	/**
-	 * @brief Captures test data for the performance overlay table.
-	 *
-	 * This function is responsible for updating the static test data used for A/B comparison and manual shader toggling.
-	 *
-	 * - In A/B Test Mode (Variant B): If ABTestingManager is enabled and using test config, this function continuously captures
-	 *   test data for all shader types, as well as the 'Other' and 'Total' summary rows, every frame.
-	 * - In Manual Shader Toggle mode: If any shader is disabled, this function captures test data for the disabled
-	 *   shaders and summary rows at the moment of disabling, and keeps it until cleared.
-	 * - Test data is NOT cleared when shaders are re-enabled; it is only cleared by the 'Clear Test Data' button
-	 *   or if all shaders are disabled (rare edge case).
-	 *
-	 * Side effects:
-	 * - Updates s_testData, s_testDataSource, and s_testDataLastUpdated.
-	 */
-	void CaptureTestData();
-
-	/**
-	 * @brief Clears all captured test data and resets the test data source.
-	 *
-	 * This should be called when the user clicks the 'Clear Test Data' button,
-	 * or in rare cases where all shaders are disabled.
-	 *
-	 * Side effects:
-	 * - Empties s_testData and resets s_testDataSource.
-	 */
-	void ClearTestData();
-
+	// ============================================================================
+	// PRIVATE DATA STRUCTURES
+	// ============================================================================
 	struct TestData
 	{
 		float frameTime;
@@ -343,6 +363,8 @@ private:
 	bool settingsDiffLoaded = false;
 
 	// Test data management
+	void CaptureTestData();
+	void ClearTestData();
 	TestDataSource testDataSource = TestDataSource::None;
 	std::chrono::steady_clock::time_point testDataLastUpdated;
 	std::unordered_map<int, TestData> testData;
