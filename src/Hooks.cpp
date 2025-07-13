@@ -297,8 +297,9 @@ struct ID3D11Device_CreateSamplerState
 	static HRESULT STDMETHODCALLTYPE thunk(ID3D11Device* This, D3D11_SAMPLER_DESC* pSamplerDesc, ID3D11SamplerState** ppSamplerState)
 	{
 		// Limit Anisotropy to 8x for performance
-		pSamplerDesc->MaxAnisotropy = std::min(pSamplerDesc->MaxAnisotropy, 8u);
-		return func(This, pSamplerDesc, ppSamplerState);
+		D3D11_SAMPLER_DESC descCopy = *pSamplerDesc;  // make a copy, pSamplerDesc is supposed to be immutable
+		descCopy.MaxAnisotropy = std::min(descCopy.MaxAnisotropy, 8u);
+		return func(This, &descCopy, ppSamplerState);
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
