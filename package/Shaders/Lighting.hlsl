@@ -1324,10 +1324,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		// Initialize weights array
 		weights[0] = weights[1] = weights[2] = weights[3] = weights[4] = weights[5] = 0.0;
 #			if defined(TERRAIN_VARIATION)
-		float mipLevels[6] = { 0, 0, 0, 0, 0, 0 }; // Dummy array for parallax compatibility
 		uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, sharedOffset, dx, dy, pixelOffset, weights);
 #			else
-		float mipLevels[6] = { 0, 0, 0, 0, 0, 0 }; // Dummy array for parallax compatibility
 		uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, pixelOffset, weights);
 #			endif
 		if (SharedData::extendedMaterialSettings.EnableHeightBlending) {
@@ -1348,7 +1346,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 	}
 
-	#		if defined(TERRAIN_VARIATION)
+#		if defined(TERRAIN_VARIATION)
 	else if (useTerrainVariation) {
 		// Calculate proper mip levels for terrain variation when parallax is disabled but EMAT is available
 		mipLevels[0] = ExtendedMaterials::GetMipLevel(uv, TexColorSampler);
@@ -1360,7 +1358,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #		endif
 #		else
-	// Initialize mip levels for non-EMAT case (no longer needed)
+	// Initialize mip levels for non-EMAT case
 	mipLevels[0] = mipLevels[1] = mipLevels[2] = mipLevels[3] = mipLevels[4] = mipLevels[5] = 0.0;
 #		endif  // EMAT
 #	endif      // LANDSCAPE
