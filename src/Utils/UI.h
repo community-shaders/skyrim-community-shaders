@@ -330,6 +330,14 @@ namespace Util
 					}
 				}
 			}
+
+			// Add separator between main rows and footer rows if there are footer rows
+			if (!footerRows.empty() && !rows.empty()) {
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Separator();
+			}
+
 			// Render static footer rows (not sorted)
 			for (size_t rowIdx = 0; rowIdx < footerRows.size(); ++rowIdx) {
 				const auto& row = footerRows[rowIdx];

@@ -6,9 +6,17 @@
 #include <algorithm>
 #include <filesystem>
 #include <imgui.h>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <tuple>
 #include <vector>
+
+struct SettingsDiffEntry
+{
+	std::string path;
+	std::string aValue;
+	std::string bValue;
+};
 
 namespace Util
 {
@@ -98,4 +106,8 @@ namespace Util
 		return result;
 	}
 
+	namespace FileSystem
+	{
+		std::vector<SettingsDiffEntry> LoadJsonDiff(const std::filesystem::path& userPath, const std::filesystem::path& testPath);
+	}
 }

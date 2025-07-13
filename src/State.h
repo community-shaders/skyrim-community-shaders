@@ -62,8 +62,8 @@ public:
 	int drawCalls[RE::BSShader::Type::Total + 1];
 
 	// Frame time tracking per shader type (in milliseconds)
-	float frameTimePerType[RE::BSShader::Type::Total];
-	float smoothFrameTimePerType[RE::BSShader::Type::Total];
+	float frameTimePerType[RE::BSShader::Type::Total + 1];
+	float smoothFrameTimePerType[RE::BSShader::Type::Total + 1];
 
 	// Timing state for per-type frame time tracking
 	std::chrono::high_resolution_clock::time_point frameStartTime;
@@ -228,6 +228,59 @@ public:
 	void PresentReShade();
 
 	bool useFrameAnnotations = false;
+
+	// --- Utility Methods ---
+	/**
+	 * @brief Gets the total smoothed draw calls from the global state
+	 * @return Total number of draw calls as float
+	 */
+	float GetTotalSmoothedDrawCalls() const;
+
+	/**
+	 * @brief Base helper that iterates through valid shader types (excluding None and Total)
+	 * @param callback Function to call for each valid shader type with parameters: (type, typeIndex, classIndex)
+	 */
+	template <typename Callback>
+	static void ForEachValidShaderType(Callback callback)
+	{
+		for (auto type : magic_enum::enum_values<RE::BSShader::Type>()) {
+			if (type == RE::BSShader::Type::None || type == RE::BSShader::Type::Total)
+				continue;
+			int typeIndex = magic_enum::enum_integer(type);
+			int classIndex = typeIndex - 1;
+			callback(type, typeIndex, classIndex);
+		}
+	}
+
+	/**
+	 * @brief Iterates through valid shader types with performance metrics
+	 * @param callback Function to call for each shader type with parameters: (type, typeIndex, drawCalls, frameTime, percent, costPerCall)
+	 */
+	template <typename Callback>
+	static void ForEachShaderTypeWithMetrics(Callback callback)
+	{
+		ForEachValidShaderType([&](auto type, int typeIndex, [[maybe_unused]] int classIndex) {
+			float drawCalls = static_cast<float>(GetSingleton()->smoothDrawCalls[typeIndex]);
+			float frameTime = static_cast<float>(GetSingleton()->smoothFrameTimePerType[typeIndex]);
+			float percent = (frameTime > 0.0f && GetSingleton()->smoothFrameTimePerType[magic_enum::enum_integer(RE::BSShader::Type::Total)] > 0.0f) ?
+			                    (frameTime / GetSingleton()->smoothFrameTimePerType[magic_enum::enum_integer(RE::BSShader::Type::Total)] * 100.0f) :
+			                    0.0f;
+			float costPerCall = (drawCalls > 0.0f) ? (frameTime / drawCalls) : 0.0f;
+			callback(type, typeIndex, drawCalls, frameTime, percent, costPerCall);
+		});
+	}
+
+	/**
+	 * @brief Iterates through valid shader types with class indices for UI operations
+	 * @param callback Function to call for each shader type with parameters: (type, classIndex)
+	 */
+	template <typename Callback>
+	static void ForEachShaderTypeWithIndex(Callback callback)
+	{
+		ForEachValidShaderType([&](auto type, [[maybe_unused]] int typeIndex, int classIndex) {
+			callback(type, classIndex);
+		});
+	}
 
 	// Features that are more special then others
 	std::unordered_map<std::string, bool> specialFeatures = {

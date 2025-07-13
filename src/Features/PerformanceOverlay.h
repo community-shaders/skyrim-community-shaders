@@ -3,13 +3,26 @@
 #include "../Utils/PerfUtils.h"
 #include "OverlayFeature.h"
 #include <chrono>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <unordered_map>
+#include <variant>
+
+// Forward declarations
+struct DrawCallRow;
+class ABTestAggregator;
+
+// Special shader type enum for summary rows
+enum class SpecialShaderType
+{
+	Total = -1,
+	Other = -2
+};
 
 struct DrawCallRow
 {
 	std::string label;
-	int shaderType;
+	int shaderType;  // Use int for consistency with the rest of the codebase
 	int drawCalls;
 	float frameTime;
 	float percent;
@@ -62,8 +75,14 @@ struct PerformanceOverlay : OverlayFeature
 
 	// Core performance display functions
 	void DrawFPS();
-	void DrawDrawCalls();
 	void DrawVRAM();
+
+	// Private helper for table rendering
+	void DrawDrawCallsTable(const std::vector<DrawCallRow>& mainRows, const std::vector<DrawCallRow>& summaryRows);
+
+	// Private helper for A/B testing section
+	void DrawABTestSection(const std::vector<DrawCallRow>& allRows, bool showCollapsibleSections);
+	void DrawABTestResultsTable();
 
 	// Test data management
 	static void UpdateShaderTestData(int shaderType, float frameTime, float costPerCall);
@@ -71,6 +90,22 @@ struct PerformanceOverlay : OverlayFeature
 
 public:
 	static void UpdateAllShaderTestData();
+
+	// A/B Test aggregator access
+	static ABTestAggregator& GetABTestAggregator();
+
+	// Test data management helpers
+	static void UpdateShaderTestDataEntry(int shaderType, float frameTime, float costPerCall, float percent = 0.0f);
+	static void UpdateSummaryTestData(float smoothedFrameTime, float otherFrameTime, float otherPercent, float totalCostPerCall);
+
+	/**
+	 * @brief Builds the main and summary rows for the performance overlay table.
+	 *
+	 * @return A pair of vectors: (mainRows, summaryRows).
+	 *         - mainRows: One row per shader type, with live and (if present) test data.
+	 *         - summaryRows: 'Other' and 'Total' rows, with live and (if present) test data.
+	 */
+	std::pair<std::vector<DrawCallRow>, std::vector<DrawCallRow>> BuildDrawCallRows() const;
 
 	// Performance overlay state management
 	class PerfOverlayState
@@ -102,6 +137,24 @@ public:
 		float textScale = 1.0f;
 		static constexpr float kSmoothingFactor = 0.15f;  // Smoothing factor: 0.1f = slow, 0.3f = fast.
 		std::chrono::steady_clock::time_point lastUpdateTime;
+
+		// Performance threshold constants
+		static constexpr float kFrameTimeGoodThreshold = 2.0f;       // ms - Good performance threshold
+		static constexpr float kFrameTimeWarningThreshold = 5.0f;    // ms - Warning performance threshold
+		static constexpr float kCostPerCallGoodThreshold = 0.05f;    // ms/call - Good cost per call threshold
+		static constexpr float kCostPerCallWarningThreshold = 0.2f;  // ms/call - Warning cost per call threshold
+		static constexpr float kMicrosecondThreshold = 0.01f;        // ms - Threshold for showing microseconds
+		static constexpr float kPercentDisplayThreshold = 0.01f;     // Minimum percent difference to display
+		static constexpr float kGraphSpreadMultiplier = 2.0f;        // Standard deviation multiplier for graph range
+		static constexpr float kGraphMinSpread = 2.0f;               // ms - Minimum graph spread
+		static constexpr float kGraphMaxSpread = 20.0f;              // ms - Maximum graph spread
+		static constexpr float kFrameGenerationMultiplier = 2.0f;    // Frame generation doubles frame rate
+		static constexpr float kMaxUpdateInterval = 2.0f;            // seconds - Maximum update interval
+		static constexpr float kDefaultWindowPadding = 10.0f;        // pixels - Default window padding
+		static constexpr float kLabelPadding = 100.0f;               // pixels - Padding for labels
+		static constexpr float kDrawCallsTableWidth = 600.0f;        // pixels - Draw calls table width
+		static constexpr float kVRAMSectionWidth = 300.0f;           // pixels - VRAM section width
+		static constexpr float kWindowBorderPadding = 20.0f;         // pixels - Window border padding
 
 		float SetTextScale();
 		/**
@@ -172,7 +225,7 @@ private:
 	 *
 	 * This function is responsible for updating the static test data used for A/B comparison and manual shader toggling.
 	 *
-	 * - In A/B Test Mode (Variant B): If abTestingEnabled && usingTestConfig, this function continuously captures
+	 * - In A/B Test Mode (Variant B): If ABTestingManager is enabled and using test config, this function continuously captures
 	 *   test data for all shader types, as well as the 'Other' and 'Total' summary rows, every frame.
 	 * - In Manual Shader Toggle mode: If any shader is disabled, this function captures test data for the disabled
 	 *   shaders and summary rows at the moment of disabling, and keeps it until cleared.
@@ -194,15 +247,6 @@ private:
 	 * - Empties s_testData and resets s_testDataSource.
 	 */
 	void ClearTestData();
-
-	/**
-	 * @brief Builds the main and summary rows for the performance overlay table.
-	 *
-	 * @return A pair of vectors: (mainRows, summaryRows).
-	 *         - mainRows: One row per shader type, with live and (if present) test data.
-	 *         - summaryRows: 'Other' and 'Total' rows, with live and (if present) test data.
-	 */
-	std::pair<std::vector<DrawCallRow>, std::vector<DrawCallRow>> BuildDrawCallRows() const;
 
 	struct TestData
 	{

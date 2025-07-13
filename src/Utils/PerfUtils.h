@@ -1,5 +1,8 @@
 #pragma once
+#include <algorithm>
 #include <cstdint>
+#include <numeric>
+#include <vector>
 
 namespace Util
 {
@@ -22,5 +25,30 @@ namespace Util
 	inline float CalcFPS(float frameTimeMs)
 	{
 		return 1000.0f / frameTimeMs;
+	}
+
+	/**
+     * @brief Calculates the mean of a vector of floats.
+     * @param v Vector of floats.
+     * @return Mean value.
+     */
+	inline float Mean(const std::vector<float>& v)
+	{
+		if (v.empty())
+			return 0.0f;
+		return std::accumulate(v.begin(), v.end(), 0.0f) / v.size();
+	}
+
+	/**
+     * @brief Calculates the median of a vector of floats.
+     * @param v Vector of floats.
+     * @return Median value.
+     */
+	inline float Median(std::vector<float> v)
+	{
+		if (v.empty())
+			return 0.0f;
+		std::nth_element(v.begin(), v.begin() + v.size() / 2, v.end());
+		return v[v.size() / 2];
 	}
 }

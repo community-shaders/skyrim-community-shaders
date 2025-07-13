@@ -1,4 +1,5 @@
 #include "Format.h"
+#include "Globals.h"
 #include <chrono>
 #include <cmath>
 #include <iomanip>
@@ -114,5 +115,33 @@ namespace Util
 		if (diff < 3600)
 			return std::to_string(diff / 60) + "m";
 		return std::to_string(diff / 3600) + "h";
+	}
+
+	std::string FormatDeltaWithPercent(float a, float b, float threshold)
+	{
+		float delta = b - a;
+		float percentDelta = 0.0f;
+		if (a < b && a > 0.0f) {
+			percentDelta = 100.0f * (b - a) / a;
+		} else if (b < a && b > 0.0f) {
+			percentDelta = 100.0f * (a - b) / b;
+		}
+		std::string percentStr = (percentDelta >= threshold) ? std::format(" ({:+.1f}%)", (b < a ? -percentDelta : percentDelta)) : "";
+		return (delta > 0.0f ? "+" : "") + FormatMilliseconds(delta) + percentStr;
+	}
+
+	float CalculatePercentage(float part, float total, float defaultValue)
+	{
+		return (total > 0.0f) ? (part / total * 100.0f) : defaultValue;
+	}
+
+	float CalculateCostPerCall(float frameTime, float drawCalls)
+	{
+		return (drawCalls > 0.0f) ? (frameTime / drawCalls) : 0.0f;
+	}
+
+	float CalculateOtherFrameTime(float totalFrameTime, float measuredSum)
+	{
+		return totalFrameTime - measuredSum;
 	}
 }  // namespace Util

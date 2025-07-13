@@ -175,8 +175,6 @@ public:
 	void SelectFeatureMenu(const std::string& featureName);
 	static std::unordered_map<std::string, int> categoryCounts;  // Number of features in each feature category
 
-	bool usingTestConfig = false;
-	bool abTestingEnabled = false;
 	bool overlayVisible = false;
 
 	// Static utility functions
@@ -195,10 +193,6 @@ private:
 	bool settingSkipCompilationKey = false;
 	bool settingsEffectsToggle = false;
 	bool settingOverlayToggleKey = false;
-	uint32_t testInterval = 0;  // Seconds to wait before toggling user/test settings
-	bool inTestMode = false;    // Whether we're in test mode
-
-	std::chrono::steady_clock::time_point lastTestSwitch = std::chrono::steady_clock::now();  // Time of last test switch
 
 	Menu() = default;
 	void SetupImGuiStyle() const;

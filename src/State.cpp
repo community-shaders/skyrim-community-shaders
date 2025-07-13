@@ -79,10 +79,12 @@ void State::Draw()
 		currentExtraFeatureDescriptor = 0;
 
 		if (frameChecker.IsNewFrame()) {
+			// Smooth draw calls and frame times for all shader types
 			for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) + 1; ++i) {
 				smoothDrawCalls[i] = smoothDrawCalls[i] * static_cast<float>(0.95) + drawCalls[i] * static_cast<float>(0.05);
 				smoothFrameTimePerType[i] = smoothFrameTimePerType[i] * static_cast<float>(0.95) + frameTimePerType[i] * static_cast<float>(0.05);
 			}
+			// Reset counters for next frame
 			for (auto& c : drawCalls)
 				c = 0;
 			for (auto& ft : frameTimePerType)
@@ -281,14 +283,14 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 		if (settings["Replace Original Shaders"].is_object()) {
 			logger::info("Loading 'Replace Original Shaders' settings");
 			json& originalShaders = settings["Replace Original Shaders"];
-			for (int classIndex = 0; classIndex < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1; ++classIndex) {
-				auto name = magic_enum::enum_name(*magic_enum::enum_cast<RE::BSShader::Type>(classIndex + 1));
+			ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
+				auto name = magic_enum::enum_name(type);
 				if (originalShaders[name].is_boolean()) {
 					enabledClasses[classIndex] = originalShaders[name];
 				} else {
 					logger::warn("Invalid entry for shader class '{}', using default", name);
 				}
-			}
+			});
 		}
 		// Ensure 'Disable at Boot' section exists in the JSON
 		if (!settings.contains("Disable at Boot") || !settings["Disable at Boot"].is_object()) {
@@ -409,9 +411,9 @@ void State::Save(ConfigMode a_configMode)
 	upscaling->SaveSettings(upscalingJson);
 
 	json originalShaders;
-	for (int classIndex = 0; classIndex < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1; ++classIndex) {
-		originalShaders[magic_enum::enum_name(*magic_enum::enum_cast<RE::BSShader::Type>(classIndex + 1))] = enabledClasses[classIndex];
-	}
+	ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
+		originalShaders[magic_enum::enum_name(type)] = enabledClasses[classIndex];
+	});
 	settings["Replace Original Shaders"] = originalShaders;
 
 	json disabledFeaturesJson;
@@ -850,4 +852,11 @@ void State::RenderReShade()
 void State::PresentReShade()
 {
 	reshade::update_and_present_effect_runtime(reShadeRuntime);
+}
+
+// --- Utility Method Implementations ---
+
+float State::GetTotalSmoothedDrawCalls() const
+{
+	return static_cast<float>(smoothDrawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]);
 }

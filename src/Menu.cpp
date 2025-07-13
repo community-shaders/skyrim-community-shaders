@@ -24,6 +24,8 @@
 
 #include "Features/LightLimitFix/ParticleLights.h"
 #include "Features/PerformanceOverlay.h"
+#include "Features/PerformanceOverlay/ABTesting/ABTestAggregator.h"
+#include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
 #include "Features/WeatherPicker.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -1415,29 +1417,9 @@ void Menu::DrawAdvancedSettings()
 				"The more threads the faster compilation will finish but may make the system unresponsive. ");
 		}
 
-		if (ImGui::SliderInt("A/B Test Interval", reinterpret_cast<int*>(&testInterval), 0, 10)) {
-			bool overlayWasEnabled = PerformanceOverlay::GetSingleton()->settings.ShowInOverlay;
-			if (testInterval == 0) {
-				abTestingEnabled = false;
-				logger::info("Disabling A/B testing. Will restore to Variant B (TEST) config.");
-				globals::state->Load(State::ConfigMode::TEST);  // restore last settings before entering test mode
-			} else if (!abTestingEnabled) {
-				logger::info("Saving current settings for Variant B (TEST) and starting test with interval {}.", testInterval);
-				globals::state->Save(State::ConfigMode::TEST);
-				abTestingEnabled = true;
-			} else {
-				logger::info("Setting new A/B test interval {}.", testInterval);
-			}
-			PerformanceOverlay::GetSingleton()->settings.ShowInOverlay = overlayWasEnabled;
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Sets number of seconds before toggling between Variant A (USER) and Variant B (TEST) config for A/B testing. "
-				"0 disables. Non-zero will enable A/B testing mode. "
-				"Enabling will save current settings as TEST config (Variant B). "
-				"This has no impact if no settings are changed. "
-				"Variant A = USER config, Variant B = TEST config.");
-		}
+		// A/B Testing settings
+		auto* abTestingManager = ABTestingManager::GetSingleton();
+		abTestingManager->DrawSettingsUI();
 		bool useFileWatcher = shaderCache->UseFileWatcher();
 		ImGui::TableNextColumn();
 		if (ImGui::Checkbox("Enable File Watcher", &useFileWatcher)) {
@@ -1484,17 +1466,16 @@ void Menu::DrawAdvancedSettings()
 	if (ImGui::CollapsingHeader("Replace Original Shaders", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
 		auto state = globals::state;
 		if (ImGui::BeginTable("##ReplaceToggles", 3, ImGuiTableFlags_SizingStretchSame)) {
-			for (int classIndex = 0; classIndex < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1; ++classIndex) {
+			globals::state->ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
 				ImGui::TableNextColumn();
 
-				auto type = magic_enum::enum_value<RE::BSShader::Type>(classIndex + 1);
 				if (!(SIE::ShaderCache::IsSupportedShader(type) || state->IsDeveloperMode())) {
 					ImGui::BeginDisabled();
 					ImGui::Checkbox(std::format("{}", magic_enum::enum_name(type)).c_str(), &state->enabledClasses[classIndex]);
 					ImGui::EndDisabled();
 				} else
 					ImGui::Checkbox(std::format("{}", magic_enum::enum_name(type)).c_str(), &state->enabledClasses[classIndex]);
-			}
+			});
 			if (state->IsDeveloperMode()) {
 				ImGui::Checkbox("Vertex", &state->enableVShaders);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -1638,7 +1619,8 @@ void Menu::DrawOverlay()
 	auto shaderCache = globals::shaderCache;
 	auto failed = shaderCache->GetFailedTasks();
 	auto hide = shaderCache->IsHideErrors();
-	if (!(shaderCache->IsCompiling() || IsEnabled || abTestingEnabled || (failed && !hide) || PerformanceOverlay::GetSingleton()->settings.ShowInOverlay)) {
+	auto* abTestingManager = ABTestingManager::GetSingleton();
+	if (!(shaderCache->IsCompiling() || IsEnabled || abTestingManager->IsEnabled() || (failed && !hide) || PerformanceOverlay::GetSingleton()->settings.ShowInOverlay)) {
 		auto& io = ImGui::GetIO();
 		io.ClearInputKeys();
 		io.ClearEventsQueue();
@@ -1718,30 +1700,26 @@ void Menu::DrawOverlay()
 		}
 	}
 
-	if (abTestingEnabled) {  // In test mode
-		// Preserve overlay enabled state when switching configs
-		float seconds = (float)duration_cast<std::chrono::milliseconds>(high_resolution_clock::now() - lastTestSwitch).count() / 1000.0f;
-		auto remaining = (float)testInterval - seconds;
-		if (remaining < 0.0f) {
-			bool overlayWasEnabled = PerformanceOverlay::GetSingleton()->settings.ShowInOverlay;
-			Menu::GetSingleton()->usingTestConfig = !Menu::GetSingleton()->usingTestConfig;
-			logger::info("Swapping to {} (A/B Test): {}", Menu::GetSingleton()->usingTestConfig ? "Variant B (TEST)" : "Variant A (USER)", Menu::GetSingleton()->usingTestConfig ? "TEST config" : "USER config");
-			globals::state->Load(Menu::GetSingleton()->usingTestConfig ? State::ConfigMode::TEST : State::ConfigMode::USER);
-			PerformanceOverlay::GetSingleton()->settings.ShowInOverlay = overlayWasEnabled;  // Restore overlay state
-			lastTestSwitch = high_resolution_clock::now();
-		}
-		// Always update test data during TEST phase, regardless of overlay visibility
+	// A/B Testing management
+	abTestingManager->Update();
+
+	// Always update test data during TEST phase, regardless of overlay visibility
+	if (abTestingManager->IsEnabled()) {
 		PerformanceOverlay::UpdateAllShaderTestData();
-		ImGui::SetNextWindowBgAlpha(1.0f);
-		ImGui::SetNextWindowPos(ImVec2(10, 10));
-		if (!ImGui::Begin("Testing", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
-			ImGui::End();
-			return;
+
+		// Add A/B test aggregator data collection here
+		if (auto* overlay = PerformanceOverlay::GetSingleton()) {
+			auto [mainRows, summaryRows] = overlay->BuildDrawCallRows();
+			std::vector<DrawCallRow> allRows = mainRows;
+			allRows.insert(allRows.end(), summaryRows.begin(), summaryRows.end());
+
+			// Update the A/B test aggregator with current frame data
+			abTestingManager->GetAggregator().OnFrame(allRows);
 		}
-		remaining = std::max(0.0f, remaining);
-		ImGui::Text(fmt::format("{} : {:.1f} seconds left", Menu::GetSingleton()->usingTestConfig ? "Variant B (TEST)" : "Variant A (USER)", remaining).c_str());
-		ImGui::End();
 	}
+
+	// Draw A/B testing overlay
+	abTestingManager->DrawOverlayUI();
 
 	ImGuiStyle& style = ImGui::GetStyle();
 	style = oldStyle;
