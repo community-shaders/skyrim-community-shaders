@@ -292,6 +292,17 @@ struct ID3D11Device_CreatePixelShader
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
+struct ID3D11Device_CreateSamplerState
+{
+	static HRESULT STDMETHODCALLTYPE thunk(ID3D11Device* This, D3D11_SAMPLER_DESC* pSamplerDesc, ID3D11SamplerState** ppSamplerState)
+	{
+		// Limit Anisotropy to 8x for performance
+		pSamplerDesc->MaxAnisotropy = std::min(pSamplerDesc->MaxAnisotropy, 8u);
+		return func(This, pSamplerDesc, ppSamplerState);
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
 decltype(&CreateDXGIFactory) ptrCreateDXGIFactory;
 
 HRESULT WINAPI hk_CreateDXGIFactory(REFIID, void** ppFactory)
@@ -605,6 +616,9 @@ namespace Hooks
 				stl::detour_vfunc<12, ID3D11Device_CreateVertexShader>(globals::d3d::device);
 				stl::detour_vfunc<15, ID3D11Device_CreatePixelShader>(globals::d3d::device);
 			}
+
+			stl::detour_vfunc<23, ID3D11Device_CreateSamplerState>(globals::d3d::device);
+
 			globals::menu->Init();
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
