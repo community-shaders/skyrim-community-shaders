@@ -137,28 +137,27 @@ inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, f
 // Main stochastic sampling function
 inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
 {
-	// Take first sample (always needed)
-	float4 sample1 = tex.SampleBias(samp, uv + offsets.offset1, SharedData::MipBias);
+	// Calculate custom mip level from original UVs.
+	float mipLevel = tex.CalculateLevelOfDetail(samp, uv);
+	float adjustedMipLevel = mipLevel + SharedData::MipBias;
 
-	// For terrain variation, we can use distance-based early exit but use SharedData::MipBias
-	// to automatically handle mip selection like vanilla textures
-	float autoMipLevel = tex.CalculateLevelOfDetail(samp, uv);
-	float mipFactor = saturate((autoMipLevel - MIP_BLEND_START) / MIP_BLEND_RANGE);
+	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
 
 	// Early exit for very high mip levels - single sample is sufficient. Miplevels hide the artifacts.
+	float mipFactor = saturate((mipLevel - MIP_BLEND_START) / MIP_BLEND_RANGE);
 	if (mipFactor >= MIP_EARLY_EXIT_THRESHOLD)
 	{
 		return sample1;
 		// Wasted ALU since there are still 3 hash calls computed for the pixel, but doesn't really hurt performance and also avoids recalculating when moving closer/further away.
 	}
 
-	// Take remaining samples for blending
-	float4 sample2 = tex.SampleBias(samp, uv + offsets.offset2, SharedData::MipBias);
-	float4 sample3 = tex.SampleBias(samp, uv + offsets.offset3, SharedData::MipBias);
+	// Take three samples for blending at the same adjusted mip level
+	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, adjustedMipLevel);
+	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, adjustedMipLevel);
 
 	// Full height-based blending for low mip levels (close terrain) with improved contrast scaling
-	float contrastFactor = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE) * (1.0 - 0.5 * mipFactor); // Scale contrast with mip level
-	float3 blendWeights = pow(saturate(offsets.weights), max(1.0, min(100.0, contrastFactor))); // Clamp contrast factor to prevent extreme values
+	float contrastFactor = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE) * (1.0 - 0.5 * mipFactor);
+	float3 blendWeights = pow(saturate(offsets.weights), max(1.0, min(100.0, contrastFactor)));
 
 	// Height calculation
 	float3 luminanceHeights = float3(
@@ -183,8 +182,7 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 }
 
 // Stochastic sampling function without height blending for better performance
-// Disable X4000 warning: FXC incorrectly reports potentially uninitialized variables
-// due to complex control flow with early returns and conditional sampling
+// Disable X4000 warning: FXC incorrectly reports potentially uninitialized variables sdue to complex control flow with early returns and conditional sampling
 #pragma warning(push)
 #pragma warning(disable : 4000)
 inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets, float2 dx, float2 dy)
@@ -196,7 +194,7 @@ inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 
 	}
 
 	// Take three samples for blending
-	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel); // Uses miplevels from EMAT.hlsl.
 	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
 
