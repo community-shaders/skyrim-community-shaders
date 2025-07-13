@@ -69,7 +69,7 @@ inline float4x3 ComputeBarycentricVerts(float2 landscapeUV)
     float2 skewUV = mul(SKEW_MATRIX, scaledUV);
     float2 vxID = floor(skewUV);
     float2 frac_uv = frac(skewUV);
-    
+
     float barry_z = 1.0 - frac_uv.x - frac_uv.y;
     float3 barry = float3(frac_uv, barry_z);
 
