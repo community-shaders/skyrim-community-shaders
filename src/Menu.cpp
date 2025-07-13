@@ -278,20 +278,19 @@ void Menu::Init()
 
 	float fontSize = 0.f;
 	// Only bother doing auto font size if user has not changed font px size setting (new)
-	if (settings.Theme.FontSize == settings.Theme.constants.DEFAULT_SCREEN_HEIGHT 
-								* settings.Theme.constants.DEFAULT_FONT_RATIO) 
+	if (std::abs(settings.Theme.FontSize - settings.Theme.constants.DEFAULT_SCREEN_HEIGHT 
+								* settings.Theme.constants.DEFAULT_FONT_RATIO) < 0.01f) 
 	{
-		uint32_t gameScreenHeight = desc.BufferDesc.Height;
-		if (gameScreenHeight > 0) {
-			fontSize = gameScreenHeight * settings.Theme.constants.DEFAULT_FONT_RATIO;
+		uint32_t bufferHeight = desc.BufferDesc.Height;
+		if (bufferHeight > 0) {
+			fontSize = bufferHeight * settings.Theme.constants.DEFAULT_FONT_RATIO;
 		}
 		else {
-			// Try CommonLib functions
 			const auto* const state = RE::BSGraphics::State::GetSingleton();
 			if (state) {
-				const auto height = static_cast<double>(state->screenHeight);
-				if (height > 0) {
-					gameScreenHeight = static_cast<uint32_t>(height);
+				const auto stateHeight = static_cast<float>(state->screenHeight);
+				if (stateHeight > 0) {
+					fontSize = stateHeight * settings.Theme.constants.DEFAULT_FONT_RATIO;
 				} else {
 					logger::warn("Menu::Init() - Failed to get game resolution from RE::BSGraphics::State::GetSingleton().");
 					fontSize = settings.Theme.FontSize; // fallback to default 1080p value
@@ -1674,7 +1673,7 @@ void Menu::DrawOverlay()
 	}
 
 	// Reload font if user changed something
-	if (pendingFontChange || ImGui::GetFontSize() != settings.Theme.FontSize) {
+	if (pendingFontChange || std::abs(ImGui::GetFontSize() - settings.Theme.FontSize) > 0.01f) {
 		ReloadFont();
 	}
 
