@@ -1137,6 +1137,7 @@ namespace Hooks
 		// SE and AE use a 7-byte instruction whereas VR uses a 8-byte instruction
 		// We offset from the base address of the containing function to the instruction itself and then to the value the instruction sets
 		{
+			logger::info("Patching BSLightingShader::SetupGeometry::updateEyePosition");
 			uintptr_t setupGeometryUpdateEyePosition = REL::RelocationID(100565, 107300).address() + REL::Relocate(0x50, 0x75, 0x78);
 			REL::safe_write(setupGeometryUpdateEyePosition + REL::Relocate(6, 6, 7), bool{ true });
 		}
