@@ -445,7 +445,7 @@ void SnowCover::Prepass()
 {
 	if (globals::features::snowCover->wsettings.EnableSnowCover) {
 		auto context = globals::d3d::context;
-		context->PSSetShaderResources(73, (uint)views.size(), views.data());
+		context->PSSetShaderResources(38, (uint)views.size(), views.data());
 	}
 }
 

@@ -5,12 +5,12 @@
 namespace SnowCover
 {
 
-	Texture2D<float4> SnowAlbedo : register(t73);
-	Texture2D<float3> SnowNormal : register(t74);
-	Texture2D<float4> SnowRmaos : register(t75);
-	Texture2D<float4> IceAlbedo : register(t76);
-	Texture2D<float3> IceNormal : register(t77);
-	Texture2D<float4> IceRmaos : register(t78);
+	Texture2D<float4> SnowAlbedo : register(t38);
+	Texture2D<float3> SnowNormal : register(t39);
+	Texture2D<float4> SnowRmaos : register(t40);
+	Texture2D<float4> IceAlbedo : register(t41);
+	Texture2D<float3> IceNormal : register(t42);
+	Texture2D<float4> IceRmaos : register(t43);
 
 	// https://blog.selfshadow.com/publications/blending-in-detail/
 	// for when s = (0,0,1)
