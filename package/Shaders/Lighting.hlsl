@@ -314,11 +314,7 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.TexProj = TextureProj[eyeIndex][2].xyz;
 #	endif
 
-#	if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(SKINNED)
 	vsout.ViewVector = EyePosition[eyeIndex].xyz - worldPosition.xyz;
-#	else
-	vsout.ViewVector = EyePosition[eyeIndex].xyz - input.Position.xyz;
-#	endif
 
 #	if defined(EYE)
 	precise float4 modelEyeCenter = float4(LeftEyeCenter.xyz + input.EyeParameter.xxx * (RightEyeCenter.xyz - LeftEyeCenter.xyz), 1);
