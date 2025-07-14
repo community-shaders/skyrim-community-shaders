@@ -120,7 +120,16 @@ float smoothbumpstep(float edge0, float edge1, float x)
 
 	float4 color = DynamicCubemapRaw[ThreadID];
 
-	float distanceFactor = sqrt(smoothbumpstep(0.0, 2.0, length(position.xyz)));
+	float distance = length(position.xyz);
+	float distanceFactor = smoothbumpstep(0.0, 2.0, distance);
+
+	if (distance < 1.0)
+		distanceFactor = sqrt(distanceFactor);
+
+#if defined(FAKEREFLECTIONS)
+	distanceFactor = max(distanceFactor, smoothstep(0.0, 2.0, distance));
+#endif
+
 	color *= distanceFactor;
 
 	DynamicCubemap[ThreadID] = max(0, color);

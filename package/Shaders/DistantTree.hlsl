@@ -1,3 +1,4 @@
+#include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
 #include "Common/MotionBlur.hlsli"
@@ -170,6 +171,14 @@ const static float DepthOffsets[16] = {
 #		include "CloudShadows/CloudShadows.hlsli"
 #	endif
 
+#	if defined(IBL)
+#		include "IBL/IBL.hlsli"
+#	endif
+
+#	define LinearSampler SampDiffuse
+
+#	include "Common/ShadowSampling.hlsli"
+
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
@@ -214,21 +223,11 @@ PS_OUTPUT main(PS_INPUT input)
 	float dirShadow = 1;
 
 #			if defined(SCREEN_SPACE_SHADOWS)
-	dirShadow = ScreenSpaceShadows::GetScreenSpaceShadow(input.Position.xyz, screenUV, screenNoise, eyeIndex);
+	dirShadow = lerp(1.0, ScreenSpaceShadows::GetScreenSpaceShadow(input.Position.xyz, screenUV, screenNoise, eyeIndex), 0.8);
 #			endif
 
-#			if defined(TERRAIN_SHADOWS)
-	if (dirShadow > 0.0) {
-		float terrainShadow = TerrainShadows::GetTerrainShadow(input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz, SampDiffuse);
-		dirShadow = min(dirShadow, terrainShadow);
-	}
-#			endif
-
-#			if defined(CLOUD_SHADOWS)
-	if (dirShadow > 0.0) {
-		dirShadow *= CloudShadows::GetCloudShadowMult(input.WorldPosition.xyz, SampDiffuse);
-	}
-#			endif
+	if (dirShadow != 0.0)
+		dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
 	float3 diffuseColor = SharedData::DirLightColor.xyz * dirShadow * 0.5;
 
@@ -237,7 +236,13 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 normal = normalize(cross(ddx, ddy));
 
 #			if !defined(SSGI)
-	float3 directionalAmbientColor = mul(SharedData::DirectionalAmbient, float4(normal, 1.0));
+	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
+#				if defined(IBL)
+	if (SharedData::iblSettings.EnableDiffuseIBL) {
+		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
+		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+	}
+#				endif
 	diffuseColor += directionalAmbientColor;
 #			endif
 
@@ -252,13 +257,21 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Albedo = float4(baseColor.xyz, 1);
 	psout.Masks = float4(0, 0, 1, 0);
 #		else
-	float3 diffuseColor = SharedData::DirLightColor.xyz * 0.5;
+	float dirShadow = ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+
+	float3 diffuseColor = SharedData::DirLightColor.xyz * dirShadow * 0.5;
 
 	float3 ddx = ddx_coarse(input.WorldPosition.xyz);
 	float3 ddy = ddy_coarse(input.WorldPosition.xyz);
 	float3 normal = normalize(cross(ddx, ddy));
 
 	float3 directionalAmbientColor = mul(SharedData::DirectionalAmbient, float4(normal, 1.0));
+#			if defined(IBL)
+	if (SharedData::iblSettings.EnableDiffuseIBL) {
+		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
+		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+	}
+#			endif
 	diffuseColor += directionalAmbientColor;
 
 	float3 color = diffuseColor * baseColor.xyz;

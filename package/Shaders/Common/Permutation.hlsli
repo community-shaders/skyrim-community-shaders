@@ -57,9 +57,21 @@ namespace Permutation
 	namespace ExtraFlags
 	{
 		static const uint InWorld = (1 << 0);
-		static const uint IsBeastRace = (1 << 1);
-		static const uint EffectShadows = (1 << 2);
-		static const uint IsDecal = (1 << 3);
+		static const uint InReflection = (1 << 1);
+		static const uint IsBeastRace = (1 << 2);
+		static const uint EffectShadows = (1 << 3);
+		static const uint IsDecal = (1 << 4);
+		static const uint IsTree = (1 << 5);
+	}
+
+	namespace ExtraFeatureFlags
+	{
+		static const int THLand0HasDisplacement = (1 << 0);
+		static const int THLand1HasDisplacement = (1 << 1);
+		static const int THLand2HasDisplacement = (1 << 2);
+		static const int THLand3HasDisplacement = (1 << 3);
+		static const int THLand4HasDisplacement = (1 << 4);
+		static const int THLand5HasDisplacement = (1 << 5);
 	}
 
 	cbuffer PerShader : register(b4)
@@ -67,6 +79,7 @@ namespace Permutation
 		uint VertexShaderDescriptor;
 		uint PixelShaderDescriptor;
 		uint ExtraShaderDescriptor;
+		uint ExtraFeatureDescriptor;
 	};
 
 }

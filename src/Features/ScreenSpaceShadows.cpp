@@ -1,8 +1,6 @@
 #include "ScreenSpaceShadows.h"
 
-#include "Deferred.h"
 #include "State.h"
-#include "Util.h"
 
 #pragma warning(push)
 #pragma warning(disable: 4838 4244)
@@ -87,15 +85,14 @@ ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarchRight()
 void ScreenSpaceShadows::DrawShadows()
 {
 	ZoneScoped;
-	TracyD3D11Zone(State::GetSingleton()->tracyCtx, "Screen Space Shadows");
+	auto state = globals::state;
+	TracyD3D11Zone(state->tracyCtx, "Screen Space Shadows");
 
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-	auto context = State::GetSingleton()->context;
+	auto renderer = globals::game::renderer;
+	auto context = globals::d3d::context;
 
 	auto accumulator = RE::BSGraphics::BSShaderAccumulator::GetCurrentAccumulator();
 	auto dirLight = skyrim_cast<RE::NiDirectionalLight*>(accumulator->GetRuntimeData().activeShadowSceneNode->GetRuntimeData().sunLight->light.get());
-
-	auto state = State::GetSingleton();
 
 	auto& directionNi = dirLight->GetWorldDirection();
 	float3 light = { directionNi.x, directionNi.y, directionNi.z };
@@ -131,12 +128,12 @@ void ScreenSpaceShadows::DrawShadows()
 
 	auto dispatchList = Bend::BuildDispatchList(lightProjectionF, viewportSize, minRenderBounds, maxRenderBounds);
 
-	auto viewport = RE::BSGraphics::State::GetSingleton();
+	auto viewport = globals::game::graphicsState;
 
 	float2 dynamicRes = { viewport->GetRuntimeData().dynamicResolutionWidthRatio, viewport->GetRuntimeData().dynamicResolutionHeightRatio };
 
 	for (int i = 0; i < dispatchList.DispatchCount; i++) {
-		TracyD3D11Zone(State::GetSingleton()->tracyCtx, "SSS - Ray March");
+		TracyD3D11Zone(globals::state->tracyCtx, "SSS - Ray March");
 
 		auto dispatchData = dispatchList.Dispatch[i];
 
@@ -164,7 +161,7 @@ void ScreenSpaceShadows::DrawShadows()
 		context->Dispatch(dispatchData.WaveCount[0], dispatchData.WaveCount[1], dispatchData.WaveCount[2]);
 	}
 
-	if (REL::Module::IsVR()) {
+	if (globals::game::isVR) {
 		lightProjection = float4(-light.x, -light.y, -light.z, 0.0f);
 
 		viewProjMat = Util::GetCameraData(1).viewProjMat;
@@ -178,7 +175,7 @@ void ScreenSpaceShadows::DrawShadows()
 		dispatchList = Bend::BuildDispatchList(lightProjectionRightF, viewportSize, minRenderBounds, maxRenderBounds);
 
 		for (int i = 0; i < dispatchList.DispatchCount; i++) {
-			TracyD3D11Zone(State::GetSingleton()->tracyCtx, "SSS - Ray March (VR Right Eye)");
+			TracyD3D11Zone(globals::state->tracyCtx, "SSS - Ray March (VR Right Eye)");
 
 			auto dispatchData = dispatchList.Dispatch[i];
 
@@ -224,12 +221,12 @@ void ScreenSpaceShadows::DrawShadows()
 
 void ScreenSpaceShadows::Prepass()
 {
-	auto context = State::GetSingleton()->context;
+	auto context = globals::d3d::context;
 
 	float white[4] = { 1, 1, 1, 1 };
 	context->ClearUnorderedAccessViewFloat(screenSpaceShadowsTexture->uav.get(), white);
 
-	if (auto sky = RE::Sky::GetSingleton())
+	if (auto sky = globals::game::sky)
 		if (bendSettings.Enable && sky->mode.get() == RE::Sky::Mode::kFull)
 			DrawShadows();
 
@@ -262,7 +259,7 @@ void ScreenSpaceShadows::SetupResources()
 	raymarchCB = new ConstantBuffer(ConstantBufferDesc<RaymarchCB>());
 
 	{
-		auto& device = State::GetSingleton()->device;
+		auto device = globals::d3d::device;
 
 		D3D11_SAMPLER_DESC samplerDesc = {};
 		samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
@@ -280,7 +277,7 @@ void ScreenSpaceShadows::SetupResources()
 	}
 
 	{
-		auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+		auto renderer = globals::game::renderer;
 		auto shadowMask = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kSHADOW_MASK];
 
 		D3D11_TEXTURE2D_DESC texDesc{};

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.21)
 
 project(
 	CommunityShaders
-	VERSION 1.1.3
+	VERSION 1.3.0
 	LANGUAGES CXX
 )
 
@@ -52,11 +52,25 @@ target_compile_definitions(
 	"$<$<BOOL:${TRACY_SUPPORT}>:TRACY_SUPPORT>"
 )
 
+file(GLOB FEATURE_SHADER_DIRS
+    RELATIVE "${CMAKE_SOURCE_DIR}"
+    "${CMAKE_SOURCE_DIR}/features/*/Shaders"
+)
+
+foreach(_dir IN LISTS FEATURE_SHADER_DIRS)
+    target_include_directories(
+        ${PROJECT_NAME}
+        PRIVATE
+          "${CMAKE_SOURCE_DIR}/${_dir}"
+    )
+endforeach()
+
 target_include_directories(
 	${PROJECT_NAME}
 	PRIVATE
 	${BSHOSHANY_THREAD_POOL_INCLUDE_DIRS}
 	${CLIB_UTIL_INCLUDE_DIRS}
+	"${CMAKE_SOURCE_DIR}/package/Shaders"
 )
 
 target_link_libraries(
@@ -77,6 +91,7 @@ target_link_libraries(
 	efsw::efsw
 	Tracy::TracyClient
 	Streamline
+	d3d12.lib
 )
 
 # https://gitlab.kitware.com/cmake/cmake/-/issues/24922#note_1371990
@@ -111,11 +126,20 @@ file(GLOB_RECURSE FEATURE_CONFIG_FILES
 foreach(FEATURE_PATH ${FEATURE_CONFIG_FILES})
 	get_filename_component(FEATURE ${FEATURE_PATH} NAME_WE)
 	file(READ "${FEATURE_PATH}" CONFIG_VALUE)
-	string(REGEX MATCH "Version = ([0-9]*)-([0-9]*)-([0-9]*)" _ ${CONFIG_VALUE})
-	set(ver_major ${CMAKE_MATCH_1})
-	set(ver_minor ${CMAKE_MATCH_2})
-	set(ver_patch ${CMAKE_MATCH_3})
-	list(APPEND FEATURE_VERSIONS \t\t{\ \"${FEATURE}\"sv,\ {${ver_major},${ver_minor},${ver_patch}}\ })
+	string(STRIP "${CONFIG_VALUE}" CONFIG_VALUE)
+	if(CONFIG_VALUE)
+		string(REGEX MATCH "Version = ([0-9]+)-([0-9]+)-([0-9]+)" _ "${CONFIG_VALUE}")
+		if(DEFINED CMAKE_MATCH_1 AND DEFINED CMAKE_MATCH_2 AND DEFINED CMAKE_MATCH_3)
+			set(ver_major ${CMAKE_MATCH_1})
+			set(ver_minor ${CMAKE_MATCH_2})
+			set(ver_patch ${CMAKE_MATCH_3})
+			list(APPEND FEATURE_VERSIONS "\t\t{\"${FEATURE}\"sv, {${ver_major},${ver_minor},${ver_patch}}}")
+		else()
+			message(WARNING "Feature config file '${FEATURE_PATH}' does not contain a valid version string. Skipping.")
+		endif()
+	else()
+		message(WARNING "Feature config file '${FEATURE_PATH}' is empty or contains only whitespace. Skipping version detection for this feature.")
+	endif()
 endforeach()
 
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FEATURE_CONFIG_FILES}")
@@ -147,6 +171,21 @@ if(CLANG_FORMAT_PATH)
 endif()
 
 # #######################################################################################################################
+# # Shader validation config generation
+# #######################################################################################################################
+
+# Add target to generate shader validation configuration files
+# This requires hlslkit and valid Skyrim installations with recent log files
+find_program(POWERSHELL_PATH pwsh powershell)
+if(POWERSHELL_PATH)
+	add_custom_target(generate_shader_configs
+		COMMAND ${POWERSHELL_PATH} -ExecutionPolicy Bypass -File "${CMAKE_SOURCE_DIR}/.github/configs/generate-shader-configs.ps1" -OutputDir "${CMAKE_SOURCE_DIR}/.github/configs"
+		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+		COMMENT "Generating shader validation configuration files from Skyrim log files"
+	)
+endif()
+
+# #######################################################################################################################
 # # Automatic deployment
 # #######################################################################################################################
 file(GLOB FEATURE_PATHS LIST_DIRECTORIES true ${CMAKE_SOURCE_DIR}/features/*)
@@ -164,13 +203,19 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
 		COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_PDB_FILE:${PROJECT_NAME}> "${AIO_DIR}/SKSE/Plugins/"
 		COMMAND ${CMAKE_COMMAND} -E remove "${AIO_DIR}/CORE"
 	)
-
 	add_custom_command(
 		OUTPUT copy_shaders.stamp
 		COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/package "${AIO_DIR}"
 		COMMAND ${CMAKE_COMMAND} -E copy_directory ${FEATURE_PATHS} "${AIO_DIR}"
 		COMMAND ${CMAKE_COMMAND} -E touch copy_shaders.stamp
 		DEPENDS ${HLSL_FILES}
+	)
+
+	# Standalone target for preparing shaders for CI validation
+	# This allows shader validation to run without waiting for the full build
+	add_custom_target(prepare_shaders
+		DEPENDS copy_shaders.stamp
+		COMMENT "Preparing shaders for validation"
 	)
 
 endif()

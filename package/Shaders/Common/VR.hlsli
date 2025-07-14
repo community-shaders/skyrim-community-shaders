@@ -2,6 +2,13 @@
 #define __VR_DEPENDENCY_HLSL__
 #ifdef VR
 
+
+// First person model depth threshold for VR occlusion logic
+#ifndef VR_FP_Z
+#define VR_FP_Z 18.0
+#endif
+
+
 #	if defined(VSHADER)
 #		include "Common/Math.hlsli"
 #	endif  // VSHADER
@@ -57,7 +64,7 @@ namespace Stereo
 
 	/**
 	Converts from eye specific uv to general uv [0,1].
-	In VR, texture buffers include the left and right eye in the same buffer. 
+	In VR, texture buffers include the left and right eye in the same buffer.
 	This means the x value [0, .5] represents the left eye, and the x value (.5, 1] are the right eye.
 	This returns the adjusted value
 	@param uv - eye specific uv coords [0,1]; if uv.x < 0.5, it's a left eye; otherwise right
@@ -173,11 +180,11 @@ namespace Stereo
 	/**
 	* @brief Checks if the color is non zero by testing if the color is greater than 0 by epsilon.
 	*
-	* This function check is a color is non black. It uses a small epsilon value to allow for 
+	* This function check is a color is non black. It uses a small epsilon value to allow for
 	* floating point imprecision.
 	*
 	* For screen-space reflection (SSR), this acts as a mask and checks for an invalid reflection by
-	* checking if the reflection color is essentially black (close to zero). 
+	* checking if the reflection color is essentially black (close to zero).
 	*
 	* @param[in] ssrColor The color to check.
 	* @param[in] epsilon Small tolerance value used to determine if the color is close to zero.
@@ -193,11 +200,11 @@ namespace Stereo
 	* @brief Converts mono UV coordinates from one eye to the corresponding mono UV coordinates of the other eye.
 	*
 	* This function is used to transition UV coordinates from one eye's perspective to the other eye in a stereo rendering setup.
-	* It operates by converting the mono UV to clip space, transforming it into world space, and then reprojecting it 
-	* into the other eye's clip space before converting back to UV coordinates. It supports dynamic resolution adjustments 
+	* It operates by converting the mono UV to clip space, transforming it into world space, and then reprojecting it
+	* into the other eye's clip space before converting back to UV coordinates. It supports dynamic resolution adjustments
 	* and applies eye offset adjustments for correct stereo separation.
 	*
-	* The function considers the aspect of VR by modifying the NDC to view space conversion based on the stereo setup, 
+	* The function considers the aspect of VR by modifying the NDC to view space conversion based on the stereo setup,
 	* ensuring accurate rendering across both eyes.
 	*
 	* @param[in] monoUV The UV coordinates and depth value (Z component) for the current eye, in the range [0,1].
@@ -243,12 +250,12 @@ namespace Stereo
 	* If the UV coordinates are outside the frame of both eyes, it returns the adjusted UV coordinates for the current eye.
 	*
 	* The function ensures that the UV coordinates are correctly adjusted for stereo rendering, taking into account boundary conditions
-	* and preserving accurate reflections.  
+	* and preserving accurate reflections.
 	* Based on concepts from https://cuteloong.github.io/publications/scssr24/
 	* Wu, X., Xu, Y., & Wang, L. (2024). Stereo-consistent Screen Space Reflection. Computer Graphics Forum, 43(4).
 	*
 	* We do not have a backface depth so we may be ray marching even though the ray is in an object.
-	
+
 	* @param[in] monoUV Current UV coordinates with depth information, [0-1]. Must not be dynamic resolution adjusted.
 	* @param[in] eyeIndex Index of the current eye (0 or 1).
 	* @param[out] fromOtherEye Boolean indicating if the result UV coordinates are from the other eye.
@@ -308,10 +315,31 @@ namespace Stereo
 	}
 
 	/**
+	* @brief Returns a smooth fade factor for UVs near the edge of the frame.
+	*
+	* This helps avoid abrupt transitions when one eye's SSGI is out of frame or occluded.
+	* Fade width is tunable; 0.02 is 2% of the frame.
+	*/
+	float IsOutsideFrameFade(float2 uv, bool dynamicres = false)
+	{
+		float2 max = dynamicres ? FrameBuffer::DynamicResolutionParams1.xy : float2(1, 1);
+		float2 min = float2(0, 0);
+		float fadeWidth = 0.02;
+		float edgeFade = 1.0;
+		edgeFade *= smoothstep(min.x, min.x + fadeWidth, uv.x);
+		edgeFade *= smoothstep(max.x, max.x - fadeWidth, uv.x);
+		edgeFade *= smoothstep(min.y, min.y + fadeWidth, uv.y);
+		edgeFade *= smoothstep(max.y, max.y - fadeWidth, uv.y);
+		return edgeFade;
+	}
+
+	/**
 	* @brief Blends color data from two eyes based on their UV coordinates and validity.
 	*
 	* This function checks the validity of the colors based on their UV coordinates and
 	* alpha values. It blends the colors while ensuring proper handling of transparency.
+	* If one eye sees the first person model (depth < VR_FP_Z) and the other sees world geometry (depth > VR_FP_Z),
+	* the first person model's color is dropped from the blend to avoid outlines.
 	*
 	* @param uv1 UV coordinates for the first eye.
 	* @param color1 Color from the first eye.
@@ -327,25 +355,36 @@ namespace Stereo
 		float4 color2,
 		bool dynamicres = false)
 	{
-		// Check validity for color1
-		bool validColor1 = IsNonZeroColor(color1) && !FrameBuffer::IsOutsideFrame(uv1.xy, dynamicres);
-		// Check validity for color2
-		bool validColor2 = IsNonZeroColor(color2) && !FrameBuffer::IsOutsideFrame(uv2.xy, dynamicres);
+		// Use smooth fade at edge for each eye
+		float fade1 = IsOutsideFrameFade(uv1.xy, dynamicres);
+		float fade2 = IsOutsideFrameFade(uv2.xy, dynamicres);
 
-		// Calculate alpha values
-		float alpha1 = validColor1 ? color1.a : 0.0f;
-		float alpha2 = validColor2 ? color2.a : 0.0f;
+		// Stereo-consistent edge fade: use maximum fade so either eye can keep color if in bounds
+		float edgeFade = max(fade1, fade2);
 
-		// Total alpha
-		float totalAlpha = alpha1 + alpha2;
+		// Occlusion-aware confidence based on depth difference
+		float depthDiff = abs(uv1.z - uv2.z);
+		float confidence = 1.0 - smoothstep(0.01, 0.05, depthDiff);
 
-		// Blend based on higher alpha
-		float4 blendedColor = (validColor1 ? color1 * (alpha1 / max(totalAlpha, 1e-5)) : float4(0, 0, 0, 0)) +
-		                      (validColor2 ? color2 * (alpha2 / max(totalAlpha, 1e-5)) : float4(0, 0, 0, 0));
+		// Soft first person model mask: fade out FP model near threshold
+		float fp_fade1 = 1.0 - smoothstep(VR_FP_Z - 1.0, VR_FP_Z + 1.0, uv1.z); // fades from 1 to 0 as depth crosses VR_FP_Z
+		float fp_fade2 = 1.0 - smoothstep(VR_FP_Z - 1.0, VR_FP_Z + 1.0, uv2.z);
 
-		// Final alpha determination
-		blendedColor.a = max(color1.a, color2.a);
+		// If one eye is world and the other is FP, fade out FP smoothly
+		bool eye1_is_fp = uv1.z < VR_FP_Z;
+		bool eye2_is_fp = uv2.z < VR_FP_Z;
+		bool eyes_disagree = eye1_is_fp != eye2_is_fp;
+		if (eyes_disagree) {
+			if (eye1_is_fp) fade1 *= fp_fade1;
+			if (eye2_is_fp) fade2 *= fp_fade2;
+		}
 
+		fade1 *= confidence * edgeFade;
+		fade2 *= confidence * edgeFade;
+
+		float totalFade = fade1 + fade2 + 1e-5;
+		float4 blendedColor = (color1 * fade1 + color2 * fade2) / totalFade;
+		blendedColor.a = max(color1.a * fade1, color2.a * fade2);
 		return blendedColor;
 	}
 

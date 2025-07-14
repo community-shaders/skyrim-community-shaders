@@ -1,12 +1,11 @@
 #pragma once
 
-#include "Buffer.h"
-#include "Feature.h"
-#include "State.h"
-#include "Util.h"
-
 struct Skylighting : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "139352";
+
+public:
 	static Skylighting* GetSingleton()
 	{
 		static Skylighting singleton;
@@ -17,7 +16,20 @@ struct Skylighting : Feature
 
 	virtual inline std::string GetName() override { return "Skylighting"; }
 	virtual inline std::string GetShortName() override { return "Skylighting"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "SKYLIGHTING"; }
+	virtual std::string_view GetCategory() const override { return "Sky"; }
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Simulates realistic ambient lighting by calculating sky occlusion and directional lighting, providing more accurate and natural illumination in outdoor environments.",
+			{ "Sky occlusion calculation for ambient lighting",
+				"Directional skylighting based on environment geometry",
+				"Enhanced ambient lighting for outdoor scenes",
+				"Support for varying sky illumination intensities",
+				"Integration with existing lighting systems" }
+		};
+	}
 	virtual bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
 	virtual void RestoreDefaultSettings() override;
@@ -38,10 +50,10 @@ struct Skylighting : Feature
 
 	struct Settings
 	{
-		float MaxZenith = 3.1415926f / 4.f;  // 45 deg
+		float MaxZenith = 3.1415926f / 2.f;  // 90 deg
 		float MinDiffuseVisibility = 0.1f;
-		float MinSpecularVisibility = 0.f;
-		uint pad0;
+		float MinSpecularVisibility = 0.1f;
+		float SSGIAmbientDimmer = 0.5f;
 	} settings;
 
 	struct SkylightingCB
@@ -61,27 +73,29 @@ struct Skylighting : Feature
 	};
 	static_assert(sizeof(SkylightingCB) % 16 == 0);
 
-	SkylightingCB GetCommonBufferData();
+	SkylightingCB GetCommonBufferData(bool a_inWorld);
 
-	winrt::com_ptr<ID3D11SamplerState> pointClampSampler = nullptr;
+	winrt::com_ptr<ID3D11SamplerState> comparisonSampler = nullptr;
 
 	Texture2D* texOcclusion = nullptr;
 	Texture3D* texProbeArray = nullptr;
 	Texture3D* texAccumFramesArray = nullptr;
 
 	winrt::com_ptr<ID3D11ComputeShader> probeUpdateCompute = nullptr;
+	winrt::com_ptr<ID3D11ShaderResourceView> stbn_vec3_2Dx1D_128x128x64;
 
 	// misc parameters
-	bool doOcclusion = true;
 	uint probeArrayDims[3] = { 256, 256, 128 };
-	float occlusionDistance = 4096.f * 3.f;  // 3 cells
+	float occlusionDistance = 4096.f * 2.5f;  // 5 ugrids
 
 	// cached variables
+	bool queuedResetSkylighting = true;
 	bool inOcclusion = false;
 	REX::W32::XMFLOAT4X4 OcclusionTransform;
 	float4 OcclusionDir;
-	uint forceFrames = 255 * 4;
 	uint frameCount = 0;
+
+	void ResetSkylighting();
 
 	std::chrono::time_point<std::chrono::system_clock> lastUpdateTimer = std::chrono::system_clock::now();
 
@@ -94,15 +108,27 @@ struct Skylighting : Feature
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	void RenderOcclusion();
+
 	struct Main_Precipitation_RenderOcclusion
 	{
-		static void thunk();
+		static void thunk()
+		{
+			GetSingleton()->RenderOcclusion();
+		}
+
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
 	struct SetViewFrustum
 	{
 		static void thunk(RE::NiCamera* a_camera, RE::NiFrustum* a_frustum);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct SetViewFrustumVR
+	{
+		static void thunk(RE::NiCamera* a_camera, RE::NiFrustum* a_frustum, uint a_eyeIndex);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -115,7 +141,7 @@ struct Skylighting : Feature
 			// When entering a new cell through a loadscreen, update every frame until completion
 			if (a_event->menuName == RE::LoadingMenu::MENU_NAME) {
 				if (!a_event->opening)
-					Skylighting::GetSingleton()->forceFrames = 255 * 4;
+					GetSingleton()->queuedResetSkylighting = true;
 			}
 
 			return RE::BSEventNotifyControl::kContinue;
@@ -124,7 +150,7 @@ struct Skylighting : Feature
 		static bool Register()
 		{
 			static MenuOpenCloseEventHandler singleton;
-			auto ui = RE::UI::GetSingleton();
+			auto ui = globals::game::ui;
 
 			if (!ui) {
 				logger::error("UI event source not found");

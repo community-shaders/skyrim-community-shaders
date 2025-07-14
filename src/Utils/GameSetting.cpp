@@ -10,8 +10,8 @@ namespace Util
 	{
 		// List of INI setting collections to iterate over
 		std::vector<RE::SettingCollectionList<RE::Setting>*> collections = {
-			RE::INISettingCollection::GetSingleton(),
-			RE::INIPrefSettingCollection::GetSingleton(),
+			globals::game::iniSettingCollection,
+			globals::game::iniPrefSettingCollection,
 		};
 
 		// Iterate over each collection and log the settings
@@ -23,7 +23,7 @@ namespace Util
 		}
 
 		// Retrieve and log settings from the GameSettingCollection
-		auto game = RE::GameSettingCollection::GetSingleton();
+		auto game = globals::game::gameSettingCollection;
 		for (const auto& set : game->settings) {
 			logger::info("Game Setting {}", set.second->GetName());
 		}
@@ -46,10 +46,10 @@ namespace Util
 
 		// Initialize collections
 		std::vector<std::pair<RE::INISettingCollection*, std::string>> iniCollections = {
-			{ RE::INISettingCollection::GetSingleton(), "INISettingCollection" },
-			{ RE::INIPrefSettingCollection::GetSingleton(), "INIPrefSettingCollection" }
+			{ globals::game::iniSettingCollection, "INISettingCollection" },
+			{ globals::game::iniPrefSettingCollection, "INIPrefSettingCollection" }
 		};
-		auto gameSettingCollection = RE::GameSettingCollection::GetSingleton();
+		auto gameSettingCollection = globals::game::gameSettingCollection;
 
 		// Handle INI settings
 		for (const auto& [settingName, settingData] : settingsMap) {
@@ -100,10 +100,10 @@ namespace Util
 	void ResetGameSettingsToDefaults(std::map<std::string, GameSetting>& settingsMap)
 	{
 		std::vector<std::pair<RE::INISettingCollection*, std::string>> iniCollections = {
-			{ RE::INISettingCollection::GetSingleton(), "INISettingCollection" },
-			{ RE::INIPrefSettingCollection::GetSingleton(), "INIPrefSettingCollection" }
+			{ globals::game::iniSettingCollection, "INISettingCollection" },
+			{ globals::game::iniPrefSettingCollection, "INIPrefSettingCollection" }
 		};
-		auto gameSettingCollection = RE::GameSettingCollection::GetSingleton();
+		auto gameSettingCollection = globals::game::gameSettingCollection;
 
 		for (auto& [settingName, settingData] : settingsMap) {
 			char inputTypeChar = settingName[0];
@@ -214,10 +214,10 @@ namespace Util
 	{
 		if (ImGui::TreeNode(treeName.c_str())) {  // Create a tree node
 			std::vector<std::pair<RE::INISettingCollection*, std::string>> iniCollections = {
-				{ RE::INISettingCollection::GetSingleton(), "INISettingCollection" },
-				{ RE::INIPrefSettingCollection::GetSingleton(), "INIPrefSettingCollection" }
+				{ globals::game::iniSettingCollection, "INISettingCollection" },
+				{ globals::game::iniPrefSettingCollection, "INIPrefSettingCollection" }
 			};
-			auto gameSettingCollection = RE::GameSettingCollection::GetSingleton();
+			auto gameSettingCollection = globals::game::gameSettingCollection;
 
 			for (const auto& [settingName, settingData] : settingsMap) {
 				// Handle INI and INIPref settings
@@ -359,13 +359,13 @@ namespace Util
 
 	void SaveGameSettings(const std::map<std::string, GameSetting>& settingsMap)
 	{
-		auto ini = RE::INISettingCollection::GetSingleton();
+		auto ini = globals::game::iniSettingCollection;
 
 		char subKeyBackup[0x104];
 		strcpy_s(subKeyBackup, 260, ini->subKey);
 		strcpy_s(ini->subKey, 260, CS_SETTINGS_PATH.data());
 
-		auto iniPref = RE::INIPrefSettingCollection::GetSingleton();
+		auto iniPref = globals::game::iniPrefSettingCollection;
 
 		char subKeyPrefBackup[0x104];
 		strcpy_s(subKeyPrefBackup, 260, iniPref->subKey);
@@ -377,7 +377,7 @@ namespace Util
 			{ iniPref, "INIPrefSettingCollection" }
 		};
 
-		auto gameSettingCollection = RE::GameSettingCollection::GetSingleton();
+		auto gameSettingCollection = globals::game::gameSettingCollection;
 
 		// Single iteration for settings
 		for (const auto& [settingName, settingData] : settingsMap) {
@@ -416,13 +416,13 @@ namespace Util
 
 	void LoadGameSettings(const std::map<std::string, GameSetting>& settingsMap)
 	{
-		auto ini = RE::INISettingCollection::GetSingleton();
+		auto ini = globals::game::iniSettingCollection;
 
 		char subKeyBackup[0x104];
 		strcpy_s(subKeyBackup, 260, ini->subKey);
 		strcpy_s(ini->subKey, 260, CS_SETTINGS_PATH.data());
 
-		auto iniPref = RE::INIPrefSettingCollection::GetSingleton();
+		auto iniPref = globals::game::iniPrefSettingCollection;
 
 		char subKeyPrefBackup[0x104];
 		strcpy_s(subKeyPrefBackup, 260, iniPref->subKey);
@@ -434,7 +434,7 @@ namespace Util
 			{ iniPref, "INIPrefSettingCollection" }
 		};
 
-		auto gameSettingCollection = RE::GameSettingCollection::GetSingleton();
+		auto gameSettingCollection = globals::game::gameSettingCollection;
 
 		for (const auto& [settingName, settingData] : settingsMap) {
 			if (settingData.offset == 0) {  // INI-based or Game settings

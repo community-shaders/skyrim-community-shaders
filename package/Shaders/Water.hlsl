@@ -420,20 +420,141 @@ float CalculateDepthMultFromUV(float2 uv, float depth, uint eyeIndex = 0)
 
 #		if defined(SIMPLE) || defined(UNDERWATER) || defined(LOD) || defined(SPECULAR)
 #			if defined(FLOWMAP)
-float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float offset, uint eyeIndex)
+
+/**
+ * Structure containing complete flowmap information
+ */
+struct FlowmapData
 {
-	float4 flowmapColor = FlowMapTex.Sample(FlowMapSampler, input.TexCoord2.zw + uvShift);
-	float2 flowVector = (64 * input.TexCoord3.xy) * sqrt(1.01 - flowmapColor.z);
-	float2 flowSinCos = flowmapColor.xy * 2 - 1;
+	float4 color;       // Raw flowmap color (R=flow_x, G=flow_y, B=flow_strength, A=flow_mask)
+	float2 flowVector;  // Flow vector (coordinate space depends on source function)
+};
+
+/**
+ * Gets raw flowmap data before UV-space coordinate transformation
+ *
+ * @param input Pixel shader input containing texture coordinates
+ * @param uvShift UV offset for sampling the flowmap texture
+ * @return FlowmapData with raw components:
+ *         - color: Raw flowmap texture sample (RG=rotation, B=strength, A=mask)
+ *         - flowVector: Base flow vector before any coordinate transformation
+ *                      Ready for direct application of rotation matrix for world positioning
+ *
+ * @details This function provides flowmap data in its original coordinate space, suitable
+ *          for world-space positioning effects (like ripple movement). The flowVector has
+ *          NOT been transformed for UV-space normal sampling - that transformation is only
+ *          applied in GetFlowmapDataUV() which uses transpose for UV coordinate perturbation.
+ *
+ *          Use this function when you need to apply the rotation matrix directly for
+ *          world-space effects without needing to reverse any existing transformations.
+ *
+ * @see GetFlowmapDataUV() for UV-space normal sampling (applies transpose transformation)
+ */
+FlowmapData GetFlowmapDataTextureSpace(PS_INPUT input, float2 uvShift)
+{
+	FlowmapData data;
+	data.color = FlowMapTex.Sample(FlowMapSampler, input.TexCoord2.zw + uvShift);
+	data.flowVector = (64 * input.TexCoord3.xy) * sqrt(1.01 - data.color.z);
+	// NOTE: flowVector is NOT transformed yet - this is the raw vector before rotation matrix
+	return data;
+}
+/**
+ * Samples flowmap texture and calculates UV-space flow data for texture sampling
+ *
+ * @param input Pixel shader input containing texture coordinates and world position data
+ * @param uvShift UV offset for sampling the flowmap texture (used for animation/variation)
+ * @return FlowmapData Complete flowmap information with UV-space flow vector
+ *
+ * @details This function:
+ *          - Samples the flowmap texture at the specified UV coordinates
+ *          - Decodes flow direction from RG channels (remapped from [0,1] to [-1,1])
+ *          - Calculates flow strength using the blue channel with sqrt falloff
+ *          - Applies transpose rotation matrix to transform flow direction to UV space
+ *          - Scales flow vector by world position and strength factors
+ *
+ * @note Flowmap format:
+ *       - Red channel: Flow direction X component (0.5 = no flow, 0/1 = negative/positive flow)
+ *       - Green channel: Flow direction Y component (0.5 = no flow, 0/1 = negative/positive flow)
+ *       - Blue channel: Flow strength (0 = no flow, 1 = maximum flow)
+ *       - Alpha channel: Flow mask/intensity multiplier
+ */
+FlowmapData GetFlowmapDataUV(PS_INPUT input, float2 uvShift)
+{
+	FlowmapData data = GetFlowmapDataTextureSpace(input, uvShift);
+	float2 flowSinCos = data.color.xy * 2 - 1;
 	float2x2 flowRotationMatrix = float2x2(flowSinCos.x, flowSinCos.y, -flowSinCos.y, flowSinCos.x);
-	float2 rotatedFlowVector = mul(transpose(flowRotationMatrix), flowVector);
-	float2 uv = offset + (rotatedFlowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowmapColor.w), 0));
-	return float3(FlowMapNormalsTex.Sample(FlowMapNormalsSampler, uv).xy, flowmapColor.z);
+	data.flowVector = mul(transpose(flowRotationMatrix), data.flowVector);
+	return data;
+}
+
+/**
+ * Generates flowmap-based normal perturbation for water surface
+ *
+ * @param input Pixel shader input containing texture coordinates and world position
+ * @param uvShift UV offset for flowmap sampling (used for animation phases)
+ * @param multiplier Intensity multiplier for the flow effect
+ * @param offset Base UV offset for the normal texture sampling
+ * @return float3 Normal perturbation (XY=normal offset, Z=flow strength mask)
+ *
+ * @details This function uses flowmap data to:
+ *          - Calculate flow-displaced UV coordinates for normal texture sampling
+ *          - Apply flow-based animation to water normal textures
+ *          - Return both the normal perturbation and flow strength information
+ *
+ * @note The returned Z component contains the original flowmap strength value
+ *       which can be used for blending between flow and non-flow normals
+ */
+float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float offset)
+{
+	FlowmapData flowData = GetFlowmapDataUV(input, uvShift);
+	float2 uv = offset + (flowData.flowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
+	return float3(FlowMapNormalsTex.SampleBias(FlowMapNormalsSampler, uv, SharedData::MipBias).xy, flowData.color.z);
+}
+
+/**
+ * Gets flowmap data with world-space flow vector for positioning effects
+ *
+ * @param input Pixel shader input containing texture coordinates
+ * @param uvShift UV offset for flowmap sampling (used for animation phases)
+ * @return FlowmapData Complete flowmap information with world-space flow vector
+ *
+ * @details This function:
+ *          - Samples raw flowmap data (before UV-space transformations)
+ *          - Decodes flow direction from flowmap RG channels
+ *          - Applies component-wise directional transformation
+ *          - Returns complete flowmap data with world-space flow vector
+ *
+ * @note Use this for effects that need to move with water current (ripples, debris, foam, etc.)
+ *       For UV-space normal sampling, use GetFlowmapDataUV() instead
+ */
+FlowmapData GetFlowmapDataWorldSpace(PS_INPUT input, float2 uvShift)
+{
+	FlowmapData data = GetFlowmapDataTextureSpace(input, uvShift);
+	float2 flowDirection = -(data.color.xy * 2 - 1);    // Decode direction with 180° correction
+	data.flowVector = data.flowVector * flowDirection;  // Transform to world space
+	return data;
+}
+
+/**
+ * Converts existing texture-space flowmap data to world-space (avoids duplicate sampling)
+ *
+ * @param textureSpaceData FlowmapData from GetFlowmapDataTextureSpace()
+ * @return FlowmapData Complete flowmap data with world-space flow vector
+ *
+ * @note Use this overload when you already have texture-space flowmap data to avoid duplicate texture sampling
+ */
+FlowmapData GetFlowmapDataWorldSpace(FlowmapData textureSpaceData)
+{
+	FlowmapData data = textureSpaceData;
+	float2 flowDirection = -(data.color.xy * 2 - 1);    // Decode direction with 180° correction
+	data.flowVector = data.flowVector * flowDirection;  // Transform to world space
+	return data;
 }
 #			endif
 
-#			if (defined(FLOWMAP) && !defined(BLEND_NORMALS)) || defined(LOD)
+#			if defined(LOD)
 #				undef WATER_EFFECTS
+#				undef WETNESS_EFFECTS
 #			endif
 
 #			if defined(WATER_EFFECTS) && !defined(VC)
@@ -445,8 +566,21 @@ float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float 
 #				include "DynamicCubemaps/DynamicCubemaps.hlsli"
 #			endif
 
-float3 GetWaterNormal(PS_INPUT input, float distanceFactor, float normalsDepthFactor, float3 viewDirection, float depth, uint eyeIndex)
+#			if defined(WETNESS_EFFECTS)
+#				include "WetnessEffects/WetnessEffects.hlsli"
+#			endif
+
+// Structure to return both normal and ripple/splash color information
+struct WaterNormalData
 {
+	float3 normal;
+	float4 rippleInfo;  // xyz = scaled ripple normal (normalized normal * intensity), w = splash effect intensity
+};
+
+WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float normalsDepthFactor, float3 viewDirection, float depth, uint eyeIndex)
+{
+	WaterNormalData result;
+	result.rippleInfo = float4(0, 0, 0, 0);
 	float3 normalScalesRcp = rcp(input.NormalsScale.xyz);
 
 #			if defined(WATER_PARALLAX)
@@ -458,10 +592,10 @@ float3 GetWaterNormal(PS_INPUT input, float distanceFactor, float normalsDepthFa
 		0.5 + -(-0.5 + abs(frac(input.TexCoord2.zw * (64 * input.TexCoord4)) * 2 - 1));
 	float uvShift = 1 / (128 * input.TexCoord4);
 
-	float3 flowmapNormal0 = GetFlowmapNormal(input, uvShift.xx, 9.92, 0, eyeIndex);
-	float3 flowmapNormal1 = GetFlowmapNormal(input, float2(0, uvShift), 10.64, 0.27, eyeIndex);
-	float3 flowmapNormal2 = GetFlowmapNormal(input, 0.0.xx, 8, 0, eyeIndex);
-	float3 flowmapNormal3 = GetFlowmapNormal(input, float2(uvShift, 0), 8.48, 0.62, eyeIndex);
+	float3 flowmapNormal0 = GetFlowmapNormal(input, uvShift.xx, 9.92, 0);
+	float3 flowmapNormal1 = GetFlowmapNormal(input, float2(0, uvShift), 10.64, 0.27);
+	float3 flowmapNormal2 = GetFlowmapNormal(input, 0.0.xx, 8, 0);
+	float3 flowmapNormal3 = GetFlowmapNormal(input, float2(uvShift, 0), 8.48, 0.62);
 
 	float2 flowmapNormalWeighted =
 		normalMul.y * (normalMul.x * flowmapNormal2.xy + (1 - normalMul.x) * flowmapNormal3.xy) +
@@ -477,22 +611,27 @@ float3 GetWaterNormal(PS_INPUT input, float distanceFactor, float normalsDepthFa
 #			endif
 
 #			if defined(WATER_PARALLAX)
-	float3 normals1 = Normals01Tex.Sample(Normals01Sampler, input.TexCoord1.xy + parallaxOffset.xy * normalScalesRcp.x).xyz * 2.0 + float3(-1, -1, -2);
+	float3 normals1 = Normals01Tex.SampleBias(Normals01Sampler, input.TexCoord1.xy + parallaxOffset.xy * normalScalesRcp.x, SharedData::MipBias).xyz * 2.0 + float3(-1, -1, -2);
 #			else
-	float3 normals1 = Normals01Tex.Sample(Normals01Sampler, input.TexCoord1.xy).xyz * 2.0 + float3(-1, -1, -2);
+	float3 normals1 = Normals01Tex.SampleBias(Normals01Sampler, input.TexCoord1.xy, SharedData::MipBias).xyz * 2.0 + float3(-1, -1, -2);
 #			endif
 
 #			if defined(FLOWMAP) && !defined(BLEND_NORMALS)
-	float3 finalNormal =
-		normalize(lerp(normals1 + float3(0, 0, 1), flowmapNormal, distanceFactor));
+#				ifdef DISABLE_FLOWMAP_NORMALS
+	// FLOWMAP NORMALS DISABLED: Using only base normals (flow system still active for ripples/splashes)
+	float3 finalNormal = normalize(normals1 + float3(0, 0, 1));
+#				else
+	// FLOWMAP NORMALS ENABLED: Blending flow-based normals with base normals
+	float3 finalNormal = normalize(lerp(normals1 + float3(0, 0, 1), flowmapNormal, distanceFactor));
+#				endif
 #			elif !defined(LOD)
 
 #				if defined(WATER_PARALLAX)
-	float3 normals2 = Normals02Tex.Sample(Normals02Sampler, input.TexCoord1.zw + parallaxOffset.xy * normalScalesRcp.y).xyz * 2.0 - 1.0;
-	float3 normals3 = Normals03Tex.Sample(Normals03Sampler, input.TexCoord2.xy + parallaxOffset.xy * normalScalesRcp.z).xyz * 2.0 - 1.0;
+	float3 normals2 = Normals02Tex.SampleBias(Normals02Sampler, input.TexCoord1.zw + parallaxOffset.xy * normalScalesRcp.y, SharedData::MipBias).xyz * 2.0 - 1.0;
+	float3 normals3 = Normals03Tex.SampleBias(Normals03Sampler, input.TexCoord2.xy + parallaxOffset.xy * normalScalesRcp.z, SharedData::MipBias).xyz * 2.0 - 1.0;
 #				else
-	float3 normals2 = Normals02Tex.Sample(Normals02Sampler, input.TexCoord1.zw).xyz * 2.0 - 1.0;
-	float3 normals3 = Normals03Tex.Sample(Normals03Sampler, input.TexCoord2.xy).xyz * 2.0 - 1.0;
+	float3 normals2 = Normals02Tex.SampleBias(Normals02Sampler, input.TexCoord1.zw, SharedData::MipBias).xyz * 2.0 - 1.0;
+	float3 normals3 = Normals03Tex.SampleBias(Normals03Sampler, input.TexCoord2.xy, SharedData::MipBias).xyz * 2.0 - 1.0;
 #				endif
 
 	float3 blendedNormal = normalize(float3(0, 0, 1) + NormalsAmplitude.x * normals1 +
@@ -525,7 +664,69 @@ float3 GetWaterNormal(PS_INPUT input, float distanceFactor, float normalsDepthFa
 	finalNormal = lerp(displacement, finalNormal, displacement.z);
 #			endif
 
-	return finalNormal;
+#			if defined(WETNESS_EFFECTS)
+	// Wetness Effects Debug System:
+	// DEBUG_WETNESS_EFFECTS Color Legend:
+	// - BRIGHT MAGENTA: Ripples, BRIGHT GREEN: Splashes, CYAN: Both effects
+	const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
+#				if defined(SKYLIGHTING)
+#					if defined(VR)
+	float3 positionMSSkylight = input.WPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
+#					else
+	float3 positionMSSkylight = input.WPosition.xyz;
+#					endif
+	sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, float3(0, 0, 1));
+	float skylighting = SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1));
+
+	float wetnessOcclusion = inWorld ? pow(saturate(skylighting), 2) : 0;
+#				else
+	float wetnessOcclusion = inWorld;
+#				endif
+
+	float4 raindropInfo = float4(0, 0, 1, 0);
+	float maxRainDropDistance = SharedData::wetnessEffectsSettings.RaindropFxRange * SharedData::wetnessEffectsSettings.RaindropFxRange * 3;
+	float rainDropDistance = dot(input.WPosition, input.WPosition);
+	float distanceFadeout = saturate((1 - saturate(rainDropDistance / maxRainDropDistance)) * 3);
+	if (finalNormal.z > 0 && SharedData::wetnessEffectsSettings.Raining > 0.0f && SharedData::wetnessEffectsSettings.EnableRaindropFx &&
+		(rainDropDistance < maxRainDropDistance) && wetnessOcclusion > 0.05) {
+		float rippleStrengthModifier = (wetnessOcclusion * wetnessOcclusion) * distanceFadeout;
+		float3 rippleWPosition = input.WPosition.xyz + finalNormal * 16;
+#				if defined(WATER_PARALLAX)
+		rippleWPosition.xy += parallaxOffset;
+#				endif
+#				if defined(FLOWMAP)
+		// Flow-following ripple enhancement: Makes raindrops follow water current
+		FlowmapData worldFlowData = GetFlowmapDataWorldSpace(input, float2(0, 0));
+
+		// Calculate flow-aware ripple offset using centralized timing logic
+		// Parameters: avgFlowmapMultiplier=9.26 (average of GetWaterNormal flowmap normal multipliers: 9.92, 10.64, 8, 8.48)
+		// uvToWorldScale=0.125 (1/8 - relates to 64× texture coordinate scaling factor)
+		float2 flowOffset = WetnessEffects::GetFlowAwareRippleOffset(
+			worldFlowData.flowVector,
+			worldFlowData.color.w,      // Flow strength from flowmap alpha
+			0.001 * ReflectionColor.w,  // Reflection timing scale (matches GetFlowmapNormal)
+			9.26,                       // Average flowmap normal multiplier
+			0.125                       // UV-to-world scale factor (1/8)
+		);
+
+		rippleWPosition.xy += flowOffset;
+#				endif
+		raindropInfo = WetnessEffects::GetRainDrops(rippleWPosition + FrameBuffer::CameraPosAdjust[eyeIndex].xyz, SharedData::wetnessEffectsSettings.Time, finalNormal, rippleStrengthModifier);
+
+		// Calculate ripple and splash color intensities
+		float rippleIntensity = length(raindropInfo.xy) * rippleStrengthModifier;
+		float splashIntensity = raindropInfo.w * distanceFadeout;
+
+		// Store ripple and splash information for color effects
+		result.rippleInfo.xyz = raindropInfo.xyz * rippleIntensity;
+		result.rippleInfo.w = splashIntensity;
+	}
+	float3 rippleNormal = normalize(raindropInfo.xyz);
+	finalNormal = WetnessEffects::ReorientNormal(rippleNormal, finalNormal);
+#			endif
+
+	result.normal = finalNormal;
+	return result;
 }
 
 float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection,
@@ -535,51 +736,60 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 		float3 finalSsrReflectionColor = 0.0.xxx;
 		float ssrFraction = 0;
 		float3 reflectionColor = 0;
-		float3 R = reflect(viewDirection, normal);
+		float3 R = reflect(viewDirection, WaterParams.y * normal + float3(0, 0, 1 - WaterParams.y));
 
 		if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Cubemap) {
 #			if defined(DYNAMIC_CUBEMAPS)
 #				if defined(SKYLIGHTING)
+
+			float3 dynamicCubemap;
+			if (SharedData::InInterior) {
+				dynamicCubemap = DynamicCubemaps::EnvTexture.SampleLevel(CubeMapSampler, R, 0).xyz;
+			} else {
 #					if defined(VR)
-			float3 positionMSSkylight = input.WPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
+				float3 positionMSSkylight = input.WPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
 #					else
-			float3 positionMSSkylight = input.WPosition.xyz;
+				float3 positionMSSkylight = input.WPosition.xyz;
 #					endif
 
-			sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight, normal);
-			sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(normal, -viewDirection, 0.0);
+				sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, R);
+				sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(normal, -viewDirection, 0.0);
 
-			float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
-			skylightingSpecular = lerp(1.0, skylightingSpecular, Skylighting::getFadeOutFactor(input.WPosition.xyz));
-			skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
+				float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
+				skylightingSpecular = lerp(1.0, skylightingSpecular, Skylighting::getFadeOutFactor(input.WPosition.xyz));
+				skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
 
-			float3 specularIrradiance = 1;
+				float3 specularIrradiance = 1;
 
-			if (skylightingSpecular < 1.0) {
-				specularIrradiance = DynamicCubemaps::EnvTexture.SampleLevel(CubeMapSampler, R, 0).xyz;
-				specularIrradiance = Color::GammaToLinear(specularIrradiance);
+				if (skylightingSpecular < 1.0) {
+					specularIrradiance = DynamicCubemaps::EnvTexture.SampleLevel(CubeMapSampler, R, 0).xyz;
+					specularIrradiance = Color::GammaToLinear(specularIrradiance);
+				}
+
+				float3 specularIrradianceReflections = 1.0;
+
+				if (skylightingSpecular > 0.0) {
+					specularIrradianceReflections = DynamicCubemaps::EnvReflectionsTexture.SampleLevel(CubeMapSampler, R, 0).xyz;
+					specularIrradianceReflections = Color::GammaToLinear(specularIrradianceReflections);
+				}
+
+				dynamicCubemap = Color::LinearToGamma(lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular));
 			}
-
-			float3 specularIrradianceReflections = 1.0;
-
-			if (skylightingSpecular > 0.0) {
-				specularIrradianceReflections = DynamicCubemaps::EnvReflectionsTexture.SampleLevel(CubeMapSampler, R, 0).xyz;
-				specularIrradianceReflections = Color::GammaToLinear(specularIrradianceReflections);
-			}
-
-			float3 dynamicCubemap = Color::LinearToGamma(lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular));
 #				else
 			float3 dynamicCubemap = DynamicCubemaps::EnvReflectionsTexture.SampleLevel(CubeMapSampler, R, 0);
 #				endif
 
 #				if defined(VR)
 			// Reflection cubemap is incorrect for interiors in VR, ignore it
-			if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Interior)
+			if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Interior || SharedData::HideSky)
 				reflectionColor = dynamicCubemap.xyz;
 			else
 				reflectionColor = lerp(dynamicCubemap.xyz, CubeMapTex.SampleLevel(CubeMapSampler, R, 0).xyz, saturate(length(input.WPosition.xyz) / 1024.0));
 #				else
-			reflectionColor = lerp(dynamicCubemap.xyz, CubeMapTex.SampleLevel(CubeMapSampler, R, 0).xyz, saturate(length(input.WPosition.xyz) / 1024.0));
+			if (SharedData::HideSky)
+				reflectionColor = dynamicCubemap.xyz;
+			else
+				reflectionColor = lerp(dynamicCubemap.xyz, CubeMapTex.SampleLevel(CubeMapSampler, R, 0).xyz, saturate(length(input.WPosition.xyz) / 1024.0));
 #				endif
 #			else
 			reflectionColor = CubeMapTex.SampleLevel(CubeMapSampler, R, 0).xyz;
@@ -599,17 +809,16 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 		if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Cubemap) {
 			float pointingDirection = dot(viewDirection, R);
 			float pointingAlignment = dot(reflect(viewDirection, float3(0, 0, 1)), R);
-			if (SSRParams.x > 0.0 && pointingDirection > 0.0 && pointingAlignment > 0.0) {
-				float2 ssrReflectionUv = ((FrameBuffer::DynamicResolutionParams2.xy * input.HPosition.xy) * SSRParams.zw) + SSRParams2.x * normal.xy;
+			float ssrAmount = min(pointingAlignment, pointingDirection);
+			if (SSRParams.x > 0.0 && ssrAmount > 0.0) {
+				float2 ssrReflectionUv = ((FrameBuffer::DynamicResolutionParams2.xy * input.HPosition.xy) * SSRParams.zw) + 0.05 * normal.xy;
 				float2 ssrReflectionUvDR = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(ssrReflectionUv);
-				float4 ssrReflectionColorBlurred = SSRReflectionTex.Sample(SSRReflectionSampler, ssrReflectionUvDR);
+				float4 ssrReflectionColorBlurred = RawSSRReflectionTex.Sample(RawSSRReflectionSampler, ssrReflectionUvDR);
 				float4 ssrReflectionColorRaw = RawSSRReflectionTex.Sample(RawSSRReflectionSampler, ssrReflectionUvDR);
-
-				float effectiveBlurFactor = saturate(SSRParams.y);
-				float4 ssrReflectionColor = lerp(ssrReflectionColorRaw, ssrReflectionColorBlurred, effectiveBlurFactor);
+				float4 ssrReflectionColor = lerp(ssrReflectionColorBlurred, ssrReflectionColorRaw, ssrAmount * 0.7);
 
 				finalSsrReflectionColor = max(0, ssrReflectionColor.xyz);
-				ssrFraction = saturate(ssrReflectionColor.w * distanceFactor * SSRParams.x) * min(pointingDirection, pointingAlignment);
+				ssrFraction = saturate(ssrReflectionColor.w * distanceFactor * ssrAmount);
 			}
 		}
 #			endif
@@ -697,7 +906,7 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 		distanceMul = saturate(refractionPlaneMul * float4(length(refractionDepthAdjustedViewDirection).xx, abs(refractionViewSurfaceAngle).xx) / FogParam.z);
 
 #					if defined(VR)
-		refractionWorldPosition = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], float4((refractionUvRawNoStereo * 2 - 1) * float2(1, -1), DepthTex.Load(float3(refractionScreenPosition, 0)).x, 1));
+		refractionWorldPosition = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], float4((refractionUvRawNoStereo * 2 - 1), DepthTex.Load(float3(refractionScreenPosition, 0)).x, 1));
 #					else
 		refractionWorldPosition = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], float4((refractionUvRaw * 2 - 1) * float2(1, -1), DepthTex.Load(float3(refractionScreenPosition, 0)).x, 1));
 #					endif
@@ -719,11 +928,12 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 		float3 positionMSSkylight = skylightingPosition;
 #					endif
 
-		sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight, float3(0, 0, 1));
-		float skylighting = SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1));
-		skylighting = lerp(1.0, skylighting, Skylighting::getFadeOutFactor(input.WPosition.xyz));
+		sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
+		float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
+		skylightingDiffuse = saturate(skylightingDiffuse);
+		skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(input.WPosition.xyz));
 
-		float3 refractionDiffuseColorSkylight = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylighting);
+		float3 refractionDiffuseColorSkylight = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 		refractionDiffuseColor = Color::LinearToGamma(Color::GammaToLinear(refractionDiffuseColor) * refractionDiffuseColorSkylight);
 #				endif
 	}
@@ -768,6 +978,10 @@ float3 GetSunColor(float3 normal, float3 viewDirection)
 
 #		if defined(LIGHT_LIMIT_FIX)
 #			include "LightLimitFix/LightLimitFix.hlsli"
+#		endif
+
+#		if defined(ISL) && defined(LIGHT_LIMIT_FIX)
+#			include "InverseSquareLighting/InverseSquareLighting.hlsli"
 #		endif
 
 PS_OUTPUT main(PS_INPUT input)
@@ -822,11 +1036,11 @@ PS_OUTPUT main(PS_INPUT input)
 #			else
 	float4 depthControl = DepthControl * (distanceMul - 1) + 1;
 #			endif
-
 	float3 viewPosition = mul(FrameBuffer::CameraView[eyeIndex], float4(input.WPosition.xyz, 1)).xyz;
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
 
-	float3 normal = GetWaterNormal(input, distanceFactor, depthControl.z, viewDirection, depth, eyeIndex);
+	WaterNormalData waterData = GetWaterNormal(input, distanceFactor, depthControl.z, viewDirection, depth, eyeIndex);
+	float3 normal = waterData.normal;
 
 	float fresnel = GetFresnelValue(normal, viewDirection);
 
@@ -844,6 +1058,13 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 	finalColor *= fresnel;
+#				if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
+	// DEBUG MODE: Override specular color with debug visualization
+	float3 debugColor = WetnessEffects::GetDebugWetnessColorSpecular(waterData.rippleInfo, 2.5, 4.0);
+	if (any(debugColor)) {
+		finalColor = debugColor;
+	}
+#				endif
 
 	isSpecular = true;
 #			else
@@ -878,9 +1099,13 @@ PS_OUTPUT main(PS_INPUT input)
 
 			float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WPosition.xyz;
 			float lightDist = length(lightDirection);
-			float intensityFactor = saturate(lightDist / light.radius);
 
+#					if defined(ISL)
+			float intensityMultiplier = InverseSquareLighting::GetAttenuation(lightDist, light);
+#					else
+			float intensityFactor = saturate(lightDist / light.radius);
 			float intensityMultiplier = 1 - intensityFactor * intensityFactor;
+#					endif
 
 			float3 normalizedLightDirection = normalize(lightDirection);
 
@@ -897,6 +1122,14 @@ PS_OUTPUT main(PS_INPUT input)
 #				if defined(UNDERWATER)
 	float3 finalSpecularColor = lerp(ShallowColor.xyz, specularColor, 0.5);
 	float3 finalColor = saturate(1 - input.WPosition.w * 0.002) * ((1 - fresnel) * (diffuseColor - finalSpecularColor)) + finalSpecularColor;
+	// Add ripple and splash color effects for underwater
+#					if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
+	// DEBUG MODE: Override water color with debug visualization (darker for underwater)
+	float3 debugColor = WetnessEffects::GetDebugWetnessColorUnderwater(waterData.rippleInfo, 1.5, 2.0);
+	if (any(debugColor)) {
+		finalColor = debugColor;
+	}
+#					endif
 #				else
 	float3 sunColor = GetSunColor(normal, viewDirection);
 
@@ -905,14 +1138,21 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 #					if defined(VC)
-	float3 finalColorPreFog = lerp(Color::GammaToLinear(diffuseColor), Color::GammaToLinear(specularColor), fresnel * diffuseOutput.refractionMul) + Color::GammaToLinear(sunColor) * depthControl.w;
-	finalColorPreFog = Color::LinearToGamma(finalColorPreFog);
+	float specularFraction = lerp(1, fresnel * diffuseOutput.refractionMul, distanceFactor);
+	float3 finalColorPreFog = lerp(diffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
 	float3 finalColor = lerp(finalColorPreFog, input.FogParam.xyz * PosAdjust[eyeIndex].w, input.FogParam.w);
+#						if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
+	// DEBUG MODE: Override water color with debug visualization
+	float3 debugColor = WetnessEffects::GetDebugWetnessColorStandard(waterData.rippleInfo, 2.0, 3.0);
+	if (any(debugColor)) {
+		finalColor = debugColor;
+	}
+#						endif
+
 #					else
-	float3 finalColorPreFog = lerp(Color::GammaToLinear(diffuseOutput.refractionDiffuseColor), Color::GammaToLinear(specularColor), fresnel) + Color::GammaToLinear(sunColor) * depthControl.w;
-	finalColorPreFog = Color::LinearToGamma(finalColorPreFog);
+	float specularFraction = lerp(1, fresnel, distanceFactor);
+	float3 finalColorPreFog = lerp(diffuseOutput.refractionDiffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
 	finalColorPreFog = lerp(finalColorPreFog, input.FogParam.xyz * PosAdjust[eyeIndex].w, input.FogParam.w);
-	finalColorPreFog = Color::GammaToLinear(finalColorPreFog);
 
 	float3 refractionColor = diffuseOutput.refractionColor;
 
@@ -920,8 +1160,14 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 fogColor = lerp(FogNearColor.xyz, FogFarColor.xyz, fogFactor);
 	refractionColor = lerp(refractionColor, fogColor, fogFactor);
 
-	finalColorPreFog = lerp(Color::GammaToLinear(refractionColor), finalColorPreFog, diffuseOutput.refractionMul);
-	float3 finalColor = Color::LinearToGamma(finalColorPreFog);
+	float3 finalColor = lerp(refractionColor, finalColorPreFog, diffuseOutput.refractionMul);
+#						if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
+	// DEBUG MODE: Override water color with debug visualization
+	float3 debugColor = WetnessEffects::GetDebugWetnessColorStandard(waterData.rippleInfo, 2.0, 3.0);
+	if (any(debugColor)) {
+		finalColor = debugColor;
+	}
+#						endif
 #					endif
 
 #				endif

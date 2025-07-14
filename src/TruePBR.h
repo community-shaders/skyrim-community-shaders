@@ -1,7 +1,5 @@
 #pragma once
 
-#include "Buffer.h"
-
 struct GlintParameters
 {
 	bool enabled = false;
@@ -27,8 +25,10 @@ public:
 	void PrePass();
 	void PostPostLoad();
 	void DataLoaded();
+	bool TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land);
+	bool BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material);
 
-	void SetShaderResouces();
+	void SetShaderResouces(ID3D11DeviceContext* a_context);
 	void GenerateShaderPermutations(RE::BSShader* shader);
 
 	void SetupGlintsTexture();

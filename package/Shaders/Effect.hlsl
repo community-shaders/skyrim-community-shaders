@@ -504,6 +504,10 @@ cbuffer PerGeometry : register(b2)
 #		include "LightLimitFix/LightLimitFix.hlsli"
 #	endif
 
+#	if defined(ISL) && defined(LIGHT_LIMIT_FIX)
+#		include "InverseSquareLighting/InverseSquareLighting.hlsli"
+#	endif
+
 #	define LinearSampler SampBaseSampler
 
 #	if defined(TERRAIN_SHADOWS)
@@ -512,6 +516,14 @@ cbuffer PerGeometry : register(b2)
 
 #	if defined(CLOUD_SHADOWS)
 #		include "CloudShadows/CloudShadows.hlsli"
+#	endif
+
+#	if defined(SKYLIGHTING)
+#		include "Skylighting/Skylighting.hlsli"
+#	endif
+
+#	if defined(IBL)
+#		include "IBL/IBL.hlsli"
 #	endif
 
 #	include "Common/ShadowSampling.hlsli"
@@ -524,12 +536,62 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 
 	float3 color = DLightColor.xyz;
 
-	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::EffectShadows) && !SharedData::InMapMenu && !SharedData::InInterior) {
-		float3 dirLightColor = SharedData::DirLightColor * 0.5;
-		float3 ambientColor = mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1));
+	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::EffectShadows)) {
+		float3 dirLightColor = SharedData::DirLightColor.xyz * 0.5;
+		float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
+
+#		if defined(IBL)
+		if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+			ambientColor *= SharedData::iblSettings.DALCAmount;
+			ambientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+		}
+#		endif
 
 		color = ambientColor;
-		color += dirLightColor * ShadowSampling::GetEffectShadow(worldPosition, normalize(worldPosition), screenPosition, eyeIndex);
+
+#		if defined(SKYLIGHTING)
+#			if defined(VR)
+		float3 positionMSSkylight = worldPosition + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
+#			else
+		float3 positionMSSkylight = worldPosition;
+#			endif
+
+		sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
+		float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
+		skylightingDiffuse = saturate(skylightingDiffuse);
+		skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(worldPosition));
+		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+
+		color = Color::GammaToLinear(color);
+		color *= skylightingDiffuse;
+		color = Color::LinearToGamma(color);
+#		endif
+
+		if (!SharedData::InInterior)
+			color += dirLightColor * ShadowSampling::GetEffectShadow(worldPosition.xyz, normalize(worldPosition.xyz), screenPosition.xy, eyeIndex);
+		else
+			color += dirLightColor;
+	} else {
+#		if defined(SKYLIGHTING)
+#			if defined(VR)
+		float3 positionMSSkylight = worldPosition + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
+#			else
+		float3 positionMSSkylight = worldPosition;
+#			endif
+
+		sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
+
+		if (!SharedData::InInterior) {
+			float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
+			skylightingDiffuse = saturate(skylightingDiffuse);
+			skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(worldPosition));
+			skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+
+			color = Color::GammaToLinear(color);
+			color *= skylightingDiffuse;
+			color = Color::LinearToGamma(color);
+		}
+#		endif
 	}
 
 #		if defined(LIGHT_LIMIT_FIX)
@@ -624,8 +686,14 @@ PS_OUTPUT main(PS_INPUT input)
 				}
 				float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WorldPosition.xyz;
 				float lightDist = length(lightDirection);
+
+#			if defined(ISL)
+				float intensityMultiplier = InverseSquareLighting::GetAttenuation(lightDist, light);
+#			else
 				float intensityFactor = saturate(lightDist / light.radius);
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
+#			endif
+
 				float3 lightColor = light.color.xyz * intensityMultiplier * 0.5;
 				propertyColor += lightColor;
 			}

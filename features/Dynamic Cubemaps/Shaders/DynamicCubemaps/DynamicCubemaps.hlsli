@@ -1,3 +1,8 @@
+
+#if defined(SKYLIGHTING)
+#	include "Skylighting/Skylighting.hlsli"
+#endif
+
 namespace DynamicCubemaps
 {
 	TextureCube<float4> EnvReflectionsTexture : register(t30);
@@ -16,9 +21,15 @@ namespace DynamicCubemaps
 
 #if !defined(WATER)
 
-	float3 GetDynamicCubemapSpecularIrradiance(float2 uv, float3 N, float3 VN, float3 V, float roughness, float distance)
+#	if defined(SKYLIGHTING)
+	float3 GetDynamicCubemapSpecularIrradiance(float2 uv, float3 N, float3 VN, float3 V, float roughness, sh2 skylighting)
+#	else
+	float3 GetDynamicCubemapSpecularIrradiance(float2 uv, float3 N, float3 VN, float3 V, float roughness)
+#	endif
 	{
 		float3 R = reflect(-V, N);
+		float NoV = saturate(dot(N, V));
+
 		float level = roughness * 7.0;
 
 		// Horizon specular occlusion
@@ -26,14 +37,49 @@ namespace DynamicCubemaps
 		float horizon = min(1.0 + dot(R, VN), 1.0);
 		horizon *= horizon * horizon;
 
-		float3 specularIrradiance = EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz;
-		specularIrradiance = Color::GammaToLinear(specularIrradiance);
-		specularIrradiance *= horizon;
+#	if defined(DEFERRED)
+		return horizon;
+#	else
 
-		return specularIrradiance;
+		float3 finalIrradiance = 0;
+
+#		if defined(SKYLIGHTING)
+		if (SharedData::InInterior) {
+			float3 specularIrradiance = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
+
+			return finalIrradiance;
+		}
+
+		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(N, -V, roughness);
+
+		float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
+		skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
+
+		float3 specularIrradiance = 1;
+
+		if (skylightingSpecular < 1.0)
+			specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, level).xyz);
+
+		float3 specularIrradianceReflections = 1.0;
+
+		if (skylightingSpecular > 0.0)
+			specularIrradianceReflections = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
+
+		finalIrradiance = lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
+#		else
+		float3 specularIrradiance = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
+
+		finalIrradiance += specularIrradiance;
+#		endif
+		return finalIrradiance;
+#	endif
 	}
 
-	float3 GetDynamicCubemap(float2 uv, float3 N, float3 VN, float3 V, float roughness, float3 F0, float3 diffuseColor, float distance)
+#	if defined(SKYLIGHTING)
+	float3 GetDynamicCubemap(float3 N, float3 VN, float3 V, float roughness, float3 F0, sh2 skylighting)
+#	else
+	float3 GetDynamicCubemap(float3 N, float3 VN, float3 V, float roughness, float3 F0)
+#	endif
 	{
 		float3 R = reflect(-V, N);
 		float NoV = saturate(dot(N, V));
@@ -48,12 +94,42 @@ namespace DynamicCubemaps
 		horizon *= horizon * horizon;
 
 #	if defined(DEFERRED)
-		return horizon * (1 + F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1));
+		return horizon * (F0 * specularBRDF.x + specularBRDF.y);
 #	else
-		float3 specularIrradiance = EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz;
-		specularIrradiance = Color::GammaToLinear(specularIrradiance);
 
-		return specularIrradiance * (1 + F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1));
+		float3 finalIrradiance = 0;
+
+#		if defined(SKYLIGHTING)
+		if (SharedData::InInterior) {
+			float3 specularIrradiance = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
+
+			finalIrradiance += specularIrradiance;
+
+			return horizon * (F0 * specularBRDF.x + specularBRDF.y) * finalIrradiance;
+		}
+
+		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(N, -V, roughness);
+
+		float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
+		skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
+
+		float3 specularIrradiance = 1;
+
+		if (skylightingSpecular < 1.0)
+			specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, level).xyz);
+
+		float3 specularIrradianceReflections = 1.0;
+
+		if (skylightingSpecular > 0.0)
+			specularIrradianceReflections = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
+
+		finalIrradiance = lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
+#		else
+		float3 specularIrradiance = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level));
+
+		finalIrradiance += specularIrradiance;
+#		endif
+		return horizon * (F0 * specularBRDF.x + specularBRDF.y) * finalIrradiance;
 #	endif
 	}
 #endif  // !WATER

@@ -1,35 +1,68 @@
 #pragma once
 
-#include "Buffer.h"
-#include "Feature.h"
-
 struct CloudShadows : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "139185";
+
+public:
 	static CloudShadows* GetSingleton()
 	{
 		static CloudShadows singleton;
 		return &singleton;
 	}
 
+	struct alignas(16) Settings
+	{
+		float Opacity = 0.8f;
+		float pad[3];
+	};
+
+	Settings settings;
+
 	virtual inline std::string GetName() override { return "Cloud Shadows"; }
 	virtual inline std::string GetShortName() override { return "CloudShadows"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
+	virtual std::string_view GetCategory() const override { return "Sky"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "CLOUD_SHADOWS"; }
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Adds realistic cloud shadows that move across the landscape, creating dynamic lighting changes as clouds pass overhead, enhancing atmospheric immersion.",
+			{ "Dynamic cloud shadow projection on terrain and objects",
+				"Configurable shadow opacity for artistic control",
+				"Real-time shadow movement synchronized with cloud motion",
+				"Cubemap-based shadow calculation for accurate projection",
+				"Enhanced sky rendering integration" }
+		};
+	}
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
 
-	bool isCubemapPass = false;
-	ID3D11BlendState* resetBlendState = nullptr;
-	std::set<ID3D11BlendState*> mappedBlendStates;
-	std::map<ID3D11BlendState*, ID3D11BlendState*> modifiedBlendStates;
+	bool overrideSky = false;
+	void SkyShaderHacks();
 
 	Texture2D* texCubemapCloudOcc = nullptr;
+	Texture2D* texCubemapCloudOccCopy = nullptr;
+
 	ID3D11RenderTargetView* cubemapCloudOccRTVs[6] = { nullptr };
+	ID3D11RenderTargetView* cubemapCloudOccCopyRTVs[6] = { nullptr };
+
+	ID3D11BlendState* cloudShadowBlendState = nullptr;
 
 	virtual void SetupResources() override;
+
+	virtual void DrawSettings() override;
+
+	virtual void LoadSettings(json& o_json) override;
+	virtual void SaveSettings(json& o_json) override;
+
+	virtual void RestoreDefaultSettings() override;
 
 	void CheckResourcesSide(int side);
 	void ModifySky(RE::BSRenderPass* Pass);
 
-	virtual void Prepass() override;
+	virtual void ReflectionsPrepass() override;
+	virtual void EarlyPrepass() override;
 
 	virtual inline void PostPostLoad() override { Hooks::Install(); }
 
@@ -37,11 +70,7 @@ struct CloudShadows : Feature
 	{
 		struct BSSkyShader_SetupMaterial
 		{
-			static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
-			{
-				GetSingleton()->ModifySky(Pass);
-				func(This, Pass, RenderFlags);
-			}
+			static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags);
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 

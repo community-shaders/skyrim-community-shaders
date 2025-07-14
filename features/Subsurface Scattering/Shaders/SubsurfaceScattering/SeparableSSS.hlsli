@@ -5,30 +5,30 @@
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
- * 
+ *
  *    1. Redistributions of source code must retain the above copyright notice,
  *       this list of conditions and the following disclaimer.
  *
  *    2. Redistributions in binary form must reproduce the following disclaimer
- *       in the documentation and/or other materials provided with the 
+ *       in the documentation and/or other materials provided with the
  *       distribution:
  *
  *       "Uses Separable SSS. Copyright (C) 2012 by Jorge Jimenez and Diego
  *        Gutierrez."
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS ``AS 
- * IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
- * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
- * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL COPYRIGHT HOLDERS OR CONTRIBUTORS 
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS ``AS
+ * IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL COPYRIGHT HOLDERS OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- * The views and conclusions contained in the software and documentation are 
+ * The views and conclusions contained in the software and documentation are
  * those of the authors and should not be interpreted as representing official
  * policies, either expressed or implied, of the copyright holders.
  */
@@ -130,8 +130,8 @@ float4 SSSSBlurCS(
 	finalStep *= 1.0 / 3.0;  // Divide by 3 as the kernels range from -3 to 3.
 
 #if defined(VR)
-	finalStep.x *= 0.5;               // Halve horizontal screen resolution
-	uint eyeIndex = texcoord >= 0.5;  // 0 = left 1 = right
+	finalStep.x *= 0.5;                 // Halve horizontal screen resolution
+	uint eyeIndex = texcoord.x >= 0.5;  // 0 = left 1 = right
 	uint bufferDimHalfX = uint(SharedData::BufferDim.x * 0.5);
 	uint2 minCoord = uint2(eyeIndex ? bufferDimHalfX : 0, 0);
 	uint2 maxCoord = uint2(eyeIndex ? SharedData::BufferDim.x : bufferDimHalfX, SharedData::BufferDim.y);
@@ -140,16 +140,9 @@ float4 SSSSBlurCS(
 	uint2 maxCoord = uint2(SharedData::BufferDim.x, SharedData::BufferDim.y);
 #endif
 
-	float jitter = Random::InterleavedGradientNoise(DTid.xy, SharedData::FrameCount) * Math::TAU;
-	float2x2 rotationMatrix = float2x2((jitter), sin(jitter), -sin(jitter), cos(jitter));
-	float2x2 identityMatrix = float2x2(1.0, 0.0, 0.0, 1.0);
-
 	// Accumulate the other samples:
 	for (uint i = kernelOffset + 1; i < kernelOffset + SSSS_N_SAMPLES; i++) {
 		float2 offset = Kernels[i].a * finalStep;
-
-		// Apply randomized rotation
-		offset = mul(offset, rotationMatrix);
 
 		uint2 coords = DTid.xy + int2(offset + 0.5);
 

@@ -4,14 +4,31 @@
 #include <Tracy/TracyD3D11.hpp>
 
 #include <Buffer.h>
+#include <chrono>
 #include <nlohmann/json.hpp>
+
 using json = nlohmann::json;
 
 #include <FeatureBuffer.h>
 
+#include "reshade/reshade_api.hpp"
+#include <Hooks.h>
+#include <mutex>
+#include <reshade/reshade.hpp>
+
 class State
 {
 public:
+	State()
+	{
+		std::lock_guard<std::mutex> lock(statsMutex);
+		for (auto& v : smoothDrawCalls) v = 0.0;
+		for (auto& v : drawCalls) v = 0;
+		for (auto& v : frameTimePerType) v = 0.0f;
+		for (auto& v : smoothFrameTimePerType) v = 0.0f;
+	}
+	std::lock_guard<std::mutex> Lock() { return std::lock_guard<std::mutex>(statsMutex); }
+
 	static State* GetSingleton()
 	{
 		static State singleton;
@@ -41,6 +58,16 @@ public:
 	bool upscalerLoaded = false;
 
 	float timer = 0;
+	double smoothDrawCalls[RE::BSShader::Type::Total + 1];
+	int drawCalls[RE::BSShader::Type::Total + 1];
+
+	// Frame time tracking per shader type (in milliseconds)
+	float frameTimePerType[RE::BSShader::Type::Total + 1];
+	float smoothFrameTimePerType[RE::BSShader::Type::Total + 1];
+
+	// Timing state for per-type frame time tracking
+	std::chrono::high_resolution_clock::time_point frameStartTime;
+	bool frameTimingActive = false;
 
 	enum ConfigMode
 	{
@@ -89,7 +116,7 @@ public:
 	 * <p>
 	 * Developer mode is active when the log level is trace or debug.
 	 * </p>
-	 * 
+	 *
      * @return Whether in developer mode.
      */
 	bool IsDeveloperMode();
@@ -105,7 +132,7 @@ public:
 
 	void SetAdapterDescription(const std::wstring& description);
 
-	bool extendedFrameAnnotations = false;
+	bool frameAnnotations = false;
 
 	uint lastVertexDescriptor = 0;
 	uint lastPixelDescriptor = 0;
@@ -115,24 +142,44 @@ public:
 	uint lastModifiedPixelDescriptor = 0;
 	uint currentExtraDescriptor = 0;
 	uint lastExtraDescriptor = 0;
+	uint currentExtraFeatureDescriptor = 0;
+	uint lastExtraFeatureDescriptor = 0;
 	bool forceUpdatePermutationBuffer = true;
+
+	bool isTree = false;
 
 	enum class ExtraShaderDescriptors : uint32_t
 	{
 		InWorld = 1 << 0,
-		IsBeastRace = 1 << 1,
-		EffectShadows = 1 << 2,
-		IsDecal = 1 << 3
+		IsReflections = 1 << 1,
+		IsBeastRace = 1 << 2,
+		EffectShadows = 1 << 3,
+		IsDecal = 1 << 4,
+		IsTree = 1 << 5
 	};
 
-	void UpdateSharedData();
+	enum class ExtraFeatureDescriptors : uint32_t
+	{
+		THLand0HasDisplacement = 1 << 0,
+		THLand1HasDisplacement = 1 << 1,
+		THLand2HasDisplacement = 1 << 2,
+		THLand3HasDisplacement = 1 << 3,
+		THLand4HasDisplacement = 1 << 4,
+		THLand5HasDisplacement = 1 << 5,
+		ETMaterialModel = 0b111 << 6,
+	};
+
+	std::vector<::Hooks::RenderPass> blendedDecalRenderPasses;
+	bool inWorld = false;
+
+	void UpdateSharedData(bool a_inWorld, bool a_prepass);
 
 	struct alignas(16) PermutationCB
 	{
 		uint VertexShaderDescriptor;
 		uint PixelShaderDescriptor;
 		uint ExtraShaderDescriptor;
-		uint pad0[1];
+		uint ExtraFeatureDescriptor;
 	};
 
 	ConstantBuffer* permutationCB = nullptr;
@@ -150,17 +197,19 @@ public:
 		uint FrameCountAlwaysActive;
 		uint InInterior;
 		uint InMapMenu;
-		float3 pad0;
+		uint HideSky;
+		float MipBias;
+		float pad0;
 	};
 
 	ConstantBuffer* sharedDataCB = nullptr;
 	ConstantBuffer* featureDataCB = nullptr;
 
+	Util::FrameChecker frameChecker;
+	uint frameCount = 0;
+
 	// Skyrim constants
-	bool isVR = false;
 	float2 screenSize = {};
-	ID3D11DeviceContext* context = nullptr;
-	ID3D11Device* device = nullptr;
 	D3D_FEATURE_LEVEL featureLevel;
 
 	TracyD3D11Ctx tracyCtx = nullptr;  // Tracy context
@@ -170,11 +219,72 @@ public:
 	bool IsFeatureDisabled(const std::string& featureName);
 	std::unordered_map<std::string, bool>& GetDisabledFeatures();
 
+	reshade::api::effect_runtime* reShadeRuntime = nullptr;
+	reshade::api::resource_view reshadeSwapChainRTV;
+	reshade::api::resource_view reshadeSwapChainRTVsRGB;
+
+	void SetupReShade();
+	void RenderReShade();
+	void PresentReShade();
+
+	bool useFrameAnnotations = false;
+
+	// --- Utility Methods ---
+	/**
+	 * @brief Gets the total smoothed draw calls from the global state
+	 * @return Total number of draw calls as float
+	 */
+	float GetTotalSmoothedDrawCalls() const;
+
+	/**
+	 * @brief Base helper that iterates through valid shader types (excluding None and Total)
+	 * @param callback Function to call for each valid shader type with parameters: (type, typeIndex, classIndex)
+	 */
+	template <typename Callback>
+	static void ForEachValidShaderType(Callback callback)
+	{
+		for (auto type : magic_enum::enum_values<RE::BSShader::Type>()) {
+			if (type == RE::BSShader::Type::None || type == RE::BSShader::Type::Total)
+				continue;
+			int typeIndex = magic_enum::enum_integer(type);
+			int classIndex = typeIndex - 1;
+			callback(type, typeIndex, classIndex);
+		}
+	}
+
+	/**
+	 * @brief Iterates through valid shader types with performance metrics
+	 * @param callback Function to call for each shader type with parameters: (type, typeIndex, drawCalls, frameTime, percent, costPerCall)
+	 */
+	template <typename Callback>
+	static void ForEachShaderTypeWithMetrics(Callback callback)
+	{
+		ForEachValidShaderType([&](auto type, int typeIndex, [[maybe_unused]] int classIndex) {
+			float drawCalls = static_cast<float>(GetSingleton()->smoothDrawCalls[typeIndex]);
+			float frameTime = static_cast<float>(GetSingleton()->smoothFrameTimePerType[typeIndex]);
+			float percent = (frameTime > 0.0f && GetSingleton()->smoothFrameTimePerType[magic_enum::enum_integer(RE::BSShader::Type::Total)] > 0.0f) ?
+			                    (frameTime / GetSingleton()->smoothFrameTimePerType[magic_enum::enum_integer(RE::BSShader::Type::Total)] * 100.0f) :
+			                    0.0f;
+			float costPerCall = (drawCalls > 0.0f) ? (frameTime / drawCalls) : 0.0f;
+			callback(type, typeIndex, drawCalls, frameTime, percent, costPerCall);
+		});
+	}
+
+	/**
+	 * @brief Iterates through valid shader types with class indices for UI operations
+	 * @param callback Function to call for each shader type with parameters: (type, classIndex)
+	 */
+	template <typename Callback>
+	static void ForEachShaderTypeWithIndex(Callback callback)
+	{
+		ForEachValidShaderType([&](auto type, [[maybe_unused]] int typeIndex, int classIndex) {
+			callback(type, classIndex);
+		});
+	}
+
 	// Features that are more special then others
 	std::unordered_map<std::string, bool> specialFeatures = {
-		{ "Frame Generation", false },
-		{ "Upscaling", false },
-		{ "TruePBR", false },
+		{ "TruePBR", false }
 	};
 	std::unordered_map<std::string, bool> disabledFeatures;
 
@@ -189,4 +299,5 @@ public:
 private:
 	std::shared_ptr<REX::W32::ID3DUserDefinedAnnotation> pPerf;
 	bool initialized = false;
+	std::mutex statsMutex;
 };

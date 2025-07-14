@@ -1,9 +1,5 @@
 #pragma once
 
-#include "Buffer.h"
-#include "Feature.h"
-#include "Util.h"
-
 class MenuOpenCloseEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
 {
 public:
@@ -49,11 +45,13 @@ public:
 
 	ID3D11ComputeShader* updateCubemapCS = nullptr;
 	ID3D11ComputeShader* updateCubemapReflectionsCS = nullptr;
+	ID3D11ComputeShader* updateCubemapFakeReflectionsCS = nullptr;
 
 	ConstantBuffer* updateCubemapCB = nullptr;
 
 	ID3D11ComputeShader* inferCubemapCS = nullptr;
 	ID3D11ComputeShader* inferCubemapReflectionsCS = nullptr;
+	ID3D11ComputeShader* inferCubemapFakeReflectionsCS = nullptr;
 
 	Texture2D* envCaptureTexture = nullptr;
 	Texture2D* envCaptureRawTexture = nullptr;
@@ -68,6 +66,8 @@ public:
 	ID3D11ShaderResourceView* defaultCubemap = nullptr;
 
 	bool activeReflections = false;
+	bool fakeReflections = false;
+
 	bool resetCapture[2] = { true, true };
 	bool recompileFlag = false;
 
@@ -102,6 +102,18 @@ public:
 	virtual inline std::string GetName() override { return "Dynamic Cubemaps"; }
 	virtual inline std::string GetShortName() override { return "DynamicCubemaps"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "DYNAMIC_CUBEMAPS"; }
+	virtual std::string_view GetCategory() const override { return "Lighting"; }
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Provides real-time environment mapping and reflections by generating dynamic cube maps that capture the surrounding environment, enabling realistic reflections on surfaces.",
+			{ "Real-time environment capture for realistic reflections",
+				"Dynamic cube map generation based on camera position",
+				"Enhanced water reflections with environmental details",
+				"Support for both standard and VR rendering modes",
+				"Optimized cubemap inference and irradiance calculation" }
+		};
+	}
 	virtual inline std::vector<std::pair<std::string_view, std::string_view>> GetShaderDefineOptions() override;
 
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
@@ -115,13 +127,6 @@ public:
 	virtual void DrawSettings() override;
 	virtual void DataLoaded() override;
 	virtual void PostPostLoad() override;
-
-	std::map<std::string, Util::GameSetting> SSRSettings{
-		{ "fWaterSSRNormalPerturbationScale:Display", { "Water Normal Perturbation Scale", "Controls the scale of normal perturbations for Screen Space Reflections (SSR) on water surfaces.", 0, 0.05f, 0.f, 1.f } },
-		{ "fWaterSSRBlurAmount:Display", { "Water SSR Blur Amount", "Defines the amount of blur applied to Screen Space Reflections on water surfaces.", 0, 0.3f, 0.f, 1.f } },
-		{ "fWaterSSRIntensity:Display", { "Water SSR Intensity", "Adjusts the intensity or strength of Screen Space Reflections on water.", 0, 1.3f, 0.f, 5.f } },
-		{ "bDownSampleNormalSSR:Display", { "Down Sample Normal SSR", "Enables or disables downsampling of normals for SSR to improve performance.", 0, true, false, true } }
-	};
 
 	std::map<std::string, Util::GameSetting> iniVRCubeMapSettings{
 		{ "bAutoWaterSilhouetteReflections:Water", { "Auto Water Silhouette Reflections", "Automatically reflects silhouettes on water surfaces.", 0, true, false, true } },
@@ -140,8 +145,12 @@ public:
 	virtual void ClearShaderCache() override;
 	ID3D11ComputeShader* GetComputeShaderUpdate();
 	ID3D11ComputeShader* GetComputeShaderUpdateReflections();
+	ID3D11ComputeShader* GetComputeShaderUpdateFakeReflections();
+
 	ID3D11ComputeShader* GetComputeShaderInferrence();
 	ID3D11ComputeShader* GetComputeShaderInferrenceReflections();
+	ID3D11ComputeShader* GetComputeShaderInferrenceFakeReflections();
+
 	ID3D11ComputeShader* GetComputeShaderSpecularIrradiance();
 
 	void UpdateCubemapCapture(bool a_reflections);

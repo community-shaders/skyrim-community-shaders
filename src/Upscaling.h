@@ -1,25 +1,18 @@
 #pragma once
 
-#include "Buffer.h"
-#include "State.h"
-
 #include "FidelityFX.h"
 #include "Streamline.h"
 
-class Upscaling : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
+/**
+ * @brief Installs hooks for Direct3D 11 device context operations.
+ *
+ * Sets up hooks on the provided ID3D11DeviceContext to intercept and extend D3D11 Map and Unmap operations, enabling custom frame buffer management and resource tracking.
+ *
+ * @param a_context Pointer to the Direct3D 11 device context to hook.
+ */
+class Upscaling
 {
 public:
-	virtual RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
-	{
-		if (a_event->menuName == RE::LoadingMenu::MENU_NAME ||
-			a_event->menuName == RE::MapMenu::MENU_NAME ||
-			a_event->menuName == RE::LockpickingMenu::MENU_NAME ||
-			a_event->menuName == RE::MainMenu::MENU_NAME ||
-			a_event->menuName == RE::MistMenu::MENU_NAME)
-			reset = true;
-		return RE::BSEventNotifyControl::kContinue;
-	}
-
 	static Upscaling* GetSingleton()
 	{
 		static Upscaling singleton;
@@ -28,7 +21,6 @@ public:
 
 	inline std::string GetShortName() { return "Upscaling"; }
 
-	bool reset = false;
 	float2 jitter = { 0, 0 };
 
 	enum class UpscaleMethod
@@ -44,11 +36,28 @@ public:
 		uint upscaleMethod = (uint)UpscaleMethod::kTAA;
 		uint upscaleMethodNoDLSS = (uint)UpscaleMethod::kTAA;
 		uint upscaleMethodNoFSR = (uint)UpscaleMethod::kTAA;
-		float sharpness = 0.5f;
-		uint dlssPreset = (uint)sl::DLSSPreset::ePresetC;
+		float sharpness = 0.0f;
+		uint dlssPreset = 1;
+		uint frameLimitMode = 1;
+		uint frameGenerationMode = 1;
+		uint frameGenerationForceEnable = 0;
+		uint streamlineLogLevel = 0;  // 0=Off, 1=Default, 2=Verbose
 	};
 
 	Settings settings;
+
+	bool isWindowed = false;
+	bool lowRefreshRate = false;
+
+	bool streamlineMissing = false;
+	bool fidelityFXMissing = false;
+
+	bool d3d12Interop = false;
+	double refreshRate = 0.0f;
+
+	// FG FPS Measurement for Overlay
+	bool IsFrameGenerationActive() const;
+	float GetFrameGenerationFrameTime() const;
 
 	void DrawSettings();
 	void SaveSettings(json& o_json);
@@ -59,13 +68,11 @@ public:
 
 	void CheckResources();
 
+	ID3D11ComputeShader* encodeTexturesCS;
+	ID3D11ComputeShader* GetEncodeTexturesCS();
+
 	ID3D11ComputeShader* rcasCS;
 	ID3D11ComputeShader* GetRCASCS();
-
-	ID3D11ComputeShader* encodeTexturesCS;
-	ID3D11ComputeShader* encodeTexturesDLSSCS;
-	ID3D11ComputeShader* GetEncodeTexturesCS();
-	ID3D11ComputeShader* GetEncodeTexturesDLSSCS();
 
 	void UpdateJitter();
 	void Upscale();
@@ -76,6 +83,28 @@ public:
 
 	void CreateUpscalingResources();
 	void DestroyUpscalingResources();
+
+	Texture2D* HUDLessBufferShared;
+	Texture2D* depthBufferShared;
+	Texture2D* motionVectorBufferShared;
+
+	winrt::com_ptr<ID3D12Resource> HUDLessBufferShared12;
+	winrt::com_ptr<ID3D12Resource> depthBufferShared12;
+	winrt::com_ptr<ID3D12Resource> motionVectorBufferShared12;
+
+	ID3D11ComputeShader* copyDepthToSharedBufferCS;
+
+	bool useHUDLess = false;
+
+	void CreateFrameGenerationResources();
+	void CopyBuffersToSharedResources();
+	void PostDisplay();
+
+	static void TimerSleepQPC(int64_t targetQPC);
+
+	void FrameLimiter();
+
+	static double GetRefreshRate(HWND a_window);
 
 	struct Main_UpdateJitter
 	{
@@ -128,9 +157,19 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	struct MenuManagerDrawInterfaceStartHook
+	{
+		static void thunk(int64_t a1)
+		{
+			GetSingleton()->PostDisplay();
+			func(a1);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	static void InstallHooks()
 	{
-		if (!State::GetSingleton()->upscalerLoaded) {
+		if (!globals::state->upscalerLoaded) {
 			bool isGOG = !GetModuleHandle(L"steam_api64.dll");
 
 			stl::write_thunk_call<Main_UpdateJitter>(REL::RelocationID(75460, 77245).address() + REL::Relocate(0xE5, isGOG ? 0x133 : 0xE2, 0x104));
@@ -138,12 +177,49 @@ public:
 			stl::write_thunk_call<TAA_EndTechnique>(REL::RelocationID(100540, 107270).address() + REL::Relocate(0x3F3, 0x3F4, 0x452));
 			stl::write_thunk_call<BSImageSpacerShader_RenderPassImmediately>(REL::RelocationID(100951, 107733).address() + REL::Relocate(0x82, 0x78, 0x7E));
 
-			logger::info("[Upscaling] Installed hooks");
+			stl::detour_thunk<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
 
-			RE::UI::GetSingleton()->GetEventSource<RE::MenuOpenCloseEvent>()->AddEventSink(Upscaling::GetSingleton());
-			logger::info("[Upscaling] Registered for MenuOpenCloseEvent");
+			logger::info("[Upscaling] Installed hooks");
 		} else {
 			logger::info("[Upscaling] Not installing hooks due to Skyrim Upscaler");
 		}
 	}
+
+	void InstallD3DHooks(ID3D11DeviceContext* a_context);
+
+	struct FrameBuffer
+	{
+		Matrix CameraView;
+		Matrix CameraProj;
+		Matrix CameraViewProj;
+		Matrix CameraViewProjUnjittered;
+		Matrix CameraPreviousViewProjUnjittered;
+		Matrix CameraProjUnjittered;
+		Matrix CameraProjUnjitteredInverse;
+		Matrix CameraViewInverse;
+		Matrix CameraViewProjInverse;
+		Matrix CameraProjInverse;
+		float4 CameraPosAdjust;
+		float4 CameraPreviousPosAdjust;
+		float4 FrameParams;
+		float4 DynamicResolutionParams1;
+		float4 DynamicResolutionParams2;
+	};
+
+	D3D11_MAPPED_SUBRESOURCE* mappedFrameBuffer = nullptr;
+	FrameBuffer frameBufferCached{};
+
+	void CacheFramebuffer();
+
+	struct ID3D11DeviceContext_Map
+	{
+		static HRESULT thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource, D3D11_MAP MapType, UINT MapFlags, D3D11_MAPPED_SUBRESOURCE* pMappedResource);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct ID3D11DeviceContext_Unmap
+	{
+		static void thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
 };

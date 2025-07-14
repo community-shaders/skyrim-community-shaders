@@ -80,7 +80,7 @@ void BSLightingShaderMaterialPBRLandscape::ClearTextures()
 void BSLightingShaderMaterialPBRLandscape::ReceiveValuesFromRootMaterial(bool skinned, bool rimLighting, bool softLighting, bool backLighting, bool MSN)
 {
 	BSLightingShaderMaterialBase::ReceiveValuesFromRootMaterial(skinned, rimLighting, softLighting, backLighting, MSN);
-	const auto& stateData = RE::BSGraphics::State::GetSingleton()->GetRuntimeData();
+	const auto& stateData = globals::game::graphicsState->GetRuntimeData();
 	if (terrainOverlayTexture == nullptr) {
 		terrainOverlayTexture = stateData.defaultTextureNormalMap;
 	}

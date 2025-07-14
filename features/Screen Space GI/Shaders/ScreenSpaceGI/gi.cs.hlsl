@@ -44,11 +44,13 @@ Texture2D<unorm float> srcAccumFrames : register(t4);  // maybe half-res
 Texture2D<float> srcPrevAo : register(t5);             // maybe half-res
 Texture2D<float4> srcPrevY : register(t6);             // maybe half-res
 Texture2D<float2> srcPrevCoCg : register(t7);          // maybe half-res
+Texture2D<float4> srcPrevGISpecular : register(t8);    // maybe half-res
 
 RWTexture2D<unorm float> outAo : register(u0);
 RWTexture2D<float4> outY : register(u1);
 RWTexture2D<float2> outCoCg : register(u2);
-RWTexture2D<half3> outPrevGeo : register(u3);
+RWTexture2D<float4> outGISpecular : register(u3);
+RWTexture2D<half3> outPrevGeo : register(u4);
 
 float GetDepthFade(float depth)
 {
@@ -85,7 +87,7 @@ float GetVisibilityFunctionSmithJointApprox(float roughness, float NdotV, float 
 
 void CalculateGI(
 	uint2 dtid, float2 uv, float viewspaceZ, float3 viewspaceNormal,
-	out float o_ao, out sh2 o_currY, out float2 o_currCoCg)
+	out float o_ao, out sh2 o_currY, out float2 o_currCoCg, out float4 o_currGIAOSpecular)
 {
 	const float2 frameScale = FrameDim * RcpTexDim;
 
@@ -115,14 +117,23 @@ void CalculateGI(
 
 	const float3 pixCenterPos = ScreenToViewPosition(normalizedScreenPos, viewspaceZ, eyeIndex);
 	const float3 viewVec = normalize(-pixCenterPos);
+#ifdef GI_SPECULAR
+	const float NoV = clamp(dot(viewVec, viewspaceNormal), 1e-5, 1);
+#endif
 
 	// flip foliage normal
 	if (dot(viewVec, pixCenterPos) > 0)
 		viewspaceNormal = -viewspaceNormal;
 
 	float visibility = 0;
+	float visibilitySpecular = 0;
 	float4 radianceY = 0;
 	float2 radianceCoCg = 0;
+	float3 radianceSpecular = 0;
+
+#ifdef GI_SPECULAR
+	const float roughness = max(0.2, saturate(1 - FULLRES_LOAD(srcNormalRoughness, dtid, uv * frameScale, samplerLinearClamp).z));  // can't handle low roughness
+#endif
 
 	for (uint slice = 0; slice < NumSlices; slice++) {
 		float phi = (Math::PI * rcpNumSlices) * (slice + noiseSlice);
@@ -145,6 +156,12 @@ void CalculateGI(
 		uint bitmask = 0;
 #ifdef GI
 		uint bitmaskGI = 0;
+#	ifdef GI_SPECULAR
+		uint bitmaskGISpecular = 0;
+		float3 domVec = getSpecularDominantDirection(viewspaceNormal, viewVec, roughness);
+		float3 projectedDomVec = normalize(domVec - axisVec * dot(domVec, axisVec));
+		float nDom = sign(dot(orthoDirectionVec, projectedDomVec)) * FastMath::ACos(saturate(dot(projectedDomVec, viewVec)));
+#	endif
 #endif
 
 		// R1 sequence (http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/)
@@ -185,7 +202,9 @@ void CalculateGI(
 				float angleFront = FastMath::ACos(dot(sampleHorizonVec, viewVec));  // either clamp or use float version for whatever reason
 				float angleBack = FastMath::ACos(dot(sampleBackHorizonVec, viewVec));
 				float2 angleRange = -sideSign * (sideSign == -1 ? float2(angleFront, angleBack) : float2(angleBack, angleFront));
-				angleRange = smoothstep(0, 1, (angleRange + n) * RCP_PI + .5);  // https://discord.com/channels/586242553746030596/586245736413528082/1102228968247144570
+				// The math: https://www.desmos.com/calculator/je4y5ved2j
+				// Using smoothstep for cos: https://discord.com/channels/586242553746030596/586245736413528082/1102228968247144570
+				angleRange = smoothstep(0, 1, (angleRange + n) * RCP_PI + .5);
 
 				uint2 bitsRange = uint2(round(angleRange.x * 32u), round((angleRange.y - angleRange.x) * 32u));
 				uint maskedBits = s < AORadius ? ((1 << bitsRange.y) - 1) << bitsRange.x : 0;
@@ -196,13 +215,28 @@ void CalculateGI(
 				float angleBackGI = FastMath::ACos(dot(sampleBackHorizonVecGI, viewVec));
 				float2 angleRangeGI = -sideSign * (sideSign == -1 ? float2(angleFront, angleBackGI) : float2(angleBackGI, angleFront));
 
-				angleRangeGI = smoothstep(0, 1, (angleRangeGI + n) * RCP_PI + .5);  // https://discord.com/channels/586242553746030596/586245736413528082/1102228968247144570
+#	ifdef GI_SPECULAR
+				float coneHalfAngles = max(5e-2, specularLobeHalfAngle(roughness));  // not too small
+				float2 angleRangeSpecular = clamp((angleRangeGI + nDom) * 0.5 / coneHalfAngles, -1, 1) * 0.5 + 0.5;
+
+				uint2 bitsRangeGISpecular = uint2(round(angleRangeSpecular.x * 32u), round((angleRangeSpecular.y - angleRangeSpecular.x) * 32u));
+				uint maskedBitsGISpecular = s < GIRadius ? ((1 << bitsRangeGISpecular.y) - 1) << bitsRangeGISpecular.x : 0;
+#	endif
+
+				// The math: https://www.desmos.com/calculator/je4y5ved2j
+				// Using smoothstep for cos: https://discord.com/channels/586242553746030596/586245736413528082/1102228968247144570
+				angleRangeGI = smoothstep(0, 1, (angleRangeGI + n) * RCP_PI + .5);
 
 				uint2 bitsRangeGI = uint2(round(angleRangeGI.x * 32u), round((angleRangeGI.y - angleRangeGI.x) * 32u));
 				uint maskedBitsGI = s < GIRadius ? ((1 << bitsRangeGI.y) - 1) << bitsRangeGI.x : 0;
 
 				uint validBits = maskedBitsGI & ~bitmaskGI;
 				bool checkGI = validBits;
+
+#	ifdef GI_SPECULAR
+				uint overlappedBitsSpecular = maskedBitsGISpecular & ~bitmaskGISpecular;
+				checkGI = checkGI || overlappedBitsSpecular;
+#	endif
 
 				if (checkGI) {
 					float giBoost = 4.0 * Math::PI * (1 + GIDistanceCompensation * smoothstep(0, GICompensationMaxDist, s * EffectRadius));
@@ -223,6 +257,18 @@ void CalculateGI(
 
 						radianceY += sampleRadianceYCoCg.r * SphericalHarmonics::Evaluate(sampleHorizonVecWS);
 						radianceCoCg += sampleRadianceYCoCg.gb;
+
+#	ifdef GI_SPECULAR
+						// thank u Olivier!
+						float NoH = clamp(dot(viewspaceNormal, normalize(viewVec + sampleHorizonVec)), 1e-2, 1);
+						float NoL = clamp(dot(viewspaceNormal, sampleHorizonVec), 1e-2, 1);
+
+						float3 specularRadiance = sampleRadiance * countbits(overlappedBitsSpecular) * 0.03125;
+						specularRadiance *= GetNormalDistributionFunctionGGX(roughness, NoH) * GetVisibilityFunctionSmithJointApprox(roughness, NoV, NoL);
+						specularRadiance = max(0, specularRadiance);
+
+						radianceSpecular += specularRadiance;
+#	endif
 					}
 				}
 #endif  // GI
@@ -235,6 +281,10 @@ void CalculateGI(
 		}
 
 		visibility += countbits(bitmask) * 0.03125;
+
+#if defined(GI) && defined(GI_SPECULAR)
+		visibilitySpecular += countbits(bitmaskGISpecular) * 0.03125;
+#endif
 	}
 
 	float depthFade = GetDepthFade(viewspaceZ);
@@ -248,11 +298,20 @@ void CalculateGI(
 	radianceY = lerp(radianceY, 0, depthFade);
 
 	radianceCoCg *= rcpNumSlices * GISaturation;
+
+#	ifdef GI_SPECULAR
+	radianceSpecular *= rcpNumSlices;
+	radianceSpecular = lerp(radianceSpecular, 0, depthFade);
+
+	visibilitySpecular *= rcpNumSlices;
+	visibilitySpecular = lerp(saturate(visibility), 0, depthFade);
+#	endif
 #endif
 
 	o_ao = visibility;
 	o_currY = radianceY;
 	o_currCoCg = radianceCoCg;
+	o_currGIAOSpecular = float4(radianceSpecular, visibilitySpecular);
 }
 
 [numthreads(8, 8, 1)] void main(const uint2 dtid
@@ -278,24 +337,32 @@ void CalculateGI(
 	float currAo = 0;
 	float4 currY = 0;
 	float2 currCoCg = 0;
+	float4 currGIAOSpecular = float4(0, 0, 0, 0);
 
 	bool needGI = viewspaceZ > FP_Z && viewspaceZ < DepthFadeRange.y;
 	if (needGI) {
 		CalculateGI(
 			pxCoord, uv, viewspaceZ, viewspaceNormal,
-			currAo, currY, currCoCg);
+			currAo, currY, currCoCg, currGIAOSpecular);
 
 #ifdef TEMPORAL_DENOISER
 		float lerpFactor = rcp(srcAccumFrames[pxCoord] * 255);
 
 		currY = lerp(srcPrevY[pxCoord], currY, lerpFactor);
 		currCoCg = lerp(srcPrevCoCg[pxCoord], currCoCg, lerpFactor);
+#	ifdef GI_SPECULAR
+		currGIAOSpecular = lerp(srcPrevGISpecular[pxCoord], currGIAOSpecular, lerpFactor);
+#	endif
 #endif
 	}
-	currY = any(ISNAN(currY)) ? 0 : currY;
-	currCoCg = any(ISNAN(currCoCg)) ? 0 : currCoCg;
+	currY = filterNaN(currY);
+	currCoCg = filterNaN(currCoCg);
+	currGIAOSpecular = filterNaN(currGIAOSpecular);
 
 	outAo[pxCoord] = currAo;
 	outY[pxCoord] = currY;
 	outCoCg[pxCoord] = currCoCg;
+#ifdef GI_SPECULAR
+	outGISpecular[pxCoord] = currGIAOSpecular;
+#endif
 }

@@ -42,8 +42,7 @@ float getRCASLuma(float3 rgb)
 	return dot(rgb, float3(0.5, 1.0, 0.5));
 }
 
-[numthreads(8, 8, 1)] void main(uint3 DTid
-								: SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID) {
 	float3 e = Source.Load(int3(DTid.x, DTid.y, 0)).rgb;
 
 	float3 b = Source.Load(int3(DTid.x, DTid.y - 1, 0)).rgb;

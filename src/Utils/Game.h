@@ -5,15 +5,28 @@
 /**
  @def GET_INSTANCE_MEMBER
  @brief Set variable in current namespace based on instance member from GetRuntimeData or GetVRRuntimeData.
-  
+
  @warning The class must have both a GetRuntimeData() and GetVRRuntimeData() function.
-  
+
  @param a_value The instance member value to access (e.g., renderTargets).
  @param a_source The instance of the class (e.g., state).
  @result The a_value will be set as a variable in the current namespace. (e.g., auto& renderTargets = state->renderTargets;)
  */
 #define GET_INSTANCE_MEMBER(a_value, a_source) \
 	auto& a_value = !REL::Module::IsVR() ? a_source->GetRuntimeData().a_value : a_source->GetVRRuntimeData().a_value;
+
+/**
+ @def GET_INSTANCE_MEMBER_PTR
+ @brief Return refptr to runtimedata in current namespace based on instance member from GetRuntimeData or GetVRRuntimeData.
+
+ @warning The class must have both a GetRuntimeData() and GetVRRuntimeData() function.
+
+ @param a_value The instance member value to access (e.g., renderTargets).
+ @param a_source The instance of the class (e.g., state).
+ @result The a_value will be returned as a refptr. (e.g., &state->renderTargets;)
+ */
+#define GET_INSTANCE_MEMBER_PTR(a_value, a_source) \
+	&(!REL::Module::IsVR() ? a_source->GetRuntimeData().a_value : a_source->GetVRRuntimeData().a_value)
 
 namespace Util
 {
@@ -30,6 +43,77 @@ namespace Util
 
 	float2 ConvertToDynamic(float2 a_size);
 
+	// Game unit conversions
+	namespace Units
+	{
+		// Conversion constants
+		constexpr float GAME_UNIT_TO_CM = 1.428f;
+		constexpr float GAME_UNIT_TO_M = GAME_UNIT_TO_CM / 100.0f;
+		constexpr float GAME_UNIT_TO_FEET = GAME_UNIT_TO_CM / 30.48f;
+		constexpr float GAME_UNIT_TO_INCHES = GAME_UNIT_TO_CM / 2.54f;
+
+		// Wind speed conversions
+		constexpr float WIND_RAW_TO_NORMALIZED = 1.0f / 255.0f;  // Raw to 0-1 scale
+		constexpr float WIND_RAW_TO_PERCENT = 100.0f / 255.0f;   // Raw to percentage
+
+		// Direction conversions
+		constexpr float DIR_RAW_TO_DEGREES = 360.0f / 256.0f;    // Raw 0-256 to 0-360 degrees
+		constexpr float DIR_RANGE_TO_DEGREES = 180.0f / 256.0f;  // Range 0-256 to 0-180 degrees
+		constexpr float RADIANS_TO_DEGREES = 180.0f / DirectX::XM_PI;
+
+		// Distance conversions
+		inline float GameUnitsToMeters(float gameUnits) { return gameUnits * GAME_UNIT_TO_M; }
+		inline float GameUnitsToCm(float gameUnits) { return gameUnits * GAME_UNIT_TO_CM; }
+		inline float GameUnitsToFeet(float gameUnits) { return gameUnits * GAME_UNIT_TO_FEET; }
+		inline float GameUnitsToInches(float gameUnits) { return gameUnits * GAME_UNIT_TO_INCHES; }
+
+		// Wind speed conversions
+		inline float WindRawToNormalized(uint8_t rawWind) { return rawWind * WIND_RAW_TO_NORMALIZED; }
+		inline float WindRawToPercent(uint8_t rawWind) { return rawWind * WIND_RAW_TO_PERCENT; }
+
+		// Direction conversions
+		inline float DirectionRawToDegrees(uint8_t rawDirection) { return rawDirection * DIR_RAW_TO_DEGREES; }
+		inline float DirectionRangeToDegrees(uint8_t rawRange) { return rawRange * DIR_RANGE_TO_DEGREES; }
+		inline float RadiansToDegrees(float radians) { return radians * RADIANS_TO_DEGREES; }
+
+		// Angle normalization helpers
+		inline float NormalizeDegrees0To360(float degrees)
+		{
+			if (!std::isfinite(degrees))
+				return 0.0f;
+			while (degrees < 0.0f) degrees += 360.0f;
+			while (degrees >= 360.0f) degrees -= 360.0f;
+			return degrees;
+		}
+
+		inline float NormalizeDegreesToSignedRange(float degrees)
+		{
+			if (!std::isfinite(degrees))
+				return 0.0f;
+			while (degrees > 180.0f) degrees -= 360.0f;
+			while (degrees < -180.0f) degrees += 360.0f;
+			return degrees;
+		}
+
+		// Formatted string helpers for tooltips
+		inline std::string FormatDistance(float gameUnits)
+		{
+			return std::format("{:.1f} units ({:.2f} m, {:.1f} ft)",
+				gameUnits, GameUnitsToMeters(gameUnits), GameUnitsToFeet(gameUnits));
+		}
+		inline std::string FormatWindSpeed(uint8_t rawWind)
+		{
+			return std::format("{:.1f}% (raw {}, {:.2f} normalized)",
+				WindRawToPercent(rawWind), rawWind, WindRawToNormalized(rawWind));
+		}
+
+		inline std::string FormatDirection(uint8_t rawDirection)
+		{
+			return std::format("{:.1f}° (raw {})",
+				DirectionRawToDegrees(rawDirection), rawDirection);
+		}
+	}
+
 	struct DispatchCount
 	{
 		uint x;
@@ -39,7 +123,7 @@ namespace Util
 
 	/**
 	 * @brief Checks if dynamic resolution is currently enabled.
-	 * 
+	 *
 	 * @return true if dynamic resolution is enabled, false otherwise.
 	 */
 	bool IsDynamicResolution();
@@ -56,12 +140,32 @@ namespace Util
 		uint32_t last_frame = UINT32_MAX;
 
 	public:
-		inline bool IsNewFrame(uint32_t frame)
+		bool IsNewFrame(uint32_t frame)
 		{
 			bool retval = last_frame != frame;
 			last_frame = frame;
 			return retval;
 		}
-		inline bool IsNewFrame() { return IsNewFrame(RE::BSGraphics::State::GetSingleton()->frameCount); }
+		bool IsNewFrame();
 	};
+
+	/**
+     * @brief Retrieves the seasonal texture swap for a given texture set, if available.
+     *
+     * This function checks if a given texture set has been swapped by Seasons of Skyrim.
+     * If swapped, pad12C will be > 0 and will be the formid of the swapped texture set.
+     *
+     * @param textureSet Pointer to the original BGSTextureSet to check for seasonal swaps.
+     *                   Can be nullptr.
+     *
+     * @return Pointer to the seasonal swap texture set if found and valid, otherwise
+     *         returns the original textureSet parameter. Returns nullptr if the input
+     *         textureSet is nullptr.
+     */
+	[[nodiscard]] RE::BGSTextureSet* GetSeasonalSwap(RE::BGSTextureSet* textureSet);
+
+	// TESForm formatting helpers
+	std::string FormatTESForm(const RE::TESForm* form);
+	std::string FormatWeather(const RE::TESWeather* weather);
+
 }  // namespace Util

@@ -1,4 +1,5 @@
 #pragma once
+
 #include "BSShader.h"
 #include "ShaderCompiler.h"
 

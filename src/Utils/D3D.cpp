@@ -10,7 +10,7 @@ namespace Util
 	ID3D11ShaderResourceView* GetSRVFromRTV(const ID3D11RenderTargetView* a_rtv)
 	{
 		if (a_rtv) {
-			if (auto r = RE::BSGraphics::Renderer::GetSingleton()) {
+			if (auto r = globals::game::renderer) {
 				for (int i = 0; i < RE::RENDER_TARGETS::kTOTAL; i++) {
 					auto rt = r->GetRuntimeData().renderTargets[i];
 					if (a_rtv == rt.RTV) {
@@ -25,7 +25,7 @@ namespace Util
 	ID3D11RenderTargetView* GetRTVFromSRV(const ID3D11ShaderResourceView* a_srv)
 	{
 		if (a_srv) {
-			if (auto r = RE::BSGraphics::Renderer::GetSingleton()) {
+			if (auto r = globals::game::renderer) {
 				for (int i = 0; i < RE::RENDER_TARGETS::kTOTAL; i++) {
 					auto rt = r->GetRuntimeData().renderTargets[i];
 					if (a_srv == rt.SRV || a_srv == rt.SRVCopy) {
@@ -42,7 +42,7 @@ namespace Util
 		using RENDER_TARGET = RE::RENDER_TARGETS::RENDER_TARGET;
 
 		if (a_srv) {
-			if (auto r = RE::BSGraphics::Renderer::GetSingleton()) {
+			if (auto r = globals::game::renderer) {
 				for (int i = 0; i < RENDER_TARGET::kTOTAL; i++) {
 					auto rt = r->GetRuntimeData().renderTargets[i];
 					if (a_srv == rt.SRV || a_srv == rt.SRVCopy) {
@@ -58,7 +58,7 @@ namespace Util
 	{
 		using RENDER_TARGET = RE::RENDER_TARGETS::RENDER_TARGET;
 		if (a_rtv) {
-			if (auto r = RE::BSGraphics::Renderer::GetSingleton()) {
+			if (auto r = globals::game::renderer) {
 				for (int i = 0; i < RENDER_TARGET::kTOTAL; i++) {
 					auto rt = r->GetRuntimeData().renderTargets[i];
 					if (a_rtv == rt.RTV) {
@@ -124,7 +124,7 @@ namespace Util
 
 	ID3D11DeviceChild* CompileShader(const wchar_t* FilePath, const std::vector<std::pair<const char*, const char*>>& Defines, const char* ProgramType, const char* Program)
 	{
-		auto& device = State::GetSingleton()->device;
+		auto device = globals::d3d::device;
 
 		CustomInclude include;
 
@@ -142,11 +142,11 @@ namespace Util
 
 		if (REL::Module::IsVR())
 			macros.push_back({ "VR", "" });
-		if (State::GetSingleton()->IsDeveloperMode()) {
+		if (globals::state->IsDeveloperMode()) {
 			macros.push_back({ "D3DCOMPILE_SKIP_OPTIMIZATION", "" });
 			macros.push_back({ "D3DCOMPILE_DEBUG", "" });
 		}
-		auto shaderDefines = State::GetSingleton()->GetDefines();
+		auto shaderDefines = globals::state->GetDefines();
 		if (!shaderDefines->empty()) {
 			for (unsigned int i = 0; i < shaderDefines->size(); i++)
 				macros.push_back({ shaderDefines->at(i).first.c_str(), shaderDefines->at(i).second.c_str() });
@@ -174,7 +174,7 @@ namespace Util
 		macros.push_back({ nullptr, nullptr });
 
 		// Compiler setup
-		uint32_t flags = !State::GetSingleton()->IsDeveloperMode() ? (D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3) : D3DCOMPILE_DEBUG;
+		uint32_t flags = !globals::state->IsDeveloperMode() ? (D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3) : D3DCOMPILE_DEBUG;
 
 		ID3DBlob* shaderBlob;
 		ID3DBlob* shaderErrors;

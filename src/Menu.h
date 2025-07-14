@@ -1,30 +1,9 @@
 #pragma once
 
-#include "imgui.h"
-#include "imgui_impl_dx11.h"
-#include "imgui_impl_win32.h"
-#include <chrono>
+#include "Feature.h"
+#include "Utils/Serialize.h"
 #include <dxgi1_4.h>
-#include <shared_mutex>
 #include <winrt/base.h>
-
-using namespace std::chrono;
-#define BUFFER_VIEWER_NODE(a_value, a_scale)                                                                 \
-	if (ImGui::TreeNode(#a_value)) {                                                                         \
-		ImGui::Image(a_value->srv.get(), { a_value->desc.Width * a_scale, a_value->desc.Height * a_scale }); \
-		ImGui::TreePop();                                                                                    \
-	}
-
-#define BUFFER_VIEWER_NODE_BULLET(a_value, a_scale) \
-	ImGui::BulletText(#a_value);                    \
-	ImGui::Image(a_value->srv.get(), { a_value->desc.Width * a_scale, a_value->desc.Height * a_scale });
-
-#define ADDRESS_NODE(a_value)                                                                        \
-	if (ImGui::Button(#a_value)) {                                                                   \
-		ImGui::SetClipboardText(std::format("{0:x}", reinterpret_cast<uintptr_t>(a_value)).c_str()); \
-	}                                                                                                \
-	if (ImGui::IsItemHovered())                                                                      \
-		ImGui::SetTooltip(std::format("Copy {} Address to Clipboard", #a_value).c_str());
 
 class Menu
 {
@@ -42,13 +21,40 @@ public:
 	void Load(json& o_json);
 	void Save(json& o_json);
 
-	void Init(IDXGISwapChain* swapchain, ID3D11Device* device, ID3D11DeviceContext* context);
+	void Init();
 	void DrawSettings();
 	void DrawOverlay();
+	void DrawWeatherDetailsWindow();
 
 	void ProcessInputEvents(RE::InputEvent* const* a_events);
 	bool ShouldSwallowInput();
-	void OnFocusLost();
+
+	// Used for resetting input keys to solve alt-tab stuck issue
+	std::atomic<bool> focusChanged = false;
+	void OnFocusChanged();
+
+	// UI icon textures
+	struct UIIcon
+	{
+		ID3D11ShaderResourceView* texture = nullptr;
+		ImVec2 size = ImVec2(32.0f, 32.0f);
+
+		void Release()
+		{
+			if (texture) {
+				texture->Release();
+				texture = nullptr;
+			}
+		}
+	};
+	struct UIIcons
+	{
+		UIIcon saveSettings;
+		UIIcon loadSettings;
+		UIIcon clearCache;
+		UIIcon clearDiskCache;
+		UIIcon logo;  // New logo icon
+	} uiIcons;
 
 	struct ThemeSettings
 	{
@@ -57,7 +63,9 @@ public:
 		std::string FontPath = "Data\\Interface\\CommunityShaders\\Fonts\\Jost-Regular.ttf";
 		float FontSize = 36;
 
-		bool UseSimplePalette = true;  // simple palette or full customization
+		bool UseSimplePalette = true;    // simple palette or full customization
+		bool ShowActionIcons = true;     // whether to show action buttons as icons
+		float TooltipHoverDelay = 0.5f;  // tooltip hover delay in seconds
 		struct PaletteColors
 		{
 			ImVec4 Background{ 0.f, 0.f, 0.f, 0.5882353186607361f };
@@ -68,9 +76,18 @@ public:
 		{
 			ImVec4 Disable{ 0.5f, 0.5f, 0.5f, 1.f };
 			ImVec4 Error{ 1.f, 0.5f, 0.5f, 1.f };
+			ImVec4 Warning{ 1.0f, 0.6f, 0.2f, 1.0f };
 			ImVec4 RestartNeeded{ 0.5f, 1.f, 0.5f, 1.f };
 			ImVec4 CurrentHotkey{ 1.f, 1.f, 0.f, 1.f };
+			ImVec4 SuccessColor{ 0.0f, 1.0f, 0.0f, 1.0f };
+			ImVec4 InfoColor{ 0.0f, 0.5f, 1.0f, 1.0f };
 		} StatusPalette;
+		struct FeatureHeadingColors
+		{
+			ImVec4 ColorDefault{ 0.47f, 0.47f, 0.47f, 1.00f };  // ~120, 120, 120
+			ImVec4 ColorHovered{ 0.39f, 0.39f, 0.39f, 1.00f };  // ~100, 100, 100
+			float MinimizedFactor = 0.7f;                       // 70% of original alpha for when the header is minimized
+		} FeatureHeading;
 
 		ImGuiStyle Style = []() {
 			ImGuiStyle style = {};
@@ -151,11 +168,26 @@ public:
 		uint32_t ToggleKey = VK_END;
 		uint32_t SkipCompilationKey = VK_ESCAPE;
 		uint32_t EffectToggleKey = VK_MULTIPLY;  // toggle all effects
+		uint32_t OverlayToggleKey = VK_F10;      // Global overlay toggle key for all overlays
 		ThemeSettings Theme;
 	};
+	const ThemeSettings& GetTheme() const { return settings.Theme; }                // Provide read-only access to the Theme.
+	Settings& GetSettings() { return settings; }                                    // Provide access to settings for other components
+	winrt::com_ptr<IDXGIAdapter3> GetDXGIAdapter3() const { return dxgiAdapter3; }  // Provide access to dxgiAdapter3
+
+	void SelectFeatureMenu(const std::string& featureName);
+	static std::unordered_map<std::string, int> categoryCounts;  // Number of features in each feature category
+
+	bool overlayVisible = false;
+
+	// Static utility functions
+	static const char* KeyIdToString(uint32_t key);
 
 private:
 	Settings settings;
+
+	// Menu navigation
+	std::string pendingFeatureSelection;  // Feature to select on next frame
 
 	uint32_t priorShaderKey = VK_PRIOR;  // used for blocking shaders in debugging
 	uint32_t nextShaderKey = VK_NEXT;    // used for blocking shaders in debugging
@@ -164,15 +196,10 @@ private:
 	bool settingToggleKey = false;
 	bool settingSkipCompilationKey = false;
 	bool settingsEffectsToggle = false;
-	uint32_t testInterval = 0;     // Seconds to wait before toggling user/test settings
-	bool inTestMode = false;       // Whether we're in test mode
-	bool usingTestConfig = false;  // Whether we're using the test config
-
-	steady_clock::time_point lastTestSwitch = high_resolution_clock::now();  // Time of last test switch
+	bool settingOverlayToggleKey = false;
 
 	Menu() = default;
 	void SetupImGuiStyle() const;
-	const char* KeyIdToString(uint32_t key);
 	const ImGuiKey VirtualKeyToImGuiKey(WPARAM vkKey);
 
 	void LoadFont(std::string& fontPath, float fontSize, bool refresh);
@@ -182,6 +209,7 @@ private:
 	void DrawDisplaySettings();
 	void DrawDisableAtBootSettings();
 	void DrawFooter();
+	void BuildCategoryCounts();
 
 	class CharEvent : public RE::InputEvent
 	{

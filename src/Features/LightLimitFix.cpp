@@ -1,8 +1,8 @@
 #include "LightLimitFix.h"
+#include "InverseSquareLighting.h"
 
 #include "Shadercache.h"
 #include "State.h"
-#include "Util.h"
 
 static constexpr uint CLUSTER_MAX_LIGHTS = 256;
 static constexpr uint MAX_LIGHTS = 1024;
@@ -72,7 +72,7 @@ void LightLimitFix::DrawSettings()
 		ImGui::TreePop();
 	}
 
-	auto& shaderCache = SIE::ShaderCache::Instance();
+	auto shaderCache = globals::shaderCache;
 
 	if (ImGui::TreeNodeEx("Light Limit Visualization", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Checkbox("Enable Lights Visualisation", &settings.EnableLightsVisualisation);
@@ -93,8 +93,8 @@ void LightLimitFix::DrawSettings()
 		}
 		currentEnableLightsVisualisation = settings.EnableLightsVisualisation;
 		if (previousEnableLightsVisualisation != currentEnableLightsVisualisation) {
-			State::GetSingleton()->SetDefines(settings.EnableLightsVisualisation ? "LLFDEBUG" : "");
-			shaderCache.Clear(RE::BSShader::Type::Lighting);
+			globals::state->SetDefines(settings.EnableLightsVisualisation ? "LLFDEBUG" : "");
+			shaderCache->Clear(RE::BSShader::Type::Lighting);
 			previousEnableLightsVisualisation = currentEnableLightsVisualisation;
 		}
 
@@ -105,7 +105,7 @@ void LightLimitFix::DrawSettings()
 
 	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Text(std::format("Clustered Light Count : {}", lightCount).c_str());
-		ImGui::Text(std::format("Particle Lights Count : {}", particleLights.size()).c_str());
+		ImGui::Text(std::format("Particle Lights Count : {}", currentParticleLights.size()).c_str());
 
 		ImGui::TreePop();
 	}
@@ -128,7 +128,7 @@ void LightLimitFix::CleanupParticleLights(RE::NiNode* a_node)
 
 void LightLimitFix::SetupResources()
 {
-	auto screenSize = Util::ConvertToDynamic(State::GetSingleton()->screenSize);
+	auto screenSize = Util::ConvertToDynamic(globals::state->screenSize);
 	if (REL::Module::IsVR())
 		screenSize.x *= .5;
 	clusterSize[0] = ((uint)screenSize.x + 63) / 64;
@@ -235,7 +235,7 @@ void LightLimitFix::SetupResources()
 
 void LightLimitFix::Reset()
 {
-	for (auto& particleLight : particleLights) {
+	for (auto& particleLight : currentParticleLights) {
 		if (!particleLight.billboard) {
 			if (const auto particleSystem = static_cast<RE::NiParticleSystem*>(particleLight.node)) {
 				if (auto particleData = particleSystem->GetParticleRuntimeData().particleData.get()) {
@@ -245,8 +245,8 @@ void LightLimitFix::Reset()
 		}
 		particleLight.node->DecRefCount();
 	}
-	particleLights.clear();
-	std::swap(particleLights, queuedParticleLights);
+	currentParticleLights.clear();
+	std::swap(currentParticleLights, queuedParticleLights);
 }
 
 void LightLimitFix::LoadSettings(json& o_json)
@@ -283,9 +283,9 @@ RE::NiNode* GetParentRoomNode(RE::NiAVObject* object)
 
 void LightLimitFix::BSLightingShader_SetupGeometry_Before(RE::BSRenderPass* a_pass)
 {
-	auto& shaderCache = SIE::ShaderCache::Instance();
+	auto shaderCache = globals::shaderCache;
 
-	if (!shaderCache.IsEnabled())
+	if (!shaderCache->IsEnabled())
 		return;
 
 	strictLightDataTemp.NumStrictLights = 0;
@@ -302,13 +302,14 @@ void LightLimitFix::BSLightingShader_SetupGeometry_Before(RE::BSRenderPass* a_pa
 
 void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(RE::BSRenderPass* a_pass, DirectX::XMMATRIX&, uint32_t, uint32_t, float, Space)
 {
-	auto& shaderCache = SIE::ShaderCache::Instance();
+	auto shaderCache = globals::shaderCache;
+	auto isl = globals::features::inverseSquareLighting;
 
-	if (!shaderCache.IsEnabled())
+	if (!shaderCache->IsEnabled())
 		return;
 
 	auto accumulator = RE::BSGraphics::BSShaderAccumulator::GetCurrentAccumulator();
-	bool inWorld = accumulator->GetRuntimeData().activeShadowSceneNode == RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0];
+	bool inWorld = accumulator->GetRuntimeData().activeShadowSceneNode == globals::game::smState->shadowSceneNode[0];
 
 	strictLightDataTemp.NumStrictLights = inWorld ? 0 : (a_pass->numLights - 1);
 
@@ -320,14 +321,18 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 
 		LightData light{};
 		light.color = { runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue };
-		light.color *= runtimeData.fade;
+		light.lightFlags = std::bit_cast<LightFlags>(runtimeData.ambient.red);
+
+		if (isl->loaded) {
+			isl->ProcessLight(light, bsLight, niLight);
+		} else {
+			light.radius = runtimeData.radius.x;
+			light.color *= runtimeData.fade;
+		}
+
 		light.color *= bsLight->lodDimmer;
 
-		light.radius = runtimeData.radius.x;
-
 		SetLightPosition(light, niLight->world.translate, inWorld);
-
-		light.lightFlags = static_cast<LightFlags>(runtimeData.ambient.red);
 
 		if (bsLight->IsShadowLight()) {
 			auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
@@ -342,19 +347,16 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 
 void LightLimitFix::BSLightingShader_SetupGeometry_After(RE::BSRenderPass*)
 {
-	auto& shaderCache = SIE::ShaderCache::Instance();
+	auto shaderCache = globals::shaderCache;
+	auto context = globals::d3d::context;
+	auto smState = globals::game::smState;
 
-	if (!shaderCache.IsEnabled())
+	if (!shaderCache->IsEnabled())
 		return;
 
-	static auto& context = State::GetSingleton()->context;
 	auto accumulator = RE::BSGraphics::BSShaderAccumulator::GetCurrentAccumulator();
 
-	static bool wasEmpty = false;
-	static bool wasWorld = false;
-	static int previousRoomIndex = -1;
-
-	static auto shadowSceneNode = RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0];
+	auto shadowSceneNode = smState->shadowSceneNode[0];
 
 	const bool isEmpty = strictLightDataTemp.NumStrictLights == 0;
 	const bool isWorld = accumulator->GetRuntimeData().activeShadowSceneNode == shadowSceneNode;
@@ -367,7 +369,6 @@ void LightLimitFix::BSLightingShader_SetupGeometry_After(RE::BSRenderPass*)
 		previousRoomIndex = roomIndex;
 	}
 
-	static Util::FrameChecker frameChecker;
 	if (frameChecker.IsNewFrame()) {
 		ID3D11Buffer* buffer = { strictLightDataCB->CB() };
 		context->PSSetConstantBuffers(3, 1, &buffer);
@@ -411,9 +412,9 @@ float LightLimitFix::CalculateLuminance(CachedParticleLight& light, RE::NiPoint3
 
 void LightLimitFix::AddParticleLightLuminance(RE::NiPoint3& targetPosition, int& numHits, float& lightLevel)
 {
-	auto& shaderCache = SIE::ShaderCache::Instance();
+	auto shaderCache = globals::shaderCache;
 
-	if (!shaderCache.IsEnabled())
+	if (!shaderCache->IsEnabled())
 		return;
 
 	std::lock_guard<std::shared_mutex> lk{ cachedParticleLightsMutex };
@@ -431,7 +432,7 @@ void LightLimitFix::AddParticleLightLuminance(RE::NiPoint3& targetPosition, int&
 
 void LightLimitFix::Prepass()
 {
-	static auto& context = State::GetSingleton()->context;
+	auto context = globals::d3d::context;
 
 	UpdateLights();
 
@@ -482,6 +483,8 @@ std::string ExtractTextureStem(std::string_view a_path)
 
 LightLimitFix::ParticleLightReference LightLimitFix::GetParticleLightConfigs(RE::BSRenderPass* a_pass)
 {
+	auto particleLights = globals::features::llf::particleLights;
+
 	// see https://www.nexusmods.com/skyrimspecialedition/articles/1391
 	if (settings.EnableParticleLights) {
 		if (auto shaderProperty = netimmerse_cast<RE::BSEffectShaderProperty*>(a_pass->shaderProperty)) {
@@ -517,7 +520,7 @@ LightLimitFix::ParticleLightReference LightLimitFix::GetParticleLightConfigs(RE:
 							return { false };
 						}
 
-						auto& configs = ParticleLights::GetSingleton()->particleLightConfigs;
+						auto& configs = particleLights->particleLightConfigs;
 						auto it = configs.find(textureName);
 						if (it == configs.end()) {
 							particleLightsReferences.insert({ (RE::NiNode*)a_pass->geometry, { false } });
@@ -533,7 +536,7 @@ LightLimitFix::ParticleLightReference LightLimitFix::GetParticleLightConfigs(RE:
 								return { false };
 							}
 
-							auto& gradientConfigs = ParticleLights::GetSingleton()->particleLightGradientConfigs;
+							auto& gradientConfigs = particleLights->particleLightGradientConfigs;
 							auto itGradient = gradientConfigs.find(textureName);
 							if (itGradient == gradientConfigs.end()) {
 								particleLightsReferences.insert({ (RE::NiNode*)a_pass->geometry, { false } });
@@ -593,9 +596,9 @@ LightLimitFix::ParticleLightReference LightLimitFix::GetParticleLightConfigs(RE:
 
 bool LightLimitFix::CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t)
 {
-	auto& shaderCache = SIE::ShaderCache::Instance();
+	auto shaderCache = globals::shaderCache;
 
-	if (!shaderCache.IsEnabled())
+	if (!shaderCache->IsEnabled())
 		return true;
 
 	auto reference = GetParticleLightConfigs(a_pass);
@@ -660,13 +663,13 @@ bool LightLimitFix::AddParticleLight(RE::BSRenderPass* a_pass, ParticleLightRefe
 
 void LightLimitFix::PostPostLoad()
 {
-	ParticleLights::GetSingleton()->GetConfigs();
+	globals::features::llf::particleLights->GetConfigs();
 	Hooks::Install();
 }
 
 void LightLimitFix::DataLoaded()
 {
-	auto iMagicLightMaxCount = RE::GameSettingCollection::GetSingleton()->GetSetting("iMagicLightMaxCount");
+	auto iMagicLightMaxCount = globals::game::gameSettingCollection->GetSetting("iMagicLightMaxCount");
 	iMagicLightMaxCount->data.i = MAXINT32;
 	logger::info("[LLF] Unlocked magic light limit");
 }
@@ -699,6 +702,7 @@ void LightLimitFix::AddCachedParticleLights(eastl::vector<LightData>& lightsData
 		for (int eyeIndex = 0; eyeIndex < eyeCount; eyeIndex++)
 			light.positionVS[eyeIndex].data = DirectX::SimpleMath::Vector3::Transform(light.positionWS[eyeIndex].data, viewMatrixCached[eyeIndex]);
 
+		light.invRadius = 1.f / light.radius;
 		lightsData.push_back(light);
 
 		CachedParticleLight cachedParticleLight{};
@@ -727,13 +731,13 @@ namespace RE
 
 void LightLimitFix::UpdateLights()
 {
-	static float& cameraNear = (*(float*)(REL::RelocationID(517032, 403540).address() + 0x40));
-	static float& cameraFar = (*(float*)(REL::RelocationID(517032, 403540).address() + 0x44));
+	auto smState = globals::game::smState;
+	auto isl = globals::features::inverseSquareLighting;
 
-	lightsNear = cameraNear;
-	lightsFar = cameraFar;
+	lightsNear = *globals::game::cameraNear;
+	lightsFar = *globals::game::cameraFar;
 
-	static auto shadowSceneNode = RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0];
+	auto shadowSceneNode = smState->shadowSceneNode[0];
 
 	// Cache data since cameraData can become invalid in first-person
 
@@ -748,7 +752,7 @@ void LightLimitFix::UpdateLights()
 
 	// Process point lights
 
-	roomNodes.empty();
+	roomNodes.clear();
 
 	auto addRoom = [&](RE::NiNode* node, LightData& light) {
 		uint8_t roomIndex = 0;
@@ -769,12 +773,16 @@ void LightLimitFix::UpdateLights()
 
 					LightData light{};
 					light.color = { runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue };
-					light.color *= runtimeData.fade;
+					light.lightFlags = std::bit_cast<LightFlags>(runtimeData.ambient.red);
+
+					if (isl->loaded) {
+						isl->ProcessLight(light, bsLight, niLight);
+					} else {
+						light.radius = runtimeData.radius.x;
+						light.color *= runtimeData.fade;
+					}
+
 					light.color *= bsLight->lodDimmer;
-
-					light.radius = runtimeData.radius.x;
-
-					light.lightFlags = static_cast<LightFlags>(runtimeData.ambient.red);
 
 					if (!IsGlobalLight(bsLight)) {
 						// List of BSMultiBoundRooms affected by a light
@@ -824,7 +832,7 @@ void LightLimitFix::UpdateLights()
 
 		auto eyePositionOffset = eyePositionCached[0] - eyePositionCached[1];
 
-		for (const auto& particleLight : particleLights) {
+		for (const auto& particleLight : currentParticleLights) {
 			if (!particleLight.billboard) {
 				auto particleSystem = static_cast<RE::NiParticleSystem*>(particleLight.node);
 				if (particleSystem && particleSystem->GetParticleRuntimeData().particleData.get()) {
@@ -942,7 +950,7 @@ void LightLimitFix::UpdateLights()
 		}
 	}
 
-	static auto& context = State::GetSingleton()->context;
+	auto context = globals::d3d::context;
 
 	{
 		auto projMatrixUnjittered = Util::GetCameraData(0).projMatrixUnjittered;
@@ -1018,4 +1026,47 @@ void LightLimitFix::UpdateLights()
 
 	ID3D11UnorderedAccessView* null_uavs[3] = { nullptr };
 	context->CSSetUnorderedAccessViews(0, 3, null_uavs, nullptr);
+}
+
+void LightLimitFix::Hooks::BSLightingShader_SetupGeometry::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
+{
+	auto singleton = globals::features::lightLimitFix;
+	singleton->BSLightingShader_SetupGeometry_Before(Pass);
+	func(This, Pass, RenderFlags);
+	singleton->BSLightingShader_SetupGeometry_After(Pass);
+}
+
+void LightLimitFix::Hooks::BSEffectShader_SetupGeometry::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
+{
+	func(This, Pass, RenderFlags);
+	auto singleton = globals::features::lightLimitFix;
+	singleton->BSLightingShader_SetupGeometry_Before(Pass);
+	singleton->BSLightingShader_SetupGeometry_After(Pass);
+};
+
+void LightLimitFix::Hooks::BSWaterShader_SetupGeometry::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
+{
+	func(This, Pass, RenderFlags);
+	auto singleton = globals::features::lightLimitFix;
+	singleton->BSLightingShader_SetupGeometry_Before(Pass);
+	singleton->BSLightingShader_SetupGeometry_After(Pass);
+};
+
+float LightLimitFix::Hooks::AIProcess_CalculateLightValue_GetLuminance::thunk(RE::ShadowSceneNode* shadowSceneNode, RE::NiPoint3& targetPosition, int& numHits, float& sunLightLevel, float& lightLevel, RE::NiLight& refLight, int32_t shadowBitMask)
+{
+	auto ret = func(shadowSceneNode, targetPosition, numHits, sunLightLevel, lightLevel, refLight, shadowBitMask);
+	globals::features::lightLimitFix->AddParticleLightLuminance(targetPosition, numHits, ret);
+	return ret;
+}
+
+void LightLimitFix::Hooks::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights::thunk(RE::BSGraphics::PixelShader* PixelShader, RE::BSRenderPass* Pass, DirectX::XMMATRIX& Transform, uint32_t LightCount, uint32_t ShadowLightCount, float WorldScale, Space RenderSpace)
+{
+	globals::features::lightLimitFix->BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(Pass, Transform, LightCount, ShadowLightCount, WorldScale, RenderSpace);
+	func(PixelShader, Pass, Transform, LightCount, ShadowLightCount, WorldScale, RenderSpace);
+}
+
+void LightLimitFix::Hooks::NiNode_Destroy::thunk(RE::NiNode* This)
+{
+	globals::features::lightLimitFix->CleanupParticleLights(This);
+	func(This);
 }

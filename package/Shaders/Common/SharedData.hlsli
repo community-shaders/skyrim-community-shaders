@@ -7,7 +7,7 @@
 namespace SharedData
 {
 
-#if defined(PSHADER) || defined(COMPUTESHADER)
+#if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
 	cbuffer SharedData : register(b5)
 	{
 		float4 WaterData[25];
@@ -21,6 +21,8 @@ namespace SharedData
 		uint FrameCountAlwaysActive;
 		bool InInterior;  // If the area lacks a directional shadow light e.g. the sun or moon
 		bool InMapMenu;   // If the world/local map is open (note that the renderer is still deferred here)
+		bool HideSky;     // HideSky flag in WorldSpace, e.g. Blackreach
+		float MipBias;    // Offset to mip level for TAA sharpness
 	};
 
 	struct GrassLightingSettings
@@ -42,7 +44,8 @@ namespace SharedData
 		bool EnableHeightBlending;
 		bool EnableShadows;
 		bool ExtendShadows;
-		float2 pad0;
+		bool EnableParallaxWarpingFix;
+		float1 pad0;
 	};
 
 	struct CubemapCreatorSettings
@@ -66,7 +69,7 @@ namespace SharedData
 		uint EnableContactShadows;
 		uint EnableLightsVisualisation;
 		uint LightsVisualisationMode;
-		float LightsFar;
+		float pad0;
 		uint4 ClusterSize;
 	};
 
@@ -96,22 +99,23 @@ namespace SharedData
 
 		bool EnableSplashes;
 		bool EnableRipples;
+        uint EnableVanillaRipples;
+        float RaindropFxRange;
+
 		float RaindropGridSizeRcp;
 		float RaindropIntervalRcp;
-
 		float RaindropChance;
 		float SplashesLifetime;
+
 		float SplashesStrength;
 		float SplashesMinRadius;
-
 		float SplashesMaxRadius;
 		float RippleStrength;
+
 		float RippleRadius;
 		float RippleBreadth;
-
 		float RippleLifetimeRcp;
-
-		float3 pad0;
+		float pad0;
 	};
 
 	struct SkylightingSettings
@@ -128,6 +132,67 @@ namespace SharedData
 		uint2 pad0;
 	};
 
+	struct CloudShadowsSettings
+	{
+		float Opacity;
+		float3 pad0;
+	};
+
+	struct LODBlendingSettings
+	{
+		float LODTerrainBrightness;
+		float LODObjectBrightness;
+		float LODObjectSnowBrightness;
+		bool DisableTerrainVertexColors;
+	};
+
+	struct HairSpecularSettings
+	{
+		uint Enabled;
+		float HairGlossiness;
+		float SpecularMult;
+		float DiffuseMult;
+		uint EnableTangentShift;
+		float PrimaryTangentShift;
+		float SecondaryTangentShift;
+		float HairSaturation;
+		float SpecularIndirectMult;
+		float DiffuseIndirectMult;
+		float BaseColorMult;
+		float Transmission;
+		uint EnableSelfShadow;
+		float SelfShadowStrength;
+		float SelfShadowExponent;
+		float SelfShadowScale;
+		uint HairMode;  // 0: Kajiya-Kay, 1: Marschner
+		uint3 pad;
+	};
+
+	struct TerrainVariationSettings
+	{
+		uint enableTilingFix;
+		uint enableLODTerrainTilingFix;
+		float2 pad0;
+	};
+
+	struct IBLSettings
+	{
+		uint EnableDiffuseIBL;
+		float DiffuseIBLScale;
+		float DALCAmount;
+		float IBLSaturation;
+		uint SampleUnderHorizonFromDynCube;
+		uint3 pad;
+	};
+
+	struct ExtendedTranslucencySettings
+	{
+		uint MaterialModel;  // [0,1,2,3] The MaterialModel
+		float Reduction;     // [0, 1.0] The factor to reduce the transparency to matain the average transparency [0,1]
+		float Softness;      // [0, 2.0] The soft remap upper limit [0,2]
+		float Strength;      // [0, 1.0] The inverse blend weight of the effect
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -137,6 +202,12 @@ namespace SharedData
 		LightLimitFixSettings lightLimitFixSettings;
 		WetnessEffectsSettings wetnessEffectsSettings;
 		SkylightingSettings skylightingSettings;
+		CloudShadowsSettings cloudShadowsSettings;
+		LODBlendingSettings lodBlendingSettings;
+		HairSpecularSettings hairSpecularSettings;
+		TerrainVariationSettings terrainVariationSettings;
+		IBLSettings iblSettings;
+		ExtendedTranslucencySettings extendedTranslucencySettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);

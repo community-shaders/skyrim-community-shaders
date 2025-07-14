@@ -1,7 +1,5 @@
 #pragma once
 
-#include "Feature.h"
-
 struct ExtendedMaterials : Feature
 {
 	static ExtendedMaterials* GetSingleton()
@@ -13,6 +11,20 @@ struct ExtendedMaterials : Feature
 	virtual inline std::string GetName() override { return "Extended Materials"; }
 	virtual inline std::string GetShortName() override { return "ExtendedMaterials"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "EXTENDED_MATERIALS"; }
+	virtual std::string_view GetCategory() const override { return "Landscape & Textures"; }
+
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Extended Materials adds advanced material effects including parallax occlusion mapping and complex material blending.\n"
+			"This feature enhances surface detail and depth perception for more realistic textures.",
+			{ "Parallax occlusion mapping for depth",
+				"Complex material blending",
+				"Terrain heightmap support",
+				"Parallax shadows",
+				"Height-based texture blending" }
+		};
+	}
 
 	bool HasShaderDefine(RE::BSShader::Type shaderType) override;
 
@@ -26,8 +38,9 @@ struct ExtendedMaterials : Feature
 
 		uint EnableShadows = 1;
 		uint ExtendShadows = 0;
+		uint EnableParallaxWarpingFix = 1;
 
-		float pad[2];
+		float pad[1];
 	};
 
 	Settings settings;

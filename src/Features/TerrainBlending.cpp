@@ -1,7 +1,8 @@
 #include "TerrainBlending.h"
 
+#include "Deferred.h"
+#include "ShaderCache.h"
 #include "State.h"
-#include "Util.h"
 
 ID3D11VertexShader* TerrainBlending::GetTerrainVertexShader()
 {
@@ -30,19 +31,10 @@ ID3D11ComputeShader* TerrainBlending::GetDepthBlendShader()
 	return depthBlendShader;
 }
 
-ID3D11ComputeShader* TerrainBlending::GetDepthFixShader()
-{
-	if (!depthFixShader) {
-		logger::debug("Compiling DepthFix.hlsl");
-		depthFixShader = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\TerrainBlending\\DepthFix.hlsl", {}, "cs_5_0");
-	}
-	return depthFixShader;
-}
-
 void TerrainBlending::SetupResources()
 {
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-	auto& device = State::GetSingleton()->device;
+	auto renderer = globals::game::renderer;
+	auto device = globals::d3d::device;
 
 	{
 		auto& mainDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
@@ -61,56 +53,31 @@ void TerrainBlending::SetupResources()
 	}
 
 	{
-		auto& mainDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
-
-		D3D11_TEXTURE2D_DESC texDesc{};
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
-
-		mainDepth.texture->GetDesc(&texDesc);
-		mainDepth.depthSRV->GetDesc(&srvDesc);
-		mainDepth.views[0]->GetDesc(&dsvDesc);
-
-		terrainDepthTexture = new Texture2D(texDesc);
-		terrainDepthTexture->CreateSRV(srvDesc);
-		terrainDepthTexture->CreateDSV(dsvDesc);
-	}
-
-	{
 		auto main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
 		D3D11_TEXTURE2D_DESC texDesc{};
 		main.texture->GetDesc(&texDesc);
 		texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+
 		blendedDepthTexture = new Texture2D(texDesc);
-		terrainOffsetTexture = new Texture2D(texDesc);
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		main.SRV->GetDesc(&srvDesc);
 		srvDesc.Format = texDesc.Format;
 		blendedDepthTexture->CreateSRV(srvDesc);
-		terrainOffsetTexture->CreateSRV(srvDesc);
-
-		D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
-		main.RTV->GetDesc(&rtvDesc);
-		rtvDesc.Format = texDesc.Format;
-		blendedDepthTexture->CreateRTV(rtvDesc);
-		terrainOffsetTexture->CreateRTV(rtvDesc);
 
 		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 		main.UAV->GetDesc(&uavDesc);
 		uavDesc.Format = texDesc.Format;
 		blendedDepthTexture->CreateUAV(uavDesc);
-		terrainOffsetTexture->CreateUAV(uavDesc);
 
 		texDesc.Format = DXGI_FORMAT_R16_UNORM;
 		srvDesc.Format = texDesc.Format;
-		rtvDesc.Format = texDesc.Format;
 		uavDesc.Format = texDesc.Format;
 
 		blendedDepthTexture16 = new Texture2D(texDesc);
 		blendedDepthTexture16->CreateSRV(srvDesc);
-		blendedDepthTexture16->CreateRTV(rtvDesc);
 		blendedDepthTexture16->CreateUAV(uavDesc);
 
 		auto& mainDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
@@ -135,21 +102,17 @@ void TerrainBlending::PostPostLoad()
 	Hooks::Install();
 }
 
-struct DepthStates
+void TerrainBlending::DataLoaded()
 {
-	ID3D11DepthStencilState* a[6][40];
-};
-
-struct BlendStates
-{
-	ID3D11BlendState* a[7][2][13][2];
-};
+	auto bEnableLandFade = RE::GetINISetting("bEnableLandFade:Display");
+	bEnableLandFade->data.b = false;
+}
 
 void TerrainBlending::TerrainShaderHacks()
 {
 	if (renderTerrainDepth) {
-		auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-		auto& context = State::GetSingleton()->context;
+		auto renderer = globals::game::renderer;
+		auto context = globals::d3d::context;
 		if (renderAltTerrain) {
 			auto dsv = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].views[0];
 			context->OMSetRenderTargets(0, nullptr, dsv);
@@ -157,59 +120,17 @@ void TerrainBlending::TerrainShaderHacks()
 		} else {
 			auto dsv = terrainDepth.views[0];
 			context->OMSetRenderTargets(0, nullptr, dsv);
-			auto shadowState = RE::BSGraphics::RendererShadowState::GetSingleton();
+			auto shadowState = globals::game::shadowState;
 			GET_INSTANCE_MEMBER(currentVertexShader, shadowState)
 			context->VSSetShader((ID3D11VertexShader*)currentVertexShader->shader, NULL, NULL);
 		}
 		renderAltTerrain = !renderAltTerrain;
 	}
-
-	if (renderTerrainWorld)
-		OverrideTerrainWorld();
-}
-
-void TerrainBlending::OverrideTerrainWorld()
-{
-	auto& context = State::GetSingleton()->context;
-
-	auto state = RE::BSGraphics::RendererShadowState::GetSingleton();
-
-	static BlendStates* blendStates = (BlendStates*)REL::RelocationID(524749, 411364).address();
-
-	GET_INSTANCE_MEMBER(alphaBlendAlphaToCoverage, state)
-	GET_INSTANCE_MEMBER(alphaBlendModeExtra, state)
-	GET_INSTANCE_MEMBER(alphaBlendWriteMode, state)
-
-	// Enable alpha blending
-	context->OMSetBlendState(blendStates->a[1][alphaBlendAlphaToCoverage][alphaBlendWriteMode][alphaBlendModeExtra], nullptr, 0xFFFFFFFF);
-
-	//// Enable rendering for depth below the surface
-	context->OMSetDepthStencilState(terrainDepthStencilState, 0xFF);
-
-	// Used to get the distance of the surface to the lowest depth
-	auto view = terrainOffsetTexture->srv.get();
-	context->PSSetShaderResources(55, 1, &view);
-}
-
-void TerrainBlending::OverrideTerrainDepth()
-{
-	auto& context = State::GetSingleton()->context;
-
-	auto rtv = blendedDepthTexture->rtv.get();
-	FLOAT clearColor[4]{ 1, 0, 0, 0 };
-	context->ClearRenderTargetView(rtv, clearColor);
-
-	auto dsv = terrainDepth.views[0];
-	context->ClearDepthStencilView(dsv, D3D11_CLEAR_DEPTH, 1.0f, 0u);
 }
 
 void TerrainBlending::ResetDepth()
 {
-	auto& context = State::GetSingleton()->context;
-
-	auto rtv = blendedDepthTexture->rtv.get();
-	FLOAT clearColor[4]{ 1, 0, 0, 0 };
-	context->ClearRenderTargetView(rtv, clearColor);
+	auto context = globals::d3d::context;
 
 	auto dsv = terrainDepth.views[0];
 	context->ClearDepthStencilView(dsv, D3D11_CLEAR_DEPTH, 1.0f, 0u);
@@ -217,24 +138,18 @@ void TerrainBlending::ResetDepth()
 
 void TerrainBlending::ResetTerrainDepth()
 {
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-	auto& context = State::GetSingleton()->context;
+	auto context = globals::d3d::context;
 
-	auto& mainDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+	auto stateUpdateFlags = globals::game::stateUpdateFlags;
+	stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);
 
-	auto shadowState = RE::BSGraphics::RendererShadowState::GetSingleton();
-	GET_INSTANCE_MEMBER(stateUpdateFlags, shadowState)
-	stateUpdateFlags.set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);
-
-	GET_INSTANCE_MEMBER(currentVertexShader, shadowState)
+	auto currentVertexShader = *globals::game::currentVertexShader;
 	context->VSSetShader((ID3D11VertexShader*)currentVertexShader->shader, NULL, NULL);
-
-	context->CopyResource(terrainDepthTexture->resource.get(), mainDepth.texture);
 }
 
 void TerrainBlending::BlendPrepassDepths()
 {
-	auto& context = State::GetSingleton()->context;
+	auto context = globals::d3d::context;
 	context->OMSetRenderTargets(0, nullptr, nullptr);
 
 	auto dispatchCount = Util::GetScreenDispatchCount();
@@ -251,18 +166,6 @@ void TerrainBlending::BlendPrepassDepths()
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 	}
 
-	{
-		ID3D11ShaderResourceView* views[2] = { depthSRVBackup, terrainDepthTexture->srv.get() };
-		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
-
-		ID3D11UnorderedAccessView* uavs[2] = { terrainOffsetTexture->uav.get(), nullptr };
-		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
-
-		context->CSSetShader(GetDepthFixShader(), nullptr, 0);
-
-		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
-	}
-
 	ID3D11ShaderResourceView* views[2] = { nullptr, nullptr };
 	context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
@@ -272,17 +175,13 @@ void TerrainBlending::BlendPrepassDepths()
 	ID3D11ComputeShader* shader = nullptr;
 	context->CSSetShader(shader, nullptr, 0);
 
-	auto state = RE::BSGraphics::RendererShadowState::GetSingleton();
-	GET_INSTANCE_MEMBER(stateUpdateFlags, state)
-	stateUpdateFlags.set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);
-}
+	auto stateUpdateFlags = globals::game::stateUpdateFlags;
+	stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);
 
-void TerrainBlending::ResetTerrainWorld()
-{
-	auto state = RE::BSGraphics::RendererShadowState::GetSingleton();
-	GET_INSTANCE_MEMBER(stateUpdateFlags, state)
-	stateUpdateFlags.set(RE::BSGraphics::ShaderFlags::DIRTY_ALPHA_BLEND);
-	stateUpdateFlags.set(RE::BSGraphics::ShaderFlags::DIRTY_DEPTH_MODE);
+	auto renderer = globals::game::renderer;
+	auto& mainDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+
+	context->CopyResource(terrainDepth.texture, mainDepth.texture);
 }
 
 void TerrainBlending::ClearShaderCache()
@@ -299,8 +198,132 @@ void TerrainBlending::ClearShaderCache()
 		depthBlendShader->Release();
 		depthBlendShader = nullptr;
 	}
-	if (depthFixShader) {
-		depthFixShader->Release();
-		depthFixShader = nullptr;
+}
+
+void TerrainBlending::Hooks::Main_RenderDepth::thunk(bool a1, bool a2)
+{
+	auto singleton = globals::features::terrainBlending;
+	auto shaderCache = globals::shaderCache;
+	auto renderer = globals::game::renderer;
+
+	auto& mainDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+	auto& zPrepassCopy = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+
+	singleton->averageEyePosition = Util::GetAverageEyePosition();
+
+	if (shaderCache->IsEnabled()) {
+		mainDepth.depthSRV = singleton->blendedDepthTexture->srv.get();
+		zPrepassCopy.depthSRV = singleton->blendedDepthTexture->srv.get();
+
+		singleton->renderDepth = true;
+		singleton->ResetDepth();
+
+		func(a1, a2);
+
+		singleton->renderDepth = false;
+
+		if (singleton->renderTerrainDepth) {
+			singleton->renderTerrainDepth = false;
+			singleton->ResetTerrainDepth();
+		}
+
+		singleton->BlendPrepassDepths();
+	} else {
+		mainDepth.depthSRV = singleton->depthSRVBackup;
+		zPrepassCopy.depthSRV = singleton->prepassSRVBackup;
+
+		func(a1, a2);
 	}
+}
+
+void TerrainBlending::Hooks::BSBatchRenderer__RenderPassImmediately::thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags)
+{
+	auto singleton = globals::features::terrainBlending;
+	auto shaderCache = globals::shaderCache;
+
+	if (shaderCache->IsEnabled()) {
+		if (singleton->renderDepth) {
+			// Entering or exiting terrain depth section
+			bool inTerrain = a_pass->shaderProperty && a_pass->shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kMultiTextureLandscape);
+
+			if (inTerrain) {
+				if ((a_pass->geometry->worldBound.center.GetDistance(singleton->averageEyePosition) - a_pass->geometry->worldBound.radius) > 2048.0f) {
+					inTerrain = false;
+				}
+			}
+
+			if (singleton->renderTerrainDepth != inTerrain) {
+				if (!inTerrain)
+					singleton->ResetTerrainDepth();
+				singleton->renderTerrainDepth = inTerrain;
+			}
+
+			if (inTerrain)
+				func(a_pass, a_technique, a_alphaTest, a_renderFlags);  // Run terrain twice
+		} else if (globals::state->inWorld) {
+			if (auto shaderProperty = a_pass->shaderProperty) {
+				if (a_pass->shader->shaderType.get() == RE::BSShader::Type::Lighting) {
+					if (shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kMultiTextureLandscape)) {
+						RenderPass call{ a_pass, a_technique, a_alphaTest, a_renderFlags };
+						singleton->terrainRenderPasses.push_back(call);
+						return;
+					}
+
+					// Detect meshes which should not get terrain blending using an unused flag (kNoTransparencyMultiSample)
+					if (shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kNoTransparencyMultiSample)) {
+						RenderPass call{ a_pass, a_technique, a_alphaTest, a_renderFlags };
+						singleton->renderPasses.push_back(call);
+						return;
+					}
+				}
+			}
+		}
+	}
+	func(a_pass, a_technique, a_alphaTest, a_renderFlags);
+}
+
+void TerrainBlending::RenderTerrainBlendingPasses()
+{
+	auto renderer = globals::game::renderer;
+	auto context = globals::d3d::context;
+	auto shadowState = globals::game::shadowState;
+	auto stateUpdateFlags = globals::game::stateUpdateFlags;
+
+	// Used to get the distance of the surface to the lowest depth
+	auto view = terrainDepth.depthSRV;
+	context->PSSetShaderResources(55, 1, &view);
+
+	if (!terrainRenderPasses.empty() || !renderPasses.empty()) {
+		GET_INSTANCE_MEMBER(alphaBlendMode, shadowState)
+		GET_INSTANCE_MEMBER(alphaBlendWriteMode, shadowState)
+		GET_INSTANCE_MEMBER(depthStencilDepthMode, shadowState)
+
+		// Reset alpha write and enable alpha blending
+		alphaBlendWriteMode = 1;
+		alphaBlendMode = 1;
+		stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_ALPHA_BLEND);
+
+		// Enable rendering for depth below the surface
+		context->OMSetDepthStencilState(terrainDepthStencilState, 0xFF);
+
+		for (auto& renderPass : terrainRenderPasses)
+			Hooks::BSBatchRenderer__RenderPassImmediately::func(renderPass.a_pass, renderPass.a_technique, renderPass.a_alphaTest, renderPass.a_renderFlags);
+
+		// Reset alpha blending
+		alphaBlendMode = 0;
+		stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_ALPHA_BLEND);
+
+		// Reset depth testing
+		depthStencilDepthMode = RE::BSGraphics::DepthStencilDepthMode::kTestEqual;
+		stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_DEPTH_MODE);
+
+		for (auto& renderPass : renderPasses)
+			Hooks::BSBatchRenderer__RenderPassImmediately::func(renderPass.a_pass, renderPass.a_technique, renderPass.a_alphaTest, renderPass.a_renderFlags);
+
+		terrainRenderPasses.clear();
+		renderPasses.clear();
+	}
+
+	auto& mainDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+	mainDepth.depthSRV = depthSRVBackup;
 }

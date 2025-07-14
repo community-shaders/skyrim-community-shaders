@@ -147,7 +147,7 @@ void BSLightingShaderMaterialPBR::ApplyMaterialObjectData(const TruePBR::PBRMate
 
 void BSLightingShaderMaterialPBR::OnLoadTextureSet(std::uint64_t arg1, RE::BSTextureSet* inTextureSet)
 {
-	const auto& stateData = RE::BSGraphics::State::GetSingleton()->GetRuntimeData();
+	const auto& stateData = globals::game::graphicsState->GetRuntimeData();
 
 	if (diffuseTexture == nullptr || diffuseTexture == stateData.defaultTextureNormalMap) {
 		BSLightingShaderMaterialBase::OnLoadTextureSet(arg1, inTextureSet);
@@ -168,12 +168,12 @@ void BSLightingShaderMaterialPBR::OnLoadTextureSet(std::uint64_t arg1, RE::BSTex
 			textureSet->SetTexture(FeaturesTexture0, featuresTexture0);
 			textureSet->SetTexture(FeaturesTexture1, featuresTexture1);
 
-			auto* bgsTextureSet = TruePBR::GetSingleton()->currentTextureSet;
+			auto* bgsTextureSet = globals::truePBR->currentTextureSet;
 			if (bgsTextureSet == nullptr) {
 				bgsTextureSet = skyrim_cast<RE::BGSTextureSet*>(inTextureSet);
 			}
 			if (bgsTextureSet) {
-				if (auto* textureSetData = TruePBR::GetSingleton()->GetPBRTextureSetData(bgsTextureSet)) {
+				if (auto* textureSetData = globals::truePBR->GetPBRTextureSetData(bgsTextureSet)) {
 					ApplyTextureSetData(*textureSetData);
 					All[this].textureSetData = textureSetData;
 				}
@@ -200,7 +200,7 @@ void BSLightingShaderMaterialPBR::ClearTextures()
 void BSLightingShaderMaterialPBR::ReceiveValuesFromRootMaterial(bool skinned, bool rimLighting, bool softLighting, bool backLighting, bool MSN)
 {
 	BSLightingShaderMaterialBase::ReceiveValuesFromRootMaterial(skinned, rimLighting, softLighting, backLighting, MSN);
-	const auto& stateData = RE::BSGraphics::State::GetSingleton()->GetRuntimeData();
+	const auto& stateData = globals::game::graphicsState->GetRuntimeData();
 	if (rmaosTexture == nullptr) {
 		rmaosTexture = stateData.defaultTextureWhite;
 	}

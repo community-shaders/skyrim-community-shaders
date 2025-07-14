@@ -27,7 +27,7 @@ cbuffer PerFrameSSS : register(b1)
 #if defined(HORIZONTAL)
 
 	float sssAmount = MaskTexture[DTid.xy].x;
-	bool humanProfile = MaskTexture[DTid.xy].y == sssAmount;
+	bool humanProfile = MaskTexture[DTid.xy].y > 0.0;
 
 	float4 color = SSSSBlurCS(DTid.xy, texCoord, float2(1.0, 0.0), sssAmount, humanProfile);
 	SSSRW[DTid.xy] = max(0, color);
@@ -35,11 +35,14 @@ cbuffer PerFrameSSS : register(b1)
 #else
 
 	float sssAmount = MaskTexture[DTid.xy].x;
-	bool humanProfile = MaskTexture[DTid.xy].y == sssAmount;
 
-	float4 color = SSSSBlurCS(DTid.xy, texCoord, float2(0.0, 1.0), sssAmount, humanProfile);
-	color.rgb = Color::LinearToGamma(color.rgb);
-	SSSRW[DTid.xy] = float4(color.rgb, 1.0);
+	if (sssAmount > 0.0) {
+		bool humanProfile = MaskTexture[DTid.xy].y > 0.0;
+
+		float4 color = SSSSBlurCS(DTid.xy, texCoord, float2(0.0, 1.0), sssAmount, humanProfile);
+		color.rgb = Color::LinearToGamma(color.rgb);
+		SSSRW[DTid.xy] = float4(color.rgb, 1.0);
+	}
 
 #endif
 }

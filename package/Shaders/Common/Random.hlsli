@@ -16,6 +16,25 @@ namespace Random
 		{ 0.1250, 0.0000 }
 	};
 
+	const static float2 PoissonSampleOffsets16[] = {
+		{ -0.39721655431143005f, 0.8056832047758435f },
+		{ 0.5039282018939948f, 0.8175656806923035f },
+		{ -0.14008842764914875f, 0.5239821992425406f },
+		{ -0.9385950332618932f, 0.3214309237575714f },
+		{ 0.25282140190834174f, 0.37924512167905416f },
+		{ 0.9223936032296853f, 0.332539962017578f },
+		{ -0.5496451570034276f, 0.1790707762170039f },
+		{ -0.37302426066908373f, -0.13877390665733164f },
+		{ 0.03579198121130009f, -0.15676850000512513f },
+		{ 0.4919267941196914f, -0.23310683759624068f },
+		{ -0.8035590829710795f, -0.29468514494873416f },
+		{ 0.8535425755478637f, -0.27933954067261685f },
+		{ -0.34182152498958196f, -0.6383963127313933f },
+		{ 0.0426828706429914f, -0.554272463115887f },
+		{ 0.47470719643897386f, -0.7164602403811255f },
+		{ 0.07000602455182418f, -0.9868660954557704f },
+	};
+
 	///////////////////////////////////////////////////////////
 	// WHITE-LIKE HASHES
 	///////////////////////////////////////////////////////////
@@ -83,10 +102,11 @@ namespace Random
 		return fmix(h);
 	}
 
-	uint pcg(uint v)
+	uint pcg(inout uint state)
 	{
-		uint state = v * 747796405u + 2891336453u;
-		uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+		uint prevState = state;
+		state = state * 747796405u + 2891336453u;
+		uint word = ((prevState >> ((prevState >> 28u) + 4u)) ^ prevState) * 277803737u;
 		return (word >> 22u) ^ word;
 	}
 
@@ -130,6 +150,64 @@ namespace Random
 		uint n = 1103515245U * ((q.x) ^ (q.y >> 3U));
 
 		return n;
+	}
+
+	float f1(inout uint state, out uint randBits)
+	{
+		randBits = pcg(state);
+		uint bits = randBits & 0x007FFFFFu | 0x3F800000u;
+		return asfloat(bits) - 1.0f;
+	}
+
+	float f1(inout uint state)
+	{
+		uint randBits;
+		return f1(state, randBits);
+	}
+
+	float2 f2(inout uint state, out uint randBits)
+	{
+		randBits = pcg(state);
+		uint bits0 = randBits & 0x007FFFFFu | 0x3F800000u;
+		uint bits1 = randBits >> 9 | 0x3F800000u;
+		return float2(asfloat(bits0), asfloat(bits1)) - 1.0f;
+	}
+
+	float2 f2(inout uint state)
+	{
+		uint randBits;
+		return f2(state, randBits);
+	}
+
+	float3 f3(inout uint state, out uint randBits)
+	{
+		randBits = pcg(state);
+		uint bits0 = randBits & 0x007FFFFFu | 0x3F800000u;
+		uint bits1 = (randBits << 22 | randBits >> 10) & 0x007FFFFFu | 0x3F800000u;
+		uint bits2 = (randBits << 11 | randBits >> 21) & 0x007FFFFFu | 0x3F800000u;
+		return float3(asfloat(bits0), asfloat(bits1), asfloat(bits2)) - 1.0f;
+	}
+
+	float3 f3(inout uint state)
+	{
+		uint randBits;
+		return f3(state, randBits);
+	}
+
+	float4 f4(inout uint state, out uint randBits)
+	{
+		randBits = pcg(state);
+		uint bits0 = randBits & 0x007FFFFFu | 0x3F800000u;
+		uint bits1 = (randBits << 24 | randBits >> 8) & 0x007FFFFFu | 0x3F800000u;
+		uint bits2 = (randBits << 16 | randBits >> 16) & 0x007FFFFFu | 0x3F800000u;
+		uint bits3 = (randBits << 8 | randBits >> 24) & 0x007FFFFFu | 0x3F800000u;
+		return float4(asfloat(bits0), asfloat(bits1), asfloat(bits2), asfloat(bits3)) - 1.0f;
+	}
+
+	float4 f4(inout uint state)
+	{
+		uint randBits;
+		return f4(state, randBits);
 	}
 
 	///////////////////////////////////////////////////////////

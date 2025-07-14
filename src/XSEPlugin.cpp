@@ -1,8 +1,8 @@
-#include "Hooks.h"
-
+#include "DX12SwapChain.h"
 #include "Deferred.h"
-#include "Feature.h"
 #include "FrameAnnotations.h"
+#include "Globals.h"
+#include "Hooks.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -79,28 +79,29 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 	case SKSE::MessagingInterface::kPostPostLoad:
 		{
 			if (errors.empty()) {
-				auto state = State::GetSingleton();
+				auto state = globals::state;
 				state->PostPostLoad();  // state should load first so basic information is populated
 				Deferred::Hooks::Install();
-				TruePBR::GetSingleton()->PostPostLoad();
-				if (!state->IsFeatureDisabled("Upscaling")) {
-					Upscaling::InstallHooks();
-				}
+				globals::truePBR->PostPostLoad();
+				Upscaling::InstallHooks();
 				Hooks::Install();
+				EngineFix::InstallOnPostPostLoadFixes();
 				FrameAnnotations::OnPostPostLoad();
 
-				auto& shaderCache = SIE::ShaderCache::Instance();
+				auto shaderCache = globals::shaderCache;
 
-				shaderCache.ValidateDiskCache();
-
-				if (shaderCache.UseFileWatcher())
-					shaderCache.StartFileWatcher();
-
+				// Run feature PostPostLoad() first so features can disable themselves if needed
 				for (auto* feature : Feature::GetFeatureList()) {
 					if (feature->loaded) {
 						feature->PostPostLoad();
 					}
 				}
+
+				// Now validate disk cache after features have had a chance to modify their state
+				shaderCache->ValidateDiskCache();
+
+				if (shaderCache->UseFileWatcher())
+					shaderCache->StartFileWatcher();
 			}
 
 			break;
@@ -113,16 +114,18 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 			}
 
 			if (errors.empty()) {
+				globals::OnDataLoaded();
+				EngineFix::InstallOnDataLoadedFixes();
 				FrameAnnotations::OnDataLoaded();
 
-				auto& shaderCache = SIE::ShaderCache::Instance();
-				shaderCache.menuLoaded = true;
-				while (shaderCache.IsCompiling() && !shaderCache.backgroundCompilation) {
+				auto shaderCache = globals::shaderCache;
+				shaderCache->menuLoaded = true;
+				while (shaderCache->IsCompiling() && !shaderCache->backgroundCompilation) {
 					std::this_thread::sleep_for(100ms);
 				}
 
-				if (shaderCache.IsDiskCache()) {
-					shaderCache.WriteDiskCacheInfo();
+				if (shaderCache->IsDiskCache()) {
+					shaderCache->WriteDiskCacheInfo();
 				}
 
 				SKSE::Translation::ParseTranslation("CommunityShaders");
@@ -132,7 +135,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 					RE::GetINISetting("bIBLFEnable:Display")->data.b = false;
 				}
 
-				TruePBR::GetSingleton()->DataLoaded();
+				globals::truePBR->DataLoaded();
 				for (auto* feature : Feature::GetFeatureList()) {
 					if (feature->loaded) {
 						feature->DataLoaded();
@@ -153,7 +156,7 @@ bool Load()
 	}
 
 	if (REL::Module::IsVR()) {
-		REL::IDDatabase::get().IsVRAddressLibraryAtLeastVersion("0.160.0", true);
+		REL::IDDatabase::get().IsVRAddressLibraryAtLeastVersion("0.181.0", true);
 	}
 
 	auto privateProfileRedirectorVersion = Util::GetDllVersion(L"Data/SKSE/Plugins/PrivateProfileRedirector.dll");
@@ -164,7 +167,10 @@ bool Load()
 	auto messaging = SKSE::GetMessagingInterface();
 	messaging->RegisterListener("SKSE", MessageHandler);
 
-	auto state = State::GetSingleton();
+	globals::OnInit();
+	globals::ReInit();
+
+	auto state = globals::state;
 	state->Load();
 	auto log = spdlog::default_logger();
 	log->set_level(state->GetLogLevel());

@@ -1,12 +1,12 @@
 #pragma once
 
-#include "Buffer.h"
-#include "Feature.h"
-
 #define SSSS_N_SAMPLES 21
 
 struct SubsurfaceScattering : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "114114";
+
 public:
 	static SubsurfaceScattering* GetSingleton()
 	{
@@ -25,11 +25,14 @@ public:
 	struct Settings
 	{
 		uint EnableCharacterLighting = false;
-		DiffusionProfile BaseProfile{ 1.0f, 2.0f, { 0.48f, 0.41f, 0.28f }, { 0.56f, 0.56f, 0.56f } };
-		DiffusionProfile HumanProfile{ 1.0f, 2.0f, { 0.48f, 0.41f, 0.28f }, { 1.0f, 0.37f, 0.3f } };
+		float CharacterLightingStrength = 1.0f;
+		DiffusionProfile BaseProfile{ 0.5f, 1.0f, { 0.48f, 0.41f, 0.28f }, { 0.56f, 0.56f, 0.56f } };
+		DiffusionProfile HumanProfile{ 1.0f, 1.0f, { 0.48f, 0.41f, 0.28f }, { 1.0f, 0.37f, 0.3f } };
 	};
 
 	Settings settings;
+
+	float CharacterLightingStrengthOriginal = -1.0f;
 
 	struct alignas(16) Kernel
 	{
@@ -57,10 +60,26 @@ public:
 
 	ID3D11ComputeShader* horizontalSSBlur = nullptr;
 	ID3D11ComputeShader* verticalSSBlur = nullptr;
+	RE::BGSKeyword* isBeastRaceKeyword = nullptr;
 
 	virtual inline std::string GetName() override { return "Subsurface Scattering"; }
 	virtual inline std::string GetShortName() override { return "SubsurfaceScattering"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "SSS"; }
+	virtual std::string_view GetCategory() const override { return "Characters"; }
+
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Subsurface Scattering simulates light penetration through translucent materials like skin, creating more realistic character lighting.\n"
+			"This technique makes organic materials appear more lifelike and natural.",
+			{ "Realistic skin lighting",
+				"Light penetration simulation",
+				"Separate profiles for different materials",
+				"Enhanced character appearance",
+				"Configurable scattering properties" }
+		};
+	}
 
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
@@ -83,6 +102,7 @@ public:
 	ID3D11ComputeShader* GetComputeShaderHorizontalBlur();
 	ID3D11ComputeShader* GetComputeShaderVerticalBlur();
 
+	virtual void DataLoaded() override;
 	virtual void PostPostLoad() override;
 
 	void BSLightingShader_SetupSkin(RE::BSRenderPass* Pass);
@@ -91,11 +111,7 @@ public:
 	{
 		struct BSLightingShader_SetupGeometry
 		{
-			static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
-			{
-				GetSingleton()->BSLightingShader_SetupSkin(Pass);
-				func(This, Pass, RenderFlags);
-			}
+			static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags);
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
