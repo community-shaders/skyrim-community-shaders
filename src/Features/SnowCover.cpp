@@ -29,7 +29,6 @@ void SnowCover::DrawSettings()
 	ImGui::Text("Each config applies to one worldspace or interior cell.");
 	ImGui::Text("Saved config will be applied when you enter the worldspace.");
 
-
 	if (ImGui::TreeNodeEx("Worldspace Config", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Text(fmt::format("Current worldspace/cell: {}", last_worldspace).c_str());
 		ImGui::Text(fmt::format("Config status: {}", status).c_str());
@@ -179,7 +178,6 @@ void SnowCover::DrawSettings()
 		ImGui::TreePop();
 	}
 
-
 	ImGui::Spacing();
 	ImGui::Spacing();
 }
@@ -226,7 +224,6 @@ SnowCover::PerFrame SnowCover::GetCommonBufferData()
 				timeSnowing = std::max(timeSnowing - diff * melting_speed, 0.0f);
 			} else if (timeSnowing < 0) {
 				timeSnowing = std::min(timeSnowing + diff * melting_speed, 0.0f);
-				
 			}
 		}
 

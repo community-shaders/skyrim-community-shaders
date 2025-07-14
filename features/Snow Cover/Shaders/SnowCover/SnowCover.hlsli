@@ -117,7 +117,7 @@ namespace SnowCover
 		color = lerp(color, diffuse, mult);
 	}
 
-#if !defined(BASIC_SNOW_COVER)
+#	if !defined(BASIC_SNOW_COVER)
 	// The main function calculating the amount of snow used (mult) and whether to use the main or the alt texture
 	// All the magic values you see were determined by testing in game, in other words, pulled from ass
 	float ApplySnowBase(float3 worldNormal, inout float2 uv, out bool alt, float disp, float3 p, float skylight, float waterDist, float viewDist)
@@ -134,7 +134,7 @@ namespace SnowCover
 		float mult = skylight * env_mult * smoothstep(SharedData::snowCoverSettings.minAngle, SharedData::snowCoverSettings.maxAngle, worldNormal.z);
 		if (mult < 0.01)
 			return 0;
-		float main_mult = (1 - abs(worldNormal.z - SharedData::snowCoverSettings.peakMainAngle)) + min(0, weatherMult)*SharedData::snowCoverSettings.minAngle;
+		float main_mult = (1 - abs(worldNormal.z - SharedData::snowCoverSettings.peakMainAngle)) + min(0, weatherMult) * SharedData::snowCoverSettings.minAngle;
 		float alt_mult = (1 - abs(worldNormal.z - SharedData::snowCoverSettings.peakAltAngle)) + sin(p.z * 0.01 + cos(p.x * p.y * 0.01) * 0.025) * 0.05;
 		alt = alt_mult > main_mult;
 		// apparently LOD landscape color sampler clamps uvs
@@ -142,7 +142,7 @@ namespace SnowCover
 		return mult;
 	}
 
-#if defined(TRUE_PBR)
+#		if defined(TRUE_PBR)
 	PBR::SurfaceProperties ApplySnowPBR(inout float3 diffuse, inout float3 worldNormal, out float mult, float disp, float3 p, float skylight, float waterDist, float viewDist, PBR::SurfaceProperties prop, float2 uv)
 	{
 		bool alt;
@@ -164,7 +164,7 @@ namespace SnowCover
 		prop.GlintDensityRandomization = lerp(prop.GlintDensityRandomization, SharedData::snowCoverSettings.Glint.w, mult);
 		return prop;
 	}
-#else
+#		else
 
 	float ApplySnow(inout float3 diffuse, inout float3 worldNormal, inout float glossiness, inout float shininess, float disp, float3 p, float skylight, float waterDist, float viewDist, float2 uv)
 	{
@@ -182,8 +182,8 @@ namespace SnowCover
 		mult *= alt ? SharedData::snowCoverSettings.AltTint.w : SharedData::snowCoverSettings.MainTint.w;
 		return mult;
 	}
-#endif
-#endif
+#		endif
+#	endif
 
 }
 #endif
