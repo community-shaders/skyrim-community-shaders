@@ -3,8 +3,8 @@
 #include "Feature.h"
 #include "Utils/Serialize.h"
 #include <dxgi1_4.h>
-#include <winrt/base.h>
 #include <nlohmann/json.hpp>
+#include <winrt/base.h>
 
 using json = nlohmann::json;
 
@@ -28,8 +28,8 @@ public:
 	void DrawSettings();
 
 	// Search bar state
-	std::string featureSearch; // For left pane feature search
-	std::string settingsSearch; // For top-right settings search
+	std::string featureSearch;   // For left pane feature search
+	std::string settingsSearch;  // For top-right settings search
 	void DrawOverlay();
 	void DrawWeatherDetailsWindow();
 
@@ -60,8 +60,8 @@ public:
 		UIIcon loadSettings;
 		UIIcon clearCache;
 		UIIcon clearDiskCache;
-		UIIcon logo;  // New logo icon
-		UIIcon search; // Search icon for search bars
+		UIIcon logo;    // New logo icon
+		UIIcon search;  // Search icon for search bars
 	} uiIcons;
 
 	struct ThemeSettings
