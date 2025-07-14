@@ -29,6 +29,7 @@ void SnowCover::DrawSettings()
 	ImGui::Text("Each config applies to one worldspace or interior cell.");
 	ImGui::Text("Saved config will be applied when you enter the worldspace.");
 
+
 	if (ImGui::TreeNodeEx("Worldspace Config", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Text(fmt::format("Current worldspace/cell: {}", last_worldspace).c_str());
 		ImGui::Text(fmt::format("Config status: {}", status).c_str());
@@ -170,6 +171,15 @@ void SnowCover::DrawSettings()
 		ImGui::TreePop();
 	}
 
+	if (ImGui::TreeNodeEx("Debug Info")) {
+		ImGui::Text(fmt::format("Month: {}", perFrame.Month).c_str());
+		ImGui::Text(fmt::format("TimeSnowing: {}", perFrame.TimeSnowing).c_str());
+		ImGui::Text(fmt::format("SnowingDensity: {}", perFrame.SnowingDensity).c_str());
+
+		ImGui::TreePop();
+	}
+
+
 	ImGui::Spacing();
 	ImGui::Spacing();
 }
@@ -204,42 +214,41 @@ SnowCover::PerFrame SnowCover::GetCommonBufferData()
 	} else {
 		snowingDensity = 0;
 	}
-	PerFrame data{};
 	if (auto calendar = RE::Calendar::GetSingleton()) {
 		auto h = calendar->GetHour();
 		auto diff = h < lastHour ? h + 24 - lastHour : h - lastHour;
 		if (snowing)
 			timeSnowing += diff * snowing_speed;
-		else {
-			if (raining) {
-				timeSnowing -= 8 * diff * melting_speed;
-			} else {
-				if (timeSnowing > diff * melting_speed) {
-					timeSnowing -= diff * melting_speed;
-				} else if (timeSnowing < -diff * melting_speed) {
-					timeSnowing += diff * melting_speed;
-				} else {
-					timeSnowing = 0;
-				}
+		else if (raining) {
+			timeSnowing -= 2 * diff * melting_speed;
+		} else {
+			if (timeSnowing > 0) {
+				timeSnowing = std::max(timeSnowing - diff * melting_speed, 0.0f);
+			} else if (timeSnowing < 0) {
+				timeSnowing = std::min(timeSnowing + diff * melting_speed, 0.0f);
+				
 			}
 		}
+
 		timeSnowing = std::clamp(timeSnowing, -2.0f, 2.0f);
 		lastHour = h;
 
 		auto time = calendar->GetTime();
-		data.Month = static_cast<float>(time.tm_mon + (time.tm_mday + (time.tm_hour + (time.tm_min + time.tm_sec / 61.0) / 60.0) / 24.0) / 32.0);
+		perFrame.Month = static_cast<float>(time.tm_mon + (time.tm_mday + (time.tm_hour + (time.tm_min + time.tm_sec / 61.0) / 60.0) / 24.0) / 32.0);
 	}
-	data.SnowingDensity = snowingDensity;
-	data.TimeSnowing = timeSnowing;
-	data.settings = settings;
-	data.wsettings = wsettings;
+	perFrame.SnowingDensity = snowingDensity;
+	perFrame.TimeSnowing = timeSnowing;
+	perFrame.settings = settings;
+	perFrame.wsettings = wsettings;
 
-	return data;
+	return perFrame;
 }
 
 void SnowCover::SetupResources()
 {
 	Reload();
+	if (auto calendar = RE::Calendar::GetSingleton())
+		lastHour = calendar->GetHour();
 }
 
 std::string wstrtostr(std::wstring& wide)
@@ -476,6 +485,6 @@ void SnowCover::BSLightingShader_Setup(RE::BSRenderPass* a_pass)
 	auto userData = a_pass->geometry->GetUserData();
 	if (!userData)
 		return;
-	if (userData && userData->CanBeMoved() && !userData->As<RE::Actor>())
+	if ((userData && userData->CanBeMoved() && !userData->As<RE::Actor>()) || userData->GetObjectReference()->IsBoundAnimObject())
 		state->currentExtraDescriptor |= (uint)State::ExtraShaderDescriptors::IsMobile;
 }

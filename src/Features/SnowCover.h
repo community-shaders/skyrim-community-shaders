@@ -75,6 +75,7 @@ public:
 
 	UserSettings settings;
 	WorldSettings wsettings;
+	PerFrame perFrame;
 
 	PerFrame GetCommonBufferData();
 
@@ -84,8 +85,8 @@ public:
 	std::string last_worldspace;
 	std::string main_tex;
 	std::string alt_tex;
-	float snowing_speed;
-	float melting_speed;
+	float snowing_speed = 0.0f;
+	float melting_speed = 0.0f;
 	char tbuf[256] = "";
 	char altbuf[256] = "";
 
