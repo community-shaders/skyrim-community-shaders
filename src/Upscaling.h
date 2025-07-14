@@ -3,6 +3,13 @@
 #include "FidelityFX.h"
 #include "Streamline.h"
 
+/**
+ * @brief Installs hooks for Direct3D 11 device context operations.
+ *
+ * Sets up hooks on the provided ID3D11DeviceContext to intercept and extend D3D11 Map and Unmap operations, enabling custom frame buffer management and resource tracking.
+ *
+ * @param a_context Pointer to the Direct3D 11 device context to hook.
+ */
 class Upscaling
 {
 public:
@@ -34,6 +41,7 @@ public:
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 1;
 		uint frameGenerationForceEnable = 0;
+		uint streamlineLogLevel = 0;  // 0=Off, 1=Default, 2=Verbose
 	};
 
 	Settings settings;
@@ -46,6 +54,10 @@ public:
 
 	bool d3d12Interop = false;
 	double refreshRate = 0.0f;
+
+	// FG FPS Measurement for Overlay
+	bool IsFrameGenerationActive() const;
+	float GetFrameGenerationFrameTime() const;
 
 	void DrawSettings();
 	void SaveSettings(json& o_json);
@@ -172,4 +184,42 @@ public:
 			logger::info("[Upscaling] Not installing hooks due to Skyrim Upscaler");
 		}
 	}
+
+	void InstallD3DHooks(ID3D11DeviceContext* a_context);
+
+	struct FrameBuffer
+	{
+		Matrix CameraView;
+		Matrix CameraProj;
+		Matrix CameraViewProj;
+		Matrix CameraViewProjUnjittered;
+		Matrix CameraPreviousViewProjUnjittered;
+		Matrix CameraProjUnjittered;
+		Matrix CameraProjUnjitteredInverse;
+		Matrix CameraViewInverse;
+		Matrix CameraViewProjInverse;
+		Matrix CameraProjInverse;
+		float4 CameraPosAdjust;
+		float4 CameraPreviousPosAdjust;
+		float4 FrameParams;
+		float4 DynamicResolutionParams1;
+		float4 DynamicResolutionParams2;
+	};
+
+	D3D11_MAPPED_SUBRESOURCE* mappedFrameBuffer = nullptr;
+	FrameBuffer frameBufferCached{};
+
+	void CacheFramebuffer();
+
+	struct ID3D11DeviceContext_Map
+	{
+		static HRESULT thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource, D3D11_MAP MapType, UINT MapFlags, D3D11_MAPPED_SUBRESOURCE* pMappedResource);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct ID3D11DeviceContext_Unmap
+	{
+		static void thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
 };

@@ -240,7 +240,6 @@ void TerrainBlending::Hooks::BSBatchRenderer__RenderPassImmediately::thunk(RE::B
 {
 	auto singleton = globals::features::terrainBlending;
 	auto shaderCache = globals::shaderCache;
-	auto deferred = globals::deferred;
 
 	if (shaderCache->IsEnabled()) {
 		if (singleton->renderDepth) {
@@ -261,7 +260,7 @@ void TerrainBlending::Hooks::BSBatchRenderer__RenderPassImmediately::thunk(RE::B
 
 			if (inTerrain)
 				func(a_pass, a_technique, a_alphaTest, a_renderFlags);  // Run terrain twice
-		} else if (deferred->inWorld) {
+		} else if (globals::state->inWorld) {
 			if (auto shaderProperty = a_pass->shaderProperty) {
 				if (a_pass->shader->shaderType.get() == RE::BSShader::Type::Lighting) {
 					if (shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kMultiTextureLandscape)) {

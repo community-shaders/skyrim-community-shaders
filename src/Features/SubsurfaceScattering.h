@@ -4,6 +4,9 @@
 
 struct SubsurfaceScattering : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "114114";
+
 public:
 	static SubsurfaceScattering* GetSingleton()
 	{
@@ -22,11 +25,14 @@ public:
 	struct Settings
 	{
 		uint EnableCharacterLighting = false;
+		float CharacterLightingStrength = 1.0f;
 		DiffusionProfile BaseProfile{ 0.5f, 1.0f, { 0.48f, 0.41f, 0.28f }, { 0.56f, 0.56f, 0.56f } };
 		DiffusionProfile HumanProfile{ 1.0f, 1.0f, { 0.48f, 0.41f, 0.28f }, { 1.0f, 0.37f, 0.3f } };
 	};
 
 	Settings settings;
+
+	float CharacterLightingStrengthOriginal = -1.0f;
 
 	struct alignas(16) Kernel
 	{
@@ -58,7 +64,22 @@ public:
 
 	virtual inline std::string GetName() override { return "Subsurface Scattering"; }
 	virtual inline std::string GetShortName() override { return "SubsurfaceScattering"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "SSS"; }
+	virtual std::string_view GetCategory() const override { return "Characters"; }
+
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Subsurface Scattering simulates light penetration through translucent materials like skin, creating more realistic character lighting.\n"
+			"This technique makes organic materials appear more lifelike and natural.",
+			{ "Realistic skin lighting",
+				"Light penetration simulation",
+				"Separate profiles for different materials",
+				"Enhanced character appearance",
+				"Configurable scattering properties" }
+		};
+	}
 
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 

@@ -32,6 +32,20 @@ public:
 
 	virtual inline std::string GetName() override { return "Volumetric Lighting"; }
 	virtual inline std::string GetShortName() override { return "VolumetricLighting"; }
+	virtual std::string_view GetCategory() const override { return "Lighting"; }
+
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Volumetric Lighting creates realistic light scattering effects through fog, dust, and atmospheric particles.\n"
+			"This adds dramatic god rays and atmospheric depth to both interior and exterior environments.",
+			{ "Realistic light scattering",
+				"God rays and atmospheric effects",
+				"Separate interior/exterior settings",
+				"Configurable quality levels",
+				"Enhanced atmospheric immersion" }
+		};
+	}
 
 	virtual void SaveSettings(json&) override;
 	virtual void LoadSettings(json&) override;
@@ -39,6 +53,7 @@ public:
 	virtual void DrawSettings() override;
 	virtual void DataLoaded() override;
 	virtual void PostPostLoad() override;
+	virtual void SetupResources() override;
 	virtual void EarlyPrepass() override;
 
 	std::map<std::string, Util::GameSetting> hiddenVRSettings{
@@ -60,6 +75,15 @@ public:
 
 	virtual bool SupportsVR() override { return true; };
 	virtual bool IsCore() const override { return true; };
+
+	static RE::BSImagespaceShader* CreateShader(const std::string_view& name, const std::string_view& fileName, RE::BSComputeShader* computeShader);
+	RE::BSImagespaceShader* GetOrCreateGenerateCS(RE::BSComputeShader* computeShader);
+	RE::BSImagespaceShader* GetOrCreateRaymarchCS(RE::BSComputeShader* computeShader);
+	RE::BSImagespaceShader* GetOrCreateBlurHCS(RE::BSComputeShader* computeShader);
+	RE::BSImagespaceShader* GetOrCreateBlurVCS(RE::BSComputeShader* computeShader);
+	void SetDimensionsCB() const;
+	void SetGroupCountsHCS(uint32_t& threadGroupCountX) const;
+	void SetGroupCountsVCS(uint32_t& threadGroupCountY) const;
 
 	// hooks
 
@@ -126,4 +150,23 @@ private:
 	bool initialised = false;
 	bool inInterior = false;
 	bool inInteriorWithSunShadows = false;
+
+	struct VLData
+	{
+		int32_t screenX;
+		int32_t screenY;
+		int32_t screenXMin1;
+		int32_t screenYMin1;
+	};
+	VLData vlData = VLData();
+	ConstantBuffer* vlDataCB = nullptr;
+
+	static constexpr int32_t BlurThreadGroupSizeX = 256;
+	static constexpr int32_t BlurThreadGroupSizeY = 256;
+	static constexpr int32_t BlurWindow = 12;
+
+	RE::BSImagespaceShader* generateCS = nullptr;
+	RE::BSImagespaceShader* raymarchCS = nullptr;
+	RE::BSImagespaceShader* blurHCS = nullptr;
+	RE::BSImagespaceShader* blurVCS = nullptr;
 };

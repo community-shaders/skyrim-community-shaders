@@ -3,12 +3,16 @@
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExtendedMaterials.h"
+#include "Features/ExtendedTranslucency.h"
 #include "Features/GrassLighting.h"
+#include "Features/HairSpecular.h"
+#include "Features/IBL.h"
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
 #include "Features/Skylighting.h"
 #include "Features/SnowCover.h"
 #include "Features/TerrainShadows.h"
+#include "Features/TerrainVariation.h"
 #include "Features/WetnessEffects.h"
 
 #include "TruePBR.h"
@@ -41,5 +45,9 @@ std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 		globals::features::wetnessEffects->GetCommonBufferData(),
 		globals::features::skylighting->GetCommonBufferData(a_inWorld),
 		globals::features::cloudShadows->settings,
-		globals::features::lodBlending->settings);
+		globals::features::lodBlending->settings,
+		globals::features::hairSpecular->settings,
+		globals::features::terrainVariation->settings,
+		globals::features::ibl->settings,
+		globals::features::extendedTranslucency->settings);
 }

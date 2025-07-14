@@ -69,7 +69,7 @@ namespace SharedData
 		uint EnableContactShadows;
 		uint EnableLightsVisualisation;
 		uint LightsVisualisationMode;
-		float LightsFar;
+		float pad0;
 		uint4 ClusterSize;
 	};
 
@@ -99,22 +99,23 @@ namespace SharedData
 
 		bool EnableSplashes;
 		bool EnableRipples;
+        uint EnableVanillaRipples;
+        float RaindropFxRange;
+
 		float RaindropGridSizeRcp;
 		float RaindropIntervalRcp;
-
 		float RaindropChance;
 		float SplashesLifetime;
+
 		float SplashesStrength;
 		float SplashesMinRadius;
-
 		float SplashesMaxRadius;
 		float RippleStrength;
+
 		float RippleRadius;
 		float RippleBreadth;
-
 		float RippleLifetimeRcp;
-
-		float3 pad0;
+		float pad0;
 	};
 
 	struct SkylightingSettings
@@ -184,6 +185,53 @@ namespace SharedData
 		bool DisableTerrainVertexColors;
 	};
 
+	struct HairSpecularSettings
+	{
+		uint Enabled;
+		float HairGlossiness;
+		float SpecularMult;
+		float DiffuseMult;
+		uint EnableTangentShift;
+		float PrimaryTangentShift;
+		float SecondaryTangentShift;
+		float HairSaturation;
+		float SpecularIndirectMult;
+		float DiffuseIndirectMult;
+		float BaseColorMult;
+		float Transmission;
+		uint EnableSelfShadow;
+		float SelfShadowStrength;
+		float SelfShadowExponent;
+		float SelfShadowScale;
+		uint HairMode;  // 0: Kajiya-Kay, 1: Marschner
+		uint3 pad;
+	};
+
+	struct TerrainVariationSettings
+	{
+		uint enableTilingFix;
+		uint enableLODTerrainTilingFix;
+		float2 pad0;
+	};
+
+	struct IBLSettings
+	{
+		uint EnableDiffuseIBL;
+		float DiffuseIBLScale;
+		float DALCAmount;
+		float IBLSaturation;
+		uint SampleUnderHorizonFromDynCube;
+		uint3 pad;
+	};
+
+	struct ExtendedTranslucencySettings
+	{
+		uint MaterialModel;  // [0,1,2,3] The MaterialModel
+		float Reduction;     // [0, 1.0] The factor to reduce the transparency to matain the average transparency [0,1]
+		float Softness;      // [0, 2.0] The soft remap upper limit [0,2]
+		float Strength;      // [0, 1.0] The inverse blend weight of the effect
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		SnowCoverSettings snowCoverSettings;
@@ -196,6 +244,10 @@ namespace SharedData
 		SkylightingSettings skylightingSettings;
 		CloudShadowsSettings cloudShadowsSettings;
 		LODBlendingSettings lodBlendingSettings;
+		HairSpecularSettings hairSpecularSettings;
+		TerrainVariationSettings terrainVariationSettings;
+		IBLSettings iblSettings;
+		ExtendedTranslucencySettings extendedTranslucencySettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);

@@ -11,6 +11,18 @@ struct LODBlending : Feature
 	virtual inline std::string GetName() override { return "LOD Blending"; }
 	virtual inline std::string GetShortName() override { return "LODBlending"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "LOD_BLENDING"; }
+	virtual std::string_view GetCategory() const override { return "Landscape & Textures"; }
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Provides seamless visual transitions between Level of Detail (LOD) objects and full-detail objects, eliminating harsh transitions and creating smooth visual continuity.",
+			{ "Smooth LOD object brightness blending",
+				"Enhanced terrain LOD appearance matching",
+				"Snow-specific LOD brightness adjustment",
+				"Optional terrain vertex color modification",
+				"Seamless transition between detail levels" }
+		};
+	}
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
 	struct Settings

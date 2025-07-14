@@ -1,15 +1,19 @@
 #include "Deferred.h"
 
+#include <DDSTextureLoader.h>
+
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
 
 #include "Features/DynamicCubemaps.h"
+#include "Features/IBL.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
 
+#include "Hooks.h"
 #include "Streamline.h"
 
 struct DepthStates
@@ -174,6 +178,13 @@ void Deferred::SetupResources()
 		prevDiffuseAmbientTexture = new Texture2D(texDesc);
 		prevDiffuseAmbientTexture->CreateSRV(srvDesc);
 		prevDiffuseAmbientTexture->CreateUAV(uavDesc);
+	}
+
+	// Testing code for imagespace shaders
+	{
+		auto device = globals::d3d::device;
+		auto context = globals::d3d::context;
+		DirectX::CreateDDSTextureFromFile(device, context, L"Data\\Shaders\\LUT.dds", nullptr, lutTexture.put());
 	}
 }
 
@@ -400,6 +411,8 @@ void Deferred::DeferredPasses()
 	auto [ssgi_ao, ssgi_y, ssgi_cocg, ssgi_gi_spec] = ssgi->GetOutputTextures();
 	bool ssgi_hq_spec = ssgi->settings.EnableExperimentalSpecularGI;
 
+	auto ibl = globals::features::ibl;
+
 	auto dispatchCount = Util::GetScreenDispatchCount();
 
 	if (ssgi->loaded) {
@@ -407,7 +420,7 @@ void Deferred::DeferredPasses()
 		{
 			TracyD3D11Zone(globals::state->tracyCtx, "Ambient Composite");
 
-			ID3D11ShaderResourceView* srvs[8]{
+			ID3D11ShaderResourceView* srvs[9]{
 				albedo.SRV,
 				normalRoughness.SRV,
 				skylighting->loaded || REL::Module::IsVR() ? depth.depthSRV : nullptr,
@@ -416,6 +429,7 @@ void Deferred::DeferredPasses()
 				ssgi_ao,
 				ssgi_y,
 				ssgi_cocg,
+				ibl->loaded ? ibl->diffuseIBLTexture->srv.get() : nullptr,
 			};
 
 			context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
@@ -431,7 +445,7 @@ void Deferred::DeferredPasses()
 
 		// Clear
 		{
-			ID3D11ShaderResourceView* views[8]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+			ID3D11ShaderResourceView* views[9]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
 			ID3D11UnorderedAccessView* uavs[2]{ nullptr, nullptr };
@@ -455,7 +469,7 @@ void Deferred::DeferredPasses()
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite");
 
-		ID3D11ShaderResourceView* srvs[14]{
+		ID3D11ShaderResourceView* srvs[15]{
 			specular.SRV,
 			albedo.SRV,
 			normalRoughness.SRV,
@@ -470,6 +484,7 @@ void Deferred::DeferredPasses()
 			ssgi_hq_spec ? nullptr : ssgi_y,
 			ssgi_hq_spec ? nullptr : ssgi_cocg,
 			ssgi_hq_spec ? ssgi_gi_spec : nullptr,
+			ibl->loaded ? ibl->diffuseIBLTexture->srv.get() : nullptr,
 		};
 
 		if (dynamicCubemaps->loaded)
@@ -488,7 +503,7 @@ void Deferred::DeferredPasses()
 
 	// Clear
 	{
-		ID3D11ShaderResourceView* views[14]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+		ID3D11ShaderResourceView* views[15]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
 		ID3D11UnorderedAccessView* uavs[3]{ nullptr, nullptr, nullptr };
@@ -506,7 +521,7 @@ void Deferred::DeferredPasses()
 
 void Deferred::EndDeferred()
 {
-	if (!inWorld)
+	if (!globals::state->inWorld)
 		return;
 
 	auto shaderCache = globals::shaderCache;
@@ -649,6 +664,9 @@ ID3D11ComputeShader* Deferred::GetComputeAmbientComposite()
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });
 
+		if (globals::features::ibl->loaded)
+			defines.push_back({ "IBL", nullptr });
+
 		ambientCompositeCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\AmbientCompositeCS.hlsl", defines, "cs_5_0"));
 	}
 	return ambientCompositeCS;
@@ -689,6 +707,9 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 		if (globals::features::screenSpaceGI->loaded)
 			defines.push_back({ "SSGI", nullptr });
 
+		if (globals::features::ibl->loaded)
+			defines.push_back({ "IBL", nullptr });
+
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });
 
@@ -719,6 +740,14 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 	return mainCompositeInteriorCS;
 }
 
+// Testing code for imagespace shaders
+void Deferred::BindLUT()
+{
+	auto view = lutTexture.get();
+	if (view)
+		globals::d3d::context->PSSetShaderResources(100, 1, &view);
+}
+
 void Deferred::Hooks::Main_RenderShadowMaps::thunk()
 {
 	func();
@@ -727,10 +756,9 @@ void Deferred::Hooks::Main_RenderShadowMaps::thunk()
 
 void Deferred::Hooks::Main_RenderWorld::thunk(bool a1)
 {
-	auto deferred = globals::deferred;
-	deferred->inWorld = true;
+	globals::state->inWorld = true;
 	func(a1);
-	deferred->inWorld = false;
+	globals::state->inWorld = false;
 };
 
 void Deferred::Hooks::Main_RenderWorld_Start::thunk(RE::BSBatchRenderer* This, uint32_t StartRange, uint32_t EndRanges, uint32_t RenderFlags, int GeometryGroup)
@@ -738,14 +766,43 @@ void Deferred::Hooks::Main_RenderWorld_Start::thunk(RE::BSBatchRenderer* This, u
 	auto deferred = globals::deferred;
 	auto shaderCache = globals::shaderCache;
 
-	if (shaderCache->IsEnabled() && deferred->inWorld) {
+	if (shaderCache->IsEnabled() && globals::state->inWorld) {
 		// Here is where the first opaque objects start rendering
 		deferred->StartDeferred();
-		func(This, StartRange, EndRanges, RenderFlags, GeometryGroup);  // RenderBatches                                                               // RenderBatches
+		func(This, StartRange, EndRanges, RenderFlags, GeometryGroup);  // RenderBatches
 	} else {
 		func(This, StartRange, EndRanges, RenderFlags, GeometryGroup);  // RenderBatches
 	}
 };
+
+void Deferred::RenderBlendedDecals()
+{
+	if (!globals::state->blendedDecalRenderPasses.empty()) {
+		if (globals::game::isVR) {
+			auto& runtimeData = globals::game::shadowState->GetVRRuntimeData();
+			auto runtimeDataCopy = runtimeData;
+			runtimeData.rasterStateDepthBiasMode = 10;
+
+			for (auto& renderPass : globals::state->blendedDecalRenderPasses)
+				::Hooks::BSBatchRenderer_RenderPassImmediately1::func(renderPass.a_pass, renderPass.a_technique, renderPass.a_alphaTest, renderPass.a_renderFlags);
+
+			globals::state->blendedDecalRenderPasses.clear();
+
+			runtimeData = runtimeDataCopy;
+		} else {
+			auto& runtimeData = globals::game::shadowState->GetRuntimeData();
+			auto runtimeDataCopy = runtimeData;
+			runtimeData.rasterStateDepthBiasMode = 10;
+
+			for (auto& renderPass : globals::state->blendedDecalRenderPasses)
+				::Hooks::BSBatchRenderer_RenderPassImmediately1::func(renderPass.a_pass, renderPass.a_technique, renderPass.a_alphaTest, renderPass.a_renderFlags);
+
+			globals::state->blendedDecalRenderPasses.clear();
+
+			runtimeData = runtimeDataCopy;
+		}
+	}
+}
 
 void Deferred::Hooks::Main_RenderWorld_BlendedDecals::thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags)
 {
@@ -753,7 +810,7 @@ void Deferred::Hooks::Main_RenderWorld_BlendedDecals::thunk(RE::BSShaderAccumula
 	auto terrainBlending = globals::features::terrainBlending;
 	auto shaderCache = globals::shaderCache;
 
-	if (shaderCache->IsEnabled() && deferred->inWorld) {
+	if (shaderCache->IsEnabled() && globals::state->inWorld) {
 		// Defer terrain rendering until after everything else
 		if (terrainBlending->loaded)
 			terrainBlending->RenderTerrainBlendingPasses();
@@ -768,43 +825,10 @@ void Deferred::Hooks::Main_RenderWorld_BlendedDecals::thunk(RE::BSShaderAccumula
 
 	// Blended decals
 	deferred->inDecals = true;
-	func(This, RenderFlags);
+	deferred->RenderBlendedDecals();
 	deferred->inDecals = false;
 
 	// After this point, water starts rendering
-};
-
-void Deferred::Hooks::BSShaderAccumulator_BlendedDecals_RenderGeometryGroup::thunk(RE::BSBatchRenderer* This, uint32_t StartRange, uint32_t EndRanges, uint32_t RenderFlags, int GeometryGroup)
-{
-	auto deferred = globals::deferred;
-
-	if (deferred->inBlendedDecals) {
-		func(This, StartRange, EndRanges, RenderFlags, 12);
-	} else {
-		func(This, StartRange, EndRanges, RenderFlags, GeometryGroup);
-	}
-};
-
-void Deferred::Hooks::BSShaderAccumulator_FirstPerson_BlendedDecals::thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags)
-{
-	auto deferred = globals::deferred;
-
-	deferred->inBlendedDecals = true;
-	func(This, RenderFlags);
-	deferred->inBlendedDecals = false;
-	func(This, RenderFlags);
-	deferred->inDecals = false;
-};
-
-void Deferred::Hooks::BSShaderAccumulator_ShadowMapOrMask_BlendedDecals::thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags)
-{
-	auto deferred = globals::deferred;
-
-	deferred->inBlendedDecals = true;
-	func(This, RenderFlags);
-	deferred->inBlendedDecals = false;
-	func(This, RenderFlags);
-	deferred->inDecals = false;
 };
 
 void Deferred::Hooks::BSCubeMapCamera_RenderCubemap::thunk(RE::NiAVObject* camera, int a2, bool a3, bool a4, bool a5)

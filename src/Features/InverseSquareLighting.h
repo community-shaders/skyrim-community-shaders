@@ -4,6 +4,10 @@
 
 struct InverseSquareLighting : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "153542";
+
+public:
 	static InverseSquareLighting* GetSingleton()
 	{
 		static InverseSquareLighting singleton;
@@ -15,6 +19,21 @@ struct InverseSquareLighting : Feature
 	virtual inline std::string GetShortName() override { return "InverseSquareLighting"; }
 
 	virtual inline std::string_view GetShaderDefineName() override { return "ISL"; }
+
+	virtual std::string_view GetCategory() const override { return "Lighting"; }
+
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Implements an additional inverse square falloff for lighting which allows for a more physically accurate and realistic looking light attenuation.",
+			{ "Automatic light radius calculation based on intensity",
+				"Lights smoothly fade out at a configurable cutoff, solving the infinite distance problem",
+				"Does not modify any existing lighting",
+				"Requires the use of mods with lights enabled for inverse square falloff.",
+				"Full integration with Light Placer",
+				"Built in Light Editor for mod authors to preview lighting changes in real-time" }
+		};
+	}
 
 	inline bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
@@ -35,6 +54,12 @@ struct InverseSquareLighting : Feature
 	struct CreatePointLight
 	{
 		static RE::NiPointLight* thunk(RE::TESObjectLIGH* ligh, RE::TESObjectREFR* refr, RE::NiAVObject* root, bool forceDynamic, bool useLightRadius, bool affectRequesterOnly);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct BSLight_GetLuminance
+	{
+		static float thunk(RE::BSLight* bsLight, RE::NiPoint3* targetPosition, RE::NiLight* refLight);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 

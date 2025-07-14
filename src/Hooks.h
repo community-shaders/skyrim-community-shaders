@@ -12,6 +12,20 @@ namespace Hooks
 		static void thunk(bool isCompute);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
+
+	struct BSBatchRenderer_RenderPassImmediately1
+	{
+		static void thunk(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct RenderPass
+	{
+		RE::BSRenderPass* a_pass;
+		uint32_t a_technique;
+		bool a_alphaTest;
+		uint32_t a_renderFlags;
+	};
 	void Install();
 	void InstallD3DHooks();
 }

@@ -46,7 +46,6 @@ public:
 	ID3D11ComputeShader* mainCompositeCS = nullptr;
 	ID3D11ComputeShader* mainCompositeInteriorCS = nullptr;
 
-	bool inWorld = false;
 	bool inBlendedDecals = false;
 	bool inDecals = false;
 	bool inReflections = false;
@@ -77,6 +76,11 @@ public:
 	Buffer* perShadow = nullptr;
 	ID3D11ShaderResourceView* shadowView = nullptr;
 
+	winrt::com_ptr<ID3D11ShaderResourceView> lutTexture = nullptr;
+	void BindLUT();
+
+	void RenderBlendedDecals();
+
 	struct Hooks
 	{
 		struct Main_RenderShadowMaps
@@ -103,27 +107,29 @@ public:
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
-		struct BSShaderAccumulator_BlendedDecals_RenderGeometryGroup
-		{
-			static void thunk(RE::BSBatchRenderer* This, uint32_t StartRange, uint32_t EndRanges, uint32_t RenderFlags, int GeometryGroup);
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		struct BSShaderAccumulator_FirstPerson_BlendedDecals
-		{
-			static void thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags);
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		struct BSShaderAccumulator_ShadowMapOrMask_BlendedDecals
-		{
-			static void thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags);
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
 		struct BSCubeMapCamera_RenderCubemap
 		{
 			static void thunk(RE::NiAVObject* camera, int a2, bool a3, bool a4, bool a5);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSImagespaceShaderHDRTonemapBlendCinematic_SetupTechnique
+		{
+			static void thunk(RE::BSShader* a_shader, RE::BSShaderMaterial* a_material)
+			{
+				GetSingleton()->BindLUT();
+				func(a_shader, a_material);
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSImagespaceShaderHDRTonemapBlendCinematicFade_SetupTechnique
+		{
+			static void thunk(RE::BSShader* a_shader, RE::BSShaderMaterial* a_material)
+			{
+				GetSingleton()->BindLUT();
+				func(a_shader, a_material);
+			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
@@ -137,10 +143,8 @@ public:
 			stl::write_thunk_call<Main_RenderWorld_Start>(REL::RelocationID(99938, 106583).address() + REL::Relocate(0x8E, 0x84));
 			stl::write_thunk_call<Main_RenderWorld_BlendedDecals>(REL::RelocationID(99938, 106583).address() + REL::Relocate(0x319, 0x308, 0x321));
 
-			stl::write_thunk_call<BSShaderAccumulator_BlendedDecals_RenderGeometryGroup>(REL::RelocationID(99942, 106587).address() + REL::Relocate(0x111, 0x112));
-
-			stl::write_thunk_call<BSShaderAccumulator_FirstPerson_BlendedDecals>(REL::RelocationID(99943, 106588).address() + REL::Relocate(0xFE, 0xF4));
-			stl::write_thunk_call<BSShaderAccumulator_ShadowMapOrMask_BlendedDecals>(REL::RelocationID(99947, 106592).address() + 0x107);
+			stl::write_vfunc<0x2, BSImagespaceShaderHDRTonemapBlendCinematic_SetupTechnique>(RE::VTABLE_BSImagespaceShaderHDRTonemapBlendCinematic[0]);
+			stl::write_vfunc<0x2, BSImagespaceShaderHDRTonemapBlendCinematicFade_SetupTechnique>(RE::VTABLE_BSImagespaceShaderHDRTonemapBlendCinematicFade[0]);
 
 			logger::info("[Deferred] Installed hooks");
 		}
