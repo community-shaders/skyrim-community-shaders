@@ -15,6 +15,7 @@ void InverseSquareLighting::EarlyPrepass()
 void InverseSquareLighting::PostPostLoad()
 {
 	stl::detour_thunk<CreatePointLight>(REL::RelocationID(17208, 17610));
+	stl::detour_thunk<BSLight_GetLuminance>(REL::RelocationID(101303, 108292));
 
 	logger::info("[InverseSquareLighting] Installed hooks");
 }
@@ -90,4 +91,23 @@ float InverseSquareLighting::GetAttenuation(const float distance, const float ra
 	const float fadeZone = std::clamp(FadeZoneBase / radius, 0.0f, 1.0f);
 	const float fade = SmoothStep(0, radius * fadeZone, radius - distance);
 	return attenuation * fade;
+}
+
+float InverseSquareLighting::BSLight_GetLuminance::thunk(RE::BSLight* bsLight, RE::NiPoint3* targetPosition, RE::NiLight* refLight)
+{	
+	auto* niLight = bsLight->light.get();
+	const auto runtimeData = ISLCommon::RuntimeLightDataExt::Get(niLight);
+	
+	if (refLight == niLight || runtimeData->flags.any(LightLimitFix::LightFlags::Disabled))
+		return 0.0f;
+	
+	if (!bsLight->pointLight || runtimeData->flags.none(LightLimitFix::LightFlags::InverseSquare))
+		return func(bsLight, targetPosition, refLight);
+
+	const float dist = niLight->world.translate.GetDistance(*targetPosition);
+	const float attenuation = GetAttenuation(dist, runtimeData->radius.x);
+	const float luminance = (runtimeData->diffuse.red + runtimeData->diffuse.green + runtimeData->diffuse.blue) * runtimeData->fade * attenuation * (1.0f / 3.0f);
+	bsLight->luminance = luminance;
+	
+	return luminance;
 }
