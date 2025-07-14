@@ -273,21 +273,18 @@ void Menu::Init()
 
 	float fontSize = settings.Theme.FontSize;
 
-	if (std::round(fontSize) != std::round(Constants::DEFAULT_FONT_SIZE)) 
-	{
+	if (std::round(fontSize) != std::round(Constants::DEFAULT_FONT_SIZE)) {
 		if (globals::state->screenSize.y > 0) {
 			fontSize = globals::state->screenSize.y * Constants::DEFAULT_FONT_RATIO;
-		}
-		else {
+		} else {
 			logger::warn("Menu::Init() - Failed to get game resolution from globals::state->screenSize.");
 		}
 	}
-	
+
 	fontSize = std::clamp(fontSize, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE);
-	
+
 	if (!imgui_io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\Jost-Regular.ttf",
-			std::round(fontSize), &font_config)) 
-	{
+			std::round(fontSize), &font_config)) {
 		logger::warn("Menu::Init() - Failed to load custom font. Using default font.");
 		imgui_io.Fonts->AddFontDefault();
 	}
@@ -2862,24 +2859,24 @@ void Menu::BuildCategoryCounts()
 	}
 }
 
-void Menu::ReloadFont() {
+void Menu::ReloadFont()
+{
 	ImGuiIO& io = ImGui::GetIO();
 	io.Fonts->Clear();
 
 	ImFontConfig font_config;
-	
-	font_config.OversampleH = Constants::FCONF_OVERSAMPLE_H;             // Increased horizontal oversampling for sharper text
-	font_config.OversampleV = Constants::FCONF_OVERSAMPLE_V;             // Increased vertical oversampling
-	font_config.PixelSnapH = Constants::FCONF_PIXELSNAP_H;           // Align to pixel grid for sharper rendering
-	font_config.RasterizerMultiply = Constants::FCONF_RASTERIZER_MULTIPLY;   // Slightly darker font rendering
+
+	font_config.OversampleH = Constants::FCONF_OVERSAMPLE_H;                // Increased horizontal oversampling for sharper text
+	font_config.OversampleV = Constants::FCONF_OVERSAMPLE_V;                // Increased vertical oversampling
+	font_config.PixelSnapH = Constants::FCONF_PIXELSNAP_H;                  // Align to pixel grid for sharper rendering
+	font_config.RasterizerMultiply = Constants::FCONF_RASTERIZER_MULTIPLY;  // Slightly darker font rendering
 
 	float fontSize = settings.Theme.FontSize;
-	fontSize = std::clamp(fontSize, Constants::MIN_FONT_SIZE, 
-									Constants::MAX_FONT_SIZE);
+	fontSize = std::clamp(fontSize, Constants::MIN_FONT_SIZE,
+		Constants::MAX_FONT_SIZE);
 
 	if (!io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\Jost-Regular.ttf",
-		std::round(fontSize), &font_config)) 
-	{
+			std::round(fontSize), &font_config)) {
 		logger::warn("Menu::ReloadFont() - Failed to load custom font. Using default font.");
 		io.Fonts->AddFontDefault();
 	}
