@@ -1,9 +1,12 @@
-#pragma once
 
+#pragma once
 #include "Feature.h"
 #include "Utils/Serialize.h"
 #include <dxgi1_4.h>
 #include <winrt/base.h>
+#include <nlohmann/json.hpp>
+
+using json = nlohmann::json;
 
 class Menu
 {
@@ -23,6 +26,10 @@ public:
 
 	void Init();
 	void DrawSettings();
+
+	// Search bar state
+	std::string featureSearch; // For left pane feature search
+	std::string settingsSearch; // For top-right settings search
 	void DrawOverlay();
 	void DrawWeatherDetailsWindow();
 
@@ -54,6 +61,7 @@ public:
 		UIIcon clearCache;
 		UIIcon clearDiskCache;
 		UIIcon logo;  // New logo icon
+		UIIcon search; // Search icon for search bars
 	} uiIcons;
 
 	struct ThemeSettings
@@ -204,6 +212,14 @@ private:
 	void DrawDisableAtBootSettings();
 	void DrawFooter();
 	void BuildCategoryCounts();
+
+	// Helper for feature search bar (left pane)
+	void DrawFeatureSearchBar();
+	// Helper for settings search bar (top right)
+	void DrawSettingsSearchBar();
+	// Helper to filter features by search
+	bool FeatureMatchesSearch(Feature* feat) const;
+	bool SettingMatchesSearch(const std::string& label, const std::string& description) const;
 
 	class CharEvent : public RE::InputEvent
 	{
