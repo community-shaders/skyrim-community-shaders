@@ -94,13 +94,13 @@ float InverseSquareLighting::GetAttenuation(const float distance, const float ra
 }
 
 float InverseSquareLighting::BSLight_GetLuminance::thunk(RE::BSLight* bsLight, RE::NiPoint3* targetPosition, RE::NiLight* refLight)
-{	
+{
 	auto* niLight = bsLight->light.get();
 	const auto runtimeData = ISLCommon::RuntimeLightDataExt::Get(niLight);
-	
+
 	if (refLight == niLight || runtimeData->flags.any(LightLimitFix::LightFlags::Disabled))
 		return 0.0f;
-	
+
 	if (!bsLight->pointLight || runtimeData->flags.none(LightLimitFix::LightFlags::InverseSquare))
 		return func(bsLight, targetPosition, refLight);
 
@@ -108,6 +108,6 @@ float InverseSquareLighting::BSLight_GetLuminance::thunk(RE::BSLight* bsLight, R
 	const float attenuation = GetAttenuation(dist, runtimeData->radius.x);
 	const float luminance = (runtimeData->diffuse.red + runtimeData->diffuse.green + runtimeData->diffuse.blue) * runtimeData->fade * attenuation * (1.0f / 3.0f);
 	bsLight->luminance = luminance;
-	
+
 	return luminance;
 }
