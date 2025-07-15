@@ -90,7 +90,7 @@ void Upscaling::DrawSettings()
 	}
 
 	if (!globals::game::isVR) {
-		bool frameGenAvailable = d3d12Interop && ((globals::streamline && globals::streamline->featureDLSSG) ||
+		bool frameGenAvailable = ((globals::streamline && globals::streamline->featureDLSSG) ||
 													 (globals::fidelityFX && globals::fidelityFX->featureFSR3FG));
 		if (frameGenAvailable) {
 			if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
