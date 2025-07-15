@@ -29,7 +29,6 @@ public:
 
 	// Search bar state
 	std::string featureSearch; // For left pane feature search
-	std::string settingsSearch; // For top-right settings search
 	void DrawOverlay();
 	void DrawWeatherDetailsWindow();
 
@@ -212,14 +211,6 @@ private:
 	void DrawDisableAtBootSettings();
 	void DrawFooter();
 	void BuildCategoryCounts();
-
-	// Helper for feature search bar (left pane)
-	void DrawFeatureSearchBar();
-	// Helper for settings search bar (top right)
-	void DrawSettingsSearchBar();
-	// Helper to filter features by search
-	bool FeatureMatchesSearch(Feature* feat) const;
-	bool SettingMatchesSearch(const std::string& label, const std::string& description) const;
 
 	class CharEvent : public RE::InputEvent
 	{

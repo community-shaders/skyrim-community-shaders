@@ -10,6 +10,7 @@ struct ID3D11Device;
 struct ID3D11ShaderResourceView;
 struct ImVec2;
 class Menu;
+class Feature;
 
 #define BUFFER_VIEWER_NODE(a_value, a_scale)                                                                 \
 	if (ImGui::TreeNode(#a_value)) {                                                                         \
@@ -449,4 +450,21 @@ namespace Util
 
 	// Performance overlay formatting and color helpers
 	ImVec4 GetThresholdColor(float value, float good, float warn, ImVec4 goodColor, ImVec4 warnColor, ImVec4 badColor);
+
+	// Search functionality
+	/**
+	 * @brief Checks if a feature matches the search query.
+	 * Searches both the feature's short name and display name.
+	 * @param feat The feature to check
+	 * @param searchQuery The search query string
+	 * @return True if the feature matches the search query
+	 */
+	bool FeatureMatchesSearch(Feature* feat, const std::string& searchQuery);
+
+	/**
+	 * @brief Draws the feature search bar with magnifying glass icon.
+	 * @param searchString Reference to the search string to modify
+	 * @param availableWidth The available width for the search bar
+	 */
+	void DrawFeatureSearchBar(std::string& searchString, float availableWidth = 0.0f);
 }  // namespace Util

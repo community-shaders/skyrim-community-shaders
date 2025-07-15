@@ -18,6 +18,7 @@
 #include "State.h"
 #include "Streamline.h"
 #include "TruePBR.h"
+#include "Utils/UI.h"
 #include "Upscaling.h"
 #include "Util.h"
 #include "Utils/UI.h"
@@ -294,74 +295,6 @@ void Menu::Init()
 	BuildCategoryCounts();
 
 	initialized = true;
-}
-
-void Menu::DrawFeatureSearchBar() {
-	ImGui::PushID("FeatureSearchBar");
-	
-	float iconSize = 20.0f;
-	float iconSpace = iconSize + 14.0f;
-	
-	// Get the current cursor position and available width
-	ImVec2 cursorPos = ImGui::GetCursorScreenPos();
-	float availableWidth = ImGui::GetContentRegionAvail().x;
-	float frameHeight = ImGui::GetFrameHeight();
-	
-	// Custom style - always transparent background to avoid click blocking
-	ImVec4 bgColor = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
-	ImVec4 bgColorActive = ImVec4(0.3f, 0.3f, 0.3f, 0.9f);
-	ImVec4 textColor = ImVec4(0.9f, 0.9f, 0.9f, 1.0f);
-	
-	ImGui::PushStyleColor(ImGuiCol_FrameBg, bgColor);
-	ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, bgColor);
-	ImGui::PushStyleColor(ImGuiCol_FrameBgActive, bgColorActive);
-	ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0,0,0,0));
-	ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, 6.0f));
-	
-	// Draw the input field
-	ImGui::SetNextItemWidth(availableWidth);
-	ImGui::InputTextWithHint("##feature_search", "Search Features...", &featureSearch);
-		// Draw a simple search icon (magnifying glass shape)
-		ImVec2 iconPos = ImVec2(cursorPos.x + 8.0f, cursorPos.y + (frameHeight - iconSize) * 0.5f);
-		ImDrawList* drawList = ImGui::GetWindowDrawList();
-		
-		ImVec2 center = ImVec2(iconPos.x + iconSize * 0.46f, iconPos.y + iconSize * 0.5f);
-		float radius = iconSize * 0.3f;
-		ImU32 placeholderColor = IM_COL32(140, 140, 140, 180);
-		
-		// Draw circle
-		drawList->AddCircle(center, radius, placeholderColor, 12, 2.2f);
-		
-		// Draw handle
-		ImVec2 handleStart = ImVec2(center.x + radius * 0.81f, center.y + radius * 0.81f);
-		ImVec2 handleEnd = ImVec2(handleStart.x + iconSize * 0.29f, handleStart.y + iconSize * 0.29f);
-		drawList->AddLine(handleStart, handleEnd, placeholderColor, 2.1f);
-	
-	ImGui::PopStyleVar(2);
-	ImGui::PopStyleColor(5);
-	ImGui::PopID();
-}
-
-
-bool Menu::FeatureMatchesSearch(Feature* feat) const {
-	if (featureSearch.empty()) return true;
-	std::string s = feat->GetShortName();
-	std::string q = featureSearch;
-	std::transform(s.begin(), s.end(), s.begin(), ::tolower);
-	std::transform(q.begin(), q.end(), q.begin(), ::tolower);
-	return s.find(q) != std::string::npos;
-}
-
-bool Menu::SettingMatchesSearch(const std::string& label, const std::string& description) const {
-	if (settingsSearch.empty()) return true;
-	std::string q = settingsSearch;
-	std::transform(q.begin(), q.end(), q.begin(), ::tolower);
-	std::string l = label, d = description;
-	std::transform(l.begin(), l.end(), l.begin(), ::tolower);
-	std::transform(d.begin(), d.end(), d.begin(), ::tolower);
-	return l.find(q) != std::string::npos || d.find(q) != std::string::npos;
 }
 
 void Menu::DrawSettings()
@@ -1077,9 +1010,8 @@ void Menu::DrawSettings()
 
 			// Filter features by search string
 			if (!featureSearch.empty()) {
-				auto pred = [this](Feature* feat) { return FeatureMatchesSearch(feat); };
 				auto it = std::remove_if(sortedFeatureList.begin(), sortedFeatureList.end(),
-					[pred](Feature* feat) { return !pred(feat); });
+					[this](Feature* feat) { return !Util::FeatureMatchesSearch(feat, featureSearch); });
 				sortedFeatureList.erase(it, sortedFeatureList.end());
 			}
 
@@ -1210,7 +1142,7 @@ void Menu::DrawSettings()
 					
 					// Add Features header and search bar after built-in settings
 					Util::DrawSectionHeader("Features", true);
-					DrawFeatureSearchBar();
+					Util::DrawFeatureSearchBar(featureSearch);
 					
 					// Then render the rest (features and categories, but skip already rendered built-ins)
 					for (size_t i = 0; i < menuList.size(); i++) {
