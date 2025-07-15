@@ -38,24 +38,24 @@ struct StochasticOffsets
 // --------------------- FUNCTION DECLARATIONS --------------------- //
 float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsetsLOD, float2 dx, float2 dy);
 float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy);
-float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets, float2 dx, float2 dy)
+float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets, float2 dx, float2 dy);
 
 // --------------------- COMPUTE FUNCTIONS --------------------- //
 
 // Hash function for stochastic sampling
-float2 hash2D2D(float2 s)
+inline float2 hash2D2D(float2 s)
 {
 	s = s * HASH_MULTIPLIER;
 	return frac(sin(s.x + s.y) * HASH_SINE_MULTIPLIER);
 }
 
-float2 hashLOD(float2 p)
+inline float2 hashLOD(float2 p)
 {
 	p = frac(p * 0.318);
 	return frac(p.x + p.y * float2(17.0, 23.0));
 }
 
-float3 NormalizeWeights(float3 weights)
+inline float3 NormalizeWeights(float3 weights)
 {
 	float weightSum = weights.x + weights.y + weights.z;
 	float rcpWeightSum = rcp(max(weightSum, 1e-6));
@@ -63,7 +63,7 @@ float3 NormalizeWeights(float3 weights)
 }
 
 // Common barycentric coordinate calculation for stochastic sampling
-float4x3 ComputeBarycentricVerts(float2 landscapeUV)
+inline float4x3 ComputeBarycentricVerts(float2 landscapeUV)
 {
     float2 scaledUV = landscapeUV * (WORLD_SCALE);
     float2 skewUV = mul(SKEW_MATRIX, scaledUV);
@@ -78,7 +78,7 @@ float4x3 ComputeBarycentricVerts(float2 landscapeUV)
         float4x3(float3(vxID + float2(1, 1), 0), float3(vxID + float2(1, 0), 0), float3(vxID + float2(0, 1), 0), float3(-barry.z, 1.0 - barry.y, 1.0 - barry.x));
 }
 
-StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
+inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
 {
     float4x3 BW_vx = ComputeBarycentricVerts(landscapeUV);
 
@@ -91,7 +91,7 @@ StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
     return offsets;
 }
 
-StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV)
+inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV)
 {
 	// Precomputed scaling: (WORLD_SCALE / 0.010416667) * 8.0 = ~255437
 	static const float LOD_SCALE = 255437.0;
@@ -116,7 +116,7 @@ StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV)
 // --------------------- STOCHASTIC SAMPLING FUNCTIONS --------------------- //
 
 // Stochastic sampling function for Terrain LOD & LOD Mask.
-float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsetsLOD, float2 dx, float2 dy)
+inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsetsLOD, float2 dx, float2 dy)
 {
 	float offsetScale = 0.01;
 
@@ -135,7 +135,7 @@ float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, float2 u
 }
 
 // Main stochastic sampling function
-float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
+inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
 {
 	// Calculate custom mip level from original UVs.
 	float mipLevel = tex.CalculateLevelOfDetail(samp, uv);
@@ -185,7 +185,7 @@ float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticO
 // Disable X4000 warning: FXC incorrectly reports potentially uninitialized variables due to complex control flow with early returns and conditional sampling
 #pragma warning(push)
 #pragma warning(disable : 4000)
-float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets, float2 dx, float2 dy)
+inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets, float2 dx, float2 dy)
 {
 	// Early exit for disabled terrain variation - avoid all other computations
 	if (!SharedData::terrainVariationSettings.enableTilingFix)
