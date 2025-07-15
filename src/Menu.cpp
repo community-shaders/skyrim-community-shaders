@@ -296,7 +296,6 @@ void Menu::Init()
 	initialized = true;
 }
 
-
 void Menu::DrawSettings()
 {
 	if (focusChanged) {
