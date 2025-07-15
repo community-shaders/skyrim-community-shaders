@@ -5,11 +5,12 @@
 struct Feature
 {
 	// For global settings search
-	struct SettingSearchEntry {
+	struct SettingSearchEntry
+	{
 		std::string label;
 		std::string description;
-		std::function<void()> focusCallback; // Called to focus/highlight this setting in the UI
-		std::string featureName; // For display context
+		std::function<void()> focusCallback;  // Called to focus/highlight this setting in the UI
+		std::string featureName;              // For display context
 	};
 	// Override in features to expose settings for search
 	virtual std::vector<SettingSearchEntry> GetSettingsSearchEntries() { return {}; }

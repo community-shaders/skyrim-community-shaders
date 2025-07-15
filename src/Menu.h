@@ -3,8 +3,8 @@
 #include "Feature.h"
 #include "Utils/Serialize.h"
 #include <dxgi1_4.h>
-#include <winrt/base.h>
 #include <nlohmann/json.hpp>
+#include <winrt/base.h>
 
 using json = nlohmann::json;
 
@@ -59,8 +59,8 @@ public:
 		UIIcon loadSettings;
 		UIIcon clearCache;
 		UIIcon clearDiskCache;
-		UIIcon logo;  // New logo icon
-		UIIcon search; // Search icon for search bars
+		UIIcon logo;    // New logo icon
+		UIIcon search;  // Search icon for search bars
 	} uiIcons;
 
 	struct ThemeSettings
