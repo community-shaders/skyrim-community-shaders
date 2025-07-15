@@ -156,7 +156,7 @@ public:
 		EffectShadows = 1 << 3,
 		IsDecal = 1 << 4,
 		IsTree = 1 << 5,
-		IsMobile = 1 << 6
+		NoSnow = 1 << 6
 	};
 
 	enum class ExtraFeatureDescriptors : uint32_t

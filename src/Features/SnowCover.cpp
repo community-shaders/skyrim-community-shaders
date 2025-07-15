@@ -174,6 +174,7 @@ void SnowCover::DrawSettings()
 		ImGui::Text(fmt::format("Month: {}", perFrame.Month).c_str());
 		ImGui::Text(fmt::format("TimeSnowing: {}", perFrame.TimeSnowing).c_str());
 		ImGui::Text(fmt::format("SnowingDensity: {}", perFrame.SnowingDensity).c_str());
+		ImGui::Text(fmt::format("Last Form Id: {:x}", lastFormId).c_str());
 
 		ImGui::TreePop();
 	}
@@ -347,6 +348,13 @@ void SnowCover::Reload()
 		logger::error("[Snow Cover] Cannot open config at  {}", path);
 		return;
 	}
+
+	auto whitelist_path = std::string("Data\\Shaders\\SnowCover\\whitelist.txt");
+	auto blacklist_path = std::string("Data\\Shaders\\SnowCover\\blacklist.txt");
+
+	whitelist = FormIdParser::parseHexFile(whitelist_path);
+	blacklist = FormIdParser::parseHexFile(blacklist_path);
+
 	json config;
 	try {
 		fileStream >> config;
@@ -482,6 +490,12 @@ void SnowCover::BSLightingShader_Setup(RE::BSRenderPass* a_pass)
 	auto userData = a_pass->geometry->GetUserData();
 	if (!userData)
 		return;
-	if ((userData && userData->CanBeMoved() && !userData->As<RE::Actor>()) || userData->GetObjectReference()->IsBoundAnimObject())
-		state->currentExtraDescriptor |= (uint)State::ExtraShaderDescriptors::IsMobile;
+	auto ref = userData->GetObjectReference();
+	if ((userData && userData->CanBeMoved() && !userData->As<RE::Actor>()) || ref->IsBoundAnimObject()) {
+		if (!whitelist.contains(ref->GetFormID()))
+			state->currentExtraDescriptor |= (uint)State::ExtraShaderDescriptors::NoSnow;
+	}
+	else if (blacklist.contains(ref->GetFormID())){
+		state->currentExtraDescriptor |= (uint)State::ExtraShaderDescriptors::NoSnow;	
+	}
 }

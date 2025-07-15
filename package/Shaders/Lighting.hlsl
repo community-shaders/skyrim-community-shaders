@@ -37,7 +37,7 @@
 
 #if defined(SNOW_COVER)
 #	if defined(TRUE_PBR)
-#		define GLINT
+//#		define GLINT
 #	endif
 #endif
 
@@ -2327,7 +2327,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float snowFactor = 0;
 	if (SharedData::snowCoverSettings.EnableSnowCover
 #		if !defined(TREE_ANIM)
-		&& !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsMobile) && !(Permutation::VertexShaderDescriptor & Permutation::LightingFlags::Skinned)
+		&& !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::NoSnow) && !(Permutation::VertexShaderDescriptor & Permutation::LightingFlags::Skinned)
 #		endif
 	) {
 #		if defined(TRUE_PBR)
@@ -2354,11 +2354,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		// why is glossiness not just a float anyway?
 		glossiness = glossiness.xxxx;
 #		endif
-#		if !defined(MODELSPACENORMALS)
-		worldSpaceNormal = normalize(lerp(worldSpaceNormal, SnowCover::MyReorientNormal(worldSpaceNormal, normalize(mul(tbn, snowNormal))), snowFactor));
-#		else
+#	if defined(SKINNED) || !defined(MODELSPACENORMALS)
+		worldSpaceNormal = normalize(lerp(worldSpaceNormal, SnowCover::MyReorientNormal(worldSpaceNormal, normalize(mul(input.World[eyeIndex], mul(tbn, snowNormal)))), snowFactor));
+#	else
 		worldSpaceNormal = normalize(lerp(worldSpaceNormal, SnowCover::MyReorientNormal(worldSpaceNormal, snowNormal), snowFactor));
-#		endif
+#	endif
 #		if defined(LODLANDNOISE)
 		snowedColor *= snowFactor + (1 - snowFactor) * lodLandNoiseMultiplier;
 #		endif

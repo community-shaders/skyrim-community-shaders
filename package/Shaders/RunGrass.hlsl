@@ -540,24 +540,27 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	skylighting = lerp(1.0, skylighting, Skylighting::getFadeOutFactor(input.WorldPosition));
 	skylighting = saturate(Skylighting::mixDiffuse(SharedData::skylightingSettings, skylighting));
 
-	float snowOcclusion = skylighting * 0.25;
+	float snowOcclusion = skylighting * 0.75;
 #			else
-	float snowOcclusion = 0.25;
+	float snowOcclusion = 0.75;
 #			endif
 #			if defined(SNOW_COVER)
 	if (SharedData::snowCoverSettings.EnableSnowCover) {
 		if (SharedData::snowCoverSettings.EnableExpensiveFoliage) {
+			float rx;
+			float ry;
+			TexBaseSampler.GetDimensions(rx, ry);
 #				if !defined(TRUE_PBR)
 			if (complex) {
-				snowOcclusion = max(snowOcclusion, 1 - TexBaseSampler.SampleBias(SampBaseSampler, float2(input.TexCoord.x, input.TexCoord.y * 0.5 - 1. / 512.), SharedData::MipBias).a);
+				snowOcclusion = max(snowOcclusion, 1 - TexBaseSampler.SampleBias(SampBaseSampler, float2(input.TexCoord.x, input.TexCoord.y * 0.5 - 1. / ry), SharedData::MipBias).a);
 			} else
 #				endif  // !TRUE_PBR
 			{
-				snowOcclusion = max(snowOcclusion, 1 - TexBaseSampler.SampleBias(SampBaseSampler, input.TexCoord.xy - float2(0, 1. / 256.), SharedData::MipBias).a);
+				snowOcclusion = max(snowOcclusion, 1 - TexBaseSampler.SampleBias(SampBaseSampler, input.TexCoord.xy - float2(0, 1. / ry), SharedData::MipBias).a);
 			}
 		}
 		snowOcclusion *= saturate(input.WorldPosition.z - SharedData::GetWaterData(input.WorldPosition.xyz).w);
-		SnowCover::ApplySnowFoliage(baseColor.xyz, float3(normal.xy, normal.z * 0.5 + 0.5), input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz, snowOcclusion, viewPosition.z);
+		SnowCover::ApplySnowFoliage(baseColor.xyz, float3(input.TexCoord.xy, normal.z * 0.5 + 0.5), input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz, snowOcclusion, viewPosition.z);
 	}
 #			endif
 

@@ -4,6 +4,7 @@
 #include "Feature.h"
 #include "State.h"
 #include "TruePBR.h"
+#include "Utils/FormIdParser.h"
 
 struct SnowCover : Feature
 {
@@ -93,6 +94,9 @@ public:
 	float lastHour = 12;
 	float timeSnowing = 0.0f;
 	float snowingDensity = 0.0f;
+	std::uint32_t lastFormId;
+	std::unordered_set<std::uint32_t> whitelist;
+	std::unordered_set<std::uint32_t> blacklist;
 
 	virtual void SetupResources();
 	virtual void Reset();
@@ -108,6 +112,7 @@ public:
 	virtual void RestoreDefaultSettings();
 	void Reload();
 	void SaveConfig();
+
 
 	virtual inline void PostPostLoad() override { Hooks::Install(); }
 
