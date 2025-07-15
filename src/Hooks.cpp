@@ -1148,8 +1148,7 @@ namespace Hooks
 		{
 			logger::info("Patching BSLightingShader::SetupGeometry::updateEyePosition");
 			uintptr_t setupGeometryUpdateRenderSpace = REL::RelocationID(100565, 107300).address() + REL::Relocate(0x76, 0x5B, 0x4D);
-			if (REL::Module::IsAE())
-			{
+			if (REL::Module::IsAE()) {
 				uint8_t patch[] = { 0x41, 0x31, 0xFF };  // xor r15d, r15d
 				REL::safe_write(setupGeometryUpdateRenderSpace, patch, sizeof(patch));
 			} else if (REL::Module::IsVR()) {
