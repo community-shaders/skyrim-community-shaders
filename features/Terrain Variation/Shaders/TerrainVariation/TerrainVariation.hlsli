@@ -139,9 +139,8 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 {
 	// Calculate custom mip level from original UVs.
 	float mipLevel = tex.CalculateLevelOfDetail(samp, uv);
-	float adjustedMipLevel = mipLevel + SharedData::MipBias;
 
-	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
+	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 
 	// Early exit for very high mip levels - single sample is sufficient. Miplevels hide the artifacts.
 	float mipFactor = saturate((mipLevel - MIP_BLEND_START) / MIP_BLEND_RANGE);
@@ -152,8 +151,8 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 	}
 
 	// Take three samples for blending at the same adjusted mip level
-	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, adjustedMipLevel);
-	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, adjustedMipLevel);
+	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
+	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
 
 	// Full height-based blending for low mip levels (close terrain) with improved contrast scaling
 	float contrastFactor = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE) * (1.0 - 0.5 * mipFactor);
