@@ -182,7 +182,7 @@ void PerformanceOverlay::DrawSettings()
 					ImGui::Checkbox("Show Post-FG Frametime Graph", &this->settings.ShowPostFGFrameTimeGraph);
 					ImGui::EndDisabled();
 					if (auto _tt = Util::HoverTooltipWrapper()) {
-						ImGui::Text("Post-FG timing not available with AMD FSR Frame Generation.\nThis option is only available with NVIDIA DLSS Frame Generation.");
+						ImGui::Text("Post-FG detailed timing graphs not available with AMD FSR Frame Generation.\nFrametime graphs are only available with NVIDIA DLSS Frame Generation.");
 					}
 				} else {
 					ImGui::Checkbox("Show Post-FG Frametime Graph", &this->settings.ShowPostFGFrameTimeGraph);
@@ -497,10 +497,10 @@ void PerformanceOverlay::DrawFPS()
 		bool isFSRFrameGen = globals::fidelityFX && globals::fidelityFX->isFrameGenActive;
 
 		if (isFSRFrameGen) {
-			// Show note that post-FG timing isn't available with FSR
-			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Post-FG timing not available with FSR3 Framegen");
+			// Show note that post-FG detailed timing graphs aren't available with FSR
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Post-FG timing graphs not available with FSR");
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("AMD FSR Frame Generation doesn't provide internal timing data.\nPost-FG performance metrics are only available with NVIDIA DLSS Frame Generation.");
+				ImGui::Text("AMD FSR Frame Generation doesn't provide internal timing data.\nDetailed frametime graphs are only available with NVIDIA DLSS Frame Generation.");
 			}
 		} else {
 			// Show post-FG graph for DLSS
