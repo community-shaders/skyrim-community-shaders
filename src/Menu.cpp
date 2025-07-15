@@ -18,7 +18,6 @@
 #include "State.h"
 #include "Streamline.h"
 #include "TruePBR.h"
-#include "Utils/UI.h"
 #include "Upscaling.h"
 #include "Util.h"
 #include "Utils/UI.h"
@@ -297,57 +296,59 @@ void Menu::Init()
 	initialized = true;
 }
 
-void Menu::DrawFeatureSearchBar() {
+void Menu::DrawFeatureSearchBar()
+{
 	ImGui::PushID("FeatureSearchBar");
-	
+
 	float iconSize = 20.0f;
 	float iconSpace = iconSize + 14.0f;
-	
+
 	// Get the current cursor position and available width
 	ImVec2 cursorPos = ImGui::GetCursorScreenPos();
 	float availableWidth = ImGui::GetContentRegionAvail().x;
 	float frameHeight = ImGui::GetFrameHeight();
-	
+
 	// Custom style - always transparent background to avoid click blocking
 	ImVec4 bgColor = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 	ImVec4 bgColorActive = ImVec4(0.3f, 0.3f, 0.3f, 0.9f);
 	ImVec4 textColor = ImVec4(0.9f, 0.9f, 0.9f, 1.0f);
-	
+
 	ImGui::PushStyleColor(ImGuiCol_FrameBg, bgColor);
 	ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, bgColor);
 	ImGui::PushStyleColor(ImGuiCol_FrameBgActive, bgColorActive);
-	ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0,0,0,0));
+	ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
 	ImGui::PushStyleColor(ImGuiCol_Text, textColor);
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, 6.0f));
-	
+
 	// Draw the input field
 	ImGui::SetNextItemWidth(availableWidth);
 	ImGui::InputTextWithHint("##feature_search", "Search Features...", &featureSearch);
-		// Draw a simple search icon (magnifying glass shape)
-		ImVec2 iconPos = ImVec2(cursorPos.x + 8.0f, cursorPos.y + (frameHeight - iconSize) * 0.5f);
-		ImDrawList* drawList = ImGui::GetWindowDrawList();
-		
-		ImVec2 center = ImVec2(iconPos.x + iconSize * 0.46f, iconPos.y + iconSize * 0.5f);
-		float radius = iconSize * 0.3f;
-		ImU32 placeholderColor = IM_COL32(140, 140, 140, 180);
-		
-		// Draw circle
-		drawList->AddCircle(center, radius, placeholderColor, 12, 2.2f);
-		
-		// Draw handle
-		ImVec2 handleStart = ImVec2(center.x + radius * 0.81f, center.y + radius * 0.81f);
-		ImVec2 handleEnd = ImVec2(handleStart.x + iconSize * 0.29f, handleStart.y + iconSize * 0.29f);
-		drawList->AddLine(handleStart, handleEnd, placeholderColor, 2.1f);
-	
+	// Draw a simple search icon (magnifying glass shape)
+	ImVec2 iconPos = ImVec2(cursorPos.x + 8.0f, cursorPos.y + (frameHeight - iconSize) * 0.5f);
+	ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+	ImVec2 center = ImVec2(iconPos.x + iconSize * 0.46f, iconPos.y + iconSize * 0.5f);
+	float radius = iconSize * 0.3f;
+	ImU32 placeholderColor = IM_COL32(140, 140, 140, 180);
+
+	// Draw circle
+	drawList->AddCircle(center, radius, placeholderColor, 12, 2.2f);
+
+	// Draw handle
+	ImVec2 handleStart = ImVec2(center.x + radius * 0.81f, center.y + radius * 0.81f);
+	ImVec2 handleEnd = ImVec2(handleStart.x + iconSize * 0.29f, handleStart.y + iconSize * 0.29f);
+	drawList->AddLine(handleStart, handleEnd, placeholderColor, 2.1f);
+
 	ImGui::PopStyleVar(2);
 	ImGui::PopStyleColor(5);
 	ImGui::PopID();
 }
 
-
-bool Menu::FeatureMatchesSearch(Feature* feat) const {
-	if (featureSearch.empty()) return true;
+bool Menu::FeatureMatchesSearch(Feature* feat) const
+{
+	if (featureSearch.empty())
+		return true;
 	std::string s = feat->GetShortName();
 	std::string q = featureSearch;
 	std::transform(s.begin(), s.end(), s.begin(), ::tolower);
@@ -355,8 +356,10 @@ bool Menu::FeatureMatchesSearch(Feature* feat) const {
 	return s.find(q) != std::string::npos;
 }
 
-bool Menu::SettingMatchesSearch(const std::string& label, const std::string& description) const {
-	if (settingsSearch.empty()) return true;
+bool Menu::SettingMatchesSearch(const std::string& label, const std::string& description) const
+{
+	if (settingsSearch.empty())
+		return true;
 	std::string q = settingsSearch;
 	std::transform(q.begin(), q.end(), q.begin(), ::tolower);
 	std::string l = label, d = description;
@@ -1076,12 +1079,12 @@ void Menu::DrawSettings()
 			return a->GetName() < b->GetName();
 		});
 
-			// Filter features by search string
-			if (!featureSearch.empty()) {
-				auto it = std::remove_if(sortedFeatureList.begin(), sortedFeatureList.end(),
-					[this](Feature* feat) { return !Util::FeatureMatchesSearch(feat, featureSearch); });
-				sortedFeatureList.erase(it, sortedFeatureList.end());
-			}
+		// Filter features by search string
+		if (!featureSearch.empty()) {
+			auto it = std::remove_if(sortedFeatureList.begin(), sortedFeatureList.end(),
+				[this](Feature* feat) { return !Util::FeatureMatchesSearch(feat, featureSearch); });
+			sortedFeatureList.erase(it, sortedFeatureList.end());
+		}
 
 		auto menuList = std::vector<MenuFuncInfo>{
 			BuiltInMenu{ "General", [&]() { DrawGeneralSettings(); } },
@@ -1174,55 +1177,54 @@ void Menu::DrawSettings()
 			pendingFeatureSelection.clear();  // Clear after processing
 		}
 
-			// Now create the table with the declared variables available
-			if (ImGui::BeginTable("Menus Table", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable)) {
-				ImGui::TableSetupColumn("##ListOfMenus", 0, 2);
-				ImGui::TableSetupColumn("##MenuConfig", 0, 8);
-				
-				ImGui::TableNextColumn();
-				// Draw the feature list
-				ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4());
-				if (ImGui::BeginListBox("##MenusList", { -FLT_MIN, -FLT_MIN })) {
-					
-					// Find where built-in menus end (General, Advanced, Display)
-					size_t builtInMenuCount = 0;
-					for (size_t i = 0; i < menuList.size(); i++) {
-						if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
-							BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
-							if (menu.name == "General" || menu.name == "Advanced" || menu.name == "Display") {
-								builtInMenuCount++;
-							}
+		// Now create the table with the declared variables available
+		if (ImGui::BeginTable("Menus Table", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable)) {
+			ImGui::TableSetupColumn("##ListOfMenus", 0, 2);
+			ImGui::TableSetupColumn("##MenuConfig", 0, 8);
+
+			ImGui::TableNextColumn();
+			// Draw the feature list
+			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4());
+			if (ImGui::BeginListBox("##MenusList", { -FLT_MIN, -FLT_MIN })) {
+				// Find where built-in menus end (General, Advanced, Display)
+				size_t builtInMenuCount = 0;
+				for (size_t i = 0; i < menuList.size(); i++) {
+					if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
+						BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
+						if (menu.name == "General" || menu.name == "Advanced" || menu.name == "Display") {
+							builtInMenuCount++;
 						}
 					}
-					
-					// First render the built-in menus (General, Advanced, Display)
-					size_t renderedBuiltIns = 0;
-					for (size_t i = 0; i < menuList.size() && renderedBuiltIns < 3; i++) {
-						if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
-							BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
-							if (menu.name == "General" || menu.name == "Advanced" || menu.name == "Display") {
-								std::visit(ListMenuVisitor{ i, selectedMenu }, menuList[i]);
-								renderedBuiltIns++;
-							}
+				}
+
+				// First render the built-in menus (General, Advanced, Display)
+				size_t renderedBuiltIns = 0;
+				for (size_t i = 0; i < menuList.size() && renderedBuiltIns < 3; i++) {
+					if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
+						BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
+						if (menu.name == "General" || menu.name == "Advanced" || menu.name == "Display") {
+							std::visit(ListMenuVisitor{ i, selectedMenu }, menuList[i]);
+							renderedBuiltIns++;
 						}
 					}
-					
-					// Add Features header and search bar after built-in settings
-					Util::DrawSectionHeader("Features", true);
-					Util::DrawFeatureSearchBar(featureSearch);
-					
-					// Then render the rest (features and categories, but skip already rendered built-ins)
-					for (size_t i = 0; i < menuList.size(); i++) {
-						if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
-							BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
-							if (menu.name == "General" || menu.name == "Advanced" || menu.name == "Display") {
-								continue; // Skip, already rendered
-							}
+				}
+
+				// Add Features header and search bar after built-in settings
+				Util::DrawSectionHeader("Features", true);
+				Util::DrawFeatureSearchBar(featureSearch);
+
+				// Then render the rest (features and categories, but skip already rendered built-ins)
+				for (size_t i = 0; i < menuList.size(); i++) {
+					if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
+						BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
+						if (menu.name == "General" || menu.name == "Advanced" || menu.name == "Display") {
+							continue;  // Skip, already rendered
 						}
-						std::visit(ListMenuVisitor{ i, selectedMenu }, menuList[i]);
 					}
-					
+					std::visit(ListMenuVisitor{ i, selectedMenu }, menuList[i]);
+				}
+
 				ImGui::EndListBox();
 			}
 			ImGui::PopStyleVar();

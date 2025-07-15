@@ -28,7 +28,7 @@ public:
 	void DrawSettings();
 
 	// Search bar state
-	std::string featureSearch; // For left pane feature search
+	std::string featureSearch;  // For left pane feature search
 	void DrawOverlay();
 	void DrawWeatherDetailsWindow();
 

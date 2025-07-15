@@ -618,76 +618,77 @@ namespace Util
 
 	bool FeatureMatchesSearch(Feature* feat, const std::string& searchQuery)
 	{
-		if (searchQuery.empty()) return true;
-		
+		if (searchQuery.empty())
+			return true;
+
 		// Get both short name and display name
 		std::string shortName = feat->GetShortName();
 		std::string displayName = feat->GetName();
 		std::string query = searchQuery;
-		
+
 		// Convert all to lowercase for case-insensitive search
 		std::transform(shortName.begin(), shortName.end(), shortName.begin(), ::tolower);
 		std::transform(displayName.begin(), displayName.end(), displayName.begin(), ::tolower);
 		std::transform(query.begin(), query.end(), query.begin(), ::tolower);
-		
+
 		// Search in both short name and display name
-		return shortName.find(query) != std::string::npos || 
+		return shortName.find(query) != std::string::npos ||
 		       displayName.find(query) != std::string::npos;
 	}
 
 	void DrawFeatureSearchBar(std::string& searchString, float availableWidth)
 	{
 		ImGui::PushID("FeatureSearchBar");
-		
+
 		float iconSize = 20.0f;
 		float iconSpace = iconSize + 14.0f;
-		
+
 		// Get the current cursor position and available width
 		ImVec2 cursorPos = ImGui::GetCursorScreenPos();
 		if (availableWidth <= 0.0f) {
 			availableWidth = ImGui::GetContentRegionAvail().x;
 		}
 		float frameHeight = ImGui::GetFrameHeight();
-		
+
 		// Custom style - always transparent background to avoid click blocking
 		ImVec4 bgColor = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 		ImVec4 bgColorActive = ImVec4(0.3f, 0.3f, 0.3f, 0.9f);
 		ImVec4 textColor = ImVec4(0.9f, 0.9f, 0.9f, 1.0f);
-		
+
 		ImGui::PushStyleColor(ImGuiCol_FrameBg, bgColor);
 		ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, bgColor);
 		ImGui::PushStyleColor(ImGuiCol_FrameBgActive, bgColorActive);
-		ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0,0,0,0));
+		ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
 		ImGui::PushStyleColor(ImGuiCol_Text, textColor);
 		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, 6.0f));
-		
+
 		// Draw the input field
 		ImGui::SetNextItemWidth(availableWidth);
 		char buffer[256];
 		strncpy_s(buffer, searchString.c_str(), sizeof(buffer) - 1);
 		buffer[sizeof(buffer) - 1] = '\0';
-		
+
 		if (ImGui::InputTextWithHint("##feature_search", "Search Features...", buffer, sizeof(buffer))) {
 			searchString = buffer;
 		}
-		
+
 		// Draw a simple search icon (magnifying glass shape)
 		ImVec2 iconPos = ImVec2(cursorPos.x + 8.0f, cursorPos.y + (frameHeight - iconSize) * 0.5f);
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
-		
+
 		ImVec2 center = ImVec2(iconPos.x + iconSize * 0.46f, iconPos.y + iconSize * 0.5f);
 		float radius = iconSize * 0.3f;
 		ImU32 placeholderColor = IM_COL32(140, 140, 140, 180);
-		
+
 		// Draw circle
 		drawList->AddCircle(center, radius, placeholderColor, 12, 2.2f);
-		
+
 		// Draw handle
 		ImVec2 handleStart = ImVec2(center.x + radius * 0.81f, center.y + radius * 0.81f);
 		ImVec2 handleEnd = ImVec2(handleStart.x + iconSize * 0.29f, handleStart.y + iconSize * 0.29f);
 		drawList->AddLine(handleStart, handleEnd, placeholderColor, 2.1f);
-		
+
 		ImGui::PopStyleVar(2);
 		ImGui::PopStyleColor(5);
 		ImGui::PopID();
