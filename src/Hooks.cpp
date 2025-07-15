@@ -1143,7 +1143,7 @@ namespace Hooks
 		}
 
 		// Patch render space in BSLightingShader::SetupGeometry to always use world space
-		// The variable updateEyePosition is set to 1 when not skinned. By patching to be 1 it will always use world space
+		// The variable updateEyePosition is set to 1 when not skinned. By patching to be 0 it will always use world space
 		// We offset from the base address of the containing function to the start of the patch
 		{
 			logger::info("Patching BSLightingShader::SetupGeometry::updateEyePosition");
