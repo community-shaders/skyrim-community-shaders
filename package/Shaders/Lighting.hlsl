@@ -1198,7 +1198,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			}
 			entryNormal = normalize(mul(tbn, entryNormalTS));
 			refractedViewDirection = -refract(-viewDirection, entryNormal, eta);
-			else refractedViewDirection = refractedViewDirection;
 		}
 		else
 		{
