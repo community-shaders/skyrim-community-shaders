@@ -176,16 +176,12 @@ void PerformanceOverlay::DrawSettings()
 			if (this->settings.ShowFPS && isFrameGenerationActive) {
 				ImGui::Checkbox("Show Pre-FG Frametime Graph", &this->settings.ShowPreFGFrameTimeGraph);
 
+				ImGui::Checkbox("Show Post-FG Frametime Graph", &this->settings.ShowPostFGFrameTimeGraph);
 				bool isFSRFrameGen = globals::fidelityFX && globals::fidelityFX->isFrameGenActive;
-				if (isFSRFrameGen) {
-					ImGui::BeginDisabled();
-					ImGui::Checkbox("Show Post-FG Frametime Graph", &this->settings.ShowPostFGFrameTimeGraph);
-					ImGui::EndDisabled();
+				if (isFSRFrameGen && ImGui::IsItemHovered()) {
 					if (auto _tt = Util::HoverTooltipWrapper()) {
-						ImGui::Text("Post-FG detailed timing graphs not available with AMD FSR Frame Generation.\nFrametime graphs are only available with NVIDIA DLSS Frame Generation.");
+						ImGui::Text("FSR Frame Generation uses calculated timing data (2x Pre-FG).\nDLSS Frame Generation provides measured timing data.");
 					}
-				} else {
-					ImGui::Checkbox("Show Post-FG Frametime Graph", &this->settings.ShowPostFGFrameTimeGraph);
 				}
 			} else if (this->settings.ShowFPS) {
 				ImGui::Checkbox("Show Frametime Graph", &this->settings.ShowPreFGFrameTimeGraph);
@@ -497,15 +493,15 @@ void PerformanceOverlay::DrawFPS()
 		bool isFSRFrameGen = globals::fidelityFX && globals::fidelityFX->isFrameGenActive;
 
 		if (isFSRFrameGen) {
-			// Show note that post-FG detailed timing graphs aren't available with FSR
-			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Post-FG timing graphs not available with FSR");
+			// Show note that FSR uses calculated data
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Post-FG: Calculated timing (2x Pre-FG)");
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("AMD FSR Frame Generation doesn't provide internal timing data.\nDetailed frametime graphs are only available with NVIDIA DLSS Frame Generation.");
+				ImGui::Text("AMD FSR Frame Generation uses calculated timing data (2x Pre-FG).\nNVIDIA DLSS Frame Generation provides measured timing data.");
 			}
-		} else {
-			// Show post-FG graph for DLSS
-			this->perfOverlayState.DrawPostFGFrameTimeGraph();
 		}
+
+		// Show post-FG graph for both DLSS and FSR (FSR uses calculated data)
+		this->perfOverlayState.DrawPostFGFrameTimeGraph();
 	}
 }
 
