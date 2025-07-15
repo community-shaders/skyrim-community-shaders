@@ -180,7 +180,13 @@ void Upscaling::DrawSettings()
 		for (const auto& [name, version] : FidelityFX::dllVersions)
 			ffRows.push_back({ name, version });
 		std::vector<Util::TableSortFunc> ffSorters = { nullptr, Util::VersionSortComparator };
-		Util::ShowSortedStringTable("ffx_dll_versions", headers, ffRows, 0, true, ffSorters);
+		Util::ShowSortedStringTableStrings(
+			"ffx_dll_versions",
+			headers,
+			ffRows,
+			0,
+			true,
+			ffSorters);
 
 		// Streamline section
 		if (ImGui::Selectable("NVIDIA Streamline DLLs (click to open folder)")) {
@@ -190,7 +196,13 @@ void Upscaling::DrawSettings()
 		for (const auto& [name, version] : Streamline::dllVersions)
 			slRows.push_back({ name, version });
 		std::vector<Util::TableSortFunc> slSorters = { nullptr, Util::VersionSortComparator };
-		Util::ShowSortedStringTable("sl_dll_versions", headers, slRows, 0, true, slSorters);
+		Util::ShowSortedStringTableStrings(
+			"sl_dll_versions",
+			headers,
+			slRows,
+			0,
+			true,
+			slSorters);
 		ImGui::TreePop();
 	}
 }

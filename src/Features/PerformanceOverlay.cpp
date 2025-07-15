@@ -600,7 +600,7 @@ void PerformanceOverlay::DrawABTestResultsTable()
 	for (const auto& col : columns) sorters.push_back(col.sortFunc);
 	std::vector<DrawCallRow> mainRowsCopy = mainRows;
 	std::vector<DrawCallRow> summaryRowsCopy = summaryRows;
-	Util::ShowSortedStringTable<DrawCallRow>(
+	Util::ShowSortedStringTableCustom<DrawCallRow>(
 		"ABTestResultsTable",
 		[&columns]() { std::vector<std::string> h; for (const auto& c : columns) h.push_back(c.header); return h; }(),
 		mainRowsCopy,
@@ -1319,7 +1319,7 @@ void PerformanceOverlay::DrawDrawCallsTable(const std::vector<DrawCallRow>& main
 	auto rowHandler = overlay->CreateTableRowHandler(columns, overlay);
 
 	// Render the table
-	Util::ShowSortedStringTable<DrawCallRow>(
+	Util::ShowSortedStringTableCustom<DrawCallRow>(
 		"DrawCallOverlayTable",
 		[&columns]() { std::vector<std::string> h; for (const auto& c : columns) h.push_back(c.header); return h; }(),
 		mainRowsCopy,
