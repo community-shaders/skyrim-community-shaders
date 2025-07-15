@@ -90,8 +90,8 @@ void Upscaling::DrawSettings()
 	}
 
 	if (!globals::game::isVR) {
-		bool frameGenAvailable = ((globals::streamline && globals::streamline->featureDLSSG) ||
-								  (globals::fidelityFX && globals::fidelityFX->featureFSR3FG));
+		bool frameGenAvailable = (globals::streamline && globals::streamline->featureDLSSG) ||
+								  (globals::fidelityFX && globals::fidelityFX->featureFSR3FG);
 		if (frameGenAvailable) {
 			if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
 				ImGui::Text("Frame Generation interpolates real frames with generated ones for a smoother experience");
