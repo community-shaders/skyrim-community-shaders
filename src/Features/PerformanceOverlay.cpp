@@ -1886,7 +1886,10 @@ void PerformanceOverlay::PerfOverlayState::UpdateFGFrameTime()
 
 	// Get frametime directly from the Frame Generation system
 	float fgDeltaTime = globals::upscaling->GetFrameGenerationFrameTime();
-	if (fgDeltaTime > 0.0f) {
+
+	// Check if FSR frame generation is active (FSR doesn't provide timing data)
+	bool isFSRFrameGen = globals::fidelityFX && globals::fidelityFX->isFrameGenActive;
+	if (fgDeltaTime > 0.0f && !isFSRFrameGen) {
 		overlay->perfOverlayState.SetPostFGFrameTimeMs(fgDeltaTime * 1000.0f);
 		overlay->perfOverlayState.SetPostFGFps(1000.0f / overlay->perfOverlayState.GetPostFGFrameTimeMs());
 
