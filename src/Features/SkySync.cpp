@@ -394,7 +394,7 @@ void SkySync::ClimateTimings::Update(const RE::TESClimate* climate)
 
 void SkySync::Sky_OnNewClimate::thunk(RE::Sky* sky)
 {
-	if (const auto singleton = GetSingleton(); singleton->settings.Enabled && sky)
+	if (const auto singleton = GetSingleton(); sky && singleton->settings.Enabled)
 		singleton->timings.Update(sky->currentClimate);
 	func(sky);
 }
