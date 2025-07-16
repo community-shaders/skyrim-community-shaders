@@ -39,8 +39,12 @@ void FidelityFX::LoadFFX()
 	std::filesystem::path pluginDir = std::filesystem::path(FidelityFX::PluginDir);
 	FidelityFX::dllVersions = Util::EnumerateDllVersions(pluginDir);
 
-	if (module)
+	if (module){
 		ffxLoadFunctions(&ffxModule, module);
+		featureFSR3FG = true;
+	} else {
+		featureFSR3FG = false;
+	}
 }
 
 void FidelityFX::SetupFrameGeneration()
@@ -56,12 +60,8 @@ void FidelityFX::SetupFrameGeneration()
 	ffx::CreateBackendDX12Desc createBackend{};
 	createBackend.device = swapChain->d3d12Device.get();
 
-	if (ffx::CreateContext(frameGenContext, nullptr, createFg, createBackend) != ffx::ReturnCode::Ok) {
-		featureFSR3FG = false;
+	if (ffx::CreateContext(frameGenContext, nullptr, createFg, createBackend) != ffx::ReturnCode::Ok)
 		logger::critical("[FidelityFX] Failed to create frame generation context!");
-	} else {
-		featureFSR3FG = true;
-	}
 }
 
 /**
