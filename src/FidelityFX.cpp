@@ -39,7 +39,7 @@ void FidelityFX::LoadFFX()
 	std::filesystem::path pluginDir = std::filesystem::path(FidelityFX::PluginDir);
 	FidelityFX::dllVersions = Util::EnumerateDllVersions(pluginDir);
 
-	if (module){
+	if (module) {
 		ffxLoadFunctions(&ffxModule, module);
 		featureFSR3FG = true;
 	} else {
