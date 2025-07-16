@@ -205,8 +205,8 @@ public:
 private:
 	Settings settings;
 
-	bool pendingFontChange = false;  // Tracks whether font has been modified and may require reloading
-	void ReloadFont();               // Credit to user patchuli: https://github.com/Patchu1i/ModExplorerMenu/tree/master
+	bool pendingFontChange = true;  // Tracks whether font has been modified and may require reloading
+	void ReloadFont();              // Credit to user patchuli: https://github.com/Patchu1i/ModExplorerMenu/tree/master
 
 	// Menu navigation
 	std::string pendingFeatureSelection;  // Feature to select on next frame

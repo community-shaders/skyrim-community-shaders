@@ -1676,7 +1676,7 @@ void Menu::DrawOverlay()
 	}
 
 	// Reload font if user changed something
-	if (pendingFontChange || std::abs(ImGui::GetFontSize() - settings.Theme.FontSize) > 0.01f) {
+	if (pendingFontChange) {
 		ReloadFont();
 	}
 
