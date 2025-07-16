@@ -1304,9 +1304,7 @@ void Menu::DrawGeneralSettings()
 						auto& io = ImGui::GetIO();
 						io.FontGlobalScale = trueScale;
 					}
-					if (ImGui::SliderFloat("Font Size", &themeSettings.FontSize, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE, "%.0f")) {
-						pendingFontChange = true;
-					}
+					ImGui::SliderFloat("Font Size", &themeSettings.FontSize, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE, "%.0f");
 					ImGui::SliderFloat2("Window Padding", (float*)&style.WindowPadding, 0.0f, 20.0f, "%.0f");
 					ImGui::SliderFloat2("Frame Padding", (float*)&style.FramePadding, 0.0f, 20.0f, "%.0f");
 					ImGui::SliderFloat2("Item Spacing", (float*)&style.ItemSpacing, 0.0f, 20.0f, "%.0f");
@@ -1662,7 +1660,7 @@ void Menu::DrawFooter()
 
 void Menu::DrawOverlay()
 {
-	ProcessInputEventQueue();  //Synchronize Inputs to frame
+	ProcessInputEventQueue();  // Synchronize Inputs to frame
 
 	auto shaderCache = globals::shaderCache;
 	auto failed = shaderCache->GetFailedTasks();
@@ -1676,7 +1674,7 @@ void Menu::DrawOverlay()
 	}
 
 	// Reload font if user changed something
-	if (pendingFontChange) {
+	if (cachedFontSize - settings.Theme.FontSize > 0.01) {
 		ReloadFont();
 	}
 
@@ -2290,5 +2288,5 @@ void Menu::ReloadFont()
 
 	io.FontGlobalScale = exp2(settings.Theme.GlobalScale);
 
-	pendingFontChange = false;
+	cachedFontSize = settings.Theme.FontSize;
 }
