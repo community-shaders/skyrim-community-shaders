@@ -35,6 +35,45 @@ public:
 	void ProcessInputEvents(RE::InputEvent* const* a_events);
 	bool ShouldSwallowInput();
 
+#ifdef ENABLE_SKYRIM_VR
+public:
+	// ButtonState for left/right trigger, grip, touchpad, A/X, B/Y
+	RE::BSInputDevice::ButtonState leftGripState;
+	RE::BSInputDevice::ButtonState rightGripState;
+	RE::BSInputDevice::ButtonState leftTriggerState;
+	RE::BSInputDevice::ButtonState rightTriggerState;
+	RE::BSInputDevice::ButtonState leftTouchpadState;
+	RE::BSInputDevice::ButtonState rightTouchpadState;
+	RE::BSInputDevice::ButtonState leftAorXState;
+	RE::BSInputDevice::ButtonState rightAorXState;
+	RE::BSInputDevice::ButtonState leftBorYState;
+	RE::BSInputDevice::ButtonState rightBorYState;
+	RE::BSInputDevice::ButtonState leftStickClickState;
+	RE::BSInputDevice::ButtonState rightStickClickState;
+	// VR controller event log struct and vector
+	struct VRControllerEventLog
+	{
+		int device;
+		int keyCode;
+		int value;
+		bool pressed;
+		double heldTime;
+		std::string heldSource;
+		float thumbstickX = 0.0f;
+		float thumbstickY = 0.0f;
+		// For thumbstick events, keyCode/value are replaced by x/y floats
+	};
+	std::vector<VRControllerEventLog> vrControllerEventLog;
+	// Thumbstick state for left/right VR controllers
+	struct VRThumbstickState
+	{
+		float x = 0.0f;
+		float y = 0.0f;
+	};
+	VRThumbstickState leftThumbstickState;
+	VRThumbstickState rightThumbstickState;
+#endif
+
 	// Used for resetting input keys to solve alt-tab stuck issue
 	std::atomic<bool> focusChanged = false;
 	void OnFocusChanged();
@@ -202,6 +241,62 @@ public:
 	// Static utility functions
 	static const char* KeyIdToString(uint32_t key);
 
+public:
+	// Move KeyEvent struct here
+	class CharEvent : public RE::InputEvent
+	{
+	public:
+		uint32_t keyCode;  // 18 (ascii code)
+	};
+	struct KeyEvent
+	{
+		explicit KeyEvent(const RE::ButtonEvent* a_event) :
+			keyCode(a_event->GetIDCode()),
+			device(a_event->GetDevice()),
+			eventType(a_event->GetEventType()),
+			value(a_event->Value()),
+			heldDownSecs(a_event->HeldDuration()),
+			thumbstickX(0.0f),
+			thumbstickY(0.0f) {}
+
+		explicit KeyEvent(const CharEvent* a_event) :
+			keyCode(a_event->keyCode),
+			device(a_event->GetDevice()),
+			eventType(a_event->GetEventType()),
+			value(0),
+			heldDownSecs(0),
+			thumbstickX(0.0f),
+			thumbstickY(0.0f) {}
+
+#ifdef ENABLE_SKYRIM_VR
+		explicit KeyEvent(const RE::ThumbstickEvent* a_event) :
+			keyCode(0),  // For thumbstick events, keyCode/value are replaced by x/y floats
+			device(a_event->GetDevice()),
+			eventType(a_event->GetEventType()),
+			value(0),
+			heldDownSecs(0),
+			thumbstickX(a_event->xValue),
+			thumbstickY(a_event->yValue)
+		{}
+#endif
+		// For thumbstick events, keyCode/value are replaced by x/y floats
+		uint32_t keyCode;
+		RE::INPUT_DEVICE device;
+		RE::INPUT_EVENT_TYPE eventType;
+		float value = 0;
+		float heldDownSecs = 0;
+		float thumbstickX = 0.0f;
+		float thumbstickY = 0.0f;
+		[[nodiscard]] constexpr bool IsPressed() const noexcept { return value > 0.0F; }
+		[[nodiscard]] constexpr bool IsRepeating() const noexcept { return heldDownSecs > 0.0F; }
+		[[nodiscard]] constexpr bool IsDown() const noexcept { return IsPressed() && (heldDownSecs == 0.0F); }
+		[[nodiscard]] constexpr bool IsHeld() const noexcept { return IsPressed() && IsRepeating(); }
+		[[nodiscard]] constexpr bool IsUp() const noexcept { return (value == 0.0F) && IsRepeating(); }
+	};
+	// VR overlay input and cursor helpers
+	void ProcessVROverlayInput();
+	void SetMenuCursorPosition(float x, float y);
+
 private:
 	Settings settings;
 
@@ -230,38 +325,6 @@ private:
 	void DrawFooter();
 	void BuildCategoryCounts();
 
-	class CharEvent : public RE::InputEvent
-	{
-	public:
-		uint32_t keyCode;  // 18 (ascii code)
-	};
-
-	struct KeyEvent
-	{
-		explicit KeyEvent(const RE::ButtonEvent* a_event) :
-			keyCode(a_event->GetIDCode()),
-			device(a_event->GetDevice()),
-			eventType(a_event->GetEventType()),
-			value(a_event->Value()),
-			heldDownSecs(a_event->HeldDuration()) {}
-
-		explicit KeyEvent(const CharEvent* a_event) :
-			keyCode(a_event->keyCode),
-			device(a_event->GetDevice()),
-			eventType(a_event->GetEventType()) {}
-
-		[[nodiscard]] constexpr bool IsPressed() const noexcept { return value > 0.0F; }
-		[[nodiscard]] constexpr bool IsRepeating() const noexcept { return heldDownSecs > 0.0F; }
-		[[nodiscard]] constexpr bool IsDown() const noexcept { return IsPressed() && (heldDownSecs == 0.0F); }
-		[[nodiscard]] constexpr bool IsHeld() const noexcept { return IsPressed() && IsRepeating(); }
-		[[nodiscard]] constexpr bool IsUp() const noexcept { return (value == 0.0F) && IsRepeating(); }
-
-		uint32_t keyCode;
-		RE::INPUT_DEVICE device;
-		RE::INPUT_EVENT_TYPE eventType;
-		float value = 0;
-		float heldDownSecs = 0;
-	};
 	const uint32_t DIKToVK(uint32_t DIK);
 	mutable std::shared_mutex _inputEventMutex;
 	std::vector<KeyEvent> _keyEventQueue{};

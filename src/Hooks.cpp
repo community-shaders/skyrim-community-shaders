@@ -570,7 +570,7 @@ struct BSInputDeviceManager_PollInputDevices
 
 			if (*a_events) {
 				if (auto device = (*a_events)->GetDevice()) {
-					// Check that the device is not a Gamepad or VR controller. If it is, unblock input.
+					// Check if this is a VR device that should be blocked when menu is open
 					bool vrDevice = false;
 #ifdef ENABLE_SKYRIM_VR
 					vrDevice = (globals::game::isVR && ((device == RE::INPUT_DEVICES::INPUT_DEVICE::kVivePrimary) ||
@@ -580,7 +580,9 @@ struct BSInputDeviceManager_PollInputDevices
 														   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRPrimary) ||
 														   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRSecondary)));
 #endif
-					blockedDevice = !((device == RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad) || vrDevice);
+					// Block VR devices when menu is open to prevent game interaction
+					// Allow gamepad and non-VR devices to pass through
+					blockedDevice = !((device == RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad) || !vrDevice);
 				}
 			}
 		}
