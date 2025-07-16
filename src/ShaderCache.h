@@ -242,11 +242,22 @@ namespace SIE
 	class CompilationSet
 	{
 	public:
+		LARGE_INTEGER lastReset;
+		LARGE_INTEGER lastCalculation;
+		LARGE_INTEGER frequency;
+		LARGE_INTEGER totalTime = { 0 };
+
+	   	CompilationSet() {
+			QueryPerformanceFrequency(&frequency);
+			QueryPerformanceCounter(&lastReset);
+			QueryPerformanceCounter(&lastCalculation);
+    	}
+
 		std::optional<ShaderCompilationTask> WaitTake(std::stop_token stoken);
 		void Add(const ShaderCompilationTask& task);
 		void Complete(const ShaderCompilationTask& task);
 		void Clear();
-		std::string GetHumanTime(double a_totalms);
+		std::string GetHumanTime(double a_totalMs);
 		double GetEta();
 		std::string GetStatsString(bool a_timeOnly = false);
 		std::atomic<uint64_t> completedTasks = 0;
@@ -260,9 +271,6 @@ namespace SIE
 		std::unordered_set<ShaderCompilationTask> tasksInProgress;
 		std::unordered_set<ShaderCompilationTask> processedTasks;  // completed or failed
 		std::condition_variable_any conditionVariable;
-		std::chrono::steady_clock::time_point lastReset = high_resolution_clock::now();
-		std::chrono::steady_clock::time_point lastCalculation = high_resolution_clock::now();
-		double totalMs = (double)duration_cast<std::chrono::milliseconds>(lastReset - lastReset).count();
 	};
 
 	struct ShaderCacheResult
