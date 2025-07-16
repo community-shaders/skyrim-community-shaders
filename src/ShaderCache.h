@@ -247,11 +247,12 @@ namespace SIE
 		LARGE_INTEGER frequency;
 		LARGE_INTEGER totalTime = { 0 };
 
-	   	CompilationSet() {
+		CompilationSet()
+		{
 			QueryPerformanceFrequency(&frequency);
 			QueryPerformanceCounter(&lastReset);
 			QueryPerformanceCounter(&lastCalculation);
-    	}
+		}
 
 		std::optional<ShaderCompilationTask> WaitTake(std::stop_token stoken);
 		void Add(const ShaderCompilationTask& task);
