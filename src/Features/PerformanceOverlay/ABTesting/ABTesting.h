@@ -1,6 +1,6 @@
 #pragma once
 #include "ABTestAggregator.h"
-#include <chrono>
+#include <Windows.h>
 #include <nlohmann/json.hpp>
 #include <vector>
 
@@ -32,6 +32,7 @@ private:
 	uint32_t testInterval = 0;
 	bool abTestingEnabled = false;
 	bool usingTestConfig = false;
-	std::chrono::high_resolution_clock::time_point lastTestSwitch;
+	LARGE_INTEGER timingFrequency = {0};
+	LARGE_INTEGER lastTestSwitch = {0};
 	ABTestAggregator aggregator;
 };
