@@ -1674,7 +1674,7 @@ void Menu::DrawOverlay()
 	}
 
 	// Reload font if user changed something
-	if (cachedFontSize - settings.Theme.FontSize > 0.01) {
+	if (cachedFontSize - settings.Theme.FontSize > 0.01f) {
 		ReloadFont();
 	}
 
