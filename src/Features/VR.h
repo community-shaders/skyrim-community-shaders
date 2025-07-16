@@ -76,8 +76,4 @@ struct VR : Feature
 
 	bool* gDepthBufferCulling = nullptr;
 	float* gMinOccludeeBoxExtent = nullptr;
-
-#ifdef ENABLE_SKYRIM_VR
-	// static void ProcessVRInputEvent(const Menu::KeyEvent& event); // REMOVE THIS LINE
-#endif
 };

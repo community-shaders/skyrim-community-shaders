@@ -20,6 +20,7 @@ public:
 	}
 
 	bool initialized = false;
+	bool IsEnabled = false;
 
 	void Load(json& o_json);
 	void Save(json& o_json);
@@ -35,7 +36,6 @@ public:
 	void ProcessInputEvents(RE::InputEvent* const* a_events);
 	bool ShouldSwallowInput();
 
-#ifdef ENABLE_SKYRIM_VR
 public:
 	// ButtonState for left/right trigger, grip, touchpad, A/X, B/Y
 	RE::BSInputDevice::ButtonState leftGripState;
@@ -72,7 +72,6 @@ public:
 	};
 	VRThumbstickState leftThumbstickState;
 	VRThumbstickState rightThumbstickState;
-#endif
 
 	// Used for resetting input keys to solve alt-tab stuck issue
 	std::atomic<bool> focusChanged = false;
@@ -268,7 +267,6 @@ public:
 			thumbstickX(0.0f),
 			thumbstickY(0.0f) {}
 
-#ifdef ENABLE_SKYRIM_VR
 		explicit KeyEvent(const RE::ThumbstickEvent* a_event) :
 			keyCode(0),  // For thumbstick events, keyCode/value are replaced by x/y floats
 			device(a_event->GetDevice()),
@@ -278,7 +276,6 @@ public:
 			thumbstickX(a_event->xValue),
 			thumbstickY(a_event->yValue)
 		{}
-#endif
 		// For thumbstick events, keyCode/value are replaced by x/y floats
 		uint32_t keyCode;
 		RE::INPUT_DEVICE device;

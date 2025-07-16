@@ -7,6 +7,11 @@
 #	include "Utils/UI.h"
 extern vr::VROverlayHandle_t g_vrMenuOverlayHandle;
 extern vr::VROverlayHandle_t g_vrMenuControllerOverlayHandle;
+
+// --- Static variables for stick click combo detection ---
+static double lastLeftStickClick = 0.0;
+static double lastRightStickClick = 0.0;
+static constexpr double stickClickComboWindow = 0.3;
 #endif
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -754,73 +759,3 @@ void VR::UpdateVROverlayControllerPosition()
 	}
 #endif
 }
-
-#ifdef ENABLE_SKYRIM_VR
-namespace VRInputBridge
-{
-	void ProcessVRInputEvent(const Menu::KeyEvent& event)
-	{
-		auto* menu = Menu::GetSingleton();
-		auto now = std::chrono::steady_clock::now().time_since_epoch();
-		double nowSecs = std::chrono::duration_cast<std::chrono::duration<double>>(now).count();
-		Menu::VRControllerEventLog logEntry;
-		logEntry.device = static_cast<int>(event.device);
-		logEntry.keyCode = event.keyCode;
-		logEntry.value = static_cast<int>(event.value);
-		logEntry.pressed = event.IsPressed();
-		logEntry.heldTime = 0.0;
-		logEntry.heldSource = "chrono";
-		bool isLeft = (event.device == RE::INPUT_DEVICE::kVivePrimary || event.device == RE::INPUT_DEVICE::kOculusPrimary || event.device == RE::INPUT_DEVICE::kWMRPrimary);
-		bool isRight = (event.device == RE::INPUT_DEVICE::kViveSecondary || event.device == RE::INPUT_DEVICE::kOculusSecondary || event.device == RE::INPUT_DEVICE::kWMRSecondary);
-		if (RE::BSOpenVRControllerDevice::IsGripButton(event.keyCode)) {
-			if (isLeft) {
-				menu->leftGripState.OnEvent(event.IsPressed(), nowSecs);
-				logEntry.heldTime = menu->leftGripState.isPressed ? (nowSecs - menu->leftGripState.lastPressTime) : menu->leftGripState.holdDuration;
-			} else if (isRight) {
-				menu->rightGripState.OnEvent(event.IsPressed(), nowSecs);
-				logEntry.heldTime = menu->rightGripState.isPressed ? (nowSecs - menu->rightGripState.lastPressTime) : menu->rightGripState.holdDuration;
-			}
-		}
-		if (RE::BSOpenVRControllerDevice::IsTriggerButton(event.keyCode)) {
-			if (isLeft) {
-				menu->leftTriggerState.OnEvent(event.IsPressed(), nowSecs);
-				logEntry.heldTime = menu->leftTriggerState.isPressed ? (nowSecs - menu->leftTriggerState.lastPressTime) : menu->leftTriggerState.holdDuration;
-			} else if (isRight) {
-				menu->rightTriggerState.OnEvent(event.IsPressed(), nowSecs);
-				logEntry.heldTime = menu->rightTriggerState.isPressed ? (nowSecs - menu->rightTriggerState.lastPressTime) : menu->rightTriggerState.holdDuration;
-			}
-		}
-		if (RE::BSOpenVRControllerDevice::IsTouchpadClick(event.keyCode)) {
-			if (isLeft) {
-				menu->leftTouchpadState.OnEvent(event.IsPressed(), nowSecs);
-				logEntry.heldTime = menu->leftTouchpadState.isPressed ? (nowSecs - menu->leftTouchpadState.lastPressTime) : menu->leftTouchpadState.holdDuration;
-			} else if (isRight) {
-				menu->rightTouchpadState.OnEvent(event.IsPressed(), nowSecs);
-				logEntry.heldTime = menu->rightTouchpadState.isPressed ? (nowSecs - menu->rightTouchpadState.lastPressTime) : menu->rightTouchpadState.holdDuration;
-			}
-		}
-		if (RE::BSOpenVRControllerDevice::IsAButton(event.keyCode)) {
-			if (isLeft) {
-				menu->leftAorXState.OnEvent(event.IsPressed(), nowSecs);
-				logEntry.heldTime = menu->leftAorXState.isPressed ? (nowSecs - menu->leftAorXState.lastPressTime) : menu->leftAorXState.holdDuration;
-			} else if (isRight) {
-				menu->rightAorXState.OnEvent(event.IsPressed(), nowSecs);
-				logEntry.heldTime = menu->rightAorXState.isPressed ? (nowSecs - menu->rightAorXState.lastPressTime) : menu->rightAorXState.holdDuration;
-			}
-		}
-		if (RE::BSOpenVRControllerDevice::IsBButton(event.keyCode)) {
-			if (isLeft) {
-				menu->leftBorYState.OnEvent(event.IsPressed(), nowSecs);
-				logEntry.heldTime = menu->leftBorYState.isPressed ? (nowSecs - menu->leftBorYState.lastPressTime) : menu->leftBorYState.holdDuration;
-			} else if (isRight) {
-				menu->rightBorYState.OnEvent(event.IsPressed(), nowSecs);
-				logEntry.heldTime = menu->rightBorYState.isPressed ? (nowSecs - menu->rightBorYState.lastPressTime) : menu->rightBorYState.holdDuration;
-			}
-		}
-		menu->vrControllerEventLog.push_back(logEntry);
-		if (menu->vrControllerEventLog.size() > 32) {
-			menu->vrControllerEventLog.erase(menu->vrControllerEventLog.begin());
-		}
-	}
-}  // namespace VRInputBridge
-#endif
