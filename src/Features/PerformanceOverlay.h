@@ -5,6 +5,7 @@
 #include "PerformanceOverlay/ABTesting/ABTestAggregator.h"
 #include "Utils/PerfUtils.h"
 #include <Windows.h>
+#include <chrono>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <unordered_map>
@@ -372,6 +373,6 @@ private:
 	void CaptureTestData();
 	void ClearTestData();
 	TestDataSource testDataSource = TestDataSource::None;
-	LARGE_INTEGER testDataLastUpdated = {0};
+	std::chrono::steady_clock::time_point testDataLastUpdated;
 	std::unordered_map<int, TestData> testData;
 };

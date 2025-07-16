@@ -1675,7 +1675,7 @@ void PerformanceOverlay::HandleShaderToggle(const DrawCallRow& row, bool wasEnab
 		this->testData[magic_enum::enum_integer(SpecialShaderType::Total)] = { smoothedFrameTime, totalCostPerCall, 100.0f };
 		this->testData[magic_enum::enum_integer(SpecialShaderType::Other)] = { otherFrameTime, 0.0f, otherPercent };
 		this->testDataSource = TestDataSource::ManualShaderToggle;
-		QueryPerformanceCounter(&this->testDataLastUpdated);
+		this->testDataLastUpdated = std::chrono::steady_clock::now();
 	}
 }
 
@@ -1714,7 +1714,7 @@ void PerformanceOverlay::HandleTotalRowToggle()
 		this->testData[magic_enum::enum_integer(SpecialShaderType::Total)] = { smoothedFrameTime, totalCostPerCall, 100.0f };
 		this->testData[magic_enum::enum_integer(SpecialShaderType::Other)] = { otherFrameTime, 0.0f, otherPercent };
 		this->testDataSource = TestDataSource::ManualShaderToggle;
-		QueryPerformanceCounter(&this->testDataLastUpdated);
+		this->testDataLastUpdated = std::chrono::steady_clock::now();
 	}
 }
 // ============================================================================
@@ -1752,7 +1752,7 @@ void PerformanceOverlay::UpdateShaderTestData(int shaderType, float frameTime, f
 	UpdateSummaryTestData(smoothedFrameTime, otherFrameTime, otherPercent, totalCostPerCall);
 
 	testDataSource = TestDataSource::ManualShaderToggle;
-	QueryPerformanceCounter(&testDataLastUpdated);
+	testDataLastUpdated = std::chrono::steady_clock::now();
 }
 
 /**
@@ -1800,7 +1800,7 @@ void PerformanceOverlay::UpdateAllShaderTestData()
 	auto [otherFrameTime, otherPercent, totalCostPerCall] = CalculateSummaryData(smoothedFrameTime, measuredSum);
 	UpdateSummaryTestData(smoothedFrameTime, otherFrameTime, otherPercent, totalCostPerCall);
 	testDataSource = TestDataSource::ABTest_VariantB;
-	QueryPerformanceCounter(&testDataLastUpdated);
+	testDataLastUpdated = std::chrono::steady_clock::now();
 }
 
 std::string PerformanceOverlay::GetTestDataTooltip()
@@ -1845,7 +1845,7 @@ void PerformanceOverlay::CaptureTestData()
 		auto [otherFrameTime, otherPercent, totalCostPerCall] = CalculateSummaryData(smoothedFrameTime, measuredSum);
 		UpdateSummaryTestData(smoothedFrameTime, otherFrameTime, otherPercent, totalCostPerCall);
 		testDataSource = TestDataSource::ABTest_VariantB;
-		QueryPerformanceCounter(&testDataLastUpdated);
+		testDataLastUpdated = std::chrono::steady_clock::now();
 	} else if (anyShaderDisabled) {
 		measuredSum = 0.0f;
 		globals::state->ForEachShaderTypeWithMetrics([&measuredSum, smoothedFrameTime, this]([[maybe_unused]] auto type, int typeIndex, [[maybe_unused]] float drawCalls, float frameTime, float percent, float costPerCall) {
@@ -1858,7 +1858,7 @@ void PerformanceOverlay::CaptureTestData()
 		auto [otherFrameTime, otherPercent, totalCostPerCall] = CalculateSummaryData(smoothedFrameTime, measuredSum);
 		UpdateSummaryTestData(smoothedFrameTime, otherFrameTime, otherPercent, totalCostPerCall);
 		testDataSource = TestDataSource::ManualShaderToggle;
-		QueryPerformanceCounter(&testDataLastUpdated);
+		testDataLastUpdated = std::chrono::steady_clock::now();
 	}
 }
 
