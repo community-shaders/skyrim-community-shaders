@@ -150,22 +150,22 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 
 	// Simplified blending for better performance - reduce contrast calculation overhead
 	float3 blendWeights = saturate(offsets.weights);
-	
+
 	// Gradual fade-out of height blending based on distance (mip level)
 	float heightBlendFactor = saturate(1.0 - (mipLevel - 1.0) / 2.0); // Fade from mip 1.0 to 3.0
-	
+
 	if (heightBlendFactor > 0.0)
 	{
 		// Use Extended Materials style height blending for better quality
 		float3 heights = float3(sample1.a, sample2.a, sample3.a);
-		
+
 		// Apply distance-based fade to height influence
 		float heightBlend = 1.0 + (HEIGHT_INFLUENCE * heightBlendFactor * 2.0); // Scale similar to ExtendedMaterials HEIGHT_POWER
-		
+
 		// Apply height-based weighting (simplified version of ExtendedMaterials ProcessTerrainHeightWeights)
 		float3 heightWeights = blendWeights * pow(heightBlend, 8.0 * heights); // HEIGHT_MULT = 8
 		heightWeights = min(100.0, pow(heightWeights, heightBlend));
-		
+
 		// Normalize weights
 		blendWeights = NormalizeWeights(heightWeights);
 	}
