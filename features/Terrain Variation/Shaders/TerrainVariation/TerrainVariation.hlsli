@@ -20,11 +20,10 @@ static const float3 DEFAULT_WEIGHTS = float3(0.33, 0.33, 0.34);
 static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
 // Hash constants
 static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
-static const float2 HASH_SINE_MULTIPLIER = float2(43758.5453, 28637.1369);
-// Mip level transition thresholds - DO NOT CHANGE THESE VALUES.
-static const float MIP_BLEND_START = 5.0;         // Mip level where blending starts transitioning to single sample
-static const float MIP_BLEND_RANGE = 1.5;         // Range over which blending transitions to single sample (5.0 to 6.5)
-static const float MIP_EARLY_EXIT_THRESHOLD = 1.0; // Threshold for early exit to single sample optimization
+// Performance optimization constants
+static const float MIP_LEVEL_INCREASE = 0.5;      // Additional mip level increase for distance optimization
+static const float DISTANCE_SAMPLE_REDUCTION = 2.0; // Mip level where we reduce to 2 samples
+static const float FAR_DISTANCE_THRESHOLD = 4.0;  // Mip level where we use single sample with higher mip level
 
 // Structure to hold stochastic sampling offsets and weights
 struct StochasticOffsets
@@ -45,8 +44,10 @@ float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, flo
 // Hash function for stochastic sampling
 inline float2 hash2D2D(float2 s)
 {
-	s = s * HASH_MULTIPLIER;
-	return frac(sin(s.x + s.y) * HASH_SINE_MULTIPLIER);
+	// More efficient hash using frac and multiply operations
+	s = frac(s * HASH_MULTIPLIER);
+	s += dot(s, s.yx + 19.19);
+	return frac((s.xx + s.yy) * s.yx);
 }
 
 inline float2 hashLOD(float2 p)
@@ -58,6 +59,8 @@ inline float2 hashLOD(float2 p)
 inline float3 NormalizeWeights(float3 weights)
 {
 	float weightSum = weights.x + weights.y + weights.z;
+	// Skip expensive division if already normalized
+	if (abs(weightSum - 1.0) < 0.01) return weights;
 	float rcpWeightSum = rcp(max(weightSum, 1e-6));
 	return weights * rcpWeightSum;
 }
@@ -140,44 +143,40 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 	// Calculate custom mip level from original UVs.
 	float mipLevel = tex.CalculateLevelOfDetail(samp, uv);
 
+	// 3 Sample Blend
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
-
-	// Early exit for very high mip levels - single sample is sufficient. Miplevels hide the artifacts.
-	float mipFactor = saturate((mipLevel - MIP_BLEND_START) / MIP_BLEND_RANGE);
-	if (mipFactor >= MIP_EARLY_EXIT_THRESHOLD)
-	{
-		return sample1;
-		// Wasted ALU since there are still 3 hash calls computed for the pixel, but doesn't really hurt performance and also avoids recalculating when moving closer/further away.
-	}
-
-	// Take three samples for blending at the same adjusted mip level
 	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
 
-	// Full height-based blending for low mip levels (close terrain) with improved contrast scaling
-	float contrastFactor = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE) * (1.0 - 0.5 * mipFactor);
-	float3 blendWeights = pow(saturate(offsets.weights), max(1.0, min(100.0, contrastFactor)));
+	// Simplified blending for better performance - reduce contrast calculation overhead
+	float3 blendWeights = saturate(offsets.weights);
+	
+	// Gradual fade-out of height blending based on distance (mip level)
+	float heightBlendFactor = saturate(1.0 - (mipLevel - 1.0) / 2.0); // Fade from mip 1.0 to 3.0
+	
+	if (heightBlendFactor > 0.0)
+	{
+		// Use Extended Materials style height blending for better quality
+		float3 heights = float3(sample1.a, sample2.a, sample3.a);
+		
+		// Apply distance-based fade to height influence
+		float heightBlend = 1.0 + (HEIGHT_INFLUENCE * heightBlendFactor * 2.0); // Scale similar to ExtendedMaterials HEIGHT_POWER
+		
+		// Apply height-based weighting (simplified version of ExtendedMaterials ProcessTerrainHeightWeights)
+		float3 heightWeights = blendWeights * pow(heightBlend, 8.0 * heights); // HEIGHT_MULT = 8
+		heightWeights = min(100.0, pow(heightWeights, heightBlend));
+		
+		// Normalize weights
+		blendWeights = NormalizeWeights(heightWeights);
+	}
+	else
+	{
+		// Skip expensive height calculations for distant terrain
+		blendWeights = NormalizeWeights(blendWeights);
+	}
 
-	// Height calculation
-	float3 luminanceHeights = float3(
-		dot(sample1.rgb, LUMINANCE_WEIGHTS),
-		dot(sample2.rgb, LUMINANCE_WEIGHTS),
-		dot(sample3.rgb, LUMINANCE_WEIGHTS)
-	);
-
-	float3 alphaValues = float3(sample1.a, sample2.a, sample3.a);
-	float3 alphaMask = step(0.001, alphaValues);
-	float3 heights = lerp(luminanceHeights, alphaValues, alphaMask);
-
-	// Combined weight calculation and normalization
-	float3 weights = NormalizeWeights(blendWeights * (1.0 + HEIGHT_INFLUENCE * heights));
-
-	// Direct blend without intermediate variable
-	float4 highQualitySample = sample1 * weights.x + sample2 * weights.y + sample3 * weights.z;
-
-	// Smooth transition between high quality and single sample based on mip level
-	float smoothFactor = smoothstep(0.0, 1.0, mipFactor);
-	return lerp(highQualitySample, sample1, smoothFactor);
+	// Final blend
+	return sample1 * blendWeights.x + sample2 * blendWeights.y + sample3 * blendWeights.z;
 }
 
 // Stochastic sampling function without height blending for better performance
@@ -192,10 +191,17 @@ inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 
 		return tex.SampleLevel(samp, uv, mipLevel);
 	}
 
-	// Take three samples for blending
-	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel); // Uses miplevels from EMAT.hlsl.
-	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
-	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
+	// Use progressive mip level increase for better performance in parallax
+	float adjustedMipLevel = mipLevel;
+	if (mipLevel > 1.0)
+	{
+		adjustedMipLevel = mipLevel + (MIP_LEVEL_INCREASE * 0.5);
+	}
+
+	// Take three samples for blending at the adjusted mip level
+	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
+	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, adjustedMipLevel);
+	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, adjustedMipLevel);
 
 	// Simple barycentric blend without height influence
 	float3 weights = NormalizeWeights(saturate(offsets.weights));
