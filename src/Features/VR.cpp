@@ -515,7 +515,6 @@ void VR::DataLoaded()
 
 void VR::UpdateVROverlayPosition()
 {
-#ifdef ENABLE_SKYRIM_VR
 	if (!REL::Module::IsVR()) {
 		return;
 	}
@@ -715,12 +714,10 @@ void VR::UpdateVROverlayPosition()
 
 	// Ensure overlay is visible in the world
 	overlay->SetOverlayFlag(g_vrMenuOverlayHandle, vr::VROverlayFlags_VisibleInDashboard, true);
-#endif
 }
 
 void VR::UpdateVROverlayControllerPosition()
 {
-#ifdef ENABLE_SKYRIM_VR
 	if (!REL::Module::IsVR()) {
 		return;
 	}
@@ -803,5 +800,4 @@ void VR::UpdateVROverlayControllerPosition()
 		// Ensure controller overlay is visible in the world
 		overlay->SetOverlayFlag(g_vrMenuControllerOverlayHandle, vr::VROverlayFlags_VisibleInDashboard, true);
 	}
-#endif
 }
