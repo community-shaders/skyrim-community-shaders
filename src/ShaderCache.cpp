@@ -1507,7 +1507,7 @@ namespace SIE
 		{
 			using enum RE::ImageSpaceManager::ImageSpaceEffectEnum;
 
-			static const std::unordered_map<std::string_view, uint32_t> descriptors{
+			static const ankerl::unordered_dense::map<std::string_view, uint32_t> descriptors{
 				// { "BSImagespaceShaderISBlur", static_cast<uint32_t>(ISBlur) },
 				// { "BSImagespaceShaderBlur3", static_cast<uint32_t>(ISBlur3) },
 				// { "BSImagespaceShaderBlur5", static_cast<uint32_t>(ISBlur5) },
