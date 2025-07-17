@@ -1,7 +1,6 @@
 #include "State.h"
 
 #include <codecvt>
-#include <Windows.h>
 
 #include <pystring/pystring.h>
 
@@ -107,7 +106,7 @@ void State::Draw()
 		if (frameTimingActive && currentShader) {
 			LARGE_INTEGER currentTime;
 			QueryPerformanceCounter(&currentTime);
-			
+
 			// Calculate elapsed time in milliseconds
 			float elapsed = (currentTime.QuadPart - frameStartTime.QuadPart) * 1000.0f / frameTimingFrequency.QuadPart;
 

@@ -4,7 +4,6 @@
 #include "OverlayFeature.h"
 #include "PerformanceOverlay/ABTesting/ABTestAggregator.h"
 #include "Utils/PerfUtils.h"
-#include <Windows.h>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <unordered_map>
@@ -181,8 +180,8 @@ struct PerformanceOverlay : OverlayFeature
 
 		// Update timing using QueryPerformanceCounter
 		float updateTimer = 0.0f;
-		LARGE_INTEGER overlayTimingFrequency = {0};
-		LARGE_INTEGER lastUpdateTime = {0};
+		LARGE_INTEGER overlayTimingFrequency = { 0 };
+		LARGE_INTEGER lastUpdateTime = { 0 };
 
 		// Min/max tracking
 		float minFrameTime = 1000.0f;
@@ -372,6 +371,6 @@ private:
 	void CaptureTestData();
 	void ClearTestData();
 	TestDataSource testDataSource = TestDataSource::None;
-	LARGE_INTEGER testDataLastUpdated = {0};
+	LARGE_INTEGER testDataLastUpdated = { 0 };
 	std::unordered_map<int, TestData> testData;
 };

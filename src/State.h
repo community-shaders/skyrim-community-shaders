@@ -2,7 +2,6 @@
 
 #include <Tracy/Tracy.hpp>
 #include <Tracy/TracyD3D11.hpp>
-#include <Windows.h>
 
 #include <Buffer.h>
 #include <nlohmann/json.hpp>
@@ -26,7 +25,7 @@ public:
 		for (auto& v : drawCalls) v = 0;
 		for (auto& v : frameTimePerType) v = 0.0f;
 		for (auto& v : smoothFrameTimePerType) v = 0.0f;
-		
+
 		// Initialize QueryPerformanceCounter frequency
 		frameTimingFrequency.QuadPart = 0;
 		frameStartTime.QuadPart = 0;

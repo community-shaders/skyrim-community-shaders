@@ -1,6 +1,5 @@
 #pragma once
 #include "ABTestAggregator.h"
-#include <Windows.h>
 #include <nlohmann/json.hpp>
 #include <vector>
 
@@ -32,7 +31,7 @@ private:
 	uint32_t testInterval = 0;
 	bool abTestingEnabled = false;
 	bool usingTestConfig = false;
-	LARGE_INTEGER timingFrequency = {0};
-	LARGE_INTEGER lastTestSwitch = {0};
+	LARGE_INTEGER timingFrequency = { 0 };
+	LARGE_INTEGER lastTestSwitch = { 0 };
 	ABTestAggregator aggregator;
 };
