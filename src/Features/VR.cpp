@@ -19,8 +19,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EnableDepthBufferCulling,
 	MinOccludeeBoxExtent,
 	VRMenuDistance,
-	VRMenuHeight,
-	VRMenuWidth,
+	VRMenuSizePreset,
+	VRMenuScale,
 	VRMenuPositioningMethod,
 	VRMenuAttachToHMD,
 	VRMenuAttachToController,
@@ -31,7 +31,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VRMenuControllerOffsetX,
 	VRMenuControllerOffsetY,
 	VRMenuControllerOffsetZ,
-	VRMenuEnableControllerInput)
+	VRMenuEnableControllerInput,
+	VRMenuControllerDiagnosticsTestMode,
+	mouseDeadzone,
+	mouseSpeed)
 
 void VR::DrawSettings()
 {
@@ -67,25 +70,25 @@ void VR::DrawSettings()
 				ImGui::Text("HMD Relative: Menu follows your head movement. Fixed World Position: Menu stays at a fixed location in the world.");
 			}
 
+			if (ImGui::Combo("Menu Size", &settings.VRMenuSizePreset, "Small (1280x720)\0Medium (1920x1080)\0Large (2560x1440)\0")) {
+				UpdateVROverlayPosition();
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Controls the sharpness and clarity of the VR menu overlay.");
+			}
+
+			if (ImGui::SliderFloat("Menu Scale", &settings.VRMenuScale, 0.5f, 2.0f, "%.2fx")) {
+				UpdateVROverlayPosition();
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Scales the menu overlay size in VR space.");
+			}
+
 			if (ImGui::SliderFloat("Menu Distance", &settings.VRMenuDistance, 0.5f, 3.0f, "%.1f m")) {
 				UpdateVROverlayPosition();
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Distance from the player's head to display the menu overlay.");
-			}
-
-			if (ImGui::SliderFloat("Menu Height", &settings.VRMenuHeight, -0.5f, 0.5f, "%.2f m")) {
-				UpdateVROverlayPosition();
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Vertical offset from eye level (negative = below, positive = above).");
-			}
-
-			if (ImGui::SliderFloat("Menu Width", &settings.VRMenuWidth, 0.5f, 2.0f, "%.1f m")) {
-				UpdateVROverlayPosition();
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Width of the menu overlay in meters.");
 			}
 		}
 
@@ -179,6 +182,20 @@ void VR::DrawSettings()
 				ImGui::Text("Enable interaction with the menu using controller input (touchpad, buttons, etc.).");
 			}
 
+			if (ImGui::SliderFloat("Mouse Deadzone", &settings.mouseDeadzone, 0.0f, 1.0f, "%.2f")) {
+				// No extra action needed, value is used in menu input
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Minimum thumbstick deflection required to move the mouse or scroll. Higher values require more movement to register.");
+			}
+
+			if (ImGui::SliderFloat("Mouse Speed", &settings.mouseSpeed, 1.0f, 100.0f, "%.1f")) {
+				// No extra action needed, value is used in menu input
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Mouse speed in pixels per frame per full thumbstick deflection.");
+			}
+
 			if (ImGui::TreeNodeEx("Input Instructions", ImGuiTreeNodeFlags_DefaultOpen)) {
 				ImGui::TextWrapped("Controller Input Options:");
 				ImGui::BulletText("Touchpad: Move cursor and click");
@@ -197,6 +214,7 @@ void VR::DrawSettings()
 
 	// Controller Diagnostics Section
 	if (ImGui::CollapsingHeader("Controller Diagnostics", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::Checkbox("Test Mode: Disable controller menu input (except right thumbstick and triggers)", &settings.VRMenuControllerDiagnosticsTestMode);
 		ImGui::SeparatorText("Button State");
 		auto now = std::chrono::steady_clock::now().time_since_epoch();
 		double nowSecs = std::chrono::duration_cast<std::chrono::duration<double>>(now).count();
@@ -518,6 +536,22 @@ void VR::UpdateVROverlayPosition()
 	bool showOnController = settings.VRMenuAttachToController;
 	bool showOnHMD = settings.VRMenuAttachToHMD;
 
+	// Texture size based on preset
+	int texWidth = 1920, texHeight = 1080;
+	if (settings.VRMenuSizePreset == 0) {
+		texWidth = 1280;
+		texHeight = 720;
+	} else if (settings.VRMenuSizePreset == 2) {
+		texWidth = 2560;
+		texHeight = 1440;
+	}
+	float aspect = static_cast<float>(texHeight) / texWidth;
+	float baseWidth = 1.0f;
+	float overlayWidth = baseWidth * settings.VRMenuScale;
+	float overlayHeight = overlayWidth * aspect;
+	float centerOffsetX = -0.5f * (overlayWidth - baseWidth);
+	float centerOffsetY = -0.5f * (overlayHeight - (baseWidth * aspect));
+
 	// Handle HMD positioning
 	if (showOnHMD) {
 		if (settings.VRMenuPositioningMethod == 0) {
@@ -528,10 +562,9 @@ void VR::UpdateVROverlayPosition()
 			if (hmdPose.bPoseIsValid) {
 				// Calculate position in front of HMD
 				float distance = settings.VRMenuDistance;
-				float height = settings.VRMenuHeight;
-				float width = settings.VRMenuWidth;
-				float offsetX = settings.VRMenuOffsetX;
-				float offsetY = settings.VRMenuOffsetY;
+				float height = 0.0f;  // No longer using settings.VRMenuHeight
+				float offsetX = settings.VRMenuOffsetX + centerOffsetX;
+				float offsetY = settings.VRMenuOffsetY + centerOffsetY;
 				float offsetZ = settings.VRMenuOffsetZ;
 
 				// Create transform matrix - start with identity
@@ -565,8 +598,7 @@ void VR::UpdateVROverlayPosition()
 				transform.m[2][1] = hmdPose.mDeviceToAbsoluteTracking.m[2][1];
 				transform.m[2][2] = hmdPose.mDeviceToAbsoluteTracking.m[2][2];
 
-				// Move forward by distance (Z axis in HMD space) - ensure it's in front
-				// Use negative distance to move in the direction the HMD is facing
+				// Move forward by distance (Z axis in HMD space)
 				transform.m[0][3] += transform.m[0][2] * (-distance);
 				transform.m[1][3] += transform.m[1][2] * (-distance);
 				transform.m[2][3] += transform.m[2][2] * (-distance);
@@ -581,9 +613,9 @@ void VR::UpdateVROverlayPosition()
 				transform.m[1][3] += transform.m[1][0] * offsetX + transform.m[1][1] * offsetY + transform.m[1][2] * offsetZ;
 				transform.m[2][3] += transform.m[2][0] * offsetX + transform.m[2][1] * offsetY + transform.m[2][2] * offsetZ;
 
-				// Scale the overlay based on width
-				transform.m[0][0] *= width;
-				transform.m[1][1] *= width * 0.75f;  // Maintain aspect ratio
+				// Scale the overlay based on width/height
+				transform.m[0][0] *= overlayWidth;
+				transform.m[1][1] *= overlayHeight;
 
 				overlay->SetOverlayTransformAbsolute(g_vrMenuOverlayHandle, vr::TrackingUniverseStanding, &transform);
 			} else {
@@ -597,22 +629,18 @@ void VR::UpdateVROverlayPosition()
 			logger::debug("Using fixed world positioning");
 
 			vr::HmdMatrix34_t transform;
-			transform.m[0][0] = 1.0f;
+			transform.m[0][0] = overlayWidth;
 			transform.m[0][1] = 0.0f;
 			transform.m[0][2] = 0.0f;
 			transform.m[0][3] = 0.0f;
 			transform.m[1][0] = 0.0f;
-			transform.m[1][1] = 1.0f;
+			transform.m[1][1] = overlayHeight;
 			transform.m[1][2] = 0.0f;
-			transform.m[1][3] = settings.VRMenuHeight;
+			transform.m[1][3] = 0.0f;  // No longer using settings.VRMenuHeight
 			transform.m[2][0] = 0.0f;
 			transform.m[2][1] = 0.0f;
 			transform.m[2][2] = 1.0f;
 			transform.m[2][3] = settings.VRMenuDistance;
-
-			// Scale the overlay
-			transform.m[0][0] *= settings.VRMenuWidth;
-			transform.m[1][1] *= settings.VRMenuWidth * 0.75f;
 
 			overlay->SetOverlayTransformAbsolute(g_vrMenuOverlayHandle, vr::TrackingUniverseStanding, &transform);
 		}
@@ -708,6 +736,22 @@ void VR::UpdateVROverlayControllerPosition()
 		return;
 	}
 
+	// Texture size based on preset
+	int texWidth = 1920, texHeight = 1080;
+	if (settings.VRMenuSizePreset == 0) {
+		texWidth = 1280;
+		texHeight = 720;
+	} else if (settings.VRMenuSizePreset == 2) {
+		texWidth = 2560;
+		texHeight = 1440;
+	}
+	float aspect = static_cast<float>(texHeight) / texWidth;
+	float baseWidth = 1.0f;
+	float overlayWidth = baseWidth * settings.VRMenuScale;
+	float overlayHeight = overlayWidth * aspect;
+	float centerOffsetX = -0.5f * (overlayWidth - baseWidth);
+	float centerOffsetY = -0.5f * (overlayHeight - (baseWidth * aspect));
+
 	// Note: Skyrim VR interface integration would require additional reverse engineering
 	// For now, we'll use the standard OpenVR API
 
@@ -728,14 +772,16 @@ void VR::UpdateVROverlayControllerPosition()
 	if (controllerIndex != vr::k_unTrackedDeviceIndexInvalid) {
 		// Position relative to controller using offset settings
 		vr::HmdMatrix34_t transform;
-		transform.m[0][0] = 1.0f;
+		float offsetX = settings.VRMenuControllerOffsetX + centerOffsetX;
+		float offsetY = settings.VRMenuControllerOffsetY + centerOffsetY;
+		transform.m[0][0] = overlayWidth;
 		transform.m[0][1] = 0.0f;
 		transform.m[0][2] = 0.0f;
-		transform.m[0][3] = settings.VRMenuControllerOffsetX;
+		transform.m[0][3] = offsetX;
 		transform.m[1][0] = 0.0f;
-		transform.m[1][1] = 1.0f;
+		transform.m[1][1] = overlayHeight;
 		transform.m[1][2] = 0.0f;
-		transform.m[1][3] = settings.VRMenuControllerOffsetY;
+		transform.m[1][3] = offsetY;
 		transform.m[2][0] = 0.0f;
 		transform.m[2][1] = 0.0f;
 		transform.m[2][2] = 1.0f;

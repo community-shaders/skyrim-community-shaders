@@ -45,6 +45,7 @@ namespace
 	static double lastRightStickClick = 0.0;
 	static double lastLeftAorXPress = 0.0;
 	static constexpr double stickClickComboWindow = 0.3;
+	int g_lastVRMenuSizePreset = -1;
 }
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -342,8 +343,17 @@ void Menu::Init()
 		vr::IVROverlay* overlay = vr::VROverlay();
 		if (overlay) {
 			D3D11_TEXTURE2D_DESC vrDesc = {};
-			vrDesc.Width = 1920;
-			vrDesc.Height = 1080;
+			int preset = globals::features::vr->settings.VRMenuSizePreset;
+			if (preset == 0) {
+				vrDesc.Width = 1280;
+				vrDesc.Height = 720;
+			} else if (preset == 1) {
+				vrDesc.Width = 1920;
+				vrDesc.Height = 1080;
+			} else {
+				vrDesc.Width = 2560;
+				vrDesc.Height = 1440;
+			}
 			vrDesc.MipLevels = 1;
 			vrDesc.ArraySize = 1;
 			vrDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -1792,7 +1802,10 @@ void Menu::DrawFooter()
 
 void Menu::DrawOverlay()
 {
-	ProcessInputEventQueue();  // Synchronize Inputs to frame
+	if (REL::Module::IsVR()) {
+		RecreateVROverlayTexturesIfNeeded();
+	}
+	ProcessInputEventQueue();  //Synchronize Inputs to frame
 
 	if (REL::Module::IsVR()) {
 		ProcessVROverlayInput();
@@ -2274,106 +2287,19 @@ void Menu::ProcessInputEventQueue()
 	auto now = std::chrono::steady_clock::now().time_since_epoch();
 	double nowSecs = std::chrono::duration_cast<std::chrono::duration<double>>(now).count();
 
+	bool testMode = false;
+	if (globals::features::vr) {
+		testMode = globals::features::vr->settings.VRMenuControllerDiagnosticsTestMode;
+	}
+
 	for (auto& event : _keyEventQueue) {
-		// Enhanced logging for all input events
-		// logger::info("InputEvent: type={} device={} keyCode={} value={} heldDownSecs={} thumbstickX={} thumbstickY={}",
-		// 	static_cast<int>(event.eventType), static_cast<int>(event.device), event.keyCode, event.value, event.heldDownSecs, event.thumbstickX, event.thumbstickY);
-		if (
-			event.device == RE::INPUT_DEVICE::kVivePrimary ||
-			event.device == RE::INPUT_DEVICE::kViveSecondary ||
-			event.device == RE::INPUT_DEVICE::kOculusPrimary ||
-			event.device == RE::INPUT_DEVICE::kOculusSecondary ||
-			event.device == RE::INPUT_DEVICE::kWMRPrimary ||
-			event.device == RE::INPUT_DEVICE::kWMRSecondary) {
-			// logger::info("[VR Device Event] eventType={} device={} keyCode={} value={} thumbstickX={} thumbstickY={}",
-			// 	static_cast<int>(event.eventType), static_cast<int>(event.device), event.keyCode, event.value, event.thumbstickX, event.thumbstickY);
-		}
-
-		// Only log thumbstick events in the thumbstick block, all other VR controller events in the device block
-		if (event.eventType == RE::INPUT_EVENT_TYPE::kThumbstick &&
-			(event.device == RE::INPUT_DEVICE::kVivePrimary ||
-				event.device == RE::INPUT_DEVICE::kViveSecondary ||
-				event.device == RE::INPUT_DEVICE::kOculusPrimary ||
-				event.device == RE::INPUT_DEVICE::kOculusSecondary ||
-				event.device == RE::INPUT_DEVICE::kWMRPrimary ||
-				event.device == RE::INPUT_DEVICE::kWMRSecondary)) {
-			// logger::info("[VR ThumbstickEvent] eventType={} device={} x={} y={}", static_cast<int>(event.eventType), static_cast<int>(event.device), event.thumbstickX, event.thumbstickY);
-			// Update thumbstick state for UI
-			Menu* menu = Menu::GetSingleton();
-			static float prevLeftX = 0.0f, prevLeftY = 0.0f;
-			static float prevRightX = 0.0f, prevRightY = 0.0f;
-			bool isPrimary = (event.device == RE::INPUT_DEVICE::kVivePrimary ||
-							  event.device == RE::INPUT_DEVICE::kOculusPrimary ||
-							  event.device == RE::INPUT_DEVICE::kWMRPrimary);
-			bool isSecondary = (event.device == RE::INPUT_DEVICE::kViveSecondary ||
-								event.device == RE::INPUT_DEVICE::kOculusSecondary ||
-								event.device == RE::INPUT_DEVICE::kWMRSecondary);
-			if (isPrimary) {
-				menu->rightThumbstickState.x = event.thumbstickX;
-				menu->rightThumbstickState.y = event.thumbstickY;
-				if ((event.thumbstickX != 0.0f || event.thumbstickY != 0.0f) || (prevRightX != 0.0f || prevRightY != 0.0f)) {
-					Menu::VRControllerEventLog logEntry;
-					logEntry.device = static_cast<int>(event.device);
-					logEntry.keyCode = event.keyCode;
-					logEntry.value = static_cast<int>(event.value);
-					logEntry.pressed = event.IsPressed();
-					logEntry.heldTime = 0.0;
-					logEntry.heldSource = "thumbstick";
-					logEntry.thumbstickX = event.thumbstickX;
-					logEntry.thumbstickY = event.thumbstickY;
-					menu->vrControllerEventLog.push_back(logEntry);
-					if (menu->vrControllerEventLog.size() > 32) {
-						menu->vrControllerEventLog.erase(menu->vrControllerEventLog.begin());
-					}
-				}
-				prevRightX = event.thumbstickX;
-				prevRightY = event.thumbstickY;
-			} else if (isSecondary) {
-				menu->leftThumbstickState.x = event.thumbstickX;
-				menu->leftThumbstickState.y = event.thumbstickY;
-				if ((event.thumbstickX != 0.0f || event.thumbstickY != 0.0f) || (prevLeftX != 0.0f || prevLeftY != 0.0f)) {
-					Menu::VRControllerEventLog logEntry;
-					logEntry.device = static_cast<int>(event.device);
-					logEntry.keyCode = event.keyCode;
-					logEntry.value = static_cast<int>(event.value);
-					logEntry.pressed = event.IsPressed();
-					logEntry.heldTime = 0.0;
-					logEntry.heldSource = "thumbstick";
-					logEntry.thumbstickX = event.thumbstickX;
-					logEntry.thumbstickY = event.thumbstickY;
-					menu->vrControllerEventLog.push_back(logEntry);
-					if (menu->vrControllerEventLog.size() > 32) {
-						menu->vrControllerEventLog.erase(menu->vrControllerEventLog.begin());
-					}
-				}
-				prevLeftX = event.thumbstickX;
-				prevLeftY = event.thumbstickY;
-			}
-			// VR ThumbstickEvent handling
-
-			if (event.eventType == RE::INPUT_EVENT_TYPE::kThumbstick) {
-				if (auto* thumbstickEvent = reinterpret_cast<RE::InputEvent*>(&event)->AsThumbstickEvent()) {
-					if (RE::BSOpenVRControllerDevice::IsLeftController(thumbstickEvent->GetDevice())) {
-						menu->leftThumbstickState.x = thumbstickEvent->xValue;
-						menu->leftThumbstickState.y = thumbstickEvent->yValue;
-					} else if (RE::BSOpenVRControllerDevice::IsRightController(thumbstickEvent->GetDevice())) {
-						menu->rightThumbstickState.x = thumbstickEvent->xValue;
-						menu->rightThumbstickState.y = thumbstickEvent->yValue;
-					}
-				}
-			}
-
-			// Skip the rest of VR controller event logging for this event
-			continue;
-		} else if (
-			(event.device == RE::INPUT_DEVICE::kVivePrimary ||
-				event.device == RE::INPUT_DEVICE::kViveSecondary ||
-				event.device == RE::INPUT_DEVICE::kOculusPrimary ||
-				event.device == RE::INPUT_DEVICE::kOculusSecondary ||
-				event.device == RE::INPUT_DEVICE::kWMRPrimary ||
-				event.device == RE::INPUT_DEVICE::kWMRSecondary)) {
-			logger::info("[VR Device Event] eventType={} device={} keyCode={} value={} thumbstickX={} thumbstickY={}",
-				static_cast<int>(event.eventType), static_cast<int>(event.device), event.keyCode, event.value, event.thumbstickX, event.thumbstickY);
+		bool isVRController = ((event.device == RE::INPUT_DEVICE::kVivePrimary || event.device == RE::INPUT_DEVICE::kViveSecondary ||
+								event.device == RE::INPUT_DEVICE::kOculusPrimary || event.device == RE::INPUT_DEVICE::kOculusSecondary ||
+								event.device == RE::INPUT_DEVICE::kWMRPrimary || event.device == RE::INPUT_DEVICE::kWMRSecondary));
+		// Declare isLeft/isRight for use in both diagnostics and test mode filtering
+		bool isLeft = RE::BSOpenVRControllerDevice::IsLeftController(event.device);
+		bool isRight = RE::BSOpenVRControllerDevice::IsRightController(event.device);
+		if (isVRController) {
 			Menu* menu = Menu::GetSingleton();
 			Menu::VRControllerEventLog logEntry;
 			logEntry.device = static_cast<int>(event.device);
@@ -2397,8 +2323,6 @@ void Menu::ProcessInputEventQueue()
 				{ "A/X", RE::BSOpenVRControllerDevice::IsAButton, &Menu::leftAorXState, &Menu::rightAorXState },
 				{ "B/Y", RE::BSOpenVRControllerDevice::IsBButton, &Menu::leftBorYState, &Menu::rightBorYState },
 			};
-			bool isLeft = RE::BSOpenVRControllerDevice::IsLeftController(event.device);
-			bool isRight = RE::BSOpenVRControllerDevice::IsRightController(event.device);
 			for (const auto& desc : kVRButtons) {
 				if (desc.isButton(event.keyCode)) {
 					RE::BSInputDevice::ButtonState* state = isLeft ? &(menu->*(desc.leftState)) : isRight ? &(menu->*(desc.rightState)) :
@@ -2413,6 +2337,16 @@ void Menu::ProcessInputEventQueue()
 			menu->vrControllerEventLog.push_back(logEntry);
 			if (menu->vrControllerEventLog.size() > 32) {
 				menu->vrControllerEventLog.erase(menu->vrControllerEventLog.begin());
+			}
+			// Set Thumbstick state from events
+			if (event.eventType == RE::INPUT_EVENT_TYPE::kThumbstick) {
+				if (isLeft) {
+					menu->leftThumbstickState.x = event.thumbstickX;
+					menu->leftThumbstickState.y = event.thumbstickY;
+				} else if (isRight) {
+					menu->rightThumbstickState.x = event.thumbstickX;
+					menu->rightThumbstickState.y = event.thumbstickY;
+				}
 			}
 		}
 
@@ -2455,8 +2389,6 @@ void Menu::ProcessInputEventQueue()
 				{ "A/X", RE::BSOpenVRControllerDevice::IsAButton, &Menu::leftAorXState, &Menu::rightAorXState },
 				{ "B/Y", RE::BSOpenVRControllerDevice::IsBButton, &Menu::leftBorYState, &Menu::rightBorYState },
 			};
-			bool isLeft = RE::BSOpenVRControllerDevice::IsLeftController(event.device);
-			bool isRight = RE::BSOpenVRControllerDevice::IsRightController(event.device);
 			for (const auto& desc : kVRButtons) {
 				if (desc.isButton(event.keyCode)) {
 					RE::BSInputDevice::ButtonState* state = isLeft ? &(menu->*(desc.leftState)) : isRight ? &(menu->*(desc.rightState)) :
@@ -2557,7 +2489,7 @@ void Menu::ProcessInputEventQueue()
 	_keyEventQueue.clear();
 
 	// Dual grip detection using ButtonState
-	if (Menu::GetSingleton()->leftGripState.isPressed && Menu::GetSingleton()->rightGripState.isPressed) {
+	if (IsEnabled && !testMode && Menu::GetSingleton()->leftGripState.isPressed && Menu::GetSingleton()->rightGripState.isPressed) {
 		IsEnabled = false;
 		Menu::GetSingleton()->leftGripState.isPressed = false;
 		Menu::GetSingleton()->rightGripState.isPressed = false;
@@ -2569,70 +2501,48 @@ void Menu::ProcessInputEventQueue()
 	}
 
 	// After processing all events, use ButtonState transitions for ImGui mouse events
-	static bool prevLeftTrigger = false, prevRightTrigger = false;
-	static bool prevLeftGrip = false, prevRightGrip = false;
-	static bool prevLeftTouchpad = false, prevRightTouchpad = false;
-
-	// Trigger (left and right both map to left mouse button - always mouse mode now)
-	if (Menu::GetSingleton()->leftTriggerState.isPressed != prevLeftTrigger) {
-		io.AddMouseButtonEvent(ImGuiMouseButton_Left, Menu::GetSingleton()->leftTriggerState.isPressed);
-		prevLeftTrigger = Menu::GetSingleton()->leftTriggerState.isPressed;
+	struct ButtonMapping
+	{
+		RE::BSInputDevice::ButtonState Menu::* state;
+		int imguiButton;
+		bool isKeyEvent;
+		ImGuiKey key;
+		bool isShift;
+	};
+	// Order: triggers first, then the rest
+	constexpr size_t kNumTriggerMappings = 2;
+	ButtonMapping mappings[] = {
+		{ &Menu::leftTriggerState, ImGuiMouseButton_Left, false, ImGuiKey_None, false },
+		{ &Menu::rightTriggerState, ImGuiMouseButton_Left, false, ImGuiKey_None, false },
+		// Rest that are affected by test mode.
+		{ &Menu::leftGripState, ImGuiMouseButton_Right, false, ImGuiKey_None, false },
+		{ &Menu::rightGripState, ImGuiMouseButton_Right, false, ImGuiKey_None, false },
+		{ &Menu::leftTouchpadState, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
+		{ &Menu::rightTouchpadState, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
+		// Key events
+		{ &Menu::leftBorYState, -1, true, VirtualKeyToImGuiKey(VK_TAB), false },
+		{ &Menu::rightBorYState, -1, true, VirtualKeyToImGuiKey(VK_TAB), true },
+		{ &Menu::leftAorXState, -1, true, VirtualKeyToImGuiKey(VK_RETURN), false },
+		{ &Menu::rightAorXState, -1, true, VirtualKeyToImGuiKey(VK_RETURN), false },
+		{ &Menu::leftStickClickState, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
+		{ &Menu::rightStickClickState, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
+	};
+	static bool prevStates[std::size(mappings)] = {};
+	size_t limit = testMode ? kNumTriggerMappings : std::size(mappings);
+	for (size_t i = 0; i < limit; ++i) {
+		bool curr = (Menu::GetSingleton()->*(mappings[i].state)).isPressed;
+		if (curr != prevStates[i]) {
+			if (mappings[i].isKeyEvent) {
+				if (mappings[i].isShift)
+					io.AddKeyEvent(ImGuiMod_Shift, curr);
+				io.AddKeyEvent(mappings[i].key, curr);
+			} else {
+				io.AddMouseButtonEvent(mappings[i].imguiButton, curr);
+			}
+			prevStates[i] = curr;
+		}
 	}
-	if (Menu::GetSingleton()->rightTriggerState.isPressed != prevRightTrigger) {
-		io.AddMouseButtonEvent(ImGuiMouseButton_Left, Menu::GetSingleton()->rightTriggerState.isPressed);
-		prevRightTrigger = Menu::GetSingleton()->rightTriggerState.isPressed;
-	}
-	// Grip (left and right both map to right mouse button - always mouse mode now)
-	if (Menu::GetSingleton()->leftGripState.isPressed != prevLeftGrip) {
-		io.AddMouseButtonEvent(ImGuiMouseButton_Right, Menu::GetSingleton()->leftGripState.isPressed);
-		prevLeftGrip = Menu::GetSingleton()->leftGripState.isPressed;
-	}
-	if (Menu::GetSingleton()->rightGripState.isPressed != prevRightGrip) {
-		io.AddMouseButtonEvent(ImGuiMouseButton_Right, Menu::GetSingleton()->rightGripState.isPressed);
-		prevRightGrip = Menu::GetSingleton()->rightGripState.isPressed;
-	}
-	// Touchpad (left and right both map to middle mouse button)
-	if (Menu::GetSingleton()->leftTouchpadState.isPressed != prevLeftTouchpad) {
-		io.AddMouseButtonEvent(ImGuiMouseButton_Middle, Menu::GetSingleton()->leftTouchpadState.isPressed);
-		prevLeftTouchpad = Menu::GetSingleton()->leftTouchpadState.isPressed;
-	}
-	if (Menu::GetSingleton()->rightTouchpadState.isPressed != prevRightTouchpad) {
-		io.AddMouseButtonEvent(ImGuiMouseButton_Middle, Menu::GetSingleton()->rightTouchpadState.isPressed);
-		prevRightTouchpad = Menu::GetSingleton()->rightTouchpadState.isPressed;
-	}
-
-	// Y/B buttons for special functions (Tab for within-section navigation, Escape for back)
-	static bool prevLeftBorY = false, prevRightBorY = false;
-	if (Menu::GetSingleton()->leftBorYState.isPressed != prevLeftBorY) {
-		io.AddKeyEvent(VirtualKeyToImGuiKey(VK_TAB), Menu::GetSingleton()->leftBorYState.isPressed);
-		prevLeftBorY = Menu::GetSingleton()->leftBorYState.isPressed;
-	}
-	if (Menu::GetSingleton()->rightBorYState.isPressed != prevRightBorY) {
-		io.AddKeyEvent(VirtualKeyToImGuiKey(VK_ESCAPE), Menu::GetSingleton()->rightBorYState.isPressed);
-		prevRightBorY = Menu::GetSingleton()->rightBorYState.isPressed;
-	}
-
-	// Thumbstick clicks for additional functionality
-	static bool prevLeftStickClick = false, prevRightStickClick = false;
-	if (Menu::GetSingleton()->leftStickClickState.isPressed != prevLeftStickClick) {
-		io.AddKeyEvent(VirtualKeyToImGuiKey(VK_PRIOR), Menu::GetSingleton()->leftStickClickState.isPressed);  // Page Up
-		prevLeftStickClick = Menu::GetSingleton()->leftStickClickState.isPressed;
-	}
-	if (Menu::GetSingleton()->rightStickClickState.isPressed != prevRightStickClick) {
-		io.AddKeyEvent(VirtualKeyToImGuiKey(VK_RETURN), Menu::GetSingleton()->rightStickClickState.isPressed);
-		prevRightStickClick = Menu::GetSingleton()->rightStickClickState.isPressed;
-	}
-
-	// A/X buttons for Enter key selection
-	static bool prevLeftAorX = false, prevRightAorX = false;
-	if (Menu::GetSingleton()->leftAorXState.isPressed != prevLeftAorX) {
-		io.AddKeyEvent(VirtualKeyToImGuiKey(VK_RETURN), Menu::GetSingleton()->leftAorXState.isPressed);
-		prevLeftAorX = Menu::GetSingleton()->leftAorXState.isPressed;
-	}
-	if (Menu::GetSingleton()->rightAorXState.isPressed != prevRightAorX) {
-		io.AddKeyEvent(VirtualKeyToImGuiKey(VK_RETURN), Menu::GetSingleton()->rightAorXState.isPressed);
-		prevRightAorX = Menu::GetSingleton()->rightAorXState.isPressed;
-	}
+	// Right thumbstick is handled in ProcessVROverlayInput for cursor movement
 }
 
 void Menu::addToEventQueue(KeyEvent e)
@@ -2716,16 +2626,28 @@ void Menu::SelectFeatureMenu(const std::string& featureName)
 
 void Menu::ProcessVROverlayInput()
 {
-	// --- VR Thumbstick simple mouse control ---
-	if (IsEnabled) {
-		constexpr float mouseDeadzone = 0.2f;
-		constexpr float mouseSpeed = 25.0f;  // pixels per frame per full deflection (increased for better visibility)
-		ImGuiIO& io = ImGui::GetIO();
+	if (!IsEnabled)
+		return;
 
-		// Always use mouse mode for VR - much simpler and more reliable
-		io.ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
-		io.WantSetMousePos = false;
+	bool testMode = false;
+	if (globals::features::vr) {
+		testMode = globals::features::vr->settings.VRMenuControllerDiagnosticsTestMode;
+	}
 
+	float mouseDeadzone = 0.2f;
+	float mouseSpeed = 25.0f;
+	if (globals::features::vr) {
+		mouseDeadzone = globals::features::vr->settings.mouseDeadzone;
+		mouseSpeed = globals::features::vr->settings.mouseSpeed;
+	}
+	ImGuiIO& io = ImGui::GetIO();
+
+	// Always use mouse mode for VR - much simpler and more reliable
+	io.ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
+	io.WantSetMousePos = false;
+
+	// Only allow right thumbstick in test mode
+	if (!testMode) {
 		// Left thumbstick: ONLY scroll wheel (Y-axis only)
 		bool usingLeftStick = (std::abs(leftThumbstickState.y) > mouseDeadzone);
 		if (usingLeftStick) {
@@ -2737,46 +2659,36 @@ void Menu::ProcessVROverlayInput()
 				scrollAccum = 0.0f;
 			}
 		}
-
-		// Right thumbstick: mouse cursor movement (both X and Y axes)
-		bool usingRightStick = (std::abs(rightThumbstickState.x) > mouseDeadzone || std::abs(rightThumbstickState.y) > mouseDeadzone);
-		if (usingRightStick) {
-			ImVec2 mousePos = io.MousePos;
-			mousePos.x += rightThumbstickState.x * mouseSpeed;
-			mousePos.y -= rightThumbstickState.y * mouseSpeed;  // Y is typically inverted
-
-			// Keep cursor within screen bounds
-			if (mousePos.x < 0)
-				mousePos.x = 0;
-			if (mousePos.y < 0)
-				mousePos.y = 0;
-			if (mousePos.x > io.DisplaySize.x)
-				mousePos.x = io.DisplaySize.x;
-			if (mousePos.y > io.DisplaySize.y)
-				mousePos.y = io.DisplaySize.y;
-
-			// Try direct mouse position setting instead of AddMousePosEvent
-			io.MousePos = mousePos;
-			io.AddMousePosEvent(mousePos.x, mousePos.y);
-
-			// Force cursor to be visible when moving and ensure it's being processed
-			io.MouseDrawCursor = true;
-			io.WantSetMousePos = true;  // Tell ImGui we want to set the mouse position
-
-			// Force a hover event to make cursor more visible
-			io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);  // Ensure no stuck button
-
-			// Debug output including current mouse position from ImGui
-			logger::debug("Right thumbstick: x={:.3f}, y={:.3f}, mousePos.x={:.1f}, mousePos.y={:.1f}, displaySize=({:.1f},{:.1f}), MouseDrawCursor={}, WantSetMousePos={}, ActualMousePos=({:.1f},{:.1f})",
-				rightThumbstickState.x, rightThumbstickState.y, mousePos.x, mousePos.y, io.DisplaySize.x, io.DisplaySize.y, io.MouseDrawCursor, io.WantSetMousePos, io.MousePos.x, io.MousePos.y);
-		}
 	}
-}
 
-void Menu::SetMenuCursorPosition(float x, float y)
-{
-	(void)x;
-	(void)y;
+	// Right thumbstick: mouse cursor movement (both X and Y axes)
+	bool usingRightStick = (std::abs(rightThumbstickState.x) > mouseDeadzone || std::abs(rightThumbstickState.y) > mouseDeadzone);
+	if (usingRightStick) {
+		ImVec2 mousePos = io.MousePos;
+		mousePos.x += rightThumbstickState.x * mouseSpeed;
+		mousePos.y -= rightThumbstickState.y * mouseSpeed;  // Y is typically inverted
+
+		// Keep cursor within screen bounds
+		if (mousePos.x < 0)
+			mousePos.x = 0;
+		if (mousePos.y < 0)
+			mousePos.y = 0;
+		if (mousePos.x > io.DisplaySize.x)
+			mousePos.x = io.DisplaySize.x;
+		if (mousePos.y > io.DisplaySize.y)
+			mousePos.y = io.DisplaySize.y;
+
+		// Try direct mouse position setting instead of AddMousePosEvent
+		io.MousePos = mousePos;
+		io.AddMousePosEvent(mousePos.x, mousePos.y);
+
+		// Force cursor to be visible when moving and ensure it's being processed
+		io.MouseDrawCursor = true;
+		io.WantSetMousePos = true;  // Tell ImGui we want to set the mouse position
+
+		// Force a hover event to make cursor more visible
+		io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);  // Ensure no stuck button
+	}
 }
 
 void Menu::DrawWeatherDetailsWindow()
@@ -2835,4 +2747,56 @@ void Menu::ReloadFont()
 
 	cachedFontSize = settings.Theme.FontSize;
 	pendingFontChange = false;
+}
+
+void Menu::RecreateVROverlayTexturesIfNeeded()
+{
+	int preset = globals::features::vr->settings.VRMenuSizePreset;
+	if (preset == g_lastVRMenuSizePreset)
+		return;
+	g_lastVRMenuSizePreset = preset;
+
+	// Release old textures
+	if (g_vrMenuRTV) {
+		g_vrMenuRTV->Release();
+		g_vrMenuRTV = nullptr;
+	}
+	if (g_vrMenuTexture) {
+		g_vrMenuTexture->Release();
+		g_vrMenuTexture = nullptr;
+	}
+	if (g_vrMenuControllerRTV) {
+		g_vrMenuControllerRTV->Release();
+		g_vrMenuControllerRTV = nullptr;
+	}
+	if (g_vrMenuControllerTexture) {
+		g_vrMenuControllerTexture->Release();
+		g_vrMenuControllerTexture = nullptr;
+	}
+
+	D3D11_TEXTURE2D_DESC vrDesc = {};
+	if (preset == 0) {
+		vrDesc.Width = 1280;
+		vrDesc.Height = 720;
+	} else if (preset == 1) {
+		vrDesc.Width = 1920;
+		vrDesc.Height = 1080;
+	} else {
+		vrDesc.Width = 2560;
+		vrDesc.Height = 1440;
+	}
+	vrDesc.MipLevels = 1;
+	vrDesc.ArraySize = 1;
+	vrDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	vrDesc.SampleDesc.Count = 1;
+	vrDesc.Usage = D3D11_USAGE_DEFAULT;
+	vrDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+	globals::d3d::device->CreateTexture2D(&vrDesc, nullptr, &g_vrMenuTexture);
+	if (g_vrMenuTexture) {
+		globals::d3d::device->CreateRenderTargetView(g_vrMenuTexture, nullptr, &g_vrMenuRTV);
+	}
+	globals::d3d::device->CreateTexture2D(&vrDesc, nullptr, &g_vrMenuControllerTexture);
+	if (g_vrMenuControllerTexture) {
+		globals::d3d::device->CreateRenderTargetView(g_vrMenuControllerTexture, nullptr, &g_vrMenuControllerRTV);
+	}
 }

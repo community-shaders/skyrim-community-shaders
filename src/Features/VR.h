@@ -32,8 +32,8 @@ struct VR : Feature
 
 		// VR Menu Overlay Settings
 		float VRMenuDistance = 1.5f;
-		float VRMenuHeight = 0.0f;
-		float VRMenuWidth = 1.0f;
+		int VRMenuSizePreset = 1;         // 0=Small, 1=Medium, 2=Large
+		float VRMenuScale = 1.0f;         // 0.5x to 2.0x
 		int VRMenuPositioningMethod = 0;  // 0 = HMD relative, 1 = Fixed world position
 
 		// Attach point selection (multi-select)
@@ -52,7 +52,12 @@ struct VR : Feature
 		float VRMenuControllerOffsetZ = 0.2f;  // Forward/Back offset
 
 		// Input settings
-		bool VRMenuEnableControllerInput = true;  // Enable controller input interaction
+		bool VRMenuEnableControllerInput = true;           // Enable controller input interaction
+		bool VRMenuControllerDiagnosticsTestMode = false;  // If true, disables controller input for menu except right thumbstick and triggers
+
+		// VR menu mouse control settings
+		float mouseDeadzone = 0.2f;  // Minimum thumbstick deflection to move mouse/scroll
+		float mouseSpeed = 25.0f;    // Mouse speed in pixels per frame per full deflection
 	};
 
 	Settings settings;
