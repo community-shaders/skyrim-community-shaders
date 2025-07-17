@@ -2607,7 +2607,7 @@ namespace SIE
 		double totalMs = static_cast<double>(totalTime.QuadPart) * 1000.0 / frequency.QuadPart;
 
 		if (totalMs == 0.0) {
-			return 0.0; // Avoid division by zero
+			return 0.0;  // Avoid division by zero
 		}
 		auto rate = completedTasks / totalMs;
 		auto remaining = totalTasks - completedTasks - failedTasks;
