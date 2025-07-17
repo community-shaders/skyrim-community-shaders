@@ -379,9 +379,8 @@ void PerformanceOverlay::DrawOverlay()
 			this->perfOverlayState.UpdateFGFrameTime();
 		}
 
-		// Check if we should show collapsible sections (menu open or should swallow input)
-		bool showCollapsibleSections = Menu::GetSingleton()->ShouldSwallowInput() ||
-		                               (globals::game::ui && globals::game::ui->IsMenuOpen(RE::CursorMenu::MENU_NAME));
+		// Check if we should show collapsible sections (should swallow input only)
+		bool showCollapsibleSections = Menu::GetSingleton()->ShouldSwallowInput();
 
 		// Show FPS counter if enabled
 		if (this->settings.ShowFPS) {
