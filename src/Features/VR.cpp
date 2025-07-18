@@ -210,7 +210,9 @@ void VR::DrawSettings()
 
 	// Controller Diagnostics Section
 	if (ImGui::CollapsingHeader("Controller Diagnostics", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Checkbox("Test Mode: Disable controller menu input (except right thumbstick and triggers)", &settings.VRMenuControllerDiagnosticsTestMode);
+		if (ImGui::Checkbox("Test Mode: Disable controller menu input (except right thumbstick and triggers)", &settings.VRMenuControllerDiagnosticsTestMode)) {
+			ImGui::SetScrollHereY(0.0f);  // Scroll to top of the window when toggled
+		}
 		ImGui::SeparatorText("Button State");
 		auto now = std::chrono::steady_clock::now().time_since_epoch();
 		double nowSecs = std::chrono::duration_cast<std::chrono::duration<double>>(now).count();
