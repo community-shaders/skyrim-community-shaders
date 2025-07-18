@@ -130,6 +130,8 @@ void SkySync::ProcessSun(const RE::Sun* sun, const float time, const float altit
 	else
 		CalculateSunDirectionAndDistance(sun, dir, dist);
 
+	rawDirections[static_cast<int>(Caster::Sun)] = dir;
+
 	const RE::NiPoint3 apparentDir = GetApparentDirection(dir, altitude);
 	SetSunPosition(sun, apparentDir, dist);
 
@@ -144,11 +146,15 @@ void SkySync::ProcessMoon(const RE::Moon* moon, const float time, const Caster t
 {
 	intensities[static_cast<int>(type)] = 0.0f;
 	directions[static_cast<int>(type)] = { 0.0f, 0.0f, 1.0f };
+	rawDirections[static_cast<int>(type)] = { 0.0f, 0.0f, -1.0f };
 
 	if (!moon)
 		return;
 
 	const auto dir = moon->root->local.rotate.GetVectorY();
+
+	rawDirections[static_cast<int>(type)] = dir;
+
 	auto apparentDir = GetApparentDirection(dir, altitude);
 	SetMoonDirection(moon, apparentDir);
 
@@ -388,7 +394,7 @@ void SkySync::ClimateTimings::Update(const RE::TESClimate* climate)
 
 void SkySync::Sky_OnNewClimate::thunk(RE::Sky* sky)
 {
-	if (const auto singleton = GetSingleton(); singleton->settings.Enabled)
+	if (const auto singleton = GetSingleton(); sky && singleton->settings.Enabled)
 		singleton->timings.Update(sky->currentClimate);
 	func(sky);
 }

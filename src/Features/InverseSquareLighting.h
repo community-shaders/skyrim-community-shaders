@@ -57,6 +57,12 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	struct BSLight_GetLuminance
+	{
+		static float thunk(RE::BSLight* bsLight, RE::NiPoint3* targetPosition, RE::NiLight* refLight);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 private:
 	LightEditor editor = LightEditor();
 

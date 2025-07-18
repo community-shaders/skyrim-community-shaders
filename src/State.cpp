@@ -18,6 +18,7 @@
 
 void State::Draw()
 {
+	auto lock = Lock();
 	auto shaderCache = globals::shaderCache;
 	auto deferred = globals::deferred;
 	auto terrainBlending = globals::features::terrainBlending;
@@ -78,27 +79,59 @@ void State::Draw()
 		currentExtraFeatureDescriptor = 0;
 
 		if (frameChecker.IsNewFrame()) {
-			for (int i = 0; i < RE::BSShader::Type::Total + 1; ++i)
-				smoothDrawCalls[i] = smoothDrawCalls[i] * 0.95 + drawCalls[i] * 0.05;
+			// Smooth draw calls and frame times for all shader types
+			for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) + 1; ++i) {
+				smoothDrawCalls[i] = smoothDrawCalls[i] * static_cast<float>(0.95) + drawCalls[i] * static_cast<float>(0.05);
+				smoothFrameTimePerType[i] = smoothFrameTimePerType[i] * static_cast<float>(0.95) + frameTimePerType[i] * static_cast<float>(0.05);
+			}
+			// Reset counters for next frame
 			for (auto& c : drawCalls)
 				c = 0;
+			for (auto& ft : frameTimePerType)
+				ft = 0.0f;
+
+			// Start timing for this frame
+			if (frameTimingFrequency.QuadPart == 0) {
+				QueryPerformanceFrequency(&frameTimingFrequency);
+			}
+			QueryPerformanceCounter(&frameStartTime);
+			frameTimingActive = true;
+
 			ID3D11Buffer* buffers[3] = { permutationCB->CB(), sharedDataCB->CB(), featureDataCB->CB() };
 			context->PSSetConstantBuffers(4, 3, buffers);
 			context->CSSetConstantBuffers(5, 2, buffers + 1);
 		}
-		drawCalls[RE::BSShader::Type::Total]++;
-		if (currentShader)
-			drawCalls[currentShader->shaderType.get()]++;
+
+		// Track time for current shader type if timing is active
+		if (frameTimingActive && currentShader) {
+			LARGE_INTEGER currentTime;
+			QueryPerformanceCounter(&currentTime);
+
+			// Calculate elapsed time in milliseconds
+			float elapsed = (currentTime.QuadPart - frameStartTime.QuadPart) * 1000.0f / frameTimingFrequency.QuadPart;
+
+			// Add elapsed time to the current shader type
+			frameTimePerType[magic_enum::enum_integer(currentShader->shaderType.get())] += elapsed;
+			frameTimePerType[magic_enum::enum_integer(RE::BSShader::Type::Total)] += elapsed;
+
+			// Update start time for next measurement
+			frameStartTime = currentTime;
+		}
+
+		if (currentShader) {
+			drawCalls[magic_enum::enum_integer(currentShader->shaderType.get())]++;
+			drawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]++;
+		}
 
 		if (currentShader && updateShader) {
-			auto type = currentShader->shaderType.get();
-			if (type == RE::BSShader::Type::Utility) {
-				if (currentPixelDescriptor & static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask)) {
+			auto type = magic_enum::enum_integer(currentShader->shaderType.get());
+			if (type == magic_enum::enum_integer(RE::BSShader::Type::Utility)) {
+				if (currentPixelDescriptor & magic_enum::enum_integer(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask)) {
 					deferred->CopyShadowData();
 				}
 			}
 
-			if (type > 0 && type < RE::BSShader::Type::Total) {
+			if (type > 0 && type < magic_enum::enum_integer(RE::BSShader::Type::Total)) {
 				if (enabledClasses[type - 1]) {
 					// Only check against non-shader bits
 					currentPixelDescriptor &= ~modifiedPixelDescriptor;
@@ -201,7 +234,7 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 
 		if (!tryLoadConfig(configPath)) {
 			logger::info("No default config ({}), generating new one", configPath);
-			std::fill(enabledClasses, enabledClasses + RE::BSShader::Type::Total - 1, true);
+			std::fill(enabledClasses, enabledClasses + magic_enum::enum_integer(RE::BSShader::Type::Total) - 1, true);
 			Save(configMode);
 			// Attempt to load the newly created config
 			configPath = GetConfigPath(configMode);
@@ -228,7 +261,7 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 			if (advanced["Dump Shaders"].is_boolean())
 				shaderCache->SetDump(advanced["Dump Shaders"]);
 			if (advanced["Log Level"].is_number_integer())
-				logLevel = static_cast<spdlog::level::level_enum>((int)advanced["Log Level"]);
+				logLevel = magic_enum::enum_cast<spdlog::level::level_enum>(advanced["Log Level"].get<int>()).value_or(spdlog::level::info);
 			if (advanced["Shader Defines"].is_string())
 				SetDefines(advanced["Shader Defines"]);
 			if (advanced["Compiler Threads"].is_number_integer())
@@ -258,14 +291,14 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 		if (settings["Replace Original Shaders"].is_object()) {
 			logger::info("Loading 'Replace Original Shaders' settings");
 			json& originalShaders = settings["Replace Original Shaders"];
-			for (int classIndex = 0; classIndex < RE::BSShader::Type::Total - 1; ++classIndex) {
-				auto name = magic_enum::enum_name((RE::BSShader::Type)(classIndex + 1));
+			ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
+				auto name = magic_enum::enum_name(type);
 				if (originalShaders[name].is_boolean()) {
 					enabledClasses[classIndex] = originalShaders[name];
 				} else {
 					logger::warn("Invalid entry for shader class '{}', using default", name);
 				}
-			}
+			});
 		}
 		// Ensure 'Disable at Boot' section exists in the JSON
 		if (!settings.contains("Disable at Boot") || !settings["Disable at Boot"].is_object()) {
@@ -386,9 +419,9 @@ void State::Save(ConfigMode a_configMode)
 	upscaling->SaveSettings(upscalingJson);
 
 	json originalShaders;
-	for (int classIndex = 0; classIndex < RE::BSShader::Type::Total - 1; ++classIndex) {
-		originalShaders[magic_enum::enum_name((RE::BSShader::Type)(classIndex + 1))] = enabledClasses[classIndex];
-	}
+	ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
+		originalShaders[magic_enum::enum_name(type)] = enabledClasses[classIndex];
+	});
 	settings["Replace Original Shaders"] = originalShaders;
 
 	json disabledFeaturesJson;
@@ -439,7 +472,7 @@ void State::SetLogLevel(spdlog::level::level_enum a_level)
 	logLevel = a_level;
 	spdlog::set_level(logLevel);
 	spdlog::flush_on(logLevel);
-	logger::info("Log Level set to {} ({})", magic_enum::enum_name(logLevel), static_cast<int>(logLevel));
+	logger::info("Log Level set to {} ({})", magic_enum::enum_name(logLevel), magic_enum::enum_integer(logLevel));
 }
 
 spdlog::level::level_enum State::GetLogLevel()
@@ -481,7 +514,7 @@ std::vector<std::pair<std::string, std::string>>* State::GetDefines()
 
 bool State::ShaderEnabled(const RE::BSShader::Type a_type)
 {
-	auto index = static_cast<uint32_t>(a_type) + 1;
+	auto index = magic_enum::enum_integer(a_type) + 1;
 	if (index < sizeof(enabledClasses)) {
 		return enabledClasses[index];
 	}
@@ -510,6 +543,13 @@ void State::SetupResources()
 		c = 0;
 	for (auto& c : smoothDrawCalls)
 		c = 0;
+	for (auto& ft : frameTimePerType)
+		ft = 0.0f;
+	for (auto& sft : smoothFrameTimePerType)
+		sft = 0.0f;
+
+	frameTimingActive = false;
+
 	auto renderer = globals::game::renderer;
 
 	permutationCB = new ConstantBuffer(ConstantBufferDesc<PermutationCB>());
@@ -820,4 +860,11 @@ void State::RenderReShade()
 void State::PresentReShade()
 {
 	reshade::update_and_present_effect_runtime(reShadeRuntime);
+}
+
+// --- Utility Method Implementations ---
+
+float State::GetTotalSmoothedDrawCalls() const
+{
+	return static_cast<float>(smoothDrawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]);
 }

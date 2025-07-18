@@ -10,6 +10,7 @@ struct ExtendedTranslucency final : Feature
 	virtual inline std::string GetName() override { return "Extended Translucency"; }
 	virtual inline std::string GetShortName() override { return "ExtendedTranslucency"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "EXTENDED_TRANSLUCENCY"; }
+	virtual inline std::string_view GetCategory() const override { return "Lighting"; }
 	virtual bool HasShaderDefine(RE::BSShader::Type shaderType) override { return RE::BSShader::Type::Lighting == shaderType; };
 	virtual void PostPostLoad() override;
 	virtual void DrawSettings() override;
@@ -35,7 +36,7 @@ struct ExtendedTranslucency final : Feature
 		RimLight = 1,           // Similar effect like rim light
 		IsotropicFabric = 2,    // 1D fabric model, respect normal map
 		AnisotropicFabric = 3,  // 2D fabric model alone tangent and binormal, ignores normal map
-		ForceDisabled = 7,      // In ExtraFeatureDescriptor, value >= 4 means 'Disabled'
+		ForceDisabled = 4,      // In ExtraFeatureDescriptor, value >= 4 means 'Disabled'
 	};
 
 	static constexpr uint32_t ExtraFeatureDescriptorShift = 6;

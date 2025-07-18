@@ -1,4 +1,5 @@
 #include "FidelityFX.h"
+#include "Utils/FileSystem.h"
 
 #include "State.h"
 #include "Upscaling.h"
@@ -7,6 +8,9 @@
 #include <dx12/ffx_api_dx12.hpp>
 
 ffxFunctions ffxModule;
+
+// Define the static member
+std::vector<std::pair<std::string, std::string>> FidelityFX::dllVersions = {};
 
 FfxResource ffxGetResource(ID3D11Resource* dx11Resource,
 	[[maybe_unused]] wchar_t const* ffxResName,
@@ -28,10 +32,19 @@ FfxResource ffxGetResource(ID3D11Resource* dx11Resource,
 
 void FidelityFX::LoadFFX()
 {
-	module = LoadLibrary(L"Data\\SKSE\\Plugins\\FidelityFX\\amd_fidelityfx_dx12.dll");
+	std::wstring dllPath = std::wstring(FidelityFX::PluginDir) + L"\\amd_fidelityfx_dx12.dll";
+	module = LoadLibrary(dllPath.c_str());
 
-	if (module)
+	// Cache all DLL versions in the FidelityFX directory
+	std::filesystem::path pluginDir = std::filesystem::path(FidelityFX::PluginDir);
+	FidelityFX::dllVersions = Util::EnumerateDllVersions(pluginDir);
+
+	if (module) {
 		ffxLoadFunctions(&ffxModule, module);
+		featureFSR3FG = true;
+	} else {
+		featureFSR3FG = false;
+	}
 }
 
 void FidelityFX::SetupFrameGeneration()
@@ -47,9 +60,8 @@ void FidelityFX::SetupFrameGeneration()
 	ffx::CreateBackendDX12Desc createBackend{};
 	createBackend.device = swapChain->d3d12Device.get();
 
-	if (ffx::CreateContext(frameGenContext, nullptr, createFg, createBackend) != ffx::ReturnCode::Ok) {
+	if (ffx::CreateContext(frameGenContext, nullptr, createFg, createBackend) != ffx::ReturnCode::Ok)
 		logger::critical("[FidelityFX] Failed to create frame generation context!");
-	}
 }
 
 /**
@@ -184,6 +196,9 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 	}
 
 	frameID++;
+
+	// Set isFrameGenActive based on whether FSR3 frame generation is enabled
+	isFrameGenActive = a_useFrameGeneration;
 }
 
 void FidelityFX::CreateFSRResources()
