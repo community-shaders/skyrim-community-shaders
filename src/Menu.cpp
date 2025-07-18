@@ -2328,5 +2328,4 @@ void Menu::ReloadFont()
 	io.FontGlobalScale = exp2(settings.Theme.GlobalScale);
 
 	cachedFontSize = settings.Theme.FontSize;
-	pendingFontChange = false;
 }
