@@ -15,6 +15,10 @@
 #	undef IBL
 #endif
 
+#if defined(VANILLA_FRESNEL_DL)
+#	define VANILLA_FRESNEL
+#endif
+
 struct VS_INPUT
 {
 	float4 Position : POSITION0;
@@ -331,14 +335,9 @@ struct PS_OUTPUT
 	float4 NormalGlossiness : SV_Target2;
 	float4 Albedo : SV_Target3;
 	float4 Specular : SV_Target4;
-#		if defined(TRUE_PBR)
 	float4 Reflectance : SV_Target5;
-#		endif  // TRUE_PBR
 	float4 Masks : SV_Target6;
-#		if defined(TRUE_PBR)
-	float4 Parameters : SV_Target7;
-#		endif  // TRUE_PBR
-#	endif      // RENDER_DEPTH
+#	endif  // RENDER_DEPTH
 };
 #else
 struct PS_OUTPUT
@@ -530,6 +529,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		baseColor.xyz *= SharedData::grassLightingSettings.BasicGrassBrightness;
 #			endif  // !TRUE_PBR
 
+	float3 F0 = specColor.w * SharedData::grassLightingSettings.SpecularStrength;
+	float roughness = saturate(1.0 - SharedData::grassLightingSettings.Glossiness * 0.01);
+
 #			if defined(TRUE_PBR)
 	float4 rawRMAOS = TexRMAOSSampler.SampleBias(SampRMAOSSampler, input.TexCoord.xy, SharedData::MipBias) * float4(PBRParams1.x, 1, 1, PBRParams1.y);
 
@@ -621,7 +623,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 sss = dirLightColor * saturate(-dirLightAngle);
 
 	if (complex)
-		lightsSpecularColor += GrassLighting::GetLightSpecularInput(DirLightDirection, viewDirection, normal, dirLightColor, SharedData::grassLightingSettings.Glossiness);
+		lightsSpecularColor += GrassLighting::GetLightSpecularInput(DirLightDirection, viewDirection, normal, dirLightColor, roughness, F0);
 #			endif
 
 #			if defined(LIGHT_LIMIT_FIX)
@@ -687,7 +689,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				lightsDiffuseColor += lightDiffuseColor;
 
 				if (complex)
-					lightsSpecularColor += GrassLighting::GetLightSpecularInput(normalizedLightDirection, viewDirection, normal, lightColor, SharedData::grassLightingSettings.Glossiness) * intensityMultiplier;
+					lightsSpecularColor += GrassLighting::GetLightSpecularInput(normalizedLightDirection, viewDirection, normal, lightColor, roughness, F0) * intensityMultiplier;
 #				endif
 			}
 		}
@@ -765,7 +767,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				endif
 
 	specularColor += lightsSpecularColor;
+#				if !defined(VANILLA_FRESNEL_DL)
 	specularColor *= specColor.w * SharedData::grassLightingSettings.SpecularStrength;
+#				endif
 	specularColor = Color::GammaToLinear(specularColor);
 #			endif
 
@@ -790,10 +794,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.Albedo = float4(Color::LinearToGamma(indirectDiffuseLobeWeight), 1);
 	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(normalVS), 1 - pbrSurfaceProperties.Roughness, 1);
 	psout.Reflectance = float4(indirectSpecularLobeWeight, 1);
-	psout.Parameters = float4(0, 0, 1, 1);
 #			else
+
+#				if defined(DYNAMIC_CUBEMAPS) && (defined(VANILLA_FRESNEL) || defined(TRUE_PBR))
+	float2 specularBDRF = DynamicCubemaps::EnvBRDFApprox(roughness, saturate(dot(viewDirection, normalVS)));
+	float3 reflectance = F0 * specularBDRF.x + specularBDRF.y;
+#				else
+	float3 reflectance = 0;
+#				endif
+
+	psout.Reflectance = float4(reflectance, 1);
 	psout.Albedo = float4(albedo, 1);
-	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(normalVS), specColor.w, 1);
+	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(normalVS), 1.0 - roughness, 1);
 #			endif
 
 	psout.Specular = float4(specularColor, 1);

@@ -1,3 +1,4 @@
+#include "Common/BRDF.hlsli"
 #include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
@@ -25,6 +26,10 @@
 
 #if defined(LODOBJECTS) || defined(LODOBJECTSHD) || defined(LODLANDNOISE) || defined(WORLD_MAP)
 #	define LOD
+#endif
+
+#if defined(VANILLA_FRESNEL_DL)
+#	define VANILLA_FRESNEL
 #endif
 
 struct VS_INPUT
@@ -661,7 +666,7 @@ float ProcessSparkleColor(float color)
 }
 #	endif
 
-float3 GetLightSpecularInput(PS_INPUT input, float3 L, float3 V, float3 N, float3 lightColor, float shininess, float2 uv)
+float3 GetLightSpecularInput(PS_INPUT input, float3 L, float3 V, float3 N, float3 lightColor, float3 specularColor, float shininess, float2 uv)
 {
 	float3 H = normalize(V + L);
 	float HdotN = 1.0;
@@ -676,7 +681,17 @@ float3 GetLightSpecularInput(PS_INPUT input, float3 L, float3 V, float3 N, float
 
 #	if defined(SPECULAR)
 	float lightColorMultiplier = exp2(shininess * log2(HdotN));
-
+#		if defined(VANILLA_FRESNEL_DL)
+	float NdotV = saturate(dot(N, V));
+	float NdotL = saturate(dot(N, L));
+	float NdotH = saturate(dot(N, H));
+	float HdotV = saturate(dot(H, V));
+	float roughness = pow(2.0 / (shininess + 2.0), 0.25);
+	float D = BRDF::D_GGX(roughness, HdotN);
+	float3 F = BRDF::F_Schlick(specularColor, HdotV);
+	float G = BRDF::Vis_SmithJointApprox(roughness, NdotV, NdotL);
+	lightColorMultiplier = max(D * G * F * NdotL, 0.0);
+#		endif
 #	elif defined(SPARKLE)
 	float lightColorMultiplier = 0;
 #	else
@@ -2185,6 +2200,124 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float pbrGlossiness = 1 - pbrSurfaceProperties.Roughness;
 #	endif  // TRUE_PBR
 
+#	if defined(VANILLA_FRESNEL)
+	float3 F0 = 0.04;
+#	else
+	float3 F0 = 0.0;
+#	endif
+	float roughness = 1.0;
+
+#	if defined(VANILLA_FRESNEL)
+#		if defined(SPECULAR) && !defined(TRUE_PBR)
+	F0 = saturate(glossiness * SpecularColor.xyz);
+	roughness = pow(2.0 / (shininess + 2.0), 0.25);
+#		elif defined(EYE)
+	F0 = 0.027;
+	roughness = 0.1;
+#		endif
+#	endif
+
+#	if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
+	float envMask = EnvmapData.x * MaterialData.x;
+
+	float viewNormalAngle = dot(worldNormal.xyz, viewDirection);
+	float3 envSamplingPoint = (viewNormalAngle * 2) * worldNormal.xyz - viewDirection;
+
+	if (envMask > 0.0) {
+		if (EnvmapData.y) {
+			envMask *= TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv).x;
+		} else {
+			envMask *= glossiness;
+		}
+	}
+
+	float3 envColor = 0.0;
+	bool dynamicCubemap = false;
+#		if defined(VANILLA_FRESNEL)
+	dynamicCubemap = true;
+#		endif
+
+	if (envMask > 0.0) {
+#		if defined(DYNAMIC_CUBEMAPS)
+		uint2 envSize;
+		TexEnvSampler.GetDimensions(envSize.x, envSize.y);
+
+#			if defined(CREATOR)
+#				if defined(EMAT)
+		if (envSize.x == 1 && envSize.y == 1 || complexMaterial || SharedData::cubemapCreatorSettings.Enabled) {
+#				else
+		if (envSize.x == 1 && envSize.y == 1 || SharedData::cubemapCreatorSettings.Enabled) {
+#				endif
+#			else
+#				if defined(EMAT)
+		if (envSize.x == 1 && envSize.y == 1 || complexMaterial) {
+#				else
+		if (envSize.x == 1 && envSize.y == 1) {
+#				endif
+#			endif
+
+			dynamicCubemap = true;
+
+#			if defined(EMAT)
+			if (!complexMaterial)
+#			endif
+			{
+				// Dynamic Cubemap Creator sets this value to black, if it is anything but black it is wrong
+				float3 envColorTest = TexEnvSampler.SampleLevel(SampEnvSampler, float3(0.0, 1.0, 0.0), 15).xyz;
+				dynamicCubemap = all(envColorTest == 0.0);
+			}
+
+#			if defined(CREATOR)
+			if (SharedData::cubemapCreatorSettings.Enabled) {
+				dynamicCubemap = true;
+			}
+#			endif
+
+			if (dynamicCubemap) {
+				float4 envColorBase = TexEnvSampler.SampleLevel(SampEnvSampler, float3(1.0, 0.0, 0.0), 15);
+				float envRoughness = 1.0;
+
+				if (envColorBase.a < 1.0) {
+					F0 = Color::GammaToLinear(envColorBase.rgb);
+					envRoughness = envColorBase.a;
+				} else {
+					F0 = 1.0;
+					envRoughness = 1.0 / 7.0;
+				}
+
+#			if defined(CREATOR)
+				if (SharedData::cubemapCreatorSettings.Enabled) {
+					F0 = SharedData::cubemapCreatorSettings.CubemapColor.rgb;
+					envRoughness = SharedData::cubemapCreatorSettings.CubemapColor.a;
+				}
+#			endif
+
+#			if defined(EMAT)
+				float complexMaterialRoughness = 1.0 - complexMaterialColor.y;
+				envRoughness = lerp(envRoughness, complexMaterialRoughness, complexMaterial);
+				F0 = lerp(F0, complexSpecular, complexMaterial);
+#			endif
+
+				envMask = saturate(envMask);
+				F0 = lerp(glossiness * SpecularColor.xyz, F0, envMask);
+				roughness = lerp(roughness, envRoughness, pow(envMask, 0.25));
+			}
+		}
+#		endif
+
+#		if defined(EYE) && defined(VANILLA_FRESNEL)
+		F0 = 0.027;
+		roughness = 0.1;
+#		endif
+
+		if (!dynamicCubemap) {
+			float3 envColorBase = Color::GammaToLinear(TexEnvSampler.Sample(SampEnvSampler, envSamplingPoint).xyz);
+			envColor = envColorBase.xyz * envMask;
+		}
+	}
+
+#	endif  // defined (ENVMAP) || defined (MULTI_LAYER_PARALLAX) || defined(EYE)
+
 	float porosity = 1.0;
 
 #	if defined(SKYLIGHTING)
@@ -2430,11 +2563,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 		else {
 #			if defined(SPECULAR)
-			lightsSpecularColor = GetLightSpecularInput(input, DirLightDirection, viewDirection, worldNormal.xyz, dirLightColor.xyz * dirDetailShadow, shininess, uv);
+			lightsSpecularColor = GetLightSpecularInput(input, DirLightDirection, viewDirection, worldNormal.xyz, dirLightColor.xyz * dirDetailShadow, F0, shininess, uv);
 #			endif
 		}
 #		elif defined(SPECULAR) || defined(SPARKLE)
-		lightsSpecularColor = GetLightSpecularInput(input, DirLightDirection, viewDirection, worldNormal.xyz, dirLightColor.xyz * dirDetailShadow, shininess, uv);
+		lightsSpecularColor = GetLightSpecularInput(input, DirLightDirection, viewDirection, worldNormal.xyz, dirLightColor.xyz * dirDetailShadow, F0, shininess, uv);
 #		endif
 	}
 
@@ -2511,11 +2644,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			transmissionColor += lightTransmissionColor;
 		} else {
 #					if defined(SPECULAR)
-			lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, worldNormal.xyz, lightColor, shininess, uv);
+			lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, worldNormal.xyz, lightColor, F0, shininess, uv);
 #					endif
 		}
 #				elif defined(SPECULAR) || (defined(SPARKLE) && !defined(SNOW))
-		lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, worldNormal.xyz, lightColor, shininess, uv);
+		lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, worldNormal.xyz, lightColor, F0, shininess, uv);
 #				endif  // defined (SPECULAR) || (defined (SPARKLE) && !defined(SNOW))
 
 		lightsDiffuseColor += lightDiffuseColor;
@@ -2656,11 +2789,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			transmissionColor += lightTransmissionColor;
 		} else {
 #					if defined(SPECULAR)
-			lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, worldNormal.xyz, lightColor, shininess, uv);
+			lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, worldNormal.xyz, lightColor, F0, shininess, uv);
 #					endif
 		}
 #				elif defined(SPECULAR) || (defined(SPARKLE) && !defined(SNOW))
-		lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, worldNormal.xyz, lightColor, shininess, uv);
+		lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, worldNormal.xyz, lightColor, F0, shininess, uv);
 #				endif
 
 		lightsDiffuseColor += lightDiffuseColor;
@@ -2767,99 +2900,19 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 #	endif
 
-#	if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
-	float envMask = EnvmapData.x * MaterialData.x;
-
-	float viewNormalAngle = dot(worldNormal.xyz, viewDirection);
-	float3 envSamplingPoint = (viewNormalAngle * 2) * worldNormal.xyz - viewDirection;
-
-	if (envMask > 0.0) {
-		if (EnvmapData.y) {
-			envMask *= TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv).x;
-		} else {
-			envMask *= glossiness;
-		}
-	}
-
-	float3 envColor = 0.0;
-	bool dynamicCubemap = false;
-
-#		if defined(DYNAMIC_CUBEMAPS)
-	float3 F0 = 0.0;
-	float envRoughness = 1.0;
+	float3 reflectance = 0;
+#	if defined(DYNAMIC_CUBEMAPS)
+	if (any(F0 > 0.0)) {
+#		if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
+		if (dynamicCubemap)
 #		endif
-
-	if (envMask > 0.0) {
-#		if defined(DYNAMIC_CUBEMAPS)
-		uint2 envSize;
-		TexEnvSampler.GetDimensions(envSize.x, envSize.y);
-
-#			if defined(EMAT)
-		if (envSize.x == 1 && envSize.y == 1 || complexMaterial) {
-#			else
-		if (envSize.x == 1 && envSize.y == 1) {
-#			endif
-
-			dynamicCubemap = true;
-
-#			if defined(EMAT)
-			if (!complexMaterial)
-#			endif
-			{
-				// Dynamic Cubemap Creator sets this value to black, if it is anything but black it is wrong
-				float3 envColorTest = TexEnvSampler.SampleLevel(SampEnvSampler, float3(0.0, 1.0, 0.0), 15).xyz;
-				dynamicCubemap = all(envColorTest == 0.0);
-			}
-
-#			if defined(CREATOR)
-			if (SharedData::cubemapCreatorSettings.Enabled) {
-				dynamicCubemap = true;
-			}
-#			endif
-
-			if (dynamicCubemap) {
-				float4 envColorBase = TexEnvSampler.SampleLevel(SampEnvSampler, float3(1.0, 0.0, 0.0), 15);
-
-				if (envColorBase.a < 1.0) {
-					F0 = Color::GammaToLinear(envColorBase.rgb);
-					envRoughness = envColorBase.a;
-				} else {
-					F0 = 1.0;
-					envRoughness = 1.0 / 7.0;
-				}
-
-#			if defined(CREATOR)
-				if (SharedData::cubemapCreatorSettings.Enabled) {
-					F0 = SharedData::cubemapCreatorSettings.CubemapColor.rgb;
-					envRoughness = SharedData::cubemapCreatorSettings.CubemapColor.a;
-				}
-#			endif
-
-#			if defined(EMAT)
-				float complexMaterialRoughness = 1.0 - complexMaterialColor.y;
-				envRoughness = lerp(envRoughness, complexMaterialRoughness, complexMaterial);
-				F0 = lerp(F0, complexSpecular, complexMaterial);
-#			endif
-
-				if (any(F0 > 0.0))
-#			if defined(SKYLIGHTING)
-					envColor = DynamicCubemaps::GetDynamicCubemap(worldNormal, vertexNormal, viewDirection, envRoughness, F0, skylightingSH) * envMask;
-#			else
-					envColor = DynamicCubemaps::GetDynamicCubemap(worldNormal, vertexNormal, viewDirection, envRoughness, F0) * envMask;
-#			endif
-				else
-					envColor = 0.0;
-			}
-		}
+#		if defined(SKYLIGHTING)
+			reflectance = DynamicCubemaps::GetDynamicCubemap(worldNormal, vertexNormal, viewDirection, roughness, F0, skylightingSH);
+#		else
+			reflectance = DynamicCubemaps::GetDynamicCubemap(worldNormal, vertexNormal, viewDirection, roughness, F0);
 #		endif
-
-		if (!dynamicCubemap) {
-			float3 envColorBase = Color::GammaToLinear(TexEnvSampler.Sample(SampEnvSampler, envSamplingPoint).xyz);
-			envColor = envColorBase.xyz * envMask;
-		}
 	}
-
-#	endif  // defined (ENVMAP) || defined (MULTI_LAYER_PARALLAX) || defined(EYE)
+#	endif
 
 	float2 screenMotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);
 
@@ -3040,7 +3093,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 #	endif  // MULTI_LAYER_PARALLAX
 
-#	if defined(SPECULAR)
+#	if defined(SPECULAR) && !defined(VANILLA_FRESNEL_DL)
 # 		if defined(HAIR) && defined(CS_HAIR)
 	if (!SharedData::hairSpecularSettings.Enabled)
 #		endif
@@ -3058,7 +3111,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	diffuseColor = reflectionDiffuseColor;
 
-#	if (defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE))
+#	if (defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)) && !(defined(VANILLA_FRESNEL) && !defined(EYE))
 #		if defined(DYNAMIC_CUBEMAPS)
 	if (!dynamicCubemap)
 #		endif
@@ -3138,9 +3191,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	baseColor.xyz = 0.0;
 	specularColor = 0.0;
 	diffuseColor = 0.0;
-	dynamicCubemap = true;
-	envColor = 1.0;
-	envRoughness = 0.0;
+	reflectance = 1.0;
+	roughness = 0.0;
 	color.xyz = 0;
 #	endif
 
@@ -3283,11 +3335,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.Specular = float4(specularColor, psout.Diffuse.w);
 	psout.Albedo = float4(outputAlbedo, psout.Diffuse.w);
 
-	float outGlossiness = saturate(glossiness * SSRParams.w);
-
 #		if defined(HAIR) && defined(CS_HAIR)
 	if (SharedData::hairSpecularSettings.Enabled) {
-		outGlossiness = 1.0 - (SharedData::hairSpecularSettings.HairMode == 1 ? 1.0 : pow(abs(2.0 / (glossiness * 0.5 + 2.0)), 0.25));
+		roughness = (SharedData::hairSpecularSettings.HairMode == 1 ? 1.0 : pow(abs(2.0 / (glossiness * 0.5 + 2.0)), 0.25));
 	}
 #		endif
 
@@ -3306,26 +3356,26 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (SharedData::hairSpecularSettings.Enabled) {
 #			if defined(WETNESS_EFFECTS)
 		psout.Reflectance = float4(indirectSpecularLobeWeightPrim + indirectSpecularLobeWeightSec + wetnessReflectance, psout.Diffuse.w);
-		psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), lerp(outGlossiness, max(outGlossiness, wetnessGlossinessSpecular), wetnessGlossinessSpecular), psout.Diffuse.w);
+		psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), lerp(1.0 - roughness, max(1 - roughness, wetnessGlossinessSpecular), wetnessGlossinessSpecular), psout.Diffuse.w);
 #			else
 		psout.Reflectance = float4(indirectSpecularLobeWeightPrim + indirectSpecularLobeWeightSec, psout.Diffuse.w);
-		psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), outGlossiness, psout.Diffuse.w);
+		psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), 1.0 - roughness, psout.Diffuse.w);
 #			endif
 	} else {
 #			if defined(WETNESS_EFFECTS)
-		psout.Reflectance = float4(wetnessReflectance, psout.Diffuse.w);
-		psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), lerp(outGlossiness, max(outGlossiness, wetnessGlossinessSpecular), wetnessGlossinessSpecular), psout.Diffuse.w);
+	psout.Reflectance = float4(max(reflectance, wetnessReflectance), psout.Diffuse.w);
+	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), lerp(1.0 - roughness, max(1 - roughness, wetnessGlossinessSpecular), wetnessGlossinessSpecular), psout.Diffuse.w);
 #			else
-		psout.Reflectance = float4(0.0.xxx, psout.Diffuse.w);
-		psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), outGlossiness, psout.Diffuse.w);
+	psout.Reflectance = float4(reflectance, psout.Diffuse.w);
+	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), 1.0 - roughness, psout.Diffuse.w);
 #			endif
 	}
 #		elif defined(WETNESS_EFFECTS)
-	psout.Reflectance = float4(wetnessReflectance, psout.Diffuse.w);
-	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), lerp(outGlossiness, max(outGlossiness, wetnessGlossinessSpecular), wetnessGlossinessSpecular), psout.Diffuse.w);
+	psout.Reflectance = float4(max(reflectance, wetnessReflectance), psout.Diffuse.w);
+	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), lerp(1.0 - roughness, max(1 - roughness, wetnessGlossinessSpecular), wetnessGlossinessSpecular), psout.Diffuse.w);
 #		else
-	psout.Reflectance = float4(0.0.xxx, psout.Diffuse.w);
-	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), outGlossiness, psout.Diffuse.w);
+	psout.Reflectance = float4(reflectance, psout.Diffuse.w);
+	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), 1.0 - roughness, psout.Diffuse.w);
 #		endif
 
 #		if defined(SNOW)
@@ -3336,20 +3386,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.Parameters.x = Color::RGBToLuminanceAlternative(lightsSpecularColor);
 #			endif
 	psout.Parameters.w = psout.Diffuse.w;
-#		endif
-
-#		if (defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE))
-#			if defined(DYNAMIC_CUBEMAPS)
-	if (dynamicCubemap) {
-#				if defined(WETNESS_EFFECTS)
-		psout.Reflectance.xyz = max(envColor, wetnessReflectance);
-		psout.NormalGlossiness.z = lerp(1.0 - envRoughness, max(1.0 - envRoughness, wetnessGlossinessSpecular), wetnessGlossinessSpecular);
-#				else
-		psout.Reflectance.xyz = envColor;
-		psout.NormalGlossiness.z = 1.0 - envRoughness;
-#				endif
-	}
-#			endif
 #		endif
 
 #		if defined(SSS) && defined(SKIN)
