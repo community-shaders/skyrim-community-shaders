@@ -1,6 +1,10 @@
 #pragma once
-
-class Menu;  // forward declaration
+#include "Menu.h"
+#include "RE/B/BSInputDevice.h"
+#include <atomic>
+#include <d3d11.h>
+#include <openvr.h>
+#include <vector>
 
 struct VR : Feature
 {
@@ -79,6 +83,71 @@ struct VR : Feature
 	void UpdateVROverlayPosition();
 	void UpdateVROverlayControllerPosition();
 
+public:
+	// Overlay handles and D3D11 textures
+	vr::VROverlayHandle_t menuOverlayHandle = vr::k_ulOverlayHandleInvalid;
+	vr::VROverlayHandle_t menuControllerOverlayHandle = vr::k_ulOverlayHandleInvalid;
+	ID3D11Texture2D* menuTexture = nullptr;
+	ID3D11RenderTargetView* menuRTV = nullptr;
+	ID3D11Texture2D* menuControllerTexture = nullptr;
+	ID3D11RenderTargetView* menuControllerRTV = nullptr;
+
+	void EnsureOverlayInitialized();
+	void DestroyOverlay();
+	void RecreateOverlayTexturesIfNeeded();
+	void SubmitOverlayFrame();
+
 	bool* gDepthBufferCulling = nullptr;
 	float* gMinOccludeeBoxExtent = nullptr;
+
+	// VR controller event log struct and vector
+	struct VRControllerEventLog
+	{
+		int device;
+		int keyCode;
+		int value;
+		bool pressed;
+		double heldTime;
+		std::string heldSource;
+		float thumbstickX = 0.0f;
+		float thumbstickY = 0.0f;
+		// For thumbstick events, keyCode/value are replaced by x/y floats
+	};
+	std::vector<VRControllerEventLog> vrControllerEventLog;
+	// Thumbstick state for left/right VR controllers
+	struct VRThumbstickState
+	{
+		float x = 0.0f;
+		float y = 0.0f;
+	};
+	VRThumbstickState leftThumbstickState;
+	VRThumbstickState rightThumbstickState;
+	struct ButtonMapping
+	{
+		RE::BSInputDevice::ButtonState* state;
+		int imguiButton;
+		bool isKeyEvent;
+		ImGuiKey key;
+		bool isShift;
+		int keyCode;
+	};
+	// ButtonState for left/right trigger, grip, touchpad, A/X, B/Y
+	RE::BSInputDevice::ButtonState leftGripState;
+	RE::BSInputDevice::ButtonState rightGripState;
+	RE::BSInputDevice::ButtonState leftTriggerState;
+	RE::BSInputDevice::ButtonState rightTriggerState;
+	RE::BSInputDevice::ButtonState leftTouchpadState;
+	RE::BSInputDevice::ButtonState rightTouchpadState;
+	RE::BSInputDevice::ButtonState leftAorXState;
+	RE::BSInputDevice::ButtonState rightAorXState;
+	RE::BSInputDevice::ButtonState leftBorYState;
+	RE::BSInputDevice::ButtonState rightBorYState;
+	RE::BSInputDevice::ButtonState leftStickClickState;
+	RE::BSInputDevice::ButtonState rightStickClickState;
+	void ProcessOverlayInput();
+	// Process only VR controller events
+	void ProcessVREvents(std::vector<Menu::KeyEvent>& vrEvents);
+	// Helper functions for VR event processing
+	void ProcessVRButtonEvent(const Menu::KeyEvent& event, double nowSecs, bool isLeft, bool isRight);
+	void ProcessVRThumbstickEvent(const Menu::KeyEvent& event, bool isLeft, bool isRight);
 };

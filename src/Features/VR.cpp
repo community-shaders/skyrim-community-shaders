@@ -1,18 +1,14 @@
 ﻿#include "VR.h"
-#ifdef ENABLE_SKYRIM_VR
-#	include "Menu.h"
-#	include "RE/B/BSOpenVR.h"
+#include "Menu.h"
+#include "RE/B/BSOpenVR.h"
 
-#	include <chrono>
-#	include "Utils/UI.h"
-extern vr::VROverlayHandle_t g_vrMenuOverlayHandle;
-extern vr::VROverlayHandle_t g_vrMenuControllerOverlayHandle;
-
-// --- Static variables for stick click combo detection ---
-static double lastLeftStickClick = 0.0;
-static double lastRightStickClick = 0.0;
-static constexpr double stickClickComboWindow = 0.3;
-#endif
+#include "DX12SwapChain.h"
+#include "State.h"
+#include "Utils/UI.h"
+#include <chrono>
+#include <d3d11.h>
+#include <imgui_impl_dx11.h>
+#include <openvr.h>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VR::Settings,
@@ -278,12 +274,12 @@ void VR::DrawSettings()
 				DrawButtonType(right);
 			};
 
-			printRow("Trigger", Menu::GetSingleton()->leftTriggerState, Menu::GetSingleton()->rightTriggerState);
-			printRow("Grip", Menu::GetSingleton()->leftGripState, Menu::GetSingleton()->rightGripState);
-			printRow("Stick Click", Menu::GetSingleton()->leftStickClickState, Menu::GetSingleton()->rightStickClickState);
-			printRow("Touchpad", Menu::GetSingleton()->leftTouchpadState, Menu::GetSingleton()->rightTouchpadState);
-			printRow("B/Y", Menu::GetSingleton()->leftBorYState, Menu::GetSingleton()->rightBorYState);
-			printRow("A/X", Menu::GetSingleton()->leftAorXState, Menu::GetSingleton()->rightAorXState);
+			printRow("Trigger", leftTriggerState, rightTriggerState);
+			printRow("Grip", leftGripState, rightGripState);
+			printRow("Stick Click", leftStickClickState, rightStickClickState);
+			printRow("Touchpad", leftTouchpadState, rightTouchpadState);
+			printRow("B/Y", leftBorYState, rightBorYState);
+			printRow("A/X", leftAorXState, rightAorXState);
 
 			ImGui::EndTable();
 		}
@@ -398,21 +394,21 @@ void VR::DrawSettings()
 				// Left controller cell
 				ImGui::TableSetColumnIndex(0);
 				ImGui::BeginGroup();
-				ImVec2 padSizeL = DrawThumbstickPad(menu->leftThumbstickState.x, menu->leftThumbstickState.y, highlightCol);
+				ImVec2 padSizeL = DrawThumbstickPad(leftThumbstickState.x, leftThumbstickState.y, highlightCol);
 				ImGui::Dummy(padSizeL);
 				ImGui::SetNextItemWidth(160.0f);
 				ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
-				ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", menu->leftThumbstickState.x, menu->leftThumbstickState.y, GetQuadrantName(menu->leftThumbstickState.x, menu->leftThumbstickState.y));
+				ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", leftThumbstickState.x, leftThumbstickState.y, GetQuadrantName(leftThumbstickState.x, leftThumbstickState.y));
 				ImGui::EndGroup();
 
 				// Right controller cell
 				ImGui::TableSetColumnIndex(1);
 				ImGui::BeginGroup();
-				ImVec2 padSizeR = DrawThumbstickPad(menu->rightThumbstickState.x, menu->rightThumbstickState.y, highlightCol);
+				ImVec2 padSizeR = DrawThumbstickPad(rightThumbstickState.x, rightThumbstickState.y, highlightCol);
 				ImGui::Dummy(padSizeR);
 				ImGui::SetNextItemWidth(160.0f);
 				ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
-				ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", menu->rightThumbstickState.x, menu->rightThumbstickState.y, GetQuadrantName(menu->rightThumbstickState.x, menu->rightThumbstickState.y));
+				ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", rightThumbstickState.x, rightThumbstickState.y, GetQuadrantName(rightThumbstickState.x, rightThumbstickState.y));
 				ImGui::EndGroup();
 
 				ImGui::EndTable();
@@ -428,7 +424,7 @@ void VR::DrawSettings()
 			ImGui::TableSetupColumn("Known Mapping", ImGuiTableColumnFlags_WidthFixed, 120.0f);
 			ImGui::TableSetupColumn("Event Type", ImGuiTableColumnFlags_WidthFixed, 120.0f);
 			ImGui::TableHeadersRow();
-			for (const auto& e : Menu::GetSingleton()->vrControllerEventLog) {
+			for (const auto& e : vrControllerEventLog) {
 				ImGui::TableNextRow();
 				ImGui::TableSetColumnIndex(0);
 				ImGui::Text("%d", e.device);
@@ -519,7 +515,7 @@ void VR::UpdateVROverlayPosition()
 		return;
 	}
 
-	if (g_vrMenuOverlayHandle == vr::k_ulOverlayHandleInvalid) {
+	if (menuOverlayHandle == vr::k_ulOverlayHandleInvalid) {
 		return;
 	}
 
@@ -616,7 +612,7 @@ void VR::UpdateVROverlayPosition()
 				transform.m[0][0] *= overlayWidth;
 				transform.m[1][1] *= overlayHeight;
 
-				overlay->SetOverlayTransformAbsolute(g_vrMenuOverlayHandle, vr::TrackingUniverseStanding, &transform);
+				overlay->SetOverlayTransformAbsolute(menuOverlayHandle, vr::TrackingUniverseStanding, &transform);
 			} else {
 				logger::debug("HMD pose invalid, falling back to fixed positioning");
 				settings.VRMenuPositioningMethod = 1;  // Fall back to fixed positioning
@@ -641,14 +637,14 @@ void VR::UpdateVROverlayPosition()
 			transform.m[2][2] = 1.0f;
 			transform.m[2][3] = settings.VRMenuDistance;
 
-			overlay->SetOverlayTransformAbsolute(g_vrMenuOverlayHandle, vr::TrackingUniverseStanding, &transform);
+			overlay->SetOverlayTransformAbsolute(menuOverlayHandle, vr::TrackingUniverseStanding, &transform);
 		}
 	}
 
 	// Handle controller positioning separately (can be shown alongside HMD)
 	if (showOnController) {
 		// Get the VR controller overlay handle from Menu.cpp
-		if (g_vrMenuControllerOverlayHandle == vr::k_ulOverlayHandleInvalid) {
+		if (menuControllerOverlayHandle == vr::k_ulOverlayHandleInvalid) {
 			return;
 		}
 
@@ -683,37 +679,37 @@ void VR::UpdateVROverlayPosition()
 			transform.m[2][2] = 1.0f;
 			transform.m[2][3] = settings.VRMenuControllerOffsetZ;
 
-			overlay->SetOverlayTransformTrackedDeviceRelative(g_vrMenuControllerOverlayHandle, controllerIndex, &transform);
+			overlay->SetOverlayTransformTrackedDeviceRelative(menuControllerOverlayHandle, controllerIndex, &transform);
 
 			// Update controller overlay flags for input interaction
 			if (settings.VRMenuEnableControllerInput) {
-				overlay->SetOverlayFlag(g_vrMenuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
-				overlay->SetOverlayFlag(g_vrMenuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
-				overlay->SetOverlayFlag(g_vrMenuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
+				overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
+				overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
+				overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
 			} else {
-				overlay->SetOverlayFlag(g_vrMenuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, false);
-				overlay->SetOverlayFlag(g_vrMenuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, false);
-				overlay->SetOverlayFlag(g_vrMenuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, false);
+				overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, false);
+				overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, false);
+				overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, false);
 			}
 
 			// Ensure controller overlay is visible in the world
-			overlay->SetOverlayFlag(g_vrMenuControllerOverlayHandle, vr::VROverlayFlags_VisibleInDashboard, true);
+			overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_VisibleInDashboard, true);
 		}
 	}
 
 	// Update overlay flags for input interaction
 	if (settings.VRMenuEnableControllerInput) {
-		overlay->SetOverlayFlag(g_vrMenuOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
-		overlay->SetOverlayFlag(g_vrMenuOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
-		overlay->SetOverlayFlag(g_vrMenuOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
+		overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
+		overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
+		overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
 	} else {
-		overlay->SetOverlayFlag(g_vrMenuOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, false);
-		overlay->SetOverlayFlag(g_vrMenuOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, false);
-		overlay->SetOverlayFlag(g_vrMenuOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, false);
+		overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, false);
+		overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, false);
+		overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, false);
 	}
 
 	// Ensure overlay is visible in the world
-	overlay->SetOverlayFlag(g_vrMenuOverlayHandle, vr::VROverlayFlags_VisibleInDashboard, true);
+	overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_VisibleInDashboard, true);
 }
 
 void VR::UpdateVROverlayControllerPosition()
@@ -723,7 +719,7 @@ void VR::UpdateVROverlayControllerPosition()
 	}
 
 	// Get the VR controller overlay handle from Menu.cpp
-	if (g_vrMenuControllerOverlayHandle == vr::k_ulOverlayHandleInvalid) {
+	if (menuControllerOverlayHandle == vr::k_ulOverlayHandleInvalid) {
 		return;
 	}
 
@@ -784,20 +780,387 @@ void VR::UpdateVROverlayControllerPosition()
 		transform.m[2][2] = 1.0f;
 		transform.m[2][3] = settings.VRMenuControllerOffsetZ;
 
-		overlay->SetOverlayTransformTrackedDeviceRelative(g_vrMenuControllerOverlayHandle, controllerIndex, &transform);
+		overlay->SetOverlayTransformTrackedDeviceRelative(menuControllerOverlayHandle, controllerIndex, &transform);
 
 		// Update controller overlay flags for input interaction
 		if (settings.VRMenuEnableControllerInput) {
-			overlay->SetOverlayFlag(g_vrMenuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
-			overlay->SetOverlayFlag(g_vrMenuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
-			overlay->SetOverlayFlag(g_vrMenuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
+			overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
+			overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
+			overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
 		} else {
-			overlay->SetOverlayFlag(g_vrMenuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, false);
-			overlay->SetOverlayFlag(g_vrMenuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, false);
-			overlay->SetOverlayFlag(g_vrMenuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, false);
+			overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, false);
+			overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, false);
+			overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, false);
 		}
 
 		// Ensure controller overlay is visible in the world
-		overlay->SetOverlayFlag(g_vrMenuControllerOverlayHandle, vr::VROverlayFlags_VisibleInDashboard, true);
+		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_VisibleInDashboard, true);
+	}
+}
+
+// Add overlay management methods for VR menu overlays
+void VR::EnsureOverlayInitialized()
+{
+	if (menuOverlayHandle != vr::k_ulOverlayHandleInvalid)
+		return;
+	vr::IVROverlay* overlay = vr::VROverlay();
+	if (!overlay)
+		return;
+	D3D11_TEXTURE2D_DESC vrDesc = {};
+	int preset = settings.VRMenuSizePreset;
+	if (preset == 0) {
+		vrDesc.Width = 1280;
+		vrDesc.Height = 720;
+	} else if (preset == 1) {
+		vrDesc.Width = 1920;
+		vrDesc.Height = 1080;
+	} else {
+		vrDesc.Width = 2560;
+		vrDesc.Height = 1440;
+	}
+	vrDesc.MipLevels = 1;
+	vrDesc.ArraySize = 1;
+	vrDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	vrDesc.SampleDesc.Count = 1;
+	vrDesc.Usage = D3D11_USAGE_DEFAULT;
+	vrDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+	globals::d3d::device->CreateTexture2D(&vrDesc, nullptr, &menuTexture);
+	if (menuTexture) {
+		globals::d3d::device->CreateRenderTargetView(menuTexture, nullptr, &menuRTV);
+	}
+	std::string key = "communityshaders.menu";
+	std::string name = "Community Shaders Menu";
+	vr::EVROverlayError err = overlay->CreateOverlay(key.c_str(), name.c_str(), &menuOverlayHandle);
+	if (err == vr::VROverlayError_None) {
+		overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
+		overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
+		overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
+		overlay->SetOverlayWidthInMeters(menuOverlayHandle, 1.0f);
+		overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_VisibleInDashboard, true);
+	}
+	// Controller overlay
+	std::string controllerKey = "communityshaders.menu.controller";
+	std::string controllerName = "Community Shaders Menu (Controller)";
+	err = overlay->CreateOverlay(controllerKey.c_str(), controllerName.c_str(), &menuControllerOverlayHandle);
+	if (err == vr::VROverlayError_None) {
+		globals::d3d::device->CreateTexture2D(&vrDesc, nullptr, &menuControllerTexture);
+		if (menuControllerTexture) {
+			globals::d3d::device->CreateRenderTargetView(menuControllerTexture, nullptr, &menuControllerRTV);
+		}
+		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
+		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
+		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
+		overlay->SetOverlayWidthInMeters(menuControllerOverlayHandle, 0.5f);
+		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_VisibleInDashboard, true);
+	}
+}
+
+void VR::DestroyOverlay()
+{
+	vr::IVROverlay* overlay = vr::VROverlay();
+	if (menuOverlayHandle != vr::k_ulOverlayHandleInvalid) {
+		overlay->DestroyOverlay(menuOverlayHandle);
+		menuOverlayHandle = vr::k_ulOverlayHandleInvalid;
+	}
+	if (menuControllerOverlayHandle != vr::k_ulOverlayHandleInvalid) {
+		overlay->DestroyOverlay(menuControllerOverlayHandle);
+		menuControllerOverlayHandle = vr::k_ulOverlayHandleInvalid;
+	}
+	if (menuRTV) {
+		menuRTV->Release();
+		menuRTV = nullptr;
+	}
+	if (menuTexture) {
+		menuTexture->Release();
+		menuTexture = nullptr;
+	}
+	if (menuControllerRTV) {
+		menuControllerRTV->Release();
+		menuControllerRTV = nullptr;
+	}
+	if (menuControllerTexture) {
+		menuControllerTexture->Release();
+		menuControllerTexture = nullptr;
+	}
+}
+
+void VR::RecreateOverlayTexturesIfNeeded()
+{
+	static int lastPreset = -1;
+	int preset = settings.VRMenuSizePreset;
+	if (preset == lastPreset)
+		return;
+	lastPreset = preset;
+	if (menuRTV) {
+		menuRTV->Release();
+		menuRTV = nullptr;
+	}
+	if (menuTexture) {
+		menuTexture->Release();
+		menuTexture = nullptr;
+	}
+	if (menuControllerRTV) {
+		menuControllerRTV->Release();
+		menuControllerRTV = nullptr;
+	}
+	if (menuControllerTexture) {
+		menuControllerTexture->Release();
+		menuControllerTexture = nullptr;
+	}
+	D3D11_TEXTURE2D_DESC vrDesc = {};
+	if (preset == 0) {
+		vrDesc.Width = 1280;
+		vrDesc.Height = 720;
+	} else if (preset == 1) {
+		vrDesc.Width = 1920;
+		vrDesc.Height = 1080;
+	} else {
+		vrDesc.Width = 2560;
+		vrDesc.Height = 1440;
+	}
+	vrDesc.MipLevels = 1;
+	vrDesc.ArraySize = 1;
+	vrDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	vrDesc.SampleDesc.Count = 1;
+	vrDesc.Usage = D3D11_USAGE_DEFAULT;
+	vrDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+	globals::d3d::device->CreateTexture2D(&vrDesc, nullptr, &menuTexture);
+	if (menuTexture) {
+		globals::d3d::device->CreateRenderTargetView(menuTexture, nullptr, &menuRTV);
+	}
+	globals::d3d::device->CreateTexture2D(&vrDesc, nullptr, &menuControllerTexture);
+	if (menuControllerTexture) {
+		globals::d3d::device->CreateRenderTargetView(menuControllerTexture, nullptr, &menuControllerRTV);
+	}
+}
+
+void VR::SubmitOverlayFrame()
+{
+	vr::IVROverlay* overlay = vr::VROverlay();
+	if (!overlay)
+		return;
+	auto& enabled = globals::menu->IsEnabled;
+	if (enabled && menuOverlayHandle != vr::k_ulOverlayHandleInvalid && menuTexture && menuRTV) {
+		// Copy ImGui output to overlay texture
+		ID3D11RenderTargetView* oldRTV = nullptr;
+		globals::d3d::context->OMGetRenderTargets(1, &oldRTV, nullptr);
+		globals::d3d::context->OMSetRenderTargets(1, &menuRTV, nullptr);
+		float clearColor[4] = { 0, 0, 0, 0 };
+		globals::d3d::context->ClearRenderTargetView(menuRTV, clearColor);
+		// Re-render ImGui for HMD overlay
+		ImGui::Render();
+		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+		globals::d3d::context->OMSetRenderTargets(1, &oldRTV, nullptr);
+		if (oldRTV)
+			oldRTV->Release();
+		// Update overlay position and submit to SteamVR
+		UpdateVROverlayPosition();
+		vr::Texture_t tex = { menuTexture, vr::TextureType_DirectX, vr::ColorSpace_Auto };
+		overlay->SetOverlayTexture(menuOverlayHandle, &tex);
+		overlay->ShowOverlay(menuOverlayHandle);
+		// Controller overlay
+		if (settings.VRMenuAttachToController &&
+			menuControllerOverlayHandle != vr::k_ulOverlayHandleInvalid &&
+			menuControllerTexture && menuControllerRTV) {
+			// Copy the same ImGui output to controller overlay texture
+			globals::d3d::context->OMSetRenderTargets(1, &menuControllerRTV, nullptr);
+			globals::d3d::context->ClearRenderTargetView(menuControllerRTV, clearColor);
+			// Re-render ImGui for controller overlay
+			ImGui::Render();
+			ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+			globals::d3d::context->OMSetRenderTargets(1, &oldRTV, nullptr);
+			// Position controller overlay and submit
+			UpdateVROverlayControllerPosition();
+
+			vr::Texture_t controllerTex = { menuControllerTexture, vr::TextureType_DirectX, vr::ColorSpace_Auto };
+			overlay->SetOverlayTexture(menuControllerOverlayHandle, &controllerTex);
+			overlay->ShowOverlay(menuControllerOverlayHandle);
+		} else if (menuControllerOverlayHandle != vr::k_ulOverlayHandleInvalid) {
+			overlay->HideOverlay(menuControllerOverlayHandle);
+		}
+	} else {
+		if (menuOverlayHandle != vr::k_ulOverlayHandleInvalid) {
+			overlay->HideOverlay(menuOverlayHandle);
+		}
+		if (menuControllerOverlayHandle != vr::k_ulOverlayHandleInvalid) {
+			overlay->HideOverlay(menuControllerOverlayHandle);
+		}
+	}
+}
+
+void VR::ProcessVREvents(std::vector<Menu::KeyEvent>& vrEvents)
+{
+	auto& menu = globals::menu;
+	auto& isEnabled = menu->IsEnabled;
+	auto now = std::chrono::steady_clock::now().time_since_epoch();
+	double nowSecs = std::chrono::duration_cast<std::chrono::duration<double>>(now).count();
+	bool& testMode = settings.VRMenuControllerDiagnosticsTestMode;
+	for (auto& event : vrEvents) {
+		bool isLeft = RE::BSOpenVRControllerDevice::IsLeftController(event.device);
+		bool isRight = RE::BSOpenVRControllerDevice::IsRightController(event.device);
+
+		VRControllerEventLog logEntry;
+		logEntry.device = static_cast<int>(event.device);
+		logEntry.keyCode = event.keyCode;
+		logEntry.value = static_cast<int>(event.value);
+		logEntry.pressed = event.IsPressed();
+		logEntry.heldTime = 0.0;
+		logEntry.heldSource = "chrono";
+		struct VRButtonDescriptor
+		{
+			const char* name;
+			bool (*isButton)(std::uint32_t);
+			RE::BSInputDevice::ButtonState* leftState;
+			RE::BSInputDevice::ButtonState* rightState;
+		};
+		static const VRButtonDescriptor kVRButtons[] = {
+			{ "Grip", RE::BSOpenVRControllerDevice::IsGripButton, &leftGripState, &rightGripState },
+			{ "Trigger", RE::BSOpenVRControllerDevice::IsTriggerButton, &leftTriggerState, &rightTriggerState },
+			{ "Stick Click", RE::BSOpenVRControllerDevice::IsStickClick, &leftStickClickState, &rightStickClickState },
+			{ "Touchpad Click", RE::BSOpenVRControllerDevice::IsTouchpadClick, &leftTouchpadState, &rightTouchpadState },
+			{ "A/X", RE::BSOpenVRControllerDevice::IsAButton, &leftAorXState, &rightAorXState },
+			{ "B/Y", RE::BSOpenVRControllerDevice::IsBButton, &leftBorYState, &rightBorYState },
+		};
+		for (const auto& desc : kVRButtons) {
+			if (desc.isButton(event.keyCode)) {
+				RE::BSInputDevice::ButtonState* state = isLeft ? &(*(desc.leftState)) : isRight ? &(*(desc.rightState)) :
+				                                                                                  nullptr;
+				if (state) {
+					state->OnEvent(event.IsPressed(), nowSecs);
+					logEntry.heldTime = state->isPressed ? (nowSecs - state->lastPressTime) : state->holdDuration;
+				}
+				break;
+			}
+		}
+		vrControllerEventLog.push_back(logEntry);
+		if (vrControllerEventLog.size() > 32) {
+			vrControllerEventLog.erase(vrControllerEventLog.begin());
+		}
+		// Process the event based on its type
+		switch (event.eventType) {
+		case RE::INPUT_EVENT_TYPE::kButton:
+			ProcessVRButtonEvent(event, nowSecs, isLeft, isRight);
+			break;
+		case RE::INPUT_EVENT_TYPE::kThumbstick:
+			ProcessVRThumbstickEvent(event, isLeft, isRight);
+			break;
+		default:
+			break;
+		}
+	}
+	// Dual grip detection using ButtonState
+	if (isEnabled && !testMode && leftGripState.isPressed && rightGripState.isPressed) {
+		isEnabled = false;
+		leftGripState.isPressed = false;
+		rightGripState.isPressed = false;
+	}
+	// Menu activation: open overlay if left A/X and B/Y is simultaneously pressed
+	if (!isEnabled && (leftAorXState.isPressed && leftBorYState.isPressed) && globals::game::ui && (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::TweenMenu::MENU_NAME))) {
+		isEnabled = true;
+	}
+}
+
+void VR::ProcessVRButtonEvent(const Menu::KeyEvent& event, double nowSecs, bool isLeft, bool isRight)
+{
+	ImGuiIO& io = ImGui::GetIO();
+	(void)event;
+	(void)nowSecs;
+	(void)isLeft;
+	(void)isRight;
+	auto menu = globals::menu;
+	bool& testMode = settings.VRMenuControllerDiagnosticsTestMode;
+	constexpr size_t kNumTriggerMappings = 2;
+	constexpr size_t kNumMappings = 12;  // Update if mappings array changes
+	ButtonMapping mappings[kNumMappings] = {
+		{ &leftTriggerState, ImGuiMouseButton_Left, false, ImGuiKey_None, false },
+		{ &rightTriggerState, ImGuiMouseButton_Left, false, ImGuiKey_None, false },
+		{ &leftGripState, ImGuiMouseButton_Right, false, ImGuiKey_None, false },
+		{ &rightGripState, ImGuiMouseButton_Right, false, ImGuiKey_None, false },
+		{ &leftTouchpadState, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
+		{ &rightTouchpadState, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
+		{ &leftBorYState, -1, true, menu->VirtualKeyToImGuiKey(VK_TAB), false },
+		{ &rightBorYState, -1, true, menu->VirtualKeyToImGuiKey(VK_TAB), true },
+		{ &leftAorXState, -1, true, menu->VirtualKeyToImGuiKey(VK_RETURN), false },
+		{ &rightAorXState, -1, true, menu->VirtualKeyToImGuiKey(VK_RETURN), false },
+		{ &leftStickClickState, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
+		{ &rightStickClickState, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
+	};
+	static bool prevStates[kNumMappings] = {};
+	size_t limit = testMode ? kNumTriggerMappings : kNumMappings;
+	for (size_t i = 0; i < limit; ++i) {
+		bool curr = (*mappings[i].state).isPressed;
+		if (curr != prevStates[i]) {
+			if (mappings[i].isKeyEvent) {
+				if (mappings[i].isShift)
+					io.AddKeyEvent(ImGuiMod_Shift, curr);
+				io.AddKeyEvent(mappings[i].key, curr);
+			} else {
+				io.AddMouseButtonEvent(mappings[i].imguiButton, curr);
+			}
+			prevStates[i] = curr;
+		}
+	}
+}
+
+void VR::ProcessVRThumbstickEvent(const Menu::KeyEvent& event, bool isLeft, bool isRight)
+{
+	ImGuiIO& io = ImGui::GetIO();
+	bool& testMode = settings.VRMenuControllerDiagnosticsTestMode;
+
+	// Update thumbstick state and optionally map to ImGui navigation/scroll
+	if (isLeft) {
+		leftThumbstickState.x = event.thumbstickX;
+		leftThumbstickState.y = event.thumbstickY;
+		// Optionally: map to scroll if not in test mode
+		if (!testMode) {
+			io.AddMouseWheelEvent(0.0f, leftThumbstickState.y);
+		}
+	} else if (isRight) {
+		rightThumbstickState.x = event.thumbstickX;
+		rightThumbstickState.y = event.thumbstickY;
+		// Map to mouse movement
+		io.AddMousePosEvent(io.MousePos.x + rightThumbstickState.x, io.MousePos.y + rightThumbstickState.y);
+	}
+}
+
+void VR::ProcessOverlayInput()
+{
+	if (!globals::menu->IsEnabled)
+		return;
+	bool testMode = settings.VRMenuControllerDiagnosticsTestMode;
+	float mouseDeadzone = settings.mouseDeadzone;
+	float mouseSpeed = settings.mouseSpeed;
+	ImGuiIO& io = ImGui::GetIO();
+	io.ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
+	io.WantSetMousePos = false;
+	if (!testMode) {
+		bool usingLeftStick = (std::abs(leftThumbstickState.y) > mouseDeadzone);
+		if (usingLeftStick) {
+			static float scrollAccum = 0.0f;
+			scrollAccum += leftThumbstickState.y * 0.1f;
+			if (std::abs(scrollAccum) > 0.3f) {
+				io.AddMouseWheelEvent(0.0f, scrollAccum > 0 ? 1.0f : -1.0f);
+				scrollAccum = 0.0f;
+			}
+		}
+	}
+	bool usingRightStick = (std::abs(rightThumbstickState.x) > mouseDeadzone || std::abs(rightThumbstickState.y) > mouseDeadzone);
+	if (usingRightStick) {
+		ImVec2 mousePos = io.MousePos;
+		mousePos.x += rightThumbstickState.x * mouseSpeed;
+		mousePos.y -= rightThumbstickState.y * mouseSpeed;
+		if (mousePos.x < 0)
+			mousePos.x = 0;
+		if (mousePos.y < 0)
+			mousePos.y = 0;
+		if (mousePos.x > io.DisplaySize.x)
+			mousePos.x = io.DisplaySize.x;
+		if (mousePos.y > io.DisplaySize.y)
+			mousePos.y = io.DisplaySize.y;
+		io.MousePos = mousePos;
+		io.AddMousePosEvent(mousePos.x, mousePos.y);
+		io.MouseDrawCursor = true;
+		io.WantSetMousePos = true;
+		io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
 	}
 }

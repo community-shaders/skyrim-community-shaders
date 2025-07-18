@@ -37,42 +37,6 @@ public:
 	bool ShouldSwallowInput();
 
 public:
-	// ButtonState for left/right trigger, grip, touchpad, A/X, B/Y
-	RE::BSInputDevice::ButtonState leftGripState;
-	RE::BSInputDevice::ButtonState rightGripState;
-	RE::BSInputDevice::ButtonState leftTriggerState;
-	RE::BSInputDevice::ButtonState rightTriggerState;
-	RE::BSInputDevice::ButtonState leftTouchpadState;
-	RE::BSInputDevice::ButtonState rightTouchpadState;
-	RE::BSInputDevice::ButtonState leftAorXState;
-	RE::BSInputDevice::ButtonState rightAorXState;
-	RE::BSInputDevice::ButtonState leftBorYState;
-	RE::BSInputDevice::ButtonState rightBorYState;
-	RE::BSInputDevice::ButtonState leftStickClickState;
-	RE::BSInputDevice::ButtonState rightStickClickState;
-	// VR controller event log struct and vector
-	struct VRControllerEventLog
-	{
-		int device;
-		int keyCode;
-		int value;
-		bool pressed;
-		double heldTime;
-		std::string heldSource;
-		float thumbstickX = 0.0f;
-		float thumbstickY = 0.0f;
-		// For thumbstick events, keyCode/value are replaced by x/y floats
-	};
-	std::vector<VRControllerEventLog> vrControllerEventLog;
-	// Thumbstick state for left/right VR controllers
-	struct VRThumbstickState
-	{
-		float x = 0.0f;
-		float y = 0.0f;
-	};
-	VRThumbstickState leftThumbstickState;
-	VRThumbstickState rightThumbstickState;
-
 	// Used for resetting input keys to solve alt-tab stuck issue
 	std::atomic<bool> focusChanged = false;
 	void OnFocusChanged();
@@ -241,6 +205,9 @@ public:
 	static const char* KeyIdToString(uint32_t key);
 
 public:
+	const ImGuiKey VirtualKeyToImGuiKey(WPARAM vkKey);
+
+public:
 	// Move KeyEvent struct here
 	class CharEvent : public RE::InputEvent
 	{
@@ -314,7 +281,6 @@ private:
 
 	Menu() = default;
 	void SetupImGuiStyle() const;
-	const ImGuiKey VirtualKeyToImGuiKey(WPARAM vkKey);
 
 	void DrawGeneralSettings();
 	void DrawAdvancedSettings();
