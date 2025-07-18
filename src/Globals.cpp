@@ -116,6 +116,11 @@ namespace globals
 		RE::Setting* shadowMaskQuarter = nullptr;
 
 		REL::Relocation<ID3D11Buffer**> perFrame;
+
+		// Cached runtime data pointers for performance
+		void* cachedRendererRuntimeData = nullptr;
+		void* cachedShadowStateRuntimeData = nullptr;
+		void* cachedGraphicsStateRuntimeData = nullptr;
 	}
 
 	State* state = nullptr;
@@ -197,9 +202,17 @@ namespace globals
 			perFrame = { REL::RelocationID(524768, 411384) };
 		}
 
-		d3d::device = reinterpret_cast<ID3D11Device*>(game::renderer->GetRuntimeData().forwarder);
-		d3d::context = reinterpret_cast<ID3D11DeviceContext*>(game::renderer->GetRuntimeData().context);
-		d3d::swapChain = reinterpret_cast<IDXGISwapChain*>(game::renderer->GetRuntimeData().renderWindows->swapChain);
+		// Cache runtime data for performance optimization
+		auto& rendererRuntimeData = isVR ? game::renderer->GetVRRuntimeData() : game::renderer->GetRuntimeData();
+		
+		d3d::device = reinterpret_cast<ID3D11Device*>(rendererRuntimeData.forwarder);
+		d3d::context = reinterpret_cast<ID3D11DeviceContext*>(rendererRuntimeData.context);
+		d3d::swapChain = reinterpret_cast<IDXGISwapChain*>(rendererRuntimeData.renderWindows->swapChain);
+
+		// Cache runtime data pointers for performance optimization
+		game::cachedRendererRuntimeData = static_cast<void*>(&rendererRuntimeData);
+		game::cachedShadowStateRuntimeData = isVR ? static_cast<void*>(&game::shadowState->GetVRRuntimeData()) : static_cast<void*>(&game::shadowState->GetRuntimeData());
+		game::cachedGraphicsStateRuntimeData = isVR ? static_cast<void*>(&game::graphicsState->GetVRRuntimeData()) : static_cast<void*>(&game::graphicsState->GetRuntimeData());
 	}
 
 	void OnDataLoaded()

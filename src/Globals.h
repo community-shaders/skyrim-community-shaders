@@ -116,6 +116,11 @@ namespace globals
 		extern RE::Setting* bShadowsOnGrass;
 		extern RE::Setting* shadowMaskQuarter;
 		extern REL::Relocation<ID3D11Buffer**> perFrame;
+
+		// Cached runtime data pointers for performance
+		extern void* cachedRendererRuntimeData;
+		extern void* cachedShadowStateRuntimeData;
+		extern void* cachedGraphicsStateRuntimeData;
 	}
 
 	extern State* state;
@@ -131,4 +136,43 @@ namespace globals
 	void OnInit();
 	void ReInit();
 	void OnDataLoaded();
+
+	// Cached runtime data accessors for performance
+	namespace cached {
+		// Get renderer runtime data with caching
+		inline auto& GetRendererRuntimeData() {
+			if (game::cachedRendererRuntimeData) {
+				if (game::isVR) {
+					return *static_cast<decltype(game::renderer->GetVRRuntimeData())*>(game::cachedRendererRuntimeData);
+				} else {
+					return *static_cast<decltype(game::renderer->GetRuntimeData())*>(game::cachedRendererRuntimeData);
+				}
+			}
+			return game::isVR ? game::renderer->GetVRRuntimeData() : game::renderer->GetRuntimeData();
+		}
+
+		// Get shadow state runtime data with caching
+		inline auto& GetShadowStateRuntimeData() {
+			if (game::cachedShadowStateRuntimeData) {
+				if (game::isVR) {
+					return *static_cast<decltype(game::shadowState->GetVRRuntimeData())*>(game::cachedShadowStateRuntimeData);
+				} else {
+					return *static_cast<decltype(game::shadowState->GetRuntimeData())*>(game::cachedShadowStateRuntimeData);
+				}
+			}
+			return game::isVR ? game::shadowState->GetVRRuntimeData() : game::shadowState->GetRuntimeData();
+		}
+
+		// Get graphics state runtime data with caching
+		inline auto& GetGraphicsStateRuntimeData() {
+			if (game::cachedGraphicsStateRuntimeData) {
+				if (game::isVR) {
+					return *static_cast<decltype(game::graphicsState->GetVRRuntimeData())*>(game::cachedGraphicsStateRuntimeData);
+				} else {
+					return *static_cast<decltype(game::graphicsState->GetRuntimeData())*>(game::cachedGraphicsStateRuntimeData);
+				}
+			}
+			return game::isVR ? game::graphicsState->GetVRRuntimeData() : game::graphicsState->GetRuntimeData();
+		}
+	}
 }

@@ -405,7 +405,7 @@ void ScreenSpaceGI::SetupResources()
 			.Texture2D = { .MipSlice = 0 }
 		};
 
-		auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+		auto mainTex = globals::cached::GetRendererRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 		mainTex.texture->GetDesc(&texDesc);
 		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
 		texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
@@ -691,7 +691,7 @@ void ScreenSpaceGI::DrawSSGI(Texture2D* srcPrevAmbient)
 	//////////////////////////////////////////////////////
 
 	auto renderer = globals::game::renderer;
-	auto rts = renderer->GetRuntimeData().renderTargets;
+	auto rts = globals::cached::GetRendererRuntimeData().renderTargets;
 	auto deferred = globals::deferred;
 
 	float2 size = Util::ConvertToDynamic(globals::state->screenSize);

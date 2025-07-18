@@ -96,26 +96,29 @@ namespace Util
 	RE::NiPoint3 GetAverageEyePosition()
 	{
 		auto shadowState = globals::game::shadowState;
-		if (!REL::Module::IsVR())
-			return shadowState->GetRuntimeData().posAdjust.getEye();
-		return (shadowState->GetVRRuntimeData().posAdjust.getEye(0) + shadowState->GetVRRuntimeData().posAdjust.getEye(1)) * 0.5f;
+		if (!REL::Module::IsVR()) {
+			return globals::cached::GetShadowStateRuntimeData().posAdjust.getEye();
+		}
+		const auto& vrData = globals::cached::GetShadowStateRuntimeData();
+		return (vrData.posAdjust.getEye(0) + vrData.posAdjust.getEye(1)) * 0.5f;
 	}
 
 	RE::NiPoint3 GetEyePosition(int eyeIndex)
 	{
 		auto shadowState = globals::game::shadowState;
-		if (!REL::Module::IsVR())
-			return shadowState->GetRuntimeData().posAdjust.getEye();
-		return shadowState->GetVRRuntimeData().posAdjust.getEye(eyeIndex);
+		if (!REL::Module::IsVR()) {
+			return globals::cached::GetShadowStateRuntimeData().posAdjust.getEye();
+		}
+		return globals::cached::GetShadowStateRuntimeData().posAdjust.getEye(eyeIndex);
 	}
 
 	RE::BSGraphics::ViewData GetCameraData(int eyeIndex)
 	{
 		auto shadowState = globals::game::shadowState;
 		if (!REL::Module::IsVR()) {
-			return shadowState->GetRuntimeData().cameraData.getEye();
+			return globals::cached::GetShadowStateRuntimeData().cameraData.getEye();
 		}
-		return shadowState->GetVRRuntimeData().cameraData.getEye(eyeIndex);
+		return globals::cached::GetShadowStateRuntimeData().cameraData.getEye(eyeIndex);
 	}
 
 	float4 GetCameraData()
@@ -151,11 +154,11 @@ namespace Util
 
 	float2 ConvertToDynamic(float2 a_size)
 	{
-		auto viewport = globals::game::graphicsState;
+		const auto& viewportData = globals::cached::GetGraphicsStateRuntimeData();
 
 		return float2(
-			a_size.x * viewport->GetRuntimeData().dynamicResolutionWidthRatio,
-			a_size.y * viewport->GetRuntimeData().dynamicResolutionHeightRatio);
+			a_size.x * viewportData.dynamicResolutionWidthRatio,
+			a_size.y * viewportData.dynamicResolutionHeightRatio);
 	}
 
 	DispatchCount GetScreenDispatchCount(bool a_dynamic)

@@ -190,10 +190,11 @@ void SubsurfaceScattering::DrawSSS()
 		ID3D11Buffer* buffer[1] = { blurCB->CB() };
 		context->CSSetConstantBuffers(1, 1, buffer);
 
-		auto main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+		const auto& rendererData = globals::cached::GetRendererRuntimeData();
+		auto main = rendererData.renderTargets[RE::RENDER_TARGETS::kMAIN];
 
 		auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
-		auto mask = renderer->GetRuntimeData().renderTargets[MASKS];
+		auto mask = rendererData.renderTargets[MASKS];
 
 		ID3D11UnorderedAccessView* uav = blurHorizontalTemp->uav.get();
 		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
@@ -259,7 +260,8 @@ void SubsurfaceScattering::SetupResources()
 	auto renderer = globals::game::renderer;
 
 	{
-		auto main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+		const auto& rendererData = globals::cached::GetRendererRuntimeData();
+		auto main = rendererData.renderTargets[RE::RENDER_TARGETS::kMAIN];
 
 		D3D11_TEXTURE2D_DESC texDesc{};
 		main.texture->GetDesc(&texDesc);

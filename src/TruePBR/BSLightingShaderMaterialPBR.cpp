@@ -147,7 +147,7 @@ void BSLightingShaderMaterialPBR::ApplyMaterialObjectData(const TruePBR::PBRMate
 
 void BSLightingShaderMaterialPBR::OnLoadTextureSet(std::uint64_t arg1, RE::BSTextureSet* inTextureSet)
 {
-	const auto& stateData = globals::game::graphicsState->GetRuntimeData();
+	const auto& stateData = globals::cached::GetGraphicsStateRuntimeData();
 
 	if (diffuseTexture == nullptr || diffuseTexture == stateData.defaultTextureNormalMap) {
 		BSLightingShaderMaterialBase::OnLoadTextureSet(arg1, inTextureSet);
@@ -200,7 +200,7 @@ void BSLightingShaderMaterialPBR::ClearTextures()
 void BSLightingShaderMaterialPBR::ReceiveValuesFromRootMaterial(bool skinned, bool rimLighting, bool softLighting, bool backLighting, bool MSN)
 {
 	BSLightingShaderMaterialBase::ReceiveValuesFromRootMaterial(skinned, rimLighting, softLighting, backLighting, MSN);
-	const auto& stateData = globals::game::graphicsState->GetRuntimeData();
+	const auto& stateData = globals::cached::GetGraphicsStateRuntimeData();
 	if (rmaosTexture == nullptr) {
 		rmaosTexture = stateData.defaultTextureWhite;
 	}
