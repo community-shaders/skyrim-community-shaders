@@ -89,6 +89,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::ThemeSettings,
+	FontSize,
 	GlobalScale,
 	UseSimplePalette,
 	ShowActionIcons,
@@ -106,8 +107,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EffectToggleKey,
 	OverlayToggleKey,
 	Theme)
-
-constexpr std::uint16_t KEY_PRESSED_MASK = 0x8000;
 
 void Menu::SetupImGuiStyle() const
 {
@@ -244,38 +243,37 @@ void Menu::Init()
 
 	// Enhanced font configuration for sharper text rendering
 	ImFontConfig font_config;
-	font_config.GlyphExtraSpacing.x = 0.0f;  // Neutral spacing for cleaner look
-	font_config.OversampleH = 3;             // Increased horizontal oversampling for sharper text
-	font_config.OversampleV = 2;             // Increased vertical oversampling
-	font_config.PixelSnapH = true;           // Align to pixel grid for sharper rendering
-	font_config.RasterizerMultiply = 1.1f;   // Slightly darker font rendering
-	font_config.FontBuilderFlags = 0;        // No additional flags needed
+	font_config.OversampleH = Constants::FCONF_OVERSAMPLE_H;
+	font_config.OversampleV = Constants::FCONF_OVERSAMPLE_V;
+	font_config.PixelSnapH = Constants::FCONF_PIXELSNAP_H;
+	font_config.RasterizerMultiply = Constants::FCONF_RASTERIZER_MULTIPLY;
 
-	// Load font
 	DXGI_SWAP_CHAIN_DESC desc{};
-	if (FAILED(globals::d3d::swapChain->GetDesc(&desc)) || desc.BufferDesc.Height == 0) {
-		logger::warn("Failed to get swap chain description. Using default 1080p font size.");
-		desc.BufferDesc.Height = 1080;
-	}
-	uint32_t height = desc.BufferDesc.Height;  // Screen pixel height
-	// Calculate base font size based on screen height (e.g., 2% of screen height)
-	const float baseFontSize = height * 0.02f;
-	// Clamp between reasonable min/max values
-	const float fontSize = std::clamp(baseFontSize, 24.0f, 48.0f);
+	globals::d3d::swapChain->GetDesc(&desc);
 
-	// Add font with dynamic size
+	float fontSize = settings.Theme.FontSize;
+
+	if (std::round(fontSize) != std::round(Constants::DEFAULT_FONT_SIZE)) {
+		if (globals::state->screenSize.y > 0) {
+			fontSize = globals::state->screenSize.y * Constants::DEFAULT_FONT_RATIO;
+		} else {
+			logger::warn("Menu::Init() - Failed to get game resolution from globals::state->screenSize.");
+		}
+	}
+
+	fontSize = std::clamp(fontSize, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE);
+
 	if (!imgui_io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\Jost-Regular.ttf",
 			std::round(fontSize), &font_config)) {
-		logger::warn("Failed to load custom font. Using default font.");
+		logger::warn("Menu::Init() - Failed to load custom font. Using default font.");
 		imgui_io.Fonts->AddFontDefault();
 	}
+
+	imgui_io.FontGlobalScale = exp2(settings.Theme.GlobalScale);
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplWin32_Init(desc.OutputWindow);
 	ImGui_ImplDX11_Init(globals::d3d::device, globals::d3d::context);
-
-	auto& io = ImGui::GetIO();
-	io.FontGlobalScale = exp2(settings.Theme.GlobalScale);
 
 	{
 		winrt::com_ptr<IDXGIDevice> dxgiDevice;
@@ -288,7 +286,7 @@ void Menu::Init()
 	}
 	// Load UI icons
 	if (!Util::InitializeMenuIcons(this)) {
-		logger::warn("Failed to load UI icons. Will fallback to text buttons");
+		logger::warn("Menu::Init() - Failed to load UI icons. Will fallback to text buttons");
 	}
 
 	BuildCategoryCounts();
@@ -663,455 +661,503 @@ void Menu::DrawSettings()
 		float footer_height = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3 + 3.0f;  // text + separator
 
 		ImGui::BeginChild("Menus Table", ImVec2(0, -footer_height));
+
+		// Move all declarations before the table setup
+		static size_t selectedMenu = 0;  // some type erasure bs for virtual-free polymorphism
+		struct BuiltInMenu
+		{
+			std::string name;
+			std::function<void()> func;
+		};
+		struct CategoryHeader
+		{
+			std::string name;
+		};
+		using MenuFuncInfo = std::variant<BuiltInMenu, std::string, CategoryHeader, Feature*>;
+
+		// Static storage for category expansion states
+		static std::map<std::string, bool> categoryExpansionStates;
+
+		struct ListMenuVisitor
+		{
+			size_t listId;
+			size_t& selectedMenuRef;
+
+			void operator()(const BuiltInMenu& menu)
+			{
+				// Use error color for Feature Issues menu item
+				bool isFeatureIssues = (menu.name == "Feature Issues");
+				if (isFeatureIssues) {
+					auto& themeSettings = globals::menu->settings.Theme;
+					ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.Error);
+				}
+
+				if (ImGui::Selectable(fmt::format(" {} ", menu.name).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns))
+					selectedMenuRef = listId;
+
+				if (isFeatureIssues) {
+					ImGui::PopStyleColor();
+				}
+			}
+			void operator()(const std::string& label)
+			{
+				// Style "Unloaded Features" to match category headers
+				if (label == "Unloaded Features") {
+					Util::DrawSectionHeader(label.c_str(), true);
+				} else {
+					// Use default separator text for other labels
+					ImGui::SeparatorText(label.c_str());
+				}
+			}
+			void operator()(const CategoryHeader& header)
+			{
+				// Get expansion state from static map
+				bool isExpanded = categoryExpansionStates[header.name];
+
+				// Draw category header with custom styling using util:UI function
+				int count = categoryCounts[std::string(header.name)];
+				Util::DrawCategoryHeader(header.name.c_str(), isExpanded, count);
+
+				// Update expansion state
+				categoryExpansionStates[header.name] = isExpanded;
+			}
+			void operator()(Feature* feat)
+			{
+				const auto featureName = feat->GetShortName();
+				bool isDisabled = globals::state->IsFeatureDisabled(featureName);
+				bool isLoaded = feat->loaded;
+				bool hasFailedMessage = !feat->failedLoadedMessage.empty();
+				auto& themeSettings = globals::menu->settings.Theme;
+
+				ImVec4 textColor;
+
+				// Determine the text color based on the state
+				if (isDisabled) {
+					textColor = themeSettings.StatusPalette.Disable;
+				} else if (isLoaded) {
+					textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+				} else if (hasFailedMessage) {
+					textColor = feat->version.empty() ? themeSettings.StatusPalette.Disable : themeSettings.StatusPalette.Error;
+				} else {
+					// No failed message but not loaded - check if INI file exists
+					if (!std::filesystem::exists(Util::PathHelpers::GetFeatureIniPath(feat->GetShortName()))) {
+						// INI file missing - treat as missing feature (grey)
+						textColor = themeSettings.StatusPalette.Disable;
+					} else {
+						// INI file exists but feature not loaded - truly pending restart (green)
+						textColor = themeSettings.StatusPalette.RestartNeeded;
+					}
+				}
+
+				// Set text color
+				ImGui::PushStyleColor(ImGuiCol_Text, textColor);
+
+				// Create selectable item
+				if (ImGui::Selectable(fmt::format(" {} ", feat->GetName()).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns)) {
+					selectedMenuRef = listId;
+				}
+
+				// Restore original text color
+				ImGui::PopStyleColor();
+
+				// Display version if loaded
+				if (isLoaded) {
+					ImGui::SameLine();
+					std::string formattedVersion = feat->version;
+					std::replace(formattedVersion.begin(), formattedVersion.end(), '-', '.');
+					ImGui::TextDisabled(fmt::format("({})", formattedVersion).c_str());
+				}
+			}
+		};
+		struct DrawMenuVisitor
+		{
+			void operator()(const BuiltInMenu& menu)
+			{
+				if (ImGui::BeginChild("##FeatureConfigFrame", { 0, 0 }, true)) {
+					menu.func();
+				}
+				ImGui::EndChild();
+			}
+			void operator()(const std::string&)
+			{
+				// std::unreachable() from c++23
+				// you are not supposed to have selected a label!
+			}
+			void operator()(const CategoryHeader&)
+			{
+				// Category headers are not selectable in the right panel
+				ImGui::TextDisabled("Please select a feature from the left.");
+			}
+			void operator()(Feature* feat)
+			{
+				const auto featureName = feat->GetShortName();
+				bool isDisabled = globals::state->IsFeatureDisabled(featureName);
+				bool isLoaded = feat->loaded;
+				bool hasFailedMessage = !feat->failedLoadedMessage.empty();
+				auto& themeSettings = globals::menu->settings.Theme;
+				// Calculate button widths based on text content
+				const char* bootButtonText = isDisabled ? "Enable at Boot" : "Disable at Boot";
+				const char* defaultsButtonText = "Restore Defaults";
+
+				float buttonPadding = 16.0f;
+				float buttonSpacing = 8.0f;
+				float bootButtonWidth = ImGui::CalcTextSize(bootButtonText).x + buttonPadding;
+				float defaultsButtonWidth = ImGui::CalcTextSize(defaultsButtonText).x + buttonPadding;
+
+				float totalButtonWidth = bootButtonWidth;
+				if (!isDisabled && isLoaded) {
+					totalButtonWidth += defaultsButtonWidth + buttonSpacing;
+				}
+
+				if (ImGui::BeginTabBar("##FeatureTabs", ImGuiTabBarFlags_Reorderable)) {
+					// Draw standard tabs
+					if (ImGui::BeginTabItem("Settings")) {
+						if (ImGui::BeginChild("##FeatureSettingsFrame", { 0, 0 }, true)) {
+							// Feature-specific settings section
+							ImGui::SeparatorText("Feature Settings");
+							if (isDisabled) {
+								// Show disabled message
+								ImGui::TextColored(themeSettings.StatusPalette.Disable, "Feature settings are hidden because this feature is disabled at boot.");
+								ImGui::Spacing();
+								ImGui::Text("Enable the feature above to access its configuration options.");
+							} else {
+								if (isLoaded) {
+									// Check if the feature has any settings by monitoring cursor position (if the feature draws settings, the imgui cursor position will change)
+									ImVec2 cursorPosBefore = ImGui::GetCursorPos();
+
+									feat->DrawSettings();
+
+									ImVec2 cursorPosAfter = ImGui::GetCursorPos();
+
+									// If cursor position hasn't changed significantly, no visible settings were drawn
+									const float epsilon = 0.1f;  // Simple check to ensure we don't trigger on minor cursor movements / weird imgui math
+									bool cursorMoved = (std::abs(cursorPosAfter.x - cursorPosBefore.x) > epsilon ||
+														std::abs(cursorPosAfter.y - cursorPosBefore.y) > epsilon);
+									if (!cursorMoved) {
+										ImGui::TextColored(themeSettings.StatusPalette.Disable, "There are no settings available for this feature.");
+									}
+								} else {
+									// Check if feature is obsolete first - always show error for obsolete features
+									if (FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
+										// Obsolete feature - show detailed unloaded UI with error info
+										feat->DrawUnloadedUI();
+									} else if (std::filesystem::exists(Util::PathHelpers::GetFeatureIniPath(feat->GetShortName()))) {
+										// INI file exists - show simple pending restart message
+										ImGui::Text("This feature will be available after restart.");
+									} else {
+										// INI file missing - show detailed unloaded UI with installation info
+										feat->DrawUnloadedUI();
+										// Add download link if available
+										if (!feat->GetFeatureModLink().empty()) {
+											ImGui::Spacing();
+											const auto downloadText = fmt::format("Click here to download this feature ({})", feat->GetFeatureModLink());
+											if (ImGui::Selectable(downloadText.c_str())) {
+												ShellExecuteA(NULL, "open", feat->GetFeatureModLink().c_str(), NULL, NULL, SW_SHOWNORMAL);
+											}
+											if (auto _tt = Util::HoverTooltipWrapper()) {
+												ImGui::Text("Download the feature from the mod page.");
+											}
+										}
+									}
+								}
+							}
+
+							// Error Messages (Not for obsolete features as this is already covered by DrawUnloadedUI)
+							if (hasFailedMessage && feat->DrawFailLoadMessage() && !FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
+								ImGui::Spacing();
+								ImGui::SeparatorText("Error");
+								ImGui::TextColored(themeSettings.StatusPalette.Error, feat->failedLoadedMessage.c_str());
+							}
+						}
+						ImGui::EndChild();
+						ImGui::EndTabItem();
+					}
+
+					// About Tab - Information about the feature and how it works
+					if (ImGui::BeginTabItem("About")) {
+						if (ImGui::BeginChild("##FeatureAboutFrame", { 0, 0 }, true)) {
+							// Status Section
+							ImGui::SeparatorText("Status");
+
+							ImVec4 statusColor;
+							const char* statusText;
+							if (isDisabled) {
+								statusColor = themeSettings.StatusPalette.Disable;
+								statusText = "Disabled at boot.";
+							} else if (hasFailedMessage) {
+								statusColor = themeSettings.StatusPalette.Error;
+								statusText = "Failed to load.";
+							} else if (!isLoaded) {
+								// Check if INI file exists to determine actual status
+								if (!std::filesystem::exists(Util::PathHelpers::GetFeatureIniPath(feat->GetShortName()))) {
+									// INI file missing - feature not installed
+									statusColor = themeSettings.StatusPalette.Error;
+									statusText = "Not installed.";
+								} else {
+									// INI file exists but feature not loaded - truly pending restart
+									statusColor = themeSettings.StatusPalette.RestartNeeded;
+									statusText = "Pending restart.";
+								}
+							} else {
+								statusColor = themeSettings.StatusPalette.SuccessColor;
+								statusText = "Active.";
+							}
+
+							ImGui::TextColored(statusColor, "Current State: %s", statusText);
+
+							// Feature Info - Description and key features
+							if (isLoaded) {
+								auto [description, keyFeatures] = feat->GetFeatureSummary();
+								if (!description.empty()) {
+									ImGui::Spacing();
+									ImGui::SeparatorText("Description");
+									ImGui::TextWrapped("%s", description.c_str());
+
+									if (!keyFeatures.empty()) {
+										ImGui::Spacing();
+										ImGui::SeparatorText("Key Features");
+										for (const auto& feature : keyFeatures) {
+											ImGui::BulletText("%s", feature.c_str());
+										}
+									}
+								}
+							} else {
+								// For unloaded features, show basic info if available
+								ImGui::Spacing();
+								ImGui::SeparatorText("Information");
+								if (hasFailedMessage) {
+									ImGui::TextColored(themeSettings.StatusPalette.Error, "%s", feat->failedLoadedMessage.c_str());
+								} else {
+									// For features that are pending restart or not installed,
+									// the detailed information is shown in the Settings tab.
+									// Here we just show a simple message directing users there.
+									if (!std::filesystem::exists(Util::PathHelpers::GetFeatureIniPath(feat->GetShortName()))) {
+										ImGui::Text("Feature installation details are available in the Settings tab.");
+									} else {
+										// INI file exists but feature not loaded - truly pending restart
+										ImGui::Text("This feature is pending restart.");
+									}
+								}
+							}
+						}
+						ImGui::EndChild();
+						ImGui::EndTabItem();
+					}
+
+					// Position buttons on the right side of the tab bar
+					ImGui::SameLine();
+					float availableSpace = ImGui::GetContentRegionAvail().x;
+					float rightOffset = availableSpace - totalButtonWidth;
+					if (rightOffset > 0) {
+						ImGui::SetCursorPosX(ImGui::GetCursorPosX() + rightOffset);
+					}
+
+					// Disable/Enable at boot button
+					ImVec4 textColor;
+					if (isDisabled) {
+						textColor = themeSettings.StatusPalette.Disable;
+					} else if (hasFailedMessage) {
+						textColor = themeSettings.StatusPalette.Error;
+					} else {
+						textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+					}
+
+					ImGui::PushStyleColor(ImGuiCol_Text, textColor);
+					if (ImGui::Button(bootButtonText, { bootButtonWidth, 0 })) {
+						bool newState = feat->ToggleAtBootSetting();
+						logger::info("{}: {} at boot.", featureName, newState ? "Enabled" : "Disabled");
+					}
+					ImGui::PopStyleColor();
+
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text(
+							"Current State: %s\n"
+							"%s the feature settings at boot. "
+							"Restart will be required to reenable. "
+							"This is the same as deleting the ini file. "
+							"This should remove any performance impact for the feature.",
+							isDisabled ? "Disabled" : "Enabled",
+							isDisabled ? "Enable" : "Disable");
+					}
+
+					// Restore Defaults button (when feature is not disabled and is loaded)
+					if (!isDisabled && isLoaded) {
+						ImGui::SameLine();
+						if (ImGui::Button(defaultsButtonText, { defaultsButtonWidth, 0 })) {
+							feat->RestoreDefaultSettings();
+						}
+
+						if (auto _tt = Util::HoverTooltipWrapper()) {
+							ImGui::Text(
+								"Restores the feature's settings back to their default values. "
+								"You will still need to Save Settings to make these changes permanent.");
+						}
+					}
+				}
+				ImGui::EndTabBar();
+			}
+		};
+
+		// Build the menu list
+		auto& featureList = Feature::GetFeatureList();
+		auto sortedFeatureList{ featureList };  // need a copy so the load order is not lost
+		std::ranges::sort(sortedFeatureList, [](Feature* a, Feature* b) {
+			return a->GetName() < b->GetName();
+		});
+
+		// Filter features by search string
+		if (!featureSearch.empty()) {
+			auto it = std::remove_if(sortedFeatureList.begin(), sortedFeatureList.end(),
+				[this](Feature* feat) { return !Util::FeatureMatchesSearch(feat, featureSearch); });
+			sortedFeatureList.erase(it, sortedFeatureList.end());
+		}
+
+		auto menuList = std::vector<MenuFuncInfo>{
+			BuiltInMenu{ "General", [&]() { DrawGeneralSettings(); } },
+			BuiltInMenu{ "Advanced", [&]() { DrawAdvancedSettings(); } },
+			BuiltInMenu{ "Display", [&]() { DrawDisplaySettings(); } }
+		};  // NOTE: The menu list is rebuilt every frame, so category expansion states
+		// persist correctly. This is acceptable since the list is small and built
+		// infrequently, but could be optimized if performance becomes an issue.
+
+		// Group features by category
+		std::map<std::string, std::vector<Feature*>> categorizedFeatures;
+		for (Feature* feat : sortedFeatureList) {
+			if (feat->IsInMenu() && feat->loaded) {
+				std::string category(feat->GetCategory());
+				categorizedFeatures[category].push_back(feat);
+			}
+		}
+
+		// Sort features within each category
+		for (auto& [category, features] : categorizedFeatures) {
+			std::ranges::sort(features, [](Feature* a, Feature* b) {
+				return a->GetName() < b->GetName();
+			});
+		}
+
+		// Define category order
+		std::vector<std::string> categoryOrder = { "Characters", "Grass", "Lighting", "Sky", "Landscape & Textures", "Water", "Other" };
+		// Add categorized features to menu with collapsible headers
+		for (const std::string& category : categoryOrder) {
+			if (categorizedFeatures.find(category) != categorizedFeatures.end() && !categorizedFeatures[category].empty()) {
+				// Initialize expansion state if not exists
+				if (categoryExpansionStates.find(category) == categoryExpansionStates.end()) {
+					categoryExpansionStates[category] = true;  // Default to expanded
+				}
+
+				// Add category header
+				menuList.push_back(CategoryHeader{ category });
+
+				// Add features only if category is expanded
+				if (categoryExpansionStates[category]) {
+					std::ranges::copy(categorizedFeatures[category], std::back_inserter(menuList));
+				}
+			}
+		}
+
+		// Add any categories not in the predefined order
+		for (const auto& [category, features] : categorizedFeatures) {
+			if (std::find(categoryOrder.begin(), categoryOrder.end(), category) == categoryOrder.end() && !features.empty()) {
+				// Initialize expansion state if not exists
+				if (categoryExpansionStates.find(category) == categoryExpansionStates.end()) {
+					categoryExpansionStates[category] = true;  // Default to expanded
+				}
+
+				// Add category header
+				menuList.push_back(CategoryHeader{ category });
+
+				// Add features only if category is expanded
+				if (categoryExpansionStates[category]) {
+					std::ranges::copy(features, std::back_inserter(menuList));
+				}
+			}
+		}
+
+		auto unloadedFeatures = sortedFeatureList | std::ranges::views::filter([](Feature* feat) {
+			return !feat->loaded && feat->IsInMenu() && (!FeatureIssues::IsObsoleteFeature(feat->GetShortName()) || globals::state->IsDeveloperMode());
+		});
+		if (std::ranges::distance(unloadedFeatures) != 0) {
+			menuList.push_back("Unloaded Features"s);
+			std::ranges::copy(unloadedFeatures, std::back_inserter(menuList));
+		}
+		// Add top section for feature issues (rejected features, obsolete info, etc.)
+		if (FeatureIssues::HasFeatureIssues()) {
+			menuList.insert(menuList.begin(), BuiltInMenu{ "Feature Issues", []() {
+															  FeatureIssues::DrawFeatureIssuesUI();
+														  } });
+		}
+
+		// Handle pending feature selection
+		if (!pendingFeatureSelection.empty()) {
+			for (size_t i = 0; i < menuList.size(); ++i) {
+				if (std::holds_alternative<Feature*>(menuList[i])) {
+					Feature* feature = std::get<Feature*>(menuList[i]);
+					if (feature->GetShortName() == pendingFeatureSelection) {
+						selectedMenu = i;
+						logger::info("Navigated to {} feature menu", pendingFeatureSelection);
+						break;
+					}
+				}
+			}
+			pendingFeatureSelection.clear();  // Clear after processing
+		}
+
+		// Now create the table with the declared variables available
 		if (ImGui::BeginTable("Menus Table", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable)) {
 			ImGui::TableSetupColumn("##ListOfMenus", 0, 2);
 			ImGui::TableSetupColumn("##MenuConfig", 0, 8);
 
-			static size_t selectedMenu = 0;  // some type erasure bs for virtual-free polymorphism
-			struct BuiltInMenu
-			{
-				std::string name;
-				std::function<void()> func;
-			};
-			struct CategoryHeader
-			{
-				std::string name;
-			};
-			using MenuFuncInfo = std::variant<BuiltInMenu, std::string, CategoryHeader, Feature*>;
-
-			// Static storage for category expansion states
-			static std::map<std::string, bool> categoryExpansionStates;
-
-			struct ListMenuVisitor
-			{
-				size_t listId;
-				size_t& selectedMenuRef;
-
-				void operator()(const BuiltInMenu& menu)
-				{
-					// Use error color for Feature Issues menu item
-					bool isFeatureIssues = (menu.name == "Feature Issues");
-					if (isFeatureIssues) {
-						auto& themeSettings = globals::menu->settings.Theme;
-						ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.Error);
-					}
-
-					if (ImGui::Selectable(fmt::format(" {} ", menu.name).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns))
-						selectedMenuRef = listId;
-
-					if (isFeatureIssues) {
-						ImGui::PopStyleColor();
-					}
-				}
-				void operator()(const std::string& label)
-				{
-					// Style "Unloaded Features" to match category headers
-					if (label == "Unloaded Features") {
-						Util::DrawSectionHeader(label.c_str(), true);
-					} else {
-						// Use default separator text for other labels
-						ImGui::SeparatorText(label.c_str());
-					}
-				}
-				void operator()(const CategoryHeader& header)
-				{
-					// Get expansion state from static map
-					bool isExpanded = categoryExpansionStates[header.name];
-
-					// Draw category header with custom styling using util:UI function
-					int count = categoryCounts[std::string(header.name)];
-					Util::DrawCategoryHeader(header.name.c_str(), isExpanded, count);
-
-					// Update expansion state
-					categoryExpansionStates[header.name] = isExpanded;
-				}
-				void operator()(Feature* feat)
-				{
-					const auto featureName = feat->GetShortName();
-					bool isDisabled = globals::state->IsFeatureDisabled(featureName);
-					bool isLoaded = feat->loaded;
-					bool hasFailedMessage = !feat->failedLoadedMessage.empty();
-					auto& themeSettings = globals::menu->settings.Theme;
-
-					ImVec4 textColor;
-
-					// Determine the text color based on the state
-					if (isDisabled) {
-						textColor = themeSettings.StatusPalette.Disable;
-					} else if (isLoaded) {
-						textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-					} else if (hasFailedMessage) {
-						textColor = feat->version.empty() ? themeSettings.StatusPalette.Disable : themeSettings.StatusPalette.Error;
-					} else {
-						// No failed message but not loaded - check if INI file exists
-						if (!std::filesystem::exists(Util::PathHelpers::GetFeatureIniPath(feat->GetShortName()))) {
-							// INI file missing - treat as missing feature (grey)
-							textColor = themeSettings.StatusPalette.Disable;
-						} else {
-							// INI file exists but feature not loaded - truly pending restart (green)
-							textColor = themeSettings.StatusPalette.RestartNeeded;
-						}
-					}
-
-					// Set text color
-					ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-
-					// Create selectable item
-					if (ImGui::Selectable(fmt::format(" {} ", feat->GetName()).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns)) {
-						selectedMenuRef = listId;
-					}
-
-					// Restore original text color
-					ImGui::PopStyleColor();
-
-					// Display version if loaded
-					if (isLoaded) {
-						ImGui::SameLine();
-						std::string formattedVersion = feat->version;
-						std::replace(formattedVersion.begin(), formattedVersion.end(), '-', '.');
-						ImGui::TextDisabled(fmt::format("({})", formattedVersion).c_str());
-					}
-				}
-			};
-			struct DrawMenuVisitor
-			{
-				void operator()(const BuiltInMenu& menu)
-				{
-					if (ImGui::BeginChild("##FeatureConfigFrame", { 0, 0 }, true)) {
-						menu.func();
-					}
-					ImGui::EndChild();
-				}
-				void operator()(const std::string&)
-				{
-					// std::unreachable() from c++23
-					// you are not supposed to have selected a label!
-				}
-				void operator()(const CategoryHeader&)
-				{
-					// Category headers are not selectable in the right panel
-					ImGui::TextDisabled("Please select a feature from the left.");
-				}
-				void operator()(Feature* feat)
-				{
-					const auto featureName = feat->GetShortName();
-					bool isDisabled = globals::state->IsFeatureDisabled(featureName);
-					bool isLoaded = feat->loaded;
-					bool hasFailedMessage = !feat->failedLoadedMessage.empty();
-					auto& themeSettings = globals::menu->settings.Theme;
-					// Calculate button widths based on text content
-					const char* bootButtonText = isDisabled ? "Enable at Boot" : "Disable at Boot";
-					const char* defaultsButtonText = "Restore Defaults";
-
-					float buttonPadding = 16.0f;
-					float buttonSpacing = 8.0f;
-					float bootButtonWidth = ImGui::CalcTextSize(bootButtonText).x + buttonPadding;
-					float defaultsButtonWidth = ImGui::CalcTextSize(defaultsButtonText).x + buttonPadding;
-
-					float totalButtonWidth = bootButtonWidth;
-					if (!isDisabled && isLoaded) {
-						totalButtonWidth += defaultsButtonWidth + buttonSpacing;
-					}
-
-					if (ImGui::BeginTabBar("##FeatureTabs", ImGuiTabBarFlags_Reorderable)) {
-						// Draw standard tabs
-						if (ImGui::BeginTabItem("Settings")) {
-							if (ImGui::BeginChild("##FeatureSettingsFrame", { 0, 0 }, true)) {
-								// Feature-specific settings section
-								ImGui::SeparatorText("Feature Settings");
-								if (isDisabled) {
-									// Show disabled message
-									ImGui::TextColored(themeSettings.StatusPalette.Disable, "Feature settings are hidden because this feature is disabled at boot.");
-									ImGui::Spacing();
-									ImGui::Text("Enable the feature above to access its configuration options.");
-								} else {
-									if (isLoaded) {
-										// Check if the feature has any settings by monitoring cursor position (if the feature draws settings, the imgui cursor position will change)
-										ImVec2 cursorPosBefore = ImGui::GetCursorPos();
-
-										feat->DrawSettings();
-
-										ImVec2 cursorPosAfter = ImGui::GetCursorPos();
-
-										// If cursor position hasn't changed significantly, no visible settings were drawn
-										const float epsilon = 0.1f;  // Simple check to ensure we don't trigger on minor cursor movements / weird imgui math
-										bool cursorMoved = (std::abs(cursorPosAfter.x - cursorPosBefore.x) > epsilon ||
-															std::abs(cursorPosAfter.y - cursorPosBefore.y) > epsilon);
-										if (!cursorMoved) {
-											ImGui::TextColored(themeSettings.StatusPalette.Disable, "There are no settings available for this feature.");
-										}
-									} else {
-										// Check if feature is obsolete first - always show error for obsolete features
-										if (FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
-											// Obsolete feature - show detailed unloaded UI with error info
-											feat->DrawUnloadedUI();
-										} else if (std::filesystem::exists(Util::PathHelpers::GetFeatureIniPath(feat->GetShortName()))) {
-											// INI file exists - show simple pending restart message
-											ImGui::Text("This feature will be available after restart.");
-										} else {
-											// INI file missing - show detailed unloaded UI with installation info
-											feat->DrawUnloadedUI();
-											// Add download link if available
-											if (!feat->GetFeatureModLink().empty()) {
-												ImGui::Spacing();
-												const auto downloadText = fmt::format("Click here to download this feature ({})", feat->GetFeatureModLink());
-												if (ImGui::Selectable(downloadText.c_str())) {
-													ShellExecuteA(NULL, "open", feat->GetFeatureModLink().c_str(), NULL, NULL, SW_SHOWNORMAL);
-												}
-												if (auto _tt = Util::HoverTooltipWrapper()) {
-													ImGui::Text("Download the feature from the mod page.");
-												}
-											}
-										}
-									}
-								}
-
-								// Error Messages (Not for obsolete features as this is already covered by DrawUnloadedUI)
-								if (hasFailedMessage && feat->DrawFailLoadMessage() && !FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
-									ImGui::Spacing();
-									ImGui::SeparatorText("Error");
-									ImGui::TextColored(themeSettings.StatusPalette.Error, feat->failedLoadedMessage.c_str());
-								}
-							}
-							ImGui::EndChild();
-							ImGui::EndTabItem();
-						}
-
-						// About Tab - Information about the feature and how it works
-						if (ImGui::BeginTabItem("About")) {
-							if (ImGui::BeginChild("##FeatureAboutFrame", { 0, 0 }, true)) {
-								// Status Section
-								ImGui::SeparatorText("Status");
-
-								ImVec4 statusColor;
-								const char* statusText;
-								if (isDisabled) {
-									statusColor = themeSettings.StatusPalette.Disable;
-									statusText = "Disabled at boot.";
-								} else if (hasFailedMessage) {
-									statusColor = themeSettings.StatusPalette.Error;
-									statusText = "Failed to load.";
-								} else if (!isLoaded) {
-									// Check if INI file exists to determine actual status
-									if (!std::filesystem::exists(Util::PathHelpers::GetFeatureIniPath(feat->GetShortName()))) {
-										// INI file missing - feature not installed
-										statusColor = themeSettings.StatusPalette.Error;
-										statusText = "Not installed.";
-									} else {
-										// INI file exists but feature not loaded - truly pending restart
-										statusColor = themeSettings.StatusPalette.RestartNeeded;
-										statusText = "Pending restart.";
-									}
-								} else {
-									statusColor = themeSettings.StatusPalette.SuccessColor;
-									statusText = "Active.";
-								}
-
-								ImGui::TextColored(statusColor, "Current State: %s", statusText);
-
-								// Feature Info - Description and key features
-								if (isLoaded) {
-									auto [description, keyFeatures] = feat->GetFeatureSummary();
-									if (!description.empty()) {
-										ImGui::Spacing();
-										ImGui::SeparatorText("Description");
-										ImGui::TextWrapped("%s", description.c_str());
-
-										if (!keyFeatures.empty()) {
-											ImGui::Spacing();
-											ImGui::SeparatorText("Key Features");
-											for (const auto& feature : keyFeatures) {
-												ImGui::BulletText("%s", feature.c_str());
-											}
-										}
-									}
-								} else {
-									// For unloaded features, show basic info if available
-									ImGui::Spacing();
-									ImGui::SeparatorText("Information");
-									if (hasFailedMessage) {
-										ImGui::TextColored(themeSettings.StatusPalette.Error, "%s", feat->failedLoadedMessage.c_str());
-									} else {
-										// For features that are pending restart or not installed,
-										// the detailed information is shown in the Settings tab.
-										// Here we just show a simple message directing users there.
-										if (!std::filesystem::exists(Util::PathHelpers::GetFeatureIniPath(feat->GetShortName()))) {
-											ImGui::Text("Feature installation details are available in the Settings tab.");
-										} else {
-											// INI file exists but feature not loaded - truly pending restart
-											ImGui::Text("This feature is pending restart.");
-										}
-									}
-								}
-							}
-							ImGui::EndChild();
-							ImGui::EndTabItem();
-						}
-
-						// Position buttons on the right side of the tab bar
-						ImGui::SameLine();
-						float availableSpace = ImGui::GetContentRegionAvail().x;
-						float rightOffset = availableSpace - totalButtonWidth;
-						if (rightOffset > 0) {
-							ImGui::SetCursorPosX(ImGui::GetCursorPosX() + rightOffset);
-						}
-
-						// Disable/Enable at boot button
-						ImVec4 textColor;
-						if (isDisabled) {
-							textColor = themeSettings.StatusPalette.Disable;
-						} else if (hasFailedMessage) {
-							textColor = themeSettings.StatusPalette.Error;
-						} else {
-							textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-						}
-
-						ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-						if (ImGui::Button(bootButtonText, { bootButtonWidth, 0 })) {
-							bool newState = feat->ToggleAtBootSetting();
-							logger::info("{}: {} at boot.", featureName, newState ? "Enabled" : "Disabled");
-						}
-						ImGui::PopStyleColor();
-
-						if (auto _tt = Util::HoverTooltipWrapper()) {
-							ImGui::Text(
-								"Current State: %s\n"
-								"%s the feature settings at boot. "
-								"Restart will be required to reenable. "
-								"This is the same as deleting the ini file. "
-								"This should remove any performance impact for the feature.",
-								isDisabled ? "Disabled" : "Enabled",
-								isDisabled ? "Enable" : "Disable");
-						}
-
-						// Restore Defaults button (when feature is not disabled and is loaded)
-						if (!isDisabled && isLoaded) {
-							ImGui::SameLine();
-							if (ImGui::Button(defaultsButtonText, { defaultsButtonWidth, 0 })) {
-								feat->RestoreDefaultSettings();
-							}
-
-							if (auto _tt = Util::HoverTooltipWrapper()) {
-								ImGui::Text(
-									"Restores the feature's settings back to their default values. "
-									"You will still need to Save Settings to make these changes permanent.");
-							}
-						}
-					}
-					ImGui::EndTabBar();
-				}
-			};
-
-			auto& featureList = Feature::GetFeatureList();
-			auto sortedFeatureList{ featureList };  // need a copy so the load order is not lost
-			std::ranges::sort(sortedFeatureList, [](Feature* a, Feature* b) {
-				return a->GetName() < b->GetName();
-			});
-
-			auto menuList = std::vector<MenuFuncInfo>{
-				BuiltInMenu{ "General", [&]() { DrawGeneralSettings(); } },
-				BuiltInMenu{ "Advanced", [&]() { DrawAdvancedSettings(); } },
-				BuiltInMenu{ "Display", [&]() { DrawDisplaySettings(); } }
-			};  // NOTE: The menu list is rebuilt every frame, so category expansion states
-			// persist correctly. This is acceptable since the list is small and built
-			// infrequently, but could be optimized if performance becomes an issue.
-
-			// Group features by category
-			std::map<std::string, std::vector<Feature*>> categorizedFeatures;
-			for (Feature* feat : sortedFeatureList) {
-				if (feat->IsInMenu() && feat->loaded) {
-					std::string category(feat->GetCategory());
-					categorizedFeatures[category].push_back(feat);
-				}
-			}
-
-			// Sort features within each category
-			for (auto& [category, features] : categorizedFeatures) {
-				std::ranges::sort(features, [](Feature* a, Feature* b) {
-					return a->GetName() < b->GetName();
-				});
-			}
-
-			// Define category order
-			std::vector<std::string> categoryOrder = { "Characters", "Grass", "Lighting", "Sky", "Landscape & Textures", "Water", "Other" };
-			// Add categorized features to menu with collapsible headers
-			for (const std::string& category : categoryOrder) {
-				if (categorizedFeatures.find(category) != categorizedFeatures.end() && !categorizedFeatures[category].empty()) {
-					// Initialize expansion state if not exists
-					if (categoryExpansionStates.find(category) == categoryExpansionStates.end()) {
-						categoryExpansionStates[category] = true;  // Default to expanded
-					}
-
-					// Add category header
-					menuList.push_back(CategoryHeader{ category });
-
-					// Add features only if category is expanded
-					if (categoryExpansionStates[category]) {
-						std::ranges::copy(categorizedFeatures[category], std::back_inserter(menuList));
-					}
-				}
-			}
-
-			// Add any categories not in the predefined order
-			for (const auto& [category, features] : categorizedFeatures) {
-				if (std::find(categoryOrder.begin(), categoryOrder.end(), category) == categoryOrder.end() && !features.empty()) {
-					// Initialize expansion state if not exists
-					if (categoryExpansionStates.find(category) == categoryExpansionStates.end()) {
-						categoryExpansionStates[category] = true;  // Default to expanded
-					}
-
-					// Add category header
-					menuList.push_back(CategoryHeader{ category });
-
-					// Add features only if category is expanded
-					if (categoryExpansionStates[category]) {
-						std::ranges::copy(features, std::back_inserter(menuList));
-					}
-				}
-			}
-
-			auto unloadedFeatures = sortedFeatureList | std::ranges::views::filter([](Feature* feat) {
-				return !feat->loaded && feat->IsInMenu() && (!FeatureIssues::IsObsoleteFeature(feat->GetShortName()) || globals::state->IsDeveloperMode());
-			});
-			if (std::ranges::distance(unloadedFeatures) != 0) {
-				menuList.push_back("Unloaded Features"s);
-				std::ranges::copy(unloadedFeatures, std::back_inserter(menuList));
-			}
-			// Add top section for feature issues (rejected features, obsolete info, etc.)
-			if (FeatureIssues::HasFeatureIssues()) {
-				menuList.insert(menuList.begin(), BuiltInMenu{ "Feature Issues", []() {
-																  FeatureIssues::DrawFeatureIssuesUI();
-															  } });
-			}
-
-			// Handle pending feature selection
-			if (!pendingFeatureSelection.empty()) {
-				for (size_t i = 0; i < menuList.size(); ++i) {
-					if (std::holds_alternative<Feature*>(menuList[i])) {
-						Feature* feature = std::get<Feature*>(menuList[i]);
-						if (feature->GetShortName() == pendingFeatureSelection) {
-							selectedMenu = i;
-							logger::info("Navigated to {} feature menu", pendingFeatureSelection);
-							break;
-						}
-					}
-				}
-				pendingFeatureSelection.clear();  // Clear after processing
-			}
-
 			ImGui::TableNextColumn();
+			// Draw the feature list
 			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4());
 			if (ImGui::BeginListBox("##MenusList", { -FLT_MIN, -FLT_MIN })) {
-				ImGui::PopStyleVar();
-				ImGui::PopStyleColor();
+				// Find where built-in menus end (General, Advanced, Display)
+				size_t builtInMenuCount = 0;
 				for (size_t i = 0; i < menuList.size(); i++) {
+					if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
+						BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
+						if (menu.name == "General" || menu.name == "Advanced" || menu.name == "Display") {
+							builtInMenuCount++;
+						}
+					}
+				}
+
+				// First render the built-in menus (General, Advanced, Display)
+				size_t renderedBuiltIns = 0;
+				for (size_t i = 0; i < menuList.size() && renderedBuiltIns < 3; i++) {
+					if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
+						BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
+						if (menu.name == "General" || menu.name == "Advanced" || menu.name == "Display") {
+							std::visit(ListMenuVisitor{ i, selectedMenu }, menuList[i]);
+							renderedBuiltIns++;
+						}
+					}
+				}
+
+				// Add Features header and search bar after built-in settings
+				Util::DrawSectionHeader("Features", true);
+				Util::DrawFeatureSearchBar(featureSearch);
+
+				// Then render the rest (features and categories, but skip already rendered built-ins)
+				for (size_t i = 0; i < menuList.size(); i++) {
+					if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
+						BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
+						if (menu.name == "General" || menu.name == "Advanced" || menu.name == "Display") {
+							continue;  // Skip, already rendered
+						}
+					}
 					std::visit(ListMenuVisitor{ i, selectedMenu }, menuList[i]);
 				}
+
 				ImGui::EndListBox();
 			}
+			ImGui::PopStyleVar();
+			ImGui::PopStyleColor();
 
 			ImGui::TableNextColumn();
+			ImGui::Dummy(ImVec2(0, 8));  // spacing
 
 			if (selectedMenu < menuList.size()) {
 				std::visit(DrawMenuVisitor{}, menuList[selectedMenu]);
@@ -1234,13 +1280,6 @@ void Menu::DrawGeneralSettings()
 
 			if (ImGui::BeginTabBar("##tabs", ImGuiTabBarFlags_None)) {
 				if (ImGui::BeginTabItem("UI Options")) {
-					if (ImGui::SliderFloat("Global Scale", &themeSettings.GlobalScale, -1.f, 1.f, "%.2f")) {
-						float trueScale = exp2(themeSettings.GlobalScale);
-
-						auto& io = ImGui::GetIO();
-						io.FontGlobalScale = trueScale;
-					}
-
 					ImGui::SeparatorText("UI Elements");
 					ImGui::Checkbox("Use Icon Buttons in Header", &themeSettings.ShowActionIcons);
 					if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -1259,6 +1298,13 @@ void Menu::DrawGeneralSettings()
 
 				if (ImGui::BeginTabItem("Sizes")) {
 					ImGui::SeparatorText("Main");
+					if (ImGui::SliderFloat("Global Scale", &themeSettings.GlobalScale, -1.f, 1.f, "%.2f")) {
+						float trueScale = exp2(themeSettings.GlobalScale);
+
+						auto& io = ImGui::GetIO();
+						io.FontGlobalScale = trueScale;
+					}
+					ImGui::SliderFloat("Font Size", &themeSettings.FontSize, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE, "%.0f");
 					ImGui::SliderFloat2("Window Padding", (float*)&style.WindowPadding, 0.0f, 20.0f, "%.0f");
 					ImGui::SliderFloat2("Frame Padding", (float*)&style.FramePadding, 0.0f, 20.0f, "%.0f");
 					ImGui::SliderFloat2("Item Spacing", (float*)&style.ItemSpacing, 0.0f, 20.0f, "%.0f");
@@ -1614,7 +1660,7 @@ void Menu::DrawFooter()
 
 void Menu::DrawOverlay()
 {
-	ProcessInputEventQueue();  //Synchronize Inputs to frame
+	ProcessInputEventQueue();  // Synchronize Inputs to frame
 
 	auto shaderCache = globals::shaderCache;
 	auto failed = shaderCache->GetFailedTasks();
@@ -1625,6 +1671,11 @@ void Menu::DrawOverlay()
 		io.ClearInputKeys();
 		io.ClearEventsQueue();
 		return;
+	}
+
+	// Reload font if user changed something
+	if (std::abs(cachedFontSize - settings.Theme.FontSize) > 0.01f) {
+		ReloadFont();
 	}
 
 	// Start the Dear ImGui frame
@@ -2105,12 +2156,12 @@ void Menu::ProcessInputEventQueue()
 	_keyEventQueue.clear();
 
 	// Fallback: release stuck Shift and Tab if OS reports them not pressed
-	if ((io.KeysDown[ImGuiKey_LeftShift] && !(GetAsyncKeyState(VK_LSHIFT) & KEY_PRESSED_MASK)) ||
-		(io.KeysDown[ImGuiKey_RightShift] && !(GetAsyncKeyState(VK_RSHIFT) & KEY_PRESSED_MASK))) {
+	if ((io.KeysDown[ImGuiKey_LeftShift] && !(GetAsyncKeyState(VK_LSHIFT) & Constants::KEY_PRESSED_MASK)) ||
+		(io.KeysDown[ImGuiKey_RightShift] && !(GetAsyncKeyState(VK_RSHIFT) & Constants::KEY_PRESSED_MASK))) {
 		io.AddKeyEvent(ImGuiKey_LeftShift, false);
 		io.AddKeyEvent(ImGuiKey_RightShift, false);
 	}
-	if (io.KeysDown[ImGuiKey_Tab] && !(GetAsyncKeyState(VK_TAB) & KEY_PRESSED_MASK)) {
+	if (io.KeysDown[ImGuiKey_Tab] && !(GetAsyncKeyState(VK_TAB) & Constants::KEY_PRESSED_MASK)) {
 		io.AddKeyEvent(ImGuiKey_Tab, false);
 	}
 }
@@ -2207,4 +2258,35 @@ void Menu::BuildCategoryCounts()
 			categoryCounts[std::string(category)]++;
 		}
 	}
+}
+
+void Menu::ReloadFont()
+{
+	ImGuiIO& io = ImGui::GetIO();
+	io.Fonts->Clear();
+
+	ImFontConfig font_config;
+
+	font_config.OversampleH = Constants::FCONF_OVERSAMPLE_H;                // Increased horizontal oversampling for sharper text
+	font_config.OversampleV = Constants::FCONF_OVERSAMPLE_V;                // Increased vertical oversampling
+	font_config.PixelSnapH = Constants::FCONF_PIXELSNAP_H;                  // Align to pixel grid for sharper rendering
+	font_config.RasterizerMultiply = Constants::FCONF_RASTERIZER_MULTIPLY;  // Slightly darker font rendering
+
+	float fontSize = settings.Theme.FontSize;
+	fontSize = std::clamp(fontSize, Constants::MIN_FONT_SIZE,
+		Constants::MAX_FONT_SIZE);
+
+	if (!io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\Jost-Regular.ttf",
+			std::round(fontSize), &font_config)) {
+		logger::warn("Menu::ReloadFont() - Failed to load custom font. Using default font.");
+		io.Fonts->AddFontDefault();
+	}
+
+	io.Fonts->Build();
+
+	ImGui_ImplDX11_InvalidateDeviceObjects();
+
+	io.FontGlobalScale = exp2(settings.Theme.GlobalScale);
+
+	cachedFontSize = settings.Theme.FontSize;
 }

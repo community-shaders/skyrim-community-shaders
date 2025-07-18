@@ -10,6 +10,7 @@ struct ID3D11Device;
 struct ID3D11ShaderResourceView;
 struct ImVec2;
 class Menu;
+class Feature;
 
 #define BUFFER_VIEWER_NODE(a_value, a_scale)                                                                 \
 	if (ImGui::TreeNode(#a_value)) {                                                                         \
@@ -242,47 +243,46 @@ namespace Util
 	 */
 	void DrawColoredMultiLineTooltip(const ColoredTextLines& lines);
 
-	/**
-	 * @brief Comparator function type for table sorting.
-	 *
-	 * Should return true if the first value should come before the second, given the sort direction.
-	 * @param a First string value (cell content).
-	 * @param b Second string value (cell content).
-	 * @param ascending True if sorting ascending, false for descending.
-	 * @return True if a should come before b, false otherwise.
-	 */
+	// Table sort function for string columns
 	using TableSortFunc = std::function<bool(const std::string&, const std::string&, bool)>;
-
-	/**
-	 * @brief Sorts table rows by the specified column using a default string comparison.
-	 * @param rows The table data (vector of rows).
-	 * @param column The column index to sort by.
-	 * @param ascending True for ascending, false for descending.
-	 */
-	void SortTableRowsByColumn(std::vector<std::vector<std::string>>& rows, size_t column, bool ascending = true);
-
 	using TableCellRenderFunc = std::function<void(int row, int col, const std::string& value)>;
 
 	/**
-	 * @brief Renders a sortable ImGui table with arbitrary columns and per-column custom sorting for custom row types.
-	 *
+	 * Renders a sortable ImGui table for string tables (vector<vector<string>>).
+	 * Always sorts a copy if sorting is needed. Never modifies the input.
+	 * @param table_id Unique ImGui table ID.
+	 * @param headers Column headers.
+	 * @param rows Table data, each row is a vector of strings.
+	 * @param sortColumn Default sort column index.
+	 * @param ascending Default sort direction.
+	 * @param customSorts Vector of custom comparator functions, one per column (nullptr for default string sort).
+	 *        Each function should compare two strings and return true if the first should come before the second.
+	 * @param cellRender Optional cell renderer function for custom cell rendering. Signature: (row, col, value)
+	 */
+	void ShowSortedStringTableStrings(
+		const char* table_id,
+		const std::vector<std::string>& headers,
+		const std::vector<std::vector<std::string>>& rows,
+		size_t sortColumn = 0,
+		bool ascending = true,
+		const std::vector<TableSortFunc>& customSorts = {},
+		TableCellRenderFunc cellRender = nullptr);
+
+	/**
+	 * Renders a sortable ImGui table for custom row types (vector<T>), sorts in-place.
 	 * @tparam T The row type. Must be copyable and compatible with the provided cellRender and customSorts functions.
 	 * @param table_id Unique ImGui table ID.
 	 * @param headers Column headers.
-	 * @param rows Table data, each row is of type T.
+	 * @param rows Table data, each row is of type T (will be sorted in-place).
 	 * @param sortColumn Default sort column index.
 	 * @param ascending Default sort direction.
 	 * @param customSorts Vector of custom comparator functions, one per column.
 	 *        Each function should compare two rows and return true if the first should come before the second.
 	 * @param cellRender Function to render a cell: (rowIdx, colIdx, const T& row).
 	 * @param footerRows Optional static footer rows (not sorted, rendered after main rows).
-	 *
-	 * Example usage:
-	 *   struct MyRow { ... };
-	 *   Util::ShowSortedStringTable<MyRow>(..., rows, ..., customSorts, cellRender, footerRows);
 	 */
 	template <typename T>
-	void ShowSortedStringTable(
+	void ShowSortedStringTableCustom(
 		const char* table_id,
 		const std::vector<std::string>& headers,
 		std::vector<T>& rows,
@@ -324,9 +324,6 @@ namespace Util
 					ImGui::TableSetColumnIndex(static_cast<int>(col));
 					if (cellRender) {
 						cellRender(static_cast<int>(rowIdx), static_cast<int>(col), row);
-					} else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
-						if (col < row.size())
-							ImGui::TextUnformatted(row[col].c_str());
 					}
 				}
 			}
@@ -354,86 +351,6 @@ namespace Util
 	}
 
 	/**
-	 * @brief Renders a sortable ImGui table with arbitrary columns and per-column custom sorting.
-	 *
-	 * This overload is for tables where each row is a std::vector<std::string>.
-	 * For custom row types, use the template version above.
-	 *
-	 * @param table_id Unique ImGui table ID.
-	 * @param headers Column headers.
-	 * @param rows Table data, each row is a vector of strings.
-	 * @param sortColumn Default sort column index.
-	 * @param ascending Default sort direction.
-	 * @param customSorts Vector of custom comparator functions, one per column (nullptr for default string sort).
-	 *        Each function should compare two strings and return true if the first should come before the second.
-	 * @param cellRender Optional cell renderer function for custom cell rendering. Signature: (row, col, value)
-	 */
-	inline void ShowSortedStringTable(
-		const char* table_id,
-		const std::vector<std::string>& headers,
-		const std::vector<std::vector<std::string>>& rows,
-		size_t sortColumn = 0,
-		bool ascending = true,
-		const std::vector<TableSortFunc>& customSorts = {},
-		TableCellRenderFunc cellRender = nullptr)
-	{
-		// Adapt TableSortFunc to std::function<bool(const std::vector<std::string>&, const std::vector<std::string>&, bool)>
-		std::vector<std::function<bool(const std::vector<std::string>&, const std::vector<std::string>&, bool)>> adaptedSorts;
-		adaptedSorts.reserve(customSorts.size());
-		for (size_t i = 0; i < customSorts.size(); ++i) {
-			const auto& sort = customSorts[i];
-			if (sort) {
-				adaptedSorts.push_back([i, sort](const std::vector<std::string>& a, const std::vector<std::string>& b, bool asc) {
-					// Use the i-th column for comparison if available
-					const std::string& aVal = (i < a.size()) ? a[i] : std::string();
-					const std::string& bVal = (i < b.size()) ? b[i] : std::string();
-					return sort(aVal, bVal, asc);
-				});
-			} else {
-				adaptedSorts.push_back(nullptr);
-			}
-		}
-		// Adapt TableCellRenderFunc to std::function<void(int, int, const std::vector<std::string>&)>
-		std::function<void(int, int, const std::vector<std::string>&)> adaptedCellRender = nullptr;
-		if (cellRender) {
-			adaptedCellRender = [cellRender](int row, int col, const std::vector<std::string>& value) {
-				if (col < value.size())
-					cellRender(row, col, value[col]);
-			};
-		}
-
-		// Check if sorting is needed by looking at ImGui table sort specs
-		bool needsSorting = false;
-		if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
-			needsSorting = (sortSpecs->SpecsCount > 0);
-		}
-
-		// Only make a copy if we need to sort, otherwise use the original data
-		if (needsSorting) {
-			std::vector<std::vector<std::string>> rowsCopy = rows;
-			ShowSortedStringTable<std::vector<std::string>>(
-				table_id,
-				headers,
-				rowsCopy,
-				sortColumn,
-				ascending,
-				adaptedSorts,
-				adaptedCellRender);
-		} else {
-			// For non-sorting case, we can use the original data directly
-			// We need to const_cast because the template expects non-const, but we know it won't be modified
-			ShowSortedStringTable<std::vector<std::string>>(
-				table_id,
-				headers,
-				const_cast<std::vector<std::vector<std::string>>&>(rows),
-				sortColumn,
-				ascending,
-				adaptedSorts,
-				adaptedCellRender);
-		}
-	}
-
-	/**
 	 * @brief Compares two version strings (e.g., "1.2.3") numerically.
 	 * @param a First version string.
 	 * @param b Second version string.
@@ -445,8 +362,28 @@ namespace Util
 	/**
 	 * @brief TableSortFunc for version strings, using VersionStringLess.
 	 */
-	extern const TableSortFunc VersionSortComparator;
+	bool VersionSortComparator(const std::string& a, const std::string& b, bool ascending);
+
+	// A standard string comparator for use with ShowSortedStringTable
+	bool StringSortComparator(const std::string& a, const std::string& b, bool ascending);
 
 	// Performance overlay formatting and color helpers
 	ImVec4 GetThresholdColor(float value, float good, float warn, ImVec4 goodColor, ImVec4 warnColor, ImVec4 badColor);
+
+	// Search functionality
+	/**
+	 * @brief Checks if a feature matches the search query.
+	 * Searches both the feature's short name and display name.
+	 * @param feat The feature to check
+	 * @param searchQuery The search query string
+	 * @return True if the feature matches the search query
+	 */
+	bool FeatureMatchesSearch(Feature* feat, const std::string& searchQuery);
+
+	/**
+	 * @brief Draws the feature search bar with magnifying glass icon.
+	 * @param searchString Reference to the search string to modify
+	 * @param availableWidth The available width for the search bar
+	 */
+	void DrawFeatureSearchBar(std::string& searchString, float availableWidth = 0.0f);
 }  // namespace Util

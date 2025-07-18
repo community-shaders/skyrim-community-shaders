@@ -27,6 +27,12 @@ void ABTestingManager::Enable()
 		state->Save(State::ConfigMode::TEST);
 		abTestingEnabled = true;
 
+		// Initialize QueryPerformanceCounter timing
+		if (timingFrequency.QuadPart == 0) {
+			QueryPerformanceFrequency(&timingFrequency);
+		}
+		QueryPerformanceCounter(&lastTestSwitch);
+
 		// Preserve overlay enabled state
 		bool overlayWasEnabled = performanceOverlay->settings.ShowInOverlay;
 		performanceOverlay->settings.ShowInOverlay = overlayWasEnabled;
@@ -58,9 +64,9 @@ void ABTestingManager::Update()
 	auto* performanceOverlay = PerformanceOverlay::GetSingleton();
 
 	// Preserve overlay enabled state when switching configs
-	float seconds = std::chrono::duration<float>(
-		std::chrono::high_resolution_clock::now() - lastTestSwitch)
-	                    .count();
+	LARGE_INTEGER currentTime;
+	QueryPerformanceCounter(&currentTime);
+	float seconds = (currentTime.QuadPart - lastTestSwitch.QuadPart) / static_cast<float>(timingFrequency.QuadPart);
 	auto remaining = static_cast<float>(testInterval) - seconds;
 
 	if (remaining < 0.0f) {
@@ -71,7 +77,7 @@ void ABTestingManager::Update()
 			usingTestConfig ? "TEST config" : "USER config");
 		state->Load(usingTestConfig ? State::ConfigMode::TEST : State::ConfigMode::USER);
 		performanceOverlay->settings.ShowInOverlay = overlayWasEnabled;  // Restore overlay state
-		lastTestSwitch = std::chrono::high_resolution_clock::now();
+		QueryPerformanceCounter(&lastTestSwitch);
 
 		// Notify the A/B test aggregator of the variant switch
 		aggregator.OnABSwitch(usingTestConfig ? ABVariant::B : ABVariant::A);
@@ -109,9 +115,9 @@ void ABTestingManager::DrawOverlayUI()
 	if (!abTestingEnabled)
 		return;
 
-	float seconds = std::chrono::duration<float>(
-		std::chrono::high_resolution_clock::now() - lastTestSwitch)
-	                    .count();
+	LARGE_INTEGER currentTime;
+	QueryPerformanceCounter(&currentTime);
+	float seconds = (currentTime.QuadPart - lastTestSwitch.QuadPart) / static_cast<float>(timingFrequency.QuadPart);
 	auto remaining = static_cast<float>(testInterval) - seconds;
 
 	ImGui::SetNextWindowBgAlpha(1.0f);

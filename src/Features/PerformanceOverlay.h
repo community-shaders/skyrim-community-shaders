@@ -4,7 +4,6 @@
 #include "OverlayFeature.h"
 #include "PerformanceOverlay/ABTesting/ABTestAggregator.h"
 #include "Utils/PerfUtils.h"
-#include <chrono>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <unordered_map>
@@ -179,9 +178,10 @@ struct PerformanceOverlay : OverlayFeature
 		float postFGSmoothFps = 0.0f;
 		float postFGSmoothFrameTimeMs = 0.0f;
 
-		// Update timing
+		// Update timing using QueryPerformanceCounter
 		float updateTimer = 0.0f;
-		std::chrono::steady_clock::time_point lastUpdateTime;
+		LARGE_INTEGER overlayTimingFrequency = { 0 };
+		LARGE_INTEGER lastUpdateTime = { 0 };
 
 		// Min/max tracking
 		float minFrameTime = 1000.0f;
@@ -246,7 +246,9 @@ struct PerformanceOverlay : OverlayFeature
 
 		const std::vector<float>& GetFrameTimeHistory() const { return frameTimeHistory; }
 		const std::vector<float>& GetPostFGFrameTimeHistory() const { return postFGFrameTimeHistory; }
-		const std::chrono::steady_clock::time_point& GetLastUpdateTime() const { return lastUpdateTime; }
+		const LARGE_INTEGER& GetLastUpdateTime() const { return lastUpdateTime; }
+		LARGE_INTEGER& GetLastUpdateTimeRef() { return lastUpdateTime; }
+		LARGE_INTEGER& GetOverlayTimingFrequencyRef() { return overlayTimingFrequency; }
 
 		// Non-const getters for history vectors that need modification
 		std::vector<float>& GetFrameTimeHistoryRef() { return frameTimeHistory; }
@@ -275,7 +277,7 @@ struct PerformanceOverlay : OverlayFeature
 		void SetCurrentFrameCounter(int64_t value) { currentFrameCounter = value; }
 		void SetFrameTimeHistoryIndex(int value) { frameTimeHistoryIndex = value; }
 		void SetPostFGFrameTimeHistoryIndex(int value) { postFGFrameTimeHistoryIndex = value; }
-		void SetLastUpdateTime(const std::chrono::steady_clock::time_point& value) { lastUpdateTime = value; }
+		void SetLastUpdateTime(const LARGE_INTEGER& value) { lastUpdateTime = value; }
 
 		// Buffer management methods
 		void ResizeFrameTimeHistory(size_t size, float defaultValue = 0.0f) { frameTimeHistory.resize(size, defaultValue); }
@@ -369,6 +371,6 @@ private:
 	void CaptureTestData();
 	void ClearTestData();
 	TestDataSource testDataSource = TestDataSource::None;
-	std::chrono::steady_clock::time_point testDataLastUpdated;
+	LARGE_INTEGER testDataLastUpdated = { 0 };
 	std::unordered_map<int, TestData> testData;
 };
