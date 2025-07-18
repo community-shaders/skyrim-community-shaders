@@ -47,6 +47,7 @@ namespace DynamicCubemaps
 		if (SharedData::InInterior) {
 			float3 specularIrradiance = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
 
+			finalIrradiance += specularIrradiance;
 			return finalIrradiance;
 		}
 
