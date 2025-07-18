@@ -82,6 +82,9 @@ struct VR : Feature
 	void UpdateVROverlayPosition();
 	void UpdateVROverlayControllerPosition();
 
+private:
+	vr::HmdMatrix34_t ComputeOverlayTransformFromHMD();
+
 public:
 	// VR input processing (event loop)
 	void ProcessVREvents(std::vector<Menu::KeyEvent>& vrEvents);
@@ -121,10 +124,37 @@ public:
 		std::string heldSource;
 		float thumbstickX = 0.0f;
 		float thumbstickY = 0.0f;
-		std::string controllerRole;  // Add this line
-									 // For thumbstick events, keyCode/value are replaced by x/y floats
+		std::string controllerRole;  // For thumbstick events, keyCode/value are replaced by x/y floats
 	};
 	std::vector<VRControllerEventLog> vrControllerEventLog;
 	RE::InputDeviceState primaryControllerState;
 	RE::InputDeviceState secondaryControllerState;
+
+	// Non-persistent fixed world overlay position (session only)
+	struct OverlayWorldPosition
+	{
+		float m[3][4] = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 } };  // 3x4 matrix (rotation + translation)
+	} fixedWorldOverlayPosition;
+
+	// Drag state for overlay manipulation
+	struct OverlayDragState
+	{
+		bool dragging = false;
+		vr::TrackedDeviceIndex_t controllerIndex = vr::k_unTrackedDeviceIndexInvalid;
+		bool isPrimary = false;
+		bool isSecondary = false;
+		float initialControllerMatrix[3][4] = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 } };
+		float initialOverlayMatrix[3][4] = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 } };
+		float grabOffset[3][4] = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 } };  // overlay^-1 * controller at grab
+		bool intersecting = false;                                                    // True if any controller is currently intersecting the overlay
+	} overlayDragState;
+
+	void UpdateOverlayDrag();
+	void SetFixedOverlayToCurrentHMD();
+
+	// Returns true if the overlay window should be highlighted (dragging in fixed world mode)
+	bool ShouldHighlightOverlayWindow() const
+	{
+		return settings.VRMenuPositioningMethod == 1 && overlayDragState.dragging;
+	}
 };

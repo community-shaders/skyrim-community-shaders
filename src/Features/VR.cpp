@@ -6,6 +6,7 @@
 #include "State.h"
 #include "Utils/UI.h"
 #include <chrono>
+#include <cmath>
 #include <d3d11.h>
 #include <imgui_impl_dx11.h>
 #include <openvr.h>
@@ -42,6 +43,46 @@ inline double GetNowSecs()
 	return static_cast<double>(now.QuadPart) / static_cast<double>(freq.QuadPart);
 }
 
+vr::HmdMatrix34_t VR::ComputeOverlayTransformFromHMD()
+{
+	vr::HmdMatrix34_t transform = {};
+	vr::IVRSystem* system = vr::VRSystem();
+	if (system) {
+		vr::TrackedDevicePose_t hmdPose;
+		system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &hmdPose, 1);
+		if (hmdPose.bPoseIsValid) {
+			float distance = settings.VRMenuDistance;
+			int texWidth = 1920, texHeight = 1080;
+			if (settings.VRMenuSizePreset == 0) {
+				texWidth = 1280;
+				texHeight = 720;
+			} else if (settings.VRMenuSizePreset == 2) {
+				texWidth = 2560;
+				texHeight = 1440;
+			}
+			float aspect = static_cast<float>(texHeight) / texWidth;
+			float baseWidth = 1.0f;
+			float overlayWidth = baseWidth * settings.VRMenuScale;
+			float overlayHeight = overlayWidth * aspect;
+			float centerOffsetX = -0.5f * (overlayWidth - baseWidth);
+			float centerOffsetY = -0.5f * (overlayHeight - (baseWidth * aspect));
+			float offsetX = settings.VRMenuOffsetX + centerOffsetX;
+			float offsetY = settings.VRMenuOffsetY + centerOffsetY;
+			float offsetZ = settings.VRMenuOffsetZ;
+			transform = hmdPose.mDeviceToAbsoluteTracking;
+			// Move forward by distance (Z axis in HMD space)
+			transform.m[0][3] += transform.m[0][2] * (-distance);
+			transform.m[1][3] += transform.m[1][2] * (-distance);
+			transform.m[2][3] += transform.m[2][2] * (-distance);
+			// Apply HMD overlay offsets (in HMD local space)
+			transform.m[0][3] += transform.m[0][0] * offsetX + transform.m[0][1] * offsetY + transform.m[0][2] * offsetZ;
+			transform.m[1][3] += transform.m[1][0] * offsetX + transform.m[1][1] * offsetY + transform.m[1][2] * offsetZ;
+			transform.m[2][3] += transform.m[2][0] * offsetX + transform.m[2][1] * offsetY + transform.m[2][2] * offsetZ;
+		}
+	}
+	return transform;
+}
+
 void VR::DrawSettings()
 {
 	if (ImGui::Checkbox("Enable Depth Buffer Culling", &settings.EnableDepthBufferCulling))
@@ -74,6 +115,12 @@ void VR::DrawSettings()
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("HMD Relative: Menu follows your head movement. Fixed World Position: Menu stays at a fixed location in the world.");
+			}
+			// If in Fixed World Position mode, show reset button
+			if (settings.VRMenuPositioningMethod == 1) {
+				if (ImGui::Button("Reset Fixed Position to HMD")) {
+					SetFixedOverlayToCurrentHMD();
+				}
 			}
 
 			if (ImGui::Combo("Menu Size", &settings.VRMenuSizePreset, "Small (1280x720)\0Medium (1920x1080)\0Large (2560x1440)\0")) {
@@ -550,6 +597,10 @@ void VR::UpdateVROverlayPosition()
 	float centerOffsetX = -0.5f * (overlayWidth - baseWidth);
 	float centerOffsetY = -0.5f * (overlayHeight - (baseWidth * aspect));
 
+	static int lastPositioningMethod = -1;
+	bool justSwitchedToFixed = (lastPositioningMethod != 1 && settings.VRMenuPositioningMethod == 1);
+	lastPositioningMethod = settings.VRMenuPositioningMethod;
+
 	// Handle HMD positioning
 	if (showOnHMD) {
 		if (settings.VRMenuPositioningMethod == 0) {
@@ -566,56 +617,57 @@ void VR::UpdateVROverlayPosition()
 				float offsetZ = settings.VRMenuOffsetZ;
 
 				// Create transform matrix - start with identity
-				vr::HmdMatrix34_t transform;
-				transform.m[0][0] = 1.0f;
-				transform.m[0][1] = 0.0f;
-				transform.m[0][2] = 0.0f;
-				transform.m[0][3] = 0.0f;
-				transform.m[1][0] = 0.0f;
-				transform.m[1][1] = 1.0f;
-				transform.m[1][2] = 0.0f;
-				transform.m[1][3] = 0.0f;
-				transform.m[2][0] = 0.0f;
-				transform.m[2][1] = 0.0f;
-				transform.m[2][2] = 1.0f;
-				transform.m[2][3] = 0.0f;
+				vr::HmdMatrix34_t hmdTransform;
+				hmdTransform.m[0][0] = 1.0f;
+				hmdTransform.m[0][1] = 0.0f;
+				hmdTransform.m[0][2] = 0.0f;
+				hmdTransform.m[0][3] = 0.0f;
+				hmdTransform.m[1][0] = 0.0f;
+				hmdTransform.m[1][1] = 1.0f;
+				hmdTransform.m[1][2] = 0.0f;
+				hmdTransform.m[1][3] = 0.0f;
+				hmdTransform.m[2][0] = 0.0f;
+				hmdTransform.m[2][1] = 0.0f;
+				hmdTransform.m[2][2] = 1.0f;
+				hmdTransform.m[2][3] = 0.0f;
 
 				// Copy HMD position
-				transform.m[0][3] = hmdPose.mDeviceToAbsoluteTracking.m[0][3];
-				transform.m[1][3] = hmdPose.mDeviceToAbsoluteTracking.m[1][3];
-				transform.m[2][3] = hmdPose.mDeviceToAbsoluteTracking.m[2][3];
+				hmdTransform.m[0][3] = hmdPose.mDeviceToAbsoluteTracking.m[0][3];
+				hmdTransform.m[1][3] = hmdPose.mDeviceToAbsoluteTracking.m[1][3];
+				hmdTransform.m[2][3] = hmdPose.mDeviceToAbsoluteTracking.m[2][3];
 
 				// Copy HMD orientation
-				transform.m[0][0] = hmdPose.mDeviceToAbsoluteTracking.m[0][0];
-				transform.m[0][1] = hmdPose.mDeviceToAbsoluteTracking.m[0][1];
-				transform.m[0][2] = hmdPose.mDeviceToAbsoluteTracking.m[0][2];
-				transform.m[1][0] = hmdPose.mDeviceToAbsoluteTracking.m[1][0];
-				transform.m[1][1] = hmdPose.mDeviceToAbsoluteTracking.m[1][1];
-				transform.m[1][2] = hmdPose.mDeviceToAbsoluteTracking.m[1][2];
-				transform.m[2][0] = hmdPose.mDeviceToAbsoluteTracking.m[2][0];
-				transform.m[2][1] = hmdPose.mDeviceToAbsoluteTracking.m[2][1];
-				transform.m[2][2] = hmdPose.mDeviceToAbsoluteTracking.m[2][2];
+				hmdTransform.m[0][0] = hmdPose.mDeviceToAbsoluteTracking.m[0][0];
+				hmdTransform.m[0][1] = hmdPose.mDeviceToAbsoluteTracking.m[0][1];
+				hmdTransform.m[0][2] = hmdPose.mDeviceToAbsoluteTracking.m[0][2];
+				hmdTransform.m[1][0] = hmdPose.mDeviceToAbsoluteTracking.m[1][0];
+				hmdTransform.m[1][1] = hmdPose.mDeviceToAbsoluteTracking.m[1][1];
+				hmdTransform.m[1][2] = hmdPose.mDeviceToAbsoluteTracking.m[1][2];
+				hmdTransform.m[2][0] = hmdPose.mDeviceToAbsoluteTracking.m[2][0];
+				hmdTransform.m[2][1] = hmdPose.mDeviceToAbsoluteTracking.m[2][1];
+				hmdTransform.m[2][2] = hmdPose.mDeviceToAbsoluteTracking.m[2][2];
 
 				// Move forward by distance (Z axis in HMD space)
-				transform.m[0][3] += transform.m[0][2] * (-distance);
-				transform.m[1][3] += transform.m[1][2] * (-distance);
-				transform.m[2][3] += transform.m[2][2] * (-distance);
+				hmdTransform.m[0][3] += hmdTransform.m[0][2] * (-distance);
+				hmdTransform.m[1][3] += hmdTransform.m[1][2] * (-distance);
+				hmdTransform.m[2][3] += hmdTransform.m[2][2] * (-distance);
 
 				// Move up by height (Y axis in HMD space)
-				transform.m[0][3] += transform.m[0][1] * height;
-				transform.m[1][3] += transform.m[1][1] * height;
-				transform.m[2][3] += transform.m[2][1] * height;
+				hmdTransform.m[0][3] += hmdTransform.m[0][1] * height;
+				hmdTransform.m[1][3] += hmdTransform.m[1][1] * height;
+				hmdTransform.m[2][3] += hmdTransform.m[2][1] * height;
 
 				// Apply HMD overlay offsets (in HMD local space)
-				transform.m[0][3] += transform.m[0][0] * offsetX + transform.m[0][1] * offsetY + transform.m[0][2] * offsetZ;
-				transform.m[1][3] += transform.m[1][0] * offsetX + transform.m[1][1] * offsetY + transform.m[1][2] * offsetZ;
-				transform.m[2][3] += transform.m[2][0] * offsetX + transform.m[2][1] * offsetY + transform.m[2][2] * offsetZ;
+				hmdTransform.m[0][3] += hmdTransform.m[0][0] * offsetX + hmdTransform.m[0][1] * offsetY + hmdTransform.m[0][2] * offsetZ;
+				hmdTransform.m[1][3] += hmdTransform.m[1][0] * offsetX + hmdTransform.m[1][1] * offsetY + hmdTransform.m[1][2] * offsetZ;
+				hmdTransform.m[2][3] += hmdTransform.m[2][0] * offsetX + hmdTransform.m[2][1] * offsetY + hmdTransform.m[2][2] * offsetZ;
 
 				// Scale the overlay based on width/height
-				transform.m[0][0] *= overlayWidth;
-				transform.m[1][1] *= overlayHeight;
+				hmdTransform.m[0][0] *= overlayWidth;
+				hmdTransform.m[1][1] *= overlayHeight;
 
-				overlay->SetOverlayTransformAbsolute(menuOverlayHandle, vr::TrackingUniverseStanding, &transform);
+				overlay->SetOverlayTransformAbsolute(menuOverlayHandle, vr::TrackingUniverseStanding, &hmdTransform);
+
 			} else {
 				logger::debug("HMD pose invalid, falling back to fixed positioning");
 				settings.VRMenuPositioningMethod = 1;  // Fall back to fixed positioning
@@ -625,22 +677,15 @@ void VR::UpdateVROverlayPosition()
 		if (settings.VRMenuPositioningMethod == 1) {
 			// Fixed World Position
 			logger::debug("Using fixed world positioning");
+			if (justSwitchedToFixed) {
+				SetFixedOverlayToCurrentHMD();
+			}
 
-			vr::HmdMatrix34_t transform;
-			transform.m[0][0] = overlayWidth;
-			transform.m[0][1] = 0.0f;
-			transform.m[0][2] = 0.0f;
-			transform.m[0][3] = 0.0f;
-			transform.m[1][0] = 0.0f;
-			transform.m[1][1] = overlayHeight;
-			transform.m[1][2] = 0.0f;
-			transform.m[1][3] = 0.0f;  // No longer using settings.VRMenuHeight
-			transform.m[2][0] = 0.0f;
-			transform.m[2][1] = 0.0f;
-			transform.m[2][2] = 1.0f;
-			transform.m[2][3] = settings.VRMenuDistance;
-
-			overlay->SetOverlayTransformAbsolute(menuOverlayHandle, vr::TrackingUniverseStanding, &transform);
+			vr::HmdMatrix34_t fixedTransform;
+			for (int i = 0; i < 3; ++i)
+				for (int j = 0; j < 4; ++j)
+					fixedTransform.m[i][j] = fixedWorldOverlayPosition.m[i][j];
+			overlay->SetOverlayTransformAbsolute(menuOverlayHandle, vr::TrackingUniverseStanding, &fixedTransform);
 		}
 	}
 
@@ -942,6 +987,10 @@ void VR::SubmitOverlayFrame()
 	vr::IVROverlay* overlay = vr::VROverlay();
 	if (!overlay)
 		return;
+	// Only update drag logic in fixed world mode
+	if (settings.VRMenuPositioningMethod == 1) {
+		UpdateOverlayDrag();
+	}
 	auto& enabled = globals::menu->IsEnabled;
 	if (enabled && menuOverlayHandle != vr::k_ulOverlayHandleInvalid && menuTexture && menuRTV) {
 		// Copy ImGui output to overlay texture
@@ -1204,4 +1253,161 @@ void VR::ProcessVRControllerOverlayInput()
 		io.WantSetMousePos = true;
 		io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
 	}
+}
+
+// Helper: Invert a 3x4 rigid transform matrix (rotation + translation)
+void InvertMatrix3x4(const float in[3][4], float out[3][4])
+{
+	// Transpose rotation
+	for (int i = 0; i < 3; ++i)
+		for (int j = 0; j < 3; ++j)
+			out[i][j] = in[j][i];
+	// Invert translation
+	for (int i = 0; i < 3; ++i) {
+		out[i][3] = 0.0f;
+		for (int j = 0; j < 3; ++j)
+			out[i][3] -= out[i][j] * in[j][3];
+	}
+}
+
+// Helper: Multiply two 3x4 matrices (rigid transforms)
+void MultiplyMatrix3x4(const float a[3][4], const float b[3][4], float out[3][4])
+{
+	// Rotation
+	for (int i = 0; i < 3; ++i)
+		for (int j = 0; j < 3; ++j)
+			out[i][j] = a[i][0] * b[0][j] + a[i][1] * b[1][j] + a[i][2] * b[2][j];
+	// Translation
+	for (int i = 0; i < 3; ++i)
+		out[i][3] = a[i][0] * b[0][3] + a[i][1] * b[1][3] + a[i][2] * b[2][3] + a[i][3];
+}
+
+// Helper: Get controller world matrix from OpenVR pose
+bool GetControllerWorldMatrix(vr::TrackedDeviceIndex_t index, float out[3][4])
+{
+	vr::IVRSystem* system = vr::VRSystem();
+	if (!system)
+		return false;
+	vr::TrackedDevicePose_t poses[vr::k_unMaxTrackedDeviceCount];
+	system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, poses, vr::k_unMaxTrackedDeviceCount);
+	if (!poses[index].bPoseIsValid)
+		return false;
+	for (int i = 0; i < 3; ++i)
+		for (int j = 0; j < 4; ++j)
+			out[i][j] = poses[index].mDeviceToAbsoluteTracking.m[i][j];
+	return true;
+}
+
+// Helper: Overlay intersection test (controller tip in overlay local space)
+bool IsControllerIntersectingOverlay(const float controllerMatrix[3][4], const float overlayMatrix[3][4], float overlayWidth, float overlayHeight, float threshold = 0.05f)
+{
+	// Invert overlay matrix
+	float invOverlay[3][4];
+	InvertMatrix3x4(overlayMatrix, invOverlay);
+	// Controller tip in world space (origin)
+	float tipWorld[3] = { controllerMatrix[0][3], controllerMatrix[1][3], controllerMatrix[2][3] };
+	// Transform to overlay local space
+	float rel[3];
+	for (int i = 0; i < 3; ++i) {
+		rel[i] = invOverlay[i][0] * tipWorld[0] + invOverlay[i][1] * tipWorld[1] + invOverlay[i][2] * tipWorld[2] + invOverlay[i][3];
+	}
+	// Check Z is close to 0 (overlay plane)
+	if (std::abs(rel[2]) > threshold)
+		return false;
+	// Check X/Y bounds
+	if (std::abs(rel[0]) > overlayWidth / 2.0f)
+		return false;
+	if (std::abs(rel[1]) > overlayHeight / 2.0f)
+		return false;
+	return true;
+}
+
+void VR::UpdateOverlayDrag()
+{
+	if (settings.VRMenuPositioningMethod != 1)
+		return;
+	vr::IVRSystem* system = vr::VRSystem();
+	if (!system)
+		return;
+	// Allow either grip to start dragging, no intersection required
+	for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; ++i) {
+		if (system->GetTrackedDeviceClass(i) != vr::TrackedDeviceClass_Controller)
+			continue;
+		float controllerMatrix[3][4];
+		if (!GetControllerWorldMatrix(i, controllerMatrix))
+			continue;
+		vr::ETrackedControllerRole role = system->GetControllerRoleForTrackedDeviceIndex(i);
+		bool isPrimary = (role == vr::TrackedControllerRole_LeftHand);
+		bool isSecondary = (role == vr::TrackedControllerRole_RightHand);
+		bool gripPressed = false;
+		if (isPrimary)
+			gripPressed = primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
+		else if (isSecondary)
+			gripPressed = secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
+		if (!overlayDragState.dragging && gripPressed) {
+			overlayDragState.dragging = true;
+			overlayDragState.controllerIndex = i;
+			overlayDragState.isPrimary = isPrimary;
+			overlayDragState.isSecondary = isSecondary;
+			for (int r = 0; r < 3; ++r)
+				for (int c = 0; c < 4; ++c) {
+					overlayDragState.initialControllerMatrix[r][c] = controllerMatrix[r][c];
+					overlayDragState.initialOverlayMatrix[r][c] = fixedWorldOverlayPosition.m[r][c];
+				}
+			// Compute grabOffset = inverse(overlay) * controller
+			float invOverlay[3][4];
+			InvertMatrix3x4(fixedWorldOverlayPosition.m, invOverlay);
+			MultiplyMatrix3x4(invOverlay, controllerMatrix, overlayDragState.grabOffset);
+			break;
+		}
+	}
+	overlayDragState.intersecting = false;  // No intersection logic now
+	// If dragging, update overlay position
+	if (overlayDragState.dragging) {
+		// Find the current device index for the dragging logical controller
+		vr::IVRSystem* vrSystem = vr::VRSystem();
+		vr::TrackedDeviceIndex_t draggingIndex = vr::k_unTrackedDeviceIndexInvalid;
+		for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; ++i) {
+			if (vrSystem->GetTrackedDeviceClass(i) != vr::TrackedDeviceClass_Controller)
+				continue;
+			vr::ETrackedControllerRole role = vrSystem->GetControllerRoleForTrackedDeviceIndex(i);
+			if ((overlayDragState.isPrimary && role == vr::TrackedControllerRole_LeftHand) ||
+				(overlayDragState.isSecondary && role == vr::TrackedControllerRole_RightHand)) {
+				draggingIndex = i;
+				break;
+			}
+		}
+		if (draggingIndex != vr::k_unTrackedDeviceIndexInvalid) {
+			float controllerMatrix[3][4];
+			if (GetControllerWorldMatrix(draggingIndex, controllerMatrix)) {
+				float invGrab[3][4];
+				InvertMatrix3x4(overlayDragState.grabOffset, invGrab);
+				float newOverlay[3][4];
+				MultiplyMatrix3x4(controllerMatrix, invGrab, newOverlay);
+				for (int r = 0; r < 3; ++r)
+					for (int c = 0; c < 4; ++c)
+						fixedWorldOverlayPosition.m[r][c] = newOverlay[r][c];
+			}
+		}
+		// If grip released, stop dragging
+		bool gripPressed = false;
+		if (overlayDragState.isPrimary)
+			gripPressed = primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
+		else if (overlayDragState.isSecondary)
+			gripPressed = secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
+		if (!gripPressed) {
+			overlayDragState.dragging = false;
+			overlayDragState.controllerIndex = vr::k_unTrackedDeviceIndexInvalid;
+			overlayDragState.isPrimary = false;
+			overlayDragState.isSecondary = false;
+		}
+	}
+}
+
+void VR::SetFixedOverlayToCurrentHMD()
+{
+	vr::HmdMatrix34_t transform = ComputeOverlayTransformFromHMD();
+	for (int i = 0; i < 3; ++i)
+		for (int j = 0; j < 4; ++j)
+			fixedWorldOverlayPosition.m[i][j] = transform.m[i][j];
 }
