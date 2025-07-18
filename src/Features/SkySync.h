@@ -164,6 +164,7 @@ private:
 
 	ClimateTimings timings = {};
 
+	RE::NiPoint3 rawDirections[3];
 	RE::NiPoint3 directions[3];
 	float intensities[3] = {};
 	ShadowFader shadowFader;

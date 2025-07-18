@@ -292,6 +292,18 @@ struct ID3D11Device_CreatePixelShader
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
+struct ID3D11Device_CreateSamplerState
+{
+	static HRESULT STDMETHODCALLTYPE thunk(ID3D11Device* This, D3D11_SAMPLER_DESC* pSamplerDesc, ID3D11SamplerState** ppSamplerState)
+	{
+		// Limit Anisotropy to 8x for performance
+		D3D11_SAMPLER_DESC descCopy = *pSamplerDesc;  // make a copy, pSamplerDesc is supposed to be immutable
+		descCopy.MaxAnisotropy = std::min(descCopy.MaxAnisotropy, 8u);
+		return func(This, &descCopy, ppSamplerState);
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
 decltype(&CreateDXGIFactory) ptrCreateDXGIFactory;
 
 HRESULT WINAPI hk_CreateDXGIFactory(REFIID, void** ppFactory)
@@ -605,6 +617,9 @@ namespace Hooks
 				stl::detour_vfunc<12, ID3D11Device_CreateVertexShader>(globals::d3d::device);
 				stl::detour_vfunc<15, ID3D11Device_CreatePixelShader>(globals::d3d::device);
 			}
+
+			stl::detour_vfunc<23, ID3D11Device_CreateSamplerState>(globals::d3d::device);
+
 			globals::menu->Init();
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -847,41 +862,58 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	struct BSBatchRenderer_RenderPassImmediately1
+	void BSBatchRenderer_RenderPassImmediately1::thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags)
 	{
-		static void thunk(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags)
-		{
-			if (globals::features::lightLimitFix->loaded && !globals::features::lightLimitFix->CheckParticleLights(pass, technique))
-				return;
+		if (globals::features::lightLimitFix->loaded && !globals::features::lightLimitFix->CheckParticleLights(a_pass, a_technique))
+			return;
 
-			func(pass, technique, alphaTest, renderFlags);
+		// Separate deferred and forward blended decals
+		if (globals::state->inWorld && a_pass->accumulationHint == 3 && !a_pass->shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kZBufferWrite)) {
+			RenderPass call{ a_pass, a_technique, a_alphaTest, a_renderFlags };
+			globals::state->blendedDecalRenderPasses.push_back(call);
+			return;
 		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
+
+		func(a_pass, a_technique, a_alphaTest, a_renderFlags);
+	}
 
 	struct BSBatchRenderer_RenderPassImmediately2
 	{
-		static void thunk(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags)
+		static void thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags)
 		{
-			if (globals::features::lightLimitFix->loaded && !globals::features::lightLimitFix->CheckParticleLights(pass, technique))
+			if (globals::features::lightLimitFix->loaded && !globals::features::lightLimitFix->CheckParticleLights(a_pass, a_technique))
 				return;
 
 			if (globals::features::interiorSunShadows->loaded)
-				globals::features::interiorSunShadows->UpdateRasterStateCullMode(pass, technique);
+				globals::features::interiorSunShadows->UpdateRasterStateCullMode(a_pass, a_technique);
 
-			func(pass, technique, alphaTest, renderFlags);
+			// Separate deferred and forward blended decals
+			if (globals::state->inWorld && a_pass->accumulationHint == 3 && !a_pass->shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kZBufferWrite)) {
+				RenderPass call{ a_pass, a_technique, a_alphaTest, a_renderFlags };
+				globals::state->blendedDecalRenderPasses.push_back(call);
+				return;
+			}
+
+			func(a_pass, a_technique, a_alphaTest, a_renderFlags);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
 	struct BSBatchRenderer_RenderPassImmediately3
 	{
-		static void thunk(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags)
+		static void thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags)
 		{
-			if (globals::features::lightLimitFix->loaded && !globals::features::lightLimitFix->CheckParticleLights(pass, technique))
+			if (globals::features::lightLimitFix->loaded && !globals::features::lightLimitFix->CheckParticleLights(a_pass, a_technique))
 				return;
 
-			func(pass, technique, alphaTest, renderFlags);
+			// Separate deferred and forward blended decals
+			if (globals::state->inWorld && a_pass->accumulationHint == 3 && !a_pass->shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kZBufferWrite)) {
+				RenderPass call{ a_pass, a_technique, a_alphaTest, a_renderFlags };
+				globals::state->blendedDecalRenderPasses.push_back(call);
+				return;
+			}
+
+			func(a_pass, a_technique, a_alphaTest, a_renderFlags);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -1098,6 +1130,16 @@ namespace Hooks
 		if (!REL::Module::IsVR()) {
 			stl::write_thunk_call<Main_Update_Begin>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x53, 0x6E));
 			stl::write_thunk_call<Main_Update_Swap>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x5D2, 0xA97));
+		}
+
+		// Patch eye position in BSLightingShader::SetupGeometry to always update due to additional effects which may require it
+		// The variable updateEyePosition is set to false by default. By patching to be true it will always update the eye position
+		// SE and AE use a 7-byte instruction whereas VR uses a 8-byte instruction
+		// We offset from the base address of the containing function to the instruction itself and then to the value the instruction sets
+		{
+			logger::info("Patching BSLightingShader::SetupGeometry::updateEyePosition");
+			uintptr_t setupGeometryUpdateEyePosition = REL::RelocationID(100565, 107300).address() + REL::Relocate(0x50, 0x75, 0x78);
+			REL::safe_write(setupGeometryUpdateEyePosition + REL::Relocate(6, 6, 7), bool{ true });
 		}
 	}
 

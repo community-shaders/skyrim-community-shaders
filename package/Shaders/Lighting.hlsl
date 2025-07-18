@@ -1464,12 +1464,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			landRMAOS1 = TexRMAOSSampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
 #			endif
 			if ((PBRFlags & PBR::TerrainFlags::LandTile0HasGlint) != 0) {
-				glintParameters += input.LandBlendWeights1.x * LandscapeTexture1GlintParameters;
+				glintParameters += weight * LandscapeTexture1GlintParameters;
 			}
 		}
 		else
 		{
-			landRMAOS1 = float4(1 - landNormal1.w, 0, 1, 0);
+			landRMAOS1 = input.LandBlendWeights1.x * float4(1 - glossiness.x, 0, 1, 0);
 		}
 		blendedRMAOS += landRMAOS1 * weight;
 #		endif
@@ -1545,12 +1545,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			landRMAOS2 = TexLandRMAOS2Sampler.SampleBias(SampLandRMAOS2Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
 #			endif
 			if ((PBRFlags & PBR::TerrainFlags::LandTile1HasGlint) != 0) {
-				glintParameters += input.LandBlendWeights1.y * LandscapeTexture2GlintParameters;
+				glintParameters += weight * LandscapeTexture2GlintParameters;
 			}
 		}
 		else
 		{
-			landRMAOS2 = float4(1 - landNormal2.w, 0, 1, 0);
+			landRMAOS2 = input.LandBlendWeights1.y * float4(1 - glossiness.x, 0, 1, 0);
 		}
 		blendedRMAOS += landRMAOS2 * weight;
 #		endif
@@ -1625,12 +1625,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			landRMAOS3 = TexLandRMAOS3Sampler.SampleBias(SampLandRMAOS3Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
 #			endif
 			if ((PBRFlags & PBR::TerrainFlags::LandTile2HasGlint) != 0) {
-				glintParameters += input.LandBlendWeights1.z * LandscapeTexture3GlintParameters;
+				glintParameters += weight * LandscapeTexture3GlintParameters;
 			}
 		}
 		else
 		{
-			landRMAOS3 = float4(1 - landNormal3.w, 0, 1, 0);
+			landRMAOS3 = input.LandBlendWeights1.z * float4(1 - glossiness.x, 0, 1, 0);
 		}
 		blendedRMAOS += landRMAOS3 * weight;
 #		endif
@@ -1704,13 +1704,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			else
 			landRMAOS4 = TexLandRMAOS4Sampler.SampleBias(SampLandRMAOS4Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
 #			endif
-			if ((PBRFlags & PBR::TerrainFlags::LandTile3HasGlint) != 0) {
-				glintParameters += input.LandBlendWeights1.w * LandscapeTexture4GlintParameters;
+			if ((PBRFlags & PBR::TerrainFlags::LandTile3HasGlint) != 0) {\
+				glintParameters += weight * LandscapeTexture4GlintParameters;
 			}
 		}
 		else
 		{
-			landRMAOS4 = float4(1 - landNormal4.w, 0, 1, 0);
+			landRMAOS4 = input.LandBlendWeights1.w * float4(1 - glossiness.x, 0, 1, 0);
 		}
 		blendedRMAOS += landRMAOS4 * weight;
 #		endif
@@ -1786,12 +1786,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			landRMAOS5 = TexLandRMAOS5Sampler.SampleBias(SampLandRMAOS5Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
 #			endif
 			if ((PBRFlags & PBR::TerrainFlags::LandTile4HasGlint) != 0) {
-				glintParameters += input.LandBlendWeights2.x * LandscapeTexture5GlintParameters;
+				glintParameters += weight * LandscapeTexture5GlintParameters;
 			}
 		}
 		else
 		{
-			landRMAOS5 = float4(1 - landNormal5.w, 0, 1, 0);
+			landRMAOS5 = input.LandBlendWeights2.x * float4(1 - glossiness.x, 0, 1, 0);
 		}
 		blendedRMAOS += landRMAOS5 * weight;
 #		endif
@@ -1866,12 +1866,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			landRMAOS6 = TexLandRMAOS6Sampler.SampleBias(SampLandRMAOS6Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
 #			endif
 			if ((PBRFlags & PBR::TerrainFlags::LandTile5HasGlint) != 0) {
-				glintParameters += input.LandBlendWeights2.y * LandscapeTexture6GlintParameters;
+				glintParameters += weight * LandscapeTexture6GlintParameters;
 			}
 		}
 		else
 		{
-			landRMAOS6 = float4(1 - landNormal6.w, 0, 1, 0);
+			landRMAOS6 = input.LandBlendWeights2.y * float4(1 - glossiness.x, 0, 1, 0);
 		}
 		blendedRMAOS += landRMAOS6 * weight;
 #		endif
@@ -1900,12 +1900,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 #	endif
 
-#	if defined(TRUE_PBR) && defined(LANDSCAPE)
-	[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile0PBR) == 0)
-	{
-		baseColor = float4(rawBaseColor.rgb / Color::PBRLightingScale, rawBaseColor.a);
-	}
-#	endif
 
 #	if defined(LOD_BLENDING)
 #		if defined(LODOBJECTS) || defined(LODOBJECTSHD)
@@ -1964,90 +1958,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(SNOW) && !defined(TRUE_PBR)
 	landSnowMask = LandscapeTexture1to4IsSnow.x * input.LandBlendWeights1.x;
 #		endif  // SNOW
-
-	// Layer 1 (LandBlendWeights1.x)
-	if (input.LandBlendWeights1.x > 0.01) {
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		float landSnowMask1 = GetLandSnowMaskValue(baseColor.w);
-		landSnowMask += LandscapeTexture1to4IsSnow.x * input.LandBlendWeights1.x * landSnowMask1;
-#		endif
-#		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile0HasGlint) != 0)
-		{
-			glintParameters += input.LandBlendWeights1.x * LandscapeTexture1GlintParameters;
-		}
-#		endif
-	}
-
-	// Layer 2 (LandBlendWeights1.y)
-	if (input.LandBlendWeights1.y > 0.01) {
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		float landSnowMask2 = GetLandSnowMaskValue(baseColor.w);
-		landSnowMask += LandscapeTexture1to4IsSnow.y * input.LandBlendWeights1.y * landSnowMask2;
-#		endif
-#		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile1HasGlint) != 0)
-		{
-			glintParameters += input.LandBlendWeights1.y * LandscapeTexture2GlintParameters;
-		}
-#		endif
-	}
-
-	// Layer 3 (LandBlendWeights1.z)
-	if (input.LandBlendWeights1.z > 0.01) {
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		float landSnowMask3 = GetLandSnowMaskValue(baseColor.w);
-		landSnowMask += LandscapeTexture1to4IsSnow.z * input.LandBlendWeights1.z * landSnowMask3;
-#		endif
-#		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile2HasGlint) != 0)
-		{
-			glintParameters += input.LandBlendWeights1.z * LandscapeTexture3GlintParameters;
-		}
-#		endif
-	}
-
-	// Layer 4 (LandBlendWeights1.w)
-	if (input.LandBlendWeights1.w > 0.01) {
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		float landSnowMask4 = GetLandSnowMaskValue(baseColor.w);
-		landSnowMask += LandscapeTexture1to4IsSnow.w * input.LandBlendWeights1.w * landSnowMask4;
-#		endif
-#		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile3HasGlint) != 0)
-		{
-			glintParameters += input.LandBlendWeights1.w * LandscapeTexture4GlintParameters;
-		}
-#		endif
-	}
-
-	// Layer 5 (LandBlendWeights2.x)
-	if (input.LandBlendWeights2.x > 0.01) {
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		float landSnowMask5 = GetLandSnowMaskValue(baseColor.w);
-		landSnowMask += LandscapeTexture5to6IsSnow.x * input.LandBlendWeights2.x * landSnowMask5;
-#		endif
-#		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile4HasGlint) != 0)
-		{
-			glintParameters += input.LandBlendWeights2.x * LandscapeTexture5GlintParameters;
-		}
-#		endif
-	}
-
-	// Layer 6 (LandBlendWeights2.y)
-	if (input.LandBlendWeights2.y > 0.01) {
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		float landSnowMask6 = GetLandSnowMaskValue(baseColor.w);
-		landSnowMask += LandscapeTexture5to6IsSnow.y * input.LandBlendWeights2.y * landSnowMask6;
-#		endif
-#		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile5HasGlint) != 0)
-		{
-			glintParameters += input.LandBlendWeights2.y * LandscapeTexture6GlintParameters;
-		}
-#		endif
-	}
 #	endif  // LANDSCAPE
 
 #	if defined(EMAT_ENVMAP)
@@ -2076,6 +1986,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		baseColor.xyz *= hairTint;
 		baseColor.xyz = Hair::Saturation(baseColor.xyz, SharedData::hairSpecularSettings.HairSaturation);
 		baseColor.xyz *= SharedData::hairSpecularSettings.BaseColorMult;
+		baseColor.xyz = SharedData::hairSpecularSettings.HairMode == 1 ? baseColor.xyz * baseColor.xyz : baseColor.xyz;  // To match color for Marschner
 	}
 
 	float3 sampledHairFlow = 0;
@@ -2274,6 +2185,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float3 shiftedNormal = Hair::ShiftWorldNormal(hairT, worldSpaceNormal, 0, uv);
 		screenSpaceNormal = normalize(FrameBuffer::WorldToView(shiftedNormal, false, eyeIndex));
 	}
+
+	float3 transmissionColor = 0;
 #	endif
 
 #	if defined(TRUE_PBR)
@@ -2632,8 +2545,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	} else {
 #		if defined(HAIR) && defined(CS_HAIR)
 		if (SharedData::hairSpecularSettings.Enabled) {
+			float3 dirTransmissionColor = 0.0;
 			float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, DirLightDirection, screenNoise, eyeIndex);
-			Hair::GetHairDirectLight(dirDiffuseColor, lightsSpecularColor, hairT, DirLightDirection, viewDirection, modelNormal.xyz, worldSpaceVertexNormal.xyz, dirLightColor.xyz * dirDetailShadow, SharedData::hairSpecularSettings.HairGlossiness, hairShadow, uv, baseColor.xyz);
+			Hair::GetHairDirectLight(dirDiffuseColor, lightsSpecularColor, dirTransmissionColor, hairT, DirLightDirection, viewDirection, modelNormal.xyz, worldSpaceVertexNormal.xyz, dirLightColor.xyz * dirDetailShadow, SharedData::hairSpecularSettings.HairGlossiness, hairShadow, uv, baseColor.xyz);
+			transmissionColor += dirTransmissionColor;
 		}
 		else {
 #			if defined(SPECULAR)
@@ -2712,9 +2627,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				if defined(HAIR) && defined(CS_HAIR)
 		if (SharedData::hairSpecularSettings.Enabled) {
 			float3 lightSpecularColor = 0;
+			float3 lightTransmissionColor = 0;
 			float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, normalizedLightDirection, screenNoise, eyeIndex);
-			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, worldSpaceVertexNormal.xyz, lightColor, SharedData::hairSpecularSettings.HairGlossiness, hairShadow, uv, baseColor.xyz);
+			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, lightTransmissionColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, worldSpaceVertexNormal.xyz, lightColor, SharedData::hairSpecularSettings.HairGlossiness, hairShadow, uv, baseColor.xyz);
 			lightsSpecularColor += lightSpecularColor;
+			transmissionColor += lightTransmissionColor;
 		} else {
 #					if defined(SPECULAR)
 			lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, shininess, uv);
@@ -2876,8 +2793,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		if (SharedData::hairSpecularSettings.Enabled) {
 			float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, normalizedLightDirection, screenNoise, eyeIndex);
 			float3 lightSpecularColor = 0;
-			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, worldSpaceVertexNormal.xyz, lightColor * contactShadow, SharedData::hairSpecularSettings.HairGlossiness, hairShadow, uv, baseColor.xyz);
+			float3 lightTransmissionColor = 0;
+			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, lightTransmissionColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, worldSpaceVertexNormal.xyz, lightColor * contactShadow, SharedData::hairSpecularSettings.HairGlossiness, hairShadow, uv, baseColor.xyz);
 			lightsSpecularColor += lightSpecularColor;
+			transmissionColor += lightTransmissionColor;
 		} else {
 #					if defined(SPECULAR)
 			lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz, lightColor, shininess, uv);
@@ -2900,13 +2819,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	diffuseColor += lightsDiffuseColor;
 	specularColor += lightsSpecularColor;
-
-#	if defined(HAIR) && defined(CS_HAIR)
-	if (SharedData::hairSpecularSettings.Enabled) {
-		diffuseColor *= SharedData::hairSpecularSettings.DiffuseMult;
-		specularColor *= baseColor.w * SharedData::hairSpecularSettings.SpecularMult;
-	}
-#	endif
 
 #	if !defined(LANDSCAPE)
 	if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::CharacterLight) {
@@ -3205,6 +3117,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		else
 		color.xyz += indirectDiffuseLobeWeight * directionalAmbientColor;
 #		endif
+		color.xyz += transmissionColor;
 	}
 #	else
 	color.xyz += diffuseColor * baseColor.xyz;
@@ -3399,19 +3312,20 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(ANISOTROPIC_ALPHA)
 	// Uniform alpha material settings
 	uint AlphaMaterialModel = ExtendedTranslucency::GetMaterialModelFromDescriptor(Permutation::ExtraFeatureDescriptor);
-	float AlphaMaterialReduction = 0.f;
-	float AlphaMaterialSoftness = 0.f;
-	float AlphaMaterialStrength = 0.f;
-	if (AlphaMaterialModel == ExtendedTranslucency::MaterialModel::Default) {
-		AlphaMaterialModel = SharedData::extendedTranslucencySettings.MaterialModel;
-		AlphaMaterialReduction = SharedData::extendedTranslucencySettings.Reduction;
-		AlphaMaterialSoftness = SharedData::extendedTranslucencySettings.Softness;
-		AlphaMaterialStrength = SharedData::extendedTranslucencySettings.Strength;
-	}
-
 	[branch] if (ExtendedTranslucency::IsValidMaterial(AlphaMaterialModel))
 	{
 		if (alpha >= 0.0156862754 && alpha < 1.0) {
+			float AlphaMaterialReduction = 0.f;
+			float AlphaMaterialSoftness = 0.f;
+			float AlphaMaterialStrength = 0.f;
+
+			if (AlphaMaterialModel == ExtendedTranslucency::MaterialModel::Default) {
+				AlphaMaterialModel = SharedData::extendedTranslucencySettings.MaterialModel;
+				AlphaMaterialReduction = SharedData::extendedTranslucencySettings.Reduction;
+				AlphaMaterialSoftness = SharedData::extendedTranslucencySettings.Softness;
+				AlphaMaterialStrength = SharedData::extendedTranslucencySettings.Strength;
+			}
+
 			float originalAlpha = alpha;
 			alpha = alpha * (1.0 - AlphaMaterialReduction);
 			[branch] if (AlphaMaterialModel == ExtendedTranslucency::MaterialModel::AnisotropicFabric)
@@ -3513,7 +3427,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #		if defined(HAIR) && defined(CS_HAIR)
 	if (SharedData::hairSpecularSettings.Enabled) {
-		outGlossiness = 1.0 - pow(abs(2.0 / (glossiness * 0.5 + 2.0)), 0.25);
+		outGlossiness = 1.0 - (SharedData::hairSpecularSettings.HairMode == 1 ? 1.0 : pow(abs(2.0 / (glossiness * 0.5 + 2.0)), 0.25));
 	}
 #		endif
 

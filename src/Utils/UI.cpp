@@ -5,24 +5,26 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 
+#include "../Feature.h"
 #include "../Globals.h"
 #include "../Menu.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <functional>
+#include <iomanip>
+#include <sstream>
 #include <stb_image.h>
 #include <string>
 #include <vector>
 
 namespace Util
 {
-	PerformanceOverlay performanceOverlay;
-
 	HoverTooltipWrapper::HoverTooltipWrapper()
 	{
-		hovered = ImGui::IsItemHovered();
+		hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal);
 		if (hovered) {
 			ImGui::BeginTooltip();
 			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
@@ -552,6 +554,13 @@ namespace Util
 		}
 	}
 
+	void DrawColoredMultiLineTooltip(const ColoredTextLines& lines)
+	{
+		for (const auto& line : lines) {
+			ImGui::TextColored(line.color, "%s", line.text.c_str());
+		}
+	}
+
 	void SortTableRowsByColumn(std::vector<std::vector<std::string>>& rows, size_t column, bool ascending)
 	{
 		std::sort(rows.begin(), rows.end(), [column, ascending](const auto& a, const auto& b) {
@@ -593,17 +602,112 @@ namespace Util
 		return false;
 	}
 
-	const TableSortFunc VersionSortComparator = [](const std::string& a, const std::string& b, bool asc) {
+	bool VersionSortComparator(const std::string& a, const std::string& b, bool asc)
+	{
 		return VersionStringLess(a, b, asc);
-	};
+	}
 
-	void ShowSortedStringTable(
+	bool StringSortComparator(const std::string& a, const std::string& b, bool ascending)
+	{
+		return ascending ? (a < b) : (b < a);
+	}
+
+	ImVec4 GetThresholdColor(float value, float good, float warn, ImVec4 goodColor, ImVec4 warnColor, ImVec4 badColor)
+	{
+		if (value < good)
+			return goodColor;
+		else if (value < warn)
+			return warnColor;
+		else
+			return badColor;
+	}
+
+	bool FeatureMatchesSearch(Feature* feat, const std::string& searchQuery)
+	{
+		if (searchQuery.empty())
+			return true;
+
+		// Get both short name and display name
+		std::string shortName = feat->GetShortName();
+		std::string displayName = feat->GetName();
+		std::string query = searchQuery;
+
+		// Convert all to lowercase for case-insensitive search
+		std::transform(shortName.begin(), shortName.end(), shortName.begin(), ::tolower);
+		std::transform(displayName.begin(), displayName.end(), displayName.begin(), ::tolower);
+		std::transform(query.begin(), query.end(), query.begin(), ::tolower);
+
+		// Search in both short name and display name
+		return shortName.find(query) != std::string::npos ||
+		       displayName.find(query) != std::string::npos;
+	}
+
+	void DrawFeatureSearchBar(std::string& searchString, float availableWidth)
+	{
+		ImGui::PushID("FeatureSearchBar");
+
+		float iconSize = 20.0f;
+		float iconSpace = iconSize + 14.0f;
+
+		// Get the current cursor position and available width
+		ImVec2 cursorPos = ImGui::GetCursorScreenPos();
+		if (availableWidth <= 0.0f) {
+			availableWidth = ImGui::GetContentRegionAvail().x;
+		}
+		float frameHeight = ImGui::GetFrameHeight();
+
+		// Custom style - always transparent background to avoid click blocking
+		ImVec4 bgColor = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+		ImVec4 bgColorActive = ImVec4(0.3f, 0.3f, 0.3f, 0.9f);
+		ImVec4 textColor = ImVec4(0.9f, 0.9f, 0.9f, 1.0f);
+
+		ImGui::PushStyleColor(ImGuiCol_FrameBg, bgColor);
+		ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, bgColor);
+		ImGui::PushStyleColor(ImGuiCol_FrameBgActive, bgColorActive);
+		ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
+		ImGui::PushStyleColor(ImGuiCol_Text, textColor);
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, 6.0f));
+
+		// Draw the input field
+		ImGui::SetNextItemWidth(availableWidth);
+		char buffer[256];
+		strncpy_s(buffer, searchString.c_str(), sizeof(buffer) - 1);
+		buffer[sizeof(buffer) - 1] = '\0';
+
+		if (ImGui::InputTextWithHint("##feature_search", "Search Features...", buffer, sizeof(buffer))) {
+			searchString = buffer;
+		}
+
+		// Draw a simple search icon (magnifying glass shape)
+		ImVec2 iconPos = ImVec2(cursorPos.x + 8.0f, cursorPos.y + (frameHeight - iconSize) * 0.5f);
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+		ImVec2 center = ImVec2(iconPos.x + iconSize * 0.46f, iconPos.y + iconSize * 0.5f);
+		float radius = iconSize * 0.3f;
+		ImU32 placeholderColor = IM_COL32(140, 140, 140, 180);
+
+		// Draw circle
+		drawList->AddCircle(center, radius, placeholderColor, 12, 2.2f);
+
+		// Draw handle
+		ImVec2 handleStart = ImVec2(center.x + radius * 0.81f, center.y + radius * 0.81f);
+		ImVec2 handleEnd = ImVec2(handleStart.x + iconSize * 0.29f, handleStart.y + iconSize * 0.29f);
+		drawList->AddLine(handleStart, handleEnd, placeholderColor, 2.1f);
+
+		ImGui::PopStyleVar(2);
+		ImGui::PopStyleColor(5);
+		ImGui::PopID();
+	}
+
+	void ShowSortedStringTableStrings(
 		const char* table_id,
 		const std::vector<std::string>& headers,
-		std::vector<std::vector<std::string>> rows,
+		const std::vector<std::vector<std::string>>& rows,
 		size_t sortColumn,
 		bool ascending,
-		const std::vector<TableSortFunc>& customSorts)
+		const std::vector<TableSortFunc>& customSorts,
+		TableCellRenderFunc cellRender)
 	{
 		ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable;
 		if (ImGui::BeginTable(table_id, static_cast<int>(headers.size()), flags)) {
@@ -611,7 +715,7 @@ namespace Util
 				ImGui::TableSetupColumn(header.c_str());
 			ImGui::TableHeadersRow();
 
-			// Interactive sorting
+			// Determine sorting
 			int sortCol = static_cast<int>(sortColumn);
 			bool sortAsc = ascending;
 			if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
@@ -620,26 +724,32 @@ namespace Util
 					sortAsc = sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending;
 				}
 			}
-			if (sortCol >= 0 && static_cast<size_t>(sortCol) < headers.size()) {
-				if (sortCol < static_cast<int>(customSorts.size()) && customSorts[sortCol]) {
-					auto cmp = customSorts[sortCol];
-					std::sort(rows.begin(), rows.end(), [sortCol, sortAsc, &cmp](const auto& a, const auto& b) {
-						return cmp(a[sortCol], b[sortCol], sortAsc);
-					});
-				} else {
-					std::sort(rows.begin(), rows.end(), [sortCol, sortAsc](const auto& a, const auto& b) {
-						return sortAsc ? (a[sortCol] < b[sortCol]) : (a[sortCol] > b[sortCol]);
-					});
-				}
-			}
-			// else: no sorting if sortCol is invalid
 
-			for (const auto& row : rows) {
+			// Make a copy if sorting is needed
+			std::vector<std::vector<std::string>> sortedRows = rows;
+			if (sortCol >= 0 && static_cast<size_t>(sortCol) < headers.size()) {
+				// Fallback to default string sort if no custom sort is provided
+				auto cmp = (sortCol < static_cast<int>(customSorts.size()) && customSorts[sortCol]) ? customSorts[sortCol] : StringSortComparator;
+				std::sort(sortedRows.begin(), sortedRows.end(), [sortCol, sortAsc, &cmp](const std::vector<std::string>& a, const std::vector<std::string>& b) {
+					const std::string& aVal = (sortCol < a.size()) ? a[sortCol] : std::string();
+					const std::string& bVal = (sortCol < b.size()) ? b[sortCol] : std::string();
+					return cmp(aVal, bVal, sortAsc);
+				});
+			}
+
+			// Render rows
+			for (size_t rowIdx = 0; rowIdx < sortedRows.size(); ++rowIdx) {
+				const auto& row = sortedRows[rowIdx];
 				ImGui::TableNextRow();
 				for (size_t col = 0; col < headers.size(); ++col) {
 					ImGui::TableSetColumnIndex(static_cast<int>(col));
-					if (col < row.size())
-						ImGui::TextUnformatted(row[col].c_str());
+					if (cellRender) {
+						const std::string& value = (col < row.size()) ? row[col] : std::string();
+						cellRender(static_cast<int>(rowIdx), static_cast<int>(col), value);
+					} else {
+						if (col < row.size())
+							ImGui::TextUnformatted(row[col].c_str());
+					}
 				}
 			}
 			ImGui::EndTable();

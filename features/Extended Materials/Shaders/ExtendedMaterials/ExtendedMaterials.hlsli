@@ -78,7 +78,7 @@ namespace ExtendedMaterials
 
 		#if defined(TERRAIN_VARIATION) && defined(LANDSCAPE)
 			#if !defined(VR)
-				mipLevel += 2.0; // Increase mip level to match vanilla appearance since terrain variation tends to be sharper than vanilla.
+				mipLevel++; // Increase mip level to match vanilla appearance since terrain variation tends to be sharper than vanilla.
 			#else
 				// When VR + terrain variation are both active, no additional mip penalty - VR gets only TV features without mip changes
 			#endif

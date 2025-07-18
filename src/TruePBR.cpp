@@ -704,11 +704,6 @@ struct BSLightingShaderProperty_GetRenderPasses
 
 				lightingTechnique = (static_cast<uint32_t>(lightingType) << 24) | lightingFlags;
 				currentPass->passEnum = lightingTechnique + LightingTechniqueStart;
-
-				// Separate deferred and forward blended decals
-				if (currentPass->accumulationHint == 3 && currentPass->shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kZBufferWrite)) {
-					currentPass->accumulationHint = 16;
-				}
 			}
 			currentPass = currentPass->next;
 		}
@@ -988,11 +983,9 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 				shadowState->SetPSTextureAddressMode(11, RE::BSGraphics::TextureAddressMode::kClampSClampT);
 			}
 
-			std::array<float, 4> characterLightParams;
+			std::array<float, 4> characterLightParams{};  // in C++, arrays will be zero-initialized
 			if (smState->characterLightEnabled) {
 				std::copy_n(smState->characterLightParams, 4, characterLightParams.data());
-			} else {
-				std::fill_n(characterLightParams.data(), 4, 0.f);
 			}
 			shadowState->SetPSConstant(characterLightParams, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.CharacterLightParams);
 		}

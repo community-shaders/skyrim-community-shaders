@@ -1,4 +1,5 @@
 #include "FileSystem.h"
+#include <fstream>
 
 namespace Util
 {
@@ -77,4 +78,51 @@ namespace Util
 			return result;
 		}
 	}
+}
+
+std::vector<SettingsDiffEntry> Util::FileSystem::LoadJsonDiff(const std::filesystem::path& userPath, const std::filesystem::path& testPath)
+{
+	std::vector<SettingsDiffEntry> diffEntries;
+
+	try {
+		if (!std::filesystem::exists(userPath) || !std::filesystem::exists(testPath)) {
+			return diffEntries;
+		}
+
+		std::ifstream userFile(userPath);
+		std::ifstream testFile(testPath);
+
+		if (!userFile.is_open() || !testFile.is_open()) {
+			return diffEntries;
+		}
+
+		nlohmann::json userJson, testJson;
+		userFile >> userJson;
+		testFile >> testJson;
+
+		auto diff = nlohmann::json::diff(userJson, testJson);
+
+		for (const auto& change : diff) {
+			std::string op = change.value("op", "");
+			std::string path = change.value("path", "");
+			std::string aVal, bVal;
+
+			if (op == "replace") {
+				aVal = userJson.at(nlohmann::json::json_pointer(path)).dump();
+				bVal = testJson.at(nlohmann::json::json_pointer(path)).dump();
+			} else if (op == "add") {
+				aVal = "(none)";
+				bVal = testJson.at(nlohmann::json::json_pointer(path)).dump();
+			} else if (op == "remove") {
+				aVal = userJson.at(nlohmann::json::json_pointer(path)).dump();
+				bVal = "(none)";
+			}
+
+			diffEntries.push_back({ path, aVal, bVal });
+		}
+	} catch (const std::exception& e) {
+		logger::warn("Failed to load JSON diff: {}", e.what());
+	}
+
+	return diffEntries;
 }
