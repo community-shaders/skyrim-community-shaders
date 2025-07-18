@@ -121,6 +121,7 @@ namespace globals
 		void* cachedRendererRuntimeData = nullptr;
 		void* cachedShadowStateRuntimeData = nullptr;
 		void* cachedGraphicsStateRuntimeData = nullptr;
+		void* cachedDepthStencilData = nullptr;
 	}
 
 	State* state = nullptr;
@@ -213,6 +214,7 @@ namespace globals
 		game::cachedRendererRuntimeData = static_cast<void*>(&rendererRuntimeData);
 		game::cachedShadowStateRuntimeData = isVR ? static_cast<void*>(&game::shadowState->GetVRRuntimeData()) : static_cast<void*>(&game::shadowState->GetRuntimeData());
 		game::cachedGraphicsStateRuntimeData = isVR ? static_cast<void*>(&game::graphicsState->GetVRRuntimeData()) : static_cast<void*>(&game::graphicsState->GetRuntimeData());
+		game::cachedDepthStencilData = static_cast<void*>(&game::renderer->GetDepthStencilData());
 	}
 
 	void OnDataLoaded()

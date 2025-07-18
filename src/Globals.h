@@ -121,6 +121,7 @@ namespace globals
 		extern void* cachedRendererRuntimeData;
 		extern void* cachedShadowStateRuntimeData;
 		extern void* cachedGraphicsStateRuntimeData;
+		extern void* cachedDepthStencilData;
 	}
 
 	extern State* state;
@@ -173,6 +174,19 @@ namespace globals
 				}
 			}
 			return game::isVR ? game::graphicsState->GetVRRuntimeData() : game::graphicsState->GetRuntimeData();
+		}
+
+		// Get depth stencil data with caching
+		inline auto& GetDepthStencilData() {
+			if (game::cachedDepthStencilData) {
+				return *static_cast<decltype(game::renderer->GetDepthStencilData())*>(game::cachedDepthStencilData);
+			}
+			return game::renderer->GetDepthStencilData();
+		}
+
+		// Get cached VR flag to avoid repeated REL::Module::IsVR() calls
+		inline bool IsVR() {
+			return game::isVR;
 		}
 	}
 }

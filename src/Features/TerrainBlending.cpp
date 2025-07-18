@@ -37,7 +37,8 @@ void TerrainBlending::SetupResources()
 	auto device = globals::d3d::device;
 
 	{
-		auto& mainDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+		const auto& depthStencilData = globals::cached::GetDepthStencilData();
+		auto& mainDepth = depthStencilData.depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
 		D3D11_TEXTURE2D_DESC texDesc;
 		mainDepth.texture->GetDesc(&texDesc);
@@ -80,10 +81,10 @@ void TerrainBlending::SetupResources()
 		blendedDepthTexture16->CreateSRV(srvDesc);
 		blendedDepthTexture16->CreateUAV(uavDesc);
 
-		auto& mainDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+		auto& mainDepth = depthStencilData.depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 		depthSRVBackup = mainDepth.depthSRV;
 
-		auto& zPrepassCopy = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+		auto& zPrepassCopy = depthStencilData.depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 		prepassSRVBackup = zPrepassCopy.depthSRV;
 	}
 
@@ -114,7 +115,8 @@ void TerrainBlending::TerrainShaderHacks()
 		auto renderer = globals::game::renderer;
 		auto context = globals::d3d::context;
 		if (renderAltTerrain) {
-			auto dsv = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].views[0];
+			const auto& depthStencilData = globals::cached::GetDepthStencilData();
+			auto dsv = depthStencilData.depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].views[0];
 			context->OMSetRenderTargets(0, nullptr, dsv);
 			context->VSSetShader(GetTerrainOffsetVertexShader(), NULL, NULL);
 		} else {
@@ -179,7 +181,8 @@ void TerrainBlending::BlendPrepassDepths()
 	stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);
 
 	auto renderer = globals::game::renderer;
-	auto& mainDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+	const auto& depthStencilData = globals::cached::GetDepthStencilData();
+	auto& mainDepth = depthStencilData.depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
 	context->CopyResource(terrainDepth.texture, mainDepth.texture);
 }
@@ -206,8 +209,9 @@ void TerrainBlending::Hooks::Main_RenderDepth::thunk(bool a1, bool a2)
 	auto shaderCache = globals::shaderCache;
 	auto renderer = globals::game::renderer;
 
-	auto& mainDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
-	auto& zPrepassCopy = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+	const auto& depthStencilData = globals::cached::GetDepthStencilData();
+	auto& mainDepth = depthStencilData.depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+	auto& zPrepassCopy = depthStencilData.depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 
 	singleton->averageEyePosition = Util::GetAverageEyePosition();
 
@@ -324,6 +328,7 @@ void TerrainBlending::RenderTerrainBlendingPasses()
 		renderPasses.clear();
 	}
 
-	auto& mainDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+	const auto& depthStencilData = globals::cached::GetDepthStencilData();
+	auto& mainDepth = depthStencilData.depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 	mainDepth.depthSRV = depthSRVBackup;
 }
