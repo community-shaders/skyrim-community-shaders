@@ -1685,7 +1685,7 @@ void Menu::DrawOverlay()
 	}
 	ProcessInputEventQueue();
 	if (REL::Module::IsVR()) {
-		globals::features::vr->ProcessOverlayInput();
+		globals::features::vr->ProcessVRControllerOverlayInput();
 	}
 
 	auto shaderCache = globals::shaderCache;
@@ -2105,6 +2105,7 @@ void Menu::ProcessInputEventQueue()
 	// Process VR events in VR
 	if (!vrEvents.empty()) {
 		globals::features::vr->ProcessVREvents(vrEvents);
+		globals::features::vr->UpdateOverlayMenuStateFromInput();
 	}
 	// Process non-VR events in Menu (original logic here)
 	for (auto& event : nonVREvents) {

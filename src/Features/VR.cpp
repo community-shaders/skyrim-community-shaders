@@ -9,6 +9,7 @@
 #include <d3d11.h>
 #include <imgui_impl_dx11.h>
 #include <openvr.h>
+#include <windows.h>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VR::Settings,
@@ -31,6 +32,15 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VRMenuControllerDiagnosticsTestMode,
 	mouseDeadzone,
 	mouseSpeed)
+
+// Add a high-resolution timer helper using QueryPerformanceCounter
+inline double GetNowSecs()
+{
+	static LARGE_INTEGER freq = [] { LARGE_INTEGER f; QueryPerformanceFrequency(&f); return f; }();
+	LARGE_INTEGER now;
+	QueryPerformanceCounter(&now);
+	return static_cast<double>(now.QuadPart) / static_cast<double>(freq.QuadPart);
+}
 
 void VR::DrawSettings()
 {
@@ -135,7 +145,7 @@ void VR::DrawSettings()
 			bool controllerOffsetExpanded = true;
 			Util::DrawSectionHeader("Controller Offset", false, true, &controllerOffsetExpanded);
 			if (controllerOffsetExpanded) {
-				const char* hands[] = { "Left Hand", "Right Hand" };
+				const char* hands[] = { "Primary Controller", "Secondary Controller" };
 				if (ImGui::Combo("Controller Hand", &settings.VRMenuControllerHand, hands, 2)) {
 					UpdateVROverlayPosition();
 				}
@@ -195,10 +205,19 @@ void VR::DrawSettings()
 			if (ImGui::TreeNodeEx("Input Instructions", ImGuiTreeNodeFlags_DefaultOpen)) {
 				ImGui::TextWrapped("Controller Input Options:");
 				ImGui::BulletText("Touchpad: Move cursor and click");
-				ImGui::BulletText("Trigger: Left mouse button");
-				ImGui::BulletText("Grip: Right mouse button");
+				ImGui::BulletText("Trigger (Primary Controller): Left mouse button");
+				ImGui::BulletText("Grip (Primary Controller): Right mouse button");
+				ImGui::BulletText("Touchpad Click (Primary Controller): Middle mouse button");
+				ImGui::BulletText("Stick Click (Primary Controller): Middle mouse button");
+				ImGui::BulletText("A/X (Primary Controller): Enter");
+				ImGui::BulletText("B/Y (Primary Controller): Tab");
+				ImGui::BulletText("B/Y (Primary Controller) + Shift: Shift+Tab");
 				ImGui::BulletText("Menu button: Toggle menu visibility");
 				ImGui::BulletText("Thumbstick: Scroll (if supported)");
+				ImGui::Spacing();
+				ImGui::TextWrapped("Menu Overlay:");
+				ImGui::BulletText("Open: Hold both A/X and B/Y (Primary Controller) while in the main menu or tween menu");
+				ImGui::BulletText("Close: Hold the Grip button on both controllers at the same time");
 				ImGui::Spacing();
 				ImGui::TextWrapped("HMD Input Options:");
 				ImGui::BulletText("Mouse: Standard desktop mouse input");
@@ -214,8 +233,7 @@ void VR::DrawSettings()
 			ImGui::SetScrollHereY(0.0f);  // Scroll to top of the window when toggled
 		}
 		ImGui::SeparatorText("Button State");
-		auto now = std::chrono::steady_clock::now().time_since_epoch();
-		double nowSecs = std::chrono::duration_cast<std::chrono::duration<double>>(now).count();
+		double nowSecs = GetNowSecs();
 
 		// Get highlight color from theme
 		ImVec4 highlightColor = Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor;
@@ -232,7 +250,7 @@ void VR::DrawSettings()
 			ImGui::TableHeadersRow();
 
 			// Helper for button type text
-			auto DrawButtonType = [](const RE::BSInputDevice::ButtonState& state) {
+			auto DrawButtonType = [](const RE::ButtonState& state) {
 				if (!state.isPressed) {
 					if (state.IsClick())
 						ImGui::TextUnformatted("Click");
@@ -246,7 +264,7 @@ void VR::DrawSettings()
 			};
 
 			// Helper for printing a row with left/right cell highlight
-			auto printRow = [&](const char* label, const RE::BSInputDevice::ButtonState& left, const RE::BSInputDevice::ButtonState& right) {
+			auto printRow = [&](const char* label, const RE::ButtonState& left, const RE::ButtonState& right) {
 				ImGui::TableNextRow();
 				ImGui::TableSetColumnIndex(0);
 				ImGui::TextUnformatted(label);
@@ -276,12 +294,14 @@ void VR::DrawSettings()
 				DrawButtonType(right);
 			};
 
-			printRow("Trigger", leftTriggerState, rightTriggerState);
-			printRow("Grip", leftGripState, rightGripState);
-			printRow("Stick Click", leftStickClickState, rightStickClickState);
-			printRow("Touchpad", leftTouchpadState, rightTouchpadState);
-			printRow("B/Y", leftBorYState, rightBorYState);
-			printRow("A/X", leftAorXState, rightAorXState);
+			printRow("Trigger", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTrigger], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTrigger]);
+			printRow("Grip", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip]);
+			printRow("GripAlt", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGripAlt], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGripAlt]);
+			printRow("Stick Click", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger]);
+			printRow("Touchpad Click", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTouchpadClick], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTouchpadClick]);
+			printRow("Touchpad Alt", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTouchpadAlt], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTouchpadAlt]);
+			printRow("B/Y", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kBY], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kBY]);
+			printRow("A/X", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kXA], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kXA]);
 
 			ImGui::EndTable();
 		}
@@ -367,50 +387,31 @@ void VR::DrawSettings()
 				return padSize;
 			};
 
-			// Helper to get quadrant name
-			auto GetQuadrantName = [](float x, float y) -> const char* {
-				if (x > 0 && y > 0)
-					return "Top-Right";
-				if (x < 0 && y > 0)
-					return "Top-Left";
-				if (x < 0 && y < 0)
-					return "Bottom-Left";
-				if (x > 0 && y < 0)
-					return "Bottom-Right";
-				if (x == 0 && y == 0)
-					return "Center";
-				if (y == 0)
-					return x > 0 ? "Right" : "Left";
-				if (x == 0)
-					return y > 0 ? "Top" : "Bottom";
-				return "";
-			};
-
 			ImU32 highlightCol = ImGui::ColorConvertFloat4ToU32(menu->GetTheme().StatusPalette.InfoColor);
 
 			if (ImGui::BeginTable("##VRThumbstickTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
-				ImGui::TableSetupColumn("Left Controller", ImGuiTableColumnFlags_WidthFixed, 200.0f);
-				ImGui::TableSetupColumn("Right Controller", ImGuiTableColumnFlags_WidthFixed, 200.0f);
+				ImGui::TableSetupColumn("Primary Controller", ImGuiTableColumnFlags_WidthFixed, 200.0f);
+				ImGui::TableSetupColumn("Secondary Controller", ImGuiTableColumnFlags_WidthFixed, 200.0f);
 				ImGui::TableNextRow();
 
-				// Left controller cell
+				// Primary controller cell
 				ImGui::TableSetColumnIndex(0);
 				ImGui::BeginGroup();
-				ImVec2 padSizeL = DrawThumbstickPad(leftThumbstickState.x, leftThumbstickState.y, highlightCol);
+				ImVec2 padSizeL = DrawThumbstickPad(primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, highlightCol);
 				ImGui::Dummy(padSizeL);
 				ImGui::SetNextItemWidth(160.0f);
 				ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
-				ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", leftThumbstickState.x, leftThumbstickState.y, GetQuadrantName(leftThumbstickState.x, leftThumbstickState.y));
+				ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, RE::GetQuadrantName(primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y));
 				ImGui::EndGroup();
 
-				// Right controller cell
+				// Secondary controller cell
 				ImGui::TableSetColumnIndex(1);
 				ImGui::BeginGroup();
-				ImVec2 padSizeR = DrawThumbstickPad(rightThumbstickState.x, rightThumbstickState.y, highlightCol);
+				ImVec2 padSizeR = DrawThumbstickPad(secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, highlightCol);
 				ImGui::Dummy(padSizeR);
 				ImGui::SetNextItemWidth(160.0f);
 				ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
-				ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", rightThumbstickState.x, rightThumbstickState.y, GetQuadrantName(rightThumbstickState.x, rightThumbstickState.y));
+				ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, RE::GetQuadrantName(secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y));
 				ImGui::EndGroup();
 
 				ImGui::EndTable();
@@ -446,7 +447,7 @@ void VR::DrawSettings()
 				ImGui::Text("%s", e.pressed ? "Pressed" : "Released");
 				ImGui::TableSetColumnIndex(4);
 				if (e.heldSource == "thumbstick") {
-					ImGui::TextUnformatted("Thumbstick");
+					ImGui::TextUnformatted(e.controllerRole.c_str());
 				} else {
 					ImGui::TextUnformatted(RE::GetOpenVRButtonName(e.keyCode));
 				}
@@ -990,142 +991,180 @@ void VR::SubmitOverlayFrame()
 	}
 }
 
+// New function: Handles overlay/menu open/close logic based on controller input state
+void VR::UpdateOverlayMenuStateFromInput()
+{
+	bool& isEnabled = globals::menu->IsEnabled;
+	bool& testMode = settings.VRMenuControllerDiagnosticsTestMode;
+	// Dual grip to close
+	if (isEnabled && !testMode &&
+		primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed &&
+		secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed) {
+		isEnabled = false;
+		primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed = false;
+		secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed = false;
+	}
+	// A/X + B/Y to open
+	if (!isEnabled &&
+		primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kXA].isPressed &&
+		primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kBY].isPressed &&
+		globals::game::ui &&
+		(globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::TweenMenu::MENU_NAME))) {
+		isEnabled = true;
+	}
+}
+
 void VR::ProcessVREvents(std::vector<Menu::KeyEvent>& vrEvents)
 {
-	auto& menu = globals::menu;
-	auto& isEnabled = menu->IsEnabled;
-	auto now = std::chrono::steady_clock::now().time_since_epoch();
-	double nowSecs = std::chrono::duration_cast<std::chrono::duration<double>>(now).count();
-	bool& testMode = settings.VRMenuControllerDiagnosticsTestMode;
+	double nowSecs = GetNowSecs();
 	for (auto& event : vrEvents) {
-		bool isLeft = RE::BSOpenVRControllerDevice::IsLeftController(event.device);
-		bool isRight = RE::BSOpenVRControllerDevice::IsRightController(event.device);
-
-		VRControllerEventLog logEntry;
-		logEntry.device = static_cast<int>(event.device);
-		logEntry.keyCode = event.keyCode;
-		logEntry.value = static_cast<int>(event.value);
-		logEntry.pressed = event.IsPressed();
-		logEntry.heldTime = 0.0;
-		logEntry.heldSource = "chrono";
+		bool isPrimary = RE::BSOpenVRControllerDevice::IsSecondaryController(event.device);
+		bool isSecondary = RE::BSOpenVRControllerDevice::IsPrimaryController(event.device);
 		struct VRButtonDescriptor
 		{
 			const char* name;
 			bool (*isButton)(std::uint32_t);
-			RE::BSInputDevice::ButtonState* leftState;
-			RE::BSInputDevice::ButtonState* rightState;
+			std::uint32_t keyCode;
 		};
 		static const VRButtonDescriptor kVRButtons[] = {
-			{ "Grip", RE::BSOpenVRControllerDevice::IsGripButton, &leftGripState, &rightGripState },
-			{ "Trigger", RE::BSOpenVRControllerDevice::IsTriggerButton, &leftTriggerState, &rightTriggerState },
-			{ "Stick Click", RE::BSOpenVRControllerDevice::IsStickClick, &leftStickClickState, &rightStickClickState },
-			{ "Touchpad Click", RE::BSOpenVRControllerDevice::IsTouchpadClick, &leftTouchpadState, &rightTouchpadState },
-			{ "A/X", RE::BSOpenVRControllerDevice::IsAButton, &leftAorXState, &rightAorXState },
-			{ "B/Y", RE::BSOpenVRControllerDevice::IsBButton, &leftBorYState, &rightBorYState },
+			{ "Grip", RE::BSOpenVRControllerDevice::IsGripButton, RE::BSOpenVRControllerDevice::Keys::kGrip },
+			{ "GripAlt", RE::BSOpenVRControllerDevice::IsGripButton, RE::BSOpenVRControllerDevice::Keys::kGripAlt },
+			{ "Trigger", RE::BSOpenVRControllerDevice::IsTriggerButton, RE::BSOpenVRControllerDevice::Keys::kTrigger },
+			{ "Stick Click", RE::BSOpenVRControllerDevice::IsStickClick, RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger },
+			{ "Touchpad Click", RE::BSOpenVRControllerDevice::IsTouchpadClick, RE::BSOpenVRControllerDevice::Keys::kTouchpadClick },
+			{ "Touchpad Alt", RE::BSOpenVRControllerDevice::IsTouchpadClick, RE::BSOpenVRControllerDevice::Keys::kTouchpadAlt },
+			{ "A/X", RE::BSOpenVRControllerDevice::IsAButton, RE::BSOpenVRControllerDevice::Keys::kXA },
+			{ "B/Y", RE::BSOpenVRControllerDevice::IsBButton, RE::BSOpenVRControllerDevice::Keys::kBY },
 		};
 		for (const auto& desc : kVRButtons) {
 			if (desc.isButton(event.keyCode)) {
-				RE::BSInputDevice::ButtonState* state = isLeft ? &(*(desc.leftState)) : isRight ? &(*(desc.rightState)) :
-				                                                                                  nullptr;
+				RE::ButtonState* state = isPrimary ? &primaryControllerState.buttons[desc.keyCode] : isSecondary ? &secondaryControllerState.buttons[desc.keyCode] :
+				                                                                                                   nullptr;
 				if (state) {
 					state->OnEvent(event.IsPressed(), nowSecs);
-					logEntry.heldTime = state->isPressed ? (nowSecs - state->lastPressTime) : state->holdDuration;
 				}
 				break;
 			}
 		}
-		vrControllerEventLog.push_back(logEntry);
-		if (vrControllerEventLog.size() > 32) {
-			vrControllerEventLog.erase(vrControllerEventLog.begin());
-		}
-		// Process the event based on its type
+		// Do not log events here; logging is handled in the event-specific handler
 		switch (event.eventType) {
 		case RE::INPUT_EVENT_TYPE::kButton:
-			ProcessVRButtonEvent(event, nowSecs, isLeft, isRight);
+			ProcessVRButtonEvent(event);
 			break;
 		case RE::INPUT_EVENT_TYPE::kThumbstick:
-			ProcessVRThumbstickEvent(event, isLeft, isRight);
+			ProcessVRThumbstickEvent(event);
 			break;
 		default:
 			break;
 		}
 	}
-	// Dual grip detection using ButtonState
-	if (isEnabled && !testMode && leftGripState.isPressed && rightGripState.isPressed) {
-		isEnabled = false;
-		leftGripState.isPressed = false;
-		rightGripState.isPressed = false;
-	}
-	// Menu activation: open overlay if left A/X and B/Y is simultaneously pressed
-	if (!isEnabled && (leftAorXState.isPressed && leftBorYState.isPressed) && globals::game::ui && (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::TweenMenu::MENU_NAME))) {
-		isEnabled = true;
-	}
 }
 
-void VR::ProcessVRButtonEvent(const Menu::KeyEvent& event, double nowSecs, bool isLeft, bool isRight)
+void VR::ProcessVRButtonEvent(const Menu::KeyEvent& event)
 {
 	ImGuiIO& io = ImGui::GetIO();
 	(void)event;
-	(void)nowSecs;
-	(void)isLeft;
-	(void)isRight;
 	auto menu = globals::menu;
+	bool isPrimary = RE::BSOpenVRControllerDevice::IsSecondaryController(event.device);
+	bool isSecondary = RE::BSOpenVRControllerDevice::IsPrimaryController(event.device);
 	bool& testMode = settings.VRMenuControllerDiagnosticsTestMode;
 	constexpr size_t kNumTriggerMappings = 2;
 	constexpr size_t kNumMappings = 12;  // Update if mappings array changes
-	ButtonMapping mappings[kNumMappings] = {
-		{ &leftTriggerState, ImGuiMouseButton_Left, false, ImGuiKey_None, false },
-		{ &rightTriggerState, ImGuiMouseButton_Left, false, ImGuiKey_None, false },
-		{ &leftGripState, ImGuiMouseButton_Right, false, ImGuiKey_None, false },
-		{ &rightGripState, ImGuiMouseButton_Right, false, ImGuiKey_None, false },
-		{ &leftTouchpadState, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
-		{ &rightTouchpadState, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
-		{ &leftBorYState, -1, true, menu->VirtualKeyToImGuiKey(VK_TAB), false },
-		{ &rightBorYState, -1, true, menu->VirtualKeyToImGuiKey(VK_TAB), true },
-		{ &leftAorXState, -1, true, menu->VirtualKeyToImGuiKey(VK_RETURN), false },
-		{ &rightAorXState, -1, true, menu->VirtualKeyToImGuiKey(VK_RETURN), false },
-		{ &leftStickClickState, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
-		{ &rightStickClickState, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
+	RE::ButtonMapping mappings[kNumMappings] = {
+		{ RE::BSOpenVRControllerDevice::Keys::kTrigger, ImGuiMouseButton_Left, false, ImGuiKey_None, false },
+		{ RE::BSOpenVRControllerDevice::Keys::kTrigger, ImGuiMouseButton_Left, false, ImGuiKey_None, false },
+		{ RE::BSOpenVRControllerDevice::Keys::kGrip, ImGuiMouseButton_Right, false, ImGuiKey_None, false },
+		{ RE::BSOpenVRControllerDevice::Keys::kGrip, ImGuiMouseButton_Right, false, ImGuiKey_None, false },
+		{ RE::BSOpenVRControllerDevice::Keys::kTouchpadClick, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
+		{ RE::BSOpenVRControllerDevice::Keys::kTouchpadClick, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
+		{ RE::BSOpenVRControllerDevice::Keys::kBY, -1, true, menu->VirtualKeyToImGuiKey(VK_TAB), false },
+		{ RE::BSOpenVRControllerDevice::Keys::kBY, -1, true, menu->VirtualKeyToImGuiKey(VK_TAB), true },
+		{ RE::BSOpenVRControllerDevice::Keys::kXA, -1, true, menu->VirtualKeyToImGuiKey(VK_RETURN), false },
+		{ RE::BSOpenVRControllerDevice::Keys::kXA, -1, true, menu->VirtualKeyToImGuiKey(VK_RETURN), false },
+		{ RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
+		{ RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
 	};
 	static bool prevStates[kNumMappings] = {};
 	size_t limit = testMode ? kNumTriggerMappings : kNumMappings;
 	for (size_t i = 0; i < limit; ++i) {
-		bool curr = (*mappings[i].state).isPressed;
+		// Look up the button state for left/right controller
+		RE::ButtonState* state = nullptr;
+		if (isPrimary) {
+			state = &primaryControllerState.buttons[mappings[i].keyCode];
+		} else if (isSecondary) {
+			state = &secondaryControllerState.buttons[mappings[i].keyCode];
+		}
+		bool curr = state ? state->isPressed : false;
 		if (curr != prevStates[i]) {
 			if (mappings[i].isKeyEvent) {
 				if (mappings[i].isShift)
 					io.AddKeyEvent(ImGuiMod_Shift, curr);
-				io.AddKeyEvent(mappings[i].key, curr);
+				io.AddKeyEvent(static_cast<ImGuiKey>(mappings[i].key), curr);
 			} else {
-				io.AddMouseButtonEvent(mappings[i].imguiButton, curr);
+				io.AddMouseButtonEvent(mappings[i].logicalButton, curr);
 			}
 			prevStates[i] = curr;
 		}
 	}
-}
-
-void VR::ProcessVRThumbstickEvent(const Menu::KeyEvent& event, bool isLeft, bool isRight)
-{
-	ImGuiIO& io = ImGui::GetIO();
-	bool& testMode = settings.VRMenuControllerDiagnosticsTestMode;
-
-	// Update thumbstick state and optionally map to ImGui navigation/scroll
-	if (isLeft) {
-		leftThumbstickState.x = event.thumbstickX;
-		leftThumbstickState.y = event.thumbstickY;
-		// Optionally: map to scroll if not in test mode
-		if (!testMode) {
-			io.AddMouseWheelEvent(0.0f, leftThumbstickState.y);
-		}
-	} else if (isRight) {
-		rightThumbstickState.x = event.thumbstickX;
-		rightThumbstickState.y = event.thumbstickY;
-		// Map to mouse movement
-		io.AddMousePosEvent(io.MousePos.x + rightThumbstickState.x, io.MousePos.y + rightThumbstickState.y);
+	// Log the button event after state is updated
+	VRControllerEventLog logEntry;
+	logEntry.device = static_cast<int>(event.device);
+	logEntry.keyCode = event.keyCode;
+	logEntry.value = static_cast<int>(event.value);
+	logEntry.pressed = event.IsPressed();
+	logEntry.heldTime = 0.0;
+	logEntry.heldSource = "button";
+	logEntry.thumbstickX = 0.0f;
+	logEntry.thumbstickY = 0.0f;
+	logEntry.controllerRole = isPrimary ? "Primary" : isSecondary ? "Secondary" :
+	                                                                "Unknown";
+	vrControllerEventLog.push_back(logEntry);
+	if (vrControllerEventLog.size() > 32) {
+		vrControllerEventLog.erase(vrControllerEventLog.begin());
 	}
 }
 
-void VR::ProcessOverlayInput()
+void VR::ProcessVRThumbstickEvent(const Menu::KeyEvent& event)
+{
+	ImGuiIO& io = ImGui::GetIO();
+	bool isPrimary = RE::BSOpenVRControllerDevice::IsSecondaryController(event.device);
+	bool isSecondary = RE::BSOpenVRControllerDevice::IsPrimaryController(event.device);
+	bool& testMode = settings.VRMenuControllerDiagnosticsTestMode;
+
+	// Update thumbstick state and optionally map to ImGui navigation/scroll
+	if (isPrimary) {
+		primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x = event.thumbstickX;
+		primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y = event.thumbstickY;
+		// Optionally: map to scroll if not in test mode
+		if (!testMode) {
+			io.AddMouseWheelEvent(0.0f, primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y);
+		}
+	} else if (isSecondary) {
+		secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x = event.thumbstickX;
+		secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y = event.thumbstickY;
+		// Map to mouse movement
+		io.AddMousePosEvent(io.MousePos.x + secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, io.MousePos.y + secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y);
+	}
+
+	// Log the thumbstick event
+	VRControllerEventLog logEntry;
+	logEntry.device = static_cast<int>(event.device);
+	logEntry.keyCode = event.keyCode;
+	logEntry.value = static_cast<int>(event.value);
+	logEntry.pressed = event.IsPressed();
+	logEntry.heldTime = 0.0;
+	logEntry.heldSource = "thumbstick";
+	logEntry.thumbstickX = event.thumbstickX;
+	logEntry.thumbstickY = event.thumbstickY;
+	logEntry.controllerRole = isPrimary ? "Primary" : "Secondary";
+	vrControllerEventLog.push_back(logEntry);
+	if (vrControllerEventLog.size() > 32) {
+		vrControllerEventLog.erase(vrControllerEventLog.begin());
+	}
+}
+
+// Maps VR controller thumbstick input to ImGui mouse and scroll events for the overlay UI
+void VR::ProcessVRControllerOverlayInput()
 {
 	if (!globals::menu->IsEnabled)
 		return;
@@ -1136,21 +1175,21 @@ void VR::ProcessOverlayInput()
 	io.ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
 	io.WantSetMousePos = false;
 	if (!testMode) {
-		bool usingLeftStick = (std::abs(leftThumbstickState.y) > mouseDeadzone);
-		if (usingLeftStick) {
+		bool usingPrimaryStick = (std::abs(primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y) > mouseDeadzone);
+		if (usingPrimaryStick) {
 			static float scrollAccum = 0.0f;
-			scrollAccum += leftThumbstickState.y * 0.1f;
+			scrollAccum += primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y * 0.1f;
 			if (std::abs(scrollAccum) > 0.3f) {
 				io.AddMouseWheelEvent(0.0f, scrollAccum > 0 ? 1.0f : -1.0f);
 				scrollAccum = 0.0f;
 			}
 		}
 	}
-	bool usingRightStick = (std::abs(rightThumbstickState.x) > mouseDeadzone || std::abs(rightThumbstickState.y) > mouseDeadzone);
-	if (usingRightStick) {
+	bool usingSecondaryStick = (std::abs(secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x) > mouseDeadzone || std::abs(secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y) > mouseDeadzone);
+	if (usingSecondaryStick) {
 		ImVec2 mousePos = io.MousePos;
-		mousePos.x += rightThumbstickState.x * mouseSpeed;
-		mousePos.y -= rightThumbstickState.y * mouseSpeed;
+		mousePos.x += secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x * mouseSpeed;
+		mousePos.y -= secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y * mouseSpeed;
 		if (mousePos.x < 0)
 			mousePos.x = 0;
 		if (mousePos.y < 0)
