@@ -325,11 +325,6 @@ void Menu::DrawSettings()
 		windowFlags |= ImGuiWindowFlags_NoTitleBar;
 	}
 
-	// --- VR Overlay Drag Visual Feedback ---
-	if (REL::Module::IsVR() && globals::features::vr->ShouldHighlightOverlayWindow()) {
-		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.3f, 0.3f, 0.3f, 0.25f));  // Subtle gray background
-	}
-	// --- End VR Overlay Drag Visual Feedback ---
 	ImGui::Begin(title.c_str(), &IsEnabled, windowFlags);
 	{
 		auto shaderCache = globals::shaderCache;
@@ -1189,10 +1184,6 @@ void Menu::DrawSettings()
 		DrawFooter();
 	}
 	ImGui::End();
-	// After window content, pop the style if we pushed it
-	if (REL::Module::IsVR() && globals::features::vr->ShouldHighlightOverlayWindow()) {
-		ImGui::PopStyleColor();
-	}
 }
 
 void Menu::DrawGeneralSettings()

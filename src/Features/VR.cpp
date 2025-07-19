@@ -35,7 +35,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VRMenuControllerOffsetY,
 	VRMenuControllerOffsetZ,
 	mouseDeadzone,
-	mouseSpeed)
+	mouseSpeed,
+	dragHighlightColor)
 
 void CreateOverlayTextureAndRTV(ID3D11Device* device, int width, int height, ID3D11Texture2D** outTex, ID3D11RenderTargetView** outRTV)
 {
@@ -52,6 +53,61 @@ void CreateOverlayTextureAndRTV(ID3D11Device* device, int width, int height, ID3
 	if (*outTex) {
 		device->CreateRenderTargetView(*outTex, nullptr, outRTV);
 	}
+}
+
+void VR::ApplyHighlightTintToTexture(ID3D11Texture2D* texture, bool isHighlighted)
+{
+	if (!isHighlighted || !texture)
+		return;
+
+	// Create a temporary staging texture to read from
+	ID3D11Texture2D* stagingTexture = nullptr;
+	D3D11_TEXTURE2D_DESC desc;
+	texture->GetDesc(&desc);
+	desc.Usage = D3D11_USAGE_STAGING;
+	desc.BindFlags = 0;
+	desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ | D3D11_CPU_ACCESS_WRITE;
+
+	if (FAILED(globals::d3d::device->CreateTexture2D(&desc, nullptr, &stagingTexture)))
+		return;
+
+	// Copy the original texture to staging
+	globals::d3d::context->CopyResource(stagingTexture, texture);
+
+	// Map the staging texture to read/write pixels
+	D3D11_MAPPED_SUBRESOURCE mapped;
+	if (SUCCEEDED(globals::d3d::context->Map(stagingTexture, 0, D3D11_MAP_READ_WRITE, 0, &mapped))) {
+		// Apply highlight tint to each pixel
+		uint8_t* pixels = static_cast<uint8_t*>(mapped.pData);
+		for (UINT y = 0; y < desc.Height; ++y) {
+			for (UINT x = 0; x < desc.Width; ++x) {
+				uint8_t* pixel = pixels + (y * mapped.RowPitch + x * 4);
+
+				// Only tint non-transparent pixels (alpha > 0)
+				if (pixel[3] > 0) {
+					// Apply configurable highlight tint
+					// Blend the original color with the highlight color
+					float originalR = pixel[0] / 255.0f;
+					float originalG = pixel[1] / 255.0f;
+					float originalB = pixel[2] / 255.0f;
+
+					// Blend: original * (1 - alpha) + highlight * alpha
+					float blendAlpha = settings.dragHighlightColor[3];
+					pixel[0] = static_cast<uint8_t>((originalR * (1.0f - blendAlpha) + settings.dragHighlightColor[0] * blendAlpha) * 255.0f);
+					pixel[1] = static_cast<uint8_t>((originalG * (1.0f - blendAlpha) + settings.dragHighlightColor[1] * blendAlpha) * 255.0f);
+					pixel[2] = static_cast<uint8_t>((originalB * (1.0f - blendAlpha) + settings.dragHighlightColor[2] * blendAlpha) * 255.0f);
+					// Alpha stays the same
+				}
+			}
+		}
+
+		globals::d3d::context->Unmap(stagingTexture, 0);
+
+		// Copy the modified texture back
+		globals::d3d::context->CopyResource(texture, stagingTexture);
+	}
+
+	stagingTexture->Release();
 }
 
 // Add a high-resolution timer helper using QueryPerformanceCounter
@@ -148,6 +204,13 @@ void VR::DrawSettings()
 		ImGui::BulletText("Open: Hold both A/X and B/Y (Primary Controller) while in the main menu or tween menu");
 		ImGui::BulletText("Close: Hold the Grip button on both controllers at the same time");
 		ImGui::Spacing();
+		ImGui::TextWrapped("Overlay Positioning (Grip + Drag):");
+		ImGui::BulletText("Fixed World Position: Any controller can drag (HMD-only mode) or attached controller only (Both modes)");
+		ImGui::BulletText("HMD Relative: Any controller can drag (HMD-only mode) or attached controller only (Both modes)");
+		ImGui::BulletText("Controller Attached: Only the opposite hand can drag the controller overlay");
+		ImGui::BulletText("Haptic feedback will confirm when drag starts");
+		ImGui::BulletText("The overlay being dragged will be highlighted with a tint color");
+		ImGui::Spacing();
 		ImGui::TextWrapped("HMD Input Options:");
 		ImGui::BulletText("Mouse: Standard desktop mouse input");
 		ImGui::BulletText("Keyboard: Standard keyboard input");
@@ -229,23 +292,34 @@ void VR::DrawSettings()
 			bool hmdOffsetExpanded = true;
 			Util::DrawSectionHeader("HMD Overlay Offset", false, true, &hmdOffsetExpanded);
 			if (hmdOffsetExpanded) {
-				if (ImGui::SliderFloat("X Offset (Left/Right)##HMD", &settings.VRMenuOffsetX, -0.5f, 0.5f, "%.2f m")) {
+				if (ImGui::SliderFloat("X Offset (Left/Right)##HMD", &settings.VRMenuOffsetX, -2.0f, 2.0f, "%.2f m")) {
 					UpdateVROverlayPosition();
 				}
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Horizontal offset from HMD center (negative = left, positive = right).");
 				}
-				if (ImGui::SliderFloat("Y Offset (Up/Down)##HMD", &settings.VRMenuOffsetY, -0.5f, 0.5f, "%.2f m")) {
+				if (ImGui::SliderFloat("Y Offset (Up/Down)##HMD", &settings.VRMenuOffsetY, -2.0f, 2.0f, "%.2f m")) {
 					UpdateVROverlayPosition();
 				}
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Vertical offset from HMD center (negative = down, positive = up).");
 				}
-				if (ImGui::SliderFloat("Z Offset (Forward/Back)##HMD", &settings.VRMenuOffsetZ, -0.5f, 0.5f, "%.2f m")) {
+				if (ImGui::SliderFloat("Z Offset (Forward/Back)##HMD", &settings.VRMenuOffsetZ, -2.0f, 2.0f, "%.2f m")) {
 					UpdateVROverlayPosition();
 				}
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Depth offset from HMD center (negative = forward, positive = backward).");
+				}
+
+				// Reset HMD offset button
+				if (ImGui::Button("Reset HMD Offset")) {
+					settings.VRMenuOffsetX = 0.0f;
+					settings.VRMenuOffsetY = 0.0f;
+					settings.VRMenuOffsetZ = 0.0f;
+					UpdateVROverlayPosition();
+				}
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Reset all HMD offset values to zero.");
 				}
 			}
 		}
@@ -275,25 +349,36 @@ void VR::DrawSettings()
 					ImGui::Text("Which controller to attach the menu to.");
 				}
 
-				if (ImGui::SliderFloat("X Offset (Left/Right)##Controller", &settings.VRMenuControllerOffsetX, -0.5f, 0.5f, "%.2f m")) {
+				if (ImGui::SliderFloat("X Offset (Left/Right)##Controller", &settings.VRMenuControllerOffsetX, -2.0f, 2.0f, "%.2f m")) {
 					UpdateVROverlayPosition();
 				}
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Horizontal offset from controller center (negative = left, positive = right).");
 				}
 
-				if (ImGui::SliderFloat("Y Offset (Up/Down)##Controller", &settings.VRMenuControllerOffsetY, -0.5f, 0.5f, "%.2f m")) {
+				if (ImGui::SliderFloat("Y Offset (Up/Down)##Controller", &settings.VRMenuControllerOffsetY, -2.0f, 2.0f, "%.2f m")) {
 					UpdateVROverlayPosition();
 				}
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Vertical offset from controller center (negative = down, positive = up).");
 				}
 
-				if (ImGui::SliderFloat("Z Offset (Forward/Back)##Controller", &settings.VRMenuControllerOffsetZ, -0.5f, 0.5f, "%.2f m")) {
+				if (ImGui::SliderFloat("Z Offset (Forward/Back)##Controller", &settings.VRMenuControllerOffsetZ, -2.0f, 2.0f, "%.2f m")) {
 					UpdateVROverlayPosition();
 				}
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Depth offset from controller center (negative = forward, positive = backward).");
+				}
+
+				// Reset Controller offset button
+				if (ImGui::Button("Reset Controller Offset")) {
+					settings.VRMenuControllerOffsetX = 0.0f;
+					settings.VRMenuControllerOffsetY = 0.0f;
+					settings.VRMenuControllerOffsetZ = 0.0f;
+					UpdateVROverlayPosition();
+				}
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Reset all controller offset values to zero.");
 				}
 			}
 		}
@@ -315,6 +400,15 @@ void VR::DrawSettings()
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Mouse speed in pixels per frame per full thumbstick deflection.");
+			}
+
+			ImGui::Separator();
+			ImGui::Text("Drag Highlight Color");
+			if (ImGui::ColorEdit4("##DragHighlightColor", settings.dragHighlightColor.data(), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar)) {
+				// Color picker changed - no immediate action needed, will be applied on next drag
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Color and transparency of the highlight tint applied to overlays when dragging. Alpha controls the blend strength.");
 			}
 		}
 	}
@@ -753,12 +847,12 @@ void VR::UpdateVROverlayPosition()
 		if (controllerIndex != vr::k_unTrackedDeviceIndexInvalid) {
 			// Position relative to controller using offset settings
 			vr::HmdMatrix34_t transform;
-			transform.m[0][0] = 1.0f;
+			transform.m[0][0] = overlayWidth;
 			transform.m[0][1] = 0.0f;
 			transform.m[0][2] = 0.0f;
 			transform.m[0][3] = settings.VRMenuControllerOffsetX;
 			transform.m[1][0] = 0.0f;
-			transform.m[1][1] = 1.0f;
+			transform.m[1][1] = overlayHeight;
 			transform.m[1][2] = 0.0f;
 			transform.m[1][3] = settings.VRMenuControllerOffsetY;
 			transform.m[2][0] = 0.0f;
@@ -768,6 +862,9 @@ void VR::UpdateVROverlayPosition()
 
 			SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
 			overlay->SetOverlayTransformTrackedDeviceRelative(menuControllerOverlayHandle, controllerIndex, &transform);
+
+			// Update the overlay width to match the calculated size
+			overlay->SetOverlayWidthInMeters(menuControllerOverlayHandle, overlayWidth);
 
 			// Update controller overlay flags for input interaction
 			SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
@@ -848,6 +945,9 @@ void VR::UpdateVROverlayControllerPosition()
 
 	SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
 	overlay->SetOverlayTransformTrackedDeviceRelative(menuControllerOverlayHandle, controllerIndex, &transform);
+
+	// Update the overlay width to match the calculated size
+	overlay->SetOverlayWidthInMeters(menuControllerOverlayHandle, overlayWidth);
 
 	// Update controller overlay flags for input interaction
 	SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
@@ -936,10 +1036,8 @@ void VR::SubmitOverlayFrame()
 	vr::IVROverlay* overlay = vr::VROverlay();
 	if (!overlay)
 		return;
-	// Only update drag logic in fixed world mode
-	if (settings.VRMenuPositioningMethod == 1) {
-		UpdateOverlayDrag();
-	}
+	// Update drag logic for all modes
+	UpdateOverlayDrag();
 	auto& enabled = globals::menu->IsEnabled;
 	if (enabled && menuOverlayHandle != vr::k_ulOverlayHandleInvalid && menuTexture && menuRTV) {
 		// Copy ImGui output to overlay texture
@@ -954,6 +1052,13 @@ void VR::SubmitOverlayFrame()
 		globals::d3d::context->OMSetRenderTargets(1, &oldRTV, nullptr);
 		if (oldRTV)
 			oldRTV->Release();
+
+		// Apply highlight tint to HMD overlay if it's being dragged
+		bool hmdBeingDragged = overlayDragState.dragging &&
+		                       (overlayDragState.mode == OverlayDragState::DragMode::HMD ||
+								   overlayDragState.mode == OverlayDragState::DragMode::FixedWorld);
+		ApplyHighlightTintToTexture(menuTexture, hmdBeingDragged);
+
 		// Update overlay position and submit to SteamVR
 		UpdateVROverlayPosition();
 		vr::Texture_t tex = { menuTexture, vr::TextureType_DirectX, vr::ColorSpace_Auto };
@@ -973,6 +1078,12 @@ void VR::SubmitOverlayFrame()
 			ImGui::Render();
 			ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 			globals::d3d::context->OMSetRenderTargets(1, &oldRTV, nullptr);
+
+			// Apply highlight tint to controller overlay if it's being dragged
+			bool controllerBeingDragged = overlayDragState.dragging &&
+			                              overlayDragState.mode == OverlayDragState::DragMode::Controller;
+			ApplyHighlightTintToTexture(menuControllerTexture, controllerBeingDragged);
+
 			// Position controller overlay and submit
 			UpdateVROverlayControllerPosition();
 
@@ -1231,25 +1342,17 @@ static bool CanStartAny(vr::ETrackedControllerRole, bool isLeft, bool isRight)
 {
 	return isLeft || isRight;
 }
-static bool IsActiveFixedWorld(const VR* self, vr::IVROverlay*)
-{
-	return self->settings.VRMenuPositioningMethod == 1;
-}
-static bool IsActiveHMD(const VR* self, vr::IVROverlay*)
-{
-	return self->settings.attachMode == AttachMode::HMDOnly || self->settings.attachMode == AttachMode::Both;
-}
-static bool IsActiveController(const VR* self, vr::IVROverlay* overlay)
-{
-	return (self->settings.attachMode == AttachMode::ControllerOnly || self->settings.attachMode == AttachMode::Both) && overlay && overlay->IsOverlayVisible(self->menuControllerOverlayHandle);
-}
 
 void VR::UpdateOverlayDrag()
 {
 	vr::IVRSystem* system = vr::VRSystem();
-	vr::IVROverlay* overlay = vr::VROverlay();
 	if (!system)
 		return;
+
+	// Check if test mode is active - disable all dragging
+	if (settings.VRMenuControllerDiagnosticsTestMode) {
+		return;
+	}
 
 	// Helper to get grip state for a controller
 	auto getGripPressed = [&](bool isLeft, bool isRight) {
@@ -1268,8 +1371,6 @@ void VR::UpdateOverlayDrag()
 		overlayDragState.isSecondary = false;
 	};
 
-	bool overlayOnLeft = (settings.VRMenuControllerHand == 0);
-
 	// --- Strict mutually exclusive drag mode selection ---
 	struct DragMode
 	{
@@ -1281,10 +1382,146 @@ void VR::UpdateOverlayDrag()
 	};
 
 	std::vector<DragMode> dragModes;
+
+	// Controller mode - only for opposite hand (highest priority)
+	if (settings.attachMode == AttachMode::ControllerOnly || settings.attachMode == AttachMode::Both) {
+		// Controller drag - only opposite hand can drag the controller overlay
+		dragModes.push_back({ OverlayDragState::DragMode::Controller,
+			true,
+			[&](vr::ETrackedControllerRole role, bool isLeft, bool isRight) {
+				// Find the actual attached controller (same logic as UpdateVROverlayControllerPosition)
+				vr::TrackedDeviceIndex_t attachedControllerIndex = vr::k_unTrackedDeviceIndexInvalid;
+				vr::TrackedDeviceIndex_t firstController = vr::k_unTrackedDeviceIndexInvalid;
+				vr::ETrackedControllerRole actualAttachedRole = settings.VRMenuControllerHand;
+
+				for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; ++i) {
+					if (system->GetTrackedDeviceClass(i) == vr::TrackedDeviceClass_Controller) {
+						if (firstController == vr::k_unTrackedDeviceIndexInvalid) {
+							firstController = i;
+						}
+						vr::ETrackedControllerRole deviceRole = system->GetControllerRoleForTrackedDeviceIndex(i);
+						if (deviceRole == settings.VRMenuControllerHand) {
+							attachedControllerIndex = i;
+							break;
+						}
+					}
+				}
+
+				// If preferred controller not found, use first available (same fallback logic)
+				if (attachedControllerIndex == vr::k_unTrackedDeviceIndexInvalid && firstController != vr::k_unTrackedDeviceIndexInvalid) {
+					attachedControllerIndex = firstController;
+					actualAttachedRole = system->GetControllerRoleForTrackedDeviceIndex(firstController);
+				}
+
+				// Find the opposite of the actual attached controller
+				vr::ETrackedControllerRole oppositeRole = (actualAttachedRole == vr::ETrackedControllerRole::TrackedControllerRole_LeftHand) ?
+			                                                  vr::ETrackedControllerRole::TrackedControllerRole_RightHand :
+			                                                  vr::ETrackedControllerRole::TrackedControllerRole_LeftHand;
+
+				// Only allow the opposite controller to drag
+				return (attachedControllerIndex != vr::k_unTrackedDeviceIndexInvalid) &&
+			           ((isLeft && role == oppositeRole) ||
+						   (isRight && role == oppositeRole));
+			},
+			[&](Matrix controllerMatrix) {
+				// Get current attached controller transform to convert world deltas to local space (same logic as above)
+				vr::TrackedDeviceIndex_t attachedControllerIndex = vr::k_unTrackedDeviceIndexInvalid;
+				vr::TrackedDeviceIndex_t firstController = vr::k_unTrackedDeviceIndexInvalid;
+
+				for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; ++i) {
+					if (system->GetTrackedDeviceClass(i) == vr::TrackedDeviceClass_Controller) {
+						if (firstController == vr::k_unTrackedDeviceIndexInvalid) {
+							firstController = i;
+						}
+						vr::ETrackedControllerRole role = system->GetControllerRoleForTrackedDeviceIndex(i);
+						if (role == settings.VRMenuControllerHand) {
+							attachedControllerIndex = i;
+							break;
+						}
+					}
+				}
+
+				// If preferred controller not found, use first available (same fallback logic)
+				if (attachedControllerIndex == vr::k_unTrackedDeviceIndexInvalid && firstController != vr::k_unTrackedDeviceIndexInvalid) {
+					attachedControllerIndex = firstController;
+				}
+
+				if (attachedControllerIndex != vr::k_unTrackedDeviceIndexInvalid) {
+					vr::TrackedDevicePose_t controllerPose;
+					system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &controllerPose, 1);
+					if (controllerPose.bPoseIsValid) {
+						Matrix attachedControllerMatrix = HmdMatrix34ToMatrix(controllerPose.mDeviceToAbsoluteTracking);
+
+						// Calculate world-space delta
+						Vector3 worldDelta(
+							controllerMatrix._14 - overlayDragState.initialControllerMatrix._14,
+							controllerMatrix._24 - overlayDragState.initialControllerMatrix._24,
+							controllerMatrix._34 - overlayDragState.initialControllerMatrix._34);
+
+						// Transform world delta to attached controller local space (use transpose for correct direction)
+						Vector3 localDelta = Vector3::Transform(worldDelta, attachedControllerMatrix);
+
+						// Apply local delta to offsets
+						settings.VRMenuControllerOffsetX = overlayDragState.initialControllerOffset.x + localDelta.x;
+						settings.VRMenuControllerOffsetY = overlayDragState.initialControllerOffset.y + localDelta.y;
+						settings.VRMenuControllerOffsetZ = overlayDragState.initialControllerOffset.z + localDelta.z;
+						UpdateVROverlayPosition();
+					}
+				}
+			},
+			[&]() {
+				overlayDragState.initialControllerOffset.x = settings.VRMenuControllerOffsetX;
+				overlayDragState.initialControllerOffset.y = settings.VRMenuControllerOffsetY;
+				overlayDragState.initialControllerOffset.z = settings.VRMenuControllerOffsetZ;
+				overlayDragState.initialControllerMatrix = overlayDragState.startControllerMatrix;
+			} });
+	}
+
+	// Fixed world mode - only for attached controller when in "Both" mode
 	if (settings.VRMenuPositioningMethod == 1) {
+		// In "Both" mode, only the attached controller can adjust fixed world position
+		// In HMD-only mode, any controller can adjust fixed world position
+		std::function<bool(vr::ETrackedControllerRole, bool, bool)> fixedWorldCanStart;
+		if (settings.attachMode == AttachMode::Both) {
+			// In "Both" mode, only the attached controller can adjust fixed world position
+			fixedWorldCanStart = [&](vr::ETrackedControllerRole role, bool isLeft, bool isRight) {
+				// Find the actual attached controller (same logic as controller drag)
+				vr::TrackedDeviceIndex_t attachedControllerIndex = vr::k_unTrackedDeviceIndexInvalid;
+				vr::TrackedDeviceIndex_t firstController = vr::k_unTrackedDeviceIndexInvalid;
+				vr::ETrackedControllerRole actualAttachedRole = settings.VRMenuControllerHand;
+
+				for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; ++i) {
+					if (system->GetTrackedDeviceClass(i) == vr::TrackedDeviceClass_Controller) {
+						if (firstController == vr::k_unTrackedDeviceIndexInvalid) {
+							firstController = i;
+						}
+						vr::ETrackedControllerRole deviceRole = system->GetControllerRoleForTrackedDeviceIndex(i);
+						if (deviceRole == settings.VRMenuControllerHand) {
+							attachedControllerIndex = i;
+							break;
+						}
+					}
+				}
+
+				// If preferred controller not found, use first available (same fallback logic)
+				if (attachedControllerIndex == vr::k_unTrackedDeviceIndexInvalid && firstController != vr::k_unTrackedDeviceIndexInvalid) {
+					attachedControllerIndex = firstController;
+					actualAttachedRole = system->GetControllerRoleForTrackedDeviceIndex(firstController);
+				}
+
+				// Only allow the attached controller to drag fixed world
+				return (attachedControllerIndex != vr::k_unTrackedDeviceIndexInvalid) &&
+				       ((isLeft && role == actualAttachedRole) ||
+						   (isRight && role == actualAttachedRole));
+			};
+		} else {
+			// In HMD-only mode, any controller can adjust fixed world position
+			fixedWorldCanStart = CanStartAny;
+		}
+
 		dragModes.push_back({ OverlayDragState::DragMode::FixedWorld,
 			true,
-			CanStartAny,
+			fixedWorldCanStart,
 			[&](Matrix controllerMatrix) {
 				Matrix delta = controllerMatrix * overlayDragState.initialControllerMatrix.Invert();
 				fixedWorldOverlayPosition.m = delta * overlayDragState.initialOverlayMatrix;
@@ -1293,43 +1530,80 @@ void VR::UpdateOverlayDrag()
 				overlayDragState.initialControllerMatrix = overlayDragState.startControllerMatrix;
 				overlayDragState.initialOverlayMatrix = fixedWorldOverlayPosition.m;
 			} });
-	} else if (settings.attachMode == AttachMode::HMDOnly || settings.attachMode == AttachMode::Both) {
+	}
+
+	// HMD mode - for attached controller when both modes active, or any controller otherwise
+	if (settings.attachMode == AttachMode::HMDOnly || settings.attachMode == AttachMode::Both) {
+		// In "Both" mode, only the attached controller can adjust HMD position
+		// In HMD-only mode, any controller can adjust HMD position
+		std::function<bool(vr::ETrackedControllerRole, bool, bool)> hmdCanStart;
+		if (settings.attachMode == AttachMode::Both) {
+			// In "Both" mode, only the attached controller can adjust HMD position
+			hmdCanStart = [&](vr::ETrackedControllerRole role, bool isLeft, bool isRight) {
+				// Find the actual attached controller (same logic as controller drag)
+				vr::TrackedDeviceIndex_t attachedControllerIndex = vr::k_unTrackedDeviceIndexInvalid;
+				vr::TrackedDeviceIndex_t firstController = vr::k_unTrackedDeviceIndexInvalid;
+				vr::ETrackedControllerRole actualAttachedRole = settings.VRMenuControllerHand;
+
+				for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; ++i) {
+					if (system->GetTrackedDeviceClass(i) == vr::TrackedDeviceClass_Controller) {
+						if (firstController == vr::k_unTrackedDeviceIndexInvalid) {
+							firstController = i;
+						}
+						vr::ETrackedControllerRole deviceRole = system->GetControllerRoleForTrackedDeviceIndex(i);
+						if (deviceRole == settings.VRMenuControllerHand) {
+							attachedControllerIndex = i;
+							break;
+						}
+					}
+				}
+
+				// If preferred controller not found, use first available (same fallback logic)
+				if (attachedControllerIndex == vr::k_unTrackedDeviceIndexInvalid && firstController != vr::k_unTrackedDeviceIndexInvalid) {
+					attachedControllerIndex = firstController;
+					actualAttachedRole = system->GetControllerRoleForTrackedDeviceIndex(firstController);
+				}
+
+				// Only allow the attached controller to drag HMD
+				return (attachedControllerIndex != vr::k_unTrackedDeviceIndexInvalid) &&
+				       ((isLeft && role == actualAttachedRole) ||
+						   (isRight && role == actualAttachedRole));
+			};
+		} else {
+			// In HMD-only mode, any controller can adjust HMD
+			hmdCanStart = CanStartAny;
+		}
+
 		dragModes.push_back({ OverlayDragState::DragMode::HMD,
 			true,
-			CanStartAny,
+			hmdCanStart,
 			[&](Matrix controllerMatrix) {
-				float dx = controllerMatrix._14 - overlayDragState.initialControllerMatrix._14;
-				float dy = controllerMatrix._24 - overlayDragState.initialControllerMatrix._24;
-				float dz = controllerMatrix._34 - overlayDragState.initialControllerMatrix._34;
-				settings.VRMenuOffsetX = overlayDragState.initialHMDOffset.x + dx;
-				settings.VRMenuOffsetY = overlayDragState.initialHMDOffset.y + dy;
-				settings.VRMenuOffsetZ = overlayDragState.initialHMDOffset.z + dz;
-				UpdateVROverlayPosition();
+				// Get current HMD transform to convert world deltas to local space
+				vr::TrackedDevicePose_t hmdPose;
+				system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &hmdPose, 1);
+				if (hmdPose.bPoseIsValid) {
+					Matrix hmdMatrix = HmdMatrix34ToMatrix(hmdPose.mDeviceToAbsoluteTracking);
+
+					// Calculate world-space delta
+					Vector3 worldDelta(
+						controllerMatrix._14 - overlayDragState.initialControllerMatrix._14,
+						controllerMatrix._24 - overlayDragState.initialControllerMatrix._24,
+						controllerMatrix._34 - overlayDragState.initialControllerMatrix._34);
+
+					// Transform world delta to HMD local space (use transpose for correct direction)
+					Vector3 localDelta = Vector3::Transform(worldDelta, hmdMatrix);
+
+					// Apply local delta to offsets
+					settings.VRMenuOffsetX = overlayDragState.initialHMDOffset.x + localDelta.x;
+					settings.VRMenuOffsetY = overlayDragState.initialHMDOffset.y + localDelta.y;
+					settings.VRMenuOffsetZ = overlayDragState.initialHMDOffset.z + localDelta.z;
+					UpdateVROverlayPosition();
+				}
 			},
 			[&]() {
 				overlayDragState.initialHMDOffset.x = settings.VRMenuOffsetX;
 				overlayDragState.initialHMDOffset.y = settings.VRMenuOffsetY;
 				overlayDragState.initialHMDOffset.z = settings.VRMenuOffsetZ;
-				overlayDragState.initialControllerMatrix = overlayDragState.startControllerMatrix;
-			} });
-	}
-	if (settings.attachMode == AttachMode::ControllerOnly || settings.attachMode == AttachMode::Both && overlay && overlay->IsOverlayVisible(menuControllerOverlayHandle)) {
-		dragModes.push_back({ OverlayDragState::DragMode::Controller,
-			true,
-			[overlayOnLeft](vr::ETrackedControllerRole, bool isLeft, bool isRight) { return (overlayOnLeft && isRight) || (!overlayOnLeft && isLeft); },
-			[&](Matrix controllerMatrix) {
-				float dx = controllerMatrix._14 - overlayDragState.initialControllerMatrix._14;
-				float dy = controllerMatrix._24 - overlayDragState.initialControllerMatrix._24;
-				float dz = controllerMatrix._34 - overlayDragState.initialControllerMatrix._34;
-				settings.VRMenuControllerOffsetX = overlayDragState.initialControllerOffset.x + dx;
-				settings.VRMenuControllerOffsetY = overlayDragState.initialControllerOffset.y + dy;
-				settings.VRMenuControllerOffsetZ = overlayDragState.initialControllerOffset.z + dz;
-				UpdateVROverlayPosition();
-			},
-			[&]() {
-				overlayDragState.initialControllerOffset.x = settings.VRMenuControllerOffsetX;
-				overlayDragState.initialControllerOffset.y = settings.VRMenuControllerOffsetY;
-				overlayDragState.initialControllerOffset.z = settings.VRMenuControllerOffsetZ;
 				overlayDragState.initialControllerMatrix = overlayDragState.startControllerMatrix;
 			} });
 	}
@@ -1340,7 +1614,14 @@ void VR::UpdateOverlayDrag()
 		if (GetControllerWorldMatrix(overlayDragState.controllerIndex, rawMatrix)) {
 			vr::HmdMatrix34_t mat = Float3x4ToHmdMatrix34(rawMatrix);
 			Matrix controllerMatrix = HmdMatrix34ToMatrix(mat);
-			dragModes[0].onUpdate(controllerMatrix);  // Only one mode is active at a time
+
+			// Find the active drag mode and update it
+			for (const auto& mode : dragModes) {
+				if (mode.mode == overlayDragState.mode) {
+					mode.onUpdate(controllerMatrix);
+					break;
+				}
+			}
 		}
 		bool gripPressed = getGripPressed(overlayDragState.isPrimary, overlayDragState.isSecondary);
 		if (!gripPressed) {
@@ -1349,7 +1630,7 @@ void VR::UpdateOverlayDrag()
 		return;
 	}
 
-	// Try to start a new drag
+	// Try to start a new drag - use first available mode
 	for (const auto& mode : dragModes) {
 		if (!mode.isActive)
 			continue;
@@ -1376,6 +1657,23 @@ void VR::UpdateOverlayDrag()
 			overlayDragState.isSecondary = isRight;
 			overlayDragState.startControllerMatrix = controllerMatrix;
 			mode.onInit();
+
+			// Send haptic pulse to the controller that started the drag (only if overlay is visible)
+			if (system && globals::menu->IsEnabled) {
+				// Find the controller device index for the hand that started the drag
+				for (vr::TrackedDeviceIndex_t deviceIdx = 0; deviceIdx < vr::k_unMaxTrackedDeviceCount; ++deviceIdx) {
+					if (system->GetTrackedDeviceClass(deviceIdx) == vr::TrackedDeviceClass_Controller) {
+						vr::ETrackedControllerRole deviceRole = system->GetControllerRoleForTrackedDeviceIndex(deviceIdx);
+						bool isRightController = (deviceRole == vr::ETrackedControllerRole::TrackedControllerRole_RightHand);
+						if (isRightController == isRight) {
+							// Trigger haptic pulse (100ms = 100,000 microseconds)
+							system->TriggerHapticPulse(deviceIdx, 0, static_cast<unsigned short>(100000));
+							break;
+						}
+					}
+				}
+			}
+
 			return;
 		}
 	}

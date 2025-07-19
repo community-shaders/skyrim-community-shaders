@@ -66,6 +66,9 @@ struct VR : Feature
 		// VR menu mouse control settings
 		float mouseDeadzone = 0.2f;  // Minimum thumbstick deflection to move mouse/scroll
 		float mouseSpeed = 25.0f;    // Mouse speed in pixels per frame per full deflection
+
+		// Drag highlight color (RGBA)
+		std::array<float, 4> dragHighlightColor = { 0.7f, 0.7f, 0.7f, 0.3f };  // Gray tint with 30% alpha
 	};
 
 	Settings settings;
@@ -175,6 +178,7 @@ public:
 
 	void UpdateOverlayDrag();
 	void SetFixedOverlayToCurrentHMD();
+	void ApplyHighlightTintToTexture(ID3D11Texture2D* texture, bool isHighlighted);
 
 	// Returns true if the overlay window should be highlighted (dragging in any mode)
 	bool ShouldHighlightOverlayWindow() const
