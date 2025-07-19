@@ -56,14 +56,8 @@ vr::HmdMatrix34_t VR::ComputeOverlayTransformFromHMD()
 		system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &hmdPose, 1);
 		if (hmdPose.bPoseIsValid) {
 			float distance = settings.VRMenuDistance;
-			float aspect = static_cast<float>(kOverlayHeight) / kOverlayWidth;
-			float baseWidth = 1.0f;
-			float overlayWidth = baseWidth * settings.VRMenuScale;
-			float overlayHeight = overlayWidth * aspect;
-			float centerOffsetX = -0.5f * (overlayWidth - baseWidth);
-			float centerOffsetY = -0.5f * (overlayHeight - (baseWidth * aspect));
-			float offsetX = settings.VRMenuOffsetX + centerOffsetX;
-			float offsetY = settings.VRMenuOffsetY + centerOffsetY;
+			float offsetX = settings.VRMenuOffsetX;
+			float offsetY = settings.VRMenuOffsetY;
 			float offsetZ = settings.VRMenuOffsetZ;
 			transform = hmdPose.mDeviceToAbsoluteTracking;
 			// Move forward by distance (Z axis in HMD space)
@@ -587,8 +581,9 @@ void VR::UpdateVROverlayPosition()
 	float baseWidth = 1.0f;
 	float overlayWidth = baseWidth * settings.VRMenuScale;
 	float overlayHeight = overlayWidth * aspect;
-	float centerOffsetX = -0.5f * (overlayWidth - baseWidth);
-	float centerOffsetY = -0.5f * (overlayHeight - (baseWidth * aspect));
+	float offsetX = settings.VRMenuOffsetX;
+	float offsetY = settings.VRMenuOffsetY;
+	float offsetZ = settings.VRMenuOffsetZ;
 
 	static int lastPositioningMethod = -1;
 	bool justSwitchedToFixed = (lastPositioningMethod != 1 && settings.VRMenuPositioningMethod == 1);
@@ -605,9 +600,6 @@ void VR::UpdateVROverlayPosition()
 				// Calculate position in front of HMD
 				float distance = settings.VRMenuDistance;
 				float height = 0.0f;  // No longer using settings.VRMenuHeight
-				float offsetX = settings.VRMenuOffsetX + centerOffsetX;
-				float offsetY = settings.VRMenuOffsetY + centerOffsetY;
-				float offsetZ = settings.VRMenuOffsetZ;
 
 				// Create transform matrix - start with identity
 				vr::HmdMatrix34_t hmdTransform;
@@ -660,6 +652,7 @@ void VR::UpdateVROverlayPosition()
 				hmdTransform.m[1][1] *= overlayHeight;
 
 				overlay->SetOverlayTransformAbsolute(menuOverlayHandle, vr::TrackingUniverseStanding, &hmdTransform);
+				overlay->SetOverlayWidthInMeters(menuOverlayHandle, baseWidth * settings.VRMenuScale);
 
 			} else {
 				logger::debug("HMD pose invalid, falling back to fixed positioning");
@@ -679,6 +672,7 @@ void VR::UpdateVROverlayPosition()
 				for (int j = 0; j < 4; ++j)
 					fixedTransform.m[i][j] = fixedWorldOverlayPosition.m[i][j];
 			overlay->SetOverlayTransformAbsolute(menuOverlayHandle, vr::TrackingUniverseStanding, &fixedTransform);
+			overlay->SetOverlayWidthInMeters(menuOverlayHandle, baseWidth * settings.VRMenuScale);
 		}
 	}
 
@@ -774,59 +768,67 @@ void VR::UpdateVROverlayControllerPosition()
 	float baseWidth = 1.0f;
 	float overlayWidth = baseWidth * settings.VRMenuScale;
 	float overlayHeight = overlayWidth * aspect;
-	float centerOffsetX = -0.5f * (overlayWidth - baseWidth);
-	float centerOffsetY = -0.5f * (overlayHeight - (baseWidth * aspect));
 
 	// Note: Skyrim VR interface integration would require additional reverse engineering
 	// For now, we'll use the standard OpenVR API
 
 	// Find the appropriate controller for the controller overlay
 	vr::TrackedDeviceIndex_t controllerIndex = vr::k_unTrackedDeviceIndexInvalid;
-
+	bool foundPreferred = false;
+	vr::TrackedDeviceIndex_t firstController = vr::k_unTrackedDeviceIndexInvalid;
 	for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; i++) {
 		if (system->GetTrackedDeviceClass(i) == vr::TrackedDeviceClass_Controller) {
+			if (firstController == vr::k_unTrackedDeviceIndexInvalid) {
+				firstController = i;
+			}
 			vr::ETrackedControllerRole role = system->GetControllerRoleForTrackedDeviceIndex(i);
 			if (role == settings.VRMenuControllerHand) {
 				controllerIndex = i;
+				foundPreferred = true;
 				break;
 			}
 		}
 	}
-
-	if (controllerIndex != vr::k_unTrackedDeviceIndexInvalid) {
-		// Position relative to controller using offset settings
-		vr::HmdMatrix34_t transform;
-		float offsetX = settings.VRMenuControllerOffsetX + centerOffsetX;
-		float offsetY = settings.VRMenuControllerOffsetY + centerOffsetY;
-		transform.m[0][0] = overlayWidth;
-		transform.m[0][1] = 0.0f;
-		transform.m[0][2] = 0.0f;
-		transform.m[0][3] = offsetX;
-		transform.m[1][0] = 0.0f;
-		transform.m[1][1] = overlayHeight;
-		transform.m[1][2] = 0.0f;
-		transform.m[1][3] = offsetY;
-		transform.m[2][0] = 0.0f;
-		transform.m[2][1] = 0.0f;
-		transform.m[2][2] = 1.0f;
-		transform.m[2][3] = settings.VRMenuControllerOffsetZ;
-
-		overlay->SetOverlayTransformTrackedDeviceRelative(menuControllerOverlayHandle, controllerIndex, &transform);
-
-		// Update controller overlay flags for input interaction
-		if (settings.VRMenuEnableControllerInput) {
-			overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
-			overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
-			overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
-		} else {
-			overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, false);
-			overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, false);
-			overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, false);
-		}
-
-		// Ensure controller overlay is visible in the world
-		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_VisibleInDashboard, true);
+	if (!foundPreferred && firstController != vr::k_unTrackedDeviceIndexInvalid) {
+		controllerIndex = firstController;
 	}
+	if (controllerIndex == vr::k_unTrackedDeviceIndexInvalid) {
+		overlay->HideOverlay(menuControllerOverlayHandle);
+		return;
+	}
+
+	// Position relative to controller using offset settings
+	vr::HmdMatrix34_t transform;
+	float offsetX = settings.VRMenuControllerOffsetX;
+	float offsetY = settings.VRMenuControllerOffsetY;
+	transform.m[0][0] = overlayWidth;
+	transform.m[0][1] = 0.0f;
+	transform.m[0][2] = 0.0f;
+	transform.m[0][3] = offsetX;
+	transform.m[1][0] = 0.0f;
+	transform.m[1][1] = overlayHeight;
+	transform.m[1][2] = 0.0f;
+	transform.m[1][3] = offsetY;
+	transform.m[2][0] = 0.0f;
+	transform.m[2][1] = 0.0f;
+	transform.m[2][2] = 1.0f;
+	transform.m[2][3] = settings.VRMenuControllerOffsetZ;
+
+	overlay->SetOverlayTransformTrackedDeviceRelative(menuControllerOverlayHandle, controllerIndex, &transform);
+
+	// Update controller overlay flags for input interaction
+	if (settings.VRMenuEnableControllerInput) {
+		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
+		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
+		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
+	} else {
+		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, false);
+		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, false);
+		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, false);
+	}
+
+	// Ensure controller overlay is visible in the world
+	overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_VisibleInDashboard, true);
 }
 
 // Add overlay management methods for VR menu overlays
