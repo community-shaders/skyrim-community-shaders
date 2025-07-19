@@ -5,6 +5,7 @@
 #include <magic_enum.hpp>
 #include <openvr.h>
 #include <vector>
+using namespace DirectX::SimpleMath;
 
 struct VR : Feature
 {
@@ -137,7 +138,7 @@ public:
 	// Non-persistent fixed world overlay position (session only)
 	struct OverlayWorldPosition
 	{
-		float m[3][4] = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 } };  // 3x4 matrix (rotation + translation)
+		Matrix m = Matrix::Identity;  // 3x4 matrix (rotation + translation)
 	} fixedWorldOverlayPosition;
 
 	// Drag state for overlay manipulation
@@ -147,18 +148,37 @@ public:
 		vr::TrackedDeviceIndex_t controllerIndex = vr::k_unTrackedDeviceIndexInvalid;
 		bool isPrimary = false;
 		bool isSecondary = false;
-		float initialControllerMatrix[3][4] = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 } };
-		float initialOverlayMatrix[3][4] = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 } };
-		float grabOffset[3][4] = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 } };  // overlay^-1 * controller at grab
-		bool intersecting = false;                                                    // True if any controller is currently intersecting the overlay
-	} overlayDragState;
+		// For fixed world drag
+		Matrix initialControllerMatrix = Matrix::Identity;
+		Matrix initialOverlayMatrix = Matrix::Identity;
+		Matrix grabOffset = Matrix::Identity;  // overlay^-1 * controller at grab
+		bool intersecting = false;             // True if any controller is currently intersecting the overlay
+
+		// For HMD/controller overlay drag
+		enum class DragMode
+		{
+			None,
+			FixedWorld,
+			HMD,
+			Controller
+		} mode = DragMode::None;
+		// For HMD overlay drag
+		Vector3 initialHMDOffset = Vector3::Zero;
+		// For controller overlay drag
+		Vector3 initialControllerOffset = Vector3::Zero;
+
+		// For refactored drag logic
+		Matrix startControllerMatrix = Matrix::Identity;
+	};
+
+	OverlayDragState overlayDragState;
 
 	void UpdateOverlayDrag();
 	void SetFixedOverlayToCurrentHMD();
 
-	// Returns true if the overlay window should be highlighted (dragging in fixed world mode)
+	// Returns true if the overlay window should be highlighted (dragging in any mode)
 	bool ShouldHighlightOverlayWindow() const
 	{
-		return settings.VRMenuPositioningMethod == 1 && overlayDragState.dragging;
+		return overlayDragState.dragging;
 	}
 };

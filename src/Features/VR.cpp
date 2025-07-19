@@ -5,6 +5,8 @@
 #include "DX12SwapChain.h"
 #include "State.h"
 #include "Utils/UI.h"
+#include <DirectXMath.h>
+#include <SimpleMath.h>
 #include <cmath>
 #include <d3d11.h>
 #include <imgui_impl_dx11.h>
@@ -59,6 +61,43 @@ inline double GetNowSecs()
 	LARGE_INTEGER now;
 	QueryPerformanceCounter(&now);
 	return static_cast<double>(now.QuadPart) / static_cast<double>(freq.QuadPart);
+}
+
+// Conversion helpers for OpenVR API boundary
+Matrix HmdMatrix34ToMatrix(const vr::HmdMatrix34_t& m)
+{
+	return Matrix(
+		m.m[0][0], m.m[0][1], m.m[0][2], m.m[0][3],
+		m.m[1][0], m.m[1][1], m.m[1][2], m.m[1][3],
+		m.m[2][0], m.m[2][1], m.m[2][2], m.m[2][3],
+		0, 0, 0, 1);
+}
+
+vr::HmdMatrix34_t Float3x4ToHmdMatrix34(const float m[3][4])
+{
+	vr::HmdMatrix34_t mat;
+	for (int i = 0; i < 3; ++i)
+		for (int j = 0; j < 4; ++j)
+			mat.m[i][j] = m[i][j];
+	return mat;
+}
+
+vr::HmdMatrix34_t MatrixToHmdMatrix34(const Matrix& mat)
+{
+	vr::HmdMatrix34_t m{};
+	m.m[0][0] = mat._11;
+	m.m[0][1] = mat._12;
+	m.m[0][2] = mat._13;
+	m.m[0][3] = mat._14;
+	m.m[1][0] = mat._21;
+	m.m[1][1] = mat._22;
+	m.m[1][2] = mat._23;
+	m.m[1][3] = mat._24;
+	m.m[2][0] = mat._31;
+	m.m[2][1] = mat._32;
+	m.m[2][2] = mat._33;
+	m.m[2][3] = mat._34;
+	return m;
 }
 
 vr::HmdMatrix34_t VR::ComputeOverlayTransformFromHMD()
@@ -563,6 +602,14 @@ void VR::DataLoaded()
 	*gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
 }
 
+void SetOverlayInputFlags(vr::IVROverlay* overlay, vr::VROverlayHandle_t handle)
+{
+	overlay->SetOverlayFlag(handle, vr::VROverlayFlags_SendVRScrollEvents, true);
+	overlay->SetOverlayFlag(handle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
+	overlay->SetOverlayFlag(handle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
+	overlay->SetOverlayFlag(handle, vr::VROverlayFlags_VisibleInDashboard, true);
+}
+
 void VR::UpdateVROverlayPosition()
 {
 	if (!REL::Module::IsVR()) {
@@ -658,6 +705,7 @@ void VR::UpdateVROverlayPosition()
 				hmdTransform.m[0][0] *= overlayWidth;
 				hmdTransform.m[1][1] *= overlayHeight;
 
+				SetOverlayInputFlags(overlay, menuOverlayHandle);
 				overlay->SetOverlayTransformAbsolute(menuOverlayHandle, vr::TrackingUniverseStanding, &hmdTransform);
 				overlay->SetOverlayWidthInMeters(menuOverlayHandle, baseWidth * settings.VRMenuScale);
 
@@ -674,10 +722,8 @@ void VR::UpdateVROverlayPosition()
 				SetFixedOverlayToCurrentHMD();
 			}
 
-			vr::HmdMatrix34_t fixedTransform;
-			for (int i = 0; i < 3; ++i)
-				for (int j = 0; j < 4; ++j)
-					fixedTransform.m[i][j] = fixedWorldOverlayPosition.m[i][j];
+			vr::HmdMatrix34_t fixedTransform = MatrixToHmdMatrix34(fixedWorldOverlayPosition.m);
+			SetOverlayInputFlags(overlay, menuOverlayHandle);
 			overlay->SetOverlayTransformAbsolute(menuOverlayHandle, vr::TrackingUniverseStanding, &fixedTransform);
 			overlay->SetOverlayWidthInMeters(menuOverlayHandle, baseWidth * settings.VRMenuScale);
 		}
@@ -720,25 +766,16 @@ void VR::UpdateVROverlayPosition()
 			transform.m[2][2] = 1.0f;
 			transform.m[2][3] = settings.VRMenuControllerOffsetZ;
 
+			SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
 			overlay->SetOverlayTransformTrackedDeviceRelative(menuControllerOverlayHandle, controllerIndex, &transform);
 
 			// Update controller overlay flags for input interaction
-			overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
-			overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
-			overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
-
-			// Ensure controller overlay is visible in the world
-			overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_VisibleInDashboard, true);
+			SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
 		}
 	}
 
 	// Update overlay flags for input interaction
-	overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
-	overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
-	overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
-
-	// Ensure overlay is visible in the world
-	overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_VisibleInDashboard, true);
+	SetOverlayInputFlags(overlay, menuOverlayHandle);
 }
 
 void VR::UpdateVROverlayControllerPosition()
@@ -809,15 +846,11 @@ void VR::UpdateVROverlayControllerPosition()
 	transform.m[2][2] = 1.0f;
 	transform.m[2][3] = settings.VRMenuControllerOffsetZ;
 
+	SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
 	overlay->SetOverlayTransformTrackedDeviceRelative(menuControllerOverlayHandle, controllerIndex, &transform);
 
 	// Update controller overlay flags for input interaction
-	overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
-	overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
-	overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
-
-	// Ensure controller overlay is visible in the world
-	overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_VisibleInDashboard, true);
+	SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
 }
 
 // Add overlay management methods for VR menu overlays
@@ -833,11 +866,8 @@ void VR::EnsureOverlayInitialized()
 	std::string name = "Community Shaders Menu";
 	vr::EVROverlayError err = overlay->CreateOverlay(key.c_str(), name.c_str(), &menuOverlayHandle);
 	if (err == vr::VROverlayError_None) {
-		overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
-		overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
-		overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
+		SetOverlayInputFlags(overlay, menuOverlayHandle);
 		overlay->SetOverlayWidthInMeters(menuOverlayHandle, 1.0f);
-		overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_VisibleInDashboard, true);
 	}
 	// Controller overlay
 	std::string controllerKey = "communityshaders.menu.controller";
@@ -845,11 +875,8 @@ void VR::EnsureOverlayInitialized()
 	err = overlay->CreateOverlay(controllerKey.c_str(), controllerName.c_str(), &menuControllerOverlayHandle);
 	if (err == vr::VROverlayError_None) {
 		CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, &menuControllerTexture, &menuControllerRTV);
-		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
-		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
-		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
+		SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
 		overlay->SetOverlayWidthInMeters(menuControllerOverlayHandle, 1.0f);
-		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_VisibleInDashboard, true);
 	}
 }
 
@@ -931,6 +958,7 @@ void VR::SubmitOverlayFrame()
 		UpdateVROverlayPosition();
 		vr::Texture_t tex = { menuTexture, vr::TextureType_DirectX, vr::ColorSpace_Auto };
 		if (settings.attachMode == AttachMode::HMDOnly || settings.attachMode == AttachMode::Both) {
+			SetOverlayInputFlags(overlay, menuOverlayHandle);
 			overlay->SetOverlayTexture(menuOverlayHandle, &tex);
 			overlay->ShowOverlay(menuOverlayHandle);
 		} else if (menuOverlayHandle != vr::k_ulOverlayHandleInvalid) {
@@ -949,6 +977,7 @@ void VR::SubmitOverlayFrame()
 			UpdateVROverlayControllerPosition();
 
 			vr::Texture_t controllerTex = { menuControllerTexture, vr::TextureType_DirectX, vr::ColorSpace_Auto };
+			SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
 			overlay->SetOverlayTexture(menuControllerOverlayHandle, &controllerTex);
 			overlay->ShowOverlay(menuControllerOverlayHandle);
 		} else if (menuControllerOverlayHandle != vr::k_ulOverlayHandleInvalid) {
@@ -1181,33 +1210,6 @@ void VR::ProcessVRControllerOverlayInput()
 	}
 }
 
-// Helper: Invert a 3x4 rigid transform matrix (rotation + translation)
-void InvertMatrix3x4(const float in[3][4], float out[3][4])
-{
-	// Transpose rotation
-	for (int i = 0; i < 3; ++i)
-		for (int j = 0; j < 3; ++j)
-			out[i][j] = in[j][i];
-	// Invert translation
-	for (int i = 0; i < 3; ++i) {
-		out[i][3] = 0.0f;
-		for (int j = 0; j < 3; ++j)
-			out[i][3] -= out[i][j] * in[j][3];
-	}
-}
-
-// Helper: Multiply two 3x4 matrices (rigid transforms)
-void MultiplyMatrix3x4(const float a[3][4], const float b[3][4], float out[3][4])
-{
-	// Rotation
-	for (int i = 0; i < 3; ++i)
-		for (int j = 0; j < 3; ++j)
-			out[i][j] = a[i][0] * b[0][j] + a[i][1] * b[1][j] + a[i][2] * b[2][j];
-	// Translation
-	for (int i = 0; i < 3; ++i)
-		out[i][3] = a[i][0] * b[0][3] + a[i][1] * b[1][3] + a[i][2] * b[2][3] + a[i][3];
-}
-
 // Helper: Get controller world matrix from OpenVR pose
 bool GetControllerWorldMatrix(vr::TrackedDeviceIndex_t index, float out[3][4])
 {
@@ -1224,108 +1226,157 @@ bool GetControllerWorldMatrix(vr::TrackedDeviceIndex_t index, float out[3][4])
 	return true;
 }
 
-// Helper: Overlay intersection test (controller tip in overlay local space)
-bool IsControllerIntersectingOverlay(const float controllerMatrix[3][4], const float overlayMatrix[3][4], float overlayWidth, float overlayHeight, float threshold = 0.05f)
+// --- File-scope static helpers for drag logic ---
+static bool CanStartAny(vr::ETrackedControllerRole, bool isLeft, bool isRight)
 {
-	// Invert overlay matrix
-	float invOverlay[3][4];
-	InvertMatrix3x4(overlayMatrix, invOverlay);
-	// Controller tip in world space (origin)
-	float tipWorld[3] = { controllerMatrix[0][3], controllerMatrix[1][3], controllerMatrix[2][3] };
-	// Transform to overlay local space
-	float rel[3];
-	for (int i = 0; i < 3; ++i) {
-		rel[i] = invOverlay[i][0] * tipWorld[0] + invOverlay[i][1] * tipWorld[1] + invOverlay[i][2] * tipWorld[2] + invOverlay[i][3];
-	}
-	// Check Z is close to 0 (overlay plane)
-	if (std::abs(rel[2]) > threshold)
-		return false;
-	// Check X/Y bounds
-	if (std::abs(rel[0]) > overlayWidth / 2.0f)
-		return false;
-	if (std::abs(rel[1]) > overlayHeight / 2.0f)
-		return false;
-	return true;
+	return isLeft || isRight;
+}
+static bool IsActiveFixedWorld(const VR* self, vr::IVROverlay*)
+{
+	return self->settings.VRMenuPositioningMethod == 1;
+}
+static bool IsActiveHMD(const VR* self, vr::IVROverlay*)
+{
+	return self->settings.attachMode == AttachMode::HMDOnly || self->settings.attachMode == AttachMode::Both;
+}
+static bool IsActiveController(const VR* self, vr::IVROverlay* overlay)
+{
+	return (self->settings.attachMode == AttachMode::ControllerOnly || self->settings.attachMode == AttachMode::Both) && overlay && overlay->IsOverlayVisible(self->menuControllerOverlayHandle);
 }
 
 void VR::UpdateOverlayDrag()
 {
-	if (settings.VRMenuPositioningMethod != 1)
-		return;
 	vr::IVRSystem* system = vr::VRSystem();
+	vr::IVROverlay* overlay = vr::VROverlay();
 	if (!system)
 		return;
-	// Allow either grip to start dragging, no intersection required
-	for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; ++i) {
-		if (system->GetTrackedDeviceClass(i) != vr::TrackedDeviceClass_Controller)
-			continue;
-		float controllerMatrix[3][4];
-		if (!GetControllerWorldMatrix(i, controllerMatrix))
-			continue;
-		vr::ETrackedControllerRole role = system->GetControllerRoleForTrackedDeviceIndex(i);
-		bool isPrimary = (role == vr::TrackedControllerRole_LeftHand);
-		bool isSecondary = (role == vr::TrackedControllerRole_RightHand);
-		bool gripPressed = false;
-		if (isPrimary)
-			gripPressed = primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
-		else if (isSecondary)
-			gripPressed = secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
-		if (!overlayDragState.dragging && gripPressed) {
-			overlayDragState.dragging = true;
-			overlayDragState.controllerIndex = i;
-			overlayDragState.isPrimary = isPrimary;
-			overlayDragState.isSecondary = isSecondary;
-			for (int r = 0; r < 3; ++r)
-				for (int c = 0; c < 4; ++c) {
-					overlayDragState.initialControllerMatrix[r][c] = controllerMatrix[r][c];
-					overlayDragState.initialOverlayMatrix[r][c] = fixedWorldOverlayPosition.m[r][c];
-				}
-			// Compute grabOffset = inverse(overlay) * controller
-			float invOverlay[3][4];
-			InvertMatrix3x4(fixedWorldOverlayPosition.m, invOverlay);
-			MultiplyMatrix3x4(invOverlay, controllerMatrix, overlayDragState.grabOffset);
-			break;
-		}
+
+	// Helper to get grip state for a controller
+	auto getGripPressed = [&](bool isLeft, bool isRight) {
+		if (isLeft)
+			return primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
+		if (isRight)
+			return secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
+		return false;
+	};
+
+	// Helper to reset drag state
+	auto resetDragState = [&]() {
+		overlayDragState.dragging = false;
+		overlayDragState.controllerIndex = vr::k_unTrackedDeviceIndexInvalid;
+		overlayDragState.isPrimary = false;
+		overlayDragState.isSecondary = false;
+	};
+
+	bool overlayOnLeft = (settings.VRMenuControllerHand == 0);
+
+	// --- Strict mutually exclusive drag mode selection ---
+	struct DragMode
+	{
+		OverlayDragState::DragMode mode;
+		bool isActive;
+		std::function<bool(vr::ETrackedControllerRole, bool, bool)> canStart;
+		std::function<void(Matrix)> onUpdate;
+		std::function<void()> onInit;
+	};
+
+	std::vector<DragMode> dragModes;
+	if (settings.VRMenuPositioningMethod == 1) {
+		dragModes.push_back({ OverlayDragState::DragMode::FixedWorld,
+			true,
+			CanStartAny,
+			[&](Matrix controllerMatrix) {
+				Matrix delta = controllerMatrix * overlayDragState.initialControllerMatrix.Invert();
+				fixedWorldOverlayPosition.m = delta * overlayDragState.initialOverlayMatrix;
+			},
+			[&]() {
+				overlayDragState.initialControllerMatrix = overlayDragState.startControllerMatrix;
+				overlayDragState.initialOverlayMatrix = fixedWorldOverlayPosition.m;
+			} });
+	} else if (settings.attachMode == AttachMode::HMDOnly || settings.attachMode == AttachMode::Both) {
+		dragModes.push_back({ OverlayDragState::DragMode::HMD,
+			true,
+			CanStartAny,
+			[&](Matrix controllerMatrix) {
+				float dx = controllerMatrix._14 - overlayDragState.initialControllerMatrix._14;
+				float dy = controllerMatrix._24 - overlayDragState.initialControllerMatrix._24;
+				float dz = controllerMatrix._34 - overlayDragState.initialControllerMatrix._34;
+				settings.VRMenuOffsetX = overlayDragState.initialHMDOffset.x + dx;
+				settings.VRMenuOffsetY = overlayDragState.initialHMDOffset.y + dy;
+				settings.VRMenuOffsetZ = overlayDragState.initialHMDOffset.z + dz;
+				UpdateVROverlayPosition();
+			},
+			[&]() {
+				overlayDragState.initialHMDOffset.x = settings.VRMenuOffsetX;
+				overlayDragState.initialHMDOffset.y = settings.VRMenuOffsetY;
+				overlayDragState.initialHMDOffset.z = settings.VRMenuOffsetZ;
+				overlayDragState.initialControllerMatrix = overlayDragState.startControllerMatrix;
+			} });
 	}
-	overlayDragState.intersecting = false;  // No intersection logic now
-	// If dragging, update overlay position
+	if (settings.attachMode == AttachMode::ControllerOnly || settings.attachMode == AttachMode::Both && overlay && overlay->IsOverlayVisible(menuControllerOverlayHandle)) {
+		dragModes.push_back({ OverlayDragState::DragMode::Controller,
+			true,
+			[overlayOnLeft](vr::ETrackedControllerRole, bool isLeft, bool isRight) { return (overlayOnLeft && isRight) || (!overlayOnLeft && isLeft); },
+			[&](Matrix controllerMatrix) {
+				float dx = controllerMatrix._14 - overlayDragState.initialControllerMatrix._14;
+				float dy = controllerMatrix._24 - overlayDragState.initialControllerMatrix._24;
+				float dz = controllerMatrix._34 - overlayDragState.initialControllerMatrix._34;
+				settings.VRMenuControllerOffsetX = overlayDragState.initialControllerOffset.x + dx;
+				settings.VRMenuControllerOffsetY = overlayDragState.initialControllerOffset.y + dy;
+				settings.VRMenuControllerOffsetZ = overlayDragState.initialControllerOffset.z + dz;
+				UpdateVROverlayPosition();
+			},
+			[&]() {
+				overlayDragState.initialControllerOffset.x = settings.VRMenuControllerOffsetX;
+				overlayDragState.initialControllerOffset.y = settings.VRMenuControllerOffsetY;
+				overlayDragState.initialControllerOffset.z = settings.VRMenuControllerOffsetZ;
+				overlayDragState.initialControllerMatrix = overlayDragState.startControllerMatrix;
+			} });
+	}
+
+	// Drag update (if dragging)
 	if (overlayDragState.dragging) {
-		// Find the current device index for the dragging logical controller
-		vr::IVRSystem* vrSystem = vr::VRSystem();
-		vr::TrackedDeviceIndex_t draggingIndex = vr::k_unTrackedDeviceIndexInvalid;
-		for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; ++i) {
-			if (vrSystem->GetTrackedDeviceClass(i) != vr::TrackedDeviceClass_Controller)
-				continue;
-			vr::ETrackedControllerRole role = vrSystem->GetControllerRoleForTrackedDeviceIndex(i);
-			if ((overlayDragState.isPrimary && role == vr::TrackedControllerRole_LeftHand) ||
-				(overlayDragState.isSecondary && role == vr::TrackedControllerRole_RightHand)) {
-				draggingIndex = i;
-				break;
-			}
+		float rawMatrix[3][4];
+		if (GetControllerWorldMatrix(overlayDragState.controllerIndex, rawMatrix)) {
+			vr::HmdMatrix34_t mat = Float3x4ToHmdMatrix34(rawMatrix);
+			Matrix controllerMatrix = HmdMatrix34ToMatrix(mat);
+			dragModes[0].onUpdate(controllerMatrix);  // Only one mode is active at a time
 		}
-		if (draggingIndex != vr::k_unTrackedDeviceIndexInvalid) {
-			float controllerMatrix[3][4];
-			if (GetControllerWorldMatrix(draggingIndex, controllerMatrix)) {
-				float invGrab[3][4];
-				InvertMatrix3x4(overlayDragState.grabOffset, invGrab);
-				float newOverlay[3][4];
-				MultiplyMatrix3x4(controllerMatrix, invGrab, newOverlay);
-				for (int r = 0; r < 3; ++r)
-					for (int c = 0; c < 4; ++c)
-						fixedWorldOverlayPosition.m[r][c] = newOverlay[r][c];
-			}
-		}
-		// If grip released, stop dragging
-		bool gripPressed = false;
-		if (overlayDragState.isPrimary)
-			gripPressed = primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
-		else if (overlayDragState.isSecondary)
-			gripPressed = secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
+		bool gripPressed = getGripPressed(overlayDragState.isPrimary, overlayDragState.isSecondary);
 		if (!gripPressed) {
-			overlayDragState.dragging = false;
-			overlayDragState.controllerIndex = vr::k_unTrackedDeviceIndexInvalid;
-			overlayDragState.isPrimary = false;
-			overlayDragState.isSecondary = false;
+			resetDragState();
+		}
+		return;
+	}
+
+	// Try to start a new drag
+	for (const auto& mode : dragModes) {
+		if (!mode.isActive)
+			continue;
+		for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; ++i) {
+			if (system->GetTrackedDeviceClass(i) != vr::TrackedDeviceClass_Controller)
+				continue;
+			vr::ETrackedControllerRole role = system->GetControllerRoleForTrackedDeviceIndex(i);
+			bool isLeft = (role == vr::ETrackedControllerRole::TrackedControllerRole_LeftHand);
+			bool isRight = (role == vr::ETrackedControllerRole::TrackedControllerRole_RightHand);
+			if (!mode.canStart(role, isLeft, isRight))
+				continue;
+			bool gripPressed = getGripPressed(isLeft, isRight);
+			if (!gripPressed)
+				continue;
+			float rawMatrix[3][4];
+			if (!GetControllerWorldMatrix(i, rawMatrix))
+				continue;
+			vr::HmdMatrix34_t mat = Float3x4ToHmdMatrix34(rawMatrix);
+			Matrix controllerMatrix = HmdMatrix34ToMatrix(mat);
+			overlayDragState.dragging = true;
+			overlayDragState.mode = mode.mode;
+			overlayDragState.controllerIndex = i;
+			overlayDragState.isPrimary = isLeft;
+			overlayDragState.isSecondary = isRight;
+			overlayDragState.startControllerMatrix = controllerMatrix;
+			mode.onInit();
+			return;
 		}
 	}
 }
@@ -1333,7 +1384,5 @@ void VR::UpdateOverlayDrag()
 void VR::SetFixedOverlayToCurrentHMD()
 {
 	vr::HmdMatrix34_t transform = ComputeOverlayTransformFromHMD();
-	for (int i = 0; i < 3; ++i)
-		for (int j = 0; j < 4; ++j)
-			fixedWorldOverlayPosition.m[i][j] = transform.m[i][j];
+	fixedWorldOverlayPosition.m = HmdMatrix34ToMatrix(transform);
 }
