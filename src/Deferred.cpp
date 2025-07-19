@@ -331,7 +331,7 @@ void Deferred::StartDeferred()
 
 	stateUpdateFlags.set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
 
-	deferredPass = true;
+	globals::state->deferredPass = true;
 
 	{
 		auto context = globals::d3d::context;
@@ -548,8 +548,9 @@ void Deferred::EndDeferred()
 	DeferredPasses();  // Perform deferred passes and composite forward buffers
 
 	stateUpdateFlags.set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
+	stateUpdateFlags.set(RE::BSGraphics::ShaderFlags::DIRTY_ALPHA_BLEND);   // Run OMSetRenderTargets again
 
-	deferredPass = false;
+	globals::state->deferredPass = false;
 
 	ResetBlendStates();
 }
@@ -574,8 +575,7 @@ void Deferred::OverrideBlendStates()
 
 							blendDesc.IndependentBlendEnable = true;
 
-							// Start at 1 to ignore Diffuse
-							for (int i = 1; i < 8; i++) {
+							for (int i = 0; i < 8; i++) {
 								blendDesc.RenderTarget[i].BlendEnable = blendDesc.RenderTarget[0].BlendEnable;
 								blendDesc.RenderTarget[i].SrcBlend = D3D11_BLEND_SRC_ALPHA;
 								blendDesc.RenderTarget[i].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
@@ -775,35 +775,6 @@ void Deferred::Hooks::Main_RenderWorld_Start::thunk(RE::BSBatchRenderer* This, u
 	}
 };
 
-void Deferred::RenderBlendedDecals()
-{
-	if (!globals::state->blendedDecalRenderPasses.empty()) {
-		if (globals::game::isVR) {
-			auto& runtimeData = globals::game::shadowState->GetVRRuntimeData();
-			auto runtimeDataCopy = runtimeData;
-			runtimeData.rasterStateDepthBiasMode = 10;
-
-			for (auto& renderPass : globals::state->blendedDecalRenderPasses)
-				::Hooks::BSBatchRenderer_RenderPassImmediately1::func(renderPass.a_pass, renderPass.a_technique, renderPass.a_alphaTest, renderPass.a_renderFlags);
-
-			globals::state->blendedDecalRenderPasses.clear();
-
-			runtimeData = runtimeDataCopy;
-		} else {
-			auto& runtimeData = globals::game::shadowState->GetRuntimeData();
-			auto runtimeDataCopy = runtimeData;
-			runtimeData.rasterStateDepthBiasMode = 10;
-
-			for (auto& renderPass : globals::state->blendedDecalRenderPasses)
-				::Hooks::BSBatchRenderer_RenderPassImmediately1::func(renderPass.a_pass, renderPass.a_technique, renderPass.a_alphaTest, renderPass.a_renderFlags);
-
-			globals::state->blendedDecalRenderPasses.clear();
-
-			runtimeData = runtimeDataCopy;
-		}
-	}
-}
-
 void Deferred::Hooks::Main_RenderWorld_BlendedDecals::thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags)
 {
 	auto deferred = globals::deferred;
@@ -818,17 +789,15 @@ void Deferred::Hooks::Main_RenderWorld_BlendedDecals::thunk(RE::BSShaderAccumula
 
 	// Deferred blended decals
 	deferred->inBlendedDecals = true;
+	deferred->inDecals = true;
+
 	func(This, RenderFlags);
 	deferred->inBlendedDecals = false;
-
-	deferred->EndDeferred();
-
-	// Blended decals
-	deferred->inDecals = true;
-	deferred->RenderBlendedDecals();
 	deferred->inDecals = false;
 
-	// After this point, water starts rendering
+	if (globals::state->deferredPass) {
+		deferred->EndDeferred();
+	}
 };
 
 void Deferred::Hooks::BSCubeMapCamera_RenderCubemap::thunk(RE::NiAVObject* camera, int a2, bool a3, bool a4, bool a5)

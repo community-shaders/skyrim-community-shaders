@@ -49,7 +49,6 @@ public:
 	bool inBlendedDecals = false;
 	bool inDecals = false;
 	bool inReflections = false;
-	bool deferredPass = false;
 
 	Texture2D* prevDiffuseAmbientTexture = nullptr;
 
@@ -78,8 +77,6 @@ public:
 
 	winrt::com_ptr<ID3D11ShaderResourceView> lutTexture = nullptr;
 	void BindLUT();
-
-	void RenderBlendedDecals();
 
 	struct Hooks
 	{

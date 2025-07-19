@@ -175,6 +175,7 @@ public:
 
 	std::vector<::Hooks::RenderPass> blendedDecalRenderPasses;
 	bool inWorld = false;
+	bool deferredPass = false;
 
 	void UpdateSharedData(bool a_inWorld, bool a_prepass);
 
@@ -230,6 +231,8 @@ public:
 	void SetupReShade();
 	void RenderReShade();
 	void PresentReShade();
+
+	void TestEndDeferred(RE::BSRenderPass* a_pass);
 
 	bool useFrameAnnotations = false;
 

@@ -574,8 +574,6 @@ void State::SetupResources()
 
 void State::ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescriptor, uint& a_pixelDescriptor, bool a_forceDeferred)
 {
-	auto deferred = globals::deferred;
-
 	if (a_shader.shaderType.get() != RE::BSShader::Type::Utility && a_shader.shaderType.get() != RE::BSShader::Type::ImageSpace) {
 		switch (a_shader.shaderType.get()) {
 		case RE::BSShader::Type::Lighting:
@@ -611,7 +609,7 @@ void State::ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescr
 				if (vr || !enableImprovedSnow->GetBool())
 					a_pixelDescriptor &= ~((uint32_t)SIE::ShaderCache::LightingShaderFlags::Snow);
 
-				if (deferred->deferredPass || a_forceDeferred)
+				if (deferredPass || a_forceDeferred)
 					a_pixelDescriptor |= (uint32_t)SIE::ShaderCache::LightingShaderFlags::Deferred;
 
 				{
@@ -651,19 +649,19 @@ void State::ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescr
 				a_vertexDescriptor &= flags;
 				a_pixelDescriptor &= flags;
 
-				if (deferred->deferredPass || a_forceDeferred)
+				if (deferredPass || a_forceDeferred)
 					a_pixelDescriptor |= (uint32_t)SIE::ShaderCache::EffectShaderFlags::Deferred;
 			}
 			break;
 		case RE::BSShader::Type::DistantTree:
 			{
-				if (deferred->deferredPass || a_forceDeferred)
+				if (deferredPass || a_forceDeferred)
 					a_pixelDescriptor |= (uint32_t)SIE::ShaderCache::DistantTreeShaderFlags::Deferred;
 			}
 			break;
 		case RE::BSShader::Type::Sky:
 			{
-				if (deferred->deferredPass || a_forceDeferred)
+				if (deferredPass || a_forceDeferred)
 					a_pixelDescriptor |= 256;
 			}
 			break;
@@ -798,7 +796,8 @@ bool State::SetFeatureDisabled(const std::string& featureName, bool isDisabled)
 	// Log the change
 	if (wasPreviouslyDisabled != isDisabled) {
 		logger::info("Set feature '{}' to: {}", featureName, isDisabled ? "Disabled" : "Enabled");
-	} else {
+	}
+	else {
 		logger::info("Feature '{}' state remains: {}", featureName, isDisabled ? "Disabled" : "Enabled");
 	}
 
@@ -846,7 +845,7 @@ void State::SetupReShade()
 			if (runtime->get_annotation_string_from_uniform_variable(variable, "source", source) &&
 				std::strcmp(source, "bufready_depth") == 0)
 				runtime->set_uniform_value_bool(variable, true);
-		});
+			});
 	}
 }
 
@@ -860,6 +859,19 @@ void State::RenderReShade()
 void State::PresentReShade()
 {
 	reshade::update_and_present_effect_runtime(reShadeRuntime);
+}
+
+// Check if in a deferred pass, end it if necessary based on whether effect shaders being used which are incompatible with deferred rendering
+// If a mod somehow uses non-standard deferred effect shaders this will break deferred rendering by exiting too early
+void State::TestEndDeferred(RE::BSRenderPass* a_pass)
+{
+	if (globals::state->deferredPass) {
+		if (a_pass->shader->shaderType.all(RE::BSShader::Type::Effect)) {
+			if (globals::deferred->inDecals){
+				globals::deferred->EndDeferred();
+			}
+		}
+	}
 }
 
 // --- Utility Method Implementations ---

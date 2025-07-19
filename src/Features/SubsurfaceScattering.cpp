@@ -354,10 +354,9 @@ void SubsurfaceScattering::PostPostLoad()
 
 void SubsurfaceScattering::BSLightingShader_SetupSkin(RE::BSRenderPass* a_pass)
 {
-	auto deferred = globals::deferred;
 	auto state = globals::state;
 
-	if (deferred->deferredPass) {
+	if (state->deferredPass){
 		if (a_pass->shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kFace, RE::BSShaderProperty::EShaderPropertyFlag::kFaceGenRGBTint)) {
 			bool isBeastRace = true;
 

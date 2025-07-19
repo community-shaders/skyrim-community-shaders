@@ -867,12 +867,7 @@ namespace Hooks
 		if (globals::features::lightLimitFix->loaded && !globals::features::lightLimitFix->CheckParticleLights(a_pass, a_technique))
 			return;
 
-		// Separate deferred and forward blended decals
-		if (globals::state->inWorld && a_pass->accumulationHint == 3 && !a_pass->shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kZBufferWrite)) {
-			RenderPass call{ a_pass, a_technique, a_alphaTest, a_renderFlags };
-			globals::state->blendedDecalRenderPasses.push_back(call);
-			return;
-		}
+		globals::state->TestEndDeferred(a_pass);
 
 		func(a_pass, a_technique, a_alphaTest, a_renderFlags);
 	}
@@ -887,12 +882,7 @@ namespace Hooks
 			if (globals::features::interiorSunShadows->loaded)
 				globals::features::interiorSunShadows->UpdateRasterStateCullMode(a_pass, a_technique);
 
-			// Separate deferred and forward blended decals
-			if (globals::state->inWorld && a_pass->accumulationHint == 3 && !a_pass->shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kZBufferWrite)) {
-				RenderPass call{ a_pass, a_technique, a_alphaTest, a_renderFlags };
-				globals::state->blendedDecalRenderPasses.push_back(call);
-				return;
-			}
+			globals::state->TestEndDeferred(a_pass);
 
 			func(a_pass, a_technique, a_alphaTest, a_renderFlags);
 		}
@@ -906,12 +896,7 @@ namespace Hooks
 			if (globals::features::lightLimitFix->loaded && !globals::features::lightLimitFix->CheckParticleLights(a_pass, a_technique))
 				return;
 
-			// Separate deferred and forward blended decals
-			if (globals::state->inWorld && a_pass->accumulationHint == 3 && !a_pass->shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kZBufferWrite)) {
-				RenderPass call{ a_pass, a_technique, a_alphaTest, a_renderFlags };
-				globals::state->blendedDecalRenderPasses.push_back(call);
-				return;
-			}
+			globals::state->TestEndDeferred(a_pass);
 
 			func(a_pass, a_technique, a_alphaTest, a_renderFlags);
 		}
