@@ -29,17 +29,6 @@
 #include "Features/VR.h"
 #include "Features/WeatherPicker.h"
 
-#include "RE/B/BSOpenVR.h"
-#include <chrono>
-
-namespace
-{
-	static double lastLeftStickClick = 0.0;
-	static double lastRightStickClick = 0.0;
-	static double lastLeftAorXPress = 0.0;
-	static constexpr double stickClickComboWindow = 0.3;
-}
-
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::ThemeSettings::PaletteColors,
 	Background,
