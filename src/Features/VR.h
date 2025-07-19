@@ -60,7 +60,6 @@ struct VR : Feature
 		float VRMenuControllerOffsetZ = 0.2f;  // Forward/Back offset
 
 		// Input settings
-		bool VRMenuEnableControllerInput = true;           // Enable controller input interaction
 		bool VRMenuControllerDiagnosticsTestMode = false;  // If true, disables controller input for menu except right thumbstick and triggers
 
 		// VR menu mouse control settings

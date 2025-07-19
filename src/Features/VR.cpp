@@ -5,7 +5,6 @@
 #include "DX12SwapChain.h"
 #include "State.h"
 #include "Utils/UI.h"
-#include <chrono>
 #include <cmath>
 #include <d3d11.h>
 #include <imgui_impl_dx11.h>
@@ -33,10 +32,25 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VRMenuControllerOffsetX,
 	VRMenuControllerOffsetY,
 	VRMenuControllerOffsetZ,
-	VRMenuEnableControllerInput,
-	VRMenuControllerDiagnosticsTestMode,
 	mouseDeadzone,
 	mouseSpeed)
+
+void CreateOverlayTextureAndRTV(ID3D11Device* device, int width, int height, ID3D11Texture2D** outTex, ID3D11RenderTargetView** outRTV)
+{
+	D3D11_TEXTURE2D_DESC desc = {};
+	desc.Width = width;
+	desc.Height = height;
+	desc.MipLevels = 1;
+	desc.ArraySize = 1;
+	desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	desc.SampleDesc.Count = 1;
+	desc.Usage = D3D11_USAGE_DEFAULT;
+	desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+	device->CreateTexture2D(&desc, nullptr, outTex);
+	if (*outTex) {
+		device->CreateRenderTargetView(*outTex, nullptr, outRTV);
+	}
+}
 
 // Add a high-resolution timer helper using QueryPerformanceCounter
 inline double GetNowSecs()
@@ -250,13 +264,6 @@ void VR::DrawSettings()
 	if (ImGui::CollapsingHeader("Input Options", ImGuiTreeNodeFlags_DefaultOpen)) {
 		bool inputOptionsExpanded = true;
 		if (inputOptionsExpanded) {
-			if (ImGui::Checkbox("Enable Controller Input", &settings.VRMenuEnableControllerInput)) {
-				UpdateVROverlayPosition();
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Enable interaction with the menu using controller input (touchpad, buttons, etc.).");
-			}
-
 			if (ImGui::SliderFloat("Mouse Deadzone", &settings.mouseDeadzone, 0.0f, 1.0f, "%.2f")) {
 				// No extra action needed, value is used in menu input
 			}
@@ -716,15 +723,9 @@ void VR::UpdateVROverlayPosition()
 			overlay->SetOverlayTransformTrackedDeviceRelative(menuControllerOverlayHandle, controllerIndex, &transform);
 
 			// Update controller overlay flags for input interaction
-			if (settings.VRMenuEnableControllerInput) {
-				overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
-				overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
-				overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
-			} else {
-				overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, false);
-				overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, false);
-				overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, false);
-			}
+			overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
+			overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
+			overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
 
 			// Ensure controller overlay is visible in the world
 			overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_VisibleInDashboard, true);
@@ -732,15 +733,9 @@ void VR::UpdateVROverlayPosition()
 	}
 
 	// Update overlay flags for input interaction
-	if (settings.VRMenuEnableControllerInput) {
-		overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
-		overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
-		overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
-	} else {
-		overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, false);
-		overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, false);
-		overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, false);
-	}
+	overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
+	overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
+	overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
 
 	// Ensure overlay is visible in the world
 	overlay->SetOverlayFlag(menuOverlayHandle, vr::VROverlayFlags_VisibleInDashboard, true);
@@ -817,15 +812,9 @@ void VR::UpdateVROverlayControllerPosition()
 	overlay->SetOverlayTransformTrackedDeviceRelative(menuControllerOverlayHandle, controllerIndex, &transform);
 
 	// Update controller overlay flags for input interaction
-	if (settings.VRMenuEnableControllerInput) {
-		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
-		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
-		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
-	} else {
-		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, false);
-		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, false);
-		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, false);
-	}
+	overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
+	overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
+	overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
 
 	// Ensure controller overlay is visible in the world
 	overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_VisibleInDashboard, true);
@@ -839,19 +828,7 @@ void VR::EnsureOverlayInitialized()
 	vr::IVROverlay* overlay = vr::VROverlay();
 	if (!overlay)
 		return;
-	D3D11_TEXTURE2D_DESC vrDesc = {};
-	vrDesc.Width = kOverlayWidth;
-	vrDesc.Height = kOverlayHeight;
-	vrDesc.MipLevels = 1;
-	vrDesc.ArraySize = 1;
-	vrDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	vrDesc.SampleDesc.Count = 1;
-	vrDesc.Usage = D3D11_USAGE_DEFAULT;
-	vrDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-	globals::d3d::device->CreateTexture2D(&vrDesc, nullptr, &menuTexture);
-	if (menuTexture) {
-		globals::d3d::device->CreateRenderTargetView(menuTexture, nullptr, &menuRTV);
-	}
+	CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, &menuTexture, &menuRTV);
 	std::string key = "communityshaders.menu";
 	std::string name = "Community Shaders Menu";
 	vr::EVROverlayError err = overlay->CreateOverlay(key.c_str(), name.c_str(), &menuOverlayHandle);
@@ -867,10 +844,7 @@ void VR::EnsureOverlayInitialized()
 	std::string controllerName = "Community Shaders Menu (Controller)";
 	err = overlay->CreateOverlay(controllerKey.c_str(), controllerName.c_str(), &menuControllerOverlayHandle);
 	if (err == vr::VROverlayError_None) {
-		globals::d3d::device->CreateTexture2D(&vrDesc, nullptr, &menuControllerTexture);
-		if (menuControllerTexture) {
-			globals::d3d::device->CreateRenderTargetView(menuControllerTexture, nullptr, &menuControllerRTV);
-		}
+		CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, &menuControllerTexture, &menuControllerRTV);
 		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
 		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
 		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
@@ -926,23 +900,8 @@ void VR::RecreateOverlayTexturesIfNeeded()
 		menuControllerTexture->Release();
 		menuControllerTexture = nullptr;
 	}
-	D3D11_TEXTURE2D_DESC vrDesc = {};
-	vrDesc.Width = kOverlayWidth;
-	vrDesc.Height = kOverlayHeight;
-	vrDesc.MipLevels = 1;
-	vrDesc.ArraySize = 1;
-	vrDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	vrDesc.SampleDesc.Count = 1;
-	vrDesc.Usage = D3D11_USAGE_DEFAULT;
-	vrDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-	globals::d3d::device->CreateTexture2D(&vrDesc, nullptr, &menuTexture);
-	if (menuTexture) {
-		globals::d3d::device->CreateRenderTargetView(menuTexture, nullptr, &menuRTV);
-	}
-	globals::d3d::device->CreateTexture2D(&vrDesc, nullptr, &menuControllerTexture);
-	if (menuControllerTexture) {
-		globals::d3d::device->CreateRenderTargetView(menuControllerTexture, nullptr, &menuControllerRTV);
-	}
+	CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, &menuTexture, &menuRTV);
+	CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, &menuControllerTexture, &menuControllerRTV);
 }
 
 void VR::SubmitOverlayFrame()
