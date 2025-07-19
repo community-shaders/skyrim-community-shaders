@@ -85,6 +85,10 @@ vr::HmdMatrix34_t VR::ComputeOverlayTransformFromHMD()
 
 void VR::DrawSettings()
 {
+	auto menu = globals::menu;
+	if (!menu)
+		return;
+
 	if (ImGui::CollapsingHeader("Controller Input Instructions", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::TextWrapped("Controller Input Options:");
 		ImGui::BulletText("Trigger (Both Controllers): Left mouse button");
@@ -281,7 +285,7 @@ void VR::DrawSettings()
 		double nowSecs = GetNowSecs();
 
 		// Get highlight color from theme
-		ImVec4 highlightColor = Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor;
+		ImVec4 highlightColor = menu->GetTheme().StatusPalette.InfoColor;
 		ImU32 highlightColorU32 = ImGui::ColorConvertFloat4ToU32(highlightColor);
 
 		if (ImGui::BeginTable("vr_input_state_table", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
@@ -350,118 +354,116 @@ void VR::DrawSettings()
 
 			ImGui::EndTable();
 		}
-		auto menu = Menu::GetSingleton();
 
-		if (menu) {
-			ImGui::SeparatorText("VR Thumbstick State");
+		ImGui::SeparatorText("VR Thumbstick State");
 
-			// Helper to draw a thumbstick quadrant visualization (returns ImVec2 for label alignment)
-			auto DrawThumbstickPad = [&](float x, float y, ImU32 highlightCol) -> ImVec2 {
-				ImVec2 padSize = ImVec2(80, 80);
-				ImVec2 cursor = ImGui::GetCursorScreenPos();
-				ImDrawList* drawList = ImGui::GetWindowDrawList();
-				ImVec2 center = ImVec2(cursor.x + padSize.x / 2, cursor.y + padSize.y / 2);
-				float radius = padSize.x / 2 - 4;
-				ImU32 borderCol = ImGui::GetColorU32(ImGuiCol_Border);
-				ImU32 axisCol = ImGui::GetColorU32(ImGuiCol_TextDisabled);
-				ImU32 dotCol = ImGui::GetColorU32(ImGuiCol_Text);
+		// Helper to draw a thumbstick quadrant visualization (returns ImVec2 for label alignment)
+		auto DrawThumbstickPad = [&](float x, float y, ImU32 highlightCol) -> ImVec2 {
+			ImVec2 padSize = ImVec2(80, 80);
+			ImVec2 cursor = ImGui::GetCursorScreenPos();
+			ImDrawList* drawList = ImGui::GetWindowDrawList();
+			ImVec2 center = ImVec2(cursor.x + padSize.x / 2, cursor.y + padSize.y / 2);
+			float radius = padSize.x / 2 - 4;
+			ImU32 borderCol = ImGui::GetColorU32(ImGuiCol_Border);
+			ImU32 axisCol = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+			ImU32 dotCol = ImGui::GetColorU32(ImGuiCol_Text);
 
-				// Draw background
-				drawList->AddRectFilled(cursor, ImVec2(cursor.x + padSize.x, cursor.y + padSize.y), ImGui::GetColorU32(ImGuiCol_FrameBg));
-				// Draw border
-				drawList->AddRect(cursor, ImVec2(cursor.x + padSize.x, cursor.y + padSize.y), borderCol, 4.0f, 0, 2.0f);
-				// Draw axes
-				drawList->AddLine(ImVec2(center.x, cursor.y + 4), ImVec2(center.x, cursor.y + padSize.y - 4), axisCol, 1.0f);
-				drawList->AddLine(ImVec2(cursor.x + 4, center.y), ImVec2(cursor.x + padSize.x - 4, center.y), axisCol, 1.0f);
+			// Draw background
+			drawList->AddRectFilled(cursor, ImVec2(cursor.x + padSize.x, cursor.y + padSize.y), ImGui::GetColorU32(ImGuiCol_FrameBg));
+			// Draw border
+			drawList->AddRect(cursor, ImVec2(cursor.x + padSize.x, cursor.y + padSize.y), borderCol, 4.0f, 0, 2.0f);
+			// Draw axes
+			drawList->AddLine(ImVec2(center.x, cursor.y + 4), ImVec2(center.x, cursor.y + padSize.y - 4), axisCol, 1.0f);
+			drawList->AddLine(ImVec2(cursor.x + 4, center.y), ImVec2(cursor.x + padSize.x - 4, center.y), axisCol, 1.0f);
 
-				// Determine quadrant
-				int quad = 0;
-				if (x > 0 && y > 0)
-					quad = 1;  // top-right
-				else if (x < 0 && y > 0)
-					quad = 2;  // top-left
-				else if (x < 0 && y < 0)
-					quad = 3;  // bottom-left
-				else if (x > 0 && y < 0)
-					quad = 4;  // bottom-right
+			// Determine quadrant
+			int quad = 0;
+			if (x > 0 && y > 0)
+				quad = 1;  // top-right
+			else if (x < 0 && y > 0)
+				quad = 2;  // top-left
+			else if (x < 0 && y < 0)
+				quad = 3;  // bottom-left
+			else if (x > 0 && y < 0)
+				quad = 4;  // bottom-right
 
-				// Highlight quadrant
-				if (quad != 0) {
-					ImVec2 q0 = center;
-					ImVec2 q1 = center;
-					ImVec2 q2 = center;
-					ImVec2 q3 = center;
-					if (quad == 1) {  // top-right
-						q1.x += radius;
-						q1.y -= radius;
-						q2.x += radius;
-						q2.y += 0;
-						q3.x += 0;
-						q3.y -= radius;
-					} else if (quad == 2) {  // top-left
-						q1.x -= radius;
-						q1.y -= radius;
-						q2.x -= radius;
-						q2.y += 0;
-						q3.x += 0;
-						q3.y -= radius;
-					} else if (quad == 3) {  // bottom-left
-						q1.x -= radius;
-						q1.y += radius;
-						q2.x -= radius;
-						q2.y += 0;
-						q3.x += 0;
-						q3.y += radius;
-					} else if (quad == 4) {  // bottom-right
-						q1.x += radius;
-						q1.y += radius;
-						q2.x += radius;
-						q2.y += 0;
-						q3.x += 0;
-						q3.y += radius;
-					}
-					ImVec2 poly[4] = { center, q1, q2, q3 };
-					drawList->AddConvexPolyFilled(poly, 4, highlightCol);
+			// Highlight quadrant
+			if (quad != 0) {
+				ImVec2 q0 = center;
+				ImVec2 q1 = center;
+				ImVec2 q2 = center;
+				ImVec2 q3 = center;
+				if (quad == 1) {  // top-right
+					q1.x += radius;
+					q1.y -= radius;
+					q2.x += radius;
+					q2.y += 0;
+					q3.x += 0;
+					q3.y -= radius;
+				} else if (quad == 2) {  // top-left
+					q1.x -= radius;
+					q1.y -= radius;
+					q2.x -= radius;
+					q2.y += 0;
+					q3.x += 0;
+					q3.y -= radius;
+				} else if (quad == 3) {  // bottom-left
+					q1.x -= radius;
+					q1.y += radius;
+					q2.x -= radius;
+					q2.y += 0;
+					q3.x += 0;
+					q3.y += radius;
+				} else if (quad == 4) {  // bottom-right
+					q1.x += radius;
+					q1.y += radius;
+					q2.x += radius;
+					q2.y += 0;
+					q3.x += 0;
+					q3.y += radius;
 				}
-
-				// Draw stick position dot
-				ImVec2 dot = ImVec2(center.x + x * radius, center.y - y * radius);
-				drawList->AddCircleFilled(dot, 5.0f, dotCol);
-
-				// Return size for label alignment
-				return padSize;
-			};
-
-			ImU32 highlightCol = ImGui::ColorConvertFloat4ToU32(menu->GetTheme().StatusPalette.InfoColor);
-
-			if (ImGui::BeginTable("##VRThumbstickTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
-				ImGui::TableSetupColumn("Primary Controller", ImGuiTableColumnFlags_WidthFixed, 200.0f);
-				ImGui::TableSetupColumn("Secondary Controller", ImGuiTableColumnFlags_WidthFixed, 200.0f);
-				ImGui::TableNextRow();
-
-				// Primary controller cell
-				ImGui::TableSetColumnIndex(0);
-				ImGui::BeginGroup();
-				ImVec2 padSizeL = DrawThumbstickPad(primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, highlightCol);
-				ImGui::Dummy(padSizeL);
-				ImGui::SetNextItemWidth(160.0f);
-				ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
-				ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, RE::GetQuadrantName(primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y));
-				ImGui::EndGroup();
-
-				// Secondary controller cell
-				ImGui::TableSetColumnIndex(1);
-				ImGui::BeginGroup();
-				ImVec2 padSizeR = DrawThumbstickPad(secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, highlightCol);
-				ImGui::Dummy(padSizeR);
-				ImGui::SetNextItemWidth(160.0f);
-				ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
-				ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, RE::GetQuadrantName(secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y));
-				ImGui::EndGroup();
-
-				ImGui::EndTable();
+				ImVec2 poly[4] = { center, q1, q2, q3 };
+				drawList->AddConvexPolyFilled(poly, 4, highlightCol);
 			}
+
+			// Draw stick position dot
+			ImVec2 dot = ImVec2(center.x + x * radius, center.y - y * radius);
+			drawList->AddCircleFilled(dot, 5.0f, dotCol);
+
+			// Return size for label alignment
+			return padSize;
+		};
+
+		ImU32 highlightCol = ImGui::ColorConvertFloat4ToU32(menu->GetTheme().StatusPalette.InfoColor);
+
+		if (ImGui::BeginTable("##VRThumbstickTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+			ImGui::TableSetupColumn("Primary Controller", ImGuiTableColumnFlags_WidthFixed, 200.0f);
+			ImGui::TableSetupColumn("Secondary Controller", ImGuiTableColumnFlags_WidthFixed, 200.0f);
+			ImGui::TableNextRow();
+
+			// Primary controller cell
+			ImGui::TableSetColumnIndex(0);
+			ImGui::BeginGroup();
+			ImVec2 padSizeL = DrawThumbstickPad(primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, highlightCol);
+			ImGui::Dummy(padSizeL);
+			ImGui::SetNextItemWidth(160.0f);
+			ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
+			ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, RE::GetQuadrantName(primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y));
+			ImGui::EndGroup();
+
+			// Secondary controller cell
+			ImGui::TableSetColumnIndex(1);
+			ImGui::BeginGroup();
+			ImVec2 padSizeR = DrawThumbstickPad(secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, highlightCol);
+			ImGui::Dummy(padSizeR);
+			ImGui::SetNextItemWidth(160.0f);
+			ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
+			ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, RE::GetQuadrantName(secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y));
+			ImGui::EndGroup();
+
+			ImGui::EndTable();
 		}
+
 		ImGui::SeparatorText("Recent VR Controller Events");
 		ImGui::TextDisabled("Note: For thumbstick events, KeyCode/Value columns show X/Y floats.");
 		if (ImGui::BeginTable("eventlog", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
