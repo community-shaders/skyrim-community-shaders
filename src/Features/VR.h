@@ -2,6 +2,7 @@
 #include "Menu.h"
 #include <atomic>
 #include <d3d11.h>
+#include <magic_enum.hpp>
 #include <openvr.h>
 #include <vector>
 
@@ -39,10 +40,15 @@ struct VR : Feature
 		float VRMenuScale = 1.0f;         // 0.5x to 2.0x
 		int VRMenuPositioningMethod = 0;  // 0 = HMD relative, 1 = Fixed world position
 
-		// Attach point selection (multi-select)
-		bool VRMenuAttachToHMD = true;         // Show on HMD
-		bool VRMenuAttachToController = true;  // Show on controller
-		int VRMenuControllerHand = 0;          // 0 = left, 1 = right
+		enum class OverlayAttachMode
+		{
+			HMDOnly = 0,
+			ControllerOnly = 1,
+			Both = 2
+		};
+		OverlayAttachMode attachMode = OverlayAttachMode::Both;
+		// Use OpenVR's ETrackedControllerRole for hand selection
+		vr::ETrackedControllerRole VRMenuControllerHand = vr::ETrackedControllerRole::TrackedControllerRole_LeftHand;
 
 		// HMD overlay offset settings (separate from controller)
 		float VRMenuOffsetX = 0.0f;  // Left/Right offset

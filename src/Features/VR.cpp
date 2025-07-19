@@ -9,8 +9,11 @@
 #include <cmath>
 #include <d3d11.h>
 #include <imgui_impl_dx11.h>
+#include <magic_enum.hpp>
 #include <openvr.h>
 #include <windows.h>
+
+using AttachMode = VR::Settings::OverlayAttachMode;
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VR::Settings,
@@ -20,8 +23,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VRMenuSizePreset,
 	VRMenuScale,
 	VRMenuPositioningMethod,
-	VRMenuAttachToHMD,
-	VRMenuAttachToController,
+	attachMode,
 	VRMenuControllerHand,
 	VRMenuOffsetX,
 	VRMenuOffsetY,
@@ -173,22 +175,23 @@ void VR::DrawSettings()
 		bool attachPointsExpanded = true;
 		Util::DrawSectionHeader("Attach Points", false, true, &attachPointsExpanded);
 		if (attachPointsExpanded) {
-			if (ImGui::Checkbox("Show on HMD", &settings.VRMenuAttachToHMD)) {
+			constexpr auto attachEnums = magic_enum::enum_values<AttachMode>();
+			constexpr auto attachNames = magic_enum::enum_names<AttachMode>();
+			std::vector<const char*> attachLabels;
+			for (size_t i = 0; i < attachEnums.size(); ++i) {
+				attachLabels.push_back(attachNames[i].data());
+			}
+			int attachModeInt = static_cast<int>(settings.attachMode);
+			if (ImGui::Combo("Overlay Attach Mode", &attachModeInt, attachLabels.data(), static_cast<int>(attachLabels.size()))) {
+				settings.attachMode = static_cast<AttachMode>(attachModeInt);
 				UpdateVROverlayPosition();
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Display the menu overlay in front of your head.");
 			}
-
-			if (ImGui::Checkbox("Show on Controller", &settings.VRMenuAttachToController)) {
-				UpdateVROverlayPosition();
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Display the menu overlay attached to your controller.");
-			}
 		}
 
-		if (settings.VRMenuAttachToHMD) {
+		if (AttachMode::HMDOnly == settings.attachMode || AttachMode::Both == settings.attachMode) {
 			bool hmdOffsetExpanded = true;
 			Util::DrawSectionHeader("HMD Overlay Offset", false, true, &hmdOffsetExpanded);
 			if (hmdOffsetExpanded) {
@@ -213,12 +216,25 @@ void VR::DrawSettings()
 			}
 		}
 
-		if (settings.VRMenuAttachToController) {
+		if (AttachMode::ControllerOnly == settings.attachMode || AttachMode::Both == settings.attachMode) {
 			bool controllerOffsetExpanded = true;
 			Util::DrawSectionHeader("Controller Offset", false, true, &controllerOffsetExpanded);
 			if (controllerOffsetExpanded) {
-				const char* hands[] = { "Primary Controller", "Secondary Controller" };
-				if (ImGui::Combo("Controller Hand", &settings.VRMenuControllerHand, hands, 2)) {
+				// Use magic_enum to get names and filter out 'Invalid'
+				constexpr auto handEnums = magic_enum::enum_values<vr::ETrackedControllerRole>();
+				constexpr auto handNames = magic_enum::enum_names<vr::ETrackedControllerRole>();
+				std::vector<const char*> handLabels;
+				std::vector<int> handIndices;
+				for (size_t i = 0; i < handEnums.size(); ++i) {
+					if (handEnums[i] == vr::ETrackedControllerRole::TrackedControllerRole_LeftHand || handEnums[i] == vr::ETrackedControllerRole::TrackedControllerRole_RightHand) {
+						handLabels.push_back(handNames[i].data());
+						handIndices.push_back(static_cast<int>(handEnums[i]));
+					}
+				}
+				int handInt = static_cast<int>(settings.VRMenuControllerHand);
+				int currentIndex = (handInt == vr::ETrackedControllerRole::TrackedControllerRole_RightHand) ? 1 : 0;
+				if (ImGui::Combo("Controller Hand", &currentIndex, handLabels.data(), static_cast<int>(handLabels.size()))) {
+					settings.VRMenuControllerHand = static_cast<vr::ETrackedControllerRole>(handIndices[currentIndex]);
 					UpdateVROverlayPosition();
 				}
 				if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -578,8 +594,8 @@ void VR::UpdateVROverlayPosition()
 	// Remove pose debug logging
 
 	// Determine positioning strategy based on settings
-	bool showOnController = settings.VRMenuAttachToController;
-	bool showOnHMD = settings.VRMenuAttachToHMD;
+	bool showOnController = (settings.attachMode == AttachMode::ControllerOnly || settings.attachMode == AttachMode::Both);
+	bool showOnHMD = (settings.attachMode == AttachMode::HMDOnly || settings.attachMode == AttachMode::Both);
 
 	// Texture size based on preset
 	int texWidth = 1920, texHeight = 1080;
@@ -703,8 +719,7 @@ void VR::UpdateVROverlayPosition()
 		for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; i++) {
 			if (system->GetTrackedDeviceClass(i) == vr::TrackedDeviceClass_Controller) {
 				vr::ETrackedControllerRole role = system->GetControllerRoleForTrackedDeviceIndex(i);
-				if ((settings.VRMenuControllerHand == 0 && role == vr::TrackedControllerRole_LeftHand) ||
-					(settings.VRMenuControllerHand == 1 && role == vr::TrackedControllerRole_RightHand)) {
+				if (role == settings.VRMenuControllerHand) {
 					controllerIndex = i;
 					break;
 				}
@@ -802,8 +817,7 @@ void VR::UpdateVROverlayControllerPosition()
 	for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; i++) {
 		if (system->GetTrackedDeviceClass(i) == vr::TrackedDeviceClass_Controller) {
 			vr::ETrackedControllerRole role = system->GetControllerRoleForTrackedDeviceIndex(i);
-			if ((settings.VRMenuControllerHand == 0 && role == vr::TrackedControllerRole_LeftHand) ||
-				(settings.VRMenuControllerHand == 1 && role == vr::TrackedControllerRole_RightHand)) {
+			if (role == settings.VRMenuControllerHand) {
 				controllerIndex = i;
 				break;
 			}
@@ -1008,12 +1022,14 @@ void VR::SubmitOverlayFrame()
 		// Update overlay position and submit to SteamVR
 		UpdateVROverlayPosition();
 		vr::Texture_t tex = { menuTexture, vr::TextureType_DirectX, vr::ColorSpace_Auto };
-		overlay->SetOverlayTexture(menuOverlayHandle, &tex);
-		overlay->ShowOverlay(menuOverlayHandle);
+		if (settings.attachMode == AttachMode::HMDOnly || settings.attachMode == AttachMode::Both) {
+			overlay->SetOverlayTexture(menuOverlayHandle, &tex);
+			overlay->ShowOverlay(menuOverlayHandle);
+		} else if (menuOverlayHandle != vr::k_ulOverlayHandleInvalid) {
+			overlay->HideOverlay(menuOverlayHandle);
+		}
 		// Controller overlay
-		if (settings.VRMenuAttachToController &&
-			menuControllerOverlayHandle != vr::k_ulOverlayHandleInvalid &&
-			menuControllerTexture && menuControllerRTV) {
+		if (settings.attachMode == AttachMode::ControllerOnly || settings.attachMode == AttachMode::Both) {
 			// Copy the same ImGui output to controller overlay texture
 			globals::d3d::context->OMSetRenderTargets(1, &menuControllerRTV, nullptr);
 			globals::d3d::context->ClearRenderTargetView(menuControllerRTV, clearColor);
