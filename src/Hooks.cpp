@@ -1132,16 +1132,6 @@ namespace Hooks
 			stl::write_thunk_call<Main_Update_Swap>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x5D2, 0xA97));
 		}
 
-		// Patch eye position in BSLightingShader::SetupGeometry to always update due to additional effects which may require it
-		// The variable updateEyePosition is set to false by default. By patching to be true it will always update the eye position
-		// SE and AE use a 7-byte instruction whereas VR uses a 8-byte instruction
-		// We offset from the base address of the containing function to the instruction itself and then to the value the instruction sets
-		{
-			logger::info("Patching BSLightingShader::SetupGeometry::updateEyePosition");
-			uintptr_t setupGeometryUpdateEyePosition = REL::RelocationID(100565, 107300).address() + REL::Relocate(0x50, 0x75, 0x78);
-			REL::safe_write(setupGeometryUpdateEyePosition + REL::Relocate(6, 6, 7), bool{ true });
-		}
-
 		// Patch render space in BSLightingShader::SetupGeometry to always use world space
 		// The variable updateEyePosition is set to 1 when not skinned. By patching to be 0 it will always use world space
 		// We offset from the base address of the containing function to the start of the patch
