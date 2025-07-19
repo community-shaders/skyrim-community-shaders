@@ -38,7 +38,6 @@ namespace
 	static double lastRightStickClick = 0.0;
 	static double lastLeftAorXPress = 0.0;
 	static constexpr double stickClickComboWindow = 0.3;
-	int g_lastVRMenuSizePreset = -1;
 }
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(

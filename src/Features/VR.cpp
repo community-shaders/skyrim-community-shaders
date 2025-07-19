@@ -15,12 +15,14 @@
 
 using AttachMode = VR::Settings::OverlayAttachMode;
 
+constexpr int kOverlayWidth = 1920;
+constexpr int kOverlayHeight = 1080;
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VR::Settings,
 	EnableDepthBufferCulling,
 	MinOccludeeBoxExtent,
 	VRMenuDistance,
-	VRMenuSizePreset,
 	VRMenuScale,
 	VRMenuPositioningMethod,
 	attachMode,
@@ -54,15 +56,7 @@ vr::HmdMatrix34_t VR::ComputeOverlayTransformFromHMD()
 		system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &hmdPose, 1);
 		if (hmdPose.bPoseIsValid) {
 			float distance = settings.VRMenuDistance;
-			int texWidth = 1920, texHeight = 1080;
-			if (settings.VRMenuSizePreset == 0) {
-				texWidth = 1280;
-				texHeight = 720;
-			} else if (settings.VRMenuSizePreset == 2) {
-				texWidth = 2560;
-				texHeight = 1440;
-			}
-			float aspect = static_cast<float>(texHeight) / texWidth;
+			float aspect = static_cast<float>(kOverlayHeight) / kOverlayWidth;
 			float baseWidth = 1.0f;
 			float overlayWidth = baseWidth * settings.VRMenuScale;
 			float overlayHeight = overlayWidth * aspect;
@@ -148,13 +142,6 @@ void VR::DrawSettings()
 				if (ImGui::Button("Reset Fixed Position to HMD")) {
 					SetFixedOverlayToCurrentHMD();
 				}
-			}
-
-			if (ImGui::Combo("Menu Size", &settings.VRMenuSizePreset, "Small (1280x720)\0Medium (1920x1080)\0Large (2560x1440)\0")) {
-				UpdateVROverlayPosition();
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Controls the sharpness and clarity of the VR menu overlay.");
 			}
 
 			if (ImGui::SliderFloat("Menu Scale", &settings.VRMenuScale, 0.5f, 2.0f, "%.2fx")) {
@@ -591,22 +578,12 @@ void VR::UpdateVROverlayPosition()
 		return;
 	}
 
-	// Remove pose debug logging
-
 	// Determine positioning strategy based on settings
 	bool showOnController = (settings.attachMode == AttachMode::ControllerOnly || settings.attachMode == AttachMode::Both);
 	bool showOnHMD = (settings.attachMode == AttachMode::HMDOnly || settings.attachMode == AttachMode::Both);
 
-	// Texture size based on preset
-	int texWidth = 1920, texHeight = 1080;
-	if (settings.VRMenuSizePreset == 0) {
-		texWidth = 1280;
-		texHeight = 720;
-	} else if (settings.VRMenuSizePreset == 2) {
-		texWidth = 2560;
-		texHeight = 1440;
-	}
-	float aspect = static_cast<float>(texHeight) / texWidth;
+	// Texture size
+	float aspect = static_cast<float>(kOverlayHeight) / kOverlayWidth;
 	float baseWidth = 1.0f;
 	float overlayWidth = baseWidth * settings.VRMenuScale;
 	float overlayHeight = overlayWidth * aspect;
@@ -793,15 +770,7 @@ void VR::UpdateVROverlayControllerPosition()
 	}
 
 	// Texture size based on preset
-	int texWidth = 1920, texHeight = 1080;
-	if (settings.VRMenuSizePreset == 0) {
-		texWidth = 1280;
-		texHeight = 720;
-	} else if (settings.VRMenuSizePreset == 2) {
-		texWidth = 2560;
-		texHeight = 1440;
-	}
-	float aspect = static_cast<float>(texHeight) / texWidth;
+	float aspect = static_cast<float>(kOverlayHeight) / kOverlayWidth;
 	float baseWidth = 1.0f;
 	float overlayWidth = baseWidth * settings.VRMenuScale;
 	float overlayHeight = overlayWidth * aspect;
@@ -869,17 +838,8 @@ void VR::EnsureOverlayInitialized()
 	if (!overlay)
 		return;
 	D3D11_TEXTURE2D_DESC vrDesc = {};
-	int preset = settings.VRMenuSizePreset;
-	if (preset == 0) {
-		vrDesc.Width = 1280;
-		vrDesc.Height = 720;
-	} else if (preset == 1) {
-		vrDesc.Width = 1920;
-		vrDesc.Height = 1080;
-	} else {
-		vrDesc.Width = 2560;
-		vrDesc.Height = 1440;
-	}
+	vrDesc.Width = kOverlayWidth;
+	vrDesc.Height = kOverlayHeight;
 	vrDesc.MipLevels = 1;
 	vrDesc.ArraySize = 1;
 	vrDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -912,7 +872,7 @@ void VR::EnsureOverlayInitialized()
 		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRScrollEvents, true);
 		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
 		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
-		overlay->SetOverlayWidthInMeters(menuControllerOverlayHandle, 0.5f);
+		overlay->SetOverlayWidthInMeters(menuControllerOverlayHandle, 1.0f);
 		overlay->SetOverlayFlag(menuControllerOverlayHandle, vr::VROverlayFlags_VisibleInDashboard, true);
 	}
 }
@@ -948,11 +908,6 @@ void VR::DestroyOverlay()
 
 void VR::RecreateOverlayTexturesIfNeeded()
 {
-	static int lastPreset = -1;
-	int preset = settings.VRMenuSizePreset;
-	if (preset == lastPreset)
-		return;
-	lastPreset = preset;
 	if (menuRTV) {
 		menuRTV->Release();
 		menuRTV = nullptr;
@@ -970,16 +925,8 @@ void VR::RecreateOverlayTexturesIfNeeded()
 		menuControllerTexture = nullptr;
 	}
 	D3D11_TEXTURE2D_DESC vrDesc = {};
-	if (preset == 0) {
-		vrDesc.Width = 1280;
-		vrDesc.Height = 720;
-	} else if (preset == 1) {
-		vrDesc.Width = 1920;
-		vrDesc.Height = 1080;
-	} else {
-		vrDesc.Width = 2560;
-		vrDesc.Height = 1440;
-	}
+	vrDesc.Width = kOverlayWidth;
+	vrDesc.Height = kOverlayHeight;
 	vrDesc.MipLevels = 1;
 	vrDesc.ArraySize = 1;
 	vrDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;

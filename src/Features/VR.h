@@ -36,7 +36,6 @@ struct VR : Feature
 
 		// VR Menu Overlay Settings
 		float VRMenuDistance = 1.5f;
-		int VRMenuSizePreset = 1;         // 0=Small, 1=Medium, 2=Large
 		float VRMenuScale = 1.0f;         // 0.5x to 2.0x
 		int VRMenuPositioningMethod = 0;  // 0 = HMD relative, 1 = Fixed world position
 
