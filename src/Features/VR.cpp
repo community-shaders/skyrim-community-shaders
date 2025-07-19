@@ -85,6 +85,27 @@ vr::HmdMatrix34_t VR::ComputeOverlayTransformFromHMD()
 
 void VR::DrawSettings()
 {
+	if (ImGui::CollapsingHeader("Controller Input Instructions", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::TextWrapped("Controller Input Options:");
+		ImGui::BulletText("Trigger (Both Controllers): Left mouse button");
+		ImGui::BulletText("Grip (Both Controllers): Right mouse button");
+		ImGui::BulletText("Touchpad Click (Both Controllers): Middle mouse button");
+		ImGui::BulletText("Stick Click (Both Controllers): Middle mouse button");
+		ImGui::BulletText("A/X (Both Controllers): Enter");
+		ImGui::BulletText("B/Y (Primary Controller): Tab");
+		ImGui::BulletText("B/Y (Secondary Controller): Shift+Tab");
+		ImGui::BulletText("Secondary Controller Thumbstick: Mouse movement");
+		ImGui::BulletText("Primary Controller Thumbstick: Scroll");
+		ImGui::Spacing();
+		ImGui::TextWrapped("Menu Overlay:");
+		ImGui::BulletText("Open: Hold both A/X and B/Y (Primary Controller) while in the main menu or tween menu");
+		ImGui::BulletText("Close: Hold the Grip button on both controllers at the same time");
+		ImGui::Spacing();
+		ImGui::TextWrapped("HMD Input Options:");
+		ImGui::BulletText("Mouse: Standard desktop mouse input");
+		ImGui::BulletText("Keyboard: Standard keyboard input");
+	}
+
 	if (ImGui::Checkbox("Enable Depth Buffer Culling", &settings.EnableDepthBufferCulling))
 		*gDepthBufferCulling = settings.EnableDepthBufferCulling;
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -247,29 +268,6 @@ void VR::DrawSettings()
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Mouse speed in pixels per frame per full thumbstick deflection.");
-			}
-
-			if (ImGui::TreeNodeEx("Input Instructions", ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::TextWrapped("Controller Input Options:");
-				ImGui::BulletText("Touchpad: Move cursor and click");
-				ImGui::BulletText("Trigger (Primary Controller): Left mouse button");
-				ImGui::BulletText("Grip (Primary Controller): Right mouse button");
-				ImGui::BulletText("Touchpad Click (Primary Controller): Middle mouse button");
-				ImGui::BulletText("Stick Click (Primary Controller): Middle mouse button");
-				ImGui::BulletText("A/X (Primary Controller): Enter");
-				ImGui::BulletText("B/Y (Primary Controller): Tab");
-				ImGui::BulletText("B/Y (Primary Controller) + Shift: Shift+Tab");
-				ImGui::BulletText("Menu button: Toggle menu visibility");
-				ImGui::BulletText("Thumbstick: Scroll (if supported)");
-				ImGui::Spacing();
-				ImGui::TextWrapped("Menu Overlay:");
-				ImGui::BulletText("Open: Hold both A/X and B/Y (Primary Controller) while in the main menu or tween menu");
-				ImGui::BulletText("Close: Hold the Grip button on both controllers at the same time");
-				ImGui::Spacing();
-				ImGui::TextWrapped("HMD Input Options:");
-				ImGui::BulletText("Mouse: Standard desktop mouse input");
-				ImGui::BulletText("Keyboard: Standard keyboard input");
-				ImGui::TreePop();
 			}
 		}
 	}
@@ -1117,42 +1115,44 @@ void VR::ProcessVRButtonEvent(const Menu::KeyEvent& event)
 	bool isPrimary = RE::BSOpenVRControllerDevice::IsSecondaryController(event.device);
 	bool isSecondary = RE::BSOpenVRControllerDevice::IsPrimaryController(event.device);
 	bool& testMode = settings.VRMenuControllerDiagnosticsTestMode;
-	constexpr size_t kNumTriggerMappings = 2;
-	constexpr size_t kNumMappings = 12;  // Update if mappings array changes
-	RE::ButtonMapping mappings[kNumMappings] = {
-		{ RE::BSOpenVRControllerDevice::Keys::kTrigger, ImGuiMouseButton_Left, false, ImGuiKey_None, false },
-		{ RE::BSOpenVRControllerDevice::Keys::kTrigger, ImGuiMouseButton_Left, false, ImGuiKey_None, false },
-		{ RE::BSOpenVRControllerDevice::Keys::kGrip, ImGuiMouseButton_Right, false, ImGuiKey_None, false },
-		{ RE::BSOpenVRControllerDevice::Keys::kGrip, ImGuiMouseButton_Right, false, ImGuiKey_None, false },
-		{ RE::BSOpenVRControllerDevice::Keys::kTouchpadClick, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
-		{ RE::BSOpenVRControllerDevice::Keys::kTouchpadClick, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
-		{ RE::BSOpenVRControllerDevice::Keys::kBY, -1, true, menu->VirtualKeyToImGuiKey(VK_TAB), false },
-		{ RE::BSOpenVRControllerDevice::Keys::kBY, -1, true, menu->VirtualKeyToImGuiKey(VK_TAB), true },
-		{ RE::BSOpenVRControllerDevice::Keys::kXA, -1, true, menu->VirtualKeyToImGuiKey(VK_RETURN), false },
-		{ RE::BSOpenVRControllerDevice::Keys::kXA, -1, true, menu->VirtualKeyToImGuiKey(VK_RETURN), false },
-		{ RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
-		{ RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
-	};
-	static bool prevStates[kNumMappings] = {};
-	size_t limit = testMode ? kNumTriggerMappings : kNumMappings;
-	for (size_t i = 0; i < limit; ++i) {
-		// Look up the button state for left/right controller
-		RE::ButtonState* state = nullptr;
-		if (isPrimary) {
-			state = &primaryControllerState.buttons[mappings[i].keyCode];
-		} else if (isSecondary) {
-			state = &secondaryControllerState.buttons[mappings[i].keyCode];
-		}
-		bool curr = state ? state->isPressed : false;
-		if (curr != prevStates[i]) {
-			if (mappings[i].isKeyEvent) {
-				if (mappings[i].isShift)
-					io.AddKeyEvent(ImGuiMod_Shift, curr);
-				io.AddKeyEvent(static_cast<ImGuiKey>(mappings[i].key), curr);
-			} else {
-				io.AddMouseButtonEvent(mappings[i].logicalButton, curr);
+	constexpr size_t kNumTriggerMappings = 1;
+
+	// Process button mappings for the current controller
+	if (isPrimary || isSecondary) {
+		// Define mappings for both controllers (only B/Y differs)
+		constexpr size_t kNumMappings = 6;
+		RE::ButtonMapping mappings[kNumMappings] = {
+			{ RE::BSOpenVRControllerDevice::Keys::kTrigger, ImGuiMouseButton_Left, false, ImGuiKey_None, false },
+			{ RE::BSOpenVRControllerDevice::Keys::kGrip, ImGuiMouseButton_Right, false, ImGuiKey_None, false },
+			{ RE::BSOpenVRControllerDevice::Keys::kTouchpadClick, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
+			{ RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
+			{ RE::BSOpenVRControllerDevice::Keys::kBY, -1, true, menu->VirtualKeyToImGuiKey(VK_TAB), isSecondary },  // Shift+Tab for secondary
+			{ RE::BSOpenVRControllerDevice::Keys::kXA, -1, true, menu->VirtualKeyToImGuiKey(VK_RETURN), false },
+		};
+
+		// Use separate state arrays for each controller
+		static bool prevPrimaryStates[kNumMappings] = {};
+		static bool prevSecondaryStates[kNumMappings] = {};
+		bool* prevStates = isPrimary ? prevPrimaryStates : prevSecondaryStates;
+
+		// Get the appropriate controller state
+		RE::InputDeviceState& controllerState = isPrimary ? primaryControllerState : secondaryControllerState;
+
+		size_t limit = testMode ? kNumTriggerMappings : kNumMappings;  // Only trigger mappings in test mode
+
+		for (size_t i = 0; i < limit; ++i) {
+			RE::ButtonState* state = &controllerState.buttons[mappings[i].keyCode];
+			bool curr = state ? state->isPressed : false;
+			if (curr != prevStates[i]) {
+				if (mappings[i].isKeyEvent) {
+					if (mappings[i].isShift)
+						io.AddKeyEvent(ImGuiMod_Shift, curr);
+					io.AddKeyEvent(static_cast<ImGuiKey>(mappings[i].key), curr);
+				} else {
+					io.AddMouseButtonEvent(mappings[i].logicalButton, curr);
+				}
+				prevStates[i] = curr;
 			}
-			prevStates[i] = curr;
 		}
 	}
 	// Log the button event after state is updated
