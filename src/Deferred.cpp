@@ -574,8 +574,20 @@ void Deferred::OverrideBlendStates()
 
 							blendDesc.IndependentBlendEnable = true;
 
-							// Start at 1 to ignore Diffuse
+							// Default to original blending method
 							for (int i = 1; i < 8; i++) {
+								blendDesc.RenderTarget[i].BlendEnable = blendDesc.RenderTarget[0].BlendEnable;
+								blendDesc.RenderTarget[i].SrcBlend = blendDesc.RenderTarget[0].SrcBlend;
+								blendDesc.RenderTarget[i].DestBlend = blendDesc.RenderTarget[0].DestBlend;
+								blendDesc.RenderTarget[i].BlendOp = blendDesc.RenderTarget[0].BlendOp;
+								blendDesc.RenderTarget[i].SrcBlendAlpha = blendDesc.RenderTarget[0].SrcBlendAlpha;
+								blendDesc.RenderTarget[i].DestBlendAlpha = blendDesc.RenderTarget[0].DestBlendAlpha;
+								blendDesc.RenderTarget[i].BlendOpAlpha = blendDesc.RenderTarget[0].BlendOpAlpha;
+								blendDesc.RenderTarget[i].RenderTargetWriteMask = blendDesc.RenderTarget[0].RenderTargetWriteMask;
+							}
+
+							// Normals and motion vectors must use alpha blending
+							for (int i = 1; i < 3; i++) {
 								blendDesc.RenderTarget[i].BlendEnable = blendDesc.RenderTarget[0].BlendEnable;
 								blendDesc.RenderTarget[i].SrcBlend = D3D11_BLEND_SRC_ALPHA;
 								blendDesc.RenderTarget[i].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
@@ -583,7 +595,7 @@ void Deferred::OverrideBlendStates()
 								blendDesc.RenderTarget[i].SrcBlendAlpha = D3D11_BLEND_SRC_ALPHA;
 								blendDesc.RenderTarget[i].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
 								blendDesc.RenderTarget[i].BlendOpAlpha = D3D11_BLEND_OP_ADD;
-								blendDesc.RenderTarget[i].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+								blendDesc.RenderTarget[i].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;					
 							}
 
 							DX::ThrowIfFailed(device->CreateBlendState(&blendDesc, &deferredBlendStates[a][b][c][d]));
