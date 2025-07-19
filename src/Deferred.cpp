@@ -763,70 +763,32 @@ void Deferred::Hooks::Main_RenderWorld::thunk(bool a1)
 
 void Deferred::Hooks::Main_RenderWorld_Start::thunk(RE::BSBatchRenderer* This, uint32_t StartRange, uint32_t EndRanges, uint32_t RenderFlags, int GeometryGroup)
 {
-	auto deferred = globals::deferred;
-	auto shaderCache = globals::shaderCache;
-
-	if (shaderCache->IsEnabled() && globals::state->inWorld) {
+	if (globals::shaderCache->IsEnabled() && globals::state->inWorld) {
 		// Here is where the first opaque objects start rendering
-		deferred->StartDeferred();
-		func(This, StartRange, EndRanges, RenderFlags, GeometryGroup);  // RenderBatches
-	} else {
-		func(This, StartRange, EndRanges, RenderFlags, GeometryGroup);  // RenderBatches
+		globals::deferred->StartDeferred();
 	}
+
+	func(This, StartRange, EndRanges, RenderFlags, GeometryGroup);  // RenderBatches
 };
-
-void Deferred::RenderBlendedDecals()
-{
-	if (!globals::state->blendedDecalRenderPasses.empty()) {
-		if (globals::game::isVR) {
-			auto& runtimeData = globals::game::shadowState->GetVRRuntimeData();
-			auto runtimeDataCopy = runtimeData;
-			runtimeData.rasterStateDepthBiasMode = 10;
-
-			for (auto& renderPass : globals::state->blendedDecalRenderPasses)
-				::Hooks::BSBatchRenderer_RenderPassImmediately1::func(renderPass.a_pass, renderPass.a_technique, renderPass.a_alphaTest, renderPass.a_renderFlags);
-
-			globals::state->blendedDecalRenderPasses.clear();
-
-			runtimeData = runtimeDataCopy;
-		} else {
-			auto& runtimeData = globals::game::shadowState->GetRuntimeData();
-			auto runtimeDataCopy = runtimeData;
-			runtimeData.rasterStateDepthBiasMode = 10;
-
-			for (auto& renderPass : globals::state->blendedDecalRenderPasses)
-				::Hooks::BSBatchRenderer_RenderPassImmediately1::func(renderPass.a_pass, renderPass.a_technique, renderPass.a_alphaTest, renderPass.a_renderFlags);
-
-			globals::state->blendedDecalRenderPasses.clear();
-
-			runtimeData = runtimeDataCopy;
-		}
-	}
-}
 
 void Deferred::Hooks::Main_RenderWorld_BlendedDecals::thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags)
 {
 	auto deferred = globals::deferred;
-	auto terrainBlending = globals::features::terrainBlending;
-	auto shaderCache = globals::shaderCache;
 
-	if (shaderCache->IsEnabled() && globals::state->inWorld) {
+	if (globals::shaderCache->IsEnabled() && globals::state->inWorld) {
+		auto terrainBlending = globals::features::terrainBlending;
 		// Defer terrain rendering until after everything else
 		if (terrainBlending->loaded)
 			terrainBlending->RenderTerrainBlendingPasses();
 	}
 
 	// Deferred blended decals
-	deferred->inBlendedDecals = true;
+
+	deferred->inDecals = true;
 	func(This, RenderFlags);
-	deferred->inBlendedDecals = false;
+	deferred->inDecals = false;
 
 	deferred->EndDeferred();
-
-	// Blended decals
-	deferred->inDecals = true;
-	deferred->RenderBlendedDecals();
-	deferred->inDecals = false;
 
 	// After this point, water starts rendering
 };
