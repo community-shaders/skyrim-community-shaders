@@ -128,8 +128,9 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 					shaderCache->WriteDiskCacheInfo();
 				}
 
-				SKSE::Translation::ParseTranslation("CommunityShaders");
-
+				if (!SKSE::Translation::ParseTranslation("CommunityShaders")) {
+					logger::warn("Failed to load translations for CommunityShaders");
+				}
 				if (!REL::Module::IsVR()) {
 					RE::GetINISetting("bEnableImprovedSnow:Display")->data.b = false;
 					RE::GetINISetting("bIBLFEnable:Display")->data.b = false;
