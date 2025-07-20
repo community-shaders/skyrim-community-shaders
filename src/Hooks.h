@@ -19,13 +19,6 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	struct RenderPass
-	{
-		RE::BSRenderPass* a_pass;
-		uint32_t a_technique;
-		bool a_alphaTest;
-		uint32_t a_renderFlags;
-	};
 	void Install();
 	void InstallD3DHooks();
 }

@@ -19,10 +19,6 @@
 #	define DYNAMIC_CUBEMAPS
 #endif
 
-#if defined(SKINNED) || defined(ENVMAP) || defined(EYE) || defined(MULTI_LAYER_PARALLAX)
-#	define DRAW_IN_WORLDSPACE
-#endif
-
 #if (defined(TREE_ANIM) || defined(LANDSCAPE)) && !defined(VC)
 #	define VC
 #endif  // TREE_ANIM || LANDSCAPE || !VC
@@ -77,7 +73,6 @@ struct VS_OUTPUT
 	float3 TBN1 : TEXCOORD2;
 	float3 TBN2 : TEXCOORD3;
 #endif  // defined(SKINNED) || !defined(MODELSPACENORMALS)
-	float3 ViewVector : TEXCOORD5;
 #if defined(EYE)
 	float3 EyeNormal : TEXCOORD6;
 #elif defined(LANDSCAPE)
@@ -101,7 +96,6 @@ struct VS_OUTPUT
 #else
 	row_major float3x4 World[2] : POSITION3;
 #endif  // VR
-	bool WorldSpace : TEXCOORD11;
 #if defined(VR)
 	float ClipDistance : SV_ClipDistance0;  // o11
 	float CullDistance : SV_CullDistance0;  // p11
@@ -277,7 +271,7 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.TBN0.xyz = worldTbnTr[0];
 	vsout.TBN1.xyz = worldTbnTr[1];
 	vsout.TBN2.xyz = worldTbnTr[2];
-#		elif defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX)
+#		else
 	vsout.TBN0.xyz = mul(tbn, World[eyeIndex][0].xyz);
 	vsout.TBN1.xyz = mul(tbn, World[eyeIndex][1].xyz);
 	vsout.TBN2.xyz = mul(tbn, World[eyeIndex][2].xyz);
@@ -289,10 +283,6 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.TBN0.xyz = tempTbnTr[0];
 	vsout.TBN1.xyz = tempTbnTr[1];
 	vsout.TBN2.xyz = tempTbnTr[2];
-#		else
-	vsout.TBN0.xyz = tbnTr[0];
-	vsout.TBN1.xyz = tbnTr[1];
-	vsout.TBN2.xyz = tbnTr[2];
 #		endif
 #	elif defined(SKINNED)
 	float3x3 boneRSMatrixTr = transpose(boneRSMatrix);
@@ -312,12 +302,6 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.LandBlendWeights2.xyz = input.LandBlendWeights2.xyz;
 #	elif defined(PROJECTED_UV) && !defined(SKINNED)
 	vsout.TexProj = TextureProj[eyeIndex][2].xyz;
-#	endif
-
-#	if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(SKINNED)
-	vsout.ViewVector = EyePosition[eyeIndex].xyz - worldPosition.xyz;
-#	else
-	vsout.ViewVector = EyePosition[eyeIndex].xyz - input.Position.xyz;
 #	endif
 
 #	if defined(EYE)
@@ -364,11 +348,6 @@ VS_OUTPUT main(VS_INPUT input)
 #	ifdef VR
 	vsout.World[1] = World[1];
 #	endif  // VR
-#	if defined(SKINNED) || defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
-	vsout.WorldSpace = true;
-#	else
-	vsout.WorldSpace = false;
-#	endif
 
 #	if defined(VR)
 	Stereo::VR_OUTPUT VRout = Stereo::GetVRVSOutput(vsout.Position, eyeIndex);
@@ -815,7 +794,7 @@ float3 GetLandNormal(float landSnowMask, float3 normal, float2 uv, SamplerState 
 }
 
 #	if defined(SNOW) && !defined(TRUE_PBR)
-float3 GetSnowSpecularColor(PS_INPUT input, float3 modelNormal, float3 viewDirection)
+float3 GetSnowSpecularColor(PS_INPUT input, float3 worldNormal, float3 viewDirection)
 {
 	if (SnowRimLightParameters.w > 1e-5) {
 #		if defined(MODELSPACENORMALS) && !defined(SKINNED)
@@ -823,7 +802,7 @@ float3 GetSnowSpecularColor(PS_INPUT input, float3 modelNormal, float3 viewDirec
 #		else
 		float3 modelGeometryNormal = normalize(float3(input.TBN0.z, input.TBN1.z, input.TBN2.z));
 #		endif
-		float normalFactor = 1 - saturate(dot(modelNormal, viewDirection));
+		float normalFactor = 1 - saturate(dot(worldNormal, viewDirection));
 		float geometryNormalFactor = 1 - saturate(dot(modelGeometryNormal, viewDirection));
 		return (SnowRimLightParameters.x * (exp2(SnowRimLightParameters.y * log2(geometryNormalFactor)) * exp2(SnowRimLightParameters.z * log2(normalFactor)))).xxx;
 	} else {
@@ -1091,8 +1070,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	blendFactorTerrain = saturate(blendFactorTerrain);
 #	endif
 
-	float3 viewDirection = normalize(input.ViewVector.xyz);
-	float3 worldSpaceViewDirection = -normalize(input.WorldPosition.xyz);
+	float3 viewDirection = -normalize(input.WorldPosition.xyz);
 
 	float2 uv = input.TexCoord0.xy;
 	float2 uvOriginal = uv;
@@ -1131,23 +1109,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if !defined(MODELSPACENORMALS)
 	float3 vertexNormal = tbnTr[2];
-	float3 worldSpaceVertexNormal = vertexNormal;
-
-#		if !defined(DRAW_IN_WORLDSPACE)
-	[flatten] if (!input.WorldSpace)
-		worldSpaceVertexNormal = normalize(mul(input.World[eyeIndex], float4(worldSpaceVertexNormal, 0)));
-#		endif
 #		if defined(EMAT)
 
 	if (SharedData::extendedMaterialSettings.EnableParallaxWarpingFix) {
-		float3 ndx = ddx(worldSpaceVertexNormal);
-		float3 ndy = ddy(worldSpaceVertexNormal);
+		float3 ndx = ddx(vertexNormal);
+		float3 ndy = ddy(vertexNormal);
 		float3 fdx = ddx(input.WorldPosition.xyz);
 		float3 fdy = ddy(input.WorldPosition.xyz);
 		float fragSize = rcp(length(max(abs(fdx), abs(fdy))));
 		curvature = pow(length(max(abs(ndx), abs(ndy))) * fragSize, 0.5);
 		float3 flatWorldNormal = normalize(-cross(ddx(input.WorldPosition.xyz), ddy(input.WorldPosition.xyz)));
-		normalSmoothness = (1 - dot(worldSpaceVertexNormal, flatWorldNormal));
+		normalSmoothness = (1 - dot(vertexNormal, flatWorldNormal));
 #			if defined(LANDSCAPE)
 		displacementParams[0].HeightScale = saturate(1 - curvature);
 		displacementParams[0].FlattenAmount = (normalSmoothness + curvature);
@@ -1163,7 +1135,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 entryNormalTS = 0;
 	float eta = 1;
 	float3 refractedViewDirection = viewDirection;
-	float3 refractedViewDirectionWS = worldSpaceViewDirection;
 	float4 sampledCoatColor = PBRParams2;
 	float3 complexSpecular = 1.0;  // Declare complexSpecular at a higher scope so it's available throughout the shader (NEEDED FOR STOCH. FIX)
 #	if defined(EMAT)
@@ -1229,9 +1200,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			}
 			entryNormal = normalize(mul(tbn, entryNormalTS));
 			refractedViewDirection = -refract(-viewDirection, entryNormal, eta);
-			[flatten] if (!input.WorldSpace)
-				refractedViewDirectionWS = normalize(mul(input.World[eyeIndex], float4(refractedViewDirection, 0)));
-			else refractedViewDirectionWS = refractedViewDirection;
 		}
 		else
 		{
@@ -1363,17 +1331,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	// Initialize mip levels for non-EMAT case
 	mipLevels[0] = mipLevels[1] = mipLevels[2] = mipLevels[3] = mipLevels[4] = mipLevels[5] = 0.0;
 #		endif  // EMAT
-	// When terrain variation is enabled but parallax is disabled, calculate proper mip levels for stochastic sampling
-#		if defined(TERRAIN_VARIATION)
-	[branch] if (useTerrainVariation && !SharedData::extendedMaterialSettings.EnableTerrainParallax) {
-		mipLevels[0] = ExtendedMaterials::GetMipLevel(uv, TexColorSampler);
-		mipLevels[1] = ExtendedMaterials::GetMipLevel(uv, TexLandColor2Sampler);
-		mipLevels[2] = ExtendedMaterials::GetMipLevel(uv, TexLandColor3Sampler);
-		mipLevels[3] = ExtendedMaterials::GetMipLevel(uv, TexLandColor4Sampler);
-		mipLevels[4] = ExtendedMaterials::GetMipLevel(uv, TexLandColor5Sampler);
-		mipLevels[5] = ExtendedMaterials::GetMipLevel(uv, TexLandColor6Sampler);
-	}
-#		endif
 #	endif      // LANDSCAPE
 
 #	if defined(SPARKLE)
@@ -1409,7 +1366,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landColor1;
 		[branch] if (useTerrainVariation)
 		{
-			landColor1 = StochasticEffect(screenNoise, mipLevels[0], TexColorSampler, SampColorSampler, uv, sharedOffset, dx, dy);
+			landColor1 = StochasticEffect(TexColorSampler, SampColorSampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1433,7 +1390,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landNormal1;
 		[branch] if (useTerrainVariation)
 		{
-			landNormal1 = StochasticEffect(screenNoise, mipLevels[0], TexNormalSampler, SampNormalSampler, uv, sharedOffset, dx, dy);
+			landNormal1 = StochasticEffect(TexNormalSampler, SampNormalSampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1456,7 +1413,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
-				landRMAOS1 = StochasticEffectNoHeight(mipLevels[0], TexRMAOSSampler, SampRMAOSSampler, uv, sharedOffset) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
+				landRMAOS1 = StochasticEffect(TexRMAOSSampler, SampRMAOSSampler, uv, sharedOffset, dx, dy) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
 			}
 			else
 			{
@@ -1490,7 +1447,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landColor2;
 		[branch] if (useTerrainVariation)
 		{
-			landColor2 = StochasticEffect(screenNoise, mipLevels[1], TexLandColor2Sampler, SampLandColor2Sampler, uv, sharedOffset, dx, dy);
+			landColor2 = StochasticEffect(TexLandColor2Sampler, SampLandColor2Sampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1514,7 +1471,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landNormal2;
 		[branch] if (useTerrainVariation)
 		{
-			landNormal2 = StochasticEffect(screenNoise, mipLevels[1], TexLandNormal2Sampler, SampLandNormal2Sampler, uv, sharedOffset, dx, dy);
+			landNormal2 = StochasticEffect(TexLandNormal2Sampler, SampLandNormal2Sampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1537,7 +1494,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
-				landRMAOS2 = StochasticEffectNoHeight(mipLevels[1], TexLandRMAOS2Sampler, SampLandRMAOS2Sampler, uv, sharedOffset) * float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
+				landRMAOS2 = StochasticEffect(TexLandRMAOS2Sampler, SampLandRMAOS2Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
 			}
 			else
 			{
@@ -1570,7 +1527,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landColor3;
 		[branch] if (useTerrainVariation)
 		{
-			landColor3 = StochasticEffect(screenNoise, mipLevels[2], TexLandColor3Sampler, SampLandColor3Sampler, uv, sharedOffset, dx, dy);
+			landColor3 = StochasticEffect(TexLandColor3Sampler, SampLandColor3Sampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1594,7 +1551,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landNormal3;
 		[branch] if (useTerrainVariation)
 		{
-			landNormal3 = StochasticEffect(screenNoise, mipLevels[2], TexLandNormal3Sampler, SampLandNormal3Sampler, uv, sharedOffset, dx, dy);
+			landNormal3 = StochasticEffect(TexLandNormal3Sampler, SampLandNormal3Sampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1617,7 +1574,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
-				landRMAOS3 = StochasticEffectNoHeight(mipLevels[2], TexLandRMAOS3Sampler, SampLandRMAOS3Sampler, uv, sharedOffset) * float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
+				landRMAOS3 = StochasticEffect(TexLandRMAOS3Sampler, SampLandRMAOS3Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
 			}
 			else
 			{
@@ -1650,7 +1607,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landColor4;
 		[branch] if (useTerrainVariation)
 		{
-			landColor4 = StochasticEffect(screenNoise, mipLevels[3], TexLandColor4Sampler, SampLandColor4Sampler, uv, sharedOffset, dx, dy);
+			landColor4 = StochasticEffect(TexLandColor4Sampler, SampLandColor4Sampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1674,7 +1631,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landNormal4;
 		[branch] if (useTerrainVariation)
 		{
-			landNormal4 = StochasticEffect(screenNoise, mipLevels[3], TexLandNormal4Sampler, SampLandNormal4Sampler, uv, sharedOffset, dx, dy);
+			landNormal4 = StochasticEffect(TexLandNormal4Sampler, SampLandNormal4Sampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1697,7 +1654,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
-				landRMAOS4 = StochasticEffectNoHeight(mipLevels[3], TexLandRMAOS4Sampler, SampLandRMAOS4Sampler, uv, sharedOffset) * float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
+				landRMAOS4 = StochasticEffect(TexLandRMAOS4Sampler, SampLandRMAOS4Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
 			}
 			else
 			{
@@ -1730,7 +1687,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landColor5;
 		[branch] if (useTerrainVariation)
 		{
-			landColor5 = StochasticEffect(screenNoise, mipLevels[4], TexLandColor5Sampler, SampLandColor5Sampler, uv, sharedOffset, dx, dy);
+			landColor5 = StochasticEffect(TexLandColor5Sampler, SampLandColor5Sampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1754,7 +1711,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landNormal5;
 		[branch] if (useTerrainVariation)
 		{
-			landNormal5 = StochasticEffect(screenNoise, mipLevels[4], TexLandNormal5Sampler, SampLandNormal5Sampler, uv, sharedOffset, dx, dy);
+			landNormal5 = StochasticEffect(TexLandNormal5Sampler, SampLandNormal5Sampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1778,7 +1735,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
-				landRMAOS5 = StochasticEffectNoHeight(mipLevels[4], TexLandRMAOS5Sampler, SampLandRMAOS5Sampler, uv, sharedOffset) * float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
+				landRMAOS5 = StochasticEffect(TexLandRMAOS5Sampler, SampLandRMAOS5Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
 			}
 			else
 			{
@@ -1811,7 +1768,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landColor6;
 		[branch] if (useTerrainVariation)
 		{
-			landColor6 = StochasticEffect(screenNoise, mipLevels[5], TexLandColor6Sampler, SampLandColor6Sampler, uv, sharedOffset, dx, dy);
+			landColor6 = StochasticEffect(TexLandColor6Sampler, SampLandColor6Sampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1835,7 +1792,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float4 landNormal6;
 		[branch] if (useTerrainVariation)
 		{
-			landNormal6 = StochasticEffect(screenNoise, mipLevels[5], TexLandNormal6Sampler, SampLandNormal6Sampler, uv, sharedOffset, dx, dy);
+			landNormal6 = StochasticEffect(TexLandNormal6Sampler, SampLandNormal6Sampler, uv, sharedOffset, dx, dy);
 		}
 		else
 		{
@@ -1847,7 +1804,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float3 landNormalRGB6 = landNormal6.rgb;
 		float landNormalAlpha6 = landNormal6.a;
 #		if defined(SNOW) && !defined(TRUE_PBR)
-		landSnowMask += LandscapeTexture5to6IsSnow.y * input.LandBlendWeights2.y * landSnowMask6;
+		landSnowMask += LandscapeTexture5to6IsSnow.y * 	input.LandBlendWeights2.y * landSnowMask6;
 #		endif  // SNOW
 
 		// Sample RMAOS texture for layer 6
@@ -1858,7 +1815,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(TERRAIN_VARIATION)
 			[branch] if (useTerrainVariation)
 			{
-				landRMAOS6 = StochasticEffectNoHeight(mipLevels[5], TexLandRMAOS6Sampler, SampLandRMAOS6Sampler, uv, sharedOffset) * float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
+				landRMAOS6 = StochasticEffect(TexLandRMAOS6Sampler, SampLandRMAOS6Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
 			}
 			else
 			{
@@ -1913,7 +1870,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			float2 dx = ddx(uv);
 			float2 dy = ddy(uv);
 			StochasticOffsets lodOffset = ComputeStochasticOffsetsLOD(uv);
-			float4 lodStochasticColor = StochasticSampleLOD(screenNoise, 0, TexColorSampler, SampColorSampler, uv, lodOffset, dx, dy);
+			float4 lodStochasticColor = StochasticSampleLOD(screenNoise, TexColorSampler, SampColorSampler, uv, lodOffset, dx, dy);
 
 			// Apply the stochastic result directly
 			baseColor.xyz = Color::Diffuse(lodStochasticColor.rgb);
@@ -2022,7 +1979,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float2 dx = ddx(blendColorUV);
 		float2 dy = ddy(blendColorUV);
 		StochasticOffsets lodBlendColorOffset = ComputeStochasticOffsetsLOD(blendColorUV);
-		lodLandColor = StochasticSampleLOD(screenNoise, 0, TexLandLodBlend1Sampler, SampLandLodBlend1Sampler, blendColorUV, lodBlendColorOffset, dx, dy);
+		lodLandColor = StochasticSampleLOD(screenNoise, TexLandLodBlend1Sampler, SampLandLodBlend1Sampler, blendColorUV, lodBlendColorOffset, dx, dy);
 	} else {
 		lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
 	}
@@ -2068,9 +2025,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	uint numShadowLights = min(4, uint(NumLightNumShadowLight.y));
 
 #	if defined(MODELSPACENORMALS) && !defined(SKINNED)
-	float4 modelNormal = normal;
+	float4 worldNormal = normal;
 #	else
-	float4 modelNormal = float4(normalize(mul(tbn, normal.xyz)), 1);
+	float4 worldNormal = float4(normalize(mul(tbn, normal.xyz)), 1);
 
 #		if defined(SPARKLE)
 	float3 projectedNormal = normalize(mul(tbn, float3(ProjectedUVParams2.xx * normal.xy, normal.z)));
@@ -2099,7 +2056,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		else
 	float vertexAlpha = input.Color.w;
 #		endif  // defined (TREE_ANIM) || defined (LODOBJECTSHD)
-	projWeight = -ProjectedUVParams.x * projNoise + (dot(modelNormal.xyz, texProj) * vertexAlpha - ProjectedUVParams.w);
+	projWeight = -ProjectedUVParams.x * projNoise + (dot(worldNormal.xyz, texProj) * vertexAlpha - ProjectedUVParams.w);
 #		if defined(LODOBJECTSHD)
 	projWeight += (-0.5 + input.Color.w) * 2.5;
 #		endif  // LODOBJECTSHD
@@ -2107,7 +2064,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (projWeight < 0)
 		discard;
 
-	modelNormal.xyz = projectedNormal;
+	worldNormal.xyz = projectedNormal;
 #			if defined(SNOW)
 	psout.Parameters.y = 1;
 #			endif  // SNOW
@@ -2169,18 +2126,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	baseColor.xyz = GetWorldMapBaseColor(rawBaseColor.xyz, baseColor.xyz, projWeight);
 #	endif  // WORLD_MAP
 
-	float3 worldSpaceNormal = modelNormal.xyz;
-
-#	if !defined(DRAW_IN_WORLDSPACE)
-	[flatten] if (!input.WorldSpace)
-		worldSpaceNormal = normalize(mul(input.World[eyeIndex], float4(worldSpaceNormal, 0)));
-#	endif
-
 #	if defined(MODELSPACENORMALS)
-	float3 worldSpaceVertexNormal = worldSpaceNormal;
+	float3 vertexNormal = worldNormal;
 #	endif
 
-	float3 screenSpaceNormal = normalize(FrameBuffer::WorldToView(worldSpaceNormal, false, eyeIndex));
+	float3 screenSpaceNormal = normalize(FrameBuffer::WorldToView(worldNormal, false, eyeIndex));
 
 #	if defined(HAIR) && defined(CS_HAIR)
 	float3 Bitangent = normalize(float3(input.TBN0.y, input.TBN1.y, input.TBN2.y));
@@ -2190,10 +2140,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		else
 	hairT = Bitangent;
 #		endif
-	hairT = Hair::ReorientTangent(hairT, worldSpaceNormal);
+	hairT = Hair::ReorientTangent(hairT, worldNormal);
 
 	if (SharedData::hairSpecularSettings.Enabled && SharedData::hairSpecularSettings.EnableTangentShift) {
-		float3 shiftedNormal = Hair::ShiftWorldNormal(hairT, worldSpaceNormal, 0, uv);
+		float3 shiftedNormal = Hair::ShiftWorldNormal(hairT, worldNormal, 0, uv);
 		screenSpaceNormal = normalize(FrameBuffer::WorldToView(shiftedNormal, false, eyeIndex));
 	}
 
@@ -2228,8 +2178,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	pbrSurfaceProperties.BaseColor = baseColor.xyz;
 
-	float3 coatModelNormal = modelNormal.xyz;
-	float3 coatWorldNormal = worldSpaceNormal;
+	float3 coatWorldNormal = worldNormal;
 
 #		if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 	[branch] if ((PBRFlags & PBR::Flags::Subsurface) != 0)
@@ -2262,15 +2211,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			pbrSurfaceProperties.CoatRoughness *= sampledCoatProperties.w;
 			[branch] if ((PBRFlags & PBR::Flags::CoatNormal) != 0)
 			{
-				coatModelNormal = normalize(mul(tbn, TransformNormal(sampledCoatProperties.xyz)));
+				coatWorldNormal = normalize(mul(tbn, TransformNormal(sampledCoatProperties.xyz)));
 			}
-
-#			if !defined(DRAW_IN_WORLDSPACE)
-			[flatten] if (!input.WorldSpace)
-			{
-				coatWorldNormal = normalize(mul(input.World[eyeIndex], float4(coatModelNormal, 0)));
-			}
-#			endif
 		}
 		pbrSurfaceProperties.CoatStrength = lerp(pbrSurfaceProperties.CoatStrength, 0, projectedMaterialWeight);
 	}
@@ -2304,12 +2246,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 positionMSSkylight = input.WorldPosition.xyz;
 #		endif
 
-	float3 skylightingNormal = normalize(float3(worldSpaceNormal.xy, max(0, worldSpaceNormal.z)));
+	float3 skylightingNormal = normalize(float3(worldNormal.xy, max(0, worldNormal.z)));
 
 #		if defined(DEFERRED)
-	sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.Position.xy, positionMSSkylight, worldSpaceNormal);
+	sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.Position.xy, positionMSSkylight, worldNormal);
 #		else
-	sh2 skylightingSH = inWorld ? Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.Position.xy, positionMSSkylight, worldSpaceNormal) : float4(sqrt(4.0 * Math::PI), 0, 0, 0);
+	sh2 skylightingSH = inWorld ? Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.Position.xy, positionMSSkylight, worldNormal) : float4(sqrt(4.0 * Math::PI), 0, 0, 0);
 #		endif
 
 #	endif
@@ -2333,7 +2275,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float maxOcclusion = 1;
 	float minWetnessAngle = 0;
-	minWetnessAngle = saturate(max(minWetnessValue, worldSpaceNormal.z));
+	minWetnessAngle = saturate(max(minWetnessValue, worldNormal.z));
 #		if defined(SKYLIGHTING)
 	float wetnessOcclusion = inWorld ? pow(saturate(SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1))), 2) : 0;
 #		else
@@ -2341,7 +2283,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 
 	float4 raindropInfo = float4(0, 0, 1, 0);
-	if (worldSpaceNormal.z > 0 && SharedData::wetnessEffectsSettings.Raining > 0.0f && SharedData::wetnessEffectsSettings.EnableRaindropFx) {
+	if (worldNormal.z > 0 && SharedData::wetnessEffectsSettings.Raining > 0.0f && SharedData::wetnessEffectsSettings.EnableRaindropFx) {
 		float4 precipOcclusionTexCoord = mul(SharedData::wetnessEffectsSettings.OcclusionViewProj, float4(input.WorldPosition.xyz, 1));
 		precipOcclusionTexCoord.y = -precipOcclusionTexCoord.y;
 		float2 precipOcclusionUV = precipOcclusionTexCoord.xy * 0.5 + 0.5;
@@ -2351,11 +2293,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 			if (precipOcclusionTexCoord.z < precipOcclusionZ + 0.1)
 #		if defined(SKINNED)
-				raindropInfo = WetnessEffects::GetRainDrops(input.ModelPosition.xyz, SharedData::wetnessEffectsSettings.Time, worldSpaceNormal);
+				raindropInfo = WetnessEffects::GetRainDrops(input.ModelPosition.xyz, SharedData::wetnessEffectsSettings.Time, worldNormal);
 #		elif defined(DEFERRED)
-				raindropInfo = WetnessEffects::GetRainDrops(input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz, SharedData::wetnessEffectsSettings.Time, worldSpaceNormal);
+				raindropInfo = WetnessEffects::GetRainDrops(input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz, SharedData::wetnessEffectsSettings.Time, worldNormal);
 #		else
-				raindropInfo = WetnessEffects::GetRainDrops(!FrameBuffer::FrameParams.y ? input.ModelPosition.xyz : input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz, SharedData::wetnessEffectsSettings.Time, worldSpaceNormal);
+				raindropInfo = WetnessEffects::GetRainDrops(!FrameBuffer::FrameParams.y ? input.ModelPosition.xyz : input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz, SharedData::wetnessEffectsSettings.Time, worldNormal);
 #		endif
 		}
 	}
@@ -2376,7 +2318,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	wetness = max(shoreFactor * SharedData::wetnessEffectsSettings.MaxShoreWetness, rainWetness);
 
-	float3 wetnessNormal = worldSpaceNormal;
+	float3 wetnessNormal = worldNormal;
 
 	float3 puddleCoords = ((input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz) * 0.5 + 0.5) * 0.01 / SharedData::wetnessEffectsSettings.PuddleRadius;
 	float puddle = wetness;
@@ -2418,16 +2360,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	dirLightColorMultiplier *= WaterEffects::ComputeCaustics(waterData, input.WorldPosition.xyz, eyeIndex);
 #	endif
 
-	float selfShadowFactor = 1.0f;
-
-	float3 normalizedDirLightDirectionWS = DirLightDirection;
-
-#	if !defined(DRAW_IN_WORLDSPACE)
-	[flatten] if (!input.WorldSpace)
-		normalizedDirLightDirectionWS = normalize(mul(input.World[eyeIndex], float4(DirLightDirection.xyz, 0)));
-#	endif
-
-	float dirLightAngle = dot(modelNormal.xyz, DirLightDirection.xyz);
+	float dirLightAngle = dot(worldNormal.xyz, DirLightDirection.xyz);
 
 	if ((Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) && (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::ShadowDir)) {
 		dirLightColorMultiplier *= shadowColor.x;
@@ -2448,8 +2381,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(TRUE_PBR) && !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 	[branch] if ((PBRFlags & PBR::Flags::InterlayerParallax) != 0)
 	{
-		if (dot(DirLightDirection, coatModelNormal) > 0)
-			refractedDirLightDirection = -refract(-DirLightDirection, coatModelNormal, eta);
+		if (dot(DirLightDirection, coatWorldNormal) > 0)
+			refractedDirLightDirection = -refract(-DirLightDirection, coatWorldNormal, eta);
 	}
 #	endif
 
@@ -2521,7 +2454,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	{
 		PBR::LightProperties lightProperties = PBR::InitLightProperties(dirLightColor, dirLightColorMultiplier * dirDetailShadow, parallaxShadow);
 		float3 dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor;
-		PBR::GetDirectLightInput(dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor, modelNormal.xyz, coatModelNormal, refractedViewDirection, viewDirection, refractedDirLightDirection, DirLightDirection, lightProperties, pbrSurfaceProperties, tbnTr, uvOriginal);
+		PBR::GetDirectLightInput(dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor, worldNormal.xyz, coatWorldNormal, refractedViewDirection, viewDirection, refractedDirLightDirection, DirLightDirection, lightProperties, pbrSurfaceProperties, tbnTr, uvOriginal);
 		lightsDiffuseColor += dirDiffuseColor;
 		coatLightsDiffuseColor += coatDirDiffuseColor;
 		transmissionColor += dirTransmissionColor;
@@ -2531,7 +2464,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 #		if defined(WETNESS_EFFECTS)
 		if (waterRoughnessSpecular < 1.0)
-			specularColorPBR += PBR::GetWetnessDirectLightSpecularInput(wetnessNormal, worldSpaceViewDirection, normalizedDirLightDirectionWS, lightProperties.CoatLightColor, waterRoughnessSpecular) * wetnessGlossinessSpecular;
+			specularColorPBR += PBR::GetWetnessDirectLightSpecularInput(wetnessNormal, viewDirection, DirLightDirection, lightProperties.CoatLightColor, waterRoughnessSpecular) * wetnessGlossinessSpecular;
 #		endif
 	}
 #	else
@@ -2546,7 +2479,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 
 #		if defined(RIM_LIGHTING)
-	lightsDiffuseColor += dirBacklighting * dirLightColor * GetRimLightMultiplier(DirLightDirection, viewDirection, modelNormal.xyz) * rimSoftLightColor.xyz;
+	lightsDiffuseColor += dirBacklighting * dirLightColor * GetRimLightMultiplier(DirLightDirection, viewDirection, worldNormal.xyz) * rimSoftLightColor.xyz;
 #		endif
 
 #		if defined(BACK_LIGHTING)
@@ -2555,23 +2488,23 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	if (useSnowSpecular && useSnowDecalSpecular) {
 #		if defined(SNOW)
-		lightsSpecularColor += GetSnowSpecularColor(input, modelNormal.xyz, viewDirection);
+		lightsSpecularColor += GetSnowSpecularColor(input, worldNormal.xyz, viewDirection);
 #		endif
 	} else {
 #		if defined(HAIR) && defined(CS_HAIR)
 		if (SharedData::hairSpecularSettings.Enabled) {
 			float3 dirTransmissionColor = 0.0;
 			float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, DirLightDirection, screenNoise, eyeIndex);
-			Hair::GetHairDirectLight(dirDiffuseColor, lightsSpecularColor, dirTransmissionColor, hairT, DirLightDirection, viewDirection, modelNormal.xyz, worldSpaceVertexNormal.xyz, dirLightColor.xyz * dirDetailShadow, SharedData::hairSpecularSettings.HairGlossiness, hairShadow, uv, baseColor.xyz);
+			Hair::GetHairDirectLight(dirDiffuseColor, lightsSpecularColor, dirTransmissionColor, hairT, DirLightDirection, viewDirection, worldNormal.xyz, vertexNormal.xyz, dirLightColor.xyz * dirDetailShadow, SharedData::hairSpecularSettings.HairGlossiness, hairShadow, uv, baseColor.xyz);
 			transmissionColor += dirTransmissionColor;
 		}
 		else {
 #			if defined(SPECULAR)
-			lightsSpecularColor = GetLightSpecularInput(input, DirLightDirection, viewDirection, modelNormal.xyz, dirLightColor.xyz * dirDetailShadow, shininess, uv);
+			lightsSpecularColor = GetLightSpecularInput(input, DirLightDirection, viewDirection, worldNormal.xyz, dirLightColor.xyz * dirDetailShadow, shininess, uv);
 #			endif
 		}
 #		elif defined(SPECULAR) || defined(SPARKLE)
-		lightsSpecularColor = GetLightSpecularInput(input, DirLightDirection, viewDirection, modelNormal.xyz, dirLightColor.xyz * dirDetailShadow, shininess, uv);
+		lightsSpecularColor = GetLightSpecularInput(input, DirLightDirection, viewDirection, worldNormal.xyz, dirLightColor.xyz * dirDetailShadow, shininess, uv);
 #		endif
 	}
 
@@ -2579,7 +2512,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #		if defined(WETNESS_EFFECTS)
 	if (waterRoughnessSpecular < 1.0)
-		wetnessSpecular += WetnessEffects::GetWetnessSpecular(wetnessNormal, normalizedDirLightDirectionWS, worldSpaceViewDirection, dirLightColor * dirDetailShadow, waterRoughnessSpecular);
+		wetnessSpecular += WetnessEffects::GetWetnessSpecular(wetnessNormal, DirLightDirection, viewDirection, dirLightColor * dirDetailShadow, waterRoughnessSpecular);
 #		endif
 #	endif
 
@@ -2611,12 +2544,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 			[branch] if ((PBRFlags & PBR::Flags::InterlayerParallax) != 0)
 			{
-				if (dot(normalizedLightDirection, coatModelNormal) > 0)
-					refractedLightDirection = -refract(-normalizedLightDirection, coatModelNormal, eta);
+				if (dot(normalizedLightDirection, coatWorldNormal) > 0)
+					refractedLightDirection = -refract(-normalizedLightDirection, coatWorldNormal, eta);
 			}
 #				endif
 			PBR::LightProperties lightProperties = PBR::InitLightProperties(lightColor, lightShadow, 1);
-			PBR::GetDirectLightInput(pointDiffuseColor, coatPointDiffuseColor, pointTransmissionColor, pointSpecularColor, modelNormal.xyz, coatModelNormal, refractedViewDirection, viewDirection, refractedLightDirection, normalizedLightDirection, lightProperties, pbrSurfaceProperties, tbnTr, uvOriginal);
+			PBR::GetDirectLightInput(pointDiffuseColor, coatPointDiffuseColor, pointTransmissionColor, pointSpecularColor, worldNormal.xyz, coatWorldNormal, refractedViewDirection, viewDirection, refractedLightDirection, normalizedLightDirection, lightProperties, pbrSurfaceProperties, tbnTr, uvOriginal);
 			lightsDiffuseColor += pointDiffuseColor;
 			coatLightsDiffuseColor += coatPointDiffuseColor;
 			transmissionColor += pointTransmissionColor;
@@ -2624,7 +2557,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 #			else
 		lightColor *= lightShadow;
-		float lightAngle = dot(modelNormal.xyz, normalizedLightDirection.xyz);
+		float lightAngle = dot(worldNormal.xyz, normalizedLightDirection.xyz);
 		float3 lightDiffuseColor = lightColor * saturate(lightAngle.xxx);
 		float lightBacklighting = 1.0 + saturate(-dot(normalizedLightDirection.xyz, viewDirection));
 
@@ -2633,7 +2566,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				endif  // SOFT_LIGHTING
 
 #				if defined(RIM_LIGHTING)
-		lightDiffuseColor += lightBacklighting * lightColor * GetRimLightMultiplier(normalizedLightDirection, viewDirection, modelNormal.xyz) * rimSoftLightColor.xyz;
+		lightDiffuseColor += lightBacklighting * lightColor * GetRimLightMultiplier(normalizedLightDirection, viewDirection, worldNormal.xyz) * rimSoftLightColor.xyz;
 #				endif  // RIM_LIGHTING
 
 #				if defined(BACK_LIGHTING)
@@ -2644,16 +2577,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			float3 lightSpecularColor = 0;
 			float3 lightTransmissionColor = 0;
 			float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, normalizedLightDirection, screenNoise, eyeIndex);
-			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, lightTransmissionColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, worldSpaceVertexNormal.xyz, lightColor, SharedData::hairSpecularSettings.HairGlossiness, hairShadow, uv, baseColor.xyz);
+			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, lightTransmissionColor, hairT, normalizedLightDirection, viewDirection, worldNormal.xyz, vertexNormal.xyz, lightColor, SharedData::hairSpecularSettings.HairGlossiness, hairShadow, uv, baseColor.xyz);
 			lightsSpecularColor += lightSpecularColor;
 			transmissionColor += lightTransmissionColor;
 		} else {
 #					if defined(SPECULAR)
-			lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, shininess, uv);
+			lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, worldNormal.xyz, lightColor, shininess, uv);
 #					endif
 		}
 #				elif defined(SPECULAR) || (defined(SPARKLE) && !defined(SNOW))
-		lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, modelNormal.xyz, lightColor, shininess, uv);
+		lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, worldNormal.xyz, lightColor, shininess, uv);
 #				endif  // defined (SPECULAR) || (defined (SPARKLE) && !defined(SNOW))
 
 		lightsDiffuseColor += lightDiffuseColor;
@@ -2661,12 +2594,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 
 #		else
-
-#			if defined(ANISO_LIGHTING)
-	input.TBN0.z = worldSpaceVertexNormal[0];
-	input.TBN1.z = worldSpaceVertexNormal[1];
-	input.TBN2.z = worldSpaceVertexNormal[2];
-#			endif
 
 	uint numClusteredLights = 0;
 	uint totalLightCount = LightLimitFix::NumStrictLights;
@@ -2689,9 +2616,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			uint clusteredLightIndex = LightLimitFix::lightList[lightOffset + (lightIndex - LightLimitFix::NumStrictLights)];
 			light = LightLimitFix::lights[clusteredLightIndex];
 
-			if (LightLimitFix::IsLightIgnored(light) || (!(Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) && light.lightFlags & LightLimitFix::LightFlags::Shadow)) {
+			if (LightLimitFix::IsLightIgnored(light))
 				continue;
-			}
 		}
 
 		float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WorldPosition.xyz;
@@ -2712,13 +2638,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float lightShadow = 1.0;
 
 		float shadowComponent = 1.0;
-		if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
+		if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow && light.lightFlags & LightLimitFix::LightFlags::Shadow) {
 			shadowComponent = shadowColor[light.shadowLightIndex];
 			lightShadow *= shadowComponent;
 		}
 
 		float3 normalizedLightDirection = normalize(lightDirection);
-		float lightAngle = dot(worldSpaceNormal.xyz, normalizedLightDirection.xyz);
+		float lightAngle = dot(worldNormal.xyz, normalizedLightDirection.xyz);
 
 		float contactShadow = 1.0;
 		[branch] if (
@@ -2776,28 +2702,28 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		{
 			PBR::LightProperties lightProperties = PBR::InitLightProperties(lightColor, lightShadow * contactShadow, parallaxShadow);
 			float3 pointDiffuseColor, coatPointDiffuseColor, pointTransmissionColor, pointSpecularColor;
-			PBR::GetDirectLightInput(pointDiffuseColor, coatPointDiffuseColor, pointTransmissionColor, pointSpecularColor, worldSpaceNormal.xyz, coatWorldNormal, refractedViewDirectionWS, worldSpaceViewDirection, refractedLightDirection, normalizedLightDirection, lightProperties, pbrSurfaceProperties, tbnTr, uvOriginal);
+			PBR::GetDirectLightInput(pointDiffuseColor, coatPointDiffuseColor, pointTransmissionColor, pointSpecularColor, worldNormal.xyz, coatWorldNormal, refractedViewDirection, viewDirection, refractedLightDirection, normalizedLightDirection, lightProperties, pbrSurfaceProperties, tbnTr, uvOriginal);
 			lightsDiffuseColor += pointDiffuseColor;
 			coatLightsDiffuseColor += coatPointDiffuseColor;
 			transmissionColor += pointTransmissionColor;
 			specularColorPBR += pointSpecularColor;
 #				if defined(WETNESS_EFFECTS)
 			if (waterRoughnessSpecular < 1.0)
-				specularColorPBR += PBR::GetWetnessDirectLightSpecularInput(wetnessNormal, worldSpaceViewDirection, normalizedLightDirection, lightProperties.CoatLightColor, waterRoughnessSpecular) * wetnessGlossinessSpecular;
+				specularColorPBR += PBR::GetWetnessDirectLightSpecularInput(wetnessNormal, viewDirection, normalizedLightDirection, lightProperties.CoatLightColor, waterRoughnessSpecular) * wetnessGlossinessSpecular;
 #				endif
 		}
 #			else
 		lightColor *= lightShadow;
 
 		float3 lightDiffuseColor = lightColor * contactShadow * parallaxShadow * saturate(lightAngle.xxx);
-		float lightBacklighting = 1.0 + saturate(dot(normalizedLightDirection.xyz, worldSpaceViewDirection));
+		float lightBacklighting = 1.0 + saturate(dot(normalizedLightDirection.xyz, viewDirection));
 
 #				if defined(SOFT_LIGHTING)
 		lightDiffuseColor += lightBacklighting * lightColor * GetSoftLightMultiplier(lightAngle) * rimSoftLightColor.xyz;
 #				endif
 
 #				if defined(RIM_LIGHTING)
-		lightDiffuseColor += lightBacklighting * lightColor * GetRimLightMultiplier(normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz) * rimSoftLightColor.xyz;
+		lightDiffuseColor += lightBacklighting * lightColor * GetRimLightMultiplier(normalizedLightDirection, viewDirection, worldNormal.xyz) * rimSoftLightColor.xyz;
 #				endif
 
 #				if defined(BACK_LIGHTING)
@@ -2809,16 +2735,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, normalizedLightDirection, screenNoise, eyeIndex);
 			float3 lightSpecularColor = 0;
 			float3 lightTransmissionColor = 0;
-			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, lightTransmissionColor, hairT, normalizedLightDirection, viewDirection, modelNormal.xyz, worldSpaceVertexNormal.xyz, lightColor * contactShadow, SharedData::hairSpecularSettings.HairGlossiness, hairShadow, uv, baseColor.xyz);
+			Hair::GetHairDirectLight(lightDiffuseColor, lightSpecularColor, lightTransmissionColor, hairT, normalizedLightDirection, viewDirection, worldNormal.xyz, vertexNormal.xyz, lightColor * contactShadow, SharedData::hairSpecularSettings.HairGlossiness, hairShadow, uv, baseColor.xyz);
 			lightsSpecularColor += lightSpecularColor;
 			transmissionColor += lightTransmissionColor;
 		} else {
 #					if defined(SPECULAR)
-			lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz, lightColor, shininess, uv);
+			lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, worldNormal.xyz, lightColor, shininess, uv);
 #					endif
 		}
 #				elif defined(SPECULAR) || (defined(SPARKLE) && !defined(SNOW))
-		lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, worldSpaceViewDirection, worldSpaceNormal.xyz, lightColor, shininess, uv);
+		lightsSpecularColor += GetLightSpecularInput(input, normalizedLightDirection, viewDirection, worldNormal.xyz, lightColor, shininess, uv);
 #				endif
 
 		lightsDiffuseColor += lightDiffuseColor;
@@ -2826,7 +2752,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #			if defined(WETNESS_EFFECTS)
 		if (waterRoughnessSpecular < 1.0)
-			wetnessSpecular += WetnessEffects::GetWetnessSpecular(wetnessNormal, normalizedLightDirection, worldSpaceViewDirection, lightColor, waterRoughnessSpecular);
+			wetnessSpecular += WetnessEffects::GetWetnessSpecular(wetnessNormal, normalizedLightDirection, viewDirection, lightColor, waterRoughnessSpecular);
 #			endif
 	}
 #		endif
@@ -2837,14 +2763,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if !defined(LANDSCAPE)
 	if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::CharacterLight) {
-		float charLightMul = saturate(dot(worldSpaceViewDirection, worldSpaceNormal.xyz)) * CharacterLightParams.x + CharacterLightParams.y * saturate(dot(float2(0.164398998, -0.986393988), worldSpaceNormal.yz));
+		float charLightMul = saturate(dot(viewDirection, worldNormal.xyz)) * CharacterLightParams.x + CharacterLightParams.y * saturate(dot(float2(0.164398998, -0.986393988), worldNormal.yz));
 		float charLightColor = min(CharacterLightParams.w, max(0, CharacterLightParams.z * TexCharacterLightProjNoiseSampler.Sample(SampCharacterLightProjNoiseSampler, baseShadowUV).x));
 		diffuseColor += (charLightMul * charLightColor).xxx;
 	}
 #	endif
 
 #	if defined(EYE)
-	modelNormal.xyz = input.EyeNormal;
+	worldNormal.xyz = input.EyeNormal;
 #	endif  // EYE
 
 	float3 emitColor = Color::GammaToLinearLuminancePreserving(EmitColor);
@@ -2864,12 +2790,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	diffuseColor += emitColor.xyz;
 #	endif
 
-	float3 directionalAmbientColor = Color::Ambient(max(0, mul(DirectionalAmbient, modelNormal)));
+	float3 directionalAmbientColor = Color::Ambient(max(0, mul(DirectionalAmbient, worldNormal)));
 
 #	if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
 		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(-worldSpaceNormal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(-worldNormal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 	}
 #	endif
 
@@ -2889,7 +2815,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		directionalAmbientColor = Color::IrradianceToLinear(directionalAmbientColor);
 
 		directionalAmbientColor *= skylightingDiffuse;
-		directionalAmbientColor *= 1.0 + saturate(worldSpaceNormal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
+		directionalAmbientColor *= 1.0 + saturate(worldNormal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
 		directionalAmbientColor = Color::IrradianceToGamma(directionalAmbientColor);
 	}
 #	endif
@@ -2913,8 +2839,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
 	float envMask = EnvmapData.x * MaterialData.x;
 
-	float viewNormalAngle = dot(worldSpaceNormal.xyz, viewDirection);
-	float3 envSamplingPoint = (viewNormalAngle * 2) * modelNormal.xyz - viewDirection;
+	float viewNormalAngle = dot(worldNormal.xyz, viewDirection);
+	float3 envSamplingPoint = (viewNormalAngle * 2) * worldNormal.xyz - viewDirection;
 
 	if (envMask > 0.0) {
 		if (EnvmapData.y) {
@@ -2986,9 +2912,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 				if (any(F0 > 0.0))
 #			if defined(SKYLIGHTING)
-					envColor = DynamicCubemaps::GetDynamicCubemap(worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, envRoughness, F0, skylightingSH) * envMask;
+					envColor = DynamicCubemaps::GetDynamicCubemap(worldNormal, vertexNormal, viewDirection, envRoughness, F0, skylightingSH) * envMask;
 #			else
-					envColor = DynamicCubemaps::GetDynamicCubemap(worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, envRoughness, F0) * envMask;
+					envColor = DynamicCubemaps::GetDynamicCubemap(worldNormal, vertexNormal, viewDirection, envRoughness, F0) * envMask;
 #			endif
 				else
 					envColor = 0.0;
@@ -3026,7 +2952,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	baseColor.xyz = lerp(baseColor.xyz, pow(abs(baseColor.xyz), 1.0 + wetnessDarkeningAmount), 0.8);
 #		endif
 
-	float3 wetnessReflectance = WetnessEffects::GetWetnessAmbientSpecular(screenUV, wetnessNormal, worldSpaceVertexNormal, worldSpaceViewDirection, waterRoughnessSpecular) * wetnessGlossinessSpecular;
+	float3 wetnessReflectance = WetnessEffects::GetWetnessAmbientSpecular(screenUV, wetnessNormal, vertexNormal, viewDirection, waterRoughnessSpecular) * wetnessGlossinessSpecular;
 
 #		if !defined(DEFERRED)
 	wetnessSpecular += wetnessReflectance;
@@ -3039,7 +2965,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 indirectDiffuseLobeWeight, indirectSpecularLobeWeightPrim, indirectSpecularLobeWeightSec;
 	if (SharedData::hairSpecularSettings.Enabled)
 		vertexColor = 1;
-	Hair::GetHairIndirectSpecularLobeWeights(indirectDiffuseLobeWeight, indirectSpecularLobeWeightPrim, indirectSpecularLobeWeightSec, hairT, worldSpaceNormal.xyz, worldSpaceViewDirection, worldSpaceVertexNormal, SharedData::hairSpecularSettings.HairGlossiness, uv, baseColor.xyz);
+	Hair::GetHairIndirectSpecularLobeWeights(indirectDiffuseLobeWeight, indirectSpecularLobeWeightPrim, indirectSpecularLobeWeightSec, hairT, worldNormal.xyz, viewDirection, vertexNormal, SharedData::hairSpecularSettings.HairGlossiness, uv, baseColor.xyz);
 	indirectDiffuseLobeWeight *= SharedData::hairSpecularSettings.DiffuseIndirectMult;
 	indirectSpecularLobeWeightPrim *= SharedData::hairSpecularSettings.SpecularIndirectMult;
 	indirectSpecularLobeWeightSec *= SharedData::hairSpecularSettings.SpecularIndirectMult;
@@ -3094,10 +3020,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 
 	float3 indirectDiffuseLobeWeight, indirectSpecularLobeWeight;
-	PBR::GetIndirectLobeWeights(indirectDiffuseLobeWeight, indirectSpecularLobeWeight, worldSpaceNormal.xyz, worldSpaceViewDirection, worldSpaceVertexNormal, baseColor.xyz, pbrSurfaceProperties);
+	PBR::GetIndirectLobeWeights(indirectDiffuseLobeWeight, indirectSpecularLobeWeight, worldNormal.xyz, viewDirection, vertexNormal, baseColor.xyz, pbrSurfaceProperties);
 #		if defined(WETNESS_EFFECTS)
 	if (waterRoughnessSpecular < 1.0)
-		indirectSpecularLobeWeight += PBR::GetWetnessIndirectSpecularLobeWeight(wetnessNormal, worldSpaceViewDirection, worldSpaceVertexNormal, waterRoughnessSpecular) * wetnessGlossinessSpecular;
+		indirectSpecularLobeWeight += PBR::GetWetnessIndirectSpecularLobeWeight(wetnessNormal, viewDirection, vertexNormal, waterRoughnessSpecular) * wetnessGlossinessSpecular;
 #		endif
 
 #		if defined(DEFERRED) && defined(SSGI)
@@ -3108,9 +3034,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if !defined(DEFERRED)
 #			if defined(DYNAMIC_CUBEMAPS)
 #				if defined(SKYLIGHTING)
-	specularColorPBR += indirectSpecularLobeWeight * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, pbrSurfaceProperties.Roughness, skylightingSH);
+	specularColorPBR += indirectSpecularLobeWeight * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldNormal, vertexNormal, viewDirection, pbrSurfaceProperties.Roughness, skylightingSH);
 #				else
-	specularColorPBR += indirectSpecularLobeWeight * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, pbrSurfaceProperties.Roughness);
+	specularColorPBR += indirectSpecularLobeWeight * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldNormal, vertexNormal, viewDirection, pbrSurfaceProperties.Roughness);
 #				endif
 #			else
 	specularColorPBR += indirectSpecularLobeWeight * directionalAmbientColor;
@@ -3144,12 +3070,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (SharedData::hairSpecularSettings.Enabled)
 #				if defined(SKYLIGHTING)
 	{
-		float3 indirectSpecular = Hair::GetHairDynamicCubemapSpecularIrradiance(uv, screenUV, hairT, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, SharedData::hairSpecularSettings.HairGlossiness, indirectSpecularLobeWeightPrim, indirectSpecularLobeWeightSec, skylightingSH);
+		float3 indirectSpecular = Hair::GetHairDynamicCubemapSpecularIrradiance(uv, screenUV, hairT, worldNormal, vertexNormal, viewDirection, SharedData::hairSpecularSettings.HairGlossiness, indirectSpecularLobeWeightPrim, indirectSpecularLobeWeightSec, skylightingSH);
 		color.xyz += indirectSpecular;
 	}
 #				else
 	{
-		float3 indirectSpecular = Hair::GetHairDynamicCubemapSpecularIrradiance(uv, screenUV, hairT, worldSpaceNormal, worldSpaceVertexNormal, worldSpaceViewDirection, SharedData::hairSpecularSettings.HairGlossiness, indirectSpecularLobeWeightPrim, indirectSpecularLobeWeightSec);
+		float3 indirectSpecular = Hair::GetHairDynamicCubemapSpecularIrradiance(uv, screenUV, hairT, worldNormal, vertexNormal, viewDirection, SharedData::hairSpecularSettings.HairGlossiness, indirectSpecularLobeWeightPrim, indirectSpecularLobeWeightSec);
 		color.xyz += indirectSpecular;
 	}
 #				endif
@@ -3348,16 +3274,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(SKINNED) || !defined(MODELSPACENORMALS)
 				alpha = ExtendedTranslucency::GetViewDependentAlphaFabric2D(alpha, viewDirection, tbnTr);
 #			else
-				alpha = ExtendedTranslucency::GetViewDependentAlphaFabric1D(alpha, viewDirection, modelNormal.xyz);
+				alpha = ExtendedTranslucency::GetViewDependentAlphaFabric1D(alpha, viewDirection, worldNormal.xyz);
 #			endif
 			}
 			else if (AlphaMaterialModel == ExtendedTranslucency::MaterialModel::IsotropicFabric)
 			{
-				alpha = ExtendedTranslucency::GetViewDependentAlphaFabric1D(alpha, viewDirection, modelNormal.xyz);
+				alpha = ExtendedTranslucency::GetViewDependentAlphaFabric1D(alpha, viewDirection, worldNormal.xyz);
 			}
 			else
 			{
-				alpha = ExtendedTranslucency::GetViewDependentAlphaNaive(alpha, viewDirection, modelNormal.xyz);
+				alpha = ExtendedTranslucency::GetViewDependentAlphaNaive(alpha, viewDirection, worldNormal.xyz);
 			}
 			alpha = saturate(ExtendedTranslucency::SoftClamp(alpha, 2.0f - AlphaMaterialSoftness));
 			alpha = lerp(alpha, originalAlpha, AlphaMaterialStrength);

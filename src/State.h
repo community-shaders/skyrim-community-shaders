@@ -173,7 +173,6 @@ public:
 		ETMaterialModel = 0b111 << 6,
 	};
 
-	std::vector<::Hooks::RenderPass> blendedDecalRenderPasses;
 	bool inWorld = false;
 
 	void UpdateSharedData(bool a_inWorld, bool a_prepass);
