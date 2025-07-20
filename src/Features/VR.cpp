@@ -189,6 +189,13 @@ void VR::DrawSettings()
 		return;
 
 	if (ImGui::CollapsingHeader("Controller Input Instructions", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::TextWrapped("Menu:");
+		ImGui::BulletText("Open Community Shaders Menu: Hold both A/X and B/Y (Primary Controller) while in the main menu or tween menu");
+		ImGui::BulletText("Close: Hold the Grip button on both controllers at the same time");
+		ImGui::TextWrapped("Overlay:");
+		ImGui::BulletText("Open Overlay: Primary Controller Thumbstick Click while in the main menu or tween menu");
+		ImGui::BulletText("Close Overlay: Secondary Controller Thumbstick Click while in the main menu or tween menu");
+		ImGui::Spacing();
 		ImGui::TextWrapped("Controller Input Options:");
 		ImGui::BulletText("Trigger (Both Controllers): Left mouse button");
 		ImGui::BulletText("Grip (Both Controllers): Right mouse button");
@@ -199,10 +206,6 @@ void VR::DrawSettings()
 		ImGui::BulletText("B/Y (Secondary Controller): Shift+Tab");
 		ImGui::BulletText("Secondary Controller Thumbstick: Mouse movement");
 		ImGui::BulletText("Primary Controller Thumbstick: Scroll");
-		ImGui::Spacing();
-		ImGui::TextWrapped("Menu Overlay:");
-		ImGui::BulletText("Open: Hold both A/X and B/Y (Primary Controller) while in the main menu or tween menu");
-		ImGui::BulletText("Close: Hold the Grip button on both controllers at the same time");
 		ImGui::Spacing();
 		ImGui::TextWrapped("Overlay Positioning (Grip + Drag):");
 		ImGui::BulletText("Fixed World Position: Any controller can drag (HMD-only mode) or attached controller only (Both modes)");
@@ -216,22 +219,24 @@ void VR::DrawSettings()
 		ImGui::BulletText("Keyboard: Standard keyboard input");
 	}
 
-	if (ImGui::Checkbox("Enable Depth Buffer Culling", &settings.EnableDepthBufferCulling))
-		*gDepthBufferCulling = settings.EnableDepthBufferCulling;
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text(
-			"Enables a depth buffer culling solution that checks object bounds against the depth buffer before rendering. "
-			"Provides a significant performance boost and includes fixes for game engine bugs. ");
-	}
-
-	if (settings.EnableDepthBufferCulling) {
-		if (ImGui::SliderFloat("Min Occludee Box Extent", &settings.MinOccludeeBoxExtent, 0.1f, 500.0f, "%.1f"))
-			*gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
+	if (ImGui::CollapsingHeader("VR Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+		if (ImGui::Checkbox("Enable Depth Buffer Culling", &settings.EnableDepthBufferCulling))
+			*gDepthBufferCulling = settings.EnableDepthBufferCulling;
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
-				"Sets the minimum bounding box size to use for objects when testing them against the depth buffer. "
-				"Helps prevent small objects from flickering due to precision issues. "
-				"Lower values will give better performance. ");
+				"Enables a depth buffer culling solution that checks object bounds against the depth buffer before rendering. "
+				"Provides a significant performance boost and includes fixes for game engine bugs. ");
+		}
+
+		if (settings.EnableDepthBufferCulling) {
+			if (ImGui::SliderFloat("Min Occludee Box Extent", &settings.MinOccludeeBoxExtent, 0.1f, 500.0f, "%.1f"))
+				*gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text(
+					"Sets the minimum bounding box size to use for objects when testing them against the depth buffer. "
+					"Helps prevent small objects from flickering due to precision issues. "
+					"Lower values will give better performance. ");
+			}
 		}
 	}
 
@@ -1044,7 +1049,8 @@ void VR::SubmitOverlayFrame()
 	// Update drag logic for all modes
 	UpdateOverlayDrag();
 	auto& enabled = globals::menu->IsEnabled;
-	if (enabled && menuOverlayHandle != vr::k_ulOverlayHandleInvalid && menuTexture && menuRTV) {
+	auto& overlayVisible = globals::menu->overlayVisible;
+	if ((enabled || overlayVisible) && menuOverlayHandle != vr::k_ulOverlayHandleInvalid && menuTexture && menuRTV) {
 		// Copy ImGui output to overlay texture
 		ID3D11RenderTargetView* oldRTV = nullptr;
 		globals::d3d::context->OMGetRenderTargets(1, &oldRTV, nullptr);
@@ -1113,22 +1119,38 @@ void VR::SubmitOverlayFrame()
 void VR::UpdateOverlayMenuStateFromInput()
 {
 	bool& isEnabled = globals::menu->IsEnabled;
+	bool& overlayEnabled = globals::menu->overlayVisible;
 	bool& testMode = settings.VRMenuControllerDiagnosticsTestMode;
+	if (testMode)
+		return;
 	// Dual grip to close
-	if (isEnabled && !testMode &&
+	if (isEnabled &&
 		primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed &&
 		secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed) {
 		isEnabled = false;
 		primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed = false;
 		secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed = false;
 	}
-	// A/X + B/Y to open
+	// A/X + B/Y to open Community Shaders menu (Primary Controller) - only when menu is closed
 	if (!isEnabled &&
 		primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kXA].isPressed &&
 		primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kBY].isPressed &&
 		globals::game::ui &&
 		(globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::TweenMenu::MENU_NAME))) {
+		// Open the Community Shaders menu (only when closed)
 		isEnabled = true;
+	}
+
+	// Overlay control
+	if (!overlayEnabled && primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger].isPressed && globals::game::ui &&
+		(globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::TweenMenu::MENU_NAME))) {
+		// Enable the global overlay visibility
+		overlayEnabled = true;
+	}
+	if (overlayEnabled && secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger].isPressed && globals::game::ui &&
+		(globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::TweenMenu::MENU_NAME))) {
+		// Disable the global overlay visibility
+		overlayEnabled = false;
 	}
 }
 
