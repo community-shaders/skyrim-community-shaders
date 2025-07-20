@@ -1145,7 +1145,7 @@ namespace Hooks
 				std::uint8_t patch[] = { 0x41, 0x83, 0xE4, 0x00 };  // and r12d, 0
 				REL::safe_write(setupGeometryUpdateRenderSpace, patch, sizeof(patch));
 			} else {
-				std::uint8_t patch[] = { 0x90, 0x90, 0x90, 0x90 };  // 4 NOPs
+				std::uint8_t patch[] = { 0x0F, 0x1F, 0x40, 0x00 };  // 4-byte NOP
 				REL::safe_write(setupGeometryUpdateRenderSpace, patch, sizeof(patch));
 			}
 		}
