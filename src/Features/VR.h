@@ -7,6 +7,39 @@
 #include <vector>
 using namespace DirectX::SimpleMath;
 
+// Controller device enum
+enum class ControllerDevice
+{
+	Primary = 0,
+	Secondary = 1,
+	Both = 2
+};
+
+// Button combo structure - using explicit encoding for better JSON compatibility
+struct ButtonCombo
+{
+	uint32_t deviceAndKey;  // device in upper bits, key in lower bits
+
+	ButtonCombo(ControllerDevice device, uint32_t key) :
+		deviceAndKey((static_cast<uint32_t>(device) << 16) | (key & 0xFFFF)) {}
+
+	// Helper constructors for common cases
+	static ButtonCombo Primary(uint32_t key) { return ButtonCombo(ControllerDevice::Primary, key); }
+	static ButtonCombo Secondary(uint32_t key) { return ButtonCombo(ControllerDevice::Secondary, key); }
+	static ButtonCombo Both(uint32_t key) { return ButtonCombo(ControllerDevice::Both, key); }
+
+	// Accessors
+	ControllerDevice GetDevice() const { return static_cast<ControllerDevice>(deviceAndKey >> 16); }
+	uint32_t GetKey() const { return deviceAndKey & 0xFFFF; }
+
+	// Default constructor for JSON
+	ButtonCombo() :
+		deviceAndKey(0) {}
+};
+
+// JSON serialization for ButtonCombo (simple uint32_t)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(ButtonCombo, deviceAndKey)
+
 struct VR : Feature
 {
 	static VR* GetSingleton()
@@ -64,11 +97,30 @@ struct VR : Feature
 		bool VRMenuControllerDiagnosticsTestMode = false;  // If true, disables controller input for menu except right thumbstick and triggers
 
 		// VR menu mouse control settings
-		float mouseDeadzone = 0.2f;  // Minimum thumbstick deflection to move mouse/scroll
-		float mouseSpeed = 25.0f;    // Mouse speed in pixels per frame per full deflection
+		float mouseDeadzone = 0.1f;  // Minimum thumbstick deflection to move mouse/scroll
+		float mouseSpeed = 10.0f;    // Mouse speed in pixels per frame per full deflection
 
 		// Drag highlight color (RGBA)
-		std::array<float, 4> dragHighlightColor = { 0.7f, 0.7f, 0.7f, 0.3f };  // Gray tint with 30% alpha
+		std::array<float, 4> dragHighlightColor = { 1.0f, 1.0f, 0.0f, 0.3f };  // Yellow tint with 30% alpha
+
+		// VR Key Bindings - Using ButtonCombo structure for cleaner device/key separation
+		std::vector<ButtonCombo> VRMenuOpenKeys = {
+			ButtonCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kXA)),
+			ButtonCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kBY))
+		};  // A/X and B/Y on primary
+		std::vector<ButtonCombo> VRMenuCloseKeys = {
+			ButtonCombo::Both(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kGrip))
+		};  // Grips on both
+		std::vector<ButtonCombo> VROverlayOpenKeys = {
+			ButtonCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
+		};  // Joystick click on primary
+		std::vector<ButtonCombo> VROverlayCloseKeys = {
+			ButtonCombo::Secondary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
+		};  // Joystick click on secondary
+
+		// VR Combo Settings
+		float comboTimeout = 3.0f;  // Timeout in seconds for combo sequences
+		bool useComboMode = true;   // Enable combo mode for menu actions
 	};
 
 	Settings settings;
@@ -175,6 +227,37 @@ public:
 	};
 
 	OverlayDragState overlayDragState;
+
+	// VR combo sequence tracking
+	struct ComboSequence
+	{
+		std::vector<uint32_t> sequence;
+		double startTime = 0.0;
+		size_t currentIndex = 0;
+		bool active = false;
+	};
+	ComboSequence menuOpenCombo;
+	ComboSequence menuCloseCombo;
+
+	// Combo recording state
+	enum class ComboType
+	{
+		None,
+		MenuOpen,
+		MenuClose,
+		OverlayOpen,
+		OverlayClose
+	};
+
+	bool isCapturingCombo = false;
+	ComboType currentComboType = ComboType::None;
+	const char* currentComboName = nullptr;
+	std::vector<ButtonCombo> recordedCombo;
+	double comboStartTime = 0.0;
+	double comboTimeout = 3.0;  // 3 second timeout
+	bool currentComboRequiresPrimary = false;
+	bool currentComboRequiresSecondary = false;
+	bool currentComboRequiresBoth = false;
 
 	void UpdateOverlayDrag();
 	void SetFixedOverlayToCurrentHMD();

@@ -12,6 +12,7 @@
 #include <imgui_impl_dx11.h>
 #include <magic_enum.hpp>
 #include <openvr.h>
+#include <unordered_map>
 #include <windows.h>
 
 using AttachMode = VR::Settings::OverlayAttachMode;
@@ -36,7 +37,13 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VRMenuControllerOffsetZ,
 	mouseDeadzone,
 	mouseSpeed,
-	dragHighlightColor)
+	dragHighlightColor,
+	VRMenuOpenKeys,
+	VRMenuCloseKeys,
+	VROverlayOpenKeys,
+	VROverlayCloseKeys,
+	comboTimeout,
+	useComboMode)
 
 void CreateOverlayTextureAndRTV(ID3D11Device* device, int width, int height, ID3D11Texture2D** outTex, ID3D11RenderTargetView** outRTV)
 {
@@ -184,487 +191,830 @@ vr::HmdMatrix34_t VR::ComputeOverlayTransformFromHMD()
 
 void VR::DrawSettings()
 {
+	static std::unordered_map<uint32_t, ControllerDevice> recordingButtonControllers;
 	auto menu = globals::menu;
 	if (!menu)
 		return;
 
-	if (ImGui::CollapsingHeader("Controller Input Instructions", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::TextWrapped("Menu:");
-		ImGui::BulletText("Open Community Shaders Menu: Hold both A/X and B/Y (Primary Controller) while in the main menu or tween menu");
-		ImGui::BulletText("Close: Hold the Grip button on both controllers at the same time");
-		ImGui::TextWrapped("Overlay:");
-		ImGui::BulletText("Open Overlay: Primary Controller Thumbstick Click while in the main menu or tween menu");
-		ImGui::BulletText("Close Overlay: Secondary Controller Thumbstick Click while in the main menu or tween menu");
-		ImGui::Spacing();
-		ImGui::TextWrapped("Controller Input Options:");
-		ImGui::BulletText("Trigger (Both Controllers): Left mouse button");
-		ImGui::BulletText("Grip (Both Controllers): Right mouse button");
-		ImGui::BulletText("Touchpad Click (Both Controllers): Middle mouse button");
-		ImGui::BulletText("Stick Click (Both Controllers): Middle mouse button");
-		ImGui::BulletText("A/X (Both Controllers): Enter");
-		ImGui::BulletText("B/Y (Primary Controller): Tab");
-		ImGui::BulletText("B/Y (Secondary Controller): Shift+Tab");
-		ImGui::BulletText("Secondary Controller Thumbstick: Mouse movement");
-		ImGui::BulletText("Primary Controller Thumbstick: Scroll");
-		ImGui::Spacing();
-		ImGui::TextWrapped("Overlay Positioning (Grip + Drag):");
-		ImGui::BulletText("Fixed World Position: Any controller can drag (HMD-only mode) or attached controller only (Both modes)");
-		ImGui::BulletText("HMD Relative: Any controller can drag (HMD-only mode) or attached controller only (Both modes)");
-		ImGui::BulletText("Controller Attached: Only the opposite hand can drag the controller overlay");
-		ImGui::BulletText("Haptic feedback will confirm when drag starts");
-		ImGui::BulletText("The overlay being dragged will be highlighted with a tint color");
-		ImGui::Spacing();
-		ImGui::TextWrapped("HMD Input Options:");
-		ImGui::BulletText("Mouse: Standard desktop mouse input");
-		ImGui::BulletText("Keyboard: Standard keyboard input");
-	}
-
-	if (ImGui::CollapsingHeader("VR Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-		if (ImGui::Checkbox("Enable Depth Buffer Culling", &settings.EnableDepthBufferCulling))
-			*gDepthBufferCulling = settings.EnableDepthBufferCulling;
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Enables a depth buffer culling solution that checks object bounds against the depth buffer before rendering. "
-				"Provides a significant performance boost and includes fixes for game engine bugs. ");
-		}
-
-		if (settings.EnableDepthBufferCulling) {
-			if (ImGui::SliderFloat("Min Occludee Box Extent", &settings.MinOccludeeBoxExtent, 0.1f, 500.0f, "%.1f"))
-				*gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text(
-					"Sets the minimum bounding box size to use for objects when testing them against the depth buffer. "
-					"Helps prevent small objects from flickering due to precision issues. "
-					"Lower values will give better performance. ");
-			}
-		}
-	}
-
-	// Overlay Settings Section
-	if (ImGui::CollapsingHeader("Overlay Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-		bool vrMenuOverlayExpanded = true;
-		Util::DrawSectionHeader("VR Menu Overlay", false, true, &vrMenuOverlayExpanded);
-		if (vrMenuOverlayExpanded) {
-			const char* positioningMethods[] = { "HMD Relative", "Fixed World Position" };
-			if (ImGui::Combo("Positioning Method", &settings.VRMenuPositioningMethod, positioningMethods, 2)) {
-				UpdateVROverlayPosition();
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("HMD Relative: Menu follows your head movement. Fixed World Position: Menu stays at a fixed location in the world.");
-			}
-			// If in Fixed World Position mode, show reset button
-			if (settings.VRMenuPositioningMethod == 1) {
-				if (ImGui::Button("Reset Fixed Position to HMD")) {
-					SetFixedOverlayToCurrentHMD();
-				}
-			}
-
-			if (ImGui::SliderFloat("Menu Scale", &settings.VRMenuScale, 0.5f, 2.0f, "%.2fx")) {
-				UpdateVROverlayPosition();
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Scales the menu overlay size in VR space.");
-			}
-
-			if (ImGui::SliderFloat("Menu Distance", &settings.VRMenuDistance, 0.5f, 3.0f, "%.1f m")) {
-				UpdateVROverlayPosition();
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Distance from the player's head to display the menu overlay.");
-			}
-		}
-
-		bool attachPointsExpanded = true;
-		Util::DrawSectionHeader("Attach Points", false, true, &attachPointsExpanded);
-		if (attachPointsExpanded) {
-			constexpr auto attachEnums = magic_enum::enum_values<AttachMode>();
-			constexpr auto attachNames = magic_enum::enum_names<AttachMode>();
-			std::vector<const char*> attachLabels;
-			for (size_t i = 0; i < attachEnums.size(); ++i) {
-				attachLabels.push_back(attachNames[i].data());
-			}
-			int attachModeInt = static_cast<int>(settings.attachMode);
-			if (ImGui::Combo("Overlay Attach Mode", &attachModeInt, attachLabels.data(), static_cast<int>(attachLabels.size()))) {
-				settings.attachMode = static_cast<AttachMode>(attachModeInt);
-				UpdateVROverlayPosition();
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Display the menu overlay in front of your head.");
-			}
-		}
-
-		if (AttachMode::HMDOnly == settings.attachMode || AttachMode::Both == settings.attachMode) {
-			bool hmdOffsetExpanded = true;
-			Util::DrawSectionHeader("HMD Overlay Offset", false, true, &hmdOffsetExpanded);
-			if (hmdOffsetExpanded) {
-				if (ImGui::SliderFloat("X Offset (Left/Right)##HMD", &settings.VRMenuOffsetX, -2.0f, 2.0f, "%.2f m")) {
-					UpdateVROverlayPosition();
-				}
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Horizontal offset from HMD center (negative = left, positive = right).");
-				}
-				if (ImGui::SliderFloat("Y Offset (Up/Down)##HMD", &settings.VRMenuOffsetY, -2.0f, 2.0f, "%.2f m")) {
-					UpdateVROverlayPosition();
-				}
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Vertical offset from HMD center (negative = down, positive = up).");
-				}
-				if (ImGui::SliderFloat("Z Offset (Forward/Back)##HMD", &settings.VRMenuOffsetZ, -2.0f, 2.0f, "%.2f m")) {
-					UpdateVROverlayPosition();
-				}
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Depth offset from HMD center (negative = forward, positive = backward).");
+	if (ImGui::BeginTabBar("##VRTabs", ImGuiTabBarFlags_None)) {
+		// General Settings Tab
+		if (ImGui::BeginTabItem("General")) {
+			if (ImGui::BeginChild("##VRGeneralFrame", { 0, 0 }, true)) {
+				// Controller Input Instructions
+				if (ImGui::CollapsingHeader("Controller Input Instructions", ImGuiTreeNodeFlags_DefaultOpen)) {
+					ImGui::TextWrapped("Menu:");
+					ImGui::BulletText("Open Community Shaders Menu: Hold both configured buttons (Primary Controller) while in the main menu or tween menu");
+					ImGui::BulletText("Close: Hold the configured buttons on both controllers at the same time");
+					ImGui::TextWrapped("Overlay:");
+					ImGui::BulletText("Open Overlay: Primary Controller configured button while in the main menu or tween menu");
+					ImGui::BulletText("Close Overlay: Secondary Controller configured button while in the main menu or tween menu");
+					ImGui::Spacing();
+					ImGui::TextWrapped("Controller Input Options:");
+					ImGui::BulletText("Trigger (Both Controllers): Left mouse button");
+					ImGui::BulletText("Grip (Both Controllers): Right mouse button");
+					ImGui::BulletText("Touchpad Click (Both Controllers): Middle mouse button");
+					ImGui::BulletText("Stick Click (Both Controllers): Middle mouse button");
+					ImGui::BulletText("A/X (Both Controllers): Enter");
+					ImGui::BulletText("B/Y (Primary Controller): Tab");
+					ImGui::BulletText("B/Y (Secondary Controller): Shift+Tab");
+					ImGui::BulletText("Secondary Controller Thumbstick: Mouse movement");
+					ImGui::BulletText("Primary Controller Thumbstick: Scroll");
+					ImGui::Spacing();
+					ImGui::TextWrapped("Overlay Positioning (Grip + Drag):");
+					ImGui::BulletText("Fixed World Position: Any controller can drag (HMD-only mode) or attached controller only (Both modes)");
+					ImGui::BulletText("HMD Relative: Any controller can drag (HMD-only mode) or attached controller only (Both modes)");
+					ImGui::BulletText("Controller Attached: Only the opposite hand can drag the controller overlay");
 				}
 
-				// Reset HMD offset button
-				if (ImGui::Button("Reset HMD Offset")) {
-					settings.VRMenuOffsetX = 0.0f;
-					settings.VRMenuOffsetY = 0.0f;
-					settings.VRMenuOffsetZ = 0.0f;
-					UpdateVROverlayPosition();
-				}
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Reset all HMD offset values to zero.");
-				}
-			}
-		}
+				// General VR Settings
+				if (ImGui::CollapsingHeader("General Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+					ImGui::Checkbox("Enable Depth Buffer Culling", &settings.EnableDepthBufferCulling);
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text("Enables depth buffer culling for VR performance optimization.");
+					}
 
-		if (AttachMode::ControllerOnly == settings.attachMode || AttachMode::Both == settings.attachMode) {
-			bool controllerOffsetExpanded = true;
-			Util::DrawSectionHeader("Controller Offset", false, true, &controllerOffsetExpanded);
-			if (controllerOffsetExpanded) {
-				// Use magic_enum to get names and filter out 'Invalid'
-				constexpr auto handEnums = magic_enum::enum_values<vr::ETrackedControllerRole>();
-				constexpr auto handNames = magic_enum::enum_names<vr::ETrackedControllerRole>();
-				std::vector<const char*> handLabels;
-				std::vector<int> handIndices;
-				for (size_t i = 0; i < handEnums.size(); ++i) {
-					if (handEnums[i] == vr::ETrackedControllerRole::TrackedControllerRole_LeftHand || handEnums[i] == vr::ETrackedControllerRole::TrackedControllerRole_RightHand) {
-						handLabels.push_back(handNames[i].data());
-						handIndices.push_back(static_cast<int>(handEnums[i]));
+					ImGui::SliderFloat("Min Occludee Box Extent", &settings.MinOccludeeBoxExtent, 0.0f, 1000.0f, "%.1f");
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text("Minimum box extent for occlusion culling in VR.");
 					}
 				}
-				int handInt = static_cast<int>(settings.VRMenuControllerHand);
-				int currentIndex = (handInt == vr::ETrackedControllerRole::TrackedControllerRole_RightHand) ? 1 : 0;
-				if (ImGui::Combo("Controller Hand", &currentIndex, handLabels.data(), static_cast<int>(handLabels.size()))) {
-					settings.VRMenuControllerHand = static_cast<vr::ETrackedControllerRole>(handIndices[currentIndex]);
-					UpdateVROverlayPosition();
-				}
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Which controller to attach the menu to.");
+
+				// Menu Settings
+				if (ImGui::CollapsingHeader("Menu Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+					ImGui::SliderFloat("Menu Distance", &settings.VRMenuDistance, 0.5f, 5.0f, "%.1f");
+					ImGui::SliderFloat("Menu Scale", &settings.VRMenuScale, 0.5f, 2.0f, "%.2f");
+
+					const char* positioningMethods[] = { "HMD Relative", "Fixed World Position" };
+					ImGui::Combo("Menu Positioning Method", &settings.VRMenuPositioningMethod, positioningMethods, IM_ARRAYSIZE(positioningMethods));
+
+					const char* attachModes[] = { "HMD Only", "Controller Only", "Both" };
+					int attachModeInt = static_cast<int>(settings.attachMode);
+					if (ImGui::Combo("Attach Mode", &attachModeInt, attachModes, IM_ARRAYSIZE(attachModes))) {
+						settings.attachMode = static_cast<AttachMode>(attachModeInt);
+					}
+
+					const char* controllerHands[] = { "Left", "Right" };
+					int controllerHandInt = static_cast<int>(settings.VRMenuControllerHand);
+					if (ImGui::Combo("Menu Controller Hand", &controllerHandInt, controllerHands, IM_ARRAYSIZE(controllerHands))) {
+						settings.VRMenuControllerHand = static_cast<vr::ETrackedControllerRole>(controllerHandInt);
+					}
+
+					ImGui::SliderFloat("Menu Offset X", &settings.VRMenuOffsetX, -2.0f, 2.0f, "%.2f");
+					ImGui::SliderFloat("Menu Offset Y", &settings.VRMenuOffsetY, -2.0f, 2.0f, "%.2f");
+					ImGui::SliderFloat("Menu Offset Z", &settings.VRMenuOffsetZ, -2.0f, 2.0f, "%.2f");
+
+					ImGui::SliderFloat("Controller Offset X", &settings.VRMenuControllerOffsetX, -0.5f, 0.5f, "%.2f");
+					ImGui::SliderFloat("Controller Offset Y", &settings.VRMenuControllerOffsetY, -0.5f, 0.5f, "%.2f");
+					ImGui::SliderFloat("Controller Offset Z", &settings.VRMenuControllerOffsetZ, -0.5f, 0.5f, "%.2f");
 				}
 
-				if (ImGui::SliderFloat("X Offset (Left/Right)##Controller", &settings.VRMenuControllerOffsetX, -2.0f, 2.0f, "%.2f m")) {
-					UpdateVROverlayPosition();
-				}
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Horizontal offset from controller center (negative = left, positive = right).");
-				}
-
-				if (ImGui::SliderFloat("Y Offset (Up/Down)##Controller", &settings.VRMenuControllerOffsetY, -2.0f, 2.0f, "%.2f m")) {
-					UpdateVROverlayPosition();
-				}
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Vertical offset from controller center (negative = down, positive = up).");
+				// Mouse Settings
+				if (ImGui::CollapsingHeader("Mouse Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+					ImGui::SliderFloat("Mouse Deadzone", &settings.mouseDeadzone, 0.0f, 0.5f, "%.2f");
+					ImGui::SliderFloat("Mouse Speed", &settings.mouseSpeed, 0.1f, 5.0f, "%.2f");
 				}
 
-				if (ImGui::SliderFloat("Z Offset (Forward/Back)##Controller", &settings.VRMenuControllerOffsetZ, -2.0f, 2.0f, "%.2f m")) {
-					UpdateVROverlayPosition();
-				}
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Depth offset from controller center (negative = forward, positive = backward).");
+				// Visual Settings
+				if (ImGui::CollapsingHeader("Visual Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+					ImGui::ColorEdit4("Drag Highlight Color", settings.dragHighlightColor.data());
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text("Color used to highlight draggable overlays in VR.");
+					}
 				}
 
-				// Reset Controller offset button
-				if (ImGui::Button("Reset Controller Offset")) {
-					settings.VRMenuControllerOffsetX = 0.0f;
-					settings.VRMenuControllerOffsetY = 0.0f;
-					settings.VRMenuControllerOffsetZ = 0.0f;
-					UpdateVROverlayPosition();
-				}
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Reset all controller offset values to zero.");
+				// Combo Settings
+				if (ImGui::CollapsingHeader("Combo Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+					ImGui::SliderFloat("Combo Timeout", &settings.comboTimeout, 1.0f, 10.0f, "%.1f seconds");
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text("Time limit for recording button combinations.");
+					}
+
+					ImGui::Checkbox("Use Combo Mode", &settings.useComboMode);
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text("Enable button combination mode for menu interactions.");
+					}
 				}
 			}
-		}
-	}
-
-	// Input Options Section
-	if (ImGui::CollapsingHeader("Input Options", ImGuiTreeNodeFlags_DefaultOpen)) {
-		bool inputOptionsExpanded = true;
-		if (inputOptionsExpanded) {
-			if (ImGui::SliderFloat("Mouse Deadzone", &settings.mouseDeadzone, 0.0f, 1.0f, "%.2f")) {
-				// No extra action needed, value is used in menu input
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Minimum thumbstick deflection required to move the mouse or scroll. Higher values require more movement to register.");
-			}
-
-			if (ImGui::SliderFloat("Mouse Speed", &settings.mouseSpeed, 1.0f, 100.0f, "%.1f")) {
-				// No extra action needed, value is used in menu input
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Mouse speed in pixels per frame per full thumbstick deflection.");
-			}
-
-			ImGui::Separator();
-			ImGui::Text("Drag Highlight Color");
-			if (ImGui::ColorEdit4("##DragHighlightColor", settings.dragHighlightColor.data(), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar)) {
-				// Color picker changed - no immediate action needed, will be applied on next drag
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Color and transparency of the highlight tint applied to overlays when dragging. Alpha controls the blend strength.");
-			}
-		}
-	}
-
-	// Controller Diagnostics Section
-	if (ImGui::CollapsingHeader("Controller Diagnostics", ImGuiTreeNodeFlags_DefaultOpen)) {
-		if (ImGui::Checkbox("Test Mode: Disable controller menu input (except right thumbstick and triggers)", &settings.VRMenuControllerDiagnosticsTestMode)) {
-			ImGui::SetScrollHereY(0.0f);  // Scroll to top of the window when toggled
-		}
-		ImGui::SeparatorText("Button State");
-		double nowSecs = GetNowSecs();
-
-		// Get highlight color from theme
-		ImVec4 highlightColor = menu->GetTheme().StatusPalette.InfoColor;
-		ImU32 highlightColorU32 = ImGui::ColorConvertFloat4ToU32(highlightColor);
-
-		if (ImGui::BeginTable("vr_input_state_table", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-			ImGui::TableSetupColumn("Button");
-			ImGui::TableSetupColumn("Left State");
-			ImGui::TableSetupColumn("Left Held (s)");
-			ImGui::TableSetupColumn("Left Type");
-			ImGui::TableSetupColumn("Right State");
-			ImGui::TableSetupColumn("Right Held (s)");
-			ImGui::TableSetupColumn("Right Type");
-			ImGui::TableHeadersRow();
-
-			// Helper for button type text
-			auto DrawButtonType = [](const RE::ButtonState& state) {
-				if (!state.isPressed) {
-					if (state.IsClick())
-						ImGui::TextUnformatted("Click");
-					else if (state.IsHold())
-						ImGui::TextUnformatted("Hold");
-					else
-						ImGui::TextUnformatted("-");
-				} else {
-					ImGui::TextUnformatted("Held");
-				}
-			};
-
-			// Helper for printing a row with left/right cell highlight
-			auto printRow = [&](const char* label, const RE::ButtonState& left, const RE::ButtonState& right) {
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::TextUnformatted(label);
-				ImGui::TableSetColumnIndex(1);
-				if (left.isPressed)
-					ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, highlightColorU32);
-				ImGui::TextUnformatted(left.isPressed ? "Pressed" : "Released");
-				ImGui::TableSetColumnIndex(2);
-				if (left.isPressed)
-					ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, highlightColorU32);
-				ImGui::Text("%.2f", left.GetCurrentHeldTime(nowSecs));
-				ImGui::TableSetColumnIndex(3);
-				if (left.isPressed)
-					ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, highlightColorU32);
-				DrawButtonType(left);
-				ImGui::TableSetColumnIndex(4);
-				if (right.isPressed)
-					ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, highlightColorU32);
-				ImGui::TextUnformatted(right.isPressed ? "Pressed" : "Released");
-				ImGui::TableSetColumnIndex(5);
-				if (right.isPressed)
-					ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, highlightColorU32);
-				ImGui::Text("%.2f", right.GetCurrentHeldTime(nowSecs));
-				ImGui::TableSetColumnIndex(6);
-				if (right.isPressed)
-					ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, highlightColorU32);
-				DrawButtonType(right);
-			};
-
-			printRow("Trigger", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTrigger], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTrigger]);
-			printRow("Grip", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip]);
-			printRow("GripAlt", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGripAlt], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGripAlt]);
-			printRow("Stick Click", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger]);
-			printRow("Touchpad Click", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTouchpadClick], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTouchpadClick]);
-			printRow("Touchpad Alt", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTouchpadAlt], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTouchpadAlt]);
-			printRow("B/Y", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kBY], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kBY]);
-			printRow("A/X", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kXA], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kXA]);
-
-			ImGui::EndTable();
+			ImGui::EndChild();
+			ImGui::EndTabItem();
 		}
 
-		ImGui::SeparatorText("VR Thumbstick State");
+		// Key Bindings Tab
+		if (ImGui::BeginTabItem("Key Bindings")) {
+			if (ImGui::BeginChild("##VRKeyBindingsFrame", { 0, 0 }, true)) {
+				// Combo box for selecting which combo to record
+				const char* comboTypes[] = {
+					"Open Community Shaders Menu",
+					"Close Community Shaders Menu",
+					"Open VR Overlay",
+					"Close VR Overlay"
+				};
 
-		// Helper to draw a thumbstick quadrant visualization (returns ImVec2 for label alignment)
-		auto DrawThumbstickPad = [&](float x, float y, ImU32 highlightCol) -> ImVec2 {
-			ImVec2 padSize = ImVec2(80, 80);
-			ImVec2 cursor = ImGui::GetCursorScreenPos();
-			ImDrawList* drawList = ImGui::GetWindowDrawList();
-			ImVec2 center = ImVec2(cursor.x + padSize.x / 2, cursor.y + padSize.y / 2);
-			float radius = padSize.x / 2 - 4;
-			ImU32 borderCol = ImGui::GetColorU32(ImGuiCol_Border);
-			ImU32 axisCol = ImGui::GetColorU32(ImGuiCol_TextDisabled);
-			ImU32 dotCol = ImGui::GetColorU32(ImGuiCol_Text);
-
-			// Draw background
-			drawList->AddRectFilled(cursor, ImVec2(cursor.x + padSize.x, cursor.y + padSize.y), ImGui::GetColorU32(ImGuiCol_FrameBg));
-			// Draw border
-			drawList->AddRect(cursor, ImVec2(cursor.x + padSize.x, cursor.y + padSize.y), borderCol, 4.0f, 0, 2.0f);
-			// Draw axes
-			drawList->AddLine(ImVec2(center.x, cursor.y + 4), ImVec2(center.x, cursor.y + padSize.y - 4), axisCol, 1.0f);
-			drawList->AddLine(ImVec2(cursor.x + 4, center.y), ImVec2(cursor.x + padSize.x - 4, center.y), axisCol, 1.0f);
-
-			// Determine quadrant
-			int quad = 0;
-			if (x > 0 && y > 0)
-				quad = 1;  // top-right
-			else if (x < 0 && y > 0)
-				quad = 2;  // top-left
-			else if (x < 0 && y < 0)
-				quad = 3;  // bottom-left
-			else if (x > 0 && y < 0)
-				quad = 4;  // bottom-right
-
-			// Highlight quadrant
-			if (quad != 0) {
-				ImVec2 q0 = center;
-				ImVec2 q1 = center;
-				ImVec2 q2 = center;
-				ImVec2 q3 = center;
-				if (quad == 1) {  // top-right
-					q1.x += radius;
-					q1.y -= radius;
-					q2.x += radius;
-					q2.y += 0;
-					q3.x += 0;
-					q3.y -= radius;
-				} else if (quad == 2) {  // top-left
-					q1.x -= radius;
-					q1.y -= radius;
-					q2.x -= radius;
-					q2.y += 0;
-					q3.x += 0;
-					q3.y -= radius;
-				} else if (quad == 3) {  // bottom-left
-					q1.x -= radius;
-					q1.y += radius;
-					q2.x -= radius;
-					q2.y += 0;
-					q3.x += 0;
-					q3.y += radius;
-				} else if (quad == 4) {  // bottom-right
-					q1.x += radius;
-					q1.y += radius;
-					q2.x += radius;
-					q2.y += 0;
-					q3.x += 0;
-					q3.y += radius;
+				static int selectedComboIndex = 0;
+				ImGui::Text("Select Combo to Record:");
+				ImGui::SameLine();
+				if (ImGui::Combo("##ComboSelector", &selectedComboIndex, comboTypes, IM_ARRAYSIZE(comboTypes))) {
+					// Reset recording state when changing selection
+					this->isCapturingCombo = false;
+					this->currentComboType = VR::ComboType::None;
+					this->recordedCombo.clear();
 				}
-				ImVec2 poly[4] = { center, q1, q2, q3 };
-				drawList->AddConvexPolyFilled(poly, 4, highlightCol);
-			}
 
-			// Draw stick position dot
-			ImVec2 dot = ImVec2(center.x + x * radius, center.y - y * radius);
-			drawList->AddCircleFilled(dot, 5.0f, dotCol);
+				ImGui::SameLine();
+				if (ImGui::Button("Record Selected Combo")) {
+					// Start recording the selected combo
+					this->isCapturingCombo = true;
+					this->currentComboType = static_cast<VR::ComboType>(selectedComboIndex + 1);
+					this->currentComboName = comboTypes[selectedComboIndex];
+					this->recordedCombo.clear();
+					this->comboStartTime = GetNowSecs();
+					recordingButtonControllers.clear();
 
-			// Return size for label alignment
-			return padSize;
-		};
-
-		ImU32 highlightCol = ImGui::ColorConvertFloat4ToU32(menu->GetTheme().StatusPalette.InfoColor);
-
-		if (ImGui::BeginTable("##VRThumbstickTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
-			ImGui::TableSetupColumn("Primary Controller", ImGuiTableColumnFlags_WidthFixed, 200.0f);
-			ImGui::TableSetupColumn("Secondary Controller", ImGuiTableColumnFlags_WidthFixed, 200.0f);
-			ImGui::TableNextRow();
-
-			// Primary controller cell
-			ImGui::TableSetColumnIndex(0);
-			ImGui::BeginGroup();
-			ImVec2 padSizeL = DrawThumbstickPad(primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, highlightCol);
-			ImGui::Dummy(padSizeL);
-			ImGui::SetNextItemWidth(160.0f);
-			ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
-			ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, RE::GetQuadrantName(primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y));
-			ImGui::EndGroup();
-
-			// Secondary controller cell
-			ImGui::TableSetColumnIndex(1);
-			ImGui::BeginGroup();
-			ImVec2 padSizeR = DrawThumbstickPad(secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, highlightCol);
-			ImGui::Dummy(padSizeR);
-			ImGui::SetNextItemWidth(160.0f);
-			ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
-			ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, RE::GetQuadrantName(secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y));
-			ImGui::EndGroup();
-
-			ImGui::EndTable();
-		}
-
-		ImGui::SeparatorText("Recent VR Controller Events");
-		ImGui::TextDisabled("Note: For thumbstick events, KeyCode/Value columns show X/Y floats.");
-		if (ImGui::BeginTable("eventlog", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
-			ImGui::TableSetupColumn("Device", ImGuiTableColumnFlags_WidthFixed, 60.0f);
-			ImGui::TableSetupColumn("KeyCode/X", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-			ImGui::TableSetupColumn("Value/Y", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-			ImGui::TableSetupColumn("Pressed", ImGuiTableColumnFlags_WidthFixed, 70.0f);
-			ImGui::TableSetupColumn("Known Mapping", ImGuiTableColumnFlags_WidthFixed, 120.0f);
-			ImGui::TableSetupColumn("Event Type", ImGuiTableColumnFlags_WidthFixed, 120.0f);
-			ImGui::TableHeadersRow();
-			for (const auto& e : vrControllerEventLog) {
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::Text("%d", e.device);
-				ImGui::TableSetColumnIndex(1);
-				if (e.heldSource == "thumbstick") {
-					ImGui::Text("%.3f", e.thumbstickX);
-				} else {
-					ImGui::Text("%d", e.keyCode);
+					// Set controller requirements based on combo type
+					switch (this->currentComboType) {
+					case VR::ComboType::MenuOpen:
+						this->currentComboRequiresPrimary = true;
+						this->currentComboRequiresSecondary = false;
+						this->currentComboRequiresBoth = false;
+						break;
+					case VR::ComboType::MenuClose:
+						this->currentComboRequiresPrimary = false;
+						this->currentComboRequiresSecondary = false;
+						this->currentComboRequiresBoth = true;
+						break;
+					case VR::ComboType::OverlayOpen:
+						this->currentComboRequiresPrimary = true;
+						this->currentComboRequiresSecondary = false;
+						this->currentComboRequiresBoth = false;
+						break;
+					case VR::ComboType::OverlayClose:
+						this->currentComboRequiresPrimary = false;
+						this->currentComboRequiresSecondary = true;
+						this->currentComboRequiresBoth = false;
+						break;
+					default:
+						break;
+					}
 				}
-				ImGui::TableSetColumnIndex(2);
-				if (e.heldSource == "thumbstick") {
-					ImGui::Text("%.3f", e.thumbstickY);
-				} else {
-					ImGui::Text("%d", e.value);
+
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Click to start recording a new button combination for the selected action.");
 				}
-				ImGui::TableSetColumnIndex(3);
-				ImGui::Text("%s", e.pressed ? "Pressed" : "Released");
-				ImGui::TableSetColumnIndex(4);
-				if (e.heldSource == "thumbstick") {
-					ImGui::TextUnformatted(e.controllerRole.c_str());
-				} else {
-					ImGui::TextUnformatted(RE::GetOpenVRButtonName(e.keyCode));
-				}
-				ImGui::TableSetColumnIndex(5);
-				if (e.heldSource == "thumbstick") {
-					ImGui::TextUnformatted("-");
-				} else {
-					// Show click/hold for release events if available
-					if (!e.pressed) {
-						if (e.heldTime > 0.0) {
-							if (e.heldTime < 0.5) {
-								ImGui::Text("Click (%.2fs)", e.heldTime);
-							} else {
-								ImGui::Text("Hold (%.2fs)", e.heldTime);
+
+				ImGui::Spacing();
+				ImGui::Separator();
+				ImGui::Spacing();
+
+				// Table for displaying current key bindings
+				if (ImGui::BeginTable("##VRKeyBindingsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+					ImGui::TableSetupColumn("Action");
+					ImGui::TableSetupColumn("Current Binding");
+					ImGui::TableSetupColumn("Description");
+					ImGui::TableHeadersRow();
+
+					// Define VR key binding configurations
+					struct VRKeyBindingConfig
+					{
+						const char* label;
+						std::vector<ButtonCombo>& combos;
+						const char* description;
+						const char* controllerRequirement;
+					};
+
+					std::vector<VRKeyBindingConfig> keyBindingConfigs = {
+						{ "Open Community Shaders Menu", settings.VRMenuOpenKeys, "Button combination to open the Community Shaders menu", "Primary" },
+						{ "Close Community Shaders Menu", settings.VRMenuCloseKeys, "Button combination to close the Community Shaders menu", "Both" },
+						{ "Open VR Overlay", settings.VROverlayOpenKeys, "Button combination to open the VR overlay", "Primary" },
+						{ "Close VR Overlay", settings.VROverlayCloseKeys, "Button combination to close the VR overlay", "Secondary" }
+					};
+
+					// Helper function to get button name
+					auto GetButtonName = [](uint32_t key) -> const char* {
+						switch (key) {
+						case static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kTrigger):
+							return "Trigger";
+						case static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kGrip):
+							return "Grip";
+						case static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kTouchpadClick):
+							return "Touchpad";
+						case static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger):
+							return "Stick Click";
+						case static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kXA):
+							return "A/X";
+						case static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kBY):
+							return "B/Y";
+						default:
+							return "Unknown";
+						}
+					};
+
+					// Helper for button color
+					auto GetButtonColor = [](ControllerDevice device) -> ImVec4 {
+						switch (device) {
+						case ControllerDevice::Primary:
+							return ImVec4(0.0f, 1.0f, 0.0f, 1.0f);  // Green
+						case ControllerDevice::Secondary:
+							return ImVec4(0.0f, 0.6f, 1.0f, 1.0f);  // Blue
+						case ControllerDevice::Both:
+							return ImVec4(1.0f, 0.65f, 0.0f, 1.0f);  // Orange
+						default:
+							return ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+						}
+					};
+
+					for (size_t row = 0; row < keyBindingConfigs.size(); ++row) {
+						const auto& config = keyBindingConfigs[row];
+						ImGui::TableNextRow();
+
+						// Highlight the selected row
+						if (row == static_cast<size_t>(selectedComboIndex)) {
+							ImU32 highlight = ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 0.0f, 0.15f));
+							ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, highlight);
+						}
+
+						// Make row selectable
+						ImGui::TableSetColumnIndex(0);
+						char selectableId[64];
+						snprintf(selectableId, sizeof(selectableId), "##combo_row_%zu", row);
+						bool rowSelected = (row == static_cast<size_t>(selectedComboIndex));
+						if (ImGui::Selectable(selectableId, rowSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowItemOverlap, ImVec2(0, 0))) {
+							selectedComboIndex = static_cast<int>(row);
+						}
+						ImGui::SameLine(0, 0);
+						ImGui::Text("%s", config.label);
+
+						// Current Binding column
+						ImGui::TableSetColumnIndex(1);
+						if (config.combos.empty()) {
+							ImGui::TextDisabled("No combo set");
+						} else {
+							// Create a sorted list of buttons for consistent display
+							std::vector<ButtonCombo> sortedCombos;
+							for (size_t i = 0; i < config.combos.size(); ++i) {
+								if (config.combos[i].GetKey() != 0) {
+									sortedCombos.push_back(config.combos[i]);
+								}
 							}
-						} else {
-							ImGui::Text("Release");
+							std::sort(sortedCombos.begin(), sortedCombos.end(),
+								[](const ButtonCombo& a, const ButtonCombo& b) {
+									return a.GetKey() < b.GetKey();
+								});
+
+							// Show each button in the combo with color
+							for (size_t i = 0; i < sortedCombos.size(); ++i) {
+								if (i > 0) {
+									ImGui::SameLine();
+									ImGui::Text("+");
+									ImGui::SameLine();
+								}
+								ImGui::PushStyleColor(ImGuiCol_Text, GetButtonColor(sortedCombos[i].GetDevice()));
+								ImGui::Text("%s", GetButtonName(sortedCombos[i].GetKey()));
+								ImGui::PopStyleColor();
+							}
+							// Tooltip for color explanation
+							if (ImGui::IsItemHovered()) {
+								ImGui::BeginTooltip();
+								ImGui::Text("Color coding:");
+								ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Green = Primary controller");
+								ImGui::TextColored(ImVec4(0.0f, 0.6f, 1.0f, 1.0f), "Blue = Secondary controller");
+								ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.0f, 1.0f), "Orange = Both controllers");
+								ImGui::EndTooltip();
+							}
 						}
-					} else if (e.pressed) {
-						if (e.heldTime > 0.0) {
-							ImGui::Text("Held for %.2fs", e.heldTime);
-						} else {
-							ImGui::Text("Press");
+
+						// Description column
+						ImGui::TableSetColumnIndex(2);
+						ImGui::Text("%s", config.description);
+					}
+
+					ImGui::EndTable();
+				}
+
+				ImGui::Spacing();
+
+				// Reset to defaults button
+				if (ImGui::Button("Reset to Defaults")) {
+					// Use ButtonCombo structure for cleaner defaults
+					settings.VRMenuOpenKeys = {
+						ButtonCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kXA)),
+						ButtonCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kBY))
+					};
+					settings.VRMenuCloseKeys = {
+						ButtonCombo::Both(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kGrip))
+					};
+					settings.VROverlayOpenKeys = {
+						ButtonCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
+					};
+					settings.VROverlayCloseKeys = {
+						ButtonCombo::Secondary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
+					};
+				}
+
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Reset all VR key bindings to their default values.");
+				}
+			}
+			ImGui::EndChild();
+			ImGui::EndTabItem();
+		}
+
+		// Debug Tab (existing debug functionality)
+		if (ImGui::BeginTabItem("Debug")) {
+			if (ImGui::BeginChild("##VRDebugFrame", { 0, 0 }, true)) {
+				// Controller Diagnostics Section
+				if (ImGui::CollapsingHeader("Controller Diagnostics", ImGuiTreeNodeFlags_DefaultOpen)) {
+					if (ImGui::Checkbox("Test Mode: Disable controller menu input (except right thumbstick and triggers)", &settings.VRMenuControllerDiagnosticsTestMode)) {
+						ImGui::SetScrollHereY(0.0f);  // Scroll to top of the window when toggled
+					}
+					ImGui::SeparatorText("Button State");
+					double nowSecs = GetNowSecs();
+
+					// Get highlight color from theme
+					ImVec4 highlightColor = menu->GetTheme().StatusPalette.InfoColor;
+					ImU32 highlightColorU32 = ImGui::ColorConvertFloat4ToU32(highlightColor);
+
+					if (ImGui::BeginTable("vr_input_state_table", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+						ImGui::TableSetupColumn("Button");
+						ImGui::TableSetupColumn("Left State");
+						ImGui::TableSetupColumn("Left Held (s)");
+						ImGui::TableSetupColumn("Left Type");
+						ImGui::TableSetupColumn("Right State");
+						ImGui::TableSetupColumn("Right Held (s)");
+						ImGui::TableSetupColumn("Right Type");
+						ImGui::TableHeadersRow();
+
+						// Helper for button type text
+						auto DrawButtonType = [](const RE::ButtonState& state) {
+							if (!state.isPressed) {
+								if (state.IsClick())
+									ImGui::TextUnformatted("Click");
+								else if (state.IsHold())
+									ImGui::TextUnformatted("Hold");
+								else
+									ImGui::TextUnformatted("-");
+							} else {
+								ImGui::TextUnformatted("Held");
+							}
+						};
+
+						// Helper for printing a row with left/right cell highlight
+						auto printRow = [&](const char* label, const RE::ButtonState& left, const RE::ButtonState& right) {
+							ImGui::TableNextRow();
+							ImGui::TableSetColumnIndex(0);
+							ImGui::TextUnformatted(label);
+							ImGui::TableSetColumnIndex(1);
+							if (left.isPressed)
+								ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, highlightColorU32);
+							ImGui::TextUnformatted(left.isPressed ? "Pressed" : "Released");
+							ImGui::TableSetColumnIndex(2);
+							if (left.isPressed)
+								ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, highlightColorU32);
+							ImGui::Text("%.2f", left.GetCurrentHeldTime(nowSecs));
+							ImGui::TableSetColumnIndex(3);
+							if (left.isPressed)
+								ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, highlightColorU32);
+							DrawButtonType(left);
+							ImGui::TableSetColumnIndex(4);
+							if (right.isPressed)
+								ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, highlightColorU32);
+							ImGui::TextUnformatted(right.isPressed ? "Pressed" : "Released");
+							ImGui::TableSetColumnIndex(5);
+							if (right.isPressed)
+								ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, highlightColorU32);
+							ImGui::Text("%.2f", right.GetCurrentHeldTime(nowSecs));
+							ImGui::TableSetColumnIndex(6);
+							if (right.isPressed)
+								ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, highlightColorU32);
+							DrawButtonType(right);
+						};
+
+						printRow("Trigger", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTrigger], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTrigger]);
+						printRow("Grip", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip]);
+						printRow("GripAlt", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGripAlt], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGripAlt]);
+						printRow("Stick Click", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger]);
+						printRow("Touchpad Click", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTouchpadClick], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTouchpadClick]);
+						printRow("Touchpad Alt", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTouchpadAlt], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTouchpadAlt]);
+						printRow("B/Y", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kBY], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kBY]);
+						printRow("A/X", primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kXA], secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kXA]);
+
+						ImGui::EndTable();
+					}
+
+					ImGui::SeparatorText("VR Thumbstick State");
+
+					// Helper to draw a thumbstick quadrant visualization (returns ImVec2 for label alignment)
+					auto DrawThumbstickPad = [&](float x, float y, ImU32 highlightCol) -> ImVec2 {
+						ImVec2 padSize = ImVec2(80, 80);
+						ImVec2 cursor = ImGui::GetCursorScreenPos();
+						ImDrawList* drawList = ImGui::GetWindowDrawList();
+						ImVec2 center = ImVec2(cursor.x + padSize.x / 2, cursor.y + padSize.y / 2);
+						float radius = padSize.x / 2 - 4;
+						ImU32 borderCol = ImGui::GetColorU32(ImGuiCol_Border);
+						ImU32 axisCol = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+						ImU32 dotCol = ImGui::GetColorU32(ImGuiCol_Text);
+
+						// Draw background
+						drawList->AddRectFilled(cursor, ImVec2(cursor.x + padSize.x, cursor.y + padSize.y), ImGui::GetColorU32(ImGuiCol_FrameBg));
+						// Draw border
+						drawList->AddRect(cursor, ImVec2(cursor.x + padSize.x, cursor.y + padSize.y), borderCol, 4.0f, 0, 2.0f);
+						// Draw axes
+						drawList->AddLine(ImVec2(center.x, cursor.y + 4), ImVec2(center.x, cursor.y + padSize.y - 4), axisCol, 1.0f);
+						drawList->AddLine(ImVec2(cursor.x + 4, center.y), ImVec2(cursor.x + padSize.x - 4, center.y), axisCol, 1.0f);
+
+						// Determine quadrant
+						int quad = 0;
+						if (x > 0 && y > 0)
+							quad = 1;  // top-right
+						else if (x < 0 && y > 0)
+							quad = 2;  // top-left
+						else if (x < 0 && y < 0)
+							quad = 3;  // bottom-left
+						else if (x > 0 && y < 0)
+							quad = 4;  // bottom-right
+
+						// Highlight quadrant
+						if (quad != 0) {
+							ImVec2 q0 = center;
+							ImVec2 q1 = center;
+							ImVec2 q2 = center;
+							ImVec2 q3 = center;
+							if (quad == 1) {  // top-right
+								q1.x += radius;
+								q1.y -= radius;
+								q2.x += radius;
+								q2.y += 0;
+								q3.x += 0;
+								q3.y -= radius;
+							} else if (quad == 2) {  // top-left
+								q1.x -= radius;
+								q1.y -= radius;
+								q2.x -= radius;
+								q2.y += 0;
+								q3.x += 0;
+								q3.y -= radius;
+							} else if (quad == 3) {  // bottom-left
+								q1.x -= radius;
+								q1.y += radius;
+								q2.x -= radius;
+								q2.y += 0;
+								q3.x += 0;
+								q3.y += radius;
+							} else if (quad == 4) {  // bottom-right
+								q1.x += radius;
+								q1.y += radius;
+								q2.x += radius;
+								q2.y += 0;
+								q3.x += 0;
+								q3.y += radius;
+							}
+							ImVec2 poly[4] = { center, q1, q2, q3 };
+							drawList->AddConvexPolyFilled(poly, 4, highlightCol);
 						}
+
+						// Draw stick position dot
+						ImVec2 dot = ImVec2(center.x + x * radius, center.y - y * radius);
+						drawList->AddCircleFilled(dot, 5.0f, dotCol);
+
+						// Return size for label alignment
+						return padSize;
+					};
+
+					ImU32 highlightCol = ImGui::ColorConvertFloat4ToU32(menu->GetTheme().StatusPalette.InfoColor);
+
+					if (ImGui::BeginTable("##VRThumbstickTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+						ImGui::TableSetupColumn("Primary Controller", ImGuiTableColumnFlags_WidthFixed, 200.0f);
+						ImGui::TableSetupColumn("Secondary Controller", ImGuiTableColumnFlags_WidthFixed, 200.0f);
+						ImGui::TableHeadersRow();
+
+						// Primary controller cell
+						ImGui::TableSetColumnIndex(0);
+						ImGui::BeginGroup();
+						ImVec2 padSizeL = DrawThumbstickPad(primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, highlightCol);
+						ImGui::Dummy(padSizeL);
+						ImGui::SetNextItemWidth(160.0f);
+						ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
+						ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, RE::GetQuadrantName(primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y));
+						ImGui::EndGroup();
+
+						// Secondary controller cell
+						ImGui::TableSetColumnIndex(1);
+						ImGui::BeginGroup();
+						ImVec2 padSizeR = DrawThumbstickPad(secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, highlightCol);
+						ImGui::Dummy(padSizeR);
+						ImGui::SetNextItemWidth(160.0f);
+						ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
+						ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, RE::GetQuadrantName(secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y));
+						ImGui::EndGroup();
+
+						ImGui::EndTable();
+					}
+
+					ImGui::SeparatorText("Recent VR Controller Events");
+					ImGui::TextDisabled("Note: For thumbstick events, KeyCode/Value columns show X/Y floats.");
+					if (ImGui::BeginTable("eventlog", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+						ImGui::TableSetupColumn("Device", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+						ImGui::TableSetupColumn("KeyCode/X", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+						ImGui::TableSetupColumn("Value/Y", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+						ImGui::TableSetupColumn("Pressed", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+						ImGui::TableSetupColumn("Known Mapping", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+						ImGui::TableSetupColumn("Event Type", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+						ImGui::TableHeadersRow();
+						for (const auto& e : vrControllerEventLog) {
+							ImGui::TableNextRow();
+							ImGui::TableSetColumnIndex(0);
+							ImGui::Text("%d", e.device);
+							ImGui::TableSetColumnIndex(1);
+							if (e.heldSource == "thumbstick") {
+								ImGui::Text("%.3f", e.thumbstickX);
+							} else {
+								ImGui::Text("%d", e.keyCode);
+							}
+							ImGui::TableSetColumnIndex(2);
+							if (e.heldSource == "thumbstick") {
+								ImGui::Text("%.3f", e.thumbstickY);
+							} else {
+								ImGui::Text("%d", e.value);
+							}
+							ImGui::TableSetColumnIndex(3);
+							ImGui::Text("%s", e.pressed ? "Pressed" : "Released");
+							ImGui::TableSetColumnIndex(4);
+							if (e.heldSource == "thumbstick") {
+								ImGui::TextUnformatted(e.controllerRole.c_str());
+							} else {
+								ImGui::TextUnformatted(RE::GetOpenVRButtonName(e.keyCode));
+							}
+							ImGui::TableSetColumnIndex(5);
+							if (e.heldSource == "thumbstick") {
+								ImGui::TextUnformatted("-");
+							} else {
+								// Show click/hold for release events if available
+								if (!e.pressed) {
+									if (e.heldTime > 0.0) {
+										if (e.heldTime < 0.5) {
+											ImGui::Text("Click (%.2fs)", e.heldTime);
+										} else {
+											ImGui::Text("Hold (%.2fs)", e.heldTime);
+										}
+									} else {
+										ImGui::Text("Release");
+									}
+								} else if (e.pressed) {
+									if (e.heldTime > 0.0) {
+										ImGui::Text("Held for %.2fs", e.heldTime);
+									} else {
+										ImGui::Text("Press");
+									}
+								}
+							}
+						}
+						ImGui::EndTable();
 					}
 				}
 			}
-			ImGui::EndTable();
+			ImGui::EndChild();
+			ImGui::EndTabItem();
+		}
+
+		ImGui::EndTabBar();
+	}
+
+	// Combo recording popup (moved outside tabs)
+	if (this->isCapturingCombo) {
+		ImGui::OpenPopup("Record Combo");
+
+		ImGui::SetNextWindowSize(ImVec2(400, 200), ImGuiCond_FirstUseEver);
+		if (ImGui::BeginPopupModal("Record Combo", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+			// Helper function to get button name
+			auto GetButtonName = [](uint32_t key) -> const char* {
+				switch (key) {
+				case static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kTrigger):
+					return "Trigger";
+				case static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kGrip):
+					return "Grip";
+				case static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kTouchpadClick):
+					return "Touchpad";
+				case static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger):
+					return "Stick Click";
+				case static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kXA):
+					return "A/X";
+				case static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kBY):
+					return "B/Y";
+				default:
+					return "Unknown";
+				}
+			};
+			// Helper for button color
+			auto GetButtonColor = [](ControllerDevice device) -> ImVec4 {
+				switch (device) {
+				case ControllerDevice::Primary:
+					return ImVec4(0.0f, 1.0f, 0.0f, 1.0f);  // Green
+				case ControllerDevice::Secondary:
+					return ImVec4(0.0f, 0.6f, 1.0f, 1.0f);  // Blue
+				case ControllerDevice::Both:
+					return ImVec4(1.0f, 0.65f, 0.0f, 1.0f);  // Orange
+				default:
+					return ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+				}
+			};
+
+			ImGui::Text("Recording combo for: %s", this->currentComboName ? this->currentComboName : "Unknown");
+			ImGui::Spacing();
+
+			// Show controller requirements
+			ImGui::Text("Controller Requirements:");
+			if (this->currentComboRequiresPrimary)
+				ImGui::BulletText("Primary Controller");
+			if (this->currentComboRequiresSecondary)
+				ImGui::BulletText("Secondary Controller");
+			if (this->currentComboRequiresBoth)
+				ImGui::BulletText("Both Controllers");
+			ImGui::TextDisabled("(During recording, any controller's buttons can be used. Requirement is only enforced during use.)");
+
+			ImGui::Spacing();
+
+			// Show countdown timer with color
+			double remainingTime = this->comboTimeout - (GetNowSecs() - this->comboStartTime);
+			ImVec4 timerColor;
+			if (remainingTime > 2.0) {
+				timerColor = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);  // Green
+			} else if (remainingTime > 1.0) {
+				timerColor = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);  // Yellow
+			} else {
+				timerColor = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);  // Red
+			}
+			ImGui::TextColored(timerColor, "Time remaining: %.1f seconds", remainingTime);
+
+			ImGui::Spacing();
+
+			// Show recorded buttons
+			if (this->recordedCombo.empty()) {
+				ImGui::Text("Press buttons to record combo...");
+			} else {
+				ImGui::Text("Recorded buttons:");
+				// Create a sorted list of decoded buttons for consistent display
+				std::vector<ButtonCombo> sortedRecordedCombos;
+				for (size_t i = 0; i < this->recordedCombo.size(); ++i) {
+					sortedRecordedCombos.push_back(this->recordedCombo[i]);
+				}
+				std::sort(sortedRecordedCombos.begin(), sortedRecordedCombos.end(),
+					[](const ButtonCombo& a, const ButtonCombo& b) {
+						return a.GetKey() < b.GetKey();
+					});
+
+				for (size_t i = 0; i < sortedRecordedCombos.size(); ++i) {
+					if (i > 0) {
+						ImGui::SameLine();
+						ImGui::Text("+");
+						ImGui::SameLine();
+					}
+					ImGui::PushStyleColor(ImGuiCol_Text, GetButtonColor(sortedRecordedCombos[i].GetDevice()));
+					ImGui::Text("%s", GetButtonName(sortedRecordedCombos[i].GetKey()));
+					ImGui::PopStyleColor();
+				}
+			}
+
+			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
+
+			// Instructions
+			ImGui::Text("Press ENTER to accept, ESC to cancel");
+
+			// Handle button recording
+			// Check for VR controller button presses - record them (any controller allowed during recording)
+			bool buttonPressed = false;
+			uint32_t pressedKey = 0;
+			ControllerDevice pressedDevice = ControllerDevice::Both;  // Default to Both, will set below
+
+			// Check primary controller buttons
+			for (const auto& [keyCode, buttonState] : primaryControllerState.buttons) {
+				if (buttonState.isPressed) {
+					pressedKey = keyCode;
+					buttonPressed = true;
+					pressedDevice = ControllerDevice::Primary;
+					break;
+				}
+			}
+
+			// Check secondary controller buttons if primary didn't have any
+			if (!buttonPressed) {
+				for (const auto& [keyCode, buttonState] : secondaryControllerState.buttons) {
+					if (buttonState.isPressed) {
+						pressedKey = keyCode;
+						buttonPressed = true;
+						pressedDevice = ControllerDevice::Secondary;
+						break;
+					}
+				}
+			}
+
+			// Record button press
+			if (buttonPressed) {
+				// Check if this button is already in the combo (avoid duplicates)
+				auto it = recordingButtonControllers.find(pressedKey);
+				if (it == recordingButtonControllers.end()) {
+					// Not yet recorded, add with the current device
+					recordingButtonControllers[pressedKey] = pressedDevice;
+				} else {
+					// Already recorded, if the other controller is now pressed, set to BOTH
+					if (it->second != pressedDevice && it->second != ControllerDevice::Both) {
+						it->second = ControllerDevice::Both;
+					}
+				}
+				// Update the recordedCombo vector to match the map
+				this->recordedCombo.clear();
+				for (const auto& [key, device] : recordingButtonControllers) {
+					this->recordedCombo.push_back(ButtonCombo(device, key));
+				}
+			}
+
+			// Handle ENTER key to accept combo
+			if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Enter)) || ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_KeypadEnter))) {
+				if (!this->recordedCombo.empty()) {
+					// Apply the recorded combo to the correct settings vector
+					switch (this->currentComboType) {
+					case VR::ComboType::MenuOpen:
+						settings.VRMenuOpenKeys = this->recordedCombo;
+						break;
+					case VR::ComboType::MenuClose:
+						settings.VRMenuCloseKeys = this->recordedCombo;
+						break;
+					case VR::ComboType::OverlayOpen:
+						settings.VROverlayOpenKeys = this->recordedCombo;
+						break;
+					case VR::ComboType::OverlayClose:
+						settings.VROverlayCloseKeys = this->recordedCombo;
+						break;
+					default:
+						break;
+					}
+				}
+
+				// Reset recording state
+				this->isCapturingCombo = false;
+				this->currentComboType = VR::ComboType::None;
+				this->currentComboName = nullptr;
+				this->recordedCombo.clear();
+				this->comboStartTime = 0.0;
+				this->currentComboRequiresPrimary = false;
+				this->currentComboRequiresSecondary = false;
+				this->currentComboRequiresBoth = false;
+				recordingButtonControllers.clear();
+				ImGui::CloseCurrentPopup();
+			}
+
+			// Handle ESC key to cancel
+			if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape))) {
+				// Reset recording state
+				this->isCapturingCombo = false;
+				this->currentComboType = VR::ComboType::None;
+				this->currentComboName = nullptr;
+				this->recordedCombo.clear();
+				this->comboStartTime = 0.0;
+				this->currentComboRequiresPrimary = false;
+				this->currentComboRequiresSecondary = false;
+				this->currentComboRequiresBoth = false;
+				recordingButtonControllers.clear();
+				ImGui::CloseCurrentPopup();
+			}
+
+			// Handle timeout - auto-accept if buttons were pressed, auto-cancel if not
+			if (remainingTime <= 0.0) {
+				if (!this->recordedCombo.empty()) {
+					// Auto-accept if buttons were pressed - apply to correct settings vector
+					switch (this->currentComboType) {
+					case VR::ComboType::MenuOpen:
+						settings.VRMenuOpenKeys = this->recordedCombo;
+						break;
+					case VR::ComboType::MenuClose:
+						settings.VRMenuCloseKeys = this->recordedCombo;
+						break;
+					case VR::ComboType::OverlayOpen:
+						settings.VROverlayOpenKeys = this->recordedCombo;
+						break;
+					case VR::ComboType::OverlayClose:
+						settings.VROverlayCloseKeys = this->recordedCombo;
+						break;
+					default:
+						break;
+					}
+				}
+				// Auto-cancel if no buttons were pressed (do nothing, just close)
+
+				// Reset recording state
+				this->isCapturingCombo = false;
+				this->currentComboType = VR::ComboType::None;
+				this->currentComboName = nullptr;
+				this->recordedCombo.clear();
+				this->comboStartTime = 0.0;
+				this->currentComboRequiresPrimary = false;
+				this->currentComboRequiresSecondary = false;
+				this->currentComboRequiresBoth = false;
+				recordingButtonControllers.clear();
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
 		}
 	}
 }
@@ -1118,6 +1468,11 @@ void VR::SubmitOverlayFrame()
 // Handles overlay/menu open/close logic based on controller input state
 void VR::UpdateOverlayMenuStateFromInput()
 {
+	// Disable menu interactions during combo recording
+	if (this->isCapturingCombo) {
+		return;
+	}
+
 	bool& isEnabled = globals::menu->IsEnabled;
 	bool& overlayEnabled = globals::menu->overlayVisible;
 	bool& testMode = settings.VRMenuControllerDiagnosticsTestMode;
@@ -1147,45 +1502,66 @@ void VR::UpdateOverlayMenuStateFromInput()
 		std::function<void()> action;
 	};
 
-	// Helper functions for conditions
-	auto dualGripPressed = [&]() {
-		return primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed &&
-		       secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
+	// Generic combo checking function - makes the system truly extensible
+	auto CheckCombo = [&](const std::vector<ButtonCombo>& combos) -> bool {
+		if (combos.empty())
+			return false;
+
+		// Check all configured buttons in the combo
+		for (size_t i = 0; i < combos.size(); ++i) {
+			const auto& combo = combos[i];
+
+			bool buttonPressed = false;
+
+			switch (combo.GetDevice()) {
+			case ControllerDevice::Both:
+				// Check if this button is pressed on BOTH controllers
+				buttonPressed = primaryControllerState.buttons[combo.GetKey()].isPressed &&
+				                secondaryControllerState.buttons[combo.GetKey()].isPressed;
+				break;
+			case ControllerDevice::Primary:
+				// Check if this button is pressed on PRIMARY controller only
+				buttonPressed = primaryControllerState.buttons[combo.GetKey()].isPressed;
+				break;
+			case ControllerDevice::Secondary:
+				// Check if this button is pressed on SECONDARY controller only
+				buttonPressed = secondaryControllerState.buttons[combo.GetKey()].isPressed;
+				break;
+			}
+
+			if (!buttonPressed) {
+				return false;  // Any button not pressed means combo fails
+			}
+		}
+
+		// All configured buttons are pressed according to requirements
+		return true;
 	};
 
-	auto primaryAXBYPressed = [&]() {
-		return primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kXA].isPressed &&
-		       primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kBY].isPressed;
-	};
-
-	auto primaryStickPressed = [&]() {
-		return primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger].isPressed;
-	};
-
-	auto secondaryStickPressed = [&]() {
-		return secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger].isPressed;
-	};
-
-	// Define the mappings
+	// Define the mappings - restore original 4 distinct events with extensible lambda array
 	std::vector<MenuStateMapping> mappings = {
-		// Dual grip to close menu
-		{ [&]() { return isEnabled && dualGripPressed(); },
-			[&]() {
-				isEnabled = false;
-			} },
-
-		// A/X + B/Y to open Community Shaders menu (Primary Controller) - only when menu is closed
-		{ [&]() { return !isEnabled && primaryAXBYPressed(); },
+		// Open Community Shaders menu when closed
+		{ [&]() {
+			 return CheckCombo(settings.VRMenuOpenKeys) && !isEnabled;
+		 },
 			[&]() { isEnabled = true; } },
 
-		// Primary stick click to open overlay
-		{ [&]() { return !overlayEnabled && primaryStickPressed(); },
-			[&]() {
-				overlayEnabled = true;
-			} },
+		// Close Community Shaders menu when open
+		{ [&]() {
+			 return CheckCombo(settings.VRMenuCloseKeys) && isEnabled;
+		 },
+			[&]() { isEnabled = false; } },
 
-		// Secondary stick click to close overlay
-		{ [&]() { return overlayEnabled && secondaryStickPressed(); },
+		// Open VR overlay when closed
+		{ [&]() {
+			 return CheckCombo(settings.VROverlayOpenKeys) && !overlayEnabled;
+		 },
+			[&]() { overlayEnabled = true; } },
+
+		// Close VR overlay when open
+		{ [&]() {
+			 return CheckCombo(settings.VROverlayCloseKeys) && overlayEnabled;
+		 },
 			[&]() { overlayEnabled = false; } }
 	};
 
@@ -1246,6 +1622,11 @@ void VR::ProcessVREvents(std::vector<Menu::KeyEvent>& vrEvents)
 
 void VR::ProcessVRButtonEvent(const Menu::KeyEvent& event)
 {
+	// Disable menu interactions during combo recording
+	if (this->isCapturingCombo) {
+		return;
+	}
+
 	ImGuiIO& io = ImGui::GetIO();
 	(void)event;
 	auto menu = globals::menu;
