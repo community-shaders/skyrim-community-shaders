@@ -253,8 +253,34 @@ void DrawButtonCombo(const std::vector<ButtonCombo>& combo, bool showControllerL
 
 void VR::DrawOverlay()
 {
-	if (!(settings.ShowHowToUseMessage && globals::game::ui && globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME)))
+	static LARGE_INTEGER overlayShowStart = { 0 };
+	static LARGE_INTEGER freq = { 0 };
+
+	bool shouldShow = settings.ShowHowToUseMessage && globals::game::ui && globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME);
+
+	if (!shouldShow) {
+		overlayShowStart.QuadPart = 0;  // Reset timer when overlay is not shown
 		return;
+	}
+
+	if (freq.QuadPart == 0) {
+		QueryPerformanceFrequency(&freq);
+	}
+
+	LARGE_INTEGER now;
+	QueryPerformanceCounter(&now);
+
+	if (overlayShowStart.QuadPart == 0) {
+		overlayShowStart = now;
+	}
+
+	double elapsed = double(now.QuadPart - overlayShowStart.QuadPart) / double(freq.QuadPart);
+	const double kAutoHideSeconds = 15.0;
+	if (elapsed >= kAutoHideSeconds) {
+		return;
+	}
+	int secondsLeft = int(std::ceil(kAutoHideSeconds - elapsed));
+
 	ImGuiIO& io = ImGui::GetIO();
 	ImVec2 overlaySize(480, 0);  // width, height auto
 	ImVec2 overlayPos = ImVec2((io.DisplaySize.x - overlaySize.x) * 0.5f, 80.0f);
@@ -284,9 +310,11 @@ void VR::DrawOverlay()
 	ImGui::Text("\nClose Menu: ");
 	DrawButtonCombo(settings.VRMenuCloseKeys, true);
 	ImGui::Spacing();
+	ImGui::TextDisabled("(This message will auto-disable in %d seconds)", secondsLeft);
 	ImGui::TextDisabled("(You can disable this message in VR settings > Controller Instructions)");
 	ImGui::End();
 }
+
 void VR::DrawSettings()
 {
 	static std::unordered_map<uint32_t, ControllerDevice> recordingButtonControllers;
