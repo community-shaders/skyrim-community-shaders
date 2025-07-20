@@ -190,6 +190,67 @@ vr::HmdMatrix34_t VR::ComputeOverlayTransformFromHMD()
 	return transform;
 }
 
+void DrawButtonCombo(const std::vector<ButtonCombo>& combo, bool showControllerLabels = false)
+{
+	bool anyDrawn = false;
+	for (size_t i = 0; i < combo.size(); ++i) {
+		if (combo[i].GetKey() == 0)
+			continue;
+		if (i > 0) {
+			ImGui::SameLine();
+			ImGui::Text("+");
+			ImGui::SameLine();
+		}
+		ImVec4 color;
+		switch (combo[i].GetDevice()) {
+		case ControllerDevice::Primary:
+			color = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
+			break;
+		case ControllerDevice::Secondary:
+			color = ImVec4(0.0f, 0.6f, 1.0f, 1.0f);
+			break;
+		case ControllerDevice::Both:
+			color = ImVec4(0.5f, 0.0f, 0.5f, 1.0f);
+			break;
+		default:
+			color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+			break;
+		}
+		ImGui::PushStyleColor(ImGuiCol_Text, color);
+		ImGui::Text("%s", RE::GetOpenVRButtonName(combo[i].GetKey()));
+		ImGui::PopStyleColor();
+		anyDrawn = true;
+		if (showControllerLabels) {
+			ImGui::SameLine();
+			const char* label = "";
+			switch (combo[i].GetDevice()) {
+			case ControllerDevice::Primary:
+				label = "(Primary)";
+				break;
+			case ControllerDevice::Secondary:
+				label = "(Secondary)";
+				break;
+			case ControllerDevice::Both:
+				label = "(Both)";
+				break;
+			default:
+				break;
+			}
+			ImGui::TextDisabled("%s", label);
+			if (i < combo.size() - 1)
+				ImGui::SameLine();
+		}
+	}
+	if (anyDrawn) {
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			Util::DrawColoredMultiLineTooltip({ { "Color coding:", ImVec4(1, 1, 1, 1) },
+				{ "Green = Primary controller", ImVec4(0.0f, 1.0f, 0.0f, 1.0f) },
+				{ "Blue = Secondary controller", ImVec4(0.0f, 0.6f, 1.0f, 1.0f) },
+				{ "Purple = Both controllers", ImVec4(0.5f, 0.0f, 0.5f, 1.0f) } });
+		}
+	}
+}
+
 void VR::DrawOverlay()
 {
 	if (!(settings.ShowHowToUseMessage && globals::game::ui && globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME)))
@@ -219,31 +280,9 @@ void VR::DrawOverlay()
 	ImGui::Text("You must be in the Main Menu or Tween Menu for these key binds to work.");
 	ImGui::Spacing();
 	ImGui::Text("Open Menu: ");
-	for (size_t i = 0; i < settings.VRMenuOpenKeys.size(); ++i) {
-		if (i > 0) {
-			ImGui::SameLine();
-			ImGui::Text("+");
-			ImGui::SameLine();
-		}
-		ImGui::PushStyleColor(ImGuiCol_Text, GetButtonColor(settings.VRMenuOpenKeys[i].GetDevice()));
-		ImGui::Text("%s", RE::GetOpenVRButtonName(settings.VRMenuOpenKeys[i].GetKey()));
-		ImGui::PopStyleColor();
-		if (i < settings.VRMenuOpenKeys.size() - 1)
-			ImGui::SameLine();
-	}
+	DrawButtonCombo(settings.VRMenuOpenKeys, true);
 	ImGui::Text("\nClose Menu: ");
-	for (size_t i = 0; i < settings.VRMenuCloseKeys.size(); ++i) {
-		if (i > 0) {
-			ImGui::SameLine();
-			ImGui::Text("+");
-			ImGui::SameLine();
-		}
-		ImGui::PushStyleColor(ImGuiCol_Text, GetButtonColor(settings.VRMenuCloseKeys[i].GetDevice()));
-		ImGui::Text("%s", RE::GetOpenVRButtonName(settings.VRMenuCloseKeys[i].GetKey()));
-		ImGui::PopStyleColor();
-		if (i < settings.VRMenuCloseKeys.size() - 1)
-			ImGui::SameLine();
-	}
+	DrawButtonCombo(settings.VRMenuCloseKeys, true);
 	ImGui::Spacing();
 	ImGui::TextDisabled("(You can disable this message in VR settings > Controller Instructions)");
 	ImGui::End();
@@ -495,42 +534,7 @@ void VR::DrawSettings()
 
 						// Current Binding column
 						ImGui::TableSetColumnIndex(1);
-						if (config.combos.empty()) {
-							ImGui::TextDisabled("No combo set");
-						} else {
-							// Create a sorted list of buttons for consistent display
-							std::vector<ButtonCombo> sortedCombos;
-							for (size_t i = 0; i < config.combos.size(); ++i) {
-								if (config.combos[i].GetKey() != 0) {
-									sortedCombos.push_back(config.combos[i]);
-								}
-							}
-							std::sort(sortedCombos.begin(), sortedCombos.end(),
-								[](const ButtonCombo& a, const ButtonCombo& b) {
-									return a.GetKey() < b.GetKey();
-								});
-
-							// Show each button in the combo with color
-							for (size_t i = 0; i < sortedCombos.size(); ++i) {
-								if (i > 0) {
-									ImGui::SameLine();
-									ImGui::Text("+");
-									ImGui::SameLine();
-								}
-								ImGui::PushStyleColor(ImGuiCol_Text, GetButtonColor(sortedCombos[i].GetDevice()));
-								ImGui::Text("%s", GetButtonName(sortedCombos[i].GetKey()));
-								ImGui::PopStyleColor();
-							}
-							// Tooltip for color explanation
-							if (ImGui::IsItemHovered()) {
-								ImGui::BeginTooltip();
-								ImGui::Text("Color coding:");
-								ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Green = Primary controller");
-								ImGui::TextColored(ImVec4(0.0f, 0.6f, 1.0f, 1.0f), "Blue = Secondary controller");
-								ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.0f, 1.0f), "Orange = Both controllers");
-								ImGui::EndTooltip();
-							}
-						}
+						DrawButtonCombo(config.combos, false);
 
 						// Description column
 						ImGui::TableSetColumnIndex(2);
@@ -903,16 +907,7 @@ void VR::DrawSettings()
 						return a.GetKey() < b.GetKey();
 					});
 
-				for (size_t i = 0; i < sortedRecordedCombos.size(); ++i) {
-					if (i > 0) {
-						ImGui::SameLine();
-						ImGui::Text("+");
-						ImGui::SameLine();
-					}
-					ImGui::PushStyleColor(ImGuiCol_Text, GetButtonColor(sortedRecordedCombos[i].GetDevice()));
-					ImGui::Text("%s", GetButtonName(sortedRecordedCombos[i].GetKey()));
-					ImGui::PopStyleColor();
-				}
+				DrawButtonCombo(sortedRecordedCombos, false);
 			}
 
 			ImGui::Spacing();
