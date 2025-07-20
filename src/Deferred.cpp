@@ -574,8 +574,20 @@ void Deferred::OverrideBlendStates()
 
 							blendDesc.IndependentBlendEnable = true;
 
-							// Start at 1 to ignore Diffuse
+							// Default to original blending method
 							for (int i = 1; i < 8; i++) {
+								blendDesc.RenderTarget[i].BlendEnable = blendDesc.RenderTarget[0].BlendEnable;
+								blendDesc.RenderTarget[i].SrcBlend = blendDesc.RenderTarget[0].SrcBlend;
+								blendDesc.RenderTarget[i].DestBlend = blendDesc.RenderTarget[0].DestBlend;
+								blendDesc.RenderTarget[i].BlendOp = blendDesc.RenderTarget[0].BlendOp;
+								blendDesc.RenderTarget[i].SrcBlendAlpha = blendDesc.RenderTarget[0].SrcBlendAlpha;
+								blendDesc.RenderTarget[i].DestBlendAlpha = blendDesc.RenderTarget[0].DestBlendAlpha;
+								blendDesc.RenderTarget[i].BlendOpAlpha = blendDesc.RenderTarget[0].BlendOpAlpha;
+								blendDesc.RenderTarget[i].RenderTargetWriteMask = blendDesc.RenderTarget[0].RenderTargetWriteMask;
+							}
+
+							// Normals and motion vectors must use alpha blending
+							for (int i = 1; i < 3; i++) {
 								blendDesc.RenderTarget[i].BlendEnable = blendDesc.RenderTarget[0].BlendEnable;
 								blendDesc.RenderTarget[i].SrcBlend = D3D11_BLEND_SRC_ALPHA;
 								blendDesc.RenderTarget[i].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
@@ -763,70 +775,32 @@ void Deferred::Hooks::Main_RenderWorld::thunk(bool a1)
 
 void Deferred::Hooks::Main_RenderWorld_Start::thunk(RE::BSBatchRenderer* This, uint32_t StartRange, uint32_t EndRanges, uint32_t RenderFlags, int GeometryGroup)
 {
-	auto deferred = globals::deferred;
-	auto shaderCache = globals::shaderCache;
-
-	if (shaderCache->IsEnabled() && globals::state->inWorld) {
+	if (globals::shaderCache->IsEnabled() && globals::state->inWorld) {
 		// Here is where the first opaque objects start rendering
-		deferred->StartDeferred();
-		func(This, StartRange, EndRanges, RenderFlags, GeometryGroup);  // RenderBatches
-	} else {
-		func(This, StartRange, EndRanges, RenderFlags, GeometryGroup);  // RenderBatches
+		globals::deferred->StartDeferred();
 	}
+
+	func(This, StartRange, EndRanges, RenderFlags, GeometryGroup);  // RenderBatches
 };
-
-void Deferred::RenderBlendedDecals()
-{
-	if (!globals::state->blendedDecalRenderPasses.empty()) {
-		if (globals::game::isVR) {
-			auto& runtimeData = globals::game::shadowState->GetVRRuntimeData();
-			auto runtimeDataCopy = runtimeData;
-			runtimeData.rasterStateDepthBiasMode = 10;
-
-			for (auto& renderPass : globals::state->blendedDecalRenderPasses)
-				::Hooks::BSBatchRenderer_RenderPassImmediately1::func(renderPass.a_pass, renderPass.a_technique, renderPass.a_alphaTest, renderPass.a_renderFlags);
-
-			globals::state->blendedDecalRenderPasses.clear();
-
-			runtimeData = runtimeDataCopy;
-		} else {
-			auto& runtimeData = globals::game::shadowState->GetRuntimeData();
-			auto runtimeDataCopy = runtimeData;
-			runtimeData.rasterStateDepthBiasMode = 10;
-
-			for (auto& renderPass : globals::state->blendedDecalRenderPasses)
-				::Hooks::BSBatchRenderer_RenderPassImmediately1::func(renderPass.a_pass, renderPass.a_technique, renderPass.a_alphaTest, renderPass.a_renderFlags);
-
-			globals::state->blendedDecalRenderPasses.clear();
-
-			runtimeData = runtimeDataCopy;
-		}
-	}
-}
 
 void Deferred::Hooks::Main_RenderWorld_BlendedDecals::thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags)
 {
 	auto deferred = globals::deferred;
-	auto terrainBlending = globals::features::terrainBlending;
-	auto shaderCache = globals::shaderCache;
 
-	if (shaderCache->IsEnabled() && globals::state->inWorld) {
+	if (globals::shaderCache->IsEnabled() && globals::state->inWorld) {
+		auto terrainBlending = globals::features::terrainBlending;
 		// Defer terrain rendering until after everything else
 		if (terrainBlending->loaded)
 			terrainBlending->RenderTerrainBlendingPasses();
 	}
 
 	// Deferred blended decals
-	deferred->inBlendedDecals = true;
+
+	deferred->inDecals = true;
 	func(This, RenderFlags);
-	deferred->inBlendedDecals = false;
+	deferred->inDecals = false;
 
 	deferred->EndDeferred();
-
-	// Blended decals
-	deferred->inDecals = true;
-	deferred->RenderBlendedDecals();
-	deferred->inDecals = false;
 
 	// After this point, water starts rendering
 };

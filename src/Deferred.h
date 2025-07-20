@@ -46,7 +46,6 @@ public:
 	ID3D11ComputeShader* mainCompositeCS = nullptr;
 	ID3D11ComputeShader* mainCompositeInteriorCS = nullptr;
 
-	bool inBlendedDecals = false;
 	bool inDecals = false;
 	bool inReflections = false;
 	bool deferredPass = false;
@@ -78,8 +77,6 @@ public:
 
 	winrt::com_ptr<ID3D11ShaderResourceView> lutTexture = nullptr;
 	void BindLUT();
-
-	void RenderBlendedDecals();
 
 	struct Hooks
 	{
