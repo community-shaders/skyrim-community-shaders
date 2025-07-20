@@ -817,6 +817,11 @@ void VR::UpdateVROverlayPosition()
 			}
 
 			vr::HmdMatrix34_t fixedTransform = MatrixToHmdMatrix34(fixedWorldOverlayPosition.m);
+
+			// Scale the overlay based on width/height (same as relative HMD mode)
+			fixedTransform.m[0][0] *= overlayWidth;
+			fixedTransform.m[1][1] *= overlayHeight;
+
 			SetOverlayInputFlags(overlay, menuOverlayHandle);
 			overlay->SetOverlayTransformAbsolute(menuOverlayHandle, vr::TrackingUniverseStanding, &fixedTransform);
 			overlay->SetOverlayWidthInMeters(menuOverlayHandle, baseWidth * settings.VRMenuScale);
