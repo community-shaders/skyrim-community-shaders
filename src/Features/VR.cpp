@@ -43,7 +43,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VROverlayOpenKeys,
 	VROverlayCloseKeys,
 	comboTimeout,
-	useComboMode)
+	EnableDragToReposition,
+	ShowHowToUseMessage)
 
 void CreateOverlayTextureAndRTV(ID3D11Device* device, int width, int height, ID3D11Texture2D** outTex, ID3D11RenderTargetView** outRTV)
 {
@@ -189,19 +190,77 @@ vr::HmdMatrix34_t VR::ComputeOverlayTransformFromHMD()
 	return transform;
 }
 
+void VR::DrawOverlay()
+{
+	if (!(settings.ShowHowToUseMessage && globals::game::ui && globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME)))
+		return;
+	ImGuiIO& io = ImGui::GetIO();
+	ImVec2 overlaySize(480, 0);  // width, height auto
+	ImVec2 overlayPos = ImVec2((io.DisplaySize.x - overlaySize.x) * 0.5f, 80.0f);
+	ImGui::SetNextWindowPos(overlayPos, ImGuiCond_Always);
+	ImGui::SetNextWindowSize(overlaySize, ImGuiCond_Always);
+	ImGui::SetNextWindowBgAlpha(0.92f);
+	// Helper for button color
+	auto GetButtonColor = [](ControllerDevice device) -> ImVec4 {
+		switch (device) {
+		case ControllerDevice::Primary:
+			return ImVec4(0.0f, 1.0f, 0.0f, 1.0f);  // Green
+		case ControllerDevice::Secondary:
+			return ImVec4(0.0f, 0.6f, 1.0f, 1.0f);  // Blue
+		case ControllerDevice::Both:
+			return ImVec4(0.5f, 0.0f, 0.5f, 1.0f);  // Purple
+		default:
+			return ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+		}
+	};
+	ImGui::Begin("HowToUseOverlay", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+	ImGui::Text("How to Use VR Community Shaders Menu:");
+	ImGui::Separator();
+	ImGui::Text("You must be in the Main Menu or Tween Menu for these key binds to work.");
+	ImGui::Spacing();
+	ImGui::Text("Open Menu: ");
+	for (size_t i = 0; i < settings.VRMenuOpenKeys.size(); ++i) {
+		if (i > 0) {
+			ImGui::SameLine();
+			ImGui::Text("+");
+			ImGui::SameLine();
+		}
+		ImGui::PushStyleColor(ImGuiCol_Text, GetButtonColor(settings.VRMenuOpenKeys[i].GetDevice()));
+		ImGui::Text("%s", RE::GetOpenVRButtonName(settings.VRMenuOpenKeys[i].GetKey()));
+		ImGui::PopStyleColor();
+		if (i < settings.VRMenuOpenKeys.size() - 1)
+			ImGui::SameLine();
+	}
+	ImGui::Text("\nClose Menu: ");
+	for (size_t i = 0; i < settings.VRMenuCloseKeys.size(); ++i) {
+		if (i > 0) {
+			ImGui::SameLine();
+			ImGui::Text("+");
+			ImGui::SameLine();
+		}
+		ImGui::PushStyleColor(ImGuiCol_Text, GetButtonColor(settings.VRMenuCloseKeys[i].GetDevice()));
+		ImGui::Text("%s", RE::GetOpenVRButtonName(settings.VRMenuCloseKeys[i].GetKey()));
+		ImGui::PopStyleColor();
+		if (i < settings.VRMenuCloseKeys.size() - 1)
+			ImGui::SameLine();
+	}
+	ImGui::Spacing();
+	ImGui::TextDisabled("(You can disable this message in VR settings > Controller Instructions)");
+	ImGui::End();
+}
 void VR::DrawSettings()
 {
 	static std::unordered_map<uint32_t, ControllerDevice> recordingButtonControllers;
 	auto menu = globals::menu;
 	if (!menu)
 		return;
-
 	if (ImGui::BeginTabBar("##VRTabs", ImGuiTabBarFlags_None)) {
 		// General Settings Tab
 		if (ImGui::BeginTabItem("General")) {
 			if (ImGui::BeginChild("##VRGeneralFrame", { 0, 0 }, true)) {
 				// Controller Input Instructions
 				if (ImGui::CollapsingHeader("Controller Input Instructions", ImGuiTreeNodeFlags_DefaultOpen)) {
+					ImGui::Checkbox("Show 'How to Use' Message", &settings.ShowHowToUseMessage);
 					ImGui::TextWrapped("Menu:");
 					ImGui::BulletText("Open Community Shaders Menu: Hold both configured buttons (Primary Controller) while in the main menu or tween menu");
 					ImGui::BulletText("Close: Hold the configured buttons on both controllers at the same time");
@@ -209,7 +268,7 @@ void VR::DrawSettings()
 					ImGui::BulletText("Open Overlay: Primary Controller configured button while in the main menu or tween menu");
 					ImGui::BulletText("Close Overlay: Secondary Controller configured button while in the main menu or tween menu");
 					ImGui::Spacing();
-					ImGui::TextWrapped("Controller Input Options:");
+					ImGui::TextWrapped("Controller Input:");
 					ImGui::BulletText("Trigger (Both Controllers): Left mouse button");
 					ImGui::BulletText("Grip (Both Controllers): Right mouse button");
 					ImGui::BulletText("Touchpad Click (Both Controllers): Middle mouse button");
@@ -219,11 +278,6 @@ void VR::DrawSettings()
 					ImGui::BulletText("B/Y (Secondary Controller): Shift+Tab");
 					ImGui::BulletText("Secondary Controller Thumbstick: Mouse movement");
 					ImGui::BulletText("Primary Controller Thumbstick: Scroll");
-					ImGui::Spacing();
-					ImGui::TextWrapped("Overlay Positioning (Grip + Drag):");
-					ImGui::BulletText("Fixed World Position: Any controller can drag (HMD-only mode) or attached controller only (Both modes)");
-					ImGui::BulletText("HMD Relative: Any controller can drag (HMD-only mode) or attached controller only (Both modes)");
-					ImGui::BulletText("Controller Attached: Only the opposite hand can drag the controller overlay");
 				}
 
 				// General VR Settings
@@ -274,24 +328,20 @@ void VR::DrawSettings()
 					ImGui::SliderFloat("Mouse Speed", &settings.mouseSpeed, 0.1f, 5.0f, "%.2f");
 				}
 
-				// Visual Settings
-				if (ImGui::CollapsingHeader("Visual Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+				// Drag Settings
+				if (ImGui::CollapsingHeader("Drag Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+					if (ImGui::CollapsingHeader("Drag Instructions", ImGuiTreeNodeFlags_DefaultOpen)) {
+						ImGui::TextWrapped("Overlay Positioning (Grip + Drag):");
+						ImGui::BulletText("Fixed World Position: Any controller can drag (HMD-only mode) or attached controller only (Both modes)");
+						ImGui::BulletText("HMD Relative: Any controller can drag (HMD-only mode) or attached controller only (Both modes)");
+						ImGui::BulletText("Controller Attached: Only the opposite hand can drag the controller overlay");
+					}
+					ImGui::Checkbox("Enable drag to reposition overlays", &settings.EnableDragToReposition);
+					ImGui::BeginDisabled(!settings.EnableDragToReposition);
 					ImGui::ColorEdit4("Drag Highlight Color", settings.dragHighlightColor.data());
+					ImGui::EndDisabled();
 					if (auto _tt = Util::HoverTooltipWrapper()) {
 						ImGui::Text("Color used to highlight draggable overlays in VR.");
-					}
-				}
-
-				// Combo Settings
-				if (ImGui::CollapsingHeader("Combo Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-					ImGui::SliderFloat("Combo Timeout", &settings.comboTimeout, 1.0f, 10.0f, "%.1f seconds");
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						ImGui::Text("Time limit for recording button combinations.");
-					}
-
-					ImGui::Checkbox("Use Combo Mode", &settings.useComboMode);
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						ImGui::Text("Enable button combination mode for menu interactions.");
 					}
 				}
 			}
@@ -300,8 +350,16 @@ void VR::DrawSettings()
 		}
 
 		// Key Bindings Tab
-		if (ImGui::BeginTabItem("Key Bindings")) {
-			if (ImGui::BeginChild("##VRKeyBindingsFrame", { 0, 0 }, true)) {
+		if (ImGui::BeginTabItem("Bindings")) {
+			if (ImGui::BeginChild("##VRBindingsFrame", { 0, 0 }, true)) {
+				// Combo Settings
+				if (ImGui::CollapsingHeader("Combo Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+					ImGui::SliderFloat("Combo Timeout", &settings.comboTimeout, 1.0f, 10.0f, "%.1f seconds");
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text("Time limit for recording button combinations.");
+					}
+				}
+				ImGui::Separator();
 				// Combo box for selecting which combo to record
 				const char* comboTypes[] = {
 					"Open Community Shaders Menu",
@@ -320,7 +378,6 @@ void VR::DrawSettings()
 					this->recordedCombo.clear();
 				}
 
-				ImGui::SameLine();
 				if (ImGui::Button("Record Selected Combo")) {
 					// Start recording the selected combo
 					this->isCapturingCombo = true;
@@ -329,30 +386,23 @@ void VR::DrawSettings()
 					this->recordedCombo.clear();
 					this->comboStartTime = GetNowSecs();
 					recordingButtonControllers.clear();
+				}
 
-					// Set controller requirements based on combo type
-					switch (this->currentComboType) {
-					case VR::ComboType::MenuOpen:
-						this->currentComboRequiresPrimary = true;
-						this->currentComboRequiresSecondary = false;
-						this->currentComboRequiresBoth = false;
+				ImGui::SameLine();
+				if (ImGui::SmallButton("Clear")) {
+					// Clear the selected combo
+					switch (selectedComboIndex) {
+					case 0:
+						settings.VRMenuOpenKeys.clear();
 						break;
-					case VR::ComboType::MenuClose:
-						this->currentComboRequiresPrimary = false;
-						this->currentComboRequiresSecondary = false;
-						this->currentComboRequiresBoth = true;
+					case 1:
+						settings.VRMenuCloseKeys.clear();
 						break;
-					case VR::ComboType::OverlayOpen:
-						this->currentComboRequiresPrimary = true;
-						this->currentComboRequiresSecondary = false;
-						this->currentComboRequiresBoth = false;
+					case 2:
+						settings.VROverlayOpenKeys.clear();
 						break;
-					case VR::ComboType::OverlayClose:
-						this->currentComboRequiresPrimary = false;
-						this->currentComboRequiresSecondary = true;
-						this->currentComboRequiresBoth = false;
-						break;
-					default:
+					case 3:
+						settings.VROverlayCloseKeys.clear();
 						break;
 					}
 				}
@@ -366,7 +416,7 @@ void VR::DrawSettings()
 				ImGui::Spacing();
 
 				// Table for displaying current key bindings
-				if (ImGui::BeginTable("##VRKeyBindingsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+				if (ImGui::BeginTable("##VRBindingsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
 					ImGui::TableSetupColumn("Action");
 					ImGui::TableSetupColumn("Current Binding");
 					ImGui::TableSetupColumn("Description");
@@ -820,14 +870,6 @@ void VR::DrawSettings()
 			ImGui::Text("Recording combo for: %s", this->currentComboName ? this->currentComboName : "Unknown");
 			ImGui::Spacing();
 
-			// Show controller requirements
-			ImGui::Text("Controller Requirements:");
-			if (this->currentComboRequiresPrimary)
-				ImGui::BulletText("Primary Controller");
-			if (this->currentComboRequiresSecondary)
-				ImGui::BulletText("Secondary Controller");
-			if (this->currentComboRequiresBoth)
-				ImGui::BulletText("Both Controllers");
 			ImGui::TextDisabled("(During recording, any controller's buttons can be used. Requirement is only enforced during use.)");
 
 			ImGui::Spacing();
@@ -956,9 +998,6 @@ void VR::DrawSettings()
 				this->currentComboName = nullptr;
 				this->recordedCombo.clear();
 				this->comboStartTime = 0.0;
-				this->currentComboRequiresPrimary = false;
-				this->currentComboRequiresSecondary = false;
-				this->currentComboRequiresBoth = false;
 				recordingButtonControllers.clear();
 				ImGui::CloseCurrentPopup();
 			}
@@ -971,9 +1010,6 @@ void VR::DrawSettings()
 				this->currentComboName = nullptr;
 				this->recordedCombo.clear();
 				this->comboStartTime = 0.0;
-				this->currentComboRequiresPrimary = false;
-				this->currentComboRequiresSecondary = false;
-				this->currentComboRequiresBoth = false;
 				recordingButtonControllers.clear();
 				ImGui::CloseCurrentPopup();
 			}
@@ -1007,9 +1043,6 @@ void VR::DrawSettings()
 				this->currentComboName = nullptr;
 				this->recordedCombo.clear();
 				this->comboStartTime = 0.0;
-				this->currentComboRequiresPrimary = false;
-				this->currentComboRequiresSecondary = false;
-				this->currentComboRequiresBoth = false;
 				recordingButtonControllers.clear();
 				ImGui::CloseCurrentPopup();
 			}
@@ -1396,11 +1429,12 @@ void VR::SubmitOverlayFrame()
 	vr::IVROverlay* overlay = vr::VROverlay();
 	if (!overlay)
 		return;
+
 	// Update drag logic for all modes
 	UpdateOverlayDrag();
 	auto& enabled = globals::menu->IsEnabled;
 	auto& overlayVisible = globals::menu->overlayVisible;
-	if ((enabled || overlayVisible) && menuOverlayHandle != vr::k_ulOverlayHandleInvalid && menuTexture && menuRTV) {
+	if ((enabled || overlayVisible || settings.ShowHowToUseMessage) && menuOverlayHandle != vr::k_ulOverlayHandleInvalid && menuTexture && menuRTV) {
 		// Copy ImGui output to overlay texture
 		ID3D11RenderTargetView* oldRTV = nullptr;
 		globals::d3d::context->OMGetRenderTargets(1, &oldRTV, nullptr);
@@ -1415,7 +1449,7 @@ void VR::SubmitOverlayFrame()
 			oldRTV->Release();
 
 		// Apply highlight tint to HMD overlay if it's being dragged
-		bool hmdBeingDragged = overlayDragState.dragging &&
+		bool hmdBeingDragged = settings.EnableDragToReposition && overlayDragState.dragging &&
 		                       (overlayDragState.mode == OverlayDragState::DragMode::HMD ||
 								   overlayDragState.mode == OverlayDragState::DragMode::FixedWorld);
 		ApplyHighlightTintToTexture(menuTexture, hmdBeingDragged);
@@ -1805,6 +1839,9 @@ void VR::UpdateOverlayDrag()
 	if (settings.VRMenuControllerDiagnosticsTestMode) {
 		return;
 	}
+
+	if (!settings.EnableDragToReposition)
+		return;
 
 	// Helper to get grip state for a controller
 	auto getGripPressed = [&](bool isLeft, bool isRight) {

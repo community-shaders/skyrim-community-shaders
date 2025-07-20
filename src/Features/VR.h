@@ -1,5 +1,6 @@
 #pragma once
 #include "Menu.h"
+#include "OverlayFeature.h"
 #include <atomic>
 #include <d3d11.h>
 #include <magic_enum.hpp>
@@ -40,7 +41,7 @@ struct ButtonCombo
 // JSON serialization for ButtonCombo (simple uint32_t)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(ButtonCombo, deviceAndKey)
 
-struct VR : Feature
+struct VR : OverlayFeature
 {
 	static VR* GetSingleton()
 	{
@@ -120,12 +121,15 @@ struct VR : Feature
 
 		// VR Combo Settings
 		float comboTimeout = 3.0f;  // Timeout in seconds for combo sequences
-		bool useComboMode = true;   // Enable combo mode for menu actions
+		bool ShowHowToUseMessage = true;
+		bool EnableDragToReposition = true;
 	};
 
 	Settings settings;
 
 	virtual void DrawSettings() override;
+	virtual void DrawOverlay() override;
+	bool IsOverlayVisible() const override { return settings.ShowHowToUseMessage; }
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
@@ -255,9 +259,6 @@ public:
 	std::vector<ButtonCombo> recordedCombo;
 	double comboStartTime = 0.0;
 	double comboTimeout = 3.0;  // 3 second timeout
-	bool currentComboRequiresPrimary = false;
-	bool currentComboRequiresSecondary = false;
-	bool currentComboRequiresBoth = false;
 
 	void UpdateOverlayDrag();
 	void SetFixedOverlayToCurrentHMD();
