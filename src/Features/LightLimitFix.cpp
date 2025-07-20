@@ -371,10 +371,10 @@ void LightLimitFix::BSLightingShader_SetupGeometry_After(RE::BSRenderPass*)
 
 	auto shadowSceneNode = smState->shadowSceneNode[0];
 
-	const bool isEmpty = strictLightDataTemp.NumStrictLights == 0;
 	const auto isEmpty = strictLightDataTemp.NumStrictLights == 0;
 	const bool isWorld = accumulator->GetRuntimeData().activeShadowSceneNode == shadowSceneNode;
-	const int roomIndex = strictLightDataTemp.RoomIndex;
+	const auto roomIndex = strictLightDataTemp.RoomIndex;
+	const auto shadowBitMask = strictLightDataTemp.ShadowBitMask;
 
 	if (!isEmpty || (isEmpty && !wasEmpty) || isWorld != wasWorld || previousRoomIndex != roomIndex || shadowBitMask != previousShadowBitMask) {
 		strictLightDataCB->Update(strictLightDataTemp);
