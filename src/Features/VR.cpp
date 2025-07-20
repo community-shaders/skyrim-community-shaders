@@ -1115,42 +1115,86 @@ void VR::SubmitOverlayFrame()
 	}
 }
 
-// New function: Handles overlay/menu open/close logic based on controller input state
+// Handles overlay/menu open/close logic based on controller input state
 void VR::UpdateOverlayMenuStateFromInput()
 {
 	bool& isEnabled = globals::menu->IsEnabled;
 	bool& overlayEnabled = globals::menu->overlayVisible;
 	bool& testMode = settings.VRMenuControllerDiagnosticsTestMode;
-	if (testMode)
+
+	// Auto-disable test mode if user leaves VR section or closes menu
+	if (testMode) {
+		// Check if we're still in the VR section or if menu is closed
+		if (!isEnabled) {
+			settings.VRMenuControllerDiagnosticsTestMode = false;
+			return;
+		}
+		// In test mode, only allow basic input processing
 		return;
-	// Dual grip to close
-	if (isEnabled &&
-		primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed &&
-		secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed) {
-		isEnabled = false;
-		primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed = false;
-		secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed = false;
-	}
-	// A/X + B/Y to open Community Shaders menu (Primary Controller) - only when menu is closed
-	if (!isEnabled &&
-		primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kXA].isPressed &&
-		primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kBY].isPressed &&
-		globals::game::ui &&
-		(globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::TweenMenu::MENU_NAME))) {
-		// Open the Community Shaders menu (only when closed)
-		isEnabled = true;
 	}
 
-	// Overlay control
-	if (!overlayEnabled && primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger].isPressed && globals::game::ui &&
-		(globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::TweenMenu::MENU_NAME))) {
-		// Enable the global overlay visibility
-		overlayEnabled = true;
-	}
-	if (overlayEnabled && secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger].isPressed && globals::game::ui &&
-		(globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::TweenMenu::MENU_NAME))) {
-		// Disable the global overlay visibility
-		overlayEnabled = false;
+	// Check if we're in a valid menu state for input
+	bool inValidMenuState = globals::game::ui &&
+	                        (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::TweenMenu::MENU_NAME));
+
+	if (!inValidMenuState)
+		return;
+
+	// Define menu state mappings
+	struct MenuStateMapping
+	{
+		std::function<bool()> condition;
+		std::function<void()> action;
+	};
+
+	// Helper functions for conditions
+	auto dualGripPressed = [&]() {
+		return primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed &&
+		       secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
+	};
+
+	auto primaryAXBYPressed = [&]() {
+		return primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kXA].isPressed &&
+		       primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kBY].isPressed;
+	};
+
+	auto primaryStickPressed = [&]() {
+		return primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger].isPressed;
+	};
+
+	auto secondaryStickPressed = [&]() {
+		return secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger].isPressed;
+	};
+
+	// Define the mappings
+	std::vector<MenuStateMapping> mappings = {
+		// Dual grip to close menu
+		{ [&]() { return isEnabled && dualGripPressed(); },
+			[&]() {
+				isEnabled = false;
+			} },
+
+		// A/X + B/Y to open Community Shaders menu (Primary Controller) - only when menu is closed
+		{ [&]() { return !isEnabled && primaryAXBYPressed(); },
+			[&]() { isEnabled = true; } },
+
+		// Primary stick click to open overlay
+		{ [&]() { return !overlayEnabled && primaryStickPressed(); },
+			[&]() {
+				overlayEnabled = true;
+			} },
+
+		// Secondary stick click to close overlay
+		{ [&]() { return overlayEnabled && secondaryStickPressed(); },
+			[&]() { overlayEnabled = false; } }
+	};
+
+	// Process mappings in order
+	for (const auto& mapping : mappings) {
+		if (mapping.condition()) {
+			mapping.action();
+			break;  // Only execute one action per frame
+		}
 	}
 }
 
