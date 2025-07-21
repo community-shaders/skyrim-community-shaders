@@ -120,9 +120,12 @@ bool Hooks::BSShader_BeginTechnique::thunk(RE::BSShader* shader, uint32_t vertex
 
 	state->updateShader = true;
 	state->currentShader = shader;
-
+	
 	state->currentVertexDescriptor = vertexDescriptor;
 	state->currentPixelDescriptor = pixelDescriptor;
+
+	state->permutationData.VertexShaderDescriptor = vertexDescriptor;
+	state->permutationData.PixelShaderDescriptor = pixelDescriptor;
 
 	state->modifiedVertexDescriptor = vertexDescriptor;
 	state->modifiedPixelDescriptor = pixelDescriptor;
@@ -130,7 +133,7 @@ bool Hooks::BSShader_BeginTechnique::thunk(RE::BSShader* shader, uint32_t vertex
 	state->ModifyShaderLookup(*shader, state->modifiedVertexDescriptor, state->modifiedPixelDescriptor);
 
 	// Only check against non-shader bits
-	state->currentPixelDescriptor &= ~state->modifiedPixelDescriptor;
+	state->permutationData.PixelShaderDescriptor &= ~state->modifiedPixelDescriptor;
 
 	bool shaderFound = func(shader, vertexDescriptor, pixelDescriptor, skipPixelShader);
 
@@ -171,7 +174,7 @@ namespace EffectExtensions
 			if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(pass->geometry->GetGeometryRuntimeData().properties[1].get())) {
 				if (shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kUniformScale)) {
 					auto state = globals::state;
-					state->currentExtraDescriptor |= (uint)State::ExtraShaderDescriptors::EffectShadows;
+					state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::EffectShadows;
 				}
 			}
 		}
@@ -187,12 +190,12 @@ namespace LightingExtensions
 		{
 			func(shader, pass, renderFlags);
 
-			globals::state->currentExtraDescriptor &= ~(uint32_t)State::ExtraShaderDescriptors::IsTree;
+			globals::state->permutationData.ExtraShaderDescriptor &= ~(uint32_t)State::ExtraShaderDescriptors::IsTree;
 
 			if (auto userData = pass->geometry->GetUserData())
 				if (auto baseObject = userData->GetBaseObject())
 					if (baseObject->As<RE::TESObjectTREE>())
-						globals::state->currentExtraDescriptor |= (uint32_t)State::ExtraShaderDescriptors::IsTree;
+						globals::state->permutationData.ExtraShaderDescriptor |= (uint32_t)State::ExtraShaderDescriptors::IsTree;
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};

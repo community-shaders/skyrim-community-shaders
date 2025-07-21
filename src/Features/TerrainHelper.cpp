@@ -160,10 +160,10 @@ void TerrainHelper::BSLightingShader_SetupMaterial(RE::BSLightingShaderMaterialB
 	for (uint32_t textureI = 0; textureI < 6; ++textureI) {
 		if (materialBase.parallax[textureI] != nullptr && materialBase.parallax[textureI] != stateData.defaultTextureNormalMap) {
 			thExtendedRendererState.SetPSTexture(textureI, materialBase.parallax[textureI]->rendererTexture);
-			state->currentExtraFeatureDescriptor |= 1 << textureI;
+			state->permutationData.ExtraFeatureDescriptor |= 1 << textureI;
 		} else {
 			thExtendedRendererState.SetPSTexture(textureI, nullptr);
-			state->currentExtraFeatureDescriptor &= ~(1 << textureI);
+			state->permutationData.ExtraFeatureDescriptor &= ~(1 << textureI);
 		}
 	}
 }

@@ -24,7 +24,7 @@ void State::Draw()
 	auto terrainBlending = globals::features::terrainBlending;
 	auto terrainHelper = globals::features::terrainHelper;
 	auto cloudShadows = globals::features::cloudShadows;
-//	auto truePBR = globals::truePBR;
+	auto truePBR = globals::truePBR;
 //	auto smState = globals::game::smState;
 	auto context = globals::d3d::context;
 
@@ -38,7 +38,7 @@ void State::Draw()
 		if (terrainHelper->loaded)
 			terrainHelper->SetShaderResouces(context);
 
-	//	truePBR->SetShaderResouces(context);
+		truePBR->SetShaderResouces(context);
 
 		//if (!deferred->inReflections) {
 		//	if (auto accumulator = RE::BSGraphics::BSShaderAccumulator::GetCurrentAccumulator()) {
@@ -50,21 +50,9 @@ void State::Draw()
 		//}
 
 
-		if (forceUpdatePermutationBuffer || currentPixelDescriptor != lastPixelDescriptor || currentExtraDescriptor != lastExtraDescriptor || currentExtraFeatureDescriptor != lastExtraFeatureDescriptor) {
-			PermutationCB data{};
-			data.VertexShaderDescriptor = currentVertexDescriptor;
-			data.PixelShaderDescriptor = currentPixelDescriptor;
-			data.ExtraShaderDescriptor = currentExtraDescriptor;
-			data.ExtraFeatureDescriptor = currentExtraFeatureDescriptor;
-
-			permutationCB->Update(data);
-
-			lastVertexDescriptor = currentVertexDescriptor;
-			lastPixelDescriptor = currentPixelDescriptor;
-			lastExtraDescriptor = currentExtraDescriptor;
-			lastExtraFeatureDescriptor = currentExtraFeatureDescriptor;
-
-			forceUpdatePermutationBuffer = false;
+		if (permutationData != permutationDataPrevious) {
+			permutationCB->Update(permutationData);		
+			permutationDataPrevious = permutationData;
 		}
 
 		if (frameChecker.IsNewFrame()) {
@@ -149,7 +137,7 @@ void State::Reset()
 	lastPixelDescriptor = 0;
 	lastVertexDescriptor = 0;
 	initialized = false;
-	forceUpdatePermutationBuffer = true;
+	std::memset(&permutationDataPrevious, 0xFF, sizeof(PermutationCB));
 	frameCount++;
 }
 

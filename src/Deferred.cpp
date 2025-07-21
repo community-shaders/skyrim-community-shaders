@@ -809,7 +809,7 @@ void Deferred::Hooks::BSCubeMapCamera_RenderCubemap::thunk(RE::NiAVObject* camer
 	auto state = globals::state;
 
 	deferred->ReflectionsPrepasses();
-	state->currentExtraDescriptor |= (uint32_t)State::ExtraShaderDescriptors::IsReflections;
+	state->permutationData.ExtraShaderDescriptor |= (uint32_t)State::ExtraShaderDescriptors::IsReflections;
 	func(camera, a2, a3, a4, a5);
-	state->currentExtraDescriptor &= ~(uint32_t)State::ExtraShaderDescriptors::IsReflections;
+	state->permutationData.ExtraShaderDescriptor &= ~(uint32_t)State::ExtraShaderDescriptors::IsReflections;
 }

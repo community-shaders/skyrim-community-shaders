@@ -144,11 +144,8 @@ public:
 	uint modifiedPixelDescriptor = 0;
 	uint lastModifiedVertexDescriptor = 0;
 	uint lastModifiedPixelDescriptor = 0;
-	uint currentExtraDescriptor = 0;
 	uint lastExtraDescriptor = 0;
-	uint currentExtraFeatureDescriptor = 0;
 	uint lastExtraFeatureDescriptor = 0;
-	bool forceUpdatePermutationBuffer = true;
 
 	enum class ExtraShaderDescriptors : uint32_t
 	{
@@ -174,12 +171,20 @@ public:
 
 	void UpdateSharedData(bool a_inWorld, bool a_prepass);
 
-	struct alignas(16) PermutationCB
+	struct PermutationCB
 	{
 		uint VertexShaderDescriptor;
 		uint PixelShaderDescriptor;
 		uint ExtraShaderDescriptor;
 		uint ExtraFeatureDescriptor;
+
+		bool operator==(const PermutationCB& other) const
+		{
+			return VertexShaderDescriptor == other.VertexShaderDescriptor &&
+			       PixelShaderDescriptor == other.PixelShaderDescriptor &&
+			       ExtraShaderDescriptor == other.ExtraShaderDescriptor &&
+			       ExtraFeatureDescriptor == other.ExtraFeatureDescriptor;
+		}
 	};
 
 	ConstantBuffer* permutationCB = nullptr;
@@ -204,6 +209,9 @@ public:
 
 	ConstantBuffer* sharedDataCB = nullptr;
 	ConstantBuffer* featureDataCB = nullptr;
+
+	PermutationCB permutationData{};
+	PermutationCB permutationDataPrevious{};
 
 	Util::FrameChecker frameChecker;
 	uint frameCount = 0;
