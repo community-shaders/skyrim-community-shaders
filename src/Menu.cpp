@@ -1520,13 +1520,13 @@ void Menu::DrawAdvancedSettings()
 		static bool lastPerformanceMode = false;
 		static bool frameAnnotationsBackup = false;
 		static bool performanceOverlayBackup = false;
-		
+
 		if (settings.PerformanceMode != lastPerformanceMode) {
 			if (settings.PerformanceMode) {
 				// Entering Performance Mode - backup and disable
 				frameAnnotationsBackup = globals::state->frameAnnotations;
 				globals::state->frameAnnotations = false;
-				
+
 				performanceOverlayBackup = PerformanceOverlay::GetSingleton()->settings.ShowInOverlay;
 				PerformanceOverlay::GetSingleton()->settings.ShowInOverlay = false;
 			} else {
@@ -1536,7 +1536,7 @@ void Menu::DrawAdvancedSettings()
 			}
 			lastPerformanceMode = settings.PerformanceMode;
 		}
-		
+
 		// Force settings to false while in Performance Mode
 		if (settings.PerformanceMode) {
 			if (globals::state->frameAnnotations) {
@@ -1546,9 +1546,9 @@ void Menu::DrawAdvancedSettings()
 				PerformanceOverlay::GetSingleton()->settings.ShowInOverlay = false;
 			}
 		}
-		
+
 		ImGui::BeginDisabled(settings.PerformanceMode);
-			ImGui::Checkbox("Frame Annotations", &globals::state->frameAnnotations);
+		ImGui::Checkbox("Frame Annotations", &globals::state->frameAnnotations);
 		ImGui::EndDisabled();
 		if (settings.PerformanceMode && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
 			ImGui::SetTooltip("Disabled in Performance Mode.");

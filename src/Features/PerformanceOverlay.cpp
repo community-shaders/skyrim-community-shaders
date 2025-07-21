@@ -153,11 +153,11 @@ void PerformanceOverlay::DrawSettings()
 	auto menu = Menu::GetSingleton();
 	const auto& themeSettings = menu->GetTheme();
 	const auto& menuSettings = menu->GetSettings();
-	
+
 	ImGui::BeginDisabled(menuSettings.PerformanceMode);
-		ImGui::Checkbox("Show in Overlay", &this->settings.ShowInOverlay);
+	ImGui::Checkbox("Show in Overlay", &this->settings.ShowInOverlay);
 	ImGui::EndDisabled();
-	
+
 	if (menuSettings.PerformanceMode && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
 		ImGui::SetTooltip("Disabled in Performance Mode.");
 	} else {
