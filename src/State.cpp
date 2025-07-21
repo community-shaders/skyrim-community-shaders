@@ -52,9 +52,6 @@ void State::Draw()
 		if (deferred->inReflections)
 			currentExtraDescriptor |= (uint32_t)ExtraShaderDescriptors::IsReflections;
 
-		if (deferred->inDecals)
-			currentExtraDescriptor |= (uint32_t)ExtraShaderDescriptors::IsDecal;
-
 		if (isTree)
 			currentExtraDescriptor |= (uint32_t)ExtraShaderDescriptors::IsTree;
 
