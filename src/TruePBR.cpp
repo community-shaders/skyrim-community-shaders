@@ -1604,10 +1604,44 @@ void TruePBR::SetupDefaultPBRLandTextureSet()
 
 void TruePBR::SetShaderResouces(ID3D11DeviceContext* a_context)
 {
-	for (uint32_t textureIndex = 0; textureIndex < ExtendedRendererState::NumPSTextures; ++textureIndex) {
-		if (extendedRendererState.PSResourceModifiedBits & (1 << textureIndex)) {
-			a_context->PSSetShaderResources(ExtendedRendererState::FirstPSTexture + textureIndex, 1, &extendedRendererState.PSTexture[textureIndex]);
-		}
+	uint32_t mask = extendedRendererState.PSResourceModifiedBits;
+
+	if (mask == 0) [[likely]] {
+		// No dirty slots, early exit
+		return;
 	}
+
+	constexpr uint32_t firstTexture = ExtendedRendererState::FirstPSTexture;
+	auto& textures = extendedRendererState.PSTexture;
+
+	while (mask) {
+		unsigned long index;
+
+		// Find index of the least significant set bit
+		_BitScanForward(&index, mask);
+
+		// Start batching from this index
+		uint32_t batchStart = index;
+		uint32_t batchCount = 1;
+
+		// Check for consecutive set bits and batch them
+		uint32_t shiftedMask = mask >> (index + 1);
+		while ((shiftedMask & 1) != 0) {
+			++batchCount;
+			shiftedMask >>= 1;
+		}
+
+		// Issue one API call for this batch
+		a_context->PSSetShaderResources(
+			firstTexture + batchStart,
+			batchCount,
+			&textures[batchStart]);
+
+		// Clear the bits we just processed
+		uint32_t clearMask = ((1u << batchCount) - 1u) << batchStart;
+		mask &= ~clearMask;
+	}
+
+	// Reset modified bits
 	extendedRendererState.PSResourceModifiedBits = 0;
 }
