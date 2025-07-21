@@ -963,12 +963,12 @@ namespace Hooks
 						} else if (CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingRaymarchCS")) {
 							isShader = globals::features::volumetricLighting->GetOrCreateRaymarchCS(CurrentlyDispatchedComputeShader);
 						}
-					} else if (CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingBlurHCS")) {
+					} else if (vl->loaded && CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingBlurHCS")) {
 						techniqueId = 0;
 						isShader = vl->GetOrCreateBlurHCS(CurrentlyDispatchedComputeShader);
 						vl->SetDimensionsCB();
 						vl->SetGroupCountsHCS(threadGroupCountX);
-					} else if (CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingBlurVCS")) {
+					} else if (vl->loaded && CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingBlurVCS")) {
 						techniqueId = 0;
 						isShader = vl->GetOrCreateBlurVCS(CurrentlyDispatchedComputeShader);
 						vl->SetDimensionsCB();

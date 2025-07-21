@@ -1977,9 +1977,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	uint numShadowLights = min(4, uint(NumLightNumShadowLight.y));
 
 #	if defined(MODELSPACENORMALS) && !defined(SKINNED)
-	float4 worldNormal = normal;
+	float3 worldNormal = normal.xyz;
 #	else
-	float4 worldNormal = float4(normalize(mul(tbn, normal.xyz)), 1);
+	float3 worldNormal = normalize(mul(tbn, normal.xyz));
 
 #		if defined(SPARKLE)
 	float3 projectedNormal = normalize(mul(tbn, float3(ProjectedUVParams2.xx * normal.xy, normal.z)));
@@ -2740,7 +2740,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	diffuseColor += emitColor.xyz;
 #	endif
 
-	float3 directionalAmbientColor = max(0, mul(DirectionalAmbient, worldNormal));
+	float3 directionalAmbientColor = max(0, mul(DirectionalAmbient, float4(worldNormal, 1.0)));
 
 #	if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
