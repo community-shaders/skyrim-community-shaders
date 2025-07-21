@@ -2740,7 +2740,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	diffuseColor += emitColor.xyz;
 #	endif
 
-	float3 directionalAmbientColor = max(0, mul(DirectionalAmbient, float4(worldNormal, 1)));
+	float3 directionalAmbientColor = max(0, mul(DirectionalAmbient, float4(worldNormal, 1.0)));
 
 #	if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
