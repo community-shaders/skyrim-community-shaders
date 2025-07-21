@@ -153,12 +153,20 @@ void PerformanceOverlay::DrawSettings()
 	auto menu = Menu::GetSingleton();
 	const auto& themeSettings = menu->GetTheme();
 	const auto& menuSettings = menu->GetSettings();
-	ImGui::Checkbox("Show in Overlay", &this->settings.ShowInOverlay);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Opens performance overlay in a separate window that stays open\neven when the main menu is closed. ");
-		ImGui::Text("Toggle with ");
-		ImGui::SameLine();
-		ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Menu::KeyIdToString(menuSettings.OverlayToggleKey));
+	
+	ImGui::BeginDisabled(menuSettings.PerformanceMode);
+		ImGui::Checkbox("Show in Overlay", &this->settings.ShowInOverlay);
+	ImGui::EndDisabled();
+	
+	if (menuSettings.PerformanceMode && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+		ImGui::SetTooltip("Disabled in Performance Mode.");
+	} else {
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Opens performance overlay in a separate window that stays open\neven when the main menu is closed. ");
+			ImGui::Text("Toggle with ");
+			ImGui::SameLine();
+			ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Menu::KeyIdToString(menuSettings.OverlayToggleKey));
+		}
 	}
 
 	if (this->settings.ShowInOverlay) {

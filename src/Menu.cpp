@@ -106,6 +106,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkipCompilationKey,
 	EffectToggleKey,
 	OverlayToggleKey,
+	PerformanceMode,
 	Theme)
 
 void Menu::SetupImGuiStyle() const
@@ -1463,6 +1464,14 @@ void Menu::DrawAdvancedSettings()
 				"The more threads the faster compilation will finish but may make the system unresponsive. ");
 		}
 
+		bool performanceMode = settings.PerformanceMode;
+		if (ImGui::Checkbox("Performance Mode", &performanceMode)) {
+			settings.PerformanceMode = performanceMode;
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Disables certain menu options to improve performance.");
+		}
+
 		// A/B Testing settings
 		auto* abTestingManager = ABTestingManager::GetSingleton();
 		abTestingManager->DrawSettingsUI();
@@ -1506,7 +1515,48 @@ void Menu::DrawAdvancedSettings()
 			ImGui::Text(std::format("Shader Compiler : {}", shaderCache->GetShaderStatsString()).c_str());
 			ImGui::TreePop();
 		}
-		ImGui::Checkbox("Frame Annotations", &globals::state->frameAnnotations);
+
+		// Handle frameAnnotations and Performance Overlay backup/restore when PerformanceMode changes
+		static bool lastPerformanceMode = false;
+		static bool frameAnnotationsBackup = false;
+		static bool performanceOverlayBackup = false;
+		
+		if (settings.PerformanceMode != lastPerformanceMode) {
+			if (settings.PerformanceMode) {
+				// Entering Performance Mode - backup and disable
+				frameAnnotationsBackup = globals::state->frameAnnotations;
+				globals::state->frameAnnotations = false;
+				
+				performanceOverlayBackup = PerformanceOverlay::GetSingleton()->settings.ShowInOverlay;
+				PerformanceOverlay::GetSingleton()->settings.ShowInOverlay = false;
+			} else {
+				// Exiting Performance Mode - restore backups
+				globals::state->frameAnnotations = frameAnnotationsBackup;
+				PerformanceOverlay::GetSingleton()->settings.ShowInOverlay = performanceOverlayBackup;
+			}
+			lastPerformanceMode = settings.PerformanceMode;
+		}
+		
+		// Force settings to false while in Performance Mode
+		if (settings.PerformanceMode) {
+			if (globals::state->frameAnnotations) {
+				globals::state->frameAnnotations = false;
+			}
+			if (PerformanceOverlay::GetSingleton()->settings.ShowInOverlay) {
+				PerformanceOverlay::GetSingleton()->settings.ShowInOverlay = false;
+			}
+		}
+		
+		ImGui::BeginDisabled(settings.PerformanceMode);
+			ImGui::Checkbox("Frame Annotations", &globals::state->frameAnnotations);
+		ImGui::EndDisabled();
+		if (settings.PerformanceMode && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+			ImGui::SetTooltip("Disabled in Performance Mode.");
+		} else {
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Enables frame annotations for debug purposes.");
+			}
+		}
 	}
 
 	if (ImGui::CollapsingHeader("Replace Original Shaders", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {

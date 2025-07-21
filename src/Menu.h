@@ -188,6 +188,7 @@ public:
 		uint32_t SkipCompilationKey = VK_ESCAPE;
 		uint32_t EffectToggleKey = VK_MULTIPLY;  // toggle all effects
 		uint32_t OverlayToggleKey = VK_F10;      // Global overlay toggle key for all overlays
+		bool PerformanceMode = false; // Force-disables certain menu options to improve performance
 		ThemeSettings Theme;
 	};
 	const ThemeSettings& GetTheme() const { return settings.Theme; }                // Provide read-only access to the Theme.
