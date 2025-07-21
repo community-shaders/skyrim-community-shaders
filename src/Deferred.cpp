@@ -768,7 +768,7 @@ void Deferred::Hooks::Main_RenderShadowMaps::thunk()
 
 void Deferred::Hooks::Main_RenderWorld::thunk(bool a1)
 {
-	auto* const state = globals::state;	
+	auto* const state = globals::state;
 	state->permutationData.ExtraShaderDescriptor |= (uint32_t)State::ExtraShaderDescriptors::InWorld;
 	state->inWorld = true;
 	func(a1);
@@ -816,7 +816,6 @@ void Deferred::Hooks::BSCubeMapCamera_RenderCubemap::thunk(RE::NiAVObject* camer
 	func(camera, a2, a3, a4, a5);
 	state->permutationData.ExtraShaderDescriptor &= ~(uint32_t)State::ExtraShaderDescriptors::IsReflections;
 }
-
 
 void Deferred::Hooks::Main_RenderFirstPersonView::thunk(bool a1, bool a2)
 {

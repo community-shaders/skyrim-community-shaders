@@ -25,7 +25,7 @@ void State::Draw()
 	auto terrainHelper = globals::features::terrainHelper;
 	auto cloudShadows = globals::features::cloudShadows;
 	auto truePBR = globals::truePBR;
-//	auto smState = globals::game::smState;
+	//	auto smState = globals::game::smState;
 	auto context = globals::d3d::context;
 
 	if (shaderCache->IsEnabled()) {
@@ -49,9 +49,8 @@ void State::Draw()
 		//	}
 		//}
 
-
 		if (permutationData != permutationDataPrevious) {
-			permutationCB->Update(permutationData);		
+			permutationCB->Update(permutationData);
 			permutationDataPrevious = permutationData;
 		}
 
