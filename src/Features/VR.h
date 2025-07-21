@@ -80,7 +80,7 @@ struct VR : OverlayFeature
 			ControllerOnly = 1,
 			Both = 2
 		};
-		OverlayAttachMode attachMode = OverlayAttachMode::Both;
+		OverlayAttachMode attachMode = OverlayAttachMode::HMDOnly;
 		// Use OpenVR's ETrackedControllerRole for hand selection
 		vr::ETrackedControllerRole VRMenuControllerHand = vr::ETrackedControllerRole::TrackedControllerRole_LeftHand;
 

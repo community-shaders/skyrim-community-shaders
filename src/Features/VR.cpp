@@ -684,7 +684,7 @@ namespace
 	{
 		if (ImGui::CollapsingHeader("Mouse Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::SliderFloat("Mouse Deadzone", &settings.mouseDeadzone, 0.0f, 0.5f, "%.2f");
-			ImGui::SliderFloat("Mouse Speed", &settings.mouseSpeed, 0.1f, 5.0f, "%.2f");
+			ImGui::SliderFloat("Mouse Speed", &settings.mouseSpeed, 0.1f, 20.0f, "%.2f");
 		}
 	}
 	void DrawDragSettings(VR::Settings& settings)
