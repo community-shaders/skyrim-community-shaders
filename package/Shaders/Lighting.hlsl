@@ -2344,7 +2344,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(DEFERRED)
 	bool useScreenSpaceShadows = true;
 #		else
-	bool useScreenSpaceShadows = inWorld && !SharedData::InInterior && Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsDecal;
+	bool useScreenSpaceShadows = inWorld && !SharedData::InInterior;
 #		endif
 
 	if (useScreenSpaceShadows)
