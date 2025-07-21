@@ -122,11 +122,38 @@ struct THExtendedRendererState
 
 void TerrainHelper::SetShaderResouces(ID3D11DeviceContext* a_context)
 {
-	for (uint32_t textureIndex = 0; textureIndex < THExtendedRendererState::NumPSTextures; ++textureIndex) {
-		if (thExtendedRendererState.PSResourceModifiedBits & (1 << textureIndex)) {
-			a_context->PSSetShaderResources(THExtendedRendererState::FirstPSTexture + textureIndex, 1, &thExtendedRendererState.PSTexture[textureIndex]);
-		}
+	uint32_t mask = thExtendedRendererState.PSResourceModifiedBits;
+
+	if (mask == 0) [[likely]] {
+		return;  // Nothing to update
 	}
+
+	constexpr uint32_t firstTexture = THExtendedRendererState::FirstPSTexture;
+	auto& textures = thExtendedRendererState.PSTexture;
+
+	while (mask) {
+		unsigned long index;
+
+		_BitScanForward(&index, mask);
+
+		uint32_t batchStart = index;
+		uint32_t batchCount = 1;
+
+		uint32_t shiftedMask = mask >> (index + 1);
+		while ((shiftedMask & 1) != 0) {
+			++batchCount;
+			shiftedMask >>= 1;
+		}
+
+		a_context->PSSetShaderResources(
+			firstTexture + batchStart,
+			batchCount,
+			&textures[batchStart]);
+
+		uint32_t clearMask = ((1u << batchCount) - 1u) << batchStart;
+		mask &= ~clearMask;
+	}
+
 	thExtendedRendererState.PSResourceModifiedBits = 0;
 }
 
