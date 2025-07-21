@@ -48,9 +48,7 @@ void State::Draw()
 		//		}
 		//	}
 		//}
-		
-		// Only check against non-shader bits
-		currentPixelDescriptor &= ~modifiedPixelDescriptor;
+
 
 		if (forceUpdatePermutationBuffer || currentPixelDescriptor != lastPixelDescriptor || currentExtraDescriptor != lastExtraDescriptor || currentExtraFeatureDescriptor != lastExtraFeatureDescriptor) {
 			PermutationCB data{};

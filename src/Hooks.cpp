@@ -129,6 +129,9 @@ bool Hooks::BSShader_BeginTechnique::thunk(RE::BSShader* shader, uint32_t vertex
 
 	state->ModifyShaderLookup(*shader, state->modifiedVertexDescriptor, state->modifiedPixelDescriptor);
 
+	// Only check against non-shader bits
+	state->currentPixelDescriptor &= ~state->modifiedPixelDescriptor;
+
 	bool shaderFound = func(shader, vertexDescriptor, pixelDescriptor, skipPixelShader);
 
 	if (!shaderFound && shader->shaderType.get() != RE::BSShader::Type::Effect) {
