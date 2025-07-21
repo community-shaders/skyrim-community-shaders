@@ -150,8 +150,6 @@ public:
 	uint lastExtraFeatureDescriptor = 0;
 	bool forceUpdatePermutationBuffer = true;
 
-	bool isTree = false;
-
 	enum class ExtraShaderDescriptors : uint32_t
 	{
 		InWorld = 1 << 0,

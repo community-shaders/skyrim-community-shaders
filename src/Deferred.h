@@ -46,8 +46,6 @@ public:
 	ID3D11ComputeShader* mainCompositeCS = nullptr;
 	ID3D11ComputeShader* mainCompositeInteriorCS = nullptr;
 
-	bool inDecals = false;
-	bool inReflections = false;
 	bool deferredPass = false;
 
 	Texture2D* prevDiffuseAmbientTexture = nullptr;

@@ -49,12 +49,6 @@ void State::Draw()
 		//	}
 		//}
 
-		if (deferred->inReflections)
-			currentExtraDescriptor |= (uint32_t)ExtraShaderDescriptors::IsReflections;
-
-		if (isTree)
-			currentExtraDescriptor |= (uint32_t)ExtraShaderDescriptors::IsTree;
-
 		if (forceUpdatePermutationBuffer || currentPixelDescriptor != lastPixelDescriptor || currentExtraDescriptor != lastExtraDescriptor || currentExtraFeatureDescriptor != lastExtraFeatureDescriptor) {
 			PermutationCB data{};
 			data.VertexShaderDescriptor = currentVertexDescriptor;
@@ -71,9 +65,6 @@ void State::Draw()
 
 			forceUpdatePermutationBuffer = false;
 		}
-
-		currentExtraDescriptor = 0;
-		currentExtraFeatureDescriptor = 0;
 
 		if (frameChecker.IsNewFrame()) {
 			// Smooth draw calls and frame times for all shader types

@@ -796,9 +796,7 @@ void Deferred::Hooks::Main_RenderWorld_BlendedDecals::thunk(RE::BSShaderAccumula
 
 	// Deferred blended decals
 
-	deferred->inDecals = true;
 	func(This, RenderFlags);
-	deferred->inDecals = false;
 
 	deferred->EndDeferred();
 
@@ -808,9 +806,10 @@ void Deferred::Hooks::Main_RenderWorld_BlendedDecals::thunk(RE::BSShaderAccumula
 void Deferred::Hooks::BSCubeMapCamera_RenderCubemap::thunk(RE::NiAVObject* camera, int a2, bool a3, bool a4, bool a5)
 {
 	auto deferred = globals::deferred;
+	auto state = globals::state;
 
-	deferred->inReflections = true;
 	deferred->ReflectionsPrepasses();
+	state->currentExtraDescriptor |= (uint32_t)State::ExtraShaderDescriptors::IsReflections;
 	func(camera, a2, a3, a4, a5);
-	deferred->inReflections = false;
+	state->currentExtraDescriptor &= ~(uint32_t)State::ExtraShaderDescriptors::IsReflections;
 }
