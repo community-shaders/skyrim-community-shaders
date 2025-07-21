@@ -1367,11 +1367,6 @@ void VR::UpdateVROverlayControllerPosition()
 // Add overlay management methods for VR menu overlays
 void VR::EnsureOverlayInitialized()
 {
-	// One-time initialization of the clean overlay interface
-	if (!g_cleanOverlay) {
-		InitCleanOverlay();
-	}
-
 	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
 	logger::info("BSOpenVR: 0x{:X}", reinterpret_cast<uintptr_t>(openvr));
 	if (!openvr) {
@@ -1488,9 +1483,20 @@ void VR::SubmitOverlayFrame()
 {
 	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
 	auto* gameOverlay = openvr ? RE::BSOpenVR::GetIVROverlayFromContext(&openvr->vrContext) : nullptr;
+	auto* cleanOverlay = RE::BSOpenVR::GetCleanIVROverlay();
 
-	if (!gameOverlay || !g_cleanOverlay) {
-		return;  // Not ready yet
+	static bool cleanOverlayLogged = false;
+	if (!cleanOverlayLogged) {
+		if (cleanOverlay) {
+			logger::info("VR: Successfully acquired clean IVROverlay interface via CommonLib: 0x{:X}", reinterpret_cast<uintptr_t>(cleanOverlay));
+		} else {
+			logger::error("VR: Failed to get clean IVROverlay interface via CommonLib");
+		}
+		cleanOverlayLogged = true;
+	}
+
+	if (!gameOverlay || !cleanOverlay) {
+		return;
 	}
 
 	if (!openvr || !openvr->vrSystem) {
@@ -1527,7 +1533,7 @@ void VR::SubmitOverlayFrame()
 		vr::Texture_t tex = { menuTexture, vr::TextureType_DirectX, vr::ColorSpace_Auto };
 		if (settings.attachMode == AttachMode::HMDOnly || settings.attachMode == AttachMode::Both) {
 			SetOverlayInputFlags(gameOverlay, menuOverlayHandle);
-			vr::EVROverlayError err = g_cleanOverlay->SetOverlayTexture(menuOverlayHandle, &tex);
+			vr::EVROverlayError err = cleanOverlay->SetOverlayTexture(menuOverlayHandle, &tex);
 			if (err != vr::VROverlayError_None) {
 				logger::error("SetOverlayTexture failed for menu overlay: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
 			}
@@ -1558,7 +1564,7 @@ void VR::SubmitOverlayFrame()
 
 			vr::Texture_t controllerTex = { menuControllerTexture, vr::TextureType_DirectX, vr::ColorSpace_Auto };
 			SetOverlayInputFlags(gameOverlay, menuControllerOverlayHandle);
-			vr::EVROverlayError err = g_cleanOverlay->SetOverlayTexture(menuControllerOverlayHandle, &controllerTex);
+			vr::EVROverlayError err = cleanOverlay->SetOverlayTexture(menuControllerOverlayHandle, &controllerTex);
 			if (err != vr::VROverlayError_None) {
 				logger::error("SetOverlayTexture failed for controller overlay: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
 			}
