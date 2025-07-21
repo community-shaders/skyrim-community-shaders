@@ -18,14 +18,12 @@
 
 void State::Draw()
 {
-	//auto lock = Lock();
 	auto shaderCache = globals::shaderCache;
 	auto deferred = globals::deferred;
 	auto terrainBlending = globals::features::terrainBlending;
 	auto terrainHelper = globals::features::terrainHelper;
 	auto cloudShadows = globals::features::cloudShadows;
 	auto truePBR = globals::truePBR;
-	//	auto smState = globals::game::smState;
 	auto context = globals::d3d::context;
 
 	if (shaderCache->IsEnabled()) {
@@ -40,83 +38,113 @@ void State::Draw()
 
 		truePBR->SetShaderResouces(context);
 
-		//if (!deferred->inReflections) {
-		//	if (auto accumulator = RE::BSGraphics::BSShaderAccumulator::GetCurrentAccumulator()) {
-		//		// Set an unused bit to indicate if we are rendering an object in the main rendering passes
-		//		if (accumulator->GetRuntimeData().activeShadowSceneNode == smState->shadowSceneNode[0]) {
-		//			currentExtraDescriptor |= (uint32_t)ExtraShaderDescriptors::InWorld;
-		//		}
-		//	}
-		//}
+		if (permutationData != permutationDataPrevious) {
+			permutationCB->Update(permutationData);
+			permutationDataPrevious = permutationData;
+		}
+
+		if (currentShader && updateShader) {
+			if (currentShader->shaderType.get() == RE::BSShader::Type::Utility) {
+				if (currentPixelDescriptor & (uint32_t)SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask) {
+					deferred->CopyShadowData();
+				}
+			}
+		}
+
+		updateShader = false;
+	}
+}
+
+void State::DrawDebug()
+{
+	auto shaderCache = globals::shaderCache;
+	auto deferred = globals::deferred;
+	auto terrainBlending = globals::features::terrainBlending;
+	auto terrainHelper = globals::features::terrainHelper;
+	auto cloudShadows = globals::features::cloudShadows;
+	auto truePBR = globals::truePBR;
+	auto context = globals::d3d::context;
+
+	if (shaderCache->IsEnabled()) {
+		if (terrainBlending->loaded)
+			terrainBlending->TerrainShaderHacks();
+
+		if (cloudShadows->loaded)
+			cloudShadows->SkyShaderHacks();
+
+		if (terrainHelper->loaded)
+			terrainHelper->SetShaderResouces(context);
+
+		truePBR->SetShaderResouces(context);
 
 		if (permutationData != permutationDataPrevious) {
 			permutationCB->Update(permutationData);
 			permutationDataPrevious = permutationData;
 		}
 
-		//if (frameChecker.IsNewFrame()) {
-		//	// Smooth draw calls and frame times for all shader types
-		//	//for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) + 1; ++i) {
-		//	//	smoothDrawCalls[i] = smoothDrawCalls[i] * static_cast<float>(0.95) + drawCalls[i] * static_cast<float>(0.05);
-		//	//	smoothFrameTimePerType[i] = smoothFrameTimePerType[i] * static_cast<float>(0.95) + frameTimePerType[i] * static_cast<float>(0.05);
-		//	//}
-		//	//// Reset counters for next frame
-		//	//for (auto& c : drawCalls)
-		//	//	c = 0;
-		//	//for (auto& ft : frameTimePerType)
-		//	//	ft = 0.0f;
-
-		//	//// Start timing for this frame
-		//	//if (frameTimingFrequency.QuadPart == 0) {
-		//	//	QueryPerformanceFrequency(&frameTimingFrequency);
-		//	//}
-		//	//QueryPerformanceCounter(&frameStartTime);
-		//	//frameTimingActive = true;
-		//}
-
-		// Track time for current shader type if timing is active
-		//if (frameTimingActive && currentShader) {
-		//	LARGE_INTEGER currentTime;
-		//	QueryPerformanceCounter(&currentTime);
-
-		//	// Calculate elapsed time in milliseconds
-		//	float elapsed = (currentTime.QuadPart - frameStartTime.QuadPart) * 1000.0f / frameTimingFrequency.QuadPart;
-
-		//	// Add elapsed time to the current shader type
-		//	frameTimePerType[magic_enum::enum_integer(currentShader->shaderType.get())] += elapsed;
-		//	frameTimePerType[magic_enum::enum_integer(RE::BSShader::Type::Total)] += elapsed;
-
-		//	// Update start time for next measurement
-		//	frameStartTime = currentTime;
-		//}
-
-		//if (currentShader) {
-		//	drawCalls[magic_enum::enum_integer(currentShader->shaderType.get())]++;
-		//	drawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]++;
-		//}
-
-		if (currentShader && updateShader) {
-			auto type = magic_enum::enum_integer(currentShader->shaderType.get());
-			if (type == magic_enum::enum_integer(RE::BSShader::Type::Utility)) {
-				if (currentPixelDescriptor & magic_enum::enum_integer(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask)) {
+		if (currentShader && updateShader && currentShader->shaderType.get() == RE::BSShader::Type::Utility) {
+			if (currentShader->shaderType.get() == RE::BSShader::Type::Utility) {
+				if (currentPixelDescriptor & (uint32_t)SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask) {
 					deferred->CopyShadowData();
 				}
 			}
-
-			//if (type > 0 && type < magic_enum::enum_integer(RE::BSShader::Type::Total)) {
-			//	if (enabledClasses[type - 1]) {
-			//		// Only check against non-shader bits
-			//		currentPixelDescriptor &= ~modifiedPixelDescriptor;
-
-			//		if (frameAnnotations) {
-			//			BeginPerfEvent(std::format("Draw: CS {}::{:x}::{}", magic_enum::enum_name(currentShader->shaderType.get()), currentPixelDescriptor, currentShader->fxpFilename));
-			//			SetPerfMarker(std::format("Defines: {}", SIE::ShaderCache::GetDefinesString(*currentShader, currentPixelDescriptor)));
-			//			EndPerfEvent();
-			//		}
-			//	}
-			//}
 		}
+
+		Debug();
+		
 		updateShader = false;
+	}
+}
+
+void State::Debug()
+{
+	auto lock = Lock();
+
+	if (frameChecker.IsNewFrame()) {
+		// Smooth draw calls and frame times for all shader types
+		for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) + 1; ++i) {
+			smoothDrawCalls[i] = smoothDrawCalls[i] * static_cast<float>(0.95) + drawCalls[i] * static_cast<float>(0.05);
+			smoothFrameTimePerType[i] = smoothFrameTimePerType[i] * static_cast<float>(0.95) + frameTimePerType[i] * static_cast<float>(0.05);
+		}
+		// Reset counters for next frame
+		for (auto& c : drawCalls)
+			c = 0;
+		for (auto& ft : frameTimePerType)
+			ft = 0.0f;
+
+		// Start timing for this frame
+		if (frameTimingFrequency.QuadPart == 0) {
+			QueryPerformanceFrequency(&frameTimingFrequency);
+		}
+		QueryPerformanceCounter(&frameStartTime);
+		frameTimingActive = true;
+	}
+
+	// Track time for current shader type if timing is active
+	if (frameTimingActive && currentShader) {
+		LARGE_INTEGER currentTime;
+		QueryPerformanceCounter(&currentTime);
+
+		// Calculate elapsed time in milliseconds
+		float elapsed = (currentTime.QuadPart - frameStartTime.QuadPart) * 1000.0f / frameTimingFrequency.QuadPart;
+
+		// Add elapsed time to the current shader type
+		frameTimePerType[magic_enum::enum_integer(currentShader->shaderType.get())] += elapsed;
+		frameTimePerType[magic_enum::enum_integer(RE::BSShader::Type::Total)] += elapsed;
+
+		// Update start time for next measurement
+		frameStartTime = currentTime;
+	}
+
+	if (currentShader) {
+		drawCalls[magic_enum::enum_integer(currentShader->shaderType.get())]++;
+		drawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]++;
+	}
+
+	if (currentShader && updateShader && frameAnnotations) {
+		BeginPerfEvent(std::format("Draw: CS {}::{:x}::{}", magic_enum::enum_name(currentShader->shaderType.get()), permutationData.PixelShaderDescriptor, currentShader->fxpFilename));
+		SetPerfMarker(std::format("Defines: {}", SIE::ShaderCache::GetDefinesString(*currentShader, permutationData.PixelShaderDescriptor)));
+		EndPerfEvent();
 	}
 }
 

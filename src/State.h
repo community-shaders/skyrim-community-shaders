@@ -81,6 +81,8 @@ public:
 	};
 
 	void Draw();
+	void DrawDebug();
+	void Debug();
 	void Reset();
 	void Setup();
 
