@@ -1213,17 +1213,6 @@ struct TESForm_SetFormEditorID
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
-struct SetPerFrameBuffers
-{
-	static void thunk(void* renderer)
-	{
-		func(renderer);
-		auto* singleton = globals::truePBR;
-		singleton->SetupFrame();
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
-
 struct BSTempEffectSimpleDecal_SetupGeometry
 {
 	static void thunk(RE::BSTempEffectSimpleDecal* decal, RE::BSGeometry* geometry, RE::BGSTextureSet* textureSet, bool blended)
@@ -1561,9 +1550,6 @@ void TruePBR::PostPostLoad()
 	stl::write_vfunc<0x33, TESForm_SetFormEditorID>(RE::VTABLE_BGSLightingTemplate[0]);
 	stl::write_vfunc<0x32, TESForm_GetFormEditorID>(RE::VTABLE_TESWeather[0]);
 	stl::write_vfunc<0x33, TESForm_SetFormEditorID>(RE::VTABLE_TESWeather[0]);
-
-	logger::info("Hooking SetPerFrameBuffers");
-	stl::detour_thunk<SetPerFrameBuffers>(REL::RelocationID(75570, 77371));
 
 	logger::info("Hooking BSTempEffectSimpleDecal");
 	stl::detour_thunk<BSTempEffectSimpleDecal_SetupGeometry>(REL::RelocationID(29253, 30108));

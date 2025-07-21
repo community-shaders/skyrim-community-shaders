@@ -768,9 +768,12 @@ void Deferred::Hooks::Main_RenderShadowMaps::thunk()
 
 void Deferred::Hooks::Main_RenderWorld::thunk(bool a1)
 {
-	globals::state->inWorld = true;
+	auto* const state = globals::state;	
+	state->permutationData.ExtraShaderDescriptor |= (uint32_t)State::ExtraShaderDescriptors::InWorld;
+	state->inWorld = true;
 	func(a1);
-	globals::state->inWorld = false;
+	state->inWorld = false;
+	state->permutationData.ExtraShaderDescriptor &= ~(uint32_t)State::ExtraShaderDescriptors::InWorld;
 };
 
 void Deferred::Hooks::Main_RenderWorld_Start::thunk(RE::BSBatchRenderer* This, uint32_t StartRange, uint32_t EndRanges, uint32_t RenderFlags, int GeometryGroup)
@@ -812,4 +815,28 @@ void Deferred::Hooks::BSCubeMapCamera_RenderCubemap::thunk(RE::NiAVObject* camer
 	state->permutationData.ExtraShaderDescriptor |= (uint32_t)State::ExtraShaderDescriptors::IsReflections;
 	func(camera, a2, a3, a4, a5);
 	state->permutationData.ExtraShaderDescriptor &= ~(uint32_t)State::ExtraShaderDescriptors::IsReflections;
+}
+
+
+void Deferred::Hooks::Main_RenderFirstPersonView::thunk(bool a1, bool a2)
+{
+	auto* const state = globals::state;
+	state->permutationData.ExtraShaderDescriptor |= (uint32_t)State::ExtraShaderDescriptors::InWorld;
+	func(a1, a2);
+	state->permutationData.ExtraShaderDescriptor &= ~(uint32_t)State::ExtraShaderDescriptors::InWorld;
+}
+
+void Deferred::Hooks::Renderer_ResetState::thunk(void* This)
+{
+	func(This);
+
+	auto* const state = globals::state;
+	auto* const context = globals::d3d::context;
+
+	ID3D11Buffer* buffers[3] = { state->permutationCB->CB(), state->sharedDataCB->CB(), state->featureDataCB->CB() };
+	context->PSSetConstantBuffers(4, 3, buffers);
+	context->CSSetConstantBuffers(5, 2, buffers + 1);
+
+	auto* singleton = globals::truePBR;
+	singleton->SetupFrame();
 }

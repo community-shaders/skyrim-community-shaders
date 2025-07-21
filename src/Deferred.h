@@ -128,6 +128,18 @@ public:
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		struct Main_RenderFirstPersonView
+		{
+			static void thunk(bool a1, bool a2);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct Renderer_ResetState
+		{
+			static void thunk(void* This);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
 		static void Install()
 		{
 			stl::write_vfunc<0x35, BSCubeMapCamera_RenderCubemap>(RE::VTABLE_BSCubeMapCamera[0]);
@@ -137,6 +149,11 @@ public:
 			stl::write_thunk_call<Main_RenderWorld>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x831, 0x841, 0x791));
 			stl::write_thunk_call<Main_RenderWorld_Start>(REL::RelocationID(99938, 106583).address() + REL::Relocate(0x8E, 0x84));
 			stl::write_thunk_call<Main_RenderWorld_BlendedDecals>(REL::RelocationID(99938, 106583).address() + REL::Relocate(0x319, 0x308, 0x321));
+			
+			if (!REL::Module::IsVR())
+				stl::write_thunk_call<Main_RenderFirstPersonView>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x944, 0x954));
+
+			stl::detour_thunk<Renderer_ResetState>(REL::RelocationID(75570, 77371));
 
 			stl::write_vfunc<0x2, BSImagespaceShaderHDRTonemapBlendCinematic_SetupTechnique>(RE::VTABLE_BSImagespaceShaderHDRTonemapBlendCinematic[0]);
 			stl::write_vfunc<0x2, BSImagespaceShaderHDRTonemapBlendCinematicFade_SetupTechnique>(RE::VTABLE_BSImagespaceShaderHDRTonemapBlendCinematicFade[0]);

@@ -55,29 +55,25 @@ void State::Draw()
 			permutationDataPrevious = permutationData;
 		}
 
-		if (frameChecker.IsNewFrame()) {
-			// Smooth draw calls and frame times for all shader types
-			//for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) + 1; ++i) {
-			//	smoothDrawCalls[i] = smoothDrawCalls[i] * static_cast<float>(0.95) + drawCalls[i] * static_cast<float>(0.05);
-			//	smoothFrameTimePerType[i] = smoothFrameTimePerType[i] * static_cast<float>(0.95) + frameTimePerType[i] * static_cast<float>(0.05);
-			//}
-			//// Reset counters for next frame
-			//for (auto& c : drawCalls)
-			//	c = 0;
-			//for (auto& ft : frameTimePerType)
-			//	ft = 0.0f;
+		//if (frameChecker.IsNewFrame()) {
+		//	// Smooth draw calls and frame times for all shader types
+		//	//for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) + 1; ++i) {
+		//	//	smoothDrawCalls[i] = smoothDrawCalls[i] * static_cast<float>(0.95) + drawCalls[i] * static_cast<float>(0.05);
+		//	//	smoothFrameTimePerType[i] = smoothFrameTimePerType[i] * static_cast<float>(0.95) + frameTimePerType[i] * static_cast<float>(0.05);
+		//	//}
+		//	//// Reset counters for next frame
+		//	//for (auto& c : drawCalls)
+		//	//	c = 0;
+		//	//for (auto& ft : frameTimePerType)
+		//	//	ft = 0.0f;
 
-			//// Start timing for this frame
-			//if (frameTimingFrequency.QuadPart == 0) {
-			//	QueryPerformanceFrequency(&frameTimingFrequency);
-			//}
-			//QueryPerformanceCounter(&frameStartTime);
-			//frameTimingActive = true;
-
-			ID3D11Buffer* buffers[3] = { permutationCB->CB(), sharedDataCB->CB(), featureDataCB->CB() };
-			context->PSSetConstantBuffers(4, 3, buffers);
-			context->CSSetConstantBuffers(5, 2, buffers + 1);
-		}
+		//	//// Start timing for this frame
+		//	//if (frameTimingFrequency.QuadPart == 0) {
+		//	//	QueryPerformanceFrequency(&frameTimingFrequency);
+		//	//}
+		//	//QueryPerformanceCounter(&frameStartTime);
+		//	//frameTimingActive = true;
+		//}
 
 		// Track time for current shader type if timing is active
 		//if (frameTimingActive && currentShader) {
