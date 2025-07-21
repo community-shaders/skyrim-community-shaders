@@ -1,6 +1,7 @@
 ﻿#include "VR.h"
 #include "Menu.h"
 #include "RE/B/BSOpenVR.h"
+#include <openvr.h>
 
 #include "DX12SwapChain.h"
 #include "State.h"
@@ -11,7 +12,7 @@
 #include <d3d11.h>
 #include <imgui_impl_dx11.h>
 #include <magic_enum.hpp>
-#include <openvr.h>
+#include <processthreadsapi.h>  // For GetCurrentProcessId on Windows
 #include <unordered_map>
 #include <windows.h>
 
@@ -45,6 +46,38 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	comboTimeout,
 	EnableDragToReposition,
 	ShowHowToUseMessage)
+
+// A "clean" IVROverlay interface, loaded separately from the game's context.
+static vr::IVROverlay* g_cleanOverlay = nullptr;
+
+// Helper to acquire the clean interface
+void InitCleanOverlay()
+{
+	// Define the function pointer type locally, as it seems to be missing from the project's openvr.h
+	typedef void* (*pfnVRGetGenericInterface)(const char* pchInterfaceVersion, vr::EVRInitError* peError);
+
+	HMODULE openvr_handle = GetModuleHandleA("openvr_api.dll");
+	if (!openvr_handle) {
+		logger::error("VR: Failed to get openvr_api.dll handle");
+		return;
+	}
+
+	auto VR_GetGenericInterface = (pfnVRGetGenericInterface)GetProcAddress(openvr_handle, "VR_GetGenericInterface");
+	if (!VR_GetGenericInterface) {
+		logger::error("VR: Failed to get address of VR_GetGenericInterface");
+		return;
+	}
+
+	vr::EVRInitError eError = vr::VRInitError_None;
+	g_cleanOverlay = (vr::IVROverlay*)VR_GetGenericInterface(vr::IVROverlay_Version, &eError);
+
+	if (eError != vr::VRInitError_None) {
+		g_cleanOverlay = nullptr;
+		logger::error("VR: Failed to get clean IVROverlay interface: {} ({})", static_cast<int>(eError), magic_enum::enum_name(eError));
+		return;
+	}
+	logger::info("VR: Successfully acquired clean IVROverlay interface: 0x{:X}", reinterpret_cast<uintptr_t>(g_cleanOverlay));
+}
 
 void CreateOverlayTextureAndRTV(ID3D11Device* device, int width, int height, ID3D11Texture2D** outTex, ID3D11RenderTargetView** outRTV)
 {
@@ -167,24 +200,27 @@ vr::HmdMatrix34_t MatrixToHmdMatrix34(const Matrix& mat)
 vr::HmdMatrix34_t VR::ComputeOverlayTransformFromHMD()
 {
 	vr::HmdMatrix34_t transform = {};
-	vr::IVRSystem* system = vr::VRSystem();
-	if (system) {
-		vr::TrackedDevicePose_t hmdPose;
-		system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &hmdPose, 1);
-		if (hmdPose.bPoseIsValid) {
-			float distance = settings.VRMenuDistance;
-			float offsetX = settings.VRMenuOffsetX;
-			float offsetY = settings.VRMenuOffsetY;
-			float offsetZ = settings.VRMenuOffsetZ;
-			transform = hmdPose.mDeviceToAbsoluteTracking;
-			// Move forward by distance (Z axis in HMD space)
-			transform.m[0][3] += transform.m[0][2] * (-distance);
-			transform.m[1][3] += transform.m[1][2] * (-distance);
-			transform.m[2][3] += transform.m[2][2] * (-distance);
-			// Apply HMD overlay offsets (in HMD local space)
-			transform.m[0][3] += transform.m[0][0] * offsetX + transform.m[0][1] * offsetY + transform.m[0][2] * offsetZ;
-			transform.m[1][3] += transform.m[1][0] * offsetX + transform.m[1][1] * offsetY + transform.m[1][2] * offsetZ;
-			transform.m[2][3] += transform.m[2][0] * offsetX + transform.m[2][1] * offsetY + transform.m[2][2] * offsetZ;
+	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
+	if (openvr) {
+		auto* system = openvr->vrSystem;
+		if (system) {
+			vr::TrackedDevicePose_t hmdPose;
+			system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &hmdPose, 1);
+			if (hmdPose.bPoseIsValid) {
+				float distance = settings.VRMenuDistance;
+				float offsetX = settings.VRMenuOffsetX;
+				float offsetY = settings.VRMenuOffsetY;
+				float offsetZ = settings.VRMenuOffsetZ;
+				transform = hmdPose.mDeviceToAbsoluteTracking;
+				// Move forward by distance (Z axis in HMD space)
+				transform.m[0][3] += transform.m[0][2] * (-distance);
+				transform.m[1][3] += transform.m[1][2] * (-distance);
+				transform.m[2][3] += transform.m[2][2] * (-distance);
+				// Apply HMD overlay offsets (in HMD local space)
+				transform.m[0][3] += transform.m[0][0] * offsetX + transform.m[0][1] * offsetY + transform.m[0][2] * offsetZ;
+				transform.m[1][3] += transform.m[1][0] * offsetX + transform.m[1][1] * offsetY + transform.m[1][2] * offsetZ;
+				transform.m[2][3] += transform.m[2][0] * offsetX + transform.m[2][1] * offsetY + transform.m[2][2] * offsetZ;
+			}
 		}
 	}
 	return transform;
@@ -1078,19 +1114,18 @@ void SetOverlayInputFlags(vr::IVROverlay* overlay, vr::VROverlayHandle_t handle)
 
 void VR::UpdateVROverlayPosition()
 {
-	if (!REL::Module::IsVR()) {
+	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
+	auto* system = openvr ? openvr->vrSystem : nullptr;
+	if (!system)
 		return;
-	}
 
 	if (menuOverlayHandle == vr::k_ulOverlayHandleInvalid) {
 		return;
 	}
 
-	vr::IVROverlay* overlay = vr::VROverlay();
-	vr::IVRSystem* system = vr::VRSystem();
-	if (!overlay || !system) {
+	auto* overlay = openvr ? RE::BSOpenVR::GetIVROverlayFromContext(&openvr->vrContext) : nullptr;
+	if (!overlay)
 		return;
-	}
 
 	// Determine positioning strategy based on settings
 	bool showOnController = (settings.attachMode == AttachMode::ControllerOnly || settings.attachMode == AttachMode::Both);
@@ -1254,20 +1289,19 @@ void VR::UpdateVROverlayPosition()
 
 void VR::UpdateVROverlayControllerPosition()
 {
-	if (!REL::Module::IsVR()) {
+	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
+	auto* system = openvr ? openvr->vrSystem : nullptr;
+	if (!system)
 		return;
-	}
 
 	// Get the VR controller overlay handle from Menu.cpp
 	if (menuControllerOverlayHandle == vr::k_ulOverlayHandleInvalid) {
 		return;
 	}
 
-	vr::IVROverlay* overlay = vr::VROverlay();
-	vr::IVRSystem* system = vr::VRSystem();
-	if (!overlay || !system) {
+	auto* overlay = openvr ? RE::BSOpenVR::GetIVROverlayFromContext(&openvr->vrContext) : nullptr;
+	if (!overlay)
 		return;
-	}
 
 	// Texture size based on preset
 	float aspect = static_cast<float>(kOverlayHeight) / kOverlayWidth;
@@ -1333,33 +1367,75 @@ void VR::UpdateVROverlayControllerPosition()
 // Add overlay management methods for VR menu overlays
 void VR::EnsureOverlayInitialized()
 {
-	if (menuOverlayHandle != vr::k_ulOverlayHandleInvalid)
+	// One-time initialization of the clean overlay interface
+	if (!g_cleanOverlay) {
+		InitCleanOverlay();
+	}
+
+	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
+	logger::info("BSOpenVR: 0x{:X}", reinterpret_cast<uintptr_t>(openvr));
+	if (!openvr) {
+		logger::error("BSOpenVR::GetSingleton() returned nullptr");
 		return;
-	vr::IVROverlay* overlay = vr::VROverlay();
-	if (!overlay)
+	}
+	auto* vrSystem = openvr->vrSystem;
+	auto* overlay = openvr ? RE::BSOpenVR::GetIVROverlayFromContext(&openvr->vrContext) : nullptr;
+	logger::info("openVR->vrSystem: 0x{:X}", reinterpret_cast<uintptr_t>(vrSystem));
+	logger::info("openVR->vrContext: 0x{:X}", reinterpret_cast<uintptr_t>(&openvr->vrContext));
+	logger::info("openVR->vrContext.vrOverlay: 0x{:X}", reinterpret_cast<uintptr_t>(openvr->vrContext.vrOverlay));
+	logger::info("openVR->hmdDeviceType: {} ({})", static_cast<int>(openvr->hmdDeviceType), magic_enum::enum_name(openvr->hmdDeviceType));
+	for (int i = 0; i < RE::BSVRInterface::Hand::kTotal; ++i) {
+		logger::info("openVR->controllerNodes[{}]: 0x{:X}", i, reinterpret_cast<uintptr_t>(openvr->controllerNodes[i].get()));
+		if (openvr->controllerNodes[i] && reinterpret_cast<uintptr_t>(openvr->controllerNodes[i].get()) < 0x1000) {
+			logger::warn("controllerNodes[{}] is suspiciously low (0x{:X})", i, reinterpret_cast<uintptr_t>(openvr->controllerNodes[i].get()));
+		}
+	}
+	logger::info("menuOverlayHandle: 0x{:X}", menuOverlayHandle);
+	logger::info("menuControllerOverlayHandle: 0x{:X}", menuControllerOverlayHandle);
+	logger::info("Current PID: {}", GetCurrentProcessId());
+	if (!overlay) {
+		logger::error("IVROverlay is nullptr after GetIVROverlay");
 		return;
+	}
 	CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, &menuTexture, &menuRTV);
 	std::string key = "communityshaders.menu";
 	std::string name = "Community Shaders Menu";
 	vr::EVROverlayError err = overlay->CreateOverlay(key.c_str(), name.c_str(), &menuOverlayHandle);
 	if (err == vr::VROverlayError_None) {
+		logger::info("CreateOverlay succeeded for menuOverlayHandle: 0x{:X}", menuOverlayHandle);
 		SetOverlayInputFlags(overlay, menuOverlayHandle);
 		overlay->SetOverlayWidthInMeters(menuOverlayHandle, 1.0f);
+		overlay->SetOverlayRenderingPid(menuOverlayHandle, GetCurrentProcessId());
+		uint32_t pid = overlay->GetOverlayRenderingPid(menuOverlayHandle);
+		logger::info("menuOverlayHandle rendering PID: {}", pid);
+	} else {
+		logger::error("CreateOverlay failed: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
 	}
 	// Controller overlay
 	std::string controllerKey = "communityshaders.menu.controller";
 	std::string controllerName = "Community Shaders Menu (Controller)";
 	err = overlay->CreateOverlay(controllerKey.c_str(), controllerName.c_str(), &menuControllerOverlayHandle);
 	if (err == vr::VROverlayError_None) {
+		logger::info("CreateOverlay succeeded for menuControllerOverlayHandle: 0x{:X}", menuControllerOverlayHandle);
 		CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, &menuControllerTexture, &menuControllerRTV);
 		SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
 		overlay->SetOverlayWidthInMeters(menuControllerOverlayHandle, 1.0f);
+		overlay->SetOverlayRenderingPid(menuControllerOverlayHandle, GetCurrentProcessId());
+		uint32_t pid = overlay->GetOverlayRenderingPid(menuControllerOverlayHandle);
+		logger::info("menuControllerOverlayHandle rendering PID: {}", pid);
+	} else {
+		logger::error("CreateOverlay failed: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
 	}
 }
 
 void VR::DestroyOverlay()
 {
-	vr::IVROverlay* overlay = vr::VROverlay();
+	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
+	auto* overlay = openvr ? RE::BSOpenVR::GetIVROverlayFromContext(&openvr->vrContext) : nullptr;
+	if (!overlay) {
+		logger::error("DestroyOverlay: IVROverlay is nullptr");
+		return;
+	}
 	if (menuOverlayHandle != vr::k_ulOverlayHandleInvalid) {
 		overlay->DestroyOverlay(menuOverlayHandle);
 		menuOverlayHandle = vr::k_ulOverlayHandleInvalid;
@@ -1410,9 +1486,17 @@ void VR::RecreateOverlayTexturesIfNeeded()
 
 void VR::SubmitOverlayFrame()
 {
-	vr::IVROverlay* overlay = vr::VROverlay();
-	if (!overlay)
+	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
+	auto* gameOverlay = openvr ? RE::BSOpenVR::GetIVROverlayFromContext(&openvr->vrContext) : nullptr;
+
+	if (!gameOverlay || !g_cleanOverlay) {
+		return;  // Not ready yet
+	}
+
+	if (!openvr || !openvr->vrSystem) {
+		logger::error("SubmitOverlayFrame: BSOpenVR or vrSystem is nullptr");
 		return;
+	}
 
 	// Update drag logic for all modes
 	UpdateOverlayDrag();
@@ -1442,11 +1526,17 @@ void VR::SubmitOverlayFrame()
 		UpdateVROverlayPosition();
 		vr::Texture_t tex = { menuTexture, vr::TextureType_DirectX, vr::ColorSpace_Auto };
 		if (settings.attachMode == AttachMode::HMDOnly || settings.attachMode == AttachMode::Both) {
-			SetOverlayInputFlags(overlay, menuOverlayHandle);
-			overlay->SetOverlayTexture(menuOverlayHandle, &tex);
-			overlay->ShowOverlay(menuOverlayHandle);
+			SetOverlayInputFlags(gameOverlay, menuOverlayHandle);
+			vr::EVROverlayError err = g_cleanOverlay->SetOverlayTexture(menuOverlayHandle, &tex);
+			if (err != vr::VROverlayError_None) {
+				logger::error("SetOverlayTexture failed for menu overlay: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
+			}
+			err = gameOverlay->ShowOverlay(menuOverlayHandle);
+			if (err != vr::VROverlayError_None) {
+				logger::error("ShowOverlay failed for menu overlay: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
+			}
 		} else if (menuOverlayHandle != vr::k_ulOverlayHandleInvalid) {
-			overlay->HideOverlay(menuOverlayHandle);
+			gameOverlay->HideOverlay(menuOverlayHandle);
 		}
 		// Controller overlay
 		if (settings.attachMode == AttachMode::ControllerOnly || settings.attachMode == AttachMode::Both) {
@@ -1467,18 +1557,24 @@ void VR::SubmitOverlayFrame()
 			UpdateVROverlayControllerPosition();
 
 			vr::Texture_t controllerTex = { menuControllerTexture, vr::TextureType_DirectX, vr::ColorSpace_Auto };
-			SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
-			overlay->SetOverlayTexture(menuControllerOverlayHandle, &controllerTex);
-			overlay->ShowOverlay(menuControllerOverlayHandle);
+			SetOverlayInputFlags(gameOverlay, menuControllerOverlayHandle);
+			vr::EVROverlayError err = g_cleanOverlay->SetOverlayTexture(menuControllerOverlayHandle, &controllerTex);
+			if (err != vr::VROverlayError_None) {
+				logger::error("SetOverlayTexture failed for controller overlay: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
+			}
+			err = gameOverlay->ShowOverlay(menuControllerOverlayHandle);
+			if (err != vr::VROverlayError_None) {
+				logger::error("ShowOverlay failed for controller overlay: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
+			}
 		} else if (menuControllerOverlayHandle != vr::k_ulOverlayHandleInvalid) {
-			overlay->HideOverlay(menuControllerOverlayHandle);
+			gameOverlay->HideOverlay(menuControllerOverlayHandle);
 		}
 	} else {
 		if (menuOverlayHandle != vr::k_ulOverlayHandleInvalid) {
-			overlay->HideOverlay(menuOverlayHandle);
+			gameOverlay->HideOverlay(menuOverlayHandle);
 		}
 		if (menuControllerOverlayHandle != vr::k_ulOverlayHandleInvalid) {
-			overlay->HideOverlay(menuControllerOverlayHandle);
+			gameOverlay->HideOverlay(menuControllerOverlayHandle);
 		}
 	}
 }
@@ -1794,7 +1890,8 @@ void VR::ProcessVRControllerOverlayInput()
 // Helper: Get controller world matrix from OpenVR pose
 bool GetControllerWorldMatrix(vr::TrackedDeviceIndex_t index, float out[3][4])
 {
-	vr::IVRSystem* system = vr::VRSystem();
+	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
+	auto* system = openvr ? openvr->vrSystem : nullptr;
 	if (!system)
 		return false;
 	vr::TrackedDevicePose_t poses[vr::k_unMaxTrackedDeviceCount];
@@ -1815,7 +1912,8 @@ static bool CanStartAny(vr::ETrackedControllerRole, bool isLeft, bool isRight)
 
 void VR::UpdateOverlayDrag()
 {
-	vr::IVRSystem* system = vr::VRSystem();
+	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
+	auto* system = openvr ? openvr->vrSystem : nullptr;
 	if (!system)
 		return;
 
