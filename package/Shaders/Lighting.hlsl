@@ -1977,7 +1977,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	uint numShadowLights = min(4, uint(NumLightNumShadowLight.y));
 
 #	if defined(MODELSPACENORMALS) && !defined(SKINNED)
-	float3 worldNormal = normal;
+	float3 worldNormal = normal.xyz;
 #	else
 	float3 worldNormal = normalize(mul(tbn, normal.xyz));
 
