@@ -70,7 +70,6 @@ struct VR : OverlayFeature
 		float MinOccludeeBoxExtent = 10.0f;
 
 		// VR Menu Overlay Settings
-		float VRMenuDistance = 1.5f;
 		float VRMenuScale = 1.0f;         // 0.5x to 2.0x
 		int VRMenuPositioningMethod = 0;  // 0 = HMD relative, 1 = Fixed world position
 
@@ -85,14 +84,14 @@ struct VR : OverlayFeature
 		vr::ETrackedControllerRole VRMenuControllerHand = vr::ETrackedControllerRole::TrackedControllerRole_LeftHand;
 
 		// HMD overlay offset settings (separate from controller)
-		float VRMenuOffsetX = 0.0f;  // Left/Right offset
-		float VRMenuOffsetY = 0.0f;  // Up/Down offset
-		float VRMenuOffsetZ = 0.0f;  // Forward/Back offset
+		float VRMenuOffsetX = 0.26f;   // Left/Right offset
+		float VRMenuOffsetY = -0.04f;  // Up/Down offset
+		float VRMenuOffsetZ = -0.41f;  // Forward/Back offset
 
 		// Controller offset settings (separate from HMD)
-		float VRMenuControllerOffsetX = 0.0f;  // Left/Right offset
-		float VRMenuControllerOffsetY = 0.1f;  // Up/Down offset
-		float VRMenuControllerOffsetZ = 0.2f;  // Forward/Back offset
+		float VRMenuControllerOffsetX = 0.22f;  // Left/Right offset
+		float VRMenuControllerOffsetY = 0.15f;  // Up/Down offset
+		float VRMenuControllerOffsetZ = 0.20f;  // Forward/Back offset
 
 		// Input settings
 		bool VRMenuControllerDiagnosticsTestMode = false;  // If true, disables controller input for menu except right thumbstick and triggers

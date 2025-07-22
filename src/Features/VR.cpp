@@ -25,7 +25,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VR::Settings,
 	EnableDepthBufferCulling,
 	MinOccludeeBoxExtent,
-	VRMenuDistance,
 	VRMenuScale,
 	VRMenuPositioningMethod,
 	attachMode,
@@ -207,15 +206,10 @@ vr::HmdMatrix34_t VR::ComputeOverlayTransformFromHMD()
 			vr::TrackedDevicePose_t hmdPose;
 			system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &hmdPose, 1);
 			if (hmdPose.bPoseIsValid) {
-				float distance = settings.VRMenuDistance;
 				float offsetX = settings.VRMenuOffsetX;
 				float offsetY = settings.VRMenuOffsetY;
 				float offsetZ = settings.VRMenuOffsetZ;
 				transform = hmdPose.mDeviceToAbsoluteTracking;
-				// Move forward by distance (Z axis in HMD space)
-				transform.m[0][3] += transform.m[0][2] * (-distance);
-				transform.m[1][3] += transform.m[1][2] * (-distance);
-				transform.m[2][3] += transform.m[2][2] * (-distance);
 				// Apply HMD overlay offsets (in HMD local space)
 				transform.m[0][3] += transform.m[0][0] * offsetX + transform.m[0][1] * offsetY + transform.m[0][2] * offsetZ;
 				transform.m[1][3] += transform.m[1][0] * offsetX + transform.m[1][1] * offsetY + transform.m[1][2] * offsetZ;
@@ -658,7 +652,6 @@ namespace
 	void DrawMenuSettings(VR::Settings& settings)
 	{
 		if (ImGui::CollapsingHeader("Menu Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::SliderFloat("Menu Distance", &settings.VRMenuDistance, 0.5f, 5.0f, "%.1f");
 			ImGui::SliderFloat("Menu Scale", &settings.VRMenuScale, 0.5f, 2.0f, "%.2f");
 			const char* positioningMethods[] = { "HMD Relative", "Fixed World Position" };
 			ImGui::Combo("Menu Positioning Method", &settings.VRMenuPositioningMethod, positioningMethods, IM_ARRAYSIZE(positioningMethods));
@@ -667,17 +660,34 @@ namespace
 			if (ImGui::Combo("Attach Mode", &attachModeInt, attachModes, IM_ARRAYSIZE(attachModes))) {
 				settings.attachMode = static_cast<VR::Settings::OverlayAttachMode>(attachModeInt);
 			}
-			const char* controllerHands[] = { "Left", "Right" };
-			int controllerHandInt = static_cast<int>(settings.VRMenuControllerHand);
-			if (ImGui::Combo("Menu Controller Hand", &controllerHandInt, controllerHands, IM_ARRAYSIZE(controllerHands))) {
-				settings.VRMenuControllerHand = static_cast<vr::ETrackedControllerRole>(controllerHandInt);
+
+			// Controller-specific settings (only show when controller mode is active)
+			if (settings.attachMode == VR::Settings::OverlayAttachMode::ControllerOnly ||
+				settings.attachMode == VR::Settings::OverlayAttachMode::Both) {
+				const char* controllerHands[] = { "Left", "Right" };
+				// Convert from OpenVR enum (1=Left, 2=Right) to array index (0=Left, 1=Right)
+				int controllerHandInt = static_cast<int>(settings.VRMenuControllerHand) - 1;
+				if (ImGui::Combo("Menu Controller Hand", &controllerHandInt, controllerHands, IM_ARRAYSIZE(controllerHands))) {
+					// Convert back to OpenVR enum (0->1=Left, 1->2=Right)
+					settings.VRMenuControllerHand = static_cast<vr::ETrackedControllerRole>(controllerHandInt + 1);
+				}
+
+				ImGui::Separator();
+				ImGui::Text("Controller Offset Settings");
+				ImGui::SliderFloat("Controller Offset X", &settings.VRMenuControllerOffsetX, -2.0f, 2.0f, "%.2f");
+				ImGui::SliderFloat("Controller Offset Y", &settings.VRMenuControllerOffsetY, -2.0f, 2.0f, "%.2f");
+				ImGui::SliderFloat("Controller Offset Z", &settings.VRMenuControllerOffsetZ, -2.0f, 2.0f, "%.2f");
 			}
-			ImGui::SliderFloat("Menu Offset X", &settings.VRMenuOffsetX, -2.0f, 2.0f, "%.2f");
-			ImGui::SliderFloat("Menu Offset Y", &settings.VRMenuOffsetY, -2.0f, 2.0f, "%.2f");
-			ImGui::SliderFloat("Menu Offset Z", &settings.VRMenuOffsetZ, -2.0f, 2.0f, "%.2f");
-			ImGui::SliderFloat("Controller Offset X", &settings.VRMenuControllerOffsetX, -0.5f, 0.5f, "%.2f");
-			ImGui::SliderFloat("Controller Offset Y", &settings.VRMenuControllerOffsetY, -0.5f, 0.5f, "%.2f");
-			ImGui::SliderFloat("Controller Offset Z", &settings.VRMenuControllerOffsetZ, -0.5f, 0.5f, "%.2f");
+
+			// HMD-specific settings (only show when HMD mode is active)
+			if (settings.attachMode == VR::Settings::OverlayAttachMode::HMDOnly ||
+				settings.attachMode == VR::Settings::OverlayAttachMode::Both) {
+				ImGui::Separator();
+				ImGui::Text("HMD Offset Settings");
+				ImGui::SliderFloat("HMD Offset X", &settings.VRMenuOffsetX, -2.0f, 2.0f, "%.2f");
+				ImGui::SliderFloat("HMD Offset Y", &settings.VRMenuOffsetY, -2.0f, 2.0f, "%.2f");
+				ImGui::SliderFloat("HMD Offset Z", &settings.VRMenuOffsetZ, -2.0f, 2.0f, "%.2f");
+			}
 		}
 	}
 	void DrawMouseSettings(VR::Settings& settings)
@@ -1152,9 +1162,8 @@ void VR::UpdateVROverlayPosition()
 			system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &hmdPose, 1);
 
 			if (hmdPose.bPoseIsValid) {
-				// Calculate position in front of HMD
-				float distance = settings.VRMenuDistance;
-				float height = 0.0f;  // No longer using settings.VRMenuHeight
+				// Calculate position in front of HMD using offsets directly
+				float height = 0.0f;
 
 				// Create transform matrix - start with identity
 				vr::HmdMatrix34_t hmdTransform;
@@ -1187,20 +1196,15 @@ void VR::UpdateVROverlayPosition()
 				hmdTransform.m[2][1] = hmdPose.mDeviceToAbsoluteTracking.m[2][1];
 				hmdTransform.m[2][2] = hmdPose.mDeviceToAbsoluteTracking.m[2][2];
 
-				// Move forward by distance (Z axis in HMD space)
-				hmdTransform.m[0][3] += hmdTransform.m[0][2] * (-distance);
-				hmdTransform.m[1][3] += hmdTransform.m[1][2] * (-distance);
-				hmdTransform.m[2][3] += hmdTransform.m[2][2] * (-distance);
+				// Apply HMD offset positions directly (in HMD local space)
+				hmdTransform.m[0][3] += hmdTransform.m[0][0] * offsetX + hmdTransform.m[0][1] * offsetY + hmdTransform.m[0][2] * offsetZ;
+				hmdTransform.m[1][3] += hmdTransform.m[1][0] * offsetX + hmdTransform.m[1][1] * offsetY + hmdTransform.m[1][2] * offsetZ;
+				hmdTransform.m[2][3] += hmdTransform.m[2][0] * offsetX + hmdTransform.m[2][1] * offsetY + hmdTransform.m[2][2] * offsetZ;
 
 				// Move up by height (Y axis in HMD space)
 				hmdTransform.m[0][3] += hmdTransform.m[0][1] * height;
 				hmdTransform.m[1][3] += hmdTransform.m[1][1] * height;
 				hmdTransform.m[2][3] += hmdTransform.m[2][1] * height;
-
-				// Apply HMD overlay offsets (in HMD local space)
-				hmdTransform.m[0][3] += hmdTransform.m[0][0] * offsetX + hmdTransform.m[0][1] * offsetY + hmdTransform.m[0][2] * offsetZ;
-				hmdTransform.m[1][3] += hmdTransform.m[1][0] * offsetX + hmdTransform.m[1][1] * offsetY + hmdTransform.m[1][2] * offsetZ;
-				hmdTransform.m[2][3] += hmdTransform.m[2][0] * offsetX + hmdTransform.m[2][1] * offsetY + hmdTransform.m[2][2] * offsetZ;
 
 				// Scale the overlay based on width/height
 				hmdTransform.m[0][0] *= overlayWidth;
