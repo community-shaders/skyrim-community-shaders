@@ -1006,11 +1006,11 @@ namespace Hooks
 
 	struct BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights
 	{
-		static void thunk(RE::BSGraphics::PixelShader* PixelShader, RE::BSRenderPass* Pass, DirectX::XMMATRIX& Transform, uint32_t LightCount, uint32_t ShadowLightCount, float WorldScale, uint32_t)
+		static void thunk(RE::BSGraphics::PixelShader* PixelShader, RE::BSRenderPass* Pass, DirectX::XMMATRIX& Transform, uint32_t LightCount, uint32_t ShadowLightCount, float WorldScale, uint32_t RenderSpace)
 		{
 			if (globals::features::lightLimitFix->loaded)
 				globals::features::lightLimitFix->BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(Pass);
-			func(PixelShader, Pass, Transform, LightCount, ShadowLightCount, WorldScale, 0);
+			func(PixelShader, Pass, Transform, LightCount, ShadowLightCount, WorldScale, globals::shaderCache->IsEnabled() ? 0 : RenderSpace);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
