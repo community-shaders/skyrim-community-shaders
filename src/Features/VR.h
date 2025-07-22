@@ -46,4 +46,5 @@ struct VR : Feature
 
 	bool* gDepthBufferCulling = nullptr;
 	float* gMinOccludeeBoxExtent = nullptr;
+	virtual std::string_view GetCategory() const override { return "Debug"; }
 };
