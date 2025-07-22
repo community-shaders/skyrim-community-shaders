@@ -5,14 +5,16 @@
 
 #include "DX12SwapChain.h"
 #include "State.h"
+#include "Utils/D3D.h"
+#include "Utils/PerfUtils.h"
 #include "Utils/UI.h"
+#include "Utils/VRUtils.h"
 #include <DirectXMath.h>
 #include <SimpleMath.h>
 #include <cmath>
 #include <d3d11.h>
 #include <imgui_impl_dx11.h>
 #include <magic_enum.hpp>
-#include <processthreadsapi.h>  // For GetCurrentProcessId on Windows
 #include <unordered_map>
 #include <windows.h>
 
@@ -21,6 +23,37 @@ using AttachMode = VR::Settings::OverlayAttachMode;
 constexpr int kOverlayWidth = 1920;
 constexpr int kOverlayHeight = 1080;
 
+// Helper function to get controller index for our ControllerDevice enum
+vr::TrackedDeviceIndex_t GetControllerIndexForDevice(ControllerDevice device)
+{
+	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
+	auto* system = openvr ? openvr->vrSystem : nullptr;
+	if (!system)
+		return vr::k_unTrackedDeviceIndexInvalid;
+
+	// Determine the OpenVR role based on handedness and our device enum
+	vr::ETrackedControllerRole targetRole;
+	bool isLeftHanded = RE::BSOpenVRControllerDevice::IsLeftHandedMode();
+
+	if (device == ControllerDevice::Primary) {
+		// Primary controller = dominant hand
+		targetRole = isLeftHanded ? vr::ETrackedControllerRole::TrackedControllerRole_LeftHand : vr::ETrackedControllerRole::TrackedControllerRole_RightHand;
+	} else {
+		// Secondary controller = non-dominant hand
+		targetRole = isLeftHanded ? vr::ETrackedControllerRole::TrackedControllerRole_RightHand : vr::ETrackedControllerRole::TrackedControllerRole_LeftHand;
+	}
+
+	// Find controller with the target role
+	for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; ++i) {
+		if (system->GetTrackedDeviceClass(i) == vr::TrackedDeviceClass_Controller) {
+			if (system->GetControllerRoleForTrackedDeviceIndex(i) == targetRole) {
+				return i;
+			}
+		}
+	}
+	return vr::k_unTrackedDeviceIndexInvalid;
+}
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VR::Settings,
 	EnableDepthBufferCulling,
@@ -28,7 +61,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VRMenuScale,
 	VRMenuPositioningMethod,
 	attachMode,
-	VRMenuControllerHand,
+	VRMenuAttachController,
 	VRMenuOffsetX,
 	VRMenuOffsetY,
 	VRMenuOffsetZ,
@@ -45,156 +78,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	comboTimeout,
 	EnableDragToReposition,
 	ShowHowToUseMessage)
-
-// A "clean" IVROverlay interface, loaded separately from the game's context.
-static vr::IVROverlay* g_cleanOverlay = nullptr;
-
-// Helper to acquire the clean interface
-void InitCleanOverlay()
-{
-	// Define the function pointer type locally, as it seems to be missing from the project's openvr.h
-	typedef void* (*pfnVRGetGenericInterface)(const char* pchInterfaceVersion, vr::EVRInitError* peError);
-
-	HMODULE openvr_handle = GetModuleHandleA("openvr_api.dll");
-	if (!openvr_handle) {
-		logger::error("VR: Failed to get openvr_api.dll handle");
-		return;
-	}
-
-	auto VR_GetGenericInterface = (pfnVRGetGenericInterface)GetProcAddress(openvr_handle, "VR_GetGenericInterface");
-	if (!VR_GetGenericInterface) {
-		logger::error("VR: Failed to get address of VR_GetGenericInterface");
-		return;
-	}
-
-	vr::EVRInitError eError = vr::VRInitError_None;
-	g_cleanOverlay = (vr::IVROverlay*)VR_GetGenericInterface(vr::IVROverlay_Version, &eError);
-
-	if (eError != vr::VRInitError_None) {
-		g_cleanOverlay = nullptr;
-		logger::error("VR: Failed to get clean IVROverlay interface: {} ({})", static_cast<int>(eError), magic_enum::enum_name(eError));
-		return;
-	}
-	logger::info("VR: Successfully acquired clean IVROverlay interface: 0x{:X}", reinterpret_cast<uintptr_t>(g_cleanOverlay));
-}
-
-void CreateOverlayTextureAndRTV(ID3D11Device* device, int width, int height, ID3D11Texture2D** outTex, ID3D11RenderTargetView** outRTV)
-{
-	D3D11_TEXTURE2D_DESC desc = {};
-	desc.Width = width;
-	desc.Height = height;
-	desc.MipLevels = 1;
-	desc.ArraySize = 1;
-	desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	desc.SampleDesc.Count = 1;
-	desc.Usage = D3D11_USAGE_DEFAULT;
-	desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-	device->CreateTexture2D(&desc, nullptr, outTex);
-	if (*outTex) {
-		device->CreateRenderTargetView(*outTex, nullptr, outRTV);
-	}
-}
-
-void VR::ApplyHighlightTintToTexture(ID3D11Texture2D* texture, bool isHighlighted)
-{
-	if (!isHighlighted || !texture)
-		return;
-
-	// Create a temporary staging texture to read from
-	ID3D11Texture2D* stagingTexture = nullptr;
-	D3D11_TEXTURE2D_DESC desc;
-	texture->GetDesc(&desc);
-	desc.Usage = D3D11_USAGE_STAGING;
-	desc.BindFlags = 0;
-	desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ | D3D11_CPU_ACCESS_WRITE;
-
-	if (FAILED(globals::d3d::device->CreateTexture2D(&desc, nullptr, &stagingTexture)))
-		return;
-
-	// Copy the original texture to staging
-	globals::d3d::context->CopyResource(stagingTexture, texture);
-
-	// Map the staging texture to read/write pixels
-	D3D11_MAPPED_SUBRESOURCE mapped;
-	if (SUCCEEDED(globals::d3d::context->Map(stagingTexture, 0, D3D11_MAP_READ_WRITE, 0, &mapped))) {
-		// Apply highlight tint to each pixel
-		uint8_t* pixels = static_cast<uint8_t*>(mapped.pData);
-		for (UINT y = 0; y < desc.Height; ++y) {
-			for (UINT x = 0; x < desc.Width; ++x) {
-				uint8_t* pixel = pixels + (y * mapped.RowPitch + x * 4);
-
-				// Only tint non-transparent pixels (alpha > 0)
-				if (pixel[3] > 0) {
-					// Apply configurable highlight tint
-					// Blend the original color with the highlight color
-					float originalR = pixel[0] / 255.0f;
-					float originalG = pixel[1] / 255.0f;
-					float originalB = pixel[2] / 255.0f;
-
-					// Blend: original * (1 - alpha) + highlight * alpha
-					float blendAlpha = settings.dragHighlightColor[3];
-					pixel[0] = static_cast<uint8_t>((originalR * (1.0f - blendAlpha) + settings.dragHighlightColor[0] * blendAlpha) * 255.0f);
-					pixel[1] = static_cast<uint8_t>((originalG * (1.0f - blendAlpha) + settings.dragHighlightColor[1] * blendAlpha) * 255.0f);
-					pixel[2] = static_cast<uint8_t>((originalB * (1.0f - blendAlpha) + settings.dragHighlightColor[2] * blendAlpha) * 255.0f);
-					// Alpha stays the same
-				}
-			}
-		}
-
-		globals::d3d::context->Unmap(stagingTexture, 0);
-
-		// Copy the modified texture back
-		globals::d3d::context->CopyResource(texture, stagingTexture);
-	}
-
-	stagingTexture->Release();
-}
-
-// Add a high-resolution timer helper using QueryPerformanceCounter
-inline double GetNowSecs()
-{
-	static LARGE_INTEGER freq = [] { LARGE_INTEGER f; QueryPerformanceFrequency(&f); return f; }();
-	LARGE_INTEGER now;
-	QueryPerformanceCounter(&now);
-	return static_cast<double>(now.QuadPart) / static_cast<double>(freq.QuadPart);
-}
-
-// Conversion helpers for OpenVR API boundary
-Matrix HmdMatrix34ToMatrix(const vr::HmdMatrix34_t& m)
-{
-	return Matrix(
-		m.m[0][0], m.m[0][1], m.m[0][2], m.m[0][3],
-		m.m[1][0], m.m[1][1], m.m[1][2], m.m[1][3],
-		m.m[2][0], m.m[2][1], m.m[2][2], m.m[2][3],
-		0, 0, 0, 1);
-}
-
-vr::HmdMatrix34_t Float3x4ToHmdMatrix34(const float m[3][4])
-{
-	vr::HmdMatrix34_t mat;
-	for (int i = 0; i < 3; ++i)
-		for (int j = 0; j < 4; ++j)
-			mat.m[i][j] = m[i][j];
-	return mat;
-}
-
-vr::HmdMatrix34_t MatrixToHmdMatrix34(const Matrix& mat)
-{
-	vr::HmdMatrix34_t m{};
-	m.m[0][0] = mat._11;
-	m.m[0][1] = mat._12;
-	m.m[0][2] = mat._13;
-	m.m[0][3] = mat._14;
-	m.m[1][0] = mat._21;
-	m.m[1][1] = mat._22;
-	m.m[1][2] = mat._23;
-	m.m[1][3] = mat._24;
-	m.m[2][0] = mat._31;
-	m.m[2][1] = mat._32;
-	m.m[2][2] = mat._33;
-	m.m[2][3] = mat._34;
-	return m;
-}
 
 vr::HmdMatrix34_t VR::ComputeOverlayTransformFromHMD()
 {
@@ -218,67 +101,6 @@ vr::HmdMatrix34_t VR::ComputeOverlayTransformFromHMD()
 		}
 	}
 	return transform;
-}
-
-void DrawButtonCombo(const std::vector<ButtonCombo>& combo, bool showControllerLabels = false)
-{
-	bool anyDrawn = false;
-	for (size_t i = 0; i < combo.size(); ++i) {
-		if (combo[i].GetKey() == 0)
-			continue;
-		if (i > 0) {
-			ImGui::SameLine();
-			ImGui::Text("+");
-			ImGui::SameLine();
-		}
-		ImVec4 color;
-		switch (combo[i].GetDevice()) {
-		case ControllerDevice::Primary:
-			color = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
-			break;
-		case ControllerDevice::Secondary:
-			color = ImVec4(0.0f, 0.6f, 1.0f, 1.0f);
-			break;
-		case ControllerDevice::Both:
-			color = ImVec4(0.5f, 0.0f, 0.5f, 1.0f);
-			break;
-		default:
-			color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-			break;
-		}
-		ImGui::PushStyleColor(ImGuiCol_Text, color);
-		ImGui::Text("%s", RE::GetOpenVRButtonName(combo[i].GetKey()));
-		ImGui::PopStyleColor();
-		anyDrawn = true;
-		if (showControllerLabels) {
-			ImGui::SameLine();
-			const char* label = "";
-			switch (combo[i].GetDevice()) {
-			case ControllerDevice::Primary:
-				label = "(Primary)";
-				break;
-			case ControllerDevice::Secondary:
-				label = "(Secondary)";
-				break;
-			case ControllerDevice::Both:
-				label = "(Both)";
-				break;
-			default:
-				break;
-			}
-			ImGui::TextDisabled("%s", label);
-			if (i < combo.size() - 1)
-				ImGui::SameLine();
-		}
-	}
-	if (anyDrawn) {
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			Util::DrawColoredMultiLineTooltip({ { "Color coding:", ImVec4(1, 1, 1, 1) },
-				{ "Green = Primary controller", ImVec4(0.0f, 1.0f, 0.0f, 1.0f) },
-				{ "Blue = Secondary controller", ImVec4(0.0f, 0.6f, 1.0f, 1.0f) },
-				{ "Purple = Both controllers", ImVec4(0.5f, 0.0f, 0.5f, 1.0f) } });
-		}
-	}
 }
 
 void VR::DrawOverlay()
@@ -336,9 +158,9 @@ void VR::DrawOverlay()
 	ImGui::Text("You must be in the Main Menu or Tween Menu for these key binds to work.");
 	ImGui::Spacing();
 	ImGui::Text("Open Menu: ");
-	DrawButtonCombo(settings.VRMenuOpenKeys, true);
+	Util::DrawButtonCombo(settings.VRMenuOpenKeys, true);
 	ImGui::Text("\nClose Menu: ");
-	DrawButtonCombo(settings.VRMenuCloseKeys, true);
+	Util::DrawButtonCombo(settings.VRMenuCloseKeys, true);
 	ImGui::Spacing();
 	ImGui::TextDisabled("(This message will auto-disable in %d seconds)", secondsLeft);
 	ImGui::TextDisabled("(You can disable this message in VR settings > Controller Instructions)");
@@ -397,7 +219,7 @@ void VR::DrawSettings()
 		ImGui::EndTabBar();
 	}
 
-	// Combo recording popup (moved outside tabs)
+	// Combo recording popup
 	if (this->isCapturingCombo) {
 		ImGui::OpenPopup("Record Combo");
 		ImGui::SetNextWindowSize(ImVec2(400, 200), ImGuiCond_FirstUseEver);
@@ -443,7 +265,7 @@ void VR::DrawSettings()
 			ImGui::Spacing();
 
 			// Show countdown timer with color
-			double remainingTime = this->comboTimeout - (GetNowSecs() - this->comboStartTime);
+			double remainingTime = this->comboTimeout - (Util::GetNowSecs() - this->comboStartTime);
 			ImVec4 timerColor;
 			if (remainingTime > 2.0) {
 				timerColor = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);  // Green
@@ -471,7 +293,7 @@ void VR::DrawSettings()
 						return a.GetKey() < b.GetKey();
 					});
 
-				DrawButtonCombo(sortedRecordedCombos, false);
+				Util::DrawButtonCombo(sortedRecordedCombos, false);
 			}
 
 			ImGui::Spacing();
@@ -632,8 +454,23 @@ namespace
 			ImGui::BulletText("A/X (Both Controllers): Enter");
 			ImGui::BulletText("B/Y (Primary Controller): Tab");
 			ImGui::BulletText("B/Y (Secondary Controller): Shift+Tab");
-			ImGui::BulletText("Secondary Controller Thumbstick: Mouse movement");
-			ImGui::BulletText("Primary Controller Thumbstick: Scroll");
+
+			// Show dynamic controller assignments based on attach mode
+			bool useAttachedControllerForCursor = (settings.attachMode == VR::Settings::OverlayAttachMode::ControllerOnly ||
+												   settings.attachMode == VR::Settings::OverlayAttachMode::Both);
+
+			if (useAttachedControllerForCursor) {
+				if (settings.VRMenuAttachController == ControllerDevice::Primary) {
+					ImGui::BulletText("Primary Controller Thumbstick: Mouse movement (attached controller)");
+					ImGui::BulletText("Secondary Controller Thumbstick: Scroll");
+				} else {
+					ImGui::BulletText("Primary Controller Thumbstick: Scroll");
+					ImGui::BulletText("Secondary Controller Thumbstick: Mouse movement (attached controller)");
+				}
+			} else {
+				ImGui::BulletText("Primary Controller Thumbstick: Mouse movement (HMD mode)");
+				ImGui::BulletText("Secondary Controller Thumbstick: Scroll");
+			}
 		}
 	}
 	void DrawGeneralVRSettings(VR::Settings& settings)
@@ -664,12 +501,10 @@ namespace
 			// Controller-specific settings (only show when controller mode is active)
 			if (settings.attachMode == VR::Settings::OverlayAttachMode::ControllerOnly ||
 				settings.attachMode == VR::Settings::OverlayAttachMode::Both) {
-				const char* controllerHands[] = { "Left", "Right" };
-				// Convert from OpenVR enum (1=Left, 2=Right) to array index (0=Left, 1=Right)
-				int controllerHandInt = static_cast<int>(settings.VRMenuControllerHand) - 1;
-				if (ImGui::Combo("Menu Controller Hand", &controllerHandInt, controllerHands, IM_ARRAYSIZE(controllerHands))) {
-					// Convert back to OpenVR enum (0->1=Left, 1->2=Right)
-					settings.VRMenuControllerHand = static_cast<vr::ETrackedControllerRole>(controllerHandInt + 1);
+				const char* attachControllers[] = { "Primary Controller", "Secondary Controller" };
+				int attachControllerInt = static_cast<int>(settings.VRMenuAttachController);
+				if (ImGui::Combo("Attach to Controller", &attachControllerInt, attachControllers, IM_ARRAYSIZE(attachControllers))) {
+					settings.VRMenuAttachController = static_cast<ControllerDevice>(attachControllerInt);
 				}
 
 				ImGui::Separator();
@@ -749,7 +584,7 @@ namespace
 			vr->currentComboType = static_cast<VR::ComboType>(selectedComboIndex + 1);
 			vr->currentComboName = comboTypes[selectedComboIndex];
 			vr->recordedCombo.clear();
-			vr->comboStartTime = GetNowSecs();
+			vr->comboStartTime = Util::GetNowSecs();
 			recordingButtonControllers.clear();
 		}
 		ImGui::SameLine();
@@ -816,7 +651,7 @@ namespace
 				ImGui::Text("%s", config.label);
 				// Current Binding column
 				ImGui::TableSetColumnIndex(1);
-				DrawButtonCombo(config.combos, false);
+				Util::DrawButtonCombo(config.combos, false);
 				// Description column
 				ImGui::TableSetColumnIndex(2);
 				ImGui::Text("%s", config.description);
@@ -851,22 +686,37 @@ namespace
 		auto menu = globals::menu;
 		// Controller Diagnostics Section
 		if (ImGui::CollapsingHeader("Controller Diagnostics", ImGuiTreeNodeFlags_DefaultOpen)) {
-			if (ImGui::Checkbox("Test Mode: Disable controller menu input (except right thumbstick and triggers)", &settings.VRMenuControllerDiagnosticsTestMode)) {
+			if (ImGui::Checkbox("Test Mode: Disable controller menu input (except scroll controller and triggers)", &settings.VRMenuControllerDiagnosticsTestMode)) {
 				ImGui::SetScrollHereY(0.0f);  // Scroll to top of the window when toggled
 			}
 			ImGui::SeparatorText("Button State");
-			double nowSecs = GetNowSecs();
+			double nowSecs = Util::GetNowSecs();
 			// Get highlight color from theme
 			ImVec4 highlightColor = menu->GetTheme().StatusPalette.InfoColor;
 			ImU32 highlightColorU32 = ImGui::ColorConvertFloat4ToU32(highlightColor);
+
+			// Determine display order based on handedness
+			bool isLeftHanded = RE::BSOpenVRControllerDevice::IsLeftHandedMode();
+
 			if (ImGui::BeginTable("vr_input_state_table", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
 				ImGui::TableSetupColumn("Button");
-				ImGui::TableSetupColumn("Left State");
-				ImGui::TableSetupColumn("Left Held (s)");
-				ImGui::TableSetupColumn("Left Type");
-				ImGui::TableSetupColumn("Right State");
-				ImGui::TableSetupColumn("Right Held (s)");
-				ImGui::TableSetupColumn("Right Type");
+				if (isLeftHanded) {
+					// Left-handed: Primary (left hand) on left, Secondary (right hand) on right
+					ImGui::TableSetupColumn("Primary State");
+					ImGui::TableSetupColumn("Primary Held (s)");
+					ImGui::TableSetupColumn("Primary Type");
+					ImGui::TableSetupColumn("Secondary State");
+					ImGui::TableSetupColumn("Secondary Held (s)");
+					ImGui::TableSetupColumn("Secondary Type");
+				} else {
+					// Right-handed: Secondary (left hand) on left, Primary (right hand) on right
+					ImGui::TableSetupColumn("Secondary State");
+					ImGui::TableSetupColumn("Secondary Held (s)");
+					ImGui::TableSetupColumn("Secondary Type");
+					ImGui::TableSetupColumn("Primary State");
+					ImGui::TableSetupColumn("Primary Held (s)");
+					ImGui::TableSetupColumn("Primary Type");
+				}
 				ImGui::TableHeadersRow();
 				// Helper for button type text
 				auto DrawButtonType = [](const RE::ButtonState& state) {
@@ -911,14 +761,28 @@ namespace
 						ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, highlightColorU32);
 					DrawButtonType(right);
 				};
-				printRow("Trigger", vr->primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kTrigger], vr->secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kTrigger]);
-				printRow("Grip", vr->primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kGrip], vr->secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kGrip]);
-				printRow("GripAlt", vr->primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kGripAlt], vr->secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kGripAlt]);
-				printRow("Stick Click", vr->primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger], vr->secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger]);
-				printRow("Touchpad Click", vr->primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kTouchpadClick], vr->secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kTouchpadClick]);
-				printRow("Touchpad Alt", vr->primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kTouchpadAlt], vr->secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kTouchpadAlt]);
-				printRow("B/Y", vr->primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kBY], vr->secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kBY]);
-				printRow("A/X", vr->primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kXA], vr->secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kXA]);
+
+				// Helper to determine the correct order for display based on handedness
+				auto printRowWithHandedness = [&](const char* label, auto key) {
+					auto& primary = vr->primaryControllerState[key];
+					auto& secondary = vr->secondaryControllerState[key];
+					if (isLeftHanded) {
+						// Left-handed: Primary (left hand) on left, Secondary (right hand) on right
+						printRow(label, primary, secondary);
+					} else {
+						// Right-handed: Secondary (left hand) on left, Primary (right hand) on right
+						printRow(label, secondary, primary);
+					}
+				};
+
+				printRowWithHandedness("Trigger", RE::BSOpenVRControllerDevice::Keys::kTrigger);
+				printRowWithHandedness("Grip", RE::BSOpenVRControllerDevice::Keys::kGrip);
+				printRowWithHandedness("GripAlt", RE::BSOpenVRControllerDevice::Keys::kGripAlt);
+				printRowWithHandedness("Stick Click", RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger);
+				printRowWithHandedness("Touchpad Click", RE::BSOpenVRControllerDevice::Keys::kTouchpadClick);
+				printRowWithHandedness("Touchpad Alt", RE::BSOpenVRControllerDevice::Keys::kTouchpadAlt);
+				printRowWithHandedness("B/Y", RE::BSOpenVRControllerDevice::Keys::kBY);
+				printRowWithHandedness("A/X", RE::BSOpenVRControllerDevice::Keys::kXA);
 				ImGui::EndTable();
 			}
 			ImGui::SeparatorText("VR Thumbstick State");
@@ -995,26 +859,55 @@ namespace
 			};
 			ImU32 highlightCol = ImGui::ColorConvertFloat4ToU32(menu->GetTheme().StatusPalette.InfoColor);
 			if (ImGui::BeginTable("##VRThumbstickTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
-				ImGui::TableSetupColumn("Primary Controller", ImGuiTableColumnFlags_WidthFixed, 200.0f);
-				ImGui::TableSetupColumn("Secondary Controller", ImGuiTableColumnFlags_WidthFixed, 200.0f);
+				if (isLeftHanded) {
+					// Left-handed: Primary (left hand) on left, Secondary (right hand) on right
+					ImGui::TableSetupColumn("Primary Controller", ImGuiTableColumnFlags_WidthFixed, 200.0f);
+					ImGui::TableSetupColumn("Secondary Controller", ImGuiTableColumnFlags_WidthFixed, 200.0f);
+				} else {
+					// Right-handed: Secondary (left hand) on left, Primary (right hand) on right
+					ImGui::TableSetupColumn("Secondary Controller", ImGuiTableColumnFlags_WidthFixed, 200.0f);
+					ImGui::TableSetupColumn("Primary Controller", ImGuiTableColumnFlags_WidthFixed, 200.0f);
+				}
 				ImGui::TableHeadersRow();
-				// Primary controller cell
+
+				// Left column content
 				ImGui::TableSetColumnIndex(0);
 				ImGui::BeginGroup();
-				ImVec2 padSizeL = DrawThumbstickPad(vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, highlightCol);
-				ImGui::Dummy(padSizeL);
-				ImGui::SetNextItemWidth(160.0f);
-				ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
-				ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, RE::GetQuadrantName(vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y));
+				if (isLeftHanded) {
+					// Left-handed: Show primary controller in left column
+					ImVec2 padSizeL = DrawThumbstickPad(vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, highlightCol);
+					ImGui::Dummy(padSizeL);
+					ImGui::SetNextItemWidth(160.0f);
+					ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
+					ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, RE::GetQuadrantName(vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y));
+				} else {
+					// Right-handed: Show secondary controller in left column
+					ImVec2 padSizeL = DrawThumbstickPad(vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].x, vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].y, highlightCol);
+					ImGui::Dummy(padSizeL);
+					ImGui::SetNextItemWidth(160.0f);
+					ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
+					ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].x, vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].y, RE::GetQuadrantName(vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].x, vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].y));
+				}
 				ImGui::EndGroup();
-				// Secondary controller cell
+
+				// Right column content
 				ImGui::TableSetColumnIndex(1);
 				ImGui::BeginGroup();
-				ImVec2 padSizeR = DrawThumbstickPad(vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, highlightCol);
-				ImGui::Dummy(padSizeR);
-				ImGui::SetNextItemWidth(160.0f);
-				ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
-				ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, RE::GetQuadrantName(vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y));
+				if (isLeftHanded) {
+					// Left-handed: Show secondary controller in right column
+					ImVec2 padSizeR = DrawThumbstickPad(vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].x, vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].y, highlightCol);
+					ImGui::Dummy(padSizeR);
+					ImGui::SetNextItemWidth(160.0f);
+					ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
+					ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].x, vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].y, RE::GetQuadrantName(vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].x, vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].y));
+				} else {
+					// Right-handed: Show primary controller in right column
+					ImVec2 padSizeR = DrawThumbstickPad(vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, highlightCol);
+					ImGui::Dummy(padSizeR);
+					ImGui::SetNextItemWidth(160.0f);
+					ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
+					ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, RE::GetQuadrantName(vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y));
+				}
 				ImGui::EndGroup();
 				ImGui::EndTable();
 			}
@@ -1227,7 +1120,7 @@ void VR::UpdateVROverlayPosition()
 				SetFixedOverlayToCurrentHMD();
 			}
 
-			vr::HmdMatrix34_t fixedTransform = MatrixToHmdMatrix34(fixedWorldOverlayPosition.m);
+			vr::HmdMatrix34_t fixedTransform = Util::MatrixToHmdMatrix34(fixedWorldOverlayPosition.m);
 
 			// Scale the overlay based on width/height (same as relative HMD mode)
 			fixedTransform.m[0][0] *= overlayWidth;
@@ -1247,18 +1140,7 @@ void VR::UpdateVROverlayPosition()
 		}
 
 		// Attach to controller
-		vr::TrackedDeviceIndex_t controllerIndex = vr::k_unTrackedDeviceIndexInvalid;
-
-		// Find the appropriate controller
-		for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; i++) {
-			if (system->GetTrackedDeviceClass(i) == vr::TrackedDeviceClass_Controller) {
-				vr::ETrackedControllerRole role = system->GetControllerRoleForTrackedDeviceIndex(i);
-				if (role == settings.VRMenuControllerHand) {
-					controllerIndex = i;
-					break;
-				}
-			}
-		}
+		vr::TrackedDeviceIndex_t controllerIndex = GetControllerIndexForDevice(settings.VRMenuAttachController);
 
 		if (controllerIndex != vr::k_unTrackedDeviceIndexInvalid) {
 			// Position relative to controller using offset settings
@@ -1313,29 +1195,8 @@ void VR::UpdateVROverlayControllerPosition()
 	float overlayWidth = baseWidth * settings.VRMenuScale;
 	float overlayHeight = overlayWidth * aspect;
 
-	// Note: Skyrim VR interface integration would require additional reverse engineering
-	// For now, we'll use the standard OpenVR API
-
 	// Find the appropriate controller for the controller overlay
-	vr::TrackedDeviceIndex_t controllerIndex = vr::k_unTrackedDeviceIndexInvalid;
-	bool foundPreferred = false;
-	vr::TrackedDeviceIndex_t firstController = vr::k_unTrackedDeviceIndexInvalid;
-	for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; i++) {
-		if (system->GetTrackedDeviceClass(i) == vr::TrackedDeviceClass_Controller) {
-			if (firstController == vr::k_unTrackedDeviceIndexInvalid) {
-				firstController = i;
-			}
-			vr::ETrackedControllerRole role = system->GetControllerRoleForTrackedDeviceIndex(i);
-			if (role == settings.VRMenuControllerHand) {
-				controllerIndex = i;
-				foundPreferred = true;
-				break;
-			}
-		}
-	}
-	if (!foundPreferred && firstController != vr::k_unTrackedDeviceIndexInvalid) {
-		controllerIndex = firstController;
-	}
+	vr::TrackedDeviceIndex_t controllerIndex = GetControllerIndexForDevice(settings.VRMenuAttachController);
 	if (controllerIndex == vr::k_unTrackedDeviceIndexInvalid) {
 		overlay->HideOverlay(menuControllerOverlayHandle);
 		return;
@@ -1391,12 +1252,11 @@ void VR::EnsureOverlayInitialized()
 	}
 	logger::info("menuOverlayHandle: 0x{:X}", menuOverlayHandle);
 	logger::info("menuControllerOverlayHandle: 0x{:X}", menuControllerOverlayHandle);
-	logger::info("Current PID: {}", GetCurrentProcessId());
 	if (!overlay) {
 		logger::error("IVROverlay is nullptr after GetIVROverlay");
 		return;
 	}
-	CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, &menuTexture, &menuRTV);
+	Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, &menuTexture, &menuRTV);
 	std::string key = "communityshaders.menu";
 	std::string name = "Community Shaders Menu";
 	vr::EVROverlayError err = overlay->CreateOverlay(key.c_str(), name.c_str(), &menuOverlayHandle);
@@ -1404,9 +1264,6 @@ void VR::EnsureOverlayInitialized()
 		logger::info("CreateOverlay succeeded for menuOverlayHandle: 0x{:X}", menuOverlayHandle);
 		SetOverlayInputFlags(overlay, menuOverlayHandle);
 		overlay->SetOverlayWidthInMeters(menuOverlayHandle, 1.0f);
-		overlay->SetOverlayRenderingPid(menuOverlayHandle, GetCurrentProcessId());
-		uint32_t pid = overlay->GetOverlayRenderingPid(menuOverlayHandle);
-		logger::info("menuOverlayHandle rendering PID: {}", pid);
 	} else {
 		logger::error("CreateOverlay failed: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
 	}
@@ -1416,14 +1273,31 @@ void VR::EnsureOverlayInitialized()
 	err = overlay->CreateOverlay(controllerKey.c_str(), controllerName.c_str(), &menuControllerOverlayHandle);
 	if (err == vr::VROverlayError_None) {
 		logger::info("CreateOverlay succeeded for menuControllerOverlayHandle: 0x{:X}", menuControllerOverlayHandle);
-		CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, &menuControllerTexture, &menuControllerRTV);
+		Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, &menuControllerTexture, &menuControllerRTV);
 		SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
 		overlay->SetOverlayWidthInMeters(menuControllerOverlayHandle, 1.0f);
-		overlay->SetOverlayRenderingPid(menuControllerOverlayHandle, GetCurrentProcessId());
-		uint32_t pid = overlay->GetOverlayRenderingPid(menuControllerOverlayHandle);
-		logger::info("menuControllerOverlayHandle rendering PID: {}", pid);
 	} else {
 		logger::error("CreateOverlay failed: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
+	}
+}
+
+void VR::CleanupOverlayTextures()
+{
+	if (menuRTV) {
+		menuRTV->Release();
+		menuRTV = nullptr;
+	}
+	if (menuTexture) {
+		menuTexture->Release();
+		menuTexture = nullptr;
+	}
+	if (menuControllerRTV) {
+		menuControllerRTV->Release();
+		menuControllerRTV = nullptr;
+	}
+	if (menuControllerTexture) {
+		menuControllerTexture->Release();
+		menuControllerTexture = nullptr;
 	}
 }
 
@@ -1443,44 +1317,14 @@ void VR::DestroyOverlay()
 		overlay->DestroyOverlay(menuControllerOverlayHandle);
 		menuControllerOverlayHandle = vr::k_ulOverlayHandleInvalid;
 	}
-	if (menuRTV) {
-		menuRTV->Release();
-		menuRTV = nullptr;
-	}
-	if (menuTexture) {
-		menuTexture->Release();
-		menuTexture = nullptr;
-	}
-	if (menuControllerRTV) {
-		menuControllerRTV->Release();
-		menuControllerRTV = nullptr;
-	}
-	if (menuControllerTexture) {
-		menuControllerTexture->Release();
-		menuControllerTexture = nullptr;
-	}
+	CleanupOverlayTextures();
 }
 
 void VR::RecreateOverlayTexturesIfNeeded()
 {
-	if (menuRTV) {
-		menuRTV->Release();
-		menuRTV = nullptr;
-	}
-	if (menuTexture) {
-		menuTexture->Release();
-		menuTexture = nullptr;
-	}
-	if (menuControllerRTV) {
-		menuControllerRTV->Release();
-		menuControllerRTV = nullptr;
-	}
-	if (menuControllerTexture) {
-		menuControllerTexture->Release();
-		menuControllerTexture = nullptr;
-	}
-	CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, &menuTexture, &menuRTV);
-	CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, &menuControllerTexture, &menuControllerRTV);
+	CleanupOverlayTextures();
+	Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, &menuTexture, &menuRTV);
+	Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, &menuControllerTexture, &menuControllerRTV);
 }
 
 void VR::SubmitOverlayFrame()
@@ -1530,7 +1374,7 @@ void VR::SubmitOverlayFrame()
 		bool hmdBeingDragged = settings.EnableDragToReposition && overlayDragState.dragging &&
 		                       (overlayDragState.mode == OverlayDragState::DragMode::HMD ||
 								   overlayDragState.mode == OverlayDragState::DragMode::FixedWorld);
-		ApplyHighlightTintToTexture(menuTexture, hmdBeingDragged);
+		Util::ApplyHighlightTintToTexture(menuTexture, hmdBeingDragged, settings.dragHighlightColor);
 
 		// Update overlay position and submit to SteamVR
 		UpdateVROverlayPosition();
@@ -1561,7 +1405,7 @@ void VR::SubmitOverlayFrame()
 			// Apply highlight tint to controller overlay if it's being dragged
 			bool controllerBeingDragged = overlayDragState.dragging &&
 			                              overlayDragState.mode == OverlayDragState::DragMode::Controller;
-			ApplyHighlightTintToTexture(menuControllerTexture, controllerBeingDragged);
+			Util::ApplyHighlightTintToTexture(menuControllerTexture, controllerBeingDragged, settings.dragHighlightColor);
 
 			// Position controller overlay and submit
 			UpdateVROverlayControllerPosition();
@@ -1662,7 +1506,7 @@ void VR::UpdateOverlayMenuStateFromInput()
 		return true;
 	};
 
-	// Define the mappings - restore original 4 distinct events with extensible lambda array
+	// Define the menu state mappings with extensible lambda array
 	std::vector<MenuStateMapping> mappings = {
 		// Open Community Shaders menu when closed
 		{ [&]() {
@@ -1700,10 +1544,24 @@ void VR::UpdateOverlayMenuStateFromInput()
 
 void VR::ProcessVREvents(std::vector<Menu::KeyEvent>& vrEvents)
 {
-	double nowSecs = GetNowSecs();
+	// Check for handedness changes and reset controller states if needed
+	bool currentLeftHandedMode = RE::BSOpenVRControllerDevice::IsLeftHandedMode();
+	static bool firstCall = true;
+	if (firstCall || currentLeftHandedMode != lastKnownLeftHandedMode) {
+		if (!firstCall) {
+			logger::info("VR handedness changed: {} -> {}", lastKnownLeftHandedMode ? "Left" : "Right", currentLeftHandedMode ? "Left" : "Right");
+		}
+		firstCall = false;
+		lastKnownLeftHandedMode = currentLeftHandedMode;
+		// Reset controller states so they get repopulated with correct roles
+		primaryControllerState = {};
+		secondaryControllerState = {};
+	}
+
+	double nowSecs = Util::GetNowSecs();
 	for (auto& event : vrEvents) {
-		bool isPrimary = RE::BSOpenVRControllerDevice::IsSecondaryController(event.device);
-		bool isSecondary = RE::BSOpenVRControllerDevice::IsPrimaryController(event.device);
+		bool isPrimary = RE::BSOpenVRControllerDevice::IsPrimaryController(event.device);
+		bool isSecondary = RE::BSOpenVRControllerDevice::IsSecondaryController(event.device);
 		struct VRButtonDescriptor
 		{
 			const char* name;
@@ -1736,7 +1594,7 @@ void VR::ProcessVREvents(std::vector<Menu::KeyEvent>& vrEvents)
 			ProcessVRButtonEvent(event);
 			break;
 		case RE::INPUT_EVENT_TYPE::kThumbstick:
-			ProcessVRThumbstickEvent(event);
+			UpdateControllerState(event);
 			break;
 		default:
 			break;
@@ -1754,8 +1612,8 @@ void VR::ProcessVRButtonEvent(const Menu::KeyEvent& event)
 	ImGuiIO& io = ImGui::GetIO();
 	(void)event;
 	auto menu = globals::menu;
-	bool isPrimary = RE::BSOpenVRControllerDevice::IsSecondaryController(event.device);
-	bool isSecondary = RE::BSOpenVRControllerDevice::IsPrimaryController(event.device);
+	bool isPrimary = RE::BSOpenVRControllerDevice::IsPrimaryController(event.device);
+	bool isSecondary = RE::BSOpenVRControllerDevice::IsSecondaryController(event.device);
 	bool& testMode = settings.VRMenuControllerDiagnosticsTestMode;
 	constexpr size_t kNumTriggerMappings = 1;
 
@@ -1815,26 +1673,18 @@ void VR::ProcessVRButtonEvent(const Menu::KeyEvent& event)
 	}
 }
 
-void VR::ProcessVRThumbstickEvent(const Menu::KeyEvent& event)
+void VR::UpdateControllerState(const Menu::KeyEvent& event)
 {
-	ImGuiIO& io = ImGui::GetIO();
-	bool isPrimary = RE::BSOpenVRControllerDevice::IsSecondaryController(event.device);
-	bool isSecondary = RE::BSOpenVRControllerDevice::IsPrimaryController(event.device);
-	bool& testMode = settings.VRMenuControllerDiagnosticsTestMode;
+	bool isPrimary = RE::BSOpenVRControllerDevice::IsPrimaryController(event.device);
+	bool isSecondary = RE::BSOpenVRControllerDevice::IsSecondaryController(event.device);
 
-	// Update thumbstick state and optionally map to ImGui navigation/scroll
+	// Update thumbstick state for diagnostics display and later input processing
 	if (isPrimary) {
 		primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x = event.thumbstickX;
 		primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y = event.thumbstickY;
-		// Optionally: map to scroll if not in test mode
-		if (!testMode) {
-			io.AddMouseWheelEvent(0.0f, primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y);
-		}
 	} else if (isSecondary) {
-		secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x = event.thumbstickX;
-		secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y = event.thumbstickY;
-		// Map to mouse movement
-		io.AddMousePosEvent(io.MousePos.x + secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, io.MousePos.y + secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y);
+		secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].x = event.thumbstickX;
+		secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].y = event.thumbstickY;
 	}
 
 	// Log the thumbstick event
@@ -1854,8 +1704,8 @@ void VR::ProcessVRThumbstickEvent(const Menu::KeyEvent& event)
 	}
 }
 
-// Maps VR controller thumbstick input to ImGui mouse and scroll events for the overlay UI
-void VR::ProcessVRControllerOverlayInput()
+// Converts VR controller thumbstick input to ImGui mouse and scroll events for the overlay UI
+void VR::ProcessControllerInputForImGui()
 {
 	if (!globals::menu->IsEnabled)
 		return;
@@ -1866,34 +1716,96 @@ void VR::ProcessVRControllerOverlayInput()
 	io.ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
 	io.WantSetMousePos = false;
 	if (!testMode) {
-		bool usingPrimaryStick = (std::abs(primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y) > mouseDeadzone);
-		if (usingPrimaryStick) {
-			static float scrollAccum = 0.0f;
-			scrollAccum += primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y * 0.1f;
-			if (std::abs(scrollAccum) > 0.3f) {
-				io.AddMouseWheelEvent(0.0f, scrollAccum > 0 ? 1.0f : -1.0f);
-				scrollAccum = 0.0f;
+		// Determine which controller should handle cursor vs scrolling based on attachment mode
+		bool useAttachedControllerForCursor = (settings.attachMode == VR::Settings::OverlayAttachMode::ControllerOnly ||
+											   settings.attachMode == VR::Settings::OverlayAttachMode::Both);
+
+		// Assign cursor and scroll controllers based on settings
+		RE::VRControllerState* cursorController = nullptr;
+		RE::VRControllerState* scrollController = nullptr;
+
+		if (useAttachedControllerForCursor) {
+			// When attached to controller: attached controller = cursor, other controller = scrolling
+			if (settings.VRMenuAttachController == ControllerDevice::Primary) {
+				cursorController = &primaryControllerState;
+				scrollController = &secondaryControllerState;
+			} else {
+				cursorController = &secondaryControllerState;
+				scrollController = &primaryControllerState;
+			}
+		} else {
+			// HMD mode: primary = cursor, secondary = scroll (traditional)
+			cursorController = &primaryControllerState;
+			scrollController = &secondaryControllerState;
+		}
+
+		// Cursor movement (from determined cursor controller)
+		if (cursorController) {
+			// Determine the correct thumbstick index based on which controller we're using
+			size_t thumbstickIndex = (cursorController == &primaryControllerState) ?
+			                             static_cast<size_t>(RE::ControllerRole::Primary) :
+			                             static_cast<size_t>(RE::ControllerRole::Secondary);
+
+			float thumbstickX = cursorController->thumbsticks[thumbstickIndex].x;
+			float thumbstickY = cursorController->thumbsticks[thumbstickIndex].y;
+			bool usingCursorStick = (std::abs(thumbstickX) > mouseDeadzone || std::abs(thumbstickY) > mouseDeadzone);
+			if (usingCursorStick) {
+				ImVec2 mousePos = io.MousePos;
+				mousePos.x += thumbstickX * mouseSpeed;
+				mousePos.y -= thumbstickY * mouseSpeed;
+				if (mousePos.x < 0)
+					mousePos.x = 0;
+				if (mousePos.y < 0)
+					mousePos.y = 0;
+				if (mousePos.x > io.DisplaySize.x)
+					mousePos.x = io.DisplaySize.x;
+				if (mousePos.y > io.DisplaySize.y)
+					mousePos.y = io.DisplaySize.y;
+				io.MousePos = mousePos;
+				io.AddMousePosEvent(mousePos.x, mousePos.y);
+				io.MouseDrawCursor = true;
+				io.WantSetMousePos = true;
+				io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
 			}
 		}
-	}
-	bool usingSecondaryStick = (std::abs(secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x) > mouseDeadzone || std::abs(secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y) > mouseDeadzone);
-	if (usingSecondaryStick) {
-		ImVec2 mousePos = io.MousePos;
-		mousePos.x += secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x * mouseSpeed;
-		mousePos.y -= secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y * mouseSpeed;
-		if (mousePos.x < 0)
-			mousePos.x = 0;
-		if (mousePos.y < 0)
-			mousePos.y = 0;
-		if (mousePos.x > io.DisplaySize.x)
-			mousePos.x = io.DisplaySize.x;
-		if (mousePos.y > io.DisplaySize.y)
-			mousePos.y = io.DisplaySize.y;
-		io.MousePos = mousePos;
-		io.AddMousePosEvent(mousePos.x, mousePos.y);
-		io.MouseDrawCursor = true;
-		io.WantSetMousePos = true;
-		io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+
+		// Scrolling (from determined scroll controller) - both horizontal and vertical
+		if (scrollController) {
+			// Determine the correct thumbstick index based on which controller we're using
+			size_t thumbstickIndex = (scrollController == &primaryControllerState) ?
+			                             static_cast<size_t>(RE::ControllerRole::Primary) :
+			                             static_cast<size_t>(RE::ControllerRole::Secondary);
+
+			bool usingScrollStickX = (std::abs(scrollController->thumbsticks[thumbstickIndex].x) > mouseDeadzone);
+			bool usingScrollStickY = (std::abs(scrollController->thumbsticks[thumbstickIndex].y) > mouseDeadzone);
+
+			if (usingScrollStickX || usingScrollStickY) {
+				static float scrollAccumX = 0.0f;
+				static float scrollAccumY = 0.0f;
+
+				// Accumulate scroll input with sensitivity scaling
+				scrollAccumX += scrollController->thumbsticks[thumbstickIndex].x * 0.1f;
+				scrollAccumY += scrollController->thumbsticks[thumbstickIndex].y * 0.1f;
+
+				// Send scroll events when accumulated enough input
+				float scrollEventX = 0.0f;
+				float scrollEventY = 0.0f;
+
+				if (std::abs(scrollAccumX) > 0.3f) {
+					scrollEventX = scrollAccumX > 0 ? 1.0f : -1.0f;
+					scrollAccumX = 0.0f;
+				}
+				if (std::abs(scrollAccumY) > 0.3f) {
+					scrollEventY = scrollAccumY > 0 ? 1.0f : -1.0f;
+					scrollAccumY = 0.0f;
+				}
+
+				// Send both horizontal and vertical scroll events if needed
+				if (scrollEventX != 0.0f || scrollEventY != 0.0f) {
+					io.AddMouseWheelEvent(scrollEventX, scrollEventY);
+				}
+			}
+		}
 	}
 }
 
@@ -1915,9 +1827,9 @@ bool GetControllerWorldMatrix(vr::TrackedDeviceIndex_t index, float out[3][4])
 }
 
 // --- File-scope static helpers for drag logic ---
-static bool CanStartAny(vr::ETrackedControllerRole, bool isLeft, bool isRight)
+static bool CanStartAny(vr::ETrackedControllerRole role)
 {
-	return isLeft || isRight;
+	return role != vr::TrackedControllerRole_Invalid;
 }
 
 void VR::UpdateOverlayDrag()
@@ -1935,12 +1847,26 @@ void VR::UpdateOverlayDrag()
 	if (!settings.EnableDragToReposition)
 		return;
 
-	// Helper to get grip state for a controller
+	// Helper to get grip state for a controller based on actual hand position
 	auto getGripPressed = [&](bool isLeft, bool isRight) {
-		if (isLeft)
-			return primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
-		if (isRight)
-			return secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
+		bool isLeftHanded = RE::BSOpenVRControllerDevice::IsLeftHandedMode();
+
+		if (isLeft) {
+			// Left hand: primary if left-handed, secondary if right-handed
+			if (isLeftHanded) {
+				return primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
+			} else {
+				return secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
+			}
+		}
+		if (isRight) {
+			// Right hand: secondary if left-handed, primary if right-handed
+			if (isLeftHanded) {
+				return secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
+			} else {
+				return primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
+			}
+		}
 		return false;
 	};
 
@@ -1957,7 +1883,7 @@ void VR::UpdateOverlayDrag()
 	{
 		OverlayDragState::DragMode mode;
 		bool isActive;
-		std::function<bool(vr::ETrackedControllerRole, bool, bool)> canStart;
+		std::function<bool(vr::ETrackedControllerRole)> canStart;
 		std::function<void(Matrix)> onUpdate;
 		std::function<void()> onInit;
 	};
@@ -1969,69 +1895,42 @@ void VR::UpdateOverlayDrag()
 		// Controller drag - only opposite hand can drag the controller overlay
 		dragModes.push_back({ OverlayDragState::DragMode::Controller,
 			true,
-			[&](vr::ETrackedControllerRole role, bool isLeft, bool isRight) {
-				// Find the actual attached controller (same logic as UpdateVROverlayControllerPosition)
-				vr::TrackedDeviceIndex_t attachedControllerIndex = vr::k_unTrackedDeviceIndexInvalid;
-				vr::TrackedDeviceIndex_t firstController = vr::k_unTrackedDeviceIndexInvalid;
-				vr::ETrackedControllerRole actualAttachedRole = settings.VRMenuControllerHand;
+			[&](vr::ETrackedControllerRole role) {
+				// Get the attached controller index
+				vr::TrackedDeviceIndex_t attachedControllerIndex = GetControllerIndexForDevice(settings.VRMenuAttachController);
+				if (attachedControllerIndex == vr::k_unTrackedDeviceIndexInvalid) {
+					return false;  // No attached controller found
+				}
 
+				// Get the opposite controller index
+				ControllerDevice oppositeDevice = (settings.VRMenuAttachController == ControllerDevice::Primary) ?
+			                                          ControllerDevice::Secondary :
+			                                          ControllerDevice::Primary;
+				vr::TrackedDeviceIndex_t oppositeControllerIndex = GetControllerIndexForDevice(oppositeDevice);
+				if (oppositeControllerIndex == vr::k_unTrackedDeviceIndexInvalid) {
+					return false;  // No opposite controller found
+				}
+
+				// Check if the current controller (the one doing the dragging) is the opposite controller
 				for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; ++i) {
 					if (system->GetTrackedDeviceClass(i) == vr::TrackedDeviceClass_Controller) {
-						if (firstController == vr::k_unTrackedDeviceIndexInvalid) {
-							firstController = i;
-						}
 						vr::ETrackedControllerRole deviceRole = system->GetControllerRoleForTrackedDeviceIndex(i);
-						if (deviceRole == settings.VRMenuControllerHand) {
-							attachedControllerIndex = i;
-							break;
+						if (deviceRole == role && i == oppositeControllerIndex) {
+							return true;  // This is the opposite controller, can drag
 						}
 					}
 				}
-
-				// If preferred controller not found, use first available (same fallback logic)
-				if (attachedControllerIndex == vr::k_unTrackedDeviceIndexInvalid && firstController != vr::k_unTrackedDeviceIndexInvalid) {
-					attachedControllerIndex = firstController;
-					actualAttachedRole = system->GetControllerRoleForTrackedDeviceIndex(firstController);
-				}
-
-				// Find the opposite of the actual attached controller
-				vr::ETrackedControllerRole oppositeRole = (actualAttachedRole == vr::ETrackedControllerRole::TrackedControllerRole_LeftHand) ?
-			                                                  vr::ETrackedControllerRole::TrackedControllerRole_RightHand :
-			                                                  vr::ETrackedControllerRole::TrackedControllerRole_LeftHand;
-
-				// Only allow the opposite controller to drag
-				return (attachedControllerIndex != vr::k_unTrackedDeviceIndexInvalid) &&
-			           ((isLeft && role == oppositeRole) ||
-						   (isRight && role == oppositeRole));
+				return false;  // Not the opposite controller
 			},
 			[&](Matrix controllerMatrix) {
-				// Get current attached controller transform to convert world deltas to local space (same logic as above)
-				vr::TrackedDeviceIndex_t attachedControllerIndex = vr::k_unTrackedDeviceIndexInvalid;
-				vr::TrackedDeviceIndex_t firstController = vr::k_unTrackedDeviceIndexInvalid;
-
-				for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; ++i) {
-					if (system->GetTrackedDeviceClass(i) == vr::TrackedDeviceClass_Controller) {
-						if (firstController == vr::k_unTrackedDeviceIndexInvalid) {
-							firstController = i;
-						}
-						vr::ETrackedControllerRole role = system->GetControllerRoleForTrackedDeviceIndex(i);
-						if (role == settings.VRMenuControllerHand) {
-							attachedControllerIndex = i;
-							break;
-						}
-					}
-				}
-
-				// If preferred controller not found, use first available (same fallback logic)
-				if (attachedControllerIndex == vr::k_unTrackedDeviceIndexInvalid && firstController != vr::k_unTrackedDeviceIndexInvalid) {
-					attachedControllerIndex = firstController;
-				}
+				// Get current attached controller transform to convert world deltas to local space
+				vr::TrackedDeviceIndex_t attachedControllerIndex = GetControllerIndexForDevice(settings.VRMenuAttachController);
 
 				if (attachedControllerIndex != vr::k_unTrackedDeviceIndexInvalid) {
 					vr::TrackedDevicePose_t controllerPose;
 					system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &controllerPose, 1);
 					if (controllerPose.bPoseIsValid) {
-						Matrix attachedControllerMatrix = HmdMatrix34ToMatrix(controllerPose.mDeviceToAbsoluteTracking);
+						Matrix attachedControllerMatrix = Util::HmdMatrix34ToMatrix(controllerPose.mDeviceToAbsoluteTracking);
 
 						// Calculate world-space delta
 						Vector3 worldDelta(
@@ -2062,38 +1961,19 @@ void VR::UpdateOverlayDrag()
 	if (settings.VRMenuPositioningMethod == 1) {
 		// In "Both" mode, only the attached controller can adjust fixed world position
 		// In HMD-only mode, any controller can adjust fixed world position
-		std::function<bool(vr::ETrackedControllerRole, bool, bool)> fixedWorldCanStart;
+		std::function<bool(vr::ETrackedControllerRole)> fixedWorldCanStart;
 		if (settings.attachMode == AttachMode::Both) {
 			// In "Both" mode, only the attached controller can adjust fixed world position
-			fixedWorldCanStart = [&](vr::ETrackedControllerRole role, bool isLeft, bool isRight) {
-				// Find the actual attached controller (same logic as controller drag)
-				vr::TrackedDeviceIndex_t attachedControllerIndex = vr::k_unTrackedDeviceIndexInvalid;
-				vr::TrackedDeviceIndex_t firstController = vr::k_unTrackedDeviceIndexInvalid;
-				vr::ETrackedControllerRole actualAttachedRole = settings.VRMenuControllerHand;
+			fixedWorldCanStart = [&](vr::ETrackedControllerRole role) {
+				// Find the actual attached controller using helper function
+				vr::TrackedDeviceIndex_t attachedControllerIndex = GetControllerIndexForDevice(settings.VRMenuAttachController);
 
-				for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; ++i) {
-					if (system->GetTrackedDeviceClass(i) == vr::TrackedDeviceClass_Controller) {
-						if (firstController == vr::k_unTrackedDeviceIndexInvalid) {
-							firstController = i;
-						}
-						vr::ETrackedControllerRole deviceRole = system->GetControllerRoleForTrackedDeviceIndex(i);
-						if (deviceRole == settings.VRMenuControllerHand) {
-							attachedControllerIndex = i;
-							break;
-						}
-					}
+				if (attachedControllerIndex != vr::k_unTrackedDeviceIndexInvalid) {
+					vr::ETrackedControllerRole actualAttachedRole = system->GetControllerRoleForTrackedDeviceIndex(attachedControllerIndex);
+					// Only allow the attached controller to drag fixed world
+					return role == actualAttachedRole;
 				}
-
-				// If preferred controller not found, use first available (same fallback logic)
-				if (attachedControllerIndex == vr::k_unTrackedDeviceIndexInvalid && firstController != vr::k_unTrackedDeviceIndexInvalid) {
-					attachedControllerIndex = firstController;
-					actualAttachedRole = system->GetControllerRoleForTrackedDeviceIndex(firstController);
-				}
-
-				// Only allow the attached controller to drag fixed world
-				return (attachedControllerIndex != vr::k_unTrackedDeviceIndexInvalid) &&
-				       ((isLeft && role == actualAttachedRole) ||
-						   (isRight && role == actualAttachedRole));
+				return false;
 			};
 		} else {
 			// In HMD-only mode, any controller can adjust fixed world position
@@ -2117,38 +1997,19 @@ void VR::UpdateOverlayDrag()
 	if (settings.attachMode == AttachMode::HMDOnly || settings.attachMode == AttachMode::Both) {
 		// In "Both" mode, only the attached controller can adjust HMD position
 		// In HMD-only mode, any controller can adjust HMD position
-		std::function<bool(vr::ETrackedControllerRole, bool, bool)> hmdCanStart;
+		std::function<bool(vr::ETrackedControllerRole)> hmdCanStart;
 		if (settings.attachMode == AttachMode::Both) {
 			// In "Both" mode, only the attached controller can adjust HMD position
-			hmdCanStart = [&](vr::ETrackedControllerRole role, bool isLeft, bool isRight) {
-				// Find the actual attached controller (same logic as controller drag)
-				vr::TrackedDeviceIndex_t attachedControllerIndex = vr::k_unTrackedDeviceIndexInvalid;
-				vr::TrackedDeviceIndex_t firstController = vr::k_unTrackedDeviceIndexInvalid;
-				vr::ETrackedControllerRole actualAttachedRole = settings.VRMenuControllerHand;
+			hmdCanStart = [&](vr::ETrackedControllerRole role) {
+				// Find the actual attached controller using helper function
+				vr::TrackedDeviceIndex_t attachedControllerIndex = GetControllerIndexForDevice(settings.VRMenuAttachController);
 
-				for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; ++i) {
-					if (system->GetTrackedDeviceClass(i) == vr::TrackedDeviceClass_Controller) {
-						if (firstController == vr::k_unTrackedDeviceIndexInvalid) {
-							firstController = i;
-						}
-						vr::ETrackedControllerRole deviceRole = system->GetControllerRoleForTrackedDeviceIndex(i);
-						if (deviceRole == settings.VRMenuControllerHand) {
-							attachedControllerIndex = i;
-							break;
-						}
-					}
+				if (attachedControllerIndex != vr::k_unTrackedDeviceIndexInvalid) {
+					vr::ETrackedControllerRole actualAttachedRole = system->GetControllerRoleForTrackedDeviceIndex(attachedControllerIndex);
+					// Only allow the attached controller to drag HMD
+					return role == actualAttachedRole;
 				}
-
-				// If preferred controller not found, use first available (same fallback logic)
-				if (attachedControllerIndex == vr::k_unTrackedDeviceIndexInvalid && firstController != vr::k_unTrackedDeviceIndexInvalid) {
-					attachedControllerIndex = firstController;
-					actualAttachedRole = system->GetControllerRoleForTrackedDeviceIndex(firstController);
-				}
-
-				// Only allow the attached controller to drag HMD
-				return (attachedControllerIndex != vr::k_unTrackedDeviceIndexInvalid) &&
-				       ((isLeft && role == actualAttachedRole) ||
-						   (isRight && role == actualAttachedRole));
+				return false;
 			};
 		} else {
 			// In HMD-only mode, any controller can adjust HMD
@@ -2163,7 +2024,7 @@ void VR::UpdateOverlayDrag()
 				vr::TrackedDevicePose_t hmdPose;
 				system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &hmdPose, 1);
 				if (hmdPose.bPoseIsValid) {
-					Matrix hmdMatrix = HmdMatrix34ToMatrix(hmdPose.mDeviceToAbsoluteTracking);
+					Matrix hmdMatrix = Util::HmdMatrix34ToMatrix(hmdPose.mDeviceToAbsoluteTracking);
 
 					// Calculate world-space delta
 					Vector3 worldDelta(
@@ -2193,8 +2054,8 @@ void VR::UpdateOverlayDrag()
 	if (overlayDragState.dragging) {
 		float rawMatrix[3][4];
 		if (GetControllerWorldMatrix(overlayDragState.controllerIndex, rawMatrix)) {
-			vr::HmdMatrix34_t mat = Float3x4ToHmdMatrix34(rawMatrix);
-			Matrix controllerMatrix = HmdMatrix34ToMatrix(mat);
+			vr::HmdMatrix34_t mat = Util::Float3x4ToHmdMatrix34(rawMatrix);
+			Matrix controllerMatrix = Util::HmdMatrix34ToMatrix(mat);
 
 			// Find the active drag mode and update it
 			for (const auto& mode : dragModes) {
@@ -2221,7 +2082,7 @@ void VR::UpdateOverlayDrag()
 			vr::ETrackedControllerRole role = system->GetControllerRoleForTrackedDeviceIndex(i);
 			bool isLeft = (role == vr::ETrackedControllerRole::TrackedControllerRole_LeftHand);
 			bool isRight = (role == vr::ETrackedControllerRole::TrackedControllerRole_RightHand);
-			if (!mode.canStart(role, isLeft, isRight))
+			if (!mode.canStart(role))
 				continue;
 			bool gripPressed = getGripPressed(isLeft, isRight);
 			if (!gripPressed)
@@ -2229,8 +2090,8 @@ void VR::UpdateOverlayDrag()
 			float rawMatrix[3][4];
 			if (!GetControllerWorldMatrix(i, rawMatrix))
 				continue;
-			vr::HmdMatrix34_t mat = Float3x4ToHmdMatrix34(rawMatrix);
-			Matrix controllerMatrix = HmdMatrix34ToMatrix(mat);
+			vr::HmdMatrix34_t mat = Util::Float3x4ToHmdMatrix34(rawMatrix);
+			Matrix controllerMatrix = Util::HmdMatrix34ToMatrix(mat);
 			overlayDragState.dragging = true;
 			overlayDragState.mode = mode.mode;
 			overlayDragState.controllerIndex = i;
@@ -2263,5 +2124,5 @@ void VR::UpdateOverlayDrag()
 void VR::SetFixedOverlayToCurrentHMD()
 {
 	vr::HmdMatrix34_t transform = ComputeOverlayTransformFromHMD();
-	fixedWorldOverlayPosition.m = HmdMatrix34ToMatrix(transform);
+	fixedWorldOverlayPosition.m = Util::HmdMatrix34ToMatrix(transform);
 }

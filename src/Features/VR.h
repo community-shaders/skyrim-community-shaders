@@ -80,8 +80,8 @@ struct VR : OverlayFeature
 			Both = 2
 		};
 		OverlayAttachMode attachMode = OverlayAttachMode::HMDOnly;
-		// Use OpenVR's ETrackedControllerRole for hand selection
-		vr::ETrackedControllerRole VRMenuControllerHand = vr::ETrackedControllerRole::TrackedControllerRole_LeftHand;
+		// Which controller to attach overlay to (Primary = dominant hand, Secondary = non-dominant hand)
+		ControllerDevice VRMenuAttachController = ControllerDevice::Secondary;
 
 		// HMD overlay offset settings (separate from controller)
 		float VRMenuOffsetX = 0.26f;   // Left/Right offset
@@ -94,7 +94,7 @@ struct VR : OverlayFeature
 		float VRMenuControllerOffsetZ = 0.20f;  // Forward/Back offset
 
 		// Input settings
-		bool VRMenuControllerDiagnosticsTestMode = false;  // If true, disables controller input for menu except right thumbstick and triggers
+		bool VRMenuControllerDiagnosticsTestMode = false;  // If true, disables controller input for menu except scroll controller and triggers
 
 		// VR menu mouse control settings
 		float mouseDeadzone = 0.1f;  // Minimum thumbstick deflection to move mouse/scroll
@@ -105,18 +105,18 @@ struct VR : OverlayFeature
 
 		// VR Key Bindings - Using ButtonCombo structure for cleaner device/key separation
 		std::vector<ButtonCombo> VRMenuOpenKeys = {
-			ButtonCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kXA)),
-			ButtonCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kBY))
-		};  // A/X and B/Y on primary
+			ButtonCombo::Secondary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kXA)),
+			ButtonCombo::Secondary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kBY))
+		};  // A/X and B/Y on Secondary
 		std::vector<ButtonCombo> VRMenuCloseKeys = {
 			ButtonCombo::Both(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kGrip))
 		};  // Grips on both
 		std::vector<ButtonCombo> VROverlayOpenKeys = {
-			ButtonCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
-		};  // Joystick click on primary
-		std::vector<ButtonCombo> VROverlayCloseKeys = {
 			ButtonCombo::Secondary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
-		};  // Joystick click on secondary
+		};  // Joystick click on Secondary
+		std::vector<ButtonCombo> VROverlayCloseKeys = {
+			ButtonCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
+		};  // Joystick click on Primary
 
 		// VR Combo Settings
 		float comboTimeout = 3.0f;  // Timeout in seconds for combo sequences
@@ -155,9 +155,9 @@ public:
 	void UpdateOverlayMenuStateFromInput();
 	// VR input processing
 	void ProcessVRButtonEvent(const Menu::KeyEvent& event);
-	void ProcessVRThumbstickEvent(const Menu::KeyEvent& event);
-	// Maps VR controller thumbstick input to ImGui mouse and scroll events for the overlay UI
-	void ProcessVRControllerOverlayInput();
+	void UpdateControllerState(const Menu::KeyEvent& event);
+	// Converts VR controller thumbstick input to ImGui mouse and scroll events for the overlay UI
+	void ProcessControllerInputForImGui();
 
 public:
 	// Overlay handles and D3D11 textures
@@ -173,6 +173,10 @@ public:
 	void RecreateOverlayTexturesIfNeeded();
 	void SubmitOverlayFrame();
 
+private:
+	void CleanupOverlayTextures();
+
+public:
 	bool* gDepthBufferCulling = nullptr;
 	float* gMinOccludeeBoxExtent = nullptr;
 
@@ -192,6 +196,9 @@ public:
 	std::vector<VRControllerEventLog> vrControllerEventLog;
 	RE::VRControllerState primaryControllerState;
 	RE::VRControllerState secondaryControllerState;
+
+	// Handedness tracking for cache invalidation
+	bool lastKnownLeftHandedMode = false;
 
 	// Non-persistent fixed world overlay position (session only)
 	struct OverlayWorldPosition
@@ -261,7 +268,6 @@ public:
 
 	void UpdateOverlayDrag();
 	void SetFixedOverlayToCurrentHMD();
-	void ApplyHighlightTintToTexture(ID3D11Texture2D* texture, bool isHighlighted);
 
 	// Returns true if the overlay window should be highlighted (dragging in any mode)
 	bool ShouldHighlightOverlayWindow() const

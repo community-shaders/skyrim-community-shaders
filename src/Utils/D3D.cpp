@@ -218,4 +218,76 @@ namespace Util
 
 		return nullptr;
 	}
+
+	void ApplyHighlightTintToTexture(ID3D11Texture2D* texture, bool isHighlighted, const std::array<float, 4>& highlightColor)
+	{
+		if (!isHighlighted || !texture)
+			return;
+
+		// Create a temporary staging texture to read from
+		ID3D11Texture2D* stagingTexture = nullptr;
+		D3D11_TEXTURE2D_DESC desc;
+		texture->GetDesc(&desc);
+		desc.Usage = D3D11_USAGE_STAGING;
+		desc.BindFlags = 0;
+		desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ | D3D11_CPU_ACCESS_WRITE;
+
+		if (FAILED(globals::d3d::device->CreateTexture2D(&desc, nullptr, &stagingTexture)))
+			return;
+
+		// Copy the original texture to staging
+		globals::d3d::context->CopyResource(stagingTexture, texture);
+
+		// Map the staging texture to read/write pixels
+		D3D11_MAPPED_SUBRESOURCE mapped;
+		if (SUCCEEDED(globals::d3d::context->Map(stagingTexture, 0, D3D11_MAP_READ_WRITE, 0, &mapped))) {
+			// Apply highlight tint to each pixel
+			uint8_t* pixels = static_cast<uint8_t*>(mapped.pData);
+			for (UINT y = 0; y < desc.Height; ++y) {
+				for (UINT x = 0; x < desc.Width; ++x) {
+					uint8_t* pixel = pixels + (y * mapped.RowPitch + x * 4);
+
+					// Only tint non-transparent pixels (alpha > 0)
+					if (pixel[3] > 0) {
+						// Apply configurable highlight tint
+						// Blend the original color with the highlight color
+						float originalR = pixel[0] / 255.0f;
+						float originalG = pixel[1] / 255.0f;
+						float originalB = pixel[2] / 255.0f;
+
+						// Blend: original * (1 - alpha) + highlight * alpha
+						float blendAlpha = highlightColor[3];
+						pixel[0] = static_cast<uint8_t>((originalR * (1.0f - blendAlpha) + highlightColor[0] * blendAlpha) * 255.0f);
+						pixel[1] = static_cast<uint8_t>((originalG * (1.0f - blendAlpha) + highlightColor[1] * blendAlpha) * 255.0f);
+						pixel[2] = static_cast<uint8_t>((originalB * (1.0f - blendAlpha) + highlightColor[2] * blendAlpha) * 255.0f);
+						// Alpha stays the same
+					}
+				}
+			}
+
+			globals::d3d::context->Unmap(stagingTexture, 0);
+
+			// Copy the modified texture back
+			globals::d3d::context->CopyResource(texture, stagingTexture);
+		}
+
+		stagingTexture->Release();
+	}
+
+	void CreateOverlayTextureAndRTV(ID3D11Device* device, int width, int height, ID3D11Texture2D** outTex, ID3D11RenderTargetView** outRTV)
+	{
+		D3D11_TEXTURE2D_DESC desc = {};
+		desc.Width = width;
+		desc.Height = height;
+		desc.MipLevels = 1;
+		desc.ArraySize = 1;
+		desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		desc.SampleDesc.Count = 1;
+		desc.Usage = D3D11_USAGE_DEFAULT;
+		desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+		device->CreateTexture2D(&desc, nullptr, outTex);
+		if (*outTex) {
+			device->CreateRenderTargetView(*outTex, nullptr, outRTV);
+		}
+	}
 }  // namespace Util

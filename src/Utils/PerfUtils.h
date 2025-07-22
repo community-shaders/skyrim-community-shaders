@@ -67,4 +67,16 @@ namespace Util
 			return (lower + upper) / 2.0f;
 		}
 	}
+
+	/**
+	 * @brief High-resolution timer using QueryPerformanceCounter
+	 * @return Current time in seconds as a double
+	 */
+	inline double GetNowSecs()
+	{
+		static LARGE_INTEGER freq = [] { LARGE_INTEGER f; QueryPerformanceFrequency(&f); return f; }();
+		LARGE_INTEGER now;
+		QueryPerformanceCounter(&now);
+		return static_cast<double>(now.QuadPart) / static_cast<double>(freq.QuadPart);
+	}
 }

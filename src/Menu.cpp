@@ -1673,7 +1673,7 @@ void Menu::DrawOverlay()
 	}
 	ProcessInputEventQueue();
 	if (REL::Module::IsVR()) {
-		globals::features::vr->ProcessVRControllerOverlayInput();
+		globals::features::vr->ProcessControllerInputForImGui();
 	}
 
 	auto shaderCache = globals::shaderCache;
