@@ -33,7 +33,7 @@ vr::TrackedDeviceIndex_t GetControllerIndexForDevice(ControllerDevice device)
 
 	// Determine the OpenVR role based on handedness and our device enum
 	vr::ETrackedControllerRole targetRole;
-	bool isLeftHanded = RE::BSOpenVRControllerDevice::IsLeftHandedMode();
+	bool isLeftHanded = VR::GetSingleton()->lastKnownLeftHandedMode;  // Use cached handedness
 
 	if (device == ControllerDevice::Primary) {
 		// Primary controller = dominant hand
@@ -169,11 +169,11 @@ void VR::DrawOverlay()
 
 namespace
 {
-	void DrawControllerInputInstructions(VR::Settings& settings);
-	void DrawGeneralVRSettings(VR::Settings& settings);
-	void DrawMenuSettings(VR::Settings& settings);
-	void DrawMouseSettings(VR::Settings& settings);
-	void DrawDragSettings(VR::Settings& settings);
+	void DrawControllerInputInstructions();
+	void DrawGeneralVRSettings();
+	void DrawMenuSettings();
+	void DrawMouseSettings();
+	void DrawDragSettings();
 	void DrawKeyBindings(VR* vr);
 	void DrawDebugSection(VR* vr);
 }
@@ -188,11 +188,11 @@ void VR::DrawSettings()
 		// General Settings Tab
 		if (ImGui::BeginTabItem("General")) {
 			if (ImGui::BeginChild("##VRGeneralFrame", { 0, 0 }, true)) {
-				DrawControllerInputInstructions(settings);
-				DrawGeneralVRSettings(settings);
-				DrawMenuSettings(settings);
-				DrawMouseSettings(settings);
-				DrawDragSettings(settings);
+				DrawControllerInputInstructions();
+				DrawGeneralVRSettings();
+				DrawMenuSettings();
+				DrawMouseSettings();
+				DrawDragSettings();
 			}
 			ImGui::EndChild();
 			ImGui::EndTabItem();
@@ -435,8 +435,10 @@ void VR::DrawSettings()
 
 namespace
 {
-	void DrawControllerInputInstructions(VR::Settings& settings)
+	void DrawControllerInputInstructions()
 	{
+		auto vr = VR::GetSingleton();
+		VR::Settings& settings = vr->settings;
 		if (ImGui::CollapsingHeader("Controller Input Instructions", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Checkbox("Show 'How to Use' Message", &settings.ShowHowToUseMessage);
 			ImGui::TextWrapped("Menu:");
@@ -473,8 +475,11 @@ namespace
 			}
 		}
 	}
-	void DrawGeneralVRSettings(VR::Settings& settings)
+
+	void DrawGeneralVRSettings()
 	{
+		auto vr = VR::GetSingleton();
+		VR::Settings& settings = vr->settings;
 		if (ImGui::CollapsingHeader("General Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Checkbox("Enable Depth Buffer Culling", &settings.EnableDepthBufferCulling);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -486,8 +491,11 @@ namespace
 			}
 		}
 	}
-	void DrawMenuSettings(VR::Settings& settings)
+
+	void DrawMenuSettings()
 	{
+		auto vr = VR::GetSingleton();
+		VR::Settings& settings = vr->settings;
 		if (ImGui::CollapsingHeader("Menu Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::SliderFloat("Menu Scale", &settings.VRMenuScale, 0.5f, 2.0f, "%.2f");
 			const char* positioningMethods[] = { "HMD Relative", "Fixed World Position" };
@@ -525,15 +533,21 @@ namespace
 			}
 		}
 	}
-	void DrawMouseSettings(VR::Settings& settings)
+
+	void DrawMouseSettings()
 	{
+		auto vr = VR::GetSingleton();
+		VR::Settings& settings = vr->settings;
 		if (ImGui::CollapsingHeader("Mouse Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::SliderFloat("Mouse Deadzone", &settings.mouseDeadzone, 0.0f, 0.5f, "%.2f");
 			ImGui::SliderFloat("Mouse Speed", &settings.mouseSpeed, 0.1f, 20.0f, "%.2f");
 		}
 	}
-	void DrawDragSettings(VR::Settings& settings)
+
+	void DrawDragSettings()
 	{
+		auto vr = VR::GetSingleton();
+		VR::Settings& settings = vr->settings;
 		if (ImGui::CollapsingHeader("Drag Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
 			if (ImGui::CollapsingHeader("Drag Instructions", ImGuiTreeNodeFlags_DefaultOpen)) {
 				ImGui::TextWrapped("Overlay Positioning (Grip + Drag):");
@@ -696,7 +710,7 @@ namespace
 			ImU32 highlightColorU32 = ImGui::ColorConvertFloat4ToU32(highlightColor);
 
 			// Determine display order based on handedness
-			bool isLeftHanded = RE::BSOpenVRControllerDevice::IsLeftHandedMode();
+			bool isLeftHanded = vr->lastKnownLeftHandedMode;  // Use cached handedness
 
 			if (ImGui::BeginTable("vr_input_state_table", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
 				ImGui::TableSetupColumn("Button");
@@ -1849,7 +1863,7 @@ void VR::UpdateOverlayDrag()
 
 	// Helper to get grip state for a controller based on actual hand position
 	auto getGripPressed = [&](bool isLeft, bool isRight) {
-		bool isLeftHanded = RE::BSOpenVRControllerDevice::IsLeftHandedMode();
+		bool isLeftHanded = lastKnownLeftHandedMode;
 
 		if (isLeft) {
 			// Left hand: primary if left-handed, secondary if right-handed
