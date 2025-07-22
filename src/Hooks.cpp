@@ -1003,7 +1003,7 @@ namespace Hooks
 	{
 		PatchMemory(Address, Data.begin(), Data.size());
 	}
-	
+
 	struct BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights
 	{
 		static void thunk(RE::BSGraphics::PixelShader* PixelShader, RE::BSRenderPass* Pass, DirectX::XMMATRIX& Transform, uint32_t LightCount, uint32_t ShadowLightCount, float WorldScale, uint32_t)
