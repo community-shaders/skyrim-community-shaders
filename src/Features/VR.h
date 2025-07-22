@@ -191,8 +191,8 @@ public:
 		std::string controllerRole;  // For thumbstick events, keyCode/value are replaced by x/y floats
 	};
 	std::vector<VRControllerEventLog> vrControllerEventLog;
-	RE::InputDeviceState primaryControllerState;
-	RE::InputDeviceState secondaryControllerState;
+	RE::VRControllerState primaryControllerState;
+	RE::VRControllerState secondaryControllerState;
 
 	// Non-persistent fixed world overlay position (session only)
 	struct OverlayWorldPosition

@@ -494,8 +494,8 @@ void VR::DrawSettings()
 			ControllerDevice pressedDevice = ControllerDevice::Both;  // Default to Both, will set below
 
 			// Check primary controller buttons
-			for (const auto& [keyCode, buttonState] : primaryControllerState.buttons) {
-				if (buttonState.isPressed) {
+			for (const auto& [keyCode, buttonState] : primaryControllerState.GetActiveButtons()) {
+				if (buttonState->isPressed) {
 					pressedKey = keyCode;
 					buttonPressed = true;
 					pressedDevice = ControllerDevice::Primary;
@@ -505,8 +505,8 @@ void VR::DrawSettings()
 
 			// Check secondary controller buttons if primary didn't have any
 			if (!buttonPressed) {
-				for (const auto& [keyCode, buttonState] : secondaryControllerState.buttons) {
-					if (buttonState.isPressed) {
+				for (const auto& [keyCode, buttonState] : secondaryControllerState.GetActiveButtons()) {
+					if (buttonState->isPressed) {
 						pressedKey = keyCode;
 						buttonPressed = true;
 						pressedDevice = ControllerDevice::Secondary;
@@ -901,14 +901,14 @@ namespace
 						ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, highlightColorU32);
 					DrawButtonType(right);
 				};
-				printRow("Trigger", vr->primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTrigger], vr->secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTrigger]);
-				printRow("Grip", vr->primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip], vr->secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip]);
-				printRow("GripAlt", vr->primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGripAlt], vr->secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGripAlt]);
-				printRow("Stick Click", vr->primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger], vr->secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger]);
-				printRow("Touchpad Click", vr->primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTouchpadClick], vr->secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTouchpadClick]);
-				printRow("Touchpad Alt", vr->primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTouchpadAlt], vr->secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kTouchpadAlt]);
-				printRow("B/Y", vr->primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kBY], vr->secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kBY]);
-				printRow("A/X", vr->primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kXA], vr->secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kXA]);
+				printRow("Trigger", vr->primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kTrigger], vr->secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kTrigger]);
+				printRow("Grip", vr->primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kGrip], vr->secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kGrip]);
+				printRow("GripAlt", vr->primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kGripAlt], vr->secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kGripAlt]);
+				printRow("Stick Click", vr->primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger], vr->secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger]);
+				printRow("Touchpad Click", vr->primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kTouchpadClick], vr->secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kTouchpadClick]);
+				printRow("Touchpad Alt", vr->primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kTouchpadAlt], vr->secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kTouchpadAlt]);
+				printRow("B/Y", vr->primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kBY], vr->secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kBY]);
+				printRow("A/X", vr->primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kXA], vr->secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kXA]);
 				ImGui::EndTable();
 			}
 			ImGui::SeparatorText("VR Thumbstick State");
@@ -1636,16 +1636,16 @@ void VR::UpdateOverlayMenuStateFromInput()
 			switch (combo.GetDevice()) {
 			case ControllerDevice::Both:
 				// Check if this button is pressed on BOTH controllers
-				buttonPressed = primaryControllerState.buttons[combo.GetKey()].isPressed &&
-				                secondaryControllerState.buttons[combo.GetKey()].isPressed;
+				buttonPressed = primaryControllerState[combo.GetKey()].isPressed &&
+				                secondaryControllerState[combo.GetKey()].isPressed;
 				break;
 			case ControllerDevice::Primary:
 				// Check if this button is pressed on PRIMARY controller only
-				buttonPressed = primaryControllerState.buttons[combo.GetKey()].isPressed;
+				buttonPressed = primaryControllerState[combo.GetKey()].isPressed;
 				break;
 			case ControllerDevice::Secondary:
 				// Check if this button is pressed on SECONDARY controller only
-				buttonPressed = secondaryControllerState.buttons[combo.GetKey()].isPressed;
+				buttonPressed = secondaryControllerState[combo.GetKey()].isPressed;
 				break;
 			}
 
@@ -1718,8 +1718,8 @@ void VR::ProcessVREvents(std::vector<Menu::KeyEvent>& vrEvents)
 		};
 		for (const auto& desc : kVRButtons) {
 			if (desc.isButton(event.keyCode)) {
-				RE::ButtonState* state = isPrimary ? &primaryControllerState.buttons[desc.keyCode] : isSecondary ? &secondaryControllerState.buttons[desc.keyCode] :
-				                                                                                                   nullptr;
+				RE::ButtonState* state = isPrimary ? &primaryControllerState[desc.keyCode] : isSecondary ? &secondaryControllerState[desc.keyCode] :
+				                                                                                           nullptr;
 				if (state) {
 					state->OnEvent(event.IsPressed(), nowSecs);
 				}
@@ -1779,7 +1779,7 @@ void VR::ProcessVRButtonEvent(const Menu::KeyEvent& event)
 		size_t limit = testMode ? kNumTriggerMappings : kNumMappings;  // Only trigger mappings in test mode
 
 		for (size_t i = 0; i < limit; ++i) {
-			RE::ButtonState* state = &controllerState.buttons[mappings[i].keyCode];
+			RE::ButtonState* state = &controllerState[mappings[i].keyCode];
 			bool curr = state ? state->isPressed : false;
 			if (curr != prevStates[i]) {
 				if (mappings[i].isKeyEvent) {
@@ -1934,9 +1934,9 @@ void VR::UpdateOverlayDrag()
 	// Helper to get grip state for a controller
 	auto getGripPressed = [&](bool isLeft, bool isRight) {
 		if (isLeft)
-			return primaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
+			return primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
 		if (isRight)
-			return secondaryControllerState.buttons[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
+			return secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
 		return false;
 	};
 
