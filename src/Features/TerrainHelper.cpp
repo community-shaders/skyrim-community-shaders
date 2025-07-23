@@ -134,7 +134,7 @@ void TerrainHelper::SetShaderResouces(ID3D11DeviceContext* a_context)
 	while (mask) {
 		// Find the position of the first set bit
 		uint32_t batchStart = std::countr_zero(mask);
-		
+
 		// Count consecutive 1s starting from batchStart
 		uint32_t shiftedMask = mask >> batchStart;
 		uint32_t batchCount = std::countr_one(shiftedMask);
