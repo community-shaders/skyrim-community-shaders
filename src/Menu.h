@@ -266,8 +266,6 @@ private:
 	float cachedFontSize = Constants::DEFAULT_FONT_SIZE;  // Tracks whether font has been modified and may require reloading
 	void ReloadFont();                                    // Credit to user patchuli: https://github.com/Patchu1i/ModExplorerMenu/tree/master
 
-	void RecreateVROverlayTexturesIfNeeded();
-
 	// Menu navigation
 	std::string pendingFeatureSelection;  // Feature to select on next frame
 

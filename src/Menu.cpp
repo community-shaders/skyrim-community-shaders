@@ -220,7 +220,6 @@ Menu::~Menu()
 	ImGui::DestroyContext();
 	dxgiAdapter3 = nullptr;
 
-	// VR overlay cleanup is now handled by VR
 	globals::features::vr->DestroyOverlay();
 }
 
@@ -2077,6 +2076,7 @@ inline const uint32_t Menu::DIKToVK(uint32_t DIK)
 void Menu::ProcessInputEventQueue()
 {
 	std::unique_lock<std::shared_mutex> mutex(_inputEventMutex);
+	ImGuiIO& io = ImGui::GetIO();
 	// Split the queue into VR and non-VR events
 	std::vector<KeyEvent> vrEvents;
 	std::vector<KeyEvent> nonVREvents;
@@ -2084,7 +2084,7 @@ void Menu::ProcessInputEventQueue()
 		bool isVRController = ((event.device == RE::INPUT_DEVICE::kVivePrimary || event.device == RE::INPUT_DEVICE::kViveSecondary ||
 								event.device == RE::INPUT_DEVICE::kOculusPrimary || event.device == RE::INPUT_DEVICE::kOculusSecondary ||
 								event.device == RE::INPUT_DEVICE::kWMRPrimary || event.device == RE::INPUT_DEVICE::kWMRSecondary));
-		if (isVRController) {
+		if (REL::Module::IsVR() && isVRController) {
 			vrEvents.push_back(event);
 		} else {
 			nonVREvents.push_back(event);
@@ -2097,7 +2097,6 @@ void Menu::ProcessInputEventQueue()
 	}
 	// Process non-VR events in Menu (original logic here)
 	for (auto& event : nonVREvents) {
-		ImGuiIO& io = ImGui::GetIO();
 		if (event.eventType == RE::INPUT_EVENT_TYPE::kChar) {
 			io.AddInputCharacter(event.keyCode);
 			continue;
@@ -2181,6 +2180,16 @@ void Menu::ProcessInputEventQueue()
 	}
 
 	_keyEventQueue.clear();
+
+	// Fallback: release stuck Shift and Tab if OS reports them not pressed
+	if ((io.KeysDown[ImGuiKey_LeftShift] && !(GetAsyncKeyState(VK_LSHIFT) & Constants::KEY_PRESSED_MASK)) ||
+		(io.KeysDown[ImGuiKey_RightShift] && !(GetAsyncKeyState(VK_RSHIFT) & Constants::KEY_PRESSED_MASK))) {
+		io.AddKeyEvent(ImGuiKey_LeftShift, false);
+		io.AddKeyEvent(ImGuiKey_RightShift, false);
+	}
+	if (io.KeysDown[ImGuiKey_Tab] && !(GetAsyncKeyState(VK_TAB) & Constants::KEY_PRESSED_MASK)) {
+		io.AddKeyEvent(ImGuiKey_Tab, false);
+	}
 }
 
 void Menu::addToEventQueue(KeyEvent e)
