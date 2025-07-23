@@ -576,19 +576,24 @@ struct BSInputDeviceManager_PollInputDevices
 
 			if (*a_events) {
 				if (auto device = (*a_events)->GetDevice()) {
-					// Check if this is a VR device that should be blocked when menu is open
-					bool vrDevice = false;
+					if (globals::game::isVR) {
+						// Check if this is a VR device that should be blocked when menu is open
+						bool vrDevice = false;
 #ifdef ENABLE_SKYRIM_VR
-					vrDevice = (globals::game::isVR && ((device == RE::INPUT_DEVICES::INPUT_DEVICE::kVivePrimary) ||
-														   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kViveSecondary) ||
-														   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusPrimary) ||
-														   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusSecondary) ||
-														   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRPrimary) ||
-														   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRSecondary)));
+						vrDevice = (globals::game::isVR && ((device == RE::INPUT_DEVICES::INPUT_DEVICE::kVivePrimary) ||
+															   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kViveSecondary) ||
+															   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusPrimary) ||
+															   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusSecondary) ||
+															   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRPrimary) ||
+															   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRSecondary)));
 #endif
-					// Block VR devices when menu is open to prevent game interaction
-					// Allow gamepad and non-VR devices to pass through
-					blockedDevice = !((device == RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad) || !vrDevice);
+						// Block VR devices when menu is open to prevent game interaction
+						// Allow gamepad and non-VR devices to pass through
+						blockedDevice = !((device == RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad) || !vrDevice);
+					} else {
+						// Block all devices except gamepad when menu is open
+						blockedDevice = (device != RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad);
+					}
 				}
 			}
 		}
