@@ -213,6 +213,15 @@ Menu::~Menu()
 	uiIcons.clearCache.Release();
 	uiIcons.clearDiskCache.Release();
 	uiIcons.logo.Release();
+	uiIcons.characters.Release();
+	uiIcons.grass.Release();
+	uiIcons.lighting.Release();
+	uiIcons.sky.Release();
+	uiIcons.landscape.Release();
+	uiIcons.water.Release();
+	uiIcons.debug.Release();
+	uiIcons.materials.Release();
+	uiIcons.other.Release();
 
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();

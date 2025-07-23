@@ -163,12 +163,20 @@ namespace Util
 		logger::info("InitializeMenuIcons: Loading icons from base path: {}", basePath);
 
 		// Initialize all texture pointers to nullptr for safe cleanup
-		std::array<ID3D11ShaderResourceView**, 5> texturePointers = {
+		std::array<ID3D11ShaderResourceView**, 13> texturePointers = {
 			&menu->uiIcons.saveSettings.texture,
 			&menu->uiIcons.loadSettings.texture,
 			&menu->uiIcons.clearCache.texture,
 			&menu->uiIcons.clearDiskCache.texture,
-			&menu->uiIcons.logo.texture
+			&menu->uiIcons.logo.texture,
+			&menu->uiIcons.characters.texture,
+			&menu->uiIcons.grass.texture,
+			&menu->uiIcons.lighting.texture,
+			&menu->uiIcons.sky.texture,
+			&menu->uiIcons.landscape.texture,
+			&menu->uiIcons.water.texture,
+			&menu->uiIcons.debug.texture,
+			&menu->uiIcons.materials.texture
 		};
 
 		// Safely release existing textures
@@ -228,7 +236,74 @@ namespace Util
 			logger::warn("InitializeMenuIcons: Failed to load logo icon from: {}", basePath + "Community Shaders Logo\\cs-logo.png");
 		}
 
-		logger::info("InitializeMenuIcons: Loaded {}/5 icons successfully", iconsLoaded);
+		// Load category icons
+		if (LoadTextureFromFile(device, (basePath + "Categories\\characters.png").c_str(), &menu->uiIcons.characters.texture, menu->uiIcons.characters.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded characters icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load characters icon from: {}", basePath + "Categories\\characters.png");
+		}
+
+		if (LoadTextureFromFile(device, (basePath + "Categories\\grass.png").c_str(), &menu->uiIcons.grass.texture, menu->uiIcons.grass.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded grass icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load grass icon from: {}", basePath + "Categories\\grass.png");
+		}
+
+		if (LoadTextureFromFile(device, (basePath + "Categories\\lighting.png").c_str(), &menu->uiIcons.lighting.texture, menu->uiIcons.lighting.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded lighting icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load lighting icon from: {}", basePath + "Categories\\lighting.png");
+		}
+
+		if (LoadTextureFromFile(device, (basePath + "Categories\\sky.png").c_str(), &menu->uiIcons.sky.texture, menu->uiIcons.sky.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded sky icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load sky icon from: {}", basePath + "Categories\\sky.png");
+		}
+
+		if (LoadTextureFromFile(device, (basePath + "Categories\\landscape.png").c_str(), &menu->uiIcons.landscape.texture, menu->uiIcons.landscape.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded landscape icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load landscape icon from: {}", basePath + "Categories\\landscape.png");
+		}
+
+		if (LoadTextureFromFile(device, (basePath + "Categories\\water.png").c_str(), &menu->uiIcons.water.texture, menu->uiIcons.water.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded water icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load water icon from: {}", basePath + "Categories\\water.png");
+		}
+
+		if (LoadTextureFromFile(device, (basePath + "Categories\\debug.png").c_str(), &menu->uiIcons.debug.texture, menu->uiIcons.debug.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded debug icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load debug icon from: {}", basePath + "Categories\\debug.png");
+		}
+
+		// Materials placeholder - will fail to load for now
+		if (LoadTextureFromFile(device, (basePath + "Categories\\materials.png").c_str(), &menu->uiIcons.materials.texture, menu->uiIcons.materials.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded materials icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load materials icon from: {}", basePath + "Categories\\materials.png");
+		}
+
+
+		logger::info("InitializeMenuIcons: Loaded {}/13 icons successfully", iconsLoaded);
 		return anyIconLoaded;
 	}
 
@@ -350,6 +425,28 @@ namespace Util
 
 	bool DrawCategoryHeader(const char* categoryName, bool& isExpanded, int categoryCount)
 	{
+		// Get the appropriate icon for this category
+		ID3D11ShaderResourceView* categoryIcon = nullptr;
+		auto& menu = Menu::GetSingleton()->uiIcons;
+		
+		if (strcmp(categoryName, "Characters") == 0) {
+			categoryIcon = menu.characters.texture;
+		} else if (strcmp(categoryName, "Grass") == 0) {
+			categoryIcon = menu.grass.texture;
+		} else if (strcmp(categoryName, "Lighting") == 0) {
+			categoryIcon = menu.lighting.texture;
+		} else if (strcmp(categoryName, "Sky") == 0) {
+			categoryIcon = menu.sky.texture;
+		} else if (strcmp(categoryName, "Landscape & Textures") == 0) {
+			categoryIcon = menu.landscape.texture;
+		} else if (strcmp(categoryName, "Water") == 0) {
+			categoryIcon = menu.water.texture;
+		} else if (strcmp(categoryName, "Debug") == 0) {
+			categoryIcon = menu.debug.texture;
+		} else if (strcmp(categoryName, "Materials") == 0) {
+			categoryIcon = menu.materials.texture;
+		}
+
 		// Add categoryCount to categoryName
 		std::string displayName = std::format("{} ({})", categoryName, categoryCount);
 
@@ -357,11 +454,23 @@ namespace Util
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 		ImVec2 pos = ImGui::GetCursorScreenPos();
 		float availableWidth = ImGui::GetContentRegionAvail().x;
+		
+		// Calculate icon size based on current font size to match text scaling
+		// This ensures icons scale consistently with text when the font scale changes
+		const float currentFontSize = ImGui::GetFontSize();
+		const float iconSize = currentFontSize * 1.2f;  // 20% larger than font height
+		const float iconSpacing = currentFontSize * 0.3f;  // 30% of font height for spacing
 		ImVec2 textSize = ImGui::CalcTextSize(displayName.c_str());
+		
+		// Calculate total content width (icon + spacing + text)
+		float contentWidth = textSize.x;
+		if (categoryIcon) {
+			contentWidth += iconSize + iconSpacing;
+		}
 
 		// Calculate line positions
 		float lineY = pos.y + textSize.y * 0.5f;
-		float lineLength = (availableWidth - textSize.x - 20.0f) * 0.5f;  // 20px for padding
+		float lineLength = (availableWidth - contentWidth - 20.0f) * 0.5f;  // 20px for padding
 
 		// Create selectable area for the entire header
 		ImGui::PushID(displayName.c_str());
@@ -392,13 +501,28 @@ namespace Util
 		}
 
 		// Right line
-		float rightLineStart = pos.x + lineLength + 10.0f + textSize.x + 10.0f;
+		float rightLineStart = pos.x + lineLength + 10.0f + contentWidth + 10.0f;
 		if (rightLineStart < pos.x + availableWidth) {
 			drawList->AddLine(ImVec2(rightLineStart, lineY), ImVec2(pos.x + availableWidth, lineY), headerColor, 1.0f);
 		}
 
+		// Draw icon and text
+		float currentX = pos.x + lineLength + 10.0f;
+		
+		// Draw icon if available
+		if (categoryIcon) {
+			ImVec2 iconPos = ImVec2(currentX, pos.y + (textSize.y - iconSize) * 0.5f + 2.0f);
+			ImVec2 iconMax = ImVec2(iconPos.x + iconSize, iconPos.y + iconSize);
+			
+			// Apply the same color tint as the text
+			ImU32 iconTint = headerColor;
+			drawList->AddImage(categoryIcon, iconPos, iconMax, ImVec2(0, 0), ImVec2(1, 1), iconTint);
+			
+			currentX += iconSize + iconSpacing;
+		}
+		
 		// Center text
-		ImVec2 textPos = ImVec2(pos.x + lineLength + 10.0f, pos.y + 2.0f);
+		ImVec2 textPos = ImVec2(currentX, pos.y + 2.0f);
 		drawList->AddText(textPos, headerColor, displayName.c_str());
 
 		// Handle click to toggle expansion
@@ -639,7 +763,7 @@ namespace Util
 
 		// Search in both short name and display name
 		return shortName.find(query) != std::string::npos ||
-		       displayName.find(query) != std::string::npos;
+			   displayName.find(query) != std::string::npos;
 	}
 
 	void DrawFeatureSearchBar(std::string& searchString, float availableWidth)

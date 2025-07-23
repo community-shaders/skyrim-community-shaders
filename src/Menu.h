@@ -75,6 +75,17 @@ public:
 		UIIcon clearDiskCache;
 		UIIcon logo;    // New logo icon
 		UIIcon search;  // Search icon for search bars
+		
+		// Category icons
+		UIIcon characters;
+		UIIcon grass;
+		UIIcon lighting;
+		UIIcon sky;
+		UIIcon landscape;
+		UIIcon water;
+		UIIcon debug;
+		UIIcon materials;  // Placeholder for now
+		UIIcon other;      // Generic icon for other/misc categories
 	} uiIcons;
 
 	struct ThemeSettings
