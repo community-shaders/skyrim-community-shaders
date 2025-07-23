@@ -116,6 +116,15 @@ namespace globals
 		REL::Relocation<ID3D11Buffer**> perFrame;
 	}
 
+	namespace rtti
+	{
+		REL::Relocation<const RE::NiRTTI*> NiIntegerExtraDataRTTI;
+		REL::Relocation<const RE::NiRTTI*> BSLightingShaderPropertyRTTI;
+		REL::Relocation<const RE::NiRTTI*> BSEffectShaderPropertyRTTI;
+		REL::Relocation<const RE::NiRTTI*> NiParticleSystemRTTI;
+		REL::Relocation<const RE::NiRTTI*> NiBillboardNodeRTTI;
+	}
+
 	State* state = nullptr;
 	Deferred* deferred = nullptr;
 	TruePBR* truePBR = nullptr;
