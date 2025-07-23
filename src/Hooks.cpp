@@ -1133,7 +1133,6 @@ namespace Hooks
 			stl::write_thunk_call<Main_Update_Swap>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x5D2, 0xA97));
 		}
 
-		
 		// Patch render space in BSLightingShader::SetupGeometry to always use world space
 		// The variable updateEyePosition is set to 1 when not skinned. By patching to be 0 it will always use world space
 		// We offset from the base address of the containing function to the start of the patch
