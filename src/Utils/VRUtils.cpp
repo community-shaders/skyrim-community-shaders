@@ -67,84 +67,53 @@ namespace Util
 		}
 	}
 
-	vr::HmdMatrix34_t ComputeOverlayTransformFromHMD(float distance, float offsetX, float offsetY, float offsetZ)
+	vr::HmdMatrix34_t ComputeOverlayTransformFromHMD(float offsetX, float offsetY, float offsetZ)
 	{
 		vr::HmdMatrix34_t transform = {};
+
+		// Use the same OpenVR access pattern as the VR class
 		RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
-		if (openvr) {
-			auto* system = openvr->vrSystem;
-			if (system) {
-				vr::TrackedDevicePose_t hmdPose;
-				system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &hmdPose, 1);
-				if (hmdPose.bPoseIsValid) {
-					transform = hmdPose.mDeviceToAbsoluteTracking;
-					// Move forward by distance (Z axis in HMD space)
-					transform.m[0][3] += transform.m[0][2] * (-distance);
-					transform.m[1][3] += transform.m[1][2] * (-distance);
-					transform.m[2][3] += transform.m[2][2] * (-distance);
-					// Apply HMD overlay offsets (in HMD local space)
-					transform.m[0][3] += transform.m[0][0] * offsetX + transform.m[0][1] * offsetY + transform.m[0][2] * offsetZ;
-					transform.m[1][3] += transform.m[1][0] * offsetX + transform.m[1][1] * offsetY + transform.m[1][2] * offsetZ;
-					transform.m[2][3] += transform.m[2][0] * offsetX + transform.m[2][1] * offsetY + transform.m[2][2] * offsetZ;
-				}
-			}
-		}
+		if (!openvr)
+			return transform;
+
+		auto* system = openvr->vrSystem;
+		if (!system)
+			return transform;
+
+		vr::TrackedDevicePose_t hmdPose;
+		system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &hmdPose, 1);
+		if (!hmdPose.bPoseIsValid)
+			return transform;
+
+		transform = hmdPose.mDeviceToAbsoluteTracking;
+
+		// Apply HMD overlay offsets (in HMD local space)
+		transform.m[0][3] += transform.m[0][0] * offsetX + transform.m[0][1] * offsetY + transform.m[0][2] * offsetZ;
+		transform.m[1][3] += transform.m[1][0] * offsetX + transform.m[1][1] * offsetY + transform.m[1][2] * offsetZ;
+		transform.m[2][3] += transform.m[2][0] * offsetX + transform.m[2][1] * offsetY + transform.m[2][2] * offsetZ;
+
 		return transform;
 	}
 
-	void VROverlayResources::Create(ID3D11Device* device, const char* key, const char* name, int width, int height)
+	vr::HmdMatrix34_t CreateControllerOverlayTransform(float offsetX, float offsetY, float offsetZ, float width, float height)
 	{
-		Destroy();  // Clean up any existing resources
-
-		// Create D3D resources
-		D3D11_TEXTURE2D_DESC desc = {};
-		desc.Width = width;
-		desc.Height = height;
-		desc.MipLevels = 1;
-		desc.ArraySize = 1;
-		desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		desc.SampleDesc.Count = 1;
-		desc.Usage = D3D11_USAGE_DEFAULT;
-		desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-
-		if (FAILED(device->CreateTexture2D(&desc, nullptr, &texture))) {
-			logger::error("Failed to create overlay texture");
-			return;
-		}
-
-		if (FAILED(device->CreateRenderTargetView(texture, nullptr, &rtv))) {
-			logger::error("Failed to create overlay RTV");
-			texture->Release();
-			texture = nullptr;
-			return;
-		}
-
-		// Create OpenVR overlay
-		vr::EVROverlayError err = vr::VROverlay()->CreateOverlay(key, name, &handle);
-		if (err != vr::VROverlayError_None) {
-			logger::error("Failed to create overlay: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
-			Destroy();
-			return;
-		}
+		vr::HmdMatrix34_t transform;
+		transform.m[0][0] = width;
+		transform.m[0][1] = 0.0f;
+		transform.m[0][2] = 0.0f;
+		transform.m[0][3] = offsetX;
+		transform.m[1][0] = 0.0f;
+		transform.m[1][1] = height;
+		transform.m[1][2] = 0.0f;
+		transform.m[1][3] = offsetY;
+		transform.m[2][0] = 0.0f;
+		transform.m[2][1] = 0.0f;
+		transform.m[2][2] = 1.0f;
+		transform.m[2][3] = offsetZ;
+		return transform;
 	}
 
-	void VROverlayResources::Destroy()
-	{
-		if (rtv) {
-			rtv->Release();
-			rtv = nullptr;
-		}
-		if (texture) {
-			texture->Release();
-			texture = nullptr;
-		}
-		if (handle != vr::k_ulOverlayHandleInvalid) {
-			vr::VROverlay()->DestroyOverlay(handle);
-			handle = vr::k_ulOverlayHandleInvalid;
-		}
-	}
-
-	void VROverlayResources::SetInputFlags(vr::IVROverlay* overlay)
+	void SetOverlayInputFlags(vr::IVROverlay* overlay, vr::VROverlayHandle_t handle)
 	{
 		if (!overlay || handle == vr::k_ulOverlayHandleInvalid)
 			return;
@@ -155,17 +124,85 @@ namespace Util
 		overlay->SetOverlayFlag(handle, vr::VROverlayFlags_VisibleInDashboard, true);
 	}
 
-	bool VROverlayResources::SubmitTexture(vr::IVROverlay* overlay)
+	//=============================================================================
+	// NEW ACTIVE FUNCTIONS FROM VR.CPP
+	//=============================================================================
+
+	OpenVRContext::OpenVRContext()
 	{
-		if (!overlay || !texture || handle == vr::k_ulOverlayHandleInvalid)
+		openvr = RE::BSOpenVR::GetSingleton();
+		if (openvr) {
+			system = openvr->vrSystem;
+			overlay = RE::BSOpenVR::GetIVROverlayFromContext(&openvr->vrContext);
+		}
+	}
+
+	ImVec4 GetControllerDeviceColor(ControllerDevice device, bool isRecording)
+	{
+		// UI color constants from VR.cpp
+		constexpr ImVec4 Primary = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);     // Green
+		constexpr ImVec4 Secondary = ImVec4(0.0f, 0.6f, 1.0f, 1.0f);   // Blue
+		constexpr ImVec4 Both = ImVec4(0.5f, 0.0f, 0.5f, 1.0f);        // Purple
+		constexpr ImVec4 Recording = ImVec4(1.0f, 0.65f, 0.0f, 1.0f);  // Orange
+		constexpr ImVec4 Default = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);     // White
+
+		if (isRecording && device == ControllerDevice::Both) {
+			return Recording;  // Orange for recording mode
+		}
+		switch (device) {
+		case ControllerDevice::Primary:
+			return Primary;
+		case ControllerDevice::Secondary:
+			return Secondary;
+		case ControllerDevice::Both:
+			return Both;
+		default:
+			return Default;
+		}
+	}
+
+	vr::TrackedDeviceIndex_t GetControllerIndexForDevice(ControllerDevice device, bool isLeftHanded)
+	{
+		OpenVRContext ctx;
+		if (!ctx.IsValid())
+			return vr::k_unTrackedDeviceIndexInvalid;
+
+		// Determine the OpenVR role based on handedness and our device enum
+		vr::ETrackedControllerRole targetRole;
+
+		if (device == ControllerDevice::Primary) {
+			// Primary controller = dominant hand
+			targetRole = isLeftHanded ? vr::ETrackedControllerRole::TrackedControllerRole_LeftHand : vr::ETrackedControllerRole::TrackedControllerRole_RightHand;
+		} else {
+			// Secondary controller = non-dominant hand
+			targetRole = isLeftHanded ? vr::ETrackedControllerRole::TrackedControllerRole_RightHand : vr::ETrackedControllerRole::TrackedControllerRole_LeftHand;
+		}
+
+		// Find controller with the target role
+		for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; ++i) {
+			if (ctx.system->GetTrackedDeviceClass(i) == vr::TrackedDeviceClass_Controller) {
+				if (ctx.system->GetControllerRoleForTrackedDeviceIndex(i) == targetRole) {
+					return i;
+				}
+			}
+		}
+		return vr::k_unTrackedDeviceIndexInvalid;
+	}
+
+	bool GetControllerWorldMatrix(vr::TrackedDeviceIndex_t index, float out[3][4])
+	{
+		OpenVRContext ctx;
+		if (!ctx.IsValid())
 			return false;
 
-		vr::Texture_t tex = { texture, vr::TextureType_DirectX, vr::ColorSpace_Auto };
-		vr::EVROverlayError err = overlay->SetOverlayTexture(handle, &tex);
-		if (err != vr::VROverlayError_None) {
-			logger::error("SetOverlayTexture failed: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
+		vr::TrackedDevicePose_t poses[vr::k_unMaxTrackedDeviceCount];
+		ctx.system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, poses, vr::k_unMaxTrackedDeviceCount);
+		if (!poses[index].bPoseIsValid)
 			return false;
-		}
+
+		for (int i = 0; i < 3; ++i)
+			for (int j = 0; j < 4; ++j)
+				out[i][j] = poses[index].mDeviceToAbsoluteTracking.m[i][j];
 		return true;
 	}
 }

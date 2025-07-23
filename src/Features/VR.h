@@ -1,57 +1,265 @@
 #pragma once
 #include "Menu.h"
 #include "OverlayFeature.h"
+#include <algorithm>
 #include <atomic>
 #include <d3d11.h>
+#include <imgui_impl_dx11.h>
 #include <magic_enum.hpp>
 #include <openvr.h>
+#include <string>
 #include <vector>
 using namespace DirectX::SimpleMath;
 
-// Controller device enum
+/**
+ * @brief Identifies which VR controller(s) to target for input actions
+ *
+ * This enum is used throughout the VR system to specify which controller
+ * should handle specific input events or UI interactions.
+ */
 enum class ControllerDevice
 {
-	Primary = 0,
-	Secondary = 1,
-	Both = 2
+	Primary = 0,    ///< The dominant hand controller (right for right-handed, left for left-handed)
+	Secondary = 1,  ///< The non-dominant hand controller
+	Both = 2        ///< Both controllers simultaneously
 };
 
-// Button combo structure - using explicit encoding for better JSON compatibility
+/**
+ * @brief Converts a ControllerDevice enum value to a human-readable string
+ * @param device The controller device to convert
+ * @return String representation of the device ("Primary", "Secondary", "Both", or "Unknown")
+ */
+constexpr const char* ToString(ControllerDevice device)
+{
+	switch (device) {
+	case ControllerDevice::Primary:
+		return "Primary";
+	case ControllerDevice::Secondary:
+		return "Secondary";
+	case ControllerDevice::Both:
+		return "Both";
+	default:
+		return "Unknown";
+	}
+}
+
+/**
+ * @brief Validates if a ControllerDevice enum value is within valid range
+ * @param device The controller device to validate
+ * @return true if the device value is valid, false otherwise
+ */
+constexpr bool IsValidDevice(ControllerDevice device)
+{
+	return device >= ControllerDevice::Primary && device <= ControllerDevice::Both;
+}
+
+/**
+ * @brief Represents a combination of controller device and button/key for VR input mapping
+ *
+ * This structure efficiently encodes both the target controller and the specific button
+ * into a single 32-bit value for performance and JSON serialization compatibility.
+ * The upper 16 bits store the device type, lower 16 bits store the key code.
+ *
+ * @example
+ * ```cpp
+ * // Create a combo for the A button on the secondary controller
+ * auto combo = ButtonCombo::Secondary(RE::BSOpenVRControllerDevice::Keys::kXA);
+ *
+ * // Check which device and key
+ * ControllerDevice device = combo.GetDevice();
+ * uint32_t key = combo.GetKey();
+ * ```
+ */
 struct ButtonCombo
 {
+private:
 	uint32_t deviceAndKey;  // device in upper bits, key in lower bits
 
+public:
+	/**
+	 * @brief Constructs a ButtonCombo with the specified device and key
+	 * @param device The target controller device
+	 * @param key The button/key code (should fit in 16 bits)
+	 */
 	ButtonCombo(ControllerDevice device, uint32_t key) :
 		deviceAndKey((static_cast<uint32_t>(device) << 16) | (key & 0xFFFF)) {}
 
-	// Helper constructors for common cases
+	/**
+	 * @brief Creates a ButtonCombo for the primary controller
+	 * @param key The button/key code
+	 * @return ButtonCombo targeting the primary controller
+	 */
 	static ButtonCombo Primary(uint32_t key) { return ButtonCombo(ControllerDevice::Primary, key); }
+
+	/**
+	 * @brief Creates a ButtonCombo for the secondary controller
+	 * @param key The button/key code
+	 * @return ButtonCombo targeting the secondary controller
+	 */
 	static ButtonCombo Secondary(uint32_t key) { return ButtonCombo(ControllerDevice::Secondary, key); }
+
+	/**
+	 * @brief Creates a ButtonCombo for both controllers
+	 * @param key The button/key code
+	 * @return ButtonCombo targeting both controllers
+	 */
 	static ButtonCombo Both(uint32_t key) { return ButtonCombo(ControllerDevice::Both, key); }
 
-	// Accessors
+	/**
+	 * @brief Gets the controller device from this combo
+	 * @return The target controller device
+	 */
 	ControllerDevice GetDevice() const { return static_cast<ControllerDevice>(deviceAndKey >> 16); }
+	/**
+	 * @brief Gets the button/key code from this combo
+	 * @return The button/key code (16-bit value)
+	 */
 	uint32_t GetKey() const { return deviceAndKey & 0xFFFF; }
 
-	// Default constructor for JSON
+	/**
+	 * @brief Validates if this ButtonCombo has valid device and key values
+	 * @return true if both device and key are valid, false otherwise
+	 */
+	bool IsValid() const
+	{
+		return IsValidDevice(GetDevice()) && GetKey() != 0;
+	}
+
+	/**
+	 * @brief Equality comparison operator for container usage
+	 * @param other The ButtonCombo to compare with
+	 * @return true if both combos represent the same device and key
+	 */
+	bool operator==(const ButtonCombo& other) const
+	{
+		return deviceAndKey == other.deviceAndKey;
+	}
+
+	/**
+	 * @brief Less-than comparison operator for ordered container usage
+	 * @param other The ButtonCombo to compare with
+	 * @return true if this combo sorts before the other
+	 */
+	bool operator<(const ButtonCombo& other) const
+	{
+		return deviceAndKey < other.deviceAndKey;
+	}
+
+	/**
+	 * @brief Creates a human-readable string representation for debugging
+	 * @return String in format "Device:Key" (e.g., "Primary:123")
+	 */
+	std::string ToString() const
+	{
+		return std::string(::ToString(GetDevice())) + ":" + std::to_string(GetKey());
+	}
+
+	/**
+	 * @brief Default constructor for JSON serialization compatibility
+	 */
 	ButtonCombo() :
 		deviceAndKey(0) {}
+
+	/**
+	 * @brief JSON serialization support - converts ButtonCombo to JSON
+	 * @param j Output JSON object
+	 * @param combo ButtonCombo to serialize
+	 */
+	friend void to_json(nlohmann::json& j, const ButtonCombo& combo)
+	{
+		j = combo.deviceAndKey;
+	}
+
+	/**
+	 * @brief JSON deserialization support - creates ButtonCombo from JSON
+	 * @param j Input JSON object
+	 * @param combo ButtonCombo to populate
+	 */
+	friend void from_json(const nlohmann::json& j, ButtonCombo& combo)
+	{
+		combo.deviceAndKey = j.get<uint32_t>();
+	}
 };
 
-// JSON serialization for ButtonCombo (simple uint32_t)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(ButtonCombo, deviceAndKey)
-
+/**
+ * @brief Main VR feature class providing VR-specific optimizations and overlay UI system
+ *
+ * This class extends OverlayFeature to provide comprehensive VR support including:
+ * - Performance optimizations (depth buffer culling, occlusion culling)
+ * - VR overlay system for in-game UI interaction
+ * - Controller input processing and button combo mapping
+ * - Overlay positioning and manipulation (HMD-relative, controller-relative, fixed world)
+ * - Drag-and-drop overlay repositioning
+ *
+ * The VR class follows the singleton pattern and integrates with the OpenVR API
+ * to provide seamless VR experience within the Community Shaders framework.
+ *
+ * @example
+ * ```cpp
+ * // Get the VR singleton instance
+ * VR* vr = VR::GetSingleton();
+ *
+ * // Check if VR is supported
+ * if (vr->SupportsVR()) {
+ *     // Configure VR settings
+ *     vr->settings.EnableDepthBufferCulling = true;
+ *     vr->settings.VRMenuScale = 1.2f;
+ * }
+ * ```
+ */
 struct VR : OverlayFeature
 {
+public:
+	//=============================================================================
+	// NESTED TYPES AND CONSTANTS
+	//=============================================================================
+
+	/**
+	 * @brief Configuration constants for VR feature defaults and limits
+	 *
+	 * These constants define the default values and valid ranges for various
+	 * VR settings to ensure consistent behavior and prevent invalid configurations.
+	 */
+	struct Config
+	{
+		static constexpr float kDefaultMenuScale = 1.0f;      ///< Default overlay scale factor
+		static constexpr float kMinMenuScale = 0.5f;          ///< Minimum allowed overlay scale
+		static constexpr float kMaxMenuScale = 2.0f;          ///< Maximum allowed overlay scale
+		static constexpr float kDefaultComboTimeout = 3.0f;   ///< Default timeout for button combos (seconds)
+		static constexpr float kDefaultMouseDeadzone = 0.1f;  ///< Default thumbstick deadzone for mouse input
+		static constexpr float kDefaultMouseSpeed = 10.0f;    ///< Default mouse speed multiplier
+
+		// Default HMD overlay offset values (in meters, relative to HMD)
+		static constexpr float kDefaultHMDOffsetX = 0.26f;   ///< Default horizontal offset from HMD
+		static constexpr float kDefaultHMDOffsetY = -0.04f;  ///< Default vertical offset from HMD
+		static constexpr float kDefaultHMDOffsetZ = -0.41f;  ///< Default depth offset from HMD
+
+		// Default controller overlay offset values (in meters, relative to controller)
+		static constexpr float kDefaultControllerOffsetX = 0.22f;  ///< Default horizontal offset from controller
+		static constexpr float kDefaultControllerOffsetY = 0.15f;  ///< Default vertical offset from controller
+		static constexpr float kDefaultControllerOffsetZ = 0.20f;  ///< Default depth offset from controller
+	};
+
+	//=============================================================================
+	// SINGLETON PATTERN
+	//=============================================================================
+
+	/**
+	 * @brief Gets the singleton instance of the VR feature
+	 * @return Pointer to the singleton VR instance (never null)
+	 */
 	static VR* GetSingleton()
 	{
 		static VR singleton;
 		return &singleton;
 	}
 
+	//=============================================================================
+	// FEATURE BASE CLASS OVERRIDES
+	//=============================================================================
+
 	virtual inline std::string GetName() override { return "VR"; }
 	virtual inline std::string GetShortName() override { return "VR"; }
-
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
@@ -64,103 +272,203 @@ struct VR : OverlayFeature
 		};
 	}
 
-	struct Settings
-	{
-		bool EnableDepthBufferCulling = true;
-		float MinOccludeeBoxExtent = 10.0f;
-
-		// VR Menu Overlay Settings
-		float VRMenuScale = 1.0f;         // 0.5x to 2.0x
-		int VRMenuPositioningMethod = 0;  // 0 = HMD relative, 1 = Fixed world position
-
-		enum class OverlayAttachMode
-		{
-			HMDOnly = 0,
-			ControllerOnly = 1,
-			Both = 2
-		};
-		OverlayAttachMode attachMode = OverlayAttachMode::HMDOnly;
-		// Which controller to attach overlay to (Primary = dominant hand, Secondary = non-dominant hand)
-		ControllerDevice VRMenuAttachController = ControllerDevice::Secondary;
-
-		// HMD overlay offset settings (separate from controller)
-		float VRMenuOffsetX = 0.26f;   // Left/Right offset
-		float VRMenuOffsetY = -0.04f;  // Up/Down offset
-		float VRMenuOffsetZ = -0.41f;  // Forward/Back offset
-
-		// Controller offset settings (separate from HMD)
-		float VRMenuControllerOffsetX = 0.22f;  // Left/Right offset
-		float VRMenuControllerOffsetY = 0.15f;  // Up/Down offset
-		float VRMenuControllerOffsetZ = 0.20f;  // Forward/Back offset
-
-		// Input settings
-		bool VRMenuControllerDiagnosticsTestMode = false;  // If true, disables controller input for menu except scroll controller and triggers
-
-		// VR menu mouse control settings
-		float mouseDeadzone = 0.1f;  // Minimum thumbstick deflection to move mouse/scroll
-		float mouseSpeed = 10.0f;    // Mouse speed in pixels per frame per full deflection
-
-		// Drag highlight color (RGBA)
-		std::array<float, 4> dragHighlightColor = { 1.0f, 1.0f, 0.0f, 0.3f };  // Yellow tint with 30% alpha
-
-		// VR Key Bindings - Using ButtonCombo structure for cleaner device/key separation
-		std::vector<ButtonCombo> VRMenuOpenKeys = {
-			ButtonCombo::Secondary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kXA)),
-			ButtonCombo::Secondary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kBY))
-		};  // A/X and B/Y on Secondary
-		std::vector<ButtonCombo> VRMenuCloseKeys = {
-			ButtonCombo::Both(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kGrip))
-		};  // Grips on both
-		std::vector<ButtonCombo> VROverlayOpenKeys = {
-			ButtonCombo::Secondary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
-		};  // Joystick click on Secondary
-		std::vector<ButtonCombo> VROverlayCloseKeys = {
-			ButtonCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
-		};  // Joystick click on Primary
-
-		// VR Combo Settings
-		float comboTimeout = 3.0f;  // Timeout in seconds for combo sequences
-		bool ShowHowToUseMessage = true;
-		bool EnableDragToReposition = true;
-	};
-
-	Settings settings;
-
-	virtual void DrawSettings() override;
-	virtual void DrawOverlay() override;
-	bool IsOverlayVisible() const override { return settings.ShowHowToUseMessage; }
-
-	virtual void LoadSettings(json& o_json) override;
-	virtual void SaveSettings(json& o_json) override;
-
-	virtual void RestoreDefaultSettings() override;
-
 	virtual bool SupportsVR() override { return true; }
 	virtual bool IsCore() const override { return true; }
 
 	virtual void PostPostLoad() override;
 	virtual void DataLoaded() override;
 
-	// VR Menu Overlay functions
+	virtual void LoadSettings(json& o_json) override;
+	virtual void SaveSettings(json& o_json) override;
+	virtual void RestoreDefaultSettings() override;
+
+	virtual void DrawSettings() override;
+
+	//=============================================================================
+	// OVERLAY FEATURE OVERRIDES
+	//=============================================================================
+
+	virtual void DrawOverlay() override;
+	virtual bool IsOverlayVisible() const override { return settings.ShowHowToUseMessage; }
+
+	//=============================================================================
+	// SETTINGS STRUCTURE
+	//=============================================================================
+
+	/**
+	 * @brief Configuration settings for the VR feature
+	 *
+	 * This structure contains all user-configurable settings for VR functionality,
+	 * including performance optimizations, overlay positioning, input mapping, and
+	 * visual customization options. Settings are automatically validated and clamped
+	 * to valid ranges when loaded or modified.
+	 */
+	struct Settings
+	{
+		// Performance optimization settings
+		bool EnableDepthBufferCulling = true;  ///< Enable depth buffer culling for VR performance
+		float MinOccludeeBoxExtent = 10.0f;    ///< Minimum bounding box size for occlusion culling
+
+		// VR Menu Overlay positioning settings
+		float VRMenuScale = Config::kDefaultMenuScale;  ///< Scale factor for overlay UI (0.5-2.0)
+		int VRMenuPositioningMethod = 0;                ///< 0 = HMD relative, 1 = Fixed world position
+
+		/**
+		 * @brief Defines how overlays are attached and positioned in VR space
+		 */
+		enum class OverlayAttachMode
+		{
+			HMDOnly = 0,         ///< Overlay attached to HMD only
+			ControllerOnly = 1,  ///< Overlay attached to controller only
+			Both = 2             ///< Overlay can be attached to both HMD and controller
+		};
+		OverlayAttachMode attachMode = OverlayAttachMode::HMDOnly;              ///< Current overlay attachment mode
+		ControllerDevice VRMenuAttachController = ControllerDevice::Secondary;  ///< Which controller to attach overlay to
+
+		// HMD overlay offset settings (in meters)
+		float VRMenuOffsetX = Config::kDefaultHMDOffsetX;  ///< Horizontal offset from HMD
+		float VRMenuOffsetY = Config::kDefaultHMDOffsetY;  ///< Vertical offset from HMD
+		float VRMenuOffsetZ = Config::kDefaultHMDOffsetZ;  ///< Depth offset from HMD
+
+		// Controller overlay offset settings (in meters)
+		float VRMenuControllerOffsetX = Config::kDefaultControllerOffsetX;  ///< Horizontal offset from controller
+		float VRMenuControllerOffsetY = Config::kDefaultControllerOffsetY;  ///< Vertical offset from controller
+		float VRMenuControllerOffsetZ = Config::kDefaultControllerOffsetZ;  ///< Depth offset from controller
+
+		// Input and interaction settings
+		bool VRMenuControllerDiagnosticsTestMode = false;     ///< Enable controller diagnostics mode
+		float mouseDeadzone = Config::kDefaultMouseDeadzone;  ///< Thumbstick deadzone for mouse input (0.0-1.0)
+		float mouseSpeed = Config::kDefaultMouseSpeed;        ///< Mouse speed multiplier (0.1-50.0)
+
+		// Visual customization
+		std::array<float, 4> dragHighlightColor = { 1.0f, 1.0f, 0.0f, 0.3f };  ///< RGBA color for drag highlight
+
+		// Key binding configurations
+		std::vector<ButtonCombo> VRMenuOpenKeys = { ///< Button combos to open VR menu
+			ButtonCombo::Secondary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kXA)),
+			ButtonCombo::Secondary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kBY))
+		};
+		std::vector<ButtonCombo> VRMenuCloseKeys = { ///< Button combos to close VR menu
+			ButtonCombo::Both(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kGrip))
+		};
+		std::vector<ButtonCombo> VROverlayOpenKeys = { ///< Button combos to open VR overlay
+			ButtonCombo::Secondary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
+		};
+		std::vector<ButtonCombo> VROverlayCloseKeys = { ///< Button combos to close VR overlay
+			ButtonCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
+		};
+
+		// General interaction settings
+		float comboTimeout = Config::kDefaultComboTimeout;  ///< Timeout for button combo sequences (1.0-10.0 seconds)
+		bool ShowHowToUseMessage = true;                    ///< Show instructional overlay messages
+		bool EnableDragToReposition = true;                 ///< Allow drag-and-drop overlay repositioning
+
+		/**
+		 * @brief Validates if the current menu scale is within acceptable range
+		 * @return true if scale is between kMinMenuScale and kMaxMenuScale
+		 */
+		bool IsMenuScaleValid() const
+		{
+			return VRMenuScale >= Config::kMinMenuScale && VRMenuScale <= Config::kMaxMenuScale;
+		}
+
+		/**
+		 * @brief Validates if the current attach mode is valid
+		 * @return true if attach mode is within valid enum range
+		 */
+		bool IsAttachModeValid() const
+		{
+			return attachMode >= OverlayAttachMode::HMDOnly && attachMode <= OverlayAttachMode::Both;
+		}
+
+		/**
+		 * @brief Clamps all settings to their valid ranges
+		 *
+		 * This method ensures all numeric settings are within acceptable bounds,
+		 * automatically correcting any out-of-range values that might have been
+		 * loaded from configuration files or set programmatically.
+		 */
+		void ClampToValidRanges()
+		{
+			VRMenuScale = std::clamp(VRMenuScale, Config::kMinMenuScale, Config::kMaxMenuScale);
+			mouseDeadzone = std::clamp(mouseDeadzone, 0.0f, 1.0f);
+			mouseSpeed = std::clamp(mouseSpeed, 0.1f, 50.0f);
+			comboTimeout = std::clamp(comboTimeout, 1.0f, 10.0f);
+		}
+	};
+
+	Settings settings;  ///< Current VR configuration settings
+
+	//=============================================================================
+	// VR-SPECIFIC PUBLIC API
+	//=============================================================================
+
 	void UpdateVROverlayPosition();
 	void UpdateVROverlayControllerPosition();
 
-private:
-	vr::HmdMatrix34_t ComputeOverlayTransformFromHMD();
-
-public:
-	// VR input processing (event loop)
 	void ProcessVREvents(std::vector<Menu::KeyEvent>& vrEvents);
-	// Overlay/menu open/close logic based on controller input state
 	void UpdateOverlayMenuStateFromInput();
-	// VR input processing
 	void ProcessVRButtonEvent(const Menu::KeyEvent& event);
 	void UpdateControllerState(const Menu::KeyEvent& event);
-	// Converts VR controller thumbstick input to ImGui mouse and scroll events for the overlay UI
 	void ProcessControllerInputForImGui();
 
-public:
-	// Overlay handles and D3D11 textures
+	void EnsureOverlayInitialized();
+	void DestroyOverlay();
+	void RecreateOverlayTexturesIfNeeded();
+	void SubmitOverlayFrame();
+
+	/**
+	 * @brief Context for rendering VR overlays with render target management
+	 */
+	struct OverlayRenderContext
+	{
+		vr::IVROverlay* gameOverlay;
+		vr::IVROverlay* cleanOverlay;
+		RE::BSOpenVR* openvr;
+		ID3D11RenderTargetView* oldRTV = nullptr;
+		float clearColor[4] = { 0, 0, 0, 0 };
+
+		bool IsValid() const
+		{
+			return gameOverlay && cleanOverlay && openvr && openvr->vrSystem;
+		}
+
+		void SaveRenderTarget()
+		{
+			globals::d3d::context->OMGetRenderTargets(1, &oldRTV, nullptr);
+		}
+
+		void RestoreRenderTarget()
+		{
+			globals::d3d::context->OMSetRenderTargets(1, &oldRTV, nullptr);
+			if (oldRTV) {
+				oldRTV->Release();
+				oldRTV = nullptr;
+			}
+		}
+
+		void RenderToTexture(ID3D11RenderTargetView* targetRTV)
+		{
+			globals::d3d::context->OMSetRenderTargets(1, &targetRTV, nullptr);
+			globals::d3d::context->ClearRenderTargetView(targetRTV, clearColor);
+			ImGui::Render();
+			ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+		}
+	};
+
+	void SubmitHMDOverlay(OverlayRenderContext& context);
+	void SubmitControllerOverlay(OverlayRenderContext& context);
+	void HideAllOverlays(vr::IVROverlay* gameOverlay);
+
+	void UpdateOverlayDrag();
+	void SetFixedOverlayToCurrentHMD();
+	bool ShouldHighlightOverlayWindow() const { return overlayDragState.dragging; }
+
+	//=============================================================================
+	// PUBLIC MEMBER VARIABLES
+	//=============================================================================
+
+	// OpenVR overlay handles and DirectX 11 rendering resources
 	vr::VROverlayHandle_t menuOverlayHandle = vr::k_ulOverlayHandleInvalid;
 	vr::VROverlayHandle_t menuControllerOverlayHandle = vr::k_ulOverlayHandleInvalid;
 	ID3D11Texture2D* menuTexture = nullptr;
@@ -168,19 +476,11 @@ public:
 	ID3D11Texture2D* menuControllerTexture = nullptr;
 	ID3D11RenderTargetView* menuControllerRTV = nullptr;
 
-	void EnsureOverlayInitialized();
-	void DestroyOverlay();
-	void RecreateOverlayTexturesIfNeeded();
-	void SubmitOverlayFrame();
-
-private:
-	void CleanupOverlayTextures();
-
-public:
+	// Engine hook integration points
 	bool* gDepthBufferCulling = nullptr;
 	float* gMinOccludeeBoxExtent = nullptr;
 
-	// VR controller event log struct and vector
+	// VR Controller state and logging
 	struct VRControllerEventLog
 	{
 		int device;
@@ -191,35 +491,30 @@ public:
 		std::string heldSource;
 		float thumbstickX = 0.0f;
 		float thumbstickY = 0.0f;
-		std::string controllerRole;  // For thumbstick events, keyCode/value are replaced by x/y floats
+		std::string controllerRole;
 	};
+
 	std::vector<VRControllerEventLog> vrControllerEventLog;
 	RE::VRControllerState primaryControllerState;
 	RE::VRControllerState secondaryControllerState;
-
-	// Handedness tracking for cache invalidation
 	bool lastKnownLeftHandedMode = false;
 
-	// Non-persistent fixed world overlay position (session only)
 	struct OverlayWorldPosition
 	{
-		Matrix m = Matrix::Identity;  // 3x4 matrix (rotation + translation)
+		Matrix m = Matrix::Identity;
 	} fixedWorldOverlayPosition;
 
-	// Drag state for overlay manipulation
 	struct OverlayDragState
 	{
 		bool dragging = false;
 		vr::TrackedDeviceIndex_t controllerIndex = vr::k_unTrackedDeviceIndexInvalid;
 		bool isPrimary = false;
 		bool isSecondary = false;
-		// For fixed world drag
 		Matrix initialControllerMatrix = Matrix::Identity;
 		Matrix initialOverlayMatrix = Matrix::Identity;
-		Matrix grabOffset = Matrix::Identity;  // overlay^-1 * controller at grab
-		bool intersecting = false;             // True if any controller is currently intersecting the overlay
+		Matrix grabOffset = Matrix::Identity;
+		bool intersecting = false;
 
-		// For HMD/controller overlay drag
 		enum class DragMode
 		{
 			None,
@@ -227,18 +522,12 @@ public:
 			HMD,
 			Controller
 		} mode = DragMode::None;
-		// For HMD overlay drag
+
 		Vector3 initialHMDOffset = Vector3::Zero;
-		// For controller overlay drag
 		Vector3 initialControllerOffset = Vector3::Zero;
-
-		// For refactored drag logic
 		Matrix startControllerMatrix = Matrix::Identity;
-	};
+	} overlayDragState;
 
-	OverlayDragState overlayDragState;
-
-	// VR combo sequence tracking
 	struct ComboSequence
 	{
 		std::vector<uint32_t> sequence;
@@ -249,7 +538,6 @@ public:
 	ComboSequence menuOpenCombo;
 	ComboSequence menuCloseCombo;
 
-	// Combo recording state
 	enum class ComboType
 	{
 		None,
@@ -264,14 +552,12 @@ public:
 	const char* currentComboName = nullptr;
 	std::vector<ButtonCombo> recordedCombo;
 	double comboStartTime = 0.0;
-	double comboTimeout = 3.0;  // 3 second timeout
+	double comboTimeout = 3.0;
 
-	void UpdateOverlayDrag();
-	void SetFixedOverlayToCurrentHMD();
+private:
+	//=============================================================================
+	// PRIVATE IMPLEMENTATION
+	//=============================================================================
 
-	// Returns true if the overlay window should be highlighted (dragging in any mode)
-	bool ShouldHighlightOverlayWindow() const
-	{
-		return overlayDragState.dragging;
-	}
+	void CleanupOverlayTextures();
 };

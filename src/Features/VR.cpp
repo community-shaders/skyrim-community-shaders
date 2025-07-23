@@ -23,37 +23,6 @@ using AttachMode = VR::Settings::OverlayAttachMode;
 constexpr int kOverlayWidth = 1920;
 constexpr int kOverlayHeight = 1080;
 
-// Helper function to get controller index for our ControllerDevice enum
-vr::TrackedDeviceIndex_t GetControllerIndexForDevice(ControllerDevice device)
-{
-	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
-	auto* system = openvr ? openvr->vrSystem : nullptr;
-	if (!system)
-		return vr::k_unTrackedDeviceIndexInvalid;
-
-	// Determine the OpenVR role based on handedness and our device enum
-	vr::ETrackedControllerRole targetRole;
-	bool isLeftHanded = VR::GetSingleton()->lastKnownLeftHandedMode;  // Use cached handedness
-
-	if (device == ControllerDevice::Primary) {
-		// Primary controller = dominant hand
-		targetRole = isLeftHanded ? vr::ETrackedControllerRole::TrackedControllerRole_LeftHand : vr::ETrackedControllerRole::TrackedControllerRole_RightHand;
-	} else {
-		// Secondary controller = non-dominant hand
-		targetRole = isLeftHanded ? vr::ETrackedControllerRole::TrackedControllerRole_RightHand : vr::ETrackedControllerRole::TrackedControllerRole_LeftHand;
-	}
-
-	// Find controller with the target role
-	for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; ++i) {
-		if (system->GetTrackedDeviceClass(i) == vr::TrackedDeviceClass_Controller) {
-			if (system->GetControllerRoleForTrackedDeviceIndex(i) == targetRole) {
-				return i;
-			}
-		}
-	}
-	return vr::k_unTrackedDeviceIndexInvalid;
-}
-
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VR::Settings,
 	EnableDepthBufferCulling,
@@ -79,29 +48,47 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EnableDragToReposition,
 	ShowHowToUseMessage)
 
-vr::HmdMatrix34_t VR::ComputeOverlayTransformFromHMD()
+//=============================================================================
+// FEATURE BASE CLASS OVERRIDES
+//=============================================================================
+
+void VR::LoadSettings(json& o_json)
 {
-	vr::HmdMatrix34_t transform = {};
-	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
-	if (openvr) {
-		auto* system = openvr->vrSystem;
-		if (system) {
-			vr::TrackedDevicePose_t hmdPose;
-			system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &hmdPose, 1);
-			if (hmdPose.bPoseIsValid) {
-				float offsetX = settings.VRMenuOffsetX;
-				float offsetY = settings.VRMenuOffsetY;
-				float offsetZ = settings.VRMenuOffsetZ;
-				transform = hmdPose.mDeviceToAbsoluteTracking;
-				// Apply HMD overlay offsets (in HMD local space)
-				transform.m[0][3] += transform.m[0][0] * offsetX + transform.m[0][1] * offsetY + transform.m[0][2] * offsetZ;
-				transform.m[1][3] += transform.m[1][0] * offsetX + transform.m[1][1] * offsetY + transform.m[1][2] * offsetZ;
-				transform.m[2][3] += transform.m[2][0] * offsetX + transform.m[2][1] * offsetY + transform.m[2][2] * offsetZ;
-			}
-		}
-	}
-	return transform;
+	settings = o_json.get<Settings>();
+	// Validate and clamp loaded settings to ensure they're within valid ranges
+	settings.ClampToValidRanges();
 }
+
+void VR::SaveSettings(json& o_json)
+{
+	o_json = settings;
+}
+
+void VR::RestoreDefaultSettings()
+{
+	settings = {};
+}
+
+void VR::PostPostLoad()
+{
+	gDepthBufferCulling = reinterpret_cast<bool*>(REL::Offset(0x1EC6B88).address());
+	gMinOccludeeBoxExtent = reinterpret_cast<float*>(REL::Offset(0x1ED64E8).address());
+
+	// Patches BSGeometry::CopyTransformAndBounds to copy the model-bound translation across correctly instead of overwriting it with the bounding sphere centre
+	REL::safe_write(REL::RelocationID(0, 0, 69528).address() + REL::Relocate(0, 0, 0xD9) + 0x2, 0x148);
+	REL::safe_write(REL::RelocationID(0, 0, 69528).address() + REL::Relocate(0, 0, 0xE5) + 0x2, 0x14C);
+	REL::safe_write(REL::RelocationID(0, 0, 69528).address() + REL::Relocate(0, 0, 0xF1) + 0x2, 0x150);
+}
+
+void VR::DataLoaded()
+{
+	*gDepthBufferCulling = settings.EnableDepthBufferCulling;
+	*gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
+}
+
+//=============================================================================
+// OVERLAY FEATURE OVERRIDES
+//=============================================================================
 
 void VR::DrawOverlay()
 {
@@ -139,19 +126,7 @@ void VR::DrawOverlay()
 	ImGui::SetNextWindowPos(overlayPos, ImGuiCond_Always);
 	ImGui::SetNextWindowSize(overlaySize, ImGuiCond_Always);
 	ImGui::SetNextWindowBgAlpha(0.92f);
-	// Helper for button color
-	auto GetButtonColor = [](ControllerDevice device) -> ImVec4 {
-		switch (device) {
-		case ControllerDevice::Primary:
-			return ImVec4(0.0f, 1.0f, 0.0f, 1.0f);  // Green
-		case ControllerDevice::Secondary:
-			return ImVec4(0.0f, 0.6f, 1.0f, 1.0f);  // Blue
-		case ControllerDevice::Both:
-			return ImVec4(0.5f, 0.0f, 0.5f, 1.0f);  // Purple
-		default:
-			return ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-		}
-	};
+
 	ImGui::Begin("HowToUseOverlay", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
 	ImGui::Text("How to Use VR Community Shaders Menu:");
 	ImGui::Separator();
@@ -243,19 +218,6 @@ void VR::DrawSettings()
 					return "Unknown";
 				}
 			};
-			// Helper for button color
-			auto GetButtonColor = [](ControllerDevice device) -> ImVec4 {
-				switch (device) {
-				case ControllerDevice::Primary:
-					return ImVec4(0.0f, 1.0f, 0.0f, 1.0f);  // Green
-				case ControllerDevice::Secondary:
-					return ImVec4(0.0f, 0.6f, 1.0f, 1.0f);  // Blue
-				case ControllerDevice::Both:
-					return ImVec4(1.0f, 0.65f, 0.0f, 1.0f);  // Orange
-				default:
-					return ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-				}
-			};
 
 			ImGui::Text("Recording combo for: %s", this->currentComboName ? this->currentComboName : "Unknown");
 			ImGui::Spacing();
@@ -266,14 +228,9 @@ void VR::DrawSettings()
 
 			// Show countdown timer with color
 			double remainingTime = this->comboTimeout - (Util::GetNowSecs() - this->comboStartTime);
-			ImVec4 timerColor;
-			if (remainingTime > 2.0) {
-				timerColor = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);  // Green
-			} else if (remainingTime > 1.0) {
-				timerColor = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);  // Yellow
-			} else {
-				timerColor = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);  // Red
-			}
+			ImVec4 timerColor = remainingTime > 2.0 ? Util::Colors::GetTimerGood() :
+			                    remainingTime > 1.0 ? Util::Colors::GetTimerWarning() :
+			                                          Util::Colors::GetTimerCritical();
 			ImGui::TextColored(timerColor, "Time remaining: %.1f seconds", remainingTime);
 
 			ImGui::Spacing();
@@ -497,7 +454,7 @@ namespace
 		auto vr = VR::GetSingleton();
 		VR::Settings& settings = vr->settings;
 		if (ImGui::CollapsingHeader("Menu Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::SliderFloat("Menu Scale", &settings.VRMenuScale, 0.5f, 2.0f, "%.2f");
+			ImGui::SliderFloat("Menu Scale", &settings.VRMenuScale, VR::Config::kMinMenuScale, VR::Config::kMaxMenuScale, "%.2f");
 			const char* positioningMethods[] = { "HMD Relative", "Fixed World Position" };
 			ImGui::Combo("Menu Positioning Method", &settings.VRMenuPositioningMethod, positioningMethods, IM_ARRAYSIZE(positioningMethods));
 			const char* attachModes[] = { "HMD Only", "Controller Only", "Both" };
@@ -539,8 +496,8 @@ namespace
 		auto vr = VR::GetSingleton();
 		VR::Settings& settings = vr->settings;
 		if (ImGui::CollapsingHeader("Mouse Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::SliderFloat("Mouse Deadzone", &settings.mouseDeadzone, 0.0f, 0.5f, "%.2f");
-			ImGui::SliderFloat("Mouse Speed", &settings.mouseSpeed, 0.1f, 20.0f, "%.2f");
+			ImGui::SliderFloat("Mouse Deadzone", &settings.mouseDeadzone, 0.0f, 1.0f, "%.2f");
+			ImGui::SliderFloat("Mouse Speed", &settings.mouseSpeed, 0.1f, 50.0f, "%.2f");
 		}
 	}
 
@@ -989,60 +946,19 @@ namespace
 	}
 }  // namespace
 
-void VR::LoadSettings(json& o_json)
-{
-	settings = o_json.get<Settings>();
-}
-
-void VR::SaveSettings(json& o_json)
-{
-	o_json = settings;
-}
-
-void VR::RestoreDefaultSettings()
-{
-	settings = {};
-}
-
-void VR::PostPostLoad()
-{
-	gDepthBufferCulling = reinterpret_cast<bool*>(REL::Offset(0x1EC6B88).address());
-	gMinOccludeeBoxExtent = reinterpret_cast<float*>(REL::Offset(0x1ED64E8).address());
-
-	// Patches BSGeometry::CopyTransformAndBounds to copy the model-bound translation across correctly instead of overwriting it with the bounding sphere centre
-	REL::safe_write(REL::RelocationID(0, 0, 69528).address() + REL::Relocate(0, 0, 0xD9) + 0x2, 0x148);
-	REL::safe_write(REL::RelocationID(0, 0, 69528).address() + REL::Relocate(0, 0, 0xE5) + 0x2, 0x14C);
-	REL::safe_write(REL::RelocationID(0, 0, 69528).address() + REL::Relocate(0, 0, 0xF1) + 0x2, 0x150);
-}
-
-void VR::DataLoaded()
-{
-	*gDepthBufferCulling = settings.EnableDepthBufferCulling;
-	*gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
-}
-
-void SetOverlayInputFlags(vr::IVROverlay* overlay, vr::VROverlayHandle_t handle)
-{
-	overlay->SetOverlayFlag(handle, vr::VROverlayFlags_SendVRScrollEvents, true);
-	overlay->SetOverlayFlag(handle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
-	overlay->SetOverlayFlag(handle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
-	overlay->SetOverlayFlag(handle, vr::VROverlayFlags_VisibleInDashboard, true);
-}
+//=============================================================================
+// VR-SPECIFIC PUBLIC API
+//=============================================================================
 
 void VR::UpdateVROverlayPosition()
 {
-	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
-	auto* system = openvr ? openvr->vrSystem : nullptr;
-	if (!system)
+	Util::OpenVRContext ctx;
+	if (!ctx.HasOverlay())
 		return;
 
 	if (menuOverlayHandle == vr::k_ulOverlayHandleInvalid) {
 		return;
 	}
-
-	auto* overlay = openvr ? RE::BSOpenVR::GetIVROverlayFromContext(&openvr->vrContext) : nullptr;
-	if (!overlay)
-		return;
 
 	// Determine positioning strategy based on settings
 	bool showOnController = (settings.attachMode == AttachMode::ControllerOnly || settings.attachMode == AttachMode::Both);
@@ -1066,7 +982,7 @@ void VR::UpdateVROverlayPosition()
 		if (settings.VRMenuPositioningMethod == 0) {
 			// HMD Relative positioning
 			vr::TrackedDevicePose_t hmdPose;
-			system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &hmdPose, 1);
+			ctx.system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &hmdPose, 1);
 
 			if (hmdPose.bPoseIsValid) {
 				// Calculate position in front of HMD using offsets directly
@@ -1117,9 +1033,9 @@ void VR::UpdateVROverlayPosition()
 				hmdTransform.m[0][0] *= overlayWidth;
 				hmdTransform.m[1][1] *= overlayHeight;
 
-				SetOverlayInputFlags(overlay, menuOverlayHandle);
-				overlay->SetOverlayTransformAbsolute(menuOverlayHandle, vr::TrackingUniverseStanding, &hmdTransform);
-				overlay->SetOverlayWidthInMeters(menuOverlayHandle, baseWidth * settings.VRMenuScale);
+				Util::SetOverlayInputFlags(ctx.overlay, menuOverlayHandle);
+				ctx.overlay->SetOverlayTransformAbsolute(menuOverlayHandle, vr::TrackingUniverseStanding, &hmdTransform);
+				ctx.overlay->SetOverlayWidthInMeters(menuOverlayHandle, baseWidth * settings.VRMenuScale);
 
 			} else {
 				logger::debug("HMD pose invalid, falling back to fixed positioning");
@@ -1140,9 +1056,9 @@ void VR::UpdateVROverlayPosition()
 			fixedTransform.m[0][0] *= overlayWidth;
 			fixedTransform.m[1][1] *= overlayHeight;
 
-			SetOverlayInputFlags(overlay, menuOverlayHandle);
-			overlay->SetOverlayTransformAbsolute(menuOverlayHandle, vr::TrackingUniverseStanding, &fixedTransform);
-			overlay->SetOverlayWidthInMeters(menuOverlayHandle, baseWidth * settings.VRMenuScale);
+			Util::SetOverlayInputFlags(ctx.overlay, menuOverlayHandle);
+			ctx.overlay->SetOverlayTransformAbsolute(menuOverlayHandle, vr::TrackingUniverseStanding, &fixedTransform);
+			ctx.overlay->SetOverlayWidthInMeters(menuOverlayHandle, baseWidth * settings.VRMenuScale);
 		}
 	}
 
@@ -1154,54 +1070,42 @@ void VR::UpdateVROverlayPosition()
 		}
 
 		// Attach to controller
-		vr::TrackedDeviceIndex_t controllerIndex = GetControllerIndexForDevice(settings.VRMenuAttachController);
+		vr::TrackedDeviceIndex_t controllerIndex = Util::GetControllerIndexForDevice(settings.VRMenuAttachController, lastKnownLeftHandedMode);
 
 		if (controllerIndex != vr::k_unTrackedDeviceIndexInvalid) {
 			// Position relative to controller using offset settings
-			vr::HmdMatrix34_t transform;
-			transform.m[0][0] = overlayWidth;
-			transform.m[0][1] = 0.0f;
-			transform.m[0][2] = 0.0f;
-			transform.m[0][3] = settings.VRMenuControllerOffsetX;
-			transform.m[1][0] = 0.0f;
-			transform.m[1][1] = overlayHeight;
-			transform.m[1][2] = 0.0f;
-			transform.m[1][3] = settings.VRMenuControllerOffsetY;
-			transform.m[2][0] = 0.0f;
-			transform.m[2][1] = 0.0f;
-			transform.m[2][2] = 1.0f;
-			transform.m[2][3] = settings.VRMenuControllerOffsetZ;
+			vr::HmdMatrix34_t transform = Util::CreateControllerOverlayTransform(
+				settings.VRMenuControllerOffsetX,
+				settings.VRMenuControllerOffsetY,
+				settings.VRMenuControllerOffsetZ,
+				overlayWidth,
+				overlayHeight);
 
-			SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
-			overlay->SetOverlayTransformTrackedDeviceRelative(menuControllerOverlayHandle, controllerIndex, &transform);
+			Util::SetOverlayInputFlags(ctx.overlay, menuControllerOverlayHandle);
+			ctx.overlay->SetOverlayTransformTrackedDeviceRelative(menuControllerOverlayHandle, controllerIndex, &transform);
 
 			// Update the overlay width to match the calculated size
-			overlay->SetOverlayWidthInMeters(menuControllerOverlayHandle, overlayWidth);
+			ctx.overlay->SetOverlayWidthInMeters(menuControllerOverlayHandle, overlayWidth);
 
 			// Update controller overlay flags for input interaction
-			SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
+			Util::SetOverlayInputFlags(ctx.overlay, menuControllerOverlayHandle);
 		}
 	}
 
 	// Update overlay flags for input interaction
-	SetOverlayInputFlags(overlay, menuOverlayHandle);
+	Util::SetOverlayInputFlags(ctx.overlay, menuOverlayHandle);
 }
 
 void VR::UpdateVROverlayControllerPosition()
 {
-	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
-	auto* system = openvr ? openvr->vrSystem : nullptr;
-	if (!system)
+	Util::OpenVRContext ctx;
+	if (!ctx.HasOverlay())
 		return;
 
 	// Get the VR controller overlay handle from Menu.cpp
 	if (menuControllerOverlayHandle == vr::k_ulOverlayHandleInvalid) {
 		return;
 	}
-
-	auto* overlay = openvr ? RE::BSOpenVR::GetIVROverlayFromContext(&openvr->vrContext) : nullptr;
-	if (!overlay)
-		return;
 
 	// Texture size based on preset
 	float aspect = static_cast<float>(kOverlayHeight) / kOverlayWidth;
@@ -1210,37 +1114,28 @@ void VR::UpdateVROverlayControllerPosition()
 	float overlayHeight = overlayWidth * aspect;
 
 	// Find the appropriate controller for the controller overlay
-	vr::TrackedDeviceIndex_t controllerIndex = GetControllerIndexForDevice(settings.VRMenuAttachController);
+	vr::TrackedDeviceIndex_t controllerIndex = Util::GetControllerIndexForDevice(settings.VRMenuAttachController, lastKnownLeftHandedMode);
 	if (controllerIndex == vr::k_unTrackedDeviceIndexInvalid) {
-		overlay->HideOverlay(menuControllerOverlayHandle);
+		ctx.overlay->HideOverlay(menuControllerOverlayHandle);
 		return;
 	}
 
 	// Position relative to controller using offset settings
-	vr::HmdMatrix34_t transform;
-	float offsetX = settings.VRMenuControllerOffsetX;
-	float offsetY = settings.VRMenuControllerOffsetY;
-	transform.m[0][0] = overlayWidth;
-	transform.m[0][1] = 0.0f;
-	transform.m[0][2] = 0.0f;
-	transform.m[0][3] = offsetX;
-	transform.m[1][0] = 0.0f;
-	transform.m[1][1] = overlayHeight;
-	transform.m[1][2] = 0.0f;
-	transform.m[1][3] = offsetY;
-	transform.m[2][0] = 0.0f;
-	transform.m[2][1] = 0.0f;
-	transform.m[2][2] = 1.0f;
-	transform.m[2][3] = settings.VRMenuControllerOffsetZ;
+	vr::HmdMatrix34_t transform = Util::CreateControllerOverlayTransform(
+		settings.VRMenuControllerOffsetX,
+		settings.VRMenuControllerOffsetY,
+		settings.VRMenuControllerOffsetZ,
+		overlayWidth,
+		overlayHeight);
 
-	SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
-	overlay->SetOverlayTransformTrackedDeviceRelative(menuControllerOverlayHandle, controllerIndex, &transform);
+	Util::SetOverlayInputFlags(ctx.overlay, menuControllerOverlayHandle);
+	ctx.overlay->SetOverlayTransformTrackedDeviceRelative(menuControllerOverlayHandle, controllerIndex, &transform);
 
 	// Update the overlay width to match the calculated size
-	overlay->SetOverlayWidthInMeters(menuControllerOverlayHandle, overlayWidth);
+	ctx.overlay->SetOverlayWidthInMeters(menuControllerOverlayHandle, overlayWidth);
 
 	// Update controller overlay flags for input interaction
-	SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
+	Util::SetOverlayInputFlags(ctx.overlay, menuControllerOverlayHandle);
 }
 
 // Add overlay management methods for VR menu overlays
@@ -1276,7 +1171,7 @@ void VR::EnsureOverlayInitialized()
 	vr::EVROverlayError err = overlay->CreateOverlay(key.c_str(), name.c_str(), &menuOverlayHandle);
 	if (err == vr::VROverlayError_None) {
 		logger::info("CreateOverlay succeeded for menuOverlayHandle: 0x{:X}", menuOverlayHandle);
-		SetOverlayInputFlags(overlay, menuOverlayHandle);
+		Util::SetOverlayInputFlags(overlay, menuOverlayHandle);
 		overlay->SetOverlayWidthInMeters(menuOverlayHandle, 1.0f);
 	} else {
 		logger::error("CreateOverlay failed: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
@@ -1288,12 +1183,16 @@ void VR::EnsureOverlayInitialized()
 	if (err == vr::VROverlayError_None) {
 		logger::info("CreateOverlay succeeded for menuControllerOverlayHandle: 0x{:X}", menuControllerOverlayHandle);
 		Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, &menuControllerTexture, &menuControllerRTV);
-		SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
+		Util::SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
 		overlay->SetOverlayWidthInMeters(menuControllerOverlayHandle, 1.0f);
 	} else {
 		logger::error("CreateOverlay failed: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
 	}
 }
+
+//=============================================================================
+// PRIVATE IMPLEMENTATION
+//=============================================================================
 
 void VR::CleanupOverlayTextures()
 {
@@ -1394,7 +1293,7 @@ void VR::SubmitOverlayFrame()
 		UpdateVROverlayPosition();
 		vr::Texture_t tex = { menuTexture, vr::TextureType_DirectX, vr::ColorSpace_Auto };
 		if (settings.attachMode == AttachMode::HMDOnly || settings.attachMode == AttachMode::Both) {
-			SetOverlayInputFlags(gameOverlay, menuOverlayHandle);
+			Util::SetOverlayInputFlags(gameOverlay, menuOverlayHandle);
 			vr::EVROverlayError err = cleanOverlay->SetOverlayTexture(menuOverlayHandle, &tex);
 			if (err != vr::VROverlayError_None) {
 				logger::error("SetOverlayTexture failed for menu overlay: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
@@ -1425,7 +1324,7 @@ void VR::SubmitOverlayFrame()
 			UpdateVROverlayControllerPosition();
 
 			vr::Texture_t controllerTex = { menuControllerTexture, vr::TextureType_DirectX, vr::ColorSpace_Auto };
-			SetOverlayInputFlags(gameOverlay, menuControllerOverlayHandle);
+			Util::SetOverlayInputFlags(gameOverlay, menuControllerOverlayHandle);
 			vr::EVROverlayError err = cleanOverlay->SetOverlayTexture(menuControllerOverlayHandle, &controllerTex);
 			if (err != vr::VROverlayError_None) {
 				logger::error("SetOverlayTexture failed for controller overlay: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
@@ -1824,22 +1723,6 @@ void VR::ProcessControllerInputForImGui()
 }
 
 // Helper: Get controller world matrix from OpenVR pose
-bool GetControllerWorldMatrix(vr::TrackedDeviceIndex_t index, float out[3][4])
-{
-	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
-	auto* system = openvr ? openvr->vrSystem : nullptr;
-	if (!system)
-		return false;
-	vr::TrackedDevicePose_t poses[vr::k_unMaxTrackedDeviceCount];
-	system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, poses, vr::k_unMaxTrackedDeviceCount);
-	if (!poses[index].bPoseIsValid)
-		return false;
-	for (int i = 0; i < 3; ++i)
-		for (int j = 0; j < 4; ++j)
-			out[i][j] = poses[index].mDeviceToAbsoluteTracking.m[i][j];
-	return true;
-}
-
 // --- File-scope static helpers for drag logic ---
 static bool CanStartAny(vr::ETrackedControllerRole role)
 {
@@ -1911,7 +1794,7 @@ void VR::UpdateOverlayDrag()
 			true,
 			[&](vr::ETrackedControllerRole role) {
 				// Get the attached controller index
-				vr::TrackedDeviceIndex_t attachedControllerIndex = GetControllerIndexForDevice(settings.VRMenuAttachController);
+				vr::TrackedDeviceIndex_t attachedControllerIndex = Util::GetControllerIndexForDevice(settings.VRMenuAttachController, lastKnownLeftHandedMode);
 				if (attachedControllerIndex == vr::k_unTrackedDeviceIndexInvalid) {
 					return false;  // No attached controller found
 				}
@@ -1920,7 +1803,7 @@ void VR::UpdateOverlayDrag()
 				ControllerDevice oppositeDevice = (settings.VRMenuAttachController == ControllerDevice::Primary) ?
 			                                          ControllerDevice::Secondary :
 			                                          ControllerDevice::Primary;
-				vr::TrackedDeviceIndex_t oppositeControllerIndex = GetControllerIndexForDevice(oppositeDevice);
+				vr::TrackedDeviceIndex_t oppositeControllerIndex = Util::GetControllerIndexForDevice(oppositeDevice, lastKnownLeftHandedMode);
 				if (oppositeControllerIndex == vr::k_unTrackedDeviceIndexInvalid) {
 					return false;  // No opposite controller found
 				}
@@ -1938,7 +1821,7 @@ void VR::UpdateOverlayDrag()
 			},
 			[&](Matrix controllerMatrix) {
 				// Get current attached controller transform to convert world deltas to local space
-				vr::TrackedDeviceIndex_t attachedControllerIndex = GetControllerIndexForDevice(settings.VRMenuAttachController);
+				vr::TrackedDeviceIndex_t attachedControllerIndex = Util::GetControllerIndexForDevice(settings.VRMenuAttachController, lastKnownLeftHandedMode);
 
 				if (attachedControllerIndex != vr::k_unTrackedDeviceIndexInvalid) {
 					vr::TrackedDevicePose_t controllerPose;
@@ -1980,7 +1863,7 @@ void VR::UpdateOverlayDrag()
 			// In "Both" mode, only the attached controller can adjust fixed world position
 			fixedWorldCanStart = [&](vr::ETrackedControllerRole role) {
 				// Find the actual attached controller using helper function
-				vr::TrackedDeviceIndex_t attachedControllerIndex = GetControllerIndexForDevice(settings.VRMenuAttachController);
+				vr::TrackedDeviceIndex_t attachedControllerIndex = Util::GetControllerIndexForDevice(settings.VRMenuAttachController, lastKnownLeftHandedMode);
 
 				if (attachedControllerIndex != vr::k_unTrackedDeviceIndexInvalid) {
 					vr::ETrackedControllerRole actualAttachedRole = system->GetControllerRoleForTrackedDeviceIndex(attachedControllerIndex);
@@ -2016,7 +1899,7 @@ void VR::UpdateOverlayDrag()
 			// In "Both" mode, only the attached controller can adjust HMD position
 			hmdCanStart = [&](vr::ETrackedControllerRole role) {
 				// Find the actual attached controller using helper function
-				vr::TrackedDeviceIndex_t attachedControllerIndex = GetControllerIndexForDevice(settings.VRMenuAttachController);
+				vr::TrackedDeviceIndex_t attachedControllerIndex = Util::GetControllerIndexForDevice(settings.VRMenuAttachController, lastKnownLeftHandedMode);
 
 				if (attachedControllerIndex != vr::k_unTrackedDeviceIndexInvalid) {
 					vr::ETrackedControllerRole actualAttachedRole = system->GetControllerRoleForTrackedDeviceIndex(attachedControllerIndex);
@@ -2067,7 +1950,7 @@ void VR::UpdateOverlayDrag()
 	// Drag update (if dragging)
 	if (overlayDragState.dragging) {
 		float rawMatrix[3][4];
-		if (GetControllerWorldMatrix(overlayDragState.controllerIndex, rawMatrix)) {
+		if (Util::GetControllerWorldMatrix(overlayDragState.controllerIndex, rawMatrix)) {
 			vr::HmdMatrix34_t mat = Util::Float3x4ToHmdMatrix34(rawMatrix);
 			Matrix controllerMatrix = Util::HmdMatrix34ToMatrix(mat);
 
@@ -2102,7 +1985,7 @@ void VR::UpdateOverlayDrag()
 			if (!gripPressed)
 				continue;
 			float rawMatrix[3][4];
-			if (!GetControllerWorldMatrix(i, rawMatrix))
+			if (!Util::GetControllerWorldMatrix(i, rawMatrix))
 				continue;
 			vr::HmdMatrix34_t mat = Util::Float3x4ToHmdMatrix34(rawMatrix);
 			Matrix controllerMatrix = Util::HmdMatrix34ToMatrix(mat);
@@ -2137,6 +2020,9 @@ void VR::UpdateOverlayDrag()
 
 void VR::SetFixedOverlayToCurrentHMD()
 {
-	vr::HmdMatrix34_t transform = ComputeOverlayTransformFromHMD();
+	vr::HmdMatrix34_t transform = Util::ComputeOverlayTransformFromHMD(
+		settings.VRMenuOffsetX,
+		settings.VRMenuOffsetY,
+		settings.VRMenuOffsetZ);
 	fixedWorldOverlayPosition.m = Util::HmdMatrix34ToMatrix(transform);
 }

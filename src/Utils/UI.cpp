@@ -376,7 +376,7 @@ namespace Util
 		hovered = ImGui::IsItemHovered();
 
 		// Draw the lines and text using Menu theme colors
-		auto& theme = Menu::GetSingleton()->GetTheme().FeatureHeading;
+		auto& theme = globals::menu->GetTheme().FeatureHeading;
 
 		// Get the color based on hover state
 		ImVec4 color = hovered ? theme.ColorHovered : theme.ColorDefault;
@@ -418,7 +418,7 @@ namespace Util
 		bool stateChanged = false;
 
 		// Use Menu theme colors for consistent styling
-		auto& theme = Menu::GetSingleton()->GetTheme().FeatureHeading;
+		auto& theme = globals::menu->GetTheme().FeatureHeading;
 		ImVec4 color = useWhiteText ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : theme.ColorDefault;
 
 		ImU32 headerColor = ImGui::GetColorU32(color);
@@ -480,7 +480,7 @@ namespace Util
 	ColorCodedValueConfig ColorCodedValueConfig::HighIsBad(float low, float med, float high)
 	{
 		ColorCodedValueConfig config;
-		const auto& theme = Menu::GetSingleton()->GetTheme().StatusPalette;
+		const auto& theme = globals::menu->GetTheme().StatusPalette;
 		config.thresholds = {
 			{ low, theme.Disable },    // Very low - gray
 			{ med, theme.InfoColor },  // Low - blue
@@ -493,7 +493,7 @@ namespace Util
 	ColorCodedValueConfig ColorCodedValueConfig::HighIsGood(float low, float med, float high)
 	{
 		ColorCodedValueConfig config;
-		const auto& theme = Menu::GetSingleton()->GetTheme().StatusPalette;
+		const auto& theme = globals::menu->GetTheme().StatusPalette;
 		config.thresholds = {
 			{ low, theme.Disable },          // Very low - gray
 			{ med, theme.InfoColor },        // Low - blue
@@ -753,6 +753,55 @@ namespace Util
 				}
 			}
 			ImGui::EndTable();
+		}
+	}
+
+	// Theme-aware color accessor functions
+	namespace Colors
+	{
+		ImVec4 GetTimerGood()
+		{
+			return globals::menu->GetTheme().StatusPalette.SuccessColor;
+		}
+
+		ImVec4 GetTimerWarning()
+		{
+			return globals::menu->GetTheme().StatusPalette.Warning;
+		}
+
+		ImVec4 GetTimerCritical()
+		{
+			return globals::menu->GetTheme().StatusPalette.Error;
+		}
+
+		ImVec4 GetDefault()
+		{
+			return globals::menu->GetTheme().Palette.Text;
+		}
+
+		ImVec4 GetSuccess()
+		{
+			return globals::menu->GetTheme().StatusPalette.SuccessColor;
+		}
+
+		ImVec4 GetWarning()
+		{
+			return globals::menu->GetTheme().StatusPalette.Warning;
+		}
+
+		ImVec4 GetError()
+		{
+			return globals::menu->GetTheme().StatusPalette.Error;
+		}
+
+		ImVec4 GetInfo()
+		{
+			return globals::menu->GetTheme().StatusPalette.InfoColor;
+		}
+
+		ImVec4 GetDisabled()
+		{
+			return globals::menu->GetTheme().StatusPalette.Disable;
 		}
 	}
 }  // namespace Util
