@@ -119,6 +119,15 @@ namespace globals
 		extern REL::Relocation<RE::BSGraphics::BSShaderAccumulator**> currentAccumulator;
 	}
 
+	namespace rtti
+	{
+		extern REL::Relocation<const RE::NiRTTI*> NiIntegerExtraDataRTTI;
+		extern REL::Relocation<const RE::NiRTTI*> BSLightingShaderPropertyRTTI;
+		extern REL::Relocation<const RE::NiRTTI*> BSEffectShaderPropertyRTTI;
+		extern REL::Relocation<const RE::NiRTTI*> NiParticleSystemRTTI;
+		extern REL::Relocation<const RE::NiRTTI*> NiBillboardNodeRTTI;
+	}
+
 	extern State* state;
 	extern Deferred* deferred;
 	extern TruePBR* truePBR;

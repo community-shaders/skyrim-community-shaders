@@ -493,14 +493,14 @@ LightLimitFix::ParticleLightReference LightLimitFix::GetParticleLightConfigs(RE:
 
 	// see https://www.nexusmods.com/skyrimspecialedition/articles/1391
 	if (settings.EnableParticleLights) {
-		if (auto shaderProperty = netimmerse_cast<RE::BSEffectShaderProperty*>(a_pass->shaderProperty)) {
+		if (auto shaderProperty = a_pass->shaderProperty->GetRTTI() == globals::rtti::BSEffectShaderPropertyRTTI.get() ? static_cast<RE::BSEffectShaderProperty*>(a_pass->shaderProperty) : nullptr) {
 			if (!shaderProperty->lightData) {
 				if (auto material = shaderProperty->GetMaterial()) {
 					// Check if it's a valid particle light
 					bool billboard = false;
-					if (!netimmerse_cast<RE::NiParticleSystem*>(a_pass->geometry)) {
+					if (a_pass->geometry->GetRTTI() != globals::rtti::NiParticleSystemRTTI.get()) {
 						if (auto parent = a_pass->geometry->parent) {
-							if (auto billboardNode = netimmerse_cast<RE::NiBillboardNode*>(parent)) {
+							if (auto billboardNode = parent->GetRTTI() == globals::rtti::NiBillboardNodeRTTI.get() ? static_cast<RE::NiBillboardNode*>(parent) : nullptr) {
 								billboard = true;
 							} else {
 								return { false };
