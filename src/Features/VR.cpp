@@ -155,7 +155,6 @@ namespace
 
 void VR::DrawSettings()
 {
-	static std::unordered_map<uint32_t, ControllerDevice> recordingButtonControllers;
 	auto menu = globals::menu;
 	if (!menu)
 		return;
@@ -524,7 +523,6 @@ namespace
 	void DrawKeyBindings(VR* vr)
 	{
 		VR::Settings& settings = vr->settings;
-		static std::unordered_map<uint32_t, ControllerDevice> recordingButtonControllers;
 		// Combo Settings
 		if (ImGui::CollapsingHeader("Combo Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::SliderFloat("Combo Timeout", &settings.comboTimeout, 1.0f, 10.0f, "%.1f seconds");
@@ -556,7 +554,7 @@ namespace
 			vr->currentComboName = comboTypes[selectedComboIndex];
 			vr->recordedCombo.clear();
 			vr->comboStartTime = Util::GetNowSecs();
-			recordingButtonControllers.clear();
+			vr->recordingButtonControllers.clear();
 		}
 		ImGui::SameLine();
 		if (ImGui::SmallButton("Clear")) {
@@ -1731,17 +1729,40 @@ static bool CanStartAny(vr::ETrackedControllerRole role)
 
 void VR::UpdateOverlayDrag()
 {
-	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
-	auto* system = openvr ? openvr->vrSystem : nullptr;
-	if (!system)
-		return;
-
-	// Check if test mode is active - disable all dragging
-	if (settings.VRMenuControllerDiagnosticsTestMode) {
+	if (!CanPerformDrag()) {
 		return;
 	}
 
+	if (overlayDragState.dragging) {
+		UpdateActiveDrag();
+	} else {
+		TryStartNewDrag();
+	}
+}
+
+bool VR::CanPerformDrag()
+{
+	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
+	auto* system = openvr ? openvr->vrSystem : nullptr;
+	if (!system)
+		return false;
+
+	// Check if test mode is active - disable all dragging
+	if (settings.VRMenuControllerDiagnosticsTestMode) {
+		return false;
+	}
+
 	if (!settings.EnableDragToReposition)
+		return false;
+
+	return true;
+}
+
+void VR::UpdateActiveDrag()
+{
+	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
+	auto* system = openvr ? openvr->vrSystem : nullptr;
+	if (!system)
 		return;
 
 	// Helper to get grip state for a controller based on actual hand position
@@ -1775,13 +1796,118 @@ void VR::UpdateOverlayDrag()
 		overlayDragState.isSecondary = false;
 	};
 
+	float rawMatrix[3][4];
+	if (Util::GetControllerWorldMatrix(overlayDragState.controllerIndex, rawMatrix)) {
+		vr::HmdMatrix34_t mat = Util::Float3x4ToHmdMatrix34(rawMatrix);
+		Matrix controllerMatrix = Util::HmdMatrix34ToMatrix(mat);
+
+		// Update drag based on current mode
+		switch (overlayDragState.mode) {
+		case OverlayDragState::DragMode::Controller:
+			{
+				// Get current attached controller transform to convert world deltas to local space
+				vr::TrackedDeviceIndex_t attachedControllerIndex = Util::GetControllerIndexForDevice(settings.VRMenuAttachController, lastKnownLeftHandedMode);
+
+				if (attachedControllerIndex != vr::k_unTrackedDeviceIndexInvalid) {
+					vr::TrackedDevicePose_t controllerPose;
+					system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &controllerPose, 1);
+					if (controllerPose.bPoseIsValid) {
+						Matrix attachedControllerMatrix = Util::HmdMatrix34ToMatrix(controllerPose.mDeviceToAbsoluteTracking);
+
+						// Calculate world-space delta
+						Vector3 worldDelta(
+							controllerMatrix._14 - overlayDragState.initialControllerMatrix._14,
+							controllerMatrix._24 - overlayDragState.initialControllerMatrix._24,
+							controllerMatrix._34 - overlayDragState.initialControllerMatrix._34);
+
+						// Transform world delta to attached controller local space (use transpose for correct direction)
+						Vector3 localDelta = Vector3::Transform(worldDelta, attachedControllerMatrix);
+
+						// Apply local delta to offsets
+						settings.VRMenuControllerOffsetX = overlayDragState.initialControllerOffset.x + localDelta.x;
+						settings.VRMenuControllerOffsetY = overlayDragState.initialControllerOffset.y + localDelta.y;
+						settings.VRMenuControllerOffsetZ = overlayDragState.initialControllerOffset.z + localDelta.z;
+						UpdateVROverlayPosition();
+					}
+				}
+				break;
+			}
+		case OverlayDragState::DragMode::FixedWorld:
+			{
+				Matrix delta = controllerMatrix * overlayDragState.initialControllerMatrix.Invert();
+				fixedWorldOverlayPosition.m = delta * overlayDragState.initialOverlayMatrix;
+				break;
+			}
+		case OverlayDragState::DragMode::HMD:
+			{
+				// Get current HMD transform to convert world deltas to local space
+				vr::TrackedDevicePose_t hmdPose;
+				system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &hmdPose, 1);
+				if (hmdPose.bPoseIsValid) {
+					Matrix hmdMatrix = Util::HmdMatrix34ToMatrix(hmdPose.mDeviceToAbsoluteTracking);
+
+					// Calculate world-space delta
+					Vector3 worldDelta(
+						controllerMatrix._14 - overlayDragState.initialControllerMatrix._14,
+						controllerMatrix._24 - overlayDragState.initialControllerMatrix._24,
+						controllerMatrix._34 - overlayDragState.initialControllerMatrix._34);
+
+					// Transform world delta to HMD local space (use transpose for correct direction)
+					Vector3 localDelta = Vector3::Transform(worldDelta, hmdMatrix);
+
+					// Apply local delta to offsets
+					settings.VRMenuOffsetX = overlayDragState.initialHMDOffset.x + localDelta.x;
+					settings.VRMenuOffsetY = overlayDragState.initialHMDOffset.y + localDelta.y;
+					settings.VRMenuOffsetZ = overlayDragState.initialHMDOffset.z + localDelta.z;
+					UpdateVROverlayPosition();
+				}
+				break;
+			}
+		}
+	}
+
+	bool gripPressed = getGripPressed(overlayDragState.isPrimary, overlayDragState.isSecondary);
+	if (!gripPressed) {
+		resetDragState();
+	}
+}
+
+void VR::TryStartNewDrag()
+{
+	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
+	auto* system = openvr ? openvr->vrSystem : nullptr;
+	if (!system)
+		return;
+
+	// Helper to get grip state for a controller based on actual hand position
+	auto getGripPressed = [&](bool isLeft, bool isRight) {
+		bool isLeftHanded = lastKnownLeftHandedMode;
+
+		if (isLeft) {
+			// Left hand: primary if left-handed, secondary if right-handed
+			if (isLeftHanded) {
+				return primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
+			} else {
+				return secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
+			}
+		}
+		if (isRight) {
+			// Right hand: secondary if left-handed, primary if right-handed
+			if (isLeftHanded) {
+				return secondaryControllerState[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
+			} else {
+				return primaryControllerState[RE::BSOpenVRControllerDevice::Keys::kGrip].isPressed;
+			}
+		}
+		return false;
+	};
+
 	// --- Strict mutually exclusive drag mode selection ---
 	struct DragMode
 	{
 		OverlayDragState::DragMode mode;
 		bool isActive;
 		std::function<bool(vr::ETrackedControllerRole)> canStart;
-		std::function<void(Matrix)> onUpdate;
 		std::function<void()> onInit;
 	};
 
@@ -1819,33 +1945,6 @@ void VR::UpdateOverlayDrag()
 				}
 				return false;  // Not the opposite controller
 			},
-			[&](Matrix controllerMatrix) {
-				// Get current attached controller transform to convert world deltas to local space
-				vr::TrackedDeviceIndex_t attachedControllerIndex = Util::GetControllerIndexForDevice(settings.VRMenuAttachController, lastKnownLeftHandedMode);
-
-				if (attachedControllerIndex != vr::k_unTrackedDeviceIndexInvalid) {
-					vr::TrackedDevicePose_t controllerPose;
-					system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &controllerPose, 1);
-					if (controllerPose.bPoseIsValid) {
-						Matrix attachedControllerMatrix = Util::HmdMatrix34ToMatrix(controllerPose.mDeviceToAbsoluteTracking);
-
-						// Calculate world-space delta
-						Vector3 worldDelta(
-							controllerMatrix._14 - overlayDragState.initialControllerMatrix._14,
-							controllerMatrix._24 - overlayDragState.initialControllerMatrix._24,
-							controllerMatrix._34 - overlayDragState.initialControllerMatrix._34);
-
-						// Transform world delta to attached controller local space (use transpose for correct direction)
-						Vector3 localDelta = Vector3::Transform(worldDelta, attachedControllerMatrix);
-
-						// Apply local delta to offsets
-						settings.VRMenuControllerOffsetX = overlayDragState.initialControllerOffset.x + localDelta.x;
-						settings.VRMenuControllerOffsetY = overlayDragState.initialControllerOffset.y + localDelta.y;
-						settings.VRMenuControllerOffsetZ = overlayDragState.initialControllerOffset.z + localDelta.z;
-						UpdateVROverlayPosition();
-					}
-				}
-			},
 			[&]() {
 				overlayDragState.initialControllerOffset.x = settings.VRMenuControllerOffsetX;
 				overlayDragState.initialControllerOffset.y = settings.VRMenuControllerOffsetY;
@@ -1880,10 +1979,6 @@ void VR::UpdateOverlayDrag()
 		dragModes.push_back({ OverlayDragState::DragMode::FixedWorld,
 			true,
 			fixedWorldCanStart,
-			[&](Matrix controllerMatrix) {
-				Matrix delta = controllerMatrix * overlayDragState.initialControllerMatrix.Invert();
-				fixedWorldOverlayPosition.m = delta * overlayDragState.initialOverlayMatrix;
-			},
 			[&]() {
 				overlayDragState.initialControllerMatrix = overlayDragState.startControllerMatrix;
 				overlayDragState.initialOverlayMatrix = fixedWorldOverlayPosition.m;
@@ -1916,57 +2011,12 @@ void VR::UpdateOverlayDrag()
 		dragModes.push_back({ OverlayDragState::DragMode::HMD,
 			true,
 			hmdCanStart,
-			[&](Matrix controllerMatrix) {
-				// Get current HMD transform to convert world deltas to local space
-				vr::TrackedDevicePose_t hmdPose;
-				system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &hmdPose, 1);
-				if (hmdPose.bPoseIsValid) {
-					Matrix hmdMatrix = Util::HmdMatrix34ToMatrix(hmdPose.mDeviceToAbsoluteTracking);
-
-					// Calculate world-space delta
-					Vector3 worldDelta(
-						controllerMatrix._14 - overlayDragState.initialControllerMatrix._14,
-						controllerMatrix._24 - overlayDragState.initialControllerMatrix._24,
-						controllerMatrix._34 - overlayDragState.initialControllerMatrix._34);
-
-					// Transform world delta to HMD local space (use transpose for correct direction)
-					Vector3 localDelta = Vector3::Transform(worldDelta, hmdMatrix);
-
-					// Apply local delta to offsets
-					settings.VRMenuOffsetX = overlayDragState.initialHMDOffset.x + localDelta.x;
-					settings.VRMenuOffsetY = overlayDragState.initialHMDOffset.y + localDelta.y;
-					settings.VRMenuOffsetZ = overlayDragState.initialHMDOffset.z + localDelta.z;
-					UpdateVROverlayPosition();
-				}
-			},
 			[&]() {
 				overlayDragState.initialHMDOffset.x = settings.VRMenuOffsetX;
 				overlayDragState.initialHMDOffset.y = settings.VRMenuOffsetY;
 				overlayDragState.initialHMDOffset.z = settings.VRMenuOffsetZ;
 				overlayDragState.initialControllerMatrix = overlayDragState.startControllerMatrix;
 			} });
-	}
-
-	// Drag update (if dragging)
-	if (overlayDragState.dragging) {
-		float rawMatrix[3][4];
-		if (Util::GetControllerWorldMatrix(overlayDragState.controllerIndex, rawMatrix)) {
-			vr::HmdMatrix34_t mat = Util::Float3x4ToHmdMatrix34(rawMatrix);
-			Matrix controllerMatrix = Util::HmdMatrix34ToMatrix(mat);
-
-			// Find the active drag mode and update it
-			for (const auto& mode : dragModes) {
-				if (mode.mode == overlayDragState.mode) {
-					mode.onUpdate(controllerMatrix);
-					break;
-				}
-			}
-		}
-		bool gripPressed = getGripPressed(overlayDragState.isPrimary, overlayDragState.isSecondary);
-		if (!gripPressed) {
-			resetDragState();
-		}
-		return;
 	}
 
 	// Try to start a new drag - use first available mode

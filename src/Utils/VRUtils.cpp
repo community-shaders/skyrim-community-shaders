@@ -69,7 +69,12 @@ namespace Util
 
 	vr::HmdMatrix34_t ComputeOverlayTransformFromHMD(float offsetX, float offsetY, float offsetZ)
 	{
+		// Initialize as identity matrix to ensure valid transform on early returns
 		vr::HmdMatrix34_t transform = {};
+		transform.m[0][0] = 1.0f;
+		transform.m[1][1] = 1.0f;
+		transform.m[2][2] = 1.0f;
+		// All other elements remain 0.0f from the {} initialization
 
 		// Use the same OpenVR access pattern as the VR class
 		RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();

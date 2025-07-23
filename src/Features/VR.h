@@ -8,6 +8,7 @@
 #include <magic_enum.hpp>
 #include <openvr.h>
 #include <string>
+#include <unordered_map>
 #include <vector>
 using namespace DirectX::SimpleMath;
 
@@ -79,10 +80,23 @@ public:
 	/**
 	 * @brief Constructs a ButtonCombo with the specified device and key
 	 * @param device The target controller device
-	 * @param key The button/key code (should fit in 16 bits)
+	 * @param key The button/key code (must fit in 16 bits, values > 0xFFFF will be truncated)
 	 */
 	ButtonCombo(ControllerDevice device, uint32_t key) :
-		deviceAndKey((static_cast<uint32_t>(device) << 16) | (key & 0xFFFF)) {}
+		deviceAndKey((static_cast<uint32_t>(device) << 16) | (key & 0xFFFF))
+	{
+		// Validate that the device is within valid range
+		if (!IsValidDevice(device)) {
+			logger::warn("ButtonCombo: Invalid device value {} ({}), using as-is",
+				static_cast<uint32_t>(device), magic_enum::enum_name(device));
+		}
+
+		// Validate that the key fits within 16 bits to prevent silent data loss
+		if (key > 0xFFFF) {
+			logger::warn("ButtonCombo: Key value 0x{:X} exceeds 16-bit limit (0xFFFF), truncating to 0x{:X}",
+				key, key & 0xFFFF);
+		}
+	}
 
 	/**
 	 * @brief Creates a ButtonCombo for the primary controller
@@ -461,6 +475,9 @@ public:
 	void HideAllOverlays(vr::IVROverlay* gameOverlay);
 
 	void UpdateOverlayDrag();
+	bool CanPerformDrag();
+	void UpdateActiveDrag();
+	void TryStartNewDrag();
 	void SetFixedOverlayToCurrentHMD();
 	bool ShouldHighlightOverlayWindow() const { return overlayDragState.dragging; }
 
@@ -553,6 +570,9 @@ public:
 	std::vector<ButtonCombo> recordedCombo;
 	double comboStartTime = 0.0;
 	double comboTimeout = 3.0;
+
+	// Button controller recording state for UI settings
+	std::unordered_map<uint32_t, ControllerDevice> recordingButtonControllers;
 
 private:
 	//=============================================================================

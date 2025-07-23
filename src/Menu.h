@@ -207,7 +207,6 @@ public:
 public:
 	const ImGuiKey VirtualKeyToImGuiKey(WPARAM vkKey);
 
-public:
 	// Move KeyEvent struct here
 	class CharEvent : public RE::InputEvent
 	{
