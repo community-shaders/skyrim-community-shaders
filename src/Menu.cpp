@@ -329,7 +329,7 @@ void Menu::DrawSettings()
 		bool canShowIcons = settings.Theme.ShowActionIcons &&
 		                    (uiIcons.saveSettings.texture ||
 								uiIcons.loadSettings.texture ||
-								uiIcons.clearCache.texture);		// Always show logo if available, regardless of action icons setting
+								uiIcons.clearCache.texture);  // Always show logo if available, regardless of action icons setting
 		bool showLogo = uiIcons.logo.texture != nullptr;
 		// Define action icon metadata and callbacks
 		struct ActionIcon
@@ -363,7 +363,7 @@ void Menu::DrawSettings()
 					"the vanilla shaders at runtime. The Disk Cache is a collection of\n"
 					"compiled shaders on disk. Clearing will mean that shaders are\n"
 					"recompiled only when the game re-encounters them.",
-					[shaderCache]() { 
+					[shaderCache]() {
 						shaderCache->Clear();
 						if (shaderCache->IsDiskCache()) {
 							shaderCache->DeleteDiskCache();
