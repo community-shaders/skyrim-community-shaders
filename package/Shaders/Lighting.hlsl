@@ -2308,7 +2308,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	dirLightColorMultiplier *= WaterEffects::ComputeCaustics(waterData, input.WorldPosition.xyz, eyeIndex);
 #	endif
 
-	float dirLightAngle = dot(worldNormal.xyz, DirLightDirection);
+	float dirLightAngle = dot(worldNormal.xyz, DirLightDirection.xyz);
 
 	if ((Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) && (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::ShadowDir)) {
 		dirLightColorMultiplier *= shadowColor.x;
