@@ -75,7 +75,7 @@ public:
 		UIIcon clearDiskCache;
 		UIIcon logo;    // New logo icon
 		UIIcon search;  // Search icon for search bars
-		
+
 		// Category icons
 		UIIcon characters;
 		UIIcon grass;

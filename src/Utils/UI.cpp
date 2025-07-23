@@ -302,7 +302,6 @@ namespace Util
 			logger::warn("InitializeMenuIcons: Failed to load materials icon from: {}", basePath + "Categories\\materials.png");
 		}
 
-
 		logger::info("InitializeMenuIcons: Loaded {}/13 icons successfully", iconsLoaded);
 		return anyIconLoaded;
 	}
@@ -428,7 +427,7 @@ namespace Util
 		// Get the appropriate icon for this category
 		ID3D11ShaderResourceView* categoryIcon = nullptr;
 		auto& menu = Menu::GetSingleton()->uiIcons;
-		
+
 		if (strcmp(categoryName, "Characters") == 0) {
 			categoryIcon = menu.characters.texture;
 		} else if (strcmp(categoryName, "Grass") == 0) {
@@ -454,14 +453,14 @@ namespace Util
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 		ImVec2 pos = ImGui::GetCursorScreenPos();
 		float availableWidth = ImGui::GetContentRegionAvail().x;
-		
+
 		// Calculate icon size based on current font size to match text scaling
 		// This ensures icons scale consistently with text when the font scale changes
 		const float currentFontSize = ImGui::GetFontSize();
-		const float iconSize = currentFontSize * 1.2f;  // 20% larger than font height
+		const float iconSize = currentFontSize * 1.2f;     // 20% larger than font height
 		const float iconSpacing = currentFontSize * 0.3f;  // 30% of font height for spacing
 		ImVec2 textSize = ImGui::CalcTextSize(displayName.c_str());
-		
+
 		// Calculate total content width (icon + spacing + text)
 		float contentWidth = textSize.x;
 		if (categoryIcon) {
@@ -508,19 +507,19 @@ namespace Util
 
 		// Draw icon and text
 		float currentX = pos.x + lineLength + 10.0f;
-		
+
 		// Draw icon if available
 		if (categoryIcon) {
 			ImVec2 iconPos = ImVec2(currentX, pos.y + (textSize.y - iconSize) * 0.5f + 2.0f);
 			ImVec2 iconMax = ImVec2(iconPos.x + iconSize, iconPos.y + iconSize);
-			
+
 			// Apply the same color tint as the text
 			ImU32 iconTint = headerColor;
 			drawList->AddImage(categoryIcon, iconPos, iconMax, ImVec2(0, 0), ImVec2(1, 1), iconTint);
-			
+
 			currentX += iconSize + iconSpacing;
 		}
-		
+
 		// Center text
 		ImVec2 textPos = ImVec2(currentX, pos.y + 2.0f);
 		drawList->AddText(textPos, headerColor, displayName.c_str());
@@ -763,7 +762,7 @@ namespace Util
 
 		// Search in both short name and display name
 		return shortName.find(query) != std::string::npos ||
-			   displayName.find(query) != std::string::npos;
+		       displayName.find(query) != std::string::npos;
 	}
 
 	void DrawFeatureSearchBar(std::string& searchString, float availableWidth)
