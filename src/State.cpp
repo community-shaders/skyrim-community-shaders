@@ -45,7 +45,7 @@ void State::Draw()
 
 		if (currentShader && updateShader) {
 			if (currentShader->shaderType.get() == RE::BSShader::Type::Utility) {
-				if (currentPixelDescriptor & (uint32_t)SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask) {
+				if (currentPixelDescriptor & static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask)) {
 					deferred->CopyShadowData();
 				}
 			}

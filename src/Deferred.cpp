@@ -768,11 +768,11 @@ void Deferred::Hooks::Main_RenderShadowMaps::thunk()
 void Deferred::Hooks::Main_RenderWorld::thunk(bool a1)
 {
 	auto* const state = globals::state;
-	state->permutationData.ExtraShaderDescriptor |= (uint32_t)State::ExtraShaderDescriptors::InWorld;
+	state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::InWorld);
 	state->inWorld = true;
 	func(a1);
 	state->inWorld = false;
-	state->permutationData.ExtraShaderDescriptor &= ~(uint32_t)State::ExtraShaderDescriptors::InWorld;
+	state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::InWorld);
 };
 
 void Deferred::Hooks::Main_RenderWorld_Start::thunk(RE::BSBatchRenderer* This, uint32_t StartRange, uint32_t EndRanges, uint32_t RenderFlags, int GeometryGroup)
@@ -811,17 +811,17 @@ void Deferred::Hooks::BSCubeMapCamera_RenderCubemap::thunk(RE::NiAVObject* camer
 	auto state = globals::state;
 
 	deferred->ReflectionsPrepasses();
-	state->permutationData.ExtraShaderDescriptor |= (uint32_t)State::ExtraShaderDescriptors::IsReflections;
+	state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::IsReflections);
 	func(camera, a2, a3, a4, a5);
-	state->permutationData.ExtraShaderDescriptor &= ~(uint32_t)State::ExtraShaderDescriptors::IsReflections;
+	state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::IsReflections);
 }
 
 void Deferred::Hooks::Main_RenderFirstPersonView::thunk(bool a1, bool a2)
 {
 	auto* const state = globals::state;
-	state->permutationData.ExtraShaderDescriptor |= (uint32_t)State::ExtraShaderDescriptors::InWorld;
+	state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::InWorld);
 	func(a1, a2);
-	state->permutationData.ExtraShaderDescriptor &= ~(uint32_t)State::ExtraShaderDescriptors::InWorld;
+	state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::InWorld);
 }
 
 void Deferred::Hooks::Renderer_ResetState::thunk(void* This)

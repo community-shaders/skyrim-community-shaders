@@ -190,12 +190,12 @@ namespace LightingExtensions
 		{
 			func(shader, pass, renderFlags);
 
-			globals::state->permutationData.ExtraShaderDescriptor &= ~(uint32_t)State::ExtraShaderDescriptors::IsTree;
+			globals::state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::IsTree);
 
 			if (auto userData = pass->geometry->GetUserData())
 				if (auto baseObject = userData->GetBaseObject())
 					if (baseObject->As<RE::TESObjectTREE>())
-						globals::state->permutationData.ExtraShaderDescriptor |= (uint32_t)State::ExtraShaderDescriptors::IsTree;
+						globals::state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::IsTree);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
