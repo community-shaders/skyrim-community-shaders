@@ -1043,7 +1043,6 @@ void VR::UpdateVROverlayPosition()
 
 		if (settings.VRMenuPositioningMethod == 1) {
 			// Fixed World Position
-			logger::debug("Using fixed world positioning");
 			if (justSwitchedToFixed) {
 				SetFixedOverlayToCurrentHMD();
 			}

@@ -4,6 +4,7 @@
 #include "Utils/Format.h"
 
 #include <d3dcompiler.h>
+#include <mutex>
 
 namespace Util
 {
@@ -280,15 +281,16 @@ namespace Util
 		D3D11_TEXTURE2D_DESC desc;
 		texture->GetDesc(&desc);
 
-		// Performance consideration: warn about large textures
+		// Performance consideration: warn about large textures (only once)
 		const UINT pixelCount = desc.Width * desc.Height;
 		const UINT largeTextureThreshold = 1024 * 1024;  // 1 megapixel
 		if (pixelCount > largeTextureThreshold) {
-			logger::warn("ApplyHighlightTintToTexture: Processing large texture ({}x{} = {} pixels). Consider using compute shader for better performance.",
-				desc.Width, desc.Height, pixelCount);
-		}
-
-		// Create a temporary staging texture to read from
+			static std::once_flag largeTextureWarning;
+			std::call_once(largeTextureWarning, [&]() {
+				logger::warn("ApplyHighlightTintToTexture: Processing large texture ({}x{} = {} pixels). Consider using compute shader for better performance. This warning will only be shown once.",
+					desc.Width, desc.Height, pixelCount);
+			});
+		}  // Create a temporary staging texture to read from
 		ID3D11Texture2D* stagingTexture = nullptr;
 		desc.Usage = D3D11_USAGE_STAGING;
 		desc.BindFlags = 0;
