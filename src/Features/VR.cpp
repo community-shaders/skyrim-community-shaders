@@ -1000,6 +1000,17 @@ namespace
 				ImGui::EndTable();
 			}
 		}
+
+		// Debugging addresses for copy/paste
+		if (ImGui::TreeNodeEx("Addresses")) {
+			auto openvr = RE::BSOpenVR::GetSingleton();
+			auto overlay = openvr ? RE::BSOpenVR::GetIVROverlayFromContext(&openvr->vrContext) : nullptr;
+			auto vrSystem = openvr ? openvr->vrSystem : nullptr;
+			ADDRESS_NODE(openvr)
+			ADDRESS_NODE(overlay)
+			ADDRESS_NODE(vrSystem)
+			ImGui::TreePop();
+		}
 	}
 }  // namespace
 
@@ -1205,25 +1216,25 @@ void VR::EnsureOverlayInitialized()
 	}
 
 	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
-	logger::info("BSOpenVR: 0x{:X}", reinterpret_cast<uintptr_t>(openvr));
+	logger::debug("BSOpenVR: 0x{:X}", reinterpret_cast<uintptr_t>(openvr));
 	if (!openvr) {
 		logger::error("BSOpenVR::GetSingleton() returned nullptr");
 		return;
 	}
 	auto* vrSystem = openvr->vrSystem;
 	auto* overlay = openvr ? RE::BSOpenVR::GetIVROverlayFromContext(&openvr->vrContext) : nullptr;
-	logger::info("openVR->vrSystem: 0x{:X}", reinterpret_cast<uintptr_t>(vrSystem));
-	logger::info("openVR->vrContext: 0x{:X}", reinterpret_cast<uintptr_t>(&openvr->vrContext));
-	logger::info("openVR->vrContext.vrOverlay: 0x{:X}", reinterpret_cast<uintptr_t>(openvr->vrContext.vrOverlay));
-	logger::info("openVR->hmdDeviceType: {} ({})", static_cast<int>(openvr->hmdDeviceType), magic_enum::enum_name(openvr->hmdDeviceType));
+	logger::debug("openVR->vrSystem: 0x{:X}", reinterpret_cast<uintptr_t>(vrSystem));
+	logger::debug("openVR->vrContext: 0x{:X}", reinterpret_cast<uintptr_t>(&openvr->vrContext));
+	logger::debug("openVR->vrContext.vrOverlay: 0x{:X}", reinterpret_cast<uintptr_t>(openvr->vrContext.vrOverlay));
+	logger::debug("openVR->hmdDeviceType: {} ({})", static_cast<int>(openvr->hmdDeviceType), magic_enum::enum_name(openvr->hmdDeviceType));
 	for (int i = 0; i < RE::BSVRInterface::Hand::kTotal; ++i) {
-		logger::info("openVR->controllerNodes[{}]: 0x{:X}", i, reinterpret_cast<uintptr_t>(openvr->controllerNodes[i].get()));
+		logger::debug("openVR->controllerNodes[{}]: 0x{:X}", i, reinterpret_cast<uintptr_t>(openvr->controllerNodes[i].get()));
 		if (openvr->controllerNodes[i] && reinterpret_cast<uintptr_t>(openvr->controllerNodes[i].get()) < 0x1000) {
 			logger::warn("controllerNodes[{}] is suspiciously low (0x{:X})", i, reinterpret_cast<uintptr_t>(openvr->controllerNodes[i].get()));
 		}
 	}
-	logger::info("menuOverlayHandle: 0x{:X}", menuOverlayHandle);
-	logger::info("menuControllerOverlayHandle: 0x{:X}", menuControllerOverlayHandle);
+	logger::debug("menuOverlayHandle: 0x{:X}", menuOverlayHandle);
+	logger::debug("menuControllerOverlayHandle: 0x{:X}", menuControllerOverlayHandle);
 	if (!overlay) {
 		logger::error("IVROverlay is nullptr after GetIVROverlay");
 		return;
@@ -1233,7 +1244,7 @@ void VR::EnsureOverlayInitialized()
 	std::string name = "Community Shaders Menu";
 	vr::EVROverlayError err = overlay->CreateOverlay(key.c_str(), name.c_str(), &menuOverlayHandle);
 	if (err == vr::VROverlayError_None) {
-		logger::info("CreateOverlay succeeded for menuOverlayHandle: 0x{:X}", menuOverlayHandle);
+		logger::debug("CreateOverlay succeeded for menuOverlayHandle: 0x{:X}", menuOverlayHandle);
 		Util::SetOverlayInputFlags(overlay, menuOverlayHandle);
 		overlay->SetOverlayWidthInMeters(menuOverlayHandle, 1.0f);
 	} else {
@@ -1244,7 +1255,7 @@ void VR::EnsureOverlayInitialized()
 	std::string controllerName = "Community Shaders Menu (Controller)";
 	err = overlay->CreateOverlay(controllerKey.c_str(), controllerName.c_str(), &menuControllerOverlayHandle);
 	if (err == vr::VROverlayError_None) {
-		logger::info("CreateOverlay succeeded for menuControllerOverlayHandle: 0x{:X}", menuControllerOverlayHandle);
+		logger::debug("CreateOverlay succeeded for menuControllerOverlayHandle: 0x{:X}", menuControllerOverlayHandle);
 		Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, &menuControllerTexture, &menuControllerRTV);
 		Util::SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
 		overlay->SetOverlayWidthInMeters(menuControllerOverlayHandle, 1.0f);
@@ -1317,7 +1328,7 @@ void VR::SubmitOverlayFrame()
 	static bool cleanOverlayLogged = false;
 	if (!cleanOverlayLogged) {
 		if (cleanOverlay) {
-			logger::info("VR: Successfully acquired clean IVROverlay interface via CommonLib: 0x{:X}", reinterpret_cast<uintptr_t>(cleanOverlay));
+			logger::debug("VR: Successfully acquired clean IVROverlay interface via CommonLib: 0x{:X}", reinterpret_cast<uintptr_t>(cleanOverlay));
 		} else {
 			logger::error("VR: Failed to get clean IVROverlay interface via CommonLib");
 		}
@@ -1530,7 +1541,7 @@ void VR::ProcessVREvents(std::vector<Menu::KeyEvent>& vrEvents)
 	static bool firstCall = true;
 	if (firstCall || currentLeftHandedMode != lastKnownLeftHandedMode) {
 		if (!firstCall) {
-			logger::info("VR handedness changed: {} -> {}", lastKnownLeftHandedMode ? "Left" : "Right", currentLeftHandedMode ? "Left" : "Right");
+			logger::debug("VR handedness changed: {} -> {}", lastKnownLeftHandedMode ? "Left" : "Right", currentLeftHandedMode ? "Left" : "Right");
 		}
 		firstCall = false;
 		lastKnownLeftHandedMode = currentLeftHandedMode;
