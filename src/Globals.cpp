@@ -116,6 +116,7 @@ namespace globals
 		RE::Setting* shadowMaskQuarter = nullptr;
 
 		REL::Relocation<ID3D11Buffer**> perFrame;
+		REL::Relocation<RE::BSGraphics::BSShaderAccumulator**> currentAccumulator;
 	}
 
 	State* state = nullptr;
@@ -195,6 +196,8 @@ namespace globals
 
 			ui = RE::UI::GetSingleton();
 			perFrame = { REL::RelocationID(524768, 411384) };
+
+			currentAccumulator = { REL::RelocationID(527650, 527650) };
 		}
 
 		d3d::device = reinterpret_cast<ID3D11Device*>(game::renderer->GetRuntimeData().forwarder);

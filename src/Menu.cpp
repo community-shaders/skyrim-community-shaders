@@ -1495,7 +1495,7 @@ void Menu::DrawAdvancedSettings()
 		}
 		if (ImGui::TreeNodeEx("Addresses")) {
 			auto Renderer = globals::game::renderer;
-			auto BSShaderAccumulator = RE::BSGraphics::BSShaderAccumulator::GetCurrentAccumulator();
+			auto BSShaderAccumulator = *globals::game::currentAccumulator.get();
 			auto RendererShadowState = globals::game::shadowState;
 			ADDRESS_NODE(Renderer)
 			ADDRESS_NODE(BSShaderAccumulator)

@@ -1008,9 +1008,13 @@ namespace Hooks
 	{
 		static void thunk(RE::BSGraphics::PixelShader* PixelShader, RE::BSRenderPass* Pass, DirectX::XMMATRIX& Transform, uint32_t LightCount, uint32_t ShadowLightCount, float WorldScale, uint32_t RenderSpace)
 		{
-			if (globals::features::lightLimitFix->loaded)
-				globals::features::lightLimitFix->BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(Pass);
-			func(PixelShader, Pass, Transform, LightCount, ShadowLightCount, WorldScale, globals::shaderCache->IsEnabled() ? 0 : RenderSpace);
+			if (globals::shaderCache->IsEnabled())
+				if (globals::features::lightLimitFix->loaded)
+					globals::features::lightLimitFix->BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(Pass);
+				else
+					func(PixelShader, Pass, Transform, LightCount, ShadowLightCount, WorldScale, 0);
+			else
+				func(PixelShader, Pass, Transform, LightCount, ShadowLightCount, WorldScale, RenderSpace);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -1129,7 +1133,7 @@ namespace Hooks
 			stl::write_thunk_call<Main_Update_Swap>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x5D2, 0xA97));
 		}
 
-		stl::write_thunk_call<BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights>(REL::RelocationID(100565, 107300).address() + REL::Relocate(0x523, 0xB0E, 0x5fe));
+		stl::write_thunk_call<BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights>(REL::RelocationID(100565, 107300).address() + REL::Relocate(0x523, 0xB0E, 0x5FE));
 	}
 
 	/**

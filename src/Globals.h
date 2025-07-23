@@ -116,6 +116,7 @@ namespace globals
 		extern RE::Setting* bShadowsOnGrass;
 		extern RE::Setting* shadowMaskQuarter;
 		extern REL::Relocation<ID3D11Buffer**> perFrame;
+		extern REL::Relocation<RE::BSGraphics::BSShaderAccumulator**> currentAccumulator;
 	}
 
 	extern State* state;
