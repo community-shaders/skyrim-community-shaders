@@ -126,6 +126,7 @@ namespace globals
 		REL::Relocation<const RE::NiRTTI*> BSEffectShaderPropertyRTTI;
 		REL::Relocation<const RE::NiRTTI*> NiParticleSystemRTTI;
 		REL::Relocation<const RE::NiRTTI*> NiBillboardNodeRTTI;
+		REL::Relocation<const RE::NiRTTI*> NiAlphaPropertyRTTI;
 	}
 
 	State* state = nullptr;
@@ -206,7 +207,7 @@ namespace globals
 			ui = RE::UI::GetSingleton();
 			perFrame = { REL::RelocationID(524768, 411384) };
 
-			currentAccumulator = { REL::RelocationID(527650, 527650) };
+			currentAccumulator = { REL::RelocationID(527650, 414600) };
 		}
 
 		{
@@ -216,6 +217,7 @@ namespace globals
 			BSEffectShaderPropertyRTTI = { RE::BSEffectShaderProperty::Ni_RTTI };
 			NiParticleSystemRTTI = { RE::NiParticleSystem::Ni_RTTI };
 			NiBillboardNodeRTTI = { RE::NiBillboardNode::Ni_RTTI };
+			NiAlphaPropertyRTTI = { RE::NiAlphaProperty::Ni_RTTI };
 		}
 
 		d3d::device = reinterpret_cast<ID3D11Device*>(game::renderer->GetRuntimeData().forwarder);

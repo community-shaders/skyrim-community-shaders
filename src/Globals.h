@@ -126,6 +126,7 @@ namespace globals
 		extern REL::Relocation<const RE::NiRTTI*> BSEffectShaderPropertyRTTI;
 		extern REL::Relocation<const RE::NiRTTI*> NiParticleSystemRTTI;
 		extern REL::Relocation<const RE::NiRTTI*> NiBillboardNodeRTTI;
+		extern REL::Relocation<const RE::NiRTTI*> NiAlphaPropertyRTTI;
 	}
 
 	extern State* state;
