@@ -51,45 +51,6 @@ void State::Draw()
 			}
 		}
 
-		updateShader = false;
-	}
-}
-
-void State::DrawDebug()
-{
-	auto shaderCache = globals::shaderCache;
-	auto deferred = globals::deferred;
-	auto terrainBlending = globals::features::terrainBlending;
-	auto terrainHelper = globals::features::terrainHelper;
-	auto cloudShadows = globals::features::cloudShadows;
-	auto truePBR = globals::truePBR;
-	auto context = globals::d3d::context;
-
-	if (shaderCache->IsEnabled()) {
-		if (terrainBlending->loaded)
-			terrainBlending->TerrainShaderHacks();
-
-		if (cloudShadows->loaded)
-			cloudShadows->SkyShaderHacks();
-
-		if (terrainHelper->loaded)
-			terrainHelper->SetShaderResouces(context);
-
-		truePBR->SetShaderResouces(context);
-
-		if (permutationData != permutationDataPrevious) {
-			permutationCB->Update(permutationData);
-			permutationDataPrevious = permutationData;
-		}
-
-		if (currentShader && updateShader && currentShader->shaderType.get() == RE::BSShader::Type::Utility) {
-			if (currentShader->shaderType.get() == RE::BSShader::Type::Utility) {
-				if (currentPixelDescriptor & (uint32_t)SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask) {
-					deferred->CopyShadowData();
-				}
-			}
-		}
-
 		Debug();
 
 		updateShader = false;
