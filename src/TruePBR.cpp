@@ -1603,7 +1603,7 @@ void TruePBR::SetShaderResouces(ID3D11DeviceContext* a_context)
 	while (mask) {
 		// Find index of the least significant set bit
 		uint32_t batchStart = std::countr_zero(mask);
-		
+
 		// Check for consecutive set bits and batch them
 		uint32_t shiftedMask = mask >> batchStart;
 		uint32_t batchCount = std::countr_one(shiftedMask);
