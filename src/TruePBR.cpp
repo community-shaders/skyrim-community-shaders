@@ -1601,21 +1601,12 @@ void TruePBR::SetShaderResouces(ID3D11DeviceContext* a_context)
 	auto& textures = extendedRendererState.PSTexture;
 
 	while (mask) {
-		unsigned long index;
-
 		// Find index of the least significant set bit
-		_BitScanForward(&index, mask);
-
-		// Start batching from this index
-		uint32_t batchStart = index;
-		uint32_t batchCount = 1;
-
+		uint32_t batchStart = std::countr_zero(mask);
+		
 		// Check for consecutive set bits and batch them
-		uint32_t shiftedMask = mask >> (index + 1);
-		while ((shiftedMask & 1) != 0) {
-			++batchCount;
-			shiftedMask >>= 1;
-		}
+		uint32_t shiftedMask = mask >> batchStart;
+		uint32_t batchCount = std::countr_one(shiftedMask);
 
 		// Issue one API call for this batch
 		a_context->PSSetShaderResources(
