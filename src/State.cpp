@@ -10,6 +10,7 @@
 #include "Features/CloudShadows.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
+#include "Features/PerformanceOverlay.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "Streamline.h"
@@ -51,7 +52,8 @@ void State::Draw()
 			}
 		}
 
-		Debug();
+		if (globals::menu->overlayVisible && globals::features::performanceOverlay->loaded && globals::features::performanceOverlay->IsOverlayVisible())
+			Debug();
 
 		updateShader = false;
 	}
