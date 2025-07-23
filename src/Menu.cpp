@@ -211,7 +211,6 @@ Menu::~Menu()
 	uiIcons.saveSettings.Release();
 	uiIcons.loadSettings.Release();
 	uiIcons.clearCache.Release();
-	uiIcons.clearDiskCache.Release();
 	uiIcons.logo.Release();
 
 	ImGui_ImplDX11_Shutdown();
@@ -325,15 +324,12 @@ void Menu::DrawSettings()
 		wasDocked = isDocked;
 
 		const float uiScale = exp2(settings.Theme.GlobalScale);  // Get current UI scale
-																 // Check if we can show icons - require setting enabled and at least some icons loaded (for undocked)
+		// Check if we can show icons - require setting enabled and at least some icons loaded (for undocked)
 		// For docked mode, always show icons if textures are available
 		bool canShowIcons = settings.Theme.ShowActionIcons &&
 		                    (uiIcons.saveSettings.texture ||
 								uiIcons.loadSettings.texture ||
-								uiIcons.clearCache.texture ||
-								uiIcons.clearDiskCache.texture);
-
-		// Always show logo if available, regardless of action icons setting
+								uiIcons.clearCache.texture);		// Always show logo if available, regardless of action icons setting
 		bool showLogo = uiIcons.logo.texture != nullptr;
 		// Define action icon metadata and callbacks
 		struct ActionIcon
@@ -362,23 +358,17 @@ void Menu::DrawSettings()
 			if (uiIcons.clearCache.texture) {
 				actionIcons.push_back({ uiIcons.clearCache.texture,
 					"Clear Shader Cache\n\n"
+					"Clears the shader cache and disk cache (if enabled).\n"
 					"The Shader Cache is the collection of compiled shaders which replace\n"
-					"the vanilla shaders at runtime. Clearing the shader cache will mean\n"
-					"that shaders are recompiled only when the game re-encounters them.\n"
-					"This is only needed for hot-loading shaders for development purposes.",
-					[shaderCache]() { shaderCache->Clear(); } });
-			}
-			if (uiIcons.clearDiskCache.texture) {
-				actionIcons.push_back({ uiIcons.clearDiskCache.texture,
-					"Clear Disk Cache\n\n"
-					"The Disk Cache is a collection of compiled shaders on disk, which\n"
-					"are automatically created when shaders are added to the Shader Cache.\n"
-					"If you do not have a Disk Cache, or it is outdated or invalid, you will\n"
-					"see \"Compiling Shaders\" in the upper-left corner. After this has\n"
-					"completed you will no longer see this message apart from when loading\n"
-					"from the Disk Cache. Only delete the Disk Cache manually if you are\n"
-					"encountering issues.",
-					[shaderCache]() { shaderCache->DeleteDiskCache(); } });
+					"the vanilla shaders at runtime. The Disk Cache is a collection of\n"
+					"compiled shaders on disk. Clearing will mean that shaders are\n"
+					"recompiled only when the game re-encounters them.",
+					[shaderCache]() { 
+						shaderCache->Clear();
+						if (shaderCache->IsDiskCache()) {
+							shaderCache->DeleteDiskCache();
+						}
+					} });
 			}
 		}
 
@@ -589,25 +579,16 @@ void Menu::DrawSettings()
 				ImGui::TableNextColumn();
 				if (ImGui::Button("Clear Shader Cache", { -1, 0 })) {
 					shaderCache->Clear();
+					if (shaderCache->IsDiskCache()) {
+						shaderCache->DeleteDiskCache();
+					}
 				}
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text(
+						"Clears the shader cache and disk cache (if enabled). "
 						"The Shader Cache is the collection of compiled shaders which replace the vanilla shaders at runtime. "
-						"Clearing the shader cache will mean that shaders are recompiled only when the game re-encounters them. "
-						"This is only needed for hot-loading shaders for development purposes. ");
-				}
-
-				// Clear Disk Cache Button
-				ImGui::TableNextColumn();
-				if (ImGui::Button("Clear Disk Cache", { -1, 0 })) {
-					shaderCache->DeleteDiskCache();
-				}
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text(
-						"The Disk Cache is a collection of compiled shaders on disk, which are automatically created when shaders are added to the Shader Cache. "
-						"If you do not have a Disk Cache, or it is outdated or invalid, you will see \"Compiling Shaders\" in the upper-left corner. "
-						"After this has completed you will no longer see this message apart from when loading from the Disk Cache. "
-						"Only delete the Disk Cache manually if you are encountering issues. ");
+						"The Disk Cache is a collection of compiled shaders on disk. "
+						"Clearing will mean that shaders are recompiled only when the game re-encounters them. ");
 				}
 
 				// Error message toggle if needed
@@ -1284,7 +1265,7 @@ void Menu::DrawGeneralSettings()
 					ImGui::Checkbox("Use Icon Buttons in Header", &themeSettings.ShowActionIcons);
 					if (auto _tt = Util::HoverTooltipWrapper()) {
 						ImGui::Text(
-							"When enabled: Shows action buttons (Save, Load, Clear Cache, Clear Disk Cache) as icons in the header\n"
+							"When enabled: Shows action buttons (Save, Load, Clear Cache) as icons in the header\n"
 							"When disabled: Shows as text buttons below the header");
 					}
 

@@ -163,11 +163,10 @@ namespace Util
 		logger::info("InitializeMenuIcons: Loading icons from base path: {}", basePath);
 
 		// Initialize all texture pointers to nullptr for safe cleanup
-		std::array<ID3D11ShaderResourceView**, 5> texturePointers = {
+		std::array<ID3D11ShaderResourceView**, 4> texturePointers = {
 			&menu->uiIcons.saveSettings.texture,
 			&menu->uiIcons.loadSettings.texture,
 			&menu->uiIcons.clearCache.texture,
-			&menu->uiIcons.clearDiskCache.texture,
 			&menu->uiIcons.logo.texture
 		};
 
@@ -210,15 +209,6 @@ namespace Util
 			logger::warn("InitializeMenuIcons: Failed to load clear-cache icon from: {}", basePath + "Microsoft Icons\\clear-cache.png");
 		}
 
-		// Load clear disk cache icon
-		if (LoadTextureFromFile(device, (basePath + "Microsoft Icons\\clear-disk.png").c_str(), &menu->uiIcons.clearDiskCache.texture, menu->uiIcons.clearDiskCache.size)) {
-			logger::info("InitializeMenuIcons: Successfully loaded clear-disk icon");
-			iconsLoaded++;
-			anyIconLoaded = true;
-		} else {
-			logger::warn("InitializeMenuIcons: Failed to load clear-disk icon from: {}", basePath + "Microsoft Icons\\clear-disk.png");
-		}
-
 		// Load logo icon
 		if (LoadTextureFromFile(device, (basePath + "Community Shaders Logo\\cs-logo.png").c_str(), &menu->uiIcons.logo.texture, menu->uiIcons.logo.size)) {
 			logger::info("InitializeMenuIcons: Successfully loaded logo icon");
@@ -228,7 +218,7 @@ namespace Util
 			logger::warn("InitializeMenuIcons: Failed to load logo icon from: {}", basePath + "Community Shaders Logo\\cs-logo.png");
 		}
 
-		logger::info("InitializeMenuIcons: Loaded {}/5 icons successfully", iconsLoaded);
+		logger::info("InitializeMenuIcons: Loaded {}/4 icons successfully", iconsLoaded);
 		return anyIconLoaded;
 	}
 

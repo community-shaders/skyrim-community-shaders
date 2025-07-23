@@ -72,7 +72,6 @@ public:
 		UIIcon saveSettings;
 		UIIcon loadSettings;
 		UIIcon clearCache;
-		UIIcon clearDiskCache;
 		UIIcon logo;    // New logo icon
 		UIIcon search;  // Search icon for search bars
 	} uiIcons;
