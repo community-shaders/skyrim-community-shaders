@@ -297,8 +297,8 @@ public:
 	virtual void RestoreDefaultSettings() override;
 
 	virtual void DrawSettings() override;
-  
-  virtual std::string_view GetCategory() const override { return "Debug"; }
+
+	virtual std::string_view GetCategory() const override { return "Debug"; }
 
 	//=============================================================================
 	// OVERLAY FEATURE OVERRIDES
@@ -499,7 +499,6 @@ public:
 	bool* gDepthBufferCulling = nullptr;
 	float* gMinOccludeeBoxExtent = nullptr;
 
-
 	// VR Controller state and logging
 	struct VRControllerEventLog
 	{
@@ -584,4 +583,3 @@ private:
 
 	void CleanupOverlayTextures();
 };
-
