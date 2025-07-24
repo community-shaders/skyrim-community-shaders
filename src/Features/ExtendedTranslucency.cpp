@@ -21,16 +21,14 @@ ExtendedTranslucency* ExtendedTranslucency::GetSingleton()
 
 void ExtendedTranslucency::BSLightingShader_SetupGeometry(RE::BSRenderPass* pass)
 {
-	globals::state->currentExtraFeatureDescriptor &= ~(ExtraFeatureDescriptorMask << ExtraFeatureDescriptorShift);
+	globals::state->permutationData.ExtraFeatureDescriptor &= ~(ExtraFeatureDescriptorMask << ExtraFeatureDescriptorShift);
 	// TODO: PERFORMANCE: Caching the feature descriptor in map<RE::BSGeometry*, uint> if this get more complex
 	auto& unknownProperty = pass->geometry->GetGeometryRuntimeData().properties[RE::BSGeometry::States::kProperty];
-	static const REL::Relocation<const RE::NiRTTI*> NiAlphaPropertyRTTI{ RE::NiAlphaProperty::Ni_RTTI };
-	auto alphaProperty = unknownProperty && unknownProperty->GetRTTI() == NiAlphaPropertyRTTI.get() ? static_cast<RE::NiAlphaProperty*>(unknownProperty.get()) : nullptr;
+	auto alphaProperty = unknownProperty && unknownProperty->GetRTTI() == globals::rtti::NiAlphaPropertyRTTI.get() ? static_cast<RE::NiAlphaProperty*>(unknownProperty.get()) : nullptr;
 	// Check alpha property exists and blending is enabled
 	if (alphaProperty && alphaProperty->GetAlphaBlending()) {
 		if (auto* data = pass->geometry->GetExtraData(NiExtraDataName_AnisotropicAlphaMaterial)) {
-			static const REL::Relocation<const RE::NiRTTI*> NiIntegerExtraDataRTTI{ RE::NiIntegerExtraData::Ni_RTTI };
-			if (data->GetRTTI() == NiIntegerExtraDataRTTI.get()) {
+			if (data->GetRTTI() == globals::rtti::NiIntegerExtraDataRTTI.get()) {
 				uint32_t material = static_cast<uint32_t>(static_cast<RE::NiIntegerExtraData*>(data)->value) & ExtraFeatureDescriptorMask;
 				if (material == MaterialModel::Disabled) {
 					// MaterialModel::Disabled (0) is the flag when this extra does not exist
@@ -38,7 +36,7 @@ void ExtendedTranslucency::BSLightingShader_SetupGeometry(RE::BSRenderPass* pass
 					// Ensure this is disabled by using the ForceDisabled flag
 					material = MaterialModel::ForceDisabled;
 				}
-				globals::state->currentExtraFeatureDescriptor |= (material << ExtraFeatureDescriptorShift);
+				globals::state->permutationData.ExtraFeatureDescriptor |= (material << ExtraFeatureDescriptorShift);
 
 				// TODO: Per-material settings from Nif
 				// Mods supporting this feature should adjust their alpha value in texture already
@@ -46,7 +44,7 @@ void ExtendedTranslucency::BSLightingShader_SetupGeometry(RE::BSRenderPass* pass
 			}
 		}
 	} else {
-		globals::state->currentExtraFeatureDescriptor |= ((MaterialModel::ForceDisabled) << ExtraFeatureDescriptorShift);
+		globals::state->permutationData.ExtraFeatureDescriptor |= ((MaterialModel::ForceDisabled) << ExtraFeatureDescriptorShift);
 	}
 }
 

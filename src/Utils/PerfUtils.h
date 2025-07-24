@@ -67,4 +67,33 @@ namespace Util
 			return (lower + upper) / 2.0f;
 		}
 	}
+
+	/**
+	 * @brief High-resolution timer using QueryPerformanceCounter
+	 * @return Current time in seconds as a double, or 0.0 if high-resolution timer is unavailable
+	 */
+	inline double GetNowSecs()
+	{
+		static LARGE_INTEGER freq = [] {
+			LARGE_INTEGER f;
+			if (!QueryPerformanceFrequency(&f) || f.QuadPart == 0) {
+				// Fallback: if high-resolution timer is unavailable, return frequency of 0
+				// This will cause the function to return 0.0 consistently
+				f.QuadPart = 0;
+			}
+			return f;
+		}();
+
+		// If frequency is 0, high-resolution timer is not available
+		if (freq.QuadPart == 0) {
+			return 0.0;
+		}
+
+		LARGE_INTEGER now;
+		if (!QueryPerformanceCounter(&now)) {
+			return 0.0;  // Return 0.0 if counter query fails
+		}
+
+		return static_cast<double>(now.QuadPart) / static_cast<double>(freq.QuadPart);
+	}
 }
