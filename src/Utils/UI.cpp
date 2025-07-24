@@ -163,11 +163,10 @@ namespace Util
 		logger::info("InitializeMenuIcons: Loading icons from base path: {}", basePath);
 
 		// Initialize all texture pointers to nullptr for safe cleanup
-		std::array<ID3D11ShaderResourceView**, 13> texturePointers = {
+		std::array<ID3D11ShaderResourceView**, 12> texturePointers = {
 			&menu->uiIcons.saveSettings.texture,
 			&menu->uiIcons.loadSettings.texture,
 			&menu->uiIcons.clearCache.texture,
-			&menu->uiIcons.clearDiskCache.texture,
 			&menu->uiIcons.logo.texture,
 			&menu->uiIcons.characters.texture,
 			&menu->uiIcons.grass.texture,
