@@ -86,7 +86,8 @@ namespace Util
 			return transform;
 
 		vr::TrackedDevicePose_t hmdPose;
-		system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &hmdPose, 1);
+		if (!GetDeviceToAbsoluteTrackingPoseCompatible(vr::TrackingUniverseStanding, 0, &hmdPose, 1))
+			return transform;
 		if (!hmdPose.bPoseIsValid)
 			return transform;
 
@@ -132,6 +133,12 @@ namespace Util
 	//=============================================================================
 	// NEW ACTIVE FUNCTIONS FROM VR.CPP
 	//=============================================================================
+
+	// NOTE: OpenComposite Compatibility
+	// The functions below provide compatibility with OpenComposite, which has issues
+	// with GetDeviceToAbsoluteTrackingPose when requesting poses. We completely avoid
+	// using GetDeviceToAbsoluteTrackingPose and instead use VRCompositor interfaces
+	// obtained through BSOpenVR to avoid static linking issues on non-VR systems.
 
 	OpenVRContext::OpenVRContext()
 	{
@@ -201,7 +208,9 @@ namespace Util
 			return false;
 
 		vr::TrackedDevicePose_t poses[vr::k_unMaxTrackedDeviceCount];
-		ctx.system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, poses, vr::k_unMaxTrackedDeviceCount);
+		if (!GetDeviceToAbsoluteTrackingPoseCompatible(vr::TrackingUniverseStanding, 0, poses, vr::k_unMaxTrackedDeviceCount))
+			return false;
+
 		if (!poses[index].bPoseIsValid)
 			return false;
 
@@ -209,5 +218,72 @@ namespace Util
 			for (int j = 0; j < 4; ++j)
 				out[i][j] = poses[index].mDeviceToAbsoluteTracking.m[i][j];
 		return true;
+	}
+
+	bool GetDeviceToAbsoluteTrackingPoseCompatible(vr::ETrackingUniverseOrigin eOrigin, float fPredictedSecondsToPhotonsFromNow, vr::TrackedDevicePose_t* pTrackedDevicePoseArray, uint32_t unTrackedDevicePoseArrayCount)
+	{
+		(void)fPredictedSecondsToPhotonsFromNow;
+		(void)eOrigin;
+		OpenVRContext ctx;
+		if (!ctx.IsValid())
+			return false;
+
+		// For single device requests (common with HMD pose requests),
+		// use a full pose array to ensure OpenComposite compatibility
+		if (unTrackedDevicePoseArrayCount == 1) {
+			vr::TrackedDevicePose_t allPoses[vr::k_unMaxTrackedDeviceCount];
+
+			// Try to use compositor interface first for better OpenComposite compatibility
+			// Use BSOpenVR's method to avoid static linking issues
+			auto* compositor = RE::BSOpenVR::GetIVRCompositor();
+			if (!compositor && ctx.openvr) {
+				// Fallback to compositor from the context
+				compositor = ctx.openvr->vrContext.vrCompositor;
+			}
+
+			if (compositor) {
+				// For OpenComposite compatibility, try to use GetLastPoses which is more stable
+				auto error = compositor->GetLastPoses(allPoses, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
+				if (error == vr::VRCompositorError_None) {
+					// Copy HMD pose (index 0) to output
+					pTrackedDevicePoseArray[0] = allPoses[0];
+					return true;
+				}
+				// Fallback to WaitGetPoses if GetLastPoses fails
+				error = compositor->WaitGetPoses(allPoses, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
+				if (error == vr::VRCompositorError_None) {
+					// Copy HMD pose (index 0) to output
+					pTrackedDevicePoseArray[0] = allPoses[0];
+					return true;
+				}
+			}
+
+			// If compositor methods failed, return false rather than using the problematic direct call
+			return false;
+		}
+
+		// For full device array requests, try compositor first
+		// Use BSOpenVR's method to avoid static linking issues
+		auto* compositor = RE::BSOpenVR::GetIVRCompositor();
+		if (!compositor && ctx.openvr) {
+			// Fallback to compositor from the context
+			compositor = ctx.openvr->vrContext.vrCompositor;
+		}
+
+		if (compositor) {
+			// For OpenComposite compatibility, try to use GetLastPoses which is more stable
+			auto error = compositor->GetLastPoses(pTrackedDevicePoseArray, unTrackedDevicePoseArrayCount, nullptr, 0);
+			if (error == vr::VRCompositorError_None) {
+				return true;
+			}
+			// Fallback to WaitGetPoses if GetLastPoses fails
+			error = compositor->WaitGetPoses(pTrackedDevicePoseArray, unTrackedDevicePoseArrayCount, nullptr, 0);
+			if (error == vr::VRCompositorError_None) {
+				return true;
+			}
+		}
+
+		// If compositor methods failed, return false rather than using the problematic direct call
+		return false;
 	}
 }

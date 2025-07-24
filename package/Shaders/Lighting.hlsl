@@ -1884,12 +1884,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	complexMaterial = complexMaterial && complexMaterialColor.y > (4.0 / 255.0);
 	shininess = lerp(shininess, shininess * complexMaterialColor.y, complexMaterial);
 	if (complexMaterial) {
-		if (complexMaterialColor.z > 0.0) {
-			complexSpecular = Color::GammaToLinear(baseColor.xyz);  // Use original baseColor for complexSpecular calculation to avoid stochastic artifacts
-		}
 		complexSpecular = lerp(1.0, complexSpecular, complexMaterialColor.z);
+		baseColor.xyz = lerp(baseColor.xyz, 0.0, complexMaterialColor.z);
 	}
-	baseColor.xyz = lerp(baseColor.xyz, lerp(baseColor.xyz, 0.0, complexMaterialColor.z), complexMaterial);
 #	endif  // defined (EMAT) && defined(ENVMAP)
 
 #	if defined(FACEGEN)
@@ -2856,7 +2853,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #			if defined(EMAT)
 				float complexMaterialRoughness = 1.0 - complexMaterialColor.y;
-				envRoughness = lerp(envRoughness, pow(saturate(complexMaterialRoughness), 1.5), complexMaterial);
+				envRoughness = lerp(envRoughness, complexMaterialRoughness, complexMaterial);
 				F0 = lerp(F0, complexSpecular, complexMaterial);
 #			endif
 
