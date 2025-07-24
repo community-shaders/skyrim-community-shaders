@@ -51,6 +51,7 @@ struct ExtendedTranslucency final : Feature
 	};
 
 	MaterialParams settings;
+	bool SkinnedOnly = true;
 
 	static const RE::BSFixedString NiExtraDataName_AnisotropicAlphaMaterial;
 };
