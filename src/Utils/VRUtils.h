@@ -143,6 +143,20 @@ namespace Util
 	 */
 	bool GetControllerWorldMatrix(vr::TrackedDeviceIndex_t index, float out[3][4]);
 
+	/**
+	 * @brief OpenComposite-compatible function to get device poses
+	 * @param eOrigin The tracking universe origin
+	 * @param fPredictedSecondsToPhotonsFromNow Prediction time for poses
+	 * @param pTrackedDevicePoseArray Output array for tracked device poses
+	 * @param unTrackedDevicePoseArrayCount Number of poses to retrieve
+	 * @return true if poses were retrieved successfully
+	 *
+	 * This function provides a compatibility layer for getting device poses that works
+	 * with both standard OpenVR and OpenComposite. It uses the compositor interface
+	 * when available for better OpenComposite compatibility.
+	 */
+	bool GetDeviceToAbsoluteTrackingPoseCompatible(vr::ETrackingUniverseOrigin eOrigin, float fPredictedSecondsToPhotonsFromNow, vr::TrackedDevicePose_t* pTrackedDevicePoseArray, uint32_t unTrackedDevicePoseArrayCount);
+
 	//=============================================================================
 	// MATRIX CONVERSION UTILITIES
 	//=============================================================================
