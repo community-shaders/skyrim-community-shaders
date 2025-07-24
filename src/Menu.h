@@ -84,8 +84,7 @@ public:
 		UIIcon landscape;
 		UIIcon water;
 		UIIcon debug;
-		UIIcon materials;  // Placeholder for now
-		UIIcon other;      // Generic icon for other/misc categories
+		UIIcon materials;
 	} uiIcons;
 
 	struct ThemeSettings
