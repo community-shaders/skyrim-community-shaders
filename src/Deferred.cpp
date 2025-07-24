@@ -355,6 +355,8 @@ void Deferred::StartDeferred()
 	PrepassPasses();
 
 	OverrideBlendStates();
+
+	globals::state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::InWorld);
 }
 
 void Deferred::DeferredPasses()
@@ -551,6 +553,8 @@ void Deferred::EndDeferred()
 	deferredPass = false;
 
 	ResetBlendStates();
+
+	globals::state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::InWorld);
 }
 
 void Deferred::OverrideBlendStates()
@@ -768,11 +772,9 @@ void Deferred::Hooks::Main_RenderShadowMaps::thunk()
 void Deferred::Hooks::Main_RenderWorld::thunk(bool a1)
 {
 	auto* const state = globals::state;
-	state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::InWorld);
 	state->inWorld = true;
 	func(a1);
 	state->inWorld = false;
-	state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::InWorld);
 };
 
 void Deferred::Hooks::Main_RenderWorld_Start::thunk(RE::BSBatchRenderer* This, uint32_t StartRange, uint32_t EndRanges, uint32_t RenderFlags, int GeometryGroup)
