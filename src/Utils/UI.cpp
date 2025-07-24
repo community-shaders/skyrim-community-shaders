@@ -292,7 +292,7 @@ namespace Util
 			logger::warn("InitializeMenuIcons: Failed to load materials icon from: {}", basePath + "Categories\\materials.png");
 		}
 
-		logger::info("InitializeMenuIcons: Loaded {}/13 icons successfully", iconsLoaded);
+		logger::info("InitializeMenuIcons: Loaded {}/12 icons successfully", iconsLoaded);
 
 		return anyIconLoaded;
 	}
