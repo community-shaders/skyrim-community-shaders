@@ -301,15 +301,11 @@ void LightLimitFix::BSLightingShader_SetupGeometry_Before(RE::BSRenderPass* a_pa
 	}
 }
 
-void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(RE::BSRenderPass* a_pass, DirectX::XMMATRIX&, uint32_t, uint32_t, float, Space)
+void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(RE::BSRenderPass* a_pass)
 {
-	auto shaderCache = globals::shaderCache;
 	auto isl = globals::features::inverseSquareLighting;
 
-	if (!shaderCache->IsEnabled())
-		return;
-
-	auto accumulator = RE::BSGraphics::BSShaderAccumulator::GetCurrentAccumulator();
+	auto accumulator = *globals::game::currentAccumulator.get();
 	bool inWorld = accumulator->GetRuntimeData().activeShadowSceneNode == globals::game::smState->shadowSceneNode[0];
 
 	strictLightDataTemp.NumStrictLights = inWorld ? 0 : (a_pass->numLights - 1);
@@ -335,7 +331,7 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 
 		SetLightPosition(light, niLight->world.translate, inWorld);
 
-		if (bsLight->IsShadowLight()) {
+		if (i < a_pass->numShadowLights) {
 			auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
 			GET_INSTANCE_MEMBER(shadowLightIndex, shadowLight);
 			light.shadowMaskIndex = shadowLightIndex;
@@ -362,7 +358,7 @@ void LightLimitFix::BSLightingShader_SetupGeometry_After(RE::BSRenderPass*)
 	if (!shaderCache->IsEnabled())
 		return;
 
-	auto accumulator = RE::BSGraphics::BSShaderAccumulator::GetCurrentAccumulator();
+	auto accumulator = *globals::game::currentAccumulator.get();
 
 	auto shadowSceneNode = smState->shadowSceneNode[0];
 
@@ -497,14 +493,14 @@ LightLimitFix::ParticleLightReference LightLimitFix::GetParticleLightConfigs(RE:
 
 	// see https://www.nexusmods.com/skyrimspecialedition/articles/1391
 	if (settings.EnableParticleLights) {
-		if (auto shaderProperty = netimmerse_cast<RE::BSEffectShaderProperty*>(a_pass->shaderProperty)) {
+		if (auto shaderProperty = a_pass->shaderProperty->GetRTTI() == globals::rtti::BSEffectShaderPropertyRTTI.get() ? static_cast<RE::BSEffectShaderProperty*>(a_pass->shaderProperty) : nullptr) {
 			if (!shaderProperty->lightData) {
 				if (auto material = shaderProperty->GetMaterial()) {
 					// Check if it's a valid particle light
 					bool billboard = false;
-					if (!netimmerse_cast<RE::NiParticleSystem*>(a_pass->geometry)) {
+					if (a_pass->geometry->GetRTTI() != globals::rtti::NiParticleSystemRTTI.get()) {
 						if (auto parent = a_pass->geometry->parent) {
-							if (auto billboardNode = netimmerse_cast<RE::NiBillboardNode*>(parent)) {
+							if (auto billboardNode = parent->GetRTTI() == globals::rtti::NiBillboardNodeRTTI.get() ? static_cast<RE::NiBillboardNode*>(parent) : nullptr) {
 								billboard = true;
 							} else {
 								return { false };
@@ -1067,12 +1063,6 @@ float LightLimitFix::Hooks::AIProcess_CalculateLightValue_GetLuminance::thunk(RE
 	auto ret = func(shadowSceneNode, targetPosition, numHits, sunLightLevel, lightLevel, refLight, shadowBitMask);
 	globals::features::lightLimitFix->AddParticleLightLuminance(targetPosition, numHits, ret);
 	return ret;
-}
-
-void LightLimitFix::Hooks::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights::thunk(RE::BSGraphics::PixelShader* PixelShader, RE::BSRenderPass* Pass, DirectX::XMMATRIX& Transform, uint32_t LightCount, uint32_t ShadowLightCount, float WorldScale, Space RenderSpace)
-{
-	globals::features::lightLimitFix->BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(Pass, Transform, LightCount, ShadowLightCount, WorldScale, RenderSpace);
-	func(PixelShader, Pass, Transform, LightCount, ShadowLightCount, WorldScale, RenderSpace);
 }
 
 void LightLimitFix::Hooks::NiNode_Destroy::thunk(RE::NiNode* This)

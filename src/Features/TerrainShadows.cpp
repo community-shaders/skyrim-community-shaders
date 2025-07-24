@@ -320,7 +320,7 @@ void TerrainShadows::UpdateShadow()
 		context->CSSetShaderResources(60, (uint)srvs.size(), srvs.data());
 	}
 
-	auto accumulator = RE::BSGraphics::BSShaderAccumulator::GetCurrentAccumulator();
+	auto accumulator = *globals::game::currentAccumulator.get();
 	auto sunLight = skyrim_cast<RE::NiDirectionalLight*>(accumulator->GetRuntimeData().activeShadowSceneNode->GetRuntimeData().sunLight->light.get());
 	if (!sunLight)
 		return;

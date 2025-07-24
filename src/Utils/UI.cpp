@@ -218,15 +218,6 @@ namespace Util
 			logger::warn("InitializeMenuIcons: Failed to load clear-cache icon from: {}", basePath + "Microsoft Icons\\clear-cache.png");
 		}
 
-		// Load clear disk cache icon
-		if (LoadTextureFromFile(device, (basePath + "Microsoft Icons\\clear-disk.png").c_str(), &menu->uiIcons.clearDiskCache.texture, menu->uiIcons.clearDiskCache.size)) {
-			logger::info("InitializeMenuIcons: Successfully loaded clear-disk icon");
-			iconsLoaded++;
-			anyIconLoaded = true;
-		} else {
-			logger::warn("InitializeMenuIcons: Failed to load clear-disk icon from: {}", basePath + "Microsoft Icons\\clear-disk.png");
-		}
-
 		// Load logo icon
 		if (LoadTextureFromFile(device, (basePath + "Community Shaders Logo\\cs-logo.png").c_str(), &menu->uiIcons.logo.texture, menu->uiIcons.logo.size)) {
 			logger::info("InitializeMenuIcons: Successfully loaded logo icon");
@@ -303,10 +294,11 @@ namespace Util
 		}
 
 		logger::info("InitializeMenuIcons: Loaded {}/13 icons successfully", iconsLoaded);
+
 		return anyIconLoaded;
 	}
 
-	// Text rendering helpers (moved from UITextHelper)
+	// Text rendering helpers
 	ImVec2 DrawSharpText(const char* text, bool alignToPixelGrid, float scale)
 	{
 		ImVec2 startPos = ImGui::GetCursorPos();
@@ -484,7 +476,7 @@ namespace Util
 		hovered = ImGui::IsItemHovered();
 
 		// Draw the lines and text using Menu theme colors
-		auto& theme = Menu::GetSingleton()->GetTheme().FeatureHeading;
+		auto& theme = globals::menu->GetTheme().FeatureHeading;
 
 		// Get the color based on hover state
 		ImVec4 color = hovered ? theme.ColorHovered : theme.ColorDefault;
@@ -541,7 +533,7 @@ namespace Util
 		bool stateChanged = false;
 
 		// Use Menu theme colors for consistent styling
-		auto& theme = Menu::GetSingleton()->GetTheme().FeatureHeading;
+		auto& theme = globals::menu->GetTheme().FeatureHeading;
 		ImVec4 color = useWhiteText ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : theme.ColorDefault;
 
 		ImU32 headerColor = ImGui::GetColorU32(color);
@@ -603,7 +595,7 @@ namespace Util
 	ColorCodedValueConfig ColorCodedValueConfig::HighIsBad(float low, float med, float high)
 	{
 		ColorCodedValueConfig config;
-		const auto& theme = Menu::GetSingleton()->GetTheme().StatusPalette;
+		const auto& theme = globals::menu->GetTheme().StatusPalette;
 		config.thresholds = {
 			{ low, theme.Disable },    // Very low - gray
 			{ med, theme.InfoColor },  // Low - blue
@@ -616,7 +608,7 @@ namespace Util
 	ColorCodedValueConfig ColorCodedValueConfig::HighIsGood(float low, float med, float high)
 	{
 		ColorCodedValueConfig config;
-		const auto& theme = Menu::GetSingleton()->GetTheme().StatusPalette;
+		const auto& theme = globals::menu->GetTheme().StatusPalette;
 		config.thresholds = {
 			{ low, theme.Disable },          // Very low - gray
 			{ med, theme.InfoColor },        // Low - blue
@@ -876,6 +868,55 @@ namespace Util
 				}
 			}
 			ImGui::EndTable();
+		}
+	}
+
+	// Theme-aware color accessor functions
+	namespace Colors
+	{
+		ImVec4 GetTimerGood()
+		{
+			return globals::menu->GetTheme().StatusPalette.SuccessColor;
+		}
+
+		ImVec4 GetTimerWarning()
+		{
+			return globals::menu->GetTheme().StatusPalette.Warning;
+		}
+
+		ImVec4 GetTimerCritical()
+		{
+			return globals::menu->GetTheme().StatusPalette.Error;
+		}
+
+		ImVec4 GetDefault()
+		{
+			return globals::menu->GetTheme().Palette.Text;
+		}
+
+		ImVec4 GetSuccess()
+		{
+			return globals::menu->GetTheme().StatusPalette.SuccessColor;
+		}
+
+		ImVec4 GetWarning()
+		{
+			return globals::menu->GetTheme().StatusPalette.Warning;
+		}
+
+		ImVec4 GetError()
+		{
+			return globals::menu->GetTheme().StatusPalette.Error;
+		}
+
+		ImVec4 GetInfo()
+		{
+			return globals::menu->GetTheme().StatusPalette.InfoColor;
+		}
+
+		ImVec4 GetDisabled()
+		{
+			return globals::menu->GetTheme().StatusPalette.Disable;
 		}
 	}
 }  // namespace Util

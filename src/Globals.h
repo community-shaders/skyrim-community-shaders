@@ -116,6 +116,17 @@ namespace globals
 		extern RE::Setting* bShadowsOnGrass;
 		extern RE::Setting* shadowMaskQuarter;
 		extern REL::Relocation<ID3D11Buffer**> perFrame;
+		extern REL::Relocation<RE::BSGraphics::BSShaderAccumulator**> currentAccumulator;
+	}
+
+	namespace rtti
+	{
+		extern REL::Relocation<const RE::NiRTTI*> NiIntegerExtraDataRTTI;
+		extern REL::Relocation<const RE::NiRTTI*> BSLightingShaderPropertyRTTI;
+		extern REL::Relocation<const RE::NiRTTI*> BSEffectShaderPropertyRTTI;
+		extern REL::Relocation<const RE::NiRTTI*> NiParticleSystemRTTI;
+		extern REL::Relocation<const RE::NiRTTI*> NiBillboardNodeRTTI;
+		extern REL::Relocation<const RE::NiRTTI*> NiAlphaPropertyRTTI;
 	}
 
 	extern State* state;

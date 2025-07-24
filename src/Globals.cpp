@@ -116,6 +116,17 @@ namespace globals
 		RE::Setting* shadowMaskQuarter = nullptr;
 
 		REL::Relocation<ID3D11Buffer**> perFrame;
+		REL::Relocation<RE::BSGraphics::BSShaderAccumulator**> currentAccumulator;
+	}
+
+	namespace rtti
+	{
+		REL::Relocation<const RE::NiRTTI*> NiIntegerExtraDataRTTI;
+		REL::Relocation<const RE::NiRTTI*> BSLightingShaderPropertyRTTI;
+		REL::Relocation<const RE::NiRTTI*> BSEffectShaderPropertyRTTI;
+		REL::Relocation<const RE::NiRTTI*> NiParticleSystemRTTI;
+		REL::Relocation<const RE::NiRTTI*> NiBillboardNodeRTTI;
+		REL::Relocation<const RE::NiRTTI*> NiAlphaPropertyRTTI;
 	}
 
 	State* state = nullptr;
@@ -195,6 +206,18 @@ namespace globals
 
 			ui = RE::UI::GetSingleton();
 			perFrame = { REL::RelocationID(524768, 411384) };
+
+			currentAccumulator = { REL::RelocationID(527650, 414600) };
+		}
+
+		{
+			using namespace rtti;
+			NiIntegerExtraDataRTTI = { RE::NiIntegerExtraData::Ni_RTTI };
+			BSLightingShaderPropertyRTTI = { RE::BSLightingShaderProperty::Ni_RTTI };
+			BSEffectShaderPropertyRTTI = { RE::BSEffectShaderProperty::Ni_RTTI };
+			NiParticleSystemRTTI = { RE::NiParticleSystem::Ni_RTTI };
+			NiBillboardNodeRTTI = { RE::NiBillboardNode::Ni_RTTI };
+			NiAlphaPropertyRTTI = { RE::NiAlphaProperty::Ni_RTTI };
 		}
 
 		d3d::device = reinterpret_cast<ID3D11Device*>(game::renderer->GetRuntimeData().forwarder);
