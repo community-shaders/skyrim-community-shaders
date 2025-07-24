@@ -2586,9 +2586,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 		float3 normalizedLightDirection = normalize(lightDirection);
 		float lightAngle = dot(worldNormal.xyz, normalizedLightDirection.xyz);
+		
+		float contactShadow = 1.0;
 
 #	if defined(DEFERRED)
-		float contactShadow = 1.0;
 		[branch] if (
 			inWorld && !FrameBuffer::FrameParams.z &&
 			SharedData::lightLimitFixSettings.EnableContactShadows &&
