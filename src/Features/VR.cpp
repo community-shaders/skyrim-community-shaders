@@ -2057,8 +2057,8 @@ void VR::TryStartNewDrag()
 						vr::ETrackedControllerRole deviceRole = system->GetControllerRoleForTrackedDeviceIndex(deviceIdx);
 						bool isRightController = (deviceRole == vr::ETrackedControllerRole::TrackedControllerRole_RightHand);
 						if (isRightController == isRight) {
-							// Trigger haptic pulse (100ms = 100,000 microseconds)
-							system->TriggerHapticPulse(deviceIdx, 0, static_cast<unsigned short>(100000));
+							// Use BSOpenVR's haptic pulse method instead of direct OpenVR call
+							openvr->TriggerHapticPulse(isRightController, 25.0f);  // 100ms pulse
 							break;
 						}
 					}
