@@ -221,7 +221,6 @@ Menu::~Menu()
 	uiIcons.water.Release();
 	uiIcons.debug.Release();
 	uiIcons.materials.Release();
-	uiIcons.other.Release();
 
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
