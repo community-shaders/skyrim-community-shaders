@@ -82,7 +82,6 @@ public:
 	Texture2D* adaptationTextures[2];
 	winrt::com_ptr<ID3D11ShaderResourceView> lutTexture = nullptr;
 
-
 	struct Hooks
 	{
 		struct Main_RenderShadowMaps

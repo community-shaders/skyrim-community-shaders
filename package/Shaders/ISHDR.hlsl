@@ -60,20 +60,20 @@ PS_OUTPUT main(PS_INPUT input)
 #	if defined(DOWNSAMPLE) && !defined(DOWNADAPT)
 
 	float3 downsampledColor = 0.0;
-	
+
 	[loop]
-	for (int sampleIndex = 0; sampleIndex < DOWNSAMPLE; ++sampleIndex) 
+	for (int sampleIndex = 0; sampleIndex < DOWNSAMPLE; ++sampleIndex)
 	{
 		float2 texCoord = BlurOffsets[sampleIndex].xy * BlurScale.xy + input.TexCoord;
-		
-		[branch] 
+
+		[branch]
 		if (Flags.x > 0.5)
 		{
 			texCoord = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(texCoord);
 		}
-		
+
 		float3 imageColor = ImageTex.Sample(ImageSampler, texCoord).xyz;
-		
+
 #if defined(RGB2LUM)
 		imageColor = max(imageColor.x, max(imageColor.y, imageColor.z));
 #elif (defined(LUM) || defined(LUMCLAMP)) && !defined(DOWNADAPT)
@@ -82,7 +82,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 		downsampledColor += imageColor * BlurOffsets[sampleIndex].z;
 	}
-	
+
 	psout.Color = float4(downsampledColor, BlurScale.z);
 
 #elif defined(DOWNADAPT)

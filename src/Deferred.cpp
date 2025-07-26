@@ -804,7 +804,7 @@ void Deferred::BindAdaptationShader()
 
 	auto srv = adaptationTextures[frameSwap]->srv.get();
 	globals::d3d::context->PSSetShaderResources(1, 1, &srv);
-	
+
 	auto rtv = adaptationTextures[!frameSwap]->rtv.get();
 	globals::d3d::context->OMSetRenderTargets(1, &rtv, nullptr);
 }
