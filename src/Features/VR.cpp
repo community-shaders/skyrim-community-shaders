@@ -165,7 +165,7 @@ void VR::DrawOverlay()
 	Util::DrawButtonCombo(settings.VRMenuCloseKeys, true);
 	ImGui::Spacing();
 	ImGui::TextDisabled("(This message will auto-disable in %d seconds)", secondsLeft);
-	ImGui::TextDisabled("(You can disable this message in VR settings > Controller Instructions)");
+	ImGui::TextDisabled("(You can disable this message in VR settings > Controller Input Instructions)");
 	ImGui::End();
 }
 
@@ -189,8 +189,8 @@ void VR::DrawSettings()
 		// General Settings Tab
 		if (ImGui::BeginTabItem("General")) {
 			if (ImGui::BeginChild("##VRGeneralFrame", { 0, 0 }, true)) {
-				DrawControllerInputInstructions();
 				DrawGeneralVRSettings();
+				DrawControllerInputInstructions();
 				DrawMenuSettings();
 				DrawMouseSettings();
 				DrawDragSettings();
