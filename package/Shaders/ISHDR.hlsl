@@ -172,7 +172,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 gameSdrColor = 0.0;
 	float3 ppColor = 0.0;
 	{
-		inputColor = 0.04 * inputColor / (adaptation * 0.18 + 0.02);
+		inputColor = 0.04 * inputColor / (adaptation * 0.20 + 0.02);
 
 		float3 blendedColor;
 		[branch] if (Param.z > 0.5)
