@@ -136,18 +136,9 @@ namespace DisplayMapping
 		float saturationAmount = pow(smoothstep(1.0, 0.3, ictcp.x), 1.3);
 		col = ICtCpToRGB(ictcp * float3(1, saturationAmount.xx));
 
-		// Hue preserving mapping
-		float maxCol = Color::RGBToLuminance(col);
-		float mappedMax = GetTonemapFactorHejlBurgessDawson(maxCol).x;
-		float3 compressedHuePreserving = col * mappedMax / maxCol;
-
-		compressedHuePreserving += saturate(Param.x - mappedMax) * bloomCol;
-
 		// Non-hue preserving mapping
-		float3 perChannelCompressed = GetTonemapFactorHejlBurgessDawson(col);
-		perChannelCompressed += saturate(Param.x - perChannelCompressed) * bloomCol;
-
-		col = lerp(perChannelCompressed, compressedHuePreserving, 0.6);
+		col = GetTonemapFactorHejlBurgessDawson(col);
+		col += saturate(Param.x - col) * bloomCol;
 
 		float3 ictcpMapped = RGBToICtCp(col);
 
@@ -158,6 +149,7 @@ namespace DisplayMapping
 		// Doing it here however does a better job of preserving perceptual luminance of highly saturated colors. Because in the hue-preserving path we only range-compress the max channel,
 		// saturated colors lose luminance. By desaturating them more aggressively first, compressing, and then re-adding some saturation, we can preserve their brightness to a greater extent.
 		ictcpMapped.yz = lerp(ictcpMapped.yz, ictcp.yz * ictcpMapped.x / max(1e-3, ictcp.x), postCompressionSaturationBoost);
+		ictcpMapped.yz *= 1.1; // Boost vibrance due to non hue preserving mapping
 
 		col = ICtCpToRGB(ictcpMapped);
 

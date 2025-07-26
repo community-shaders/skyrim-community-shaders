@@ -35,6 +35,12 @@ public:
 
 	ID3D11ComputeShader* GetComputeMainCompositeInterior();
 
+	void HDRShaderHacks();
+
+	void BindAdaptationShader();
+
+	void BindHDRShader();
+
 	ID3D11BlendState* deferredBlendStates[7][2][13][2];
 	ID3D11BlendState* forwardBlendStates[7][2][13][2];
 
@@ -73,8 +79,9 @@ public:
 	Buffer* perShadow = nullptr;
 	ID3D11ShaderResourceView* shadowView = nullptr;
 
+	Texture2D* adaptationTextures[2];
 	winrt::com_ptr<ID3D11ShaderResourceView> lutTexture = nullptr;
-	void BindLUT();
+
 
 	struct Hooks
 	{
@@ -108,26 +115,6 @@ public:
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
-		struct BSImagespaceShaderHDRTonemapBlendCinematic_SetupTechnique
-		{
-			static void thunk(RE::BSShader* a_shader, RE::BSShaderMaterial* a_material)
-			{
-				GetSingleton()->BindLUT();
-				func(a_shader, a_material);
-			}
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		struct BSImagespaceShaderHDRTonemapBlendCinematicFade_SetupTechnique
-		{
-			static void thunk(RE::BSShader* a_shader, RE::BSShaderMaterial* a_material)
-			{
-				GetSingleton()->BindLUT();
-				func(a_shader, a_material);
-			}
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
 		struct Main_RenderFirstPersonView
 		{
 			static void thunk(bool a1, bool a2);
@@ -154,9 +141,6 @@ public:
 				stl::write_thunk_call<Main_RenderFirstPersonView>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x944, 0x954));
 
 			stl::detour_thunk<Renderer_ResetState>(REL::RelocationID(75570, 77371));
-
-			stl::write_vfunc<0x2, BSImagespaceShaderHDRTonemapBlendCinematic_SetupTechnique>(RE::VTABLE_BSImagespaceShaderHDRTonemapBlendCinematic[0]);
-			stl::write_vfunc<0x2, BSImagespaceShaderHDRTonemapBlendCinematicFade_SetupTechnique>(RE::VTABLE_BSImagespaceShaderHDRTonemapBlendCinematicFade[0]);
 
 			logger::info("[Deferred] Installed hooks");
 		}

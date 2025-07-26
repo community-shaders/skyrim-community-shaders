@@ -1,6 +1,7 @@
 #include "Common/Color.hlsli"
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
+#include "Common/SharedData.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
 
@@ -56,35 +57,102 @@ PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
 
-#	if defined(DOWNSAMPLE)
-	float3 downsampledColor = 0;
-	for (int sampleIndex = 0; sampleIndex < DOWNSAMPLE; ++sampleIndex) {
+#	if defined(DOWNSAMPLE) && !defined(DOWNADAPT)
+
+	float3 downsampledColor = 0.0;
+	
+	[loop]
+	for (int sampleIndex = 0; sampleIndex < DOWNSAMPLE; ++sampleIndex) 
+	{
 		float2 texCoord = BlurOffsets[sampleIndex].xy * BlurScale.xy + input.TexCoord;
-		[branch] if (Flags.x > 0.5)
+		
+		[branch] 
+		if (Flags.x > 0.5)
 		{
 			texCoord = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(texCoord);
 		}
+		
 		float3 imageColor = ImageTex.Sample(ImageSampler, texCoord).xyz;
-#		if defined(RGB2LUM)
-		imageColor = Color::RGBToLuminance(imageColor);
-#		elif (defined(LUM) || defined(LUMCLAMP)) && !defined(DOWNADAPT)
+		
+#if defined(RGB2LUM)
+		imageColor = max(imageColor.x, max(imageColor.y, imageColor.z));
+#elif (defined(LUM) || defined(LUMCLAMP)) && !defined(DOWNADAPT)
 		imageColor = imageColor.x;
-#		endif
+#endif
+
 		downsampledColor += imageColor * BlurOffsets[sampleIndex].z;
 	}
-#		if defined(DOWNADAPT)
-	float2 adaptValue = AdaptTex.Sample(AdaptSampler, input.TexCoord).xy;
-	if (isnan(downsampledColor.x) || isnan(downsampledColor.y) || isnan(downsampledColor.z)) {
-		downsampledColor.xy = adaptValue;
-	} else {
-		float2 adaptDelta = downsampledColor.xy - adaptValue;
-		downsampledColor.xy =
-			sign(adaptDelta) * clamp(abs(Param.wz * adaptDelta), 0.00390625, abs(adaptDelta)) +
-			adaptValue;
-	}
-	downsampledColor = max(asfloat(0x00800000), downsampledColor);  // Black screen fix
-#		endif
+	
 	psout.Color = float4(downsampledColor, BlurScale.z);
+
+#elif defined(DOWNADAPT)
+
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+// ENBSeries Fallout 4 adaptation file, hlsl DX11                   //
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+//  Histogram based adaptation by kingeric1992                      //
+//      based on the description here:                              //
+//  https://docs.unrealengine.com/latest/INT/Engine/Rendering/PostProcessEffects/AutomaticExposure/
+//                                                                  //
+//  For more info, visit                                            //
+//     http://enbseries.enbdev.com/forum/viewtopic.php?f=7&t=5321   //
+//                                                                  //
+//  update: Nov.23.2016                                             //
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+
+    float4 coord = { 1.0 / 32.0, 1.0 / 32.0, 1.0 / 32.0, 1.0 / 16.0};
+    float4 bin[16];
+
+    for(int k=0; k<16; k++)
+    {
+        bin[k]=float4(0.0, 0.0, 0.0, 0.0);
+    }
+
+    [loop]
+    for(int i=0; i < 16.0; i++)
+    {
+        coord.y  = coord.z;
+        [loop]
+        for(int j=0; j<16.0; j++)
+        {
+            float  color = log2(ImageTex.SampleLevel(ImageSampler, coord.xy, 0.0).r);
+            float level = saturate(( color + 5.0 ) / 7) * 63; // [-5, 2] - Tweaked for SSE by ez009 @ http://enbseries.enbdev.com/forum/viewtopic.php?p=90553#p90553
+            bin[ level * 0.25 ] += float4(0.0, 1.0, 2.0, 3.0) == float4(trunc(level % 4).xxxx); //bitwise ?
+            coord.y  += coord.w;
+        }
+        coord.x += coord.w;
+    }
+
+	float LowPercent = 0.6;
+	float HighPercent = 0.9;
+
+    float2 adaptAnchor = 0.5; //.x = high, .y = low
+    float2 accumulate  = float2( HighPercent - 1.0, LowPercent - 1.0) * 256.0;
+
+    [loop]
+    for(int l=15; l>0; l--)
+    {
+        accumulate += bin[l].w;
+        adaptAnchor = (accumulate.xy < bin[l].ww)? l * 4.0 + accumulate.xy / bin[l].ww + 3.0: adaptAnchor;
+
+        accumulate += bin[l].z;
+        adaptAnchor = (accumulate.xy < bin[l].zz)? l * 4.0 + accumulate.xy / bin[l].zz + 2.0: adaptAnchor;
+
+        accumulate += bin[l].y;
+        adaptAnchor = (accumulate.xy < bin[l].yy)? l * 4.0 + accumulate.xy / bin[l].yy + 1.0: adaptAnchor;
+
+        accumulate += bin[l].x;
+        adaptAnchor = (accumulate.xy < bin[l].xx)? l * 4.0 + accumulate.xy / bin[l].xx + 0.0: adaptAnchor;
+    }
+
+	float Bias = -2.0;
+	float MaxBrightness = 0.0;
+	float MinBrightness = -4.0;
+
+    float adapt = (adaptAnchor.x + adaptAnchor.y) * 0.5 / 63.0 * 7.0 - 5.0; // - Tweaked for SSE by ez009 @ http://enbseries.enbdev.com/forum/viewtopic.php?p=90553#p90553
+          adapt =  pow(2.0, clamp( adapt, MinBrightness, MaxBrightness) + Bias);  // min max on log2 scale
+
+	psout.Color = lerp(AdaptTex.Sample(ImageSampler, 0.5).x, adapt, 0.2 * 0.001 * SharedData::Timer);
 
 #	elif defined(BLEND)
 	float2 uv = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
@@ -98,14 +166,13 @@ PS_OUTPUT main(PS_INPUT input)
 		bloomColor = ImageTex.Sample(ImageSampler, input.TexCoord.xy).xyz;
 	}
 
-	float2 avgValue = AvgTex.Sample(AvgSampler, input.TexCoord.xy).xy;
+	float adaptation = AvgTex.Sample(AvgSampler, uv).xyz;
 
 	// Vanilla tonemapping and post-processing
 	float3 gameSdrColor = 0.0;
 	float3 ppColor = 0.0;
 	{
-		inputColor *= avgValue.y / avgValue.x;
-		inputColor = max(0, inputColor);
+		inputColor = 0.04 * inputColor / (adaptation * 0.18 + 0.02);
 
 		float3 blendedColor;
 		[branch] if (Param.z > 0.5)
@@ -127,7 +194,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 		float3 linearColor = Cinematic.w * lerp(lerp(blendedLuminance, blendedColor, Cinematic.x), blendedLuminance * Tint.xyz, Tint.w).xyz;
 
-		linearColor = lerp(avgValue.x, linearColor, Cinematic.z);
+		linearColor = lerp(adaptation, linearColor, Cinematic.z);
 
 		ppColor = max(0, linearColor);
 	}
