@@ -29,6 +29,10 @@ public:
 	void PrepassPasses();
 
 	void ClearShaderCache();
+
+	ID3D11ComputeShader* GetComputeHistogram();
+	ID3D11ComputeShader* GetComputeHistogramAverage();
+
 	ID3D11ComputeShader* GetComputeAmbientComposite();
 	ID3D11ComputeShader* GetComputeAmbientCompositeInterior();
 	ID3D11ComputeShader* GetComputeMainComposite();
@@ -37,7 +41,7 @@ public:
 
 	void HDRShaderHacks();
 
-	void BindAdaptationShader();
+	void EyeAdaptation();
 
 	void BindHDRShader();
 
@@ -79,7 +83,20 @@ public:
 	Buffer* perShadow = nullptr;
 	ID3D11ShaderResourceView* shadowView = nullptr;
 
-	Texture2D* adaptationTextures[2];
+	struct alignas(16) AutoExposureCB
+	{
+		float2 AdaptArea;
+		float AdaptLerp;
+		float pad[1];
+	};
+
+	std::unique_ptr<ConstantBuffer> autoExposureCB = nullptr;
+	std::unique_ptr<StructuredBuffer> histogramSB = nullptr;
+	std::unique_ptr<StructuredBuffer> adaptationSB = nullptr;
+
+	ID3D11ComputeShader* histogramCS = nullptr;
+	ID3D11ComputeShader* histogramAvgCS = nullptr;
+
 	winrt::com_ptr<ID3D11ShaderResourceView> lutTexture = nullptr;
 
 	struct Hooks

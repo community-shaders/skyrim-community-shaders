@@ -107,21 +107,6 @@ void Deferred::SetupResources()
 		SetupRenderTarget(NORMALROUGHNESS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Masks
 		SetupRenderTarget(MASKS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
-
-		texDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
-		texDesc.Width = 1;
-		texDesc.Height = 1;
-
-		adaptationTextures[0] = new Texture2D(texDesc);
-		adaptationTextures[1] = new Texture2D(texDesc);
-
-		srvDesc.Format = texDesc.Format;
-		adaptationTextures[0]->CreateSRV(srvDesc);
-		adaptationTextures[1]->CreateSRV(srvDesc);
-
-		rtvDesc.Format = texDesc.Format;
-		adaptationTextures[0]->CreateRTV(rtvDesc);
-		adaptationTextures[1]->CreateRTV(rtvDesc);
 	}
 
 	{
@@ -195,11 +180,21 @@ void Deferred::SetupResources()
 		prevDiffuseAmbientTexture->CreateUAV(uavDesc);
 	}
 
-	// Testing code for imagespace shaders
 	{
 		auto device = globals::d3d::device;
 		auto context = globals::d3d::context;
 		DirectX::CreateDDSTextureFromFile(device, context, L"Data\\Shaders\\LUT.dds", nullptr, lutTexture.put());
+	}
+
+	{	
+		autoExposureCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<AutoExposureCB>());
+
+		histogramSB = std::make_unique<StructuredBuffer>(StructuredBufferDesc<uint>(256u, false), 256);
+		histogramSB->CreateUAV();
+
+		adaptationSB = std::make_unique<StructuredBuffer>(StructuredBufferDesc<float>(1u, false), 1);
+		adaptationSB->CreateSRV();
+		adaptationSB->CreateUAV();
 	}
 }
 
@@ -672,6 +667,38 @@ void Deferred::ClearShaderCache()
 		mainCompositeInteriorCS->Release();
 		mainCompositeInteriorCS = nullptr;
 	}
+	if (histogramCS) {
+		histogramCS->Release();
+		histogramCS = nullptr;
+	}
+	if (histogramAvgCS) {
+		histogramAvgCS->Release();
+		histogramAvgCS = nullptr;
+	}
+}
+
+ID3D11ComputeShader* Deferred::GetComputeHistogram()
+{
+	if (!histogramCS) {
+		logger::debug("Compiling HistogramCS");
+
+		std::vector<std::pair<const char*, const char*>> defines;
+
+		histogramCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\HistogramCS.hlsl", defines, "cs_5_0", "CS_Histogram"));
+	}
+	return histogramCS;
+}
+
+ID3D11ComputeShader* Deferred::GetComputeHistogramAverage()
+{
+	if (!histogramAvgCS) {
+		logger::debug("Compiling HistogramCS");
+
+		std::vector<std::pair<const char*, const char*>> defines;
+
+		histogramAvgCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\HistogramCS.hlsl", defines, "cs_5_0", "CS_Average"));
+	}
+	return histogramAvgCS;
 }
 
 ID3D11ComputeShader* Deferred::GetComputeAmbientComposite()
@@ -773,47 +800,100 @@ void Deferred::HDRShaderHacks()
 
 		enum class ShaderAction
 		{
-			Adaptation,
 			HDR
 		};
 
 		static const ankerl::unordered_dense::map<std::string_view, ShaderAction> shaderMap{
-			{ "BSImagespaceShaderHDRDownSample4LightAdapt", ShaderAction::Adaptation },
-			{ "BSImagespaceShaderHDRDownSample16LightAdapt", ShaderAction::Adaptation },
 			{ "BSImagespaceShaderHDRTonemapBlendCinematic", ShaderAction::HDR },
 			{ "BSImagespaceShaderHDRTonemapBlendCinematicFade", ShaderAction::HDR }
 		};
 
 		auto it = shaderMap.find(isShader.name);
 		if (it != shaderMap.cend()) {
-			switch (it->second) {
-			case ShaderAction::Adaptation:
-				BindAdaptationShader();
-				break;
-			case ShaderAction::HDR:
-				BindHDRShader();
-				break;
-			}
+			BindHDRShader();
 		}
 	}
 }
 
-void Deferred::BindAdaptationShader()
+void Deferred::EyeAdaptation()
 {
-	uint frameSwap = (globals::state->frameCount % 2);
+	::Hooks::BSGraphics_SetDirtyStates::func(false);
 
-	auto srv = adaptationTextures[frameSwap]->srv.get();
-	globals::d3d::context->PSSetShaderResources(1, 1, &srv);
+	auto context = globals::d3d::context;
+	auto state = globals::state;
 
-	auto rtv = adaptationTextures[!frameSwap]->rtv.get();
-	globals::d3d::context->OMSetRenderTargets(1, &rtv, nullptr);
+	AutoExposureCB cbData = {
+		.AdaptArea = { 0.6f, 0.6f },
+		.AdaptLerp = std::clamp(1.f - exp(-RE::BSTimer::GetSingleton()->realTimeDelta * 0.1f), 0.f, 1.f),
+	};
+	autoExposureCB->Update(cbData);
+
+	std::array<ID3D11ShaderResourceView*, 2> srvs = { nullptr };
+	std::array<ID3D11UnorderedAccessView*, 2> uavs = { nullptr };
+	ID3D11Buffer* cb = autoExposureCB->CB();
+
+	auto resetViews = [&]() {
+		srvs.fill(nullptr);
+		uavs.fill(nullptr);
+
+		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+	};
+
+	context->CSSetConstantBuffers(1, 1, &cb);
+	state->BeginPerfEvent("Histogram Auto Exposure");
+
+	ID3D11ShaderResourceView* in_tex;
+	context->PSGetShaderResources(0, 1, &in_tex);
+
+	ID3D11ShaderResourceView* nullSRV = nullptr;
+	context->PSSetShaderResources(0, 1, &nullSRV);
+
+	{
+		state->BeginPerfEvent("Calculate Histogram");
+		srvs[0] = in_tex;
+		uavs[0] = histogramSB->UAV();
+		uavs[1] = adaptationSB->UAV();
+
+		context->CSSetShaderResources(0, (UINT)srvs.size(), srvs.data());
+		context->CSSetUnorderedAccessViews(0, (UINT)uavs.size(), uavs.data(), nullptr);
+
+		// Calculate histogram - optimized for 32x32 threads
+		// Reduced number of dispatches due to increased thread count and sampling optimization
+		context->CSSetShader(GetComputeHistogram(), nullptr, 0);
+		uint32_t dispatchX = (((uint)globals::state->screenSize.x - 1) >> 5) + 1;
+		uint32_t dispatchY = (((uint)globals::state->screenSize.y - 1) >> 5) + 1;
+
+		// Further reduce dispatches based on our sampling pattern
+		// Since we're sampling at 8x spacing, we can reduce dispatches by 8x
+		dispatchX = (dispatchX + 7) / 8;
+		dispatchY = (dispatchY + 7) / 8;
+
+		context->Dispatch(dispatchX, dispatchY, 1);
+
+		// Calculate average
+		context->CSSetShader(GetComputeHistogramAverage(), nullptr, 0);
+		context->Dispatch(1, 1, 1);
+		state->EndPerfEvent();
+	}
+
+	// Clean up
+	resetViews();
+	cb = nullptr;
+	context->CSSetConstantBuffers(1, 1, &cb);
+	context->CSSetShader(nullptr, nullptr, 0);
+
+	state->EndPerfEvent();
+
+	context->PSSetShaderResources(0, 1, &in_tex);
 }
+
 
 void Deferred::BindHDRShader()
 {
-	uint frameSwap = (globals::state->frameCount % 2);
+	EyeAdaptation();
 
-	auto srv = adaptationTextures[!frameSwap]->srv.get();
+	auto srv = adaptationSB->SRV();
 	globals::d3d::context->PSSetShaderResources(2, 1, &srv);
 
 	auto view = lutTexture.get();
