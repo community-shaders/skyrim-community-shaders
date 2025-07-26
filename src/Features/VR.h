@@ -242,6 +242,8 @@ public:
 		static constexpr float kDefaultComboTimeout = 3.0f;   ///< Default timeout for button combos (seconds)
 		static constexpr float kDefaultMouseDeadzone = 0.1f;  ///< Default thumbstick deadzone for mouse input
 		static constexpr float kDefaultMouseSpeed = 10.0f;    ///< Default mouse speed multiplier
+		static constexpr int kDefaultAutoHideSeconds = 30;    ///< Default auto-hide timeout for overlay messages
+		static constexpr int kMaxAutoHideSeconds = 300;       ///< Maximum auto-hide timeout (5 minutes)
 
 		// Default HMD overlay offset values (in meters, relative to HMD)
 		static constexpr float kDefaultHMDOffsetX = 0.26f;   ///< Default horizontal offset from HMD
@@ -305,7 +307,7 @@ public:
 	//=============================================================================
 
 	virtual void DrawOverlay() override;
-	virtual bool IsOverlayVisible() const override { return settings.ShowHowToUseMessage; }
+	virtual bool IsOverlayVisible() const override { return settings.kAutoHideSeconds > 0 && !globals::menu->IsEnabled; }
 
 	//=============================================================================
 	// SETTINGS STRUCTURE
@@ -375,9 +377,9 @@ public:
 		};
 
 		// General interaction settings
-		float comboTimeout = Config::kDefaultComboTimeout;  ///< Timeout for button combo sequences (1.0-10.0 seconds)
-		bool ShowHowToUseMessage = true;                    ///< Show instructional overlay messages
-		bool EnableDragToReposition = true;                 ///< Allow drag-and-drop overlay repositioning
+		float comboTimeout = Config::kDefaultComboTimeout;       ///< Timeout for button combo sequences (1.0-10.0 seconds)
+		int kAutoHideSeconds = Config::kDefaultAutoHideSeconds;  ///< Auto-hide timeout for overlay messages (>0 shows overlay, <=0 hides it)
+		bool EnableDragToReposition = true;                      ///< Allow drag-and-drop overlay repositioning
 
 		/**
 		 * @brief Validates if the current menu scale is within acceptable range
@@ -410,6 +412,7 @@ public:
 			mouseDeadzone = std::clamp(mouseDeadzone, 0.0f, 1.0f);
 			mouseSpeed = std::clamp(mouseSpeed, 0.1f, 50.0f);
 			comboTimeout = std::clamp(comboTimeout, 1.0f, 10.0f);
+			kAutoHideSeconds = std::clamp(kAutoHideSeconds, 0, Config::kMaxAutoHideSeconds);
 		}
 	};
 

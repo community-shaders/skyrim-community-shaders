@@ -46,7 +46,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VROverlayCloseKeys,
 	comboTimeout,
 	EnableDragToReposition,
-	ShowHowToUseMessage)
+	kAutoHideSeconds)
 
 //=============================================================================
 // FEATURE BASE CLASS OVERRIDES
@@ -95,7 +95,7 @@ void VR::DrawOverlay()
 	static LARGE_INTEGER overlayShowStart = { 0 };
 	static LARGE_INTEGER freq = { 0 };
 
-	bool shouldShow = settings.ShowHowToUseMessage && globals::game::ui && globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME);
+	bool shouldShow = settings.kAutoHideSeconds > 0 && globals::game::ui && globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME);
 
 	if (!shouldShow) {
 		overlayShowStart.QuadPart = 0;  // Reset timer when overlay is not shown
@@ -114,11 +114,11 @@ void VR::DrawOverlay()
 	}
 
 	double elapsed = double(now.QuadPart - overlayShowStart.QuadPart) / double(freq.QuadPart);
-	const double kAutoHideSeconds = 15.0;
-	if (elapsed >= kAutoHideSeconds) {
+	const double autoHideSeconds = static_cast<double>(settings.kAutoHideSeconds);
+	if (elapsed >= autoHideSeconds) {
 		return;
 	}
-	int secondsLeft = int(std::ceil(kAutoHideSeconds - elapsed));
+	int secondsLeft = int(std::ceil(autoHideSeconds - elapsed));
 
 	ImGuiIO& io = ImGui::GetIO();
 	ImVec2 overlaySize(480, 0);  // width, height auto
@@ -396,7 +396,11 @@ namespace
 		auto vr = VR::GetSingleton();
 		VR::Settings& settings = vr->settings;
 		if (ImGui::CollapsingHeader("Controller Input Instructions", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Checkbox("Show 'How to Use' Message", &settings.ShowHowToUseMessage);
+			ImGui::SliderInt("Auto-hide overlay timeout (seconds)", &settings.kAutoHideSeconds, 0, VR::Config::kMaxAutoHideSeconds,
+				settings.kAutoHideSeconds <= 0 ? "Hidden" : "%d seconds");
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Set to 0 to hide the overlay, or a positive value to show it for that many seconds");
+			}
 			ImGui::TextWrapped("Menu:");
 			ImGui::BulletText("Open Community Shaders Menu: Hold both configured buttons (Primary Controller) while in the main menu or tween menu");
 			ImGui::BulletText("Close: Hold the configured buttons on both controllers at the same time");
@@ -1267,7 +1271,7 @@ void VR::SubmitOverlayFrame()
 	UpdateOverlayDrag();
 	auto& enabled = globals::menu->IsEnabled;
 	auto& overlayVisible = globals::menu->overlayVisible;
-	if ((enabled || overlayVisible || settings.ShowHowToUseMessage) && menuOverlayHandle != vr::k_ulOverlayHandleInvalid && menuTexture && menuRTV) {
+	if ((enabled || overlayVisible || settings.kAutoHideSeconds > 0) && menuOverlayHandle != vr::k_ulOverlayHandleInvalid && menuTexture && menuRTV) {
 		// Copy ImGui output to overlay texture
 		ID3D11RenderTargetView* oldRTV = nullptr;
 		globals::d3d::context->OMGetRenderTargets(1, &oldRTV, nullptr);
