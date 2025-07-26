@@ -20,16 +20,16 @@ namespace Util
 			ImVec4 color;
 			switch (combo[i].GetDevice()) {
 			case ControllerDevice::Primary:
-				color = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
+				color = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);  // Yellow
 				break;
 			case ControllerDevice::Secondary:
-				color = ImVec4(0.0f, 0.6f, 1.0f, 1.0f);
+				color = ImVec4(0.0f, 0.5f, 1.0f, 1.0f);  // Blue
 				break;
 			case ControllerDevice::Both:
-				color = ImVec4(0.5f, 0.0f, 0.5f, 1.0f);
+				color = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);  // Green (yellow+blue)
 				break;
 			default:
-				color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+				color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);  // White
 				break;
 			}
 			ImGui::PushStyleColor(ImGuiCol_Text, color);
@@ -41,13 +41,13 @@ namespace Util
 				const char* label = "";
 				switch (combo[i].GetDevice()) {
 				case ControllerDevice::Primary:
-					label = "(Primary)";
+					label = "(Primary Controller)";
 					break;
 				case ControllerDevice::Secondary:
-					label = "(Secondary)";
+					label = "(Secondary Controller)";
 					break;
 				case ControllerDevice::Both:
-					label = "(Both)";
+					label = "(Both Controllers)";
 					break;
 				default:
 					break;
@@ -60,9 +60,9 @@ namespace Util
 		if (anyDrawn) {
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				Util::DrawColoredMultiLineTooltip({ { "Color coding:", ImVec4(1, 1, 1, 1) },
-					{ "Green = Primary controller", ImVec4(0.0f, 1.0f, 0.0f, 1.0f) },
-					{ "Blue = Secondary controller", ImVec4(0.0f, 0.6f, 1.0f, 1.0f) },
-					{ "Purple = Both controllers", ImVec4(0.5f, 0.0f, 0.5f, 1.0f) } });
+					{ "Yellow = Primary controller", ImVec4(1.0f, 1.0f, 0.0f, 1.0f) },
+					{ "Blue = Secondary controller", ImVec4(0.0f, 0.5f, 1.0f, 1.0f) },
+					{ "Green = Both controllers (Yellow + Blue)", ImVec4(0.0f, 1.0f, 0.0f, 1.0f) } });
 			}
 		}
 	}
