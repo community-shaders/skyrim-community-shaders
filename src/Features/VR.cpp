@@ -1002,14 +1002,13 @@ namespace
 		}
 
 		// Debugging addresses for copy/paste
-		if (ImGui::TreeNodeEx("Addresses")) {
+		if (ImGui::CollapsingHeader("OpenVR Addresses")) {
 			auto openvr = RE::BSOpenVR::GetSingleton();
 			auto overlay = openvr ? RE::BSOpenVR::GetIVROverlayFromContext(&openvr->vrContext) : nullptr;
 			auto vrSystem = openvr ? openvr->vrSystem : nullptr;
 			ADDRESS_NODE(openvr)
 			ADDRESS_NODE(overlay)
 			ADDRESS_NODE(vrSystem)
-			ImGui::TreePop();
 		}
 	}
 }  // namespace
