@@ -115,7 +115,8 @@ PS_OUTPUT main(PS_INPUT input)
         [loop]
         for(int j=0; j<16.0; j++)
         {
-            float  color = log2(ImageTex.SampleLevel(ImageSampler, coord.xy, 0.0).r);
+			float2 uv = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(coord.xy);
+            float  color = log2(ImageTex.SampleLevel(ImageSampler, uv.xy, 0.0).r);
             float level = saturate(( color + 5.0 ) / 7) * 63; // [-5, 2] - Tweaked for SSE by ez009 @ http://enbseries.enbdev.com/forum/viewtopic.php?p=90553#p90553
             bin[ level * 0.25 ] += float4(0.0, 1.0, 2.0, 3.0) == float4(trunc(level % 4).xxxx); //bitwise ?
             coord.y  += coord.w;
@@ -146,13 +147,13 @@ PS_OUTPUT main(PS_INPUT input)
     }
 
 	float Bias = -2.0;
-	float MaxBrightness = 0.0;
+	float MaxBrightness = 2.0;
 	float MinBrightness = -4.0;
 
     float adapt = (adaptAnchor.x + adaptAnchor.y) * 0.5 / 63.0 * 7.0 - 5.0; // - Tweaked for SSE by ez009 @ http://enbseries.enbdev.com/forum/viewtopic.php?p=90553#p90553
           adapt =  pow(2.0, clamp( adapt, MinBrightness, MaxBrightness) + Bias);  // min max on log2 scale
 
-	psout.Color = lerp(AdaptTex.Sample(ImageSampler, 0.5).x, adapt, 0.2 * 0.001 * SharedData::Timer);
+	psout.Color = lerp(AdaptTex.Sample(ImageSampler, 0.5).x, adapt, 0.1 * 0.001 * SharedData::Timer);
 
 #	elif defined(BLEND)
 	float2 uv = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
@@ -172,7 +173,10 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 gameSdrColor = 0.0;
 	float3 ppColor = 0.0;
 	{
-		inputColor = 0.04 * inputColor / (adaptation * 0.20 + 0.02);
+		adaptation = adaptation * 0.20 + 0.02;
+
+		inputColor = 0.04 * inputColor / adaptation;
+		bloomColor = 0.04 * bloomColor / adaptation;
 
 		float3 blendedColor;
 		[branch] if (Param.z > 0.5)
