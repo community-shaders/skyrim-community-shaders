@@ -27,11 +27,10 @@ namespace Util
 	/**
      * @brief Extracts the shape bounds from a hkpShape.
      * @param shape Pointer to the shape.
-     * @param centerPos Output: center position of the shape.
      * @param radius Output: radius of the shape.
      * @return True if bounds were successfully extracted, false otherwise.
      */
-	bool ExtractShapeBound(const RE::hkpShape* shape, RE::NiPoint3& centerPos, float& radius);
+	bool ExtractShapeBound(const RE::hkpShape* shape, float& radius);
 
 	/**
      * @brief Holds display info for an actor (used in UI tables).

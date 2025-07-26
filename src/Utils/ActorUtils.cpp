@@ -17,14 +17,13 @@ namespace Util
 			float massTrans[4];
 			_mm_store_ps(massTrans, massCenter.quad);
 			centerPos = RE::NiPoint3(massTrans[0], massTrans[1], massTrans[2]) * RE::bhkWorld::GetWorldScaleInverse();
-			return Util::ExtractShapeBound(hkpRigid->collidable.GetShape(), centerPos, radius);
+			return Util::ExtractShapeBound(hkpRigid->collidable.GetShape(), radius);
 		}
 		return false;
 	}
 
-	bool ExtractShapeBound(const RE::hkpShape* shape, RE::NiPoint3& centerPos, float& radius)
+	bool ExtractShapeBound(const RE::hkpShape* shape, float& radius)
 	{
-		(void)centerPos;
 		using ShapeType = RE::hkpShapeType;
 		if (!shape)
 			return false;
