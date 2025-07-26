@@ -48,7 +48,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VROverlayCloseKeys,
 	comboTimeout,
 	EnableDragToReposition,
-	kAutoHideSeconds)
+	kAutoHideSeconds,
+	VRMenuAutoResetDistance)
 
 //=============================================================================
 // FEATURE BASE CLASS OVERRIDES
@@ -426,7 +427,7 @@ namespace
 			return;
 		VR::Settings& settings = vr->settings;
 		if (ImGui::CollapsingHeader("Controller Input Instructions", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::SliderInt("Auto-hide overlay timeout (seconds)", &settings.kAutoHideSeconds, 0, VR::Config::kMaxAutoHideSeconds,
+			ImGui::SliderInt("Auto-hide Welcome overlay timeout", &settings.kAutoHideSeconds, 0, VR::Config::kMaxAutoHideSeconds,
 				settings.kAutoHideSeconds <= 0 ? "Hidden" : "%d seconds");
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Set to 0 to hide the overlay, or a positive value to show it for that many seconds");
@@ -598,6 +599,19 @@ namespace
 				ImGui::SliderFloat("HMD Offset X", &settings.VRMenuOffsetX, -2.0f, 2.0f, "%.2f");
 				ImGui::SliderFloat("HMD Offset Y", &settings.VRMenuOffsetY, -2.0f, 2.0f, "%.2f");
 				ImGui::SliderFloat("HMD Offset Z", &settings.VRMenuOffsetZ, -2.0f, 2.0f, "%.2f");
+			}
+
+			// Fixed World Position: show auto reset distance and manual reset button
+			if (settings.VRMenuPositioningMethod == 1) {  // 1 = Fixed World Position
+				ImGui::Separator();
+				ImGui::Text("Fixed World Position Settings");
+				ImGui::SliderFloat("Auto Reset Distance (game units)", &settings.VRMenuAutoResetDistance, 100.0f, 5000.0f, "%.0f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("If you move farther than this distance from the menu, it will automatically reset to your HMD position. %s", Util::Units::FormatDistance(settings.VRMenuAutoResetDistance).c_str());
+				}
+				if (ImGui::Button("Reset Menu to HMD Position")) {
+					vr->SetFixedOverlayToCurrentHMD();
+				}
 			}
 		}
 	}
@@ -1191,11 +1205,22 @@ void VR::UpdateVROverlayPosition()
 			// Fixed World Position
 			if (justSwitchedToFixed) {
 				SetFixedOverlayToCurrentHMD();
+				// Save player position when switching to Fixed World Position
+				savedPlayerWorldPos = RE::PlayerCharacter::GetSingleton()->GetPosition();
 			}
 
-			vr::HmdMatrix34_t fixedTransform = Util::MatrixToHmdMatrix34(fixedWorldOverlayPosition.m);
+			// --- Auto reset logic using player world position ---
+			RE::NiPoint3 currentPos = RE::PlayerCharacter::GetSingleton()->GetPosition();
+			float sqDist = currentPos.GetSquaredDistance(savedPlayerWorldPos);
+			float thresholdSq = settings.VRMenuAutoResetDistance * settings.VRMenuAutoResetDistance;
+			if (sqDist > thresholdSq) {
+				SetFixedOverlayToCurrentHMD();
+				// Update saved position after reset
+				savedPlayerWorldPos = RE::PlayerCharacter::GetSingleton()->GetPosition();
+			}
 
 			// Scale the overlay based on width/height (same as relative HMD mode)
+			vr::HmdMatrix34_t fixedTransform = Util::MatrixToHmdMatrix34(fixedWorldOverlayPosition.m);
 			fixedTransform.m[0][0] *= overlayWidth;
 			fixedTransform.m[1][1] *= overlayHeight;
 

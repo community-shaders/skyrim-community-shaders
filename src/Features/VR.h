@@ -382,6 +382,8 @@ public:
 		int kAutoHideSeconds = Config::kDefaultAutoHideSeconds;  ///< Auto-hide timeout for overlay messages (>0 shows overlay, <=0 hides it)
 		bool EnableDragToReposition = true;                      ///< Allow drag-and-drop overlay repositioning
 
+		float VRMenuAutoResetDistance = 1000.0f;  // Default: 1000 units ≈ 14.3 meters
+
 		/**
 		 * @brief Validates if the current menu scale is within acceptable range
 		 * @return true if scale is between kMinMenuScale and kMaxMenuScale
@@ -590,6 +592,8 @@ public:
 		uint64_t fileSize = 0;
 		std::string modificationTime;
 	} openVRInfo;
+
+	RE::NiPoint3 savedPlayerWorldPos = RE::NiPoint3();  // Used for auto-reset distance check
 
 public:
 	//=============================================================================
