@@ -191,30 +191,30 @@ namespace Util
 		int iconsLoaded = 0;
 
 		// Load save settings icon
-		if (LoadTextureFromFile(device, (basePath + "Microsoft Icons\\save-settings.png").c_str(), &menu->uiIcons.saveSettings.texture, menu->uiIcons.saveSettings.size)) {
+		if (LoadTextureFromFile(device, (basePath + "Action Icons\\save-settings.png").c_str(), &menu->uiIcons.saveSettings.texture, menu->uiIcons.saveSettings.size)) {
 			logger::info("InitializeMenuIcons: Successfully loaded save-settings icon");
 			iconsLoaded++;
 			anyIconLoaded = true;
 		} else {
-			logger::warn("InitializeMenuIcons: Failed to load save-settings icon from: {}", basePath + "Microsoft Icons\\save-settings.png");
+			logger::warn("InitializeMenuIcons: Failed to load save-settings icon from: {}", basePath + "Action Icons\\save-settings.png");
 		}
 
 		// Load load settings icon
-		if (LoadTextureFromFile(device, (basePath + "Microsoft Icons\\load-settings.png").c_str(), &menu->uiIcons.loadSettings.texture, menu->uiIcons.loadSettings.size)) {
+		if (LoadTextureFromFile(device, (basePath + "Action Icons\\load-settings.png").c_str(), &menu->uiIcons.loadSettings.texture, menu->uiIcons.loadSettings.size)) {
 			logger::info("InitializeMenuIcons: Successfully loaded load-settings icon");
 			iconsLoaded++;
 			anyIconLoaded = true;
 		} else {
-			logger::warn("InitializeMenuIcons: Failed to load load-settings icon from: {}", basePath + "Microsoft Icons\\load-settings.png");
+			logger::warn("InitializeMenuIcons: Failed to load load-settings icon from: {}", basePath + "Action Icons\\load-settings.png");
 		}
 
 		// Load clear cache icon
-		if (LoadTextureFromFile(device, (basePath + "Microsoft Icons\\clear-cache.png").c_str(), &menu->uiIcons.clearCache.texture, menu->uiIcons.clearCache.size)) {
+		if (LoadTextureFromFile(device, (basePath + "Action Icons\\clear-cache.png").c_str(), &menu->uiIcons.clearCache.texture, menu->uiIcons.clearCache.size)) {
 			logger::info("InitializeMenuIcons: Successfully loaded clear-cache icon");
 			iconsLoaded++;
 			anyIconLoaded = true;
 		} else {
-			logger::warn("InitializeMenuIcons: Failed to load clear-cache icon from: {}", basePath + "Microsoft Icons\\clear-cache.png");
+			logger::warn("InitializeMenuIcons: Failed to load clear-cache icon from: {}", basePath + "Action Icons\\clear-cache.png");
 		}
 
 		// Load logo icon

@@ -148,5 +148,4 @@ See LICENSE within each directory; if none, it's [Default](#default)
 
 ### Icons
 
--   [Microsoft Icons](package/Interface/CommunityShaders/Icons/Microsoft%20Icons/) are subject to the [MIT License](package/Interface/CommunityShaders/Icons/Microsoft%20Icons/LICENSE) https://github.com/microsoft/fluentui-system-icons
 -   [Community Shaders Logo](package/Interface/CommunityShaders/Icons/Community%20Shaders%20Logo/) is not covered by the GPL-3.0 license. It is provided solely for personal use (e.g., building from source) and may only be used in unmodified form. There is no license for any other purpose or to distribute the logo. No trademark license is granted for the logo. Any use not expressly permitted is prohibited without the express written consent of the Community Shaders team.
