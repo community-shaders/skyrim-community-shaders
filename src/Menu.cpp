@@ -394,7 +394,8 @@ void Menu::DrawSettings()
 
 			if (isDocked) {
 				// Docked: Draw larger icons in the title bar using foreground draw list
-				const float iconSize = 40.0f * uiScale;  // Increased by 10% for better visual balance
+				const float currentFontSize = ImGui::GetFontSize();
+				const float iconSize = currentFontSize * 2.5f * uiScale;  // Scale with font size and UI scale
 				const float iconSpacing = 8.0f * uiScale;
 				const float rightMargin = 45.0f * uiScale;  // Space for close button
 
@@ -444,7 +445,8 @@ void Menu::DrawSettings()
 					}
 				}
 			} else {                               // Undocked: Draw icons as ImageButtons in a table column
-				const float baseIconSize = 48.0f;  // Reduced by 25% from 64.0f for better proportions
+				const float currentFontSize = ImGui::GetFontSize();
+				const float baseIconSize = currentFontSize * 3.0f;  // Scale with font size
 				const float iconSize = baseIconSize * uiScale;
 				const float paddingReduction = 4.0f * uiScale;  // Reduce padding to minimize dead space
 				const ImVec2 buttonSize(iconSize, iconSize);
@@ -523,9 +525,10 @@ void Menu::DrawSettings()
 				ImGui::TableSetupColumn("Buttons", ImGuiTableColumnFlags_WidthFixed);
 				ImGui::TableNextColumn();  // Title on the left with logo
 
-				// Determine scaling based on GlobalScale setting
+				// Determine scaling based on GlobalScale setting and font size
+				const float currentFontSize = ImGui::GetFontSize();
 				const float baseTextScale = 1.7f;
-				const float baseIconSize = 48.0f;  // Reduced by 25% from 64.0f to match action icons
+				const float baseIconSize = currentFontSize * 3.0f;  // Scale with font size to match action icons
 
 				// Apply UI scale to the base scaling factors
 				const float textScaleFactor = baseTextScale * uiScale;
