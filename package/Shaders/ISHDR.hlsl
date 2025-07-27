@@ -104,8 +104,8 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 ppColor = 0.0;
 	{
 		if (avgValue.x != 0 && avgValue.y != 0)
-			inputColor *= avgValue.x / avgValue.y;
-			
+			inputColor *= avgValue.y / avgValue.x;
+
 		inputColor = max(0, inputColor);
 
 		float3 blendedColor;
