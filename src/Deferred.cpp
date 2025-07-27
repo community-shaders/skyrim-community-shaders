@@ -108,9 +108,9 @@ void Deferred::SetupResources()
 		// Masks
 		SetupRenderTarget(MASKS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 
-		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-		texDesc.Width = 2;
-		texDesc.Height = 2;
+		texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+		texDesc.Width = 1;
+		texDesc.Height = 1;
 
 		adaptationTextures[0] = new Texture2D(texDesc);
 		adaptationTextures[1] = new Texture2D(texDesc);
