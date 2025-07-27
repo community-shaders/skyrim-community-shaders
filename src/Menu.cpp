@@ -395,7 +395,7 @@ void Menu::DrawSettings()
 			if (isDocked) {
 				// Docked: Draw larger icons in the title bar using foreground draw list
 				const float currentFontSize = ImGui::GetFontSize();
-				const float iconSize = currentFontSize * 2.5f * uiScale;  // Scale with font size and UI scale
+				const float iconSize = currentFontSize * 1.25f * uiScale;  // Reduced by 50%
 				const float iconSpacing = 8.0f * uiScale;
 				const float rightMargin = 45.0f * uiScale;  // Space for close button
 
@@ -446,7 +446,7 @@ void Menu::DrawSettings()
 				}
 			} else {                               // Undocked: Draw icons as ImageButtons in a table column
 				const float currentFontSize = ImGui::GetFontSize();
-				const float baseIconSize = currentFontSize * 3.0f;  // Scale with font size
+				const float baseIconSize = currentFontSize * 1.5f;  // Reduced by 50%
 				const float iconSize = baseIconSize * uiScale;
 				const float paddingReduction = 4.0f * uiScale;  // Reduce padding to minimize dead space
 				const ImVec2 buttonSize(iconSize, iconSize);
@@ -528,7 +528,7 @@ void Menu::DrawSettings()
 				// Determine scaling based on GlobalScale setting and font size
 				const float currentFontSize = ImGui::GetFontSize();
 				const float baseTextScale = 1.7f;
-				const float baseIconSize = currentFontSize * 3.0f;  // Scale with font size to match action icons
+				const float baseIconSize = currentFontSize * 1.5f;  // Reduced by 50%
 
 				// Apply UI scale to the base scaling factors
 				const float textScaleFactor = baseTextScale * uiScale;
