@@ -444,7 +444,7 @@ void Menu::DrawSettings()
 						ImGui::SetTooltip("%s", it->tooltip);
 					}
 				}
-			} else {                               // Undocked: Draw icons as ImageButtons in a table column
+			} else {  // Undocked: Draw icons as ImageButtons in a table column
 				const float currentFontSize = ImGui::GetFontSize();
 				const float baseIconSize = currentFontSize * 1.5f;  // Reduced by 50%
 				const float iconSize = baseIconSize * uiScale;
