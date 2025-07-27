@@ -255,7 +255,7 @@ void PerformanceOverlay::DrawOverlay()
 	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize;
 
 	// Only allow mouse interaction when the main menu is open
-	if (!this->settings.ShowInOverlay) {
+	if (!menu->IsEnabled) {
 		windowFlags |= ImGuiWindowFlags_NoInputs;
 	}
 

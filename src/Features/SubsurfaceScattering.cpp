@@ -370,7 +370,9 @@ void SubsurfaceScattering::BSLightingShader_SetupSkin(RE::BSRenderPass* a_pass)
 			validMaterials = true;
 
 			if (isBeastRace)
-				state->currentExtraDescriptor |= (uint)State::ExtraShaderDescriptors::IsBeastRace;
+				state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::IsBeastRace;
+			else
+				state->permutationData.ExtraShaderDescriptor &= ~(uint)State::ExtraShaderDescriptors::IsBeastRace;
 		}
 	}
 }

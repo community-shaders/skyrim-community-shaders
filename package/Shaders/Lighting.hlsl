@@ -64,10 +64,11 @@ struct VS_OUTPUT
 	float2
 #endif  // (defined (PROJECTED_UV) && !defined(SKINNED)) || defined(LANDSCAPE)
 		TexCoord0 : TEXCOORD0;
-#if defined(ENVMAP)
-	precise
-#endif  // ENVMAP
+
+#if defined(WORLD_MAP)
 		float3 InputPosition : TEXCOORD4;
+#endif
+
 #if defined(SKINNED) || !defined(MODELSPACENORMALS)
 	float3 TBN0 : TEXCOORD1;
 	float3 TBN1 : TEXCOORD2;
@@ -81,21 +82,12 @@ struct VS_OUTPUT
 #elif defined(PROJECTED_UV) && !defined(SKINNED)
 	float3 TexProj : TEXCOORD7;
 #endif  // EYE
-	float3 ScreenNormalTransform0 : TEXCOORD8;
-	float3 ScreenNormalTransform1 : TEXCOORD9;
-	float3 ScreenNormalTransform2 : TEXCOORD10;
-	// #if !defined(VR)  // Position is normally not in VR, but perhaps we can use
-	// it.
+
 	float4 WorldPosition : POSITION1;
 	float4 PreviousWorldPosition : POSITION2;
-	// #endif // !VR
 	float4 Color : COLOR0;
 	float4 FogParam : COLOR1;
-#if !defined(VR)
-	row_major float3x4 World[1] : POSITION3;
-#else
-	row_major float3x4 World[2] : POSITION3;
-#endif  // VR
+
 #if defined(VR)
 	float ClipDistance : SV_ClipDistance0;  // o11
 	float CullDistance : SV_CullDistance0;  // p11
@@ -242,12 +234,8 @@ VS_OUTPUT main(VS_INPUT input)
 #	endif
 	vsout.TexCoord0.xy = uv;
 
-#	if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(SKINNED)
-	vsout.InputPosition.xyz = worldPosition.xyz;
-#	elif defined(WORLD_MAP)
+#	if defined(WORLD_MAP)
 	vsout.InputPosition.xyz = WorldMapOverlayParameters.xyz + worldPosition.xyz;
-#	else
-	vsout.InputPosition.xyz = inputPosition.xyz;
 #	endif
 
 #	if defined(SKINNED)
@@ -309,26 +297,6 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.EyeNormal.xyz = normalize(worldPosition.xyz - mul(modelEyeCenter, transpose(worldMatrix)));
 #	endif  // EYE
 
-#	if defined(SKINNED)
-	float3x3 ScreenNormalTransform = mul(ScreenProj[eyeIndex], worldTbnTr);
-
-	vsout.ScreenNormalTransform0.xyz = ScreenNormalTransform[0];
-	vsout.ScreenNormalTransform1.xyz = ScreenNormalTransform[1];
-	vsout.ScreenNormalTransform2.xyz = ScreenNormalTransform[2];
-#	else
-	float3x4 transMat = mul(ScreenProj[eyeIndex], World[eyeIndex]);
-
-#		if defined(MODELSPACENORMALS)
-	vsout.ScreenNormalTransform0.xyz = transMat[0].xyz;
-	vsout.ScreenNormalTransform1.xyz = transMat[1].xyz;
-	vsout.ScreenNormalTransform2.xyz = transMat[2].xyz;
-#		else
-	vsout.ScreenNormalTransform0.xyz = mul(transMat[0].xyz, transpose(tbn));
-	vsout.ScreenNormalTransform1.xyz = mul(transMat[1].xyz, transpose(tbn));
-	vsout.ScreenNormalTransform2.xyz = mul(transMat[2].xyz, transpose(tbn));
-#		endif  // MODELSPACENORMALS
-#	endif      // SKINNED
-
 	vsout.WorldPosition = worldPosition;
 	vsout.PreviousWorldPosition = previousWorldPosition;
 
@@ -343,11 +311,6 @@ VS_OUTPUT main(VS_INPUT input)
 
 	vsout.FogParam.xyz = lerp(FogNearColor.xyz, FogFarColor.xyz, fogColorParam);
 	vsout.FogParam.w = fogColorParam;
-
-	vsout.World[0] = World[0];
-#	ifdef VR
-	vsout.World[1] = World[1];
-#	endif  // VR
 
 #	if defined(VR)
 	Stereo::VR_OUTPUT VRout = Stereo::GetVRVSOutput(vsout.Position, eyeIndex);
@@ -1923,12 +1886,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	complexMaterial = complexMaterial && complexMaterialColor.y > (4.0 / 255.0);
 	shininess = lerp(shininess, shininess * complexMaterialColor.y, complexMaterial);
 	if (complexMaterial) {
-		if (complexMaterialColor.z > 0.0) {
-			complexSpecular = Color::GammaToLinear(baseColor.xyz);  // Use original baseColor for complexSpecular calculation to avoid stochastic artifacts
-		}
 		complexSpecular = lerp(1.0, complexSpecular, complexMaterialColor.z);
+		baseColor.xyz = lerp(baseColor.xyz, 0.0, complexMaterialColor.z);
 	}
-	baseColor.xyz = lerp(baseColor.xyz, lerp(baseColor.xyz, 0.0, complexMaterialColor.z), complexMaterial);
 #	endif  // defined (EMAT) && defined(ENVMAP)
 
 #	if defined(FACEGEN)
@@ -2025,9 +1985,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	uint numShadowLights = min(4, uint(NumLightNumShadowLight.y));
 
 #	if defined(MODELSPACENORMALS) && !defined(SKINNED)
-	float4 worldNormal = normal;
+	float3 worldNormal = normal.xyz;
 #	else
-	float4 worldNormal = float4(normalize(mul(tbn, normal.xyz)), 1);
+	float3 worldNormal = normalize(mul(tbn, normal.xyz));
 
 #		if defined(SPARKLE)
 	float3 projectedNormal = normalize(mul(tbn, float3(ProjectedUVParams2.xx * normal.xy, normal.z)));
@@ -2392,14 +2352,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	bool inReflection = Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection;
 
-#	if defined(SCREEN_SPACE_SHADOWS)
-#		if defined(DEFERRED)
-	bool useScreenSpaceShadows = true;
-#		else
-	bool useScreenSpaceShadows = inWorld && !SharedData::InInterior && Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsDecal;
-#		endif
-
-	if (useScreenSpaceShadows)
+#	if defined(SCREEN_SPACE_SHADOWS) && defined(DEFERRED)
+	if (!SharedData::InInterior)
 		dirDetailShadow = ScreenSpaceShadows::GetScreenSpaceShadow(input.Position.xyz, screenUV, screenNoise, eyeIndex);
 #	endif
 
@@ -2520,7 +2474,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if !defined(LIGHT_LIMIT_FIX)
 	[loop] for (uint lightIndex = 0; lightIndex < numLights; lightIndex++)
 	{
-		float3 lightDirection = PointLightPosition[eyeIndex * numLights + lightIndex].xyz - input.InputPosition.xyz;
+		float3 lightDirection = PointLightPosition[eyeIndex * numLights + lightIndex].xyz - input.WorldPosition.xyz;
 		float lightDist = length(lightDirection);
 		float intensityFactor = saturate(lightDist / PointLightPosition[lightIndex].w);
 		if (intensityFactor == 1)
@@ -2638,17 +2592,20 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float lightShadow = 1.0;
 
 		float shadowComponent = 1.0;
-		if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow && light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-			shadowComponent = shadowColor[light.shadowLightIndex];
-			lightShadow *= shadowComponent;
+		if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) {
+			if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
+				shadowComponent = shadowColor[light.shadowLightIndex];
+				lightShadow *= shadowComponent;
+			}
 		}
 
 		float3 normalizedLightDirection = normalize(lightDirection);
 		float lightAngle = dot(worldNormal.xyz, normalizedLightDirection.xyz);
 
 		float contactShadow = 1.0;
+
+#	if defined(DEFERRED)
 		[branch] if (
-			inWorld && !FrameBuffer::FrameParams.z &&
 			SharedData::lightLimitFixSettings.EnableContactShadows &&
 			!(light.lightFlags & LightLimitFix::LightFlags::Simple) &&
 			shadowComponent != 0.0 &&
@@ -2657,6 +2614,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			float3 normalizedLightDirectionVS = normalize(light.positionVS[eyeIndex].xyz - viewPosition.xyz);
 			contactShadow = LightLimitFix::ContactShadows(viewPosition, screenNoise, normalizedLightDirectionVS, contactShadowSteps, eyeIndex);
 		}
+#	endif
 
 		float3 refractedLightDirection = normalizedLightDirection;
 #			if defined(TRUE_PBR) && !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
@@ -2790,7 +2748,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	diffuseColor += emitColor.xyz;
 #	endif
 
-	float3 directionalAmbientColor = Color::Ambient(max(0, mul(DirectionalAmbient, worldNormal)));
+	float3 directionalAmbientColor = Color::Ambient(max(0, mul(DirectionalAmbient, float4(worldNormal, 1.0))));
 
 #	if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
@@ -2906,7 +2864,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #			if defined(EMAT)
 				float complexMaterialRoughness = 1.0 - complexMaterialColor.y;
-				envRoughness = lerp(envRoughness, pow(saturate(complexMaterialRoughness), 1.5), complexMaterial);
+				envRoughness = lerp(envRoughness, complexMaterialRoughness, complexMaterial);
 				F0 = lerp(F0, complexSpecular, complexMaterial);
 #			endif
 
@@ -3253,20 +3211,19 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(ANISOTROPIC_ALPHA)
 	// Uniform alpha material settings
 	uint AlphaMaterialModel = ExtendedTranslucency::GetMaterialModelFromDescriptor(Permutation::ExtraFeatureDescriptor);
+	float AlphaMaterialReduction = 0.f;
+	float AlphaMaterialSoftness = 0.f;
+	float AlphaMaterialStrength = 0.f;
+	[branch] if (AlphaMaterialModel == ExtendedTranslucency::MaterialModel::Default) {
+		AlphaMaterialModel = SharedData::extendedTranslucencySettings.MaterialModel;
+		AlphaMaterialReduction = SharedData::extendedTranslucencySettings.Reduction;
+		AlphaMaterialSoftness = SharedData::extendedTranslucencySettings.Softness;
+		AlphaMaterialStrength = SharedData::extendedTranslucencySettings.Strength;
+	}
+
 	[branch] if (ExtendedTranslucency::IsValidMaterial(AlphaMaterialModel))
 	{
 		if (alpha >= 0.0156862754 && alpha < 1.0) {
-			float AlphaMaterialReduction = 0.f;
-			float AlphaMaterialSoftness = 0.f;
-			float AlphaMaterialStrength = 0.f;
-
-			if (AlphaMaterialModel == ExtendedTranslucency::MaterialModel::Default) {
-				AlphaMaterialModel = SharedData::extendedTranslucencySettings.MaterialModel;
-				AlphaMaterialReduction = SharedData::extendedTranslucencySettings.Reduction;
-				AlphaMaterialSoftness = SharedData::extendedTranslucencySettings.Softness;
-				AlphaMaterialStrength = SharedData::extendedTranslucencySettings.Strength;
-			}
-
 			float originalAlpha = alpha;
 			alpha = alpha * (1.0 - AlphaMaterialReduction);
 			[branch] if (AlphaMaterialModel == ExtendedTranslucency::MaterialModel::AnisotropicFabric)

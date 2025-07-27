@@ -83,7 +83,6 @@ PS_OUTPUT main(PS_INPUT input)
 			sign(adaptDelta) * clamp(abs(Param.wz * adaptDelta), 0.00390625, abs(adaptDelta)) +
 			adaptValue;
 	}
-	downsampledColor = max(asfloat(0x00800000), downsampledColor);  // Black screen fix
 #		endif
 	psout.Color = float4(downsampledColor, BlurScale.z);
 
@@ -105,7 +104,9 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 gameSdrColor = 0.0;
 	float3 ppColor = 0.0;
 	{
-		inputColor *= avgValue.y / avgValue.x;
+		if (avgValue.x != 0 && avgValue.y != 0)
+			inputColor *= avgValue.y / avgValue.x;
+
 		inputColor = max(0, inputColor);
 
 		float3 blendedColor;

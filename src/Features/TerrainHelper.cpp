@@ -122,11 +122,33 @@ struct THExtendedRendererState
 
 void TerrainHelper::SetShaderResouces(ID3D11DeviceContext* a_context)
 {
-	for (uint32_t textureIndex = 0; textureIndex < THExtendedRendererState::NumPSTextures; ++textureIndex) {
-		if (thExtendedRendererState.PSResourceModifiedBits & (1 << textureIndex)) {
-			a_context->PSSetShaderResources(THExtendedRendererState::FirstPSTexture + textureIndex, 1, &thExtendedRendererState.PSTexture[textureIndex]);
-		}
+	uint32_t mask = thExtendedRendererState.PSResourceModifiedBits;
+
+	if (mask == 0) [[likely]] {
+		return;  // Nothing to update
 	}
+
+	constexpr uint32_t firstTexture = THExtendedRendererState::FirstPSTexture;
+	auto& textures = thExtendedRendererState.PSTexture;
+
+	while (mask) {
+		// Find the position of the first set bit
+		uint32_t batchStart = std::countr_zero(mask);
+
+		// Count consecutive 1s starting from batchStart
+		uint32_t shiftedMask = mask >> batchStart;
+		uint32_t batchCount = std::countr_one(shiftedMask);
+
+		a_context->PSSetShaderResources(
+			firstTexture + batchStart,
+			batchCount,
+			&textures[batchStart]);
+
+		// Clear the processed bits
+		uint32_t clearMask = ((1u << batchCount) - 1u) << batchStart;
+		mask &= ~clearMask;
+	}
+
 	thExtendedRendererState.PSResourceModifiedBits = 0;
 }
 
@@ -160,10 +182,10 @@ void TerrainHelper::BSLightingShader_SetupMaterial(RE::BSLightingShaderMaterialB
 	for (uint32_t textureI = 0; textureI < 6; ++textureI) {
 		if (materialBase.parallax[textureI] != nullptr && materialBase.parallax[textureI] != stateData.defaultTextureNormalMap) {
 			thExtendedRendererState.SetPSTexture(textureI, materialBase.parallax[textureI]->rendererTexture);
-			state->currentExtraFeatureDescriptor |= 1 << textureI;
+			state->permutationData.ExtraFeatureDescriptor |= 1 << textureI;
 		} else {
 			thExtendedRendererState.SetPSTexture(textureI, nullptr);
-			state->currentExtraFeatureDescriptor &= ~(1 << textureI);
+			state->permutationData.ExtraFeatureDescriptor &= ~(1 << textureI);
 		}
 	}
 }

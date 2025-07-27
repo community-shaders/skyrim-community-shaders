@@ -26,6 +26,7 @@
 #include "Features/PerformanceOverlay.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTestAggregator.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
+#include "Features/VR.h"
 #include "Features/WeatherPicker.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -211,13 +212,22 @@ Menu::~Menu()
 	uiIcons.saveSettings.Release();
 	uiIcons.loadSettings.Release();
 	uiIcons.clearCache.Release();
-	uiIcons.clearDiskCache.Release();
 	uiIcons.logo.Release();
+	uiIcons.characters.Release();
+	uiIcons.grass.Release();
+	uiIcons.lighting.Release();
+	uiIcons.sky.Release();
+	uiIcons.landscape.Release();
+	uiIcons.water.Release();
+	uiIcons.debug.Release();
+	uiIcons.materials.Release();
 
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
 	dxgiAdapter3 = nullptr;
+
+	globals::features::vr->DestroyOverlay();
 }
 
 void Menu::Load(json& o_json)
@@ -238,8 +248,8 @@ void Menu::Init()
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	auto& imgui_io = ImGui::GetIO();
-	imgui_io.ConfigFlags = ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_DockingEnable;
-	imgui_io.BackendFlags = ImGuiBackendFlags_HasMouseCursors | ImGuiBackendFlags_RendererHasVtxOffset;
+	imgui_io.ConfigFlags = ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad | ImGuiConfigFlags_DockingEnable;
+	imgui_io.BackendFlags = ImGuiBackendFlags_HasMouseCursors | ImGuiBackendFlags_RendererHasVtxOffset | ImGuiBackendFlags_HasGamepad;
 
 	// Enhanced font configuration for sharper text rendering
 	ImFontConfig font_config;
@@ -291,6 +301,10 @@ void Menu::Init()
 
 	BuildCategoryCounts();
 
+	if (globals::features::vr && globals::features::vr->IsOpenVRCompatible()) {
+		globals::features::vr->EnsureOverlayInitialized();
+	}
+
 	initialized = true;
 }
 
@@ -325,15 +339,12 @@ void Menu::DrawSettings()
 		wasDocked = isDocked;
 
 		const float uiScale = exp2(settings.Theme.GlobalScale);  // Get current UI scale
-																 // Check if we can show icons - require setting enabled and at least some icons loaded (for undocked)
+		// Check if we can show icons - require setting enabled and at least some icons loaded (for undocked)
 		// For docked mode, always show icons if textures are available
 		bool canShowIcons = settings.Theme.ShowActionIcons &&
 		                    (uiIcons.saveSettings.texture ||
 								uiIcons.loadSettings.texture ||
-								uiIcons.clearCache.texture ||
-								uiIcons.clearDiskCache.texture);
-
-		// Always show logo if available, regardless of action icons setting
+								uiIcons.clearCache.texture);  // Always show logo if available, regardless of action icons setting
 		bool showLogo = uiIcons.logo.texture != nullptr;
 		// Define action icon metadata and callbacks
 		struct ActionIcon
@@ -362,23 +373,17 @@ void Menu::DrawSettings()
 			if (uiIcons.clearCache.texture) {
 				actionIcons.push_back({ uiIcons.clearCache.texture,
 					"Clear Shader Cache\n\n"
+					"Clears the shader cache and disk cache (if enabled).\n"
 					"The Shader Cache is the collection of compiled shaders which replace\n"
-					"the vanilla shaders at runtime. Clearing the shader cache will mean\n"
-					"that shaders are recompiled only when the game re-encounters them.\n"
-					"This is only needed for hot-loading shaders for development purposes.",
-					[shaderCache]() { shaderCache->Clear(); } });
-			}
-			if (uiIcons.clearDiskCache.texture) {
-				actionIcons.push_back({ uiIcons.clearDiskCache.texture,
-					"Clear Disk Cache\n\n"
-					"The Disk Cache is a collection of compiled shaders on disk, which\n"
-					"are automatically created when shaders are added to the Shader Cache.\n"
-					"If you do not have a Disk Cache, or it is outdated or invalid, you will\n"
-					"see \"Compiling Shaders\" in the upper-left corner. After this has\n"
-					"completed you will no longer see this message apart from when loading\n"
-					"from the Disk Cache. Only delete the Disk Cache manually if you are\n"
-					"encountering issues.",
-					[shaderCache]() { shaderCache->DeleteDiskCache(); } });
+					"the vanilla shaders at runtime. The Disk Cache is a collection of\n"
+					"compiled shaders on disk. Clearing will mean that shaders are\n"
+					"recompiled only when the game re-encounters them.",
+					[shaderCache]() {
+						shaderCache->Clear();
+						if (shaderCache->IsDiskCache()) {
+							shaderCache->DeleteDiskCache();
+						}
+					} });
 			}
 		}
 
@@ -389,7 +394,8 @@ void Menu::DrawSettings()
 
 			if (isDocked) {
 				// Docked: Draw larger icons in the title bar using foreground draw list
-				const float iconSize = 40.0f * uiScale;  // Increased by 10% for better visual balance
+				const float currentFontSize = ImGui::GetFontSize();
+				const float iconSize = currentFontSize * 1.25f * uiScale;  // Reduced by 50%
 				const float iconSpacing = 8.0f * uiScale;
 				const float rightMargin = 45.0f * uiScale;  // Space for close button
 
@@ -438,8 +444,9 @@ void Menu::DrawSettings()
 						ImGui::SetTooltip("%s", it->tooltip);
 					}
 				}
-			} else {                               // Undocked: Draw icons as ImageButtons in a table column
-				const float baseIconSize = 48.0f;  // Reduced by 25% from 64.0f for better proportions
+			} else {  // Undocked: Draw icons as ImageButtons in a table column
+				const float currentFontSize = ImGui::GetFontSize();
+				const float baseIconSize = currentFontSize * 1.5f;  // Reduced by 50%
 				const float iconSize = baseIconSize * uiScale;
 				const float paddingReduction = 4.0f * uiScale;  // Reduce padding to minimize dead space
 				const ImVec2 buttonSize(iconSize, iconSize);
@@ -518,9 +525,10 @@ void Menu::DrawSettings()
 				ImGui::TableSetupColumn("Buttons", ImGuiTableColumnFlags_WidthFixed);
 				ImGui::TableNextColumn();  // Title on the left with logo
 
-				// Determine scaling based on GlobalScale setting
+				// Determine scaling based on GlobalScale setting and font size
+				const float currentFontSize = ImGui::GetFontSize();
 				const float baseTextScale = 1.7f;
-				const float baseIconSize = 48.0f;  // Reduced by 25% from 64.0f to match action icons
+				const float baseIconSize = currentFontSize * 1.5f;  // Reduced by 50%
 
 				// Apply UI scale to the base scaling factors
 				const float textScaleFactor = baseTextScale * uiScale;
@@ -589,25 +597,16 @@ void Menu::DrawSettings()
 				ImGui::TableNextColumn();
 				if (ImGui::Button("Clear Shader Cache", { -1, 0 })) {
 					shaderCache->Clear();
+					if (shaderCache->IsDiskCache()) {
+						shaderCache->DeleteDiskCache();
+					}
 				}
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text(
+						"Clears the shader cache and disk cache (if enabled). "
 						"The Shader Cache is the collection of compiled shaders which replace the vanilla shaders at runtime. "
-						"Clearing the shader cache will mean that shaders are recompiled only when the game re-encounters them. "
-						"This is only needed for hot-loading shaders for development purposes. ");
-				}
-
-				// Clear Disk Cache Button
-				ImGui::TableNextColumn();
-				if (ImGui::Button("Clear Disk Cache", { -1, 0 })) {
-					shaderCache->DeleteDiskCache();
-				}
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text(
-						"The Disk Cache is a collection of compiled shaders on disk, which are automatically created when shaders are added to the Shader Cache. "
-						"If you do not have a Disk Cache, or it is outdated or invalid, you will see \"Compiling Shaders\" in the upper-left corner. "
-						"After this has completed you will no longer see this message apart from when loading from the Disk Cache. "
-						"Only delete the Disk Cache manually if you are encountering issues. ");
+						"The Disk Cache is a collection of compiled shaders on disk. "
+						"Clearing will mean that shaders are recompiled only when the game re-encounters them. ");
 				}
 
 				// Error message toggle if needed
@@ -1037,7 +1036,7 @@ void Menu::DrawSettings()
 		}
 
 		// Define category order
-		std::vector<std::string> categoryOrder = { "Characters", "Grass", "Lighting", "Sky", "Landscape & Textures", "Water", "Other" };
+		std::vector<std::string> categoryOrder = { "Debug", "Characters", "Grass", "Lighting", "Materials", "Sky", "Landscape & Textures", "Water", "Other" };
 		// Add categorized features to menu with collapsible headers
 		for (const std::string& category : categoryOrder) {
 			if (categorizedFeatures.find(category) != categorizedFeatures.end() && !categorizedFeatures[category].empty()) {
@@ -1284,7 +1283,7 @@ void Menu::DrawGeneralSettings()
 					ImGui::Checkbox("Use Icon Buttons in Header", &themeSettings.ShowActionIcons);
 					if (auto _tt = Util::HoverTooltipWrapper()) {
 						ImGui::Text(
-							"When enabled: Shows action buttons (Save, Load, Clear Cache, Clear Disk Cache) as icons in the header\n"
+							"When enabled: Shows action buttons (Save, Load, Clear Cache) as icons in the header\n"
 							"When disabled: Shows as text buttons below the header");
 					}
 
@@ -1495,7 +1494,7 @@ void Menu::DrawAdvancedSettings()
 		}
 		if (ImGui::TreeNodeEx("Addresses")) {
 			auto Renderer = globals::game::renderer;
-			auto BSShaderAccumulator = RE::BSGraphics::BSShaderAccumulator::GetCurrentAccumulator();
+			auto BSShaderAccumulator = *globals::game::currentAccumulator.get();
 			auto RendererShadowState = globals::game::shadowState;
 			ADDRESS_NODE(Renderer)
 			ADDRESS_NODE(BSShaderAccumulator)
@@ -1624,7 +1623,7 @@ void Menu::DrawDisplaySettings()
 		for (const auto& [featureName, drawFunc] : features) {
 			bool isDisabled = globals::state->IsFeatureDisabled(featureName);
 
-			if (featureName == "Frame Generation" && REL::Module::IsVR()) {
+			if (featureName == "Frame Generation" && globals::features::vr) {
 				isDisabled = true;
 			}
 
@@ -1660,7 +1659,13 @@ void Menu::DrawFooter()
 
 void Menu::DrawOverlay()
 {
-	ProcessInputEventQueue();  // Synchronize Inputs to frame
+	if (globals::features::vr && globals::features::vr->IsOpenVRCompatible()) {
+		globals::features::vr->RecreateOverlayTexturesIfNeeded();
+	}
+	ProcessInputEventQueue();
+	if (globals::features::vr && globals::features::vr->IsOpenVRCompatible()) {
+		globals::features::vr->ProcessControllerInputForImGui();
+	}
 
 	auto shaderCache = globals::shaderCache;
 	auto failed = shaderCache->GetFailedTasks();
@@ -1771,20 +1776,16 @@ void Menu::DrawOverlay()
 
 	// Draw A/B testing overlay
 	abTestingManager->DrawOverlayUI();
-
 	ImGuiStyle& style = ImGui::GetStyle();
 	style = oldStyle;
 
 	ImGui::Render();
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-}
 
-/**
- * @brief Renders the current draw call counts for various shader types using ImGui.
- *
- * Displays a breakdown of draw calls by type (e.g., Grass, Sky, Water, etc.) and the total count.
- * Values are sourced from the global state.
- */
+	if (globals::features::vr && globals::features::vr->IsOpenVRCompatible()) {
+		globals::features::vr->SubmitOverlayFrame();
+	}
+}
 
 const ImGuiKey Menu::VirtualKeyToImGuiKey(WPARAM vkKey)
 {
@@ -2068,13 +2069,31 @@ void Menu::ProcessInputEventQueue()
 {
 	std::unique_lock<std::shared_mutex> mutex(_inputEventMutex);
 	ImGuiIO& io = ImGui::GetIO();
-
+	// Split the queue into VR and non-VR events
+	std::vector<KeyEvent> vrEvents;
+	std::vector<KeyEvent> nonVREvents;
 	for (auto& event : _keyEventQueue) {
+		bool isVRController = ((event.device == RE::INPUT_DEVICE::kVivePrimary || event.device == RE::INPUT_DEVICE::kViveSecondary ||
+								event.device == RE::INPUT_DEVICE::kOculusPrimary || event.device == RE::INPUT_DEVICE::kOculusSecondary ||
+								event.device == RE::INPUT_DEVICE::kWMRPrimary || event.device == RE::INPUT_DEVICE::kWMRSecondary));
+
+		if (globals::features::vr && globals::features::vr->IsOpenVRCompatible() && isVRController) {
+			vrEvents.push_back(event);
+		} else {
+			nonVREvents.push_back(event);
+		}
+	}
+	// Process VR events in VR
+	if (!vrEvents.empty()) {
+		globals::features::vr->ProcessVREvents(vrEvents);
+		globals::features::vr->UpdateOverlayMenuStateFromInput();
+	}
+	// Process non-VR events in Menu (original logic here)
+	for (auto& event : nonVREvents) {
 		if (event.eventType == RE::INPUT_EVENT_TYPE::kChar) {
 			io.AddInputCharacter(event.keyCode);
 			continue;
 		}
-
 		if (event.device == RE::INPUT_DEVICE::kMouse) {
 			logger::trace("Detect mouse scan code {} value {} pressed: {}", event.keyCode, event.value, event.IsPressed());
 			if (event.keyCode > 7) {  // middle scroll
@@ -2130,7 +2149,7 @@ void Menu::ProcessInputEventQueue()
 							 Menu::GetSingleton()->overlayVisible = !Menu::GetSingleton()->overlayVisible;
 						 } },
 					};
-					for (auto& ka : keyActions) {
+					for (const auto& ka : keyActions) {
 						if (key == ka.settingKey) {
 							ka.action();
 							break;
@@ -2187,12 +2206,23 @@ void Menu::OnFocusChanged()
 void Menu::ProcessInputEvents(RE::InputEvent* const* a_events)
 {
 	for (auto it = *a_events; it; it = it->next) {
-		if (it->GetEventType() != RE::INPUT_EVENT_TYPE::kButton && it->GetEventType() != RE::INPUT_EVENT_TYPE::kChar)  // we do not care about non button or char events
+		// Accept button, char, and thumbstick events
+		if (it->GetEventType() != RE::INPUT_EVENT_TYPE::kButton &&
+			it->GetEventType() != RE::INPUT_EVENT_TYPE::kChar &&
+
+			it->GetEventType() != RE::INPUT_EVENT_TYPE::kThumbstick
+
+			)  // we do not care about non button/char/thumbstick events
 			continue;
 
-		auto event = it->GetEventType() == RE::INPUT_EVENT_TYPE::kButton ? KeyEvent(static_cast<RE::ButtonEvent*>(it)) : KeyEvent(static_cast<CharEvent*>(it));
+		if (it->GetEventType() == RE::INPUT_EVENT_TYPE::kButton) {
+			addToEventQueue(KeyEvent(static_cast<RE::ButtonEvent*>(it)));
+		} else if (it->GetEventType() == RE::INPUT_EVENT_TYPE::kChar) {
+			addToEventQueue(KeyEvent(static_cast<CharEvent*>(it)));
 
-		addToEventQueue(event);
+		} else if (it->GetEventType() == RE::INPUT_EVENT_TYPE::kThumbstick) {
+			addToEventQueue(KeyEvent(static_cast<RE::ThumbstickEvent*>(it)));
+		}
 	}
 }
 

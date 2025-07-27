@@ -18,7 +18,7 @@ public:
 	virtual inline std::string GetShortName() override { return "Skylighting"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "SKYLIGHTING"; }
-	virtual std::string_view GetCategory() const override { return "Sky"; }
+	virtual std::string_view GetCategory() const override { return "Lighting"; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {

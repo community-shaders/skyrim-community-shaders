@@ -91,7 +91,7 @@ void ScreenSpaceShadows::DrawShadows()
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
 
-	auto accumulator = RE::BSGraphics::BSShaderAccumulator::GetCurrentAccumulator();
+	auto accumulator = *globals::game::currentAccumulator.get();
 	auto dirLight = skyrim_cast<RE::NiDirectionalLight*>(accumulator->GetRuntimeData().activeShadowSceneNode->GetRuntimeData().sunLight->light.get());
 
 	auto& directionNi = dirLight->GetWorldDirection();
