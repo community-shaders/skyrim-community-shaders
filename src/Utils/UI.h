@@ -64,9 +64,9 @@ namespace Util
 	/**
 	 * Usage:
 	 * {
-     *      auto _ = DisableGuard(disableThis);
-     *      ... Some settings ...
-     * }
+	 *      auto _ = DisableGuard(disableThis);
+	 *      ... Some settings ...
+	 * }
 	*/
 	class DisableGuard
 	{
@@ -386,4 +386,31 @@ namespace Util
 	 * @param availableWidth The available width for the search bar
 	 */
 	void DrawFeatureSearchBar(std::string& searchString, float availableWidth = 0.0f);
+
+	/**
+	 * Provides access to theme-aware UI colors for consistent styling.
+	 * These functions return colors from the active theme's StatusPalette,
+	 * ensuring consistency with the overall application theme.
+	 */
+	namespace Colors
+	{
+		/**
+		 * Get theme-appropriate colors for timer/countdown displays.
+		 * @return Theme colors: Good=SuccessColor, Warning=Warning, Critical=Error
+		 */
+		ImVec4 GetTimerGood();      // Green - good/safe status (from theme SuccessColor)
+		ImVec4 GetTimerWarning();   // Orange - warning status (from theme Warning)
+		ImVec4 GetTimerCritical();  // Red - critical/error status (from theme Error)
+
+		/**
+		 * Get standard theme UI colors for consistent theming.
+		 * @return Theme colors from StatusPalette
+		 */
+		ImVec4 GetDefault();   // White - default text (from theme Text)
+		ImVec4 GetSuccess();   // Green - success/positive (from theme SuccessColor)
+		ImVec4 GetWarning();   // Orange - warning (from theme Warning)
+		ImVec4 GetError();     // Red - error/negative (from theme Error)
+		ImVec4 GetInfo();      // Blue - informational (from theme InfoColor)
+		ImVec4 GetDisabled();  // Gray - disabled items (from theme Disable)
+	}
 }  // namespace Util

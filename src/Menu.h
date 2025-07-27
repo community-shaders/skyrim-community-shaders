@@ -20,6 +20,7 @@ public:
 	}
 
 	bool initialized = false;
+	bool IsEnabled = false;
 
 	void Load(json& o_json);
 	void Save(json& o_json);
@@ -35,6 +36,7 @@ public:
 	void ProcessInputEvents(RE::InputEvent* const* a_events);
 	bool ShouldSwallowInput();
 
+public:
 	// Used for resetting input keys to solve alt-tab stuck issue
 	std::atomic<bool> focusChanged = false;
 	void OnFocusChanged();
@@ -72,9 +74,18 @@ public:
 		UIIcon saveSettings;
 		UIIcon loadSettings;
 		UIIcon clearCache;
-		UIIcon clearDiskCache;
 		UIIcon logo;    // New logo icon
 		UIIcon search;  // Search icon for search bars
+
+		// Category icons
+		UIIcon characters;
+		UIIcon grass;
+		UIIcon lighting;
+		UIIcon sky;
+		UIIcon landscape;
+		UIIcon water;
+		UIIcon debug;
+		UIIcon materials;
 	} uiIcons;
 
 	struct ThemeSettings
@@ -202,6 +213,61 @@ public:
 	// Static utility functions
 	static const char* KeyIdToString(uint32_t key);
 
+public:
+	const ImGuiKey VirtualKeyToImGuiKey(WPARAM vkKey);
+
+	// Move KeyEvent struct here
+	class CharEvent : public RE::InputEvent
+	{
+	public:
+		uint32_t keyCode;  // 18 (ascii code)
+	};
+	struct KeyEvent
+	{
+		explicit KeyEvent(const RE::ButtonEvent* a_event) :
+			keyCode(a_event->GetIDCode()),
+			device(a_event->GetDevice()),
+			eventType(a_event->GetEventType()),
+			value(a_event->Value()),
+			heldDownSecs(a_event->HeldDuration()),
+			thumbstickX(0.0f),
+			thumbstickY(0.0f) {}
+
+		explicit KeyEvent(const CharEvent* a_event) :
+			keyCode(a_event->keyCode),
+			device(a_event->GetDevice()),
+			eventType(a_event->GetEventType()),
+			value(0),
+			heldDownSecs(0),
+			thumbstickX(0.0f),
+			thumbstickY(0.0f) {}
+
+		explicit KeyEvent(const RE::ThumbstickEvent* a_event) :
+			keyCode(0),  // For thumbstick events, keyCode/value are replaced by x/y floats
+			device(a_event->GetDevice()),
+			eventType(a_event->GetEventType()),
+			value(0),
+			heldDownSecs(0),
+			thumbstickX(a_event->xValue),
+			thumbstickY(a_event->yValue)
+		{}
+		// For thumbstick events, keyCode/value are replaced by x/y floats
+		uint32_t keyCode;
+		RE::INPUT_DEVICE device;
+		RE::INPUT_EVENT_TYPE eventType;
+		float value = 0;
+		float heldDownSecs = 0;
+		float thumbstickX = 0.0f;
+		float thumbstickY = 0.0f;
+		[[nodiscard]] constexpr bool IsPressed() const noexcept { return value > 0.0F; }
+		[[nodiscard]] constexpr bool IsRepeating() const noexcept { return heldDownSecs > 0.0F; }
+		[[nodiscard]] constexpr bool IsDown() const noexcept { return IsPressed() && (heldDownSecs == 0.0F); }
+		[[nodiscard]] constexpr bool IsHeld() const noexcept { return IsPressed() && IsRepeating(); }
+		[[nodiscard]] constexpr bool IsUp() const noexcept { return (value == 0.0F) && IsRepeating(); }
+	};
+	// VR overlay input and cursor helpers
+	void ProcessVROverlayInput();
+
 private:
 	Settings settings;
 
@@ -221,7 +287,6 @@ private:
 
 	Menu() = default;
 	void SetupImGuiStyle() const;
-	const ImGuiKey VirtualKeyToImGuiKey(WPARAM vkKey);
 
 	void DrawGeneralSettings();
 	void DrawAdvancedSettings();
@@ -230,38 +295,6 @@ private:
 	void DrawFooter();
 	void BuildCategoryCounts();
 
-	class CharEvent : public RE::InputEvent
-	{
-	public:
-		uint32_t keyCode;  // 18 (ascii code)
-	};
-
-	struct KeyEvent
-	{
-		explicit KeyEvent(const RE::ButtonEvent* a_event) :
-			keyCode(a_event->GetIDCode()),
-			device(a_event->GetDevice()),
-			eventType(a_event->GetEventType()),
-			value(a_event->Value()),
-			heldDownSecs(a_event->HeldDuration()) {}
-
-		explicit KeyEvent(const CharEvent* a_event) :
-			keyCode(a_event->keyCode),
-			device(a_event->GetDevice()),
-			eventType(a_event->GetEventType()) {}
-
-		[[nodiscard]] constexpr bool IsPressed() const noexcept { return value > 0.0F; }
-		[[nodiscard]] constexpr bool IsRepeating() const noexcept { return heldDownSecs > 0.0F; }
-		[[nodiscard]] constexpr bool IsDown() const noexcept { return IsPressed() && (heldDownSecs == 0.0F); }
-		[[nodiscard]] constexpr bool IsHeld() const noexcept { return IsPressed() && IsRepeating(); }
-		[[nodiscard]] constexpr bool IsUp() const noexcept { return (value == 0.0F) && IsRepeating(); }
-
-		uint32_t keyCode;
-		RE::INPUT_DEVICE device;
-		RE::INPUT_EVENT_TYPE eventType;
-		float value = 0;
-		float heldDownSecs = 0;
-	};
 	const uint32_t DIKToVK(uint32_t DIK);
 	mutable std::shared_mutex _inputEventMutex;
 	std::vector<KeyEvent> _keyEventQueue{};

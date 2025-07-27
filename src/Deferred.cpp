@@ -107,6 +107,21 @@ void Deferred::SetupResources()
 		SetupRenderTarget(NORMALROUGHNESS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Masks
 		SetupRenderTarget(MASKS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
+
+		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		texDesc.Width = 2;
+		texDesc.Height = 2;
+
+		adaptationTextures[0] = new Texture2D(texDesc);
+		adaptationTextures[1] = new Texture2D(texDesc);
+
+		srvDesc.Format = texDesc.Format;
+		adaptationTextures[0]->CreateSRV(srvDesc);
+		adaptationTextures[1]->CreateSRV(srvDesc);
+
+		rtvDesc.Format = texDesc.Format;
+		adaptationTextures[0]->CreateRTV(rtvDesc);
+		adaptationTextures[1]->CreateRTV(rtvDesc);
 	}
 
 	{
@@ -336,8 +351,7 @@ void Deferred::StartDeferred()
 	{
 		auto context = globals::d3d::context;
 
-		static REL::Relocation<ID3D11Buffer**> perFrame{ REL::RelocationID(524768, 411384) };
-		ID3D11Buffer* buffers[1] = { *perFrame.get() };
+		ID3D11Buffer* buffers[1] = { *globals::game::perFrame.get() };
 
 		ID3D11Buffer* vrBuffer = nullptr;
 
@@ -752,9 +766,56 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 	return mainCompositeInteriorCS;
 }
 
-// Testing code for imagespace shaders
-void Deferred::BindLUT()
+void Deferred::HDRShaderHacks()
 {
+	if (globals::state->currentShader && globals::state->currentShader->shaderType.get() == RE::BSShader::Type::ImageSpace) {
+		const auto& isShader = static_cast<const RE::BSImagespaceShader&>(*globals::state->currentShader);
+
+		enum class ShaderAction
+		{
+			Adaptation,
+			HDR
+		};
+
+		static const ankerl::unordered_dense::map<std::string_view, ShaderAction> shaderMap{
+			{ "BSImagespaceShaderHDRDownSample4LightAdapt", ShaderAction::Adaptation },
+			{ "BSImagespaceShaderHDRDownSample16LightAdapt", ShaderAction::Adaptation },
+			{ "BSImagespaceShaderHDRTonemapBlendCinematic", ShaderAction::HDR },
+			{ "BSImagespaceShaderHDRTonemapBlendCinematicFade", ShaderAction::HDR }
+		};
+
+		auto it = shaderMap.find(isShader.name);
+		if (it != shaderMap.cend()) {
+			switch (it->second) {
+			case ShaderAction::Adaptation:
+				BindAdaptationShader();
+				break;
+			case ShaderAction::HDR:
+				BindHDRShader();
+				break;
+			}
+		}
+	}
+}
+
+void Deferred::BindAdaptationShader()
+{
+	uint frameSwap = (globals::state->frameCount % 2);
+
+	auto srv = adaptationTextures[frameSwap]->srv.get();
+	globals::d3d::context->PSSetShaderResources(1, 1, &srv);
+
+	auto rtv = adaptationTextures[!frameSwap]->rtv.get();
+	globals::d3d::context->OMSetRenderTargets(1, &rtv, nullptr);
+}
+
+void Deferred::BindHDRShader()
+{
+	uint frameSwap = (globals::state->frameCount % 2);
+
+	auto srv = adaptationTextures[!frameSwap]->srv.get();
+	globals::d3d::context->PSSetShaderResources(2, 1, &srv);
+
 	auto view = lutTexture.get();
 	if (view)
 		globals::d3d::context->PSSetShaderResources(100, 1, &view);
@@ -768,9 +829,12 @@ void Deferred::Hooks::Main_RenderShadowMaps::thunk()
 
 void Deferred::Hooks::Main_RenderWorld::thunk(bool a1)
 {
-	globals::state->inWorld = true;
+	auto* const state = globals::state;
+	state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::InWorld);
+	state->inWorld = true;
 	func(a1);
-	globals::state->inWorld = false;
+	state->inWorld = false;
+	state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::InWorld);
 };
 
 void Deferred::Hooks::Main_RenderWorld_Start::thunk(RE::BSBatchRenderer* This, uint32_t StartRange, uint32_t EndRanges, uint32_t RenderFlags, int GeometryGroup)
@@ -796,9 +860,7 @@ void Deferred::Hooks::Main_RenderWorld_BlendedDecals::thunk(RE::BSShaderAccumula
 
 	// Deferred blended decals
 
-	deferred->inDecals = true;
 	func(This, RenderFlags);
-	deferred->inDecals = false;
 
 	deferred->EndDeferred();
 
@@ -808,9 +870,33 @@ void Deferred::Hooks::Main_RenderWorld_BlendedDecals::thunk(RE::BSShaderAccumula
 void Deferred::Hooks::BSCubeMapCamera_RenderCubemap::thunk(RE::NiAVObject* camera, int a2, bool a3, bool a4, bool a5)
 {
 	auto deferred = globals::deferred;
+	auto state = globals::state;
 
-	deferred->inReflections = true;
 	deferred->ReflectionsPrepasses();
+	state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::IsReflections);
 	func(camera, a2, a3, a4, a5);
-	deferred->inReflections = false;
+	state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::IsReflections);
+}
+
+void Deferred::Hooks::Main_RenderFirstPersonView::thunk(bool a1, bool a2)
+{
+	auto* const state = globals::state;
+	state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::InWorld);
+	func(a1, a2);
+	state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::InWorld);
+}
+
+void Deferred::Hooks::Renderer_ResetState::thunk(void* This)
+{
+	func(This);
+
+	auto* const state = globals::state;
+	auto* const context = globals::d3d::context;
+
+	ID3D11Buffer* buffers[3] = { state->permutationCB->CB(), state->sharedDataCB->CB(), state->featureDataCB->CB() };
+	context->PSSetConstantBuffers(4, 3, buffers);
+	context->CSSetConstantBuffers(5, 2, buffers + 1);
+
+	auto* singleton = globals::truePBR;
+	singleton->SetupFrame();
 }
