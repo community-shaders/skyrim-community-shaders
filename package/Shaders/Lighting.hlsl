@@ -3053,7 +3053,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif  // MULTI_LAYER_PARALLAX
 
 #	if defined(SPECULAR)
-	specularColor = (specularColor * glossiness * MaterialData.yyy) * SpecularColor.xyz;
+	if (!SharedData::hairSpecularSettings.Enabled)
+#		endif
+		specularColor = (specularColor * glossiness * MaterialData.yyy) * SpecularColor.xyz;
+#		endif
 #	elif defined(SPARKLE)
 	specularColor *= glossiness;
 #	endif  // SPECULAR
