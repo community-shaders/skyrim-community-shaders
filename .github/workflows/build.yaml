@@ -243,6 +243,22 @@ jobs:
                   }
                   "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
+            - name: Fail if CMake version does not match tag
+              if: success() && github.ref_type == 'tag'
+              shell: pwsh
+              run: |
+                  $tag = '${{ github.ref_name }}'
+                  $expected = $tag.TrimStart('v')
+                  $version = '${{ steps.get_version.outputs.version }}'
+                  if (-not $version -or $version -eq "") {
+                    Write-Error "Version extraction failed: no version found in previous step" -ErrorAction Stop
+                  }
+                  if ($version -ne $expected) {
+                    Write-Error "CMakeLists.txt version '$version' does not match tag version '$expected'. Please update CMakeLists.txt before tagging." -ErrorAction Stop
+                  } else {
+                    Write-Host "CMakeLists.txt version matches tag."
+                  }
+
             - name: Upload dist artifacts
               if: success()
               uses: actions/upload-artifact@v4
