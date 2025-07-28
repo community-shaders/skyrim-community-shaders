@@ -1031,8 +1031,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if !defined(TRUE_PBR)
 #		if defined(LANDSCAPE)
 	float shininess = dot(input.LandBlendWeights1, LandscapeTexture1to4IsSpecPower) + input.LandBlendWeights2.x * LandscapeTexture5to6IsSpecPower.x + input.LandBlendWeights2.y * LandscapeTexture5to6IsSpecPower.y;
-#		else
+#		elif defined(SPECULAR)
 	float shininess = SpecularColor.w;
+#		else
+	float shininess = 0.0;
 #		endif  // defined (LANDSCAPE)
 #	endif
 
@@ -2299,7 +2301,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			endif
 
 				envMask = saturate(envMask);
+#			if defined(SPECULAR)
 				F0 = lerp(glossiness * SpecularColor.xyz, F0, envMask);
+#			endif
 				roughness = lerp(roughness, envRoughness, pow(envMask, 0.25));
 			}
 		}
