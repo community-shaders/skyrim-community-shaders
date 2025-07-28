@@ -1,6 +1,8 @@
 ﻿#include "VR.h"
 #include "Menu.h"
 #include "RE/B/BSOpenVR.h"
+#include "RE/N/NiPoint3.h"
+#include "RE/P/PlayerCharacter.h"
 #include <openvr.h>
 
 #include "DX12SwapChain.h"
@@ -1203,20 +1205,26 @@ void VR::UpdateVROverlayPosition()
 
 		if (settings.VRMenuPositioningMethod == 1) {
 			// Fixed World Position
+			// Cache player position once per frame
+			RE::NiPoint3 playerPos = savedPlayerWorldPos;
+			auto player = RE::PlayerCharacter::GetSingleton();
+			if (player) {
+				playerPos = player->GetPosition();
+			}
+
 			if (justSwitchedToFixed) {
 				SetFixedOverlayToCurrentHMD();
 				// Save player position when switching to Fixed World Position
-				savedPlayerWorldPos = RE::PlayerCharacter::GetSingleton()->GetPosition();
+				savedPlayerWorldPos = playerPos;
 			}
 
 			// --- Auto reset logic using player world position ---
-			RE::NiPoint3 currentPos = RE::PlayerCharacter::GetSingleton()->GetPosition();
-			float sqDist = currentPos.GetSquaredDistance(savedPlayerWorldPos);
+			float sqDist = playerPos.GetSquaredDistance(savedPlayerWorldPos);
 			float thresholdSq = settings.VRMenuAutoResetDistance * settings.VRMenuAutoResetDistance;
 			if (sqDist > thresholdSq) {
 				SetFixedOverlayToCurrentHMD();
 				// Update saved position after reset
-				savedPlayerWorldPos = RE::PlayerCharacter::GetSingleton()->GetPosition();
+				savedPlayerWorldPos = playerPos;
 			}
 
 			// Scale the overlay based on width/height (same as relative HMD mode)
