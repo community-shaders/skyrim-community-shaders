@@ -1884,8 +1884,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	complexMaterial = complexMaterial && complexMaterialColor.y > (4.0 / 255.0);
 	shininess = lerp(shininess, shininess * complexMaterialColor.y, complexMaterial);
 	if (complexMaterial) {
-		complexSpecular = lerp(1.0, complexSpecular, complexMaterialColor.z);
+		complexSpecular = lerp(1.0, baseColor.xyz, complexMaterialColor.z);
 		baseColor.xyz = lerp(baseColor.xyz, 0.0, complexMaterialColor.z);
+
 	}
 #	endif  // defined (EMAT) && defined(ENVMAP)
 
@@ -3052,14 +3053,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif  // MULTI_LAYER_PARALLAX
 
 #	if defined(SPECULAR)
-#		if defined(EMAT_ENVMAP)
-	specularColor = (specularColor * glossiness * MaterialData.yyy) * lerp(SpecularColor.xyz, Color::LinearToGamma(complexSpecular), complexMaterial);
-#		elif defined(HAIR) && defined(CS_HAIR)
-	if (!SharedData::hairSpecularSettings.Enabled)
-		specularColor = (specularColor * glossiness * MaterialData.yyy) * SpecularColor.xyz;
-#		else
 	specularColor = (specularColor * glossiness * MaterialData.yyy) * SpecularColor.xyz;
-#		endif
 #	elif defined(SPARKLE)
 	specularColor *= glossiness;
 #	endif  // SPECULAR
