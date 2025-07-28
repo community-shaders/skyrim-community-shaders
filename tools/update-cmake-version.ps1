@@ -22,7 +22,7 @@ if (-not (Test-Path $cmakeFile)) {
 $lines = Get-Content $cmakeFile
 
 # Find the line with 'VERSION'
-$versionLineIndex = $lines | Select-String -Pattern '^\s*VERSION\s+\d+\.\d+\.\d+' | Select-Object -First 1 | ForEach-Object { $_.LineNumber - 1 }
+$versionLineIndex = $lines | Select-String -Pattern '^\s*VERSION\s+\d+\.\d+\.\d+(\.\d+)?' | Select-Object -First 1 | ForEach-Object { $_.LineNumber - 1 }
 
 if ($null -eq $versionLineIndex) {
     Write-Error "VERSION line not found in CMakeLists.txt."
