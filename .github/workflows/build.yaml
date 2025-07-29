@@ -622,7 +622,7 @@ jobs:
         if: >
             github.event_name == 'workflow_dispatch' ||
             startsWith(github.ref, 'refs/tags/v') ||
-            (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
+            (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
         runs-on: windows-2022
         permissions:
             contents: write
