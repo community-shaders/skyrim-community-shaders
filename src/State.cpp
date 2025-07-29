@@ -21,21 +21,21 @@ void State::Draw()
 {
 	auto shaderCache = globals::shaderCache;
 	auto deferred = globals::deferred;
-	auto terrainBlending = globals::features::terrainBlending;
-	auto terrainHelper = globals::features::terrainHelper;
-	auto cloudShadows = globals::features::cloudShadows;
+	auto& terrainBlending = globals::features::terrainBlending;
+	auto& terrainHelper = globals::features::terrainHelper;
+	auto& cloudShadows = globals::features::cloudShadows;
 	auto truePBR = globals::truePBR;
 	auto context = globals::d3d::context;
 
 	if (shaderCache->IsEnabled()) {
-		if (terrainBlending->loaded)
-			terrainBlending->TerrainShaderHacks();
+		if (terrainBlending.loaded)
+			terrainBlending.TerrainShaderHacks();
 
-		if (cloudShadows->loaded)
-			cloudShadows->SkyShaderHacks();
+		if (cloudShadows.loaded)
+			cloudShadows.SkyShaderHacks();
 
-		if (terrainHelper->loaded)
-			terrainHelper->SetShaderResouces(context);
+		if (terrainHelper.loaded)
+			terrainHelper.SetShaderResouces(context);
 
 		truePBR->SetShaderResouces(context);
 
@@ -54,7 +54,7 @@ void State::Draw()
 			}
 		}
 
-		if (globals::menu->overlayVisible && globals::features::performanceOverlay->loaded && globals::features::performanceOverlay->IsOverlayVisible())
+		if (globals::menu->overlayVisible && globals::features::performanceOverlay.loaded && globals::features::performanceOverlay.IsOverlayVisible())
 			Debug();
 
 		updateShader = false;
@@ -744,8 +744,8 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 	}
 
 	const auto& depth = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
-	auto terrainBlending = globals::features::terrainBlending;
-	auto srv = (terrainBlending->loaded ? terrainBlending->blendedDepthTexture16->srv.get() : depth.depthSRV);
+	auto& terrainBlending = globals::features::terrainBlending;
+	auto srv = (terrainBlending.loaded ? terrainBlending.blendedDepthTexture16->srv.get() : depth.depthSRV);
 
 	globals::d3d::context->PSSetShaderResources(17, 1, &srv);
 }

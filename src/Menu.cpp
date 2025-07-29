@@ -227,7 +227,7 @@ Menu::~Menu()
 	ImGui::DestroyContext();
 	dxgiAdapter3 = nullptr;
 
-	globals::features::vr->DestroyOverlay();
+	globals::features::vr.DestroyOverlay();
 }
 
 void Menu::Load(json& o_json)
@@ -301,8 +301,8 @@ void Menu::Init()
 
 	BuildCategoryCounts();
 
-	if (globals::features::vr && globals::features::vr->IsOpenVRCompatible()) {
-		globals::features::vr->EnsureOverlayInitialized();
+	if (globals::features::vr.IsOpenVRCompatible()) {
+		globals::features::vr.EnsureOverlayInitialized();
 	}
 
 	initialized = true;
@@ -367,7 +367,7 @@ void Menu::DrawSettings()
 					"Load Settings",
 					[]() {
 						globals::state->Load();
-						globals::features::llf::particleLights->GetConfigs();
+						globals::features::llf::particleLights.GetConfigs();
 					} });
 			}
 			if (uiIcons.clearCache.texture) {
@@ -590,7 +590,7 @@ void Menu::DrawSettings()
 				ImGui::TableNextColumn();
 				if (ImGui::Button("Load Settings", { -1, 0 })) {
 					globals::state->Load();
-					globals::features::llf::particleLights->GetConfigs();
+					globals::features::llf::particleLights.GetConfigs();
 				}
 
 				// Clear Shader Cache Button
@@ -1623,7 +1623,7 @@ void Menu::DrawDisplaySettings()
 		for (const auto& [featureName, drawFunc] : features) {
 			bool isDisabled = globals::state->IsFeatureDisabled(featureName);
 
-			if (featureName == "Frame Generation" && globals::features::vr) {
+			if (featureName == "Frame Generation") {
 				isDisabled = true;
 			}
 
@@ -1659,19 +1659,19 @@ void Menu::DrawFooter()
 
 void Menu::DrawOverlay()
 {
-	if (globals::features::vr && globals::features::vr->IsOpenVRCompatible()) {
-		globals::features::vr->RecreateOverlayTexturesIfNeeded();
+	if (globals::features::vr.IsOpenVRCompatible()) {
+		globals::features::vr.RecreateOverlayTexturesIfNeeded();
 	}
 	ProcessInputEventQueue();
-	if (globals::features::vr && globals::features::vr->IsOpenVRCompatible()) {
-		globals::features::vr->ProcessControllerInputForImGui();
+	if (globals::features::vr.IsOpenVRCompatible()) {
+		globals::features::vr.ProcessControllerInputForImGui();
 	}
 
 	auto shaderCache = globals::shaderCache;
 	auto failed = shaderCache->GetFailedTasks();
 	auto hide = shaderCache->IsHideErrors();
 	auto* abTestingManager = ABTestingManager::GetSingleton();
-	if (!(shaderCache->IsCompiling() || IsEnabled || abTestingManager->IsEnabled() || (failed && !hide) || PerformanceOverlay::GetSingleton()->settings.ShowInOverlay)) {
+	if (!(shaderCache->IsCompiling() || IsEnabled || abTestingManager->IsEnabled() || (failed && !hide) || globals::features::performanceOverlay.settings.ShowInOverlay)) {
 		auto& io = ImGui::GetIO();
 		io.ClearInputKeys();
 		io.ClearEventsQueue();
@@ -1761,17 +1761,16 @@ void Menu::DrawOverlay()
 
 	// Always update test data during TEST phase, regardless of overlay visibility
 	if (abTestingManager->IsEnabled()) {
-		PerformanceOverlay::GetSingleton()->UpdateAllShaderTestData();
+		auto& overlay = globals::features::performanceOverlay;
+		overlay.UpdateAllShaderTestData();
 
 		// Add A/B test aggregator data collection here
-		if (auto* overlay = PerformanceOverlay::GetSingleton()) {
-			auto [mainRows, summaryRows] = overlay->BuildDrawCallRows();
-			std::vector<DrawCallRow> allRows = mainRows;
-			allRows.insert(allRows.end(), summaryRows.begin(), summaryRows.end());
+		auto [mainRows, summaryRows] = overlay.BuildDrawCallRows();
+		std::vector<DrawCallRow> allRows = mainRows;
+		allRows.insert(allRows.end(), summaryRows.begin(), summaryRows.end());
 
-			// Update the A/B test aggregator with current frame data
-			abTestingManager->GetAggregator().OnFrame(allRows);
-		}
+		// Update the A/B test aggregator with current frame data
+		abTestingManager->GetAggregator().OnFrame(allRows);
 	}
 
 	// Draw A/B testing overlay
@@ -1782,8 +1781,8 @@ void Menu::DrawOverlay()
 	ImGui::Render();
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
-	if (globals::features::vr && globals::features::vr->IsOpenVRCompatible()) {
-		globals::features::vr->SubmitOverlayFrame();
+	if (globals::features::vr.IsOpenVRCompatible()) {
+		globals::features::vr.SubmitOverlayFrame();
 	}
 }
 
@@ -2077,7 +2076,7 @@ void Menu::ProcessInputEventQueue()
 								event.device == RE::INPUT_DEVICE::kOculusPrimary || event.device == RE::INPUT_DEVICE::kOculusSecondary ||
 								event.device == RE::INPUT_DEVICE::kWMRPrimary || event.device == RE::INPUT_DEVICE::kWMRSecondary));
 
-		if (globals::features::vr && globals::features::vr->IsOpenVRCompatible() && isVRController) {
+		if (globals::features::vr.IsOpenVRCompatible() && isVRController) {
 			vrEvents.push_back(event);
 		} else {
 			nonVREvents.push_back(event);
@@ -2085,8 +2084,8 @@ void Menu::ProcessInputEventQueue()
 	}
 	// Process VR events in VR
 	if (!vrEvents.empty()) {
-		globals::features::vr->ProcessVREvents(vrEvents);
-		globals::features::vr->UpdateOverlayMenuStateFromInput();
+		globals::features::vr.ProcessVREvents(vrEvents);
+		globals::features::vr.UpdateOverlayMenuStateFromInput();
 	}
 	// Process non-VR events in Menu (original logic here)
 	for (auto& event : nonVREvents) {
@@ -2266,16 +2265,14 @@ void Menu::SelectFeatureMenu(const std::string& featureName)
 
 void Menu::DrawWeatherDetailsWindow()
 {
-	if (!WeatherPicker::GetSingleton()->WeatherDetailsWindow.Enabled) {
+	auto& weatherPicker = globals::features::weatherPicker;
+	if (!weatherPicker.WeatherDetailsWindow.Enabled) {
 		return;
 	}
 
 	// Use Weather core feature for all window management and rendering
-	auto weather = globals::features::weatherPicker;
-	if (weather) {
-		bool* p_open = &WeatherPicker::GetSingleton()->WeatherDetailsWindow.Enabled;
-		weather->RenderWeatherDetailsWindow(p_open);
-	}
+	bool* p_open = &weatherPicker.WeatherDetailsWindow.Enabled;
+	weatherPicker.RenderWeatherDetailsWindow(p_open);
 }
 
 void Menu::BuildCategoryCounts()

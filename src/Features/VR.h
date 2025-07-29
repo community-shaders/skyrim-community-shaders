@@ -257,20 +257,6 @@ public:
 	};
 
 	//=============================================================================
-	// SINGLETON PATTERN
-	//=============================================================================
-
-	/**
-	 * @brief Gets the singleton instance of the VR feature
-	 * @return Pointer to the singleton VR instance (never null)
-	 */
-	static VR* GetSingleton()
-	{
-		static VR singleton;
-		return &singleton;
-	}
-
-	//=============================================================================
 	// FEATURE BASE CLASS OVERRIDES
 	//=============================================================================
 

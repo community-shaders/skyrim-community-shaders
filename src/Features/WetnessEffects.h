@@ -6,12 +6,6 @@ private:
 	static constexpr std::string_view MOD_ID = "112739";
 
 public:
-	static WetnessEffects* GetSingleton()
-	{
-		static WetnessEffects singleton;
-		return &singleton;
-	}
-
 	virtual inline std::string GetName() override { return "Wetness Effects"; }
 	virtual inline std::string GetShortName() override { return "WetnessEffects"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }

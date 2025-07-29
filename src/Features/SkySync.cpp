@@ -70,7 +70,7 @@ void SkySync::DisableOnConflict(std::string_view conflictName)
 void SkySync::Sky_Update::thunk(RE::Sky* sky)
 {
 	func(sky);
-	GetSingleton()->Update(sky);
+	globals::features::skySync.Update(sky);
 }
 
 void SkySync::Update(const RE::Sky* sky)
@@ -373,7 +373,7 @@ inline void SkySync::ShadowFader::ClampDirection(RE::NiPoint3& dir)
 SkySync::VolumetricLightingDescriptor* SkySync::ApplyVolumetricLighting_VolumetricLightingDescriptor_Get::thunk()
 {
 	const auto volumetricLightingDescriptor = func();
-	if (const auto singleton = GetSingleton(); singleton->settings.Enabled)
+	if (globals::features::skySync.settings.Enabled)
 		volumetricLightingDescriptor->lightingIntensity *= volumetricLightingIntensityFactor;
 	return volumetricLightingDescriptor;
 }
@@ -394,8 +394,8 @@ void SkySync::ClimateTimings::Update(const RE::TESClimate* climate)
 
 void SkySync::Sky_OnNewClimate::thunk(RE::Sky* sky)
 {
-	if (const auto singleton = GetSingleton(); sky && singleton->settings.Enabled)
-		singleton->timings.Update(sky->currentClimate);
+	if (auto& singleton = globals::features::skySync; sky && singleton.settings.Enabled)
+		singleton.timings.Update(sky->currentClimate);
 	func(sky);
 }
 
@@ -405,7 +405,7 @@ void SkySync::Moon_Update::thunk(RE::Moon* moon, RE::Sky* sky)
 
 	func(moon, sky);
 
-	if (const auto singleton = GetSingleton(); singleton->settings.Enabled && updateMoonTexture != moon->updateMoonTexture) {
+	if (auto& singleton = globals::features::skySync; singleton.settings.Enabled && updateMoonTexture != moon->updateMoonTexture) {
 		// Gets the texture name of the current moon phase when it changes rather than reading direct global variables
 		// Allows for compatability with other mods that don't directly update the in-game phase values
 		const auto moonShaderProperty = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().properties[1].get());
@@ -437,7 +437,7 @@ void SkySync::Moon_Update::thunk(RE::Moon* moon, RE::Sky* sky)
 			}
 		}
 
-		float* intensityFactor = moon == sky->masser ? &singleton->masserPhaseIntensityFactor : &singleton->secundaPhaseIntensityFactor;
+		float* intensityFactor = moon == sky->masser ? &singleton.masserPhaseIntensityFactor : &singleton.secundaPhaseIntensityFactor;
 		if (phase == RE::Moon::Phases::Phase::kNewMoon) {
 			*intensityFactor = NewMoonIntensityFactor;
 		} else {

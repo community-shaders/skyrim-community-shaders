@@ -21,7 +21,7 @@ void ABTestingManager::Enable()
 {
 	if (!abTestingEnabled) {
 		auto* state = globals::state;
-		auto* performanceOverlay = PerformanceOverlay::GetSingleton();
+		auto& performanceOverlay = globals::features::performanceOverlay;
 
 		logger::info("Saving current settings for Variant B (TEST) and starting test with interval {}.", testInterval);
 		state->Save(State::ConfigMode::TEST);
@@ -34,8 +34,8 @@ void ABTestingManager::Enable()
 		QueryPerformanceCounter(&lastTestSwitch);
 
 		// Preserve overlay enabled state
-		bool overlayWasEnabled = performanceOverlay->settings.ShowInOverlay;
-		performanceOverlay->settings.ShowInOverlay = overlayWasEnabled;
+		bool overlayWasEnabled = performanceOverlay.settings.ShowInOverlay;
+		performanceOverlay.settings.ShowInOverlay = overlayWasEnabled;
 	}
 }
 
@@ -43,15 +43,15 @@ void ABTestingManager::Disable()
 {
 	if (abTestingEnabled) {
 		auto* state = globals::state;
-		auto* performanceOverlay = PerformanceOverlay::GetSingleton();
+		auto& performanceOverlay = globals::features::performanceOverlay;
 
 		logger::info("Disabling A/B testing. Will restore to Variant B (TEST) config.");
 		state->Load(State::ConfigMode::TEST);  // restore last settings before entering test mode
 		abTestingEnabled = false;
 
 		// Preserve overlay enabled state
-		bool overlayWasEnabled = performanceOverlay->settings.ShowInOverlay;
-		performanceOverlay->settings.ShowInOverlay = overlayWasEnabled;
+		bool overlayWasEnabled = performanceOverlay.settings.ShowInOverlay;
+		performanceOverlay.settings.ShowInOverlay = overlayWasEnabled;
 	}
 }
 
@@ -61,7 +61,7 @@ void ABTestingManager::Update()
 		return;
 
 	auto* state = globals::state;
-	auto* performanceOverlay = PerformanceOverlay::GetSingleton();
+	auto& performanceOverlay = globals::features::performanceOverlay;
 
 	// Preserve overlay enabled state when switching configs
 	LARGE_INTEGER currentTime;
@@ -70,13 +70,13 @@ void ABTestingManager::Update()
 	auto remaining = static_cast<float>(testInterval) - seconds;
 
 	if (remaining < 0.0f) {
-		bool overlayWasEnabled = performanceOverlay->settings.ShowInOverlay;
+		bool overlayWasEnabled = performanceOverlay.settings.ShowInOverlay;
 		usingTestConfig = !usingTestConfig;
 		logger::info("Swapping to {} (A/B Test): {}",
 			usingTestConfig ? "Variant B (TEST)" : "Variant A (USER)",
 			usingTestConfig ? "TEST config" : "USER config");
 		state->Load(usingTestConfig ? State::ConfigMode::TEST : State::ConfigMode::USER);
-		performanceOverlay->settings.ShowInOverlay = overlayWasEnabled;  // Restore overlay state
+		performanceOverlay.settings.ShowInOverlay = overlayWasEnabled;  // Restore overlay state
 		QueryPerformanceCounter(&lastTestSwitch);
 
 		// Notify the A/B test aggregator of the variant switch
@@ -86,10 +86,10 @@ void ABTestingManager::Update()
 
 void ABTestingManager::DrawSettingsUI()
 {
-	auto* performanceOverlay = PerformanceOverlay::GetSingleton();
+	auto& performanceOverlay = globals::features::performanceOverlay;
 
 	if (ImGui::SliderInt("A/B Test Interval", reinterpret_cast<int*>(&testInterval), 0, 10)) {
-		bool overlayWasEnabled = performanceOverlay->settings.ShowInOverlay;
+		bool overlayWasEnabled = performanceOverlay.settings.ShowInOverlay;
 		if (testInterval == 0) {
 			Disable();
 		} else if (!abTestingEnabled) {
@@ -97,7 +97,7 @@ void ABTestingManager::DrawSettingsUI()
 		} else {
 			logger::info("Setting new A/B test interval {}.", testInterval);
 		}
-		performanceOverlay->settings.ShowInOverlay = overlayWasEnabled;
+		performanceOverlay.settings.ShowInOverlay = overlayWasEnabled;
 	}
 
 	if (auto _tt = Util::HoverTooltipWrapper()) {
