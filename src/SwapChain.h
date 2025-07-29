@@ -86,7 +86,6 @@ public:
 	WrappedResource* uiBuffersWrapped[2];
 
 	Texture2D* upscaledSwapChainBuffer;
-	Texture2D* uiBuffers[2];
 
 	winrt::com_ptr<ID3D11Device5> d3d11Device;
 	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context;

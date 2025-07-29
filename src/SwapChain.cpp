@@ -149,13 +149,6 @@ void SwapChain::CreateWrapperResources()
 		upscaledSwapChainBuffer->CreateSRV(srvDesc);
 		upscaledSwapChainBuffer->CreateRTV(rtvDesc);
 		upscaledSwapChainBuffer->CreateUAV(uavDesc);
-
-		for (int i = 0; i < 2; i++) {
-			uiBuffers[i] = new Texture2D(texDesc11);
-			uiBuffers[i]->CreateSRV(srvDesc);
-			uiBuffers[i]->CreateRTV(rtvDesc);
-			uiBuffers[i]->CreateUAV(uavDesc);
-		}
 	}
 }
 
@@ -551,14 +544,11 @@ void SwapChain::SetUIBuffer()
 	if (dx12Interop) {
 		float clearColor[4]{ 0, 0, 0, 0 };
 		d3d11Context->ClearRenderTargetView(uiBuffersWrapped[frameIndex]->rtv, clearColor);
-	} else {
-		float clearColor[4]{ 0, 0, 0, 0 };
-		d3d11Context->ClearRenderTargetView(uiBuffers[frameIndex]->rtv.get(), clearColor);
-	}
+	} 
 
 	auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 
-	data.RTV = dx12Interop ? uiBuffersWrapped[frameIndex]->rtv : uiBuffers[frameIndex]->rtv.get();
+	data.RTV = dx12Interop ? uiBuffersWrapped[frameIndex]->rtv : upscaledSwapChainBuffer->rtv.get(); 
 
 	d3d11Context->OMSetRenderTargets(1, &data.RTV, nullptr);
 }
