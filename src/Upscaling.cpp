@@ -349,7 +349,7 @@ void Upscaling::CreateUpscalingResources()
 	alphaMaskTexture->CreateSRV(srvDesc);
 	alphaMaskTexture->CreateUAV(uavDesc);
 
-	if (globals::swapChain->swapChain)
+	if (globals::swapChain->dx12Interop)
 		CreateFrameGenerationResources();
 }
 
