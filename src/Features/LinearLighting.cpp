@@ -14,6 +14,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	skyGamma,
 	waterGamma,
 	vlGamma,
+	vanillaDiffuseMult,
+	vanillaSpecularMult,
 	membraneEffectMult,
 	bloodEffectMult,
 	projectedEffectMult,
@@ -37,6 +39,8 @@ void LinearLighting::DrawSettings()
 	ImGui::SliderFloat("Volumetric Lighting Gamma", &settings.vlGamma, 1.0f, 3.0f, "%.2f");
 
 	ImGui::SeparatorText("Multipliers");
+	ImGui::SliderFloat("Vanilla Diffuse Multiplier", &settings.vanillaDiffuseMult, 0.0f, 10.0f, "%.2f");
+	ImGui::SliderFloat("Vanilla Specular Multiplier", &settings.vanillaSpecularMult, 0.0f, 10.0f, "%.2f");
 	if (ImGui::TreeNode("Effects")) {
 		ImGui::SliderFloat("Membrane Effects Multiplier", &settings.membraneEffectMult, 0.0f, 10.0f, "%.2f");
 		ImGui::SliderFloat("Blood Effects Multiplier", &settings.bloodEffectMult, 0.0f, 10.0f, "%.2f");
@@ -82,6 +86,8 @@ LinearLighting::Settings LinearLighting::GetCommonBufferData()
 	data.skyGamma = settings.skyGamma;
 	data.waterGamma = settings.waterGamma;
 	data.vlGamma = settings.vlGamma;
+	data.vanillaDiffuseMult = settings.vanillaDiffuseMult;
+	data.vanillaSpecularMult = settings.vanillaSpecularMult;
 	data.membraneEffectMult = settings.membraneEffectMult;
 	data.bloodEffectMult = settings.bloodEffectMult;
 	data.projectedEffectMult = settings.projectedEffectMult;
