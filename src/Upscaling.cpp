@@ -74,16 +74,14 @@ void Upscaling::DrawSettings()
 	if (upscaleMethod != UpscaleMethod::kNONE) {
 		ImGui::SliderFloat("Sharpness", &settings.sharpness, 0.0f, 1.0f, "%.1f");
 		settings.sharpness = std::clamp(settings.sharpness, 0.0f, 1.0f);
-	}  
-	
-	
+	}
+
 	// Display upscaling preset if applicable
 
 	if (upscaleMethod == UpscaleMethod::kFSR || upscaleMethod == UpscaleMethod::kDLSS) {
 		const char* upscalePresets[] = { "Ultra Performance", "Performance", "Balanced", "Quality" };
 		ImGui::SliderInt("Upscale Preset", (int*)&settings.upscalePreset, 1, 4, std::format("{}", upscalePresets[4 - settings.upscalePreset]).c_str());
 	}
-
 
 	// Display DLSS preset slider if using DLSS
 	if (upscaleMethod == UpscaleMethod::kDLSS) {
