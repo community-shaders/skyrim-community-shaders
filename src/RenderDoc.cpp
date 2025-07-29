@@ -32,9 +32,9 @@ bool RenderDoc::Initialize()
 	}
 
 	renderDocApi->SetCaptureFilePathTemplate(CAPTURE_PATH_TEMPLATE);
-	
+
 	try {
-		std::filesystem::create_directories(CAPTURE_PATH_TEMPLATE);	
+		std::filesystem::create_directories(CAPTURE_PATH_TEMPLATE);
 	} catch (const std::exception& e) {
 		logger::warn("[RenderDoc] Failed to create capture directory: {}", e.what());
 	}
