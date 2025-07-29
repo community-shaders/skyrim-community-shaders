@@ -10,6 +10,7 @@
 #include "FeatureIssues.h"
 #include "Globals.h"
 #include "Menu.h"
+#include "Menu/ThemeManager.h"
 #include "State.h"
 #include "Util.h"
 
@@ -223,7 +224,7 @@ void FeatureListRenderer::RenderRightColumn(
 	size_t selectedMenu)
 {
 	ImGui::TableNextColumn();
-	ImGui::Dummy(ImVec2(0, 8));  // spacing
+	ImGui::Dummy(ImVec2(0, ThemeManager::Constants::BUTTON_SPACING));  // spacing
 
 	if (selectedMenu < menuList.size()) {
 		std::visit(DrawMenuVisitor{}, menuList[selectedMenu]);
@@ -352,8 +353,8 @@ void FeatureListRenderer::DrawMenuVisitor::operator()(Feature* feat)
 	const char* bootButtonText = isDisabled ? "Enable at Boot" : "Disable at Boot";
 	const char* defaultsButtonText = "Restore Defaults";
 
-	float buttonPadding = 16.0f;
-	float buttonSpacing = 8.0f;
+	float buttonPadding = ThemeManager::Constants::BUTTON_PADDING;
+	float buttonSpacing = ThemeManager::Constants::BUTTON_SPACING;
 	float bootButtonWidth = ImGui::CalcTextSize(bootButtonText).x + buttonPadding;
 	float defaultsButtonWidth = ImGui::CalcTextSize(defaultsButtonText).x + buttonPadding;
 

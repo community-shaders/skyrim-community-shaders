@@ -8,6 +8,7 @@
 #include "Plugin.h"
 #include "ShaderCache.h"
 #include "State.h"
+#include "ThemeManager.h"
 #include "Util.h"
 
 void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShowIcons, float uiScale, const Menu::UIIcons& uiIcons)
@@ -32,8 +33,8 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 
 			// Determine scaling based on GlobalScale setting and font size
 			const float currentFontSize = ImGui::GetFontSize();
-			const float baseTextScale = 1.7f;
-			const float baseIconSize = currentFontSize * 1.5f;  // Reduced by 50%
+			const float baseTextScale = ThemeManager::Constants::HEADER_BASE_TEXT_SCALE;
+			const float baseIconSize = currentFontSize * ThemeManager::Constants::HEADER_BASE_ICON_MULTIPLIER;
 
 			// Apply UI scale to the base scaling factors
 			const float textScaleFactor = baseTextScale * uiScale;
@@ -45,7 +46,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 				ImVec2 logoSizeVec(logoSize * logoAspectRatio, logoSize);
 
 				// Add a bit of padding before the logo and text
-				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 5.0f);
+				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ThemeManager::Constants::CURSOR_POSITION_PADDING);
 
 				// Use our helper to render aligned logo and text with perfect vertical alignment
 				Util::DrawAlignedTextWithLogo(
@@ -56,7 +57,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 			} else {
 				// No logo, just render the text with proper alignment
 				ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 5.0f);
+				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ThemeManager::Constants::CURSOR_POSITION_PADDING);
 				Util::DrawSharpText(title.c_str(), true, textScaleFactor);
 				ImGui::PopStyleVar();
 			}
@@ -68,7 +69,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 			ImGui::EndTable();
 		} else if (!(showLogo || canShowIcons)) {
 			// No icons available - show just the title without the table layout
-			const float baseTextScale = 1.5f;
+			const float baseTextScale = ThemeManager::Constants::HEADER_FALLBACK_TEXT_SCALE;
 			const float textScaleFactor = baseTextScale * uiScale;  // Apply UI scale
 
 			ImGui::SetWindowFontScale(textScaleFactor);
@@ -80,7 +81,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 	// Add separators - no separator needed for docked mode since icons are in title bar
 	if (!isDocked) {
 		// First separator - always shown when not docked
-		ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 3.0f);
+		ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, ThemeManager::Constants::SEPARATOR_THICKNESS);
 		ImGui::Spacing();
 	}
 
@@ -139,7 +140,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 		// Second separator - only shown if icons are disabled/missing or if there are failed tasks (and not docked)
 		if (!isDocked) {
 			ImGui::Spacing();
-			ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 3.0f);
+			ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, ThemeManager::Constants::SEPARATOR_THICKNESS);
 			ImGui::Spacing();
 		}
 	} else if (shaderCache->GetFailedTasks() && !isDocked) {
@@ -158,7 +159,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 
 		// Add second separator when showing error button
 		ImGui::Spacing();
-		ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 3.0f);
+		ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, ThemeManager::Constants::SEPARATOR_THICKNESS);
 		ImGui::Spacing();
 	}
 }
@@ -221,9 +222,9 @@ void MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& action
 
 	// Docked: Draw larger icons in the title bar using foreground draw list
 	const float currentFontSize = ImGui::GetFontSize();
-	const float iconSize = currentFontSize * 1.25f * uiScale;  // Reduced by 50%
-	const float iconSpacing = 8.0f * uiScale;
-	const float rightMargin = 45.0f * uiScale;  // Space for close button
+	const float iconSize = currentFontSize * ThemeManager::Constants::DOCKED_ICON_SIZE_MULTIPLIER * uiScale;
+	const float iconSpacing = ThemeManager::Constants::DOCKED_ICON_SPACING * uiScale;
+	const float rightMargin = ThemeManager::Constants::DOCKED_RIGHT_MARGIN * uiScale;
 
 	// Get window position and calculate title bar area
 	ImVec2 windowPos = ImGui::GetWindowPos();
@@ -242,7 +243,7 @@ void MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& action
 		iconX -= iconSize + iconSpacing;
 
 		// Slightly reduce the icon rendering area to minimize any transparent padding
-		const float paddingReduction = 2.0f * uiScale;
+		const float paddingReduction = ThemeManager::Constants::DOCKED_ICON_PADDING_REDUCTION * uiScale;
 		ImVec2 iconMin(iconX + paddingReduction, iconY + paddingReduction);
 		ImVec2 iconMax(iconX + iconSize - paddingReduction, iconY + iconSize - paddingReduction);
 
@@ -281,17 +282,17 @@ void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& acti
 
 	// Undocked: Draw icons as ImageButtons in a table column
 	const float currentFontSize = ImGui::GetFontSize();
-	const float baseIconSize = currentFontSize * 1.5f;  // Reduced by 50%
+	const float baseIconSize = currentFontSize * ThemeManager::Constants::HEADER_BASE_ICON_MULTIPLIER;
 	const float iconSize = baseIconSize * uiScale;
-	const float paddingReduction = 4.0f * uiScale;  // Reduce padding to minimize dead space
+	const float paddingReduction = ThemeManager::Constants::UNDOCKED_ICON_PADDING_REDUCTION * uiScale;
 	const ImVec2 buttonSize(iconSize, iconSize);
 	const ImVec2 imageSize(iconSize - paddingReduction, iconSize - paddingReduction);
 
 	// Setup button styling for transparent background with hover effects
-	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, 0.0f));              // Slightly increased spacing
-	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);                        // Remove button borders
-	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));                      // Transparent button background
-	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.8f, 0.8f, 0.25f));  // Slightly more visible hover effect
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ThemeManager::Constants::UNDOCKED_ICON_ITEM_SPACING, 0.0f));  // Slightly increased spacing
+	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);                                                           // Remove button borders
+	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));                                                         // Transparent button background
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.8f, 0.8f, 0.25f));                                     // Slightly more visible hover effect
 
 	// Draw action icons as ImageButtons
 	for (size_t i = 0; i < actionIcons.size(); ++i) {
@@ -329,7 +330,7 @@ void MenuHeaderRenderer::RenderWatermarkLogo(const Menu::UIIcons& uiIcons)
 	ImVec2 contentSize(windowSize.x, windowSize.y - titleBarHeight);
 
 	// Calculate watermark logo size - base it on height for consistent sizing
-	const float watermarkHeightPercent = 0.50f;  // 25% of content height
+	const float watermarkHeightPercent = ThemeManager::Constants::WATERMARK_HEIGHT_PERCENT;
 	float watermarkHeight = contentSize.y * watermarkHeightPercent;
 	float logoAspectRatio = uiIcons.logo.size.x / uiIcons.logo.size.y;
 	float watermarkWidth = watermarkHeight * logoAspectRatio;

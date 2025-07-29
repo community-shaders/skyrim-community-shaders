@@ -103,7 +103,6 @@ void AdvancedSettingsRenderer::RenderAdvancedSection()
 
 		// File Watcher option
 		bool useFileWatcher = shaderCache->UseFileWatcher();
-		ImGui::TableNextColumn();
 		if (ImGui::Checkbox("Enable File Watcher", &useFileWatcher)) {
 			shaderCache->SetFileWatcher(useFileWatcher);
 		}

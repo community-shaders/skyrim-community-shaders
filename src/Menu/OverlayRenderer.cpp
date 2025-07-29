@@ -78,7 +78,7 @@ bool OverlayRenderer::ShouldSkipRendering()
 void OverlayRenderer::HandleFontReload(Menu& menu, float& cachedFontSize, float currentFontSize)
 {
 	// Reload font if user changed something
-	if (std::abs(cachedFontSize - currentFontSize) > 0.01f) {
+	if (std::abs(cachedFontSize - currentFontSize) > ThemeManager::Constants::FONT_CACHE_EPSILON) {
 		ThemeManager::ReloadFont(menu, cachedFontSize);
 	}
 }
@@ -90,7 +90,6 @@ void OverlayRenderer::InitializeImGuiFrame(Menu& menu)
 	ImGui_ImplWin32_NewFrame();
 	ImGui::NewFrame();
 
-	ImGuiStyle oldStyle = ImGui::GetStyle();
 	ThemeManager::SetupImGuiStyle(menu);
 }
 
@@ -113,7 +112,7 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 	auto progressOverlay = fmt::format("{}/{} ({:2.1f}%)", compiledShaders, totalShaders, 100 * percent);
 
 	if (shaderCache->IsCompiling()) {
-		ImGui::SetNextWindowPos(ImVec2(10, 10));
+		ImGui::SetNextWindowPos(ImVec2(ThemeManager::Constants::OVERLAY_WINDOW_POSITION, ThemeManager::Constants::OVERLAY_WINDOW_POSITION));
 		if (!ImGui::Begin("ShaderCompilationInfo", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
 			ImGui::End();
 			return;
@@ -131,7 +130,7 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 		ImGui::End();
 	} else if (failed) {
 		if (!hide) {
-			ImGui::SetNextWindowPos(ImVec2(10, 10));
+			ImGui::SetNextWindowPos(ImVec2(ThemeManager::Constants::OVERLAY_WINDOW_POSITION, ThemeManager::Constants::OVERLAY_WINDOW_POSITION));
 			if (!ImGui::Begin("ShaderCompilationInfo", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
 				ImGui::End();
 				return;
@@ -188,10 +187,6 @@ void OverlayRenderer::HandleABTesting()
 
 void OverlayRenderer::FinalizeImGuiFrame()
 {
-	ImGuiStyle oldStyle = ImGui::GetStyle();
-	ImGuiStyle& style = ImGui::GetStyle();
-	style = oldStyle;
-
 	ImGui::Render();
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 

@@ -292,7 +292,7 @@ void Menu::DrawSettings()
 			[&]() { DrawDisplaySettings(); });
 
 		ImGui::Spacing();
-		ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 3.0f);
+		ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, ThemeManager::Constants::SEPARATOR_THICKNESS);
 		ImGui::Spacing();
 
 		DrawFooter();
