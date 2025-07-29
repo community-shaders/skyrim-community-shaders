@@ -1,9 +1,12 @@
 #include "RenderDoc.h"
 
+constexpr const wchar_t* RENDERDOC_DLL_PATH = L"Data\\SKSE\\Plugins\\Renderdoc\\renderdoc.dll";
+constexpr const char* CAPTURE_PATH_TEMPLATE = ".\\Data\\SKSE\\Plugins\\CommunityShaders\\Captures\\";
+
 bool RenderDoc::Initialize()
 {
 	// Try to load the RenderDoc DLL
-	renderDocModule = LoadLibraryW(L"Data\\SKSE\\Plugins\\Renderdoc\\renderdoc.dll");
+	renderDocModule = LoadLibraryW(RENDERDOC_DLL_PATH);
 	if (!renderDocModule) {
 		logger::debug("[RenderDoc] renderdoc.dll not found");
 		return false;
@@ -28,7 +31,13 @@ bool RenderDoc::Initialize()
 		return false;
 	}
 
-	renderDocApi->SetCaptureFilePathTemplate(".\\Data\\SKSE\\Plugins\\CommunityShaders\\Captures\\");
+	renderDocApi->SetCaptureFilePathTemplate(CAPTURE_PATH_TEMPLATE);
+	
+	try {
+		std::filesystem::create_directories(CAPTURE_PATH_TEMPLATE);	
+	} catch (const std::exception& e) {
+		logger::warn("[RenderDoc] Failed to create capture directory: {}", e.what());
+	}
 
 	renderDocApi->MaskOverlayBits(eRENDERDOC_Overlay_None, eRENDERDOC_Overlay_None);
 
@@ -68,7 +77,7 @@ std::string RenderDoc::GetCapturePath(uint32_t a_index)
 	}
 
 	char path[1024] = {};
-	uint32_t pathLength;
+	uint32_t pathLength = sizeof(path);
 	uint64_t timestamp;
 
 	renderDocApi->GetCapture(a_index, path, &pathLength, &timestamp);

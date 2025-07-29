@@ -40,6 +40,13 @@ private:
 	RenderDoc() = default;
 	~RenderDoc() = default;
 
+	// Delete copy/move operations
+	RenderDoc(const RenderDoc&) = delete;
+	RenderDoc& operator=(const RenderDoc&) = delete;
+	RenderDoc(RenderDoc&&) = delete;
+	RenderDoc& operator=(RenderDoc&&) = delete;
+
+	// RenderDoc library and API
 	HMODULE renderDocModule = nullptr;
 	RENDERDOC_API_1_6_0* renderDocApi = nullptr;
 };
