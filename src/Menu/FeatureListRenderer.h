@@ -53,6 +53,13 @@ private:
 		void operator()(const std::string&);
 		void operator()(const CategoryHeader&);
 		void operator()(Feature* feat);
+
+	private:
+		// Helper methods for Feature rendering
+		static bool IsFeatureInstalled(const std::string& featureName);
+		static void RenderFeatureSettingsTab(Feature* feat, bool isDisabled, bool isLoaded, bool hasFailedMessage);
+		static void RenderFeatureAboutTab(Feature* feat, bool isDisabled, bool isLoaded, bool hasFailedMessage);
+		static void RenderFeatureActionButtons(Feature* feat, bool isDisabled, bool isLoaded, float buttonPadding, float buttonSpacing);
 	};
 
 	static std::vector<MenuFuncInfo> BuildMenuList(
