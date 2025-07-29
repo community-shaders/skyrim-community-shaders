@@ -90,6 +90,7 @@ void ExtendedTranslucency::DrawSettings()
 			"1 - Rim Edge",
 			"2 - Isotropic Fabric, Glass, ...",
 			"3 - Anisotropic Fabric",
+			"4 - Scattering Volume",
 		};
 
 		static constexpr int AlphaModeSize = static_cast<int>(std::size(AlphaModeNames));
@@ -104,7 +105,8 @@ void ExtendedTranslucency::DrawSettings()
 				"  - Disabled: No anisotropic transluency, flat alpha.\n"
 				"  - Rim Edge: Naive rim light effect with no physics model, the edge of the geometry is always opaque even its full transparent.\n"
 				"  - Isotropic Fabric: Imaginary fabric weaved from threads in one direction, respect normal map, also works well for layer of glass panels.\n"
-				"  - Anisotropic Fabric: Common fabric weaved from tangent and birnormal direction, ignores normal map.\n");
+				"  - Anisotropic Fabric: Common fabric weaved from tangent and birnormal direction, ignores normal map.\n"
+				"  - Scattering Volume: A **volumn** (instead of a layer) of light scattering or absoring material, it fade the geometry out at its edge instead of strength them like other material.\n");
 		}
 		if (ImGui::Checkbox("Skinned Mesh Only", &settings.SkinnedOnly)) {
 			changed = true;
@@ -160,7 +162,7 @@ std::pair<std::string, std::vector<std::string>> ExtendedTranslucency::GetFeatur
 	return {
 		"Extended Translucency provides realistic rendering of thin fabric and other translucent materials.\n"
 		"This feature supports multiple material models for different types of translucent surfaces.",
-		{ "Multiple translucency material models (rim edge, isotropic/anisotropic fabric)",
+		{ "Multiple translucency material models (rim edge, isotropic/anisotropic fabric, scattering volume)",
 			"Realistic fabric translucency with directional light transmission",
 			"Per-material override support via NIF extra data",
 			"Configurable transparency and softness controls",

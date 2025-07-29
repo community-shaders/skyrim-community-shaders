@@ -3205,7 +3205,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	[branch] if (ExtendedTranslucency::IsValidMaterial(AlphaMaterialModel))
 	{
-		if (alpha >= 0.0156862754 && alpha < 1.0) {
+		if (alpha >= 0.0156862754 && alpha <= 1.0 - 0.0156862754) {
 			float originalAlpha = alpha;
 			alpha = alpha * (1.0 - AlphaMaterialReduction);
 			[branch] if (AlphaMaterialModel == ExtendedTranslucency::MaterialModel::AnisotropicFabric)
@@ -3219,6 +3219,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			else if (AlphaMaterialModel == ExtendedTranslucency::MaterialModel::IsotropicFabric)
 			{
 				alpha = ExtendedTranslucency::GetViewDependentAlphaFabric1D(alpha, viewDirection, worldNormal.xyz);
+			}
+			else if (AlphaMaterialModel == ExtendedTranslucency::MaterialModel::ScatteringVolume)
+			{
+				alpha = ExtendedTranslucency::GetViewDependentAlphaScatteringVolume(alpha, viewDirection, worldNormal.xyz);
 			}
 			else
 			{

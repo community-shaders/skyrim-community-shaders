@@ -32,6 +32,7 @@ struct ExtendedTranslucency final : Feature
 		RimLight = 1,           // Similar effect like rim light
 		IsotropicFabric = 2,    // 1D fabric model, respect normal map
 		AnisotropicFabric = 3,  // 2D fabric model alone tangent and binormal, ignores normal map
+		ScatteringVolume = 4,   // Fade out at the edge, models a ball of fog (light decays in exponential on distance)
 
 		DescriptorUseDefault = 0,  // In ExtraFeatureDescriptor, 0 means 'UseDefault' instead of 'Disabled'
 		DescriptorDisabled = 7,    // In ExtraFeatureDescriptor, value >= 5 means 'Disabled'

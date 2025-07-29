@@ -6,7 +6,8 @@ namespace ExtendedTranslucency
 		static const uint RimLight = 1;
 		static const uint IsotropicFabric = 2;
 		static const uint AnisotropicFabric = 3;
-		static const uint Disabled = 4;  // Any value >= 4
+		static const uint ScatteringVolume = 4;
+		static const uint Disabled = 5;  // Any value >= 5
 	}
 
 	bool IsValidMaterial(uint Material)
@@ -39,6 +40,11 @@ namespace ExtendedTranslucency
 		float3 v = view;
 		float a0 = 1 - sqrt(1.0 - alpha);
 		return a0 * (length(cross(v, t)) + length(cross(v, b))) / (abs(dot(v, n)) + 0.001) - a0 * a0;
+	}
+
+	float GetViewDependentAlphaScatteringVolume(float alpha, float3 view, float3 normal)
+	{
+		return 1.0 - pow(1.0 - alpha, dot(view, normal));
 	}
 
 	float SoftClamp(float alpha, float limit)
