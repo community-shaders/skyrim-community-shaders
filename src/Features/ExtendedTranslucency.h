@@ -5,10 +5,14 @@
 
 struct ExtendedTranslucency final : Feature
 {
+	static constexpr std::string_view MOD_ID = "150755"sv;
+
 	virtual inline std::string GetName() override { return "Extended Translucency"; }
 	virtual inline std::string GetShortName() override { return "ExtendedTranslucency"; }
-	virtual inline std::string_view GetShaderDefineName() override { return "EXTENDED_TRANSLUCENCY"; }
-	virtual inline std::string_view GetCategory() const override { return "Materials"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
+	virtual inline std::string_view GetShaderDefineName() override { return "EXTENDED_TRANSLUCENCY"sv; }
+	virtual inline std::string_view GetCategory() const override { return "Materials"sv; }
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override;
 	virtual bool HasShaderDefine(RE::BSShader::Type shaderType) override { return RE::BSShader::Type::Lighting == shaderType; };
 	virtual void PostPostLoad() override;
 	virtual void DrawSettings() override;
@@ -17,12 +21,6 @@ struct ExtendedTranslucency final : Feature
 	virtual void RestoreDefaultSettings() override;
 	virtual bool SupportsVR() override { return true; };
 
-	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override;
-
-	// Future proof function for UI refactoring
-	std::string GetFeatureDescription() { return "Realistic rendering of thin fabric and other translucent materials"; }  // Feature description for settings page
-	std::string GetFeatureModLink() { return "https://www.nexusmods.com/skyrimspecialedition/mods/150755"; }
-
 	static void BSLightingShader_SetupGeometry(RE::BSRenderPass* pass);
 
 	struct Hooks;
@@ -30,11 +28,13 @@ struct ExtendedTranslucency final : Feature
 	// TODO: Support more material model like glasses or arcylic
 	enum MaterialModel : uint32_t
 	{
-		Disabled = 0,           // In ExtraFeatureDescriptor, this value means 'Default' instead of 'Disabled'
+		Disabled = 0,           // In user settings, 0 means 'Disabled'
 		RimLight = 1,           // Similar effect like rim light
 		IsotropicFabric = 2,    // 1D fabric model, respect normal map
 		AnisotropicFabric = 3,  // 2D fabric model alone tangent and binormal, ignores normal map
-		ForceDisabled = 4,      // In ExtraFeatureDescriptor, value >= 4 means 'Disabled'
+
+		DescriptorUseDefault = 0,  // In ExtraFeatureDescriptor, 0 means 'UseDefault' instead of 'Disabled'
+		DescriptorDisabled = 7,    // In ExtraFeatureDescriptor, value >= 5 means 'Disabled'
 	};
 
 	static constexpr uint32_t ExtraFeatureDescriptorShift = 6;
