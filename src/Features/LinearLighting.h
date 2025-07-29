@@ -41,13 +41,18 @@ struct LinearLighting : Feature
 		float waterGamma = 1.8f;
 		float vlGamma = 1.8f;
 
+		// Lighting multipliers
+		float vanillaDiffuseMult = 1.0f;
+		float vanillaSpecularMult = 1.0f;
+
 		// Effect multipliers
 		float membraneEffectMult = 1.0f;
 		float bloodEffectMult = 1.0f;
 		float projectedEffectMult = 1.0f;
 		float deferredEffectMult = 1.0f;
 		float otherEffectMult = 1.0f;
-		float pad[3];
+
+		float pad;
 	} settings;
 
 	uint tempDisable = false;

@@ -207,12 +207,14 @@ namespace SharedData
 		float skyGamma;
 		float waterGamma;
 		float vlGamma;
+		float vanillaDiffuseMult;
+		float vanillaSpecularMult;
 		float membraneEffectMult;
 		float bloodEffectMult;
 		float projectedEffectMult;
 		float deferredEffectMult;
 		float otherEffectMult;
-		float3 pad;
+		float pad;
 	};
 
 	cbuffer FeatureData : register(b6)

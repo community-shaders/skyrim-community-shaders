@@ -207,6 +207,16 @@ namespace Color
 	{
 		return ENABLE_LL ? color : LinearToGamma(color);
 	}
+
+	float VanillaDiffuseMult()
+	{
+		return ENABLE_LL ? SharedData::linearLightingSettings.vanillaDiffuseMult : 1.0f;
+	}
+
+	float VanillaSpecularMult()
+	{
+		return ENABLE_LL ? SharedData::linearLightingSettings.vanillaSpecularMult : 1.0f;
+	}
 #endif
 }
 
