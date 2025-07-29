@@ -122,7 +122,7 @@ namespace Color
 	float3 Diffuse(float3 color)
 	{
 #	if defined(TRUE_PBR)
-		return ENABLE_LL ? color : pow(abs(color), 1.0 / 2.2);
+		return ENABLE_LL ? color : LinearToGamma(color);
 #	else
 		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.colorGamma) : color;
 #	endif

@@ -1886,8 +1886,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	complexMaterial = complexMaterial && complexMaterialColor.y > (4.0 / 255.0);
 	shininess = lerp(shininess, shininess * complexMaterialColor.y, complexMaterial);
 	if (complexMaterial) {
-		complexSpecular = lerp(1.0, complexSpecular, complexMaterialColor.z);
+		complexSpecular = lerp(1.0, baseColor.xyz, complexMaterialColor.z);
 		baseColor.xyz = lerp(baseColor.xyz, 0.0, complexMaterialColor.z);
+
 	}
 #	endif  // defined (EMAT) && defined(ENVMAP)
 
@@ -2115,7 +2116,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	pbrSurfaceProperties.Noise = screenNoise;
 
-	pbrSurfaceProperties.Roughness = saturate(rawRMAOS.x);
+	pbrSurfaceProperties.Roughness = clamp(rawRMAOS.x, 0.005, 1.0);
 	pbrSurfaceProperties.Metallic = saturate(rawRMAOS.y);
 	pbrSurfaceProperties.AO = rawRMAOS.z;
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
@@ -2722,7 +2723,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if !defined(LANDSCAPE)
 	if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::CharacterLight) {
 		float charLightMul = saturate(dot(viewDirection, worldNormal.xyz)) * CharacterLightParams.x + CharacterLightParams.y * saturate(dot(float2(0.164398998, -0.986393988), worldNormal.yz));
-		float charLightColor = min(CharacterLightParams.w, max(0, CharacterLightParams.z * TexCharacterLightProjNoiseSampler.Sample(SampCharacterLightProjNoiseSampler, baseShadowUV).x));
+		float charLightColor = min(CharacterLightParams.w, max(0, CharacterLightParams.z));
 		diffuseColor += (charLightMul * charLightColor).xxx;
 	}
 #	endif
@@ -3067,14 +3068,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif  // MULTI_LAYER_PARALLAX
 
 #	if defined(SPECULAR)
-#		if defined(EMAT_ENVMAP)
-	specularColor = (specularColor * glossiness * MaterialData.yyy) * lerp(SpecularColor.xyz, Color::IrradianceToGamma(complexSpecular), complexMaterial);
-#		elif defined(HAIR) && defined(CS_HAIR)
+# 		if defined(HAIR) && defined(CS_HAIR)
 	if (!SharedData::hairSpecularSettings.Enabled)
-		specularColor = (specularColor * glossiness * MaterialData.yyy) * SpecularColor.xyz;
-#		else
-	specularColor = (specularColor * glossiness * MaterialData.yyy) * SpecularColor.xyz;
 #		endif
+		specularColor = (specularColor * glossiness * MaterialData.yyy) * SpecularColor.xyz;
 #	elif defined(SPARKLE)
 	specularColor *= glossiness;
 #	endif  // SPECULAR

@@ -148,35 +148,26 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
 
-	// Simplified blending for better performance - reduce contrast calculation overhead
-	float3 blendWeights = saturate(offsets.weights);
+	// Full height-based blending for terrain
+	float contrastFactor = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE);
+	float3 blendWeights = pow(saturate(offsets.weights), contrastFactor);
 
-	// Gradual fade-out of height blending based on distance (mip level)
-	float heightBlendFactor = saturate(1.0 - (mipLevel - 1.0) / 2.0); // Fade from mip 1.0 to 3.0
+	// Height calculation - use luminance for RGB data, alpha when available
+	float3 luminanceHeights = float3(
+		dot(sample1.rgb, LUMINANCE_WEIGHTS),
+		dot(sample2.rgb, LUMINANCE_WEIGHTS),
+		dot(sample3.rgb, LUMINANCE_WEIGHTS)
+	);
 
-	if (heightBlendFactor > 0.0)
-	{
-		// Use Extended Materials style height blending for better quality
-		float3 heights = float3(sample1.a, sample2.a, sample3.a);
+	float3 alphaValues = float3(sample1.a, sample2.a, sample3.a);
+	float3 alphaMask = step(0.001, alphaValues);
+	float3 heights = lerp(luminanceHeights, alphaValues, alphaMask);
 
-		// Apply distance-based fade to height influence
-		float heightBlend = 1.0 + (HEIGHT_INFLUENCE * heightBlendFactor * 2.0); // Scale similar to ExtendedMaterials HEIGHT_POWER
-
-		// Apply height-based weighting (simplified version of ExtendedMaterials ProcessTerrainHeightWeights)
-		float3 heightWeights = blendWeights * pow(heightBlend, 8.0 * heights); // HEIGHT_MULT = 8
-		heightWeights = min(100.0, pow(heightWeights, heightBlend));
-
-		// Normalize weights
-		blendWeights = NormalizeWeights(heightWeights);
-	}
-	else
-	{
-		// Skip expensive height calculations for distant terrain
-		blendWeights = NormalizeWeights(blendWeights);
-	}
+	// Combined weight calculation and normalization
+	float3 weights = NormalizeWeights(blendWeights * (1.0 + HEIGHT_INFLUENCE * heights));
 
 	// Final blend
-	return sample1 * blendWeights.x + sample2 * blendWeights.y + sample3 * blendWeights.z;
+	return sample1 * weights.x + sample2 * weights.y + sample3 * weights.z;
 }
 
 // Stochastic sampling function without height blending for better performance
