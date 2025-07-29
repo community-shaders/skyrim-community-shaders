@@ -41,6 +41,7 @@ public:
 		uint upscaleMethod = (uint)UpscaleMethod::kTAA;
 		uint upscaleMethodNoDLSS = (uint)UpscaleMethod::kTAA;
 		uint upscaleMethodNoFSR = (uint)UpscaleMethod::kTAA;
+		uint upscalePreset = (uint)FfxFsr3QualityMode::FFX_FSR3_QUALITY_MODE_QUALITY;
 		float sharpness = 0.5f;
 		uint dlssPreset = 1;
 		uint vsyncMode = 1;

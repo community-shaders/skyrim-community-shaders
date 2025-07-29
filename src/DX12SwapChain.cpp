@@ -519,7 +519,20 @@ void DX12SwapChain::PostInitD3D()
 
 	outputSize = { (float)*g_width, (float)*g_height };
 
-	renderSize = outputSize * resolutionScale;
+	auto upscaling = Upscaling::GetSingleton();
+
+	uint renderWidth;
+	uint renderHeight;
+
+	ffxFsr3GetRenderResolutionFromQualityMode(
+		&renderWidth,
+		&renderHeight,
+		(uint)outputSize.x,
+		(uint)outputSize.y,
+		(FfxFsr3QualityMode)upscaling->settings.upscalePreset);
+
+	renderSize.x = (float)renderWidth;
+	renderSize.y = (float)renderHeight;
 
 	*g_width = (uint32_t)renderSize.x;
 	*g_height = (uint32_t)renderSize.y;
