@@ -2,12 +2,12 @@
 
 #include "Utils/Game.h"
 
-#include "SwapChain.h"
 #include "Deferred.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Streamline.h"
+#include "SwapChain.h"
 #include "Upscaling.h"
 
 #include "Features/CloudShadows.h"
