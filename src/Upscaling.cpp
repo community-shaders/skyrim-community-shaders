@@ -1,8 +1,8 @@
 #include "Upscaling.h"
 
-#include "SwapChain.h"
 #include "Hooks.h"
 #include "State.h"
+#include "SwapChain.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Upscaling::Settings,

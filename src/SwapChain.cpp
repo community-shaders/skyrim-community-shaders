@@ -544,7 +544,7 @@ HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetLastPresentCount(_Out_ UINT* pL
 void SwapChain::SetUIBuffer()
 {
 	Upscaling::GetSingleton()->Upscale();
-	
+
 	if (dx12Interop)
 		Upscaling::GetSingleton()->CopyResourcesToSharedBuffers();
 
@@ -555,7 +555,7 @@ void SwapChain::SetUIBuffer()
 		float clearColor[4]{ 0, 0, 0, 0 };
 		d3d11Context->ClearRenderTargetView(uiBuffers[frameIndex]->rtv.get(), clearColor);
 	}
-	
+
 	auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 
 	data.RTV = dx12Interop ? uiBuffersWrapped[frameIndex]->rtv : uiBuffers[frameIndex]->rtv.get();

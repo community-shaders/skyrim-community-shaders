@@ -10,9 +10,9 @@
 
 #include "ShaderTools/BSShaderHooks.h"
 
-#include "SwapChain.h"
 #include "FidelityFX.h"
 #include "Streamline.h"
+#include "SwapChain.h"
 #include "Upscaling.h"
 
 std::unordered_map<void*, std::pair<std::unique_ptr<uint8_t[]>, size_t>> ShaderBytecodeMap;
@@ -262,7 +262,6 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	D3D_FEATURE_LEVEL* pFeatureLevel,
 	ID3D11DeviceContext** ppImmediateContext)
 {
-
 	Flags |= D3D11_CREATE_DEVICE_DEBUG;
 
 	DXGI_ADAPTER_DESC adapterDesc;
@@ -275,7 +274,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	auto swapChainWrapper = globals::swapChain;
 	auto fidelityFX = FidelityFX::GetSingleton();
 	auto upscaling = Upscaling::GetSingleton();
-	
+
 	bool shouldProxy = !globals::game::isVR;
 
 	if (shouldProxy)
@@ -306,9 +305,9 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	upscaling->isWindowed = pSwapChainDesc->Windowed;
 
 	swapChainWrapper->dx12Interop = shouldProxy;
-	
+
 	swapChainWrapper->CreateD3D12Device(pAdapter);
-	
+
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
 
 	D3D11CreateDevice(
@@ -331,7 +330,6 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	*ppSwapChain = swapChainWrapper->GetSwapChainProxy();
 
 	return S_OK;
-	
 }
 
 struct BSShaderRenderTargets_Create
