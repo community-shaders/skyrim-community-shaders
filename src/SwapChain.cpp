@@ -544,11 +544,11 @@ void SwapChain::SetUIBuffer()
 	if (dx12Interop) {
 		float clearColor[4]{ 0, 0, 0, 0 };
 		d3d11Context->ClearRenderTargetView(uiBuffersWrapped[frameIndex]->rtv, clearColor);
-	} 
+	}
 
 	auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 
-	data.RTV = dx12Interop ? uiBuffersWrapped[frameIndex]->rtv : upscaledSwapChainBuffer->rtv.get(); 
+	data.RTV = dx12Interop ? uiBuffersWrapped[frameIndex]->rtv : upscaledSwapChainBuffer->rtv.get();
 
 	d3d11Context->OMSetRenderTargets(1, &data.RTV, nullptr);
 }
