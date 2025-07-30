@@ -504,6 +504,45 @@ void PerformanceOverlay::DrawVRAM()
 		ImGui::Text("VRAM Usage: Not available");
 	}
 }
+
+void PerformanceOverlay::DrawPostFGFrameTimeGraph()
+{
+	// Prepare overlay text
+	char overlay_text[128];
+	snprintf(overlay_text, IM_ARRAYSIZE(overlay_text),
+		"Post-FG: %.2f ms (%.1f FPS)",
+		state.postFGSmoothFrameTimeMs, state.postFGSmoothFps);
+
+	// Set graph colors - blue for post-FG
+	ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.0f, 0.5f, 1.0f, 1.0f));  // Blue line
+
+	// Draw the graph
+	float graphWidth = ImGui::GetWindowWidth() * 0.9f;
+	ImGui::PlotLines("##postfgframetime",
+		state.postFGFrameTimeHistory.GetData().data(),
+		settings.FrameHistorySize,
+		static_cast<int>(state.postFGFrameTimeHistory.GetHeadIdx()),
+		overlay_text,
+		state.smoothedMinFrameTime, state.smoothedMaxFrameTime,
+		ImVec2(graphWidth, 50.0f * settings.TextSize));
+
+	ImGui::PopStyleColor();
+
+	// Draw frametime target reference lines
+	if (ImGui::BeginTable("PostFGFrametimeTargets", 3, ImGuiTableFlags_SizingStretchSame)) {
+		ImGui::TableNextColumn();
+		ImGui::Text("30 FPS: 33.3 ms");
+
+		ImGui::TableNextColumn();
+		ImGui::Text("60 FPS: 16.7 ms");
+
+		ImGui::TableNextColumn();
+		ImGui::Text("120 FPS: 8.3 ms");
+
+		ImGui::EndTable();
+	}
+}
+
 // ============================================================================
 // A/B TESTING FUNCTIONS
 // ============================================================================
@@ -1877,15 +1916,12 @@ void PerformanceOverlay::UpdateGraphValues()
 		state.maxFrameTime = *std::ranges::max_element(state.frameTimeHistory.GetData());
 	}
 
-	float avgFrameTime, stdDev, graphMin, graphMax;
+	float avgFrameTime = kDefaultFrameTimeMs,
+		  stdDev = 0.0f,
+		  graphMin = 0.0f,
+		  graphMax = Settings::kGraphSpreadMultiplier * kDefaultFrameTimeMs;
 	// Calculate mean and standard deviation for normalized graph range
-	if (state.frameTimeHistory.GetData().empty()) {
-		// Default to 60 FPS
-		avgFrameTime = kDefaultFrameTimeMs;
-		stdDev = 0.0f;
-		graphMin = 0.0f;
-		graphMax = Settings::kGraphSpreadMultiplier * kDefaultFrameTimeMs;
-	} else {
+	if (!state.frameTimeHistory.GetData().empty()) {
 		// Calculate average frame time
 		avgFrameTime = std::accumulate(state.frameTimeHistory.GetData().begin(), state.frameTimeHistory.GetData().end(), 0.0f) / state.frameTimeHistory.GetData().size();
 
@@ -1937,45 +1973,7 @@ void PerformanceOverlay::UpdateGraphValues()
 	state.updateTimer += deltaTime;
 	if (state.updateTimer >= settings.UpdateInterval) {
 		state.smoothFps = state.fps;
-		state.smoothFrameTimeMs = state.frameTimeMs;  // TODO: is smoothFrameTimeMs smoothed at all?
+		state.smoothFrameTimeMs = state.frameTimeMs;
 		state.updateTimer = 0.0f;
-	}
-}
-
-void PerformanceOverlay::DrawPostFGFrameTimeGraph()
-{
-	// Prepare overlay text
-	char overlay_text[128];
-	snprintf(overlay_text, IM_ARRAYSIZE(overlay_text),
-		"Post-FG: %.2f ms (%.1f FPS)",
-		state.postFGSmoothFrameTimeMs, state.postFGSmoothFps);
-
-	// Set graph colors - blue for post-FG
-	ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.0f, 0.5f, 1.0f, 1.0f));  // Blue line
-
-	// Draw the graph
-	float graphWidth = ImGui::GetWindowWidth() * 0.9f;
-	ImGui::PlotLines("##postfgframetime",
-		state.postFGFrameTimeHistory.GetData().data(),
-		settings.FrameHistorySize,
-		static_cast<int>(state.postFGFrameTimeHistory.GetHeadIdx()),
-		overlay_text,
-		state.smoothedMinFrameTime, state.smoothedMaxFrameTime,
-		ImVec2(graphWidth, 50.0f * settings.TextSize));
-
-	ImGui::PopStyleColor();
-
-	// Draw frametime target reference lines
-	if (ImGui::BeginTable("PostFGFrametimeTargets", 3, ImGuiTableFlags_SizingStretchSame)) {
-		ImGui::TableNextColumn();
-		ImGui::Text("30 FPS: 33.3 ms");
-
-		ImGui::TableNextColumn();
-		ImGui::Text("60 FPS: 16.7 ms");
-
-		ImGui::TableNextColumn();
-		ImGui::Text("120 FPS: 8.3 ms");
-
-		ImGui::EndTable();
 	}
 }
