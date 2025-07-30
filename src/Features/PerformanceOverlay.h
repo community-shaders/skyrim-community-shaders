@@ -88,9 +88,11 @@ class CircularBuffer
 public:
 	CircularBuffer(size_t size)
 	{
-		size = std::max(1, size);
+		size = std::max((size_t)1, size);
 		data.resize(size);
 	}
+	CircularBuffer() :
+		CircularBuffer(1) {}
 
 	void Resize(size_t newSize)
 	{
@@ -104,12 +106,14 @@ public:
 	void Push(const T& val)
 	{
 		data[headIdx++] = val;
-		headIdx %= data.size();
+		if (headIdx >= data.size())
+			headIdx = 0;
 	}
 
 	std::span<const T> GetData() { return { data }; }
 	size_t GetHeadIdx() { return headIdx; }
 };
+
 struct PerformanceOverlay : OverlayFeature
 {
 	// ============================================================================
@@ -175,16 +179,11 @@ struct PerformanceOverlay : OverlayFeature
 	struct PerfOverlayState
 	{
 		// Frame time history buffers
-		std::vector<float> frameTimeHistory;
-		std::vector<float> postFGFrameTimeHistory;
+		CircularBuffer<float> frameTimeHistory;
+		CircularBuffer<float> postFGFrameTimeHistory;
 
 		// State flags
-		bool initialized = false;
 		bool isFrameGenerationActive = false;  // TODO: this shouldn't be a tracked state
-
-		// History indices
-		int frameTimeHistoryIndex = 0;
-		int postFGFrameTimeHistoryIndex = 0;
 
 		// Performance counters
 		int64_t frequency;
@@ -213,31 +212,6 @@ struct PerformanceOverlay : OverlayFeature
 		float maxFrameTime = 0.0f;
 		float smoothedMinFrameTime = 0.0f;
 		float smoothedMaxFrameTime = 50.0f;
-
-		// Display settings
-		float textScale = 1.0f;
-
-		// Performance threshold constants
-		static constexpr float kSmoothingFactor = 0.15f;             // Smoothing factor: 0.1f = slow, 0.3f = fast.
-		static constexpr float kFrameTimeGoodThreshold = 2.0f;       // ms - Good performance threshold
-		static constexpr float kFrameTimeWarningThreshold = 5.0f;    // ms - Warning performance threshold
-		static constexpr float kCostPerCallGoodThreshold = 0.05f;    // ms/call - Good cost per call threshold
-		static constexpr float kCostPerCallWarningThreshold = 0.2f;  // ms/call - Warning cost per call threshold
-		static constexpr float kMicrosecondThreshold = 0.01f;        // ms - Threshold for showing microseconds
-		static constexpr float kPercentDisplayThreshold = 0.01f;     // Minimum percent difference to display
-		static constexpr float kGraphSpreadMultiplier = 2.0f;        // Standard deviation multiplier for graph range
-		static constexpr float kGraphMinSpread = 2.0f;               // ms - Minimum graph spread
-		static constexpr float kGraphMaxSpread = 20.0f;              // ms - Maximum graph spread
-		static constexpr float kFrameGenerationMultiplier = 2.0f;    // Frame generation doubles frame rate
-		static constexpr float kMaxUpdateInterval = 2.0f;            // seconds - Maximum update interval
-		static constexpr float kDefaultWindowPadding = 10.0f;        // pixels - Default window padding
-		static constexpr float kLabelPadding = 100.0f;               // pixels - Padding for labels
-		static constexpr float kDrawCallsTableWidth = 600.0f;        // pixels - Draw calls table width
-		static constexpr float kVRAMSectionWidth = 300.0f;           // pixels - VRAM section width
-		static constexpr float kWindowBorderPadding = 20.0f;         // pixels - Window border padding
-		static constexpr float kDefaultFrameTimeMs = 16.67f;         // ms - Default frame time (60 FPS)
-
-		void ResizeFrameTimeHistory(size_t newSize);
 
 		/**
 		* @brief Updates all runtime state related to the performance overlay graph.
@@ -268,6 +242,28 @@ struct PerformanceOverlay : OverlayFeature
 	// ============================================================================
 	struct PerfOverlaySettings
 	{
+		// Performance threshold constants
+		static constexpr float kSmoothingFactor = 0.15f;             // Smoothing factor: 0.1f = slow, 0.3f = fast.
+		static constexpr float kFrameTimeGoodThreshold = 2.0f;       // ms - Good performance threshold
+		static constexpr float kFrameTimeWarningThreshold = 5.0f;    // ms - Warning performance threshold
+		static constexpr float kCostPerCallGoodThreshold = 0.05f;    // ms/call - Good cost per call threshold
+		static constexpr float kCostPerCallWarningThreshold = 0.2f;  // ms/call - Warning cost per call threshold
+		static constexpr float kMicrosecondThreshold = 0.01f;        // ms - Threshold for showing microseconds
+		static constexpr float kPercentDisplayThreshold = 0.01f;     // Minimum percent difference to display
+		static constexpr float kGraphSpreadMultiplier = 2.0f;        // Standard deviation multiplier for graph range
+		static constexpr float kGraphMinSpread = 2.0f;               // ms - Minimum graph spread
+		static constexpr float kGraphMaxSpread = 20.0f;              // ms - Maximum graph spread
+		static constexpr float kFrameGenerationMultiplier = 2.0f;    // Frame generation doubles frame rate
+		static constexpr float kMaxUpdateInterval = 2.0f;            // seconds - Maximum update interval
+		static constexpr float kDefaultWindowPadding = 10.0f;        // pixels - Default window padding
+		static constexpr float kLabelPadding = 100.0f;               // pixels - Padding for labels
+		static constexpr float kDrawCallsTableWidth = 600.0f;        // pixels - Draw calls table width
+		static constexpr float kVRAMSectionWidth = 300.0f;           // pixels - VRAM section width
+		static constexpr float kWindowBorderPadding = 20.0f;         // pixels - Window border padding
+		static constexpr float kDefaultFrameTimeMs = 16.67f;         // ms - Default frame time (60 FPS)
+		static constexpr int kMinFrameHistorySize = 60;              // 60 frames = 1s @ 60fps. Reasonable minimum.
+		static constexpr int kMaxFrameHistorySize = 480;             // 480 frames = 10s @ 60fps or 2s @ 240fps. Reasonable maximum.
+
 		bool ShowInOverlay = true;  // was: Enabled
 		bool ShowDrawCalls = true;
 		bool ShowVRAM = true;
@@ -275,9 +271,7 @@ struct PerformanceOverlay : OverlayFeature
 		bool ShowPreFGFrameTimeGraph = true;
 		bool ShowPostFGFrameTimeGraph = true;
 		float UpdateInterval = 0.5f;
-		int FrameHistorySize = 120;                       // Default 120 frames = 2s @ 60fps. Clamped using static values to prevent config file values going outside of slider bounds.
-		static constexpr int kMinFrameHistorySize = 60;   // 60 frames = 1s @ 60fps. Reasonable minimum.
-		static constexpr int kMaxFrameHistorySize = 480;  // 480 frames = 10s @ 60fps or 2s @ 240fps. Reasonable maximum.
+		int FrameHistorySize = 120;  // Default 120 frames = 2s @ 60fps. Clamped using static values to prevent config file values going outside of slider bounds.
 		float TextSize = 1.0f;
 
 		float BackgroundOpacity = 0.5f;
