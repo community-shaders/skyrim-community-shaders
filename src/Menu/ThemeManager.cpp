@@ -92,11 +92,11 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 
 		colors[ImGuiCol_CheckMark] = themeSettings.Palette.Text;
 
-		colors[ImGuiCol_Tab] = ImVec4();
-		colors[ImGuiCol_TabActive] = ImVec4();
+		colors[ImGuiCol_Tab] = themeSettings.FullPalette[ImGuiCol_Tab];
+		colors[ImGuiCol_TabActive] = themeSettings.FullPalette[ImGuiCol_TabActive];
 		colors[ImGuiCol_TabHovered] = tabHovered;
-		colors[ImGuiCol_TabUnfocused] = colors[ImGuiCol_Tab];
-		colors[ImGuiCol_TabUnfocusedActive] = colors[ImGuiCol_TabActive];
+		colors[ImGuiCol_TabUnfocused] = themeSettings.FullPalette[ImGuiCol_TabUnfocused];
+		colors[ImGuiCol_TabUnfocusedActive] = themeSettings.FullPalette[ImGuiCol_TabUnfocusedActive];
 
 		colors[ImGuiCol_PopupBg] = themeSettings.Palette.Background;
 

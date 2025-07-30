@@ -163,25 +163,25 @@ void Menu::Init()
 
 	// Enhanced font configuration for sharper text rendering
 	ImFontConfig font_config;
-	font_config.OversampleH = Constants::FCONF_OVERSAMPLE_H;
-	font_config.OversampleV = Constants::FCONF_OVERSAMPLE_V;
-	font_config.PixelSnapH = Constants::FCONF_PIXELSNAP_H;
-	font_config.RasterizerMultiply = Constants::FCONF_RASTERIZER_MULTIPLY;
+	font_config.OversampleH = ThemeManager::Constants::FCONF_OVERSAMPLE_H;
+	font_config.OversampleV = ThemeManager::Constants::FCONF_OVERSAMPLE_V;
+	font_config.PixelSnapH = ThemeManager::Constants::FCONF_PIXELSNAP_H;
+	font_config.RasterizerMultiply = ThemeManager::Constants::FCONF_RASTERIZER_MULTIPLY;
 
 	DXGI_SWAP_CHAIN_DESC desc{};
 	globals::d3d::swapChain->GetDesc(&desc);
 
 	float fontSize = settings.Theme.FontSize;
 
-	if (std::round(fontSize) != std::round(Constants::DEFAULT_FONT_SIZE)) {
+	if (std::round(fontSize) != std::round(ThemeManager::Constants::DEFAULT_FONT_SIZE)) {
 		if (globals::state->screenSize.y > 0) {
-			fontSize = globals::state->screenSize.y * Constants::DEFAULT_FONT_RATIO;
+			fontSize = globals::state->screenSize.y * ThemeManager::Constants::DEFAULT_FONT_RATIO;
 		} else {
 			logger::warn("Menu::Init() - Failed to get game resolution from globals::state->screenSize.");
 		}
 	}
 
-	fontSize = std::clamp(fontSize, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE);
+	fontSize = std::clamp(fontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE);
 
 	if (!imgui_io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\Jost-Regular.ttf",
 			std::round(fontSize), &font_config)) {

@@ -57,15 +57,6 @@ public:
 	struct Constants
 	{
 		static constexpr std::uint16_t KEY_PRESSED_MASK = 0x8000;
-		static constexpr float DEFAULT_SCREEN_HEIGHT = 1080.0f;  // Default screen resolution to use for subsequent calculations
-		static constexpr float DEFAULT_FONT_RATIO = 0.025f;      // Default 2.5% of screen height
-		static constexpr float MIN_FONT_SIZE = 16.0f;            // ~1.5% @ 1080px height
-		static constexpr float MAX_FONT_SIZE = 108.0f;           // 5.0% @ 2160px height
-		static constexpr float DEFAULT_FONT_SIZE = 27.0f;
-		static constexpr int FCONF_OVERSAMPLE_H = 3;              // ImGui default = 2
-		static constexpr int FCONF_OVERSAMPLE_V = 2;              // ImGui default = 1
-		static constexpr bool FCONF_PIXELSNAP_H = true;           // ImGui default = false
-		static constexpr float FCONF_RASTERIZER_MULTIPLY = 1.1f;  // ImGui default = 1.0f. "Linearly brighten (>1.0f) or darken (<1.0f) font output."
 	};
 
 	// UI icon textures
@@ -103,7 +94,7 @@ public:
 
 	struct ThemeSettings
 	{
-		float FontSize = Constants::DEFAULT_FONT_SIZE;
+		float FontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;
 		float GlobalScale = REL::Module::IsVR() ? -0.5f : 0.f;  // exponential
 
 		bool UseSimplePalette = true;    // simple palette or full customization
@@ -279,7 +270,7 @@ public:
 private:
 	Settings settings;
 
-	float cachedFontSize = Constants::DEFAULT_FONT_SIZE;  // Tracks whether font has been modified and may require reloading
+	float cachedFontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;  // Tracks whether font has been modified and may require reloading
 
 	// Menu navigation
 	std::string pendingFeatureSelection;  // Feature to select on next frame

@@ -181,7 +181,7 @@ void SettingsTabRenderer::RenderSizesTab()
 			auto& io = ImGui::GetIO();
 			io.FontGlobalScale = trueScale;
 		}
-		ImGui::SliderFloat("Font Size", &themeSettings.FontSize, Menu::Constants::MIN_FONT_SIZE, Menu::Constants::MAX_FONT_SIZE, "%.0f");
+		ImGui::SliderFloat("Font Size", &themeSettings.FontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE, "%.0f");
 		ImGui::SliderFloat2("Window Padding", (float*)&style.WindowPadding, 0.0f, 20.0f, "%.0f");
 		ImGui::SliderFloat2("Frame Padding", (float*)&style.FramePadding, 0.0f, 20.0f, "%.0f");
 		ImGui::SliderFloat2("Item Spacing", (float*)&style.ItemSpacing, 0.0f, 20.0f, "%.0f");

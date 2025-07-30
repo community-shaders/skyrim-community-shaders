@@ -10,13 +10,18 @@ public:
 
 	struct Constants
 	{
+		// Font size constants
+		static constexpr float DEFAULT_SCREEN_HEIGHT = 1080.0f;  // Default screen resolution to use for subsequent calculations
+		static constexpr float DEFAULT_FONT_RATIO = 0.025f;      // Default 2.5% of screen height
+		static constexpr float MIN_FONT_SIZE = 16.0f;            // ~1.5% @ 1080px height
+		static constexpr float MAX_FONT_SIZE = 108.0f;           // 5.0% @ 2160px height
+		static constexpr float DEFAULT_FONT_SIZE = 27.0f;
+
 		// Font configuration constants
-		static constexpr float MIN_FONT_SIZE = 8.0f;
-		static constexpr float MAX_FONT_SIZE = 32.0f;
-		static constexpr int FCONF_OVERSAMPLE_H = 3;
-		static constexpr int FCONF_OVERSAMPLE_V = 1;
-		static constexpr bool FCONF_PIXELSNAP_H = true;
-		static constexpr float FCONF_RASTERIZER_MULTIPLY = 1.1f;
+		static constexpr int FCONF_OVERSAMPLE_H = 3;              // ImGui default = 2
+		static constexpr int FCONF_OVERSAMPLE_V = 2;              // ImGui default = 1
+		static constexpr bool FCONF_PIXELSNAP_H = true;           // ImGui default = false
+		static constexpr float FCONF_RASTERIZER_MULTIPLY = 1.1f;  // ImGui default = 1.0f
 
 		// Header rendering constants
 		static constexpr float HEADER_BASE_TEXT_SCALE = 1.7f;
