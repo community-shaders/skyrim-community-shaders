@@ -440,9 +440,9 @@ void Upscaling::Upscale()
 		state->EndPerfEvent();
 	}
 
-	auto postProcessing = globals::features::postProcessing;
-	if (postProcessing->loaded) {
-		postProcessing->DrawAfterTAA(upscalingTexture);
+	auto& postProcessing = globals::features::postProcessing;
+	if (postProcessing.loaded) {
+		postProcessing.DrawAfterTAA(upscalingTexture);
 	}
 
 	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
@@ -509,9 +509,9 @@ void Upscaling::SharpenTAA()
 
 	state->EndPerfEvent();
 
-	auto postProcessing = globals::features::postProcessing;
-	if (postProcessing->loaded) {
-		postProcessing->DrawAfterTAA(upscalingTexture);
+	auto& postProcessing = globals::features::postProcessing;
+	if (postProcessing.loaded) {
+		postProcessing.DrawAfterTAA(upscalingTexture);
 	}
 
 	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
