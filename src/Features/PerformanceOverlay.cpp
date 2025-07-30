@@ -1902,9 +1902,8 @@ void PerformanceOverlay::UpdateGraphValues()
 	                  static_cast<float>(state.overlayTimingFrequency.QuadPart);
 	state.lastUpdateTime = now;
 
-	// WHAT DOES oldFrameTime EVEN MEAN???????
 	// Insert latest frame time into circular buffer
-	float oldFrameTime = state.frameTimeHistory.GetData()[state.frameTimeHistory.GetHeadIdx()];
+	float oldFrameTime = state.frameTimeHistory.GetData()[state.frameTimeHistory.GetHeadIdx()];  // what is the point of oldFrameTime?
 	state.frameTimeHistory.Push(state.frameTimeMs);
 
 	// Maintain instantaneous min/max tracking
