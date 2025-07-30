@@ -5,12 +5,10 @@
 
 struct ExtendedTranslucency final : Feature
 {
-	static ExtendedTranslucency* GetSingleton();
-
 	virtual inline std::string GetName() override { return "Extended Translucency"; }
 	virtual inline std::string GetShortName() override { return "ExtendedTranslucency"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "EXTENDED_TRANSLUCENCY"; }
-	virtual inline std::string_view GetCategory() const override { return "Lighting"; }
+	virtual inline std::string_view GetCategory() const override { return "Materials"; }
 	virtual bool HasShaderDefine(RE::BSShader::Type shaderType) override { return RE::BSShader::Type::Lighting == shaderType; };
 	virtual void PostPostLoad() override;
 	virtual void DrawSettings() override;
@@ -51,6 +49,7 @@ struct ExtendedTranslucency final : Feature
 	};
 
 	MaterialParams settings;
+	bool SkinnedOnly = true;
 
 	static const RE::BSFixedString NiExtraDataName_AnisotropicAlphaMaterial;
 };

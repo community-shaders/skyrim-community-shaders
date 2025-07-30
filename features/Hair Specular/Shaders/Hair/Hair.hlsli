@@ -241,7 +241,6 @@ namespace Hair
 
 			specularLobeWeightPrimary = D_Marschner(L, V, T, roughnessPrimary, baseColor, 0.2, 0) * Math::PI;
 			diffuseLobeWeight = GetHairDiffuseAttenuationKajiyaKay(T, V, L, 1, baseColor) * Math::PI;
-			diffuseLobeWeight = Color::LinearToGamma(diffuseLobeWeight);
 			specularLobeWeightPrimary = Color::LinearToGamma(specularLobeWeightPrimary);
 			return;
 		} else {

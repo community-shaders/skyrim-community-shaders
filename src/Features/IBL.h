@@ -6,12 +6,6 @@ private:
 	static constexpr std::string_view MOD_ID = "153478";
 
 public:
-	static IBL* GetSingleton()
-	{
-		static IBL singleton;
-		return &singleton;
-	}
-
 	virtual bool SupportsVR() override { return true; };
 
 	virtual inline std::string GetName() override { return "Image Based Lighting"; }

@@ -6,12 +6,6 @@ private:
 	static constexpr std::string_view MOD_ID = "130375";
 
 public:
-	static ScreenSpaceGI* GetSingleton()
-	{
-		static ScreenSpaceGI singleton;
-		return &singleton;
-	}
-
 	bool inline SupportsVR() override { return true; }
 
 	virtual inline std::string GetName() override { return "Screen Space GI"; }

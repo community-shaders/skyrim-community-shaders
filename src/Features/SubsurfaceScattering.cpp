@@ -198,11 +198,11 @@ void SubsurfaceScattering::DrawSSS()
 		ID3D11UnorderedAccessView* uav = blurHorizontalTemp->uav.get();
 		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 
-		auto terrainBlending = globals::features::terrainBlending;
+		auto& terrainBlending = globals::features::terrainBlending;
 
 		ID3D11ShaderResourceView* views[3];
 		views[0] = main.SRV;
-		views[1] = terrainBlending->loaded ? terrainBlending->blendedDepthTexture16->srv.get() : depth.depthSRV,
+		views[1] = terrainBlending.loaded ? terrainBlending.blendedDepthTexture16->srv.get() : depth.depthSRV,
 		views[2] = mask.SRV;
 
 		context->CSSetShaderResources(0, 3, views);
@@ -370,13 +370,15 @@ void SubsurfaceScattering::BSLightingShader_SetupSkin(RE::BSRenderPass* a_pass)
 			validMaterials = true;
 
 			if (isBeastRace)
-				state->currentExtraDescriptor |= (uint)State::ExtraShaderDescriptors::IsBeastRace;
+				state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::IsBeastRace;
+			else
+				state->permutationData.ExtraShaderDescriptor &= ~(uint)State::ExtraShaderDescriptors::IsBeastRace;
 		}
 	}
 }
 
 void SubsurfaceScattering::Hooks::BSLightingShader_SetupGeometry::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 {
-	globals::features::subsurfaceScattering->BSLightingShader_SetupSkin(Pass);
+	globals::features::subsurfaceScattering.BSLightingShader_SetupSkin(Pass);
 	func(This, Pass, RenderFlags);
 }

@@ -7,12 +7,6 @@ private:
 	static constexpr std::string_view MOD_ID = "153541";
 
 public:
-	static InteriorSunShadows* GetSingleton()
-	{
-		static InteriorSunShadows singleton;
-		return &singleton;
-	}
-
 	virtual inline std::string GetName() override { return "Interior Sun Shadows"; }
 	virtual inline std::string GetShortName() override { return "InteriorSunShadows"; }
 	virtual std::string_view GetCategory() const override { return "Lighting"; }

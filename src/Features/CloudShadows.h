@@ -6,12 +6,6 @@ private:
 	static constexpr std::string_view MOD_ID = "139185";
 
 public:
-	static CloudShadows* GetSingleton()
-	{
-		static CloudShadows singleton;
-		return &singleton;
-	}
-
 	struct alignas(16) Settings
 	{
 		float Opacity = 0.8f;

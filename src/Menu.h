@@ -1,9 +1,12 @@
 
 #pragma once
 #include "Feature.h"
+#include "Menu/ThemeManager.h"
 #include "Utils/Serialize.h"
 #include <dxgi1_4.h>
 #include <nlohmann/json.hpp>
+#include <shared_mutex>
+#include <vector>
 #include <winrt/base.h>
 
 using json = nlohmann::json;
@@ -12,6 +15,8 @@ class Menu
 {
 public:
 	~Menu();
+	Menu(const Menu&) = delete;
+	Menu& operator=(const Menu&) = delete;
 
 	static Menu* GetSingleton()
 	{
@@ -20,6 +25,7 @@ public:
 	}
 
 	bool initialized = false;
+	bool IsEnabled = false;
 
 	void Load(json& o_json);
 	void Save(json& o_json);
@@ -35,6 +41,15 @@ public:
 	void ProcessInputEvents(RE::InputEvent* const* a_events);
 	bool ShouldSwallowInput();
 
+public:
+	// Input handling flags (made public for InputEventHandler access)
+	bool settingToggleKey = false;
+	bool settingSkipCompilationKey = false;
+	bool settingsEffectsToggle = false;
+	bool settingOverlayToggleKey = false;
+	uint32_t priorShaderKey = VK_PRIOR;  // used for blocking shaders in debugging
+	uint32_t nextShaderKey = VK_NEXT;    // used for blocking shaders in debugging
+
 	// Used for resetting input keys to solve alt-tab stuck issue
 	std::atomic<bool> focusChanged = false;
 	void OnFocusChanged();
@@ -42,15 +57,6 @@ public:
 	struct Constants
 	{
 		static constexpr std::uint16_t KEY_PRESSED_MASK = 0x8000;
-		static constexpr float DEFAULT_SCREEN_HEIGHT = 1080.0f;  // Default screen resolution to use for subsequent calculations
-		static constexpr float DEFAULT_FONT_RATIO = 0.025f;      // Default 2.5% of screen height
-		static constexpr float MIN_FONT_SIZE = 16.0f;            // ~1.5% @ 1080px height
-		static constexpr float MAX_FONT_SIZE = 108.0f;           // 5.0% @ 2160px height
-		static constexpr float DEFAULT_FONT_SIZE = 27.0f;
-		static constexpr int FCONF_OVERSAMPLE_H = 3;              // ImGui default = 2
-		static constexpr int FCONF_OVERSAMPLE_V = 2;              // ImGui default = 1
-		static constexpr bool FCONF_PIXELSNAP_H = true;           // ImGui default = false
-		static constexpr float FCONF_RASTERIZER_MULTIPLY = 1.1f;  // ImGui default = 1.0f. "Linearly brighten (>1.0f) or darken (<1.0f) font output."
 	};
 
 	// UI icon textures
@@ -72,14 +78,23 @@ public:
 		UIIcon saveSettings;
 		UIIcon loadSettings;
 		UIIcon clearCache;
-		UIIcon clearDiskCache;
 		UIIcon logo;    // New logo icon
 		UIIcon search;  // Search icon for search bars
+
+		// Category icons
+		UIIcon characters;
+		UIIcon grass;
+		UIIcon lighting;
+		UIIcon sky;
+		UIIcon landscape;
+		UIIcon water;
+		UIIcon debug;
+		UIIcon materials;
 	} uiIcons;
 
 	struct ThemeSettings
 	{
-		float FontSize = Constants::DEFAULT_FONT_SIZE;
+		float FontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;
 		float GlobalScale = REL::Module::IsVR() ? -0.5f : 0.f;  // exponential
 
 		bool UseSimplePalette = true;    // simple palette or full customization
@@ -199,29 +214,72 @@ public:
 
 	bool overlayVisible = false;
 
-	// Static utility functions
-	static const char* KeyIdToString(uint32_t key);
+public:
+	// Move KeyEvent struct here
+	class CharEvent : public RE::InputEvent
+	{
+	public:
+		uint32_t keyCode;  // 18 (ascii code)
+	};
+	struct KeyEvent
+	{
+		explicit KeyEvent(const RE::ButtonEvent* a_event) :
+			keyCode(a_event->GetIDCode()),
+			device(a_event->GetDevice()),
+			eventType(a_event->GetEventType()),
+			value(a_event->Value()),
+			heldDownSecs(a_event->HeldDuration()),
+			thumbstickX(0.0f),
+			thumbstickY(0.0f) {}
+
+		explicit KeyEvent(const CharEvent* a_event) :
+			keyCode(a_event->keyCode),
+			device(a_event->GetDevice()),
+			eventType(a_event->GetEventType()),
+			value(0),
+			heldDownSecs(0),
+			thumbstickX(0.0f),
+			thumbstickY(0.0f) {}
+
+		explicit KeyEvent(const RE::ThumbstickEvent* a_event) :
+			keyCode(0),  // For thumbstick events, keyCode/value are replaced by x/y floats
+			device(a_event->GetDevice()),
+			eventType(a_event->GetEventType()),
+			value(0),
+			heldDownSecs(0),
+			thumbstickX(a_event->xValue),
+			thumbstickY(a_event->yValue)
+		{}
+		// For thumbstick events, keyCode/value are replaced by x/y floats
+		uint32_t keyCode;
+		RE::INPUT_DEVICE device;
+		RE::INPUT_EVENT_TYPE eventType;
+		float value = 0;
+		float heldDownSecs = 0;
+		float thumbstickX = 0.0f;
+		float thumbstickY = 0.0f;
+		[[nodiscard]] constexpr bool IsPressed() const noexcept { return value > 0.0F; }
+		[[nodiscard]] constexpr bool IsRepeating() const noexcept { return heldDownSecs > 0.0F; }
+		[[nodiscard]] constexpr bool IsDown() const noexcept { return IsPressed() && (heldDownSecs == 0.0F); }
+		[[nodiscard]] constexpr bool IsHeld() const noexcept { return IsPressed() && IsRepeating(); }
+		[[nodiscard]] constexpr bool IsUp() const noexcept { return (value == 0.0F) && IsRepeating(); }
+	};
+	// VR overlay input and cursor helpers
+	void ProcessVROverlayInput();
 
 private:
 	Settings settings;
 
-	float cachedFontSize = Constants::DEFAULT_FONT_SIZE;  // Tracks whether font has been modified and may require reloading
-	void ReloadFont();                                    // Credit to user patchuli: https://github.com/Patchu1i/ModExplorerMenu/tree/master
+	float cachedFontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;  // Tracks whether font has been modified and may require reloading
 
 	// Menu navigation
 	std::string pendingFeatureSelection;  // Feature to select on next frame
 
-	uint32_t priorShaderKey = VK_PRIOR;  // used for blocking shaders in debugging
-	uint32_t nextShaderKey = VK_NEXT;    // used for blocking shaders in debugging
-
-	bool settingToggleKey = false;
-	bool settingSkipCompilationKey = false;
-	bool settingsEffectsToggle = false;
-	bool settingOverlayToggleKey = false;
+	// Input event handling
+	std::vector<KeyEvent> _keyEventQueue;
+	mutable std::shared_mutex _inputEventMutex;
 
 	Menu() = default;
-	void SetupImGuiStyle() const;
-	const ImGuiKey VirtualKeyToImGuiKey(WPARAM vkKey);
 
 	void DrawGeneralSettings();
 	void DrawAdvancedSettings();
@@ -230,41 +288,6 @@ private:
 	void DrawFooter();
 	void BuildCategoryCounts();
 
-	class CharEvent : public RE::InputEvent
-	{
-	public:
-		uint32_t keyCode;  // 18 (ascii code)
-	};
-
-	struct KeyEvent
-	{
-		explicit KeyEvent(const RE::ButtonEvent* a_event) :
-			keyCode(a_event->GetIDCode()),
-			device(a_event->GetDevice()),
-			eventType(a_event->GetEventType()),
-			value(a_event->Value()),
-			heldDownSecs(a_event->HeldDuration()) {}
-
-		explicit KeyEvent(const CharEvent* a_event) :
-			keyCode(a_event->keyCode),
-			device(a_event->GetDevice()),
-			eventType(a_event->GetEventType()) {}
-
-		[[nodiscard]] constexpr bool IsPressed() const noexcept { return value > 0.0F; }
-		[[nodiscard]] constexpr bool IsRepeating() const noexcept { return heldDownSecs > 0.0F; }
-		[[nodiscard]] constexpr bool IsDown() const noexcept { return IsPressed() && (heldDownSecs == 0.0F); }
-		[[nodiscard]] constexpr bool IsHeld() const noexcept { return IsPressed() && IsRepeating(); }
-		[[nodiscard]] constexpr bool IsUp() const noexcept { return (value == 0.0F) && IsRepeating(); }
-
-		uint32_t keyCode;
-		RE::INPUT_DEVICE device;
-		RE::INPUT_EVENT_TYPE eventType;
-		float value = 0;
-		float heldDownSecs = 0;
-	};
-	const uint32_t DIKToVK(uint32_t DIK);
-	mutable std::shared_mutex _inputEventMutex;
-	std::vector<KeyEvent> _keyEventQueue{};
 	void addToEventQueue(KeyEvent e);
 	void ProcessInputEventQueue();
 	winrt::com_ptr<IDXGIAdapter3> dxgiAdapter3;

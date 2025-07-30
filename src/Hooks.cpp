@@ -12,6 +12,7 @@
 #include "Features/InteriorSunShadows.h"
 #include "Features/LightLimitFix.h"
 #include "Features/TerrainHelper.h"
+#include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 
 #include "ShaderTools/BSShaderHooks.h"
@@ -124,10 +125,16 @@ bool Hooks::BSShader_BeginTechnique::thunk(RE::BSShader* shader, uint32_t vertex
 	state->currentVertexDescriptor = vertexDescriptor;
 	state->currentPixelDescriptor = pixelDescriptor;
 
+	state->permutationData.VertexShaderDescriptor = vertexDescriptor;
+	state->permutationData.PixelShaderDescriptor = pixelDescriptor;
+
 	state->modifiedVertexDescriptor = vertexDescriptor;
 	state->modifiedPixelDescriptor = pixelDescriptor;
 
 	state->ModifyShaderLookup(*shader, state->modifiedVertexDescriptor, state->modifiedPixelDescriptor);
+
+	// Only check against non-shader bits
+	state->permutationData.PixelShaderDescriptor &= ~state->modifiedPixelDescriptor;
 
 	bool shaderFound = func(shader, vertexDescriptor, pixelDescriptor, skipPixelShader);
 
@@ -168,7 +175,7 @@ namespace EffectExtensions
 			if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(pass->geometry->GetGeometryRuntimeData().properties[1].get())) {
 				if (shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kUniformScale)) {
 					auto state = globals::state;
-					state->currentExtraDescriptor |= (uint)State::ExtraShaderDescriptors::EffectShadows;
+					state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::EffectShadows;
 				}
 			}
 		}
@@ -184,12 +191,12 @@ namespace LightingExtensions
 		{
 			func(shader, pass, renderFlags);
 
-			globals::state->isTree = false;
+			globals::state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::IsTree);
 
 			if (auto userData = pass->geometry->GetUserData())
 				if (auto baseObject = userData->GetBaseObject())
 					if (baseObject->As<RE::TESObjectTREE>())
-						globals::state->isTree = true;
+						globals::state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::IsTree);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -570,17 +577,23 @@ struct BSInputDeviceManager_PollInputDevices
 
 			if (*a_events) {
 				if (auto device = (*a_events)->GetDevice()) {
-					// Check that the device is not a Gamepad or VR controller. If it is, unblock input.
-					bool vrDevice = false;
-#ifdef ENABLE_SKYRIM_VR
-					vrDevice = (globals::game::isVR && ((device == RE::INPUT_DEVICES::INPUT_DEVICE::kVivePrimary) ||
-														   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kViveSecondary) ||
-														   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusPrimary) ||
-														   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusSecondary) ||
-														   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRPrimary) ||
-														   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRSecondary)));
-#endif
-					blockedDevice = !((device == RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad) || vrDevice);
+					if (globals::game::isVR) {
+						// Check if this is a VR device that should be blocked when menu is open
+						bool vrDevice = false;
+						vrDevice = (globals::game::isVR && ((device == RE::INPUT_DEVICES::INPUT_DEVICE::kVivePrimary) ||
+															   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kViveSecondary) ||
+															   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusPrimary) ||
+															   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusSecondary) ||
+															   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRPrimary) ||
+															   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRSecondary)));
+						// Block VR devices when menu is open to prevent game interaction
+						// Allow gamepad and non-VR devices to pass through
+						// Only block VR device if openvr is compatible with the in game vr menu
+						blockedDevice = !((device == RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad) || !vrDevice || (vrDevice && !globals::features::vr.IsOpenVRCompatible()));
+					} else {
+						// Block all devices except gamepad when menu is open
+						blockedDevice = (device != RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad);
+					}
 				}
 			}
 		}
@@ -829,9 +842,9 @@ namespace Hooks
 			}
 
 			// setup material for terrain helper
-			auto terrainHelper = globals::features::terrainHelper;
-			if (vanillaResult && terrainHelper->loaded) {
-				terrainHelper->TESObjectLAND_SetupMaterial(land);
+			auto& terrainHelper = globals::features::terrainHelper;
+			if (vanillaResult && terrainHelper.loaded) {
+				terrainHelper.TESObjectLAND_SetupMaterial(land);
 			}
 
 			return vanillaResult;
@@ -854,9 +867,9 @@ namespace Hooks
 			func(shader, material);
 
 			// terrain helper
-			auto terrainHelper = globals::features::terrainHelper;
-			if (terrainHelper->loaded) {
-				terrainHelper->BSLightingShader_SetupMaterial(material);
+			auto& terrainHelper = globals::features::terrainHelper;
+			if (terrainHelper.loaded) {
+				terrainHelper.BSLightingShader_SetupMaterial(material);
 			}
 		};
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -864,15 +877,8 @@ namespace Hooks
 
 	void BSBatchRenderer_RenderPassImmediately1::thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags)
 	{
-		if (globals::features::lightLimitFix->loaded && !globals::features::lightLimitFix->CheckParticleLights(a_pass, a_technique))
+		if (globals::features::lightLimitFix.loaded && !globals::features::lightLimitFix.CheckParticleLights(a_pass, a_technique))
 			return;
-
-		// Separate deferred and forward blended decals
-		if (globals::state->inWorld && a_pass->accumulationHint == 3 && !a_pass->shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kZBufferWrite)) {
-			RenderPass call{ a_pass, a_technique, a_alphaTest, a_renderFlags };
-			globals::state->blendedDecalRenderPasses.push_back(call);
-			return;
-		}
 
 		func(a_pass, a_technique, a_alphaTest, a_renderFlags);
 	}
@@ -881,18 +887,11 @@ namespace Hooks
 	{
 		static void thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags)
 		{
-			if (globals::features::lightLimitFix->loaded && !globals::features::lightLimitFix->CheckParticleLights(a_pass, a_technique))
+			if (globals::features::lightLimitFix.loaded && !globals::features::lightLimitFix.CheckParticleLights(a_pass, a_technique))
 				return;
 
-			if (globals::features::interiorSunShadows->loaded)
-				globals::features::interiorSunShadows->UpdateRasterStateCullMode(a_pass, a_technique);
-
-			// Separate deferred and forward blended decals
-			if (globals::state->inWorld && a_pass->accumulationHint == 3 && !a_pass->shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kZBufferWrite)) {
-				RenderPass call{ a_pass, a_technique, a_alphaTest, a_renderFlags };
-				globals::state->blendedDecalRenderPasses.push_back(call);
-				return;
-			}
+			if (globals::features::interiorSunShadows.loaded)
+				globals::features::interiorSunShadows.UpdateRasterStateCullMode(a_pass, a_technique);
 
 			func(a_pass, a_technique, a_alphaTest, a_renderFlags);
 		}
@@ -903,15 +902,8 @@ namespace Hooks
 	{
 		static void thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags)
 		{
-			if (globals::features::lightLimitFix->loaded && !globals::features::lightLimitFix->CheckParticleLights(a_pass, a_technique))
+			if (globals::features::lightLimitFix.loaded && !globals::features::lightLimitFix.CheckParticleLights(a_pass, a_technique))
 				return;
-
-			// Separate deferred and forward blended decals
-			if (globals::state->inWorld && a_pass->accumulationHint == 3 && !a_pass->shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kZBufferWrite)) {
-				RenderPass call{ a_pass, a_technique, a_alphaTest, a_renderFlags };
-				globals::state->blendedDecalRenderPasses.push_back(call);
-				return;
-			}
 
 			func(a_pass, a_technique, a_alphaTest, a_renderFlags);
 		}
@@ -966,7 +958,7 @@ namespace Hooks
 			{
 				auto state = globals::state;
 				auto shaderCache = globals::shaderCache;
-				auto vl = globals::features::volumetricLighting;
+				auto& vl = globals::features::volumetricLighting;
 
 				if (state->enabledClasses[RE::BSShader::Type::ImageSpace]) {
 					RE::BSImagespaceShader* isShader = CurrentlyDispatchedShader;
@@ -974,20 +966,20 @@ namespace Hooks
 					if (CurrentlyDispatchedShader == nullptr) {
 						techniqueId = 0;
 						if (CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingGenerateCS")) {
-							isShader = globals::features::volumetricLighting->GetOrCreateGenerateCS(CurrentlyDispatchedComputeShader);
+							isShader = vl.GetOrCreateGenerateCS(CurrentlyDispatchedComputeShader);
 						} else if (CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingRaymarchCS")) {
-							isShader = globals::features::volumetricLighting->GetOrCreateRaymarchCS(CurrentlyDispatchedComputeShader);
+							isShader = vl.GetOrCreateRaymarchCS(CurrentlyDispatchedComputeShader);
 						}
-					} else if (CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingBlurHCS")) {
+					} else if (vl.loaded && CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingBlurHCS")) {
 						techniqueId = 0;
-						isShader = vl->GetOrCreateBlurHCS(CurrentlyDispatchedComputeShader);
-						vl->SetDimensionsCB();
-						vl->SetGroupCountsHCS(threadGroupCountX);
-					} else if (CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingBlurVCS")) {
+						isShader = vl.GetOrCreateBlurHCS(CurrentlyDispatchedComputeShader);
+						vl.SetDimensionsCB();
+						vl.SetGroupCountsHCS(threadGroupCountX);
+					} else if (vl.loaded && CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingBlurVCS")) {
 						techniqueId = 0;
-						isShader = vl->GetOrCreateBlurVCS(CurrentlyDispatchedComputeShader);
-						vl->SetDimensionsCB();
-						vl->SetGroupCountsVCS(threadGroupCountY);
+						isShader = vl.GetOrCreateBlurVCS(CurrentlyDispatchedComputeShader);
+						vl.SetDimensionsCB();
+						vl.SetGroupCountsVCS(threadGroupCountY);
 					}
 					if (isShader != nullptr) {
 						if (auto* computeShader = shaderCache->GetComputeShader(*isShader, techniqueId)) {
@@ -1018,6 +1010,18 @@ namespace Hooks
 	{
 		PatchMemory(Address, Data.begin(), Data.size());
 	}
+
+	struct BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights
+	{
+		static void thunk(RE::BSGraphics::PixelShader* PixelShader, RE::BSRenderPass* Pass, DirectX::XMMATRIX& Transform, uint32_t LightCount, uint32_t ShadowLightCount, float WorldScale, uint32_t)
+		{
+			if (globals::features::lightLimitFix.loaded)
+				globals::features::lightLimitFix.BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(Pass);
+			else
+				func(PixelShader, Pass, Transform, LightCount, ShadowLightCount, WorldScale, 0);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
 
 	/**
 	 * @brief Installs hooks, detours, and memory patches for graphics, input, and rendering subsystems.
@@ -1127,20 +1131,38 @@ namespace Hooks
 				REL::Relocation<std::uintptr_t>(renderPassCacheCtor, 0x191 - 2).address(),
 				reinterpret_cast<const uint8_t*>(&passCountSE), 4);
 		}
+
 		if (!REL::Module::IsVR()) {
 			stl::write_thunk_call<Main_Update_Begin>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x53, 0x6E));
 			stl::write_thunk_call<Main_Update_Swap>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x5D2, 0xA97));
 		}
 
-		// Patch eye position in BSLightingShader::SetupGeometry to always update due to additional effects which may require it
-		// The variable updateEyePosition is set to false by default. By patching to be true it will always update the eye position
-		// SE and AE use a 7-byte instruction whereas VR uses a 8-byte instruction
-		// We offset from the base address of the containing function to the instruction itself and then to the value the instruction sets
+		// Patch render space in BSLightingShader::SetupGeometry to always use world space
+		// The variable updateEyePosition is set to 1 when not skinned. By patching to be 0 it will always use world space
+		// We offset from the base address of the containing function to the start of the patch
 		{
 			logger::info("Patching BSLightingShader::SetupGeometry::updateEyePosition");
-			uintptr_t setupGeometryUpdateEyePosition = REL::RelocationID(100565, 107300).address() + REL::Relocate(0x50, 0x75, 0x78);
-			REL::safe_write(setupGeometryUpdateEyePosition + REL::Relocate(6, 6, 7), bool{ true });
+			auto setupGeometryUpdateRenderSpace = REL::RelocationID(100565, 107300).address();
+
+			if (REL::Module::IsAE()) {
+				std::uint8_t patch[] = { 0x41, 0x83, 0xE7, 0x00 };  // and r15d, 0
+				REL::safe_write(setupGeometryUpdateRenderSpace + 0x71, patch, sizeof(patch));
+			} else if (REL::Module::IsVR()) {
+				std::uint8_t patch[] = { 0x41, 0x83, 0xE4, 0x00 };  // and r12d, 0
+				REL::safe_write(setupGeometryUpdateRenderSpace + 0x65, patch, sizeof(patch));
+			} else {
+				std::uint8_t patch1[] = { 0xB8, 0x00, 0x00 };  // mov eax, 0
+				REL::safe_write(setupGeometryUpdateRenderSpace + 0x73, patch1, sizeof(patch1));
+
+				std::uint8_t patch2[] = { 0x45, 0x31, 0xC9 };  // xor r9d, r9d (zeros r9d)
+				REL::safe_write(setupGeometryUpdateRenderSpace + 0x36D, patch2, sizeof(patch2));
+
+				std::uint8_t patch3[] = { 0x45, 0x31, 0xC0 };  // xor r8d, r8d (zeros r8d)
+				REL::safe_write(setupGeometryUpdateRenderSpace + 0x378, patch3, sizeof(patch3));
+			}
 		}
+
+		stl::write_thunk_call<BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights>(REL::RelocationID(100565, 107300).address() + REL::Relocate(0x523, 0xB0E, 0x5FE));
 	}
 
 	/**

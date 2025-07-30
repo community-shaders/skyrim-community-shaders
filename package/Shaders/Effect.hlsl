@@ -831,10 +831,17 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.MotionVectors = float4(screenMotionVector, 0.0, psout.Diffuse.w);
 #		endif
 
-	psout.Specular = float4(0.0.xxx, finalColor.w);
-	psout.Albedo = float4(0.0.xxx, finalColor.w);
-	psout.Reflectance = float4(0.0.xxx, finalColor.w);
-	psout.Masks = float4(0.0.xxx, finalColor.w);
+#if defined(MULTBLEND) || defined(MULTBLEND_DECAL)
+	psout.Specular = float4(psout.Diffuse.xyz, finalColor.w);
+	psout.Albedo = float4(psout.Diffuse.xyz, finalColor.w);
+	psout.Reflectance = float4(psout.Diffuse.xyz, finalColor.w);
+	psout.Masks = float4(Color::RGBToLuminance(psout.Diffuse.xyz).xxx, finalColor.w);
+#else
+	psout.Specular = float4(0, 0, 0, finalColor.w);
+	psout.Albedo = float4(0, 0, 0, finalColor.w);
+	psout.Reflectance = float4(0, 0, 0, finalColor.w);
+	psout.Masks = float4(0, 0, 0, finalColor.w);
+#endif
 
 #	elif defined(MOTIONVECTORS_NORMALS)
 	float2 screenMotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);

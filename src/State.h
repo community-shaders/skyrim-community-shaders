@@ -81,6 +81,7 @@ public:
 	};
 
 	void Draw();
+	void Debug();
 	void Reset();
 	void Setup();
 
@@ -144,13 +145,8 @@ public:
 	uint modifiedPixelDescriptor = 0;
 	uint lastModifiedVertexDescriptor = 0;
 	uint lastModifiedPixelDescriptor = 0;
-	uint currentExtraDescriptor = 0;
 	uint lastExtraDescriptor = 0;
-	uint currentExtraFeatureDescriptor = 0;
 	uint lastExtraFeatureDescriptor = 0;
-	bool forceUpdatePermutationBuffer = true;
-
-	bool isTree = false;
 
 	enum class ExtraShaderDescriptors : uint32_t
 	{
@@ -158,8 +154,8 @@ public:
 		IsReflections = 1 << 1,
 		IsBeastRace = 1 << 2,
 		EffectShadows = 1 << 3,
-		IsDecal = 1 << 4,
-		IsTree = 1 << 5,
+		IsTree = 1 << 4,
+		
 		NoSnow = 1 << 6
 	};
 
@@ -174,17 +170,23 @@ public:
 		ETMaterialModel = 0b111 << 6,
 	};
 
-	std::vector<::Hooks::RenderPass> blendedDecalRenderPasses;
 	bool inWorld = false;
 
 	void UpdateSharedData(bool a_inWorld, bool a_prepass);
 
-	struct alignas(16) PermutationCB
+	struct PermutationCB
 	{
 		uint VertexShaderDescriptor;
 		uint PixelShaderDescriptor;
 		uint ExtraShaderDescriptor;
 		uint ExtraFeatureDescriptor;
+
+		bool operator==(const PermutationCB& other) const
+		{
+			return PixelShaderDescriptor == other.PixelShaderDescriptor &&
+			       ExtraShaderDescriptor == other.ExtraShaderDescriptor &&
+			       ExtraFeatureDescriptor == other.ExtraFeatureDescriptor;
+		}
 	};
 
 	ConstantBuffer* permutationCB = nullptr;
@@ -209,6 +211,9 @@ public:
 
 	ConstantBuffer* sharedDataCB = nullptr;
 	ConstantBuffer* featureDataCB = nullptr;
+
+	PermutationCB permutationData{};
+	PermutationCB permutationDataPrevious{};
 
 	Util::FrameChecker frameChecker;
 	uint frameCount = 0;
