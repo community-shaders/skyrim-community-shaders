@@ -20,6 +20,9 @@
 #include <string>
 #include <vector>
 
+#pragma warning(push)
+#pragma warning(disable: 4244)
+
 namespace Util
 {
 	HoverTooltipWrapper::HoverTooltipWrapper()
@@ -756,3 +759,4 @@ namespace Util
 		}
 	}
 }  // namespace Util
+#pragma warning(pop)

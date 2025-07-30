@@ -92,9 +92,9 @@ namespace SnowCover
 		float gmult = pow(saturate(env_mult - SharedData::snowCoverSettings.FoliageHeightOffset / 10000), 0.25);
 		float3 hsv = RGBtoHSV(color);
 		if (hsv.x > 0.55)
-			hsv.x = frac(lerp(hsv.x, 1.1, gmult * (1.1 - hsv.x)) * 4);
+			hsv.x = frac(lerp(hsv.x, 1.1, gmult * (1.1 - hsv.x)) * 2);
 		else
-			hsv.x = lerp(hsv.x, 0.1, gmult * (hsv.x + 0.1) * 4);
+			hsv.x = lerp(hsv.x, 0.1, gmult * (hsv.x + 0.1) * 2);
 		//hsv.z = pow(hsv.z, 1+gmult*0.5);
 		color = HSVtoRGB(hsv);
 	}
@@ -125,7 +125,7 @@ namespace SnowCover
 		// the range in which water level affects snow
 		waterDist = smoothstep(-64, 8, -waterDist - disp);
 		// distance from the camera in which weather has effect, this extends far beyond where lod starts
-		float distMult = 1 - smoothstep(10000, 30000 + 1000 * sin(p.z * 0.001 + cos(p.x * p.y * 0.001)), viewDist);
+		float distMult = 1 - smoothstep(20000, 40000 + 1000 * sin(p.z * 0.001 + cos(p.x * p.y * 0.001)), viewDist);
 		// the amount of snow based on weather, TimeSnowing transitions smoothly between -1 in rain and 1 when snowing
 		float weatherMult = distMult * pow(SharedData::snowCoverSettings.TimeSnowing, 3) * max(500, SharedData::snowCoverSettings.SnowingDensity) / 500;
 		weatherMult = clamp(-1, 1, (weatherMult + disp * 0.1) * max(SharedData::snowCoverSettings.minAngle, worldNormal.z));

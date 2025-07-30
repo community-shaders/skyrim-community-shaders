@@ -94,9 +94,9 @@ public:
 	float lastHour = 12;
 	float timeSnowing = 0.0f;
 	float snowingDensity = 0.0f;
-	std::uint32_t lastFormId;
-	std::unordered_set<std::uint32_t> whitelist;
-	std::unordered_set<std::uint32_t> blacklist;
+	const char* lastTriName;
+	std::unordered_set<std::uint64_t> whitelist;
+	std::unordered_set<std::uint64_t> blacklist;
 
 	virtual void SetupResources();
 	virtual void Reset();

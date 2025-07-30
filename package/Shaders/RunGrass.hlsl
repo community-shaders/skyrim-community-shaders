@@ -540,9 +540,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	skylighting = lerp(1.0, skylighting, Skylighting::getFadeOutFactor(input.WorldPosition));
 	skylighting = saturate(Skylighting::mixDiffuse(SharedData::skylightingSettings, skylighting));
 
-	float snowOcclusion = skylighting * 0.75;
+	float snowOcclusion = skylighting * 0.55;
 #			else
-	float snowOcclusion = 0.75;
+	float snowOcclusion = 0.55;
 #			endif
 #			if defined(SNOW_COVER)
 	if (SharedData::snowCoverSettings.EnableSnowCover) {
@@ -552,7 +552,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			TexBaseSampler.GetDimensions(rx, ry);
 #				if !defined(TRUE_PBR)
 			if (complex) {
-				snowOcclusion = max(snowOcclusion, 1 - TexBaseSampler.SampleBias(SampBaseSampler, float2(input.TexCoord.x, input.TexCoord.y * 0.5 - 1. / ry), SharedData::MipBias).a);
+				snowOcclusion = max(snowOcclusion, 1 - TexBaseSampler.SampleBias(SampBaseSampler, float2(input.TexCoord.x, input.TexCoord.y * 0.5 - 0.5 / ry), SharedData::MipBias).a);
 			} else
 #				endif  // !TRUE_PBR
 			{
