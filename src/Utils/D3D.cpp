@@ -71,6 +71,23 @@ namespace Util
 		return "NONE";
 	}
 
+	RE::BSGraphics::RenderTargetData* GetRenderTargetFromRTV(ID3D11RenderTargetView* a_rtv)
+	{
+		using RENDER_TARGET = RE::RENDER_TARGETS::RENDER_TARGET;
+		if (a_rtv) {
+			if (auto r = globals::game::renderer) {
+				for (int i = 0; i < RENDER_TARGET::kTOTAL; i++) {
+					auto* rt = &r->GetRuntimeData().renderTargets[i];
+					if (a_rtv == rt->RTV) {
+						return rt;
+					}
+				}
+			}
+		}
+		return nullptr;
+	}
+
+
 	GUID WKPDID_D3DDebugObjectNameT = { 0x429b8c22, 0x9188, 0x4b0c, 0x87, 0x42, 0xac, 0xb0, 0xbf, 0x85, 0xc2, 0x00 };
 
 	void SetResourceName(ID3D11DeviceChild* Resource, const char* Format, ...)

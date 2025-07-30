@@ -40,6 +40,10 @@ public:
 	void BindAdaptationShader();
 
 	void BindHDRShader();
+	
+	void SetupExposureFusionResources();
+	void ClearExposureFusionResources();
+	void ProcessExposureFusion();
 
 	ID3D11BlendState* deferredBlendStates[7][2][13][2];
 	ID3D11BlendState* forwardBlendStates[7][2][13][2];
@@ -81,6 +85,26 @@ public:
 
 	Texture2D* adaptationTextures[2];
 	winrt::com_ptr<ID3D11ShaderResourceView> lutTexture = nullptr;
+
+	// Exposure Fusion
+
+	ID3D11ComputeShader* effectCopy = nullptr;
+	ID3D11ComputeShader* effectFinalCombine = nullptr;
+	ID3D11ComputeShader* effectLuminance = nullptr;
+	ID3D11ComputeShader* effectWeights = nullptr;
+	ID3D11ComputeShader* effectBlend = nullptr;
+	ID3D11ComputeShader* effectBlendLaplacian = nullptr;
+
+	std::vector<Texture2D> mips;
+	std::vector<Texture2D> mipsWeights;
+	std::vector<Texture2D> mipsAssemble;
+	
+	struct alignas(16) ExposureFusionCB
+	{
+		float4 exposureFusionParams;
+	};
+	
+	ConstantBuffer* exposureFusionCBuffer = nullptr;
 
 	struct Hooks
 	{

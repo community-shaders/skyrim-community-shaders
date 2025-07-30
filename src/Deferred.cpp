@@ -169,6 +169,8 @@ void Deferred::SetupResources()
 		copyShadowCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\CopyShadowDataCS.hlsl", {}, "cs_5_0"));
 	}
 
+	SetupExposureFusionResources();
+
 	{
 		D3D11_TEXTURE2D_DESC texDesc;
 		auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
@@ -672,6 +674,8 @@ void Deferred::ClearShaderCache()
 		mainCompositeInteriorCS->Release();
 		mainCompositeInteriorCS = nullptr;
 	}
+	
+	ClearExposureFusionResources();
 }
 
 ID3D11ComputeShader* Deferred::GetComputeAmbientComposite()
@@ -800,25 +804,223 @@ void Deferred::HDRShaderHacks()
 
 void Deferred::BindAdaptationShader()
 {
-	uint frameSwap = (globals::state->frameCount % 2);
+	//uint frameSwap = (globals::state->frameCount % 2);
 
-	auto srv = adaptationTextures[frameSwap]->srv.get();
-	globals::d3d::context->PSSetShaderResources(1, 1, &srv);
+	//auto srv = adaptationTextures[frameSwap]->srv.get();
+	//globals::d3d::context->PSSetShaderResources(1, 1, &srv);
 
-	auto rtv = adaptationTextures[!frameSwap]->rtv.get();
-	globals::d3d::context->OMSetRenderTargets(1, &rtv, nullptr);
+	//auto rtv = adaptationTextures[!frameSwap]->rtv.get();
+	//globals::d3d::context->OMSetRenderTargets(1, &rtv, nullptr);
 }
 
 void Deferred::BindHDRShader()
 {
-	uint frameSwap = (globals::state->frameCount % 2);
+	//uint frameSwap = (globals::state->frameCount % 2);
 
-	auto srv = adaptationTextures[!frameSwap]->srv.get();
-	globals::d3d::context->PSSetShaderResources(2, 1, &srv);
+	//auto srv = adaptationTextures[!frameSwap]->srv.get();
+	//globals::d3d::context->PSSetShaderResources(2, 1, &srv);
 
 	auto view = lutTexture.get();
 	if (view)
 		globals::d3d::context->PSSetShaderResources(100, 1, &view);
+	
+	globals::d3d::context->DrawIndexed(3, 0, 0);  // Draw a full-screen quad for the HDR shader
+
+	// Process exposure fusion for enhanced HDR tone mapping
+	ProcessExposureFusion();
+
+	// Disable the original HDR shader
+	ID3D11PixelShader* nullShader = nullptr;
+	globals::d3d::context->PSSetShader(nullShader, nullptr, 0);
+}
+
+void Deferred::SetupExposureFusionResources()
+{
+	auto renderer = globals::game::renderer;
+	
+	D3D11_TEXTURE2D_DESC texDesc;
+	auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	mainTex.texture->GetDesc(&texDesc);
+
+	while (texDesc.Width > 1 && texDesc.Height > 1) {
+		mips.push_back(Texture2D(texDesc));
+		mipsWeights.push_back(Texture2D(texDesc));
+		mipsAssemble.push_back(Texture2D(texDesc));
+		texDesc.Width = texDesc.Width / 2;
+		texDesc.Height = texDesc.Height / 2;
+	}
+
+	exposureFusionCBuffer = new ConstantBuffer(ConstantBufferDesc<ExposureFusionCB>());	
+}
+
+void Deferred::ClearExposureFusionResources()
+{
+	if (effectCopy) {
+		effectCopy->Release();
+		effectCopy = nullptr;
+	}
+	if (effectFinalCombine) {
+		effectFinalCombine->Release();
+		effectFinalCombine = nullptr;
+	}
+	if (effectLuminance) {
+		effectLuminance->Release();
+		effectLuminance = nullptr;
+	}
+	if (effectWeights) {
+		effectWeights->Release();
+		effectWeights = nullptr;
+	}
+	if (effectBlend) {
+		effectBlend->Release();
+		effectBlend = nullptr;
+	}
+	if (effectBlendLaplacian) {
+		effectBlendLaplacian->Release();
+		effectBlendLaplacian = nullptr;
+	}
+}
+
+void Deferred::ProcessExposureFusion()
+{
+	auto context = globals::d3d::context;
+	
+	// Get main render target
+	ID3D11RenderTargetView* rtv;
+	context->OMGetRenderTargets(1, &rtv, nullptr);
+	auto renderTarget = Util::GetRenderTargetFromRTV(rtv);
+
+	// Setup exposure fusion parameters
+	ExposureFusionCB exposureFusionData = {};	
+
+	// Define exposure levels (EV stops)
+	exposureFusionData.exposureFusionParams.x = 0.7f;  // exposure
+	exposureFusionData.exposureFusionParams.y = 1.5f;  // shadows
+	exposureFusionData.exposureFusionParams.z = 2.0f;  // highlights
+	exposureFusionData.exposureFusionParams.w = 5.0f * 5.0f;  // sigma
+	
+	exposureFusionCBuffer->Update(exposureFusionData);
+
+	auto dispatchCount = Util::GetScreenDispatchCount();
+
+	ID3D11Buffer* cbs[] = { exposureFusionCBuffer->CB() };
+	context->CSSetConstantBuffers(0, 1, cbs);
+
+	context->CSSetSamplers(0, 1, &linearSampler);
+
+	// Compute the luminances of synthetic exposures.
+	{
+		ID3D11ShaderResourceView* srvs[] = { renderTarget->SRV };
+		context->CSSetShaderResources(0, 1, srvs);
+
+		ID3D11UnorderedAccessView* uavs[] = { mips[0].uav.get() };
+		context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+
+		context->CSSetShader(effectWeights, nullptr, 0);
+
+		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+	}
+	
+	// Compute the local weights of synthetic exposures.
+	{
+		{
+			ID3D11ShaderResourceView* srvs[] = { mipsWeights[0].srv.get() };
+			ID3D11UnorderedAccessView* uavs[] = { mips[0].uav.get() };
+
+			context->CSSetShaderResources(0, 1, srvs);
+			context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+
+			context->CSSetShader(effectWeights, nullptr, 0);
+
+			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+		}
+
+		context->CSSetShader(effectCopy, nullptr, 0);
+
+		for (int i = 0; i < mips.size() - 1; i++) {
+			uint levelDispatchX = (uint)std::ceil(mips[i + 1].desc.Width / 8.0f);
+			uint levelDispatchY = (uint)std::ceil(mips[i + 1].desc.Height / 8.0f);
+
+			{
+				ID3D11ShaderResourceView* srvs[] = { mips[i].srv.get() };
+				ID3D11UnorderedAccessView* uavs[] = { mips[i + 1].uav.get() };
+
+				context->CSSetShaderResources(0, 1, srvs);
+				context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+
+				context->Dispatch(levelDispatchX, levelDispatchY, 1);
+			}
+			{
+				ID3D11ShaderResourceView* srvs[] = { mipsWeights[i].srv.get() };
+				ID3D11UnorderedAccessView* uavs[] = { mipsWeights[i + 1].uav.get() };
+
+				context->CSSetShaderResources(0, 1, srvs);
+				context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+
+				context->Dispatch(levelDispatchX, levelDispatchY, 1);
+			}
+		}
+	}
+
+	// Blend the coarsest level - Gaussian.
+	{
+		auto mipLevel = mips.size() - 1;
+
+		ID3D11ShaderResourceView* srvs[] = { mips[mipLevel].srv.get(), mipsWeights[mipLevel].srv.get() };
+		ID3D11UnorderedAccessView* uavs[] = { mipsAssemble[mipLevel].uav.get() };
+
+		context->CSSetShaderResources(0, 2, srvs);
+		context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+
+		uint levelDispatchX = (uint)std::ceil(mipsAssemble[mipLevel].desc.Width / 8.0f);
+		uint levelDispatchY = (uint)std::ceil(mipsAssemble[mipLevel].desc.Height / 8.0f);
+
+		context->CSSetShader(effectBlend, nullptr, 0);
+
+		context->Dispatch(levelDispatchX, levelDispatchY, 1);
+
+	}
+
+	context->CSSetShader(effectBlendLaplacian, nullptr, 0);
+
+	for (auto i = mips.size() - 1; i > 0; i--) {
+		// Blend the finer levels - Laplacians.
+		uint levelDispatchX = (uint)std::ceil(mipsAssemble[i - 1].desc.Width / 8.0f);
+		uint levelDispatchY = (uint)std::ceil(mipsAssemble[i - 1].desc.Height / 8.0f);
+
+		{
+			ID3D11ShaderResourceView* srvs[] = { mips[i - 1].srv.get(), mips[i].srv.get(), mipsWeights[i - 1].srv.get(), mipsAssemble[i].srv.get() };
+			ID3D11UnorderedAccessView* uavs[] = { mipsAssemble[i + 1].uav.get() };
+
+			context->CSSetShaderResources(0, 4, srvs);
+			context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+
+			context->Dispatch(levelDispatchX, levelDispatchY, 1);
+		}
+	}
+
+	// Perform guided upsampling and output the final RGB image.
+	{
+		ID3D11ShaderResourceView* srvs[] = { renderTarget->SRV, mips[0].srv.get() };
+		ID3D11UnorderedAccessView* uavs[] = { mipsAssemble[0].uav.get() };
+
+		context->CSSetShaderResources(0, 2, srvs);
+		context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+
+		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+	}
+
+	// Clear bindings
+	ID3D11ShaderResourceView* nullSrvs[5] = { nullptr };
+	context->CSSetShaderResources(0, 5, nullSrvs);
+	
+	ID3D11UnorderedAccessView* nullUavs[1] = { nullptr };
+	context->CSSetUnorderedAccessViews(0, 1, nullUavs, nullptr);
+	
+	ID3D11Buffer* nullCbs[1] = { nullptr };
+	context->CSSetConstantBuffers(0, 1, nullCbs);
+	
+	context->CSSetShader(nullptr, nullptr, 0);
 }
 
 void Deferred::Hooks::Main_RenderShadowMaps::thunk()
