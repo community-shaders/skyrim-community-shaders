@@ -183,7 +183,8 @@ public:
 
 		bool operator==(const PermutationCB& other) const
 		{
-			return PixelShaderDescriptor == other.PixelShaderDescriptor &&
+			return VertexShaderDescriptor == other.VertexShaderDescriptor &&
+				   PixelShaderDescriptor == other.PixelShaderDescriptor &&
 			       ExtraShaderDescriptor == other.ExtraShaderDescriptor &&
 			       ExtraFeatureDescriptor == other.ExtraFeatureDescriptor;
 		}

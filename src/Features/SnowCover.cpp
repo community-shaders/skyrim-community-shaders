@@ -451,7 +451,7 @@ void SnowCover::Reload()
 
 void SnowCover::Prepass()
 {
-	if (globals::features::snowCover->wsettings.EnableSnowCover) {
+	if (globals::features::snowCover.wsettings.EnableSnowCover) {
 		auto context = globals::d3d::context;
 		context->PSSetShaderResources(38, (uint)views.size(), views.data());
 	}
@@ -478,8 +478,8 @@ void SnowCover::RestoreDefaultSettings()
 
 void SnowCover::Hooks::BSLightingShader_SetupGeometry::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 {
-	if (globals::features::snowCover->wsettings.EnableSnowCover) {
-		globals::features::snowCover->BSLightingShader_Setup(Pass);
+	if (globals::features::snowCover.wsettings.EnableSnowCover) {
+		globals::features::snowCover.BSLightingShader_Setup(Pass);
 	}
 	func(This, Pass, RenderFlags);
 }
@@ -497,8 +497,8 @@ void SnowCover::BSLightingShader_Setup(RE::BSRenderPass* a_pass)
 	if (a_pass->geometry->HasAnimation())
 	{
 		if (!whitelist.contains(FormIdParser::fnv_hash(name)))
-			state->currentExtraDescriptor |= (uint)State::ExtraShaderDescriptors::NoSnow;
+			state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::NoSnow;
 	} else if (blacklist.contains(FormIdParser::fnv_hash(name))) {
-		state->currentExtraDescriptor |= (uint)State::ExtraShaderDescriptors::NoSnow;	
+		state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::NoSnow;	
 	}
 }

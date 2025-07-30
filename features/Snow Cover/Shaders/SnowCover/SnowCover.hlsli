@@ -1,5 +1,6 @@
 #include "Common/Color.hlsli"
 #include "Common/SharedData.hlsli"
+#include "Common/Random.hlsli"
 #if defined(PSHADER)
 
 namespace SnowCover
@@ -84,7 +85,7 @@ namespace SnowCover
 				summerToWinter = 1 - summerToWinter;
 		}
 
-		return (GetHeightMult(p) - lerp(SharedData::snowCoverSettings.SummerHeightOffset, SharedData::snowCoverSettings.WinterHeightOffset, summerToWinter)) / 10000;
+		return (GetHeightMult(p) - lerp(SharedData::snowCoverSettings.SummerHeightOffset, SharedData::snowCoverSettings.WinterHeightOffset, summerToWinter)) / 5000;
 	}
 
 	void ApplyFoliageColor(inout float3 color, float env_mult)
@@ -130,9 +131,9 @@ namespace SnowCover
 		float weatherMult = distMult * pow(SharedData::snowCoverSettings.TimeSnowing, 3) * max(500, SharedData::snowCoverSettings.SnowingDensity) / 500;
 		weatherMult = clamp(-1, 1, (weatherMult + disp * 0.1) * max(SharedData::snowCoverSettings.minAngle, worldNormal.z));
 		// the amount of snow based on season and weather
-		float env_mult = saturate(max(pow(saturate(GetEnvironmentalMultiplier(p) + disp), 0.25), weatherMult)) - waterDist;
+		float env_mult = saturate(max(saturate(GetEnvironmentalMultiplier(p) + disp*100), weatherMult)) - waterDist;
 		float mult = skylight * env_mult * smoothstep(SharedData::snowCoverSettings.minAngle, SharedData::snowCoverSettings.maxAngle, worldNormal.z);
-		if (mult < 0.01)
+		if (mult < 0.001)
 			return 0;
 		float main_mult = (1 - abs(worldNormal.z - SharedData::snowCoverSettings.peakMainAngle)) + min(0, weatherMult) * SharedData::snowCoverSettings.minAngle;
 		float alt_mult = (1 - abs(worldNormal.z - SharedData::snowCoverSettings.peakAltAngle)) + sin(p.z * 0.01 + cos(p.x * p.y * 0.01) * 0.025) * 0.05;

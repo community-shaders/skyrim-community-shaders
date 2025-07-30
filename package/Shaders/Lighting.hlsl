@@ -1057,10 +1057,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(LANDSCAPE)
 	float mipLevels[6];
+	float sh0 = 0;
 #	else
 	float mipLevel = 0;
+	float sh0 = 0.5;
 #	endif  // LANDSCAPE
-	float sh0 = 0;
 	float pixelOffset = 0;
 
 #	if defined(EMAT)
@@ -2244,7 +2245,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		else
 		float disp = 0.1 * (sh0 - 0.5);
 #		endif
-		float3 snowNormal = worldSpaceNormal;
+		float3 snowNormal = worldNormal;
 		float3 snowedColor = baseColor.rgb;
 #		if defined(TREE_ANIM)
 		if (SharedData::snowCoverSettings.AffectFoliageColor)
@@ -2257,11 +2258,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		// why is glossiness not just a float anyway?
 		glossiness = glossiness.xxxx;
 #		endif
-#	if defined(SKINNED) || !defined(MODELSPACENORMALS)
-		worldSpaceNormal = normalize(lerp(worldSpaceNormal, SnowCover::MyReorientNormal(worldSpaceNormal, normalize(mul(input.World[eyeIndex], mul(tbn, snowNormal)))), snowFactor));
+	if (snowFactor > 0)
+#	if defined(MODELSPACENORMALS) && !defined(SKINNED)
+		worldNormal = normalize(lerp(worldNormal, SnowCover::MyReorientNormal(worldNormal, snowNormal), snowFactor));
 #	else
-		worldSpaceNormal = normalize(lerp(worldSpaceNormal, SnowCover::MyReorientNormal(worldSpaceNormal, snowNormal), snowFactor));
+		worldNormal = normalize(lerp(worldNormal, SnowCover::MyReorientNormal(worldNormal, normalize(mul(tbn, snowNormal))), snowFactor));
 #	endif
+
 #		if defined(LODLANDNOISE)
 		snowedColor *= snowFactor + (1 - snowFactor) * lodLandNoiseMultiplier;
 #		endif
@@ -2272,13 +2275,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 	}
 
-#		if !defined(DRAW_IN_WORLDSPACE)  // && (defined(SKINNED) || !defined(MODELSPACENORMALS))
-	[flatten] if (!input.WorldSpace)
-		modelNormal.xyz = mul(transpose(input.World[eyeIndex]), float4(worldSpaceNormal, 0));
-	else
-#		endif
-		modelNormal.xyz = worldSpaceNormal;
-	modelNormal.xyz = normalize(modelNormal.xyz);
 #	endif  // SNOW_COVER
 
 #	if defined(GLINT)
