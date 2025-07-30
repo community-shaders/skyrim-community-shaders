@@ -85,8 +85,8 @@ struct PostProcessing : Feature
 	{
 		static void thunk(RE::BSShader* a_shader, RE::BSShaderMaterial* a_material)
 		{
-			if (GetSingleton()->loaded)
-				GetSingleton()->PreProcess();
+			if (globals::features::postProcessing.loaded)
+				globals::features::postProcessing.PreProcess();
 			func(a_shader, a_material);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -96,8 +96,8 @@ struct PostProcessing : Feature
 	{
 		static void thunk(RE::BSShader* a_shader, RE::BSShaderMaterial* a_material)
 		{
-			if (GetSingleton()->loaded)
-				GetSingleton()->PreProcess();
+			if (globals::features::postProcessing.loaded)
+				globals::features::postProcessing.PreProcess();
 			func(a_shader, a_material);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -107,7 +107,7 @@ struct PostProcessing : Feature
 	{
 		static void thunk(RE::BSShader* a_shader, RE::BSShaderMaterial* a_material)
 		{
-			GetSingleton()->isrefraction = true;
+			globals::features::postProcessing.isrefraction = true;
 			func(a_shader, a_material);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
