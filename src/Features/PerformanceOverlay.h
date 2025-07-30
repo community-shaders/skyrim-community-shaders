@@ -110,8 +110,8 @@ public:
 			headIdx = 0;
 	}
 
-	std::span<const T> GetData() { return { data }; }
-	size_t GetHeadIdx() { return headIdx; }
+	std::span<const T> GetData() const { return { data }; }
+	size_t GetHeadIdx() const { return headIdx; }
 };
 
 struct PerformanceOverlay : OverlayFeature
