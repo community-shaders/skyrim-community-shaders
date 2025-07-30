@@ -133,6 +133,25 @@ struct PerformanceOverlay : OverlayFeature
 	// ============================================================================
 	// CORE PERFORMANCE DISPLAY FUNCTIONS
 	// ============================================================================
+	/**
+	* @brief Updates all runtime state related to the performance overlay graph.
+	*
+	* This function synchronizes the frame time history buffer, tracks min/max frame times,
+	* and computes the normalized Y-axis range for the frame time graph using statistical analysis.
+	*
+	* Steps performed:
+	*   1. Resizes the frameTimeHistory buffer if the user has changed the setting.
+	*   2. Inserts the latest frame time into the circular history buffer.
+	*   3. Updates instantaneous min/max frame time values, with full rescans if necessary.
+	*   4. Calculates the average (mean) and standard deviation of frame times in the buffer.
+	*   5. Sets the graph Y-axis range to be centered on the average, with a spread of ±2 standard deviations,
+	*      clamped to user-friendly minimum and maximum values.
+	*   6. Smooths the min/max Y-axis values for visual stability using exponential smoothing.
+	*
+	*
+	* No parameters; uses settings from the singleton.
+	*/
+	void UpdateGraphValues();
 	void DrawFPS();
 	void DrawVRAM();
 	void DrawPostFGFrameTimeGraph();
@@ -176,14 +195,14 @@ struct PerformanceOverlay : OverlayFeature
 	// PERFORMANCE OVERLAY STATE MANAGEMENT
 	// ============================================================================
 
-	struct PerfOverlayState
+	struct State
 	{
 		// Frame time history buffers
 		CircularBuffer<float> frameTimeHistory;
 		CircularBuffer<float> postFGFrameTimeHistory;
 
 		// State flags
-		bool isFrameGenerationActive = false;  // TODO: this shouldn't be a tracked state
+		bool isFrameGenerationActive = false;
 
 		// Performance counters
 		int64_t frequency;
@@ -212,35 +231,13 @@ struct PerformanceOverlay : OverlayFeature
 		float maxFrameTime = 0.0f;
 		float smoothedMinFrameTime = 0.0f;
 		float smoothedMaxFrameTime = 50.0f;
-
-		/**
-		* @brief Updates all runtime state related to the performance overlay graph.
-		*
-		* This function synchronizes the frame time history buffer, tracks min/max frame times,
-		* and computes the normalized Y-axis range for the frame time graph using statistical analysis.
-		*
-		* Steps performed:
-		*   1. Resizes the frameTimeHistory buffer if the user has changed the setting.
-		*   2. Inserts the latest frame time into the circular history buffer.
-		*   3. Updates instantaneous min/max frame time values, with full rescans if necessary.
-		*   4. Calculates the average (mean) and standard deviation of frame times in the buffer.
-		*   5. Sets the graph Y-axis range to be centered on the average, with a spread of ±2 standard deviations,
-		*      clamped to user-friendly minimum and maximum values.
-		*   6. Smooths the min/max Y-axis values for visual stability using exponential smoothing.
-		*
-		*
-		* No parameters; uses settings from the singleton.
-		*/
-		void UpdateGraphValues();
-		void UpdateFGFrameTime();
 	};
-
-	PerfOverlayState perfOverlayState;
+	State state;
 
 	// ============================================================================
 	// SETTINGS STRUCTURE
 	// ============================================================================
-	struct PerfOverlaySettings
+	struct Settings
 	{
 		// Performance threshold constants
 		static constexpr float kSmoothingFactor = 0.15f;             // Smoothing factor: 0.1f = slow, 0.3f = fast.
@@ -279,9 +276,7 @@ struct PerformanceOverlay : OverlayFeature
 		ImVec2 Position = ImVec2(10.f, 10.f);
 		bool PositionSet = false;
 	};
-
-public:
-	PerfOverlaySettings settings;
+	Settings settings;
 
 private:
 	// ============================================================================
