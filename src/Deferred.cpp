@@ -619,6 +619,16 @@ void Deferred::OverrideBlendStates()
 								blendDesc.RenderTarget[i].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 							}
 
+							// Use alpha blending for masks2
+							blendDesc.RenderTarget[7].BlendEnable = blendDesc.RenderTarget[0].BlendEnable;
+							blendDesc.RenderTarget[7].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+							blendDesc.RenderTarget[7].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+							blendDesc.RenderTarget[7].BlendOp = D3D11_BLEND_OP_ADD;
+							blendDesc.RenderTarget[7].SrcBlendAlpha = D3D11_BLEND_SRC_ALPHA;
+							blendDesc.RenderTarget[7].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+							blendDesc.RenderTarget[7].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+							blendDesc.RenderTarget[7].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+
 							DX::ThrowIfFailed(device->CreateBlendState(&blendDesc, &deferredBlendStates[a][b][c][d]));
 						} else {
 							deferredBlendStates[a][b][c][d] = nullptr;
