@@ -242,9 +242,6 @@ void PerformanceOverlay::DrawOverlay()
 		return;
 	}
 
-	// Check if Frame Generation is active
-	this->state.isFrameGenerationActive = globals::upscaling && globals::upscaling->IsFrameGenerationActive();
-
 	// Build draw call rows ONCE per frame and reuse
 	auto [mainRows, summaryRows] = this->BuildDrawCallRows();
 	std::vector<DrawCallRow> allRows = mainRows;
@@ -1872,6 +1869,18 @@ void PerformanceOverlay::UpdateSummaryTestData(float smoothedFrameTime, float ot
 
 void PerformanceOverlay::UpdateGraphValues()
 {
+	// Check if Frame Generation is active
+	state.isFrameGenerationActive = globals::upscaling && globals::upscaling->IsFrameGenerationActive();
+
+	// Sync frame history buffer size with user settings
+	settings.FrameHistorySize = std::clamp(
+		settings.FrameHistorySize,
+		settings.kMinFrameHistorySize,
+		settings.kMaxFrameHistorySize);
+	state.frameTimeHistory.Resize(settings.FrameHistorySize);
+	state.postFGFrameTimeHistory.Resize(settings.FrameHistorySize);
+
+	// Calculate counter deltas
 	REX::W32::QueryPerformanceCounter(&state.currentFrameCounter);
 	int64_t elapsedCounter = state.currentFrameCounter - state.lastFrameCounter;
 	state.lastFrameCounter = state.currentFrameCounter;
@@ -1893,14 +1902,7 @@ void PerformanceOverlay::UpdateGraphValues()
 	                  static_cast<float>(state.overlayTimingFrequency.QuadPart);
 	state.lastUpdateTime = now;
 
-	// Sync frame history buffer size with user settings
-	settings.FrameHistorySize = std::clamp(
-		settings.FrameHistorySize,
-		settings.kMinFrameHistorySize,
-		settings.kMaxFrameHistorySize);
-	state.frameTimeHistory.Resize(settings.FrameHistorySize);
-	state.postFGFrameTimeHistory.Resize(settings.FrameHistorySize);
-
+	// WHAT DOES oldFrameTime EVEN MEAN???????
 	// Insert latest frame time into circular buffer
 	float oldFrameTime = state.frameTimeHistory.GetData()[state.frameTimeHistory.GetHeadIdx()];
 	state.frameTimeHistory.Push(state.frameTimeMs);
@@ -1944,7 +1946,7 @@ void PerformanceOverlay::UpdateGraphValues()
 	state.smoothedMinFrameTime = state.smoothedMinFrameTime + Settings::kSmoothingFactor * (graphMin - state.smoothedMinFrameTime);
 	state.smoothedMaxFrameTime = state.smoothedMaxFrameTime + Settings::kSmoothingFactor * (graphMax - state.smoothedMaxFrameTime);
 
-	if (state.isFrameGenerationActive && globals::upscaling) {
+	if (state.isFrameGenerationActive) {
 		// Get frametime directly from the Frame Generation system
 		float fgDeltaTime = globals::upscaling->GetFrameGenerationFrameTime();
 
@@ -1955,8 +1957,8 @@ void PerformanceOverlay::UpdateGraphValues()
 			state.postFGFps = 1000.0f / state.postFGFrameTimeMs;
 		} else {
 			// Fallback if FG time is not available
-			state.postFGFrameTimeMs = state.frameTimeMs / PerformanceOverlay::Settings::kFrameGenerationMultiplier;
-			state.postFGFps = state.fps * PerformanceOverlay::Settings::kFrameGenerationMultiplier;
+			state.postFGFrameTimeMs = state.frameTimeMs / Settings::kFrameGenerationMultiplier;
+			state.postFGFps = state.fps * Settings::kFrameGenerationMultiplier;
 		}
 
 		// Update post-FG smooth values when timer elapses
@@ -1972,7 +1974,7 @@ void PerformanceOverlay::UpdateGraphValues()
 	// Update smooth values with user-specified interval
 	state.updateTimer += deltaTime;
 	if (state.updateTimer >= settings.UpdateInterval) {
-		state.smoothFps = state.fps;
+		state.smoothFps = state.fps;  // Sampling white noise won't give you smoothed noise. This is useless.
 		state.smoothFrameTimeMs = state.frameTimeMs;
 		state.updateTimer = 0.0f;
 	}
