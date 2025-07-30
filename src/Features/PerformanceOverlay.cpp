@@ -109,7 +109,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ShowPostFGFrameTimeGraph,
 	UpdateInterval,
 	FrameHistorySize,
-	Size,
+	TextSize,
 	BackgroundOpacity,
 	ShowBorder,
 	Position,
@@ -194,12 +194,7 @@ void PerformanceOverlay::DrawSettings()
 		if (ImGui::CollapsingHeader("Appearance", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Indent();
 
-			const char* sizes[] = { "Small", "Medium", "Large" };
-			int currentSize = static_cast<int>(this->settings.Size);
-			if (ImGui::Combo("Text Size", &currentSize, sizes, IM_ARRAYSIZE(sizes))) {
-				this->settings.Size = static_cast<PerfOverlaySettings::TextSize>(currentSize);
-			}
-
+			ImGui::SliderFloat("Text Size", &this->settings.TextSize, 0.8f, 1.2f, "%.2f");
 			ImGui::SliderFloat("Background Opacity", &this->settings.BackgroundOpacity, 0.0f, 1.0f, "%.2f");
 			ImGui::Checkbox("Show Border", &this->settings.ShowBorder);
 			ImGui::SliderFloat("Update Interval", &this->settings.UpdateInterval, 0.001f, PerformanceOverlay::PerfOverlayState::kMaxUpdateInterval, "%.2f seconds");
@@ -222,8 +217,8 @@ void PerformanceOverlay::DataLoaded()
 {
 	// Initialize performance overlay state
 	this->perfOverlayState.initialized = false;
-	this->perfOverlayState.ResizeFrameTimeHistory(this->settings.FrameHistorySize, 0.0f);
-	this->perfOverlayState.ResizePostFGFrameTimeHistory(this->settings.FrameHistorySize, 0.0f);
+	this->perfOverlayState.frameTimeHistory.resize(this->settings.FrameHistorySize, 0.0f);
+	this->perfOverlayState.postFGFrameTimeHistory.resize(this->settings.FrameHistorySize, 0.0f);
 }
 
 void PerformanceOverlay::DrawOverlay()
@@ -276,9 +271,6 @@ void PerformanceOverlay::DrawOverlay()
 			ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).z,
 			this->settings.BackgroundOpacity));
 
-	// Set text size based on user preference
-	this->perfOverlayState.textScale = this->perfOverlayState.CalculateTextScale();
-
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, this->settings.ShowBorder ? 1.0f : 0.0f);
 
 	// Set initial position if not already set
@@ -309,11 +301,11 @@ void PerformanceOverlay::DrawOverlay()
 		}
 		if (this->settings.ShowDrawCalls) {
 			// Draw calls table needs significant width for all columns
-			minWidth = std::max(minWidth, PerformanceOverlay::PerfOverlayState::kDrawCallsTableWidth * this->perfOverlayState.textScale);
+			minWidth = std::max(minWidth, PerformanceOverlay::PerfOverlayState::kDrawCallsTableWidth * this->settings.TextSize);
 		}
 		if (this->settings.ShowVRAM && menu->GetDXGIAdapter3()) {
 			// VRAM section needs width for the progress bar and text
-			minWidth = std::max(minWidth, PerformanceOverlay::PerfOverlayState::kVRAMSectionWidth * this->perfOverlayState.textScale);
+			minWidth = std::max(minWidth, PerformanceOverlay::PerfOverlayState::kVRAMSectionWidth * this->settings.TextSize);
 		}
 
 		// Add some padding for window borders and spacing
@@ -338,7 +330,7 @@ void PerformanceOverlay::DrawOverlay()
 	}
 
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 1.0f));  // Tighter spacing
-	ImGui::SetWindowFontScale(this->perfOverlayState.textScale);
+	ImGui::SetWindowFontScale(this->settings.TextSize);
 
 	// Initialize Performance Counter if necessary
 	if (!this->perfOverlayState.initialized) {
@@ -376,10 +368,6 @@ void PerformanceOverlay::DrawOverlay()
 			this->perfOverlayState.smoothFps = this->perfOverlayState.fps;
 			this->perfOverlayState.smoothFrameTimeMs = this->perfOverlayState.frameTimeMs;  // TODO: is smoothFrameTimeMs smoothed at all?
 			this->perfOverlayState.updateTimer = 0.0f;
-		}
-
-		if (this->perfOverlayState.isFrameGenerationActive) {
-			this->perfOverlayState.UpdateFGFrameTime();
 		}
 
 		// Check if we should show collapsible sections (should swallow input only)
@@ -474,7 +462,7 @@ void PerformanceOverlay::DrawFPS()
 			this->perfOverlayState.frameTimeHistoryIndex,
 			overlay_text,
 			this->perfOverlayState.smoothedMinFrameTime, this->perfOverlayState.smoothedMaxFrameTime,
-			ImVec2(graphWidth, 50.0f * this->perfOverlayState.textScale));
+			ImVec2(graphWidth, 50.0f * this->settings.TextSize));
 
 		ImGui::PopStyleColor();
 
@@ -507,7 +495,7 @@ void PerformanceOverlay::DrawFPS()
 		}
 
 		// Show post-FG graph for both DLSS and FSR (FSR uses calculated data)
-		this->perfOverlayState.DrawPostFGFrameTimeGraph();
+		this->DrawPostFGFrameTimeGraph();
 	}
 }
 
@@ -1878,13 +1866,27 @@ void PerformanceOverlay::UpdateSummaryTestData(float smoothedFrameTime, float ot
 // PERFORMANCE OVERLAY STATE MANAGEMENT
 // ============================================================================
 
+void PerformanceOverlay::PerfOverlayState::ResizeFrameTimeHistory(size_t newSize)
+{
+	if (frameTimeHistory.size() != newSize) {
+		frameTimeHistory.resize(newSize, 0.0f);
+		if (frameTimeHistoryIndex >= newSize) {
+			frameTimeHistoryIndex = 0;
+		}
+	}
+	if (postFGFrameTimeHistory.size() != newSize) {
+		postFGFrameTimeHistory.resize(newSize, 0.0f);
+		if (postFGFrameTimeHistoryIndex >= newSize) {
+			postFGFrameTimeHistoryIndex = 0;
+		}
+	}
+}
+
 void PerformanceOverlay::PerfOverlayState::UpdateFGFrameTime()
 {
 	// Defensive: Check for upscaling pointer
 	if (!globals::upscaling)
 		return;
-
-	auto& overlay = globals::features::performanceOverlay;
 
 	// Get frametime directly from the Frame Generation system
 	float fgDeltaTime = globals::upscaling->GetFrameGenerationFrameTime();
@@ -1892,77 +1894,36 @@ void PerformanceOverlay::PerfOverlayState::UpdateFGFrameTime()
 	// Check if FSR frame generation is active (FSR doesn't provide timing data)
 	bool isFSRFrameGen = globals::fidelityFX && globals::fidelityFX->isFrameGenActive;
 	if (fgDeltaTime > 0.0f && !isFSRFrameGen) {
-		overlay.perfOverlayState.postFGFrameTimeMs = fgDeltaTime * 1000.0f;
-		overlay.perfOverlayState.postFGFps = 1000.0f / overlay.perfOverlayState.postFGFrameTimeMs;
-
-		// Update post-FG smooth values when timer elapses
-		if (overlay.perfOverlayState.updateTimer <= 0.0f) {
-			overlay.perfOverlayState.postFGSmoothFps = overlay.perfOverlayState.postFGFps;
-			overlay.perfOverlayState.postFGSmoothFrameTimeMs = overlay.perfOverlayState.postFGFrameTimeMs;
-		}
-
-		// Update post-FG frametime history
-		overlay.perfOverlayState.postFGFrameTimeHistory[overlay.perfOverlayState.postFGFrameTimeHistoryIndex] = overlay.perfOverlayState.postFGFrameTimeMs;
-		overlay.perfOverlayState.postFGFrameTimeHistoryIndex = (overlay.perfOverlayState.postFGFrameTimeHistoryIndex + 1) % overlay.settings.FrameHistorySize;
+		postFGFrameTimeMs = fgDeltaTime * 1000.0f;
+		postFGFps = 1000.0f / postFGFrameTimeMs;
 	} else {
 		// Fallback if FG time is not available
-		overlay.perfOverlayState.postFGFrameTimeMs = overlay.perfOverlayState.frameTimeMs / PerformanceOverlay::PerfOverlayState::kFrameGenerationMultiplier;
-		overlay.perfOverlayState.postFGFps = overlay.perfOverlayState.fps * PerformanceOverlay::PerfOverlayState::kFrameGenerationMultiplier;
-
-		if (overlay.perfOverlayState.updateTimer <= 0.0f) {
-			overlay.perfOverlayState.postFGSmoothFps = overlay.perfOverlayState.postFGFps;
-			overlay.perfOverlayState.postFGSmoothFrameTimeMs = overlay.perfOverlayState.postFGFrameTimeMs;
-		}
-
-		overlay.perfOverlayState.postFGFrameTimeHistory[overlay.perfOverlayState.postFGFrameTimeHistoryIndex] = overlay.perfOverlayState.postFGFrameTimeMs;
-		overlay.perfOverlayState.postFGFrameTimeHistoryIndex = (overlay.perfOverlayState.postFGFrameTimeHistoryIndex + 1) % overlay.settings.FrameHistorySize;
+		postFGFrameTimeMs = frameTimeMs / PerformanceOverlay::PerfOverlayState::kFrameGenerationMultiplier;
+		postFGFps = fps * PerformanceOverlay::PerfOverlayState::kFrameGenerationMultiplier;
 	}
-}
 
-void PerformanceOverlay::PerfOverlayState::UpdateFrameTimeHistorySizes()
-{
-	auto& overlay = globals::features::performanceOverlay;
-
-	overlay.settings.FrameHistorySize = std::clamp(
-		overlay.settings.FrameHistorySize,
-		overlay.settings.kMinFrameHistorySize,
-		overlay.settings.kMaxFrameHistorySize);
-
-	if (overlay.perfOverlayState.frameTimeHistory.size() != static_cast<size_t>(overlay.settings.FrameHistorySize)) {
-		overlay.perfOverlayState.ResizeFrameTimeHistory(overlay.settings.FrameHistorySize, 0.0f);
-		if (overlay.perfOverlayState.frameTimeHistoryIndex >= overlay.settings.FrameHistorySize) {
-			overlay.perfOverlayState.frameTimeHistoryIndex = 0;
-		}
+	// Update post-FG smooth values when timer elapses
+	if (updateTimer <= 0.0f) {
+		postFGSmoothFps = postFGFps;
+		postFGSmoothFrameTimeMs = postFGFrameTimeMs;
 	}
-	if (overlay.perfOverlayState.postFGFrameTimeHistory.size() != static_cast<size_t>(overlay.settings.FrameHistorySize)) {
-		overlay.perfOverlayState.ResizePostFGFrameTimeHistory(overlay.settings.FrameHistorySize, 0.0f);
-		if (overlay.perfOverlayState.postFGFrameTimeHistoryIndex >= overlay.settings.FrameHistorySize) {
-			overlay.perfOverlayState.postFGFrameTimeHistoryIndex = 0;
-		}
-	}
-}
 
-float PerformanceOverlay::PerfOverlayState::CalculateTextScale()
-{
-	auto& overlay = globals::features::performanceOverlay;
-	switch (overlay.settings.Size) {
-	case PerfOverlaySettings::TextSize::Small:
-		return 0.8f;
-	case PerfOverlaySettings::TextSize::Medium:
-		return 1.0f;
-	case PerfOverlaySettings::TextSize::Large:
-		return 1.2f;
-	}
-	return 1.0f;
+	// Update post-FG frametime history
+	postFGFrameTimeHistory[postFGFrameTimeHistoryIndex] = postFGFrameTimeMs;
+	postFGFrameTimeHistoryIndex = (postFGFrameTimeHistoryIndex + 1) % postFGFrameTimeHistory.size();
 }
 
 void PerformanceOverlay::PerfOverlayState::UpdateGraphValues()
 {
 	// Get settings from the singleton
-	const auto& overlaySettings = globals::features::performanceOverlay.settings;
+	auto& overlaySettings = globals::features::performanceOverlay.settings;
 
 	// Sync frame history buffer size with user settings
-	UpdateFrameTimeHistorySizes();
+	overlaySettings.FrameHistorySize = std::clamp(
+		overlaySettings.FrameHistorySize,
+		overlaySettings.kMinFrameHistorySize,
+		overlaySettings.kMaxFrameHistorySize);
+	ResizeFrameTimeHistory(overlaySettings.FrameHistorySize);
 
 	// Insert latest frame time into circular buffer
 	float oldFrameTime = frameTimeHistory[frameTimeHistoryIndex];
@@ -2010,15 +1971,19 @@ void PerformanceOverlay::PerfOverlayState::UpdateGraphValues()
 	// Exponential smoothing for stable graph scaling
 	smoothedMinFrameTime = smoothedMinFrameTime + kSmoothingFactor * (graphMin - smoothedMinFrameTime);
 	smoothedMaxFrameTime = smoothedMaxFrameTime + kSmoothingFactor * (graphMax - smoothedMaxFrameTime);
+
+	if (isFrameGenerationActive) {
+		UpdateFGFrameTime();
+	}
 }
 
-void PerformanceOverlay::PerfOverlayState::DrawPostFGFrameTimeGraph()
+void PerformanceOverlay::DrawPostFGFrameTimeGraph()
 {
 	// Prepare overlay text
 	char overlay_text[128];
 	snprintf(overlay_text, IM_ARRAYSIZE(overlay_text),
 		"Post-FG: %.2f ms (%.1f FPS)",
-		postFGSmoothFrameTimeMs, postFGSmoothFps);
+		perfOverlayState.postFGSmoothFrameTimeMs, perfOverlayState.postFGSmoothFps);
 
 	// Set graph colors - blue for post-FG
 	ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.0f, 0.5f, 1.0f, 1.0f));  // Blue line
@@ -2026,12 +1991,12 @@ void PerformanceOverlay::PerfOverlayState::DrawPostFGFrameTimeGraph()
 	// Draw the graph
 	float graphWidth = ImGui::GetWindowWidth() * 0.9f;
 	ImGui::PlotLines("##postfgframetime",
-		postFGFrameTimeHistory.data(),
-		globals::features::performanceOverlay.settings.FrameHistorySize,
-		postFGFrameTimeHistoryIndex,
+		perfOverlayState.postFGFrameTimeHistory.data(),
+		settings.FrameHistorySize,
+		perfOverlayState.postFGFrameTimeHistoryIndex,
 		overlay_text,
-		smoothedMinFrameTime, smoothedMaxFrameTime,
-		ImVec2(graphWidth, 50.0f * textScale));
+		perfOverlayState.smoothedMinFrameTime, perfOverlayState.smoothedMaxFrameTime,
+		ImVec2(graphWidth, 50.0f * settings.TextSize));
 
 	ImGui::PopStyleColor();
 

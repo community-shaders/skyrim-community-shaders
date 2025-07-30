@@ -79,6 +79,37 @@ struct ColumnConfig
 	std::function<void()> headerTooltip;
 };
 
+template <typename T>
+class CircularBuffer
+{
+	std::vector<T> data = {};
+	size_t headIdx = 0;
+
+public:
+	CircularBuffer(size_t size)
+	{
+		size = std::max(1, size);
+		data.resize(size);
+	}
+
+	void Resize(size_t newSize)
+	{
+		if (data.size() == newSize)
+			return;
+		data.resize(newSize);
+		if (headIdx >= newSize)
+			headIdx = 0;
+	}
+
+	void Push(const T& val)
+	{
+		data[headIdx++] = val;
+		headIdx %= data.size();
+	}
+
+	std::span<const T> GetData() { return { data }; }
+	size_t GetHeadIdx() { return headIdx; }
+};
 struct PerformanceOverlay : OverlayFeature
 {
 	// ============================================================================
@@ -100,6 +131,7 @@ struct PerformanceOverlay : OverlayFeature
 	// ============================================================================
 	void DrawFPS();
 	void DrawVRAM();
+	void DrawPostFGFrameTimeGraph();
 
 	// ============================================================================
 	// A/B TESTING FUNCTIONS
@@ -139,6 +171,7 @@ struct PerformanceOverlay : OverlayFeature
 	// ============================================================================
 	// PERFORMANCE OVERLAY STATE MANAGEMENT
 	// ============================================================================
+
 	struct PerfOverlayState
 	{
 		// Frame time history buffers
@@ -204,12 +237,8 @@ struct PerformanceOverlay : OverlayFeature
 		static constexpr float kWindowBorderPadding = 20.0f;         // pixels - Window border padding
 		static constexpr float kDefaultFrameTimeMs = 16.67f;         // ms - Default frame time (60 FPS)
 
-		// Buffer management methods
-		void ResizeFrameTimeHistory(size_t size, float defaultValue = 0.0f) { frameTimeHistory.resize(size, defaultValue); }
-		void ResizePostFGFrameTimeHistory(size_t size, float defaultValue = 0.0f) { postFGFrameTimeHistory.resize(size, defaultValue); }
+		void ResizeFrameTimeHistory(size_t newSize);
 
-		// Methods that modify state
-		float CalculateTextScale();
 		/**
 		* @brief Updates all runtime state related to the performance overlay graph.
 		*
@@ -229,9 +258,7 @@ struct PerformanceOverlay : OverlayFeature
 		* No parameters; uses settings from the singleton.
 		*/
 		void UpdateGraphValues();
-		void UpdateFrameTimeHistorySizes();
 		void UpdateFGFrameTime();
-		void DrawPostFGFrameTimeGraph();
 	};
 
 	PerfOverlayState perfOverlayState;
@@ -251,13 +278,7 @@ struct PerformanceOverlay : OverlayFeature
 		int FrameHistorySize = 120;                       // Default 120 frames = 2s @ 60fps. Clamped using static values to prevent config file values going outside of slider bounds.
 		static constexpr int kMinFrameHistorySize = 60;   // 60 frames = 1s @ 60fps. Reasonable minimum.
 		static constexpr int kMaxFrameHistorySize = 480;  // 480 frames = 10s @ 60fps or 2s @ 240fps. Reasonable maximum.
-		enum class TextSize
-		{
-			Small,
-			Medium,
-			Large
-		};
-		TextSize Size = TextSize::Medium;
+		float TextSize = 1.0f;
 
 		float BackgroundOpacity = 0.5f;
 		bool ShowBorder = true;
