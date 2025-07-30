@@ -36,7 +36,7 @@ std::pair<unsigned char*, size_t> _GetFeatureBufferData(Ts... feat_datas)
 std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 {
 	return _GetFeatureBufferData(
-		globals::features::snowCover->GetCommonBufferData(),
+		globals::features::snowCover.GetCommonBufferData(),
 		globals::features::grassLighting.settings,
 		globals::features::extendedMaterials.settings,
 		globals::features::dynamicCubemaps.settings,
