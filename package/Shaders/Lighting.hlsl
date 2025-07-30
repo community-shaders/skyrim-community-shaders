@@ -3375,7 +3375,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			endif
 #		endif
 
-#		if defined(SSS) && defined(SKIN)
+#		if defined(SSS) && defined(SKIN) && !defined(DO_ALPHA_TEST)
 	psout.Masks = float4(saturate(baseColor.a), !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsBeastRace), 0, psout.Diffuse.w);
 #		elif defined(WETNESS_EFFECTS)
 	float wetnessNormalAmount = saturate(dot(float3(0, 0, 1), wetnessNormal) * saturate(flatnessAmount));
