@@ -727,7 +727,7 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
 
-		if (globals::features::screenSpaceReflections->loaded)
+		if (globals::features::screenSpaceReflections.loaded)
 			defines.push_back({ "SSR", nullptr });
 
 		if (REL::Module::IsVR())
@@ -752,7 +752,7 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 		if (globals::features::screenSpaceGI.loaded)
 			defines.push_back({ "SSGI", nullptr });
 
-		if (globals::features::screenSpaceReflections->loaded)
+		if (globals::features::screenSpaceReflections.loaded)
 			defines.push_back({ "SSR", nullptr });
 
 		if (REL::Module::IsVR())
