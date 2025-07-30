@@ -4,6 +4,7 @@
 #include <imgui.h>
 #include <string>
 #include <vector>
+#include <windows.h>  // For WPARAM and virtual key constants
 
 // Forward declarations
 struct ID3D11Device;
@@ -412,5 +413,106 @@ namespace Util
 		ImVec4 GetError();     // Red - error/negative (from theme Error)
 		ImVec4 GetInfo();      // Blue - informational (from theme InfoColor)
 		ImVec4 GetDisabled();  // Gray - disabled items (from theme Disable)
+	}
+
+	/**
+	 * @brief Input handling utilities for ImGui integration
+	 *
+	 * This namespace provides input mapping functions for converting between different
+	 * input systems (Windows Virtual Keys, DirectInput, ImGui) and generating
+	 * human-readable key representations for UI display.
+	 *
+	 * These utilities were extracted from Menu.cpp to improve reusability and
+	 * separation of concerns. They are designed to be stateless and thread-safe.
+	 */
+	namespace Input
+	{
+		/**
+		 * @brief Converts Windows virtual key codes to ImGui key codes
+		 *
+		 * Translates Windows input events from the VK_* constant format to ImGui's
+		 * ImGuiKey enum format for proper input handling in ImGui interfaces.
+		 * Supports the full range of keyboard keys, function keys, numpad, and
+		 * special keys (modifiers, navigation, etc.).
+		 *
+		 * @param vkKey Windows virtual key code (VK_* constants from winuser.h)
+		 * @return Corresponding ImGuiKey value, or ImGuiKey_None if unmapped
+		 *
+		 * @note This function handles all standard keyboard keys including:
+		 *       - Alphanumeric keys (A-Z, 0-9)
+		 *       - Function keys (F1-F12)
+		 *       - Modifier keys (Shift, Ctrl, Alt, Windows)
+		 *       - Navigation keys (arrows, page up/down, home/end)
+		 *       - Numpad keys and operations
+		 *       - Special OEM keys (punctuation, brackets, etc.)
+		 *
+		 * @example
+		 * @code
+		 * ImGuiKey key = Util::Input::VirtualKeyToImGuiKey(VK_SPACE);
+		 * if (key != ImGuiKey_None) {
+		 *     ImGui::GetIO().AddKeyEvent(key, true);
+		 * }
+		 * @endcode
+		 */
+		ImGuiKey VirtualKeyToImGuiKey(WPARAM vkKey);
+
+		/**
+		 * @brief Converts DirectInput key codes to Windows virtual key codes
+		 *
+		 * Translates DirectInput device key codes (DIK_* constants) to standard
+		 * Windows virtual key codes (VK_* constants). This is particularly useful
+		 * for handling input from DirectInput devices and normalizing them to
+		 * the Windows input system.
+		 *
+		 * @param dikKey DirectInput key code (DIK_* constants from dinput.h)
+		 * @return Corresponding Windows virtual key code, or original dikKey if unmapped
+		 *
+		 * @note This function handles common DirectInput keys including:
+		 *       - Arrow keys and navigation
+		 *       - Numpad keys and operations
+		 *       - Modifier keys (Alt, Ctrl, Windows)
+		 *       - Special keys (Delete, Insert, Home, End, Page Up/Down)
+		 *
+		 * @note For unmapped keys, the function returns the original dikKey value
+		 *       as a fallback, allowing for pass-through behavior.
+		 *
+		 * @example
+		 * @code
+		 * uint32_t vkKey = Util::Input::DIKToVK(DIK_LEFTARROW);
+		 * // vkKey will be VK_LEFT
+		 * @endcode
+		 */
+		uint32_t DIKToVK(uint32_t dikKey);
+
+		/**
+		 * @brief Converts key codes to human-readable string representations
+		 *
+		 * Provides localized, user-friendly key names for display in UI elements
+		 * such as settings panels, tooltips, and configuration dialogs. The strings
+		 * are suitable for direct display to users.
+		 *
+		 * @param key Virtual key code to convert (0-255 range)
+		 * @return Human-readable key name string, or empty string if key >= 256
+		 *
+		 * @note Key names include proper formatting and descriptions:
+		 *       - "Left Mouse", "Right Mouse", "Middle Mouse" for mouse buttons
+		 *       - "Numpad 0", "Numpad +", "Numpad Enter" for numpad keys
+		 *       - "Left Shift", "Right Ctrl" for specific modifier keys
+		 *       - "Page Up", "Page Down" instead of "Prior", "Next"
+		 *       - "Left Arrow", "Up Arrow" for navigation keys
+		 *
+		 * @note Returns empty string for invalid key codes (>= 256) to prevent
+		 *       buffer overrun and provide safe fallback behavior.
+		 *
+		 * @example
+		 * @code
+		 * const char* keyName = Util::Input::KeyIdToString(VK_SPACE);
+		 * // keyName will be "Space"
+		 *
+		 * const char* mouseName = Util::Input::KeyIdToString(VK_LBUTTON);
+		 * // mouseName will be "Left Mouse"
+		 * @endcode
+		 */
+		const char* KeyIdToString(uint32_t key);
 	}
 }  // namespace Util

@@ -76,7 +76,7 @@ namespace Color
 	float3 Diffuse(float3 color)
 	{
 #if defined(TRUE_PBR)
-		return pow(abs(color), 1.0 / 2.2);
+		return LinearToGamma(color);
 #else
 		return color;
 #endif

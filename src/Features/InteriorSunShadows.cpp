@@ -85,22 +85,22 @@ RE::TESWorldSpace* InteriorSunShadows::disableInteriorSunShadows = [] {
 
 void InteriorSunShadows::DirShadowLightCulling::thunk(RE::BSShadowDirectionalLight* dirLight, RE::BSTArray<RE::BSTArray<RE::NiPointer<RE::NiAVObject>>>& jobArrays, RE::BSTArray<RE::NiPointer<RE::NiAVObject>>& nodes)
 {
-	auto* singleton = GetSingleton();
+	auto& singleton = globals::features::interiorSunShadows;
 	const auto cell = globals::game::tes->interiorCell;
 	auto* passedJobArrays = &jobArrays;
 
-	if (cell && singleton->isInteriorWithSun) {
+	if (cell && singleton.isInteriorWithSun) {
 		const auto* loadedData = cell->GetRuntimeData().loadedData;
 		const auto portalGraph = loadedData ? loadedData->portalGraph : nullptr;
 		if (portalGraph) {
-			singleton->PopulateReplacementJobArrays(cell, portalGraph, dirLight, jobArrays);
-			passedJobArrays = &singleton->replacementJobArrays;
+			singleton.PopulateReplacementJobArrays(cell, portalGraph, dirLight, jobArrays);
+			passedJobArrays = &singleton.replacementJobArrays;
 		} else
-			singleton->currentCell = nullptr;
+			singleton.currentCell = nullptr;
 	} else {
-		if (!singleton->arraysCleared)
-			singleton->ClearArrays();
-		singleton->currentCell = nullptr;
+		if (!singleton.arraysCleared)
+			singleton.ClearArrays();
+		singleton.currentCell = nullptr;
 	}
 
 	func(dirLight, *passedJobArrays, nodes);

@@ -8,12 +8,6 @@ private:
 	static constexpr std::string_view MOD_ID = "135817";
 
 public:
-	static TerrainShadows* GetSingleton()
-	{
-		static TerrainShadows singleton;
-		return std::addressof(singleton);
-	}
-
 	virtual inline std::string GetName() override { return "Terrain Shadows"; }
 	virtual inline std::string GetShortName() override { return "TerrainShadows"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }

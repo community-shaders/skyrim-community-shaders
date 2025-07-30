@@ -303,7 +303,7 @@ void LightLimitFix::BSLightingShader_SetupGeometry_Before(RE::BSRenderPass* a_pa
 
 void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(RE::BSRenderPass* a_pass)
 {
-	auto isl = globals::features::inverseSquareLighting;
+	auto& isl = globals::features::inverseSquareLighting;
 
 	auto accumulator = *globals::game::currentAccumulator.get();
 	bool inWorld = accumulator->GetRuntimeData().activeShadowSceneNode == globals::game::smState->shadowSceneNode[0];
@@ -320,8 +320,8 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 		light.color = { runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue };
 		light.lightFlags = std::bit_cast<LightFlags>(runtimeData.ambient.red);
 
-		if (isl->loaded) {
-			isl->ProcessLight(light, bsLight, niLight);
+		if (isl.loaded) {
+			isl.ProcessLight(light, bsLight, niLight);
 		} else {
 			light.radius = runtimeData.radius.x;
 			light.color *= runtimeData.fade;
@@ -489,7 +489,7 @@ std::string ExtractTextureStem(std::string_view a_path)
 
 LightLimitFix::ParticleLightReference LightLimitFix::GetParticleLightConfigs(RE::BSRenderPass* a_pass)
 {
-	auto particleLights = globals::features::llf::particleLights;
+	auto& particleLights = globals::features::llf::particleLights;
 
 	// see https://www.nexusmods.com/skyrimspecialedition/articles/1391
 	if (settings.EnableParticleLights) {
@@ -526,7 +526,7 @@ LightLimitFix::ParticleLightReference LightLimitFix::GetParticleLightConfigs(RE:
 							return { false };
 						}
 
-						auto& configs = particleLights->particleLightConfigs;
+						auto& configs = particleLights.particleLightConfigs;
 						auto it = configs.find(textureName);
 						if (it == configs.end()) {
 							particleLightsReferences.insert({ (RE::NiNode*)a_pass->geometry, { false } });
@@ -542,7 +542,7 @@ LightLimitFix::ParticleLightReference LightLimitFix::GetParticleLightConfigs(RE:
 								return { false };
 							}
 
-							auto& gradientConfigs = particleLights->particleLightGradientConfigs;
+							auto& gradientConfigs = particleLights.particleLightGradientConfigs;
 							auto itGradient = gradientConfigs.find(textureName);
 							if (itGradient == gradientConfigs.end()) {
 								particleLightsReferences.insert({ (RE::NiNode*)a_pass->geometry, { false } });
@@ -669,7 +669,7 @@ bool LightLimitFix::AddParticleLight(RE::BSRenderPass* a_pass, ParticleLightRefe
 
 void LightLimitFix::PostPostLoad()
 {
-	globals::features::llf::particleLights->GetConfigs();
+	globals::features::llf::particleLights.GetConfigs();
 	Hooks::Install();
 }
 
@@ -738,7 +738,7 @@ namespace RE
 void LightLimitFix::UpdateLights()
 {
 	auto smState = globals::game::smState;
-	auto isl = globals::features::inverseSquareLighting;
+	auto& isl = globals::features::inverseSquareLighting;
 
 	lightsNear = *globals::game::cameraNear;
 	lightsFar = *globals::game::cameraFar;
@@ -781,8 +781,8 @@ void LightLimitFix::UpdateLights()
 					light.color = { runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue };
 					light.lightFlags = std::bit_cast<LightFlags>(runtimeData.ambient.red);
 
-					if (isl->loaded) {
-						isl->ProcessLight(light, bsLight, niLight);
+					if (isl.loaded) {
+						isl.ProcessLight(light, bsLight, niLight);
 					} else {
 						light.radius = runtimeData.radius.x;
 						light.color *= runtimeData.fade;
@@ -1036,37 +1036,37 @@ void LightLimitFix::UpdateLights()
 
 void LightLimitFix::Hooks::BSLightingShader_SetupGeometry::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 {
-	auto singleton = globals::features::lightLimitFix;
-	singleton->BSLightingShader_SetupGeometry_Before(Pass);
+	auto& singleton = globals::features::lightLimitFix;
+	singleton.BSLightingShader_SetupGeometry_Before(Pass);
 	func(This, Pass, RenderFlags);
-	singleton->BSLightingShader_SetupGeometry_After(Pass);
+	singleton.BSLightingShader_SetupGeometry_After(Pass);
 }
 
 void LightLimitFix::Hooks::BSEffectShader_SetupGeometry::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 {
 	func(This, Pass, RenderFlags);
-	auto singleton = globals::features::lightLimitFix;
-	singleton->BSLightingShader_SetupGeometry_Before(Pass);
-	singleton->BSLightingShader_SetupGeometry_After(Pass);
+	auto& singleton = globals::features::lightLimitFix;
+	singleton.BSLightingShader_SetupGeometry_Before(Pass);
+	singleton.BSLightingShader_SetupGeometry_After(Pass);
 };
 
 void LightLimitFix::Hooks::BSWaterShader_SetupGeometry::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 {
 	func(This, Pass, RenderFlags);
-	auto singleton = globals::features::lightLimitFix;
-	singleton->BSLightingShader_SetupGeometry_Before(Pass);
-	singleton->BSLightingShader_SetupGeometry_After(Pass);
+	auto& singleton = globals::features::lightLimitFix;
+	singleton.BSLightingShader_SetupGeometry_Before(Pass);
+	singleton.BSLightingShader_SetupGeometry_After(Pass);
 };
 
 float LightLimitFix::Hooks::AIProcess_CalculateLightValue_GetLuminance::thunk(RE::ShadowSceneNode* shadowSceneNode, RE::NiPoint3& targetPosition, int& numHits, float& sunLightLevel, float& lightLevel, RE::NiLight& refLight, int32_t shadowBitMask)
 {
 	auto ret = func(shadowSceneNode, targetPosition, numHits, sunLightLevel, lightLevel, refLight, shadowBitMask);
-	globals::features::lightLimitFix->AddParticleLightLuminance(targetPosition, numHits, ret);
+	globals::features::lightLimitFix.AddParticleLightLuminance(targetPosition, numHits, ret);
 	return ret;
 }
 
 void LightLimitFix::Hooks::NiNode_Destroy::thunk(RE::NiNode* This)
 {
-	globals::features::lightLimitFix->CleanupParticleLights(This);
+	globals::features::lightLimitFix.CleanupParticleLights(This);
 	func(This);
 }

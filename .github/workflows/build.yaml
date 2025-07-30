@@ -108,7 +108,7 @@ jobs:
               github.event.inputs.build-cpp == 'true') ||
             (github.event_name == 'pull_request_target' &&
              !github.event.pull_request.draft) ||
-            (github.event_name == 'release'))
+            (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
         name: Build plugin and addons
         runs-on: windows-2022
         permissions:
@@ -243,6 +243,22 @@ jobs:
                   }
                   "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
+            - name: Fail if CMake version does not match tag
+              if: success() && github.ref_type == 'tag'
+              shell: pwsh
+              run: |
+                  $tag = '${{ github.ref_name }}'
+                  $expected = $tag.TrimStart('v')
+                  $version = '${{ steps.get_version.outputs.version }}'
+                  if (-not $version -or $version -eq "") {
+                    Write-Error "Version extraction failed: no version found in previous step" -ErrorAction Stop
+                  }
+                  if ($version -ne $expected) {
+                    Write-Error "CMakeLists.txt version '$version' does not match tag version '$expected'. Please update CMakeLists.txt before tagging." -ErrorAction Stop
+                  } else {
+                    Write-Host "CMakeLists.txt version matches tag."
+                  }
+
             - name: Upload dist artifacts
               if: success()
               uses: actions/upload-artifact@v4
@@ -259,7 +275,7 @@ jobs:
               !github.event.pull_request.draft) ||
              (github.event_name == 'workflow_dispatch' &&
               github.event.inputs.validate-shaders == 'true') ||
-             (github.event_name == 'release'))
+             (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
         name: Validate shader compilation
         runs-on: windows-2022
         permissions:
@@ -606,7 +622,7 @@ jobs:
         if: >
             github.event_name == 'workflow_dispatch' ||
             startsWith(github.ref, 'refs/tags/v') ||
-            github.event_name == 'release'
+            (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
         runs-on: windows-2022
         permissions:
             contents: write

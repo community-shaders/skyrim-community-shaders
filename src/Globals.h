@@ -56,38 +56,38 @@ namespace globals
 
 	namespace features
 	{
-		extern CloudShadows* cloudShadows;
-		extern DynamicCubemaps* dynamicCubemaps;
-		extern ExtendedMaterials* extendedMaterials;
-		extern GrassCollision* grassCollision;
-		extern GrassLighting* grassLighting;
-		extern HairSpecular* hairSpecular;
-		extern IBL* ibl;
-		extern LightLimitFix* lightLimitFix;
-		extern LODBlending* lodBlending;
-		extern InteriorSunShadows* interiorSunShadows;
-		extern InverseSquareLighting* inverseSquareLighting;
-		extern ScreenSpaceGI* screenSpaceGI;
-		extern ScreenSpaceShadows* screenSpaceShadows;
-		extern Skylighting* skylighting;
-		extern TerrainVariation* terrainVariation;
-		extern SkySync* skySync;
-		extern SubsurfaceScattering* subsurfaceScattering;
-		extern TerrainBlending* terrainBlending;
-		extern TerrainHelper* terrainHelper;
-		extern TerrainShadows* terrainShadows;
-		extern VolumetricLighting* volumetricLighting;
-		extern VR* vr;
-		extern WaterEffects* waterEffects;
-		extern WeatherPicker* weatherPicker;
-		extern PerformanceOverlay* performanceOverlay;
-		extern WetnessEffects* wetnessEffects;
-		extern ExtendedTranslucency* extendedTranslucency;
-		extern PostProcessing* postProcessing;
+		extern CloudShadows cloudShadows;
+		extern DynamicCubemaps dynamicCubemaps;
+		extern ExtendedMaterials extendedMaterials;
+		extern GrassCollision grassCollision;
+		extern GrassLighting grassLighting;
+		extern HairSpecular hairSpecular;
+		extern IBL ibl;
+		extern LightLimitFix lightLimitFix;
+		extern LODBlending lodBlending;
+		extern InteriorSunShadows interiorSunShadows;
+		extern InverseSquareLighting inverseSquareLighting;
+		extern ScreenSpaceGI screenSpaceGI;
+		extern ScreenSpaceShadows screenSpaceShadows;
+		extern Skylighting skylighting;
+		extern TerrainVariation terrainVariation;
+		extern SkySync skySync;
+		extern SubsurfaceScattering subsurfaceScattering;
+		extern TerrainBlending terrainBlending;
+		extern TerrainHelper terrainHelper;
+		extern TerrainShadows terrainShadows;
+		extern VolumetricLighting volumetricLighting;
+		extern VR vr;
+		extern WaterEffects waterEffects;
+		extern WeatherPicker weatherPicker;
+		extern PerformanceOverlay performanceOverlay;
+		extern WetnessEffects wetnessEffects;
+		extern ExtendedTranslucency extendedTranslucency;
+		extern PostProcessing postProcessing;
 
 		namespace llf
 		{
-			extern ParticleLights* particleLights;
+			extern ParticleLights particleLights;
 		}
 	}
 

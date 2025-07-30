@@ -3,7 +3,7 @@
 #include <BS_thread_pool.hpp>
 #include <efsw/efsw.hpp>
 
-static constexpr REL::Version SHADER_CACHE_VERSION = { 0, 0, 0, 32 };
+static constexpr REL::Version SHADER_CACHE_VERSION = { 0, 0, 0, 34 };
 
 using namespace std::chrono;
 

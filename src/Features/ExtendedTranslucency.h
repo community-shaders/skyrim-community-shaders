@@ -5,8 +5,6 @@
 
 struct ExtendedTranslucency final : Feature
 {
-	static ExtendedTranslucency* GetSingleton();
-
 	virtual inline std::string GetName() override { return "Extended Translucency"; }
 	virtual inline std::string GetShortName() override { return "ExtendedTranslucency"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "EXTENDED_TRANSLUCENCY"; }
