@@ -3006,14 +3006,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 		color.xyz += transmissionColor;
 	}
-#	elif defined(SKIN) && defined(SSS) && defined(DEFERRED)
+#	elif defined(SKIN) && defined(SSS) && defined(DEFERRED) && !defined(DO_ALPHA_TEST)
 	color.xyz += diffuseColor;
 	psout.Masks2.xyz = baseColor.xyz;
 #	else
 	color.xyz += diffuseColor * baseColor.xyz;
 #	endif
 
-#	if defined(DEFERRED) && !(defined(SKIN) && defined(SSS))
+#	if defined(DEFERRED) && !(defined(SKIN) && defined(SSS) && !defined(DO_ALPHA_TEST))
 	psout.Masks2.xyz = float3(1.0, 1.0, 1.0);
 #	endif
 
