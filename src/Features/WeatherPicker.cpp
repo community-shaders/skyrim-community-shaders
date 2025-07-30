@@ -2,6 +2,7 @@
 #include "Feature.h"
 #include "Menu.h"
 #include "Utils/Game.h"
+#include "Utils/UI.h"
 #include <nlohmann/json.hpp>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -46,7 +47,7 @@ void WeatherPicker::DrawSettings()
 			ImGui::Text("Opens weather details in a separate window that stays open\neven when the main menu is closed. ");
 			ImGui::Text("Toggle with ");
 			ImGui::SameLine();
-			ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Menu::KeyIdToString(menuSettings.OverlayToggleKey));
+			ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Util::Input::KeyIdToString(menuSettings.OverlayToggleKey));
 		}
 		ImGui::Spacing();
 

@@ -1,9 +1,12 @@
 
 #pragma once
 #include "Feature.h"
+#include "Menu/ThemeManager.h"
 #include "Utils/Serialize.h"
 #include <dxgi1_4.h>
 #include <nlohmann/json.hpp>
+#include <shared_mutex>
+#include <vector>
 #include <winrt/base.h>
 
 using json = nlohmann::json;
@@ -12,6 +15,8 @@ class Menu
 {
 public:
 	~Menu();
+	Menu(const Menu&) = delete;
+	Menu& operator=(const Menu&) = delete;
 
 	static Menu* GetSingleton()
 	{
@@ -37,6 +42,14 @@ public:
 	bool ShouldSwallowInput();
 
 public:
+	// Input handling flags (made public for InputEventHandler access)
+	bool settingToggleKey = false;
+	bool settingSkipCompilationKey = false;
+	bool settingsEffectsToggle = false;
+	bool settingOverlayToggleKey = false;
+	uint32_t priorShaderKey = VK_PRIOR;  // used for blocking shaders in debugging
+	uint32_t nextShaderKey = VK_NEXT;    // used for blocking shaders in debugging
+
 	// Used for resetting input keys to solve alt-tab stuck issue
 	std::atomic<bool> focusChanged = false;
 	void OnFocusChanged();
@@ -210,12 +223,7 @@ public:
 
 	bool overlayVisible = false;
 
-	// Static utility functions
-	static const char* KeyIdToString(uint32_t key);
-
 public:
-	const ImGuiKey VirtualKeyToImGuiKey(WPARAM vkKey);
-
 	// Move KeyEvent struct here
 	class CharEvent : public RE::InputEvent
 	{
@@ -272,21 +280,15 @@ private:
 	Settings settings;
 
 	float cachedFontSize = Constants::DEFAULT_FONT_SIZE;  // Tracks whether font has been modified and may require reloading
-	void ReloadFont();                                    // Credit to user patchuli: https://github.com/Patchu1i/ModExplorerMenu/tree/master
 
 	// Menu navigation
 	std::string pendingFeatureSelection;  // Feature to select on next frame
 
-	uint32_t priorShaderKey = VK_PRIOR;  // used for blocking shaders in debugging
-	uint32_t nextShaderKey = VK_NEXT;    // used for blocking shaders in debugging
-
-	bool settingToggleKey = false;
-	bool settingSkipCompilationKey = false;
-	bool settingsEffectsToggle = false;
-	bool settingOverlayToggleKey = false;
+	// Input event handling
+	std::vector<KeyEvent> _keyEventQueue;
+	mutable std::shared_mutex _inputEventMutex;
 
 	Menu() = default;
-	void SetupImGuiStyle() const;
 
 	void DrawGeneralSettings();
 	void DrawAdvancedSettings();
@@ -295,9 +297,6 @@ private:
 	void DrawFooter();
 	void BuildCategoryCounts();
 
-	const uint32_t DIKToVK(uint32_t DIK);
-	mutable std::shared_mutex _inputEventMutex;
-	std::vector<KeyEvent> _keyEventQueue{};
 	void addToEventQueue(KeyEvent e);
 	void ProcessInputEventQueue();
 	winrt::com_ptr<IDXGIAdapter3> dxgiAdapter3;

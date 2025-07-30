@@ -158,7 +158,7 @@ void PerformanceOverlay::DrawSettings()
 		ImGui::Text("Opens performance overlay in a separate window that stays open\neven when the main menu is closed. ");
 		ImGui::Text("Toggle with ");
 		ImGui::SameLine();
-		ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Menu::KeyIdToString(menuSettings.OverlayToggleKey));
+		ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Util::Input::KeyIdToString(menuSettings.OverlayToggleKey));
 	}
 
 	if (this->settings.ShowInOverlay) {
