@@ -2,6 +2,7 @@
 #include "Feature.h"
 #include "Menu.h"
 #include "Utils/Game.h"
+#include "Utils/UI.h"
 #include <nlohmann/json.hpp>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -38,15 +39,15 @@ void WeatherPicker::DrawSettings()
 		const auto& menuSettings = Menu::GetSingleton()->GetSettings();
 
 		// Show as Overlay checkbox
-		bool showInOverlay = WeatherPicker::GetSingleton()->WeatherDetailsWindow.ShowInOverlay;
+		bool showInOverlay = WeatherDetailsWindow.ShowInOverlay;
 		if (ImGui::Checkbox("Show in Overlay", &showInOverlay)) {
-			WeatherPicker::GetSingleton()->WeatherDetailsWindow.ShowInOverlay = showInOverlay;
+			WeatherDetailsWindow.ShowInOverlay = showInOverlay;
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Opens weather details in a separate window that stays open\neven when the main menu is closed. ");
 			ImGui::Text("Toggle with ");
 			ImGui::SameLine();
-			ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Menu::KeyIdToString(menuSettings.OverlayToggleKey));
+			ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Util::Input::KeyIdToString(menuSettings.OverlayToggleKey));
 		}
 		ImGui::Spacing();
 
@@ -653,7 +654,7 @@ void WeatherPicker::RenderFeatureWeatherAnalysis()
 	for (auto* feature : Feature::GetFeatureList()) {
 		if (feature->loaded) {
 			// Skip the WeatherPicker itself to avoid recursion
-			if (feature == WeatherPicker::GetSingleton()) {
+			if (feature == &globals::features::weatherPicker) {
 				continue;
 			}
 

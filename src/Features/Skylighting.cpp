@@ -199,9 +199,9 @@ Skylighting::SkylightingCB Skylighting::GetCommonBufferData(bool a_inWorld)
 
 	auto ambientDimmer = 1.0f;
 
-	auto ssgi = globals::features::screenSpaceGI;
-	if (ssgi->loaded)
-		if (ssgi->settings.Enabled && ssgi->settings.EnableGI && ssgi->settings.GIStrength > 0.0f)
+	auto& ssgi = globals::features::screenSpaceGI;
+	if (ssgi.loaded)
+		if (ssgi.settings.Enabled && ssgi.settings.EnableGI && ssgi.settings.GIStrength > 0.0f)
 			ambientDimmer = settings.SSGIAmbientDimmer;
 
 	return {
@@ -367,7 +367,7 @@ RE::BSLightingShaderProperty::Data* Skylighting::BSLightingShaderProperty_GetPre
 	[[maybe_unused]] uint32_t renderMode,
 	[[maybe_unused]] RE::BSGraphics::BSShaderAccumulator* accumulator)
 {
-	auto skylighting = globals::features::skylighting;
+	auto& skylighting = globals::features::skylighting;
 
 	auto batch = accumulator->GetRuntimeData().batchRenderer;
 	batch->geometryGroups[14]->flags &= ~1;
@@ -378,7 +378,7 @@ RE::BSLightingShaderProperty::Data* Skylighting::BSLightingShaderProperty_GetPre
 	auto* precipitationOcclusionMapRenderPassList = &property->unk0C8;
 
 	precipitationOcclusionMapRenderPassList->Clear();
-	if (skylighting->inOcclusion) {
+	if (skylighting.inOcclusion) {
 		if (property->flags.any(kSkinned) && property->flags.none(kTreeAnim))
 			return precipitationOcclusionMapRenderPassList;
 	} else {
@@ -386,7 +386,7 @@ RE::BSLightingShaderProperty::Data* Skylighting::BSLightingShaderProperty_GetPre
 			return precipitationOcclusionMapRenderPassList;
 	}
 
-	if (skylighting->inOcclusion) {
+	if (skylighting.inOcclusion) {
 		if (auto userData = geometry->GetUserData()) {
 			RE::BSFadeNode* fadeNode = nullptr;
 
@@ -419,7 +419,7 @@ RE::BSLightingShaderProperty::Data* Skylighting::BSLightingShaderProperty_GetPre
 
 	bool valid = false;
 
-	if (skylighting->inOcclusion) {
+	if (skylighting.inOcclusion) {
 		valid = property->flags.any(kZBufferWrite) && property->flags.none(kRefraction, kTempRefraction, kLODLandscape, kEyeReflect, kDecal, kDynamicDecal);
 	} else {
 		valid = property->flags.any(kZBufferWrite) && property->flags.none(kRefraction, kTempRefraction, kMultiTextureLandscape, kNoLODLandBlend, kLODLandscape, kEyeReflect, kDecal, kDynamicDecal);
@@ -460,10 +460,10 @@ RE::BSLightingShaderProperty::Data* Skylighting::BSLightingShaderProperty_GetPre
 
 void Skylighting::SetViewFrustum::thunk(RE::NiCamera* a_camera, RE::NiFrustum* a_frustum)
 {
-	auto skylighting = globals::features::skylighting;
+	auto& skylighting = globals::features::skylighting;
 
-	if (skylighting->inOcclusion) {
-		uint corner = skylighting->frameCount % 4;
+	if (skylighting.inOcclusion) {
+		uint corner = skylighting.frameCount % 4;
 
 		float frustumSize = a_frustum->fTop;
 
@@ -478,10 +478,10 @@ void Skylighting::SetViewFrustum::thunk(RE::NiCamera* a_camera, RE::NiFrustum* a
 
 void Skylighting::SetViewFrustumVR::thunk(RE::NiCamera* a_camera, RE::NiFrustum* a_frustum, uint a_eyeIndex)
 {
-	auto skylighting = globals::features::skylighting;
+	auto& skylighting = globals::features::skylighting;
 
-	if (skylighting->inOcclusion) {
-		uint corner = skylighting->frameCount % 4;
+	if (skylighting.inOcclusion) {
+		uint corner = skylighting.frameCount % 4;
 
 		float frustumSize = a_frustum->fTop;
 
@@ -619,4 +619,20 @@ void Skylighting::RenderOcclusion()
 			}
 		}
 	}
+}
+
+void Skylighting::Main_Precipitation_RenderOcclusion::thunk()
+{
+	globals::features::skylighting.RenderOcclusion();
+}
+
+RE::BSEventNotifyControl Skylighting::MenuOpenCloseEventHandler::ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
+{
+	// When entering a new cell through a loadscreen, update every frame until completion
+	if (a_event->menuName == RE::LoadingMenu::MENU_NAME) {
+		if (!a_event->opening)
+			globals::features::skylighting.queuedResetSkylighting = true;
+	}
+
+	return RE::BSEventNotifyControl::kContinue;
 }

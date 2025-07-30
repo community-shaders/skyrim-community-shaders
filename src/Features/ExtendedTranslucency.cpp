@@ -13,21 +13,15 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 const RE::BSFixedString ExtendedTranslucency::NiExtraDataName_AnisotropicAlphaMaterial = "AnisotropicAlphaMaterial";
 
-ExtendedTranslucency* ExtendedTranslucency::GetSingleton()
-{
-	static ExtendedTranslucency singleton;
-	return &singleton;
-}
-
 void ExtendedTranslucency::BSLightingShader_SetupGeometry(RE::BSRenderPass* pass)
 {
 	globals::state->permutationData.ExtraFeatureDescriptor &= ~(ExtraFeatureDescriptorMask << ExtraFeatureDescriptorShift);
 	// TODO: PERFORMANCE: Caching the feature descriptor in map<RE::BSGeometry*, uint> if this get more complex
 	auto& unknownProperty = pass->geometry->GetGeometryRuntimeData().properties[RE::BSGeometry::States::kProperty];
 	auto alphaProperty = unknownProperty && unknownProperty->GetRTTI() == globals::rtti::NiAlphaPropertyRTTI.get() ? static_cast<RE::NiAlphaProperty*>(unknownProperty.get()) : nullptr;
-	auto* feature = ExtendedTranslucency::GetSingleton();
+	auto& feature = globals::features::extendedTranslucency;
 	// Check alpha property exists and blending is enabled
-	if (alphaProperty && alphaProperty->GetAlphaBlending() && (pass->geometry->GetGeometryRuntimeData().skinInstance != nullptr || (feature && !feature->SkinnedOnly))) {
+	if (alphaProperty && alphaProperty->GetAlphaBlending() && (pass->geometry->GetGeometryRuntimeData().skinInstance != nullptr || !feature.SkinnedOnly)) {
 		if (auto* data = pass->geometry->GetExtraData(NiExtraDataName_AnisotropicAlphaMaterial)) {
 			if (data->GetRTTI() == globals::rtti::NiIntegerExtraDataRTTI.get()) {
 				uint32_t material = static_cast<uint32_t>(static_cast<RE::NiIntegerExtraData*>(data)->value) & ExtraFeatureDescriptorMask;

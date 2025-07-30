@@ -2,12 +2,6 @@
 
 struct LODBlending : Feature
 {
-	static LODBlending* GetSingleton()
-	{
-		static LODBlending singleton;
-		return &singleton;
-	}
-
 	virtual inline std::string GetName() override { return "LOD Blending"; }
 	virtual inline std::string GetShortName() override { return "LODBlending"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "LOD_BLENDING"; }

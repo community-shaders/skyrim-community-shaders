@@ -209,28 +209,21 @@ namespace Ripples
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	WetnessEffects* UpdateSettings()
+	void UpdateSettings()
 	{
-		const auto WetnessEffects = WetnessEffects::GetSingleton();
-		if (WetnessEffects) {
-			s_isEnabled = WetnessEffects->settings.EnableWetnessEffects;
-			s_vanillaRipplesEnabled = WetnessEffects->settings.EnableVanillaRipples;
-			logger::debug("[{}] UpdateSettings: EnableWetnessEffects={}, EnableVanillaRipples={}",
-				WetnessEffects->GetName(), s_isEnabled, s_vanillaRipplesEnabled);
-		} else {
-			logger::debug("[WetnessEffects] UpdateSettings: WetnessEffects singleton not found");
-		}
-		return WetnessEffects;
+		auto& wetnessEffects = globals::features::wetnessEffects;
+		s_isEnabled = wetnessEffects.settings.EnableWetnessEffects;
+		s_vanillaRipplesEnabled = wetnessEffects.settings.EnableVanillaRipples;
+		logger::debug("[{}] UpdateSettings: EnableWetnessEffects={}, EnableVanillaRipples={}",
+			wetnessEffects.GetName(), s_isEnabled, s_vanillaRipplesEnabled);
 	}
 
 	void Install()
 	{
-		const auto WetnessEffects = UpdateSettings();  // Initialize cached values
-		if (!WetnessEffects)
-			return;
+		auto& wetnessEffects = globals::features::wetnessEffects;
 		REL::Relocation<std::uintptr_t> target{ RELOCATION_ID(25638, 26179), REL::VariantOffset(0x238, 0x223, 0x238) };
 		stl::write_thunk_call<ToggleWaterSplashes>(target.address());
-		logger::info("[{}] Installed ripple hooks", WetnessEffects->GetName());
+		logger::info("[{}] Installed ripple hooks", wetnessEffects.GetName());
 	}
 }
 
@@ -474,14 +467,14 @@ void WetnessEffects::DrawSettings()
 
 	ImGui::Spacing();
 	ImGui::Spacing();
-	auto weather = globals::features::weatherPicker;
-	if (weather && weather->loaded) {
-		if (ImGui::SmallButton(("Open " + weather->GetName()).c_str())) {
+	auto& weatherPicker = globals::features::weatherPicker;
+	if (weatherPicker.loaded) {
+		if (ImGui::SmallButton(("Open " + weatherPicker.GetName()).c_str())) {
 			// Navigate to the replacement feature in the menu
-			Menu::GetSingleton()->SelectFeatureMenu(weather->GetShortName());
+			Menu::GetSingleton()->SelectFeatureMenu(weatherPicker.GetShortName());
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Open the installed %s feature", weather->GetShortName().c_str());
+			ImGui::Text("Open the installed %s feature", weatherPicker.GetShortName().c_str());
 		}
 	}
 }

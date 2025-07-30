@@ -120,7 +120,8 @@ void VR::DataLoaded()
 
 void VR::DrawOverlay()
 {
-	if (!VR::GetSingleton()->openVRInfo.isCompatible)
+	auto& vr = globals::features::vr;
+	if (!vr.openVRInfo.isCompatible)
 		return;
 	static LARGE_INTEGER overlayShowStart = { 0 };
 	static LARGE_INTEGER freq = { 0 };
@@ -179,8 +180,8 @@ namespace
 	void DrawMenuSettings();
 	void DrawMouseSettings();
 	void DrawDragSettings();
-	void DrawKeyBindings(VR* vr);
-	void DrawDebugSection(VR* vr);
+	void DrawKeyBindings();
+	void DrawDebugSection();
 }
 
 void VR::DrawSettings()
@@ -206,7 +207,7 @@ void VR::DrawSettings()
 		if (openVRInfo.isCompatible) {
 			if (ImGui::BeginTabItem("Bindings")) {
 				if (ImGui::BeginChild("##VRBindingsFrame", { 0, 0 }, true)) {
-					DrawKeyBindings(this);
+					DrawKeyBindings();
 				}
 				ImGui::EndChild();
 				ImGui::EndTabItem();
@@ -215,7 +216,7 @@ void VR::DrawSettings()
 		// Debug Tab (existing debug functionality)
 		if (ImGui::BeginTabItem("Debug")) {
 			if (ImGui::BeginChild("##VRDebugFrame", { 0, 0 }, true)) {
-				DrawDebugSection(this);
+				DrawDebugSection();
 			}
 			ImGui::EndChild();
 			ImGui::EndTabItem();
@@ -424,10 +425,10 @@ namespace
 {
 	void DrawControllerInputInstructions()
 	{
-		auto vr = VR::GetSingleton();
-		if (!VR::GetSingleton()->openVRInfo.isCompatible)
+		auto& vr = globals::features::vr;
+		auto& settings = vr.settings;
+		if (!vr.openVRInfo.isCompatible)
 			return;
-		VR::Settings& settings = vr->settings;
 		if (ImGui::CollapsingHeader("Controller Input Instructions", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::SliderInt("Auto-hide Welcome overlay timeout", &settings.kAutoHideSeconds, 0, VR::Config::kMaxAutoHideSeconds,
 				settings.kAutoHideSeconds <= 0 ? "Hidden" : "%d seconds");
@@ -547,8 +548,8 @@ namespace
 
 	void DrawGeneralVRSettings()
 	{
-		auto vr = VR::GetSingleton();
-		VR::Settings& settings = vr->settings;
+		auto& vr = globals::features::vr;
+		VR::Settings& settings = vr.settings;
 		if (ImGui::CollapsingHeader("General Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Checkbox("Enable Depth Buffer Culling", &settings.EnableDepthBufferCulling);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -563,10 +564,10 @@ namespace
 
 	void DrawMenuSettings()
 	{
-		if (!VR::GetSingleton()->openVRInfo.isCompatible)
+		auto& vr = globals::features::vr;
+		auto& settings = vr.settings;
+		if (!vr.openVRInfo.isCompatible)
 			return;
-		auto vr = VR::GetSingleton();
-		VR::Settings& settings = vr->settings;
 		if (ImGui::CollapsingHeader("Menu Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::SliderFloat("Menu Scale", &settings.VRMenuScale, VR::Config::kMinMenuScale, VR::Config::kMaxMenuScale, "%.2f");
 			const char* positioningMethods[] = { "HMD Relative", "Fixed World Position" };
@@ -612,7 +613,7 @@ namespace
 					ImGui::Text("If you move farther than this distance from the menu, it will automatically reset to your HMD position. %s", Util::Units::FormatDistance(settings.VRMenuAutoResetDistance).c_str());
 				}
 				if (ImGui::Button("Reset Menu to HMD Position")) {
-					vr->SetFixedOverlayToCurrentHMD();
+					vr.SetFixedOverlayToCurrentHMD();
 				}
 			}
 		}
@@ -620,10 +621,10 @@ namespace
 
 	void DrawMouseSettings()
 	{
-		if (!VR::GetSingleton()->openVRInfo.isCompatible)
+		auto& vr = globals::features::vr;
+		if (!vr.openVRInfo.isCompatible)
 			return;
-		auto vr = VR::GetSingleton();
-		VR::Settings& settings = vr->settings;
+		VR::Settings& settings = vr.settings;
 		if (ImGui::CollapsingHeader("Mouse Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::SliderFloat("Mouse Deadzone", &settings.mouseDeadzone, 0.0f, 1.0f, "%.2f");
 			ImGui::SliderFloat("Mouse Speed", &settings.mouseSpeed, 0.1f, 50.0f, "%.2f");
@@ -632,10 +633,10 @@ namespace
 
 	void DrawDragSettings()
 	{
-		if (!VR::GetSingleton()->openVRInfo.isCompatible)
+		auto& vr = globals::features::vr;
+		if (!vr.openVRInfo.isCompatible)
 			return;
-		auto vr = VR::GetSingleton();
-		VR::Settings& settings = vr->settings;
+		VR::Settings& settings = vr.settings;
 		if (ImGui::CollapsingHeader("Drag Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
 			if (ImGui::CollapsingHeader("Drag Instructions", ImGuiTreeNodeFlags_DefaultOpen)) {
 				ImGui::TextWrapped("Overlay Positioning (Grip + Drag):");
@@ -652,9 +653,11 @@ namespace
 			}
 		}
 	}
-	void DrawKeyBindings(VR* vr)
+	void DrawKeyBindings()
 	{
-		VR::Settings& settings = vr->settings;
+		auto& vr = globals::features::vr;
+		auto& settings = vr.settings;
+
 		// Combo Settings
 		if (ImGui::CollapsingHeader("Combo Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::SliderFloat("Combo Timeout", &settings.comboTimeout, 1.0f, 10.0f, "%.1f seconds");
@@ -675,18 +678,18 @@ namespace
 		ImGui::SameLine();
 		if (ImGui::Combo("##ComboSelector", &selectedComboIndex, comboTypes, IM_ARRAYSIZE(comboTypes))) {
 			// Reset recording state when changing selection
-			vr->isCapturingCombo = false;
-			vr->currentComboType = VR::ComboType::None;
-			vr->recordedCombo.clear();
+			vr.isCapturingCombo = false;
+			vr.currentComboType = VR::ComboType::None;
+			vr.recordedCombo.clear();
 		}
 		if (ImGui::Button("Record Selected Combo")) {
 			// Start recording the selected combo
-			vr->isCapturingCombo = true;
-			vr->currentComboType = static_cast<VR::ComboType>(selectedComboIndex + 1);
-			vr->currentComboName = comboTypes[selectedComboIndex];
-			vr->recordedCombo.clear();
-			vr->comboStartTime = Util::GetNowSecs();
-			vr->recordingButtonControllers.clear();
+			vr.isCapturingCombo = true;
+			vr.currentComboType = static_cast<VR::ComboType>(selectedComboIndex + 1);
+			vr.currentComboName = comboTypes[selectedComboIndex];
+			vr.recordedCombo.clear();
+			vr.comboStartTime = Util::GetNowSecs();
+			vr.recordingButtonControllers.clear();
 		}
 		ImGui::SameLine();
 		if (ImGui::SmallButton("Clear")) {
@@ -781,14 +784,15 @@ namespace
 			ImGui::Text("Reset all VR key bindings to their default values.");
 		}
 	}
-	void DrawDebugSection(VR* vr)
+	void DrawDebugSection()
 	{
-		VR::Settings& settings = vr->settings;
+		auto& vr = globals::features::vr;
+		auto& settings = vr.settings;
 		auto menu = globals::menu;
 
 		// OpenVR Version Information
 		if (ImGui::CollapsingHeader("OpenVR Information", ImGuiTreeNodeFlags_DefaultOpen)) {
-			auto& info = vr->openVRInfo;
+			auto& info = vr.openVRInfo;
 			if (info.isAvailable) {
 				ImGui::Text("OpenVR System: %s", info.isCompatible ? "Active & Compatible" : "Active but INCOMPATIBLE");
 				if (!info.isCompatible) {
@@ -816,7 +820,7 @@ namespace
 			ImU32 highlightColorU32 = ImGui::ColorConvertFloat4ToU32(highlightColor);
 
 			// Determine display order based on handedness
-			bool isLeftHanded = vr->lastKnownLeftHandedMode;  // Use cached handedness
+			bool isLeftHanded = vr.lastKnownLeftHandedMode;  // Use cached handedness
 
 			if (ImGui::BeginTable("vr_input_state_table", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
 				ImGui::TableSetupColumn("Button");
@@ -884,8 +888,8 @@ namespace
 
 				// Helper to determine the correct order for display based on handedness
 				auto printRowWithHandedness = [&](const char* label, auto key) {
-					auto& primary = vr->primaryControllerState[key];
-					auto& secondary = vr->secondaryControllerState[key];
+					auto& primary = vr.primaryControllerState[key];
+					auto& secondary = vr.secondaryControllerState[key];
 					if (isLeftHanded) {
 						// Left-handed: Primary (left hand) on left, Secondary (right hand) on right
 						printRow(label, primary, secondary);
@@ -995,18 +999,18 @@ namespace
 				ImGui::BeginGroup();
 				if (isLeftHanded) {
 					// Left-handed: Show primary controller in left column
-					ImVec2 padSizeL = DrawThumbstickPad(vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, highlightCol);
+					ImVec2 padSizeL = DrawThumbstickPad(vr.primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr.primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, highlightCol);
 					ImGui::Dummy(padSizeL);
 					ImGui::SetNextItemWidth(160.0f);
 					ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
-					ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, RE::GetQuadrantName(vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y));
+					ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", vr.primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr.primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, RE::GetQuadrantName(vr.primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr.primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y));
 				} else {
 					// Right-handed: Show secondary controller in left column
-					ImVec2 padSizeL = DrawThumbstickPad(vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].x, vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].y, highlightCol);
+					ImVec2 padSizeL = DrawThumbstickPad(vr.secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].x, vr.secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].y, highlightCol);
 					ImGui::Dummy(padSizeL);
 					ImGui::SetNextItemWidth(160.0f);
 					ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
-					ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].x, vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].y, RE::GetQuadrantName(vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].x, vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].y));
+					ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", vr.secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].x, vr.secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].y, RE::GetQuadrantName(vr.secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].x, vr.secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].y));
 				}
 				ImGui::EndGroup();
 
@@ -1015,18 +1019,18 @@ namespace
 				ImGui::BeginGroup();
 				if (isLeftHanded) {
 					// Left-handed: Show secondary controller in right column
-					ImVec2 padSizeR = DrawThumbstickPad(vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].x, vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].y, highlightCol);
+					ImVec2 padSizeR = DrawThumbstickPad(vr.secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].x, vr.secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].y, highlightCol);
 					ImGui::Dummy(padSizeR);
 					ImGui::SetNextItemWidth(160.0f);
 					ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
-					ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].x, vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].y, RE::GetQuadrantName(vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].x, vr->secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].y));
+					ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", vr.secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].x, vr.secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].y, RE::GetQuadrantName(vr.secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].x, vr.secondaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Secondary)].y));
 				} else {
 					// Right-handed: Show primary controller in right column
-					ImVec2 padSizeR = DrawThumbstickPad(vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, highlightCol);
+					ImVec2 padSizeR = DrawThumbstickPad(vr.primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr.primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, highlightCol);
 					ImGui::Dummy(padSizeR);
 					ImGui::SetNextItemWidth(160.0f);
 					ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
-					ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, RE::GetQuadrantName(vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr->primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y));
+					ImGui::Text("X: %+1.3f  Y: %+1.3f  [%s]", vr.primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr.primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y, RE::GetQuadrantName(vr.primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].x, vr.primaryControllerState.thumbsticks[static_cast<size_t>(RE::ControllerRole::Primary)].y));
 				}
 				ImGui::EndGroup();
 				ImGui::EndTable();
@@ -1041,7 +1045,7 @@ namespace
 				ImGui::TableSetupColumn("Known Mapping", ImGuiTableColumnFlags_WidthFixed, 120.0f);
 				ImGui::TableSetupColumn("Event Type", ImGuiTableColumnFlags_WidthFixed, 120.0f);
 				ImGui::TableHeadersRow();
-				for (const auto& e : vr->vrControllerEventLog) {
+				for (const auto& e : vr.vrControllerEventLog) {
 					ImGui::TableNextRow();
 					ImGui::TableSetColumnIndex(0);
 					ImGui::Text("%d", e.device);
@@ -1711,7 +1715,6 @@ void VR::ProcessVRButtonEvent(const Menu::KeyEvent& event)
 
 	ImGuiIO& io = ImGui::GetIO();
 	(void)event;
-	auto menu = globals::menu;
 	bool isPrimary = RE::BSOpenVRControllerDevice::IsPrimaryController(event.device);
 	bool isSecondary = RE::BSOpenVRControllerDevice::IsSecondaryController(event.device);
 	bool& testMode = settings.VRMenuControllerDiagnosticsTestMode;
@@ -1726,8 +1729,8 @@ void VR::ProcessVRButtonEvent(const Menu::KeyEvent& event)
 			{ RE::BSOpenVRControllerDevice::Keys::kGrip, ImGuiMouseButton_Right, false, ImGuiKey_None, false },
 			{ RE::BSOpenVRControllerDevice::Keys::kTouchpadClick, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
 			{ RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger, ImGuiMouseButton_Middle, false, ImGuiKey_None, false },
-			{ RE::BSOpenVRControllerDevice::Keys::kBY, -1, true, menu->VirtualKeyToImGuiKey(VK_TAB), isSecondary },  // Shift+Tab for secondary
-			{ RE::BSOpenVRControllerDevice::Keys::kXA, -1, true, menu->VirtualKeyToImGuiKey(VK_RETURN), false },
+			{ RE::BSOpenVRControllerDevice::Keys::kBY, -1, true, Util::Input::VirtualKeyToImGuiKey(VK_TAB), isSecondary },  // Shift+Tab for secondary
+			{ RE::BSOpenVRControllerDevice::Keys::kXA, -1, true, Util::Input::VirtualKeyToImGuiKey(VK_RETURN), false },
 		};
 
 		// Use separate state arrays for each controller

@@ -36,18 +36,18 @@ std::pair<unsigned char*, size_t> _GetFeatureBufferData(Ts... feat_datas)
 std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 {
 	return _GetFeatureBufferData(
-		globals::features::grassLighting->settings,
-		globals::features::extendedMaterials->settings,
-		globals::features::dynamicCubemaps->settings,
-		globals::features::terrainShadows->GetCommonBufferData(),
-		globals::features::lightLimitFix->GetCommonBufferData(),
-		globals::features::wetnessEffects->GetCommonBufferData(),
-		globals::features::skylighting->GetCommonBufferData(a_inWorld),
-		globals::features::cloudShadows->settings,
-		globals::features::lodBlending->settings,
-		globals::features::hairSpecular->settings,
-		globals::features::terrainVariation->settings,
-		globals::features::ibl->settings,
-		globals::features::extendedTranslucency->settings,
-		globals::features::linearLighting->GetCommonBufferData());
+		globals::features::grassLighting.settings,
+		globals::features::extendedMaterials.settings,
+		globals::features::dynamicCubemaps.settings,
+		globals::features::terrainShadows.GetCommonBufferData(),
+		globals::features::lightLimitFix.GetCommonBufferData(),
+		globals::features::wetnessEffects.GetCommonBufferData(),
+		globals::features::skylighting.GetCommonBufferData(a_inWorld),
+		globals::features::cloudShadows.settings,
+		globals::features::lodBlending.settings,
+		globals::features::hairSpecular.settings,
+		globals::features::terrainVariation.settings,
+		globals::features::ibl.settings,
+		globals::features::extendedTranslucency.settings,
+		globals::features::linearLighting.GetCommonBufferData());
 }

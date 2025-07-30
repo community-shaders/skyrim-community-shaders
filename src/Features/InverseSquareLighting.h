@@ -8,12 +8,6 @@ private:
 	static constexpr std::string_view MOD_ID = "153542";
 
 public:
-	static InverseSquareLighting* GetSingleton()
-	{
-		static InverseSquareLighting singleton;
-		return &singleton;
-	}
-
 	virtual inline std::string GetName() override { return "Inverse Square Lighting"; }
 
 	virtual inline std::string GetShortName() override { return "InverseSquareLighting"; }

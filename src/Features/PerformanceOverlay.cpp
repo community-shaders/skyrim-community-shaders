@@ -158,7 +158,7 @@ void PerformanceOverlay::DrawSettings()
 		ImGui::Text("Opens performance overlay in a separate window that stays open\neven when the main menu is closed. ");
 		ImGui::Text("Toggle with ");
 		ImGui::SameLine();
-		ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Menu::KeyIdToString(menuSettings.OverlayToggleKey));
+		ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Util::Input::KeyIdToString(menuSettings.OverlayToggleKey));
 	}
 
 	if (this->settings.ShowInOverlay) {
@@ -221,7 +221,7 @@ void PerformanceOverlay::DrawSettings()
 void PerformanceOverlay::DataLoaded()
 {
 	// Initialize performance overlay state
-	this->perfOverlayState.SetInitialized(false);
+	this->perfOverlayState.initialized = false;
 	this->perfOverlayState.ResizeFrameTimeHistory(this->settings.FrameHistorySize, 0.0f);
 	this->perfOverlayState.ResizePostFGFrameTimeHistory(this->settings.FrameHistorySize, 0.0f);
 }
@@ -245,6 +245,9 @@ void PerformanceOverlay::DrawOverlay()
 	if (!this->settings.ShowInOverlay) {
 		return;
 	}
+
+	// Check if Frame Generation is active
+	this->perfOverlayState.isFrameGenerationActive = globals::upscaling && globals::upscaling->IsFrameGenerationActive();
 
 	// Build draw call rows ONCE per frame and reuse
 	auto [mainRows, summaryRows] = this->BuildDrawCallRows();
@@ -274,8 +277,7 @@ void PerformanceOverlay::DrawOverlay()
 			this->settings.BackgroundOpacity));
 
 	// Set text size based on user preference
-	float scale = this->perfOverlayState.CalculateTextScale();
-	this->perfOverlayState.SetTextScale(scale);
+	this->perfOverlayState.textScale = this->perfOverlayState.CalculateTextScale();
 
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, this->settings.ShowBorder ? 1.0f : 0.0f);
 
@@ -289,29 +291,29 @@ void PerformanceOverlay::DrawOverlay()
 	}
 
 	// Set window size based on whether graphs are shown, was rapidly changing size based on text
-	this->perfOverlayState.SetHasGraphs(this->settings.ShowPreFGFrameTimeGraph ||
-										(this->settings.ShowPostFGFrameTimeGraph && this->perfOverlayState.IsFrameGenerationActive()));
-	if (!this->perfOverlayState.HasGraphs()) {
+	bool hasGraphs = this->settings.ShowPreFGFrameTimeGraph ||
+	                 (this->settings.ShowPostFGFrameTimeGraph && this->perfOverlayState.isFrameGenerationActive);
+	if (!hasGraphs) {
 		// Calculate minimum width needed based on actual content
 		float minWidth = 0.0f;
 
 		// Calculate width needed for each enabled section
 		if (this->settings.ShowFPS) {
 			// Measure FPS text width
-			std::string fpsText = std::format("{:.1f} ({:.2f} ms)", this->perfOverlayState.GetSmoothFps(), this->perfOverlayState.GetSmoothFrameTimeMs());
-			if (this->perfOverlayState.IsFrameGenerationActive()) {
-				fpsText = std::format("Raw FPS: {:.1f} ({:.2f} ms)", this->perfOverlayState.GetSmoothFps(), this->perfOverlayState.GetSmoothFrameTimeMs());
+			std::string fpsText = std::format("{:.1f} ({:.2f} ms)", this->perfOverlayState.smoothFps, this->perfOverlayState.smoothFrameTimeMs);
+			if (this->perfOverlayState.isFrameGenerationActive) {
+				fpsText = std::format("Raw FPS: {:.1f} ({:.2f} ms)", this->perfOverlayState.smoothFps, this->perfOverlayState.smoothFrameTimeMs);
 			}
 			float fpsWidth = ImGui::CalcTextSize(fpsText.c_str()).x;
 			minWidth = std::max(minWidth, fpsWidth + PerformanceOverlay::PerfOverlayState::kLabelPadding);  // Add padding for labels
 		}
 		if (this->settings.ShowDrawCalls) {
 			// Draw calls table needs significant width for all columns
-			minWidth = std::max(minWidth, PerformanceOverlay::PerfOverlayState::kDrawCallsTableWidth * this->perfOverlayState.GetTextScale());
+			minWidth = std::max(minWidth, PerformanceOverlay::PerfOverlayState::kDrawCallsTableWidth * this->perfOverlayState.textScale);
 		}
 		if (this->settings.ShowVRAM && menu->GetDXGIAdapter3()) {
 			// VRAM section needs width for the progress bar and text
-			minWidth = std::max(minWidth, PerformanceOverlay::PerfOverlayState::kVRAMSectionWidth * this->perfOverlayState.GetTextScale());
+			minWidth = std::max(minWidth, PerformanceOverlay::PerfOverlayState::kVRAMSectionWidth * this->perfOverlayState.textScale);
 		}
 
 		// Add some padding for window borders and spacing
@@ -336,50 +338,47 @@ void PerformanceOverlay::DrawOverlay()
 	}
 
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 1.0f));  // Tighter spacing
-	ImGui::SetWindowFontScale(this->perfOverlayState.GetTextScale());
+	ImGui::SetWindowFontScale(this->perfOverlayState.textScale);
 
 	// Initialize Performance Counter if necessary
-	if (!this->perfOverlayState.IsInitialized()) {
-		REX::W32::QueryPerformanceFrequency(&this->perfOverlayState.GetFrequencyRef());
-		REX::W32::QueryPerformanceCounter(&this->perfOverlayState.GetLastFrameCounterRef());
-		this->perfOverlayState.SetInitialized(true);
+	if (!this->perfOverlayState.initialized) {
+		REX::W32::QueryPerformanceFrequency(&this->perfOverlayState.frequency);
+		REX::W32::QueryPerformanceCounter(&this->perfOverlayState.lastFrameCounter);
+		this->perfOverlayState.initialized = true;
 	} else {
-		REX::W32::QueryPerformanceCounter(&this->perfOverlayState.GetCurrentFrameCounterRef());
-		int64_t elapsedCounter = this->perfOverlayState.GetCurrentFrameCounter() - this->perfOverlayState.GetLastFrameCounter();
-		this->perfOverlayState.SetLastFrameCounter(this->perfOverlayState.GetCurrentFrameCounter());
+		REX::W32::QueryPerformanceCounter(&this->perfOverlayState.currentFrameCounter);
+		int64_t elapsedCounter = this->perfOverlayState.currentFrameCounter - this->perfOverlayState.lastFrameCounter;
+		this->perfOverlayState.lastFrameCounter = this->perfOverlayState.currentFrameCounter;
 
 		// Calculate frametime and fps
-		this->perfOverlayState.SetFrameTimeMs(Util::CalcFrameTime(elapsedCounter, this->perfOverlayState.GetFrequency()));
-		this->perfOverlayState.SetFps(Util::CalcFPS(this->perfOverlayState.GetFrameTimeMs()));
+		this->perfOverlayState.frameTimeMs = Util::CalcFrameTime(elapsedCounter, this->perfOverlayState.frequency);
+		this->perfOverlayState.fps = Util::CalcFPS(this->perfOverlayState.frameTimeMs);
 
 		// Calculate smooth values for display using the user-defined update interval
 		// Initialize overlay timing frequency if needed
-		if (this->perfOverlayState.GetOverlayTimingFrequencyRef().QuadPart == 0) {
-			QueryPerformanceFrequency(&this->perfOverlayState.GetOverlayTimingFrequencyRef());
-			QueryPerformanceCounter(&this->perfOverlayState.GetLastUpdateTimeRef());
+		if (this->perfOverlayState.overlayTimingFrequency.QuadPart == 0) {
+			QueryPerformanceFrequency(&this->perfOverlayState.overlayTimingFrequency);
+			QueryPerformanceCounter(&this->perfOverlayState.lastUpdateTime);
 		}
 
 		LARGE_INTEGER now;
 		QueryPerformanceCounter(&now);
-		float deltaTime = (now.QuadPart - this->perfOverlayState.GetLastUpdateTime().QuadPart) /
-		                  static_cast<float>(this->perfOverlayState.GetOverlayTimingFrequencyRef().QuadPart);
-		this->perfOverlayState.SetLastUpdateTime(now);
+		float deltaTime = (now.QuadPart - this->perfOverlayState.lastUpdateTime.QuadPart) /
+		                  static_cast<float>(this->perfOverlayState.overlayTimingFrequency.QuadPart);
+		this->perfOverlayState.lastUpdateTime = now;
 
 		// Update graph values
 		this->perfOverlayState.UpdateGraphValues();
 
 		// Update smooth values with user-specified interval
-		this->perfOverlayState.SetUpdateTimer(this->perfOverlayState.GetUpdateTimer() + deltaTime);
-		if (this->perfOverlayState.GetUpdateTimer() >= this->settings.UpdateInterval) {
-			this->perfOverlayState.SetSmoothFps(this->perfOverlayState.GetFps());
-			this->perfOverlayState.SetSmoothFrameTimeMs(this->perfOverlayState.GetFrameTimeMs());
-			this->perfOverlayState.SetUpdateTimer(0.0f);
+		this->perfOverlayState.updateTimer += deltaTime;
+		if (this->perfOverlayState.updateTimer >= this->settings.UpdateInterval) {
+			this->perfOverlayState.smoothFps = this->perfOverlayState.fps;
+			this->perfOverlayState.smoothFrameTimeMs = this->perfOverlayState.frameTimeMs;  // TODO: is smoothFrameTimeMs smoothed at all?
+			this->perfOverlayState.updateTimer = 0.0f;
 		}
 
-		// Check if Frame Generation is active
-		this->perfOverlayState.SetFrameGenerationActive(globals::upscaling && globals::upscaling->IsFrameGenerationActive());
-
-		if (this->perfOverlayState.IsFrameGenerationActive()) {
+		if (this->perfOverlayState.isFrameGenerationActive) {
 			this->perfOverlayState.UpdateFGFrameTime();
 		}
 
@@ -441,15 +440,15 @@ void PerformanceOverlay::DrawFPS()
 		ImGui::TableSetupColumn("##value");
 
 		ImGui::TableNextColumn();
-		ImGui::Text(this->perfOverlayState.IsFrameGenerationActive() ? "Raw FPS:" : "FPS:");
+		ImGui::Text(this->perfOverlayState.isFrameGenerationActive ? "Raw FPS:" : "FPS:");
 		ImGui::TableNextColumn();
-		ImGui::Text("%.1f (%.2f ms)", this->perfOverlayState.GetSmoothFps(), this->perfOverlayState.GetSmoothFrameTimeMs());
+		ImGui::Text("%.1f (%.2f ms)", this->perfOverlayState.smoothFps, this->perfOverlayState.smoothFrameTimeMs);
 
-		if (this->perfOverlayState.IsFrameGenerationActive()) {
+		if (this->perfOverlayState.isFrameGenerationActive) {
 			ImGui::TableNextColumn();
 			ImGui::Text("Post-FG FPS:");
 			ImGui::TableNextColumn();
-			ImGui::Text("%.1f (%.2f ms)", this->perfOverlayState.GetPostFGSmoothFps(), this->perfOverlayState.GetPostFGSmoothFrameTimeMs());
+			ImGui::Text("%.1f (%.2f ms)", this->perfOverlayState.postFGSmoothFps, this->perfOverlayState.postFGSmoothFrameTimeMs);
 		}
 
 		ImGui::EndTable();
@@ -461,8 +460,8 @@ void PerformanceOverlay::DrawFPS()
 		char overlay_text[128];
 		snprintf(overlay_text, IM_ARRAYSIZE(overlay_text),
 			"%s%.2f ms (%.1f FPS)",
-			this->perfOverlayState.IsFrameGenerationActive() ? "Pre-FG: " : "",
-			this->perfOverlayState.GetSmoothFrameTimeMs(), this->perfOverlayState.GetSmoothFps());
+			this->perfOverlayState.isFrameGenerationActive ? "Pre-FG: " : "",
+			this->perfOverlayState.smoothFrameTimeMs, this->perfOverlayState.smoothFps);
 
 		// Set graph colors
 		ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));  // Green line
@@ -470,12 +469,12 @@ void PerformanceOverlay::DrawFPS()
 		// Draw the graph
 		float graphWidth = ImGui::GetWindowWidth() * 0.9f;
 		ImGui::PlotLines("##frametime",
-			this->perfOverlayState.GetFrameTimeHistory().data(),
+			this->perfOverlayState.frameTimeHistory.data(),
 			this->settings.FrameHistorySize,
-			this->perfOverlayState.GetFrameTimeHistoryIndex(),
+			this->perfOverlayState.frameTimeHistoryIndex,
 			overlay_text,
-			this->perfOverlayState.GetSmoothedMinFrameTime(), this->perfOverlayState.GetSmoothedMaxFrameTime(),
-			ImVec2(graphWidth, 50.0f * this->perfOverlayState.GetTextScale()));
+			this->perfOverlayState.smoothedMinFrameTime, this->perfOverlayState.smoothedMaxFrameTime,
+			ImVec2(graphWidth, 50.0f * this->perfOverlayState.textScale));
 
 		ImGui::PopStyleColor();
 
@@ -495,7 +494,7 @@ void PerformanceOverlay::DrawFPS()
 	}
 
 	// Show Post-FG frametime graph if enabled
-	if (this->settings.ShowPostFGFrameTimeGraph && this->perfOverlayState.IsFrameGenerationActive()) {
+	if (this->settings.ShowPostFGFrameTimeGraph && this->perfOverlayState.isFrameGenerationActive) {
 		// Check if FSR frame generation is active (FSR doesn't provide timing data)
 		bool isFSRFrameGen = globals::fidelityFX && globals::fidelityFX->isFrameGenActive;
 
@@ -1293,13 +1292,13 @@ void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRo
 void PerformanceOverlay::DrawDrawCallsTable(const std::vector<DrawCallRow>& mainRows, const std::vector<DrawCallRow>& summaryRows)
 {
 	static bool clearTestDataRequested = false;
-	auto* overlay = PerformanceOverlay::GetSingleton();
+	auto& overlay = globals::features::performanceOverlay;
 	auto* menu = Menu::GetSingleton();
 	const auto& theme = menu->GetTheme();
 
 	// Capture test data and handle clear button
-	overlay->CaptureTestData();
-	bool anyTestData = !overlay->testData.empty();
+	overlay.CaptureTestData();
+	bool anyTestData = !overlay.testData.empty();
 	if (anyTestData) {
 		if (ImGui::Button("Clear Test Data")) {
 			clearTestDataRequested = true;
@@ -1307,8 +1306,8 @@ void PerformanceOverlay::DrawDrawCallsTable(const std::vector<DrawCallRow>& main
 	}
 
 	// Build legends and column configurations
-	auto legends = overlay->BuildDrawCallLegends(theme, anyTestData, overlay);
-	auto columns = overlay->BuildDrawCallTableColumns(theme, legends, anyTestData, overlay);
+	auto legends = overlay.BuildDrawCallLegends(theme, anyTestData);
+	auto columns = overlay.BuildDrawCallTableColumns(theme, legends, anyTestData);
 
 	// Build sorters
 	std::vector<std::function<bool(const DrawCallRow&, const DrawCallRow&, bool)>> sorters;
@@ -1319,7 +1318,7 @@ void PerformanceOverlay::DrawDrawCallsTable(const std::vector<DrawCallRow>& main
 	std::vector<DrawCallRow> summaryRowsCopy = summaryRows;
 
 	// Create table row handler
-	auto rowHandler = overlay->CreateTableRowHandler(columns, overlay);
+	auto rowHandler = overlay.CreateTableRowHandler(columns);
 
 	// Render the table
 	Util::ShowSortedStringTableCustom<DrawCallRow>(
@@ -1334,12 +1333,12 @@ void PerformanceOverlay::DrawDrawCallsTable(const std::vector<DrawCallRow>& main
 
 	// Handle clear test data request
 	if (clearTestDataRequested) {
-		overlay->ClearTestData();
+		overlay.ClearTestData();
 		clearTestDataRequested = false;
 	}
 }
 
-DrawCallLegends PerformanceOverlay::BuildDrawCallLegends(const Menu::ThemeSettings& theme, bool anyTestData, PerformanceOverlay* overlay) const
+DrawCallLegends PerformanceOverlay::BuildDrawCallLegends(const Menu::ThemeSettings& theme, bool anyTestData) const
 {
 	(void)anyTestData;
 	DrawCallLegends legends;
@@ -1357,7 +1356,7 @@ DrawCallLegends PerformanceOverlay::BuildDrawCallLegends(const Menu::ThemeSettin
 
 	legends.frameTime = {
 		"Frame Time (%)",
-		{ { overlay->GetTestDataTooltip(), theme.Palette.Text },
+		{ { GetTestDataTooltip(), theme.Palette.Text },
 			{ "", theme.Palette.Text },
 			{ "Performance Color Legend (ms):", theme.Palette.Text },
 			{ "  <= 2 ms", theme.StatusPalette.SuccessColor },
@@ -1377,7 +1376,7 @@ DrawCallLegends PerformanceOverlay::BuildDrawCallLegends(const Menu::ThemeSettin
 
 	legends.testFrameTime = {
 		"Test Frame Time (%)",
-		{ { overlay->GetTestDataTooltip(), theme.Palette.Text },
+		{ { GetTestDataTooltip(), theme.Palette.Text },
 			{ "", theme.Palette.Text },
 			{ "Color Legend (compared to live data):", theme.Palette.Text },
 			{ "  Better (lower than live)", theme.StatusPalette.SuccessColor },
@@ -1387,7 +1386,7 @@ DrawCallLegends PerformanceOverlay::BuildDrawCallLegends(const Menu::ThemeSettin
 
 	legends.testCostPerCall = {
 		"Test Cost/Call",
-		{ { overlay->GetTestDataTooltip(), theme.Palette.Text },
+		{ { GetTestDataTooltip(), theme.Palette.Text },
 			{ "", theme.Palette.Text },
 			{ "Color Legend (compared to live data):", theme.Palette.Text },
 			{ "  Better (lower than live)", theme.StatusPalette.SuccessColor },
@@ -1398,12 +1397,12 @@ DrawCallLegends PerformanceOverlay::BuildDrawCallLegends(const Menu::ThemeSettin
 	return legends;
 }
 
-std::vector<ColumnConfig> PerformanceOverlay::BuildDrawCallTableColumns(const Menu::ThemeSettings& theme, const DrawCallLegends& legends, bool anyTestData, PerformanceOverlay* overlay)
+std::vector<ColumnConfig> PerformanceOverlay::BuildDrawCallTableColumns(const Menu::ThemeSettings& theme, const DrawCallLegends& legends, bool anyTestData)
 {
 	// Build column configurations
 	std::vector<ColumnConfig> columns = {
 		{ legends.shaderType.header,
-			[theme](const DrawCallRow& row, int) {
+			[theme, this](const DrawCallRow& row, int) {
 				if (!row.enabled)
 					ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.Disable);
 				bool wasEnabled = row.enabled;
@@ -1412,7 +1411,7 @@ std::vector<ColumnConfig> PerformanceOverlay::BuildDrawCallTableColumns(const Me
 					if (maybeType.has_value()) {
 						auto classIndex = magic_enum::enum_integer(*maybeType) - 1;
 						if (classIndex >= 0 && classIndex < magic_enum::enum_integer(RE::BSShader::Type::Total) - 1) {
-							PerformanceOverlay::GetSingleton()->HandleShaderToggle(row, wasEnabled);
+							HandleShaderToggle(row, wasEnabled);
 						}
 					}
 				}
@@ -1486,7 +1485,7 @@ std::vector<ColumnConfig> PerformanceOverlay::BuildDrawCallTableColumns(const Me
 						 return theme.StatusPalette.SuccessColor;
 					 if (value > row.frameTime)
 						 return theme.StatusPalette.Error;
-					 return theme.Palette.Text; }, [overlay](float value, const DrawCallRow& row) { return Util::FormatMilliseconds(value) + " (" + Util::FormatPercent(overlay->testData[row.shaderType].percent) + ")"; }, legends.testFrameTime.tooltip), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
+					 return theme.Palette.Text; }, [this](float value, const DrawCallRow& row) { return Util::FormatMilliseconds(value) + " (" + Util::FormatPercent(testData[row.shaderType].percent) + ")"; }, legends.testFrameTime.tooltip), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
 				 float aVal = a.testFrameTime.value_or(FLT_MAX);
 				 float bVal = b.testFrameTime.value_or(FLT_MAX);
 				 return asc ? (aVal < bVal) : (aVal > bVal); }, [legends]() {
@@ -1520,7 +1519,7 @@ std::vector<ColumnConfig> PerformanceOverlay::BuildDrawCallTableColumns(const Me
 std::pair<std::vector<DrawCallRow>, std::vector<DrawCallRow>> PerformanceOverlay::BuildDrawCallRows() const
 {
 	std::vector<DrawCallRow> mainRows;
-	float smoothedFrameTime = static_cast<float>(this->perfOverlayState.GetSmoothFrameTimeMs());
+	float smoothedFrameTime = static_cast<float>(this->perfOverlayState.smoothFrameTimeMs);
 	float measuredSum = 0.0f;
 
 	globals::state->ForEachShaderTypeWithMetrics([&mainRows, &measuredSum, smoothedFrameTime, this](auto type, int typeIndex, float drawCalls, float frameTime, float percent, float costPerCall) {
@@ -1588,15 +1587,15 @@ std::pair<std::vector<DrawCallRow>, std::vector<DrawCallRow>> PerformanceOverlay
   * @param overlay Pointer to the performance overlay instance
   * @return Function that handles row rendering and interaction
   */
-std::function<void(int, int, const DrawCallRow&)> PerformanceOverlay::CreateTableRowHandler(const std::vector<ColumnConfig>& columns, PerformanceOverlay* overlay)
+std::function<void(int, int, const DrawCallRow&)> PerformanceOverlay::CreateTableRowHandler(const std::vector<ColumnConfig>& columns)
 {
-	return [&columns, overlay](int rowIdx, int colIdx, const DrawCallRow& row) {
+	return [&columns, this](int rowIdx, int colIdx, const DrawCallRow& row) {
 		(void)rowIdx;
 		// Special handling for summary rows
 		if ((row.label == "Total:" || row.label == "Other:") && colIdx == 0) {
 			if (row.label == "Total:") {
 				if (ImGui::Selectable(row.label.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
-					overlay->HandleTotalRowToggle();
+					HandleTotalRowToggle();
 				}
 				if (ImGui::IsItemHovered()) {
 					if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -1654,7 +1653,7 @@ void PerformanceOverlay::HandleShaderToggle(const DrawCallRow& row, bool wasEnab
 	float prevCostPerCall = row.costPerCall;
 
 	// Capture live data for Total and Other before toggling
-	float smoothedFrameTime = static_cast<float>(this->perfOverlayState.GetSmoothFrameTimeMs());
+	float smoothedFrameTime = static_cast<float>(this->perfOverlayState.smoothFrameTimeMs);
 	float measuredSum = 0.0f;
 	globals::state->ForEachShaderTypeWithMetrics([&measuredSum]([[maybe_unused]] auto type, [[maybe_unused]] int typeIndex, [[maybe_unused]] float drawCalls, float frameTime, [[maybe_unused]] float percent, [[maybe_unused]] float costPerCall) {
 		measuredSum += frameTime;
@@ -1701,7 +1700,7 @@ void PerformanceOverlay::HandleTotalRowToggle()
 		this->UpdateAllShaderTestData();
 	} else {
 		// Manual toggle: update test data and timestamp
-		float smoothedFrameTime = static_cast<float>(this->perfOverlayState.GetSmoothFrameTimeMs());
+		float smoothedFrameTime = static_cast<float>(this->perfOverlayState.smoothFrameTimeMs);
 		float measuredSum = 0.0f;
 		globals::state->ForEachShaderTypeWithMetrics([&measuredSum]([[maybe_unused]] auto type, [[maybe_unused]] int typeIndex, [[maybe_unused]] float drawCalls, float frameTime, [[maybe_unused]] float percent, [[maybe_unused]] float costPerCall) {
 			measuredSum += frameTime;
@@ -1737,7 +1736,7 @@ void PerformanceOverlay::UpdateShaderTestData(int shaderType, float frameTime, f
 {
 	UpdateShaderTestDataEntry(shaderType, frameTime, costPerCall);
 
-	float smoothedFrameTime = static_cast<float>(this->perfOverlayState.GetSmoothFrameTimeMs());
+	float smoothedFrameTime = static_cast<float>(this->perfOverlayState.smoothFrameTimeMs);
 	float measuredSum = 0.0f;
 	for (const auto& [type, data] : testData) {
 		if (type >= 0)
@@ -1785,7 +1784,7 @@ void PerformanceOverlay::UpdateAllShaderTestData()
 		return;
 	}
 
-	float smoothedFrameTime = static_cast<float>(this->perfOverlayState.GetSmoothFrameTimeMs());
+	float smoothedFrameTime = static_cast<float>(this->perfOverlayState.smoothFrameTimeMs);
 	float measuredSum = 0.0f;
 
 	globals::state->ForEachShaderTypeWithMetrics([&measuredSum, smoothedFrameTime, this]([[maybe_unused]] auto type, int typeIndex, [[maybe_unused]] float drawCalls, float frameTime, float percent, float costPerCall) {
@@ -1799,13 +1798,13 @@ void PerformanceOverlay::UpdateAllShaderTestData()
 	QueryPerformanceCounter(&testDataLastUpdated);
 }
 
-std::string PerformanceOverlay::GetTestDataTooltip()
+std::string PerformanceOverlay::GetTestDataTooltip() const
 {
 	switch (testDataSource) {
 	case TestDataSource::ABTest_VariantB:
-		return std::string("Test data from Test (Variant B).\nLast updated: ") + Util::TimeAgoStringQPC(testDataLastUpdated, this->perfOverlayState.GetOverlayTimingFrequencyRef()) + " ago.";
+		return std::string("Test data from Test (Variant B).\nLast updated: ") + Util::TimeAgoStringQPC(testDataLastUpdated, perfOverlayState.overlayTimingFrequency) + " ago.";
 	case TestDataSource::ManualShaderToggle:
-		return std::string("Test data from manual shader toggle.\nLast updated: ") + Util::TimeAgoStringQPC(testDataLastUpdated, this->perfOverlayState.GetOverlayTimingFrequencyRef()) + " ago.";
+		return std::string("Test data from manual shader toggle.\nLast updated: ") + Util::TimeAgoStringQPC(testDataLastUpdated, perfOverlayState.overlayTimingFrequency) + " ago.";
 	default:
 		return "No test data available.";
 	}
@@ -1830,7 +1829,7 @@ void PerformanceOverlay::CaptureTestData()
 			anyShaderDisabled = true;
 		}
 	});
-	float smoothedFrameTime = static_cast<float>(this->perfOverlayState.GetSmoothFrameTimeMs());
+	float smoothedFrameTime = static_cast<float>(this->perfOverlayState.smoothFrameTimeMs);
 	float measuredSum = 0.0f;
 	if (abTestActive) {
 		measuredSum = 0.0f;
@@ -1885,7 +1884,7 @@ void PerformanceOverlay::PerfOverlayState::UpdateFGFrameTime()
 	if (!globals::upscaling)
 		return;
 
-	auto* overlay = GetSingleton();
+	auto& overlay = globals::features::performanceOverlay;
 
 	// Get frametime directly from the Frame Generation system
 	float fgDeltaTime = globals::upscaling->GetFrameGenerationFrameTime();
@@ -1893,72 +1892,60 @@ void PerformanceOverlay::PerfOverlayState::UpdateFGFrameTime()
 	// Check if FSR frame generation is active (FSR doesn't provide timing data)
 	bool isFSRFrameGen = globals::fidelityFX && globals::fidelityFX->isFrameGenActive;
 	if (fgDeltaTime > 0.0f && !isFSRFrameGen) {
-		overlay->perfOverlayState.SetPostFGFrameTimeMs(fgDeltaTime * 1000.0f);
-		overlay->perfOverlayState.SetPostFGFps(1000.0f / overlay->perfOverlayState.GetPostFGFrameTimeMs());
+		overlay.perfOverlayState.postFGFrameTimeMs = fgDeltaTime * 1000.0f;
+		overlay.perfOverlayState.postFGFps = 1000.0f / overlay.perfOverlayState.postFGFrameTimeMs;
 
 		// Update post-FG smooth values when timer elapses
-		if (overlay->perfOverlayState.GetUpdateTimer() <= 0.0f) {
-			overlay->perfOverlayState.SetPostFGSmoothFps(overlay->perfOverlayState.GetPostFGFps());
-			overlay->perfOverlayState.SetPostFGSmoothFrameTimeMs(overlay->perfOverlayState.GetPostFGFrameTimeMs());
+		if (overlay.perfOverlayState.updateTimer <= 0.0f) {
+			overlay.perfOverlayState.postFGSmoothFps = overlay.perfOverlayState.postFGFps;
+			overlay.perfOverlayState.postFGSmoothFrameTimeMs = overlay.perfOverlayState.postFGFrameTimeMs;
 		}
 
 		// Update post-FG frametime history
-		overlay->perfOverlayState.GetPostFGFrameTimeHistoryRef()[overlay->perfOverlayState.GetPostFGFrameTimeHistoryIndex()] = overlay->perfOverlayState.GetPostFGFrameTimeMs();
-		overlay->perfOverlayState.SetPostFGFrameTimeHistoryIndex((overlay->perfOverlayState.GetPostFGFrameTimeHistoryIndex() + 1) % overlay->settings.FrameHistorySize);
+		overlay.perfOverlayState.postFGFrameTimeHistory[overlay.perfOverlayState.postFGFrameTimeHistoryIndex] = overlay.perfOverlayState.postFGFrameTimeMs;
+		overlay.perfOverlayState.postFGFrameTimeHistoryIndex = (overlay.perfOverlayState.postFGFrameTimeHistoryIndex + 1) % overlay.settings.FrameHistorySize;
 	} else {
 		// Fallback if FG time is not available
-		overlay->perfOverlayState.SetPostFGFrameTimeMs(overlay->perfOverlayState.GetFrameTimeMs() / PerformanceOverlay::PerfOverlayState::kFrameGenerationMultiplier);
-		overlay->perfOverlayState.SetPostFGFps(overlay->perfOverlayState.GetFps() * PerformanceOverlay::PerfOverlayState::kFrameGenerationMultiplier);
+		overlay.perfOverlayState.postFGFrameTimeMs = overlay.perfOverlayState.frameTimeMs / PerformanceOverlay::PerfOverlayState::kFrameGenerationMultiplier;
+		overlay.perfOverlayState.postFGFps = overlay.perfOverlayState.fps * PerformanceOverlay::PerfOverlayState::kFrameGenerationMultiplier;
 
-		if (overlay->perfOverlayState.GetUpdateTimer() <= 0.0f) {
-			overlay->perfOverlayState.SetPostFGSmoothFps(overlay->perfOverlayState.GetPostFGFps());
-			overlay->perfOverlayState.SetPostFGSmoothFrameTimeMs(overlay->perfOverlayState.GetPostFGFrameTimeMs());
+		if (overlay.perfOverlayState.updateTimer <= 0.0f) {
+			overlay.perfOverlayState.postFGSmoothFps = overlay.perfOverlayState.postFGFps;
+			overlay.perfOverlayState.postFGSmoothFrameTimeMs = overlay.perfOverlayState.postFGFrameTimeMs;
 		}
 
-		overlay->perfOverlayState.GetPostFGFrameTimeHistoryRef()[overlay->perfOverlayState.GetPostFGFrameTimeHistoryIndex()] = overlay->perfOverlayState.GetPostFGFrameTimeMs();
-		overlay->perfOverlayState.SetPostFGFrameTimeHistoryIndex((overlay->perfOverlayState.GetPostFGFrameTimeHistoryIndex() + 1) % overlay->settings.FrameHistorySize);
+		overlay.perfOverlayState.postFGFrameTimeHistory[overlay.perfOverlayState.postFGFrameTimeHistoryIndex] = overlay.perfOverlayState.postFGFrameTimeMs;
+		overlay.perfOverlayState.postFGFrameTimeHistoryIndex = (overlay.perfOverlayState.postFGFrameTimeHistoryIndex + 1) % overlay.settings.FrameHistorySize;
 	}
 }
 
 void PerformanceOverlay::PerfOverlayState::UpdateFrameTimeHistorySizes()
 {
-	auto* overlay = GetSingleton();
+	auto& overlay = globals::features::performanceOverlay;
 
-	overlay->settings.FrameHistorySize = std::clamp(
-		overlay->settings.FrameHistorySize,
-		overlay->settings.kMinFrameHistorySize,
-		overlay->settings.kMaxFrameHistorySize);
+	overlay.settings.FrameHistorySize = std::clamp(
+		overlay.settings.FrameHistorySize,
+		overlay.settings.kMinFrameHistorySize,
+		overlay.settings.kMaxFrameHistorySize);
 
-	if (overlay->perfOverlayState.GetFrameTimeHistory().size() != static_cast<size_t>(overlay->settings.FrameHistorySize)) {
-		overlay->perfOverlayState.ResizeFrameTimeHistory(overlay->settings.FrameHistorySize, 0.0f);
-		if (overlay->perfOverlayState.GetFrameTimeHistoryIndex() >= overlay->settings.FrameHistorySize) {
-			overlay->perfOverlayState.SetFrameTimeHistoryIndex(0);
+	if (overlay.perfOverlayState.frameTimeHistory.size() != static_cast<size_t>(overlay.settings.FrameHistorySize)) {
+		overlay.perfOverlayState.ResizeFrameTimeHistory(overlay.settings.FrameHistorySize, 0.0f);
+		if (overlay.perfOverlayState.frameTimeHistoryIndex >= overlay.settings.FrameHistorySize) {
+			overlay.perfOverlayState.frameTimeHistoryIndex = 0;
 		}
 	}
-	if (overlay->perfOverlayState.GetPostFGFrameTimeHistory().size() != static_cast<size_t>(overlay->settings.FrameHistorySize)) {
-		overlay->perfOverlayState.ResizePostFGFrameTimeHistory(overlay->settings.FrameHistorySize, 0.0f);
-		if (overlay->perfOverlayState.GetPostFGFrameTimeHistoryIndex() >= overlay->settings.FrameHistorySize) {
-			overlay->perfOverlayState.SetPostFGFrameTimeHistoryIndex(0);
+	if (overlay.perfOverlayState.postFGFrameTimeHistory.size() != static_cast<size_t>(overlay.settings.FrameHistorySize)) {
+		overlay.perfOverlayState.ResizePostFGFrameTimeHistory(overlay.settings.FrameHistorySize, 0.0f);
+		if (overlay.perfOverlayState.postFGFrameTimeHistoryIndex >= overlay.settings.FrameHistorySize) {
+			overlay.perfOverlayState.postFGFrameTimeHistoryIndex = 0;
 		}
 	}
-}
-
-void PerformanceOverlay::PerfOverlayState::UpdateMinFrameTime()
-{
-	auto* overlay = GetSingleton();
-	overlay->perfOverlayState.SetMinFrameTime(*std::min_element(overlay->perfOverlayState.GetFrameTimeHistory().begin(), overlay->perfOverlayState.GetFrameTimeHistory().end()));
-}
-
-void PerformanceOverlay::PerfOverlayState::UpdateMaxFrameTime()
-{
-	auto* overlay = GetSingleton();
-	overlay->perfOverlayState.SetMaxFrameTime(*std::max_element(overlay->perfOverlayState.GetFrameTimeHistory().begin(), overlay->perfOverlayState.GetFrameTimeHistory().end()));
 }
 
 float PerformanceOverlay::PerfOverlayState::CalculateTextScale()
 {
-	auto* overlay = GetSingleton();
-	switch (overlay->settings.Size) {
+	auto& overlay = globals::features::performanceOverlay;
+	switch (overlay.settings.Size) {
 	case PerfOverlaySettings::TextSize::Small:
 		return 0.8f;
 	case PerfOverlaySettings::TextSize::Medium:
@@ -1972,30 +1959,30 @@ float PerformanceOverlay::PerfOverlayState::CalculateTextScale()
 void PerformanceOverlay::PerfOverlayState::UpdateGraphValues()
 {
 	// Get settings from the singleton
-	const auto& overlaySettings = PerformanceOverlay::GetSingleton()->settings;
+	const auto& overlaySettings = globals::features::performanceOverlay.settings;
 
 	// Sync frame history buffer size with user settings
 	UpdateFrameTimeHistorySizes();
 
 	// Insert latest frame time into circular buffer
-	float oldFrameTime = GetFrameTimeHistory()[GetFrameTimeHistoryIndex()];
-	GetFrameTimeHistoryRef()[GetFrameTimeHistoryIndex()] = GetFrameTimeMs();
-	SetFrameTimeHistoryIndex((GetFrameTimeHistoryIndex() + 1) % overlaySettings.FrameHistorySize);
+	float oldFrameTime = frameTimeHistory[frameTimeHistoryIndex];
+	frameTimeHistory[frameTimeHistoryIndex] = frameTimeMs;
+	frameTimeHistoryIndex = ((frameTimeHistoryIndex + 1) % overlaySettings.FrameHistorySize);
 
 	// Maintain instantaneous min/max tracking
-	if (GetFrameTimeMs() > GetMaxFrameTime()) {
-		SetMaxFrameTime(GetFrameTimeMs());
-	} else if (GetFrameTimeMs() < GetMinFrameTime()) {
-		SetMinFrameTime(GetFrameTimeMs());
-	} else if (oldFrameTime == GetMinFrameTime()) {
-		UpdateMinFrameTime();
-	} else if (oldFrameTime == GetMaxFrameTime()) {
-		UpdateMaxFrameTime();
+	if (frameTimeMs > maxFrameTime) {
+		maxFrameTime = frameTimeMs;
+	} else if (frameTimeMs < minFrameTime) {
+		minFrameTime = frameTimeMs;
+	} else if (oldFrameTime == minFrameTime) {
+		minFrameTime = *std::min_element(frameTimeHistory.begin(), frameTimeHistory.end());
+	} else if (oldFrameTime == maxFrameTime) {
+		maxFrameTime = *std::max_element(frameTimeHistory.begin(), frameTimeHistory.end());
 	}
 
 	float avgFrameTime, stdDev, graphMin, graphMax;
 	// Calculate mean and standard deviation for normalized graph range
-	if (GetFrameTimeHistory().empty()) {
+	if (frameTimeHistory.empty()) {
 		// Default to 60 FPS
 		avgFrameTime = kDefaultFrameTimeMs;
 		stdDev = 0.0f;
@@ -2003,15 +1990,15 @@ void PerformanceOverlay::PerfOverlayState::UpdateGraphValues()
 		graphMax = PerformanceOverlay::PerfOverlayState::kGraphSpreadMultiplier * kDefaultFrameTimeMs;
 	} else {
 		// Calculate average frame time
-		avgFrameTime = std::accumulate(GetFrameTimeHistory().begin(), GetFrameTimeHistory().end(), 0.0f) / GetFrameTimeHistory().size();
+		avgFrameTime = std::accumulate(frameTimeHistory.begin(), frameTimeHistory.end(), 0.0f) / frameTimeHistory.size();
 
 		// Calculate standard deviation
 		float variance = 0.0f;
-		for (float ft : GetFrameTimeHistory()) {
+		for (float ft : frameTimeHistory) {
 			float diff = ft - avgFrameTime;
 			variance += diff * diff;
 		}
-		variance /= GetFrameTimeHistory().size();
+		variance /= frameTimeHistory.size();
 		stdDev = std::sqrt(variance);
 
 		// Calculate graph range
@@ -2021,8 +2008,8 @@ void PerformanceOverlay::PerfOverlayState::UpdateGraphValues()
 	}
 
 	// Exponential smoothing for stable graph scaling
-	SetSmoothedMinFrameTime(GetSmoothedMinFrameTime() + kSmoothingFactor * (graphMin - GetSmoothedMinFrameTime()));
-	SetSmoothedMaxFrameTime(GetSmoothedMaxFrameTime() + kSmoothingFactor * (graphMax - GetSmoothedMaxFrameTime()));
+	smoothedMinFrameTime = smoothedMinFrameTime + kSmoothingFactor * (graphMin - smoothedMinFrameTime);
+	smoothedMaxFrameTime = smoothedMaxFrameTime + kSmoothingFactor * (graphMax - smoothedMaxFrameTime);
 }
 
 void PerformanceOverlay::PerfOverlayState::DrawPostFGFrameTimeGraph()
@@ -2031,7 +2018,7 @@ void PerformanceOverlay::PerfOverlayState::DrawPostFGFrameTimeGraph()
 	char overlay_text[128];
 	snprintf(overlay_text, IM_ARRAYSIZE(overlay_text),
 		"Post-FG: %.2f ms (%.1f FPS)",
-		GetPostFGSmoothFrameTimeMs(), GetPostFGSmoothFps());
+		postFGSmoothFrameTimeMs, postFGSmoothFps);
 
 	// Set graph colors - blue for post-FG
 	ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.0f, 0.5f, 1.0f, 1.0f));  // Blue line
@@ -2039,12 +2026,12 @@ void PerformanceOverlay::PerfOverlayState::DrawPostFGFrameTimeGraph()
 	// Draw the graph
 	float graphWidth = ImGui::GetWindowWidth() * 0.9f;
 	ImGui::PlotLines("##postfgframetime",
-		GetPostFGFrameTimeHistory().data(),
-		PerformanceOverlay::GetSingleton()->settings.FrameHistorySize,
-		GetPostFGFrameTimeHistoryIndex(),
+		postFGFrameTimeHistory.data(),
+		globals::features::performanceOverlay.settings.FrameHistorySize,
+		postFGFrameTimeHistoryIndex,
 		overlay_text,
-		GetSmoothedMinFrameTime(), GetSmoothedMaxFrameTime(),
-		ImVec2(graphWidth, 50.0f * GetTextScale()));
+		smoothedMinFrameTime, smoothedMaxFrameTime,
+		ImVec2(graphWidth, 50.0f * textScale));
 
 	ImGui::PopStyleColor();
 

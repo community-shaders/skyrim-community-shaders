@@ -3,12 +3,6 @@
 class ParticleLights
 {
 public:
-	static ParticleLights* GetSingleton()
-	{
-		static ParticleLights singleton;
-		return &singleton;
-	}
-
 	struct Config
 	{
 		bool cull = false;
