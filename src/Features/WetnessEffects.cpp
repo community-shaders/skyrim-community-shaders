@@ -796,25 +796,24 @@ void WetnessEffects::Prepass()
 
 void WetnessEffects::LoadSettings(json& o_json)
 {
-    settings = o_json;
+	settings = o_json;
 
 	// Auto-detect which preset matches the loaded settings
 	DetectCurrentPreset();
 
 	Ripples::UpdateSettings();  // Sync cached values after loading
 
-    if (o_json.contains("DebugSettings")) {
-        debugSettings = o_json["DebugSettings"].get<DebugSettings>();
-    }
+	if (o_json.contains("DebugSettings")) {
+		debugSettings = o_json["DebugSettings"].get<DebugSettings>();
+	}
 }
 
 void WetnessEffects::SaveSettings(json& o_json)
 {
-    o_json = settings;
+	o_json = settings;
 
-    o_json["DebugSettings"] = debugSettings;
+	o_json["DebugSettings"] = debugSettings;
 }
-
 
 void WetnessEffects::RestoreDefaultSettings()
 {
