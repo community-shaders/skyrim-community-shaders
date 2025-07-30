@@ -39,9 +39,9 @@ void WeatherPicker::DrawSettings()
 		const auto& menuSettings = Menu::GetSingleton()->GetSettings();
 
 		// Show as Overlay checkbox
-		bool showInOverlay = WeatherPicker::GetSingleton()->WeatherDetailsWindow.ShowInOverlay;
+		bool showInOverlay = WeatherDetailsWindow.ShowInOverlay;
 		if (ImGui::Checkbox("Show in Overlay", &showInOverlay)) {
-			WeatherPicker::GetSingleton()->WeatherDetailsWindow.ShowInOverlay = showInOverlay;
+			WeatherDetailsWindow.ShowInOverlay = showInOverlay;
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Opens weather details in a separate window that stays open\neven when the main menu is closed. ");
@@ -654,7 +654,7 @@ void WeatherPicker::RenderFeatureWeatherAnalysis()
 	for (auto* feature : Feature::GetFeatureList()) {
 		if (feature->loaded) {
 			// Skip the WeatherPicker itself to avoid recursion
-			if (feature == WeatherPicker::GetSingleton()) {
+			if (feature == &globals::features::weatherPicker) {
 				continue;
 			}
 

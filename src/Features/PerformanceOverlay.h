@@ -81,12 +81,6 @@ struct ColumnConfig
 
 struct PerformanceOverlay : OverlayFeature
 {
-	static PerformanceOverlay* GetSingleton()
-	{
-		static PerformanceOverlay singleton;
-		return &singleton;
-	}
-
 	// ============================================================================
 	// VIRTUAL OVERRIDES (Feature.h interface)
 	// ============================================================================
@@ -122,10 +116,10 @@ struct PerformanceOverlay : OverlayFeature
 	// TABLE BUILDING AND RENDERING FUNCTIONS
 	// ============================================================================
 	void DrawDrawCallsTable(const std::vector<DrawCallRow>& mainRows, const std::vector<DrawCallRow>& summaryRows);
-	DrawCallLegends BuildDrawCallLegends(const Menu::ThemeSettings& theme, bool anyTestData, PerformanceOverlay* overlay) const;
-	std::vector<ColumnConfig> BuildDrawCallTableColumns(const Menu::ThemeSettings& theme, const DrawCallLegends& legends, bool anyTestData, PerformanceOverlay* overlay);
+	DrawCallLegends BuildDrawCallLegends(const Menu::ThemeSettings& theme, bool anyTestData) const;
+	std::vector<ColumnConfig> BuildDrawCallTableColumns(const Menu::ThemeSettings& theme, const DrawCallLegends& legends, bool anyTestData);
 	std::pair<std::vector<DrawCallRow>, std::vector<DrawCallRow>> BuildDrawCallRows() const;
-	std::function<void(int, int, const DrawCallRow&)> CreateTableRowHandler(const std::vector<ColumnConfig>& columns, PerformanceOverlay* overlay);
+	std::function<void(int, int, const DrawCallRow&)> CreateTableRowHandler(const std::vector<ColumnConfig>& columns);
 
 	// ============================================================================
 	// EVENT HANDLING FUNCTIONS
@@ -140,22 +134,20 @@ struct PerformanceOverlay : OverlayFeature
 	void UpdateAllShaderTestData();
 	void UpdateShaderTestDataEntry(int shaderType, float frameTime, float costPerCall, float percent = 0.0f);
 	void UpdateSummaryTestData(float smoothedFrameTime, float otherFrameTime, float otherPercent, float totalCostPerCall);
-	std::string GetTestDataTooltip();
+	std::string GetTestDataTooltip() const;
 
 	// ============================================================================
 	// PERFORMANCE OVERLAY STATE MANAGEMENT
 	// ============================================================================
-	class PerfOverlayState
+	struct PerfOverlayState
 	{
-	private:
 		// Frame time history buffers
 		std::vector<float> frameTimeHistory;
 		std::vector<float> postFGFrameTimeHistory;
 
 		// State flags
 		bool initialized = false;
-		bool hasGraphs = false;
-		bool isFrameGenerationActive = false;
+		bool isFrameGenerationActive = false;  // TODO: this shouldn't be a tracked state
 
 		// History indices
 		int frameTimeHistoryIndex = 0;
@@ -192,7 +184,6 @@ struct PerformanceOverlay : OverlayFeature
 		// Display settings
 		float textScale = 1.0f;
 
-	public:
 		// Performance threshold constants
 		static constexpr float kSmoothingFactor = 0.15f;             // Smoothing factor: 0.1f = slow, 0.3f = fast.
 		static constexpr float kFrameTimeGoodThreshold = 2.0f;       // ms - Good performance threshold
@@ -212,72 +203,6 @@ struct PerformanceOverlay : OverlayFeature
 		static constexpr float kVRAMSectionWidth = 300.0f;           // pixels - VRAM section width
 		static constexpr float kWindowBorderPadding = 20.0f;         // pixels - Window border padding
 		static constexpr float kDefaultFrameTimeMs = 16.67f;         // ms - Default frame time (60 FPS)
-
-		// Getters for read-only access
-		bool IsInitialized() const { return initialized; }
-		bool HasGraphs() const { return hasGraphs; }
-		bool IsFrameGenerationActive() const { return isFrameGenerationActive; }
-
-		float GetFrameTimeMs() const { return frameTimeMs; }
-		float GetFps() const { return fps; }
-		float GetPostFGFrameTimeMs() const { return postFGFrameTimeMs; }
-		float GetPostFGFps() const { return postFGFps; }
-		float GetSmoothFps() const { return smoothFps; }
-		float GetSmoothFrameTimeMs() const { return smoothFrameTimeMs; }
-		float GetPostFGSmoothFps() const { return postFGSmoothFps; }
-		float GetPostFGSmoothFrameTimeMs() const { return postFGSmoothFrameTimeMs; }
-		float GetUpdateTimer() const { return updateTimer; }
-		float GetMinFrameTime() const { return minFrameTime; }
-		float GetMaxFrameTime() const { return maxFrameTime; }
-		float GetSmoothedMinFrameTime() const { return smoothedMinFrameTime; }
-		float GetSmoothedMaxFrameTime() const { return smoothedMaxFrameTime; }
-		float GetTextScale() const { return textScale; }
-
-		int64_t GetFrequency() const { return frequency; }
-		int64_t GetLastFrameCounter() const { return lastFrameCounter; }
-		int64_t GetCurrentFrameCounter() const { return currentFrameCounter; }
-		int GetFrameTimeHistoryIndex() const { return frameTimeHistoryIndex; }
-		int GetPostFGFrameTimeHistoryIndex() const { return postFGFrameTimeHistoryIndex; }
-
-		// Non-const getters for use with system functions that require pointers
-		int64_t& GetFrequencyRef() { return frequency; }
-		int64_t& GetLastFrameCounterRef() { return lastFrameCounter; }
-		int64_t& GetCurrentFrameCounterRef() { return currentFrameCounter; }
-
-		const std::vector<float>& GetFrameTimeHistory() const { return frameTimeHistory; }
-		const std::vector<float>& GetPostFGFrameTimeHistory() const { return postFGFrameTimeHistory; }
-		const LARGE_INTEGER& GetLastUpdateTime() const { return lastUpdateTime; }
-		LARGE_INTEGER& GetLastUpdateTimeRef() { return lastUpdateTime; }
-		LARGE_INTEGER& GetOverlayTimingFrequencyRef() { return overlayTimingFrequency; }
-
-		// Non-const getters for history vectors that need modification
-		std::vector<float>& GetFrameTimeHistoryRef() { return frameTimeHistory; }
-		std::vector<float>& GetPostFGFrameTimeHistoryRef() { return postFGFrameTimeHistory; }
-
-		// Setters for controlled state modification
-		void SetInitialized(bool value) { initialized = value; }
-		void SetHasGraphs(bool value) { hasGraphs = value; }
-		void SetFrameGenerationActive(bool value) { isFrameGenerationActive = value; }
-		void SetFrameTimeMs(float value) { frameTimeMs = value; }
-		void SetFps(float value) { fps = value; }
-		void SetPostFGFrameTimeMs(float value) { postFGFrameTimeMs = value; }
-		void SetPostFGFps(float value) { postFGFps = value; }
-		void SetSmoothFps(float value) { smoothFps = value; }
-		void SetSmoothFrameTimeMs(float value) { smoothFrameTimeMs = value; }
-		void SetPostFGSmoothFps(float value) { postFGSmoothFps = value; }
-		void SetPostFGSmoothFrameTimeMs(float value) { postFGSmoothFrameTimeMs = value; }
-		void SetUpdateTimer(float value) { updateTimer = value; }
-		void SetMinFrameTime(float value) { minFrameTime = value; }
-		void SetMaxFrameTime(float value) { maxFrameTime = value; }
-		void SetSmoothedMinFrameTime(float value) { smoothedMinFrameTime = value; }
-		void SetSmoothedMaxFrameTime(float value) { smoothedMaxFrameTime = value; }
-		void SetTextScale(float value) { textScale = value; }
-		void SetFrequency(int64_t value) { frequency = value; }
-		void SetLastFrameCounter(int64_t value) { lastFrameCounter = value; }
-		void SetCurrentFrameCounter(int64_t value) { currentFrameCounter = value; }
-		void SetFrameTimeHistoryIndex(int value) { frameTimeHistoryIndex = value; }
-		void SetPostFGFrameTimeHistoryIndex(int value) { postFGFrameTimeHistoryIndex = value; }
-		void SetLastUpdateTime(const LARGE_INTEGER& value) { lastUpdateTime = value; }
 
 		// Buffer management methods
 		void ResizeFrameTimeHistory(size_t size, float defaultValue = 0.0f) { frameTimeHistory.resize(size, defaultValue); }
@@ -305,8 +230,6 @@ struct PerformanceOverlay : OverlayFeature
 		*/
 		void UpdateGraphValues();
 		void UpdateFrameTimeHistorySizes();
-		void UpdateMinFrameTime();
-		void UpdateMaxFrameTime();
 		void UpdateFGFrameTime();
 		void DrawPostFGFrameTimeGraph();
 	};

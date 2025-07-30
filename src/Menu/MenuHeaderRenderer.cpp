@@ -99,7 +99,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 			ImGui::TableNextColumn();
 			if (ImGui::Button("Load Settings", { -1, 0 })) {
 				globals::state->Load();
-				globals::features::llf::particleLights->GetConfigs();
+				globals::features::llf::particleLights.GetConfigs();
 			}
 
 			// Clear Shader Cache Button
@@ -183,7 +183,7 @@ std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons
 			"Load Settings",
 			[]() {
 				globals::state->Load();
-				globals::features::llf::particleLights->GetConfigs();
+				globals::features::llf::particleLights.GetConfigs();
 			} });
 	}
 	if (uiIcons.clearCache.texture) {

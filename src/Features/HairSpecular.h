@@ -6,12 +6,6 @@ private:
 	static constexpr std::string_view MOD_ID = "149011";
 
 public:
-	static HairSpecular* GetSingleton()
-	{
-		static HairSpecular singleton;
-		return &singleton;
-	}
-
 	virtual inline std::string GetName() override { return "Hair Specular"; }
 	virtual inline std::string GetShortName() override { return "HairSpecular"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "CS_HAIR"; }

@@ -5,12 +5,6 @@
 
 struct WeatherPicker : OverlayFeature
 {
-	static WeatherPicker* GetSingleton()
-	{
-		static WeatherPicker singleton;
-		return &singleton;
-	}
-
 	// Virtual overrides in Feature.h order
 	std::string GetName() override { return "Weather Picker"; }
 	std::string GetShortName() override { return "WeatherPicker"; }

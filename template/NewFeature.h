@@ -20,12 +20,6 @@
 struct NewFeature : public Feature
 {
 	////////////////////////////////////////////////// Boilerplate
-	static NewFeature* GetSingleton()
-	{
-		static NewFeature singleton;
-		return &singleton;
-	}
-
 	// Metadata
 	virtual inline std::string GetName() override { return "New Feature"; }
 	virtual inline std::string GetShortName() override { return "NewFeature"; }

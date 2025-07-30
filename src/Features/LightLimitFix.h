@@ -8,12 +8,6 @@ private:
 	static constexpr std::string_view MOD_ID = "99548";
 
 public:
-	static LightLimitFix* GetSingleton()
-	{
-		static LightLimitFix render;
-		return &render;
-	}
-
 	virtual inline std::string GetName() override { return "Light Limit Fix"; }
 	virtual inline std::string GetShortName() override { return "LightLimitFix"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }

@@ -202,35 +202,35 @@ void TerrainBlending::ClearShaderCache()
 
 void TerrainBlending::Hooks::Main_RenderDepth::thunk(bool a1, bool a2)
 {
-	auto singleton = globals::features::terrainBlending;
+	auto& singleton = globals::features::terrainBlending;
 	auto shaderCache = globals::shaderCache;
 	auto renderer = globals::game::renderer;
 
 	auto& mainDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 	auto& zPrepassCopy = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 
-	singleton->averageEyePosition = Util::GetAverageEyePosition();
+	singleton.averageEyePosition = Util::GetAverageEyePosition();
 
 	if (shaderCache->IsEnabled()) {
-		mainDepth.depthSRV = singleton->blendedDepthTexture->srv.get();
-		zPrepassCopy.depthSRV = singleton->blendedDepthTexture->srv.get();
+		mainDepth.depthSRV = singleton.blendedDepthTexture->srv.get();
+		zPrepassCopy.depthSRV = singleton.blendedDepthTexture->srv.get();
 
-		singleton->renderDepth = true;
-		singleton->ResetDepth();
+		singleton.renderDepth = true;
+		singleton.ResetDepth();
 
 		func(a1, a2);
 
-		singleton->renderDepth = false;
+		singleton.renderDepth = false;
 
-		if (singleton->renderTerrainDepth) {
-			singleton->renderTerrainDepth = false;
-			singleton->ResetTerrainDepth();
+		if (singleton.renderTerrainDepth) {
+			singleton.renderTerrainDepth = false;
+			singleton.ResetTerrainDepth();
 		}
 
-		singleton->BlendPrepassDepths();
+		singleton.BlendPrepassDepths();
 	} else {
-		mainDepth.depthSRV = singleton->depthSRVBackup;
-		zPrepassCopy.depthSRV = singleton->prepassSRVBackup;
+		mainDepth.depthSRV = singleton.depthSRVBackup;
+		zPrepassCopy.depthSRV = singleton.prepassSRVBackup;
 
 		func(a1, a2);
 	}
@@ -238,24 +238,24 @@ void TerrainBlending::Hooks::Main_RenderDepth::thunk(bool a1, bool a2)
 
 void TerrainBlending::Hooks::BSBatchRenderer__RenderPassImmediately::thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags)
 {
-	auto singleton = globals::features::terrainBlending;
+	auto& singleton = globals::features::terrainBlending;
 	auto shaderCache = globals::shaderCache;
 
 	if (shaderCache->IsEnabled()) {
-		if (singleton->renderDepth) {
+		if (singleton.renderDepth) {
 			// Entering or exiting terrain depth section
 			bool inTerrain = a_pass->shaderProperty && a_pass->shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kMultiTextureLandscape);
 
 			if (inTerrain) {
-				if ((a_pass->geometry->worldBound.center.GetDistance(singleton->averageEyePosition) - a_pass->geometry->worldBound.radius) > 2048.0f) {
+				if ((a_pass->geometry->worldBound.center.GetDistance(singleton.averageEyePosition) - a_pass->geometry->worldBound.radius) > 2048.0f) {
 					inTerrain = false;
 				}
 			}
 
-			if (singleton->renderTerrainDepth != inTerrain) {
+			if (singleton.renderTerrainDepth != inTerrain) {
 				if (!inTerrain)
-					singleton->ResetTerrainDepth();
-				singleton->renderTerrainDepth = inTerrain;
+					singleton.ResetTerrainDepth();
+				singleton.renderTerrainDepth = inTerrain;
 			}
 
 			if (inTerrain)
@@ -265,14 +265,14 @@ void TerrainBlending::Hooks::BSBatchRenderer__RenderPassImmediately::thunk(RE::B
 				if (a_pass->shader->shaderType.get() == RE::BSShader::Type::Lighting) {
 					if (shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kMultiTextureLandscape)) {
 						RenderPass call{ a_pass, a_technique, a_alphaTest, a_renderFlags };
-						singleton->terrainRenderPasses.push_back(call);
+						singleton.terrainRenderPasses.push_back(call);
 						return;
 					}
 
 					// Detect meshes which should not get terrain blending using an unused flag (kNoTransparencyMultiSample)
 					if (shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kNoTransparencyMultiSample)) {
 						RenderPass call{ a_pass, a_technique, a_alphaTest, a_renderFlags };
-						singleton->renderPasses.push_back(call);
+						singleton.renderPasses.push_back(call);
 						return;
 					}
 				}
