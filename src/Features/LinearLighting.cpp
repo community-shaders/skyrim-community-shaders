@@ -71,6 +71,7 @@ void LinearLighting::PostPostLoad()
 
 LinearLighting::Settings LinearLighting::GetCommonBufferData()
 {
+	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	auto data = settings;
 	data.enableLinearLighting = settings.enableLinearLighting && !tempDisable;
 	data.enableGammaCorrection = settings.enableGammaCorrection;
