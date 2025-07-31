@@ -4,6 +4,7 @@
 #include <DDSTextureLoader.h>
 #include <cstdlib>
 #include <cstring>
+#include <string.h>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SnowCover::UserSettings,
@@ -174,7 +175,8 @@ void SnowCover::DrawSettings()
 		ImGui::Text(fmt::format("Month: {}", perFrame.Month).c_str());
 		ImGui::Text(fmt::format("TimeSnowing: {}", perFrame.TimeSnowing).c_str());
 		ImGui::Text(fmt::format("SnowingDensity: {}", perFrame.SnowingDensity).c_str());
-		ImGui::Text(fmt::format("Last Tri Name: {}", lastTriName).c_str());
+		if (debug_text != nullptr)
+		ImGui::Text(fmt::format("Debug text: {}", debug_text).c_str());
 
 		ImGui::TreePop();
 	}
@@ -491,14 +493,12 @@ void SnowCover::BSLightingShader_Setup(RE::BSRenderPass* a_pass)
 	if (!userData)
 		return;
 	auto name = a_pass->geometry->name.c_str();
-	lastTriName = name;
-	//auto ref = userData->GetObjectReference();
-	//if ((userData && userData->CanBeMoved() && !userData->As<RE::Actor>()) || ref->IsBoundAnimObject()) 
-	if (a_pass->geometry->HasAnimation())
+	if (a_pass->geometry->HasAnimation() && !whitelist.contains(FormIdParser::fnv_hash(name)))
 	{
-		if (!whitelist.contains(FormIdParser::fnv_hash(name)))
-			state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::NoSnow;
+		state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::NoSnow;
 	} else if (blacklist.contains(FormIdParser::fnv_hash(name))) {
 		state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::NoSnow;	
+	} else {
+		state->permutationData.ExtraShaderDescriptor &= ~(uint)State::ExtraShaderDescriptors::NoSnow;	
 	}
 }

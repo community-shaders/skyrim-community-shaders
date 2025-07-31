@@ -26,6 +26,9 @@ std::unordered_set<std::uint32_t> FormIdParser::parseHexFile(const std::string& 
 	size_t lineNumber = 0;
 
 	while (std::getline(file, line)) {
+		auto commentid = line.find('#');
+		if (commentid != std::string::npos)
+			line = line.substr(0, commentid);
 		std::string trimmed = trim(line);
 		if (!trimmed.empty()) {
 			try {
@@ -60,6 +63,9 @@ std::unordered_set<std::uint64_t> FormIdParser::parseTriNameFile(const std::stri
 	size_t lineNumber = 0;
 
 	while (std::getline(file, line)) {
+		auto commentid = line.find('#');
+		if (commentid != std::string::npos)
+			line = line.substr(0, commentid);
 		std::string trimmed = trim(line);
 		if (!trimmed.empty()) {
 			try {

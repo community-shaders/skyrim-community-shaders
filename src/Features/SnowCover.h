@@ -94,7 +94,7 @@ public:
 	float lastHour = 12;
 	float timeSnowing = 0.0f;
 	float snowingDensity = 0.0f;
-	const char* lastTriName;
+	const char* debug_text = nullptr;
 	std::unordered_set<std::uint64_t> whitelist;
 	std::unordered_set<std::uint64_t> blacklist;
 
