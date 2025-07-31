@@ -69,13 +69,25 @@ void LinearLighting::PostPostLoad()
 	MenuOpenCloseEventHandler::Register();
 }
 
+void LinearLighting::Prepass()
+{
+	if (!settings.enableLinearLighting || tempDisable)
+		return;
+
+	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+	if (!imageSpaceManager)
+		return;
+
+	settings.dirLightMult = !globals::game::isVR ? imageSpaceManager->GetRuntimeData().data.baseData.hdr.sunlightScale
+		: imageSpaceManager->GetVRRuntimeData().data.baseData.hdr.sunlightScale;
+}
+
 LinearLighting::Settings LinearLighting::GetCommonBufferData()
 {
-	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	auto data = settings;
 	data.enableLinearLighting = settings.enableLinearLighting && !tempDisable;
 	data.enableGammaCorrection = settings.enableGammaCorrection;
-	data.dirLightMult = !globals::game::isVR ? imageSpaceManager->GetRuntimeData().data.baseData.hdr.sunlightScale : imageSpaceManager->GetVRRuntimeData().data.baseData.hdr.sunlightScale;
+	data.dirLightMult = settings.dirLightMult;
 	data.lightGamma = settings.lightGamma;
 	data.colorGamma = settings.colorGamma;
 	data.ambientGamma = settings.ambientGamma;

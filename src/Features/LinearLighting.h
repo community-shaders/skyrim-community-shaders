@@ -65,6 +65,7 @@ struct LinearLighting : Feature
 	virtual void RestoreDefaultSettings() override;
 
 	virtual void PostPostLoad() override;
+	virtual void Prepass() override;
 
 	Settings GetCommonBufferData();
 
