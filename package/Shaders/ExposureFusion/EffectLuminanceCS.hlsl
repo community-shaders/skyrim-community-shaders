@@ -4,6 +4,7 @@
 
 Texture2D<float3> OriginalTexture : register(t0);
 RWTexture2D<float3> LuminanceRW : register(u0);
+SamplerState LinearSampler : register(s0);
 
 cbuffer ExposureFusionCB : register(b0)
 {
@@ -23,7 +24,15 @@ float3 ACESFilmicToneMapping(float3 x)
 [numthreads(8, 8, 1)]
 void main(uint3 dispatchID : SV_DispatchThreadID)
 {    
-    float3 inpColor = OriginalTexture[dispatchID.xy] * exposureFusionParams.x;
+    uint2 fineDim;
+    LuminanceRW.GetDimensions(fineDim.x, fineDim.y);
+    
+    if (dispatchID.x >= fineDim.x || dispatchID.y >= fineDim.y)
+        return;
+
+    float2 vUv = (float2(dispatchID.xy) + 0.5) / float2(fineDim);
+
+    float3 inpColor = OriginalTexture.SampleLevel(LinearSampler, vUv, 0) * exposureFusionParams.x;
     
     float highlights = sqrt(dot(saturate(ACESFilmicToneMapping(inpColor * exposureFusionParams.z)), float3(0.1,0.7,0.2)));
     float midtones = sqrt(dot(saturate(ACESFilmicToneMapping(inpColor)), float3(0.1,0.7,0.2)));

@@ -38,18 +38,21 @@ public:
 	void HDRShaderHacks();
 
 	void BindAdaptationShader();
-
+	
+	void PatchHDRShader();
 	void BindHDRShader();
 	
 	void SetupExposureFusionResources();
 	void ClearExposureFusionResources();
-	void ProcessExposureFusion();
 
 	ID3D11ComputeShader* GetEffectLuminance();
 	ID3D11ComputeShader* GetEffectWeights();
 	ID3D11ComputeShader* GetEffectCopy();
 	ID3D11ComputeShader* GetEffectBlend();
 	ID3D11ComputeShader* GetEffectBlendLaplacian();
+	ID3D11ComputeShader* GetEffectFinalCombine();
+
+	void ProcessExposureFusion(ID3D11Resource* a_framebuffer);
 
 	ID3D11BlendState* deferredBlendStates[7][2][13][2];
 	ID3D11BlendState* forwardBlendStates[7][2][13][2];
@@ -104,6 +107,9 @@ public:
 	std::vector<Texture2D> mips;
 	std::vector<Texture2D> mipsWeights;
 	std::vector<Texture2D> mipsAssemble;
+
+	Texture2D* tempFramebuffer;
+	Texture2D* finalFramebuffer;
 	
 	struct alignas(16) ExposureFusionCB
 	{
@@ -156,6 +162,18 @@ public:
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		template <RE::ImageSpaceManager::ImageSpaceEffectEnum EffectType>
+		struct BSImagespaceShader_Render
+		{
+			static void thunk(void* imageSpaceShader, RE::BSTriShape* shape, RE::ImageSpaceEffectParam* param)
+			{
+				func(imageSpaceShader, shape, param);
+				globals::deferred->BindHDRShader();
+			}
+
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
 		static void Install()
 		{
 			stl::write_vfunc<0x35, BSCubeMapCamera_RenderCubemap>(RE::VTABLE_BSCubeMapCamera[0]);
@@ -170,6 +188,13 @@ public:
 				stl::write_thunk_call<Main_RenderFirstPersonView>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x944, 0x954));
 
 			stl::detour_thunk<Renderer_ResetState>(REL::RelocationID(75570, 77371));
+
+		stl::write_vfunc<0x1,
+				BSImagespaceShader_Render<RE::ImageSpaceManager::ISHDRTonemapBlendCinematic>>(
+				RE::VTABLE_BSImagespaceShaderHDRTonemapBlendCinematic[3]);
+			stl::write_vfunc<0x1,
+				BSImagespaceShader_Render<RE::ImageSpaceManager::ISHDRTonemapBlendCinematicFade>>(
+				RE::VTABLE_BSImagespaceShaderHDRTonemapBlendCinematicFade[3]);
 
 			logger::info("[Deferred] Installed hooks");
 		}

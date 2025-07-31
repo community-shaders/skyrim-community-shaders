@@ -22,8 +22,8 @@ void main(uint3 dispatchID : SV_DispatchThreadID)
 
     // Blend the Laplacians based on exposure weights.
     float accumSoFar = tAccumSoFar.SampleLevel(LinearSampler, vUv, 0);
-    float3 laplacians = tExposures[dispatchID.xy] - tExposuresCoarser.SampleLevel(LinearSampler, vUv, 0);
-    float3 weights = tWeights[dispatchID.xy] * abs(laplacians);
+    float3 laplacians = tExposures.SampleLevel(LinearSampler, vUv, 0) - tExposuresCoarser.SampleLevel(LinearSampler, vUv, 0);
+    float3 weights = tWeights.SampleLevel(LinearSampler, vUv, 0) * (false > 0.0 ? abs(laplacians) + 0.00001 : 1.0);
     weights /= dot(weights, 1.0) + 0.00001;
     float laplac = dot(laplacians * weights, 1.0);
     BlendedRW[dispatchID.xy] = accumSoFar + laplac;
