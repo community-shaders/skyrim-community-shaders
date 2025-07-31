@@ -2242,6 +2242,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			else
 		float disp = 0;
 #			endif
+#		elif defined(LANDSCAPE)
+		float disp = 0.1 * sh0;
 #		else
 		float disp = 0.1 * (sh0 - 0.5);
 #		endif
