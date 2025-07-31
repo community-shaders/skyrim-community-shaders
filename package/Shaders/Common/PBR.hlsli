@@ -147,7 +147,7 @@ namespace PBR
 	// [Lagarde et al. 2014, "Moving Frostbite to Physically Based Rendering 3.0"]
 	float SpecularAOLagarde(float NdotV, float ao, float roughness)
 	{
-		return saturate(pow(NdotV + ao, exp2(-16.0 * roughness - 1.0)) - 1.0 + ao);
+		return saturate(pow(abs(NdotV + ao), exp2(-16.0 * roughness - 1.0)) - 1.0 + ao);
 	}
 
 #if defined(GLINT)

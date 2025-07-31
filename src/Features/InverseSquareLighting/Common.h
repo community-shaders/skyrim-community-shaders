@@ -14,7 +14,9 @@ struct ISLCommon
 		float cutoffOverride;
 		RE::FormID lighFormId;
 		RE::NiColor diffuse;
-		RE::NiPoint3 radius;
+		float radius;
+		float pad1C;
+		float size;
 		float fade;
 		std::uint32_t unk138;
 
