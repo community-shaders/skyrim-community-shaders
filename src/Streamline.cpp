@@ -383,7 +383,7 @@ void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl
  */
 void Streamline::Present()
 {
-	if (!initialized || !featureDLSSG || globals::game::isVR || !globals::upscaling->d3d12Interop)
+	if (!initialized || !featureDLSSG || globals::game::isVR || !globals::dx12SwapChain->swapChain)
 		return;
 
 	CheckFrameConstants();

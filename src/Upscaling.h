@@ -51,8 +51,8 @@ public:
 
 	bool streamlineMissing = false;
 	bool fidelityFXMissing = false;
-
-	bool d3d12Interop = false;
+	
+	bool frameGenEnabled = false;
 	double refreshRate = 0.0f;
 
 	// FG FPS Measurement for Overlay

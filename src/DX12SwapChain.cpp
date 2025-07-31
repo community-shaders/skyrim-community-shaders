@@ -41,27 +41,33 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	swapChainDesc.SwapEffect = a_swapChainDesc.SwapEffect;
 	swapChainDesc.Flags = a_swapChainDesc.Flags;
 
-	ffx::CreateContextDescFrameGenerationSwapChainForHwndDX12 ffxSwapChainDesc{};
+	auto shouldFG = globals::upscaling->frameGenEnabled;
 
-	ffxSwapChainDesc.desc = &swapChainDesc;
-	ffxSwapChainDesc.dxgiFactory = dxgiFactory;
-	ffxSwapChainDesc.fullscreenDesc = nullptr;
-	ffxSwapChainDesc.gameQueue = commandQueue.get();
-	ffxSwapChainDesc.hwnd = a_swapChainDesc.OutputWindow;
-	ffxSwapChainDesc.swapchain = &swapChain;
+	if (shouldFG) {
+		ffx::CreateContextDescFrameGenerationSwapChainForHwndDX12 ffxSwapChainDesc{};
 
-	auto fidelityFX = globals::fidelityFX;
+		ffxSwapChainDesc.desc = &swapChainDesc;
+		ffxSwapChainDesc.dxgiFactory = dxgiFactory;
+		ffxSwapChainDesc.fullscreenDesc = nullptr;
+		ffxSwapChainDesc.gameQueue = commandQueue.get();
+		ffxSwapChainDesc.hwnd = a_swapChainDesc.OutputWindow;
+		ffxSwapChainDesc.swapchain = &swapChain;
 
-	if (ffx::CreateContext(fidelityFX->swapChainContext, nullptr, ffxSwapChainDesc) != ffx::ReturnCode::Ok) {
-		logger::critical("[FidelityFX] Failed to create swap chain context!");
+		auto fidelityFX = globals::fidelityFX;
+
+		if (ffx::CreateContext(fidelityFX->swapChainContext, nullptr, ffxSwapChainDesc) != ffx::ReturnCode::Ok) {
+			logger::critical("[FidelityFX] Failed to create swap chain context!");
+		}
+
+		fidelityFX->SetupFrameGeneration();
+	} else {
+		DX::ThrowIfFailed(dxgiFactory->CreateSwapChainForHwnd(commandQueue.get(), a_swapChainDesc.OutputWindow, &swapChainDesc, nullptr, nullptr, (IDXGISwapChain1**)&swapChain));
 	}
 
 	DX::ThrowIfFailed(swapChain->GetBuffer(0, IID_PPV_ARGS(&swapChainBuffers[0])));
 	DX::ThrowIfFailed(swapChain->GetBuffer(1, IID_PPV_ARGS(&swapChainBuffers[1])));
 
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
-
-	fidelityFX->SetupFrameGeneration();
 }
 
 void DX12SwapChain::CreateInterop()
@@ -145,7 +151,8 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 
 	auto upscaling = globals::upscaling;
 
-	globals::fidelityFX->Present(upscaling->settings.frameGenerationMode);
+	if (upscaling->frameGenEnabled)
+		globals::fidelityFX->Present(upscaling->settings.frameGenerationMode);
 
 	DX::ThrowIfFailed(commandLists[frameIndex]->Close());
 

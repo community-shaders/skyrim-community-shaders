@@ -227,7 +227,7 @@ struct IDXGISwapChain_Present
 		state->Reset();
 		menu->DrawOverlay();
 
-		if (upscaling->d3d12Interop)
+		if (upscaling->frameGenEnabled)
 			SyncInterval = 0;
 
 		if (!globals::game::isVR) {
@@ -380,130 +380,69 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 
 	auto proxy = globals::dx12SwapChain;
 
-	bool shouldProxy = !REL::Module::IsVR();
-	if (shouldProxy)
+	bool shouldFG = fidelityFX->module && !REL::Module::IsVR();
+	if (shouldFG)
 		if (!pSwapChainDesc->Windowed)
-			shouldProxy = false;
+			shouldFG = false;
 
 	auto refreshRate = Upscaling::GetRefreshRate(pSwapChainDesc->OutputWindow);
 	upscaling->refreshRate = refreshRate;
 
-	if (shouldProxy) {
+	if (shouldFG) {
 		if (upscaling->settings.frameGenerationMode)
 			if (refreshRate >= 120)
-				shouldProxy = true;
+				shouldFG = true;
 			else if (upscaling->settings.frameGenerationForceEnable)
-				shouldProxy = true;
+				shouldFG = true;
 			else
-				shouldProxy = false;
+				shouldFG = false;
 		else
-			shouldProxy = false;
+			shouldFG = false;
 	}
 
+	upscaling->frameGenEnabled = shouldFG;
 	upscaling->lowRefreshRate = refreshRate < 119;
 	upscaling->isWindowed = pSwapChainDesc->Windowed;
 
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
 
-	if (shouldProxy) {
-		logger::info("[Frame Generation] Frame Generation enabled, using D3D12 proxy");
+	proxy->CreateD3D12Device(pAdapter);
 
-		if (streamline->featureDLSSG) {
-			logger::info("[Frame Generation] Using D3D12 proxy via Streamline");
-
-			auto ret = streamline->slD3D11CreateDeviceAndSwapChain(pAdapter,
-				DriverType,
-				Software,
-				Flags,
-				&featureLevel,
-				1,
-				SDKVersion,
-				pSwapChainDesc,
-				ppSwapChain,
-				ppDevice,
-				pFeatureLevel,
-				ppImmediateContext);
-
-			upscaling->d3d12Interop = true;
-
-			streamline->PostDevice();
-			upscaling->InstallD3DHooks(*ppImmediateContext);
-
-			IDXGIFactory* factory = nullptr;
-			if (SUCCEEDED((*ppSwapChain)->GetParent(IID_PPV_ARGS(&factory)))) {
-				factory->MakeWindowAssociation(pSwapChainDesc->OutputWindow, DXGI_MWA_NO_WINDOW_CHANGES);
-				factory->Release();
-			}
-
-			return ret;
-
-		} else {
-			logger::info("[Frame Generation] Using manual D3D12 proxy");
-
-			if (fidelityFX->module) {
-				proxy->CreateD3D12Device(pAdapter);
-
-				D3D11CreateDevice(
-					pAdapter,
-					DriverType,
-					Software,
-					Flags,
-					&featureLevel,
-					1,
-					SDKVersion,
-					ppDevice,
-					pFeatureLevel,
-					ppImmediateContext);
-
-				proxy->SetD3D11Device(*ppDevice);
-				proxy->SetD3D11DeviceContext(*ppImmediateContext);
-
-				proxy->CreateSwapChain(pAdapter, *pSwapChainDesc);
-
-				proxy->CreateInterop();
-
-				*ppSwapChain = proxy->GetSwapChainProxy();
-
-				upscaling->d3d12Interop = true;
-
-				if (streamline->initialized) {
-					streamline->slSetD3DDevice(*ppDevice);
-					streamline->PostDevice();
-				}
-
-				IDXGIFactory* factory = nullptr;
-				if (SUCCEEDED((*ppSwapChain)->GetParent(IID_PPV_ARGS(&factory)))) {
-					factory->MakeWindowAssociation(pSwapChainDesc->OutputWindow, DXGI_MWA_NO_WINDOW_CHANGES);
-					factory->Release();
-				}
-
-				return S_OK;
-			} else {
-				logger::warn("[Frame Generation] amd_fidelityfx_dx12.dll is not loaded, skipping proxy");
-				upscaling->fidelityFXMissing = true;
-			}
-		}
-	}
-
-	auto ret = ptrD3D11CreateDeviceAndSwapChain(pAdapter,
+	D3D11CreateDevice(
+		pAdapter,
 		DriverType,
 		Software,
 		Flags,
 		&featureLevel,
 		1,
 		SDKVersion,
-		pSwapChainDesc,
-		ppSwapChain,
 		ppDevice,
 		pFeatureLevel,
 		ppImmediateContext);
+
+	proxy->SetD3D11Device(*ppDevice);
+	proxy->SetD3D11DeviceContext(*ppImmediateContext);
+
+	proxy->CreateSwapChain(pAdapter, *pSwapChainDesc);
+
+	proxy->CreateInterop();
+
+	*ppSwapChain = proxy->GetSwapChainProxy();
+
+	upscaling->frameGenEnabled = true;
 
 	if (streamline->initialized) {
 		streamline->slSetD3DDevice(*ppDevice);
 		streamline->PostDevice();
 	}
 
-	return ret;
+	IDXGIFactory* factory = nullptr;
+	if (SUCCEEDED((*ppSwapChain)->GetParent(IID_PPV_ARGS(&factory)))) {
+		factory->MakeWindowAssociation(pSwapChainDesc->OutputWindow, DXGI_MWA_NO_WINDOW_CHANGES);
+		factory->Release();
+	}
+
+	return S_OK;
 }
 
 struct Main_Update_Begin

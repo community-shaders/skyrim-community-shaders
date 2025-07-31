@@ -125,7 +125,7 @@ void Upscaling::DrawSettings()
 					onlyRequiresRestart = false;
 				}
 
-				if (onlyRequiresRestart && settings.frameGenerationMode && !d3d12Interop)
+				if (onlyRequiresRestart && settings.frameGenerationMode && !frameGenEnabled)
 					ImGui::Text("Warning: Requires restart");
 
 				std::string backendLabel =
@@ -138,12 +138,12 @@ void Upscaling::DrawSettings()
 
 				ImGui::SliderInt("Frame Generation", (int*)&settings.frameGenerationMode, 0, 1, toggleModesFG[settings.frameGenerationMode]);
 
-				if (!d3d12Interop)
+				if (!frameGenEnabled)
 					ImGui::BeginDisabled();
 
 				ImGui::SliderInt("Frame Limit (Variable Refresh Rate)", (int*)&settings.frameLimitMode, 0, 1, std::format("{}", toggleModes[settings.frameLimitMode]).c_str());
 
-				if (!d3d12Interop)
+				if (!frameGenEnabled)
 					ImGui::EndDisabled();
 
 				ImGui::Text("Allows frame generation to function on low refresh rate monitors");
@@ -538,7 +538,7 @@ void Upscaling::CreateUpscalingResources()
 	alphaMaskTexture->CreateSRV(srvDesc);
 	alphaMaskTexture->CreateUAV(uavDesc);
 
-	if (d3d12Interop)
+	if (frameGenEnabled)
 		CreateFrameGenerationResources();
 }
 
@@ -673,7 +673,7 @@ void Upscaling::CreateFrameGenerationResources()
 
 void Upscaling::CopyBuffersToSharedResources()
 {
-	if (!d3d12Interop || !settings.frameGenerationMode)
+	if (!frameGenEnabled || !settings.frameGenerationMode)
 		return;
 
 	auto renderer = globals::game::renderer;
@@ -725,7 +725,7 @@ void Upscaling::PostDisplay()
 {
 	globals::state->RenderReShade();
 
-	if (!d3d12Interop || !settings.frameGenerationMode)
+	if (!frameGenEnabled || !settings.frameGenerationMode)
 		return;
 
 	auto renderer = globals::game::renderer;
@@ -749,7 +749,7 @@ void Upscaling::TimerSleepQPC(int64_t targetQPC)
 
 void Upscaling::FrameLimiter()
 {
-	if (d3d12Interop && settings.frameLimitMode) {
+	if (frameGenEnabled && settings.frameLimitMode) {
 		double bestRefreshRate = refreshRate - (refreshRate * refreshRate) / 3600.0;
 
 		LARGE_INTEGER qpf;
@@ -831,7 +831,7 @@ double Upscaling::GetRefreshRate(HWND a_window)
 
 bool Upscaling::IsFrameGenerationActive() const
 {
-	return d3d12Interop && settings.frameGenerationMode;
+	return frameGenEnabled && settings.frameGenerationMode;
 }
 
 /**
