@@ -42,8 +42,8 @@ struct LinearLighting : Feature
 		float vlGamma = 1.8f;
 
 		// Lighting multipliers
-		float vanillaDiffuseMult = 1.0f;
-		float vanillaSpecularMult = 1.0f;
+		float vanillaDiffuseMult = 0.66f;
+		float vanillaSpecularMult = 0.66f;
 
 		// Effect multipliers
 		float membraneEffectMult = 1.0f;
