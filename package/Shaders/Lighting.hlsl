@@ -3047,6 +3047,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	else
 	color.xyz += diffuseColor * baseColor.xyz;
+#		if !defined(DEFERRED) && defined(VANILLA_FRESNEL)
+#			if defined(DYNAMIC_CUBEMAPS)
+#				if defined(SKYLIGHTING)
+	specularColor += DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldNormal, vertexNormal, viewDirection, roughness, skylightingSH) * reflectance;
+#				else
+	specularColor += DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldNormal, vertexNormal, viewDirection, roughness) * reflectance;
+#				endif
+#			else
+	specularColor += directionalAmbientColor * reflectance;
+#			endif
+#		endif
 #	endif
 
 #	if defined(HAIR) && defined(CS_HAIR)
