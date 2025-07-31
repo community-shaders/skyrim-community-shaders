@@ -131,7 +131,7 @@ namespace SnowCover
 		float weatherMult = distMult * pow(SharedData::snowCoverSettings.TimeSnowing, 3) * max(500, SharedData::snowCoverSettings.SnowingDensity) / 500;
 		weatherMult = clamp(-1, 1, (weatherMult + disp * 0.1) * max(SharedData::snowCoverSettings.minAngle, worldNormal.z));
 		// the amount of snow based on season and weather
-		float env_mult = saturate(max(saturate(GetEnvironmentalMultiplier(p) + disp*100), weatherMult)) - waterDist;
+		float env_mult = saturate(max(saturate(GetEnvironmentalMultiplier(p) + disp), weatherMult)) - waterDist;
 		float mult = skylight * env_mult * smoothstep(SharedData::snowCoverSettings.minAngle, SharedData::snowCoverSettings.maxAngle, worldNormal.z);
 		if (mult < 0.001)
 			return 0;
@@ -180,7 +180,6 @@ namespace SnowCover
 		glossiness = lerp(glossiness, 1 - rmaos.x, mult);
 		shininess = lerp(shininess, 25 * 500 * (alt ? SharedData::snowCoverSettings.altSpec : SharedData::snowCoverSettings.mainSpec) * rmaos.w, mult);
 		worldNormal = TransformNormal(alt ? IceNormal.Sample(SampNormalSampler, uv).rgb : SnowNormal.Sample(SampNormalSampler, uv).rgb);
-		mult *= alt ? SharedData::snowCoverSettings.AltTint.w : SharedData::snowCoverSettings.MainTint.w;
 		return mult;
 	}
 #		endif

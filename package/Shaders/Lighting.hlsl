@@ -2236,16 +2236,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	) {
 #		if defined(TRUE_PBR)
 #			if defined(LANDSCAPE)
-		float disp = 0.1 * sh0 * max(displacementParams[0].HeightScale * input.LandBlendWeights1.x, max(displacementParams[1].HeightScale * input.LandBlendWeights1.y, max(displacementParams[2].HeightScale * input.LandBlendWeights1.z, max(displacementParams[3].HeightScale * input.LandBlendWeights1.w, max(displacementParams[4].HeightScale * input.LandBlendWeights2.x, displacementParams[5].HeightScale * input.LandBlendWeights2.y)))));
-#			elif defined(EMAT)
-		float disp = 0.1 * (sh0 - 0.5) * displacementParams.HeightScale;
+		float disp = sh0 * max(displacementParams[0].HeightScale * input.LandBlendWeights1.x, max(displacementParams[1].HeightScale * input.LandBlendWeights1.y, max(displacementParams[2].HeightScale * input.LandBlendWeights1.z, max(displacementParams[3].HeightScale * input.LandBlendWeights1.w, max(displacementParams[4].HeightScale * input.LandBlendWeights2.x, displacementParams[5].HeightScale * input.LandBlendWeights2.y)))));
 #			else
-		float disp = 0;
+		float disp = (sh0 - 0.5) * displacementParams.HeightScale;
 #			endif
-#		elif defined(LANDSCAPE)
-		float disp = 0.1 * sh0;
+#		elif defined(LANDSCAPE) && defined(EMAT)
+		float disp = sh0;
+#		elif defined(EMAT)
+		float disp = (sh0 - 0.5);
 #		else
-		float disp = 0.1 * (sh0 - 0.5);
+		float disp = 0;
 #		endif
 		float3 snowNormal = worldNormal;
 		float3 snowedColor = baseColor.rgb;
