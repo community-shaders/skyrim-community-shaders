@@ -53,7 +53,7 @@ public:
 		float radius;
 		float invRadius;
 		float fadeZone;
-		float size;
+		float sizeBias;
 		PositionOpt positionWS[2];
 		PositionOpt positionVS[2];
 		uint128_t roomFlags = uint32_t(0);

@@ -38,7 +38,7 @@ struct Light
 	float radius;
 	float invRadius;
 	float fadeZone;
-	float size;
+	float sizeBias;
 	float4 positionWS[2];
 	float4 positionVS[2];
 	uint4 roomFlags;
