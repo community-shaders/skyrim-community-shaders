@@ -197,7 +197,7 @@ namespace SharedData
 	{
 		uint enableLinearLighting;
 		uint enableGammaCorrection;
-		uint preserveLightLuminance;
+		float dirLightMult;
 		float lightGamma;
 		float colorGamma;
 		float ambientGamma;

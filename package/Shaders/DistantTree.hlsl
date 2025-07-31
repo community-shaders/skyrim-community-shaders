@@ -230,7 +230,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (dirShadow != 0.0)
 		dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
-	float3 diffuseColor = Color::Light(SharedData::DirLightColor.xyz) * dirShadow * 0.5;
+	float3 diffuseColor = Color::Light(SharedData::DirLightColor.xyz / SharedData::linearLightingSettings.dirLightMult) * dirShadow * 0.5 * SharedData::linearLightingSettings.dirLightMult;
 
 	float3 ddx = ddx_coarse(input.WorldPosition.xyz);
 	float3 ddy = ddy_coarse(input.WorldPosition.xyz);
@@ -260,7 +260,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		else
 	float dirShadow = ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
-	float3 diffuseColor = Color::Light(SharedData::DirLightColor.xyz) * dirShadow * 0.5;
+	float3 diffuseColor = Color::Light(SharedData::DirLightColor.xyz / SharedData::linearLightingSettings.dirLightMult) * dirShadow * 0.5 * SharedData::linearLightingSettings.dirLightMult;
 
 	float3 ddx = ddx_coarse(input.WorldPosition.xyz);
 	float3 ddy = ddy_coarse(input.WorldPosition.xyz);

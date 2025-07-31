@@ -4,7 +4,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LinearLighting::Settings,
 	enableLinearLighting,
 	enableGammaCorrection,
-	preserveLightLuminance,
 	lightGamma,
 	colorGamma,
 	ambientGamma,
@@ -26,7 +25,6 @@ void LinearLighting::DrawSettings()
 {
 	ImGui::Checkbox("Enable Linear Lighting", (bool*)&settings.enableLinearLighting);
 	ImGui::Checkbox("Enable Gamma Correction", (bool*)&settings.enableGammaCorrection);
-	ImGui::Checkbox("Preserve Light Luminance", (bool*)&settings.preserveLightLuminance);
 	ImGui::Text("Gamma Settings");
 	ImGui::SliderFloat("Light Gamma", &settings.lightGamma, 1.0f, 3.0f, "%.2f");
 	ImGui::SliderFloat("Color Gamma", &settings.colorGamma, 1.0f, 3.0f, "%.2f");
@@ -76,7 +74,7 @@ LinearLighting::Settings LinearLighting::GetCommonBufferData()
 	auto data = settings;
 	data.enableLinearLighting = settings.enableLinearLighting && !tempDisable;
 	data.enableGammaCorrection = settings.enableGammaCorrection;
-	data.preserveLightLuminance = settings.preserveLightLuminance;
+	data.dirLightMult = !globals::game::isVR ? imageSpaceManager->GetRuntimeData().data.baseData.hdr.sunlightScale : imageSpaceManager->GetVRRuntimeData().data.baseData.hdr.sunlightScale;
 	data.lightGamma = settings.lightGamma;
 	data.colorGamma = settings.colorGamma;
 	data.ambientGamma = settings.ambientGamma;

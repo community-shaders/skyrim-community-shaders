@@ -130,8 +130,7 @@ namespace Color
 
 	float3 Light(float3 color)
 	{
-		color = ENABLE_LL ? (SharedData::linearLightingSettings.preserveLightLuminance ? GammaToLinearLuminancePreservingLight(color) 
-			: pow(abs(color), SharedData::linearLightingSettings.lightGamma)) : color;
+		color = ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.lightGamma) : color;
 #	if defined(TRUE_PBR)
 		return color * PBRLightingCompensation;  // Compensate for traditional Lambertian diffuse
 #	else

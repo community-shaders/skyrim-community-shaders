@@ -694,7 +694,7 @@ PS_OUTPUT main(PS_INPUT input)
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 #			endif
 
-				float3 lightColor = light.color.xyz * intensityMultiplier * 0.5;
+				float3 lightColor = light.color.xyz * intensityMultiplier * 0.5 * light.fade;
 				propertyColor += lightColor;
 			}
 		}

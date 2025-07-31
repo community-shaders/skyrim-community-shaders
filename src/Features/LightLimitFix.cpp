@@ -324,11 +324,11 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 			isl.ProcessLight(light, bsLight, niLight);
 		} else {
 			light.radius = runtimeData.radius.x;
-			light.color *= runtimeData.fade;
+			// light.color *= runtimeData.fade;
 			light.fade = runtimeData.fade;
 		}
 
-		light.color *= bsLight->lodDimmer;
+		light.fade *= bsLight->lodDimmer;
 
 		SetLightPosition(light, niLight->world.translate, inWorld);
 
@@ -786,10 +786,11 @@ void LightLimitFix::UpdateLights()
 						isl.ProcessLight(light, bsLight, niLight);
 					} else {
 						light.radius = runtimeData.radius.x;
-						light.color *= runtimeData.fade;
+						// light.color *= runtimeData.fade;
+						light.fade = runtimeData.fade;
 					}
 
-					light.color *= bsLight->lodDimmer;
+					light.fade *= bsLight->lodDimmer;
 
 					if (!IsGlobalLight(bsLight)) {
 						// List of BSMultiBoundRooms affected by a light

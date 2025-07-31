@@ -969,7 +969,7 @@ float3 GetSunColor(float3 normal, float3 viewDirection)
 	float3 reflectionDirection = reflect(viewDirection, normal);
 	float reflectionMul = exp2(VarAmounts.x * log2(saturate(dot(reflectionDirection, SunDir.xyz))));
 
-	return reflectionMul * SunColor.xyz * SunDir.w * DeepColor.w;
+	return reflectionMul * Color::Light(SunColor.xyz / SharedData::linearLightingSettings.dirLightMult) * SunDir.w * DeepColor.w * SharedData::linearLightingSettings.dirLightMult;
 #			endif
 }
 #		endif
@@ -1110,7 +1110,7 @@ PS_OUTPUT main(PS_INPUT input)
 			float3 H = normalize(normalizedLightDirection - viewDirection);
 			float HdotN = saturate(dot(H, normal));
 
-			float3 lightColor = Color::Light(light.color.xyz) * pow(HdotN, FresnelRI.z);
+			float3 lightColor = Color::Light(light.color.xyz) * pow(HdotN, FresnelRI.z) * light.fade;
 			specularLighting += lightColor * intensityMultiplier;
 		}
 	}
