@@ -547,7 +547,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 transmissionColor = 0;
 #			endif  // TRUE_PBR
 
-	float3 dirLightColor = Color::Light(SharedData::DirLightColor.xyz / SharedData::linearLightingSettings.dirLightMult) * SharedData::linearLightingSettings.dirLightMult;
+	float llDirLightMult = SharedData::linearLightingSettings.enableLinearLighting ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+	float3 dirLightColor = Color::Light(SharedData::DirLightColor.xyz / llDirLightMult) * llDirLightMult;
 	float3 dirLightColorMultiplier = 1;
 
 	float dirLightAngle = dot(normal, SharedData::DirLightDirection.xyz);
@@ -834,7 +835,8 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif
 	}
 
-	float3 diffuseColor = Color::Light(SharedData::DirLightColor.xyz / SharedData::linearLightingSettings.dirLightMult) * dirShadow * lerp(dirDetailShadow, 1.0, 0.5) * 0.5 * SharedData::linearLightingSettings.dirLightMult;
+	float llDirLightMult = SharedData::linearLightingSettings.enableLinearLighting ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+	float3 diffuseColor = Color::Light(SharedData::DirLightColor.xyz / llDirLightMult) * dirShadow * lerp(dirDetailShadow, 1.0, 0.5) * 0.5 * llDirLightMult;
 
 #			if defined(LIGHT_LIMIT_FIX)
 	uint clusterIndex = 0;

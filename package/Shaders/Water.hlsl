@@ -969,7 +969,8 @@ float3 GetSunColor(float3 normal, float3 viewDirection)
 	float3 reflectionDirection = reflect(viewDirection, normal);
 	float reflectionMul = exp2(VarAmounts.x * log2(saturate(dot(reflectionDirection, SunDir.xyz))));
 
-	return reflectionMul * Color::Light(SunColor.xyz / SharedData::linearLightingSettings.dirLightMult) * SunDir.w * DeepColor.w * SharedData::linearLightingSettings.dirLightMult;
+	float llDirLightMult = SharedData::linearLightingSettings.enableLinearLighting ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+	return reflectionMul * Color::Light(SunColor.xyz / llDirLightMult) * SunDir.w * DeepColor.w * llDirLightMult;
 #			endif
 }
 #		endif

@@ -26,11 +26,10 @@ struct LinearLighting : Feature
 	virtual bool SupportsVR() override { return true; };
 	virtual bool IsCore() const override { return true; };
 
-	struct alignas(16) Settings
+	struct Settings
 	{
 		uint enableLinearLighting = true;
 		uint enableGammaCorrection = true;
-		float dirLightMult = 1.0f;
 		float lightGamma = 1.8f;
 		float colorGamma = 2.2f;
 		float ambientGamma = 1.8f;
@@ -51,11 +50,34 @@ struct LinearLighting : Feature
 		float projectedEffectMult = 1.0f;
 		float deferredEffectMult = 1.0f;
 		float otherEffectMult = 1.0f;
-
-		float pad;
 	} settings;
 
+	struct alignas(16) PerFrameData
+	{
+		uint enableLinearLighting;
+		uint enableGammaCorrection;
+		float dirLightMult;
+		float lightGamma;
+		float colorGamma;
+		float ambientGamma;
+		float fogGamma;
+		float effectGamma;
+		float effectAlphaGamma;
+		float skyGamma;
+		float waterGamma;
+		float vlGamma;
+		float vanillaDiffuseMult;
+		float vanillaSpecularMult;
+		float membraneEffectMult;
+		float bloodEffectMult;
+		float projectedEffectMult;
+		float deferredEffectMult;
+		float otherEffectMult;
+		float pad;
+	};
+
 	uint tempDisable = false;
+	float dirLightMult = 1.0f;
 
 	virtual void DrawSettings() override;
 
@@ -67,7 +89,7 @@ struct LinearLighting : Feature
 	virtual void PostPostLoad() override;
 	virtual void Prepass() override;
 
-	Settings GetCommonBufferData();
+	PerFrameData GetCommonBufferData();
 
 	// Event handler
 	class MenuOpenCloseEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>

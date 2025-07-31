@@ -78,16 +78,16 @@ void LinearLighting::Prepass()
 	if (!imageSpaceManager)
 		return;
 
-	settings.dirLightMult = !globals::game::isVR ? imageSpaceManager->GetRuntimeData().data.baseData.hdr.sunlightScale
+	dirLightMult = !globals::game::isVR ? imageSpaceManager->GetRuntimeData().data.baseData.hdr.sunlightScale
 		: imageSpaceManager->GetVRRuntimeData().data.baseData.hdr.sunlightScale;
 }
 
-LinearLighting::Settings LinearLighting::GetCommonBufferData()
+LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 {
-	auto data = settings;
+	auto data = PerFrameData{};
 	data.enableLinearLighting = settings.enableLinearLighting && !tempDisable;
 	data.enableGammaCorrection = settings.enableGammaCorrection;
-	data.dirLightMult = settings.dirLightMult;
+	data.dirLightMult = dirLightMult;
 	data.lightGamma = settings.lightGamma;
 	data.colorGamma = settings.colorGamma;
 	data.ambientGamma = settings.ambientGamma;
@@ -104,5 +104,6 @@ LinearLighting::Settings LinearLighting::GetCommonBufferData()
 	data.projectedEffectMult = settings.projectedEffectMult;
 	data.deferredEffectMult = settings.deferredEffectMult;
 	data.otherEffectMult = settings.otherEffectMult;
+	data.pad = 0.0f;
 	return data;
 }
