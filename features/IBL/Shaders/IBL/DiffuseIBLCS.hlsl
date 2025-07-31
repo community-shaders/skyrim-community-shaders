@@ -19,9 +19,9 @@ SamplerState LinearSampler : register(s0);
 #define TOTAL_SAMPLES (AXIS_SAMPLE_COUNT * AXIS_SAMPLE_COUNT)
 
 // Shared memory for parallel reduction - each thread gets its own slot
-groupshared sh2 sharedR[AXIS_SAMPLE_COUNT * AXIS_SAMPLE_COUNT];
-groupshared sh2 sharedG[AXIS_SAMPLE_COUNT * AXIS_SAMPLE_COUNT];
-groupshared sh2 sharedB[AXIS_SAMPLE_COUNT * AXIS_SAMPLE_COUNT];
+groupshared sh2 sharedR[TOTAL_SAMPLES];
+groupshared sh2 sharedG[TOTAL_SAMPLES];
+groupshared sh2 sharedB[TOTAL_SAMPLES];
 
 // Parallelize computation: 16x16 = 256 threads, one per sample
 [numthreads(AXIS_SAMPLE_COUNT, AXIS_SAMPLE_COUNT, 1)] 
