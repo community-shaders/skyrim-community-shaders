@@ -45,6 +45,12 @@ public:
 	void ClearExposureFusionResources();
 	void ProcessExposureFusion();
 
+	ID3D11ComputeShader* GetEffectLuminance();
+	ID3D11ComputeShader* GetEffectWeights();
+	ID3D11ComputeShader* GetEffectCopy();
+	ID3D11ComputeShader* GetEffectBlend();
+	ID3D11ComputeShader* GetEffectBlendLaplacian();
+
 	ID3D11BlendState* deferredBlendStates[7][2][13][2];
 	ID3D11BlendState* forwardBlendStates[7][2][13][2];
 

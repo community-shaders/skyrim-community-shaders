@@ -881,6 +881,51 @@ void Deferred::ClearExposureFusionResources()
 	}
 }
 
+ID3D11ComputeShader* Deferred::GetEffectLuminance()
+{
+	if (!effectLuminance) {
+		logger::debug("Compiling EffectLuminanceCS");
+		effectLuminance = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ExposureFusion\\EffectLuminanceCS.hlsl", {}, "cs_5_0"));
+	}
+	return effectLuminance;
+}
+
+ID3D11ComputeShader* Deferred::GetEffectWeights()
+{
+	if (!effectWeights) {
+		logger::debug("Compiling EffectWeightsCS");
+		effectWeights = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ExposureFusion\\EffectWeightsCS.hlsl", {}, "cs_5_0"));
+	}
+	return effectWeights;
+}
+
+ID3D11ComputeShader* Deferred::GetEffectCopy()
+{
+	if (!effectCopy) {
+		logger::debug("Compiling EffectCopyCS");
+		effectCopy = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ExposureFusion\\EffectCopyCS.hlsl", {}, "cs_5_0"));
+	}
+	return effectCopy;
+}
+
+ID3D11ComputeShader* Deferred::GetEffectBlend()
+{
+	if (!effectBlend) {
+		logger::debug("Compiling EffectBlendCS");
+		effectBlend = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ExposureFusion\\EffectBlendCS.hlsl", {}, "cs_5_0"));
+	}
+	return effectBlend;
+}
+
+ID3D11ComputeShader* Deferred::GetEffectBlendLaplacian()
+{
+	if (!effectBlendLaplacian) {
+		logger::debug("Compiling EffectBlendLaplacianCS");
+		effectBlendLaplacian = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ExposureFusion\\EffectBlendLaplacianCS.hlsl", {}, "cs_5_0"));
+	}
+	return effectBlendLaplacian;
+}
+
 void Deferred::ProcessExposureFusion()
 {
 	auto context = globals::d3d::context;
@@ -916,7 +961,7 @@ void Deferred::ProcessExposureFusion()
 		ID3D11UnorderedAccessView* uavs[] = { mips[0].uav.get() };
 		context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
 
-		context->CSSetShader(effectWeights, nullptr, 0);
+		context->CSSetShader(GetEffectLuminance(), nullptr, 0);
 
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 	}
@@ -924,18 +969,18 @@ void Deferred::ProcessExposureFusion()
 	// Compute the local weights of synthetic exposures.
 	{
 		{
-			ID3D11ShaderResourceView* srvs[] = { mipsWeights[0].srv.get() };
-			ID3D11UnorderedAccessView* uavs[] = { mips[0].uav.get() };
+			ID3D11ShaderResourceView* srvs[] = { mips[0].srv.get() };
+			ID3D11UnorderedAccessView* uavs[] = { mipsWeights[0].uav.get() };
 
 			context->CSSetShaderResources(0, 1, srvs);
 			context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
 
-			context->CSSetShader(effectWeights, nullptr, 0);
+			context->CSSetShader(GetEffectWeights(), nullptr, 0);
 
 			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 		}
 
-		context->CSSetShader(effectCopy, nullptr, 0);
+		context->CSSetShader(GetEffectCopy(), nullptr, 0);
 
 		for (int i = 0; i < mips.size() - 1; i++) {
 			uint levelDispatchX = (uint)std::ceil(mips[i + 1].desc.Width / 8.0f);
@@ -975,13 +1020,13 @@ void Deferred::ProcessExposureFusion()
 		uint levelDispatchX = (uint)std::ceil(mipsAssemble[mipLevel].desc.Width / 8.0f);
 		uint levelDispatchY = (uint)std::ceil(mipsAssemble[mipLevel].desc.Height / 8.0f);
 
-		context->CSSetShader(effectBlend, nullptr, 0);
+		context->CSSetShader(GetEffectBlend(), nullptr, 0);
 
 		context->Dispatch(levelDispatchX, levelDispatchY, 1);
 
 	}
 
-	context->CSSetShader(effectBlendLaplacian, nullptr, 0);
+	context->CSSetShader(GetEffectBlendLaplacian(), nullptr, 0);
 
 	for (auto i = mips.size() - 1; i > 0; i--) {
 		// Blend the finer levels - Laplacians.
@@ -990,7 +1035,7 @@ void Deferred::ProcessExposureFusion()
 
 		{
 			ID3D11ShaderResourceView* srvs[] = { mips[i - 1].srv.get(), mips[i].srv.get(), mipsWeights[i - 1].srv.get(), mipsAssemble[i].srv.get() };
-			ID3D11UnorderedAccessView* uavs[] = { mipsAssemble[i + 1].uav.get() };
+			ID3D11UnorderedAccessView* uavs[] = { mipsAssemble[i - 1].uav.get() };
 
 			context->CSSetShaderResources(0, 4, srvs);
 			context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
