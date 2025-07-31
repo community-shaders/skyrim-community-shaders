@@ -12,7 +12,7 @@ namespace InverseSquareLighting
 		float isEnabled = 1.0f - float((light.lightFlags & LightLimitFix::LightFlags::Disabled) != 0);
 		float isInvSq = float((light.lightFlags & LightLimitFix::LightFlags::InverseSquare) != 0);
 
-		float invSq = SCALED_UNITS_SQ * rcp(distance * distance + SCALED_UNITS_SQ);
+		float invSq = SCALED_UNITS_SQ * rcp(distance * distance + SCALED_UNITS_SQ * light.size * light.size / 2.0f);
 		float t = saturate((light.radius - distance) * light.fadeZone);
 		float fastSmoothstep = t * t * (3.0f - 2.0f * t);
 		invSq *= fastSmoothstep;

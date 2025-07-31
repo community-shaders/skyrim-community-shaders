@@ -49,14 +49,18 @@ public:
 	struct alignas(16) LightData
 	{
 		float3 color;
+		float fade;
 		float radius;
+		float invRadius;
+		float fadeZone;
+		float size;
 		PositionOpt positionWS[2];
 		PositionOpt positionVS[2];
 		uint128_t roomFlags = uint32_t(0);
 		stl::enumeration<LightFlags> lightFlags;
 		uint32_t shadowMaskIndex = 0;
-		float invRadius;
-		float fadeZone;
+		uint pad0;
+		uint pad1;
 	};
 
 	struct ClusterAABB
