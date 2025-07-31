@@ -1903,7 +1903,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	complexMaterial = complexMaterial && complexMaterialColor.y > (4.0 / 255.0);
 	shininess = lerp(shininess, shininess * complexMaterialColor.y, complexMaterial);
 	if (complexMaterial) {
-		complexSpecular = lerp(1.0, baseColor.xyz, complexMaterialColor.z);
+		complexSpecular = lerp(0.04, baseColor.xyz, complexMaterialColor.z);
 		baseColor.xyz = lerp(baseColor.xyz, 0.0, complexMaterialColor.z);
 
 	}
@@ -2244,18 +2244,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		uint2 envSize;
 		TexEnvSampler.GetDimensions(envSize.x, envSize.y);
 
-#			if defined(CREATOR)
-#				if defined(EMAT)
-		if (envSize.x == 1 && envSize.y == 1 || complexMaterial || SharedData::cubemapCreatorSettings.Enabled) {
-#				else
-		if (envSize.x == 1 && envSize.y == 1 || SharedData::cubemapCreatorSettings.Enabled) {
-#				endif
-#			else
-#				if defined(EMAT)
+#			if defined(EMAT)
 		if (envSize.x == 1 && envSize.y == 1 || complexMaterial) {
-#				else
+#			else
 		if (envSize.x == 1 && envSize.y == 1) {
-#				endif
 #			endif
 
 			dynamicCubemap = true;
