@@ -36,6 +36,7 @@ public:
 		uint upscaleMethod = (uint)UpscaleMethod::kTAA;
 		uint upscaleMethodNoDLSS = (uint)UpscaleMethod::kTAA;
 		uint upscaleMethodNoFSR = (uint)UpscaleMethod::kTAA;
+		uint upscalePreset = (uint)FfxFsr3QualityMode::FFX_FSR3_QUALITY_MODE_QUALITY;
 		float sharpness = 0.0f;
 		uint dlssPreset = 1;
 		uint frameLimitMode = 1;
@@ -96,6 +97,9 @@ public:
 
 	bool useHUDLess = false;
 
+	uint outputSize[2];
+	uint renderSize[2];
+
 	void CreateFrameGenerationResources();
 	void CopyBuffersToSharedResources();
 	void PostDisplay();
@@ -115,6 +119,8 @@ public:
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
+
+	void PostInitD3D();
 
 	bool validTaaPass = false;
 	std::mutex settingsMutex;  // Mutex to protect settings access
@@ -167,8 +173,66 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	struct SetupWindowHook
+	{
+		static void thunk(int64_t a1)
+		{
+			GetSingleton()->PostInitD3D();
+			func(a1);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct GetWindowRectHook
+	{
+		static bool thunk(HWND hWnd, LPRECT lpRect)
+		{
+			auto ret = func(hWnd, lpRect);
+
+			auto upscaling = globals::upscaling;
+
+			lpRect->right = (LONG)upscaling->renderSize[0];
+			lpRect->bottom = (LONG)upscaling->renderSize[1];
+
+			return ret;
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct GetClientRectHook
+	{
+		static bool thunk(HWND hWnd, LPRECT lpRect)
+		{
+			auto ret = func(hWnd, lpRect);
+
+			auto upscaling = globals::upscaling;
+
+			lpRect->right = (LONG)upscaling->renderSize[0];
+			lpRect->bottom = (LONG)upscaling->renderSize[1];
+
+			return ret;
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	static void InstallHooks()
 	{
+		stl::write_thunk_call<SetupWindowHook>(REL::RelocationID(75445, 75445).address() + REL::Relocate(0xEC, 0xEC, 0xEC));
+
+		*(uintptr_t*)&GetWindowRectHook::func = Detours::X64::DetourFunction((uintptr_t) & ::GetWindowRect, (uintptr_t)&GetWindowRectHook::thunk);
+		*(uintptr_t*)&GetClientRectHook::func = Detours::X64::DetourFunction((uintptr_t) & ::GetClientRect, (uintptr_t)&GetClientRectHook::thunk);
+
+		// Always enable TAA jitters, even without TAA
+
+		//static REL::Relocation<uintptr_t> updateJitterHook{ REL::RelocationID(75709, 77518) };          // D7CFB0, DB96E0
+		//static REL::Relocation<uintptr_t> buildCameraStateDataHook{ REL::RelocationID(75711, 77520) };  // D7D130, DB9850
+
+		//uint8_t patch1[] = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 };
+		//uint8_t patch2[] = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 };
+
+		//REL::safe_write<uint8_t>(updateJitterHook.address() + REL::Relocate(0xE, 0x11), patch1);
+		//REL::safe_write<uint8_t>(buildCameraStateDataHook.address() + REL::Relocate(0x1D5, 0x1D5), patch2);
+
 		if (!globals::state->upscalerLoaded) {
 			bool isGOG = !GetModuleHandle(L"steam_api64.dll");
 

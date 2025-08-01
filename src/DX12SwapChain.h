@@ -76,6 +76,7 @@ public:
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc;
 
 	WrappedResource* swapChainBufferWrapped;
+	WrappedResource* swapChainBufferUpscaled;
 
 	winrt::com_ptr<ID3D11Device5> d3d11Device;
 	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context;

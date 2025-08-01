@@ -11,6 +11,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	upscaleMethod,
 	upscaleMethodNoDLSS,
 	upscaleMethodNoFSR,
+	upscalePreset,
 	sharpness,
 	dlssPreset,
 	frameLimitMode,
@@ -76,6 +77,13 @@ void Upscaling::DrawSettings()
 	if (upscaleMethod != UpscaleMethod::kNONE) {
 		ImGui::SliderFloat("Sharpness", &settings.sharpness, 0.0f, 1.0f, "%.1f");
 		settings.sharpness = std::clamp(settings.sharpness, 0.0f, 1.0f);
+	}
+
+	// Display upscaling preset if applicable
+
+	if (upscaleMethod == UpscaleMethod::kFSR || upscaleMethod == UpscaleMethod::kDLSS) {
+		const char* upscalePresets[] = { "Ultra Performance", "Performance", "Balanced", "Quality" };
+		ImGui::SliderInt("Upscale Preset", (int*)&settings.upscalePreset, 1, 4, std::format("{}", upscalePresets[4 - settings.upscalePreset]).c_str());
 	}
 
 	// Display DLSS preset slider if using DLSS
@@ -673,49 +681,75 @@ void Upscaling::CreateFrameGenerationResources()
 
 void Upscaling::CopyBuffersToSharedResources()
 {
-	if (!frameGenEnabled || !settings.frameGenerationMode)
-		return;
-
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
 
-	{
-		auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-		context->CopyResource(motionVectorBufferShared->resource.get(), motionVector.texture);
-	}
-
-	{
-		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
-
+	if (frameGenEnabled && settings.frameGenerationMode) {
 		{
-			auto dispatchCount = Util::GetScreenDispatchCount(true);
-
-			ID3D11ShaderResourceView* views[1] = { depth.depthSRV };
-			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
-
-			ID3D11UnorderedAccessView* uavs[1] = { depthBufferShared->uav.get() };
-			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
-
-			context->CSSetShader(copyDepthToSharedBufferCS, nullptr, 0);
-
-			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+			auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+			context->CopyResource(motionVectorBufferShared->resource.get(), motionVector.texture);
 		}
 
-		ID3D11ShaderResourceView* views[1] = { nullptr };
-		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+		{
+			auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 
-		ID3D11UnorderedAccessView* uavs[1] = { nullptr };
-		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+			{
+				auto dispatchCount = Util::GetScreenDispatchCount(true);
 
-		ID3D11ComputeShader* shader = nullptr;
-		context->CSSetShader(shader, nullptr, 0);
+				ID3D11ShaderResourceView* views[1] = { depth.depthSRV };
+				context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+				ID3D11UnorderedAccessView* uavs[1] = { depthBufferShared->uav.get() };
+				context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+				context->CSSetShader(copyDepthToSharedBufferCS, nullptr, 0);
+
+				context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+			}
+
+			ID3D11ShaderResourceView* views[1] = { nullptr };
+			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+			ID3D11UnorderedAccessView* uavs[1] = { nullptr };
+			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+			ID3D11ComputeShader* shader = nullptr;
+			context->CSSetShader(shader, nullptr, 0);
+		}
+
+		if (!useHUDLess) {
+			auto& swapChain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+			ID3D11Resource* swapChainResource;
+			swapChain.SRV->GetResource(&swapChainResource);
+			context->CopyResource(HUDLessBufferShared->resource.get(), swapChainResource);
+		}
 	}
 
-	if (!useHUDLess) {
-		auto& swapChain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-		ID3D11Resource* swapChainResource;
-		swapChain.SRV->GetResource(&swapChainResource);
-		context->CopyResource(HUDLessBufferShared->resource.get(), swapChainResource);
+	// Copy the wrapped swap chain buffer to the upscaled one
+	if (!useHUDLess) {	
+		float clearColor[4]{ 0, 0, 0, 1 };
+		context->ClearRenderTargetView(globals::dx12SwapChain->swapChainBufferUpscaled->rtv, clearColor);
+
+		D3D11_BOX srcBox = {};
+		srcBox.left = 0;
+		srcBox.top = 0;
+		srcBox.front = 0;
+		srcBox.right = renderSize[0];
+		srcBox.bottom = renderSize[1];
+		srcBox.back = 1;
+
+		context->CopySubresourceRegion(
+			globals::dx12SwapChain->swapChainBufferUpscaled->resource11,
+			0,
+			0, 0, 0,
+			globals::dx12SwapChain->swapChainBufferWrapped->resource11,
+			0,
+			&srcBox);	
+
+		// Swap the framebuffer to the upscaled one
+		auto& framebuffer = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+		framebuffer.RTV = globals::dx12SwapChain->swapChainBufferUpscaled->rtv;
+		context->OMSetRenderTargets(1, &framebuffer.RTV, nullptr);
 	}
 
 	useHUDLess = false;
@@ -725,16 +759,43 @@ void Upscaling::PostDisplay()
 {
 	globals::state->RenderReShade();
 
-	if (!frameGenEnabled || !settings.frameGenerationMode)
-		return;
-
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
 
-	auto& swapChain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-	ID3D11Resource* swapChainResource;
-	swapChain.SRV->GetResource(&swapChainResource);
-	context->CopyResource(HUDLessBufferShared->resource.get(), swapChainResource);
+	if (frameGenEnabled && settings.frameGenerationMode) {
+		auto& swapChain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+		ID3D11Resource* swapChainResource;
+		swapChain.SRV->GetResource(&swapChainResource);
+		context->CopyResource(HUDLessBufferShared->resource.get(), swapChainResource);
+	}
+
+	// Copy the wrapped swap chain buffer to the upscaled one
+	{
+		float clearColor[4]{ 0, 0, 0, 1 };
+		context->ClearRenderTargetView(globals::dx12SwapChain->swapChainBufferUpscaled->rtv, clearColor);
+
+		D3D11_BOX srcBox = {};
+		srcBox.left = 0;
+		srcBox.top = 0;
+		srcBox.front = 0;
+		srcBox.right = renderSize[0];
+		srcBox.bottom = renderSize[1];
+		srcBox.back = 1;
+
+		context->CopySubresourceRegion(
+			globals::dx12SwapChain->swapChainBufferUpscaled->resource11,
+			0,
+			0, 0, 0,
+			globals::dx12SwapChain->swapChainBufferWrapped->resource11,
+			0,
+			&srcBox
+		);
+	}
+
+	// Swap the framebuffer to the upscaled one
+	auto& framebuffer = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+	framebuffer.RTV = globals::dx12SwapChain->swapChainBufferUpscaled->rtv;
+	context->OMSetRenderTargets(1, &framebuffer.RTV, nullptr);
 
 	useHUDLess = true;
 }
@@ -827,6 +888,29 @@ double Upscaling::GetRefreshRate(HWND a_window)
 	}
 	logger::error("Failed to retrieve refresh rate from swap chain");
 	return 60;
+}
+
+void Upscaling::PostInitD3D()
+{
+	static uint32_t* g_width = (uint32_t*)REL::RelocationID(525002, 411483).address();    // 302C8B4, 30C6DB4
+	static uint32_t* g_height = (uint32_t*)REL::RelocationID(525003, 411484).address();   // 302C8B8, 30C6DB8
+	static uint32_t* g_xRight = (uint32_t*)REL::RelocationID(525004, 411485).address();   // 302C8BC, 30C6DBC
+	static uint32_t* g_yBottom = (uint32_t*)REL::RelocationID(525005, 411486).address();  // 302C8C0, 30C6DC0
+
+	outputSize[0] = *g_width;
+	outputSize[1] = *g_height;
+
+	ffxFsr3GetRenderResolutionFromQualityMode(
+		&renderSize[0],
+		&renderSize[1],
+		(uint)outputSize[0],
+		(uint)outputSize[1],
+		(FfxFsr3QualityMode)settings.upscalePreset);
+
+	*g_width = renderSize[0];
+	*g_height = renderSize[1];
+	*g_xRight = renderSize[0];
+	*g_yBottom = renderSize[1];
 }
 
 bool Upscaling::IsFrameGenerationActive() const

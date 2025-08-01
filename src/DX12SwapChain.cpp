@@ -28,12 +28,14 @@ void DX12SwapChain::CreateD3D12Device(IDXGIAdapter* a_adapter)
 
 void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC a_swapChainDesc)
 {
+	auto upscaling = globals::upscaling;
+
 	IDXGIFactory4* dxgiFactory;
 	DX::ThrowIfFailed(adapter->GetParent(IID_PPV_ARGS(&dxgiFactory)));
 
 	swapChainDesc = {};
-	swapChainDesc.Width = a_swapChainDesc.BufferDesc.Width;
-	swapChainDesc.Height = a_swapChainDesc.BufferDesc.Height;
+	swapChainDesc.Width = upscaling->outputSize[0];
+	swapChainDesc.Height = upscaling->outputSize[1];
 	swapChainDesc.Format = a_swapChainDesc.BufferDesc.Format;
 	swapChainDesc.SampleDesc.Count = 1;
 	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -72,6 +74,8 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 
 void DX12SwapChain::CreateInterop()
 {
+	auto upscaling = globals::upscaling;
+
 	HANDLE sharedFenceHandle;
 	DX::ThrowIfFailed(d3d12Device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&d3d12Fence)));
 	DX::ThrowIfFailed(d3d12Device->CreateSharedHandle(d3d12Fence.get(), nullptr, GENERIC_ALL, nullptr, &sharedFenceHandle));
@@ -94,6 +98,11 @@ void DX12SwapChain::CreateInterop()
 	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
 	swapChainBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
+
+	texDesc11.Width = upscaling->outputSize[0];
+	texDesc11.Height = upscaling->outputSize[1];
+
+	swapChainBufferUpscaled = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
 }
 
 DXGISwapChainProxy* DX12SwapChain::GetSwapChainProxy()
@@ -127,10 +136,12 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	// New frame, reset
 	DX::ThrowIfFailed(commandAllocators[frameIndex]->Reset());
 	DX::ThrowIfFailed(commandLists[frameIndex]->Reset(commandAllocators[frameIndex].get(), nullptr));
+	
+	auto upscaling = globals::upscaling;
 
 	// Copy shared texture to swap chain buffer
 	{
-		auto fakeSwapChain = swapChainBufferWrapped->resource.get();
+		auto fakeSwapChain = swapChainBufferUpscaled->resource.get();
 		auto realSwapChain = swapChainBuffers[frameIndex].get();
 		{
 			std::vector<D3D12_RESOURCE_BARRIER> barriers;
@@ -148,8 +159,6 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 			commandLists[frameIndex]->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
 		}
 	}
-
-	auto upscaling = globals::upscaling;
 
 	if (upscaling->frameGenEnabled)
 		globals::fidelityFX->Present(upscaling->settings.frameGenerationMode);
@@ -169,6 +178,10 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 
 	// Update the frame index
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
+
+	// Reset the framebuffer
+	globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER].RTV = swapChainBufferWrapped->rtv;
+	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);
 
 	return S_OK;
 }

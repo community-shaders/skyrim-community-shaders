@@ -380,27 +380,17 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 
 	auto proxy = globals::dx12SwapChain;
 
-	bool shouldFG = fidelityFX->module && !REL::Module::IsVR();
-	if (shouldFG)
-		if (!pSwapChainDesc->Windowed)
-			shouldFG = false;
-
 	auto refreshRate = Upscaling::GetRefreshRate(pSwapChainDesc->OutputWindow);
 	upscaling->refreshRate = refreshRate;
-
-	if (shouldFG) {
-		if (upscaling->settings.frameGenerationMode)
-			if (refreshRate >= 120)
-				shouldFG = true;
-			else if (upscaling->settings.frameGenerationForceEnable)
-				shouldFG = true;
-			else
-				shouldFG = false;
-		else
-			shouldFG = false;
+	
+	if (fidelityFX->module && !REL::Module::IsVR() && pSwapChainDesc->Windowed) {
+		if (upscaling->settings.frameGenerationMode) {
+			upscaling->frameGenEnabled = (refreshRate >= 120) || upscaling->settings.frameGenerationForceEnable;
+		} else {
+			upscaling->frameGenEnabled = false;
+		}
 	}
 
-	upscaling->frameGenEnabled = shouldFG;
 	upscaling->lowRefreshRate = refreshRate < 119;
 	upscaling->isWindowed = pSwapChainDesc->Windowed;
 
@@ -428,8 +418,6 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	proxy->CreateInterop();
 
 	*ppSwapChain = proxy->GetSwapChainProxy();
-
-	upscaling->frameGenEnabled = true;
 
 	if (streamline->initialized) {
 		streamline->slSetD3DDevice(*ppDevice);
