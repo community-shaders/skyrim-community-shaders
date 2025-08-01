@@ -619,15 +619,15 @@ void Deferred::OverrideBlendStates()
 								blendDesc.RenderTarget[i].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 							}
 
-							// Use alpha blending for masks2
-							blendDesc.RenderTarget[7].BlendEnable = blendDesc.RenderTarget[0].BlendEnable;
-							blendDesc.RenderTarget[7].SrcBlend = D3D11_BLEND_SRC_ALPHA;
-							blendDesc.RenderTarget[7].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
-							blendDesc.RenderTarget[7].BlendOp = D3D11_BLEND_OP_ADD;
-							blendDesc.RenderTarget[7].SrcBlendAlpha = D3D11_BLEND_SRC_ALPHA;
-							blendDesc.RenderTarget[7].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
-							blendDesc.RenderTarget[7].BlendOpAlpha = D3D11_BLEND_OP_ADD;
-							blendDesc.RenderTarget[7].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+							// Copy albedo blending to masks2
+							blendDesc.RenderTarget[7].BlendEnable = blendDesc.RenderTarget[3].BlendEnable;
+							blendDesc.RenderTarget[7].SrcBlend = blendDesc.RenderTarget[3].SrcBlend;
+							blendDesc.RenderTarget[7].DestBlend = blendDesc.RenderTarget[3].DestBlend;
+							blendDesc.RenderTarget[7].BlendOp = blendDesc.RenderTarget[3].BlendOp;
+							blendDesc.RenderTarget[7].SrcBlendAlpha = blendDesc.RenderTarget[3].SrcBlendAlpha;
+							blendDesc.RenderTarget[7].DestBlendAlpha = blendDesc.RenderTarget[3].DestBlendAlpha;
+							blendDesc.RenderTarget[7].BlendOpAlpha = blendDesc.RenderTarget[3].BlendOpAlpha;
+							blendDesc.RenderTarget[7].RenderTargetWriteMask = blendDesc.RenderTarget[3].RenderTargetWriteMask;
 
 							DX::ThrowIfFailed(device->CreateBlendState(&blendDesc, &deferredBlendStates[a][b][c][d]));
 						} else {

@@ -72,7 +72,7 @@ BurleySampleDiffuseNormal SampleSSSColor(float2 CenterUV, float2 UVOffset, float
 	Sample.WorldNormal = 0.0;
 
 	Sample.DiffuseLighting = ColorTexture[pixCoord];
-	Sample.DiffuseLighting.rgb = Color::GammaToLinear(Sample.DiffuseLighting.rgb);
+	Sample.DiffuseLighting.rgb = Color::GammaToLinear(Sample.DiffuseLighting.rgb / max(AlbedoTexture[pixCoord].rgb, 1e-5));
 
 	float3 ViewNormal = GBuffer::DecodeNormal(NormalTexture[pixCoord].xy);
 	Sample.WorldNormal = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(ViewNormal, 0)).xyz);
@@ -505,7 +505,7 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssA
 	float OriginalLerp = saturate((BurleyParameter.SurfaceOpacity - LowOpacityEps) / LowOpacityEps);
 
 	OutColor.xyz = lerp(OriginalColor,RadianceAccumulated.xyz,OriginalLerp);
-	OutColor.xyz = Color::LinearToGamma(OutColor.xyz) * AlbedoTexture[DTid.xy].xyz;
+	OutColor.xyz = Color::LinearToGamma(OutColor.xyz) * AlbedoTexture[DTid.xy].rgb;
 	OutColor.w = ColorTexture[DTid.xy].w;
 
 	return OutColor;

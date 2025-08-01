@@ -344,7 +344,7 @@ struct PS_OUTPUT
 #	if defined(SNOW)
 	float4 Masks2 : SV_Target7;
 #	else
-	float3 Masks2 : SV_Target7;
+	float4 Masks2 : SV_Target7;
 #	endif
 };
 #else
@@ -3006,15 +3006,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 		color.xyz += transmissionColor;
 	}
-#	elif defined(SKIN) && defined(SSS) && defined(DEFERRED) && !defined(DO_ALPHA_TEST)
-	color.xyz += diffuseColor;
-	psout.Masks2.xyz = baseColor.xyz;
 #	else
 	color.xyz += diffuseColor * baseColor.xyz;
-#	endif
-
-#	if defined(DEFERRED) && !(defined(SKIN) && defined(SSS) && !defined(DO_ALPHA_TEST))
-	psout.Masks2.xyz = float3(1.0, 1.0, 1.0);
 #	endif
 
 #	if defined(HAIR) && defined(CS_HAIR)
@@ -3309,6 +3302,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #		endif
 
+	psout.Masks2.xyz = baseColor.xyz;
+
 	psout.Albedo = float4(outputAlbedo, psout.Diffuse.w);
 
 	const float wetnessGlossinessGain = 0.65;
@@ -3357,9 +3352,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.NormalGlossiness.w = 1;
 #		endif
 
-#		if defined(SNOW)
 	psout.Masks2.w = psout.Diffuse.w;
-#		endif
 
 #		if (defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE))
 #			if defined(DYNAMIC_CUBEMAPS)
