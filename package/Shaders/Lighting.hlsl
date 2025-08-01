@@ -1903,7 +1903,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	complexMaterial = complexMaterial && complexMaterialColor.y > (4.0 / 255.0);
 	shininess = lerp(shininess, shininess * complexMaterialColor.y, complexMaterial);
 	if (complexMaterial) {
-		complexSpecular = lerp(0.04, baseColor.xyz, complexMaterialColor.z);
+		complexSpecular = lerp(1.0, baseColor.xyz, complexMaterialColor.z);
 		baseColor.xyz = lerp(baseColor.xyz, 0.0, complexMaterialColor.z);
 
 	}
@@ -2293,8 +2293,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			endif
 
 				envMask = saturate(envMask);
-#			if defined(SPECULAR)
+#			if defined(VANILLA_FRESNEL)
+#				if defined(SPECULAR)
 				F0 = lerp(glossiness * SpecularColor.xyz, F0, envMask);
+#				else
+				F0 = lerp(0.04, F0, envMask);
+#				endif
 #			endif
 				roughness = lerp(roughness, envRoughness, pow(envMask, 0.25));
 			}
@@ -2907,6 +2911,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		else
 			reflectance = DynamicCubemaps::GetDynamicCubemap(worldNormal, vertexNormal, viewDirection, roughness, F0);
 #		endif
+
+#		if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE) && !defined(VANILLA_FRESNEL)
+		reflectance *= envMask;
+#		endif
 	}
 #	endif
 
@@ -3047,15 +3055,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	else
 	color.xyz += diffuseColor * baseColor.xyz;
-#		if !defined(DEFERRED) && defined(VANILLA_FRESNEL)
-#			if defined(DYNAMIC_CUBEMAPS)
-#				if defined(SKYLIGHTING)
-	specularColor += DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldNormal, vertexNormal, viewDirection, roughness, skylightingSH) * reflectance;
-#				else
-	specularColor += DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldNormal, vertexNormal, viewDirection, roughness) * reflectance;
-#				endif
+#		if !defined(DEFERRED) && (defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)) && defined(DYNAMIC_CUBEMAPS)
+	if (dynamicCubemap)
+#			if defined(SKYLIGHTING)
+		envColor += DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldNormal, vertexNormal, viewDirection, roughness, skylightingSH) * reflectance;
 #			else
-	specularColor += directionalAmbientColor * reflectance;
+		envColor += DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldNormal, vertexNormal, viewDirection, roughness) * reflectance;
 #			endif
 #		endif
 #	endif
