@@ -348,6 +348,9 @@ void SkySync::ShadowFader::SetLighting(const RE::Sun* sun, RE::NiPoint3 dir, flo
 	m.entry[1][0] = -dir.y;
 	m.entry[2][0] = -dir.z;
 
+	RE::NiUpdateData updateData; 
+	sun->light->Update(updateData);
+
 	intensity = std::clamp(intensity, 0.0f, 1.0f);
 	sun->light->GetLightRuntimeData().fade = intensity;
 	volumetricLightingIntensityFactor = intensity;
@@ -394,7 +397,7 @@ void SkySync::ClimateTimings::Update(const RE::TESClimate* climate)
 
 void SkySync::Sky_OnNewClimate::thunk(RE::Sky* sky)
 {
-	if (auto& singleton = globals::features::skySync; sky && singleton.settings.Enabled)
+	if (auto& singleton = globals::features::skySync; singleton.settings.Enabled && sky && sky->currentClimate)
 		singleton.timings.Update(sky->currentClimate);
 	func(sky);
 }
