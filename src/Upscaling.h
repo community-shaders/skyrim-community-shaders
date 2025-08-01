@@ -122,46 +122,7 @@ public:
 
 	void PostInitD3D();
 
-	bool validTaaPass = false;
 	std::mutex settingsMutex;  // Mutex to protect settings access
-
-	struct TAA_BeginTechnique
-	{
-		static void thunk(RE::BSImagespaceShaderISTemporalAA* a_shader, RE::BSTriShape* a_null)
-		{
-			func(a_shader, a_null);
-			GetSingleton()->validTaaPass = true;
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	struct TAA_EndTechnique
-	{
-		static void thunk(RE::BSImagespaceShaderISTemporalAA* a_shader, RE::BSTriShape* a_null)
-		{
-			auto singleton = GetSingleton();
-			auto upscaleMode = singleton->GetUpscaleMethod();
-			if ((upscaleMode != UpscaleMethod::kTAA && upscaleMode != UpscaleMethod::kNONE) && singleton->validTaaPass)
-				singleton->Upscale();
-			else
-				func(a_shader, a_null);
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	struct BSImageSpacerShader_RenderPassImmediately
-	{
-		static void thunk(RE::BSRenderPass* Pass, uint32_t Technique, bool AlphaTest, uint32_t RenderFlags)
-		{
-			func(Pass, Technique, AlphaTest, RenderFlags);
-			auto singleton = GetSingleton();
-			auto upscaleMode = singleton->GetUpscaleMethod();
-			if (singleton->validTaaPass && upscaleMode == UpscaleMethod::kTAA)
-				singleton->SharpenTAA();
-			singleton->validTaaPass = false;
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
 
 	struct MenuManagerDrawInterfaceStartHook
 	{
@@ -217,31 +178,27 @@ public:
 
 	static void InstallHooks()
 	{
-		stl::write_thunk_call<SetupWindowHook>(REL::RelocationID(75445, 75445).address() + REL::Relocate(0xEC, 0xEC, 0xEC));
-
-		*(uintptr_t*)&GetWindowRectHook::func = Detours::X64::DetourFunction((uintptr_t) & ::GetWindowRect, (uintptr_t)&GetWindowRectHook::thunk);
-		*(uintptr_t*)&GetClientRectHook::func = Detours::X64::DetourFunction((uintptr_t) & ::GetClientRect, (uintptr_t)&GetClientRectHook::thunk);
-
-		// Always enable TAA jitters, even without TAA
-
-		//static REL::Relocation<uintptr_t> updateJitterHook{ REL::RelocationID(75709, 77518) };          // D7CFB0, DB96E0
-		//static REL::Relocation<uintptr_t> buildCameraStateDataHook{ REL::RelocationID(75711, 77520) };  // D7D130, DB9850
-
-		//uint8_t patch1[] = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 };
-		//uint8_t patch2[] = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 };
-
-		//REL::safe_write<uint8_t>(updateJitterHook.address() + REL::Relocate(0xE, 0x11), patch1);
-		//REL::safe_write<uint8_t>(buildCameraStateDataHook.address() + REL::Relocate(0x1D5, 0x1D5), patch2);
-
 		if (!globals::state->upscalerLoaded) {
 			bool isGOG = !GetModuleHandle(L"steam_api64.dll");
 
 			stl::write_thunk_call<Main_UpdateJitter>(REL::RelocationID(75460, 77245).address() + REL::Relocate(0xE5, isGOG ? 0x133 : 0xE2, 0x104));
-			stl::write_thunk_call<TAA_BeginTechnique>(REL::RelocationID(100540, 107270).address() + REL::Relocate(0x3E9, 0x3EA, 0x448));
-			stl::write_thunk_call<TAA_EndTechnique>(REL::RelocationID(100540, 107270).address() + REL::Relocate(0x3F3, 0x3F4, 0x452));
-			stl::write_thunk_call<BSImageSpacerShader_RenderPassImmediately>(REL::RelocationID(100951, 107733).address() + REL::Relocate(0x82, 0x78, 0x7E));
-
 			stl::detour_thunk<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
+
+			stl::write_thunk_call<SetupWindowHook>(REL::RelocationID(75445, 75445).address() + REL::Relocate(0xEC, 0xEC, 0xEC));
+
+			*(uintptr_t*)&GetWindowRectHook::func = Detours::X64::DetourFunction((uintptr_t) & ::GetWindowRect, (uintptr_t)&GetWindowRectHook::thunk);
+			*(uintptr_t*)&GetClientRectHook::func = Detours::X64::DetourFunction((uintptr_t) & ::GetClientRect, (uintptr_t)&GetClientRectHook::thunk);
+
+			// Always enable TAA jitters, even without TAA
+
+			static REL::Relocation<uintptr_t> updateJitterHook{ REL::RelocationID(75709, 77518) };          // D7CFB0, DB96E0
+			static REL::Relocation<uintptr_t> buildCameraStateDataHook{ REL::RelocationID(75711, 77520) };  // D7D130, DB9850
+
+			uint8_t patch1[] = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 };
+			uint8_t patch2[] = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 };
+
+			REL::safe_write<uint8_t>(updateJitterHook.address() + REL::Relocate(0xE, 0x11), patch1);
+			REL::safe_write<uint8_t>(buildCameraStateDataHook.address() + REL::Relocate(0x1D5, 0x1D5), patch2);
 
 			logger::info("[Upscaling] Installed hooks");
 		} else {

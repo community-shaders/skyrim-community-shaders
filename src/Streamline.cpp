@@ -110,20 +110,22 @@ void Streamline::LoadInterposer()
 	pref.numFeaturesToLoad = _countof(featuresToLoad);
 
 	// Set log level from settings
-	switch (globals::upscaling->settings.streamlineLogLevel) {
-	case 2:
-		pref.logLevel = sl::LogLevel::eVerbose;
-		break;
-	case 1:
-		pref.logLevel = sl::LogLevel::eDefault;
-		break;
-	case 0:
-	default:
-		pref.logLevel = sl::LogLevel::eOff;
-		break;
-	}
+	//switch (globals::upscaling->settings.streamlineLogLevel) {
+	//case 2:
+	//	pref.logLevel = sl::LogLevel::eVerbose;
+	//	break;
+	//case 1:
+	//	pref.logLevel = sl::LogLevel::eDefault;
+	//	break;
+	//case 0:
+	//default:
+	//	pref.logLevel = sl::LogLevel::eOff;
+	//	break;
+	//}
+
+	pref.logLevel = sl::LogLevel::eVerbose;
 	pref.logMessageCallback = LoggingCallback;
-	pref.showConsole = false;
+	pref.showConsole = true;
 
 	pref.engine = sl::EngineType::eCustom;
 	pref.engineVersion = "1.0.0";
@@ -313,17 +315,19 @@ void Streamline::CheckFrameConstants()
 	}
 }
 
-void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl::DLSSPreset a_preset)
+void Streamline::Upscale(ID3D11Resource* a_originalTexture, ID3D11Resource* a_upscaledTexture, Texture2D* a_alphaMask, sl::DLSSPreset a_preset)
 {
 	CheckFrameConstants();
 
-	auto state = globals::state;
+	//auto state = globals::state;
 
 	auto renderer = globals::game::renderer;
 	auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 	auto& motionVectorsTexture = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
 	static auto previousDlssPreset = a_preset;
+
+	auto upscaling = globals::upscaling;
 
 	if (previousDlssPreset != a_preset)
 		DestroyDLSSResources();
@@ -332,8 +336,8 @@ void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl
 	{
 		sl::DLSSOptions dlssOptions{};
 		dlssOptions.mode = sl::DLSSMode::eMaxQuality;
-		dlssOptions.outputWidth = (uint)state->screenSize.x;
-		dlssOptions.outputHeight = (uint)state->screenSize.y;
+		dlssOptions.outputWidth = upscaling->outputSize[0];
+		dlssOptions.outputHeight = upscaling->outputSize[1];
 		dlssOptions.colorBuffersHDR = sl::Boolean::eFalse;
 		dlssOptions.preExposure = 1.0f;
 		dlssOptions.sharpness = 0.0f;
@@ -349,23 +353,24 @@ void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl
 		}
 	}
 
-	{
-		sl::Extent fullExtent{ 0, 0, (uint)state->screenSize.x, (uint)state->screenSize.y };
+	{	
+		sl::Extent originalExtent{ 0, 0, upscaling->renderSize[0], upscaling->renderSize[1] };
+		sl::Extent upscaledExtent{ 0, 0, upscaling->outputSize[0], upscaling->outputSize[1] };
 
-		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_upscaleTexture->resource.get(), 0 };
-		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_upscaleTexture->resource.get(), 0 };
+		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_originalTexture, 0 };
+		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_upscaledTexture, 0 };
 		sl::Resource depth = { sl::ResourceType::eTex2d, depthTexture.texture, 0 };
 		sl::Resource mvec = { sl::ResourceType::eTex2d, motionVectorsTexture.texture, 0 };
 
-		sl::ResourceTag colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
-		sl::ResourceTag colorOutTag = sl::ResourceTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
-		sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
-		sl::ResourceTag mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
+		sl::ResourceTag colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &originalExtent };
+		sl::ResourceTag colorOutTag = sl::ResourceTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &upscaledExtent };
+		sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eOnlyValidNow, &originalExtent };
+		sl::ResourceTag mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eOnlyValidNow, &originalExtent };
 
 		bool needsMask = a_preset != sl::DLSSPreset::ePresetA && a_preset != sl::DLSSPreset::ePresetB;
 
 		sl::Resource alpha = { sl::ResourceType::eTex2d, needsMask ? a_alphaMask->resource.get() : nullptr, 0 };
-		sl::ResourceTag alphaTag = sl::ResourceTag{ &alpha, sl::kBufferTypeBiasCurrentColorHint, sl::ResourceLifecycle::eValidUntilPresent, &fullExtent };
+		sl::ResourceTag alphaTag = sl::ResourceTag{ &alpha, sl::kBufferTypeBiasCurrentColorHint, sl::ResourceLifecycle::eValidUntilPresent, &originalExtent };
 
 		sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag, depthTag, mvecTag, alphaTag };
 		slSetTag(viewport, resourceTags, _countof(resourceTags), globals::d3d::context);

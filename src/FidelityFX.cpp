@@ -203,8 +203,6 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 
 void FidelityFX::CreateFSRResources()
 {
-	auto state = globals::state;
-
 	auto fsrDevice = ffxGetDeviceDX11(globals::d3d::device);
 
 	size_t scratchBufferSize = ffxGetScratchMemorySizeDX11(FFX_FSR3UPSCALER_CONTEXT_COUNT);
@@ -215,13 +213,15 @@ void FidelityFX::CreateFSRResources()
 	if (ffxGetInterfaceDX11(&fsrInterface, fsrDevice, scratchBuffer, scratchBufferSize, FFX_FSR3UPSCALER_CONTEXT_COUNT) != FFX_OK)
 		logger::critical("[FidelityFX] Failed to initialize FSR3 backend interface!");
 
+	auto upscaling = globals::upscaling;
+
 	FfxFsr3ContextDescription contextDescription;
-	contextDescription.maxRenderSize.width = (uint)state->screenSize.x;
-	contextDescription.maxRenderSize.height = (uint)state->screenSize.y;
-	contextDescription.maxUpscaleSize.width = (uint)state->screenSize.x;
-	contextDescription.maxUpscaleSize.height = (uint)state->screenSize.y;
-	contextDescription.displaySize.width = (uint)state->screenSize.x;
-	contextDescription.displaySize.height = (uint)state->screenSize.y;
+	contextDescription.maxRenderSize.width = upscaling->renderSize[0];
+	contextDescription.maxRenderSize.height = upscaling->renderSize[1];
+	contextDescription.maxUpscaleSize.width = upscaling->outputSize[0];
+	contextDescription.maxUpscaleSize.height = upscaling->outputSize[1];
+	contextDescription.displaySize.width = upscaling->outputSize[0];
+	contextDescription.displaySize.height = upscaling->outputSize[1];
 	contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE;
 	contextDescription.backBufferFormat = FFX_SURFACE_FORMAT_R8G8B8A8_UNORM;
 
@@ -237,7 +237,7 @@ void FidelityFX::DestroyFSRResources()
 		logger::critical("[FidelityFX] Failed to destroy FSR3 context!");
 }
 
-void FidelityFX::Upscale(Texture2D* a_color, Texture2D* a_alphaMask, float2 a_jitter, float a_sharpness)
+void FidelityFX::Upscale(ID3D11Resource* a_originalTexture, ID3D11Resource* a_upscaledTexture, Texture2D* a_alphaMask, float2 a_jitter, float a_sharpness)
 {
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
@@ -249,18 +249,22 @@ void FidelityFX::Upscale(Texture2D* a_color, Texture2D* a_alphaMask, float2 a_ji
 		FfxFsr3DispatchUpscaleDescription dispatchParameters{};
 
 		dispatchParameters.commandList = ffxGetCommandListDX11(context);
-		dispatchParameters.color = ffxGetResource(a_color->resource.get(), L"FSR3_Input_OutputColor", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+		dispatchParameters.color = ffxGetResource(a_originalTexture, L"FSR3_Input_Color", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 		dispatchParameters.depth = ffxGetResource(depthTexture.texture, L"FSR3_InputDepth", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 		dispatchParameters.motionVectors = ffxGetResource(motionVectorsTexture.texture, L"FSR3_InputMotionVectors", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 		dispatchParameters.exposure = ffxGetResource(nullptr, L"FSR3_InputExposure", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
-		dispatchParameters.upscaleOutput = dispatchParameters.color;
+		dispatchParameters.upscaleOutput = ffxGetResource(a_upscaledTexture, L"FSR3_Output_Color", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 		dispatchParameters.reactive = ffxGetResource(a_alphaMask->resource.get(), L"FSR3_InputReactiveMap", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 		dispatchParameters.transparencyAndComposition = ffxGetResource(nullptr, L"FSR3_TransparencyAndCompositionMap", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 
+		auto upscaling = globals::upscaling;
+
 		dispatchParameters.motionVectorScale.x = globals::game::isVR ? state->screenSize.x / 2 : state->screenSize.x;
 		dispatchParameters.motionVectorScale.y = state->screenSize.y;
-		dispatchParameters.renderSize.width = (uint)state->screenSize.x;
-		dispatchParameters.renderSize.height = (uint)state->screenSize.y;
+		dispatchParameters.renderSize.width = upscaling->renderSize[0];
+		dispatchParameters.renderSize.height = upscaling->renderSize[1];
+		dispatchParameters.upscaleSize.width = upscaling->outputSize[0];
+		dispatchParameters.upscaleSize.height = upscaling->outputSize[1];
 		dispatchParameters.jitterOffset.x = -a_jitter.x;
 		dispatchParameters.jitterOffset.y = -a_jitter.y;
 

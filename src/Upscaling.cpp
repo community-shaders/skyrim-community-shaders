@@ -11,7 +11,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	upscaleMethod,
 	upscaleMethodNoDLSS,
 	upscaleMethodNoFSR,
-	upscalePreset,
 	sharpness,
 	dlssPreset,
 	frameLimitMode,
@@ -24,13 +23,14 @@ void Upscaling::DrawSettings()
 	// Skyrim settings control whether any upscaling is possible
 
 	auto state = globals::state;
-	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+	//auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	auto streamline = globals::streamline;
-	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
-	auto& bTAA = BSImagespaceShaderISTemporalAA->taaEnabled;  // Setting used by shaders
+	//GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
+//	auto& bTAA = BSImagespaceShaderISTemporalAA->taaEnabled;  // Setting used by shaders
+	//BSImagespaceShaderISTemporalAA->taaEnabled = false;
 
 	// Update upscale mode based on TAA setting
-	settings.upscaleMethod = bTAA ? (settings.upscaleMethod == (uint)UpscaleMethod::kNONE ? (uint)UpscaleMethod::kTAA : settings.upscaleMethod) : (uint)UpscaleMethod::kNONE;
+//	settings.upscaleMethod = bTAA ? (settings.upscaleMethod == (uint)UpscaleMethod::kNONE ? (uint)UpscaleMethod::kTAA : settings.upscaleMethod) : (uint)UpscaleMethod::kNONE;
 
 	// Display upscaling options in the UI
 	const char* upscaleModes[] = { "Disabled", "Temporal Anti-Aliasing", "AMD FSR 3.1", "NVIDIA DLAA" };
@@ -61,12 +61,12 @@ void Upscaling::DrawSettings()
 	}
 
 	*currentUpscaleMode = std::min(availableModes, (uint)*currentUpscaleMode);
-	bTAA = *currentUpscaleMode != (uint)UpscaleMethod::kNONE;
+	//bTAA = *currentUpscaleMode != (uint)UpscaleMethod::kNONE;
 
 	// settings for scaleform/ini
 	if (auto iniSettingCollection = globals::game::iniPrefSettingCollection) {
 		if (auto setting = iniSettingCollection->GetSetting("bUseTAA:Display")) {
-			setting->data.b = bTAA;
+			setting->data.b = false;
 		}
 	}
 
@@ -321,7 +321,9 @@ void Upscaling::UpdateJitter()
 
 		auto state = globals::state;
 
-		ffxFsr3UpscalerGetJitterOffset(&jitter.x, &jitter.y, globals::state->frameCount, 8);
+		auto phaseCount = ffxFsr3UpscalerGetJitterPhaseCount(renderSize[0], outputSize[0]);
+
+		ffxFsr3UpscalerGetJitterOffset(&jitter.x, &jitter.y, globals::state->frameCount, phaseCount);
 
 		if (globals::game::isVR)
 			gameViewport->projectionPosScaleX = -jitter.x / state->screenSize.x;
@@ -343,32 +345,11 @@ void Upscaling::Upscale()
 
 	CheckResources();
 
-	Hooks::BSGraphics_SetDirtyStates::func(false);
-
 	auto state = globals::state;
-
 	auto context = globals::d3d::context;
 
-	ID3D11ShaderResourceView* inputTextureSRV;
-	context->PSGetShaderResources(0, 1, &inputTextureSRV);
-
-	inputTextureSRV->Release();
-
-	ID3D11RenderTargetView* outputTextureRTV;
-	ID3D11DepthStencilView* dsv;
-	context->OMGetRenderTargets(1, &outputTextureRTV, &dsv);
+	// Clear render targets, to use in other shaders
 	context->OMSetRenderTargets(0, nullptr, nullptr);
-
-	outputTextureRTV->Release();
-
-	if (dsv)
-		dsv->Release();
-
-	ID3D11Resource* inputTextureResource;
-	inputTextureSRV->GetResource(&inputTextureResource);
-
-	ID3D11Resource* outputTextureResource;
-	outputTextureRTV->GetResource(&outputTextureResource);
 
 	auto dispatchCount = Util::GetScreenDispatchCount(false);
 
@@ -402,51 +383,49 @@ void Upscaling::Upscale()
 		state->EndPerfEvent();
 	}
 
+	auto dx12SwapChain = globals::dx12SwapChain;
+
 	{
 		state->BeginPerfEvent("Upscaling");
 
-		context->CopyResource(upscalingTexture->resource.get(), inputTextureResource);
-
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			globals::streamline->Upscale(upscalingTexture, alphaMaskTexture, settings.dlssPreset == 0 ? (sl::DLSSPreset)11u : sl::DLSSPreset::ePresetE);
+			globals::streamline->Upscale(dx12SwapChain->swapChainBufferWrapped->resource11, dx12SwapChain->swapChainBufferUpscaled->resource11, alphaMaskTexture, settings.dlssPreset == 0 ? (sl::DLSSPreset)11u : sl::DLSSPreset::ePresetE);
 		else if (upscaleMethod == UpscaleMethod::kFSR)
-			globals::fidelityFX->Upscale(upscalingTexture, alphaMaskTexture, jitter, settings.sharpness);
+			globals::fidelityFX->Upscale(dx12SwapChain->swapChainBufferWrapped->resource11, dx12SwapChain->swapChainBufferUpscaled->resource11, alphaMaskTexture, jitter, settings.sharpness);
 
 		state->EndPerfEvent();
 	}
 
-	if (upscaleMethod != UpscaleMethod::kFSR) {
-		state->BeginPerfEvent("Sharpening");
+	//if (upscaleMethod != UpscaleMethod::kFSR) {
+	//	state->BeginPerfEvent("Sharpening");
 
-		context->CopyResource(inputTextureResource, upscalingTexture->resource.get());
+	//	context->CopyResource(inputTextureResource, upscalingTexture->resource.get());
 
-		{
-			{
-				ID3D11ShaderResourceView* views[1] = { inputTextureSRV };
-				context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+	//	{
+	//		{
+	//			ID3D11ShaderResourceView* views[1] = { inputTextureSRV };
+	//			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
-				ID3D11UnorderedAccessView* uavs[1] = { upscalingTexture->uav.get() };
-				context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+	//			ID3D11UnorderedAccessView* uavs[1] = { upscalingTexture->uav.get() };
+	//			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
-				context->CSSetShader(GetRCASCS(), nullptr, 0);
+	//			context->CSSetShader(GetRCASCS(), nullptr, 0);
 
-				context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
-			}
+	//			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+	//		}
 
-			ID3D11ShaderResourceView* views[1] = { nullptr };
-			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+	//		ID3D11ShaderResourceView* views[1] = { nullptr };
+	//		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
-			ID3D11UnorderedAccessView* uavs[1] = { nullptr };
-			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+	//		ID3D11UnorderedAccessView* uavs[1] = { nullptr };
+	//		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
-			ID3D11ComputeShader* shader = nullptr;
-			context->CSSetShader(shader, nullptr, 0);
-		}
+	//		ID3D11ComputeShader* shader = nullptr;
+	//		context->CSSetShader(shader, nullptr, 0);
+	//	}
 
-		state->EndPerfEvent();
-	}
-
-	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
+	//	state->EndPerfEvent();
+	//}
 }
 
 void Upscaling::SharpenTAA()
@@ -725,33 +704,6 @@ void Upscaling::CopyBuffersToSharedResources()
 		}
 	}
 
-	// Copy the wrapped swap chain buffer to the upscaled one
-	if (!useHUDLess) {	
-		float clearColor[4]{ 0, 0, 0, 1 };
-		context->ClearRenderTargetView(globals::dx12SwapChain->swapChainBufferUpscaled->rtv, clearColor);
-
-		D3D11_BOX srcBox = {};
-		srcBox.left = 0;
-		srcBox.top = 0;
-		srcBox.front = 0;
-		srcBox.right = renderSize[0];
-		srcBox.bottom = renderSize[1];
-		srcBox.back = 1;
-
-		context->CopySubresourceRegion(
-			globals::dx12SwapChain->swapChainBufferUpscaled->resource11,
-			0,
-			0, 0, 0,
-			globals::dx12SwapChain->swapChainBufferWrapped->resource11,
-			0,
-			&srcBox);	
-
-		// Swap the framebuffer to the upscaled one
-		auto& framebuffer = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-		framebuffer.RTV = globals::dx12SwapChain->swapChainBufferUpscaled->rtv;
-		context->OMSetRenderTargets(1, &framebuffer.RTV, nullptr);
-	}
-
 	useHUDLess = false;
 }
 
@@ -769,33 +721,10 @@ void Upscaling::PostDisplay()
 		context->CopyResource(HUDLessBufferShared->resource.get(), swapChainResource);
 	}
 
-	// Copy the wrapped swap chain buffer to the upscaled one
-	{
-		float clearColor[4]{ 0, 0, 0, 1 };
-		context->ClearRenderTargetView(globals::dx12SwapChain->swapChainBufferUpscaled->rtv, clearColor);
-
-		D3D11_BOX srcBox = {};
-		srcBox.left = 0;
-		srcBox.top = 0;
-		srcBox.front = 0;
-		srcBox.right = renderSize[0];
-		srcBox.bottom = renderSize[1];
-		srcBox.back = 1;
-
-		context->CopySubresourceRegion(
-			globals::dx12SwapChain->swapChainBufferUpscaled->resource11,
-			0,
-			0, 0, 0,
-			globals::dx12SwapChain->swapChainBufferWrapped->resource11,
-			0,
-			&srcBox
-		);
-	}
-
-	// Swap the framebuffer to the upscaled one
-	auto& framebuffer = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-	framebuffer.RTV = globals::dx12SwapChain->swapChainBufferUpscaled->rtv;
-	context->OMSetRenderTargets(1, &framebuffer.RTV, nullptr);
+	// Swap the framebuffer for the UI buffer
+	//auto& framebuffer = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+	//framebuffer.RTV = globals::dx12SwapChain->uiBuffer->rtv;
+	//context->OMSetRenderTargets(1, &framebuffer.RTV, nullptr);
 
 	useHUDLess = true;
 }
@@ -903,8 +832,8 @@ void Upscaling::PostInitD3D()
 	ffxFsr3GetRenderResolutionFromQualityMode(
 		&renderSize[0],
 		&renderSize[1],
-		(uint)outputSize[0],
-		(uint)outputSize[1],
+		outputSize[0],
+		outputSize[1],
 		(FfxFsr3QualityMode)settings.upscalePreset);
 
 	*g_width = renderSize[0];

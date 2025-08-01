@@ -85,15 +85,15 @@ void DX12SwapChain::CreateInterop()
 	swapChainProxy = new DXGISwapChainProxy(swapChain);
 
 	D3D11_TEXTURE2D_DESC texDesc11{};
-	texDesc11.Width = swapChainDesc.Width;
-	texDesc11.Height = swapChainDesc.Height;
+	texDesc11.Width = upscaling->renderSize[0];
+	texDesc11.Height = upscaling->renderSize[1];
 	texDesc11.MipLevels = 1;
 	texDesc11.ArraySize = 1;
 	texDesc11.Format = swapChainDesc.Format;
 	texDesc11.SampleDesc.Count = 1;
 	texDesc11.SampleDesc.Quality = 0;
 	texDesc11.Usage = D3D11_USAGE_DEFAULT;
-	texDesc11.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+	texDesc11.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET | D3D11_BIND_UNORDERED_ACCESS;
 	texDesc11.CPUAccessFlags = 0;
 	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
@@ -102,7 +102,12 @@ void DX12SwapChain::CreateInterop()
 	texDesc11.Width = upscaling->outputSize[0];
 	texDesc11.Height = upscaling->outputSize[1];
 
+	uiBuffer = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
 	swapChainBufferUpscaled = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
+	
+	globals::d3d::device = d3d11Device.get();
+
+	uiCompositeCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\UICompositeCS.hlsl", {}, "cs_5_0"));
 }
 
 DXGISwapChainProxy* DX12SwapChain::GetSwapChainProxy()
@@ -126,8 +131,53 @@ HRESULT DX12SwapChain::GetBuffer(void** ppSurface)
 	return S_OK;
 }
 
+void DX12SwapChain::UIComposite()
+{
+	auto upscaling = globals::upscaling;
+
+	d3d11Context->CSSetShader(uiCompositeCS, nullptr, 0);
+	d3d11Context->CSSetShaderResources(0, 1, &uiBuffer->srv);
+	d3d11Context->CSSetUnorderedAccessViews(0, 1, &swapChainBufferUpscaled->uav, nullptr);
+
+	UINT dispatchX = (upscaling->outputSize[0] + 7) / 8;
+	UINT dispatchY = (upscaling->outputSize[1] + 7) / 8;
+
+	d3d11Context->Dispatch(dispatchX, dispatchY, 1);
+	
+	d3d11Context->CSSetShader(nullptr, nullptr, 0);
+	ID3D11ShaderResourceView* nullSRV = nullptr;
+	d3d11Context->CSSetShaderResources(0, 1, &nullSRV);
+	ID3D11UnorderedAccessView* nullUAV = nullptr;
+	d3d11Context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
+}
+
 HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 {
+	d3d11Context->OMSetRenderTargets(0, nullptr, nullptr);
+
+	auto upscaling = globals::upscaling;
+
+	// Upscale from swapChainBuffer to swapChainBufferUpscaled
+	upscaling->Upscale();
+
+	// Composite the UI with upscaled framebuffer
+	{
+		d3d11Context->CSSetShader(uiCompositeCS, nullptr, 0);
+		d3d11Context->CSSetShaderResources(0, 1, &uiBuffer->srv);
+		d3d11Context->CSSetUnorderedAccessViews(0, 1, &swapChainBufferUpscaled->uav, nullptr);
+
+		UINT dispatchX = (upscaling->outputSize[0] + 7) / 8;
+		UINT dispatchY = (upscaling->outputSize[1] + 7) / 8;
+
+		d3d11Context->Dispatch(dispatchX, dispatchY, 1);
+
+		d3d11Context->CSSetShader(nullptr, nullptr, 0);
+		ID3D11ShaderResourceView* nullSRV = nullptr;
+		d3d11Context->CSSetShaderResources(0, 1, &nullSRV);
+		ID3D11UnorderedAccessView* nullUAV = nullptr;
+		d3d11Context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
+	}
+
 	// Wait for D3D11 to finish
 	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), fenceValue));
 	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), fenceValue));
@@ -137,8 +187,6 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	DX::ThrowIfFailed(commandAllocators[frameIndex]->Reset());
 	DX::ThrowIfFailed(commandLists[frameIndex]->Reset(commandAllocators[frameIndex].get(), nullptr));
 	
-	auto upscaling = globals::upscaling;
-
 	// Copy shared texture to swap chain buffer
 	{
 		auto fakeSwapChain = swapChainBufferUpscaled->resource.get();
@@ -182,6 +230,10 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	// Reset the framebuffer
 	globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER].RTV = swapChainBufferWrapped->rtv;
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);
+	
+	// Reset UI buffer
+	float clearColor[4]{ 0, 0, 0, 0 };
+	d3d11Context->ClearRenderTargetView(uiBuffer->rtv, clearColor);
 
 	return S_OK;
 }
@@ -352,7 +404,14 @@ HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetFullscreenState(_Out_opt_ BOOL*
 
 HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetDesc(_Out_ DXGI_SWAP_CHAIN_DESC* pDesc)
 {
-	return swapChain->GetDesc(pDesc);
+	auto hr = swapChain->GetDesc(pDesc);
+
+	auto upscaling = globals::upscaling;
+
+	pDesc->BufferDesc.Width = upscaling->outputSize[0];
+	pDesc->BufferDesc.Height = upscaling->outputSize[1];
+
+	return hr;
 }
 
 HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::ResizeBuffers(UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags)
