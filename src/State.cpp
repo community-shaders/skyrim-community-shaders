@@ -7,6 +7,7 @@
 #include "Deferred.h"
 #include "FeatureIssues.h"
 #include "Features/CloudShadows.h"
+#include "Features/LensEffects.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
@@ -24,6 +25,7 @@ void State::Draw()
 	auto& terrainBlending = globals::features::terrainBlending;
 	auto& terrainHelper = globals::features::terrainHelper;
 	auto& cloudShadows = globals::features::cloudShadows;
+	auto& lensEffects = globals::features::lensEffects;
 	auto truePBR = globals::truePBR;
 	auto context = globals::d3d::context;
 
@@ -36,6 +38,9 @@ void State::Draw()
 
 		if (terrainHelper.loaded)
 			terrainHelper.SetShaderResouces(context);
+
+		if (lensEffects.loaded)
+			lensEffects.CheckOverride();
 
 		truePBR->SetShaderResouces(context);
 

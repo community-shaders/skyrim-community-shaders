@@ -168,6 +168,15 @@ Texture2D<float4> TexBaseSampler : register(t0);
 Texture2D<float4> TexBlendSampler : register(t1);
 Texture2D<float4> TexNoiseGradSampler : register(t2);
 
+#if defined(LENS_EFFECTS) && defined(DEFERRED)
+	#if defined(CLOUDS)
+		RWTexture2D<uint> LensEffectsAT : register(u7);
+		Texture2D<float4> LensEffects : register(t3);
+	#else
+		RWTexture2D<float4> LensEffects : register(u7);
+	#endif
+#endif
+
 cbuffer PerGeometry : register(b2)
 {
 	float2 PParams : packoffset(c0);
@@ -253,9 +262,22 @@ PS_OUTPUT main(PS_INPUT input)
 	float depth = TexDepthSampler.Load(int3(input.Position.xy, 0));
 	if (depth < input.Position.z)
 		psout.Color.w = 0;
-
 #	endif
+
+	#if defined(LENS_EFFECTS) && defined(DEFERRED)
+		#pragma warning(disable:3206)
+		float4 SunParams = LensEffects.Load(int3(3,0,0)); uint Out;
+		#pragma warning(default:3206)
+		#if defined(DITHER)
+			if(input.Position.y == SunParams.y)
+				LensEffects[int2(2,0)] = psout.Color;
+		#elif defined(CLOUDS)
+			if(psout.Color.w > 0.5 && length(input.Position.xy - SunParams.xy) - SunParams.w <= 0.0)
+				InterlockedAdd(LensEffectsAT[int2(0,0)], 1, Out);
+		#endif
+	#endif
 
 	return psout;
 }
 #endif
+

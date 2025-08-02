@@ -1,0 +1,569 @@
+#pragma once
+#include "Feature.h"
+#include <vector>
+
+struct LensEffects : Feature
+{
+	static LensEffects* GetSingleton()
+	{
+		static LensEffects singleton;
+		return &singleton;
+	}
+
+	virtual inline std::string GetName() override { return "Lens Effects"; }
+	virtual inline std::string GetShortName() override { return "LensEffects"; }
+	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
+	virtual inline std::string_view GetShaderDefineName() override { return "LENS_EFFECTS"; }
+	virtual std::string_view GetCategory() const override { return "Sky"; }
+	virtual inline bool SupportsVR() override { return false; };  //
+
+	virtual void DataLoaded() override;
+	virtual inline void PostPostLoad() override { Hooks::Install(); }
+
+	virtual void SetupResources() override;
+	virtual void CompileShaders();
+
+	virtual void CheckOverride();
+	virtual void LookupShader(int desc);
+
+	virtual void AppendOcclusionLUT();
+	virtual void SetupOcclusionMask();
+	virtual void SetupBurstEffect();
+	virtual void SetupSunGlareEffect();
+	virtual void SetupLensGlareEffect();
+	virtual void SetupHaloEffect();
+	virtual void SetupGhostEffect();
+	virtual void SetupIceEffect();
+	virtual void SetupRainEffect();
+	virtual void BypassShader();
+	virtual void SetupCAEffect();
+
+	ConstantBuffer* SettingsCB = nullptr;
+	ID3D11BlendState* BlendState[2] = {};
+
+	ID3D11SamplerState* LinearSampler = nullptr;
+	ID3D11SamplerState* PointSampler = nullptr;
+	ID3D11SamplerState* DepthSampler = nullptr;
+	ID3D11SamplerState* PointMirrorSampler = nullptr;
+
+	ID3D11ShaderResourceView* AtlasTexSRV = nullptr;
+	ID3D11ShaderResourceView* IceTexSRV = nullptr;
+	ID3D11ShaderResourceView* SunTexSRV = nullptr;
+
+	ID3D11Texture2D* SunOcclusionLUT = nullptr;
+	ID3D11Texture2D* SunOcclusionLUT_AT = nullptr;
+	ID3D11UnorderedAccessView* SunOcclusionUAV = nullptr;
+	ID3D11UnorderedAccessView* SunOcclusionUAV_AT = nullptr;
+	ID3D11ShaderResourceView* SunOcclusionSRV = nullptr;
+
+	ID3D11PixelShader* SunOcclusionMaskPixelShader = nullptr;
+	ID3D11PixelShader* ChromaticAberrationPixelShader = nullptr;
+	ID3D11VertexShader* BypassVertexShader = nullptr;
+
+	ID3D11VertexShader* BurstVertexShader = nullptr;
+	ID3D11PixelShader* BurstPixelShader = nullptr;
+
+	ID3D11VertexShader* SunGlareVertexShader = nullptr;
+	ID3D11PixelShader* SunGlarePixelShader = nullptr;
+
+	ID3D11VertexShader* LensGlareVertexShader = nullptr;
+	ID3D11PixelShader* LensGlarePixelShader = nullptr;
+
+	ID3D11VertexShader* HaloVertexShader = nullptr;
+	ID3D11PixelShader* HaloPixelShader = nullptr;
+
+	ID3D11VertexShader* GhostVertexShader = nullptr;
+	ID3D11PixelShader* GhostPixelShader = nullptr;
+
+	ID3D11VertexShader* IceVertexShader = nullptr;
+	ID3D11PixelShader* IcePixelShader = nullptr;
+
+	ID3D11VertexShader* RainVertexShader = nullptr;
+	ID3D11PixelShader* RainPixelShader = nullptr;
+
+	uintptr_t* skyrim_FlareData = nullptr;
+	uint32_t* skyrim_RunFlarePtr = nullptr;
+
+	RE::NiPoint3* skyrim_SunPosition = nullptr;
+	float* skyrim_SunGlareScale = nullptr;
+	float SunScale;
+
+	bool overrideShader = false;
+	bool renderDeferred = false;
+	bool useCloudLUT = false;
+	bool upscalingActive = false;
+	uint frameIdx = 5;
+	uint TMOkay = false;
+	float4 screenParams;
+	static constexpr int ghostpasses = 10;
+
+	virtual DirectX::XMFLOAT4A GetSunPosition();
+	virtual DirectX::XMFLOAT4A GetSunColor();
+	virtual void GetWeatherShader();
+	virtual bool GetWeatherPrecip();
+	virtual bool CheckWeatherChange();
+	virtual float GetWeatherTransTime();
+	virtual void UpdateWeatherBasedDisable();
+	virtual void UpdateFrameGenBasedDisable();
+
+	bool disableSunFX = false;
+	bool weatherCurrent = false;
+	bool precipCurrent = false;
+	float weatherFadeout = 0.0f;
+	uint32_t PrevWeatherID = 0;
+	uint32_t WeatherID = 0;
+	float2 currentPrecip = float2(0.0f, 0.0f);
+	std::chrono::high_resolution_clock::time_point precipstart;
+
+	static inline std::array<uint32_t, 31> weatherDisables = { { 0x00D299E, 0x02006AEC, 0x02001407, 0x02018DBB, 0x02018DBC, 0x02018DBD,
+		0x02001407, 0x000D9329, 0x0200959F, 0x00105941, 0x000923FD, 0x00048C14,
+		0x0010FEF8, 0x0010D9EC, 0x000923FD, 0x00105941, 0x0010199F, 0x000C821E,
+		0x0010FE7E, 0x0010A7A7, 0x0010A23E, 0x0010A239, 0x0010A235, 0x0010A232,
+		0x00106635, 0x0010A242, 0x00105945, 0x00105944, 0x00105943, 0x00105942,
+		0x000c8221 } };
+
+	static const inline std::string customSettingsPath = "Data\\Shaders\\LensEffects\\Lens Settings.json";
+
+	virtual void RefreshToggles();
+	virtual void RestoreDefaultSettings() override;
+	virtual void DrawSettings() override;
+	virtual void LoadSettings(json& o_json) override;
+	virtual void SaveSettings(json& o_json) override;
+	virtual void ClearCustomSettings();
+
+	struct MainSettings
+	{
+		//Starburst
+		float SB_Scale = 0.35f;
+		float SB_Intensity = 1.3f;
+
+		uint SB_EnableBlades = true;
+		float SB_BladeInt = 0.75f;
+		float SB_BladeVertices = 6.0f;
+		float SB_BladeSplay = 0.026f;
+		float SB_BladeRotation = 180.0f;
+		float SB_BladeLength = 0.9f;
+		float SB_BladeBaseWidth = 1.16f;
+		float SB_BladeWidth = 1.4f;
+		float SB_BladeTaper = 1.0f;
+		float SB_BladeFeather = 10.0f;
+		float SB_BladeFadePow = 0.7f;
+		float SB_BladeFadeDist = 8.5f;
+		float SBEX_BladeSplayLen = 0.0f;
+
+		uint SB_EnableRays = true;
+		float SB_RandomRaysInt = 0.55f;
+		float SB_RandomRaysVolume = 0.162f;
+		float SB_RandomRaysLength = 0.72f;
+		float SB_RandomRaysWidth = 0.485f;
+
+		//Ghosts
+		float GH_Scale = 0.40f;
+		float GH_Intensity = 0.4f;
+		float GH_Saturation = 1.0f;
+		uint GH_EnableClampOffset = true;
+		float GH_ClampOffset = 0.5f;
+
+		float GH_Size = 0.0f;
+		float GH_Offset = 0.0f;
+		float GH_Shape = 0.0f;
+		float GH_Roundness = 0.0f;
+		float GH_Rotation = 0.0f;
+		float GH_Feather = 0.0f;
+		float GH_CAScale = 0.0f;
+		float GH_MoveCurve = 0.0f;
+		float GH_InnerInt = 0.0f;
+
+		//Lens Glare
+		float GL_Scale = 0.35f;
+		float GL_Intensity = 0.5f;
+		float GL_XAxisOffset = 0.5f;
+		float GL_YAxisOffset = 0.1f;
+		float GL_MaxRotation = 50.0f;
+		float GL_CutDepth = 0.86f;
+		float GL_Radius = 0.88f;
+		float GL_TipFade = 1.0f;
+
+		//Halo
+		float HL_Scale = 0.5f;
+		float HL_Intensity = 0.16f;
+		uint HL_EnableExp = true;
+		uint HL_FlipExpOffset = false;
+		float HL_ExpMinSize = 0.46f;
+		float HL_ExpMaxSize = 0.4f;
+		float HL_RotationSpeed = 0.22f;
+		float HL_LineVolume = 5.0f;
+		float HL_LineLength = 0.11f;
+		float HL_LineWidth = 0.085f;
+		float HL_LineTaper = 0.15f;
+		float HL_ColorShift = 0.52f;
+
+		//Sun Glare
+		float SG_Scale = 0.8f;
+		float SG_Intensity = 0.6f;
+		float SG_OuterInt = 0.25f;
+
+		//LensCA
+		float CA_Intensity = 0.50f;
+		float CA_Threshold = 0.025f;
+		float CA_MaxOffset = 0.004f;
+
+		//LensIce
+		float LI_Intensity = 0.50f;
+		float LI_FadeDuration = 20.0f;
+		//62  248
+
+		float _pad[2];
+		DirectX::XMFLOAT4A SB_Color = DirectX::XMFLOAT4A(0.0f, 0.0f, 0.0f, 0.0f);
+		DirectX::XMFLOAT4A SG_Color = DirectX::XMFLOAT4A(0.0f, 0.0f, 0.0f, 0.0f);
+		DirectX::XMFLOAT4A HL_Color = DirectX::XMFLOAT4A(0.0f, 0.0f, 0.0f, 0.0f);
+		DirectX::XMFLOAT4A GH_Color = DirectX::XMFLOAT4A(0.0f, 0.0f, 0.0f, 0.0f);
+		DirectX::XMFLOAT4A GH_Atlas = DirectX::XMFLOAT4A(0.0f, 0.0f, 0.0f, 0.0f);
+		DirectX::XMFLOAT4A LI_Color = DirectX::XMFLOAT4A(0.0f, 0.0f, 0.0f, 0.0f);
+	};
+
+	struct ColdSettings
+	{
+		//Size, Offset, Shape, Roundness
+		std::array<float4, 10> GH_Params = {
+			float4(0.13f, 0.20f, 6.00f, 0.60f),
+			float4(0.14f, 0.30f, 9.00f, 0.25f),
+			float4(0.22f, 0.43f, 6.00f, 0.30f),
+			float4(0.20f, 0.43f, 7.00f, 1.00f),
+			float4(0.13f, 0.43f, 5.00f, 0.42f),
+			float4(0.12f, 0.54f, 6.00f, 0.35f),
+			float4(0.14f, 0.64f, 6.00f, 0.50f),
+			float4(0.42f, 0.78f, 6.00f, 0.05f),
+			float4(0.08f, 0.91f, 6.00f, 0.67f),
+			float4(0.19f, 1.00f, 7.00f, 0.15f)
+		};
+		//Rotation, Feather, CA Scale, Motion
+		std::array<float4, 10> GH_Params_2 = {
+			float4(75.0f, 0.73f, 1.00f, 1.00f),
+			float4(90.0f, 0.10f, 1.00f, 1.00f),
+			float4(60.0f, 0.16f, 1.00f, 1.00f),
+			float4(31.0f, 0.32f, 1.00f, 1.00f),
+			float4(0.00f, 1.00f, 1.00f, 1.00f),
+			float4(63.0f, 0.34f, 1.00f, 1.00f),
+			float4(40.0f, 0.13f, 1.27f, 1.00f),
+			float4(45.0f, 0.16f, 1.00f, 1.00f),
+			float4(215.0f, 0.39f, 2.00f, 1.00f),
+			float4(0.00f, 0.03f, 1.11f, 1.00f)
+		};
+		//Guess
+		std::array<float4, 10> GH_Color = {
+			float4(0.99f, 0.98f, 0.42f, 0.35f),
+			float4(1.00f, 0.00f, 0.00f, 0.38f),
+			float4(0.00f, 0.46f, 0.82f, 0.30f),
+			float4(1.00f, 0.00f, 0.00f, 0.25f),
+			float4(0.85f, 0.77f, 0.37f, 0.67f),
+			float4(0.17f, 0.24f, 0.86f, 0.59f),
+			float4(1.00f, 0.80f, 0.80f, 0.41f),
+			float4(0.20f, 0.00f, 0.25f, 0.98f),
+			float4(1.00f, 1.00f, 1.00f, 0.55f),
+			float4(0.48f, 0.00f, 0.58f, 0.60f)
+		};
+		//Tex, Vis, Scale, NA
+		std::array<float4, 10> GH_Atlas = {
+			float4(2.00f, 1.00f, 1.00f, 0.00f),
+			float4(4.00f, 0.61f, 1.00f, 0.00f),
+			float4(4.00f, 0.00f, 1.00f, 0.00f),
+			float4(3.00f, 0.24f, 0.50f, 0.00f),
+			float4(1.00f, 0.00f, 1.00f, 0.00f),
+			float4(1.00f, 0.14f, 0.55f, 0.00f),
+			float4(1.00f, 0.28f, 1.00f, 0.00f),
+			float4(2.00f, 0.11f, 0.77f, 0.00f),
+			float4(1.00f, 0.00f, 1.00f, 0.00f),
+			float4(1.00f, 0.42f, 0.50f, 0.00f)
+		};
+		std::array<float, 10> GH_InInt = {
+			float(0.67f), float(0.11f),
+			float(0.15f), float(0.40f),
+			float(0.74f), float(0.26f),
+			float(0.34f), float(0.20f),
+			float(0.64f), float(0.11f)
+		};
+
+		float4 SB_Color = float4(1.0f, 1.0f, 1.0f, 1.0f);
+		float4 SG_Color = float4(1.0f, 0.9f, 0.7f, 1.0f);
+		float4 HL_Color = float4(1.0f, 0.0f, 0.0f, 1.0f);
+		float4 LI_Color = float4(0.29f, 0.69f, 0.8f, 1.0f);
+
+		float LI_FadeIn = 0.88f;
+		float LI_FadeOut = 0.26f;
+
+		bool useOldSchoolCA = true;
+	};
+
+	struct Settings
+	{
+		MainSettings mainsettings;
+		ColdSettings coldsettings;
+		bool EnableStarburst = true;
+		bool EnableSunGlare = true;
+		bool EnableLensGlare = true;
+		bool EnableHalo = true;
+		bool EnableGhosts = true;
+		bool EnableCA = true;
+		bool EnableIce = true;
+		bool EnableRain = false;
+
+		bool disableInFPV = false;
+	};
+	Settings settings;
+	virtual void SaveCustomSettings(Settings& insettings);
+	virtual Settings LoadCustomSettings(Settings& settings);
+
+	struct alignas(16) ConstBuffer
+	{
+		DirectX::XMFLOAT4A screensize;
+		uint frame;
+		uint TMOkay;
+		float precip;
+		float precipfade;
+		float sunFXFade;
+		float pad[3];
+		DirectX::XMFLOAT4A SunParams;
+		DirectX::XMFLOAT4A suncolor;
+		MainSettings shadersettings;
+	};
+	virtual ConstBuffer UpdateBufferValues();
+
+	virtual inline DirectX::XMFLOAT4A VectorToXMFloat(float4& value) { return DirectX::XMFLOAT4A(value.x, value.y, value.z, value.w); }
+
+	virtual inline float MapRange(float x, float oldMin, float oldMax, float newMin, float newMax)
+	{
+		return newMin + ((x - oldMin) / (oldMax - oldMin)) * (newMax - newMin);
+	}
+
+	virtual inline MainSettings UpdateSettings()
+	{
+		auto mSettings = settings.mainsettings;
+		static auto& cSettings = settings.coldsettings;
+
+		mSettings.SB_Color = VectorToXMFloat(cSettings.SB_Color);
+		mSettings.SB_BladeTaper = mSettings.SB_BladeTaper + ((mSettings.SB_BladeSplay > 0.01f) * 80);
+		mSettings.SB_BladeWidth = (1.0f + (mSettings.SB_BladeWidth - 1.0f) * 0.25f) + mSettings.SB_BladeSplay;
+		mSettings.SB_BladeBaseWidth = 1.0f + (mSettings.SB_BladeBaseWidth - 1.0f) * 0.25f;
+		mSettings.SB_RandomRaysWidth = MapRange(mSettings.SB_RandomRaysWidth, 0.0f, 1.0f, 11.0f, 7.0f);
+		mSettings.SBEX_BladeSplayLen = (1 / mSettings.SB_BladeLength - 0.95f) * (mSettings.SB_BladeSplay > 0.01f);
+		mSettings.SG_Color = VectorToXMFloat(cSettings.SG_Color);
+		mSettings.SG_Scale = mSettings.SG_Scale * 0.5f;
+		mSettings.GH_Scale = mSettings.GH_Scale * 0.5f;
+		mSettings.HL_Color = VectorToXMFloat(cSettings.HL_Color);
+		mSettings.HL_LineWidth = mSettings.HL_LineWidth * 0.1f;
+		mSettings.LI_Color = VectorToXMFloat(cSettings.LI_Color);
+
+		return mSettings;
+	}
+
+	struct Shaders
+	{
+		enum Enum
+		{
+			Bypass = 0,
+			AttachLUT = 1,
+			OcculsionMask = 2,
+
+			LensIce = 3,
+			LensRain = 4,
+			LensCA = 5,
+			LensBurst = 6,
+			LensGlare = 7,
+			LensHalo = 8,
+			LensGhosts = 9,
+			LensSunGlare = 10
+		};
+	};
+	Shaders::Enum shaderdesc;
+
+	struct Setup  //expanded version of BGS lens flare system
+	{
+		class LF_PassData
+		{
+		private:
+			uint64_t shaderdesc;
+			uint64_t active;
+			uint64_t numpasses;
+			uint64_t weatherpass;
+			uint64_t uncondpass;
+			uint64_t pad[3] = {};
+			uint64_t* enginerefs_ptr = nullptr;
+
+			std::array<uint64_t, 4> enginerefs{ 1, 8, 0, 0 };
+
+		public:
+			LF_PassData(uint64_t desc, uint64_t active, uint64_t numpasses, uint64_t weather, uint64_t nocond) :
+				shaderdesc(desc), active(active), numpasses(numpasses), weatherpass(weather), uncondpass(nocond)
+			{
+				enginerefs_ptr = enginerefs.data();
+			}
+
+			int passesdone = 0;
+
+			Shaders::Enum GetDesc() const { return (Shaders::Enum)shaderdesc; }
+			int PassesLeft() const { return (int)numpasses - (int)passesdone; }
+
+			void Toggle(bool value) { active = (uint64_t)value; }
+			bool IsActive() const { return (bool)active; }
+			bool IsWeatherShader() const { return (bool)weatherpass; }
+
+			void CheckRefs()
+			{
+				enginerefs = { 1, 8, 0, 0 };
+				enginerefs_ptr = enginerefs.data();
+			}
+		};
+
+		class LF_RenderData
+		{
+		private:
+			uint64_t head = 0x3F800000;
+			std::unique_ptr<LF_PassData>* passarray_ptr = nullptr;
+			uint64_t _pad[1] = {};
+			uint64_t passcount = 0;
+			uint64_t pad[2] = {};
+
+			std::vector<std::unique_ptr<LF_PassData>> Passes;
+			std::vector<std::unique_ptr<LF_PassData>> PassList;  //engine loops via passarray_ptr and renders for each
+			std::vector<std::unique_ptr<LF_PassData>> NoSunPassList;
+			size_t currentEffect = 0;
+
+		public:
+			LF_RenderData()
+			{
+				PassList.reserve(100);
+				NoSunPassList.reserve(100);
+			}
+
+			struct Type
+			{
+				bool weather_pass = false;
+				bool uncond_pass = false;
+			};
+
+			void SetupPass(int desc, bool active, int passes, Type type = {})
+			{
+				Passes.push_back(std::make_unique<LF_PassData>(desc, active, passes, type.weather_pass, type.uncond_pass));
+
+				for (auto i = 0; i < passes; i++) {
+					PassList.push_back(std::make_unique<LF_PassData>(*Passes.back()));
+					if (type.weather_pass || type.uncond_pass)
+						NoSunPassList.push_back(std::make_unique<LF_PassData>(*Passes.back()));
+				}
+			}
+
+			void SetupRenderData()
+			{
+				passcount = PassList.size();
+				passarray_ptr = PassList.data();
+			}
+
+			Shaders::Enum UpdateCurrentEffect()
+			{
+				if (Passes[currentEffect]->PassesLeft() == 0)
+					if (currentEffect + 1 < Passes.size())
+						currentEffect++;
+
+				Passes[currentEffect]->passesdone++;
+				return (Passes[currentEffect]->IsActive()) ? Passes[currentEffect]->GetDesc() : Shaders::Bypass;
+			}
+
+			void ResetEffects(bool sunVisible)
+			{
+				currentEffect = 0;
+				for (auto& pass : Passes) pass->passesdone = 0;
+				passarray_ptr = (sunVisible) ? PassList.data() : NoSunPassList.data();
+				passcount = (sunVisible) ? PassList.size() : NoSunPassList.size();
+			}
+
+			LF_PassData& GetEffect(int desc)
+			{
+				for (auto& pass : Passes) {
+					if (pass->GetDesc() == desc)
+						return *pass.get();
+				}
+				throw std::out_of_range("");
+			}
+
+			LF_PassData& GetCurrentEffect()
+			{
+				return *Passes[currentEffect].get();
+			}
+
+			void CheckRefData()
+			{
+				for (auto& pass : PassList) {
+					pass->CheckRefs();
+				}
+			}
+		};
+	};
+	Setup::LF_RenderData* renderdata = nullptr;
+
+	struct Hooks
+	{
+		struct LensFlare_CheckResources  //override main init/integ
+		{
+			static void thunk();
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct LensFlareVisibility_CheckRenderCondition
+		{
+			static void thunk(RE::NiCamera* camera, void* unk);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct LensFlare_CheckRenderCondition  //setup buffers etc, if sun on screen, return true (override for non sun FX)
+		{
+#pragma warning(push)
+#pragma warning(disable: 4189)
+			static bool thunk(void* shader, RE::NiCamera* camera, uint64_t unk)
+			{
+				bool result = func(shader, camera, unk);
+				return true;
+			}
+#pragma warning(pop)
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		template <RE::ImageSpaceManager::ImageSpaceEffectEnum EffectType>
+		struct BSImagespaceShader_Render
+		{
+			static void thunk(void* imageSpaceShader, RE::BSTriShape* shape, RE::ImageSpaceEffectParam* param);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct LensFlare_AssignTexture  //remove lensflare texture init/assignment
+		{
+			static void thunk(void* previous, uint64_t current)
+			{
+				current = 0;
+				func(previous = &current, current);
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSSkyShader_SetupMaterial  //override sun glare, fix sun blend color and append occlusion LUT
+		{
+			static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		static void Install()
+		{
+			logger::info("[Lens Effects] Installed hooks");
+
+			stl::detour_thunk<LensFlare_CheckResources>(REL::RelocationID(25772, 26327));
+			stl::write_thunk_call<LensFlareVisibility_CheckRenderCondition>(REL::RelocationID(100274, 106988).address() + REL::Relocate(0x188, 0x195));
+			stl::write_thunk_call<LensFlare_CheckRenderCondition>(REL::RelocationID(100281, 106995).address() + REL::Relocate(0x14, 0x16));
+			stl::write_thunk_call<LensFlare_AssignTexture>(REL::RelocationID(100280, 106994).address() + REL::Relocate(0x4B, 0x4B));
+
+			stl::write_thunk_call<BSImagespaceShader_Render<RE::ImageSpaceManager::ISLensFlareVisibility>>(REL::RelocationID(100274, 106988).address() + REL::Relocate(0x1CB, 0x275));
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISLensFlare>>(RE::VTABLE_BSImagespaceShaderLensFlare[3]);
+
+			stl::write_vfunc<0x6, BSSkyShader_SetupMaterial>(RE::VTABLE_BSSkyShader[0]);
+		}
+	};
+};

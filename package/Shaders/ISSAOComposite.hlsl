@@ -136,6 +136,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float2 screenPosition = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 	float ao = SAOTex.Sample(SAOSampler, screenPosition).x;
 	float4 sourceColor = sourceTex.SampleLevel(sourceSampler, screenPosition, 0);
+	sourceColor.x = ((asuint(sourceColor.x) & 0x7fffffff) > 0x7f800000) ? 0.0 : sourceColor.x;
 
 	float4 composedColor = sourceColor;
 
