@@ -122,7 +122,7 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	void PostInitD3D();
+	void OverrideResolution();
 
 	std::mutex settingsMutex;  // Mutex to protect settings access
 
@@ -132,32 +132,6 @@ public:
 		{
 			GetSingleton()->PostDisplay();
 			func(a1);
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	struct SetupWindowHook
-	{
-		static void thunk(int64_t a1)
-		{
-			func(a1);
-			GetSingleton()->PostInitD3D();
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	struct GetWindowRectHook
-	{
-		static bool thunk(HWND hWnd, LPRECT lpRect)
-		{
-			auto ret = func(hWnd, lpRect);
-
-			auto upscaling = globals::upscaling;
-
-			lpRect->right = (LONG)upscaling->renderSize[0];
-			lpRect->bottom = (LONG)upscaling->renderSize[1];
-
-			return ret;
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -178,25 +152,22 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-
 	static void InstallHooks()
 	{
 		if (!globals::state->upscalerLoaded) {
 			bool isGOG = !GetModuleHandle(L"steam_api64.dll");
 
 			stl::write_thunk_call<Main_UpdateJitter>(REL::RelocationID(75460, 77245).address() + REL::Relocate(0xE5, isGOG ? 0x133 : 0xE2, 0x104));
+			
+			// Detect when the UI begins to be drawn
 			stl::detour_thunk<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
 
-			stl::write_thunk_call<SetupWindowHook>(REL::RelocationID(75595, 77226).address() + REL::Relocate(0x50, 0x2BC));
-			stl::write_thunk_call<GetClientRectHook, 6>(REL::RelocationID(75460, 77245).address() + REL::Relocate(0x192, 0x18B));  // D6A0C0 (D6A252), DA5A00 (DA5B8B)
-
-			//*(uintptr_t*)&GetWindowRectHook::func = Detours::X64::DetourFunction((uintptr_t) & ::GetWindowRect, (uintptr_t)&GetWindowRectHook::thunk);
-			//*(uintptr_t*)&GetClientRectHook::func = Detours::X64::DetourFunction((uintptr_t) & ::GetClientRect, (uintptr_t)&GetClientRectHook::thunk);
+			// Fixes broken camera which checks the window size itself
+			stl::write_thunk_call<GetClientRectHook, 6>(REL::RelocationID(75460, 77245).address() + REL::Relocate(0x192, 0x18B));
 
 			// Always enable TAA jitters, even without TAA
-
-			static REL::Relocation<uintptr_t> updateJitterHook{ REL::RelocationID(75709, 77518) };          // D7CFB0, DB96E0
-			static REL::Relocation<uintptr_t> buildCameraStateDataHook{ REL::RelocationID(75711, 77520) };  // D7D130, DB9850
+			static REL::Relocation<uintptr_t> updateJitterHook{ REL::RelocationID(75709, 77518) };
+			static REL::Relocation<uintptr_t> buildCameraStateDataHook{ REL::RelocationID(75711, 77520) };
 
 			uint8_t patch1[] = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 };
 			uint8_t patch2[] = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 };

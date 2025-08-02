@@ -836,7 +836,7 @@ void Upscaling::ConfigureUpscaling()
 		(FfxFsr3QualityMode)settings.upscalePreset);
 }
 
-void Upscaling::PostInitD3D()
+void Upscaling::OverrideResolution()
 {
 	static uint32_t* g_width = (uint32_t*)REL::RelocationID(525002, 411483).address();    // 302C8B4, 30C6DB4
 	static uint32_t* g_height = (uint32_t*)REL::RelocationID(525003, 411484).address();   // 302C8B8, 30C6DB8

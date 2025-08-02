@@ -110,6 +110,19 @@ void DX12SwapChain::CreateInterop()
 	globals::d3d::device = d3d11Device.get();
 
 	uiCompositeCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\UICompositeCS.hlsl", {}, "cs_5_0"));
+
+	
+	auto device = globals::d3d::device;
+
+	D3D11_SAMPLER_DESC samplerDesc = {};
+	samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
+	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+	samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+	samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+	samplerDesc.MaxAnisotropy = 1;
+	samplerDesc.MinLOD = 0;
+	samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+	DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &pointSampler));	
 }
 
 DXGISwapChainProxy* DX12SwapChain::GetSwapChainProxy()
@@ -167,7 +180,7 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 		d3d11Context->CSSetShader(uiCompositeCS, nullptr, 0);
 		d3d11Context->CSSetShaderResources(0, 1, &uiBuffer->srv);
 		d3d11Context->CSSetUnorderedAccessViews(0, 1, &swapChainBufferUpscaled->uav, nullptr);
-		d3d11Context->CSSetSamplers(0, 1, &globals::deferred->linearSampler);
+		d3d11Context->CSSetSamplers(0, 1, &pointSampler);
 
 		UINT dispatchX = (upscaling->outputSize[0] + 7) / 8;
 		UINT dispatchY = (upscaling->outputSize[1] + 7) / 8;

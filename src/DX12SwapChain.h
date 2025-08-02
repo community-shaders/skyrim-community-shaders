@@ -92,6 +92,8 @@ public:
 	UINT frameIndex = 0;
 	UINT64 fenceValue = 0;
 
+	ID3D11SamplerState* pointSampler;
+
 	LARGE_INTEGER qpf;
 
 	double refreshRate = 0;

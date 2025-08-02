@@ -110,22 +110,21 @@ void Streamline::LoadInterposer()
 	pref.numFeaturesToLoad = _countof(featuresToLoad);
 
 	// Set log level from settings
-	//switch (globals::upscaling->settings.streamlineLogLevel) {
-	//case 2:
-	//	pref.logLevel = sl::LogLevel::eVerbose;
-	//	break;
-	//case 1:
-	//	pref.logLevel = sl::LogLevel::eDefault;
-	//	break;
-	//case 0:
-	//default:
-	//	pref.logLevel = sl::LogLevel::eOff;
-	//	break;
-	//}
+	switch (globals::upscaling->settings.streamlineLogLevel) {
+	case 2:
+		pref.logLevel = sl::LogLevel::eVerbose;
+		break;
+	case 1:
+		pref.logLevel = sl::LogLevel::eDefault;
+		break;
+	case 0:
+	default:
+		pref.logLevel = sl::LogLevel::eOff;
+		break;
+	}
 
-	pref.logLevel = sl::LogLevel::eVerbose;
 	pref.logMessageCallback = LoggingCallback;
-	pref.showConsole = true;
+	pref.showConsole = false;
 
 	pref.engine = sl::EngineType::eCustom;
 	pref.engineVersion = "1.0.0";
