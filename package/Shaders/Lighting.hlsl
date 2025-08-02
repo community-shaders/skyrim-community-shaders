@@ -2280,7 +2280,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(VANILLA_FRESNEL)
 					F0 = saturate(Color::GammaToLinear(envColorBase.rgb) * Math::PI);
 					envRoughness = roughness;
+#				if !defined(EYE)
 					baseColor.xyz = lerp(baseColor.xyz, 0, envMask);
+#				endif
 #			else
 					F0 = 1.0;
 					envRoughness = 1.0 / 7.0;
@@ -3133,7 +3135,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	diffuseColor = reflectionDiffuseColor;
 
-#	if (defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)) && !(defined(VANILLA_FRESNEL) && !defined(EYE))
+#	if (defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)) && !defined(VANILLA_FRESNEL)
 #		if defined(DYNAMIC_CUBEMAPS)
 	if (!dynamicCubemap)
 #		endif
