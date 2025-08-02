@@ -159,17 +159,18 @@ namespace SharedData
 		float SummerHeightOffset;
 		float WinterHeightOffset;
 
-		float4 equation;
-		float4 equation2;
-
-		float2 equation3;
 		float peakMainAngle;
 		float peakAltAngle;
-	
 		float minAngle;
 		float maxAngle;
+	
 		float mainSpec;
 		float altSpec;
+		float mapZscale;
+		float mapZoffset;
+	
+		float2 mapMin;
+		float2 mapMax;
 
 		float4 Glint;
 		float4 MainTint;

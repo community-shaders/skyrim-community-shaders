@@ -2226,6 +2226,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float snowOcclusion = inWorld;
 #		endif
 
+#if defined(LODOBJECTSHD) || defined(LODOBJECTS)
+	snowOcclusion *= 0.5;
+#endif
+
 	float3 adjustedWorldPos = (input.WorldPosition + FrameBuffer::CameraPosAdjust[eyeIndex]).xyz;
 
 	float snowFactor = 0;
@@ -2237,8 +2241,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(TRUE_PBR)
 #			if defined(LANDSCAPE)
 		float disp = sh0 * max(displacementParams[0].HeightScale * input.LandBlendWeights1.x, max(displacementParams[1].HeightScale * input.LandBlendWeights1.y, max(displacementParams[2].HeightScale * input.LandBlendWeights1.z, max(displacementParams[3].HeightScale * input.LandBlendWeights1.w, max(displacementParams[4].HeightScale * input.LandBlendWeights2.x, displacementParams[5].HeightScale * input.LandBlendWeights2.y)))));
-#			else
+#			elif defined(EMAT)
 		float disp = (sh0 - 0.5) * displacementParams.HeightScale;
+#			else
+		float disp = (sh0 - 0.5);
 #			endif
 #		elif defined(LANDSCAPE) && defined(EMAT)
 		float disp = sh0;

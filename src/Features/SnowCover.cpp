@@ -71,23 +71,65 @@ void SnowCover::DrawSettings()
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("How far below/above the snow line should the foliage color start changing?");
 			}
-			ImGui::Separator();
-			ImGui::SliderInt("Maximum Summer Month", (int*)&wsettings.MaxSummerMonth, 0, 11);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("In which month is the snow line highest?");
+			if (ImGui::TreeNodeEx("Seasonal offset")) {
+				ImGui::SliderInt("Maximum Summer Month", (int*)&wsettings.MaxSummerMonth, 0, 11);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("In which month is the snow line highest?");
+				}
+				ImGui::SliderInt("Maximum Winter Month", (int*)&wsettings.MaxWinterMonth, 0, 11);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("In which month is the snow line lowest?");
+				}
+				ImGui::SliderFloat("Summer Height Offset", &wsettings.SummerHeightOffset, -20000.0f, 20000.0f);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("What is the snow line altitude in summer?");
+				}
+				ImGui::SliderFloat("Winter Height Offset", &wsettings.WinterHeightOffset, -20000.0f, 20000.0f);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("What is the snow line altitude in winter?");
+				}
+				ImGui::TreePop();
 			}
-			ImGui::SliderInt("Maximum Winter Month", (int*)&wsettings.MaxWinterMonth, 0, 11);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("In which month is the snow line lowest?");
+
+			if (ImGui::TreeNodeEx("Snow Map")) {
+				ImGui::InputText("Map texture", mapbuf, 128);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Path to the map texture relative to Data folder. Interpreted as grayscale.");
+				}
+				ImGui::InputFloat("Min X", &wsettings.mapMin.x, 0.0f, 10.0f);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("");
+				}
+				ImGui::SameLine();
+				ImGui::InputFloat("Min Y", &wsettings.mapMin.y, 0.0f, 10.0f);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("");
+				}
+				ImGui::InputFloat("Max X", &wsettings.mapMax.x, 0.0f, 10.0f);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("");
+				}
+				ImGui::SameLine();
+				ImGui::InputFloat("Max Y", &wsettings.mapMax.y, 0.0f, 10.0f);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("");
+				}
+
+				map_tex = std::string(mapbuf);
+				ImGui::SliderFloat("Snow Map Z Scale", &wsettings.mapZscale, 0.1f, 10000.0f);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("");
+				}
+				ImGui::SliderFloat("Snow Map Z Offset", &wsettings.mapZoffset, -100.f, 100.0f);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("");
+				}
+				ImGui::TreePop();
 			}
-			ImGui::SliderFloat("Summer Height Offset", &wsettings.SummerHeightOffset, -20000.0f, 20000.0f);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("What is the snow line altitude in summer?");
+				ImGui::Text("A grayscale map of the worldspace that offsets the altitude snow appears at. Relative to game Data folder, without '.dds' ");
 			}
-			ImGui::SliderFloat("Winter Height Offset", &wsettings.WinterHeightOffset, -20000.0f, 20000.0f);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("What is the snow line altitude in winter?");
-			}
+
 			ImGui::SliderFloat("Snowing speed", &snowing_speed, 0.01f, 10.0f);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("How fast snowy weather accumulates snow. Also depends on the weather settings.");
@@ -96,25 +138,8 @@ void SnowCover::DrawSettings()
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("How fast snow (under snow line) disappears when it is not snowing.");
 			}
-			if (ImGui::TreeNodeEx("Height Equation")) {
-				ImGui::InputFloat("c", &wsettings.Equation[0], 0.0f, 0.0f, "%.20f");
-				ImGui::InputFloat("x", &wsettings.Equation[1], 0.0f, 0.0f, "%.20f");
-				ImGui::InputFloat("y", &wsettings.Equation[2], 0.0f, 0.0f, "%.20f");
-				ImGui::InputFloat("xx", &wsettings.Equation[3], 0.0f, 0.0f, "%.20f");
-				ImGui::InputFloat("xy", &wsettings.Equation[4], 0.0f, 0.0f, "%.20f");
-				ImGui::InputFloat("yy", &wsettings.Equation[5], 0.0f, 0.0f, "%.20f");
-				ImGui::InputFloat("xxx", &wsettings.Equation[6], 0.0f, 0.0f, "%.20f");
-				ImGui::InputFloat("xxy", &wsettings.Equation[7], 0.0f, 0.0f, "%.20f");
-				ImGui::InputFloat("xyy", &wsettings.Equation[8], 0.0f, 0.0f, "%.20f");
-				ImGui::InputFloat("yyy", &wsettings.Equation[9], 0.0f, 0.0f, "%.20f");
-				ImGui::TreePop();
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text(
-					"The 'snow line' is a curved plane controlled by a cubic equation. "
-					"These parameters control how the plane is curved.");
-			}
-			if (ImGui::TreeNodeEx("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
+
+			if (ImGui::TreeNodeEx("Material")) {
 				ImGui::SliderFloat("Min Angle", &wsettings.MinAngle, 0.0f, 1.0f);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("The angle snow starts appearing at. 0 = horizontal, 1 = vertical.");
@@ -125,12 +150,12 @@ void SnowCover::DrawSettings()
 				}
 				ImGui::InputText("Main texture", tbuf, 128);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Path to the main texture relative to Data folder. Needs to be a PBR texture with a diffuse, _n, and _rmaos.");
+					ImGui::Text("Path to the main texture relative to Data folder, without '.dds'. Needs to be a PBR texture with a diffuse, _n, and _rmaos.");
 				}
 				main_tex = std::string(tbuf);
 				ImGui::InputText("Alt texture", altbuf, 128);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Path to the alternative texture relative to Data folder. Needs to be a PBR texture with a diffuse, _n, and _rmaos.");
+					ImGui::Text("Optional path to the alternative texture relative to Data folder, without '.dds'. Needs to be a PBR texture with a diffuse, _n, and _rmaos.");
 				}
 				alt_tex = std::string(altbuf);
 				ImGui::ColorEdit4("Main Tint", &wsettings.MainTint.x);
@@ -177,7 +202,7 @@ void SnowCover::DrawSettings()
 		ImGui::Text(fmt::format("TimeSnowing: {}", perFrame.TimeSnowing).c_str());
 		ImGui::Text(fmt::format("SnowingDensity: {}", perFrame.SnowingDensity).c_str());
 		if (debug_text != nullptr)
-		ImGui::Text(fmt::format("Debug text: {}", debug_text).c_str());
+			ImGui::Text(fmt::format("Debug text: {}", debug_text).c_str());
 
 		ImGui::TreePop();
 	}
@@ -297,11 +322,16 @@ void SnowCover::SaveConfig()
 		{ "MaxWinterMonth", wsettings.MaxWinterMonth },
 		{ "SummerHeightOffset", wsettings.SummerHeightOffset },
 		{ "WinterHeightOffset", wsettings.WinterHeightOffset },
-		{ "Equation", wsettings.Equation },
+		{ "MapTexture", map_tex },
+		{ "MapZscale", wsettings.mapZscale },
+		{ "MapZoffset", wsettings.mapZoffset },
 		{ "ScreenSpaceScale", wsettings.ScreenSpaceScale },
 		{ "LogMicrofacetDensity", wsettings.LogMicrofacetDensity },
 		{ "MicrofacetRoughness", wsettings.MicrofacetRoughness },
 		{ "DensityRandomization", wsettings.DensityRandomization },
+		{ "MapMin", json::array({ wsettings.mapMin.x, wsettings.mapMin.y }) },
+		{ "MapMax", json::array({
+		wsettings.mapMax.x, wsettings.mapMax.y}) },
 		{ "MainTexture", main_tex },
 		{ "AltTexture", alt_tex },
 		{ "MainTint", json::array({ wsettings.MainTint.x,
@@ -368,8 +398,10 @@ void SnowCover::Reload()
 		wsettings.MaxWinterMonth = config["MaxWinterMonth"];
 		wsettings.SummerHeightOffset = config["SummerHeightOffset"];
 		wsettings.WinterHeightOffset = config["WinterHeightOffset"];
-		for (auto i = 0; i < 10; ++i)
-			wsettings.Equation[i] = config["Equation"][i];
+		wsettings.mapMin = float2(config["MapMin"][0], config["MapMin"][1]);
+		wsettings.mapMax = float2(config["MapMax"][0], config["MapMax"][1]);
+		wsettings.mapZscale = config["MapZscale"];
+		wsettings.mapZoffset = config["MapZoffset"];
 		wsettings.ScreenSpaceScale = config["ScreenSpaceScale"];
 		wsettings.LogMicrofacetDensity = config["LogMicrofacetDensity"];
 		wsettings.MicrofacetRoughness = config["MicrofacetRoughness"];
@@ -388,7 +420,6 @@ void SnowCover::Reload()
 		main_tex = config["MainTexture"];
 		std::wstring tname = strtowstr(main_tex);
 		copyString(main_tex, tbuf, 256);
-		logger::warn("Snow cover: {}, {}", main_tex, tbuf);
 		auto device = globals::d3d::device;
 		auto context = globals::d3d::context;
 		if (views[0])
@@ -436,6 +467,17 @@ void SnowCover::Reload()
 			views[3] = views[0];
 			views[4] = views[1];
 			views[5] = views[2];
+		}
+
+		if (views[6])
+			views[6]->Release();
+		map_tex = config["MapTexture"];
+		std::wstring mname = strtowstr(map_tex);
+		copyString(map_tex, mapbuf, 256);
+		hr = DirectX::CreateDDSTextureFromFile(device, context, (std::wstring(L"Data\\") + mname + L".dds").c_str(), nullptr, &views.at(6));
+		if (hr != S_OK) {
+			logger::warn("Snow Cover: Error loading {}.dds texture: {}", map_tex, hr);
+			DirectX::CreateDDSTextureFromFile(device, context, L"Data\\textures\\gray.dds", nullptr, &views.at(6));
 		}
 		wsettings.EnableSnowCover = true;
 	} catch (const nlohmann::json::parse_error& e) {
@@ -497,12 +539,11 @@ void SnowCover::BSLightingShader_Setup(RE::BSRenderPass* a_pass)
 {
 	auto state = globals::state;
 	auto name = a_pass->geometry->name.c_str();
-	if (a_pass->geometry->HasAnimation() && !whitelist.contains(FormIdParser::fnv_hash(name)))
-	{
+	if (a_pass->geometry->HasAnimation() && !whitelist.contains(FormIdParser::fnv_hash(name))) {
 		state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::NoSnow;
 	} else if (blacklist.contains(FormIdParser::fnv_hash(name))) {
-		state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::NoSnow;	
+		state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::NoSnow;
 	} else {
-		state->permutationData.ExtraShaderDescriptor &= ~(uint)State::ExtraShaderDescriptors::NoSnow;	
+		state->permutationData.ExtraShaderDescriptor &= ~(uint)State::ExtraShaderDescriptors::NoSnow;
 	}
 }

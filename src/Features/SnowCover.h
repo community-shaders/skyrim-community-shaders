@@ -41,14 +41,18 @@ public:
 		float SummerHeightOffset = 0.0f;
 		float WinterHeightOffset = -10000.0f;
 
-		float Equation[10];
 		float PeakMainAngle = 1.0f;
 		float PeakAltAngle = 0.0f;
-
 		float MinAngle = 0.0f;
 		float MaxAngle = 1.0f;
+
 		float MainSpec = 0.02f;
 		float AltSpec = 0.02f;
+		float mapZscale = 1000.f;
+		float mapZoffset = 0.0f;
+
+		float2 mapMin = float2(-57* 4096.f, -43* 4096.f);
+		float2 mapMax = float2(61* 4096.f, 50* 4096.f);
 
 		//glint
 		float ScreenSpaceScale = 1.2f;
@@ -79,14 +83,16 @@ public:
 
 	PerFrame GetCommonBufferData();
 
-	std::array<ID3D11ShaderResourceView*, 6> views;
+	std::array<ID3D11ShaderResourceView*, 7> views;
 
 	std::string status;
 	std::string last_worldspace;
+	std::string map_tex;
 	std::string main_tex;
 	std::string alt_tex;
 	float snowing_speed = 0.0f;
 	float melting_speed = 0.0f;
+	char mapbuf[256] = "";
 	char tbuf[256] = "";
 	char altbuf[256] = "";
 

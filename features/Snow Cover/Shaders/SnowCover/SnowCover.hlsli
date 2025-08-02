@@ -12,6 +12,7 @@ namespace SnowCover
 	Texture2D<float4> IceAlbedo : register(t41);
 	Texture2D<float3> IceNormal : register(t42);
 	Texture2D<float4> IceRmaos : register(t43);
+	Texture2D<float> SnowMap : register(t44);
 
 	// https://blog.selfshadow.com/publications/blending-in-detail/
 	// for when s = (0,0,1)
@@ -62,7 +63,11 @@ namespace SnowCover
 
 	float GetHeightMult(float3 p)
 	{
-		float height_tresh = p.z - SharedData::snowCoverSettings.SnowHeightOffset - SharedData::snowCoverSettings.equation.x - (p.x * SharedData::snowCoverSettings.equation.y - p.y * SharedData::snowCoverSettings.equation.z - p.x * p.x * SharedData::snowCoverSettings.equation.w - p.x * p.y * SharedData::snowCoverSettings.equation2.x - p.y * p.y * SharedData::snowCoverSettings.equation2.y - p.x * p.x * p.x * SharedData::snowCoverSettings.equation2.z + p.x * p.x * p.y * SharedData::snowCoverSettings.equation2.w + p.x * p.y * p.y * SharedData::snowCoverSettings.equation3.x + p.y * p.y * p.y * SharedData::snowCoverSettings.equation3.y);
+		float2 scale = rcp(SharedData::snowCoverSettings.mapMax-SharedData::snowCoverSettings.mapMin);
+		float2 offset = -SharedData::snowCoverSettings.mapMin*scale;
+		float2 uv = p.xy*scale + offset;
+		uv = float2(uv.x, 1-uv.y);
+		float height_tresh = p.z - SharedData::snowCoverSettings.SnowHeightOffset + (SnowMap.SampleLevel(SampColorSampler, uv, 0) + SharedData::snowCoverSettings.mapZoffset)*SharedData::snowCoverSettings.mapZscale;
 		return height_tresh;
 	}
 
