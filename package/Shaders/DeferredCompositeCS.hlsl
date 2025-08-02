@@ -47,7 +47,9 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	float NdotV = dot(normal, view);
 	float s = saturate(-0.3 + NdotV * NdotV);
 	ao = lerp(pow(ao, SpecularPow), 1.0, s);
-
+#	if defined(SSR)
+	il = 0;
+#	else
 	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
 	float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, lobe);
 	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord].xy;
@@ -64,6 +66,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	float4 hq_spec = SsgiSpecularTexture[pixCoord];
 	ao *= 1 - hq_spec.a;
 	il += hq_spec.rgb;
+#	endif
 }
 #endif
 
