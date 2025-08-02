@@ -41,15 +41,14 @@ public:
 		float SummerHeightOffset = 0.0f;
 		float WinterHeightOffset = -10000.0f;
 
-		float Equation[9];
+		float Equation[10];
 		float PeakMainAngle = 1.0f;
 		float PeakAltAngle = 0.0f;
-		float MinAngle = 0.0f;
 
+		float MinAngle = 0.0f;
 		float MaxAngle = 1.0f;
 		float MainSpec = 0.02f;
 		float AltSpec = 0.02f;
-		uint pad[1];
 
 		//glint
 		float ScreenSpaceScale = 1.2f;

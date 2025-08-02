@@ -97,15 +97,16 @@ void SnowCover::DrawSettings()
 				ImGui::Text("How fast snow (under snow line) disappears when it is not snowing.");
 			}
 			if (ImGui::TreeNodeEx("Height Equation")) {
-				ImGui::InputFloat("x", &wsettings.Equation[0], 0.0f, 0.0f, "%.20f");
-				ImGui::InputFloat("y", &wsettings.Equation[1], 0.0f, 0.0f, "%.20f");
-				ImGui::InputFloat("xx", &wsettings.Equation[2], 0.0f, 0.0f, "%.20f");
-				ImGui::InputFloat("xy", &wsettings.Equation[3], 0.0f, 0.0f, "%.20f");
-				ImGui::InputFloat("yy", &wsettings.Equation[4], 0.0f, 0.0f, "%.20f");
-				ImGui::InputFloat("xxx", &wsettings.Equation[5], 0.0f, 0.0f, "%.20f");
-				ImGui::InputFloat("xxy", &wsettings.Equation[6], 0.0f, 0.0f, "%.20f");
-				ImGui::InputFloat("xyy", &wsettings.Equation[7], 0.0f, 0.0f, "%.20f");
-				ImGui::InputFloat("yyy", &wsettings.Equation[8], 0.0f, 0.0f, "%.20f");
+				ImGui::InputFloat("c", &wsettings.Equation[0], 0.0f, 0.0f, "%.20f");
+				ImGui::InputFloat("x", &wsettings.Equation[1], 0.0f, 0.0f, "%.20f");
+				ImGui::InputFloat("y", &wsettings.Equation[2], 0.0f, 0.0f, "%.20f");
+				ImGui::InputFloat("xx", &wsettings.Equation[3], 0.0f, 0.0f, "%.20f");
+				ImGui::InputFloat("xy", &wsettings.Equation[4], 0.0f, 0.0f, "%.20f");
+				ImGui::InputFloat("yy", &wsettings.Equation[5], 0.0f, 0.0f, "%.20f");
+				ImGui::InputFloat("xxx", &wsettings.Equation[6], 0.0f, 0.0f, "%.20f");
+				ImGui::InputFloat("xxy", &wsettings.Equation[7], 0.0f, 0.0f, "%.20f");
+				ImGui::InputFloat("xyy", &wsettings.Equation[8], 0.0f, 0.0f, "%.20f");
+				ImGui::InputFloat("yyy", &wsettings.Equation[9], 0.0f, 0.0f, "%.20f");
 				ImGui::TreePop();
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -367,7 +368,7 @@ void SnowCover::Reload()
 		wsettings.MaxWinterMonth = config["MaxWinterMonth"];
 		wsettings.SummerHeightOffset = config["SummerHeightOffset"];
 		wsettings.WinterHeightOffset = config["WinterHeightOffset"];
-		for (auto i = 0; i < 9; ++i)
+		for (auto i = 0; i < 10; ++i)
 			wsettings.Equation[i] = config["Equation"][i];
 		wsettings.ScreenSpaceScale = config["ScreenSpaceScale"];
 		wsettings.LogMicrofacetDensity = config["LogMicrofacetDensity"];
@@ -397,14 +398,20 @@ void SnowCover::Reload()
 		if (views[2])
 			views[2]->Release();
 		HRESULT hr = DirectX::CreateDDSTextureFromFile(device, context, (std::wstring(L"Data\\") + tname + L".dds").c_str(), nullptr, &views.at(0));
-		if (hr != S_OK)
+		if (hr != S_OK) {
 			logger::warn("Snow Cover: Error loading {}.dds texture: {}", main_tex, hr);
+			DirectX::CreateDDSTextureFromFile(device, context, L"Data\\textures\\defaultdiffuse.dds", nullptr, &views.at(0));
+		}
 		hr = DirectX::CreateDDSTextureFromFile(device, context, (std::wstring(L"Data\\") + tname + L"_n.dds").c_str(), nullptr, &views.at(1));
-		if (hr != S_OK)
+		if (hr != S_OK) {
 			logger::warn("Snow Cover: Error loading {}_n.dds texture: {}", main_tex, hr);
+			DirectX::CreateDDSTextureFromFile(device, context, L"Data\\textures\\default_n.dds", nullptr, &views.at(1));
+		}
 		hr = DirectX::CreateDDSTextureFromFile(device, context, (std::wstring(L"Data\\") + tname + L"_rmaos.dds").c_str(), nullptr, &views.at(2));
-		if (hr != S_OK)
+		if (hr != S_OK) {
 			logger::warn("Snow Cover: Error loading {}_rmaos.dds texture: {}", main_tex, hr);
+			DirectX::CreateDDSTextureFromFile(device, context, L"Data\\textures\\white.dds", nullptr, &views.at(2));
+		}
 		if (config.contains("AltTexture") && config["AltTexture"] != "") {
 			if (views[3])
 				views[3]->Release();
@@ -489,9 +496,6 @@ void SnowCover::Hooks::BSLightingShader_SetupGeometry::thunk(RE::BSShader* This,
 void SnowCover::BSLightingShader_Setup(RE::BSRenderPass* a_pass)
 {
 	auto state = globals::state;
-	auto userData = a_pass->geometry->GetUserData();
-	if (!userData)
-		return;
 	auto name = a_pass->geometry->name.c_str();
 	if (a_pass->geometry->HasAnimation() && !whitelist.contains(FormIdParser::fnv_hash(name)))
 	{

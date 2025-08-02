@@ -62,7 +62,7 @@ namespace SnowCover
 
 	float GetHeightMult(float3 p)
 	{
-		float height_tresh = p.z - SharedData::snowCoverSettings.SnowHeightOffset - (p.x * SharedData::snowCoverSettings.equation.x - p.y * SharedData::snowCoverSettings.equation.y - p.x * p.x * SharedData::snowCoverSettings.equation.z - p.x * p.y * SharedData::snowCoverSettings.equation.w - p.y * p.y * SharedData::snowCoverSettings.equation2.x - p.x * p.x * p.x * SharedData::snowCoverSettings.equation2.y + p.x * p.x * p.y * SharedData::snowCoverSettings.equation2.z + p.x * p.y * p.y * SharedData::snowCoverSettings.equation2.w + p.y * p.y * p.y * SharedData::snowCoverSettings.equation3);
+		float height_tresh = p.z - SharedData::snowCoverSettings.SnowHeightOffset - SharedData::snowCoverSettings.equation.x - (p.x * SharedData::snowCoverSettings.equation.y - p.y * SharedData::snowCoverSettings.equation.z - p.x * p.x * SharedData::snowCoverSettings.equation.w - p.x * p.y * SharedData::snowCoverSettings.equation2.x - p.y * p.y * SharedData::snowCoverSettings.equation2.y - p.x * p.x * p.x * SharedData::snowCoverSettings.equation2.z + p.x * p.x * p.y * SharedData::snowCoverSettings.equation2.w + p.x * p.y * p.y * SharedData::snowCoverSettings.equation3.x + p.y * p.y * p.y * SharedData::snowCoverSettings.equation3.y);
 		return height_tresh;
 	}
 

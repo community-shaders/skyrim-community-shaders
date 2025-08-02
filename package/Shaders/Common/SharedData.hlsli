@@ -162,15 +162,14 @@ namespace SharedData
 		float4 equation;
 		float4 equation2;
 
-		float equation3;
+		float2 equation3;
 		float peakMainAngle;
 		float peakAltAngle;
+	
 		float minAngle;
-
 		float maxAngle;
 		float mainSpec;
 		float altSpec;
-		uint pad1;
 
 		float4 Glint;
 		float4 MainTint;
