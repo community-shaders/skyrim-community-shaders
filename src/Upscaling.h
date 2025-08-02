@@ -110,6 +110,8 @@ public:
 
 	static double GetRefreshRate(HWND a_window);
 
+	void ConfigureUpscaling();
+
 	struct Main_UpdateJitter
 	{
 		static void thunk(RE::BSGraphics::State* a_state)
@@ -138,8 +140,8 @@ public:
 	{
 		static void thunk(int64_t a1)
 		{
-			GetSingleton()->PostInitD3D();
 			func(a1);
+			GetSingleton()->PostInitD3D();
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -176,6 +178,7 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+
 	static void InstallHooks()
 	{
 		if (!globals::state->upscalerLoaded) {
@@ -184,10 +187,11 @@ public:
 			stl::write_thunk_call<Main_UpdateJitter>(REL::RelocationID(75460, 77245).address() + REL::Relocate(0xE5, isGOG ? 0x133 : 0xE2, 0x104));
 			stl::detour_thunk<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
 
-			stl::write_thunk_call<SetupWindowHook>(REL::RelocationID(75445, 75445).address() + REL::Relocate(0xEC, 0xEC, 0xEC));
+			stl::write_thunk_call<SetupWindowHook>(REL::RelocationID(75595, 77226).address() + REL::Relocate(0x50, 0x2BC));
+			stl::write_thunk_call<GetClientRectHook, 6>(REL::RelocationID(75460, 77245).address() + REL::Relocate(0x192, 0x18B));  // D6A0C0 (D6A252), DA5A00 (DA5B8B)
 
-			*(uintptr_t*)&GetWindowRectHook::func = Detours::X64::DetourFunction((uintptr_t) & ::GetWindowRect, (uintptr_t)&GetWindowRectHook::thunk);
-			*(uintptr_t*)&GetClientRectHook::func = Detours::X64::DetourFunction((uintptr_t) & ::GetClientRect, (uintptr_t)&GetClientRectHook::thunk);
+			//*(uintptr_t*)&GetWindowRectHook::func = Detours::X64::DetourFunction((uintptr_t) & ::GetWindowRect, (uintptr_t)&GetWindowRectHook::thunk);
+			//*(uintptr_t*)&GetClientRectHook::func = Detours::X64::DetourFunction((uintptr_t) & ::GetClientRect, (uintptr_t)&GetClientRectHook::thunk);
 
 			// Always enable TAA jitters, even without TAA
 

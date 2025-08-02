@@ -722,9 +722,9 @@ void Upscaling::PostDisplay()
 	}
 
 	// Swap the framebuffer for the UI buffer
-	//auto& framebuffer = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-	//framebuffer.RTV = globals::dx12SwapChain->uiBuffer->rtv;
-	//context->OMSetRenderTargets(1, &framebuffer.RTV, nullptr);
+	auto& framebuffer = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+	framebuffer.RTV = globals::dx12SwapChain->uiBuffer->rtv;
+	context->OMSetRenderTargets(1, &framebuffer.RTV, nullptr);
 
 	useHUDLess = true;
 }
@@ -818,8 +818,7 @@ double Upscaling::GetRefreshRate(HWND a_window)
 	logger::error("Failed to retrieve refresh rate from swap chain");
 	return 60;
 }
-
-void Upscaling::PostInitD3D()
+void Upscaling::ConfigureUpscaling()
 {
 	static uint32_t* g_width = (uint32_t*)REL::RelocationID(525002, 411483).address();    // 302C8B4, 30C6DB4
 	static uint32_t* g_height = (uint32_t*)REL::RelocationID(525003, 411484).address();   // 302C8B8, 30C6DB8
@@ -835,6 +834,14 @@ void Upscaling::PostInitD3D()
 		outputSize[0],
 		outputSize[1],
 		(FfxFsr3QualityMode)settings.upscalePreset);
+}
+
+void Upscaling::PostInitD3D()
+{
+	static uint32_t* g_width = (uint32_t*)REL::RelocationID(525002, 411483).address();    // 302C8B4, 30C6DB4
+	static uint32_t* g_height = (uint32_t*)REL::RelocationID(525003, 411484).address();   // 302C8B8, 30C6DB8
+	static uint32_t* g_xRight = (uint32_t*)REL::RelocationID(525004, 411485).address();   // 302C8BC, 30C6DBC
+	static uint32_t* g_yBottom = (uint32_t*)REL::RelocationID(525005, 411486).address();  // 302C8C0, 30C6DC0
 
 	*g_width = renderSize[0];
 	*g_height = renderSize[1];

@@ -6,6 +6,7 @@
 #include "FidelityFX.h"
 #include "Streamline.h"
 #include "Upscaling.h"
+#include "Deferred.h"
 
 void DX12SwapChain::CreateD3D12Device(IDXGIAdapter* a_adapter)
 {
@@ -29,6 +30,7 @@ void DX12SwapChain::CreateD3D12Device(IDXGIAdapter* a_adapter)
 void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC a_swapChainDesc)
 {
 	auto upscaling = globals::upscaling;
+	upscaling->ConfigureUpscaling();
 
 	IDXGIFactory4* dxgiFactory;
 	DX::ThrowIfFailed(adapter->GetParent(IID_PPV_ARGS(&dxgiFactory)));
@@ -98,11 +100,11 @@ void DX12SwapChain::CreateInterop()
 	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
 	swapChainBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
+	uiBuffer = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
 
 	texDesc11.Width = upscaling->outputSize[0];
 	texDesc11.Height = upscaling->outputSize[1];
-
-	uiBuffer = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
+	
 	swapChainBufferUpscaled = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
 	
 	globals::d3d::device = d3d11Device.get();
@@ -165,6 +167,7 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 		d3d11Context->CSSetShader(uiCompositeCS, nullptr, 0);
 		d3d11Context->CSSetShaderResources(0, 1, &uiBuffer->srv);
 		d3d11Context->CSSetUnorderedAccessViews(0, 1, &swapChainBufferUpscaled->uav, nullptr);
+		d3d11Context->CSSetSamplers(0, 1, &globals::deferred->linearSampler);
 
 		UINT dispatchX = (upscaling->outputSize[0] + 7) / 8;
 		UINT dispatchY = (upscaling->outputSize[1] + 7) / 8;
@@ -176,6 +179,8 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 		d3d11Context->CSSetShaderResources(0, 1, &nullSRV);
 		ID3D11UnorderedAccessView* nullUAV = nullptr;
 		d3d11Context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
+		ID3D11SamplerState* nullSampler = nullptr;
+		d3d11Context->CSSetSamplers(0, 1, &nullSampler);
 	}
 
 	// Wait for D3D11 to finish
