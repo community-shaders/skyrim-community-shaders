@@ -189,7 +189,23 @@ public:
 		}
 
 		static inline REL::Relocation<decltype(thunk)> func;
-	};;
+	};
+
+	void CopySwapChainToScreenshot();
+
+	struct CopyScreenshot
+	{
+		static void thunk(RE::ImageSpaceManager*,
+			uint32_t,
+			uint32_t,
+			uint32_t,
+			RE::ImageSpaceShaderParam*)
+		{
+			globals::upscaling->CopySwapChainToScreenshot();
+		}
+
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
 
 	static void InstallHooks()
 	{
@@ -203,6 +219,8 @@ public:
 			stl::detour_thunk<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
 			
 			stl::write_thunk_call<UpsampleDynamicResolution_Render>(REL::RelocationID(100548, 107733).address() + REL::Relocate(0x152, 0x78, 0x7E));
+
+			stl::write_thunk_call<CopyScreenshot>(REL::RelocationID(35556, 35556).address() + REL::Relocate(0x3E6, 0x3E6));
 
 			logger::info("[Upscaling] Installed hooks");
 		} else {

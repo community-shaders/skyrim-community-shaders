@@ -478,6 +478,9 @@ void Upscaling::Upscale()
 		outputTextureRTV->Release();
 	if (dsv)
 		dsv->Release();
+	
+	// Additional copy for screenshot screen size fix
+	context->CopyResource(inputTextureResource, outputTextureResource);
 }
 
 void Upscaling::SharpenTAA()
@@ -978,6 +981,19 @@ void Upscaling::CustomUpscale()
 	}
 
 	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
+}
+
+void Upscaling::CopySwapChainToScreenshot()
+{
+	auto renderer = globals::game::renderer;
+
+	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
+	auto& screenshot = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kSCREENSHOT];
+
+	ID3D11Resource* swapChainResource;
+	main.RTV->GetResource(&swapChainResource);
+
+	globals::d3d::context->CopyResource(screenshot.texture, swapChainResource);
 }
 
 /**
