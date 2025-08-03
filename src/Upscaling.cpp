@@ -321,7 +321,7 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	static float* clampOffset = (float*)REL::RelocationID(512203, 411484).address();
 	*clampOffset = 0;
 
-	if (upscaleMethod != UpscaleMethod::kNONE) {		
+	if (upscaleMethod != UpscaleMethod::kNONE && !globals::game::ui->GameIsPaused()) {		
 		resolutionScale = 1.0f / ffxFsr3GetUpscaleRatioFromQualityMode((FfxFsr3QualityMode)settings.upscalePreset);
 		
 		auto state = globals::state;
