@@ -356,13 +356,6 @@ void Upscaling::Upscale()
 	ID3D11Resource* outputTextureResource;
 	outputTextureRTV->GetResource(&outputTextureResource);
 
-	// Now release the views after getting resources
-	inputTextureSRV->Release();
-	outputTextureRTV->Release();
-
-	if (dsv)
-		dsv->Release();
-
 	auto dispatchCount = Util::GetScreenDispatchCount(false);
 
 	{
@@ -440,6 +433,14 @@ void Upscaling::Upscale()
 	}
 
 	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
+
+	// Release COM objects to prevent memory leaks after all usage is complete
+	if (inputTextureSRV)
+		inputTextureSRV->Release();
+	if (outputTextureRTV)
+		outputTextureRTV->Release();
+	if (dsv)
+		dsv->Release();
 }
 
 void Upscaling::SharpenTAA()
@@ -465,13 +466,6 @@ void Upscaling::SharpenTAA()
 
 	ID3D11Resource* outputTextureResource;
 	outputTextureRTV->GetResource(&outputTextureResource);
-
-	// Now release the views after getting resources
-	inputTextureSRV->Release();
-	outputTextureRTV->Release();
-
-	if (dsv)
-		dsv->Release();
 
 	auto dispatchCount = Util::GetScreenDispatchCount(false);
 
@@ -505,6 +499,14 @@ void Upscaling::SharpenTAA()
 	state->EndPerfEvent();
 
 	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
+
+	// Release COM objects to prevent memory leaks after all usage is complete
+	if (inputTextureSRV)
+		inputTextureSRV->Release();
+	if (outputTextureRTV)
+		outputTextureRTV->Release();
+	if (dsv)
+		dsv->Release();
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
 }

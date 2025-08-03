@@ -343,8 +343,6 @@ void TruePBR::SetupGlintsTexture()
 		// Release COM objects to prevent memory leaks
 		if (old.shader)
 			old.shader->Release();
-		if (old.instance)
-			old.instance->Release();
 		for (auto& uav : old.uav) {
 			if (uav)
 				uav->Release();
