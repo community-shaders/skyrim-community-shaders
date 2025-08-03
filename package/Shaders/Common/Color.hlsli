@@ -88,7 +88,7 @@ namespace Color
 			return float3(0.0, 0.0, 0.0);
 		}
 		float3 linearColorRaw = GammaToLinear(color / originalLuminance);
-		float scale = GammaToLinear(originalLuminance);
+		float scale = GammaToLinear(originalLuminance).x;
 		return linearColorRaw * scale;
 	}
 
