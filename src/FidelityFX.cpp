@@ -222,7 +222,7 @@ void FidelityFX::CreateFSRResources()
 	contextDescription.maxUpscaleSize.height = (uint)state->screenSize.y;
 	contextDescription.displaySize.width = (uint)state->screenSize.x;
 	contextDescription.displaySize.height = (uint)state->screenSize.y;
-	contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE;
+	contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE | FFX_FSR3_ENABLE_DYNAMIC_RESOLUTION;
 	contextDescription.backBufferFormat = FFX_SURFACE_FORMAT_R8G8B8A8_UNORM;
 
 	contextDescription.backendInterfaceUpscaling = fsrInterface;
@@ -257,10 +257,15 @@ void FidelityFX::Upscale(Texture2D* a_color, Texture2D* a_alphaMask, float2 a_ji
 		dispatchParameters.reactive = ffxGetResource(a_alphaMask->resource.get(), L"FSR3_InputReactiveMap", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 		dispatchParameters.transparencyAndComposition = ffxGetResource(nullptr, L"FSR3_TransparencyAndCompositionMap", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 
-		dispatchParameters.motionVectorScale.x = globals::game::isVR ? state->screenSize.x / 2 : state->screenSize.x;
-		dispatchParameters.motionVectorScale.y = state->screenSize.y;
-		dispatchParameters.renderSize.width = (uint)state->screenSize.x;
-		dispatchParameters.renderSize.height = (uint)state->screenSize.y;
+		auto screenSize = state->screenSize;
+		auto renderSize = Util::ConvertToDynamic(screenSize);
+
+		dispatchParameters.motionVectorScale.x = (globals::game::isVR ? renderSize.x * 0.5f : renderSize.x);
+		dispatchParameters.motionVectorScale.y = renderSize.y;
+		dispatchParameters.renderSize.width = (uint)(renderSize.x);
+		dispatchParameters.renderSize.height = (uint)(renderSize.y);
+		dispatchParameters.upscaleSize.width = (uint)(screenSize.x);
+		dispatchParameters.upscaleSize.height = (uint)(screenSize.y);
 		dispatchParameters.jitterOffset.x = -a_jitter.x;
 		dispatchParameters.jitterOffset.y = -a_jitter.y;
 
