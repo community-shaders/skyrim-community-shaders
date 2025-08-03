@@ -175,6 +175,17 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	struct SetScissorRect
+	{
+		static void thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom)
+		{
+			auto resolutionScale = globals::upscaling->resolutionScale;
+			func(This, a_left * resolutionScale, a_top * resolutionScale, a_right * resolutionScale, a_bottom * resolutionScale);
+		}
+
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	static void InstallHooks()
 	{
 		if (!globals::state->upscalerLoaded) {
@@ -194,6 +205,10 @@ public:
 			// Performs depth upscaling after the final main post processing pass
 			stl::write_thunk_call<Main_HDRTonemapBlendCinematic_Render>(REL::RelocationID(99023, 99023).address() + REL::Relocate(0x1EA, 0x1C5));
 			stl::write_thunk_call<Main_HDRTonemapBlendCinematic_Render>(REL::RelocationID(99023, 99023).address() + REL::Relocate(0x230, 0x1C5));
+
+			// Patches RSSetScissorRect calls to use dynamic resolution
+			// This is a PC-specific function hence it was missing
+			stl::detour_thunk<SetScissorRect>(REL::RelocationID(75564, 75564));
 
 			logger::info("[Upscaling] Installed hooks");
 		} else {
