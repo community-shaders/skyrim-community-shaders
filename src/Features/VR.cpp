@@ -1380,14 +1380,6 @@ void VR::EnsureOverlayInitialized()
 // PRIVATE IMPLEMENTATION
 //=============================================================================
 
-void VR::CleanupOverlayTextures()
-{
-	menuRTV = nullptr;
-	menuTexture = nullptr;
-	menuControllerRTV = nullptr;
-	menuControllerTexture = nullptr;
-}
-
 void VR::DestroyOverlay()
 {
 	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
@@ -1404,12 +1396,11 @@ void VR::DestroyOverlay()
 		overlay->DestroyOverlay(menuControllerOverlayHandle);
 		menuControllerOverlayHandle = vr::k_ulOverlayHandleInvalid;
 	}
-	CleanupOverlayTextures();
 }
 
 void VR::RecreateOverlayTexturesIfNeeded()
 {
-	CleanupOverlayTextures();
+	// Smart pointers automatically release existing resources when put() assigns new ones
 	Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, menuTexture.put(), menuRTV.put());
 	Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, menuControllerTexture.put(), menuControllerRTV.put());
 }
@@ -1460,8 +1451,6 @@ void VR::SubmitOverlayFrame()
 		ImGui::Render();
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 		globals::d3d::context->OMSetRenderTargets(1, &oldRTV, nullptr);
-		if (oldRTV)
-			oldRTV->Release();
 
 		// Apply highlight tint to HMD overlay if it's being dragged
 		bool hmdBeingDragged = settings.EnableDragToReposition && overlayDragState.dragging &&
@@ -1495,8 +1484,6 @@ void VR::SubmitOverlayFrame()
 			ImGui::Render();
 			ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 			globals::d3d::context->OMSetRenderTargets(1, &oldRTV, nullptr);
-			if (oldRTV)
-				oldRTV->Release();
 
 			// Apply highlight tint to controller overlay if it's being dragged
 			bool controllerBeingDragged = overlayDragState.dragging &&
@@ -1519,6 +1506,10 @@ void VR::SubmitOverlayFrame()
 		} else if (menuControllerOverlayHandle != vr::k_ulOverlayHandleInvalid) {
 			gameOverlay->HideOverlay(menuControllerOverlayHandle);
 		}
+
+		// Release oldRTV after all usage is complete to prevent use-after-free
+		if (oldRTV)
+			oldRTV->Release();
 	} else {
 		if (menuOverlayHandle != vr::k_ulOverlayHandleInvalid) {
 			gameOverlay->HideOverlay(menuOverlayHandle);

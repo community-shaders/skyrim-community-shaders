@@ -587,7 +587,6 @@ public:
 	// PRIVATE IMPLEMENTATION
 	//=============================================================================
 
-	void CleanupOverlayTextures();
 	void DetectOpenVRInfo();
 	bool IsOpenVRCompatible() const;
 };
