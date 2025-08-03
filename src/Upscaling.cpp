@@ -221,8 +221,6 @@ void Upscaling::DrawSettings()
 
 void Upscaling::SaveSettings(json& o_json)
 {
-	std::lock_guard<std::mutex> lock(settingsMutex);
-
 	o_json = settings;
 	auto iniSettingCollection = globals::game::iniPrefSettingCollection;
 	if (iniSettingCollection) {
@@ -235,7 +233,6 @@ void Upscaling::SaveSettings(json& o_json)
 
 void Upscaling::LoadSettings(json& o_json)
 {
-	std::lock_guard<std::mutex> lock(settingsMutex);
 	settings = o_json;
 	auto iniSettingCollection = globals::game::iniPrefSettingCollection;
 	if (iniSettingCollection) {
@@ -737,8 +734,6 @@ float Upscaling::GetFrameGenerationFrameTime() const
 
 void Upscaling::Upscale()
 {
-	std::lock_guard<std::mutex> lock(settingsMutex);  // Lock for the duration of this function
-
 	auto upscaleMethod = GetUpscaleMethod();
 
 	CheckResources();
