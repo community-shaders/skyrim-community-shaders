@@ -311,47 +311,52 @@ ID3D11ComputeShader* Upscaling::GetRCASCS()
 	return rcasCS;
 }
 
-void Upscaling::ConfigureUpscaling()
+void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 {
 	auto upscaleMethod = GetUpscaleMethod();
 
 	static bool* enableAutoDynamicResolution = (bool*)REL::RelocationID(508794, 411484).address();
+	*enableAutoDynamicResolution = false;
 
-	static float* widthRatio = (float*)REL::RelocationID(525023, 411484).address();
-	static float* heightRatio = (float*)REL::RelocationID(525024, 411484).address();
 	static float* clampOffset = (float*)REL::RelocationID(512203, 411484).address();
+	*clampOffset = 0;
 
-	if (upscaleMethod != UpscaleMethod::kNONE) {
-		*enableAutoDynamicResolution = false;
-		
-		auto state = globals::state;
-
+	if (upscaleMethod != UpscaleMethod::kNONE) {		
 		resolutionScale = 1.0f / ffxFsr3GetUpscaleRatioFromQualityMode((FfxFsr3QualityMode)settings.upscalePreset);
 		
-		auto gameViewport = globals::game::graphicsState;
+		auto state = globals::state;
+		auto screenSize = globals::state->screenSize;
 
-		auto renderSize = Util::ConvertToDynamic(state->screenSize);
+		auto screenWidth = static_cast<int>(screenSize.x);
+		auto renderWidth = static_cast<int>(screenWidth * resolutionScale);
 
-		auto phaseCount = ffxFsr3GetJitterPhaseCount(static_cast<int>(renderSize.x), static_cast<int>(state->screenSize.x));
+		auto screenHeight = static_cast<int>(screenSize.y);
+		auto renderHeight = static_cast<int>(screenHeight * resolutionScale);
 
-		ffxFsr3UpscalerGetJitterOffset(&jitter.x, &jitter.y, globals::state->frameCount, phaseCount);
+		resolutionScale = static_cast<float>(renderWidth) / static_cast<float>(screenWidth);
+
+		auto phaseCount = ffxFsr3GetJitterPhaseCount(renderWidth, screenWidth);
+
+		ffxFsr3UpscalerGetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
 
 		if (globals::game::isVR)
-			gameViewport->projectionPosScaleX = -jitter.x / renderSize.x;
+			a_viewport->projectionPosScaleX = -jitter.x / renderWidth;
 		else
-			gameViewport->projectionPosScaleX = -2.0f * jitter.x / renderSize.x;
+			a_viewport->projectionPosScaleX = -2.0f * jitter.x / renderWidth;
 
-		gameViewport->projectionPosScaleY = 2.0f * jitter.y / renderSize.y;
+		a_viewport->projectionPosScaleY = 2.0f * jitter.y / renderHeight;
 
 	} else {
-		*enableAutoDynamicResolution = false;
 		resolutionScale = 1.0f;
 	}
 
+	auto& runtimeData = a_viewport->GetRuntimeData();
 
-	*widthRatio = resolutionScale;
-	*heightRatio = resolutionScale;
-	*clampOffset = 0;
+	runtimeData.dynamicResolutionPreviousWidthRatio = runtimeData.dynamicResolutionWidthRatio;
+	runtimeData.dynamicResolutionPreviousHeightRatio = runtimeData.dynamicResolutionHeightRatio;
+
+	runtimeData.dynamicResolutionWidthRatio = resolutionScale;
+	runtimeData.dynamicResolutionHeightRatio = resolutionScale;
 }
 
 void Upscaling::Upscale()
