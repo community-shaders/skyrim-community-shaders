@@ -107,8 +107,6 @@ void Deferred::SetupResources()
 		SetupRenderTarget(NORMALROUGHNESS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Masks
 		SetupRenderTarget(MASKS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
-		// Masks 2
-		SetupRenderTarget(MASKS2, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 
 		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 		texDesc.Width = 2;
@@ -342,7 +340,7 @@ void Deferred::StartDeferred()
 		SPECULAR,
 		REFLECTANCE,
 		MASKS,
-		MASKS2
+		RE::RENDER_TARGET::kNONE
 	};
 
 	for (uint i = 2; i < 8; i++) {
@@ -618,16 +616,6 @@ void Deferred::OverrideBlendStates()
 								blendDesc.RenderTarget[i].BlendOpAlpha = D3D11_BLEND_OP_ADD;
 								blendDesc.RenderTarget[i].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 							}
-
-							// Copy albedo blending to masks2
-							blendDesc.RenderTarget[7].BlendEnable = blendDesc.RenderTarget[3].BlendEnable;
-							blendDesc.RenderTarget[7].SrcBlend = blendDesc.RenderTarget[3].SrcBlend;
-							blendDesc.RenderTarget[7].DestBlend = blendDesc.RenderTarget[3].DestBlend;
-							blendDesc.RenderTarget[7].BlendOp = blendDesc.RenderTarget[3].BlendOp;
-							blendDesc.RenderTarget[7].SrcBlendAlpha = blendDesc.RenderTarget[3].SrcBlendAlpha;
-							blendDesc.RenderTarget[7].DestBlendAlpha = blendDesc.RenderTarget[3].DestBlendAlpha;
-							blendDesc.RenderTarget[7].BlendOpAlpha = blendDesc.RenderTarget[3].BlendOpAlpha;
-							blendDesc.RenderTarget[7].RenderTargetWriteMask = blendDesc.RenderTarget[3].RenderTargetWriteMask;
 
 							DX::ThrowIfFailed(device->CreateBlendState(&blendDesc, &deferredBlendStates[a][b][c][d]));
 						} else {

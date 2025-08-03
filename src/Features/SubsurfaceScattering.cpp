@@ -229,7 +229,7 @@ void SubsurfaceScattering::DrawSSS()
 
 		auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 		auto mask = renderer->GetRuntimeData().renderTargets[MASKS];
-		auto albedo = renderer->GetRuntimeData().renderTargets[MASKS2];
+		auto albedo = renderer->GetRuntimeData().renderTargets[ALBEDO];
 		auto normal = renderer->GetRuntimeData().renderTargets[NORMALROUGHNESS];
 
 		ID3D11UnorderedAccessView* uav = blurHorizontalTemp->uav.get();
