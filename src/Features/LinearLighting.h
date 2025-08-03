@@ -97,10 +97,7 @@ struct LinearLighting : Feature
 		{
 			// Disable linear lighting when entering the loading screen
 			if (a_event->menuName == RE::LoadingMenu::MENU_NAME) {
-				if (a_event->opening)
-					globals::features::linearLighting.tempDisable = true;
-				else
-					globals::features::linearLighting.tempDisable = false;
+				globals::features::linearLighting.tempDisable = a_event->opening;
 			}
 
 			return RE::BSEventNotifyControl::kContinue;

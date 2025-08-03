@@ -82,14 +82,11 @@ namespace Color
 	{
 		float originalLuminance = RGBToLuminance(color);
 		float3 linearColorRaw = GammaToLinear(color / originalLuminance);
-		float scale = 1.0;
-		if (originalLuminance > 1e-5) {
-			scale = GammaToLinear(originalLuminance);
-		} else if (originalLuminance <= 1e-5) {
+		if (originalLuminance <= 1e-5) {
 			return float3(0.0, 0.0, 0.0);
 		}
-		float3 finalLinearColor = linearColorRaw * scale;
-		return finalLinearColor;
+		float scale = GammaToLinear(originalLuminance);
+		return linearColorRaw * scale;
 	}
 
 	float3 GammaToLinearLuminancePreservingLight(float3 color)
@@ -99,14 +96,11 @@ namespace Color
 		}
 		float originalLuminance = RGBToLuminance(color);
 		float3 linearColorRaw = pow(color / originalLuminance, SharedData::linearLightingSettings.lightGamma);
-		float scale = 1.0;
-		if (originalLuminance > 1e-5) {
-			scale = originalLuminance;
-		} else if (originalLuminance <= 1e-5) {
+		if (originalLuminance <= 1e-5) {
 			return float3(0.0, 0.0, 0.0);
 		}
-		float3 finalLinearColor = linearColorRaw * scale;
-		return finalLinearColor;
+		float scale = originalLuminance;
+		return linearColorRaw * scale;
 	}
 
 	float3 LLGammaToLinear(float3 color)
