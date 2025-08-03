@@ -332,16 +332,16 @@ void Upscaling::ConfigureUpscaling()
 
 		auto renderSize = Util::ConvertToDynamic(state->screenSize);
 
-		auto phaseCount = upscaleMethod == UpscaleMethod::kTAA ? 8 : ffxFsr3GetJitterPhaseCount(static_cast<int>(renderSize.x), static_cast<int>(state->screenSize.x));
+		auto phaseCount = ffxFsr3GetJitterPhaseCount(static_cast<int>(renderSize.x), static_cast<int>(state->screenSize.x));
 
 		ffxFsr3UpscalerGetJitterOffset(&jitter.x, &jitter.y, globals::state->frameCount, phaseCount);
 
 		if (globals::game::isVR)
-			gameViewport->projectionPosScaleX = -jitter.x / state->screenSize.x;
+			gameViewport->projectionPosScaleX = -jitter.x / renderSize.x;
 		else
-			gameViewport->projectionPosScaleX = -2.0f * jitter.x / state->screenSize.x;
+			gameViewport->projectionPosScaleX = -2.0f * jitter.x / renderSize.x;
 
-		gameViewport->projectionPosScaleY = 2.0f * jitter.y / state->screenSize.y;
+		gameViewport->projectionPosScaleY = 2.0f * jitter.y / renderSize.y;
 
 	} else {
 		*enableAutoDynamicResolution = false;
