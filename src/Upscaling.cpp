@@ -326,9 +326,13 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	static float* clampOffset = (float*)REL::RelocationID(512203, 411484).address();
 	*clampOffset = 0;
 
-	if (upscaleMethod != UpscaleMethod::kNONE && allowUpscaling) {		
-		resolutionScale = 1.0f / ffxFsr3GetUpscaleRatioFromQualityMode((FfxFsr3QualityMode)settings.upscalePreset);
-		
+	if (upscaleMethod != UpscaleMethod::kNONE) {		
+
+		if (allowUpscaling)
+			resolutionScale = 1.0f / ffxFsr3GetUpscaleRatioFromQualityMode((FfxFsr3QualityMode)settings.upscalePreset);
+		else
+			resolutionScale = 1.0f;
+
 		auto state = globals::state;
 		auto screenSize = globals::state->screenSize;
 
