@@ -76,7 +76,7 @@ public:
 	ID3D11ComputeShader* rcasCS;
 	ID3D11ComputeShader* GetRCASCS();
 
-	void ConfigureUpscaling();
+	void ConfigureUpscaling(RE::BSGraphics::State* a_state);
 	void Upscale();
 	void SharpenTAA();
 
@@ -113,7 +113,7 @@ public:
 		static void thunk(RE::BSGraphics::State* a_state)
 		{
 			func(a_state);
-			GetSingleton()->ConfigureUpscaling();
+			GetSingleton()->ConfigureUpscaling(a_state);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -224,8 +224,10 @@ public:
 			stl::detour_thunk<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
 			
 			stl::write_thunk_call<UpsampleDynamicResolution_Render>(REL::RelocationID(100548, 107733).address() + REL::Relocate(0x152, 0x78, 0x7E));
-
 			stl::write_thunk_call<CopyScreenshot>(REL::RelocationID(35556, 35556).address() + REL::Relocate(0x3E6, 0x3E6));
+
+			std::uint8_t nop5[] = { 0x0F, 0x1F, 0x44, 0x00, 0x00 };
+			REL::safe_write(REL::RelocationID(35556, 36555).address() + REL::Relocate(0x2D, 0x2D, 0x25), nop5, sizeof(nop5));
 
 			logger::info("[Upscaling] Installed hooks");
 		} else {
