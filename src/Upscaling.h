@@ -36,6 +36,7 @@ public:
 		uint upscaleMethod = (uint)UpscaleMethod::kTAA;
 		uint upscaleMethodNoDLSS = (uint)UpscaleMethod::kTAA;
 		uint upscaleMethodNoFSR = (uint)UpscaleMethod::kTAA;
+		uint upscalePreset = (uint)FfxFsr3QualityMode::FFX_FSR3_QUALITY_MODE_QUALITY;
 		float sharpness = 0.0f;
 		uint dlssPreset = 1;
 		uint frameLimitMode = 1;
@@ -54,6 +55,7 @@ public:
 
 	bool d3d12Interop = false;
 	double refreshRate = 0.0f;
+	float resolutionScale = 1.0f;
 
 	// FG FPS Measurement for Overlay
 	bool IsFrameGenerationActive() const;
@@ -74,7 +76,7 @@ public:
 	ID3D11ComputeShader* rcasCS;
 	ID3D11ComputeShader* GetRCASCS();
 
-	void UpdateJitter();
+	void ConfigureUpscaling();
 	void Upscale();
 	void SharpenTAA();
 
@@ -111,7 +113,7 @@ public:
 		static void thunk(RE::BSGraphics::State* a_state)
 		{
 			func(a_state);
-			GetSingleton()->UpdateJitter();
+			GetSingleton()->ConfigureUpscaling();
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -167,17 +169,40 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	void CustomUpscale();
+
+	struct UpsampleDynamicResolution_Render
+	{
+		static void thunk(RE::BSImagespaceShader* a1, RE::BSTriShape* a2)
+		{		
+			globals::state->BeginPerfEvent(std::format("{} Draw", magic_enum::enum_name(RE::ImageSpaceManager::ISUpsampleDynamicResolution)));
+				
+			auto upscaling = globals::upscaling;
+			auto upscaleMethod = upscaling->GetUpscaleMethod();
+
+			if (upscaleMethod == UpscaleMethod::kFSR || upscaleMethod == UpscaleMethod::kDLSS)
+				upscaling->CustomUpscale();
+			else
+				func(a1, a2);
+
+			globals::state->EndPerfEvent();
+		}
+
+		static inline REL::Relocation<decltype(thunk)> func;
+	};;
+
 	static void InstallHooks()
 	{
 		if (!globals::state->upscalerLoaded) {
 			bool isGOG = !GetModuleHandle(L"steam_api64.dll");
-
 			stl::write_thunk_call<Main_UpdateJitter>(REL::RelocationID(75460, 77245).address() + REL::Relocate(0xE5, isGOG ? 0x133 : 0xE2, 0x104));
 			stl::write_thunk_call<TAA_BeginTechnique>(REL::RelocationID(100540, 107270).address() + REL::Relocate(0x3E9, 0x3EA, 0x448));
 			stl::write_thunk_call<TAA_EndTechnique>(REL::RelocationID(100540, 107270).address() + REL::Relocate(0x3F3, 0x3F4, 0x452));
 			stl::write_thunk_call<BSImageSpacerShader_RenderPassImmediately>(REL::RelocationID(100951, 107733).address() + REL::Relocate(0x82, 0x78, 0x7E));
 
 			stl::detour_thunk<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
+			
+			stl::write_thunk_call<UpsampleDynamicResolution_Render>(REL::RelocationID(100548, 107733).address() + REL::Relocate(0x152, 0x78, 0x7E));
 
 			logger::info("[Upscaling] Installed hooks");
 		} else {

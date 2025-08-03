@@ -78,6 +78,12 @@ void Upscaling::DrawSettings()
 		settings.sharpness = std::clamp(settings.sharpness, 0.0f, 1.0f);
 	}
 
+	// Display upscaling preset if applicable
+	if (upscaleMethod != UpscaleMethod::kNONE) {
+		const char* upscalePresets[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "Native AA" };
+		ImGui::SliderInt("Upscale Preset", (int*)&settings.upscalePreset, 0, 4, std::format("{}", upscalePresets[4 - settings.upscalePreset]).c_str());
+	}
+
 	// Display DLSS preset slider if using DLSS
 	if (upscaleMethod == UpscaleMethod::kDLSS) {
 		const char* dlssPresets[] = { "Transformer Model", "Convolutional Model" };
@@ -305,15 +311,30 @@ ID3D11ComputeShader* Upscaling::GetRCASCS()
 	return rcasCS;
 }
 
-void Upscaling::UpdateJitter()
+void Upscaling::ConfigureUpscaling()
 {
 	auto upscaleMethod = GetUpscaleMethod();
-	if (upscaleMethod == UpscaleMethod::kFSR || upscaleMethod == UpscaleMethod::kDLSS) {
-		auto gameViewport = globals::game::graphicsState;
 
+	static bool* enableAutoDynamicResolution = (bool*)REL::RelocationID(508794, 411484).address();
+
+	static float* widthRatio = (float*)REL::RelocationID(525023, 411484).address();
+	static float* heightRatio = (float*)REL::RelocationID(525024, 411484).address();
+	static float* clampOffset = (float*)REL::RelocationID(512203, 411484).address();
+
+	if (upscaleMethod != UpscaleMethod::kNONE) {
+		*enableAutoDynamicResolution = false;
+		
 		auto state = globals::state;
 
-		ffxFsr3UpscalerGetJitterOffset(&jitter.x, &jitter.y, globals::state->frameCount, 8);
+		resolutionScale = 1.0f / ffxFsr3GetUpscaleRatioFromQualityMode((FfxFsr3QualityMode)settings.upscalePreset);
+		
+		auto gameViewport = globals::game::graphicsState;
+
+		auto renderSize = Util::ConvertToDynamic(state->screenSize);
+
+		auto phaseCount = ffxFsr3GetJitterPhaseCount(static_cast<int>(renderSize.x), static_cast<int>(state->screenSize.x));
+
+		ffxFsr3UpscalerGetJitterOffset(&jitter.x, &jitter.y, globals::state->frameCount, phaseCount);
 
 		if (globals::game::isVR)
 			gameViewport->projectionPosScaleX = -jitter.x / state->screenSize.x;
@@ -321,7 +342,16 @@ void Upscaling::UpdateJitter()
 			gameViewport->projectionPosScaleX = -2.0f * jitter.x / state->screenSize.x;
 
 		gameViewport->projectionPosScaleY = 2.0f * jitter.y / state->screenSize.y;
+
+	} else {
+		*enableAutoDynamicResolution = false;
+		resolutionScale = 1.0f;
 	}
+
+
+	*widthRatio = resolutionScale;
+	*heightRatio = resolutionScale;
+	*clampOffset = 0;
 }
 
 void Upscaling::Upscale()
@@ -392,6 +422,13 @@ void Upscaling::Upscale()
 		context->CSSetShader(shader, nullptr, 0);
 
 		state->EndPerfEvent();
+	}
+
+	// If actually upscaling, skip here
+	if (resolutionScale < 1.0f)
+	{
+		context->CopyResource(outputTextureResource, inputTextureResource);
+		return;
 	}
 
 	{
@@ -471,7 +508,7 @@ void Upscaling::SharpenTAA()
 	ID3D11Resource* outputTextureResource;
 	outputTextureRTV->GetResource(&outputTextureResource);
 
-	auto dispatchCount = Util::GetScreenDispatchCount(false);
+	auto dispatchCount = Util::GetScreenDispatchCount(true);
 
 	state->BeginPerfEvent("Sharpening");
 
@@ -853,6 +890,90 @@ float Upscaling::GetFrameGenerationFrameTime() const
 	}
 
 	return 0.0f;
+}
+
+void Upscaling::CustomUpscale()
+{
+	std::lock_guard<std::mutex> lock(settingsMutex);  // Lock for the duration of this function
+
+	auto upscaleMethod = GetUpscaleMethod();
+
+	CheckResources();
+
+	Hooks::BSGraphics_SetDirtyStates::func(false);
+
+	auto state = globals::state;
+
+	auto context = globals::d3d::context;
+
+	ID3D11ShaderResourceView* inputTextureSRV;
+	context->PSGetShaderResources(0, 1, &inputTextureSRV);
+
+	inputTextureSRV->Release();
+
+	ID3D11RenderTargetView* outputTextureRTV;
+	ID3D11DepthStencilView* dsv;
+	context->OMGetRenderTargets(1, &outputTextureRTV, &dsv);
+	context->OMSetRenderTargets(0, nullptr, nullptr);
+
+	outputTextureRTV->Release();
+
+	if (dsv)
+		dsv->Release();
+
+	ID3D11Resource* inputTextureResource;
+	inputTextureSRV->GetResource(&inputTextureResource);
+
+	ID3D11Resource* outputTextureResource;
+	outputTextureRTV->GetResource(&outputTextureResource);
+
+	{
+		state->BeginPerfEvent("Upscaling");
+
+		context->CopyResource(upscalingTexture->resource.get(), inputTextureResource);
+
+		if (upscaleMethod == UpscaleMethod::kDLSS)
+			globals::streamline->Upscale(upscalingTexture, alphaMaskTexture, settings.dlssPreset == 0 ? (sl::DLSSPreset)11u : sl::DLSSPreset::ePresetE);
+		else if (upscaleMethod == UpscaleMethod::kFSR)
+			globals::fidelityFX->Upscale(upscalingTexture, alphaMaskTexture, jitter, settings.sharpness);
+
+		state->EndPerfEvent();
+	}
+
+	if (upscaleMethod != UpscaleMethod::kFSR) {
+		state->BeginPerfEvent("Sharpening");
+
+		context->CopyResource(inputTextureResource, upscalingTexture->resource.get());
+
+		{
+			{
+				auto dispatchCount = Util::GetScreenDispatchCount(false);
+
+				ID3D11ShaderResourceView* views[1] = { inputTextureSRV };
+				context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+				ID3D11UnorderedAccessView* uavs[1] = { upscalingTexture->uav.get() };
+				context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+				context->CSSetShader(GetRCASCS(), nullptr, 0);
+
+				context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+			}
+
+			ID3D11ShaderResourceView* views[1] = { nullptr };
+			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+			ID3D11UnorderedAccessView* uavs[1] = { nullptr };
+			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+			ID3D11ComputeShader* shader = nullptr;
+			context->CSSetShader(shader, nullptr, 0);
+		}
+
+		state->EndPerfEvent();
+	}
+
+	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
 }
 
 /**
