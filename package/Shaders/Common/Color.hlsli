@@ -73,6 +73,11 @@ namespace Color
 		return pow(max(color, 0), 1.0 / 2.2);
 	}
 
+#if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
+	// Attempt to match vanilla materials tha are a darker than PBR
+	const static float PBRLightingScale = ENABLE_LL ? 1.0 : 0.666;
+	const static float PBRLightingCompensation = ENABLE_LL ? 1.0 : Math::PI;
+
 	float3 GammaToLinearLuminancePreserving(float3 color)
 	{
 		float originalLuminance = RGBToLuminance(color);
@@ -86,11 +91,6 @@ namespace Color
 		float3 finalLinearColor = linearColorRaw * scale;
 		return finalLinearColor;
 	}
-
-#if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
-	// Attempt to match vanilla materials tha are a darker than PBR
-	const static float PBRLightingScale = ENABLE_LL ? 1.0 : 0.666;
-	const static float PBRLightingCompensation = ENABLE_LL ? 1.0 : Math::PI;
 
 	float3 GammaToLinearLuminancePreservingLight(float3 color)
 	{
