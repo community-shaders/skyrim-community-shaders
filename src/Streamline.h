@@ -168,7 +168,7 @@ public:
 
 	void CheckFrameConstants();
 
-	void Upscale(Texture2D* a_color, Texture2D* a_alphaMask, sl::DLSSPreset a_preset);
+	void Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl::DLSSMode a_mode, sl::DLSSPreset a_preset);
 	void Present();
 	void DestroyDLSSResources();
 };

@@ -313,7 +313,7 @@ void Streamline::CheckFrameConstants()
 	}
 }
 
-void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl::DLSSPreset a_preset)
+void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl::DLSSMode a_mode, sl::DLSSPreset a_preset)
 {
 	CheckFrameConstants();
 
@@ -323,15 +323,19 @@ void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl
 	auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 	auto& motionVectorsTexture = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
+	static auto previousDlssMode = a_mode;
 	static auto previousDlssPreset = a_preset;
 
-	if (previousDlssPreset != a_preset)
+	if (previousDlssMode != a_mode || previousDlssPreset != a_preset)
 		DestroyDLSSResources();
+
+	previousDlssMode = a_mode;
 	previousDlssPreset = a_preset;
 
 	{
+
 		sl::DLSSOptions dlssOptions{};
-		dlssOptions.mode = sl::DLSSMode::eMaxQuality;
+		dlssOptions.mode = a_mode;
 		dlssOptions.outputWidth = (uint)state->screenSize.x;
 		dlssOptions.outputHeight = (uint)state->screenSize.y;
 		dlssOptions.colorBuffersHDR = sl::Boolean::eFalse;

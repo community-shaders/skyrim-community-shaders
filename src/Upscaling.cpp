@@ -245,6 +245,24 @@ void Upscaling::RestoreDefaultSettings()
 	settings = {};
 }
 
+sl::DLSSMode Upscaling::UpscalePresetToDLSS(FfxFsr3QualityMode fsrMode)
+{	
+	switch (fsrMode) {
+		case FFX_FSR3_QUALITY_MODE_QUALITY:
+			return sl::DLSSMode::eMaxQuality;
+
+		case FFX_FSR3_QUALITY_MODE_BALANCED:
+			return sl::DLSSMode::eBalanced;
+
+		case FFX_FSR3_QUALITY_MODE_PERFORMANCE:
+			return sl::DLSSMode::eMaxPerformance;
+
+		case FFX_FSR3_QUALITY_MODE_ULTRA_PERFORMANCE:
+			return sl::DLSSMode::eUltraPerformance;
+	}
+	return sl::DLSSMode::eMaxQuality;
+}
+
 Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
 {
 	if (globals::state->featureLevel != D3D_FEATURE_LEVEL_11_1)
@@ -431,7 +449,7 @@ void Upscaling::Upscale()
 		context->CopyResource(upscalingTexture->resource.get(), inputTextureResource);
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			globals::streamline->Upscale(upscalingTexture, alphaMaskTexture, settings.dlssPreset == 0 ? (sl::DLSSPreset)11u : sl::DLSSPreset::ePresetE);
+			globals::streamline->Upscale(upscalingTexture, alphaMaskTexture, sl::DLSSMode::eMaxQuality, settings.dlssPreset == 0 ? (sl::DLSSPreset)11u : sl::DLSSPreset::ePresetE);
 		else if (upscaleMethod == UpscaleMethod::kFSR)
 			globals::fidelityFX->Upscale(upscalingTexture, alphaMaskTexture, jitter, settings.sharpness);
 
@@ -937,7 +955,7 @@ void Upscaling::CustomUpscale()
 		context->CopyResource(upscalingTexture->resource.get(), inputTextureResource);
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			globals::streamline->Upscale(upscalingTexture, alphaMaskTexture, settings.dlssPreset == 0 ? (sl::DLSSPreset)11u : sl::DLSSPreset::ePresetE);
+			globals::streamline->Upscale(upscalingTexture, alphaMaskTexture, UpscalePresetToDLSS((FfxFsr3QualityMode)settings.upscaleMethod), settings.dlssPreset == 0 ? (sl::DLSSPreset)11u : sl::DLSSPreset::ePresetE);
 		else if (upscaleMethod == UpscaleMethod::kFSR)
 			globals::fidelityFX->Upscale(upscalingTexture, alphaMaskTexture, jitter, settings.sharpness);
 

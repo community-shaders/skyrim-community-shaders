@@ -66,6 +66,8 @@ public:
 	void LoadSettings(json& o_json);
 	void RestoreDefaultSettings();
 
+	sl::DLSSMode UpscalePresetToDLSS(FfxFsr3QualityMode fsrMode);
+
 	UpscaleMethod GetUpscaleMethod();
 
 	void CheckResources();
