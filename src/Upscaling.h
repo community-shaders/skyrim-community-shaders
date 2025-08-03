@@ -191,8 +191,6 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	void CopySwapChainToScreenshot();
-
 	struct CopyScreenshot
 	{
 		static void thunk(RE::ImageSpaceManager*,
@@ -201,7 +199,14 @@ public:
 			uint32_t,
 			RE::ImageSpaceShaderParam*)
 		{
-			globals::upscaling->CopySwapChainToScreenshot();
+			auto renderer = globals::game::renderer;
+			auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
+			auto& screenshot = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kSCREENSHOT];
+
+			ID3D11Resource* swapChainResource;
+			main.RTV->GetResource(&swapChainResource);
+
+			globals::d3d::context->CopyResource(screenshot.texture, swapChainResource);
 		}
 
 		static inline REL::Relocation<decltype(thunk)> func;

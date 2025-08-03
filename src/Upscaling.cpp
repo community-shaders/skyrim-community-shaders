@@ -983,19 +983,6 @@ void Upscaling::CustomUpscale()
 	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
 }
 
-void Upscaling::CopySwapChainToScreenshot()
-{
-	auto renderer = globals::game::renderer;
-
-	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
-	auto& screenshot = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kSCREENSHOT];
-
-	ID3D11Resource* swapChainResource;
-	main.RTV->GetResource(&swapChainResource);
-
-	globals::d3d::context->CopyResource(screenshot.texture, swapChainResource);
-}
-
 /**
  * @brief Installs hooks on the Map and Unmap methods of the provided D3D11 device context.
  *
