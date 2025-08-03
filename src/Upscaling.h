@@ -132,9 +132,6 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	bool validTaaPass = false;
-	std::mutex settingsMutex;  // Mutex to protect settings access
-
 	struct MenuManagerDrawInterfaceStartHook
 	{
 		static void thunk(int64_t a1)
