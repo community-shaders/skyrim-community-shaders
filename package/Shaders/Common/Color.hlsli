@@ -80,11 +80,14 @@ namespace Color
 
 	float3 GammaToLinearLuminancePreserving(float3 color)
 	{
+		if (!ENABLE_LL) {
+			return color;
+		}
 		float originalLuminance = RGBToLuminance(color);
-		float3 linearColorRaw = GammaToLinear(color / originalLuminance);
 		if (originalLuminance <= 1e-5) {
 			return float3(0.0, 0.0, 0.0);
 		}
+		float3 linearColorRaw = GammaToLinear(color / originalLuminance);
 		float scale = GammaToLinear(originalLuminance);
 		return linearColorRaw * scale;
 	}
@@ -95,10 +98,10 @@ namespace Color
 			return color;
 		}
 		float originalLuminance = RGBToLuminance(color);
-		float3 linearColorRaw = pow(color / originalLuminance, SharedData::linearLightingSettings.lightGamma);
 		if (originalLuminance <= 1e-5) {
 			return float3(0.0, 0.0, 0.0);
 		}
+		float3 linearColorRaw = pow(color / originalLuminance, SharedData::linearLightingSettings.lightGamma);
 		float scale = originalLuminance;
 		return linearColorRaw * scale;
 	}

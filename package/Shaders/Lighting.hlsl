@@ -2315,8 +2315,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	waterRoughnessSpecular = 1.0 - wetnessGlossinessSpecular * 0.9;
 #	endif
 
-	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && (inWorld || inReflection)) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
-	float3 dirLightColor = Color::Light(DirLightColor.xyz / llDirLightMult) * llDirLightMult;
+	float llDirLightMult = SharedData::linearLightingSettings.enableLinearLighting && (inWorld || inReflection) && !SharedData::InInterior ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+	float3 dirLightColor = Color::Light(DirLightColor.xyz / max(llDirLightMult, 1e-5)) * llDirLightMult;
 	float3 dirLightColorMultiplier = 1;
 
 #	if defined(WATER_EFFECTS)
