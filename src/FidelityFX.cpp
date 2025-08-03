@@ -215,6 +215,12 @@ void FidelityFX::CreateFSRResources()
 	if (ffxGetInterfaceDX11(&fsrInterface, fsrDevice, scratchBuffer, scratchBufferSize, FFX_FSR3UPSCALER_CONTEXT_COUNT) != FFX_OK)
 		logger::critical("[FidelityFX] Failed to initialize FSR3 backend interface!");
 
+	auto renderer = globals::game::renderer;
+	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	
+	D3D11_TEXTURE2D_DESC texDesc{};
+	main.texture->GetDesc(&texDesc);
+
 	FfxFsr3ContextDescription contextDescription;
 	contextDescription.maxRenderSize.width = (uint)state->screenSize.x;
 	contextDescription.maxRenderSize.height = (uint)state->screenSize.y;
@@ -222,8 +228,8 @@ void FidelityFX::CreateFSRResources()
 	contextDescription.maxUpscaleSize.height = (uint)state->screenSize.y;
 	contextDescription.displaySize.width = (uint)state->screenSize.x;
 	contextDescription.displaySize.height = (uint)state->screenSize.y;
-	contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE | FFX_FSR3_ENABLE_DYNAMIC_RESOLUTION;
-	contextDescription.backBufferFormat = FFX_SURFACE_FORMAT_R8G8B8A8_UNORM;
+	contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE | FFX_FSR3_ENABLE_DYNAMIC_RESOLUTION | FFX_FSR3_ENABLE_HIGH_DYNAMIC_RANGE;
+	contextDescription.backBufferFormat = ffxGetSurfaceFormatDX11(texDesc.Format);
 
 	contextDescription.backendInterfaceUpscaling = fsrInterface;
 
@@ -237,7 +243,7 @@ void FidelityFX::DestroyFSRResources()
 		logger::critical("[FidelityFX] Failed to destroy FSR3 context!");
 }
 
-void FidelityFX::Upscale(Texture2D* a_color, Texture2D* a_alphaMask, float2 a_jitter, float a_sharpness)
+void FidelityFX::Upscale(ID3D11Resource* a_upscaleTexture, Texture2D* a_alphaMask, float2 a_jitter, float a_sharpness)
 {
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
@@ -249,7 +255,7 @@ void FidelityFX::Upscale(Texture2D* a_color, Texture2D* a_alphaMask, float2 a_ji
 		FfxFsr3DispatchUpscaleDescription dispatchParameters{};
 
 		dispatchParameters.commandList = ffxGetCommandListDX11(context);
-		dispatchParameters.color = ffxGetResource(a_color->resource.get(), L"FSR3_Input_OutputColor", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+		dispatchParameters.color = ffxGetResource(a_upscaleTexture, L"FSR3_Input_OutputColor", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 		dispatchParameters.depth = ffxGetResource(depthTexture.texture, L"FSR3_InputDepth", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 		dispatchParameters.motionVectors = ffxGetResource(motionVectorsTexture.texture, L"FSR3_InputMotionVectors", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 		dispatchParameters.exposure = ffxGetResource(nullptr, L"FSR3_InputExposure", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);

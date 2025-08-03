@@ -301,7 +301,7 @@ void Streamline::CheckFrameConstants()
 		slConstants.reset = sl::Boolean::eFalse;
 
 		slConstants.mvecScale = { (globals::game::isVR ? 0.5f : 1.0f), 1 };
-		slConstants.motionVectors3D = sl::Boolean::eTrue;
+		slConstants.motionVectors3D = sl::Boolean::eFalse;
 		slConstants.motionVectorsInvalidValue = FLT_MIN;
 		slConstants.orthographicProjection = sl::Boolean::eFalse;
 		slConstants.motionVectorsDilated = sl::Boolean::eFalse;
@@ -313,7 +313,7 @@ void Streamline::CheckFrameConstants()
 	}
 }
 
-void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl::DLSSPreset a_preset)
+void Streamline::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTexture, Texture2D* a_alphaMask, sl::DLSSPreset a_preset)
 {
 	CheckFrameConstants();
 
@@ -334,7 +334,7 @@ void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl
 		dlssOptions.mode = sl::DLSSMode::eMaxQuality;
 		dlssOptions.outputWidth = (uint)state->screenSize.x;
 		dlssOptions.outputHeight = (uint)state->screenSize.y;
-		dlssOptions.colorBuffersHDR = sl::Boolean::eFalse;
+		dlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
 		dlssOptions.preExposure = 1.0f;
 		dlssOptions.sharpness = 0.0f;
 
@@ -356,8 +356,8 @@ void Streamline::Upscale(Texture2D* a_upscaleTexture, Texture2D* a_alphaMask, sl
 		sl::Extent lowResExtent{ 0, 0, (uint)renderSize.x, (uint)renderSize.y };
 		sl::Extent fullExtent{ 0, 0, (uint)screenSize.x, (uint)screenSize.y };
 
-		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_upscaleTexture->resource.get(), 0 };
-		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_upscaleTexture->resource.get(), 0 };
+		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_inputTexture, 0 };
+		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_outputTexture, 0 };
 		sl::Resource depth = { sl::ResourceType::eTex2d, depthTexture.texture, 0 };
 		sl::Resource mvec = { sl::ResourceType::eTex2d, motionVectorsTexture.texture, 0 };
 

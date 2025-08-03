@@ -56,6 +56,7 @@ public:
 	bool d3d12Interop = false;
 	double refreshRate = 0.0f;
 	float resolutionScale = 1.0f;
+	bool allowUpscaling = false;
 
 	// FG FPS Measurement for Overlay
 	bool IsFrameGenerationActive() const;
@@ -78,7 +79,6 @@ public:
 
 	void ConfigureUpscaling(RE::BSGraphics::State* a_state);
 	void Upscale();
-	void SharpenTAA();
 
 	Texture2D* upscalingTexture;
 	Texture2D* alphaMaskTexture;
@@ -121,44 +121,6 @@ public:
 	bool validTaaPass = false;
 	std::mutex settingsMutex;  // Mutex to protect settings access
 
-	struct TAA_BeginTechnique
-	{
-		static void thunk(RE::BSImagespaceShaderISTemporalAA* a_shader, RE::BSTriShape* a_null)
-		{
-			func(a_shader, a_null);
-			GetSingleton()->validTaaPass = true;
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	struct TAA_EndTechnique
-	{
-		static void thunk(RE::BSImagespaceShaderISTemporalAA* a_shader, RE::BSTriShape* a_null)
-		{
-			auto singleton = GetSingleton();
-			auto upscaleMode = singleton->GetUpscaleMethod();
-			if ((upscaleMode != UpscaleMethod::kTAA && upscaleMode != UpscaleMethod::kNONE) && singleton->validTaaPass)
-				singleton->Upscale();
-			else
-				func(a_shader, a_null);
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	struct BSImageSpacerShader_RenderPassImmediately
-	{
-		static void thunk(RE::BSRenderPass* Pass, uint32_t Technique, bool AlphaTest, uint32_t RenderFlags)
-		{
-			func(Pass, Technique, AlphaTest, RenderFlags);
-			auto singleton = GetSingleton();
-			auto upscaleMode = singleton->GetUpscaleMethod();
-			if (singleton->validTaaPass && upscaleMode == UpscaleMethod::kTAA)
-				singleton->SharpenTAA();
-			singleton->validTaaPass = false;
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
 	struct MenuManagerDrawInterfaceStartHook
 	{
 		static void thunk(int64_t a1)
@@ -166,28 +128,6 @@ public:
 			GetSingleton()->PostDisplay();
 			func(a1);
 		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	void CustomUpscale();
-
-	struct UpsampleDynamicResolution_Render
-	{
-		static void thunk(RE::BSImagespaceShader* a1, RE::BSTriShape* a2)
-		{		
-			globals::state->BeginPerfEvent(std::format("{} Draw", magic_enum::enum_name(RE::ImageSpaceManager::ISUpsampleDynamicResolution)));
-				
-			auto upscaling = globals::upscaling;
-			auto upscaleMethod = upscaling->GetUpscaleMethod();
-
-			if (upscaleMethod == UpscaleMethod::kFSR || upscaleMethod == UpscaleMethod::kDLSS)
-				upscaling->CustomUpscale();
-			else
-				func(a1, a2);
-
-			globals::state->EndPerfEvent();
-		}
-
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -212,22 +152,41 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	void PerformUpscaling();
+
+	struct Main_PostProcessing
+	{
+		static void thunk(RE::ImageSpaceManager* a1, uint32_t a3, uint32_t er8_)
+		{
+			globals::upscaling->PerformUpscaling();
+			
+			auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+			GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
+
+			BSImagespaceShaderISTemporalAA->taaEnabled = false;
+
+			func(a1, a3, er8_);
+
+			BSImagespaceShaderISTemporalAA->taaEnabled = true;
+		}
+
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	static void InstallHooks()
 	{
 		if (!globals::state->upscalerLoaded) {
 			bool isGOG = !GetModuleHandle(L"steam_api64.dll");
 			stl::write_thunk_call<Main_UpdateJitter>(REL::RelocationID(75460, 77245).address() + REL::Relocate(0xE5, isGOG ? 0x133 : 0xE2, 0x104));
-			stl::write_thunk_call<TAA_BeginTechnique>(REL::RelocationID(100540, 107270).address() + REL::Relocate(0x3E9, 0x3EA, 0x448));
-			stl::write_thunk_call<TAA_EndTechnique>(REL::RelocationID(100540, 107270).address() + REL::Relocate(0x3F3, 0x3F4, 0x452));
-			stl::write_thunk_call<BSImageSpacerShader_RenderPassImmediately>(REL::RelocationID(100951, 107733).address() + REL::Relocate(0x82, 0x78, 0x7E));
 
 			stl::detour_thunk<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
 			
-			stl::write_thunk_call<UpsampleDynamicResolution_Render>(REL::RelocationID(100548, 107733).address() + REL::Relocate(0x152, 0x78, 0x7E));
 			stl::write_thunk_call<CopyScreenshot>(REL::RelocationID(35556, 35556).address() + REL::Relocate(0x3E6, 0x3E6));
 
 			std::uint8_t nop5[] = { 0x0F, 0x1F, 0x44, 0x00, 0x00 };
 			REL::safe_write(REL::RelocationID(35556, 36555).address() + REL::Relocate(0x2D, 0x2D, 0x25), nop5, sizeof(nop5));
+			
+			stl::write_thunk_call<Main_PostProcessing>(REL::RelocationID(100430, 100430).address() + REL::Relocate(0x1F0, 0x1C5));
 
 			logger::info("[Upscaling] Installed hooks");
 		} else {
