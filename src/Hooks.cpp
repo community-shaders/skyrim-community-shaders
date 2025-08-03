@@ -350,24 +350,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	pAdapter->GetDesc(&adapterDesc);
 	globals::state->SetAdapterDescription(adapterDesc.Description);
 
-	if (!REL::Module::IsVR()) {
+	if (!REL::Module::IsVR())
 		pSwapChainDesc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-
-		IDXGIFactory5* dxgiFactory;
-		DX::ThrowIfFailed(pAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory)));
-
-		BOOL allowTearing = FALSE;
-		DX::ThrowIfFailed(dxgiFactory->CheckFeatureSupport(
-			DXGI_FEATURE_PRESENT_ALLOW_TEARING,
-			&allowTearing,
-			sizeof(allowTearing)));
-
-		if (allowTearing) {
-			pSwapChainDesc->Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
-		} else {
-			pSwapChainDesc->Flags &= ~DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
-		}
-	}
 
 	auto streamline = globals::streamline;
 	auto fidelityFX = globals::fidelityFX;
@@ -441,6 +425,21 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 			logger::info("[Frame Generation] Using manual D3D12 proxy");
 
 			if (fidelityFX->module) {
+				IDXGIFactory5* dxgiFactory;
+				DX::ThrowIfFailed(pAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory)));
+
+				BOOL allowTearing = FALSE;
+				DX::ThrowIfFailed(dxgiFactory->CheckFeatureSupport(
+					DXGI_FEATURE_PRESENT_ALLOW_TEARING,
+					&allowTearing,
+					sizeof(allowTearing)));
+
+				if (allowTearing) {
+					pSwapChainDesc->Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+				} else {
+					pSwapChainDesc->Flags &= ~DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+				}
+
 				proxy->CreateD3D12Device(pAdapter);
 
 				D3D11CreateDevice(
