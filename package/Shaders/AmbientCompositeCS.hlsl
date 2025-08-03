@@ -9,7 +9,6 @@
 Texture2D<float3> AlbedoTexture : register(t0);
 Texture2D<float3> NormalRoughnessTexture : register(t1);
 Texture2D<float> DepthTexture : register(t2);
-Texture2D<float3> MasksTexture : register(t9);
 
 #if defined(SKYLIGHTING)
 #	include "Skylighting/Skylighting.hlsli"
