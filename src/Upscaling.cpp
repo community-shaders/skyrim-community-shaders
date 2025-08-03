@@ -55,7 +55,7 @@ void Upscaling::DrawSettings()
 			"AMD FSR 3.1:\n"
 			"AMD's open-source FSR spatial upscaling algorithm designed to enhance performance while maintaining high visual quality.\n"
 			"\n"
-			"NVIDIA DLAA:\n"
+			"NVIDIA DLSS:\n"
 			"NVIDIA's Deep Learning Anti-Aliasing leverages AI to provide high-quality anti-aliasing without sacrificing performance. Requires NVIDIA RTX GPU.");
 	}
 
@@ -74,8 +74,13 @@ void Upscaling::DrawSettings()
 
 	// Display upscaling preset if applicable
 	if (upscaleMethod != UpscaleMethod::kNONE) {
+		const char* upscalePresetsDLSS[] = { "Performance", "Balanced", "Quality", "DLAA" };
 		const char* upscalePresets[] = { "Performance", "Balanced", "Quality", "Native AA" };
-		ImGui::SliderInt("Upscale Preset", (int*)&settings.upscalePreset, 0, 3, std::format("{}", upscalePresets[3 - settings.upscalePreset]).c_str());
+
+		if (upscaleMethod == UpscaleMethod::kDLSS)
+			ImGui::SliderInt("Upscale Preset", (int*)&settings.upscalePreset, 0, 3, std::format("{}", upscalePresetsDLSS[3 - settings.upscalePreset]).c_str());
+		else
+			ImGui::SliderInt("Upscale Preset", (int*)&settings.upscalePreset, 0, 3, std::format("{}", upscalePresets[3 - settings.upscalePreset]).c_str());
 	}
 
 	// Display sharpness slider if applicable
