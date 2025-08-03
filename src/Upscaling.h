@@ -154,7 +154,7 @@ public:
 	static void InstallHooks()
 	{
 		if (!globals::state->upscalerLoaded) {
-			bool isGOG = !GetModuleHandle(L"steam_api64.dll")
+			bool isGOG = !GetModuleHandle(L"steam_api64.dll");
 			stl::detour_thunk<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
 
 			// Calculates resolution and jitter
