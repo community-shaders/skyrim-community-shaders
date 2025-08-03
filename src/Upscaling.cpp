@@ -332,7 +332,7 @@ void Upscaling::ConfigureUpscaling()
 
 		auto renderSize = Util::ConvertToDynamic(state->screenSize);
 
-		auto phaseCount = ffxFsr3GetJitterPhaseCount(static_cast<int>(renderSize.x), static_cast<int>(state->screenSize.x));
+		auto phaseCount = upscaleMethod == UpscaleMethod::kTAA ? 8 : ffxFsr3GetJitterPhaseCount(static_cast<int>(renderSize.x), static_cast<int>(state->screenSize.x));
 
 		ffxFsr3UpscalerGetJitterOffset(&jitter.x, &jitter.y, globals::state->frameCount, phaseCount);
 
