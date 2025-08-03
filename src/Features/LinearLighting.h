@@ -15,11 +15,9 @@ struct LinearLighting : Feature
 	{
 		return {
 			"Linear Lighting does internal color space conversion to improve lighting calculation accuracy.",
-			{
-				"Customizable gamma correction",
+			{ "Customizable gamma correction",
 				"Corrects lighting calculations",
-				"Makes PBR really work"
-			}
+				"Makes PBR really work" }
 		};
 	}
 

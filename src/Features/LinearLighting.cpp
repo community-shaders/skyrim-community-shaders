@@ -78,8 +78,7 @@ void LinearLighting::Prepass()
 	if (!imageSpaceManager)
 		return;
 
-	dirLightMult = !globals::game::isVR ? imageSpaceManager->GetRuntimeData().data.baseData.hdr.sunlightScale
-		: imageSpaceManager->GetVRRuntimeData().data.baseData.hdr.sunlightScale;
+	dirLightMult = !globals::game::isVR ? imageSpaceManager->GetRuntimeData().data.baseData.hdr.sunlightScale : imageSpaceManager->GetVRRuntimeData().data.baseData.hdr.sunlightScale;
 }
 
 LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
