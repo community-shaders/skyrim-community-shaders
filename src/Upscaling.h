@@ -38,7 +38,6 @@ public:
 		uint upscaleMethodNoFSR = (uint)UpscaleMethod::kTAA;
 		uint upscalePreset = (uint)FfxFsr3QualityMode::FFX_FSR3_QUALITY_MODE_QUALITY;
 		float sharpness = 0.0f;
-		uint dlssPreset = 1;
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 1;
 		uint frameGenerationForceEnable = 0;
@@ -146,16 +145,20 @@ public:
 	{
 		static void thunk(RE::ImageSpaceManager* a1, uint32_t a3, uint32_t er8_)
 		{
-			globals::upscaling->PerformUpscaling();
+			auto upscaling = globals::upscaling;
+			auto upscaleMethod = upscaling->GetUpscaleMethod();
+
+			if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA)
+				upscaling->PerformUpscaling();
 			
 			auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 			GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
 
-			BSImagespaceShaderISTemporalAA->taaEnabled = false;
+			BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod == UpscaleMethod::kTAA;
 
 			func(a1, a3, er8_);
 
-			BSImagespaceShaderISTemporalAA->taaEnabled = true;
+			BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
 		}
 
 		static inline REL::Relocation<decltype(thunk)> func;

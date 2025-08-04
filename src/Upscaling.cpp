@@ -13,7 +13,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	upscaleMethodNoDLSS,
 	upscaleMethodNoFSR,
 	sharpness,
-	dlssPreset,
 	frameLimitMode,
 	frameGenerationMode,
 	frameGenerationForceEnable,
@@ -73,8 +72,8 @@ void Upscaling::DrawSettings()
 	// Check the current upscale method
 	auto upscaleMethod = GetUpscaleMethod();
 
-	// Display upscaling preset if applicable
-	if (upscaleMethod != UpscaleMethod::kNONE) {
+	// Display upscaling settings if applicable
+	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
 		const char* upscalePresetsDLSS[] = { "Performance", "Balanced", "Quality", "DLAA" };
 		const char* upscalePresets[] = { "Performance", "Balanced", "Quality", "Native AA" };
 
@@ -82,23 +81,9 @@ void Upscaling::DrawSettings()
 			ImGui::SliderInt("Upscale Preset", (int*)&settings.upscalePreset, 0, 3, std::format("{}", upscalePresetsDLSS[3 - settings.upscalePreset]).c_str());
 		else
 			ImGui::SliderInt("Upscale Preset", (int*)&settings.upscalePreset, 0, 3, std::format("{}", upscalePresets[3 - settings.upscalePreset]).c_str());
-	}
-
-	// Display sharpness slider if applicable
-	if (upscaleMethod != UpscaleMethod::kNONE) {
+		
 		ImGui::SliderFloat("Sharpness", &settings.sharpness, 0.0f, 1.0f, "%.1f");
 		settings.sharpness = std::clamp(settings.sharpness, 0.0f, 1.0f);
-	}
-
-	// Display DLSS preset slider if using DLSS
-	if (upscaleMethod == UpscaleMethod::kDLSS) {
-		const char* dlssPresets[] = { "Transformer Model", "Convolutional Model" };
-		settings.dlssPreset = std::clamp(settings.dlssPreset, 0u, 1u);
-		ImGui::SliderInt("DLSS Super Resolution Preset", (int*)&settings.dlssPreset, 0, 1, std::format("{}", dlssPresets[settings.dlssPreset]).c_str());
-		settings.dlssPreset = std::clamp(settings.dlssPreset, 0u, 1u);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("The new DLSS Transformer model offers more image stability, less ghosting and improved anti-aliasing in comparison with the original DLSS Convolutional Neural Network model.");
-		}
 	}
 
 	if (!globals::game::isVR) {
@@ -336,7 +321,7 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 
 	if (upscaleMethod != UpscaleMethod::kNONE) {		
 
-		if (allowUpscaling)
+		if (allowUpscaling && upscaleMethod != UpscaleMethod::kTAA)
 			resolutionScale = 1.0f / ffxFsr3GetUpscaleRatioFromQualityMode((FfxFsr3QualityMode)settings.upscalePreset);
 		else
 			resolutionScale = 1.0f;
@@ -779,7 +764,7 @@ void Upscaling::Upscale()
 		state->BeginPerfEvent("Upscaling");
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			globals::streamline->Upscale(main.texture, upscalingTexture->resource.get(), alphaMaskTexture, settings.dlssPreset == 0 ? (sl::DLSSPreset)11u : sl::DLSSPreset::ePresetE);
+			globals::streamline->Upscale(main.texture, upscalingTexture->resource.get(), alphaMaskTexture, (sl::DLSSPreset)11u);
 		else if (upscaleMethod == UpscaleMethod::kFSR)
 			globals::fidelityFX->Upscale(main.texture, alphaMaskTexture, jitter, settings.sharpness);
 
