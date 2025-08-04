@@ -199,7 +199,7 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	struct ProcessFaceGenTextures
+	struct BSFaceGenManager_UpdatePendingCustomizationTextures
 	{
 		static void thunk()
 		{
@@ -236,7 +236,7 @@ public:
 		stl::detour_thunk<SetScissorRect>(REL::RelocationID(75564, 77365));
 
 		// Patches facegen texture generation to not use dynamic resolution
-		stl::detour_thunk<ProcessFaceGenTextures>(REL::RelocationID(26455, 27041));
+		stl::detour_thunk<BSFaceGenManager_UpdatePendingCustomizationTextures>(REL::RelocationID(26455, 27041));
 
 		// Patches precipitation camera to not use dynamic resolution
 		stl::write_thunk_call<Main_RenderPrecipitation>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x3A1, 0x3A1, 0x2FA));
