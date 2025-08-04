@@ -150,7 +150,7 @@ public:
 
 			if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA)
 				upscaling->PerformUpscaling();
-			
+
 			auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 			GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
 
@@ -199,7 +199,6 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-
 	static void InstallHooks()
 	{
 		bool isGOG = !GetModuleHandle(L"steam_api64.dll");
@@ -209,16 +208,15 @@ public:
 		stl::write_thunk_call<Main_UpdateJitter>(REL::RelocationID(75460, 77245).address() + REL::Relocate(0xE5, isGOG ? 0x133 : 0xE2, 0x104));
 
 		// Disables the original dynamic resolution system
-		std::uint8_t nop5[] = { 0x0F, 0x1F, 0x44, 0x00, 0x00 };
-		REL::safe_write(REL::RelocationID(35556, 36555).address() + REL::Relocate(0x2D, 0x2D, 0x25), nop5, sizeof(nop5));
-		
+		REL::safe_write(REL::RelocationID(35556, 36555).address() + REL::Relocate(0x2D, 0x2D, 0x25), REL::NOP5, sizeof(REL::NOP5));
+
 		// Performs upscaling inbetween volumetric lighting and post processing
-		stl::write_thunk_call<Main_PostProcessing>(REL::RelocationID(100430, 107148).address() + REL::Relocate(0x1F0, 0x1E7));
-		
+		stl::write_thunk_call<Main_PostProcessing>(REL::RelocationID(100430, 107148).address() + REL::Relocate(0x1F0, 0x1E7, 0x206));
+
 		// Performs depth upscaling after the final main post processing pass
-		stl::write_thunk_call<Main_HDRTonemapBlendCinematic_Render>(REL::RelocationID(99023, 105674).address() + REL::Relocate(0x1EA, 0x178));
-		if (REL::Module::IsSE())
-			stl::write_thunk_call<Main_HDRTonemapBlendCinematic_Render>(REL::RelocationID(99023, 105674).address() + REL::Relocate(0x230, 0x178));
+		stl::write_thunk_call<Main_HDRTonemapBlendCinematic_Render>(REL::RelocationID(99023, 105674).address() + REL::Relocate(0x1EA, 0x178, 0x20E));
+		if (REL::Module::IsSE() || REL::Module::IsVR())
+			stl::write_thunk_call<Main_HDRTonemapBlendCinematic_Render>(REL::RelocationID(99023, 105674).address() + REL::Relocate(0x230, 0x178, 0x254));
 
 		// Patches RSSetScissorRect calls to use dynamic resolution
 		// This is a PC-specific function hence it was missing

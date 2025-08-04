@@ -1106,7 +1106,7 @@ namespace Hooks
 		stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately2>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
 		stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately3>(REL::RelocationID(100871, 107667).address() + REL::Relocate(0xEE, 0xED));
 
-		const auto renderPassCacheCtor = REL::VariantID(100720, 107500, 0x1340330);
+		const auto renderPassCacheCtor = REL::VariantID(100720, 107500, 0x1340330);  // VR function is identical to SE
 		const int32_t passCount = 4194240;
 		const int32_t passCountSE = 4194240 * 16;
 
@@ -1144,8 +1144,8 @@ namespace Hooks
 		}
 
 		if (!REL::Module::IsVR()) {
-			stl::write_thunk_call<Main_Update_Begin>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x53, 0x6E));
-			stl::write_thunk_call<Main_Update_Swap>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x5D2, 0xA97));
+			stl::write_thunk_call<Main_Update_Begin>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x53, 0x6E, 0x68));
+			stl::write_thunk_call<Main_Update_Swap>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x5D2, 0xA97, 0x678));
 		}
 
 		// Patch render space in BSLightingShader::SetupGeometry to always use world space
