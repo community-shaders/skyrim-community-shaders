@@ -386,9 +386,9 @@ float GetPoissonDiskFilteredShadowVisibility(uint3 seed, Texture2DArray<float4> 
 	
 	// Unroll first few samples for better instruction scheduling
 	[unroll(4)]
-	for (int sampleIndex = 0; sampleIndex < 4; ++sampleIndex) {
+	for (int unrollSampleIndex = 0; unrollSampleIndex < 4; ++unrollSampleIndex) {
 		// Optimized random generation using simplified hash
-		uint hashInput = sampleIndex + frameOffset;
+		uint hashInput = unrollSampleIndex + frameOffset;
 		float3 randomVec = Random::R3Modified(hashInput, seedNormalized);
 		float3 sampleOffset = (randomVec * 2.0 - 1.0) * sampleRadius;
 		
@@ -421,8 +421,8 @@ float GetPoissonDiskFilteredShadowVisibility(uint3 seed, Texture2DArray<float4> 
 	}
 	
 	// Continue with remaining samples
-	for (int sampleIndex = 4; sampleIndex < sampleCount; ++sampleIndex) {
-		uint hashInput = sampleIndex + frameOffset;
+	for (int remainingSampleIndex = 4; remainingSampleIndex < sampleCount; ++remainingSampleIndex) {
+		uint hashInput = remainingSampleIndex + frameOffset;
 		float3 randomVec = Random::R3Modified(hashInput, seedNormalized);
 		float3 sampleOffset = (randomVec * 2.0 - 1.0) * sampleRadius;
 		
@@ -450,11 +450,11 @@ float GetPoissonDiskFilteredShadowVisibility(uint3 seed, Texture2DArray<float4> 
 		visibility += tex.SampleCmpLevelZero(samp, float3(shadowMapUV, layerIndex), compareValue).x;
 		
 		// Early termination for clear shadow/light cases
-		if (sampleIndex >= 8) {
-			float currentAverage = visibility * rcp((float)(sampleIndex + 1));
+		if (remainingSampleIndex >= 8) {
+			float currentAverage = visibility * rcp((float)(remainingSampleIndex + 1));
 			if (currentAverage < 0.1 || currentAverage > 0.9) {
 				// Extrapolate remaining samples based on current trend
-				visibility += (sampleCount - sampleIndex - 1) * (currentAverage > 0.5 ? 1.0 : 0.0);
+				visibility += (sampleCount - remainingSampleIndex - 1) * (currentAverage > 0.5 ? 1.0 : 0.0);
 				break;
 			}
 		}
