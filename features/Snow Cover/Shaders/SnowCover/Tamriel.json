@@ -1,0 +1,46 @@
+{
+    "AffectFoliageColor": 1,
+    "AltSpec": 0.019999999552965164,
+    "AltTexture": "textures/pbr/landscape/frozenmarshice01",
+    "AltTint": [
+        1.0,
+        0.9921568632125854,
+        1.0,
+        0.4470588266849518
+    ],
+    "BlendSmoothness": 5000.0,
+    "DensityRandomization": 2.700000047683716,
+    "FoliageHeightOffset": -4000.0,
+    "LogMicrofacetDensity": 4.627999782562256,
+    "MainSpec": 0.019999999552965164,
+    "MainTexture": "textures/pbr/landscape/snow01",
+    "MainTint": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+    ],
+    "MapMax": [
+        253952.0,
+        -176128.0
+    ],
+    "MapMin": [
+        -233472.0,
+        208896.0
+    ],
+    "MapTexture": "Shaders\\SnowCover\\Skyrim",
+    "MapZscale": 75000.0,
+    "MaxAngle": 0.7319999933242798,
+    "MaxSummerMonth": 6,
+    "MaxWinterMonth": 0,
+    "MeltingSpeed": 1.0,
+    "MicrofacetRoughness": 0.8130000233650208,
+    "MinAngle": 0.296999990940094,
+    "PeakAltAngle": 0.45399999618530273,
+    "PeakMainAngle": 0.9300000071525574,
+    "ScreenSpaceScale": 1.2400000095367432,
+    "SnowingSpeed": 1.0,
+    "UVScale": 0.5,
+    "WinterHeightOffset": -20000.0,
+    "SummerHeightOffset": 20000.0
+}

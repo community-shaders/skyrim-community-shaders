@@ -49,10 +49,10 @@ public:
 		float MainSpec = 0.02f;
 		float AltSpec = 0.02f;
 		float mapZscale = 1000.f;
-		float mapZoffset = 0.0f;
+		float blendSmoothness = 5000.0f;
 
-		float2 mapMin = float2(-57* 4096.f, -43* 4096.f);
-		float2 mapMax = float2(61* 4096.f, 50* 4096.f);
+		float2 mapMin = float2(-233472.0, 208896.0);
+		float2 mapMax = float2(253952.0, -176128.0);
 
 		//glint
 		float ScreenSpaceScale = 1.2f;

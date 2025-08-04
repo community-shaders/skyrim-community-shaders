@@ -66,8 +66,7 @@ namespace SnowCover
 		float2 scale = rcp(SharedData::snowCoverSettings.mapMax-SharedData::snowCoverSettings.mapMin);
 		float2 offset = -SharedData::snowCoverSettings.mapMin*scale;
 		float2 uv = p.xy*scale + offset;
-		uv = float2(uv.x, 1-uv.y);
-		float height_tresh = p.z - SharedData::snowCoverSettings.SnowHeightOffset + (SnowMap.SampleLevel(SampColorSampler, uv, 0) + SharedData::snowCoverSettings.mapZoffset)*SharedData::snowCoverSettings.mapZscale;
+		float height_tresh = p.z - SharedData::snowCoverSettings.SnowHeightOffset + (SnowMap.SampleLevel(SampColorSampler, uv, 0) - 0.5)*SharedData::snowCoverSettings.mapZscale;
 		return height_tresh;
 	}
 
@@ -90,18 +89,18 @@ namespace SnowCover
 				summerToWinter = 1 - summerToWinter;
 		}
 
-		return (GetHeightMult(p) - lerp(SharedData::snowCoverSettings.SummerHeightOffset, SharedData::snowCoverSettings.WinterHeightOffset, summerToWinter)) / 5000;
+		return (GetHeightMult(p) - lerp(SharedData::snowCoverSettings.SummerHeightOffset, SharedData::snowCoverSettings.WinterHeightOffset, summerToWinter)) / SharedData::snowCoverSettings.blendSmoothness;
 	}
 
 	void ApplyFoliageColor(inout float3 color, float env_mult)
 	{
-		float gmult = pow(saturate(env_mult - SharedData::snowCoverSettings.FoliageHeightOffset / 10000), 0.25);
+		float gmult = saturate(env_mult - SharedData::snowCoverSettings.FoliageHeightOffset / 5000);
 		float3 hsv = RGBtoHSV(color);
 		if (hsv.x > 0.55)
-			hsv.x = frac(lerp(hsv.x, 1.1, gmult * (1.1 - hsv.x)) * 2);
+			hsv.x = frac(lerp(hsv.x, 1.1, gmult) * 2);
 		else
-			hsv.x = lerp(hsv.x, 0.1, gmult * (hsv.x + 0.1) * 2);
-		//hsv.z = pow(hsv.z, 1+gmult*0.5);
+			hsv.x = lerp(hsv.x, 0.1, gmult);
+		hsv.y *= lerp(1, 0.5, 4.0 * gmult * (1.0 - gmult));
 		color = HSVtoRGB(hsv);
 	}
 
@@ -137,9 +136,14 @@ namespace SnowCover
 		weatherMult = clamp(-1, 1, (weatherMult + disp * 0.1) * max(SharedData::snowCoverSettings.minAngle, worldNormal.z));
 		// the amount of snow based on season and weather
 		float env_mult = saturate(max(saturate(GetEnvironmentalMultiplier(p) + disp), weatherMult)) - waterDist;
+		#if defined(LODOBJECTSHD) || defined(LODOBJECTS)
+
+		#endif
 		float mult = skylight * env_mult * smoothstep(SharedData::snowCoverSettings.minAngle, SharedData::snowCoverSettings.maxAngle, worldNormal.z);
-		if (mult < 0.001)
+		if (mult < 0.001){
+			alt = false;
 			return 0;
+		}
 		float main_mult = (1 - abs(worldNormal.z - SharedData::snowCoverSettings.peakMainAngle)) + min(0, weatherMult) * SharedData::snowCoverSettings.minAngle;
 		float alt_mult = (1 - abs(worldNormal.z - SharedData::snowCoverSettings.peakAltAngle)) + sin(p.z * 0.01 + cos(p.x * p.y * 0.01) * 0.025) * 0.05;
 		alt = alt_mult > main_mult;
@@ -178,8 +182,10 @@ namespace SnowCover
 		float mult = ApplySnowBase(worldNormal, uv, alt, disp, p, skylight, waterDist, viewDist);
 		if (mult <= 0.0)
 			return 0;
+		
 		float3 albedo = alt ? IceAlbedo.Sample(SampColorSampler, uv).rgb : SnowAlbedo.Sample(SampColorSampler, uv).rgb;
 		albedo = Color::TrueLinearToGamma(albedo) * (alt ? SharedData::snowCoverSettings.AltTint.rgb : SharedData::snowCoverSettings.MainTint.rgb) * Color::PBRLightingScale;
+
 		float4 rmaos = alt ? IceRmaos.Sample(SampColorSampler, uv) : SnowRmaos.Sample(SampColorSampler, uv);
 		diffuse = lerp(diffuse, rmaos.z * albedo, mult * (alt ? SharedData::snowCoverSettings.AltTint.w : SharedData::snowCoverSettings.MainTint.w));
 		glossiness = lerp(glossiness, 1 - rmaos.x, mult);

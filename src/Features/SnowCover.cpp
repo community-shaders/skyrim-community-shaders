@@ -71,7 +71,11 @@ void SnowCover::DrawSettings()
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("How far below/above the snow line should the foliage color start changing?");
 			}
-			if (ImGui::TreeNodeEx("Seasonal offset")) {
+			ImGui::SliderFloat("Blend smoothness", &wsettings.blendSmoothness, 1.f, 10000.0f);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("How gradual the snow transition is.");
+			}
+			if (ImGui::TreeNodeEx("Weather and Seasons")) {
 				ImGui::SliderInt("Maximum Summer Month", (int*)&wsettings.MaxSummerMonth, 0, 11);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("In which month is the snow line highest?");
@@ -88,6 +92,14 @@ void SnowCover::DrawSettings()
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("What is the snow line altitude in winter?");
 				}
+				ImGui::SliderFloat("Snowing speed", &snowing_speed, 0.01f, 10.0f);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("How fast snowy weather accumulates snow. Also depends on the weather settings.");
+				}
+				ImGui::SliderFloat("Melting speed", &melting_speed, 0.01f, 10.0f);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("How fast snow (under snow line) disappears when it is not snowing.");
+				}
 				ImGui::TreePop();
 			}
 
@@ -100,7 +112,6 @@ void SnowCover::DrawSettings()
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("");
 				}
-				ImGui::SameLine();
 				ImGui::InputFloat("Min Y", &wsettings.mapMin.y, 0.0f, 10.0f);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("");
@@ -109,7 +120,6 @@ void SnowCover::DrawSettings()
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("");
 				}
-				ImGui::SameLine();
 				ImGui::InputFloat("Max Y", &wsettings.mapMax.y, 0.0f, 10.0f);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("");
@@ -120,24 +130,12 @@ void SnowCover::DrawSettings()
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("");
 				}
-				ImGui::SliderFloat("Snow Map Z Offset", &wsettings.mapZoffset, -100.f, 100.0f);
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("");
-				}
 				ImGui::TreePop();
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("A grayscale map of the worldspace that offsets the altitude snow appears at. Relative to game Data folder, without '.dds' ");
 			}
 
-			ImGui::SliderFloat("Snowing speed", &snowing_speed, 0.01f, 10.0f);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("How fast snowy weather accumulates snow. Also depends on the weather settings.");
-			}
-			ImGui::SliderFloat("Melting speed", &melting_speed, 0.01f, 10.0f);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("How fast snow (under snow line) disappears when it is not snowing.");
-			}
 
 			if (ImGui::TreeNodeEx("Material")) {
 				ImGui::SliderFloat("Min Angle", &wsettings.MinAngle, 0.0f, 1.0f);
@@ -224,7 +222,6 @@ SnowCover::PerFrame SnowCover::GetCommonBufferData()
 	bool raining = false;
 	if (wsettings.EnableSnowCover) {
 		if (auto sky = RE::Sky::GetSingleton()) {
-			//data.Sky = static_cast<uint>(sky->mode.get());
 			if (auto currentWeather = sky->currentWeather) {
 				if (currentWeather->precipitationData) {
 					float particleDensity = currentWeather->precipitationData->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;
@@ -324,7 +321,7 @@ void SnowCover::SaveConfig()
 		{ "WinterHeightOffset", wsettings.WinterHeightOffset },
 		{ "MapTexture", map_tex },
 		{ "MapZscale", wsettings.mapZscale },
-		{ "MapZoffset", wsettings.mapZoffset },
+		{ "BlendSmoothness", wsettings.blendSmoothness },
 		{ "ScreenSpaceScale", wsettings.ScreenSpaceScale },
 		{ "LogMicrofacetDensity", wsettings.LogMicrofacetDensity },
 		{ "MicrofacetRoughness", wsettings.MicrofacetRoughness },
@@ -401,7 +398,7 @@ void SnowCover::Reload()
 		wsettings.mapMin = float2(config["MapMin"][0], config["MapMin"][1]);
 		wsettings.mapMax = float2(config["MapMax"][0], config["MapMax"][1]);
 		wsettings.mapZscale = config["MapZscale"];
-		wsettings.mapZoffset = config["MapZoffset"];
+		wsettings.blendSmoothness = config["BlendSmoothness"];
 		wsettings.ScreenSpaceScale = config["ScreenSpaceScale"];
 		wsettings.LogMicrofacetDensity = config["LogMicrofacetDensity"];
 		wsettings.MicrofacetRoughness = config["MicrofacetRoughness"];

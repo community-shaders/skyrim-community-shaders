@@ -33,7 +33,7 @@
 
 #if defined(SNOW_COVER)
 #	if defined(TRUE_PBR)
-//#		define GLINT
+#		define GLINT
 #	endif
 #endif
 
@@ -1014,7 +1014,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(SKINNED) || !defined(MODELSPACENORMALS)
 	float3x3 tbn = float3x3(input.TBN0.xyz, input.TBN1.xyz, input.TBN2.xyz);
 
-#		if !defined(TREE_ANIM) && !defined(LOD)
+#		if !defined(TREE_ANIM) && !defined(LOD) && !defined(LOD_BLENDING)
 	// Fix incorrect vertex normals on double-sided meshes
 	if (!frontFace)
 		tbn = lerp(tbn, -tbn, nearFactor);
@@ -2226,9 +2226,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float snowOcclusion = inWorld;
 #		endif
 
-#if defined(LODOBJECTSHD) || defined(LODOBJECTS)
-	snowOcclusion *= 0.5;
-#endif
+#	if defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(RIM_LIGHTING) && defined(SOFT_LIGHTING) // should only match object lod trees (ultra trees), they have no define
+	float rx;
+	float ry;
+	TexColorSampler.GetDimensions(rx, ry);
+	float hasAlpha = 1 - TexColorSampler.SampleLevel(SampColorSampler, uv, 6).a;
+	if(hasAlpha > 0.001){		
+		snowOcclusion = 1 - TexColorSampler.Sample(SampColorSampler, uv - float2(0, 2. / ry)).a;
+	}
+#	endif
 
 	float3 adjustedWorldPos = (input.WorldPosition + FrameBuffer::CameraPosAdjust[eyeIndex]).xyz;
 
@@ -2239,6 +2245,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 	) {
 #		if defined(TRUE_PBR)
+		if(glintParameters.y < 0.01)
+			pbrSurfaceProperties.GlintLogMicrofacetDensity = 1; // this will disable glint in case there shouldn't be any
 #			if defined(LANDSCAPE)
 		float disp = sh0 * max(displacementParams[0].HeightScale * input.LandBlendWeights1.x, max(displacementParams[1].HeightScale * input.LandBlendWeights1.y, max(displacementParams[2].HeightScale * input.LandBlendWeights1.z, max(displacementParams[3].HeightScale * input.LandBlendWeights1.w, max(displacementParams[4].HeightScale * input.LandBlendWeights2.x, displacementParams[5].HeightScale * input.LandBlendWeights2.y)))));
 #			elif defined(EMAT)
@@ -2272,7 +2280,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	else
 		worldNormal = normalize(lerp(worldNormal, SnowCover::MyReorientNormal(worldNormal, normalize(mul(tbn, snowNormal))), snowFactor));
 #	endif
-
+		
 #		if defined(LODLANDNOISE)
 		snowedColor *= snowFactor + (1 - snowFactor) * lodLandNoiseMultiplier;
 #		endif

@@ -167,7 +167,7 @@ namespace SharedData
 		float mainSpec;
 		float altSpec;
 		float mapZscale;
-		float mapZoffset;
+		float blendSmoothness;
 	
 		float2 mapMin;
 		float2 mapMax;
