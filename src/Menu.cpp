@@ -401,7 +401,6 @@ void Menu::DrawDisableAtBootSettings()
 void Menu::DrawDisplaySettings()
 {
 	DisplaySettingsRenderer::RenderDisplaySettings(
-		globals::state->upscalerLoaded,
 		[](const std::string& featureName) { return globals::state->IsFeatureDisabled(featureName); },
 		[]() { globals::upscaling->DrawSettings(); });
 }

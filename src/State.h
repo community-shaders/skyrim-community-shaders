@@ -58,8 +58,6 @@ public:
 	const std::string userConfigPath = "Data\\SKSE\\Plugins\\CommunityShaders\\SettingsUser.json";
 	const std::string defaultConfigPath = "Data\\SKSE\\Plugins\\CommunityShaders\\SettingsDefault.json";
 
-	bool upscalerLoaded = false;
-
 	float timer = 0;
 	double smoothDrawCalls[RE::BSShader::Type::Total + 1];
 	int drawCalls[RE::BSShader::Type::Total + 1];

@@ -6,21 +6,16 @@
 #include "Util.h"
 
 void DisplaySettingsRenderer::RenderDisplaySettings(
-	bool upscalerLoaded,
 	const std::function<bool(const std::string&)>& isFeatureDisabled,
 	const std::function<void()>& drawUpscalingSettings)
 {
-	if (!upscalerLoaded) {
-		const std::vector<std::pair<std::string, std::function<void()>>> features = {
-			{ "Upscaling", drawUpscalingSettings }
-		};
+	const std::vector<std::pair<std::string, std::function<void()>>> features = {
+		{ "Upscaling", drawUpscalingSettings }
+	};
 
-		for (const auto& [featureName, drawFunc] : features) {
-			bool isDisabled = isFeatureDisabled(featureName);
-			RenderFeatureSection(featureName, drawFunc, isDisabled, false);
-		}
-	} else {
-		ImGui::Text("Display options disabled due to Skyrim Upscaler");
+	for (const auto& [featureName, drawFunc] : features) {
+		bool isDisabled = isFeatureDisabled(featureName);
+		RenderFeatureSection(featureName, drawFunc, isDisabled, false);
 	}
 }
 
