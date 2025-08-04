@@ -62,7 +62,7 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 
 #if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
-		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
+		directionalAmbientColor = SharedData::iblSettings.DALCAmount * Color::Ambient(directionalAmbientColor);
 		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(-normalWS), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 	}
 #endif
