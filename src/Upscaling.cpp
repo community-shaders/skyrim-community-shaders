@@ -303,10 +303,20 @@ ID3D11PixelShader* Upscaling::GetDepthUpscalePS()
 {
 	if (!depthUpscalePS) {
 		logger::debug("Compiling DepthUpscalePS.hlsl");
-		depthUpscalePS = (ID3D11PixelShader*)Util::CompileShader(L"Data/Shaders/Upscaling/DepthUpscalePS.hlsl", {}, "ps_5_0");
+		depthUpscalePS = (ID3D11PixelShader*)Util::CompileShader(L"Data/Shaders/Upscaling/DepthUpscale.hlsl", { { "PSHADER", "" } }, "ps_5_0");
 	}
 
 	return depthUpscalePS;
+}
+
+ID3D11VertexShader* Upscaling::GetDepthUpscaleVS()
+{
+	if (!depthUpscaleVS) {
+		logger::debug("Compiling DepthUpscaleVS.hlsl");
+		depthUpscaleVS = (ID3D11VertexShader*)Util::CompileShader(L"Data/Shaders/Upscaling/DepthUpscale.hlsl", { { "VSHADER", "" } }, "vs_5_0");
+	}
+
+	return depthUpscaleVS;
 }
 
 void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
@@ -396,6 +406,28 @@ void Upscaling::CreateUpscalingResources()
 	depthStencilDesc.DepthFunc = D3D11_COMPARISON_ALWAYS;			// Always pass depth test (write all depths)
 	depthStencilDesc.StencilEnable = false;							// Disable stencil testing
 	DX::ThrowIfFailed(globals::d3d::device->CreateDepthStencilState(&depthStencilDesc, &depthUpscaleState));
+
+	// Create blend state for depth upscaling (disable color writes, depth only)
+	D3D11_BLEND_DESC blendDesc = {};
+	blendDesc.AlphaToCoverageEnable = false;
+	blendDesc.IndependentBlendEnable = false;
+	blendDesc.RenderTarget[0].BlendEnable = false;
+	blendDesc.RenderTarget[0].RenderTargetWriteMask = 0;  // No color writes
+	DX::ThrowIfFailed(globals::d3d::device->CreateBlendState(&blendDesc, &depthUpscaleBlendState));
+
+	// Create rasterizer state for fullscreen rendering
+	D3D11_RASTERIZER_DESC rasterizerDesc = {};
+	rasterizerDesc.FillMode = D3D11_FILL_SOLID;
+	rasterizerDesc.CullMode = D3D11_CULL_NONE;
+	rasterizerDesc.FrontCounterClockwise = false;
+	rasterizerDesc.DepthBias = 0;
+	rasterizerDesc.DepthBiasClamp = 0.0f;
+	rasterizerDesc.SlopeScaledDepthBias = 0.0f;
+	rasterizerDesc.DepthClipEnable = false;
+	rasterizerDesc.ScissorEnable = false;
+	rasterizerDesc.MultisampleEnable = false;
+	rasterizerDesc.AntialiasedLineEnable = false;
+	DX::ThrowIfFailed(globals::d3d::device->CreateRasterizerState(&rasterizerDesc, &depthUpscaleRasterizerState));
 }
 
 void Upscaling::DestroyUpscalingResources()
@@ -409,6 +441,20 @@ void Upscaling::DestroyUpscalingResources()
 	alphaMaskTexture->uav = nullptr;
 	alphaMaskTexture->resource = nullptr;
 	delete alphaMaskTexture;
+
+	// Clean up depth upscaling states
+	if (depthUpscaleState) {
+		depthUpscaleState->Release();
+		depthUpscaleState = nullptr;
+	}
+	if (depthUpscaleBlendState) {
+		depthUpscaleBlendState->Release();
+		depthUpscaleBlendState = nullptr;
+	}
+	if (depthUpscaleRasterizerState) {
+		depthUpscaleRasterizerState->Release();
+		depthUpscaleRasterizerState = nullptr;
+	}
 }
 
 void Upscaling::CreateFrameGenerationResources()
@@ -806,6 +852,7 @@ void UpdateCameraData();
 void Upscaling::PerformUpscaling()
 {
 	Upscale();
+	UpscaleDepth();
 
 	auto& runtimeData = globals::game::graphicsState->GetRuntimeData();
 
@@ -843,18 +890,47 @@ void Upscaling::UpscaleDepth()
 		updateData.ResolutionScale.x = resolutionScale;
 		resolutionScaleCB->Update(updateData);
 
-		auto constantBuffer = resolutionScaleCB->CB();
-		context->PSSetConstantBuffers(0, 1, &constantBuffer);
+		// Set up Input Assembler for fullscreen triangle (no vertex/index buffers needed)
+		context->IASetInputLayout(nullptr);
+		context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
+		context->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
+		context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-		context->PSSetShaderResources(0, 1, &depthCopy.depthSRV);
-		context->OMSetRenderTargets(0, nullptr, depth.views[0]);
+		// Set up vertex shader that generates fullscreen triangle using SV_VertexID
+		context->VSSetShader(GetDepthUpscaleVS(), nullptr, 0);
+
+		// Set up viewport for fullscreen rendering
+		auto screenSize = globals::state->screenSize;
+
+		D3D11_VIEWPORT viewport = {};
+		viewport.TopLeftX = 0.0f;
+		viewport.TopLeftY = 0.0f;
+		viewport.Width = screenSize.x;
+		viewport.Height = screenSize.y;
+		viewport.MinDepth = 0.0f;
+		viewport.MaxDepth = 1.0f;
+		context->RSSetViewports(1, &viewport);
+
+		// Set rasterizer state
+		context->RSSetState(depthUpscaleRasterizerState);
+
+		// Set blend state (no color writes, depth only)
+		context->OMSetBlendState(nullptr, nullptr, 0xffffffff);
+
+		// Set depth stencil state
 		context->OMSetDepthStencilState(depthUpscaleState, 0);
 
-		context->PSSetSamplers(0, 1, &globals::deferred->linearSampler);
+		// Set render targets (no color target, depth only)
+		context->OMSetRenderTargets(0, nullptr, depth.views[0]);
 
+		// Set up pixel shader resources
+		auto constantBuffer = resolutionScaleCB->CB();
+		context->PSSetConstantBuffers(0, 1, &constantBuffer);
+		context->PSSetShaderResources(0, 1, &depthCopy.depthSRV);
+		context->PSSetSamplers(0, 1, &globals::deferred->linearSampler);
 		context->PSSetShader(GetDepthUpscalePS(), nullptr, 0);
 
-		context->DrawIndexed(6, 0, 0);
+		context->Draw(3, 0);
 
 		globals::state->EndPerfEvent();
 	}

@@ -79,6 +79,9 @@ public:
 	ID3D11PixelShader* depthUpscalePS;
 	ID3D11PixelShader* GetDepthUpscalePS();
 
+	ID3D11VertexShader* depthUpscaleVS = nullptr;
+	ID3D11VertexShader* GetDepthUpscaleVS();
+
 	struct ResolutionScaleCB
 	{
 		float4 ResolutionScale;
@@ -87,6 +90,8 @@ public:
 	ConstantBuffer* resolutionScaleCB;
 
 	ID3D11DepthStencilState* depthUpscaleState;
+	ID3D11BlendState* depthUpscaleBlendState = nullptr;
+	ID3D11RasterizerState* depthUpscaleRasterizerState = nullptr;
 
 	void ConfigureUpscaling(RE::BSGraphics::State* a_state);
 	void Upscale();
@@ -164,17 +169,6 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	struct Main_HDRTonemapBlendCinematic_Render
-	{
-		static void thunk(RE::ImageSpaceManager* a1, RE::ImageSpaceEffect* a2, uint32_t a3, uint32_t a4, RE::ImageSpaceShaderParam* a5)
-		{
-			func(a1, a2, a3, a4, a5);
-			globals::upscaling->UpscaleDepth();
-		}
-
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
 	struct SetScissorRect
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom)
@@ -225,11 +219,6 @@ public:
 
 		// Performs upscaling inbetween volumetric lighting and post processing
 		stl::write_thunk_call<Main_PostProcessing>(REL::RelocationID(100430, 107148).address() + REL::Relocate(0x1F0, 0x1E7, 0x206));
-
-		// Performs depth upscaling after the final main post processing pass
-		stl::write_thunk_call<Main_HDRTonemapBlendCinematic_Render>(REL::RelocationID(99023, 105674).address() + REL::Relocate(0x1EA, 0x178, 0x20E));
-		if (REL::Module::IsSE() || REL::Module::IsVR())
-			stl::write_thunk_call<Main_HDRTonemapBlendCinematic_Render>(REL::RelocationID(99023, 105674).address() + REL::Relocate(0x230, 0x178, 0x254));
 
 		// Patches RSSetScissorRect calls to use dynamic resolution
 		// This is a PC-specific function hence it was missing
