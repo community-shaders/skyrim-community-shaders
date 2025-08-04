@@ -201,7 +201,7 @@ public:
 		uint InMapMenu;
 		uint HideSky;
 		float MipBias;
-		float pad0;
+		float ResolutionScale;
 	};
 
 	ConstantBuffer* sharedDataCB = nullptr;

@@ -1,6 +1,7 @@
 #include "Common/Color.hlsli"
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
+#include "Common/SharedData.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
 
@@ -26,30 +27,32 @@ float2 GetRefractedTexCoord(float2 texCoordOriginal, float3 normalOriginal)
 	float2 texCoord = texCoordOriginal + float2(-1, 1) * (2 * (0.05 * normalOriginal.z) * (normalOriginal.xy - 0.5));
 	float2 texCoordClamped = texCoord > 0.85 ? lerp(0.85, texCoord, 0.78) : texCoord;
 	texCoordClamped = texCoord < 0.15 ? lerp(0.15, texCoord, 0.78) : texCoordClamped;
-	return FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(lerp(texCoord, texCoordClamped, normalOriginal.z));
+	return lerp(texCoord, texCoordClamped, normalOriginal.z);
 }
 
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
 
-	float2 texCoordOriginal = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
+	float2 texCoordOriginal = input.TexCoord.xy;
 
-	float4 normalOriginal = Src1Tex.Sample(Src1Sampler, texCoordOriginal);
+	float4 normalOriginal = Src1Tex.Sample(Src0Sampler, texCoordOriginal * SharedData::ResolutionScale);
+
 	float4 colorOriginal = Src0Tex.Sample(Src0Sampler, texCoordOriginal);
 
 	float2 texCoordRefracted = GetRefractedTexCoord(input.TexCoord, normalOriginal.xyz);
 
-	float refractedMask = Src1Tex.Sample(Src1Sampler, texCoordRefracted).w;
+	float refractedMask = Src1Tex.Sample(Src0Sampler, texCoordRefracted * SharedData::ResolutionScale).w;
 	float4 colorRefracted = Src0Tex.Sample(Src0Sampler, texCoordRefracted);
-	float4 colorResulting = refractedMask != 0 ? colorRefracted : colorOriginal;
-
-	if (normalOriginal.w > 0.8 && normalOriginal.w < 1) {
+	float4 colorResulting = lerp(colorOriginal, colorRefracted, refractedMask);
+	
+	float4 normalOriginalPoint = Src1Tex.Sample(Src1Sampler, texCoordOriginal * SharedData::ResolutionScale);
+	if (normalOriginalPoint.w > 0.8 && normalOriginalPoint.w < 1) {
 		psout.Color.xyz = lerp(colorResulting.xyz, Tint.xyz * Color::RGBToLuminance2(colorRefracted.xyz), Tint.w);
 	} else {
 		psout.Color.xyz = colorResulting.xyz;
 	}
-
+	
 	psout.Color.w = colorResulting.w;
 
 	return psout;

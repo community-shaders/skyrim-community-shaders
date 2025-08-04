@@ -720,6 +720,8 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 			data.MipBias = 0;
 		}
 
+		data.ResolutionScale = globals::upscaling->resolutionScale;
+
 		sharedDataCB->Update(data);
 	}
 
