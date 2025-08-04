@@ -2,7 +2,6 @@
 #include "Menu.h"
 #include "OverlayFeature.h"
 #include <algorithm>
-#include <atomic>
 #include <d3d11.h>
 #include <imgui_impl_dx11.h>
 #include <magic_enum.hpp>
@@ -10,6 +9,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <winrt/base.h>
 using namespace DirectX::SimpleMath;
 
 /**
@@ -280,6 +280,7 @@ public:
 
 	virtual void PostPostLoad() override;
 	virtual void DataLoaded() override;
+	virtual void EarlyPrepass() override;
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
@@ -311,8 +312,9 @@ public:
 	struct Settings
 	{
 		// Performance optimization settings
-		bool EnableDepthBufferCulling = true;  ///< Enable depth buffer culling for VR performance
-		float MinOccludeeBoxExtent = 10.0f;    ///< Minimum bounding box size for occlusion culling
+		bool EnableDepthBufferCullingExterior = true;  ///< Enable depth buffer culling for VR performance
+		bool EnableDepthBufferCullingInterior = false;
+		float MinOccludeeBoxExtent = 10.0f;  ///< Minimum bounding box size for occlusion culling
 
 		// VR Menu Overlay positioning settings
 		float VRMenuScale = Config::kDefaultMenuScale;  ///< Scale factor for overlay UI (0.5-2.0)
@@ -482,10 +484,10 @@ public:
 	// OpenVR overlay handles and DirectX 11 rendering resources
 	vr::VROverlayHandle_t menuOverlayHandle = vr::k_ulOverlayHandleInvalid;
 	vr::VROverlayHandle_t menuControllerOverlayHandle = vr::k_ulOverlayHandleInvalid;
-	ID3D11Texture2D* menuTexture = nullptr;
-	ID3D11RenderTargetView* menuRTV = nullptr;
-	ID3D11Texture2D* menuControllerTexture = nullptr;
-	ID3D11RenderTargetView* menuControllerRTV = nullptr;
+	winrt::com_ptr<ID3D11Texture2D> menuTexture;
+	winrt::com_ptr<ID3D11RenderTargetView> menuRTV;
+	winrt::com_ptr<ID3D11Texture2D> menuControllerTexture;
+	winrt::com_ptr<ID3D11RenderTargetView> menuControllerRTV;
 
 	// Engine hook integration points
 	bool* gDepthBufferCulling = nullptr;
@@ -586,7 +588,6 @@ public:
 	// PRIVATE IMPLEMENTATION
 	//=============================================================================
 
-	void CleanupOverlayTextures();
 	void DetectOpenVRInfo();
 	bool IsOpenVRCompatible() const;
 };

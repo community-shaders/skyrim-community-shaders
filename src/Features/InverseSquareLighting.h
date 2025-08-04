@@ -39,11 +39,11 @@ public:
 
 	virtual void PostPostLoad() override;
 
-	static float CalculateRadius(float intensity, bool shadowCaster, float cutoffOverride);
+	static float CalculateRadius(float intensity, bool shadowCaster, float cutoffOverride, float size);
 
 	void ProcessLight(LightLimitFix::LightData& light, RE::BSLight* bsLight, RE::NiLight* niLight) const;
 
-	static float GetAttenuation(float distance, float radius);
+	static float GetAttenuation(float distance, float radius, float size);
 
 	struct CreatePointLight
 	{

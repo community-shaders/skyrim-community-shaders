@@ -29,7 +29,8 @@ constexpr int kOverlayHeight = 1080;
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VR::Settings,
-	EnableDepthBufferCulling,
+	EnableDepthBufferCullingInterior,
+	EnableDepthBufferCullingExterior,
 	MinOccludeeBoxExtent,
 	VRMenuScale,
 	VRMenuPositioningMethod,
@@ -110,8 +111,13 @@ void VR::PostPostLoad()
 
 void VR::DataLoaded()
 {
-	*gDepthBufferCulling = settings.EnableDepthBufferCulling;
+	*gDepthBufferCulling = settings.EnableDepthBufferCullingExterior;
 	*gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
+}
+
+void VR::EarlyPrepass()
+{
+	*gDepthBufferCulling = globals::game::tes->interiorCell ? settings.EnableDepthBufferCullingInterior : settings.EnableDepthBufferCullingExterior;
 }
 
 //=============================================================================
@@ -551,13 +557,18 @@ namespace
 		auto& vr = globals::features::vr;
 		VR::Settings& settings = vr.settings;
 		if (ImGui::CollapsingHeader("General Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Checkbox("Enable Depth Buffer Culling", &settings.EnableDepthBufferCulling);
+			ImGui::Checkbox("Enable Depth Buffer Culling in Exteriors", &settings.EnableDepthBufferCullingExterior);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Enables depth buffer culling for VR performance optimization.");
+				ImGui::Text("Improves performance in exteriors, recommended ON.");
 			}
-			ImGui::SliderFloat("Min Occludee Box Extent", &settings.MinOccludeeBoxExtent, 0.0f, 1000.0f, "%.1f");
+			ImGui::Checkbox("Enable Depth Buffer Culling in Interiors", &settings.EnableDepthBufferCullingInterior);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Minimum box extent for occlusion culling in VR.");
+				ImGui::Text("Improves performance in interiors, recommended OFF due to occasional visual glitches.");
+			}
+			if (ImGui::SliderFloat("Min Occludee Box Extent", &settings.MinOccludeeBoxExtent, 0.0f, 1000.0f, "%.1f"))
+				*vr.gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Minimum bounding box dimensions for object occlusion culling. Lower values improve performance but may result in visual artifacts.");
 			}
 		}
 	}
@@ -1351,7 +1362,7 @@ void VR::EnsureOverlayInitialized()
 		logger::error("IVROverlay is nullptr after GetIVROverlay");
 		return;
 	}
-	Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, &menuTexture, &menuRTV);
+	Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, menuTexture.put(), menuRTV.put());
 	std::string key = "communityshaders.menu";
 	std::string name = "Community Shaders Menu";
 	vr::EVROverlayError err = overlay->CreateOverlay(key.c_str(), name.c_str(), &menuOverlayHandle);
@@ -1368,7 +1379,7 @@ void VR::EnsureOverlayInitialized()
 	err = overlay->CreateOverlay(controllerKey.c_str(), controllerName.c_str(), &menuControllerOverlayHandle);
 	if (err == vr::VROverlayError_None) {
 		logger::debug("CreateOverlay succeeded for menuControllerOverlayHandle: 0x{:X}", menuControllerOverlayHandle);
-		Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, &menuControllerTexture, &menuControllerRTV);
+		Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, menuControllerTexture.put(), menuControllerRTV.put());
 		Util::SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
 		overlay->SetOverlayWidthInMeters(menuControllerOverlayHandle, 1.0f);
 	} else {
@@ -1379,26 +1390,6 @@ void VR::EnsureOverlayInitialized()
 //=============================================================================
 // PRIVATE IMPLEMENTATION
 //=============================================================================
-
-void VR::CleanupOverlayTextures()
-{
-	if (menuRTV) {
-		menuRTV->Release();
-		menuRTV = nullptr;
-	}
-	if (menuTexture) {
-		menuTexture->Release();
-		menuTexture = nullptr;
-	}
-	if (menuControllerRTV) {
-		menuControllerRTV->Release();
-		menuControllerRTV = nullptr;
-	}
-	if (menuControllerTexture) {
-		menuControllerTexture->Release();
-		menuControllerTexture = nullptr;
-	}
-}
 
 void VR::DestroyOverlay()
 {
@@ -1416,14 +1407,13 @@ void VR::DestroyOverlay()
 		overlay->DestroyOverlay(menuControllerOverlayHandle);
 		menuControllerOverlayHandle = vr::k_ulOverlayHandleInvalid;
 	}
-	CleanupOverlayTextures();
 }
 
 void VR::RecreateOverlayTexturesIfNeeded()
 {
-	CleanupOverlayTextures();
-	Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, &menuTexture, &menuRTV);
-	Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, &menuControllerTexture, &menuControllerRTV);
+	// Smart pointers automatically release existing resources when put() assigns new ones
+	Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, menuTexture.put(), menuRTV.put());
+	Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, menuControllerTexture.put(), menuControllerRTV.put());
 }
 
 void VR::SubmitOverlayFrame()
@@ -1460,29 +1450,28 @@ void VR::SubmitOverlayFrame()
 	UpdateOverlayDrag();
 	auto& enabled = globals::menu->IsEnabled;
 	auto& overlayVisible = globals::menu->overlayVisible;
-	if ((enabled || overlayVisible || settings.kAutoHideSeconds > 0) && menuOverlayHandle != vr::k_ulOverlayHandleInvalid && menuTexture && menuRTV) {
+	if ((enabled || overlayVisible || settings.kAutoHideSeconds > 0) && menuOverlayHandle != vr::k_ulOverlayHandleInvalid && menuTexture.get() && menuRTV.get()) {
 		// Copy ImGui output to overlay texture
 		ID3D11RenderTargetView* oldRTV = nullptr;
 		globals::d3d::context->OMGetRenderTargets(1, &oldRTV, nullptr);
-		globals::d3d::context->OMSetRenderTargets(1, &menuRTV, nullptr);
+		ID3D11RenderTargetView* menuRTVPtr = menuRTV.get();
+		globals::d3d::context->OMSetRenderTargets(1, &menuRTVPtr, nullptr);
 		float clearColor[4] = { 0, 0, 0, 0 };
-		globals::d3d::context->ClearRenderTargetView(menuRTV, clearColor);
+		globals::d3d::context->ClearRenderTargetView(menuRTV.get(), clearColor);
 		// Re-render ImGui for HMD overlay
 		ImGui::Render();
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 		globals::d3d::context->OMSetRenderTargets(1, &oldRTV, nullptr);
-		if (oldRTV)
-			oldRTV->Release();
 
 		// Apply highlight tint to HMD overlay if it's being dragged
 		bool hmdBeingDragged = settings.EnableDragToReposition && overlayDragState.dragging &&
 		                       (overlayDragState.mode == OverlayDragState::DragMode::HMD ||
 								   overlayDragState.mode == OverlayDragState::DragMode::FixedWorld);
-		Util::ApplyHighlightTintToTexture(menuTexture, hmdBeingDragged, settings.dragHighlightColor);
+		Util::ApplyHighlightTintToTexture(menuTexture.get(), hmdBeingDragged, settings.dragHighlightColor);
 
 		// Update overlay position and submit to SteamVR
 		UpdateVROverlayPosition();
-		vr::Texture_t tex = { menuTexture, vr::TextureType_DirectX, vr::ColorSpace_Auto };
+		vr::Texture_t tex = { menuTexture.get(), vr::TextureType_DirectX, vr::ColorSpace_Auto };
 		if (settings.attachMode == AttachMode::HMDOnly || settings.attachMode == AttachMode::Both) {
 			Util::SetOverlayInputFlags(gameOverlay, menuOverlayHandle);
 			vr::EVROverlayError err = cleanOverlay->SetOverlayTexture(menuOverlayHandle, &tex);
@@ -1499,8 +1488,9 @@ void VR::SubmitOverlayFrame()
 		// Controller overlay
 		if (settings.attachMode == AttachMode::ControllerOnly || settings.attachMode == AttachMode::Both) {
 			// Copy the same ImGui output to controller overlay texture
-			globals::d3d::context->OMSetRenderTargets(1, &menuControllerRTV, nullptr);
-			globals::d3d::context->ClearRenderTargetView(menuControllerRTV, clearColor);
+			ID3D11RenderTargetView* menuControllerRTVPtr = menuControllerRTV.get();
+			globals::d3d::context->OMSetRenderTargets(1, &menuControllerRTVPtr, nullptr);
+			globals::d3d::context->ClearRenderTargetView(menuControllerRTV.get(), clearColor);
 			// Re-render ImGui for controller overlay
 			ImGui::Render();
 			ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
@@ -1509,12 +1499,12 @@ void VR::SubmitOverlayFrame()
 			// Apply highlight tint to controller overlay if it's being dragged
 			bool controllerBeingDragged = overlayDragState.dragging &&
 			                              overlayDragState.mode == OverlayDragState::DragMode::Controller;
-			Util::ApplyHighlightTintToTexture(menuControllerTexture, controllerBeingDragged, settings.dragHighlightColor);
+			Util::ApplyHighlightTintToTexture(menuControllerTexture.get(), controllerBeingDragged, settings.dragHighlightColor);
 
 			// Position controller overlay and submit
 			UpdateVROverlayControllerPosition();
 
-			vr::Texture_t controllerTex = { menuControllerTexture, vr::TextureType_DirectX, vr::ColorSpace_Auto };
+			vr::Texture_t controllerTex = { menuControllerTexture.get(), vr::TextureType_DirectX, vr::ColorSpace_Auto };
 			Util::SetOverlayInputFlags(gameOverlay, menuControllerOverlayHandle);
 			vr::EVROverlayError err = cleanOverlay->SetOverlayTexture(menuControllerOverlayHandle, &controllerTex);
 			if (err != vr::VROverlayError_None) {
@@ -1527,6 +1517,10 @@ void VR::SubmitOverlayFrame()
 		} else if (menuControllerOverlayHandle != vr::k_ulOverlayHandleInvalid) {
 			gameOverlay->HideOverlay(menuControllerOverlayHandle);
 		}
+
+		// Release oldRTV after all usage is complete to prevent use-after-free
+		if (oldRTV)
+			oldRTV->Release();
 	} else {
 		if (menuOverlayHandle != vr::k_ulOverlayHandleInvalid) {
 			gameOverlay->HideOverlay(menuOverlayHandle);
