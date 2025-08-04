@@ -408,16 +408,6 @@ void State::Save(ConfigMode a_configMode)
 	}
 }
 
-void State::PostPostLoad()
-{
-	upscalerLoaded = GetModuleHandle(L"Data\\SKSE\\Plugins\\SkyrimUpscaler.dll");
-	if (upscalerLoaded)
-		logger::info("Skyrim Upscaler detected");
-	else
-		logger::info("Skyrim Upscaler not detected");
-	// No hooks should be here, hook in XSEPlugin::MessageHandler()
-}
-
 bool State::ValidateCache(CSimpleIniA& a_ini)
 {
 	bool valid = true;
