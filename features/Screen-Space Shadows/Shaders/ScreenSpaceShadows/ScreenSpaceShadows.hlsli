@@ -16,7 +16,7 @@ namespace ScreenSpaceShadows
 	float GetScreenSpaceShadow(float3 screenPosition, float2 uv, float noise, uint eyeIndex)
 	{
 #if defined(VR)
-		return ScreenSpaceShadowsTexture.Load(int3(int2(screenPosition.xy + 0.5f), 0)).x;
+		return ScreenSpaceShadowsTexture.Load(int3(int2(screenPosition.xy), 0)).x;
 #else
 		noise *= Math::TAU;
 
@@ -28,10 +28,10 @@ namespace ScreenSpaceShadows
 #	if defined(DEFERRED) && !defined(DO_ALPHA_TEST)
 		depthSamples[0] = screenPosition.z;
 #	else
-		depthSamples[0] = SharedData::DepthTexture.Load(int3(int2(screenPosition.xy + 0.5f), 0)).x;
+		depthSamples[0] = SharedData::DepthTexture.Load(int3(int2(screenPosition.xy), 0)).x;
 #	endif
 
-		shadowSamples[0] = ScreenSpaceShadowsTexture.Load(int3(int2(screenPosition.xy + 0.5f), 0)).x;
+		shadowSamples[0] = ScreenSpaceShadowsTexture.Load(int3(int2(screenPosition.xy), 0)).x;
 
 		static const float2 BlurOffsets[3] = {
 			float2(-0.6720635096678028f, 0.6601738628451107f),
@@ -43,7 +43,7 @@ namespace ScreenSpaceShadows
 		{
 			float2 offset = mul(BlurOffsets[i - 1], rotationMatrix) * 0.0025;
 
-			float2 sampleUV = uv + offset;
+			float2 sampleUV = uv + offset * FrameBuffer::DynamicResolutionParams1.xy;
 			sampleUV = saturate(sampleUV);
 
 			int3 sampleCoord = SharedData::ConvertUVToSampleCoord(sampleUV, eyeIndex);
