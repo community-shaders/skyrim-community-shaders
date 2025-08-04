@@ -186,6 +186,20 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	struct Main_RenderPrecipitation
+	{
+		static void thunk()
+		{
+			auto& runtimeData = globals::game::graphicsState->GetRuntimeData();
+			runtimeData.dynamicResolutionLock = 1;
+			func();
+			runtimeData.dynamicResolutionLock = 0;
+		}
+
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+
 	static void InstallHooks()
 	{
 		if (!globals::state->upscalerLoaded) {
@@ -209,6 +223,9 @@ public:
 			// Patches RSSetScissorRect calls to use dynamic resolution
 			// This is a PC-specific function hence it was missing
 			stl::detour_thunk<SetScissorRect>(REL::RelocationID(75564, 75564));
+
+			// Fix precipitation camera using dynamic resolution when it shouldn't
+			stl::write_thunk_call<Main_RenderPrecipitation>(REL::RelocationID(35560, 35560).address() + REL::Relocate(0x3A1, 0x3A1));
 
 			logger::info("[Upscaling] Installed hooks");
 		} else {

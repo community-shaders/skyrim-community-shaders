@@ -803,7 +803,6 @@ void Upscaling::Upscale()
 	}
 }
 
-void UpdateViewPort(RE::BSGraphics::Renderer* This, int32_t a2, uint32_t a3, char ForceMatchRenderTarget);
 void UpdateCameraData();
 
 void Upscaling::PerformUpscaling()
@@ -817,11 +816,8 @@ void Upscaling::PerformUpscaling()
 	runtimeData.dynamicResolutionWidthRatio = 1.0f;
 	runtimeData.dynamicResolutionHeightRatio = 1.0f;
 
-	{
-		using func_t = decltype(&UpdateViewPort);
-		static REL::Relocation<func_t> func{ RELOCATION_ID(75455, 75455) };
-		func(globals::game::renderer, 0, 0, 1);
-	}
+	auto renderer = globals::game::renderer;
+	renderer->UpdateViewPort(0, 0, 1);
 
 	{
 		using func_t = decltype(&UpdateCameraData);
