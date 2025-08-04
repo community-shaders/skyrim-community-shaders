@@ -37,7 +37,7 @@ void Upscaling::DrawSettings()
 	// Determine available modes
 	bool featureDLSS = streamline->featureDLSS;
 	uint* currentUpscaleMode = featureDLSS ? &settings.upscaleMethod : &settings.upscaleMethodNoDLSS;
-	uint availableModes = (globals::game::isVR && state->upscalerLoaded) ? (featureDLSS ? 2 : 1) : (featureDLSS ? 3 : 2);
+	uint availableModes = (globals::game::isVR) ? (featureDLSS ? 2 : 1) : (featureDLSS ? 3 : 2);
 
 	if (state->featureLevel != D3D_FEATURE_LEVEL_11_1)
 		availableModes = 1;
@@ -313,9 +313,7 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 {
 	auto upscaleMethod = GetUpscaleMethod();
 
-	static bool* enableAutoDynamicResolution = (bool*)REL::RelocationID(508794, 380760).address();
-	*enableAutoDynamicResolution = false;
-
+	// The game defaults this to a non-zero value
 	static float* clampOffset = (float*)REL::RelocationID(512203, 389038).address();
 	*clampOffset = 0;
 

@@ -137,8 +137,7 @@ void State::Setup()
 		if (feature->loaded)
 			feature->SetupResources();
 	globals::deferred->SetupResources();
-	if (!upscalerLoaded)
-		globals::upscaling->CreateUpscalingResources();
+	globals::upscaling->CreateUpscalingResources();
 	SetupReShade();
 	if (initialized)
 		return;
@@ -684,10 +683,9 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 		data.BufferDim = { screenSize.x, screenSize.y, 1.0f / screenSize.x, 1.0f / screenSize.y };
 		data.Timer = timer;
 
-		auto bTAA = !globals::game::isVR ? imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled :
-		                                   imageSpaceManager->GetVRRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled;
+		auto temporal = Util::GetTemporal();
 
-		data.FrameCount = frameCount * (bTAA || globals::state->upscalerLoaded);
+		data.FrameCount = frameCount * temporal;
 		data.FrameCountAlwaysActive = frameCount;
 
 		if (a_inWorld) {
@@ -715,7 +713,7 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 		else
 			data.InMapMenu = true;
 
-		if (!globals::game::isVR && bTAA && (a_inWorld || a_prepass)) {
+		if (!globals::game::isVR && temporal && (a_inWorld || a_prepass)) {
 			auto renderSize = Util::ConvertToDynamic(screenSize);
 			data.MipBias = std::log2f(renderSize.x / screenSize.x) - 1.0f;
 		} else {

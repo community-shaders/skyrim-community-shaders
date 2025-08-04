@@ -19,7 +19,6 @@ class DisplaySettingsRenderer
 {
 public:
 	static void RenderDisplaySettings(
-		bool upscalerLoaded,
 		const std::function<bool(const std::string&)>& isFeatureDisabled,
 		const std::function<void()>& drawUpscalingSettings);
 
