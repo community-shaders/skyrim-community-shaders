@@ -313,8 +313,8 @@ public:
 	{
 		// Performance optimization settings
 		bool EnableDepthBufferCullingExterior = true;  ///< Enable depth buffer culling for VR performance
-		bool EnableDepthBufferCullingInterior = false;  
-		float MinOccludeeBoxExtent = 10.0f;    ///< Minimum bounding box size for occlusion culling
+		bool EnableDepthBufferCullingInterior = false;
+		float MinOccludeeBoxExtent = 10.0f;  ///< Minimum bounding box size for occlusion culling
 
 		// VR Menu Overlay positioning settings
 		float VRMenuScale = Config::kDefaultMenuScale;  ///< Scale factor for overlay UI (0.5-2.0)
