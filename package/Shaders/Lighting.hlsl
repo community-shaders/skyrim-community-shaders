@@ -1014,7 +1014,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(SKINNED) || !defined(MODELSPACENORMALS)
 	float3x3 tbn = float3x3(input.TBN0.xyz, input.TBN1.xyz, input.TBN2.xyz);
 
-#		if !defined(TREE_ANIM) && !defined(LOD) && !defined(LOD_BLENDING)
+#		if !defined(TREE_ANIM) && !defined(LOD) && !(defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(RIM_LIGHTING) && defined(SOFT_LIGHTING))
 	// Fix incorrect vertex normals on double-sided meshes
 	if (!frontFace)
 		tbn = lerp(tbn, -tbn, nearFactor);

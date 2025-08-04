@@ -33,22 +33,22 @@ public:
 	{
 		uint EnableSnowCover = false;
 		uint AffectFoliageColor = true;
-		float FoliageHeightOffset = -512.0f;
-		float UVScale = 1;
+		float FoliageHeightOffset = -2048.0f;
+		float UVScale = 0.5;
 
 		uint MaxSummerMonth = 6;
 		uint MaxWinterMonth = 0;
-		float SummerHeightOffset = 0.0f;
-		float WinterHeightOffset = -10000.0f;
+		float SummerHeightOffset = 20000.0f;
+		float WinterHeightOffset = -20000.0f;
 
-		float PeakMainAngle = 1.0f;
-		float PeakAltAngle = 0.0f;
-		float MinAngle = 0.0f;
-		float MaxAngle = 1.0f;
+		float PeakMainAngle = 0.45f;
+		float PeakAltAngle = 0.9f;
+		float MinAngle = 0.3f;
+		float MaxAngle = 0.9f;
 
 		float MainSpec = 0.02f;
 		float AltSpec = 0.02f;
-		float mapZscale = 1000.f;
+		float mapZscale = 75000.0f;
 		float blendSmoothness = 5000.0f;
 
 		float2 mapMin = float2(-233472.0, 208896.0);
