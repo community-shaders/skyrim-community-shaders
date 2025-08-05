@@ -148,6 +148,6 @@ public:
 
 	void CheckFrameConstants();
 
-	void Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTexture, Texture2D* a_alphaMask, sl::DLSSPreset a_preset);
+	void Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, sl::DLSSPreset a_preset);
 	void DestroyDLSSResources();
 };
