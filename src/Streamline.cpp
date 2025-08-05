@@ -103,7 +103,7 @@ void Streamline::LoadInterposer()
 
 	sl::Preferences pref;
 
-	sl::Feature featuresToLoad[] = { sl::kFeatureDLSS, sl::kFeatureDLSS_G, sl::kFeatureReflex };
+	sl::Feature featuresToLoad[] = { sl::kFeatureDLSS };
 	sl::Feature featuresToLoadVR[] = { sl::kFeatureDLSS };
 
 	pref.featuresToLoad = REL::Module::IsVR() ? featuresToLoadVR : featuresToLoad;
