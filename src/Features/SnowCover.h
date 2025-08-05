@@ -118,7 +118,6 @@ public:
 	void Reload();
 	void SaveConfig();
 
-
 	virtual inline void PostPostLoad() override { Hooks::Install(); }
 
 	void BSLightingShader_Setup(RE::BSRenderPass* Pass);

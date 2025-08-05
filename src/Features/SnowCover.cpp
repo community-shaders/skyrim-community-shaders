@@ -136,7 +136,6 @@ void SnowCover::DrawSettings()
 				ImGui::Text("A grayscale map of the worldspace that offsets the altitude snow appears at. Relative to game Data folder, without '.dds' ");
 			}
 
-
 			if (ImGui::TreeNodeEx("Material")) {
 				ImGui::SliderFloat("Min Angle", &wsettings.MinAngle, 0.0f, 1.0f);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -327,8 +326,7 @@ void SnowCover::SaveConfig()
 		{ "MicrofacetRoughness", wsettings.MicrofacetRoughness },
 		{ "DensityRandomization", wsettings.DensityRandomization },
 		{ "MapMin", json::array({ wsettings.mapMin.x, wsettings.mapMin.y }) },
-		{ "MapMax", json::array({
-		wsettings.mapMax.x, wsettings.mapMax.y}) },
+		{ "MapMax", json::array({ wsettings.mapMax.x, wsettings.mapMax.y }) },
 		{ "MainTexture", main_tex },
 		{ "AltTexture", alt_tex },
 		{ "MainTint", json::array({ wsettings.MainTint.x,

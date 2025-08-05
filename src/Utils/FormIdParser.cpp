@@ -1,6 +1,6 @@
+#include "FormIdParser.h"
 #include <fstream>
 #include <iostream>
-#include "FormIdParser.h"
 
 std::string FormIdParser::trim(const std::string& str)
 {
@@ -81,7 +81,6 @@ std::unordered_set<std::uint64_t> FormIdParser::parseTriNameFile(const std::stri
 
 	return hexMap;
 }
-
 
 // https://web.archive.org/web/20160304013032/http://eternallyconfuzzled.com/tuts/algorithms/jsw_tut_hashing.aspx
 std::uint64_t FormIdParser::fnv_hash(const char* key)

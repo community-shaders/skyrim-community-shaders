@@ -182,7 +182,7 @@ namespace SnowCover
 		float mult = ApplySnowBase(worldNormal, uv, alt, disp, p, skylight, waterDist, viewDist);
 		if (mult <= 0.0)
 			return 0;
-		
+
 		float3 albedo = alt ? IceAlbedo.Sample(SampColorSampler, uv).rgb : SnowAlbedo.Sample(SampColorSampler, uv).rgb;
 		albedo = Color::TrueLinearToGamma(albedo) * (alt ? SharedData::snowCoverSettings.AltTint.rgb : SharedData::snowCoverSettings.MainTint.rgb) * Color::PBRLightingScale;
 

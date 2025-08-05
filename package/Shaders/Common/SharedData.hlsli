@@ -163,12 +163,12 @@ namespace SharedData
 		float peakAltAngle;
 		float minAngle;
 		float maxAngle;
-	
+
 		float mainSpec;
 		float altSpec;
 		float mapZscale;
 		float blendSmoothness;
-	
+
 		float2 mapMin;
 		float2 mapMax;
 

@@ -2231,7 +2231,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float ry;
 	TexColorSampler.GetDimensions(rx, ry);
 	float hasAlpha = 1 - TexColorSampler.SampleLevel(SampColorSampler, uv, 6).a;
-	if(hasAlpha > 0.001){		
+	if(hasAlpha > 0.001){
 		snowOcclusion = 1 - TexColorSampler.Sample(SampColorSampler, uv - float2(0, 2. / ry)).a;
 	}
 #	endif
@@ -2280,7 +2280,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	else
 		worldNormal = normalize(lerp(worldNormal, SnowCover::MyReorientNormal(worldNormal, normalize(mul(tbn, snowNormal))), snowFactor));
 #	endif
-		
+
 #		if defined(LODLANDNOISE)
 		snowedColor *= snowFactor + (1 - snowFactor) * lodLandNoiseMultiplier;
 #		endif

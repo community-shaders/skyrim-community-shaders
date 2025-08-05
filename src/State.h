@@ -155,7 +155,7 @@ public:
 		IsBeastRace = 1 << 2,
 		EffectShadows = 1 << 3,
 		IsTree = 1 << 4,
-		
+
 		NoSnow = 1 << 6
 	};
 
@@ -184,7 +184,7 @@ public:
 		bool operator==(const PermutationCB& other) const
 		{
 			return VertexShaderDescriptor == other.VertexShaderDescriptor &&
-				   PixelShaderDescriptor == other.PixelShaderDescriptor &&
+			       PixelShaderDescriptor == other.PixelShaderDescriptor &&
 			       ExtraShaderDescriptor == other.ExtraShaderDescriptor &&
 			       ExtraFeatureDescriptor == other.ExtraFeatureDescriptor;
 		}
