@@ -289,7 +289,11 @@ ID3D11PixelShader* Upscaling::GetDepthUpscalePS()
 {
 	if (!depthUpscalePS) {
 		logger::debug("Compiling DepthUpscalePS.hlsl");
-		depthUpscalePS = (ID3D11PixelShader*)Util::CompileShader(L"Data/Shaders/Upscaling/DepthUpscale.hlsl", { { "PSHADER", "" } }, "ps_5_0");
+		std::vector<std::pair<const char*, const char*>> defines = { { "PSHADER", "" } };
+		if (globals::game::isVR) {
+			defines.push_back({ "VR", "" });
+		}
+		depthUpscalePS = (ID3D11PixelShader*)Util::CompileShader(L"Data/Shaders/Upscaling/DepthUpscale.hlsl", defines, "ps_5_0");
 	}
 
 	return depthUpscalePS;
@@ -909,11 +913,30 @@ void Upscaling::UpscaleDepth()
 		// Set up pixel shader resources
 		auto constantBuffer = resolutionScaleCB->CB();
 		context->PSSetConstantBuffers(0, 1, &constantBuffer);
-		context->PSSetShaderResources(0, 1, &depthCopy.depthSRV);
+		
+		if (globals::game::isVR) {
+			// For VR, bind both depth and stencil textures
+			ID3D11ShaderResourceView* views[2] = { depthCopy.depthSRV, depthCopy.stencilSRV };
+			context->PSSetShaderResources(0, 2, views);
+		} else {
+			// For non-VR, bind only depth texture
+			context->PSSetShaderResources(0, 1, &depthCopy.depthSRV);
+		}
+
 		context->PSSetSamplers(0, 1, &globals::deferred->linearSampler);
+
 		context->PSSetShader(GetDepthUpscalePS(), nullptr, 0);
 
 		context->Draw(3, 0);
+
+		// Clean up pixel shader resources
+		if (globals::game::isVR) {
+			ID3D11ShaderResourceView* nullPSResources[2] = { nullptr, nullptr };
+			context->PSSetShaderResources(0, 2, nullPSResources);
+		} else {
+			ID3D11ShaderResourceView* nullPSResources[1] = { nullptr };
+			context->PSSetShaderResources(0, 1, nullPSResources);
+		}
 
 		globals::state->EndPerfEvent();
 	}
