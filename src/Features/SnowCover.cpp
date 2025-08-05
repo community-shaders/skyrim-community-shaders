@@ -8,6 +8,7 @@
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SnowCover::UserSettings,
+	EnableExpensiveFoliage,
 	SnowHeightOffset)
 
 void copyString(const std::string& input, char* dst, size_t dst_size)
