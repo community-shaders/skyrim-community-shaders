@@ -96,7 +96,8 @@ public:
 	void Upscale();
 
 	Texture2D* upscalingTexture;
-	Texture2D* alphaMaskTexture;
+	Texture2D* reactiveMaskTexture;
+	Texture2D* transparencyCompositionMaskTexture;
 
 	void CreateUpscalingResources();
 	void DestroyUpscalingResources();

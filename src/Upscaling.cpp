@@ -385,9 +385,13 @@ void Upscaling::CreateUpscalingResources()
 	srvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
 
-	alphaMaskTexture = new Texture2D(texDesc);
-	alphaMaskTexture->CreateSRV(srvDesc);
-	alphaMaskTexture->CreateUAV(uavDesc);
+	reactiveMaskTexture = new Texture2D(texDesc);
+	reactiveMaskTexture->CreateSRV(srvDesc);
+	reactiveMaskTexture->CreateUAV(uavDesc);
+
+	transparencyCompositionMaskTexture = new Texture2D(texDesc);
+	transparencyCompositionMaskTexture->CreateSRV(srvDesc);
+	transparencyCompositionMaskTexture->CreateUAV(uavDesc);
 
 	if (d3d12Interop)
 		CreateFrameGenerationResources();
@@ -431,10 +435,20 @@ void Upscaling::DestroyUpscalingResources()
 	upscalingTexture->resource = nullptr;
 	delete upscalingTexture;
 
-	alphaMaskTexture->srv = nullptr;
-	alphaMaskTexture->uav = nullptr;
-	alphaMaskTexture->resource = nullptr;
-	delete alphaMaskTexture;
+	reactiveMaskTexture->srv = nullptr;
+	reactiveMaskTexture->uav = nullptr;
+	reactiveMaskTexture->resource = nullptr;
+	delete reactiveMaskTexture;
+
+	transparencyCompositionMaskTexture->srv = nullptr;
+	transparencyCompositionMaskTexture->uav = nullptr;
+	transparencyCompositionMaskTexture->resource = nullptr;
+	delete transparencyCompositionMaskTexture;
+
+	if (encodeTexturesCS) {
+		encodeTexturesCS->Release();
+		encodeTexturesCS = nullptr;
+	}
 
 	// Clean up depth upscaling states
 	if (depthUpscaleState) {
@@ -772,13 +786,15 @@ void Upscaling::Upscale()
 	{
 		state->BeginPerfEvent("Alpha Mask");
 
-		static auto& temporalAAMask = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kTEMPORAL_AA_MASK];
+		auto& temporalAAMask = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kTEMPORAL_AA_MASK];
+		auto& depthPreWater = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+		auto& depthPostWater = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
 		{
-			ID3D11ShaderResourceView* views[1] = { temporalAAMask.SRV };
+			ID3D11ShaderResourceView* views[3] = { temporalAAMask.SRV, depthPreWater.depthSRV, depthPostWater.depthSRV };
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
-			ID3D11UnorderedAccessView* uavs[1] = { alphaMaskTexture->uav.get() };
+			ID3D11UnorderedAccessView* uavs[2] = { reactiveMaskTexture->uav.get(), transparencyCompositionMaskTexture->uav.get() };
 			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
 			context->CSSetShader(GetEncodeTexturesCS(), nullptr, 0);
@@ -802,9 +818,9 @@ void Upscaling::Upscale()
 		state->BeginPerfEvent("Upscaling");
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			globals::streamline->Upscale(main.texture, upscalingTexture->resource.get(), alphaMaskTexture, (sl::DLSSPreset)11u);
+			globals::streamline->Upscale(main.texture, upscalingTexture->resource.get(), reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), (sl::DLSSPreset)11u);
 		else if (upscaleMethod == UpscaleMethod::kFSR)
-			globals::fidelityFX->Upscale(main.texture, alphaMaskTexture, jitter, settings.sharpness);
+			globals::fidelityFX->Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), jitter, settings.sharpness);
 
 		state->EndPerfEvent();
 	}
