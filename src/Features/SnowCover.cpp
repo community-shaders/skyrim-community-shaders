@@ -482,7 +482,7 @@ void SnowCover::Reload()
 		wsettings = WorldSettings{};
 		wsettings.EnableSnowCover = false;
 		return;
-	} catch (const nlohmann::json::exception e) {
+	} catch (const nlohmann::json::exception& e) {
 		logger::error("[Snow Cover] failed to parse {} : {}", path, e.what());
 		status = e.what();
 		wsettings = WorldSettings{};
