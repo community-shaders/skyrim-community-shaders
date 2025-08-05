@@ -274,6 +274,8 @@ void Streamline::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outpu
 		dlssOptions.outputWidth = (uint)state->screenSize.x;
 		dlssOptions.outputHeight = (uint)state->screenSize.y;
 		dlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
+		dlssOptions.useAutoExposure = sl::Boolean::eTrue;
+
 		dlssOptions.preExposure = 1.0f;
 		dlssOptions.sharpness = 0.0f;
 
