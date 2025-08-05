@@ -47,7 +47,7 @@ namespace Skylighting
 
 		if (SharedData::FrameCount) {  // Check TAA
 			float3 offset = blueNoise[int3(screenPosition.xy % 128, SharedData::FrameCount % 64)] * 2.0 - 1.0;
-			positionMS.xyz += offset * CELL_SIZE * 0.5;
+			positionMS.xyz += offset * CELL_SIZE * 0.5 * SharedData::ResolutionScale;
 		}
 
 		float3 positionMSAdjusted = positionMS - params.PosOffset.xyz;
