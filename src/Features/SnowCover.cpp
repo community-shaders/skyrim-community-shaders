@@ -535,8 +535,9 @@ void SnowCover::Hooks::BSLightingShader_SetupGeometry::thunk(RE::BSShader* This,
 void SnowCover::BSLightingShader_Setup(RE::BSRenderPass* a_pass)
 {
 	auto state = globals::state;
+	auto userData = a_pass->geometry->GetUserData();
 	auto name = a_pass->geometry->name.c_str();
-	if (a_pass->geometry->HasAnimation() && !whitelist.contains(FormIdParser::fnv_hash(name))) {
+	if ((a_pass->geometry->HasAnimation() || (userData && userData->GetObjectReference()->IsBoundAnimObject())) && !whitelist.contains(FormIdParser::fnv_hash(name))) {
 		state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::NoSnow;
 	} else if (blacklist.contains(FormIdParser::fnv_hash(name))) {
 		state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::NoSnow;

@@ -100,7 +100,7 @@ namespace SnowCover
 			hsv.x = frac(lerp(hsv.x, 1.1, gmult) * 2);
 		else
 			hsv.x = lerp(hsv.x, 0.1, gmult);
-		hsv.y *= lerp(1, 0.5, 4.0 * gmult * (1.0 - gmult));
+		hsv.y *= lerp(1, 0.25, 4.0 * gmult * (1.0 - gmult));
 		color = HSVtoRGB(hsv);
 	}
 
