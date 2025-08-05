@@ -33,7 +33,7 @@ std::unordered_set<std::uint32_t> FormIdParser::parseHexFile(const std::string& 
 		if (!trimmed.empty()) {
 			try {
 				size_t pos = 0;
-				std::uint32_t value = static_cast<std::uint32_t>std::stoull(trimmed, &pos, 16);
+				std::uint32_t value = static_cast<std::uint32_t> std::stoull(trimmed, &pos, 16);
 				if (pos != trimmed.length()) {
 					logger::error("[FormIdParser] not a hexadecimal number: {}", trimmed);
 				}
