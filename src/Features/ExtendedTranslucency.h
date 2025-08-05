@@ -40,7 +40,8 @@ struct ExtendedTranslucency final : Feature
 	static constexpr uint32_t ExtraFeatureDescriptorShift = 6;
 	static constexpr uint32_t ExtraFeatureDescriptorMask = 7;
 
-	struct alignas(16) MaterialParams
+	// Settings in both CPU and GPU constant buffer
+	struct alignas(16) PerFrame
 	{
 		uint32_t AlphaMode = MaterialModel::AnisotropicFabric;
 		float AlphaReduction = 0.15f;
@@ -48,8 +49,16 @@ struct ExtendedTranslucency final : Feature
 		float AlphaStrength = 0.f;
 	};
 
-	MaterialParams settings;
-	bool SkinnedOnly = true;
+	// Settings only in CPU
+	struct Settings : PerFrame
+	{
+		bool SkinnedOnly = true;
+	};
+
+	Settings settings;
+
+	const PerFrame& GetCommonBufferData() { return settings; }
+
 
 	static const RE::BSFixedString NiExtraDataName_AnisotropicAlphaMaterial;
 };

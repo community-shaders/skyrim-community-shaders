@@ -5,11 +5,13 @@
 #include "../Util.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-	ExtendedTranslucency::MaterialParams,
+	ExtendedTranslucency::Settings,
 	AlphaMode,
 	AlphaReduction,
 	AlphaSoftness,
-	AlphaStrength);
+	AlphaStrength,
+	SkinnedOnly
+);
 
 const RE::BSFixedString ExtendedTranslucency::NiExtraDataName_AnisotropicAlphaMaterial = "AnisotropicAlphaMaterial";
 
@@ -38,21 +40,21 @@ void ExtendedTranslucency::BSLightingShader_SetupGeometry(RE::BSRenderPass* pass
 
 	const auto* data = pass->geometry->GetExtraData(NiExtraDataName_AnisotropicAlphaMaterial);
 	if (!data) {
-		// If there is no extra data for explict settings, use the default material model from global user settings
+		// If there is no extra data for explicit settings, use the default material model from global user settings
 		// And respect the SkinnedOnly setting
 		const auto& feature = globals::features::extendedTranslucency;
-		if (!feature.SkinnedOnly || pass->geometry->GetGeometryRuntimeData().skinInstance != nullptr) {
+		if (!feature.settings.SkinnedOnly || pass->geometry->GetGeometryRuntimeData().skinInstance != nullptr) {
 			SetFeatureDescriptor(MaterialModel::DescriptorUseDefault);
 		}
 	} else {
 		// Read explicit material model from extra data
 		if (data->GetRTTI() == globals::rtti::NiIntegerExtraDataRTTI.get()) {
 			uint32_t material = static_cast<uint32_t>(static_cast<const RE::NiIntegerExtraData*>(data)->value) & ExtraFeatureDescriptorMask;
-			// Promopt `Disabled` in settings to `DescriptorDisabled` in shader
+			// Promote `Disabled` in settings to `DescriptorDisabled` in shader
 			material = material == MaterialModel::Disabled ? MaterialModel::DescriptorDisabled : material;
 			SetFeatureDescriptor(material);
 		} else {
-			// logging is too expensive here, treat type error as disable, should should only happen for modders
+			// logging is too expensive here, treat type error as disable, should only happen for modders
 		}
 	}
 }
@@ -105,7 +107,7 @@ void ExtendedTranslucency::DrawSettings()
 				"  - Isotropic Fabric: Imaginary fabric weaved from threads in one direction, respect normal map, also works well for layer of glass panels.\n"
 				"  - Anisotropic Fabric: Common fabric weaved from tangent and birnormal direction, ignores normal map.\n");
 		}
-		if (ImGui::Checkbox("Skinned Mesh Only", &SkinnedOnly)) {
+		if (ImGui::Checkbox("Skinned Mesh Only", &settings.SkinnedOnly)) {
 			changed = true;
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -142,19 +144,16 @@ void ExtendedTranslucency::DrawSettings()
 void ExtendedTranslucency::LoadSettings(json& o_json)
 {
 	settings = o_json;
-	SkinnedOnly = o_json.value("SkinnedOnly", true);
 }
 
 void ExtendedTranslucency::SaveSettings(json& o_json)
 {
 	o_json = settings;
-	o_json["SkinnedOnly"] = SkinnedOnly;
 }
 
 void ExtendedTranslucency::RestoreDefaultSettings()
 {
 	settings = {};
-	SkinnedOnly = true;
 }
 
 std::pair<std::string, std::vector<std::string>> ExtendedTranslucency::GetFeatureSummary()
