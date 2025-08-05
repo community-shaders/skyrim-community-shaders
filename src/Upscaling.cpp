@@ -12,6 +12,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	upscaleMethod,
 	upscaleMethodNoDLSS,
 	upscaleMethodNoFSR,
+	upscaleMethodNoXeSS,
 	sharpness,
 	frameLimitMode,
 	frameGenerationMode,
@@ -32,12 +33,27 @@ void Upscaling::DrawSettings()
 	settings.upscaleMethod = bTAA ? (settings.upscaleMethod == (uint)UpscaleMethod::kNONE ? (uint)UpscaleMethod::kTAA : settings.upscaleMethod) : (uint)UpscaleMethod::kNONE;
 
 	// Display upscaling options in the UI
-	const char* upscaleModes[] = { "Disabled", "Temporal Anti-Aliasing", "AMD FSR 3.1", "NVIDIA DLSS" };
+	const char* upscaleModes[] = { "Disabled", "Temporal Anti-Aliasing", "AMD FSR 3.1", "NVIDIA DLSS", "Intel XeSS" };
 
 	// Determine available modes
 	bool featureDLSS = streamline->featureDLSS;
-	uint* currentUpscaleMode = featureDLSS ? &settings.upscaleMethod : &settings.upscaleMethodNoDLSS;
-	uint availableModes = (globals::game::isVR) ? (featureDLSS ? 2 : 1) : (featureDLSS ? 3 : 2);
+	bool featureXeSS = globals::xess->featureXeSS;
+	uint* currentUpscaleMode = &settings.upscaleMethod;
+	
+	// Fallback based on available features
+	if (!featureDLSS && !featureXeSS) {
+		currentUpscaleMode = &settings.upscaleMethodNoFSR;
+	} else if (!featureDLSS) {
+		currentUpscaleMode = &settings.upscaleMethodNoDLSS;
+	} else if (!featureXeSS) {
+		currentUpscaleMode = &settings.upscaleMethodNoXeSS;
+	}
+	
+	uint availableModes = (globals::game::isVR) ? 2 : 4; // All methods available for non-VR
+	if (globals::game::isVR) {
+		if (featureDLSS || featureXeSS) availableModes = 2;
+		else availableModes = 1;
+	}
 
 	if (state->featureLevel != D3D_FEATURE_LEVEL_11_1)
 		availableModes = 1;
@@ -56,7 +72,10 @@ void Upscaling::DrawSettings()
 			"AMD FSR 3.1 is an open-source upscaling algorithm compatible with all GPUs.\n"
 			"\n"
 			"NVIDIA DLSS:\n"
-			"NVIDIA's Deep Learning Super Sampling is an upscaling algorithm using AI. Requires an NVIDIA RTX GPU.");
+			"NVIDIA's Deep Learning Super Sampling is an upscaling algorithm using AI. Requires an NVIDIA RTX GPU.\n"
+			"\n"
+			"Intel XeSS:\n"
+			"Intel's Xe Super Sampling uses machine learning to upscale rendered frames. Compatible with DirectX 11/12 GPUs supporting Shader Model 6.4.");
 	}
 
 	*currentUpscaleMode = std::min(availableModes, (uint)*currentUpscaleMode);
@@ -79,6 +98,8 @@ void Upscaling::DrawSettings()
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
 			ImGui::SliderInt("Upscale Preset", (int*)&settings.upscalePreset, 0, 3, std::format("{}", upscalePresetsDLSS[3 - settings.upscalePreset]).c_str());
+		else if (upscaleMethod == UpscaleMethod::kXESS)
+			ImGui::SliderInt("Upscale Preset", (int*)&settings.upscalePreset, 0, 3, std::format("{}", upscalePresets[3 - settings.upscalePreset]).c_str());
 		else
 			ImGui::SliderInt("Upscale Preset", (int*)&settings.upscalePreset, 0, 3, std::format("{}", upscalePresets[3 - settings.upscalePreset]).c_str());
 		
@@ -224,10 +245,17 @@ Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
 	if (globals::state->featureLevel != D3D_FEATURE_LEVEL_11_1)
 		return (Upscaling::UpscaleMethod)settings.upscaleMethodNoFSR;
 
-	if (globals::streamline->featureDLSS)
-		return (Upscaling::UpscaleMethod)settings.upscaleMethod;
+	bool featureDLSS = globals::streamline->featureDLSS;
+	bool featureXeSS = globals::xess->featureXeSS;
 
-	return (Upscaling::UpscaleMethod)settings.upscaleMethodNoDLSS;
+	if (featureDLSS && featureXeSS)
+		return (Upscaling::UpscaleMethod)settings.upscaleMethod;
+	else if (featureDLSS)
+		return (Upscaling::UpscaleMethod)settings.upscaleMethodNoXeSS;
+	else if (featureXeSS)
+		return (Upscaling::UpscaleMethod)settings.upscaleMethodNoDLSS;
+	else
+		return (Upscaling::UpscaleMethod)settings.upscaleMethodNoFSR;
 }
 
 void Upscaling::CheckResources()
@@ -237,15 +265,20 @@ void Upscaling::CheckResources()
 
 	auto streamline = globals::streamline;
 	auto fidelityFX = globals::fidelityFX;
+	auto xess = globals::xess;
 
 	if (previousUpscaleMode != currentUpscaleMode) {
 		if (previousUpscaleMode == UpscaleMethod::kDLSS)
 			streamline->DestroyDLSSResources();
 		else if (previousUpscaleMode == UpscaleMethod::kFSR)
 			fidelityFX->DestroyFSRResources();
+		else if (previousUpscaleMode == UpscaleMethod::kXESS)
+			xess->DestroyXeSSResources();
 
 		if (currentUpscaleMode == UpscaleMethod::kFSR)
 			fidelityFX->CreateFSRResources();
+		else if (currentUpscaleMode == UpscaleMethod::kXESS)
+			xess->CreateXeSSResources();
 
 		previousUpscaleMode = currentUpscaleMode;
 	}
@@ -821,6 +854,11 @@ void Upscaling::Upscale()
 			globals::streamline->Upscale(main.texture, upscalingTexture->resource.get(), reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), (sl::DLSSPreset)11u);
 		else if (upscaleMethod == UpscaleMethod::kFSR)
 			globals::fidelityFX->Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), jitter, settings.sharpness);
+		else if (upscaleMethod == UpscaleMethod::kXESS) {
+			auto& motionVectorsTexture = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kMOTION_VECTOR];
+			auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+			globals::xess->Upscale(main.texture, upscalingTexture->resource.get(), reactiveMaskTexture->resource.get(), motionVectorsTexture.texture, depthTexture.texture, jitter);
+		}
 
 		state->EndPerfEvent();
 	}

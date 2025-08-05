@@ -38,6 +38,7 @@ class Streamline;
 class Upscaling;
 class DX12SwapChain;
 class FidelityFX;
+class XeSS;
 
 namespace SIE
 {
@@ -138,6 +139,7 @@ namespace globals
 	extern Upscaling* upscaling;
 	extern DX12SwapChain* dx12SwapChain;
 	extern FidelityFX* fidelityFX;
+	extern XeSS* xess;
 
 	void OnInit();
 	void ReInit();

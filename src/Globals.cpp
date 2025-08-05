@@ -6,6 +6,7 @@
 #include "Deferred.h"
 #include "FidelityFX.h"
 #include "Menu.h"
+#include "XeSS.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Streamline.h"
@@ -138,6 +139,7 @@ namespace globals
 	Upscaling* upscaling = nullptr;
 	DX12SwapChain* dx12SwapChain = nullptr;
 	FidelityFX* fidelityFX = nullptr;
+	XeSS* xess = nullptr;
 
 	void OnInit()
 	{
@@ -150,6 +152,7 @@ namespace globals
 		upscaling = Upscaling::GetSingleton();
 		dx12SwapChain = DX12SwapChain::GetSingleton();
 		fidelityFX = FidelityFX::GetSingleton();
+		xess = XeSS::GetSingleton();
 	}
 
 	void ReInit()

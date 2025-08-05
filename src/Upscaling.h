@@ -2,6 +2,7 @@
 
 #include "FidelityFX.h"
 #include "Streamline.h"
+#include "XeSS.h"
 
 /**
  * @brief Installs hooks for Direct3D 11 device context operations.
@@ -28,7 +29,8 @@ public:
 		kNONE,
 		kTAA,
 		kFSR,
-		kDLSS
+		kDLSS,
+		kXESS
 	};
 
 	struct Settings
@@ -36,6 +38,7 @@ public:
 		uint upscaleMethod = (uint)UpscaleMethod::kTAA;
 		uint upscaleMethodNoDLSS = (uint)UpscaleMethod::kTAA;
 		uint upscaleMethodNoFSR = (uint)UpscaleMethod::kTAA;
+		uint upscaleMethodNoXeSS = (uint)UpscaleMethod::kTAA;
 		uint upscalePreset = (uint)FfxFsr3QualityMode::FFX_FSR3_QUALITY_MODE_QUALITY;
 		float sharpness = 0.0f;
 		uint frameLimitMode = 1;
@@ -50,6 +53,7 @@ public:
 	bool lowRefreshRate = false;
 
 	bool fidelityFXMissing = false;
+	bool xessMissing = false;
 
 	bool d3d12Interop = false;
 	double refreshRate = 0.0f;

@@ -45,6 +45,7 @@ find_package(efsw CONFIG REQUIRED)
 find_package(Tracy CONFIG REQUIRED)
 add_subdirectory(${CMAKE_SOURCE_DIR}/cmake/Streamline)
 include(FidelityFX-SDK)
+include(XeSS-SDK)
 
 target_compile_definitions(
 	${PROJECT_NAME}
