@@ -151,9 +151,6 @@ void Streamline::LoadInterposer()
 	slGetNewFrameToken = (PFun_slGetNewFrameToken*)GetProcAddress(interposer, "slGetNewFrameToken");
 	slSetD3DDevice = (PFun_slSetD3DDevice*)GetProcAddress(interposer, "slSetD3DDevice");
 
-	slCreateDXGIFactory1 = (decltype(&CreateDXGIFactory1))GetProcAddress(interposer, "CreateDXGIFactory1");
-	slD3D11CreateDeviceAndSwapChain = (decltype(&D3D11CreateDeviceAndSwapChain))GetProcAddress(interposer, "D3D11CreateDeviceAndSwapChain");
-
 	if (SL_FAILED(res, slInit(pref, sl::kSDKVersion))) {
 		logger::critical("[Streamline] Failed to initialize Streamline");
 	} else {
@@ -185,39 +182,7 @@ void Streamline::CheckFeatures(IDXGIAdapter* a_adapter)
 		}
 	}
 
-	slIsFeatureLoaded(sl::kFeatureDLSS_G, featureDLSSG);
-	if (REL::Module::IsVR()) {
-		featureDLSSG = false;
-	} else if (featureDLSSG) {
-		logger::info("[Streamline] DLSSG feature is loaded");
-		featureDLSSG = slIsFeatureSupported(sl::kFeatureDLSS_G, adapterInfo) == sl::Result::eOk;
-	} else {
-		logger::info("[Streamline] DLSSG feature is not loaded");
-		sl::FeatureRequirements featureRequirements;
-		sl::Result result = slGetFeatureRequirements(sl::kFeatureDLSS_G, featureRequirements);
-		if (result != sl::Result::eOk) {
-			logger::info("[Streamline] DLSSG feature failed to load due to: {}", magic_enum::enum_name(result));
-		}
-	}
-
-	slIsFeatureLoaded(sl::kFeatureReflex, featureReflex);
-	if (REL::Module::IsVR()) {
-		featureReflex = false;
-	} else if (featureReflex) {
-		logger::info("[Streamline] Reflex feature is loaded");
-		featureReflex = slIsFeatureSupported(sl::kFeatureReflex, adapterInfo) == sl::Result::eOk;
-	} else {
-		logger::info("[Streamline] Reflex feature is not loaded");
-		sl::FeatureRequirements featureRequirements;
-		sl::Result result = slGetFeatureRequirements(sl::kFeatureReflex, featureRequirements);
-		if (result != sl::Result::eOk) {
-			logger::info("[Streamline] Reflex feature failed to load due to: {}", magic_enum::enum_name(result));
-		}
-	}
-
 	logger::info("[Streamline] DLSS {} available", featureDLSS ? "is" : "is not");
-	logger::info("[Streamline] DLSSG {} available", featureDLSSG && !REL::Module::IsVR() ? "is" : "is not");
-	logger::info("[Streamline] Reflex {} available", featureReflex && !REL::Module::IsVR() ? "is" : "is not");
 }
 
 void Streamline::PostDevice()
@@ -228,32 +193,6 @@ void Streamline::PostDevice()
 		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetOptimalSettings", (void*&)slDLSSGetOptimalSettings);
 		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetState", (void*&)slDLSSGetState);
 		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSSetOptions", (void*&)slDLSSSetOptions);
-	}
-
-	if (featureDLSSG) {
-		slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGGetState", (void*&)slDLSSGGetState);
-		slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGSetOptions", (void*&)slDLSSGSetOptions);
-	}
-
-	if (featureReflex) {
-		slGetFeatureFunction(sl::kFeatureReflex, "slReflexGetState", (void*&)slReflexGetState);
-		slGetFeatureFunction(sl::kFeatureReflex, "slReflexSetMarker", (void*&)slReflexSetMarker);
-		slGetFeatureFunction(sl::kFeatureReflex, "slReflexSleep", (void*&)slReflexSleep);
-		slGetFeatureFunction(sl::kFeatureReflex, "slReflexSetOptions", (void*&)slReflexSetOptions);
-
-		if (featureDLSSG) {
-			sl::ReflexOptions reflexOptions{};
-			reflexOptions.mode = sl::ReflexMode::eLowLatency;
-			reflexOptions.useMarkersToOptimize = false;
-			reflexOptions.virtualKey = 0;
-			reflexOptions.frameLimitUs = 0;
-
-			if (SL_FAILED(res, slReflexSetOptions(reflexOptions))) {
-				logger::error("[Streamline] Failed to set reflex options");
-			} else {
-				logger::info("[Streamline] Successfully set reflex options");
-			}
-		}
 	}
 }
 
@@ -378,63 +317,6 @@ void Streamline::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outpu
 	sl::ViewportHandle view(viewport);
 	const sl::BaseStructure* inputs[] = { &view };
 	slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
-}
-
-/**
- * @brief Submits frame resources and markers for DLSS-G frame generation and Reflex latency tracking.
- *
- * Updates DLSS-G frame generation mode if needed, sets Reflex simulation and render markers, and binds required resources (depth, motion vectors, HUD-less color, UI) for the current frame to the Streamline SDK. No action is taken if Streamline is uninitialized, DLSS-G is unavailable, VR mode is active, or D3D12 interop is not enabled.
- */
-void Streamline::Present()
-{
-	if (!initialized || !featureDLSSG || globals::game::isVR || !globals::upscaling->d3d12Interop)
-		return;
-
-	CheckFrameConstants();
-
-	auto upscaling = globals::upscaling;
-
-	static auto currentFrameGenerationMode = sl::DLSSGMode::eOff;
-	auto frameGenerationMode = upscaling->settings.frameGenerationMode ? sl::DLSSGMode::eOn : sl::DLSSGMode::eOff;
-
-	// Set isFrameGenActive based on whether DLSS-G frame generation is enabled
-	isFrameGenActive = (frameGenerationMode == sl::DLSSGMode::eOn);
-
-	if (currentFrameGenerationMode != frameGenerationMode) {
-		currentFrameGenerationMode = frameGenerationMode;
-
-		sl::DLSSGOptions options{};
-		options.mode = upscaling->settings.frameGenerationMode ? sl::DLSSGMode::eOn : sl::DLSSGMode::eOff;
-
-		if (SL_FAILED(result, slDLSSGSetOptions(viewport, options))) {
-			logger::error("[Streamline] Could not set DLSSG");
-		}
-	}
-
-	auto state = globals::state;
-
-	slReflexSetMarker(sl::ReflexMarker::eSimulationEnd, *frameToken);
-	slReflexSetMarker(sl::ReflexMarker::eRenderSubmitStart, *frameToken);
-
-	sl::Extent fullExtent{ 0, 0, (uint)state->screenSize.x, (uint)state->screenSize.y };
-
-	float2 dynamicScreenSize = Util::ConvertToDynamic(state->screenSize);
-	sl::Extent dynamicExtent{ 0, 0, (uint)dynamicScreenSize.x, (uint)dynamicScreenSize.y };
-
-	sl::Resource depth = { sl::ResourceType::eTex2d, upscaling->depthBufferShared->resource.get(), 0 };
-	sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &dynamicExtent };
-
-	sl::Resource mvec = { sl::ResourceType::eTex2d, upscaling->motionVectorBufferShared->resource.get(), 0 };
-	sl::ResourceTag mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &dynamicExtent };
-
-	sl::Resource hudLess = { sl::ResourceType::eTex2d, upscaling->HUDLessBufferShared->resource.get(), 0 };
-	sl::ResourceTag hudLessTag = sl::ResourceTag{ &hudLess, sl::kBufferTypeHUDLessColor, sl::ResourceLifecycle::eValidUntilPresent, &fullExtent };
-
-	sl::Resource ui = { sl::ResourceType::eTex2d, nullptr, 0 };
-	sl::ResourceTag uiTag = sl::ResourceTag{ &ui, sl::kBufferTypeUIColorAndAlpha, sl::ResourceLifecycle::eValidUntilPresent, &fullExtent };
-
-	sl::ResourceTag inputs[] = { depthTag, mvecTag, hudLessTag, uiTag };
-	slSetTag(viewport, inputs, _countof(inputs), globals::d3d::context);
 }
 
 /**

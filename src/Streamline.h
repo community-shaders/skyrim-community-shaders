@@ -13,10 +13,8 @@
 #include <sl.h>
 #include <sl_consts.h>
 #include <sl_dlss.h>
-#include <sl_dlss_g.h>
-#include <sl_matrix_helpers.h>
-#include <sl_reflex.h>
 #include <sl_version.h>
+#include <sl_matrix_helpers.h>
 #pragma warning(pop)
 
 /**
@@ -107,11 +105,6 @@ public:
 	bool triedInitialization = false;
 
 	bool featureDLSS = false;
-	bool featureDLSSG = false;
-	bool featureReflex = false;
-
-	// Track if Streamline is currently being used for frame generation
-	bool isFrameGenActive = false;
 
 	sl::ViewportHandle viewport{ 0 };
 
@@ -141,21 +134,8 @@ public:
 	PFun_slDLSSGetState* slDLSSGetState{};
 	PFun_slDLSSSetOptions* slDLSSSetOptions{};
 
-	// DLSSG specific functions
-	PFun_slDLSSGGetState* slDLSSGGetState{};
-	PFun_slDLSSGSetOptions* slDLSSGSetOptions{};
-
-	// Reflex specific functions
-	PFun_slReflexGetState* slReflexGetState{};
-	PFun_slReflexSetMarker* slReflexSetMarker{};
-	PFun_slReflexSleep* slReflexSleep{};
-	PFun_slReflexSetOptions* slReflexSetOptions{};
-
 	Util::FrameChecker frameChecker;
 	sl::FrameToken* frameToken;
-
-	decltype(&CreateDXGIFactory1) slCreateDXGIFactory1{};
-	decltype(&D3D11CreateDeviceAndSwapChain) slD3D11CreateDeviceAndSwapChain{};
 
 	// Cached DLL version info for Streamline plugin directory
 	static std::vector<std::pair<std::string, std::string>> dllVersions;
@@ -169,6 +149,5 @@ public:
 	void CheckFrameConstants();
 
 	void Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTexture, Texture2D* a_alphaMask, sl::DLSSPreset a_preset);
-	void Present();
 	void DestroyDLSSResources();
 };

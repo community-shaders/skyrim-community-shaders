@@ -49,7 +49,6 @@ public:
 	bool isWindowed = false;
 	bool lowRefreshRate = false;
 
-	bool streamlineMissing = false;
 	bool fidelityFXMissing = false;
 
 	bool d3d12Interop = false;

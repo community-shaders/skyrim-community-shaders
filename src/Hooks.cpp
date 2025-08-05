@@ -217,13 +217,11 @@ struct IDXGISwapChain_Present
 	thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
 	{
 		auto state = globals::state;
-		auto streamline = globals::streamline;
 		auto upscaling = globals::upscaling;
 		auto menu = globals::menu;
 
 		upscaling->CopyBuffersToSharedResources();
 		state->PresentReShade();
-		streamline->Present();
 		state->Reset();
 		menu->DrawOverlay();
 
@@ -240,21 +238,7 @@ struct IDXGISwapChain_Present
 			}
 		}
 
-		HRESULT retval = S_OK;
-
-		if (globals::streamline->featureReflex) {
-			sl::FrameToken* frameToken;
-			globals::streamline->slGetNewFrameToken(frameToken, &globals::state->frameCount);
-
-			globals::streamline->slReflexSetMarker(sl::ReflexMarker::eRenderSubmitEnd, *frameToken);
-			globals::streamline->slReflexSetMarker(sl::ReflexMarker::ePresentStart, *frameToken);
-
-			retval = func(This, SyncInterval, Flags);
-
-			globals::streamline->slReflexSetMarker(sl::ReflexMarker::ePresentEnd, *frameToken);
-		} else {
-			retval = func(This, SyncInterval, Flags);
-		}
+		HRESULT retval = func(This, SyncInterval, Flags);		
 
 		TracyD3D11Collect(state->tracyCtx);
 
@@ -315,11 +299,6 @@ decltype(&CreateDXGIFactory) ptrCreateDXGIFactory;
 
 HRESULT WINAPI hk_CreateDXGIFactory(REFIID, void** ppFactory)
 {
-	auto streamline = globals::streamline;
-	if (!streamline->triedInitialization)
-		globals::streamline->LoadInterposer();
-	if (streamline->initialized)
-		return streamline->slCreateDXGIFactory1(__uuidof(IDXGIFactory4), ppFactory);
 	return ptrCreateDXGIFactory(__uuidof(IDXGIFactory4), ppFactory);
 }
 
@@ -357,10 +336,10 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	auto fidelityFX = globals::fidelityFX;
 	auto upscaling = globals::upscaling;
 
+	streamline->LoadInterposer();
+
 	if (streamline->initialized)
 		streamline->CheckFeatures(pAdapter);
-	else
-		upscaling->streamlineMissing = true;
 
 	auto proxy = globals::dx12SwapChain;
 
@@ -394,26 +373,51 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	if (shouldProxy) {
 		logger::info("[Frame Generation] Frame Generation enabled, using D3D12 proxy");
 
-		if (streamline->featureDLSSG) {
-			logger::info("[Frame Generation] Using D3D12 proxy via Streamline");
+		if (fidelityFX->module) {
+			IDXGIFactory5* dxgiFactory;
+			DX::ThrowIfFailed(pAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory)));
 
-			auto ret = streamline->slD3D11CreateDeviceAndSwapChain(pAdapter,
+			BOOL allowTearing = FALSE;
+			DX::ThrowIfFailed(dxgiFactory->CheckFeatureSupport(
+				DXGI_FEATURE_PRESENT_ALLOW_TEARING,
+				&allowTearing,
+				sizeof(allowTearing)));
+
+			if (allowTearing) {
+				pSwapChainDesc->Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+			} else {
+				pSwapChainDesc->Flags &= ~DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+			}
+
+			proxy->CreateD3D12Device(pAdapter);
+
+			D3D11CreateDevice(
+				pAdapter,
 				DriverType,
 				Software,
 				Flags,
 				&featureLevel,
 				1,
 				SDKVersion,
-				pSwapChainDesc,
-				ppSwapChain,
 				ppDevice,
 				pFeatureLevel,
 				ppImmediateContext);
 
+			proxy->SetD3D11Device(*ppDevice);
+			proxy->SetD3D11DeviceContext(*ppImmediateContext);
+
+			proxy->CreateSwapChain(pAdapter, *pSwapChainDesc);
+
+			proxy->CreateInterop();
+
+			*ppSwapChain = proxy->GetSwapChainProxy();
+
 			upscaling->d3d12Interop = true;
 
-			streamline->PostDevice();
-			upscaling->InstallD3DHooks(*ppImmediateContext);
+			if (streamline->initialized) {
+				streamline->slSetD3DDevice(*ppDevice);
+				streamline->PostDevice();
+			}
 
 			IDXGIFactory* factory = nullptr;
 			if (SUCCEEDED((*ppSwapChain)->GetParent(IID_PPV_ARGS(&factory)))) {
@@ -421,68 +425,10 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 				factory->Release();
 			}
 
-			return ret;
-
+			return S_OK;
 		} else {
-			logger::info("[Frame Generation] Using manual D3D12 proxy");
-
-			if (fidelityFX->module) {
-				IDXGIFactory5* dxgiFactory;
-				DX::ThrowIfFailed(pAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory)));
-
-				BOOL allowTearing = FALSE;
-				DX::ThrowIfFailed(dxgiFactory->CheckFeatureSupport(
-					DXGI_FEATURE_PRESENT_ALLOW_TEARING,
-					&allowTearing,
-					sizeof(allowTearing)));
-
-				if (allowTearing) {
-					pSwapChainDesc->Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
-				} else {
-					pSwapChainDesc->Flags &= ~DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
-				}
-
-				proxy->CreateD3D12Device(pAdapter);
-
-				D3D11CreateDevice(
-					pAdapter,
-					DriverType,
-					Software,
-					Flags,
-					&featureLevel,
-					1,
-					SDKVersion,
-					ppDevice,
-					pFeatureLevel,
-					ppImmediateContext);
-
-				proxy->SetD3D11Device(*ppDevice);
-				proxy->SetD3D11DeviceContext(*ppImmediateContext);
-
-				proxy->CreateSwapChain(pAdapter, *pSwapChainDesc);
-
-				proxy->CreateInterop();
-
-				*ppSwapChain = proxy->GetSwapChainProxy();
-
-				upscaling->d3d12Interop = true;
-
-				if (streamline->initialized) {
-					streamline->slSetD3DDevice(*ppDevice);
-					streamline->PostDevice();
-				}
-
-				IDXGIFactory* factory = nullptr;
-				if (SUCCEEDED((*ppSwapChain)->GetParent(IID_PPV_ARGS(&factory)))) {
-					factory->MakeWindowAssociation(pSwapChainDesc->OutputWindow, DXGI_MWA_NO_WINDOW_CHANGES);
-					factory->Release();
-				}
-
-				return S_OK;
-			} else {
-				logger::warn("[Frame Generation] amd_fidelityfx_dx12.dll is not loaded, skipping proxy");
-				upscaling->fidelityFXMissing = true;
-			}
+			logger::warn("[Frame Generation] amd_fidelityfx_dx12.dll is not loaded, skipping proxy");
+			upscaling->fidelityFXMissing = true;
 		}
 	}
 
@@ -506,48 +452,6 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 
 	return ret;
 }
-
-struct Main_Update_Begin
-{
-	/**
-	 * @brief Wraps the player character update with Reflex frame timing markers.
-	 *
-	 * If the Reflex feature is enabled, obtains a new frame token and sets markers for input sampling and simulation start before invoking the original update function.
-	 *
-	 * @param a_player Pointer to the player character being updated.
-	 */
-	static void thunk(RE::PlayerCharacter* a_player)
-	{
-		if (globals::streamline->featureReflex) {
-			sl::FrameToken* frameToken;
-			globals::streamline->slGetNewFrameToken(frameToken, &globals::state->frameCount);
-			globals::streamline->slReflexSetMarker(sl::ReflexMarker::eInputSample, *frameToken);
-			globals::streamline->slReflexSetMarker(sl::ReflexMarker::eSimulationStart, *frameToken);
-		}
-		func(a_player);
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
-
-struct Main_Update_Swap
-{
-	/**
-	 * @brief Wraps a function call with Streamline Reflex simulation and render submit markers.
-	 *
-	 * If the Reflex feature is enabled, obtains a new frame token and sets markers for simulation end and render submit start before invoking the original function.
-	 */
-	static void thunk(void* This)
-	{
-		if (globals::streamline->featureReflex) {
-			sl::FrameToken* frameToken;
-			globals::streamline->slGetNewFrameToken(frameToken, &globals::state->frameCount);
-			globals::streamline->slReflexSetMarker(sl::ReflexMarker::eSimulationEnd, *frameToken);
-			globals::streamline->slReflexSetMarker(sl::ReflexMarker::eRenderSubmitStart, *frameToken);
-		}
-		func(This);
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
 
 struct BSShaderRenderTargets_Create
 {
@@ -1143,11 +1047,6 @@ namespace Hooks
 			PatchMemory(
 				REL::Relocation<std::uintptr_t>(renderPassCacheCtor, 0x191 - 2).address(),
 				reinterpret_cast<const uint8_t*>(&passCountSE), 4);
-		}
-
-		if (!REL::Module::IsVR()) {
-			stl::write_thunk_call<Main_Update_Begin>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x53, 0x6E, 0x68));
-			stl::write_thunk_call<Main_Update_Swap>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x5D2, 0xA97, 0x678));
 		}
 
 		// Patch render space in BSLightingShader::SetupGeometry to always use world space
