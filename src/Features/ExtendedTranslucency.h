@@ -59,6 +59,5 @@ struct ExtendedTranslucency final : Feature
 
 	const PerFrame& GetCommonBufferData() { return settings; }
 
-
 	static const RE::BSFixedString NiExtraDataName_AnisotropicAlphaMaterial;
 };

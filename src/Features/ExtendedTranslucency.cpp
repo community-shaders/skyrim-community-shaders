@@ -10,8 +10,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	AlphaReduction,
 	AlphaSoftness,
 	AlphaStrength,
-	SkinnedOnly
-);
+	SkinnedOnly);
 
 const RE::BSFixedString ExtendedTranslucency::NiExtraDataName_AnisotropicAlphaMaterial = "AnisotropicAlphaMaterial";
 
