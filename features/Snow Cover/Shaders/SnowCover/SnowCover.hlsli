@@ -159,15 +159,28 @@ namespace SnowCover
 		mult = ApplySnowBase(worldNormal, uv, alt, disp, p, skylight, waterDist, viewDist);
 		if (mult <= 0.0)
 			return prop;
-		float3 albedo = alt ? IceAlbedo.Sample(SampColorSampler, uv).rgb : SnowAlbedo.Sample(SampColorSampler, uv).rgb;
-		albedo = Color::Diffuse(albedo) * (alt ? SharedData::snowCoverSettings.AltTint.rgb : SharedData::snowCoverSettings.MainTint.rgb);
-		diffuse = lerp(diffuse, albedo, mult * (alt ? SharedData::snowCoverSettings.AltTint.w : SharedData::snowCoverSettings.MainTint.w));
-		float4 rmaos = alt ? IceRmaos.Sample(SampColorSampler, uv) : SnowRmaos.Sample(SampColorSampler, uv);
-		worldNormal = TransformNormal(alt ? IceNormal.Sample(SampNormalSampler, uv).rgb : SnowNormal.Sample(SampNormalSampler, uv).rgb);
+		float4 rmaos;
+		if (alt){
+			rmaos = IceRmaos.Sample(SampColorSampler, uv);
+			float3 albedo = IceAlbedo.Sample(SampColorSampler, uv).rgb;
+			albedo = Color::Diffuse(albedo) * SharedData::snowCoverSettings.AltTint.rgb;
+			diffuse = lerp(diffuse, albedo, mult * SharedData::snowCoverSettings.AltTint.w);
+			worldNormal = TransformNormal(IceNormal.Sample(SampNormalSampler, uv).rgb);
+			prop.F0 = lerp(prop.F0, rmaos.w *SharedData::snowCoverSettings.altSpec, mult);
+
+		}
+		else{
+			rmaos = SnowRmaos.Sample(SampColorSampler, uv);
+			float3 albedo = SnowAlbedo.Sample(SampColorSampler, uv).rgb;
+			albedo = Color::Diffuse(albedo) * SharedData::snowCoverSettings.MainTint.rgb;
+			diffuse = lerp(diffuse, albedo, mult * SharedData::snowCoverSettings.MainTint.w);
+			worldNormal = TransformNormal(SnowNormal.Sample(SampNormalSampler, uv).rgb);
+			prop.F0 = lerp(prop.F0, rmaos.w * SharedData::snowCoverSettings.mainSpec, mult);
+
+		}
 		prop.Roughness = lerp(prop.Roughness, rmaos.x, mult);
 		prop.Metallic = lerp(prop.Metallic, rmaos.y, mult);
 		prop.AO = lerp(prop.AO, rmaos.z, mult);
-		prop.F0 = lerp(prop.F0, rmaos.w * alt ? SharedData::snowCoverSettings.altSpec : SharedData::snowCoverSettings.mainSpec, mult);
 		prop.GlintScreenSpaceScale = lerp(prop.GlintScreenSpaceScale, SharedData::snowCoverSettings.Glint.x, mult);
 		prop.GlintLogMicrofacetDensity = lerp(prop.GlintLogMicrofacetDensity, SharedData::snowCoverSettings.Glint.y, mult);
 		prop.GlintMicrofacetRoughness = lerp(prop.GlintMicrofacetRoughness, SharedData::snowCoverSettings.Glint.z, mult);
@@ -182,15 +195,26 @@ namespace SnowCover
 		float mult = ApplySnowBase(worldNormal, uv, alt, disp, p, skylight, waterDist, viewDist);
 		if (mult <= 0.0)
 			return 0;
+		float4 rmaos;
+		if(alt){
+			float3 albedo = IceAlbedo.Sample(SampColorSampler, uv).rgb;
+			albedo = Color::TrueLinearToGamma(albedo) * SharedData::snowCoverSettings.AltTint.rgb * Color::PBRLightingScale;
+			rmaos = IceRmaos.Sample(SampColorSampler, uv);
+			shininess = lerp(shininess, 25 * 500 * SharedData::snowCoverSettings.altSpec * rmaos.w, mult);
+			worldNormal = TransformNormal(IceNormal.Sample(SampNormalSampler, uv).rgb);
+			diffuse = lerp(diffuse, rmaos.z * albedo, mult * SharedData::snowCoverSettings.AltTint.w);
 
-		float3 albedo = alt ? IceAlbedo.Sample(SampColorSampler, uv).rgb : SnowAlbedo.Sample(SampColorSampler, uv).rgb;
-		albedo = Color::TrueLinearToGamma(albedo) * (alt ? SharedData::snowCoverSettings.AltTint.rgb : SharedData::snowCoverSettings.MainTint.rgb) * Color::PBRLightingScale;
+		}
+		else{
+			float3 albedo = SnowAlbedo.Sample(SampColorSampler, uv).rgb;
+			albedo = Color::TrueLinearToGamma(albedo) * SharedData::snowCoverSettings.MainTint.rgb * Color::PBRLightingScale;
+			rmaos = SnowRmaos.Sample(SampColorSampler, uv);
+			shininess = lerp(shininess, 25 * 500 *  SharedData::snowCoverSettings.mainSpec * rmaos.w, mult);
+			worldNormal = TransformNormal(SnowNormal.Sample(SampNormalSampler, uv).rgb);
+			diffuse = lerp(diffuse, rmaos.z * albedo, mult * SharedData::snowCoverSettings.MainTint.w);
 
-		float4 rmaos = alt ? IceRmaos.Sample(SampColorSampler, uv) : SnowRmaos.Sample(SampColorSampler, uv);
-		diffuse = lerp(diffuse, rmaos.z * albedo, mult * (alt ? SharedData::snowCoverSettings.AltTint.w : SharedData::snowCoverSettings.MainTint.w));
+		}
 		glossiness = lerp(glossiness, 1 - rmaos.x, mult);
-		shininess = lerp(shininess, 25 * 500 * (alt ? SharedData::snowCoverSettings.altSpec : SharedData::snowCoverSettings.mainSpec) * rmaos.w, mult);
-		worldNormal = TransformNormal(alt ? IceNormal.Sample(SampNormalSampler, uv).rgb : SnowNormal.Sample(SampNormalSampler, uv).rgb);
 		return mult;
 	}
 #		endif
