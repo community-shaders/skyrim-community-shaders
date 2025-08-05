@@ -1928,6 +1928,9 @@ void VR::UpdateOverlayDrag()
 
 bool VR::CanPerformDrag()
 {
+	if (!settings.EnableDragToReposition)
+		return false;
+
 	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
 	auto* system = openvr ? openvr->vrSystem : nullptr;
 	if (!system)
@@ -1937,9 +1940,6 @@ bool VR::CanPerformDrag()
 	if (settings.VRMenuControllerDiagnosticsTestMode) {
 		return false;
 	}
-
-	if (!settings.EnableDragToReposition)
-		return false;
 
 	return true;
 }
