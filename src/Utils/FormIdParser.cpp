@@ -68,13 +68,7 @@ std::unordered_set<std::uint64_t> FormIdParser::parseTriNameFile(const std::stri
 			line = line.substr(0, commentid);
 		std::string trimmed = trim(line);
 		if (!trimmed.empty()) {
-			try {
-				hexMap.insert(fnv_hash(trimmed.c_str()));
-			} catch (const std::invalid_argument& e) {
-				logger::error("[FormIdParser] invalid line: {}: {}", lineNumber, e.what());
-			} catch (const std::out_of_range& e) {
-				logger::error("[FormIdParser] invalid line: {}: {}", lineNumber, e.what());
-			}
+			hexMap.insert(fnv_hash(trimmed.c_str()));
 		}
 		++lineNumber;
 	}
