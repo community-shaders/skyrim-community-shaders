@@ -117,15 +117,14 @@ public:
 	HANDLE sharedFenceEvent = nullptr;
 	UINT64 sharedFenceValue = 0;
 
-	Texture2D* HUDLessBufferShared;
-	Texture2D* depthBufferShared;
-	Texture2D* motionVectorBufferShared;
-
 	// Shared D3D12 resources for upscaling systems (using WrappedResource)
 	WrappedResource* HUDLessBufferShared12;
 	WrappedResource* depthBufferShared12;
 	WrappedResource* motionVectorBufferShared12;
 	WrappedResource* reactiveMaskBufferShared12;
+
+	WrappedResource* inputColorBufferShared12;
+	WrappedResource* outputColorBufferShared12;
 
 	ID3D11ComputeShader* copyDepthToSharedBufferCS;
 

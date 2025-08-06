@@ -42,9 +42,10 @@ public:
 
 	bool featureXeSS = false;  // whether enabled
 
-	// XeSS-specific shared textures (input/output) using WrappedResource
-	WrappedResource* inputColorTexture = nullptr;
-	WrappedResource* outputColorTexture = nullptr;
+	// D3D11/D3D12 shared fence for synchronization
+	winrt::com_ptr<ID3D11Fence> d3d11Fence;
+	winrt::com_ptr<ID3D12Fence> d3d12Fence;
+	UINT64 fenceValue = 0;
 
 	// Cached DLL version info for XeSS plugin directory
 	static std::vector<std::pair<std::string, std::string>> dllVersions;

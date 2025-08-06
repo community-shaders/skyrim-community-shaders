@@ -567,61 +567,6 @@ void Upscaling::CreateFrameGenerationResources()
 {
 	logger::info("[Frame Generation] Creating resources");
 
-	// Create shared D3D12 device first
-	if (!sharedD3D12Device) {
-		logger::error("[Frame Generation] Failed to create shared D3D12 device, cannot create resources");
-		return;
-	}
-
-	auto renderer = globals::game::renderer;
-	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-
-	D3D11_TEXTURE2D_DESC texDesc{};
-	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
-	D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-
-	main.texture->GetDesc(&texDesc);
-	main.SRV->GetDesc(&srvDesc);
-	main.RTV->GetDesc(&rtvDesc);
-	main.UAV->GetDesc(&uavDesc);
-
-	texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
-
-	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	srvDesc.Format = texDesc.Format;
-	rtvDesc.Format = texDesc.Format;
-	uavDesc.Format = texDesc.Format;
-
-	HUDLessBufferShared = new Texture2D(texDesc);
-	HUDLessBufferShared->CreateSRV(srvDesc);
-	HUDLessBufferShared->CreateRTV(rtvDesc);
-	HUDLessBufferShared->CreateUAV(uavDesc);
-
-	texDesc.Format = DXGI_FORMAT_R32_FLOAT;
-	srvDesc.Format = texDesc.Format;
-	rtvDesc.Format = texDesc.Format;
-	uavDesc.Format = texDesc.Format;
-
-	depthBufferShared = new Texture2D(texDesc);
-	depthBufferShared->CreateSRV(srvDesc);
-	depthBufferShared->CreateRTV(rtvDesc);
-	depthBufferShared->CreateUAV(uavDesc);
-
-	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-	D3D11_TEXTURE2D_DESC texDescMotionVector{};
-	motionVector.texture->GetDesc(&texDescMotionVector);
-
-	texDesc.Format = texDescMotionVector.Format;
-	srvDesc.Format = texDesc.Format;
-	rtvDesc.Format = texDesc.Format;
-	uavDesc.Format = texDesc.Format;
-
-	motionVectorBufferShared = new Texture2D(texDesc);
-	motionVectorBufferShared->CreateSRV(srvDesc);
-	motionVectorBufferShared->CreateRTV(rtvDesc);
-	motionVectorBufferShared->CreateUAV(uavDesc);
-
 	// Get D3D11 device5 interface for WrappedResource creation
 	winrt::com_ptr<ID3D11Device5> d3d11Device5;
 	if (FAILED(globals::d3d::device->QueryInterface(IID_PPV_ARGS(&d3d11Device5)))) {
@@ -629,24 +574,26 @@ void Upscaling::CreateFrameGenerationResources()
 		return;
 	}
 
-	// Create shared D3D12 resources using WrappedResource
-	D3D11_TEXTURE2D_DESC texDesc11{};
-	HUDLessBufferShared->resource->GetDesc(&texDesc11);
-	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
-	HUDLessBufferShared12 = new WrappedResource(texDesc11, d3d11Device5.get(), sharedD3D12Device.get());
+	auto renderer = globals::game::renderer;
+	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-	depthBufferShared->resource->GetDesc(&texDesc11);
-	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
-	depthBufferShared12 = new WrappedResource(texDesc11, d3d11Device5.get(), sharedD3D12Device.get());
+	D3D11_TEXTURE2D_DESC texDesc{};
+	main.texture->GetDesc(&texDesc);
 
-	motionVectorBufferShared->resource->GetDesc(&texDesc11);
-	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
-	motionVectorBufferShared12 = new WrappedResource(texDesc11, d3d11Device5.get(), sharedD3D12Device.get());
-	
-	// Create reactive mask shared texture (will be used by both frame generation and XeSS)
-	reactiveMaskTexture->resource->GetDesc(&texDesc11);
-	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
-	reactiveMaskBufferShared12 = new WrappedResource(texDesc11, d3d11Device5.get(), sharedD3D12Device.get());
+	texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+	inputColorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+	outputColorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+
+	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	HUDLessBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+	reactiveMaskBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+
+	texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+	depthBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+
+	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+	motionVector.texture->GetDesc(&texDesc);
+	motionVectorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
 
 	copyDepthToSharedBufferCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\FrameGeneration\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0");
 }
@@ -661,7 +608,7 @@ void Upscaling::CopyBuffersToSharedResources()
 
 	{
 		auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-		context->CopyResource(motionVectorBufferShared->resource.get(), motionVector.texture);
+		context->CopyResource(motionVectorBufferShared12->resource11, motionVector.texture);
 	}
 
 	{
@@ -673,7 +620,7 @@ void Upscaling::CopyBuffersToSharedResources()
 			ID3D11ShaderResourceView* views[1] = { depth.depthSRV };
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
-			ID3D11UnorderedAccessView* uavs[1] = { depthBufferShared->uav.get() };
+			ID3D11UnorderedAccessView* uavs[1] = { depthBufferShared12->uav };
 			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
 			context->CSSetShader(copyDepthToSharedBufferCS, nullptr, 0);
@@ -695,7 +642,7 @@ void Upscaling::CopyBuffersToSharedResources()
 		auto& swapChain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 		ID3D11Resource* swapChainResource;
 		swapChain.SRV->GetResource(&swapChainResource);
-		context->CopyResource(HUDLessBufferShared->resource.get(), swapChainResource);
+		context->CopyResource(HUDLessBufferShared12->resource11, swapChainResource);
 	}
 
 	useHUDLess = false;
@@ -714,7 +661,7 @@ void Upscaling::PostDisplay()
 	auto& swapChain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 	ID3D11Resource* swapChainResource;
 	swapChain.SRV->GetResource(&swapChainResource);
-	context->CopyResource(HUDLessBufferShared->resource.get(), swapChainResource);
+	context->CopyResource(HUDLessBufferShared12->resource11, swapChainResource);
 
 	useHUDLess = true;
 }

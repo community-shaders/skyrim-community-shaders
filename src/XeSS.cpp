@@ -87,8 +87,17 @@ void XeSS::CreateXeSSResources()
 		return;
 	}
 
+	// Create shared D3D11/D3D12 fences for synchronization
+	winrt::com_ptr<ID3D11Device5> d3d11Device5;
+	DX::ThrowIfFailed(globals::d3d::device->QueryInterface(IID_PPV_ARGS(&d3d11Device5)));
+
+	HANDLE sharedFenceHandle;
+	DX::ThrowIfFailed(upscaling->sharedD3D12Device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&d3d12Fence)));
+	DX::ThrowIfFailed(upscaling->sharedD3D12Device->CreateSharedHandle(d3d12Fence.get(), nullptr, GENERIC_ALL, nullptr, &sharedFenceHandle));
+	DX::ThrowIfFailed(d3d11Device5->OpenSharedFence(sharedFenceHandle, IID_PPV_ARGS(&d3d11Fence)));
+	CloseHandle(sharedFenceHandle);
+
 	logger::info("[XeSS] XeSS context initialized successfully");
-	logger::info("[XeSS] Shared textures will be created dynamically during first Upscale() call");
 }
 
 void XeSS::DestroyXeSSResources()
@@ -100,86 +109,39 @@ void XeSS::DestroyXeSSResources()
 		}
 		xessContext = nullptr;
 	}
-
-	// Clean up XeSS-specific shared textures
-	if (inputColorTexture) {
-		delete inputColorTexture;
-		inputColorTexture = nullptr;
-	}
-	if (outputColorTexture) {
-		delete outputColorTexture;
-		outputColorTexture = nullptr;
-	}
-
-	// Note: motion vector, depth, and reactive mask textures are now managed by Upscaling system
 }
 
 void XeSS::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_motionVectors, ID3D11Resource* a_depth, float2 a_jitter)
 {
 	auto upscaling = globals::upscaling;
-	if (!featureXeSS || !xessContext || !upscaling->sharedD3D12Device) {
-		logger::error("[XeSS] XeSS not initialized, cannot upscale");
-		return;
-	}
-
 	auto state = globals::state;
 	auto renderSize = Util::ConvertToDynamic(state->screenSize);
 
-	// Create shared textures dynamically from source textures if not already created
-	if (!inputColorTexture) {
-		// Get D3D11 device5 interface for WrappedResource creation
-		winrt::com_ptr<ID3D11Device5> d3d11Device5;
-		DX::ThrowIfFailed(globals::d3d::device->QueryInterface(IID_PPV_ARGS(&d3d11Device5)));
-
-		// Get texture description from input texture
-		winrt::com_ptr<ID3D11Texture2D> inputTexture2D;
-		DX::ThrowIfFailed(a_inputTexture->QueryInterface(IID_PPV_ARGS(&inputTexture2D)));
-		
-		D3D11_TEXTURE2D_DESC inputDesc;
-		inputTexture2D->GetDesc(&inputDesc);
-		inputDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
-		inputColorTexture = new WrappedResource(inputDesc, d3d11Device5.get(), upscaling->sharedD3D12Device.get());
-		logger::debug("[XeSS] Created input color shared texture from source");
-	}
-	
-	if (!outputColorTexture) {
-		// Get D3D11 device5 interface for WrappedResource creation
-		winrt::com_ptr<ID3D11Device5> d3d11Device5;
-		DX::ThrowIfFailed(globals::d3d::device->QueryInterface(IID_PPV_ARGS(&d3d11Device5)));
-
-		// Get texture description from output texture
-		winrt::com_ptr<ID3D11Texture2D> outputTexture2D;
-		DX::ThrowIfFailed(a_outputTexture->QueryInterface(IID_PPV_ARGS(&outputTexture2D)));
-		
-		D3D11_TEXTURE2D_DESC outputDesc;
-		outputTexture2D->GetDesc(&outputDesc);
-		outputDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
-		outputColorTexture = new WrappedResource(outputDesc, d3d11Device5.get(), upscaling->sharedD3D12Device.get());
-		logger::debug("[XeSS] Created output color shared texture from source");
-	}
-
 	// Copy input textures to shared resources
-	globals::d3d::context->CopyResource(inputColorTexture->resource11, a_inputTexture);
+	globals::d3d::context->CopyResource(upscaling->inputColorBufferShared12->resource11, a_inputTexture);
 	globals::d3d::context->CopyResource(upscaling->motionVectorBufferShared12->resource11, a_motionVectors);
 	globals::d3d::context->CopyResource(upscaling->depthBufferShared12->resource11, a_depth);
 	globals::d3d::context->CopyResource(upscaling->reactiveMaskBufferShared12->resource11, a_reactiveMask);
 	
-	// Flush D3D11 context to ensure copies are complete before D3D12 access
-	globals::d3d::context->Flush();
+	// Wait for D3D11 to finish
+	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context4;
+	DX::ThrowIfFailed(globals::d3d::context->QueryInterface(IID_PPV_ARGS(&d3d11Context4)));
+	DX::ThrowIfFailed(d3d11Context4->Signal(d3d11Fence.get(), fenceValue));
+	DX::ThrowIfFailed(upscaling->sharedD3D12CommandQueue->Wait(d3d12Fence.get(), fenceValue));
+	fenceValue++;
 
 	// Reset command allocator and list from shared resources
 	DX::ThrowIfFailed(upscaling->sharedD3D12CommandAllocator->Reset());
-
 	DX::ThrowIfFailed(upscaling->sharedD3D12CommandList->Reset(upscaling->sharedD3D12CommandAllocator.get(), nullptr));
 
 	// Execute XeSS upscaling on D3D12 using shared resources
 	xess_d3d12_execute_params_t execParams{};
-	execParams.pColorTexture = inputColorTexture->resource.get();
+	execParams.pColorTexture = upscaling->inputColorBufferShared12->resource.get();
 	execParams.pVelocityTexture = upscaling->motionVectorBufferShared12->resource.get();
 	execParams.pDepthTexture = upscaling->depthBufferShared12->resource.get();
 	execParams.pExposureScaleTexture = nullptr;
 	execParams.pResponsivePixelMaskTexture = upscaling->reactiveMaskBufferShared12->resource.get();
-	execParams.pOutputTexture = outputColorTexture->resource.get();
+	execParams.pOutputTexture = upscaling->outputColorBufferShared12->resource.get();
 	execParams.jitterOffsetX = -a_jitter.x;
 	execParams.jitterOffsetY = -a_jitter.y;
 	execParams.exposureScale = 1.0f;
@@ -207,15 +169,11 @@ void XeSS::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTextu
 	ID3D12CommandList* commandLists[] = { upscaling->sharedD3D12CommandList.get() };
 	upscaling->sharedD3D12CommandQueue->ExecuteCommandLists(1, commandLists);
 
-	// Signal fence and wait for completion using shared resources
-	upscaling->sharedFenceValue++;
-	DX::ThrowIfFailed(upscaling->sharedD3D12CommandQueue->Signal(upscaling->sharedD3D12Fence.get(), upscaling->sharedFenceValue));
-
-	if (upscaling->sharedD3D12Fence->GetCompletedValue() < upscaling->sharedFenceValue) {
-		DX::ThrowIfFailed(upscaling->sharedD3D12Fence->SetEventOnCompletion(upscaling->sharedFenceValue, upscaling->sharedFenceEvent));
-		WaitForSingleObject(upscaling->sharedFenceEvent, INFINITE);
-	}
+	// Wait for D3D12 to finish
+	DX::ThrowIfFailed(upscaling->sharedD3D12CommandQueue->Signal(d3d12Fence.get(), fenceValue));
+	DX::ThrowIfFailed(d3d11Context4->Wait(d3d11Fence.get(), fenceValue));
+	fenceValue++;
 
 	// Copy output texture from D3D12 back to D3D11
-	globals::d3d::context->CopyResource(a_outputTexture, outputColorTexture->resource11);
+	globals::d3d::context->CopyResource(a_outputTexture, upscaling->outputColorBufferShared12->resource11);
 }
