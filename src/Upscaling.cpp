@@ -527,11 +527,7 @@ void Upscaling::DestroyUpscalingResources()
 void Upscaling::CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter)
 {
 	// Create D3D12 device on same adapter
-	HRESULT hr = D3D12CreateDevice(a_dxgiAdapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&sharedD3D12Device));
-	if (FAILED(hr)) {
-		logger::error("[Upscaling] Failed to create shared D3D12 device: 0x{:X}", hr);
-		return;
-	}
+	DX::ThrowIfFailed(D3D12CreateDevice(a_dxgiAdapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&sharedD3D12Device)));
 
 	// Create command queue
 	D3D12_COMMAND_QUEUE_DESC queueDesc = {};
@@ -540,52 +536,20 @@ void Upscaling::CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter)
 	queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
 	queueDesc.NodeMask = 0;
 
-	hr = sharedD3D12Device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&sharedD3D12CommandQueue));
-	if (FAILED(hr)) {
-		logger::error("[Upscaling] Failed to create shared D3D12 command queue: 0x{:X}", hr);
-		sharedD3D12Device = nullptr;
-		return;
-	}
+	DX::ThrowIfFailed(sharedD3D12Device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&sharedD3D12CommandQueue)));
 
 	// Create command allocator
-	hr = sharedD3D12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&sharedD3D12CommandAllocator));
-	if (FAILED(hr)) {
-		logger::error("[Upscaling] Failed to create shared D3D12 command allocator: 0x{:X}", hr);
-		sharedD3D12CommandQueue = nullptr;
-		sharedD3D12Device = nullptr;
-		return;
-	}
+	DX::ThrowIfFailed(sharedD3D12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&sharedD3D12CommandAllocator)));
 
 	// Create command list
-	hr = sharedD3D12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, sharedD3D12CommandAllocator.get(), nullptr, IID_PPV_ARGS(&sharedD3D12CommandList));
-	if (FAILED(hr)) {
-		logger::error("[Upscaling] Failed to create shared D3D12 command list: 0x{:X}", hr);
-		sharedD3D12CommandAllocator = nullptr;
-		sharedD3D12CommandQueue = nullptr;
-		sharedD3D12Device = nullptr;
-		return;
-	}
+	DX::ThrowIfFailed(sharedD3D12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, sharedD3D12CommandAllocator.get(), nullptr, IID_PPV_ARGS(&sharedD3D12CommandList)));
 
 	// Create fence for synchronization
-	hr = sharedD3D12Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&sharedD3D12Fence));
-	if (FAILED(hr)) {
-		logger::error("[Upscaling] Failed to create shared D3D12 fence: 0x{:X}", hr);
-		sharedD3D12CommandList = nullptr;
-		sharedD3D12CommandAllocator = nullptr;
-		sharedD3D12CommandQueue = nullptr;
-		sharedD3D12Device = nullptr;
-		return;
-	}
+	DX::ThrowIfFailed(sharedD3D12Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&sharedD3D12Fence)));
 
 	sharedFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 	if (sharedFenceEvent == nullptr) {
-		logger::error("[Upscaling] Failed to create shared fence event");
-		sharedD3D12Fence = nullptr;
-		sharedD3D12CommandList = nullptr;
-		sharedD3D12CommandAllocator = nullptr;
-		sharedD3D12CommandQueue = nullptr;
-		sharedD3D12Device = nullptr;
-		return;
+		throw std::runtime_error("Failed to create shared fence event");
 	}
 
 	// Close initial command list

@@ -129,17 +129,11 @@ void XeSS::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTextu
 	if (!inputColorTexture) {
 		// Get D3D11 device5 interface for WrappedResource creation
 		winrt::com_ptr<ID3D11Device5> d3d11Device5;
-		if (FAILED(globals::d3d::device->QueryInterface(IID_PPV_ARGS(&d3d11Device5)))) {
-			logger::error("[XeSS] Failed to get ID3D11Device5 interface");
-			return;
-		}
+		DX::ThrowIfFailed(globals::d3d::device->QueryInterface(IID_PPV_ARGS(&d3d11Device5)));
 
 		// Get texture description from input texture
 		winrt::com_ptr<ID3D11Texture2D> inputTexture2D;
-		if (FAILED(a_inputTexture->QueryInterface(IID_PPV_ARGS(&inputTexture2D)))) {
-			logger::error("[XeSS] Input texture is not a 2D texture");
-			return;
-		}
+		DX::ThrowIfFailed(a_inputTexture->QueryInterface(IID_PPV_ARGS(&inputTexture2D)));
 		
 		D3D11_TEXTURE2D_DESC inputDesc;
 		inputTexture2D->GetDesc(&inputDesc);
@@ -151,17 +145,11 @@ void XeSS::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTextu
 	if (!outputColorTexture) {
 		// Get D3D11 device5 interface for WrappedResource creation
 		winrt::com_ptr<ID3D11Device5> d3d11Device5;
-		if (FAILED(globals::d3d::device->QueryInterface(IID_PPV_ARGS(&d3d11Device5)))) {
-			logger::error("[XeSS] Failed to get ID3D11Device5 interface");
-			return;
-		}
+		DX::ThrowIfFailed(globals::d3d::device->QueryInterface(IID_PPV_ARGS(&d3d11Device5)));
 
 		// Get texture description from output texture
 		winrt::com_ptr<ID3D11Texture2D> outputTexture2D;
-		if (FAILED(a_outputTexture->QueryInterface(IID_PPV_ARGS(&outputTexture2D)))) {
-			logger::error("[XeSS] Output texture is not a 2D texture");
-			return;
-		}
+		DX::ThrowIfFailed(a_outputTexture->QueryInterface(IID_PPV_ARGS(&outputTexture2D)));
 		
 		D3D11_TEXTURE2D_DESC outputDesc;
 		outputTexture2D->GetDesc(&outputDesc);
@@ -180,17 +168,9 @@ void XeSS::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTextu
 	globals::d3d::context->Flush();
 
 	// Reset command allocator and list from shared resources
-	HRESULT hr = upscaling->sharedD3D12CommandAllocator->Reset();
-	if (FAILED(hr)) {
-		logger::error("[XeSS] Failed to reset shared command allocator: 0x{:X}", hr);
-		return;
-	}
+	DX::ThrowIfFailed(upscaling->sharedD3D12CommandAllocator->Reset());
 
-	hr = upscaling->sharedD3D12CommandList->Reset(upscaling->sharedD3D12CommandAllocator.get(), nullptr);
-	if (FAILED(hr)) {
-		logger::error("[XeSS] Failed to reset shared command list: 0x{:X}", hr);
-		return;
-	}
+	DX::ThrowIfFailed(upscaling->sharedD3D12CommandList->Reset(upscaling->sharedD3D12CommandAllocator.get(), nullptr));
 
 	// Execute XeSS upscaling on D3D12 using shared resources
 	xess_d3d12_execute_params_t execParams{};
@@ -222,29 +202,17 @@ void XeSS::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTextu
 	}
 
 	// Close and execute command list using shared resources
-	hr = upscaling->sharedD3D12CommandList->Close();
-	if (FAILED(hr)) {
-		logger::error("[XeSS] Failed to close shared command list: 0x{:X}", hr);
-		return;
-	}
+	DX::ThrowIfFailed(upscaling->sharedD3D12CommandList->Close());
 
 	ID3D12CommandList* commandLists[] = { upscaling->sharedD3D12CommandList.get() };
 	upscaling->sharedD3D12CommandQueue->ExecuteCommandLists(1, commandLists);
 
 	// Signal fence and wait for completion using shared resources
 	upscaling->sharedFenceValue++;
-	hr = upscaling->sharedD3D12CommandQueue->Signal(upscaling->sharedD3D12Fence.get(), upscaling->sharedFenceValue);
-	if (FAILED(hr)) {
-		logger::error("[XeSS] Failed to signal shared fence: 0x{:X}", hr);
-		return;
-	}
+	DX::ThrowIfFailed(upscaling->sharedD3D12CommandQueue->Signal(upscaling->sharedD3D12Fence.get(), upscaling->sharedFenceValue));
 
 	if (upscaling->sharedD3D12Fence->GetCompletedValue() < upscaling->sharedFenceValue) {
-		hr = upscaling->sharedD3D12Fence->SetEventOnCompletion(upscaling->sharedFenceValue, upscaling->sharedFenceEvent);
-		if (FAILED(hr)) {
-			logger::error("[XeSS] Failed to set shared fence event: 0x{:X}", hr);
-			return;
-		}
+		DX::ThrowIfFailed(upscaling->sharedD3D12Fence->SetEventOnCompletion(upscaling->sharedFenceValue, upscaling->sharedFenceEvent));
 		WaitForSingleObject(upscaling->sharedFenceEvent, INFINITE);
 	}
 
