@@ -5,13 +5,11 @@
 #include "DX12SwapChain.h"
 #include <d3d12.h>
 #include <dxgi1_4.h>
-#include <wrl/client.h>
+#include <winrt/base.h>
 
 // Include XeSS headers
 #include <xess/xess.h>
 #include <xess/xess_d3d12.h>
-
-using Microsoft::WRL::ComPtr;
 
 // XeSS function pointers - matching exact signatures from xess.h and xess_d3d12.h
 typedef xess_result_t (*xessGetVersionPtr)(xess_version_t* pVersion);
