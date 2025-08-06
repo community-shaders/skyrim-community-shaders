@@ -265,6 +265,10 @@ void FidelityFX::Upscale(
 
 	dispatchUpscale.cameraFar = *globals::game::cameraFar;
 	dispatchUpscale.cameraNear = *globals::game::cameraNear;
+
+	dispatchUpscale.viewSpaceToMetersFactor = 0.01428222656f;
+
+	dispatchUpscale.flags = FFX_UPSCALE_FLAG_NON_LINEAR_COLOR_SRGB;
 	
 	if (ffx::Dispatch(upscalingContext, dispatchUpscale) != ffx::ReturnCode::Ok)
 		logger::critical("[FidelityFX] Failed to upscale");

@@ -785,11 +785,6 @@ void Upscaling::CopyToSharedIntermediaryTextures(
 	ID3D12Resource* a_depthTexture
 )
 {
-	if (!sharedInputColorTexture || !sharedMotionVectorTexture || !sharedDepthTexture || !sharedOutputColorTexture) {
-		logger::error("[Upscaling] Shared intermediary textures not created");
-		return;
-	}
-
 	// Batch all resource barriers for maximum efficiency
 	D3D12_RESOURCE_BARRIER barriers[10] = {};
 	UINT barrierCount = 0;
@@ -831,11 +826,6 @@ void Upscaling::CopyFromSharedIntermediaryTexture(
 	ID3D12Resource* a_outputColorTexture
 )
 {
-	if (!sharedOutputColorTexture) {
-		logger::error("[Upscaling] Shared output intermediary texture not created");
-		return;
-	}
-
 	// Batch resource barriers for efficiency
 	D3D12_RESOURCE_BARRIER barriers[4] = {};
 	UINT barrierCount = 0;
