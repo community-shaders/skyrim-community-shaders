@@ -468,6 +468,16 @@ void Upscaling::CreateUpscalingResources()
 	rasterizerDesc.MultisampleEnable = false;
 	rasterizerDesc.AntialiasedLineEnable = false;
 	DX::ThrowIfFailed(globals::d3d::device->CreateRasterizerState(&rasterizerDesc, &depthUpscaleRasterizerState));
+
+	// Create shared D3D11/D3D12 fences for synchronization
+	winrt::com_ptr<ID3D11Device5> d3d11Device5;
+	DX::ThrowIfFailed(globals::d3d::device->QueryInterface(IID_PPV_ARGS(&d3d11Device5)));
+
+	HANDLE sharedFenceHandle;
+	DX::ThrowIfFailed(sharedD3D12Device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&sharedD3D12Fence)));
+	DX::ThrowIfFailed(sharedD3D12Device->CreateSharedHandle(sharedD3D12Fence.get(), nullptr, GENERIC_ALL, nullptr, &sharedFenceHandle));
+	DX::ThrowIfFailed(d3d11Device5->OpenSharedFence(sharedFenceHandle, IID_PPV_ARGS(&sharedD3D11Fence)));
+	CloseHandle(sharedFenceHandle);
 }
 
 void Upscaling::DestroyUpscalingResources()
@@ -612,7 +622,7 @@ void Upscaling::CopyFrameGenerationResources()
 	if (!d3d12Interop || !settings.frameGenerationMode)
 		return;
 
-	CopySharedResources();
+	CopySharedD3D12Resources();
 
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
@@ -627,7 +637,7 @@ void Upscaling::CopyFrameGenerationResources()
 	useHUDLess = false;
 }
 
-void Upscaling::CopySharedResources()
+void Upscaling::CopySharedD3D12Resources()
 {
 	// Only copy once per frame for all upscaling systems (XeSS, Frame Generation, etc.)
 	if (!sharedResourcesFrameChecker.IsNewFrame())
@@ -876,8 +886,79 @@ void Upscaling::Upscale()
 			globals::streamline->Upscale(main.texture, upscalingTexture->resource.get(), reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), (sl::DLSSPreset)11u);
 		else if (upscaleMethod == UpscaleMethod::kFSR)
 			globals::fidelityFX->Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), jitter, settings.sharpness);
-		else if (upscaleMethod == UpscaleMethod::kXESS)
-			globals::xess->Upscale(main.texture, jitter);
+		else if (upscaleMethod == UpscaleMethod::kXESS) {
+
+			CopySharedD3D12Resources();
+
+			// Copy input color texture to shared D3D12 resource (only dynamic resolution area)
+			auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
+			D3D11_BOX srcBox = {};
+			srcBox.left = 0;
+			srcBox.top = 0;
+			srcBox.front = 0;
+			srcBox.right = (UINT)renderSize.x;
+			srcBox.bottom = (UINT)renderSize.y;
+			srcBox.back = 1;
+
+			context->CopySubresourceRegion(inputColorBufferShared12->resource11, 0, 0, 0, 0, main.texture, 0, &srcBox);
+
+			// Wait for D3D11 to finish
+			winrt::com_ptr<ID3D11DeviceContext4> d3d11Context4;
+			DX::ThrowIfFailed(context->QueryInterface(IID_PPV_ARGS(&d3d11Context4)));
+			DX::ThrowIfFailed(d3d11Context4->Signal(sharedD3D11Fence.get(), sharedFenceValue));
+			DX::ThrowIfFailed(sharedD3D12CommandQueue->Wait(sharedD3D12Fence.get(), sharedFenceValue));
+			sharedFenceValue++;
+
+			// Reset command allocator and list
+			DX::ThrowIfFailed(sharedD3D12CommandAllocator->Reset());
+			DX::ThrowIfFailed(sharedD3D12CommandList->Reset(sharedD3D12CommandAllocator.get(), nullptr));
+
+			// Transition input resources to NON_PIXEL_SHADER_RESOURCE state and output to UNORDERED_ACCESS state
+			{
+				std::vector<D3D12_RESOURCE_BARRIER> barriers;
+				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(inputColorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(motionVectorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(depthBufferShared12->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(reactiveMaskBufferShared12->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(outputColorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+				sharedD3D12CommandList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+			}
+
+			// Execute XeSS upscaling
+			globals::xess->Upscale(
+				inputColorBufferShared12->resource.get(),
+				motionVectorBufferShared12->resource.get(),
+				depthBufferShared12->resource.get(),
+				reactiveMaskBufferShared12->resource.get(),
+				outputColorBufferShared12->resource.get(),
+				sharedD3D12CommandList.get(),
+				(uint32_t)renderSize.x,
+				(uint32_t)renderSize.y,
+				jitter
+			);
+
+			// Transition resources back to COMMON state
+			{
+				std::vector<D3D12_RESOURCE_BARRIER> barriers;
+				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(inputColorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON));
+				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(motionVectorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON));
+				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(depthBufferShared12->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON));
+				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(reactiveMaskBufferShared12->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON));
+				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(outputColorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON));
+				sharedD3D12CommandList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+			}
+
+			// Close and execute command list
+			DX::ThrowIfFailed(sharedD3D12CommandList->Close());
+
+			ID3D12CommandList* commandLists[] = { sharedD3D12CommandList.get() };
+			sharedD3D12CommandQueue->ExecuteCommandLists(1, commandLists);
+
+			// Wait for D3D12 to finish
+			DX::ThrowIfFailed(sharedD3D12CommandQueue->Signal(sharedD3D12Fence.get(), sharedFenceValue));
+			DX::ThrowIfFailed(d3d11Context4->Wait(sharedD3D11Fence.get(), sharedFenceValue));
+			sharedFenceValue++;
+		}
 
 		state->EndPerfEvent();
 	}

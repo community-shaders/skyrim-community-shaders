@@ -46,16 +46,21 @@ public:
 
 	bool featureXeSS = false;  // whether enabled
 
-	// D3D11/D3D12 shared fence for synchronization
-	winrt::com_ptr<ID3D11Fence> d3d11Fence;
-	winrt::com_ptr<ID3D12Fence> d3d12Fence;
-	UINT64 fenceValue = 0;
-
 	// Cached DLL version info for XeSS plugin directory
 	static std::vector<std::pair<std::string, std::string>> dllVersions;
 
 	void LoadXeSS();
 	void CreateXeSSResources();
 	void DestroyXeSSResources();
-	void Upscale(ID3D11Resource* a_inputTexture, float2 a_jitter);
+	void Upscale(
+		ID3D12Resource* a_inputColorTexture,
+		ID3D12Resource* a_motionVectorTexture,
+		ID3D12Resource* a_depthTexture,
+		ID3D12Resource* a_reactiveMaskTexture,
+		ID3D12Resource* a_outputTexture,
+		ID3D12GraphicsCommandList* a_commandList,
+		uint32_t a_renderWidth,
+		uint32_t a_renderHeight,
+		float2 a_jitter
+	);
 };

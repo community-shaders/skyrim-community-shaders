@@ -78,16 +78,6 @@ void XeSS::CreateXeSSResources()
 		logger::critical("[XeSS] Failed to initialize XeSS context!");
 		return;
 	}
-
-	// Create shared D3D11/D3D12 fences for synchronization
-	winrt::com_ptr<ID3D11Device5> d3d11Device5;
-	DX::ThrowIfFailed(globals::d3d::device->QueryInterface(IID_PPV_ARGS(&d3d11Device5)));
-
-	HANDLE sharedFenceHandle;
-	DX::ThrowIfFailed(upscaling->sharedD3D12Device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&d3d12Fence)));
-	DX::ThrowIfFailed(upscaling->sharedD3D12Device->CreateSharedHandle(d3d12Fence.get(), nullptr, GENERIC_ALL, nullptr, &sharedFenceHandle));
-	DX::ThrowIfFailed(d3d11Device5->OpenSharedFence(sharedFenceHandle, IID_PPV_ARGS(&d3d11Fence)));
-	CloseHandle(sharedFenceHandle);
 }
 
 void XeSS::DestroyXeSSResources()
@@ -101,27 +91,20 @@ void XeSS::DestroyXeSSResources()
 	}
 }
 
-void XeSS::Upscale(ID3D11Resource* a_inputTexture, float2 a_jitter)
+void XeSS::Upscale(
+	ID3D12Resource* a_inputColorTexture,
+	ID3D12Resource* a_motionVectorTexture,
+	ID3D12Resource* a_depthTexture,
+	ID3D12Resource* a_reactiveMaskTexture,
+	ID3D12Resource* a_outputTexture,
+	ID3D12GraphicsCommandList* a_commandList,
+	uint32_t a_renderWidth,
+	uint32_t a_renderHeight,
+	float2 a_jitter
+)
 {
-	auto upscaling = globals::upscaling;
-	auto state = globals::state;
-	auto renderSize = Util::ConvertToDynamic(state->screenSize);
-
-	upscaling->CopySharedResources();
-
-	// Input textures are already copied to shared resources by the main upscaling system
-	// We just need to set the scales and copy the input color and reactive mask to the shared textures
-	D3D11_BOX srcBox = {};
-	srcBox.left = 0;
-	srcBox.top = 0;
-	srcBox.front = 0;
-	srcBox.right = (UINT)renderSize.x;
-	srcBox.bottom = (UINT)renderSize.y;
-	srcBox.back = 1;
-
-	globals::d3d::context->CopySubresourceRegion(upscaling->inputColorBufferShared12->resource11, 0, 0, 0, 0, a_inputTexture, 0, &srcBox);
-
-	if (xessSetVelocityScale(xessContext, renderSize.x, renderSize.y) != XESS_RESULT_SUCCESS) {
+	// Set velocity and jitter scales
+	if (xessSetVelocityScale(xessContext, (float)a_renderWidth, (float)a_renderHeight) != XESS_RESULT_SUCCESS) {
 		logger::warn("[XeSS] Failed to set velocity scale");
 	}
 
@@ -129,41 +112,20 @@ void XeSS::Upscale(ID3D11Resource* a_inputTexture, float2 a_jitter)
 		logger::warn("[XeSS] Failed to set jitter scale");
 	}
 
-	// Wait for D3D11 to finish
-	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context4;
-	DX::ThrowIfFailed(globals::d3d::context->QueryInterface(IID_PPV_ARGS(&d3d11Context4)));
-	DX::ThrowIfFailed(d3d11Context4->Signal(d3d11Fence.get(), fenceValue));
-	DX::ThrowIfFailed(upscaling->sharedD3D12CommandQueue->Wait(d3d12Fence.get(), fenceValue));
-	fenceValue++;
-
-	// Reset command allocator and list from shared resources
-	DX::ThrowIfFailed(upscaling->sharedD3D12CommandAllocator->Reset());
-	DX::ThrowIfFailed(upscaling->sharedD3D12CommandList->Reset(upscaling->sharedD3D12CommandAllocator.get(), nullptr));
-
-	// Transition input resources to NON_PIXEL_SHADER_RESOURCE state and output to UNORDERED_ACCESS state
-	{
-		std::vector<D3D12_RESOURCE_BARRIER> barriers;
-		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(upscaling->inputColorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
-		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(upscaling->motionVectorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
-		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(upscaling->depthBufferShared12->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
-		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(upscaling->reactiveMaskBufferShared12->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
-		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(upscaling->outputColorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
-		upscaling->sharedD3D12CommandList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
-	}
-
+	// XeSS execution parameters
 	xess_d3d12_execute_params_t execParams{};
-	execParams.pColorTexture = upscaling->inputColorBufferShared12->resource.get();
-	execParams.pVelocityTexture = upscaling->motionVectorBufferShared12->resource.get();
-	execParams.pDepthTexture = upscaling->depthBufferShared12->resource.get();
+	execParams.pColorTexture = a_inputColorTexture;
+	execParams.pVelocityTexture = a_motionVectorTexture;
+	execParams.pDepthTexture = a_depthTexture;
 	execParams.pExposureScaleTexture = nullptr;
-	execParams.pResponsivePixelMaskTexture = upscaling->reactiveMaskBufferShared12->resource.get();
-	execParams.pOutputTexture = upscaling->outputColorBufferShared12->resource.get();
+	execParams.pResponsivePixelMaskTexture = a_reactiveMaskTexture;
+	execParams.pOutputTexture = a_outputTexture;
 	execParams.jitterOffsetX = -a_jitter.x;
 	execParams.jitterOffsetY = -a_jitter.y;
 	execParams.exposureScale = 1.0f;
 	execParams.resetHistory = 0;
-	execParams.inputWidth = (uint32_t)renderSize.x;
-	execParams.inputHeight = (uint32_t)renderSize.y;
+	execParams.inputWidth = a_renderWidth;
+	execParams.inputHeight = a_renderHeight;
 	execParams.inputColorBase = { 0, 0 };
 	execParams.inputMotionVectorBase = { 0, 0 };
 	execParams.inputDepthBase = { 0, 0 };
@@ -173,33 +135,9 @@ void XeSS::Upscale(ID3D11Resource* a_inputTexture, float2 a_jitter)
 	execParams.pDescriptorHeap = nullptr;
 	execParams.descriptorHeapOffset = 0;
 
-	xess_result_t result = xessD3D12Execute(xessContext, upscaling->sharedD3D12CommandList.get(), &execParams);
+	xess_result_t result = xessD3D12Execute(xessContext, a_commandList, &execParams);
 	if (result != XESS_RESULT_SUCCESS) {
 		logger::error("[XeSS] Failed to execute XeSS upscaling, error code: {}", (int)result);
 		return;
 	}
-
-	// Transition resources back to COMMON state
-	{
-		std::vector<D3D12_RESOURCE_BARRIER> barriers;
-		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(upscaling->inputColorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON));
-		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(upscaling->motionVectorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON));
-		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(upscaling->depthBufferShared12->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON));
-		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(upscaling->reactiveMaskBufferShared12->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON));
-		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(upscaling->outputColorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON));
-		upscaling->sharedD3D12CommandList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
-	}
-
-	// Close and execute command list using shared resources
-	DX::ThrowIfFailed(upscaling->sharedD3D12CommandList->Close());
-
-	ID3D12CommandList* commandLists[] = { upscaling->sharedD3D12CommandList.get() };
-	upscaling->sharedD3D12CommandQueue->ExecuteCommandLists(1, commandLists);
-
-	// Wait for D3D12 to finish
-	DX::ThrowIfFailed(upscaling->sharedD3D12CommandQueue->Signal(d3d12Fence.get(), fenceValue));
-	DX::ThrowIfFailed(d3d11Context4->Wait(d3d11Fence.get(), fenceValue));
-	fenceValue++;
-
-	// outputColorBufferShared12 is copied back to the main buffer by the sharpening pass
 }

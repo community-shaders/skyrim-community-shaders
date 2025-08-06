@@ -120,6 +120,10 @@ public:
 	HANDLE sharedFenceEvent = nullptr;
 	UINT64 sharedFenceValue = 0;
 
+	// D3D11/D3D12 shared fence for interop synchronization (used by XeSS and other systems)
+	winrt::com_ptr<ID3D11Fence> sharedD3D11Fence;
+	UINT64 sharedInteropFenceValue = 0;
+
 	// Shared D3D12 resources for upscaling systems (using WrappedResource)
 	WrappedResource* HUDLessBufferShared12;
 	WrappedResource* depthBufferShared12;
@@ -139,7 +143,7 @@ public:
 	void CreateFrameGenerationResources();
 	void CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter);
 	void CopyFrameGenerationResources();
-	void CopySharedResources();
+	void CopySharedD3D12Resources();
 	void PostDisplay();
 	void PerformUpscaling();
 	void UpscaleDepth();
