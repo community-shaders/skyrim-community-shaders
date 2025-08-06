@@ -51,8 +51,6 @@ public:
 	winrt::com_ptr<ID3D12Resource> outputColorTexture;
 	winrt::com_ptr<ID3D12Resource> motionVectorTexture;
 	winrt::com_ptr<ID3D12Resource> depthTexture;
-	uint32_t lastRenderWidth = 0;
-	uint32_t lastRenderHeight = 0;
 
 	// Cached DLL version info for XeSS plugin directory
 	static std::vector<std::pair<std::string, std::string>> dllVersions;
@@ -62,7 +60,6 @@ public:
 	void DestroyXeSSResources();
 	void CreateD3D12IntermediaryTextures();
 	void DestroyD3D12IntermediaryTextures();
-	void CheckAndRecreateIntermediaryTextures();
 	void CopyToIntermediaryTextures(
 		ID3D12GraphicsCommandList* a_commandList,
 		ID3D12Resource* a_inputColorTexture,

@@ -887,9 +887,6 @@ void Upscaling::Upscale()
 
 			CopySharedD3D12Resources();
 
-			// Check and recreate intermediary textures if resolution changed
-			globals::xess->CheckAndRecreateIntermediaryTextures();
-
 			// Copy input color texture to shared D3D12 resource (only dynamic resolution area)
 			auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
 			D3D11_BOX srcBox = {};

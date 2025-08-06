@@ -150,17 +150,8 @@ void XeSS::Upscale(
 void XeSS::CreateD3D12IntermediaryTextures()
 {
 	auto upscaling = globals::upscaling;
-	if (!upscaling->sharedD3D12Device) {
-		logger::error("[XeSS] Cannot create D3D12 intermediary textures, shared D3D12 device not available");
-		return;
-	}
-
-	// Clean up any existing textures first
-	DestroyD3D12IntermediaryTextures();
-
 	auto state = globals::state;
 	auto screenSize = state->screenSize;
-//	auto renderSize = Util::ConvertToDynamic(screenSize);
 
 	D3D12_HEAP_PROPERTIES heapProps = {};
 	heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -185,7 +176,6 @@ void XeSS::CreateD3D12IntermediaryTextures()
 		nullptr,
 		IID_PPV_ARGS(&inputColorTexture)
 	));
-	inputColorTexture->SetName(L"XeSS_InputColorTexture");
 
 	// Output color texture (same as input)
 	DX::ThrowIfFailed(upscaling->sharedD3D12Device->CreateCommittedResource(
@@ -196,7 +186,6 @@ void XeSS::CreateD3D12IntermediaryTextures()
 		nullptr,
 		IID_PPV_ARGS(&outputColorTexture)
 	));
-	outputColorTexture->SetName(L"XeSS_OutputColorTexture");
 
 	// Motion vector texture (RG16F)
 	D3D12_RESOURCE_DESC motionVectorDesc = inputColorDesc;
@@ -210,7 +199,6 @@ void XeSS::CreateD3D12IntermediaryTextures()
 		nullptr,
 		IID_PPV_ARGS(&motionVectorTexture)
 	));
-	motionVectorTexture->SetName(L"XeSS_MotionVectorTexture");
 
 	// Depth texture (R16 or R32F)
 	D3D12_RESOURCE_DESC depthDesc = inputColorDesc;
@@ -227,11 +215,7 @@ void XeSS::CreateD3D12IntermediaryTextures()
 	));
 	depthTexture->SetName(L"XeSS_DepthTexture");
 
-	// Store current resolution
-	lastRenderWidth = (uint32_t)screenSize.x;
-	lastRenderHeight = (uint32_t)screenSize.y;
-
-	logger::info("[XeSS] Created D3D12 intermediary textures ({}x{}) for improved performance", lastRenderWidth, lastRenderHeight);
+	logger::info("[XeSS] Created D3D12 intermediary textures ({}x{}) for improved performance", (uint32_t)screenSize.x, (uint32_t)screenSize.y);
 }
 
 void XeSS::DestroyD3D12IntermediaryTextures()
@@ -240,27 +224,6 @@ void XeSS::DestroyD3D12IntermediaryTextures()
 	outputColorTexture = nullptr;
 	motionVectorTexture = nullptr;
 	depthTexture = nullptr;
-	lastRenderWidth = 0;
-	lastRenderHeight = 0;
-}
-
-void XeSS::CheckAndRecreateIntermediaryTextures()
-{
-	if (!featureXeSS)
-		return;
-
-	auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
-	uint32_t currentWidth = (uint32_t)renderSize.x;
-	uint32_t currentHeight = (uint32_t)renderSize.y;
-
-	// Check if resolution has changed or textures don't exist
-	if (!inputColorTexture || !outputColorTexture || !motionVectorTexture || !depthTexture ||
-		currentWidth != lastRenderWidth || currentHeight != lastRenderHeight) {
-		
-		logger::info("[XeSS] Resolution changed from {}x{} to {}x{}, recreating intermediary textures", 
-			lastRenderWidth, lastRenderHeight, currentWidth, currentHeight);
-		CreateD3D12IntermediaryTextures();
-	}
 }
 
 void XeSS::CopyToIntermediaryTextures(
