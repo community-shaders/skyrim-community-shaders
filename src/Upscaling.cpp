@@ -33,7 +33,7 @@ void Upscaling::DrawSettings()
 	settings.upscaleMethod = bTAA ? (settings.upscaleMethod == (uint)UpscaleMethod::kNONE ? (uint)UpscaleMethod::kTAA : settings.upscaleMethod) : (uint)UpscaleMethod::kNONE;
 
 	// Display upscaling options in the UI
-	const char* upscaleModes[] = { "Disabled", "Temporal Anti-Aliasing", "AMD FSR 3.1", "NVIDIA DLSS", "Intel XeSS" };
+	const char* upscaleModes[] = { "Disabled", "Temporal Anti-Aliasing", "AMD FSR 3.1", "Intel XeSS", "NVIDIA DLSS"};
 
 	// Determine available modes
 	bool featureDLSS = streamline->featureDLSS;
@@ -47,7 +47,7 @@ void Upscaling::DrawSettings()
 		availableModes = 3;
 	} else {
 		currentUpscaleMode = &settings.upscaleMethodNothing;
-		availableModes = 2;
+		availableModes = 1;
 	}
 	
 	// Slider for method selection
@@ -90,8 +90,6 @@ void Upscaling::DrawSettings()
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
 			ImGui::SliderInt("Upscale Preset", (int*)&settings.upscalePreset, 0, 3, std::format("{}", upscalePresetsDLSS[3 - settings.upscalePreset]).c_str());
-		else if (upscaleMethod == UpscaleMethod::kXESS)
-			ImGui::SliderInt("Upscale Preset", (int*)&settings.upscalePreset, 0, 3, std::format("{}", upscalePresets[3 - settings.upscalePreset]).c_str());
 		else
 			ImGui::SliderInt("Upscale Preset", (int*)&settings.upscalePreset, 0, 3, std::format("{}", upscalePresets[3 - settings.upscalePreset]).c_str());
 		
@@ -234,10 +232,14 @@ void Upscaling::RestoreDefaultSettings()
 
 Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
 {
-	if (globals::streamline->featureDLSS)
+	if (globals::streamline->featureDLSS) {
+		settings.upscaleMethod = std::clamp(settings.upscaleMethod, 0u, 4u);
 		return (Upscaling::UpscaleMethod)settings.upscaleMethod;
-	else if (globals::state->featureLevel == D3D_FEATURE_LEVEL_11_1)
+	} else if (globals::state->featureLevel == D3D_FEATURE_LEVEL_11_1) {
+		settings.upscaleMethodNoDLSS = std::clamp(settings.upscaleMethodNoDLSS, 0u, 3u);
 		return (Upscaling::UpscaleMethod)settings.upscaleMethodNoDLSS;
+	}
+	settings.upscaleMethodNothing = std::clamp(settings.upscaleMethodNothing, 0u, 1u);
 	return (Upscaling::UpscaleMethod)settings.upscaleMethodNothing;
 }
 
@@ -697,7 +699,7 @@ void Upscaling::CreateSharedIntermediaryTextures()
 	inputColorDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 	inputColorDesc.SampleDesc.Count = 1;
 	inputColorDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-	inputColorDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+	inputColorDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
 	DX::ThrowIfFailed(sharedD3D12Device->CreateCommittedResource(
 		&heapProps,
@@ -707,6 +709,8 @@ void Upscaling::CreateSharedIntermediaryTextures()
 		nullptr,
 		IID_PPV_ARGS(&sharedInputColorTexture)
 	));
+
+	inputColorDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 
 	// Output color texture (same as input)
 	DX::ThrowIfFailed(sharedD3D12Device->CreateCommittedResource(
@@ -721,6 +725,7 @@ void Upscaling::CreateSharedIntermediaryTextures()
 	// Motion vector texture (RG16F)
 	D3D12_RESOURCE_DESC motionVectorDesc = inputColorDesc;
 	motionVectorDesc.Format = DXGI_FORMAT_R16G16_FLOAT;
+	motionVectorDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
 	DX::ThrowIfFailed(sharedD3D12Device->CreateCommittedResource(
 		&heapProps,
@@ -734,7 +739,7 @@ void Upscaling::CreateSharedIntermediaryTextures()
 	// Depth texture (R16_UNORM)
 	D3D12_RESOURCE_DESC depthDesc = inputColorDesc;
 	depthDesc.Format = DXGI_FORMAT_R16_UNORM;
-	depthDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+	depthDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
 	DX::ThrowIfFailed(sharedD3D12Device->CreateCommittedResource(
 		&heapProps,

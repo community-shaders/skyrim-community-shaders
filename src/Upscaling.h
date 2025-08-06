@@ -31,8 +31,8 @@ public:
 		kNONE,
 		kTAA,
 		kFSR,
-		kDLSS,
-		kXESS
+		kXESS,
+		kDLSS
 	};
 
 	struct Settings
