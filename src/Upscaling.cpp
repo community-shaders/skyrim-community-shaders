@@ -356,14 +356,15 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	auto upscaleMethod = GetUpscaleMethod();
 
 	// The game defaults this to a non-zero value
-	static float* clampOffset = (float*)REL::RelocationID(512203, 389038).address();
-	*clampOffset = 0;
+	auto fDRClampOffset = RE::GetINISetting("fDRClampOffset:Display");
+	fDRClampOffset->data.f = 0.0f;
 
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
 
-	bool* boolPtr = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISTemporalAA) + 0x38LL);
-	*boolPtr = upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA;
+	// Disable water TAA when upscaling is enabled
+	bool* enableWaterTAA = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISTemporalAA) + 0x38LL);
+	*enableWaterTAA = upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA;
 
 	if (upscaleMethod != UpscaleMethod::kNONE) {		
 
