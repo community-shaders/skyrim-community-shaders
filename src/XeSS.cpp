@@ -117,9 +117,17 @@ void XeSS::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTextu
 		logger::warn("[XeSS] Failed to set jitter scale");
 	}
 
-	// Copy input textures to D3D12
-	globals::d3d::context->CopyResource(upscaling->inputColorBufferShared12->resource11, a_inputTexture);
-	globals::d3d::context->CopyResource(upscaling->reactiveMaskBufferShared12->resource11, a_reactiveMask);
+	// Copy input textures to D3D12 (only the dynamic resolution area)
+	D3D11_BOX srcBox = {};
+	srcBox.left = 0;
+	srcBox.top = 0;
+	srcBox.front = 0;
+	srcBox.right = (UINT)renderSize.x;
+	srcBox.bottom = (UINT)renderSize.y;
+	srcBox.back = 1;
+
+	globals::d3d::context->CopySubresourceRegion(upscaling->inputColorBufferShared12->resource11, 0, 0, 0, 0, a_inputTexture, 0, &srcBox);
+	globals::d3d::context->CopySubresourceRegion(upscaling->reactiveMaskBufferShared12->resource11, 0, 0, 0, 0, a_reactiveMask, 0, &srcBox);
 
 	// Wait for D3D11 to finish
 	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context4;

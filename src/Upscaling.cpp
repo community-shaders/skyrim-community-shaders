@@ -634,7 +634,18 @@ void Upscaling::CopySharedResources()
 
 	{
 		auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-		context->CopyResource(motionVectorBufferShared12->resource11, motionVector.texture);
+		
+		// Copy only the dynamic resolution area
+		auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
+		D3D11_BOX srcBox = {};
+		srcBox.left = 0;
+		srcBox.top = 0;
+		srcBox.front = 0;
+		srcBox.right = (UINT)renderSize.x;
+		srcBox.bottom = (UINT)renderSize.y;
+		srcBox.back = 1;
+		
+		context->CopySubresourceRegion(motionVectorBufferShared12->resource11, 0, 0, 0, 0, motionVector.texture, 0, &srcBox);
 	}
 
 	{
