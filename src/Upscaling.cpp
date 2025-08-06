@@ -887,6 +887,9 @@ void Upscaling::Upscale()
 
 			CopySharedD3D12Resources();
 
+			// Check and recreate intermediary textures if resolution changed
+			globals::xess->CheckAndRecreateIntermediaryTextures();
+
 			// Copy input color texture to shared D3D12 resource (only dynamic resolution area)
 			auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
 			D3D11_BOX srcBox = {};
@@ -910,16 +913,26 @@ void Upscaling::Upscale()
 			DX::ThrowIfFailed(sharedD3D12CommandAllocator->Reset());
 			DX::ThrowIfFailed(sharedD3D12CommandList->Reset(sharedD3D12CommandAllocator.get(), nullptr));
 
-			// Execute XeSS upscaling
-			globals::xess->Upscale(
+			// Copy from shared resources to D3D12-only intermediary textures for better performance
+			globals::xess->CopyToIntermediaryTextures(
+				sharedD3D12CommandList.get(),
 				inputColorBufferShared12->resource.get(),
 				motionVectorBufferShared12->resource.get(),
-				depthBufferShared12->resource.get(),
-				outputColorBufferShared12->resource.get(),
+				depthBufferShared12->resource.get()
+			);
+
+			// Execute XeSS upscaling using D3D12-only intermediary textures
+			globals::xess->UpscaleWithIntermediaries(
 				sharedD3D12CommandList.get(),
 				(uint32_t)renderSize.x,
 				(uint32_t)renderSize.y,
 				jitter
+			);
+
+			// Copy result back from intermediary texture to shared resource
+			globals::xess->CopyFromIntermediaryTexture(
+				sharedD3D12CommandList.get(),
+				outputColorBufferShared12->resource.get()
 			);
 
 			// Close and execute command list
