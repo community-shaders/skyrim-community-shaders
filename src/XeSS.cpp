@@ -63,8 +63,8 @@ void XeSS::CreateXeSSResources()
 	xess_d3d12_init_params_t initParams{};
 	initParams.outputResolution.x = (uint32_t)state->screenSize.x;
 	initParams.outputResolution.y = (uint32_t)state->screenSize.y;
-	initParams.qualitySetting = XESS_QUALITY_SETTING_AA;
-	initParams.initFlags = XESS_INIT_FLAG_RESPONSIVE_PIXEL_MASK | XESS_INIT_FLAG_ENABLE_AUTOEXPOSURE;
+	initParams.qualitySetting = XESS_QUALITY_SETTING_ULTRA_PERFORMANCE;
+	initParams.initFlags = XESS_INIT_FLAG_ENABLE_AUTOEXPOSURE;
 
 	initParams.creationNodeMask = 1;
 	initParams.visibleNodeMask = 1;
@@ -95,7 +95,6 @@ void XeSS::Upscale(
 	ID3D12Resource* a_inputColorTexture,
 	ID3D12Resource* a_motionVectorTexture,
 	ID3D12Resource* a_depthTexture,
-	ID3D12Resource* a_reactiveMaskTexture,
 	ID3D12Resource* a_outputTexture,
 	ID3D12GraphicsCommandList* a_commandList,
 	uint32_t a_renderWidth,
@@ -118,7 +117,7 @@ void XeSS::Upscale(
 	execParams.pVelocityTexture = a_motionVectorTexture;
 	execParams.pDepthTexture = a_depthTexture;
 	execParams.pExposureScaleTexture = nullptr;
-	execParams.pResponsivePixelMaskTexture = a_reactiveMaskTexture;
+	execParams.pResponsivePixelMaskTexture = nullptr;
 	execParams.pOutputTexture = a_outputTexture;
 	execParams.jitterOffsetX = -a_jitter.x;
 	execParams.jitterOffsetY = -a_jitter.y;

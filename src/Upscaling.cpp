@@ -359,6 +359,12 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	static float* clampOffset = (float*)REL::RelocationID(512203, 389038).address();
 	*clampOffset = 0;
 
+	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
+
+	bool* boolPtr = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISTemporalAA) + 0x38LL);
+	*boolPtr = upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA;
+
 	if (upscaleMethod != UpscaleMethod::kNONE) {		
 
 		if (allowUpscaling && upscaleMethod != UpscaleMethod::kTAA)
@@ -529,10 +535,6 @@ void Upscaling::DestroyUpscalingResources()
 		delete motionVectorBufferShared12;
 		motionVectorBufferShared12 = nullptr;
 	}
-	if (reactiveMaskBufferShared12) {
-		delete reactiveMaskBufferShared12;
-		reactiveMaskBufferShared12 = nullptr;
-	}
 
 	// Clean up shared D3D12 device resources
 	if (sharedFenceEvent) {
@@ -605,9 +607,8 @@ void Upscaling::CreateFrameGenerationResources()
 
 	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	HUDLessBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
-	reactiveMaskBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
 
-	texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+	texDesc.Format = DXGI_FORMAT_R16_UNORM;
 	depthBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
 
 	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
@@ -843,20 +844,20 @@ void Upscaling::Upscale()
 	auto dispatchCount = Util::GetScreenDispatchCount(true);
 
 	{
-		state->BeginPerfEvent("Alpha Mask");
+		state->BeginPerfEvent("Encode Upscaling Textures");
 
 		auto& temporalAAMask = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kTEMPORAL_AA_MASK];
 		auto& depthPreWater = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 		auto& depthPostWater = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
 		{
-			bool useTransparencyMask = upscaleMethod != UpscaleMethod::kXESS;
+			const bool useTransparencyMask = true;
 
 			ID3D11ShaderResourceView* views[3] = { temporalAAMask.SRV, depthPreWater.depthSRV, depthPostWater.depthSRV };
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
 			// Use shared D3D12 textures for XeSS, regular D3D11 textures for others
-			ID3D11UnorderedAccessView* reactiveMaskUAV = (upscaleMethod == UpscaleMethod::kXESS) ? reactiveMaskBufferShared12->uav : reactiveMaskTexture->uav.get();
+			ID3D11UnorderedAccessView* reactiveMaskUAV = reactiveMaskTexture->uav.get();
 			ID3D11UnorderedAccessView* transparencyUAV = useTransparencyMask ? transparencyCompositionMaskTexture->uav.get() : nullptr;
 			
 			ID3D11UnorderedAccessView* uavs[2] = { reactiveMaskUAV, transparencyUAV };
@@ -883,7 +884,7 @@ void Upscaling::Upscale()
 		state->BeginPerfEvent("Upscaling");
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			globals::streamline->Upscale(main.texture, upscalingTexture->resource.get(), reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), (sl::DLSSPreset)11u);
+			globals::streamline->Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), (sl::DLSSPreset)11u);
 		else if (upscaleMethod == UpscaleMethod::kFSR)
 			globals::fidelityFX->Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), jitter, settings.sharpness);
 		else if (upscaleMethod == UpscaleMethod::kXESS) {
@@ -913,40 +914,17 @@ void Upscaling::Upscale()
 			DX::ThrowIfFailed(sharedD3D12CommandAllocator->Reset());
 			DX::ThrowIfFailed(sharedD3D12CommandList->Reset(sharedD3D12CommandAllocator.get(), nullptr));
 
-			// Transition input resources to NON_PIXEL_SHADER_RESOURCE state and output to UNORDERED_ACCESS state
-			{
-				std::vector<D3D12_RESOURCE_BARRIER> barriers;
-				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(inputColorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
-				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(motionVectorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
-				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(depthBufferShared12->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
-				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(reactiveMaskBufferShared12->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
-				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(outputColorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
-				sharedD3D12CommandList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
-			}
-
 			// Execute XeSS upscaling
 			globals::xess->Upscale(
 				inputColorBufferShared12->resource.get(),
 				motionVectorBufferShared12->resource.get(),
 				depthBufferShared12->resource.get(),
-				reactiveMaskBufferShared12->resource.get(),
 				outputColorBufferShared12->resource.get(),
 				sharedD3D12CommandList.get(),
 				(uint32_t)renderSize.x,
 				(uint32_t)renderSize.y,
 				jitter
 			);
-
-			// Transition resources back to COMMON state
-			{
-				std::vector<D3D12_RESOURCE_BARRIER> barriers;
-				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(inputColorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON));
-				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(motionVectorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON));
-				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(depthBufferShared12->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON));
-				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(reactiveMaskBufferShared12->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON));
-				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(outputColorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON));
-				sharedD3D12CommandList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
-			}
 
 			// Close and execute command list
 			DX::ThrowIfFailed(sharedD3D12CommandList->Close());
@@ -958,39 +936,8 @@ void Upscaling::Upscale()
 			DX::ThrowIfFailed(sharedD3D12CommandQueue->Signal(sharedD3D12Fence.get(), sharedFenceValue));
 			DX::ThrowIfFailed(d3d11Context4->Wait(sharedD3D11Fence.get(), sharedFenceValue));
 			sharedFenceValue++;
-		}
 
-		state->EndPerfEvent();
-	}
-
-	if (upscaleMethod != UpscaleMethod::kFSR) {
-		state->BeginPerfEvent("Sharpening");
-
-		{
-			{
-				dispatchCount = Util::GetScreenDispatchCount(false);
-
-				// Use shared D3D12 texture for XeSS, regular D3D11 texture for DLSS
-				ID3D11ShaderResourceView* upscalingSRV = (upscaleMethod == UpscaleMethod::kXESS) ? outputColorBufferShared12->srv : upscalingTexture->srv.get();
-				ID3D11ShaderResourceView* views[1] = { upscalingSRV };
-				context->CSSetShaderResources(0, ARRAYSIZE(views), views);
-
-				ID3D11UnorderedAccessView* uavs[1] = { main.UAV };
-				context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
-
-				context->CSSetShader(GetRCASCS(), nullptr, 0);
-
-				context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
-			}
-
-			ID3D11ShaderResourceView* views[1] = { nullptr };
-			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
-
-			ID3D11UnorderedAccessView* uavs[1] = { nullptr };
-			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
-
-			ID3D11ComputeShader* shader = nullptr;
-			context->CSSetShader(shader, nullptr, 0);
+			context->CopyResource(main.texture, outputColorBufferShared12->resource11);
 		}
 
 		state->EndPerfEvent();
