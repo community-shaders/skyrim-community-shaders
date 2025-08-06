@@ -290,7 +290,7 @@ foreach(FEATURE_PATH ${FEATURE_PATHS})
 
 	get_filename_component(FEATURE ${FEATURE_PATH} NAME)
 	set(FEATURE_PACKAGE "${DIST_PATH}/${FEATURE}-${UTC_NOW}.7z")
-		
+
 	add_custom_command(OUTPUT ${FEATURE_PACKAGE}
 		COMMAND ${CMAKE_COMMAND} -E tar cfv ${FEATURE_PACKAGE} --format=7zip -- .
 		WORKING_DIRECTORY "${FEATURE_PATH}"
