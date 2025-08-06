@@ -53,7 +53,7 @@ void XeSS::CreateXeSSResources()
 
 	auto state = globals::state;
 
-	if (xessD3D12CreateContext(upscaling->sharedD3D12Device.Get(), &xessContext) != XESS_RESULT_SUCCESS) {
+	if (xessD3D12CreateContext(upscaling->sharedD3D12Device.get(), &xessContext) != XESS_RESULT_SUCCESS) {
 		logger::critical("[XeSS] Failed to create XeSS context!");
 		return;
 	}
@@ -128,14 +128,14 @@ void XeSS::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTextu
 	// Create shared textures dynamically from source textures if not already created
 	if (!inputColorTexture) {
 		// Get D3D11 device5 interface for WrappedResource creation
-		ComPtr<ID3D11Device5> d3d11Device5;
+		winrt::com_ptr<ID3D11Device5> d3d11Device5;
 		if (FAILED(globals::d3d::device->QueryInterface(IID_PPV_ARGS(&d3d11Device5)))) {
 			logger::error("[XeSS] Failed to get ID3D11Device5 interface");
 			return;
 		}
 
 		// Get texture description from input texture
-		ComPtr<ID3D11Texture2D> inputTexture2D;
+		winrt::com_ptr<ID3D11Texture2D> inputTexture2D;
 		if (FAILED(a_inputTexture->QueryInterface(IID_PPV_ARGS(&inputTexture2D)))) {
 			logger::error("[XeSS] Input texture is not a 2D texture");
 			return;
@@ -144,20 +144,20 @@ void XeSS::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTextu
 		D3D11_TEXTURE2D_DESC inputDesc;
 		inputTexture2D->GetDesc(&inputDesc);
 		inputDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
-		inputColorTexture = new WrappedResource(inputDesc, d3d11Device5.Get(), upscaling->sharedD3D12Device.Get());
+		inputColorTexture = new WrappedResource(inputDesc, d3d11Device5.get(), upscaling->sharedD3D12Device.get());
 		logger::debug("[XeSS] Created input color shared texture from source");
 	}
 	
 	if (!outputColorTexture) {
 		// Get D3D11 device5 interface for WrappedResource creation
-		ComPtr<ID3D11Device5> d3d11Device5;
+		winrt::com_ptr<ID3D11Device5> d3d11Device5;
 		if (FAILED(globals::d3d::device->QueryInterface(IID_PPV_ARGS(&d3d11Device5)))) {
 			logger::error("[XeSS] Failed to get ID3D11Device5 interface");
 			return;
 		}
 
 		// Get texture description from output texture
-		ComPtr<ID3D11Texture2D> outputTexture2D;
+		winrt::com_ptr<ID3D11Texture2D> outputTexture2D;
 		if (FAILED(a_outputTexture->QueryInterface(IID_PPV_ARGS(&outputTexture2D)))) {
 			logger::error("[XeSS] Output texture is not a 2D texture");
 			return;
@@ -166,7 +166,7 @@ void XeSS::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTextu
 		D3D11_TEXTURE2D_DESC outputDesc;
 		outputTexture2D->GetDesc(&outputDesc);
 		outputDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
-		outputColorTexture = new WrappedResource(outputDesc, d3d11Device5.Get(), upscaling->sharedD3D12Device.Get());
+		outputColorTexture = new WrappedResource(outputDesc, d3d11Device5.get(), upscaling->sharedD3D12Device.get());
 		logger::debug("[XeSS] Created output color shared texture from source");
 	}
 
@@ -186,7 +186,7 @@ void XeSS::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTextu
 		return;
 	}
 
-	hr = upscaling->sharedD3D12CommandList->Reset(upscaling->sharedD3D12CommandAllocator.Get(), nullptr);
+	hr = upscaling->sharedD3D12CommandList->Reset(upscaling->sharedD3D12CommandAllocator.get(), nullptr);
 	if (FAILED(hr)) {
 		logger::error("[XeSS] Failed to reset shared command list: 0x{:X}", hr);
 		return;
@@ -215,7 +215,7 @@ void XeSS::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTextu
 	execParams.pDescriptorHeap = nullptr;
 	execParams.descriptorHeapOffset = 0;
 
-	xess_result_t result = xessD3D12Execute(xessContext, upscaling->sharedD3D12CommandList.Get(), &execParams);
+	xess_result_t result = xessD3D12Execute(xessContext, upscaling->sharedD3D12CommandList.get(), &execParams);
 	if (result != XESS_RESULT_SUCCESS) {
 		logger::error("[XeSS] Failed to execute XeSS upscaling, error code: {}", (int)result);
 		return;
@@ -228,12 +228,12 @@ void XeSS::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTextu
 		return;
 	}
 
-	ID3D12CommandList* commandLists[] = { upscaling->sharedD3D12CommandList.Get() };
+	ID3D12CommandList* commandLists[] = { upscaling->sharedD3D12CommandList.get() };
 	upscaling->sharedD3D12CommandQueue->ExecuteCommandLists(1, commandLists);
 
 	// Signal fence and wait for completion using shared resources
 	upscaling->sharedFenceValue++;
-	hr = upscaling->sharedD3D12CommandQueue->Signal(upscaling->sharedD3D12Fence.Get(), upscaling->sharedFenceValue);
+	hr = upscaling->sharedD3D12CommandQueue->Signal(upscaling->sharedD3D12Fence.get(), upscaling->sharedFenceValue);
 	if (FAILED(hr)) {
 		logger::error("[XeSS] Failed to signal shared fence: 0x{:X}", hr);
 		return;

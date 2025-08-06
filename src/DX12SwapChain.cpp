@@ -52,7 +52,7 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	ffxSwapChainDesc.desc = &swapChainDesc;
 	ffxSwapChainDesc.dxgiFactory = dxgiFactory;
 	ffxSwapChainDesc.fullscreenDesc = nullptr;
-	ffxSwapChainDesc.gameQueue = upscaling->sharedD3D12CommandQueue.Get();
+	ffxSwapChainDesc.gameQueue = upscaling->sharedD3D12CommandQueue.get();
 	ffxSwapChainDesc.hwnd = a_swapChainDesc.OutputWindow;
 	ffxSwapChainDesc.swapchain = &swapChain;
 
@@ -99,7 +99,7 @@ void DX12SwapChain::CreateInterop()
 	texDesc11.CPUAccessFlags = 0;
 	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
-	swapChainBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), upscaling->sharedD3D12Device.Get());
+	swapChainBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), upscaling->sharedD3D12Device.get());
 }
 
 DXGISwapChainProxy* DX12SwapChain::GetSwapChainProxy()

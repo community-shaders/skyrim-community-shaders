@@ -59,7 +59,7 @@ void FidelityFX::SetupFrameGeneration()
 	createFg.backBufferFormat = ffxApiGetSurfaceFormatDX12(swapChain->swapChainDesc.Format);
 
 	ffx::CreateBackendDX12Desc createBackend{};
-	createBackend.device = upscaling->sharedD3D12Device.Get();
+	createBackend.device = upscaling->sharedD3D12Device.get();
 
 	if (ffx::CreateContext(frameGenContext, nullptr, createFg, createBackend) != ffx::ReturnCode::Ok)
 		logger::critical("[FidelityFX] Failed to create frame generation context!");

@@ -520,11 +520,11 @@ void Upscaling::DestroyUpscalingResources()
 		CloseHandle(sharedFenceEvent);
 		sharedFenceEvent = nullptr;
 	}
-	sharedD3D12Fence.Reset();
-	sharedD3D12CommandList.Reset();
-	sharedD3D12CommandAllocator.Reset();
-	sharedD3D12CommandQueue.Reset();
-	sharedD3D12Device.Reset();
+	sharedD3D12Fence = nullptr;
+	sharedD3D12CommandList = nullptr;
+	sharedD3D12CommandAllocator = nullptr;
+	sharedD3D12CommandQueue = nullptr;
+	sharedD3D12Device = nullptr;
 	sharedFenceValue = 0;
 }
 
@@ -547,7 +547,7 @@ void Upscaling::CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter)
 	hr = sharedD3D12Device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&sharedD3D12CommandQueue));
 	if (FAILED(hr)) {
 		logger::error("[Upscaling] Failed to create shared D3D12 command queue: 0x{:X}", hr);
-		sharedD3D12Device.Reset();
+		sharedD3D12Device = nullptr;
 		return;
 	}
 
@@ -555,18 +555,18 @@ void Upscaling::CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter)
 	hr = sharedD3D12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&sharedD3D12CommandAllocator));
 	if (FAILED(hr)) {
 		logger::error("[Upscaling] Failed to create shared D3D12 command allocator: 0x{:X}", hr);
-		sharedD3D12CommandQueue.Reset();
-		sharedD3D12Device.Reset();
+		sharedD3D12CommandQueue = nullptr;
+		sharedD3D12Device = nullptr;
 		return;
 	}
 
 	// Create command list
-	hr = sharedD3D12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, sharedD3D12CommandAllocator.Get(), nullptr, IID_PPV_ARGS(&sharedD3D12CommandList));
+	hr = sharedD3D12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, sharedD3D12CommandAllocator.get(), nullptr, IID_PPV_ARGS(&sharedD3D12CommandList));
 	if (FAILED(hr)) {
 		logger::error("[Upscaling] Failed to create shared D3D12 command list: 0x{:X}", hr);
-		sharedD3D12CommandAllocator.Reset();
-		sharedD3D12CommandQueue.Reset();
-		sharedD3D12Device.Reset();
+		sharedD3D12CommandAllocator = nullptr;
+		sharedD3D12CommandQueue = nullptr;
+		sharedD3D12Device = nullptr;
 		return;
 	}
 
@@ -574,21 +574,21 @@ void Upscaling::CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter)
 	hr = sharedD3D12Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&sharedD3D12Fence));
 	if (FAILED(hr)) {
 		logger::error("[Upscaling] Failed to create shared D3D12 fence: 0x{:X}", hr);
-		sharedD3D12CommandList.Reset();
-		sharedD3D12CommandAllocator.Reset();
-		sharedD3D12CommandQueue.Reset();
-		sharedD3D12Device.Reset();
+		sharedD3D12CommandList = nullptr;
+		sharedD3D12CommandAllocator = nullptr;
+		sharedD3D12CommandQueue = nullptr;
+		sharedD3D12Device = nullptr;
 		return;
 	}
 
 	sharedFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 	if (sharedFenceEvent == nullptr) {
 		logger::error("[Upscaling] Failed to create shared fence event");
-		sharedD3D12Fence.Reset();
-		sharedD3D12CommandList.Reset();
-		sharedD3D12CommandAllocator.Reset();
-		sharedD3D12CommandQueue.Reset();
-		sharedD3D12Device.Reset();
+		sharedD3D12Fence = nullptr;
+		sharedD3D12CommandList = nullptr;
+		sharedD3D12CommandAllocator = nullptr;
+		sharedD3D12CommandQueue = nullptr;
+		sharedD3D12Device = nullptr;
 		return;
 	}
 
@@ -659,7 +659,7 @@ void Upscaling::CreateFrameGenerationResources()
 	motionVectorBufferShared->CreateUAV(uavDesc);
 
 	// Get D3D11 device5 interface for WrappedResource creation
-	ComPtr<ID3D11Device5> d3d11Device5;
+	winrt::com_ptr<ID3D11Device5> d3d11Device5;
 	if (FAILED(globals::d3d::device->QueryInterface(IID_PPV_ARGS(&d3d11Device5)))) {
 		logger::error("[Upscaling] Failed to get ID3D11Device5 interface");
 		return;
@@ -669,20 +669,20 @@ void Upscaling::CreateFrameGenerationResources()
 	D3D11_TEXTURE2D_DESC texDesc11{};
 	HUDLessBufferShared->resource->GetDesc(&texDesc11);
 	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
-	HUDLessBufferShared12 = new WrappedResource(texDesc11, d3d11Device5.Get(), sharedD3D12Device.Get());
+	HUDLessBufferShared12 = new WrappedResource(texDesc11, d3d11Device5.get(), sharedD3D12Device.get());
 
 	depthBufferShared->resource->GetDesc(&texDesc11);
 	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
-	depthBufferShared12 = new WrappedResource(texDesc11, d3d11Device5.Get(), sharedD3D12Device.Get());
+	depthBufferShared12 = new WrappedResource(texDesc11, d3d11Device5.get(), sharedD3D12Device.get());
 
 	motionVectorBufferShared->resource->GetDesc(&texDesc11);
 	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
-	motionVectorBufferShared12 = new WrappedResource(texDesc11, d3d11Device5.Get(), sharedD3D12Device.Get());
+	motionVectorBufferShared12 = new WrappedResource(texDesc11, d3d11Device5.get(), sharedD3D12Device.get());
 	
 	// Create reactive mask shared texture (will be used by both frame generation and XeSS)
 	reactiveMaskTexture->resource->GetDesc(&texDesc11);
 	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
-	reactiveMaskBufferShared12 = new WrappedResource(texDesc11, d3d11Device5.Get(), sharedD3D12Device.Get());
+	reactiveMaskBufferShared12 = new WrappedResource(texDesc11, d3d11Device5.get(), sharedD3D12Device.get());
 
 	copyDepthToSharedBufferCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\FrameGeneration\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0");
 }
