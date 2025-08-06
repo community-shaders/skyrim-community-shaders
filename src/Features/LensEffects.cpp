@@ -14,9 +14,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SB_BladeWidth, SB_BladeTaper, SB_BladeFeather,
 	SB_EnableRays, SB_RandomRaysInt, SB_RandomRaysVolume,
 	SB_RandomRaysLength, SB_RandomRaysWidth,
-	SG_Scale, SG_Intensity, SG_OuterInt,
-	LI_Intensity, LI_FadeDuration,
-	GH_Intensity, GH_Scale, GH_Saturation,
+	SG_Scale, SG_Intensity, SG_OuterInt, SG_OuterFade,
+	GH_Intensity, GH_Scale, GH_Saturation, LI_Intensity,
 	GH_EnableClampOffset, GH_ClampOffset,
 	GL_Intensity, GL_Scale, GL_XAxisOffset, GL_YAxisOffset,
 	GL_MaxRotation, GL_CutDepth, GL_Radius, GL_TipFade,
@@ -30,41 +29,37 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LensEffects::ColdSettings,
 	GH_Params, GH_Params_2, GH_Color, GH_Atlas,
 	GH_InInt, SB_Color, HL_Color, LI_Color,
-	LI_FadeIn, LI_FadeOut, useOldSchoolCA)
+	LI_FadeIn, LI_FadeOut, LI_FadeDuration, useOldSchoolCA)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LensEffects::Settings,
 	mainsettings, coldsettings, EnableStarburst,
 	EnableLensGlare, EnableHalo, EnableGhosts,
-	EnableIce, EnableRain, EnableSunGlare, EnableCA,
-	disableInFPV)
+	EnableIce, EnableSunGlare, EnableCA, useCustomPreset)
 
 void LensEffects::CompileShaders()
 {
-	SunOcclusionMaskPixelShader = (ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "MaskPSShader", "" } }, "ps_5_0");
-	ChromaticAberrationPixelShader = (ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "ChromaticAberrationPSShader", "" } }, "ps_5_0");
-	BypassVertexShader = (ID3D11VertexShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "BypassVSShader", "" } }, "vs_5_0");
+	SunOcclusionMaskPixelShader = (ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "OCCLUSION_PIXEL_SHADER", "" } }, "ps_5_0");
+	ChromaticAberrationPixelShader = (ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "CHROMATIC_ABERRATION_PIXEL_SHADER", "" } }, "ps_5_0");
+	BypassVertexShader = (ID3D11VertexShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "BYPASS_VERTEX_SHADER", "" } }, "vs_5_0");
 
-	BurstVertexShader = (ID3D11VertexShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "StarburstVSShader", "" } }, "vs_5_0");
-	BurstPixelShader = (ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "StarburstPSShader", "" } }, "ps_5_0");
+	BurstVertexShader = (ID3D11VertexShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "STARBURST_VERTEX_SHADER", "" } }, "vs_5_0");
+	BurstPixelShader = (ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "STARBURST_PIXEL_SHADER", "" } }, "ps_5_0");
 
-	SunGlareVertexShader = (ID3D11VertexShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "SunGlareVSShader", "" } }, "vs_5_0");
-	SunGlarePixelShader = (ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "SunGlarePSShader", "" } }, "ps_5_0");
+	GhostVertexShader = (ID3D11VertexShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "GHOST_VERTEX_SHADER", "" } }, "vs_5_0");
+	GhostPixelShader = (ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "GHOST_PIXEL_SHADER", "" } }, "ps_5_0");
 
-	LensGlareVertexShader = (ID3D11VertexShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "LensGlareVSShader", "" } }, "vs_5_0");
-	LensGlarePixelShader = (ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "LensGlarePSShader", "" } }, "ps_5_0");
+	SunGlareVertexShader = (ID3D11VertexShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "SUNGLARE_VERTEX_SHADER", "" } }, "vs_5_0");
+	SunGlarePixelShader = (ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "SUNGLARE_PIXEL_SHADER", "" } }, "ps_5_0");
 
-	HaloVertexShader = (ID3D11VertexShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "HaloVSShader", "" } }, "vs_5_0");
-	HaloPixelShader = (ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "HaloPSShader", "" } }, "ps_5_0");
+	HaloVertexShader = (ID3D11VertexShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "HALO_VERTEX_SHADER", "" } }, "vs_5_0");
+	HaloPixelShader = (ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "HALO_PIXEL_SHADER", "" } }, "ps_5_0");
 
-	GhostVertexShader = (ID3D11VertexShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "GhostVSShader", "" } }, "vs_5_0");
-	GhostPixelShader = (ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "GhostPSShader", "" } }, "ps_5_0");
+	LensGlareVertexShader = (ID3D11VertexShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "LENSGLARE_VERTEX_SHADER", "" } }, "vs_5_0");
+	LensGlarePixelShader = (ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "LENSGLARE_PIXEL_SHADER", "" } }, "ps_5_0");
 
-	IceVertexShader = (ID3D11VertexShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "IceVSShader", "" } }, "vs_5_0");
-	IcePixelShader = (ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "IcePSShader", "" } }, "ps_5_0");
-
-	RainVertexShader = (ID3D11VertexShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "RainVSShader", "" } }, "vs_5_0");
-	RainPixelShader = (ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "RainPSShader", "" } }, "ps_5_0");
+	IceVertexShader = (ID3D11VertexShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "ICE_VERTEX_SHADER", "" } }, "vs_5_0");
+	IcePixelShader = (ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\LensEffects\\LensEffects.hlsl", { { "ICE_PIXEL_SHADER", "" } }, "ps_5_0");
 }
 
 void LensEffects::SetupResources()
@@ -129,13 +124,10 @@ void LensEffects::SetupResources()
 	DX::ThrowIfFailed(device->CreateTexture2D(&OcclusionTexDescAT, nullptr, &SunOcclusionLUT_AT));
 	DX::ThrowIfFailed(device->CreateUnorderedAccessView(SunOcclusionLUT_AT, &OcclusionUAVDescAT, &SunOcclusionUAV_AT));
 
-	DirectX::CreateDDSTextureFromFile(device, L"Data\\Shaders\\LensEffects\\Textures\\Atlas.dds", nullptr, &AtlasTexSRV);
-	DirectX::CreateDDSTextureFromFile(device, L"Data\\Shaders\\LensEffects\\Textures\\Frost.dds", nullptr, &IceTexSRV);
+	DX::ThrowIfFailed(DirectX::CreateDDSTextureFromFile(device, L"Data\\Shaders\\LensEffects\\Textures\\Atlas.dds", nullptr, &AtlasTexSRV));
+	DX::ThrowIfFailed(DirectX::CreateDDSTextureFromFile(device, L"Data\\Shaders\\LensEffects\\Textures\\Frost.dds", nullptr, &IceTexSRV));
 
 	SettingsCB = new ConstantBuffer(ConstantBufferDesc<ConstBuffer>());
-
-	float2 screenSize = (float2)Util::ConvertToDynamic(globals::state->screenSize);
-	screenParams = { screenSize.x, screenSize.y, screenSize.x / screenSize.y, 0.0f };
 
 	std::sort(weatherDisables.begin(), weatherDisables.end());
 
@@ -147,27 +139,17 @@ void LensEffects::SetupResources()
 
 	renderdata = new Setup::LF_RenderData;
 
-	renderdata->SetupPass(Shaders::LensCA, settings.EnableCA, 1, { .uncond_pass = true });
-	renderdata->SetupPass(Shaders::LensIce, settings.EnableIce, 1, { .weather_pass = true });
-	renderdata->SetupPass(Shaders::LensRain, settings.EnableRain, 1, { .weather_pass = true });
-	renderdata->SetupPass(Shaders::LensBurst, settings.EnableStarburst, 1);
-	renderdata->SetupPass(Shaders::LensSunGlare, settings.EnableSunGlare, 1);
-	renderdata->SetupPass(Shaders::LensGlare, settings.EnableLensGlare, 1);
-	renderdata->SetupPass(Shaders::LensHalo, settings.EnableHalo, 1);
-	renderdata->SetupPass(Shaders::LensGhosts, settings.EnableGhosts, ghostpasses);
+	renderdata->SetupPass(Shaders::LensCA, settings->EnableCA, 1, { .uncond_pass = true });
+	renderdata->SetupPass(Shaders::LensIce, settings->EnableIce, 1, { .weather_pass = true });
+	renderdata->SetupPass(Shaders::LensBurst, settings->EnableStarburst, 1);
+	renderdata->SetupPass(Shaders::LensSunGlare, settings->EnableSunGlare, 1);
+	renderdata->SetupPass(Shaders::LensGlare, settings->EnableLensGlare, 1);
+	renderdata->SetupPass(Shaders::LensHalo, settings->EnableHalo, 1);
+	renderdata->SetupPass(Shaders::LensGhosts, settings->EnableGhosts, ghostpasses);
 
 	renderdata->SetupRenderData();
 
 	CompileShaders();
-}
-
-void LensEffects::DataLoaded()
-{
-	RE::GetINISetting("bLensFlare:Imagespace")->data.b = true;
-
-	const auto dataHandler = RE::TESDataHandler::GetSingleton();
-	if (dataHandler && dataHandler->LookupLoadedLightModByName("Azurite Weathers III.esp"sv))
-		TMOkay = true;
 }
 
 void LensEffects::CheckOverride()
@@ -177,12 +159,10 @@ void LensEffects::CheckOverride()
 	if (overrideShader) {
 		if (frame_checker.IsNewFrame()) {
 			SettingsCB->Update(UpdateBufferValues());
-			precipCurrent = GetWeatherPrecip();
 			UpdateWeatherBasedDisable();
 			UpdateFrameGenBasedDisable();
 			frameIdx = (frameIdx < 16) ? ++frameIdx : 5;
 		}
-
 		LookupShader(shaderdesc);
 	}
 }
@@ -194,7 +174,6 @@ void LensEffects::LookupShader(int desc)
 		{ Shaders::AttachLUT, &LensEffects::AppendOcclusionLUT },
 		{ Shaders::OcculsionMask, &LensEffects::SetupOcclusionMask },
 		{ Shaders::LensIce, &LensEffects::SetupIceEffect },
-		{ Shaders::LensRain, &LensEffects::SetupRainEffect },
 		{ Shaders::LensBurst, &LensEffects::SetupBurstEffect },
 		{ Shaders::LensSunGlare, &LensEffects::SetupSunGlareEffect },
 		{ Shaders::LensGlare, &LensEffects::SetupLensGlareEffect },
@@ -209,12 +188,12 @@ void LensEffects::LookupShader(int desc)
 
 LensEffects::ConstBuffer LensEffects::UpdateBufferValues()
 {
+	float2 screenSize = Util::ConvertToDynamic(globals::state->screenSize);
+	float4 screenParams = { screenSize.x, screenSize.y, screenSize.x / screenSize.y, 0.0f };
 	ConstBuffer data{};
 	data.screensize = VectorToXMFloat(screenParams);
 	data.frame = frameIdx;
-	data.precip = currentPrecip.x;
-	data.precipfade = currentPrecip.y;
-	data.TMOkay = TMOkay;
+	data.precip = GetWeatherPrecip();
 	data.sunFXFade = weatherFadeout;
 	data.SunParams = GetSunPosition();
 	data.suncolor = GetSunColor();
@@ -253,13 +232,15 @@ void LensEffects::SetupOcclusionMask()
 	context->PSSetSamplers(13, 1, &DepthSampler);
 
 	if (!BlendState[1]) {
-		D3D11_BLEND_DESC SrcBlendDesc = {};
 		context->OMGetBlendState(&BlendState[1], nullptr, nullptr);
-		BlendState[1]->GetDesc(&SrcBlendDesc);
-		auto& blendState = SrcBlendDesc.RenderTarget[0];
-		blendState.BlendEnable = TRUE;
-		blendState.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-		globals::d3d::device->CreateBlendState(&SrcBlendDesc, &BlendState[0]);
+		if (BlendState[1]) {
+			D3D11_BLEND_DESC SrcBlendDesc = {};
+			BlendState[1]->GetDesc(&SrcBlendDesc);
+			auto& blendState = SrcBlendDesc.RenderTarget[0];
+			blendState.BlendEnable = TRUE;
+			blendState.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+			globals::d3d::device->CreateBlendState(&SrcBlendDesc, &BlendState[0]);
+		}
 	}
 
 	overrideShader = false;
@@ -321,8 +302,8 @@ void LensEffects::SetupGhostEffect()
 	auto context = globals::d3d::context;
 
 	auto it = renderdata->GetCurrentEffect().passesdone - 1;
-	float4& params = settings.coldsettings.GH_Params[it];
-	float4& params_2 = settings.coldsettings.GH_Params_2[it];
+	float4& params = settings->coldsettings.GH_Params[it];
+	float4& params_2 = settings->coldsettings.GH_Params_2[it];
 
 	ConstBuffer data = UpdateBufferValues();
 	data.shadersettings.GH_Size = params.x;
@@ -333,9 +314,9 @@ void LensEffects::SetupGhostEffect()
 	data.shadersettings.GH_Feather = params_2.y;
 	data.shadersettings.GH_CAScale = params_2.z;
 	data.shadersettings.GH_MoveCurve = params_2.w;
-	data.shadersettings.GH_InnerInt = settings.coldsettings.GH_InInt[it];
-	data.shadersettings.GH_Color = VectorToXMFloat(settings.coldsettings.GH_Color[it]);
-	data.shadersettings.GH_Atlas = VectorToXMFloat(settings.coldsettings.GH_Atlas[it]);
+	data.shadersettings.GH_InnerInt = settings->coldsettings.GH_InInt[it];
+	data.shadersettings.GH_Color = VectorToXMFloat(settings->coldsettings.GH_Color[it]);
+	data.shadersettings.GH_Atlas = VectorToXMFloat(settings->coldsettings.GH_Atlas[it]);
 
 	SettingsCB->Update(data);
 
@@ -356,7 +337,7 @@ void LensEffects::SetupCAEffect()
 	auto& mainCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].SRVCopy;
 	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR].SRV;
 
-	if (settings.coldsettings.useOldSchoolCA) {
+	if (settings->coldsettings.useOldSchoolCA) {
 		context->OMSetBlendState(BlendState[1], nullptr, 0xFFFFFFFF);
 	} else
 		context->OMSetBlendState(BlendState[0], nullptr, 0xFFFFFFFF);
@@ -381,16 +362,6 @@ void LensEffects::SetupIceEffect()
 
 	context->PSSetShaderResources(0, 1, &IceTexSRV);
 	context->PSSetShaderResources(1, 1, &mainCopy);
-
-	overrideShader = false;
-}
-
-void LensEffects::SetupRainEffect()
-{
-	auto context = globals::d3d::context;
-
-	context->VSSetShader(RainVertexShader, NULL, NULL);
-	context->PSSetShader(RainPixelShader, NULL, NULL);
 
 	overrideShader = false;
 }
@@ -432,35 +403,89 @@ void LensEffects::BypassShader()
 
 void LensEffects::GetWeatherShader()
 {
-	auto sky = globals::game::sky;
+	if (shaderdesc == Shaders::LensIce) {
+		if (auto sky = globals::game::sky) {
+			float lastUpdate = sky->lastWeatherUpdate / 24.0f;
+			static float transEpoch = lastUpdate;
+			static float epochDelta = 0;
+			static int weatherRole = 0;
+			static float fade;
+			static float fadeMod;
 
-	if (precipCurrent) {
-		RE::TESWeather* weather = (weatherCurrent) ? sky->currentWeather : sky->lastWeather;
-		if (weather->data.flags.any(RE::TESWeather::WeatherDataFlag::kSnow) && shaderdesc == Shaders::LensIce) {
-			auto factor = 0.0f;
-			if (weatherCurrent) {
-				factor = std::clamp(sky->currentWeatherPct - settings.coldsettings.LI_FadeIn, 0.0f, 1.0f);
-				currentPrecip.y = 0.0f;
+			if (CheckWeatherChange()) {
+				transEpoch = lastUpdate;
+				if (auto currWeather = sky->currentWeather; currWeather && currWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kSnow)) {
+					fade = std::max(sky->currentWeather->data.precipitationBeginFadeIn / 255.0f / 24.0f / 7.0f, 0.0018f);
+					fadeMod = settings->coldsettings.LI_FadeIn / 24.0f / 4.0f;
+					weatherRole = 1;
+					epochDelta = 0;
+				} else if (auto prevWeather = sky->lastWeather; prevWeather && prevWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kSnow)) {
+					fade = std::max(sky->lastWeather->data.precipitationEndFadeOut / 255.0f / 24.0f / 7.0f, 0.00025f);
+					fadeMod = settings->coldsettings.LI_FadeOut / 24.0f / 4.0f;
+					weatherRole = 2;
+					epochDelta = snowPrecipValue;
+				} else {
+					weatherRole = false;
+					return;
+				}
+			}
+
+			if (weatherRole) {
+				float duration = settings->coldsettings.LI_FadeDuration / 24.0f / 4.0f;
+				float time = RE::Calendar::GetSingleton()->GetCurrentGameTime();
+				bool IsInside = RE::PlayerCharacter::GetSingleton()->GetParentCell()->IsInteriorCell();
+				static bool lastIsInside = IsInside;
+				if (IsInside != lastIsInside) {
+					lastIsInside = IsInside;
+					epochDelta = snowPrecipValue;
+					transEpoch = time;
+					fadeMod = (IsInside) ? settings->coldsettings.LI_FadeOut : settings->coldsettings.LI_FadeIn;
+					fadeMod = fadeMod / 24.0f / 4.0f;
+					duration = (IsInside) ? duration * 0.5f : duration;
+					fade = 0;
+				}
+
+				float fadeValue = std::clamp((time - (transEpoch + (fade + fadeMod))) / duration, 0.0f, 1.0f);
+
+				if (!IsInside && weatherRole == 1)
+					snowPrecipValue = std::clamp(epochDelta + fadeValue, 0.0f, 1.0f);
+				else
+					snowPrecipValue = std::clamp(epochDelta - fadeValue, 0.0f, 1.0f);
 			} else {
-				factor = std::clamp(sky->currentWeatherPct - settings.coldsettings.LI_FadeOut, 0.0f, 1.0f);
+				snowPrecipValue = 0.0f;
+				shaderdesc = Shaders::Bypass;
 			}
-
-			if (factor < 0.01f || RE::PlayerCharacter::GetSingleton()->GetParentCell()->IsInteriorCell())
-				precipstart = std::chrono::high_resolution_clock::now();
-
-			else if (factor > 0.01f) {
-				auto time = std::chrono::high_resolution_clock::now();
-				float elapsed = std::chrono::duration_cast<std::chrono::duration<float>>(time - precipstart).count();
-				auto precipfade = std::clamp(elapsed / settings.mainsettings.LI_FadeDuration, 0.0f, 1.0f);
-				currentPrecip.y = (weatherCurrent) ? precipfade : 1.0f - precipfade;
-			}
-
-			if (RE::PlayerCharacter::GetSingleton()->GetParentCell()->IsInteriorCell() == false)
-				return;
+		} else {
+			shaderdesc = Shaders::Bypass;
 		}
 	}
+}
 
-	shaderdesc = Shaders::Bypass;
+float LensEffects::GetWeatherPrecip()
+{
+	float precip = 0.0f;
+	if (auto sky = globals::game::sky; sky && sky->mode.get() == RE::Sky::Mode::kFull) {
+		if (auto prevweather = sky->lastWeather; prevweather && prevweather->precipitationData)
+			precip = 1.0f - sky->currentWeatherPct;
+		if (auto currweather = sky->currentWeather; currweather && currweather->precipitationData)
+			precip = (precip) ? 1.0f : sky->currentWeatherPct;
+	}
+	return precip;
+}
+
+bool LensEffects::CheckWeatherChange()
+{
+	if (auto sky = globals::game::sky) {
+		auto update = [&]() {
+			WeatherID = (sky->currentWeather) ? sky->currentWeather->formID : 0;
+			PrevWeatherID = (sky->lastWeather) ? sky->lastWeather->formID : 0; };
+
+		if (!WeatherID || std::floor(sky->lastWeatherUpdate * 60) == std::floor(sky->currentGameHour * 60)) {
+			update();
+			return true;
+		}
+	}
+	return false;
 }
 
 void LensEffects::UpdateWeatherBasedDisable()
@@ -475,8 +500,8 @@ void LensEffects::UpdateWeatherBasedDisable()
 		prevWeatherRole = std::binary_search(weatherDisables.begin(), weatherDisables.end(), PrevWeatherID);
 	}
 
-	if (currWeatherRole || prevWeatherRole) {
-		auto weatherTransition = GetWeatherTransTime();
+	if (auto sky = globals::game::sky; sky && (currWeatherRole || prevWeatherRole)) {
+		auto weatherTransition = LinearStep(0.5, 1.0, sky->currentWeatherPct);
 		if ((weatherTransition == 1.0f && currWeatherRole) || (currWeatherRole && prevWeatherRole))
 			disableSunFX = true;
 		weatherFadeout = (currWeatherRole) ? weatherTransition : 1.0f - weatherTransition;
@@ -485,14 +510,15 @@ void LensEffects::UpdateWeatherBasedDisable()
 
 void LensEffects::UpdateFrameGenBasedDisable()
 {
-	auto method = globals::upscaling->GetUpscaleMethod();
-
-	if (globals::upscaling->IsFrameGenerationActive() || method == Upscaling::UpscaleMethod::kDLSS || method == Upscaling::UpscaleMethod::kFSR) {
-		renderdata->GetEffect(Shaders::LensIce).Toggle(false);
-		upscalingActive = true;
-	} else if (upscalingActive) {
-		renderdata->GetEffect(Shaders::LensIce).Toggle(settings.EnableIce);
-		upscalingActive = false;
+	if (auto upscaling = globals::upscaling) {
+		auto method = globals::upscaling->GetUpscaleMethod();
+		if (upscaling->IsFrameGenerationActive() || method == Upscaling::UpscaleMethod::kDLSS || method == Upscaling::UpscaleMethod::kFSR) {
+			renderdata->GetEffect(Shaders::LensIce).Toggle(false);
+			upscalingActive = true;
+		} else if (upscalingActive) {
+			renderdata->GetEffect(Shaders::LensIce).Toggle(settings->EnableIce);
+			upscalingActive = false;
+		}
 	}
 }
 
@@ -500,76 +526,19 @@ DirectX::XMFLOAT4A LensEffects::GetSunPosition()
 {
 	auto sunWSPos = *skyrim_SunPosition;
 	float4 sunPosition = { sunWSPos.x, sunWSPos.y, sunWSPos.z, 1.0f };
-
 	Matrix viewMatrix = Util::GetCameraData(0).viewMat;
 	float4 sunPosVS = float4::Transform(sunPosition, viewMatrix);
 	sunPosVS.w = *skyrim_SunGlareScale * SunScale;
-
 	return VectorToXMFloat(sunPosVS);
 }
 
 DirectX::XMFLOAT4A LensEffects::GetSunColor()
 {
 	static float4 sunColor = { 1.0f, 1.0f, 1.0f, 1.0f };
-
-	if (const auto property = skyrim_cast<RE::BSSkyShaderProperty*>(globals::game::sky->sun->sunBase->GetGeometryRuntimeData().properties[1].get()))
-		sunColor = { property->kBlendColor.red, property->kBlendColor.green, property->kBlendColor.blue, 1.0f };
-
+	if (auto sky = globals::game::sky; sky && sky->sun && sky->sun->sunBase)
+		if (auto property = skyrim_cast<RE::BSSkyShaderProperty*>(sky->sun->sunBase->GetGeometryRuntimeData().properties[1].get()))
+			sunColor = { property->kBlendColor.red, property->kBlendColor.green, property->kBlendColor.blue, 1.0f };
 	return VectorToXMFloat(sunColor);
-}
-
-bool LensEffects::CheckWeatherChange()
-{
-	auto sky = globals::game::sky;
-	auto update = [&]() {
-		WeatherID = (sky->currentWeather) ? sky->currentWeather->formID : 0;
-		PrevWeatherID = (sky->lastWeather) ? sky->lastWeather->formID : 0; };
-
-	if (!WeatherID || !PrevWeatherID)
-		update();
-
-	if (std::floor(sky->lastWeatherUpdate * 60) == std::floor(sky->currentGameHour * 60)) {
-		update();
-		return true;
-	}
-	return false;
-}
-
-float LensEffects::GetWeatherTransTime()
-{
-	auto sky = globals::game::sky;
-
-	if (sky->currentWeather) {
-		auto transDelta = static_cast<uint8_t>(sky->currentWeather->data.transDelta) * 0.176f * 20.0f / 60.0f;
-		auto delta = sky->lastWeatherUpdate * 60.0f;
-		auto time = sky->currentGameHour * 60.0f;
-
-		return std::clamp((time - delta) / transDelta, 0.0f, 1.0f);
-	}
-	return 0.0f;
-}
-
-bool LensEffects::GetWeatherPrecip()
-{
-	auto sky = globals::game::sky;
-	if (sky->mode.get() == RE::Sky::Mode::kFull) {
-		if (auto precip = sky->precip) {
-			if (auto currweather = sky->currentWeather)
-				if (currweather->precipitationData) {
-					currentPrecip.x = sky->currentWeatherPct;
-					weatherCurrent = true;
-					return true;
-				}
-			if (auto prevweather = sky->lastWeather)
-				if (prevweather->precipitationData) {
-					currentPrecip.x = 1.0f - sky->currentWeatherPct;
-					weatherCurrent = false;
-					return true;
-				}
-		}
-	}
-	currentPrecip.x = 0.0f;
-	return false;
 }
 
 void LensEffects::Hooks::BSSkyShader_SetupMaterial::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
@@ -577,34 +546,35 @@ void LensEffects::Hooks::BSSkyShader_SetupMaterial::thunk(RE::BSShader* This, RE
 	auto& lens = globals::features::lensEffects;
 	auto skyProperty = reinterpret_cast<RE::BSSkyShaderProperty*>(Pass->shaderProperty);
 
-	if (skyProperty->uiSkyObjectType == RE::BSSkyShaderProperty::SkyObject::SO_SUN_GLARE) {
-		lens.overrideShader = true;
-		lens.shaderdesc = Shaders::Bypass;
-	}
-
-	else if (skyProperty->uiSkyObjectType == RE::BSSkyShaderProperty::SkyObject::SO_ATMOSPHERE) {
-		if (Pass->passEnum == 0x5C00005E && RenderFlags == 65) {
+	if (skyProperty) {
+		if (skyProperty->uiSkyObjectType == RE::BSSkyShaderProperty::SkyObject::SO_SUN_GLARE) {
 			lens.overrideShader = true;
-			lens.shaderdesc = Shaders::AttachLUT;
+			lens.shaderdesc = Shaders::Bypass;
+		}
+
+		else if (skyProperty->uiSkyObjectType == RE::BSSkyShaderProperty::SkyObject::SO_ATMOSPHERE) {
+			if (Pass->passEnum == 0x5C00005E && RenderFlags == 65) {
+				lens.overrideShader = true;
+				lens.shaderdesc = Shaders::AttachLUT;
+			}
+		}
+
+		else if (skyProperty->uiSkyObjectType == RE::BSSkyShaderProperty::SkyObject::SO_CLOUDS) {
+			if ((Pass->passEnum == 0x5C000062 || Pass->passEnum == 0x5C000063) && RenderFlags == 65) {
+				lens.overrideShader = true;
+				lens.shaderdesc = Shaders::AttachLUT;
+				lens.useCloudLUT = true;
+			}
+		}
+
+		else if (skyProperty->uiSkyObjectType == RE::BSSkyShaderProperty::SkyObject::SO_SUN) {
+			if (lens.SunScale == 0.0f && Pass->passEnum == 0x5C000061 && (RenderFlags == 65 || RenderFlags == 8)) {
+				D3D11_TEXTURE2D_DESC sunDesc = {};
+				skyProperty->pBaseTexture->rendererTexture->texture->GetDesc(&sunDesc);
+				lens.SunScale = 24.0f / sunDesc.Width;
+			}
 		}
 	}
-
-	else if (skyProperty->uiSkyObjectType == RE::BSSkyShaderProperty::SkyObject::SO_CLOUDS) {
-		if ((Pass->passEnum == 0x5C000062 || Pass->passEnum == 0x5C000063) && RenderFlags == 65) {
-			lens.overrideShader = true;
-			lens.shaderdesc = Shaders::AttachLUT;
-			lens.useCloudLUT = true;
-		}
-	}
-
-	else if (skyProperty->uiSkyObjectType == RE::BSSkyShaderProperty::SkyObject::SO_SUN) {
-		if (lens.SunScale == 0.0f && Pass->passEnum == 0x5C000061 && (RenderFlags == 65 || RenderFlags == 8)) {
-			D3D11_TEXTURE2D_DESC sunDesc = {};
-			skyProperty->pBaseTexture->rendererTexture->texture->GetDesc(&sunDesc);
-			lens.SunScale = 24.0f / sunDesc.Width;
-		}
-	}
-
 	func(This, Pass, RenderFlags);
 }
 
@@ -661,45 +631,64 @@ void LensEffects::Hooks::BSImagespaceShader_Render<RE::ImageSpaceManager::ISLens
 
 void LensEffects::DrawSettings()
 {
-	static auto& mainSettings = settings.mainsettings;
-	static auto& coldSettings = settings.coldsettings;
+	auto& mainSettings = settings->mainsettings;
+	auto& coldSettings = settings->coldsettings;
 
-	if (ImGui::Button("Save Preset"))
-		SaveCustomSettings(settings);
-	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text("Saves the current settings to Data/Shaders/LensEffects/Lens Settings.json");
+	if (ImGui::TreeNode("Preset Options")) {
+		if (PresetFileExists() && presetLoaded) {
+			ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Lens preset loaded");
+			if (ImGui::Checkbox("Enable  ", &stdSettings.useCustomPreset))
+				settings = (stdSettings.useCustomPreset) ? &customSettings : &stdSettings;
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("When enabled any changes made to settings are applied to the preset");
 
-	ImGui::SameLine();
-	if (ImGui::Button("Clear Preset"))
-		ClearCustomSettings();
-	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text("Restores the preset to defualt settings");
+			ImGui::SameLine();
+			if (ImGui::Button("Delete Preset")) {
+				DeletePresetFile();
+				presetLoaded = false;
+				settings = &stdSettings;
+			}
+		} else {
+			if (ImGui::Button("Export As Preset")) {
+				customSettings = *settings;
+				ExportAsPreset();
+				presetLoaded = true;
+				if (stdSettings.useCustomPreset)
+					settings = &customSettings;
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Saves the current settings to Data/Shaders/LensEffects/Lens Settings.json");
+				ImGui::Text("This is meant for modders who want to package a custom lens preset with their mod");
+			}
+		}
+		ImGui::TreePop();
+	}
+	ImGui::Spacing();
+	ImGui::Spacing();
 
-	ImGui::SeparatorText("Enable Effects");
+	if (ImGui::Checkbox("Enable Sun Glare", &settings->EnableSunGlare))
+		renderdata->GetEffect(Shaders::LensSunGlare).Toggle(settings->EnableSunGlare);
 
-	if (ImGui::Checkbox("Enable Sun Glare", &settings.EnableSunGlare))
-		renderdata->GetEffect(Shaders::LensSunGlare).Toggle(settings.EnableSunGlare);
+	if (ImGui::Checkbox("Enable Starburst", &settings->EnableStarburst))
+		renderdata->GetEffect(Shaders::LensBurst).Toggle(settings->EnableStarburst);
 
-	if (ImGui::Checkbox("Enable Starburst", &settings.EnableStarburst))
-		renderdata->GetEffect(Shaders::LensBurst).Toggle(settings.EnableStarburst);
+	if (ImGui::Checkbox("Enable Ghosts", &settings->EnableGhosts))
+		renderdata->GetEffect(Shaders::LensGhosts).Toggle(settings->EnableGhosts);
 
-	if (ImGui::Checkbox("Enable Ghosts", &settings.EnableGhosts))
-		renderdata->GetEffect(Shaders::LensGhosts).Toggle(settings.EnableGhosts);
+	if (ImGui::Checkbox("Enable Lens Glare", &settings->EnableLensGlare))
+		renderdata->GetEffect(Shaders::LensGlare).Toggle(settings->EnableLensGlare);
 
-	if (ImGui::Checkbox("Enable Lens Glare", &settings.EnableLensGlare))
-		renderdata->GetEffect(Shaders::LensGlare).Toggle(settings.EnableLensGlare);
+	if (ImGui::Checkbox("Enable Sun Halo", &settings->EnableHalo))
+		renderdata->GetEffect(Shaders::LensHalo).Toggle(settings->EnableHalo);
 
-	if (ImGui::Checkbox("Enable Sun Halo", &settings.EnableHalo))
-		renderdata->GetEffect(Shaders::LensHalo).Toggle(settings.EnableHalo);
-
-	if (ImGui::Checkbox("Enable Chromatic Aberration", &settings.EnableCA))
-		renderdata->GetEffect(Shaders::LensCA).Toggle(settings.EnableCA);
+	if (ImGui::Checkbox("Enable Chromatic Aberration", &settings->EnableCA))
+		renderdata->GetEffect(Shaders::LensCA).Toggle(settings->EnableCA);
 
 	if (upscalingActive) {
 		ImGui::BeginDisabled();
 	}
 
-	ImGui::Checkbox("Enable Lens Ice", &settings.EnableIce);
+	ImGui::Checkbox("Enable Lens Ice", &settings->EnableIce);
 
 	if (upscalingActive) {
 		ImGui::SameLine();
@@ -708,7 +697,7 @@ void LensEffects::DrawSettings()
 	}
 
 	if (!upscalingActive && ImGui::IsItemEdited())
-		renderdata->GetEffect(Shaders::LensIce).Toggle(settings.EnableIce);
+		renderdata->GetEffect(Shaders::LensIce).Toggle(settings->EnableIce);
 	ImGui::Spacing();
 	ImGui::Spacing();
 
@@ -717,14 +706,15 @@ void LensEffects::DrawSettings()
 
 	ImGui::Spacing();
 	ImGui::SliderFloat("Glare Scale ##sun", &mainSettings.SG_Scale, 0.25f, 1.0f);
-	ImGui::SliderFloat("Glare Intensity ##sun", &mainSettings.SG_Intensity, 0.01f, 1.2f);
-	ImGui::SliderFloat("Glare Outer Intensity ##sun", &mainSettings.SG_OuterInt, 0.0f, 2.0f);
+	ImGui::SliderFloat("Glare Intensity ##sun", &mainSettings.SG_Intensity, 1.0, 3.0f);
+	ImGui::SliderFloat("Glare Outer Intensity ##sun", &mainSettings.SG_OuterInt, 0.0f, 2.5f);
+	ImGui::SliderFloat("Glare Outer Fade ##sun", &mainSettings.SG_OuterFade, 0.0f, 1.0f);
 	ImGui::Spacing();
 	ImGui::Spacing();
 
 	ImGui::Text("Color ");
 	ImGui::SameLine();
-	float4& SGColor = settings.coldsettings.SG_Color;
+	float4& SGColor = coldSettings.SG_Color;
 	if (ImGui::ColorButton("Pick", ImVec4(SGColor.x, SGColor.y, SGColor.z, SGColor.w)))
 		ImGui::OpenPopup("ColorPopup_");
 
@@ -776,7 +766,7 @@ void LensEffects::DrawSettings()
 
 		ImGui::Text("Color ");
 		ImGui::SameLine();
-		float4& SBcolor = settings.coldsettings.SB_Color;
+		float4& SBcolor = coldSettings.SB_Color;
 		if (ImGui::ColorButton("Pick", ImVec4(SBcolor.x, SBcolor.y, SBcolor.z, SBcolor.w)))
 			ImGui::OpenPopup("ColorPopup_");
 
@@ -912,7 +902,7 @@ void LensEffects::DrawSettings()
 		ImGui::Text("Color ");
 		ImGui::SameLine();
 
-		float4& Color = settings.coldsettings.HL_Color;
+		float4& Color = coldSettings.HL_Color;
 		if (ImGui::ColorButton("Pick", ImVec4(Color.x, Color.y, Color.z, Color.w)))
 			ImGui::OpenPopup("ColorPopup_");
 
@@ -937,15 +927,15 @@ void LensEffects::DrawSettings()
 
 	ImGui::Spacing();
 	ImGui::SliderFloat("Ice Intensity", &mainSettings.LI_Intensity, 0.01f, 2.0f);
-	ImGui::SliderFloat("Fade Duration", &mainSettings.LI_FadeDuration, 1.0f, 30.0f, "%.0f");
-	ImGui::SliderFloat("Fade In Delay", &coldSettings.LI_FadeIn, 0.3f, 0.95f);
-	ImGui::SliderFloat("Fade Out Delay", &coldSettings.LI_FadeOut, 0.0f, 0.7f);
+	ImGui::SliderFloat("Fade Duration", &coldSettings.LI_FadeDuration, 0.01f, 2.0f);
+	ImGui::SliderFloat("Fade In Delay", &coldSettings.LI_FadeIn, 0.01f, 1.0f);
+	ImGui::SliderFloat("Fade Out Delay", &coldSettings.LI_FadeOut, 0.01f, 1.0f);
 	ImGui::Spacing();
 	ImGui::Spacing();
 	ImGui::Text("Color ");
 	ImGui::SameLine();
 
-	float4& Color = settings.coldsettings.LI_Color;
+	float4& Color = coldSettings.LI_Color;
 	if (ImGui::ColorButton("Pick ##LI", ImVec4(Color.x, Color.y, Color.z, Color.w)))
 		ImGui::OpenPopup("ColorPopup_ ##LI");
 
@@ -974,137 +964,128 @@ void LensEffects::DrawSettings()
 	ImGui::Spacing();
 	ImGui::Spacing();
 	ImGui::Spacing();
-
-	//ImGui::SeparatorText("Lens Rain Effect");
-	//ImGui::Checkbox("Enable Lens Rain", (bool*)&settings.Enable);
-	//ImGui::SliderFloat("Drop Size", &settings.Scale, 0.0f, 1.0f);
-	//ImGui::SliderFloat("Hit Probability", &mainSettings.Intensity, 0.0f, 1.0f);
 }
 
 void LensEffects::RefreshToggles()
 {
 	if (renderdata) {
-		renderdata->GetEffect(Shaders::LensIce).Toggle(settings.EnableIce);
-		renderdata->GetEffect(Shaders::LensRain).Toggle(settings.EnableRain);
-		renderdata->GetEffect(Shaders::LensCA).Toggle(settings.EnableCA);
-		renderdata->GetEffect(Shaders::LensBurst).Toggle(settings.EnableStarburst);
-		renderdata->GetEffect(Shaders::LensSunGlare).Toggle(settings.EnableSunGlare);
-		renderdata->GetEffect(Shaders::LensGlare).Toggle(settings.EnableLensGlare);
-		renderdata->GetEffect(Shaders::LensHalo).Toggle(settings.EnableHalo);
-		renderdata->GetEffect(Shaders::LensGhosts).Toggle(settings.EnableGhosts);
+		renderdata->GetEffect(Shaders::LensIce).Toggle(settings->EnableIce);
+		renderdata->GetEffect(Shaders::LensCA).Toggle(settings->EnableCA);
+		renderdata->GetEffect(Shaders::LensBurst).Toggle(settings->EnableStarburst);
+		renderdata->GetEffect(Shaders::LensSunGlare).Toggle(settings->EnableSunGlare);
+		renderdata->GetEffect(Shaders::LensGlare).Toggle(settings->EnableLensGlare);
+		renderdata->GetEffect(Shaders::LensHalo).Toggle(settings->EnableHalo);
+		renderdata->GetEffect(Shaders::LensGhosts).Toggle(settings->EnableGhosts);
 	}
 }
 
-LensEffects::Settings LensEffects::LoadCustomSettings(Settings& insettings)
+bool LensEffects::PresetFileExists()
+{
+	return std::filesystem::exists(customSettingsPath) && std::filesystem::is_regular_file(customSettingsPath);
+}
+
+void LensEffects::ExportAsPreset()
+{
+	if (!PresetFileExists()) {
+		try {
+			std::filesystem::path path(customSettingsPath);
+			if (path.has_parent_path())
+				std::filesystem::create_directories(path.parent_path());
+			else {
+				logger::error("[Lens Effects] Failed to create file {}", customSettingsPath);
+				return;
+			}
+		} catch (const std::filesystem::filesystem_error& e) {
+			logger::error("[Lens Effects] Filesystem error when creating {} : {}", customSettingsPath, e.what());
+			return;
+		} catch (const std::exception& e) {
+			logger::error("[Lens Effects] Unexpected error when creating {} : {}", customSettingsPath, e.what());
+			return;
+		}
+	}
+
+	json to_write;
+	to_write["Lens Effects"] = (presetLoaded) ? customSettings : *settings;
+	std::ofstream outfile(customSettingsPath);
+
+	if (outfile) {
+		outfile << to_write.dump(1);
+		logger::info("[Lens Effects] Saved preset to {}", customSettingsPath);
+	} else {
+		logger::error("[Lens Effects] Failed to save {}", customSettingsPath);
+	}
+}
+
+bool LensEffects::LoadFromPreset()
 {
 	std::ifstream file(customSettingsPath);
-	json customsettings;
-
-	if (!file) {
-		logger::info("[Lens Effects] {} not found. Creating with default settings.", customSettingsPath);
-		try {
-			std::filesystem::path p(customSettingsPath);
-			if (!p.parent_path().empty()) {
-				std::filesystem::create_directories(p.parent_path());
-			}
-
-			json to_write;
-			to_write["Lens Effects"] = insettings;
-
-			std::ofstream outfile(customSettingsPath);
-			if (!outfile) {
-				logger::error("[Lens Effects] Failed to create {}", customSettingsPath);
-				return insettings;
-			}
-			outfile << to_write.dump(1);
-		} catch (const std::filesystem::filesystem_error& e) {
-			logger::error("[Lens Effects] Filesystem error when creating {}: {}", customSettingsPath, e.what());
-		} catch (const std::exception& e) {
-			logger::error("[Lens Effects] Unexpected error when creating {}: {}", customSettingsPath, e.what());
-		}
-		return insettings;
-	}
+	json custom;
 
 	try {
-		file >> customsettings;
+		file >> custom;
 	} catch (const nlohmann::json::parse_error& e) {
 		logger::error("[Lens Effects] Failed to parse {}: {}", customSettingsPath, e.what());
-		return insettings;
+		return false;
 	}
 
-	auto it = customsettings.find("Lens Effects");
-	if (it != customsettings.end() && it->is_object()) {
-		logger::info("[Lens Effects] Loading lens settings from {}", customSettingsPath);
+	auto it = custom.find("Lens Effects");
+	if (it != custom.end() && it->is_object()) {
 		try {
-			return customsettings["Lens Effects"].get<Settings>();
+			logger::info("[Lens Effects] Loading preset from {}", customSettingsPath);
+			customSettings = custom["Lens Effects"].get<Settings>();
+			return true;
 		} catch (const nlohmann::json::type_error& e) {
 			logger::error("[Lens Effects] Type error converting settings from {}: {}", customSettingsPath, e.what());
-			return insettings;
 		}
 	} else {
+		logger::error("[Lens Effects] Failed to load preset from {}", customSettingsPath);
+	}
+
+	return false;
+}
+
+void LensEffects::DeletePresetFile()
+{
+	if (PresetFileExists()) {
+		std::filesystem::path path(customSettingsPath);
 		try {
-			customsettings["Lens Effects"] = insettings;
-			std::ofstream outfile(customSettingsPath);
-			if (outfile) {
-				outfile << customsettings.dump(1);
-			} else {
-				logger::error("[Lens Effects] Could not open {} to write default object.", customSettingsPath);
+			if (!std::filesystem::remove(path)) {
+				logger::error("[Lens Effects] Failed to delete lens preset file");
 			}
+		} catch (const std::filesystem::filesystem_error& e) {
+			logger::error("[Lens Effects] Filesystem error when deleting {} : {}", customSettingsPath, e.what());
 		} catch (const std::exception& e) {
-			logger::error("[Lens Effects] Failed to write default \"Lens Effects\" into {}: {}", customSettingsPath, e.what());
+			logger::error("[Lens Effects] Unexpected error when deleting {} : {}", customSettingsPath, e.what());
 		}
 	}
-
-	return insettings;
-}
-
-void LensEffects::SaveCustomSettings(Settings& insettings)
-{
-	std::ofstream file(customSettingsPath);
-	json customsettings;
-	customsettings["Lens Effects"] = insettings;
-
-	if (!file) {
-		logger::error("[Lens Effects] Could not access {}", customSettingsPath);
-		return;
-	}
-
-	try {
-		file << customsettings.dump(1);
-	} catch (const std::exception& e) {
-		logger::error("[Lens Effects] Failed to write settings to {} : Error: {}", customSettingsPath, e.what());
-	}
-
-	if (file.good())
-		logger::info("[Lens Effects] Settings config saved to {}", customSettingsPath);
-	else
-		logger::error("[Lens Effects] Failed to write settings to {}", customSettingsPath);
-}
-
-void LensEffects::ClearCustomSettings()
-{
-	Settings clear;
-	SaveCustomSettings(clear);
-}
-
-void LensEffects::SaveSettings(json& o_json)
-{
-	o_json = settings;
-	SaveCustomSettings(settings);
 }
 
 void LensEffects::LoadSettings(json& o_json)
 {
-	Settings insettings = o_json;
-	settings = LoadCustomSettings(insettings);
+	stdSettings = o_json;
+
+	if (PresetFileExists())
+		presetLoaded = LoadFromPreset();
+
+	settings = (presetLoaded && stdSettings.useCustomPreset) ? &customSettings : &stdSettings;
 
 	RefreshToggles();
 }
 
+void LensEffects::SaveSettings(json& o_json)
+{
+	o_json = stdSettings;
+
+	if (presetLoaded)
+		ExportAsPreset();
+}
+
 void LensEffects::RestoreDefaultSettings()
 {
-	Settings clear;
-	settings = LoadCustomSettings(clear);
+	stdSettings = {};
+
+	if (PresetFileExists())
+		presetLoaded = LoadFromPreset();
 
 	RefreshToggles();
 }

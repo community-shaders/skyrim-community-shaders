@@ -265,13 +265,12 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif
 
 	#if defined(LENS_EFFECTS) && defined(DEFERRED)
-		#pragma warning(disable:3206)
-		float4 SunParams = LensEffects.Load(int3(3,0,0)); uint Out;
-		#pragma warning(default:3206)
 		#if defined(DITHER)
+			float4 SunParams = LensEffects.Load(int2(3,0));
 			if(input.Position.y == SunParams.y)
 				LensEffects[int2(2,0)] = psout.Color;
 		#elif defined(CLOUDS)
+			float4 SunParams = LensEffects.Load(int3(3,0,0)); uint Out;
 			if(psout.Color.w > 0.5 && length(input.Position.xy - SunParams.xy) - SunParams.w <= 0.0)
 				InterlockedAdd(LensEffectsAT[int2(0,0)], 1, Out);
 		#endif

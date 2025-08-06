@@ -1,6 +1,7 @@
 #include "LensEffects/LensEffectHelper.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/SharedData.hlsli"
+#include "Common/Math.hlsli"
 
 //// Structs ////////////////////////////////////////////////////////////////////////////
 
@@ -47,7 +48,7 @@ struct SunGlareVertexOutput
     float4 Position : SV_POSITION;
     float4 TexCoord : TEXCOORD0;
     nointerpolation float4 SunInt : DATA0;
-    nointerpolation float4 Color : DATA1;
+    nointerpolation float3 Color : DATA1;
     nointerpolation float4 SkyColor : DATA2;
     nointerpolation float Scale : DATA3;
 };
@@ -75,7 +76,6 @@ struct IceVertexOutput
     float3 Color : DATA0;
 };
 
-
 /////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -85,9 +85,7 @@ struct IceVertexOutput
 cbuffer Settings : register(b1){
     float4 ScreenSize;
     uint  Frame;
-    uint  TMOkay;
     float Precip;
-    float PrecipFade;
     float WeatherBasedFadeout;
     float4 SunParams;
     float4 SunBlendColor;
@@ -156,13 +154,14 @@ cbuffer Settings : register(b1){
     float UISunGlareScale;
     float UISunGlareInt;
     float UISunGlareOuterInt;
+    float UISunGlareFade;
 
     float UICAIntensity;
     float UICAThreshold;
     float UICAMaxOffset;
 
     float UIFrostInt;
-    float UIFrostFade;
+    float SnowPrecipValue;
 
     float4 UIBurstColor;
     float4 UISunGlareColor;
@@ -187,7 +186,7 @@ SamplerComparisonState Depth_Sampler : register(s13);
 
 ///// Occlusion Shader //////////////////////////////////////////////////////////////////
 
-#ifdef MaskPSShader
+#ifdef OCCLUSION_PIXEL_SHADER
 
 cbuffer CB2 : register(b2){
     float4 buffer[16];};
@@ -201,13 +200,12 @@ Texture2D MotionVector : register(t2);
 
 static const int nFrames = 10;
 
-#pragma warning(disable:3206)
 uint GetTemporalAverage(uint Value, uint idx){
     SunLUT_AT[int2(idx-1, 0)] = Value;
 
     uint Sum = 0.0;
     [unroll] for(int i=0; i < nFrames; ++i)
-        Sum += SunLUT_AT.Load(int3(5+i, 0, 0));
+        Sum += SunLUT_AT.Load(int2(5+i, 0));
 
     return Sum / nFrames;
 }
@@ -217,16 +215,15 @@ float GetTemporalAverage(float Value, uint idx){
 
     float Sum = 0.0;
     [unroll] for(int i=0; i < nFrames; ++i)
-        Sum += SunLUT.Load(int3(5+i, 0, 0)).x;
+        Sum += SunLUT.Load(int2(5+i, 0)).x;
 
     return Sum / nFrames;
 }
-#pragma warning(default:3206)
 
 float UpdateDepthFactor(float2 SunCoords, float SunRadius){
     float DepthFactor = 0.00001;
     [loop] for(int i=0; i<OCCLSAMPLES; ++i){
-        float2 Offset = sincos2(Random(i) * TPI) * sqrt(Random(i+1)) * SunRadius;
+        float2 Offset = sincos2(Random(i) * Math::TAU) * sqrt(Random(i+1)) * SunRadius;
         float2 Coords = SunCoords + Offset;
         DepthFactor += DepthTexture.SampleCmpLevelZero(Depth_Sampler, Coords, 1).x;
     }
@@ -249,10 +246,10 @@ float UpdateCloudFactor(float2 SunSSCoords, uint CloudFactor, uint OldCloudFacto
 }
 
 float GetWeatherFactor(float4 SunColor, float CloudFactor, float SunRadius){
-    float PrecipFactor = LinearStep(0.0, 0.5, inv(Precip));
+    float PrecipFactor = 1.0 - LinearStep(0.2, 0.6, Precip);
     float WeatherFade = inv(WeatherBasedFadeout);
 
-    CloudFactor = saturate(inv(CloudFactor / delta((PI * (SunRadius * SunRadius)))));
+    CloudFactor = saturate(inv(CloudFactor / delta((Math::PI * (SunRadius * SunRadius)))));
     CloudFactor = LinearStep(0.0, 0.8, CloudFactor);
 
     return PrecipFactor * CloudFactor * WeatherFade;
@@ -276,13 +273,16 @@ void main(MaskVSOutput input)
 
     [branch] if(index < 1 && min(SunCoords.x, SunCoords.y) > -0.4)
     {
-        #pragma warning(disable:3206)
-        uint Clouds = SunLUT_AT.Load(int3(0,0,0));
-        uint OldClouds = SunLUT_AT.Load(int3(1,0,0));
-        #pragma warning(default:3206)
+        uint Clouds = SunLUT_AT.Load(int2(0,0));
+        uint OldClouds = SunLUT_AT.Load(int2(1,0));
 
         float SunUVRadius;
         float SunSSRadius = GetSunRadius(SunParams.z, SunParams.w, SunUVRadius);
+        if(SunUVRadius < 0.0 || SunSSRadius < 0.0){
+            float4 Sun = SunLUT.Load(int2(3,0));
+            SunSSRadius = Sun.z;
+            SunUVRadius = SunSSRadius * rcp(ScreenSize.x);
+        }
 
         float CloudFactor = UpdateCloudFactor(SunSSCoords, Clouds, OldClouds);
         float DepthFactor = UpdateDepthFactor(SunCoords, SunUVRadius);
@@ -305,7 +305,7 @@ void main(MaskVSOutput input)
 
 //// Starburst Vertex Shader ////////////////////////////////////////////////////////////
 
-#ifdef StarburstVSShader
+#ifdef STARBURST_VERTEX_SHADER
 
 cbuffer SunFlare : register(b2) {
     float4 Unused;
@@ -353,7 +353,7 @@ StarburstVSOutput main(VertexShaderInput input)
 
 //// Starburst Pixel Shader /////////////////////////////////////////////////////////////
 
-#ifdef StarburstPSShader
+#ifdef STARBURST_PIXEL_SHADER
 
 Texture2D depth : register(t0);
 
@@ -431,7 +431,6 @@ float4 main(StarburstVSOutput input) : SV_Target
     Starburst += RayMask * LinearStep(0.3, 1.0, input.SunInt.x);
     Starburst *= input.SunInt.y;
 
-
 	return float4(Starburst * input.Color.xyz * UIBurstInt * input.Color.w, 0.0);
 }
 #endif
@@ -441,7 +440,7 @@ float4 main(StarburstVSOutput input) : SV_Target
 
 //// Ghost Vertex Shader ////////////////////////////////////////////////////////////////
 
-#ifdef GhostVSShader
+#ifdef GHOST_VERTEX_SHADER
 
 cbuffer SunFlare : register(b2) {
     float4 Unused;
@@ -505,8 +504,6 @@ GhostVSOutput main(VertexShaderInput input)
         output.Color.xyz = lerp(SunParams.xyz, UIColor.xyz, UIGhostSat);
     }
 
-
-
 	output.Position = float4(output.Position.xy, 0.0, 1.0);
 
     return output;
@@ -518,7 +515,7 @@ GhostVSOutput main(VertexShaderInput input)
 
 //// Ghost Pixel Shader /////////////////////////////////////////////////////////////////
 
-#ifdef GhostPSShader
+#ifdef GHOST_PIXEL_SHADER
 
 Texture2D AtlasTexture : register(t1);
 
@@ -575,7 +572,7 @@ float4 main(GhostVSOutput input) : SV_Target
 
 //// Sun Glare Vertex Shader ////////////////////////////////////////////////////////////
 
-#ifdef SunGlareVSShader
+#ifdef SUNGLARE_VERTEX_SHADER
 
 cbuffer SunFlare : register(b2) {
     float4 Unused;
@@ -602,12 +599,9 @@ SunGlareVertexOutput main(VertexShaderInput input)
     output.Position = float4(output.Position.xy, 0.0, 1.0);
 
     output.SunInt = OcclusionLUT.Load(0);
-
     output.SkyColor = OcclusionLUT.Load(int3(2,0,0));
-    float ColorScale = inv(LinearStep(0.1, 0.3, Chroma(output.SkyColor.xyz)));
+    output.Color = UISunGlareColor.xyz;
 
-    float3 Color = UISunGlareColor.xyz - output.SkyColor.xyz + (inv(sum3(output.SkyColor.xyz) / 3.0));
-    output.Color = float4(lerp(Color, Color+float3(1,1,1), ColorScale * 0.5), lerp(1.0, 3.0, ColorScale));
 
     return output;
 }
@@ -618,7 +612,7 @@ SunGlareVertexOutput main(VertexShaderInput input)
 
 //// Sun Glare Pixel Shader /////////////////////////////////////////////////////////////
 
-#ifdef SunGlarePSShader
+#ifdef SUNGLARE_PIXEL_SHADER
 
 Texture2D Depth : register(t0);
 Texture2D Main : register(t1);
@@ -626,26 +620,22 @@ Texture2D Main : register(t1);
 float4 main(SunGlareVertexOutput input) : SV_Target
 {
     float Dist = length(input.TexCoord.zw);
+    float InvDist = inv(Dist);
+    clip(InvDist);
 
-    clip(inv(Dist));
-
-    float Intensity = (TMOkay) ? UISunGlareInt : UISunGlareInt * 0.3;
+    float Intensity = UISunGlareInt;
           Intensity *= input.Scale * 0.8;
 
     float sigma = max(0.01, Intensity);
     float Glow = exp(-(Dist * Dist) / (2.0 * sigma * sigma));
-          Glow *= pow(saturate(1.0 - Dist), Intensity * 2) * Intensity;
+          Glow *= pow(saturate(InvDist), Intensity * 2) * Intensity;
 
-    float Edge = 1.0 + ((UISunGlareOuterInt) + input.Color.w - 1) * Dist;
-    float3 Color = Glow * (input.Color.xyz * 1.5) * Edge;
+    float3 Scene = Main.Sample(Point_Sampler, input.Position.xy / ScreenSize.xy).xyz;
 
-    [branch] if(!TMOkay){
-        float3 Scene = Main.Sample(Point_Sampler, input.Position.xy / ScreenSize.xy).xyz;
-        Edge = 1.0 + (UISunGlareOuterInt - 0.25) * Dist;
-        float3 MinF = float3(0.5,0.5,0.5) * input.Color.xyz * Edge;
-        Color = input.Color.xyz * Glow - Scene;
-        Color = (Color + MinF) * inv(Dist);
-    }
+    float Edge = UISunGlareOuterInt * Dist;
+
+    float3 Color = WHITE * Glow + (input.Color * Edge) - Scene;
+    Color *= smoothstep(-0.01, UISunGlareFade, InvDist) * InvDist;
 
     float depth = Depth.SampleCmpLevelZero(Depth_Sampler, input.Position.xy / ScreenSize.xy, 1).x;
           depth = saturate(depth + input.SunInt.x);
@@ -661,7 +651,7 @@ float4 main(SunGlareVertexOutput input) : SV_Target
 
 //// Halo Vertex Shader /////////////////////////////////////////////////////////////////
 
-#ifdef HaloVSShader
+#ifdef HALO_VERTEX_SHADER
 
 cbuffer SunFlare : register(b2) {
     float4 Unused;
@@ -710,7 +700,7 @@ HaloVertexOutput main(VertexShaderInput input)
 
 //// Halo Pixel Shader //////////////////////////////////////////////////////////////////
 
-#ifdef HaloPSShader
+#ifdef HALO_PIXEL_SHADER
 
 
 float4 main(HaloVertexOutput input) : SV_Target
@@ -752,7 +742,7 @@ float4 main(HaloVertexOutput input) : SV_Target
 
 //// Lens Glare Vertex Shader ///////////////////////////////////////////////////////////
 
-#ifdef LensGlareVSShader
+#ifdef LENSGLARE_VERTEX_SHADER
 
 cbuffer SunFlare : register(b2) {
     float4 Unused;
@@ -792,7 +782,7 @@ LensGlareVertexOutput main(VertexShaderInput input)
 
 //// Lens Glare Pixel Shader ////////////////////////////////////////////////////////////
 
-#ifdef LensGlarePSShader
+#ifdef LENSGLARE_PIXEL_SHADER
 
 
 float4 main(LensGlareVertexOutput input) : SV_Target
@@ -817,7 +807,7 @@ float4 main(LensGlareVertexOutput input) : SV_Target
 
 //// Chromatic Aberration ///////////////////////////////////////////////////////////////
 
-#ifdef ChromaticAberrationPSShader
+#ifdef CHROMATIC_ABERRATION_PIXEL_SHADER
 
 Texture2D Main : register(t1);
 Texture2D MotionVector : register(t2);
@@ -851,7 +841,7 @@ float4 main(VertexShaderOutput input) : SV_Target
 
 //// Ice Vertex Shader //////////////////////////////////////////////////////////////////
 
-#ifdef IceVSShader
+#ifdef ICE_VERTEX_SHADER
 
 
 IceVertexOutput main(VertexShaderInput input)
@@ -862,7 +852,6 @@ IceVertexOutput main(VertexShaderInput input)
     output.TexCoord.zw = input.TexCoord * 2.0 - 1.0;
 
     output.Color = UIFrostColor.xyz * UIFrostInt;
-    output.Color *= lerp(saturate(Precip - inv(PrecipFade)), Precip, PrecipFade);
 
     output.Position = float4(input.Position.xy, 0.0, 1.0);
 
@@ -875,7 +864,7 @@ IceVertexOutput main(VertexShaderInput input)
 
 //// Ice Pixel Shader ///////////////////////////////////////////////////////////////////
 
-#ifdef IcePSShader
+#ifdef ICE_PIXEL_SHADER
 
 Texture2D IceTexture : register(t0);
 Texture2D Main : register(t1);
@@ -886,48 +875,11 @@ float4 main(IceVertexOutput input) : SV_Target
 {
     float Dist = length(input.TexCoord.zw);
 
-    float2 UVCoords = (input.TexCoord.xy) * (ScreenSize.xy / float2(2560, 1440));
+    float3 Texture = IceTexture.Sample(Point_Sampler, input.TexCoord.xy).xyz;
+    float FadeFactor = LinearStep(inv(SnowPrecipValue), 1.0, saturate(Dist-0.35));
+    float3 Color = Texture * input.Color * FadeFactor;
 
-    float3 Scene = Main.Sample(Point_Sampler, UVCoords).xyz;
-    float3 Texture = IceTexture.Sample(Point_Sampler, UVCoords).xyz;
-
-    float3 Frost = lerp(Scene, Texture * input.Color, saturate((PrecipFade+0.2)));
-           Frost *= LinearStep(inv(PrecipFade), 1.0, saturate((Dist-0.35)));
-
-    return float4(Frost, 0.0);
-}
-#endif
-/////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-//// Rain Vertex Shader /////////////////////////////////////////////////////////////////
-
-#ifdef RainVSShader
-
-VertexShaderOutput main(VertexShaderInput input)
-{
-    VertexShaderOutput output;
-    output.TexCoord = input.TexCoord;
-    output.Position = float4(input.Position.xy, 0.0, 1.0);
-
-    return output;
-}
-#endif
-/////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-//// Rain Pixel Shader //////////////////////////////////////////////////////////////////
-
-#ifdef RainPSShader
-
-float4 main(VertexShaderOutput input) : SV_Target
-{
-    float3 Rain = float3(0.0, 0.0, 0.0);
-
-
-    return float4(Rain, 0.0);
+    return float4(Color, 0.0);
 }
 #endif
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -936,7 +888,7 @@ float4 main(VertexShaderOutput input) : SV_Target
 
 //// Bypass VS //////////////////////////////////////////////////////////////////////////
 
-#ifdef BypassVSShader
+#ifdef BYPASS_VERTEX_SHADER
 
 
 VertexShaderOutput main(VertexShaderInput input)

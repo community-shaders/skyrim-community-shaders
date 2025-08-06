@@ -1,17 +1,14 @@
-
+#include "Common/Math.hlsli"
 //// Defines //////////////////////////////////////////////////////////////////////////////////////
 
 #define LUM 0.333333
 #define LUM_601 float3(0.299, 0.587, 0.114)
 #define LUM_709 float3(0.212, 0.715, 0.072)
 #define LUM_202 float3(0.262, 0.678, 0.059)
-#define EPSIL	1e-6
-#define PI		3.14159265358
-#define TPI	    6.28318530718
 
 // Macros //
 #define inv(x) (1.0 - (x))
-#define delta(x) max(x, EPSIL)
+#define delta(x) max(x, EPSILON_DIVISION)
 
 // Debug //
 #define CLEAR float3(0.0, 0.0, 0.0)
@@ -141,23 +138,17 @@ float4 DegreesToVect(float2 degrees) {
 float AbsDist(float2 Coords){
     return max(abs(Coords.x), abs(Coords.y));}
 
-//Test if axis aligned shape inside Boundary [0,0]
-bool ASInsideBoundary(float2 Coords, float2 Boundary, float Radius){
-    return all(abs(Coords - (Boundary.xy*0.5)) <= (Boundary.xy*0.5) - Radius); }
-
-bool ASInsideBoundary(float2 Coords, float2 Boundary, float2 Radius){
-    return all(abs(Coords - (Boundary.xy*0.5)) <= (Boundary.xy*0.5) - Radius); }
-
-//origin[x,y]
 bool InsideRect(float2 p, float2 rectMin, float2 rectMax){
     return all(step(rectMin, p) * step(p, rectMax)); }
 
 float2 AtlasFetch4(float2 coords, uint texNum){
-    static const float2 pos[4] = {0.0,0.0, 0.5,0.0, 0.0,0.5, 0.5,0.5};
+    static const float2 pos[4] = {
+    float2(0.0, 0.0), float2(0.5, 0.0),
+    float2(0.0, 0.5), float2(0.5, 0.5)};
     return mad(coords, 0.5, pos[texNum - 1]);}
 
 float2 AtlasFetch16(float2 coords, uint texNum){
-    static const float2 pos[16] ={
+    static const float2 pos[16] = {
     float2(0.00, 0.00), float2(0.25, 0.00), float2(0.50, 0.00), float2(0.75, 0.00),
     float2(0.00, 0.25), float2(0.25, 0.25), float2(0.50, 0.25), float2(0.75, 0.25),
     float2(0.00, 0.50), float2(0.25, 0.50), float2(0.50, 0.50), float2(0.75, 0.50),
@@ -173,12 +164,12 @@ static const float2 BF4_Coords[4] = {
 
 //// Lighting /////////////////////////////////////////////////////////////////////////////////////
 
-float Diffraction(float x, float freq, float phase, float ampli){
-	float  sinc = PI * (x * freq + phase) + EPSIL;
+float Diffraction(float x, float Frequency, float Phase, float Amplitude){
+	float  sinc = Math::PI * (x * Frequency + Phase) + EPSILON_DIVISION;
 	sinc = sin(sinc) / sinc;
-    return sinc * sinc * ampli;}
+    return sinc * sinc * Amplitude;}
 
-float3 DiffractionF3(float3 x, float freq, float phase, float ampli){
-	float3 sinc = PI * (x * freq + phase) + EPSIL;
+float3 DiffractionF3(float3 x, float Frequency, float Phase, float Amplitude){
+	float3 sinc = Math::PI * (x * Frequency + Phase) + EPSILON_DIVISION;
 	sinc = sin(sinc) / sinc;
-    return sinc * sinc * ampli;}
+    return sinc * sinc * Amplitude;}

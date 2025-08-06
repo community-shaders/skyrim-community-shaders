@@ -14,12 +14,10 @@ struct LensEffects : Feature
 	virtual inline std::string GetShortName() override { return "LensEffects"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
 	virtual inline std::string_view GetShaderDefineName() override { return "LENS_EFFECTS"; }
-	virtual std::string_view GetCategory() const override { return "Sky"; }
+	virtual std::string_view GetCategory() const override { return "Post Process"; }
 	virtual inline bool SupportsVR() override { return false; };  //
 
-	virtual void DataLoaded() override;
 	virtual inline void PostPostLoad() override { Hooks::Install(); }
-
 	virtual void SetupResources() override;
 	virtual void CompileShaders();
 
@@ -34,7 +32,6 @@ struct LensEffects : Feature
 	virtual void SetupHaloEffect();
 	virtual void SetupGhostEffect();
 	virtual void SetupIceEffect();
-	virtual void SetupRainEffect();
 	virtual void BypassShader();
 	virtual void SetupCAEffect();
 
@@ -78,42 +75,33 @@ struct LensEffects : Feature
 	ID3D11VertexShader* IceVertexShader = nullptr;
 	ID3D11PixelShader* IcePixelShader = nullptr;
 
-	ID3D11VertexShader* RainVertexShader = nullptr;
-	ID3D11PixelShader* RainPixelShader = nullptr;
-
 	uintptr_t* skyrim_FlareData = nullptr;
 	uint32_t* skyrim_RunFlarePtr = nullptr;
 
 	RE::NiPoint3* skyrim_SunPosition = nullptr;
 	float* skyrim_SunGlareScale = nullptr;
-	float SunScale;
+
+	static constexpr int ghostpasses = 10;
 
 	bool overrideShader = false;
-	bool renderDeferred = false;
 	bool useCloudLUT = false;
 	bool upscalingActive = false;
 	uint frameIdx = 5;
-	uint TMOkay = false;
-	float4 screenParams;
-	static constexpr int ghostpasses = 10;
 
 	virtual DirectX::XMFLOAT4A GetSunPosition();
 	virtual DirectX::XMFLOAT4A GetSunColor();
 	virtual void GetWeatherShader();
-	virtual bool GetWeatherPrecip();
+	virtual float GetWeatherPrecip();
 	virtual bool CheckWeatherChange();
-	virtual float GetWeatherTransTime();
 	virtual void UpdateWeatherBasedDisable();
 	virtual void UpdateFrameGenBasedDisable();
 
 	bool disableSunFX = false;
-	bool weatherCurrent = false;
-	bool precipCurrent = false;
 	float weatherFadeout = 0.0f;
+	float snowPrecipValue = 0.0f;
 	uint32_t PrevWeatherID = 0;
 	uint32_t WeatherID = 0;
-	float2 currentPrecip = float2(0.0f, 0.0f);
-	std::chrono::high_resolution_clock::time_point precipstart;
+	float SunScale;
 
 	static inline std::array<uint32_t, 31> weatherDisables = { { 0x00D299E, 0x02006AEC, 0x02001407, 0x02018DBB, 0x02018DBC, 0x02018DBD,
 		0x02001407, 0x000D9329, 0x0200959F, 0x00105941, 0x000923FD, 0x00048C14,
@@ -123,13 +111,18 @@ struct LensEffects : Feature
 		0x000c8221 } };
 
 	static const inline std::string customSettingsPath = "Data\\Shaders\\LensEffects\\Lens Settings.json";
+	bool presetLoaded = false;
 
 	virtual void RefreshToggles();
 	virtual void RestoreDefaultSettings() override;
 	virtual void DrawSettings() override;
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
-	virtual void ClearCustomSettings();
+
+	virtual bool PresetFileExists();
+	virtual bool LoadFromPreset();
+	virtual void ExportAsPreset();
+	virtual void DeletePresetFile();
 
 	struct MainSettings
 	{
@@ -140,11 +133,11 @@ struct LensEffects : Feature
 		uint SB_EnableBlades = true;
 		float SB_BladeInt = 0.75f;
 		float SB_BladeVertices = 6.0f;
-		float SB_BladeSplay = 0.026f;
+		float SB_BladeSplay = 0.11f;
 		float SB_BladeRotation = 180.0f;
 		float SB_BladeLength = 0.9f;
-		float SB_BladeBaseWidth = 1.16f;
-		float SB_BladeWidth = 1.4f;
+		float SB_BladeBaseWidth = 1.23f;
+		float SB_BladeWidth = 1.0f;
 		float SB_BladeTaper = 1.0f;
 		float SB_BladeFeather = 10.0f;
 		float SB_BladeFadePow = 0.7f;
@@ -199,9 +192,10 @@ struct LensEffects : Feature
 		float HL_ColorShift = 0.52f;
 
 		//Sun Glare
-		float SG_Scale = 0.8f;
-		float SG_Intensity = 0.6f;
-		float SG_OuterInt = 0.25f;
+		float SG_Scale = 0.7f;
+		float SG_Intensity = 2.0f;
+		float SG_OuterInt = 1.2f;
+		float SG_OuterFade = 0.8f;
 
 		//LensCA
 		float CA_Intensity = 0.50f;
@@ -210,10 +204,10 @@ struct LensEffects : Feature
 
 		//LensIce
 		float LI_Intensity = 0.50f;
-		float LI_FadeDuration = 20.0f;
-		//62  248
+		float LIEX_FadeFactor = 0.0f;
+		//63  252
 
-		float _pad[2];
+		float _pad[1];
 		DirectX::XMFLOAT4A SB_Color = DirectX::XMFLOAT4A(0.0f, 0.0f, 0.0f, 0.0f);
 		DirectX::XMFLOAT4A SG_Color = DirectX::XMFLOAT4A(0.0f, 0.0f, 0.0f, 0.0f);
 		DirectX::XMFLOAT4A HL_Color = DirectX::XMFLOAT4A(0.0f, 0.0f, 0.0f, 0.0f);
@@ -289,9 +283,9 @@ struct LensEffects : Feature
 		float4 HL_Color = float4(1.0f, 0.0f, 0.0f, 1.0f);
 		float4 LI_Color = float4(0.29f, 0.69f, 0.8f, 1.0f);
 
-		float LI_FadeIn = 0.88f;
-		float LI_FadeOut = 0.26f;
-
+		float LI_FadeDuration = 1.0f;
+		float LI_FadeIn = 0.35f;
+		float LI_FadeOut = 0.01f;
 		bool useOldSchoolCA = true;
 	};
 
@@ -306,23 +300,20 @@ struct LensEffects : Feature
 		bool EnableGhosts = true;
 		bool EnableCA = true;
 		bool EnableIce = true;
-		bool EnableRain = false;
 
-		bool disableInFPV = false;
+		bool useCustomPreset = true;
 	};
-	Settings settings;
-	virtual void SaveCustomSettings(Settings& insettings);
-	virtual Settings LoadCustomSettings(Settings& settings);
+	Settings* settings;
+	Settings customSettings;
+	Settings stdSettings;
 
 	struct alignas(16) ConstBuffer
 	{
 		DirectX::XMFLOAT4A screensize;
 		uint frame;
-		uint TMOkay;
 		float precip;
-		float precipfade;
 		float sunFXFade;
-		float pad[3];
+		float _pad[1];
 		DirectX::XMFLOAT4A SunParams;
 		DirectX::XMFLOAT4A suncolor;
 		MainSettings shadersettings;
@@ -330,30 +321,25 @@ struct LensEffects : Feature
 	virtual ConstBuffer UpdateBufferValues();
 
 	virtual inline DirectX::XMFLOAT4A VectorToXMFloat(float4& value) { return DirectX::XMFLOAT4A(value.x, value.y, value.z, value.w); }
-
-	virtual inline float MapRange(float x, float oldMin, float oldMax, float newMin, float newMax)
-	{
-		return newMin + ((x - oldMin) / (oldMax - oldMin)) * (newMax - newMin);
-	}
+	virtual inline float LinearStep(float edge0, float edge1, float x) { return std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f); }
 
 	virtual inline MainSettings UpdateSettings()
 	{
-		auto mSettings = settings.mainsettings;
-		static auto& cSettings = settings.coldsettings;
-
-		mSettings.SB_Color = VectorToXMFloat(cSettings.SB_Color);
+		auto mSettings = settings->mainsettings;
+		auto& cSettings = settings->coldsettings;
 		mSettings.SB_BladeTaper = mSettings.SB_BladeTaper + ((mSettings.SB_BladeSplay > 0.01f) * 80);
 		mSettings.SB_BladeWidth = (1.0f + (mSettings.SB_BladeWidth - 1.0f) * 0.25f) + mSettings.SB_BladeSplay;
 		mSettings.SB_BladeBaseWidth = 1.0f + (mSettings.SB_BladeBaseWidth - 1.0f) * 0.25f;
-		mSettings.SB_RandomRaysWidth = MapRange(mSettings.SB_RandomRaysWidth, 0.0f, 1.0f, 11.0f, 7.0f);
+		mSettings.SB_RandomRaysWidth = std::lerp(11.0f, 7.0f, mSettings.SB_RandomRaysWidth);
 		mSettings.SBEX_BladeSplayLen = (1 / mSettings.SB_BladeLength - 0.95f) * (mSettings.SB_BladeSplay > 0.01f);
-		mSettings.SG_Color = VectorToXMFloat(cSettings.SG_Color);
 		mSettings.SG_Scale = mSettings.SG_Scale * 0.5f;
 		mSettings.GH_Scale = mSettings.GH_Scale * 0.5f;
-		mSettings.HL_Color = VectorToXMFloat(cSettings.HL_Color);
 		mSettings.HL_LineWidth = mSettings.HL_LineWidth * 0.1f;
+		mSettings.LIEX_FadeFactor = snowPrecipValue;
+		mSettings.SB_Color = VectorToXMFloat(cSettings.SB_Color);
+		mSettings.SG_Color = VectorToXMFloat(cSettings.SG_Color);
+		mSettings.HL_Color = VectorToXMFloat(cSettings.HL_Color);
 		mSettings.LI_Color = VectorToXMFloat(cSettings.LI_Color);
-
 		return mSettings;
 	}
 
@@ -366,13 +352,12 @@ struct LensEffects : Feature
 			OcculsionMask = 2,
 
 			LensIce = 3,
-			LensRain = 4,
-			LensCA = 5,
-			LensBurst = 6,
-			LensGlare = 7,
-			LensHalo = 8,
-			LensGhosts = 9,
-			LensSunGlare = 10
+			LensCA = 4,
+			LensBurst = 5,
+			LensGlare = 6,
+			LensHalo = 7,
+			LensGhosts = 8,
+			LensSunGlare = 9
 		};
 	};
 	Shaders::Enum shaderdesc;
@@ -545,7 +530,7 @@ struct LensEffects : Feature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
-		struct BSSkyShader_SetupMaterial  //override sun glare, fix sun blend color and append occlusion LUT
+		struct BSSkyShader_SetupMaterial  //override sun glare, fetch sun scale, append occlusion LUT
 		{
 			static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags);
 			static inline REL::Relocation<decltype(thunk)> func;
