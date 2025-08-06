@@ -252,7 +252,7 @@ void Streamline::CheckFrameConstants()
 	}
 }
 
-void Streamline::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, sl::DLSSPreset a_preset)
+void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, sl::DLSSPreset a_preset)
 {
 	CheckFrameConstants();
 
@@ -297,8 +297,8 @@ void Streamline::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outpu
 		sl::Extent lowResExtent{ 0, 0, (uint)renderSize.x, (uint)renderSize.y };
 		sl::Extent fullExtent{ 0, 0, (uint)screenSize.x, (uint)screenSize.y };
 
-		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_inputTexture, 0 };
-		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_outputTexture, 0 };
+		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
+		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
 		sl::Resource depth = { sl::ResourceType::eTex2d, depthTexture.texture, 0 };
 		sl::Resource mvec = { sl::ResourceType::eTex2d, motionVectorsTexture.texture, 0 };
 

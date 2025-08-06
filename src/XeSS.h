@@ -56,7 +56,6 @@ public:
 		ID3D12Resource* a_inputColorTexture,
 		ID3D12Resource* a_motionVectorTexture,
 		ID3D12Resource* a_depthTexture,
-		ID3D12Resource* a_reactiveMaskTexture,
 		ID3D12Resource* a_outputTexture,
 		ID3D12GraphicsCommandList* a_commandList,
 		uint32_t a_renderWidth,

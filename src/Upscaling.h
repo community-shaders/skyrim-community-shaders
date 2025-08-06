@@ -128,7 +128,6 @@ public:
 	WrappedResource* HUDLessBufferShared12;
 	WrappedResource* depthBufferShared12;
 	WrappedResource* motionVectorBufferShared12;
-	WrappedResource* reactiveMaskBufferShared12;
 
 	WrappedResource* inputColorBufferShared12;
 	WrappedResource* outputColorBufferShared12;
