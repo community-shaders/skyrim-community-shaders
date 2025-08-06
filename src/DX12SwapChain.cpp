@@ -274,6 +274,27 @@ WrappedResource::WrappedResource(D3D11_TEXTURE2D_DESC a_texDesc, ID3D11Device5* 
 	}
 }
 
+WrappedResource::~WrappedResource()
+{
+	if (resource11) {
+		resource11->Release();
+		resource11 = nullptr;
+	}
+	if (srv) {
+		srv->Release();
+		srv = nullptr;
+	}
+	if (uav) {
+		uav->Release();
+		uav = nullptr;
+	}
+	if (rtv) {
+		rtv->Release();
+		rtv = nullptr;
+	}
+	// resource (winrt::com_ptr) will be automatically released
+}
+
 DXGISwapChainProxy::DXGISwapChainProxy(IDXGISwapChain4* a_swapChain)
 {
 	swapChain = a_swapChain;
