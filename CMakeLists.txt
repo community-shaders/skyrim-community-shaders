@@ -1,10 +1,17 @@
 cmake_minimum_required(VERSION 3.21)
+cmake_policy(SET CMP0116 NEW)
+set(CMAKE_POLICY_WARNING_CMP0116 OFF)
 
 project(
 	CommunityShaders
 	VERSION 1.3.4
 	LANGUAGES CXX
 )
+
+# default install path
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+  set_property(CACHE CMAKE_INSTALL_PREFIX PROPERTY VALUE "${CMAKE_CURRENT_BINARY_DIR}/aio")
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
@@ -191,33 +198,40 @@ endif()
 file(GLOB FEATURE_PATHS LIST_DIRECTORIES true ${CMAKE_SOURCE_DIR}/features/*)
 string(TIMESTAMP UTC_NOW "%Y-%m-%dT%H-%MZ" UTC)
 
+# Append a '/' to the end of each feature path for installation all its contents but not itself
+set(FEATURE_PATHS_SLASH ${FEATURE_PATHS})
+list(TRANSFORM FEATURE_PATHS_SLASH APPEND /)
+
+# Install logic for AIO package
+# To copy AIO package at a folder do `${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${AIO_DIR}`
+install(CODE "file(REMOVE_RECURSE \${CMAKE_INSTALL_PREFIX})")
+install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION SKSE/Plugins COMPONENT SKSE)
+install(FILES $<TARGET_PDB_FILE:${PROJECT_NAME}> DESTINATION SKSE/Plugins COMPONENT SKSE)
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/package/ ${FEATURE_PATHS_SLASH} DESTINATION . COMPONENT Shaders)
+install(CODE "file(REMOVE \${CMAKE_INSTALL_PREFIX}/Core)" COMPONENT Shaders)
+
+add_custom_command(
+	OUTPUT copy_shaders.stamp
+	COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${AIO_DIR} --component Shaders
+	COMMAND ${CMAKE_COMMAND} -E touch copy_shaders.stamp
+	DEPENDS ${HLSL_FILES}
+	COMMENT "Copy shaders"
+)
+
+# Standalone target for preparing shaders for CI validation
+# This allows shader validation to run without waiting for the full build
+add_custom_target(prepare_shaders
+	DEPENDS copy_shaders.stamp
+	COMMENT "Preparing shaders for validation"
+)
+
 if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
 	set(AIO_DIR "${CMAKE_CURRENT_BINARY_DIR}/aio")
 	message("Copying package folder with dll/pdb with all features to ${AIO_DIR}")
 	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E remove_directory "${AIO_DIR}"
-		COMMAND ${CMAKE_COMMAND} -E make_directory "${AIO_DIR}/SKSE/Plugins"
-		COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/package "${AIO_DIR}"
-		COMMAND ${CMAKE_COMMAND} -E copy_directory ${FEATURE_PATHS} "${AIO_DIR}"
-		COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}> "${AIO_DIR}/SKSE/Plugins/"
-		COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_PDB_FILE:${PROJECT_NAME}> "${AIO_DIR}/SKSE/Plugins/"
-		COMMAND ${CMAKE_COMMAND} -E remove "${AIO_DIR}/CORE"
+		COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${AIO_DIR}
+		COMMENT "Copy shaders to AIO"
 	)
-	add_custom_command(
-		OUTPUT copy_shaders.stamp
-		COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/package "${AIO_DIR}"
-		COMMAND ${CMAKE_COMMAND} -E copy_directory ${FEATURE_PATHS} "${AIO_DIR}"
-		COMMAND ${CMAKE_COMMAND} -E touch copy_shaders.stamp
-		DEPENDS ${HLSL_FILES}
-	)
-
-	# Standalone target for preparing shaders for CI validation
-	# This allows shader validation to run without waiting for the full build
-	add_custom_target(prepare_shaders
-		DEPENDS copy_shaders.stamp
-		COMMENT "Preparing shaders for validation"
-	)
-
 endif()
 
 # Automatic deployment to CommunityShaders output directory.
@@ -225,88 +239,77 @@ if(AUTO_PLUGIN_DEPLOYMENT)
 	foreach(DEPLOY_TARGET $ENV{CommunityShadersOutputDir})
 		message("Copying AIO to ${DEPLOY_TARGET}")
 		add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy_directory ${AIO_DIR} "${DEPLOY_TARGET}"
+		COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${DEPLOY_TARGET}
+		COMMENT "Copy AIO to ${DEPLOY_TARGET}"
 		)
-
-		string(MD5 DEPLOY_TARGET_HASH ${DEPLOY_TARGET})
-
-		add_custom_command(
-			OUTPUT ${DEPLOY_TARGET_HASH}.stamp
-			COMMAND ${CMAKE_COMMAND} -E copy_directory "${AIO_DIR}/Shaders" "${DEPLOY_TARGET}/Shaders"
-			COMMAND ${CMAKE_COMMAND} -E touch ${DEPLOY_TARGET_HASH}.stamp
-			DEPENDS copy_shaders.stamp
-		)
-
-		list(APPEND DEPLOY_TARGET_HASHES ${DEPLOY_TARGET_HASH}.stamp)
-
 	endforeach()
-
-	add_custom_target(COPY_SHADERS ALL
-		DEPENDS
-			copy_shaders.stamp
-			${DEPLOY_TARGET_HASHES}
-	)
-
 	if(NOT DEFINED ENV{CommunityShadersOutputDir})
 		message("When using AUTO_PLUGIN_DEPLOYMENT option, you need to set environment variable 'CommunityShadersOutputDir'")
 	endif()
 endif()
 
-# Zip base CommunityShaders and all addons as their own 7z in dist folder
-if(ZIP_TO_DIST)
-	set(ZIP_DIR "${CMAKE_CURRENT_BINARY_DIR}/zip")
-	message("Copying base CommunityShader into ${ZIP_DIR}.")
-	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E remove_directory "${ZIP_DIR}" ${CMAKE_SOURCE_DIR}/dist
-		COMMAND ${CMAKE_COMMAND} -E make_directory "${ZIP_DIR}/SKSE/Plugins" ${CMAKE_SOURCE_DIR}/dist
-		COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/package "${ZIP_DIR}"
-		COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}> "${ZIP_DIR}/SKSE/Plugins/"
-		COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_PDB_FILE:${PROJECT_NAME}> "${ZIP_DIR}/SKSE/Plugins/"
-	)
-	foreach(FEATURE_PATH ${FEATURE_PATHS})
-		if (EXISTS "${FEATURE_PATH}/CORE")
-			add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-				COMMAND ${CMAKE_COMMAND} -E copy_directory ${FEATURE_PATH} "${ZIP_DIR}"
-			)
-		endif()
-	endforeach()
-	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E remove "${ZIP_DIR}/CORE"
-	)
+set(DIST_PATH "${CMAKE_SOURCE_DIR}/dist")
 
-	set(TARGET_ZIP "${PROJECT_NAME}-${UTC_NOW}.7z")
-	message("Zipping ${ZIP_DIR} to ${CMAKE_SOURCE_DIR}/dist/${TARGET_ZIP}")
-	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E tar cf ${CMAKE_SOURCE_DIR}/dist/${TARGET_ZIP} --format=7zip -- .
-		WORKING_DIRECTORY ${ZIP_DIR}
-	)
+set(CORE_PACKAGE "${DIST_PATH}/${PROJECT_NAME}-${UTC_NOW}.7z")
 
-	foreach(FEATURE_PATH ${FEATURE_PATHS})
-		if (EXISTS "${FEATURE_PATH}/CORE")
-			continue()
-		endif()
-		get_filename_component(FEATURE ${FEATURE_PATH} NAME)
-		message("Zipping ${FEATURE_PATH} to ${CMAKE_SOURCE_DIR}/dist/${FEATURE}-${UTC_NOW}.7z")
-		add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E tar cf ${CMAKE_SOURCE_DIR}/dist/${FEATURE}-${UTC_NOW}.7z --format=7zip -- .
-			WORKING_DIRECTORY ${FEATURE_PATH}
-		)
-	endforeach()
-endif()
+file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/package/*")
+# Add SKSE plugin dll as dependency
+list(APPEND CORE_SOURCES ${PROJECT_NAME})
 
-# Create a AIO zip for easier testing
-if(AIO_ZIP_TO_DIST)
-	if(NOT ZIP_TO_DIST)
-		add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_SOURCE_DIR}/dist
-			COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/dist
-		)
+set(CORE_FEATURE_PATHS "${CMAKE_SOURCE_DIR}/package/")
+
+foreach(FEATURE_PATH ${FEATURE_PATHS})
+	if (EXISTS "${FEATURE_PATH}/CORE")
+		list(APPEND CORE_FEATURE_PATHS "\"${FEATURE_PATH}/\"")
+		file(GLOB_RECURSE FEATURE_SOURCES CONFIGURE_DEPENDS "${FEATURE_PATH}/*")
+		list(APPEND CORE_SOURCES ${FEATURE_SOURCES})
+	endif()
+endforeach()
+
+set(FEATURE_PATH "${CMAKE_BINARY_DIR}/Core")
+file(MAKE_DIRECTORY ${FEATURE_PATH})
+add_custom_command(OUTPUT ${CORE_PACKAGE}
+	DEPENDS ${CORE_SOURCES}
+	COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${FEATURE_PATH} --component SKSE
+	COMMAND ${CMAKE_COMMAND} -E copy_directory ${CORE_FEATURE_PATHS} ${FEATURE_PATH}
+	COMMAND ${CMAKE_COMMAND} -E rm -f -- ${FEATURE_PATH}/Core
+	COMMAND ${CMAKE_COMMAND} -E tar cfv ${CORE_PACKAGE} --format=7zip -- .
+	WORKING_DIRECTORY ${FEATURE_PATH}
+	COMMENT "Creating Core zip package"
+)
+add_custom_target("Package-Core" DEPENDS ${CORE_PACKAGE})
+
+foreach(FEATURE_PATH ${FEATURE_PATHS})
+	if (EXISTS "${FEATURE_PATH}/CORE")
+		continue()
 	endif()
 
-	set(TARGET_AIO_ZIP "${PROJECT_NAME}_AIO-${UTC_NOW}.7z")
-	message("Zipping ${AIO_DIR} to ${CMAKE_SOURCE_DIR}/dist/${TARGET_AIO_ZIP}")
-	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E tar cf ${CMAKE_SOURCE_DIR}/dist/${TARGET_AIO_ZIP} --format=7zip -- .
-		WORKING_DIRECTORY ${AIO_DIR}
+	list(APPEND CORE_FEATURE_PATHS "\"${FEATURE_PATH}/\"")
+	file(GLOB_RECURSE FEATURE_SOURCES CONFIGURE_DEPENDS "${FEATURE_PATH}/*")
+	list(APPEND CORE_SOURCES ${FEATURE_SOURCES})
+
+	get_filename_component(FEATURE ${FEATURE_PATH} NAME)
+	set(FEATURE_PACKAGE "${DIST_PATH}/${FEATURE}-${UTC_NOW}.7z")
+		
+	add_custom_command(OUTPUT ${FEATURE_PACKAGE}
+		COMMAND ${CMAKE_COMMAND} -E tar cfv ${FEATURE_PACKAGE} --format=7zip -- .
+		WORKING_DIRECTORY "${FEATURE_PATH}"
+		DEPENDS ${FEATURE_SOURCES}
+		COMMENT "Creating ${FEATURE} zip package"
 	)
-endif()
+
+	string(REPLACE " " "" FEATURE ${FEATURE})
+	string(REPLACE "-" "" FEATURE ${FEATURE})
+	add_custom_target("Package-${FEATURE}" DEPENDS ${FEATURE_PACKAGE})
+endforeach()
+
+set(AIO_PACKAGE "${DIST_PATH}/${PROJECT_NAME}_AIO-${UTC_NOW}.7z")
+add_custom_command(OUTPUT ${AIO_PACKAGE}
+	DEPENDS ${CORE_SOURCES}
+	COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${AIO_DIR}
+	COMMAND ${CMAKE_COMMAND} -E tar cfv ${AIO_PACKAGE} --format=7zip -- .
+	WORKING_DIRECTORY ${AIO_DIR}
+	COMMENT "Creating AIO zip package"
+)
+add_custom_target("Package-AIO" DEPENDS ${AIO_PACKAGE})
+
