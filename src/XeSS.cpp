@@ -134,6 +134,17 @@ void XeSS::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTextu
 	DX::ThrowIfFailed(upscaling->sharedD3D12CommandAllocator->Reset());
 	DX::ThrowIfFailed(upscaling->sharedD3D12CommandList->Reset(upscaling->sharedD3D12CommandAllocator.get(), nullptr));
 
+	// Transition input resources to NON_PIXEL_SHADER_RESOURCE state and output to UNORDERED_ACCESS state
+	{
+		std::vector<D3D12_RESOURCE_BARRIER> barriers;
+		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(upscaling->inputColorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(upscaling->motionVectorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(upscaling->depthBufferShared12->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(upscaling->reactiveMaskBufferShared12->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(upscaling->outputColorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+		upscaling->sharedD3D12CommandList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+	}
+
 	// Execute XeSS upscaling on D3D12 using shared resources
 	xess_d3d12_execute_params_t execParams{};
 	execParams.pColorTexture = upscaling->inputColorBufferShared12->resource.get();
@@ -161,6 +172,17 @@ void XeSS::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTextu
 	if (result != XESS_RESULT_SUCCESS) {
 		logger::error("[XeSS] Failed to execute XeSS upscaling, error code: {}", (int)result);
 		return;
+	}
+
+	// Transition resources back to COMMON state
+	{
+		std::vector<D3D12_RESOURCE_BARRIER> barriers;
+		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(upscaling->inputColorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON));
+		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(upscaling->motionVectorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON));
+		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(upscaling->depthBufferShared12->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON));
+		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(upscaling->reactiveMaskBufferShared12->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON));
+		barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(upscaling->outputColorBufferShared12->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON));
+		upscaling->sharedD3D12CommandList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
 	}
 
 	// Close and execute command list using shared resources
