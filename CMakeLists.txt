@@ -210,6 +210,8 @@ install(FILES $<TARGET_PDB_FILE:${PROJECT_NAME}> DESTINATION SKSE/Plugins COMPON
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/package/ ${FEATURE_PATHS_SLASH} DESTINATION . COMPONENT Shaders)
 install(CODE "file(REMOVE \${CMAKE_INSTALL_PREFIX}/Core)" COMPONENT Shaders)
 
+set(AIO_DIR "${CMAKE_CURRENT_BINARY_DIR}/aio")
+
 add_custom_command(
 	OUTPUT copy_shaders.stamp
 	COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${AIO_DIR} --component Shaders
@@ -226,7 +228,6 @@ add_custom_target(prepare_shaders
 )
 
 if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
-	set(AIO_DIR "${CMAKE_CURRENT_BINARY_DIR}/aio")
 	message("Copying package folder with dll/pdb with all features to ${AIO_DIR}")
 	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 		COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${AIO_DIR}
