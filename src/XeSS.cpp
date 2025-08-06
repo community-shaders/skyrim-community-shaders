@@ -4,62 +4,6 @@
 #include "State.h"
 #include "Upscaling.h"
 
-// XeSS enums and structures (simplified - these would come from the XeSS SDK headers)
-enum xess_result_t
-{
-	XESS_RESULT_SUCCESS = 0,
-	XESS_RESULT_ERROR_DEVICE_OUT_OF_MEMORY = -1,
-	XESS_RESULT_ERROR_DEVICE = -2,
-	XESS_RESULT_ERROR_IMPLEMENTATION = -3,
-	XESS_RESULT_ERROR_INVALID_ARGUMENT = -4,
-	XESS_RESULT_ERROR_NOT_SUPPORTED = -5,
-	XESS_RESULT_ERROR_UNINITIALIZED = -6,
-	XESS_RESULT_ERROR_INVALID_CONTEXT = -7
-};
-
-enum xess_quality_settings_t
-{
-	XESS_QUALITY_SETTING_PERFORMANCE = 0,
-	XESS_QUALITY_SETTING_BALANCED = 1,
-	XESS_QUALITY_SETTING_QUALITY = 2,
-	XESS_QUALITY_SETTING_ULTRA_QUALITY = 3
-};
-
-enum xess_init_flag_bits_t
-{
-	XESS_INIT_FLAG_NONE = 0,
-	XESS_INIT_FLAG_ENABLE_AUTOEXPOSURE = (1 << 0),
-	XESS_INIT_FLAG_HIGH_RES_MV = (1 << 1),
-	XESS_INIT_FLAG_JITTERED_MV = (1 << 2),
-	XESS_INIT_FLAG_INVERTED_DEPTH = (1 << 3),
-	XESS_INIT_FLAG_RESPONSIVE_PIXEL_MASK = (1 << 4),
-	XESS_INIT_FLAG_LDR_INPUT_COLOR = (1 << 5),
-	XESS_INIT_FLAG_USE_TAA_HISTORY = (1 << 6)
-};
-
-struct xess_d3d11_init_params
-{
-	uint32_t outputWidth;
-	uint32_t outputHeight;
-	xess_quality_settings_t qualitySetting;
-	uint32_t initFlags;
-};
-
-struct xess_d3d11_execute_params
-{
-	ID3D11Resource* pColorTexture;
-	ID3D11Resource* pVelocityTexture;
-	ID3D11Resource* pDepthTexture;
-	ID3D11Resource* pResponsivePixelMaskTexture;
-	ID3D11Resource* pOutputTexture;
-	float jitterOffsetX;
-	float jitterOffsetY;
-	uint32_t inputWidth;
-	uint32_t inputHeight;
-	float exposureScale;
-	float resetHistory;
-};
-
 // Define the static member
 std::vector<std::pair<std::string, std::string>> XeSS::dllVersions = {};
 
@@ -74,14 +18,19 @@ void XeSS::LoadXeSS()
 
 	if (module) {
 		xessGetVersion = (xessGetVersionPtr)GetProcAddress(module, "xessGetVersion");
-		xessD3D11CreateContext = (xessD3D11CreateContextPtr)GetProcAddress(module, "xessD3D11CreateContext");
-		xessD3D11Init = (xessD3D11InitPtr)GetProcAddress(module, "xessD3D11Init");
-		xessD3D11Execute = (xessD3D11ExecutePtr)GetProcAddress(module, "xessD3D11Execute");
+		xessD3D12CreateContext = (xessD3D12CreateContextPtr)GetProcAddress(module, "xessD3D12CreateContext");
+		xessD3D12Init = (xessD3D12InitPtr)GetProcAddress(module, "xessD3D12Init");
+		xessD3D12Execute = (xessD3D12ExecutePtr)GetProcAddress(module, "xessD3D12Execute");
 		xessDestroyContext = (xessDestroyContextPtr)GetProcAddress(module, "xessDestroyContext");
 
-		if (xessGetVersion && xessD3D11CreateContext && xessD3D11Init && xessD3D11Execute && xessDestroyContext) {
+		if (xessGetVersion && xessD3D12CreateContext && xessD3D12Init && xessD3D12Execute && xessDestroyContext) {
 			featureXeSS = true;
-			logger::info("[XeSS] Successfully loaded XeSS SDK version: {}", xessGetVersion());
+			xess_version_t version;
+			if (xessGetVersion(&version) == XESS_RESULT_SUCCESS) {
+				logger::info("[XeSS] Successfully loaded XeSS SDK version: {}.{}.{}", version.major, version.minor, version.patch);
+			} else {
+				logger::info("[XeSS] Successfully loaded XeSS SDK");
+			}
 		} else {
 			featureXeSS = false;
 			logger::error("[XeSS] Failed to load XeSS function pointers");
@@ -92,45 +41,83 @@ void XeSS::LoadXeSS()
 	}
 }
 
+
+
 void XeSS::CreateXeSSResources()
 {
-	if (!featureXeSS) {
-		logger::error("[XeSS] XeSS not available, cannot create resources");
+	auto upscaling = globals::upscaling;
+	if (!featureXeSS || !upscaling->sharedD3D12Device) {
+		logger::error("[XeSS] XeSS not available or shared D3D12 device not available, cannot create resources");
 		return;
 	}
 
 	auto state = globals::state;
 
-	if (xessD3D11CreateContext(globals::d3d::device, &xessContext) != XESS_RESULT_SUCCESS) {
+	if (xessD3D12CreateContext(upscaling->sharedD3D12Device.Get(), &xessContext) != XESS_RESULT_SUCCESS) {
 		logger::critical("[XeSS] Failed to create XeSS context!");
 		return;
 	}
 
-	xess_d3d11_init_params initParams{};
-	initParams.outputWidth = (uint32_t)state->screenSize.x;
-	initParams.outputHeight = (uint32_t)state->screenSize.y;
-	initParams.qualitySetting = XESS_QUALITY_SETTING_QUALITY;
-	initParams.initFlags = XESS_INIT_FLAG_HIGH_RES_MV | XESS_INIT_FLAG_JITTERED_MV;
+	// Map upscale preset to XeSS quality settings
+	// 0=Performance, 1=Balanced, 2=Quality, 3=Native AA
+	xess_quality_settings_t xessQuality;
+	switch (upscaling->settings.upscalePreset) {
+		case 0: xessQuality = XESS_QUALITY_SETTING_PERFORMANCE; break;
+		case 1: xessQuality = XESS_QUALITY_SETTING_BALANCED; break;
+		case 2: xessQuality = XESS_QUALITY_SETTING_QUALITY; break;
+		case 3: xessQuality = XESS_QUALITY_SETTING_AA; break;
+		default: xessQuality = XESS_QUALITY_SETTING_QUALITY; break;
+	}
 
-	if (xessD3D11Init(xessContext, &initParams) != XESS_RESULT_SUCCESS) {
+	xess_d3d12_init_params_t initParams{};
+	initParams.outputResolution.x = (uint32_t)state->screenSize.x;
+	initParams.outputResolution.y = (uint32_t)state->screenSize.y;
+	initParams.qualitySetting = xessQuality;
+	initParams.initFlags = XESS_INIT_FLAG_RESPONSIVE_PIXEL_MASK;
+	initParams.creationNodeMask = 1;
+	initParams.visibleNodeMask = 1;
+	initParams.pTempBufferHeap = nullptr;
+	initParams.bufferHeapOffset = 0;
+	initParams.pTempTextureHeap = nullptr;
+	initParams.textureHeapOffset = 0;
+	initParams.pPipelineLibrary = nullptr;
+
+	if (xessD3D12Init(xessContext, &initParams) != XESS_RESULT_SUCCESS) {
 		logger::critical("[XeSS] Failed to initialize XeSS context!");
 		return;
 	}
 
-	logger::info("[XeSS] XeSS resources created successfully");
+	logger::info("[XeSS] XeSS context initialized successfully");
+	logger::info("[XeSS] Shared textures will be created dynamically during first Upscale() call");
 }
 
 void XeSS::DestroyXeSSResources()
 {
 	if (xessContext && xessDestroyContext) {
-		xessDestroyContext(xessContext);
+		xess_result_t result = xessDestroyContext(xessContext);
+		if (result != XESS_RESULT_SUCCESS) {
+			logger::error("[XeSS] Failed to destroy XeSS context, error code: {}", (int)result);
+		}
 		xessContext = nullptr;
 	}
+
+	// Clean up XeSS-specific shared textures
+	if (inputColorTexture) {
+		delete inputColorTexture;
+		inputColorTexture = nullptr;
+	}
+	if (outputColorTexture) {
+		delete outputColorTexture;
+		outputColorTexture = nullptr;
+	}
+
+	// Note: motion vector, depth, and reactive mask textures are now managed by Upscaling system
 }
 
 void XeSS::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_motionVectors, ID3D11Resource* a_depth, float2 a_jitter)
 {
-	if (!featureXeSS || !xessContext) {
+	auto upscaling = globals::upscaling;
+	if (!featureXeSS || !xessContext || !upscaling->sharedD3D12Device) {
 		logger::error("[XeSS] XeSS not initialized, cannot upscale");
 		return;
 	}
@@ -138,21 +125,129 @@ void XeSS::Upscale(ID3D11Resource* a_inputTexture, ID3D11Resource* a_outputTextu
 	auto state = globals::state;
 	auto renderSize = Util::ConvertToDynamic(state->screenSize);
 
-	xess_d3d11_execute_params execParams{};
-	execParams.pColorTexture = a_inputTexture;
-	execParams.pVelocityTexture = a_motionVectors;
-	execParams.pDepthTexture = a_depth;
-	execParams.pResponsivePixelMaskTexture = a_reactiveMask;
-	execParams.pOutputTexture = a_outputTexture;
+	// Create shared textures dynamically from source textures if not already created
+	if (!inputColorTexture) {
+		// Get D3D11 device5 interface for WrappedResource creation
+		ComPtr<ID3D11Device5> d3d11Device5;
+		if (FAILED(globals::d3d::device->QueryInterface(IID_PPV_ARGS(&d3d11Device5)))) {
+			logger::error("[XeSS] Failed to get ID3D11Device5 interface");
+			return;
+		}
+
+		// Get texture description from input texture
+		ComPtr<ID3D11Texture2D> inputTexture2D;
+		if (FAILED(a_inputTexture->QueryInterface(IID_PPV_ARGS(&inputTexture2D)))) {
+			logger::error("[XeSS] Input texture is not a 2D texture");
+			return;
+		}
+		
+		D3D11_TEXTURE2D_DESC inputDesc;
+		inputTexture2D->GetDesc(&inputDesc);
+		inputDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+		inputColorTexture = new WrappedResource(inputDesc, d3d11Device5.Get(), upscaling->sharedD3D12Device.Get());
+		logger::debug("[XeSS] Created input color shared texture from source");
+	}
+	
+	if (!outputColorTexture) {
+		// Get D3D11 device5 interface for WrappedResource creation
+		ComPtr<ID3D11Device5> d3d11Device5;
+		if (FAILED(globals::d3d::device->QueryInterface(IID_PPV_ARGS(&d3d11Device5)))) {
+			logger::error("[XeSS] Failed to get ID3D11Device5 interface");
+			return;
+		}
+
+		// Get texture description from output texture
+		ComPtr<ID3D11Texture2D> outputTexture2D;
+		if (FAILED(a_outputTexture->QueryInterface(IID_PPV_ARGS(&outputTexture2D)))) {
+			logger::error("[XeSS] Output texture is not a 2D texture");
+			return;
+		}
+		
+		D3D11_TEXTURE2D_DESC outputDesc;
+		outputTexture2D->GetDesc(&outputDesc);
+		outputDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+		outputColorTexture = new WrappedResource(outputDesc, d3d11Device5.Get(), upscaling->sharedD3D12Device.Get());
+		logger::debug("[XeSS] Created output color shared texture from source");
+	}
+
+	// Copy input textures to shared resources
+	globals::d3d::context->CopyResource(inputColorTexture->resource11, a_inputTexture);
+	globals::d3d::context->CopyResource(upscaling->motionVectorBufferShared12->resource11, a_motionVectors);
+	globals::d3d::context->CopyResource(upscaling->depthBufferShared12->resource11, a_depth);
+	globals::d3d::context->CopyResource(upscaling->reactiveMaskBufferShared12->resource11, a_reactiveMask);
+	
+	// Flush D3D11 context to ensure copies are complete before D3D12 access
+	globals::d3d::context->Flush();
+
+	// Reset command allocator and list from shared resources
+	HRESULT hr = upscaling->sharedD3D12CommandAllocator->Reset();
+	if (FAILED(hr)) {
+		logger::error("[XeSS] Failed to reset shared command allocator: 0x{:X}", hr);
+		return;
+	}
+
+	hr = upscaling->sharedD3D12CommandList->Reset(upscaling->sharedD3D12CommandAllocator.Get(), nullptr);
+	if (FAILED(hr)) {
+		logger::error("[XeSS] Failed to reset shared command list: 0x{:X}", hr);
+		return;
+	}
+
+	// Execute XeSS upscaling on D3D12 using shared resources
+	xess_d3d12_execute_params_t execParams{};
+	execParams.pColorTexture = inputColorTexture->resource.get();
+	execParams.pVelocityTexture = upscaling->motionVectorBufferShared12->resource.get();
+	execParams.pDepthTexture = upscaling->depthBufferShared12->resource.get();
+	execParams.pExposureScaleTexture = nullptr;
+	execParams.pResponsivePixelMaskTexture = upscaling->reactiveMaskBufferShared12->resource.get();
+	execParams.pOutputTexture = outputColorTexture->resource.get();
 	execParams.jitterOffsetX = -a_jitter.x;
 	execParams.jitterOffsetY = -a_jitter.y;
+	execParams.exposureScale = 1.0f;
+	execParams.resetHistory = 0;
 	execParams.inputWidth = (uint32_t)renderSize.x;
 	execParams.inputHeight = (uint32_t)renderSize.y;
-	execParams.exposureScale = 1.0f;
-	execParams.resetHistory = 0.0f;
+	execParams.inputColorBase = { 0, 0 };
+	execParams.inputMotionVectorBase = { 0, 0 };
+	execParams.inputDepthBase = { 0, 0 };
+	execParams.inputResponsiveMaskBase = { 0, 0 };
+	execParams.reserved0 = { 0, 0 };
+	execParams.outputColorBase = { 0, 0 };
+	execParams.pDescriptorHeap = nullptr;
+	execParams.descriptorHeapOffset = 0;
 
-	int result = xessD3D11Execute(xessContext, &execParams);
+	xess_result_t result = xessD3D12Execute(xessContext, upscaling->sharedD3D12CommandList.Get(), &execParams);
 	if (result != XESS_RESULT_SUCCESS) {
-		logger::error("[XeSS] Failed to execute XeSS upscaling, error code: {}", result);
+		logger::error("[XeSS] Failed to execute XeSS upscaling, error code: {}", (int)result);
+		return;
 	}
+
+	// Close and execute command list using shared resources
+	hr = upscaling->sharedD3D12CommandList->Close();
+	if (FAILED(hr)) {
+		logger::error("[XeSS] Failed to close shared command list: 0x{:X}", hr);
+		return;
+	}
+
+	ID3D12CommandList* commandLists[] = { upscaling->sharedD3D12CommandList.Get() };
+	upscaling->sharedD3D12CommandQueue->ExecuteCommandLists(1, commandLists);
+
+	// Signal fence and wait for completion using shared resources
+	upscaling->sharedFenceValue++;
+	hr = upscaling->sharedD3D12CommandQueue->Signal(upscaling->sharedD3D12Fence.Get(), upscaling->sharedFenceValue);
+	if (FAILED(hr)) {
+		logger::error("[XeSS] Failed to signal shared fence: 0x{:X}", hr);
+		return;
+	}
+
+	if (upscaling->sharedD3D12Fence->GetCompletedValue() < upscaling->sharedFenceValue) {
+		hr = upscaling->sharedD3D12Fence->SetEventOnCompletion(upscaling->sharedFenceValue, upscaling->sharedFenceEvent);
+		if (FAILED(hr)) {
+			logger::error("[XeSS] Failed to set shared fence event: 0x{:X}", hr);
+			return;
+		}
+		WaitForSingleObject(upscaling->sharedFenceEvent, INFINITE);
+	}
+
+	// Copy output texture from D3D12 back to D3D11
+	globals::d3d::context->CopyResource(a_outputTexture, outputColorTexture->resource11);
 }

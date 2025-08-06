@@ -66,8 +66,7 @@ public:
 		return &singleton;
 	}
 
-	winrt::com_ptr<ID3D12Device> d3d12Device;
-	winrt::com_ptr<ID3D12CommandQueue> commandQueue;
+	// D3D12 resources for swap chain (uses shared device from Upscaling)
 	winrt::com_ptr<ID3D12CommandAllocator> commandAllocators[2];
 	winrt::com_ptr<ID3D12GraphicsCommandList4> commandLists[2];
 
@@ -97,7 +96,7 @@ public:
 	// Returns the current frame time (in seconds) for accurate FPS calculation when frame generation is active
 	float GetFrameTime() const;
 
-	void CreateD3D12Device(IDXGIAdapter* a_adapter);
+	void InitializeD3D12Resources();
 	void CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC swapChainDesc);
 
 	void CreateInterop();

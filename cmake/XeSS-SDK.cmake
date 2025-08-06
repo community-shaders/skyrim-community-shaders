@@ -4,22 +4,21 @@
 # XeSS is dynamically loaded at runtime, so we don't need to link against static libraries
 # The XeSS DLL (libxess.dll) should be placed in the Data/SKSE/Plugins/XeSS directory
 
-# Create interface library for XeSS headers (if SDK headers are available)
-if(EXISTS "${CMAKE_SOURCE_DIR}/extern/XeSS-SDK")
-    add_library(xess_interface INTERFACE)
-    target_include_directories(xess_interface INTERFACE "${CMAKE_SOURCE_DIR}/extern/XeSS-SDK/inc")
-    
-    # Link the interface to the main project
-    target_link_libraries(
-        ${PROJECT_NAME}
-        PRIVATE
-        xess_interface
-    )
-    
-    message(STATUS "XeSS SDK headers found and configured")
+# XeSS headers are available in the include/xess directory
+if(EXISTS "${CMAKE_SOURCE_DIR}/include/xess")
+    message(STATUS "XeSS SDK headers found in include/xess")
+    # Headers are already available through the main include path
 else()
-    message(STATUS "XeSS SDK not found - using forward declarations in XeSS.h")
+    message(WARNING "XeSS SDK headers not found in include/xess - XeSS compilation may fail")
 endif()
+
+# Link required D3D12 libraries for interop
+target_link_libraries(
+    ${PROJECT_NAME}
+    PRIVATE
+    d3d12.lib
+    dxgi.lib
+)
 
 # Add preprocessor definition to enable XeSS support
 target_compile_definitions(

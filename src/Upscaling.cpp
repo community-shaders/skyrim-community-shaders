@@ -49,11 +49,11 @@ void Upscaling::DrawSettings()
 		currentUpscaleMode = &settings.upscaleMethodNoXeSS;
 	}
 	
-	uint availableModes = (globals::game::isVR) ? 2 : 4; // All methods available for non-VR
-	if (globals::game::isVR) {
-		if (featureDLSS || featureXeSS) availableModes = 2;
-		else availableModes = 1;
-	}
+	uint availableModes = 4; // All methods available for non-VR
+	//if (globals::game::isVR) {
+	//	if (featureDLSS || featureXeSS) availableModes = 2;
+	//	else availableModes = 1;
+	//}
 
 	if (state->featureLevel != D3D_FEATURE_LEVEL_11_1)
 		availableModes = 1;
@@ -422,8 +422,8 @@ void Upscaling::CreateUpscalingResources()
 	transparencyCompositionMaskTexture->CreateSRV(srvDesc);
 	transparencyCompositionMaskTexture->CreateUAV(uavDesc);
 
-	if (d3d12Interop)
-		CreateFrameGenerationResources();
+	//if (d3d12Interop)
+	CreateFrameGenerationResources();
 
 	resolutionScaleCB = new ConstantBuffer(ConstantBufferDesc<ResolutionScaleCB>());
 
@@ -492,11 +492,118 @@ void Upscaling::DestroyUpscalingResources()
 		depthUpscaleRasterizerState->Release();
 		depthUpscaleRasterizerState = nullptr;
 	}
+
+	// Clean up shared D3D12 resources
+	if (HUDLessBufferShared12) {
+		delete HUDLessBufferShared12;
+		HUDLessBufferShared12 = nullptr;
+	}
+	if (depthBufferShared12) {
+		delete depthBufferShared12;
+		depthBufferShared12 = nullptr;
+	}
+	if (motionVectorBufferShared12) {
+		delete motionVectorBufferShared12;
+		motionVectorBufferShared12 = nullptr;
+	}
+	if (reactiveMaskBufferShared12) {
+		delete reactiveMaskBufferShared12;
+		reactiveMaskBufferShared12 = nullptr;
+	}
+
+	// Clean up shared D3D12 device resources
+	if (sharedFenceEvent) {
+		CloseHandle(sharedFenceEvent);
+		sharedFenceEvent = nullptr;
+	}
+	sharedD3D12Fence.Reset();
+	sharedD3D12CommandList.Reset();
+	sharedD3D12CommandAllocator.Reset();
+	sharedD3D12CommandQueue.Reset();
+	sharedD3D12Device.Reset();
+	sharedFenceValue = 0;
 }
+
+void Upscaling::CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter)
+{
+	// Create D3D12 device on same adapter
+	HRESULT hr = D3D12CreateDevice(a_dxgiAdapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&sharedD3D12Device));
+	if (FAILED(hr)) {
+		logger::error("[Upscaling] Failed to create shared D3D12 device: 0x{:X}", hr);
+		return;
+	}
+
+	// Create command queue
+	D3D12_COMMAND_QUEUE_DESC queueDesc = {};
+	queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+	queueDesc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
+	queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+	queueDesc.NodeMask = 0;
+
+	hr = sharedD3D12Device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&sharedD3D12CommandQueue));
+	if (FAILED(hr)) {
+		logger::error("[Upscaling] Failed to create shared D3D12 command queue: 0x{:X}", hr);
+		sharedD3D12Device.Reset();
+		return;
+	}
+
+	// Create command allocator
+	hr = sharedD3D12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&sharedD3D12CommandAllocator));
+	if (FAILED(hr)) {
+		logger::error("[Upscaling] Failed to create shared D3D12 command allocator: 0x{:X}", hr);
+		sharedD3D12CommandQueue.Reset();
+		sharedD3D12Device.Reset();
+		return;
+	}
+
+	// Create command list
+	hr = sharedD3D12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, sharedD3D12CommandAllocator.Get(), nullptr, IID_PPV_ARGS(&sharedD3D12CommandList));
+	if (FAILED(hr)) {
+		logger::error("[Upscaling] Failed to create shared D3D12 command list: 0x{:X}", hr);
+		sharedD3D12CommandAllocator.Reset();
+		sharedD3D12CommandQueue.Reset();
+		sharedD3D12Device.Reset();
+		return;
+	}
+
+	// Create fence for synchronization
+	hr = sharedD3D12Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&sharedD3D12Fence));
+	if (FAILED(hr)) {
+		logger::error("[Upscaling] Failed to create shared D3D12 fence: 0x{:X}", hr);
+		sharedD3D12CommandList.Reset();
+		sharedD3D12CommandAllocator.Reset();
+		sharedD3D12CommandQueue.Reset();
+		sharedD3D12Device.Reset();
+		return;
+	}
+
+	sharedFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+	if (sharedFenceEvent == nullptr) {
+		logger::error("[Upscaling] Failed to create shared fence event");
+		sharedD3D12Fence.Reset();
+		sharedD3D12CommandList.Reset();
+		sharedD3D12CommandAllocator.Reset();
+		sharedD3D12CommandQueue.Reset();
+		sharedD3D12Device.Reset();
+		return;
+	}
+
+	// Close initial command list
+	sharedD3D12CommandList->Close();
+
+	logger::info("[Upscaling] Shared D3D12 device and interop resources created successfully");
+}
+
 
 void Upscaling::CreateFrameGenerationResources()
 {
 	logger::info("[Frame Generation] Creating resources");
+
+	// Create shared D3D12 device first
+	if (!sharedD3D12Device) {
+		logger::error("[Frame Generation] Failed to create shared D3D12 device, cannot create resources");
+		return;
+	}
 
 	auto renderer = globals::game::renderer;
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
@@ -547,65 +654,31 @@ void Upscaling::CreateFrameGenerationResources()
 	motionVectorBufferShared->CreateRTV(rtvDesc);
 	motionVectorBufferShared->CreateUAV(uavDesc);
 
-	{
-		IDXGIResource1* dxgiResource = nullptr;
-		DX::ThrowIfFailed(HUDLessBufferShared->resource->QueryInterface(IID_PPV_ARGS(&dxgiResource)));
-
-		if (globals::dx12SwapChain->swapChain) {
-			HANDLE sharedHandle = nullptr;
-			DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(
-				nullptr,
-				DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE,
-				nullptr,
-				&sharedHandle));
-
-			DX::ThrowIfFailed(globals::dx12SwapChain->d3d12Device->OpenSharedHandle(
-				sharedHandle,
-				IID_PPV_ARGS(&HUDLessBufferShared12)));
-
-			CloseHandle(sharedHandle);
-		}
+	// Get D3D11 device5 interface for WrappedResource creation
+	ComPtr<ID3D11Device5> d3d11Device5;
+	if (FAILED(globals::d3d::device->QueryInterface(IID_PPV_ARGS(&d3d11Device5)))) {
+		logger::error("[Upscaling] Failed to get ID3D11Device5 interface");
+		return;
 	}
 
-	{
-		IDXGIResource1* dxgiResource = nullptr;
-		DX::ThrowIfFailed(depthBufferShared->resource->QueryInterface(IID_PPV_ARGS(&dxgiResource)));
+	// Create shared D3D12 resources using WrappedResource
+	D3D11_TEXTURE2D_DESC texDesc11{};
+	HUDLessBufferShared->resource->GetDesc(&texDesc11);
+	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+	HUDLessBufferShared12 = new WrappedResource(texDesc11, d3d11Device5.Get(), sharedD3D12Device.Get());
 
-		if (globals::dx12SwapChain->swapChain) {
-			HANDLE sharedHandle = nullptr;
-			DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(
-				nullptr,
-				DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE,
-				nullptr,
-				&sharedHandle));
+	depthBufferShared->resource->GetDesc(&texDesc11);
+	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+	depthBufferShared12 = new WrappedResource(texDesc11, d3d11Device5.Get(), sharedD3D12Device.Get());
 
-			DX::ThrowIfFailed(globals::dx12SwapChain->d3d12Device->OpenSharedHandle(
-				sharedHandle,
-				IID_PPV_ARGS(&depthBufferShared12)));
-
-			CloseHandle(sharedHandle);
-		}
-	}
-
-	{
-		IDXGIResource1* dxgiResource = nullptr;
-		DX::ThrowIfFailed(motionVectorBufferShared->resource->QueryInterface(IID_PPV_ARGS(&dxgiResource)));
-
-		if (globals::dx12SwapChain->swapChain) {
-			HANDLE sharedHandle = nullptr;
-			DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(
-				nullptr,
-				DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE,
-				nullptr,
-				&sharedHandle));
-
-			DX::ThrowIfFailed(globals::dx12SwapChain->d3d12Device->OpenSharedHandle(
-				sharedHandle,
-				IID_PPV_ARGS(&motionVectorBufferShared12)));
-
-			CloseHandle(sharedHandle);
-		}
-	}
+	motionVectorBufferShared->resource->GetDesc(&texDesc11);
+	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+	motionVectorBufferShared12 = new WrappedResource(texDesc11, d3d11Device5.Get(), sharedD3D12Device.Get());
+	
+	// Create reactive mask shared texture (will be used by both frame generation and XeSS)
+	reactiveMaskTexture->resource->GetDesc(&texDesc11);
+	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+	reactiveMaskBufferShared12 = new WrappedResource(texDesc11, d3d11Device5.Get(), sharedD3D12Device.Get());
 
 	copyDepthToSharedBufferCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\FrameGeneration\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0");
 }

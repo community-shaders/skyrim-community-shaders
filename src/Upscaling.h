@@ -3,6 +3,10 @@
 #include "FidelityFX.h"
 #include "Streamline.h"
 #include "XeSS.h"
+#include <d3d12.h>
+#include <wrl/client.h>
+
+using Microsoft::WRL::ComPtr;
 
 /**
  * @brief Installs hooks for Direct3D 11 device context operations.
@@ -106,19 +110,31 @@ public:
 	void CreateUpscalingResources();
 	void DestroyUpscalingResources();
 
+	// Shared D3D12 device and interop resources
+	ComPtr<ID3D12Device> sharedD3D12Device;
+	ComPtr<ID3D12CommandQueue> sharedD3D12CommandQueue;
+	ComPtr<ID3D12CommandAllocator> sharedD3D12CommandAllocator;
+	ComPtr<ID3D12GraphicsCommandList> sharedD3D12CommandList;
+	ComPtr<ID3D12Fence> sharedD3D12Fence;
+	HANDLE sharedFenceEvent = nullptr;
+	UINT64 sharedFenceValue = 0;
+
 	Texture2D* HUDLessBufferShared;
 	Texture2D* depthBufferShared;
 	Texture2D* motionVectorBufferShared;
 
-	winrt::com_ptr<ID3D12Resource> HUDLessBufferShared12;
-	winrt::com_ptr<ID3D12Resource> depthBufferShared12;
-	winrt::com_ptr<ID3D12Resource> motionVectorBufferShared12;
+	// Shared D3D12 resources for upscaling systems (using WrappedResource)
+	WrappedResource* HUDLessBufferShared12;
+	WrappedResource* depthBufferShared12;
+	WrappedResource* motionVectorBufferShared12;
+	WrappedResource* reactiveMaskBufferShared12;
 
 	ID3D11ComputeShader* copyDepthToSharedBufferCS;
 
 	bool useHUDLess = false;
 
 	void CreateFrameGenerationResources();
+	void CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter);
 	void CopyBuffersToSharedResources();
 	void PostDisplay();
 	void PerformUpscaling();

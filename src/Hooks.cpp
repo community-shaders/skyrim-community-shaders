@@ -369,6 +369,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	upscaling->isWindowed = pSwapChainDesc->Windowed;
 
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
+	
+	upscaling->CreateSharedD3D12Device(pAdapter);
 
 	if (shouldProxy) {
 		logger::info("[Frame Generation] Frame Generation enabled, using D3D12 proxy");
@@ -388,8 +390,6 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 			} else {
 				pSwapChainDesc->Flags &= ~DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
 			}
-
-			proxy->CreateD3D12Device(pAdapter);
 
 			D3D11CreateDevice(
 				pAdapter,
@@ -1085,7 +1085,6 @@ namespace Hooks
 	void InstallD3DHooks()
 	{
 		globals::fidelityFX->LoadFFX();
-		globals::xess->LoadXeSS();
 
 		*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
 		*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", !REL::Module::IsVR() ? "CreateDXGIFactory" : "CreateDXGIFactory1");

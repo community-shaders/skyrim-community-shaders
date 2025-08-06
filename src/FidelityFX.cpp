@@ -50,6 +50,7 @@ void FidelityFX::LoadFFX()
 void FidelityFX::SetupFrameGeneration()
 {
 	auto swapChain = globals::dx12SwapChain;
+	auto upscaling = globals::upscaling;
 
 	ffx::CreateContextDescFrameGeneration createFg{};
 	createFg.displaySize = { swapChain->swapChainDesc.Width, swapChain->swapChainDesc.Height };
@@ -58,7 +59,7 @@ void FidelityFX::SetupFrameGeneration()
 	createFg.backBufferFormat = ffxApiGetSurfaceFormatDX12(swapChain->swapChainDesc.Format);
 
 	ffx::CreateBackendDX12Desc createBackend{};
-	createBackend.device = swapChain->d3d12Device.get();
+	createBackend.device = upscaling->sharedD3D12Device.Get();
 
 	if (ffx::CreateContext(frameGenContext, nullptr, createFg, createBackend) != ffx::ReturnCode::Ok)
 		logger::critical("[FidelityFX] Failed to create frame generation context!");
@@ -77,9 +78,9 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 	auto swapChain = globals::dx12SwapChain;
 	auto commandList = swapChain->commandLists[swapChain->frameIndex].get();
 
-	auto HUDLessColor = upscaling->HUDLessBufferShared12.get();
-	auto depth = upscaling->depthBufferShared12.get();
-	auto motionVectors = upscaling->motionVectorBufferShared12.get();
+	auto HUDLessColor = upscaling->HUDLessBufferShared12->resource.get();
+	auto depth = upscaling->depthBufferShared12->resource.get();
+	auto motionVectors = upscaling->motionVectorBufferShared12->resource.get();
 
 	FfxApiSwapchainFramePacingTuning framePacingTuning{ 0.1f, 0.1f, true, 2, false };
 
