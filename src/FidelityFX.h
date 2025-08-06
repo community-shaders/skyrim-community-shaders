@@ -9,9 +9,12 @@
 #include <ffx_api_loader.h>
 #include <ffx_api_types.h>
 #include <ffx_framegeneration.hpp>
+#include <ffx_upscale.hpp>
 
 #include "Buffer.h"
 #include "State.h"
+#include <d3d12.h>
+#include <winrt/base.h>
 
 class FidelityFX
 {
@@ -28,10 +31,10 @@ public:
 
 	ffx::Context swapChainContext{};
 	ffx::Context frameGenContext;
-
-	FfxFsr3Context fsrContext;
+	ffx::Context upscalingContext;
 
 	bool featureFSR3FG = false;  // whether enabled
+	bool featureFSR3 = false;   // FSR 3 upscaling feature
 
 	// Track if FidelityFX is currently being used for frame generation
 	bool isFrameGenActive = false;
@@ -47,5 +50,15 @@ public:
 
 	void CreateFSRResources();
 	void DestroyFSRResources();
-	void Upscale(ID3D11Resource* a_upscaleTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, float2 a_jitter, float a_sharpness);
+	void Upscale(
+		ID3D12Resource* a_inputColorTexture,
+		ID3D12Resource* a_motionVectorTexture,
+		ID3D12Resource* a_depthTexture,
+		ID3D12Resource* a_outputTexture,
+		ID3D12GraphicsCommandList* a_commandList,
+		uint32_t a_renderWidth,
+		uint32_t a_renderHeight,
+		float2 a_jitter,
+		float a_sharpness
+	);
 };

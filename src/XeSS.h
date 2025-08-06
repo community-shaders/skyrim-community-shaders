@@ -46,36 +46,12 @@ public:
 
 	bool featureXeSS = false;  // whether enabled
 
-	// D3D12-only intermediary textures for improved performance
-	winrt::com_ptr<ID3D12Resource> inputColorTexture;
-	winrt::com_ptr<ID3D12Resource> outputColorTexture;
-	winrt::com_ptr<ID3D12Resource> motionVectorTexture;
-	winrt::com_ptr<ID3D12Resource> depthTexture;
-
 	// Cached DLL version info for XeSS plugin directory
 	static std::vector<std::pair<std::string, std::string>> dllVersions;
 
 	void LoadXeSS();
 	void CreateXeSSResources();
 	void DestroyXeSSResources();
-	void CreateD3D12IntermediaryTextures();
-	void DestroyD3D12IntermediaryTextures();
-	void CopyToIntermediaryTextures(
-		ID3D12GraphicsCommandList* a_commandList,
-		ID3D12Resource* a_inputColorTexture,
-		ID3D12Resource* a_motionVectorTexture,
-		ID3D12Resource* a_depthTexture
-	);
-	void CopyFromIntermediaryTexture(
-		ID3D12GraphicsCommandList* a_commandList,
-		ID3D12Resource* a_outputColorTexture
-	);
-	void UpscaleWithIntermediaries(
-		ID3D12GraphicsCommandList* a_commandList,
-		uint32_t a_renderWidth,
-		uint32_t a_renderHeight,
-		float2 a_jitter
-	);
 	void Upscale(
 		ID3D12Resource* a_inputColorTexture,
 		ID3D12Resource* a_motionVectorTexture,

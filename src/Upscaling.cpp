@@ -6,6 +6,7 @@
 #include <Windows.h>
 #include <reshade/reshade.hpp>
 #include "Deferred.h"
+#include <FidelityFX/host/backends/dx12/d3dx12.h>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Upscaling::Settings,
@@ -442,8 +443,10 @@ void Upscaling::CreateUpscalingResources()
 	transparencyCompositionMaskTexture->CreateSRV(srvDesc);
 	transparencyCompositionMaskTexture->CreateUAV(uavDesc);
 
-	//if (d3d12Interop)
-	CreateFrameGenerationResources();
+	CreateSharedD3D12Resources();
+
+	if (d3d12Interop)
+		CreateFrameGenerationResources();
 
 	resolutionScaleCB = new ConstantBuffer(ConstantBufferDesc<ResolutionScaleCB>());
 
@@ -523,11 +526,6 @@ void Upscaling::DestroyUpscalingResources()
 		depthUpscaleRasterizerState = nullptr;
 	}
 
-	// Clean up shared D3D12 resources
-	if (HUDLessBufferShared12) {
-		delete HUDLessBufferShared12;
-		HUDLessBufferShared12 = nullptr;
-	}
 	if (depthBufferShared12) {
 		delete depthBufferShared12;
 		depthBufferShared12 = nullptr;
@@ -537,17 +535,7 @@ void Upscaling::DestroyUpscalingResources()
 		motionVectorBufferShared12 = nullptr;
 	}
 
-	// Clean up shared D3D12 device resources
-	if (sharedFenceEvent) {
-		CloseHandle(sharedFenceEvent);
-		sharedFenceEvent = nullptr;
-	}
-	sharedD3D12Fence = nullptr;
-	sharedD3D12CommandList = nullptr;
-	sharedD3D12CommandAllocator = nullptr;
-	sharedD3D12CommandQueue = nullptr;
-	sharedD3D12Device = nullptr;
-	sharedFenceValue = 0;
+	DestroySharedIntermediaryTextures();
 }
 
 void Upscaling::CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter)
@@ -584,10 +572,9 @@ void Upscaling::CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter)
 	logger::info("[Upscaling] Shared D3D12 device and interop resources created successfully");
 }
 
-
-void Upscaling::CreateFrameGenerationResources()
+void Upscaling::CreateSharedD3D12Resources()
 {
-	logger::info("[Frame Generation] Creating resources");
+	logger::info("[Upscaling] Creating shared D3D12 resources");
 
 	// Get D3D11 device5 interface for WrappedResource creation
 	winrt::com_ptr<ID3D11Device5> d3d11Device5;
@@ -606,15 +593,37 @@ void Upscaling::CreateFrameGenerationResources()
 	inputColorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
 	outputColorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
 
-	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	HUDLessBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
-
 	texDesc.Format = DXGI_FORMAT_R16_UNORM;
 	depthBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
 
 	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 	motionVector.texture->GetDesc(&texDesc);
 	motionVectorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+
+	copyDepthToSharedBufferCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\FrameGeneration\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0");
+
+	CreateSharedIntermediaryTextures();
+}
+
+void Upscaling::CreateFrameGenerationResources()
+{
+	logger::info("[Frame Generation] Creating resources");
+
+	// Get D3D11 device5 interface for WrappedResource creation
+	winrt::com_ptr<ID3D11Device5> d3d11Device5;
+	if (FAILED(globals::d3d::device->QueryInterface(IID_PPV_ARGS(&d3d11Device5)))) {
+		logger::error("[Upscaling] Failed to get ID3D11Device5 interface");
+		return;
+	}
+
+	auto renderer = globals::game::renderer;
+	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+
+	D3D11_TEXTURE2D_DESC texDesc{};
+	main.texture->GetDesc(&texDesc);
+
+	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	HUDLessBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
 
 	copyDepthToSharedBufferCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\FrameGeneration\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0");
 }
@@ -690,6 +699,164 @@ void Upscaling::CopySharedD3D12Resources()
 		ID3D11ComputeShader* shader = nullptr;
 		context->CSSetShader(shader, nullptr, 0);
 	}
+}
+
+void Upscaling::CreateSharedIntermediaryTextures()
+{
+	auto state = globals::state;
+	auto screenSize = state->screenSize;
+
+	D3D12_HEAP_PROPERTIES heapProps = {};
+	heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+	// Input color texture (RGBA16F)
+	D3D12_RESOURCE_DESC inputColorDesc = {};
+	inputColorDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	inputColorDesc.Width = (UINT)screenSize.x;
+	inputColorDesc.Height = (UINT)screenSize.y;
+	inputColorDesc.DepthOrArraySize = 1;
+	inputColorDesc.MipLevels = 1;
+	inputColorDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	inputColorDesc.SampleDesc.Count = 1;
+	inputColorDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	inputColorDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+	DX::ThrowIfFailed(sharedD3D12Device->CreateCommittedResource(
+		&heapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&inputColorDesc,
+		D3D12_RESOURCE_STATE_COMMON,
+		nullptr,
+		IID_PPV_ARGS(&sharedInputColorTexture)
+	));
+
+	// Output color texture (same as input)
+	DX::ThrowIfFailed(sharedD3D12Device->CreateCommittedResource(
+		&heapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&inputColorDesc,
+		D3D12_RESOURCE_STATE_COMMON,
+		nullptr,
+		IID_PPV_ARGS(&sharedOutputColorTexture)
+	));
+
+	// Motion vector texture (RG16F)
+	D3D12_RESOURCE_DESC motionVectorDesc = inputColorDesc;
+	motionVectorDesc.Format = DXGI_FORMAT_R16G16_FLOAT;
+
+	DX::ThrowIfFailed(sharedD3D12Device->CreateCommittedResource(
+		&heapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&motionVectorDesc,
+		D3D12_RESOURCE_STATE_COMMON,
+		nullptr,
+		IID_PPV_ARGS(&sharedMotionVectorTexture)
+	));
+
+	// Depth texture (R16_UNORM)
+	D3D12_RESOURCE_DESC depthDesc = inputColorDesc;
+	depthDesc.Format = DXGI_FORMAT_R16_UNORM;
+	depthDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+	DX::ThrowIfFailed(sharedD3D12Device->CreateCommittedResource(
+		&heapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&depthDesc,
+		D3D12_RESOURCE_STATE_COMMON,
+		nullptr,
+		IID_PPV_ARGS(&sharedDepthTexture)
+	));
+
+	logger::info("[Upscaling] Created shared D3D12 intermediary textures ({}x{}) for improved performance", (uint32_t)screenSize.x, (uint32_t)screenSize.y);
+}
+
+void Upscaling::DestroySharedIntermediaryTextures()
+{
+	sharedInputColorTexture = nullptr;
+	sharedOutputColorTexture = nullptr;
+	sharedMotionVectorTexture = nullptr;
+	sharedDepthTexture = nullptr;
+}
+
+void Upscaling::CopyToSharedIntermediaryTextures(
+	ID3D12GraphicsCommandList* a_commandList,
+	ID3D12Resource* a_inputColorTexture,
+	ID3D12Resource* a_motionVectorTexture,
+	ID3D12Resource* a_depthTexture
+)
+{
+	if (!sharedInputColorTexture || !sharedMotionVectorTexture || !sharedDepthTexture || !sharedOutputColorTexture) {
+		logger::error("[Upscaling] Shared intermediary textures not created");
+		return;
+	}
+
+	// Batch all resource barriers for maximum efficiency
+	D3D12_RESOURCE_BARRIER barriers[10] = {};
+	UINT barrierCount = 0;
+
+	// Transition source textures to copy source state
+	barriers[barrierCount++] = CD3DX12_RESOURCE_BARRIER::Transition(a_inputColorTexture, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE);
+	barriers[barrierCount++] = CD3DX12_RESOURCE_BARRIER::Transition(a_motionVectorTexture, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE);
+	barriers[barrierCount++] = CD3DX12_RESOURCE_BARRIER::Transition(a_depthTexture, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE);
+
+	// Transition intermediary textures to copy destination state
+	barriers[barrierCount++] = CD3DX12_RESOURCE_BARRIER::Transition(sharedInputColorTexture.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
+	barriers[barrierCount++] = CD3DX12_RESOURCE_BARRIER::Transition(sharedMotionVectorTexture.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
+	barriers[barrierCount++] = CD3DX12_RESOURCE_BARRIER::Transition(sharedDepthTexture.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
+
+	a_commandList->ResourceBarrier(barrierCount, barriers);
+
+	// Perform texture copies
+	a_commandList->CopyResource(sharedInputColorTexture.get(), a_inputColorTexture);
+	a_commandList->CopyResource(sharedMotionVectorTexture.get(), a_motionVectorTexture);
+	a_commandList->CopyResource(sharedDepthTexture.get(), a_depthTexture);
+
+	// Transition textures to final states for upscaling processing
+	barrierCount = 0;
+	barriers[barrierCount++] = CD3DX12_RESOURCE_BARRIER::Transition(sharedInputColorTexture.get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	barriers[barrierCount++] = CD3DX12_RESOURCE_BARRIER::Transition(sharedMotionVectorTexture.get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	barriers[barrierCount++] = CD3DX12_RESOURCE_BARRIER::Transition(sharedDepthTexture.get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	barriers[barrierCount++] = CD3DX12_RESOURCE_BARRIER::Transition(sharedOutputColorTexture.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+	// Transition source textures back to common state
+	barriers[barrierCount++] = CD3DX12_RESOURCE_BARRIER::Transition(a_inputColorTexture, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
+	barriers[barrierCount++] = CD3DX12_RESOURCE_BARRIER::Transition(a_motionVectorTexture, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
+	barriers[barrierCount++] = CD3DX12_RESOURCE_BARRIER::Transition(a_depthTexture, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
+
+	a_commandList->ResourceBarrier(barrierCount, barriers);
+}
+
+void Upscaling::CopyFromSharedIntermediaryTexture(
+	ID3D12GraphicsCommandList* a_commandList,
+	ID3D12Resource* a_outputColorTexture
+)
+{
+	if (!sharedOutputColorTexture) {
+		logger::error("[Upscaling] Shared output intermediary texture not created");
+		return;
+	}
+
+	// Batch resource barriers for efficiency
+	D3D12_RESOURCE_BARRIER barriers[4] = {};
+	UINT barrierCount = 0;
+
+	// Transition output intermediary texture to copy source state
+	barriers[barrierCount++] = CD3DX12_RESOURCE_BARRIER::Transition(sharedOutputColorTexture.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+	
+	// Transition destination texture to copy destination state  
+	barriers[barrierCount++] = CD3DX12_RESOURCE_BARRIER::Transition(a_outputColorTexture, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
+
+	a_commandList->ResourceBarrier(barrierCount, barriers);
+
+	// Perform texture copy
+	a_commandList->CopyResource(a_outputColorTexture, sharedOutputColorTexture.get());
+
+	// Transition textures back to common state
+	barrierCount = 0;
+	barriers[barrierCount++] = CD3DX12_RESOURCE_BARRIER::Transition(sharedOutputColorTexture.get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
+	barriers[barrierCount++] = CD3DX12_RESOURCE_BARRIER::Transition(a_outputColorTexture, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
+
+	a_commandList->ResourceBarrier(barrierCount, barriers);
 }
 
 void Upscaling::PostDisplay()
@@ -886,10 +1053,7 @@ void Upscaling::Upscale()
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
 			globals::streamline->Upscale(main.texture, upscalingTexture->resource.get(), reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), (sl::DLSSPreset)11u);
-		else if (upscaleMethod == UpscaleMethod::kFSR)
-			globals::fidelityFX->Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), jitter, settings.sharpness);
-		else if (upscaleMethod == UpscaleMethod::kXESS) {
-
+		else {
 			CopySharedD3D12Resources();
 
 			// Copy input color texture to shared D3D12 resource (only dynamic resolution area)
@@ -907,32 +1071,49 @@ void Upscaling::Upscale()
 			// Wait for D3D11 to finish
 			winrt::com_ptr<ID3D11DeviceContext4> d3d11Context4;
 			DX::ThrowIfFailed(context->QueryInterface(IID_PPV_ARGS(&d3d11Context4)));
-			DX::ThrowIfFailed(d3d11Context4->Signal(sharedD3D11Fence.get(), sharedFenceValue));
-			DX::ThrowIfFailed(sharedD3D12CommandQueue->Wait(sharedD3D12Fence.get(), sharedFenceValue));
-			sharedFenceValue++;
+			DX::ThrowIfFailed(d3d11Context4->Signal(sharedD3D11Fence.get(), sharedInteropFenceValue));
+			DX::ThrowIfFailed(sharedD3D12CommandQueue->Wait(sharedD3D12Fence.get(), sharedInteropFenceValue));
+			sharedInteropFenceValue++;
 
 			// Reset command allocator and list
 			DX::ThrowIfFailed(sharedD3D12CommandAllocator->Reset());
 			DX::ThrowIfFailed(sharedD3D12CommandList->Reset(sharedD3D12CommandAllocator.get(), nullptr));
 
-			// Copy from shared resources to D3D12-only intermediary textures for better performance
-			globals::xess->CopyToIntermediaryTextures(
+			// Copy from shared resources to shared D3D12-only intermediary textures for better performance
+			CopyToSharedIntermediaryTextures(
 				sharedD3D12CommandList.get(),
 				inputColorBufferShared12->resource.get(),
 				motionVectorBufferShared12->resource.get(),
 				depthBufferShared12->resource.get()
 			);
 
-			// Execute XeSS upscaling using D3D12-only intermediary textures
-			globals::xess->UpscaleWithIntermediaries(
-				sharedD3D12CommandList.get(),
-				(uint32_t)renderSize.x,
-				(uint32_t)renderSize.y,
-				jitter
-			);
+			if (upscaleMethod == UpscaleMethod::kFSR) {
+				// Execute FSR upscaling using shared intermediary textures
+				globals::fidelityFX->Upscale(
+					sharedInputColorTexture.get(),
+					sharedMotionVectorTexture.get(),
+					sharedDepthTexture.get(),
+					sharedOutputColorTexture.get(),
+					sharedD3D12CommandList.get(),
+					(uint32_t)renderSize.x,
+					(uint32_t)renderSize.y,
+					jitter,
+					settings.sharpness);
+			} else {
+				// Execute XeSS upscaling using shared intermediary textures
+				globals::xess->Upscale(
+					sharedInputColorTexture.get(),
+					sharedMotionVectorTexture.get(),
+					sharedDepthTexture.get(),
+					sharedOutputColorTexture.get(),
+					sharedD3D12CommandList.get(),
+					(uint32_t)renderSize.x,
+					(uint32_t)renderSize.y,
+					jitter);
+			}
 
-			// Copy result back from intermediary texture to shared resource
-			globals::xess->CopyFromIntermediaryTexture(
+			// Copy result back from shared intermediary texture to shared resource
+			CopyFromSharedIntermediaryTexture(
 				sharedD3D12CommandList.get(),
 				outputColorBufferShared12->resource.get()
 			);
@@ -944,11 +1125,14 @@ void Upscaling::Upscale()
 			sharedD3D12CommandQueue->ExecuteCommandLists(1, commandLists);
 
 			// Wait for D3D12 to finish
-			DX::ThrowIfFailed(sharedD3D12CommandQueue->Signal(sharedD3D12Fence.get(), sharedFenceValue));
-			DX::ThrowIfFailed(d3d11Context4->Wait(sharedD3D11Fence.get(), sharedFenceValue));
-			sharedFenceValue++;
+			DX::ThrowIfFailed(sharedD3D12CommandQueue->Signal(sharedD3D12Fence.get(), sharedInteropFenceValue));
+			DX::ThrowIfFailed(d3d11Context4->Wait(sharedD3D11Fence.get(), sharedInteropFenceValue));
+			sharedInteropFenceValue++;
 
-			context->CopyResource(upscalingTexture->resource.get(), outputColorBufferShared12->resource11);
+			if (upscaleMethod == UpscaleMethod::kFSR)
+				context->CopyResource(main.texture, outputColorBufferShared12->resource11);
+			else
+				context->CopyResource(upscalingTexture->resource.get(), outputColorBufferShared12->resource11);
 		}
 
 		state->EndPerfEvent();

@@ -6,29 +6,13 @@
 
 #include "DX12SwapChain.h"
 #include <dx12/ffx_api_dx12.hpp>
+#include <FidelityFX/host/backends/dx12/d3dx12.h>
+#include <FidelityFX/host/backends/dx12/ffx_dx12.h>
 
 ffxFunctions ffxModule;
 
 // Define the static member
 std::vector<std::pair<std::string, std::string>> FidelityFX::dllVersions = {};
-
-FfxResource ffxGetResource(ID3D11Resource* dx11Resource,
-	[[maybe_unused]] wchar_t const* ffxResName,
-	FfxResourceStates state /*=FFX_RESOURCE_STATE_COMPUTE_READ*/)
-{
-	FfxResource resource = {};
-	resource.resource = reinterpret_cast<void*>(const_cast<ID3D11Resource*>(dx11Resource));
-	resource.state = state;
-	resource.description = GetFfxResourceDescriptionDX11(dx11Resource);
-
-#ifdef _DEBUG
-	if (ffxResName) {
-		wcscpy_s(resource.name, ffxResName);
-	}
-#endif
-
-	return resource;
-}
 
 void FidelityFX::LoadFFX()
 {
@@ -41,9 +25,18 @@ void FidelityFX::LoadFFX()
 
 	if (module) {
 		ffxLoadFunctions(&ffxModule, module);
+		
 		featureFSR3FG = true;
+		featureFSR3 = true;
+
+		if (featureFSR3) {
+			logger::info("[FidelityFX] FSR 3 API loaded successfully");
+		} else {
+			logger::warn("[FidelityFX] FSR 3 API functions not found, falling back to legacy implementation");
+		}
 	} else {
 		featureFSR3FG = false;
+		featureFSR3 = false;
 	}
 }
 
@@ -205,93 +198,74 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 void FidelityFX::CreateFSRResources()
 {
 	auto state = globals::state;
+	auto upscaling = globals::upscaling;
 
-	auto fsrDevice = ffxGetDeviceDX11(globals::d3d::device);
+	ffx::CreateContextDescUpscale createUpscaling;
+	createUpscaling.maxRenderSize.width = (uint)state->screenSize.x;
+	createUpscaling.maxRenderSize.height = (uint)state->screenSize.y;
+	createUpscaling.maxUpscaleSize.width = (uint)state->screenSize.x;
+	createUpscaling.maxUpscaleSize.height = (uint)state->screenSize.y;
+	createUpscaling.flags = FFX_UPSCALE_ENABLE_HIGH_DYNAMIC_RANGE | FFX_UPSCALE_ENABLE_AUTO_EXPOSURE | FFX_UPSCALE_ENABLE_NON_LINEAR_COLORSPACE;
 
-	size_t scratchBufferSize = ffxGetScratchMemorySizeDX11(FFX_FSR3UPSCALER_CONTEXT_COUNT);
-	void* scratchBuffer = calloc(scratchBufferSize, 1);
-	memset(scratchBuffer, 0, scratchBufferSize);
+	ffx::CreateBackendDX12Desc backendDesc{};
+	backendDesc.device = upscaling->sharedD3D12Device.get();
 
-	FfxInterface fsrInterface;
-	if (ffxGetInterfaceDX11(&fsrInterface, fsrDevice, scratchBuffer, scratchBufferSize, FFX_FSR3UPSCALER_CONTEXT_COUNT) != FFX_OK)
-		logger::critical("[FidelityFX] Failed to initialize FSR3 backend interface!");
-
-	auto renderer = globals::game::renderer;
-	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-	
-	D3D11_TEXTURE2D_DESC texDesc{};
-	main.texture->GetDesc(&texDesc);
-
-	FfxFsr3ContextDescription contextDescription;
-	contextDescription.maxRenderSize.width = (uint)state->screenSize.x;
-	contextDescription.maxRenderSize.height = (uint)state->screenSize.y;
-	contextDescription.maxUpscaleSize.width = (uint)state->screenSize.x;
-	contextDescription.maxUpscaleSize.height = (uint)state->screenSize.y;
-	contextDescription.displaySize.width = (uint)state->screenSize.x;
-	contextDescription.displaySize.height = (uint)state->screenSize.y;
-	contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE | FFX_FSR3_ENABLE_DYNAMIC_RESOLUTION | FFX_FSR3_ENABLE_HIGH_DYNAMIC_RANGE;
-	contextDescription.backBufferFormat = ffxGetSurfaceFormatDX11(texDesc.Format);
-
-	contextDescription.backendInterfaceUpscaling = fsrInterface;
-
-	if (ffxFsr3ContextCreate(&fsrContext, &contextDescription) != FFX_OK)
-		logger::critical("[FidelityFX] Failed to initialize FSR3 context!");
+	if (ffx::CreateContext(upscalingContext, nullptr, createUpscaling, backendDesc) != ffx::ReturnCode::Ok)
+		logger::critical("[FidelityFX] Failed to create FSR3 API context");
 }
 
 void FidelityFX::DestroyFSRResources()
 {
-	if (ffxFsr3ContextDestroy(&fsrContext) != FFX_OK)
-		logger::critical("[FidelityFX] Failed to destroy FSR3 context!");
+	if (ffx::DestroyContext(upscalingContext) != ffx::ReturnCode::Ok)
+		logger::critical("[FidelityFX] Failed to destroy FSR3 API context");
 }
 
-void FidelityFX::Upscale(ID3D11Resource* a_upscaleTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, float2 a_jitter, float a_sharpness)
+void FidelityFX::Upscale(
+	ID3D12Resource* a_inputColorTexture,
+	ID3D12Resource* a_motionVectorTexture,
+	ID3D12Resource* a_depthTexture,
+	ID3D12Resource* a_outputTexture,
+	ID3D12GraphicsCommandList* a_commandList,
+	uint32_t a_renderWidth,
+	uint32_t a_renderHeight,
+	float2 a_jitter,
+	float a_sharpness
+)
 {
-	auto renderer = globals::game::renderer;
-	auto context = globals::d3d::context;
 	auto state = globals::state;
-	auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
-	auto& motionVectorsTexture = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kMOTION_VECTOR];
 
-	{
-		FfxFsr3DispatchUpscaleDescription dispatchParameters{};
+	ffx::DispatchDescUpscale dispatchUpscale{};
 
-		dispatchParameters.commandList = ffxGetCommandListDX11(context);
-		dispatchParameters.color = ffxGetResource(a_upscaleTexture, L"FSR3_Input_OutputColor", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
-		dispatchParameters.depth = ffxGetResource(depthTexture.texture, L"FSR3_InputDepth", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
-		dispatchParameters.motionVectors = ffxGetResource(motionVectorsTexture.texture, L"FSR3_InputMotionVectors", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
-		dispatchParameters.exposure = ffxGetResource(nullptr, L"FSR3_InputExposure", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
-		dispatchParameters.upscaleOutput = dispatchParameters.color;
-		dispatchParameters.reactive = ffxGetResource(a_reactiveMask, L"FSR3_InputReactiveMap", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
-		dispatchParameters.transparencyAndComposition = ffxGetResource(a_transparencyCompositionMask, L"FSR3_TransparencyAndCompositionMap", FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+	dispatchUpscale.commandList = a_commandList;
+	dispatchUpscale.color = ffxApiGetResourceDX12(a_inputColorTexture, FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+	dispatchUpscale.depth = ffxApiGetResourceDX12(a_depthTexture, FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+	dispatchUpscale.motionVectors = ffxApiGetResourceDX12(a_motionVectorTexture, FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+	dispatchUpscale.output = ffxApiGetResourceDX12(a_outputTexture, FFX_RESOURCE_STATE_UNORDERED_ACCESS);
+	dispatchUpscale.exposure = ffxApiGetResourceDX12(nullptr, FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+	dispatchUpscale.reactive = ffxApiGetResourceDX12(nullptr, FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+	dispatchUpscale.transparencyAndComposition = ffxApiGetResourceDX12(nullptr, FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 
-		auto screenSize = state->screenSize;
-		auto renderSize = Util::ConvertToDynamic(screenSize);
+	dispatchUpscale.jitterOffset.x = -a_jitter.x;
+	dispatchUpscale.jitterOffset.y = -a_jitter.y;
+	dispatchUpscale.motionVectorScale.x = (float)a_renderWidth;
+	dispatchUpscale.motionVectorScale.y = (float)a_renderHeight;
+	dispatchUpscale.reset = false;
+	dispatchUpscale.enableSharpening = true;
+	dispatchUpscale.sharpness = a_sharpness;
 
-		dispatchParameters.motionVectorScale.x = (globals::game::isVR ? renderSize.x * 0.5f : renderSize.x);
-		dispatchParameters.motionVectorScale.y = renderSize.y;
-		dispatchParameters.renderSize.width = (uint)(renderSize.x);
-		dispatchParameters.renderSize.height = (uint)(renderSize.y);
-		dispatchParameters.upscaleSize.width = (uint)(screenSize.x);
-		dispatchParameters.upscaleSize.height = (uint)(screenSize.y);
-		dispatchParameters.jitterOffset.x = -a_jitter.x;
-		dispatchParameters.jitterOffset.y = -a_jitter.y;
+	dispatchUpscale.frameTimeDelta = static_cast<float>(*globals::game::deltaTime * 1000.f);
 
-		dispatchParameters.frameTimeDelta = *globals::game::deltaTime * 1000.f;
+	dispatchUpscale.preExposure = 1.0f;
+	dispatchUpscale.renderSize.width = a_renderWidth;
+	dispatchUpscale.renderSize.height = a_renderHeight;
+	dispatchUpscale.upscaleSize.width = (uint32_t)state->screenSize.x;
+	dispatchUpscale.upscaleSize.height = (uint32_t)state->screenSize.y;
 
-		dispatchParameters.cameraFar = *globals::game::cameraFar;
-		dispatchParameters.cameraNear = *globals::game::cameraNear;
+	dispatchUpscale.cameraFovAngleVertical = Util::GetVerticalFOVRad();
 
-		dispatchParameters.enableSharpening = true;
-		dispatchParameters.sharpness = a_sharpness;
-
-		dispatchParameters.cameraFovAngleVertical = Util::GetVerticalFOVRad();
-		dispatchParameters.viewSpaceToMetersFactor = 0.01428222656f;
-		dispatchParameters.reset = false;
-		dispatchParameters.preExposure = 1.0f;
-
-		dispatchParameters.flags = 0;
-
-		if (ffxFsr3ContextDispatchUpscale(&fsrContext, &dispatchParameters) != FFX_OK)
-			logger::critical("[FidelityFX] Failed to dispatch upscaling!");
-	}
+	dispatchUpscale.cameraFar = *globals::game::cameraFar;
+	dispatchUpscale.cameraNear = *globals::game::cameraNear;
+	
+	if (ffx::Dispatch(upscalingContext, dispatchUpscale) != ffx::ReturnCode::Ok)
+		logger::critical("[FidelityFX] Failed to upscale");
 }

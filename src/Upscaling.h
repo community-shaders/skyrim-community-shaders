@@ -132,6 +132,16 @@ public:
 	WrappedResource* inputColorBufferShared12;
 	WrappedResource* outputColorBufferShared12;
 
+	// Shared resources for FSR-specific reactive and transparency masks
+	WrappedResource* reactiveMaskBufferShared12;
+	WrappedResource* transparencyMaskBufferShared12;
+
+	// Shared D3D12-only intermediary textures for upscaling performance (shared between FidelityFX and XeSS)
+	winrt::com_ptr<ID3D12Resource> sharedInputColorTexture;
+	winrt::com_ptr<ID3D12Resource> sharedOutputColorTexture;
+	winrt::com_ptr<ID3D12Resource> sharedMotionVectorTexture;
+	winrt::com_ptr<ID3D12Resource> sharedDepthTexture;
+
 	// Frame tracking to ensure shared resources are only copied once per frame
 	Util::FrameChecker sharedResourcesFrameChecker;
 
@@ -141,11 +151,26 @@ public:
 
 	void CreateFrameGenerationResources();
 	void CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter);
+	void CreateSharedD3D12Resources();
 	void CopyFrameGenerationResources();
 	void CopySharedD3D12Resources();
 	void PostDisplay();
 	void PerformUpscaling();
 	void UpscaleDepth();
+
+	// Shared intermediary texture management
+	void CreateSharedIntermediaryTextures();
+	void DestroySharedIntermediaryTextures();
+	void CopyToSharedIntermediaryTextures(
+		ID3D12GraphicsCommandList* a_commandList,
+		ID3D12Resource* a_inputColorTexture,
+		ID3D12Resource* a_motionVectorTexture,
+		ID3D12Resource* a_depthTexture
+	);
+	void CopyFromSharedIntermediaryTexture(
+		ID3D12GraphicsCommandList* a_commandList,
+		ID3D12Resource* a_outputColorTexture
+	);
 
 	static void TimerSleepQPC(int64_t targetQPC);
 
