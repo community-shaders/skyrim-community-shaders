@@ -13,9 +13,10 @@ SamplerComparisonState comparisonSampler : register(s0);
 	const static sh2 unitSH = float4(sqrt(4.0 * Math::PI), 0, 0, 0);
 	const SharedData::SkylightingSettings settings = SharedData::skylightingSettings;
 
-	uint3 cellID = (int3(dtid) - settings.ArrayOrigin.xyz) % Skylighting::ARRAY_DIM;
-	bool isValid = all(cellID >= max(0, settings.ValidMargin.xyz)) && all(cellID <= Skylighting::ARRAY_DIM - 1 + min(0, settings.ValidMargin.xyz));  // check if the cell is newly added
-
+	uint3 cellID = (uint3(int3(dtid) - settings.ArrayOrigin.xyz)) % Skylighting::ARRAY_DIM;
+	uint3 validMin = (uint3)max(0, settings.ValidMargin.xyz);
+	uint3 validMax = Skylighting::ARRAY_DIM - 1 + (uint3)min(0, settings.ValidMargin.xyz);
+	bool isValid = all(cellID >= validMin) && all(cellID <= validMax);  // check if the cell is newly added
 	float3 cellCentreMS = cellID + 0.5 - Skylighting::ARRAY_DIM / 2;
 	cellCentreMS = cellCentreMS / Skylighting::ARRAY_DIM * Skylighting::ARRAY_SIZE + settings.PosOffset.xyz;
 
