@@ -52,7 +52,6 @@ public:
 	bool lowRefreshRate = false;
 
 	bool fidelityFXMissing = false;
-	bool xessMissing = false;
 
 	bool d3d12Interop = false;
 	double refreshRate = 0.0f;
@@ -117,27 +116,17 @@ public:
 	HANDLE sharedFenceEvent = nullptr;
 	UINT64 sharedFenceValue = 0;
 
-	// D3D11/D3D12 shared fence for interop synchronization (used by XeSS and other systems)
+	// D3D11/D3D12 shared fence for interop synchronization
 	winrt::com_ptr<ID3D11Fence> sharedD3D11Fence;
 	UINT64 sharedInteropFenceValue = 0;
 
-	// Shared D3D12 resources for upscaling systems (using WrappedResource)
+	// Shared D3D12 resources for upscaling systems
 	WrappedResource* HUDLessBufferShared12;
 	WrappedResource* depthBufferShared12;
 	WrappedResource* motionVectorBufferShared12;
 
 	WrappedResource* inputColorBufferShared12;
 	WrappedResource* outputColorBufferShared12;
-
-	// Shared resources for FSR-specific reactive and transparency masks
-	WrappedResource* reactiveMaskBufferShared12;
-	WrappedResource* transparencyMaskBufferShared12;
-
-	// Shared D3D12-only intermediary textures for upscaling performance (shared between FidelityFX and XeSS)
-	winrt::com_ptr<ID3D12Resource> sharedInputColorTexture;
-	winrt::com_ptr<ID3D12Resource> sharedOutputColorTexture;
-	winrt::com_ptr<ID3D12Resource> sharedMotionVectorTexture;
-	winrt::com_ptr<ID3D12Resource> sharedDepthTexture;
 
 	// Frame tracking to ensure shared resources are only copied once per frame
 	Util::FrameChecker sharedResourcesFrameChecker;
@@ -154,20 +143,6 @@ public:
 	void PostDisplay();
 	void PerformUpscaling();
 	void UpscaleDepth();
-
-	// Shared intermediary texture management
-	void CreateSharedIntermediaryTextures();
-	void DestroySharedIntermediaryTextures();
-	void CopyToSharedIntermediaryTextures(
-		ID3D12GraphicsCommandList* a_commandList,
-		ID3D12Resource* a_inputColorTexture,
-		ID3D12Resource* a_motionVectorTexture,
-		ID3D12Resource* a_depthTexture
-	);
-	void CopyFromSharedIntermediaryTexture(
-		ID3D12GraphicsCommandList* a_commandList,
-		ID3D12Resource* a_outputColorTexture
-	);
 
 	static void TimerSleepQPC(int64_t targetQPC);
 

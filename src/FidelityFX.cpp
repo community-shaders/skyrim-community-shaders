@@ -27,16 +27,14 @@ void FidelityFX::LoadFFX()
 		ffxLoadFunctions(&ffxModule, module);
 		
 		featureFSR3FG = true;
-		featureFSR3 = true;
 
-		if (featureFSR3) {
-			logger::info("[FidelityFX] FSR 3 API loaded successfully");
+		if (featureFSR3FG) {
+			logger::info("[FidelityFX] API loaded successfully");
 		} else {
-			logger::warn("[FidelityFX] FSR 3 API functions not found, falling back to legacy implementation");
+			logger::warn("[FidelityFX] API functions not found");
 		}
 	} else {
 		featureFSR3FG = false;
-		featureFSR3 = false;
 	}
 }
 
