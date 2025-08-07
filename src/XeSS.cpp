@@ -120,7 +120,7 @@ float XeSS::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight,
 	float scaleY = (float)inputResolution.y / (float)outputResolution.y;
 	
 	// Use the average scale (both should be the same for uniform scaling)
-	return (scaleX + scaleY) * 0.5;
+	return (scaleX + scaleY) * 0.5f;
 }
 
 void XeSS::Upscale(

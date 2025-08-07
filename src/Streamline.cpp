@@ -324,6 +324,38 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
 }
 
+float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityPreset)
+{
+	sl::DLSSMode dlssMode;
+	switch (qualityPreset) {
+	case 1: dlssMode = sl::DLSSMode::eMaxQuality; break;
+	case 2: dlssMode = sl::DLSSMode::eBalanced; break;
+	case 3: dlssMode = sl::DLSSMode::eMaxPerformance; break;
+	default:
+		dlssMode = sl::DLSSMode::eDLAA;
+		break;
+	}
+
+	sl::DLSSOptions dlssOptions{};
+	dlssOptions.mode = dlssMode;
+	dlssOptions.outputWidth = outputWidth;
+	dlssOptions.outputHeight = outputHeight;
+	
+	sl::DLSSOptimalSettings optimalSettings{};
+	sl::Result result = slDLSSGetOptimalSettings(dlssOptions, optimalSettings);
+	if (result != sl::Result::eOk) {
+		logger::critical("[Streamline] Failed to get DLSS optimal settings, error code: {}", (int)result);
+		return 1.0f;
+	}
+
+	// Calculate scale as ratio of optimal render resolution to output resolution
+	float scaleX = (float)optimalSettings.optimalRenderWidth / (float)outputWidth;
+	float scaleY = (float)optimalSettings.optimalRenderHeight / (float)outputHeight;
+	
+	// Use the average scale (both should be the same for uniform scaling)
+	return (scaleX + scaleY) * 0.5f;
+}
+
 /**
  * @brief Releases DLSS resources and disables DLSS for the current viewport.
  *
