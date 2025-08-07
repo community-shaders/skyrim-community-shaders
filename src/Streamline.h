@@ -150,5 +150,7 @@ public:
 
 	void Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, sl::DLSSPreset a_preset);
 
+	float GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityPreset);
+
 	void DestroyDLSSResources();
 };
