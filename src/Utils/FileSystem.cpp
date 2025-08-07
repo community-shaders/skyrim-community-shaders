@@ -88,7 +88,7 @@ namespace Util
 
 		std::filesystem::path GetFeaturesRealPath()
 		{
-			return GetRootRealPath() / "Features";
+			return GetShadersRealPath() / "Features";
 		}
 	}
 
