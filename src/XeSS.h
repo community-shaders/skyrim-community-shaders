@@ -19,6 +19,7 @@ typedef xess_result_t (*xessD3D12ExecutePtr)(xess_context_handle_t hContext, ID3
 typedef xess_result_t (*xessDestroyContextPtr)(xess_context_handle_t hContext);
 typedef xess_result_t (*xessSetJitterScalePtr)(xess_context_handle_t hContext, float x, float y);
 typedef xess_result_t (*xessSetVelocityScalePtr)(xess_context_handle_t hContext, float x, float y);
+typedef xess_result_t (*xessGetInputResolutionPtr)(xess_context_handle_t hContext, const xess_2d_t* pOutputResolution, xess_quality_settings_t qualitySettings, xess_2d_t* pInputResolution);
 
 class XeSS
 {
@@ -41,6 +42,7 @@ public:
 	xessDestroyContextPtr xessDestroyContext = nullptr;
 	xessSetJitterScalePtr xessSetJitterScale = nullptr;
 	xessSetVelocityScalePtr xessSetVelocityScale = nullptr;
+	xessGetInputResolutionPtr xessGetInputResolution = nullptr;
 
 	xess_context_handle_t xessContext = nullptr;
 
@@ -52,6 +54,7 @@ public:
 	void LoadXeSS();
 	void CreateXeSSResources();
 	void DestroyXeSSResources();
+	float GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityPreset);
 	void Upscale(
 		ID3D12Resource* a_inputColorTexture,
 		ID3D12Resource* a_motionVectorTexture,

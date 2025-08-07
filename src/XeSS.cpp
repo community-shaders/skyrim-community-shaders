@@ -26,8 +26,9 @@ void XeSS::LoadXeSS()
 		xessDestroyContext = (xessDestroyContextPtr)GetProcAddress(module, "xessDestroyContext");
 		xessSetJitterScale = (xessSetJitterScalePtr)GetProcAddress(module, "xessSetJitterScale");
 		xessSetVelocityScale = (xessSetVelocityScalePtr)GetProcAddress(module, "xessSetVelocityScale");
+		xessGetInputResolution = (xessGetInputResolutionPtr)GetProcAddress(module, "xessGetInputResolution");
 
-		if (xessGetVersion && xessD3D12CreateContext && xessD3D12Init && xessD3D12Execute && xessDestroyContext && xessSetJitterScale && xessSetVelocityScale) {
+		if (xessGetVersion && xessD3D12CreateContext && xessD3D12Init && xessD3D12Execute && xessDestroyContext && xessSetJitterScale && xessSetVelocityScale && xessGetInputResolution) {
 			featureXeSS = true;
 			xess_version_t version;
 			if (xessGetVersion(&version) == XESS_RESULT_SUCCESS) {
@@ -91,6 +92,35 @@ void XeSS::DestroyXeSSResources()
 		}
 		xessContext = nullptr;
 	}
+}
+
+float XeSS::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityPreset)
+{
+	xess_quality_settings_t xessQuality;
+	switch (qualityPreset) {
+	case 1: xessQuality = XESS_QUALITY_SETTING_QUALITY; break; 
+	case 2: xessQuality = XESS_QUALITY_SETTING_BALANCED; break;
+	case 3: xessQuality = XESS_QUALITY_SETTING_PERFORMANCE; break;
+	default: 
+		xessQuality = XESS_QUALITY_SETTING_AA;
+		break;
+	}
+
+	xess_2d_t outputResolution = { outputWidth, outputHeight };
+	xess_2d_t inputResolution = { 0, 0 };
+
+	xess_result_t result = xessGetInputResolution(xessContext, &outputResolution, xessQuality, &inputResolution);
+	if (result != XESS_RESULT_SUCCESS) {
+		logger::critical("[XeSS] Failed to get input resolution, error code: {}", (int)result);
+		return 1.0f;
+	}
+
+	// Calculate scale as ratio of input to output resolution
+	float scaleX = (float)inputResolution.x / (float)outputResolution.x;
+	float scaleY = (float)inputResolution.y / (float)outputResolution.y;
+	
+	// Use the average scale (both should be the same for uniform scaling)
+	return (scaleX + scaleY) * 0.5;
 }
 
 void XeSS::Upscale(

@@ -357,10 +357,16 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 
 	if (upscaleMethod != UpscaleMethod::kNONE) {		
 
-		if (allowUpscaling && upscaleMethod != UpscaleMethod::kTAA)
-			resolutionScale = 1.0f / ffxFsr3GetUpscaleRatioFromQualityMode((FfxFsr3QualityMode)settings.upscalePreset);
-		else
+		if (allowUpscaling && upscaleMethod != UpscaleMethod::kTAA) {
+			if (upscaleMethod == UpscaleMethod::kXESS) {
+				auto screenSize = globals::state->screenSize;
+				resolutionScale = globals::xess->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.upscalePreset);
+			} else {
+				resolutionScale = 1.0f / ffxFsr3GetUpscaleRatioFromQualityMode((FfxFsr3QualityMode)settings.upscalePreset);
+			}
+		} else {
 			resolutionScale = 1.0f;
+		}
 
 		auto state = globals::state;
 		auto screenSize = globals::state->screenSize;
