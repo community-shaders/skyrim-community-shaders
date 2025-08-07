@@ -93,8 +93,10 @@ void Upscaling::DrawSettings()
 		else
 			ImGui::SliderInt("Upscale Preset", (int*)&settings.upscalePreset, 0, 3, std::format("{}", upscalePresets[3 - settings.upscalePreset]).c_str());
 		
-		ImGui::SliderFloat("Sharpness", &settings.sharpness, 0.0f, 1.0f, "%.1f");
-		settings.sharpness = std::clamp(settings.sharpness, 0.0f, 1.0f);
+		if (upscaleMethod != UpscaleMethod::kDLSS) {
+			ImGui::SliderFloat("Sharpness", &settings.sharpness, 0.0f, 1.0f, "%.1f");
+			settings.sharpness = std::clamp(settings.sharpness, 0.0f, 1.0f);
+		}
 	}
 
 	if (globals::fidelityFX->featureFSR3FG) {
@@ -289,7 +291,9 @@ ID3D11ComputeShader* Upscaling::GetEncodeTexturesTransparencyCS()
 
 ID3D11ComputeShader* Upscaling::GetRCASCS()
 {
-	float sharpnessRemapped = (-2.0f * settings.sharpness) + 2.0f;
+	auto upscaleMethod = GetUpscaleMethod();
+
+	float sharpnessRemapped = (-2.0f * (upscaleMethod == UpscaleMethod::kXESS ? 0.5f +  settings.sharpness * 0.5f : settings.sharpness)) + 2.0f;
 	sharpnessRemapped = exp2(-sharpnessRemapped);
 
 	static auto previousSharpness = sharpnessRemapped;
@@ -1025,7 +1029,7 @@ void Upscaling::Upscale()
 		state->BeginPerfEvent("Upscaling");
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			globals::streamline->Upscale(main.texture, upscalingTexture->resource.get(), reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), (sl::DLSSPreset)11u);
+			globals::streamline->Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), (sl::DLSSPreset)11u);
 		else {
 			CopySharedD3D12Resources();
 
@@ -1111,7 +1115,7 @@ void Upscaling::Upscale()
 		state->EndPerfEvent();
 	}
 
-	if (upscaleMethod != UpscaleMethod::kFSR) {
+	if (upscaleMethod == UpscaleMethod::kXESS) {
 		state->BeginPerfEvent("Sharpening");
 
 		{
