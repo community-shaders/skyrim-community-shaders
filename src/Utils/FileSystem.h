@@ -57,6 +57,30 @@ namespace Util
 		 * @return Shaders / "{featureName}"
 		 */
 		std::filesystem::path GetFeatureShaderPath(const std::string& featureName);
+
+		/**
+		 * Gets the real path to the current .dll module in the file system (outside VFS)
+		 * @return Real path to CS root directory
+		 */
+		std::filesystem::path GetCurrentModuleRealPath();
+
+		/**
+		 * Gets the path to the real CS root directory (outside VFS)
+		 * @return Real path to CS root directory
+		 */
+		std::filesystem::path GetRootRealPath();
+
+		/**
+		 * Gets the main Shaders directory path in CS root directory (outside VFS)
+		 * @return CS root directory / "Shaders"
+		 */
+		std::filesystem::path GetShadersRealPath();
+
+		/**
+		 * Gets the Features directory path in CS root directory where INI files are stored (outside VFS)
+		 * @return CS root directory / "Shaders" / "Features"
+		 */
+		std::filesystem::path GetFeaturesRealPath();
 	}
 
 	/**
