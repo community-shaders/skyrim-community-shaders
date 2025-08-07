@@ -13,7 +13,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	upscaleMethod,
 	upscaleMethodNoDLSS,
 	upscaleMethodNothing,
-	sharpness,
 	frameLimitMode,
 	frameGenerationMode,
 	frameGenerationForceEnable,
@@ -33,21 +32,22 @@ void Upscaling::DrawSettings()
 	settings.upscaleMethod = bTAA ? (settings.upscaleMethod == (uint)UpscaleMethod::kNONE ? (uint)UpscaleMethod::kTAA : settings.upscaleMethod) : (uint)UpscaleMethod::kNONE;
 
 	// Display upscaling options in the UI
-	const char* upscaleModes[] = { "Disabled", "Temporal Anti-Aliasing", "AMD FSR 3.1", "Intel XeSS", "NVIDIA DLSS"};
+	const char* upscaleModes[] = { "Disabled", "Temporal Anti-Aliasing", "Intel XeSS", "NVIDIA DLSS"};
 
 	// Determine available modes
 	bool featureDLSS = streamline->featureDLSS;
 
 	uint* currentUpscaleMode = &settings.upscaleMethod;
-	uint availableModes = 4;
+	uint availableModes = 3;  // 0=Disabled, 1=TAA, 2=XeSS, 3=DLSS
 
 	if (featureDLSS) {
+		// All modes available including DLSS
 	} else if (state->featureLevel == D3D_FEATURE_LEVEL_11_1) {
 		currentUpscaleMode = &settings.upscaleMethodNoDLSS;
-		availableModes = 3;
+		availableModes = 2;  // 0=Disabled, 1=TAA, 2=XeSS (no DLSS)
 	} else {
 		currentUpscaleMode = &settings.upscaleMethodNothing;
-		availableModes = 1;
+		availableModes = 1;  // 0=Disabled, 1=TAA (no XeSS, no DLSS)
 	}
 	
 	// Slider for method selection
@@ -55,19 +55,16 @@ void Upscaling::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
 			"Disabled:\n"
-			"Disable all methods. Same as disabling Skyrim's TAA.\n"
+			"Disable all methods.\n"
 			"\n"
 			"Temporal Anti-Aliasing:\n"
-			"Uses Skyrim's TAA which uses frame history to smooth out jagged edges, reducing flickering and improving image stability.\n"
-			"\n"
-			"AMD FSR 3.1:\n"
-			"AMD FSR 3.1 is an open-source upscaling algorithm compatible with all GPUs.\n"
+			"TAA uses frame history to smooth out jagged edges, reducing flickering and improving image stability.\n"
 			"\n"
 			"Intel XeSS:\n"
-			"Intel's Xe Super Sampling uses machine learning to upscale rendered frames. Compatible with DirectX 11/12 GPUs supporting Shader Model 6.4."
+			"XeSS or Xe Super Sampling is a novel upscaling technology that enables high performance and high-fidelity visuals. It uses deep learning to synthesize images that are very close to the quality of native high-res rendering. It works by reconstructing subpixel details from neighboring pixels, as well as motion-compensated previous frames. This reconstruction is performed by a neural network trained to deliver high performance and great quality, with up to a 2x performance boost.\n"
 			"\n"
 			"NVIDIA DLSS:\n"
-			"NVIDIA's Deep Learning Super Sampling is an upscaling algorithm using AI. Requires an NVIDIA RTX GPU.\n");
+			"DLSS Super Resolution boosts performance by using AI to output higher-resolution frames from a lower-resolution input. DLSS samples multiple lower-resolution images and uses motion data and feedback from prior frames to construct high-quality images.\n");
 	}
 
 	*currentUpscaleMode = std::min(availableModes, (uint)*currentUpscaleMode);
@@ -92,11 +89,6 @@ void Upscaling::DrawSettings()
 			ImGui::SliderInt("Upscale Preset", (int*)&settings.upscalePreset, 0, 3, std::format("{}", upscalePresetsDLSS[3 - settings.upscalePreset]).c_str());
 		else
 			ImGui::SliderInt("Upscale Preset", (int*)&settings.upscalePreset, 0, 3, std::format("{}", upscalePresets[3 - settings.upscalePreset]).c_str());
-		
-		if (upscaleMethod != UpscaleMethod::kDLSS) {
-			ImGui::SliderFloat("Sharpness", &settings.sharpness, 0.0f, 1.0f, "%.1f");
-			settings.sharpness = std::clamp(settings.sharpness, 0.0f, 1.0f);
-		}
 	}
 
 	if (globals::fidelityFX->featureFSR3FG) {
@@ -235,13 +227,13 @@ void Upscaling::RestoreDefaultSettings()
 Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
 {
 	if (globals::streamline->featureDLSS) {
-		settings.upscaleMethod = std::clamp(settings.upscaleMethod, 0u, 4u);
+		settings.upscaleMethod = std::clamp(settings.upscaleMethod, 0u, 3u);  // 0=NONE, 1=TAA, 2=XeSS, 3=DLSS
 		return (Upscaling::UpscaleMethod)settings.upscaleMethod;
 	} else if (globals::state->featureLevel == D3D_FEATURE_LEVEL_11_1) {
-		settings.upscaleMethodNoDLSS = std::clamp(settings.upscaleMethodNoDLSS, 0u, 3u);
+		settings.upscaleMethodNoDLSS = std::clamp(settings.upscaleMethodNoDLSS, 0u, 2u);  // 0=NONE, 1=TAA, 2=XeSS (no DLSS)
 		return (Upscaling::UpscaleMethod)settings.upscaleMethodNoDLSS;
 	}
-	settings.upscaleMethodNothing = std::clamp(settings.upscaleMethodNothing, 0u, 1u);
+	settings.upscaleMethodNothing = std::clamp(settings.upscaleMethodNothing, 0u, 1u);  // 0=NONE, 1=TAA (no XeSS, no DLSS)
 	return (Upscaling::UpscaleMethod)settings.upscaleMethodNothing;
 }
 
@@ -251,20 +243,15 @@ void Upscaling::CheckResources()
 	auto currentUpscaleMode = GetUpscaleMethod();
 
 	auto streamline = globals::streamline;
-	auto fidelityFX = globals::fidelityFX;
 	auto xess = globals::xess;
 
 	if (previousUpscaleMode != currentUpscaleMode) {
 		if (previousUpscaleMode == UpscaleMethod::kDLSS)
 			streamline->DestroyDLSSResources();
-		else if (previousUpscaleMode == UpscaleMethod::kFSR)
-			fidelityFX->DestroyFSRResources();
 		else if (previousUpscaleMode == UpscaleMethod::kXESS)
 			xess->DestroyXeSSResources();
 
-		if (currentUpscaleMode == UpscaleMethod::kFSR)
-			fidelityFX->CreateFSRResources();
-		else if (currentUpscaleMode == UpscaleMethod::kXESS)
+		if (currentUpscaleMode == UpscaleMethod::kXESS)
 			xess->CreateXeSSResources();
 
 		previousUpscaleMode = currentUpscaleMode;
@@ -291,9 +278,7 @@ ID3D11ComputeShader* Upscaling::GetEncodeTexturesTransparencyCS()
 
 ID3D11ComputeShader* Upscaling::GetRCASCS()
 {
-	auto upscaleMethod = GetUpscaleMethod();
-
-	float sharpnessRemapped = (-2.0f * (upscaleMethod == UpscaleMethod::kXESS ? 0.5f +  settings.sharpness * 0.5f : settings.sharpness)) + 2.0f;
+	float sharpnessRemapped = (-2.0f * 0.5f) + 2.0f;
 	sharpnessRemapped = exp2(-sharpnessRemapped);
 
 	static auto previousSharpness = sharpnessRemapped;
@@ -363,9 +348,6 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 				resolutionScale = globals::xess->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.upscalePreset);
 			} else if (upscaleMethod == UpscaleMethod::kDLSS) {
 				resolutionScale = globals::streamline->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.upscalePreset);
-			} else {
-				// FSR and other methods
-				resolutionScale = 1.0f / ffxFsr3GetUpscaleRatioFromQualityMode((FfxFsr3QualityMode)settings.upscalePreset);
 			}
 		} else {
 			resolutionScale = 1.0f;
@@ -1038,7 +1020,7 @@ void Upscaling::Upscale()
 		state->BeginPerfEvent("Upscaling");
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			globals::streamline->Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), (sl::DLSSPreset)11u);
+			globals::streamline->Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), sl::DLSSPreset::ePresetK);
 		else {
 			CopySharedD3D12Resources();
 
@@ -1073,30 +1055,16 @@ void Upscaling::Upscale()
 				depthBufferShared12->resource.get()
 			);
 
-			if (upscaleMethod == UpscaleMethod::kFSR) {
-				// Execute FSR upscaling using shared intermediary textures
-				globals::fidelityFX->Upscale(
-					sharedInputColorTexture.get(),
-					sharedMotionVectorTexture.get(),
-					sharedDepthTexture.get(),
-					sharedOutputColorTexture.get(),
-					sharedD3D12CommandList.get(),
-					(uint32_t)renderSize.x,
-					(uint32_t)renderSize.y,
-					jitter,
-					settings.sharpness);
-			} else {
-				// Execute XeSS upscaling using shared intermediary textures
-				globals::xess->Upscale(
-					sharedInputColorTexture.get(),
-					sharedMotionVectorTexture.get(),
-					sharedDepthTexture.get(),
-					sharedOutputColorTexture.get(),
-					sharedD3D12CommandList.get(),
-					(uint32_t)renderSize.x,
-					(uint32_t)renderSize.y,
-					jitter);
-			}
+			// Execute XeSS upscaling using shared intermediary textures
+			globals::xess->Upscale(
+				sharedInputColorTexture.get(),
+				sharedMotionVectorTexture.get(),
+				sharedDepthTexture.get(),
+				sharedOutputColorTexture.get(),
+				sharedD3D12CommandList.get(),
+				(uint32_t)renderSize.x,
+				(uint32_t)renderSize.y,
+				jitter);
 
 			// Copy result back from shared intermediary texture to shared resource
 			CopyFromSharedIntermediaryTexture(
@@ -1115,10 +1083,8 @@ void Upscaling::Upscale()
 			DX::ThrowIfFailed(d3d11Context4->Wait(sharedD3D11Fence.get(), sharedInteropFenceValue));
 			sharedInteropFenceValue++;
 
-			if (upscaleMethod == UpscaleMethod::kFSR)
-				context->CopyResource(main.texture, outputColorBufferShared12->resource11);
-			else
-				context->CopyResource(upscalingTexture->resource.get(), outputColorBufferShared12->resource11);
+			// XeSS output needs to go through sharpening, so copy to upscaling texture
+			context->CopyResource(upscalingTexture->resource.get(), outputColorBufferShared12->resource11);
 		}
 
 		state->EndPerfEvent();

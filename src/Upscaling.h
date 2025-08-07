@@ -30,7 +30,6 @@ public:
 	{
 		kNONE,
 		kTAA,
-		kFSR,
 		kXESS,
 		kDLSS
 	};
@@ -40,8 +39,7 @@ public:
 		uint upscaleMethod = (uint)UpscaleMethod::kDLSS;
 		uint upscaleMethodNoDLSS = (uint)UpscaleMethod::kXESS;
 		uint upscaleMethodNothing = (uint)UpscaleMethod::kTAA;
-		uint upscalePreset = (uint)FfxFsr3QualityMode::FFX_FSR3_QUALITY_MODE_QUALITY;
-		float sharpness = 0.0f;
+		uint upscalePreset = 1;  // Default to Quality (1=Quality, 2=Balanced, 3=Performance, 0=Native AA)
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 1;
 		uint frameGenerationForceEnable = 0;
