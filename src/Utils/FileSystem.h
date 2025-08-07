@@ -59,28 +59,35 @@ namespace Util
 		std::filesystem::path GetFeatureShaderPath(const std::string& featureName);
 
 		/**
-		 * Gets the real path to the current .dll module in the file system (outside VFS)
-		 * @return Real path to CS root directory
+		 * Returns the real file system path to the current DLL module.
+		 *
+		 * This is useful when running under Mod Organizer 2 (MO2), which uses a virtual file system (VFS).
+		 * Accessing files relative to the game's Data directory via VFS (e.g. "Data/Shaders") may not work 
+		 * outside the game process (e.g. from Windows Explorer or ShellExecute), since those paths don't 
+		 * exist on disk. This function bypasses VFS and returns the actual DLL path on disk.
+		 *
+		 * @return Absolute file system path to the current DLL module.
 		 */
 		std::filesystem::path GetCurrentModuleRealPath();
 
 		/**
-		 * Gets the path to the real CS root directory (outside VFS)
-		 * @return Real path to CS root directory
+		 * Returns the real root directory of the mod, relative to the DLL path.
+		  * @return <mod_root>.
 		 */
 		std::filesystem::path GetRootRealPath();
 
 		/**
-		 * Gets the main Shaders directory path in CS root directory (outside VFS)
-		 * @return CS root directory / "Shaders"
+		 * Returns the real path to the Shaders directory located in the mod's root folder.
+		 * @return  <mod_root> / "Shaders"
 		 */
 		std::filesystem::path GetShadersRealPath();
 
 		/**
-		 * Gets the Features directory path in CS root directory where INI files are stored (outside VFS)
-		 * @return CS root directory / "Shaders" / "Features"
+		 * Returns the real path to the Features directory containing feature INI files.
+		 * @return  <mod_root> / "Shaders" / "Features"
 		 */
 		std::filesystem::path GetFeaturesRealPath();
+
 	}
 
 	/**
