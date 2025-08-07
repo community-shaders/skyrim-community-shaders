@@ -63,34 +63,26 @@
         }
     ],
     "buildPresets": [
-      {
-        "name": "ALL",
-        "description": "Default build preset for developers, generate files in <BUILD>/aio folder",
-        "configurePreset": "ALL",
-        "configuration": "Release",
-        "targets": [
-          "CommunityShaders",
-          "AIO"
-        ]
-      },
-      {
-        "name": "Package",
-        "description": "Build preset to generate a AIO zip package in <SRC>/dist folder",
-        "configurePreset": "ALL",
-        "configuration": "Release",
-        "targets": [
-          "CommunityShaders",
-          "Package-AIO"
-        ]
-      },
-      {
-        "name": "Shaders",
-        "description": "Build preset to copy shaders into <BUILD>/AIO folder for shader validation",
-        "configurePreset": "ALL",
-        "configuration": "Release",
-        "targets": [
-          "prepare_shaders"
-        ]
-      }
+        {
+            "name": "ALL",
+            "description": "Default build preset for developers, generate files in <BUILD>/aio folder",
+            "configurePreset": "ALL",
+            "configuration": "Release",
+            "targets": ["CommunityShaders", "AIO"]
+        },
+        {
+            "name": "Package",
+            "description": "Build preset to generate a AIO zip package in <SRC>/dist folder",
+            "configurePreset": "ALL",
+            "configuration": "Release",
+            "targets": ["CommunityShaders", "Package-AIO"]
+        },
+        {
+            "name": "Shaders",
+            "description": "Build preset to copy shaders into <BUILD>/AIO folder for shader validation",
+            "configurePreset": "ALL",
+            "configuration": "Release",
+            "targets": ["prepare_shaders"]
+        }
     ]
 }

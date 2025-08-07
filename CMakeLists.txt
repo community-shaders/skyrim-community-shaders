@@ -208,7 +208,7 @@ install(CODE "file(REMOVE \${CMAKE_INSTALL_PREFIX}/Core)" COMPONENT Shaders)
 
 # Build and install logic complete here
 # One can just build the project and install an AIO folder into anywhere with:
-#   `cmake --install ./build/ALL --prefix <AIO_FOLDER>` 
+#   `cmake --install ./build/ALL --prefix <AIO_FOLDER>`
 # Scripts below defines utility targets for:
 # - AIO: install to ./build/ALL/aio
 # - Package-AIO: AIO zip package

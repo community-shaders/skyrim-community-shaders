@@ -43,19 +43,23 @@ SKSE core plugin for community-driven advanced graphics modifications.
 ## Build Instructions
 
 ### Clone the Repository with submodules
+
 To clone the repository with all submodules, run the following command in your terminal:
+
 ```bash
 git clone https://github.com/doodlum/skyrim-community-shaders.git --recursive
 cd skyrim-community-shaders
 ```
 
 ### Visual Studio build
+
 To build the project, ensure you have CMake support enabled in Visual Studio. You can do this by selecting the "Desktop development with C++" workload during installation.
 Just open `./skyrim-community-shaders` with Visual Studio's "Open Folder" feature, and it will automatically detect the CMake project.
 Follow the prompts to `Configure` and `Build` the project.
 It should generate the AIO package in the `./build/ALL/aio` folder by default.
 
 #### Zip package & Optional targets
+
 If you change the `Solution Explorer` into `CMake Targets View`, you can find optional targets to create zip packages for each feature.
 Right click on the target and select `Build` to create the zip package in `./dist/`.
 
@@ -83,8 +87,10 @@ cmake --install ./build/ALL --prefix $MOD_FOLDER
 ```
 
 #### Build a zip package
+
 You can build zip packages for optional cmake targets.
 Currently support `Package-AIO`, `Package-Core`, and `Package-<Feature>`:
+
 ```pwsh
 # Create a AIO package in ./dist/
 cmake --build  ./build/ALL --config Release --target Package-AIO
