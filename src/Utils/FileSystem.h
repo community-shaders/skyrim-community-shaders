@@ -62,8 +62,8 @@ namespace Util
 		 * Returns the real file system path to the current DLL module.
 		 *
 		 * This is useful when running under Mod Organizer 2 (MO2), which uses a virtual file system (VFS).
-		 * Accessing files relative to the game's Data directory via VFS (e.g. "Data/Shaders") may not work 
-		 * outside the game process (e.g. from Windows Explorer or ShellExecute), since those paths don't 
+		 * Accessing files relative to the game's Data directory via VFS (e.g. "Data/Shaders") may not work
+		 * outside the game process (e.g. from Windows Explorer or ShellExecute), since those paths don't
 		 * exist on disk. This function bypasses VFS and returns the actual DLL path on disk.
 		 *
 		 * @return Absolute file system path to the current DLL module.
