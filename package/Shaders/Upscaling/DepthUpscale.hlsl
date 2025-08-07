@@ -34,7 +34,6 @@ typedef VS_OUTPUT PS_INPUT;
 struct PS_OUTPUT
 {
 	float Depth : SV_Depth;
-	uint Stencil : SV_StencilRef;
 };
 
 SamplerState LinearSampler : register(s0);
@@ -42,7 +41,7 @@ SamplerState LinearSampler : register(s0);
 Texture2D<float4> DepthTex : register(t0);
 
 #if defined(VR)
-Texture2D<uint2> StencilTex : register(t1);
+Texture2D<uint> StencilTex : register(t1);
 #endif
 
 cbuffer PerFrame : register(b0)
@@ -53,10 +52,6 @@ cbuffer PerFrame : register(b0)
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
-	
-	// Upscale depth using linear sampling
-	float depth = DepthTex.SampleLevel(LinearSampler, input.TexCoord.xy * ResolutionScale.x, 0);
-	psout.Depth = depth;
 	
 #if defined(VR)
 	// For VR, upscale stencil using point sampling with minimum value selection
@@ -73,19 +68,22 @@ PS_OUTPUT main(PS_INPUT input)
 	int2 baseCoord = int2(floor(pixelCoord));
 	
 	// Sample 4 neighboring stencil values using point sampling
-	uint stencil0 = StencilTex.Load(int3(baseCoord + int2(0, 0), 0)).g; // Assuming stencil is in green channel
-	uint stencil1 = StencilTex.Load(int3(baseCoord + int2(1, 0), 0)).g;
-	uint stencil2 = StencilTex.Load(int3(baseCoord + int2(0, 1), 0)).g;
-	uint stencil3 = StencilTex.Load(int3(baseCoord + int2(1, 1), 0)).g;
+	uint stencil0 = StencilTex.Load(int3(baseCoord + int2(0, 0), 0));
+	uint stencil1 = StencilTex.Load(int3(baseCoord + int2(1, 0), 0));
+	uint stencil2 = StencilTex.Load(int3(baseCoord + int2(0, 1), 0));
+	uint stencil3 = StencilTex.Load(int3(baseCoord + int2(1, 1), 0));
 	
-	// Choose the minimum stencil value
-	uint minStencil = min(min(stencil0, stencil1), min(stencil2, stencil3));
-	psout.Stencil = minStencil;
-#else
-	// For non-VR, just pass through stencil value (or set to 0)
-	psout.Stencil = 0;
+	// Choose the maximum stencil value
+	uint maxStencil = max(max(stencil0, stencil1), max(stencil2, stencil3));
+	
+	if (maxStencil > 0x00)
+		discard;
 #endif
 	
+	// Upscale depth using linear sampling
+	float depth = DepthTex.SampleLevel(LinearSampler, input.TexCoord.xy * ResolutionScale.x, 0);
+	psout.Depth = depth;
+
 	return psout;
 }
 

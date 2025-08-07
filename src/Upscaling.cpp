@@ -433,7 +433,26 @@ void Upscaling::CreateUpscalingResources()
 	depthStencilDesc.DepthEnable = true;							// Enable depth testing
 	depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;	// Write to all depth bits
 	depthStencilDesc.DepthFunc = D3D11_COMPARISON_ALWAYS;			// Always pass depth test (write all depths)
-	depthStencilDesc.StencilEnable = false;							// Disable stencil testing
+	
+	if (REL::Module::IsVR()) {
+		depthStencilDesc.StencilEnable = true;     // Enable stencil testing
+		depthStencilDesc.StencilReadMask = 0xFF;   // Read all stencil bits
+		depthStencilDesc.StencilWriteMask = 0xFF;  // Write to all stencil bits
+
+		// Configure front-facing stencil operations
+		depthStencilDesc.FrontFace.StencilFailOp = D3D11_STENCIL_OP_REPLACE;       // Replace on stencil fail
+		depthStencilDesc.FrontFace.StencilDepthFailOp = D3D11_STENCIL_OP_REPLACE;  // Replace on depth fail
+		depthStencilDesc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_REPLACE;       // Replace on pass
+		depthStencilDesc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;          // Always pass stencil test
+
+		// Configure back-facing stencil operations (same as front)
+		depthStencilDesc.BackFace.StencilFailOp = depthStencilDesc.FrontFace.StencilFailOp;
+		depthStencilDesc.BackFace.StencilDepthFailOp = depthStencilDesc.FrontFace.StencilDepthFailOp;
+		depthStencilDesc.BackFace.StencilPassOp = depthStencilDesc.FrontFace.StencilPassOp;
+		depthStencilDesc.BackFace.StencilFunc = depthStencilDesc.FrontFace.StencilFunc;
+	} else {
+		depthStencilDesc.StencilEnable = false;  // Disable stencil testing
+	}
 	DX::ThrowIfFailed(globals::d3d::device->CreateDepthStencilState(&depthStencilDesc, &depthUpscaleState));
 
 	// Create blend state for depth upscaling (disable color writes, depth only)
@@ -1020,9 +1039,13 @@ void Upscaling::UpscaleDepth()
 
 		// Set blend state (no color writes, depth only)
 		context->OMSetBlendState(nullptr, nullptr, 0xffffffff);
-
+		
+		// Clear stencil to be 0xFF
+		if (globals::game::isVR)
+			context->ClearDepthStencilView(depth.views[0], D3D11_CLEAR_STENCIL, 1.0f, 0xFF);
+		
 		// Set depth stencil state
-		context->OMSetDepthStencilState(depthUpscaleState, 0);
+		context->OMSetDepthStencilState(depthUpscaleState, 0xFF);
 
 		// Set render targets (no color target, depth only)
 		context->OMSetRenderTargets(0, nullptr, depth.views[0]);
