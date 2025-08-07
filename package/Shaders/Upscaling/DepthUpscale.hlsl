@@ -73,8 +73,8 @@ PS_OUTPUT main(PS_INPUT input)
 	uint stencil2 = StencilTex.Load(int3(baseCoord + int2(0, 1), 0));
 	uint stencil3 = StencilTex.Load(int3(baseCoord + int2(1, 1), 0));
 	
-	// Choose the maximum stencil value
-	uint maxStencil = max(max(stencil0, stencil1), max(stencil2, stencil3));
+	// Choose the minimum stencil value
+	uint maxStencil = min(min(stencil0, stencil1), min(stencil2, stencil3));
 	
 	if (maxStencil > 0x00)
 		discard;
