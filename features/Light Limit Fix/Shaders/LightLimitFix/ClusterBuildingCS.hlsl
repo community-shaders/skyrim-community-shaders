@@ -61,8 +61,8 @@ float3 IntersectionZPlane(float3 B, float z_dist)
 	float3 minPointVS = min(GetPositionVS(texcoordMin, 1.0f, 0), GetPositionVS(texcoordMin, 1.0f, 1));
 #endif  // !VR
 
-	float clusterNear = LightsNear * pow(LightsFar / LightsNear, groupId.z / float(CLUSTER_BUILDING_DISPATCH_SIZE_Z));
-	float clusterFar = LightsNear * pow(LightsFar / LightsNear, (groupId.z + 1) / float(CLUSTER_BUILDING_DISPATCH_SIZE_Z));
+	float clusterNear = LightsNear * pow(abs(LightsFar / LightsNear), groupId.z / float(CLUSTER_BUILDING_DISPATCH_SIZE_Z));
+	float clusterFar = LightsNear * pow(abs(LightsFar / LightsNear), (groupId.z + 1) / float(CLUSTER_BUILDING_DISPATCH_SIZE_Z));
 
 	float3 minPointNear = IntersectionZPlane(minPointVS, clusterNear);
 	float3 minPointFar = IntersectionZPlane(minPointVS, clusterFar);

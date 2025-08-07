@@ -110,7 +110,7 @@ float InverseSquareLighting::BSLight_GetLuminance::thunk(RE::BSLight* bsLight, R
 
 	const float dist = niLight->world.translate.GetDistance(*targetPosition);
 	const float attenuation = GetAttenuation(dist, runtimeData->radius, runtimeData->size);
-	const float luminance = (runtimeData->diffuse.red + runtimeData->diffuse.green + runtimeData->diffuse.blue) * runtimeData->fade * attenuation * (1.0f / 3.0f);
+	const float luminance = (runtimeData->diffuse.red + runtimeData->diffuse.green + runtimeData->diffuse.blue) * runtimeData->fade * 4 * attenuation * (1.0f / 3.0f);
 	bsLight->luminance = luminance;
 
 	return luminance;

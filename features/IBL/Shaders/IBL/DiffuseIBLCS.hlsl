@@ -40,8 +40,7 @@ void main(uint3 dispatchID : SV_DispatchThreadID, uint groupIndex : SV_GroupInde
 	float3 rayDir = SphericalHarmonics::GetUniformSphereSample(sampleCoord.x, sampleCoord.y);
 
 	// Sample cubemap with optimized direction
-	float3 color = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0);
-
+	float3 color = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
 #if defined(DYNAMIC_CUBEMAPS)
 	// Optimized condition check using faster comparisons
 	if (rayDir.z >= 0 && SharedData::iblSettings.SampleUnderHorizonFromDynCube) {

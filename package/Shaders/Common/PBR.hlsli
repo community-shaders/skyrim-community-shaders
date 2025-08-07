@@ -251,7 +251,7 @@ namespace PBR
 		h = cosHalfPhi * (1 + a * (0.6 - 0.8 * cosPhi));
 		f = BRDF::F_Schlick(specularColor, cosThetaD * sqrt(saturate(1 - h * h))).x;
 		Fp = (1 - f) * (1 - f);
-		Tp = pow(surfaceProperties.BaseColor, 0.5 * sqrt(1 - (h * a) * (h * a)) / cosThetaD);
+		Tp = pow(abs(surfaceProperties.BaseColor), 0.5 * sqrt(1 - (h * a) * (h * a)) / cosThetaD);
 		Np = exp(-3.65 * cosPhi - 3.98);
 		S += (Mp * Np) * (Fp * Tp) * backlit;
 
@@ -259,7 +259,7 @@ namespace PBR
 		Mp = HairGaussian(B[2], ThetaH - Alpha[2]);
 		f = BRDF::F_Schlick(specularColor, cosThetaD * 0.5f).x;
 		Fp = (1 - f) * (1 - f) * f;
-		Tp = pow(surfaceProperties.BaseColor, 0.8 / cosThetaD);
+		Tp = pow(abs(surfaceProperties.BaseColor), 0.8 / cosThetaD);
 		Np = exp(17 * cosPhi - 16.78);
 		S += (Mp * Np) * (Fp * Tp);
 

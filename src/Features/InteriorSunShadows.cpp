@@ -37,10 +37,15 @@ void InteriorSunShadows::PostPostLoad()
 	// Hooks and patch to enable directional lighting for interiors
 	stl::write_thunk_call<GetWorldSpace>(REL::RelocationID(35562, 36561).address() + REL::Relocate(0x399, 0x37D, 0x639));
 	stl::write_thunk_call<GetWorldSpace>(REL::RelocationID(35562, 36561).address() + REL::Relocate(0x3AE, 0x392, 0x64E));
-	REL::safe_fill(REL::RelocationID(35562, 36561).address() + REL::Relocate(0x397, 0x37B, 0x637), 0x90, 2);
+	REL::safe_fill(REL::RelocationID(35562, 36561).address() + REL::Relocate(0x397, 0x37B, 0x637), REL::NOP, 2);
 
 	// Hook for overriding the rooms and portals passed to the directional light culling step to fix light leaking through unrendered geometry
 	stl::detour_thunk<DirShadowLightCulling>(REL::RelocationID(101498, 108492));
+
+	// Hooks and patches in AIProcess::CalculateLightValue to force interior cells with directional lights to perform raycast checks
+	REL::safe_fill(REL::RelocationID(38900, 39946).address() + REL::Relocate(0x1E7, 0x1F1), REL::NOP, REL::Module::IsAE() ? 2 : 6);
+	stl::write_thunk_call<GetWorldSpace>(REL::RelocationID(38900, 39946).address() + REL::Relocate(0x1ED, 0x1F3));
+	REL::safe_fill(REL::RelocationID(38900, 39946).address() + REL::Relocate(0x2CA, 0x22B), REL::NOP, REL::Module::IsAE() ? 6 : 2);
 
 	gShadowDistance = reinterpret_cast<float*>(REL::RelocationID(528314, 415263).address());
 
