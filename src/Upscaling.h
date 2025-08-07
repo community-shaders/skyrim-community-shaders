@@ -56,7 +56,6 @@ public:
 	bool d3d12Interop = false;
 	double refreshRate = 0.0f;
 	float resolutionScale = 1.0f;
-	bool allowUpscaling = false;
 
 	// FG FPS Measurement for Overlay
 	bool IsFrameGenerationActive() const;

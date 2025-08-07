@@ -23,13 +23,7 @@ void Upscaling::DrawSettings()
 	// Skyrim settings control whether any upscaling is possible
 
 	auto state = globals::state;
-	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	auto streamline = globals::streamline;
-	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
-	auto& bTAA = BSImagespaceShaderISTemporalAA->taaEnabled;  // Setting used by shaders
-
-	// Update upscale mode based on TAA setting
-	settings.upscaleMethod = bTAA ? (settings.upscaleMethod == (uint)UpscaleMethod::kNONE ? (uint)UpscaleMethod::kTAA : settings.upscaleMethod) : (uint)UpscaleMethod::kNONE;
 
 	// Display upscaling options in the UI
 	const char* upscaleModes[] = { "Disabled", "Temporal Anti-Aliasing", "Intel XeSS", "NVIDIA DLSS"};
@@ -68,14 +62,6 @@ void Upscaling::DrawSettings()
 	}
 
 	*currentUpscaleMode = std::min(availableModes, (uint)*currentUpscaleMode);
-	bTAA = *currentUpscaleMode != (uint)UpscaleMethod::kNONE;
-
-	// settings for scaleform/ini
-	if (auto iniSettingCollection = globals::game::iniPrefSettingCollection) {
-		if (auto setting = iniSettingCollection->GetSetting("bUseTAA:Display")) {
-			setting->data.b = bTAA;
-		}
-	}
 
 	// Check the current upscale method
 	auto upscaleMethod = GetUpscaleMethod();
@@ -339,10 +325,12 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	// Disable water TAA when upscaling is enabled
 	bool* enableWaterTAA = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISTemporalAA) + 0x38LL);
 	*enableWaterTAA = upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA;
+	
+	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
 
 	if (upscaleMethod != UpscaleMethod::kNONE) {		
 
-		if (allowUpscaling && upscaleMethod != UpscaleMethod::kTAA) {
+		if (upscaleMethod != UpscaleMethod::kTAA) {
 			auto screenSize = globals::state->screenSize;
 			if (upscaleMethod == UpscaleMethod::kXESS) {
 				resolutionScale = globals::xess->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.upscalePreset);
@@ -354,7 +342,7 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 		}
 
 		auto state = globals::state;
-		auto screenSize = globals::state->screenSize;
+		auto screenSize = state->screenSize;
 
 		auto screenWidth = static_cast<int>(screenSize.x);
 		auto renderWidth = static_cast<int>(screenWidth * resolutionScale);
@@ -383,8 +371,6 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	runtimeData.dynamicResolutionPreviousHeightRatio = resolutionScale;
 	runtimeData.dynamicResolutionWidthRatio = resolutionScale;
 	runtimeData.dynamicResolutionHeightRatio = resolutionScale;
-
-	allowUpscaling = false;
 }
 
 void Upscaling::CreateUpscalingResources()
@@ -691,8 +677,19 @@ void Upscaling::CopySharedD3D12Resources()
 	}
 }
 
+void UpdateCameraData(){
+	using func_t = decltype(&UpdateCameraData);
+	static REL::Relocation<func_t> func{ RELOCATION_ID(75472, 77258) };
+	func();
+}
+
 void Upscaling::PostDisplay()
 {
+	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
+
+	BSImagespaceShaderISTemporalAA->taaEnabled = GetUpscaleMethod() == UpscaleMethod::kTAA;
+
 	globals::state->RenderReShade();
 
 	if (!d3d12Interop || !settings.frameGenerationMode)
@@ -969,8 +966,6 @@ void Upscaling::Upscale()
 	}
 }
 
-void UpdateCameraData();
-
 void Upscaling::PerformUpscaling()
 {
 	Upscale();
@@ -985,11 +980,7 @@ void Upscaling::PerformUpscaling()
 	runtimeData.dynamicResolutionHeightRatio = 1.0f;
 	
 	// Updates the PerFrame constant buffer so that dynamic resolution settings are disabled
-	using func_t = decltype(&UpdateCameraData);
-	static REL::Relocation<func_t> func{ RELOCATION_ID(75472, 77258) };
-	func();
-	
-	allowUpscaling = true;
+	UpdateCameraData();
 }
 
 void Upscaling::UpscaleDepth()
