@@ -52,72 +52,45 @@
             "inherits": ["common", "vcpkg", "win64", "msvc"]
         },
         {
-            "name": "AE",
-            "cacheVariables": {
-                "ENABLE_SKYRIM_AE": "ON",
-                "ENABLE_SKYRIM_SE": "OFF",
-                "ENABLE_SKYRIM_VR": "OFF"
-            },
-            "inherits": "skyrim"
-        },
-        {
-            "name": "SE",
-            "cacheVariables": {
-                "ENABLE_SKYRIM_AE": "OFF",
-                "ENABLE_SKYRIM_SE": "ON",
-                "ENABLE_SKYRIM_VR": "OFF"
-            },
-            "inherits": "skyrim"
-        },
-        {
-            "name": "VR",
-            "cacheVariables": {
-                "ENABLE_SKYRIM_AE": "OFF",
-                "ENABLE_SKYRIM_SE": "OFF",
-                "ENABLE_SKYRIM_VR": "ON"
-            },
-            "inherits": "skyrim"
-        },
-        {
             "name": "ALL",
             "cacheVariables": {
                 "ENABLE_SKYRIM_AE": "ON",
                 "ENABLE_SKYRIM_SE": "ON",
-                "ENABLE_SKYRIM_VR": "ON"
+                "ENABLE_SKYRIM_VR": "ON",
+                "AUTO_PLUGIN_DEPLOYMENT": "OFF"
             },
             "inherits": "skyrim"
-        },
-        {
-            "name": "PRE-AE",
-            "cacheVariables": {
-                "ENABLE_SKYRIM_AE": "OFF",
-                "ENABLE_SKYRIM_SE": "ON",
-                "ENABLE_SKYRIM_VR": "ON"
-            },
-            "inherits": "skyrim"
-        },
-        {
-            "name": "FLATRIM",
-            "cacheVariables": {
-                "ENABLE_SKYRIM_AE": "ON",
-                "ENABLE_SKYRIM_SE": "ON",
-                "ENABLE_SKYRIM_VR": "OFF"
-            },
-            "inherits": "skyrim"
-        },
-        {
-            "name": "ALL-TRACY",
-            "cacheVariables": {
-                "TRACY_SUPPORT": "ON"
-            },
-            "inherits": "ALL"
         }
     ],
     "buildPresets": [
-        {
-            "name": "ALL",
-            "configurePreset": "ALL",
-            "configuration": "Release"
-        }
+      {
+        "name": "ALL",
+        "description": "Default build preset for developers, generate files in <BUILD>/aio folder",
+        "configurePreset": "ALL",
+        "configuration": "Release",
+        "targets": [
+          "CommunityShaders",
+          "AIO"
+        ]
+      },
+      {
+        "name": "Package",
+        "description": "Build preset to generate a AIO zip package in <SRC>/dist folder",
+        "configurePreset": "ALL",
+        "configuration": "Release",
+        "targets": [
+          "CommunityShaders",
+          "Package-AIO"
+        ]
+      },
+      {
+        "name": "Shaders",
+        "description": "Build preset to copy shaders into <BUILD>/AIO folder for shader validation",
+        "configurePreset": "ALL",
+        "configuration": "Release",
+        "targets": [
+          "prepare_shaders"
+        ]
+      }
     ]
 }

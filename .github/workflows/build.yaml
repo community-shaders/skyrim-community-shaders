@@ -225,7 +225,7 @@ jobs:
               uses: lukka/run-cmake@v10
               with:
                   configurePreset: ALL
-                  buildPreset: ALL
+                  buildPreset: Package
 
             - name: Extract version from CMake
               id: get_version
@@ -421,8 +421,7 @@ jobs:
               uses: lukka/run-cmake@v10
               with:
                   configurePreset: ALL
-                  buildPreset: ALL
-                  buildPresetAdditionalArgs: "['--target prepare_shaders']"
+                  buildPreset: Shaders
 
             - name: Setup Python
               if: steps.check-hlsl.outputs.skip != 'true'

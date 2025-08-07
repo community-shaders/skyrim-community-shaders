@@ -20,12 +20,8 @@ list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 # ########################################################################################################################
 message("Options:")
 option(AUTO_PLUGIN_DEPLOYMENT "Copy the build output and addons to env:CommunityShadersOutputDir." OFF)
-option(ZIP_TO_DIST "Zip the base mod and addons to their own 7z file in dist." ON)
-option(AIO_ZIP_TO_DIST "Zip the base mod and addons to a AIO 7z file in dist." ON)
 option(TRACY_SUPPORT "Enable support for tracy profiler" OFF)
 message("\tAuto plugin deployment: ${AUTO_PLUGIN_DEPLOYMENT}")
-message("\tZip to dist: ${ZIP_TO_DIST}")
-message("\tAIO Zip to dist: ${AIO_ZIP_TO_DIST}")
 message("\tTracy profiler: ${TRACY_SUPPORT}")
 
 # #######################################################################################################################
@@ -210,6 +206,17 @@ install(FILES $<TARGET_PDB_FILE:${PROJECT_NAME}> DESTINATION SKSE/Plugins COMPON
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/package/ ${FEATURE_PATHS_SLASH} DESTINATION . COMPONENT Shaders)
 install(CODE "file(REMOVE \${CMAKE_INSTALL_PREFIX}/Core)" COMPONENT Shaders)
 
+# Build and install logic complete here
+# One can just build the project and install an AIO folder into anywhere with:
+#   `cmake --install ./build/ALL --prefix <AIO_FOLDER>` 
+# Scripts below defines utility targets for:
+# - AIO: install to ./build/ALL/aio
+# - Package-AIO: AIO zip package
+# - Package-Core: CS-Core zip package
+# - Package-<Feature>: Feature zip packages
+# - prepare_shaders: Copying shaders only without build the SKSE plugin
+# - (AUTO_PLUGIN_DEPLOYMENT): Run cmake install on CommunityShaders.dll POST_BUILD
+
 set(AIO_DIR "${CMAKE_CURRENT_BINARY_DIR}/aio")
 
 add_custom_command(
@@ -227,21 +234,13 @@ add_custom_target(prepare_shaders
 	COMMENT "Preparing shaders for validation"
 )
 
-if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
-	message("Copying package folder with dll/pdb with all features to ${AIO_DIR}")
-	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-		COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${AIO_DIR}
-		COMMENT "Copy shaders to AIO"
-	)
-endif()
-
 # Automatic deployment to CommunityShaders output directory.
 if(AUTO_PLUGIN_DEPLOYMENT)
 	foreach(DEPLOY_TARGET $ENV{CommunityShadersOutputDir})
-		message("Copying AIO to ${DEPLOY_TARGET}")
+		message("Installing to ${DEPLOY_TARGET}")
 		add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 		COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${DEPLOY_TARGET}
-		COMMENT "Copy AIO to ${DEPLOY_TARGET}"
+		COMMENT "Installing to ${DEPLOY_TARGET}"
 		)
 	endforeach()
 	if(NOT DEFINED ENV{CommunityShadersOutputDir})
@@ -250,9 +249,11 @@ if(AUTO_PLUGIN_DEPLOYMENT)
 endif()
 
 set(DIST_PATH "${CMAKE_SOURCE_DIR}/dist")
+file(MAKE_DIRECTORY "${CMAKE_SOURCE_DIR}/dist")
 
 set(CORE_PACKAGE "${DIST_PATH}/${PROJECT_NAME}-${UTC_NOW}.7z")
 
+# CORE_SOURCES = all content copied to the AIO directory + the SKSE plugin dll
 file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/package/*")
 # Add SKSE plugin dll as dependency
 list(APPEND CORE_SOURCES ${PROJECT_NAME})
@@ -267,6 +268,7 @@ foreach(FEATURE_PATH ${FEATURE_PATHS})
 	endif()
 endforeach()
 
+# Core package
 set(FEATURE_PATH "${CMAKE_BINARY_DIR}/Core")
 file(MAKE_DIRECTORY ${FEATURE_PATH})
 add_custom_command(OUTPUT ${CORE_PACKAGE}
@@ -280,6 +282,7 @@ add_custom_command(OUTPUT ${CORE_PACKAGE}
 )
 add_custom_target("Package-Core" DEPENDS ${CORE_PACKAGE})
 
+# Feature packages
 foreach(FEATURE_PATH ${FEATURE_PATHS})
 	if (EXISTS "${FEATURE_PATH}/CORE")
 		continue()
@@ -304,6 +307,15 @@ foreach(FEATURE_PATH ${FEATURE_PATHS})
 	add_custom_target("Package-${FEATURE}" DEPENDS ${FEATURE_PACKAGE})
 endforeach()
 
+# AIO Folder
+add_custom_command(OUTPUT ${AIO_PACKAGE}/SKSE/Plugins/${PROJECT_NAME}.dll
+	DEPENDS ${CORE_SOURCES}
+	COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${AIO_DIR}
+	COMMENT "Installing to AIO folder"
+)
+add_custom_target("AIO" DEPENDS ${AIO_PACKAGE}/SKSE/Plugins/${PROJECT_NAME}.dll)
+
+# AIO package
 set(AIO_PACKAGE "${DIST_PATH}/${PROJECT_NAME}_AIO-${UTC_NOW}.7z")
 add_custom_command(OUTPUT ${AIO_PACKAGE}
 	DEPENDS ${CORE_SOURCES}

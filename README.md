@@ -40,29 +40,61 @@ SKSE core plugin for community-driven advanced graphics modifications.
 -   [VR Address Library for SKSEVR](https://www.nexusmods.com/skyrimspecialedition/mods/58101)
     -   Needed for VR
 
-## Register Visual Studio as a Generator
+## Build Instructions
 
--   Open `x64 Native Tools Command Prompt`
--   Run `cmake`
--   Close the cmd window
-
-Or, in powershell run:
-
-```pwsh
-& "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" amd64
-```
-
-## Clone and Build
-
-Open terminal (e.g., PowerShell) and run the following commands:
-
-```
+### Clone the Repository with submodules
+To clone the repository with all submodules, run the following command in your terminal:
+```bash
 git clone https://github.com/doodlum/skyrim-community-shaders.git --recursive
 cd skyrim-community-shaders
-.\BuildRelease.bat
 ```
 
-### CMAKE Options (optional)
+### Visual Studio build
+To build the project, ensure you have CMake support enabled in Visual Studio. You can do this by selecting the "Desktop development with C++" workload during installation.
+Just open `./skyrim-community-shaders` with Visual Studio's "Open Folder" feature, and it will automatically detect the CMake project.
+Follow the prompts to `Configure` and `Build` the project.
+It should generate the AIO package in the `./build/ALL/aio` folder by default.
+
+#### Zip package & Optional targets
+If you change the `Solution Explorer` into `CMake Targets View`, you can find optional targets to create zip packages for each feature.
+Right click on the target and select `Build` to create the zip package in `./dist/`.
+
+### Advanced build with CMake in command line
+
+In Windows Start menu, search for `x64 Native Tools Command Prompt`, open it in a Cmd or Powershell terminal:
+
+```pwsh
+# Same as running `x64 Native Tools Command Prompt`
+# Adding cl.exe and cmake.exe into your PATH
+& "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" amd64
+
+# Change to the repository folder
+cd skyrim-community-shaders
+
+# Generate the build files in ./build/ALL
+cmake -S . --preset=ALL -B ./build/ALL
+
+# Invoke build tool to build the C++ source code
+# This also generate an AIO folder in ./build/ALL/aio
+cmake --build  ./build/ALL --preset ALL
+
+# Install an AIO package into anywhere, e.g. $MOD_FOLDER
+cmake --install ./build/ALL --prefix $MOD_FOLDER
+```
+
+#### Build a zip package
+You can build zip packages for optional cmake targets.
+Currently support `Package-AIO`, `Package-Core`, and `Package-<Feature>`:
+```pwsh
+# Create a AIO package in ./dist/
+cmake --build  ./build/ALL --config Release --target Package-AIO
+# Create a CommunityShaders core package in ./dist/
+cmake --build  ./build/ALL --config Release --target Package-Core
+# Create a feature package in ./dist/
+cmake --build  ./build/ALL --config Release --target Package-GrassLighting
+```
+
+#### CMAKE Options (optional)
 
 If you want an example CMakeUserPreset to start off with you can copy the `CMakeUserPresets.json.template` -> `CMakeUserPresets.json`
 
@@ -71,19 +103,6 @@ If you want an example CMakeUserPreset to start off with you can copy the `CMake
 -   This option is default `"OFF"`
 -   Make sure `"AUTO_PLUGIN_DEPLOYMENT"` is set to `"ON"` in `CMakeUserPresets.json`
 -   Change the `"CommunityShadersOutputDir"` value to match your desired outputs, if you want multiple folders you can separate them by `;` is shown in the template example
-
-#### AIO_ZIP_TO_DIST
-
--   This option is default `"ON"`
--   Make sure `"AIO_ZIP_TO_DIST"` is set to `"ON"` in `CMakeUserPresets.json`
--   This will create a `CommunityShaders_AIO.7z` archive in /dist containing all features and base mod
-
-#### ZIP_TO_DIST
-
--   This option is default `"ON"`
--   Make sure `"ZIP_TO_DIST"` is set to `"ON"` in `CMakeUserPresets.json`
--   This will create a zip for each feature and one for the base Community shaders in /dist
--   If having a file with name `CORE` in the root of the features folder it will instead be merged into the core zip
 
 #### TRACY_SUPPORT
 
