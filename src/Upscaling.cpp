@@ -570,7 +570,7 @@ void Upscaling::CreateSharedD3D12Resources()
 	inputColorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
 	outputColorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
 
-	texDesc.Format = DXGI_FORMAT_R16_UNORM;
+	texDesc.Format = DXGI_FORMAT_R32_FLOAT;
 	depthBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
 
 	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];

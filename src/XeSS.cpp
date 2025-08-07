@@ -66,8 +66,8 @@ void XeSS::CreateXeSSResources()
 	xess_d3d12_init_params_t initParams{};
 	initParams.outputResolution.x = (uint32_t)state->screenSize.x;
 	initParams.outputResolution.y = (uint32_t)state->screenSize.y;
-	initParams.qualitySetting = XESS_QUALITY_SETTING_ULTRA_PERFORMANCE;
-	initParams.initFlags = XESS_INIT_FLAG_ENABLE_AUTOEXPOSURE;
+	initParams.qualitySetting = XESS_QUALITY_SETTING_AA;
+	initParams.initFlags = XESS_INIT_FLAG_ENABLE_AUTOEXPOSURE | XESS_INIT_FLAG_USE_NDC_VELOCITY;
 
 	initParams.creationNodeMask = 1;
 	initParams.visibleNodeMask = 1;
@@ -135,7 +135,7 @@ void XeSS::Upscale(
 )
 {
 	// Set velocity and jitter scales
-	if (xessSetVelocityScale(xessContext, (float)a_renderWidth, (float)a_renderHeight) != XESS_RESULT_SUCCESS) {
+	if (xessSetVelocityScale(xessContext, 2.0f, -2.0f) != XESS_RESULT_SUCCESS) {
 		logger::warn("[XeSS] Failed to set velocity scale");
 	}
 
