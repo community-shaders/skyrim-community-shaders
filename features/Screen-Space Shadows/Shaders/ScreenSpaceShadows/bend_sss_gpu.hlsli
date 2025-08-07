@@ -31,6 +31,7 @@
 // The following Macros must be defined in the compute shader file before including this header:
 //
 //
+
 #define WAVE_SIZE 64           // Wavefront size of the compute shader running this code.                                                                                                                      \
 							   //													// numthreads[WAVE_SIZE, 1, 1]                                                                                                                                   \
 							   //													// Only tested with 64.                                                                                                                                          \
@@ -45,21 +46,15 @@
 							   //		//	However, the samples very close to the start pixel can optionally be forced to disable this averaging, so a single sample can fully shadow the pixel (HardShadowSamples) \
 							   //		//	Plus, a number of the last (most distant) samples can (for a small cost) apply a fade-out effect to soften a hash shadow cutoff (FadeOutSamples)                         \
 							   //
-#define HARD_SHADOW_SAMPLES 0  // Number of initial shadow samples that will produce a hard shadow, and not perform sample-averaging. \
+#define HARD_SHADOW_SAMPLES 4  // Number of initial shadow samples that will produce a hard shadow, and not perform sample-averaging. \
 							   //													// This trades aliasing for grounding pixels very close to the shadow caster.           \
 							   //													// Recommended starting value: 4                                                        \
 							   //
-#define FADE_OUT_SAMPLES 0     // Number of samples that will fade out at the end of the shadow (for a minor cost). \
+#define FADE_OUT_SAMPLES 8     // Number of samples that will fade out at the end of the shadow (for a minor cost). \
 							   //													// Recommended starting value: 8
-
-//#if defined(__HLSL_VERSION) || defined(__hlsl_dx_compiler)
 
 #define USE_HALF_PIXEL_OFFSET 1  // Apply a 0.5 texel offset when sampling a texture. Toggle this macro if the output shadow has odd, regular grid-like artefacts.
 
-// HLSL enforces that a pixel offset in a Sample() call must be a compile time constant, which isn't always required - and in some cases can give a small perf boost if used.
-#define USE_UV_PIXEL_BIAS 1  // Use Sample(uv + bias) instead of Sample(uv, bias)
-
-//#endif
 
 // This is the list of runtime properties to pass to the shader
 // Wherever possible, it is highly recommended to have these values be compile-time constants
@@ -273,7 +268,7 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 
 		half2 depths;
 		half bilinear = frac(minor_axis) - 0.5;
-
+		
 #	if USE_HALF_PIXEL_OFFSET
 		read_xy += 0.5;
 #	endif
@@ -283,8 +278,8 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 
 		// HLSL enforces that a pixel offset is a compile-time constant, which isn't strictly required (and can sometimes be a bit faster)
 		// So this fallback will use a manual uv offset instead
-		half2 coord = read_xy * inParameters.InvDepthTextureSize * inParameters.DynamicRes;
-		half2 coord_with_offset = (read_xy + offset_xy) * inParameters.InvDepthTextureSize * inParameters.DynamicRes;
+		half2 coord = read_xy * inParameters.InvDepthTextureSize;
+		half2 coord_with_offset = (read_xy + offset_xy) * inParameters.InvDepthTextureSize;
 #	if defined(VR)
 		coord *= half2(0.5, 1.0);
 		coord_with_offset *= half2(0.5, 1.0);

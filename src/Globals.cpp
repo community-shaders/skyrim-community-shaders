@@ -118,6 +118,9 @@ namespace globals
 
 		REL::Relocation<ID3D11Buffer**> perFrame;
 		REL::Relocation<RE::BSGraphics::BSShaderAccumulator**> currentAccumulator;
+
+		D3D11_MAPPED_SUBRESOURCE* mappedFrameBuffer = nullptr;
+		FrameBuffer frameBufferCached{};
 	}
 
 	namespace rtti
@@ -209,5 +212,66 @@ namespace globals
 
 		bShadowsOnGrass = RE::GetINISetting("bShadowsOnGrass:Display");
 		shadowMaskQuarter = RE::GetINISetting("iShadowMaskQuarter:Display");
+	}
+
+	/**
+ * @brief Caches the current frame buffer data and clears the mapped pointer.
+ *
+ * Copies the contents of the mapped frame buffer into an internal cache and resets the mapped frame buffer pointer.
+ */
+	void CacheFramebuffer()
+	{
+		using namespace game;
+		auto frameBuffer = (FrameBuffer*)mappedFrameBuffer->pData;
+		frameBufferCached = *frameBuffer;
+		mappedFrameBuffer = nullptr;
+	}
+
+	/**
+ * @brief Hooks the ID3D11DeviceContext::Map method to track mapping of the per-frame resource.
+ *
+ * Calls the original Map function and, if the mapped resource matches the current per-frame buffer, stores the mapped subresource pointer for later use.
+ *
+ * @return HRESULT Result of the original Map call.
+ */
+	struct ID3D11DeviceContext_Map
+	{
+		static HRESULT thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource, D3D11_MAP MapType, UINT MapFlags, D3D11_MAPPED_SUBRESOURCE* pMappedResource)
+		{
+			HRESULT hr = func(This, pResource, Subresource, MapType, MapFlags, pMappedResource);
+			if (hr == S_OK) {
+				if (*globals::game::perFrame.get() == pResource)
+					globals::game::mappedFrameBuffer = pMappedResource;
+			}
+			return hr;
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	/**
+ * @brief Hooked implementation of ID3D11DeviceContext::Unmap that caches the frame buffer if applicable.
+ *
+ * If the resource being unmapped matches the current per-frame buffer and a mapped frame buffer is present, caches the frame buffer data before calling the original Unmap function.
+ */
+	struct ID3D11DeviceContext_Unmap
+	{
+		static void thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource)
+		{
+			if (*globals::game::perFrame.get() == pResource && globals::game::mappedFrameBuffer)
+				CacheFramebuffer();
+			func(This, pResource, Subresource);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	/**
+ * @brief Installs hooks on the Map and Unmap methods of the provided D3D11 device context.
+ *
+ * This enables interception of resource mapping and unmapping operations for frame buffer caching.
+ */
+	void InstallD3DHooks(ID3D11DeviceContext* a_context)
+	{
+		stl::detour_vfunc<14, ID3D11DeviceContext_Map>(a_context);
+		stl::detour_vfunc<15, ID3D11DeviceContext_Unmap>(a_context);
 	}
 }

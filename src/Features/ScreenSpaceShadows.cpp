@@ -58,7 +58,7 @@ ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarch()
 
 	if (!raymarchCS) {
 		logger::debug("Compiling RaymarchCS");
-		raymarchCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", { { "SAMPLE_COUNT", std::format("{}", sampleCount * 64).c_str() } }, "cs_5_0");
+		raymarchCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", { { "SAMPLE_COUNT", std::format("{}", sampleCount * 60).c_str() } }, "cs_5_0");
 	}
 	return raymarchCS;
 }
@@ -77,7 +77,7 @@ ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarchRight()
 
 	if (!raymarchRightCS) {
 		logger::debug("Compiling RaymarchCS RIGHT");
-		raymarchRightCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", { { "SAMPLE_COUNT", std::format("{}", sampleCount * 64).c_str() }, { "RIGHT", "" } }, "cs_5_0");
+		raymarchRightCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", { { "SAMPLE_COUNT", std::format("{}", sampleCount * 60).c_str() }, { "RIGHT", "" } }, "cs_5_0");
 	}
 	return raymarchRightCS;
 }
@@ -99,19 +99,21 @@ void ScreenSpaceShadows::DrawShadows()
 	light.Normalize();
 	float4 lightProjection = float4(-light.x, -light.y, -light.z, 0.0f);
 
-	Matrix viewProjMat = Util::GetCameraData(0).viewProjMat;
+	auto viewProjMat = globals::game::frameBufferCached.CameraViewProj.Transpose();
 
 	lightProjection = DirectX::SimpleMath::Vector4::Transform(lightProjection, viewProjMat);
 	float lightProjectionF[4] = { lightProjection.x, lightProjection.y, lightProjection.z, lightProjection.w };
 
-	float2 size = Util::ConvertToDynamic(state->screenSize);
-	int viewportSize[2] = { (int)size.x, (int)size.y };
+	auto screenSize = state->screenSize;
+	float2 renderSize = Util::ConvertToDynamic(screenSize);
+
+	int viewportSize[2] = { (int)renderSize.x, (int)renderSize.y };
 
 	if (REL::Module::IsVR())
 		viewportSize[0] /= 2;
 
 	int minRenderBounds[2] = { 0, 0 };
-	int maxRenderBounds[2] = { viewportSize[0], viewportSize[1] };
+	int maxRenderBounds[2] = { (int)renderSize.x, (int)renderSize.y };
 
 	auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 	context->CSSetShaderResources(0, 1, &depth.depthSRV);
@@ -131,7 +133,6 @@ void ScreenSpaceShadows::DrawShadows()
 	auto viewport = globals::game::graphicsState;
 
 	float2 dynamicRes = { viewport->GetRuntimeData().dynamicResolutionWidthRatio, viewport->GetRuntimeData().dynamicResolutionHeightRatio };
-
 	for (int i = 0; i < dispatchList.DispatchCount; i++) {
 		TracyD3D11Zone(globals::state->tracyCtx, "SSS - Ray March");
 
@@ -149,10 +150,10 @@ void ScreenSpaceShadows::DrawShadows()
 		data.FarDepthValue = 1.0f;
 		data.NearDepthValue = 0.0f;
 
-		data.InvDepthTextureSize[0] = 1.0f / (float)viewportSize[0];
-		data.InvDepthTextureSize[1] = 1.0f / (float)viewportSize[1];
-
 		data.DynamicRes = dynamicRes;
+
+		data.InvDepthTextureSize[0] = 1.0f / (float)screenSize.x;
+		data.InvDepthTextureSize[1] = 1.0f / (float)screenSize.y;
 
 		data.settings = bendSettings;
 
@@ -191,10 +192,10 @@ void ScreenSpaceShadows::DrawShadows()
 			data.FarDepthValue = 1.0f;
 			data.NearDepthValue = 0.0f;
 
+			data.DynamicRes = dynamicRes;
+
 			data.InvDepthTextureSize[0] = 1.0f / (float)viewportSize[0];
 			data.InvDepthTextureSize[1] = 1.0f / (float)viewportSize[1];
-
-			data.DynamicRes = dynamicRes;
 
 			data.settings = bendSettings;
 

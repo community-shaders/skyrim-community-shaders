@@ -538,6 +538,8 @@ namespace Hooks
 
 			stl::detour_vfunc<23, ID3D11Device_CreateSamplerState>(globals::d3d::device);
 
+			globals::InstallD3DHooks(globals::d3d::context);
+
 			globals::menu->Init();
 		}
 		static inline REL::Relocation<decltype(thunk)> func;

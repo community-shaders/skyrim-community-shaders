@@ -163,8 +163,8 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 
 		ffx::DispatchDescFrameGenerationPrepareCameraInfo cameraConfig{};
 
-		auto viewMatrix = globals::upscaling->frameBufferCached.CameraViewInverse.Transpose();
-		auto cameraViewToClip = globals::upscaling->frameBufferCached.CameraProjUnjittered.Transpose();
+		auto viewMatrix = globals::game::frameBufferCached.CameraViewInverse.Transpose();
+		auto cameraViewToClip = globals::game::frameBufferCached.CameraProjUnjittered.Transpose();
 
 		cameraConfig.cameraRight[0] = viewMatrix._11;
 		cameraConfig.cameraRight[1] = viewMatrix._12;
@@ -178,9 +178,9 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		cameraConfig.cameraForward[1] = viewMatrix._32;
 		cameraConfig.cameraForward[2] = viewMatrix._33;
 
-		cameraConfig.cameraPosition[0] = globals::upscaling->frameBufferCached.CameraPosAdjust.x;
-		cameraConfig.cameraPosition[1] = globals::upscaling->frameBufferCached.CameraPosAdjust.y;
-		cameraConfig.cameraPosition[2] = globals::upscaling->frameBufferCached.CameraPosAdjust.z;
+		cameraConfig.cameraPosition[0] = globals::game::frameBufferCached.CameraPosAdjust.x;
+		cameraConfig.cameraPosition[1] = globals::game::frameBufferCached.CameraPosAdjust.y;
+		cameraConfig.cameraPosition[2] = globals::game::frameBufferCached.CameraPosAdjust.z;
 
 		if (ffx::Dispatch(frameGenContext, dispatchParameters, cameraConfig) != ffx::ReturnCode::Ok) {
 			logger::critical("[FidelityFX] Failed to dispatch frame generation camera info!");

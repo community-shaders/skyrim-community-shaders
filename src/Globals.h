@@ -90,6 +90,25 @@ namespace globals
 		}
 	}
 
+	struct FrameBuffer
+	{
+		Matrix CameraView;
+		Matrix CameraProj;
+		Matrix CameraViewProj;
+		Matrix CameraViewProjUnjittered;
+		Matrix CameraPreviousViewProjUnjittered;
+		Matrix CameraProjUnjittered;
+		Matrix CameraProjUnjitteredInverse;
+		Matrix CameraViewInverse;
+		Matrix CameraViewProjInverse;
+		Matrix CameraProjInverse;
+		float4 CameraPosAdjust;
+		float4 CameraPreviousPosAdjust;
+		float4 FrameParams;
+		float4 DynamicResolutionParams1;
+		float4 DynamicResolutionParams2;
+	};
+
 	namespace game
 	{
 		extern RE::BSGraphics::RendererShadowState* shadowState;
@@ -118,6 +137,9 @@ namespace globals
 		extern RE::Setting* shadowMaskQuarter;
 		extern REL::Relocation<ID3D11Buffer**> perFrame;
 		extern REL::Relocation<RE::BSGraphics::BSShaderAccumulator**> currentAccumulator;
+
+		extern D3D11_MAPPED_SUBRESOURCE* mappedFrameBuffer;
+		extern FrameBuffer frameBufferCached;
 	}
 
 	namespace rtti
@@ -144,4 +166,5 @@ namespace globals
 	void OnInit();
 	void ReInit();
 	void OnDataLoaded();
+	void InstallD3DHooks(ID3D11DeviceContext* a_context);
 }
