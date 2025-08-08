@@ -240,6 +240,10 @@ void Deferred::CopyShadowData()
 		};
 
 		context->PSSetShaderResources(18, ARRAYSIZE(srvs), srvs);
+
+		// Release COM object to prevent memory leak
+		if (shadowView)
+			shadowView->Release();
 	}
 }
 

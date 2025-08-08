@@ -93,7 +93,7 @@ namespace Hair
 		const float3 F = BRDF::F_Schlick(HairF0(), HdotL);
 		float3 specR = 0.25 * F * (specPrimary + specSecondary * scatterColor) * NdotL * saturate(VNdotV * (3.4e+38));
 		float scatterFresnel1 = pow(saturate(-dot(L, V)), 9) * pow(saturate(1 - VNdotV * VNdotV), 12);
-		float scatterFresnel2 = saturate(pow((1 - VNdotV), 20));
+		float scatterFresnel2 = saturate(pow(abs(1 - VNdotV), 20));
 		float3 specT = (scatterFresnel1 + scatterFresnel2 * scatterColor) * SharedData::hairSpecularSettings.Transmission;
 		dirSpecular = specR * lightColor * SharedData::hairSpecularSettings.SpecularMult;
 		dirTransmission = specT * lightColor * SharedData::hairSpecularSettings.SpecularMult;

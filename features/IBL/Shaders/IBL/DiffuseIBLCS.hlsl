@@ -26,7 +26,7 @@ SamplerState LinearSampler : register(s0);
 		for (float ze = 0.5; ze < axisSampleCount; ze += 1.0) {
 			float3 rayDir = SphericalHarmonics::GetUniformSphereSample(az / axisSampleCount, ze / axisSampleCount);
 
-			float3 color = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0);
+			float3 color = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
 #if defined(DYNAMIC_CUBEMAPS)
 			if (rayDir.z >= 0 && SharedData::iblSettings.SampleUnderHorizonFromDynCube && abs(rayDir.z) > abs(rayDir.x) && abs(rayDir.z) > abs(rayDir.y)) {
 				color = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0);

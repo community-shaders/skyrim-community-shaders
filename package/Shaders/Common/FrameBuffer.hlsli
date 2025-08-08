@@ -103,7 +103,7 @@ namespace FrameBuffer
 
 	float3 ToSRGBColor(float3 linearColor)
 	{
-		return pow(linearColor, FrameParams.x);
+		return pow(abs(linearColor), FrameParams.x);
 	}
 
 	float3 WorldToView(float3 x, bool is_position = true, uint a_eyeIndex = 0)

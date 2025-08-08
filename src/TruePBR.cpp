@@ -339,6 +339,14 @@ void TruePBR::SetupGlintsTexture()
 
 		context->CSSetShader(old.shader, &old.instance, old.numInstances);
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(old.uav), old.uav, nullptr);
+
+		// Release COM objects to prevent memory leaks
+		if (old.shader)
+			old.shader->Release();
+		for (auto& uav : old.uav) {
+			if (uav)
+				uav->Release();
+		}
 	}
 
 	noiseGenProgram->Release();

@@ -963,23 +963,25 @@ namespace Hooks
 				if (state->enabledClasses[RE::BSShader::Type::ImageSpace]) {
 					RE::BSImagespaceShader* isShader = CurrentlyDispatchedShader;
 					uint32_t techniqueId = CurrentComputeShaderTechniqueId;
-					if (CurrentlyDispatchedShader == nullptr) {
-						techniqueId = 0;
-						if (CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingGenerateCS")) {
-							isShader = vl.GetOrCreateGenerateCS(CurrentlyDispatchedComputeShader);
-						} else if (CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingRaymarchCS")) {
-							isShader = vl.GetOrCreateRaymarchCS(CurrentlyDispatchedComputeShader);
+					if (vl.loaded) {
+						if (CurrentlyDispatchedShader == nullptr) {
+							techniqueId = 0;
+							if (CurrentlyDispatchedComputeShader->name == "ISVolumetricLightingGenerateCS"sv) {
+								isShader = vl.GetOrCreateGenerateCS(CurrentlyDispatchedComputeShader);
+							} else if (CurrentlyDispatchedComputeShader->name == "ISVolumetricLightingRaymarchCS"sv) {
+								isShader = vl.GetOrCreateRaymarchCS(CurrentlyDispatchedComputeShader);
+							}
+						} else if (CurrentlyDispatchedComputeShader->name == "ISVolumetricLightingBlurHCS"sv) {
+							techniqueId = 0;
+							isShader = vl.GetOrCreateBlurHCS(CurrentlyDispatchedComputeShader);
+							vl.SetDimensionsCB();
+							vl.SetGroupCountsHCS(threadGroupCountX);
+						} else if (CurrentlyDispatchedComputeShader->name == "ISVolumetricLightingBlurVCS"sv) {
+							techniqueId = 0;
+							isShader = vl.GetOrCreateBlurVCS(CurrentlyDispatchedComputeShader);
+							vl.SetDimensionsCB();
+							vl.SetGroupCountsVCS(threadGroupCountY);
 						}
-					} else if (vl.loaded && CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingBlurHCS")) {
-						techniqueId = 0;
-						isShader = vl.GetOrCreateBlurHCS(CurrentlyDispatchedComputeShader);
-						vl.SetDimensionsCB();
-						vl.SetGroupCountsHCS(threadGroupCountX);
-					} else if (vl.loaded && CurrentlyDispatchedComputeShader->name == std::string_view("ISVolumetricLightingBlurVCS")) {
-						techniqueId = 0;
-						isShader = vl.GetOrCreateBlurVCS(CurrentlyDispatchedComputeShader);
-						vl.SetDimensionsCB();
-						vl.SetGroupCountsVCS(threadGroupCountY);
 					}
 					if (isShader != nullptr) {
 						if (auto* computeShader = shaderCache->GetComputeShader(*isShader, techniqueId)) {

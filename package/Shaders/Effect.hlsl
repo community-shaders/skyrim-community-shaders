@@ -609,7 +609,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 
 PS_OUTPUT main(PS_INPUT input)
 {
-	PS_OUTPUT psout;
+	PS_OUTPUT psout = (PS_OUTPUT)0;
 
 #	if !defined(VR)
 	uint eyeIndex = 0;

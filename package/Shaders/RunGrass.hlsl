@@ -448,7 +448,7 @@ cbuffer PerMaterial : register(b1)
 
 PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 {
-	PS_OUTPUT psout;
+	PS_OUTPUT psout = (PS_OUTPUT)0;
 
 #		if !defined(TRUE_PBR)
 	float x;
