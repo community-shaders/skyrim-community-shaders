@@ -944,14 +944,18 @@ void Upscaling::Upscale()
 			DX::ThrowIfFailed(d3d11Context4->Wait(sharedD3D11Fence.get(), sharedInteropFenceValue));
 			sharedInteropFenceValue++;
 
-			// XeSS output needs to go through sharpening, so copy to upscaling texture
-			context->CopyResource(upscalingTexture->resource.get(), outputColorBufferShared12->resource11);
+			// XeSS output may need to go through sharpening, so copy to upscaling texture if required
+			if (globals::game::isVR)
+				context->CopyResource(upscalingTexture->resource.get(), outputColorBufferShared12->resource11);
+			else
+				context->CopyResource(main.texture, outputColorBufferShared12->resource11);
 		}
 
 		state->EndPerfEvent();
 	}
 
-	if (upscaleMethod == UpscaleMethod::kXESS) {
+	// XeSS requires sharpening to match the look of TAA and DLSS, but on VR this looks bad
+	if (!globals::game::isVR && upscaleMethod == UpscaleMethod::kXESS) {
 		state->BeginPerfEvent("Sharpening");
 
 		{
