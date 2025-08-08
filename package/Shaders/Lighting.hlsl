@@ -28,10 +28,6 @@
 #	define LOD
 #endif
 
-#if defined(VANILLA_FRESNEL_DL)
-#	define VANILLA_FRESNEL
-#endif
-
 struct VS_INPUT
 {
 	float4 Position : POSITION0;
@@ -681,15 +677,17 @@ float3 GetLightSpecularInput(PS_INPUT input, float3 L, float3 V, float3 N, float
 
 #	if defined(SPECULAR)
 	float3 lightColorMultiplier = exp2(shininess * log2(HdotN));
-#		if defined(VANILLA_FRESNEL_DL)
-	float NdotV = saturate(dot(N, V));
-	float NdotL = saturate(dot(N, L));
-	float NdotH = saturate(dot(N, H));
-	float HdotV = saturate(dot(H, V));
-	float D = BRDF::D_GGX(roughness, HdotN);
-	float3 F = BRDF::F_Schlick(F0, HdotV);
-	float G = BRDF::Vis_SmithJointApprox(roughness, NdotV, NdotL);
-	lightColorMultiplier = max(D * G * F * NdotL, 0.0);
+#		if defined(VANILLA_FRESNEL)
+	if (SharedData::vanillaFresnelSettings.Enable && SharedData::vanillaFresnelSettings.EnableGGX) {
+		float NdotV = saturate(dot(N, V));
+		float NdotL = saturate(dot(N, L));
+		float NdotH = saturate(dot(N, H));
+		float HdotV = saturate(dot(H, V));
+		float D = BRDF::D_GGX(roughness, HdotN);
+		float3 F = BRDF::F_Schlick(F0, HdotV);
+		float G = BRDF::Vis_SmithJointApprox(roughness, NdotV, NdotL);
+		lightColorMultiplier = max(D * G * F * NdotL, 0.0);
+	}
 #		endif
 #	elif defined(SPARKLE)
 	float lightColorMultiplier = 0;
@@ -2202,7 +2200,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif  // TRUE_PBR
 
 #	if defined(VANILLA_FRESNEL)
-	float3 F0 = 0.04;
+	const bool enableVanillaFresnel = SharedData::vanillaFresnelSettings.Enable;
+	float3 F0 = enableVanillaFresnel ? 0.04 : 0.0;
 #	else
 	float3 F0 = 0.0;
 #	endif
@@ -2210,11 +2209,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(VANILLA_FRESNEL)
 #		if defined(SPECULAR) && !defined(TRUE_PBR)
-	F0 = saturate(glossiness * SpecularColor.xyz);
-	roughness = pow(2.0 / (shininess + 2.0), 0.25);
+	if (enableVanillaFresnel) {
+		F0 = saturate(glossiness * SpecularColor.xyz);
+		roughness = pow(2.0 / (shininess + 2.0), 0.25);
+	}
 #		elif defined(EYE)
-	F0 = 0.027;
-	roughness = 0.1;
+	if (enableVanillaFresnel) {
+		F0 = 0.027;
+		roughness = 0.1;
+	}
 #		endif
 #	endif
 
@@ -2243,7 +2246,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(EMAT) && !defined(VANILLA_FRESNEL)
 		if (envSize.x == 1 && envSize.y == 1 || complexMaterial) {
 #			elif defined(VANILLA_FRESNEL)
-		if (true) {
+		if (enableVanillaFresnel && SharedData::vanillaFresnelSettings.EnableDynamicCubemapsConversion) {
 #			else
 		if (envSize.x == 1 && envSize.y == 1) {
 #			endif
@@ -2315,8 +2318,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 
 #		if defined(EYE) && defined(VANILLA_FRESNEL)
-		F0 = 0.027;
-		roughness = 0.1;
+		if (enableVanillaFresnel) {
+			F0 = 0.027;
+			roughness = 0.1;
+		}
 #		endif
 
 		if (!dynamicCubemap) {
@@ -2921,7 +2926,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			reflectance = DynamicCubemaps::GetDynamicCubemap(worldNormal, vertexNormal, viewDirection, roughness, F0);
 #		endif
 
-#		if (defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)) && !defined(VANILLA_FRESNEL)
+#		if (defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE))
+#			if defined(VANILLA_FRESNEL)
+		if (!enableVanillaFresnel)
+#			endif
 		reflectance *= envMask;
 #		endif
 	}
@@ -3110,12 +3118,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 #	endif  // MULTI_LAYER_PARALLAX
 
-#	if defined(SPECULAR) && !defined(VANILLA_FRESNEL_DL)
+#	if defined(SPECULAR)
 # 		if defined(HAIR) && defined(CS_HAIR)
 	if (!SharedData::hairSpecularSettings.Enabled)
 #		endif
+#		if defined(VANILLA_FRESNEL)
+	if (!(enableVanillaFresnel && SharedData::vanillaFresnelSettings.EnableGGX))
+#		endif
 #		if defined(VANILLA_FRESNEL) && (defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE))
-		specularColor = (specularColor * glossiness * MaterialData.yyy) * lerp(SpecularColor.xyz, F0, envMask);
+		specularColor = (specularColor * glossiness * MaterialData.yyy) * ((enableVanillaFresnel && SharedData::vanillaFresnelSettings.EnableDynamicCubemapsConversion) ? lerp(SpecularColor.xyz, F0, envMask) : SpecularColor.xyz);
 #		else
 		specularColor = (specularColor * glossiness * MaterialData.yyy) * SpecularColor.xyz;
 #		endif
@@ -3132,9 +3143,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	diffuseColor = reflectionDiffuseColor;
 
-#	if (defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)) && !defined(VANILLA_FRESNEL)
+#	if (defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE))
 #		if defined(DYNAMIC_CUBEMAPS)
 	if (!dynamicCubemap)
+#		endif
+#		if defined(VANILLA_FRESNEL)
+	if (!enableVanillaFresnel)
 #		endif
 		specularColor += envColor * Color::GammaToLinear(diffuseColor);
 #	endif

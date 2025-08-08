@@ -5,23 +5,24 @@ namespace GrassLighting
 	float3 GetLightSpecularInput(float3 L, float3 V, float3 N, float3 lightColor, float roughness, float3 F0)
 	{
 		float3 H = normalize(V + L);
-#if defined(VANILLA_FRESNEL_DL)
-		float NdotL = saturate(dot(N, L));
-		float NdotV = saturate(dot(N, V));
-		float NdotH = saturate(dot(N, H));
-		float VdotH = saturate(dot(V, H));
+#if defined(VANILLA_FRESNEL)
+		if (SharedData::vanillaFresnelSettings.Enable && SharedData::vanillaFresnelSettings.EnableGGXOnGrass) {
+			float NdotL = saturate(dot(N, L));
+			float NdotV = saturate(dot(N, V));
+			float NdotH = saturate(dot(N, H));
+			float VdotH = saturate(dot(V, H));
 
-		float D = BRDF::D_GGX(roughness, NdotH);
-		float G = BRDF::Vis_SmithJointApprox(roughness, NdotL, NdotV);
-		float3 F = BRDF::F_Schlick(F0, VdotH);
-		float3 specular = D * G * F;
-		return specular * lightColor * NdotL;
-#else
+			float D = BRDF::D_GGX(roughness, NdotH);
+			float G = BRDF::Vis_SmithJointApprox(roughness, NdotL, NdotV);
+			float3 F = BRDF::F_Schlick(F0, VdotH);
+			float3 specular = D * G * F;
+			return specular * lightColor * NdotL;
+		}
+#endif
 		float shininess = (1.0 - roughness) * 100.f;
 		float HdotN = saturate(dot(H, N));
 		float lightColorMultiplier = exp2(shininess * log2(HdotN));
 		return lightColor * lightColorMultiplier.xxx;
-#endif
 	}
 
 	float3 TransformNormal(float3 normal)

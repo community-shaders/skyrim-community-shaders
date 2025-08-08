@@ -15,10 +15,6 @@
 #	undef IBL
 #endif
 
-#if defined(VANILLA_FRESNEL_DL)
-#	define VANILLA_FRESNEL
-#endif
-
 struct VS_INPUT
 {
 	float4 Position : POSITION0;
@@ -767,9 +763,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				endif
 
 	specularColor += lightsSpecularColor;
-#				if !defined(VANILLA_FRESNEL_DL)
-	specularColor *= specColor.w * SharedData::grassLightingSettings.SpecularStrength;
+#				if defined(VANILLA_FRESNEL)
+	if (!SharedData::vanillaFresnelSettings.Enable && !SharedData::vanillaFresnelSettings.EnableGGXOnGrass)
 #				endif
+	specularColor *= specColor.w * SharedData::grassLightingSettings.SpecularStrength;
 	specularColor = Color::GammaToLinear(specularColor);
 #			endif
 
@@ -796,11 +793,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.Reflectance = float4(indirectSpecularLobeWeight, 1);
 #			else
 
-#				if defined(DYNAMIC_CUBEMAPS) && (defined(VANILLA_FRESNEL) || defined(TRUE_PBR))
-	float2 specularBDRF = DynamicCubemaps::EnvBRDFApprox(roughness, saturate(dot(viewDirection, normalVS)));
-	float3 reflectance = F0 * specularBDRF.x + specularBDRF.y;
-#				else
 	float3 reflectance = 0;
+#				if defined(DYNAMIC_CUBEMAPS) && (defined(VANILLA_FRESNEL) || defined(TRUE_PBR))
+#					if defined(VANILLA_FRESNEL)
+	if (SharedData::vanillaFresnelSettings.Enable) {
+#					endif
+	float2 specularBDRF = DynamicCubemaps::EnvBRDFApprox(roughness, saturate(dot(viewDirection, normalVS)));
+	reflectance = F0 * specularBDRF.x + specularBDRF.y;
+#					if defined(VANILLA_FRESNEL)
+	}
+#					endif
 #				endif
 
 	psout.Reflectance = float4(reflectance, 1);
