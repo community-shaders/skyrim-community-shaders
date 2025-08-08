@@ -866,19 +866,19 @@ void Upscaling::Upscale()
 		auto& depthPostWater = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
 		{
-			const bool isXeSS = upscaleMethod == UpscaleMethod::kDLSS;
+			const bool isDLSS = upscaleMethod == UpscaleMethod::kDLSS;
 
 			ID3D11ShaderResourceView* views[3] = { temporalAAMask.SRV, depthPreWater.depthSRV, depthPostWater.depthSRV };
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
 			// Use shared D3D12 textures for XeSS, regular D3D11 textures for others
-			ID3D11UnorderedAccessView* reactiveMaskUAV = isXeSS ? reactiveMaskShared12->uav : reactiveMaskTexture->uav.get();
-			ID3D11UnorderedAccessView* transparencyUAV = isXeSS ? transparencyCompositionMaskTexture->uav.get() : nullptr;
+			ID3D11UnorderedAccessView* reactiveMaskUAV = isDLSS ? reactiveMaskTexture->uav.get() : reactiveMaskShared12->uav;
+			ID3D11UnorderedAccessView* transparencyUAV = isDLSS ? transparencyCompositionMaskTexture->uav.get() : nullptr;
 
 			ID3D11UnorderedAccessView* uavs[2] = { reactiveMaskUAV, transparencyUAV };
 			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
-			context->CSSetShader(isXeSS ? GetEncodeTexturesTransparencyCS() : GetEncodeTexturesCS(), nullptr, 0);
+			context->CSSetShader(isDLSS ? GetEncodeTexturesTransparencyCS() : GetEncodeTexturesCS(), nullptr, 0);
 
 			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 		}
