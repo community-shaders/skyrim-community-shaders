@@ -67,7 +67,7 @@ void Upscaling::DrawSettings()
 	auto upscaleMethod = GetUpscaleMethod();
 
 	// Display upscaling settings if applicable
-	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
+	if (upscaleMethod != UpscaleMethod::kNONE) {
 		const char* upscalePresetsDLSS[] = { "Performance", "Balanced", "Quality", "DLAA" };
 		const char* upscalePresets[] = { "Performance", "Balanced", "Quality", "Native AA" };
 
@@ -311,6 +311,20 @@ ID3D11VertexShader* Upscaling::GetDepthUpscaleVS()
 	return depthUpscaleVS;
 }
 
+float Upscaling::GetTAAInputResolutionScale(uint qualityMode)
+{
+	switch (qualityMode) {
+	case 1:
+		return 1.0f / 1.5f;
+	case 2:
+		return 1.0f / 1.7f;
+	case 3:
+		return 1.0f / 2.0f;
+	default:
+		return 1.0f;
+	}
+}
+
 void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 {
 	auto upscaleMethod = GetUpscaleMethod();
@@ -329,37 +343,35 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
 
 	if (upscaleMethod != UpscaleMethod::kNONE) {
-		if (upscaleMethod != UpscaleMethod::kTAA) {
-			auto screenSize = globals::state->screenSize;
-			if (upscaleMethod == UpscaleMethod::kXESS) {
-				resolutionScale = globals::xess->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.upscalePreset);
-			} else if (upscaleMethod == UpscaleMethod::kDLSS) {
-				resolutionScale = globals::streamline->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.upscalePreset);
-			}
-		} else {
-			resolutionScale = 1.0f;
-		}
-
 		auto state = globals::state;
 		auto screenSize = state->screenSize;
 
-		auto screenWidth = static_cast<int>(screenSize.x);
-		auto renderWidth = static_cast<int>(screenWidth * resolutionScale);
+		if (upscaleMethod == UpscaleMethod::kXESS) {
+			resolutionScale = globals::xess->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.upscalePreset);
+		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
+			resolutionScale = globals::streamline->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.upscalePreset);
+		} else {
+			resolutionScale = GetTAAInputResolutionScale(settings.upscalePreset);
+		}
 
-		auto screenHeight = static_cast<int>(screenSize.y);
-		auto renderHeight = static_cast<int>(screenHeight * resolutionScale);
+		if (upscaleMethod != UpscaleMethod::kTAA) {
+			auto screenWidth = static_cast<int>(screenSize.x);
+			auto renderWidth = static_cast<int>(screenWidth * resolutionScale);
 
-		auto phaseCount = ffxFsr3GetJitterPhaseCount(renderWidth, screenWidth);
+			auto screenHeight = static_cast<int>(screenSize.y);
+			auto renderHeight = static_cast<int>(screenHeight * resolutionScale);
 
-		ffxFsr3UpscalerGetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
+			auto phaseCount = ffxFsr3GetJitterPhaseCount(renderWidth, screenWidth);
 
-		if (globals::game::isVR)
-			a_viewport->projectionPosScaleX = -jitter.x / renderWidth;
-		else
-			a_viewport->projectionPosScaleX = -2.0f * jitter.x / renderWidth;
+			ffxFsr3UpscalerGetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
 
-		a_viewport->projectionPosScaleY = 2.0f * jitter.y / renderHeight;
+			if (globals::game::isVR)
+				a_viewport->projectionPosScaleX = -jitter.x / renderWidth;
+			else
+				a_viewport->projectionPosScaleX = -2.0f * jitter.x / renderWidth;
 
+			a_viewport->projectionPosScaleY = 2.0f * jitter.y / renderHeight;
+		}
 	} else {
 		resolutionScale = 1.0f;
 	}
@@ -370,6 +382,9 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	runtimeData.dynamicResolutionPreviousHeightRatio = resolutionScale;
 	runtimeData.dynamicResolutionWidthRatio = resolutionScale;
 	runtimeData.dynamicResolutionHeightRatio = resolutionScale;
+
+	if (upscaleMethod == UpscaleMethod::kTAA)
+		resolutionScale = 1.0f;
 }
 
 void Upscaling::CreateUpscalingResources()
