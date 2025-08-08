@@ -85,6 +85,8 @@ public:
 	ID3D11VertexShader* depthUpscaleVS = nullptr;
 	ID3D11VertexShader* GetDepthUpscaleVS();
 
+	float GetTAAInputResolutionScale(uint qualityMode);
+
 	struct ResolutionScaleCB
 	{
 		float4 ResolutionScale;
