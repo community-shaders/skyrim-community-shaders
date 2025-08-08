@@ -423,8 +423,6 @@ void Upscaling::CreateUpscalingResources()
 	if (d3d12Interop)
 		CreateFrameGenerationResources();
 
-	resolutionScaleCB = new ConstantBuffer(ConstantBufferDesc<ResolutionScaleCB>());
-
 	D3D11_DEPTH_STENCIL_DESC depthStencilDesc = {};
 	depthStencilDesc.DepthEnable = true;                           // Enable depth testing
 	depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;  // Write to all depth bits
@@ -946,9 +944,9 @@ void Upscaling::Upscale()
 
 			// XeSS output may need to go through sharpening, so copy to upscaling texture if required
 			if (globals::game::isVR)
-				context->CopyResource(upscalingTexture->resource.get(), outputColorBufferShared12->resource11);
-			else
 				context->CopyResource(main.texture, outputColorBufferShared12->resource11);
+			else
+				context->CopyResource(upscalingTexture->resource.get(), outputColorBufferShared12->resource11);
 		}
 
 		state->EndPerfEvent();
@@ -1017,10 +1015,6 @@ void Upscaling::UpscaleDepth()
 		if (!globals::game::isVR)
 			context->CopyResource(depthCopy.texture, depth.texture);
 
-		ResolutionScaleCB updateData{};
-		updateData.ResolutionScale.x = resolutionScale;
-		resolutionScaleCB->Update(updateData);
-
 		// Set up Input Assembler for fullscreen triangle (no vertex/index buffers needed)
 		context->IASetInputLayout(nullptr);
 		context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
@@ -1056,22 +1050,24 @@ void Upscaling::UpscaleDepth()
 		context->OMSetDepthStencilState(depthUpscaleState, 0x00);
 
 		// Set render targets (no color target, depth only)
-		context->OMSetRenderTargets(0, nullptr, depthCopy.views[0]);
+		context->OMSetRenderTargets(0, nullptr, globals::game::isVR ? depthCopy.views[0] : depth.views[0]);
 
 		// Set up pixel shader resources
-		auto constantBuffer = resolutionScaleCB->CB();
-		context->PSSetConstantBuffers(0, 1, &constantBuffer);
+		auto deferred = globals::deferred;
 
 		if (globals::game::isVR) {
 			// For VR, bind both depth and stencil textures
 			ID3D11ShaderResourceView* views[2] = { depth.depthSRV, depth.stencilSRV };
 			context->PSSetShaderResources(0, 2, views);
+			ID3D11SamplerState* samplers[2] = { deferred->linearSampler, deferred->pointSampler };
+			context->PSSetSamplers(0, 2, samplers);
 		} else {
 			// For non-VR, bind only depth texture
 			context->PSSetShaderResources(0, 1, &depthCopy.depthSRV);
+			ID3D11SamplerState* samplers[1] = { deferred->linearSampler };
+			context->PSSetSamplers(0, 1, samplers);
 		}
 
-		context->PSSetSamplers(0, 1, &globals::deferred->linearSampler);
 
 		context->PSSetShader(GetDepthUpscalePS(), nullptr, 0);
 

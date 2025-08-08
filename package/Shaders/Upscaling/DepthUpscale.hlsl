@@ -28,6 +28,7 @@ VS_OUTPUT main(uint vertexId : SV_VertexID)
 #endif
 
 #if defined(PSHADER)
+#include "Common/FrameBuffer.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
 
@@ -37,51 +38,31 @@ struct PS_OUTPUT
 };
 
 SamplerState LinearSampler : register(s0);
-
-Texture2D<float4> DepthTex : register(t0);
+Texture2D<float> DepthTex : register(t0);
 
 #if defined(VR)
+SamplerState PointSampler : register(s1);
 Texture2D<uint> StencilTex : register(t1);
 #endif
-
-cbuffer PerFrame : register(b0)
-{
-	float4 ResolutionScale;
-};
 
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
+	float2 uv = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 
 #if defined(VR)
-	// For VR, upscale stencil using point sampling with minimum value selection
-	float2 scaledUV = input.TexCoord.xy * ResolutionScale.x;
-
-	// Get stencil texture dimensions
-	uint2 stencilDims;
-	StencilTex.GetDimensions(stencilDims.x, stencilDims.y);
-
-	// Convert UV to pixel coordinates
-	float2 pixelCoord = scaledUV * float2(stencilDims);
-
-	// Calculate sample positions for 2x2 neighborhood
-	int2 baseCoord = int2(floor(pixelCoord));
-
-	// Sample 4 neighboring stencil values using point sampling
-	uint stencil0 = StencilTex.Load(int3(baseCoord + int2(0, 0), 0));
-	uint stencil1 = StencilTex.Load(int3(baseCoord + int2(1, 0), 0));
-	uint stencil2 = StencilTex.Load(int3(baseCoord + int2(0, 1), 0));
-	uint stencil3 = StencilTex.Load(int3(baseCoord + int2(1, 1), 0));
+	uint4 stencilSamples = StencilTex.GatherRed(PointSampler, uv);
 
 	// Choose the minimum stencil value
-	uint maxStencil = min(min(stencil0, stencil1), min(stencil2, stencil3));
+	uint maxStencil = min(min(stencilSamples.x, stencilSamples.y), min(stencilSamples.z, stencilSamples.w));
 
+	// Only write depth/stencil that is inside the viewable area
 	if (maxStencil > 0x00)
 		discard;
 #endif
 
 	// Upscale depth using linear sampling
-	float depth = DepthTex.SampleLevel(LinearSampler, input.TexCoord.xy * ResolutionScale.x, 0);
+	float depth = DepthTex.SampleLevel(LinearSampler, uv, 0);
 	psout.Depth = depth;
 
 	return psout;

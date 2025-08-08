@@ -87,14 +87,7 @@ public:
 
 	float GetTAAInputResolutionScale(uint qualityMode);
 
-	struct ResolutionScaleCB
-	{
-		float4 ResolutionScale;
-	};
-
-	ConstantBuffer* resolutionScaleCB;
-
-	ID3D11DepthStencilState* depthUpscaleState;
+	ID3D11DepthStencilState* depthUpscaleState = nullptr;
 	ID3D11BlendState* depthUpscaleBlendState = nullptr;
 	ID3D11RasterizerState* depthUpscaleRasterizerState = nullptr;
 
