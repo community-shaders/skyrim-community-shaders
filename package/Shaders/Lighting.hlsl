@@ -677,7 +677,13 @@ float3 GetLightSpecularInput(PS_INPUT input, float3 L, float3 V, float3 N, float
 
 #	if defined(SPECULAR)
 	float3 lightColorMultiplier = exp2(shininess * log2(HdotN));
-#		if defined(VANILLA_FRESNEL)
+#	elif defined(SPARKLE)
+	float3 lightColorMultiplier = 0;
+#	else
+	float3 lightColorMultiplier = HdotN;
+#	endif
+
+#	if defined(VANILLA_FRESNEL)
 	if (SharedData::vanillaFresnelSettings.Enable && SharedData::vanillaFresnelSettings.EnableGGX) {
 		float NdotV = saturate(dot(N, V));
 		float NdotL = saturate(dot(N, L));
@@ -688,11 +694,6 @@ float3 GetLightSpecularInput(PS_INPUT input, float3 L, float3 V, float3 N, float
 		float G = BRDF::Vis_SmithJointApprox(roughness, NdotV, NdotL);
 		lightColorMultiplier = max(D * G * F * NdotL, 0.0);
 	}
-#		endif
-#	elif defined(SPARKLE)
-	float lightColorMultiplier = 0;
-#	else
-	float lightColorMultiplier = HdotN;
 #	endif
 
 #	if defined(ANISO_LIGHTING)
@@ -2201,7 +2202,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(VANILLA_FRESNEL)
 	const bool enableVanillaFresnel = SharedData::vanillaFresnelSettings.Enable;
-	float3 F0 = enableVanillaFresnel ? 0.04 : 0.0;
+	float3 F0 = enableVanillaFresnel ? SharedData::vanillaFresnelSettings.MinF0 : 0.0;
 #	else
 	float3 F0 = 0.0;
 #	endif
@@ -2314,9 +2315,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				if defined(SPECULAR)
 					F0 = max(lerp(baseF0, F0, envMask), SharedData::vanillaFresnelSettings.MinF0);
 #				else
-					F0 = lerp(SharedData::vanillaFresnelSettings.MinF0, F0, envMask);
+					F0 = max(lerp(0, F0, envMask), SharedData::vanillaFresnelSettings.MinF0);
 #				endif
-					roughness = lerp(roughness, envRoughness, pow(envMask, 0.25));
+					roughness = lerp(roughness, envRoughness, envMask);
 				} else {
 					roughness = envRoughness;
 				}
@@ -2931,7 +2932,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(DYNAMIC_CUBEMAPS)
 	if (any(F0 > 0.0)) {
 #		if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
+#			if defined(VANILLA_FRESNEL)
+		if (dynamicCubemap || enableVanillaFresnel)
+#			else
 		if (dynamicCubemap)
+#			endif
 #		endif
 #		if defined(SKYLIGHTING)
 			reflectance = DynamicCubemaps::GetDynamicCubemap(worldNormal, vertexNormal, viewDirection, roughness, F0, skylightingSH);
