@@ -12,7 +12,7 @@ VS_OUTPUT main(uint vertexId : SV_VertexID)
 
 	// Generate fullscreen triangle using vertex ID
 	// Vertex 0: (-1, -1) -> (0, 1) UV
-	// Vertex 1: (-1,  3) -> (0, -1) UV  
+	// Vertex 1: (-1,  3) -> (0, -1) UV
 	// Vertex 2: ( 3, -1) -> (2, 1) UV
 	vsout.Position.x = (float)(vertexId / 2) * 4.0 - 1.0;
 	vsout.Position.y = (float)(vertexId % 2) * 4.0 - 1.0;
@@ -52,34 +52,34 @@ cbuffer PerFrame : register(b0)
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
-	
+
 #if defined(VR)
 	// For VR, upscale stencil using point sampling with minimum value selection
 	float2 scaledUV = input.TexCoord.xy * ResolutionScale.x;
-	
+
 	// Get stencil texture dimensions
 	uint2 stencilDims;
 	StencilTex.GetDimensions(stencilDims.x, stencilDims.y);
-	
+
 	// Convert UV to pixel coordinates
 	float2 pixelCoord = scaledUV * float2(stencilDims);
-	
+
 	// Calculate sample positions for 2x2 neighborhood
 	int2 baseCoord = int2(floor(pixelCoord));
-	
+
 	// Sample 4 neighboring stencil values using point sampling
 	uint stencil0 = StencilTex.Load(int3(baseCoord + int2(0, 0), 0));
 	uint stencil1 = StencilTex.Load(int3(baseCoord + int2(1, 0), 0));
 	uint stencil2 = StencilTex.Load(int3(baseCoord + int2(0, 1), 0));
 	uint stencil3 = StencilTex.Load(int3(baseCoord + int2(1, 1), 0));
-	
+
 	// Choose the minimum stencil value
 	uint maxStencil = min(min(stencil0, stencil1), min(stencil2, stencil3));
-	
+
 	if (maxStencil > 0x00)
 		discard;
 #endif
-	
+
 	// Upscale depth using linear sampling
 	float depth = DepthTex.SampleLevel(LinearSampler, input.TexCoord.xy * ResolutionScale.x, 0);
 	psout.Depth = depth;

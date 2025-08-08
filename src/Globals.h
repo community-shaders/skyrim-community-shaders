@@ -109,6 +109,94 @@ namespace globals
 		float4 DynamicResolutionParams2;
 	};
 
+	struct FrameBufferVR
+	{
+		// Must match HLSL VR layout exactly - packoffsets c0 to c86
+		Matrix CameraView[2];                        // packoffset(c0) - 8 registers
+		Matrix CameraProj[2];                        // packoffset(c8) - 8 registers
+		Matrix CameraViewProj[2];                    // packoffset(c16) - 8 registers
+		Matrix CameraViewProjUnjittered[2];          // packoffset(c24) - 8 registers
+		Matrix CameraPreviousViewProjUnjittered[2];  // packoffset(c32) - 8 registers
+		Matrix CameraProjUnjittered[2];              // packoffset(c40) - 8 registers
+		Matrix CameraProjUnjitteredInverse[2];       // packoffset(c48) - 8 registers
+		Matrix CameraViewInverse[2];                 // packoffset(c56) - 8 registers
+		Matrix CameraViewProjInverse[2];             // packoffset(c64) - 8 registers
+		Matrix CameraProjInverse[2];                 // packoffset(c72) - 8 registers
+		float4 CameraPosAdjust[2];                   // packoffset(c80) - 2 registers
+		float4 CameraPreviousPosAdjust[2];           // packoffset(c82) - 2 registers
+		float4 FrameParams;                          // packoffset(c84) - 1 register
+		float4 DynamicResolutionParams1;             // packoffset(c85) - 1 register
+		float4 DynamicResolutionParams2;             // packoffset(c86) - 1 register
+	};
+
+	union FrameBufferCache
+	{
+		FrameBuffer nonVR;
+		FrameBufferVR vr;
+
+		// Helper functions for VR-agnostic access to eye 0 (or single eye)
+		const Matrix& GetCameraView(uint32_t eyeIndex = 0) const
+		{
+			return REL::Module::IsVR() ? vr.CameraView[eyeIndex] : nonVR.CameraView;
+		}
+		const Matrix& GetCameraProj(uint32_t eyeIndex = 0) const
+		{
+			return REL::Module::IsVR() ? vr.CameraProj[eyeIndex] : nonVR.CameraProj;
+		}
+		const Matrix& GetCameraViewProj(uint32_t eyeIndex = 0) const
+		{
+			return REL::Module::IsVR() ? vr.CameraViewProj[eyeIndex] : nonVR.CameraViewProj;
+		}
+		const Matrix& GetCameraViewProjUnjittered(uint32_t eyeIndex = 0) const
+		{
+			return REL::Module::IsVR() ? vr.CameraViewProjUnjittered[eyeIndex] : nonVR.CameraViewProjUnjittered;
+		}
+		const Matrix& GetCameraPreviousViewProjUnjittered(uint32_t eyeIndex = 0) const
+		{
+			return REL::Module::IsVR() ? vr.CameraPreviousViewProjUnjittered[eyeIndex] : nonVR.CameraPreviousViewProjUnjittered;
+		}
+		const Matrix& GetCameraProjUnjittered(uint32_t eyeIndex = 0) const
+		{
+			return REL::Module::IsVR() ? vr.CameraProjUnjittered[eyeIndex] : nonVR.CameraProjUnjittered;
+		}
+		const Matrix& GetCameraProjUnjitteredInverse(uint32_t eyeIndex = 0) const
+		{
+			return REL::Module::IsVR() ? vr.CameraProjUnjitteredInverse[eyeIndex] : nonVR.CameraProjUnjitteredInverse;
+		}
+		const Matrix& GetCameraViewInverse(uint32_t eyeIndex = 0) const
+		{
+			return REL::Module::IsVR() ? vr.CameraViewInverse[eyeIndex] : nonVR.CameraViewInverse;
+		}
+		const Matrix& GetCameraViewProjInverse(uint32_t eyeIndex = 0) const
+		{
+			return REL::Module::IsVR() ? vr.CameraViewProjInverse[eyeIndex] : nonVR.CameraViewProjInverse;
+		}
+		const Matrix& GetCameraProjInverse(uint32_t eyeIndex = 0) const
+		{
+			return REL::Module::IsVR() ? vr.CameraProjInverse[eyeIndex] : nonVR.CameraProjInverse;
+		}
+		const float4& GetCameraPosAdjust(uint32_t eyeIndex = 0) const
+		{
+			return REL::Module::IsVR() ? vr.CameraPosAdjust[eyeIndex] : nonVR.CameraPosAdjust;
+		}
+		const float4& GetCameraPreviousPosAdjust(uint32_t eyeIndex = 0) const
+		{
+			return REL::Module::IsVR() ? vr.CameraPreviousPosAdjust[eyeIndex] : nonVR.CameraPreviousPosAdjust;
+		}
+		const float4& GetFrameParams() const
+		{
+			return REL::Module::IsVR() ? vr.FrameParams : nonVR.FrameParams;
+		}
+		const float4& GetDynamicResolutionParams1() const
+		{
+			return REL::Module::IsVR() ? vr.DynamicResolutionParams1 : nonVR.DynamicResolutionParams1;
+		}
+		const float4& GetDynamicResolutionParams2() const
+		{
+			return REL::Module::IsVR() ? vr.DynamicResolutionParams2 : nonVR.DynamicResolutionParams2;
+		}
+	};
+
 	namespace game
 	{
 		extern RE::BSGraphics::RendererShadowState* shadowState;
@@ -139,7 +227,7 @@ namespace globals
 		extern REL::Relocation<RE::BSGraphics::BSShaderAccumulator**> currentAccumulator;
 
 		extern D3D11_MAPPED_SUBRESOURCE* mappedFrameBuffer;
-		extern FrameBuffer frameBufferCached;
+		extern FrameBufferCache frameBufferCached;
 	}
 
 	namespace rtti

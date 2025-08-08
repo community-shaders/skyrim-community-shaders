@@ -45,14 +45,14 @@ PS_OUTPUT main(PS_INPUT input)
 	float refractedMask = Src1Tex.Sample(Src0Sampler, texCoordRefracted * SharedData::ResolutionScale).w;
 	float4 colorRefracted = Src0Tex.Sample(Src0Sampler, texCoordRefracted);
 	float4 colorResulting = lerp(colorOriginal, colorRefracted, refractedMask);
-	
+
 	float4 normalOriginalPoint = Src1Tex.Sample(Src1Sampler, texCoordOriginal * SharedData::ResolutionScale);
 	if (normalOriginalPoint.w > 0.8 && normalOriginalPoint.w < 1) {
 		psout.Color.xyz = lerp(colorResulting.xyz, Tint.xyz * Color::RGBToLuminance2(colorRefracted.xyz), Tint.w);
 	} else {
 		psout.Color.xyz = colorResulting.xyz;
 	}
-	
+
 	psout.Color.w = colorResulting.w;
 
 	return psout;

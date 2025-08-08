@@ -6,11 +6,11 @@
 #include "Deferred.h"
 #include "FidelityFX.h"
 #include "Menu.h"
-#include "XeSS.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Streamline.h"
 #include "Upscaling.h"
+#include "XeSS.h"
 
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
@@ -120,7 +120,7 @@ namespace globals
 		REL::Relocation<RE::BSGraphics::BSShaderAccumulator**> currentAccumulator;
 
 		D3D11_MAPPED_SUBRESOURCE* mappedFrameBuffer = nullptr;
-		FrameBuffer frameBufferCached{};
+		FrameBufferCache frameBufferCached{};
 	}
 
 	namespace rtti
@@ -222,8 +222,13 @@ namespace globals
 	void CacheFramebuffer()
 	{
 		using namespace game;
-		auto frameBuffer = (FrameBuffer*)mappedFrameBuffer->pData;
-		frameBufferCached = *frameBuffer;
+		if (REL::Module::IsVR()) {
+			auto frameBufferVR = (FrameBufferVR*)mappedFrameBuffer->pData;
+			frameBufferCached.vr = *frameBufferVR;
+		} else {
+			auto frameBuffer = (FrameBuffer*)mappedFrameBuffer->pData;
+			frameBufferCached.nonVR = *frameBuffer;
+		}
 		mappedFrameBuffer = nullptr;
 	}
 

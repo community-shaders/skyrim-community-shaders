@@ -1,8 +1,8 @@
 #pragma once
 
 #include "Buffer.h"
-#include "State.h"
 #include "DX12SwapChain.h"
+#include "State.h"
 #include <d3d12.h>
 #include <dxgi1_4.h>
 #include <winrt/base.h>
@@ -63,6 +63,5 @@ public:
 		ID3D12GraphicsCommandList* a_commandList,
 		uint32_t a_renderWidth,
 		uint32_t a_renderHeight,
-		float2 a_jitter
-	);
+		float2 a_jitter);
 };

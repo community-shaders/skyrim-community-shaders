@@ -268,7 +268,7 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 
 		half2 depths;
 		half bilinear = frac(minor_axis) - 0.5;
-		
+
 #	if USE_HALF_PIXEL_OFFSET
 		read_xy += 0.5;
 #	endif

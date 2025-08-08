@@ -238,7 +238,7 @@ struct IDXGISwapChain_Present
 			}
 		}
 
-		HRESULT retval = func(This, SyncInterval, Flags);		
+		HRESULT retval = func(This, SyncInterval, Flags);
 
 		TracyD3D11Collect(state->tracyCtx);
 
@@ -363,13 +363,13 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 			shouldProxy = false;
 	}
 
-	shouldProxy = false; // Currently broken with upscaling
+	shouldProxy = false;  // Currently broken with upscaling
 
 	upscaling->lowRefreshRate = refreshRate < 119;
 	upscaling->isWindowed = pSwapChainDesc->Windowed;
 
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
-	
+
 	upscaling->CreateSharedD3D12Device(pAdapter);
 
 	if (shouldProxy) {

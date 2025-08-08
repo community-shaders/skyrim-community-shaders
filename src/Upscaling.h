@@ -72,7 +72,7 @@ public:
 
 	ID3D11ComputeShader* encodeTexturesCS = nullptr;
 	ID3D11ComputeShader* GetEncodeTexturesCS();
-	
+
 	ID3D11ComputeShader* encodeTexturesTransparencyCS = nullptr;
 	ID3D11ComputeShader* GetEncodeTexturesTransparencyCS();
 

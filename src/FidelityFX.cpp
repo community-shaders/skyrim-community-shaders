@@ -5,9 +5,9 @@
 #include "Upscaling.h"
 
 #include "DX12SwapChain.h"
-#include <dx12/ffx_api_dx12.hpp>
 #include <FidelityFX/host/backends/dx12/d3dx12.h>
 #include <FidelityFX/host/backends/dx12/ffx_dx12.h>
+#include <dx12/ffx_api_dx12.hpp>
 
 ffxFunctions ffxModule;
 
@@ -25,7 +25,7 @@ void FidelityFX::LoadFFX()
 
 	if (module) {
 		ffxLoadFunctions(&ffxModule, module);
-		
+
 		featureFSR3FG = true;
 
 		if (featureFSR3FG) {
@@ -163,8 +163,8 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 
 		ffx::DispatchDescFrameGenerationPrepareCameraInfo cameraConfig{};
 
-		auto viewMatrix = globals::game::frameBufferCached.CameraViewInverse.Transpose();
-		auto cameraViewToClip = globals::game::frameBufferCached.CameraProjUnjittered.Transpose();
+		auto viewMatrix = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
+		auto cameraViewToClip = globals::game::frameBufferCached.GetCameraProjUnjittered().Transpose();
 
 		cameraConfig.cameraRight[0] = viewMatrix._11;
 		cameraConfig.cameraRight[1] = viewMatrix._12;
@@ -178,9 +178,9 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		cameraConfig.cameraForward[1] = viewMatrix._32;
 		cameraConfig.cameraForward[2] = viewMatrix._33;
 
-		cameraConfig.cameraPosition[0] = globals::game::frameBufferCached.CameraPosAdjust.x;
-		cameraConfig.cameraPosition[1] = globals::game::frameBufferCached.CameraPosAdjust.y;
-		cameraConfig.cameraPosition[2] = globals::game::frameBufferCached.CameraPosAdjust.z;
+		cameraConfig.cameraPosition[0] = globals::game::frameBufferCached.GetCameraPosAdjust().x;
+		cameraConfig.cameraPosition[1] = globals::game::frameBufferCached.GetCameraPosAdjust().y;
+		cameraConfig.cameraPosition[2] = globals::game::frameBufferCached.GetCameraPosAdjust().z;
 
 		if (ffx::Dispatch(frameGenContext, dispatchParameters, cameraConfig) != ffx::ReturnCode::Ok) {
 			logger::critical("[FidelityFX] Failed to dispatch frame generation camera info!");

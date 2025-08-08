@@ -220,15 +220,15 @@ void Streamline::CheckFrameConstants()
 		slConstants.cameraNear = *globals::game::cameraNear;
 		slConstants.cameraFar = *globals::game::cameraFar;
 
-		auto viewMatrix = globals::game::frameBufferCached.CameraViewInverse.Transpose();
-		auto cameraViewToClip = globals::game::frameBufferCached.CameraProjUnjittered.Transpose();
+		auto viewMatrix = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
+		auto cameraViewToClip = globals::game::frameBufferCached.GetCameraProjUnjittered().Transpose();
 
 		slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
 		slConstants.cameraPinholeOffset = { 0.f, 0.f };
 		slConstants.cameraRight = { viewMatrix._11, viewMatrix._12, viewMatrix._13 };
 		slConstants.cameraUp = { viewMatrix._21, viewMatrix._22, viewMatrix._23 };
 		slConstants.cameraFwd = { viewMatrix._31, viewMatrix._32, viewMatrix._33 };
-		slConstants.cameraPos = *(sl::float3*)&globals::game::frameBufferCached.CameraPosAdjust;
+		slConstants.cameraPos = *(sl::float3*)&globals::game::frameBufferCached.GetCameraPosAdjust();
 		slConstants.cameraViewToClip = *(sl::float4x4*)&cameraViewToClip;
 		slConstants.depthInverted = sl::Boolean::eFalse;
 
@@ -311,7 +311,7 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 
 		sl::Resource reactiveMask = { sl::ResourceType::eTex2d, needsMask ? a_reactiveMask : nullptr, 0 };
 		sl::ResourceTag reactiveMaskTag = sl::ResourceTag{ &reactiveMask, sl::kBufferTypeBiasCurrentColorHint, sl::ResourceLifecycle::eValidUntilPresent, &lowResExtent };
-		
+
 		sl::Resource transparencyCompositionMask = { sl::ResourceType::eTex2d, needsMask ? a_transparencyCompositionMask : nullptr, 0 };
 		sl::ResourceTag transparencyCompositionMaskTag = sl::ResourceTag{ &transparencyCompositionMask, sl::kBufferTypeTransparencyHint, sl::ResourceLifecycle::eValidUntilPresent, &lowResExtent };
 
@@ -328,9 +328,15 @@ float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputH
 {
 	sl::DLSSMode dlssMode;
 	switch (qualityPreset) {
-	case 1: dlssMode = sl::DLSSMode::eMaxQuality; break;
-	case 2: dlssMode = sl::DLSSMode::eBalanced; break;
-	case 3: dlssMode = sl::DLSSMode::eMaxPerformance; break;
+	case 1:
+		dlssMode = sl::DLSSMode::eMaxQuality;
+		break;
+	case 2:
+		dlssMode = sl::DLSSMode::eBalanced;
+		break;
+	case 3:
+		dlssMode = sl::DLSSMode::eMaxPerformance;
+		break;
 	default:
 		dlssMode = sl::DLSSMode::eDLAA;
 		break;
@@ -340,7 +346,7 @@ float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputH
 	dlssOptions.mode = dlssMode;
 	dlssOptions.outputWidth = outputWidth;
 	dlssOptions.outputHeight = outputHeight;
-	
+
 	sl::DLSSOptimalSettings optimalSettings{};
 	sl::Result result = slDLSSGetOptimalSettings(dlssOptions, optimalSettings);
 	if (result != sl::Result::eOk) {
@@ -351,7 +357,7 @@ float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputH
 	// Calculate scale as ratio of optimal render resolution to output resolution
 	float scaleX = (float)optimalSettings.optimalRenderWidth / (float)outputWidth;
 	float scaleY = (float)optimalSettings.optimalRenderHeight / (float)outputHeight;
-	
+
 	// Use the average scale (both should be the same for uniform scaling)
 	return (scaleX + scaleY) * 0.5f;
 }

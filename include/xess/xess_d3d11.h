@@ -1,12 +1,12 @@
 /*******************************************************************************
  * Copyright (C) 2024 Intel Corporation
- * 
+ *
  * This software and the related documents are Intel copyrighted materials, and
  * your use of them is governed by the express license under which they were
  * provided to you ("License"). Unless the License provides otherwise, you may
  * not use, modify, copy, publish, distribute, disclose or transmit this
  * software or the related documents without Intel's prior written permission.
- * 
+ *
  * This software and the related documents are provided as is, with no express
  * or implied warranties, other than those that are expressly stated in the
  * License.
@@ -25,7 +25,7 @@ extern "C" {
 #endif
 
 /**
-* @note XeSS D3D11 version only works on Intel Hardware. 
+* @note XeSS D3D11 version only works on Intel Hardware.
 */
 
 XESS_PACK_B()
@@ -119,7 +119,7 @@ XESS_API xess_result_t xessD3D11Init(
 
 /**
  * @brief Get XeSS D3D11 initialization parameters.
- * 
+ *
  * @note This function will return @ref XESS_RESULT_ERROR_UNINITIALIZED if @ref xessD3D11Init has not been called.
  *
  * @param hContext: The XeSS context handle.

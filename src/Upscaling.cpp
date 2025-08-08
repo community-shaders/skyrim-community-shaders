@@ -1,12 +1,12 @@
 #include "Upscaling.h"
 
 #include "DX12SwapChain.h"
+#include "Deferred.h"
 #include "Hooks.h"
 #include "State.h"
+#include <FidelityFX/host/backends/dx12/d3dx12.h>
 #include <Windows.h>
 #include <reshade/reshade.hpp>
-#include "Deferred.h"
-#include <FidelityFX/host/backends/dx12/d3dx12.h>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Upscaling::Settings,
@@ -26,7 +26,7 @@ void Upscaling::DrawSettings()
 	auto streamline = globals::streamline;
 
 	// Display upscaling options in the UI
-	const char* upscaleModes[] = { "Disabled", "Temporal Anti-Aliasing", "Intel XeSS", "NVIDIA DLSS"};
+	const char* upscaleModes[] = { "Disabled", "Temporal Anti-Aliasing", "Intel XeSS", "NVIDIA DLSS" };
 
 	// Determine available modes
 	bool featureDLSS = streamline->featureDLSS;
@@ -43,7 +43,7 @@ void Upscaling::DrawSettings()
 		currentUpscaleMode = &settings.upscaleMethodNothing;
 		availableModes = 1;  // 0=Disabled, 1=TAA (no XeSS, no DLSS)
 	}
-	
+
 	// Slider for method selection
 	ImGui::SliderInt("Method", (int*)currentUpscaleMode, 0, availableModes, std::format("{}", upscaleModes[(uint)*currentUpscaleMode]).c_str());
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -339,8 +339,6 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	// Disable water TAA when upscaling is enabled
 	bool* enableWaterTAA = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISTemporalAA) + 0x38LL);
 	*enableWaterTAA = upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA;
-	
-	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
 
 	if (upscaleMethod != UpscaleMethod::kNONE) {
 		auto state = globals::state;
@@ -430,10 +428,10 @@ void Upscaling::CreateUpscalingResources()
 	resolutionScaleCB = new ConstantBuffer(ConstantBufferDesc<ResolutionScaleCB>());
 
 	D3D11_DEPTH_STENCIL_DESC depthStencilDesc = {};
-	depthStencilDesc.DepthEnable = true;							// Enable depth testing
-	depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;	// Write to all depth bits
-	depthStencilDesc.DepthFunc = D3D11_COMPARISON_ALWAYS;			// Always pass depth test (write all depths)
-	
+	depthStencilDesc.DepthEnable = true;                           // Enable depth testing
+	depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;  // Write to all depth bits
+	depthStencilDesc.DepthFunc = D3D11_COMPARISON_ALWAYS;          // Always pass depth test (write all depths)
+
 	if (REL::Module::IsVR()) {
 		depthStencilDesc.StencilEnable = true;     // Enable stencil testing
 		depthStencilDesc.StencilReadMask = 0xFF;   // Read all stencil bits
@@ -442,8 +440,8 @@ void Upscaling::CreateUpscalingResources()
 		// Configure front-facing stencil operations
 		depthStencilDesc.FrontFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;       // Replace on stencil fail
 		depthStencilDesc.FrontFace.StencilDepthFailOp = D3D11_STENCIL_OP_KEEP;  // Replace on depth fail
-		depthStencilDesc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_REPLACE;       // Replace on pass
-		depthStencilDesc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;          // Always pass stencil test
+		depthStencilDesc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_REPLACE;    // Replace on pass
+		depthStencilDesc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;       // Always pass stencil test
 
 		// Configure back-facing stencil operations (same as front)
 		depthStencilDesc.BackFace.StencilFailOp = depthStencilDesc.FrontFace.StencilFailOp;
@@ -653,7 +651,7 @@ void Upscaling::CopySharedD3D12Resources()
 
 	{
 		auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-		
+
 		// Copy only the dynamic resolution area
 		auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
 		D3D11_BOX srcBox = {};
@@ -663,7 +661,7 @@ void Upscaling::CopySharedD3D12Resources()
 		srcBox.right = (UINT)renderSize.x;
 		srcBox.bottom = (UINT)renderSize.y;
 		srcBox.back = 1;
-		
+
 		context->CopySubresourceRegion(motionVectorBufferShared12->resource11, 0, 0, 0, 0, motionVector.texture, 0, &srcBox);
 	}
 
@@ -695,7 +693,8 @@ void Upscaling::CopySharedD3D12Resources()
 	}
 }
 
-void UpdateCameraData(){
+void UpdateCameraData()
+{
 	using func_t = decltype(&UpdateCameraData);
 	static REL::Relocation<func_t> func{ RELOCATION_ID(75472, 77258) };
 	func();
@@ -849,7 +848,7 @@ void Upscaling::Upscale()
 	auto state = globals::state;
 
 	auto context = globals::d3d::context;
-	
+
 	auto renderer = globals::game::renderer;
 
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
@@ -874,7 +873,7 @@ void Upscaling::Upscale()
 			// Use shared D3D12 textures for XeSS, regular D3D11 textures for others
 			ID3D11UnorderedAccessView* reactiveMaskUAV = reactiveMaskTexture->uav.get();
 			ID3D11UnorderedAccessView* transparencyUAV = useTransparencyMask ? transparencyCompositionMaskTexture->uav.get() : nullptr;
-			
+
 			ID3D11UnorderedAccessView* uavs[2] = { reactiveMaskUAV, transparencyUAV };
 			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
@@ -925,7 +924,7 @@ void Upscaling::Upscale()
 			// Reset command allocator and list
 			DX::ThrowIfFailed(sharedD3D12CommandAllocator->Reset());
 			DX::ThrowIfFailed(sharedD3D12CommandList->Reset(sharedD3D12CommandAllocator.get(), nullptr));
-	
+
 			globals::xess->Upscale(
 				inputColorBufferShared12->resource.get(),
 				motionVectorBufferShared12->resource.get(),
@@ -996,7 +995,7 @@ void Upscaling::PerformUpscaling()
 	runtimeData.dynamicResolutionPreviousHeightRatio = 1.0f;
 	runtimeData.dynamicResolutionWidthRatio = 1.0f;
 	runtimeData.dynamicResolutionHeightRatio = 1.0f;
-	
+
 	// Updates the PerFrame constant buffer so that dynamic resolution settings are disabled
 	UpdateCameraData();
 }
@@ -1044,11 +1043,11 @@ void Upscaling::UpscaleDepth()
 
 		// Set blend state (no color writes, depth only)
 		context->OMSetBlendState(nullptr, nullptr, 0xffffffff);
-		
+
 		// Clear stencil to be 0xFF
 		if (globals::game::isVR)
 			context->ClearDepthStencilView(depth.views[0], D3D11_CLEAR_STENCIL, 1.0f, 0xFF);
-		
+
 		// Set depth stencil state
 		context->OMSetDepthStencilState(depthUpscaleState, 0x00);
 
@@ -1058,7 +1057,7 @@ void Upscaling::UpscaleDepth()
 		// Set up pixel shader resources
 		auto constantBuffer = resolutionScaleCB->CB();
 		context->PSSetConstantBuffers(0, 1, &constantBuffer);
-		
+
 		if (globals::game::isVR) {
 			// For VR, bind both depth and stencil textures
 			ID3D11ShaderResourceView* views[2] = { depthCopy.depthSRV, depthCopy.stencilSRV };

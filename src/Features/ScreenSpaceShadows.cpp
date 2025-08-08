@@ -99,7 +99,7 @@ void ScreenSpaceShadows::DrawShadows()
 	light.Normalize();
 	float4 lightProjection = float4(-light.x, -light.y, -light.z, 0.0f);
 
-	auto viewProjMat = globals::game::frameBufferCached.CameraViewProj.Transpose();
+	auto viewProjMat = globals::game::frameBufferCached.GetCameraViewProj().Transpose();
 
 	lightProjection = DirectX::SimpleMath::Vector4::Transform(lightProjection, viewProjMat);
 	float lightProjectionF[4] = { lightProjection.x, lightProjection.y, lightProjection.z, lightProjection.w };
@@ -109,8 +109,8 @@ void ScreenSpaceShadows::DrawShadows()
 
 	int viewportSize[2] = { (int)renderSize.x, (int)renderSize.y };
 
-	if (REL::Module::IsVR())
-		viewportSize[0] /= 2;
+	if (globals::game::isVR)
+		renderSize.x /= 2;
 
 	int minRenderBounds[2] = { 0, 0 };
 	int maxRenderBounds[2] = { (int)renderSize.x, (int)renderSize.y };
@@ -165,7 +165,7 @@ void ScreenSpaceShadows::DrawShadows()
 	if (globals::game::isVR) {
 		lightProjection = float4(-light.x, -light.y, -light.z, 0.0f);
 
-		viewProjMat = Util::GetCameraData(1).viewProjMat;
+		viewProjMat = globals::game::frameBufferCached.GetCameraViewProj(1).Transpose();
 
 		lightProjection = DirectX::SimpleMath::Vector4::Transform(lightProjection, viewProjMat);
 
@@ -194,8 +194,8 @@ void ScreenSpaceShadows::DrawShadows()
 
 			data.DynamicRes = dynamicRes;
 
-			data.InvDepthTextureSize[0] = 1.0f / (float)viewportSize[0];
-			data.InvDepthTextureSize[1] = 1.0f / (float)viewportSize[1];
+			data.InvDepthTextureSize[0] = 1.0f / (float)screenSize.x;
+			data.InvDepthTextureSize[1] = 1.0f / (float)screenSize.y;
 
 			data.settings = bendSettings;
 

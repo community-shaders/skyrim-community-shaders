@@ -1,12 +1,12 @@
 /*******************************************************************************
  * Copyright (C) 2021 Intel Corporation
- * 
+ *
  * This software and the related documents are Intel copyrighted materials, and
  * your use of them is governed by the express license under which they were
  * provided to you ("License"). Unless the License provides otherwise, you may
  * not use, modify, copy, publish, distribute, disclose or transmit this
  * software or the related documents without Intel's prior written permission.
- * 
+ *
  * This software and the related documents are provided as is, with no express
  * or implied warranties, other than those that are expressly stated in the
  * License.
@@ -49,7 +49,7 @@ typedef struct _xess_context_handle_t* xess_context_handle_t;
 XESS_PACK_B()
 /**
  * @brief XeSS version.
- * 
+ *
  * XeSS uses major.minor.patch version format and Numeric 90+ scheme for development stage builds.
  */
 typedef struct _xess_version_t
@@ -204,7 +204,7 @@ typedef enum _xess_logging_level_t
 /** @addtogroup xess XeSS API exports
  * @{
  */
-  
+
 /**
  * @brief Gets the XeSS version. This is baked into the XeSS SDK release.
  * @param[out] pVersion Returned XeSS version.
@@ -213,14 +213,14 @@ typedef enum _xess_logging_level_t
 XESS_API xess_result_t xessGetVersion(xess_version_t* pVersion);
 
 /**
- * @brief Gets the version of the loaded Intel XeFX library. When running on Intel platforms 
- * this function will return the version of the loaded Intel XeFX library, for other 
+ * @brief Gets the version of the loaded Intel XeFX library. When running on Intel platforms
+ * this function will return the version of the loaded Intel XeFX library, for other
  * platforms 0.0.0 will be returned.
  * @param hContext The XeSS context handle.
  * @param[out] pVersion Returned Intel XeFX library version.
  * @return XeSS return status code.
  */
-XESS_API xess_result_t xessGetIntelXeFXVersion(xess_context_handle_t hContext, 
+XESS_API xess_result_t xessGetIntelXeFXVersion(xess_context_handle_t hContext,
     xess_version_t* pVersion);
 
 /**
@@ -251,7 +251,7 @@ XESS_API xess_result_t xessGetInputResolution(xess_context_handle_t hContext,
 
 /**
  * @brief Get the optimal input resolution and possible range for a specified output resolution for a given quality setting.
- * XeSS expects all the input buffers except motion vectors to be in the returned resolution range 
+ * XeSS expects all the input buffers except motion vectors to be in the returned resolution range
  * and all input buffers to be in the same resolution.
  * Motion vectors can be either in output resolution (XESS_INIT_FLAG_HIGH_RES_MV) or
  * in the same resolution as other input buffers (by default).
@@ -373,7 +373,7 @@ XESS_API xess_result_t xessSetLoggingCallback(xess_context_handle_t hContext,
  *
  * @param hContext The XeSS context handle.
  * @return xessIsOptimalDriver returns XESS_RESULT_SUCCESS, or XESS_RESULT_WARNING_OLD_DRIVER
- * if installed driver may result in degraded performance or visual quality.  
+ * if installed driver may result in degraded performance or visual quality.
  * xessD3D12CreateContext(..) will return XESS_RESULT_ERROR_UNSUPPORTED_DRIVER if driver does
  * not support XeSS  at all.
  */
@@ -417,7 +417,7 @@ XESS_API xess_result_t xessForceLegacyScaleFactors(xess_context_handle_t hContex
 XESS_API xess_result_t xessGetPipelineBuildStatus(xess_context_handle_t hContext);
 
 /** @}*/
-  
+
 #endif
 
 // Enum size checks. All enums must be 4 bytes
