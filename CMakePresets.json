@@ -62,55 +62,41 @@
             "inherits": "skyrim"
         }
     ],
-  "buildPresets": [
-    {
-      "name": "Dev",
-      "description": "Default build preset for developers, generate an AIO folder thats ready to copy",
-      "configurePreset": "ALL",
-      "configuration": "Release",
-      "targets": [
-        "CommunityShaders",
-        "AIO"
-      ]
-    },
-    {
-      "name": "ALL",
-      "description": "(Deprecated), kept for for CI, use Package instead",
-      "configurePreset": "ALL",
-      "configuration": "Release",
-      "targets": [
-        "CommunityShaders",
-        "Package-AIO"
-      ]
-    },
-    {
-      "name": "Package",
-      "description": "Build preset to generate a AIO zip package in <SRC>/dist folder, mostly for CI",
-      "configurePreset": "ALL",
-      "configuration": "Release",
-      "targets": [
-        "CommunityShaders",
-        "Package-AIO"
-      ]
-    },
-    {
-      "name": "Shaders",
-      "description": "Build preset to copy shaders into <BUILD>/AIO folder for shader validation",
-      "configurePreset": "ALL",
-      "configuration": "Release",
-      "targets": [
-        "prepare_shaders"
-      ]
-    },
-    {
-      "name": "Debug",
-      "description": "Debug build for CS SKSE plugin, generate an AIO folder thats ready to copy",
-      "configurePreset": "ALL",
-      "configuration": "Debug",
-      "targets": [
-        "CommunityShaders",
-        "AIO"
-      ]
-    }
-  ]
+    "buildPresets": [
+        {
+            "name": "Dev",
+            "description": "Default build preset for developers, generate an AIO folder thats ready to copy",
+            "configurePreset": "ALL",
+            "configuration": "Release",
+            "targets": ["CommunityShaders", "AIO"]
+        },
+        {
+            "name": "ALL",
+            "description": "(Deprecated), kept for for CI, use Package instead",
+            "configurePreset": "ALL",
+            "configuration": "Release",
+            "targets": ["CommunityShaders", "Package-AIO"]
+        },
+        {
+            "name": "Package",
+            "description": "Build preset to generate a AIO zip package in <SRC>/dist folder, mostly for CI",
+            "configurePreset": "ALL",
+            "configuration": "Release",
+            "targets": ["CommunityShaders", "Package-AIO"]
+        },
+        {
+            "name": "Shaders",
+            "description": "Build preset to copy shaders into <BUILD>/AIO folder for shader validation",
+            "configurePreset": "ALL",
+            "configuration": "Release",
+            "targets": ["prepare_shaders"]
+        },
+        {
+            "name": "Debug",
+            "description": "Debug build for CS SKSE plugin, generate an AIO folder thats ready to copy",
+            "configurePreset": "ALL",
+            "configuration": "Debug",
+            "targets": ["CommunityShaders", "AIO"]
+        }
+    ]
 }
