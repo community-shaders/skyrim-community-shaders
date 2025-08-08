@@ -422,8 +422,8 @@ void Upscaling::CreateUpscalingResources()
 		depthStencilDesc.StencilWriteMask = 0xFF;  // Write to all stencil bits
 
 		// Configure front-facing stencil operations
-		depthStencilDesc.FrontFace.StencilFailOp = D3D11_STENCIL_OP_REPLACE;       // Replace on stencil fail
-		depthStencilDesc.FrontFace.StencilDepthFailOp = D3D11_STENCIL_OP_REPLACE;  // Replace on depth fail
+		depthStencilDesc.FrontFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;       // Replace on stencil fail
+		depthStencilDesc.FrontFace.StencilDepthFailOp = D3D11_STENCIL_OP_KEEP;  // Replace on depth fail
 		depthStencilDesc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_REPLACE;       // Replace on pass
 		depthStencilDesc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;          // Always pass stencil test
 
@@ -1032,7 +1032,7 @@ void Upscaling::UpscaleDepth()
 			context->ClearDepthStencilView(depth.views[0], D3D11_CLEAR_STENCIL, 1.0f, 0xFF);
 		
 		// Set depth stencil state
-		context->OMSetDepthStencilState(depthUpscaleState, 0xFF);
+		context->OMSetDepthStencilState(depthUpscaleState, 0x00);
 
 		// Set render targets (no color target, depth only)
 		context->OMSetRenderTargets(0, nullptr, depth.views[0]);
@@ -1064,6 +1064,10 @@ void Upscaling::UpscaleDepth()
 			ID3D11ShaderResourceView* nullPSResources[1] = { nullptr };
 			context->PSSetShaderResources(0, 1, nullPSResources);
 		}
+
+		// VR uses this for some passes
+		if (globals::game::isVR)
+			context->CopyResource(depthCopy.texture, depth.texture);
 
 		globals::state->EndPerfEvent();
 	}
