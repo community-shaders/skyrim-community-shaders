@@ -382,10 +382,13 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 
 	auto& runtimeData = a_viewport->GetRuntimeData();
 
-	runtimeData.dynamicResolutionPreviousWidthRatio = resolutionScale;
-	runtimeData.dynamicResolutionPreviousHeightRatio = resolutionScale;
+	runtimeData.dynamicResolutionPreviousWidthRatio = runtimeData.dynamicResolutionWidthRatio;
+	runtimeData.dynamicResolutionPreviousHeightRatio = runtimeData.dynamicResolutionHeightRatio;
 	runtimeData.dynamicResolutionWidthRatio = resolutionScale;
 	runtimeData.dynamicResolutionHeightRatio = resolutionScale;
+
+	// Disable dynamic resolution unless the game explictly enables it
+	runtimeData.dynamicResolutionLock = 1;
 
 	if (upscaleMethod == UpscaleMethod::kTAA)
 		resolutionScale = 1.0f;
@@ -994,11 +997,8 @@ void Upscaling::PerformUpscaling()
 
 	auto& runtimeData = globals::game::graphicsState->GetRuntimeData();
 
-	// The game uses these values at multiple points, setting to 1.0 disables all checks
-	runtimeData.dynamicResolutionPreviousWidthRatio = 1.0f;
-	runtimeData.dynamicResolutionPreviousHeightRatio = 1.0f;
-	runtimeData.dynamicResolutionWidthRatio = 1.0f;
-	runtimeData.dynamicResolutionHeightRatio = 1.0f;
+	// Disable dynamic resolution past this point
+	runtimeData.dynamicResolutionLock = 1;
 
 	// Updates the PerFrame constant buffer so that dynamic resolution settings are disabled
 	UpdateCameraData();
