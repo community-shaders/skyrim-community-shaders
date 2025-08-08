@@ -20,6 +20,9 @@ RWTexture2D<float> TransparencyCompositionMask : register(u1);
 	float reactiveMask = taaMask.x * 0.1 + taaMask.y;
 #endif
 
+	ReactiveMask[dispatchID.xy] = reactiveMask;
+
+#if defined(TRANSPARENCY_MASK)
 	float depthPreWater = SharedData::GetScreenDepth(DepthPreWater[dispatchID.xy]);
 	float depthPostWater = SharedData::GetScreenDepth(DepthPostWater[dispatchID.xy]);
 
@@ -27,11 +30,6 @@ RWTexture2D<float> TransparencyCompositionMask : register(u1);
 
 	float transparencyCompositionMask = depthDifference;
 
-#if defined(TRANSPARENCY_MASK)
-	ReactiveMask[dispatchID.xy] = reactiveMask;
 	TransparencyCompositionMask[dispatchID.xy] = transparencyCompositionMask;
-#else
-	ReactiveMask[dispatchID.xy] = max(reactiveMask, transparencyCompositionMask * 0.1);
 #endif
-
 }
