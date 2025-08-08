@@ -7,6 +7,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     EnableGGXOnGrass,
     EnableDynamicCubemapsConversion,
     RoughnessMultiplier,
+    BaseF0Multiplier,
+    MinF0,
     CubemapToF0Multiplier)
 
 void VanillaFresnel::RestoreDefaultSettings()
@@ -32,5 +34,7 @@ void VanillaFresnel::DrawSettings()
     ImGui::Checkbox("Enable Auto Cubemaps Conversion", reinterpret_cast<bool*>(&settings.EnableDynamicCubemapsConversion));
 
     ImGui::SliderFloat("Roughness Multiplier", &settings.RoughnessMultiplier, 0.0f, 10.0f, "%.2f");
+    ImGui::SliderFloat("Base F0 Multiplier", &settings.BaseF0Multiplier, 0.0f, 10.0f, "%.2f");
+    ImGui::SliderFloat("Min F0", &settings.MinF0, 0.0f, 0.04f, "%.3f");
     ImGui::SliderFloat("Cubemap to F0 Multiplier", &settings.CubemapToF0Multiplier, 0.0f, 10.0f, "%.2f");
 }

@@ -2219,6 +2219,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		roughness = 0.1;
 	}
 #		endif
+	F0 = max((enableVanillaFresnel ? SharedData::vanillaFresnelSettings.MinF0 : 0.0), F0 * SharedData::vanillaFresnelSettings.BaseF0Multiplier);
+	float3 baseF0 = F0;
 #	endif
 
 #	if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
@@ -2246,7 +2248,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(EMAT) && !defined(VANILLA_FRESNEL)
 		if (envSize.x == 1 && envSize.y == 1 || complexMaterial) {
 #			elif defined(VANILLA_FRESNEL)
-		if (enableVanillaFresnel && SharedData::vanillaFresnelSettings.EnableDynamicCubemapsConversion) {
+		bool vfStartDynamicCubemapTest = (enableVanillaFresnel && SharedData::vanillaFresnelSettings.EnableDynamicCubemapsConversion);
+#				if defined(EMAT)
+		vfStartDynamicCubemapTest = complexMaterial || vfStartDynamicCubemapTest;
+#				endif
+		if (vfStartDynamicCubemapTest || (envSize.x == 1 && envSize.y == 1)) {
 #			else
 		if (envSize.x == 1 && envSize.y == 1) {
 #			endif
@@ -2269,7 +2275,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			endif
 
 #			if defined(VANILLA_FRESNEL)
-			dynamicCubemap = true;
+			dynamicCubemap = dynamicCubemap || (SharedData::vanillaFresnelSettings.EnableDynamicCubemapsConversion && enableVanillaFresnel);
 #			endif
 
 			if (dynamicCubemap) {
@@ -2281,7 +2287,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 					envRoughness = envColorBase.a;
 				} else {
 #			if defined(VANILLA_FRESNEL)
-					F0 = saturate(Color::GammaToLinear(envColorBase.rgb) * Math::PI);
+					F0 = saturate(Color::GammaToLinear(envColorBase.rgb) * Math::PI * SharedData::vanillaFresnelSettings.CubemapToF0Multiplier);
 					envRoughness = roughness;
 #			else
 					F0 = 1.0;
@@ -2304,12 +2310,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 				envMask = saturate(envMask);
 #			if defined(VANILLA_FRESNEL)
+				if (enableVanillaFresnel) {
 #				if defined(SPECULAR)
-				F0 = max(lerp(glossiness * SpecularColor.xyz, F0, envMask), glossiness * SpecularColor.xyz);
+					F0 = max(lerp(baseF0, F0, envMask), SharedData::vanillaFresnelSettings.MinF0);
 #				else
-				F0 = lerp(0.04, F0, envMask);
+					F0 = lerp(SharedData::vanillaFresnelSettings.MinF0, F0, envMask);
 #				endif
-				roughness = lerp(roughness, envRoughness, pow(envMask, 0.25));
+					roughness = lerp(roughness, envRoughness, pow(envMask, 0.25));
+				} else {
+					roughness = envRoughness;
+				}
 #			else
 				roughness = envRoughness;
 #			endif
@@ -2317,10 +2327,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 #		endif
 
-#		if defined(EYE) && defined(VANILLA_FRESNEL)
+#		if defined(VANILLA_FRESNEL)
 		if (enableVanillaFresnel) {
+#			if defined(EYE)
 			F0 = 0.027;
 			roughness = 0.1;
+#			endif
+			roughness = clamp(roughness * SharedData::vanillaFresnelSettings.RoughnessMultiplier, 0.04, 1.0);
 		}
 #		endif
 
@@ -3148,7 +3161,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (!dynamicCubemap)
 #		endif
 #		if defined(VANILLA_FRESNEL)
-	if (!enableVanillaFresnel)
+	if (!(enableVanillaFresnel && SharedData::vanillaFresnelSettings.EnableDynamicCubemapsConversion))
 #		endif
 		specularColor += envColor * Color::GammaToLinear(diffuseColor);
 #	endif

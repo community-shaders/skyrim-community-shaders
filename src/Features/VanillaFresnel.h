@@ -39,7 +39,8 @@ struct VanillaFresnel : public Feature
         uint EnableGGXOnGrass = false;
         uint EnableDynamicCubemapsConversion = false;
         float RoughnessMultiplier = 1.0f;
+        float BaseF0Multiplier = 0.32f;
+        float MinF0 = 0.02f;
         float CubemapToF0Multiplier = 1.0f;
-        float pad[2];
 	} settings;
 };
