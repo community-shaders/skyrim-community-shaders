@@ -223,24 +223,23 @@ Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
 	return (Upscaling::UpscaleMethod)settings.upscaleMethodNothing;
 }
 
-void Upscaling::CheckResources()
+void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 {
-	static auto previousUpscaleMode = UpscaleMethod::kTAA;
-	auto currentUpscaleMode = GetUpscaleMethod();
+	static auto previousUpscaleMethod = UpscaleMethod::kTAA;
 
 	auto streamline = globals::streamline;
 	auto xess = globals::xess;
 
-	if (previousUpscaleMode != currentUpscaleMode) {
-		if (previousUpscaleMode == UpscaleMethod::kDLSS)
+	if (previousUpscaleMethod != a_upscalemethod) {
+		if (previousUpscaleMethod == UpscaleMethod::kDLSS)
 			streamline->DestroyDLSSResources();
-		else if (previousUpscaleMode == UpscaleMethod::kXESS)
+		else if (previousUpscaleMethod == UpscaleMethod::kXESS)
 			xess->DestroyXeSSResources();
 
-		if (currentUpscaleMode == UpscaleMethod::kXESS)
+		if (a_upscalemethod == UpscaleMethod::kXESS)
 			xess->CreateXeSSResources();
 
-		previousUpscaleMode = currentUpscaleMode;
+		previousUpscaleMethod = a_upscalemethod;
 	}
 }
 
@@ -328,6 +327,9 @@ float Upscaling::GetTAAInputResolutionScale(uint qualityMode)
 void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 {
 	auto upscaleMethod = GetUpscaleMethod();
+	
+	// Delete or create resources as necessary 
+	CheckResources(upscaleMethod);
 
 	// The game defaults this to a non-zero value
 	auto fDRClampOffset = RE::GetINISetting("fDRClampOffset:Display");
@@ -584,6 +586,9 @@ void Upscaling::CreateSharedD3D12Resources()
 	texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 	inputColorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
 	outputColorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+	
+	texDesc.Format = DXGI_FORMAT_R8_UNORM;
+	reactiveMaskShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
 
 	texDesc.Format = DXGI_FORMAT_R32_FLOAT;
 	depthBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
@@ -841,12 +846,8 @@ void Upscaling::Upscale()
 {
 	auto upscaleMethod = GetUpscaleMethod();
 
-	CheckResources();
-
 	auto state = globals::state;
-
 	auto context = globals::d3d::context;
-
 	auto renderer = globals::game::renderer;
 
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
@@ -863,19 +864,19 @@ void Upscaling::Upscale()
 		auto& depthPostWater = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
 		{
-			const bool useTransparencyMask = true;
+			const bool isXeSS = upscaleMethod == UpscaleMethod::kDLSS;
 
 			ID3D11ShaderResourceView* views[3] = { temporalAAMask.SRV, depthPreWater.depthSRV, depthPostWater.depthSRV };
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
 			// Use shared D3D12 textures for XeSS, regular D3D11 textures for others
-			ID3D11UnorderedAccessView* reactiveMaskUAV = reactiveMaskTexture->uav.get();
-			ID3D11UnorderedAccessView* transparencyUAV = useTransparencyMask ? transparencyCompositionMaskTexture->uav.get() : nullptr;
+			ID3D11UnorderedAccessView* reactiveMaskUAV = isXeSS ? reactiveMaskShared12->uav : reactiveMaskTexture->uav.get();
+			ID3D11UnorderedAccessView* transparencyUAV = isXeSS ? transparencyCompositionMaskTexture->uav.get() : nullptr;
 
 			ID3D11UnorderedAccessView* uavs[2] = { reactiveMaskUAV, transparencyUAV };
 			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
-			context->CSSetShader(useTransparencyMask ? GetEncodeTexturesTransparencyCS() : GetEncodeTexturesCS(), nullptr, 0);
+			context->CSSetShader(isXeSS ? GetEncodeTexturesTransparencyCS() : GetEncodeTexturesCS(), nullptr, 0);
 
 			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 		}
@@ -928,6 +929,7 @@ void Upscaling::Upscale()
 				motionVectorBufferShared12->resource.get(),
 				depthBufferShared12->resource.get(),
 				outputColorBufferShared12->resource.get(),
+				reactiveMaskShared12->resource.get(),
 				sharedD3D12CommandList.get(),
 				(uint32_t)renderSize.x,
 				(uint32_t)renderSize.y,

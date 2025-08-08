@@ -68,7 +68,7 @@ public:
 
 	UpscaleMethod GetUpscaleMethod();
 
-	void CheckResources();
+	void CheckResources(UpscaleMethod a_upscalemethod);
 
 	ID3D11ComputeShader* encodeTexturesCS = nullptr;
 	ID3D11ComputeShader* GetEncodeTexturesCS();
@@ -118,6 +118,8 @@ public:
 	WrappedResource* HUDLessBufferShared12;
 	WrappedResource* depthBufferShared12;
 	WrappedResource* motionVectorBufferShared12;
+
+	WrappedResource* reactiveMaskShared12;
 
 	WrappedResource* inputColorBufferShared12;
 	WrappedResource* outputColorBufferShared12;
