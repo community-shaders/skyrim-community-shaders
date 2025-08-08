@@ -27,14 +27,14 @@ float2 GetRefractedTexCoord(float2 texCoordOriginal, float3 normalOriginal)
 	float2 texCoord = texCoordOriginal + float2(-1, 1) * (2 * (0.05 * normalOriginal.z) * (normalOriginal.xy - 0.5));
 	float2 texCoordClamped = texCoord > 0.85 ? lerp(0.85, texCoord, 0.78) : texCoord;
 	texCoordClamped = texCoord < 0.15 ? lerp(0.15, texCoord, 0.78) : texCoordClamped;
-	return lerp(texCoord, texCoordClamped, normalOriginal.z);
+	return FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(lerp(texCoord, texCoordClamped, normalOriginal.z));
 }
 
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
 
-	float2 texCoordOriginal = input.TexCoord.xy;
+	float2 texCoordOriginal = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 
 	float4 normalOriginal = Src1Tex.Sample(Src0Sampler, texCoordOriginal * SharedData::ResolutionScale);
 
