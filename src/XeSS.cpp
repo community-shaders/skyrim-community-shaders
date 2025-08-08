@@ -5,6 +5,7 @@
 #include "Upscaling.h"
 
 #include <FidelityFX/host/backends/dx12/d3dx12.h>
+#include <magic_enum.hpp>
 
 // Define the static member
 std::vector<std::pair<std::string, std::string>> XeSS::dllVersions = {};
@@ -46,8 +47,6 @@ void XeSS::LoadXeSS()
 	}
 }
 
-
-
 void XeSS::CreateXeSSResources()
 {
 	auto upscaling = globals::upscaling;
@@ -58,8 +57,9 @@ void XeSS::CreateXeSSResources()
 
 	auto state = globals::state;
 
-	if (xessD3D12CreateContext(upscaling->sharedD3D12Device.get(), &xessContext) != XESS_RESULT_SUCCESS) {
-		logger::critical("[XeSS] Failed to create XeSS context!");
+	xess_result_t createResult = xessD3D12CreateContext(upscaling->sharedD3D12Device.get(), &xessContext);
+	if (createResult != XESS_RESULT_SUCCESS) {
+		logger::critical("[XeSS] Failed to create XeSS context, error: {} ({})", magic_enum::enum_name(createResult), (int)createResult);
 		return;
 	}
 
@@ -77,8 +77,9 @@ void XeSS::CreateXeSSResources()
 	initParams.textureHeapOffset = 0;
 	initParams.pPipelineLibrary = nullptr;
 
-	if (xessD3D12Init(xessContext, &initParams) != XESS_RESULT_SUCCESS) {
-		logger::critical("[XeSS] Failed to initialize XeSS context!");
+	xess_result_t initResult = xessD3D12Init(xessContext, &initParams);
+	if (initResult != XESS_RESULT_SUCCESS) {
+		logger::critical("[XeSS] Failed to initialize XeSS context, error: {} ({})", magic_enum::enum_name(initResult), (int)initResult);
 		return;
 	}
 }
@@ -88,7 +89,7 @@ void XeSS::DestroyXeSSResources()
 	if (xessContext && xessDestroyContext) {
 		xess_result_t result = xessDestroyContext(xessContext);
 		if (result != XESS_RESULT_SUCCESS) {
-			logger::error("[XeSS] Failed to destroy XeSS context, error code: {}", (int)result);
+			logger::error("[XeSS] Failed to destroy XeSS context, error: {} ({})", magic_enum::enum_name(result), (int)result);
 		}
 		xessContext = nullptr;
 	}
@@ -96,12 +97,36 @@ void XeSS::DestroyXeSSResources()
 
 float XeSS::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityPreset)
 {
+	// Check if XeSS context is valid
+	if (!xessContext) {
+		logger::error("[XeSS] GetInputResolutionScale called with null context");
+		return 1.0f;
+	}
+
+	// Check if function pointer is valid
+	if (!xessGetInputResolution) {
+		logger::error("[XeSS] GetInputResolutionScale called with null function pointer");
+		return 1.0f;
+	}
+
+	// Validate input parameters
+	if (outputWidth == 0 || outputHeight == 0) {
+		logger::error("[XeSS] GetInputResolutionScale called with invalid resolution: {}x{}", outputWidth, outputHeight);
+		return 1.0f;
+	}
+
 	xess_quality_settings_t xessQuality;
 	switch (qualityPreset) {
-	case 1: xessQuality = XESS_QUALITY_SETTING_QUALITY; break; 
-	case 2: xessQuality = XESS_QUALITY_SETTING_BALANCED; break;
-	case 3: xessQuality = XESS_QUALITY_SETTING_PERFORMANCE; break;
-	default: 
+	case 1:
+		xessQuality = XESS_QUALITY_SETTING_QUALITY;
+		break;
+	case 2:
+		xessQuality = XESS_QUALITY_SETTING_BALANCED;
+		break;
+	case 3:
+		xessQuality = XESS_QUALITY_SETTING_PERFORMANCE;
+		break;
+	default:
 		xessQuality = XESS_QUALITY_SETTING_AA;
 		break;
 	}
@@ -111,14 +136,14 @@ float XeSS::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight,
 
 	xess_result_t result = xessGetInputResolution(xessContext, &outputResolution, xessQuality, &inputResolution);
 	if (result != XESS_RESULT_SUCCESS) {
-		logger::critical("[XeSS] Failed to get input resolution, error code: {}", (int)result);
+		logger::critical("[XeSS] Failed to get input resolution, error: {} ({})", magic_enum::enum_name(result), (int)result);
 		return 1.0f;
 	}
 
 	// Calculate scale as ratio of input to output resolution
 	float scaleX = (float)inputResolution.x / (float)outputResolution.x;
 	float scaleY = (float)inputResolution.y / (float)outputResolution.y;
-	
+
 	// Use the average scale (both should be the same for uniform scaling)
 	return (scaleX + scaleY) * 0.5f;
 }
@@ -131,16 +156,17 @@ void XeSS::Upscale(
 	ID3D12GraphicsCommandList* a_commandList,
 	uint32_t a_renderWidth,
 	uint32_t a_renderHeight,
-	float2 a_jitter
-)
+	float2 a_jitter)
 {
 	// Set velocity and jitter scales
-	if (xessSetVelocityScale(xessContext, 2.0f, -2.0f) != XESS_RESULT_SUCCESS) {
-		logger::warn("[XeSS] Failed to set velocity scale");
+	xess_result_t velocityResult = xessSetVelocityScale(xessContext, 2.0f, -2.0f);
+	if (velocityResult != XESS_RESULT_SUCCESS) {
+		logger::warn("[XeSS] Failed to set velocity scale, error: {} ({})", magic_enum::enum_name(velocityResult), (int)velocityResult);
 	}
 
-	if (xessSetJitterScale(xessContext, 1.0f, 1.0f) != XESS_RESULT_SUCCESS) {
-		logger::warn("[XeSS] Failed to set jitter scale");
+	xess_result_t jitterResult = xessSetJitterScale(xessContext, 1.0f, 1.0f);
+	if (jitterResult != XESS_RESULT_SUCCESS) {
+		logger::warn("[XeSS] Failed to set jitter scale, error: {} ({})", magic_enum::enum_name(jitterResult), (int)jitterResult);
 	}
 
 	// XeSS execution parameters
@@ -168,7 +194,7 @@ void XeSS::Upscale(
 
 	xess_result_t result = xessD3D12Execute(xessContext, a_commandList, &execParams);
 	if (result != XESS_RESULT_SUCCESS) {
-		logger::error("[XeSS] Failed to execute XeSS upscaling, error code: {}", (int)result);
+		logger::error("[XeSS] Failed to execute XeSS upscaling, error: {} ({})", magic_enum::enum_name(result), (int)result);
 		return;
 	}
 }
