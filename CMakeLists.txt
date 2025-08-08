@@ -308,12 +308,12 @@ foreach(FEATURE_PATH ${FEATURE_PATHS})
 endforeach()
 
 # AIO Folder
-add_custom_command(OUTPUT ${AIO_PACKAGE}/SKSE/Plugins/${PROJECT_NAME}.dll
+add_custom_command(OUTPUT ${AIO_DIR}/SKSE/Plugins/${PROJECT_NAME}.dll
 	DEPENDS ${CORE_SOURCES}
 	COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${AIO_DIR}
 	COMMENT "Installing to AIO folder"
 )
-add_custom_target("AIO" DEPENDS ${AIO_PACKAGE}/SKSE/Plugins/${PROJECT_NAME}.dll)
+add_custom_target("AIO" DEPENDS ${AIO_DIR}/SKSE/Plugins/${PROJECT_NAME}.dll)
 
 # AIO package
 set(AIO_PACKAGE "${DIST_PATH}/${PROJECT_NAME}_AIO-${UTC_NOW}.7z")
