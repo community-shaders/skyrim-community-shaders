@@ -204,6 +204,8 @@ namespace SharedData
 		float BaseF0Multiplier;
 		float MinF0;
 		float CubemapToF0Multiplier;
+		float ComplexMaterialF0Multiplier;
+		float3 pad;
 	};
 
 	cbuffer FeatureData : register(b6)

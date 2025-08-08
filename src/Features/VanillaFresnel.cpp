@@ -9,7 +9,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     RoughnessMultiplier,
     BaseF0Multiplier,
     MinF0,
-    CubemapToF0Multiplier)
+    CubemapToF0Multiplier,
+    ComplexMaterialF0Multiplier)
 
 void VanillaFresnel::RestoreDefaultSettings()
 {
@@ -37,4 +38,5 @@ void VanillaFresnel::DrawSettings()
     ImGui::SliderFloat("Base F0 Multiplier", &settings.BaseF0Multiplier, 0.0f, 10.0f, "%.2f");
     ImGui::SliderFloat("Min F0", &settings.MinF0, 0.0f, 0.04f, "%.3f");
     ImGui::SliderFloat("Cubemap to F0 Multiplier", &settings.CubemapToF0Multiplier, 0.0f, 10.0f, "%.2f");
+    ImGui::SliderFloat("Complex Material Env F0 Multiplier", &settings.ComplexMaterialF0Multiplier, 0.0f, 10.0f, "%.2f");
 }

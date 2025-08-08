@@ -1902,6 +1902,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	shininess = lerp(shininess, shininess * complexMaterialColor.y, complexMaterial);
 	if (complexMaterial) {
 		complexSpecular = lerp(1.0, baseColor.xyz, complexMaterialColor.z);
+#		if defined(VANILLA_FRESNEL)
+		complexSpecular = saturate(complexSpecular * (enableVanillaFresnel ? SharedData::vanillaFresnelSettings.ComplexMaterialF0Multiplier : 1.0));
+#		endif
 		baseColor.xyz = lerp(baseColor.xyz, 0.0, complexMaterialColor.z);
 
 	}
@@ -3172,6 +3175,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if defined(EMAT_ENVMAP)
+#		if defined(VANILLA_FRESNEL)
+	if (!(enableVanillaFresnel && SharedData::vanillaFresnelSettings.EnableGGX))
+#		endif
 	specularColor *= complexSpecular;
 #	endif  // defined (EMAT) && defined(ENVMAP)
 

@@ -42,5 +42,7 @@ struct VanillaFresnel : public Feature
         float BaseF0Multiplier = 0.32f;
         float MinF0 = 0.02f;
         float CubemapToF0Multiplier = 1.0f;
+        float ComplexMaterialF0Multiplier = 1.0f;
+        float pad[3];
 	} settings;
 };
