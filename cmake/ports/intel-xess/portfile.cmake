@@ -8,7 +8,7 @@ vcpkg_from_github(
 )
 
 # Install only the necessary header files (not the entire repo)
-set(XESS_HEADERS_SOURCE ${SOURCE_PATH}/inc/xess)
+set(XESS_HEADERS_SOURCE ${SOURCE_PATH}/include/xess)
 file(INSTALL ${XESS_HEADERS_SOURCE} DESTINATION ${CURRENT_PACKAGES_DIR}/include)
 
 # Install copyright
