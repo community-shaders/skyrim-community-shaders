@@ -152,8 +152,8 @@ void XeSS::Upscale(
 	ID3D12Resource* a_inputColorTexture,
 	ID3D12Resource* a_motionVectorTexture,
 	ID3D12Resource* a_depthTexture,
+	ID3D12Resource* a_reactiveMask,
 	ID3D12Resource* a_outputTexture,
-	ID3D12Resource* a_reactiveTexture,
 	ID3D12GraphicsCommandList* a_commandList,
 	uint32_t a_renderWidth,
 	uint32_t a_renderHeight,
@@ -176,7 +176,7 @@ void XeSS::Upscale(
 	execParams.pVelocityTexture = a_motionVectorTexture;
 	execParams.pDepthTexture = a_depthTexture;
 	execParams.pExposureScaleTexture = nullptr;
-	execParams.pResponsivePixelMaskTexture = a_reactiveTexture;
+	execParams.pResponsivePixelMaskTexture = a_reactiveMask;
 	execParams.pOutputTexture = a_outputTexture;
 	execParams.jitterOffsetX = -a_jitter.x;
 	execParams.jitterOffsetY = -a_jitter.y;

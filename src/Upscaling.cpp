@@ -12,7 +12,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Upscaling::Settings,
 	upscaleMethod,
 	upscaleMethodNoDLSS,
-	upscaleMethodNothing,
 	frameLimitMode,
 	frameGenerationMode,
 	frameGenerationForceEnable,
@@ -20,28 +19,22 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void Upscaling::DrawSettings()
 {
-	// Skyrim settings control whether any upscaling is possible
-
-	auto state = globals::state;
 	auto streamline = globals::streamline;
 
 	// Display upscaling options in the UI
-	const char* upscaleModes[] = { "Disabled", "Temporal Anti-Aliasing", "Intel XeSS", "NVIDIA DLSS" };
+	const char* upscaleModes[] = { "Disabled", "Temporal Anti-Aliasing", "AMD FSR", "Intel XeSS", "NVIDIA DLSS" };
 
 	// Determine available modes
 	bool featureDLSS = streamline->featureDLSS;
 
 	uint* currentUpscaleMode = &settings.upscaleMethod;
-	uint availableModes = 3;  // 0=Disabled, 1=TAA, 2=XeSS, 3=DLSS
+	uint availableModes = 4;
 
 	if (featureDLSS) {
 		// All modes available including DLSS
-	} else if (state->featureLevel == D3D_FEATURE_LEVEL_11_1) {
-		currentUpscaleMode = &settings.upscaleMethodNoDLSS;
-		availableModes = 2;  // 0=Disabled, 1=TAA, 2=XeSS (no DLSS)
 	} else {
-		currentUpscaleMode = &settings.upscaleMethodNothing;
-		availableModes = 1;  // 0=Disabled, 1=TAA (no XeSS, no DLSS)
+		currentUpscaleMode = &settings.upscaleMethodNoDLSS;
+		availableModes = 3;
 	}
 
 	// Slider for method selection
@@ -54,6 +47,8 @@ void Upscaling::DrawSettings()
 			"Temporal Anti-Aliasing:\n"
 			"TAA uses frame history to smooth out jagged edges, reducing flickering and improving image stability.\n"
 			"\n"
+			"AMD FSR:\n"
+			"AMD FidelityFX Super Resolution is an open-source upscaling algorithm compatible with all GPUs.\n"
 			"Intel XeSS:\n"
 			"XeSS or Xe Super Sampling is a novel upscaling technology that enables high performance and high-fidelity visuals. It uses deep learning to synthesize images that are very close to the quality of native high-res rendering. It works by reconstructing subpixel details from neighboring pixels, as well as motion-compensated previous frames. This reconstruction is performed by a neural network trained to deliver high performance and great quality, with up to a 2x performance boost.\n"
 			"\n"
@@ -213,33 +208,36 @@ void Upscaling::RestoreDefaultSettings()
 Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
 {
 	if (globals::streamline->featureDLSS) {
-		settings.upscaleMethod = std::clamp(settings.upscaleMethod, 0u, 3u);  // 0=NONE, 1=TAA, 2=XeSS, 3=DLSS
-		return (Upscaling::UpscaleMethod)settings.upscaleMethod;
-	} else if (globals::state->featureLevel == D3D_FEATURE_LEVEL_11_1) {
-		settings.upscaleMethodNoDLSS = std::clamp(settings.upscaleMethodNoDLSS, 0u, 2u);  // 0=NONE, 1=TAA, 2=XeSS (no DLSS)
-		return (Upscaling::UpscaleMethod)settings.upscaleMethodNoDLSS;
-	}
-	settings.upscaleMethodNothing = std::clamp(settings.upscaleMethodNothing, 0u, 1u);  // 0=NONE, 1=TAA (no XeSS, no DLSS)
-	return (Upscaling::UpscaleMethod)settings.upscaleMethodNothing;
+		settings.upscaleMethod = std::clamp(settings.upscaleMethod, (uint)UpscaleMethod::kNONE, (uint)UpscaleMethod::kDLSS);
+		return (UpscaleMethod)settings.upscaleMethod;
+	} 
+	
+	settings.upscaleMethodNoDLSS = std::clamp(settings.upscaleMethodNoDLSS, (uint)UpscaleMethod::kNONE, (uint)UpscaleMethod::kXESS);
+	return (UpscaleMethod)settings.upscaleMethodNoDLSS;
 }
 
 void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 {
-	static auto previousUpscaleMethod = UpscaleMethod::kTAA;
+	static auto previousUpscaleMode = UpscaleMethod::kTAA;
 
 	auto streamline = globals::streamline;
+	auto fidelityFX = globals::fidelityFX;
 	auto xess = globals::xess;
 
-	if (previousUpscaleMethod != a_upscalemethod) {
-		if (previousUpscaleMethod == UpscaleMethod::kDLSS)
+	if (previousUpscaleMode != a_upscalemethod) {
+		if (previousUpscaleMode == UpscaleMethod::kDLSS)
 			streamline->DestroyDLSSResources();
-		else if (previousUpscaleMethod == UpscaleMethod::kXESS)
+		else if (previousUpscaleMode == UpscaleMethod::kFSR)
+			fidelityFX->DestroyFSRResources();
+		else if (previousUpscaleMode == UpscaleMethod::kXESS)
 			xess->DestroyXeSSResources();
 
-		if (a_upscalemethod == UpscaleMethod::kXESS)
+		if (a_upscalemethod == UpscaleMethod::kFSR)
+			fidelityFX->CreateFSRResources();
+		else if (a_upscalemethod == UpscaleMethod::kXESS)
 			xess->CreateXeSSResources();
 
-		previousUpscaleMethod = a_upscalemethod;
+		previousUpscaleMode = a_upscalemethod;
 	}
 }
 
@@ -893,16 +891,30 @@ void Upscaling::Upscale()
 			DX::ThrowIfFailed(sharedD3D12CommandAllocator->Reset());
 			DX::ThrowIfFailed(sharedD3D12CommandList->Reset(sharedD3D12CommandAllocator.get(), nullptr));
 
-			globals::xess->Upscale(
-				inputColorBufferShared12->resource.get(),
-				motionVectorBufferShared12->resource.get(),
-				depthBufferShared12->resource.get(),
-				outputColorBufferShared12->resource.get(),
-				reactiveMaskShared12->resource.get(),
-				sharedD3D12CommandList.get(),
-				(uint32_t)renderSize.x,
-				(uint32_t)renderSize.y,
-				jitter);
+			if (upscaleMethod == UpscaleMethod::kFSR){
+				globals::fidelityFX->Upscale(
+					inputColorBufferShared12->resource.get(),
+					motionVectorBufferShared12->resource.get(),
+					depthBufferShared12->resource.get(),
+					reactiveMaskShared12->resource.get(),
+					outputColorBufferShared12->resource.get(),
+					sharedD3D12CommandList.get(),
+					(uint32_t)renderSize.x,
+					(uint32_t)renderSize.y,
+					jitter,
+					0.0f);
+			} else {
+				globals::xess->Upscale(
+					inputColorBufferShared12->resource.get(),
+					motionVectorBufferShared12->resource.get(),
+					depthBufferShared12->resource.get(),
+					outputColorBufferShared12->resource.get(),
+					reactiveMaskShared12->resource.get(),
+					sharedD3D12CommandList.get(),
+					(uint32_t)renderSize.x,
+					(uint32_t)renderSize.y,
+					jitter);
+			}
 
 			// Close and execute command list
 			DX::ThrowIfFailed(sharedD3D12CommandList->Close());
