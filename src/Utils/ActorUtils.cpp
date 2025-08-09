@@ -50,7 +50,9 @@ namespace Util
 		if (shape->type == ShapeType::kCapsule) {
 			float hx, hy, hz;
 			symmetricHalfExtents(hx, hy, hz);
-			radius = halfDiagonal(hx, hy, hz);
+			// For capsules, use the maximum half-extent (typically hz for vertical orientation)
+			// as the farthest point lies along the capsule's main axis, not at the diagonal
+			radius = std::max(hx, std::max(hy, hz));
 			return true;
 		} else if (shape->type == ShapeType::kSphere) {
 			// For spheres, any axis should yield the same half-extent; use symmetric X
