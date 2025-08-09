@@ -15,7 +15,8 @@ namespace Util
 			RE::hkVector4 massCenter;
 			bhkRigid->GetCenterOfMassWorld(massCenter);
 			float massTrans[4];
-			_mm_store_ps(massTrans, massCenter.quad);
+			// Use unaligned store to avoid UB from potential stack misalignment
+			_mm_storeu_ps(massTrans, massCenter.quad);
 			centerPos = RE::NiPoint3(massTrans[0], massTrans[1], massTrans[2]) * RE::bhkWorld::GetWorldScaleInverse();
 			return Util::ExtractShapeBound(hkpRigid->collidable.GetShape(), radius);
 		}
@@ -27,49 +28,59 @@ namespace Util
 		using ShapeType = RE::hkpShapeType;
 		if (!shape)
 			return false;
+
+		// Helpers to avoid repeating projection math and ensure offset-invariant half-extents
+		auto project = [shape](float x, float y, float z) {
+			return shape->GetMaximumProjection(RE::hkVector4{ x, y, z, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
+		};
+		auto symmetricHalfExtents = [&project](float& hx, float& hy, float& hz) {
+			float x_pos = project(1.0f, 0.0f, 0.0f);
+			float x_neg = project(-1.0f, 0.0f, 0.0f);
+			float y_pos = project(0.0f, 1.0f, 0.0f);
+			float y_neg = project(0.0f, -1.0f, 0.0f);
+			float z_pos = project(0.0f, 0.0f, 1.0f);
+			float z_neg = project(0.0f, 0.0f, -1.0f);
+			hx = 0.5f * (x_pos + x_neg);
+			hy = 0.5f * (y_pos + y_neg);
+			hz = 0.5f * (z_pos + z_neg);
+		};
+		auto halfDiagonal = [](float hx, float hy, float hz) {
+			return sqrtf(hx * hx + hy * hy + hz * hz);
+		};
 		if (shape->type == ShapeType::kCapsule) {
-			float upExtent = shape->GetMaximumProjection(RE::hkVector4{ 0.0f, 0.0f, 1.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			float downExtent = shape->GetMaximumProjection(RE::hkVector4{ 0.0f, 0.0f, -1.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			auto z_extent = (upExtent + downExtent) / 2.0f;
-			float forwardExtent = shape->GetMaximumProjection(RE::hkVector4{ 0.0f, 1.0f, 0.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			float backwardExtent = shape->GetMaximumProjection(RE::hkVector4{ 0.0f, -1.0f, 0.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			auto y_extent = (forwardExtent + backwardExtent) / 2.0f;
-			float leftExtent = shape->GetMaximumProjection(RE::hkVector4{ 1.0f, 0.0f, 0.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			float rightExtent = shape->GetMaximumProjection(RE::hkVector4{ -1.0f, 0.0f, 0.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			auto x_extent = (leftExtent + rightExtent) / 2.0f;
-			radius = sqrtf(x_extent * x_extent + y_extent * y_extent + z_extent * z_extent);
+			float hx, hy, hz;
+			symmetricHalfExtents(hx, hy, hz);
+			radius = halfDiagonal(hx, hy, hz);
 			return true;
 		} else if (shape->type == ShapeType::kSphere) {
-			float sphereRadius = shape->GetMaximumProjection(RE::hkVector4{ 1.0f, 0.0f, 0.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			radius = sphereRadius;
+			// For spheres, any axis should yield the same half-extent; use symmetric X
+			float hx, hy, hz;
+			symmetricHalfExtents(hx, hy, hz);
+			radius = hx;
 			return true;
 		} else if (shape->type == ShapeType::kBox) {
-			float x_extent = shape->GetMaximumProjection(RE::hkVector4{ 1.0f, 0.0f, 0.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			float y_extent = shape->GetMaximumProjection(RE::hkVector4{ 0.0f, 1.0f, 0.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			float z_extent = shape->GetMaximumProjection(RE::hkVector4{ 0.0f, 0.0f, 1.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			radius = sqrtf(x_extent * x_extent + y_extent * y_extent + z_extent * z_extent) * 0.5f;
+			float hx, hy, hz;
+			symmetricHalfExtents(hx, hy, hz);
+			radius = halfDiagonal(hx, hy, hz);
 			return true;
 		} else if (shape->type == ShapeType::kCylinder) {
-			float x_extent = shape->GetMaximumProjection(RE::hkVector4{ 1.0f, 0.0f, 0.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			float y_extent = shape->GetMaximumProjection(RE::hkVector4{ 0.0f, 1.0f, 0.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			float z_extent = shape->GetMaximumProjection(RE::hkVector4{ 0.0f, 0.0f, 1.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			radius = sqrtf(std::max(x_extent, y_extent) * std::max(x_extent, y_extent) + z_extent * z_extent) * 0.5f;
+			// Use symmetric half-extents; cylinder radius is max of X/Y half-extents
+			float hx, hy, hz;
+			symmetricHalfExtents(hx, hy, hz);
+			float hr = std::max(hx, hy);
+			radius = sqrtf(hr * hr + hz * hz);
 			return true;
 		} else if (shape->type == ShapeType::kConvexVertices || shape->type == ShapeType::kTriangle) {
-			float max_extent = 0.0f;
-			for (const auto& dir : { RE::hkVector4{ 1, 0, 0, 0 }, RE::hkVector4{ 0, 1, 0, 0 }, RE::hkVector4{ 0, 0, 1, 0 }, RE::hkVector4{ -1, 0, 0, 0 }, RE::hkVector4{ 0, -1, 0, 0 }, RE::hkVector4{ 0, 0, -1, 0 } }) {
-				float extent = shape->GetMaximumProjection(dir) * RE::bhkWorld::GetWorldScaleInverse();
-				max_extent = std::max(max_extent, extent);
-			}
-			radius = max_extent;
+			// Offset-invariant estimate: take symmetric half-extents per axis and use the max
+			float hx, hy, hz;
+			symmetricHalfExtents(hx, hy, hz);
+			radius = std::max(hx, std::max(hy, hz));
 			return true;
 		} else {
-			float max_extent = 0.0f;
-			for (const auto& dir : { RE::hkVector4{ 1, 0, 0, 0 }, RE::hkVector4{ 0, 1, 0, 0 }, RE::hkVector4{ 0, 0, 1, 0 }, RE::hkVector4{ -1, 0, 0, 0 }, RE::hkVector4{ 0, -1, 0, 0 }, RE::hkVector4{ 0, 0, -1, 0 } }) {
-				float extent = shape->GetMaximumProjection(dir) * RE::bhkWorld::GetWorldScaleInverse();
-				max_extent = std::max(max_extent, extent);
-			}
-			radius = max_extent;
+			// Fallback: mirror the convex/triangle approach for consistency
+			float hx, hy, hz;
+			symmetricHalfExtents(hx, hy, hz);
+			radius = std::max(hx, std::max(hy, hz));
 			return true;
 		}
 	}
