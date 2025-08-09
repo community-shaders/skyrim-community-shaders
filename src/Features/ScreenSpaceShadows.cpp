@@ -156,17 +156,25 @@ void ScreenSpaceShadows::DrawShadows()
 	float2 dynamicRes = { viewport->GetRuntimeData().dynamicResolutionWidthRatio, viewport->GetRuntimeData().dynamicResolutionHeightRatio };
 
 	// Shared dispatch logic for both VR and non-VR
-	auto DispatchEye = [&](const char* eyeName, ID3D11ComputeShader* shader, float lightProj[4]) {
-		if (globals::state->frameAnnotations) {
-			globals::state->BeginPerfEvent(eyeName ? std::format("SSS - Ray March ({})", eyeName) : "SSS - Ray March");
+	auto DispatchEye = [&](const char* eyeName, ID3D11ComputeShader* shader, const float* lightProj,
+						   float invTexSizeX, float invTexSizeY) {
+		std::string eventName;
+		const char* tracyName = "SSS - Ray March";
+
+		if (globals::state->frameAnnotations && eyeName) {
+			eventName = std::format("SSS - Ray March ({})", eyeName);
+			tracyName = eventName.c_str();
+			globals::state->BeginPerfEvent(eventName);
+		} else if (globals::state->frameAnnotations) {
+			globals::state->BeginPerfEvent("SSS - Ray March");
 		}
 
 		context->CSSetShader(shader, nullptr, 0);
 
-		auto dispatchList = Bend::BuildDispatchList(lightProj, viewportSize, minRenderBounds, maxRenderBounds);
+		auto dispatchList = Bend::BuildDispatchList(const_cast<float*>(lightProj), viewportSize, minRenderBounds, maxRenderBounds);
 
 		for (int i = 0; i < dispatchList.DispatchCount; i++) {
-			TracyD3D11Zone(globals::state->tracyCtx, eyeName ? std::format("SSS - Ray March ({})", eyeName).c_str() : "SSS - Ray March");
+			TracyD3D11Zone(globals::state->tracyCtx, tracyName);
 
 			auto dispatchData = dispatchList.Dispatch[i];
 
@@ -184,14 +192,8 @@ void ScreenSpaceShadows::DrawShadows()
 
 			data.DynamicRes = dynamicRes;
 
-			// Use screen size for non-VR, viewport size for VR (per-eye texture coordinates)
-			if (globals::game::isVR) {
-				data.InvDepthTextureSize[0] = 1.0f / (float)viewportSize[0];
-				data.InvDepthTextureSize[1] = 1.0f / (float)viewportSize[1];
-			} else {
-				data.InvDepthTextureSize[0] = 1.0f / (float)screenSize.x;
-				data.InvDepthTextureSize[1] = 1.0f / (float)screenSize.y;
-			}
+			data.InvDepthTextureSize[0] = invTexSizeX;
+			data.InvDepthTextureSize[1] = invTexSizeY;
 
 			data.settings = bendSettings;
 
@@ -206,16 +208,22 @@ void ScreenSpaceShadows::DrawShadows()
 	};
 
 	if (globals::game::isVR) {
-		// VR: Process both eyes
-		DispatchEye("Left Eye", GetComputeRaymarch(), lightProjectionF.data());
+		// VR: Process both eyes with per-eye texture coordinates
+		float vrInvTexSizeX = 1.0f / (float)viewportSize[0];
+		float vrInvTexSizeY = 1.0f / (float)viewportSize[1];
+
+		DispatchEye("Left Eye", GetComputeRaymarch(), lightProjectionF.data(), vrInvTexSizeX, vrInvTexSizeY);
 
 		// Calculate light projection for right eye
 		auto lightProjectionRightF = CalculateLightProjection(1);
 
-		DispatchEye("Right Eye", GetComputeRaymarchRight(), lightProjectionRightF.data());
+		DispatchEye("Right Eye", GetComputeRaymarchRight(), lightProjectionRightF.data(), vrInvTexSizeX, vrInvTexSizeY);
 	} else {
-		// Non-VR: Single eye processing
-		DispatchEye(nullptr, GetComputeRaymarch(), lightProjectionF.data());
+		// Non-VR: Single eye processing with full screen texture coordinates
+		float InvTexSizeX = 1.0f / (float)screenSize.x;
+		float InvTexSizeY = 1.0f / (float)screenSize.y;
+
+		DispatchEye(nullptr, GetComputeRaymarch(), lightProjectionF.data(), InvTexSizeX, InvTexSizeY);
 	}
 
 	ID3D11ShaderResourceView* views[1]{ nullptr };
