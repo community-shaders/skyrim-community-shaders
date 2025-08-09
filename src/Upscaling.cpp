@@ -225,6 +225,18 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 	auto xess = globals::xess;
 
 	if (previousUpscaleMode != a_upscalemethod) {
+
+		// Synchronise all pending GPU work before destroying contexts
+		// Otherwise resources will be desotroyed whilst in use, causing the device to crash
+		if (previousUpscaleMode == UpscaleMethod::kFSR || previousUpscaleMode == UpscaleMethod::kXESS) {
+			UINT64 fenceValue = sharedInteropFenceValue++;
+			DX::ThrowIfFailed(sharedD3D12CommandQueue->Signal(sharedD3D12Fence.get(), fenceValue));
+			if (sharedD3D12Fence->GetCompletedValue() < fenceValue) {
+				sharedD3D12Fence->SetEventOnCompletion(fenceValue, sharedFenceEvent);
+				WaitForSingleObject(sharedFenceEvent, INFINITE);
+			}
+		}
+
 		if (previousUpscaleMode == UpscaleMethod::kDLSS)
 			streamline->DestroyDLSSResources();
 		else if (previousUpscaleMode == UpscaleMethod::kFSR)
@@ -908,8 +920,8 @@ void Upscaling::Upscale()
 					inputColorBufferShared12->resource.get(),
 					motionVectorBufferShared12->resource.get(),
 					depthBufferShared12->resource.get(),
-					outputColorBufferShared12->resource.get(),
 					reactiveMaskShared12->resource.get(),
+					outputColorBufferShared12->resource.get(),
 					sharedD3D12CommandList.get(),
 					(uint32_t)renderSize.x,
 					(uint32_t)renderSize.y,
