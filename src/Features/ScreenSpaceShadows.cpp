@@ -66,10 +66,8 @@ ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarch()
 		float referenceArea = referenceRes.x * referenceRes.y;
 		float currentArea = renderSize.x * renderSize.y;
 		float areaScale = std::sqrt(currentArea / referenceArea);
-		uint scaledSampleCount = static_cast<uint>(std::round(sampleCount * 60 * areaScale));
+		uint scaledSampleCount = static_cast<uint>(std::round(sampleCount * 120 * areaScale));
 		
-		logger::debug("Compiling RaymarchCS with area-scaled sample count: {} (base: {}, scale: {:.2f})", 
-			scaledSampleCount, sampleCount * 60, areaScale);
 		raymarchCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", { { "SAMPLE_COUNT", std::format("{}", scaledSampleCount).c_str() } }, "cs_5_0");
 	}
 	return raymarchCS;
@@ -97,10 +95,8 @@ ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarchRight()
 		float referenceArea = referenceRes.x * referenceRes.y;
 		float currentArea = renderSize.x * renderSize.y;
 		float areaScale = std::sqrt(currentArea / referenceArea);
-		uint scaledSampleCount = static_cast<uint>(std::round(sampleCount * 60 * areaScale));
+		uint scaledSampleCount = static_cast<uint>(std::round(sampleCount * 120 * areaScale));
 		
-		logger::debug("Compiling RaymarchCS RIGHT with area-scaled sample count: {} (base: {}, scale: {:.2f})", 
-			scaledSampleCount, sampleCount * 60, areaScale);
 		raymarchRightCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", { { "SAMPLE_COUNT", std::format("{}", scaledSampleCount).c_str() }, { "RIGHT", "" } }, "cs_5_0");
 	}
 	return raymarchRightCS;
