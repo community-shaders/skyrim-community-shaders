@@ -61,13 +61,15 @@ ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarch()
 	}
 
 	if (!raymarchCS) {
-		// Scale sample count linearly based on vertical resolution relative to 1080p reference
-		float referenceHeight = 1080.0f;
-		float heightScale = renderSize.y / referenceHeight;
-		uint scaledSampleCount = static_cast<uint>(std::round(sampleCount * 60 * heightScale));
+		// Scale sample count based on both dimensions relative to 1920x1080 reference
+		float2 referenceRes = { 1920.0f, 1080.0f };
+		float referenceArea = referenceRes.x * referenceRes.y;
+		float currentArea = renderSize.x * renderSize.y;
+		float areaScale = std::sqrt(currentArea / referenceArea);
+		uint scaledSampleCount = static_cast<uint>(std::round(sampleCount * 60 * areaScale));
 		
-		logger::debug("Compiling RaymarchCS with height-scaled sample count: {} (base: {}, scale: {:.2f})", 
-			scaledSampleCount, sampleCount * 60, heightScale);
+		logger::debug("Compiling RaymarchCS with area-scaled sample count: {} (base: {}, scale: {:.2f})", 
+			scaledSampleCount, sampleCount * 60, areaScale);
 		raymarchCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", { { "SAMPLE_COUNT", std::format("{}", scaledSampleCount).c_str() } }, "cs_5_0");
 	}
 	return raymarchCS;
@@ -90,13 +92,15 @@ ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarchRight()
 	}
 
 	if (!raymarchRightCS) {
-		// Scale sample count linearly based on vertical resolution relative to 1080p reference
-		float referenceHeight = 1080.0f;
-		float heightScale = renderSize.y / referenceHeight;
-		uint scaledSampleCount = static_cast<uint>(std::round(sampleCount * 60 * heightScale));
+		// Scale sample count based on both dimensions relative to 1920x1080 reference
+		float2 referenceRes = { 1920.0f, 1080.0f };
+		float referenceArea = referenceRes.x * referenceRes.y;
+		float currentArea = renderSize.x * renderSize.y;
+		float areaScale = std::sqrt(currentArea / referenceArea);
+		uint scaledSampleCount = static_cast<uint>(std::round(sampleCount * 60 * areaScale));
 		
-		logger::debug("Compiling RaymarchCS RIGHT with height-scaled sample count: {} (base: {}, scale: {:.2f})", 
-			scaledSampleCount, sampleCount * 60, heightScale);
+		logger::debug("Compiling RaymarchCS RIGHT with area-scaled sample count: {} (base: {}, scale: {:.2f})", 
+			scaledSampleCount, sampleCount * 60, areaScale);
 		raymarchRightCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", { { "SAMPLE_COUNT", std::format("{}", scaledSampleCount).c_str() }, { "RIGHT", "" } }, "cs_5_0");
 	}
 	return raymarchRightCS;
