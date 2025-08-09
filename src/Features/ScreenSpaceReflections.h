@@ -34,6 +34,8 @@ struct ScreenSpaceReflections : Feature
 	virtual void ClearShaderCache() override;
 	void CompileComputeShaders();
 
+    virtual bool SupportsVR() override { return true; };
+
     struct Settings
     {
         bool Enabled = true;
