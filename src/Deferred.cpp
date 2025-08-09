@@ -136,7 +136,7 @@ void Deferred::SetupResources()
 		samplerDesc.MinLOD = 0;
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &linearSampler));
-		
+
 		samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &pointSampler));
 	}
