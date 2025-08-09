@@ -582,12 +582,12 @@ struct BSInputDeviceManager_PollInputDevices
 						// Allow gamepad input to pass through
 						// Also handle VR controller devices based on OpenVR compatibility
 						bool isVRController = ((device == RE::INPUT_DEVICES::INPUT_DEVICE::kVivePrimary) ||
-							(device == RE::INPUT_DEVICES::INPUT_DEVICE::kViveSecondary) ||
-							(device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusPrimary) ||
-							(device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusSecondary) ||
-							(device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRPrimary) ||
-							(device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRSecondary));
-						
+											   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kViveSecondary) ||
+											   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusPrimary) ||
+											   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusSecondary) ||
+											   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRPrimary) ||
+											   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRSecondary));
+
 						// Allow gamepad input to pass through always
 						if (device == RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad) {
 							blockedDevice = false;
