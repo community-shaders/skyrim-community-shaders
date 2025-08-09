@@ -91,9 +91,9 @@ float FFX_SSSR_LoadDepth(int2 pixel_coordinate, int mip)
     return DepthTextureMips.Load(int3(pixel_coordinate, mip /* + pc.depth_mip_bias*/)).x;
 }
 
-float3 FFX_SSSR_ScreenSpaceToViewSpace(float3 screen_space_position)
+float3 FFX_SSSR_ScreenSpaceToViewSpace(float3 screen_space_position, uint eyeIndex)
 {
-    return InvProjectPosition(screen_space_position, FrameBuffer::CameraProjInverse[0]);
+    return InvProjectPosition(screen_space_position, FrameBuffer::CameraProjInverse[eyeIndex]);
 }
 
 void FFX_SSSR_InitialAdvanceRay(float3     origin,
@@ -242,7 +242,7 @@ float3 FFX_SSSR_HierarchicalRaymarch(float3 origin, float3 direction, bool is_mi
     return position;
 }
 
-float FFX_SSSR_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_direction, float2 screen_size, float depth_buffer_thickness)
+float FFX_SSSR_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_direction, float2 screen_size, float depth_buffer_thickness, uint eyeIndex)
 {
     // Reject hits outside the view frustum
     if ((hit.x < 0.0f) || (hit.y < 0.0f) || (hit.x > 1.0f) || (hit.y > 1.0f))
@@ -274,14 +274,14 @@ float FFX_SSSR_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_directi
     float3 hit_normalVS;
     float hit_roughness;
     GetNormalRoughness(texel_coords, hit_normalVS, hit_roughness);
-    float3 hit_normal = normalize(mul(FrameBuffer::CameraViewInverse[0], float4(hit_normalVS, 0)).xyz);
+    float3 hit_normal = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(hit_normalVS, 0)).xyz);
     if (dot(hit_normal, world_space_ray_direction) > 0)
     {
         return 0;
     }
 
-    float3 view_space_surface = FFX_SSSR_ScreenSpaceToViewSpace(float3(hit.xy, surface_z));
-    float3 view_space_hit     = FFX_SSSR_ScreenSpaceToViewSpace(hit);
+    float3 view_space_surface = FFX_SSSR_ScreenSpaceToViewSpace(float3(hit.xy, surface_z), eyeIndex);
+    float3 view_space_hit     = FFX_SSSR_ScreenSpaceToViewSpace(hit, eyeIndex);
     float  distance           = length(view_space_surface - view_space_hit);
 
     // Fade out hits near the screen borders
@@ -384,8 +384,6 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
     
     float2 uv = float2(coords.xy + 0.5) * SharedData::BufferDim.zw;
     uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
-	uv *= FrameBuffer::DynamicResolutionParams2.xy;  // Adjust for dynamic res
-	uv = Stereo::ConvertFromStereoUV(uv, eyeIndex);
 
     float3 normalVS;
     float roughness;
@@ -456,7 +454,8 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
                                                       uv,
                                                       world_space_ray,
                                                       screen_size,
-                                                      thickness
+                                                      thickness,
+                                                      eyeIndex
                                                       )
                                      : 0;
         
