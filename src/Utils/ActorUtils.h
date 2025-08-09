@@ -17,12 +17,12 @@ namespace Util
 {
 	/**
      * @brief Extracts the shape bounds from a collision object.
-     * @param Colliedobj Pointer to the collision object.
+     * @param collisionObj Pointer to the collision object.
      * @param centerPos Output: center position of the shape.
      * @param radius Output: radius of the shape.
      * @return True if bounds were successfully extracted, false otherwise.
      */
-	bool GetShapeBound(RE::bhkNiCollisionObject* Colliedobj, RE::NiPoint3& centerPos, float& radius);
+	bool GetShapeBound(RE::bhkNiCollisionObject* collisionObj, RE::NiPoint3& centerPos, float& radius);
 
 	/**
      * @brief Extracts the shape bounds from a hkpShape.
