@@ -152,10 +152,14 @@ namespace Util
 	float2 ConvertToDynamic(float2 a_size)
 	{
 		auto viewport = globals::game::graphicsState;
+		auto& runtimeData = viewport->GetRuntimeData();
+
+		if (runtimeData.dynamicResolutionLock)
+			return a_size;
 
 		return float2(
-			a_size.x * viewport->GetRuntimeData().dynamicResolutionWidthRatio,
-			a_size.y * viewport->GetRuntimeData().dynamicResolutionHeightRatio);
+			a_size.x * runtimeData.dynamicResolutionWidthRatio,
+			a_size.y * runtimeData.dynamicResolutionHeightRatio);
 	}
 
 	DispatchCount GetScreenDispatchCount(bool a_dynamic)
