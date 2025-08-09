@@ -578,18 +578,28 @@ struct BSInputDeviceManager_PollInputDevices
 			if (*a_events) {
 				if (auto device = (*a_events)->GetDevice()) {
 					if (globals::game::isVR) {
-						// Check if this is a VR device that should be blocked when menu is open
-						bool vrDevice = false;
-						vrDevice = (globals::game::isVR && ((device == RE::INPUT_DEVICES::INPUT_DEVICE::kVivePrimary) ||
-															   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kViveSecondary) ||
-															   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusPrimary) ||
-															   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusSecondary) ||
-															   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRPrimary) ||
-															   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRSecondary)));
-						// Block VR devices when menu is open to prevent game interaction
-						// Allow gamepad and non-VR devices to pass through
-						// Only block VR device if openvr is compatible with the in game vr menu
-						blockedDevice = !((device == RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad) || !vrDevice || (vrDevice && !globals::features::vr.IsOpenVRCompatible()));
+						// In VR, block mouse/keyboard input when menu is open (like Flatrim)
+						// Allow gamepad input to pass through
+						// Also handle VR controller devices based on OpenVR compatibility
+						bool isVRController = ((device == RE::INPUT_DEVICES::INPUT_DEVICE::kVivePrimary) ||
+							(device == RE::INPUT_DEVICES::INPUT_DEVICE::kViveSecondary) ||
+							(device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusPrimary) ||
+							(device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusSecondary) ||
+							(device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRPrimary) ||
+							(device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRSecondary));
+						
+						// Allow gamepad input to pass through always
+						if (device == RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad) {
+							blockedDevice = false;
+						}
+						// For VR controllers, only block if OpenVR is compatible
+						else if (isVRController) {
+							blockedDevice = globals::features::vr.IsOpenVRCompatible();
+						}
+						// For mouse/keyboard and other devices, block them (like Flatrim)
+						else {
+							blockedDevice = true;
+						}
 					} else {
 						// Block all devices except gamepad when menu is open
 						blockedDevice = (device != RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad);
