@@ -302,8 +302,8 @@ float Upscaling::GetTAAInputResolutionScale(uint qualityMode)
 void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 {
 	auto upscaleMethod = GetUpscaleMethod();
-	
-	// Delete or create resources as necessary 
+
+	// Delete or create resources as necessary
 	CheckResources(upscaleMethod);
 
 	// The game defaults this to a non-zero value
@@ -316,7 +316,7 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	// Disable water TAA when upscaling is enabled
 	bool* enableWaterTAA = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISTemporalAA) + 0x38LL);
 	*enableWaterTAA = upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA;
-	
+
 	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
 
 	if (upscaleMethod != UpscaleMethod::kNONE) {
@@ -557,7 +557,7 @@ void Upscaling::CreateSharedD3D12Resources()
 	texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 	inputColorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
 	outputColorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
-	
+
 	texDesc.Format = DXGI_FORMAT_R8_UNORM;
 	reactiveMaskShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
 
@@ -1008,7 +1008,6 @@ void Upscaling::UpscaleDepth()
 			ID3D11SamplerState* samplers[1] = { deferred->linearSampler };
 			context->PSSetSamplers(0, 1, samplers);
 		}
-
 
 		context->PSSetShader(GetDepthUpscalePS(), nullptr, 0);
 

@@ -67,7 +67,7 @@ ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarch()
 		float currentArea = renderSize.x * renderSize.y;
 		float areaScale = std::sqrt(currentArea / referenceArea);
 		uint scaledSampleCount = static_cast<uint>(std::round(sampleCount * 120 * areaScale));
-		
+
 		raymarchCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", { { "SAMPLE_COUNT", std::format("{}", scaledSampleCount).c_str() } }, "cs_5_0");
 	}
 	return raymarchCS;
@@ -79,7 +79,7 @@ ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarchRight()
 	static float2 lastRenderSize = { 0, 0 };
 
 	float2 renderSize = Util::ConvertToDynamic(globals::state->screenSize);
-	
+
 	if (sampleCount != bendSettings.SampleCount || lastRenderSize.x != renderSize.x || lastRenderSize.y != renderSize.y) {
 		sampleCount = bendSettings.SampleCount;
 		lastRenderSize = renderSize;
@@ -96,7 +96,7 @@ ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarchRight()
 		float currentArea = renderSize.x * renderSize.y;
 		float areaScale = std::sqrt(currentArea / referenceArea);
 		uint scaledSampleCount = static_cast<uint>(std::round(sampleCount * 120 * areaScale));
-		
+
 		raymarchRightCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", { { "SAMPLE_COUNT", std::format("{}", scaledSampleCount).c_str() }, { "RIGHT", "" } }, "cs_5_0");
 	}
 	return raymarchRightCS;
