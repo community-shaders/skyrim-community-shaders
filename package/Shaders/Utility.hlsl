@@ -78,6 +78,9 @@ struct VS_OUTPUT
 	float CullDistance : SV_CullDistance0;  // p11
 	uint EyeIndex : EYEIDX0;
 #endif  // VR
+#if defined(TREE_ANIM)
+	float TreeAlpha: TEXCOORD5;
+#endif
 };
 
 #ifdef VSHADER
@@ -154,6 +157,10 @@ VS_OUTPUT main(VS_INPUT input)
 	float2 treeTmp1 = SmoothSaturate(abs(2 * frac(float2(0.1, 0.25) * (TreeParams.w * TreeParams.y * TreeParams.x) + dot(input.PositionMS.xyz, 1.0.xxx) + 0.5) - 1));
 	float normalMult = (treeTmp1.x + 0.1 * treeTmp1.y) * (input.Color.w * TreeParams.z);
 	positionMS.xyz += normalMS.xyz * normalMult;
+#		endif
+
+		#if defined(TREE_ANIM)
+	vsout.TreeAlpha = input.Color.w;
 #		endif
 
 #		if defined(LOD_LANDSCAPE)
@@ -547,7 +554,11 @@ PS_OUTPUT main(PS_INPUT input)
 	baseTexCoord = input.TexCoord0.xy;
 #		endif
 #	endif
-	float4 baseColor = TexBaseSampler.SampleBias(SampBaseSampler, baseTexCoord, SharedData::MipBias);
+float adjustBias = 0;
+		#if defined(TREE_ANIM)
+	adjustBias = saturate(input.TreeAlpha * 10.0);
+		#endif
+	float4 baseColor = TexBaseSampler.SampleBias(SampBaseSampler, baseTexCoord, SharedData::MipBias + adjustBias);
 
 #	if defined(RENDER_SHADOWMAP_PB)
 	if (input.TexCoord1.z < 0) {
