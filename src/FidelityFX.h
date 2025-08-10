@@ -48,6 +48,7 @@ public:
 
 	void CreateFSRResources();
 	void DestroyFSRResources();
+	float GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityPreset);
 	void Upscale(
 		ID3D12Resource* a_inputColorTexture,
 		ID3D12Resource* a_motionVectorTexture,

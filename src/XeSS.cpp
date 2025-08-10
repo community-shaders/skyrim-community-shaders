@@ -95,7 +95,7 @@ void XeSS::DestroyXeSSResources()
 	}
 }
 
-float XeSS::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityPreset)
+float XeSS::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityMode)
 {
 	// Check if XeSS context is valid
 	if (!xessContext) {
@@ -116,7 +116,7 @@ float XeSS::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight,
 	}
 
 	xess_quality_settings_t xessQuality;
-	switch (qualityPreset) {
+	switch (qualityMode) {
 	case 1:
 		xessQuality = XESS_QUALITY_SETTING_QUALITY;
 		break;

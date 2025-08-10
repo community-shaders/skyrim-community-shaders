@@ -324,10 +324,10 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
 }
 
-float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityPreset)
+float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityMode)
 {
 	sl::DLSSMode dlssMode;
-	switch (qualityPreset) {
+	switch (qualityMode) {
 	case 1:
 		dlssMode = sl::DLSSMode::eMaxQuality;
 		break;

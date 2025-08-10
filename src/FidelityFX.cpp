@@ -231,6 +231,25 @@ void FidelityFX::DestroyFSRResources()
 		logger::critical("[FidelityFX] Failed to destroy FSR3 API context");
 }
 
+float FidelityFX::GetInputResolutionScale([[maybe_unused]] uint32_t outputWidth, [[maybe_unused]] uint32_t outputHeight, uint32_t qualityMode)
+{
+	float upscaleRatio = 1.0f;
+
+	ffx::QueryDescUpscaleGetUpscaleRatioFromQualityMode query{};
+	query.qualityMode = qualityMode;
+	query.pOutUpscaleRatio = &upscaleRatio;
+
+	if (ffx::Query(upscalingContext, query) != ffx::ReturnCode::Ok) {
+		logger::critical("[FidelityFX] Failed to query upscale ratio for quality preset {}", qualityMode);
+		return 1.0f;
+	}
+
+	// Convert upscale ratio to resolution scale (input resolution / output resolution)
+	float resolutionScale = 1.0f / upscaleRatio;
+
+	return resolutionScale;
+}
+
 void FidelityFX::Upscale(
 	ID3D12Resource* a_inputColorTexture,
 	ID3D12Resource* a_motionVectorTexture,

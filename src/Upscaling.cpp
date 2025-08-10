@@ -67,9 +67,9 @@ void Upscaling::DrawSettings()
 		const char* upscalePresets[] = { "Performance", "Balanced", "Quality", "Native AA" };
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			ImGui::SliderInt("Upscale Preset", (int*)&settings.upscalePreset, 0, 3, std::format("{}", upscalePresetsDLSS[3 - settings.upscalePreset]).c_str());
+			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 3, std::format("{}", upscalePresetsDLSS[3 - settings.qualityMode]).c_str());
 		else
-			ImGui::SliderInt("Upscale Preset", (int*)&settings.upscalePreset, 0, 3, std::format("{}", upscalePresets[3 - settings.upscalePreset]).c_str());
+			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 3, std::format("{}", upscalePresets[3 - settings.qualityMode]).c_str());
 	}
 
 	if (globals::fidelityFX->featureFSR3FG) {
@@ -334,11 +334,13 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 		auto screenSize = state->screenSize;
 
 		if (upscaleMethod == UpscaleMethod::kXESS) {
-			resolutionScale = globals::xess->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.upscalePreset);
+			resolutionScale = globals::xess->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
 		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
-			resolutionScale = globals::streamline->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.upscalePreset);
+			resolutionScale = globals::streamline->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
+		} else if (upscaleMethod == UpscaleMethod::kFSR) {
+			resolutionScale = globals::fidelityFX->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
 		} else {
-			resolutionScale = GetTAAInputResolutionScale(settings.upscalePreset);
+			resolutionScale = GetTAAInputResolutionScale(settings.qualityMode);
 		}
 
 		if (upscaleMethod != UpscaleMethod::kTAA) {

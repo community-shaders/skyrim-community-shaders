@@ -39,7 +39,7 @@ public:
 	{
 		uint upscaleMethod = (uint)UpscaleMethod::kDLSS;
 		uint upscaleMethodNoDLSS = (uint)UpscaleMethod::kFSR;
-		uint upscalePreset = 1;  // Default to Quality (1=Quality, 2=Balanced, 3=Performance, 0=Native AA)
+		uint qualityMode = 1;  // Default to Quality (1=Quality, 2=Balanced, 3=Performance, 0=Native AA)
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 1;
 		uint frameGenerationForceEnable = 0;
