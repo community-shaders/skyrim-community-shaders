@@ -1,13 +1,13 @@
 #include "FidelityFX.h"
+
+#include <directx/d3dx12.h>
+
 #include "Utils/FileSystem.h"
 
 #include "State.h"
 #include "Upscaling.h"
 
 #include "DX12SwapChain.h"
-#include <FidelityFX/host/backends/dx12/d3dx12.h>
-#include <FidelityFX/host/backends/dx12/ffx_dx12.h>
-#include <dx12/ffx_api_dx12.hpp>
 
 ffxFunctions ffxModule;
 
@@ -266,13 +266,13 @@ void FidelityFX::Upscale(
 	ffx::DispatchDescUpscale dispatchUpscale{};
 
 	dispatchUpscale.commandList = a_commandList;
-	dispatchUpscale.color = ffxApiGetResourceDX12(a_inputColorTexture, FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
-	dispatchUpscale.depth = ffxApiGetResourceDX12(a_depthTexture, FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
-	dispatchUpscale.motionVectors = ffxApiGetResourceDX12(a_motionVectorTexture, FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
-	dispatchUpscale.output = ffxApiGetResourceDX12(a_outputTexture, FFX_RESOURCE_STATE_UNORDERED_ACCESS);
-	dispatchUpscale.exposure = ffxApiGetResourceDX12(nullptr, FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
-	dispatchUpscale.reactive = ffxApiGetResourceDX12(a_reactiveMask, FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
-	dispatchUpscale.transparencyAndComposition = ffxApiGetResourceDX12(nullptr, FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+	dispatchUpscale.color = ffxApiGetResourceDX12(a_inputColorTexture, FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+	dispatchUpscale.depth = ffxApiGetResourceDX12(a_depthTexture, FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+	dispatchUpscale.motionVectors = ffxApiGetResourceDX12(a_motionVectorTexture, FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+	dispatchUpscale.output = ffxApiGetResourceDX12(a_outputTexture, FFX_API_RESOURCE_STATE_UNORDERED_ACCESS);
+	dispatchUpscale.exposure = ffxApiGetResourceDX12(nullptr, FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+	dispatchUpscale.reactive = ffxApiGetResourceDX12(a_reactiveMask, FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+	dispatchUpscale.transparencyAndComposition = ffxApiGetResourceDX12(nullptr, FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 
 	dispatchUpscale.jitterOffset.x = -a_jitter.x;
 	dispatchUpscale.jitterOffset.y = -a_jitter.y;

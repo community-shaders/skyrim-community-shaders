@@ -4,7 +4,7 @@
 #include "State.h"
 #include "Upscaling.h"
 
-#include <FidelityFX/host/backends/dx12/d3dx12.h>
+#include <directx/d3dx12.h>
 #include <magic_enum.hpp>
 
 // Define the static member

@@ -4,7 +4,7 @@
 #include "Deferred.h"
 #include "Hooks.h"
 #include "State.h"
-#include <FidelityFX/host/backends/dx12/d3dx12.h>
+#include <directx/d3dx12.h>
 #include <Windows.h>
 #include <reshade/reshade.hpp>
 
@@ -309,6 +309,36 @@ float Upscaling::GetTAAInputResolutionScale(uint qualityMode)
 	}
 }
 
+int32_t GetJitterPhaseCount(int32_t renderWidth, int32_t displayWidth)
+{
+	const float basePhaseCount = 8.0f;
+	const int32_t jitterPhaseCount = int32_t(basePhaseCount * pow((float(displayWidth) / renderWidth), 2.0f));
+	return jitterPhaseCount;
+}
+
+// Calculate halton number for index and base.
+static float Halton(int32_t index, int32_t base)
+{
+	float f = 1.0f, result = 0.0f;
+
+	for (int32_t currentIndex = index; currentIndex > 0;) {
+		f /= (float)base;
+		result = result + f * (float)(currentIndex % base);
+		currentIndex = (uint32_t)(floorf((float)(currentIndex) / (float)(base)));
+	}
+
+	return result;
+}
+
+void GetJitterOffset(float* outX, float* outY, int32_t index, int32_t phaseCount)
+{
+	const float x = Halton((index % phaseCount) + 1, 2) - 0.5f;
+	const float y = Halton((index % phaseCount) + 1, 3) - 0.5f;
+
+	*outX = x;
+	*outY = y;
+}
+
 void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 {
 	auto upscaleMethod = GetUpscaleMethod();
@@ -350,9 +380,9 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 			auto screenHeight = static_cast<int>(screenSize.y);
 			auto renderHeight = static_cast<int>(screenHeight * resolutionScale);
 
-			auto phaseCount = ffxFsr3GetJitterPhaseCount(renderWidth, screenWidth);
+			auto phaseCount = GetJitterPhaseCount(renderWidth, screenWidth);
 
-			ffxFsr3UpscalerGetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
+			GetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
 
 			if (globals::game::isVR)
 				a_viewport->projectionPosScaleX = -jitter.x / renderWidth;

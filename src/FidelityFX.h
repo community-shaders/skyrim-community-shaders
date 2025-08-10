@@ -1,10 +1,11 @@
 #pragma once
 
-#include <FidelityFX/host/backends/dx11/ffx_dx11.h>
-#include <FidelityFX/host/ffx_fsr3.h>
-#include <FidelityFX/host/ffx_interface.h>
+#include <d3d12.h>
+#include <winrt/base.h>
 
 #include <dx12/ffx_api_dx12.h>
+#include <dx12/ffx_api_dx12.hpp>
+
 #include <ffx_api.hpp>
 #include <ffx_api_loader.h>
 #include <ffx_api_types.h>
@@ -13,8 +14,6 @@
 
 #include "Buffer.h"
 #include "State.h"
-#include <d3d12.h>
-#include <winrt/base.h>
 
 class FidelityFX
 {
