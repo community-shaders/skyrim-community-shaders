@@ -5,7 +5,7 @@ cbuffer PerFrame : register(b0)
 	row_major float4x4 InvProjMatrix[2];
 	float LightsNear;
 	float LightsFar;
-	float pad0[2];
+	uint pad0[2];
 	uint4 ClusterSize;
 }
 
