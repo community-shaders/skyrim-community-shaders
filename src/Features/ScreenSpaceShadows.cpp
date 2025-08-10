@@ -132,12 +132,14 @@ void ScreenSpaceShadows::DrawShadows()
 	float2 renderSize = Util::ConvertToDynamic(screenSize);
 
 	int viewportSize[2] = { (int)renderSize.x, (int)renderSize.y };
-	// For VR, adjust viewport size for light coordinate calculation
-	if (globals::game::isVR)
-		viewportSize[0] /= 2;
-
 	int minRenderBounds[2] = { 0, 0 };
 	int maxRenderBounds[2] = { (int)renderSize.x, (int)renderSize.y };
+
+	if (globals::game::isVR) {
+		// VR: Use screen size for dispatch bounds (to match depth texture), render size for light calculations
+		viewportSize[0] /= 2;     // Per-eye render size for light calc
+		maxRenderBounds[0] /= 2;  // Per-eye screen size for dispatch
+	}
 
 	// Setup common render state
 	auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
@@ -207,23 +209,20 @@ void ScreenSpaceShadows::DrawShadows()
 		}
 	};
 
-	if (globals::game::isVR) {
-		// VR: Process both eyes with per-eye texture coordinates
-		float vrInvTexSizeX = 1.0f / (float)viewportSize[0];
-		float vrInvTexSizeY = 1.0f / (float)viewportSize[1];
+	float InvTexSizeX = 1.0f / (float)screenSize.x;
+	float InvTexSizeY = 1.0f / (float)screenSize.y;
 
-		DispatchEye("Left Eye", GetComputeRaymarch(), lightProjectionF.data(), vrInvTexSizeX, vrInvTexSizeY);
+	if (!globals::game::isVR) {
+		DispatchEye(nullptr, GetComputeRaymarch(), lightProjectionF.data(), InvTexSizeX, InvTexSizeY);
+	} else {
+		// VR: Process both eyes with per-eye texture coordinates (based on screen size for dispatch bounds)
+		InvTexSizeX = 2.0f / (float)screenSize.x;
+
+		DispatchEye("Left Eye", GetComputeRaymarch(), lightProjectionF.data(), InvTexSizeX, InvTexSizeY);
 
 		// Calculate light projection for right eye
 		auto lightProjectionRightF = CalculateLightProjection(1);
-
-		DispatchEye("Right Eye", GetComputeRaymarchRight(), lightProjectionRightF.data(), vrInvTexSizeX, vrInvTexSizeY);
-	} else {
-		// Non-VR: Single eye processing with full screen texture coordinates
-		float InvTexSizeX = 1.0f / (float)screenSize.x;
-		float InvTexSizeY = 1.0f / (float)screenSize.y;
-
-		DispatchEye(nullptr, GetComputeRaymarch(), lightProjectionF.data(), InvTexSizeX, InvTexSizeY);
+		DispatchEye("Right Eye", GetComputeRaymarchRight(), lightProjectionRightF.data(), InvTexSizeX, InvTexSizeY);
 	}
 
 	ID3D11ShaderResourceView* views[1]{ nullptr };
