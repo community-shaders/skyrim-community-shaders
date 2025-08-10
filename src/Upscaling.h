@@ -189,8 +189,18 @@ public:
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom)
 		{
-			auto resolutionScale = globals::upscaling->resolutionScale;
-			func(This, a_left * resolutionScale, a_top * resolutionScale, a_right * resolutionScale, a_bottom * resolutionScale);
+			auto viewport = globals::game::graphicsState;
+			auto& runtimeData = viewport->GetRuntimeData();
+
+			if (!runtimeData.dynamicResolutionLock) {
+				a_left = static_cast<int>(a_left * runtimeData.dynamicResolutionWidthRatio);
+				a_right = static_cast<int>(a_right * runtimeData.dynamicResolutionWidthRatio);
+
+				a_top = static_cast<int>(a_top * runtimeData.dynamicResolutionHeightRatio);
+				a_bottom = static_cast<int>(a_bottom * runtimeData.dynamicResolutionHeightRatio);
+			}
+
+			func(This, a_left, a_top, a_right, a_bottom);
 		}
 
 		static inline REL::Relocation<decltype(thunk)> func;
