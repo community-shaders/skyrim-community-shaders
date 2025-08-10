@@ -55,6 +55,7 @@ struct LinearLighting : Feature
 	{
 		uint enableLinearLighting;
 		uint enableGammaCorrection;
+		uint isDirLightLinear;
 		float dirLightMult;
 		float lightGamma;
 		float colorGamma;
@@ -73,9 +74,11 @@ struct LinearLighting : Feature
 		float projectedEffectMult;
 		float deferredEffectMult;
 		float otherEffectMult;
+		float pad[3];
 	};
 
 	uint tempDisable = false;
+	uint isDirLightLinear = false;
 	float dirLightMult = 1.0f;
 
 	virtual void DrawSettings() override;

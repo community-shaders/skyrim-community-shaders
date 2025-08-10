@@ -125,9 +125,9 @@ namespace Color
 #	endif
 	}
 
-	float3 Light(float3 color)
+	float3 Light(float3 color, bool isLinear = false)
 	{
-		color = ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.lightGamma) * SharedData::linearLightingSettings.lightMult : color;
+		color = (ENABLE_LL && !isLinear) ? pow(abs(color), SharedData::linearLightingSettings.lightGamma) * SharedData::linearLightingSettings.lightMult : color;
 #	if defined(TRUE_PBR)
 		return color * PBRLightingCompensation;  // Compensate for traditional Lambertian diffuse
 #	else

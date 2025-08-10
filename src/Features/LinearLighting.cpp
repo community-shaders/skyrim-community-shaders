@@ -88,6 +88,7 @@ LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 	auto data = PerFrameData{};
 	data.enableLinearLighting = settings.enableLinearLighting && !tempDisable;
 	data.enableGammaCorrection = settings.enableGammaCorrection;
+	data.isDirLightLinear = isDirLightLinear;
 	data.dirLightMult = dirLightMult;
 	data.lightGamma = settings.lightGamma;
 	data.colorGamma = settings.colorGamma;
@@ -106,5 +107,8 @@ LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 	data.projectedEffectMult = settings.projectedEffectMult;
 	data.deferredEffectMult = settings.deferredEffectMult;
 	data.otherEffectMult = settings.otherEffectMult;
+	for (auto& pad : data.pad) {
+		pad = 0.0f;
+	}
 	return data;
 }

@@ -197,6 +197,7 @@ namespace SharedData
 	{
 		uint enableLinearLighting;
 		uint enableGammaCorrection;
+		uint isDirLightLinear;
 		float dirLightMult;
 		float lightGamma;
 		float colorGamma;
@@ -215,6 +216,7 @@ namespace SharedData
 		float projectedEffectMult;
 		float deferredEffectMult;
 		float otherEffectMult;
+		float3 pad;
 	};
 
 	cbuffer FeatureData : register(b6)
