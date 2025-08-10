@@ -416,7 +416,7 @@ namespace FeatureIssues
 		// Common cleanup actions section
 		ImGui::TextColored(theme.Palette.Text, "Cleanup Actions:");
 		if (ImGui::Button("Open Features Folder")) {
-			std::filesystem::path featuresPath = Util::PathHelpers::GetFeaturesPath();
+			std::filesystem::path featuresPath = Util::PathHelpers::GetFeaturesRealPath();
 			ShellExecuteA(NULL, "open", featuresPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -424,7 +424,7 @@ namespace FeatureIssues
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Open Shaders Directory")) {
-			std::filesystem::path shadersPath = Util::PathHelpers::GetShadersPath();
+			std::filesystem::path shadersPath = Util::PathHelpers::GetShadersRealPath();
 			ShellExecuteA(NULL, "open", shadersPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {

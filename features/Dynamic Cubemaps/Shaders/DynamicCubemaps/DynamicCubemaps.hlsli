@@ -45,7 +45,7 @@ namespace DynamicCubemaps
 
 #		if defined(SKYLIGHTING)
 		if (SharedData::InInterior) {
-			float3 specularIrradiance = Color::IrradianceToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
+			float3 specularIrradiance = Color::IrradianceToLinear(EnvTexture.SampleLevel(SampColorSampler, R, level).xyz);
 
 			finalIrradiance += specularIrradiance;
 			return finalIrradiance;
@@ -102,7 +102,7 @@ namespace DynamicCubemaps
 
 #		if defined(SKYLIGHTING)
 		if (SharedData::InInterior) {
-			float3 specularIrradiance = Color::IrradianceToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
+			float3 specularIrradiance = Color::IrradianceToLinear(EnvTexture.SampleLevel(SampColorSampler, R, level).xyz);
 
 			finalIrradiance += specularIrradiance;
 
