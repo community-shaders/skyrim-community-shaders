@@ -57,6 +57,8 @@ public:
 	double refreshRate = 0.0f;
 	float resolutionScale = 1.0f;
 
+	bool wasUpscaled = false;
+
 	// FG FPS Measurement for Overlay
 	bool IsFrameGenerationActive() const;
 	float GetFrameGenerationFrameTime() const;
@@ -182,6 +184,8 @@ public:
 			func(a1, a3, er8_);
 
 			BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
+
+			upscaling->wasUpscaled = true;
 		}
 
 		static inline REL::Relocation<decltype(thunk)> func;
