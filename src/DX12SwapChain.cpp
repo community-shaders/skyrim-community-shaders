@@ -100,6 +100,10 @@ void DX12SwapChain::CreateInterop()
 	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
 	swapChainBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), upscaling->sharedD3D12Device.get());
+
+	for (int i = 0; i < 2; i++) {
+		uiBuffersWrapped[i] = new WrappedResource(texDesc11, d3d11Device.get(), upscaling->sharedD3D12Device.get());
+	}
 }
 
 DXGISwapChainProxy* DX12SwapChain::GetSwapChainProxy()
@@ -178,6 +182,12 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 
 	// Update the frame index
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
+
+	float clearColor[4]{ 0, 0, 0, 0 };
+	d3d11Context->ClearRenderTargetView(uiBuffersWrapped[frameIndex]->rtv, clearColor);
+
+	auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+	data.RTV = swapChainBufferWrapped->rtv;
 
 	return S_OK;
 }
@@ -395,4 +405,11 @@ HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetFrameStatistics(_Out_ DXGI_FRAM
 HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetLastPresentCount(_Out_ UINT* pLastPresentCount)
 {
 	return swapChain->GetLastPresentCount(pLastPresentCount);
+}
+
+void DX12SwapChain::SetUIBuffer()
+{
+	auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+	data.RTV = uiBuffersWrapped[frameIndex]->rtv;
+	d3d11Context->OMSetRenderTargets(1, &data.RTV, nullptr);
 }

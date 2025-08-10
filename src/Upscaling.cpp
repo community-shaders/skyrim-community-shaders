@@ -737,11 +737,14 @@ void Upscaling::PostDisplay()
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
 
-	BSImagespaceShaderISTemporalAA->taaEnabled = GetUpscaleMethod() == UpscaleMethod::kTAA;
+	BSImagespaceShaderISTemporalAA->taaEnabled = false;
 
 	globals::state->RenderReShade();
 
 	CopyHUDLessBuffer();
+	
+	if (d3d12Interop)
+		globals::dx12SwapChain->SetUIBuffer();
 }
 
 void Upscaling::TimerSleepQPC(int64_t targetQPC)

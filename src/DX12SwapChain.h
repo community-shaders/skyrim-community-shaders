@@ -76,6 +76,7 @@ public:
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc;
 
 	WrappedResource* swapChainBufferWrapped;
+	WrappedResource* uiBuffersWrapped[2];
 
 	winrt::com_ptr<ID3D11Device5> d3d11Device;
 	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context;
@@ -109,4 +110,6 @@ public:
 	HRESULT GetBuffer(void** ppSurface);
 	HRESULT Present(UINT SyncInterval, UINT Flags);
 	HRESULT GetDevice(_In_ REFIID riid, _COM_Outptr_ void** ppDevice);
+
+	void SetUIBuffer();
 };

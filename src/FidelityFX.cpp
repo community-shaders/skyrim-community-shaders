@@ -129,6 +129,14 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		logger::critical("[FidelityFX] Failed to configure frame generation!");
 	}
 
+	ffx::ConfigureDescFrameGenerationSwapChainRegisterUiResourceDX12 uiConfig{};
+	uiConfig.uiResource = ffxApiGetResourceDX12(swapChain->uiBuffersWrapped[swapChain->frameIndex]->resource.get());
+	uiConfig.flags = FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_USE_PREMUL_ALPHA;
+
+	if (ffx::Configure(swapChainContext, uiConfig) != ffx::ReturnCode::Ok) {
+		logger::critical("[FidelityFX] Failed to configure UI composition!");
+	}
+
 	if (a_useFrameGeneration) {
 		ffx::DispatchDescFrameGenerationPrepare dispatchParameters{};
 
@@ -141,16 +149,16 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 
 		auto gameViewport = globals::game::graphicsState;
 
-		float2 jitter;
-
-		if (globals::game::isVR)
-			jitter.x = -gameViewport->projectionPosScaleX * renderSize.x;
-		else
-			jitter.x = -gameViewport->projectionPosScaleX * renderSize.x / 2.0f;
-
-		jitter.y = gameViewport->projectionPosScaleY * renderSize.y / 2.0f;
-
 		if (wasUpscaled) {
+			float2 jitter;
+
+			if (globals::game::isVR)
+				jitter.x = -gameViewport->projectionPosScaleX * renderSize.x;
+			else
+				jitter.x = -gameViewport->projectionPosScaleX * renderSize.x / 2.0f;
+
+			jitter.y = gameViewport->projectionPosScaleY * renderSize.y / 2.0f;
+
 			dispatchParameters.jitterOffset.x = -jitter.x;
 			dispatchParameters.jitterOffset.y = -jitter.y;
 		} else {
