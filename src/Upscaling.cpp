@@ -935,7 +935,7 @@ void Upscaling::Upscale()
 			DX::ThrowIfFailed(sharedD3D12CommandAllocator->Reset());
 			DX::ThrowIfFailed(sharedD3D12CommandList->Reset(sharedD3D12CommandAllocator.get(), nullptr));
 
-			if (upscaleMethod == UpscaleMethod::kFSR){
+			if (upscaleMethod == UpscaleMethod::kFSR) {
 				globals::fidelityFX->Upscale(
 					inputColorBufferShared12->resource.get(),
 					motionVectorBufferShared12->resource.get(),
