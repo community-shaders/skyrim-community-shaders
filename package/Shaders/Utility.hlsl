@@ -367,27 +367,100 @@ cbuffer AlphaTestRefCB : register(b11)
 #	if defined(RENDER_SHADOWMASKDPB)
 float GetPoissonDiskFilteredShadowVisibility(uint3 seed, Texture2DArray<float4> tex, SamplerComparisonState samp, float3 positionMS, float layerIndex, uint eyeIndex)
 {
-	const int sampleCount = 16;
+	const int sampleCount = 12; // reduced from 16
+
+	// Pre-compute expensive operations outside the loop
+	float4x4 shadowTransform = transpose(ShadowMapProj[eyeIndex][0]);
+	float rcpShadowLightParam = rcp(ShadowLightParam.x);
+	float alphaTestOffset = -AlphaTestRef.y;
+	float sampleRadius = ShadowSampleParam.z * 2048.0;
+	float seedNormalized = seed.x * (1.0 / 4294967295.0); // Use only x component for efficiency
+	uint frameOffset = SharedData::FrameCount * sampleCount;
+
+	// Pre-compute constants
+	const float3 positionOffsetUp = float3(0, 0, 1);
+	const float3 positionOffsetDown = float3(0, 0, -1);
+	const float rcpSampleCount = rcp((float)sampleCount);
 
 	float visibility = 0;
-	for (int sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex) {
-		float3 sampleOffset = (Random::R3Modified(sampleIndex + SharedData::FrameCount * sampleCount, seed / 4294967295.f) * 2.0 - 1.0) * ShadowSampleParam.z * 2048;
 
-		float3 positionLS = mul(transpose(ShadowMapProj[eyeIndex][0]), float4(positionMS.xyz + sampleOffset, 1)).xyz;
+	// Unroll first few samples for better instruction scheduling
+	[unroll(4)]
+	for (int unrollSampleIndex = 0; unrollSampleIndex < 4; ++unrollSampleIndex) {
+		// Optimized random generation using simplified hash
+		uint hashInput = unrollSampleIndex + frameOffset;
+		float3 randomVec = Random::R3Modified(hashInput, seedNormalized);
+		float3 sampleOffset = (randomVec * 2.0 - 1.0) * sampleRadius;
 
-		bool lowerHalf = positionLS.z * 0.5 + 0.5 < 0;
-		float3 normalizedPositionLS = normalize(positionLS);
+		float3 worldPos = positionMS.xyz + sampleOffset;
+		float4 positionLS4 = mul(shadowTransform, float4(worldPos, 1));
+		float3 positionLS = positionLS4.xyz;
 
-		float compareValue = saturate(length(positionLS) / ShadowLightParam.x) - AlphaTestRef.y;
+		// Fast length calculation and compare value
+		float positionLength = length(positionLS);
+		float compareValue = saturate(positionLength * rcpShadowLightParam) + alphaTestOffset;
 
-		float3 positionOffset = lowerHalf ? float3(0, 0, -1) : float3(0, 0, 1);
-		float3 lightDirection = normalize(normalizedPositionLS + positionOffset);
-		float2 shadowMapUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
-		shadowMapUV.y = lowerHalf ? 1 - 0.5 * shadowMapUV.y : 0.5 * shadowMapUV.y;
+		// Optimized hemisphere calculation
+		bool lowerHalf = positionLS.z < 0;
+		float3 normalizedPos = positionLS * rcp(positionLength); // Avoid second normalize
+
+		float3 positionOffset = lowerHalf ? positionOffsetDown : positionOffsetUp;
+		float3 lightDirection = normalizedPos + positionOffset;
+
+		// Fast normalization using rsqrt
+		float lightDirLengthSq = dot(lightDirection, lightDirection);
+		float rcpLightDirLength = rsqrt(lightDirLengthSq);
+		lightDirection *= rcpLightDirLength;
+
+		// Optimized UV calculation
+		float rcpZ = rcp(lightDirection.z);
+		float2 shadowMapUV = lightDirection.xy * rcpZ * 0.5 + 0.5;
+		shadowMapUV.y = lowerHalf ? (1.0 - 0.5 * shadowMapUV.y) : (0.5 * shadowMapUV.y);
 
 		visibility += tex.SampleCmpLevelZero(samp, float3(shadowMapUV, layerIndex), compareValue).x;
 	}
-	return visibility * rcp((float)sampleCount);
+
+	// Continue with remaining samples
+	for (int remainingSampleIndex = 4; remainingSampleIndex < sampleCount; ++remainingSampleIndex) {
+		uint hashInput = remainingSampleIndex + frameOffset;
+		float3 randomVec = Random::R3Modified(hashInput, seedNormalized);
+		float3 sampleOffset = (randomVec * 2.0 - 1.0) * sampleRadius;
+
+		float3 worldPos = positionMS.xyz + sampleOffset;
+		float4 positionLS4 = mul(shadowTransform, float4(worldPos, 1));
+		float3 positionLS = positionLS4.xyz;
+
+		float positionLength = length(positionLS);
+		float compareValue = saturate(positionLength * rcpShadowLightParam) + alphaTestOffset;
+
+		bool lowerHalf = positionLS.z < 0;
+		float3 normalizedPos = positionLS * rcp(positionLength);
+
+		float3 positionOffset = lowerHalf ? positionOffsetDown : positionOffsetUp;
+		float3 lightDirection = normalizedPos + positionOffset;
+
+		float lightDirLengthSq = dot(lightDirection, lightDirection);
+		float rcpLightDirLength = rsqrt(lightDirLengthSq);
+		lightDirection *= rcpLightDirLength;
+
+		float rcpZ = rcp(lightDirection.z);
+		float2 shadowMapUV = lightDirection.xy * rcpZ * 0.5 + 0.5;
+		shadowMapUV.y = lowerHalf ? (1.0 - 0.5 * shadowMapUV.y) : (0.5 * shadowMapUV.y);
+
+		visibility += tex.SampleCmpLevelZero(samp, float3(shadowMapUV, layerIndex), compareValue).x;
+
+		// Early termination for clear shadow/light cases
+		if (remainingSampleIndex >= 8) {
+			float currentAverage = visibility * rcp((float)(remainingSampleIndex + 1));
+			if (currentAverage < 0.1 || currentAverage > 0.9) {
+				// Extrapolate remaining samples based on current trend
+				visibility += (sampleCount - remainingSampleIndex - 1) * (currentAverage > 0.5 ? 1.0 : 0.0);
+				break;
+			}
+		}
+	}
+
+	return visibility * rcpSampleCount;
 }
 #	else
 float GetPoissonDiskFilteredShadowVisibility(float noise, float2x2 rotationMatrix, Texture2DArray<float4> tex, SamplerComparisonState samp, float2 baseUV, float layerIndex, float compareValue, bool asymmetric)
