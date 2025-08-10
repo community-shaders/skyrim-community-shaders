@@ -227,7 +227,7 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 	if (previousUpscaleMode != a_upscalemethod) {
 
 		// Synchronise all pending GPU work before destroying contexts
-		// Otherwise resources will be desotroyed whilst in use, causing the device to crash
+		// Otherwise resources will be destroyed whilst in use, causing the device to crash
 		if (previousUpscaleMode == UpscaleMethod::kFSR || previousUpscaleMode == UpscaleMethod::kXESS) {
 			UINT64 fenceValue = sharedInteropFenceValue++;
 			DX::ThrowIfFailed(sharedD3D12CommandQueue->Signal(sharedD3D12Fence.get(), fenceValue));
