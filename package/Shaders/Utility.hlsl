@@ -79,7 +79,7 @@ struct VS_OUTPUT
 	uint EyeIndex : EYEIDX0;
 #endif  // VR
 #if defined(TREE_ANIM)
-	float TreeAlpha: TEXCOORD5;
+	float TreeAlpha: TEXCOORD6;
 #endif
 };
 
