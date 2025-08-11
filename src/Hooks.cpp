@@ -358,7 +358,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 		logger::info("[Frame Generation] Frame Generation enabled, using D3D12 proxy");
 
 		if (fidelityFX->module) {
-			D3D11CreateDevice(
+			DX::ThrowIfFailed(D3D11CreateDevice(
 				pAdapter,
 				DriverType,
 				Software,
@@ -368,7 +368,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 				SDKVersion,
 				ppDevice,
 				pFeatureLevel,
-				ppImmediateContext);
+				ppImmediateContext));
 
 			proxy->SetD3D11Device(*ppDevice);
 			proxy->SetD3D11DeviceContext(*ppImmediateContext);
@@ -386,12 +386,6 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 				streamline->slUpgradeInterface((void**)&(*ppSwapChain));
 				streamline->slSetD3DDevice(*ppDevice);
 				streamline->PostDevice();
-			}
-
-			IDXGIFactory* factory = nullptr;
-			if (SUCCEEDED((*ppSwapChain)->GetParent(IID_PPV_ARGS(&factory)))) {
-				factory->MakeWindowAssociation(pSwapChainDesc->OutputWindow, DXGI_MWA_NO_WINDOW_CHANGES);
-				factory->Release();
 			}
 
 			return S_OK;
