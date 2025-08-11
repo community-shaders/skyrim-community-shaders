@@ -1,20 +1,20 @@
 #pragma once
 
-#include <nlohmann/json.hpp>
-#include <filesystem>
-#include <string>
-#include <vector>
-#include <unordered_map>
 #include <ctime>
+#include <filesystem>
+#include <nlohmann/json.hpp>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 using json = nlohmann::json;
 
 /**
  * @brief Manages layered JSON override system for Community Shaders features
- * 
+ *
  * This class handles discovery and application of feature setting overrides
  * from external mod files without requiring changes to existing feature code.
- * 
+ *
  * Override files follow the format: {ModName}_{FeatureShortName}.json
  * or {ModName}_Global.json for global overrides affecting multiple features.
  */
@@ -28,14 +28,14 @@ public:
 		std::string filePath;
 		json overrideData;
 		bool isGlobal = false;
-		
+
 		// Metadata from override file
 		std::string version;
 		std::string description;
 		bool enabled = true;
-		
+
 		// Tracking for first-time application
-		std::string fileHash;  // Hash of override file content for change detection
+		std::string fileHash;          // Hash of override file content for change detection
 		std::time_t firstApplied = 0;  // Timestamp when first applied
 	};
 

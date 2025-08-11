@@ -5,6 +5,7 @@ The Settings Override System allows mods to provide custom configuration overrid
 ## Directory Structure
 
 Override files should be placed in:
+
 ```
 Data\SKSE\Plugins\CommunityShaders\Overrides\
 ```
@@ -14,59 +15,65 @@ Data\SKSE\Plugins\CommunityShaders\Overrides\
 Override files must follow these naming patterns:
 
 ### Feature-Specific Overrides
+
 ```
 {ModName}_{FeatureShortName}.json
 ```
 
 Examples:
-- `MyMod_Skylighting.json` - Overrides for Skylighting feature
-- `EnhancedSSGI_ScreenSpaceGI.json` - Overrides for Screen Space GI feature
-- `WaterTweaks_WaterEffects.json` - Overrides for Water Effects feature
+
+-   `MyMod_Skylighting.json` - Overrides for Skylighting feature
+-   `EnhancedSSGI_ScreenSpaceGI.json` - Overrides for Screen Space GI feature
+-   `WaterTweaks_WaterEffects.json` - Overrides for Water Effects feature
 
 ### Global Overrides
+
 ```
 {ModName}_Global.json
 ```
 
 Examples:
-- `PerformanceOptimizer_Global.json` - Global settings changes
-- `MyMod_Global.json` - Global configuration overrides
+
+-   `PerformanceOptimizer_Global.json` - Global settings changes
+-   `MyMod_Global.json` - Global configuration overrides
 
 ## File Format
 
 Override files use JSON format and should contain only the settings you want to override, not the complete feature configuration.
 
 ### Feature Override Example
+
 ```json
 {
-  "MaxZenith": 2.0,
-  "MinDiffuseVisibility": 0.15,
-  "_metadata": {
-    "modName": "Enhanced Skylighting",
-    "version": "1.2.0",
-    "description": "Optimized Skylighting settings for better performance",
-    "enabled": true
-  }
+    "MaxZenith": 2.0,
+    "MinDiffuseVisibility": 0.15,
+    "_metadata": {
+        "modName": "Enhanced Skylighting",
+        "version": "1.2.0",
+        "description": "Optimized Skylighting settings for better performance",
+        "enabled": true
+    }
 }
 ```
 
 ### Global Override Example
+
 ```json
 {
-  "General": {
-    "Enable Shaders": true,
-    "Enable Async": true
-  },
-  "Advanced": {
-    "Log Level": "info",
-    "Compiler Threads": 8
-  },
-  "_metadata": {
-    "modName": "Performance Optimizer",
-    "version": "1.0.0",
-    "description": "Global settings optimized for performance",
-    "enabled": true
-  }
+    "General": {
+        "Enable Shaders": true,
+        "Enable Async": true
+    },
+    "Advanced": {
+        "Log Level": "info",
+        "Compiler Threads": 8
+    },
+    "_metadata": {
+        "modName": "Performance Optimizer",
+        "version": "1.0.0",
+        "description": "Global settings optimized for performance",
+        "enabled": true
+    }
 }
 ```
 
@@ -74,23 +81,23 @@ Override files use JSON format and should contain only the settings you want to 
 
 The `_metadata` section is optional but recommended. It provides information about the override and is displayed in the UI:
 
-- `modName`: Display name of your mod
-- `version`: Version of your override file
-- `description`: Description of what the override does
-- `enabled`: Whether the override is enabled by default (optional, defaults to true)
+-   `modName`: Display name of your mod
+-   `version`: Version of your override file
+-   `description`: Description of what the override does
+-   `enabled`: Whether the override is enabled by default (optional, defaults to true)
 
 ## Feature Short Names
 
 To create feature-specific overrides, you need to use the correct feature short name. Common feature short names include:
 
-- `Skylighting` - Skylighting feature
-- `ScreenSpaceGI` - Screen Space Global Illumination
-- `VolumetricLighting` - Volumetric Lighting
-- `WaterEffects` - Water Effects
-- `TerrainShadows` - Terrain Shadows
-- `SubsurfaceScattering` - Subsurface Scattering
-- `DynamicCubemaps` - Dynamic Cubemaps
-- `CloudShadows` - Cloud Shadows
+-   `Skylighting` - Skylighting feature
+-   `ScreenSpaceGI` - Screen Space Global Illumination
+-   `VolumetricLighting` - Volumetric Lighting
+-   `WaterEffects` - Water Effects
+-   `TerrainShadows` - Terrain Shadows
+-   `SubsurfaceScattering` - Subsurface Scattering
+-   `DynamicCubemaps` - Dynamic Cubemaps
+-   `CloudShadows` - Cloud Shadows
 
 You can find the complete list of feature short names in the Community Shaders UI under the "Overrides" tab.
 
@@ -104,16 +111,18 @@ You can find the complete list of feature short names in the Community Shaders U
 ## Managing Overrides
 
 ### In-Game UI
-- Navigate to the "Overrides" tab in the Community Shaders menu
-- View all discovered override files
-- Enable/disable individual overrides
-- Refresh to discover new override files
-- View override file contents and metadata
+
+-   Navigate to the "Overrides" tab in the Community Shaders menu
+-   View all discovered override files
+-   Enable/disable individual overrides
+-   Refresh to discover new override files
+-   View override file contents and metadata
 
 ### Enable/Disable System
-- The entire override system can be toggled on/off
-- Individual overrides can be enabled/disabled
-- Changes take effect on next game restart
+
+-   The entire override system can be toggled on/off
+-   Individual overrides can be enabled/disabled
+-   Changes take effect on next game restart
 
 ## Best Practices for Mod Authors
 
@@ -127,22 +136,27 @@ You can find the complete list of feature short names in the Community Shaders U
 ## Troubleshooting
 
 ### Override Not Applied
-- Check file naming follows the correct pattern
-- Verify JSON syntax is valid
-- Ensure feature short name is correct
-- Check that override system is enabled in the UI
-- Look for errors in the Community Shaders log
+
+-   Check file naming follows the correct pattern
+-   Verify JSON syntax is valid
+-   Ensure feature short name is correct
+-   Check that override system is enabled in the UI
+-   Look for errors in the Community Shaders log
 
 ### JSON Validation
+
 Use a JSON validator to ensure your override files have valid syntax:
-- No trailing commas
-- Proper quotation marks around strings
-- Balanced brackets and braces
+
+-   No trailing commas
+-   Proper quotation marks around strings
+-   Balanced brackets and braces
 
 ### Log Messages
+
 Community Shaders logs override discovery and application:
-- Check `CommunityShaders.log` for override-related messages
-- Look for "Discovered X override files" and "Applied X override(s)" messages
+
+-   Check `CommunityShaders.log` for override-related messages
+-   Look for "Discovered X override files" and "Applied X override(s)" messages
 
 ## Examples
 

@@ -1,16 +1,18 @@
 #include "SettingsOverrideManager.h"
 
-#include <fstream>
-#include <regex>
 #include <ctime>
-#include <sstream>
+#include <fstream>
 #include <iomanip>
+#include <regex>
+#include <sstream>
 
 using namespace SKSE;
 
-namespace {
+namespace
+{
 	// Simple hash function for file contents
-	std::string ComputeContentHash(const std::string& content) {
+	std::string ComputeContentHash(const std::string& content)
+	{
 		std::hash<std::string> hasher;
 		auto hash = hasher(content);
 		std::ostringstream oss;
@@ -29,7 +31,7 @@ size_t SettingsOverrideManager::DiscoverOverrides()
 	featureOverrideMap.clear();
 
 	auto overridesDir = GetOverridesDirectory();
-	
+
 	if (!std::filesystem::exists(overridesDir)) {
 		logger::info("Overrides directory does not exist: {}", overridesDir.string());
 		discovered = true;
@@ -48,15 +50,15 @@ size_t SettingsOverrideManager::DiscoverOverrides()
 			if (overrideInfo) {
 				size_t index = overrides.size();
 				overrides.push_back(std::move(*overrideInfo));
-				
+
 				// Map feature overrides for quick lookup
 				const auto& override = overrides[index];
 				if (!override.isGlobal) {
 					featureOverrideMap[override.featureName].push_back(index);
 				}
-				
-				logger::info("Loaded override: {} for {}", 
-					override.modName, 
+
+				logger::info("Loaded override: {} for {}",
+					override.modName,
 					override.isGlobal ? "Global" : override.featureName);
 			}
 		}
@@ -76,7 +78,7 @@ size_t SettingsOverrideManager::ApplyOverrides(const std::string& featureName, j
 	}
 
 	size_t appliedCount = 0;
-	
+
 	auto it = featureOverrideMap.find(featureName);
 	if (it != featureOverrideMap.end()) {
 		for (size_t index : it->second) {
@@ -87,7 +89,7 @@ size_t SettingsOverrideManager::ApplyOverrides(const std::string& featureName, j
 					appliedCount++;
 					logger::debug("Applied override from {} to {}", override.modName, featureName);
 				} catch (const std::exception& e) {
-					logger::warn("Failed to apply override from {} to {}: {}", 
+					logger::warn("Failed to apply override from {} to {}: {}",
 						override.modName, featureName, e.what());
 				}
 			}
@@ -104,7 +106,7 @@ size_t SettingsOverrideManager::ApplyGlobalOverrides(json& mainJson)
 	}
 
 	size_t appliedCount = 0;
-	
+
 	for (const auto& override : overrides) {
 		if (override.isGlobal && override.enabled) {
 			try {
@@ -112,7 +114,7 @@ size_t SettingsOverrideManager::ApplyGlobalOverrides(json& mainJson)
 				appliedCount++;
 				logger::debug("Applied global override from {}", override.modName);
 			} catch (const std::exception& e) {
-				logger::warn("Failed to apply global override from {}: {}", 
+				logger::warn("Failed to apply global override from {}: {}",
 					override.modName, e.what());
 			}
 		}
@@ -124,26 +126,26 @@ size_t SettingsOverrideManager::ApplyGlobalOverrides(json& mainJson)
 std::vector<const SettingsOverrideManager::OverrideInfo*> SettingsOverrideManager::GetFeatureOverrides(const std::string& featureName) const
 {
 	std::vector<const OverrideInfo*> result;
-	
+
 	auto it = featureOverrideMap.find(featureName);
 	if (it != featureOverrideMap.end()) {
 		for (size_t index : it->second) {
 			result.push_back(&overrides[index]);
 		}
 	}
-	
+
 	return result;
 }
 
 void SettingsOverrideManager::SetOverrideEnabled(const std::string& modName, const std::string& featureName, bool isEnabled)
 {
 	for (auto& override : overrides) {
-		if (override.modName == modName && 
+		if (override.modName == modName &&
 			((featureName.empty() && override.isGlobal) || override.featureName == featureName)) {
 			override.enabled = isEnabled;
-			logger::info("{} override from {} for {}", 
-				isEnabled ? "Enabled" : "Disabled", 
-				modName, 
+			logger::info("{} override from {} for {}",
+				isEnabled ? "Enabled" : "Disabled",
+				modName,
 				featureName.empty() ? "Global" : featureName);
 			break;
 		}
@@ -209,7 +211,7 @@ size_t SettingsOverrideManager::ApplyNewOverrides(json& baseSettings, json& appl
 
 		// Create tracking key
 		std::string trackingKey = override.modName + "_Global";
-		
+
 		// Check if this override has been applied before
 		bool shouldApply = false;
 		if (!appliedOverrides.contains(trackingKey)) {
@@ -230,15 +232,15 @@ size_t SettingsOverrideManager::ApplyNewOverrides(json& baseSettings, json& appl
 			try {
 				MergeJson(baseSettings, override.overrideData);
 				appliedCount++;
-				
+
 				// Update tracking
 				appliedOverrides[trackingKey] = {
-					{"hash", override.fileHash},
-					{"firstApplied", currentTime},
-					{"lastApplied", currentTime},
-					{"version", override.version}
+					{ "hash", override.fileHash },
+					{ "firstApplied", currentTime },
+					{ "lastApplied", currentTime },
+					{ "version", override.version }
 				};
-				
+
 				logger::info("Applied global override from {}", override.modName);
 			} catch (const std::exception& e) {
 				logger::warn("Failed to apply global override from {}: {}", override.modName, e.what());
@@ -257,7 +259,7 @@ size_t SettingsOverrideManager::ApplyNewFeatureOverrides(const std::string& feat
 
 	size_t appliedCount = 0;
 	auto currentTime = std::time(nullptr);
-	
+
 	auto it = featureOverrideMap.find(featureName);
 	if (it != featureOverrideMap.end()) {
 		for (size_t index : it->second) {
@@ -268,7 +270,7 @@ size_t SettingsOverrideManager::ApplyNewFeatureOverrides(const std::string& feat
 
 			// Create tracking key
 			std::string trackingKey = override.modName + "_" + featureName;
-			
+
 			// Check if this override has been applied before
 			bool shouldApply = false;
 			if (!appliedOverrides.contains(trackingKey)) {
@@ -289,15 +291,15 @@ size_t SettingsOverrideManager::ApplyNewFeatureOverrides(const std::string& feat
 				try {
 					MergeJson(featureJson, override.overrideData);
 					appliedCount++;
-					
+
 					// Update tracking
 					appliedOverrides[trackingKey] = {
-						{"hash", override.fileHash},
-						{"firstApplied", currentTime},
-						{"lastApplied", currentTime},
-						{"version", override.version}
+						{ "hash", override.fileHash },
+						{ "firstApplied", currentTime },
+						{ "lastApplied", currentTime },
+						{ "version", override.version }
 					};
-					
+
 					logger::info("Applied override from {} to {}", override.modName, featureName);
 				} catch (const std::exception& e) {
 					logger::warn("Failed to apply override from {} to {}: {}", override.modName, featureName, e.what());
@@ -331,7 +333,7 @@ std::unique_ptr<SettingsOverrideManager::OverrideInfo> SettingsOverrideManager::
 		}
 
 		auto overrideInfo = std::make_unique<OverrideInfo>();
-		
+
 		auto [modName, featureName] = ParseOverrideFilename(filePath.filename().string());
 		overrideInfo->modName = modName;
 		overrideInfo->featureName = featureName;
@@ -372,17 +374,17 @@ std::pair<std::string, std::string> SettingsOverrideManager::ParseOverrideFilena
 	// Remove .json extension
 	std::string nameWithoutExt = filename;
 	const std::string jsonExt = ".json";
-	if (nameWithoutExt.length() >= jsonExt.length() && 
+	if (nameWithoutExt.length() >= jsonExt.length() &&
 		nameWithoutExt.substr(nameWithoutExt.length() - jsonExt.length()) == jsonExt) {
 		nameWithoutExt = nameWithoutExt.substr(0, nameWithoutExt.length() - jsonExt.length());
 	}
 
 	// Check for global override
 	const std::string globalSuffix = "_Global";
-	if (nameWithoutExt.length() >= globalSuffix.length() && 
+	if (nameWithoutExt.length() >= globalSuffix.length() &&
 		nameWithoutExt.substr(nameWithoutExt.length() - globalSuffix.length()) == globalSuffix) {
 		std::string modName = nameWithoutExt.substr(0, nameWithoutExt.length() - globalSuffix.length());
-		return { modName, "" }; // Empty feature name indicates global
+		return { modName, "" };  // Empty feature name indicates global
 	}
 
 	// Parse ModName_FeatureName format
