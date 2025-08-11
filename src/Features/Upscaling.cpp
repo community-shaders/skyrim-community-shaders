@@ -23,7 +23,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 void Upscaling::DrawSettings()
 {
 	// Display upscaling options in the UI
-	const char* upscaleModes[] = { "Disabled", "Temporal Anti-Aliasing", "AMD FSR", "Intel XeSS", "NVIDIA DLSS" };
+	const char* upscaleModes[] = { "Disabled", "TAA", "AMD FSR", "Intel XeSS", "NVIDIA DLSS" };
 
 	// Determine available modes
 	bool featureDLSS = streamline.featureDLSS;
@@ -45,7 +45,7 @@ void Upscaling::DrawSettings()
 			"Disabled:\n"
 			"Disable all methods.\n"
 			"\n"
-			"Temporal Anti-Aliasing:\n"
+			"TAA:\n"
 			"TAA uses frame history to smooth out jagged edges, reducing flickering and improving image stability.\n"
 			"\n"
 			"AMD FSR:\n"
