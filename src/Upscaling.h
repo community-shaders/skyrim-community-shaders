@@ -85,8 +85,6 @@ public:
 	ID3D11VertexShader* depthUpscaleVS = nullptr;
 	ID3D11VertexShader* GetDepthUpscaleVS();
 
-	float GetTAAInputResolutionScale(uint qualityMode);
-
 	ID3D11DepthStencilState* depthUpscaleState = nullptr;
 	ID3D11BlendState* depthUpscaleBlendState = nullptr;
 	ID3D11RasterizerState* depthUpscaleRasterizerState = nullptr;

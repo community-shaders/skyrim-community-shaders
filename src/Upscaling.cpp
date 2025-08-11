@@ -62,7 +62,7 @@ void Upscaling::DrawSettings()
 	auto upscaleMethod = GetUpscaleMethod();
 
 	// Display upscaling settings if applicable
-	if (upscaleMethod != UpscaleMethod::kNONE) {
+	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
 		const char* upscalePresetsDLSS[] = { "Performance", "Balanced", "Quality", "DLAA" };
 		const char* upscalePresets[] = { "Performance", "Balanced", "Quality", "Native AA" };
 
@@ -294,20 +294,6 @@ ID3D11VertexShader* Upscaling::GetDepthUpscaleVS()
 	return depthUpscaleVS;
 }
 
-float Upscaling::GetTAAInputResolutionScale(uint qualityMode)
-{
-	switch (qualityMode) {
-	case 1:
-		return 1.0f / 1.5f;
-	case 2:
-		return 1.0f / 1.7f;
-	case 3:
-		return 1.0f / 2.0f;
-	default:
-		return 1.0f;
-	}
-}
-
 int32_t GetJitterPhaseCount(int32_t renderWidth, int32_t displayWidth)
 {
 	const float basePhaseCount = 8.0f;
@@ -358,9 +344,7 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 
 	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
 
-	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
-
-	if (upscaleMethod != UpscaleMethod::kNONE) {
+	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
 		auto state = globals::state;
 		auto screenSize = state->screenSize;
 
@@ -370,8 +354,6 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 			resolutionScale = globals::streamline->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
 		} else if (upscaleMethod == UpscaleMethod::kFSR) {
 			resolutionScale = globals::fidelityFX->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
-		} else {
-			resolutionScale = GetTAAInputResolutionScale(settings.qualityMode);
 		}
 
 		auto screenWidth = static_cast<int>(screenSize.x);
@@ -380,7 +362,7 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 		auto screenHeight = static_cast<int>(screenSize.y);
 		auto renderHeight = static_cast<int>(screenHeight * resolutionScale);
 
-		auto phaseCount = upscaleMethod == UpscaleMethod::kTAA ? 8 : GetJitterPhaseCount(renderWidth, screenWidth);
+		auto phaseCount = GetJitterPhaseCount(renderWidth, screenWidth);
 
 		GetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
 
