@@ -1155,9 +1155,9 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 refractionColor = diffuseOutput.refractionColor;
 
-	float fogFactor = Color::FogAlpha(min(FogParam.w, pow(saturate(-diffuseOutput.depth * FogParam.y - FogParam.x), FogParam.z)));
-	float3 fogColor = lerp(Color::Fog(FogNearColor.xyz), Color::Fog(FogFarColor.xyz), fogFactor);
-	refractionColor = lerp(refractionColor, fogColor, fogFactor);
+	float fogFactor = min(FogParam.w, pow(saturate(-diffuseOutput.depth * FogParam.y - FogParam.x), FogParam.z));
+	float3 fogColor = Color::Fog(lerp(FogNearColor.xyz, FogFarColor.xyz, fogFactor));
+	refractionColor = lerp(refractionColor, fogColor, Color::FogAlpha(fogFactor));
 
 	float3 finalColor = lerp(refractionColor, finalColorPreFog, diffuseOutput.refractionMul);
 #						if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
