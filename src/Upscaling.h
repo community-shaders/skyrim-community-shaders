@@ -255,16 +255,17 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	struct GFxLoader_CreateMovie
+	struct GFxSpriteDef_GetFrameRate
 	{
-		static RE::GFxMovieDef* thunk(const char* a_filename, RE::GFxLoader::LoadConstants a_loadConstants, uint32_t a_memoryArena)
+		static float thunk(RE::GFxSpriteDef* This)
 		{
-			auto movieDef = func(a_filename, a_loadConstants, a_memoryArena);
-			static bool patched = false;
-			if (!patched)
-				stl::detour_vfunc<0x9, GFxMovieDef_GetFrameRate>(movieDef);
-			patched = true;
-			return movieDef;
+			auto frameRate = func(This);
+			auto upscaling = globals::upscaling;
+			if (upscaling->d3d12Interop && upscaling->settings.frameGenerationMode) {
+				float newFrameRate = std::min(60.0f, frameRate * 2.0f);
+				return std::max(frameRate, newFrameRate);
+			}
+			return frameRate;
 		}
 
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -285,7 +286,8 @@ public:
 		stl::write_thunk_call<Main_PostProcessing>(REL::RelocationID(100430, 107148).address() + REL::Relocate(0x1F0, 0x1E7, 0x206));
 		
 		// Patches user interface to reduce latency
-		stl::detour_thunk<GFxLoader_CreateMovie>(REL::RelocationID(80620, 84640));
+		stl::detour_thunk<GFxMovieDef_GetFrameRate>(REL::RelocationID(83381, 85326));
+		stl::detour_thunk<GFxSpriteDef_GetFrameRate>(REL::RelocationID(82110, 84186));
 
 		if (!REL::Module::IsVR()) {
 			// Patches RSSetScissorRect calls to use dynamic resolution
