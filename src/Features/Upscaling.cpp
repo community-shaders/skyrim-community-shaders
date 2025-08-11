@@ -205,6 +205,35 @@ void Upscaling::RestoreDefaultSettings()
 	settings = {};
 }
 
+void Upscaling::PostPostLoad()
+{
+	bool isGOG = !GetModuleHandle(L"steam_api64.dll");
+	stl::detour_thunk<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
+
+	// Calculates resolution and jitter
+	stl::write_thunk_call<Main_UpdateJitter>(REL::RelocationID(75460, 77245).address() + REL::Relocate(0xE5, isGOG ? 0x133 : 0xE2, 0x104));
+
+	// Disables the original dynamic resolution system
+	REL::safe_write(REL::RelocationID(35556, 36555).address() + REL::Relocate(0x2D, 0x2D, 0x25), REL::NOP5, sizeof(REL::NOP5));
+
+	// Performs upscaling in between volumetric lighting and post processing
+	stl::write_thunk_call<Main_PostProcessing>(REL::RelocationID(100430, 107148).address() + REL::Relocate(0x1F0, 0x1E7, 0x206));
+	
+	if (!REL::Module::IsVR()) {
+		// Patches RSSetScissorRect calls to use dynamic resolution
+		// This is a PC-specific function hence it was missing
+		stl::detour_thunk<SetScissorRect>(REL::RelocationID(75564, 77365));
+
+		// Patches facegen texture generation to not use dynamic resolution
+		stl::detour_thunk<BSFaceGenManager_UpdatePendingCustomizationTextures>(REL::RelocationID(26455, 27041));
+
+		// Patches precipitation camera to not use dynamic resolution
+		stl::write_thunk_call<Main_RenderPrecipitation>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x3A1, 0x3A1, 0x2FA));
+	}
+
+	logger::info("[Upscaling] Installed hooks");
+}
+
 Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
 {
 	if (globals::streamline->featureDLSS) {
@@ -1095,4 +1124,70 @@ void Upscaling::UpscaleDepth()
 
 		globals::state->EndPerfEvent();
 	}
+}
+
+void Upscaling::Main_UpdateJitter::thunk(RE::BSGraphics::State* a_state)
+{
+	func(a_state);
+	GetSingleton()->ConfigureUpscaling(a_state);
+}
+
+void Upscaling::MenuManagerDrawInterfaceStartHook::thunk(int64_t a1)
+{
+	GetSingleton()->PostDisplay();
+	func(a1);
+}
+
+void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a1, uint32_t a3, uint32_t er8_)
+{
+	auto upscaling = globals::upscaling;
+	auto upscaleMethod = upscaling->GetUpscaleMethod();
+	
+	upscaling->CopySharedD3D12Resources(upscaleMethod == UpscaleMethod::kFSR || upscaleMethod == UpscaleMethod::kXESS);
+
+	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA)
+		upscaling->PerformUpscaling();
+
+	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
+
+	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod == UpscaleMethod::kTAA;
+
+	func(a1, a3, er8_);
+
+	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
+
+	upscaling->wasUpscaled = true;
+}
+
+void Upscaling::SetScissorRect::thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom)
+{
+	auto viewport = globals::game::graphicsState;
+	auto& runtimeData = viewport->GetRuntimeData();
+
+	if (!runtimeData.dynamicResolutionLock) {
+		a_left = static_cast<int>(a_left * runtimeData.dynamicResolutionWidthRatio);
+		a_right = static_cast<int>(a_right * runtimeData.dynamicResolutionWidthRatio);
+
+		a_top = static_cast<int>(a_top * runtimeData.dynamicResolutionHeightRatio);
+		a_bottom = static_cast<int>(a_bottom * runtimeData.dynamicResolutionHeightRatio);
+	}
+
+	func(This, a_left, a_top, a_right, a_bottom);
+}
+
+void Upscaling::Main_RenderPrecipitation::thunk()
+{
+	auto& runtimeData = globals::game::graphicsState->GetRuntimeData();
+	runtimeData.dynamicResolutionLock = 1;
+	func();
+	runtimeData.dynamicResolutionLock = 0;
+}
+
+void Upscaling::BSFaceGenManager_UpdatePendingCustomizationTextures::thunk()
+{
+	auto& runtimeData = globals::game::graphicsState->GetRuntimeData();
+	runtimeData.dynamicResolutionLock = 1;
+	func();
+	runtimeData.dynamicResolutionLock = 0;
 }

@@ -27,6 +27,7 @@ struct WeatherPicker;
 struct PerformanceOverlay;
 struct WetnessEffects;
 struct ExtendedTranslucency;
+struct Upscaling;
 
 class ParticleLights;
 
@@ -35,7 +36,6 @@ class Deferred;
 struct TruePBR;
 class Menu;
 class Streamline;
-class Upscaling;
 class DX12SwapChain;
 class FidelityFX;
 class XeSS;
