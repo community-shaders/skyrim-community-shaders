@@ -47,8 +47,9 @@ public:
 		float DiffuseIBLScale = 0.5f;
 		float DALCAmount = 0.5f;
 		float IBLSaturation = 0.65f;
+		float FogAmount = 0.0f;
 		uint SampleUnderHorizonFromDynCube = 0;
-		uint pad[3];
+		uint pad[2];
 	} settings;
 
 	ID3D11ComputeShader* GetDiffuseIBLCS();

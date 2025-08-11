@@ -984,6 +984,10 @@ float3 GetSunColor(float3 normal, float3 viewDirection)
 #			include "InverseSquareLighting/InverseSquareLighting.hlsli"
 #		endif
 
+#		if defined(IBL)
+#			include "IBL/IBL.hlsli"
+#		endif
+
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
@@ -1158,6 +1162,12 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float fogFactor = min(FogParam.w, pow(saturate(-diffuseOutput.depth * FogParam.y - FogParam.x), FogParam.z));
 	float3 fogColor = lerp(FogNearColor.xyz, FogFarColor.xyz, fogFactor);
+#						if defined(IBL)
+	if (SharedData::iblSettings.EnableDiffuseIBL) {
+		float3 iblColor = Color::Saturation(ImageBasedLighting::GetDiffuseIBL(float3(0, 0, 0)), SharedData::iblSettings.IBLSaturation);
+		fogColor = lerp(fogColor, fogColor * iblColor, SharedData::iblSettings.FogAmount * SharedData::iblSettings.DiffuseIBLScale);
+	}
+#						endif
 	refractionColor = lerp(refractionColor, fogColor, fogFactor);
 
 	float3 finalColor = lerp(refractionColor, finalColorPreFog, diffuseOutput.refractionMul);

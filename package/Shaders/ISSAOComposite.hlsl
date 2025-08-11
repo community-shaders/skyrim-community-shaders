@@ -125,6 +125,10 @@ float SimplexNoise(float3 v)
 									 dot(p2, x2), dot(p3, x3)));
 }
 
+#	if defined(IBL)
+#		include "IBL/IBL.hlsli"
+#	endif
+
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
@@ -170,6 +174,12 @@ PS_OUTPUT main(PS_INPUT input)
 	float fogDistanceFactor = (2 * CameraNearFar.x * CameraNearFar.y) / ((CameraNearFar.y + CameraNearFar.x) - (2 * (1.01 * depth - 0.01) - 1) * (CameraNearFar.y - CameraNearFar.x));
 	float fogFactor = min(FogParam.w, pow(saturate(fogDistanceFactor * FogParam.y - FogParam.x), FogParam.z));
 	float3 fogColor = lerp(FogNearColor.xyz, FogFarColor.xyz, fogFactor);
+#		if defined(IBL)
+	if (SharedData::iblSettings.EnableDiffuseIBL) {
+		float3 iblColor = Color::Saturation(ImageBasedLighting::GetDiffuseIBL(float3(0, 0, 0)), SharedData::iblSettings.IBLSaturation);
+		fogColor = lerp(fogColor, fogColor * iblColor, SharedData::iblSettings.FogAmount * SharedData::iblSettings.DiffuseIBLScale);
+	}
+#		endif
 	if (depth < 0.999999) {
 		composedColor.xyz = FogNearColor.w * lerp(composedColor.xyz, fogColor, fogFactor);
 	}

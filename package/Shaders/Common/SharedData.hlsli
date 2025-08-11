@@ -181,8 +181,9 @@ namespace SharedData
 		float DiffuseIBLScale;
 		float DALCAmount;
 		float IBLSaturation;
+		float FogAmount;
 		uint SampleUnderHorizonFromDynCube;
-		uint3 pad;
+		uint2 pad;
 	};
 
 	struct ExtendedTranslucencySettings

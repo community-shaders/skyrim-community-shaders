@@ -11,6 +11,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	DiffuseIBLScale,
 	DALCAmount,
 	IBLSaturation,
+	FogAmount,
 	SampleUnderHorizonFromDynCube)
 
 void IBL::DrawSettings()
@@ -19,6 +20,7 @@ void IBL::DrawSettings()
 	ImGui::SliderFloat("Diffuse IBL Scale", &settings.DiffuseIBLScale, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("Diffuse IBL Saturation", &settings.IBLSaturation, 0.0f, 2.0f, "%.2f");
 	ImGui::SliderFloat("DALC Amount", &settings.DALCAmount, 0.0f, 1.0f, "%.2f");
+	ImGui::SliderFloat("Affects Fog Amount", &settings.FogAmount, 0.0f, 1.0f, "%.2f");
 	ImGui::Checkbox("[EXP] Sample Under Horizon From Dynamic Cubemaps", (bool*)&settings.SampleUnderHorizonFromDynCube);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
