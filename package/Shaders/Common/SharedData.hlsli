@@ -36,7 +36,7 @@ namespace SharedData
 		float3 pad0;
 	};
 
-	struct CPMSettings
+	struct ExtendedMaterialSettings
 	{
 		bool EnableComplexMaterial;
 		bool EnableParallax;
@@ -234,20 +234,20 @@ namespace SharedData
 
 	cbuffer FeatureData : register(b6)
 	{
-		SnowCoverSettings snowCoverSettings;
-		GrassLightingSettings grassLightingSettings;
-		CPMSettings extendedMaterialSettings;
-		CubemapCreatorSettings cubemapCreatorSettings;
-		TerraOccSettings terraOccSettings;
-		LightLimitFixSettings lightLimitFixSettings;
-		WetnessEffectsSettings wetnessEffectsSettings;
-		SkylightingSettings skylightingSettings;
 		CloudShadowsSettings cloudShadowsSettings;
-		LODBlendingSettings lodBlendingSettings;
-		HairSpecularSettings hairSpecularSettings;
-		TerrainVariationSettings terrainVariationSettings;
-		IBLSettings iblSettings;
+		CubemapCreatorSettings cubemapCreatorSettings;
+		ExtendedMaterialSettings extendedMaterialSettings;
 		ExtendedTranslucencySettings extendedTranslucencySettings;
+		GrassLightingSettings grassLightingSettings;
+		HairSpecularSettings hairSpecularSettings;
+		IBLSettings iblSettings;
+		LODBlendingSettings lodBlendingSettings;
+		LightLimitFixSettings lightLimitFixSettings;
+		SkylightingSettings skylightingSettings;
+		SnowCoverSettings snowCoverSettings;
+		TerraOccSettings terraOccSettings;
+		TerrainVariationSettings terrainVariationSettings;
+		WetnessEffectsSettings wetnessEffectsSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);
