@@ -1,6 +1,9 @@
 #include "Upscaling.h"
 
 #include "Upscaling/DX12SwapChain.h"
+#include "Upscaling/Streamline.h"
+#include "Upscaling/XeSS.h"
+#include "Upscaling/FidelityFX.h"
 #include "Deferred.h"
 #include "Hooks.h"
 #include "State.h"
@@ -19,13 +22,11 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void Upscaling::DrawSettings()
 {
-	auto streamline = globals::streamline;
-
 	// Display upscaling options in the UI
 	const char* upscaleModes[] = { "Disabled", "Temporal Anti-Aliasing", "AMD FSR", "Intel XeSS", "NVIDIA DLSS" };
 
 	// Determine available modes
-	bool featureDLSS = streamline->featureDLSS;
+	bool featureDLSS = streamline.featureDLSS;
 
 	uint* currentUpscaleMode = &settings.upscaleMethod;
 	uint availableModes = 4;
@@ -72,11 +73,11 @@ void Upscaling::DrawSettings()
 			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
 	}
 
-	if (globals::fidelityFX->featureFSR3FG) {
+	if (fidelityFX.featureFSR3FG) {
 		if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Text("Frame Generation interpolates real frames with generated ones for a smoother experience");
 			ImGui::Text("Uses AMD FSR 3.1 Frame Generation technology");
-			if (globals::fidelityFX && globals::fidelityFX->featureFSR3FG)
+			if (fidelityFX.featureFSR3FG)
 				ImGui::Text("AMD FSR 3.1 Frame Generation is available.");
 			ImGui::Text("Requires a D3D11 to D3D12 proxy which can create compatibility issues");
 			ImGui::Text("Toggling this setting requires a restart to work correctly");
@@ -101,7 +102,7 @@ void Upscaling::DrawSettings()
 			if (onlyRequiresRestart && settings.frameGenerationMode && !d3d12Interop)
 				ImGui::Text("Warning: Requires restart");
 
-			std::string backendLabel = globals::fidelityFX && globals::fidelityFX->isFrameGenActive ? "FSR3" : "None";
+			std::string backendLabel = fidelityFX.isFrameGenActive ? "FSR3" : "None";
 			std::string enabledLabel = "Enabled (" + backendLabel + ")";
 			const char* toggleModes[] = { "Disabled", "Enabled" };
 			const char* toggleModesFG[] = { "Disabled", enabledLabel.c_str() };
@@ -236,7 +237,7 @@ void Upscaling::PostPostLoad()
 
 Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
 {
-	if (globals::streamline->featureDLSS) {
+	if (streamline.featureDLSS) {
 		settings.upscaleMethod = std::clamp(settings.upscaleMethod, (uint)UpscaleMethod::kNONE, (uint)UpscaleMethod::kDLSS);
 		settings.qualityMode = std::clamp(settings.qualityMode, 0u, 4u);
 		return (UpscaleMethod)settings.upscaleMethod;
@@ -251,9 +252,6 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 {
 	static auto previousUpscaleMode = UpscaleMethod::kTAA;
 
-	auto streamline = globals::streamline;
-	auto fidelityFX = globals::fidelityFX;
-	auto xess = globals::xess;
 
 	if (previousUpscaleMode != a_upscalemethod) {
 		// Synchronise all pending GPU work before destroying contexts
@@ -268,16 +266,16 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 		}
 
 		if (previousUpscaleMode == UpscaleMethod::kDLSS)
-			streamline->DestroyDLSSResources();
+			streamline.DestroyDLSSResources();
 		else if (previousUpscaleMode == UpscaleMethod::kFSR)
-			fidelityFX->DestroyFSRResources();
+			fidelityFX.DestroyFSRResources();
 		else if (previousUpscaleMode == UpscaleMethod::kXESS)
-			xess->DestroyXeSSResources();
+			xess.DestroyXeSSResources();
 
 		if (a_upscalemethod == UpscaleMethod::kFSR)
-			fidelityFX->CreateFSRResources();
+			fidelityFX.CreateFSRResources();
 		else if (a_upscalemethod == UpscaleMethod::kXESS)
-			xess->CreateXeSSResources();
+			xess.CreateXeSSResources();
 
 		previousUpscaleMode = a_upscalemethod;
 	}
@@ -384,11 +382,11 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 			qualityMode = 4;
 
 		if (upscaleMethod == UpscaleMethod::kXESS) {
-			resolutionScale = globals::xess->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, qualityMode);
+			resolutionScale = xess.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, qualityMode);
 		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
-			resolutionScale = globals::streamline->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, qualityMode);
+			resolutionScale = streamline.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, qualityMode);
 		} else if (upscaleMethod == UpscaleMethod::kFSR) {
-			resolutionScale = globals::fidelityFX->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, qualityMode);
+			resolutionScale = fidelityFX.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, qualityMode);
 		} else {
 			logger::critical("[Upscaling] Invalid upscale method");
 		}
@@ -947,7 +945,7 @@ void Upscaling::Upscale()
 		state->BeginPerfEvent("Upscaling");
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			globals::streamline->Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), sl::DLSSPreset::ePresetK);
+			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), sl::DLSSPreset::ePresetK);
 		else {
 			// Copy input color texture to shared D3D12 resource (only dynamic resolution area)
 			auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
@@ -973,7 +971,7 @@ void Upscaling::Upscale()
 			DX::ThrowIfFailed(sharedD3D12CommandList->Reset(sharedD3D12CommandAllocator.get(), nullptr));
 
 			if (upscaleMethod == UpscaleMethod::kFSR) {
-				globals::fidelityFX->Upscale(
+				fidelityFX.Upscale(
 					inputColorBufferShared12->resource.get(),
 					motionVectorBufferShared12->resource.get(),
 					depthBufferShared12->resource.get(),
@@ -984,7 +982,7 @@ void Upscaling::Upscale()
 					(uint32_t)renderSize.y,
 					jitter);
 			} else {
-				globals::xess->Upscale(
+				xess.Upscale(
 					inputColorBufferShared12->resource.get(),
 					motionVectorBufferShared12->resource.get(),
 					depthBufferShared12->resource.get(),

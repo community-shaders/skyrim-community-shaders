@@ -22,11 +22,7 @@ class Streamline
 public:
 	static constexpr const wchar_t* PluginDir = L"Data\\SKSE\\Plugins\\Streamline";
 
-	static Streamline* GetSingleton()
-	{
-		static Streamline singleton;
-		return &singleton;
-	}
+	Streamline() = default;
 
 	inline std::string GetShortName() { return "Streamline"; }
 

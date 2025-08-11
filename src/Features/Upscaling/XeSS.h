@@ -26,11 +26,7 @@ class XeSS
 public:
 	static constexpr const wchar_t* PluginDir = L"Data\\SKSE\\Plugins\\XeSS";
 
-	static XeSS* GetSingleton()
-	{
-		static XeSS singleton;
-		return &singleton;
-	}
+	XeSS() = default;
 
 	HMODULE module = nullptr;
 

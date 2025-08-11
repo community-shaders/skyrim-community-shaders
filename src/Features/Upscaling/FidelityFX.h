@@ -20,11 +20,7 @@ class FidelityFX
 public:
 	static constexpr const wchar_t* PluginDir = L"Data\\SKSE\\Plugins\\FidelityFX";
 
-	static FidelityFX* GetSingleton()
-	{
-		static FidelityFX singleton;
-		return &singleton;
-	}
+	FidelityFX() = default;
 
 	HMODULE module = nullptr;
 

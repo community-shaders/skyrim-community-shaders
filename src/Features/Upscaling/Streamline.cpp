@@ -202,7 +202,7 @@ void Streamline::PostDevice()
  */
 void Streamline::CheckFrameConstants()
 {
-	if (frameChecker.IsNewFrame() && globals::streamline->initialized) {
+	if (frameChecker.IsNewFrame() && globals::features::upscaling.streamline.initialized) {
 		slGetNewFrameToken(frameToken, &globals::state->frameCount);
 
 		auto state = globals::state;
