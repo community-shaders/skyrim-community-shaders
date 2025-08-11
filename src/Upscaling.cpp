@@ -210,8 +210,8 @@ Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
 	if (globals::streamline->featureDLSS) {
 		settings.upscaleMethod = std::clamp(settings.upscaleMethod, (uint)UpscaleMethod::kNONE, (uint)UpscaleMethod::kDLSS);
 		return (UpscaleMethod)settings.upscaleMethod;
-	} 
-	
+	}
+
 	settings.upscaleMethodNoDLSS = std::clamp(settings.upscaleMethodNoDLSS, (uint)UpscaleMethod::kNONE, (uint)UpscaleMethod::kXESS);
 	return (UpscaleMethod)settings.upscaleMethodNoDLSS;
 }
@@ -225,7 +225,6 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 	auto xess = globals::xess;
 
 	if (previousUpscaleMode != a_upscalemethod) {
-
 		// Synchronise all pending GPU work before destroying contexts
 		// Otherwise resources will be destroyed whilst in use, causing the device to crash
 		if (previousUpscaleMode == UpscaleMethod::kFSR || previousUpscaleMode == UpscaleMethod::kXESS) {
@@ -401,7 +400,8 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	runtimeData.dynamicResolutionHeightRatio = resolutionScale;
 
 	// Disable dynamic resolution unless the game explictly enables it
-	runtimeData.dynamicResolutionLock = 1;
+	if (!globals::game::isVR)
+		runtimeData.dynamicResolutionLock = 1;
 
 	if (upscaleMethod == UpscaleMethod::kTAA)
 		resolutionScale = 1.0f;
@@ -995,9 +995,15 @@ void Upscaling::PerformUpscaling()
 
 	auto& runtimeData = globals::game::graphicsState->GetRuntimeData();
 
-	// Disable dynamic resolution past this point
-	runtimeData.dynamicResolutionLock = 1;
-
+	if (globals::game::isVR) {
+		runtimeData.dynamicResolutionPreviousWidthRatio = 1.0f;
+		runtimeData.dynamicResolutionPreviousHeightRatio = 1.0f;
+		runtimeData.dynamicResolutionWidthRatio = 1.0f;
+		runtimeData.dynamicResolutionHeightRatio = 1.0f;
+	} else {
+		// Disable dynamic resolution past this point
+		runtimeData.dynamicResolutionLock = 1;
+	}
 	// Updates the PerFrame constant buffer so that dynamic resolution settings are disabled
 	UpdateCameraData();
 }
