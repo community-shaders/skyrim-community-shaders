@@ -81,6 +81,7 @@ namespace globals
 		PerformanceOverlay performanceOverlay{};
 		WetnessEffects wetnessEffects{};
 		ExtendedTranslucency extendedTranslucency{};
+		Upscaling upscaling{};
 
 		namespace llf
 		{
@@ -138,7 +139,6 @@ namespace globals
 	Menu* menu = nullptr;
 	SIE::ShaderCache* shaderCache = nullptr;
 	Streamline* streamline = nullptr;
-	Upscaling* upscaling = nullptr;
 	DX12SwapChain* dx12SwapChain = nullptr;
 	FidelityFX* fidelityFX = nullptr;
 	XeSS* xess = nullptr;
@@ -151,7 +151,6 @@ namespace globals
 		deferred = Deferred::GetSingleton();
 		truePBR = TruePBR::GetSingleton();
 		streamline = Streamline::GetSingleton();
-		upscaling = Upscaling::GetSingleton();
 		dx12SwapChain = DX12SwapChain::GetSingleton();
 		fidelityFX = FidelityFX::GetSingleton();
 		xess = XeSS::GetSingleton();

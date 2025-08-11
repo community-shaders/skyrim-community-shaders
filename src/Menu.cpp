@@ -402,14 +402,14 @@ void Menu::DrawDisplaySettings()
 {
 	DisplaySettingsRenderer::RenderDisplaySettings(
 		[](const std::string& featureName) { return globals::state->IsFeatureDisabled(featureName); },
-		[]() { globals::upscaling->DrawSettings(); });
+		[]() { globals::features::upscaling.DrawSettings(); });
 }
 
 void Menu::DrawFooter()
 {
 	ImGui::BulletText(std::format("Game Version: {} {}", magic_enum::enum_name(REL::Module::GetRuntime()), Util::GetFormattedVersion(REL::Module::get().version()).c_str()).c_str());
 	ImGui::SameLine();
-	ImGui::BulletText(std::format("D3D12 Interop: {}", globals::upscaling->d3d12Interop ? "Active" : "Inactive").c_str());
+	ImGui::BulletText(std::format("D3D12 Interop: {}", globals::features::upscaling.d3d12Interop ? "Active" : "Inactive").c_str());
 	ImGui::SameLine();
 	ImGui::Text(std::format("GPU: {}", globals::state->adapterDescription.c_str()).c_str());
 }

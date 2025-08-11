@@ -49,15 +49,15 @@ void XeSS::LoadXeSS()
 
 void XeSS::CreateXeSSResources()
 {
-	auto upscaling = globals::upscaling;
-	if (!featureXeSS || !upscaling->sharedD3D12Device) {
+	auto& upscaling = globals::features::upscaling;
+	if (!featureXeSS || !upscaling.sharedD3D12Device) {
 		logger::error("[XeSS] XeSS not available or shared D3D12 device not available, cannot create resources");
 		return;
 	}
 
 	auto state = globals::state;
 
-	xess_result_t createResult = xessD3D12CreateContext(upscaling->sharedD3D12Device.get(), &xessContext);
+	xess_result_t createResult = xessD3D12CreateContext(upscaling.sharedD3D12Device.get(), &xessContext);
 	if (createResult != XESS_RESULT_SUCCESS) {
 		logger::critical("[XeSS] Failed to create XeSS context, error: {} ({})", magic_enum::enum_name(createResult), (int)createResult);
 		return;

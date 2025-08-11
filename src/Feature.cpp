@@ -29,6 +29,7 @@
 #include "Features/WaterEffects.h"
 #include "Features/WeatherPicker.h"
 #include "Features/WetnessEffects.h"
+#include "Features/Upscaling.h"
 #include "Menu.h"
 #include "Utils/Format.h"
 
@@ -222,7 +223,8 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::interiorSunShadows,
 		&globals::features::terrainVariation,
 		&globals::features::ibl,
-		&globals::features::extendedTranslucency
+		&globals::features::extendedTranslucency,
+		&globals::features::upscaling
 	};
 
 	if (REL::Module::IsVR()) {

@@ -41,7 +41,7 @@ void FidelityFX::LoadFFX()
 void FidelityFX::SetupFrameGeneration()
 {
 	auto swapChain = globals::dx12SwapChain;
-	auto upscaling = globals::upscaling;
+	auto& upscaling = globals::features::upscaling;
 
 	ffx::CreateContextDescFrameGeneration createFg{};
 	createFg.displaySize = { swapChain->swapChainDesc.Width, swapChain->swapChainDesc.Height };
@@ -50,7 +50,7 @@ void FidelityFX::SetupFrameGeneration()
 	createFg.backBufferFormat = ffxApiGetSurfaceFormatDX12(swapChain->swapChainDesc.Format);
 
 	ffx::CreateBackendDX12Desc createBackend{};
-	createBackend.device = upscaling->sharedD3D12Device.get();
+	createBackend.device = upscaling.sharedD3D12Device.get();
 
 	if (ffx::CreateContext(frameGenContext, nullptr, createFg, createBackend) != ffx::ReturnCode::Ok)
 		logger::critical("[FidelityFX] Failed to create frame generation context!");
@@ -65,13 +65,13 @@ void FidelityFX::SetupFrameGeneration()
  */
 void FidelityFX::Present(bool a_useFrameGeneration)
 {
-	auto upscaling = globals::upscaling;
+	auto& upscaling = globals::features::upscaling;
 	auto swapChain = globals::dx12SwapChain;
 	auto commandList = swapChain->commandLists[swapChain->frameIndex].get();
 
-	auto HUDLessColor = upscaling->HUDLessBufferShared12->resource.get();
-	auto depth = upscaling->depthBufferShared12->resource.get();
-	auto motionVectors = upscaling->motionVectorBufferShared12->resource.get();
+	auto HUDLessColor = upscaling.HUDLessBufferShared12->resource.get();
+	auto depth = upscaling.depthBufferShared12->resource.get();
+	auto motionVectors = upscaling.motionVectorBufferShared12->resource.get();
 
 	FfxApiSwapchainFramePacingTuning framePacingTuning{ 0.1f, 0.1f, true, 2, false };
 
@@ -113,7 +113,7 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 
 	auto state = globals::state;
 
-	auto wasUpscaled = upscaling->wasUpscaled;
+	auto wasUpscaled = upscaling.wasUpscaled;
 
 	auto screenSize = state->screenSize;
 	auto renderSize = wasUpscaled ? Util::ConvertToDynamic(state->screenSize, true) : screenSize;
@@ -217,7 +217,7 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 void FidelityFX::CreateFSRResources()
 {
 	auto state = globals::state;
-	auto upscaling = globals::upscaling;
+	auto& upscaling = globals::features::upscaling;
 
 	ffx::CreateContextDescUpscale createUpscaling;
 	createUpscaling.maxRenderSize.width = (uint)state->screenSize.x;
@@ -237,7 +237,7 @@ void FidelityFX::CreateFSRResources()
 	};
 
 	ffx::CreateBackendDX12Desc backendDesc{};
-	backendDesc.device = upscaling->sharedD3D12Device.get();
+	backendDesc.device = upscaling.sharedD3D12Device.get();
 
 	if (ffx::CreateContext(upscalingContext, nullptr, createUpscaling, backendDesc) != ffx::ReturnCode::Ok)
 		logger::critical("[FidelityFX] Failed to create FSR3 API context");

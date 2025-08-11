@@ -138,7 +138,6 @@ void State::Setup()
 			feature->SetupResources();
 	globals::deferred->SetupResources();
 	globals::xess->LoadXeSS();
-	globals::upscaling->CreateUpscalingResources();
 	SetupReShade();
 	if (initialized)
 		return;
@@ -287,20 +286,6 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 			}
 		}
 
-		auto upscaling = globals::upscaling;
-		auto& upscalingJson = settings[upscaling->GetShortName()];
-		if (upscalingJson.is_object()) {
-			logger::info("Loading Upscaling settings");
-			try {
-				upscaling->LoadSettings(upscalingJson);
-			} catch (...) {
-				logger::warn("Invalid settings for Upscaling, using default.");
-				upscaling->RestoreDefaultSettings();
-			}
-		} else {
-			logger::warn("Missing settings for Upscaling, using default.");
-		}
-
 		for (auto* feature : Feature::GetFeatureList()) {
 			try {
 				const std::string featureName = feature->GetShortName();
@@ -379,9 +364,9 @@ void State::Save(ConfigMode a_configMode)
 
 	settings["General"] = general;
 
-	auto upscaling = globals::upscaling;
-	auto& upscalingJson = settings[upscaling->GetShortName()];
-	upscaling->SaveSettings(upscalingJson);
+	auto& upscaling = globals::features::upscaling;
+	auto& upscalingJson = settings[upscaling.GetShortName()];
+	upscaling.SaveSettings(upscalingJson);
 
 	json originalShaders;
 	ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
@@ -721,7 +706,7 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 			data.MipBias = 0;
 		}
 
-		data.ResolutionScale = globals::upscaling->resolutionScale;
+		data.ResolutionScale = globals::features::upscaling.resolutionScale;
 
 		sharedDataCB->Update(data);
 	}

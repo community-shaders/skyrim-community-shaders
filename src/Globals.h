@@ -83,6 +83,7 @@ namespace globals
 		extern PerformanceOverlay performanceOverlay;
 		extern WetnessEffects wetnessEffects;
 		extern ExtendedTranslucency extendedTranslucency;
+		extern Upscaling upscaling;
 
 		namespace llf
 		{
@@ -246,7 +247,6 @@ namespace globals
 	extern Menu* menu;
 	extern SIE::ShaderCache* shaderCache;
 	extern Streamline* streamline;
-	extern Upscaling* upscaling;
 	extern DX12SwapChain* dx12SwapChain;
 	extern FidelityFX* fidelityFX;
 	extern XeSS* xess;

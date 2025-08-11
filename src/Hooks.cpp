@@ -217,10 +217,10 @@ struct IDXGISwapChain_Present
 	thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
 	{
 		auto state = globals::state;
-		auto upscaling = globals::upscaling;
+		auto& upscaling = globals::features::upscaling;
 		auto menu = globals::menu;
 
-		upscaling->CopyFrameGenerationResources();
+		upscaling.CopyFrameGenerationResources();
 		state->PresentReShade();
 		state->Reset();
 		menu->DrawOverlay();
@@ -229,7 +229,7 @@ struct IDXGISwapChain_Present
 
 		TracyD3D11Collect(state->tracyCtx);
 
-		upscaling->FrameLimiter();
+		upscaling.FrameLimiter();
 
 		return retval;
 	}
@@ -320,7 +320,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 
 	auto streamline = globals::streamline;
 	auto fidelityFX = globals::fidelityFX;
-	auto upscaling = globals::upscaling;
+	auto& upscaling = globals::features::upscaling;
 
 	streamline->LoadInterposer();
 
@@ -335,13 +335,13 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 			shouldProxy = false;
 
 	auto refreshRate = Upscaling::GetRefreshRate(pSwapChainDesc->OutputWindow);
-	upscaling->refreshRate = refreshRate;
+	upscaling.refreshRate = refreshRate;
 
 	if (shouldProxy) {
-		if (upscaling->settings.frameGenerationMode)
+		if (upscaling.settings.frameGenerationMode)
 			if (refreshRate >= 120)
 				shouldProxy = true;
-			else if (upscaling->settings.frameGenerationForceEnable)
+			else if (upscaling.settings.frameGenerationForceEnable)
 				shouldProxy = true;
 			else
 				shouldProxy = false;
@@ -349,12 +349,12 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 			shouldProxy = false;
 	}
 
-	upscaling->lowRefreshRate = refreshRate < 119;
-	upscaling->isWindowed = pSwapChainDesc->Windowed;
+	upscaling.lowRefreshRate = refreshRate < 119;
+	upscaling.isWindowed = pSwapChainDesc->Windowed;
 
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
 
-	upscaling->CreateSharedD3D12Device(pAdapter);
+	upscaling.CreateSharedD3D12Device(pAdapter);
 
 	if (shouldProxy) {
 		logger::info("[Frame Generation] Frame Generation enabled, using D3D12 proxy");
@@ -381,7 +381,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 
 			*ppSwapChain = proxy->GetSwapChainProxy();
 
-			upscaling->d3d12Interop = true;
+			upscaling.d3d12Interop = true;
 
 			if (streamline->initialized) {
 				streamline->slUpgradeInterface((void**)&(*ppDevice));
@@ -393,7 +393,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 			return S_OK;
 		} else {
 			logger::warn("[Frame Generation] amd_fidelityfx_dx12.dll is not loaded, skipping proxy");
-			upscaling->fidelityFXMissing = true;
+			upscaling.fidelityFXMissing = true;
 		}
 	}
 

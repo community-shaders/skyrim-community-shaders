@@ -16,11 +16,6 @@
 struct Upscaling : Feature
 {
 public:
-	static Upscaling* GetSingleton()
-	{
-		static Upscaling singleton;
-		return &singleton;
-	}
 
 	// Feature interface
 	virtual inline std::string GetName() override { return "Upscaling"; }
@@ -89,6 +84,7 @@ public:
 	virtual void LoadSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;
 	virtual void PostPostLoad() override;
+	virtual void SetupResources() override;
 
 	UpscaleMethod GetUpscaleMethod();
 
@@ -118,7 +114,6 @@ public:
 	Texture2D* transparencyCompositionMaskTexture = nullptr;
 
 	// Resource management
-	void CreateUpscalingResources();
 	void DestroyUpscalingResources();
 
 	// Shared D3D12 device and interop resources

@@ -172,7 +172,7 @@ void PerformanceOverlay::DrawSettings()
 			ImGui::Checkbox("Show Draw Calls", &this->settings.ShowDrawCalls);
 			ImGui::Checkbox("Show VRAM Usage", &this->settings.ShowVRAM);
 
-			bool isFrameGenerationActive = globals::upscaling && globals::upscaling->IsFrameGenerationActive();
+			bool isFrameGenerationActive = globals::features::upscaling.IsFrameGenerationActive();
 			if (this->settings.ShowFPS && isFrameGenerationActive) {
 				ImGui::Checkbox("Show Pre-FG Frametime Graph", &this->settings.ShowPreFGFrameTimeGraph);
 
@@ -1870,7 +1870,7 @@ void PerformanceOverlay::UpdateSummaryTestData(float smoothedFrameTime, float ot
 void PerformanceOverlay::UpdateGraphValues()
 {
 	// Check if Frame Generation is active
-	state.isFrameGenerationActive = globals::upscaling && globals::upscaling->IsFrameGenerationActive();
+	state.isFrameGenerationActive = globals::features::upscaling.IsFrameGenerationActive();
 
 	// Sync frame history buffer size with user settings
 	settings.FrameHistorySize = std::clamp(
@@ -1947,7 +1947,7 @@ void PerformanceOverlay::UpdateGraphValues()
 
 	if (state.isFrameGenerationActive) {
 		// Get frametime directly from the Frame Generation system
-		float fgDeltaTime = globals::upscaling->GetFrameGenerationFrameTime();
+		float fgDeltaTime = globals::features::upscaling.GetFrameGenerationFrameTime();
 
 		// Check if FSR frame generation is active (FSR doesn't provide timing data)
 		bool isFSRFrameGen = globals::fidelityFX && globals::fidelityFX->isFrameGenActive;

@@ -109,7 +109,7 @@ void Streamline::LoadInterposer()
 	pref.numFeaturesToLoad = _countof(featuresToLoad);
 
 	// Set log level from settings
-	switch (globals::upscaling->settings.streamlineLogLevel) {
+	switch (globals::features::upscaling.settings.streamlineLogLevel) {
 	case 2:
 		pref.logLevel = sl::LogLevel::eVerbose;
 		break;
@@ -233,8 +233,8 @@ void Streamline::CheckFrameConstants()
 
 		recalculateCameraMatrices(slConstants);
 
-		auto upscaling = globals::upscaling;
-		auto jitter = upscaling->jitter;
+		auto& upscaling = globals::features::upscaling;
+		auto jitter = upscaling.jitter;
 		slConstants.jitterOffset = { -jitter.x, -jitter.y };
 		slConstants.reset = sl::Boolean::eFalse;
 
@@ -264,7 +264,7 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	sl::DLSSOptions dlssOptions{};
 		
 	// Map quality mode to DLSS mode
-	uint32_t qualityMode = globals::upscaling->settings.qualityMode;
+	uint32_t qualityMode = globals::features::upscaling.settings.qualityMode;
 	switch (qualityMode) {
 	case 1:
 		dlssOptions.mode = sl::DLSSMode::eMaxQuality;

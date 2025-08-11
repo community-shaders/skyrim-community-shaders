@@ -430,7 +430,7 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	wasUpscaled = false;
 }
 
-void Upscaling::CreateUpscalingResources()
+void Upscaling::SetupResources()
 {
 	QueryPerformanceFrequency(&qpf);
 
@@ -1129,24 +1129,24 @@ void Upscaling::UpscaleDepth()
 void Upscaling::Main_UpdateJitter::thunk(RE::BSGraphics::State* a_state)
 {
 	func(a_state);
-	GetSingleton()->ConfigureUpscaling(a_state);
+	globals::features::upscaling.ConfigureUpscaling(a_state);
 }
 
 void Upscaling::MenuManagerDrawInterfaceStartHook::thunk(int64_t a1)
 {
-	GetSingleton()->PostDisplay();
+	globals::features::upscaling.PostDisplay();
 	func(a1);
 }
 
 void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a1, uint32_t a3, uint32_t er8_)
 {
-	auto upscaling = globals::upscaling;
-	auto upscaleMethod = upscaling->GetUpscaleMethod();
+	auto& upscaling = globals::features::upscaling;
+	auto upscaleMethod = upscaling.GetUpscaleMethod();
 	
-	upscaling->CopySharedD3D12Resources(upscaleMethod == UpscaleMethod::kFSR || upscaleMethod == UpscaleMethod::kXESS);
+	upscaling.CopySharedD3D12Resources(upscaleMethod == UpscaleMethod::kFSR || upscaleMethod == UpscaleMethod::kXESS);
 
 	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA)
-		upscaling->PerformUpscaling();
+		upscaling.PerformUpscaling();
 
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
@@ -1157,7 +1157,7 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a1, uint32_t a
 
 	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
 
-	upscaling->wasUpscaled = true;
+	upscaling.wasUpscaled = true;
 }
 
 void Upscaling::SetScissorRect::thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom)
