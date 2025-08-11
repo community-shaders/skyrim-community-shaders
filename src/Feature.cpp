@@ -2,7 +2,6 @@
 
 #include "FeatureIssues.h"
 #include "FeatureVersions.h"
-#include "SettingsOverrideManager.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExtendedMaterials.h"
@@ -31,6 +30,7 @@
 #include "Features/WeatherPicker.h"
 #include "Features/WetnessEffects.h"
 #include "Menu.h"
+#include "SettingsOverrideManager.h"
 #include "Utils/Format.h"
 
 #include "State.h"

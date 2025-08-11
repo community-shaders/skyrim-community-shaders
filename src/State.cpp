@@ -7,12 +7,12 @@
 #include "DX12SwapChain.h"
 #include "Deferred.h"
 #include "FeatureIssues.h"
-#include "SettingsOverrideManager.h"
 #include "Features/CloudShadows.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
 #include "Menu.h"
+#include "SettingsOverrideManager.h"
 #include "ShaderCache.h"
 #include "Streamline.h"
 #include "TruePBR.h"
@@ -198,7 +198,7 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 	};
 
 	// NEW LOADING ORDER: Default → Overrides → User
-	
+
 	// Step 1: Always start with default settings
 	logger::info("Loading default settings from: {}", defaultConfigFilePath);
 	if (!tryLoadConfig(defaultConfigFilePath)) {
@@ -216,10 +216,10 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 	auto overrideManager = SettingsOverrideManager::GetSingleton();
 	size_t overridesDiscovered = overrideManager->DiscoverOverrides();
 	json appliedOverrides = overrideManager->LoadAppliedOverridesTracking();
-	
+
 	if (overridesDiscovered > 0) {
 		logger::info("Discovered {} override files", overridesDiscovered);
-		
+
 		// Apply global overrides to main settings (only new/changed ones)
 		size_t newGlobalOverrides = overrideManager->ApplyNewOverrides(settings, appliedOverrides);
 		if (newGlobalOverrides > 0) {
@@ -235,7 +235,7 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 			try {
 				userFile >> userSettings;
 				userFile.close();
-				
+
 				// Merge user settings on top of (default + overrides)
 				for (auto& [key, value] : userSettings.items()) {
 					settings[key] = value;
@@ -346,15 +346,15 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 				bool isDisabled = disabledFeatures.contains(featureName) && disabledFeatures[featureName];
 				if (!isDisabled) {
 					logger::info("Loading Feature: '{}'", featureName);
-					
+
 					// Load base feature settings from merged config (default + user)
 					feature->Load(settings);
-					
+
 					// Apply new/changed feature-specific overrides if any
 					if (overridesDiscovered > 0) {
 						json featureJson;
 						feature->SaveSettings(featureJson);  // Get current settings as JSON
-						
+
 						size_t newFeatureOverrides = overrideManager->ApplyNewFeatureOverrides(featureName, featureJson, appliedOverrides);
 						if (newFeatureOverrides > 0) {
 							logger::info("Applied {} new/changed override(s) to {}", newFeatureOverrides, feature->GetName());
@@ -369,23 +369,23 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 					logger::info("Feature '{}' is disabled at boot.", featureName);
 				}
 			} catch (const std::exception& e) {
-				feature->failedLoadedMessage = feature->failedLoadedMessage.empty() ? 
-					(feature->GetName() + " failed to load. Check CommunityShaders.log") :
-					(feature->failedLoadedMessage + "\n" + feature->GetName() + " failed to load. Check CommunityShaders.log");
+				feature->failedLoadedMessage = feature->failedLoadedMessage.empty() ?
+				                                   (feature->GetName() + " failed to load. Check CommunityShaders.log") :
+				                                   (feature->failedLoadedMessage + "\n" + feature->GetName() + " failed to load. Check CommunityShaders.log");
 				logger::warn("Error loading setting for feature '{}': {}", feature->GetShortName(), e.what());
 			}
 		}
-		
+
 		// Save updated applied overrides tracking
 		if (overridesDiscovered > 0) {
 			overrideManager->SaveAppliedOverridesTracking(appliedOverrides);
 		}
-		
+
 		if (settings["Version"].is_string() && settings["Version"].get<std::string>() != Plugin::VERSION.string()) {
 			logger::info("Found older config for version {}; upgrading to {}", (std::string)settings["Version"], Plugin::VERSION.string());
 			Save(a_configMode);  // Use original config mode
 		}
-		
+
 		FeatureIssues::ScanForOrphanedFeatureINIs();
 
 		logger::info("Loading Settings Complete");
