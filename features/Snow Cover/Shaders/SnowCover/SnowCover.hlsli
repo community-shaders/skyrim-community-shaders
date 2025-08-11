@@ -123,8 +123,6 @@ namespace SnowCover
 	}
 
 #	if !defined(BASIC_SNOW_COVER)
-	// The main function calculating the amount of snow used (mult) and whether to use the main or the alt texture
-	// All the magic values you see were determined by testing in game, in other words, pulled from ass
 	float ApplySnowBase(float3 worldNormal, inout float2 uv, out bool alt, float disp, float3 p, float skylight, float waterDist, float viewDist)
 	{
 		// the range in which water level affects snow
