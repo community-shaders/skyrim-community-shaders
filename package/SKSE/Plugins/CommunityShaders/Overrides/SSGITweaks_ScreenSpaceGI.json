@@ -1,15 +1,15 @@
 {
-  "Enabled": true,
-  "EnableGI": true,
-  "NumSlices": 6,
-  "NumSteps": 10,
-  "ResolutionMode": 1,
-  "AORadius": 200.0,
-  "GIRadius": 300.0,
-  "_metadata": {
-    "modName": "SSGI Performance Tweaks",
-    "version": "2.1.0",
-    "description": "Balanced SSGI settings for good performance without sacrificing too much quality",
-    "enabled": true
-  }
+    "Enabled": true,
+    "EnableGI": true,
+    "NumSlices": 6,
+    "NumSteps": 10,
+    "ResolutionMode": 1,
+    "AORadius": 200.0,
+    "GIRadius": 300.0,
+    "_metadata": {
+        "modName": "SSGI Performance Tweaks",
+        "version": "2.1.0",
+        "description": "Balanced SSGI settings for good performance without sacrificing too much quality",
+        "enabled": true
+    }
 }
