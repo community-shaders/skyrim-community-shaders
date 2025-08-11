@@ -33,6 +33,7 @@
 #include "Features/TerrainHelper.h"
 #include "Features/TerrainShadows.h"
 #include "Features/TerrainVariation.h"
+#include "Features/UnifiedWater.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
@@ -74,6 +75,7 @@ namespace globals
 		TerrainBlending terrainBlending{};
 		TerrainHelper terrainHelper{};
 		TerrainShadows terrainShadows{};
+		UnifiedWater unifiedWater{};
 		VolumetricLighting volumetricLighting{};
 		VR vr{};
 		WaterEffects waterEffects{};
@@ -124,9 +126,11 @@ namespace globals
 		REL::Relocation<const RE::NiRTTI*> NiIntegerExtraDataRTTI;
 		REL::Relocation<const RE::NiRTTI*> BSLightingShaderPropertyRTTI;
 		REL::Relocation<const RE::NiRTTI*> BSEffectShaderPropertyRTTI;
+		REL::Relocation<const RE::NiRTTI*> BSWaterShaderPropertyRTTI;
 		REL::Relocation<const RE::NiRTTI*> NiParticleSystemRTTI;
 		REL::Relocation<const RE::NiRTTI*> NiBillboardNodeRTTI;
 		REL::Relocation<const RE::NiRTTI*> NiAlphaPropertyRTTI;
+		REL::Relocation<const RE::NiRTTI*> NiSourceTextureRTTI;
 	}
 
 	State* state = nullptr;
@@ -185,9 +189,11 @@ namespace globals
 			NiIntegerExtraDataRTTI = { RE::NiIntegerExtraData::Ni_RTTI };
 			BSLightingShaderPropertyRTTI = { RE::BSLightingShaderProperty::Ni_RTTI };
 			BSEffectShaderPropertyRTTI = { RE::BSEffectShaderProperty::Ni_RTTI };
+			BSWaterShaderPropertyRTTI = { RE::BSWaterShaderProperty::Ni_RTTI };
 			NiParticleSystemRTTI = { RE::NiParticleSystem::Ni_RTTI };
 			NiBillboardNodeRTTI = { RE::NiBillboardNode::Ni_RTTI };
 			NiAlphaPropertyRTTI = { RE::NiAlphaProperty::Ni_RTTI };
+			NiSourceTextureRTTI = { RE::NiSourceTexture::Ni_RTTI };
 		}
 
 		d3d::device = reinterpret_cast<ID3D11Device*>(game::renderer->GetRuntimeData().forwarder);
