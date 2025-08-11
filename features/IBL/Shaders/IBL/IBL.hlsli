@@ -26,7 +26,8 @@ namespace ImageBasedLighting
 
 	float3 GetFogIBLColor(float3 fogColor)
 	{
-		float3 iblColor = Color::Saturation(GetDiffuseIBL(float3(0, 0, 0)), SharedData::iblSettings.IBLSaturation) * Math::PI;
-		return lerp(fogColor, fogColor * iblColor, SharedData::iblSettings.FogAmount * SharedData::iblSettings.DiffuseIBLScale);
+		float3 directionalAmbientColor = Color::Ambient(max(0, mul(SharedData::DirectionalAmbient, float4(float3(0, 0, 0), 1.0))));
+		float3 iblColor = directionalAmbientColor * SharedData::iblSettings.DALCAmount + Color::Saturation(GetDiffuseIBL(float3(0, 0, 0)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+		return lerp(fogColor, iblColor, SharedData::iblSettings.FogAmount);
 	}
 }
