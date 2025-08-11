@@ -285,11 +285,11 @@ public:
 		// Performs upscaling in between volumetric lighting and post processing
 		stl::write_thunk_call<Main_PostProcessing>(REL::RelocationID(100430, 107148).address() + REL::Relocate(0x1F0, 0x1E7, 0x206));
 		
-		// Patches user interface to reduce latency
-		stl::detour_thunk<GFxMovieDef_GetFrameRate>(REL::RelocationID(83381, 85326));
-		stl::detour_thunk<GFxSpriteDef_GetFrameRate>(REL::RelocationID(82110, 84186));
-
 		if (!REL::Module::IsVR()) {
+			// Patches user interface to reduce latency
+			stl::detour_thunk<GFxMovieDef_GetFrameRate>(REL::RelocationID(83381, 85326));
+			stl::detour_thunk<GFxSpriteDef_GetFrameRate>(REL::RelocationID(82110, 84186));
+
 			// Patches RSSetScissorRect calls to use dynamic resolution
 			// This is a PC-specific function hence it was missing
 			stl::detour_thunk<SetScissorRect>(REL::RelocationID(75564, 77365));
