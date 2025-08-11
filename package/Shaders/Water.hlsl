@@ -1144,7 +1144,13 @@ PS_OUTPUT main(PS_INPUT input)
 #					if defined(VC)
 	float specularFraction = lerp(1, fresnel * diffuseOutput.refractionMul, distanceFactor);
 	float3 finalColorPreFog = lerp(diffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
-	float3 finalColor = lerp(finalColorPreFog, input.FogParam.xyz * PosAdjust[eyeIndex].w, input.FogParam.w);
+	float3 fogColor = input.FogParam.xyz;
+#						if defined(IBL)
+	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
+	}
+#						endif
+	float3 finalColor = lerp(finalColorPreFog, fogColor * PosAdjust[eyeIndex].w, input.FogParam.w);
 #						if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
 	// DEBUG MODE: Override water color with debug visualization
 	float3 debugColor = WetnessEffects::GetDebugWetnessColorStandard(waterData.rippleInfo, 2.0, 3.0);
