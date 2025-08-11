@@ -318,14 +318,14 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 
 	pSwapChainDesc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 
-	auto streamline = globals::streamline;
-	auto fidelityFX = globals::fidelityFX;
+	auto& streamline = globals::features::upscaling.streamline;
+	auto& fidelityFX = globals::features::upscaling.fidelityFX;
 	auto& upscaling = globals::features::upscaling;
 
-	streamline->LoadInterposer();
+	streamline.LoadInterposer();
 
-	if (streamline->initialized)
-		streamline->CheckFeatures(pAdapter);
+	if (streamline.initialized)
+		streamline.CheckFeatures(pAdapter);
 
 	auto proxy = globals::dx12SwapChain;
 
@@ -359,7 +359,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	if (shouldProxy) {
 		logger::info("[Frame Generation] Frame Generation enabled, using D3D12 proxy");
 
-		if (fidelityFX->module) {
+		if (fidelityFX.module) {
 			DX::ThrowIfFailed(D3D11CreateDevice(
 				pAdapter,
 				DriverType,
@@ -383,11 +383,11 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 
 			upscaling.d3d12Interop = true;
 
-			if (streamline->initialized) {
-				streamline->slUpgradeInterface((void**)&(*ppDevice));
-				streamline->slUpgradeInterface((void**)&(*ppSwapChain));
-				streamline->slSetD3DDevice(*ppDevice);
-				streamline->PostDevice();
+			if (streamline.initialized) {
+				streamline.slUpgradeInterface((void**)&(*ppDevice));
+				streamline.slUpgradeInterface((void**)&(*ppSwapChain));
+				streamline.slSetD3DDevice(*ppDevice);
+				streamline.PostDevice();
 			}
 
 			return S_OK;
@@ -410,11 +410,11 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 		pFeatureLevel,
 		ppImmediateContext);
 
-	if (streamline->initialized) {
-		streamline->slUpgradeInterface((void**)&(*ppDevice));
-		streamline->slUpgradeInterface((void**)&(*ppSwapChain));
-		streamline->slSetD3DDevice(*ppDevice);
-		streamline->PostDevice();
+	if (streamline.initialized) {
+		streamline.slUpgradeInterface((void**)&(*ppDevice));
+		streamline.slUpgradeInterface((void**)&(*ppSwapChain));
+		streamline.slSetD3DDevice(*ppDevice);
+		streamline.PostDevice();
 	}
 
 	return ret;
@@ -1053,7 +1053,7 @@ namespace Hooks
 	 */
 	void InstallD3DHooks()
 	{
-		globals::fidelityFX->LoadFFX();
+		globals::features::upscaling.fidelityFX.LoadFFX();
 
 		*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
 		*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", !REL::Module::IsVR() ? "CreateDXGIFactory" : "CreateDXGIFactory1");

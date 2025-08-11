@@ -6,6 +6,7 @@
 #include "State.h"
 #include "TruePBR.h"
 
+#include "Features/Upscaling.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/IBL.h"
 #include "Features/ScreenSpaceGI.h"
@@ -381,7 +382,7 @@ void Deferred::StartDeferred()
 
 void Deferred::DeferredPasses()
 {
-	globals::streamline->CheckFrameConstants();
+	globals::features::upscaling.streamline.CheckFrameConstants();
 
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "Deferred");

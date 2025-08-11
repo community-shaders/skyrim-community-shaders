@@ -56,9 +56,9 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	ffxSwapChainDesc.hwnd = a_swapChainDesc.OutputWindow;
 	ffxSwapChainDesc.swapchain = &swapChain;
 
-	auto fidelityFX = globals::fidelityFX;
+	auto& fidelityFX = globals::features::upscaling.fidelityFX;
 
-	if (ffx::CreateContext(fidelityFX->swapChainContext, nullptr, ffxSwapChainDesc) != ffx::ReturnCode::Ok) {
+	if (ffx::CreateContext(fidelityFX.swapChainContext, nullptr, ffxSwapChainDesc) != ffx::ReturnCode::Ok) {
 		logger::critical("[FidelityFX] Failed to create swap chain context!");
 	}
 
@@ -67,7 +67,7 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
 
-	fidelityFX->SetupFrameGeneration();
+	fidelityFX.SetupFrameGeneration();
 }
 
 void DX12SwapChain::CreateInterop()
@@ -158,7 +158,7 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 		}
 	}
 
-	globals::fidelityFX->Present(upscaling.settings.frameGenerationMode && !globals::game::ui->GameIsPaused());
+	globals::features::upscaling.fidelityFX.Present(upscaling.settings.frameGenerationMode && !globals::game::ui->GameIsPaused());
 
 	DX::ThrowIfFailed(commandLists[frameIndex]->Close());
 

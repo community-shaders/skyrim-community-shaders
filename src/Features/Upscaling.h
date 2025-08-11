@@ -4,6 +4,7 @@
 #include "Upscaling/FidelityFX.h"
 #include "Upscaling/Streamline.h"
 #include "Upscaling/XeSS.h"
+#include <d3d11_4.h>
 #include <d3d12.h>
 #include <winrt/base.h>
 
@@ -140,6 +141,11 @@ public:
 	// Frame tracking to ensure shared resources are only copied once per frame
 	Util::FrameChecker sharedResourcesFrameChecker;
 	Util::FrameChecker HUDLessBufferFrameChecker;
+
+	// Static instances instead of singletons
+	static inline Streamline streamline;
+	static inline XeSS xess;
+	static inline FidelityFX fidelityFX;
 
 	ID3D11ComputeShader* copyDepthToSharedBufferCS = nullptr;
 

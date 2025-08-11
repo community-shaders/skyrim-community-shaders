@@ -246,10 +246,7 @@ namespace globals
 	extern TruePBR* truePBR;
 	extern Menu* menu;
 	extern SIE::ShaderCache* shaderCache;
-	extern Streamline* streamline;
 	extern DX12SwapChain* dx12SwapChain;
-	extern FidelityFX* fidelityFX;
-	extern XeSS* xess;
 
 	void OnInit();
 	void ReInit();

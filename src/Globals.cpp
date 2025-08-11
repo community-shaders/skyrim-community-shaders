@@ -138,10 +138,7 @@ namespace globals
 	TruePBR* truePBR = nullptr;
 	Menu* menu = nullptr;
 	SIE::ShaderCache* shaderCache = nullptr;
-	Streamline* streamline = nullptr;
 	DX12SwapChain* dx12SwapChain = nullptr;
-	FidelityFX* fidelityFX = nullptr;
-	XeSS* xess = nullptr;
 
 	void OnInit()
 	{
@@ -150,10 +147,7 @@ namespace globals
 		menu = Menu::GetSingleton();
 		deferred = Deferred::GetSingleton();
 		truePBR = TruePBR::GetSingleton();
-		streamline = Streamline::GetSingleton();
 		dx12SwapChain = DX12SwapChain::GetSingleton();
-		fidelityFX = FidelityFX::GetSingleton();
-		xess = XeSS::GetSingleton();
 	}
 
 	void ReInit()
