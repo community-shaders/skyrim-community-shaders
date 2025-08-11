@@ -2221,7 +2221,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(SNOW_COVER)
 #		if defined(SKYLIGHTING)
-	float snowOcclusion = inWorld ? pow(saturate(SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1))), 0.25) : 0;
+	float snowOcclusion = inWorld ? smoothstep(0, 0.75, SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1))) : 0;
 #		else
 	float snowOcclusion = inWorld;
 #		endif

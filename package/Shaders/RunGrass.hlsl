@@ -539,7 +539,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	skylighting = lerp(1.0, skylighting, Skylighting::getFadeOutFactor(input.WorldPosition.xyz));
 	skylighting = saturate(Skylighting::mixDiffuse(SharedData::skylightingSettings, skylighting));
 
-	float snowOcclusion = skylighting * 0.55;
+	float snowOcclusion = smoothstep(0, 0.75, skylighting) * 0.55;
 #			else
 	float snowOcclusion = 0.55;
 #			endif
