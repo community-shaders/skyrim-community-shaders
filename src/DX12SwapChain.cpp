@@ -179,9 +179,6 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	float clearColor[4]{ 0, 0, 0, 0 };
 	d3d11Context->ClearRenderTargetView(uiBufferWrapped->rtv, clearColor);
 
-	auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-	data.RTV = swapChainBufferWrapped->rtv;
-
 	return S_OK;
 }
 
