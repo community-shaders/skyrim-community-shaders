@@ -350,12 +350,16 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 		auto state = globals::state;
 		auto screenSize = state->screenSize;
 
+		auto qualityMode = settings.qualityMode;
+		if (upscaleMethod != UpscaleMethod::kDLSS && globals::game::ui->GameIsPaused())
+			qualityMode = 4;
+
 		if (upscaleMethod == UpscaleMethod::kXESS) {
-			resolutionScale = globals::xess->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
+			resolutionScale = globals::xess->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, qualityMode);
 		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
-			resolutionScale = globals::streamline->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
+			resolutionScale = globals::streamline->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, qualityMode);
 		} else if (upscaleMethod == UpscaleMethod::kFSR) {
-			resolutionScale = globals::fidelityFX->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
+			resolutionScale = globals::fidelityFX->GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, qualityMode);
 		}
 
 		auto screenWidth = static_cast<int>(screenSize.x);

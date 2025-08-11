@@ -283,6 +283,7 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 		dlssOptions.mode = sl::DLSSMode::eDLAA;
 		break;
 	}
+
 	dlssOptions.outputWidth = (uint)state->screenSize.x;
 	dlssOptions.outputHeight = (uint)state->screenSize.y;
 	dlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
@@ -368,9 +369,18 @@ float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputH
 		return 1.0f;
 	}
 
-	// Calculate scale as ratio of optimal render resolution to output resolution
-	float scaleX = (float)optimalSettings.optimalRenderWidth / (float)outputWidth;
-	float scaleY = (float)optimalSettings.optimalRenderHeight / (float)outputHeight;
+	float scaleX;
+	float scaleY;
+
+	if (globals::game::ui->GameIsPaused()) {
+		// Calculate scale as ratio of minimum render resolution to output resolution
+		scaleX = (float)optimalSettings.renderWidthMin / (float)outputWidth;
+		scaleY = (float)optimalSettings.renderHeightMin / (float)outputHeight;
+	} else {
+		// Calculate scale as ratio of optimal render resolution to output resolution
+		scaleX = (float)optimalSettings.optimalRenderWidth / (float)outputWidth;
+		scaleY = (float)optimalSettings.optimalRenderHeight / (float)outputHeight;
+	}
 
 	// Use the average scale (both should be the same for uniform scaling)
 	return (scaleX + scaleY) * 0.5f;

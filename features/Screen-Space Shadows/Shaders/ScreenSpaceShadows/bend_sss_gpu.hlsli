@@ -76,6 +76,8 @@ struct DispatchParameters
 
 	float2 DynamicRes;
 
+	uint DynamicReadCount;
+
 	bool IgnoreEdgePixels;  // If an edge is detected, the edge pixel will not contribute to the shadow.
 							// If a very flat surface is being lit and rendered at an grazing angles, the edge detect may incorrectly detect multiple 'edge' pixels along that flat surface.
 							// In these cases, the grazing angle of the light may subsequently produce aliasing artefacts in the shadow where these incorrect edges were detected.
@@ -256,7 +258,7 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 
 	half2 write_xy = floor(pixel_xy);
 
-	[unroll] for (i = 0; i < READ_COUNT; i++)
+	for (i = 0; i < inParameters.DynamicReadCount; i++)
 	{
 		// We sample depth twice per pixel per sample, and interpolate with an edge detect filter
 		// Interpolation should only occur on the minor axis of the ray - major axis coordinates should be at pixel centers
@@ -356,7 +358,7 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 	// }
 
 	// Write the shadow depths to LDS
-	[unroll] for (i = 0; i < READ_COUNT; i++)
+	[unroll] for (i = 0; i < inParameters.DynamicReadCount; i++)
 	{
 		// Perspective correct the shadowing depth, in this space, all light rays are parallel
 		half stored_depth = (shadowing_depth[i] - inParameters.LightCoordinate.z) / sample_distance[i];

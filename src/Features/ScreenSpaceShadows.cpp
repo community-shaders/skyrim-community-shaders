@@ -44,16 +44,33 @@ void ScreenSpaceShadows::ClearShaderCache()
 	}
 }
 
+uint ScreenSpaceShadows::GetScaledSampleCount(bool a_dynamic)
+{
+	auto screenSize = globals::state->screenSize;
+
+	if (a_dynamic)
+		screenSize = Util::ConvertToDynamic(globals::state->screenSize);
+	
+	if (globals::game::isVR)
+		screenSize.x *= 0.5f;
+
+	// Scale sample count based on both dimensions relative to 1920x1080 reference
+
+	float2 referenceRes = { 1920.0f, 1080.0f };
+	float referenceArea = referenceRes.x * referenceRes.y;
+	float currentArea = screenSize.x * screenSize.y;
+	float areaScale = std::sqrt(currentArea / referenceArea);
+	uint scaledSampleCount = static_cast<uint>(std::round(bendSettings.SampleCount * 120 * areaScale));
+	
+	return scaledSampleCount;
+}
+
 ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarch()
 {
 	static uint sampleCount = bendSettings.SampleCount;
-	static float2 lastRenderSize = { 0, 0 };
 
-	float2 renderSize = Util::ConvertToDynamic(globals::state->screenSize);
-
-	if (sampleCount != bendSettings.SampleCount || lastRenderSize.x != renderSize.x || lastRenderSize.y != renderSize.y) {
+	if (sampleCount != bendSettings.SampleCount) {
 		sampleCount = bendSettings.SampleCount;
-		lastRenderSize = renderSize;
 		if (raymarchCS) {
 			raymarchCS->Release();
 			raymarchCS = nullptr;
@@ -61,13 +78,7 @@ ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarch()
 	}
 
 	if (!raymarchCS) {
-		// Scale sample count based on both dimensions relative to 1920x1080 reference
-		float2 referenceRes = { 1920.0f, 1080.0f };
-		float referenceArea = referenceRes.x * referenceRes.y;
-		float currentArea = renderSize.x * renderSize.y;
-		float areaScale = std::sqrt(currentArea / referenceArea);
-		uint scaledSampleCount = static_cast<uint>(std::round(sampleCount * 120 * areaScale));
-
+		uint scaledSampleCount = GetScaledSampleCount(false);
 		raymarchCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", { { "SAMPLE_COUNT", std::format("{}", scaledSampleCount).c_str() } }, "cs_5_0");
 	}
 	return raymarchCS;
@@ -76,13 +87,9 @@ ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarch()
 ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarchRight()
 {
 	static uint sampleCount = bendSettings.SampleCount;
-	static float2 lastRenderSize = { 0, 0 };
 
-	float2 renderSize = Util::ConvertToDynamic(globals::state->screenSize);
-
-	if (sampleCount != bendSettings.SampleCount || lastRenderSize.x != renderSize.x || lastRenderSize.y != renderSize.y) {
+	if (sampleCount != bendSettings.SampleCount) {
 		sampleCount = bendSettings.SampleCount;
-		lastRenderSize = renderSize;
 		if (raymarchRightCS) {
 			raymarchRightCS->Release();
 			raymarchRightCS = nullptr;
@@ -90,13 +97,7 @@ ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarchRight()
 	}
 
 	if (!raymarchRightCS) {
-		// Scale sample count based on both dimensions relative to 1920x1080 reference
-		float2 referenceRes = { 1920.0f, 1080.0f };
-		float referenceArea = referenceRes.x * referenceRes.y;
-		float currentArea = renderSize.x * renderSize.y;
-		float areaScale = std::sqrt(currentArea / referenceArea);
-		uint scaledSampleCount = static_cast<uint>(std::round(sampleCount * 120 * areaScale));
-
+		uint scaledSampleCount = GetScaledSampleCount(false);
 		raymarchRightCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", { { "SAMPLE_COUNT", std::format("{}", scaledSampleCount).c_str() }, { "RIGHT", "" } }, "cs_5_0");
 	}
 	return raymarchRightCS;
@@ -157,6 +158,9 @@ void ScreenSpaceShadows::DrawShadows()
 
 	float2 dynamicRes = { viewport->GetRuntimeData().dynamicResolutionWidthRatio, viewport->GetRuntimeData().dynamicResolutionHeightRatio };
 
+	uint sampleCount = GetScaledSampleCount(true);
+	uint dynamicReadCount = (sampleCount / 64 + 2);
+
 	// Shared dispatch logic for both VR and non-VR
 	auto DispatchEye = [&](const char* eyeName, ID3D11ComputeShader* shader, const float* lightProj,
 						   float invTexSizeX, float invTexSizeY) {
@@ -193,6 +197,8 @@ void ScreenSpaceShadows::DrawShadows()
 			data.NearDepthValue = 0.0f;
 
 			data.DynamicRes = dynamicRes;
+			
+			data.DynamicReadCount = dynamicReadCount;
 
 			data.InvDepthTextureSize[0] = invTexSizeX;
 			data.InvDepthTextureSize[1] = invTexSizeY;
