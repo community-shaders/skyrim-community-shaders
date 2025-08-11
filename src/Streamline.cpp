@@ -262,54 +262,44 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 	auto& motionVectorsTexture = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
-	static auto previousDlssPreset = a_preset;
-	static auto previousQualityMode = globals::upscaling->settings.qualityMode;
-
-	if (previousDlssPreset != a_preset || previousQualityMode != globals::upscaling->settings.qualityMode)
-		DestroyDLSSResources();
-	previousDlssPreset = a_preset;
-	previousQualityMode = globals::upscaling->settings.qualityMode;
-
-	{
-		sl::DLSSOptions dlssOptions{};
+	sl::DLSSOptions dlssOptions{};
 		
-		// Map quality mode to DLSS mode
-		uint32_t qualityMode = globals::upscaling->settings.qualityMode;
-		switch (qualityMode) {
-		case 1:
-			dlssOptions.mode = sl::DLSSMode::eMaxQuality;
-			break;
-		case 2:
-			dlssOptions.mode = sl::DLSSMode::eBalanced;
-			break;
-		case 3:
-			dlssOptions.mode = sl::DLSSMode::eMaxPerformance;
-			break;
-		case 4:
-			dlssOptions.mode = sl::DLSSMode::eUltraPerformance;
-			break;
-		default:
-			dlssOptions.mode = sl::DLSSMode::eDLAA;
-			break;
-		}
-		dlssOptions.outputWidth = (uint)state->screenSize.x;
-		dlssOptions.outputHeight = (uint)state->screenSize.y;
-		dlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
-		dlssOptions.useAutoExposure = sl::Boolean::eTrue;
-
-		dlssOptions.preExposure = 1.0f;
-		dlssOptions.sharpness = 0.0f;
-
-		dlssOptions.dlaaPreset = a_preset;
-		dlssOptions.qualityPreset = a_preset;
-		dlssOptions.balancedPreset = a_preset;
-		dlssOptions.performancePreset = a_preset;
-		dlssOptions.ultraPerformancePreset = a_preset;
-
-		if (SL_FAILED(result, slDLSSSetOptions(viewport, dlssOptions))) {
-			logger::critical("[Streamline] Could not enable DLSS");
-		}
+	// Map quality mode to DLSS mode
+	uint32_t qualityMode = globals::upscaling->settings.qualityMode;
+	switch (qualityMode) {
+	case 1:
+		dlssOptions.mode = sl::DLSSMode::eMaxQuality;
+		break;
+	case 2:
+		dlssOptions.mode = sl::DLSSMode::eBalanced;
+		break;
+	case 3:
+		dlssOptions.mode = sl::DLSSMode::eMaxPerformance;
+		break;
+	case 4:
+		dlssOptions.mode = sl::DLSSMode::eUltraPerformance;
+		break;
+	default:
+		dlssOptions.mode = sl::DLSSMode::eDLAA;
+		break;
 	}
+	dlssOptions.outputWidth = (uint)state->screenSize.x;
+	dlssOptions.outputHeight = (uint)state->screenSize.y;
+	dlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
+	dlssOptions.useAutoExposure = sl::Boolean::eTrue;
+
+	dlssOptions.preExposure = 1.0f;
+	dlssOptions.sharpness = 0.0f;
+
+	dlssOptions.dlaaPreset = a_preset;
+	dlssOptions.qualityPreset = a_preset;
+	dlssOptions.balancedPreset = a_preset;
+	dlssOptions.performancePreset = a_preset;
+	dlssOptions.ultraPerformancePreset = a_preset;
+
+	if (SL_FAILED(result, slDLSSSetOptions(viewport, dlssOptions))) {
+		logger::critical("[Streamline] Could not enable DLSS");
+	}	
 
 	{
 		auto screenSize = state->screenSize;
