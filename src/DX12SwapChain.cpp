@@ -158,7 +158,7 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 		}
 	}
 
-	globals::fidelityFX->Present(upscaling->settings.frameGenerationMode);
+	globals::fidelityFX->Present(upscaling->settings.frameGenerationMode && !globals::game::ui->GameIsPaused());
 
 	DX::ThrowIfFailed(commandLists[frameIndex]->Close());
 
@@ -190,6 +190,11 @@ HRESULT DX12SwapChain::GetDevice(REFIID uuid, void** ppDevice)
 	}
 
 	return swapChain->GetDevice(uuid, ppDevice);
+}
+
+HANDLE DX12SwapChain::GetFrameLatencyWaitableObject()
+{
+	return swapChain->GetFrameLatencyWaitableObject();
 }
 
 float DX12SwapChain::GetFrameTime() const

@@ -399,6 +399,8 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 
 void Upscaling::CreateUpscalingResources()
 {
+	QueryPerformanceFrequency(&qpf);
+
 	auto renderer = globals::game::renderer;
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
@@ -745,22 +747,28 @@ void Upscaling::TimerSleepQPC(int64_t targetQPC)
 
 void Upscaling::FrameLimiter()
 {
-	if (d3d12Interop && settings.frameLimitMode) {
-		double bestRefreshRate = refreshRate - (refreshRate * refreshRate) / 3600.0;
+	if (d3d12Interop) {
+		// Use frame latency waitable object if available for better frame pacing
+		HANDLE waitableObject = globals::dx12SwapChain->GetFrameLatencyWaitableObject();
 
-		LARGE_INTEGER qpf;
-		QueryPerformanceFrequency(&qpf);
+		// Wait for the next frame presentation slot
+		WaitForSingleObject(waitableObject, INFINITE);
 
-		int64_t targetFrameTicks = int64_t(double(qpf.QuadPart) / (bestRefreshRate * (settings.frameGenerationMode ? 0.5 : 1.0)));
+		if (settings.frameLimitMode) {
+			// Fall back to the original timing method
+			double bestRefreshRate = refreshRate - (refreshRate * refreshRate) / 3600.0;
 
-		static LARGE_INTEGER lastFrame = {};
-		LARGE_INTEGER timeNow;
-		QueryPerformanceCounter(&timeNow);
-		int64_t delta = timeNow.QuadPart - lastFrame.QuadPart;
-		if (delta < targetFrameTicks) {
-			TimerSleepQPC(lastFrame.QuadPart + targetFrameTicks);
+			int64_t targetFrameTicks = int64_t(double(qpf.QuadPart) / (bestRefreshRate * (settings.frameGenerationMode && !globals::game::ui->GameIsPaused() ? 0.5 : 1.0)));
+
+			static LARGE_INTEGER lastFrame = {};
+			LARGE_INTEGER timeNow;
+			QueryPerformanceCounter(&timeNow);
+			int64_t delta = timeNow.QuadPart - lastFrame.QuadPart;
+			if (delta < targetFrameTicks) {
+				TimerSleepQPC(lastFrame.QuadPart + targetFrameTicks);
+			}
+			QueryPerformanceCounter(&lastFrame);
 		}
-		QueryPerformanceCounter(&lastFrame);
 	}
 }
 
