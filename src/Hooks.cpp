@@ -382,6 +382,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 			upscaling->d3d12Interop = true;
 
 			if (streamline->initialized) {
+				streamline->slUpgradeInterface((void**)&(*ppDevice));
+				streamline->slUpgradeInterface((void**)&(*ppSwapChain));
 				streamline->slSetD3DDevice(*ppDevice);
 				streamline->PostDevice();
 			}
@@ -413,6 +415,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 		ppImmediateContext);
 
 	if (streamline->initialized) {
+		streamline->slUpgradeInterface((void**)&(*ppDevice));
+		streamline->slUpgradeInterface((void**)&(*ppSwapChain));
 		streamline->slSetD3DDevice(*ppDevice);
 		streamline->PostDevice();
 	}
