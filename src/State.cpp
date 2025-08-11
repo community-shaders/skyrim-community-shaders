@@ -4,7 +4,7 @@
 
 #include <pystring/pystring.h>
 
-#include "DX12SwapChain.h"
+#include "Features/Upscaling/DX12SwapChain.h"
 #include "Deferred.h"
 #include "FeatureIssues.h"
 #include "Features/CloudShadows.h"
@@ -14,9 +14,9 @@
 #include "Menu.h"
 #include "SettingsOverrideManager.h"
 #include "ShaderCache.h"
-#include "Streamline.h"
+#include "Features/Upscaling/Streamline.h"
 #include "TruePBR.h"
-#include "Upscaling.h"
+#include "Features/Upscaling.h"
 
 void State::Draw()
 {

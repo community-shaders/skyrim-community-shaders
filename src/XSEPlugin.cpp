@@ -1,4 +1,4 @@
-#include "DX12SwapChain.h"
+#include "Features/Upscaling/DX12SwapChain.h"
 #include "Deferred.h"
 #include "FrameAnnotations.h"
 #include "Globals.h"
@@ -7,7 +7,7 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
-#include "Upscaling.h"
+#include "Features/Upscaling.h"
 
 #include "ENB/ENBSeriesAPI.h"
 

@@ -5,7 +5,7 @@
 #include "RE/P/PlayerCharacter.h"
 #include <openvr.h>
 
-#include "DX12SwapChain.h"
+#include "Upscaling/DX12SwapChain.h"
 #include "State.h"
 #include "Utils/D3D.h"
 #include "Utils/PerfUtils.h"

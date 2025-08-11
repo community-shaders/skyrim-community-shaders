@@ -17,10 +17,10 @@
 
 #include "ShaderTools/BSShaderHooks.h"
 
-#include "DX12SwapChain.h"
-#include "FidelityFX.h"
-#include "Streamline.h"
-#include "Upscaling.h"
+#include "Features/Upscaling/DX12SwapChain.h"
+#include "Features/Upscaling/FidelityFX.h"
+#include "Features/Upscaling/Streamline.h"
+#include "Features/Upscaling.h"
 
 std::unordered_map<void*, std::pair<std::unique_ptr<uint8_t[]>, size_t>> ShaderBytecodeMap;
 

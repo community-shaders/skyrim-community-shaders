@@ -2,16 +2,15 @@
 
 #include "Utils/Game.h"
 
-#include "DX12SwapChain.h"
+#include "Features/Upscaling/DX12SwapChain.h"
 #include "Deferred.h"
-#include "FidelityFX.h"
+#include "Features/Upscaling/FidelityFX.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
-#include "Streamline.h"
-#include "Upscaling.h"
-#include "XeSS.h"
-
+#include "Features/Upscaling.h"
+#include "Features/Upscaling/Streamline.h"
+#include "Features/Upscaling/XeSS.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExtendedMaterials.h"

@@ -14,7 +14,7 @@
 #include "Features/TerrainBlending.h"
 
 #include "Hooks.h"
-#include "Streamline.h"
+#include "Features/Upscaling/Streamline.h"
 
 struct DepthStates
 {

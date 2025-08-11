@@ -9,7 +9,7 @@
 #include <imgui_internal.h>
 #include <imgui_stdlib.h>
 
-#include "DX12SwapChain.h"
+#include "Features/Upscaling/DX12SwapChain.h"
 #include "Deferred.h"
 #include "Feature.h"
 #include "FeatureIssues.h"
@@ -23,9 +23,9 @@
 #include "Menu/ThemeManager.h"
 #include "ShaderCache.h"
 #include "State.h"
-#include "Streamline.h"
+#include "Features/Upscaling/Streamline.h"
 #include "TruePBR.h"
-#include "Upscaling.h"
+#include "Features/Upscaling.h"
 #include "Util.h"
 #include "Utils/UI.h"
 

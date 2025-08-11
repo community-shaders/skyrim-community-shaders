@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(msbuild:*)"
+      "Bash(msbuild:*)",
+      "Bash(mkdir:*)",
+      "Bash(mv:*)",
+      "Bash(cmake:*)",
+      "Bash(.BuildRelease.bat)",
+      "Bash(cmd.exe:*)"
     ],
     "deny": []
   }
