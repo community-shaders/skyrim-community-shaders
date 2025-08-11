@@ -15,6 +15,7 @@
  */
 struct Upscaling : Feature
 {
+public:
 	static Upscaling* GetSingleton()
 	{
 		static Upscaling singleton;
@@ -22,11 +23,11 @@ struct Upscaling : Feature
 	}
 
 	// Feature interface
-	virtual std::string GetName() override { return "Upscaling"; }
-	virtual std::string GetShortName() override { return "Upscaling"; }
-	virtual bool SupportsVR() override { return true; }
-	virtual bool IsCore() const override { return false; }
-	virtual std::string_view GetCategory() const override { return "Graphics"; }
+	virtual inline std::string GetName() override { return "Upscaling"; }
+	virtual inline std::string GetShortName() override { return "Upscaling"; }
+	virtual inline bool SupportsVR() override { return true; }
+	virtual inline bool IsCore() const override { return false; }
+	virtual inline std::string_view GetCategory() const override { return "Graphics"; }
 	
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
@@ -65,17 +66,17 @@ struct Upscaling : Feature
 	};
 
 	Settings settings;
-
+	
+	// Runtime state
 	bool isWindowed = false;
 	bool lowRefreshRate = false;
-
 	bool fidelityFXMissing = false;
-
 	bool d3d12Interop = false;
+	bool wasUpscaled = false;
+	
+	// Timing and scaling
 	double refreshRate = 0.0f;
 	float resolutionScale = 1.0f;
-
-	bool wasUpscaled = false;
 	LARGE_INTEGER qpf;
 
 	// FG FPS Measurement for Overlay
@@ -112,9 +113,11 @@ struct Upscaling : Feature
 	void ConfigureUpscaling(RE::BSGraphics::State* a_state);
 	void Upscale();
 
-	Texture2D* reactiveMaskTexture;
-	Texture2D* transparencyCompositionMaskTexture;
+	// D3D11 textures
+	Texture2D* reactiveMaskTexture = nullptr;
+	Texture2D* transparencyCompositionMaskTexture = nullptr;
 
+	// Resource management
 	void CreateUpscalingResources();
 	void DestroyUpscalingResources();
 
@@ -132,20 +135,18 @@ struct Upscaling : Feature
 	UINT64 sharedInteropFenceValue = 0;
 
 	// Shared D3D12 resources for upscaling systems
-	WrappedResource* HUDLessBufferShared12;
-	WrappedResource* depthBufferShared12;
-	WrappedResource* motionVectorBufferShared12;
-
-	WrappedResource* reactiveMaskShared12;
-
-	WrappedResource* inputColorBufferShared12;
-	WrappedResource* outputColorBufferShared12;
+	WrappedResource* HUDLessBufferShared12 = nullptr;
+	WrappedResource* depthBufferShared12 = nullptr;
+	WrappedResource* motionVectorBufferShared12 = nullptr;
+	WrappedResource* reactiveMaskShared12 = nullptr;
+	WrappedResource* inputColorBufferShared12 = nullptr;
+	WrappedResource* outputColorBufferShared12 = nullptr;
 
 	// Frame tracking to ensure shared resources are only copied once per frame
 	Util::FrameChecker sharedResourcesFrameChecker;
 	Util::FrameChecker HUDLessBufferFrameChecker;
 
-	ID3D11ComputeShader* copyDepthToSharedBufferCS;
+	ID3D11ComputeShader* copyDepthToSharedBufferCS = nullptr;
 
 	void CreateFrameGenerationResources();
 	void CopyHUDLessBuffer();
@@ -163,6 +164,7 @@ struct Upscaling : Feature
 
 	static double GetRefreshRate(HWND a_window);
 
+private:
 	struct Main_UpdateJitter
 	{
 		static void thunk(RE::BSGraphics::State* a_state);
@@ -198,5 +200,5 @@ struct Upscaling : Feature
 		static void thunk();
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
-
 };
+
