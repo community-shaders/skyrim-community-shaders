@@ -123,7 +123,7 @@ size_t SettingsOverrideManager::DiscoverOverrides()
 				}
 			} catch (const std::exception& e) {
 				logger::info("Error loading override file {}: {}", entry.path().string(), e.what());
-				
+
 				// Report to Feature Issues
 				auto [modName, featureName] = ParseOverrideFilename(entry.path().filename().string());
 				if (!modName.empty()) {
@@ -163,7 +163,7 @@ size_t SettingsOverrideManager::ApplyOverrides(const std::string& featureName, j
 				} catch (const std::exception& e) {
 					logger::info("Failed to apply override from {} to {}: {}",
 						override.modName, featureName, e.what());
-					
+
 					// Report application failure to Feature Issues
 					ReportOverrideFailure(override.modName, featureName, "Failed to apply override: " + std::string(e.what()));
 				}
@@ -191,7 +191,7 @@ size_t SettingsOverrideManager::ApplyGlobalOverrides(json& mainJson)
 			} catch (const std::exception& e) {
 				logger::info("Failed to apply global override from {}: {}",
 					override.modName, e.what());
-				
+
 				// Report application failure to Feature Issues
 				ReportOverrideFailure(override.modName, "", "Failed to apply global override: " + std::string(e.what()));
 			}
@@ -245,7 +245,7 @@ size_t SettingsOverrideManager::ReapplyFeatureOverrides(const std::string& featu
 				} catch (const std::exception& e) {
 					logger::warn("Failed to manually reapply override from {} to {}: {}",
 						override.modName, featureName, e.what());
-					
+
 					// Report reapplication failure to Feature Issues
 					ReportOverrideFailure(override.modName, featureName, "Failed to reapply override: " + std::string(e.what()));
 				}
@@ -1123,21 +1123,21 @@ void SettingsOverrideManager::ReportOverrideFailure(const std::string& modName, 
 	// Create a feature file info for the override failure
 	FeatureIssues::FeatureFileInfo fileInfo;
 	fileInfo.featureName = featureName.empty() ? "Global" : featureName;
-	
+
 	// Try to find the override file path for better error reporting
 	std::string filename = modName + "_" + (featureName.empty() ? "Global" : featureName) + ".json";
 	auto overridesDir = GetOverridesDirectory();
 	auto filePath = overridesDir / filename;
-	
+
 	if (std::filesystem::exists(filePath)) {
-		fileInfo.hasINI = true; // Using hasINI to indicate file exists (even though it's JSON)
+		fileInfo.hasINI = true;  // Using hasINI to indicate file exists (even though it's JSON)
 		fileInfo.iniPath = filePath.string();
-		
+
 		try {
 			auto timestamp = std::filesystem::last_write_time(filePath);
 			fileInfo.latestTimestamp = timestamp;
 			fileInfo.latestTimestampFile = filePath.string();
-			
+
 			// Format timestamp for display
 			auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
 				timestamp - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
@@ -1149,7 +1149,7 @@ void SettingsOverrideManager::ReportOverrideFailure(const std::string& modName, 
 			fileInfo.timestampDisplay = "Unknown";
 		}
 	}
-	
+
 	// Create a descriptive error message
 	std::string fullErrorMessage;
 	if (featureName.empty()) {
@@ -1157,13 +1157,12 @@ void SettingsOverrideManager::ReportOverrideFailure(const std::string& modName, 
 	} else {
 		fullErrorMessage = "Override for feature '" + featureName + "' from mod '" + modName + "' failed to load: " + errorMessage;
 	}
-	
+
 	// Add to Feature Issues as an override failure
 	FeatureIssues::AddFeatureIssue(
-		modName + (featureName.empty() ? "_Global" : "_" + featureName), // Use combined name as shortName
-		"unknown", // version
+		modName + (featureName.empty() ? "_Global" : "_" + featureName),  // Use combined name as shortName
+		"unknown",                                                        // version
 		fullErrorMessage,
 		FeatureIssues::FeatureIssueInfo::IssueType::OVERRIDE_FAILED,
-		fileInfo
-	);
+		fileInfo);
 }

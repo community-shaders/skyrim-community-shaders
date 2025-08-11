@@ -86,38 +86,37 @@ The `_metadata` section also required for the system to identify the override. I
 -   `description`: Description of what the override does
 -   `enabled`: Whether the override is enabled by default (optional, defaults to true)
 
-
 ## Feature Short Names
 
 To create feature-specific overrides, you need to use the correct feature short name. The full list of feature short names is:
 
-- `CloudShadows` - Cloud Shadows
-- `DynamicCubemaps` - Dynamic Cubemaps
-- `ExtendedMaterials` - Extended Materials
-- `GrassCollision` - Grass Collision
-- `GrassLighting` - Grass Lighting
-- `HairSpecular` - Hair Specular
-- `IBL` - Image-Based Lighting
-- `LightLimitFix` - Light Limit Fix
-- `LODBlending` - LOD Blending
-- `InteriorSun` - Interior Sun
-- `InverseSquareLighting` - Inverse Square Lighting
-- `ScreenSpaceGI` - Screen Space Global Illumination
-- `ScreenSpaceShadows` - Screen-Space Shadows
-- `Skylighting` - Skylighting
-- `TerrainVariation` - Terrain Variation
-- `SkySync` - Sky Sync
-- `SubsurfaceScattering` - Subsurface Scattering
-- `TerrainBlending` - Terrain Blending
-- `TerrainHelper` - Terrain Helper
-- `TerrainShadows` - Terrain Shadows
-- `VolumetricLighting` - Volumetric Lighting
-- `VR` - VR
-- `WaterEffects` - Water Effects
-- `WeatherPicker` - Weather Picker
-- `PerformanceOverlay` - Performance Overlay
-- `WetnessEffects` - Wetness Effects
-- `ExtendedTranslucency` - Extended Translucency
+-   `CloudShadows` - Cloud Shadows
+-   `DynamicCubemaps` - Dynamic Cubemaps
+-   `ExtendedMaterials` - Extended Materials
+-   `GrassCollision` - Grass Collision
+-   `GrassLighting` - Grass Lighting
+-   `HairSpecular` - Hair Specular
+-   `IBL` - Image-Based Lighting
+-   `LightLimitFix` - Light Limit Fix
+-   `LODBlending` - LOD Blending
+-   `InteriorSun` - Interior Sun
+-   `InverseSquareLighting` - Inverse Square Lighting
+-   `ScreenSpaceGI` - Screen Space Global Illumination
+-   `ScreenSpaceShadows` - Screen-Space Shadows
+-   `Skylighting` - Skylighting
+-   `TerrainVariation` - Terrain Variation
+-   `SkySync` - Sky Sync
+-   `SubsurfaceScattering` - Subsurface Scattering
+-   `TerrainBlending` - Terrain Blending
+-   `TerrainHelper` - Terrain Helper
+-   `TerrainShadows` - Terrain Shadows
+-   `VolumetricLighting` - Volumetric Lighting
+-   `VR` - VR
+-   `WaterEffects` - Water Effects
+-   `WeatherPicker` - Weather Picker
+-   `PerformanceOverlay` - Performance Overlay
+-   `WetnessEffects` - Wetness Effects
+-   `ExtendedTranslucency` - Extended Translucency
 
 **This list is not exhaustive. It is current as of 11/08/2025. All Feature Short Names will work.**
 
