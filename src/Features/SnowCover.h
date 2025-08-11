@@ -86,10 +86,10 @@ public:
 	std::array<ID3D11ShaderResourceView*, 7> views;
 
 	std::string status;
-	std::string last_worldspace;
-	std::string map_tex;
-	std::string main_tex;
-	std::string alt_tex;
+	const char* last_worldspace = nullptr;
+	std::filesystem::path map_tex;
+	std::filesystem::path main_tex;
+	std::filesystem::path alt_tex;
 	float snowing_speed = 0.0f;
 	float melting_speed = 0.0f;
 	char mapbuf[256] = "";

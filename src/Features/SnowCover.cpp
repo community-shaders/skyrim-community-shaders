@@ -1,6 +1,7 @@
 #include "SnowCover.h"
 
 #include "Util.h"
+#include "Utils/FileSystem.h"
 #include <DDSTextureLoader.h>
 #include <cstdlib>
 #include <cstring>
@@ -126,7 +127,7 @@ void SnowCover::DrawSettings()
 					ImGui::Text("");
 				}
 
-				map_tex = std::string(mapbuf);
+				map_tex = std::filesystem::path(mapbuf);
 				ImGui::SliderFloat("Snow Map Z Scale", &wsettings.mapZscale, 0.1f, 10000.0f);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("");
@@ -292,14 +293,14 @@ std::wstring strtowstr(std::string& wide)
 	return str;
 }
 
-std::string GetWorldspace()
+const char* GetWorldspace()
 {
-	std::string curr_worldspace = "none";
+	auto curr_worldspace = "none";
 	auto tes = globals::game::tes;
 	if (tes) {
 		auto worldspace = tes->GetRuntimeData2().worldSpace;
 		if (tes->interiorCell) {
-			curr_worldspace = std::string(tes->interiorCell->GetFullName());
+			curr_worldspace = tes->interiorCell->GetFormEditorID();
 		} else if (worldspace) {
 			curr_worldspace = worldspace->GetFormEditorID();
 		}
@@ -309,7 +310,7 @@ std::string GetWorldspace()
 
 void SnowCover::SaveConfig()
 {
-	if (last_worldspace.length() == 0)
+	if (last_worldspace == nullptr)
 		return;
 	json config = {
 		{ "AffectFoliageColor", wsettings.AffectFoliageColor },
@@ -319,7 +320,7 @@ void SnowCover::SaveConfig()
 		{ "MaxWinterMonth", wsettings.MaxWinterMonth },
 		{ "SummerHeightOffset", wsettings.SummerHeightOffset },
 		{ "WinterHeightOffset", wsettings.WinterHeightOffset },
-		{ "MapTexture", map_tex },
+		{ "MapTexture", map_tex.c_str() },
 		{ "MapZscale", wsettings.mapZscale },
 		{ "BlendSmoothness", wsettings.blendSmoothness },
 		{ "ScreenSpaceScale", wsettings.ScreenSpaceScale },
@@ -328,8 +329,8 @@ void SnowCover::SaveConfig()
 		{ "DensityRandomization", wsettings.DensityRandomization },
 		{ "MapMin", json::array({ wsettings.mapMin.x, wsettings.mapMin.y }) },
 		{ "MapMax", json::array({ wsettings.mapMax.x, wsettings.mapMax.y }) },
-		{ "MainTexture", main_tex },
-		{ "AltTexture", alt_tex },
+		{ "MainTexture", main_tex.c_str() },
+		{ "AltTexture", alt_tex.c_str() },
 		{ "MainTint", json::array({ wsettings.MainTint.x,
 						  wsettings.MainTint.y,
 						  wsettings.MainTint.z,
@@ -348,38 +349,48 @@ void SnowCover::SaveConfig()
 		{ "AltSpec", wsettings.AltSpec },
 	};
 
-	if (alt_tex.length() != 0)
+	if (!alt_tex.empty())
 		config["AltTexture"] = alt_tex;
 
-	std::string curr_worldspace = GetWorldspace();
-	auto path = std::string("Data\\Shaders\\SnowCover\\") + curr_worldspace + ".json";
-	std::ofstream file(path);
-	file << config.dump(4);
+	try {
+		auto curr_worldspace = GetWorldspace();
+		auto path = (Util::PathHelpers::GetFeatureShaderPath("SnowCover") / curr_worldspace).replace_extension(std::filesystem::path(".json"));
+		std::ofstream file(path);
+		file << config.dump(4);
+	} catch (const std::system_error& e) {
+		logger::error("[Snow Cover] Error saving file: {}", e.what());
+	}
 	Reload();
 }
 
 void SnowCover::Reload()
 {
-	std::string curr_worldspace = GetWorldspace();
-	if (curr_worldspace == last_worldspace)
-		return;
-	last_worldspace = curr_worldspace;
-	auto path = std::string("Data\\Shaders\\SnowCover\\") + curr_worldspace + ".json";
-	if (!std::filesystem::exists(path)) {
-		status = std::string("Config doesn't exist.");
-		wsettings.EnableSnowCover = false;
-		return;
-	}
-	std::ifstream fileStream(path);
-	if (!fileStream.is_open()) {
-		status = std::string("Cannot open config.");
-		wsettings.EnableSnowCover = false;
-		logger::error("[Snow Cover] Cannot open config at  {}", path);
-		return;
+	std::ifstream fileStream;
+	std::filesystem::path path;
+	try {
+		auto curr_worldspace = GetWorldspace();
+		if (curr_worldspace == last_worldspace)
+			return;
+		last_worldspace = curr_worldspace;
+		path = (Util::PathHelpers::GetFeatureShaderPath("SnowCover") / curr_worldspace).replace_extension(std::filesystem::path(".json"));
+		if (!std::filesystem::exists(path)) {
+			status = std::string("Config doesn't exist.");
+			wsettings.EnableSnowCover = false;
+			return;
+		}
+		fileStream = std::ifstream(path);
+		if (!fileStream.is_open()) {
+			status = std::string("Cannot open config.");
+			wsettings.EnableSnowCover = false;
+			logger::error("[Snow Cover] Cannot open config at {}", path.generic_string());
+			return;
+		}
+	} catch (const std::system_error& e) {
+		logger::error("[Snow Cover] Error opening file: {}", e.what());
 	}
 
-	auto whitelist_path = std::string("Data\\Shaders\\SnowCover\\whitelist.txt");
-	auto blacklist_path = std::string("Data\\Shaders\\SnowCover\\blacklist.txt");
+	auto whitelist_path = Util::PathHelpers::GetFeatureShaderPath("SnowCover") / "whitelist.txt";
+	auto blacklist_path = Util::PathHelpers::GetFeatureShaderPath("SnowCover") / "blacklist.txt";
 
 	whitelist = FormIdParser::parseTriNameFile(whitelist_path);
 	blacklist = FormIdParser::parseTriNameFile(blacklist_path);
@@ -412,10 +423,9 @@ void SnowCover::Reload()
 		wsettings.MaxAngle = config["MaxAngle"];
 		wsettings.MainSpec = config["MainSpec"];
 		wsettings.AltSpec = config["AltSpec"];
-
-		main_tex = config["MainTexture"];
-		std::wstring tname = strtowstr(main_tex);
-		copyString(main_tex, tbuf, 256);
+		main_tex = std::filesystem::path(config["MainTexture"].get<std::string>());
+		//std::wstring tname = strtowstr(main_tex);
+		copyString(main_tex.generic_string().c_str(), tbuf, 256);
 		auto device = globals::d3d::device;
 		auto context = globals::d3d::context;
 		if (views[0])
@@ -424,20 +434,21 @@ void SnowCover::Reload()
 			views[1]->Release();
 		if (views[2])
 			views[2]->Release();
-		HRESULT hr = DirectX::CreateDDSTextureFromFile(device, context, (std::wstring(L"Data\\") + tname + L".dds").c_str(), nullptr, &views.at(0));
+		auto data_path = Util::PathHelpers::GetDataPath();
+		HRESULT hr = DirectX::CreateDDSTextureFromFile(device, context, (data_path / main_tex).replace_extension(".dds").native().c_str(), nullptr, &views.at(0));
 		if (hr != S_OK) {
-			logger::warn("Snow Cover: Error loading {}.dds texture: {}", main_tex, hr);
-			DirectX::CreateDDSTextureFromFile(device, context, L"Data\\textures\\defaultdiffuse.dds", nullptr, &views.at(0));
+			logger::warn("Snow Cover: Error loading {}.dds texture: {}", main_tex.generic_string(), hr);
+			DirectX::CreateDDSTextureFromFile(device, context, (data_path / "textures" / "defaultdiffuse.dds").native().c_str(), nullptr, &views.at(0));
 		}
-		hr = DirectX::CreateDDSTextureFromFile(device, context, (std::wstring(L"Data\\") + tname + L"_n.dds").c_str(), nullptr, &views.at(1));
+		hr = DirectX::CreateDDSTextureFromFile(device, context, (data_path / main_tex).concat("_n.dds").native().c_str(), nullptr, &views.at(1));
 		if (hr != S_OK) {
-			logger::warn("Snow Cover: Error loading {}_n.dds texture: {}", main_tex, hr);
-			DirectX::CreateDDSTextureFromFile(device, context, L"Data\\textures\\default_n.dds", nullptr, &views.at(1));
+			logger::warn("Snow Cover: Error loading {}_n.dds texture: {}", main_tex.generic_string(), hr);
+			DirectX::CreateDDSTextureFromFile(device, context, (data_path / "textures" / "default_n.dds").native().c_str(), nullptr, &views.at(1));
 		}
-		hr = DirectX::CreateDDSTextureFromFile(device, context, (std::wstring(L"Data\\") + tname + L"_rmaos.dds").c_str(), nullptr, &views.at(2));
+		hr = DirectX::CreateDDSTextureFromFile(device, context, (data_path / main_tex).concat("_rmaos.dds").native().c_str(), nullptr, &views.at(2));
 		if (hr != S_OK) {
-			logger::warn("Snow Cover: Error loading {}_rmaos.dds texture: {}", main_tex, hr);
-			DirectX::CreateDDSTextureFromFile(device, context, L"Data\\textures\\white.dds", nullptr, &views.at(2));
+			logger::warn("Snow Cover: Error loading {}_rmaos.dds texture: {}", main_tex.generic_string(), hr);
+			DirectX::CreateDDSTextureFromFile(device, context, (data_path / L"textures" / "white.dds").native().c_str(), nullptr, &views.at(2));
 		}
 		if (config.contains("AltTexture") && config["AltTexture"] != "") {
 			if (views[3])
@@ -446,18 +457,18 @@ void SnowCover::Reload()
 				views[4]->Release();
 			if (views[5])
 				views[5]->Release();
-			alt_tex = config["AltTexture"];
-			std::wstring altname = strtowstr(alt_tex);
-			copyString(alt_tex, altbuf, 256);
-			hr = DirectX::CreateDDSTextureFromFile(device, context, (std::wstring(L"Data\\") + altname + L".dds").c_str(), nullptr, &views.at(3));
+			alt_tex = std::filesystem::path(config["AltTexture"].get<std::string>());
+			//std::wstring altname = strtowstr(alt_tex);
+			copyString(alt_tex.generic_string().c_str(), altbuf, 256);
+			hr = DirectX::CreateDDSTextureFromFile(device, context, (data_path / alt_tex).replace_extension(".dds").native().c_str(), nullptr, &views.at(3));
 			if (hr != S_OK)
-				logger::warn("Snow Cover: Error loading {}.dds texture: {}", alt_tex, hr);
-			hr = DirectX::CreateDDSTextureFromFile(device, context, (std::wstring(L"Data\\") + altname + L"_n.dds").c_str(), nullptr, &views.at(4));
+				logger::warn("Snow Cover: Error loading {}.dds texture: {}", alt_tex.generic_string(), hr);
+			hr = DirectX::CreateDDSTextureFromFile(device, context, (data_path / alt_tex).concat("_n.dds").native().c_str(), nullptr, &views.at(4));
 			if (hr != S_OK)
-				logger::warn("Snow Cover: Error loading {}_n.dds texture: {}", alt_tex, hr);
-			hr = DirectX::CreateDDSTextureFromFile(device, context, (std::wstring(L"Data\\") + altname + L"_rmaos.dds").c_str(), nullptr, &views.at(5));
+				logger::warn("Snow Cover: Error loading {}_n.dds texture: {}", alt_tex.generic_string(), hr);
+			hr = DirectX::CreateDDSTextureFromFile(device, context, (data_path / alt_tex).concat("_rmaos.dds").native().c_str(), nullptr, &views.at(5));
 			if (hr != S_OK)
-				logger::warn("Snow Cover: Error loading {}_rmaos.dds texture: {}", alt_tex, hr);
+				logger::warn("Snow Cover: Error loading {}_rmaos.dds texture: {}", alt_tex.generic_string(), hr);
 
 		} else {
 			views[3] = views[0];
@@ -467,29 +478,29 @@ void SnowCover::Reload()
 
 		if (views[6])
 			views[6]->Release();
-		map_tex = config["MapTexture"];
-		std::wstring mname = strtowstr(map_tex);
-		copyString(map_tex, mapbuf, 256);
-		hr = DirectX::CreateDDSTextureFromFile(device, context, (std::wstring(L"Data\\") + mname + L".dds").c_str(), nullptr, &views.at(6));
+		map_tex = std::filesystem::path(config["MapTexture"].get<std::string>());
+		//std::wstring mname = strtowstr(map_tex);
+		copyString(map_tex.generic_string().c_str(), mapbuf, 256);
+		hr = DirectX::CreateDDSTextureFromFile(device, context, (data_path / map_tex).concat(".dds").native().c_str(), nullptr, &views.at(6));
 		if (hr != S_OK) {
-			logger::warn("Snow Cover: Error loading {}.dds texture: {}", map_tex, hr);
-			DirectX::CreateDDSTextureFromFile(device, context, L"Data\\textures\\gray.dds", nullptr, &views.at(6));
+			logger::warn("Snow Cover: Error loading {}.dds texture: {}", map_tex.generic_string(), hr);
+			DirectX::CreateDDSTextureFromFile(device, context, (data_path / "textures" / "gray.dds").native().c_str(), nullptr, &views.at(6));
 		}
 		wsettings.EnableSnowCover = true;
 	} catch (const nlohmann::json::parse_error& e) {
-		logger::error("[Snow Cover] failed to parse {} : {}", path, e.what());
+		logger::error("[Snow Cover] failed to parse {} : {}", path.generic_string(), e.what());
 		status = e.what();
 		wsettings = WorldSettings{};
 		wsettings.EnableSnowCover = false;
 		return;
 	} catch (const nlohmann::json::exception& e) {
-		logger::error("[Snow Cover] failed to parse {} : {}", path, e.what());
+		logger::error("[Snow Cover] failed to parse {} : {}", path.generic_string(), e.what());
 		status = e.what();
 		wsettings = WorldSettings{};
 		wsettings.EnableSnowCover = false;
 		return;
 	} catch (...) {
-		logger::error("[Snow Cover] unknown error when loading a config: {}", path);
+		logger::error("[Snow Cover] unknown error when loading a config: {}", path.generic_string());
 		status = std::string("Unknown error.");
 		return;
 	}

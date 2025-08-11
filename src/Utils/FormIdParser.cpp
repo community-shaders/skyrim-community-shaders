@@ -13,12 +13,12 @@ std::string FormIdParser::trim(const std::string& str)
 	return str.substr(start, end - start + 1);
 }
 
-std::unordered_set<std::uint32_t> FormIdParser::parseHexFile(const std::string& filename)
+std::unordered_set<std::uint32_t> FormIdParser::parseHexFile(const std::filesystem::path& filename)
 {
 	std::unordered_set<std::uint32_t> hexMap;
 	std::ifstream file(filename);
 	if (!file.is_open()) {
-		logger::error("[FormIdParser] failed to open the file: {}", filename);
+		logger::error("[FormIdParser] failed to open the file: {}", filename.generic_string());
 		return hexMap;
 	}
 
@@ -50,12 +50,12 @@ std::unordered_set<std::uint32_t> FormIdParser::parseHexFile(const std::string& 
 	return hexMap;
 }
 
-std::unordered_set<std::uint64_t> FormIdParser::parseTriNameFile(const std::string& filename)
+std::unordered_set<std::uint64_t> FormIdParser::parseTriNameFile(const std::filesystem::path& filename)
 {
 	std::unordered_set<std::uint64_t> hexMap;
 	std::ifstream file(filename);
 	if (!file.is_open()) {
-		logger::error("[FormIdParser] failed to open the file: {}", filename);
+		logger::error("[FormIdParser] failed to open the file: {}", filename.generic_string());
 		return hexMap;
 	}
 
