@@ -1139,7 +1139,7 @@ PS_OUTPUT main(PS_INPUT input)
 #					if defined(VC)
 	float specularFraction = lerp(1, fresnel * diffuseOutput.refractionMul, distanceFactor);
 	float3 finalColorPreFog = lerp(diffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
-	float3 finalColor = lerp(finalColorPreFog, Color::Fog(input.FogParam.xyz) * PosAdjust[eyeIndex].w, input.FogParam.w);
+	float3 finalColor = lerp(finalColorPreFog, Color::Fog(input.FogParam.xyz) * PosAdjust[eyeIndex].w, Color::FogAlpha(input.FogParam.w));
 #						if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
 	// DEBUG MODE: Override water color with debug visualization
 	float3 debugColor = WetnessEffects::GetDebugWetnessColorStandard(waterData.rippleInfo, 2.0, 3.0);
@@ -1151,11 +1151,11 @@ PS_OUTPUT main(PS_INPUT input)
 #					else
 	float specularFraction = lerp(1, fresnel, distanceFactor);
 	float3 finalColorPreFog = lerp(diffuseOutput.refractionDiffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
-	finalColorPreFog = lerp(finalColorPreFog, Color::Fog(input.FogParam.xyz) * PosAdjust[eyeIndex].w, input.FogParam.w);
+	finalColorPreFog = lerp(finalColorPreFog, Color::Fog(input.FogParam.xyz) * PosAdjust[eyeIndex].w, Color::FogAlpha(input.FogParam.w));
 
 	float3 refractionColor = diffuseOutput.refractionColor;
 
-	float fogFactor = min(FogParam.w, pow(saturate(-diffuseOutput.depth * FogParam.y - FogParam.x), FogParam.z));
+	float fogFactor = Color::FogAlpha(min(FogParam.w, pow(saturate(-diffuseOutput.depth * FogParam.y - FogParam.x), FogParam.z)));
 	float3 fogColor = lerp(Color::Fog(FogNearColor.xyz), Color::Fog(FogFarColor.xyz), fogFactor);
 	refractionColor = lerp(refractionColor, fogColor, fogFactor);
 

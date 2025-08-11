@@ -32,8 +32,9 @@ struct LinearLighting : Feature
 		float colorGamma = 2.2f;
 		float ambientGamma = 1.8f;
 		float fogGamma = 2.2f;
+		float fogAlphaGamma = 1.0f;
 		float effectGamma = 1.8f;
-		float effectAlphaGamma = 1.8f;
+		float effectAlphaGamma = 1.0f;
 		float skyGamma = 1.8f;
 		float waterGamma = 1.8f;
 		float vlGamma = 1.8f;
@@ -63,6 +64,7 @@ struct LinearLighting : Feature
 		float colorGamma;
 		float ambientGamma;
 		float fogGamma;
+		float fogAlphaGamma;
 		float effectGamma;
 		float effectAlphaGamma;
 		float skyGamma;
@@ -78,7 +80,6 @@ struct LinearLighting : Feature
 		float projectedEffectMult;
 		float deferredEffectMult;
 		float otherEffectMult;
-		float pad;
 	};
 
 	uint tempDisable = false;

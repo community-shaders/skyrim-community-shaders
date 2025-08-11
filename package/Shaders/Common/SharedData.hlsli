@@ -203,6 +203,7 @@ namespace SharedData
 		float colorGamma;
 		float ambientGamma;
 		float fogGamma;
+		float fogAlphaGamma;
 		float effectGamma;
 		float effectAlphaGamma;
 		float skyGamma;
@@ -218,7 +219,6 @@ namespace SharedData
 		float projectedEffectMult;
 		float deferredEffectMult;
 		float otherEffectMult;
-		float pad;
 	};
 
 	cbuffer FeatureData : register(b6)

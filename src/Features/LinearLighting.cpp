@@ -8,6 +8,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	colorGamma,
 	ambientGamma,
 	fogGamma,
+	fogAlphaGamma,
 	effectGamma,
 	effectAlphaGamma,
 	skyGamma,
@@ -29,15 +30,16 @@ void LinearLighting::DrawSettings()
 	ImGui::Checkbox("Enable Linear Lighting", (bool*)&settings.enableLinearLighting);
 	ImGui::Checkbox("Enable Gamma Correction", (bool*)&settings.enableGammaCorrection);
 	ImGui::Text("Gamma Settings");
-	ImGui::SliderFloat("Light Gamma", &settings.lightGamma, 1.0f, 3.0f, "%.2f");
-	ImGui::SliderFloat("Color Gamma", &settings.colorGamma, 1.0f, 3.0f, "%.2f");
-	ImGui::SliderFloat("Ambient Gamma", &settings.ambientGamma, 1.0f, 3.0f, "%.2f");
-	ImGui::SliderFloat("Fog Gamma", &settings.fogGamma, 1.0f, 3.0f, "%.2f");
-	ImGui::SliderFloat("Effect Gamma", &settings.effectGamma, 1.0f, 3.0f, "%.2f");
-	ImGui::SliderFloat("Effect Transparency Gamma", &settings.effectAlphaGamma, 1.0f, 3.0f, "%.2f");
-	ImGui::SliderFloat("Sky Gamma", &settings.skyGamma, 1.0f, 3.0f, "%.2f");
-	ImGui::SliderFloat("Water Gamma", &settings.waterGamma, 1.0f, 3.0f, "%.2f");
-	ImGui::SliderFloat("Volumetric Lighting Gamma", &settings.vlGamma, 1.0f, 3.0f, "%.2f");
+	ImGui::SliderFloat("Light Gamma", &settings.lightGamma, 0.1f, 3.0f, "%.2f");
+	ImGui::SliderFloat("Color Gamma", &settings.colorGamma, 0.1f, 3.0f, "%.2f");
+	ImGui::SliderFloat("Ambient Gamma", &settings.ambientGamma, 0.1f, 3.0f, "%.2f");
+	ImGui::SliderFloat("Fog Gamma", &settings.fogGamma, 0.1f, 3.0f, "%.2f");
+	ImGui::SliderFloat("Fog Transparency Gamma", &settings.fogAlphaGamma, 0.1f, 3.0f, "%.2f");
+	ImGui::SliderFloat("Effect Gamma", &settings.effectGamma, 0.1f, 3.0f, "%.2f");
+	ImGui::SliderFloat("Effect Transparency Gamma", &settings.effectAlphaGamma, 0.1f, 3.0f, "%.2f");
+	ImGui::SliderFloat("Sky Gamma", &settings.skyGamma, 0.1f, 3.0f, "%.2f");
+	ImGui::SliderFloat("Water Gamma", &settings.waterGamma, 0.1f, 3.0f, "%.2f");
+	ImGui::SliderFloat("Volumetric Lighting Gamma", &settings.vlGamma, 0.1f, 3.0f, "%.2f");
 
 	ImGui::SeparatorText("Multipliers");
 	ImGui::SliderFloat("Vanilla Diffuse Multiplier", &settings.vanillaDiffuseMult, 0.0f, 10.0f, "%.2f");
@@ -98,6 +100,7 @@ LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 	data.colorGamma = settings.colorGamma;
 	data.ambientGamma = settings.ambientGamma;
 	data.fogGamma = settings.fogGamma;
+	data.fogAlphaGamma = settings.fogAlphaGamma;
 	data.effectGamma = settings.effectGamma;
 	data.effectAlphaGamma = settings.effectAlphaGamma;
 	data.skyGamma = settings.skyGamma;
@@ -113,6 +116,5 @@ LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 	data.projectedEffectMult = settings.projectedEffectMult;
 	data.deferredEffectMult = settings.deferredEffectMult;
 	data.otherEffectMult = settings.otherEffectMult;
-	data.pad = 0.0f;
 	return data;
 }

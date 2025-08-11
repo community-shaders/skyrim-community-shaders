@@ -145,6 +145,11 @@ namespace Color
 		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.fogGamma) : color;
 	}
 
+	float FogAlpha(float alpha)
+	{
+		return ENABLE_LL ? pow(abs(alpha), SharedData::linearLightingSettings.fogAlphaGamma) : alpha;
+	}
+
 	float3 Effect(float3 color)
 	{
 		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.effectGamma) : color;
