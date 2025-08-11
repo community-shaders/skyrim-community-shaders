@@ -126,6 +126,9 @@ float XeSS::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight,
 	case 3:
 		xessQuality = XESS_QUALITY_SETTING_PERFORMANCE;
 		break;
+	case 4:
+		xessQuality = XESS_QUALITY_SETTING_ULTRA_PERFORMANCE;
+		break;
 	default:
 		xessQuality = XESS_QUALITY_SETTING_AA;
 		break;

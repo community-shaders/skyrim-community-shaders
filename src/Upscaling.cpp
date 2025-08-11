@@ -63,13 +63,13 @@ void Upscaling::DrawSettings()
 
 	// Display upscaling settings if applicable
 	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
-		const char* upscalePresetsDLSS[] = { "Performance", "Balanced", "Quality", "DLAA" };
-		const char* upscalePresets[] = { "Performance", "Balanced", "Quality", "Native AA" };
+		const char* upscalePresetsDLSS[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "DLAA" };
+		const char* upscalePresets[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "Native AA" };
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 3, std::format("{}", upscalePresetsDLSS[3 - settings.qualityMode]).c_str());
+			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresetsDLSS[4 - settings.qualityMode]).c_str());
 		else
-			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 3, std::format("{}", upscalePresets[3 - settings.qualityMode]).c_str());
+			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
 	}
 
 	if (globals::fidelityFX->featureFSR3FG) {
@@ -209,10 +209,12 @@ Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
 {
 	if (globals::streamline->featureDLSS) {
 		settings.upscaleMethod = std::clamp(settings.upscaleMethod, (uint)UpscaleMethod::kNONE, (uint)UpscaleMethod::kDLSS);
+		settings.qualityMode = std::clamp(settings.qualityMode, 0u, 4u);
 		return (UpscaleMethod)settings.upscaleMethod;
 	}
 
 	settings.upscaleMethodNoDLSS = std::clamp(settings.upscaleMethodNoDLSS, (uint)UpscaleMethod::kNONE, (uint)UpscaleMethod::kXESS);
+	settings.qualityMode = std::clamp(settings.qualityMode, 0u, 4u);
 	return (UpscaleMethod)settings.upscaleMethodNoDLSS;
 }
 

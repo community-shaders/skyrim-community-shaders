@@ -263,14 +263,35 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	auto& motionVectorsTexture = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
 	static auto previousDlssPreset = a_preset;
+	static auto previousQualityMode = globals::upscaling->settings.qualityMode;
 
-	if (previousDlssPreset != a_preset)
+	if (previousDlssPreset != a_preset || previousQualityMode != globals::upscaling->settings.qualityMode)
 		DestroyDLSSResources();
 	previousDlssPreset = a_preset;
+	previousQualityMode = globals::upscaling->settings.qualityMode;
 
 	{
 		sl::DLSSOptions dlssOptions{};
-		dlssOptions.mode = sl::DLSSMode::eMaxQuality;
+		
+		// Map quality mode to DLSS mode
+		uint32_t qualityMode = globals::upscaling->settings.qualityMode;
+		switch (qualityMode) {
+		case 1:
+			dlssOptions.mode = sl::DLSSMode::eMaxQuality;
+			break;
+		case 2:
+			dlssOptions.mode = sl::DLSSMode::eBalanced;
+			break;
+		case 3:
+			dlssOptions.mode = sl::DLSSMode::eMaxPerformance;
+			break;
+		case 4:
+			dlssOptions.mode = sl::DLSSMode::eUltraPerformance;
+			break;
+		default:
+			dlssOptions.mode = sl::DLSSMode::eDLAA;
+			break;
+		}
 		dlssOptions.outputWidth = (uint)state->screenSize.x;
 		dlssOptions.outputHeight = (uint)state->screenSize.y;
 		dlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
@@ -336,6 +357,9 @@ float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputH
 		break;
 	case 3:
 		dlssMode = sl::DLSSMode::eMaxPerformance;
+		break;
+	case 4:
+		dlssMode = sl::DLSSMode::eUltraPerformance;
 		break;
 	default:
 		dlssMode = sl::DLSSMode::eDLAA;
