@@ -147,8 +147,12 @@ namespace Color
 
 	float3 Effect(float3 color)
 	{
+		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.effectGamma) : color;
+	}
+
+	float3 EffectMult(float3 color)
+	{
 		if (ENABLE_LL) {
-			color = pow(abs(color), SharedData::linearLightingSettings.effectGamma);
 #	if defined(MEMBRANE)
 			color *= SharedData::linearLightingSettings.membraneEffectMult;
 #	elif defined(BLOOD)
@@ -212,6 +216,16 @@ namespace Color
 	float VanillaSpecularMult()
 	{
 		return ENABLE_LL ? SharedData::linearLightingSettings.vanillaSpecularMult : 1.0f;
+	}
+
+	float GrassDiffuseMult()
+	{
+		return ENABLE_LL ? SharedData::linearLightingSettings.grassDiffuseMult : 1.0f;
+	}
+
+	float GrassSpecularMult()
+	{
+		return ENABLE_LL ? SharedData::linearLightingSettings.grassSpecularMult : 1.0f;
 	}
 #endif
 }

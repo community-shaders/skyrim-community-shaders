@@ -210,13 +210,15 @@ namespace SharedData
 		float vlGamma;
 		float vanillaDiffuseMult;
 		float vanillaSpecularMult;
+		float grassDiffuseMult;
+		float grassSpecularMult;
 		float lightMult;
 		float membraneEffectMult;
 		float bloodEffectMult;
 		float projectedEffectMult;
 		float deferredEffectMult;
 		float otherEffectMult;
-		float3 pad;
+		float pad;
 	};
 
 	cbuffer FeatureData : register(b6)

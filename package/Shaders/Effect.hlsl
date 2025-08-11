@@ -537,7 +537,8 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 	float3 color = DLightColor.xyz;
 
 	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::EffectShadows)) {
-		float3 dirLightColor = SharedData::DirLightColor.xyz * 0.5;
+		float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+		float3 dirLightColor = Color::Light(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult * 0.5;
 		float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
 
 #		if defined(IBL)
@@ -598,9 +599,9 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld))
 #		endif
 	{
-		color.x += dot(PLightColorR * lightFadeMul, 1.0.xxxx);
-		color.y += dot(PLightColorG * lightFadeMul, 1.0.xxxx);
-		color.z += dot(PLightColorB * lightFadeMul, 1.0.xxxx);
+		color.x += dot(Color::Light(PLightColorR) * lightFadeMul, 1.0.xxxx);
+        color.y += dot(Color::Light(PLightColorG) * lightFadeMul, 1.0.xxxx);
+        color.z += dot(Color::Light(PLightColorB) * lightFadeMul, 1.0.xxxx);
 	}
 
 	return color;
@@ -661,7 +662,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif
 
 	float lightingInfluence = LightingInfluence.x;
-	float3 propertyColor = PropertyColor.xyz;
+	float3 propertyColor = Color::Effect(PropertyColor.xyz);
 
 #	if defined(LIGHTING)
 	propertyColor = GetLightingColor(input.MSPosition.xyz, input.WorldPosition.xyz, input.Position.xyzw, eyeIndex);
@@ -694,7 +695,7 @@ PS_OUTPUT main(PS_INPUT input)
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 #			endif
 
-				float3 lightColor = light.color.xyz * intensityMultiplier * 0.5 * light.fade;
+				float3 lightColor = Color::Light(light.color.xyz) * intensityMultiplier * 0.5 * light.fade;
 				propertyColor += lightColor;
 			}
 		}
@@ -712,6 +713,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif
 	{
 		baseTexColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord0.xy);
+		baseTexColor.xyz = Color::Effect(baseTexColor.xyz);
 		baseColor *= baseTexColor;
 		if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::IgnoreTexAlpha || Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha) {
 			baseColor.w = 1;
@@ -722,8 +724,9 @@ PS_OUTPUT main(PS_INPUT input)
 	float4 baseColorMul = float4(1, 1, 1, 1);
 #	else
 	float4 baseColorMul = BaseColor;
+	baseColorMul.xyz = Color::Effect(baseColorMul.xyz);
 #		if defined(VC) && !defined(PROJECTED_UV)
-	baseColorMul *= input.Color;
+	baseColorMul *= float4(Color::Effect(input.Color.xyz), input.Color.w);
 #		endif
 #	endif
 
@@ -776,7 +779,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	if defined(MEMBRANE)
 		grayscaleToColorUv.y = PropertyColor.x;
 #	endif
-		baseColor.xyz = baseColorScale * TexGrayscaleSampler.Sample(SampGrayscaleSampler, grayscaleToColorUv).xyz;
+		baseColor.xyz = Color::Effect(baseColorScale * TexGrayscaleSampler.Sample(SampGrayscaleSampler, grayscaleToColorUv).xyz);
 	}
 
 	float3 lightColor = lerp(baseColor.xyz, propertyColor * baseColor.xyz, lightingInfluence.xxx);
@@ -799,7 +802,9 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 blendedColor = lightColor.xyz;
 #	endif
 
-	float4 finalColor = float4(blendedColor, alpha);
+	alpha = Color::EffectAlpha(alpha);
+
+	float4 finalColor = float4(Color::EffectMult(blendedColor), alpha);
 #	if defined(MULTBLEND_DECAL)
 	finalColor.xyz *= alpha;
 #	else
@@ -862,7 +867,6 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color2 = finalColor;
 #	endif
 
-	psout.Diffuse = float4(Color::Effect(psout.Diffuse.xyz), Color::EffectAlpha(psout.Diffuse.w).x);
 	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld) && SharedData::linearLightingSettings.enableLinearLighting) {
 		psout.Diffuse.xyz = Color::TrueLinearToGamma(psout.Diffuse.xyz);
 	}
