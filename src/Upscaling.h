@@ -58,7 +58,7 @@ public:
 	float resolutionScale = 1.0f;
 
 	bool wasUpscaled = false;
-
+	LARGE_INTEGER qpf;
 
 	// FG FPS Measurement for Overlay
 	bool IsFrameGenerationActive() const;
@@ -237,38 +237,6 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	struct GFxMovieDef_GetFrameRate
-	{
-		static float thunk(RE::GFxMovieDef* This)
-		{
-			auto frameRate = func(This);
-			auto upscaling = globals::upscaling;
-			if (upscaling->d3d12Interop && upscaling->settings.frameGenerationMode) {
-				float newFrameRate = std::min(60.0f, frameRate * 2.0f);
-				return std::max(frameRate, newFrameRate);
-			}
-			return frameRate;
-		}
-
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	struct GFxSpriteDef_GetFrameRate
-	{
-		static float thunk(RE::GFxSpriteDef* This)
-		{
-			auto frameRate = func(This);
-			auto upscaling = globals::upscaling;
-			if (upscaling->d3d12Interop && upscaling->settings.frameGenerationMode) {
-				float newFrameRate = std::min(60.0f, frameRate * 2.0f);
-				return std::max(frameRate, newFrameRate);
-			}
-			return frameRate;
-		}
-
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
 	static void InstallHooks()
 	{
 		bool isGOG = !GetModuleHandle(L"steam_api64.dll");
@@ -284,10 +252,6 @@ public:
 		stl::write_thunk_call<Main_PostProcessing>(REL::RelocationID(100430, 107148).address() + REL::Relocate(0x1F0, 0x1E7, 0x206));
 		
 		if (!REL::Module::IsVR()) {
-			// Patches user interface to reduce latency
-			stl::detour_thunk<GFxMovieDef_GetFrameRate>(REL::RelocationID(83381, 85326));
-			stl::detour_thunk<GFxSpriteDef_GetFrameRate>(REL::RelocationID(82110, 84186));
-
 			// Patches RSSetScissorRect calls to use dynamic resolution
 			// This is a PC-specific function hence it was missing
 			stl::detour_thunk<SetScissorRect>(REL::RelocationID(75564, 77365));
