@@ -79,25 +79,47 @@ Override files use JSON format and should contain only the settings you want to 
 
 ## Metadata Section
 
-The `_metadata` section is optional but recommended. It provides information about the override:
+The `_metadata` section also required for the system to identify the override. It provides information about the override:
 
 -   `modName`: Display name of your mod
 -   `version`: Version of your override file
 -   `description`: Description of what the override does
 -   `enabled`: Whether the override is enabled by default (optional, defaults to true)
 
+
 ## Feature Short Names
 
-To create feature-specific overrides, you need to use the correct feature short name. Common feature short names include:
+To create feature-specific overrides, you need to use the correct feature short name. The full list of feature short names is:
 
--   `Skylighting` - Skylighting feature
--   `ScreenSpaceGI` - Screen Space Global Illumination
--   `VolumetricLighting` - Volumetric Lighting
--   `WaterEffects` - Water Effects
--   `TerrainShadows` - Terrain Shadows
--   `SubsurfaceScattering` - Subsurface Scattering
--   `DynamicCubemaps` - Dynamic Cubemaps
--   `CloudShadows` - Cloud Shadows
+- `CloudShadows` - Cloud Shadows
+- `DynamicCubemaps` - Dynamic Cubemaps
+- `ExtendedMaterials` - Extended Materials
+- `GrassCollision` - Grass Collision
+- `GrassLighting` - Grass Lighting
+- `HairSpecular` - Hair Specular
+- `IBL` - Image-Based Lighting
+- `LightLimitFix` - Light Limit Fix
+- `LODBlending` - LOD Blending
+- `InteriorSun` - Interior Sun
+- `InverseSquareLighting` - Inverse Square Lighting
+- `ScreenSpaceGI` - Screen Space Global Illumination
+- `ScreenSpaceShadows` - Screen-Space Shadows
+- `Skylighting` - Skylighting
+- `TerrainVariation` - Terrain Variation
+- `SkySync` - Sky Sync
+- `SubsurfaceScattering` - Subsurface Scattering
+- `TerrainBlending` - Terrain Blending
+- `TerrainHelper` - Terrain Helper
+- `TerrainShadows` - Terrain Shadows
+- `VolumetricLighting` - Volumetric Lighting
+- `VR` - VR
+- `WaterEffects` - Water Effects
+- `WeatherPicker` - Weather Picker
+- `PerformanceOverlay` - Performance Overlay
+- `WetnessEffects` - Wetness Effects
+- `ExtendedTranslucency` - Extended Translucency
+
+**This list is not exhaustive. It is current as of 11/08/2025. All Feature Short Names will work.**
 
 ## How It Works
 
