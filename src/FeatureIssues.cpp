@@ -362,6 +362,7 @@ namespace FeatureIssues
 		std::vector<const FeatureIssueInfo*> unknownIssues;
 		std::vector<const FeatureIssueInfo*> obsoleteIssues;
 		std::vector<const FeatureIssueInfo*> versionIssues;
+		std::vector<const FeatureIssueInfo*> overrideIssues;
 
 		for (const auto& issue : featureIssues) {
 			if (issue.IsObsolete() && issue.ModifiedShaderDirectory()) {
@@ -374,6 +375,8 @@ namespace FeatureIssues
 				obsoleteIssues.push_back(&issue);
 			} else if (issue.IsVersionMismatch()) {
 				versionIssues.push_back(&issue);
+			} else if (issue.IsOverrideFailed()) {
+				overrideIssues.push_back(&issue);
 			}
 		}
 		// Shader Breaking Features Section (most critical)
@@ -410,6 +413,14 @@ namespace FeatureIssues
 				theme.StatusPalette.Warning, !versionIssues.empty())) {
 			for (const auto* issue : versionIssues) {
 				DrawFeatureIssue(*issue, theme.StatusPalette.Warning);
+			}
+		}
+		// Override Failures Section
+		if (auto section = Util::SectionWrapper("Override Failures",
+				"The following override files failed to load or apply. Check the file format and content.",
+				theme.StatusPalette.Error, !overrideIssues.empty())) {
+			for (const auto* issue : overrideIssues) {
+				DrawFeatureIssue(*issue, theme.StatusPalette.Error);
 			}
 		}
 

@@ -79,7 +79,7 @@ Override files use JSON format and should contain only the settings you want to 
 
 ## Metadata Section
 
-The `_metadata` section is optional but recommended. It provides information about the override and is displayed in the UI:
+The `_metadata` section is optional but recommended. It provides information about the override:
 
 -   `modName`: Display name of your mod
 -   `version`: Version of your override file
@@ -98,8 +98,6 @@ To create feature-specific overrides, you need to use the correct feature short 
 -   `SubsurfaceScattering` - Subsurface Scattering
 -   `DynamicCubemaps` - Dynamic Cubemaps
 -   `CloudShadows` - Cloud Shadows
-
-You can find the complete list of feature short names in the Community Shaders UI under the "Overrides" tab.
 
 ## How It Works
 

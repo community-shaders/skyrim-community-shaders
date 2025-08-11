@@ -97,10 +97,25 @@ public:
 	std::vector<const OverrideInfo*> GetFeatureOverrides(const std::string& featureName) const;
 
 	/**
+	 * @brief Checks if there are any overrides available for a specific feature
+	 * @param featureName The short name of the feature
+	 * @return True if the feature has overrides available
+	 */
+	bool HasFeatureOverrides(const std::string& featureName) const;
+
+	/**
+	 * @brief Manually reapplies all overrides for a specific feature to the provided JSON
+	 * @param featureName The short name of the feature
+	 * @param featureJson JSON object to apply overrides to
+	 * @return Number of overrides applied
+	 */
+	size_t ReapplyFeatureOverrides(const std::string& featureName, json& featureJson);
+
+	/**
 	 * @brief Enables or disables a specific override
 	 * @param modName Name of the mod
 	 * @param featureName Feature name (empty for global)
-s	 * @param isEnabled Whether to enable the override
+	 * @param isEnabled Whether to enable the override
 	 */
 	void SetOverrideEnabled(const std::string& modName, const std::string& featureName, bool isEnabled);
 
@@ -141,6 +156,14 @@ s	 * @param isEnabled Whether to enable the override
 	 */
 	void SetEnabled(bool enable) { enabled = enable; }
 
+	/**
+	 * @brief Reports an override failure to the Feature Issues system
+	 * @param modName Name of the mod
+	 * @param featureName Feature name (empty for global overrides)
+	 * @param errorMessage Description of the failure
+	 */
+	void ReportOverrideFailure(const std::string& modName, const std::string& featureName, const std::string& errorMessage);
+
 private:
 	SettingsOverrideManager() = default;
 	~SettingsOverrideManager() = default;
@@ -164,9 +187,26 @@ private:
 	/**
 	 * @brief Validates override file format and content
 	 * @param overrideJson The JSON to validate
+	 * @param filePath Path to the file being validated (for error reporting)
 	 * @return True if valid
 	 */
-	bool ValidateOverrideFormat(const json& overrideJson);
+	bool ValidateOverrideFormat(const json& overrideJson, const std::string& filePath = "");
+
+	/**
+	 * @brief Validates JSON data types and ranges for safety
+	 * @param jsonData The JSON data to validate
+	 * @param path Current path in the JSON (for error reporting)
+	 * @param filePath Path to the file being validated (for error reporting)
+	 * @return True if all data types are safe
+	 */
+	bool ValidateJsonDataTypes(const json& jsonData, const std::string& path = "", const std::string& filePath = "");
+
+	/**
+	 * @brief Sanitizes JSON data to prevent corruption
+	 * @param jsonData The JSON data to sanitize
+	 * @return Sanitized JSON data
+	 */
+	json SanitizeJsonData(const json& jsonData);
 
 	/**
 	 * @brief Recursively merges override JSON into target JSON
@@ -183,4 +223,12 @@ private:
 	static constexpr const char* OVERRIDES_DIR = "Data\\SKSE\\Plugins\\CommunityShaders\\Overrides";
 	static constexpr const char* GLOBAL_SUFFIX = "_Global.json";
 	static constexpr const char* APPLIED_OVERRIDES_TRACKING_FILE = "Data\\SKSE\\Plugins\\CommunityShaders\\AppliedOverrides.json";
+	
+	// Security limits for JSON validation
+	static constexpr size_t MAX_JSON_DEPTH = 10;
+	static constexpr size_t MAX_STRING_LENGTH = 1000;
+	static constexpr size_t MAX_ARRAY_SIZE = 100;
+	static constexpr size_t MAX_OBJECT_SIZE = 100;
+	static constexpr double MAX_NUMERIC_VALUE = 1e6;
+	static constexpr double MIN_NUMERIC_VALUE = -1e6;
 };
