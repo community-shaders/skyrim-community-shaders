@@ -223,7 +223,7 @@ private:
 	static constexpr const char* OVERRIDES_DIR = "Data\\SKSE\\Plugins\\CommunityShaders\\Overrides";
 	static constexpr const char* GLOBAL_SUFFIX = "_Global.json";
 	static constexpr const char* APPLIED_OVERRIDES_TRACKING_FILE = "Data\\SKSE\\Plugins\\CommunityShaders\\AppliedOverrides.json";
-	
+
 	// Security limits for JSON validation
 	static constexpr size_t MAX_JSON_DEPTH = 10;
 	static constexpr size_t MAX_STRING_LENGTH = 1000;

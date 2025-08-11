@@ -45,7 +45,7 @@ size_t SettingsOverrideManager::DiscoverOverrides()
 
 	size_t filesProcessed = 0;
 	size_t filesLoaded = 0;
-	size_t maxFilesToProcess = 1000; // Prevent processing too many files
+	size_t maxFilesToProcess = 1000;  // Prevent processing too many files
 
 	try {
 		for (const auto& entry : std::filesystem::directory_iterator(overridesDir)) {
@@ -87,7 +87,7 @@ size_t SettingsOverrideManager::DiscoverOverrides()
 				continue;
 			}
 
-			constexpr size_t MAX_OVERRIDE_FILE_SIZE = 1024 * 1024; // 1MB
+			constexpr size_t MAX_OVERRIDE_FILE_SIZE = 1024 * 1024;  // 1MB
 			if (fileSize > MAX_OVERRIDE_FILE_SIZE) {
 				logger::info("Skipping overly large override file ({}KB): {}", fileSize / 1024, entry.path().string());
 				continue;
@@ -287,7 +287,7 @@ json SettingsOverrideManager::LoadAppliedOverridesTracking() const
 	json appliedOverrides;
 	try {
 		auto trackingPath = GetAppliedOverridesTrackingPath();
-		
+
 		// Check if file exists and is reasonable size
 		std::error_code ec;
 		if (!std::filesystem::exists(trackingPath, ec)) {
@@ -302,7 +302,7 @@ json SettingsOverrideManager::LoadAppliedOverridesTracking() const
 		}
 
 		// Limit tracking file size to prevent abuse
-		constexpr size_t MAX_TRACKING_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+		constexpr size_t MAX_TRACKING_FILE_SIZE = 10 * 1024 * 1024;  // 10MB
 		if (fileSize > MAX_TRACKING_FILE_SIZE) {
 			logger::info("Applied overrides tracking file too large ({}KB), ignoring: {}", fileSize / 1024, trackingPath.string());
 			return appliedOverrides;
@@ -312,7 +312,7 @@ json SettingsOverrideManager::LoadAppliedOverridesTracking() const
 		if (file.is_open()) {
 			try {
 				file >> appliedOverrides;
-				
+
 				// Validate the loaded JSON structure
 				if (!appliedOverrides.is_object()) {
 					logger::info("Applied overrides tracking file contains invalid data structure, resetting");
@@ -323,14 +323,13 @@ json SettingsOverrideManager::LoadAppliedOverridesTracking() const
 					while (it != appliedOverrides.end()) {
 						const std::string& key = it.key();
 						const auto& value = it.value();
-						
+
 						// Validate tracking entry structure
-						if (!value.is_object() || 
-							!value.contains("hash") || 
-							!value.contains("firstApplied") || 
+						if (!value.is_object() ||
+							!value.contains("hash") ||
+							!value.contains("firstApplied") ||
 							!value["hash"].is_string() ||
 							!value["firstApplied"].is_number()) {
-							
 							logger::info("Invalid tracking entry for '{}', removing", key);
 							it = appliedOverrides.erase(it);
 						} else {
@@ -364,16 +363,16 @@ void SettingsOverrideManager::SaveAppliedOverridesTracking(const json& appliedOv
 		}
 
 		auto trackingPath = GetAppliedOverridesTrackingPath();
-		
+
 		// Create directory if it doesn't exist
 		std::filesystem::create_directories(trackingPath.parent_path());
-		
+
 		// Create a backup of existing file before overwriting
 		std::error_code ec;
 		if (std::filesystem::exists(trackingPath, ec) && !ec) {
 			auto backupPath = trackingPath;
 			backupPath += ".backup";
-			std::filesystem::copy_file(trackingPath, backupPath, 
+			std::filesystem::copy_file(trackingPath, backupPath,
 				std::filesystem::copy_options::overwrite_existing, ec);
 			if (ec) {
 				logger::info("Could not create backup of tracking file: {}", ec.message());
@@ -385,7 +384,7 @@ void SettingsOverrideManager::SaveAppliedOverridesTracking(const json& appliedOv
 			try {
 				file << appliedOverrides.dump(1);
 				file.flush();
-				
+
 				if (file.fail()) {
 					logger::info("Failed to write applied overrides tracking file completely");
 				}
@@ -473,7 +472,7 @@ size_t SettingsOverrideManager::ApplyNewOverrides(json& baseSettings, json& appl
 
 				// Create a backup of base settings for rollback if needed
 				json backupSettings = baseSettings;
-				
+
 				try {
 					MergeJson(baseSettings, override.overrideData);
 					appliedCount++;
@@ -580,7 +579,7 @@ size_t SettingsOverrideManager::ApplyNewFeatureOverrides(const std::string& feat
 
 					// Create a backup of feature settings for rollback if needed
 					json backupSettings = featureJson;
-					
+
 					try {
 						MergeJson(featureJson, override.overrideData);
 						appliedCount++;
@@ -619,7 +618,7 @@ std::unique_ptr<SettingsOverrideManager::OverrideInfo> SettingsOverrideManager::
 			logger::info("Could not get file size for override file: {}", filePath.string());
 			return nullptr;
 		}
-		
+
 		// Limit file size to 1MB to prevent abuse
 		constexpr size_t MAX_OVERRIDE_FILE_SIZE = 1024 * 1024;
 		if (fileSize > MAX_OVERRIDE_FILE_SIZE) {
@@ -650,7 +649,7 @@ std::unique_ptr<SettingsOverrideManager::OverrideInfo> SettingsOverrideManager::
 		try {
 			overrideJson = json::parse(fileContent);
 		} catch (const json::parse_error& e) {
-			logger::info("JSON parse error in override file {}: {} at byte {}", 
+			logger::info("JSON parse error in override file {}: {} at byte {}",
 				filePath.string(), e.what(), e.byte);
 			return nullptr;
 		} catch (const json::exception& e) {
@@ -672,13 +671,13 @@ std::unique_ptr<SettingsOverrideManager::OverrideInfo> SettingsOverrideManager::
 		auto overrideInfo = std::make_unique<OverrideInfo>();
 
 		auto [modName, featureName] = ParseOverrideFilename(filePath.filename().string());
-		
+
 		// Validate mod name and feature name
 		if (modName.empty() || modName.length() > MAX_STRING_LENGTH) {
 			logger::info("Invalid mod name in override file: {}", filePath.string());
 			return nullptr;
 		}
-		
+
 		if (!featureName.empty() && featureName.length() > MAX_STRING_LENGTH) {
 			logger::info("Invalid feature name in override file: {}", filePath.string());
 			return nullptr;
@@ -693,7 +692,7 @@ std::unique_ptr<SettingsOverrideManager::OverrideInfo> SettingsOverrideManager::
 		// Extract and validate metadata if present
 		if (overrideJson.contains("_metadata") && overrideJson["_metadata"].is_object()) {
 			const auto& metadata = overrideJson["_metadata"];
-			
+
 			try {
 				if (metadata.contains("version") && metadata["version"].is_string()) {
 					std::string version = metadata["version"];
@@ -703,7 +702,7 @@ std::unique_ptr<SettingsOverrideManager::OverrideInfo> SettingsOverrideManager::
 						logger::info("Version string too long in override file: {}", filePath.string());
 					}
 				}
-				
+
 				if (metadata.contains("description") && metadata["description"].is_string()) {
 					std::string description = metadata["description"];
 					if (description.length() <= MAX_STRING_LENGTH) {
@@ -712,7 +711,7 @@ std::unique_ptr<SettingsOverrideManager::OverrideInfo> SettingsOverrideManager::
 						logger::info("Description string too long in override file: {}", filePath.string());
 					}
 				}
-				
+
 				if (metadata.contains("enabled") && metadata["enabled"].is_boolean()) {
 					overrideInfo->enabled = metadata["enabled"];
 				}
@@ -854,7 +853,7 @@ bool SettingsOverrideManager::ValidateOverrideFormat(const json& overrideJson, c
 		}
 
 		return true;
-		
+
 	} catch (const json::exception& e) {
 		if (!filePath.empty()) {
 			logger::info("JSON error during validation of override file {}: {}", filePath, e.what());
@@ -931,7 +930,7 @@ bool SettingsOverrideManager::ValidateJsonDataTypes(const json& jsonData, const 
 				}
 				return false;
 			}
-			
+
 			// Check for NaN and infinity
 			if (std::isnan(value) || std::isinf(value)) {
 				if (!filePath.empty()) {
@@ -943,7 +942,7 @@ bool SettingsOverrideManager::ValidateJsonDataTypes(const json& jsonData, const 
 		// Boolean and null values are always valid
 
 		return true;
-		
+
 	} catch (const json::exception& e) {
 		if (!filePath.empty()) {
 			logger::info("JSON error during data type validation at '{}' in override file {}: {}", path, filePath, e.what());
@@ -961,26 +960,26 @@ json SettingsOverrideManager::SanitizeJsonData(const json& jsonData)
 {
 	try {
 		json sanitized = jsonData;
-		
+
 		// Remove any potentially dangerous keys that start with system prefixes
 		std::vector<std::string> dangerousPrefixes = { "__", "System", "Windows", "HKEY_", "C:\\" };
-		
+
 		std::function<void(json&)> sanitizeRecursive = [&](json& data) {
 			if (data.is_object()) {
 				auto it = data.begin();
 				while (it != data.end()) {
 					const std::string& key = it.key();
-					
+
 					// Check for dangerous key prefixes
 					bool isDangerous = false;
 					for (const auto& prefix : dangerousPrefixes) {
-						if (key.length() >= prefix.length() && 
+						if (key.length() >= prefix.length() &&
 							key.substr(0, prefix.length()) == prefix) {
 							isDangerous = true;
 							break;
 						}
 					}
-					
+
 					if (isDangerous) {
 						logger::info("Removing potentially dangerous key from override: {}", key);
 						it = data.erase(it);
@@ -996,22 +995,23 @@ json SettingsOverrideManager::SanitizeJsonData(const json& jsonData)
 				}
 			} else if (data.is_string()) {
 				std::string str = data.get<std::string>();
-				
+
 				// Remove any null characters or control characters except common ones
 				str.erase(std::remove_if(str.begin(), str.end(), [](char c) {
 					return (c >= 0 && c < 32 && c != '\t' && c != '\n' && c != '\r');
-				}), str.end());
-				
+				}),
+					str.end());
+
 				// Truncate if too long
 				if (str.length() > MAX_STRING_LENGTH) {
 					str = str.substr(0, MAX_STRING_LENGTH);
 					logger::info("Truncated overly long string in override data");
 				}
-				
+
 				data = str;
 			} else if (data.is_number()) {
 				double value = data.get<double>();
-				
+
 				// Clamp to safe ranges
 				if (value > MAX_NUMERIC_VALUE) {
 					data = MAX_NUMERIC_VALUE;
@@ -1025,13 +1025,13 @@ json SettingsOverrideManager::SanitizeJsonData(const json& jsonData)
 				}
 			}
 		};
-		
+
 		sanitizeRecursive(sanitized);
 		return sanitized;
-		
+
 	} catch (const std::exception& e) {
 		logger::info("Error during JSON sanitization: {}", e.what());
-		return json::object(); // Return empty object on error
+		return json::object();  // Return empty object on error
 	}
 }
 
