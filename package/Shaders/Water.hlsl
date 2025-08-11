@@ -1156,16 +1156,21 @@ PS_OUTPUT main(PS_INPUT input)
 #					else
 	float specularFraction = lerp(1, fresnel, distanceFactor);
 	float3 finalColorPreFog = lerp(diffuseOutput.refractionDiffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
-	finalColorPreFog = lerp(finalColorPreFog, input.FogParam.xyz * PosAdjust[eyeIndex].w, input.FogParam.w);
+	float3 preFogColor = input.FogParam.xyz;
+#						if defined(IBL)
+	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+		preFogColor = ImageBasedLighting::GetFogIBLColor(preFogColor);
+	}
+#						endif
+	finalColorPreFog = lerp(finalColorPreFog, preFogColor * PosAdjust[eyeIndex].w, input.FogParam.w);
 
 	float3 refractionColor = diffuseOutput.refractionColor;
 
 	float fogFactor = min(FogParam.w, pow(saturate(-diffuseOutput.depth * FogParam.y - FogParam.x), FogParam.z));
 	float3 fogColor = lerp(FogNearColor.xyz, FogFarColor.xyz, fogFactor);
 #						if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL) {
-		float3 iblColor = Color::Saturation(ImageBasedLighting::GetDiffuseIBL(float3(0, 0, 0)), SharedData::iblSettings.IBLSaturation);
-		fogColor = lerp(fogColor, fogColor * iblColor, SharedData::iblSettings.FogAmount * SharedData::iblSettings.DiffuseIBLScale);
+	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
 	}
 #						endif
 	refractionColor = lerp(refractionColor, fogColor, fogFactor);

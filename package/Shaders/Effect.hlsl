@@ -795,9 +795,8 @@ PS_OUTPUT main(PS_INPUT input)
 #		else
 	float3 fogColor = input.FogParam.xyz;
 #			if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL) {
-		float3 iblFogColor = Color::Saturation(ImageBasedLighting::GetDiffuseIBL(float3(0, 0, 0)), SharedData::iblSettings.IBLSaturation);
-		fogColor = lerp(fogColor, fogColor * iblFogColor, SharedData::iblSettings.FogAmount * SharedData::iblSettings.DiffuseIBLScale);
+	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
 	}
 #			endif
 	float3 blendedColor = lerp(lightColor, fogColor, input.FogParam.www);

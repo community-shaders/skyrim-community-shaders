@@ -1,3 +1,4 @@
+#include "Common/Color.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
@@ -21,5 +22,11 @@ namespace ImageBasedLighting
 		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(shG, rayDir);
 		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(shB, rayDir);
 		return float3(colorR, colorG, colorB);
+	}
+
+	float3 GetFogIBLColor(float3 fogColor)
+	{
+		float3 iblColor = Color::Saturation(GetDiffuseIBL(float3(0, 0, 0)), SharedData::iblSettings.IBLSaturation) * Math::PI;
+		return lerp(fogColor, fogColor * iblColor, SharedData::iblSettings.FogAmount * SharedData::iblSettings.DiffuseIBLScale);
 	}
 }
