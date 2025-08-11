@@ -2,6 +2,7 @@
 
 #include "FeatureIssues.h"
 #include "FeatureVersions.h"
+#include "SettingsOverrideManager.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExtendedMaterials.h"
