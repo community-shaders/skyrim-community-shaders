@@ -106,6 +106,7 @@ namespace Color
 		return linearColorRaw * scale;
 	}
 
+	// Linear Lighting Functions
 	float3 LLGammaToLinear(float3 color)
 	{
 		return ENABLE_LL ? GammaToLinear(color) : color;
@@ -171,6 +172,11 @@ namespace Color
 #	endif
 		}
 		return color;
+	}
+
+	float EffectLightingMult()
+	{
+		return ENABLE_LL ? SharedData::linearLightingSettings.effectLightingMult : 1.0f;
 	}
 
 	float EffectAlpha(float alpha)

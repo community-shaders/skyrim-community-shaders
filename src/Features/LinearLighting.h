@@ -40,13 +40,14 @@ struct LinearLighting : Feature
 		float vlGamma = 1.8f;
 
 		// Lighting multipliers
-		float vanillaDiffuseMult = 0.33f;
-		float vanillaSpecularMult = 0.33f;
-		float grassDiffuseMult = 0.33f;
-		float grassSpecularMult = 0.33f;
+		float vanillaDiffuseMult = 0.32f;
+		float vanillaSpecularMult = 0.32f;
+		float grassDiffuseMult = 0.32f;
+		float grassSpecularMult = 0.32f;
 		float lightMult = 1.0f;
 
 		// Effect multipliers
+		float effectLightingMult = 0.32f;
 		float membraneEffectMult = 1.0f;
 		float bloodEffectMult = 1.0f;
 		float projectedEffectMult = 1.0f;
@@ -75,11 +76,13 @@ struct LinearLighting : Feature
 		float grassDiffuseMult;
 		float grassSpecularMult;
 		float lightMult;
+		float effectLightingMult;
 		float membraneEffectMult;
 		float bloodEffectMult;
 		float projectedEffectMult;
 		float deferredEffectMult;
 		float otherEffectMult;
+		float pad[3];
 	};
 
 	uint tempDisable = false;
