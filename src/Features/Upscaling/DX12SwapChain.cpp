@@ -10,10 +10,6 @@
 void DX12SwapChain::InitializeD3D12Resources()
 {
 	auto& upscaling = globals::features::upscaling;
-	if (!upscaling.sharedD3D12Device) {
-		logger::error("[DX12SwapChain] Shared D3D12 device not available");
-		return;
-	}
 
 	// Create frame-specific command allocators and lists using shared device
 	for (int i = 0; i < 2; i++) {
@@ -26,10 +22,6 @@ void DX12SwapChain::InitializeD3D12Resources()
 void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC a_swapChainDesc)
 {
 	auto& upscaling = globals::features::upscaling;
-	if (!upscaling.sharedD3D12Device || !upscaling.sharedD3D12CommandQueue) {
-		logger::error("[DX12SwapChain] Shared D3D12 resources not available");
-		return;
-	}
 
 	// Initialize D3D12 resources first
 	InitializeD3D12Resources();
@@ -73,10 +65,6 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 void DX12SwapChain::CreateInterop()
 {
 	auto& upscaling = globals::features::upscaling;
-	if (!upscaling.sharedD3D12Device) {
-		logger::error("[DX12SwapChain] Shared D3D12 device not available for interop");
-		return;
-	}
 
 	HANDLE sharedFenceHandle;
 	DX::ThrowIfFailed(upscaling.sharedD3D12Device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&d3d12Fence)));
