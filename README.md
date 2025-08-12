@@ -23,11 +23,21 @@ SKSE core plugin for community-driven advanced graphics modifications.
 -   Any terminal of your choice (e.g., PowerShell)
 -   [Visual Studio Community 2022](https://visualstudio.microsoft.com/)
     -   Desktop development with C++
--   [CMake](https://cmake.org/)
-    -   Edit the `PATH` environment variable and add the cmake.exe install path as a new value
-    -   Instructions for finding and editing the `PATH` environment variable can be found [here](https://www.java.com/en/download/help/path.html)
+    -   CMake Tools for Windows
+    -   HLSL Tools
 -   [Git](https://git-scm.com/downloads)
     -   Edit the `PATH` environment variable and add the Git.exe install path as a new value
+
+## Optional Requirements
+```
+CMake & Vcpkg comes with Visual Studio in Developer Command Prompts already. 
+Install them manually only if you want them in everywhere.
+```
+-   [CMake](https://cmake.org/)
+    -   No need to install manually if you have Visual Studio CMake Tools installed
+    -   CMake 4.0+ is __not__ supported right now
+    -   Edit the `PATH` environment variable and add the cmake.exe install path as a new value
+    -   Instructions for finding and editing the `PATH` environment variable can be found [here](https://www.java.com/en/download/help/path.html)
 -   [Vcpkg](https://github.com/microsoft/vcpkg)
     -   Install vcpkg using the directions in vcpkg's [Quick Start Guide](https://github.com/microsoft/vcpkg#quick-start-windows)
     -   After install, add a new environment variable named `VCPKG_ROOT` with the value as the path to the folder containing vcpkg
@@ -53,8 +63,8 @@ cd skyrim-community-shaders
 
 ### Visual Studio build
 
-To build the project, ensure you have CMake support enabled in Visual Studio. You can do this by selecting the "Desktop development with C++" workload during installation.
-Just open `./skyrim-community-shaders` with Visual Studio's "Open Folder" feature, and it will automatically detect the CMake project.
+To build the project, just open `./skyrim-community-shaders` with Visual Studio's "Open Folder" feature. (Ensure you have `CMake Tools for Windows` selected when installing VS)
+
 Follow the prompts to `Configure` and `Build` the project.
 It should generate the AIO package in the `./build/ALL/aio` folder by default.
 
@@ -81,6 +91,9 @@ cmake -S . --preset=ALL -B ./build/ALL
 # Invoke build tool to build the C++ source code
 # This also generate an AIO folder in ./build/ALL/aio
 cmake --build  ./build/ALL --preset ALL
+
+# The cmake & cmake --build comamnd are captured in this batch file as well
+# ./BuildRelease.bat
 
 # Install an AIO package into anywhere, e.g. $MOD_FOLDER
 cmake --install ./build/ALL --prefix $MOD_FOLDER
@@ -148,6 +161,26 @@ If you run into `Access violation` build errors during step 3, you can try addin
 ```pwsh
 docker run -it --rm --isolation=process -v .:C:/skyrim-community-shaders skyrim-community-shaders:latest
 ```
+
+## Debugging
+### Launching MO2-SKSE-Skyrim from commandline
+1. Open Steam
+2. Close ModOrganizer GUI
+3. Add `ModOrganizer.exe` (MO2 Folder) to your PATH, or use the path of it
+4. Run the commands:
+```pwsh
+# Change Working Directory
+cd "C:/Program Files (x86)/Steam/steamapps/common/Skyrim Special Edition"
+# Launch SKSE with MO2
+ModOrganizer.exe --log run "C:\Program Files (x86)\Steam\steamapps\common\Skyrim Special Edition\skse64_loader.exe"
+```
+
+### Capture with RenderDoc
+In Launch Application Menu, use the following settings:
+- Executable Path: `PATH/TO/ModOrganizer.exe`
+- Working Directory: `C:/Program Files (x86)/Steam/steamapps/common/Skyrim Special Edition`
+- Command-line Arguments: `--log run "C:\Program Files (x86)\Steam\steamapps\common\Skyrim Special Edition\skse64_loader.exe"`
+- [x] __Capture Child Process__
 
 ## License
 

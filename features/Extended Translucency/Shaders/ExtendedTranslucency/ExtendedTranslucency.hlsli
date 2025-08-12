@@ -7,8 +7,6 @@ namespace ExtendedTranslucency
 		static const uint IsotropicFabric = 2;
 		static const uint AnisotropicFabric = 3;
 		static const uint Disabled = 4;  // Any value >= 4
-		// Yoyo this is a testing change to trigger CI shader validation
-		static const uint Placeholder = 5; // Placeholder for future use
 	}
 
 	bool IsValidMaterial(uint Material)

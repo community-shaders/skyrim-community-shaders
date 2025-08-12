@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.21)
 cmake_policy(SET CMP0116 NEW)
 set(CMAKE_POLICY_WARNING_CMP0116 OFF)
 
+if (CMAKE_VERSION VERSION_GREATER_EQUAL "4.0.0")
+	message(ERROR "EASTL will fail to install with vcpkg using cmake 4.0+, remove this line if the port get fixed.")
+endif()
+
 project(
 	CommunityShaders
 	VERSION 1.3.4
@@ -326,3 +330,9 @@ add_custom_command(OUTPUT ${AIO_PACKAGE}
 )
 add_custom_target("Package-AIO" DEPENDS ${AIO_PACKAGE})
 
+message("*************************************************************")
+message("Community Shaders configuration complete")
+message("To prepare a ZIP package of AIO, Core, or Features")
+message("  Build cmake targets 'Package-XXX'")
+message("Try switching to build preset 'Dev' for faster iteration time")
+message("*************************************************************")
