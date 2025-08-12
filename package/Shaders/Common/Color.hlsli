@@ -101,7 +101,7 @@ namespace Color
 		if (originalLuminance <= 1e-5) {
 			return float3(0.0, 0.0, 0.0);
 		}
-		float3 linearColorRaw = pow(color / originalLuminance, SharedData::linearLightingSettings.lightGamma);
+		float3 linearColorRaw = pow(abs(color / originalLuminance), SharedData::linearLightingSettings.lightGamma);
 		float scale = originalLuminance;
 		return linearColorRaw * scale;
 	}
