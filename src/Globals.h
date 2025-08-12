@@ -1,33 +1,33 @@
 #pragma once
 
-struct SnowCover;
 struct CloudShadows;
 struct DynamicCubemaps;
 struct ExtendedMaterials;
+struct ExtendedTranslucency;
 struct GrassCollision;
 struct GrassLighting;
 struct HairSpecular;
 struct IBL;
-struct LightLimitFix;
-struct LODBlending;
 struct InteriorSunShadows;
 struct InverseSquareLighting;
+struct LODBlending;
+struct LightLimitFix;
+struct PerformanceOverlay;
 struct ScreenSpaceGI;
 struct ScreenSpaceShadows;
-struct Skylighting;
-struct TerrainVariation;
 struct SkySync;
+struct Skylighting;
+struct SnowCover;
 struct SubsurfaceScattering;
 struct TerrainBlending;
 struct TerrainHelper;
 struct TerrainShadows;
-struct VolumetricLighting;
+struct TerrainVariation;
 struct VR;
+struct VolumetricLighting;
 struct WaterEffects;
 struct WeatherPicker;
-struct PerformanceOverlay;
 struct WetnessEffects;
-struct ExtendedTranslucency;
 
 class ParticleLights;
 
@@ -56,34 +56,34 @@ namespace globals
 
 	namespace features
 	{
-		extern SnowCover snowCover;
 		extern CloudShadows cloudShadows;
 		extern DynamicCubemaps dynamicCubemaps;
 		extern ExtendedMaterials extendedMaterials;
+		extern ExtendedTranslucency extendedTranslucency;
 		extern GrassCollision grassCollision;
 		extern GrassLighting grassLighting;
 		extern HairSpecular hairSpecular;
 		extern IBL ibl;
-		extern LightLimitFix lightLimitFix;
-		extern LODBlending lodBlending;
 		extern InteriorSunShadows interiorSunShadows;
 		extern InverseSquareLighting inverseSquareLighting;
+		extern LODBlending lodBlending;
+		extern LightLimitFix lightLimitFix;
+		extern PerformanceOverlay performanceOverlay;
 		extern ScreenSpaceGI screenSpaceGI;
 		extern ScreenSpaceShadows screenSpaceShadows;
-		extern Skylighting skylighting;
-		extern TerrainVariation terrainVariation;
 		extern SkySync skySync;
+		extern Skylighting skylighting;
+		extern SnowCover snowCover;
 		extern SubsurfaceScattering subsurfaceScattering;
 		extern TerrainBlending terrainBlending;
 		extern TerrainHelper terrainHelper;
 		extern TerrainShadows terrainShadows;
-		extern VolumetricLighting volumetricLighting;
+		extern TerrainVariation terrainVariation;
 		extern VR vr;
+		extern VolumetricLighting volumetricLighting;
 		extern WaterEffects waterEffects;
 		extern WeatherPicker weatherPicker;
-		extern PerformanceOverlay performanceOverlay;
 		extern WetnessEffects wetnessEffects;
-		extern ExtendedTranslucency extendedTranslucency;
 
 		namespace llf
 		{

@@ -55,34 +55,34 @@ namespace globals
 
 	namespace features
 	{
-		SnowCover snowCover{};
 		CloudShadows cloudShadows{};
 		DynamicCubemaps dynamicCubemaps{};
 		ExtendedMaterials extendedMaterials{};
+		ExtendedTranslucency extendedTranslucency{};
 		GrassCollision grassCollision{};
 		GrassLighting grassLighting{};
-		IBL ibl{};
-		LightLimitFix lightLimitFix{};
-		LODBlending lodBlending{};
 		HairSpecular hairSpecular{};
+		IBL ibl{};
 		InteriorSunShadows interiorSunShadows{};
 		InverseSquareLighting inverseSquareLighting{};
+		LODBlending lodBlending{};
+		LightLimitFix lightLimitFix{};
+		PerformanceOverlay performanceOverlay{};
 		ScreenSpaceGI screenSpaceGI{};
 		ScreenSpaceShadows screenSpaceShadows{};
-		Skylighting skylighting{};
-		TerrainVariation terrainVariation{};
 		SkySync skySync{};
+		Skylighting skylighting{};
+		SnowCover snowCover{};
 		SubsurfaceScattering subsurfaceScattering{};
 		TerrainBlending terrainBlending{};
 		TerrainHelper terrainHelper{};
 		TerrainShadows terrainShadows{};
-		VolumetricLighting volumetricLighting{};
+		TerrainVariation terrainVariation{};
 		VR vr{};
+		VolumetricLighting volumetricLighting{};
 		WaterEffects waterEffects{};
 		WeatherPicker weatherPicker{};
-		PerformanceOverlay performanceOverlay{};
 		WetnessEffects wetnessEffects{};
-		ExtendedTranslucency extendedTranslucency{};
 
 		namespace llf
 		{
