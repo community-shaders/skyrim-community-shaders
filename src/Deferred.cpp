@@ -15,7 +15,6 @@
 #include "Features/TerrainBlending.h"
 
 #include "Hooks.h"
-#include "Features/Upscaling/Streamline.h"
 
 struct DepthStates
 {
@@ -382,7 +381,7 @@ void Deferred::StartDeferred()
 
 void Deferred::DeferredPasses()
 {
-	globals::features::upscaling.streamline.CheckFrameConstants();
+	globals::features::upscaling.CheckFrameConstants();
 
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "Deferred");

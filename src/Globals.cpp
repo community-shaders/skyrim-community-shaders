@@ -2,13 +2,10 @@
 
 #include "Utils/Game.h"
 #include "Deferred.h"
-#include "Features/Upscaling/FidelityFX.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Features/Upscaling.h"
-#include "Features/Upscaling/Streamline.h"
-#include "Features/Upscaling/XeSS.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExtendedMaterials.h"

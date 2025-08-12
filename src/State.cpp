@@ -4,8 +4,6 @@
 
 #include <pystring/pystring.h>
 
-#include "Features/Upscaling/DX12SwapChain.h"
-#include "Features/Upscaling/XeSS.h"
 #include "Deferred.h"
 #include "FeatureIssues.h"
 #include "Features/CloudShadows.h"
@@ -15,7 +13,6 @@
 #include "Menu.h"
 #include "SettingsOverrideManager.h"
 #include "ShaderCache.h"
-#include "Features/Upscaling/Streamline.h"
 #include "TruePBR.h"
 #include "Features/Upscaling.h"
 
@@ -139,7 +136,6 @@ void State::Setup()
 		if (feature->loaded)
 			feature->SetupResources();
 	globals::deferred->SetupResources();
-	globals::features::upscaling.xess.LoadXeSS();
 	SetupReShade();
 	if (initialized)
 		return;

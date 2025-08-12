@@ -23,7 +23,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 void Upscaling::DrawSettings()
 {
 	// Display upscaling options in the UI
-	const char* upscaleModes[] = { "Disabled", "TAA", "AMD FSR", "Intel XeSS", "NVIDIA DLSS" };
+	const char* upscaleModes[] = { "None", "TAA", "AMD FSR", "Intel XeSS", "NVIDIA DLSS" };
 
 	// Determine available modes
 	bool featureDLSS = streamline.featureDLSS;
@@ -42,9 +42,6 @@ void Upscaling::DrawSettings()
 	ImGui::SliderInt("Method", (int*)currentUpscaleMode, 0, availableModes, std::format("{}", upscaleModes[(uint)*currentUpscaleMode]).c_str());
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
-			"Disabled:\n"
-			"Disable all methods.\n"
-			"\n"
 			"TAA:\n"
 			"TAA uses frame history to smooth out jagged edges, reducing flickering and improving image stability.\n"
 			"\n"
@@ -220,6 +217,8 @@ void Upscaling::RestoreDefaultSettings()
 
 void Upscaling::PostPostLoad()
 {
+	LoadUpscalingSDKs();
+
 	bool isGOG = !GetModuleHandle(L"steam_api64.dll");
 	stl::detour_thunk<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
 
@@ -760,7 +759,7 @@ void Upscaling::PostDisplay()
 	CopyHUDLessBuffer();
 	
 	if (d3d12Interop)
-		globals::features::upscaling.dx12SwapChain.SetUIBuffer();
+		SetUIBuffer();
 }
 
 void Upscaling::TimerSleepQPC(int64_t targetQPC)
@@ -775,7 +774,7 @@ void Upscaling::FrameLimiter()
 {
 	if (d3d12Interop) {
 		// Use frame latency waitable object if available for better frame pacing
-		HANDLE waitableObject = globals::features::upscaling.dx12SwapChain.GetFrameLatencyWaitableObject();
+		HANDLE waitableObject = GetFrameLatencyWaitableObject();
 
 		// Wait for the next frame presentation slot
 		WaitForSingleObject(waitableObject, INFINITE);
@@ -877,12 +876,105 @@ float Upscaling::GetFrameGenerationFrameTime() const
 		return 0.0f;
 
 	// Get the current frame time from D3D12 swapchain
-	if (globals::features::upscaling.dx12SwapChain.swapChain) {
+	if (dx12SwapChain.swapChain) {
 		// Get frame time from the D3D12 SwapChain
-		return globals::features::upscaling.dx12SwapChain.GetFrameTime();
+		return GetFrameTime();
 	}
 
 	return 0.0f;
+}
+
+// Unified interface methods
+void Upscaling::LoadUpscalingSDKs()
+{
+	// Initialize all upscaling SDK components during plugin startup
+	// This ensures all SDKs are available before any D3D device creation
+	streamline.LoadInterposer();
+	fidelityFX.LoadFFX();
+	xess.LoadXeSS();
+}
+
+void Upscaling::CheckFrameConstants()
+{
+	streamline.CheckFrameConstants();
+}
+
+bool Upscaling::IsFrameGenActive() const
+{
+	return fidelityFX.isFrameGenActive;
+}
+
+void Upscaling::SetUIBuffer()
+{
+	dx12SwapChain.SetUIBuffer();
+}
+
+HANDLE Upscaling::GetFrameLatencyWaitableObject() const
+{
+	return dx12SwapChain.GetFrameLatencyWaitableObject();
+}
+
+float Upscaling::GetFrameTime() const
+{
+	return dx12SwapChain.GetFrameTime();
+}
+
+// Backend interface methods
+bool Upscaling::IsBackendInitialized() const
+{
+	return streamline.initialized;
+}
+
+void Upscaling::CheckBackendFeatures(IDXGIAdapter* adapter)
+{
+	streamline.CheckFeatures(adapter);
+}
+
+void Upscaling::UpgradeBackendInterface(void** ppInterface)
+{
+	streamline.slUpgradeInterface(ppInterface);
+}
+
+void Upscaling::SetBackendD3DDevice(ID3D11Device* device)
+{
+	streamline.slSetD3DDevice(device);
+}
+
+void Upscaling::PostBackendDevice()
+{
+	streamline.PostDevice();
+}
+
+// Module availability methods
+bool Upscaling::HasFrameGenModule() const
+{
+	return fidelityFX.module != nullptr;
+}
+
+// Proxy interface methods
+void Upscaling::SetProxyD3D11Device(ID3D11Device* device)
+{
+	dx12SwapChain.SetD3D11Device(device);
+}
+
+void Upscaling::SetProxyD3D11DeviceContext(ID3D11DeviceContext* context)
+{
+	dx12SwapChain.SetD3D11DeviceContext(context);
+}
+
+void Upscaling::CreateProxySwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC swapChainDesc)
+{
+	dx12SwapChain.CreateSwapChain(adapter, swapChainDesc);
+}
+
+void Upscaling::CreateProxyInterop()
+{
+	dx12SwapChain.CreateInterop();
+}
+
+IDXGISwapChain* Upscaling::GetProxySwapChain()
+{
+	return dx12SwapChain.GetSwapChainProxy();
 }
 
 void Upscaling::Upscale()

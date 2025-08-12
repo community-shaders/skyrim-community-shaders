@@ -35,9 +35,6 @@ class State;
 class Deferred;
 struct TruePBR;
 class Menu;
-class Streamline;
-class FidelityFX;
-class XeSS;
 
 namespace SIE
 {

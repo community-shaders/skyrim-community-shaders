@@ -17,9 +17,6 @@
 
 #include "ShaderTools/BSShaderHooks.h"
 
-#include "Features/Upscaling/DX12SwapChain.h"
-#include "Features/Upscaling/FidelityFX.h"
-#include "Features/Upscaling/Streamline.h"
 #include "Features/Upscaling.h"
 
 std::unordered_map<void*, std::pair<std::unique_ptr<uint8_t[]>, size_t>> ShaderBytecodeMap;
@@ -315,14 +312,10 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	pAdapter->GetDesc(&adapterDesc);
 	globals::state->SetAdapterDescription(adapterDesc.Description);
 
-	auto& streamline = globals::features::upscaling.streamline;
-	auto& fidelityFX = globals::features::upscaling.fidelityFX;
 	auto& upscaling = globals::features::upscaling;
 
-	streamline.LoadInterposer();
-
-	if (streamline.initialized)
-		streamline.CheckFeatures(pAdapter);
+	if (upscaling.IsBackendInitialized())
+		upscaling.CheckBackendFeatures(pAdapter);
 
 	bool shouldProxy = !REL::Module::IsVR();
 	if (shouldProxy)
@@ -354,7 +347,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	if (shouldProxy) {
 		logger::info("[Frame Generation] Frame Generation enabled, using D3D12 proxy");
 
-		if (fidelityFX.module) {
+		if (upscaling.HasFrameGenModule()) {
 			DX::ThrowIfFailed(D3D11CreateDevice(
 				pAdapter,
 				DriverType,
@@ -367,26 +360,22 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 				pFeatureLevel,
 				ppImmediateContext));
 
-			auto& proxy = globals::features::upscaling.dx12SwapChain;
+			upscaling.SetProxyD3D11Device(*ppDevice);
+			upscaling.SetProxyD3D11DeviceContext(*ppImmediateContext);
+			upscaling.CreateProxySwapChain(pAdapter, *pSwapChainDesc);
+			upscaling.CreateProxyInterop();
 
-			proxy.SetD3D11Device(*ppDevice);
-			proxy.SetD3D11DeviceContext(*ppImmediateContext);
-
-			proxy.CreateSwapChain(pAdapter, *pSwapChainDesc);
-
-			proxy.CreateInterop();
-
-			*ppSwapChain = proxy.GetSwapChainProxy();
+			*ppSwapChain = upscaling.GetProxySwapChain();
 
 			upscaling.d3d12Interop = true;
 
 			globals::state->InitReShade(*ppSwapChain);
 
-			if (streamline.initialized) {
-				streamline.slUpgradeInterface((void**)&(*ppDevice));
-				streamline.slUpgradeInterface((void**)&(*ppSwapChain));
-				streamline.slSetD3DDevice(*ppDevice);
-				streamline.PostDevice();
+			if (upscaling.IsBackendInitialized()) {
+				upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
+				upscaling.UpgradeBackendInterface((void**)&(*ppSwapChain));
+				upscaling.SetBackendD3DDevice(*ppDevice);
+				upscaling.PostBackendDevice();
 			}
 
 			return S_OK;
@@ -411,11 +400,11 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	
 	globals::state->InitReShade(*ppSwapChain);
 
-	if (streamline.initialized) {
-		streamline.slUpgradeInterface((void**)&(*ppDevice));
-		streamline.slUpgradeInterface((void**)&(*ppSwapChain));
-		streamline.slSetD3DDevice(*ppDevice);
-		streamline.PostDevice();
+	if (upscaling.IsBackendInitialized()) {
+		upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
+		upscaling.UpgradeBackendInterface((void**)&(*ppSwapChain));
+		upscaling.SetBackendD3DDevice(*ppDevice);
+		upscaling.PostBackendDevice();
 	}
 
 	return ret;
@@ -1054,7 +1043,6 @@ namespace Hooks
 	 */
 	void InstallD3DHooks()
 	{
-		globals::features::upscaling.fidelityFX.LoadFFX();
 
 		*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
 		*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", !REL::Module::IsVR() ? "CreateDXGIFactory" : "CreateDXGIFactory1");
