@@ -61,11 +61,6 @@ public:
 class DX12SwapChain
 {
 public:
-	static DX12SwapChain* GetSingleton()
-	{
-		static DX12SwapChain singleton;
-		return &singleton;
-	}
 
 	// D3D12 resources for swap chain (uses shared device from Upscaling)
 	winrt::com_ptr<ID3D12CommandAllocator> commandAllocators[2];

@@ -1,8 +1,6 @@
 #include "Globals.h"
 
 #include "Utils/Game.h"
-
-#include "Features/Upscaling/DX12SwapChain.h"
 #include "Deferred.h"
 #include "Features/Upscaling/FidelityFX.h"
 #include "Menu.h"
@@ -138,7 +136,6 @@ namespace globals
 	TruePBR* truePBR = nullptr;
 	Menu* menu = nullptr;
 	SIE::ShaderCache* shaderCache = nullptr;
-	DX12SwapChain* dx12SwapChain = nullptr;
 
 	void OnInit()
 	{
@@ -147,7 +144,6 @@ namespace globals
 		menu = Menu::GetSingleton();
 		deferred = Deferred::GetSingleton();
 		truePBR = TruePBR::GetSingleton();
-		dx12SwapChain = DX12SwapChain::GetSingleton();
 	}
 
 	void ReInit()

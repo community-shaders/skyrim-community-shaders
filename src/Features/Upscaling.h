@@ -8,6 +8,8 @@
 #include <d3d12.h>
 #include <winrt/base.h>
 
+class DX12SwapChain;
+
 /**
  * @brief Provides upscaling functionality including DLSS, FSR, XeSS and TAA.
  *
@@ -146,6 +148,7 @@ public:
 	static inline Streamline streamline;
 	static inline XeSS xess;
 	static inline FidelityFX fidelityFX;
+	static inline class DX12SwapChain dx12SwapChain;
 
 	ID3D11ComputeShader* copyDepthToSharedBufferCS = nullptr;
 

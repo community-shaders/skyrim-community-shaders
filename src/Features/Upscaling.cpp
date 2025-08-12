@@ -752,7 +752,7 @@ void Upscaling::PostDisplay()
 	CopyHUDLessBuffer();
 	
 	if (d3d12Interop)
-		globals::dx12SwapChain->SetUIBuffer();
+		globals::features::upscaling.dx12SwapChain.SetUIBuffer();
 }
 
 void Upscaling::TimerSleepQPC(int64_t targetQPC)
@@ -767,7 +767,7 @@ void Upscaling::FrameLimiter()
 {
 	if (d3d12Interop) {
 		// Use frame latency waitable object if available for better frame pacing
-		HANDLE waitableObject = globals::dx12SwapChain->GetFrameLatencyWaitableObject();
+		HANDLE waitableObject = globals::features::upscaling.dx12SwapChain.GetFrameLatencyWaitableObject();
 
 		// Wait for the next frame presentation slot
 		WaitForSingleObject(waitableObject, INFINITE);
@@ -869,9 +869,9 @@ float Upscaling::GetFrameGenerationFrameTime() const
 		return 0.0f;
 
 	// Get the current frame time from D3D12 swapchain
-	if (globals::dx12SwapChain && globals::dx12SwapChain->swapChain) {
+	if (globals::features::upscaling.dx12SwapChain.swapChain) {
 		// Get frame time from the D3D12 SwapChain
-		return globals::dx12SwapChain->GetFrameTime();
+		return globals::features::upscaling.dx12SwapChain.GetFrameTime();
 	}
 
 	return 0.0f;

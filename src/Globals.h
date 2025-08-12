@@ -36,7 +36,6 @@ class Deferred;
 struct TruePBR;
 class Menu;
 class Streamline;
-class DX12SwapChain;
 class FidelityFX;
 class XeSS;
 
@@ -246,7 +245,6 @@ namespace globals
 	extern TruePBR* truePBR;
 	extern Menu* menu;
 	extern SIE::ShaderCache* shaderCache;
-	extern DX12SwapChain* dx12SwapChain;
 
 	void OnInit();
 	void ReInit();

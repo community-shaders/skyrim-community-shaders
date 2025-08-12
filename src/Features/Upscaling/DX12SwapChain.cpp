@@ -348,18 +348,18 @@ HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetParent(_In_ REFIID riid, _COM_O
 /****IDXGIDeviceSubObject****/
 HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetDevice(_In_ REFIID riid, _COM_Outptr_ void** ppDevice)
 {
-	return globals::dx12SwapChain->GetDevice(riid, ppDevice);
+	return globals::features::upscaling.dx12SwapChain.GetDevice(riid, ppDevice);
 }
 
 /****IDXGISwapChain****/
 HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::Present(UINT SyncInterval, UINT Flags)
 {
-	return globals::dx12SwapChain->Present(SyncInterval, Flags);
+	return globals::features::upscaling.dx12SwapChain.Present(SyncInterval, Flags);
 }
 
 HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetBuffer(UINT, _In_ REFIID, _COM_Outptr_ void** ppSurface)
 {
-	return globals::dx12SwapChain->GetBuffer(ppSurface);
+	return globals::features::upscaling.dx12SwapChain.GetBuffer(ppSurface);
 }
 
 HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::SetFullscreenState(BOOL Fullscreen, _In_opt_ IDXGIOutput* pTarget)

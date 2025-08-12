@@ -325,7 +325,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	if (streamline.initialized)
 		streamline.CheckFeatures(pAdapter);
 
-	auto proxy = globals::dx12SwapChain;
+	auto& proxy = globals::features::upscaling.dx12SwapChain;
 
 	bool shouldProxy = !REL::Module::IsVR();
 	if (shouldProxy)
@@ -370,14 +370,14 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 				pFeatureLevel,
 				ppImmediateContext));
 
-			proxy->SetD3D11Device(*ppDevice);
-			proxy->SetD3D11DeviceContext(*ppImmediateContext);
+			proxy.SetD3D11Device(*ppDevice);
+			proxy.SetD3D11DeviceContext(*ppImmediateContext);
 
-			proxy->CreateSwapChain(pAdapter, *pSwapChainDesc);
+			proxy.CreateSwapChain(pAdapter, *pSwapChainDesc);
 
-			proxy->CreateInterop();
+			proxy.CreateInterop();
 
-			*ppSwapChain = proxy->GetSwapChainProxy();
+			*ppSwapChain = proxy.GetSwapChainProxy();
 
 			upscaling.d3d12Interop = true;
 

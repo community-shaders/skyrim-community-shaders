@@ -40,14 +40,14 @@ void FidelityFX::LoadFFX()
 
 void FidelityFX::SetupFrameGeneration()
 {
-	auto swapChain = globals::dx12SwapChain;
+	auto& swapChain = globals::features::upscaling.dx12SwapChain;
 	auto& upscaling = globals::features::upscaling;
 
 	ffx::CreateContextDescFrameGeneration createFg{};
-	createFg.displaySize = { swapChain->swapChainDesc.Width, swapChain->swapChainDesc.Height };
+	createFg.displaySize = { swapChain.swapChainDesc.Width, swapChain.swapChainDesc.Height };
 	createFg.maxRenderSize = createFg.displaySize;
 	createFg.flags = FFX_FRAMEGENERATION_ENABLE_ASYNC_WORKLOAD_SUPPORT;
-	createFg.backBufferFormat = ffxApiGetSurfaceFormatDX12(swapChain->swapChainDesc.Format);
+	createFg.backBufferFormat = ffxApiGetSurfaceFormatDX12(swapChain.swapChainDesc.Format);
 
 	ffx::CreateBackendDX12Desc createBackend{};
 	createBackend.device = upscaling.sharedD3D12Device.get();
@@ -66,8 +66,8 @@ void FidelityFX::SetupFrameGeneration()
 void FidelityFX::Present(bool a_useFrameGeneration)
 {
 	auto& upscaling = globals::features::upscaling;
-	auto swapChain = globals::dx12SwapChain;
-	auto commandList = swapChain->commandLists[swapChain->frameIndex].get();
+	auto& swapChain = globals::features::upscaling.dx12SwapChain;
+	auto commandList = swapChain.commandLists[swapChain.frameIndex].get();
 
 	auto HUDLessColor = upscaling.HUDLessBufferShared12->resource.get();
 	auto depth = upscaling.depthBufferShared12->resource.get();
@@ -106,7 +106,7 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 
 	static uint64_t frameID = 0;
 	configParameters.frameID = frameID;
-	configParameters.swapChain = swapChain->swapChain;
+	configParameters.swapChain = swapChain.swapChain;
 	configParameters.onlyPresentGenerated = false;
 	configParameters.allowAsyncWorkloads = true;
 	configParameters.flags = 0;
@@ -118,17 +118,17 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 	auto screenSize = state->screenSize;
 	auto renderSize = wasUpscaled ? Util::ConvertToDynamic(state->screenSize, true) : screenSize;
 
-	configParameters.generationRect.left = (swapChain->swapChainDesc.Width - swapChain->swapChainDesc.Width) / 2;
-	configParameters.generationRect.top = (swapChain->swapChainDesc.Height - swapChain->swapChainDesc.Height) / 2;
-	configParameters.generationRect.width = swapChain->swapChainDesc.Width;
-	configParameters.generationRect.height = swapChain->swapChainDesc.Height;
+	configParameters.generationRect.left = (swapChain.swapChainDesc.Width - swapChain.swapChainDesc.Width) / 2;
+	configParameters.generationRect.top = (swapChain.swapChainDesc.Height - swapChain.swapChainDesc.Height) / 2;
+	configParameters.generationRect.width = swapChain.swapChainDesc.Width;
+	configParameters.generationRect.height = swapChain.swapChainDesc.Height;
 
 	if (ffx::Configure(frameGenContext, configParameters) != ffx::ReturnCode::Ok) {
 		logger::critical("[FidelityFX] Failed to configure frame generation!");
 	}
 
 	ffx::ConfigureDescFrameGenerationSwapChainRegisterUiResourceDX12 uiConfig{};
-	uiConfig.uiResource = ffxApiGetResourceDX12(swapChain->uiBufferWrapped->resource.get());
+	uiConfig.uiResource = ffxApiGetResourceDX12(swapChain.uiBufferWrapped->resource.get());
 	uiConfig.flags = FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_USE_PREMUL_ALPHA | FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_ENABLE_INTERNAL_UI_DOUBLE_BUFFERING;
 
 	if (ffx::Configure(swapChainContext, uiConfig) != ffx::ReturnCode::Ok) {
