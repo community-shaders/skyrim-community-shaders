@@ -24,8 +24,9 @@ cbuffer PerFrame : register(b1)
 
 	float2 DynamicRes;
 	
+	uint DynamicSampleCount;
 	uint DynamicReadCount;
-	float3 pad0;
+	float2 pad0;
 
 	float SurfaceThickness;
 	float BilinearThreshold;
@@ -55,6 +56,7 @@ cbuffer PerFrame : register(b1)
 
 	parameters.DynamicRes = DynamicRes;
 	
+	parameters.DynamicSampleCount = DynamicSampleCount;
 	parameters.DynamicReadCount = DynamicReadCount;
 
 	WriteScreenSpaceShadow(parameters, groupID, groupThreadID);

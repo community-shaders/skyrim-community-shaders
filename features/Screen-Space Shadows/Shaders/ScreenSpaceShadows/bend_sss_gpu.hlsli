@@ -1,4 +1,3 @@
-
 // Copyright 2023 Sony Interactive Entertainment.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,31 +27,8 @@
 // It can compile to DX11, but requires some modifications (e.g., early-out's use of wave intrinsics is not supported in DX11).
 // Note; you can customize the 'EarlyOutPixel' function to perform custom early-out logic to optimize this shader.
 
-// The following Macros must be defined in the compute shader file before including this header:
-//
-//
 
 #define WAVE_SIZE 64           // Wavefront size of the compute shader running this code.                                                                                                                      \
-							   //													// numthreads[WAVE_SIZE, 1, 1]                                                                                                                                   \
-							   //													// Only tested with 64.                                                                                                                                          \
-							   //                                                                                                                                                                              \
-							   //		#define SAMPLE_COUNT 512						// Number of shadow samples per-pixel.                                                                                                        \
-							   //													// Determines overall cost, as this value controls the length of the shadow (in pixels).                                                                         \
-							   //													// The number of texture-reads performed per-thread will be (SAMPLE_COUNT / WAVE_SIZE + 2) * 2.                                                                  \
-							   //													// Recommended starting value is 60 (This would be 4 reads per thread if WAVE_SIZE is 64). A value of 64 would require 6 reads.                                  \
-							   //                                                                                                                                                                              \
-							   //		// Not all shadow samples are treated the same:                                                                                                                             \
-							   //		//	The bulk of samples will average together in to groups of 4, to produce a slightly smoothed result (so one sample cannot fully show the pixel)                           \
-							   //		//	However, the samples very close to the start pixel can optionally be forced to disable this averaging, so a single sample can fully shadow the pixel (HardShadowSamples) \
-							   //		//	Plus, a number of the last (most distant) samples can (for a small cost) apply a fade-out effect to soften a hash shadow cutoff (FadeOutSamples)                         \
-							   //
-#define HARD_SHADOW_SAMPLES 4  // Number of initial shadow samples that will produce a hard shadow, and not perform sample-averaging. \
-							   //													// This trades aliasing for grounding pixels very close to the shadow caster.           \
-							   //													// Recommended starting value: 4                                                        \
-							   //
-#define FADE_OUT_SAMPLES 8     // Number of samples that will fade out at the end of the shadow (for a minor cost). \
-							   //													// Recommended starting value: 8
-
 #define USE_HALF_PIXEL_OFFSET 1  // Apply a 0.5 texel offset when sampling a texture. Toggle this macro if the output shadow has odd, regular grid-like artefacts.
 
 
@@ -75,7 +51,8 @@ struct DispatchParameters
 						  // Recommended starting value: 2 or 4. Values >= 1 are valid.
 
 	float2 DynamicRes;
-
+	
+	uint DynamicSampleCount;
 	uint DynamicReadCount;
 
 	bool IgnoreEdgePixels;  // If an edge is detected, the edge pixel will not contribute to the shadow.
@@ -148,8 +125,8 @@ struct DispatchParameters
 //	(int)	inGroupThreadId:	Compute shader group thread id register (SV_GroupThreadID)
 void WriteScreenSpaceShadow(struct DispatchParameters inParameters, int3 inGroupID, int inGroupThreadID);
 
-#if !defined(WAVE_SIZE) || !defined(SAMPLE_COUNT) || !defined(HARD_SHADOW_SAMPLES) || !defined(FADE_OUT_SAMPLES)
-#	error Before including bend_sss_gpu.h, four macros must be defined to configure the shader compile: WAVE_SIZE, SAMPLE_COUNT, HARD_SHADOW_SAMPLES, and FADE_OUT_SAMPLES. See the top of this file for details.
+#if !defined(WAVE_SIZE) || !defined(SAMPLE_COUNT)
+#	error Before including bend_sss_gpu.h, four macros must be defined to configure the shader compile: WAVE_SIZE, SAMPLE_COUNT. See the top of this file for details.
 #else
 
 // static bool EarlyOutPixel(struct DispatchParameters inParameters, int2 pixel_xy, half depth)
@@ -411,18 +388,9 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 
 	start_depth = start_depth * depth_scale - z_sign;
 
-	// The first number of hard shadow samples, a single pixel can produce a full shadow
-	[unroll] for (i = 0; i < HARD_SHADOW_SAMPLES; i++)
-	{
-		half depth_delta = abs(start_depth - DepthData[sample_index + i] * depth_scale);
-
-		// We want to find the distance of the sample that is closest to the reference depth
-		hard_shadow = min(hard_shadow, depth_delta);
-	}
-
 	// Brute force go!
 	// The main shadow samples, averaged in to a set of 4 shadow values
-	[unroll] for (i = HARD_SHADOW_SAMPLES; i < SAMPLE_COUNT - FADE_OUT_SAMPLES; i++)
+	[unroll] for (i = 0; i < inParameters.DynamicSampleCount; i++)
 	{
 		half depth_delta = abs(start_depth - DepthData[sample_index + i] * depth_scale);
 
@@ -431,30 +399,15 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 		shadow_value[i & 3] = min(shadow_value[i & 3], depth_delta);
 	}
 
-	// Final fade out samples
-	[unroll] for (i = SAMPLE_COUNT - FADE_OUT_SAMPLES; i < SAMPLE_COUNT; i++)
-	{
-		half depth_delta = abs(start_depth - DepthData[sample_index + i] * depth_scale);
-
-		// Add the fade value to these samples
-		const half fade_out = (half)(i + 1 - (SAMPLE_COUNT - FADE_OUT_SAMPLES)) / (half)(FADE_OUT_SAMPLES + 1) * 0.75;
-
-		shadow_value[i & 3] = min(shadow_value[i & 3], depth_delta + fade_out);
-	}
-
 	// Apply the contrast value.
 	// A value of 0 indicates a sample was exactly matched to the reference depth (and the result is fully shadowed)
 	// We want some boost to this range, so samples don't have to exactly match to produce a full shadow.
 	shadow_value = saturate(shadow_value * (inParameters.ShadowContrast) + (1 - inParameters.ShadowContrast));
-	hard_shadow = saturate(hard_shadow * (inParameters.ShadowContrast) + (1 - inParameters.ShadowContrast));
 
 	half result = 0;
 
 	// Take the average of 4 samples, this is useful to reduces aliasing noise in the source depth, especially with long shadows.
 	result = dot(shadow_value, 0.25);
-
-	// If the first samples are always producing a hard shadow, then compute this value separately.
-	result = min(hard_shadow, result);
 
 	// Asking the GPU to write scattered single-byte pixels isn't great,
 	// But thankfully the latency is hidden by all the work we're doing...
