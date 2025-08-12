@@ -85,22 +85,34 @@ void Upscaling::DrawSettings()
 			bool onlyRequiresRestart = true;
 
 			if (!isWindowed) {
+				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
 				ImGui::Text("Warning: Requires windowed mode");
+				ImGui::PopStyleColor(ImGuiCol_Text);
+
 				onlyRequiresRestart = false;
 			}
 
 			if (lowRefreshRate && !settings.frameGenerationForceEnable) {
+				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
 				ImGui::Text("Warning: Requires a high refresh rate monitor or Force Enable Frame Generation");
+				ImGui::PopStyleColor(ImGuiCol_Text);
+
 				onlyRequiresRestart = false;
 			}
 
 			if (fidelityFXMissing) {
+				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
 				ImGui::Text("Warning: amd_fidelityfx_dx12.dll is not loaded");
+				ImGui::PopStyleColor(ImGuiCol_Text);
+
 				onlyRequiresRestart = false;
 			}
 
-			if (onlyRequiresRestart && settings.frameGenerationMode && !d3d12Interop)
+			if (onlyRequiresRestart && settings.frameGenerationMode && !d3d12Interop) {
+				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
 				ImGui::Text("Warning: Requires restart");
+				ImGui::PopStyleColor(ImGuiCol_Text);
+			}
 
 			std::string backendLabel = fidelityFX.isFrameGenActive ? "FSR3" : "None";
 			std::string enabledLabel = "Enabled (" + backendLabel + ")";
@@ -376,16 +388,12 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 		auto state = globals::state;
 		auto screenSize = state->screenSize;
 
-		auto qualityMode = settings.qualityMode;
-		if (upscaleMethod != UpscaleMethod::kDLSS && globals::game::ui->GameIsPaused())
-			qualityMode = 4;
-
 		if (upscaleMethod == UpscaleMethod::kXESS) {
-			resolutionScale = xess.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, qualityMode);
+			resolutionScale = xess.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
 		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
-			resolutionScale = streamline.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, qualityMode);
+			resolutionScale = streamline.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
 		} else if (upscaleMethod == UpscaleMethod::kFSR) {
-			resolutionScale = fidelityFX.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, qualityMode);
+			resolutionScale = fidelityFX.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
 		} else {
 			logger::critical("[Upscaling] Invalid upscale method");
 		}
