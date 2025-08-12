@@ -757,18 +757,31 @@ std::unordered_map<std::string, bool>& State::GetDisabledFeatures()
 	return disabledFeatures;
 }
 
-void State::SetupReShade()
+void State::InitReShade(IDXGISwapChain* a_swapChain)
 {
+	winrt::com_ptr<ID3D11Device> device;
+	ID3D11DeviceContext* immediateContext;
+
+	DX::ThrowIfFailed(a_swapChain->GetDevice(IID_PPV_ARGS(&device)));
+	device->GetImmediateContext(&immediateContext);
+
 	SetEnvironmentVariableW(L"RESHADE_DISABLE_GRAPHICS_HOOK", L"1");
 	auto module = LoadLibraryW(L"ReShade64.dll");
 
-	auto device = globals::d3d::device;
-	auto context = globals::d3d::context;
-	auto swapChain = globals::d3d::swapChain;
+	static const auto func = reinterpret_cast<bool (*)(reshade::api::device_api, void*, void*, void*, const char*, reshade::api::effect_runtime**)>(
+		GetProcAddress(module, "ReShadeCreateEffectRuntime"));
 
-	if (module && reshade::create_effect_runtime(reshade::api::device_api::d3d11, device, context, swapChain, "ReShade", &reShadeRuntime)) {
+	if (func)
+		func(reshade::api::device_api::d3d11, device.get(), immediateContext, a_swapChain, "ReShade", &reShadeRuntime);
+}
+
+void State::SetupReShade()
+{
+	if (reShadeRuntime) {
 		auto renderer = globals::game::renderer;
-		auto& swapChainRTV = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER].RTV;
+		auto swapChainRTV = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER].RTV;
+		if (globals::features::upscaling.d3d12Interop)
+			swapChainRTV = globals::features::upscaling.dx12SwapChain.swapChainBufferWrapped->rtv;
 
 		auto reShadeDevice = reShadeRuntime->get_device();
 
@@ -778,7 +791,7 @@ void State::SetupReShade()
 		reShadeDevice->create_resource_view(reShadeSwapChainResource, reshade::api::resource_usage::render_target, reshade::api::resource_view_desc(reshade::api::format_to_default_typed(reShadeSwapChainDesc.texture.format, 0), 0, 1, 0, 1), &reshadeSwapChainRTV);
 		reShadeDevice->create_resource_view(reShadeSwapChainResource, reshade::api::resource_usage::render_target, reshade::api::resource_view_desc(reshade::api::format_to_default_typed(reShadeSwapChainDesc.texture.format, 1), 0, 1, 0, 1), &reshadeSwapChainRTVsRGB);
 
-		auto& depth = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+		auto& depth = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
 		auto depthRTV = reshade::api::resource_view{ reinterpret_cast<uintptr_t>(depth.depthSRV) };
 		reShadeRuntime->update_texture_bindings("DEPTH", depthRTV, depthRTV);

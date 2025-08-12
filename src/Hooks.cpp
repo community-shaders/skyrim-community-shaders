@@ -219,7 +219,6 @@ struct IDXGISwapChain_Present
 		auto state = globals::state;
 		auto& upscaling = globals::features::upscaling;
 		auto menu = globals::menu;
-
 		upscaling.CopyFrameGenerationResources();
 		state->PresentReShade();
 		state->Reset();
@@ -325,8 +324,6 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	if (streamline.initialized)
 		streamline.CheckFeatures(pAdapter);
 
-	auto& proxy = globals::features::upscaling.dx12SwapChain;
-
 	bool shouldProxy = !REL::Module::IsVR();
 	if (shouldProxy)
 		if (!pSwapChainDesc->Windowed)
@@ -370,6 +367,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 				pFeatureLevel,
 				ppImmediateContext));
 
+			auto& proxy = globals::features::upscaling.dx12SwapChain;
+
 			proxy.SetD3D11Device(*ppDevice);
 			proxy.SetD3D11DeviceContext(*ppImmediateContext);
 
@@ -380,6 +379,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 			*ppSwapChain = proxy.GetSwapChainProxy();
 
 			upscaling.d3d12Interop = true;
+
+			globals::state->InitReShade(*ppSwapChain);
 
 			if (streamline.initialized) {
 				streamline.slUpgradeInterface((void**)&(*ppDevice));
@@ -407,6 +408,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 		ppDevice,
 		pFeatureLevel,
 		ppImmediateContext);
+	
+	globals::state->InitReShade(*ppSwapChain);
 
 	if (streamline.initialized) {
 		streamline.slUpgradeInterface((void**)&(*ppDevice));

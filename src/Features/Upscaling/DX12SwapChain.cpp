@@ -404,7 +404,9 @@ HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetLastPresentCount(_Out_ UINT* pL
 
 void DX12SwapChain::SetUIBuffer()
 {
-	auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-	data.RTV = uiBufferWrapped->rtv;
-	d3d11Context->OMSetRenderTargets(1, &data.RTV, nullptr);
+	if (!globals::game::ui->GameIsPaused()) {
+		auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+		data.RTV = uiBufferWrapped->rtv;
+		d3d11Context->OMSetRenderTargets(1, &data.RTV, nullptr);
+	}
 }

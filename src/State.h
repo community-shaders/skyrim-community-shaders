@@ -227,7 +227,8 @@ public:
 	reshade::api::effect_runtime* reShadeRuntime = nullptr;
 	reshade::api::resource_view reshadeSwapChainRTV;
 	reshade::api::resource_view reshadeSwapChainRTVsRGB;
-
+	
+	void InitReShade(IDXGISwapChain* a_swapChain);
 	void SetupReShade();
 	void RenderReShade();
 	void PresentReShade();
