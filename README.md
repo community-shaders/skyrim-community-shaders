@@ -29,13 +29,15 @@ SKSE core plugin for community-driven advanced graphics modifications.
     -   Edit the `PATH` environment variable and add the Git.exe install path as a new value
 
 ## Optional Requirements
+
 ```
-CMake & Vcpkg comes with Visual Studio in Developer Command Prompts already. 
+CMake & Vcpkg comes with Visual Studio in Developer Command Prompts already.
 Install them manually only if you want them in everywhere.
 ```
+
 -   [CMake](https://cmake.org/)
     -   No need to install manually if you have Visual Studio CMake Tools installed
-    -   CMake 4.0+ is __not__ supported right now
+    -   CMake 4.0+ is **not** supported right now
     -   Edit the `PATH` environment variable and add the cmake.exe install path as a new value
     -   Instructions for finding and editing the `PATH` environment variable can be found [here](https://www.java.com/en/download/help/path.html)
 -   [Vcpkg](https://github.com/microsoft/vcpkg)
@@ -163,11 +165,14 @@ docker run -it --rm --isolation=process -v .:C:/skyrim-community-shaders skyrim-
 ```
 
 ## Debugging
+
 ### Launching MO2-SKSE-Skyrim from commandline
+
 1. Open Steam
 2. Close ModOrganizer GUI
 3. Add `ModOrganizer.exe` (MO2 Folder) to your PATH, or use the path of it
 4. Run the commands:
+
 ```pwsh
 # Change Working Directory
 cd "C:/Program Files (x86)/Steam/steamapps/common/Skyrim Special Edition"
@@ -176,11 +181,13 @@ ModOrganizer.exe --log run "C:\Program Files (x86)\Steam\steamapps\common\Skyrim
 ```
 
 ### Capture with RenderDoc
+
 In Launch Application Menu, use the following settings:
-- Executable Path: `PATH/TO/ModOrganizer.exe`
-- Working Directory: `C:/Program Files (x86)/Steam/steamapps/common/Skyrim Special Edition`
-- Command-line Arguments: `--log run "C:\Program Files (x86)\Steam\steamapps\common\Skyrim Special Edition\skse64_loader.exe"`
-- [x] __Capture Child Process__
+
+-   Executable Path: `PATH/TO/ModOrganizer.exe`
+-   Working Directory: `C:/Program Files (x86)/Steam/steamapps/common/Skyrim Special Edition`
+-   Command-line Arguments: `--log run "C:\Program Files (x86)\Steam\steamapps\common\Skyrim Special Edition\skse64_loader.exe"`
+-   [x] **Capture Child Process**
 
 ## License
 
