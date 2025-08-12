@@ -158,8 +158,8 @@ void ScreenSpaceShadows::DrawShadows()
 
 	float2 dynamicRes = { viewport->GetRuntimeData().dynamicResolutionWidthRatio, viewport->GetRuntimeData().dynamicResolutionHeightRatio };
 
-	uint sampleCount = GetScaledSampleCount(true);
-	uint dynamicReadCount = (sampleCount / 64 + 2);
+	uint dynamicSampleCount = GetScaledSampleCount(true);
+	uint dynamicReadCount = (dynamicSampleCount / 64 + 2);
 
 	// Shared dispatch logic for both VR and non-VR
 	auto DispatchEye = [&](const char* eyeName, ID3D11ComputeShader* shader, const float* lightProj,
@@ -198,6 +198,7 @@ void ScreenSpaceShadows::DrawShadows()
 
 			data.DynamicRes = dynamicRes;
 			
+			data.DynamicSampleCount = dynamicSampleCount;
 			data.DynamicReadCount = dynamicReadCount;
 
 			data.InvDepthTextureSize[0] = invTexSizeX;

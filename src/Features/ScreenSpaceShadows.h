@@ -56,8 +56,9 @@ public:
 
 		float2 DynamicRes;
 		
+		uint DynamicSampleCount;
 		uint DynamicReadCount;
-		float pad0[3];
+		float pad0[2];
 
 		BendSettings settings;
 	};
