@@ -35,6 +35,11 @@ namespace Random
 		{ 0.07000602455182418f, -0.9868660954557704f },
 	};
 
+	float RandomSH(float seed){
+		return frac(sin(seed * 12.9898) * 43758.5453);}
+	float RandomSH(float2 seed){
+		return frac(sin(dot(seed, float2(12.9898, 78.233))) * 43758.5453);}
+
 	///////////////////////////////////////////////////////////
 	// WHITE-LIKE HASHES
 	///////////////////////////////////////////////////////////

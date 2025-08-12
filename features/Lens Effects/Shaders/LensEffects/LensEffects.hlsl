@@ -1,7 +1,8 @@
-#include "LensEffects/LensEffectHelper.hlsli"
 #include "Common/FrameBuffer.hlsli"
-#include "Common/SharedData.hlsli"
 #include "Common/Math.hlsli"
+#include "Common/CoordMath.hlsli"
+#include "Common/Random.hlsli"
+#include "Common/Color.hlsli"
 
 //// Structs ////////////////////////////////////////////////////////////////////////////
 
@@ -75,7 +76,6 @@ struct IceVertexOutput
     float4 TexCoord : TEXCOORD0;
     float3 Color : DATA0;
 };
-
 /////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -176,9 +176,26 @@ SamplerState Point_Sampler : register(s11);
 SamplerState PointMirror_Sampler : register(s12);
 SamplerComparisonState Depth_Sampler : register(s13);
 
+/////////////////////////////////////////////////////////////////////////////////////////
 
-#define SUNCLIP 0.05
-#define OCCLSAMPLES 20
+
+
+//// Safe Macros ////////////////////////////////////////////////////////////////////////
+
+static const float SUNCLIP = 0.05;
+static const int OCCLSAMPLES = 20;
+
+inline float  inv(float x) {return 1.0 - x;}
+inline float2 inv(float2 x) {return 1.0 - x;}
+inline float3 inv(float3 x) {return 1.0 - x;}
+inline float  delta(float x) {return max(x, EPSILON_DIVISION);}
+inline float2 delta(float2 x) {return max(x, EPSILON_DIVISION);}
+inline float  LinearStep(float x, float y, float z) {return Math::LinearStep(x, y, z);}
+inline float2 LinearStep(float2 x, float2 y, float2 z) {return Math::LinearStep(x, y, z);}
+inline float3 LinearStep(float3 x, float3 y, float3 z) {return Math::LinearStep(x, y, z);}
+inline float2 DegreesToVector(float x) {return CoordMath::DegreesToVector(x);}
+inline float  Luma(float3 x) {return Color::RGBToLuminance(x);}
+inline float  Chroma(float3 x) {return Color::RGBToChrominance(x);}
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -223,7 +240,7 @@ float GetTemporalAverage(float Value, uint idx){
 float UpdateDepthFactor(float2 SunCoords, float SunRadius){
     float DepthFactor = 0.00001;
     [loop] for(int i=0; i<OCCLSAMPLES; ++i){
-        float2 Offset = sincos2(Random(i) * Math::TAU) * sqrt(Random(i+1)) * SunRadius;
+        float2 Offset = Math::sincos2(Random::RandomSH(i) * Math::TAU) * sqrt(Random::RandomSH(i+1)) * SunRadius;
         float2 Coords = SunCoords + Offset;
         DepthFactor += DepthTexture.SampleCmpLevelZero(Depth_Sampler, Coords, 1).x;
     }
@@ -233,8 +250,8 @@ float UpdateDepthFactor(float2 SunCoords, float SunRadius){
 }
 
 float UpdateCloudFactor(float2 SunSSCoords, uint CloudFactor, uint OldCloudFactor){
-    bool InsideSSBoundry = InsideRect(SunSSCoords, float2(200,200), ScreenSize.xy-200);
-    float Motion = max2(MotionVector.Sample(Point_Sampler, SunSSCoords).xy);
+    bool InsideSSBoundry = CoordMath::InsideRect(SunSSCoords, float2(200,200), ScreenSize.xy-200);
+    float Motion = Math::max2(MotionVector.Sample(Point_Sampler, SunSSCoords).xy);
 
     if(InsideSSBoundry && Motion < 0.04){
         SunLUT_AT[int2(0,0)] = 0;
@@ -289,7 +306,7 @@ void main(MaskVSOutput input)
 
         float WeatherFactor = GetWeatherFactor(SunBlendColor, CloudFactor, SunSSRadius);
 
-        float DistFactor = AbsDist(float2(SunCoords.x, 1.0 - SunCoords.y) * 2.0 - 1.0);
+        float DistFactor = CoordMath::ChebyDistance(float2(SunCoords.x, 1.0 - SunCoords.y) * 2.0 - 1.0);
               DistFactor = LinearStep(0.0, 0.65, inv(saturate(DistFactor-0.2)));
 
 
@@ -321,17 +338,17 @@ StarburstVSOutput main(VertexShaderInput input)
     output.TexCoord = input.TexCoord.xy * 2.0 - 1.0;
     output.Position = float4(input.Position.xy, 0.0, 1.0);
 
-    float4 SunParams = OcclusionLUT.Load(TEX_ONE);
+    float4 SunParams = OcclusionLUT.Load(int3(1,0,0));
     float SunRadius = SunParams.w;
 
-    float BurstScale = MapRange(SunRadius, 0.02, 0.05, UIBurstScale * 0.75, UIBurstScale);
+    float BurstScale = Math::MapRange(SunRadius, 0.02, 0.05, UIBurstScale * 0.75, UIBurstScale);
     output.Scale = SunRadius * rcp(BurstScale);
 
     output.Position.y *= ScreenSize.z;
     output.Position.xy = mad(output.Position.xy, BurstScale, SunPositionUV.xy * 2.0 - 1.0);
 
     [unroll] for(int i=0; i<16; ++i)
-		output.ApertureBlades[i] = DegreesToVect(360.0 / UIBladeVerts * (i + 0.5) + UIBladeRotation);
+		output.ApertureBlades[i] = DegreesToVector(360.0 / UIBladeVerts * (i + 0.5) + UIBladeRotation);
 	output.ApertureBlades[15] = output.ApertureBlades[0];
 
     output.SunInt = OcclusionLUT.Load(0);
@@ -341,7 +358,7 @@ StarburstVSOutput main(VertexShaderInput input)
     float ColorScale = lerp(0.8, 2.0, LinearStep(0.2, 0.4, Chroma(SkyColor.xyz)));
 
     output.Color.xyz = UIBurstColor.xyz;
-    output.Color.w = MapRange(SunRadius, 0.02, 0.05, 0.5, 1.0) * ColorScale;
+    output.Color.w = Math::MapRange(SunRadius, 0.02, 0.05, 0.5, 1.0) * ColorScale;
 
 
     return output;
@@ -404,10 +421,11 @@ float4 main(StarburstVSOutput input) : SV_Target
 
         float RayWidth = pow(abs(UIRaysWidth), 2.1);
         float2 PixelSize = rcp(ScreenSize.xy);
-
+        static const float2 BFCoord[4] = {float2(0.5,0.5),float2(-0.5,0.5),
+                                         float2(0.5,-0.5),float2(-0.5,-0.5)};
         [unroll] for(int i=0; i<4; ++i){
-            float2 Coords = normalize(input.TexCoord.xy + BF4_Coords[i] * PixelSize);
-            RandomRays += sqrt(Random(floor(Coords * RayWidth))) + 0.1;
+            float2 Coords = normalize(input.TexCoord.xy + BFCoord[i] * PixelSize);
+            RandomRays += sqrt(Random::RandomSH(floor(Coords * RayWidth))) + 0.1;
         }
         RandomRays /= 4;
 
@@ -464,16 +482,16 @@ GhostVSOutput main(VertexShaderInput input)
     output.SunInt = OcclusionLUT.Load(0);
     output.SunInt.x = LinearStep(0.4, 0.8, output.SunInt.w);
 
-    float4 SunParams = OcclusionLUT.Load(TEX_ONE);
-    float Scale = MapRange(SunParams.w, 0.02, 0.04, UIGhostScale * 0.8, UIGhostScale);
-    output.Color.w = MapRange(SunParams.w, 0.02, 0.04, 0.8, 1.0);
+    float4 SunParams = OcclusionLUT.Load(int3(1,0,0));
+    float Scale = Math::MapRange(SunParams.w, 0.02, 0.04, UIGhostScale * 0.8, UIGhostScale);
+    output.Color.w = Math::MapRange(SunParams.w, 0.02, 0.04, 0.8, 1.0);
 
     [branch] if(output.SunInt.w > SUNCLIP){
 
         float2 SunPosition = SunPositionUV.xy * 2.0 - 1.0;
         float SunDist = length(SunPosition);
 
-        float2x2 GhostRotation = DegreesToVect(UIGhostRotation).xyyx * float2(1.0, -1.0).xyxx;
+        float2x2 GhostRotation = DegreesToVector(UIGhostRotation).xyyx * float2(1.0, -1.0).xyxx;
 
         float GhostScale =  UIGhostSize * Scale * UIGhostCAFactor;
         float RadialDelta = mad(SunDist, -0.25, 1.0);
@@ -481,7 +499,7 @@ GhostVSOutput main(VertexShaderInput input)
         float2 ClampPosition = lerp(float2(UIGhostClampOffset, -1.0), -SunPosition, SunDist);
                ClampPosition *= rsqrt(delta(dot(ClampPosition, ClampPosition))) * RadialDelta;
 
-        float2 Bind = normalize(-SunPosition) * NthRoot(SunDist*2, UIGhostMoveCurve);
+        float2 Bind = normalize(-SunPosition) * Math::nRoot(SunDist*2, UIGhostMoveCurve);
 
         float2 GhostPosition = lerp(Bind, ClampPosition, UIGhostClampEnable);
                GhostPosition = mad(GhostPosition - SunPosition, UIGhostOffset, SunPosition);
@@ -492,11 +510,11 @@ GhostVSOutput main(VertexShaderInput input)
         output.Position.xy = mad(output.Position.xy, GhostScale, GhostPosition);
 
         [unroll] for(int i=0; i<9; ++i)
-            output.Vertices[i] = DegreesToVect(360.0 / UIGhostShape * i);
+            output.Vertices[i] = DegreesToVector(360.0 / UIGhostShape * i);
         output.Vertices[9] = output.Vertices[0];
 
-        float2 AtlasCoords = RandomUV(UIGhostOffset * 10.0) * UIGhostAtlas.z * output.TexCoord.xy * 0.5 + 0.5;
-        output.AtlasCoords = float4(AtlasFetch4(AtlasCoords, UIGhostAtlas.x), UIGhostAtlas.y, 0);
+        float2 AtlasCoords = (Random::RandomSH(UIGhostOffset * 10.0) * 0.5 + 0.5) * UIGhostAtlas.z * output.TexCoord.xy * 0.5 + 0.5;
+        output.AtlasCoords = float4(CoordMath::AtlasFetch4x4(AtlasCoords, UIGhostAtlas.x), UIGhostAtlas.y, 0);
 
         float2 CADispacement = normalize(SunPosition - GhostPosition) * float2(1.0, -1.0);
         output.CADispacement = mul(GhostRotation, CADispacement * (UIGhostCAFactor - 1.0) * 0.5);
@@ -531,7 +549,7 @@ float4 main(GhostVSOutput input) : SV_Target
         GhostOffset[x] = input.TexCoord.xy + (input.CADispacement * (x-1));
         Ghost[x] = saturate(inv(length(GhostOffset[x])));
     }
-    clip(min3(Ghost));
+    clip(Math::min3(Ghost));
 
 
 	[loop] for(int i = 0; i < UIGhostShape; ++i){
@@ -544,9 +562,9 @@ float4 main(GhostVSOutput input) : SV_Target
             Ghost[j] = min(Ghost[j], EdgeDist);
         }
     }
-    clip(max3(Ghost));
+    clip(Math::max3(Ghost));
 
-    float NSGhost = abs(max3(Ghost));
+    float NSGhost = abs(Math::max3(Ghost));
 
     Ghost = smoothstep(-0.05, UIGhostFeather, Ghost);
 
@@ -588,9 +606,9 @@ SunGlareVertexOutput main(VertexShaderInput input)
     output.TexCoord = input.TexCoord.xyxy;
     output.TexCoord.zw = output.TexCoord.xy * 2.0 - 1.0;
 
-    float SunRadius = OcclusionLUT.Load(TEX_ONE).w;
+    float SunRadius = OcclusionLUT.Load(int3(1,0,0)).w;
 
-    float GlareScale = MapRange(SunRadius, 0.02, 0.055, UISunGlareScale * 0.99, UISunGlareScale);
+    float GlareScale = Math::MapRange(SunRadius, 0.02, 0.055, UISunGlareScale * 0.99, UISunGlareScale);
 
     output.Scale = GlareScale / UISunGlareScale;
     output.Scale = lerp(output.Scale*0.5, output.Scale, LinearStep(0.025, 0.055, SunRadius));
@@ -634,7 +652,7 @@ float4 main(SunGlareVertexOutput input) : SV_Target
 
     float Edge = UISunGlareOuterInt * Dist;
 
-    float3 Color = WHITE * Glow + (input.Color * Edge) - Scene;
+    float3 Color = float3(1.0, 1.0, 1.0) * Glow + (input.Color * Edge) - Scene;
     Color *= smoothstep(-0.01, UISunGlareFade, InvDist) * InvDist;
 
     float depth = Depth.SampleCmpLevelZero(Depth_Sampler, input.Position.xy / ScreenSize.xy, 1).x;
@@ -667,18 +685,18 @@ HaloVertexOutput main(VertexShaderInput input)
     output.TexCoord = input.TexCoord.xyxy * 2.0 - 1.0;
     output.Position = float4(0.0, 0.0, 0.0, 1.0);
 
+    float4 SunParams = OcclusionLUT.Load(int3(1,0,0));
+    output.SunColor = SunParams.xyz;
     output.SunInt = OcclusionLUT.Load(0);
-    output.SunColor = OcclusionLUT.Load(TEX_ONE).xyz;
 
-    float4 SunParams = OcclusionLUT.Load(TEX_ONE);
-    float Scale = MapRange(SunParams.w, 0.02, 0.05, UIHaloScale * 0.8, UIHaloScale);
-    output.SunInt.z *= MapRange(SunParams.w, 0.02, 0.05, 0.8, 1.0);
+    float Scale = Math::MapRange(SunParams.w, 0.02, 0.05, UIHaloScale * 0.8, UIHaloScale);
+    output.SunInt.z *= Math::MapRange(SunParams.w, 0.02, 0.05, 0.8, 1.0);
 
     if (output.SunInt.w > SUNCLIP){
         float2 SunPosition = SunPositionUV.xy * 2.0 - 1.0;
         float Dist = length(SunPosition);
 
-        float2x2 RotateOffset = DegreesToVect(-SunPosition.x * (360 * UIHaloRotationSpeed)).xyyx;
+        float2x2 RotateOffset = DegreesToVector(-SunPosition.x * (360 * UIHaloRotationSpeed)).xyyx;
 
         output.Position.xy = mul(RotateOffset * float2(1.0, -1.0).xyxx, input.Position.xy);
         output.Position.y *= ScreenSize.z;
@@ -719,11 +737,11 @@ float4 main(HaloVertexOutput input) : SV_Target
 
     float3 Color = lerp(UIHaloColor.xyz, ColorShift, UIHaloCrShift);
 
-    float2 Polar = CartToPolar(input.TexCoord.xy);
+    float2 Polar = CoordMath::CartesianToPolar(input.TexCoord.xy);
     float DeltaStep = radians(UIHaloIncr);
     float HalfDelta = DeltaStep * 0.5;
 
-    float DeltaMap = ufmod(Polar.y + HalfDelta, DeltaStep) - HalfDelta; //+- Delta/2
+    float DeltaMap = Math::ufmod(Polar.y + HalfDelta, DeltaStep) - HalfDelta; //+- Delta/2
 
     float Taper = min(Radial - IDist, ODist - Radial);
           Taper = saturate(Taper / delta(UIHaloTaper * UIHaloLength * 2.0));
@@ -760,7 +778,7 @@ LensGlareVertexOutput main(VertexShaderInput input)
     float2 SunPosition = SunPositionUV.xy * 2.0 - 1.0;
 
     float angle = lerp(0.0, UIGlareMaxRot, -SunPosition.x) + 180.0;
-    float2x2 GlareRotMat = DegreesToVect(angle).xyyx * float2(1.0, -1.0).xyxx;
+    float2x2 GlareRotMat = DegreesToVector(angle).xyyx * float2(1.0, -1.0).xyxx;
 
     float2 GlarePos = float2(UIGlareXOffset, UIGlareYOffset) * 2.0 - 1.0;
            GlarePos = lerp(GlarePos + UIGlareScale, GlarePos - UIGlareScale, GlarePos * 0.5 + 0.5);
@@ -769,7 +787,7 @@ LensGlareVertexOutput main(VertexShaderInput input)
     output.Position.xy = mad(output.Position.xy, UIGlareScale * float2(1.0, ScreenSize.z), GlarePos);
 
     output.SunInt = OcclusionLUT.Load(0);
-    output.SunColor = OcclusionLUT.Load(TEX_ONE).xyz;
+    output.SunColor = OcclusionLUT.Load(int3(1,0,0)).xyz;
 
 	output.Position = float4(output.Position.xy, 0.0, 1.0);
 

@@ -14,7 +14,7 @@ struct LensEffects : Feature
 	virtual inline std::string GetShortName() override { return "LensEffects"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
 	virtual inline std::string_view GetShaderDefineName() override { return "LENS_EFFECTS"; }
-	virtual std::string_view GetCategory() const override { return "Post Process"; }
+	virtual std::string_view GetCategory() const override { return "Post-Processing"; }
 	virtual inline bool SupportsVR() override { return false; };  //
 
 	virtual inline void PostPostLoad() override { Hooks::Install(); }
@@ -127,7 +127,7 @@ struct LensEffects : Feature
 	struct MainSettings
 	{
 		//Starburst
-		float SB_Scale = 0.35f;
+		float SB_Scale = 0.30f;
 		float SB_Intensity = 1.3f;
 
 		uint SB_EnableBlades = true;
@@ -479,6 +479,9 @@ struct LensEffects : Feature
 			void CheckRefData()
 			{
 				for (auto& pass : PassList) {
+					pass->CheckRefs();
+				}
+				for (auto& pass : NoSunPassList) {
 					pass->CheckRefs();
 				}
 			}

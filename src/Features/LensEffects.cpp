@@ -664,7 +664,6 @@ void LensEffects::DrawSettings()
 		ImGui::TreePop();
 	}
 	ImGui::Spacing();
-	ImGui::Spacing();
 
 	if (ImGui::Checkbox("Enable Sun Glare", &settings->EnableSunGlare))
 		renderdata->GetEffect(Shaders::LensSunGlare).Toggle(settings->EnableSunGlare);
