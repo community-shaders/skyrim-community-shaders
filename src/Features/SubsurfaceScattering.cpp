@@ -293,7 +293,7 @@ void SubsurfaceScattering::DrawSSS()
 	ID3D11Buffer* buffer = nullptr;
 	context->CSSetConstantBuffers(1, 1, &buffer);
 
-	ID3D11ShaderResourceView* views[5]{ nullptr, nullptr, nullptr };
+	ID3D11ShaderResourceView* views[5]{ nullptr, nullptr, nullptr, nullptr, nullptr };
 	context->CSSetShaderResources(0, 5, views);
 
 	ID3D11UnorderedAccessView* uavs[1]{ nullptr };
