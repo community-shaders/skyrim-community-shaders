@@ -11,5 +11,8 @@ vcpkg_from_github(
 set(XESS_HEADERS_SOURCE ${SOURCE_PATH}/inc/xess)
 file(INSTALL ${XESS_HEADERS_SOURCE} DESTINATION ${CURRENT_PACKAGES_DIR}/include)
 
+set(XESS_FG_HEADERS_SOURCE ${SOURCE_PATH}/inc/xess_fg)
+file(INSTALL ${XESS_FG_HEADERS_SOURCE} DESTINATION ${CURRENT_PACKAGES_DIR}/include)
+
 # Install copyright
 vcpkg_install_copyright(FILE_LIST "${SOURCE_PATH}/LICENSE.txt")

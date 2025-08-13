@@ -5,6 +5,7 @@
 
 #include "FidelityFX.h"
 #include "Streamline.h"
+#include "XeSS.h"
 #include "../Upscaling.h"
 
 void DX12SwapChain::InitializeD3D12Resources()
@@ -39,27 +40,14 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	swapChainDesc.SwapEffect = a_swapChainDesc.SwapEffect;
 	swapChainDesc.Flags = a_swapChainDesc.Flags;
 
-	ffx::CreateContextDescFrameGenerationSwapChainForHwndDX12 ffxSwapChainDesc{};
-
-	ffxSwapChainDesc.desc = &swapChainDesc;
-	ffxSwapChainDesc.dxgiFactory = dxgiFactory;
-	ffxSwapChainDesc.fullscreenDesc = nullptr;
-	ffxSwapChainDesc.gameQueue = upscaling.sharedD3D12CommandQueue.get();
-	ffxSwapChainDesc.hwnd = a_swapChainDesc.OutputWindow;
-	ffxSwapChainDesc.swapchain = &swapChain;
-
-	auto& fidelityFX = globals::features::upscaling.fidelityFX;
-
-	if (ffx::CreateContext(fidelityFX.swapChainContext, nullptr, ffxSwapChainDesc) != ffx::ReturnCode::Ok) {
-		logger::critical("[FidelityFX] Failed to create swap chain context!");
-	}
+	auto& xess = globals::features::upscaling.xess;
+	
+	swapChain = (IDXGISwapChain4*)xess.SetupFrameGeneration(a_swapChainDesc.OutputWindow, swapChainDesc, upscaling.sharedD3D12CommandQueue.get(), dxgiFactory);
 
 	DX::ThrowIfFailed(swapChain->GetBuffer(0, IID_PPV_ARGS(&swapChainBuffers[0])));
 	DX::ThrowIfFailed(swapChain->GetBuffer(1, IID_PPV_ARGS(&swapChainBuffers[1])));
 
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
-
-	fidelityFX.SetupFrameGeneration();
 }
 
 void DX12SwapChain::CreateInterop()
@@ -146,7 +134,8 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 		}
 	}
 
-	globals::features::upscaling.fidelityFX.Present(upscaling.settings.frameGenerationMode && !globals::game::ui->GameIsPaused());
+	bool useFrameGeneration = upscaling.settings.frameGenerationMode && !globals::game::ui->GameIsPaused();
+	upscaling.xess.Present(useFrameGeneration, commandLists[frameIndex].get());
 
 	DX::ThrowIfFailed(commandLists[frameIndex]->Close());
 

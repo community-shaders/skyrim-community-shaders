@@ -911,4 +911,9 @@ void Deferred::Hooks::Renderer_ResetState::thunk(void* This)
 
 	auto* singleton = globals::truePBR;
 	singleton->SetupFrame();
+
+	static auto frameCheck = Util::FrameChecker{};
+
+	if (frameCheck.IsNewFrame())
+		globals::features::upscaling.xess.AddSimulationEndMarker();
 }

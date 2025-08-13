@@ -70,12 +70,24 @@ void Upscaling::DrawSettings()
 			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
 	}
 
-	if (fidelityFX.featureFSR3FG) {
+	bool hasFrameGeneration = false;
+	std::string frameGenTechnology = "None";
+	
+	if (xess.featureXeSSFG) {
+		hasFrameGeneration = true;
+		frameGenTechnology = "Intel XeSS";
+	}
+	// Fallback to FSR3 if XeSS FG is not available
+	else if (fidelityFX.featureFSR3FG) {
+		hasFrameGeneration = true;
+		frameGenTechnology = "AMD FSR 3.1";
+	}
+
+	if (hasFrameGeneration) {
 		if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Text("Frame Generation interpolates real frames with generated ones for a smoother experience");
-			ImGui::Text("Uses AMD FSR 3.1 Frame Generation technology");
-			if (fidelityFX.featureFSR3FG)
-				ImGui::Text("AMD FSR 3.1 Frame Generation is available.");
+			ImGui::Text("Uses %s Frame Generation technology", frameGenTechnology.c_str());
+			ImGui::Text("%s Frame Generation is available.", frameGenTechnology.c_str());
 			ImGui::Text("Requires a D3D11 to D3D12 proxy which can create compatibility issues");
 			ImGui::Text("Toggling this setting requires a restart to work correctly");
 
@@ -111,7 +123,12 @@ void Upscaling::DrawSettings()
 				ImGui::PopStyleColor(ImGuiCol_Text);
 			}
 
-			std::string backendLabel = fidelityFX.isFrameGenActive ? "FSR3" : "None";
+			std::string backendLabel = "None";
+			if (xess.isFrameGenActive) {
+				backendLabel = "XeSS";
+			} else if (fidelityFX.isFrameGenActive) {
+				backendLabel = "FSR3";
+			}
 			std::string enabledLabel = "Enabled (" + backendLabel + ")";
 			const char* toggleModes[] = { "Disabled", "Enabled" };
 			const char* toggleModesFG[] = { "Disabled", enabledLabel.c_str() };
@@ -214,6 +231,43 @@ void Upscaling::RestoreDefaultSettings()
 {
 	settings = {};
 }
+struct Main_Update_Begin
+{
+
+	static void thunk(RE::PlayerCharacter* a_player)
+	{
+		// Add XeLL simulation start marker for low latency
+		auto& upscaling = globals::features::upscaling;
+		if (upscaling.xess.featureXeSSFG && upscaling.xess.xellContext) {
+			upscaling.xess.AddSimulationStartMarker();
+		}
+
+		// Sleep
+		func(a_player);
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
+struct Main_Update_Swap
+{
+
+	static void thunk(void* This)
+	{
+		// Add XeLL present start marker for low latency
+		auto& upscaling = globals::features::upscaling;
+		if (upscaling.xess.featureXeSSFG && upscaling.xess.xellContext) {
+			upscaling.xess.AddPresentStartMarker();
+		}
+
+		// Present
+		func(This);
+
+		if (upscaling.xess.featureXeSSFG && upscaling.xess.xellContext) {
+			upscaling.xess.AddPresentEndMarker();
+		}
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
 
 void Upscaling::PostPostLoad()
 {
@@ -232,6 +286,9 @@ void Upscaling::PostPostLoad()
 	stl::write_thunk_call<Main_PostProcessing>(REL::RelocationID(100430, 107148).address() + REL::Relocate(0x1F0, 0x1E7, 0x206));
 	
 	if (!REL::Module::IsVR()) {
+		stl::write_thunk_call<Main_Update_Begin>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x53, 0x6E));
+		stl::write_thunk_call<Main_Update_Swap>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x5D2, 0xA92));
+		
 		// Patches RSSetScissorRect calls to use dynamic resolution
 		// This is a PC-specific function hence it was missing
 		stl::detour_thunk<SetScissorRect>(REL::RelocationID(75564, 77365));
@@ -654,7 +711,12 @@ void Upscaling::CreateFrameGenerationResources()
 	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	HUDLessBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
 
-	copyDepthToSharedBufferCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\FrameGeneration\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0");
+	// Use the appropriate shader path based on frame generation backend
+	if (xess.featureXeSSFG) {
+		copyDepthToSharedBufferCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\Upscaling\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0");
+	} else {
+		copyDepthToSharedBufferCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\FrameGeneration\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0");
+	}
 }
 
 void Upscaling::CopyHUDLessBuffer()
@@ -907,6 +969,9 @@ void Upscaling::CheckFrameConstants()
 
 bool Upscaling::IsFrameGenActive() const
 {
+	if (xess.isFrameGenActive) {
+		return true;
+	}
 	return fidelityFX.isFrameGenActive;
 }
 
@@ -954,6 +1019,9 @@ void Upscaling::PostBackendDevice()
 // Module availability methods
 bool Upscaling::HasFrameGenModule() const
 {
+	if (xess.featureXeSSFG && xess.module != nullptr) {
+		return true;
+	}
 	return fidelityFX.module != nullptr;
 }
 

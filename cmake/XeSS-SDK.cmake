@@ -6,6 +6,7 @@
 
 # Find XeSS headers installed by vcpkg port
 find_path(INTEL_XESS_INCLUDE_DIRS "xess/xess.h")
+find_path(INTEL_XESS_FG_INCLUDE_DIRS "xess_fg/xefg_swapchain.h")
 
 if(INTEL_XESS_INCLUDE_DIRS)
     message(STATUS "XeSS SDK headers found via vcpkg at ${INTEL_XESS_INCLUDE_DIRS}")
@@ -16,6 +17,18 @@ if(INTEL_XESS_INCLUDE_DIRS)
     )
 else()
     message(WARNING "XeSS SDK headers not found - XeSS compilation may fail")
+    message(STATUS "Make sure intel-xess is installed via vcpkg")
+endif()
+
+if(INTEL_XESS_FG_INCLUDE_DIRS)
+    message(STATUS "XeSS FG SDK headers found via vcpkg at ${INTEL_XESS_FG_INCLUDE_DIRS}")
+    target_include_directories(
+        ${PROJECT_NAME}
+        PRIVATE
+        ${INTEL_XESS_FG_INCLUDE_DIRS}
+    )
+else()
+    message(WARNING "XeSS FG SDK headers not found - XeSS compilation may fail")
     message(STATUS "Make sure intel-xess is installed via vcpkg")
 endif()
 
