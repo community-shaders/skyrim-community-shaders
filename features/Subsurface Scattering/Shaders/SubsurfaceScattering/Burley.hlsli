@@ -82,7 +82,6 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssA
 
 	float3 weightSum = 0.0f;
 	float3 colorSum = 0.0f;
-	float3 bleedSum = 0.0f;
 
 	float2 uvScale = (GAME_UNIT_TO_CM * 0.1f * SSSScaleX) / centerDepth;  // Scale in mm
 
@@ -125,7 +124,6 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssA
 
 		float maskSample = MaskTexture[samplePixcoord].x;
 		bool mask = maskSample > 1e-5f;
-		bleedSum += mask ? 1.0f : surfaceAlbedo.xyz;
 
 		float3 diffusionProfile = GetBurleyProfile(diffuseMeanFreePath.xyz, s3d, radiusSampledInMM);
 		float normalWeight = sqrt(saturate(dot(sampleNormalWS, normalWS) * 0.5f + 0.5f));
@@ -136,7 +134,6 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssA
 	}
 
 	colorSum *= any(weightSum == 0.0f) ? 0.0f : (1.0f / weightSum);
-	colorSum *= bleedSum * rcp(BurleySamples);
 	colorSum = lerp(colorSum, originalColor, saturate(centerWeight));
 	float3 color = Color::LinearToGamma(colorSum) * AlbedoTexture[DTid.xy].xyz;
 
