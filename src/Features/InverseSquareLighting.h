@@ -8,12 +8,6 @@ private:
 	static constexpr std::string_view MOD_ID = "153542";
 
 public:
-	static InverseSquareLighting* GetSingleton()
-	{
-		static InverseSquareLighting singleton;
-		return &singleton;
-	}
-
 	virtual inline std::string GetName() override { return "Inverse Square Lighting"; }
 
 	virtual inline std::string GetShortName() override { return "InverseSquareLighting"; }
@@ -45,15 +39,21 @@ public:
 
 	virtual void PostPostLoad() override;
 
-	static float CalculateRadius(float intensity, bool shadowCaster, float cutoffOverride);
+	static float CalculateRadius(float intensity, bool shadowCaster, float cutoffOverride, float size);
 
 	void ProcessLight(LightLimitFix::LightData& light, RE::BSLight* bsLight, RE::NiLight* niLight) const;
 
-	static float GetAttenuation(float distance, float radius);
+	static float GetAttenuation(float distance, float radius, float size);
 
 	struct CreatePointLight
 	{
 		static RE::NiPointLight* thunk(RE::TESObjectLIGH* ligh, RE::TESObjectREFR* refr, RE::NiAVObject* root, bool forceDynamic, bool useLightRadius, bool affectRequesterOnly);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct BSLight_GetLuminance
+	{
+		static float thunk(RE::BSLight* bsLight, RE::NiPoint3* targetPosition, RE::NiLight* refLight);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 

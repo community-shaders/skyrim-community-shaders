@@ -5,40 +5,55 @@
 #include "../Util.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-	ExtendedTranslucency::MaterialParams,
+	ExtendedTranslucency::Settings,
 	AlphaMode,
 	AlphaReduction,
 	AlphaSoftness,
-	AlphaStrength);
+	AlphaStrength,
+	SkinnedOnly);
 
 const RE::BSFixedString ExtendedTranslucency::NiExtraDataName_AnisotropicAlphaMaterial = "AnisotropicAlphaMaterial";
 
-ExtendedTranslucency* ExtendedTranslucency::GetSingleton()
-{
-	static ExtendedTranslucency singleton;
-	return &singleton;
-}
-
 void ExtendedTranslucency::BSLightingShader_SetupGeometry(RE::BSRenderPass* pass)
 {
-	globals::state->currentExtraFeatureDescriptor &= ~(ExtraFeatureDescriptorMask << ExtraFeatureDescriptorShift);
-	// TODO: PERFORMANCE: Caching the feature descriptor in map<RE::BSGeometry*, uint> if this get more complex
-	if (auto* data = pass->geometry->GetExtraData(NiExtraDataName_AnisotropicAlphaMaterial)) {
-		static const REL::Relocation<const RE::NiRTTI*> NiIntegerExtraDataRTTI{ RE::NiIntegerExtraData::Ni_RTTI };
-		// netimmerse_cast<RE::NiIntegerExtraData*>(data) seems not working here
-		if (data->GetRTTI() == NiIntegerExtraDataRTTI.get()) {
-			uint32_t material = static_cast<uint32_t>(static_cast<RE::NiIntegerExtraData*>(data)->value) & ExtraFeatureDescriptorMask;
-			if (material == MaterialModel::Disabled) {
-				// MaterialModel::Disabled (0) is the flag when this extra does not exist
-				// And it will let the effect use default settings instead of force disable it
-				// Ensure this is disabled by using the ForceDisabled flag
-				material = MaterialModel::ForceDisabled;
-			}
-			globals::state->currentExtraFeatureDescriptor |= (material << ExtraFeatureDescriptorShift);
+	auto SetFeatureDescriptor = [](int material) {
+		auto& descriptor = globals::state->permutationData.ExtraFeatureDescriptor;
+		static constexpr int mask = ExtraFeatureDescriptorMask << ExtraFeatureDescriptorShift;
+		static constexpr int shift = ExtraFeatureDescriptorShift;
+		descriptor = (descriptor & ~mask) | (material << shift);
+	};
 
-			// TODO: Per-material settings from Nif
-			// Mods supporting this feature should adjust their alpha value in texture already
-			// And the texture should be adjusted based on full strength param
+	// Clear the ExtraFeatureDescriptor to disable this effect on default
+	SetFeatureDescriptor(MaterialModel::DescriptorDisabled);
+
+	auto& property0 = pass->geometry->GetGeometryRuntimeData().properties[0];
+	auto& property1 = pass->geometry->GetGeometryRuntimeData().properties[1];
+	auto alphaProperty = property0 && property0->GetRTTI() == globals::rtti::NiAlphaPropertyRTTI.get() ? static_cast<RE::NiAlphaProperty*>(property0.get()) : nullptr;
+	auto lightProperty = property1 && property1->GetRTTI() == globals::rtti::BSLightingShaderPropertyRTTI.get() ? static_cast<RE::BSLightingShaderProperty*>(property1.get()) : nullptr;
+
+	// This effect only matters when alpha property exists and blending is enabled
+	// Geometries with alpha < 1 have an implicit alpha blend property
+	if (!(lightProperty && lightProperty->alpha < 0.999f) && (!alphaProperty || !alphaProperty->GetAlphaBlending())) {
+		return;
+	}
+
+	const auto* data = pass->geometry->GetExtraData(NiExtraDataName_AnisotropicAlphaMaterial);
+	if (!data) {
+		// If there is no extra data for explicit settings, use the default material model from global user settings
+		// And respect the SkinnedOnly setting
+		const auto& feature = globals::features::extendedTranslucency;
+		if (!feature.settings.SkinnedOnly || pass->geometry->GetGeometryRuntimeData().skinInstance != nullptr) {
+			SetFeatureDescriptor(MaterialModel::DescriptorUseDefault);
+		}
+	} else {
+		// Read explicit material model from extra data
+		if (data->GetRTTI() == globals::rtti::NiIntegerExtraDataRTTI.get()) {
+			uint32_t material = static_cast<uint32_t>(static_cast<const RE::NiIntegerExtraData*>(data)->value) & ExtraFeatureDescriptorMask;
+			// Promote `Disabled` in settings to `DescriptorDisabled` in shader
+			material = material == MaterialModel::Disabled ? MaterialModel::DescriptorDisabled : material;
+			SetFeatureDescriptor(material);
+		} else {
+			// logging is too expensive here, treat type error as disable, should only happen for modders
 		}
 	}
 }
@@ -70,27 +85,35 @@ void ExtendedTranslucency::PostPostLoad()
 void ExtendedTranslucency::DrawSettings()
 {
 	if (ImGui::TreeNodeEx("Translucent Material", ImGuiTreeNodeFlags_DefaultOpen)) {
-		static const char* AlphaModeNames[4] = {
-			"Disabled",
-			"Rim Light",
-			"Isotropic Fabric",
-			"Anisotropic Fabric"
+		static constexpr const char* AlphaModeNames[] = {
+			"0 - Disabled",
+			"1 - Rim Edge",
+			"2 - Isotropic Fabric, Glass, ...",
+			"3 - Anisotropic Fabric",
 		};
 
+		static constexpr int AlphaModeSize = static_cast<int>(std::size(AlphaModeNames));
+
 		bool changed = false;
-		if (ImGui::Combo("Default Material Model", (int*)&settings.AlphaMode, AlphaModeNames, 4)) {
+		if (ImGui::Combo("Default Material Model", (int*)&settings.AlphaMode, AlphaModeNames, AlphaModeSize)) {
 			changed = true;
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
-				"Anisotropic transluency will make the surface more opaque when you view it parallel to the surface.\n"
-				"  - Disabled: No anisotropic transluency\n"
-				"  - Rim Light: Naive rim light effect\n"
-				"  - Isotropic Fabric: Imaginary fabric weaved from threads in one direction, respect normal map.\n"
+				"Anisotropic transluency will adjust the opacity based on your view angle to the translucent surface.\n"
+				"  - Disabled: No anisotropic transluency, flat alpha.\n"
+				"  - Rim Edge: Naive rim light effect with no physics model, the edge of the geometry is always opaque even its full transparent.\n"
+				"  - Isotropic Fabric: Imaginary fabric weaved from threads in one direction, respect normal map, also works well for layer of glass panels.\n"
 				"  - Anisotropic Fabric: Common fabric weaved from tangent and birnormal direction, ignores normal map.\n");
 		}
+		if (ImGui::Checkbox("Skinned Mesh Only", &settings.SkinnedOnly)) {
+			changed = true;
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Control if this effect should only apply to skinned mesh, check this option if your are seeing undesired effect on random objects.");
+		}
 
-		if (ImGui::SliderFloat("Transparency Increase", &settings.AlphaReduction, 0.f, 1.f)) {
+		if (ImGui::SliderFloat("Transparency Increase", &settings.AlphaReduction, 0, 1.f)) {
 			changed = true;
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -137,7 +160,7 @@ std::pair<std::string, std::vector<std::string>> ExtendedTranslucency::GetFeatur
 	return {
 		"Extended Translucency provides realistic rendering of thin fabric and other translucent materials.\n"
 		"This feature supports multiple material models for different types of translucent surfaces.",
-		{ "Multiple translucency material models (rim light, isotropic/anisotropic fabric)",
+		{ "Multiple translucency material models (rim edge, isotropic/anisotropic fabric)",
 			"Realistic fabric translucency with directional light transmission",
 			"Per-material override support via NIF extra data",
 			"Configurable transparency and softness controls",

@@ -13,6 +13,7 @@
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
 
+#include "Hooks.h"
 #include "Streamline.h"
 
 struct DepthStates
@@ -106,6 +107,21 @@ void Deferred::SetupResources()
 		SetupRenderTarget(NORMALROUGHNESS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Masks
 		SetupRenderTarget(MASKS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
+
+		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		texDesc.Width = 2;
+		texDesc.Height = 2;
+
+		adaptationTextures[0] = new Texture2D(texDesc);
+		adaptationTextures[1] = new Texture2D(texDesc);
+
+		srvDesc.Format = texDesc.Format;
+		adaptationTextures[0]->CreateSRV(srvDesc);
+		adaptationTextures[1]->CreateSRV(srvDesc);
+
+		rtvDesc.Format = texDesc.Format;
+		adaptationTextures[0]->CreateRTV(rtvDesc);
+		adaptationTextures[1]->CreateRTV(rtvDesc);
 	}
 
 	{
@@ -224,6 +240,10 @@ void Deferred::CopyShadowData()
 		};
 
 		context->PSSetShaderResources(18, ARRAYSIZE(srvs), srvs);
+
+		// Release COM object to prevent memory leak
+		if (shadowView)
+			shadowView->Release();
 	}
 }
 
@@ -335,8 +355,7 @@ void Deferred::StartDeferred()
 	{
 		auto context = globals::d3d::context;
 
-		static REL::Relocation<ID3D11Buffer**> perFrame{ REL::RelocationID(524768, 411384) };
-		ID3D11Buffer* buffers[1] = { *perFrame.get() };
+		ID3D11Buffer* buffers[1] = { *globals::game::perFrame.get() };
 
 		ID3D11Buffer* vrBuffer = nullptr;
 
@@ -402,19 +421,19 @@ void Deferred::DeferredPasses()
 		}
 	}
 
-	auto skylighting = globals::features::skylighting;
+	auto& skylighting = globals::features::skylighting;
 
-	auto ssgi = globals::features::screenSpaceGI;
-	if (ssgi->loaded)
-		ssgi->DrawSSGI(prevDiffuseAmbientTexture);
-	auto [ssgi_ao, ssgi_y, ssgi_cocg, ssgi_gi_spec] = ssgi->GetOutputTextures();
-	bool ssgi_hq_spec = ssgi->settings.EnableExperimentalSpecularGI;
+	auto& ssgi = globals::features::screenSpaceGI;
+	if (ssgi.loaded)
+		ssgi.DrawSSGI(prevDiffuseAmbientTexture);
+	auto [ssgi_ao, ssgi_y, ssgi_cocg, ssgi_gi_spec] = ssgi.GetOutputTextures();
+	bool ssgi_hq_spec = ssgi.settings.EnableExperimentalSpecularGI;
 
-	auto ibl = globals::features::ibl;
+	auto& ibl = globals::features::ibl;
 
 	auto dispatchCount = Util::GetScreenDispatchCount();
 
-	if (ssgi->loaded) {
+	if (ssgi.loaded) {
 		// Ambient Composite
 		{
 			TracyD3D11Zone(globals::state->tracyCtx, "Ambient Composite");
@@ -422,13 +441,13 @@ void Deferred::DeferredPasses()
 			ID3D11ShaderResourceView* srvs[9]{
 				albedo.SRV,
 				normalRoughness.SRV,
-				skylighting->loaded || REL::Module::IsVR() ? depth.depthSRV : nullptr,
-				skylighting->loaded ? skylighting->texProbeArray->srv.get() : nullptr,
-				skylighting->loaded ? skylighting->stbn_vec3_2Dx1D_128x128x64.get() : nullptr,
+				skylighting.loaded || REL::Module::IsVR() ? depth.depthSRV : nullptr,
+				skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,
+				skylighting.loaded ? skylighting.stbn_vec3_2Dx1D_128x128x64.get() : nullptr,
 				ssgi_ao,
 				ssgi_y,
 				ssgi_cocg,
-				ibl->loaded ? ibl->diffuseIBLTexture->srv.get() : nullptr,
+				ibl.loaded ? ibl.diffuseIBLTexture->srv.get() : nullptr,
 			};
 
 			context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
@@ -454,15 +473,15 @@ void Deferred::DeferredPasses()
 		}
 	}
 
-	auto sss = globals::features::subsurfaceScattering;
-	if (sss->loaded)
-		sss->DrawSSS();
+	auto& sss = globals::features::subsurfaceScattering;
+	if (sss.loaded)
+		sss.DrawSSS();
 
-	auto dynamicCubemaps = globals::features::dynamicCubemaps;
-	if (dynamicCubemaps->loaded)
-		dynamicCubemaps->UpdateCubemap();
+	auto& dynamicCubemaps = globals::features::dynamicCubemaps;
+	if (dynamicCubemaps.loaded)
+		dynamicCubemaps.UpdateCubemap();
 
-	auto terrainBlending = globals::features::terrainBlending;
+	auto& terrainBlending = globals::features::terrainBlending;
 
 	// Deferred Composite
 	{
@@ -473,20 +492,20 @@ void Deferred::DeferredPasses()
 			albedo.SRV,
 			normalRoughness.SRV,
 			masks.SRV,
-			dynamicCubemaps->loaded || REL::Module::IsVR() ? (terrainBlending->loaded ? terrainBlending->blendedDepthTexture16->srv.get() : depth.depthSRV) : nullptr,
-			dynamicCubemaps->loaded ? reflectance.SRV : nullptr,
-			dynamicCubemaps->loaded ? dynamicCubemaps->envTexture->srv.get() : nullptr,
-			dynamicCubemaps->loaded ? dynamicCubemaps->envReflectionsTexture->srv.get() : nullptr,
-			dynamicCubemaps->loaded && skylighting->loaded ? skylighting->texProbeArray->srv.get() : nullptr,
-			dynamicCubemaps->loaded && skylighting->loaded ? skylighting->stbn_vec3_2Dx1D_128x128x64.get() : nullptr,
+			dynamicCubemaps.loaded || REL::Module::IsVR() ? (terrainBlending.loaded ? terrainBlending.blendedDepthTexture16->srv.get() : depth.depthSRV) : nullptr,
+			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,
+			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,
+			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,
+			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,
+			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.stbn_vec3_2Dx1D_128x128x64.get() : nullptr,
 			ssgi_ao,
 			ssgi_hq_spec ? nullptr : ssgi_y,
 			ssgi_hq_spec ? nullptr : ssgi_cocg,
 			ssgi_hq_spec ? ssgi_gi_spec : nullptr,
-			ibl->loaded ? ibl->diffuseIBLTexture->srv.get() : nullptr,
+			ibl.loaded ? ibl.diffuseIBLTexture->srv.get() : nullptr,
 		};
 
-		if (dynamicCubemaps->loaded)
+		if (dynamicCubemaps.loaded)
 			context->CSSetSamplers(0, 1, &linearSampler);
 
 		context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
@@ -514,13 +533,13 @@ void Deferred::DeferredPasses()
 		context->CSSetShader(nullptr, nullptr, 0);
 	}
 
-	if (dynamicCubemaps->loaded)
-		dynamicCubemaps->PostDeferred();
+	if (dynamicCubemaps.loaded)
+		dynamicCubemaps.PostDeferred();
 }
 
 void Deferred::EndDeferred()
 {
-	if (!inWorld)
+	if (!globals::state->inWorld)
 		return;
 
 	auto shaderCache = globals::shaderCache;
@@ -573,8 +592,20 @@ void Deferred::OverrideBlendStates()
 
 							blendDesc.IndependentBlendEnable = true;
 
-							// Start at 1 to ignore Diffuse
+							// Default to original blending method
 							for (int i = 1; i < 8; i++) {
+								blendDesc.RenderTarget[i].BlendEnable = blendDesc.RenderTarget[0].BlendEnable;
+								blendDesc.RenderTarget[i].SrcBlend = blendDesc.RenderTarget[0].SrcBlend;
+								blendDesc.RenderTarget[i].DestBlend = blendDesc.RenderTarget[0].DestBlend;
+								blendDesc.RenderTarget[i].BlendOp = blendDesc.RenderTarget[0].BlendOp;
+								blendDesc.RenderTarget[i].SrcBlendAlpha = blendDesc.RenderTarget[0].SrcBlendAlpha;
+								blendDesc.RenderTarget[i].DestBlendAlpha = blendDesc.RenderTarget[0].DestBlendAlpha;
+								blendDesc.RenderTarget[i].BlendOpAlpha = blendDesc.RenderTarget[0].BlendOpAlpha;
+								blendDesc.RenderTarget[i].RenderTargetWriteMask = blendDesc.RenderTarget[0].RenderTargetWriteMask;
+							}
+
+							// Normals and motion vectors must use alpha blending
+							for (int i = 1; i < 3; i++) {
 								blendDesc.RenderTarget[i].BlendEnable = blendDesc.RenderTarget[0].BlendEnable;
 								blendDesc.RenderTarget[i].SrcBlend = D3D11_BLEND_SRC_ALPHA;
 								blendDesc.RenderTarget[i].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
@@ -654,16 +685,16 @@ ID3D11ComputeShader* Deferred::GetComputeAmbientComposite()
 
 		std::vector<std::pair<const char*, const char*>> defines;
 
-		if (globals::features::skylighting->loaded)
+		if (globals::features::skylighting.loaded)
 			defines.push_back({ "SKYLIGHTING", nullptr });
 
-		if (globals::features::screenSpaceGI->loaded)
+		if (globals::features::screenSpaceGI.loaded)
 			defines.push_back({ "SSGI", nullptr });
 
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });
 
-		if (globals::features::ibl->loaded)
+		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
 
 		ambientCompositeCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\AmbientCompositeCS.hlsl", defines, "cs_5_0"));
@@ -679,7 +710,7 @@ ID3D11ComputeShader* Deferred::GetComputeAmbientCompositeInterior()
 		std::vector<std::pair<const char*, const char*>> defines;
 		defines.push_back({ "INTERIOR", nullptr });
 
-		if (globals::features::screenSpaceGI->loaded)
+		if (globals::features::screenSpaceGI.loaded)
 			defines.push_back({ "SSGI", nullptr });
 
 		if (REL::Module::IsVR())
@@ -697,16 +728,16 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 
 		std::vector<std::pair<const char*, const char*>> defines;
 
-		if (globals::features::dynamicCubemaps->loaded)
+		if (globals::features::dynamicCubemaps.loaded)
 			defines.push_back({ "DYNAMIC_CUBEMAPS", nullptr });
 
-		if (globals::features::skylighting->loaded)
+		if (globals::features::skylighting.loaded)
 			defines.push_back({ "SKYLIGHTING", nullptr });
 
-		if (globals::features::screenSpaceGI->loaded)
+		if (globals::features::screenSpaceGI.loaded)
 			defines.push_back({ "SSGI", nullptr });
 
-		if (globals::features::ibl->loaded)
+		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
 
 		if (REL::Module::IsVR())
@@ -725,10 +756,10 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 		std::vector<std::pair<const char*, const char*>> defines;
 		defines.push_back({ "INTERIOR", nullptr });
 
-		if (globals::features::dynamicCubemaps->loaded)
+		if (globals::features::dynamicCubemaps.loaded)
 			defines.push_back({ "DYNAMIC_CUBEMAPS", nullptr });
 
-		if (globals::features::screenSpaceGI->loaded)
+		if (globals::features::screenSpaceGI.loaded)
 			defines.push_back({ "SSGI", nullptr });
 
 		if (REL::Module::IsVR())
@@ -739,9 +770,56 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 	return mainCompositeInteriorCS;
 }
 
-// Testing code for imagespace shaders
-void Deferred::BindLUT()
+void Deferred::HDRShaderHacks()
 {
+	if (globals::state->currentShader && globals::state->currentShader->shaderType.get() == RE::BSShader::Type::ImageSpace) {
+		const auto& isShader = static_cast<const RE::BSImagespaceShader&>(*globals::state->currentShader);
+
+		enum class ShaderAction
+		{
+			Adaptation,
+			HDR
+		};
+
+		static const ankerl::unordered_dense::map<std::string_view, ShaderAction> shaderMap{
+			{ "BSImagespaceShaderHDRDownSample4LightAdapt", ShaderAction::Adaptation },
+			{ "BSImagespaceShaderHDRDownSample16LightAdapt", ShaderAction::Adaptation },
+			{ "BSImagespaceShaderHDRTonemapBlendCinematic", ShaderAction::HDR },
+			{ "BSImagespaceShaderHDRTonemapBlendCinematicFade", ShaderAction::HDR }
+		};
+
+		auto it = shaderMap.find(isShader.name);
+		if (it != shaderMap.cend()) {
+			switch (it->second) {
+			case ShaderAction::Adaptation:
+				BindAdaptationShader();
+				break;
+			case ShaderAction::HDR:
+				BindHDRShader();
+				break;
+			}
+		}
+	}
+}
+
+void Deferred::BindAdaptationShader()
+{
+	uint frameSwap = (globals::state->frameCount % 2);
+
+	auto srv = adaptationTextures[frameSwap]->srv.get();
+	globals::d3d::context->PSSetShaderResources(1, 1, &srv);
+
+	auto rtv = adaptationTextures[!frameSwap]->rtv.get();
+	globals::d3d::context->OMSetRenderTargets(1, &rtv, nullptr);
+}
+
+void Deferred::BindHDRShader()
+{
+	uint frameSwap = (globals::state->frameCount % 2);
+
+	auto srv = adaptationTextures[!frameSwap]->srv.get();
+	globals::d3d::context->PSSetShaderResources(2, 1, &srv);
+
 	auto view = lutTexture.get();
 	if (view)
 		globals::d3d::context->PSSetShaderResources(100, 1, &view);
@@ -755,92 +833,74 @@ void Deferred::Hooks::Main_RenderShadowMaps::thunk()
 
 void Deferred::Hooks::Main_RenderWorld::thunk(bool a1)
 {
-	auto deferred = globals::deferred;
-	deferred->inWorld = true;
+	auto* const state = globals::state;
+	state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::InWorld);
+	state->inWorld = true;
 	func(a1);
-	deferred->inWorld = false;
+	state->inWorld = false;
+	state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::InWorld);
 };
 
 void Deferred::Hooks::Main_RenderWorld_Start::thunk(RE::BSBatchRenderer* This, uint32_t StartRange, uint32_t EndRanges, uint32_t RenderFlags, int GeometryGroup)
 {
-	auto deferred = globals::deferred;
-	auto shaderCache = globals::shaderCache;
-
-	if (shaderCache->IsEnabled() && deferred->inWorld) {
+	if (globals::shaderCache->IsEnabled() && globals::state->inWorld) {
 		// Here is where the first opaque objects start rendering
-		deferred->StartDeferred();
-		func(This, StartRange, EndRanges, RenderFlags, GeometryGroup);  // RenderBatches                                                               // RenderBatches
-	} else {
-		func(This, StartRange, EndRanges, RenderFlags, GeometryGroup);  // RenderBatches
+		globals::deferred->StartDeferred();
 	}
+
+	func(This, StartRange, EndRanges, RenderFlags, GeometryGroup);  // RenderBatches
 };
 
 void Deferred::Hooks::Main_RenderWorld_BlendedDecals::thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags)
 {
 	auto deferred = globals::deferred;
-	auto terrainBlending = globals::features::terrainBlending;
-	auto shaderCache = globals::shaderCache;
 
-	if (shaderCache->IsEnabled() && deferred->inWorld) {
+	if (globals::shaderCache->IsEnabled() && globals::state->inWorld) {
+		auto& terrainBlending = globals::features::terrainBlending;
 		// Defer terrain rendering until after everything else
-		if (terrainBlending->loaded)
-			terrainBlending->RenderTerrainBlendingPasses();
+		if (terrainBlending.loaded)
+			terrainBlending.RenderTerrainBlendingPasses();
 	}
 
 	// Deferred blended decals
-	deferred->inBlendedDecals = true;
+
 	func(This, RenderFlags);
-	deferred->inBlendedDecals = false;
 
 	deferred->EndDeferred();
 
-	// Blended decals
-	deferred->inDecals = true;
-	func(This, RenderFlags);
-	deferred->inDecals = false;
-
 	// After this point, water starts rendering
-};
-
-void Deferred::Hooks::BSShaderAccumulator_BlendedDecals_RenderGeometryGroup::thunk(RE::BSBatchRenderer* This, uint32_t StartRange, uint32_t EndRanges, uint32_t RenderFlags, int GeometryGroup)
-{
-	auto deferred = globals::deferred;
-
-	if (deferred->inBlendedDecals) {
-		func(This, StartRange, EndRanges, RenderFlags, 12);
-	} else {
-		func(This, StartRange, EndRanges, RenderFlags, GeometryGroup);
-	}
-};
-
-void Deferred::Hooks::BSShaderAccumulator_FirstPerson_BlendedDecals::thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags)
-{
-	auto deferred = globals::deferred;
-
-	deferred->inBlendedDecals = true;
-	func(This, RenderFlags);
-	deferred->inBlendedDecals = false;
-	func(This, RenderFlags);
-	deferred->inDecals = false;
-};
-
-void Deferred::Hooks::BSShaderAccumulator_ShadowMapOrMask_BlendedDecals::thunk(RE::BSShaderAccumulator* This, uint32_t RenderFlags)
-{
-	auto deferred = globals::deferred;
-
-	deferred->inBlendedDecals = true;
-	func(This, RenderFlags);
-	deferred->inBlendedDecals = false;
-	func(This, RenderFlags);
-	deferred->inDecals = false;
 };
 
 void Deferred::Hooks::BSCubeMapCamera_RenderCubemap::thunk(RE::NiAVObject* camera, int a2, bool a3, bool a4, bool a5)
 {
 	auto deferred = globals::deferred;
+	auto state = globals::state;
 
-	deferred->inReflections = true;
 	deferred->ReflectionsPrepasses();
+	state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::IsReflections);
 	func(camera, a2, a3, a4, a5);
-	deferred->inReflections = false;
+	state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::IsReflections);
+}
+
+void Deferred::Hooks::Main_RenderFirstPersonView::thunk(bool a1, bool a2)
+{
+	auto* const state = globals::state;
+	state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::InWorld);
+	func(a1, a2);
+	state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::InWorld);
+}
+
+void Deferred::Hooks::Renderer_ResetState::thunk(void* This)
+{
+	func(This);
+
+	auto* const state = globals::state;
+	auto* const context = globals::d3d::context;
+
+	ID3D11Buffer* buffers[3] = { state->permutationCB->CB(), state->sharedDataCB->CB(), state->featureDataCB->CB() };
+	context->PSSetConstantBuffers(4, 3, buffers);
+	context->CSSetConstantBuffers(5, 2, buffers + 1);
+
+	auto* singleton = globals::truePBR;
+	singleton->SetupFrame();
 }

@@ -8,12 +8,6 @@ private:
 	static constexpr std::string_view MOD_ID = "99548";
 
 public:
-	static LightLimitFix* GetSingleton()
-	{
-		static LightLimitFix render;
-		return &render;
-	}
-
 	virtual inline std::string GetName() override { return "Light Limit Fix"; }
 	virtual inline std::string GetShortName() override { return "LightLimitFix"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
@@ -55,14 +49,18 @@ public:
 	struct alignas(16) LightData
 	{
 		float3 color;
+		float fade;
 		float radius;
+		float invRadius;
+		float fadeZone;
+		float sizeBias;
 		PositionOpt positionWS[2];
 		PositionOpt positionVS[2];
 		uint128_t roomFlags = uint32_t(0);
 		stl::enumeration<LightFlags> lightFlags;
 		uint32_t shadowMaskIndex = 0;
-		float invRadius;
-		float fadeZone;
+		uint pad0;
+		uint pad1;
 	};
 
 	struct ClusterAABB
@@ -107,7 +105,8 @@ public:
 	{
 		uint NumStrictLights;
 		int RoomIndex;
-		uint pad0[2];
+		uint ShadowBitMask;
+		uint pad0;
 		LightData StrictLights[15];
 	};
 
@@ -171,6 +170,8 @@ public:
 	bool wasEmpty = false;
 	bool wasWorld = false;
 	int previousRoomIndex = -1;
+	uint previousShadowBitMask = 0;
+
 	Util::FrameChecker frameChecker;
 
 	virtual void SetupResources() override;
@@ -222,13 +223,7 @@ public:
 
 	void BSLightingShader_SetupGeometry_Before(RE::BSRenderPass* a_pass);
 
-	enum class Space
-	{
-		World = 0,
-		Model = 1,
-	};
-
-	void BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(RE::BSRenderPass* a_pass, DirectX::XMMATRIX& Transform, uint32_t, uint32_t, float WorldScale, Space RenderSpace);
+	void BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(RE::BSRenderPass* a_pass);
 
 	void BSLightingShader_SetupGeometry_After(RE::BSRenderPass* a_pass);
 
@@ -266,12 +261,6 @@ public:
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
-		struct BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights
-		{
-			static void thunk(RE::BSGraphics::PixelShader* PixelShader, RE::BSRenderPass* Pass, DirectX::XMMATRIX& Transform, uint32_t LightCount, uint32_t ShadowLightCount, float WorldScale, Space RenderSpace);
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
 		struct NiNode_Destroy
 		{
 			static void thunk(RE::NiNode* This);
@@ -299,8 +288,6 @@ public:
 			stl::write_vfunc<0x6, BSLightingShader_SetupGeometry>(RE::VTABLE_BSLightingShader[0]);
 			stl::write_vfunc<0x6, BSEffectShader_SetupGeometry>(RE::VTABLE_BSEffectShader[0]);
 			stl::write_vfunc<0x6, BSWaterShader_SetupGeometry>(RE::VTABLE_BSWaterShader[0]);
-
-			stl::write_thunk_call<BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights>(REL::RelocationID(100565, 107300).address() + REL::Relocate(0x523, 0xB0E, 0x5fe));
 
 			stl::detour_thunk<NiNode_Destroy>(REL::RelocationID(68937, 70288));
 

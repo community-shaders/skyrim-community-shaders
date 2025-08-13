@@ -3,7 +3,7 @@
 #include "TruePBR/BSLightingShaderMaterialPBR.h"
 #include "TruePBR/BSLightingShaderMaterialPBRLandscape.h"
 
-#include "Features/InteriorSunShadows.h"
+#include "Features/InteriorSun.h"
 #include "Hooks.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -339,6 +339,14 @@ void TruePBR::SetupGlintsTexture()
 
 		context->CSSetShader(old.shader, &old.instance, old.numInstances);
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(old.uav), old.uav, nullptr);
+
+		// Release COM objects to prevent memory leaks
+		if (old.shader)
+			old.shader->Release();
+		for (auto& uav : old.uav) {
+			if (uav)
+				uav->Release();
+		}
 	}
 
 	noiseGenProgram->Release();
@@ -667,7 +675,7 @@ struct BSLightingShaderProperty_GetRenderPasses
 			return renderPasses;
 		}
 
-		const auto issEnabledAndInteriorWithSun = globals::features::interiorSunShadows->loaded && globals::features::interiorSunShadows->isInteriorWithSun;
+		const auto issEnabledAndInteriorWithSun = globals::features::interiorSun.loaded && globals::features::interiorSun.isInteriorWithSun;
 
 		bool isPbr = false;
 
@@ -704,11 +712,6 @@ struct BSLightingShaderProperty_GetRenderPasses
 
 				lightingTechnique = (static_cast<uint32_t>(lightingType) << 24) | lightingFlags;
 				currentPass->passEnum = lightingTechnique + LightingTechniqueStart;
-
-				// Separate deferred and forward blended decals
-				if (currentPass->accumulationHint == 3 && currentPass->shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kZBufferWrite)) {
-					currentPass->accumulationHint = 16;
-				}
 			}
 			currentPass = currentPass->next;
 		}
@@ -988,11 +991,9 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 				shadowState->SetPSTextureAddressMode(11, RE::BSGraphics::TextureAddressMode::kClampSClampT);
 			}
 
-			std::array<float, 4> characterLightParams;
+			std::array<float, 4> characterLightParams{};  // in C++, arrays will be zero-initialized
 			if (smState->characterLightEnabled) {
 				std::copy_n(smState->characterLightParams, 4, characterLightParams.data());
-			} else {
-				std::fill_n(characterLightParams.data(), 4, 0.f);
 			}
 			shadowState->SetPSConstant(characterLightParams, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.CharacterLightParams);
 		}
@@ -1220,25 +1221,14 @@ struct TESForm_SetFormEditorID
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
-struct SetPerFrameBuffers
-{
-	static void thunk(void* renderer)
-	{
-		func(renderer);
-		auto* singleton = globals::truePBR;
-		singleton->SetupFrame();
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
-
 struct BSTempEffectSimpleDecal_SetupGeometry
 {
 	static void thunk(RE::BSTempEffectSimpleDecal* decal, RE::BSGeometry* geometry, RE::BGSTextureSet* textureSet, bool blended)
 	{
 		func(decal, geometry, textureSet, blended);
 		auto* singleton = globals::truePBR;
-
-		if (auto* shaderProperty = netimmerse_cast<RE::BSLightingShaderProperty*>(geometry->GetGeometryRuntimeData().properties[1].get());
+		auto unknownProperty = geometry->GetGeometryRuntimeData().properties[1].get();
+		if (auto shaderProperty = unknownProperty->GetRTTI() == globals::rtti::BSLightingShaderPropertyRTTI.get() ? static_cast<RE::BSLightingShaderProperty*>(unknownProperty) : nullptr;
 			shaderProperty != nullptr && singleton->IsPBRTextureSet(textureSet)) {
 			{
 				BSLightingShaderMaterialPBR srcMaterial;
@@ -1569,9 +1559,6 @@ void TruePBR::PostPostLoad()
 	stl::write_vfunc<0x32, TESForm_GetFormEditorID>(RE::VTABLE_TESWeather[0]);
 	stl::write_vfunc<0x33, TESForm_SetFormEditorID>(RE::VTABLE_TESWeather[0]);
 
-	logger::info("Hooking SetPerFrameBuffers");
-	stl::detour_thunk<SetPerFrameBuffers>(REL::RelocationID(75570, 77371));
-
 	logger::info("Hooking BSTempEffectSimpleDecal");
 	stl::detour_thunk<BSTempEffectSimpleDecal_SetupGeometry>(REL::RelocationID(29253, 30108));
 
@@ -1611,10 +1598,35 @@ void TruePBR::SetupDefaultPBRLandTextureSet()
 
 void TruePBR::SetShaderResouces(ID3D11DeviceContext* a_context)
 {
-	for (uint32_t textureIndex = 0; textureIndex < ExtendedRendererState::NumPSTextures; ++textureIndex) {
-		if (extendedRendererState.PSResourceModifiedBits & (1 << textureIndex)) {
-			a_context->PSSetShaderResources(ExtendedRendererState::FirstPSTexture + textureIndex, 1, &extendedRendererState.PSTexture[textureIndex]);
-		}
+	uint32_t mask = extendedRendererState.PSResourceModifiedBits;
+
+	if (mask == 0) [[likely]] {
+		// No dirty slots, early exit
+		return;
 	}
+
+	constexpr uint32_t firstTexture = ExtendedRendererState::FirstPSTexture;
+	auto& textures = extendedRendererState.PSTexture;
+
+	while (mask) {
+		// Find index of the least significant set bit
+		uint32_t batchStart = std::countr_zero(mask);
+
+		// Check for consecutive set bits and batch them
+		uint32_t shiftedMask = mask >> batchStart;
+		uint32_t batchCount = std::countr_one(shiftedMask);
+
+		// Issue one API call for this batch
+		a_context->PSSetShaderResources(
+			firstTexture + batchStart,
+			batchCount,
+			&textures[batchStart]);
+
+		// Clear the bits we just processed
+		uint32_t clearMask = ((1u << batchCount) - 1u) << batchStart;
+		mask &= ~clearMask;
+	}
+
+	// Reset modified bits
 	extendedRendererState.PSResourceModifiedBits = 0;
 }

@@ -6,19 +6,13 @@ private:
 	static constexpr std::string_view MOD_ID = "139352";
 
 public:
-	static Skylighting* GetSingleton()
-	{
-		static Skylighting singleton;
-		return &singleton;
-	}
-
 	virtual bool SupportsVR() override { return true; };
 
 	virtual inline std::string GetName() override { return "Skylighting"; }
 	virtual inline std::string GetShortName() override { return "Skylighting"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "SKYLIGHTING"; }
-	virtual std::string_view GetCategory() const override { return "Sky"; }
+	virtual std::string_view GetCategory() const override { return "Lighting"; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
@@ -112,11 +106,7 @@ public:
 
 	struct Main_Precipitation_RenderOcclusion
 	{
-		static void thunk()
-		{
-			GetSingleton()->RenderOcclusion();
-		}
-
+		static void thunk();
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -136,16 +126,7 @@ public:
 	class MenuOpenCloseEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
 	{
 	public:
-		virtual RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
-		{
-			// When entering a new cell through a loadscreen, update every frame until completion
-			if (a_event->menuName == RE::LoadingMenu::MENU_NAME) {
-				if (!a_event->opening)
-					GetSingleton()->queuedResetSkylighting = true;
-			}
-
-			return RE::BSEventNotifyControl::kContinue;
-		}
+		virtual RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*);
 
 		static bool Register()
 		{

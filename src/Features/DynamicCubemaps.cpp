@@ -196,9 +196,9 @@ RE::BSEventNotifyControl MenuOpenCloseEventHandler::ProcessEvent(const RE::MenuO
 	// When entering a new cell, reset the capture
 	if (a_event->menuName == RE::LoadingMenu::MENU_NAME) {
 		if (!a_event->opening) {
-			auto dynamicCubemaps = DynamicCubemaps::GetSingleton();
-			dynamicCubemaps->resetCapture[0] = true;
-			dynamicCubemaps->resetCapture[1] = true;
+			auto& dynamicCubemaps = globals::features::dynamicCubemaps;
+			dynamicCubemaps.resetCapture[0] = true;
+			dynamicCubemaps.resetCapture[1] = true;
 		}
 	}
 	return RE::BSEventNotifyControl::kContinue;

@@ -1,14 +1,22 @@
-#pragma once
 
+#pragma once
 #include "Feature.h"
+#include "Menu/ThemeManager.h"
 #include "Utils/Serialize.h"
 #include <dxgi1_4.h>
+#include <nlohmann/json.hpp>
+#include <shared_mutex>
+#include <vector>
 #include <winrt/base.h>
+
+using json = nlohmann::json;
 
 class Menu
 {
 public:
 	~Menu();
+	Menu(const Menu&) = delete;
+	Menu& operator=(const Menu&) = delete;
 
 	static Menu* GetSingleton()
 	{
@@ -17,22 +25,39 @@ public:
 	}
 
 	bool initialized = false;
+	bool IsEnabled = false;
 
 	void Load(json& o_json);
 	void Save(json& o_json);
 
 	void Init();
 	void DrawSettings();
+
+	// Search bar state
+	std::string featureSearch;  // For left pane feature search
 	void DrawOverlay();
-	void DrawPerfOverlay();
 	void DrawWeatherDetailsWindow();
 
 	void ProcessInputEvents(RE::InputEvent* const* a_events);
 	bool ShouldSwallowInput();
 
+public:
+	// Input handling flags (made public for InputEventHandler access)
+	bool settingToggleKey = false;
+	bool settingSkipCompilationKey = false;
+	bool settingsEffectsToggle = false;
+	bool settingOverlayToggleKey = false;
+	uint32_t priorShaderKey = VK_PRIOR;  // used for blocking shaders in debugging
+	uint32_t nextShaderKey = VK_NEXT;    // used for blocking shaders in debugging
+
 	// Used for resetting input keys to solve alt-tab stuck issue
 	std::atomic<bool> focusChanged = false;
 	void OnFocusChanged();
+
+	struct Constants
+	{
+		static constexpr std::uint16_t KEY_PRESSED_MASK = 0x8000;
+	};
 
 	// UI icon textures
 	struct UIIcon
@@ -53,12 +78,23 @@ public:
 		UIIcon saveSettings;
 		UIIcon loadSettings;
 		UIIcon clearCache;
-		UIIcon clearDiskCache;
-		UIIcon logo;  // New logo icon
+		UIIcon logo;    // New logo icon
+		UIIcon search;  // Search icon for search bars
+
+		// Category icons
+		UIIcon characters;
+		UIIcon grass;
+		UIIcon lighting;
+		UIIcon sky;
+		UIIcon landscape;
+		UIIcon water;
+		UIIcon debug;
+		UIIcon materials;
 	} uiIcons;
 
 	struct ThemeSettings
 	{
+		float FontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;
 		float GlobalScale = REL::Module::IsVR() ? -0.5f : 0.f;  // exponential
 
 		bool UseSimplePalette = true;    // simple palette or full customization
@@ -166,129 +202,25 @@ public:
 		uint32_t ToggleKey = VK_END;
 		uint32_t SkipCompilationKey = VK_ESCAPE;
 		uint32_t EffectToggleKey = VK_MULTIPLY;  // toggle all effects
+		uint32_t OverlayToggleKey = VK_F10;      // Global overlay toggle key for all overlays
 		ThemeSettings Theme;
-
-		struct PerfOverlaySettings
-		{
-			bool Enabled = false;
-			bool ShowDrawCalls = true;
-			bool ShowVRAM = true;
-			bool ShowFPS = true;
-			bool ShowPreFGFrameTimeGraph = true;
-			bool ShowPostFGFrameTimeGraph = true;
-			float UpdateInterval = 0.5f;
-			int FrameHistorySize = 120;                       // Default 120 frames = 2s @ 60fps. Clamped using static values to prevent config file values going outside of slider bounds.
-			static constexpr int kMinFrameHistorySize = 60;   // 60 frames = 1s @ 60fps. Reasonable minimum.
-			static constexpr int kMaxFrameHistorySize = 480;  // 480 frames = 10s @ 60fps or 2s @ 240fps. Reasonable maximum.
-			enum class TextSize
-			{
-				Small,
-				Medium,
-				Large
-			};
-			TextSize Size = TextSize::Medium;
-
-			float BackgroundOpacity = 0.5f;
-			bool ShowBorder = true;
-			ImVec2 Position = ImVec2(10.f, 10.f);
-			bool PositionSet = false;
-			uint32_t OverlayToggleKey = VK_F10;
-		} PerfOverlay;
-
-		struct WeatherDetailsWindowSettings
-		{
-			bool Enabled = false;
-			ImVec2 Position = ImVec2(50.f, 50.f);
-			bool PositionSet = false;
-		} WeatherDetailsWindow;
 	};
-	const ThemeSettings& GetTheme() const { return settings.Theme; }  // Provide read-only access to the Theme.
-	Settings& GetSettings() { return settings; }                      // Provide access to settings for other components
+	const ThemeSettings& GetTheme() const { return settings.Theme; }                // Provide read-only access to the Theme.
+	Settings& GetSettings() { return settings; }                                    // Provide access to settings for other components
+	winrt::com_ptr<IDXGIAdapter3> GetDXGIAdapter3() const { return dxgiAdapter3; }  // Provide access to dxgiAdapter3
 
 	void SelectFeatureMenu(const std::string& featureName);
 	static std::unordered_map<std::string, int> categoryCounts;  // Number of features in each feature category
 
-	// Static utility functions
-	static const char* KeyIdToString(uint32_t key);
+	bool overlayVisible = false;
 
-private:
-	Settings settings;
-
-	// Menu navigation
-	std::string pendingFeatureSelection;  // Feature to select on next frame
-
-	uint32_t priorShaderKey = VK_PRIOR;  // used for blocking shaders in debugging
-	uint32_t nextShaderKey = VK_NEXT;    // used for blocking shaders in debugging
-
-	bool settingToggleKey = false;
-	bool settingSkipCompilationKey = false;
-	bool settingsEffectsToggle = false;
-	bool settingOverlayToggleKey = false;
-	uint32_t testInterval = 0;     // Seconds to wait before toggling user/test settings
-	bool inTestMode = false;       // Whether we're in test mode
-	bool usingTestConfig = false;  // Whether we're using the test config
-
-	class PerfOverlayState
-	{
-	public:
-		std::vector<float> frameTimeHistory;
-		std::vector<float> postFGFrameTimeHistory;
-		bool initialized = false;
-		bool hasGraphs = false;
-		int frameTimeHistoryIndex = 0;
-		int postFGFrameTimeHistoryIndex = 0;
-		bool isFrameGenerationActive = false;
-		int64_t frequency;
-		int64_t lastFrameCounter;
-		int64_t currentFrameCounter;
-		float frameTimeMs = 0.0f;
-		float fps = 0.0f;
-		float postFGFrameTimeMs = 0.0f;
-		float postFGFps = 0.0f;
-		float smoothFps = 0.0f;
-		float smoothFrameTimeMs = 0.0f;
-		float postFGSmoothFps = 0.0f;
-		float postFGSmoothFrameTimeMs = 0.0f;
-		float updateTimer = 0.0f;
-		float minFrameTime = 1000.0f;
-		float maxFrameTime = 0.0f;
-		float smoothedMinFrameTime = 0.0f;
-		float smoothedMaxFrameTime = 50.0f;
-		float textScale = 1.0f;
-		static constexpr float kSmoothingFactor = 0.15f;  // Smoothing factor: 0.1f = slow, 0.3f = fast.
-		std::chrono::steady_clock::time_point lastUpdateTime;
-		float SetTextScale(Settings::PerfOverlaySettings& settings);
-		void UpdateGraphValues(Settings::PerfOverlaySettings& settings);
-		void UpdateFrameTimeHistorySizes(Settings::PerfOverlaySettings& settings);
-		void UpdateMinFrameTime();
-		void UpdateMaxFrameTime();
-		void UpdateFGFrameTime(Settings::PerfOverlaySettings& settings);
-		void DrawPostFGFrameTimeGraph(Settings::PerfOverlaySettings& settings);
-		void DrawDrawCalls();
-		void DrawFPS(Settings::PerfOverlaySettings& settings);
-		void DrawVRAM(winrt::com_ptr<IDXGIAdapter3> dxgiAdapter3);
-	} perfOverlayState;
-
-	std::chrono::steady_clock::time_point lastTestSwitch = std::chrono::steady_clock::now();  // Time of last test switch
-
-	Menu() = default;
-	void SetupImGuiStyle() const;
-	const ImGuiKey VirtualKeyToImGuiKey(WPARAM vkKey);
-
-	void DrawGeneralSettings();
-	void DrawAdvancedSettings();
-	void DrawDisplaySettings();
-	void DrawDisableAtBootSettings();
-	void DrawFooter();
-	void DrawPerformanceOverlaySettings();
-	void BuildCategoryCounts();
-
+public:
+	// Move KeyEvent struct here
 	class CharEvent : public RE::InputEvent
 	{
 	public:
 		uint32_t keyCode;  // 18 (ascii code)
 	};
-
 	struct KeyEvent
 	{
 		explicit KeyEvent(const RE::ButtonEvent* a_event) :
@@ -296,28 +228,66 @@ private:
 			device(a_event->GetDevice()),
 			eventType(a_event->GetEventType()),
 			value(a_event->Value()),
-			heldDownSecs(a_event->HeldDuration()) {}
+			heldDownSecs(a_event->HeldDuration()),
+			thumbstickX(0.0f),
+			thumbstickY(0.0f) {}
 
 		explicit KeyEvent(const CharEvent* a_event) :
 			keyCode(a_event->keyCode),
 			device(a_event->GetDevice()),
-			eventType(a_event->GetEventType()) {}
+			eventType(a_event->GetEventType()),
+			value(0),
+			heldDownSecs(0),
+			thumbstickX(0.0f),
+			thumbstickY(0.0f) {}
 
-		[[nodiscard]] constexpr bool IsPressed() const noexcept { return value > 0.0F; }
-		[[nodiscard]] constexpr bool IsRepeating() const noexcept { return heldDownSecs > 0.0F; }
-		[[nodiscard]] constexpr bool IsDown() const noexcept { return IsPressed() && (heldDownSecs == 0.0F); }
-		[[nodiscard]] constexpr bool IsHeld() const noexcept { return IsPressed() && IsRepeating(); }
-		[[nodiscard]] constexpr bool IsUp() const noexcept { return (value == 0.0F) && IsRepeating(); }
-
+		explicit KeyEvent(const RE::ThumbstickEvent* a_event) :
+			keyCode(0),  // For thumbstick events, keyCode/value are replaced by x/y floats
+			device(a_event->GetDevice()),
+			eventType(a_event->GetEventType()),
+			value(0),
+			heldDownSecs(0),
+			thumbstickX(a_event->xValue),
+			thumbstickY(a_event->yValue)
+		{}
+		// For thumbstick events, keyCode/value are replaced by x/y floats
 		uint32_t keyCode;
 		RE::INPUT_DEVICE device;
 		RE::INPUT_EVENT_TYPE eventType;
 		float value = 0;
 		float heldDownSecs = 0;
+		float thumbstickX = 0.0f;
+		float thumbstickY = 0.0f;
+		[[nodiscard]] constexpr bool IsPressed() const noexcept { return value > 0.0F; }
+		[[nodiscard]] constexpr bool IsRepeating() const noexcept { return heldDownSecs > 0.0F; }
+		[[nodiscard]] constexpr bool IsDown() const noexcept { return IsPressed() && (heldDownSecs == 0.0F); }
+		[[nodiscard]] constexpr bool IsHeld() const noexcept { return IsPressed() && IsRepeating(); }
+		[[nodiscard]] constexpr bool IsUp() const noexcept { return (value == 0.0F) && IsRepeating(); }
 	};
-	const uint32_t DIKToVK(uint32_t DIK);
+	// VR overlay input and cursor helpers
+	void ProcessVROverlayInput();
+
+private:
+	Settings settings;
+
+	float cachedFontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;  // Tracks whether font has been modified and may require reloading
+
+	// Menu navigation
+	std::string pendingFeatureSelection;  // Feature to select on next frame
+
+	// Input event handling
+	std::vector<KeyEvent> _keyEventQueue;
 	mutable std::shared_mutex _inputEventMutex;
-	std::vector<KeyEvent> _keyEventQueue{};
+
+	Menu() = default;
+
+	void DrawGeneralSettings();
+	void DrawAdvancedSettings();
+	void DrawDisplaySettings();
+	void DrawDisableAtBootSettings();
+	void DrawFooter();
+	void BuildCategoryCounts();
+
 	void addToEventQueue(KeyEvent e);
 	void ProcessInputEventQueue();
 	winrt::com_ptr<IDXGIAdapter3> dxgiAdapter3;

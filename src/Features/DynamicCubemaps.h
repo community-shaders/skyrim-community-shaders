@@ -10,12 +10,6 @@ public:
 struct DynamicCubemaps : Feature
 {
 public:
-	static DynamicCubemaps* GetSingleton()
-	{
-		static DynamicCubemaps singleton;
-		return &singleton;
-	}
-
 	const std::string defaultDynamicCubeMapSavePath = "Data\\textures\\DynamicCubemaps";
 
 	// Specular irradiance
@@ -102,7 +96,7 @@ public:
 	virtual inline std::string GetName() override { return "Dynamic Cubemaps"; }
 	virtual inline std::string GetShortName() override { return "DynamicCubemaps"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "DYNAMIC_CUBEMAPS"; }
-	virtual std::string_view GetCategory() const override { return "Lighting"; }
+	virtual std::string_view GetCategory() const override { return "Materials"; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
@@ -114,7 +108,7 @@ public:
 				"Optimized cubemap inference and irradiance calculation" }
 		};
 	}
-	virtual inline std::vector<std::pair<std::string_view, std::string_view>> GetShaderDefineOptions() override;
+	virtual std::vector<std::pair<std::string_view, std::string_view>> GetShaderDefineOptions() override;
 
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 

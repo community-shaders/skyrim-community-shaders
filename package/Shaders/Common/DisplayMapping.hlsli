@@ -48,10 +48,10 @@ namespace DisplayMapping
 
 	float3 PQtoLinear(float3 linearCol, const float maxPqValue)
 	{
-		float3 colToPow = pow(linearCol, 1.0 / PQ_constant_M);
+		float3 colToPow = pow(abs(linearCol), 1.0 / PQ_constant_M);
 		float3 numerator = max(colToPow - PQ_constant_C1, 0.0);
 		float3 denominator = PQ_constant_C2 - (PQ_constant_C3 * colToPow);
-		float3 linearColor = pow(numerator / denominator, 1.0 / PQ_constant_N);
+		float3 linearColor = pow(abs(numerator / denominator), 1.0 / PQ_constant_N);
 
 		linearColor *= maxPqValue;
 

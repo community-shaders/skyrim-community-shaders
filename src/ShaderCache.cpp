@@ -1505,7 +1505,7 @@ namespace SIE
 		{
 			using enum RE::ImageSpaceManager::ImageSpaceEffectEnum;
 
-			static const std::unordered_map<std::string_view, uint32_t> descriptors{
+			static const ankerl::unordered_dense::map<std::string_view, uint32_t> descriptors{
 				// { "BSImagespaceShaderISBlur", static_cast<uint32_t>(ISBlur) },
 				// { "BSImagespaceShaderBlur3", static_cast<uint32_t>(ISBlur3) },
 				// { "BSImagespaceShaderBlur5", static_cast<uint32_t>(ISBlur5) },
@@ -2536,9 +2536,9 @@ namespace SIE
 			/*Woke up because of a stop request. */
 			return std::nullopt;
 		}
-		if (!shaderCache->IsCompiling()) {
-			// we just got woken up because there's a task, start clock
-			lastCalculation = lastReset = high_resolution_clock::now();
+		if (!shaderCache->IsCompiling()) {  // we just got woken up because there's a task, start clock
+			QueryPerformanceCounter(&lastReset);
+			lastCalculation = lastReset;
 		}
 		auto node = availableTasks.extract(availableTasks.begin());
 		auto& task = node.value();
@@ -2573,8 +2573,9 @@ namespace SIE
 			logger::debug("Compiling Task failed: {}", key);
 			++failedTasks;
 		}
-		auto now = high_resolution_clock::now();
-		totalMs += duration_cast<milliseconds>(now - lastCalculation).count();
+		LARGE_INTEGER now;
+		QueryPerformanceCounter(&now);
+		totalTime.QuadPart += now.QuadPart - lastCalculation.QuadPart;
 		lastCalculation = now;
 		std::scoped_lock lock(compilationMutex);
 		processedTasks.insert(task);
@@ -2592,14 +2593,14 @@ namespace SIE
 		completedTasks = 0;
 		failedTasks = 0;
 		cacheHitTasks = 0;
-		lastReset = high_resolution_clock::now();
-		lastCalculation = high_resolution_clock::now();
-		totalMs = static_cast<double>(duration_cast<milliseconds>(lastReset - lastReset).count());
+		QueryPerformanceCounter(&lastReset);
+		QueryPerformanceCounter(&lastCalculation);
+		totalTime = { 0 };
 	}
 
-	std::string CompilationSet::GetHumanTime(double a_totalms)
+	std::string CompilationSet::GetHumanTime(double a_totalMs)
 	{
-		int milliseconds = static_cast<int>(a_totalms);
+		int milliseconds = (int)a_totalMs;
 		int seconds = milliseconds / 1000;
 		int minutes = seconds / 60;
 		seconds %= 60;
@@ -2611,6 +2612,11 @@ namespace SIE
 
 	double CompilationSet::GetEta()
 	{
+		double totalMs = static_cast<double>(totalTime.QuadPart) * 1000.0 / frequency.QuadPart;
+
+		if (totalMs == 0.0) {
+			return 0.0;  // Avoid division by zero
+		}
 		auto rate = completedTasks / totalMs;
 		auto remaining = totalTasks - completedTasks - failedTasks;
 		return std::max(remaining / rate, 0.0);
@@ -2618,6 +2624,8 @@ namespace SIE
 
 	std::string CompilationSet::GetStatsString(bool a_timeOnly)
 	{
+		double totalMs = static_cast<double>(totalTime.QuadPart) * 1000.0 / frequency.QuadPart;
+
 		if (a_timeOnly)
 			return fmt::format("{}/{}",
 				GetHumanTime(totalMs),

@@ -19,10 +19,11 @@
 #include "Features/GrassLighting.h"
 #include "Features/HairSpecular.h"
 #include "Features/IBL.h"
-#include "Features/InteriorSunShadows.h"
+#include "Features/InteriorSun.h"
 #include "Features/InverseSquareLighting.h"
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
+#include "Features/PerformanceOverlay.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/SkySync.h"
@@ -54,36 +55,37 @@ namespace globals
 
 	namespace features
 	{
-		CloudShadows* cloudShadows = nullptr;
-		DynamicCubemaps* dynamicCubemaps = nullptr;
-		ExtendedMaterials* extendedMaterials = nullptr;
-		GrassCollision* grassCollision = nullptr;
-		GrassLighting* grassLighting = nullptr;
-		IBL* ibl = nullptr;
-		LightLimitFix* lightLimitFix = nullptr;
-		LODBlending* lodBlending = nullptr;
-		HairSpecular* hairSpecular = nullptr;
-		InteriorSunShadows* interiorSunShadows = nullptr;
-		InverseSquareLighting* inverseSquareLighting = nullptr;
-		ScreenSpaceGI* screenSpaceGI = nullptr;
-		ScreenSpaceShadows* screenSpaceShadows = nullptr;
-		Skylighting* skylighting = nullptr;
-		TerrainVariation* terrainVariation = nullptr;
-		SkySync* skySync = nullptr;
-		SubsurfaceScattering* subsurfaceScattering = nullptr;
-		TerrainBlending* terrainBlending = nullptr;
-		TerrainHelper* terrainHelper = nullptr;
-		TerrainShadows* terrainShadows = nullptr;
-		VolumetricLighting* volumetricLighting = nullptr;
-		VR* vr = nullptr;
-		WaterEffects* waterEffects = nullptr;
-		WeatherPicker* weatherPicker = nullptr;
-		WetnessEffects* wetnessEffects = nullptr;
-		ExtendedTranslucency* extendedTranslucency = nullptr;
+		CloudShadows cloudShadows{};
+		DynamicCubemaps dynamicCubemaps{};
+		ExtendedMaterials extendedMaterials{};
+		GrassCollision grassCollision{};
+		GrassLighting grassLighting{};
+		IBL ibl{};
+		LightLimitFix lightLimitFix{};
+		LODBlending lodBlending{};
+		HairSpecular hairSpecular{};
+		InteriorSun interiorSun{};
+		InverseSquareLighting inverseSquareLighting{};
+		ScreenSpaceGI screenSpaceGI{};
+		ScreenSpaceShadows screenSpaceShadows{};
+		Skylighting skylighting{};
+		TerrainVariation terrainVariation{};
+		SkySync skySync{};
+		SubsurfaceScattering subsurfaceScattering{};
+		TerrainBlending terrainBlending{};
+		TerrainHelper terrainHelper{};
+		TerrainShadows terrainShadows{};
+		VolumetricLighting volumetricLighting{};
+		VR vr{};
+		WaterEffects waterEffects{};
+		WeatherPicker weatherPicker{};
+		PerformanceOverlay performanceOverlay{};
+		WetnessEffects wetnessEffects{};
+		ExtendedTranslucency extendedTranslucency{};
 
 		namespace llf
 		{
-			ParticleLights* particleLights = nullptr;
+			ParticleLights particleLights{};
 		}
 	}
 
@@ -115,6 +117,17 @@ namespace globals
 		RE::Setting* shadowMaskQuarter = nullptr;
 
 		REL::Relocation<ID3D11Buffer**> perFrame;
+		REL::Relocation<RE::BSGraphics::BSShaderAccumulator**> currentAccumulator;
+	}
+
+	namespace rtti
+	{
+		REL::Relocation<const RE::NiRTTI*> NiIntegerExtraDataRTTI;
+		REL::Relocation<const RE::NiRTTI*> BSLightingShaderPropertyRTTI;
+		REL::Relocation<const RE::NiRTTI*> BSEffectShaderPropertyRTTI;
+		REL::Relocation<const RE::NiRTTI*> NiParticleSystemRTTI;
+		REL::Relocation<const RE::NiRTTI*> NiBillboardNodeRTTI;
+		REL::Relocation<const RE::NiRTTI*> NiAlphaPropertyRTTI;
 	}
 
 	State* state = nullptr;
@@ -140,35 +153,6 @@ namespace globals
 		dx12SwapChain = DX12SwapChain::GetSingleton();
 		fidelityFX = FidelityFX::GetSingleton();
 		hdr = HDR::GetSingleton();
-
-		features::cloudShadows = CloudShadows::GetSingleton();
-		features::dynamicCubemaps = DynamicCubemaps::GetSingleton();
-		features::extendedMaterials = ExtendedMaterials::GetSingleton();
-		features::grassCollision = GrassCollision::GetSingleton();
-		features::grassLighting = GrassLighting::GetSingleton();
-		features::hairSpecular = HairSpecular::GetSingleton();
-		features::ibl = IBL::GetSingleton();
-		features::lightLimitFix = LightLimitFix::GetSingleton();
-		features::lodBlending = LODBlending::GetSingleton();
-		features::interiorSunShadows = InteriorSunShadows::GetSingleton();
-		features::inverseSquareLighting = InverseSquareLighting::GetSingleton();
-		features::screenSpaceGI = ScreenSpaceGI::GetSingleton();
-		features::screenSpaceShadows = ScreenSpaceShadows::GetSingleton();
-		features::skylighting = Skylighting::GetSingleton();
-		features::terrainVariation = TerrainVariation::GetSingleton();
-		features::skySync = SkySync::GetSingleton();
-		features::subsurfaceScattering = SubsurfaceScattering::GetSingleton();
-		features::terrainBlending = TerrainBlending::GetSingleton();
-		features::terrainHelper = TerrainHelper::GetSingleton();
-		features::terrainShadows = TerrainShadows::GetSingleton();
-		features::volumetricLighting = VolumetricLighting::GetSingleton();
-		features::vr = VR::GetSingleton();
-		features::waterEffects = WaterEffects::GetSingleton();
-		features::weatherPicker = WeatherPicker::GetSingleton();
-		features::wetnessEffects = WetnessEffects::GetSingleton();
-		features::extendedTranslucency = ExtendedTranslucency::GetSingleton();
-
-		features::llf::particleLights = ParticleLights::GetSingleton();
 	}
 
 	void ReInit()
@@ -195,6 +179,18 @@ namespace globals
 
 			ui = RE::UI::GetSingleton();
 			perFrame = { REL::RelocationID(524768, 411384) };
+
+			currentAccumulator = { REL::RelocationID(527650, 414600) };
+		}
+
+		{
+			using namespace rtti;
+			NiIntegerExtraDataRTTI = { RE::NiIntegerExtraData::Ni_RTTI };
+			BSLightingShaderPropertyRTTI = { RE::BSLightingShaderProperty::Ni_RTTI };
+			BSEffectShaderPropertyRTTI = { RE::BSEffectShaderProperty::Ni_RTTI };
+			NiParticleSystemRTTI = { RE::NiParticleSystem::Ni_RTTI };
+			NiBillboardNodeRTTI = { RE::NiBillboardNode::Ni_RTTI };
+			NiAlphaPropertyRTTI = { RE::NiAlphaProperty::Ni_RTTI };
 		}
 
 		d3d::device = reinterpret_cast<ID3D11Device*>(game::renderer->GetRuntimeData().forwarder);

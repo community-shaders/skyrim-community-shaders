@@ -289,6 +289,7 @@ void LightLimitFix::BSLightingShader_SetupGeometry_Before(RE::BSRenderPass* a_pa
 		return;
 
 	strictLightDataTemp.NumStrictLights = 0;
+	strictLightDataTemp.ShadowBitMask = 0;
 
 	strictLightDataTemp.RoomIndex = -1;
 	if (!roomNodes.empty()) {
@@ -300,15 +301,11 @@ void LightLimitFix::BSLightingShader_SetupGeometry_Before(RE::BSRenderPass* a_pa
 	}
 }
 
-void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(RE::BSRenderPass* a_pass, DirectX::XMMATRIX&, uint32_t, uint32_t, float, Space)
+void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(RE::BSRenderPass* a_pass)
 {
-	auto shaderCache = globals::shaderCache;
-	auto isl = globals::features::inverseSquareLighting;
+	auto& isl = globals::features::inverseSquareLighting;
 
-	if (!shaderCache->IsEnabled())
-		return;
-
-	auto accumulator = RE::BSGraphics::BSShaderAccumulator::GetCurrentAccumulator();
+	auto accumulator = *globals::game::currentAccumulator.get();
 	bool inWorld = accumulator->GetRuntimeData().activeShadowSceneNode == globals::game::smState->shadowSceneNode[0];
 
 	strictLightDataTemp.NumStrictLights = inWorld ? 0 : (a_pass->numLights - 1);
@@ -323,18 +320,19 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 		light.color = { runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue };
 		light.lightFlags = std::bit_cast<LightFlags>(runtimeData.ambient.red);
 
-		if (isl->loaded) {
-			isl->ProcessLight(light, bsLight, niLight);
+		if (isl.loaded) {
+			isl.ProcessLight(light, bsLight, niLight);
 		} else {
 			light.radius = runtimeData.radius.x;
 			light.color *= runtimeData.fade;
+			light.fade = runtimeData.fade;
 		}
 
 		light.color *= bsLight->lodDimmer;
 
 		SetLightPosition(light, niLight->world.translate, inWorld);
 
-		if (bsLight->IsShadowLight()) {
+		if (i < a_pass->numShadowLights) {
 			auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
 			GET_INSTANCE_MEMBER(shadowLightIndex, shadowLight);
 			light.shadowMaskIndex = shadowLightIndex;
@@ -342,6 +340,13 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 		}
 
 		strictLightDataTemp.StrictLights[i] = light;
+	}
+
+	for (uint32_t i = 0; i < a_pass->numShadowLights; i++) {
+		auto bsLight = a_pass->sceneLights[i + 1];
+		auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
+		GET_INSTANCE_MEMBER(shadowLightIndex, shadowLight);
+		strictLightDataTemp.ShadowBitMask |= (1 << shadowLightIndex);
 	}
 }
 
@@ -354,19 +359,21 @@ void LightLimitFix::BSLightingShader_SetupGeometry_After(RE::BSRenderPass*)
 	if (!shaderCache->IsEnabled())
 		return;
 
-	auto accumulator = RE::BSGraphics::BSShaderAccumulator::GetCurrentAccumulator();
+	auto accumulator = *globals::game::currentAccumulator.get();
 
 	auto shadowSceneNode = smState->shadowSceneNode[0];
 
-	const bool isEmpty = strictLightDataTemp.NumStrictLights == 0;
+	const auto isEmpty = strictLightDataTemp.NumStrictLights == 0;
 	const bool isWorld = accumulator->GetRuntimeData().activeShadowSceneNode == shadowSceneNode;
-	const int roomIndex = strictLightDataTemp.RoomIndex;
+	const auto roomIndex = strictLightDataTemp.RoomIndex;
+	const auto shadowBitMask = strictLightDataTemp.ShadowBitMask;
 
-	if (!isEmpty || (isEmpty && !wasEmpty) || isWorld != wasWorld || previousRoomIndex != roomIndex) {
+	if (!isEmpty || (isEmpty && !wasEmpty) || isWorld != wasWorld || previousRoomIndex != roomIndex || shadowBitMask != previousShadowBitMask) {
 		strictLightDataCB->Update(strictLightDataTemp);
 		wasEmpty = isEmpty;
 		wasWorld = isWorld;
 		previousRoomIndex = roomIndex;
+		previousShadowBitMask = shadowBitMask;
 	}
 
 	if (frameChecker.IsNewFrame()) {
@@ -483,18 +490,18 @@ std::string ExtractTextureStem(std::string_view a_path)
 
 LightLimitFix::ParticleLightReference LightLimitFix::GetParticleLightConfigs(RE::BSRenderPass* a_pass)
 {
-	auto particleLights = globals::features::llf::particleLights;
+	auto& particleLights = globals::features::llf::particleLights;
 
 	// see https://www.nexusmods.com/skyrimspecialedition/articles/1391
 	if (settings.EnableParticleLights) {
-		if (auto shaderProperty = netimmerse_cast<RE::BSEffectShaderProperty*>(a_pass->shaderProperty)) {
+		if (auto shaderProperty = a_pass->shaderProperty->GetRTTI() == globals::rtti::BSEffectShaderPropertyRTTI.get() ? static_cast<RE::BSEffectShaderProperty*>(a_pass->shaderProperty) : nullptr) {
 			if (!shaderProperty->lightData) {
 				if (auto material = shaderProperty->GetMaterial()) {
 					// Check if it's a valid particle light
 					bool billboard = false;
-					if (!netimmerse_cast<RE::NiParticleSystem*>(a_pass->geometry)) {
+					if (a_pass->geometry->GetRTTI() != globals::rtti::NiParticleSystemRTTI.get()) {
 						if (auto parent = a_pass->geometry->parent) {
-							if (auto billboardNode = netimmerse_cast<RE::NiBillboardNode*>(parent)) {
+							if (auto billboardNode = parent->GetRTTI() == globals::rtti::NiBillboardNodeRTTI.get() ? static_cast<RE::NiBillboardNode*>(parent) : nullptr) {
 								billboard = true;
 							} else {
 								return { false };
@@ -520,7 +527,7 @@ LightLimitFix::ParticleLightReference LightLimitFix::GetParticleLightConfigs(RE:
 							return { false };
 						}
 
-						auto& configs = particleLights->particleLightConfigs;
+						auto& configs = particleLights.particleLightConfigs;
 						auto it = configs.find(textureName);
 						if (it == configs.end()) {
 							particleLightsReferences.insert({ (RE::NiNode*)a_pass->geometry, { false } });
@@ -536,7 +543,7 @@ LightLimitFix::ParticleLightReference LightLimitFix::GetParticleLightConfigs(RE:
 								return { false };
 							}
 
-							auto& gradientConfigs = particleLights->particleLightGradientConfigs;
+							auto& gradientConfigs = particleLights.particleLightGradientConfigs;
 							auto itGradient = gradientConfigs.find(textureName);
 							if (itGradient == gradientConfigs.end()) {
 								particleLightsReferences.insert({ (RE::NiNode*)a_pass->geometry, { false } });
@@ -663,7 +670,7 @@ bool LightLimitFix::AddParticleLight(RE::BSRenderPass* a_pass, ParticleLightRefe
 
 void LightLimitFix::PostPostLoad()
 {
-	globals::features::llf::particleLights->GetConfigs();
+	globals::features::llf::particleLights.GetConfigs();
 	Hooks::Install();
 }
 
@@ -732,7 +739,7 @@ namespace RE
 void LightLimitFix::UpdateLights()
 {
 	auto smState = globals::game::smState;
-	auto isl = globals::features::inverseSquareLighting;
+	auto& isl = globals::features::inverseSquareLighting;
 
 	lightsNear = *globals::game::cameraNear;
 	lightsFar = *globals::game::cameraFar;
@@ -775,8 +782,8 @@ void LightLimitFix::UpdateLights()
 					light.color = { runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue };
 					light.lightFlags = std::bit_cast<LightFlags>(runtimeData.ambient.red);
 
-					if (isl->loaded) {
-						isl->ProcessLight(light, bsLight, niLight);
+					if (isl.loaded) {
+						isl.ProcessLight(light, bsLight, niLight);
 					} else {
 						light.radius = runtimeData.radius.x;
 						light.color *= runtimeData.fade;
@@ -1030,43 +1037,37 @@ void LightLimitFix::UpdateLights()
 
 void LightLimitFix::Hooks::BSLightingShader_SetupGeometry::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 {
-	auto singleton = globals::features::lightLimitFix;
-	singleton->BSLightingShader_SetupGeometry_Before(Pass);
+	auto& singleton = globals::features::lightLimitFix;
+	singleton.BSLightingShader_SetupGeometry_Before(Pass);
 	func(This, Pass, RenderFlags);
-	singleton->BSLightingShader_SetupGeometry_After(Pass);
+	singleton.BSLightingShader_SetupGeometry_After(Pass);
 }
 
 void LightLimitFix::Hooks::BSEffectShader_SetupGeometry::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 {
 	func(This, Pass, RenderFlags);
-	auto singleton = globals::features::lightLimitFix;
-	singleton->BSLightingShader_SetupGeometry_Before(Pass);
-	singleton->BSLightingShader_SetupGeometry_After(Pass);
+	auto& singleton = globals::features::lightLimitFix;
+	singleton.BSLightingShader_SetupGeometry_Before(Pass);
+	singleton.BSLightingShader_SetupGeometry_After(Pass);
 };
 
 void LightLimitFix::Hooks::BSWaterShader_SetupGeometry::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 {
 	func(This, Pass, RenderFlags);
-	auto singleton = globals::features::lightLimitFix;
-	singleton->BSLightingShader_SetupGeometry_Before(Pass);
-	singleton->BSLightingShader_SetupGeometry_After(Pass);
+	auto& singleton = globals::features::lightLimitFix;
+	singleton.BSLightingShader_SetupGeometry_Before(Pass);
+	singleton.BSLightingShader_SetupGeometry_After(Pass);
 };
 
 float LightLimitFix::Hooks::AIProcess_CalculateLightValue_GetLuminance::thunk(RE::ShadowSceneNode* shadowSceneNode, RE::NiPoint3& targetPosition, int& numHits, float& sunLightLevel, float& lightLevel, RE::NiLight& refLight, int32_t shadowBitMask)
 {
 	auto ret = func(shadowSceneNode, targetPosition, numHits, sunLightLevel, lightLevel, refLight, shadowBitMask);
-	globals::features::lightLimitFix->AddParticleLightLuminance(targetPosition, numHits, ret);
+	globals::features::lightLimitFix.AddParticleLightLuminance(targetPosition, numHits, ret);
 	return ret;
-}
-
-void LightLimitFix::Hooks::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights::thunk(RE::BSGraphics::PixelShader* PixelShader, RE::BSRenderPass* Pass, DirectX::XMMATRIX& Transform, uint32_t LightCount, uint32_t ShadowLightCount, float WorldScale, Space RenderSpace)
-{
-	globals::features::lightLimitFix->BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(Pass, Transform, LightCount, ShadowLightCount, WorldScale, RenderSpace);
-	func(PixelShader, Pass, Transform, LightCount, ShadowLightCount, WorldScale, RenderSpace);
 }
 
 void LightLimitFix::Hooks::NiNode_Destroy::thunk(RE::NiNode* This)
 {
-	globals::features::lightLimitFix->CleanupParticleLights(This);
+	globals::features::lightLimitFix.CleanupParticleLights(This);
 	func(This);
 }

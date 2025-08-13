@@ -6,12 +6,6 @@ private:
 	static constexpr std::string_view MOD_ID = "112739";
 
 public:
-	static WetnessEffects* GetSingleton()
-	{
-		static WetnessEffects singleton;
-		return &singleton;
-	}
-
 	virtual inline std::string GetName() override { return "Wetness Effects"; }
 	virtual inline std::string GetShortName() override { return "WetnessEffects"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
@@ -75,6 +69,17 @@ public:
 		Settings settings;
 		uint pad0;
 	};
+
+	struct DebugSettings
+	{
+		bool EnableWetnessOverride = false;
+		bool EnablePuddleOverride = false;
+		bool EnableRainOverride = false;
+		bool EnableIntExOverride = false;
+		float2 WetnessOverride = float2(0.0f, 0.0f);
+		float2 PuddleWetnessOverride = float2(0.0f, 0.0f);
+		float2 RainOverride = float2(0.0f, 0.0f);
+	} debugSettings;
 
 	Settings settings;
 	// Climate preset system

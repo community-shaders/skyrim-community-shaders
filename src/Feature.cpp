@@ -10,10 +10,11 @@
 #include "Features/GrassLighting.h"
 #include "Features/HairSpecular.h"
 #include "Features/IBL.h"
-#include "Features/InteriorSunShadows.h"
+#include "Features/InteriorSun.h"
 #include "Features/InverseSquareLighting.h"
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
+#include "Features/PerformanceOverlay.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/SkySync.h"
@@ -29,6 +30,7 @@
 #include "Features/WeatherPicker.h"
 #include "Features/WetnessEffects.h"
 #include "Menu.h"
+#include "SettingsOverrideManager.h"
 #include "Utils/Format.h"
 
 #include "State.h"
@@ -196,38 +198,39 @@ void Feature::WriteDiskCacheInfo(CSimpleIniA& a_ini)
 const std::vector<Feature*>& Feature::GetFeatureList()
 {
 	static std::vector<Feature*> features = {
-		globals::features::grassLighting,
-		globals::features::grassCollision,
-		globals::features::screenSpaceShadows,
-		globals::features::extendedMaterials,
-		globals::features::wetnessEffects,
-		globals::features::lightLimitFix,
-		globals::features::dynamicCubemaps,
-		globals::features::cloudShadows,
-		globals::features::waterEffects,
-		globals::features::weatherPicker,
-		globals::features::subsurfaceScattering,
-		globals::features::terrainShadows,
-		globals::features::screenSpaceGI,
-		globals::features::skylighting,
-		globals::features::skySync,
-		globals::features::terrainBlending,
-		globals::features::terrainHelper,
-		globals::features::volumetricLighting,
-		globals::features::lodBlending,
-		globals::features::inverseSquareLighting,
-		globals::features::hairSpecular,
-		globals::features::interiorSunShadows,
-		globals::features::terrainVariation,
-		globals::features::ibl,
-		globals::features::extendedTranslucency
+		&globals::features::grassLighting,
+		&globals::features::grassCollision,
+		&globals::features::screenSpaceShadows,
+		&globals::features::extendedMaterials,
+		&globals::features::wetnessEffects,
+		&globals::features::lightLimitFix,
+		&globals::features::dynamicCubemaps,
+		&globals::features::cloudShadows,
+		&globals::features::waterEffects,
+		&globals::features::weatherPicker,
+		&globals::features::performanceOverlay,
+		&globals::features::subsurfaceScattering,
+		&globals::features::terrainShadows,
+		&globals::features::screenSpaceGI,
+		&globals::features::skylighting,
+		&globals::features::skySync,
+		&globals::features::terrainBlending,
+		&globals::features::terrainHelper,
+		&globals::features::volumetricLighting,
+		&globals::features::lodBlending,
+		&globals::features::inverseSquareLighting,
+		&globals::features::hairSpecular,
+		&globals::features::interiorSun,
+		&globals::features::terrainVariation,
+		&globals::features::ibl,
+		&globals::features::extendedTranslucency
 	};
 
 	if (REL::Module::IsVR()) {
 		// Helper function to build VR feature list
 		static auto BuildVRList = []() -> std::vector<Feature*> {
 			auto v = features;
-			v.push_back(globals::features::vr);
+			v.push_back(&globals::features::vr);
 
 			// In developer mode, keep all features for testing
 			// In production mode, filter to VR-compatible only
@@ -261,6 +264,29 @@ bool Feature::ToggleAtBootSetting()
 	state->SetFeatureDisabled(featureName, !disabled);
 
 	return state->IsFeatureDisabled(featureName);  // Return the new state
+}
+
+bool Feature::ReapplyOverrideSettings()
+{
+	auto overrideManager = SettingsOverrideManager::GetSingleton();
+	if (!overrideManager || !overrideManager->HasFeatureOverrides(GetShortName())) {
+		return false;
+	}
+
+	// Get current settings as JSON
+	json featureJson;
+	SaveSettings(featureJson);
+
+	// Apply overrides to the current settings
+	size_t appliedCount = overrideManager->ReapplyFeatureOverrides(GetShortName(), featureJson);
+
+	if (appliedCount > 0) {
+		// Load the modified settings back into the feature
+		LoadSettings(featureJson);
+		return true;
+	}
+
+	return false;
 }
 
 void Feature::DrawUnloadedUI()

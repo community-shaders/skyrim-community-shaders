@@ -4,12 +4,14 @@
 #include <imgui.h>
 #include <string>
 #include <vector>
+#include <windows.h>  // For WPARAM and virtual key constants
 
 // Forward declarations
 struct ID3D11Device;
 struct ID3D11ShaderResourceView;
 struct ImVec2;
 class Menu;
+class Feature;
 
 #define BUFFER_VIEWER_NODE(a_value, a_scale)                                                                 \
 	if (ImGui::TreeNode(#a_value)) {                                                                         \
@@ -30,6 +32,16 @@ class Menu;
 
 namespace Util
 {
+	/**
+	 * Represents a single line and its color for any colored text rendering (tooltips, legends, etc.).
+	 */
+	struct ColoredTextLine
+	{
+		std::string text;
+		ImVec4 color;
+	};
+	using ColoredTextLines = std::vector<ColoredTextLine>;
+
 	// Text rendering constants
 	constexpr float DefaultHeaderTextScale = 1.5f;  // Larger scale for header text to improve readability
 
@@ -53,9 +65,9 @@ namespace Util
 	/**
 	 * Usage:
 	 * {
-     *      auto _ = DisableGuard(disableThis);
-     *      ... Some settings ...
-     * }
+	 *      auto _ = DisableGuard(disableThis);
+	 *      ... Some settings ...
+	 * }
 	*/
 	class DisableGuard
 	{
@@ -213,64 +225,131 @@ namespace Util
 		const ColorCodedValueConfig& config,
 		bool useBullet = true);
 
-	class PerformanceOverlay
-	{
-	public:
-		static float CalcFrameTime(uint64_t timeElapsed, uint64_t frequency)
-		{
-			return 1000.0f * (float)timeElapsed / (float)frequency;
-		}
-
-		static float CalcFPS(float frameTimeMs)
-		{
-			return 1000.0f / frameTimeMs;
-		}
-	};
-	extern PerformanceOverlay performanceOverlay;
-
 	/**
 	 * @brief Draws a multi-line tooltip with optional per-line coloring.
+	 *
+	 * IMPORTANT: This function should only be called from within a tooltip context
+	 * (e.g., from within a HoverTooltipWrapper or BeginTooltip/EndTooltip block).
+	 * Do not call this function directly without proper tooltip context.
+	 *
 	 * @param lines The lines of text to display in the tooltip (as std::vector<std::string>).
 	 * @param colors Optional per-line colors (if empty, default color is used for all lines).
 	 */
 	void DrawMultiLineTooltip(const std::vector<std::string>& lines, const std::vector<ImVec4>& colors = {});
 
 	/**
-	 * @brief Comparator function type for table sorting.
+	 * @brief Draws a multi-line tooltip with optional per-line coloring.
 	 *
-	 * Should return true if the first value should come before the second, given the sort direction.
-	 * @param a First string value (cell content).
-	 * @param b Second string value (cell content).
-	 * @param ascending True if sorting ascending, false for descending.
-	 * @return True if a should come before b, false otherwise.
+	 * Expects a vector of {text, color} pairs. Should be called from within a tooltip context.
 	 */
+	void DrawColoredMultiLineTooltip(const ColoredTextLines& lines);
+
+	// Table sort function for string columns
 	using TableSortFunc = std::function<bool(const std::string&, const std::string&, bool)>;
+	using TableCellRenderFunc = std::function<void(int row, int col, const std::string& value)>;
 
 	/**
-	 * @brief Sorts table rows by the specified column using a default string comparison.
-	 * @param rows The table data (vector of rows).
-	 * @param column The column index to sort by.
-	 * @param ascending True for ascending, false for descending.
-	 */
-	void SortTableRowsByColumn(std::vector<std::vector<std::string>>& rows, size_t column, bool ascending = true);
-
-	/**
-	 * @brief Renders a sortable ImGui table with arbitrary columns and per-column custom sorting.
-	 *
+	 * Renders a sortable ImGui table for string tables (vector<vector<string>>).
+	 * Always sorts a copy if sorting is needed. Never modifies the input.
 	 * @param table_id Unique ImGui table ID.
 	 * @param headers Column headers.
 	 * @param rows Table data, each row is a vector of strings.
 	 * @param sortColumn Default sort column index.
 	 * @param ascending Default sort direction.
 	 * @param customSorts Vector of custom comparator functions, one per column (nullptr for default string sort).
+	 *        Each function should compare two strings and return true if the first should come before the second.
+	 * @param cellRender Optional cell renderer function for custom cell rendering. Signature: (row, col, value)
 	 */
-	void ShowSortedStringTable(
+	void ShowSortedStringTableStrings(
 		const char* table_id,
 		const std::vector<std::string>& headers,
-		std::vector<std::vector<std::string>> rows,
+		const std::vector<std::vector<std::string>>& rows,
 		size_t sortColumn = 0,
 		bool ascending = true,
-		const std::vector<TableSortFunc>& customSorts = {});
+		const std::vector<TableSortFunc>& customSorts = {},
+		TableCellRenderFunc cellRender = nullptr);
+
+	/**
+	 * Renders a sortable ImGui table for custom row types (vector<T>), sorts in-place.
+	 * @tparam T The row type. Must be copyable and compatible with the provided cellRender and customSorts functions.
+	 * @param table_id Unique ImGui table ID.
+	 * @param headers Column headers.
+	 * @param rows Table data, each row is of type T (will be sorted in-place).
+	 * @param sortColumn Default sort column index.
+	 * @param ascending Default sort direction.
+	 * @param customSorts Vector of custom comparator functions, one per column.
+	 *        Each function should compare two rows and return true if the first should come before the second.
+	 * @param cellRender Function to render a cell: (rowIdx, colIdx, const T& row).
+	 * @param footerRows Optional static footer rows (not sorted, rendered after main rows).
+	 */
+	template <typename T>
+	void ShowSortedStringTableCustom(
+		const char* table_id,
+		const std::vector<std::string>& headers,
+		std::vector<T>& rows,
+		size_t sortColumn,
+		bool ascending,
+		const std::vector<std::function<bool(const T&, const T&, bool)>>& customSorts,
+		std::function<void(int, int, const T&)> cellRender,
+		const std::vector<T>& footerRows = {})
+	{
+		ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable;
+		if (ImGui::BeginTable(table_id, static_cast<int>(headers.size()), flags)) {
+			for (const auto& header : headers)
+				ImGui::TableSetupColumn(header.c_str());
+			ImGui::TableHeadersRow();
+
+			// Interactive sorting
+			int sortCol = static_cast<int>(sortColumn);
+			bool sortAsc = ascending;
+			if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
+				if (sortSpecs->SpecsCount > 0) {
+					sortCol = sortSpecs->Specs->ColumnIndex;
+					sortAsc = sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending;
+				}
+			}
+			if (sortCol >= 0 && static_cast<size_t>(sortCol) < headers.size()) {
+				if (sortCol < static_cast<int>(customSorts.size()) && customSorts[sortCol]) {
+					auto cmp = customSorts[sortCol];
+					std::sort(rows.begin(), rows.end(), [sortCol, sortAsc, &cmp](const T& a, const T& b) {
+						return cmp(a, b, sortAsc);
+					});
+				}
+			}
+
+			// Render main (sorted) rows
+			for (size_t rowIdx = 0; rowIdx < rows.size(); ++rowIdx) {
+				const auto& row = rows[rowIdx];
+				ImGui::TableNextRow();
+				for (size_t col = 0; col < headers.size(); ++col) {
+					ImGui::TableSetColumnIndex(static_cast<int>(col));
+					if (cellRender) {
+						cellRender(static_cast<int>(rowIdx), static_cast<int>(col), row);
+					}
+				}
+			}
+
+			// Add separator between main rows and footer rows if there are footer rows
+			if (!footerRows.empty() && !rows.empty()) {
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Separator();
+			}
+
+			// Render static footer rows (not sorted)
+			for (size_t rowIdx = 0; rowIdx < footerRows.size(); ++rowIdx) {
+				const auto& row = footerRows[rowIdx];
+				ImGui::TableNextRow();
+				for (size_t col = 0; col < headers.size(); ++col) {
+					ImGui::TableSetColumnIndex(static_cast<int>(col));
+					if (cellRender) {
+						cellRender(static_cast<int>(rows.size() + rowIdx), static_cast<int>(col), row);
+					}
+				}
+			}
+			ImGui::EndTable();
+		}
+	}
 
 	/**
 	 * @brief Compares two version strings (e.g., "1.2.3") numerically.
@@ -284,5 +363,156 @@ namespace Util
 	/**
 	 * @brief TableSortFunc for version strings, using VersionStringLess.
 	 */
-	extern const TableSortFunc VersionSortComparator;
+	bool VersionSortComparator(const std::string& a, const std::string& b, bool ascending);
+
+	// A standard string comparator for use with ShowSortedStringTable
+	bool StringSortComparator(const std::string& a, const std::string& b, bool ascending);
+
+	// Performance overlay formatting and color helpers
+	ImVec4 GetThresholdColor(float value, float good, float warn, ImVec4 goodColor, ImVec4 warnColor, ImVec4 badColor);
+
+	// Search functionality
+	/**
+	 * @brief Checks if a feature matches the search query.
+	 * Searches both the feature's short name and display name.
+	 * @param feat The feature to check
+	 * @param searchQuery The search query string
+	 * @return True if the feature matches the search query
+	 */
+	bool FeatureMatchesSearch(Feature* feat, const std::string& searchQuery);
+
+	/**
+	 * @brief Draws the feature search bar with magnifying glass icon.
+	 * @param searchString Reference to the search string to modify
+	 * @param availableWidth The available width for the search bar
+	 */
+	void DrawFeatureSearchBar(std::string& searchString, float availableWidth = 0.0f);
+
+	/**
+	 * Provides access to theme-aware UI colors for consistent styling.
+	 * These functions return colors from the active theme's StatusPalette,
+	 * ensuring consistency with the overall application theme.
+	 */
+	namespace Colors
+	{
+		/**
+		 * Get theme-appropriate colors for timer/countdown displays.
+		 * @return Theme colors: Good=SuccessColor, Warning=Warning, Critical=Error
+		 */
+		ImVec4 GetTimerGood();      // Green - good/safe status (from theme SuccessColor)
+		ImVec4 GetTimerWarning();   // Orange - warning status (from theme Warning)
+		ImVec4 GetTimerCritical();  // Red - critical/error status (from theme Error)
+
+		/**
+		 * Get standard theme UI colors for consistent theming.
+		 * @return Theme colors from StatusPalette
+		 */
+		ImVec4 GetDefault();   // White - default text (from theme Text)
+		ImVec4 GetSuccess();   // Green - success/positive (from theme SuccessColor)
+		ImVec4 GetWarning();   // Orange - warning (from theme Warning)
+		ImVec4 GetError();     // Red - error/negative (from theme Error)
+		ImVec4 GetInfo();      // Blue - informational (from theme InfoColor)
+		ImVec4 GetDisabled();  // Gray - disabled items (from theme Disable)
+	}
+
+	/**
+	 * @brief Input handling utilities for ImGui integration
+	 *
+	 * This namespace provides input mapping functions for converting between different
+	 * input systems (Windows Virtual Keys, DirectInput, ImGui) and generating
+	 * human-readable key representations for UI display.
+	 *
+	 * These utilities were extracted from Menu.cpp to improve reusability and
+	 * separation of concerns. They are designed to be stateless and thread-safe.
+	 */
+	namespace Input
+	{
+		/**
+		 * @brief Converts Windows virtual key codes to ImGui key codes
+		 *
+		 * Translates Windows input events from the VK_* constant format to ImGui's
+		 * ImGuiKey enum format for proper input handling in ImGui interfaces.
+		 * Supports the full range of keyboard keys, function keys, numpad, and
+		 * special keys (modifiers, navigation, etc.).
+		 *
+		 * @param vkKey Windows virtual key code (VK_* constants from winuser.h)
+		 * @return Corresponding ImGuiKey value, or ImGuiKey_None if unmapped
+		 *
+		 * @note This function handles all standard keyboard keys including:
+		 *       - Alphanumeric keys (A-Z, 0-9)
+		 *       - Function keys (F1-F12)
+		 *       - Modifier keys (Shift, Ctrl, Alt, Windows)
+		 *       - Navigation keys (arrows, page up/down, home/end)
+		 *       - Numpad keys and operations
+		 *       - Special OEM keys (punctuation, brackets, etc.)
+		 *
+		 * @example
+		 * @code
+		 * ImGuiKey key = Util::Input::VirtualKeyToImGuiKey(VK_SPACE);
+		 * if (key != ImGuiKey_None) {
+		 *     ImGui::GetIO().AddKeyEvent(key, true);
+		 * }
+		 * @endcode
+		 */
+		ImGuiKey VirtualKeyToImGuiKey(WPARAM vkKey);
+
+		/**
+		 * @brief Converts DirectInput key codes to Windows virtual key codes
+		 *
+		 * Translates DirectInput device key codes (DIK_* constants) to standard
+		 * Windows virtual key codes (VK_* constants). This is particularly useful
+		 * for handling input from DirectInput devices and normalizing them to
+		 * the Windows input system.
+		 *
+		 * @param dikKey DirectInput key code (DIK_* constants from dinput.h)
+		 * @return Corresponding Windows virtual key code, or original dikKey if unmapped
+		 *
+		 * @note This function handles common DirectInput keys including:
+		 *       - Arrow keys and navigation
+		 *       - Numpad keys and operations
+		 *       - Modifier keys (Alt, Ctrl, Windows)
+		 *       - Special keys (Delete, Insert, Home, End, Page Up/Down)
+		 *
+		 * @note For unmapped keys, the function returns the original dikKey value
+		 *       as a fallback, allowing for pass-through behavior.
+		 *
+		 * @example
+		 * @code
+		 * uint32_t vkKey = Util::Input::DIKToVK(DIK_LEFTARROW);
+		 * // vkKey will be VK_LEFT
+		 * @endcode
+		 */
+		uint32_t DIKToVK(uint32_t dikKey);
+
+		/**
+		 * @brief Converts key codes to human-readable string representations
+		 *
+		 * Provides localized, user-friendly key names for display in UI elements
+		 * such as settings panels, tooltips, and configuration dialogs. The strings
+		 * are suitable for direct display to users.
+		 *
+		 * @param key Virtual key code to convert (0-255 range)
+		 * @return Human-readable key name string, or empty string if key >= 256
+		 *
+		 * @note Key names include proper formatting and descriptions:
+		 *       - "Left Mouse", "Right Mouse", "Middle Mouse" for mouse buttons
+		 *       - "Numpad 0", "Numpad +", "Numpad Enter" for numpad keys
+		 *       - "Left Shift", "Right Ctrl" for specific modifier keys
+		 *       - "Page Up", "Page Down" instead of "Prior", "Next"
+		 *       - "Left Arrow", "Up Arrow" for navigation keys
+		 *
+		 * @note Returns empty string for invalid key codes (>= 256) to prevent
+		 *       buffer overrun and provide safe fallback behavior.
+		 *
+		 * @example
+		 * @code
+		 * const char* keyName = Util::Input::KeyIdToString(VK_SPACE);
+		 * // keyName will be "Space"
+		 *
+		 * const char* mouseName = Util::Input::KeyIdToString(VK_LBUTTON);
+		 * // mouseName will be "Left Mouse"
+		 * @endcode
+		 */
+		const char* KeyIdToString(uint32_t key);
+	}
 }  // namespace Util

@@ -8,10 +8,12 @@
 #include "Deferred.h"
 #include "FeatureIssues.h"
 #include "Features/CloudShadows.h"
+#include "Features/PerformanceOverlay.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
 #include "HDR.h"
 #include "Menu.h"
+#include "SettingsOverrideManager.h"
 #include "ShaderCache.h"
 #include "Streamline.h"
 #include "TruePBR.h"
@@ -21,98 +23,95 @@ void State::Draw()
 {
 	auto shaderCache = globals::shaderCache;
 	auto deferred = globals::deferred;
-	auto terrainBlending = globals::features::terrainBlending;
-	auto terrainHelper = globals::features::terrainHelper;
-	auto cloudShadows = globals::features::cloudShadows;
+	auto& terrainBlending = globals::features::terrainBlending;
+	auto& terrainHelper = globals::features::terrainHelper;
+	auto& cloudShadows = globals::features::cloudShadows;
 	auto truePBR = globals::truePBR;
-	auto smState = globals::game::smState;
 	auto context = globals::d3d::context;
 
 	if (shaderCache->IsEnabled()) {
-		if (terrainBlending->loaded)
-			terrainBlending->TerrainShaderHacks();
+		if (terrainBlending.loaded)
+			terrainBlending.TerrainShaderHacks();
 
-		if (cloudShadows->loaded)
-			cloudShadows->SkyShaderHacks();
+		if (cloudShadows.loaded)
+			cloudShadows.SkyShaderHacks();
 
-		if (terrainHelper->loaded)
-			terrainHelper->SetShaderResouces(context);
+		if (terrainHelper.loaded)
+			terrainHelper.SetShaderResouces(context);
 
 		truePBR->SetShaderResouces(context);
 
-		if (!deferred->inReflections) {
-			if (auto accumulator = RE::BSGraphics::BSShaderAccumulator::GetCurrentAccumulator()) {
-				// Set an unused bit to indicate if we are rendering an object in the main rendering passes
-				if (accumulator->GetRuntimeData().activeShadowSceneNode == smState->shadowSceneNode[0]) {
-					currentExtraDescriptor |= static_cast<uint32_t>(ExtraShaderDescriptors::InWorld);
-				}
-			}
+		globals::deferred->HDRShaderHacks();
+
+		if (permutationData != permutationDataPrevious) {
+			permutationCB->Update(permutationData);
+			permutationDataPrevious = permutationData;
 		}
-
-		if (deferred->inReflections)
-			currentExtraDescriptor |= static_cast<uint32_t>(ExtraShaderDescriptors::IsReflections);
-
-		if (deferred->inDecals)
-			currentExtraDescriptor |= static_cast<uint32_t>(ExtraShaderDescriptors::IsDecal);
-
-		if (isTree)
-			currentExtraDescriptor |= static_cast<uint32_t>(ExtraShaderDescriptors::IsTree);
-
-		if (forceUpdatePermutationBuffer || currentPixelDescriptor != lastPixelDescriptor || currentExtraDescriptor != lastExtraDescriptor || currentExtraFeatureDescriptor != lastExtraFeatureDescriptor) {
-			PermutationCB data{};
-			data.VertexShaderDescriptor = currentVertexDescriptor;
-			data.PixelShaderDescriptor = currentPixelDescriptor;
-			data.ExtraShaderDescriptor = currentExtraDescriptor;
-			data.ExtraFeatureDescriptor = currentExtraFeatureDescriptor;
-
-			permutationCB->Update(data);
-
-			lastVertexDescriptor = currentVertexDescriptor;
-			lastPixelDescriptor = currentPixelDescriptor;
-			lastExtraDescriptor = currentExtraDescriptor;
-			lastExtraFeatureDescriptor = currentExtraFeatureDescriptor;
-
-			forceUpdatePermutationBuffer = false;
-		}
-
-		currentExtraDescriptor = 0;
-		currentExtraFeatureDescriptor = 0;
-
-		if (frameChecker.IsNewFrame()) {
-			for (int i = 0; i < RE::BSShader::Type::Total + 1; ++i)
-				smoothDrawCalls[i] = smoothDrawCalls[i] * 0.95 + drawCalls[i] * 0.05;
-			for (auto& c : drawCalls)
-				c = 0;
-			ID3D11Buffer* buffers[3] = { permutationCB->CB(), sharedDataCB->CB(), featureDataCB->CB() };
-			context->PSSetConstantBuffers(4, 3, buffers);
-			context->CSSetConstantBuffers(5, 2, buffers + 1);
-		}
-		drawCalls[RE::BSShader::Type::Total]++;
-		if (currentShader)
-			drawCalls[currentShader->shaderType.get()]++;
 
 		if (currentShader && updateShader) {
-			auto type = currentShader->shaderType.get();
-			if (type == RE::BSShader::Type::Utility) {
+			if (currentShader->shaderType.get() == RE::BSShader::Type::Utility) {
 				if (currentPixelDescriptor & static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask)) {
 					deferred->CopyShadowData();
 				}
 			}
-
-			if (type > 0 && type < RE::BSShader::Type::Total) {
-				if (enabledClasses[type - 1]) {
-					// Only check against non-shader bits
-					currentPixelDescriptor &= ~modifiedPixelDescriptor;
-
-					if (frameAnnotations) {
-						BeginPerfEvent(std::format("Draw: CS {}::{:x}::{}", magic_enum::enum_name(currentShader->shaderType.get()), currentPixelDescriptor, currentShader->fxpFilename));
-						SetPerfMarker(std::format("Defines: {}", SIE::ShaderCache::GetDefinesString(*currentShader, currentPixelDescriptor)));
-						EndPerfEvent();
-					}
-				}
-			}
 		}
+
+		if (globals::menu->overlayVisible && globals::features::performanceOverlay.loaded && globals::features::performanceOverlay.IsOverlayVisible())
+			Debug();
+
 		updateShader = false;
+	}
+}
+
+void State::Debug()
+{
+	auto lock = Lock();
+
+	if (frameChecker.IsNewFrame()) {
+		// Smooth draw calls and frame times for all shader types
+		for (int i = 0; i < magic_enum::enum_integer(RE::BSShader::Type::Total) + 1; ++i) {
+			smoothDrawCalls[i] = smoothDrawCalls[i] * static_cast<float>(0.95) + drawCalls[i] * static_cast<float>(0.05);
+			smoothFrameTimePerType[i] = smoothFrameTimePerType[i] * static_cast<float>(0.95) + frameTimePerType[i] * static_cast<float>(0.05);
+		}
+		// Reset counters for next frame
+		for (auto& c : drawCalls)
+			c = 0;
+		for (auto& ft : frameTimePerType)
+			ft = 0.0f;
+
+		// Start timing for this frame
+		if (frameTimingFrequency.QuadPart == 0) {
+			QueryPerformanceFrequency(&frameTimingFrequency);
+		}
+		QueryPerformanceCounter(&frameStartTime);
+		frameTimingActive = true;
+	}
+
+	// Track time for current shader type if timing is active
+	if (frameTimingActive && currentShader) {
+		LARGE_INTEGER currentTime;
+		QueryPerformanceCounter(&currentTime);
+
+		// Calculate elapsed time in milliseconds
+		float elapsed = (currentTime.QuadPart - frameStartTime.QuadPart) * 1000.0f / frameTimingFrequency.QuadPart;
+
+		// Add elapsed time to the current shader type
+		frameTimePerType[magic_enum::enum_integer(currentShader->shaderType.get())] += elapsed;
+		frameTimePerType[magic_enum::enum_integer(RE::BSShader::Type::Total)] += elapsed;
+
+		// Update start time for next measurement
+		frameStartTime = currentTime;
+	}
+
+	if (currentShader) {
+		drawCalls[magic_enum::enum_integer(currentShader->shaderType.get())]++;
+		drawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]++;
+	}
+
+	if (currentShader && updateShader && frameAnnotations) {
+		BeginPerfEvent(std::format("Draw: CS {}::{:x}::{}", magic_enum::enum_name(currentShader->shaderType.get()), permutationData.PixelShaderDescriptor, currentShader->fxpFilename));
+		SetPerfMarker(std::format("Defines: {}", SIE::ShaderCache::GetDefinesString(*currentShader, permutationData.PixelShaderDescriptor)));
+		EndPerfEvent();
 	}
 }
 
@@ -128,7 +127,7 @@ void State::Reset()
 	lastPixelDescriptor = 0;
 	lastVertexDescriptor = 0;
 	initialized = false;
-	forceUpdatePermutationBuffer = true;
+	std::memset(&permutationDataPrevious, 0xFF, sizeof(PermutationCB));
 	frameCount++;
 }
 
@@ -164,20 +163,23 @@ static const std::string& GetConfigPath(State::ConfigMode a_configMode)
 
 void State::Load(ConfigMode a_configMode, bool a_allowReload)
 {
-	ConfigMode configMode = a_configMode;
 	auto shaderCache = globals::shaderCache;
 	json settings;
 	bool errorDetected = false;
 
+	auto configFolderPath = std::filesystem::path(GetConfigPath(a_configMode)).parent_path().string();
+	auto defaultConfigFilePath = GetConfigPath(ConfigMode::DEFAULT);
+	auto userConfigFilePath = GetConfigPath(ConfigMode::USER);
+
 	try {
-		std::filesystem::create_directories(folderPath);
+		std::filesystem::create_directories(configFolderPath);
 	} catch (const std::filesystem::filesystem_error& e) {
-		logger::warn("Error creating directory during Load ({}) : {}\n", folderPath, e.what());
+		logger::warn("Error creating directory during Load ({}) : {}\n", configFolderPath, e.what());
 		errorDetected = true;
 	}
 
 	// Attempt to load the config file
-	auto tryLoadConfig = [&](const std::string& path) {
+	auto tryLoadConfig = [&](const std::string& path) -> bool {
 		std::ifstream i(path);
 		logger::info("Attempting to open config file: {}", path);
 		if (!i.is_open()) {
@@ -186,35 +188,67 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 		}
 		try {
 			i >> settings;
-			i.close();  // Close the file after reading
+			i.close();
 			return true;
 		} catch (const nlohmann::json::parse_error& e) {
 			logger::warn("Error parsing json config file ({}) : {}\n", path, e.what());
-			i.close();  // Ensure the file is closed even on error
+			i.close();
 			return false;
 		}
 	};
 
-	std::string configPath = GetConfigPath(configMode);
-	if (!tryLoadConfig(configPath)) {
-		logger::info("Unable to open user config file ({}); trying default ({})", configPath, defaultConfigPath);
-		configMode = DEFAULT;
-		configPath = GetConfigPath(configMode);
+	// NEW LOADING ORDER: Default → Overrides → User
 
-		if (!tryLoadConfig(configPath)) {
-			logger::info("No default config ({}), generating new one", configPath);
-			std::fill(enabledClasses, enabledClasses + RE::BSShader::Type::Total - 1, true);
-			Save(configMode);
-			// Attempt to load the newly created config
-			configPath = GetConfigPath(configMode);
-			if (!tryLoadConfig(configPath)) {
-				logger::error("Error opening newly created config file ({})\n", configPath);
-				return;  // Exit if the new config can't be opened
-			}
+	// Step 1: Always start with default settings
+	logger::info("Loading default settings from: {}", defaultConfigFilePath);
+	if (!tryLoadConfig(defaultConfigFilePath)) {
+		logger::info("No default config ({}), generating new one", defaultConfigFilePath);
+		std::fill(enabledClasses, enabledClasses + magic_enum::enum_integer(RE::BSShader::Type::Total) - 1, true);
+		Save(ConfigMode::DEFAULT);
+		// Attempt to load the newly created config
+		if (!tryLoadConfig(defaultConfigFilePath)) {
+			logger::error("Error opening newly created default config file ({})\n", defaultConfigFilePath);
+			return;
 		}
 	}
 
-	// Proceed with loading settings from the loaded configuration
+	// Step 2: Apply overrides (only new/changed ones) to default settings
+	auto overrideManager = SettingsOverrideManager::GetSingleton();
+	size_t overridesDiscovered = overrideManager->DiscoverOverrides();
+	json appliedOverrides = overrideManager->LoadAppliedOverridesTracking();
+
+	if (overridesDiscovered > 0) {
+		logger::info("Discovered {} override files", overridesDiscovered);
+
+		// Apply global overrides to main settings (only new/changed ones)
+		size_t newGlobalOverrides = overrideManager->ApplyNewOverrides(settings, appliedOverrides);
+		if (newGlobalOverrides > 0) {
+			logger::info("Applied {} new/changed global override(s)", newGlobalOverrides);
+		}
+	}
+
+	// Step 3: Apply user settings on top of default + overrides
+	if (a_configMode == ConfigMode::USER) {
+		json userSettings;
+		std::ifstream userFile(userConfigFilePath);
+		if (userFile.is_open()) {
+			try {
+				userFile >> userSettings;
+				userFile.close();
+
+				// Merge user settings on top of (default + overrides)
+				for (auto& [key, value] : userSettings.items()) {
+					settings[key] = value;
+				}
+				logger::info("Applied user settings from: {}", userConfigFilePath);
+			} catch (const nlohmann::json::parse_error& e) {
+				logger::warn("Error parsing user config file: {}", e.what());
+				userFile.close();
+			}
+		} else {
+			logger::info("No user config file found at: {}", userConfigFilePath);
+		}
+	}
 
 	try {
 		// Load Menu settings
@@ -230,7 +264,7 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 			if (advanced["Dump Shaders"].is_boolean())
 				shaderCache->SetDump(advanced["Dump Shaders"]);
 			if (advanced["Log Level"].is_number_integer())
-				logLevel = static_cast<spdlog::level::level_enum>(static_cast<int>(advanced["Log Level"]));
+				logLevel = magic_enum::enum_cast<spdlog::level::level_enum>(advanced["Log Level"].get<int>()).value_or(spdlog::level::info);
 			if (advanced["Shader Defines"].is_string())
 				SetDefines(advanced["Shader Defines"]);
 			if (advanced["Compiler Threads"].is_number_integer())
@@ -260,14 +294,14 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 		if (settings["Replace Original Shaders"].is_object()) {
 			logger::info("Loading 'Replace Original Shaders' settings");
 			json& originalShaders = settings["Replace Original Shaders"];
-			for (int classIndex = 0; classIndex < RE::BSShader::Type::Total - 1; ++classIndex) {
-				auto name = magic_enum::enum_name(static_cast<RE::BSShader::Type>(classIndex + 1));
+			ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
+				auto name = magic_enum::enum_name(type);
 				if (originalShaders[name].is_boolean()) {
 					enabledClasses[classIndex] = originalShaders[name];
 				} else {
 					logger::warn("Invalid entry for shader class '{}', using default", name);
 				}
-			}
+			});
 		}
 		// Ensure 'Disable at Boot' section exists in the JSON
 		if (!settings.contains("Disable at Boot") || !settings["Disable at Boot"].is_object()) {
@@ -305,6 +339,7 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 			logger::warn("Missing settings for Upscaling, using default.");
 		}
 
+		// Feature loading with new override tracking system
 		auto hdr = globals::hdr;
 		auto& hdrJson = settings[HDR::GetShortName()];
 		if (hdrJson.is_object()) {
@@ -325,22 +360,46 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 				bool isDisabled = disabledFeatures.contains(featureName) && disabledFeatures[featureName];
 				if (!isDisabled) {
 					logger::info("Loading Feature: '{}'", featureName);
+
+					// Load base feature settings from merged config (default + user)
 					feature->Load(settings);
+
+					// Apply new/changed feature-specific overrides if any
+					if (overridesDiscovered > 0) {
+						json featureJson;
+						feature->SaveSettings(featureJson);  // Get current settings as JSON
+
+						size_t newFeatureOverrides = overrideManager->ApplyNewFeatureOverrides(featureName, featureJson, appliedOverrides);
+						if (newFeatureOverrides > 0) {
+							logger::info("Applied {} new/changed override(s) to {}", newFeatureOverrides, feature->GetName());
+							try {
+								feature->LoadSettings(featureJson);  // Reload with new overrides applied
+							} catch (...) {
+								logger::warn("Invalid override settings for {}, keeping original settings.", feature->GetName());
+							}
+						}
+					}
 				} else {
 					logger::info("Feature '{}' is disabled at boot.", featureName);
 				}
 			} catch (const std::exception& e) {
-				feature->failedLoadedMessage = std::format(
-					"{}{} failed to load. Check CommunityShaders.log",
-					feature->failedLoadedMessage.empty() ? "" : feature->failedLoadedMessage + "\n",
-					feature->GetName());
+				feature->failedLoadedMessage = feature->failedLoadedMessage.empty() ?
+				                                   (feature->GetName() + " failed to load. Check CommunityShaders.log") :
+				                                   (feature->failedLoadedMessage + "\n" + feature->GetName() + " failed to load. Check CommunityShaders.log");
 				logger::warn("Error loading setting for feature '{}': {}", feature->GetShortName(), e.what());
 			}
 		}
-		if (settings["Version"].is_string() && settings["Version"].get<std::string>() != Plugin::VERSION.string()) {
-			logger::info("Found older config for version {}; upgrading to {}", static_cast<std::string>(settings["Version"]), Plugin::VERSION.string());
-			Save(configMode);
+
+		// Save updated applied overrides tracking
+		if (overridesDiscovered > 0) {
+			overrideManager->SaveAppliedOverridesTracking(appliedOverrides);
 		}
+
+		if (settings["Version"].is_string() && settings["Version"].get<std::string>() != Plugin::VERSION.string()) {
+			logger::info("Found older config for version {}; upgrading to {}", (std::string)settings["Version"], Plugin::VERSION.string());
+			Save(a_configMode);  // Use original config mode
+		}
+
 		FeatureIssues::ScanForOrphanedFeatureINIs();
 
 		logger::info("Loading Settings Complete");
@@ -406,9 +465,9 @@ void State::Save(ConfigMode a_configMode)
 	hdr->SaveSettings(hdrJson);
 
 	json originalShaders;
-	for (int classIndex = 0; classIndex < RE::BSShader::Type::Total - 1; ++classIndex) {
-		originalShaders[magic_enum::enum_name(static_cast<RE::BSShader::Type>(classIndex + 1))] = enabledClasses[classIndex];
-	}
+	ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
+		originalShaders[magic_enum::enum_name(type)] = enabledClasses[classIndex];
+	});
 	settings["Replace Original Shaders"] = originalShaders;
 
 	json disabledFeaturesJson;
@@ -459,7 +518,7 @@ void State::SetLogLevel(spdlog::level::level_enum a_level)
 	logLevel = a_level;
 	spdlog::set_level(logLevel);
 	spdlog::flush_on(logLevel);
-	logger::info("Log Level set to {} ({})", magic_enum::enum_name(logLevel), static_cast<int>(logLevel));
+	logger::info("Log Level set to {} ({})", magic_enum::enum_name(logLevel), magic_enum::enum_integer(logLevel));
 }
 
 spdlog::level::level_enum State::GetLogLevel()
@@ -501,7 +560,7 @@ std::vector<std::pair<std::string, std::string>>* State::GetDefines()
 
 bool State::ShaderEnabled(const RE::BSShader::Type a_type)
 {
-	auto index = static_cast<uint32_t>(a_type) + 1;
+	auto index = magic_enum::enum_integer(a_type) + 1;
 	if (index < sizeof(enabledClasses)) {
 		return enabledClasses[index];
 	}
@@ -530,6 +589,13 @@ void State::SetupResources()
 		c = 0;
 	for (auto& c : smoothDrawCalls)
 		c = 0;
+	for (auto& ft : frameTimePerType)
+		ft = 0.0f;
+	for (auto& sft : smoothFrameTimePerType)
+		sft = 0.0f;
+
+	frameTimingActive = false;
+
 	auto renderer = globals::game::renderer;
 
 	permutationCB = new ConstantBuffer(ConstantBufferDesc<PermutationCB>());
@@ -760,8 +826,8 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 	}
 
 	const auto& depth = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
-	auto terrainBlending = globals::features::terrainBlending;
-	auto srv = (terrainBlending->loaded ? terrainBlending->blendedDepthTexture16->srv.get() : depth.depthSRV);
+	auto& terrainBlending = globals::features::terrainBlending;
+	auto srv = (terrainBlending.loaded ? terrainBlending.blendedDepthTexture16->srv.get() : depth.depthSRV);
 
 	globals::d3d::context->PSSetShaderResources(17, 1, &srv);
 }
@@ -846,4 +912,11 @@ void State::RenderReShade()
 void State::PresentReShade()
 {
 	reshade::update_and_present_effect_runtime(reShadeRuntime);
+}
+
+// --- Utility Method Implementations ---
+
+float State::GetTotalSmoothedDrawCalls() const
+{
+	return static_cast<float>(smoothDrawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]);
 }

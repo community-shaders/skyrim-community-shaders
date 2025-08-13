@@ -32,6 +32,16 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	RippleBreadth,
 	RippleLifetime)
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	WetnessEffects::DebugSettings,
+	EnableWetnessOverride,
+	EnablePuddleOverride,
+	EnableRainOverride,
+	EnableIntExOverride,
+	WetnessOverride,
+	PuddleWetnessOverride,
+	RainOverride)
+
 // Climate preset data - defines regional weather characteristics
 // Precipitation rates calculated from actual shader mechanics: grid size, interval, and raindrop chance
 
@@ -209,28 +219,21 @@ namespace Ripples
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	WetnessEffects* UpdateSettings()
+	void UpdateSettings()
 	{
-		const auto WetnessEffects = WetnessEffects::GetSingleton();
-		if (WetnessEffects) {
-			s_isEnabled = WetnessEffects->settings.EnableWetnessEffects;
-			s_vanillaRipplesEnabled = WetnessEffects->settings.EnableVanillaRipples;
-			logger::debug("[{}] UpdateSettings: EnableWetnessEffects={}, EnableVanillaRipples={}",
-				WetnessEffects->GetName(), s_isEnabled, s_vanillaRipplesEnabled);
-		} else {
-			logger::debug("[WetnessEffects] UpdateSettings: WetnessEffects singleton not found");
-		}
-		return WetnessEffects;
+		auto& wetnessEffects = globals::features::wetnessEffects;
+		s_isEnabled = wetnessEffects.settings.EnableWetnessEffects;
+		s_vanillaRipplesEnabled = wetnessEffects.settings.EnableVanillaRipples;
+		logger::debug("[{}] UpdateSettings: EnableWetnessEffects={}, EnableVanillaRipples={}",
+			wetnessEffects.GetName(), s_isEnabled, s_vanillaRipplesEnabled);
 	}
 
 	void Install()
 	{
-		const auto WetnessEffects = UpdateSettings();  // Initialize cached values
-		if (!WetnessEffects)
-			return;
+		auto& wetnessEffects = globals::features::wetnessEffects;
 		REL::Relocation<std::uintptr_t> target{ RELOCATION_ID(25638, 26179), REL::VariantOffset(0x238, 0x223, 0x238) };
 		stl::write_thunk_call<ToggleWaterSplashes>(target.address());
-		logger::info("[{}] Installed ripple hooks", WetnessEffects->GetName());
+		logger::info("[{}] Installed ripple hooks", wetnessEffects.GetName());
 	}
 }
 
@@ -474,15 +477,39 @@ void WetnessEffects::DrawSettings()
 
 	ImGui::Spacing();
 	ImGui::Spacing();
-	auto weather = globals::features::weatherPicker;
-	if (weather && weather->loaded) {
-		if (ImGui::SmallButton(("Open " + weather->GetName()).c_str())) {
+	auto& weatherPicker = globals::features::weatherPicker;
+	if (weatherPicker.loaded) {
+		if (ImGui::SmallButton(("Open " + weatherPicker.GetName()).c_str())) {
 			// Navigate to the replacement feature in the menu
-			Menu::GetSingleton()->SelectFeatureMenu(weather->GetShortName());
+			Menu::GetSingleton()->SelectFeatureMenu(weatherPicker.GetShortName());
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Open the installed %s feature", weather->GetShortName().c_str());
+			ImGui::Text("Open the installed %s feature", weatherPicker.GetShortName().c_str());
 		}
+	}
+
+	if (ImGui::TreeNodeEx("Debug", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::Checkbox("Enable Wetness Override", &debugSettings.EnableWetnessOverride);
+		ImGui::Checkbox("Enable Puddle Override", &debugSettings.EnablePuddleOverride);
+		ImGui::Checkbox("Enable Rain Override", &debugSettings.EnableRainOverride);
+		ImGui::Checkbox("Enable Interior/Exterior Override", &debugSettings.EnableIntExOverride);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"If disabled, will only use the exterior value. ");
+		}
+
+		if (debugSettings.EnableWetnessOverride) {
+			ImGui::SliderFloat2("Wetness In/Exterior", &debugSettings.WetnessOverride.x, 0.0f, 2.0f);
+		}
+
+		if (debugSettings.EnablePuddleOverride) {
+			ImGui::SliderFloat2("Puddle Wetness In/Exterior", &debugSettings.PuddleWetnessOverride.x, 0.0f, 2.0f);
+		}
+
+		if (debugSettings.EnableRainOverride) {
+			ImGui::SliderFloat2("Rain In/Exterior", &debugSettings.RainOverride.x, 0.0f, 1.0f);
+		}
+		ImGui::TreePop();
 	}
 }
 
@@ -719,6 +746,25 @@ WetnessEffects::PerFrame WetnessEffects::GetCommonBufferData() const
 				float combinedPuddleWetness = std::min(1.0f, currentWeatherResult.puddleWetness + lastWeatherResult.puddleWetness);
 				data.Wetness = combinedWetness;
 				data.PuddleWetness = combinedPuddleWetness;
+				if (debugSettings.EnableWetnessOverride) {
+					data.Wetness = debugSettings.WetnessOverride.y;
+				}
+				if (debugSettings.EnablePuddleOverride) {
+					data.PuddleWetness = debugSettings.PuddleWetnessOverride.y;
+				}
+				if (debugSettings.EnableRainOverride) {
+					data.Raining = debugSettings.RainOverride.y;
+				}
+			} else {
+				if (debugSettings.EnableWetnessOverride) {
+					data.Wetness = debugSettings.EnableIntExOverride ? debugSettings.WetnessOverride.x : debugSettings.WetnessOverride.y;
+				}
+				if (debugSettings.EnablePuddleOverride) {
+					data.PuddleWetness = debugSettings.EnableIntExOverride ? debugSettings.PuddleWetnessOverride.x : debugSettings.PuddleWetnessOverride.y;
+				}
+				if (debugSettings.EnableRainOverride) {
+					data.Raining = debugSettings.EnableIntExOverride ? debugSettings.RainOverride.x : debugSettings.RainOverride.y;
+				}
 			}
 		}
 	}
@@ -756,11 +802,17 @@ void WetnessEffects::LoadSettings(json& o_json)
 	DetectCurrentPreset();
 
 	Ripples::UpdateSettings();  // Sync cached values after loading
+
+	if (o_json.contains("DebugSettings")) {
+		debugSettings = o_json["DebugSettings"].get<DebugSettings>();
+	}
 }
 
 void WetnessEffects::SaveSettings(json& o_json)
 {
 	o_json = settings;
+
+	o_json["DebugSettings"] = debugSettings;
 }
 
 void WetnessEffects::RestoreDefaultSettings()

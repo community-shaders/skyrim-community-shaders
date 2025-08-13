@@ -2,16 +2,10 @@
 
 struct ExtendedMaterials : Feature
 {
-	static ExtendedMaterials* GetSingleton()
-	{
-		static ExtendedMaterials singleton;
-		return &singleton;
-	}
-
 	virtual inline std::string GetName() override { return "Extended Materials"; }
 	virtual inline std::string GetShortName() override { return "ExtendedMaterials"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "EXTENDED_MATERIALS"; }
-	virtual std::string_view GetCategory() const override { return "Landscape & Textures"; }
+	virtual std::string_view GetCategory() const override { return "Materials"; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{

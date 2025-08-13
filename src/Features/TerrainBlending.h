@@ -3,12 +3,6 @@
 struct TerrainBlending : Feature
 {
 public:
-	static TerrainBlending* GetSingleton()
-	{
-		static TerrainBlending singleton;
-		return &singleton;
-	}
-
 	virtual inline std::string GetName() override { return "Terrain Blending"; }
 	virtual inline std::string GetShortName() override { return "TerrainBlending"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_BLENDING"; }

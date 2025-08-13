@@ -1,4 +1,6 @@
 #include "FileSystem.h"
+#include <fstream>
+#include <psapi.h>
 
 namespace Util
 {
@@ -45,6 +47,49 @@ namespace Util
 		{
 			return GetShadersPath() / featureName;
 		}
+
+		std::filesystem::path GetCurrentModuleRealPath()
+		{
+			try {
+				HMODULE selfModule = nullptr;
+				if (!GetModuleHandleExW(
+						GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+						reinterpret_cast<LPCWSTR>(&GetCurrentModuleRealPath),
+						&selfModule)) {
+					return {};
+				}
+				wchar_t buffer[MAX_PATH]{};
+				DWORD size = GetModuleFileNameExW(GetCurrentProcess(), selfModule, buffer, MAX_PATH);
+				if (size == 0 || size == MAX_PATH) {
+					throw std::runtime_error("Failed to get module filename");
+				}
+				return std::filesystem::path(buffer);
+			} catch (const std::exception& e) {
+				logger::error("GetCurrentModuleRealPath: Exception caught: {}", e.what());
+				return {};
+			}
+		}
+
+		std::filesystem::path GetRootRealPath()
+		{
+			static std::filesystem::path cachedPath = []() {
+				std::filesystem::path dllPath = GetCurrentModuleRealPath();
+				if (dllPath.empty())
+					return std::filesystem::path{};
+				return dllPath.parent_path().parent_path().parent_path();
+			}();
+			return cachedPath;
+		}
+
+		std::filesystem::path GetShadersRealPath()
+		{
+			return GetRootRealPath() / "Shaders";
+		}
+
+		std::filesystem::path GetFeaturesRealPath()
+		{
+			return GetShadersRealPath() / "Features";
+		}
 	}
 
 	// File system utilities implementation
@@ -77,4 +122,51 @@ namespace Util
 			return result;
 		}
 	}
+}
+
+std::vector<SettingsDiffEntry> Util::FileSystem::LoadJsonDiff(const std::filesystem::path& userPath, const std::filesystem::path& testPath)
+{
+	std::vector<SettingsDiffEntry> diffEntries;
+
+	try {
+		if (!std::filesystem::exists(userPath) || !std::filesystem::exists(testPath)) {
+			return diffEntries;
+		}
+
+		std::ifstream userFile(userPath);
+		std::ifstream testFile(testPath);
+
+		if (!userFile.is_open() || !testFile.is_open()) {
+			return diffEntries;
+		}
+
+		nlohmann::json userJson, testJson;
+		userFile >> userJson;
+		testFile >> testJson;
+
+		auto diff = nlohmann::json::diff(userJson, testJson);
+
+		for (const auto& change : diff) {
+			std::string op = change.value("op", "");
+			std::string path = change.value("path", "");
+			std::string aVal, bVal;
+
+			if (op == "replace") {
+				aVal = userJson.at(nlohmann::json::json_pointer(path)).dump();
+				bVal = testJson.at(nlohmann::json::json_pointer(path)).dump();
+			} else if (op == "add") {
+				aVal = "(none)";
+				bVal = testJson.at(nlohmann::json::json_pointer(path)).dump();
+			} else if (op == "remove") {
+				aVal = userJson.at(nlohmann::json::json_pointer(path)).dump();
+				bVal = "(none)";
+			}
+
+			diffEntries.push_back({ path, aVal, bVal });
+		}
+	} catch (const std::exception& e) {
+		logger::warn("Failed to load JSON diff: {}", e.what());
+	}
+
+	return diffEntries;
 }

@@ -1,6 +1,6 @@
 #include "VolumetricLighting.h"
 
-#include "InteriorSunShadows.h"
+#include "InteriorSun.h"
 #include "ShaderCache.h"
 #include "State.h"
 
@@ -220,7 +220,7 @@ void VolumetricLighting::EarlyPrepass()
 
 	initialised = true;
 	inInterior = currentlyInInterior;
-	inInteriorWithSunShadows = InteriorSunShadows::IsInteriorWithSun(interiorCell);
+	inInteriorWithSun = InteriorSun::IsInteriorWithSun(interiorCell);
 	SetupVL();
 }
 
@@ -228,9 +228,9 @@ void VolumetricLighting::SetupVL()
 {
 	if (inInterior) {
 		if (globals::game::isVR)
-			SetBooleanSettings(hiddenVRSettings, GetName(), settings.InteriorEnabled && inInteriorWithSunShadows);
+			SetBooleanSettings(hiddenVRSettings, GetName(), settings.InteriorEnabled && inInteriorWithSun);
 		else
-			*bEnableVolumetricLighting = settings.InteriorEnabled && inInteriorWithSunShadows;
+			*bEnableVolumetricLighting = settings.InteriorEnabled && inInteriorWithSun;
 		*gVolumetricLightingSizeHigh = static_cast<Quality>(settings.InteriorQuality) == Quality::Custom ? settings.InteriorCustomSize : defaultSizeHigh;
 		SetVLQuality(GetVLDescriptor(), settings.InteriorQuality);
 	} else {
@@ -267,7 +267,7 @@ void VolumetricLighting::RenderVolumetricLighting(VolumetricLightingDescriptor* 
 void VolumetricLighting::RenderDepth::thunk()
 {
 	func();
-	if (*GetSingleton()->bEnableVolumetricLighting)
+	if (globals::features::volumetricLighting.bEnableVolumetricLighting)
 		RenderVolumetricLighting(&GetVLDescriptor(), RE::Main::WorldRootCamera(), false);
 }
 
@@ -325,4 +325,21 @@ void VolumetricLighting::SetGroupCountsHCS(uint32_t& threadGroupCountX) const
 void VolumetricLighting::SetGroupCountsVCS(uint32_t& threadGroupCountY) const
 {
 	threadGroupCountY = (vlData.screenY + BlurThreadGroupSizeY - BlurWindow * 2u - 1u) / (BlurThreadGroupSizeY - BlurWindow * 2u);
+}
+
+void VolumetricLighting::CopyResource::thunk(ID3D11DeviceContext* a_this, ID3D11Resource* a_renderTarget, ID3D11Resource* a_renderTargetSource)
+{
+	// In VR with dynamic resolution enabled, there's a bug with the depth stencil.
+	// The depth stencil passed to IsFullScreenVR is scaled down incorrectly.
+	// The fix is to stop a CopyResource from replacing kMAIN_COPY with kMAIN after
+	// ISApplyVolumetricLighting because it clobbers a properly scaled kMAIN_COPY.
+	// The kMAIN_COPY does not appear to be used in the remaining frame after
+	// ISApplyVolumetricLighting except for IsFullScreenVR.
+	// But, the copy might have to be done manually later after IsFullScreenVR if
+	// used in the next frame.
+
+	auto& singleton = globals::features::volumetricLighting;
+	if (!(Util::IsDynamicResolution() && singleton.bEnableVolumetricLighting)) {
+		a_this->CopyResource(a_renderTarget, a_renderTargetSource);
+	}
 }

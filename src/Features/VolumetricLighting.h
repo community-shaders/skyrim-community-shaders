@@ -3,12 +3,6 @@
 struct VolumetricLighting : Feature
 {
 public:
-	static VolumetricLighting* GetSingleton()
-	{
-		static VolumetricLighting singleton;
-		return &singleton;
-	}
-
 	struct TextureSize
 	{
 		int32_t Width = 320;
@@ -89,22 +83,7 @@ public:
 
 	struct CopyResource
 	{
-		static void thunk(ID3D11DeviceContext* a_this, ID3D11Resource* a_renderTarget, ID3D11Resource* a_renderTargetSource)
-		{
-			// In VR with dynamic resolution enabled, there's a bug with the depth stencil.
-			// The depth stencil passed to IsFullScreenVR is scaled down incorrectly.
-			// The fix is to stop a CopyResource from replacing kMAIN_COPY with kMAIN after
-			// ISApplyVolumetricLighting because it clobbers a properly scaled kMAIN_COPY.
-			// The kMAIN_COPY does not appear to be used in the remaining frame after
-			// ISApplyVolumetricLighting except for IsFullScreenVR.
-			// But, the copy might have to be done manually later after IsFullScreenVR if
-			// used in the next frame.
-
-			auto* singleton = GetSingleton();
-			if (singleton && !(Util::IsDynamicResolution() && *singleton->bEnableVolumetricLighting)) {
-				a_this->CopyResource(a_renderTarget, a_renderTargetSource);
-			}
-		}
+		static void thunk(ID3D11DeviceContext* a_this, ID3D11Resource* a_renderTarget, ID3D11Resource* a_renderTargetSource);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -149,7 +128,7 @@ private:
 
 	bool initialised = false;
 	bool inInterior = false;
-	bool inInteriorWithSunShadows = false;
+	bool inInteriorWithSun = false;
 
 	struct VLData
 	{

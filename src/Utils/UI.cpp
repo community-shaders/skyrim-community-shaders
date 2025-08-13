@@ -1,25 +1,31 @@
 #include "UI.h"
 #include "Menu.h"
 
+#ifndef DIRECTINPUT_VERSION
+#	define DIRECTINPUT_VERSION 0x0800
+#endif
 #include <d3d11.h>
+#include <dinput.h>
 #include <imgui.h>
 #include <imgui_internal.h>
 
+#include "../Feature.h"
 #include "../Globals.h"
 #include "../Menu.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <functional>
+#include <iomanip>
+#include <sstream>
 #include <stb_image.h>
 #include <string>
 #include <vector>
 
 namespace Util
 {
-	PerformanceOverlay performanceOverlay;
-
 	HoverTooltipWrapper::HoverTooltipWrapper()
 	{
 		hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal);
@@ -161,12 +167,19 @@ namespace Util
 		logger::info("InitializeMenuIcons: Loading icons from base path: {}", basePath);
 
 		// Initialize all texture pointers to nullptr for safe cleanup
-		std::array<ID3D11ShaderResourceView**, 5> texturePointers = {
+		std::array<ID3D11ShaderResourceView**, 12> texturePointers = {
 			&menu->uiIcons.saveSettings.texture,
 			&menu->uiIcons.loadSettings.texture,
 			&menu->uiIcons.clearCache.texture,
-			&menu->uiIcons.clearDiskCache.texture,
-			&menu->uiIcons.logo.texture
+			&menu->uiIcons.logo.texture,
+			&menu->uiIcons.characters.texture,
+			&menu->uiIcons.grass.texture,
+			&menu->uiIcons.lighting.texture,
+			&menu->uiIcons.sky.texture,
+			&menu->uiIcons.landscape.texture,
+			&menu->uiIcons.water.texture,
+			&menu->uiIcons.debug.texture,
+			&menu->uiIcons.materials.texture
 		};
 
 		// Safely release existing textures
@@ -182,39 +195,30 @@ namespace Util
 		int iconsLoaded = 0;
 
 		// Load save settings icon
-		if (LoadTextureFromFile(device, (basePath + "Microsoft Icons\\save-settings.png").c_str(), &menu->uiIcons.saveSettings.texture, menu->uiIcons.saveSettings.size)) {
+		if (LoadTextureFromFile(device, (basePath + "Action Icons\\save-settings.png").c_str(), &menu->uiIcons.saveSettings.texture, menu->uiIcons.saveSettings.size)) {
 			logger::info("InitializeMenuIcons: Successfully loaded save-settings icon");
 			iconsLoaded++;
 			anyIconLoaded = true;
 		} else {
-			logger::warn("InitializeMenuIcons: Failed to load save-settings icon from: {}", basePath + "Microsoft Icons\\save-settings.png");
+			logger::warn("InitializeMenuIcons: Failed to load save-settings icon from: {}", basePath + "Action Icons\\save-settings.png");
 		}
 
 		// Load load settings icon
-		if (LoadTextureFromFile(device, (basePath + "Microsoft Icons\\load-settings.png").c_str(), &menu->uiIcons.loadSettings.texture, menu->uiIcons.loadSettings.size)) {
+		if (LoadTextureFromFile(device, (basePath + "Action Icons\\load-settings.png").c_str(), &menu->uiIcons.loadSettings.texture, menu->uiIcons.loadSettings.size)) {
 			logger::info("InitializeMenuIcons: Successfully loaded load-settings icon");
 			iconsLoaded++;
 			anyIconLoaded = true;
 		} else {
-			logger::warn("InitializeMenuIcons: Failed to load load-settings icon from: {}", basePath + "Microsoft Icons\\load-settings.png");
+			logger::warn("InitializeMenuIcons: Failed to load load-settings icon from: {}", basePath + "Action Icons\\load-settings.png");
 		}
 
 		// Load clear cache icon
-		if (LoadTextureFromFile(device, (basePath + "Microsoft Icons\\clear-cache.png").c_str(), &menu->uiIcons.clearCache.texture, menu->uiIcons.clearCache.size)) {
+		if (LoadTextureFromFile(device, (basePath + "Action Icons\\clear-cache.png").c_str(), &menu->uiIcons.clearCache.texture, menu->uiIcons.clearCache.size)) {
 			logger::info("InitializeMenuIcons: Successfully loaded clear-cache icon");
 			iconsLoaded++;
 			anyIconLoaded = true;
 		} else {
-			logger::warn("InitializeMenuIcons: Failed to load clear-cache icon from: {}", basePath + "Microsoft Icons\\clear-cache.png");
-		}
-
-		// Load clear disk cache icon
-		if (LoadTextureFromFile(device, (basePath + "Microsoft Icons\\clear-disk.png").c_str(), &menu->uiIcons.clearDiskCache.texture, menu->uiIcons.clearDiskCache.size)) {
-			logger::info("InitializeMenuIcons: Successfully loaded clear-disk icon");
-			iconsLoaded++;
-			anyIconLoaded = true;
-		} else {
-			logger::warn("InitializeMenuIcons: Failed to load clear-disk icon from: {}", basePath + "Microsoft Icons\\clear-disk.png");
+			logger::warn("InitializeMenuIcons: Failed to load clear-cache icon from: {}", basePath + "Action Icons\\clear-cache.png");
 		}
 
 		// Load logo icon
@@ -226,11 +230,78 @@ namespace Util
 			logger::warn("InitializeMenuIcons: Failed to load logo icon from: {}", basePath + "Community Shaders Logo\\cs-logo.png");
 		}
 
-		logger::info("InitializeMenuIcons: Loaded {}/5 icons successfully", iconsLoaded);
+		// Load category icons
+		if (LoadTextureFromFile(device, (basePath + "Categories\\characters.png").c_str(), &menu->uiIcons.characters.texture, menu->uiIcons.characters.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded characters icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load characters icon from: {}", basePath + "Categories\\characters.png");
+		}
+
+		if (LoadTextureFromFile(device, (basePath + "Categories\\grass.png").c_str(), &menu->uiIcons.grass.texture, menu->uiIcons.grass.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded grass icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load grass icon from: {}", basePath + "Categories\\grass.png");
+		}
+
+		if (LoadTextureFromFile(device, (basePath + "Categories\\lighting.png").c_str(), &menu->uiIcons.lighting.texture, menu->uiIcons.lighting.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded lighting icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load lighting icon from: {}", basePath + "Categories\\lighting.png");
+		}
+
+		if (LoadTextureFromFile(device, (basePath + "Categories\\sky.png").c_str(), &menu->uiIcons.sky.texture, menu->uiIcons.sky.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded sky icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load sky icon from: {}", basePath + "Categories\\sky.png");
+		}
+
+		if (LoadTextureFromFile(device, (basePath + "Categories\\landscape.png").c_str(), &menu->uiIcons.landscape.texture, menu->uiIcons.landscape.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded landscape icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load landscape icon from: {}", basePath + "Categories\\landscape.png");
+		}
+
+		if (LoadTextureFromFile(device, (basePath + "Categories\\water.png").c_str(), &menu->uiIcons.water.texture, menu->uiIcons.water.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded water icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load water icon from: {}", basePath + "Categories\\water.png");
+		}
+
+		if (LoadTextureFromFile(device, (basePath + "Categories\\debug.png").c_str(), &menu->uiIcons.debug.texture, menu->uiIcons.debug.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded debug icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load debug icon from: {}", basePath + "Categories\\debug.png");
+		}
+
+		// Materials placeholder - will fail to load for now
+		if (LoadTextureFromFile(device, (basePath + "Categories\\materials.png").c_str(), &menu->uiIcons.materials.texture, menu->uiIcons.materials.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded materials icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load materials icon from: {}", basePath + "Categories\\materials.png");
+		}
+
+		logger::info("InitializeMenuIcons: Loaded {}/12 icons successfully", iconsLoaded);
+
 		return anyIconLoaded;
 	}
 
-	// Text rendering helpers (moved from UITextHelper)
+	// Text rendering helpers
 	ImVec2 DrawSharpText(const char* text, bool alignToPixelGrid, float scale)
 	{
 		ImVec2 startPos = ImGui::GetCursorPos();
@@ -348,6 +419,28 @@ namespace Util
 
 	bool DrawCategoryHeader(const char* categoryName, bool& isExpanded, int categoryCount)
 	{
+		// Get the appropriate icon for this category
+		ID3D11ShaderResourceView* categoryIcon = nullptr;
+		auto& menu = Menu::GetSingleton()->uiIcons;
+
+		if (strcmp(categoryName, "Characters") == 0) {
+			categoryIcon = menu.characters.texture;
+		} else if (strcmp(categoryName, "Grass") == 0) {
+			categoryIcon = menu.grass.texture;
+		} else if (strcmp(categoryName, "Lighting") == 0) {
+			categoryIcon = menu.lighting.texture;
+		} else if (strcmp(categoryName, "Sky") == 0) {
+			categoryIcon = menu.sky.texture;
+		} else if (strcmp(categoryName, "Landscape & Textures") == 0) {
+			categoryIcon = menu.landscape.texture;
+		} else if (strcmp(categoryName, "Water") == 0) {
+			categoryIcon = menu.water.texture;
+		} else if (strcmp(categoryName, "Debug") == 0) {
+			categoryIcon = menu.debug.texture;
+		} else if (strcmp(categoryName, "Materials") == 0) {
+			categoryIcon = menu.materials.texture;
+		}
+
 		// Add categoryCount to categoryName
 		std::string displayName = std::format("{} ({})", categoryName, categoryCount);
 
@@ -355,11 +448,23 @@ namespace Util
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 		ImVec2 pos = ImGui::GetCursorScreenPos();
 		float availableWidth = ImGui::GetContentRegionAvail().x;
+
+		// Calculate icon size based on current font size to match text scaling
+		// This ensures icons scale consistently with text when the font scale changes
+		const float currentFontSize = ImGui::GetFontSize();
+		const float iconSize = currentFontSize * 1.2f;     // 20% larger than font height
+		const float iconSpacing = currentFontSize * 0.3f;  // 30% of font height for spacing
 		ImVec2 textSize = ImGui::CalcTextSize(displayName.c_str());
+
+		// Calculate total content width (icon + spacing + text)
+		float contentWidth = textSize.x;
+		if (categoryIcon) {
+			contentWidth += iconSize + iconSpacing;
+		}
 
 		// Calculate line positions
 		float lineY = pos.y + textSize.y * 0.5f;
-		float lineLength = (availableWidth - textSize.x - 20.0f) * 0.5f;  // 20px for padding
+		float lineLength = (availableWidth - contentWidth - 20.0f) * 0.5f;  // 20px for padding
 
 		// Create selectable area for the entire header
 		ImGui::PushID(displayName.c_str());
@@ -374,7 +479,7 @@ namespace Util
 		hovered = ImGui::IsItemHovered();
 
 		// Draw the lines and text using Menu theme colors
-		auto& theme = Menu::GetSingleton()->GetTheme().FeatureHeading;
+		auto& theme = globals::menu->GetTheme().FeatureHeading;
 
 		// Get the color based on hover state
 		ImVec4 color = hovered ? theme.ColorHovered : theme.ColorDefault;
@@ -390,13 +495,28 @@ namespace Util
 		}
 
 		// Right line
-		float rightLineStart = pos.x + lineLength + 10.0f + textSize.x + 10.0f;
+		float rightLineStart = pos.x + lineLength + 10.0f + contentWidth + 10.0f;
 		if (rightLineStart < pos.x + availableWidth) {
 			drawList->AddLine(ImVec2(rightLineStart, lineY), ImVec2(pos.x + availableWidth, lineY), headerColor, 1.0f);
 		}
 
+		// Draw icon and text
+		float currentX = pos.x + lineLength + 10.0f;
+
+		// Draw icon if available
+		if (categoryIcon) {
+			ImVec2 iconPos = ImVec2(currentX, pos.y + (textSize.y - iconSize) * 0.5f + 2.0f);
+			ImVec2 iconMax = ImVec2(iconPos.x + iconSize, iconPos.y + iconSize);
+
+			// Apply the same color tint as the text
+			ImU32 iconTint = headerColor;
+			drawList->AddImage(categoryIcon, iconPos, iconMax, ImVec2(0, 0), ImVec2(1, 1), iconTint);
+
+			currentX += iconSize + iconSpacing;
+		}
+
 		// Center text
-		ImVec2 textPos = ImVec2(pos.x + lineLength + 10.0f, pos.y + 2.0f);
+		ImVec2 textPos = ImVec2(currentX, pos.y + 2.0f);
 		drawList->AddText(textPos, headerColor, displayName.c_str());
 
 		// Handle click to toggle expansion
@@ -416,7 +536,7 @@ namespace Util
 		bool stateChanged = false;
 
 		// Use Menu theme colors for consistent styling
-		auto& theme = Menu::GetSingleton()->GetTheme().FeatureHeading;
+		auto& theme = globals::menu->GetTheme().FeatureHeading;
 		ImVec4 color = useWhiteText ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : theme.ColorDefault;
 
 		ImU32 headerColor = ImGui::GetColorU32(color);
@@ -478,7 +598,7 @@ namespace Util
 	ColorCodedValueConfig ColorCodedValueConfig::HighIsBad(float low, float med, float high)
 	{
 		ColorCodedValueConfig config;
-		const auto& theme = Menu::GetSingleton()->GetTheme().StatusPalette;
+		const auto& theme = globals::menu->GetTheme().StatusPalette;
 		config.thresholds = {
 			{ low, theme.Disable },    // Very low - gray
 			{ med, theme.InfoColor },  // Low - blue
@@ -491,7 +611,7 @@ namespace Util
 	ColorCodedValueConfig ColorCodedValueConfig::HighIsGood(float low, float med, float high)
 	{
 		ColorCodedValueConfig config;
-		const auto& theme = Menu::GetSingleton()->GetTheme().StatusPalette;
+		const auto& theme = globals::menu->GetTheme().StatusPalette;
 		config.thresholds = {
 			{ low, theme.Disable },          // Very low - gray
 			{ med, theme.InfoColor },        // Low - blue
@@ -552,6 +672,13 @@ namespace Util
 		}
 	}
 
+	void DrawColoredMultiLineTooltip(const ColoredTextLines& lines)
+	{
+		for (const auto& line : lines) {
+			ImGui::TextColored(line.color, "%s", line.text.c_str());
+		}
+	}
+
 	void SortTableRowsByColumn(std::vector<std::vector<std::string>>& rows, size_t column, bool ascending)
 	{
 		std::sort(rows.begin(), rows.end(), [column, ascending](const auto& a, const auto& b) {
@@ -593,17 +720,112 @@ namespace Util
 		return false;
 	}
 
-	const TableSortFunc VersionSortComparator = [](const std::string& a, const std::string& b, bool asc) {
+	bool VersionSortComparator(const std::string& a, const std::string& b, bool asc)
+	{
 		return VersionStringLess(a, b, asc);
-	};
+	}
 
-	void ShowSortedStringTable(
+	bool StringSortComparator(const std::string& a, const std::string& b, bool ascending)
+	{
+		return ascending ? (a < b) : (b < a);
+	}
+
+	ImVec4 GetThresholdColor(float value, float good, float warn, ImVec4 goodColor, ImVec4 warnColor, ImVec4 badColor)
+	{
+		if (value < good)
+			return goodColor;
+		else if (value < warn)
+			return warnColor;
+		else
+			return badColor;
+	}
+
+	bool FeatureMatchesSearch(Feature* feat, const std::string& searchQuery)
+	{
+		if (searchQuery.empty())
+			return true;
+
+		// Get both short name and display name
+		std::string shortName = feat->GetShortName();
+		std::string displayName = feat->GetName();
+		std::string query = searchQuery;
+
+		// Convert all to lowercase for case-insensitive search
+		std::transform(shortName.begin(), shortName.end(), shortName.begin(), ::tolower);
+		std::transform(displayName.begin(), displayName.end(), displayName.begin(), ::tolower);
+		std::transform(query.begin(), query.end(), query.begin(), ::tolower);
+
+		// Search in both short name and display name
+		return shortName.find(query) != std::string::npos ||
+		       displayName.find(query) != std::string::npos;
+	}
+
+	void DrawFeatureSearchBar(std::string& searchString, float availableWidth)
+	{
+		ImGui::PushID("FeatureSearchBar");
+
+		float iconSize = 20.0f;
+		float iconSpace = iconSize + 14.0f;
+
+		// Get the current cursor position and available width
+		ImVec2 cursorPos = ImGui::GetCursorScreenPos();
+		if (availableWidth <= 0.0f) {
+			availableWidth = ImGui::GetContentRegionAvail().x;
+		}
+		float frameHeight = ImGui::GetFrameHeight();
+
+		// Custom style - always transparent background to avoid click blocking
+		ImVec4 bgColor = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+		ImVec4 bgColorActive = ImVec4(0.3f, 0.3f, 0.3f, 0.9f);
+		ImVec4 textColor = ImVec4(0.9f, 0.9f, 0.9f, 1.0f);
+
+		ImGui::PushStyleColor(ImGuiCol_FrameBg, bgColor);
+		ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, bgColor);
+		ImGui::PushStyleColor(ImGuiCol_FrameBgActive, bgColorActive);
+		ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
+		ImGui::PushStyleColor(ImGuiCol_Text, textColor);
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, 6.0f));
+
+		// Draw the input field
+		ImGui::SetNextItemWidth(availableWidth);
+		char buffer[256];
+		strncpy_s(buffer, searchString.c_str(), sizeof(buffer) - 1);
+		buffer[sizeof(buffer) - 1] = '\0';
+
+		if (ImGui::InputTextWithHint("##feature_search", "Search Features...", buffer, sizeof(buffer))) {
+			searchString = buffer;
+		}
+
+		// Draw a simple search icon (magnifying glass shape)
+		ImVec2 iconPos = ImVec2(cursorPos.x + 8.0f, cursorPos.y + (frameHeight - iconSize) * 0.5f);
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+		ImVec2 center = ImVec2(iconPos.x + iconSize * 0.46f, iconPos.y + iconSize * 0.5f);
+		float radius = iconSize * 0.3f;
+		ImU32 placeholderColor = IM_COL32(140, 140, 140, 180);
+
+		// Draw circle
+		drawList->AddCircle(center, radius, placeholderColor, 12, 2.2f);
+
+		// Draw handle
+		ImVec2 handleStart = ImVec2(center.x + radius * 0.81f, center.y + radius * 0.81f);
+		ImVec2 handleEnd = ImVec2(handleStart.x + iconSize * 0.29f, handleStart.y + iconSize * 0.29f);
+		drawList->AddLine(handleStart, handleEnd, placeholderColor, 2.1f);
+
+		ImGui::PopStyleVar(2);
+		ImGui::PopStyleColor(5);
+		ImGui::PopID();
+	}
+
+	void ShowSortedStringTableStrings(
 		const char* table_id,
 		const std::vector<std::string>& headers,
-		std::vector<std::vector<std::string>> rows,
+		const std::vector<std::vector<std::string>>& rows,
 		size_t sortColumn,
 		bool ascending,
-		const std::vector<TableSortFunc>& customSorts)
+		const std::vector<TableSortFunc>& customSorts,
+		TableCellRenderFunc cellRender)
 	{
 		ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable;
 		if (ImGui::BeginTable(table_id, static_cast<int>(headers.size()), flags)) {
@@ -611,7 +833,7 @@ namespace Util
 				ImGui::TableSetupColumn(header.c_str());
 			ImGui::TableHeadersRow();
 
-			// Interactive sorting
+			// Determine sorting
 			int sortCol = static_cast<int>(sortColumn);
 			bool sortAsc = ascending;
 			if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
@@ -620,29 +842,394 @@ namespace Util
 					sortAsc = sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending;
 				}
 			}
-			if (sortCol >= 0 && static_cast<size_t>(sortCol) < headers.size()) {
-				if (sortCol < static_cast<int>(customSorts.size()) && customSorts[sortCol]) {
-					auto cmp = customSorts[sortCol];
-					std::sort(rows.begin(), rows.end(), [sortCol, sortAsc, &cmp](const auto& a, const auto& b) {
-						return cmp(a[sortCol], b[sortCol], sortAsc);
-					});
-				} else {
-					std::sort(rows.begin(), rows.end(), [sortCol, sortAsc](const auto& a, const auto& b) {
-						return sortAsc ? (a[sortCol] < b[sortCol]) : (a[sortCol] > b[sortCol]);
-					});
-				}
-			}
-			// else: no sorting if sortCol is invalid
 
-			for (const auto& row : rows) {
+			// Make a copy if sorting is needed
+			std::vector<std::vector<std::string>> sortedRows = rows;
+			if (sortCol >= 0 && static_cast<size_t>(sortCol) < headers.size()) {
+				// Fallback to default string sort if no custom sort is provided
+				auto cmp = (sortCol < static_cast<int>(customSorts.size()) && customSorts[sortCol]) ? customSorts[sortCol] : StringSortComparator;
+				std::sort(sortedRows.begin(), sortedRows.end(), [sortCol, sortAsc, &cmp](const std::vector<std::string>& a, const std::vector<std::string>& b) {
+					const std::string& aVal = (sortCol < a.size()) ? a[sortCol] : std::string();
+					const std::string& bVal = (sortCol < b.size()) ? b[sortCol] : std::string();
+					return cmp(aVal, bVal, sortAsc);
+				});
+			}
+
+			// Render rows
+			for (size_t rowIdx = 0; rowIdx < sortedRows.size(); ++rowIdx) {
+				const auto& row = sortedRows[rowIdx];
 				ImGui::TableNextRow();
 				for (size_t col = 0; col < headers.size(); ++col) {
 					ImGui::TableSetColumnIndex(static_cast<int>(col));
-					if (col < row.size())
-						ImGui::TextUnformatted(row[col].c_str());
+					if (cellRender) {
+						const std::string& value = (col < row.size()) ? row[col] : std::string();
+						cellRender(static_cast<int>(rowIdx), static_cast<int>(col), value);
+					} else {
+						if (col < row.size())
+							ImGui::TextUnformatted(row[col].c_str());
+					}
 				}
 			}
 			ImGui::EndTable();
+		}
+	}
+
+	// Theme-aware color accessor functions
+	namespace Colors
+	{
+		ImVec4 GetTimerGood()
+		{
+			return globals::menu->GetTheme().StatusPalette.SuccessColor;
+		}
+
+		ImVec4 GetTimerWarning()
+		{
+			return globals::menu->GetTheme().StatusPalette.Warning;
+		}
+
+		ImVec4 GetTimerCritical()
+		{
+			return globals::menu->GetTheme().StatusPalette.Error;
+		}
+
+		ImVec4 GetDefault()
+		{
+			return globals::menu->GetTheme().Palette.Text;
+		}
+
+		ImVec4 GetSuccess()
+		{
+			return globals::menu->GetTheme().StatusPalette.SuccessColor;
+		}
+
+		ImVec4 GetWarning()
+		{
+			return globals::menu->GetTheme().StatusPalette.Warning;
+		}
+
+		ImVec4 GetError()
+		{
+			return globals::menu->GetTheme().StatusPalette.Error;
+		}
+
+		ImVec4 GetInfo()
+		{
+			return globals::menu->GetTheme().StatusPalette.InfoColor;
+		}
+
+		ImVec4 GetDisabled()
+		{
+			return globals::menu->GetTheme().StatusPalette.Disable;
+		}
+	}
+
+	namespace Input
+	{
+#define IM_VK_KEYPAD_ENTER (VK_RETURN + 256)
+
+		ImGuiKey VirtualKeyToImGuiKey(WPARAM vkKey)
+		{
+			switch (vkKey) {
+			case VK_TAB:
+				return ImGuiKey_Tab;
+			case VK_LEFT:
+				return ImGuiKey_LeftArrow;
+			case VK_RIGHT:
+				return ImGuiKey_RightArrow;
+			case VK_UP:
+				return ImGuiKey_UpArrow;
+			case VK_DOWN:
+				return ImGuiKey_DownArrow;
+			case VK_PRIOR:
+				return ImGuiKey_PageUp;
+			case VK_NEXT:
+				return ImGuiKey_PageDown;
+			case VK_HOME:
+				return ImGuiKey_Home;
+			case VK_END:
+				return ImGuiKey_End;
+			case VK_INSERT:
+				return ImGuiKey_Insert;
+			case VK_DELETE:
+				return ImGuiKey_Delete;
+			case VK_BACK:
+				return ImGuiKey_Backspace;
+			case VK_SPACE:
+				return ImGuiKey_Space;
+			case VK_RETURN:
+				return ImGuiKey_Enter;
+			case VK_ESCAPE:
+				return ImGuiKey_Escape;
+			case VK_OEM_7:
+				return ImGuiKey_Apostrophe;
+			case VK_OEM_COMMA:
+				return ImGuiKey_Comma;
+			case VK_OEM_MINUS:
+				return ImGuiKey_Minus;
+			case VK_OEM_PERIOD:
+				return ImGuiKey_Period;
+			case VK_OEM_2:
+				return ImGuiKey_Slash;
+			case VK_OEM_1:
+				return ImGuiKey_Semicolon;
+			case VK_OEM_PLUS:
+				return ImGuiKey_Equal;
+			case VK_OEM_4:
+				return ImGuiKey_LeftBracket;
+			case VK_OEM_5:
+				return ImGuiKey_Backslash;
+			case VK_OEM_6:
+				return ImGuiKey_RightBracket;
+			case VK_OEM_3:
+				return ImGuiKey_GraveAccent;
+			case VK_CAPITAL:
+				return ImGuiKey_CapsLock;
+			case VK_SCROLL:
+				return ImGuiKey_ScrollLock;
+			case VK_NUMLOCK:
+				return ImGuiKey_NumLock;
+			case VK_SNAPSHOT:
+				return ImGuiKey_PrintScreen;
+			case VK_PAUSE:
+				return ImGuiKey_Pause;
+			case VK_NUMPAD0:
+				return ImGuiKey_Keypad0;
+			case VK_NUMPAD1:
+				return ImGuiKey_Keypad1;
+			case VK_NUMPAD2:
+				return ImGuiKey_Keypad2;
+			case VK_NUMPAD3:
+				return ImGuiKey_Keypad3;
+			case VK_NUMPAD4:
+				return ImGuiKey_Keypad4;
+			case VK_NUMPAD5:
+				return ImGuiKey_Keypad5;
+			case VK_NUMPAD6:
+				return ImGuiKey_Keypad6;
+			case VK_NUMPAD7:
+				return ImGuiKey_Keypad7;
+			case VK_NUMPAD8:
+				return ImGuiKey_Keypad8;
+			case VK_NUMPAD9:
+				return ImGuiKey_Keypad9;
+			case VK_DECIMAL:
+				return ImGuiKey_KeypadDecimal;
+			case VK_DIVIDE:
+				return ImGuiKey_KeypadDivide;
+			case VK_MULTIPLY:
+				return ImGuiKey_KeypadMultiply;
+			case VK_SUBTRACT:
+				return ImGuiKey_KeypadSubtract;
+			case VK_ADD:
+				return ImGuiKey_KeypadAdd;
+			case IM_VK_KEYPAD_ENTER:
+				return ImGuiKey_KeypadEnter;
+			case VK_LSHIFT:
+				return ImGuiKey_LeftShift;
+			case VK_LCONTROL:
+				return ImGuiKey_LeftCtrl;
+			case VK_LMENU:
+				return ImGuiKey_LeftAlt;
+			case VK_LWIN:
+				return ImGuiKey_LeftSuper;
+			case VK_RSHIFT:
+				return ImGuiKey_RightShift;
+			case VK_RCONTROL:
+				return ImGuiKey_RightCtrl;
+			case VK_RMENU:
+				return ImGuiKey_RightAlt;
+			case VK_RWIN:
+				return ImGuiKey_RightSuper;
+			case VK_APPS:
+				return ImGuiKey_Menu;
+			case '0':
+				return ImGuiKey_0;
+			case '1':
+				return ImGuiKey_1;
+			case '2':
+				return ImGuiKey_2;
+			case '3':
+				return ImGuiKey_3;
+			case '4':
+				return ImGuiKey_4;
+			case '5':
+				return ImGuiKey_5;
+			case '6':
+				return ImGuiKey_6;
+			case '7':
+				return ImGuiKey_7;
+			case '8':
+				return ImGuiKey_8;
+			case '9':
+				return ImGuiKey_9;
+			case 'A':
+				return ImGuiKey_A;
+			case 'B':
+				return ImGuiKey_B;
+			case 'C':
+				return ImGuiKey_C;
+			case 'D':
+				return ImGuiKey_D;
+			case 'E':
+				return ImGuiKey_E;
+			case 'F':
+				return ImGuiKey_F;
+			case 'G':
+				return ImGuiKey_G;
+			case 'H':
+				return ImGuiKey_H;
+			case 'I':
+				return ImGuiKey_I;
+			case 'J':
+				return ImGuiKey_J;
+			case 'K':
+				return ImGuiKey_K;
+			case 'L':
+				return ImGuiKey_L;
+			case 'M':
+				return ImGuiKey_M;
+			case 'N':
+				return ImGuiKey_N;
+			case 'O':
+				return ImGuiKey_O;
+			case 'P':
+				return ImGuiKey_P;
+			case 'Q':
+				return ImGuiKey_Q;
+			case 'R':
+				return ImGuiKey_R;
+			case 'S':
+				return ImGuiKey_S;
+			case 'T':
+				return ImGuiKey_T;
+			case 'U':
+				return ImGuiKey_U;
+			case 'V':
+				return ImGuiKey_V;
+			case 'W':
+				return ImGuiKey_W;
+			case 'X':
+				return ImGuiKey_X;
+			case 'Y':
+				return ImGuiKey_Y;
+			case 'Z':
+				return ImGuiKey_Z;
+			case VK_F1:
+				return ImGuiKey_F1;
+			case VK_F2:
+				return ImGuiKey_F2;
+			case VK_F3:
+				return ImGuiKey_F3;
+			case VK_F4:
+				return ImGuiKey_F4;
+			case VK_F5:
+				return ImGuiKey_F5;
+			case VK_F6:
+				return ImGuiKey_F6;
+			case VK_F7:
+				return ImGuiKey_F7;
+			case VK_F8:
+				return ImGuiKey_F8;
+			case VK_F9:
+				return ImGuiKey_F9;
+			case VK_F10:
+				return ImGuiKey_F10;
+			case VK_F11:
+				return ImGuiKey_F11;
+			case VK_F12:
+				return ImGuiKey_F12;
+			default:
+				return ImGuiKey_None;
+			};
+		}
+
+		uint32_t DIKToVK(uint32_t dikKey)
+		{
+			switch (dikKey) {
+			case DIK_LEFTARROW:
+				return VK_LEFT;
+			case DIK_RIGHTARROW:
+				return VK_RIGHT;
+			case DIK_UPARROW:
+				return VK_UP;
+			case DIK_DOWNARROW:
+				return VK_DOWN;
+			case DIK_DELETE:
+				return VK_DELETE;
+			case DIK_END:
+				return VK_END;
+			case DIK_HOME:
+				return VK_HOME;  // pos1
+			case DIK_PRIOR:
+				return VK_PRIOR;  // page up
+			case DIK_NEXT:
+				return VK_NEXT;  // page down
+			case DIK_INSERT:
+				return VK_INSERT;
+			case DIK_NUMPAD0:
+				return VK_NUMPAD0;
+			case DIK_NUMPAD1:
+				return VK_NUMPAD1;
+			case DIK_NUMPAD2:
+				return VK_NUMPAD2;
+			case DIK_NUMPAD3:
+				return VK_NUMPAD3;
+			case DIK_NUMPAD4:
+				return VK_NUMPAD4;
+			case DIK_NUMPAD5:
+				return VK_NUMPAD5;
+			case DIK_NUMPAD6:
+				return VK_NUMPAD6;
+			case DIK_NUMPAD7:
+				return VK_NUMPAD7;
+			case DIK_NUMPAD8:
+				return VK_NUMPAD8;
+			case DIK_NUMPAD9:
+				return VK_NUMPAD9;
+			case DIK_DECIMAL:
+				return VK_DECIMAL;
+			case DIK_NUMPADENTER:
+				return IM_VK_KEYPAD_ENTER;
+			case DIK_RMENU:
+				return VK_RMENU;  // right alt
+			case DIK_RCONTROL:
+				return VK_RCONTROL;  // right control
+			case DIK_LWIN:
+				return VK_LWIN;  // left win
+			case DIK_RWIN:
+				return VK_RWIN;  // right win
+			case DIK_APPS:
+				return VK_APPS;
+			default:
+				return dikKey;
+			}
+		}
+
+		const char* KeyIdToString(uint32_t key)
+		{
+			if (key >= 256)
+				return "";
+
+			static const char* keyboard_keys_international[256] = {
+				"", "Left Mouse", "Right Mouse", "Cancel", "Middle Mouse", "X1 Mouse", "X2 Mouse", "", "Backspace", "Tab", "", "", "Clear", "Enter", "", "",
+				"Shift", "Control", "Alt", "Pause", "Caps Lock", "", "", "", "", "", "", "Escape", "", "", "", "",
+				"Space", "Page Up", "Page Down", "End", "Home", "Left Arrow", "Up Arrow", "Right Arrow", "Down Arrow", "Select", "", "", "Print Screen", "Insert", "Delete", "Help",
+				"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "", "", "", "", "", "",
+				"", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O",
+				"P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "Left Windows", "Right Windows", "Apps", "", "Sleep",
+				"Numpad 0", "Numpad 1", "Numpad 2", "Numpad 3", "Numpad 4", "Numpad 5", "Numpad 6", "Numpad 7", "Numpad 8", "Numpad 9", "Numpad *", "Numpad +", "", "Numpad -", "Numpad Decimal", "Numpad /",
+				"F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12", "F13", "F14", "F15", "F16",
+				"F17", "F18", "F19", "F20", "F21", "F22", "F23", "F24", "", "", "", "", "", "", "", "",
+				"Num Lock", "Scroll Lock", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+				"Left Shift", "Right Shift", "Left Control", "Right Control", "Left Menu", "Right Menu", "Browser Back", "Browser Forward", "Browser Refresh", "Browser Stop", "Browser Search", "Browser Favorites", "Browser Home", "Volume Mute", "Volume Down", "Volume Up",
+				"Next Track", "Previous Track", "Media Stop", "Media Play/Pause", "Mail", "Media Select", "Launch App 1", "Launch App 2", "", "", "OEM ;", "OEM +", "OEM ,", "OEM -", "OEM .", "OEM /",
+				"OEM ~", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+				"", "", "", "", "", "", "", "", "", "", "", "OEM [", "OEM \\", "OEM ]", "OEM '", "OEM 8",
+				"", "", "OEM <", "", "", "", "", "", "", "", "", "", "", "", "", "",
+				"", "", "", "", "", "", "Attn", "CrSel", "ExSel", "Erase EOF", "Play", "Zoom", "", "PA1", "OEM Clear", ""
+			};
+
+			return keyboard_keys_international[key];
 		}
 	}
 }  // namespace Util

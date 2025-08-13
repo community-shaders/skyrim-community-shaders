@@ -734,8 +734,8 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 {
 	if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Reflections) {
 		float3 finalSsrReflectionColor = 0.0.xxx;
-		float ssrFraction = 0;
-		float3 reflectionColor = 0;
+		float ssrFraction = 0.0;
+		float3 reflectionColor = 0.0.xxx;
 		float3 R = reflect(viewDirection, WaterParams.y * normal + float3(0, 0, 1 - WaterParams.y));
 
 		if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Cubemap) {
@@ -1048,7 +1048,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 finalColor = 0.0.xxx;
 
 	for (int lightIndex = 0; lightIndex < NUM_SPECULAR_LIGHTS; ++lightIndex) {
-		float3 lightVector = LightPos[lightIndex].xyz - (PosAdjust[eyeIndex].xyz + input.WPosition.xyz, eyeIndex);
+		float3 lightVector = LightPos[lightIndex].xyz - (PosAdjust[eyeIndex].xyz + input.WPosition.xyz);
 		float3 lightDirection = normalize(normalize(lightVector) - viewDirection);
 		float lightFade = saturate(length(lightVector) / LightPos[lightIndex].w);
 		float lightColorMul = (1 - lightFade * lightFade);

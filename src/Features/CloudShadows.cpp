@@ -75,6 +75,14 @@ void CloudShadows::SkyShaderHacks()
 		auto cubemapDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kCUBEMAP_REFLECTIONS];
 		context->PSSetShaderResources(17, 1, &cubemapDepth.depthSRV);
 
+		// Release COM objects to prevent memory leaks
+		for (int i = 0; i < 3; ++i) {
+			if (rtvs[i])
+				rtvs[i]->Release();
+		}
+		if (dsv)
+			dsv->Release();
+
 		overrideSky = false;
 	}
 }
@@ -181,6 +189,6 @@ void CloudShadows::SetupResources()
 
 void CloudShadows::Hooks::BSSkyShader_SetupMaterial::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 {
-	globals::features::cloudShadows->ModifySky(Pass);
+	globals::features::cloudShadows.ModifySky(Pass);
 	func(This, Pass, RenderFlags);
 }

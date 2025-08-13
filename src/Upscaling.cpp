@@ -91,8 +91,8 @@ void Upscaling::DrawSettings()
 	}
 
 	if (!globals::game::isVR) {
-		bool frameGenAvailable = d3d12Interop && ((globals::streamline && globals::streamline->featureDLSSG) ||
-													 (globals::fidelityFX && globals::fidelityFX->featureFSR3FG));
+		bool frameGenAvailable = ((globals::streamline && globals::streamline->featureDLSSG) ||
+								  (globals::fidelityFX && globals::fidelityFX->featureFSR3FG));
 		if (frameGenAvailable) {
 			if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
 				ImGui::Text("Frame Generation interpolates real frames with generated ones for a smoother experience");
@@ -181,7 +181,13 @@ void Upscaling::DrawSettings()
 		for (const auto& [name, version] : FidelityFX::dllVersions)
 			ffRows.push_back({ name, version });
 		std::vector<Util::TableSortFunc> ffSorters = { nullptr, Util::VersionSortComparator };
-		Util::ShowSortedStringTable("ffx_dll_versions", headers, ffRows, 0, true, ffSorters);
+		Util::ShowSortedStringTableStrings(
+			"ffx_dll_versions",
+			headers,
+			ffRows,
+			0,
+			true,
+			ffSorters);
 
 		// Streamline section
 		if (ImGui::Selectable("NVIDIA Streamline DLLs (click to open folder)")) {
@@ -191,7 +197,13 @@ void Upscaling::DrawSettings()
 		for (const auto& [name, version] : Streamline::dllVersions)
 			slRows.push_back({ name, version });
 		std::vector<Util::TableSortFunc> slSorters = { nullptr, Util::VersionSortComparator };
-		Util::ShowSortedStringTable("sl_dll_versions", headers, slRows, 0, true, slSorters);
+		Util::ShowSortedStringTableStrings(
+			"sl_dll_versions",
+			headers,
+			slRows,
+			0,
+			true,
+			slSorters);
 		ImGui::TreePop();
 	}
 }
@@ -333,18 +345,12 @@ void Upscaling::Upscale()
 	ID3D11ShaderResourceView* inputTextureSRV;
 	context->PSGetShaderResources(0, 1, &inputTextureSRV);
 
-	inputTextureSRV->Release();
-
 	ID3D11RenderTargetView* outputTextureRTV;
 	ID3D11DepthStencilView* dsv;
 	context->OMGetRenderTargets(1, &outputTextureRTV, &dsv);
 	context->OMSetRenderTargets(0, nullptr, nullptr);
 
-	outputTextureRTV->Release();
-
-	if (dsv)
-		dsv->Release();
-
+	// Get resources before releasing the views
 	ID3D11Resource* inputTextureResource;
 	inputTextureSRV->GetResource(&inputTextureResource);
 
@@ -428,6 +434,14 @@ void Upscaling::Upscale()
 	}
 
 	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
+
+	// Release COM objects to prevent memory leaks after all usage is complete
+	if (inputTextureSRV)
+		inputTextureSRV->Release();
+	if (outputTextureRTV)
+		outputTextureRTV->Release();
+	if (dsv)
+		dsv->Release();
 }
 
 void Upscaling::SharpenTAA()
@@ -442,18 +456,12 @@ void Upscaling::SharpenTAA()
 	ID3D11ShaderResourceView* inputTextureSRV;
 	context->PSGetShaderResources(0, 1, &inputTextureSRV);
 
-	inputTextureSRV->Release();
-
 	ID3D11RenderTargetView* outputTextureRTV;
 	ID3D11DepthStencilView* dsv;
 	context->OMGetRenderTargets(1, &outputTextureRTV, &dsv);
 	context->OMSetRenderTargets(0, nullptr, nullptr);
 
-	outputTextureRTV->Release();
-
-	if (dsv)
-		dsv->Release();
-
+	// Get resources before releasing the views
 	ID3D11Resource* inputTextureResource;
 	inputTextureSRV->GetResource(&inputTextureResource);
 
@@ -492,6 +500,16 @@ void Upscaling::SharpenTAA()
 	state->EndPerfEvent();
 
 	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
+
+	// Release COM objects to prevent memory leaks after all usage is complete
+	if (inputTextureSRV)
+		inputTextureSRV->Release();
+	if (outputTextureRTV)
+		outputTextureRTV->Release();
+	if (dsv)
+		dsv->Release();
+
+	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
 }
 
 void Upscaling::CreateUpscalingResources()

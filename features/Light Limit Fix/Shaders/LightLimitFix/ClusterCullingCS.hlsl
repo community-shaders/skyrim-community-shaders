@@ -75,8 +75,8 @@ bool LightIntersectsCluster(float3 position, float radius, ClusterAABB cluster)
 	uint offset = 0;
 	InterlockedAdd(lightIndexCounter[0], visibleLightCount, offset);
 
-	for (uint i = 0; i < visibleLightCount; i++) {
-		lightIndexList[offset + i] = visibleLightIndices[i];
+	for (uint j = 0; j < visibleLightCount; j++) {
+		lightIndexList[offset + j] = visibleLightIndices[j];
 	}
 
 	LightGrid output = {

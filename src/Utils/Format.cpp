@@ -1,4 +1,9 @@
 #include "Format.h"
+#include "Globals.h"
+#include <chrono>
+#include <cmath>
+#include <iomanip>
+#include <sstream>
 
 namespace Util
 {
@@ -70,5 +75,100 @@ namespace Util
 			return (char)c;
 		});
 		return result;
+	}
+
+	std::string FormatMilliseconds(float ms)
+	{
+		if (std::abs(ms) < 1e-4f)
+			return "0 ms";
+		std::ostringstream oss;
+		if (ms < 0.1f)
+			oss << std::fixed << std::setprecision(3) << ms << " ms";
+		else
+			oss << std::fixed << std::setprecision(2) << ms << " ms";
+		return oss.str();
+	}
+
+	std::string FormatMicroseconds(float us)
+	{
+		if (std::abs(us) < 1e-4f)
+			return "0 us";
+		std::ostringstream oss;
+		oss << std::fixed << std::setprecision(2) << us << " us";
+		return oss.str();
+	}
+
+	std::string FormatPercent(float percent)
+	{
+		std::ostringstream oss;
+		oss << std::fixed << std::setprecision(1) << percent << "%";
+		return oss.str();
+	}
+
+	std::string TimeAgoString(std::chrono::steady_clock::time_point last)
+	{
+		using namespace std::chrono;
+		auto now = steady_clock::now();
+		auto diff = duration_cast<seconds>(now - last).count();
+		if (diff < 60)
+			return std::to_string(diff) + "s";
+		if (diff < 3600)
+			return std::to_string(diff / 60) + "m";
+		return std::to_string(diff / 3600) + "h";
+	}
+
+	std::string TimeAgoStringQPC(const LARGE_INTEGER& lastTime, const LARGE_INTEGER& frequency)
+	{
+		if (lastTime.QuadPart == 0) {
+			return "0s";
+		}
+
+		LARGE_INTEGER currentTime;
+		QueryPerformanceCounter(&currentTime);
+
+		// Calculate elapsed seconds
+		int64_t elapsedTicks = currentTime.QuadPart - lastTime.QuadPart;
+		if (elapsedTicks < 0) {
+			return "0s";  // Handle case where clock went backwards
+		}
+
+		int64_t elapsedSeconds = elapsedTicks / frequency.QuadPart;
+
+		// Format the same way as TimeAgoString
+		if (elapsedSeconds < 60) {
+			return std::to_string(elapsedSeconds) + "s";
+		} else if (elapsedSeconds < 3600) {
+			return std::to_string(elapsedSeconds / 60) + "m";
+		} else {
+			return std::to_string(elapsedSeconds / 3600) + "h";
+		}
+	}
+
+	std::string FormatDeltaWithPercent(float a, float b, float threshold)
+	{
+		float delta = b - a;
+		float percentDelta = 0.0f;
+		if (a < b && a > 0.0f) {
+			percentDelta = 100.0f * (b - a) / a;
+		} else if (b < a && b > 0.0f) {
+			percentDelta = 100.0f * (a - b) / b;
+		}
+		std::string percentStr = (percentDelta >= threshold) ? std::format(" ({:+.1f}%)", (b < a ? -percentDelta : percentDelta)) : "";
+		return (delta > 0.0f ? "+" : "") + FormatMilliseconds(delta) + percentStr;
+	}
+
+	float CalculatePercentage(float part, float total, float defaultValue)
+	{
+		return (total > 0.0f) ? (part / total * 100.0f) : defaultValue;
+	}
+
+	float CalculateCostPerCall(float frameTime, float drawCalls)
+	{
+		return (drawCalls > 0.0f) ? (frameTime / drawCalls) : 0.0f;
+	}
+
+	float CalculateOtherFrameTime(float totalFrameTime, float measuredSum)
+	{
+		return totalFrameTime - measuredSum;
 	}
 }  // namespace Util
