@@ -45,6 +45,11 @@ float3 GetBurleyProfile(float3 l, float3 s, float radius)
 
 float3 GetScalingFactor(float3 albedo)
 {
+	// we have three methods for calculating the scaling factor
+	// d = l / (1.85 − A + 7|A − 0.8|^3)
+	// d = l / (1.9 − A + 3.5(A − 0.8)^2)
+	// d = l / (3.5 + 100(A − 0.33)^4)
+	// here we choose the third to use diffuse mean free path as parameter.
 	float3 value = albedo - 0.33f;
 	return 3.5f + 100.f * value * value * value * value;
 }
