@@ -45,7 +45,7 @@ public:
 		float4 HumanProfile;
 		float SSSS_FOVY;
 		float BurleySamples;
-		float2 pad;
+		float pad[2];
 		float4 MeanFreePathBase;
 		float4 MeanFreePathHuman;
 	};

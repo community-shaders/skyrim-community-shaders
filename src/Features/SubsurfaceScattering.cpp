@@ -210,9 +210,7 @@ void SubsurfaceScattering::DrawSSS()
 	{
 		auto cameraData = Util::GetCameraData(0);
 
-		const float distanceToProjectionWindow = cameraData.projMat.m[0][0];
-
-		blurCBData.SSSS_FOVY = atan(1.0f / distanceToProjectionWindow) * 2.0f * (180.0f / 3.14159265359f);
+		blurCBData.SSSS_FOVY = atan(1.0f / cameraData.projMat.m[0][0]) * 2.0f * (180.0f / 3.14159265359f);
 
 		blurCBData.BaseProfile = { settings.BaseProfile.BlurRadius, settings.BaseProfile.Thickness, 0, 0 };
 		blurCBData.HumanProfile = { settings.HumanProfile.BlurRadius, settings.HumanProfile.Thickness, 0, 0 };
