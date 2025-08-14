@@ -20,6 +20,140 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	frameGenerationForceEnable,
 	streamlineLogLevel);
 
+// D3D hook function pointers and implementations
+decltype(&CreateDXGIFactory) ptrCreateDXGIFactory;
+
+HRESULT WINAPI hk_CreateDXGIFactory(REFIID, void** ppFactory)
+{
+	return ptrCreateDXGIFactory(__uuidof(IDXGIFactory4), ppFactory);
+}
+
+decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChain;
+
+/**
+ * @brief Creates a Direct3D 11 device and swap chain, with support for advanced upscaling and frame generation features.
+ *
+ * This function intercepts the standard D3D11 device and swap chain creation process to enable integration with Streamline and FidelityFX technologies, as well as optional D3D12 proxying for frame generation. It adjusts swap chain flags for tearing support, manages feature checks, and conditionally routes device creation through Streamline or FidelityFX proxies based on runtime settings and hardware capabilities. If frame generation is enabled and supported, a D3D12 proxy is used; otherwise, the standard D3D11 creation path is followed.
+ *
+ * @return HRESULT indicating the success or failure of device and swap chain creation.
+ */
+HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
+	IDXGIAdapter* pAdapter,
+	D3D_DRIVER_TYPE DriverType,
+	HMODULE Software,
+	UINT Flags,
+	[[maybe_unused]] const D3D_FEATURE_LEVEL* pFeatureLevels,
+	[[maybe_unused]] UINT FeatureLevels,
+	UINT SDKVersion,
+	DXGI_SWAP_CHAIN_DESC* pSwapChainDesc,
+	IDXGISwapChain** ppSwapChain,
+	ID3D11Device** ppDevice,
+	D3D_FEATURE_LEVEL* pFeatureLevel,
+	ID3D11DeviceContext** ppImmediateContext)
+{
+	DXGI_ADAPTER_DESC adapterDesc;
+	pAdapter->GetDesc(&adapterDesc);
+	globals::state->SetAdapterDescription(adapterDesc.Description);
+
+	auto& upscaling = globals::features::upscaling;
+	upscaling.LoadUpscalingSDKs();
+
+	if (upscaling.IsBackendInitialized())
+		upscaling.CheckBackendFeatures(pAdapter);
+
+	bool shouldProxy = !REL::Module::IsVR();
+	if (shouldProxy)
+		if (!pSwapChainDesc->Windowed)
+			shouldProxy = false;
+
+	auto refreshRate = Upscaling::GetRefreshRate(pSwapChainDesc->OutputWindow);
+	upscaling.refreshRate = refreshRate;
+
+	if (shouldProxy) {
+		if (upscaling.settings.frameGenerationMode)
+			if (refreshRate >= 120)
+				shouldProxy = true;
+			else if (upscaling.settings.frameGenerationForceEnable)
+				shouldProxy = true;
+			else
+				shouldProxy = false;
+		else
+			shouldProxy = false;
+	}
+
+	upscaling.lowRefreshRate = refreshRate < 119;
+	upscaling.isWindowed = pSwapChainDesc->Windowed;
+
+	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
+
+	upscaling.CreateSharedD3D12Device(pAdapter);
+
+	if (shouldProxy) {
+		logger::info("[Frame Generation] Frame Generation enabled, using D3D12 proxy");
+
+		if (upscaling.HasFrameGenModule()) {
+			DX::ThrowIfFailed(D3D11CreateDevice(
+				pAdapter,
+				DriverType,
+				Software,
+				Flags,
+				&featureLevel,
+				1,
+				SDKVersion,
+				ppDevice,
+				pFeatureLevel,
+				ppImmediateContext));
+
+			upscaling.SetProxyD3D11Device(*ppDevice);
+			upscaling.SetProxyD3D11DeviceContext(*ppImmediateContext);
+			upscaling.CreateProxySwapChain(pAdapter, *pSwapChainDesc);
+			upscaling.CreateProxyInterop();
+
+			*ppSwapChain = upscaling.GetProxySwapChain();
+
+			upscaling.d3d12Interop = true;
+
+			globals::state->InitReShade(*ppSwapChain);
+
+			if (upscaling.IsBackendInitialized()) {
+				upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
+				upscaling.UpgradeBackendInterface((void**)&(*ppSwapChain));
+				upscaling.SetBackendD3DDevice(*ppDevice);
+				upscaling.PostBackendDevice();
+			}
+
+			return S_OK;
+		} else {
+			logger::warn("[Frame Generation] amd_fidelityfx_dx12.dll is not loaded, skipping proxy");
+			upscaling.fidelityFXMissing = true;
+		}
+	}
+
+	auto ret = ptrD3D11CreateDeviceAndSwapChain(pAdapter,
+		DriverType,
+		Software,
+		Flags,
+		&featureLevel,
+		1,
+		SDKVersion,
+		pSwapChainDesc,
+		ppSwapChain,
+		ppDevice,
+		pFeatureLevel,
+		ppImmediateContext);
+
+	globals::state->InitReShade(*ppSwapChain);
+
+	if (upscaling.IsBackendInitialized()) {
+		upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
+		upscaling.UpgradeBackendInterface((void**)&(*ppSwapChain));
+		upscaling.SetBackendD3DDevice(*ppDevice);
+		upscaling.PostBackendDevice();
+	}
+
+	return ret;
+}
+
 void Upscaling::DrawSettings()
 {
 	// Display upscaling options in the UI
@@ -215,10 +349,15 @@ void Upscaling::RestoreDefaultSettings()
 	settings = {};
 }
 
+void Upscaling::Load()
+{
+	logger::info("[Upscaling] Load: Installing D3D IAT hooks and loading upscaling SDKs");
+	*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
+	*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", !REL::Module::IsVR() ? "CreateDXGIFactory" : "CreateDXGIFactory1");
+}
+
 void Upscaling::PostPostLoad()
 {
-	LoadUpscalingSDKs();
-
 	bool isGOG = !GetModuleHandle(L"steam_api64.dll");
 	stl::detour_thunk<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
 
@@ -889,8 +1028,7 @@ void Upscaling::LoadUpscalingSDKs()
 {
 	// Initialize all upscaling SDK components during plugin startup
 	// This ensures all SDKs are available before any D3D device creation
-	if (!globals::game::isVR)
-		streamline.LoadInterposer();
+	streamline.LoadInterposer();
 	fidelityFX.LoadFFX();
 	xess.LoadXeSS();
 }
