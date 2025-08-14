@@ -1,4 +1,5 @@
 #include "Deferred.h"
+#include "Features/Upscaling.h"
 #include "FrameAnnotations.h"
 #include "Globals.h"
 #include "Hooks.h"
@@ -6,7 +7,6 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
-#include "Features/Upscaling.h"
 
 #include "ENB/ENBSeriesAPI.h"
 
@@ -183,7 +183,14 @@ bool Load()
 		}
 	}
 
-	if (errors.empty())
-		Hooks::InstallD3DHooks();
-	return true;
+	if (errors.empty()) {
+		logger::info("Calling feature Load methods");
+		for (auto* feature : Feature::GetFeatureList()) {
+			if (feature->loaded) {
+				feature->Load();
+			}
+		}
+	}
+
+	return errors.empty();
 }

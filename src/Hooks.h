@@ -20,5 +20,4 @@ namespace Hooks
 	};
 
 	void Install();
-	void InstallD3DHooks();
 }
