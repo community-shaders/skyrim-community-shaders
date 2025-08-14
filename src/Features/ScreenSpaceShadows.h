@@ -55,7 +55,7 @@ public:
 									   // The 'USE_HALF_PIXEL_OFFSET' macro might need to be defined if sampling at exact pixel coordinates isn't precise (e.g., if odd patterns appear in the shadow).
 
 		float2 DynamicRes;
-		
+
 		uint DynamicSampleCount;
 		uint DynamicReadCount;
 		float pad0[2];

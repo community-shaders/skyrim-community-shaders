@@ -8,7 +8,6 @@
 #include <d3d12.h>
 #include <winrt/base.h>
 
-
 /**
  * @brief Provides upscaling functionality including DLSS, FSR, XeSS and TAA.
  *
@@ -18,25 +17,22 @@
 struct Upscaling : Feature
 {
 public:
-
 	// Feature interface
 	virtual inline std::string GetName() override { return "Upscaling"; }
 	virtual inline std::string GetShortName() override { return "Upscaling"; }
 	virtual inline bool SupportsVR() override { return true; }
 	virtual inline bool IsCore() const override { return false; }
 	virtual inline std::string_view GetCategory() const override { return "Display"; }
-	
+
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
 			"Advanced upscaling and frame generation technologies for improved performance",
-			{
-				"DLSS (Deep Learning Super Sampling) support",
-				"FSR (FidelityFX Super Resolution) support", 
+			{ "DLSS (Deep Learning Super Sampling) support",
+				"FSR (FidelityFX Super Resolution) support",
 				"XeSS (Intel Xe Super Sampling) support",
 				"TAA (Temporal Anti-Aliasing) support",
-				"Frame generation for supported systems"
-			}
+				"Frame generation for supported systems" }
 		};
 	}
 
@@ -63,14 +59,14 @@ public:
 	};
 
 	Settings settings;
-	
+
 	// Runtime state
 	bool isWindowed = false;
 	bool lowRefreshRate = false;
 	bool fidelityFXMissing = false;
 	bool d3d12Interop = false;
 	bool wasUpscaled = false;
-	
+
 	// Timing and scaling
 	double refreshRate = 0.0f;
 	float resolutionScale = 1.0f;
@@ -85,6 +81,13 @@ public:
 	virtual void SaveSettings(json& o_json) override;
 	virtual void LoadSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;
+
+	/**
+	 * @brief Installs Direct3D-related hooks for device and factory creation.
+	 *
+	 * Loads FidelityFX support and patches the import address table (IAT) to redirect D3D11 device and DXGI factory creation functions to custom hook implementations.
+	**/
+	virtual void Load() override;
 	virtual void PostPostLoad() override;
 	virtual void SetupResources() override;
 
@@ -174,17 +177,17 @@ public:
 	void SetUIBuffer();
 	HANDLE GetFrameLatencyWaitableObject() const;
 	float GetFrameTime() const;
-	
+
 	// Backend interface methods
 	bool IsBackendInitialized() const;
 	void CheckBackendFeatures(IDXGIAdapter* adapter);
 	void UpgradeBackendInterface(void** ppInterface);
 	void SetBackendD3DDevice(ID3D11Device* device);
 	void PostBackendDevice();
-	
-	// Module availability methods  
+
+	// Module availability methods
 	bool HasFrameGenModule() const;
-	
+
 	// Proxy interface methods
 	void SetProxyD3D11Device(ID3D11Device* device);
 	void SetProxyD3D11DeviceContext(ID3D11DeviceContext* context);
@@ -229,4 +232,3 @@ private:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 };
-

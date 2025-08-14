@@ -85,7 +85,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif
 
 	float depthCC = DepthTex.Sample(DepthSampler, adjustedTexCoord).x;
-		
+
 	float crossSection = 0;
 	float avgDepth = depthCC;
 	bool isTooDeep = false;

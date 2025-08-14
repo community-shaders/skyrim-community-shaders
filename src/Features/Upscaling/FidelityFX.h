@@ -27,7 +27,7 @@ public:
 	ffx::Context swapChainContext{};
 	ffx::Context frameGenContext;
 	ffx::Context upscalingContext;
-	
+
 	bool featureFSR3FG = false;
 	bool featureFSR3 = false;
 

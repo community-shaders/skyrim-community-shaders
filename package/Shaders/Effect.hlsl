@@ -541,7 +541,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 	float4 lightFadeMul = 1.0.xxxx - saturate(PLightingRadiusInverseSquared * lightDistanceSquared);
 
 	float3 color = DLightColor.xyz;
-	
+
 	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::EffectShadows)) {
 		float3 dirLightColor = SharedData::DirLightColor.xyz * 0.5;
 		float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
@@ -576,7 +576,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 		if (!SharedData::InInterior){
 			bool isWorldShadow = false;
 			float shadow = ShadowSampling::GetEffectShadow(worldPosition.xyz, normalize(worldPosition.xyz), screenPosition.xy, eyeIndex, isWorldShadow);
-			color += dirLightColor * shadow;			
+			color += dirLightColor * shadow;
 			// Do not denoise world shadows
 			if (!isWorldShadow)
 				shadowVariance = ComputeShadowVariance(shadow);

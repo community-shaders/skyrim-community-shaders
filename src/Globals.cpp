@@ -1,11 +1,6 @@
 #include "Globals.h"
 
-#include "Utils/Game.h"
 #include "Deferred.h"
-#include "Menu.h"
-#include "ShaderCache.h"
-#include "State.h"
-#include "Features/Upscaling.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExtendedMaterials.h"
@@ -28,11 +23,16 @@
 #include "Features/TerrainHelper.h"
 #include "Features/TerrainShadows.h"
 #include "Features/TerrainVariation.h"
+#include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
 #include "Features/WeatherPicker.h"
 #include "Features/WetnessEffects.h"
+#include "Menu.h"
+#include "ShaderCache.h"
+#include "State.h"
+#include "Utils/Game.h"
 
 #include "Features/LightLimitFix/ParticleLights.h"
 
