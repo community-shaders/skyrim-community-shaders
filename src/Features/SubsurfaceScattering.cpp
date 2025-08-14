@@ -72,13 +72,25 @@ void SubsurfaceScattering::DrawSettings()
 			ImGui::SliderFloat("Burley Samples", &settings.BurleySamples, 1.0f, 64.0f, "%.0f", ImGuiSliderFlags_AlwaysClamp);
 			if (ImGui::TreeNodeEx("Base Profile", ImGuiTreeNodeFlags_DefaultOpen)) {
 				ImGui::ColorEdit3("Mean Free Path Color", (float*)&settings.MeanFreePathBase);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Controls how far light goes into the subsurface in the red, green, and blue channel. It is scaled by the Mean Free Path Distance.");
+				}
 				ImGui::SliderFloat("Mean Free Path Distance", &settings.MeanFreePathBase.w, 0.01f, 10.0f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Controls the distance that Mean Free Path Color goes into subsurface.");
+				}
 				ImGui::TreePop();
 			}
 
 			if (ImGui::TreeNodeEx("Human Profile", ImGuiTreeNodeFlags_DefaultOpen)) {
 				ImGui::ColorEdit3("Mean Free Path Color", (float*)&settings.MeanFreePathHuman);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Controls how far light goes into the subsurface in the red, green, and blue channel. It is scaled by the Mean Free Path Distance.");
+				}
 				ImGui::SliderFloat("Mean Free Path Distance", &settings.MeanFreePathHuman.w, 0.01f, 10.0f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Controls the distance that Mean Free Path Color goes into subsurface.");
+				}
 				ImGui::TreePop();
 			}
 		}
@@ -244,7 +256,7 @@ void SubsurfaceScattering::DrawSSS()
 		views[3] = albedo.SRV;
 		views[4] = normal.SRV;
 
-		context->CSSetShaderResources(0, 5, views);
+		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
 		if (settings.SSMode == 0) {
 			// Horizontal pass to temporary texture
@@ -294,7 +306,7 @@ void SubsurfaceScattering::DrawSSS()
 	context->CSSetConstantBuffers(1, 1, &buffer);
 
 	ID3D11ShaderResourceView* views[5]{ nullptr, nullptr, nullptr, nullptr, nullptr };
-	context->CSSetShaderResources(0, 5, views);
+	context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
 	ID3D11UnorderedAccessView* uavs[1]{ nullptr };
 	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
