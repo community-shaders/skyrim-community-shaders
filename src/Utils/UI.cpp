@@ -167,7 +167,7 @@ namespace Util
 		logger::info("InitializeMenuIcons: Loading icons from base path: {}", basePath);
 
 		// Initialize all texture pointers to nullptr for safe cleanup
-		std::array<ID3D11ShaderResourceView**, 12> texturePointers = {
+		std::array<ID3D11ShaderResourceView**, 13> texturePointers = {
 			&menu->uiIcons.saveSettings.texture,
 			&menu->uiIcons.loadSettings.texture,
 			&menu->uiIcons.clearCache.texture,
@@ -179,7 +179,8 @@ namespace Util
 			&menu->uiIcons.landscape.texture,
 			&menu->uiIcons.water.texture,
 			&menu->uiIcons.debug.texture,
-			&menu->uiIcons.materials.texture
+			&menu->uiIcons.materials.texture,
+			&menu->uiIcons.postProcessing.texture
 		};
 
 		// Safely release existing textures
@@ -296,7 +297,15 @@ namespace Util
 			logger::warn("InitializeMenuIcons: Failed to load materials icon from: {}", basePath + "Categories\\materials.png");
 		}
 
-		logger::info("InitializeMenuIcons: Loaded {}/12 icons successfully", iconsLoaded);
+		if (LoadTextureFromFile(device, (basePath + "Categories\\post-processing.png").c_str(), &menu->uiIcons.postProcessing.texture, menu->uiIcons.postProcessing.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded post-processing icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load post-processing icon from: {}", basePath + "Categories\\post-processing.png");
+		}
+
+		logger::info("InitializeMenuIcons: Loaded {}/13 icons successfully", iconsLoaded);
 
 		return anyIconLoaded;
 	}
@@ -439,6 +448,8 @@ namespace Util
 			categoryIcon = menu.debug.texture;
 		} else if (strcmp(categoryName, "Materials") == 0) {
 			categoryIcon = menu.materials.texture;
+		} else if (strcmp(categoryName, "Post-Processing") == 0) {
+			categoryIcon = menu.postProcessing.texture;
 		}
 
 		// Add categoryCount to categoryName

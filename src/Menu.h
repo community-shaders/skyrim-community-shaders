@@ -90,6 +90,7 @@ public:
 		UIIcon water;
 		UIIcon debug;
 		UIIcon materials;
+		UIIcon postProcessing;
 	} uiIcons;
 
 	struct ThemeSettings
