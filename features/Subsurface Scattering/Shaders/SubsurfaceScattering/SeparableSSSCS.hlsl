@@ -14,9 +14,8 @@ cbuffer PerFrameSSS : register(b1)
 	float4 BaseProfile;
 	float4 HumanProfile;
 	float SSSS_FOVY;
-	float SSSScaleX;
-	float SSSScaleZ;
 	float BurleySamples;
+	float2 pad;
 	float4 MeanFreePathBase;
 	float4 MeanFreePathHuman;
 };
@@ -25,8 +24,11 @@ cbuffer PerFrameSSS : register(b1)
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 
-#include "SubsurfaceScattering/SeparableSSS.hlsli"
-#include "SubsurfaceScattering/Burley.hlsli"
+#if defined(BURLEY)
+#	include "SubsurfaceScattering/Burley.hlsli"
+#else
+#	include "SubsurfaceScattering/SeparableSSSCS.hlsli"
+#endif
 
 [numthreads(8, 8, 1)] void main(uint3 DTid
 								: SV_DispatchThreadID) {

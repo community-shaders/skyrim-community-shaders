@@ -77,7 +77,7 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssA
 	float3 weightSum = 0.0f;
 	float3 colorSum = 0.0f;
 
-	float2 uvScale = (GAME_UNIT_TO_CM * 0.1f * SSSScaleX) / centerDepth;  // Scale in mm
+	float2 uvScale = (GAME_UNIT_TO_CM * 0.1f * (0.5f / tan(0.5 * radians(SSSS_FOVY)))) / centerDepth;  // Scale in mm
 
 	// center sample weight
 	float centerRadius = 0.5f * (SharedData::BufferDim.z / uvScale.x + SharedData::BufferDim.w / uvScale.y);
