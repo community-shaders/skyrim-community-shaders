@@ -12,6 +12,7 @@
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
 #include "Menu.h"
+#include "SettingsOverrideManager.h"
 #include "ShaderCache.h"
 #include "Streamline.h"
 #include "TruePBR.h"
@@ -160,20 +161,23 @@ static const std::string& GetConfigPath(State::ConfigMode a_configMode)
 
 void State::Load(ConfigMode a_configMode, bool a_allowReload)
 {
-	ConfigMode configMode = a_configMode;
 	auto shaderCache = globals::shaderCache;
 	json settings;
 	bool errorDetected = false;
 
+	auto configFolderPath = std::filesystem::path(GetConfigPath(a_configMode)).parent_path().string();
+	auto defaultConfigFilePath = GetConfigPath(ConfigMode::DEFAULT);
+	auto userConfigFilePath = GetConfigPath(ConfigMode::USER);
+
 	try {
-		std::filesystem::create_directories(folderPath);
+		std::filesystem::create_directories(configFolderPath);
 	} catch (const std::filesystem::filesystem_error& e) {
-		logger::warn("Error creating directory during Load ({}) : {}\n", folderPath, e.what());
+		logger::warn("Error creating directory during Load ({}) : {}\n", configFolderPath, e.what());
 		errorDetected = true;
 	}
 
 	// Attempt to load the config file
-	auto tryLoadConfig = [&](const std::string& path) {
+	auto tryLoadConfig = [&](const std::string& path) -> bool {
 		std::ifstream i(path);
 		logger::info("Attempting to open config file: {}", path);
 		if (!i.is_open()) {
@@ -182,35 +186,67 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 		}
 		try {
 			i >> settings;
-			i.close();  // Close the file after reading
+			i.close();
 			return true;
 		} catch (const nlohmann::json::parse_error& e) {
 			logger::warn("Error parsing json config file ({}) : {}\n", path, e.what());
-			i.close();  // Ensure the file is closed even on error
+			i.close();
 			return false;
 		}
 	};
 
-	std::string configPath = GetConfigPath(configMode);
-	if (!tryLoadConfig(configPath)) {
-		logger::info("Unable to open user config file ({}); trying default ({})", configPath, defaultConfigPath);
-		configMode = ConfigMode::DEFAULT;
-		configPath = GetConfigPath(configMode);
+	// NEW LOADING ORDER: Default → Overrides → User
 
-		if (!tryLoadConfig(configPath)) {
-			logger::info("No default config ({}), generating new one", configPath);
-			std::fill(enabledClasses, enabledClasses + magic_enum::enum_integer(RE::BSShader::Type::Total) - 1, true);
-			Save(configMode);
-			// Attempt to load the newly created config
-			configPath = GetConfigPath(configMode);
-			if (!tryLoadConfig(configPath)) {
-				logger::error("Error opening newly created config file ({})\n", configPath);
-				return;  // Exit if the new config can't be opened
-			}
+	// Step 1: Always start with default settings
+	logger::info("Loading default settings from: {}", defaultConfigFilePath);
+	if (!tryLoadConfig(defaultConfigFilePath)) {
+		logger::info("No default config ({}), generating new one", defaultConfigFilePath);
+		std::fill(enabledClasses, enabledClasses + magic_enum::enum_integer(RE::BSShader::Type::Total) - 1, true);
+		Save(ConfigMode::DEFAULT);
+		// Attempt to load the newly created config
+		if (!tryLoadConfig(defaultConfigFilePath)) {
+			logger::error("Error opening newly created default config file ({})\n", defaultConfigFilePath);
+			return;
 		}
 	}
 
-	// Proceed with loading settings from the loaded configuration
+	// Step 2: Apply overrides (only new/changed ones) to default settings
+	auto overrideManager = SettingsOverrideManager::GetSingleton();
+	size_t overridesDiscovered = overrideManager->DiscoverOverrides();
+	json appliedOverrides = overrideManager->LoadAppliedOverridesTracking();
+
+	if (overridesDiscovered > 0) {
+		logger::info("Discovered {} override files", overridesDiscovered);
+
+		// Apply global overrides to main settings (only new/changed ones)
+		size_t newGlobalOverrides = overrideManager->ApplyNewOverrides(settings, appliedOverrides);
+		if (newGlobalOverrides > 0) {
+			logger::info("Applied {} new/changed global override(s)", newGlobalOverrides);
+		}
+	}
+
+	// Step 3: Apply user settings on top of default + overrides
+	if (a_configMode == ConfigMode::USER) {
+		json userSettings;
+		std::ifstream userFile(userConfigFilePath);
+		if (userFile.is_open()) {
+			try {
+				userFile >> userSettings;
+				userFile.close();
+
+				// Merge user settings on top of (default + overrides)
+				for (auto& [key, value] : userSettings.items()) {
+					settings[key] = value;
+				}
+				logger::info("Applied user settings from: {}", userConfigFilePath);
+			} catch (const nlohmann::json::parse_error& e) {
+				logger::warn("Error parsing user config file: {}", e.what());
+				userFile.close();
+			}
+		} else {
+			logger::info("No user config file found at: {}", userConfigFilePath);
+		}
+	}
 
 	try {
 		// Load Menu settings
@@ -301,28 +337,53 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 			logger::warn("Missing settings for Upscaling, using default.");
 		}
 
+		// Feature loading with new override tracking system
 		for (auto* feature : Feature::GetFeatureList()) {
 			try {
 				const std::string featureName = feature->GetShortName();
 				bool isDisabled = disabledFeatures.contains(featureName) && disabledFeatures[featureName];
 				if (!isDisabled) {
 					logger::info("Loading Feature: '{}'", featureName);
+
+					// Load base feature settings from merged config (default + user)
 					feature->Load(settings);
+
+					// Apply new/changed feature-specific overrides if any
+					if (overridesDiscovered > 0) {
+						json featureJson;
+						feature->SaveSettings(featureJson);  // Get current settings as JSON
+
+						size_t newFeatureOverrides = overrideManager->ApplyNewFeatureOverrides(featureName, featureJson, appliedOverrides);
+						if (newFeatureOverrides > 0) {
+							logger::info("Applied {} new/changed override(s) to {}", newFeatureOverrides, feature->GetName());
+							try {
+								feature->LoadSettings(featureJson);  // Reload with new overrides applied
+							} catch (...) {
+								logger::warn("Invalid override settings for {}, keeping original settings.", feature->GetName());
+							}
+						}
+					}
 				} else {
 					logger::info("Feature '{}' is disabled at boot.", featureName);
 				}
 			} catch (const std::exception& e) {
-				feature->failedLoadedMessage = std::format(
-					"{}{} failed to load. Check CommunityShaders.log",
-					feature->failedLoadedMessage.empty() ? "" : feature->failedLoadedMessage + "\n",
-					feature->GetName());
+				feature->failedLoadedMessage = feature->failedLoadedMessage.empty() ?
+				                                   (feature->GetName() + " failed to load. Check CommunityShaders.log") :
+				                                   (feature->failedLoadedMessage + "\n" + feature->GetName() + " failed to load. Check CommunityShaders.log");
 				logger::warn("Error loading setting for feature '{}': {}", feature->GetShortName(), e.what());
 			}
 		}
+
+		// Save updated applied overrides tracking
+		if (overridesDiscovered > 0) {
+			overrideManager->SaveAppliedOverridesTracking(appliedOverrides);
+		}
+
 		if (settings["Version"].is_string() && settings["Version"].get<std::string>() != Plugin::VERSION.string()) {
 			logger::info("Found older config for version {}; upgrading to {}", (std::string)settings["Version"], Plugin::VERSION.string());
-			Save(configMode);
+			Save(a_configMode);  // Use original config mode
 		}
+
 		FeatureIssues::ScanForOrphanedFeatureINIs();
 
 		logger::info("Loading Settings Complete");

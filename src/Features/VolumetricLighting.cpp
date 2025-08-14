@@ -1,6 +1,6 @@
 #include "VolumetricLighting.h"
 
-#include "InteriorSunShadows.h"
+#include "InteriorSun.h"
 #include "ShaderCache.h"
 #include "State.h"
 
@@ -220,7 +220,7 @@ void VolumetricLighting::EarlyPrepass()
 
 	initialised = true;
 	inInterior = currentlyInInterior;
-	inInteriorWithSunShadows = InteriorSunShadows::IsInteriorWithSun(interiorCell);
+	inInteriorWithSun = InteriorSun::IsInteriorWithSun(interiorCell);
 	SetupVL();
 }
 
@@ -228,9 +228,9 @@ void VolumetricLighting::SetupVL()
 {
 	if (inInterior) {
 		if (globals::game::isVR)
-			SetBooleanSettings(hiddenVRSettings, GetName(), settings.InteriorEnabled && inInteriorWithSunShadows);
+			SetBooleanSettings(hiddenVRSettings, GetName(), settings.InteriorEnabled && inInteriorWithSun);
 		else
-			*bEnableVolumetricLighting = settings.InteriorEnabled && inInteriorWithSunShadows;
+			*bEnableVolumetricLighting = settings.InteriorEnabled && inInteriorWithSun;
 		*gVolumetricLightingSizeHigh = static_cast<Quality>(settings.InteriorQuality) == Quality::Custom ? settings.InteriorCustomSize : defaultSizeHigh;
 		SetVLQuality(GetVLDescriptor(), settings.InteriorQuality);
 	} else {

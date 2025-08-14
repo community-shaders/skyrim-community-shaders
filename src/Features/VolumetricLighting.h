@@ -128,7 +128,7 @@ private:
 
 	bool initialised = false;
 	bool inInterior = false;
-	bool inInteriorWithSunShadows = false;
+	bool inInteriorWithSun = false;
 
 	struct VLData
 	{

@@ -44,11 +44,13 @@ public:
 	struct alignas(16) Settings
 	{
 		uint EnableDiffuseIBL = 1;
-		float DiffuseIBLScale = 0.5f;
-		float DALCAmount = 0.5f;
-		float IBLSaturation = 0.65f;
 		uint SampleUnderHorizonFromDynCube = 0;
-		uint pad[3];
+		uint PreserveFogLuminance = 0;
+		uint pad;
+		float DiffuseIBLScale = 1.0f;
+		float DALCAmount = 0.33f;
+		float IBLSaturation = 1.0f;
+		float FogAmount = 0.0f;
 	} settings;
 
 	ID3D11ComputeShader* GetDiffuseIBLCS();

@@ -3,7 +3,7 @@
 #include "TruePBR/BSLightingShaderMaterialPBR.h"
 #include "TruePBR/BSLightingShaderMaterialPBRLandscape.h"
 
-#include "Features/InteriorSunShadows.h"
+#include "Features/InteriorSun.h"
 #include "Hooks.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -675,7 +675,7 @@ struct BSLightingShaderProperty_GetRenderPasses
 			return renderPasses;
 		}
 
-		const auto issEnabledAndInteriorWithSun = globals::features::interiorSunShadows.loaded && globals::features::interiorSunShadows.isInteriorWithSun;
+		const auto issEnabledAndInteriorWithSun = globals::features::interiorSun.loaded && globals::features::interiorSun.isInteriorWithSun;
 
 		bool isPbr = false;
 
