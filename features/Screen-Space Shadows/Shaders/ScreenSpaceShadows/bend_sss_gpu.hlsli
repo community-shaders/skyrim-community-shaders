@@ -230,7 +230,7 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 	bool skip_pixel = false;
 
 #	if defined(RIGHT)
-	pixel_xy.x += (1.0 / inParameters.InvDepthTextureSize.x) * 0.5;
+	pixel_xy.x += 1.0 / inParameters.InvDepthTextureSize.x;
 #	endif
 
 	half2 write_xy = floor(pixel_xy);
@@ -240,6 +240,13 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 		// We sample depth twice per pixel per sample, and interpolate with an edge detect filter
 		// Interpolation should only occur on the minor axis of the ray - major axis coordinates should be at pixel centers
 		half2 read_xy = floor(pixel_xy);
+		
+		read_xy *= inParameters.DynamicRes;
+		
+#	if defined(VR)
+		read_xy *= half2(0.5, 1.0);
+#	endif
+
 		half minor_axis = x_axis_major ? pixel_xy.y : pixel_xy.x;
 
 		// If a pixel has been detected as an edge, then optionally (inParameters.IgnoreEdgePixels) don't include it in the shadow
@@ -367,24 +374,25 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 
 #	if defined(VR)
 	// Check if the pixel we're writing to is on the correct eye side
-	half2 write_coord = write_xy * inParameters.InvDepthTextureSize;
+	half writeX = write_xy.x * inParameters.InvDepthTextureSize.x;
 
 #		if defined(RIGHT)
 	// Right eye: only process pixels in [0.5, 1.0] range
-	if (write_coord.x < 0.5)
+	if (writeX < 0.0)
 		return;
 #		else
-	// Left eye: only process pixels in [0.0, 0.5) range
-	if (write_coord.x >= 0.5)
+	if (writeX > 1.0)
 		return;
 #		endif
 #	endif
 
 	half start_depth = sampling_depth[0];
 
+	if (start_depth == 0.0 || start_depth == 1.0)
+		return;
+
 	// lerp away from far depth by a tiny fraction?
-	// if (inParameters.UsePrecisionOffset)
-	// 	start_depth = lerp(start_depth, inParameters.FarDepthValue, -1.0 / 0xFFFF);
+	start_depth = lerp(start_depth, inParameters.FarDepthValue, -1.0 / 0xFFFF);
 
 	// perspective correct the depth
 	start_depth = (start_depth - inParameters.LightCoordinate.z) / sample_distance[0];

@@ -129,18 +129,14 @@ void ScreenSpaceShadows::DrawShadows()
 
 	auto lightProjectionF = CalculateLightProjection(0);
 
-	auto screenSize = state->screenSize;
-	float2 renderSize = Util::ConvertToDynamic(screenSize);
-
+	float2 renderSize = Util::ConvertToDynamic(state->screenSize);
 	int viewportSize[2] = { (int)renderSize.x, (int)renderSize.y };
-	int minRenderBounds[2] = { 0, 0 };
-	int maxRenderBounds[2] = { (int)renderSize.x, (int)renderSize.y };
 
-	if (globals::game::isVR) {
-		// VR: Use screen size for dispatch bounds (to match depth texture), render size for light calculations
-		viewportSize[0] /= 2;     // Per-eye render size for light calc
-		maxRenderBounds[0] /= 2;  // Per-eye screen size for dispatch
-	}
+	if (globals::game::isVR)
+		viewportSize[0] /= 2;
+
+	int minRenderBounds[2] = { 0, 0 };
+	int maxRenderBounds[2] = { viewportSize[0], viewportSize[1] };
 
 	// Setup common render state
 	auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
@@ -216,8 +212,8 @@ void ScreenSpaceShadows::DrawShadows()
 		}
 	};
 
-	float InvTexSizeX = 1.0f / (float)screenSize.x;
-	float InvTexSizeY = 1.0f / (float)screenSize.y;
+	float InvTexSizeX = 1.0f / (float)viewportSize[0];
+	float InvTexSizeY = 1.0f / (float)viewportSize[1];
 
 	if (!globals::game::isVR) {
 		DispatchEye(nullptr, GetComputeRaymarch(), lightProjectionF.data(), InvTexSizeX, InvTexSizeY);
