@@ -43,6 +43,8 @@ find_package(cppwinrt CONFIG REQUIRED)
 find_package(unordered_dense CONFIG REQUIRED)
 find_package(efsw CONFIG REQUIRED)
 find_package(Tracy CONFIG REQUIRED)
+find_package(effects11 CONFIG REQUIRED)
+
 add_subdirectory(${CMAKE_SOURCE_DIR}/cmake/Streamline)
 include(FidelityFX-SDK)
 
@@ -92,6 +94,7 @@ target_link_libraries(
 	Tracy::TracyClient
 	Streamline
 	d3d12.lib
+	Microsoft::Effects11
 )
 
 # https://gitlab.kitware.com/cmake/cmake/-/issues/24922#note_1371990
