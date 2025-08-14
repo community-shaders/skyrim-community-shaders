@@ -163,7 +163,7 @@ void XeSS::Upscale(
 	float2 a_jitter)
 {
 	// Set velocity and jitter scales
-	xess_result_t velocityResult = xessSetVelocityScale(xessContext, 2.0f, -2.0f);
+	xess_result_t velocityResult = xessSetVelocityScale(xessContext, globals::game::isVR ? 1.0f : 2.0f, -2.0f);
 	if (velocityResult != XESS_RESULT_SUCCESS) {
 		logger::warn("[XeSS] Failed to set velocity scale, error: {} ({})", magic_enum::enum_name(velocityResult), (int)velocityResult);
 	}

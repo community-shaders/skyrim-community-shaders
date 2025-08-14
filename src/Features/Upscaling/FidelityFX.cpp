@@ -308,7 +308,7 @@ void FidelityFX::Upscale(
 
 	dispatchUpscale.jitterOffset.x = -a_jitter.x;
 	dispatchUpscale.jitterOffset.y = -a_jitter.y;
-	dispatchUpscale.motionVectorScale.x = (float)a_renderWidth;
+	dispatchUpscale.motionVectorScale.x = (globals::game::isVR ? 0.5f : 1.0f) * (float)a_renderWidth;
 	dispatchUpscale.motionVectorScale.y = (float)a_renderHeight;
 	dispatchUpscale.reset = false;
 	dispatchUpscale.enableSharpening = true;
