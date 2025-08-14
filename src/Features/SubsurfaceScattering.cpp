@@ -30,7 +30,7 @@ void SubsurfaceScattering::DrawSettings()
 			ImGui::SliderFloat("Strength", &settings.CharacterLightingStrength, 0, 5, "%.2f");
 		}
 
-		ImGui::RadioButton("Separatable SSS", &settings.SSMode, 0);
+		ImGui::RadioButton("Separable SSS", &settings.SSMode, 0);
 		ImGui::SameLine();
 		ImGui::RadioButton("Burley", &settings.SSMode, 1);
 
