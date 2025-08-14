@@ -4,20 +4,14 @@
 #include "Common/Random.hlsli"
 #include "Common/Math.hlsli"
 
-float GetLinearDepth(uint2 pixCoord)
-{
-	float depth = DepthTexture[pixCoord].x;
-	return SharedData::GetScreenDepth(depth);
-}
-
 // [Per H. Christensen, Brent Burley 2015, "Approximate Reflectance Profiles for Efficient Subsurface Scattering"]
 // https://graphics.pixar.com/library/ApproxBSSRDF/paper.pdf
-float3 GetCDF(float3 d, float3 r, float rand)
+float3 GetBurleyCDF(float3 d, float3 r, float rand)
 {
 	return 1 - 0.25 * exp(-r / d) - 0.75 * exp(-r / (3 * d)) - rand;
 }
 
-float GetPDF(float r, float l, float s)
+float GetBurleyPDF(float r, float l, float s)
 {
 	float d = l / s;
 	float pdf = 0.25 / d * (exp(-r / d) + exp(-r / (3 * d))); // cdf dr
@@ -56,7 +50,7 @@ float3 GetScalingFactor(float3 albedo)
 
 float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssAmount, bool humanProfile)
 {
-	float centerDepth = GetLinearDepth(DTid);
+	float centerDepth = SharedData::GetScreenDepth(DepthTexture[DTid].x);
 
 	float4 centerColor = ColorTexture[DTid];
 	if (sssAmount == 0 || centerDepth <= 0)
@@ -87,8 +81,8 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssA
 
 	// center sample weight
 	float centerRadius = 0.5f * (SharedData::BufferDim.z / uvScale.x + SharedData::BufferDim.w / uvScale.y);
-	float centerRadiusCDF = GetCDF(d, centerRadius, 0).x;
-	float3 centerWeight = GetCDF(d3d, centerRadius, 0);
+	float centerRadiusCDF = GetBurleyCDF(d, centerRadius, 0).x;
+	float3 centerWeight = GetBurleyCDF(d3d, centerRadius, 0);
 
 	int3 seed = int3(DTid.xy, 0);
 	int seedStart = Random::pcg3d(int3(seed.xy, SharedData::FrameCount)).x;
@@ -105,7 +99,7 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssA
 		float radius = max(RadiusApprox(d, rand.x), 1e-5f);
 		float theta = rand.y * 2.0f * Math::PI;
 
-		float pdf = GetPDF(radius, dmfpForSampling, s);
+		float pdf = GetBurleyPDF(radius, dmfpForSampling, s);
 
 		float2 uvOffset = uvScale * radius;
 		uvOffset.x *= cos(theta);
@@ -115,7 +109,7 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssA
 		float2 clampedUV = clamp(sampleUV, float2(0.0f, 0.0f), float2(1.0f, 1.0f));
 		uint2 samplePixcoord = uint2(clampedUV * SharedData::BufferDim.xy);
 		float3 sampleColor = Color::GammaToLinear(ColorTexture[samplePixcoord].xyz / max(AlbedoTexture[samplePixcoord].xyz, EPSILON_SSS_ALBEDO));
-		float sampleDepth = GetLinearDepth(samplePixcoord);
+		float sampleDepth = SharedData::GetScreenDepth(DepthTexture[samplePixcoord].x);
 		float3 sampleNormalVS = GBuffer::DecodeNormal(NormalTexture[samplePixcoord].xy);
 		float3 sampleNormalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(sampleNormalVS, 0)).xyz);
 
