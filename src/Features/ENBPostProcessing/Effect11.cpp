@@ -839,7 +839,11 @@ void Effect11::RenderImGui()
             switch (uiVar.type) {
                 case UIVariableType::Float:
                 {
-                    if (uiVar.widgetType == UIWidgetType::Slider) {
+                    // Check if min == max, making it read-only
+                    if (uiVar.floatMin == uiVar.floatMax) {
+                        ImGui::Text("%s: %.3f", uiVar.displayName.c_str(), uiVar.floatValue);
+                    }
+                    else if (uiVar.widgetType == UIWidgetType::Slider) {
                         if (ImGui::SliderFloat(uiVar.displayName.c_str(), &uiVar.floatValue, uiVar.floatMin, uiVar.floatMax, "%.3f")) {
                             valuesChanged = true;
                         }
@@ -871,6 +875,10 @@ void Effect11::RenderImGui()
                             }
                             ImGui::EndCombo();
                         }
+                    }
+                    // Check if min == max, making it read-only
+                    else if (uiVar.intMin == uiVar.intMax) {
+                        ImGui::Text("%s: %d", uiVar.displayName.c_str(), uiVar.intValue);
                     }
                     else if (uiVar.widgetType == UIWidgetType::Slider) {
                         if (ImGui::SliderInt(uiVar.displayName.c_str(), &uiVar.intValue, uiVar.intMin, uiVar.intMax)) {
