@@ -15,10 +15,9 @@
 #include "Features/TerrainHelper.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
+#include "Features/Upscaling.h"
 
 #include "ShaderTools/BSShaderHooks.h"
-
-#include "Features/Upscaling.h"
 
 std::unordered_map<void*, std::pair<std::unique_ptr<uint8_t[]>, size_t>> ShaderBytecodeMap;
 
@@ -349,6 +348,9 @@ namespace Hooks
 			logger::info("Calling original Init3D");
 
 			func();
+			
+			if (!globals::features::upscaling.loaded)
+				globals::state->InitReShade(globals::d3d::swapChain);
 
 			logger::info("Accessing render device information");
 			globals::ReInit();

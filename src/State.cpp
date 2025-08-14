@@ -755,6 +755,8 @@ std::unordered_map<std::string, bool>& State::GetDisabledFeatures()
 
 void State::InitReShade(IDXGISwapChain* a_swapChain)
 {
+	logger::info("[ReShade] Initialising ReShade64.dll if available");
+
 	winrt::com_ptr<ID3D11Device> device;
 	ID3D11DeviceContext* immediateContext;
 
@@ -764,16 +766,22 @@ void State::InitReShade(IDXGISwapChain* a_swapChain)
 	SetEnvironmentVariableW(L"RESHADE_DISABLE_GRAPHICS_HOOK", L"1");
 	auto module = LoadLibraryW(L"ReShade64.dll");
 
-	static const auto func = reinterpret_cast<bool (*)(reshade::api::device_api, void*, void*, void*, const char*, reshade::api::effect_runtime**)>(
-		GetProcAddress(module, "ReShadeCreateEffectRuntime"));
-
-	if (func)
-		func(reshade::api::device_api::d3d11, device.get(), immediateContext, a_swapChain, "ReShade", &reShadeRuntime);
+	if (module) {
+		if (reshade::create_effect_runtime(reshade::api::device_api::d3d11, device.get(), immediateContext, a_swapChain, "ReShade", &reShadeRuntime)) {
+			logger::info("[ReShade] Successfully initialised");
+		} else {
+			logger::error("[ReShade] Failed to initialise");
+		}
+	} else {
+		logger::info("[ReShade] ReShade64.dll not available");
+	}
 }
 
 void State::SetupReShade()
 {
 	if (reShadeRuntime) {
+		logger::info("[ReShade] Setting render target information");
+
 		auto renderer = globals::game::renderer;
 		auto swapChainRTV = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER].RTV;
 		if (globals::features::upscaling.d3d12Interop)
