@@ -165,6 +165,7 @@ namespace ShadowSampling
 
 	float GetEffectShadow(float3 worldPosition, float3 viewDirection, float2 screenPosition, uint eyeIndex, out bool isWorldShadow)
 	{
+		isWorldShadow = false;
 		float worldShadow = GetWorldShadow(worldPosition, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 		if (worldShadow != 0.0) {
 			float shadow = Get3DFilteredShadow(worldPosition, viewDirection, screenPosition, eyeIndex);
