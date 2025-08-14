@@ -26,6 +26,11 @@ public:
 	bool LoadFXFile(std::filesystem::path a_filePath);
 
     void ExecuteTechniqueSequence(const std::string& baseTechniqueName, ID3D11RenderTargetView* renderTarget);
+    
+    // UI System
+    void RenderImGui();
+    void LoadUIVariables();
+    void UpdateUIVariables();
 
 private:
     struct TechniqueInfo {
@@ -46,6 +51,45 @@ private:
 	std::unordered_map<std::string, Texture> commonTextureCache;
 	
     std::unordered_map<std::string, ComPtr<ID3D11ShaderResourceView>> customTextureCache;
+
+    // UI Variable System
+    enum class UIVariableType {
+        Float,
+        Int,
+        Bool
+    };
+
+    enum class UIWidgetType {
+        Default,
+        Spinner,
+        Slider,
+        Dropdown
+    };
+
+    struct UIVariable {
+        UIVariableType type;
+        UIWidgetType widgetType;
+        std::string name;
+        std::string displayName;
+        ComPtr<ID3DX11EffectVariable> effectVariable;
+        
+        // Value storage
+        union {
+            float floatValue;
+            int intValue;
+            bool boolValue;
+        };
+        
+        // UI properties
+        float floatMin = 0.0f;
+        float floatMax = 1.0f;
+        float floatStep = 0.01f;
+        int intMin = 0;
+        int intMax = 100;
+        std::vector<std::string> dropdownItems;
+    };
+
+    std::vector<UIVariable> uiVariables;
 
 	ComPtr<ID3DX11EffectVariable> Timer;
 	ComPtr<ID3DX11EffectVariable> ScreenSize;
@@ -84,4 +128,10 @@ private:
     
     std::string GetRenderTargetFromTechnique(ID3DX11EffectTechnique* technique);
     ID3D11RenderTargetView* GetRenderTargetView(const std::string& renderTargetName, ID3D11RenderTargetView* fallback);
+    
+    // UI Variable helpers
+    std::string GetUIAnnotation(ID3DX11EffectVariable* variable, const std::string& annotationName);
+    UIWidgetType ParseWidgetType(const std::string& widget);
+    std::vector<std::string> ParseDropdownList(const std::string& list);
+    void LoadUIVariableValue(UIVariable& uiVar);
 };

@@ -7,8 +7,8 @@
 #include <d3dcompiler.h>
 #include <chrono>
 #include <filesystem>
+#include <sstream>
 
-// DirectXTK for texture loading
 #include <DirectXTK/DDSTextureLoader.h>
 #include <DirectXTK/WICTextureLoader.h>
 
@@ -48,6 +48,7 @@ bool Effect11::LoadFXFile(std::filesystem::path a_filePath)
 
     LoadResourceNameTextures();
     LoadTechniques();
+    LoadUIVariables();
 
 	logger::debug("Successfully loaded FX file: {}", a_filePath.string());
     return true;
@@ -593,4 +594,310 @@ ID3D11RenderTargetView* Effect11::GetRenderTargetView(const std::string& renderT
     logger::critical("Render target '{}' not found in cache", renderTargetName);
     
     return nullptr;
+}
+
+void Effect11::LoadUIVariables()
+{
+    if (!effect) {
+        return;
+    }
+
+    D3DX11_EFFECT_DESC effectDesc;
+    if (FAILED(effect->GetDesc(&effectDesc))) {
+        return;
+    }
+
+    uiVariables.clear();
+
+    // Iterate through all global variables in the effect
+    for (UINT i = 0; i < effectDesc.GlobalVariables; ++i) {
+        auto variable = effect->GetVariableByIndex(i);
+        if (!variable || !variable->IsValid()) {
+            continue;
+        }
+
+        D3DX11_EFFECT_VARIABLE_DESC varDesc;
+        if (FAILED(variable->GetDesc(&varDesc))) {
+            continue;
+        }
+
+        // Check if this variable has UI annotations
+        std::string uiName = GetUIAnnotation(variable, "UIName");
+        if (uiName.empty()) {
+            continue; // No UI annotation, skip
+        }
+
+        UIVariable uiVar = {};
+        uiVar.name = varDesc.Name;
+        uiVar.displayName = uiName;
+        uiVar.effectVariable = variable;
+
+        // Determine variable type
+        D3DX11_EFFECT_TYPE_DESC typeDesc;
+        auto effectType = variable->GetType();
+        if (SUCCEEDED(effectType->GetDesc(&typeDesc))) {
+            switch (typeDesc.Type) {
+                case D3D_SVT_FLOAT:
+                    uiVar.type = UIVariableType::Float;
+                    break;
+                case D3D_SVT_INT:
+                    uiVar.type = UIVariableType::Int;
+                    break;
+                case D3D_SVT_BOOL:
+                    uiVar.type = UIVariableType::Bool;
+                    break;
+                default:
+                    continue; // Unsupported type
+            }
+        }
+
+        // Parse UI widget type
+        std::string widgetStr = GetUIAnnotation(variable, "UIWidget");
+        uiVar.widgetType = ParseWidgetType(widgetStr);
+        
+        logger::debug("Variable '{}': UIWidget='{}', parsed as {}", 
+                     uiVar.name, widgetStr, static_cast<int>(uiVar.widgetType));
+
+        // Parse UI properties based on type
+        if (uiVar.type == UIVariableType::Float) {
+            std::string minStr = GetUIAnnotation(variable, "UIMin");
+            std::string maxStr = GetUIAnnotation(variable, "UIMax");
+            std::string stepStr = GetUIAnnotation(variable, "UIStep");
+            
+            if (!minStr.empty()) uiVar.floatMin = std::stof(minStr);
+            if (!maxStr.empty()) uiVar.floatMax = std::stof(maxStr);
+            if (!stepStr.empty()) uiVar.floatStep = std::stof(stepStr);
+        }
+        else if (uiVar.type == UIVariableType::Int) {
+            std::string minStr = GetUIAnnotation(variable, "UIMin");
+            std::string maxStr = GetUIAnnotation(variable, "UIMax");
+            
+            if (!minStr.empty()) uiVar.intMin = std::stoi(minStr);
+            if (!maxStr.empty()) uiVar.intMax = std::stoi(maxStr);
+            
+            // Parse dropdown list if it's a dropdown widget
+            if (uiVar.widgetType == UIWidgetType::Dropdown) {
+                std::string listStr = GetUIAnnotation(variable, "UIList");
+                logger::debug("Variable '{}': UIList='{}'", uiVar.name, listStr);
+                if (!listStr.empty()) {
+                    uiVar.dropdownItems = ParseDropdownList(listStr);
+                    logger::debug("Parsed {} dropdown items", uiVar.dropdownItems.size());
+                }
+            }
+        }
+
+        // Load current value
+        LoadUIVariableValue(uiVar);
+
+        uiVariables.push_back(uiVar);
+        
+        // Debug logging
+        if (uiVar.widgetType == UIWidgetType::Dropdown) {
+            logger::debug("Loaded UI variable '{}' with display name '{}', dropdown items: {}", 
+                         uiVar.name, uiVar.displayName, uiVar.dropdownItems.size());
+            for (const auto& item : uiVar.dropdownItems) {
+                logger::debug("  - {}", item);
+            }
+        } else {
+            logger::debug("Loaded UI variable '{}' with display name '{}'", uiVar.name, uiVar.displayName);
+        }
+    }
+
+    logger::info("Loaded {} UI variables", uiVariables.size());
+}
+
+std::string Effect11::GetUIAnnotation(ID3DX11EffectVariable* variable, const std::string& annotationName)
+{
+    if (!variable) {
+        return "";
+    }
+
+    D3DX11_EFFECT_VARIABLE_DESC varDesc;
+    if (FAILED(variable->GetDesc(&varDesc))) {
+        return "";
+    }
+
+    for (UINT i = 0; i < varDesc.Annotations; ++i) {
+        auto annotation = variable->GetAnnotationByIndex(i);
+        if (!annotation || !annotation->IsValid()) {
+            continue;
+        }
+
+        D3DX11_EFFECT_VARIABLE_DESC annotationDesc;
+        if (FAILED(annotation->GetDesc(&annotationDesc))) {
+            continue;
+        }
+
+        if (std::string(annotationDesc.Name) == annotationName) {
+            // Try string annotation first
+            auto stringVar = annotation->AsString();
+            if (stringVar && stringVar->IsValid()) {
+                LPCSTR value = nullptr;
+                if (SUCCEEDED(stringVar->GetString(&value)) && value) {
+                    return std::string(value);
+                }
+            }
+            
+            // Try integer annotation (for UIMin, UIMax, etc.)
+            auto intVar = annotation->AsScalar();
+            if (intVar && intVar->IsValid()) {
+                int intValue;
+                if (SUCCEEDED(intVar->GetInt(&intValue))) {
+                    return std::to_string(intValue);
+                }
+                
+                // Also try float annotation
+                float floatValue;
+                if (SUCCEEDED(intVar->GetFloat(&floatValue))) {
+                    return std::to_string(floatValue);
+                }
+            }
+        }
+    }
+
+    return "";
+}
+
+Effect11::UIWidgetType Effect11::ParseWidgetType(const std::string& widget)
+{
+    if (widget == "Spinner") return UIWidgetType::Spinner;
+    if (widget == "Slider") return UIWidgetType::Slider;
+    if (widget == "dropdown") return UIWidgetType::Dropdown;
+    return UIWidgetType::Default;
+}
+
+std::vector<std::string> Effect11::ParseDropdownList(const std::string& list)
+{
+    std::vector<std::string> items;
+    std::stringstream ss(list);
+    std::string item;
+    
+    while (std::getline(ss, item, ',')) {
+        // Trim whitespace
+        item.erase(0, item.find_first_not_of(" \t"));
+        item.erase(item.find_last_not_of(" \t") + 1);
+        items.push_back(item);
+    }
+    
+    return items;
+}
+
+void Effect11::LoadUIVariableValue(UIVariable& uiVar)
+{
+    switch (uiVar.type) {
+        case UIVariableType::Float:
+            if (SUCCEEDED(uiVar.effectVariable->AsScalar()->GetFloat(&uiVar.floatValue))) {
+                // Successfully loaded float value
+            }
+            break;
+        case UIVariableType::Int:
+            if (SUCCEEDED(uiVar.effectVariable->AsScalar()->GetInt(&uiVar.intValue))) {
+                // Successfully loaded int value
+            }
+            break;
+        case UIVariableType::Bool:
+            if (SUCCEEDED(uiVar.effectVariable->AsScalar()->GetBool(&uiVar.boolValue))) {
+                // Successfully loaded bool value
+            }
+            break;
+    }
+}
+
+void Effect11::UpdateUIVariables()
+{
+    for (auto& uiVar : uiVariables) {
+        switch (uiVar.type) {
+            case UIVariableType::Float:
+                uiVar.effectVariable->AsScalar()->SetFloat(uiVar.floatValue);
+                break;
+            case UIVariableType::Int:
+                uiVar.effectVariable->AsScalar()->SetInt(uiVar.intValue);
+                break;
+            case UIVariableType::Bool:
+                uiVar.effectVariable->AsScalar()->SetBool(uiVar.boolValue);
+                break;
+        }
+    }
+}
+
+void Effect11::RenderImGui()
+{
+    if (uiVariables.empty()) {
+        return;
+    }
+
+    if (ImGui::Begin("enbeffect.fx")) {
+        bool valuesChanged = false;
+
+        for (auto& uiVar : uiVariables) {
+            // Skip empty UI names (spacers)
+            if (uiVar.displayName.empty() || uiVar.displayName == " " || uiVar.displayName == "  ") {
+                ImGui::Spacing();
+                continue;
+            }
+
+            switch (uiVar.type) {
+                case UIVariableType::Float:
+                {
+                    if (uiVar.widgetType == UIWidgetType::Slider) {
+                        if (ImGui::SliderFloat(uiVar.displayName.c_str(), &uiVar.floatValue, uiVar.floatMin, uiVar.floatMax, "%.3f")) {
+                            valuesChanged = true;
+                        }
+                    }
+                    else { // Spinner or default
+                        if (ImGui::DragFloat(uiVar.displayName.c_str(), &uiVar.floatValue, uiVar.floatStep, uiVar.floatMin, uiVar.floatMax, "%.3f")) {
+                            valuesChanged = true;
+                        }
+                    }
+                    break;
+                }
+                case UIVariableType::Int:
+                {
+                    if (uiVar.widgetType == UIWidgetType::Dropdown && !uiVar.dropdownItems.empty()) {
+                        // Ensure value is within bounds
+                        uiVar.intValue = std::clamp(uiVar.intValue, 0, static_cast<int>(uiVar.dropdownItems.size()) - 1);
+                        
+                        const char* currentItem = uiVar.dropdownItems[uiVar.intValue].c_str();
+                        if (ImGui::BeginCombo(uiVar.displayName.c_str(), currentItem)) {
+                            for (int i = 0; i < uiVar.dropdownItems.size(); ++i) {
+                                const bool isSelected = (uiVar.intValue == i);
+                                if (ImGui::Selectable(uiVar.dropdownItems[i].c_str(), isSelected)) {
+                                    uiVar.intValue = i;
+                                    valuesChanged = true;
+                                }
+                                if (isSelected) {
+                                    ImGui::SetItemDefaultFocus();
+                                }
+                            }
+                            ImGui::EndCombo();
+                        }
+                    }
+                    else if (uiVar.widgetType == UIWidgetType::Slider) {
+                        if (ImGui::SliderInt(uiVar.displayName.c_str(), &uiVar.intValue, uiVar.intMin, uiVar.intMax)) {
+                            valuesChanged = true;
+                        }
+                    }
+                    else { // Spinner or default
+                        if (ImGui::DragInt(uiVar.displayName.c_str(), &uiVar.intValue, 1.0f, uiVar.intMin, uiVar.intMax)) {
+                            valuesChanged = true;
+                        }
+                    }
+                    break;
+                }
+                case UIVariableType::Bool:
+                {
+                    if (ImGui::Checkbox(uiVar.displayName.c_str(), &uiVar.boolValue)) {
+                        valuesChanged = true;
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Update shader variables if any values changed
+        if (valuesChanged) {
+            UpdateUIVariables();
+        }
+    }
+    ImGui::End();
 }
