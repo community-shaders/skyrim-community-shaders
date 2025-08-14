@@ -6,13 +6,13 @@
 #include "State.h"
 #include "TruePBR.h"
 
-#include "Features/Upscaling.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/IBL.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
+#include "Features/Upscaling.h"
 
 #include "Hooks.h"
 

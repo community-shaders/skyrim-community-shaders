@@ -61,7 +61,6 @@ public:
 class DX12SwapChain
 {
 public:
-
 	// D3D12 resources for swap chain (uses shared device from Upscaling)
 	winrt::com_ptr<ID3D12CommandAllocator> commandAllocators[2];
 	winrt::com_ptr<ID3D12GraphicsCommandList4> commandLists[2];
