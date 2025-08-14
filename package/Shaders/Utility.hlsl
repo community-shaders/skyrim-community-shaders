@@ -132,6 +132,10 @@ VS_OUTPUT main(VS_INPUT input)
 #	endif
 	);
 
+#	if defined(TREE_ANIM) && defined(VC)
+	vsout.TreeAlpha = input.Color.w;
+#	endif
+
 #	if (defined(RENDER_DEPTH) && defined(RENDER_SHADOWMASK_ANY)) || SHADOWFILTER == 2
 	vsout.PositionCS.xy = input.PositionMS.xy;
 #		if defined(RENDER_SHADOWMASKDPB) || defined(RENDER_SHADOWMASKSPOT) || defined(RENDER_SHADOWMASKPB)
@@ -157,10 +161,6 @@ VS_OUTPUT main(VS_INPUT input)
 	float2 treeTmp1 = SmoothSaturate(abs(2 * frac(float2(0.1, 0.25) * (TreeParams.w * TreeParams.y * TreeParams.x) + dot(input.PositionMS.xyz, 1.0.xxx) + 0.5) - 1));
 	float normalMult = (treeTmp1.x + 0.1 * treeTmp1.y) * (input.Color.w * TreeParams.z);
 	positionMS.xyz += normalMS.xyz * normalMult;
-#		endif
-
-		#if defined(TREE_ANIM) && defined(VC)
-	vsout.TreeAlpha = input.Color.w;
 #		endif
 
 #		if defined(LOD_LANDSCAPE)
