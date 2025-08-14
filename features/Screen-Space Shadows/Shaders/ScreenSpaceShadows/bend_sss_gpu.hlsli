@@ -230,7 +230,7 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 	bool skip_pixel = false;
 
 #	if defined(RIGHT)
-	pixel_xy.x += 1.0 / inParameters.InvDepthTextureSize.x;
+	pixel_xy.x += (1.0 / inParameters.InvDepthTextureSize.x) * 0.5;
 #	endif
 
 	half2 write_xy = floor(pixel_xy);
@@ -259,10 +259,7 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 		// So this fallback will use a manual uv offset instead
 		half2 coord = read_xy * inParameters.InvDepthTextureSize;
 		half2 coord_with_offset = (read_xy + offset_xy) * inParameters.InvDepthTextureSize;
-#	if defined(VR)
-		coord *= half2(0.5, 1.0);
-		coord_with_offset *= half2(0.5, 1.0);
-#	endif
+				
 		depths.x = inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord, 0);
 		depths.y = inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord_with_offset, 0);
 #	if defined(VR)

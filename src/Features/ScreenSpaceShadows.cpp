@@ -222,9 +222,6 @@ void ScreenSpaceShadows::DrawShadows()
 	if (!globals::game::isVR) {
 		DispatchEye(nullptr, GetComputeRaymarch(), lightProjectionF.data(), InvTexSizeX, InvTexSizeY);
 	} else {
-		// VR: Process both eyes with per-eye texture coordinates (based on screen size for dispatch bounds)
-		InvTexSizeX = 2.0f / (float)screenSize.x;
-
 		DispatchEye("Left Eye", GetComputeRaymarch(), lightProjectionF.data(), InvTexSizeX, InvTexSizeY);
 
 		// Calculate light projection for right eye
