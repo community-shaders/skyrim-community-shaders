@@ -51,9 +51,6 @@ uint ScreenSpaceShadows::GetScaledSampleCount(bool a_dynamic)
 	if (a_dynamic)
 		screenSize = Util::ConvertToDynamic(globals::state->screenSize);
 
-	if (globals::game::isVR)
-		screenSize.x *= 0.5f;
-
 	// Scale sample count based on both dimensions relative to 1920x1080 reference
 
 	float2 referenceRes = { 1920.0f, 1080.0f };
