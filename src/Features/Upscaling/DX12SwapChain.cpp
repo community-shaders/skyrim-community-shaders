@@ -3,9 +3,9 @@
 #include <dx12/ffx_api_dx12.hpp>
 #include <dxgi1_6.h>
 
+#include "../Upscaling.h"
 #include "FidelityFX.h"
 #include "Streamline.h"
-#include "../Upscaling.h"
 
 void DX12SwapChain::InitializeD3D12Resources()
 {

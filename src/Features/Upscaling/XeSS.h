@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../../Buffer.h"
-#include "DX12SwapChain.h"
 #include "../../State.h"
+#include "DX12SwapChain.h"
 #include <d3d12.h>
 #include <dxgi1_4.h>
 #include <winrt/base.h>

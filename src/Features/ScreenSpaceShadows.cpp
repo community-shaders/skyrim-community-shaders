@@ -50,7 +50,7 @@ uint ScreenSpaceShadows::GetScaledSampleCount(bool a_dynamic)
 
 	if (a_dynamic)
 		screenSize = Util::ConvertToDynamic(globals::state->screenSize);
-	
+
 	if (globals::game::isVR)
 		screenSize.x *= 0.5f;
 
@@ -61,7 +61,7 @@ uint ScreenSpaceShadows::GetScaledSampleCount(bool a_dynamic)
 	float currentArea = screenSize.x * screenSize.y;
 	float areaScale = std::sqrt(currentArea / referenceArea);
 	uint scaledSampleCount = static_cast<uint>(std::round(bendSettings.SampleCount * 120 * areaScale));
-	
+
 	return scaledSampleCount;
 }
 
@@ -197,7 +197,7 @@ void ScreenSpaceShadows::DrawShadows()
 			data.NearDepthValue = 0.0f;
 
 			data.DynamicRes = dynamicRes;
-			
+
 			data.DynamicSampleCount = dynamicSampleCount;
 			data.DynamicReadCount = dynamicReadCount;
 
