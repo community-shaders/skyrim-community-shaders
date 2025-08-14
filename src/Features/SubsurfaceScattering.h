@@ -23,7 +23,7 @@ public:
 		int SSMode = 0;
 		DiffusionProfile BaseProfile{ 0.5f, 1.0f, { 0.48f, 0.41f, 0.28f }, { 0.56f, 0.56f, 0.56f } };
 		DiffusionProfile HumanProfile{ 1.0f, 1.0f, { 0.48f, 0.41f, 0.28f }, { 1.0f, 0.37f, 0.3f } };
-		float BurleySamples = 16.0f;
+		uint BurleySamples = 16;
 		float4 MeanFreePathBase = { 0.56f, 0.56f, 0.56f, 2.67f };
 		float4 MeanFreePathHuman = { 1.0f, 0.37f, 0.3f, 2.67f };
 	};
@@ -44,8 +44,8 @@ public:
 		float4 BaseProfile;
 		float4 HumanProfile;
 		float SSSS_FOVY;
-		float BurleySamples;
-		float pad[2];
+		uint BurleySamples;
+		uint pad[2];
 		float4 MeanFreePathBase;
 		float4 MeanFreePathHuman;
 	};

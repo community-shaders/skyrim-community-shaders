@@ -69,7 +69,7 @@ void SubsurfaceScattering::DrawSettings()
 				ImGui::TreePop();
 			}
 		} else if (settings.SSMode == 1) {
-			ImGui::SliderFloat("Burley Samples", &settings.BurleySamples, 1.0f, 64.0f, "%.0f", ImGuiSliderFlags_AlwaysClamp);
+			ImGui::SliderInt("Burley Samples", (int*)&settings.BurleySamples, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
 			if (ImGui::TreeNodeEx("Base Profile", ImGuiTreeNodeFlags_DefaultOpen)) {
 				ImGui::ColorEdit3("Mean Free Path Color", (float*)&settings.MeanFreePathBase);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -244,7 +244,7 @@ void SubsurfaceScattering::DrawSSS()
 
 		ID3D11ShaderResourceView* views[5];
 		views[0] = main.SRV;
-		views[1] = terrainBlending.loaded ? terrainBlending.blendedDepthTexture16->srv.get() : depth.depthSRV,
+		views[1] = terrainBlending.loaded ? terrainBlending.blendedDepthTexture16->srv.get() : depth.depthSRV;
 		views[2] = mask.SRV;
 		views[3] = albedo.SRV;
 		views[4] = normal.SRV;
