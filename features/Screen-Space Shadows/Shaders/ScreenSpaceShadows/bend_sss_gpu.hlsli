@@ -260,17 +260,15 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 		half2 coord = read_xy * inParameters.InvDepthTextureSize;
 		half2 coord_with_offset = (read_xy + offset_xy) * inParameters.InvDepthTextureSize;
 				
-#	if defined(VR)
-		const float eyeBoundary = 0.5;
-		
+#	if defined(VR)		
 #		if defined(RIGHT)
 		// Right eye: valid UV range is [0.5, 1.0]
-		bool coord_out_of_eye = coord.x < eyeBoundary;
-		bool coord_offset_out_of_eye = coord_with_offset.x < eyeBoundary;
+		bool coord_out_of_eye = coord.x < 0.5;
+		bool coord_offset_out_of_eye = coord_with_offset.x < 0.5;
 #		else
 		// Left eye: valid UV range is [0.0, 0.5)
-		bool coord_out_of_eye = coord.x >= eyeBoundary;
-		bool coord_offset_out_of_eye = coord_with_offset.x >= eyeBoundary;
+		bool coord_out_of_eye = coord.x >= 0.5;
+		bool coord_offset_out_of_eye = coord_with_offset.x >= 0.5;
 #		endif
 
 		depths.x = coord_out_of_eye ? 1.0 : inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord, 0)
@@ -367,14 +365,20 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 	// Sync wavefronts now groupshared DepthData is written
 	GroupMemoryBarrierWithGroupSync();
 
-	// Skip first person
-#	if !defined(VR)
-	skip_pixel = skip_pixel;
-#	endif
-
-	// If the starting depth isn't in depth bounds, then we don't need a shadow
-	if (skip_pixel)
+#	if defined(VR)
+	// Check if the pixel we're writing to is on the correct eye side
+	half2 write_coord = write_xy * inParameters.InvDepthTextureSize;
+	
+#		if defined(RIGHT)
+	// Right eye: only process pixels in [0.5, 1.0] range
+	if (write_coord.x < 0.5)
 		return;
+#		else
+	// Left eye: only process pixels in [0.0, 0.5) range
+	if (write_coord.x >= 0.5)
+		return;
+#		endif
+#	endif
 
 	half start_depth = sampling_depth[0];
 
