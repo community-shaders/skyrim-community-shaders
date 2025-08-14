@@ -177,7 +177,7 @@ void FeatureListRenderer::RenderLeftColumn(
 		for (size_t i = 0; i < menuList.size(); i++) {
 			if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
 				const BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
-				if (menu.name == "General" || menu.name == "Advanced" ) {
+				if (menu.name == "General" || menu.name == "Advanced") {
 					builtInMenuCount++;
 				}
 			}
@@ -188,7 +188,7 @@ void FeatureListRenderer::RenderLeftColumn(
 		for (size_t i = 0; i < menuList.size() && renderedBuiltIns < 2; i++) {
 			if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
 				const BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
-				if (menu.name == "General" || menu.name == "Advanced" ) {
+				if (menu.name == "General" || menu.name == "Advanced") {
 					std::visit(ListMenuVisitor{ i, selectedMenu, categoryExpansionStates }, menuList[i]);
 					renderedBuiltIns++;
 				}
@@ -203,7 +203,7 @@ void FeatureListRenderer::RenderLeftColumn(
 		for (size_t i = 0; i < menuList.size(); i++) {
 			if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
 				const BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
-				if (menu.name == "General" || menu.name == "Advanced" ) {
+				if (menu.name == "General" || menu.name == "Advanced") {
 					continue;  // Skip, already rendered
 				}
 			}

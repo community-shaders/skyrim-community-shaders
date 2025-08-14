@@ -3,12 +3,12 @@
 #include <dxgi.h>
 #include <dxgi1_3.h>
 
+#include "../../Deferred.h"
 #include "../../Hooks.h"
 #include "../../State.h"
 #include "../../Util.h"
-#include "../../Deferred.h"
-#include "DX12SwapChain.h"
 #include "../Upscaling.h"
+#include "DX12SwapChain.h"
 
 void LoggingCallback(sl::LogType type, const char* msg)
 {
@@ -262,7 +262,7 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	auto& motionVectorsTexture = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
 	sl::DLSSOptions dlssOptions{};
-		
+
 	// Map quality mode to DLSS mode
 	uint32_t qualityMode = globals::features::upscaling.settings.qualityMode;
 	switch (qualityMode) {
@@ -299,7 +299,7 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 
 	if (SL_FAILED(result, slDLSSSetOptions(viewport, dlssOptions))) {
 		logger::critical("[Streamline] Could not enable DLSS");
-	}	
+	}
 
 	{
 		auto screenSize = state->screenSize;

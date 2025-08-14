@@ -13,6 +13,7 @@
 #include "Feature.h"
 #include "FeatureIssues.h"
 #include "FeatureVersions.h"
+#include "Features/Upscaling.h"
 #include "Menu/AdvancedSettingsRenderer.h"
 #include "Menu/FeatureListRenderer.h"
 #include "Menu/MenuHeaderRenderer.h"
@@ -22,7 +23,6 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
-#include "Features/Upscaling.h"
 #include "Util.h"
 #include "Utils/UI.h"
 
@@ -386,7 +386,6 @@ void Menu::DrawDisableAtBootSettings()
 		}
 	}
 }
-
 
 void Menu::DrawFooter()
 {

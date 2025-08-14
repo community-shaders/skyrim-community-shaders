@@ -2,10 +2,10 @@
 
 #include <directx/d3dx12.h>
 
-#include "../../Utils/FileSystem.h"
 #include "../../State.h"
-#include "DX12SwapChain.h"
+#include "../../Utils/FileSystem.h"
 #include "../Upscaling.h"
+#include "DX12SwapChain.h"
 
 ffxFunctions ffxModule;
 
@@ -17,7 +17,7 @@ void FidelityFX::LoadFFX()
 	// Try loading from root folder first
 	std::wstring rootDllPath = L"amd_fidelityfx_dx12.dll";
 	module = LoadLibrary(rootDllPath.c_str());
-	
+
 	std::wstring loadedFrom;
 	if (module) {
 		loadedFrom = L"root folder";
@@ -41,7 +41,7 @@ void FidelityFX::LoadFFX()
 		featureFSR3 = true;
 
 		if (featureFSR3) {
-			logger::info("[FidelityFX] FSR 3 API loaded successfully from {}", 
+			logger::info("[FidelityFX] FSR 3 API loaded successfully from {}",
 				loadedFrom == L"root folder" ? "root folder" : "plugin directory");
 		} else {
 			logger::warn("[FidelityFX] FSR 3 API functions not found, falling back to legacy implementation");
@@ -228,7 +228,6 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 	isFrameGenActive = a_useFrameGeneration;
 }
 
-
 void FidelityFX::CreateFSRResources()
 {
 	auto state = globals::state;
@@ -333,5 +332,5 @@ void FidelityFX::Upscale(
 	dispatchUpscale.flags = FFX_UPSCALE_FLAG_NON_LINEAR_COLOR_SRGB;
 
 	if (ffx::Dispatch(upscalingContext, dispatchUpscale) != ffx::ReturnCode::Ok)
-		logger::critical("[FidelityFX] Failed to upscale");	
+		logger::critical("[FidelityFX] Failed to upscale");
 }
