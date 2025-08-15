@@ -45,7 +45,7 @@ float3 GetScalingFactor(float3 albedo)
 	// d = l / (3.5 + 100(A − 0.33)^4)
 	// here we choose the third to use diffuse mean free path as parameter.
 	float3 value = albedo - 0.33f;
-	return 3.5f + 100.f * value * value * value * value;
+	return 3.5f + 100.f * pow(abs(value), 4);
 }
 
 float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssAmount, bool humanProfile)
