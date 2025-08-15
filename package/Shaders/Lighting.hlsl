@@ -3112,8 +3112,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if !defined(DEFERRED)
 	color.xyz = Color::LinearToGamma(Color::GammaToLinear(color.xyz) + specularColor);
+	float3 fogColor = input.FogParam.xyz;
+#		if defined(IBL)
+	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
+	}
+#		endif
 	if (FrameBuffer::FrameParams.y && FrameBuffer::FrameParams.z)
-		color.xyz = lerp(color.xyz, input.FogParam.xyz, input.FogParam.w);
+		color.xyz = lerp(color.xyz, fogColor, input.FogParam.w);
 #	endif
 
 #	if defined(TESTCUBEMAP) && defined(ENVMAP) && defined(DYNAMIC_CUBEMAPS)
