@@ -11,6 +11,7 @@
 #include "Globals.h"
 #include "Menu.h"
 #include "Menu/ThemeManager.h"
+#include "SettingsOverrideManager.h"
 #include "State.h"
 #include "Util.h"
 
@@ -90,7 +91,7 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	}
 
 	// Define category order
-	std::vector<std::string> categoryOrder = { "Debug", "Characters", "Grass", "Lighting", "Materials", "Sky", "Landscape & Textures", "Water", "Other" };
+	std::vector<std::string> categoryOrder = { "Debug", "Characters", "Grass", "Lighting", "Materials", "Post-Processing", "Sky", "Landscape & Textures", "Water", "Other" };
 	// Add categorized features to menu with collapsible headers
 	for (const std::string& category : categoryOrder) {
 		if (categorizedFeatures.find(category) != categorizedFeatures.end() && !categorizedFeatures[category].empty()) {
@@ -516,13 +517,22 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureActionButtons(Feature* f
 	// Calculate button widths based on text content
 	const char* bootButtonText = isDisabled ? "Enable at Boot" : "Disable at Boot";
 	const char* defaultsButtonText = "Restore Defaults";
+	const char* overrideButtonText = "Apply Override";
 
 	float bootButtonWidth = ImGui::CalcTextSize(bootButtonText).x + buttonPadding;
 	float defaultsButtonWidth = ImGui::CalcTextSize(defaultsButtonText).x + buttonPadding;
+	float overrideButtonWidth = ImGui::CalcTextSize(overrideButtonText).x + buttonPadding;
+
+	// Check if override is available for this feature
+	auto overrideManager = SettingsOverrideManager::GetSingleton();
+	bool hasOverrides = overrideManager && overrideManager->HasFeatureOverrides(featureName);
 
 	float totalButtonWidth = bootButtonWidth;
 	if (!isDisabled && isLoaded) {
 		totalButtonWidth += defaultsButtonWidth + buttonSpacing;
+		if (hasOverrides) {
+			totalButtonWidth += overrideButtonWidth + buttonSpacing;
+		}
 	}
 
 	// Position buttons on the right side of the tab bar
@@ -572,6 +582,25 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureActionButtons(Feature* f
 			ImGui::Text(
 				"Restores the feature's settings back to their default values. "
 				"You will still need to Save Settings to make these changes permanent.");
+		}
+
+		// Apply Override button (when feature has available overrides)
+		if (hasOverrides) {
+			ImGui::SameLine();
+			if (ImGui::Button(overrideButtonText, { overrideButtonWidth, 0 })) {
+				if (feat->ReapplyOverrideSettings()) {
+					logger::info("Successfully reapplied override settings for {}", featureName);
+				} else {
+					logger::warn("Failed to reapply override settings for {}", featureName);
+				}
+			}
+
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text(
+					"Reapplies override settings from mod override JSON files. "
+					"This will overwrite current settings with override values. "
+					"You will still need to Save Settings to make these changes permanent.");
+			}
 		}
 	}
 }

@@ -325,6 +325,7 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 		} else {
 			light.radius = runtimeData.radius.x;
 			light.color *= runtimeData.fade;
+			light.fade = runtimeData.fade;
 		}
 
 		light.color *= bsLight->lodDimmer;

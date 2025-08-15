@@ -1,6 +1,7 @@
 #include "InverseSquareLighting.h"
 #include "Features/InverseSquareLighting/Common.h"
 #include "LightLimitFix.h"
+#include <numbers>
 
 void InverseSquareLighting::DrawSettings()
 {
@@ -38,6 +39,8 @@ void InverseSquareLighting::SetExtLightData(RE::NiLight* niLight, const RE::TESO
 		runtimeData->flags.set(LightLimitFix::LightFlags::InverseSquare);
 	runtimeData->cutoffOverride = std::clamp(ligh->data.fallofExponent, 0.01f, 1.f);
 	runtimeData->lighFormId = ligh->formID;
+	const float size = ligh->data.fov >= 50.0f ? std::numbers::sqrt2_v<float> : ligh->data.fov;
+	runtimeData->size = std::clamp(size, 0.01f, 50.0f);
 }
 
 void InverseSquareLighting::ProcessLight(LightLimitFix::LightData& light, RE::BSLight* bsLight, RE::NiLight* niLight) const
@@ -56,26 +59,27 @@ void InverseSquareLighting::ProcessLight(LightLimitFix::LightData& light, RE::BS
 
 	if (bsLight->pointLight && isInvSq) {
 		const float intensity = runtimeData->fade * 4;
-		light.radius = CalculateRadius(intensity, bsLight->IsShadowLight(), runtimeData->cutoffOverride);
+		light.radius = CalculateRadius(intensity, bsLight->IsShadowLight(), runtimeData->cutoffOverride, runtimeData->size);
+		runtimeData->radius = light.radius;
 		light.invRadius = 1.f / light.radius;
 		light.fadeZone = 1.f / (light.radius * std::clamp(FadeZoneBase * light.invRadius, 0.f, 1.f));
-		runtimeData->radius.x = light.radius;
-		runtimeData->radius.y = light.radius;
-		runtimeData->radius.z = light.radius;
+		light.sizeBias = ScaledUnitsSq * runtimeData->size * runtimeData->size * 0.5f;
 		light.color /= std::max(0.001f, std::max(light.color.x, std::max(light.color.y, light.color.z)));
 		light.color *= intensity;
+		light.fade = intensity;
 	} else {
-		light.radius = runtimeData->radius.x;
+		light.radius = runtimeData->radius;
 		light.invRadius = 1.f / light.radius;
 		light.color *= runtimeData->fade;
+		light.fade = runtimeData->fade;
 	}
 }
 
-float InverseSquareLighting::CalculateRadius(const float intensity, const bool shadowCaster, const float cutoffOverride)
+float InverseSquareLighting::CalculateRadius(const float intensity, const bool shadowCaster, const float cutoffOverride, const float size)
 {
 	float cutoff = shadowCaster ? DefaultShadowCasterCutoff : DefaultCutoff;
 	cutoff = cutoffOverride == 1.f ? cutoff : cutoffOverride;
-	const float radius = std::sqrt(ScaledUnitsSq * ((intensity - cutoff) / cutoff));
+	const float radius = std::sqrt(ScaledUnitsSq * ((2 * intensity - cutoff * size * size) / (2 * cutoff)));
 	return isnan(radius) ? 1.f : radius;
 }
 
@@ -85,9 +89,9 @@ inline float InverseSquareLighting::SmoothStep(const float edge0, const float ed
 	return t * t * (3.0f - 2.0f * t);
 }
 
-float InverseSquareLighting::GetAttenuation(const float distance, const float radius)
+float InverseSquareLighting::GetAttenuation(const float distance, const float radius, const float size)
 {
-	const float attenuation = ScaledUnitsSq / (distance * distance + ScaledUnitsSq);
+	const float attenuation = ScaledUnitsSq / (distance * distance + ScaledUnitsSq * size * size / 2);
 	const float fadeZone = std::clamp(FadeZoneBase / radius, 0.0f, 1.0f);
 	const float fade = SmoothStep(0, radius * fadeZone, radius - distance);
 	return attenuation * fade;
@@ -105,8 +109,8 @@ float InverseSquareLighting::BSLight_GetLuminance::thunk(RE::BSLight* bsLight, R
 		return func(bsLight, targetPosition, refLight);
 
 	const float dist = niLight->world.translate.GetDistance(*targetPosition);
-	const float attenuation = GetAttenuation(dist, runtimeData->radius.x);
-	const float luminance = (runtimeData->diffuse.red + runtimeData->diffuse.green + runtimeData->diffuse.blue) * runtimeData->fade * attenuation * (1.0f / 3.0f);
+	const float attenuation = GetAttenuation(dist, runtimeData->radius, runtimeData->size);
+	const float luminance = (runtimeData->diffuse.red + runtimeData->diffuse.green + runtimeData->diffuse.blue) * runtimeData->fade * 4 * attenuation * (1.0f / 3.0f);
 	bsLight->luminance = luminance;
 
 	return luminance;

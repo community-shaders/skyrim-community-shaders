@@ -92,12 +92,14 @@ void LightEditor::DrawSettings()
 
 	if (isInvSq)
 		ImGui::BeginDisabled();
-	ImGui::SliderFloat("Radius", &current.data.radius.x, 2.f, 8096.f, "%.0f");
+	ImGui::SliderFloat("Radius", &current.data.radius, 2.f, 8096.f, "%.0f");
 	if (isInvSq)
 		ImGui::EndDisabled();
 
-	if (isInvSq)
-		ImGui::SliderFloat("Cutoff Override", &current.data.cutoffOverride, 0.01f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+	if (isInvSq) {
+		ImGui::SliderFloat("Size", &current.data.size, 0.01f, 10.0f, "%.3f");
+		ImGui::SliderFloat("Cutoff", &current.data.cutoffOverride, 0.01f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+	}
 
 	ImGui::Spacing();
 	ImGui::Spacing();
@@ -258,10 +260,9 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 
 	if (current.data.flags.any(LightLimitFix::LightFlags::InverseSquare)) {
 		current.data.radius = runtimeData->radius;
-		runtimeData->cutoffOverride = std::clamp(current.data.cutoffOverride, 0.01f, 1.f);
+		runtimeData->cutoffOverride = std::clamp(current.data.cutoffOverride, 0.01f, 1.0f);
+		runtimeData->size = std::clamp(current.data.size, 0.1f, 50.0f);
 	} else {
-		current.data.radius.y = current.data.radius.x;
-		current.data.radius.z = current.data.radius.x;
 		runtimeData->radius = current.data.radius;
 		runtimeData->cutoffOverride = current.data.cutoffOverride;
 	}

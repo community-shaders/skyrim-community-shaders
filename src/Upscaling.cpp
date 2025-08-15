@@ -346,18 +346,12 @@ void Upscaling::Upscale()
 	ID3D11ShaderResourceView* inputTextureSRV;
 	context->PSGetShaderResources(0, 1, &inputTextureSRV);
 
-	inputTextureSRV->Release();
-
 	ID3D11RenderTargetView* outputTextureRTV;
 	ID3D11DepthStencilView* dsv;
 	context->OMGetRenderTargets(1, &outputTextureRTV, &dsv);
 	context->OMSetRenderTargets(0, nullptr, nullptr);
 
-	outputTextureRTV->Release();
-
-	if (dsv)
-		dsv->Release();
-
+	// Get resources before releasing the views
 	ID3D11Resource* inputTextureResource;
 	inputTextureSRV->GetResource(&inputTextureResource);
 
@@ -446,6 +440,14 @@ void Upscaling::Upscale()
 	}
 
 	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
+
+	// Release COM objects to prevent memory leaks after all usage is complete
+	if (inputTextureSRV)
+		inputTextureSRV->Release();
+	if (outputTextureRTV)
+		outputTextureRTV->Release();
+	if (dsv)
+		dsv->Release();
 }
 
 void Upscaling::SharpenTAA()
@@ -460,18 +462,12 @@ void Upscaling::SharpenTAA()
 	ID3D11ShaderResourceView* inputTextureSRV;
 	context->PSGetShaderResources(0, 1, &inputTextureSRV);
 
-	inputTextureSRV->Release();
-
 	ID3D11RenderTargetView* outputTextureRTV;
 	ID3D11DepthStencilView* dsv;
 	context->OMGetRenderTargets(1, &outputTextureRTV, &dsv);
 	context->OMSetRenderTargets(0, nullptr, nullptr);
 
-	outputTextureRTV->Release();
-
-	if (dsv)
-		dsv->Release();
-
+	// Get resources before releasing the views
 	ID3D11Resource* inputTextureResource;
 	inputTextureSRV->GetResource(&inputTextureResource);
 
@@ -515,6 +511,14 @@ void Upscaling::SharpenTAA()
 	}
 
 	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
+
+	// Release COM objects to prevent memory leaks after all usage is complete
+	if (inputTextureSRV)
+		inputTextureSRV->Release();
+	if (outputTextureRTV)
+		outputTextureRTV->Release();
+	if (dsv)
+		dsv->Release();
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
 }

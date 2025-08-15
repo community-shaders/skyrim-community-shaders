@@ -1,14 +1,14 @@
 ﻿#pragma once
 #include "ShaderCache.h"
 
-struct InteriorSunShadows : Feature
+struct InteriorSun : Feature
 {
 private:
 	static constexpr std::string_view MOD_ID = "153541";
 
 public:
-	virtual inline std::string GetName() override { return "Interior Sun Shadows"; }
-	virtual inline std::string GetShortName() override { return "InteriorSunShadows"; }
+	virtual inline std::string GetName() override { return "Interior Sun"; }
+	virtual inline std::string GetShortName() override { return "InteriorSun"; }
 	virtual std::string_view GetCategory() const override { return "Lighting"; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
@@ -31,6 +31,7 @@ public:
 	struct Settings
 	{
 		bool ForceDoubleSidedRendering = true;
+		float InteriorShadowDistance = 5000;
 	};
 
 	Settings settings;
@@ -73,6 +74,7 @@ private:
 	};
 
 	float* gShadowDistance = nullptr;
+	float* gInteriorShadowDistance = nullptr;
 	uint32_t* rasterStateCullMode = nullptr;
 
 	RE::TESObjectCELL* currentCell = nullptr;
@@ -82,8 +84,8 @@ private:
 	RE::BSTArray<RE::BSTArray<RE::NiPointer<RE::NiAVObject>>> replacementJobArrays = {};
 	eastl::hash_set<RE::NiAVObject*> addedSet = {};
 
-	static RE::TESWorldSpace* enableInteriorSunShadows;
-	static RE::TESWorldSpace* disableInteriorSunShadows;
+	static RE::TESWorldSpace* enableInteriorSun;
+	static RE::TESWorldSpace* disableInteriorSun;
 
 	void ClearArrays();
 
@@ -92,4 +94,6 @@ private:
 	bool IsInSunDirectionAndWithinShadowDistance(const RE::NiPointer<RE::NiAVObject>& object, const RE::NiPoint3& lightDir, const RE::NiPoint3& playerPos) const;
 
 	void PopulateReplacementJobArrays(RE::TESObjectCELL* cell, const RE::NiPointer<RE::BSPortalGraph>& portalGraph, const RE::BSShadowDirectionalLight* dirLight, RE::BSTArray<RE::BSTArray<RE::NiPointer<RE::NiAVObject>>>& jobArrays);
+
+	static void SetShadowDistance(bool inInterior);
 };

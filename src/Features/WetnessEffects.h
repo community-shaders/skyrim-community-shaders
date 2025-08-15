@@ -70,6 +70,17 @@ public:
 		uint pad0;
 	};
 
+	struct DebugSettings
+	{
+		bool EnableWetnessOverride = false;
+		bool EnablePuddleOverride = false;
+		bool EnableRainOverride = false;
+		bool EnableIntExOverride = false;
+		float2 WetnessOverride = float2(0.0f, 0.0f);
+		float2 PuddleWetnessOverride = float2(0.0f, 0.0f);
+		float2 RainOverride = float2(0.0f, 0.0f);
+	} debugSettings;
+
 	Settings settings;
 	// Climate preset system
 	enum class ClimatePreset : uint32_t

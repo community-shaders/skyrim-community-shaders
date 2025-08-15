@@ -34,14 +34,18 @@ struct LightGrid
 struct Light
 {
 	float3 color;
+	float fade;
 	float radius;
+	float invRadius;
+	float fadeZone;
+	float sizeBias;
 	float4 positionWS[2];
 	float4 positionVS[2];
 	uint4 roomFlags;
 	uint lightFlags;
 	uint shadowLightIndex;
-	float invRadius;
-	float fadeZone;
+	uint pad0;
+	uint pad1;
 };
 
 #endif  //__LLF_COMMON_DEPENDENCY_HLSL__

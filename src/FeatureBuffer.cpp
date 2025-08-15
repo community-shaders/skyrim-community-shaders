@@ -48,6 +48,6 @@ std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 		globals::features::hairSpecular.settings,
 		globals::features::terrainVariation.settings,
 		globals::features::ibl.settings,
-		globals::features::extendedTranslucency.settings,
+		globals::features::extendedTranslucency.GetCommonBufferData(),
 		globals::features::postProcessing.settings);
 }

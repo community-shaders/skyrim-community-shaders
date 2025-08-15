@@ -609,7 +609,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 
 PS_OUTPUT main(PS_INPUT input)
 {
-	PS_OUTPUT psout;
+	PS_OUTPUT psout = (PS_OUTPUT)0;
 
 #	if !defined(VR)
 	uint eyeIndex = 0;
@@ -793,7 +793,13 @@ PS_OUTPUT main(PS_INPUT input)
 #		elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * input.FogParam.w).xxx);
 #		else
-	float3 blendedColor = lerp(lightColor, input.FogParam.xyz, input.FogParam.www);
+	float3 fogColor = input.FogParam.xyz;
+#			if defined(IBL)
+	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
+	}
+#			endif
+	float3 blendedColor = lerp(lightColor, fogColor, input.FogParam.www);
 #		endif
 #	else
 	float3 blendedColor = lightColor.xyz;

@@ -3,7 +3,7 @@
 #include "TruePBR/BSLightingShaderMaterialPBR.h"
 #include "TruePBR/BSLightingShaderMaterialPBRLandscape.h"
 
-#include "Features/InteriorSunShadows.h"
+#include "Features/InteriorSun.h"
 #include "Hooks.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -339,6 +339,14 @@ void TruePBR::SetupGlintsTexture()
 
 		context->CSSetShader(old.shader, &old.instance, old.numInstances);
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(old.uav), old.uav, nullptr);
+
+		// Release COM objects to prevent memory leaks
+		if (old.shader)
+			old.shader->Release();
+		for (auto& uav : old.uav) {
+			if (uav)
+				uav->Release();
+		}
 	}
 
 	noiseGenProgram->Release();
@@ -667,7 +675,7 @@ struct BSLightingShaderProperty_GetRenderPasses
 			return renderPasses;
 		}
 
-		const auto issEnabledAndInteriorWithSun = globals::features::interiorSunShadows.loaded && globals::features::interiorSunShadows.isInteriorWithSun;
+		const auto issEnabledAndInteriorWithSun = globals::features::interiorSun.loaded && globals::features::interiorSun.isInteriorWithSun;
 
 		bool isPbr = false;
 
