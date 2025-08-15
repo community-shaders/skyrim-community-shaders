@@ -101,6 +101,10 @@ private:
     std::vector<std::string> availableTechniques;
 	
     ComPtr<ID3DX11EffectVariable> TextureColor;
+	ComPtr<ID3DX11EffectVariable> TextureBloom;
+	ComPtr<ID3DX11EffectVariable> TextureLens;
+	ComPtr<ID3DX11EffectVariable> TextureAdaptation;
+	ComPtr<ID3DX11EffectVariable> TextureAperture;
 	ComPtr<ID3DX11EffectVariable> Timer;
 	ComPtr<ID3DX11EffectVariable> ScreenSize;
 	ComPtr<ID3DX11EffectVariable> AdaptiveQuality;

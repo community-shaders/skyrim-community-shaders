@@ -272,6 +272,9 @@ void Effect11::SetupCommonTextures()
     }
     
     {
+		texDesc.Width = 1;
+		texDesc.Height = 1;
+
         Texture adaptationTexture{};
         DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, adaptationTexture.texture.GetAddressOf()));
         DX::ThrowIfFailed(device->CreateRenderTargetView(adaptationTexture.texture.Get(), nullptr, adaptationTexture.rtv.GetAddressOf()));
@@ -280,6 +283,9 @@ void Effect11::SetupCommonTextures()
     }
     
     {
+		texDesc.Width = 1;
+		texDesc.Height = 1;
+
         Texture apertureTexture{};
         DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, apertureTexture.texture.GetAddressOf()));
         DX::ThrowIfFailed(device->CreateRenderTargetView(apertureTexture.texture.Get(), nullptr, apertureTexture.rtv.GetAddressOf()));
@@ -312,6 +318,10 @@ std::vector<uint8_t> Effect11::LoadFileToMemory(const std::string& filePath)
 void Effect11::SetupCommonVariables()
 {
 	TextureColor = effect->GetVariableByName("TextureColor")->AsShaderResource();
+	TextureBloom = effect->GetVariableByName("TextureBloom")->AsShaderResource();
+	TextureLens = effect->GetVariableByName("TextureLens")->AsShaderResource();
+	TextureAdaptation = effect->GetVariableByName("TextureAdaptation")->AsShaderResource();
+	TextureAperture = effect->GetVariableByName("TextureAperture")->AsShaderResource();
 
 	Timer = effect->GetVariableByName("Timer")->AsVector();
 	ScreenSize = effect->GetVariableByName("ScreenSize")->AsVector();
@@ -321,6 +331,11 @@ void Effect11::SetupCommonVariables()
 	TimeOfDay2 = effect->GetVariableByName("TimeOfDay2")->AsVector();
 	ENightDayFactor = effect->GetVariableByName("ENightDayFactor")->AsVector();
 	EInteriorFactor = effect->GetVariableByName("EInteriorFactor")->AsVector();
+
+	TextureBloom->AsShaderResource()->SetResource(commonTextureCache["TextureBloom"].srv.Get());
+	TextureLens->AsShaderResource()->SetResource(commonTextureCache["TextureLens"].srv.Get());
+	TextureAdaptation->AsShaderResource()->SetResource(commonTextureCache["TextureAdaptation"].srv.Get());
+	TextureAperture->AsShaderResource()->SetResource(commonTextureCache["TextureAperture"].srv.Get());
 }
 
 void Effect11::UpdateCommonVariables()
