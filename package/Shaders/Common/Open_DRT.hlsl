@@ -210,7 +210,7 @@ float3 open_drt_transform(
 		0.00f   // -0.5f
 	);
 
-	/* Tonescale Parameters 
+	/* Tonescale Parameters
       ----------------------
     For the tonescale compression function, we use one inspired by the wisdom shared by Daniele Siragusano
     on the tonescale thread on acescentral: https://community.acescentral.com/t/output-transform-tone-scale/3498/224
@@ -224,15 +224,15 @@ float3 open_drt_transform(
 
     For the user parameter space, we include the following creative controls:
     - Lp: display peak luminance. This sets the display device peak luminance and allows rendering for HDR.
-    - contrast: This is a pivoted power function applied after the hyperbolic compress function, 
+    - contrast: This is a pivoted power function applied after the hyperbolic compress function,
         which keeps middle grey and peak white the same but increases contrast in between.
-    - flare: Applies a parabolic toe compression function after the hyperbolic compression function. 
+    - flare: Applies a parabolic toe compression function after the hyperbolic compression function.
         This compresses values near zero without clipping. Used for flare or glare compensation.
     - gb: Grey Boost. This parameter controls how many stops to boost middle grey per stop of peak luminance increase.
 
     Notes on the other non user-facing parameters:
     - (px, py): This is the peak luminance intersection constraint for the compression function.
-        px is the input scene-linear x-intersection constraint. That is, the scene-linear input value 
+        px is the input scene-linear x-intersection constraint. That is, the scene-linear input value
         which is mapped to py through the compression function. By default this is set to 128 at Lp=100, and 256 at Lp=1000.
         Here is the regression calculation using a logarithmic function to match: https://www.desmos.com/calculator/chdqwettsj
     - (gx, gy): This is the middle grey intersection constraint for the compression function.
@@ -304,7 +304,7 @@ float3 open_drt_transform(
     Most of our data is now inside of the display gamut cube, but there may still be some gradient disruptions
     due to highly chromatic colors going outside of the display cube on the lower end and then being clipped
     whether implicitly or explicitly. To combat this, our last step is to do a soft clip or gamut compression.
-    In RGB Ratios, 0,0,0 is the gamut boundary, and anything outside of gamut will have one or more negative 
+    In RGB Ratios, 0,0,0 is the gamut boundary, and anything outside of gamut will have one or more negative
     components. So to compress the gamut we use lift these negative values and compress them into a small range
     near 0. We use the "PowerP" hyperbolic compression function but it could just as well be anything.
   */
@@ -330,7 +330,7 @@ float3 open_drt_transform(
     Here we split apart the calculation for hue and chroma so that we have access to RGB CMY
     individually without having to linear step extract the result again.
 
-    To do this, we first calculate the "wide" hue angle: 
+    To do this, we first calculate the "wide" hue angle:
       wide hue RGB = (RGB - mn)/mx
       wide hue CMY = (mx - RGB)/mx
     and then "narrow down" the hue angle for each with channel subtraction (see narrow_hue_angles() function).
@@ -405,7 +405,7 @@ float3 open_drt_transform(
       Since we compress chroma by lerping in a straight line towards 1.0 in rgb ratios, this can result in perceptual hue shifts
       due to the Abney effect. For example, pure blue compressed in a straight line towards achromatic appears to shift in hue towards purple.
 
-      To combat this, and to add another important user control for image appearance, we add controls to curve the hue paths 
+      To combat this, and to add another important user control for image appearance, we add controls to curve the hue paths
       as they move towards achromatic. We include only controls for primary colors: RGB. In my testing, it was of limited use to
       control hue paths for CMY.
 
@@ -431,9 +431,9 @@ float3 open_drt_transform(
       In order to improve skin-tone rendering and overal "vibrance" of the image, which we
       are used to seeing with per-channel style view transforms, we boost mid-range chroma
       in shadows and midtones using a "chroma contrast" setup.
-      
-      Basically we take classical chroma (distance from achromatic), we take the compressed tonescale curve, 
-      and we apply a contrast to the tonescale curve mixed by a parabolic center extraction of chroma, 
+
+      Basically we take classical chroma (distance from achromatic), we take the compressed tonescale curve,
+      and we apply a contrast to the tonescale curve mixed by a parabolic center extraction of chroma,
       so that we do not boost saturation at grey (increases noise), nor do we boost saturation of highly
       saturated colors which might already be near the edge of the gamut volume.
   */
