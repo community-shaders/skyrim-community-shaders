@@ -7,6 +7,7 @@ private:
 
 public:
 	virtual bool SupportsVR() override { return true; };
+	virtual bool IsCore() const override { return true; };
 
 	virtual inline std::string GetName() override { return "Image Based Lighting"; }
 	virtual inline std::string GetShortName() override { return "ImageBasedLighting"; }
