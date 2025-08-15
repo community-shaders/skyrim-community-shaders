@@ -852,6 +852,10 @@ void Effect11::RenderImGui()
             ImGui::Separator();
         }
 
+        // Define fixed widths
+        const float labelWidth = ImGui::CalcTextSize("WWWWWWWWWWWWWWWWWWWWWWWWW").x; // 25 characters for labels
+        const float inputAreaWidth = ImGui::CalcTextSize("WWWWWWWWWWWWWWWWWWWW").x; // 20 characters for inputs
+
         for (auto& uiVar : uiVariables) {
             // Skip empty UI names (spacers) - detect any string with only whitespace
             if (uiVar.displayName.empty() || std::all_of(uiVar.displayName.begin(), uiVar.displayName.end(), [](char c) { return std::isspace(c); })) {
@@ -859,59 +863,83 @@ void Effect11::RenderImGui()
                 continue;
             }
 
-            switch (uiVar.type) {
-                case UIVariableType::Float:
-                {
-                    // Detect labels
-                    if (uiVar.floatMin == 0 && uiVar.floatMax == 0) {
-                        ImGui::Text("%s", uiVar.displayName.c_str());
-                    }
-					// Default
-                    else {
-                        if (ImGui::SliderFloat(uiVar.displayName.c_str(), &uiVar.floatValue, uiVar.floatMin, uiVar.floatMax, "%.3f")) {
-                            valuesChanged = true;
+            // Clamp label text to fixed width
+            std::string clampedLabel = uiVar.displayName;
+            while (ImGui::CalcTextSize(clampedLabel.c_str()).x > labelWidth && !clampedLabel.empty()) {
+                clampedLabel.pop_back();
+            }
+
+            // Draw label with fixed width
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("%s", clampedLabel.c_str());
+            ImGui::SameLine(labelWidth + ImGui::GetStyle().ItemSpacing.x);
+            
+            // Create child window with fixed width for inputs
+            if (ImGui::BeginChild(("input_" + uiVar.name).c_str(), ImVec2(inputAreaWidth, ImGui::GetFrameHeight()), false, ImGuiWindowFlags_NoScrollbar)) {
+                switch (uiVar.type) {
+                    case UIVariableType::Float:
+                    {
+                        // Detect labels - skip input for label-only items
+                        if (uiVar.floatMin == 0 && uiVar.floatMax == 0) {
+                            // This is a label, already drawn above
                         }
-                    }
-                    break;
-                }
-                case UIVariableType::Int:
-                {
-                    if (uiVar.widgetType == UIWidgetType::Dropdown && !uiVar.dropdownItems.empty()) {
-                        const char* currentItem = uiVar.dropdownItems[uiVar.intValue].c_str();
-                        if (ImGui::BeginCombo(uiVar.displayName.c_str(), currentItem)) {
-                            for (int i = 0; i < uiVar.dropdownItems.size(); ++i) {
-                                const bool isSelected = (uiVar.intValue == i);
-                                if (ImGui::Selectable(uiVar.dropdownItems[i].c_str(), isSelected)) {
-                                    uiVar.intValue = i;
-                                    valuesChanged = true;
+                        else {
+                            ImGui::SetNextItemWidth(-1); // Fill available width
+                            if (ImGui::InputFloat(("##" + uiVar.name).c_str(), &uiVar.floatValue, 0.0f, 0.0f, "%.3f")) {
+                                // Clamp to min/max if specified
+                                if (uiVar.floatMin != uiVar.floatMax) {
+                                    uiVar.floatValue = std::clamp(uiVar.floatValue, uiVar.floatMin, uiVar.floatMax);
                                 }
-                                if (isSelected) {
-                                    ImGui::SetItemDefaultFocus();
-                                }
+                                valuesChanged = true;
                             }
-                            ImGui::EndCombo();
                         }
+                        break;
                     }
-                    // Detect labels
-                    else if (uiVar.intMin == 0 && uiVar.intMax == 0) {
-                        ImGui::Text("%s", uiVar.displayName.c_str());
+                    case UIVariableType::Int:
+                    {
+                        if (uiVar.widgetType == UIWidgetType::Dropdown && !uiVar.dropdownItems.empty()) {
+                            ImGui::SetNextItemWidth(-1); // Fill available width
+                            const char* currentItem = uiVar.dropdownItems[uiVar.intValue].c_str();
+                            if (ImGui::BeginCombo(("##" + uiVar.name).c_str(), currentItem)) {
+                                for (int i = 0; i < uiVar.dropdownItems.size(); ++i) {
+                                    const bool isSelected = (uiVar.intValue == i);
+                                    if (ImGui::Selectable(uiVar.dropdownItems[i].c_str(), isSelected)) {
+                                        uiVar.intValue = i;
+                                        valuesChanged = true;
+                                    }
+                                    if (isSelected) {
+                                        ImGui::SetItemDefaultFocus();
+                                    }
+                                }
+                                ImGui::EndCombo();
+                            }
+                        }
+                        // Detect labels - skip input for label-only items
+                        else if (uiVar.intMin == 0 && uiVar.intMax == 0) {
+                            // This is a label, already drawn above
+                        }
+                        else {
+                            ImGui::SetNextItemWidth(-1); // Fill available width
+                            if (ImGui::InputInt(("##" + uiVar.name).c_str(), &uiVar.intValue)) {
+                                // Clamp to min/max if specified
+                                if (uiVar.intMin != uiVar.intMax) {
+                                    uiVar.intValue = std::clamp(uiVar.intValue, uiVar.intMin, uiVar.intMax);
+                                }
+                                valuesChanged = true;
+                            }
+                        }
+                        break;
                     }
-                    // Default
-                    else {
-                        if (ImGui::SliderInt(uiVar.displayName.c_str(), &uiVar.intValue, uiVar.intMin, uiVar.intMax)) {
+                    case UIVariableType::Bool:
+                    {
+                        if (ImGui::Checkbox(("##" + uiVar.name).c_str(), &uiVar.boolValue)) {
                             valuesChanged = true;
                         }
+                        break;
                     }
-                    break;
-                }
-                case UIVariableType::Bool:
-                {
-                    if (ImGui::Checkbox(uiVar.displayName.c_str(), &uiVar.boolValue)) {
-                        valuesChanged = true;
-                    }
-                    break;
                 }
             }
+            ImGui::EndChild();
         }
 
         // Update shader variables if any values changed
