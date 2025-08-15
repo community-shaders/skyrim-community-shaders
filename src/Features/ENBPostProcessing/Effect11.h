@@ -11,21 +11,6 @@
 
 using Microsoft::WRL::ComPtr;
 
-/**
- * @brief Simple include handler for D3DX11 effect compilation
- */
-class EffectIncludeHandler : public ID3DInclude
-{
-public:
-    EffectIncludeHandler(const std::filesystem::path& effectDirectory) : effectDir(effectDirectory) {}
-    
-    HRESULT Open(D3D_INCLUDE_TYPE IncludeType, LPCSTR pFileName, LPCVOID pParentData, LPCVOID* ppData, UINT* pBytes) override;
-    HRESULT Close(LPCVOID pData) override;
-
-private:
-    std::filesystem::path effectDir;
-    std::vector<std::vector<char>> includeData;
-};
 
 /**
  * @brief Framework for loading and executing ENBSeries-compatible FX effect files

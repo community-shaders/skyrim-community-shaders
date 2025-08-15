@@ -12,50 +12,6 @@
 #include <DirectXTK/DDSTextureLoader.h>
 #include <DirectXTK/WICTextureLoader.h>
 
-HRESULT EffectIncludeHandler::Open(D3D_INCLUDE_TYPE , LPCSTR pFileName, LPCVOID, LPCVOID* ppData, UINT* pBytes)
-{
-    try {
-        std::filesystem::path includePath(pFileName);
-        
-        // If it's not an absolute path, make it relative to the effect file's directory
-        if (!includePath.is_absolute()) {
-            includePath = effectDir / includePath;
-        }
-        
-        std::ifstream file(includePath, std::ios::binary | std::ios::ate);
-        if (!file.is_open()) {
-            logger::error("Failed to open include file: {}", includePath.string());
-            return E_FAIL;
-        }
-        
-        std::streamsize size = file.tellg();
-        file.seekg(0, std::ios::beg);
-        
-        includeData.emplace_back(size);
-        auto& data = includeData.back();
-        
-        if (!file.read(data.data(), size)) {
-            logger::error("Failed to read include file: {}", includePath.string());
-            includeData.pop_back();
-            return E_FAIL;
-        }
-        
-        *ppData = data.data();
-        *pBytes = static_cast<UINT>(size);
-        
-        return S_OK;
-    }
-    catch (const std::exception& e) {
-        logger::error("Exception in include handler: {}", e.what());
-        return E_FAIL;
-    }
-}
-
-HRESULT EffectIncludeHandler::Close(LPCVOID)
-{
-    // Data is managed by includeData vector, no need to explicitly free
-    return S_OK;
-}
 
 void Effect11::Initialize()
 {
@@ -68,12 +24,10 @@ bool Effect11::LoadFXFile(std::filesystem::path a_filePath)
     ComPtr<ID3DBlob> compiledShader;
     ComPtr<ID3DBlob> errorBlob;
 
-    EffectIncludeHandler includeHandler(a_filePath.parent_path());
-
     HRESULT hr = D3DX11CompileEffectFromFile(
 		a_filePath.c_str(),
         nullptr,
-        &includeHandler,
+        D3D_COMPILE_STANDARD_FILE_INCLUDE,
         NULL,
 		NULL,
 		globals::d3d::device,
