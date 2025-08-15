@@ -27,6 +27,8 @@ public:
 
 	bool LoadFXFile(std::filesystem::path a_filePath);
 
+	void Execute(ID3D11ShaderResourceView* input, ID3D11RenderTargetView* output);
+
     void ExecuteTechniqueSequence(const std::string& baseTechniqueName, ID3D11RenderTargetView* renderTarget);
     
     // UI System
@@ -99,7 +101,8 @@ private:
     // Technique selection
     std::string selectedTechnique;
     std::vector<std::string> availableTechniques;
-
+	
+    ComPtr<ID3DX11EffectVariable> TextureColor;
 	ComPtr<ID3DX11EffectVariable> Timer;
 	ComPtr<ID3DX11EffectVariable> ScreenSize;
 	ComPtr<ID3DX11EffectVariable> AdaptiveQuality;

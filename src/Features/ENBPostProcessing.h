@@ -36,6 +36,7 @@ public:
 	virtual void DrawSettings() override;
 	virtual void SetupResources() override;
 	virtual void Reset() override;
+	virtual void PostPostLoad() override;
 
 	Effect11& GetEffect11() { return effect11; }
 

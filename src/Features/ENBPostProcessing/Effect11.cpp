@@ -62,6 +62,14 @@ bool Effect11::LoadFXFile(std::filesystem::path a_filePath)
     return true;
 }
 
+void Effect11::Execute(ID3D11ShaderResourceView* input, ID3D11RenderTargetView* output)
+{
+	TextureColor->AsShaderResource()->SetResource(input);
+
+	ExecuteTechniqueSequence(selectedTechnique, output);
+}
+
+
 void Effect11::ExecuteTechniqueSequence(const std::string& baseTechniqueName, ID3D11RenderTargetView* renderTarget)
 {
 	auto context = globals::d3d::context;
@@ -240,12 +248,16 @@ std::vector<uint8_t> Effect11::LoadFileToMemory(const std::string& filePath)
 
 void Effect11::SetupCommonVariables()
 {
+	TextureColor = effect->GetVariableByName("TextureColor")->AsShaderResource();
+
 	Timer = effect->GetVariableByName("Timer")->AsVector();
 	ScreenSize = effect->GetVariableByName("ScreenSize")->AsVector();
 	AdaptiveQuality = effect->GetVariableByName("AdaptiveQuality")->AsVector();
 	Weather = effect->GetVariableByName("Weather")->AsVector();
 	TimeOfDay1 = effect->GetVariableByName("TimeOfDay1")->AsVector();
 	TimeOfDay2 = effect->GetVariableByName("TimeOfDay2")->AsVector();
+	ENightDayFactor = effect->GetVariableByName("ENightDayFactor")->AsVector();
+	EInteriorFactor = effect->GetVariableByName("EInteriorFactor")->AsVector();
 }
 
 void Effect11::UpdateCommonVariables()
@@ -272,7 +284,7 @@ void Effect11::UpdateCommonVariables()
 	auto sky = globals::game::sky;
 
     {
-		float4 weather = { static_cast<float>(sky->currentWeather->formID), static_cast<float>(sky->lastWeather->formID), sky->currentWeatherPct, sky->currentGameHour };
+		float4 weather = { sky->currentWeather ? static_cast<float>(sky->currentWeather->formID) : 0, sky->lastWeather ? static_cast<float>(sky->lastWeather->formID) : 0, sky->currentWeatherPct, sky->currentGameHour };
 
 		Weather->SetRawValue(&weather, 0, sizeof(weather));
 	}
