@@ -2,6 +2,7 @@
 
 #include <d3d11.h>
 #include <Effects11/d3dx11effect.h>
+#include <d3dcompiler.h>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -9,6 +10,22 @@
 #include <wrl/client.h>
 
 using Microsoft::WRL::ComPtr;
+
+/**
+ * @brief Simple include handler for D3DX11 effect compilation
+ */
+class EffectIncludeHandler : public ID3DInclude
+{
+public:
+    EffectIncludeHandler(const std::filesystem::path& effectDirectory) : effectDir(effectDirectory) {}
+    
+    HRESULT Open(D3D_INCLUDE_TYPE IncludeType, LPCSTR pFileName, LPCVOID pParentData, LPCVOID* ppData, UINT* pBytes) override;
+    HRESULT Close(LPCVOID pData) override;
+
+private:
+    std::filesystem::path effectDir;
+    std::vector<std::vector<char>> includeData;
+};
 
 /**
  * @brief Framework for loading and executing ENBSeries-compatible FX effect files
@@ -31,6 +48,10 @@ public:
     void RenderImGui();
     void LoadUIVariables();
     void UpdateUIVariables();
+
+    // Technique selection
+    const std::string& GetSelectedTechnique() const { return selectedTechnique; }
+    const std::vector<std::string>& GetAvailableTechniques() const { return availableTechniques; }
 
 private:
     struct TechniqueInfo {
@@ -62,7 +83,6 @@ private:
     enum class UIWidgetType {
         Default,
         Spinner,
-        Slider,
         Dropdown
     };
 
@@ -90,6 +110,10 @@ private:
     };
 
     std::vector<UIVariable> uiVariables;
+
+    // Technique selection
+    std::string selectedTechnique;
+    std::vector<std::string> availableTechniques;
 
 	ComPtr<ID3DX11EffectVariable> Timer;
 	ComPtr<ID3DX11EffectVariable> ScreenSize;

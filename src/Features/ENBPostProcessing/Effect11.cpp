@@ -12,6 +12,51 @@
 #include <DirectXTK/DDSTextureLoader.h>
 #include <DirectXTK/WICTextureLoader.h>
 
+HRESULT EffectIncludeHandler::Open(D3D_INCLUDE_TYPE , LPCSTR pFileName, LPCVOID, LPCVOID* ppData, UINT* pBytes)
+{
+    try {
+        std::filesystem::path includePath(pFileName);
+        
+        // If it's not an absolute path, make it relative to the effect file's directory
+        if (!includePath.is_absolute()) {
+            includePath = effectDir / includePath;
+        }
+        
+        std::ifstream file(includePath, std::ios::binary | std::ios::ate);
+        if (!file.is_open()) {
+            logger::error("Failed to open include file: {}", includePath.string());
+            return E_FAIL;
+        }
+        
+        std::streamsize size = file.tellg();
+        file.seekg(0, std::ios::beg);
+        
+        includeData.emplace_back(size);
+        auto& data = includeData.back();
+        
+        if (!file.read(data.data(), size)) {
+            logger::error("Failed to read include file: {}", includePath.string());
+            includeData.pop_back();
+            return E_FAIL;
+        }
+        
+        *ppData = data.data();
+        *pBytes = static_cast<UINT>(size);
+        
+        return S_OK;
+    }
+    catch (const std::exception& e) {
+        logger::error("Exception in include handler: {}", e.what());
+        return E_FAIL;
+    }
+}
+
+HRESULT EffectIncludeHandler::Close(LPCVOID)
+{
+    // Data is managed by includeData vector, no need to explicitly free
+    return S_OK;
+}
+
 void Effect11::Initialize()
 {
 	CreateRenderStates();
@@ -23,10 +68,12 @@ bool Effect11::LoadFXFile(std::filesystem::path a_filePath)
     ComPtr<ID3DBlob> compiledShader;
     ComPtr<ID3DBlob> errorBlob;
 
+    EffectIncludeHandler includeHandler(a_filePath.parent_path());
+
     HRESULT hr = D3DX11CompileEffectFromFile(
 		a_filePath.c_str(),
         nullptr,
-        nullptr,
+        &includeHandler,
         NULL,
 		NULL,
 		globals::d3d::device,
@@ -48,6 +95,13 @@ bool Effect11::LoadFXFile(std::filesystem::path a_filePath)
 
     LoadResourceNameTextures();
     LoadTechniques();
+
+    // Populate available techniques for UI selection
+    availableTechniques = GetBaseTechniqueNames();
+    if (!availableTechniques.empty()) {
+        selectedTechnique = availableTechniques[0]; // Default to first technique
+    }
+
     LoadUIVariables();
 
 	logger::debug("Successfully loaded FX file: {}", a_filePath.string());
@@ -760,9 +814,11 @@ std::string Effect11::GetUIAnnotation(ID3DX11EffectVariable* variable, const std
 
 Effect11::UIWidgetType Effect11::ParseWidgetType(const std::string& widget)
 {
-    if (widget == "Spinner") return UIWidgetType::Spinner;
-    if (widget == "Slider") return UIWidgetType::Slider;
-    if (widget == "dropdown") return UIWidgetType::Dropdown;
+    std::string lowerWidget = widget;
+    std::transform(lowerWidget.begin(), lowerWidget.end(), lowerWidget.begin(), ::tolower);
+    
+    if (lowerWidget == "spinner") return UIWidgetType::Spinner;
+    if (lowerWidget == "dropdown") return UIWidgetType::Dropdown;
     return UIWidgetType::Default;
 }
 
@@ -824,6 +880,23 @@ void Effect11::RenderImGui()
 {
 	if (ImGui::TreeNodeEx("enbeffect.fx", ImGuiTreeNodeFlags_DefaultOpen)) {
         bool valuesChanged = false;
+
+        // Technique selection dropdown
+        if (!availableTechniques.empty()) {
+            if (ImGui::BeginCombo("Technique", selectedTechnique.c_str())) {
+                for (const auto& technique : availableTechniques) {
+                    const bool isSelected = (selectedTechnique == technique);
+                    if (ImGui::Selectable(technique.c_str(), isSelected)) {
+                        selectedTechnique = technique;
+                    }
+                    if (isSelected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::Separator();
+        }
 
         for (auto& uiVar : uiVariables) {
             // Skip empty UI names (spacers) - detect any string with only whitespace
