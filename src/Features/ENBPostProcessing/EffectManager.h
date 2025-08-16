@@ -17,9 +17,6 @@ class EffectManager
 {
 public:
     static EffectManager& GetSingleton();
-    
-    bool LoadEffect(const std::string& name);
-    void UnloadAllEffects();
 
     // Effect execution
     void ExecuteEffects(RE::BSGraphics::RenderTargetData& input, 
@@ -31,12 +28,14 @@ public:
     // Lifecycle
 	void Initialize();
 	void RegisterEffects();
-    void Reset();
+
+	void LoadEffects();
+	void ApplyEffects();
     
     // Common variable management
     void UpdateAllCommonVariables();
     void UpdateCommonVariablesForEffect(ID3DX11Effect* effect);
-
+    
     std::unordered_map<std::string, std::unique_ptr<Effect>> effects;
 
     // Common resources shared across effects

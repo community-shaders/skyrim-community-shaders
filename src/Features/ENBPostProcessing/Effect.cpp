@@ -14,6 +14,44 @@
 #include <DirectXTK/WICTextureLoader.h>
 
 
+bool Effect::Load()
+{
+    if (isLoaded) {
+        return true; // Already loaded
+    }
+    
+    Initialize();
+    auto filePath = std::filesystem::path(GetName());
+    if (!LoadFXFile(filePath)) {
+        logger::error("Failed to load FX file '{}' for effect '{}'", filePath.string(), GetName());
+        isLoaded = false;
+        return false;
+    }
+    
+    logger::info("Successfully loaded effect '{}' from '{}'", GetName(), filePath.string());
+    isLoaded = true;
+    return true;
+}
+
+void Effect::Unload()
+{
+    if (!isLoaded) {
+        return;
+    }
+    
+    // Clear all resources
+    effect.Reset();
+    techniques.clear();
+    variables.clear();
+    customTextureCache.clear();
+    uiVariables.clear();
+    availableTechniques.clear();
+    selectedTechnique.clear();
+    
+    isLoaded = false;
+    logger::info("Unloaded effect '{}'", GetName());
+}
+
 void Effect::Initialize()
 {
     // Shared resources are now managed by EffectManager
@@ -61,14 +99,12 @@ bool Effect::LoadFXFile(std::filesystem::path a_filePath)
     return true;
 }
 
-void Effect::Execute(RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output)
-{
-	ExecuteTechniqueSequence(selectedTechnique, input, swap, output);
-}
-
-
 void Effect::ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output)
 {
+    if (!isLoaded || !effect) {
+        return; // Skip execution if not loaded
+    }
+    
 	auto context = globals::d3d::context;
 
     // Check if the technique sequence exists
@@ -135,6 +171,7 @@ void Effect::ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE::
 		context->CopyResource(output.texture, swap.texture);
     }
 }
+
 
 
 
@@ -739,18 +776,4 @@ void Effect::EnumerateAllVariables()
     }
 
     logger::info("Enumerated {} effect variables", variables.size());
-}
-
-bool Effect::Load()
-{
-    Initialize();
-    
-    auto filePath = std::filesystem::path(GetName());
-    if (!LoadFXFile(filePath)) {
-        logger::error("Failed to load FX file '{}' for effect '{}'", filePath.string(), GetName());
-        return false;
-    }
-    
-    logger::info("Successfully loaded effect '{}' from '{}'", GetName(), filePath.string());
-    return true;
 }

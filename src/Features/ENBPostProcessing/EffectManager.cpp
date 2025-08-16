@@ -16,38 +16,30 @@ void EffectManager::Initialize()
 {
     InitializeSharedResources();
 	RegisterEffects();
+	ApplyEffects();
 }
 
 void EffectManager::RegisterEffects()
 {
-	auto enbEffect = std::make_unique<ENBEffect>();
-	effects[enbEffect->GetName()] = std::move(enbEffect);
-
-	auto enbBloom = std::make_unique<ENBBloom>();
-	effects[enbBloom->GetName()] = std::move(enbBloom);
-}
-
-void EffectManager::Reset()
-{
-    UnloadAllEffects();
-    CleanupSharedResources();
-}
-
-bool EffectManager::LoadEffect(const std::string& name)
-{
-    auto it = effects.find(name);
-    if (it == effects.end()) {
-        logger::error("Effect '{}' not found", name);
-        return false;
-    }
+    auto registerEffect = [this](auto effect) {
+        std::string name = effect->GetName();
+        effects[name] = std::move(effect);
+        logger::info("Registered effect: {}", name);
+    };
     
-    return it->second->Load();
+    registerEffect(std::make_unique<ENBEffect>());
+    registerEffect(std::make_unique<ENBBloom>());
 }
 
-void EffectManager::UnloadAllEffects()
+void EffectManager::ApplyEffects()
 {
-    effects.clear();
-	RegisterEffects();
+    logger::info("Applying effects");
+
+    for (auto& [name, effect] : effects) {
+        effect->Apply();
+    }
+
+	logger::info("Applied effects");
 }
 
 void EffectManager::ExecuteEffects(RE::BSGraphics::RenderTargetData& input, 
@@ -67,28 +59,29 @@ void EffectManager::ExecuteEffects(RE::BSGraphics::RenderTargetData& input,
 	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
     for (auto& [name, effect] : effects) {
-        effect->Execute(input, swap, output);
+        if (effect->IsLoaded()) {
+            effect->Execute(input, swap, output);
+        }
     }
 }
 
 void EffectManager::RenderImGui()
 {
     if (ImGui::CollapsingHeader("Effect Manager", ImGuiTreeNodeFlags_DefaultOpen)) {
-             
+
         if (ImGui::Button("Apply")) {
+            ApplyEffects();
         }
-
-        if (ImGui::Button("Save")) {
-		}
-
-		if (ImGui::Button("Load")) {
-		}
-         
-        for (auto& [name, effect] : effects) {
-			if (ImGui::TreeNodeEx(name.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-				effect->RenderImGui();    
-                ImGui::TreePop();
-            }
+        
+        for (auto& [name, effect] : effects) {     
+            if (ImGui::CollapsingHeader(effect->GetName().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+				if (effect->IsLoaded()) {
+					effect->RenderImGui();
+				} else {
+					ImGui::TextDisabled("Effect failed to compile");
+				}
+				ImGui::TreePop();
+			}
         }
     }
 }
@@ -377,7 +370,9 @@ void EffectManager::UpdateAllCommonVariables()
     UpdateCommonData();
     
     for (auto& [name, effect] : effects) {
-    	UpdateCommonVariablesForEffect(effect->effect.Get());       
+        if (effect->IsLoaded()) {
+            UpdateCommonVariablesForEffect(effect->GetEffect());       
+        }
     }
 }
 

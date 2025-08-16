@@ -21,10 +21,15 @@ using Microsoft::WRL::ComPtr;
 class Effect
 {
 public:
-	void Initialize();
+    Effect() = default;
+    virtual ~Effect() = default;
+    
+    // Loading methods
+    bool Load();
+    void Unload();
+    void Apply() { Unload(); Load(); }
 
-	bool LoadFXFile(std::filesystem::path a_filePath);
-	bool Load();
+    bool IsLoaded() const { return isLoaded; }
 
 	virtual void Execute(RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output) = 0;
     
@@ -99,12 +104,18 @@ public:
     // Technique selection
     std::string selectedTechnique;
     std::vector<std::string> availableTechniques;
+    
+    // Load state
+    bool isLoaded = false;
 	
     void ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output);
     
     // Allow EffectManager to setup common variables
     ID3DX11Effect* GetEffect() const { return effect.Get(); }
 
+private:
+    bool LoadFXFile(std::filesystem::path a_filePath);
+    void Initialize();
     std::vector<uint8_t> LoadFileToMemory(const std::string& filePath);
 	
 	void EnumerateAllVariables();
