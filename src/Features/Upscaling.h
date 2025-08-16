@@ -107,21 +107,21 @@ public:
 	void CreateSharedD3D12Resources(UpscaleMethod a_upscalemethod, bool a_framegenEnabled);
 	void DestroySharedD3D12Resources(UpscaleMethod a_upscalemethod, bool a_framegenEnabled);
 
-	ID3D11ComputeShader* encodeTexturesCS[5] = { nullptr }; // One for each UpscaleMethod
+	winrt::com_ptr<ID3D11ComputeShader> encodeTexturesCS[5]; // One for each UpscaleMethod
 	ID3D11ComputeShader* GetEncodeTexturesCS();
 
-	ID3D11PixelShader* depthRefractionUpscalePS = nullptr;
+	winrt::com_ptr<ID3D11PixelShader> depthRefractionUpscalePS;
 	ID3D11PixelShader* GetDepthRefractionUpscalePS();
 	
-	ID3D11PixelShader* underwaterMaskUpscalePS = nullptr;
+	winrt::com_ptr<ID3D11PixelShader> underwaterMaskUpscalePS;
 	ID3D11PixelShader* GetUnderwaterMaskUpscalePS();
 
-	ID3D11VertexShader* upscaleVS = nullptr;
+	winrt::com_ptr<ID3D11VertexShader> upscaleVS;
 	ID3D11VertexShader* GetUpscaleVS();
 
-	ID3D11DepthStencilState* upscaleDepthStencilState = nullptr;
-	ID3D11BlendState* upscaleBlendState = nullptr;
-	ID3D11RasterizerState* upscaleRasterizerState = nullptr;
+	winrt::com_ptr<ID3D11DepthStencilState> upscaleDepthStencilState;
+	winrt::com_ptr<ID3D11BlendState> upscaleBlendState;
+	winrt::com_ptr<ID3D11RasterizerState> upscaleRasterizerState;
 
 	void ConfigureUpscaling(RE::BSGraphics::State* a_state);
 	void Upscale();
@@ -164,7 +164,7 @@ public:
 	static inline FidelityFX fidelityFX;
 	static inline class DX12SwapChain dx12SwapChain;
 
-	ID3D11ComputeShader* copyDepthToSharedBufferCS = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> copyDepthToSharedBufferCS;
 
 	void CreateFrameGenerationResources();
 	void CopyHUDLessBuffer();
