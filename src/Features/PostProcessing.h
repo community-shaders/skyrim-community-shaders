@@ -92,8 +92,6 @@ struct PostProcessing : Feature
 
 	void PreProcess();
 
-	void DrawAfterTAA(Texture2D* inout_tex);
-
 	/////////////////////////////////////////////////////////////////////////////////
 
 	bool bypass = false;

@@ -6,8 +6,6 @@
 #include <Windows.h>
 #include <reshade/reshade.hpp>
 
-#include "Features/PostProcessing.h"
-
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Upscaling::Settings,
 	upscaleMethod,
@@ -434,11 +432,6 @@ void Upscaling::Upscale()
 		state->EndPerfEvent();
 	}
 
-	auto& postProcessing = globals::features::postProcessing;
-	if (postProcessing.loaded) {
-		postProcessing.DrawAfterTAA(upscalingTexture);
-	}
-
 	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
 
 	// Release COM objects to prevent memory leaks after all usage is complete
@@ -504,11 +497,6 @@ void Upscaling::SharpenTAA()
 	}
 
 	state->EndPerfEvent();
-
-	auto& postProcessing = globals::features::postProcessing;
-	if (postProcessing.loaded) {
-		postProcessing.DrawAfterTAA(upscalingTexture);
-	}
 
 	context->CopyResource(outputTextureResource, upscalingTexture->resource.get());
 

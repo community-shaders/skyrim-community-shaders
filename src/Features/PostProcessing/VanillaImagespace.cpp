@@ -221,7 +221,7 @@ void VanillaImagespace::Draw(TextureInfo& inout_tex)
 	float4 cinematic = { 1.0f, 1.0f, 1.0f, 1.0f };
 	float4 fade = { 0.0f, 0.0f, 0.0f, 0.0f };
 	float4 tint = { 0.0f, 0.0f, 0.0f, 0.0f };
-	auto ImageSpace = RE::ImageSpaceManager::GetSingleton();
+	const auto ImageSpace = RE::ImageSpaceManager::GetSingleton();
 	if (globals::game::isVR) {
 		const auto& iSRuntimeData = ImageSpace->GetVRRuntimeData();
 		imageSpaceData = iSRuntimeData.data;
@@ -240,7 +240,7 @@ void VanillaImagespace::Draw(TextureInfo& inout_tex)
 		}
 	}
 
-	if (auto sky = globals::game::sky)
+	if (const auto sky = globals::game::sky)
 		isInInterior = sky->mode.get() != RE::Sky::Mode::kFull;
 	else
 		isInInterior = true;
@@ -299,7 +299,6 @@ void VanillaImagespace::Draw(TextureInfo& inout_tex)
 	uav = nullptr;
 	cb = nullptr;
 
-	inout_tex = { texOutput->resource.get(), texOutput->srv.get() };
 	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 	context->CSSetShaderResources(0, 1, &srv);
 	context->CSSetConstantBuffers(1, 1, &cb);

@@ -598,11 +598,6 @@ void PostProcessing::PreProcess()
 	isrefraction = false;
 }
 
-void PostProcessing::DrawAfterTAA(Texture2D* inout_tex)
-{
-	if (!inout_tex) return;
-}
-
 void PostProcessing::Prepass()
 {
 	if (!pendingSettings.empty()) {
