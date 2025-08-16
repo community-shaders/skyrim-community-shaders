@@ -2,15 +2,12 @@
 
 struct IBL : Feature
 {
-private:
-	static constexpr std::string_view MOD_ID = "153478";
-
 public:
 	virtual bool SupportsVR() override { return true; };
+	virtual bool IsCore() const override { return true; };
 
 	virtual inline std::string GetName() override { return "Image Based Lighting"; }
 	virtual inline std::string GetShortName() override { return "ImageBasedLighting"; }
-	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "IBL"; }
 	virtual std::string_view GetCategory() const override { return "Lighting"; }
 
