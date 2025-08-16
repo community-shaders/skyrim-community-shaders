@@ -1,13 +1,13 @@
 {
-  "permissions": {
-    "allow": [
-      "Bash(find:*)",
-      "WebFetch(domain:github.com)",
-      "WebFetch(domain:github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash(rm:*)"
-    ],
-    "deny": [],
-    "ask": []
-  }
+    "permissions": {
+        "allow": [
+            "Bash(find:*)",
+            "WebFetch(domain:github.com)",
+            "WebFetch(domain:github.com)",
+            "WebFetch(domain:raw.githubusercontent.com)",
+            "Bash(rm:*)"
+        ],
+        "deny": [],
+        "ask": []
+    }
 }
