@@ -18,7 +18,7 @@
 class FidelityFX
 {
 public:
-	static constexpr const wchar_t* PluginDir = L"Data\\SKSE\\Plugins\\FidelityFX";
+	static constexpr const wchar_t* PluginDir = L"Data\\Shaders\\Upscaling\\FidelityFX";
 
 	FidelityFX() = default;
 

@@ -24,7 +24,7 @@ typedef xess_result_t (*xessGetInputResolutionPtr)(xess_context_handle_t hContex
 class XeSS
 {
 public:
-	static constexpr const wchar_t* PluginDir = L"Data\\SKSE\\Plugins\\XeSS";
+	static constexpr const wchar_t* PluginDir = L"Data\\Shaders\\Upscaling\\XeSS";
 
 	XeSS() = default;
 

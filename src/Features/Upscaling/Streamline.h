@@ -20,7 +20,7 @@
 class Streamline
 {
 public:
-	static constexpr const wchar_t* PluginDir = L"Data\\SKSE\\Plugins\\Streamline";
+	static constexpr const wchar_t* PluginDir = L"Data\\Shaders\\Upscaling\\Streamline";
 
 	Streamline() = default;
 
