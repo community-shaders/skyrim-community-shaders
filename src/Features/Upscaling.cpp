@@ -432,9 +432,7 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 	}
 
 	// Create shared D3D12 resources for FSR/XeSS
-	if (a_upscalemethod == UpscaleMethod::kFSR || a_upscalemethod == UpscaleMethod::kXESS) {
-		CreateSharedD3D12Resources(a_upscalemethod);
-	}
+	CreateSharedD3D12Resources(a_upscalemethod, settings.frameGenerationMode && d3d12Interop);
 }
 
 void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
@@ -459,9 +457,7 @@ void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 	}
 
 	// Destroy shared D3D12 resources for FSR/XeSS
-	if (a_upscalemethod == UpscaleMethod::kFSR || a_upscalemethod == UpscaleMethod::kXESS) {
-		DestroySharedD3D12Resources(a_upscalemethod);
-	}
+	DestroySharedD3D12Resources(a_upscalemethod, settings.frameGenerationMode && d3d12Interop);
 }
 
 void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
@@ -691,7 +687,7 @@ void Upscaling::SetupResources()
 	srvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
 
-	// Resource allocation is now handled in CheckResources() based on upscale method
+	CreateUpscalingTextureResources((UpscaleMethod)settings.upscaleMethod);
 
 	if (d3d12Interop)
 		CreateFrameGenerationResources();
@@ -722,6 +718,9 @@ void Upscaling::SetupResources()
 	}
 
 	DX::ThrowIfFailed(globals::d3d::device->CreateDepthStencilState(&depthStencilDesc, &upscaleDepthStencilState));
+
+	// Create jitter offset constant buffer for depth upscaling
+	jitterCB = new ConstantBuffer(ConstantBufferDesc<JitterCB>());
 
 	// Create blend state for depth upscaling
 	D3D11_BLEND_DESC blendDesc = {};
@@ -764,6 +763,16 @@ void Upscaling::ClearShaderCache()
 			encodeTexturesCS[i] = nullptr;
 		}
 	}
+
+	if (depthRefractionUpscalePS) {
+		depthRefractionUpscalePS->Release();
+		depthRefractionUpscalePS = nullptr;
+	}
+
+	if (underwaterMaskUpscalePS) {
+		underwaterMaskUpscalePS->Release();
+		underwaterMaskUpscalePS = nullptr;
+	}
 }
 
 void Upscaling::CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter)
@@ -800,9 +809,9 @@ void Upscaling::CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter)
 	logger::info("[Upscaling] Shared D3D12 device and interop resources created successfully");
 }
 
-void Upscaling::CreateSharedD3D12Resources(UpscaleMethod a_upscalemethod)
+void Upscaling::CreateSharedD3D12Resources(UpscaleMethod a_upscalemethod, bool a_framegenEnabled)
 {
-	logger::info("[Upscaling] Creating shared D3D12 resources for upscale method {}", (int)a_upscalemethod);
+	logger::debug("[Upscaling] Creating shared D3D12 resources for upscale method {}", (int)a_upscalemethod);
 
 	// Get D3D11 device5 interface for WrappedResource creation
 	winrt::com_ptr<ID3D11Device5> d3d11Device5;
@@ -816,75 +825,82 @@ void Upscaling::CreateSharedD3D12Resources(UpscaleMethod a_upscalemethod)
 	texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
 	// Common resources for both FSR and XeSS
-	if (!inputColorBufferShared12) {
+	if (a_upscalemethod == UpscaleMethod::kFSR || a_upscalemethod == UpscaleMethod::kXESS) {
 		inputColorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
-	}
-	if (!outputColorBufferShared12) {
 		outputColorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
 	}
 
 	texDesc.Format = DXGI_FORMAT_R8_UNORM;
-	if (!reactiveMaskShared12) {
+	
+	if (a_upscalemethod == UpscaleMethod::kFSR || a_upscalemethod == UpscaleMethod::kXESS) {
 		reactiveMaskShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
 	}
-
+	
 	// Transparency mask only for FSR
-	if (a_upscalemethod == UpscaleMethod::kFSR && !transparencyCompositionMaskShared12) {
+	if (a_upscalemethod == UpscaleMethod::kFSR) {
 		transparencyCompositionMaskShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
 	}
 
 	texDesc.Format = DXGI_FORMAT_R32_FLOAT;
-	if (!depthBufferShared12) {
-		depthBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
-	}
 
-	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-	motionVector.texture->GetDesc(&texDesc);
-	if (!motionVectorBufferShared12) {
+	if (a_upscalemethod == UpscaleMethod::kFSR || a_upscalemethod == UpscaleMethod::kXESS || a_framegenEnabled) {
+		depthBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+
+		auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+		motionVector.texture->GetDesc(&texDesc);
+
 		motionVectorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
 	}
 
-	if (!copyDepthToSharedBufferCS) {
+	if (a_framegenEnabled) {
 		copyDepthToSharedBufferCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\Upscaling\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0");
 	}
 }
 
-void Upscaling::DestroySharedD3D12Resources(UpscaleMethod a_upscalemethod)
+void Upscaling::DestroySharedD3D12Resources(UpscaleMethod a_upscalemethod, bool a_framegenEnabled)
 {
-	logger::info("[Upscaling] Destroying shared D3D12 resources for upscale method {}", (int)a_upscalemethod);
+	logger::debug("[Upscaling] Destroying shared D3D12 resources for upscale method {}", (int)a_upscalemethod);
 
 	// Delete common resources
-	if (inputColorBufferShared12) {
-		delete inputColorBufferShared12;
-		inputColorBufferShared12 = nullptr;
+	if (a_upscalemethod != UpscaleMethod::kFSR && a_upscalemethod != UpscaleMethod::kXESS) {
+		if (inputColorBufferShared12) {
+			delete inputColorBufferShared12;
+			inputColorBufferShared12 = nullptr;
+		}
+		if (outputColorBufferShared12) {
+			delete outputColorBufferShared12;
+			outputColorBufferShared12 = nullptr;
+		}
+		if (reactiveMaskShared12) {
+			delete reactiveMaskShared12;
+			reactiveMaskShared12 = nullptr;
+		}
 	}
-	if (outputColorBufferShared12) {
-		delete outputColorBufferShared12;
-		outputColorBufferShared12 = nullptr;
-	}
-	if (reactiveMaskShared12) {
-		delete reactiveMaskShared12;
-		reactiveMaskShared12 = nullptr;
-	}
-	if (depthBufferShared12) {
-		delete depthBufferShared12;
-		depthBufferShared12 = nullptr;
-	}
-	if (motionVectorBufferShared12) {
-		delete motionVectorBufferShared12;
-		motionVectorBufferShared12 = nullptr;
-	}
-
-	// Delete transparency mask (FSR-specific)
-	if (transparencyCompositionMaskShared12) {
-		delete transparencyCompositionMaskShared12;
-		transparencyCompositionMaskShared12 = nullptr;
+	if (a_upscalemethod != UpscaleMethod::kFSR && a_upscalemethod != UpscaleMethod::kXESS && !a_framegenEnabled) {
+		if (depthBufferShared12) {
+			delete depthBufferShared12;
+			depthBufferShared12 = nullptr;
+		}
+		if (motionVectorBufferShared12) {
+			delete motionVectorBufferShared12;
+			motionVectorBufferShared12 = nullptr;
+		}
 	}
 
-	// Delete shader
-	if (copyDepthToSharedBufferCS) {
-		copyDepthToSharedBufferCS->Release();
-		copyDepthToSharedBufferCS = nullptr;
+	if (a_upscalemethod != UpscaleMethod::kFSR) {
+		// Delete transparency mask (FSR-specific)
+		if (transparencyCompositionMaskShared12) {
+			delete transparencyCompositionMaskShared12;
+			transparencyCompositionMaskShared12 = nullptr;
+		}
+	}
+
+	if (!a_framegenEnabled) {
+		// Delete shader
+		if (copyDepthToSharedBufferCS) {
+			copyDepthToSharedBufferCS->Release();
+			copyDepthToSharedBufferCS = nullptr;
+		}
 	}
 }
 
@@ -1415,8 +1431,16 @@ void Upscaling::UpscaleDepth()
 		// Set up pixel shader resources
 		auto deferred = globals::deferred;
 
-		ID3D11SamplerState* samplers[] = { deferred->linearSampler, deferred->pointSampler };
+		ID3D11SamplerState* samplers[] = { deferred->linearSampler};
 		context->PSSetSamplers(0, ARRAYSIZE(samplers), samplers);
+
+		// Set up jitter constant buffer for upscaling
+		JitterCB jitterData;
+		jitterData.jitter = jitter;
+
+		jitterCB->Update(jitterData);
+		auto bufferArray = jitterCB->CB();
+		context->PSSetConstantBuffers(0, 1, &bufferArray);
 		
 		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
