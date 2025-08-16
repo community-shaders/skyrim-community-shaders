@@ -1,5 +1,5 @@
 ﻿#include "PCH.h"
-#include "Effect11.h"
+#include "Effect.h"
 #include "EffectManager.h"
 #include "Globals.h"
 #include "State.h"
@@ -14,13 +14,13 @@
 #include <DirectXTK/WICTextureLoader.h>
 
 
-void Effect11::Initialize()
+void Effect::Initialize()
 {
     // Shared resources are now managed by EffectManager
     // Individual effects can initialize their specific resources here
 }
 
-bool Effect11::LoadFXFile(std::filesystem::path a_filePath)
+bool Effect::LoadFXFile(std::filesystem::path a_filePath)
  {
     ComPtr<ID3DBlob> compiledShader;
     ComPtr<ID3DBlob> errorBlob;
@@ -61,13 +61,13 @@ bool Effect11::LoadFXFile(std::filesystem::path a_filePath)
     return true;
 }
 
-void Effect11::Execute(RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output)
+void Effect::Execute(RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output)
 {
 	ExecuteTechniqueSequence(selectedTechnique, input, swap, output);
 }
 
 
-void Effect11::ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output)
+void Effect::ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output)
 {
 	auto context = globals::d3d::context;
 
@@ -138,7 +138,7 @@ void Effect11::ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE
 
 
 
-std::vector<uint8_t> Effect11::LoadFileToMemory(const std::string& filePath)
+std::vector<uint8_t> Effect::LoadFileToMemory(const std::string& filePath)
 {
     std::ifstream file(filePath, std::ios::binary | std::ios::ate);
     if (!file.is_open()) {
@@ -157,7 +157,7 @@ std::vector<uint8_t> Effect11::LoadFileToMemory(const std::string& filePath)
     return data;
 }
 
-void Effect11::SetupCustomTextures()
+void Effect::SetupCustomTextures()
 {
     // Iterate through all variables to find texture variables with ResourceName annotations
     for (auto& [varName, effectVar] : variables) {           
@@ -183,7 +183,7 @@ void Effect11::SetupCustomTextures()
     }
 }
 
-ID3D11ShaderResourceView* Effect11::LoadTextureFromFile(const std::string& filename)
+ID3D11ShaderResourceView* Effect::LoadTextureFromFile(const std::string& filename)
 {
 	auto device = globals::d3d::device;
 
@@ -220,7 +220,7 @@ ID3D11ShaderResourceView* Effect11::LoadTextureFromFile(const std::string& filen
     return srv.Get();
 }
 
-std::string Effect11::GetResourceNameFromVariable(ID3DX11EffectVariable* variable)
+std::string Effect::GetResourceNameFromVariable(ID3DX11EffectVariable* variable)
 {
     if (!variable) {
         return "";
@@ -260,7 +260,7 @@ std::string Effect11::GetResourceNameFromVariable(ID3DX11EffectVariable* variabl
     return "";
 }
 
-void Effect11::LoadTechniques()
+void Effect::LoadTechniques()
 {
     D3DX11_EFFECT_DESC effectDesc;
     DX::ThrowIfFailed(effect->GetDesc(&effectDesc));
@@ -319,7 +319,7 @@ void Effect11::LoadTechniques()
     }
 }
 
-std::vector<std::string> Effect11::GetBaseTechniqueNames()
+std::vector<std::string> Effect::GetBaseTechniqueNames()
 {
     std::vector<std::string> baseNames;
     baseNames.reserve(techniques.size());
@@ -334,7 +334,7 @@ std::vector<std::string> Effect11::GetBaseTechniqueNames()
     return baseNames;
 }
 
-std::string Effect11::GetRenderTargetFromTechnique(ID3DX11EffectTechnique* technique)
+std::string Effect::GetRenderTargetFromTechnique(ID3DX11EffectTechnique* technique)
 {
     if (!technique) {
         return "";
@@ -374,7 +374,7 @@ std::string Effect11::GetRenderTargetFromTechnique(ID3DX11EffectTechnique* techn
     return "";
 }
 
-ID3D11RenderTargetView* Effect11::GetRenderTargetView(const std::string& renderTargetName, ID3D11RenderTargetView* fallback)
+ID3D11RenderTargetView* Effect::GetRenderTargetView(const std::string& renderTargetName, ID3D11RenderTargetView* fallback)
 {
     if (renderTargetName.empty()) {
         return fallback;
@@ -390,7 +390,7 @@ ID3D11RenderTargetView* Effect11::GetRenderTargetView(const std::string& renderT
     return nullptr;
 }
 
-void Effect11::LoadUIVariables()
+void Effect::LoadUIVariables()
 {
     if (!effect) {
         return;
@@ -500,7 +500,7 @@ void Effect11::LoadUIVariables()
     logger::info("Loaded {} UI variables", uiVariables.size());
 }
 
-std::string Effect11::GetUIAnnotation(ID3DX11EffectVariable* variable, const std::string& annotationName)
+std::string Effect::GetUIAnnotation(ID3DX11EffectVariable* variable, const std::string& annotationName)
 {
     if (!variable) {
         return "";
@@ -552,7 +552,7 @@ std::string Effect11::GetUIAnnotation(ID3DX11EffectVariable* variable, const std
     return "";
 }
 
-Effect11::UIWidgetType Effect11::ParseWidgetType(const std::string& widget)
+Effect::UIWidgetType Effect::ParseWidgetType(const std::string& widget)
 {
     std::string lowerWidget = widget;
     std::transform(lowerWidget.begin(), lowerWidget.end(), lowerWidget.begin(), ::tolower);
@@ -562,7 +562,7 @@ Effect11::UIWidgetType Effect11::ParseWidgetType(const std::string& widget)
     return UIWidgetType::Default;
 }
 
-std::vector<std::string> Effect11::ParseDropdownList(const std::string& list)
+std::vector<std::string> Effect::ParseDropdownList(const std::string& list)
 {
     std::vector<std::string> items;
     std::stringstream ss(list);
@@ -578,7 +578,7 @@ std::vector<std::string> Effect11::ParseDropdownList(const std::string& list)
     return items;
 }
 
-void Effect11::LoadUIVariableValue(UIVariable& uiVar)
+void Effect::LoadUIVariableValue(UIVariable& uiVar)
 {
     switch (uiVar.type) {
         case UIVariableType::Float:
@@ -599,7 +599,7 @@ void Effect11::LoadUIVariableValue(UIVariable& uiVar)
     }
 }
 
-void Effect11::UpdateUIVariables()
+void Effect::UpdateUIVariables()
 {
     for (auto& uiVar : uiVariables) {
         switch (uiVar.type) {
@@ -616,7 +616,7 @@ void Effect11::UpdateUIVariables()
     }
 }
 
-void Effect11::RenderImGui()
+void Effect::RenderImGui()
 {
 	if (ImGui::TreeNodeEx("enbeffect.fx", ImGuiTreeNodeFlags_DefaultOpen)) {
         bool valuesChanged = false;
@@ -707,7 +707,7 @@ void Effect11::RenderImGui()
     }
 }
 
-void Effect11::EnumerateAllVariables()
+void Effect::EnumerateAllVariables()
 {
     if (!effect) {
         return;

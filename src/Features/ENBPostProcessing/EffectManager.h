@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Effect11.h"
+#include "Effect.h"
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -30,10 +30,6 @@ public:
                       RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output);
     void ExecuteAllEffects(RE::BSGraphics::RenderTargetData& input, 
                           RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output);
-
-    // Effect access
-    Effect11* GetEffect(const std::string& name);
-    std::vector<std::string> GetLoadedEffectNames() const;
     
     // UI Integration
     void RenderImGui();
@@ -42,18 +38,12 @@ public:
     void Initialize();
     void Reset();
     
-    // Shared resource access
-    ID3D11Buffer* GetSharedQuadVertexBuffer() const { return sharedQuadVertexBuffer.Get(); }
-    ID3D11InputLayout* GetSharedInputLayout() const { return sharedInputLayout.Get(); }
-    ID3D11RasterizerState* GetSharedRasterizerState() const { return sharedRasterizerState.Get(); }
-    ID3D11BlendState* GetSharedBlendState() const { return sharedBlendState.Get(); }
-    
     // Common variable management
     void UpdateAllCommonVariables();
     void UpdateCommonVariablesForEffect(ID3DX11Effect* effect);
 
     struct EffectEntry {
-        std::unique_ptr<Effect11> effect;
+        std::unique_ptr<Effect> effect;
         std::string type;
         bool isLoaded = false;
         bool isEnabled = true;

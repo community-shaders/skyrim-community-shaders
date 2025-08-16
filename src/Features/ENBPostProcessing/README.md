@@ -4,7 +4,7 @@ This framework provides an extensible system for loading and executing ENBSeries
 
 ## Architecture
 
-### Effect11 (Abstract Base Class)
+### Effect (Abstract Base Class)
 - Provides common functionality for all ENB effects
 - Handles DirectX 11 Effect file loading and management
 - Manages UI variables and technique selection
@@ -14,7 +14,7 @@ This framework provides an extensible system for loading and executing ENBSeries
   - `SetupCustomVariables()` - Initialize effect-specific variables
 
 ### EffectManager (Singleton)
-- Centralized management of all Effect11 instances
+- Centralized management of all Effect instances
 - Factory-based effect creation and registration
 - Unified execution interface for multiple effects
 - ImGui integration for effect management UI
@@ -52,9 +52,9 @@ manager.ExecuteAllEffects(inputRT, swapRT, outputRT);
 
 ## Adding New Effect Types
 
-1. Create a new class inheriting from Effect11:
+1. Create a new class inheriting from Effect:
 ```cpp
-class MyCustomEffect : public Effect11 {
+class MyCustomEffect : public Effect {
 public:
     virtual std::string GetEffectType() const override { return "MyCustomEffect"; }
     virtual LPCSTR GetSourceTexture() const override { return "TextureColor"; }
@@ -105,7 +105,7 @@ manager.LoadEffect("MyEffect", "path/to/shader.fx");
 
 ## Common Variables
 
-The base Effect11 class provides access to common ENB variables:
+The base Effect class provides access to common ENB variables:
 - TextureColor, TextureBloom, TextureLens, TextureAdaptation, TextureAperture
 - Timer, ScreenSize, AdaptiveQuality
 - Weather, TimeOfDay1, TimeOfDay2

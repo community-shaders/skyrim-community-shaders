@@ -18,7 +18,7 @@ namespace RE {
 
 using Microsoft::WRL::ComPtr;
 
-class Effect11
+class Effect
 {
 public:
 	void Initialize();

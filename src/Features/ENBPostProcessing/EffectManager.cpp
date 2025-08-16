@@ -94,26 +94,6 @@ void EffectManager::ExecuteAllEffects(RE::BSGraphics::RenderTargetData& input,
     }
 }
 
-Effect11* EffectManager::GetEffect(const std::string& name)
-{
-    auto it = effects.find(name);
-    if (it != effects.end() && it->second.isLoaded) {
-        return it->second.effect.get();
-    }
-    return nullptr;
-}
-
-std::vector<std::string> EffectManager::GetLoadedEffectNames() const
-{
-    std::vector<std::string> names;
-    for (const auto& [name, entry] : effects) {
-        if (entry.isLoaded) {
-            names.push_back(name);
-        }
-    }
-    return names;
-}
-
 void EffectManager::RenderImGui()
 {
     if (ImGui::CollapsingHeader("Effect Manager")) {
