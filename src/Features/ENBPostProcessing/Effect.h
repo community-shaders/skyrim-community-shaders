@@ -24,12 +24,16 @@ public:
     Effect() = default;
     virtual ~Effect() = default;
     
-    // Loading methods
-    bool Load();
-    void Unload();
-    void Apply() { Unload(); Load(); }
+    // Settings methods
+    bool LoadSettings();
+    void SaveSettings();
+    
+    // Effect lifecycle
+    bool Apply();  // Clear resources, load settings, recompile, create resources
+    void Unload(); // Clear all resources
 
-    bool IsLoaded() const { return isLoaded; }
+    bool IsCompiled() const { return errors.empty(); }
+    const std::vector<std::string>& GetErrors() const { return errors; }
 
 	virtual void Execute(RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output) = 0;
     
@@ -105,8 +109,8 @@ public:
     std::string selectedTechnique;
     std::vector<std::string> availableTechniques;
     
-    // Load state
-    bool isLoaded = false;
+    // Error tracking
+    std::vector<std::string> errors;
 	
     void ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output);
     

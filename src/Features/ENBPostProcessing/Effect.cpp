@@ -14,32 +14,43 @@
 #include <DirectXTK/WICTextureLoader.h>
 
 
-bool Effect::Load()
+bool Effect::LoadSettings()
 {
-    if (isLoaded) {
-        return true; // Already loaded
+    logger::debug("Loading settings for effect '{}'", GetName());
+    return true;
+}
+
+void Effect::SaveSettings()
+{
+    logger::debug("Saving settings for effect '{}'", GetName());
+}
+
+bool Effect::Apply()
+{
+    logger::info("Applying effect '{}'", GetName());
+    
+    Unload();
+    
+    if (!LoadSettings()) {
+        errors.push_back("Failed to load settings");
+        logger::error("Failed to load settings for effect '{}'", GetName());
+        return false;
     }
     
     Initialize();
     auto filePath = std::filesystem::path(GetName());
     if (!LoadFXFile(filePath)) {
-        logger::error("Failed to load FX file '{}' for effect '{}'", filePath.string(), GetName());
-        isLoaded = false;
+        errors.push_back("Failed to compile FX file: " + filePath.string());
+        logger::error("Failed to compile FX file '{}' for effect '{}'", filePath.string(), GetName());
         return false;
     }
     
-    logger::info("Successfully loaded effect '{}' from '{}'", GetName(), filePath.string());
-    isLoaded = true;
+    logger::info("Successfully applied effect '{}'", GetName());
     return true;
 }
 
 void Effect::Unload()
 {
-    if (!isLoaded) {
-        return;
-    }
-    
-    // Clear all resources
     effect.Reset();
     techniques.clear();
     variables.clear();
@@ -47,14 +58,14 @@ void Effect::Unload()
     uiVariables.clear();
     availableTechniques.clear();
     selectedTechnique.clear();
+
+	errors.clear();
     
-    isLoaded = false;
     logger::info("Unloaded effect '{}'", GetName());
 }
 
 void Effect::Initialize()
 {
-    // Shared resources are now managed by EffectManager
     // Individual effects can initialize their specific resources here
 }
 
@@ -75,9 +86,12 @@ bool Effect::LoadFXFile(std::filesystem::path a_filePath)
     );
 
     if (FAILED(hr)) {
+        std::string errorMsg = "Compilation failed";
         if (errorBlob) {
-            logger::error("Effect compilation failed: {}", static_cast<const char*>(errorBlob->GetBufferPointer()));
+            errorMsg = std::string(static_cast<const char*>(errorBlob->GetBufferPointer()));
+            logger::error("Effect compilation failed: {}", errorMsg);
         }
+        errors.push_back(errorMsg);
         return false;
     }
 
@@ -101,8 +115,8 @@ bool Effect::LoadFXFile(std::filesystem::path a_filePath)
 
 void Effect::ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output)
 {
-    if (!isLoaded || !effect) {
-        return; // Skip execution if not loaded
+    if (!IsCompiled() || !effect) {
+        return; // Skip execution if not compiled
     }
     
 	auto context = globals::d3d::context;
@@ -171,9 +185,6 @@ void Effect::ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE::
 		context->CopyResource(output.texture, swap.texture);
     }
 }
-
-
-
 
 std::vector<uint8_t> Effect::LoadFileToMemory(const std::string& filePath)
 {

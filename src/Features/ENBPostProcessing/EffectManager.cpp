@@ -59,7 +59,7 @@ void EffectManager::ExecuteEffects(RE::BSGraphics::RenderTargetData& input,
 	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
     for (auto& [name, effect] : effects) {
-        if (effect->IsLoaded()) {
+        if (effect->IsCompiled()) {
             effect->Execute(input, swap, output);
         }
     }
@@ -74,14 +74,33 @@ void EffectManager::RenderImGui()
         }
         
         for (auto& [name, effect] : effects) {     
+            bool isCompiled = effect->IsCompiled();
+            const auto& errors = effect->GetErrors();
+            
+            // Color-code header based on status
+            if (!isCompiled) {
+                ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 100, 100, 255)); // Red for errors
+            }
+            
             if (ImGui::CollapsingHeader(effect->GetName().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-				if (effect->IsLoaded()) {
+                if (!isCompiled) {
+                    ImGui::PopStyleColor();
+                }
+                
+				if (isCompiled) {
 					effect->RenderImGui();
 				} else {
-					ImGui::TextDisabled("Effect failed to compile");
+                    ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Effect has compilation errors:");
+                    ImGui::Indent();
+                    for (const auto& error : errors) {
+                        ImGui::BulletText("%s", error.c_str());
+                    }
+                    ImGui::Unindent();
 				}
 				ImGui::TreePop();
-			}
+			} else if (!isCompiled) {
+                ImGui::PopStyleColor();
+            }
         }
     }
 }
@@ -370,7 +389,7 @@ void EffectManager::UpdateAllCommonVariables()
     UpdateCommonData();
     
     for (auto& [name, effect] : effects) {
-        if (effect->IsLoaded()) {
+        if (effect->IsCompiled()) {
             UpdateCommonVariablesForEffect(effect->GetEffect());       
         }
     }
