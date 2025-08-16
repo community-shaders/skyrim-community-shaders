@@ -2,6 +2,7 @@
 
 #if defined(PSHADER)
 #include "Common/FrameBuffer.hlsli"
+#include "Common/SharedData.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
 
@@ -13,10 +14,6 @@ struct PS_OUTPUT
 
 SamplerState LinearSampler : register(s0);
 
-#	if defined(VR)
-SamplerState PointSampler : register(s1);
-#	endif
-
 Texture2D<float4> RefractionNormals : register(t0);
 Texture2D<float> DepthTex : register(t1);
 
@@ -24,13 +21,22 @@ Texture2D<float> DepthTex : register(t1);
 Texture2D<uint> StencilTex : register(t2);
 #	endif
 
+cbuffer JitterCB : register(b0)
+{
+	float2 jitter;
+};
+
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
+
 	float2 uv = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 
+	// Remove jitter offset to get the correct sampling coordinates
+	uv -= jitter * SharedData::BufferDim.zw;
+
 #	if defined(VR)
-	uint4 stencilSamples = StencilTex.GatherRed(PointSampler, uv);
+	uint4 stencilSamples = StencilTex.GatherRed(LinearSampler, uv);
 
 	// Choose the minimum stencil value
 	uint maxStencil = min(min(stencilSamples.x, stencilSamples.y), min(stencilSamples.z, stencilSamples.w));
