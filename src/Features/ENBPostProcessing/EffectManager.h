@@ -29,9 +29,10 @@ public:
 	void Initialize();
 	void RegisterEffects();
 
-	void LoadEffects();
 	void ApplyEffects();
-    
+	void LoadEffects();
+	void SaveEffects();
+
     // Common variable management
     void UpdateAllCommonVariables();
     void UpdateCommonVariablesForEffect(ID3DX11Effect* effect);
@@ -39,17 +40,16 @@ public:
     std::unordered_map<std::string, std::unique_ptr<Effect>> effects;
 
     // Common resources shared across effects
-    void InitializeSharedResources();
-    void CleanupSharedResources();
+    void CreateCommonResources();
     
     // Shared D3D resources
-    ComPtr<ID3D11Buffer> sharedQuadVertexBuffer;
-    ComPtr<ID3D11InputLayout> sharedInputLayout;
-    ComPtr<ID3D11RasterizerState> sharedRasterizerState;
-    ComPtr<ID3D11BlendState> sharedBlendState;
+    ComPtr<ID3D11Buffer> quadVertexBuffer;
+    ComPtr<ID3D11InputLayout> inputLayout;
+    ComPtr<ID3D11RasterizerState> rasterizerState;
+    ComPtr<ID3D11BlendState> blendState;
     
-    void CreateSharedQuadGeometry();
-    void CreateSharedRenderStates();
+    void CreateQuadGeometry();
+    void CreateRenderStates();
     
     // Common textures and variables
     struct Texture {
@@ -71,6 +71,6 @@ public:
         float eInteriorFactor;
     } commonData;
     
-    void SetupCommonTextures();
+    void CreateCommonTextures();
     void UpdateCommonData();
 };

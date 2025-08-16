@@ -25,8 +25,8 @@ public:
     virtual ~Effect() = default;
     
     // Settings methods
-    bool LoadSettings();
-    void SaveSettings();
+    bool Load();
+    void Save();
     
     // Effect lifecycle
     bool Apply();  // Clear resources, load settings, recompile, create resources
@@ -118,9 +118,7 @@ public:
     ID3DX11Effect* GetEffect() const { return effect.Get(); }
 
 private:
-    bool LoadFXFile(std::filesystem::path a_filePath);
-    void Initialize();
-    std::vector<uint8_t> LoadFileToMemory(const std::string& filePath);
+    bool LoadFXFile();
 	
 	void EnumerateAllVariables();
 

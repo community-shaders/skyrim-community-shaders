@@ -14,7 +14,7 @@ EffectManager& EffectManager::GetSingleton()
 
 void EffectManager::Initialize()
 {
-    InitializeSharedResources();
+    CreateCommonResources();
 	RegisterEffects();
 	ApplyEffects();
 }
@@ -42,20 +42,42 @@ void EffectManager::ApplyEffects()
 	logger::info("Applied effects");
 }
 
+void EffectManager::LoadEffects()
+{
+	logger::info("Loading effects");
+
+	for (auto& [name, effect] : effects) {
+		effect->Load();
+	}
+
+	logger::info("Loaded effects");
+}
+
+void EffectManager::SaveEffects()
+{
+	logger::info("Saving effects");
+
+	for (auto& [name, effect] : effects) {
+		effect->Save();
+	}
+
+	logger::info("Saved effects");
+}
+
 void EffectManager::ExecuteEffects(RE::BSGraphics::RenderTargetData& input, 
                                      RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output)
 {
 	auto context = globals::d3d::context;
 
-	context->RSSetState(sharedRasterizerState.Get());
-	context->OMSetBlendState(sharedBlendState.Get(), nullptr, 0xFFFFFFFF);
+	context->RSSetState(rasterizerState.Get());
+	context->OMSetBlendState(blendState.Get(), nullptr, 0xFFFFFFFF);
 	context->OMSetDepthStencilState(nullptr, 0);
 
     UINT stride = sizeof(float) * 5;
 	UINT offset = 0;
-	ID3D11Buffer* vertexBuffers[] = { sharedQuadVertexBuffer.Get() };
+	ID3D11Buffer* vertexBuffers[] = { quadVertexBuffer.Get() };
 	context->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
-	context->IASetInputLayout(sharedInputLayout.Get());
+	context->IASetInputLayout(inputLayout.Get());
 	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
     for (auto& [name, effect] : effects) {
@@ -72,7 +94,15 @@ void EffectManager::RenderImGui()
         if (ImGui::Button("Apply")) {
             ApplyEffects();
         }
-        
+
+		if (ImGui::Button("Load")) {
+			LoadEffects();
+		}
+
+		if (ImGui::Button("Save")) {
+			SaveEffects();
+		}
+
         for (auto& [name, effect] : effects) {     
             bool isCompiled = effect->IsCompiled();
             const auto& errors = effect->GetErrors();
@@ -105,25 +135,14 @@ void EffectManager::RenderImGui()
     }
 }
 
-void EffectManager::InitializeSharedResources()
+void EffectManager::CreateCommonResources()
 {
-    CreateSharedQuadGeometry();
-    CreateSharedRenderStates();
-    SetupCommonTextures();
+    CreateQuadGeometry();
+    CreateRenderStates();
+    CreateCommonTextures();
 }
 
-void EffectManager::CleanupSharedResources()
-{
-    sharedQuadVertexBuffer.Reset();
-    sharedInputLayout.Reset();
-    sharedRasterizerState.Reset();
-    sharedBlendState.Reset();
-    
-    // Clear common textures
-    commonTextureCache.clear();
-}
-
-void EffectManager::CreateSharedQuadGeometry()
+void EffectManager::CreateQuadGeometry()
 {
     // Create a fullscreen quad vertex buffer that all effects can share
     struct QuadVertex {
@@ -147,7 +166,7 @@ void EffectManager::CreateSharedQuadGeometry()
     D3D11_SUBRESOURCE_DATA initData = {};
     initData.pSysMem = vertices;
 
-    DX::ThrowIfFailed(globals::d3d::device->CreateBuffer(&bufferDesc, &initData, sharedQuadVertexBuffer.GetAddressOf()));
+    DX::ThrowIfFailed(globals::d3d::device->CreateBuffer(&bufferDesc, &initData, quadVertexBuffer.GetAddressOf()));
 
     // Create input layout for ENB post-processing
     D3D11_INPUT_ELEMENT_DESC inputElementDescs[] = {
@@ -176,14 +195,14 @@ void EffectManager::CreateSharedQuadGeometry()
         hr = globals::d3d::device->CreateInputLayout(inputElementDescs, ARRAYSIZE(inputElementDescs),
                                                     vertexShaderBlob->GetBufferPointer(), 
                                                     vertexShaderBlob->GetBufferSize(), 
-                                                    sharedInputLayout.GetAddressOf());
+                                                    inputLayout.GetAddressOf());
         if (FAILED(hr)) {
             logger::error("Failed to create shared input layout for ENB effects");
         }
     }
 }
 
-void EffectManager::CreateSharedRenderStates()
+void EffectManager::CreateRenderStates()
 {
     // Rasterizer state for fullscreen quads
     D3D11_RASTERIZER_DESC rastDesc = {};
@@ -198,7 +217,7 @@ void EffectManager::CreateSharedRenderStates()
     rastDesc.MultisampleEnable = FALSE;
     rastDesc.AntialiasedLineEnable = FALSE;
 
-    DX::ThrowIfFailed(globals::d3d::device->CreateRasterizerState(&rastDesc, sharedRasterizerState.GetAddressOf()));
+    DX::ThrowIfFailed(globals::d3d::device->CreateRasterizerState(&rastDesc, rasterizerState.GetAddressOf()));
 
     // Blend state for standard rendering (no blending)
     D3D11_BLEND_DESC blendDesc = {};
@@ -207,10 +226,10 @@ void EffectManager::CreateSharedRenderStates()
     blendDesc.RenderTarget[0].BlendEnable = FALSE;
     blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 
-    DX::ThrowIfFailed(globals::d3d::device->CreateBlendState(&blendDesc, sharedBlendState.GetAddressOf()));
+    DX::ThrowIfFailed(globals::d3d::device->CreateBlendState(&blendDesc, blendState.GetAddressOf()));
 }
 
-void EffectManager::SetupCommonTextures()
+void EffectManager::CreateCommonTextures()
 {
     auto device = globals::d3d::device;
     auto state = globals::state;

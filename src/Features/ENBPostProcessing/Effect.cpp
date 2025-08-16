@@ -13,14 +13,13 @@
 #include <DirectXTK/DDSTextureLoader.h>
 #include <DirectXTK/WICTextureLoader.h>
 
-
-bool Effect::LoadSettings()
+bool Effect::Load()
 {
     logger::debug("Loading settings for effect '{}'", GetName());
     return true;
 }
 
-void Effect::SaveSettings()
+void Effect::Save()
 {
     logger::debug("Saving settings for effect '{}'", GetName());
 }
@@ -31,17 +30,15 @@ bool Effect::Apply()
     
     Unload();
     
-    if (!LoadSettings()) {
+    if (!Load()) {
         errors.push_back("Failed to load settings");
         logger::error("Failed to load settings for effect '{}'", GetName());
         return false;
     }
     
-    Initialize();
-    auto filePath = std::filesystem::path(GetName());
-    if (!LoadFXFile(filePath)) {
-        errors.push_back("Failed to compile FX file: " + filePath.string());
-        logger::error("Failed to compile FX file '{}' for effect '{}'", filePath.string(), GetName());
+    if (!LoadFXFile()) {
+        errors.push_back("Failed to compile FX file");
+        logger::error("Failed to compile FX file for effect '{}'",GetName());
         return false;
     }
     
@@ -64,18 +61,15 @@ void Effect::Unload()
     logger::info("Unloaded effect '{}'", GetName());
 }
 
-void Effect::Initialize()
-{
-    // Individual effects can initialize their specific resources here
-}
-
-bool Effect::LoadFXFile(std::filesystem::path a_filePath)
+bool Effect::LoadFXFile()
  {
+	auto filePath = std::filesystem::path(GetName());
+
     ComPtr<ID3DBlob> compiledShader;
     ComPtr<ID3DBlob> errorBlob;
 
     HRESULT hr = D3DX11CompileEffectFromFile(
-		a_filePath.c_str(),
+		filePath.c_str(),
         nullptr,
         D3D_COMPILE_STANDARD_FILE_INCLUDE,
         NULL,
@@ -109,7 +103,7 @@ bool Effect::LoadFXFile(std::filesystem::path a_filePath)
 
     LoadUIVariables();
 
-	logger::debug("Successfully loaded FX file: {}", a_filePath.string());
+	logger::debug("Successfully loaded FX file: {}", filePath.string());
     return true;
 }
 
@@ -184,25 +178,6 @@ void Effect::ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE::
     if (!currentIsInOutput) {
 		context->CopyResource(output.texture, swap.texture);
     }
-}
-
-std::vector<uint8_t> Effect::LoadFileToMemory(const std::string& filePath)
-{
-    std::ifstream file(filePath, std::ios::binary | std::ios::ate);
-    if (!file.is_open()) {
-        return {};
-    }
-
-    auto size = file.tellg();
-    if (size <= 0) {
-        return {};
-    }
-
-    std::vector<uint8_t> data(static_cast<size_t>(size));
-    file.seekg(0, std::ios::beg);
-    file.read(reinterpret_cast<char*>(data.data()), size);
-
-    return data;
 }
 
 void Effect::SetupCustomTextures()
