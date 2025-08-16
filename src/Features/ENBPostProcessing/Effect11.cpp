@@ -144,7 +144,20 @@ void Effect11::ExecuteTechniqueSequence(const std::string& baseTechniqueName, RE
             }
         }
 
-        TextureColor->AsShaderResource()->SetResource(inputSRV);
+        if (TextureColor) {
+            TextureColor->AsShaderResource()->SetResource(inputSRV);
+        }
+        
+        // Set up viewport for proper rendering
+        D3D11_VIEWPORT viewport = {};
+        viewport.TopLeftX = 0;
+        viewport.TopLeftY = 0;
+        viewport.Width = static_cast<float>(globals::state->screenSize.x);
+        viewport.Height = static_cast<float>(globals::state->screenSize.y);
+        viewport.MinDepth = 0.0f;
+        viewport.MaxDepth = 1.0f;
+        context->RSSetViewports(1, &viewport);
+        
         context->OMSetRenderTargets(1, &outputRTV, nullptr);
 
         D3DX11_TECHNIQUE_DESC techDesc;

@@ -139,7 +139,7 @@ struct Main_HDRTonemapBlendCinematic_Render
 
 			globals::features::enbPostProcessing.GetEffect11().Execute(main, imageSpaceTempCopy, imageSpaceTempCopy2);
 
-			globals::d3d::context->CopyResource(imageSpaceTempCopy2.texture, imageSpaceTempCopy.texture);
+			globals::d3d::context->CopyResource(imageSpaceTempCopy.texture, imageSpaceTempCopy2.texture);
 		} else {
 			// If ENB Post Processing is disabled, call the original function
 			func(a1, a2, a3, a4, a5);
