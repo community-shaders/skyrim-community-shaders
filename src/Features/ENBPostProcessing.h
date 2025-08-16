@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Features/ENBPostProcessing/Effect11.h"
+#include <unordered_map>
 
 struct ENBPostProcessing : Feature
 {
@@ -9,6 +10,10 @@ public:
 	{
 		bool Enabled = false;
 		std::string EffectPath = "";
+		std::string SelectedTechnique = "";
+		std::unordered_map<std::string, float> FloatVariables;
+		std::unordered_map<std::string, int> IntVariables;
+		std::unordered_map<std::string, bool> BoolVariables;
 	};
 
 	Settings settings;

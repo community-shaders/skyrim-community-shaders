@@ -112,6 +112,13 @@ namespace Util
 		 * @return DeletionResult with success status and details
 		 */
 		DeletionResult SafeDelete(const std::string& path, const std::string& description);
+
+		/**
+		 * Opens a folder in Windows Explorer
+		 * @param path The path to open
+		 * @return true if successful, false otherwise
+		 */
+		bool OpenFolderInExplorer(const std::filesystem::path& path);
 	}
 
 	/**

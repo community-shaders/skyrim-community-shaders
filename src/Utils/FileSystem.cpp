@@ -1,6 +1,8 @@
 #include "FileSystem.h"
 #include <fstream>
 #include <psapi.h>
+#include <windows.h>
+#include <shellapi.h>
 
 namespace Util
 {
@@ -120,6 +122,35 @@ namespace Util
 			}
 
 			return result;
+		}
+	}
+
+	bool FileHelpers::OpenFolderInExplorer(const std::filesystem::path& path)
+	{
+		try {
+			// Check if path exists
+			if (!std::filesystem::exists(path)) {
+				logger::warn("Cannot open folder: path does not exist: {}", path.string());
+				return false;
+			}
+
+			// Convert to string for ShellExecuteA
+			std::string pathString = path.string();
+
+			// Use ShellExecuteA to open the folder in Windows Explorer
+			HINSTANCE result = ShellExecuteA(NULL, "open", pathString.c_str(), NULL, NULL, SW_SHOWNORMAL);
+			
+			// ShellExecuteA returns a value greater than 32 on success
+			if (reinterpret_cast<intptr_t>(result) > 32) {
+				logger::debug("Successfully opened folder: {}", pathString);
+				return true;
+			} else {
+				logger::warn("Failed to open folder: {}, error code: {}", pathString, reinterpret_cast<intptr_t>(result));
+				return false;
+			}
+		} catch (const std::exception& e) {
+			logger::error("Exception while opening folder {}: {}", path.string(), e.what());
+			return false;
 		}
 	}
 }
