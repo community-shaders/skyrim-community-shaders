@@ -5,7 +5,8 @@
 class ENBEffect : public Effect
 {
 public:
-    virtual std::string GetEffectType() const override { return "enbeffect"; }
+	virtual std::string GetName() const override { return "enbeffect.fx"; }
+
 	virtual LPCSTR GetSourceTexture() const override { return "TextureColor"; }
 
     virtual void Execute(RE::BSGraphics::RenderTargetData& input, 

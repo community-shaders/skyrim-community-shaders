@@ -740,3 +740,17 @@ void Effect::EnumerateAllVariables()
 
     logger::info("Enumerated {} effect variables", variables.size());
 }
+
+bool Effect::Load()
+{
+    Initialize();
+    
+    auto filePath = std::filesystem::path(GetName());
+    if (!LoadFXFile(filePath)) {
+        logger::error("Failed to load FX file '{}' for effect '{}'", filePath.string(), GetName());
+        return false;
+    }
+    
+    logger::info("Successfully loaded effect '{}' from '{}'", GetName(), filePath.string());
+    return true;
+}

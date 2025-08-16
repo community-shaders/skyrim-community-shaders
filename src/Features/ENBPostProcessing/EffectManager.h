@@ -17,11 +17,8 @@ class EffectManager
 {
 public:
     static EffectManager& GetSingleton();
-
-    // Effect registration and management
-    void RegisterEffects();
     
-    bool LoadEffect(const std::string& name, const std::filesystem::path& filePath);
+    bool LoadEffect(const std::string& name);
     void UnloadAllEffects();
 
     // Effect execution

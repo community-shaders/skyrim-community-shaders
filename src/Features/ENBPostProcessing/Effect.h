@@ -24,6 +24,7 @@ public:
 	void Initialize();
 
 	bool LoadFXFile(std::filesystem::path a_filePath);
+	bool Load();
 
 	virtual void Execute(RE::BSGraphics::RenderTargetData& input, RE::BSGraphics::RenderTargetData& swap, RE::BSGraphics::RenderTargetData& output) = 0;
     
@@ -37,8 +38,8 @@ public:
     const std::vector<std::string>& GetAvailableTechniques() const { return availableTechniques; }
 
     // Pure virtual methods for derived classes to implement
-    virtual std::string GetEffectType() const = 0;
     virtual LPCSTR GetSourceTexture() const = 0;
+    virtual std::string GetName() const = 0;
 
     struct TechniqueInfo {
         ComPtr<ID3DX11EffectTechnique> technique;

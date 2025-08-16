@@ -14,7 +14,13 @@ EffectManager& EffectManager::GetSingleton()
 
 void EffectManager::Initialize()
 {
-    RegisterEffects();
+    // Create effect instances and use their names as keys
+    auto enbEffect = std::make_unique<ENBEffect>();
+    effects[enbEffect->GetName()] = std::move(enbEffect);
+    
+    auto enbBloom = std::make_unique<ENBBloom>();
+    effects[enbBloom->GetName()] = std::move(enbBloom);
+
     InitializeSharedResources();
 }
 
@@ -24,19 +30,15 @@ void EffectManager::Reset()
     CleanupSharedResources();
 }
 
-bool EffectManager::LoadEffect(const std::string& name, const std::filesystem::path& filePath)
+bool EffectManager::LoadEffect(const std::string& name)
 {
-   auto& effect = effects[name];
-
-   effect->Initialize();
-
-    if (!effect->LoadFXFile(filePath)) {
-        logger::error("Failed to load FX file '{}' for effect '{}'", filePath.string(), name);
+    auto it = effects.find(name);
+    if (it == effects.end()) {
+        logger::error("Effect '{}' not found", name);
         return false;
     }
     
-    logger::info("Successfully loaded effect '{}' from '{}'", name, filePath.string());
-    return true;
+    return it->second->Load();
 }
 
 void EffectManager::UnloadAllEffects()
@@ -433,12 +435,4 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
     if (eInteriorFactor && eInteriorFactor->IsValid()) {
         eInteriorFactor->SetRawValue(&commonData.eInteriorFactor, 0, sizeof(commonData.eInteriorFactor));
     }
-}
-
-void EffectManager::RegisterEffects()
-{
-	effects["enbeffect.fx"] = std::unique_ptr<ENBEffect>();
-	effects["enbbloom.fx"] = std::unique_ptr<ENBBloom>();
-    
-    logger::info("Registered {} effect types", effects.size());
 }
