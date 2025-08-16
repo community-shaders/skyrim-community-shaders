@@ -61,7 +61,7 @@ public:
 	PFun_slDLSSSetOptions* slDLSSSetOptions{};
 
 	Util::FrameChecker frameChecker;
-	sl::FrameToken* frameToken;
+	sl::FrameToken* frameToken = nullptr;
 
 	// Cached DLL version info for Streamline plugin directory
 	static std::vector<std::pair<std::string, std::string>> dllVersions;
