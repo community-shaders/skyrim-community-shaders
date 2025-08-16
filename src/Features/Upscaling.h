@@ -101,15 +101,18 @@ public:
 	ID3D11ComputeShader* encodeTexturesTransparencyCS = nullptr;
 	ID3D11ComputeShader* GetEncodeTexturesTransparencyCS();
 
-	ID3D11PixelShader* depthUpscalePS = nullptr;
-	ID3D11PixelShader* GetDepthUpscalePS();
+	ID3D11PixelShader* depthRefractionUpscalePS = nullptr;
+	ID3D11PixelShader* GetDepthRefractionUpscalePS();
+	
+	ID3D11PixelShader* underwaterMaskUpscalePS = nullptr;
+	ID3D11PixelShader* GetUnderwaterMaskUpscalePS();
 
-	ID3D11VertexShader* depthUpscaleVS = nullptr;
-	ID3D11VertexShader* GetDepthUpscaleVS();
+	ID3D11VertexShader* upscaleVS = nullptr;
+	ID3D11VertexShader* GetUpscaleVS();
 
-	ID3D11DepthStencilState* depthUpscaleState = nullptr;
-	ID3D11BlendState* depthUpscaleBlendState = nullptr;
-	ID3D11RasterizerState* depthUpscaleRasterizerState = nullptr;
+	ID3D11DepthStencilState* upscaleDepthStencilState = nullptr;
+	ID3D11BlendState* upscaleBlendState = nullptr;
+	ID3D11RasterizerState* upscaleRasterizerState = nullptr;
 
 	void ConfigureUpscaling(RE::BSGraphics::State* a_state);
 	void Upscale();
