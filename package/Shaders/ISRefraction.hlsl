@@ -36,17 +36,17 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float2 texCoordOriginal = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 
-	float4 normalOriginal = Src1Tex.Sample(Src0Sampler, texCoordOriginal * SharedData::ResolutionScale);
+	float4 normalOriginal = Src1Tex.Sample(Src0Sampler, texCoordOriginal);
 
 	float4 colorOriginal = Src0Tex.Sample(Src0Sampler, texCoordOriginal);
 
 	float2 texCoordRefracted = GetRefractedTexCoord(input.TexCoord, normalOriginal.xyz);
 
-	float refractedMask = Src1Tex.Sample(Src0Sampler, texCoordRefracted * SharedData::ResolutionScale).w;
+	float refractedMask = Src1Tex.Sample(Src0Sampler, texCoordRefracted).w;
 	float4 colorRefracted = Src0Tex.Sample(Src0Sampler, texCoordRefracted);
 	float4 colorResulting = lerp(colorOriginal, colorRefracted, refractedMask);
 
-	float4 normalOriginalPoint = Src1Tex.Sample(Src1Sampler, texCoordOriginal * SharedData::ResolutionScale);
+	float4 normalOriginalPoint = Src1Tex.Sample(Src1Sampler, texCoordOriginal);
 	if (normalOriginalPoint.w > 0.8 && normalOriginalPoint.w < 1) {
 		psout.Color.xyz = lerp(colorResulting.xyz, Tint.xyz * Color::RGBToLuminance2(colorRefracted.xyz), Tint.w);
 	} else {

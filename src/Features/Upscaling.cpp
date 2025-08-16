@@ -448,28 +448,36 @@ ID3D11ComputeShader* Upscaling::GetEncodeTexturesTransparencyCS()
 	return encodeTexturesTransparencyCS;
 }
 
-ID3D11PixelShader* Upscaling::GetDepthUpscalePS()
+ID3D11PixelShader* Upscaling::GetDepthRefractionUpscalePS()
 {
-	if (!depthUpscalePS) {
-		logger::debug("Compiling DepthUpscalePS.hlsl");
+	if (!depthRefractionUpscalePS) {
+		logger::debug("Compiling DepthRefractionUpscalePS.hlsl");
 		std::vector<std::pair<const char*, const char*>> defines = { { "PSHADER", "" } };
-		if (globals::game::isVR) {
-			defines.push_back({ "VR", "" });
-		}
-		depthUpscalePS = (ID3D11PixelShader*)Util::CompileShader(L"Data/Shaders/Upscaling/DepthUpscale.hlsl", defines, "ps_5_0");
+		depthRefractionUpscalePS = (ID3D11PixelShader*)Util::CompileShader(L"Data/Shaders/Upscaling/DepthRefractionUpscalePS.hlsl", defines, "ps_5_0");
 	}
 
-	return depthUpscalePS;
+	return depthRefractionUpscalePS;
 }
 
-ID3D11VertexShader* Upscaling::GetDepthUpscaleVS()
+ID3D11PixelShader* Upscaling::GetUnderwaterMaskUpscalePS()
 {
-	if (!depthUpscaleVS) {
-		logger::debug("Compiling DepthUpscaleVS.hlsl");
-		depthUpscaleVS = (ID3D11VertexShader*)Util::CompileShader(L"Data/Shaders/Upscaling/DepthUpscale.hlsl", { { "VSHADER", "" } }, "vs_5_0");
+	if (!underwaterMaskUpscalePS) {
+		logger::debug("Compiling UnderwaterMaskPS.hlsl");
+		std::vector<std::pair<const char*, const char*>> defines = { { "PSHADER", "" } };
+		underwaterMaskUpscalePS = (ID3D11PixelShader*)Util::CompileShader(L"Data/Shaders/Upscaling/UnderwaterMaskUpscalePS.hlsl", defines, "ps_5_0");
 	}
 
-	return depthUpscaleVS;
+	return underwaterMaskUpscalePS;
+}
+
+ID3D11VertexShader* Upscaling::GetUpscaleVS()
+{
+	if (!upscaleVS) {
+		logger::debug("Compiling UpscaleVS.hlsl");
+		upscaleVS = (ID3D11VertexShader*)Util::CompileShader(L"Data/Shaders/Upscaling/UpscaleVS.hlsl", { { "VSHADER", "" } }, "vs_5_0");
+	}
+
+	return upscaleVS;
 }
 
 int32_t GetJitterPhaseCount(int32_t renderWidth, int32_t displayWidth)
@@ -641,15 +649,16 @@ void Upscaling::SetupResources()
 	} else {
 		depthStencilDesc.StencilEnable = false;  // Disable stencil testing
 	}
-	DX::ThrowIfFailed(globals::d3d::device->CreateDepthStencilState(&depthStencilDesc, &depthUpscaleState));
 
-	// Create blend state for depth upscaling (disable color writes, depth only)
+	DX::ThrowIfFailed(globals::d3d::device->CreateDepthStencilState(&depthStencilDesc, &upscaleDepthStencilState));
+
+	// Create blend state for depth upscaling
 	D3D11_BLEND_DESC blendDesc = {};
 	blendDesc.AlphaToCoverageEnable = false;
 	blendDesc.IndependentBlendEnable = false;
-	blendDesc.RenderTarget[0].BlendEnable = false;
-	blendDesc.RenderTarget[0].RenderTargetWriteMask = 0;  // No color writes
-	DX::ThrowIfFailed(globals::d3d::device->CreateBlendState(&blendDesc, &depthUpscaleBlendState));
+	blendDesc.RenderTarget[0].BlendEnable = false;                                   
+	blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+	DX::ThrowIfFailed(globals::d3d::device->CreateBlendState(&blendDesc, &upscaleBlendState));
 
 	// Create rasterizer state for fullscreen rendering
 	D3D11_RASTERIZER_DESC rasterizerDesc = {};
@@ -663,7 +672,7 @@ void Upscaling::SetupResources()
 	rasterizerDesc.ScissorEnable = false;
 	rasterizerDesc.MultisampleEnable = false;
 	rasterizerDesc.AntialiasedLineEnable = false;
-	DX::ThrowIfFailed(globals::d3d::device->CreateRasterizerState(&rasterizerDesc, &depthUpscaleRasterizerState));
+	DX::ThrowIfFailed(globals::d3d::device->CreateRasterizerState(&rasterizerDesc, &upscaleRasterizerState));
 
 	// Create shared D3D11/D3D12 fences for synchronization
 	winrt::com_ptr<ID3D11Device5> d3d11Device5;
@@ -694,17 +703,17 @@ void Upscaling::DestroyUpscalingResources()
 	}
 
 	// Clean up depth upscaling states
-	if (depthUpscaleState) {
-		depthUpscaleState->Release();
-		depthUpscaleState = nullptr;
+	if (upscaleDepthStencilState) {
+		upscaleDepthStencilState->Release();
+		upscaleDepthStencilState = nullptr;
 	}
-	if (depthUpscaleBlendState) {
-		depthUpscaleBlendState->Release();
-		depthUpscaleBlendState = nullptr;
+	if (upscaleBlendState) {
+		upscaleBlendState->Release();
+		upscaleBlendState = nullptr;
 	}
-	if (depthUpscaleRasterizerState) {
-		depthUpscaleRasterizerState->Release();
-		depthUpscaleRasterizerState = nullptr;
+	if (upscaleRasterizerState) {
+		upscaleRasterizerState->Release();
+		upscaleRasterizerState = nullptr;
 	}
 
 	if (depthBufferShared12) {
@@ -1270,17 +1279,10 @@ void Upscaling::PerformUpscaling()
 void Upscaling::UpscaleDepth()
 {
 	if (resolutionScale != 1.0f) {
-		globals::state->BeginPerfEvent("Depth Upscaling");
+		globals::state->BeginPerfEvent("Render Target Upscaling");
 
 		auto& renderer = globals::game::renderer;
-		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
-		auto& depthCopy = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN_COPY];
-
 		auto context = globals::d3d::context;
-
-		// VR uses both depth and depth copy after, upscaling, skip a copy here
-		if (!globals::game::isVR)
-			context->CopyResource(depthCopy.texture, depth.texture);
 
 		// Set up Input Assembler for fullscreen triangle (no vertex/index buffers needed)
 		context->IASetInputLayout(nullptr);
@@ -1289,7 +1291,7 @@ void Upscaling::UpscaleDepth()
 		context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 		// Set up vertex shader that generates fullscreen triangle using SV_VertexID
-		context->VSSetShader(GetDepthUpscaleVS(), nullptr, 0);
+		context->VSSetShader(GetUpscaleVS(), nullptr, 0);
 
 		// Set up viewport for fullscreen rendering
 		auto screenSize = globals::state->screenSize;
@@ -1304,53 +1306,70 @@ void Upscaling::UpscaleDepth()
 		context->RSSetViewports(1, &viewport);
 
 		// Set rasterizer state
-		context->RSSetState(depthUpscaleRasterizerState);
+		context->RSSetState(upscaleRasterizerState);
 
-		// Set blend state (no color writes, depth only)
-		context->OMSetBlendState(nullptr, nullptr, 0xffffffff);
-
-		// Clear stencil to be 0xFF
-		if (globals::game::isVR)
-			context->ClearDepthStencilView(depthCopy.views[0], D3D11_CLEAR_STENCIL, 1.0f, 0xFF);
-
-		// Set depth stencil state
-		context->OMSetDepthStencilState(depthUpscaleState, 0x00);
-
-		// Set render targets (no color target, depth only)
-		context->OMSetRenderTargets(0, nullptr, globals::game::isVR ? depthCopy.views[0] : depth.views[0]);
+		// Set blend state
+		context->OMSetBlendState(upscaleBlendState, nullptr, 0xffffffff);
 
 		// Set up pixel shader resources
 		auto deferred = globals::deferred;
 
-		if (globals::game::isVR) {
-			// For VR, bind both depth and stencil textures
-			ID3D11ShaderResourceView* views[2] = { depth.depthSRV, depth.stencilSRV };
-			context->PSSetShaderResources(0, 2, views);
-			ID3D11SamplerState* samplers[2] = { deferred->linearSampler, deferred->pointSampler };
-			context->PSSetSamplers(0, 2, samplers);
-		} else {
-			// For non-VR, bind only depth texture
-			context->PSSetShaderResources(0, 1, &depthCopy.depthSRV);
-			ID3D11SamplerState* samplers[1] = { deferred->linearSampler };
-			context->PSSetSamplers(0, 1, samplers);
+		ID3D11SamplerState* samplers[] = { deferred->linearSampler, deferred->pointSampler };
+		context->PSSetSamplers(0, ARRAYSIZE(samplers), samplers);
+		
+		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+
+		{
+			auto& refractionNormals = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kREFRACTION_NORMALS];
+			
+			auto& depthCopy = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN_COPY];
+			
+			// Clear stencil to be 0xFF
+			if (globals::game::isVR)
+				context->ClearDepthStencilView(depthCopy.views[0], D3D11_CLEAR_STENCIL, 1.0f, 0xFF);
+			
+			// Set depth stencil state to write 0x00
+			context->OMSetDepthStencilState(upscaleDepthStencilState, 0x00);
+
+			context->CopyResource(refractionNormals.textureCopy, refractionNormals.texture);
+
+			ID3D11ShaderResourceView* srvs[] = { refractionNormals.SRVCopy, depthCopy.depthSRV, depthCopy.stencilSRV };
+			context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
+
+			ID3D11RenderTargetView* rtvs[] = { refractionNormals.RTV };
+			context->OMSetRenderTargets(ARRAYSIZE(rtvs), rtvs, depth.views[0]);
+
+			context->PSSetShader(GetDepthRefractionUpscalePS(), nullptr, 0);
+			context->Draw(3, 0);
+
+			// Depth copy is also used on VR
+			if (globals::game::isVR)
+				context->CopyResource(depthCopy.texture, depth.texture);
 		}
 
-		context->PSSetShader(GetDepthUpscalePS(), nullptr, 0);
+		{
+			viewport.Width = screenSize.x * 0.5f;
+			viewport.Height = screenSize.y * 0.5f;
+			context->RSSetViewports(1, &viewport);
 
-		context->Draw(3, 0);
+			auto& underwaterMask = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kUNDERWATER_MASK];
 
-		// Clean up pixel shader resources
-		if (globals::game::isVR) {
-			ID3D11ShaderResourceView* nullPSResources[2] = { nullptr, nullptr };
-			context->PSSetShaderResources(0, 2, nullPSResources);
-		} else {
-			ID3D11ShaderResourceView* nullPSResources[1] = { nullptr };
-			context->PSSetShaderResources(0, 1, nullPSResources);
+			context->CopyResource(underwaterMask.textureCopy, underwaterMask.texture);
+			
+			context->OMSetDepthStencilState(nullptr, 0x00);
+
+			ID3D11ShaderResourceView* srvs[] = { underwaterMask.SRVCopy };
+			context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
+
+			ID3D11RenderTargetView* rtvs[] = { underwaterMask.RTV };
+			context->OMSetRenderTargets(ARRAYSIZE(rtvs), rtvs, nullptr);
+
+			context->PSSetShader(GetUnderwaterMaskUpscalePS(), nullptr, 0);
+			context->Draw(3, 0);
 		}
 
-		// Copy back to main depth texture
-		if (globals::game::isVR)
-			context->CopyResource(depth.texture, depthCopy.texture);
+		ID3D11ShaderResourceView* nullPSResources[3] = { nullptr, nullptr, nullptr };
+		context->PSSetShaderResources(0, ARRAYSIZE(nullPSResources), nullPSResources);
 
 		globals::state->EndPerfEvent();
 	}

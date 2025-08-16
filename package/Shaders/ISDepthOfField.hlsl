@@ -68,7 +68,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float4 dofParams = params;
 	float4 dofParams2 = params2;
 #	if defined(MASKED)
-	mask = MaskTex.Sample(ImageSampler, adjustedTexCoord * SharedData::ResolutionScale).x;
+	mask = MaskTex.Sample(ImageSampler, adjustedTexCoord).x;
 	dofParams = lerp(params, params6, mask);
 	dofParams2 = lerp(params2, params7, mask);
 #	endif
