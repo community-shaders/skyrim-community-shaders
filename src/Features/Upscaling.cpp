@@ -423,7 +423,7 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 			reactiveMaskTexture->CreateSRV(srvDesc);
 			reactiveMaskTexture->CreateUAV(uavDesc);
 		}
-		
+
 		if (!transparencyCompositionMaskTexture) {
 			transparencyCompositionMaskTexture = new Texture2D(texDesc);
 			transparencyCompositionMaskTexture->CreateSRV(srvDesc);
@@ -498,7 +498,7 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 
 		// Destroy previous upscaling method resources
 		DestroyUpscalingTextureResources(previousUpscaleMode);
-			
+
 		if (previousUpscaleMode == UpscaleMethod::kDLSS)
 			streamline.DestroyDLSSResources();
 		else if (previousUpscaleMode == UpscaleMethod::kFSR)
@@ -508,7 +508,7 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 
 		// Create new upscaling method resources
 		CreateUpscalingTextureResources(a_upscalemethod);
-		
+
 		if (a_upscalemethod == UpscaleMethod::kFSR)
 			fidelityFX.CreateFSRResources();
 		else if (a_upscalemethod == UpscaleMethod::kXESS)
@@ -522,28 +522,28 @@ ID3D11ComputeShader* Upscaling::GetEncodeTexturesCS()
 {
 	auto upscaleMethod = GetUpscaleMethod();
 	uint methodIndex = (uint)upscaleMethod;
-	
+
 	if (!encodeTexturesCS[methodIndex]) {
 		logger::debug("Compiling EncodeTexturesCS.hlsl for upscale method {}", methodIndex);
-		
+
 		std::vector<std::pair<const char*, const char*>> defines;
-		
+
 		// Add upscale method define
 		switch (upscaleMethod) {
-			case UpscaleMethod::kFSR:
-				defines.push_back({ "FSR", "" });
-				break;
-			case UpscaleMethod::kXESS:
-				defines.push_back({ "XESS", "" });
-				break;
-			case UpscaleMethod::kDLSS:
-				defines.push_back({ "DLSS", "" });
-				break;
-			default:
-				// No define for NONE or TAA
-				break;
+		case UpscaleMethod::kFSR:
+			defines.push_back({ "FSR", "" });
+			break;
+		case UpscaleMethod::kXESS:
+			defines.push_back({ "XESS", "" });
+			break;
+		case UpscaleMethod::kDLSS:
+			defines.push_back({ "DLSS", "" });
+			break;
+		default:
+			// No define for NONE or TAA
+			break;
 		}
-		
+
 		encodeTexturesCS[methodIndex].attach((ID3D11ComputeShader*)Util::CompileShader(L"Data/Shaders/Upscaling/EncodeTexturesCS.hlsl", defines, "cs_5_0"));
 	}
 	return encodeTexturesCS[methodIndex].get();
@@ -664,7 +664,7 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 		else
 			a_viewport->projectionPosScaleX = -2.0f * jitter.x / renderWidth;
 
-		a_viewport->projectionPosScaleY = 2.0f * jitter.y / renderHeight;	
+		a_viewport->projectionPosScaleY = 2.0f * jitter.y / renderHeight;
 	} else {
 		resolutionScale = 1.0f;
 	}
@@ -746,7 +746,7 @@ void Upscaling::SetupResources()
 	D3D11_BLEND_DESC blendDesc = {};
 	blendDesc.AlphaToCoverageEnable = false;
 	blendDesc.IndependentBlendEnable = false;
-	blendDesc.RenderTarget[0].BlendEnable = false;                                   
+	blendDesc.RenderTarget[0].BlendEnable = false;
 	blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 	DX::ThrowIfFailed(globals::d3d::device->CreateBlendState(&blendDesc, upscaleBlendState.put()));
 
@@ -842,11 +842,11 @@ void Upscaling::CreateSharedD3D12Resources(UpscaleMethod a_upscalemethod, bool a
 	}
 
 	texDesc.Format = DXGI_FORMAT_R8_UNORM;
-	
+
 	if (a_upscalemethod == UpscaleMethod::kFSR || a_upscalemethod == UpscaleMethod::kXESS) {
 		reactiveMaskShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
 	}
-	
+
 	// Transparency mask only for FSR
 	if (a_upscalemethod == UpscaleMethod::kFSR) {
 		transparencyCompositionMaskShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
@@ -889,7 +889,7 @@ void Upscaling::DestroySharedD3D12Resources(UpscaleMethod a_upscalemethod, bool 
 		delete transparencyCompositionMaskShared12;
 		transparencyCompositionMaskShared12 = nullptr;
 	}
-	
+
 	// Only clean up depth and motion vector buffers if frame generation is not enabled
 	// as they may be shared between upscaling and frame generation
 	if (!a_framegenEnabled) {
@@ -901,7 +901,7 @@ void Upscaling::DestroySharedD3D12Resources(UpscaleMethod a_upscalemethod, bool 
 			delete motionVectorBufferShared12;
 			motionVectorBufferShared12 = nullptr;
 		}
-		
+
 		// Delete shader when frame generation is not enabled
 		copyDepthToSharedBufferCS = nullptr;  // com_ptr automatically releases
 	}
@@ -1391,7 +1391,7 @@ void Upscaling::PerformUpscaling()
 
 	// Disable dynamic resolution past this point
 	runtimeData.dynamicResolutionLock = 1;
-	
+
 	// Updates the PerFrame constant buffer so that dynamic resolution settings are disabled
 	UpdateCameraData();
 }
@@ -1434,7 +1434,7 @@ void Upscaling::UpscaleDepth()
 		// Set up pixel shader resources
 		auto deferred = globals::deferred;
 
-		ID3D11SamplerState* samplers[] = { deferred->linearSampler};
+		ID3D11SamplerState* samplers[] = { deferred->linearSampler };
 		context->PSSetSamplers(0, ARRAYSIZE(samplers), samplers);
 
 		// Set up jitter constant buffer for upscaling
@@ -1444,18 +1444,18 @@ void Upscaling::UpscaleDepth()
 		jitterCB->Update(jitterData);
 		auto bufferArray = jitterCB->CB();
 		context->PSSetConstantBuffers(0, 1, &bufferArray);
-		
+
 		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
 		{
 			auto& refractionNormals = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kREFRACTION_NORMALS];
-			
+
 			auto& depthCopy = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN_COPY];
-			
+
 			// Clear stencil to be 0xFF
 			if (globals::game::isVR)
 				context->ClearDepthStencilView(depthCopy.views[0], D3D11_CLEAR_STENCIL, 1.0f, 0xFF);
-			
+
 			// Set depth stencil state to write 0x00
 			context->OMSetDepthStencilState(upscaleDepthStencilState.get(), 0x00);
 
@@ -1483,7 +1483,7 @@ void Upscaling::UpscaleDepth()
 			auto& underwaterMask = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kUNDERWATER_MASK];
 
 			context->CopyResource(underwaterMask.textureCopy, underwaterMask.texture);
-			
+
 			context->OMSetDepthStencilState(nullptr, 0x00);
 
 			ID3D11ShaderResourceView* srvs[] = { underwaterMask.SRVCopy };
