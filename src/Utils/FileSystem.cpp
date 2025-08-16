@@ -1,8 +1,8 @@
 #include "FileSystem.h"
 #include <fstream>
 #include <psapi.h>
-#include <windows.h>
 #include <shellapi.h>
+#include <windows.h>
 
 namespace Util
 {
@@ -139,7 +139,7 @@ namespace Util
 
 			// Use ShellExecuteA to open the folder in Windows Explorer
 			HINSTANCE result = ShellExecuteA(NULL, "open", pathString.c_str(), NULL, NULL, SW_SHOWNORMAL);
-			
+
 			// ShellExecuteA returns a value greater than 32 on success
 			if (reinterpret_cast<intptr_t>(result) > 32) {
 				logger::debug("Successfully opened folder: {}", pathString);

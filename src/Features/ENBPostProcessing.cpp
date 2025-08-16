@@ -1,15 +1,15 @@
-#include "PCH.h"
 #include "ENBPostProcessing.h"
+#include "Feature.h"
+#include "PCH.h"
 #include "State.h"
 #include "Util.h"
-#include "Feature.h"
 
 void ENBPostProcessing::SaveSettings(json& o_json)
 {
 	o_json["Enabled"] = settings.Enabled;
 	o_json["EffectPath"] = settings.EffectPath;
 	o_json["SelectedTechnique"] = settings.SelectedTechnique;
-	
+
 	// Save variable values
 	if (!settings.FloatVariables.empty()) {
 		o_json["FloatVariables"] = settings.FloatVariables;
@@ -26,13 +26,13 @@ void ENBPostProcessing::LoadSettings(json& o_json)
 {
 	if (o_json["Enabled"].is_boolean())
 		settings.Enabled = o_json["Enabled"];
-	
+
 	if (o_json["EffectPath"].is_string())
 		settings.EffectPath = o_json["EffectPath"];
-	
+
 	if (o_json["SelectedTechnique"].is_string())
 		settings.SelectedTechnique = o_json["SelectedTechnique"];
-	
+
 	// Load variable values
 	if (o_json.contains("FloatVariables") && o_json["FloatVariables"].is_object()) {
 		settings.FloatVariables = o_json["FloatVariables"].get<std::unordered_map<std::string, float>>();
@@ -69,7 +69,7 @@ void ENBPostProcessing::DrawSettings()
 	if (effectPathBuffer[0] == '\0') {
 		strcpy_s(effectPathBuffer, sizeof(effectPathBuffer), settings.EffectPath.c_str());
 	}
-	
+
 	if (ImGui::InputText("Effect File Path", effectPathBuffer, sizeof(effectPathBuffer))) {
 		settings.EffectPath = effectPathBuffer;
 	}
@@ -128,10 +128,10 @@ struct Main_HDRTonemapBlendCinematic_Render
 	static void thunk(RE::ImageSpaceManager* a1, RE::ImageSpaceEffect* a2, uint32_t a3, uint32_t a4, RE::ImageSpaceShaderParam* a5)
 	{
 		// Check if ENB Post Processing is enabled
-		if (globals::features::enbPostProcessing.settings.Enabled && 
-		    globals::features::enbPostProcessing.GetEffect11().IsEffectLoaded()) {
-			auto renderer = globals::game::renderer;	
-			
+		if (globals::features::enbPostProcessing.settings.Enabled &&
+			globals::features::enbPostProcessing.GetEffect11().IsEffectLoaded()) {
+			auto renderer = globals::game::renderer;
+
 			auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
 			auto& imageSpaceTempCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
