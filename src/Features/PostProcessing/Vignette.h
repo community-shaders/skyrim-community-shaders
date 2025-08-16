@@ -7,7 +7,8 @@ struct Vignette : public PostProcessFeature
 {
 	virtual inline std::string GetType() const override { return "Vignette"; }
 	virtual inline std::string GetDesc() const override { return "Simulates natural vignetting due to angled rays impinging on the film or sensor array."; }
-
+	virtual inline bool DrawAfterColorGrading() const override { return true; }
+	
 	struct Settings
 	{
 		float FocalLength = 1.f;

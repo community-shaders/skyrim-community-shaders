@@ -10,7 +10,6 @@ struct DoF : public PostProcessFeature
 {
 	virtual inline std::string GetType() const override { return "Depth of Field"; }
 	virtual inline std::string GetDesc() const override { return "Depth of Field, based on CinematicDOF by Frans Bouma"; }
-	virtual inline bool DrawAfterTAA() const override { return true; }
 
 	struct Settings
 	{

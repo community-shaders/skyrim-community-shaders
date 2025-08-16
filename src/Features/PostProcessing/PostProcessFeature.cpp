@@ -20,16 +20,16 @@ std::pair<std::string, PostProcessFeatureConstructor> GetFeatureConstructorPair(
 const ankerl::unordered_dense::map<std::string, PostProcessFeatureConstructor>& PostProcessFeatureConstructor::GetFeatureConstructors()
 {
 	static ankerl::unordered_dense::map<std::string, PostProcessFeatureConstructor> retval = {
-		GetFeatureConstructorPair<CODBloom>(),
-		GetFeatureConstructorPair<HistogramAutoExposure>(),
-		GetFeatureConstructorPair<Vignette>(),
+		// GetFeatureConstructorPair<CODBloom>(),
+		// GetFeatureConstructorPair<HistogramAutoExposure>(),
+		// GetFeatureConstructorPair<Vignette>(),
 		GetFeatureConstructorPair<ColourTransforms>(),
-		GetFeatureConstructorPair<LUT>(),
-		GetFeatureConstructorPair<Camera>(),
-		GetFeatureConstructorPair<LensFlare>(),
-		GetFeatureConstructorPair<VanillaImagespace>(),
-		GetFeatureConstructorPair<DoF>(),
-		GetFeatureConstructorPair<MotionBlur>(),
+		// GetFeatureConstructorPair<LUT>(),
+		// GetFeatureConstructorPair<Camera>(),
+		// GetFeatureConstructorPair<LensFlare>(),
+		// GetFeatureConstructorPair<VanillaImagespace>(),
+		// GetFeatureConstructorPair<DoF>(),
+		// GetFeatureConstructorPair<MotionBlur>(),
 	};
 	return retval;
 }

@@ -2,6 +2,17 @@
 
 #include "PostProcessing/PostProcessFeature.h"
 
+#include "PostProcessing/CODBloom.h"
+#include "PostProcessing/ColourTransforms.h"
+#include "PostProcessing/DoF.h"
+#include "PostProcessing/HistogramAutoExposure.h"
+#include "PostProcessing/LUT.h"
+#include "PostProcessing/LensFlare.h"
+#include "PostProcessing/MotionBlur.h"
+#include "PostProcessing/VanillaImagespace.h"
+#include "PostProcessing/Vignette.h"
+#include "PostProcessing/pCamera.h"
+
 struct PostProcessing : Feature
 {
 	static PostProcessing* GetSingleton()
@@ -13,8 +24,7 @@ struct PostProcessing : Feature
 	struct alignas(16) Settings
 	{
 		uint DisableVanillaTonemapping = 1;
-		uint AdvancedMode = 0;  // placeholder
-		uint pad[2];
+		uint pad[3];
 	} settings;
 
 	const std::string ppPresetPath = "Data\\SKSE\\Plugins\\CommunityShaders\\PostProcessing";
@@ -56,6 +66,22 @@ struct PostProcessing : Feature
 	void SavePresetTo(std::string a_name);
 	void LoadPresetFrom(std::string a_name);
 
+	enum class FeaturePipelineIndex : size_t
+	{
+		AutoExposure,
+		MotionBlur,
+		DoF,
+		CODBloom,
+		LensFlare,
+		VanillaImagespace,
+		LUT,
+		Vignette,
+		Camera,
+		COUNT
+	};
+
+	std::array<std::unique_ptr<PostProcessFeature>, static_cast<size_t>(FeaturePipelineIndex::COUNT)> pipeline;
+
 	virtual void ClearShaderCache() override;
 
 	virtual void SetupResources() override;
@@ -73,7 +99,8 @@ struct PostProcessing : Feature
 	bool bypass = false;
 	bool isrefraction = false;
 
-	std::vector<std::unique_ptr<PostProcessFeature>> feats = {};
+	// std::vector<std::unique_ptr<PostProcessFeature>> feats = {};
+	std::vector<std::unique_ptr<PostProcessFeature>> colorTransformsFeats = {};
 
 	eastl::unique_ptr<Texture2D> texCopy = nullptr;
 	eastl::unique_ptr<Texture2D> texAfterTAA = nullptr;
