@@ -542,14 +542,20 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 
 		auto phaseCount = GetJitterPhaseCount(renderWidth, screenWidth);
 
-		GetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
+		// Disable jitter due to VR head movements emulating it
+		if (globals::game::isVR) {
+			jitter.x = 0.0f;
+			jitter.y = 0.0f;
+		} else {
+			GetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
+		}
 
 		if (globals::game::isVR)
 			a_viewport->projectionPosScaleX = -jitter.x / renderWidth;
 		else
 			a_viewport->projectionPosScaleX = -2.0f * jitter.x / renderWidth;
 
-		a_viewport->projectionPosScaleY = 2.0f * jitter.y / renderHeight;
+		a_viewport->projectionPosScaleY = 2.0f * jitter.y / renderHeight;	
 	} else {
 		resolutionScale = 1.0f;
 	}
