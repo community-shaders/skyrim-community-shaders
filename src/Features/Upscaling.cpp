@@ -204,7 +204,7 @@ void Upscaling::DrawSettings()
 			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
 	}
 
-	if (fidelityFX.featureFSR3FG) {
+	if (!globals::game::isVR) {
 		if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Text("Frame Generation interpolates real frames with generated ones for a smoother experience");
 			ImGui::Text("Uses AMD FSR 3.1 Frame Generation technology");
@@ -398,6 +398,72 @@ Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
 	return (UpscaleMethod)settings.upscaleMethodNoDLSS;
 }
 
+void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
+{
+	auto renderer = globals::game::renderer;
+	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+
+	D3D11_TEXTURE2D_DESC texDesc{};
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+
+	main.texture->GetDesc(&texDesc);
+	main.SRV->GetDesc(&srvDesc);
+	main.UAV->GetDesc(&uavDesc);
+
+	texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+	texDesc.Format = DXGI_FORMAT_R8_UNORM;
+	srvDesc.Format = texDesc.Format;
+	uavDesc.Format = texDesc.Format;
+
+	// Create D3D11 textures for DLSS
+	if (a_upscalemethod == UpscaleMethod::kDLSS) {
+		if (!reactiveMaskTexture) {
+			reactiveMaskTexture = new Texture2D(texDesc);
+			reactiveMaskTexture->CreateSRV(srvDesc);
+			reactiveMaskTexture->CreateUAV(uavDesc);
+		}
+		
+		if (!transparencyCompositionMaskTexture) {
+			transparencyCompositionMaskTexture = new Texture2D(texDesc);
+			transparencyCompositionMaskTexture->CreateSRV(srvDesc);
+			transparencyCompositionMaskTexture->CreateUAV(uavDesc);
+		}
+	}
+
+	// Create shared D3D12 resources for FSR/XeSS
+	if (a_upscalemethod == UpscaleMethod::kFSR || a_upscalemethod == UpscaleMethod::kXESS) {
+		CreateSharedD3D12Resources(a_upscalemethod);
+	}
+}
+
+void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
+{
+	// Destroy D3D11 textures for DLSS
+	if (a_upscalemethod == UpscaleMethod::kDLSS) {
+		if (reactiveMaskTexture) {
+			reactiveMaskTexture->srv = nullptr;
+			reactiveMaskTexture->uav = nullptr;
+			reactiveMaskTexture->resource = nullptr;
+			delete reactiveMaskTexture;
+			reactiveMaskTexture = nullptr;
+		}
+
+		if (transparencyCompositionMaskTexture) {
+			transparencyCompositionMaskTexture->srv = nullptr;
+			transparencyCompositionMaskTexture->uav = nullptr;
+			transparencyCompositionMaskTexture->resource = nullptr;
+			delete transparencyCompositionMaskTexture;
+			transparencyCompositionMaskTexture = nullptr;
+		}
+	}
+
+	// Destroy shared D3D12 resources for FSR/XeSS
+	if (a_upscalemethod == UpscaleMethod::kFSR || a_upscalemethod == UpscaleMethod::kXESS) {
+		DestroySharedD3D12Resources(a_upscalemethod);
+	}
+}
+
 void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 {
 	static auto previousUpscaleMode = UpscaleMethod::kTAA;
@@ -414,6 +480,9 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 			}
 		}
 
+		// Destroy previous upscaling method resources
+		DestroyUpscalingTextureResources(previousUpscaleMode);
+			
 		if (previousUpscaleMode == UpscaleMethod::kDLSS)
 			streamline.DestroyDLSSResources();
 		else if (previousUpscaleMode == UpscaleMethod::kFSR)
@@ -421,6 +490,9 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 		else if (previousUpscaleMode == UpscaleMethod::kXESS)
 			xess.DestroyXeSSResources();
 
+		// Create new upscaling method resources
+		CreateUpscalingTextureResources(a_upscalemethod);
+		
 		if (a_upscalemethod == UpscaleMethod::kFSR)
 			fidelityFX.CreateFSRResources();
 		else if (a_upscalemethod == UpscaleMethod::kXESS)
@@ -432,20 +504,33 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 
 ID3D11ComputeShader* Upscaling::GetEncodeTexturesCS()
 {
-	if (!encodeTexturesCS) {
-		logger::debug("Compiling EncodeTexturesCS.hlsl");
-		encodeTexturesCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data/Shaders/Upscaling/EncodeTexturesCS.hlsl", {}, "cs_5_0");
+	auto upscaleMethod = GetUpscaleMethod();
+	uint methodIndex = (uint)upscaleMethod;
+	
+	if (!encodeTexturesCS[methodIndex]) {
+		logger::debug("Compiling EncodeTexturesCS.hlsl for upscale method {}", methodIndex);
+		
+		std::vector<std::pair<const char*, const char*>> defines;
+		
+		// Add upscale method define
+		switch (upscaleMethod) {
+			case UpscaleMethod::kFSR:
+				defines.push_back({ "FSR", "" });
+				break;
+			case UpscaleMethod::kXESS:
+				defines.push_back({ "XESS", "" });
+				break;
+			case UpscaleMethod::kDLSS:
+				defines.push_back({ "DLSS", "" });
+				break;
+			default:
+				// No define for NONE or TAA
+				break;
+		}
+		
+		encodeTexturesCS[methodIndex] = (ID3D11ComputeShader*)Util::CompileShader(L"Data/Shaders/Upscaling/EncodeTexturesCS.hlsl", defines, "cs_5_0");
 	}
-	return encodeTexturesCS;
-}
-
-ID3D11ComputeShader* Upscaling::GetEncodeTexturesTransparencyCS()
-{
-	if (!encodeTexturesTransparencyCS) {
-		logger::debug("Compiling EncodeTexturesCS.hlsl TRANSPARENCY_MASK");
-		encodeTexturesTransparencyCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data/Shaders/Upscaling/EncodeTexturesCS.hlsl", { { "TRANSPARENCY_MASK", "" } }, "cs_5_0");
-	}
-	return encodeTexturesTransparencyCS;
+	return encodeTexturesCS[methodIndex];
 }
 
 ID3D11PixelShader* Upscaling::GetDepthRefractionUpscalePS()
@@ -602,19 +687,11 @@ void Upscaling::SetupResources()
 
 	texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
-	texDesc.Format = DXGI_FORMAT_R8_UNORM;
+	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	srvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
 
-	reactiveMaskTexture = new Texture2D(texDesc);
-	reactiveMaskTexture->CreateSRV(srvDesc);
-	reactiveMaskTexture->CreateUAV(uavDesc);
-
-	transparencyCompositionMaskTexture = new Texture2D(texDesc);
-	transparencyCompositionMaskTexture->CreateSRV(srvDesc);
-	transparencyCompositionMaskTexture->CreateUAV(uavDesc);
-
-	CreateSharedD3D12Resources();
+	// Resource allocation is now handled in CheckResources() based on upscale method
 
 	if (d3d12Interop)
 		CreateFrameGenerationResources();
@@ -679,44 +756,13 @@ void Upscaling::SetupResources()
 	CloseHandle(sharedFenceHandle);
 }
 
-void Upscaling::DestroyUpscalingResources()
+void Upscaling::ClearShaderCache()
 {
-	reactiveMaskTexture->srv = nullptr;
-	reactiveMaskTexture->uav = nullptr;
-	reactiveMaskTexture->resource = nullptr;
-	delete reactiveMaskTexture;
-
-	transparencyCompositionMaskTexture->srv = nullptr;
-	transparencyCompositionMaskTexture->uav = nullptr;
-	transparencyCompositionMaskTexture->resource = nullptr;
-	delete transparencyCompositionMaskTexture;
-
-	if (encodeTexturesCS) {
-		encodeTexturesCS->Release();
-		encodeTexturesCS = nullptr;
-	}
-
-	// Clean up depth upscaling states
-	if (upscaleDepthStencilState) {
-		upscaleDepthStencilState->Release();
-		upscaleDepthStencilState = nullptr;
-	}
-	if (upscaleBlendState) {
-		upscaleBlendState->Release();
-		upscaleBlendState = nullptr;
-	}
-	if (upscaleRasterizerState) {
-		upscaleRasterizerState->Release();
-		upscaleRasterizerState = nullptr;
-	}
-
-	if (depthBufferShared12) {
-		delete depthBufferShared12;
-		depthBufferShared12 = nullptr;
-	}
-	if (motionVectorBufferShared12) {
-		delete motionVectorBufferShared12;
-		motionVectorBufferShared12 = nullptr;
+	for (int i = 0; i < 5; ++i) {
+		if (encodeTexturesCS[i]) {
+			encodeTexturesCS[i]->Release();
+			encodeTexturesCS[i] = nullptr;
+		}
 	}
 }
 
@@ -754,9 +800,9 @@ void Upscaling::CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter)
 	logger::info("[Upscaling] Shared D3D12 device and interop resources created successfully");
 }
 
-void Upscaling::CreateSharedD3D12Resources()
+void Upscaling::CreateSharedD3D12Resources(UpscaleMethod a_upscalemethod)
 {
-	logger::info("[Upscaling] Creating shared D3D12 resources");
+	logger::info("[Upscaling] Creating shared D3D12 resources for upscale method {}", (int)a_upscalemethod);
 
 	// Get D3D11 device5 interface for WrappedResource creation
 	winrt::com_ptr<ID3D11Device5> d3d11Device5;
@@ -767,22 +813,79 @@ void Upscaling::CreateSharedD3D12Resources()
 
 	D3D11_TEXTURE2D_DESC texDesc{};
 	main.texture->GetDesc(&texDesc);
-
 	texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
-	inputColorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
-	outputColorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+
+	// Common resources for both FSR and XeSS
+	if (!inputColorBufferShared12) {
+		inputColorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+	}
+	if (!outputColorBufferShared12) {
+		outputColorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+	}
 
 	texDesc.Format = DXGI_FORMAT_R8_UNORM;
-	reactiveMaskShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+	if (!reactiveMaskShared12) {
+		reactiveMaskShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+	}
+
+	// Transparency mask only for FSR
+	if (a_upscalemethod == UpscaleMethod::kFSR && !transparencyCompositionMaskShared12) {
+		transparencyCompositionMaskShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+	}
 
 	texDesc.Format = DXGI_FORMAT_R32_FLOAT;
-	depthBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+	if (!depthBufferShared12) {
+		depthBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+	}
 
 	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 	motionVector.texture->GetDesc(&texDesc);
-	motionVectorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+	if (!motionVectorBufferShared12) {
+		motionVectorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+	}
 
-	copyDepthToSharedBufferCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\Upscaling\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0");
+	if (!copyDepthToSharedBufferCS) {
+		copyDepthToSharedBufferCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\Upscaling\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0");
+	}
+}
+
+void Upscaling::DestroySharedD3D12Resources(UpscaleMethod a_upscalemethod)
+{
+	logger::info("[Upscaling] Destroying shared D3D12 resources for upscale method {}", (int)a_upscalemethod);
+
+	// Delete common resources
+	if (inputColorBufferShared12) {
+		delete inputColorBufferShared12;
+		inputColorBufferShared12 = nullptr;
+	}
+	if (outputColorBufferShared12) {
+		delete outputColorBufferShared12;
+		outputColorBufferShared12 = nullptr;
+	}
+	if (reactiveMaskShared12) {
+		delete reactiveMaskShared12;
+		reactiveMaskShared12 = nullptr;
+	}
+	if (depthBufferShared12) {
+		delete depthBufferShared12;
+		depthBufferShared12 = nullptr;
+	}
+	if (motionVectorBufferShared12) {
+		delete motionVectorBufferShared12;
+		motionVectorBufferShared12 = nullptr;
+	}
+
+	// Delete transparency mask (FSR-specific)
+	if (transparencyCompositionMaskShared12) {
+		delete transparencyCompositionMaskShared12;
+		transparencyCompositionMaskShared12 = nullptr;
+	}
+
+	// Delete shader
+	if (copyDepthToSharedBufferCS) {
+		copyDepthToSharedBufferCS->Release();
+		copyDepthToSharedBufferCS = nullptr;
+	}
 }
 
 void Upscaling::CreateFrameGenerationResources()
@@ -1153,19 +1256,22 @@ void Upscaling::Upscale()
 		auto& depthPostWater = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
 		{
-			const bool isDLSS = upscaleMethod == UpscaleMethod::kDLSS;
-
 			ID3D11ShaderResourceView* views[3] = { temporalAAMask.SRV, depthPreWater.depthSRV, depthPostWater.depthSRV };
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
-			// Use shared D3D12 textures for XeSS, regular D3D11 textures for others
-			ID3D11UnorderedAccessView* reactiveMaskUAV = isDLSS ? reactiveMaskTexture->uav.get() : reactiveMaskShared12->uav;
-			ID3D11UnorderedAccessView* transparencyUAV = isDLSS ? transparencyCompositionMaskTexture->uav.get() : nullptr;
+			// Use shared D3D12 textures for FSR/XeSS, regular D3D11 textures for DLSS
+			ID3D11UnorderedAccessView* reactiveMaskUAV = upscaleMethod == UpscaleMethod::kDLSS ? reactiveMaskTexture->uav.get() : reactiveMaskShared12->uav;
+			ID3D11UnorderedAccessView* transparencyUAV = nullptr;
+			if (upscaleMethod == UpscaleMethod::kDLSS) {
+				transparencyUAV = transparencyCompositionMaskTexture->uav.get();
+			} else if (upscaleMethod == UpscaleMethod::kFSR) {
+				transparencyUAV = transparencyCompositionMaskShared12->uav;
+			}
 
 			ID3D11UnorderedAccessView* uavs[2] = { reactiveMaskUAV, transparencyUAV };
 			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
-			context->CSSetShader(isDLSS ? GetEncodeTexturesTransparencyCS() : GetEncodeTexturesCS(), nullptr, 0);
+			context->CSSetShader(GetEncodeTexturesCS(), nullptr, 0);
 
 			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 		}
@@ -1217,6 +1323,7 @@ void Upscaling::Upscale()
 					motionVectorBufferShared12->resource.get(),
 					depthBufferShared12->resource.get(),
 					reactiveMaskShared12->resource.get(),
+					transparencyCompositionMaskShared12->resource.get(),
 					outputColorBufferShared12->resource.get(),
 					sharedD3D12CommandList.get(),
 					(uint32_t)renderSize.x,

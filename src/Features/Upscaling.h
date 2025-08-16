@@ -94,12 +94,13 @@ public:
 	UpscaleMethod GetUpscaleMethod();
 
 	void CheckResources(UpscaleMethod a_upscalemethod);
+	void CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod);
+	void DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod);
+	void CreateSharedD3D12Resources(UpscaleMethod a_upscalemethod);
+	void DestroySharedD3D12Resources(UpscaleMethod a_upscalemethod);
 
-	ID3D11ComputeShader* encodeTexturesCS = nullptr;
+	ID3D11ComputeShader* encodeTexturesCS[5] = { nullptr }; // One for each UpscaleMethod
 	ID3D11ComputeShader* GetEncodeTexturesCS();
-
-	ID3D11ComputeShader* encodeTexturesTransparencyCS = nullptr;
-	ID3D11ComputeShader* GetEncodeTexturesTransparencyCS();
 
 	ID3D11PixelShader* depthRefractionUpscalePS = nullptr;
 	ID3D11PixelShader* GetDepthRefractionUpscalePS();
@@ -121,8 +122,7 @@ public:
 	Texture2D* reactiveMaskTexture = nullptr;
 	Texture2D* transparencyCompositionMaskTexture = nullptr;
 
-	// Resource management
-	void DestroyUpscalingResources();
+	virtual void ClearShaderCache() override;
 
 	// Shared D3D12 device and interop resources
 	winrt::com_ptr<ID3D12Device> sharedD3D12Device;
@@ -142,6 +142,7 @@ public:
 	WrappedResource* depthBufferShared12 = nullptr;
 	WrappedResource* motionVectorBufferShared12 = nullptr;
 	WrappedResource* reactiveMaskShared12 = nullptr;
+	WrappedResource* transparencyCompositionMaskShared12 = nullptr;
 	WrappedResource* inputColorBufferShared12 = nullptr;
 	WrappedResource* outputColorBufferShared12 = nullptr;
 

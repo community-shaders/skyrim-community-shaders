@@ -287,6 +287,7 @@ void FidelityFX::Upscale(
 	ID3D12Resource* a_motionVectorTexture,
 	ID3D12Resource* a_depthTexture,
 	ID3D12Resource* a_reactiveMask,
+	ID3D12Resource* a_transparencyCompositionMask,
 	ID3D12Resource* a_outputTexture,
 	ID3D12GraphicsCommandList* a_commandList,
 	uint32_t a_renderWidth,
@@ -304,7 +305,7 @@ void FidelityFX::Upscale(
 	dispatchUpscale.output = ffxApiGetResourceDX12(a_outputTexture, FFX_API_RESOURCE_STATE_UNORDERED_ACCESS);
 	dispatchUpscale.exposure = ffxApiGetResourceDX12(nullptr, FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 	dispatchUpscale.reactive = ffxApiGetResourceDX12(a_reactiveMask, FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
-	dispatchUpscale.transparencyAndComposition = ffxApiGetResourceDX12(nullptr, FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+	dispatchUpscale.transparencyAndComposition = ffxApiGetResourceDX12(a_transparencyCompositionMask, FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
 
 	dispatchUpscale.jitterOffset.x = -a_jitter.x;
 	dispatchUpscale.jitterOffset.y = -a_jitter.y;
