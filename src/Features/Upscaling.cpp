@@ -1248,15 +1248,9 @@ void Upscaling::PerformUpscaling()
 
 	auto& runtimeData = globals::game::graphicsState->GetRuntimeData();
 
-	if (globals::game::isVR) {
-		runtimeData.dynamicResolutionPreviousWidthRatio = 1.0f;
-		runtimeData.dynamicResolutionPreviousHeightRatio = 1.0f;
-		runtimeData.dynamicResolutionWidthRatio = 1.0f;
-		runtimeData.dynamicResolutionHeightRatio = 1.0f;
-	} else {
-		// Disable dynamic resolution past this point
-		runtimeData.dynamicResolutionLock = 1;
-	}
+	// Disable dynamic resolution past this point
+	runtimeData.dynamicResolutionLock = 1;
+	
 	// Updates the PerFrame constant buffer so that dynamic resolution settings are disabled
 	UpdateCameraData();
 }
