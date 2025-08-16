@@ -240,9 +240,9 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 		// We sample depth twice per pixel per sample, and interpolate with an edge detect filter
 		// Interpolation should only occur on the minor axis of the ray - major axis coordinates should be at pixel centers
 		half2 read_xy = floor(pixel_xy);
-		
+
 		read_xy *= inParameters.DynamicRes;
-		
+
 #	if defined(VR)
 		read_xy *= half2(0.5, 1.0);
 #	endif

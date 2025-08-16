@@ -23,9 +23,9 @@ cbuffer JitterCB : register(b0)
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
-	
+
 	float2 uv = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
-	
+
 	// Remove jitter offset to get the correct sampling coordinates
 	uv -= jitter * SharedData::BufferDim.zw;
 
