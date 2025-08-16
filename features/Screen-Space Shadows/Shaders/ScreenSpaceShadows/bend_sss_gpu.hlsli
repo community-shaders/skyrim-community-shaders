@@ -270,12 +270,12 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 #	if defined(VR)
 #		if defined(RIGHT)
 		// Right eye: valid UV range is [0.5, 1.0]
-		bool coord_out_of_eye = coord.x < 0.5;
-		bool coord_offset_out_of_eye = coord_with_offset.x < 0.5;
+		bool coord_out_of_eye = coord.x < 0.5 * inParameters.DynamicRes.x;
+		bool coord_offset_out_of_eye = coord_with_offset.x < 0.5 * inParameters.DynamicRes.x;
 #		else
 		// Left eye: valid UV range is [0.0, 0.5)
-		bool coord_out_of_eye = coord.x >= 0.5;
-		bool coord_offset_out_of_eye = coord_with_offset.x >= 0.5;
+		bool coord_out_of_eye = coord.x >= 0.5 * inParameters.DynamicRes.x;
+		bool coord_offset_out_of_eye = coord_with_offset.x >= 0.5 * inParameters.DynamicRes.x;
 #		endif
 
 		depths.x = coord_out_of_eye ? 1.0 : inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord, 0);
