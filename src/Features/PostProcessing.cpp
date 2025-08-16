@@ -265,10 +265,7 @@ void PostProcessing::ProcessSettings(json& o_json)
 	const auto& featConstructors = PostProcessFeatureConstructor::GetFeatureConstructors();
 
 	logger::info("Loading post processing settings...");
-	if (o_json.contains("DisableVanillaTonemapping"))
-		settings.DisableVanillaTonemapping = o_json["DisableVanillaTonemapping"].get<bool>();
-	else
-		settings.DisableVanillaTonemapping = true;
+	
 
 	for (auto& feat : pipeline) {
 		if (feat) {
@@ -313,11 +310,13 @@ void PostProcessing::ProcessSettings(json& o_json)
 				colorTransformsFeats.pop_back();
 		}
 	}
+
+	if (o_json.contains("ppsettings"))
+		settings = o_json["ppsettings"];
 }
 
 void PostProcessing::SaveSettings(json& o_json)
 {
-	o_json["DisableVanillaTonemapping"] = settings.DisableVanillaTonemapping;
 	for (auto& pipe : pipeline) {
 		if (pipe) {
 			json featureSetting{};
@@ -343,6 +342,7 @@ void PostProcessing::SaveSettings(json& o_json)
 	}
 
 	o_json["ColorTransforms"] = arr;
+	o_json["ppsettings"] = settings;
 }
 
 std::vector<std::string> PostProcessing::LoadPresets()
