@@ -181,7 +181,7 @@ Texture2D<float4> SSRTexture : register(t15);
 
 #	if defined(SSR)
 		float4 ssrIrradiance = SSRTexture[dispatchID.xy];
-		finalIrradiance = lerp(finalIrradiance, ssrIrradiance.rgb, ssrIrradiance.a);
+		finalIrradiance = lerp(finalIrradiance, Color::GammaToLinear(ssrIrradiance.rgb), ssrIrradiance.a);
 #	endif
 
 		color += reflectance * finalIrradiance;
