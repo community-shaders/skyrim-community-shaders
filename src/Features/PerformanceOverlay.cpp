@@ -392,12 +392,19 @@ void PerformanceOverlay::DrawFPS()
 		ImGui::TableNextColumn();
 		ImGui::Text(this->state.isFrameGenerationActive ? "Raw FPS:" : "FPS:");
 		ImGui::TableNextColumn();
-		float avgFrameTime = std::accumulate(this->state.frameTimeHistory.GetData().begin(),
-								 this->state.frameTimeHistory.GetData().end(), 0.0f) /
-		                     this->state.frameTimeHistory.GetData().size();
-		float avgFps = avgFrameTime > 0.0f ? 1000.0f / avgFrameTime : 0.0f;
 
-		ImGui::Text("%.1f (%.2f ms) | Avg: %.1f", this->state.smoothFps, this->state.smoothFrameTimeMs, avgFps);
+		// Check if buffer is full for the avg
+		auto frameData = this->state.frameTimeHistory.GetData();
+		size_t validFrameCount = std::count_if(frameData.begin(), frameData.end(), [](float ft) { return ft > 0.0f; });
+		bool bufferIsFull = validFrameCount == frameData.size();
+
+		if (bufferIsFull) {
+			float avgFrameTime = std::accumulate(frameData.begin(), frameData.end(), 0.0f) / frameData.size();
+			float avgFps = (avgFrameTime > 0.001f) ? 1000.0f / avgFrameTime : 0.0f;
+			ImGui::Text("%.1f (%.2f ms) | Avg: %.1f", this->state.smoothFps, this->state.smoothFrameTimeMs, avgFps);
+		} else {
+			ImGui::Text("%.1f (%.2f ms)", this->state.smoothFps, this->state.smoothFrameTimeMs);
+		}
 
 		if (this->state.isFrameGenerationActive) {
 			ImGui::TableNextColumn();

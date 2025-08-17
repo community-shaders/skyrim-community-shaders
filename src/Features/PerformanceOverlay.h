@@ -258,8 +258,8 @@ struct PerformanceOverlay : OverlayFeature
 		static constexpr float kVRAMSectionWidth = 300.0f;           // pixels - VRAM section width
 		static constexpr float kWindowBorderPadding = 20.0f;         // pixels - Window border padding
 		static constexpr float kDefaultFrameTimeMs = 16.67f;         // ms - Default frame time (60 FPS)
-		static constexpr int kMinFrameHistorySize = 60;              // 60 frames = 1s @ 60fps. Reasonable minimum.
-		static constexpr int kMaxFrameHistorySize = 480;             // 480 frames = 10s @ 60fps or 2s @ 240fps. Reasonable maximum.
+		static constexpr int kMinFrameHistorySize = 120;             // 2s @ 60fps, 0.5s @ 240fps
+		static constexpr int kMaxFrameHistorySize = 1800;            // 30s @ 60fps, 7.5s @ 240fps
 
 		bool ShowInOverlay = true;  // was: Enabled
 		bool ShowDrawCalls = true;
@@ -268,7 +268,7 @@ struct PerformanceOverlay : OverlayFeature
 		bool ShowPreFGFrameTimeGraph = true;
 		bool ShowPostFGFrameTimeGraph = true;
 		float UpdateInterval = 0.5f;
-		int FrameHistorySize = 120;  // Default 120 frames = 2s @ 60fps. Clamped using static values to prevent config file values going outside of slider bounds.
+		int FrameHistorySize = 600;  // 10s @ 60fps, 2.5s @ 240fps
 		float TextSize = 1.0f;
 
 		float BackgroundOpacity = 0.5f;
