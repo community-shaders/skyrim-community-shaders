@@ -392,7 +392,12 @@ void PerformanceOverlay::DrawFPS()
 		ImGui::TableNextColumn();
 		ImGui::Text(this->state.isFrameGenerationActive ? "Raw FPS:" : "FPS:");
 		ImGui::TableNextColumn();
-		ImGui::Text("%.1f (%.2f ms)", this->state.smoothFps, this->state.smoothFrameTimeMs);
+		float avgFrameTime = std::accumulate(this->state.frameTimeHistory.GetData().begin(),
+								 this->state.frameTimeHistory.GetData().end(), 0.0f) /
+		                     this->state.frameTimeHistory.GetData().size();
+		float avgFps = avgFrameTime > 0.0f ? 1000.0f / avgFrameTime : 0.0f;
+
+		ImGui::Text("%.1f (%.2f ms) | Avg: %.1f", this->state.smoothFps, this->state.smoothFrameTimeMs, avgFps);
 
 		if (this->state.isFrameGenerationActive) {
 			ImGui::TableNextColumn();
