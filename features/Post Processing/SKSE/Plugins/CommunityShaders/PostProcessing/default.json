@@ -1,8 +1,26 @@
 {
-    "effects": [
+    "COD Bloom": {
+        "enabled": true,
+        "settings": {
+            "BlendFactor": 0.05000000074505806,
+            "MipBlendFactor": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                0.0,
+                0.0
+            ],
+            "Threshold": 1.0,
+            "UpsampleRadius": 3.0
+        }
+    },
+    "ColorTransforms": [
         {
             "enabled": true,
-            "name": "To Linear (Set to Gamma 1.5 if not using LL)",
+            "name": "Contrast",
             "settings": {
                 "Params": [
                     [
@@ -12,16 +30,16 @@
                         0.0
                     ],
                     [
-                        0.0,
-                        0.0,
-                        0.0,
+                        0.949999988079071,
+                        0.949999988079071,
+                        0.949999988079071,
                         0.0
                     ],
                     [
-                        1.0,
-                        1.0,
-                        1.0,
-                        1.0
+                        0.20000000298023224,
+                        0.20000000298023224,
+                        0.20000000298023224,
+                        0.5
                     ],
                     [
                         0.0,
@@ -54,83 +72,9 @@
                         0.0
                     ]
                 ],
-                "TransformType": "Gamma"
+                "TransformType": "Exposure/Constrast"
             },
             "type": "Colour Transforms"
-        },
-        {
-            "enabled": true,
-            "name": "Histogram Auto Exposure",
-            "settings": {
-                "AdaptArea": [
-                    0.30000001192092896,
-                    0.6000000238418579
-                ],
-                "AdaptSpeed": 1.5,
-                "AdaptationRange": [
-                    -0.75,
-                    0.20000000298023224
-                ],
-                "ExposureCompensation": 0.0,
-                "PurkinjeMaxEV": -4.0,
-                "PurkinjeStartEV": -1.5,
-                "PurkinjeStrength": 0.0
-            },
-            "type": "Histogram Auto Exposure"
-        },
-        {
-            "enabled": true,
-            "name": "COD Bloom",
-            "settings": {
-                "BlendFactor": 0.05000000074505806,
-                "MipBlendFactor": [
-                    1.0,
-                    1.0,
-                    1.0,
-                    1.0,
-                    1.0,
-                    1.0,
-                    0.0,
-                    0.0
-                ],
-                "Threshold": 1.0,
-                "UpsampleRadius": 2.0
-            },
-            "type": "COD Bloom"
-        },
-        {
-            "enabled": true,
-            "name": "Vanilla Imagespace",
-            "settings": {
-                "ExteriorMultiplier": [
-                    1.0,
-                    1.0,
-                    1.0
-                ],
-                "ExteriorOverride": [
-                    1.0,
-                    1.0,
-                    1.0
-                ],
-                "InteriorMultiplier": [
-                    1.0,
-                    1.0,
-                    1.0
-                ],
-                "InteriorOverride": [
-                    1.0,
-                    1.0,
-                    1.0
-                ],
-                "blendFactor": [
-                    1.0,
-                    1.0,
-                    1.0
-                ],
-                "enableInExMultiplier": false,
-                "enableInExOverride": false
-            },
-            "type": "Vanilla Imagespace"
         },
         {
             "enabled": true,
@@ -138,9 +82,9 @@
             "settings": {
                 "Params": [
                     [
-                        2.0,
                         1.0,
                         1.0,
+                        1.5,
                         0.0
                     ],
                     [
@@ -192,71 +136,196 @@
         },
         {
             "enabled": true,
-            "name": "To sRGB (Set to 0.45 if not using LL)",
+            "name": "OKLCH",
             "settings": {
                 "Params": [
                     [
-                        1.0,
-                        1.0,
-                        1.0,
-                        0.0
-                    ],
-                    [
                         0.0,
-                        0.0,
+                        1.2929999828338623,
                         0.0,
                         0.0
                     ],
                     [
-                        1.0,
-                        1.0,
-                        1.0,
-                        1.0
-                    ],
-                    [
-                        0.0,
-                        0.0,
+                        -0.30799999833106995,
+                        1.1239999532699585,
                         0.0,
                         0.0
                     ],
                     [
                         0.0,
-                        0.0,
-                        0.0,
-                        0.0
-                    ],
-                    [
-                        0.0,
-                        0.0,
+                        1.0,
                         0.0,
                         0.0
                     ],
                     [
                         0.0,
+                        1.2100000381469727,
                         0.0,
+                        0.0
+                    ],
+                    [
+                        -0.24199999868869781,
+                        1.305999994277954,
                         0.0,
                         0.0
                     ],
                     [
                         0.0,
+                        1.0,
                         0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        1.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        1.0,
                         0.0,
                         0.0
                     ]
                 ],
-                "TransformType": "Gamma"
+                "TransformType": "OKLCH Colour Mixer"
             },
             "type": "Colour Transforms"
-        },
-        {
-            "enabled": true,
-            "name": "Vignette",
-            "settings": {
-                "FocalLength": 1.0,
-                "Power": 3.0
-            },
-            "type": "Vignette"
         }
     ],
+    "Depth of Field": {
+        "enabled": false,
+        "settings": {
+            "AutoFocus": true,
+            "BlurQuality": 7.0,
+            "BokehBusyFactor": 0.5,
+            "FNumber": 2.799999952316284,
+            "FarPlaneMaxBlur": 1.0,
+            "FocalLength": 50.0,
+            "FocusCoord": [
+                0.5,
+                0.5
+            ],
+            "HighlightBoost": 0.0,
+            "ManualFocusPlane": 0.4000000059604645,
+            "NearFarDistanceCompensation": 1.0,
+            "NearPlaneMaxBlur": 1.0,
+            "PostBlurSmoothing": 0.0,
+            "TransitionSpeed": 0.5,
+            "consoleSelection": false,
+            "targetFocus": false,
+            "targetFocusFocalLength": 50.0
+        }
+    },
+    "Histogram Auto Exposure": {
+        "enabled": true,
+        "settings": {
+            "AdaptArea": [
+                0.6000000238418579,
+                0.6000000238418579
+            ],
+            "AdaptSpeed": 1.5,
+            "AdaptationRange": [
+                -0.5,
+                6.0
+            ],
+            "ExposureCompensation": 1.0,
+            "PurkinjeMaxEV": -4.0,
+            "PurkinjeStartEV": -1.5,
+            "PurkinjeStrength": 0.20000000298023224
+        }
+    },
+    "LUT": {
+        "enabled": false,
+        "settings": {
+            "InputMax": [
+                1.0,
+                1.0,
+                1.0
+            ],
+            "InputMin": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "LutPath": ""
+        }
+    },
+    "Motion Blur": {
+        "enabled": false,
+        "settings": {
+            "SampleCount": 8,
+            "ScalePreset": 2,
+            "VelocityScale": 300.0
+        }
+    },
+    "PotatoFX Camera": {
+        "enabled": false,
+        "settings": {
+            "CAStrength": 0.03999999910593033,
+            "FECrop": 0.0,
+            "FEFoV": 90.0,
+            "NoiseStrength": 0.07999999821186066,
+            "NoiseType": 0,
+            "UseFE": false
+        }
+    },
+    "PotatoFX Lens Flare": {
+        "enabled": false,
+        "settings": {
+            "GLocalMask": true,
+            "GhostStrength": 0.30000001192092896,
+            "HaloRadius": 0.5,
+            "HaloStrength": 0.20000000298023224,
+            "HaloWidth": 0.5,
+            "LFStrength": 0.5,
+            "LensFlareCA": 1.0,
+            "LensFlareCurve": 1.0
+        }
+    },
+    "Vanilla Imagespace": {
+        "enabled": true,
+        "settings": {
+            "ExteriorMultiplier": [
+                1.0,
+                1.0,
+                1.0
+            ],
+            "ExteriorOverride": [
+                1.0,
+                1.0,
+                1.0
+            ],
+            "InteriorMultiplier": [
+                1.0,
+                1.0,
+                1.0
+            ],
+            "InteriorOverride": [
+                1.0,
+                1.0,
+                1.0
+            ],
+            "blendFactor": [
+                1.0,
+                1.0,
+                1.0
+            ],
+            "enableFade": true,
+            "enableInExMultiplier": false,
+            "enableInExOverride": false,
+            "enableTint": true
+        }
+    },
+    "Vignette": {
+        "enabled": true,
+        "settings": {
+            "FocalLength": 1.0,
+            "Power": 3.0
+        }
+    },
+    "ppsettings": {
+        "DisableVanillaTonemapping": 1
+    },
     "preset_name": "default"
 }
