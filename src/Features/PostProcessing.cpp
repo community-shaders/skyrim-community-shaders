@@ -16,18 +16,11 @@ void PostProcessing::DrawSettings()
 	// 1 for feat settings
 	static int pageNum = 0;
 	static int featIdx = 0;
+	static int pipelinePageNum = 0;
+	static int pipelineFeatIdx = 0;
 	static int presetIdx = -1;
-	const float _iconButtonSize = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetStyle().FramePadding.x;
-	const ImVec2 iconButtonSize{ _iconButtonSize, _iconButtonSize };
-
-	//if (ImGui::BeginTable("Page Select", 2)) {
-	//	ImGui::TableNextColumn();
-	//	ImGui::RadioButton("Effect List", &pageNum, 0);
-	//	ImGui::TableNextColumn();
-	//	ImGui::RadioButton("Effect Settings", &pageNum, 1);
-
-	//	ImGui::EndTable();
-	//}
+	// const float _iconButtonSize = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetStyle().FramePadding.x;
+	// const ImVec2 iconButtonSize{ _iconButtonSize, _iconButtonSize };
 
 	ImGui::BeginGroup();
 	std::string currentPreset = (presetIdx >= 0 && presetIdx < presets.size()) ? presets[presetIdx] : "Select a preset";
@@ -70,66 +63,88 @@ void PostProcessing::DrawSettings()
 	ImGui::SameLine();
 	ImGui::Checkbox("Disable Vanilla Tonemapping", (bool*)&settings.DisableVanillaTonemapping);
 
-	ImGui::Spacing();
+	ImGui::Separator();
 
-	for (auto& feat : pipeline) {
-		if (feat) {
-			ImGui::Checkbox(feat->GetType().c_str(), &feat->enabled);
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text(feat->GetDesc().c_str());
-			if (feat->enabled) {
-				std::string label = feat->GetType() + " Settings##";
-				if (ImGui::TreeNode(label.c_str())) {
-					feat->DrawSettings();
-					ImGui::TreePop();
+	if (pipelinePageNum == 0) {
+		for (int i = 0; i < pipeline.size(); ++i) {
+			auto& feat = pipeline[i];
+			if (feat) {
+				ImGui::PushID(feat->GetType().c_str());
+				ImGui::Checkbox("##Enabled", &feat->enabled);
+				ImGui::SameLine();
+				if (ImGui::Button(ICON_FA_BARS)) {
+					pipelineFeatIdx = i;
+					pipelinePageNum = 1;
 				}
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text("Edit settings for this feature.");
+				ImGui::SameLine();
+				ImGui::Text("%s", feat->GetType().c_str());
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text(feat->GetDesc().c_str());
+				ImGui::PopID();
 			}
+		}
+	} else if (pipelinePageNum == 1) {
+		if (ImGui::Button(ICON_FA_ARROW_LEFT " Back to Pipeline")) {
+			pipelinePageNum = 0;
+		}
+		ImGui::Separator();
+		if (pipelineFeatIdx >= 0 && pipelineFeatIdx < pipeline.size()) {
+			auto& feat = pipeline[pipelineFeatIdx];
+			if (feat) {
+				ImGui::PushID(feat->GetType().c_str());
+				
+				ImGui::SeparatorText(feat->GetType().c_str());
+				ImGui::TextWrapped(feat->GetDesc().c_str());
+				
+				ImGui::Spacing();
+				ImGui::Separator();
+				ImGui::Spacing();
+				ImGui::Checkbox("Enabled", &feat->enabled);
+				if (feat->enabled)
+				{
+					ImGui::Indent();
+					feat->DrawSettings();
+					ImGui::Unindent();
+				} else {
+					ImGui::TextDisabled("Enable the feature to see its settings.");
+				}
+				
+				ImGui::PopID();
+			} else {
+				ImGui::TextDisabled("Selected feature is not valid.");
+				pipelinePageNum = 0;
+			}
+		} else {
+			ImGui::TextDisabled("Invalid feature selected. Returning to list.");
+			pipelinePageNum = 0;
 		}
 	}
 
-	if (pageNum == 0) {
-		// Effect List
+	ImGui::Separator();
 
-		if (ImGui::Button(ICON_FA_PLUS, iconButtonSize))
-			ImGui::OpenPopup("New Feature");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("Add a new effect.");
-
-		if (ImGui::BeginPopup("New Feature", ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar)) {
-			bool doClose = false;
-			if (ImGui::BeginListBox("##Feature List")) {
-				const auto& featConstructors = PostProcessFeatureConstructor::GetFeatureConstructors();
-
-				for (auto& [id, featCon] : featConstructors) {
-					if (ImGui::Selectable(featCon.name.c_str())) {
-						colorTransformsFeats.push_back(std::unique_ptr<PostProcessFeature>{ featCon.fn() });
-						colorTransformsFeats.back()->name = colorTransformsFeats.back()->GetType();
-
-						auto bogey = json::object();
-						colorTransformsFeats.back()->LoadSettings(bogey);
-						colorTransformsFeats.back()->SetupResources();
-
-						featIdx = (int)colorTransformsFeats.size() - 1;
-
-						doClose = true;
-					}
-					if (auto _tt = Util::HoverTooltipWrapper())
-						ImGui::Text(featCon.desc.c_str());
-				}
-
-				ImGui::EndListBox();
-			}
-			if (doClose)
-				ImGui::CloseCurrentPopup();
-			ImGui::EndPopup();
+	if (pageNum == 0 && pipelinePageNum == 0) {
+		if (ImGui::Button(ICON_FA_PLUS))
+		{
+			const auto& featConstructors = PostProcessFeatureConstructor::GetFeatureConstructors();
+			auto& firstCon = featConstructors.begin()->second;
+			colorTransformsFeats.push_back(std::unique_ptr<PostProcessFeature>{ firstCon.fn() });
+			colorTransformsFeats.back()->name = colorTransformsFeats.back()->GetType();
+			auto bogey = json::object();
+			colorTransformsFeats.back()->LoadSettings(bogey);
+			colorTransformsFeats.back()->SetupResources();
+			featIdx = (int)colorTransformsFeats.size() - 1;
 		}
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Add a new color transform.");
 
 		ImGui::SameLine();
-		ImGui::Dummy({ ImGui::GetTextLineHeightWithSpacing() * 2, 1 });
+		ImGui::Text("Color Transforms");
 
 		int markedFeat = -1;
 		int actionType = -1;  // 0 - remove, 1 - move up, 2 - move down
-		if (ImGui::BeginListBox("##Features", { -FLT_MIN, -FLT_MIN })) {
+		if (ImGui::BeginListBox("##Features", { -FLT_MIN, 200.f })) {
 			ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));  // I hate this
 			for (int i = 0; i < colorTransformsFeats.size(); ++i) {
 				ImGui::PushID(i);
@@ -143,7 +158,7 @@ void PostProcessing::DrawSettings()
 					ImGui::Text("Enabled/Bypassed");
 
 				ImGui::SameLine();
-				if (ImGui::Button(ICON_FA_TIMES, iconButtonSize)) {
+				if (ImGui::Button(ICON_FA_TIMES)) {
 					markedFeat = i;
 					actionType = 0;
 				}
@@ -151,7 +166,7 @@ void PostProcessing::DrawSettings()
 					ImGui::Text("Remove the selected effect.");
 
 				ImGui::SameLine();
-				if (ImGui::Button(ICON_FA_ARROW_UP, iconButtonSize) && (i != 0)) {
+				if (ImGui::Button(ICON_FA_ARROW_UP) && (i != 0)) {
 					markedFeat = i;
 					actionType = 1;
 				}
@@ -159,7 +174,7 @@ void PostProcessing::DrawSettings()
 					ImGui::Text("Move the selected effect up.");
 
 				ImGui::SameLine();
-				if (ImGui::Button(ICON_FA_ARROW_DOWN, iconButtonSize) && (i < colorTransformsFeats.size() - 1)) {
+				if (ImGui::Button(ICON_FA_ARROW_DOWN) && (i < colorTransformsFeats.size() - 1)) {
 					markedFeat = i;
 					actionType = 2;
 				}
@@ -167,7 +182,7 @@ void PostProcessing::DrawSettings()
 					ImGui::Text("Move the selected effect down.");
 
 				ImGui::SameLine();
-				if (ImGui::Button(ICON_FA_BARS, iconButtonSize)) {
+				if (ImGui::Button(ICON_FA_BARS)) {
 					markedFeat = i;
 					actionType = 3;
 				}
@@ -225,12 +240,12 @@ void PostProcessing::DrawSettings()
 			}
 		}
 
-	} else if (pageNum == 1) {
+	} else if (pageNum == 1 && pipelinePageNum == 0) {
 		// Effect Settings
 
 		if (featIdx < colorTransformsFeats.size()) {
 			auto& feat = colorTransformsFeats[featIdx];
-			if (ImGui::Button(ICON_FA_ARROW_LEFT, iconButtonSize)) {
+			if (ImGui::Button(ICON_FA_ARROW_LEFT)) {
 				pageNum = 0;
 			}
 
@@ -523,8 +538,6 @@ void PostProcessing::SetupResources()
 
 void PostProcessing::Reset()
 {
-	settings = {};
-
 	for (auto& pipe : pipeline) {
 		if (pipe)
 			pipe->Reset();
@@ -601,6 +614,7 @@ void PostProcessing::PreProcess()
 void PostProcessing::Prepass()
 {
 	if (!pendingSettings.empty()) {
+		logger::info("Processing pending post processing settings...");
 		ProcessSettings(pendingSettings);
 		pendingSettings = {};
 	}
