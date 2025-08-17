@@ -3378,7 +3378,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 
 #		if defined(TERRAIN_BLENDING)
-	float stochasticBlend = (screenNoise * screenNoise) < blendFactorTerrain ? 1.0 : 0.0;	
+	float stochasticBlend = (screenNoise * screenNoise) < blendFactorTerrain ? 1.0 : 0.0;
 	stochasticBlend = lerp(stochasticBlend, blendFactorTerrain, 0.1);
 	psout.NormalGlossiness.w = stochasticBlend;
 	psout.Albedo.w = stochasticBlend;
