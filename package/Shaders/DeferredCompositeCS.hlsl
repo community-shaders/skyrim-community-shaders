@@ -96,18 +96,22 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 	float3 reflectance = ReflectanceTexture[dispatchID.xy];
 
-	if (reflectance.x > 0.0 || reflectance.y > 0.0 || reflectance.z > 0.0) {
+	// Luminance-based threshold to reduce noise compared to hard thresholds of 0.0
+	if (dot(reflectance, float3(0.299, 0.587, 0.114)) > 0.001) {
 		float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
 
 		float wetnessMask = MasksTexture[dispatchID.xy].z;
 
 		normalWS = lerp(normalWS, float3(0, 0, 1), wetnessMask);
 
-		float3 V = normalize(positionWS.xyz);
+		// Actual camera-to-pixel direction
+		float3 V = normalize(FrameBuffer::CameraPosAdjust[eyeIndex].xyz - positionWS.xyz);
 		float3 R = reflect(V, normalWS);
 
-		float roughness = 1.0 - glossiness;
-		float level = roughness * 7.0;
+		float roughness = max(1.0 - glossiness, 0.02); // Prevent perfect mirrors
+
+		// Use perceptual roughness mapping for better visual distribution
+		float level = roughness * roughness * 7.0;
 
 		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(normalWS, -V, roughness);
 

@@ -2986,6 +2986,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	specularColorPBR += indirectSpecularLobeWeight * directionalAmbientColor;
 #			endif
 #		else
+	// In deferred mode, metallic materials need ambient specular lighting
+	specularColorPBR += indirectSpecularLobeWeight * directionalAmbientColor;
 	indirectDiffuseLobeWeight *= vertexColor;
 #		endif
 
