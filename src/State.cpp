@@ -159,25 +159,41 @@ static const std::string& GetConfigPath(State::ConfigMode a_configMode)
 	}
 }
 
-void State::Load(ConfigMode a_configMode, bool a_allowReload)
+static bool LoadJsonFromFile(const std::string& path, json& outJson)
 {
-	auto shaderCache = globals::shaderCache;
-	json settings;
-	bool errorDetected = false;
-
-	auto configFolderPath = std::filesystem::path(GetConfigPath(a_configMode)).parent_path().string();
-	auto defaultConfigFilePath = GetConfigPath(ConfigMode::DEFAULT);
-	auto userConfigFilePath = GetConfigPath(ConfigMode::USER);
+	std::ifstream file(path);
+	if (!file.is_open()) {
+		logger::warn("Unable to open config file: {}", path);
+		return false;
+	}
 
 	try {
-		std::filesystem::create_directories(configFolderPath);
+		file >> outJson;
+		return true;
+	} catch (const nlohmann::json::parse_error& e) {
+		logger::warn("Error parsing json config file ({}): {}\n", path, e.what());
+		return false;
+	}
+}
+
+void State::Load(ConfigMode a_configMode, bool a_allowReload)
+{
+	ConfigMode configMode = a_configMode;
+	auto shaderCache = globals::shaderCache;
+	json defaultSettings;
+	json userSettings;
+	json finalSettings;
+	bool errorDetected = false;
+
+	try {
+		std::filesystem::create_directories(folderPath);
 	} catch (const std::filesystem::filesystem_error& e) {
-		logger::warn("Error creating directory during Load ({}) : {}\n", configFolderPath, e.what());
+		logger::warn("Error creating directory during Load ({}) : {}\n", folderPath, e.what());
 		errorDetected = true;
 	}
 
-	// Attempt to load the config file
-	auto tryLoadConfig = [&](const std::string& path) -> bool {
+	// Lambda to load a config file
+	auto tryLoadConfig = [&](const std::string& path, json& settings) {
 		std::ifstream i(path);
 		logger::info("Attempting to open config file: {}", path);
 		if (!i.is_open()) {
@@ -195,70 +211,55 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 		}
 	};
 
-	// NEW LOADING ORDER: Default → Overrides → User
-
-	// Step 1: Always start with default settings
-	logger::info("Loading default settings from: {}", defaultConfigFilePath);
-	if (!tryLoadConfig(defaultConfigFilePath)) {
-		logger::info("No default config ({}), generating new one", defaultConfigFilePath);
+	// 1. Load default config
+	if (!tryLoadConfig(defaultConfigPath, defaultSettings)) {
+		logger::info("No default config ({}), generating new one", defaultConfigPath);
+		// Generate default settings
 		std::fill(enabledClasses, enabledClasses + magic_enum::enum_integer(RE::BSShader::Type::Total) - 1, true);
-		Save(ConfigMode::DEFAULT);
-		// Attempt to load the newly created config
-		if (!tryLoadConfig(defaultConfigFilePath)) {
-			logger::error("Error opening newly created default config file ({})\n", defaultConfigFilePath);
+		SaveDefaults();
+		if (!tryLoadConfig(defaultConfigPath, defaultSettings)) {
+			logger::error("Error opening newly created default config file ({})\n", defaultConfigPath);
 			return;
 		}
 	}
+	finalSettings = defaultSettings;
 
-	// Step 2: Apply overrides (only new/changed ones) to default settings
+	// 2. Apply overrides
 	auto overrideManager = SettingsOverrideManager::GetSingleton();
 	size_t overridesDiscovered = overrideManager->DiscoverOverrides();
 	json appliedOverrides = overrideManager->LoadAppliedOverridesTracking();
 
 	if (overridesDiscovered > 0) {
 		logger::info("Discovered {} override files", overridesDiscovered);
-
-		// Apply global overrides to main settings (only new/changed ones)
-		size_t newGlobalOverrides = overrideManager->ApplyNewOverrides(settings, appliedOverrides);
+		size_t newGlobalOverrides = overrideManager->ApplyNewOverrides(finalSettings, appliedOverrides);
 		if (newGlobalOverrides > 0) {
 			logger::info("Applied {} new/changed global override(s)", newGlobalOverrides);
 		}
 	}
 
-	// Step 3: Apply user settings on top of default + overrides
-	if (a_configMode == ConfigMode::USER) {
-		json userSettings;
-		std::ifstream userFile(userConfigFilePath);
-		if (userFile.is_open()) {
-			try {
-				userFile >> userSettings;
-				userFile.close();
-
-				// Merge user settings on top of (default + overrides)
-				for (auto& [key, value] : userSettings.items()) {
-					settings[key] = value;
-				}
-				logger::info("Applied user settings from: {}", userConfigFilePath);
-			} catch (const nlohmann::json::parse_error& e) {
-				logger::warn("Error parsing user config file: {}", e.what());
-				userFile.close();
-			}
+	// 3. Load user config and merge
+	if (configMode != ConfigMode::DEFAULT) {
+		std::string configPath = GetConfigPath(configMode);
+		if (tryLoadConfig(configPath, userSettings)) {
+			logger::info("Merging user config overrides from: {}", configPath);
+			MergeJsonSettings(finalSettings, userSettings);
 		} else {
-			logger::info("No user config file found at: {}", userConfigFilePath);
+			logger::info("No user config found ({}), using defaults", configPath);
 		}
 	}
 
+	// 4. Apply final settings
 	try {
-		// Load Menu settings
-
-		if (settings["Menu"].is_object()) {
+		// Menu
+		if (finalSettings["Menu"].is_object()) {
 			logger::info("Loading 'Menu' settings");
-			globals::menu->Load(settings["Menu"]);
+			globals::menu->Load(finalSettings["Menu"]);
 		}
 
-		if (settings["Advanced"].is_object()) {
+		// Advanced
+		if (finalSettings["Advanced"].is_object()) {
 			logger::info("Loading 'Advanced' settings");
-			json& advanced = settings["Advanced"];
+			json& advanced = finalSettings["Advanced"];
 			if (advanced["Dump Shaders"].is_boolean())
 				shaderCache->SetDump(advanced["Dump Shaders"]);
 			if (advanced["Log Level"].is_number_integer())
@@ -275,9 +276,10 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 				frameAnnotations = advanced["Frame Annotations"];
 		}
 
-		if (settings["General"].is_object()) {
+		// General
+		if (finalSettings["General"].is_object()) {
 			logger::info("Loading 'General' settings");
-			json& general = settings["General"];
+			json& general = finalSettings["General"];
 
 			if (general["Enable Shaders"].is_boolean())
 				shaderCache->SetEnabled(general["Enable Shaders"]);
@@ -289,9 +291,10 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 				shaderCache->SetAsync(general["Enable Async"]);
 		}
 
-		if (settings["Replace Original Shaders"].is_object()) {
+		// Shaders
+		if (finalSettings["Replace Original Shaders"].is_object()) {
 			logger::info("Loading 'Replace Original Shaders' settings");
-			json& originalShaders = settings["Replace Original Shaders"];
+			json& originalShaders = finalSettings["Replace Original Shaders"];
 			ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
 				auto name = magic_enum::enum_name(type);
 				if (originalShaders[name].is_boolean()) {
@@ -301,13 +304,14 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 				}
 			});
 		}
+
 		// Ensure 'Disable at Boot' section exists in the JSON
-		if (!settings.contains("Disable at Boot") || !settings["Disable at Boot"].is_object()) {
+		if (!finalSettings.contains("Disable at Boot") || !finalSettings["Disable at Boot"].is_object()) {
 			// Initialize to an empty object if it doesn't exist
-			settings["Disable at Boot"] = json::object();
+			finalSettings["Disable at Boot"] = json::object();
 		}
 
-		json& disabledFeaturesJson = settings["Disable at Boot"];
+		json& disabledFeaturesJson = finalSettings["Disable at Boot"];
 		logger::info("Loading 'Disable at Boot' settings");
 
 		for (auto& [featureName, featureStatus] : disabledFeaturesJson.items()) {
@@ -317,6 +321,7 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 				logger::warn("Invalid entry for feature '{}' in 'Disable at Boot', expected boolean.", featureName);
 			}
 		}
+
 		for (const auto& [featureName, _] : specialFeatures) {
 			if (IsFeatureDisabled(featureName)) {
 				logger::info("Special Feature '{}' disabled at boot", featureName);
@@ -324,7 +329,7 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 		}
 
 		auto upscaling = globals::upscaling;
-		auto& upscalingJson = settings[upscaling->GetShortName()];
+		auto& upscalingJson = finalSettings[upscaling->GetShortName()];
 		if (upscalingJson.is_object()) {
 			logger::info("Loading Upscaling settings");
 			try {
@@ -337,7 +342,7 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 			logger::warn("Missing settings for Upscaling, using default.");
 		}
 
-		// Feature loading with new override tracking system
+		// Feature loading with overrides
 		for (auto* feature : Feature::GetFeatureList()) {
 			try {
 				const std::string featureName = feature->GetShortName();
@@ -345,19 +350,19 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 				if (!isDisabled) {
 					logger::info("Loading Feature: '{}'", featureName);
 
-					// Load base feature settings from merged config (default + user)
-					feature->Load(settings);
+					// Load feature settings from merged config (default + overrides + user)
+					feature->Load(finalSettings);
 
-					// Apply new/changed feature-specific overrides if any
+					// Apply feature-specific overrides if any
 					if (overridesDiscovered > 0) {
 						json featureJson;
-						feature->SaveSettings(featureJson);  // Get current settings as JSON
+						feature->SaveSettings(featureJson);  // Save current settings to JSON
 
 						size_t newFeatureOverrides = overrideManager->ApplyNewFeatureOverrides(featureName, featureJson, appliedOverrides);
 						if (newFeatureOverrides > 0) {
 							logger::info("Applied {} new/changed override(s) to {}", newFeatureOverrides, feature->GetName());
 							try {
-								feature->LoadSettings(featureJson);  // Reload with new overrides applied
+								feature->LoadSettings(featureJson);  // Reload settings after applying overrides
 							} catch (...) {
 								logger::warn("Invalid override settings for {}, keeping original settings.", feature->GetName());
 							}
@@ -379,9 +384,9 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 			overrideManager->SaveAppliedOverridesTracking(appliedOverrides);
 		}
 
-		if (settings["Version"].is_string() && settings["Version"].get<std::string>() != Plugin::VERSION.string()) {
-			logger::info("Found older config for version {}; upgrading to {}", (std::string)settings["Version"], Plugin::VERSION.string());
-			Save(a_configMode);  // Use original config mode
+		if (finalSettings["Version"].is_string() && finalSettings["Version"].get<std::string>() != Plugin::VERSION.string()) {
+			logger::info("Found older config for version {}; upgrading to {}", (std::string)finalSettings["Version"], Plugin::VERSION.string());
+			Save(configMode);
 		}
 
 		FeatureIssues::ScanForOrphanedFeatureINIs();
@@ -402,9 +407,7 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 
 void State::Save(ConfigMode a_configMode)
 {
-	const auto shaderCache = globals::shaderCache;
 	std::string configPath = GetConfigPath(a_configMode);
-	std::ofstream o{ configPath };
 
 	try {
 		std::filesystem::create_directories(folderPath);
@@ -413,57 +416,63 @@ void State::Save(ConfigMode a_configMode)
 		return;
 	}
 
-	// Check if the file opened successfully
+	if (a_configMode == ConfigMode::DEFAULT) {
+		// Save complete default settings
+		SaveDefaults();
+		return;
+	}
+
+	// For user/test configs, save only differences from default
+	json currentSettings = GetCurrentSettings();
+	json defaultSettings;
+
+	// Load default settings for comparison
+	std::ifstream defaultFile(defaultConfigPath);
+	if (defaultFile.is_open()) {
+		try {
+			defaultFile >> defaultSettings;
+		} catch (const nlohmann::json::parse_error& e) {
+			logger::warn("Error parsing default config for comparison: {}", e.what());
+			// If can't read defaults, save full config as fallback
+			SaveFullConfig(a_configMode, currentSettings);
+			return;
+		}
+		defaultFile.close();
+	} else {
+		logger::warn("Cannot open default config for comparison, saving full config");
+		SaveFullConfig(a_configMode, currentSettings);
+		return;
+	}
+
+	json overrideSettings;
+	CreateSettingsDiff(defaultSettings, currentSettings, overrideSettings);
+
+	// Check for differences
+	if (overrideSettings.empty()) {
+		// Remove user config if identical to defaults
+		if (std::filesystem::exists(configPath)) {
+			try {
+				std::filesystem::remove(configPath);
+				logger::info("Removed user config file as all settings match defaults: {}", configPath);
+			} catch (const std::filesystem::filesystem_error& e) {
+				logger::warn("Failed to remove empty user config file: {}. Error: {}", configPath, e.what());
+			}
+		} else {
+			logger::info("No user config differences to save - keeping file empty");
+		}
+		return;
+	}
+
+	// Save the override settings
+	std::ofstream o{ configPath };
 	if (!o.is_open()) {
 		logger::warn("Failed to open config file for saving: {}", configPath);
-		return;  // Exit early if file cannot be opened
+		return;
 	}
-
-	json settings;
-
-	globals::menu->Save(settings["Menu"]);
-
-	json advanced;
-	advanced["Dump Shaders"] = shaderCache->IsDump();
-	advanced["Log Level"] = logLevel;
-	advanced["Shader Defines"] = shaderDefinesString;
-	advanced["Compiler Threads"] = shaderCache->compilationThreadCount;
-	advanced["Background Compiler Threads"] = shaderCache->backgroundCompilationThreadCount;
-	advanced["Use FileWatcher"] = shaderCache->UseFileWatcher();
-	advanced["Frame Annotations"] = frameAnnotations;
-	settings["Advanced"] = advanced;
-
-	json general;
-	general["Enable Shaders"] = shaderCache->IsEnabled();
-	general["Enable Disk Cache"] = shaderCache->IsDiskCache();
-	general["Enable Async"] = shaderCache->IsAsync();
-
-	settings["General"] = general;
-
-	auto upscaling = globals::upscaling;
-	auto& upscalingJson = settings[upscaling->GetShortName()];
-	upscaling->SaveSettings(upscalingJson);
-
-	json originalShaders;
-	ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
-		originalShaders[magic_enum::enum_name(type)] = enabledClasses[classIndex];
-	});
-	settings["Replace Original Shaders"] = originalShaders;
-
-	json disabledFeaturesJson;
-	for (const auto& [featureName, isDisabled] : disabledFeatures) {
-		disabledFeaturesJson[featureName] = isDisabled;
-	}
-	settings["Disable at Boot"] = disabledFeaturesJson;
-
-	settings["Version"] = Plugin::VERSION.string();
-
-	for (auto* feature : Feature::GetFeatureList())
-		feature->Save(settings);
 
 	try {
-		o << settings.dump(1);
-		logger::info("Saving settings to {}", configPath);
+		o << overrideSettings.dump(1);
+		logger::info("Saving override settings to {}", configPath);
 	} catch (const std::exception& e) {
 		logger::warn("Failed to write settings to file: {}. Error: {}", configPath, e.what());
 	}
@@ -893,4 +902,115 @@ void State::PresentReShade()
 float State::GetTotalSmoothedDrawCalls() const
 {
 	return static_cast<float>(smoothDrawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]);
+}
+
+void State::SaveDefaults()
+{
+	json settings = GetCurrentSettings();
+
+	std::ofstream o{ defaultConfigPath };
+	if (!o.is_open()) {
+		logger::warn("Failed to open default config file for saving: {}", defaultConfigPath);
+		return;
+	}
+
+	try {
+		o << settings.dump(1);
+		logger::info("Saving default settings to {}", defaultConfigPath);
+	} catch (const std::exception& e) {
+		logger::warn("Failed to write default settings to file: {}. Error: {}", defaultConfigPath, e.what());
+	}
+}
+
+void State::SaveFullConfig(ConfigMode a_configMode, const json& settings)
+{
+	std::string configPath = GetConfigPath(a_configMode);
+	std::ofstream o{ configPath };
+
+	if (!o.is_open()) {
+		logger::warn("Failed to open config file for saving: {}", configPath);
+		return;
+	}
+
+	try {
+		o << settings.dump(1);
+		logger::info("Saving full settings to {}", configPath);
+	} catch (const std::exception& e) {
+		logger::warn("Failed to write settings to file: {}. Error: {}", configPath, e.what());
+	}
+}
+
+json State::GetCurrentSettings()
+{
+	const auto shaderCache = globals::shaderCache;
+	json settings;
+
+	globals::menu->Save(settings["Menu"]);
+
+	json advanced;
+	advanced["Dump Shaders"] = shaderCache->IsDump();
+	advanced["Log Level"] = logLevel;
+	advanced["Shader Defines"] = shaderDefinesString;
+	advanced["Compiler Threads"] = shaderCache->compilationThreadCount;
+	advanced["Background Compiler Threads"] = shaderCache->backgroundCompilationThreadCount;
+	advanced["Use FileWatcher"] = shaderCache->UseFileWatcher();
+	advanced["Frame Annotations"] = frameAnnotations;
+	settings["Advanced"] = advanced;
+
+	json general;
+	general["Enable Shaders"] = shaderCache->IsEnabled();
+	general["Enable Disk Cache"] = shaderCache->IsDiskCache();
+	general["Enable Async"] = shaderCache->IsAsync();
+	settings["General"] = general;
+
+	auto upscaling = globals::upscaling;
+	auto& upscalingJson = settings[upscaling->GetShortName()];
+	upscaling->SaveSettings(upscalingJson);
+
+	json originalShaders;
+	ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
+		originalShaders[magic_enum::enum_name(type)] = enabledClasses[classIndex];
+	});
+	settings["Replace Original Shaders"] = originalShaders;
+
+	json disabledFeaturesJson;
+	for (const auto& [featureName, isDisabled] : disabledFeatures) {
+		disabledFeaturesJson[featureName] = isDisabled;
+	}
+	settings["Disable at Boot"] = disabledFeaturesJson;
+
+	settings["Version"] = Plugin::VERSION.string();
+
+	for (auto* feature : Feature::GetFeatureList())
+		feature->Save(settings);
+
+	return settings;
+}
+
+void State::MergeJsonSettings(json& target, const json& source)
+{
+	for (auto& [key, value] : source.items()) {
+		if (value.is_object() && target[key].is_object()) {
+			MergeJsonSettings(target[key], value);
+		} else {
+			target[key] = value;
+		}
+	}
+}
+
+void State::CreateSettingsDiff(const json& defaultSettings, const json& currentSettings, json& diffSettings)
+{
+	for (auto& [key, currentValue] : currentSettings.items()) {
+		if (defaultSettings.contains(key)) {
+			if (currentValue.is_object() && defaultSettings[key].is_object()) {
+				json subDiff;
+				CreateSettingsDiff(defaultSettings[key], currentValue, subDiff);
+				if (!subDiff.empty()) {
+					diffSettings[key] = subDiff;
+				}
+			} else if (currentValue != defaultSettings[key]) {
+				diffSettings[key] = currentValue;
+			}
+		}
+	}
 }

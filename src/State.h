@@ -87,6 +87,7 @@ public:
 
 	void Load(ConfigMode a_configMode = ConfigMode::USER, bool a_allowReload = true);
 	void Save(ConfigMode a_configMode = ConfigMode::USER);
+	void SaveUserOverrides();
 	void PostPostLoad();
 
 	bool ValidateCache(CSimpleIniA& a_ini);
@@ -308,4 +309,11 @@ private:
 	std::shared_ptr<REX::W32::ID3DUserDefinedAnnotation> pPerf;
 	bool initialized = false;
 	std::mutex statsMutex;
+
+	// Config override system
+	void SaveDefaults();
+	void SaveFullConfig(ConfigMode a_configMode, const json& settings);
+	json GetCurrentSettings();
+	void MergeJsonSettings(json& target, const json& source);
+	void CreateSettingsDiff(const json& defaultSettings, const json& currentSettings, json& diffSettings);
 };
