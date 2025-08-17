@@ -335,13 +335,11 @@ float2 SampleRandomVector2DBaked(uint2 pixel) {
     // float2 xi    = float2(NoiseTexture[uint3(coord, 0)].x, NoiseTexture[uint3(coord, 64)].x);
     // float2 u     = float2(fmod(xi.x + (((int)(pixel.x / 128)) & 0xFFu) * GOLDEN_RATIO, 1.0f), fmod(xi.y + (((int)(pixel.y / 128)) & 0xFFu) * GOLDEN_RATIO, 1.0f));
     // return u;
-    uint FrameCountMod8 = uint(fmod(SharedData::FrameCount, 8));
-    float2 noise;
-    noise.x = Random::InterleavedGradientNoise(pixel, FrameCountMod8);
-    noise.y = Random::InterleavedGradientNoise(pixel, FrameCountMod8 * 117);
-    uint2 randomUint = Rand3DPCG16(uint3(pixel, FrameCountMod8)).xy;
-    float2 E = Hammersley16(0, 1, randomUint);
-            E.y = lerp(E.y, 0, BRDFBias);
+    int3 seed = int3(pixel.xy, 0);
+    seed.z = Random::pcg3d(int3(seed.xy, SharedData::FrameCount)).x;
+    uint2 xi = Random::pcg3d(seed).xy / 0x10000;
+    float2 E = Hammersley16(0, 1, xi);
+    E.y = lerp(E.y, 0, BRDFBias);
     return E;
 }
 
