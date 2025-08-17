@@ -2057,9 +2057,9 @@ namespace SIE
 		return ShaderCompilationTask::Status::Pending;
 	}
 
-	std::string ShaderCache::GetShaderStatsString(bool a_timeOnly)
+	std::string ShaderCache::GetShaderStatsString(bool a_timeOnly, bool a_elapsedOnly)
 	{
-		return compilationSet.GetStatsString(a_timeOnly);
+		return compilationSet.GetStatsString(a_timeOnly, a_elapsedOnly);
 	}
 
 	inline bool ShaderCache::IsShaderSourceAvailable(const RE::BSShader& shader)
@@ -2614,14 +2614,22 @@ namespace SIE
 		return std::max(remaining / rate, 0.0);
 	}
 
-	std::string CompilationSet::GetStatsString(bool a_timeOnly)
+	std::string CompilationSet::GetStatsString(bool a_timeOnly, bool a_elapsedOnly)
 	{
 		double totalMs = static_cast<double>(totalTime.QuadPart) * 1000.0 / frequency.QuadPart;
 
-		if (a_timeOnly)
-			return fmt::format("{}/{}",
-				GetHumanTime(totalMs),
-				GetHumanTime(GetEta() + totalMs));
+		if (a_timeOnly) {
+			if (a_elapsedOnly) {
+				// Only elapsed
+				return GetHumanTime(totalMs);
+			} else {
+				// Elapsed + estimated
+				return fmt::format("{}/{}",
+					GetHumanTime(totalMs),
+					GetHumanTime(GetEta() + totalMs));
+			}
+		}
+
 		return fmt::format("{}/{} (successful/total)\tfailed: {}\tcachehits: {}\nElapsed/Estimated Time: {}/{}",
 			(std::uint64_t)completedTasks,
 			(std::uint64_t)totalTasks,
