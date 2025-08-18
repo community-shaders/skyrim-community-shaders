@@ -33,13 +33,13 @@ void EffectManager::RegisterEffects()
 		logger::info("Registered effect: {}", name);
 	};
 
+	registerEffect(std::make_unique<ENBEffectPrePass>());
 	registerEffect(std::make_unique<ENBDepthOfField>());
 	registerEffect(std::make_unique<ENBAdaptation>());
 	registerEffect(std::make_unique<ENBLens>());
 	registerEffect(std::make_unique<ENBBloom>());
 	registerEffect(std::make_unique<ENBEffect>());
 	registerEffect(std::make_unique<ENBEffectPostPass>());
-	registerEffect(std::make_unique<ENBEffectPrePass>());
 }
 
 void EffectManager::ApplyEffects()
@@ -100,9 +100,8 @@ void EffectManager::ExecuteEffects()
 
 	for (auto& [name, effect] : effects) {
 		if (effect->IsCompiled()) {
-			UpdateCommonVariablesForEffect(effect->GetEffect());
-			
-			effect->Execute();
+			UpdateCommonVariablesForEffect(effect->GetEffect());			
+			//effect->Execute();
 		}
 	}
 }
@@ -123,9 +122,13 @@ void EffectManager::RenderImGui()
 			ApplyEffects();
 		}
 
+		ImGui::SameLine();
+
 		if (ImGui::Button("Load")) {
 			LoadEffects();
 		}
+
+		ImGui::SameLine();
 
 		if (ImGui::Button("Save")) {
 			SaveEffects();
@@ -135,29 +138,15 @@ void EffectManager::RenderImGui()
 			bool isCompiled = effect->IsCompiled();
 			const auto& errors = effect->GetErrors();
 
-			// Color-code header based on status
-			if (!isCompiled) {
-				ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 100, 100, 255));  // Red for errors
-			}
-
-			if (ImGui::CollapsingHeader(effect->GetName().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-				if (!isCompiled) {
-					ImGui::PopStyleColor();
-				}
-
+			if (ImGui::TreeNodeEx(effect->GetName().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
 				if (isCompiled) {
 					effect->RenderImGui();
 				} else {
-					ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Effect has compilation errors:");
-					ImGui::Indent();
 					for (const auto& error : errors) {
 						ImGui::BulletText("%s", error.c_str());
 					}
-					ImGui::Unindent();
 				}
 				ImGui::TreePop();
-			} else if (!isCompiled) {
-				ImGui::PopStyleColor();
 			}
 		}
 	}

@@ -63,7 +63,8 @@ void Effect::Unload()
 
 bool Effect::LoadFXFile()
 {
-	auto filePath = std::filesystem::path(GetName());
+	auto filePath = std::filesystem::path("enbseries");
+	filePath /= GetName();
 
 	ComPtr<ID3DBlob> compiledShader;
 	ComPtr<ID3DBlob> errorBlob;
@@ -683,92 +684,72 @@ void Effect::UpdateUIVariables()
 
 void Effect::RenderImGui()
 {
-	if (ImGui::TreeNodeEx("enbeffect.fx", ImGuiTreeNodeFlags_DefaultOpen)) {
-		bool valuesChanged = false;
+	bool valuesChanged = false;
 
-		// Technique selection dropdown
-		if (!availableTechniques.empty()) {
-			if (ImGui::BeginCombo("Technique", selectedTechnique.c_str())) {
-				for (const auto& technique : availableTechniques) {
-					const bool isSelected = (selectedTechnique == technique);
-					if (ImGui::Selectable(technique.c_str(), isSelected)) {
-						selectedTechnique = technique;
-					}
-					if (isSelected) {
-						ImGui::SetItemDefaultFocus();
-					}
+	// Technique selection dropdown
+	if (!availableTechniques.empty()) {
+		if (ImGui::BeginCombo("Technique", selectedTechnique.c_str())) {
+			for (const auto& technique : availableTechniques) {
+				const bool isSelected = (selectedTechnique == technique);
+				if (ImGui::Selectable(technique.c_str(), isSelected)) {
+					selectedTechnique = technique;
 				}
-				ImGui::EndCombo();
+				if (isSelected) {
+					ImGui::SetItemDefaultFocus();
+				}
 			}
-			ImGui::Separator();
+			ImGui::EndCombo();
+		}
+		ImGui::Separator();
+	}
+
+	for (auto& uiVar : uiVariables) {
+		// Skip spacers
+		if (uiVar.displayName.empty() || std::all_of(uiVar.displayName.begin(), uiVar.displayName.end(), [](char c) { return std::isspace(c); })) {
+			ImGui::Spacing();
+			continue;
 		}
 
-		const float labelWidth = ImGui::CalcTextSize("WWWWWWWWWWWWWWWWWWWWWWWWW").x;  // 25 chars
-		const float inputWidth = ImGui::CalcTextSize("WWWWWWWWWWWWWWWWWWWW").x;       // 20 chars
+		ImGui::Text("%s", uiVar.displayName.c_str());
 
-		for (auto& uiVar : uiVariables) {
-			// Skip spacers
-			if (uiVar.displayName.empty() || std::all_of(uiVar.displayName.begin(), uiVar.displayName.end(), [](char c) { return std::isspace(c); })) {
-				ImGui::Spacing();
-				continue;
-			}
+		// Skip inputs for labels (min == max == 0)
+		bool isLabelOnly = (uiVar.type == UIVariableType::Float && uiVar.floatMin == 0 && uiVar.floatMax == 0) ||
+			                (uiVar.type == UIVariableType::Int && uiVar.intMin == 0 && uiVar.intMax == 0);
 
-			// Clamp label to fixed width
-			std::string label = uiVar.displayName;
-			while (ImGui::CalcTextSize(label.c_str()).x > labelWidth && !label.empty()) {
-				label.pop_back();
-			}
-
-			// Draw label and position input
-			ImGui::AlignTextToFramePadding();
-			ImGui::Text("%s", label.c_str());
-			ImGui::SameLine(labelWidth + ImGui::GetStyle().ItemSpacing.x);
-
-			// Skip inputs for labels (min == max == 0)
-			bool isLabelOnly = (uiVar.type == UIVariableType::Float && uiVar.floatMin == 0 && uiVar.floatMax == 0) ||
-			                   (uiVar.type == UIVariableType::Int && uiVar.intMin == 0 && uiVar.intMax == 0);
-
-			if (!isLabelOnly) {
-				if (ImGui::BeginChild(("##input_" + uiVar.name).c_str(), ImVec2(inputWidth, ImGui::GetFrameHeight()), false, ImGuiWindowFlags_NoScrollbar)) {
-					ImGui::SetNextItemWidth(-1);
-
-					if (uiVar.type == UIVariableType::Float) {
-						if (ImGui::InputFloat(("##" + uiVar.name).c_str(), &uiVar.floatValue, 0.0f, 0.0f, "%.3f")) {
-							valuesChanged = true;
-						}
-					} else if (uiVar.type == UIVariableType::Int) {
-						if (uiVar.widgetType == UIWidgetType::Dropdown && !uiVar.dropdownItems.empty()) {
-							const char* currentItem = uiVar.dropdownItems[uiVar.intValue].c_str();
-							if (ImGui::BeginCombo(("##" + uiVar.name).c_str(), currentItem)) {
-								for (int i = 0; i < uiVar.dropdownItems.size(); ++i) {
-									if (ImGui::Selectable(uiVar.dropdownItems[i].c_str(), uiVar.intValue == i)) {
-										uiVar.intValue = i;
-										valuesChanged = true;
-									}
-								}
-								ImGui::EndCombo();
-							}
-						} else {
-							if (ImGui::InputInt(("##" + uiVar.name).c_str(), &uiVar.intValue)) {
+		if (!isLabelOnly) {
+			ImGui::SameLine();
+			if (uiVar.type == UIVariableType::Float) {
+				if (ImGui::InputFloat(uiVar.name.c_str(), &uiVar.floatValue, 0.0f, 0.0f, "%.3f")){
+					valuesChanged = true;
+				}
+			} else if (uiVar.type == UIVariableType::Int) {
+				if (uiVar.widgetType == UIWidgetType::Dropdown && !uiVar.dropdownItems.empty()) {
+					const char* currentItem = uiVar.dropdownItems[uiVar.intValue].c_str();
+					if (ImGui::BeginCombo(uiVar.name.c_str(), currentItem)) {
+						for (int i = 0; i < uiVar.dropdownItems.size(); ++i) {
+							if (ImGui::Selectable(uiVar.dropdownItems[i].c_str(), uiVar.intValue == i)) {
+								uiVar.intValue = i;
 								valuesChanged = true;
 							}
 						}
-					} else if (uiVar.type == UIVariableType::Bool) {
-						if (ImGui::Checkbox(("##" + uiVar.name).c_str(), &uiVar.boolValue)) {
-							valuesChanged = true;
-						}
+						ImGui::EndCombo();
+					}
+				} else {
+					if (ImGui::InputInt(uiVar.name.c_str(), &uiVar.intValue)) {
+						valuesChanged = true;
 					}
 				}
-				ImGui::EndChild();
+			} else if (uiVar.type == UIVariableType::Bool) {
+				if (ImGui::Checkbox(uiVar.name.c_str(), &uiVar.boolValue)) {
+					valuesChanged = true;
+				}
 			}
 		}
+	}
 
-		// Update shader variables if any values changed
-		if (valuesChanged) {
-			UpdateUIVariables();
-		}
-
-		ImGui::TreePop();
+	// Update shader variables if any values changed
+	if (valuesChanged) {
+		UpdateUIVariables();
 	}
 }
 
