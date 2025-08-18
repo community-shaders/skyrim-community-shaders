@@ -147,7 +147,7 @@ namespace WetnessEffects
 		float3 specularIrradiance = 1.0;
 #endif
 
-		float2 specularBRDF = BRDF::EnvBRDFApprox(roughness, NoV);
+		float2 specularBRDF = BRDF::EnvBRDF(roughness, NoV);
 
 		// Horizon specular occlusion
 		// https://marmosetco.tumblr.com/post/81245981087

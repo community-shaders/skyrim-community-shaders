@@ -235,7 +235,7 @@ namespace BRDF
         return float2(k1, k0);
 	}
 
-    float2 EnvBRDFApprox(float roughness, float NdotV)
+    float2 EnvBRDF(float roughness, float NdotV)
 	{
 #   if defined(ENV_BRDF_HIRVONEN)
 		return EnvBRDFApproxHirvonen(roughness, NdotV);

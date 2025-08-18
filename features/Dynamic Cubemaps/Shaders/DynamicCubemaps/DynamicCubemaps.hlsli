@@ -77,7 +77,7 @@ namespace DynamicCubemaps
 
 		float level = roughness * 7.0;
 
-		float2 specularBRDF = BRDF::EnvBRDFApprox(roughness, NoV);
+		float2 specularBRDF = BRDF::EnvBRDF(roughness, NoV);
 
 		// Horizon specular occlusion
 		// https://marmosetco.tumblr.com/post/81245981087
