@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Effect.h"
+#include "Downsampler.h"
 #include <Effects11/d3dx11effect.h>
 #include <d3d11.h>
 #include <filesystem>
@@ -75,4 +76,12 @@ public:
 
 	void CreateCommonTextures();
 	void UpdateCommonData();
+
+	// Downsampling support
+	Downsampler& GetDownsampler() { return Downsampler::GetSingleton(); }
+	const Downsampler::DownsampleChain& GetSharedDownsampleChain() const { return sharedDownsampleChain; }
+	void PerformSharedDownsampling(RE::BSGraphics::RenderTargetData& input);
+
+private:
+	Downsampler::DownsampleChain sharedDownsampleChain;
 };

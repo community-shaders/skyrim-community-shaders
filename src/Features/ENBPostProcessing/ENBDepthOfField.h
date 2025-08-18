@@ -1,17 +1,16 @@
 #pragma once
 
 #include "Effect.h"
-#include "Downsampler.h"
 #include <d3d11.h>
 #include <wrl/client.h>
 #include <unordered_map>
 
 using Microsoft::WRL::ComPtr;
 
-class ENBBloom : public Effect
+class ENBDepthOfField : public Effect
 {
 public:
-	virtual std::string GetName() const override { return "enbbloom.fx"; }
+	virtual std::string GetName() const override { return "enbdepthoffield.fx"; }
 
 	virtual LPCSTR GetSourceTexture() const override { return "TextureColor"; }
 
@@ -21,20 +20,19 @@ public:
 
 	void UpdateEffectVariables();
 
-	// Override Apply to create bloom-specific textures
+	// Override Apply to create depth of field-specific textures
 	virtual bool Apply() override;
 	virtual void Unload() override;
 
 private:
-	struct BloomTexture
+	struct DepthOfFieldTexture
 	{
 		ComPtr<ID3D11Texture2D> texture;
 		ComPtr<ID3D11RenderTargetView> rtv;
 		ComPtr<ID3D11ShaderResourceView> srv;
 	};
 
-	std::unordered_map<std::string, BloomTexture> bloomTextures;
-	
-	void CreateBloomTextures();
-	void UpdateBloomVariables();
+	std::unordered_map<std::string, DepthOfFieldTexture> dofTextures;
+	void CreateDepthOfFieldTextures();
+	void UpdateDepthOfFieldVariables();
 };

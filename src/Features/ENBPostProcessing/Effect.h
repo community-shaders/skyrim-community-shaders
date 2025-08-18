@@ -31,8 +31,8 @@ public:
 	void Save();
 
 	// Effect lifecycle
-	bool Apply();   // Clear resources, load settings, recompile, create resources
-	void Unload();  // Clear all resources
+	virtual bool Apply();  // Clear resources, load settings, recompile, create resources
+	virtual void Unload();  // Clear all resources
 
 	bool IsCompiled() const { return errors.empty(); }
 	const std::vector<std::string>& GetErrors() const { return errors; }

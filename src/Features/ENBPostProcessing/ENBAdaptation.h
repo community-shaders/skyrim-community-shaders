@@ -8,10 +8,10 @@
 
 using Microsoft::WRL::ComPtr;
 
-class ENBBloom : public Effect
+class ENBAdaptation : public Effect
 {
 public:
-	virtual std::string GetName() const override { return "enbbloom.fx"; }
+	virtual std::string GetName() const override { return "enbadaptation.fx"; }
 
 	virtual LPCSTR GetSourceTexture() const override { return "TextureColor"; }
 
@@ -21,20 +21,20 @@ public:
 
 	void UpdateEffectVariables();
 
-	// Override Apply to create bloom-specific textures
-	virtual bool Apply() override;
-	virtual void Unload() override;
+	// Override Apply to create adaptation-specific textures
+	bool Apply() override;
+	void Unload() override;
 
 private:
-	struct BloomTexture
+	struct AdaptationTexture
 	{
 		ComPtr<ID3D11Texture2D> texture;
 		ComPtr<ID3D11RenderTargetView> rtv;
 		ComPtr<ID3D11ShaderResourceView> srv;
 	};
 
-	std::unordered_map<std::string, BloomTexture> bloomTextures;
+	std::unordered_map<std::string, AdaptationTexture> adaptationTextures;
 	
-	void CreateBloomTextures();
-	void UpdateBloomVariables();
+	void CreateAdaptationTextures();
+	void UpdateAdaptationVariables();
 };

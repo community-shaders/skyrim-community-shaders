@@ -1,6 +1,10 @@
 #include "EffectManager.h"
+#include "ENBAdaptation.h"
 #include "ENBBloom.h"
+#include "ENBDepthOfField.h"
 #include "ENBEffect.h"
+#include "ENBEffectPostPass.h"
+#include "ENBLens.h"
 #include "Globals.h"
 #include "State.h"
 #include <d3dcompiler.h>
@@ -27,8 +31,13 @@ void EffectManager::RegisterEffects()
 		logger::info("Registered effect: {}", name);
 	};
 
-	registerEffect(std::make_unique<ENBEffect>());
+
+	registerEffect(std::make_unique<ENBDepthOfField>());
+	registerEffect(std::make_unique<ENBAdaptation>());
+	registerEffect(std::make_unique<ENBLens>());
 	registerEffect(std::make_unique<ENBBloom>());
+	registerEffect(std::make_unique<ENBEffect>());
+	registerEffect(std::make_unique<ENBEffectPostPass>());
 }
 
 void EffectManager::ApplyEffects()
@@ -69,6 +78,9 @@ void EffectManager::ExecuteEffects(RE::BSGraphics::RenderTargetData& input,
 {
 	auto context = globals::d3d::context;
 
+	// Perform shared downsampling once
+	PerformSharedDownsampling(input);
+
 	context->RSSetState(rasterizerState.Get());
 	context->OMSetBlendState(blendState.Get(), nullptr, 0xFFFFFFFF);
 	context->OMSetDepthStencilState(nullptr, 0);
@@ -85,6 +97,11 @@ void EffectManager::ExecuteEffects(RE::BSGraphics::RenderTargetData& input,
 			effect->Execute(input, swap, output);
 		}
 	}
+}
+
+void EffectManager::PerformSharedDownsampling(RE::BSGraphics::RenderTargetData& input)
+{
+	Downsampler::GetSingleton().Downsample(input.SRV, sharedDownsampleChain);
 }
 
 void EffectManager::RenderImGui()
@@ -139,6 +156,17 @@ void EffectManager::CreateCommonResources()
 	CreateQuadGeometry();
 	CreateRenderStates();
 	CreateCommonTextures();
+	
+	// Initialize downsampler and create shared downsample chain
+	Downsampler::GetSingleton().Initialize();
+	
+	auto state = globals::state;
+	UINT screenWidth = static_cast<UINT>(state->screenSize.x);
+	UINT screenHeight = static_cast<UINT>(state->screenSize.y);
+	
+	// Create shared downsample chain that goes down to 1x1
+	sharedDownsampleChain = Downsampler::GetSingleton().CreateDownsampleChain(
+		screenWidth, screenHeight, 1, 1, DXGI_FORMAT_R16G16B16A16_FLOAT);
 }
 
 void EffectManager::CreateQuadGeometry()
@@ -268,6 +296,72 @@ void EffectManager::CreateCommonTextures()
 		commonTextureCache.insert({ "TextureLens", lensTexture });
 	}
 
+	// Create RenderTargetRGBA32 (R8G8B8A8 32 bit ldr format)
+	{
+		D3D11_TEXTURE2D_DESC rgba32Desc = texDesc;
+		rgba32Desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		Texture rgba32Texture{};
+		DX::ThrowIfFailed(device->CreateTexture2D(&rgba32Desc, nullptr, rgba32Texture.texture.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateRenderTargetView(rgba32Texture.texture.Get(), nullptr, rgba32Texture.rtv.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateShaderResourceView(rgba32Texture.texture.Get(), nullptr, rgba32Texture.srv.GetAddressOf()));
+		commonTextureCache.insert({ "RenderTargetRGBA32", rgba32Texture });
+	}
+
+	// Create RenderTargetRGBA64 (R16B16G16A16 64 bit ldr format)
+	{
+		D3D11_TEXTURE2D_DESC rgba64Desc = texDesc;
+		rgba64Desc.Format = DXGI_FORMAT_R16G16B16A16_UNORM;
+		Texture rgba64Texture{};
+		DX::ThrowIfFailed(device->CreateTexture2D(&rgba64Desc, nullptr, rgba64Texture.texture.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateRenderTargetView(rgba64Texture.texture.Get(), nullptr, rgba64Texture.rtv.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateShaderResourceView(rgba64Texture.texture.Get(), nullptr, rgba64Texture.srv.GetAddressOf()));
+		commonTextureCache.insert({ "RenderTargetRGBA64", rgba64Texture });
+	}
+
+	// Create RenderTargetRGBA64F (R16B16G16A16F 64 bit hdr format)
+	{
+		D3D11_TEXTURE2D_DESC rgba64fDesc = texDesc;
+		rgba64fDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		Texture rgba64fTexture{};
+		DX::ThrowIfFailed(device->CreateTexture2D(&rgba64fDesc, nullptr, rgba64fTexture.texture.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateRenderTargetView(rgba64fTexture.texture.Get(), nullptr, rgba64fTexture.rtv.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateShaderResourceView(rgba64fTexture.texture.Get(), nullptr, rgba64fTexture.srv.GetAddressOf()));
+		commonTextureCache.insert({ "RenderTargetRGBA64F", rgba64fTexture });
+	}
+
+	// Create RenderTargetR16F (R16F 16 bit hdr format with red channel only)
+	{
+		D3D11_TEXTURE2D_DESC r16fDesc = texDesc;
+		r16fDesc.Format = DXGI_FORMAT_R16_FLOAT;
+		Texture r16fTexture{};
+		DX::ThrowIfFailed(device->CreateTexture2D(&r16fDesc, nullptr, r16fTexture.texture.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateRenderTargetView(r16fTexture.texture.Get(), nullptr, r16fTexture.rtv.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateShaderResourceView(r16fTexture.texture.Get(), nullptr, r16fTexture.srv.GetAddressOf()));
+		commonTextureCache.insert({ "RenderTargetR16F", r16fTexture });
+	}
+
+	// Create RenderTargetR32F (R32F 32 bit hdr format with red channel only)
+	{
+		D3D11_TEXTURE2D_DESC r32fDesc = texDesc;
+		r32fDesc.Format = DXGI_FORMAT_R32_FLOAT;
+		Texture r32fTexture{};
+		DX::ThrowIfFailed(device->CreateTexture2D(&r32fDesc, nullptr, r32fTexture.texture.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateRenderTargetView(r32fTexture.texture.Get(), nullptr, r32fTexture.rtv.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateShaderResourceView(r32fTexture.texture.Get(), nullptr, r32fTexture.srv.GetAddressOf()));
+		commonTextureCache.insert({ "RenderTargetR32F", r32fTexture });
+	}
+
+	// Create RenderTargetRGB32F (32 bit hdr format without alpha)
+	{
+		D3D11_TEXTURE2D_DESC rgb32fDesc = texDesc;
+		rgb32fDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
+		Texture rgb32fTexture{};
+		DX::ThrowIfFailed(device->CreateTexture2D(&rgb32fDesc, nullptr, rgb32fTexture.texture.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateRenderTargetView(rgb32fTexture.texture.Get(), nullptr, rgb32fTexture.rtv.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateShaderResourceView(rgb32fTexture.texture.Get(), nullptr, rgb32fTexture.srv.GetAddressOf()));
+		commonTextureCache.insert({ "RenderTargetRGB32F", rgb32fTexture });
+	}
+
 	// Create 1x1 textures for adaptation and aperture
 	texDesc.Width = 1;
 	texDesc.Height = 1;
@@ -290,7 +384,8 @@ void EffectManager::CreateCommonTextures()
 		commonTextureCache.insert({ "TextureAperture", apertureTexture });
 	}
 
-	logger::info("Created shared common textures: TextureBloom, TextureLens, TextureAdaptation, TextureAperture");
+
+	logger::info("Created shared common textures: TextureBloom, TextureLens, RenderTargetRGBA32, RenderTargetRGBA64, RenderTargetRGBA64F, RenderTargetR16F, RenderTargetR32F, RenderTargetRGB32F, TextureAdaptation, TextureAperture");
 }
 
 void EffectManager::UpdateCommonData()
@@ -425,6 +520,12 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 	auto textureLens = effect->GetVariableByName("TextureLens")->AsShaderResource();
 	auto textureAdaptation = effect->GetVariableByName("TextureAdaptation")->AsShaderResource();
 	auto textureAperture = effect->GetVariableByName("TextureAperture")->AsShaderResource();
+	auto renderTargetRGBA32 = effect->GetVariableByName("RenderTargetRGBA32")->AsShaderResource();
+	auto renderTargetRGBA64 = effect->GetVariableByName("RenderTargetRGBA64")->AsShaderResource();
+	auto renderTargetRGBA64F = effect->GetVariableByName("RenderTargetRGBA64F")->AsShaderResource();
+	auto renderTargetR16F = effect->GetVariableByName("RenderTargetR16F")->AsShaderResource();
+	auto renderTargetR32F = effect->GetVariableByName("RenderTargetR32F")->AsShaderResource();
+	auto renderTargetRGB32F = effect->GetVariableByName("RenderTargetRGB32F")->AsShaderResource();
 
 	auto timer = effect->GetVariableByName("Timer")->AsVector();
 	auto screenSize = effect->GetVariableByName("ScreenSize")->AsVector();
@@ -449,6 +550,24 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 	}
 	if (textureAperture && textureAperture->IsValid()) {
 		textureAperture->SetResource(commonTextureCache["TextureAperture"].srv.Get());
+	}
+	if (renderTargetRGBA32 && renderTargetRGBA32->IsValid()) {
+		renderTargetRGBA32->SetResource(commonTextureCache["RenderTargetRGBA32"].srv.Get());
+	}
+	if (renderTargetRGBA64 && renderTargetRGBA64->IsValid()) {
+		renderTargetRGBA64->SetResource(commonTextureCache["RenderTargetRGBA64"].srv.Get());
+	}
+	if (renderTargetRGBA64F && renderTargetRGBA64F->IsValid()) {
+		renderTargetRGBA64F->SetResource(commonTextureCache["RenderTargetRGBA64F"].srv.Get());
+	}
+	if (renderTargetR16F && renderTargetR16F->IsValid()) {
+		renderTargetR16F->SetResource(commonTextureCache["RenderTargetR16F"].srv.Get());
+	}
+	if (renderTargetR32F && renderTargetR32F->IsValid()) {
+		renderTargetR32F->SetResource(commonTextureCache["RenderTargetR32F"].srv.Get());
+	}
+	if (renderTargetRGB32F && renderTargetRGB32F->IsValid()) {
+		renderTargetRGB32F->SetResource(commonTextureCache["RenderTargetRGB32F"].srv.Get());
 	}
 
 	// Set variable data
