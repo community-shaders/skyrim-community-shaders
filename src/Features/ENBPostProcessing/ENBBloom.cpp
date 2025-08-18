@@ -90,7 +90,7 @@ void ENBBloom::UpdateBloomVariables()
 	auto& effectManager = EffectManager::GetSingleton();
 	auto& downsampler = effectManager.GetDownsampler();
 	auto& sharedChain = effectManager.GetSharedDownsampleChain();
-	
+
 	UINT bloomMipLevel = downsampler.FindBestMipLevel(sharedChain, 1024, 1024);
 	auto downsampledSRV = downsampler.GetMipLevel(sharedChain, bloomMipLevel);
 
