@@ -1,3 +1,15 @@
+#ifndef COLOR_TRANSFORMS_COMMON_HLSLI
+#define COLOR_TRANSFORMS_COMMON_HLSLI
+
+#define PI 3.1415926535
+
+cbuffer TonemapCB : register(b1)
+{
+	float4 Params[8];
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 // https://www.shadertoy.com/view/ss23DD
 float3 LiftGammaGain(float3 rgb, float4 lift, float4 gamma, float4 gain)
 {
@@ -581,3 +593,5 @@ float3 KajiyaTonemap(float3 col)
 
 	return lerp(tm0, tm1, bt * bt) * final_mult;
 }
+
+#endif  // COLOR_TRANSFORMS_COMMON_HLSLI
