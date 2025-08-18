@@ -1,8 +1,8 @@
 #include "ENBBloom.h"
+#include "EffectManager.h"
 #include "Globals.h"
 #include "State.h"
 #include <imgui.h>
-#include "EffectManager.h"
 
 void ENBBloom::Execute(RE::BSGraphics::RenderTargetData& input,
 	RE::BSGraphics::RenderTargetData& swap,
@@ -35,7 +35,7 @@ void ENBBloom::Unload()
 void ENBBloom::CreateBloomTextures()
 {
 	auto device = globals::d3d::device;
-	
+
 	D3D11_TEXTURE2D_DESC texDesc = {};
 	texDesc.MipLevels = 1;
 	texDesc.ArraySize = 1;
@@ -49,24 +49,24 @@ void ENBBloom::CreateBloomTextures()
 
 	// Create fixed-size render targets for bloom
 	std::vector<std::pair<std::string, UINT>> bloomSizes = {
-		{"RenderTarget1024", 1024},
-		{"RenderTarget512", 512},
-		{"RenderTarget256", 256},
-		{"RenderTarget128", 128},
-		{"RenderTarget64", 64},
-		{"RenderTarget32", 32},
-		{"RenderTarget16", 16}
+		{ "RenderTarget1024", 1024 },
+		{ "RenderTarget512", 512 },
+		{ "RenderTarget256", 256 },
+		{ "RenderTarget128", 128 },
+		{ "RenderTarget64", 64 },
+		{ "RenderTarget32", 32 },
+		{ "RenderTarget16", 16 }
 	};
 
 	for (auto& [name, size] : bloomSizes) {
 		texDesc.Width = size;
 		texDesc.Height = size;
-		
+
 		BloomTexture bloomTexture{};
 		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, bloomTexture.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(bloomTexture.texture.Get(), nullptr, bloomTexture.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(bloomTexture.texture.Get(), nullptr, bloomTexture.srv.GetAddressOf()));
-		
+
 		bloomTextures[name] = std::move(bloomTexture);
 	}
 
@@ -93,7 +93,7 @@ void ENBBloom::UpdateBloomVariables()
 	
 	UINT bloomMipLevel = downsampler.FindBestMipLevel(sharedChain, 1024, 1024);
 	auto downsampledSRV = downsampler.GetMipLevel(sharedChain, bloomMipLevel);
-	
+
 	auto downsampledInput = effect->GetVariableByName("TextureDownsampled")->AsShaderResource();
 	if (downsampledInput && downsampledInput->IsValid() && downsampledSRV) {
 		downsampledInput->SetResource(downsampledSRV);

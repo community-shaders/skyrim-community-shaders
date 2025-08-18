@@ -31,7 +31,7 @@ public:
 	void Save();
 
 	// Effect lifecycle
-	virtual bool Apply();  // Clear resources, load settings, recompile, create resources
+	virtual bool Apply();   // Clear resources, load settings, recompile, create resources
 	virtual void Unload();  // Clear all resources
 
 	bool IsCompiled() const { return errors.empty(); }

@@ -1,10 +1,10 @@
 #pragma once
 
-#include "Effect.h"
 #include "Downsampler.h"
+#include "Effect.h"
 #include <d3d11.h>
-#include <wrl/client.h>
 #include <unordered_map>
+#include <wrl/client.h>
 
 using Microsoft::WRL::ComPtr;
 
@@ -34,7 +34,7 @@ private:
 	};
 
 	std::unordered_map<std::string, AdaptationTexture> adaptationTextures;
-	
+
 	void CreateAdaptationTextures();
 	void UpdateAdaptationVariables();
 };
