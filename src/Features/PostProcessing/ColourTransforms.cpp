@@ -354,6 +354,11 @@ struct TransformInfo
 				"Tonemapper designed by Tomasz Stachowiak/Embark for their real time ray tracing engine Kajiya."sv,
 				[](CTP& params) { exposureSlider(&params[0].x); },
 				{ f4{ 2.f, 0.f, 0.f, 0.f } } },
+
+			{ "GT7"sv, "GT7ToneMappingSDR"sv,
+				"Tonemapper designed for Gran Turismo 7."sv,
+				[](CTP& params) { exposureSlider(&params[0].x); },
+				{ f4{ 2.f, 0.f, 0.f, 0.f } } }
 		};
 
 		static std::once_flag flag;
