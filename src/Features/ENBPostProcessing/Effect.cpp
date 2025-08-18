@@ -444,7 +444,6 @@ ID3D11RenderTargetView* Effect::GetRenderTargetView(const std::string& renderTar
 	auto* texture = effectManager.GetCommonTexture(renderTargetName);
 	if (texture && texture->rtv)
 		return texture->rtv.Get();
-	
 
 	logger::warn("Render target '{}' not found in cache, using fallback", renderTargetName);
 	return fallback;

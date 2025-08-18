@@ -56,7 +56,6 @@ public:
 	std::unordered_map<std::string, std::vector<TechniqueInfo>> techniques;
 	std::unordered_map<std::string, ComPtr<ID3DX11EffectVariable>> variables;
 
-
 	struct Texture
 	{
 		ComPtr<ID3D11Texture2D> texture;
@@ -115,10 +114,9 @@ public:
 	// Error tracking
 	std::vector<std::string> errors;
 
-
 	// Execute a technique sequence with ping-pong rendering
 	void ExecuteTechniqueSequence(const std::string& baseTechniqueName, Texture& input, Texture& output, Texture& swap);
-	
+
 	// Execute a single technique
 	void ExecuteTechnique(const std::string& techniqueName, Texture& input, Texture& output);
 

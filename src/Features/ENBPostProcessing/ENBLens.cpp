@@ -30,7 +30,7 @@ void ENBLens::Execute()
 		logger::error("ENBLens: TextureLens not available");
 		return;
 	}
-	
+
 	ExecuteTechniqueSequence(GetSelectedTechnique(), inputTexture, *textureLens, swapTexture);
 }
 

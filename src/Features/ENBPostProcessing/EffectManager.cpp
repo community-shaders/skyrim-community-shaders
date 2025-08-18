@@ -1,5 +1,4 @@
 #include "EffectManager.h"
-#include "Effect.h"
 #include "ENBAdaptation.h"
 #include "ENBBloom.h"
 #include "ENBDepthOfField.h"
@@ -7,6 +6,7 @@
 #include "ENBEffectPostPass.h"
 #include "ENBEffectPrePass.h"
 #include "ENBLens.h"
+#include "Effect.h"
 #include "Globals.h"
 #include "State.h"
 #include <d3dcompiler.h>
@@ -29,7 +29,7 @@ void EffectManager::RegisterEffects()
 {
 	auto registerEffect = [this](auto effect) {
 		std::string name = effect->GetName();
-		effects[name] = std::move(effect);
+		effects.emplace_back(name, std::move(effect));
 		logger::info("Registered effect: {}", name);
 	};
 
@@ -100,8 +100,8 @@ void EffectManager::ExecuteEffects()
 
 	for (auto& [name, effect] : effects) {
 		if (effect->IsCompiled()) {
-			UpdateCommonVariablesForEffect(effect->GetEffect());			
-			//effect->Execute();
+			UpdateCommonVariablesForEffect(effect->GetEffect());
+			effect->Execute();
 		}
 	}
 }

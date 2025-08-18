@@ -5,7 +5,7 @@
 void ENBEffect::Execute()
 {
 	auto renderer = globals::game::renderer;
-	
+
 	auto textureOriginal = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 	auto textureSwap = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
 	auto textureSwap2 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY2];
@@ -28,9 +28,9 @@ void ENBEffect::Execute()
 	UpdateEffectVariables();
 
 	ExecuteTechniqueSequence(GetSelectedTechnique(), inputTexture, outputTexture, swapTexture);
-	
+
 	auto framebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
-	
+
 	ID3D11Resource* framebufferResource;
 	framebuffer.RTV->GetResource(&framebufferResource);
 
