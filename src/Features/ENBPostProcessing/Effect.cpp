@@ -713,12 +713,12 @@ void Effect::RenderImGui()
 
 		// Skip inputs for labels (min == max == 0)
 		bool isLabelOnly = (uiVar.type == UIVariableType::Float && uiVar.floatMin == 0 && uiVar.floatMax == 0) ||
-			                (uiVar.type == UIVariableType::Int && uiVar.intMin == 0 && uiVar.intMax == 0);
+		                   (uiVar.type == UIVariableType::Int && uiVar.intMin == 0 && uiVar.intMax == 0);
 
 		if (!isLabelOnly) {
 			ImGui::SameLine();
 			if (uiVar.type == UIVariableType::Float) {
-				if (ImGui::InputFloat(uiVar.name.c_str(), &uiVar.floatValue, 0.0f, 0.0f, "%.3f")){
+				if (ImGui::InputFloat(uiVar.name.c_str(), &uiVar.floatValue, 0.0f, 0.0f, "%.3f")) {
 					valuesChanged = true;
 				}
 			} else if (uiVar.type == UIVariableType::Int) {
