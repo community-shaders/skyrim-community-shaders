@@ -107,10 +107,10 @@ void ENBAdaptation::UpdateAdaptationVariables()
 	auto& downsampler = effectManager.GetDownsampler();
 	auto& sharedChain = effectManager.GetSharedDownsampleChain();
 	
-	UINT adaptationMipLevel = downsampler.FindBestMipLevel(sharedChain, 1, 1);
+	UINT adaptationMipLevel = downsampler.FindBestMipLevel(sharedChain, 16, 16);
 	auto downsampledSRV = downsampler.GetMipLevel(sharedChain, adaptationMipLevel);
 	
-	auto downsampledInput = effect->GetVariableByName("TextureDownsampled")->AsShaderResource();
+	auto downsampledInput = effect->GetVariableByName("TextureCurrent")->AsShaderResource();
 	if (downsampledInput && downsampledInput->IsValid() && downsampledSRV) {
 		downsampledInput->SetResource(downsampledSRV);
 	}

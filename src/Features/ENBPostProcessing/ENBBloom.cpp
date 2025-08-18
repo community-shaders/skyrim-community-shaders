@@ -91,7 +91,7 @@ void ENBBloom::UpdateBloomVariables()
 	auto& downsampler = effectManager.GetDownsampler();
 	auto& sharedChain = effectManager.GetSharedDownsampleChain();
 	
-	UINT bloomMipLevel = downsampler.FindBestMipLevel(sharedChain, 64, 64);
+	UINT bloomMipLevel = downsampler.FindBestMipLevel(sharedChain, 1024, 1024);
 	auto downsampledSRV = downsampler.GetMipLevel(sharedChain, bloomMipLevel);
 	
 	auto downsampledInput = effect->GetVariableByName("TextureDownsampled")->AsShaderResource();
