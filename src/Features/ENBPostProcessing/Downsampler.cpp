@@ -18,13 +18,13 @@ Downsampler::DownsampleChain Downsampler::CreateDownsampleChain(UINT baseWidth, 
 {
 	auto device = globals::d3d::device;
 	DownsampleChain chain;
-	
+
 	// Calculate total mip levels possible
 	UINT totalMipLevels = CalculateMipLevels(baseWidth, baseHeight);
-	
+
 	// Find the mip level that gives us the closest resolution to target by pixel count
 	UINT targetMipLevel = FindNearestMipLevel(baseWidth, baseHeight, targetWidth, targetHeight);
-	
+
 	// Calculate actual target resolution at the chosen mip level
 	UINT actualTargetWidth = std::max(1U, baseWidth >> targetMipLevel);
 	UINT actualTargetHeight = std::max(1U, baseHeight >> targetMipLevel);
@@ -63,8 +63,8 @@ Downsampler::DownsampleChain Downsampler::CreateDownsampleChain(UINT baseWidth, 
 	chain.totalMipLevels = totalMipLevels;
 	chain.format = format;
 
-	logger::info("Created downsample chain: {}x{} -> {}x{} (mip level {}/{})", 
-		baseWidth, baseHeight, 
+	logger::info("Created downsample chain: {}x{} -> {}x{} (mip level {}/{})",
+		baseWidth, baseHeight,
 		actualTargetWidth, actualTargetHeight,
 		targetMipLevel, totalMipLevels - 1);
 
@@ -80,10 +80,10 @@ void Downsampler::Downsample(ID3D11ShaderResourceView* source, DownsampleChain& 
 	source->GetResource(sourceResource.GetAddressOf());
 
 	context->CopySubresourceRegion(
-		chain.texture.Get(), 0, // dest texture, mip 0
-		0, 0, 0, // dest x, y, z
-		sourceResource.Get(), 0, // source texture, mip 0
-		nullptr // copy entire resource
+		chain.texture.Get(), 0,   // dest texture, mip 0
+		0, 0, 0,                  // dest x, y, z
+		sourceResource.Get(), 0,  // source texture, mip 0
+		nullptr                   // copy entire resource
 	);
 
 	// Generate mips automatically
@@ -154,9 +154,9 @@ UINT Downsampler::FindNearestMipLevel(UINT baseWidth, UINT baseHeight, UINT targ
 
 	while (currentWidth >= 1 && currentHeight >= 1) {
 		UINT currentPixelCount = currentWidth * currentHeight;
-		UINT pixelDiff = (currentPixelCount > targetPixelCount) ? 
-			(currentPixelCount - targetPixelCount) : 
-			(targetPixelCount - currentPixelCount);
+		UINT pixelDiff = (currentPixelCount > targetPixelCount) ?
+		                     (currentPixelCount - targetPixelCount) :
+		                     (targetPixelCount - currentPixelCount);
 
 		if (pixelDiff < bestPixelDiff) {
 			bestPixelDiff = pixelDiff;

@@ -31,7 +31,6 @@ void EffectManager::RegisterEffects()
 		logger::info("Registered effect: {}", name);
 	};
 
-
 	registerEffect(std::make_unique<ENBDepthOfField>());
 	registerEffect(std::make_unique<ENBAdaptation>());
 	registerEffect(std::make_unique<ENBLens>());
@@ -156,14 +155,14 @@ void EffectManager::CreateCommonResources()
 	CreateQuadGeometry();
 	CreateRenderStates();
 	CreateCommonTextures();
-	
+
 	// Initialize downsampler and create shared downsample chain
 	Downsampler::GetSingleton().Initialize();
-	
+
 	auto state = globals::state;
 	UINT screenWidth = static_cast<UINT>(state->screenSize.x);
 	UINT screenHeight = static_cast<UINT>(state->screenSize.y);
-	
+
 	// Create shared downsample chain that goes down to 1x1
 	sharedDownsampleChain = Downsampler::GetSingleton().CreateDownsampleChain(
 		screenWidth, screenHeight, 1, 1, DXGI_FORMAT_R16G16B16A16_FLOAT);
@@ -383,7 +382,6 @@ void EffectManager::CreateCommonTextures()
 		DX::ThrowIfFailed(device->CreateShaderResourceView(apertureTexture.texture.Get(), nullptr, apertureTexture.srv.GetAddressOf()));
 		commonTextureCache.insert({ "TextureAperture", apertureTexture });
 	}
-
 
 	logger::info("Created shared common textures: TextureBloom, TextureLens, RenderTargetRGBA32, RenderTargetRGBA64, RenderTargetRGBA64F, RenderTargetR16F, RenderTargetR32F, RenderTargetRGB32F, TextureAdaptation, TextureAperture");
 }

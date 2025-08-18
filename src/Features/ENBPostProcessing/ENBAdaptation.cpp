@@ -1,8 +1,8 @@
 #include "ENBAdaptation.h"
+#include "EffectManager.h"
 #include "Globals.h"
 #include "State.h"
 #include <imgui.h>
-#include "EffectManager.h"
 
 void ENBAdaptation::Execute(RE::BSGraphics::RenderTargetData& input,
 	RE::BSGraphics::RenderTargetData& swap,
@@ -35,7 +35,7 @@ void ENBAdaptation::Unload()
 void ENBAdaptation::CreateAdaptationTextures()
 {
 	auto device = globals::d3d::device;
-	
+
 	D3D11_TEXTURE2D_DESC texDesc = {};
 	texDesc.MipLevels = 1;
 	texDesc.ArraySize = 1;
@@ -51,12 +51,12 @@ void ENBAdaptation::CreateAdaptationTextures()
 	{
 		texDesc.Width = 1;
 		texDesc.Height = 1;
-		
+
 		AdaptationTexture texturePrevious{};
 		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, texturePrevious.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(texturePrevious.texture.Get(), nullptr, texturePrevious.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(texturePrevious.texture.Get(), nullptr, texturePrevious.srv.GetAddressOf()));
-		
+
 		adaptationTextures["TexturePrevious"] = std::move(texturePrevious);
 	}
 
@@ -64,12 +64,12 @@ void ENBAdaptation::CreateAdaptationTextures()
 	{
 		texDesc.Width = 16;
 		texDesc.Height = 16;
-		
+
 		AdaptationTexture textureCurrent{};
 		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, textureCurrent.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(textureCurrent.texture.Get(), nullptr, textureCurrent.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(textureCurrent.texture.Get(), nullptr, textureCurrent.srv.GetAddressOf()));
-		
+
 		adaptationTextures["TextureCurrent"] = std::move(textureCurrent);
 	}
 
@@ -106,10 +106,10 @@ void ENBAdaptation::UpdateAdaptationVariables()
 	auto& effectManager = EffectManager::GetSingleton();
 	auto& downsampler = effectManager.GetDownsampler();
 	auto& sharedChain = effectManager.GetSharedDownsampleChain();
-	
+
 	UINT adaptationMipLevel = downsampler.FindBestMipLevel(sharedChain, 1, 1);
 	auto downsampledSRV = downsampler.GetMipLevel(sharedChain, adaptationMipLevel);
-	
+
 	auto downsampledInput = effect->GetVariableByName("TextureDownsampled")->AsShaderResource();
 	if (downsampledInput && downsampledInput->IsValid() && downsampledSRV) {
 		downsampledInput->SetResource(downsampledSRV);

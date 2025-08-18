@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Effect.h"
 #include "Downsampler.h"
+#include "Effect.h"
 #include <Effects11/d3dx11effect.h>
 #include <d3d11.h>
 #include <filesystem>

@@ -2,8 +2,8 @@
 
 #include "Effect.h"
 #include <d3d11.h>
-#include <wrl/client.h>
 #include <unordered_map>
+#include <wrl/client.h>
 
 using Microsoft::WRL::ComPtr;
 

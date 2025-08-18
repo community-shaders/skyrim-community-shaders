@@ -33,7 +33,7 @@ void ENBDepthOfField::Unload()
 void ENBDepthOfField::CreateDepthOfFieldTextures()
 {
 	auto device = globals::d3d::device;
-	
+
 	D3D11_TEXTURE2D_DESC texDesc = {};
 	texDesc.Width = 1;
 	texDesc.Height = 1;
@@ -53,7 +53,7 @@ void ENBDepthOfField::CreateDepthOfFieldTextures()
 		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, textureFocus.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(textureFocus.texture.Get(), nullptr, textureFocus.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(textureFocus.texture.Get(), nullptr, textureFocus.srv.GetAddressOf()));
-		
+
 		dofTextures["TextureFocus"] = std::move(textureFocus);
 	}
 
@@ -63,7 +63,7 @@ void ENBDepthOfField::CreateDepthOfFieldTextures()
 		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, textureAperture.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(textureAperture.texture.Get(), nullptr, textureAperture.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(textureAperture.texture.Get(), nullptr, textureAperture.srv.GetAddressOf()));
-		
+
 		dofTextures["TextureAperture"] = std::move(textureAperture);
 	}
 
