@@ -242,12 +242,12 @@ void PostProcessing::DrawSettings()
 
 	} else if (pageNum == 1 && pipelinePageNum == 0) {
 		// Effect Settings
+		if (ImGui::Button(ICON_FA_ARROW_LEFT)) {
+			pageNum = 0;
+		}
 
 		if (featIdx < colorTransformsFeats.size()) {
 			auto& feat = colorTransformsFeats[featIdx];
-			if (ImGui::Button(ICON_FA_ARROW_LEFT)) {
-				pageNum = 0;
-			}
 
 			ImGui::Spacing();
 
