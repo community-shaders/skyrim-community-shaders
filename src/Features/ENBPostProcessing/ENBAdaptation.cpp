@@ -12,18 +12,18 @@ void ENBAdaptation::Execute()
 	Texture inputTexture{};
 	auto& downsampler = effectManager.GetDownsampler();
 	auto& sharedChain = effectManager.GetSharedDownsampleChain();
-		
+
 	auto downsampledSRV = downsampler.GetMipLevel(sharedChain, downsampler.FindBestMipLevel(sharedChain, 256, 256));
 	inputTexture.srv = ComPtr<ID3D11ShaderResourceView>(downsampledSRV);
-		
+
 	ExecuteTechnique("Downsample", inputTexture, adaptationTextures["TextureCurrent"]);
-	
+
 	auto* textureAdaptation = effectManager.GetCommonTexture("TextureAdaptation");
 	if (!textureAdaptation) {
 		logger::error("ENBAdaptation: TextureAdaptation not available");
 		return;
 	}
-	
+
 	ExecuteTechnique(GetSelectedTechnique(), adaptationTextures["TextureCurrent"], *textureAdaptation);
 }
 

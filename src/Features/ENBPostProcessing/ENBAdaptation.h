@@ -24,7 +24,6 @@ public:
 	void Unload() override;
 
 private:
-
 	std::unordered_map<std::string, Texture> adaptationTextures;
 
 	void CreateAdaptationTextures();

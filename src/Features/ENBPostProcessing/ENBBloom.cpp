@@ -28,13 +28,13 @@ void ENBBloom::Execute()
 	swapTexture.rtv.Attach(textureSwap.RTV);
 
 	UpdateBloomVariables();
-	
+
 	auto* textureBloom = effectManager.GetCommonTexture("TextureBloom");
 	if (!textureBloom) {
 		logger::error("ENBBloom: TextureBloom not available");
 		return;
 	}
-	
+
 	ExecuteTechniqueSequence(GetSelectedTechnique(), inputTexture, *textureBloom, swapTexture);
 }
 
