@@ -1,19 +1,9 @@
+#include "Common/BRDF.hlsli"
 #include "WetnessEffects/optimized-ggx.hlsli"
 
 namespace WetnessEffects
 {
 	Texture2D<float4> TexPrecipOcclusion : register(t70);
-
-	// https://www.unrealengine.com/en-US/blog/physically-based-shading-on-mobile
-	float2 EnvBRDFApproxWater(float3 F0, float Roughness, float NoV)
-	{
-		const float4 c0 = { -1, -0.0275, -0.572, 0.022 };
-		const float4 c1 = { 1, 0.0425, 1.04, -0.04 };
-		float4 r = Roughness * c0 + c1;
-		float a004 = min(r.x * r.x, exp2(-9.28 * NoV)) * r.x + r.y;
-		float2 AB = float2(-1.04, 1.04) * a004 + r.zw;
-		return AB;
-	}
 
 	// https://github.com/BelmuTM/Noble/blob/master/LICENSE.txt
 
@@ -157,7 +147,7 @@ namespace WetnessEffects
 		float3 specularIrradiance = 1.0;
 #endif
 
-		float2 specularBRDF = EnvBRDFApproxWater(0.02, roughness, NoV);
+		float2 specularBRDF = BRDF::EnvBRDFApprox(roughness, NoV);
 
 		// Horizon specular occlusion
 		// https://marmosetco.tumblr.com/post/81245981087

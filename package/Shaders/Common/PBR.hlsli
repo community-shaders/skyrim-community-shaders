@@ -334,7 +334,7 @@ namespace PBR
 			specular += GetSpecularDirectLightMultiplierMicrofacet(surfaceProperties.Roughness, surfaceProperties.F0, satNdotL, satNdotV, satNdotH, satVdotH, F) * lightProperties.LightColor * satNdotL;
 #endif
 
-			float2 specularBRDF = BRDF::EnvBRDFApproxLazarov(surfaceProperties.Roughness, satNdotV);
+			float2 specularBRDF = BRDF::EnvBRDFApprox(surfaceProperties.Roughness, satNdotV);
 			specular *= 1 + surfaceProperties.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
 
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
@@ -432,7 +432,7 @@ namespace PBR
 			}
 #endif
 
-			float2 specularBRDF = BRDF::EnvBRDFApproxLazarov(surfaceProperties.Roughness, NdotV);
+			float2 specularBRDF = BRDF::EnvBRDFApprox(surfaceProperties.Roughness, NdotV);
 			specularLobeWeight = surfaceProperties.F0 * specularBRDF.x + specularBRDF.y;
 
 			diffuseLobeWeight *= (1 - specularLobeWeight);
@@ -441,7 +441,7 @@ namespace PBR
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 			[branch] if ((PBRFlags & Flags::TwoLayer) != 0)
 			{
-				float2 coatSpecularBRDF = BRDF::EnvBRDFApproxLazarov(surfaceProperties.CoatRoughness, NdotV);
+				float2 coatSpecularBRDF = BRDF::EnvBRDFApprox(surfaceProperties.CoatRoughness, NdotV);
 				float3 coatSpecularLobeWeight = surfaceProperties.CoatF0 * coatSpecularBRDF.x + coatSpecularBRDF.y;
 				coatSpecularLobeWeight *= 1 + surfaceProperties.CoatF0 * (1 / (coatSpecularBRDF.x + coatSpecularBRDF.y) - 1);
 
@@ -484,7 +484,7 @@ namespace PBR
 		const float wetnessF0 = 0.02;
 
 		float NdotV = saturate(abs(dot(N, V)) + EPSILON_DOT_CLAMP);
-		float2 specularBRDF = BRDF::EnvBRDFApproxLazarov(roughness, NdotV);
+		float2 specularBRDF = BRDF::EnvBRDFApprox(roughness, NdotV);
 		float3 specularLobeWeight = wetnessF0 * specularBRDF.x + specularBRDF.y;
 
 		// Horizon specular occlusion
