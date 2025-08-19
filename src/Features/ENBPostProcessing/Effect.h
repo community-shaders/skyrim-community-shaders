@@ -63,6 +63,7 @@ public:
 		ComPtr<ID3D11ShaderResourceView> srv;
 	};
 
+	std::unordered_map<std::string, Texture> effectTextureCache;
 	std::unordered_map<std::string, ComPtr<ID3D11ShaderResourceView>> customTextureCache;
 
 	// UI Variable System
@@ -136,6 +137,7 @@ private:
 	std::vector<std::string> GetBaseTechniqueNames();
 
 	std::string GetRenderTargetFromTechnique(ID3DX11EffectTechnique* technique);
+	Effect::Texture* GetEffectTexture(const std::string& name);
 	ID3D11RenderTargetView* GetRenderTargetView(const std::string& renderTargetName, ID3D11RenderTargetView* fallback);
 
 	// UI Variable helpers

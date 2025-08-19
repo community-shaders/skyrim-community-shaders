@@ -291,6 +291,15 @@ void EffectManager::CreateCommonTextures()
 		commonTextureCache.insert({ "TextureBloom", bloomTexture });
 	}
 
+	// Create TextureHDR
+	{
+		Effect::Texture hdrTexture{};
+		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, hdrTexture.texture.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateRenderTargetView(hdrTexture.texture.Get(), nullptr, hdrTexture.rtv.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateShaderResourceView(hdrTexture.texture.Get(), nullptr, hdrTexture.srv.GetAddressOf()));
+		commonTextureCache.insert({ "TextureHDR", hdrTexture });
+	}
+
 	// Create TextureLens
 	{
 		Effect::Texture lensTexture{};

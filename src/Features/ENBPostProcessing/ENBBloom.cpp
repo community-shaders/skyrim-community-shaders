@@ -17,24 +17,19 @@ void ENBBloom::Execute()
 
 	// Create temp input from downsampled
 	inputTexture.srv = downsampler.GetMipLevel(sharedChain, bloomMipLevel);
+	
+	auto textureOriginal = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-	auto renderer = globals::game::renderer;
-	auto textureSwap = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
-
-	Texture swapTexture{};
-	swapTexture.texture = textureSwap.texture;
-	swapTexture.srv = textureSwap.SRV;
-	swapTexture.rtv = textureSwap.RTV;
+	inputTexture.texture = textureOriginal.texture;
+	inputTexture.srv = textureOriginal.SRV;
+	inputTexture.rtv = textureOriginal.RTV;
 
 	UpdateBloomVariables();
 
-	auto* textureBloom = effectManager.GetCommonTexture("TextureBloom");
-	if (!textureBloom) {
-		logger::error("ENBBloom: TextureBloom not available");
-		return;
-	}
+	auto textureBloom = effectManager.GetCommonTexture("TextureBloom");
+	auto textureHDR = effectManager.GetCommonTexture("TextureHDR");
 
-	ExecuteTechniqueSequence(GetSelectedTechnique(), inputTexture, *textureBloom, swapTexture);
+	ExecuteTechniqueSequence(GetSelectedTechnique(), inputTexture, *textureBloom, *textureHDR);
 }
 
 void ENBBloom::UpdateEffectVariables()
@@ -53,7 +48,6 @@ bool ENBBloom::Apply()
 
 void ENBBloom::Unload()
 {
-	bloomTextures.clear();
 	Effect::Unload();
 }
 
@@ -87,12 +81,12 @@ void ENBBloom::CreateBloomTextures()
 		texDesc.Width = size;
 		texDesc.Height = size;
 
-		BloomTexture bloomTexture{};
+		Texture bloomTexture{};
 		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, bloomTexture.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(bloomTexture.texture.Get(), nullptr, bloomTexture.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(bloomTexture.texture.Get(), nullptr, bloomTexture.srv.GetAddressOf()));
 
-		bloomTextures[name] = std::move(bloomTexture);
+		effectTextureCache[name] = std::move(bloomTexture);
 	}
 
 	logger::info("Created bloom render targets: 1024, 512, 256, 128, 64, 32, 16");
@@ -104,7 +98,7 @@ void ENBBloom::UpdateBloomVariables()
 		return;
 
 	// Set bloom fixed-size render targets
-	for (auto& [name, bloomTexture] : bloomTextures) {
+	for (auto& [name, bloomTexture] : effectTextureCache) {
 		auto variable = effect->GetVariableByName(name.c_str())->AsShaderResource();
 		if (variable && variable->IsValid()) {
 			variable->SetResource(bloomTexture.srv.Get());

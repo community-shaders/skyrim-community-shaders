@@ -55,6 +55,7 @@ void Effect::Unload()
 	uiVariables.clear();
 	availableTechniques.clear();
 	selectedTechnique.clear();
+	effectTextureCache.clear();
 
 	errors.clear();
 
@@ -164,6 +165,23 @@ void Effect::ExecuteTechniqueSequence(const std::string& baseTechniqueName, Text
 
 		sourceTexture->AsShaderResource()->SetResource(inputSRV);
 		context->OMSetRenderTargets(1, &outputRTV, nullptr);
+
+		// Set viewport based on render target description
+		ComPtr<ID3D11Resource> resource;
+		outputRTV->GetResource(&resource);
+		ComPtr<ID3D11Texture2D> texture;
+		resource.As(&texture);
+		D3D11_TEXTURE2D_DESC texDesc;
+		texture->GetDesc(&texDesc);
+
+		D3D11_VIEWPORT viewport = {};
+		viewport.TopLeftX = 0.0f;
+		viewport.TopLeftY = 0.0f;
+		viewport.Width = static_cast<float>(texDesc.Width);
+		viewport.Height = static_cast<float>(texDesc.Height);
+		viewport.MinDepth = 0.0f;
+		viewport.MaxDepth = 1.0f;
+		context->RSSetViewports(1, &viewport);
 
 		D3DX11_TECHNIQUE_DESC techDesc;
 		techniqueInfo.technique->GetDesc(&techDesc);
@@ -433,15 +451,28 @@ std::string Effect::GetRenderTargetFromTechnique(ID3DX11EffectTechnique* techniq
 	return "";
 }
 
+Effect::Texture* Effect::GetEffectTexture(const std::string& name)
+{
+	auto it = effectTextureCache.find(name);
+	if (it != effectTextureCache.end()) {
+		return &it->second;
+	}
+	return nullptr;
+}
+
 ID3D11RenderTargetView* Effect::GetRenderTargetView(const std::string& renderTargetName, ID3D11RenderTargetView* fallback)
 {
 	if (renderTargetName.empty()) {
 		return fallback;
 	}
 
+	auto* texture = GetEffectTexture(renderTargetName);
+	if (texture && texture->rtv)
+		return texture->rtv.Get();
+
 	// Get render target from EffectManager's common texture cache
 	auto& effectManager = EffectManager::GetSingleton();
-	auto* texture = effectManager.GetCommonTexture(renderTargetName);
+	texture = effectManager.GetCommonTexture(renderTargetName);
 	if (texture && texture->rtv)
 		return texture->rtv.Get();
 

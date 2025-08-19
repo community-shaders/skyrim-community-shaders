@@ -24,15 +24,6 @@ public:
 	virtual void Unload() override;
 
 private:
-	struct BloomTexture
-	{
-		ComPtr<ID3D11Texture2D> texture;
-		ComPtr<ID3D11RenderTargetView> rtv;
-		ComPtr<ID3D11ShaderResourceView> srv;
-	};
-
-	std::unordered_map<std::string, BloomTexture> bloomTextures;
-
 	void CreateBloomTextures();
 	void UpdateBloomVariables();
 };
