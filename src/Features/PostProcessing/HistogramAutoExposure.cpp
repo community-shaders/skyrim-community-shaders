@@ -15,6 +15,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ToDExposure[3],
 	ToDExposure[4],
 	ToDExposure[5],
+	EnableInterior,
+	InteriorExposure,
 	AdaptationRange,
 	AdaptArea,
 	AdaptSpeed,
@@ -41,6 +43,12 @@ void HistogramAutoExposure::DrawSettings()
 		ImGui::SliderFloat("Exposure Compensation", &settings.ExposureCompensation, -5.f, 5.f, "%+.2f EV");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("Applying additional exposure adjustment to the image.");
+	}
+	ImGui::Checkbox("Interior Exposure Compensation", &settings.EnableInterior);
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("Applying exposure adjustments separately to interiors.");
+	if (settings.EnableInterior) {
+		ImGui::SliderFloat("Interior", &settings.InteriorExposure, -5.f, 5.f, "%+.2f EV");
 	}
 
 	ImGui::SliderFloat("Adaptation Speed", &settings.AdaptSpeed, 0.1f, 5.f, "%.2f");
@@ -178,20 +186,26 @@ void HistogramAutoExposure::Draw(TextureInfo& inout_tex)
 	auto state = globals::state;
 
 	auto& pp = globals::features::postProcessing;
-	float todExposure = settings.ExposureCompensation;
-	if (pp.imageSpaceManager != nullptr && settings.EnableToD)
-		todExposure = pp.imageSpaceManager->timeOfDay[0] * settings.ToDExposure[0] +
-			pp.imageSpaceManager->timeOfDay[1] * settings.ToDExposure[1] +
-			pp.imageSpaceManager->timeOfDay[2] * settings.ToDExposure[2] +
-			pp.imageSpaceManager->timeOfDay[3] * settings.ToDExposure[3] +
-			pp.imageSpaceManager->timeOfDay[4] * settings.ToDExposure[4] +
-			pp.imageSpaceManager->timeOfDay[5] * settings.ToDExposure[5];
+	float exposureCompensation = settings.ExposureCompensation;
+	if (pp.imageSpaceManager != nullptr) {
+		if (settings.EnableToD) {
+			exposureCompensation = pp.imageSpaceManager->timeOfDay[0] * settings.ToDExposure[0] +
+				pp.imageSpaceManager->timeOfDay[1] * settings.ToDExposure[1] +
+				pp.imageSpaceManager->timeOfDay[2] * settings.ToDExposure[2] +
+				pp.imageSpaceManager->timeOfDay[3] * settings.ToDExposure[3] +
+				pp.imageSpaceManager->timeOfDay[4] * settings.ToDExposure[4] +
+				pp.imageSpaceManager->timeOfDay[5] * settings.ToDExposure[5];
+		}
+		if (settings.EnableInterior && pp.imageSpaceManager->inInterior) {
+			exposureCompensation = settings.InteriorExposure;
+		}
+	}
 
 	AutoExposureCB cbData = {
 		.AdaptArea = settings.AdaptArea,
 		.AdaptationRange = { exp2(settings.AdaptationRange.x) * 0.125f, exp2(settings.AdaptationRange.y) * 0.125f },
 		.AdaptLerp = std::clamp(1.f - exp(-RE::BSTimer::GetSingleton()->realTimeDelta * settings.AdaptSpeed), 0.f, 1.f),
-		.ExposureCompensation = exp2(settings.EnableToD ? settings.ExposureCompensation : todExposure),
+		.ExposureCompensation = exp2(exposureCompensation),
 		.PurkinjeStartEV = settings.PurkinjeStartEV,
 		.PurkinjeMaxEV = settings.PurkinjeMaxEV,
 		.PurkinjeStrength = settings.PurkinjeStrength,

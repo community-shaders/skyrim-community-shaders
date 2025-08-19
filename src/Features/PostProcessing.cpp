@@ -268,6 +268,80 @@ void PostProcessing::DrawSettings()
 			ImGui::TextDisabled("Please select an effect in the effect list to continue.");
 		}
 	}
+
+	if (ImGui::TreeNode("Debug")) {
+		ImGui::Text("In Interior: %s", imageSpaceManager->inInterior ? "Yes" : "No");
+		ImGui::Text("Time of Day:");
+		ImGui::Text("Dawn: %.2f\nDusk: %.2f\nDay: %.2f\nNight: %.2f\nMidnight: %.2f\nMorning: %.2f",
+			imageSpaceManager->timeOfDay[0],
+			imageSpaceManager->timeOfDay[1],
+			imageSpaceManager->timeOfDay[2],
+			imageSpaceManager->timeOfDay[3],
+			imageSpaceManager->timeOfDay[4],
+			imageSpaceManager->timeOfDay[5]);
+		if (ImGui::TreeNode("Game ImageSpace Values")) {
+			ImGui::Text("Base Amount: %.3f", imageSpaceManager->gameISData.baseAmount);
+			ImGui::Text("Base Data:");
+			ImGui::Text("Cinematic Values:");
+			ImGui::Text("Saturation: %.3f\nBrightness: %.3f\nContrast: %.3f",
+				imageSpaceManager->gameISData.baseData.cinematic.saturation,
+				imageSpaceManager->gameISData.baseData.cinematic.brightness,
+				imageSpaceManager->gameISData.baseData.cinematic.contrast);
+
+			ImGui::Text("HDR Values:");
+			ImGui::Text("Eye Adapt Speed: %.3f\nBloom Blur Radius: %.3f\nBloom Threshold: %.3f\nBloom Scale: %.3f\nReceive Bloom Threshold: %.3f\nWhite: %.3f\nSunlight Scale: %.3f\nSky Scale: %.3f\nEye Adapt Strength: %.3f",
+				imageSpaceManager->gameISData.baseData.hdr.eyeAdaptSpeed,
+				imageSpaceManager->gameISData.baseData.hdr.bloomBlurRadius,
+				imageSpaceManager->gameISData.baseData.hdr.bloomThreshold,
+				imageSpaceManager->gameISData.baseData.hdr.bloomScale,
+				imageSpaceManager->gameISData.baseData.hdr.receiveBloomThreshold,
+				imageSpaceManager->gameISData.baseData.hdr.white,
+				imageSpaceManager->gameISData.baseData.hdr.sunlightScale,
+				imageSpaceManager->gameISData.baseData.hdr.skyScale,
+				imageSpaceManager->gameISData.baseData.hdr.eyeAdaptStrength);
+
+			ImGui::Text("Tint Values:");
+			ImGui::Text("Tint Amount: %.3f\nTint Color: (%.3f, %.3f, %.3f)",
+				imageSpaceManager->gameISData.baseData.tint.amount,
+				imageSpaceManager->gameISData.baseData.tint.color.red,
+				imageSpaceManager->gameISData.baseData.tint.color.green,
+				imageSpaceManager->gameISData.baseData.tint.color.blue);
+
+			ImGui::Text("Depth of Field Values:");
+			ImGui::Text("DOF Strength: %.3f\nDOF Distance: %.3f\nDOF Range: %.3f\nDOF Flags: %d\nDOF Sky Blur Radius: %d",
+				imageSpaceManager->gameISData.baseData.depthOfField.strength,
+				imageSpaceManager->gameISData.baseData.depthOfField.distance,
+				imageSpaceManager->gameISData.baseData.depthOfField.range,
+				imageSpaceManager->gameISData.baseData.depthOfField.flags,
+				static_cast<int>(imageSpaceManager->gameISData.baseData.depthOfField.skyBlurRadius.get()));
+
+			ImGui::Text("Mod Amount: %.3f", imageSpaceManager->gameISData.modAmount);
+			ImGui::Text("Mod Data:");
+			ImGui::Text("Fade Amount: %.3f\nFade Color: (%.3f, %.3f, %.3f)\nBlur Radius: %.3f\nDouble Vision Strength: %.3f\n",
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kFadeAmount],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kFadeR],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kFadeG],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kFadeB],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kBlurRadius],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kDoubleVisionStrength]);
+			ImGui::Text("Radial Blur Strength: %.3f\nRadial Blur Rampup: %.3f\nRadial Blur Start: %.3f\nRadial Blur Rampdown: %.3f\nRadial Blur Down Start: %.3f\nRadial Blur Center: (%.3f, %.3f)",
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurStrength],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurRampup],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurStart],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurRampdown],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurDownStart],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurCenterX],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurCenterY]);
+			ImGui::Text("DOF Strength: %.3f\nDOF Distance: %.3f\nDOF Range: %.3f\nDOF Mode: %d",
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kDOFStrength],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kDOFDistance],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kDOFRange],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kDOFMode]);
+			ImGui::Text("Motion Blur Strength: %.3f", imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kMotionBlurStrength]);
+			ImGui::TreePop();
+		}
+		ImGui::TreePop();
+	}
 }
 
 void PostProcessing::LoadSettings(json& o_json)
@@ -556,6 +630,9 @@ void PostProcessing::UpdateToD()
 	auto sky = globals::game::sky;
 	if (!sky)
 		return;
+
+	if (sky->mode.get() == RE::Sky::Mode::kFull)
+		imageSpaceManager->inInterior = false;
 
 	float currentTime = sky->currentGameHour;
 
