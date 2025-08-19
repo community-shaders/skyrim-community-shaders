@@ -280,10 +280,9 @@ void PostProcessing::ProcessSettings(json& o_json)
 	const auto& featConstructors = PostProcessFeatureConstructor::GetFeatureConstructors();
 
 	logger::info("Loading post processing settings...");
-	
 
 	for (auto& feat : pipeline) {
-		if (feat) {
+		if (feat && o_json.contains(feat->GetType())) {
 			feat->enabled = o_json.value(feat->GetType(), json::object()).value("enabled", true);
 			json featSettings = o_json.value(feat->GetType(), json::object()).value("settings", json::object());
 			feat->LoadSettings(featSettings);
