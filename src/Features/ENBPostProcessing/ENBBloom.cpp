@@ -14,18 +14,17 @@ void ENBBloom::Execute()
 	auto& downsampler = effectManager.GetDownsampler();
 	auto& sharedChain = effectManager.GetSharedDownsampleChain();
 	UINT bloomMipLevel = downsampler.FindBestMipLevel(sharedChain, 1024, 1024);
-	auto downsampledSRV = downsampler.GetMipLevel(sharedChain, bloomMipLevel);
 
 	// Create temp input from downsampled
-	inputTexture.srv = ComPtr<ID3D11ShaderResourceView>(downsampledSRV);
+	inputTexture.srv = downsampler.GetMipLevel(sharedChain, bloomMipLevel);
 
 	auto renderer = globals::game::renderer;
 	auto textureSwap = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
 
-	Effect::Texture swapTexture{};
+	Texture swapTexture{};
 	swapTexture.texture = textureSwap.texture;
-	swapTexture.srv.Attach(textureSwap.SRV);
-	swapTexture.rtv.Attach(textureSwap.RTV);
+	swapTexture.srv = textureSwap.SRV;
+	swapTexture.rtv = textureSwap.RTV;
 
 	UpdateBloomVariables();
 

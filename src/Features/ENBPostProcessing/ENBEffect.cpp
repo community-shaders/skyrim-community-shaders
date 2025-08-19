@@ -10,20 +10,20 @@ void ENBEffect::Execute()
 	auto textureSwap = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
 	auto textureSwap2 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY2];
 
-	Effect::Texture inputTexture{};
+	Texture inputTexture{};
 	inputTexture.texture = textureOriginal.texture;
-	inputTexture.srv.Attach(textureOriginal.SRV);
-	inputTexture.rtv.Attach(textureOriginal.RTV);
+	inputTexture.srv = textureOriginal.SRV;
+	inputTexture.rtv = textureOriginal.RTV;
 
-	Effect::Texture outputTexture{};
+	Texture outputTexture{};
 	outputTexture.texture = textureSwap.texture;
-	outputTexture.srv.Attach(textureSwap.SRV);
-	outputTexture.rtv.Attach(textureSwap.RTV);
+	outputTexture.srv = textureSwap.SRV;
+	outputTexture.rtv = textureSwap.RTV;
 
-	Effect::Texture swapTexture{};
+	Texture swapTexture{};
 	swapTexture.texture = textureSwap2.texture;
-	swapTexture.srv.Attach(textureSwap2.SRV);
-	swapTexture.rtv.Attach(textureSwap2.RTV);
+	swapTexture.srv = textureSwap2.SRV;
+	swapTexture.rtv = textureSwap2.RTV;
 
 	UpdateEffectVariables();
 

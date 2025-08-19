@@ -100,8 +100,11 @@ void EffectManager::ExecuteEffects()
 
 	for (auto& [name, effect] : effects) {
 		if (effect->IsCompiled()) {
+			auto state = globals::state;
+			state->BeginPerfEvent(std::format("{}", effect->GetName()));
 			UpdateCommonVariablesForEffect(effect->GetEffect());
-			//effect->Execute();
+			effect->Execute();
+			state->EndPerfEvent();
 		}
 	}
 }

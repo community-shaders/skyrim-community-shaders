@@ -13,8 +13,7 @@ void ENBAdaptation::Execute()
 	auto& downsampler = effectManager.GetDownsampler();
 	auto& sharedChain = effectManager.GetSharedDownsampleChain();
 
-	auto downsampledSRV = downsampler.GetMipLevel(sharedChain, downsampler.FindBestMipLevel(sharedChain, 256, 256));
-	inputTexture.srv = ComPtr<ID3D11ShaderResourceView>(downsampledSRV);
+	inputTexture.srv = downsampler.GetMipLevel(sharedChain, downsampler.FindBestMipLevel(sharedChain, 256, 256));
 
 	ExecuteTechnique("Downsample", inputTexture, adaptationTextures["TextureCurrent"]);
 
