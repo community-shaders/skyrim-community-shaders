@@ -104,7 +104,7 @@ struct PostProcessing : Feature
 		RE::ImageSpaceData gameISData;
 	};
 
-	ImageSpaceManager* imageSpaceManager;
+	ImageSpaceManager* imageSpaceManager = new ImageSpaceManager();
 
 	// std::vector<std::unique_ptr<PostProcessFeature>> feats = {};
 	std::vector<std::unique_ptr<PostProcessFeature>> colorTransformsFeats = {};
