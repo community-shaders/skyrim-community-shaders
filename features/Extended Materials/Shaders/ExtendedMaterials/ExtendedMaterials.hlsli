@@ -134,7 +134,7 @@ namespace ExtendedMaterials
 	{
 		float heightBlend = 1 + blendFactor * HEIGHT_POWER;
 		float heights[6] = { 0, 0, 0, 0, 0, 0 };
-		
+
 		// Centralized terrain variation check
 		bool useVariation = false;
 #		if defined(TERRAIN_VARIATION)
@@ -168,12 +168,12 @@ namespace ExtendedMaterials
 
 		float total;
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, heights, weights, total);
-		
+
 		// Apply height boost for terrain variation if enabled
 		if (useVariation) {
 			total *= 1.3;
 		}
-		
+
 		return total;	}
 #	else
 	float GetTerrainHeight(float screenNoise, PS_INPUT input, float2 coords, float mipLevels[6], DisplacementParams params[6], float blendFactor, float4 w1, float2 w2,
@@ -248,12 +248,12 @@ namespace ExtendedMaterials
 
 		float total;
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, heights, weights, total);
-		
+
 		// Apply height boost for terrain variation if enabled
 		if (useVariation) {
 			total *= 1.3;
 		}
-		
+
 		return total;
 	}
 #	endif

@@ -1231,7 +1231,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	sharedOffset.offset2 = float2(0, 0);
 	sharedOffset.offset3 = float2(0, 0);
 	sharedOffset.weights = float3(0, 0, 0);
-	
+
 	useTerrainVariation = SharedData::terrainVariationSettings.enableTilingFix;
 	if (useTerrainVariation)
 	{
@@ -1426,7 +1426,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	// Layer 3 (LandBlendWeights1.z)
 	if (input.LandBlendWeights1.z > 0.01) {
 		float weight = input.LandBlendWeights1.z;
-		
+
 		// Sample textures with optimized terrain variation
 		float4 landColor3 = SampleTerrainTexture(TexLandColor3Sampler, SampLandColor3Sampler, uv, useTerrainVariation, sharedOffset, dx, dy);
 		float3 landColorRGB3 = landColor3.rgb;
@@ -1515,7 +1515,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	// Layer 5 (LandBlendWeights2.x)
 	if (input.LandBlendWeights2.x > 0.01) {
 		float weight = input.LandBlendWeights2.x;
-		
+
 		// Sample textures with optimized terrain variation
 		float4 landColor5 = SampleTerrainTexture(TexLandColor5Sampler, SampLandColor5Sampler, uv, useTerrainVariation, sharedOffset, dx, dy);
 		float3 landColorRGB5 = landColor5.rgb;
