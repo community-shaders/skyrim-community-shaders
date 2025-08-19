@@ -15,6 +15,7 @@ struct PostProcessFeature
 	virtual std::string GetDesc() const = 0;
 	virtual bool SupportsVR() const { return true; }
 	virtual bool DrawAfterColorGrading() const { return false; }
+	virtual bool DisableInMainLoadingMenu() const { return false; }
 
 	virtual inline void SetupResources() = 0;
 	virtual void ClearShaderCache() = 0;

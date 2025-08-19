@@ -23,6 +23,7 @@ struct MotionBlur : public PostProcessFeature
 	{
 		return "Creates cinematic motion blur based on camera and object movement.";
 	}
+	virtual inline bool DisableInMainLoadingMenu() const override { return true; }
 
 	// Constants
 	static constexpr float MaxBlurRadius = 40.0f;

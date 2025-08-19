@@ -547,6 +547,75 @@ void PostProcessing::Reset()
 			feat->Reset();
 }
 
+// from doodlum
+void PostProcessing::UpdateToD()
+{
+	if (bypass)
+		return;
+
+	auto sky = globals::game::sky;
+	if (!sky)
+		return;
+
+	float currentTime = sky->currentGameHour;
+
+	float sunriseBegin = sky->GetSunriseBegin();
+	float sunriseEnd = sky->GetSunriseEnd();
+	float sunsetBegin = sky->GetSunsetBegin();
+	float sunsetEnd = sky->GetSunsetEnd();
+
+	float dawnMid = sunriseBegin + (sunriseEnd - sunriseBegin) * 0.5f;
+	float duskMid = sunsetBegin + (sunsetEnd - sunsetBegin) * 0.5f;
+
+	auto range01 = [](float t, float a, float b) {
+		// Handles wrap-around if b < a
+		float range = b - a;
+		if (range < 0.0f)
+			range += 24.0f;
+		float value = t - a;
+		if (value < 0.0f)
+			value += 24.0f;
+		return std::clamp(value / range, 0.0f, 1.0f);
+	};
+
+	for (int i = 0; i < 6; ++i) {
+		imageSpaceManager->timeOfDay[i] = 0.0f;
+	}
+
+	// Dawn → Sunrise
+	if (currentTime >= sunriseBegin && currentTime < dawnMid) {
+		float f = range01(currentTime, sunriseBegin, dawnMid);
+		imageSpaceManager->timeOfDay[0] = 1.0f - f;  // dawn
+		imageSpaceManager->timeOfDay[1] = f;         // sunrise
+	} else if (currentTime >= dawnMid && currentTime < sunriseEnd) {
+		float f = range01(currentTime, dawnMid, sunriseEnd);
+		imageSpaceManager->timeOfDay[1] = 1.0f - f;  // sunrise
+		imageSpaceManager->timeOfDay[2] = f;         // day
+	}
+	// Day → Sunset
+	else if (currentTime >= sunriseEnd && currentTime < sunsetBegin) {
+		float f = range01(currentTime, sunriseEnd, sunsetBegin);
+		imageSpaceManager->timeOfDay[2] = 1.0f - f;  // day
+		imageSpaceManager->timeOfDay[3] = f;         // sunset
+	}
+	// Sunset → Dusk
+	else if (currentTime >= sunsetBegin && currentTime < duskMid) {
+		float f = range01(currentTime, sunsetBegin, duskMid);
+		imageSpaceManager->timeOfDay[3] = 1.0f - f;  // sunset
+		imageSpaceManager->timeOfDay[4] = f;         // dusk
+	} else if (currentTime >= duskMid && currentTime < sunsetEnd) {
+		float f = range01(currentTime, duskMid, sunsetEnd);
+		imageSpaceManager->timeOfDay[4] = 1.0f - f;  // dusk
+		imageSpaceManager->timeOfDay[5] = f;         // night
+	}
+	// Night → Dawn (wrap)
+	else {
+		float f = range01(currentTime, sunsetEnd, sunriseBegin);
+		imageSpaceManager->timeOfDay[5] = 1.0f - f;  // night
+		imageSpaceManager->timeOfDay[0] = f;         // dawn
+	}
+}
+
 void PostProcessing::PreProcess()
 {
 	if (bypass)
@@ -555,17 +624,15 @@ void PostProcessing::PreProcess()
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
 
-	// auto upscaling = globals::upscaling;
+	bool inMainLoadingMenu = globals::game::ui && (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
 
 	auto gameTexMain = isrefraction ? renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY] : renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 	PostProcessFeature::TextureInfo lastTexColor = { gameTexMain.texture, gameTexMain.SRV };
 	auto gameTexMainAlt = isrefraction ? renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN] : renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
 
-	// auto upscaleMethod = upscaling->GetUpscaleMethod();
-	// bool useAfterTAA = upscaleMethod != Upscaling::UpscaleMethod::kNONE && !globals::state->upscalerLoaded;
 	// go through each fx
 	for (auto& pipe : pipeline) {
-		if (pipe && pipe->enabled && !pipe->DrawAfterColorGrading()) {
+		if (pipe && pipe->enabled && !pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu())) {
 			pipe->Draw(lastTexColor);
 		}
 	}
@@ -575,7 +642,7 @@ void PostProcessing::PreProcess()
 			feat->Draw(lastTexColor);
 
 	for (auto& pipe : pipeline) {
-		if (pipe && pipe->enabled && pipe->DrawAfterColorGrading()) {
+		if (pipe && pipe->enabled && pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu())) {
 			pipe->Draw(lastTexColor);
 		}
 	}
@@ -616,6 +683,26 @@ void PostProcessing::Prepass()
 		logger::info("Processing pending post processing settings...");
 		ProcessSettings(pendingSettings);
 		pendingSettings = {};
+	}
+
+	// Update gameISData
+	const auto ImageSpace = RE::ImageSpaceManager::GetSingleton();
+	if (globals::game::isVR) {
+		const auto& iSRuntimeData = ImageSpace->GetVRRuntimeData();
+		imageSpaceManager->gameISData = iSRuntimeData.data;
+		if (const auto& overrideBaseData = iSRuntimeData.overrideBaseData) {
+			imageSpaceManager->gameISData.baseData = *overrideBaseData;
+		} else {
+			imageSpaceManager->gameISData.baseData = *iSRuntimeData.currentBaseData;
+		}
+	} else {
+		const auto& iSRuntimeData = ImageSpace->GetRuntimeData();
+		imageSpaceManager->gameISData = iSRuntimeData.data;
+		if (const auto& overrideBaseData = iSRuntimeData.overrideBaseData) {
+			imageSpaceManager->gameISData.baseData = *overrideBaseData;
+		} else {
+			imageSpaceManager->gameISData.baseData = *iSRuntimeData.currentBaseData;
+		}
 	}
 }
 

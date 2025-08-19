@@ -91,11 +91,20 @@ struct PostProcessing : Feature
 	virtual void Prepass() override;
 
 	void PreProcess();
+	void UpdateToD();
 
 	/////////////////////////////////////////////////////////////////////////////////
 
 	bool bypass = false;
 	bool isrefraction = false;
+
+	struct ImageSpaceManager
+	{
+		float timeOfDay[6];  // 0: dawn, 1: sunrise, 2: day, 3: sunset, 4: dusk, 5: night
+		RE::ImageSpaceData gameISData;
+	};
+
+	ImageSpaceManager* imageSpaceManager;
 
 	// std::vector<std::unique_ptr<PostProcessFeature>> feats = {};
 	std::vector<std::unique_ptr<PostProcessFeature>> colorTransformsFeats = {};

@@ -3,9 +3,18 @@
 #include "State.h"
 #include "Util.h"
 
+#include "Features/PostProcessing.h"
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	HistogramAutoExposure::Settings,
 	ExposureCompensation,
+	EnableToD,
+	ToDExposure[0],
+	ToDExposure[1],
+	ToDExposure[2],
+	ToDExposure[3],
+	ToDExposure[4],
+	ToDExposure[5],
 	AdaptationRange,
 	AdaptArea,
 	AdaptSpeed,
@@ -15,9 +24,24 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void HistogramAutoExposure::DrawSettings()
 {
-	ImGui::SliderFloat("Exposure Compensation", &settings.ExposureCompensation, -5.f, 5.f, "%+.2f EV");
+	ImGui::Checkbox("ToD Exposure Compensation", &settings.EnableToD);
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text("Applying additional exposure adjustment to the image.");
+		ImGui::Text("Applying exposure adjustments based on the time of day.");
+	if (settings.EnableToD) {
+		if (ImGui::TreeNodeEx("ToD Exposure Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::SliderFloat("Dawn", &settings.ToDExposure[0], -5.f, 5.f, "%+.2f EV");
+			ImGui::SliderFloat("Sunrise", &settings.ToDExposure[1], -5.f, 5.f, "%+.2f EV");
+			ImGui::SliderFloat("Day", &settings.ToDExposure[2], -5.f, 5.f, "%+.2f EV");
+			ImGui::SliderFloat("Sunset", &settings.ToDExposure[3], -5.f, 5.f, "%+.2f EV");
+			ImGui::SliderFloat("Dusk", &settings.ToDExposure[4], -5.f, 5.f, "%+.2f EV");
+			ImGui::SliderFloat("Night", &settings.ToDExposure[5], -5.f, 5.f, "%+.2f EV");
+			ImGui::TreePop();
+		}
+	} else {
+		ImGui::SliderFloat("Exposure Compensation", &settings.ExposureCompensation, -5.f, 5.f, "%+.2f EV");
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Applying additional exposure adjustment to the image.");
+	}
 
 	ImGui::SliderFloat("Adaptation Speed", &settings.AdaptSpeed, 0.1f, 5.f, "%.2f");
 	ImGui::SliderFloat2("Focus Area", &settings.AdaptArea.x, 0.f, 1.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
@@ -153,11 +177,19 @@ void HistogramAutoExposure::Draw(TextureInfo& inout_tex)
 	auto context = globals::d3d::context;
 	auto state = globals::state;
 
+	auto& pp = globals::features::postProcessing;
+	float todExposure = pp.imageSpaceManager->timeOfDay[0] * settings.ToDExposure[0] +
+		pp.imageSpaceManager->timeOfDay[1] * settings.ToDExposure[1] +
+		pp.imageSpaceManager->timeOfDay[2] * settings.ToDExposure[2] +
+		pp.imageSpaceManager->timeOfDay[3] * settings.ToDExposure[3] +
+		pp.imageSpaceManager->timeOfDay[4] * settings.ToDExposure[4] +
+		pp.imageSpaceManager->timeOfDay[5] * settings.ToDExposure[5];
+
 	AutoExposureCB cbData = {
 		.AdaptArea = settings.AdaptArea,
 		.AdaptationRange = { exp2(settings.AdaptationRange.x) * 0.125f, exp2(settings.AdaptationRange.y) * 0.125f },
 		.AdaptLerp = std::clamp(1.f - exp(-RE::BSTimer::GetSingleton()->realTimeDelta * settings.AdaptSpeed), 0.f, 1.f),
-		.ExposureCompensation = exp2(settings.ExposureCompensation),
+		.ExposureCompensation = exp2(settings.EnableToD ? settings.ExposureCompensation : todExposure),
 		.PurkinjeStartEV = settings.PurkinjeStartEV,
 		.PurkinjeMaxEV = settings.PurkinjeMaxEV,
 		.PurkinjeStrength = settings.PurkinjeStrength,
