@@ -17,7 +17,7 @@ void ENBBloom::Execute()
 
 	// Create temp input from downsampled
 	inputTexture.srv = downsampler.GetMipLevel(sharedChain, bloomMipLevel);
-	
+
 	auto textureOriginal = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
 	inputTexture.texture = textureOriginal.texture;
