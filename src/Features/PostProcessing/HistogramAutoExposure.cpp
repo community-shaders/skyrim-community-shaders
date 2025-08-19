@@ -178,12 +178,14 @@ void HistogramAutoExposure::Draw(TextureInfo& inout_tex)
 	auto state = globals::state;
 
 	auto& pp = globals::features::postProcessing;
-	float todExposure = pp.imageSpaceManager->timeOfDay[0] * settings.ToDExposure[0] +
-		pp.imageSpaceManager->timeOfDay[1] * settings.ToDExposure[1] +
-		pp.imageSpaceManager->timeOfDay[2] * settings.ToDExposure[2] +
-		pp.imageSpaceManager->timeOfDay[3] * settings.ToDExposure[3] +
-		pp.imageSpaceManager->timeOfDay[4] * settings.ToDExposure[4] +
-		pp.imageSpaceManager->timeOfDay[5] * settings.ToDExposure[5];
+	float todExposure = settings.ExposureCompensation;
+	if (pp.imageSpaceManager != nullptr && settings.EnableToD)
+		todExposure = pp.imageSpaceManager->timeOfDay[0] * settings.ToDExposure[0] +
+			pp.imageSpaceManager->timeOfDay[1] * settings.ToDExposure[1] +
+			pp.imageSpaceManager->timeOfDay[2] * settings.ToDExposure[2] +
+			pp.imageSpaceManager->timeOfDay[3] * settings.ToDExposure[3] +
+			pp.imageSpaceManager->timeOfDay[4] * settings.ToDExposure[4] +
+			pp.imageSpaceManager->timeOfDay[5] * settings.ToDExposure[5];
 
 	AutoExposureCB cbData = {
 		.AdaptArea = settings.AdaptArea,
