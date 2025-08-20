@@ -362,6 +362,36 @@ void EffectManager::CreateRenderStates()
 
 void EffectManager::CreateCopyShaders()
 {
+	// Compile vertex shader for texture copy
+	const char* vertexShaderSource = R"(
+		struct VS_INPUT { float3 pos : POSITION; float2 txcoord : TEXCOORD0; };
+		struct VS_OUTPUT { float4 pos : SV_POSITION; float2 txcoord0 : TEXCOORD0; };
+		
+		VS_OUTPUT main(VS_INPUT input) {
+			VS_OUTPUT output;
+			output.pos = float4(input.pos, 1.0);
+			output.txcoord0 = input.txcoord;
+			return output;
+		}
+	)";
+
+	ComPtr<ID3DBlob> vsBlob, errorBlob;
+	HRESULT hr = D3DCompile(vertexShaderSource, strlen(vertexShaderSource), nullptr, nullptr, nullptr,
+		"main", "vs_4_0", 0, 0, vsBlob.GetAddressOf(), errorBlob.GetAddressOf());
+
+	if (FAILED(hr)) {
+		if (errorBlob) {
+			logger::error("[ENBPP] Failed to compile copy vertex shader: {}", static_cast<char*>(errorBlob->GetBufferPointer()));
+		}
+		return;
+	}
+
+	hr = globals::d3d::device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, copyVertexShader.GetAddressOf());
+	if (FAILED(hr)) {
+		logger::error("[ENBPP] Failed to create copy vertex shader");
+		return;
+	}
+
 	// Compile pixel shader for texture copy
 	const char* pixelShaderSource = R"(
 		Texture2D sourceTexture : register(t0);
@@ -374,8 +404,8 @@ void EffectManager::CreateCopyShaders()
 		}
 	)";
 
-	ComPtr<ID3DBlob> psBlob, errorBlob;
-	auto hr = D3DCompile(pixelShaderSource, strlen(pixelShaderSource), nullptr, nullptr, nullptr,
+	ComPtr<ID3DBlob> psBlob;
+	hr = D3DCompile(pixelShaderSource, strlen(pixelShaderSource), nullptr, nullptr, nullptr,
 		"main", "ps_4_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf());
 
 	if (FAILED(hr)) {
@@ -484,13 +514,10 @@ void EffectManager::CreateCommonTextures()
 		commonTextureCache.insert({ "TextureBloom", bloomTexture });
 	}
 
-	// Create TextureColorTemp with UAV support for compute shader access
+	// Create TextureColorTemp
 	{
-		D3D11_TEXTURE2D_DESC colorTempDesc = texDesc;
-		colorTempDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-
 		Effect::Texture textureColor{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&colorTempDesc, nullptr, textureColor.texture.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, textureColor.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(textureColor.texture.Get(), nullptr, textureColor.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(textureColor.texture.Get(), nullptr, textureColor.srv.GetAddressOf()));
 
@@ -614,6 +641,7 @@ void EffectManager::CreateCommonTextures()
 	// Create 1x1 textures for adaptation and aperture
 	texDesc.Width = 1;
 	texDesc.Height = 1;
+	texDesc.Format = DXGI_FORMAT_R32_FLOAT;
 
 	// Create TextureAdaptation
 	{
@@ -657,6 +685,8 @@ void EffectManager::CreateCommonTextures()
 		commonTextureCache.insert({ "TextureAperture", apertureTexture });
 	}
 
+	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+
 	// Create fixed-size render targets for bloom/lens
 	std::vector<std::pair<std::string, UINT>> fixedSizes = {
 		{ "RenderTarget1024", 1024 },
@@ -684,9 +714,9 @@ void EffectManager::CreateCommonTextures()
 		commonTextureCache[name] = std::move(fixedTexture);
 	}
 
-	logger::info("[ENBPP] Created bloom render targets: 1024, 512, 256, 128, 64, 32, 16");
+	logger::info("[ENBPP] Created temporary render targets: 1024, 512, 256, 128, 64, 32, 16");
 
-	logger::info("[ENBPP] Created shared common textures: TextureBloom, TextureLens, RenderTargetRGBA32, RenderTargetRGBA64, RenderTargetRGBA64F, RenderTargetR16F, RenderTargetR32F, RenderTargetRGB32F, TextureAdaptation, TextureAperture");
+	logger::info("[ENBPP] Created shared common textures: TextureBloom, TextureLens, RenderTargetRGBA32, RenderTargetRGBA64, RenderTargetRGBA64F, RenderTargetR16F, RenderTargetR32F, RenderTargetRGB32F, TextureAdaptation, TextureAdaptationSwap, TextureAperture");
 }
 
 void EffectManager::UpdateCommonData()
@@ -842,7 +872,7 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 
 void EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11RenderTargetView* a_dest)
 {
-	if (!a_source || !a_dest || !copyPixelShader) {
+	if (!a_source || !a_dest || !copyPixelShader || !copyVertexShader) {
 		logger::critical("[ENBPP] Invalid parameters or shaders not initialized for texture copy");
 		return;
 	}
@@ -854,6 +884,7 @@ void EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11Render
 	context->OMSetDepthStencilState(nullptr, 0);
 
 	// Set shaders
+	context->VSSetShader(copyVertexShader.Get(), nullptr, 0);
 	context->PSSetShader(copyPixelShader.Get(), nullptr, 0);
 
 	// Set source texture

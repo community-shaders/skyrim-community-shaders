@@ -213,52 +213,52 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 		D3DX11_TECHNIQUE_DESC techDesc;
 		techniqueInfo.technique->GetDesc(&techDesc);
 
-		for (UINT p = 0; p < techDesc.Passes; p++) {
-			// Determine input and output for this technique
-			ID3D11ShaderResourceView* inputSRV;
-			ID3D11RenderTargetView* outputRTV;
+		// Determine input and output for this technique
+		ID3D11ShaderResourceView* inputSRV;
+		ID3D11RenderTargetView* outputRTV;
 
+		if (renderedToOutput) {
+			inputSRV = a_output.srv.Get();
+		} else {
+			inputSRV = a_input.srv.Get();
+		}
+
+		if (!techniqueInfo.renderTargetName.empty()) {
+			outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, a_input.rtv.Get());
+		} else {
 			if (renderedToOutput) {
-				inputSRV = a_output.srv.Get();
-			} else {
-				inputSRV = a_input.srv.Get();
-			}
-
-			if (!techniqueInfo.renderTargetName.empty()) {
 				outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, a_input.rtv.Get());
 			} else {
-				if (renderedToOutput) {
-					outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, a_input.rtv.Get());
-				} else {
-					outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, a_output.rtv.Get());
-				}
-				// Swap if rendered to other texture
-				renderedToOutput = !renderedToOutput;
+				outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, a_output.rtv.Get());
 			}
+			// Swap if rendered to other texture
+			renderedToOutput = !renderedToOutput;
+		}
 
-			if (sourceTexture && sourceTexture->IsValid()) {
-				sourceTexture->AsShaderResource()->SetResource(inputSRV);
-			}
+		if (sourceTexture && sourceTexture->IsValid()) {
+			sourceTexture->AsShaderResource()->SetResource(inputSRV);
+		}
 
-			context->OMSetRenderTargets(1, &outputRTV, nullptr);
+		context->OMSetRenderTargets(1, &outputRTV, nullptr);
 
-			// Set viewport based on render target description
-			ComPtr<ID3D11Resource> resource;
-			outputRTV->GetResource(&resource);
-			ComPtr<ID3D11Texture2D> texture;
-			resource.As(&texture);
-			D3D11_TEXTURE2D_DESC texDesc;
-			texture->GetDesc(&texDesc);
+		// Set viewport based on render target description
+		ComPtr<ID3D11Resource> resource;
+		outputRTV->GetResource(&resource);
+		ComPtr<ID3D11Texture2D> texture;
+		resource.As(&texture);
+		D3D11_TEXTURE2D_DESC texDesc;
+		texture->GetDesc(&texDesc);
 
-			D3D11_VIEWPORT viewport = {};
-			viewport.TopLeftX = 0.0f;
-			viewport.TopLeftY = 0.0f;
-			viewport.Width = static_cast<float>(texDesc.Width);
-			viewport.Height = static_cast<float>(texDesc.Height);
-			viewport.MinDepth = 0.0f;
-			viewport.MaxDepth = 1.0f;
-			context->RSSetViewports(1, &viewport);
+		D3D11_VIEWPORT viewport = {};
+		viewport.TopLeftX = 0.0f;
+		viewport.TopLeftY = 0.0f;
+		viewport.Width = static_cast<float>(texDesc.Width);
+		viewport.Height = static_cast<float>(texDesc.Height);
+		viewport.MinDepth = 0.0f;
+		viewport.MaxDepth = 1.0f;
+		context->RSSetViewports(1, &viewport);
 
+		for (UINT p = 0; p < techDesc.Passes; p++) {
 			techniqueInfo.technique->GetPassByIndex(p)->Apply(0, context);
 			context->Draw(4, 0);
 		}

@@ -55,6 +55,7 @@ public:
 	ComPtr<ID3D11BlendState> blendState;
 
 	// Copy shader resources
+	ComPtr<ID3D11VertexShader> copyVertexShader;
 	ComPtr<ID3D11PixelShader> copyPixelShader;
 
 	// Color correction compute shader resources
