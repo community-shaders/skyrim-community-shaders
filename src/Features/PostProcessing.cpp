@@ -631,7 +631,12 @@ void PostProcessing::UpdateToD()
 	if (!sky)
 		return;
 
-	imageSpaceManager->inInterior = sky->mode.get() != RE::Sky::Mode::kFull;
+	imageSpaceManager->inInterior = true;
+	if (auto player = RE::PlayerCharacter::GetSingleton()) {
+		if (auto parentCell = player->GetParentCell()) {
+			imageSpaceManager->inInterior = parentCell->IsInteriorCell();
+		}
+	}
 
 	float currentTime = sky->currentGameHour;
 
