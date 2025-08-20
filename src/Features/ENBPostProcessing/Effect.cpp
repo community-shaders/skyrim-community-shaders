@@ -124,7 +124,7 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 	}
 
 	const auto& sequence = sequenceIt->second;
-	
+
 	logger::debug("Executing technique sequence '{}' with {} techniques", a_baseTechniqueName, sequence.size());
 
 	auto sourceTexture = effect->GetVariableByName(GetSourceTexture())->AsShaderResource();
@@ -151,7 +151,7 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 			inputSRV = a_input.srv.Get();
 		}
 
-		if (!techniqueInfo.renderTargetName.empty()){
+		if (!techniqueInfo.renderTargetName.empty()) {
 			outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, a_input.rtv.Get());
 		} else {
 			if (swapOutput) {

@@ -291,7 +291,6 @@ void EffectManager::CreateCommonTextures()
 		commonTextureCache.insert({ "TextureBloom", bloomTexture });
 	}
 
-
 	// Create TextureColorTemp
 	{
 		Effect::Texture textureColor{};
