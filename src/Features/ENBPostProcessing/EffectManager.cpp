@@ -730,7 +730,7 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 	auto renderer = globals::game::renderer;
 
 	// Set common textures
-	Effect::SetShaderResourceVariable(effect, "TextureDepth", 
+	Effect::SetShaderResourceVariable(effect, "TextureDepth",
 		renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY].depthSRV);
 
 	// Set format-specific render targets

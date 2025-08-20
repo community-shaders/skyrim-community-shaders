@@ -43,7 +43,6 @@ public:
 	void UpdateCommonVariablesForEffect(ID3DX11Effect* effect);
 
 public:
-
 	std::vector<std::pair<std::string, std::unique_ptr<Effect>>> effects;
 
 	// Common resources shared across effects
