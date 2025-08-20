@@ -539,6 +539,20 @@ void EffectManager::CreateCommonTextures()
 		commonTextureCache.insert({ "TextureHDRTemp", textureColor });
 	}
 
+	// Create TextureHDRTemp2
+	{
+		Effect::Texture textureColor{};
+		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, textureColor.texture.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateRenderTargetView(textureColor.texture.Get(), nullptr, textureColor.rtv.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateShaderResourceView(textureColor.texture.Get(), nullptr, textureColor.srv.GetAddressOf()));
+
+		Util::SetResourceName(textureColor.texture.Get(), "EffectManager::TextureHDRTemp2");
+		Util::SetResourceName(textureColor.rtv.Get(), "EffectManager::TextureHDRTemp2 RTV");
+		Util::SetResourceName(textureColor.srv.Get(), "EffectManager::TextureHDRTemp2 SRV");
+
+		commonTextureCache.insert({ "TextureHDRTemp2", textureColor });
+	}
+
 	// Create TextureLens
 	{
 		Effect::Texture lensTexture{};

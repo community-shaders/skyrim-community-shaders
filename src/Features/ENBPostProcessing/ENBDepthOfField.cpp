@@ -31,7 +31,7 @@ void ENBDepthOfField::Execute()
 	const std::string textureFocusName = (effectManager.textureSwap & 1) ? "TextureFocus" : "TextureFocusSwap";
 
 	if (texturePrevious && texturePrevious->IsValid()) {
-		texturePrevious->SetResource(effectTextureCache[texturePreviousApertureName].srv.Get());
+		texturePrevious->SetResource(effectTextureCache[texturePreviousFocusName].srv.Get());
 	}
 
 	auto textureCurrent = effect->GetVariableByName("TextureCurrent")->AsShaderResource();
@@ -41,16 +41,29 @@ void ENBDepthOfField::Execute()
 
 	ExecuteTechnique("Focus", nullInputTexture, effectTextureCache[textureFocusName]);
 	
-	auto textureOriginal = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	auto textureFocus = effect->GetVariableByName("TextureFocus")->AsShaderResource();
+	if (textureFocus && textureFocus->IsValid()) {
+		textureFocus->SetResource(effectTextureCache["TextureFocus"].srv.Get());
+	}
 
-	Texture textureHDR{};
-	textureHDR.texture = textureOriginal.texture;
-	textureHDR.srv = textureOriginal.SRV;
-	textureHDR.rtv = textureOriginal.RTV;
+	auto textureMain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+
+	Texture textureOriginal2{};
+	textureOriginal2.texture = textureMain.texture;
+	textureOriginal2.srv = textureMain.SRV;
+	textureOriginal2.rtv = textureMain.RTV;
+
+	auto textureOriginal = effect->GetVariableByName("TextureOriginal")->AsShaderResource();
+	if (textureOriginal && textureOriginal->IsValid()) {
+		textureOriginal->SetResource(textureOriginal2.srv.Get());
+	}
 
 	auto textureHDRTemp = effectManager.GetCommonTexture("TextureHDRTemp");
+	auto textureHDRTemp2 = effectManager.GetCommonTexture("TextureHDRTemp2");
 
-	ExecuteTechniqueSequence(GetSelectedTechnique(), textureHDR, *textureHDRTemp, textureHDR);
+	ExecuteTechniqueSequence(GetSelectedTechnique(), textureOriginal2, *textureHDRTemp, *textureHDRTemp2);
+
+	globals::d3d::context->CopyResource(textureOriginal2.texture.Get(), textureHDRTemp->texture.Get());
 }
 
 void ENBDepthOfField::UpdateEffectVariables()
