@@ -18,11 +18,11 @@ void ENBEffect::Execute()
 	UpdateEffectVariables();
 
 	ExecuteTechniqueSequence(GetSelectedTechnique(), textureColor, *textureColorTemp);
-	
+
 	auto textureFramebuffer1 = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
 	auto textureFramebuffer2 = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
 	auto textureFramebuffer3 = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY2];
-	
+
 	effectManager.CopyTexture(textureOriginal.SRV, textureFramebuffer1.RTV);
 	effectManager.CopyTexture(textureOriginal.SRV, textureFramebuffer2.RTV);
 	effectManager.CopyTexture(textureOriginal.SRV, textureFramebuffer3.RTV);
