@@ -44,7 +44,6 @@ void ENBAdaptation::Execute()
 		texturePrevious->SetResource(adaptationTextures["TexturePrevious"].srv.Get());
 	}
 
-
 	ExecuteTechnique(GetSelectedTechnique(), nullInputTexture, *effectManager.GetCommonTexture("TextureAdaptation"));
 }
 
