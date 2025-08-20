@@ -17,30 +17,30 @@
 bool Effect::Load()
 {
 	logger::debug("Loading settings for effect '{}'", GetName());
-	
+
 	// Create ini file path based on effect name
 	std::filesystem::path iniPath = "enbseries";
 	iniPath /= GetName() + ".ini";
-	
+
 	// Check if file exists
 	if (!std::filesystem::exists(iniPath)) {
 		logger::debug("Could not find ini file '{}' for effect '{}', using defaults", iniPath.string(), GetName());
-		return true; // Not an error, just use defaults
+		return true;  // Not an error, just use defaults
 	}
 
 	// Prepare section name
 	std::string section = GetName();
 	std::transform(section.begin(), section.end(), section.begin(), ::toupper);
-		
-	for (auto& uiVar : uiVariables) {			
-		std::vector<char> valueBuffer(1024);	
+
+	for (auto& uiVar : uiVariables) {
+		std::vector<char> valueBuffer(1024);
 		DWORD result = GetPrivateProfileStringA(section.c_str(), uiVar.displayName.c_str(), "", valueBuffer.data(), 1024, iniPath.string().c_str());
 		if (result > 0) {
 			std::string value(valueBuffer.data());
 			LoadVariableFromString(uiVar, value);
-		}	
+		}
 	}
-	
+
 	selectedTechniqueIndex = static_cast<uint32_t>(GetPrivateProfileIntA(section.c_str(), "TECHNIQUE", selectedTechniqueIndex, iniPath.string().c_str()));
 
 	selectedTechniqueIndex = std::clamp(selectedTechniqueIndex, 0u, (uint)uiTechniques.size() - 1u);
@@ -52,18 +52,18 @@ bool Effect::Load()
 void Effect::Save()
 {
 	logger::debug("Saving settings for effect '{}'", GetName());
-	
+
 	// Create ini file path based on effect name
 	std::filesystem::path iniPath = "enbseries";
 	iniPath /= GetName() + ".ini";
-	
+
 	// Prepare section name
 	std::string section = GetName();
 	std::transform(section.begin(), section.end(), section.begin(), ::toupper);
-	
+
 	for (const auto& uiVar : uiVariables) {
 		std::string value;
-		
+
 		switch (uiVar.type) {
 		case UIVariableType::Float:
 			value = std::to_string(uiVar.floatValue);
@@ -75,19 +75,19 @@ void Effect::Save()
 			value = uiVar.boolValue ? "true" : "false";
 			break;
 		}
-		
+
 		BOOL result = WritePrivateProfileStringA(section.c_str(), uiVar.displayName.c_str(), value.c_str(), iniPath.string().c_str());
 		if (!result) {
 			logger::warn("Failed to write key '{}' to ini file '{}'", uiVar.displayName, iniPath.string());
 		}
 	}
-	
+
 	std::string techniqueValue = std::to_string(selectedTechniqueIndex);
 	BOOL techniqueResult = WritePrivateProfileStringA(section.c_str(), "TECHNIQUE", techniqueValue.c_str(), iniPath.string().c_str());
 	if (!techniqueResult) {
 		logger::warn("Failed to write TECHNIQUE key to ini file '{}'", iniPath.string());
 	}
-	
+
 	logger::info("Saved settings to '{}' for effect '{}'", iniPath.string(), GetName());
 }
 
