@@ -32,7 +32,7 @@ void EffectManager::RegisterEffects()
 	auto registerEffect = [this](auto effect) {
 		std::string name = effect->GetName();
 		effects.emplace_back(name, std::move(effect));
-		logger::info("Registered effect: {}", name);
+		logger::info("[ENBPP] Registered effect: {}", name);
 	};
 
 	registerEffect(std::make_unique<ENBEffectPrePass>());
@@ -46,35 +46,35 @@ void EffectManager::RegisterEffects()
 
 void EffectManager::ApplyEffects()
 {
-	logger::info("Applying effects");
+	logger::info("[ENBPP] Applying effects");
 
 	for (auto& [name, effect] : effects) {
 		effect->Apply();
 	}
 
-	logger::info("Applied effects");
+	logger::info("[ENBPP] Applied effects");
 }
 
 void EffectManager::LoadEffects()
 {
-	logger::info("Loading effects");
+	logger::info("[ENBPP] Loading effects");
 
 	for (auto& [name, effect] : effects) {
 		effect->Load();
 	}
 
-	logger::info("Loaded effects");
+	logger::info("[ENBPP] Loaded effects");
 }
 
 void EffectManager::SaveEffects()
 {
-	logger::info("Saving effects");
+	logger::info("[ENBPP] Saving effects");
 
 	for (auto& [name, effect] : effects) {
 		effect->Save();
 	}
 
-	logger::info("Saved effects");
+	logger::info("[ENBPP] Saved effects");
 }
 
 void EffectManager::ExecuteEffects()
@@ -328,7 +328,7 @@ void EffectManager::CreateQuadGeometry()
 			vertexShaderBlob->GetBufferSize(),
 			inputLayout.GetAddressOf());
 		if (FAILED(hr)) {
-			logger::error("Failed to create shared input layout for ENB effects");
+			logger::error("[ENBPP] Failed to create shared input layout for ENB effects");
 		}
 	}
 }
@@ -380,18 +380,18 @@ void EffectManager::CreateCopyShaders()
 
 	if (FAILED(hr)) {
 		if (errorBlob) {
-			logger::error("Failed to compile copy pixel shader: {}", static_cast<char*>(errorBlob->GetBufferPointer()));
+			logger::error("[ENBPP] Failed to compile copy pixel shader: {}", static_cast<char*>(errorBlob->GetBufferPointer()));
 		}
 		return;
 	}
 
 	hr = globals::d3d::device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, copyPixelShader.GetAddressOf());
 	if (FAILED(hr)) {
-		logger::error("Failed to create copy pixel shader");
+		logger::error("[ENBPP] Failed to create copy pixel shader");
 		return;
 	}
 
-	logger::info("Created texture copy shaders successfully");
+	logger::info("[ENBPP] Created texture copy shaders successfully");
 }
 
 void EffectManager::CreateColorCorrectionShader()
@@ -422,14 +422,14 @@ void EffectManager::CreateColorCorrectionShader()
 
 	if (FAILED(hr)) {
 		if (errorBlob) {
-			logger::error("Failed to compile color correction compute shader: {}", static_cast<char*>(errorBlob->GetBufferPointer()));
+			logger::error("[ENBPP] Failed to compile color correction compute shader: {}", static_cast<char*>(errorBlob->GetBufferPointer()));
 		}
 		return;
 	}
 
 	hr = globals::d3d::device->CreateComputeShader(csBlob->GetBufferPointer(), csBlob->GetBufferSize(), nullptr, colorCorrectionComputeShader.GetAddressOf());
 	if (FAILED(hr)) {
-		logger::error("Failed to create color correction compute shader");
+		logger::error("[ENBPP] Failed to create color correction compute shader");
 		return;
 	}
 
@@ -442,11 +442,11 @@ void EffectManager::CreateColorCorrectionShader()
 
 	hr = globals::d3d::device->CreateBuffer(&cbDesc, nullptr, colorCorrectionConstantBuffer.GetAddressOf());
 	if (FAILED(hr)) {
-		logger::error("Failed to create color correction constant buffer");
+		logger::error("[ENBPP] Failed to create color correction constant buffer");
 		return;
 	}
 
-	logger::info("Created color correction compute shader successfully");
+	logger::info("[ENBPP] Created color correction compute shader successfully");
 }
 
 void EffectManager::CreateCommonTextures()
@@ -684,9 +684,9 @@ void EffectManager::CreateCommonTextures()
 		commonTextureCache[name] = std::move(fixedTexture);
 	}
 
-	logger::info("Created bloom render targets: 1024, 512, 256, 128, 64, 32, 16");
+	logger::info("[ENBPP] Created bloom render targets: 1024, 512, 256, 128, 64, 32, 16");
 
-	logger::info("Created shared common textures: TextureBloom, TextureLens, RenderTargetRGBA32, RenderTargetRGBA64, RenderTargetRGBA64F, RenderTargetR16F, RenderTargetR32F, RenderTargetRGB32F, TextureAdaptation, TextureAperture");
+	logger::info("[ENBPP] Created shared common textures: TextureBloom, TextureLens, RenderTargetRGBA32, RenderTargetRGBA64, RenderTargetRGBA64F, RenderTargetR16F, RenderTargetR32F, RenderTargetRGB32F, TextureAdaptation, TextureAperture");
 }
 
 void EffectManager::UpdateCommonData()
@@ -843,7 +843,7 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 void EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11RenderTargetView* a_dest)
 {
 	if (!a_source || !a_dest || !copyPixelShader) {
-		logger::critical("Invalid parameters or shaders not initialized for texture copy");
+		logger::critical("[ENBPP] Invalid parameters or shaders not initialized for texture copy");
 		return;
 	}
 
@@ -866,7 +866,7 @@ void EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11Render
 void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 {
 	if (!textureUAV || !colorCorrectionComputeShader || !colorCorrectionConstantBuffer) {
-		logger::warn("Invalid parameters or shaders not initialized for color correction");
+		logger::warn("[ENBPP] Invalid parameters or shaders not initialized for color correction");
 		return;
 	}
 
@@ -929,7 +929,7 @@ void EffectManager::LoadENBSettings()
 
 	SI_Error rc = ini.LoadFile(settingsPath.c_str());
 	if (rc < 0) {
-		logger::info("Could not load ENB settings from {}, using defaults", settingsPath.string());
+		logger::info("[ENBPP] Could not load ENB settings from {}, using defaults", settingsPath.string());
 		return;
 	}
 
@@ -954,7 +954,7 @@ void EffectManager::LoadENBSettings()
 	// Load LENS settings
 	LoadTimeOfDaySettings(ini, "LENS", "Amount", enbSettings.LENS.Amount);
 
-	logger::info("Loaded ENB settings from {}", settingsPath.string());
+	logger::info("[ENBPP] Loaded ENB settings from {}", settingsPath.string());
 }
 
 void EffectManager::SaveENBSettings()
@@ -990,9 +990,9 @@ void EffectManager::SaveENBSettings()
 
 	SI_Error rc = ini.SaveFile(settingsPath.c_str());
 	if (rc < 0) {
-		logger::error("Failed to save ENB settings to {}", settingsPath.string());
+		logger::error("[ENBPP] Failed to save ENB settings to {}", settingsPath.string());
 	} else {
-		logger::info("Saved ENB settings to {}", settingsPath.string());
+		logger::info("[ENBPP] Saved ENB settings to {}", settingsPath.string());
 	}
 }
 

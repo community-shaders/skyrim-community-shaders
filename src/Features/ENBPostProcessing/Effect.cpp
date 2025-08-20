@@ -16,7 +16,7 @@
 
 bool Effect::Load()
 {
-	logger::debug("Loading settings for effect '{}'", GetName());
+	logger::debug("[ENBPP] Loading settings for effect '{}'", GetName());
 
 	// Create ini file path based on effect name
 	std::filesystem::path iniPath = "enbseries";
@@ -24,7 +24,7 @@ bool Effect::Load()
 
 	// Check if file exists
 	if (!std::filesystem::exists(iniPath)) {
-		logger::debug("Could not find ini file '{}' for effect '{}', using defaults", iniPath.string(), GetName());
+		logger::debug("[ENBPP] Could not find ini file '{}' for effect '{}', using defaults", iniPath.string(), GetName());
 		return true;  // Not an error, just use defaults
 	}
 
@@ -45,13 +45,13 @@ bool Effect::Load()
 
 	selectedTechniqueIndex = std::clamp(selectedTechniqueIndex, 0u, (uint)uiTechniques.size() - 1u);
 
-	logger::info("Loaded settings from '{}' for effect '{}'", iniPath.string(), GetName());
+	logger::info("[ENBPP] Loaded settings from '{}' for effect '{}'", iniPath.string(), GetName());
 	return true;
 }
 
 void Effect::Save()
 {
-	logger::debug("Saving settings for effect '{}'", GetName());
+	logger::debug("[ENBPP] Saving settings for effect '{}'", GetName());
 
 	// Create ini file path based on effect name
 	std::filesystem::path iniPath = "enbseries";
@@ -78,41 +78,41 @@ void Effect::Save()
 
 		BOOL result = WritePrivateProfileStringA(section.c_str(), uiVar.displayName.c_str(), value.c_str(), iniPath.string().c_str());
 		if (!result) {
-			logger::warn("Failed to write key '{}' to ini file '{}'", uiVar.displayName, iniPath.string());
+			logger::warn("[ENBPP] Failed to write key '{}' to ini file '{}'", uiVar.displayName, iniPath.string());
 		}
 	}
 
 	std::string techniqueValue = std::to_string(selectedTechniqueIndex);
 	BOOL techniqueResult = WritePrivateProfileStringA(section.c_str(), "TECHNIQUE", techniqueValue.c_str(), iniPath.string().c_str());
 	if (!techniqueResult) {
-		logger::warn("Failed to write TECHNIQUE key to ini file '{}'", iniPath.string());
+		logger::warn("[ENBPP] Failed to write TECHNIQUE key to ini file '{}'", iniPath.string());
 	}
 
-	logger::info("Saved settings to '{}' for effect '{}'", iniPath.string(), GetName());
+	logger::info("[ENBPP] Saved settings to '{}' for effect '{}'", iniPath.string(), GetName());
 }
 
 bool Effect::Apply()
 {
-	logger::info("Applying effect '{}'", GetName());
+	logger::info("[ENBPP] Applying effect '{}'", GetName());
 
 	Unload();
 
 	if (!LoadFXFile()) {
 		errors.push_back("Failed to compile FX file");
-		logger::error("Failed to compile FX file for effect '{}'", GetName());
+		logger::error("[ENBPP] Failed to compile FX file for effect '{}'", GetName());
 		return false;
 	}
 
 	if (!Load()) {
 		errors.push_back("Failed to load settings");
-		logger::error("Failed to load settings for effect '{}'", GetName());
+		logger::error("[ENBPP] Failed to load settings for effect '{}'", GetName());
 		return false;
 	}
 
 	// Call virtual texture creation function
 	CreateEffectTextures();
 
-	logger::info("Successfully applied effect '{}'", GetName());
+	logger::info("[ENBPP] Successfully applied effect '{}'", GetName());
 	return true;
 }
 
@@ -130,7 +130,7 @@ void Effect::Unload()
 
 	errors.clear();
 
-	logger::info("Unloaded effect '{}'", GetName());
+	logger::info("[ENBPP] Unloaded effect '{}'", GetName());
 }
 
 bool Effect::LoadFXFile()
@@ -155,7 +155,7 @@ bool Effect::LoadFXFile()
 		std::string errorMsg = "Compilation failed";
 		if (errorBlob) {
 			errorMsg = std::string(static_cast<const char*>(errorBlob->GetBufferPointer()));
-			logger::error("Effect compilation failed: {}", errorMsg);
+			logger::error("[ENBPP] Effect compilation failed: {}", errorMsg);
 		}
 		errors.push_back(errorMsg);
 		return false;
@@ -178,7 +178,7 @@ bool Effect::LoadFXFile()
 
 	LoadUIVariables();
 
-	logger::debug("Successfully loaded FX file: {}", filePath.string());
+	logger::debug("[ENBPP] Successfully loaded FX file: {}", filePath.string());
 	return true;
 }
 
@@ -193,13 +193,13 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 	// Check if the technique sequence exists
 	auto sequenceIt = techniques.find(a_baseTechniqueName);
 	if (sequenceIt == techniques.end()) {
-		logger::error("Technique sequence '{}' not found", a_baseTechniqueName);
+		logger::error("[ENBPP] Technique sequence '{}' not found", a_baseTechniqueName);
 		return;
 	}
 
 	const auto& sequence = sequenceIt->second;
 
-	logger::debug("Executing technique sequence '{}' with {} techniques", a_baseTechniqueName, sequence.size());
+	logger::debug("[ENBPP] Executing technique sequence '{}' with {} techniques", a_baseTechniqueName, sequence.size());
 
 	auto sourceTexture = effect->GetVariableByName("TextureColor")->AsShaderResource();
 
@@ -208,7 +208,7 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 	for (size_t i = 0; i < sequence.size(); ++i) {
 		auto& techniqueInfo = sequence[i];
 
-		logger::debug("Executing technique {} in sequence '{}'", i, a_baseTechniqueName);
+		logger::debug("[ENBPP] Executing technique {} in sequence '{}'", i, a_baseTechniqueName);
 
 		D3DX11_TECHNIQUE_DESC techDesc;
 		techniqueInfo.technique->GetDesc(&techDesc);
@@ -279,11 +279,11 @@ void Effect::ExecuteTechnique(const std::string& techniqueName, Texture& input, 
 	// Find the technique
 	auto technique = effect->GetTechniqueByName(techniqueName.c_str());
 	if (!technique || !technique->IsValid()) {
-		logger::error("Technique '{}' not found or invalid", techniqueName);
+		logger::error("[ENBPP] Technique '{}' not found or invalid", techniqueName);
 		return;
 	}
 
-	logger::debug("Executing single technique '{}'", techniqueName);
+	logger::debug("[ENBPP] Executing single technique '{}'", techniqueName);
 
 	// Set input texture
 	auto sourceTexture = effect->GetVariableByName("TextureColor")->AsShaderResource();
@@ -325,7 +325,7 @@ void Effect::SetupCustomTextures()
 		std::string resourceName = GetResourceNameFromVariable(effectVar.Get());
 
 		if (!resourceName.empty()) {
-			logger::info("Loading texture for variable '{}': {}", varName, resourceName);
+			logger::info("[ENBPP] Loading texture for variable '{}': {}", varName, resourceName);
 
 			// Load the texture
 			auto srv = LoadTextureFromFile(resourceName);
@@ -334,10 +334,10 @@ void Effect::SetupCustomTextures()
 				auto shaderResourceVar = effectVar->AsShaderResource();
 				if (shaderResourceVar && shaderResourceVar->IsValid()) {
 					shaderResourceVar->SetResource(srv);
-					logger::info("Successfully bound texture '{}' to variable '{}'", resourceName, varName);
+					logger::info("[ENBPP] Successfully bound texture '{}' to variable '{}'", resourceName, varName);
 				}
 			} else {
-				logger::warn("Failed to load texture '{}' for variable '{}'", resourceName, varName);
+				logger::warn("[ENBPP] Failed to load texture '{}' for variable '{}'", resourceName, varName);
 			}
 		}
 	}
@@ -369,14 +369,14 @@ ID3D11ShaderResourceView* Effect::LoadTextureFromFile(const std::string& filenam
 	auto fileString = filepath.string();
 
 	if (FAILED(hr)) {
-		logger::error("Failed to load texture file: {} (HRESULT: 0x{:08X})", fileString, static_cast<uint32_t>(hr));
+		logger::error("[ENBPP] Failed to load texture file: {} (HRESULT: 0x{:08X})", fileString, static_cast<uint32_t>(hr));
 		return nullptr;
 	}
 
 	// Cache the loaded texture
 	customTextureCache[filename] = srv;
 
-	logger::info("Successfully loaded texture: {}", fileString);
+	logger::info("[ENBPP] Successfully loaded texture: {}", fileString);
 	return srv.Get();
 }
 
@@ -478,12 +478,12 @@ void Effect::LoadTechniques()
 		// Store the technique info in the correct sequence position
 		techniques[baseName][sequenceNumber] = { technique, renderTargetName };
 
-		logger::debug("Loaded technique '{}' as base '{}' sequence {}", techniqueName, baseName, sequenceNumber);
+		logger::debug("[ENBPP] Loaded technique '{}' as base '{}' sequence {}", techniqueName, baseName, sequenceNumber);
 	}
 
 	// Log the technique sequences found
 	for (const auto& [baseName, sequence] : techniques) {
-		logger::info("Technique sequence '{}' has {} techniques", baseName, sequence.size());
+		logger::info("[ENBPP] Technique sequence '{}' has {} techniques", baseName, sequence.size());
 	}
 }
 
@@ -534,11 +534,11 @@ void Effect::LoadUITechniques()
 			uiTech.displayName = uiName;
 			uiTechniques.push_back(uiTech);
 
-			logger::debug("Added UI technique '{}' with display name '{}'", techniqueName, uiName);
+			logger::debug("[ENBPP] Added UI technique '{}' with display name '{}'", techniqueName, uiName);
 		}
 	}
 
-	logger::info("Loaded {} UI techniques", uiTechniques.size());
+	logger::info("[ENBPP] Loaded {} UI techniques", uiTechniques.size());
 }
 
 std::string Effect::GetRenderTargetFromTechnique(ID3DX11EffectTechnique* technique)
@@ -646,7 +646,7 @@ ID3D11RenderTargetView* Effect::GetRenderTargetView(const std::string& renderTar
 	if (texture && texture->rtv)
 		return texture->rtv.Get();
 
-	logger::warn("Render target '{}' not found in cache, using fallback", renderTargetName);
+	logger::warn("[ENBPP] Render target '{}' not found in cache, using fallback", renderTargetName);
 	return fallback;
 }
 
@@ -709,7 +709,7 @@ void Effect::LoadUIVariables()
 		std::string widgetStr = GetUIAnnotation(variable, "UIWidget");
 		uiVar.widgetType = ParseWidgetType(widgetStr);
 
-		logger::debug("Variable '{}': UIWidget='{}', parsed as {}",
+		logger::debug("[ENBPP] Variable '{}': UIWidget='{}', parsed as {}",
 			uiVar.name, widgetStr, static_cast<int>(uiVar.widgetType));
 
 		// Parse UI properties based on type
@@ -736,10 +736,10 @@ void Effect::LoadUIVariables()
 			// Parse dropdown list if it's a dropdown widget
 			if (uiVar.widgetType == UIWidgetType::Dropdown) {
 				std::string listStr = GetUIAnnotation(variable, "UIList");
-				logger::debug("Variable '{}': UIList='{}'", uiVar.name, listStr);
+				logger::debug("[ENBPP] Variable '{}': UIList='{}'", uiVar.name, listStr);
 				if (!listStr.empty()) {
 					uiVar.dropdownItems = ParseDropdownList(listStr);
-					logger::debug("Parsed {} dropdown items", uiVar.dropdownItems.size());
+					logger::debug("[ENBPP] Parsed {} dropdown items", uiVar.dropdownItems.size());
 				}
 			}
 		}
@@ -751,17 +751,17 @@ void Effect::LoadUIVariables()
 
 		// Debug logging
 		if (uiVar.widgetType == UIWidgetType::Dropdown) {
-			logger::debug("Loaded UI variable '{}' with display name '{}', dropdown items: {}",
+			logger::debug("[ENBPP] Loaded UI variable '{}' with display name '{}', dropdown items: {}",
 				uiVar.name, uiVar.displayName, uiVar.dropdownItems.size());
 			for (const auto& item : uiVar.dropdownItems) {
-				logger::debug("  - {}", item);
+				logger::debug("[ENBPP]   - {}", item);
 			}
 		} else {
-			logger::debug("Loaded UI variable '{}' with display name '{}'", uiVar.name, uiVar.displayName);
+			logger::debug("[ENBPP] Loaded UI variable '{}' with display name '{}'", uiVar.name, uiVar.displayName);
 		}
 	}
 
-	logger::info("Loaded {} UI variables", uiVariables.size());
+	logger::info("[ENBPP] Loaded {} UI variables", uiVariables.size());
 }
 
 std::string Effect::GetUIAnnotation(ID3DX11EffectVariable* variable, const std::string& annotationName)
@@ -893,7 +893,7 @@ void Effect::LoadVariableFromString(UIVariable& uiVar, const std::string& value)
 			break;
 		}
 	} catch (const std::exception& e) {
-		logger::warn("Failed to parse value '{}' for variable '{}': {}", value, uiVar.name, e.what());
+		logger::warn("[ENBPP] Failed to parse value '{}' for variable '{}': {}", value, uiVar.name, e.what());
 	}
 }
 
@@ -1016,10 +1016,10 @@ void Effect::EnumerateAllVariables()
 		std::string varName = varDesc.Name;
 		variables[varName] = variable;
 
-		logger::debug("Enumerated variable: {}", varName);
+		logger::debug("[ENBPP] Enumerated variable: {}", varName);
 	}
 
-	logger::info("Enumerated {} effect variables", variables.size());
+	logger::info("[ENBPP] Enumerated {} effect variables", variables.size());
 }
 
 bool Effect::SetShaderResourceVariable(const std::string& variableName, ID3D11ShaderResourceView* resource)

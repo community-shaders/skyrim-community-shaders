@@ -92,5 +92,5 @@ void ENBAdaptation::CreateEffectTextures()
 		effectTextureCache["TextureCurrent"] = std::move(textureCurrent);
 	}
 
-	logger::info("Created adaptation textures: TextureCurrent (16x16)");
+	logger::info("[ENBPP] Created adaptation textures: TextureCurrent (16x16)");
 }

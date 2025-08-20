@@ -57,5 +57,5 @@ void ENBDepthOfField::CreateEffectTextures()
 		effectTextureCache["TextureAperture"] = std::move(textureAperture);
 	}
 
-	logger::info("Created depth of field textures: TextureFocus (1x1), TextureAperture (1x1)");
+	logger::info("[ENBPP] Created depth of field textures: TextureFocus (1x1), TextureAperture (1x1)");
 }

@@ -12,7 +12,7 @@ Downsampler& Downsampler::GetSingleton()
 
 void Downsampler::Initialize()
 {
-	logger::info("Downsampler initialized");
+	logger::info("[ENBPP] Downsampler initialized");
 }
 
 Downsampler::DownsampleChain Downsampler::CreateDownsampleChain(UINT baseWidth, UINT baseHeight, UINT targetWidth, UINT targetHeight, DXGI_FORMAT format)
@@ -77,7 +77,7 @@ Downsampler::DownsampleChain Downsampler::CreateDownsampleChain(UINT baseWidth, 
 	chain.totalMipLevels = totalMipLevels;
 	chain.format = format;
 
-	logger::info("Created downsample chain: {}x{} -> {}x{} (mip level {}/{})",
+	logger::info("[ENBPP] Created downsample chain: {}x{} -> {}x{} (mip level {}/{})",
 		baseWidth, baseHeight,
 		actualTargetWidth, actualTargetHeight,
 		targetMipLevel, totalMipLevels - 1);
