@@ -7,7 +7,7 @@ void ENBEffect::Execute()
 	auto& effectManager = EffectManager::GetSingleton();
 
 	auto textureColorTemp = effectManager.GetCommonTexture("TextureColorTemp");
-	
+
 	auto textureOriginal = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
 	Texture textureColor{};
