@@ -52,7 +52,7 @@ void ENBEffect::UpdateEffectVariables()
 	auto textureLens = effect->GetVariableByName("TextureLens")->AsShaderResource();
 	auto textureAdaptation = effect->GetVariableByName("TextureAdaptation")->AsShaderResource();
 	auto textureAperture = effect->GetVariableByName("TextureAperture")->AsShaderResource();
-	
+
 	auto& effectManager = EffectManager::GetSingleton();
 
 	if (textureBloom && textureBloom->IsValid()) {
