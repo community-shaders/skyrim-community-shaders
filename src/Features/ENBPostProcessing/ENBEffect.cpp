@@ -17,7 +17,9 @@ void ENBEffect::Execute()
 
 	UpdateEffectVariables();
 
-	ExecuteTechniqueSequence(GetSelectedTechnique(), textureColor, *textureColorTemp);
+	globals::d3d::context->CopyResource(textureColorTemp->texture.Get(), textureOriginal.texture);
+
+	ExecuteTechniqueSequence(GetSelectedTechnique(), *textureColorTemp, textureColor);
 
 	auto textureFramebuffer1 = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
 	auto textureFramebuffer2 = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
@@ -53,6 +55,7 @@ void ENBEffect::UpdateEffectVariables()
 
 	float4 enbParams01{};
 	enbParams01.x = effectManager.ComputeTimeOfDayValue(effectManager.enbSettings.BLOOM.Amount);
+	enbParams01.y = effectManager.ComputeTimeOfDayValue(effectManager.enbSettings.LENS.Amount);
 
 	if (ENBParams01 && ENBParams01->IsValid())
 		ENBParams01->SetRawValue(&enbParams01, 0, sizeof(enbParams01));

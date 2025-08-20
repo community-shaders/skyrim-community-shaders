@@ -197,6 +197,7 @@ void EffectManager::RenderImGui()
 				ImGui::Checkbox("ForceMinMaxValues", &enbSettings.ADAPTATION.ForceMinMaxValues);
 				ImGui::DragFloat("AdaptationMin", &enbSettings.ADAPTATION.AdaptationMin, 0.01f, 0.0f, 1.0f);
 				ImGui::DragFloat("AdaptationMax", &enbSettings.ADAPTATION.AdaptationMax, 0.01f, 0.0f, 5.0f);
+				ImGui::DragFloat("AdaptationTime", &enbSettings.ADAPTATION.AdaptationTime, 0.1f, 0.0f, 10.0f);
 
 				ImGui::TreePop();
 			}
@@ -583,6 +584,31 @@ void EffectManager::CreateCommonTextures()
 		commonTextureCache.insert({ "TextureAperture", apertureTexture });
 	}
 
+	// Create fixed-size render targets for bloom/lens
+	std::vector<std::pair<std::string, UINT>> fixedSizes = {
+		{ "RenderTarget1024", 1024 },
+		{ "RenderTarget512", 512 },
+		{ "RenderTarget256", 256 },
+		{ "RenderTarget128", 128 },
+		{ "RenderTarget64", 64 },
+		{ "RenderTarget32", 32 },
+		{ "RenderTarget16", 16 }
+	};
+
+	for (auto& [name, size] : fixedSizes) {
+		texDesc.Width = size;
+		texDesc.Height = size;
+
+		Effect::Texture fixedTexture{};
+		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, fixedTexture.texture.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateRenderTargetView(fixedTexture.texture.Get(), nullptr, fixedTexture.rtv.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateShaderResourceView(fixedTexture.texture.Get(), nullptr, fixedTexture.srv.GetAddressOf()));
+
+		commonTextureCache[name] = std::move(fixedTexture);
+	}
+
+	logger::info("Created bloom render targets: 1024, 512, 256, 128, 64, 32, 16");
+
 	logger::info("Created shared common textures: TextureBloom, TextureLens, RenderTargetRGBA32, RenderTargetRGBA64, RenderTargetRGBA64F, RenderTargetR16F, RenderTargetR32F, RenderTargetRGB32F, TextureAdaptation, TextureAperture");
 }
 
@@ -608,7 +634,7 @@ void EffectManager::UpdateCommonData()
 		float aspect = state->screenSize.x / state->screenSize.y;
 
 		commonData.screenSize[0] = state->screenSize.x;
-		commonData.screenSize[1] = state->screenSize.y;
+		commonData.screenSize[1] = 1.0f / state->screenSize.x;
 		commonData.screenSize[2] = aspect;
 		commonData.screenSize[3] = 1.0f / aspect;
 	}
@@ -744,6 +770,24 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 		renderTargetRGB32F->SetResource(commonTextureCache["RenderTargetRGB32F"].srv.Get());
 	}
 
+	// Bind fixed-size render targets
+	std::vector<std::pair<std::string, UINT>> fixedSizes = {
+		{ "RenderTarget1024", 1024 },
+		{ "RenderTarget512", 512 },
+		{ "RenderTarget256", 256 },
+		{ "RenderTarget128", 128 },
+		{ "RenderTarget64", 64 },
+		{ "RenderTarget32", 32 },
+		{ "RenderTarget16", 16 }
+	};
+
+	for (const auto& [name, size] : fixedSizes) {
+		auto renderTarget = effect->GetVariableByName(name.c_str())->AsShaderResource();
+		if (renderTarget && renderTarget->IsValid()) {
+			renderTarget->SetResource(commonTextureCache[name].srv.Get());
+		}
+	}
+
 	// Set variable data
 	if (timer && timer->IsValid()) {
 		timer->SetRawValue(commonData.timer, 0, sizeof(commonData.timer));
@@ -870,6 +914,7 @@ void EffectManager::LoadENBSettings()
 	enbSettings.ADAPTATION.ForceMinMaxValues = ini.GetBoolValue("ADAPTATION", "ForceMinMaxValues", false);
 	enbSettings.ADAPTATION.AdaptationMin = static_cast<float>(ini.GetDoubleValue("ADAPTATION", "AdaptationMin", 0.0));
 	enbSettings.ADAPTATION.AdaptationMax = static_cast<float>(ini.GetDoubleValue("ADAPTATION", "AdaptationMax", 1.0));
+	enbSettings.ADAPTATION.AdaptationTime = static_cast<float>(ini.GetDoubleValue("ADAPTATION", "AdaptationTime", 1.0));
 
 	// Load DEPTHOFFIELD settings
 	enbSettings.DEPTHOFFIELD.FocusingTime = static_cast<float>(ini.GetDoubleValue("DEPTHOFFIELD", "FocusingTime", 1.0));
@@ -903,6 +948,7 @@ void EffectManager::SaveENBSettings()
 	ini.SetBoolValue("ADAPTATION", "ForceMinMaxValues", enbSettings.ADAPTATION.ForceMinMaxValues);
 	ini.SetDoubleValue("ADAPTATION", "AdaptationMin", enbSettings.ADAPTATION.AdaptationMin);
 	ini.SetDoubleValue("ADAPTATION", "AdaptationMax", enbSettings.ADAPTATION.AdaptationMax);
+	ini.SetDoubleValue("ADAPTATION", "AdaptationTime", enbSettings.ADAPTATION.AdaptationTime);
 
 	// Save DEPTHOFFIELD settings
 	ini.SetDoubleValue("DEPTHOFFIELD", "FocusingTime", enbSettings.DEPTHOFFIELD.FocusingTime);

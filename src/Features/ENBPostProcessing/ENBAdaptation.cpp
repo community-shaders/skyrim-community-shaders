@@ -24,26 +24,28 @@ void ENBAdaptation::Execute()
 
 	ExecuteTechnique("Downsample", nullInputTexture, adaptationTextures["TextureCurrent"]);
 
+	auto textureCurrent = effect->GetVariableByName("TextureCurrent")->AsShaderResource();
+	if (textureCurrent && textureCurrent->IsValid()) {
+		textureCurrent->SetResource(adaptationTextures["TextureCurrent"].srv.Get());
+	}
+
 	auto* textureAdaptation = effectManager.GetCommonTexture("TextureAdaptation");
 	if (!textureAdaptation) {
 		logger::error("ENBAdaptation: TextureAdaptation not available");
 		return;
 	}
 
-	// Swap adaptation so current frame takes last frame as input
-	std::swap(*textureAdaptation, adaptationTextures["TexturePrevious"]);
-
-	auto textureCurrent = effect->GetVariableByName("TextureCurrent")->AsShaderResource();
-	if (textureCurrent && textureCurrent->IsValid()) {
-		textureCurrent->SetResource(adaptationTextures["TextureCurrent"].srv.Get());
-	}
+	Texture tempTexture = *textureAdaptation;
+	*effectManager.GetCommonTexture("TextureAdaptation") = adaptationTextures["TexturePrevious"];
+	adaptationTextures["TexturePrevious"] = tempTexture;
 
 	auto texturePrevious = effect->GetVariableByName("TexturePrevious")->AsShaderResource();
 	if (texturePrevious && texturePrevious->IsValid()) {
 		texturePrevious->SetResource(adaptationTextures["TexturePrevious"].srv.Get());
 	}
 
-	ExecuteTechnique(GetSelectedTechnique(), nullInputTexture, *textureAdaptation);
+
+	ExecuteTechnique(GetSelectedTechnique(), nullInputTexture, *effectManager.GetCommonTexture("TextureAdaptation"));
 }
 
 void ENBAdaptation::UpdateEffectVariables()
@@ -135,4 +137,16 @@ void ENBAdaptation::UpdateAdaptationVariables()
 			variable->SetResource(adaptationTexture.srv.Get());
 		}
 	}
+
+	auto& effectManager = EffectManager::GetSingleton();
+
+	float4 adaptationParameters{};
+	adaptationParameters.x = effectManager.enbSettings.ADAPTATION.AdaptationMin;
+	adaptationParameters.y = effectManager.enbSettings.ADAPTATION.AdaptationMax;
+	adaptationParameters.z = effectManager.enbSettings.ADAPTATION.AdaptationSensitivity;
+	adaptationParameters.w = effectManager.enbSettings.ADAPTATION.AdaptationTime * (*globals::game::deltaTime);
+
+	auto AdaptationParameters = effect->GetVariableByName("AdaptationParameters")->AsVector();
+	if (AdaptationParameters && AdaptationParameters->IsValid())
+		AdaptationParameters->SetRawValue(&adaptationParameters, 0, sizeof(adaptationParameters));
 }

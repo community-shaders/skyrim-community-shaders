@@ -141,6 +141,7 @@ public:
 			bool ForceMinMaxValues = false;
 			float AdaptationMin = 0.0f;
 			float AdaptationMax = 1.0f;
+			float AdaptationTime = 1.0f;
 		} ADAPTATION;
 
 		struct

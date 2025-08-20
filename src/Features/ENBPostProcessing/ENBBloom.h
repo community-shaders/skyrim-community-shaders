@@ -22,6 +22,5 @@ public:
 	virtual void Unload() override;
 
 private:
-	void CreateBloomTextures();
 	void UpdateBloomVariables();
 };
