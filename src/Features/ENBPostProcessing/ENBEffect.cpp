@@ -43,7 +43,6 @@ void ENBEffect::UpdateEffectVariables()
 		{ 1.0f, 1.0f, 1.0f, 1.0f }
 	};
 
-
 	params01[4].w = 0.0f;
 	params01[5].w = 0.0f;
 

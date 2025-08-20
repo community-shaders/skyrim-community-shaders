@@ -55,7 +55,7 @@ public:
 
 	// Copy shader resources
 	ComPtr<ID3D11PixelShader> copyPixelShader;
-	
+
 	// Color correction compute shader resources
 	ComPtr<ID3D11ComputeShader> colorCorrectionComputeShader;
 	ComPtr<ID3D11Buffer> colorCorrectionConstantBuffer;
@@ -84,7 +84,7 @@ public:
 
 	// Texture copy using pixel shader
 	void CopyTexture(ID3D11ShaderResourceView* source, ID3D11RenderTargetView* destination);
-	
+
 	// Color correction using compute shader
 	void ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV);
 
@@ -166,7 +166,7 @@ public:
 	void RenderTimeOfDaySettings(const std::string& prefix, TimeOfDaySettings& settings);
 	void LoadTimeOfDaySettings(CSimpleIniA& ini, const std::string& section, const std::string& prefix, TimeOfDaySettings& settings);
 	void SaveTimeOfDaySettings(CSimpleIniA& ini, const std::string& section, const std::string& prefix, const TimeOfDaySettings& settings);
-	
+
 	// Time of day computation
 	float ComputeTimeOfDayValue(const TimeOfDaySettings& settings);
 };

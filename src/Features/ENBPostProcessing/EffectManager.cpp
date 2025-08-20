@@ -90,7 +90,7 @@ void EffectManager::ExecuteEffects()
 
 	// Perform shared downsampling once
 	Downsampler::GetSingleton().Downsample(textureOriginal.SRV, sharedDownsampleChain);
-	
+
 	// Backup current render state
 	ComPtr<ID3D11RasterizerState> previousRS;
 	ComPtr<ID3D11BlendState> previousBS;
@@ -406,7 +406,7 @@ void EffectManager::CreateColorCorrectionShader()
 		{
 			float4 color = OutputTexture[id.xy];
 			color.rgb = lerp(color.rgb * color.rgb, color.rgb, GammaCurve);
-			color.rgb *= Brightness;		
+			color.rgb *= Brightness;
 			OutputTexture[id.xy] = color;
 		}
 	)";
@@ -431,7 +431,7 @@ void EffectManager::CreateColorCorrectionShader()
 	// Create constant buffer
 	D3D11_BUFFER_DESC cbDesc = {};
 	cbDesc.Usage = D3D11_USAGE_DYNAMIC;
-	cbDesc.ByteWidth = sizeof(float) * 4; // Brightness, GammaCurve, padding[2]
+	cbDesc.ByteWidth = sizeof(float) * 4;  // Brightness, GammaCurve, padding[2]
 	cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 	cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
@@ -478,7 +478,7 @@ void EffectManager::CreateCommonTextures()
 	{
 		D3D11_TEXTURE2D_DESC colorTempDesc = texDesc;
 		colorTempDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-		
+
 		Effect::Texture textureColor{};
 		DX::ThrowIfFailed(device->CreateTexture2D(&colorTempDesc, nullptr, textureColor.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(textureColor.texture.Get(), nullptr, textureColor.rtv.GetAddressOf()));
@@ -807,8 +807,8 @@ void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 		float* cbData = static_cast<float*>(mapped.pData);
 		cbData[0] = enbSettings.COLORCORRECTION.Brightness;
 		cbData[1] = enbSettings.COLORCORRECTION.GammaCurve;
-		cbData[2] = 0.0f; // padding
-		cbData[3] = 0.0f; // padding
+		cbData[2] = 0.0f;  // padding
+		cbData[3] = 0.0f;  // padding
 		context->Unmap(colorCorrectionConstantBuffer.Get(), 0);
 	}
 
@@ -844,42 +844,43 @@ void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 	context->CSSetUnorderedAccessViews(0, 1, previousUAVs, nullptr);
 
 	// Clean up retrieved interfaces
-	if (previousUAVs[0]) previousUAVs[0]->Release();
+	if (previousUAVs[0])
+		previousUAVs[0]->Release();
 }
 
 void EffectManager::LoadENBSettings()
 {
 	CSimpleIniA ini;
 	ini.SetUnicode();
-	
+
 	std::filesystem::path settingsPath = "enbseries.ini";
-	
+
 	SI_Error rc = ini.LoadFile(settingsPath.c_str());
 	if (rc < 0) {
 		logger::info("Could not load ENB settings from {}, using defaults", settingsPath.string());
 		return;
 	}
-	
+
 	// Load COLORCORRECTION settings
 	enbSettings.COLORCORRECTION.Brightness = static_cast<float>(ini.GetDoubleValue("COLORCORRECTION", "Brightness", 1.0));
 	enbSettings.COLORCORRECTION.GammaCurve = static_cast<float>(ini.GetDoubleValue("COLORCORRECTION", "GammaCurve", 1.0));
-	
+
 	// Load ADAPTATION settings
 	enbSettings.ADAPTATION.AdaptationSensitivity = static_cast<float>(ini.GetDoubleValue("ADAPTATION", "AdaptationSensitivity", 1.0));
 	enbSettings.ADAPTATION.ForceMinMaxValues = ini.GetBoolValue("ADAPTATION", "ForceMinMaxValues", false);
 	enbSettings.ADAPTATION.AdaptationMin = static_cast<float>(ini.GetDoubleValue("ADAPTATION", "AdaptationMin", 0.0));
 	enbSettings.ADAPTATION.AdaptationMax = static_cast<float>(ini.GetDoubleValue("ADAPTATION", "AdaptationMax", 1.0));
-	
+
 	// Load DEPTHOFFIELD settings
 	enbSettings.DEPTHOFFIELD.FocusingTime = static_cast<float>(ini.GetDoubleValue("DEPTHOFFIELD", "FocusingTime", 1.0));
 	enbSettings.DEPTHOFFIELD.ApertureTime = static_cast<float>(ini.GetDoubleValue("DEPTHOFFIELD", "ApertureTime", 1.0));
-	
+
 	// Load BLOOM settings
 	LoadTimeOfDaySettings(ini, "BLOOM", "Amount", enbSettings.BLOOM.Amount);
-	
+
 	// Load LENS settings
 	LoadTimeOfDaySettings(ini, "LENS", "Amount", enbSettings.LENS.Amount);
-	
+
 	logger::info("Loaded ENB settings from {}", settingsPath.string());
 }
 
@@ -887,32 +888,32 @@ void EffectManager::SaveENBSettings()
 {
 	CSimpleIniA ini;
 	ini.SetUnicode();
-	
+
 	std::filesystem::path settingsPath = "enbseries.ini";
-	
+
 	// Try to load existing file first to preserve other sections
 	ini.LoadFile(settingsPath.c_str());
-	
+
 	// Save COLORCORRECTION settings
 	ini.SetDoubleValue("COLORCORRECTION", "Brightness", enbSettings.COLORCORRECTION.Brightness);
 	ini.SetDoubleValue("COLORCORRECTION", "GammaCurve", enbSettings.COLORCORRECTION.GammaCurve);
-	
+
 	// Save ADAPTATION settings
 	ini.SetDoubleValue("ADAPTATION", "AdaptationSensitivity", enbSettings.ADAPTATION.AdaptationSensitivity);
 	ini.SetBoolValue("ADAPTATION", "ForceMinMaxValues", enbSettings.ADAPTATION.ForceMinMaxValues);
 	ini.SetDoubleValue("ADAPTATION", "AdaptationMin", enbSettings.ADAPTATION.AdaptationMin);
 	ini.SetDoubleValue("ADAPTATION", "AdaptationMax", enbSettings.ADAPTATION.AdaptationMax);
-	
+
 	// Save DEPTHOFFIELD settings
 	ini.SetDoubleValue("DEPTHOFFIELD", "FocusingTime", enbSettings.DEPTHOFFIELD.FocusingTime);
 	ini.SetDoubleValue("DEPTHOFFIELD", "ApertureTime", enbSettings.DEPTHOFFIELD.ApertureTime);
-	
+
 	// Save BLOOM settings
 	SaveTimeOfDaySettings(ini, "BLOOM", "Amount", enbSettings.BLOOM.Amount);
-	
+
 	// Save LENS settings
 	SaveTimeOfDaySettings(ini, "LENS", "Amount", enbSettings.LENS.Amount);
-	
+
 	SI_Error rc = ini.SaveFile(settingsPath.c_str());
 	if (rc < 0) {
 		logger::error("Failed to save ENB settings to {}", settingsPath.string());
@@ -934,7 +935,7 @@ void EffectManager::RenderTimeOfDaySettings(const std::string& prefix, TimeOfDay
 void EffectManager::LoadTimeOfDaySettings(CSimpleIniA& ini, const std::string& section, const std::string& prefix, TimeOfDaySettings& settings)
 {
 	const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night" };
-	
+
 	for (const auto& timeOfDay : timeOfDayNames) {
 		std::string key = prefix + timeOfDay;
 		settings[timeOfDay] = static_cast<float>(ini.GetDoubleValue(section.c_str(), key.c_str(), 1.0));
@@ -944,19 +945,26 @@ void EffectManager::LoadTimeOfDaySettings(CSimpleIniA& ini, const std::string& s
 void EffectManager::SaveTimeOfDaySettings(CSimpleIniA& ini, const std::string& section, const std::string& prefix, const TimeOfDaySettings& settings)
 {
 	const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night" };
-	
+
 	for (const auto& timeOfDay : timeOfDayNames) {
 		std::string key = prefix + timeOfDay;
 		// Need to access the settings through const reference
 		float value;
-		if (timeOfDay == "Dawn") value = settings.Dawn;
-		else if (timeOfDay == "Sunrise") value = settings.Sunrise;
-		else if (timeOfDay == "Day") value = settings.Day;
-		else if (timeOfDay == "Sunset") value = settings.Sunset;
-		else if (timeOfDay == "Dusk") value = settings.Dusk;
-		else if (timeOfDay == "Night") value = settings.Night;
-		else value = 1.0f;
-		
+		if (timeOfDay == "Dawn")
+			value = settings.Dawn;
+		else if (timeOfDay == "Sunrise")
+			value = settings.Sunrise;
+		else if (timeOfDay == "Day")
+			value = settings.Day;
+		else if (timeOfDay == "Sunset")
+			value = settings.Sunset;
+		else if (timeOfDay == "Dusk")
+			value = settings.Dusk;
+		else if (timeOfDay == "Night")
+			value = settings.Night;
+		else
+			value = 1.0f;
+
 		ini.SetDoubleValue(section.c_str(), key.c_str(), value);
 	}
 }
@@ -965,18 +973,18 @@ float EffectManager::ComputeTimeOfDayValue(const TimeOfDaySettings& settings)
 {
 	// timeOfDay1: [Dawn, Sunrise, Day, Sunset] (x, y, z, w)
 	// timeOfDay2: [Dusk, Night, 0, 0] (x, y, z, w)
-	
+
 	float result = 0.0f;
-	
+
 	// Apply timeOfDay1 contributions
 	result += commonData.timeOfDay1[0] * settings.Dawn;     // Dawn
 	result += commonData.timeOfDay1[1] * settings.Sunrise;  // Sunrise
 	result += commonData.timeOfDay1[2] * settings.Day;      // Day
 	result += commonData.timeOfDay1[3] * settings.Sunset;   // Sunset
-	
+
 	// Apply timeOfDay2 contributions
-	result += commonData.timeOfDay2[0] * settings.Dusk;     // Dusk
-	result += commonData.timeOfDay2[1] * settings.Night;    // Night
-	
+	result += commonData.timeOfDay2[0] * settings.Dusk;   // Dusk
+	result += commonData.timeOfDay2[1] * settings.Night;  // Night
+
 	return result;
 }
