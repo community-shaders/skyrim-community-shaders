@@ -23,6 +23,7 @@ void EffectManager::Initialize()
 	CreateCommonResources();
 	RegisterEffects();
 	ApplyEffects();
+	LoadENBSettings();
 }
 
 void EffectManager::RegisterEffects()
@@ -154,38 +155,93 @@ Effect::Texture* EffectManager::GetCommonTexture(const std::string& name)
 
 void EffectManager::RenderImGui()
 {
-	if (ImGui::CollapsingHeader("Effect Manager", ImGuiTreeNodeFlags_DefaultOpen)) {
-		if (ImGui::Button("Apply")) {
-			ApplyEffects();
-		}
+	// Two-column layout
+	if (ImGui::BeginTable("EffectManagerTable", 2, ImGuiTableFlags_Resizable)) {
+		ImGui::TableSetupColumn("ENB Settings", ImGuiTableColumnFlags_WidthFixed, 400.0f);
+		ImGui::TableSetupColumn("Effects", ImGuiTableColumnFlags_WidthStretch);
+			
+		ImGui::TableNextRow();
+			
+		// Left Side - ENB Settings
+		ImGui::TableSetColumnIndex(0);
+		if (ImGui::BeginChild("ENBSettings", ImVec2(0, 0), false)) {
 
-		ImGui::SameLine();
+			if (ImGui::Button("Apply")) {
+				ApplyEffects();
+			}
 
-		if (ImGui::Button("Load")) {
-			LoadEffects();
-		}
+			ImGui::SameLine();
 
-		ImGui::SameLine();
+			if (ImGui::Button("Load")) {
+				LoadEffects();
+			}
 
-		if (ImGui::Button("Save")) {
-			SaveEffects();
-		}
+			ImGui::SameLine();
 
-		for (auto& [name, effect] : effects) {
-			bool isCompiled = effect->IsCompiled();
-			const auto& errors = effect->GetErrors();
+			if (ImGui::Button("Save")) {
+				SaveEffects();
+				SaveENBSettings();
+			}
 
-			if (ImGui::TreeNodeEx(effect->GetName().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-				if (isCompiled) {
-					effect->RenderImGui();
-				} else {
-					for (const auto& error : errors) {
-						ImGui::BulletText("%s", error.c_str());
-					}
-				}
+			if (ImGui::TreeNodeEx("COLORCORRECTION", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::DragFloat("Brightness", &enbSettings.COLORCORRECTION.Brightness);
+				ImGui::DragFloat("GammaCurve", &enbSettings.COLORCORRECTION.GammaCurve);
+
+				ImGui::TreePop();
+			}
+
+			if (ImGui::TreeNodeEx("ADAPTATION", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::DragFloat("AdaptationSensitivity", &enbSettings.ADAPTATION.AdaptationSensitivity);
+				ImGui::Checkbox("ForceMinMaxValues", &enbSettings.ADAPTATION.ForceMinMaxValues);
+				ImGui::DragFloat("AdaptationMin", &enbSettings.ADAPTATION.AdaptationMin);
+				ImGui::DragFloat("AdaptationMax", &enbSettings.ADAPTATION.AdaptationMax);
+
+				ImGui::TreePop();
+			}
+
+			if (ImGui::TreeNodeEx("DEPTHOFFIELD", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::DragFloat("FocusingTime", &enbSettings.DEPTHOFFIELD.FocusingTime);
+				ImGui::DragFloat("ApertureTime", &enbSettings.DEPTHOFFIELD.ApertureTime);
+
+				ImGui::TreePop();
+			}
+
+			if (ImGui::TreeNodeEx("BLOOM", ImGuiTreeNodeFlags_DefaultOpen)) {
+				RenderTimeOfDaySettings("Amount", enbSettings.BLOOM.Amount);
+
+				ImGui::TreePop();
+			}
+
+			if (ImGui::TreeNodeEx("LENS", ImGuiTreeNodeFlags_DefaultOpen)) {
+				RenderTimeOfDaySettings("Amount", enbSettings.LENS.Amount);
+
 				ImGui::TreePop();
 			}
 		}
+		ImGui::EndChild();
+
+		// Right side - Effects
+		ImGui::TableSetColumnIndex(1);
+		if (ImGui::BeginChild("Effects", ImVec2(0, 0), false)) {
+			for (auto& [name, effect] : effects) {
+				bool isCompiled = effect->IsCompiled();
+				const auto& errors = effect->GetErrors();
+
+				if (ImGui::TreeNodeEx(effect->GetName().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+					if (isCompiled) {
+						effect->RenderImGui();
+					} else {
+						for (const auto& error : errors) {
+							ImGui::BulletText("%s", error.c_str());
+						}
+					}
+					ImGui::TreePop();
+				}
+			}
+		}
+		ImGui::EndChild();
+			
+		ImGui::EndTable();
 	}
 }
 
@@ -672,4 +728,26 @@ void EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11Render
 
 	// Draw fullscreen quad
 	context->Draw(4, 0);
+}
+
+void EffectManager::LoadENBSettings()
+{
+	// Initialize with default values (already set in struct)
+	logger::info("Loaded ENB settings");
+}
+
+void EffectManager::SaveENBSettings()
+{
+	// TODO: Save to file/registry if needed
+	logger::debug("Saved ENB settings");
+}
+
+void EffectManager::RenderTimeOfDaySettings(const std::string& prefix, TimeOfDaySettings& settings)
+{
+	const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night" };
+	
+	for (const auto& timeOfDay : timeOfDayNames) {
+		std::string label = prefix + timeOfDay;
+		ImGui::DragFloat(label.c_str(), &settings[timeOfDay]);
+	}
 }

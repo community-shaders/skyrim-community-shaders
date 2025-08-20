@@ -90,4 +90,57 @@ public:
 
 private:
 	Downsampler::DownsampleChain sharedDownsampleChain;
+	
+	// Time of day setting helper
+	struct TimeOfDaySettings {
+		float Dawn = 1.0f;
+		float Sunrise = 1.0f;
+		float Day = 1.0f;
+		float Sunset = 1.0f;
+		float Dusk = 1.0f;
+		float Night = 1.0f;
+		
+		float& operator[](const std::string& timeOfDay) {
+			if (timeOfDay == "Dawn") return Dawn;
+			if (timeOfDay == "Sunrise") return Sunrise;
+			if (timeOfDay == "Day") return Day;
+			if (timeOfDay == "Sunset") return Sunset;
+			if (timeOfDay == "Dusk") return Dusk;
+			if (timeOfDay == "Night") return Night;
+			return Dawn; // fallback
+		}
+	};
+
+	// ENB settings storage
+	struct ENBSettings {
+		struct {
+			float Brightness = 1.0f;
+			float GammaCurve = 1.0f;
+		} COLORCORRECTION;
+		
+		struct {
+			float AdaptationSensitivity = 1.0f;
+			bool ForceMinMaxValues = false;
+			float AdaptationMin = 0.0f;
+			float AdaptationMax = 1.0f;
+		} ADAPTATION;
+		
+		struct {
+			float FocusingTime = 1.0f;
+			float ApertureTime = 1.0f;
+		} DEPTHOFFIELD;
+		
+		struct {
+			TimeOfDaySettings Amount;
+		} BLOOM;
+		
+		struct {
+			TimeOfDaySettings Amount;
+		} LENS;
+	} enbSettings;
+	
+	// Settings management
+	void LoadENBSettings();
+	void SaveENBSettings();
+	void RenderTimeOfDaySettings(const std::string& prefix, TimeOfDaySettings& settings);
 };
