@@ -42,7 +42,8 @@ bool Effect::Load()
 	}
 	
 	selectedTechniqueIndex = static_cast<uint32_t>(GetPrivateProfileIntA(section.c_str(), "TECHNIQUE", selectedTechniqueIndex, iniPath.string().c_str()));
-	selectedTechniqueIndex--; // 1-indexed inis
+
+	selectedTechniqueIndex = std::clamp(selectedTechniqueIndex, 0u, (uint)uiTechniques.size() - 1u);
 
 	logger::info("Loaded settings from '{}' for effect '{}'", iniPath.string(), GetName());
 	return true;
@@ -81,7 +82,7 @@ void Effect::Save()
 		}
 	}
 	
-	std::string techniqueValue = std::to_string(selectedTechniqueIndex + 1);  // 1-indexed inis
+	std::string techniqueValue = std::to_string(selectedTechniqueIndex);
 	BOOL techniqueResult = WritePrivateProfileStringA(section.c_str(), "TECHNIQUE", techniqueValue.c_str(), iniPath.string().c_str());
 	if (!techniqueResult) {
 		logger::warn("Failed to write TECHNIQUE key to ini file '{}'", iniPath.string());
@@ -206,52 +207,52 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 
 		logger::debug("Executing technique {} in sequence '{}'", i, a_baseTechniqueName);
 
-		// Determine input and output for this technique
-		ID3D11ShaderResourceView* inputSRV;
-		ID3D11RenderTargetView* outputRTV;
-
-		if (renderedToOutput) {
-			inputSRV = a_output.srv.Get();
-		} else {
-			inputSRV = a_input.srv.Get();
-		}
-
-		if (!techniqueInfo.renderTargetName.empty()) {
-			outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, a_input.rtv.Get());
-		} else {
-			if (renderedToOutput) {
-				outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, a_input.rtv.Get());
-			} else {
-				outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, a_output.rtv.Get());
-			}
-			// Swap if rendered to other texture
-			renderedToOutput = !renderedToOutput;
-		}
-
-		sourceTexture->AsShaderResource()->SetResource(inputSRV);
-		context->OMSetRenderTargets(1, &outputRTV, nullptr);
-
-		// Set viewport based on render target description
-		ComPtr<ID3D11Resource> resource;
-		outputRTV->GetResource(&resource);
-		ComPtr<ID3D11Texture2D> texture;
-		resource.As(&texture);
-		D3D11_TEXTURE2D_DESC texDesc;
-		texture->GetDesc(&texDesc);
-
-		D3D11_VIEWPORT viewport = {};
-		viewport.TopLeftX = 0.0f;
-		viewport.TopLeftY = 0.0f;
-		viewport.Width = static_cast<float>(texDesc.Width);
-		viewport.Height = static_cast<float>(texDesc.Height);
-		viewport.MinDepth = 0.0f;
-		viewport.MaxDepth = 1.0f;
-		context->RSSetViewports(1, &viewport);
-
 		D3DX11_TECHNIQUE_DESC techDesc;
 		techniqueInfo.technique->GetDesc(&techDesc);
 
 		for (UINT p = 0; p < techDesc.Passes; p++) {
+			// Determine input and output for this technique
+			ID3D11ShaderResourceView* inputSRV;
+			ID3D11RenderTargetView* outputRTV;
+
+			if (renderedToOutput) {
+				inputSRV = a_output.srv.Get();
+			} else {
+				inputSRV = a_input.srv.Get();
+			}
+
+			if (!techniqueInfo.renderTargetName.empty()) {
+				outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, a_input.rtv.Get());
+			} else {
+				if (renderedToOutput) {
+					outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, a_input.rtv.Get());
+				} else {
+					outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, a_output.rtv.Get());
+				}
+				// Swap if rendered to other texture
+				renderedToOutput = !renderedToOutput;
+			}
+
+			sourceTexture->AsShaderResource()->SetResource(inputSRV);
+			context->OMSetRenderTargets(1, &outputRTV, nullptr);
+
+			// Set viewport based on render target description
+			ComPtr<ID3D11Resource> resource;
+			outputRTV->GetResource(&resource);
+			ComPtr<ID3D11Texture2D> texture;
+			resource.As(&texture);
+			D3D11_TEXTURE2D_DESC texDesc;
+			texture->GetDesc(&texDesc);
+
+			D3D11_VIEWPORT viewport = {};
+			viewport.TopLeftX = 0.0f;
+			viewport.TopLeftY = 0.0f;
+			viewport.Width = static_cast<float>(texDesc.Width);
+			viewport.Height = static_cast<float>(texDesc.Height);
+			viewport.MinDepth = 0.0f;
+			viewport.MaxDepth = 1.0f;
+			context->RSSetViewports(1, &viewport);
+
 			techniqueInfo.technique->GetPassByIndex(p)->Apply(0, context);
 			context->Draw(4, 0);
 		}
@@ -418,6 +419,9 @@ void Effect::LoadTechniques()
 	D3DX11_EFFECT_DESC effectDesc;
 	DX::ThrowIfFailed(effect->GetDesc(&effectDesc));
 
+	std::string currentSequenceBaseName;
+	int currentSequenceIndex = 0;
+
 	// Load all techniques and organize them into sequences
 	for (UINT i = 0; i < effectDesc.Techniques; ++i) {
 		auto technique = effect->GetTechniqueByIndex(i);
@@ -434,22 +438,27 @@ void Effect::LoadTechniques()
 		std::string baseName;
 		int sequenceNumber = 0;
 
-		// Check if technique name ends with a number
-		size_t lastChar = techniqueName.length() - 1;
-		if (lastChar > 0 && std::isdigit(techniqueName[lastChar])) {
-			// Find where the number starts
-			size_t numberStart = lastChar;
-			while (numberStart > 0 && std::isdigit(techniqueName[numberStart - 1])) {
-				numberStart--;
+		// Check if this continues the current sequence
+		if (!currentSequenceBaseName.empty()) {
+			std::string expectedName = currentSequenceBaseName + std::to_string(currentSequenceIndex + 1);
+			if (techniqueName == expectedName) {
+				// Continue current sequence
+				baseName = currentSequenceBaseName;
+				sequenceNumber = currentSequenceIndex + 1;
+				currentSequenceIndex++;
+			} else {
+				// Start new sequence with this technique
+				baseName = techniqueName;
+				sequenceNumber = 0;
+				currentSequenceBaseName = techniqueName;
+				currentSequenceIndex = 1;
 			}
-
-			// Extract base name and sequence number
-			baseName = techniqueName.substr(0, numberStart);
-			sequenceNumber = std::stoi(techniqueName.substr(numberStart));
 		} else {
-			// This is a base technique
+			// First technique or start new sequence
 			baseName = techniqueName;
 			sequenceNumber = 0;
+			currentSequenceBaseName = techniqueName;
+			currentSequenceIndex = 1;
 		}
 
 		// Get RenderTarget annotation
@@ -856,9 +865,11 @@ void Effect::LoadVariableFromString(UIVariable& uiVar, const std::string& value)
 		switch (uiVar.type) {
 		case UIVariableType::Float:
 			uiVar.floatValue = std::stof(value);
+			uiVar.effectVariable->SetRawValue(&uiVar.floatValue, 0, sizeof(uiVar.floatValue));
 			break;
 		case UIVariableType::Int:
 			uiVar.intValue = std::stoi(value);
+			uiVar.effectVariable->SetRawValue(&uiVar.intValue, 0, sizeof(uiVar.intValue));
 			break;
 		case UIVariableType::Bool:
 			// Handle various boolean representations
@@ -872,6 +883,7 @@ void Effect::LoadVariableFromString(UIVariable& uiVar, const std::string& value)
 				// Try to parse as integer (non-zero = true)
 				uiVar.boolValue = std::stoi(value) != 0;
 			}
+			uiVar.effectVariable->SetRawValue(&uiVar.boolValue, 0, sizeof(uiVar.boolValue));
 			break;
 		}
 	} catch (const std::exception& e) {
