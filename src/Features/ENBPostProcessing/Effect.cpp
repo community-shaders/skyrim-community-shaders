@@ -129,12 +129,7 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 
 	auto sourceTexture = effect->GetVariableByName(GetSourceTexture())->AsShaderResource();
 
-	// Compute number of required swaps to execute effect
-	uint swaps = 0;
-	for (size_t i = 0; i < sequence.size(); ++i)
-		swaps += sequence[i].renderTargetName.empty();
-
-	bool swapOutput = swaps % 2;
+	bool renderedToOutput = false;
 
 	for (size_t i = 0; i < sequence.size(); ++i) {
 		auto& techniqueInfo = sequence[i];
@@ -145,7 +140,7 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 		ID3D11ShaderResourceView* inputSRV;
 		ID3D11RenderTargetView* outputRTV;
 
-		if (swapOutput) {
+		if (renderedToOutput) {
 			inputSRV = a_output.srv.Get();
 		} else {
 			inputSRV = a_input.srv.Get();
@@ -154,13 +149,13 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 		if (!techniqueInfo.renderTargetName.empty()){
 			outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, a_input.rtv.Get());
 		} else {
-			if (swapOutput) {
+			if (renderedToOutput) {
 				outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, a_input.rtv.Get());
 			} else {
 				outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, a_output.rtv.Get());
 			}
 			// Swap if rendered to other texture
-			swapOutput = !swapOutput;
+			renderedToOutput = !renderedToOutput;
 		}
 
 		sourceTexture->AsShaderResource()->SetResource(inputSRV);
@@ -191,6 +186,9 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 			context->Draw(4, 0);
 		}
 	}
+
+	if (!renderedToOutput)
+		context->CopyResource(a_output.texture.Get(), a_input.texture.Get());
 }
 
 void Effect::ExecuteTechnique(const std::string& techniqueName, Texture& input, Texture& output)

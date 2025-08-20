@@ -13,7 +13,7 @@ class ENBAdaptation : public Effect
 public:
 	virtual std::string GetName() const override { return "enbadaptation.fx"; }
 
-	virtual LPCSTR GetSourceTexture() const override { return "TextureCurrent"; }
+	virtual LPCSTR GetSourceTexture() const override { return "TextureColor"; }
 
 	virtual void Execute() override;
 

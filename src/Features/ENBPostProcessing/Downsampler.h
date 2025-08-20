@@ -23,6 +23,7 @@ public:
 	{
 		ComPtr<ID3D11Texture2D> texture;
 		ComPtr<ID3D11ShaderResourceView> srv;
+		ComPtr<ID3D11ShaderResourceView> fullChainSRV;  // SRV for all mip levels (used for GenerateMips)
 		UINT baseWidth;
 		UINT baseHeight;
 		UINT targetWidth;

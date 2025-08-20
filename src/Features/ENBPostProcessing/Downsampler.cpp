@@ -45,6 +45,15 @@ Downsampler::DownsampleChain Downsampler::CreateDownsampleChain(UINT baseWidth, 
 
 	DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, chain.texture.GetAddressOf()));
 
+	// Create SRV for all mip levels (used for GenerateMips)
+	D3D11_SHADER_RESOURCE_VIEW_DESC fullChainSrvDesc = {};
+	fullChainSrvDesc.Format = format;
+	fullChainSrvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+	fullChainSrvDesc.Texture2D.MostDetailedMip = 0;
+	fullChainSrvDesc.Texture2D.MipLevels = totalMipLevels;
+
+	DX::ThrowIfFailed(device->CreateShaderResourceView(chain.texture.Get(), &fullChainSrvDesc, chain.fullChainSRV.GetAddressOf()));
+
 	// Create SRV for the specific mip level we want
 	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.Format = format;
@@ -86,8 +95,8 @@ void Downsampler::Downsample(ID3D11ShaderResourceView* source, DownsampleChain& 
 		nullptr                   // copy entire resource
 	);
 
-	// Generate mips automatically
-	context->GenerateMips(chain.srv.Get());
+	// Generate mips automatically using the full chain SRV
+	context->GenerateMips(chain.fullChainSRV.Get());
 }
 
 ID3D11ShaderResourceView* Downsampler::GetTargetLevel(const DownsampleChain& chain) const

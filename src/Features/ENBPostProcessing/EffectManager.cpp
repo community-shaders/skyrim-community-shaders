@@ -519,12 +519,7 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 	auto renderer = globals::game::renderer;
 
 	// Get variable pointers and set common textures
-	auto textureBloom = effect->GetVariableByName("TextureBloom")->AsShaderResource();
-	auto textureLens = effect->GetVariableByName("TextureLens")->AsShaderResource();
-	auto textureAdaptation = effect->GetVariableByName("TextureAdaptation")->AsShaderResource();
-	auto textureAperture = effect->GetVariableByName("TextureAperture")->AsShaderResource();
 	auto textureDepth = effect->GetVariableByName("TextureDepth")->AsShaderResource();
-	auto textureDownsampled = effect->GetVariableByName("TextureDownsampled")->AsShaderResource();
 
 	auto renderTargetRGBA32 = effect->GetVariableByName("RenderTargetRGBA32")->AsShaderResource();
 	auto renderTargetRGBA64 = effect->GetVariableByName("RenderTargetRGBA64")->AsShaderResource();
@@ -540,20 +535,6 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 	auto timeOfDay2 = effect->GetVariableByName("TimeOfDay2")->AsVector();
 	auto eNightDayFactor = effect->GetVariableByName("ENightDayFactor")->AsVector();
 	auto eInteriorFactor = effect->GetVariableByName("EInteriorFactor")->AsVector();
-
-	// Set texture resources
-	if (textureBloom && textureBloom->IsValid()) {
-		textureBloom->SetResource(commonTextureCache["TextureBloom"].srv.Get());
-	}
-	if (textureLens && textureLens->IsValid()) {
-		textureLens->SetResource(commonTextureCache["TextureLens"].srv.Get());
-	}
-	if (textureAdaptation && textureAdaptation->IsValid()) {
-		textureAdaptation->SetResource(commonTextureCache["TextureAdaptation"].srv.Get());
-	}
-	if (textureAperture && textureAperture->IsValid()) {
-		textureAperture->SetResource(commonTextureCache["TextureAperture"].srv.Get());
-	}
 
 	if (textureDepth && textureDepth->IsValid()) {
 		textureDepth->SetResource(renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY].depthSRV);
