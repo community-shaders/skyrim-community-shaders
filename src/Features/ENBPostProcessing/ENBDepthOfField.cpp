@@ -40,7 +40,7 @@ void ENBDepthOfField::Execute()
 	}
 
 	ExecuteTechnique("Focus", nullInputTexture, effectTextureCache[textureFocusName]);
-	
+
 	auto textureOriginal = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
 	Texture textureHDR{};
