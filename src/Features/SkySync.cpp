@@ -11,18 +11,26 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 void SkySync::DrawSettings()
 {
 	ImGui::Checkbox("Enabled", &settings.Enabled);
+	
 	ImGui::Checkbox("Use alternate sun path", &settings.UseAlternateSunPath);
+	
 	if (settings.UseAlternateSunPath) {
-		ImGui::SliderInt("Sun path", &settings.SunPath, 0, static_cast<uint8_t>(SunPath::Count) - 1, SunPathNames[settings.SunPath]);
-		if (settings.SunPath == static_cast<int32_t>(SunPath::Custom))
-			ImGui::SliderFloat("Custom angle", &settings.CustomAngle, -90.0f, 90.0f, "%.0f");
+		if (ImGui::SliderInt("Sun path", &settings.SunPath, 0, static_cast<uint8_t>(SunPath::Count) - 1, SunPathNames[settings.SunPath]))
+			SetSunAngle();
+		
+		if (settings.SunPath == static_cast<int32_t>(SunPath::Custom)) {
+			if (ImGui::SliderFloat("Custom angle", &settings.CustomAngle, -90.0f, 90.0f, "%.0f"))
+				SetSunAngle();
+		}
 	}
+	
 	ImGui::SliderInt("Moon light source", &settings.MoonLightSource, 0, static_cast<uint8_t>(MoonLightSource::Count) - 1, MoonLightSourceNames[settings.MoonLightSource]);
 }
 
 void SkySync::LoadSettings(json& o_json)
 {
 	settings = o_json;
+	SetSunAngle();
 }
 
 void SkySync::SaveSettings(json& o_json)
@@ -109,6 +117,24 @@ void SkySync::Update(const RE::Sky* sky)
 
 	shadowFader.Update(sun, directions, intensities, isDayTime);
 }
+void SkySync::SetSunAngle()
+{
+	switch (static_cast<SunPath>(settings.SunPath)) {
+	case SunPath::Southern:
+		sunAngle = SouthernSunAngle;
+		break;
+	case SunPath::Northern:
+		sunAngle = NorthernSunAngle;
+		break;
+	case SunPath::Vanilla:
+		sunAngle = VanillaSunAngle;
+		break;
+	case SunPath::Custom:
+		sunAngle = 90.0f + settings.CustomAngle;
+		break;
+	default:;
+	}
+}
 
 void SkySync::SetSkyRotation(const RE::Sky* sky, RE::TESObjectCELL* cell)
 {
@@ -133,22 +159,6 @@ void SkySync::ProcessSun(const RE::Sun* sun, const float time, const float altit
 	float dist;
 
 	if (settings.UseAlternateSunPath) {
-		float sunAngle = 90.0f;
-		switch (static_cast<SunPath>(settings.SunPath)) {
-		case SunPath::Southern:
-			sunAngle -= 35.0f;
-			break;
-		case SunPath::Northern:
-			sunAngle += 35.0f;
-			break;
-		case SunPath::Vanilla:
-			sunAngle += 5.0f;
-			break;
-		case SunPath::Custom:
-			sunAngle += settings.CustomAngle;
-			break;
-		default:;
-		}
 		CalculateAlternateSunDirectionAndDistance(dir, dist, time, timings.sunrise, timings.sunset, sunAngle);
 	} else
 		CalculateSunDirectionAndDistance(sun, dir, dist);

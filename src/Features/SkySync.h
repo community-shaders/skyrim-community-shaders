@@ -149,6 +149,10 @@ private:
 	static constexpr float SunScaleFactor = 48.0f / 2048.0f;
 	static constexpr float MinElevation = 0.25f;
 
+	static constexpr float SouthernSunAngle = 90.0f - 35.0f;
+	static constexpr float NorthernSunAngle = 90.0f + 35.0f;
+	static constexpr float VanillaSunAngle = 90.0f + 5.0f;
+
 	static constexpr float SecundaIntensityFactor = 0.67f;
 	static constexpr float NewMoonIntensityFactor = 0.05f;
 	static constexpr float CrescentMoonIntensityFactor = 0.25f;
@@ -163,6 +167,7 @@ private:
 
 	bool moonAndStarsLoaded = false;
 	RE::TESObjectCELL* currentCell = nullptr;
+	float sunAngle = 90.0f;
 	float currentSkyRotation = D3D11_FLOAT32_MAX;
 	float masserPhaseIntensityFactor = 0.0f;
 	float secundaPhaseIntensityFactor = 0.0f;
@@ -177,6 +182,8 @@ private:
 	void DisableOnConflict(std::string_view conflictName);
 
 	void Update(const RE::Sky* sky);
+
+	void SetSunAngle();
 
 	void SetSkyRotation(const RE::Sky* sky, RE::TESObjectCELL* cell);
 
