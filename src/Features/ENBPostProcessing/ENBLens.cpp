@@ -9,10 +9,10 @@ void ENBLens::Execute()
 
 	UpdateEffectVariables();
 
-	auto textureColorTemp = effectManager.GetCommonTexture("TextureColorTemp");
+	auto textureHDRTemp = effectManager.GetCommonTexture("TextureHDRTemp");
 	auto textureLens = effectManager.GetCommonTexture("TextureLens");
 
-	ExecuteTechniqueSequence(GetSelectedTechnique(), *textureColorTemp, *textureLens);
+	ExecuteTechniqueSequence(GetSelectedTechnique(), *textureHDRTemp, *textureLens, *textureHDRTemp);
 }
 
 void ENBLens::UpdateEffectVariables()

@@ -136,6 +136,17 @@ void EffectManager::ExecuteEffects()
 		}
 	}
 
+	// Copy final render target to framebuffers
+	auto textureSDRTemp = GetCommonTexture("TextureSDRTemp");
+	auto textureFramebuffer1 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
+	auto textureFramebuffer2 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
+	auto textureFramebuffer3 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY2];
+
+	CopyTexture(textureSDRTemp->srv.Get(), textureFramebuffer1.RTV);
+	CopyTexture(textureSDRTemp->srv.Get(), textureFramebuffer2.RTV);
+	CopyTexture(textureSDRTemp->srv.Get(), textureFramebuffer3.RTV);
+
+	// Change textures used next frame
 	textureSwap++;
 
 	// Restore previous render state
@@ -234,7 +245,7 @@ void EffectManager::RenderImGui()
 				bool isCompiled = effect->IsCompiled();
 				const auto& errors = effect->GetErrors();
 
-				if (ImGui::TreeNodeEx(effect->GetName().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+				if (ImGui::TreeNodeEx(effect->GetName().c_str())) {
 					if (isCompiled) {
 						effect->RenderImGui();
 					} else {
@@ -514,18 +525,18 @@ void EffectManager::CreateCommonTextures()
 		commonTextureCache.insert({ "TextureBloom", bloomTexture });
 	}
 
-	// Create TextureColorTemp
+	// Create TextureHDRTemp
 	{
 		Effect::Texture textureColor{};
 		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, textureColor.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(textureColor.texture.Get(), nullptr, textureColor.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(textureColor.texture.Get(), nullptr, textureColor.srv.GetAddressOf()));
 
-		Util::SetResourceName(textureColor.texture.Get(), "EffectManager::TextureColorTemp");
-		Util::SetResourceName(textureColor.rtv.Get(), "EffectManager::TextureColorTemp RTV");
-		Util::SetResourceName(textureColor.srv.Get(), "EffectManager::TextureColorTemp SRV");
+		Util::SetResourceName(textureColor.texture.Get(), "EffectManager::TextureHDRTemp");
+		Util::SetResourceName(textureColor.rtv.Get(), "EffectManager::TextureHDRTemp RTV");
+		Util::SetResourceName(textureColor.srv.Get(), "EffectManager::TextureHDRTemp SRV");
 
-		commonTextureCache.insert({ "TextureColorTemp", textureColor });
+		commonTextureCache.insert({ "TextureHDRTemp", textureColor });
 	}
 
 	// Create TextureLens
@@ -636,6 +647,39 @@ void EffectManager::CreateCommonTextures()
 		Util::SetResourceName(rgb32fTexture.srv.Get(), "EffectManager::RenderTargetRGB32F SRV");
 
 		commonTextureCache.insert({ "RenderTargetRGB32F", rgb32fTexture });
+	}
+
+	// Create TextureSDRTemp
+	{
+		D3D11_TEXTURE2D_DESC rgb10uDesc = texDesc;
+		rgb10uDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+
+		Effect::Texture textureColor{};
+		DX::ThrowIfFailed(device->CreateTexture2D(&rgb10uDesc, nullptr, textureColor.texture.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateRenderTargetView(textureColor.texture.Get(), nullptr, textureColor.rtv.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateShaderResourceView(textureColor.texture.Get(), nullptr, textureColor.srv.GetAddressOf()));
+
+		Util::SetResourceName(textureColor.texture.Get(), "EffectManager::TextureSDRTemp");
+		Util::SetResourceName(textureColor.rtv.Get(), "EffectManager::TextureSDRTemp RTV");
+		Util::SetResourceName(textureColor.srv.Get(), "EffectManager::TextureSDRTemp SRV");
+
+		commonTextureCache.insert({ "TextureSDRTemp", textureColor });
+	}
+
+	{
+		D3D11_TEXTURE2D_DESC rgb10uDesc = texDesc;
+		rgb10uDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+
+		Effect::Texture textureColor{};
+		DX::ThrowIfFailed(device->CreateTexture2D(&rgb10uDesc, nullptr, textureColor.texture.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateRenderTargetView(textureColor.texture.Get(), nullptr, textureColor.rtv.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateShaderResourceView(textureColor.texture.Get(), nullptr, textureColor.srv.GetAddressOf()));
+
+		Util::SetResourceName(textureColor.texture.Get(), "EffectManager::TextureSDRTemp2");
+		Util::SetResourceName(textureColor.rtv.Get(), "EffectManager::TextureSDRTemp2 RTV");
+		Util::SetResourceName(textureColor.srv.Get(), "EffectManager::TextureSDRTemp2 SRV");
+
+		commonTextureCache.insert({ "TextureSDRTemp2", textureColor });
 	}
 
 	// Create 1x1 textures for adaptation and aperture

@@ -182,7 +182,7 @@ bool Effect::LoadFXFile()
 	return true;
 }
 
-void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Texture& a_input, Texture& a_output)
+void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Texture& a_input, Texture& a_output, Texture& a_temp)
 {
 	if (!IsCompiled() || !effect) {
 		return;  // Skip execution if not compiled
@@ -203,7 +203,7 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 
 	auto sourceTexture = effect->GetVariableByName("TextureColor")->AsShaderResource();
 
-	bool renderedToOutput = false;
+	bool useTemp = false;  // Track which texture to use for ping-ponging between output and temp
 
 	for (size_t i = 0; i < sequence.size(); ++i) {
 		auto& techniqueInfo = sequence[i];
@@ -217,22 +217,31 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 		ID3D11ShaderResourceView* inputSRV;
 		ID3D11RenderTargetView* outputRTV;
 
-		if (renderedToOutput) {
-			inputSRV = a_output.srv.Get();
-		} else {
+		if (sequence.size() == 1) {
+			// Single technique: input -> output
 			inputSRV = a_input.srv.Get();
+			outputRTV = a_output.rtv.Get();
+		} else if (i == 0) {
+			// First pass: input -> output (start the ping-pong with output)
+			inputSRV = a_input.srv.Get();
+			outputRTV = a_output.rtv.Get();
+		} else {
+			// Subsequent passes: ping-pong between output and temp
+			if (useTemp) {
+				// Read from temp, write to output
+				inputSRV = a_temp.srv.Get();
+				outputRTV = a_output.rtv.Get();
+			} else {
+				// Read from output, write to temp
+				inputSRV = a_output.srv.Get();
+				outputRTV = a_temp.rtv.Get();
+			}
+			useTemp = !useTemp;  // Toggle for next iteration
 		}
 
+		// Handle custom render target if specified
 		if (!techniqueInfo.renderTargetName.empty()) {
-			outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, a_input.rtv.Get());
-		} else {
-			if (renderedToOutput) {
-				outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, a_input.rtv.Get());
-			} else {
-				outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, a_output.rtv.Get());
-			}
-			// Swap if rendered to other texture
-			renderedToOutput = !renderedToOutput;
+			outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, outputRTV);
 		}
 
 		if (sourceTexture && sourceTexture->IsValid()) {
@@ -264,8 +273,11 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 		}
 	}
 
-	if (!renderedToOutput)
-		context->CopyResource(a_output.texture.Get(), a_input.texture.Get());
+	// Ensure final result is in output
+	if (sequence.size() > 1 && useTemp) {
+		// If we ended with writing to temp, copy temp back to output
+		context->CopyResource(a_output.texture.Get(), a_temp.texture.Get());
+	}
 }
 
 void Effect::ExecuteTechnique(const std::string& techniqueName, Texture& input, Texture& output)

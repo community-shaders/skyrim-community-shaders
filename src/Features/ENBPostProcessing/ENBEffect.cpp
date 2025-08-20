@@ -4,28 +4,22 @@
 
 void ENBEffect::Execute()
 {
+	auto renderer = globals::game::renderer;
+
 	auto& effectManager = EffectManager::GetSingleton();
 
-	auto textureColorTemp = effectManager.GetCommonTexture("TextureColorTemp");
+	auto textureSDRTemp = effectManager.GetCommonTexture("TextureSDRTemp");
+	auto textureSDRTemp2 = effectManager.GetCommonTexture("TextureSDRTemp2");
 
-	auto textureOriginal = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	auto textureOriginal = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
 	Texture textureColor{};
 	textureColor.texture = textureOriginal.texture;
 	textureColor.srv = textureOriginal.SRV;
 	textureColor.rtv = textureOriginal.RTV;
 
-	globals::d3d::context->CopyResource(textureColorTemp->texture.Get(), textureOriginal.texture);
-
-	ExecuteTechniqueSequence(GetSelectedTechnique(), *textureColorTemp, textureColor);
-
-	auto textureFramebuffer1 = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
-	auto textureFramebuffer2 = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
-	auto textureFramebuffer3 = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY2];
-
-	effectManager.CopyTexture(textureOriginal.SRV, textureFramebuffer1.RTV);
-	effectManager.CopyTexture(textureOriginal.SRV, textureFramebuffer2.RTV);
-	effectManager.CopyTexture(textureOriginal.SRV, textureFramebuffer3.RTV);
+	// Execute with: input (16bit HDR), output (10bit SDR), temp (10bit SDR)
+	ExecuteTechniqueSequence(GetSelectedTechnique(), textureColor, *textureSDRTemp, *textureSDRTemp2);
 }
 
 void ENBEffect::UpdateEffectVariables()

@@ -9,10 +9,10 @@ void ENBBloom::Execute()
 	// Get common textures for input/output
 	auto& effectManager = EffectManager::GetSingleton();
 
-	auto textureColorTemp = effectManager.GetCommonTexture("TextureColorTemp");
+	auto textureHDRTemp = effectManager.GetCommonTexture("TextureHDRTemp");
 	auto textureBloom = effectManager.GetCommonTexture("TextureBloom");
 
-	ExecuteTechniqueSequence(GetSelectedTechnique(), *textureColorTemp, *textureBloom);
+	ExecuteTechniqueSequence(GetSelectedTechnique(), *textureHDRTemp, *textureBloom, *textureHDRTemp);
 }
 
 void ENBBloom::UpdateEffectVariables()
