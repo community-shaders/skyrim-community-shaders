@@ -41,7 +41,6 @@ void ENBAdaptation::Execute()
 	// Execute adaptation technique, writing to output texture
 	auto* textureAdaptation = effectManager.GetCommonTexture(textureAdaptationName);
 	ExecuteTechnique(GetSelectedTechnique(), nullInputTexture, *textureAdaptation);
-	;
 }
 
 void ENBAdaptation::UpdateEffectVariables()
