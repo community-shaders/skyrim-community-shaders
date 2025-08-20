@@ -24,12 +24,14 @@ void SkySync::DrawSettings()
 		}
 	}
 
-	ImGui::SliderInt("Moon light source", &settings.MoonLightSource, 0, static_cast<uint8_t>(MoonLightSource::Count) - 1, MoonLightSourceNames[settings.MoonLightSource]);
+	ImGui::SliderInt("Moon light source", &settings.MoonLightSource, 0, static_cast<uint8_t>(MoonLightSource::Count) - 1, MoonLightSourceNames[settings.MoonLightSource], ImGuiSliderFlags_AlwaysClamp);
 }
 
 void SkySync::LoadSettings(json& o_json)
 {
 	settings = o_json;
+	settings.MoonLightSource = std::clamp(settings.MoonLightSource, static_cast<int32_t>(MoonLightSource::Brightest), static_cast<int32_t>(MoonLightSource::Secunda));
+	settings.SunPath = std::clamp(settings.SunPath, static_cast<int32_t>(SunPath::Southern), static_cast<int32_t>(SunPath::Custom));
 	SetSunAngle();
 }
 
@@ -119,7 +121,6 @@ void SkySync::Update(const RE::Sky* sky)
 }
 void SkySync::SetSunAngle()
 {
-	settings.SunPath = std::clamp(settings.SunPath, static_cast<int32_t>(SunPath::Southern), static_cast<int32_t>(SunPath::Custom));
 	switch (static_cast<SunPath>(settings.SunPath)) {
 	case SunPath::Southern:
 		sunAngle = SouthernSunAngle;
