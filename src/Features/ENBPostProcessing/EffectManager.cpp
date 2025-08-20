@@ -135,7 +135,7 @@ void EffectManager::ExecuteEffects()
 			state->EndPerfEvent();
 		}
 	}
-	
+
 	textureSwap++;
 
 	// Restore previous render state

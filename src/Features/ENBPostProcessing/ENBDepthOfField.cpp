@@ -59,4 +59,3 @@ void ENBDepthOfField::CreateEffectTextures()
 
 	logger::info("Created depth of field textures: TextureFocus (1x1), TextureAperture (1x1)");
 }
-

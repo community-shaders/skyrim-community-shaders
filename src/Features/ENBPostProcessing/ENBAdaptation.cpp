@@ -35,12 +35,13 @@ void ENBAdaptation::Execute()
 	// Set input texture (previous frame's adaptation value)
 	auto texturePrevious = effect->GetVariableByName("TexturePrevious")->AsShaderResource();
 	if (texturePrevious && texturePrevious->IsValid()) {
-		texturePrevious->SetResource(effectManager.GetCommonTexture(texturePreviousName)->srv.Get());	
+		texturePrevious->SetResource(effectManager.GetCommonTexture(texturePreviousName)->srv.Get());
 	}
 
 	// Execute adaptation technique, writing to output texture
 	auto* textureAdaptation = effectManager.GetCommonTexture(textureAdaptationName);
-	ExecuteTechnique(GetSelectedTechnique(), nullInputTexture, *textureAdaptation);;
+	ExecuteTechnique(GetSelectedTechnique(), nullInputTexture, *textureAdaptation);
+	;
 }
 
 void ENBAdaptation::UpdateEffectVariables()
@@ -58,7 +59,6 @@ void ENBAdaptation::UpdateEffectVariables()
 	if (AdaptationParameters && AdaptationParameters->IsValid())
 		AdaptationParameters->SetRawValue(&adaptationParameters, 0, sizeof(adaptationParameters));
 }
-
 
 void ENBAdaptation::CreateEffectTextures()
 {
