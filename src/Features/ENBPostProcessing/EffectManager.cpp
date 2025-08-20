@@ -377,7 +377,7 @@ void EffectManager::CreateCopyShaders()
 	const char* vertexShaderSource = R"(
 		struct VS_INPUT { float3 pos : POSITION; float2 txcoord : TEXCOORD0; };
 		struct VS_OUTPUT { float4 pos : SV_POSITION; float2 txcoord0 : TEXCOORD0; };
-		
+
 		VS_OUTPUT main(VS_INPUT input) {
 			VS_OUTPUT output;
 			output.pos = float4(input.pos, 1.0);
