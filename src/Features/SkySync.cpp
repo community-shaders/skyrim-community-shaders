@@ -11,19 +11,19 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 void SkySync::DrawSettings()
 {
 	ImGui::Checkbox("Enabled", &settings.Enabled);
-	
+
 	ImGui::Checkbox("Use alternate sun path", &settings.UseAlternateSunPath);
-	
+
 	if (settings.UseAlternateSunPath) {
 		if (ImGui::SliderInt("Sun path", &settings.SunPath, 0, static_cast<uint8_t>(SunPath::Count) - 1, SunPathNames[settings.SunPath], ImGuiSliderFlags_AlwaysClamp))
 			SetSunAngle();
-		
+
 		if (settings.SunPath == static_cast<int32_t>(SunPath::Custom)) {
 			if (ImGui::SliderFloat("Custom angle", &settings.CustomAngle, -90.0f, 90.0f, "%.0f"), ImGuiSliderFlags_AlwaysClamp)
 				SetSunAngle();
 		}
 	}
-	
+
 	ImGui::SliderInt("Moon light source", &settings.MoonLightSource, 0, static_cast<uint8_t>(MoonLightSource::Count) - 1, MoonLightSourceNames[settings.MoonLightSource]);
 }
 
