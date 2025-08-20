@@ -95,7 +95,7 @@ void EffectManager::ExecuteEffects()
 	FLOAT previousBlendFactor[4];
 	UINT previousSampleMask;
 	UINT previousStencilRef;
-	
+
 	context->RSGetState(previousRS.GetAddressOf());
 	context->OMGetBlendState(previousBS.GetAddressOf(), previousBlendFactor, &previousSampleMask);
 	context->OMGetDepthStencilState(previousDSS.GetAddressOf(), &previousStencilRef);
@@ -139,7 +139,8 @@ void EffectManager::ExecuteEffects()
 	context->IASetPrimitiveTopology(previousTopology);
 
 	// Clean up retrieved interfaces
-	if (previousVBs[0]) previousVBs[0]->Release();
+	if (previousVBs[0])
+		previousVBs[0]->Release();
 }
 
 Effect::Texture* EffectManager::GetCommonTexture(const std::string& name)
@@ -300,9 +301,9 @@ void EffectManager::CreateCopyShaders()
 	// Compile pixel shader for texture copy
 	const char* pixelShaderSource = R"(
 		Texture2D sourceTexture : register(t0);
-		
+
 		struct PS_INPUT { float4 pos : SV_POSITION; float2 txcoord0 : TEXCOORD0; };
-		
+
 		float4 main(PS_INPUT input) : SV_TARGET {
 			int2 pixelPos = int2(input.pos.xy);
 			return sourceTexture.Load(int3(pixelPos, 0));
@@ -312,7 +313,7 @@ void EffectManager::CreateCopyShaders()
 	ComPtr<ID3DBlob> psBlob, errorBlob;
 	auto hr = D3DCompile(pixelShaderSource, strlen(pixelShaderSource), nullptr, nullptr, nullptr,
 		"main", "ps_4_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf());
-	
+
 	if (FAILED(hr)) {
 		if (errorBlob) {
 			logger::error("Failed to compile copy pixel shader: {}", static_cast<char*>(errorBlob->GetBufferPointer()));
