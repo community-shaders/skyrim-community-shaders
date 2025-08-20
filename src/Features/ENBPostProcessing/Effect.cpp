@@ -451,14 +451,14 @@ void Effect::LoadTechniques()
 				baseName = techniqueName;
 				sequenceNumber = 0;
 				currentSequenceBaseName = techniqueName;
-				currentSequenceIndex = 1;
+				currentSequenceIndex = 0;
 			}
 		} else {
 			// First technique or start new sequence
 			baseName = techniqueName;
 			sequenceNumber = 0;
 			currentSequenceBaseName = techniqueName;
-			currentSequenceIndex = 1;
+			currentSequenceIndex = 0;
 		}
 
 		// Get RenderTarget annotation
