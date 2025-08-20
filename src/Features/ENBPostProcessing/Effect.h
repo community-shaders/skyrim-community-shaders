@@ -21,7 +21,8 @@ public:
 	virtual ~Effect() = default;
 
 	// UI technique structure (defined early for use in method declarations)
-	struct UITechnique {
+	struct UITechnique
+	{
 		std::string techniqueName;  // Actual technique name
 		std::string displayName;    // UIName annotation
 	};
@@ -47,7 +48,7 @@ public:
 	// Technique selection (legacy)
 	std::string GetSelectedTechnique() const;
 	const std::vector<std::string>& GetAvailableTechniques() const { return availableTechniques; }
-	
+
 	// UI technique selection (indexed access)
 	uint32_t GetSelectedTechniqueIndex() const { return selectedTechniqueIndex; }
 	void SetSelectedTechniqueIndex(uint32_t index);
@@ -122,7 +123,7 @@ public:
 
 	// Technique selection (legacy)
 	std::vector<std::string> availableTechniques;
-	
+
 	// UI technique selection (indexed by uint, only includes annotated techniques)
 	std::vector<UITechnique> uiTechniques;
 	uint32_t selectedTechniqueIndex = 0;
