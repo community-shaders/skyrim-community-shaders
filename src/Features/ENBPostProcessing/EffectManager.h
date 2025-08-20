@@ -55,10 +55,15 @@ public:
 
 	// Copy shader resources
 	ComPtr<ID3D11PixelShader> copyPixelShader;
+	
+	// Color correction compute shader resources
+	ComPtr<ID3D11ComputeShader> colorCorrectionComputeShader;
+	ComPtr<ID3D11Buffer> colorCorrectionConstantBuffer;
 
 	void CreateQuadGeometry();
 	void CreateRenderStates();
 	void CreateCopyShaders();
+	void CreateColorCorrectionShader();
 
 	std::unordered_map<std::string, Effect::Texture> commonTextureCache;
 
@@ -79,6 +84,9 @@ public:
 
 	// Texture copy using pixel shader
 	void CopyTexture(ID3D11ShaderResourceView* source, ID3D11RenderTargetView* destination);
+	
+	// Color correction using compute shader
+	void ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV);
 
 	// Downsampling support
 	Downsampler& GetDownsampler() { return Downsampler::GetSingleton(); }
@@ -88,7 +96,6 @@ public:
 
 	const std::unordered_map<std::string, Effect::Texture>& GetAllCommonTextures() const { return commonTextureCache; }
 
-private:
 	Downsampler::DownsampleChain sharedDownsampleChain;
 	
 	// Time of day setting helper
@@ -143,4 +150,9 @@ private:
 	void LoadENBSettings();
 	void SaveENBSettings();
 	void RenderTimeOfDaySettings(const std::string& prefix, TimeOfDaySettings& settings);
+	void LoadTimeOfDaySettings(CSimpleIniA& ini, const std::string& section, const std::string& prefix, TimeOfDaySettings& settings);
+	void SaveTimeOfDaySettings(CSimpleIniA& ini, const std::string& section, const std::string& prefix, const TimeOfDaySettings& settings);
+	
+	// Time of day computation
+	float ComputeTimeOfDayValue(const TimeOfDaySettings& settings);
 };

@@ -85,9 +85,12 @@ void EffectManager::ExecuteEffects()
 
 	UpdateCommonData();
 
+	// Apply brightness and gamma curve
+	ApplyColorCorrection(textureOriginal.UAV);
+
 	// Perform shared downsampling once
 	Downsampler::GetSingleton().Downsample(textureOriginal.SRV, sharedDownsampleChain);
-
+	
 	// Backup current render state
 	ComPtr<ID3D11RasterizerState> previousRS;
 	ComPtr<ID3D11BlendState> previousBS;
@@ -250,6 +253,7 @@ void EffectManager::CreateCommonResources()
 	CreateQuadGeometry();
 	CreateRenderStates();
 	CreateCopyShaders();
+	CreateColorCorrectionShader();
 	CreateCommonTextures();
 
 	// Initialize downsampler and create shared downsample chain
@@ -386,6 +390,67 @@ void EffectManager::CreateCopyShaders()
 	logger::info("Created texture copy shaders successfully");
 }
 
+void EffectManager::CreateColorCorrectionShader()
+{
+	// Compile compute shader for color correction
+	const char* computeShaderSource = R"(
+		cbuffer ColorCorrectionParams : register(b0)
+		{
+			float Brightness;
+			float GammaCurve;
+			float2 padding;
+		};
+
+		RWTexture2D<float4> OutputTexture : register(u0);
+
+		[numthreads(8, 8, 1)]
+		void main(uint3 id : SV_DispatchThreadID)
+		{
+			float4 color = OutputTexture[id.xy];
+			
+			// Apply brightness
+			color.rgb *= Brightness;
+			
+			// Apply gamma curve
+			color.rgb = pow(abs(color.rgb), 1.0 / GammaCurve);
+			
+			OutputTexture[id.xy] = color;
+		}
+	)";
+
+	ComPtr<ID3DBlob> csBlob, errorBlob;
+	HRESULT hr = D3DCompile(computeShaderSource, strlen(computeShaderSource), nullptr, nullptr, nullptr,
+		"main", "cs_5_0", 0, 0, csBlob.GetAddressOf(), errorBlob.GetAddressOf());
+
+	if (FAILED(hr)) {
+		if (errorBlob) {
+			logger::error("Failed to compile color correction compute shader: {}", static_cast<char*>(errorBlob->GetBufferPointer()));
+		}
+		return;
+	}
+
+	hr = globals::d3d::device->CreateComputeShader(csBlob->GetBufferPointer(), csBlob->GetBufferSize(), nullptr, colorCorrectionComputeShader.GetAddressOf());
+	if (FAILED(hr)) {
+		logger::error("Failed to create color correction compute shader");
+		return;
+	}
+
+	// Create constant buffer
+	D3D11_BUFFER_DESC cbDesc = {};
+	cbDesc.Usage = D3D11_USAGE_DYNAMIC;
+	cbDesc.ByteWidth = sizeof(float) * 4; // Brightness, GammaCurve, padding[2]
+	cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+	hr = globals::d3d::device->CreateBuffer(&cbDesc, nullptr, colorCorrectionConstantBuffer.GetAddressOf());
+	if (FAILED(hr)) {
+		logger::error("Failed to create color correction constant buffer");
+		return;
+	}
+
+	logger::info("Created color correction compute shader successfully");
+}
+
 void EffectManager::CreateCommonTextures()
 {
 	auto device = globals::d3d::device;
@@ -416,10 +481,13 @@ void EffectManager::CreateCommonTextures()
 		commonTextureCache.insert({ "TextureBloom", bloomTexture });
 	}
 
-	// Create TextureColorTemp
+	// Create TextureColorTemp with UAV support for compute shader access
 	{
+		D3D11_TEXTURE2D_DESC colorTempDesc = texDesc;
+		colorTempDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+		
 		Effect::Texture textureColor{};
-		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, textureColor.texture.GetAddressOf()));
+		DX::ThrowIfFailed(device->CreateTexture2D(&colorTempDesc, nullptr, textureColor.texture.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateRenderTargetView(textureColor.texture.Get(), nullptr, textureColor.rtv.GetAddressOf()));
 		DX::ThrowIfFailed(device->CreateShaderResourceView(textureColor.texture.Get(), nullptr, textureColor.srv.GetAddressOf()));
 		commonTextureCache.insert({ "TextureColorTemp", textureColor });
@@ -730,16 +798,134 @@ void EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11Render
 	context->Draw(4, 0);
 }
 
+void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
+{
+	if (!textureUAV || !colorCorrectionComputeShader || !colorCorrectionConstantBuffer) {
+		logger::warn("Invalid parameters or shaders not initialized for color correction");
+		return;
+	}
+
+	auto context = globals::d3d::context;
+
+	// Update constant buffer with current settings
+	D3D11_MAPPED_SUBRESOURCE mapped;
+	HRESULT hr = context->Map(colorCorrectionConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+	if (SUCCEEDED(hr)) {
+		float* cbData = static_cast<float*>(mapped.pData);
+		cbData[0] = enbSettings.COLORCORRECTION.Brightness;
+		cbData[1] = enbSettings.COLORCORRECTION.GammaCurve;
+		cbData[2] = 0.0f; // padding
+		cbData[3] = 0.0f; // padding
+		context->Unmap(colorCorrectionConstantBuffer.Get(), 0);
+	}
+
+	// Store previous compute shader state
+	ComPtr<ID3D11ComputeShader> previousCS;
+	ComPtr<ID3D11Buffer> previousCB;
+	ID3D11UnorderedAccessView* previousUAVs[1] = { nullptr };
+	context->CSGetShader(previousCS.GetAddressOf(), nullptr, nullptr);
+	context->CSGetConstantBuffers(0, 1, previousCB.GetAddressOf());
+	context->CSGetUnorderedAccessViews(0, 1, previousUAVs);
+
+	// Set compute shader and resources
+	context->CSSetShader(colorCorrectionComputeShader.Get(), nullptr, 0);
+	context->CSSetConstantBuffers(0, 1, colorCorrectionConstantBuffer.GetAddressOf());
+	context->CSSetUnorderedAccessViews(0, 1, &textureUAV, nullptr);
+
+	// Get texture dimensions for dispatch
+	ComPtr<ID3D11Resource> resource;
+	textureUAV->GetResource(&resource);
+	ComPtr<ID3D11Texture2D> texture;
+	resource.As(&texture);
+	D3D11_TEXTURE2D_DESC texDesc;
+	texture->GetDesc(&texDesc);
+
+	// Dispatch compute shader (8x8 thread groups)
+	UINT dispatchX = (texDesc.Width + 7) / 8;
+	UINT dispatchY = (texDesc.Height + 7) / 8;
+	context->Dispatch(dispatchX, dispatchY, 1);
+
+	// Restore previous state
+	context->CSSetShader(previousCS.Get(), nullptr, 0);
+	context->CSSetConstantBuffers(0, 1, &previousCB);
+	context->CSSetUnorderedAccessViews(0, 1, previousUAVs, nullptr);
+
+	// Clean up retrieved interfaces
+	if (previousUAVs[0]) previousUAVs[0]->Release();
+}
+
 void EffectManager::LoadENBSettings()
 {
-	// Initialize with default values (already set in struct)
-	logger::info("Loaded ENB settings");
+	CSimpleIniA ini;
+	ini.SetUnicode();
+	
+	std::filesystem::path settingsPath = "enbseries.ini";
+	
+	SI_Error rc = ini.LoadFile(settingsPath.c_str());
+	if (rc < 0) {
+		logger::info("Could not load ENB settings from {}, using defaults", settingsPath.string());
+		return;
+	}
+	
+	// Load COLORCORRECTION settings
+	enbSettings.COLORCORRECTION.Brightness = static_cast<float>(ini.GetDoubleValue("COLORCORRECTION", "Brightness", 1.0));
+	enbSettings.COLORCORRECTION.GammaCurve = static_cast<float>(ini.GetDoubleValue("COLORCORRECTION", "GammaCurve", 1.0));
+	
+	// Load ADAPTATION settings
+	enbSettings.ADAPTATION.AdaptationSensitivity = static_cast<float>(ini.GetDoubleValue("ADAPTATION", "AdaptationSensitivity", 1.0));
+	enbSettings.ADAPTATION.ForceMinMaxValues = ini.GetBoolValue("ADAPTATION", "ForceMinMaxValues", false);
+	enbSettings.ADAPTATION.AdaptationMin = static_cast<float>(ini.GetDoubleValue("ADAPTATION", "AdaptationMin", 0.0));
+	enbSettings.ADAPTATION.AdaptationMax = static_cast<float>(ini.GetDoubleValue("ADAPTATION", "AdaptationMax", 1.0));
+	
+	// Load DEPTHOFFIELD settings
+	enbSettings.DEPTHOFFIELD.FocusingTime = static_cast<float>(ini.GetDoubleValue("DEPTHOFFIELD", "FocusingTime", 1.0));
+	enbSettings.DEPTHOFFIELD.ApertureTime = static_cast<float>(ini.GetDoubleValue("DEPTHOFFIELD", "ApertureTime", 1.0));
+	
+	// Load BLOOM settings
+	LoadTimeOfDaySettings(ini, "BLOOM", "Amount", enbSettings.BLOOM.Amount);
+	
+	// Load LENS settings
+	LoadTimeOfDaySettings(ini, "LENS", "Amount", enbSettings.LENS.Amount);
+	
+	logger::info("Loaded ENB settings from {}", settingsPath.string());
 }
 
 void EffectManager::SaveENBSettings()
 {
-	// TODO: Save to file/registry if needed
-	logger::debug("Saved ENB settings");
+	CSimpleIniA ini;
+	ini.SetUnicode();
+	
+	std::filesystem::path settingsPath = "enbseries.ini";
+	
+	// Try to load existing file first to preserve other sections
+	ini.LoadFile(settingsPath.c_str());
+	
+	// Save COLORCORRECTION settings
+	ini.SetDoubleValue("COLORCORRECTION", "Brightness", enbSettings.COLORCORRECTION.Brightness);
+	ini.SetDoubleValue("COLORCORRECTION", "GammaCurve", enbSettings.COLORCORRECTION.GammaCurve);
+	
+	// Save ADAPTATION settings
+	ini.SetDoubleValue("ADAPTATION", "AdaptationSensitivity", enbSettings.ADAPTATION.AdaptationSensitivity);
+	ini.SetBoolValue("ADAPTATION", "ForceMinMaxValues", enbSettings.ADAPTATION.ForceMinMaxValues);
+	ini.SetDoubleValue("ADAPTATION", "AdaptationMin", enbSettings.ADAPTATION.AdaptationMin);
+	ini.SetDoubleValue("ADAPTATION", "AdaptationMax", enbSettings.ADAPTATION.AdaptationMax);
+	
+	// Save DEPTHOFFIELD settings
+	ini.SetDoubleValue("DEPTHOFFIELD", "FocusingTime", enbSettings.DEPTHOFFIELD.FocusingTime);
+	ini.SetDoubleValue("DEPTHOFFIELD", "ApertureTime", enbSettings.DEPTHOFFIELD.ApertureTime);
+	
+	// Save BLOOM settings
+	SaveTimeOfDaySettings(ini, "BLOOM", "Amount", enbSettings.BLOOM.Amount);
+	
+	// Save LENS settings
+	SaveTimeOfDaySettings(ini, "LENS", "Amount", enbSettings.LENS.Amount);
+	
+	SI_Error rc = ini.SaveFile(settingsPath.c_str());
+	if (rc < 0) {
+		logger::error("Failed to save ENB settings to {}", settingsPath.string());
+	} else {
+		logger::info("Saved ENB settings to {}", settingsPath.string());
+	}
 }
 
 void EffectManager::RenderTimeOfDaySettings(const std::string& prefix, TimeOfDaySettings& settings)
@@ -750,4 +936,54 @@ void EffectManager::RenderTimeOfDaySettings(const std::string& prefix, TimeOfDay
 		std::string label = prefix + timeOfDay;
 		ImGui::DragFloat(label.c_str(), &settings[timeOfDay]);
 	}
+}
+
+void EffectManager::LoadTimeOfDaySettings(CSimpleIniA& ini, const std::string& section, const std::string& prefix, TimeOfDaySettings& settings)
+{
+	const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night" };
+	
+	for (const auto& timeOfDay : timeOfDayNames) {
+		std::string key = prefix + timeOfDay;
+		settings[timeOfDay] = static_cast<float>(ini.GetDoubleValue(section.c_str(), key.c_str(), 1.0));
+	}
+}
+
+void EffectManager::SaveTimeOfDaySettings(CSimpleIniA& ini, const std::string& section, const std::string& prefix, const TimeOfDaySettings& settings)
+{
+	const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night" };
+	
+	for (const auto& timeOfDay : timeOfDayNames) {
+		std::string key = prefix + timeOfDay;
+		// Need to access the settings through const reference
+		float value;
+		if (timeOfDay == "Dawn") value = settings.Dawn;
+		else if (timeOfDay == "Sunrise") value = settings.Sunrise;
+		else if (timeOfDay == "Day") value = settings.Day;
+		else if (timeOfDay == "Sunset") value = settings.Sunset;
+		else if (timeOfDay == "Dusk") value = settings.Dusk;
+		else if (timeOfDay == "Night") value = settings.Night;
+		else value = 1.0f;
+		
+		ini.SetDoubleValue(section.c_str(), key.c_str(), value);
+	}
+}
+
+float EffectManager::ComputeTimeOfDayValue(const TimeOfDaySettings& settings)
+{
+	// timeOfDay1: [Dawn, Sunrise, Day, Sunset] (x, y, z, w)
+	// timeOfDay2: [Dusk, Night, 0, 0] (x, y, z, w)
+	
+	float result = 0.0f;
+	
+	// Apply timeOfDay1 contributions
+	result += commonData.timeOfDay1[0] * settings.Dawn;     // Dawn
+	result += commonData.timeOfDay1[1] * settings.Sunrise;  // Sunrise
+	result += commonData.timeOfDay1[2] * settings.Day;      // Day
+	result += commonData.timeOfDay1[3] * settings.Sunset;   // Sunset
+	
+	// Apply timeOfDay2 contributions
+	result += commonData.timeOfDay2[0] * settings.Dusk;     // Dusk
+	result += commonData.timeOfDay2[1] * settings.Night;    // Night
+	
+	return result;
 }
