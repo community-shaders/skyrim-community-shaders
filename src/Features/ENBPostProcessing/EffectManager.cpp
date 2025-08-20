@@ -186,24 +186,24 @@ void EffectManager::RenderImGui()
 			}
 
 			if (ImGui::TreeNodeEx("COLORCORRECTION", ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::DragFloat("Brightness", &enbSettings.COLORCORRECTION.Brightness);
-				ImGui::DragFloat("GammaCurve", &enbSettings.COLORCORRECTION.GammaCurve);
+				ImGui::DragFloat("Brightness", &enbSettings.COLORCORRECTION.Brightness, 0.01f, 0.0f, 3.0f);
+				ImGui::DragFloat("GammaCurve", &enbSettings.COLORCORRECTION.GammaCurve, 0.01f, 0.1f, 3.0f);
 
 				ImGui::TreePop();
 			}
 
 			if (ImGui::TreeNodeEx("ADAPTATION", ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::DragFloat("AdaptationSensitivity", &enbSettings.ADAPTATION.AdaptationSensitivity);
+				ImGui::DragFloat("AdaptationSensitivity", &enbSettings.ADAPTATION.AdaptationSensitivity, 0.01f, 0.0f, 2.0f);
 				ImGui::Checkbox("ForceMinMaxValues", &enbSettings.ADAPTATION.ForceMinMaxValues);
-				ImGui::DragFloat("AdaptationMin", &enbSettings.ADAPTATION.AdaptationMin);
-				ImGui::DragFloat("AdaptationMax", &enbSettings.ADAPTATION.AdaptationMax);
+				ImGui::DragFloat("AdaptationMin", &enbSettings.ADAPTATION.AdaptationMin, 0.01f, 0.0f, 1.0f);
+				ImGui::DragFloat("AdaptationMax", &enbSettings.ADAPTATION.AdaptationMax, 0.01f, 0.0f, 5.0f);
 
 				ImGui::TreePop();
 			}
 
 			if (ImGui::TreeNodeEx("DEPTHOFFIELD", ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::DragFloat("FocusingTime", &enbSettings.DEPTHOFFIELD.FocusingTime);
-				ImGui::DragFloat("ApertureTime", &enbSettings.DEPTHOFFIELD.ApertureTime);
+				ImGui::DragFloat("FocusingTime", &enbSettings.DEPTHOFFIELD.FocusingTime, 0.1f, 0.0f, 10.0f);
+				ImGui::DragFloat("ApertureTime", &enbSettings.DEPTHOFFIELD.ApertureTime, 0.1f, 0.0f, 10.0f);
 
 				ImGui::TreePop();
 			}
@@ -927,7 +927,7 @@ void EffectManager::RenderTimeOfDaySettings(const std::string& prefix, TimeOfDay
 
 	for (const auto& timeOfDay : timeOfDayNames) {
 		std::string label = prefix + timeOfDay;
-		ImGui::DragFloat(label.c_str(), &settings[timeOfDay]);
+		ImGui::DragFloat(label.c_str(), &settings[timeOfDay], 0.1f, 0.0f, 10.0f);
 	}
 }
 
