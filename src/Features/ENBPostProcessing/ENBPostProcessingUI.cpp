@@ -1,6 +1,6 @@
 ﻿#include "ENBPostProcessingUI.h"
-#include "SettingsRegistry.h"
 #include "PCH.h"
+#include "SettingsRegistry.h"
 
 ENBPostProcessingUI& ENBPostProcessingUI::GetSingleton()
 {
@@ -147,23 +147,24 @@ void ENBPostProcessingUI::RenderAllSettings()
 	for (const auto& category : categories) {
 		if (ImGui::TreeNodeEx(category.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
 			auto settings = settingsRegistry.GetSettingsByCategory(category);
-			
+
 			if (ImGui::BeginTable((category + "_table").c_str(), 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
 				ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed);
 				ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-				
+
 				for (const auto& settingKey : settings) {
 					auto settingInfo = settingsRegistry.GetSettingInfo(settingKey);
-					if (!settingInfo) continue;
-					
+					if (!settingInfo)
+						continue;
+
 					ImGui::TableNextRow();
 					ImGui::TableSetColumnIndex(0);
 					if (settingInfo->type != SettingType::TimeOfDay)
 						ImGui::Text("%s", settingKey.c_str());
 					ImGui::TableSetColumnIndex(1);
-					
+
 					switch (settingInfo->type) {
-						case SettingType::Bool:
+					case SettingType::Bool:
 						{
 							bool v = settingsRegistry.GetValue<bool>(settingKey);
 							if (ImGui::Checkbox(("##" + settingKey).c_str(), &v)) {
@@ -171,7 +172,7 @@ void ENBPostProcessingUI::RenderAllSettings()
 							}
 							break;
 						}
-						case SettingType::Float:
+					case SettingType::Float:
 						{
 							float v = settingsRegistry.GetValue<float>(settingKey);
 							if (ImGui::SliderFloat(("##" + settingKey).c_str(), &v, settingInfo->minValue, settingInfo->maxValue, "%.2f")) {
@@ -179,12 +180,12 @@ void ENBPostProcessingUI::RenderAllSettings()
 							}
 							break;
 						}
-						case SettingType::TimeOfDay:
+					case SettingType::TimeOfDay:
 						{
 							const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night" };
 							auto v = settingsRegistry.GetValue<TimeOfDayValue>(settingKey);
 							bool changed = false;
-							
+
 							for (const auto& timeOfDay : timeOfDayNames) {
 								ImGui::TableNextRow();
 								ImGui::TableSetColumnIndex(0);
@@ -195,7 +196,7 @@ void ENBPostProcessingUI::RenderAllSettings()
 									changed = true;
 								}
 							}
-							
+
 							if (changed) {
 								settingsRegistry.SetValue<TimeOfDayValue>(settingKey, v);
 							}
@@ -203,7 +204,7 @@ void ENBPostProcessingUI::RenderAllSettings()
 						}
 					}
 				}
-				
+
 				ImGui::EndTable();
 			}
 			ImGui::TreePop();

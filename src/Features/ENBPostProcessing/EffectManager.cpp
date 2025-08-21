@@ -25,7 +25,7 @@ void EffectManager::Initialize()
 {
 	// Register all ENB settings with the registry
 	RegisterENBSettings();
-	
+
 	CreateCommonResources();
 	RegisterEffects();
 	ApplyEffects();
@@ -573,8 +573,7 @@ void EffectManager::UpdateCommonData()
 		registry.SetWeatherBlendFactors(
 			static_cast<uint32_t>(commonData.weather[0]),
 			static_cast<uint32_t>(commonData.weather[1]),
-			commonData.weather[2]
-		);
+			commonData.weather[2]);
 	}
 }
 

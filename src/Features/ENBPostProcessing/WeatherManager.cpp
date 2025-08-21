@@ -1,6 +1,6 @@
 #include "WeatherManager.h"
-#include "SettingsRegistry.h"
 #include "PCH.h"
+#include "SettingsRegistry.h"
 #include <Windows.h>
 #include <algorithm>
 #include <filesystem>

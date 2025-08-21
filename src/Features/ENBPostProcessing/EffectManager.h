@@ -1,8 +1,8 @@
 #pragma once
 
 #include "Downsampler.h"
-#include "WeatherManager.h"
 #include "SettingsRegistry.h"
+#include "WeatherManager.h"
 #include <Effects11/d3dx11effect.h>
 #include <d3d11.h>
 #include <filesystem>
@@ -112,11 +112,17 @@ public:
 	// Helper methods for backwards compatibility
 	float GetInterpolatedBloomAmount();
 	float GetInterpolatedLensAmount();
-	
+
 	// Settings access helpers
-	template<typename T>
-	T GetSetting(const std::string& key) { return SettingsRegistry::GetSingleton().GetValue<T>(key); }
-	
-	template<typename T>
-	void SetSetting(const std::string& key, const T& value) { SettingsRegistry::GetSingleton().SetValue<T>(key, value); }
+	template <typename T>
+	T GetSetting(const std::string& key)
+	{
+		return SettingsRegistry::GetSingleton().GetValue<T>(key);
+	}
+
+	template <typename T>
+	void SetSetting(const std::string& key, const T& value)
+	{
+		SettingsRegistry::GetSingleton().SetValue<T>(key, value);
+	}
 };

@@ -1,10 +1,10 @@
 #pragma once
 
+#include <functional>
+#include <memory>
 #include <string>
 #include <unordered_map>
-#include <memory>
 #include <variant>
-#include <functional>
 #include <vector>
 
 // Forward declaration
@@ -31,28 +31,44 @@ struct TimeOfDayValue
 
 	float& operator[](const std::string& timeOfDay)
 	{
-		if (timeOfDay == "Dawn") return Dawn;
-		if (timeOfDay == "Sunrise") return Sunrise;
-		if (timeOfDay == "Day") return Day;
-		if (timeOfDay == "Sunset") return Sunset;
-		if (timeOfDay == "Dusk") return Dusk;
-		if (timeOfDay == "Night") return Night;
-		if (timeOfDay == "InteriorDay") return InteriorDay;
-		if (timeOfDay == "InteriorNight") return InteriorNight;
-		return Dawn; // fallback
+		if (timeOfDay == "Dawn")
+			return Dawn;
+		if (timeOfDay == "Sunrise")
+			return Sunrise;
+		if (timeOfDay == "Day")
+			return Day;
+		if (timeOfDay == "Sunset")
+			return Sunset;
+		if (timeOfDay == "Dusk")
+			return Dusk;
+		if (timeOfDay == "Night")
+			return Night;
+		if (timeOfDay == "InteriorDay")
+			return InteriorDay;
+		if (timeOfDay == "InteriorNight")
+			return InteriorNight;
+		return Dawn;  // fallback
 	}
 
 	const float& operator[](const std::string& timeOfDay) const
 	{
-		if (timeOfDay == "Dawn") return Dawn;
-		if (timeOfDay == "Sunrise") return Sunrise;
-		if (timeOfDay == "Day") return Day;
-		if (timeOfDay == "Sunset") return Sunset;
-		if (timeOfDay == "Dusk") return Dusk;
-		if (timeOfDay == "Night") return Night;
-		if (timeOfDay == "InteriorDay") return InteriorDay;
-		if (timeOfDay == "InteriorNight") return InteriorNight;
-		return Dawn; // fallback
+		if (timeOfDay == "Dawn")
+			return Dawn;
+		if (timeOfDay == "Sunrise")
+			return Sunrise;
+		if (timeOfDay == "Day")
+			return Day;
+		if (timeOfDay == "Sunset")
+			return Sunset;
+		if (timeOfDay == "Dusk")
+			return Dusk;
+		if (timeOfDay == "Night")
+			return Night;
+		if (timeOfDay == "InteriorDay")
+			return InteriorDay;
+		if (timeOfDay == "InteriorNight")
+			return InteriorNight;
+		return Dawn;  // fallback
 	}
 };
 
@@ -68,10 +84,10 @@ struct SettingInfo
 	bool hasWeatherSupport;
 	SettingValue defaultValue;
 	SettingValue currentValue;
-	
+
 	// UI metadata
-	float minValue = 0.0f;  // For float settings
-	float maxValue = 10.0f; // For float settings
+	float minValue = 0.0f;   // For float settings
+	float maxValue = 10.0f;  // For float settings
 };
 
 class SettingsRegistry
@@ -80,18 +96,18 @@ public:
 	static SettingsRegistry& GetSingleton();
 
 	// Setting registration
-	void RegisterBoolSetting(const std::string& key, const std::string& category, 
-							 bool defaultValue, bool hasWeatherSupport = false);
+	void RegisterBoolSetting(const std::string& key, const std::string& category,
+		bool defaultValue, bool hasWeatherSupport = false);
 	void RegisterFloatSetting(const std::string& key, const std::string& category,
-							  float defaultValue, float minValue = 0.0f, float maxValue = 10.0f, bool hasWeatherSupport = false);
+		float defaultValue, float minValue = 0.0f, float maxValue = 10.0f, bool hasWeatherSupport = false);
 	void RegisterTimeOfDaySetting(const std::string& key, const std::string& category,
-								  const TimeOfDayValue& defaultValue, bool hasWeatherSupport = false);
+		const TimeOfDayValue& defaultValue, bool hasWeatherSupport = false);
 
 	// Setting access
-	template<typename T>
+	template <typename T>
 	T GetValue(const std::string& key);
-	
-	template<typename T>
+
+	template <typename T>
 	void SetValue(const std::string& key, const T& value);
 
 	// Get interpolated time-of-day value (automatically handles weather blending if enabled)
@@ -121,16 +137,16 @@ private:
 	SettingsRegistry& operator=(const SettingsRegistry&) = delete;
 
 	std::unordered_map<std::string, std::unique_ptr<SettingInfo>> settings;
-	std::unordered_map<std::string, std::unordered_map<std::string, SettingValue>> weatherSettings; // weatherKey -> settingKey -> value
-	
+	std::unordered_map<std::string, std::unordered_map<std::string, SettingValue>> weatherSettings;  // weatherKey -> settingKey -> value
+
 	// Current weather state
 	uint32_t currentWeatherID = 0;
 	uint32_t lastWeatherID = 0;
 	float weatherBlendFactor = 0.0f;
 
 	// Time of day interpolation state
-	float timeOfDay1[4] = {0, 0, 0, 0};
-	float timeOfDay2[4] = {0, 0, 0, 0};
+	float timeOfDay1[4] = { 0, 0, 0, 0 };
+	float timeOfDay2[4] = { 0, 0, 0, 0 };
 	float interiorFactor = 0.0f;
 
 	// Helper methods
