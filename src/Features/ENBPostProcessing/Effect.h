@@ -87,7 +87,9 @@ public:
 	{
 		Float,
 		Int,
-		Bool
+		Bool,
+		Color3,
+		Color4
 	};
 
 	enum class UIWidgetType
@@ -112,6 +114,9 @@ public:
 			int intValue;
 			bool boolValue;
 		};
+		
+		// Color value storage
+		float colorValue[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
 		// UI properties
 		float floatMin = 0.0f;

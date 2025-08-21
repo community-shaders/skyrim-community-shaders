@@ -74,6 +74,18 @@ void Effect::Save()
 		case UIVariableType::Bool:
 			value = uiVar.boolValue ? "true" : "false";
 			break;
+		case UIVariableType::Color3:
+		case UIVariableType::Color4:
+			{
+				std::ostringstream oss;
+				int numComponents = (uiVar.type == UIVariableType::Color3) ? 3 : 4;
+				for (int i = 0; i < numComponents; ++i) {
+					oss << uiVar.colorValue[i];
+					if (i < numComponents - 1) oss << " ";
+				}
+				value = oss.str();
+			}
+			break;
 		}
 
 		BOOL result = WritePrivateProfileStringA(section.c_str(), uiVar.displayName.c_str(), value.c_str(), iniPath.string().c_str());
@@ -702,19 +714,33 @@ void Effect::LoadUIVariables()
 		D3DX11_EFFECT_TYPE_DESC typeDesc;
 		auto effectType = variable->GetType();
 		if (SUCCEEDED(effectType->GetDesc(&typeDesc))) {
-			switch (typeDesc.Type) {
-			case D3D_SVT_FLOAT:
-				uiVar.type = UIVariableType::Float;
-				break;
-			case D3D_SVT_INT:
-				uiVar.type = UIVariableType::Int;
-				break;
-			case D3D_SVT_BOOL:
-				uiVar.type = UIVariableType::Bool;
-				break;
-			default:
-				continue;  // Unsupported type
+			if (typeDesc.Class == D3D_SVC_SCALAR) {
+				switch (typeDesc.Type) {
+				case D3D_SVT_FLOAT:
+					uiVar.type = UIVariableType::Float;
+					break;
+				case D3D_SVT_INT:
+					uiVar.type = UIVariableType::Int;
+					break;
+				case D3D_SVT_BOOL:
+					uiVar.type = UIVariableType::Bool;
+					break;
+				default:
+					continue;
+				}
+			} else if (typeDesc.Class == D3D_SVC_VECTOR && typeDesc.Type == D3D_SVT_FLOAT && typeDesc.Elements == 0) {
+				if (typeDesc.Columns == 3) {
+					uiVar.type = UIVariableType::Color3;
+				} else if (typeDesc.Columns == 4) {
+					uiVar.type = UIVariableType::Color4;
+				} else {
+					continue;
+				}
+			} else {
+				continue;
 			}
+		} else {
+			continue;
 		}
 
 		// Parse UI widget type
@@ -874,6 +900,11 @@ void Effect::LoadUIVariableValue(UIVariable& uiVar)
 			// Successfully loaded bool value
 		}
 		break;
+	case UIVariableType::Color3:
+	case UIVariableType::Color4:
+		if (SUCCEEDED(uiVar.effectVariable->AsVector()->GetFloatVector(uiVar.colorValue))) {
+		}
+		break;
 	}
 }
 
@@ -882,26 +913,41 @@ void Effect::LoadVariableFromString(UIVariable& uiVar, const std::string& value)
 	try {
 		switch (uiVar.type) {
 		case UIVariableType::Float:
-			uiVar.floatValue = std::stof(value);
-			uiVar.effectVariable->SetRawValue(&uiVar.floatValue, 0, sizeof(uiVar.floatValue));
+			{
+				uiVar.floatValue = std::stof(value);
+				uiVar.effectVariable->AsScalar()->SetFloat(uiVar.floatValue);
+			}
 			break;
 		case UIVariableType::Int:
-			uiVar.intValue = std::stoi(value);
-			uiVar.effectVariable->SetRawValue(&uiVar.intValue, 0, sizeof(uiVar.intValue));
+			{
+				uiVar.intValue = std::stoi(value);
+				uiVar.effectVariable->AsScalar()->SetInt(uiVar.intValue);
+			}
 			break;
 		case UIVariableType::Bool:
-			// Handle various boolean representations
-			std::string lowerValue = value;
-			std::transform(lowerValue.begin(), lowerValue.end(), lowerValue.begin(), ::tolower);
-			if (lowerValue == "true" || lowerValue == "1" || lowerValue == "yes" || lowerValue == "on") {
-				uiVar.boolValue = true;
-			} else if (lowerValue == "false" || lowerValue == "0" || lowerValue == "no" || lowerValue == "off") {
-				uiVar.boolValue = false;
-			} else {
-				// Try to parse as integer (non-zero = true)
-				uiVar.boolValue = std::stoi(value) != 0;
+			{
+				std::string lowerValue = value;
+				std::transform(lowerValue.begin(), lowerValue.end(), lowerValue.begin(), ::tolower);
+				if (lowerValue == "true" || lowerValue == "1" || lowerValue == "yes" || lowerValue == "on") {
+					uiVar.boolValue = true;
+				} else if (lowerValue == "false" || lowerValue == "0" || lowerValue == "no" || lowerValue == "off") {
+					uiVar.boolValue = false;
+				} else {
+					uiVar.boolValue = std::stoi(value) != 0;
+				}
+				uiVar.effectVariable->AsScalar()->SetBool(uiVar.boolValue);
 			}
-			uiVar.effectVariable->SetRawValue(&uiVar.boolValue, 0, sizeof(uiVar.boolValue));
+			break;
+		case UIVariableType::Color3:
+		case UIVariableType::Color4:
+			{
+				std::istringstream ss(value);
+				int numComponents = (uiVar.type == UIVariableType::Color3) ? 3 : 4;
+				for (int i = 0; i < numComponents; ++i) {
+					ss >> uiVar.colorValue[i];
+				}
+				uiVar.effectVariable->AsVector()->SetFloatVector(uiVar.colorValue);
+			}
 			break;
 		}
 	} catch (const std::exception& e) {
@@ -922,6 +968,10 @@ void Effect::UpdateUIVariables()
 		case UIVariableType::Bool:
 			uiVar.effectVariable->AsScalar()->SetBool(uiVar.boolValue);
 			break;
+		case UIVariableType::Color3:
+		case UIVariableType::Color4:
+			uiVar.effectVariable->AsVector()->SetFloatVector(uiVar.colorValue);
+			break;
 		}
 	}
 }
@@ -930,49 +980,70 @@ void Effect::RenderImGui()
 {
 	bool valuesChanged = false;
 
-	// Technique selection dropdown using UI techniques with UIName annotations
-	if (!uiTechniques.empty()) {
-		const char* currentDisplayName = uiTechniques[selectedTechniqueIndex].displayName.c_str();
-		ImGui::Text("TECHNIQUE");
-		ImGui::SameLine();
-		if (ImGui::BeginCombo(("##TECHNIQUE_" + GetName()).c_str(), currentDisplayName)) {
-			for (uint32_t i = 0; i < uiTechniques.size(); ++i) {
-				const bool isSelected = (selectedTechniqueIndex == i);
-				if (ImGui::Selectable(uiTechniques[i].displayName.c_str(), isSelected)) {
-					selectedTechniqueIndex = i;
+	// Use table
+	if (ImGui::BeginTable(("effect_table_" + GetName()).c_str(), 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+		ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed);
+		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+		if (!uiTechniques.empty()) {
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::Text("TECHNIQUE");
+
+			ImGui::TableSetColumnIndex(1);
+			const char* currentDisplayName = uiTechniques[selectedTechniqueIndex].displayName.c_str();
+			if (ImGui::BeginCombo(("##TECHNIQUE_" + GetName()).c_str(), currentDisplayName)) {
+				for (uint32_t i = 0; i < uiTechniques.size(); ++i) {
+					const bool isSelected = (selectedTechniqueIndex == i);
+					if (ImGui::Selectable(uiTechniques[i].displayName.c_str(), isSelected)) {
+						selectedTechniqueIndex = i;
+						valuesChanged = true;
+					}
+					if (isSelected) {
+						ImGui::SetItemDefaultFocus();
+					}
 				}
-				if (isSelected) {
-					ImGui::SetItemDefaultFocus();
-				}
+				ImGui::EndCombo();
 			}
-			ImGui::EndCombo();
-		}
-		ImGui::Separator();
-	}
-
-	for (auto& uiVar : uiVariables) {
-		// Skip spacers
-		if (uiVar.displayName.empty() || std::all_of(uiVar.displayName.begin(), uiVar.displayName.end(), [](char c) { return std::isspace(c); })) {
-			ImGui::Spacing();
-			continue;
 		}
 
-		ImGui::Text("%s", uiVar.displayName.c_str());
+		for (auto& uiVar : uiVariables) {
+			if (uiVar.displayName.empty() || std::all_of(uiVar.displayName.begin(), uiVar.displayName.end(), [](char c) { return std::isspace(c); })) {
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Spacing();
+				continue;
+			}
 
-		// Skip inputs for labels (min == max == 0)
-		bool isLabelOnly = (uiVar.type == UIVariableType::Float && uiVar.floatMin == 0 && uiVar.floatMax == 0) ||
-		                   (uiVar.type == UIVariableType::Int && uiVar.intMin == 0 && uiVar.intMax == 0);
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::Text("%s", uiVar.displayName.c_str());
 
-		if (!isLabelOnly) {
-			ImGui::SameLine();
-			if (uiVar.type == UIVariableType::Float) {
-				if (ImGui::InputFloat(("##" + uiVar.displayName).c_str(), &uiVar.floatValue, 0.0f, 0.0f, "%.3f")) {
+			// Skip inputs
+			bool isLabelOnly = ((uiVar.type == UIVariableType::Float && uiVar.floatMin == 0 && uiVar.floatMax == 0) ||
+			                    (uiVar.type == UIVariableType::Int && uiVar.intMin == 0 && uiVar.intMax == 0));
+
+			if (isLabelOnly) {
+				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ImGui::GetColorU32(ImVec4(0.2f, 0.2f, 0.2f, 1.0f)));
+				continue;
+			}
+
+			ImGui::TableSetColumnIndex(1);
+			
+			std::string id = "##" + uiVar.displayName + "_" + GetName();
+			const char* currentItem = ""; 
+			
+			switch (uiVar.type) {
+			case UIVariableType::Float:
+				if (ImGui::InputFloat(id.c_str(), &uiVar.floatValue, 0.0f, 0.0f, "%.3f")) {
 					valuesChanged = true;
 				}
-			} else if (uiVar.type == UIVariableType::Int) {
+				break;
+			case UIVariableType::Int:
 				if (uiVar.widgetType == UIWidgetType::Dropdown && !uiVar.dropdownItems.empty()) {
-					const char* currentItem = uiVar.dropdownItems[uiVar.intValue].c_str();
-					if (ImGui::BeginCombo(("##" + uiVar.displayName).c_str(), currentItem)) {
+					// For dropdowns
+					currentItem = (uiVar.intValue >= 0 && uiVar.intValue < (int)uiVar.dropdownItems.size()) ? uiVar.dropdownItems[uiVar.intValue].c_str() : "";
+					if (ImGui::BeginCombo(id.c_str(), currentItem)) {
 						for (int i = 0; i < uiVar.dropdownItems.size(); ++i) {
 							if (ImGui::Selectable(uiVar.dropdownItems[i].c_str(), uiVar.intValue == i)) {
 								uiVar.intValue = i;
@@ -982,16 +1053,30 @@ void Effect::RenderImGui()
 						ImGui::EndCombo();
 					}
 				} else {
-					if (ImGui::InputInt(("##" + uiVar.displayName).c_str(), &uiVar.intValue)) {
+					if (ImGui::InputInt(id.c_str(), &uiVar.intValue, 0)) {
 						valuesChanged = true;
 					}
 				}
-			} else if (uiVar.type == UIVariableType::Bool) {
-				if (ImGui::Checkbox(("##" + uiVar.displayName).c_str(), &uiVar.boolValue)) {
+				break;
+			case UIVariableType::Bool:
+				if (ImGui::Checkbox(id.c_str(), &uiVar.boolValue)) {
 					valuesChanged = true;
 				}
+				break;
+			case UIVariableType::Color3:
+				if (ImGui::ColorEdit3(id.c_str(), uiVar.colorValue)) {
+					valuesChanged = true;
+				}
+				break;
+			case UIVariableType::Color4:
+				if (ImGui::ColorEdit4(id.c_str(), uiVar.colorValue)) {
+					valuesChanged = true;
+				}
+				break;
 			}
 		}
+
+		ImGui::EndTable();
 	}
 
 	// Update shader variables if any values changed
