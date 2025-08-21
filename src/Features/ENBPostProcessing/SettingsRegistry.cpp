@@ -262,6 +262,112 @@ void SettingsRegistry::LoadWeatherSettings(const std::string& weatherKey, const 
 	logger::debug("[SettingsRegistry] Loaded weather settings from: {}", filePath);
 }
 
+void SettingsRegistry::SaveWeatherSettings(const std::string& weatherKey, const std::string& filePath)
+{
+	auto weatherIt = weatherSettings.find(weatherKey);
+	if (weatherIt == weatherSettings.end()) {
+		logger::warn("[SettingsRegistry] No weather settings found for key: {}", weatherKey);
+		return;
+	}
+
+	const auto& weatherSettingMap = weatherIt->second;
+	
+	// Create directory if it doesn't exist
+	std::filesystem::path weatherFilePath(filePath);
+	std::filesystem::create_directories(weatherFilePath.parent_path());
+
+	// Save all weather settings for this weather
+	for (const auto& [compositeKey, value] : weatherSettingMap) {
+		// Find the original setting to get metadata
+		auto settingIt = settings.find(compositeKey);
+		if (settingIt == settings.end()) {
+			continue;
+		}
+
+		const auto& setting = *settingIt->second;
+		
+		// Create a temporary setting with the weather value
+		SettingInfo tempSetting = setting;
+		tempSetting.currentValue = value;
+		
+		// Save to weather file
+		SaveSettingToFile(filePath, setting.category, setting.key, tempSetting);
+	}
+
+	logger::debug("[SettingsRegistry] Saved weather settings to: {}", filePath);
+}
+
+void SettingsRegistry::SaveAllWeatherSettings()
+{
+	auto& weatherManager = WeatherManager::GetSingleton();
+	const auto& weatherEntries = weatherManager.GetWeatherEntries();
+
+	if (weatherEntries.empty()) {
+		logger::warn("[SettingsRegistry] No weather entries found, skipping weather file save");
+		return;
+	}
+
+	// Save current settings to all weather files
+	int savedCount = 0;
+	for (const auto& [sectionName, entry] : weatherEntries) {
+		std::string weatherFilePath = "enbseries/" + entry.fileName;
+		
+		// Create directory if it doesn't exist
+		std::filesystem::path weatherFilePathObj(weatherFilePath);
+		std::filesystem::create_directories(weatherFilePathObj.parent_path());
+
+		// Save all weather-supported settings with their current values
+		for (const auto& [compositeKey, setting] : settings) {
+			if (setting->hasWeatherSupport) {
+				SaveSettingToFile(weatherFilePath, setting->category, setting->key, *setting);
+			}
+		}
+		
+		savedCount++;
+		logger::debug("[SettingsRegistry] Saved current settings to weather file: {}", weatherFilePath);
+	}
+
+	logger::info("[SettingsRegistry] Saved current settings to {} weather files", savedCount);
+}
+
+void SettingsRegistry::ReloadAllWeatherSettings()
+{
+	// Clear existing weather settings
+	weatherSettings.clear();
+	
+	// Reload through WeatherManager
+	auto& weatherManager = WeatherManager::GetSingleton();
+	weatherManager.Initialize(); // This will reload _weatherlist.ini and all weather files
+	
+	logger::info("[SettingsRegistry] Reloaded all weather settings");
+}
+
+void SettingsRegistry::UpdateWeatherSettingsFromCurrent()
+{
+	// This method captures the current state of settings and stores them as weather values
+	// It's used when the user modifies settings in the UI and wants to save them to weather files
+	
+	if (currentWeatherID == 0) {
+		logger::warn("[SettingsRegistry] No current weather ID set, cannot update weather settings");
+		return;
+	}
+	
+	std::ostringstream oss;
+	oss << "weather_" << currentWeatherID;
+	std::string weatherKey = oss.str();
+	
+	auto& weatherSettingMap = weatherSettings[weatherKey];
+	
+	// Update weather settings with current values for weather-supported settings
+	for (const auto& [compositeKey, setting] : settings) {
+		if (setting->hasWeatherSupport) {
+			weatherSettingMap[compositeKey] = setting->currentValue;
+		}
+	}
+	
+	logger::debug("[SettingsRegistry] Updated weather settings for current weather ID: {}", currentWeatherID);
+}
+
 void SettingsRegistry::SetTimeOfDayData(const float newTimeOfDay1[4], const float newTimeOfDay2[4], float newInteriorFactor)
 {
 	memcpy(this->timeOfDay1, newTimeOfDay1, sizeof(this->timeOfDay1));

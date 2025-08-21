@@ -126,6 +126,10 @@ public:
 	// Weather integration
 	void SetWeatherBlendFactors(uint32_t currentWeatherID, uint32_t lastWeatherID, float blendFactor);
 	void LoadWeatherSettings(const std::string& weatherKey, const std::string& filePath);
+	void SaveWeatherSettings(const std::string& weatherKey, const std::string& filePath);
+	void SaveAllWeatherSettings();
+	void ReloadAllWeatherSettings();
+	void UpdateWeatherSettingsFromCurrent();
 
 	// File I/O
 	void LoadFromFile(const std::string& filePath);

@@ -108,6 +108,9 @@ public:
 	// Settings management (now delegated to SettingsRegistry)
 	void LoadENBSettings();
 	void SaveENBSettings();
+	void LoadAllWeatherSettings();
+	void SaveAllWeatherSettings();
+	void UpdateCurrentWeatherSettings();
 
 	// Helper methods for backwards compatibility
 	float GetInterpolatedBloomAmount();

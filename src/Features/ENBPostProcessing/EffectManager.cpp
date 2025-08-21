@@ -724,3 +724,24 @@ float EffectManager::GetInterpolatedLensAmount()
 	auto& registry = SettingsRegistry::GetSingleton();
 	return registry.GetInterpolatedTimeOfDayValue("Amount", "LENS");
 }
+
+void EffectManager::LoadAllWeatherSettings()
+{
+	auto& registry = SettingsRegistry::GetSingleton();
+	registry.ReloadAllWeatherSettings();
+	logger::info("[EffectManager] Loaded all weather settings");
+}
+
+void EffectManager::SaveAllWeatherSettings()
+{
+	auto& registry = SettingsRegistry::GetSingleton();
+	registry.SaveAllWeatherSettings();
+	logger::info("[EffectManager] Saved all weather settings");
+}
+
+void EffectManager::UpdateCurrentWeatherSettings()
+{
+	auto& registry = SettingsRegistry::GetSingleton();
+	registry.UpdateWeatherSettingsFromCurrent();
+	logger::info("[EffectManager] Updated current weather settings from UI values");
+}

@@ -42,6 +42,11 @@ void ENBPostProcessingUI::RenderSettingsPanel()
 
 	if (ImGui::Button("Load")) {
 		effectManager.LoadEffects();
+		effectManager.LoadENBSettings();
+		effectManager.LoadAllWeatherSettings();
+	}
+	if (ImGui::IsItemHovered()) {
+		ImGui::SetTooltip("Load all settings from enbseries.ini, weather files, and effect configurations");
 	}
 
 	ImGui::SameLine();
@@ -49,6 +54,10 @@ void ENBPostProcessingUI::RenderSettingsPanel()
 	if (ImGui::Button("Save")) {
 		effectManager.SaveEffects();
 		effectManager.SaveENBSettings();
+		effectManager.SaveAllWeatherSettings();
+	}
+	if (ImGui::IsItemHovered()) {
+		ImGui::SetTooltip("Save all settings to enbseries.ini, weather files, and effect configurations");
 	}
 
 	RenderWeatherControl();
