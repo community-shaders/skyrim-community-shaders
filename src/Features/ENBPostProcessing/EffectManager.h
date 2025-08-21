@@ -179,7 +179,7 @@ public:
 
 	// Weather-based settings
 	WeatherManager::WeatherSettings GetCurrentWeatherSettings();
-	
+
 	// Get effective settings (weather-based if available, fallback to ENB settings)
 	TimeOfDaySettings GetEffectiveBloomAmount();
 	TimeOfDaySettings GetEffectiveLensAmount();

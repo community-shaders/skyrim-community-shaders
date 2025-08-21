@@ -1,10 +1,10 @@
 #include "WeatherManager.h"
 #include "PCH.h"
+#include <Windows.h>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
-#include <algorithm>
-#include <Windows.h>
 
 WeatherManager& WeatherManager::GetSingleton()
 {
@@ -20,7 +20,7 @@ void WeatherManager::Initialize()
 void WeatherManager::LoadWeatherList()
 {
 	std::filesystem::path weatherListPath = "enbseries/_weatherlist.ini";
-	
+
 	if (!std::filesystem::exists(weatherListPath)) {
 		logger::warn("[WeatherManager] _weatherlist.ini not found at {}", weatherListPath.string());
 		return;
@@ -32,12 +32,12 @@ void WeatherManager::LoadWeatherList()
 
 	// Use GetPrivateProfileString to enumerate sections
 	std::string weatherListPathStr = weatherListPath.string();
-	
+
 	// Get all section names
 	constexpr DWORD bufferSize = 32768;
 	std::vector<char> buffer(bufferSize);
 	DWORD result = GetPrivateProfileSectionNamesA(buffer.data(), bufferSize, weatherListPathStr.c_str());
-	
+
 	if (result == 0 || result == bufferSize - 2) {
 		logger::error("[WeatherManager] Failed to read sections from _weatherlist.ini");
 		return;
@@ -48,7 +48,7 @@ void WeatherManager::LoadWeatherList()
 	while (*ptr != '\0') {
 		std::string sectionName = ptr;
 		ptr += sectionName.length() + 1;
-		
+
 		// Skip non-weather sections
 		if (sectionName.find("WEATHER") != 0) {
 			continue;
@@ -58,14 +58,14 @@ void WeatherManager::LoadWeatherList()
 		char fileName[MAX_PATH] = {};
 		GetPrivateProfileStringA(sectionName.c_str(), "FileName", "", fileName, MAX_PATH, weatherListPathStr.c_str());
 		if (strlen(fileName) == 0) {
-			continue; // Skip empty weather entries
+			continue;  // Skip empty weather entries
 		}
 
 		// Get weather IDs
 		char weatherIDsStr[1024] = {};
 		GetPrivateProfileStringA(sectionName.c_str(), "WeatherIDs", "", weatherIDsStr, 1024, weatherListPathStr.c_str());
 		if (strlen(weatherIDsStr) == 0) {
-			continue; // Skip entries without weather IDs
+			continue;  // Skip entries without weather IDs
 		}
 
 		WeatherEntry entry;
@@ -82,7 +82,7 @@ void WeatherManager::LoadWeatherList()
 
 		// Store entry and map weather IDs
 		weatherEntries[sectionName] = std::move(entry);
-		
+
 		for (uint32_t weatherID : weatherEntries[sectionName].weatherIDs) {
 			weatherIDMap[weatherID] = sectionName;
 		}
@@ -133,14 +133,14 @@ WeatherManager::WeatherSettings WeatherManager::GetInterpolatedSettings(uint32_t
 	if (!lastEntry || blendFactor >= 1.0f) {
 		return currentEntry ? currentEntry->settings : WeatherSettings{};
 	}
-	
+
 	if (!currentEntry || blendFactor <= 0.0f) {
 		return lastEntry ? lastEntry->settings : WeatherSettings{};
 	}
 
 	// Interpolate between the two weather settings
 	WeatherSettings result;
-	
+
 	// Helper lambda for interpolating TimeOfDaySettings
 	auto lerpTimeOfDay = [](const TimeOfDaySettings& a, const TimeOfDaySettings& b, float t) -> TimeOfDaySettings {
 		TimeOfDaySettings result;
@@ -171,7 +171,7 @@ float WeatherManager::ComputeTimeOfDayValue(const TimeOfDaySettings& settings, c
 	if (interiorFactor > 0.5f) {
 		// Interior - interpolate between InteriorDay and InteriorNight based on time
 		// Use a simple day/night cycle for interior
-		float dayNightFactor = (timeOfDay1[2] + timeOfDay1[1] + timeOfDay1[0] * 0.5f + timeOfDay1[3] * 0.5f); // More day-like during dawn/dusk
+		float dayNightFactor = (timeOfDay1[2] + timeOfDay1[1] + timeOfDay1[0] * 0.5f + timeOfDay1[3] * 0.5f);  // More day-like during dawn/dusk
 		result = settings.InteriorNight + dayNightFactor * (settings.InteriorDay - settings.InteriorNight);
 	} else {
 		// Exterior - use full time-of-day interpolation
@@ -191,15 +191,15 @@ float WeatherManager::ComputeTimeOfDayValue(const TimeOfDaySettings& settings, c
 void WeatherManager::ParseWeatherIDs(const std::string& weatherIDsStr, std::vector<uint32_t>& weatherIDs)
 {
 	weatherIDs.clear();
-	
+
 	std::stringstream ss(weatherIDsStr);
 	std::string token;
-	
+
 	while (std::getline(ss, token, ',')) {
 		// Trim whitespace
 		token.erase(0, token.find_first_not_of(" \t"));
 		token.erase(token.find_last_not_of(" \t") + 1);
-		
+
 		if (!token.empty()) {
 			try {
 				uint32_t weatherID = ParseHexID(token);
