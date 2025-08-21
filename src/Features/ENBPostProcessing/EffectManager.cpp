@@ -498,25 +498,25 @@ void EffectManager::CreateCommonTextures()
 
 	commonTextureCache.insert({ "TextureHDRTemp", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, "EffectManager::TextureHDRTemp") });
 	commonTextureCache.insert({ "TextureHDRTemp2", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, "EffectManager::TextureHDRTemp2") });
-	
+
 	commonTextureCache.insert({ "RenderTargetRGBA32", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R8G8B8A8_UNORM, "EffectManager::RenderTargetRGBA32") });
 	commonTextureCache.insert({ "RenderTargetRGBA64", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16G16B16A16_UNORM, "EffectManager::RenderTargetRGBA64") });
 	commonTextureCache.insert({ "RenderTargetRGBA64F", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, "EffectManager::RenderTargetRGBA64F") });
 	commonTextureCache.insert({ "RenderTargetR16F", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16_FLOAT, "EffectManager::RenderTargetR16F") });
 	commonTextureCache.insert({ "RenderTargetR32F", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R32_FLOAT, "EffectManager::RenderTargetR32F") });
 	commonTextureCache.insert({ "RenderTargetRGB32F", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R11G11B10_FLOAT, "EffectManager::RenderTargetRGB32F") });
-	
+
 	commonTextureCache.insert({ "TextureSDRTemp", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R10G10B10A2_UNORM, "EffectManager::TextureSDRTemp") });
 	commonTextureCache.insert({ "TextureSDRTemp2", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R10G10B10A2_UNORM, "EffectManager::TextureSDRTemp2") });
-	
+
 	commonTextureCache.insert({ "TextureBloom", Effect::CreateTexture(1024, 1024, DXGI_FORMAT_R16G16B16A16_FLOAT, "EffectManager::TextureBloom") });
 	commonTextureCache.insert({ "TextureLens", Effect::CreateTexture(1024, 1024, DXGI_FORMAT_R16G16B16A16_FLOAT, "EffectManager::TextureLens") });
 
 	commonTextureCache.insert({ "TextureBloomLensTemp", Effect::CreateTexture(1024, 1024, DXGI_FORMAT_R16G16B16A16_FLOAT, "EffectManager::TextureBloomLensTemp") });
-	
+
 	commonTextureCache.insert({ "TextureAdaptation", Effect::CreateTexture(1, 1, DXGI_FORMAT_R32_FLOAT, "EffectManager::TextureAdaptation") });
 	commonTextureCache.insert({ "TextureAdaptationSwap", Effect::CreateTexture(1, 1, DXGI_FORMAT_R32_FLOAT, "EffectManager::TextureAdaptationSwap") });
-	
+
 	// Create fixed-size render targets for bloom/lens
 	std::vector<std::pair<std::string, UINT>> fixedSizes = {
 		{ "RenderTarget1024", 1024 },
