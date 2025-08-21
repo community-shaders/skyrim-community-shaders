@@ -21,13 +21,10 @@ private:
 	// UI section rendering methods
 	void RenderEffectsList();
 	void RenderSettingsPanel();
-	void RenderColorCorrectionSettings();
-	void RenderAdaptationSettings();
-	void RenderDepthOfFieldSettings();
 	void RenderWeatherControl();
 	void RenderBloomSettings();
 	void RenderLensSettings();
 
 	// Helper UI methods
-	void RenderTimeOfDaySettings(const std::string& prefix, EffectManager::TimeOfDaySettings& settings);
+	void RenderAllSettings();
 };

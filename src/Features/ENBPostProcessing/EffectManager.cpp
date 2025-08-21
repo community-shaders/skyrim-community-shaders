@@ -9,6 +9,7 @@
 #include "Effect.h"
 #include "WeatherManager.h"
 #include "ENBPostProcessingUI.h"
+#include "ENBSettings.h"
 #include "Globals.h"
 #include "State.h"
 #include "Utils/D3D.h"
@@ -24,6 +25,9 @@ EffectManager& EffectManager::GetSingleton()
 
 void EffectManager::Initialize()
 {
+	// Register all ENB settings with the registry
+	RegisterENBSettings();
+	
 	CreateCommonResources();
 	RegisterEffects();
 	ApplyEffects();
@@ -563,6 +567,17 @@ void EffectManager::UpdateCommonData()
 	{
 		commonData.eInteriorFactor = !sky->mode.any(RE::Sky::Mode::kFull);
 	}
+
+	// Update SettingsRegistry with time-of-day data and weather info
+	{
+		auto& registry = SettingsRegistry::GetSingleton();
+		registry.SetTimeOfDayData(commonData.timeOfDay1, commonData.timeOfDay2, commonData.eInteriorFactor);
+		registry.SetWeatherBlendFactors(
+			static_cast<uint32_t>(commonData.weather[0]),
+			static_cast<uint32_t>(commonData.weather[1]),
+			commonData.weather[2]
+		);
+	}
 }
 
 void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
@@ -644,8 +659,8 @@ void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 	HRESULT hr = context->Map(colorCorrectionConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
 	if (SUCCEEDED(hr)) {
 		float* cbData = static_cast<float*>(mapped.pData);
-		cbData[0] = enbSettings.COLORCORRECTION.Brightness;
-		cbData[1] = enbSettings.COLORCORRECTION.GammaCurve;
+		cbData[0] = GetSetting<float>("Brightness");
+		cbData[1] = GetSetting<float>("GammaCurve");
 		cbData[2] = 0.0f;  // padding
 		cbData[3] = 0.0f;  // padding
 		context->Unmap(colorCorrectionConstantBuffer.Get(), 0);
@@ -689,211 +704,24 @@ void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 
 void EffectManager::LoadENBSettings()
 {
-	CSimpleIniA ini;
-	ini.SetUnicode();
-
-	std::filesystem::path settingsPath = "enbseries.ini";
-
-	SI_Error rc = ini.LoadFile(settingsPath.c_str());
-	if (rc < 0) {
-		logger::info("[ENBPP] Could not load ENB settings from {}, using defaults", settingsPath.string());
-		return;
-	}
-
-	// Load COLORCORRECTION settings
-	enbSettings.COLORCORRECTION.Brightness = static_cast<float>(ini.GetDoubleValue("COLORCORRECTION", "Brightness", 1.0));
-	enbSettings.COLORCORRECTION.GammaCurve = static_cast<float>(ini.GetDoubleValue("COLORCORRECTION", "GammaCurve", 1.0));
-
-	// Load ADAPTATION settings
-	enbSettings.ADAPTATION.AdaptationSensitivity = static_cast<float>(ini.GetDoubleValue("ADAPTATION", "AdaptationSensitivity", 1.0));
-	enbSettings.ADAPTATION.ForceMinMaxValues = ini.GetBoolValue("ADAPTATION", "ForceMinMaxValues", false);
-	enbSettings.ADAPTATION.AdaptationMin = static_cast<float>(ini.GetDoubleValue("ADAPTATION", "AdaptationMin", 0.0));
-	enbSettings.ADAPTATION.AdaptationMax = static_cast<float>(ini.GetDoubleValue("ADAPTATION", "AdaptationMax", 1.0));
-	enbSettings.ADAPTATION.AdaptationTime = static_cast<float>(ini.GetDoubleValue("ADAPTATION", "AdaptationTime", 1.0));
-
-	// Load DEPTHOFFIELD settings
-	enbSettings.DEPTHOFFIELD.FocusingTime = static_cast<float>(ini.GetDoubleValue("DEPTHOFFIELD", "FocusingTime", 1.0));
-	enbSettings.DEPTHOFFIELD.ApertureTime = static_cast<float>(ini.GetDoubleValue("DEPTHOFFIELD", "ApertureTime", 1.0));
-
-	// Load BLOOM settings
-	LoadTimeOfDaySettings(ini, "BLOOM", "Amount", enbSettings.BLOOM.Amount);
-
-	// Load LENS settings
-	LoadTimeOfDaySettings(ini, "LENS", "Amount", enbSettings.LENS.Amount);
-
-	logger::info("[ENBPP] Loaded ENB settings from {}", settingsPath.string());
+	auto& registry = SettingsRegistry::GetSingleton();
+	registry.LoadFromFile("enbseries.ini");
 }
 
 void EffectManager::SaveENBSettings()
 {
-	CSimpleIniA ini;
-	ini.SetUnicode();
-
-	std::filesystem::path settingsPath = "enbseries.ini";
-
-	// Try to load existing file first to preserve other sections
-	ini.LoadFile(settingsPath.c_str());
-
-	// Save COLORCORRECTION settings
-	ini.SetDoubleValue("COLORCORRECTION", "Brightness", enbSettings.COLORCORRECTION.Brightness);
-	ini.SetDoubleValue("COLORCORRECTION", "GammaCurve", enbSettings.COLORCORRECTION.GammaCurve);
-
-	// Save ADAPTATION settings
-	ini.SetDoubleValue("ADAPTATION", "AdaptationSensitivity", enbSettings.ADAPTATION.AdaptationSensitivity);
-	ini.SetBoolValue("ADAPTATION", "ForceMinMaxValues", enbSettings.ADAPTATION.ForceMinMaxValues);
-	ini.SetDoubleValue("ADAPTATION", "AdaptationMin", enbSettings.ADAPTATION.AdaptationMin);
-	ini.SetDoubleValue("ADAPTATION", "AdaptationMax", enbSettings.ADAPTATION.AdaptationMax);
-	ini.SetDoubleValue("ADAPTATION", "AdaptationTime", enbSettings.ADAPTATION.AdaptationTime);
-
-	// Save DEPTHOFFIELD settings
-	ini.SetDoubleValue("DEPTHOFFIELD", "FocusingTime", enbSettings.DEPTHOFFIELD.FocusingTime);
-	ini.SetDoubleValue("DEPTHOFFIELD", "ApertureTime", enbSettings.DEPTHOFFIELD.ApertureTime);
-
-	// Save BLOOM settings
-	SaveTimeOfDaySettings(ini, "BLOOM", "Amount", enbSettings.BLOOM.Amount);
-
-	// Save LENS settings
-	SaveTimeOfDaySettings(ini, "LENS", "Amount", enbSettings.LENS.Amount);
-
-	SI_Error rc = ini.SaveFile(settingsPath.c_str());
-	if (rc < 0) {
-		logger::error("[ENBPP] Failed to save ENB settings to {}", settingsPath.string());
-	} else {
-		logger::info("[ENBPP] Saved ENB settings to {}", settingsPath.string());
-	}
+	auto& registry = SettingsRegistry::GetSingleton();
+	registry.SaveToFile("enbseries.ini");
 }
 
-void EffectManager::RenderTimeOfDaySettings(const std::string& prefix, TimeOfDaySettings& settings)
+float EffectManager::GetInterpolatedBloomAmount()
 {
-	const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night" };
-
-	if (ImGui::BeginTable((prefix + "_timeofday_table").c_str(), 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
-		ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed);
-		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-
-		for (const auto& timeOfDay : timeOfDayNames) {
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::Text("%s", timeOfDay.c_str());
-			ImGui::TableSetColumnIndex(1);
-			std::string id = "##" + prefix + timeOfDay;
-			ImGui::SliderFloat(id.c_str(), &settings[timeOfDay], 0.0f, 10.0f, "%.1f");
-		}
-
-		ImGui::EndTable();
-	}
+	auto& registry = SettingsRegistry::GetSingleton();
+	return registry.GetInterpolatedTimeOfDayValue("BloomAmount");
 }
 
-void EffectManager::LoadTimeOfDaySettings(CSimpleIniA& ini, const std::string& section, const std::string& prefix, TimeOfDaySettings& settings)
+float EffectManager::GetInterpolatedLensAmount()
 {
-	const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night" };
-
-	for (const auto& timeOfDay : timeOfDayNames) {
-		std::string key = prefix + timeOfDay;
-		settings[timeOfDay] = static_cast<float>(ini.GetDoubleValue(section.c_str(), key.c_str(), 1.0));
-	}
-}
-
-void EffectManager::SaveTimeOfDaySettings(CSimpleIniA& ini, const std::string& section, const std::string& prefix, const TimeOfDaySettings& settings)
-{
-	const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night" };
-
-	for (const auto& timeOfDay : timeOfDayNames) {
-		std::string key = prefix + timeOfDay;
-		// Need to access the settings through const reference
-		float value;
-		if (timeOfDay == "Dawn")
-			value = settings.Dawn;
-		else if (timeOfDay == "Sunrise")
-			value = settings.Sunrise;
-		else if (timeOfDay == "Day")
-			value = settings.Day;
-		else if (timeOfDay == "Sunset")
-			value = settings.Sunset;
-		else if (timeOfDay == "Dusk")
-			value = settings.Dusk;
-		else if (timeOfDay == "Night")
-			value = settings.Night;
-		else
-			value = 1.0f;
-
-		ini.SetDoubleValue(section.c_str(), key.c_str(), value);
-	}
-}
-
-float EffectManager::ComputeTimeOfDayValue(const TimeOfDaySettings& settings)
-{
-	// Use WeatherManager's time-of-day computation which handles interior/exterior
-	auto& weatherManager = WeatherManager::GetSingleton();
-	return weatherManager.ComputeTimeOfDayValue(
-		WeatherManager::TimeOfDaySettings{
-			settings.Dawn, settings.Sunrise, settings.Day,
-			settings.Sunset, settings.Dusk, settings.Night, 1.0f, 1.0f },
-		commonData.timeOfDay1, commonData.timeOfDay2, commonData.eInteriorFactor);
-}
-
-WeatherManager::WeatherSettings EffectManager::GetCurrentWeatherSettings()
-{
-	auto& weatherManager = WeatherManager::GetSingleton();
-
-	// Get current weather IDs from commonData
-	uint32_t currentWeatherID = static_cast<uint32_t>(commonData.weather[0]);
-	uint32_t lastWeatherID = static_cast<uint32_t>(commonData.weather[1]);
-	float blendFactor = commonData.weather[2];
-
-	return weatherManager.GetInterpolatedSettings(currentWeatherID, lastWeatherID, blendFactor);
-}
-
-EffectManager::TimeOfDaySettings EffectManager::GetEffectiveBloomAmount()
-{
-	auto weatherSettings = GetCurrentWeatherSettings();
-	auto& weatherManager = WeatherManager::GetSingleton();
-
-	// Check if we have valid weather settings
-	uint32_t currentWeatherID = static_cast<uint32_t>(commonData.weather[0]);
-	uint32_t lastWeatherID = static_cast<uint32_t>(commonData.weather[1]);
-	bool hasWeatherSettings = weatherManager.FindWeatherEntry(currentWeatherID) != nullptr ||
-	                          weatherManager.FindWeatherEntry(lastWeatherID) != nullptr;
-
-	if (hasWeatherSettings) {
-		// Convert WeatherManager::TimeOfDaySettings to EffectManager::TimeOfDaySettings
-		TimeOfDaySettings result;
-		result.Dawn = weatherSettings.BLOOM.Amount.Dawn;
-		result.Sunrise = weatherSettings.BLOOM.Amount.Sunrise;
-		result.Day = weatherSettings.BLOOM.Amount.Day;
-		result.Sunset = weatherSettings.BLOOM.Amount.Sunset;
-		result.Dusk = weatherSettings.BLOOM.Amount.Dusk;
-		result.Night = weatherSettings.BLOOM.Amount.Night;
-		return result;
-	}
-
-	// Fallback to ENB settings
-	return enbSettings.BLOOM.Amount;
-}
-
-EffectManager::TimeOfDaySettings EffectManager::GetEffectiveLensAmount()
-{
-	auto weatherSettings = GetCurrentWeatherSettings();
-	auto& weatherManager = WeatherManager::GetSingleton();
-
-	// Check if we have valid weather settings
-	uint32_t currentWeatherID = static_cast<uint32_t>(commonData.weather[0]);
-	uint32_t lastWeatherID = static_cast<uint32_t>(commonData.weather[1]);
-	bool hasWeatherSettings = weatherManager.FindWeatherEntry(currentWeatherID) != nullptr ||
-	                          weatherManager.FindWeatherEntry(lastWeatherID) != nullptr;
-
-	if (hasWeatherSettings) {
-		// Convert WeatherManager::TimeOfDaySettings to EffectManager::TimeOfDaySettings
-		TimeOfDaySettings result;
-		result.Dawn = weatherSettings.LENS.Amount.Dawn;
-		result.Sunrise = weatherSettings.LENS.Amount.Sunrise;
-		result.Day = weatherSettings.LENS.Amount.Day;
-		result.Sunset = weatherSettings.LENS.Amount.Sunset;
-		result.Dusk = weatherSettings.LENS.Amount.Dusk;
-		result.Night = weatherSettings.LENS.Amount.Night;
-		return result;
-	}
-
-	// Fallback to ENB settings
-	return enbSettings.LENS.Amount;
+	auto& registry = SettingsRegistry::GetSingleton();
+	return registry.GetInterpolatedTimeOfDayValue("LensAmount");
 }

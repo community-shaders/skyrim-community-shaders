@@ -1,0 +1,370 @@
+#include "SettingsRegistry.h"
+#include "WeatherManager.h"
+#include "PCH.h"
+#include <Windows.h>
+#include <algorithm>
+#include <set>
+#include <filesystem>
+#include <sstream>
+
+SettingsRegistry& SettingsRegistry::GetSingleton()
+{
+	static SettingsRegistry instance;
+	return instance;
+}
+
+void SettingsRegistry::RegisterBoolSetting(const std::string& key, const std::string& category,
+											bool defaultValue, bool hasWeatherSupport)
+{
+	auto setting = std::make_unique<SettingInfo>();
+	setting->key = key;
+	setting->category = category;
+	setting->type = SettingType::Bool;
+	setting->hasWeatherSupport = hasWeatherSupport;
+	setting->defaultValue = defaultValue;
+	setting->currentValue = defaultValue;
+	
+	settings[key] = std::move(setting);
+}
+
+void SettingsRegistry::RegisterFloatSetting(const std::string& key, const std::string& category,
+											 float defaultValue, float minValue, float maxValue, bool hasWeatherSupport)
+{
+	auto setting = std::make_unique<SettingInfo>();
+	setting->key = key;
+	setting->category = category;
+	setting->type = SettingType::Float;
+	setting->hasWeatherSupport = hasWeatherSupport;
+	setting->defaultValue = defaultValue;
+	setting->currentValue = defaultValue;
+	setting->minValue = minValue;
+	setting->maxValue = maxValue;
+	
+	settings[key] = std::move(setting);
+}
+
+void SettingsRegistry::RegisterTimeOfDaySetting(const std::string& key, const std::string& category,
+												 const TimeOfDayValue& defaultValue, bool hasWeatherSupport)
+{
+	auto setting = std::make_unique<SettingInfo>();
+	setting->key = key;
+	setting->category = category;
+	setting->type = SettingType::TimeOfDay;
+	setting->hasWeatherSupport = hasWeatherSupport;
+	setting->defaultValue = defaultValue;
+	setting->currentValue = defaultValue;
+	
+	settings[key] = std::move(setting);
+}
+
+template<typename T>
+T SettingsRegistry::GetValue(const std::string& key)
+{
+	auto it = settings.find(key);
+	if (it == settings.end()) {
+		logger::error("[SettingsRegistry] Setting '{}' not found", key);
+		return T{};
+	}
+
+	const auto& setting = *it->second;
+	
+	// If setting has weather support, try to get weather-blended value
+	if (setting.hasWeatherSupport) {
+		auto& weatherManager = WeatherManager::GetSingleton();
+		
+		// Check if we have weather settings for current weather
+		auto currentWeatherEntry = weatherManager.FindWeatherEntry(currentWeatherID);
+		auto lastWeatherEntry = weatherManager.FindWeatherEntry(lastWeatherID);
+		
+		if (currentWeatherEntry || lastWeatherEntry) {
+			// Get weather values
+			SettingValue currentWeatherValue = setting.currentValue; // fallback
+			SettingValue lastWeatherValue = setting.currentValue;    // fallback
+			
+			// Look up weather-specific values
+			if (currentWeatherEntry) {
+				std::ostringstream oss;
+				oss << "weather_" << currentWeatherID;
+				auto weatherIt = weatherSettings.find(oss.str());
+				if (weatherIt != weatherSettings.end()) {
+					auto valueIt = weatherIt->second.find(key);
+					if (valueIt != weatherIt->second.end()) {
+						currentWeatherValue = valueIt->second;
+					}
+				}
+			}
+			
+			if (lastWeatherEntry) {
+				std::ostringstream oss;
+				oss << "weather_" << lastWeatherID;
+				auto weatherIt = weatherSettings.find(oss.str());
+				if (weatherIt != weatherSettings.end()) {
+					auto valueIt = weatherIt->second.find(key);
+					if (valueIt != weatherIt->second.end()) {
+						lastWeatherValue = valueIt->second;
+					}
+				}
+			}
+			
+			// Interpolate between weather values
+			SettingValue blendedValue = InterpolateWeatherValues(currentWeatherValue, lastWeatherValue, weatherBlendFactor);
+			return std::get<T>(blendedValue);
+		}
+	}
+	
+	// Return base setting value
+	return std::get<T>(setting.currentValue);
+}
+
+template<typename T>
+void SettingsRegistry::SetValue(const std::string& key, const T& value)
+{
+	auto it = settings.find(key);
+	if (it == settings.end()) {
+		logger::error("[SettingsRegistry] Setting '{}' not found", key);
+		return;
+	}
+
+	it->second->currentValue = value;
+}
+
+float SettingsRegistry::GetInterpolatedTimeOfDayValue(const std::string& key)
+{
+	TimeOfDayValue timeOfDayValue = GetValue<TimeOfDayValue>(key);
+	return ComputeTimeOfDayInterpolation(timeOfDayValue);
+}
+
+bool SettingsRegistry::HasSetting(const std::string& key) const
+{
+	return settings.find(key) != settings.end();
+}
+
+const SettingInfo* SettingsRegistry::GetSettingInfo(const std::string& key) const
+{
+	auto it = settings.find(key);
+	return (it != settings.end()) ? it->second.get() : nullptr;
+}
+
+std::vector<std::string> SettingsRegistry::GetSettingsByCategory(const std::string& category) const
+{
+	std::vector<std::string> result;
+	for (const auto& [key, setting] : settings) {
+		if (setting->category == category) {
+			result.push_back(key);
+		}
+	}
+	std::sort(result.begin(), result.end());
+	return result;
+}
+
+std::vector<std::string> SettingsRegistry::GetAllCategories() const
+{
+	std::set<std::string> categorySet;
+	for (const auto& [key, setting] : settings) {
+		categorySet.insert(setting->category);
+	}
+	return std::vector<std::string>(categorySet.begin(), categorySet.end());
+}
+
+void SettingsRegistry::SetWeatherBlendFactors(uint32_t newCurrentWeatherID, uint32_t newLastWeatherID, float blendFactor)
+{
+	this->currentWeatherID = newCurrentWeatherID;
+	this->lastWeatherID = newLastWeatherID;
+	this->weatherBlendFactor = blendFactor;
+}
+
+void SettingsRegistry::LoadWeatherSettings(const std::string& weatherKey, const std::string& filePath)
+{
+	if (!std::filesystem::exists(filePath)) {
+		logger::warn("[SettingsRegistry] Weather file not found: {}", filePath);
+		return;
+	}
+
+	auto& weatherSettingMap = weatherSettings[weatherKey];
+	
+	// Load all weather-supported settings from the file
+	for (const auto& [key, setting] : settings) {
+		if (setting->hasWeatherSupport) {
+			LoadSettingFromFile(filePath, setting->category, key, *setting);
+			// Store the loaded value in weather settings
+			weatherSettingMap[key] = setting->currentValue;
+			// Reset current value to default for next weather file
+			setting->currentValue = setting->defaultValue;
+		}
+	}
+
+	logger::debug("[SettingsRegistry] Loaded weather settings from: {}", filePath);
+}
+
+void SettingsRegistry::SetTimeOfDayData(const float newTimeOfDay1[4], const float newTimeOfDay2[4], float newInteriorFactor)
+{
+	memcpy(this->timeOfDay1, newTimeOfDay1, sizeof(this->timeOfDay1));
+	memcpy(this->timeOfDay2, newTimeOfDay2, sizeof(this->timeOfDay2));
+	this->interiorFactor = newInteriorFactor;
+}
+
+void SettingsRegistry::LoadFromFile(const std::string& filePath)
+{
+	if (!std::filesystem::exists(filePath)) {
+		logger::warn("[SettingsRegistry] Settings file not found: {}, using defaults", filePath);
+		return;
+	}
+
+	for (const auto& [key, setting] : settings) {
+		if (!setting->hasWeatherSupport) { // Only load non-weather settings from main file
+			LoadSettingFromFile(filePath, setting->category, key, *setting);
+		}
+	}
+
+	logger::info("[SettingsRegistry] Loaded settings from: {}", filePath);
+}
+
+void SettingsRegistry::SaveToFile(const std::string& filePath)
+{
+	for (const auto& [key, setting] : settings) {
+		if (!setting->hasWeatherSupport) { // Only save non-weather settings to main file
+			SaveSettingToFile(filePath, setting->category, key, *setting);
+		}
+	}
+
+	logger::info("[SettingsRegistry] Saved settings to: {}", filePath);
+}
+
+SettingValue SettingsRegistry::InterpolateWeatherValues(const SettingValue& currentValue, const SettingValue& lastValue, float t)
+{
+	if (currentValue.index() != lastValue.index()) {
+		return currentValue; // Type mismatch, return current
+	}
+
+	switch (currentValue.index()) {
+		case 0: // bool
+			return t > 0.5f ? std::get<bool>(currentValue) : std::get<bool>(lastValue);
+		case 1: // float
+		{
+			float a = std::get<float>(lastValue);
+			float b = std::get<float>(currentValue);
+			return a + t * (b - a);
+		}
+		case 2: // TimeOfDayValue
+		{
+			const auto& a = std::get<TimeOfDayValue>(lastValue);
+			const auto& b = std::get<TimeOfDayValue>(currentValue);
+			return InterpolateTimeOfDayValues(a, b, t);
+		}
+	}
+	return currentValue;
+}
+
+TimeOfDayValue SettingsRegistry::InterpolateTimeOfDayValues(const TimeOfDayValue& a, const TimeOfDayValue& b, float t)
+{
+	TimeOfDayValue result;
+	result.Dawn = a.Dawn + t * (b.Dawn - a.Dawn);
+	result.Sunrise = a.Sunrise + t * (b.Sunrise - a.Sunrise);
+	result.Day = a.Day + t * (b.Day - a.Day);
+	result.Sunset = a.Sunset + t * (b.Sunset - a.Sunset);
+	result.Dusk = a.Dusk + t * (b.Dusk - a.Dusk);
+	result.Night = a.Night + t * (b.Night - a.Night);
+	result.InteriorDay = a.InteriorDay + t * (b.InteriorDay - a.InteriorDay);
+	result.InteriorNight = a.InteriorNight + t * (b.InteriorNight - a.InteriorNight);
+	return result;
+}
+
+float SettingsRegistry::ComputeTimeOfDayInterpolation(const TimeOfDayValue& value)
+{
+	float result = 0.0f;
+
+	if (interiorFactor > 0.5f) {
+		// Interior - interpolate between InteriorDay and InteriorNight based on time
+		float dayNightFactor = (timeOfDay1[2] + timeOfDay1[1] + timeOfDay1[0] * 0.5f + timeOfDay1[3] * 0.5f);
+		result = value.InteriorNight + dayNightFactor * (value.InteriorDay - value.InteriorNight);
+	} else {
+		// Exterior - use full time-of-day interpolation
+		result += timeOfDay1[0] * value.Dawn;     // Dawn
+		result += timeOfDay1[1] * value.Sunrise;  // Sunrise
+		result += timeOfDay1[2] * value.Day;      // Day
+		result += timeOfDay1[3] * value.Sunset;   // Sunset
+		result += timeOfDay2[0] * value.Dusk;     // Dusk
+		result += timeOfDay2[1] * value.Night;    // Night
+	}
+
+	return result;
+}
+
+void SettingsRegistry::LoadSettingFromFile(const std::string& filePath, const std::string& section, const std::string& key, SettingInfo& setting)
+{
+	char buffer[256];
+
+	switch (setting.type) {
+		case SettingType::Bool:
+		{
+			GetPrivateProfileStringA(section.c_str(), key.c_str(), "false", buffer, sizeof(buffer), filePath.c_str());
+			std::string valueStr = buffer;
+			std::transform(valueStr.begin(), valueStr.end(), valueStr.begin(), ::tolower);
+			setting.currentValue = (valueStr == "true" || valueStr == "1");
+			break;
+		}
+		case SettingType::Float:
+		{
+			float defaultVal = std::get<float>(setting.defaultValue);
+			GetPrivateProfileStringA(section.c_str(), key.c_str(), std::to_string(defaultVal).c_str(), buffer, sizeof(buffer), filePath.c_str());
+			setting.currentValue = static_cast<float>(atof(buffer));
+			break;
+		}
+		case SettingType::TimeOfDay:
+		{
+			TimeOfDayValue timeOfDayValue = std::get<TimeOfDayValue>(setting.defaultValue);
+			const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
+			
+			for (const auto& timeOfDay : timeOfDayNames) {
+				std::string fullKey = key + timeOfDay;
+				GetPrivateProfileStringA(section.c_str(), fullKey.c_str(), "1.0", buffer, sizeof(buffer), filePath.c_str());
+				timeOfDayValue[timeOfDay] = static_cast<float>(atof(buffer));
+			}
+			
+			setting.currentValue = timeOfDayValue;
+			break;
+		}
+	}
+}
+
+void SettingsRegistry::SaveSettingToFile(const std::string& filePath, const std::string& section, const std::string& key, const SettingInfo& setting)
+{
+	char buffer[256];
+
+	switch (setting.type) {
+		case SettingType::Bool:
+		{
+			bool value = std::get<bool>(setting.currentValue);
+			WritePrivateProfileStringA(section.c_str(), key.c_str(), value ? "true" : "false", filePath.c_str());
+			break;
+		}
+		case SettingType::Float:
+		{
+			float value = std::get<float>(setting.currentValue);
+			sprintf_s(buffer, "%.6f", value);
+			WritePrivateProfileStringA(section.c_str(), key.c_str(), buffer, filePath.c_str());
+			break;
+		}
+		case SettingType::TimeOfDay:
+		{
+			const TimeOfDayValue& timeOfDayValue = std::get<TimeOfDayValue>(setting.currentValue);
+			const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
+			
+			for (const auto& timeOfDay : timeOfDayNames) {
+				std::string fullKey = key + timeOfDay;
+				sprintf_s(buffer, "%.6f", timeOfDayValue[timeOfDay]);
+				WritePrivateProfileStringA(section.c_str(), fullKey.c_str(), buffer, filePath.c_str());
+			}
+			break;
+		}
+	}
+}
+
+// Explicit template instantiations
+template bool SettingsRegistry::GetValue<bool>(const std::string& key);
+template float SettingsRegistry::GetValue<float>(const std::string& key);
+template TimeOfDayValue SettingsRegistry::GetValue<TimeOfDayValue>(const std::string& key);
+
+template void SettingsRegistry::SetValue<bool>(const std::string& key, const bool& value);
+template void SettingsRegistry::SetValue<float>(const std::string& key, const float& value);
+template void SettingsRegistry::SetValue<TimeOfDayValue>(const std::string& key, const TimeOfDayValue& value);

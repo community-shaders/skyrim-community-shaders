@@ -74,8 +74,8 @@ void ENBDepthOfField::UpdateEffectVariables()
 	auto& effectManager = EffectManager::GetSingleton();
 
 	float4 dofParameters{};
-	dofParameters.z = effectManager.enbSettings.DEPTHOFFIELD.ApertureTime * (*globals::game::deltaTime);
-	dofParameters.w = effectManager.enbSettings.DEPTHOFFIELD.FocusingTime * (*globals::game::deltaTime);
+	dofParameters.z = effectManager.GetSetting<float>("ApertureTime") * (*globals::game::deltaTime);
+	dofParameters.w = effectManager.GetSetting<float>("FocusingTime") * (*globals::game::deltaTime);
 
 	auto DofParameters = effect->GetVariableByName("DofParameters")->AsVector();
 	if (DofParameters && DofParameters->IsValid())

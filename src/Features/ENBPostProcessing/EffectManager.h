@@ -2,6 +2,7 @@
 
 #include "Downsampler.h"
 #include "WeatherManager.h"
+#include "SettingsRegistry.h"
 #include <Effects11/d3dx11effect.h>
 #include <d3d11.h>
 #include <filesystem>
@@ -104,83 +105,18 @@ public:
 	// Texture swap tracking
 	uint32_t textureSwap = 0;
 
-	// Time of day setting helper
-	struct TimeOfDaySettings
-	{
-		float Dawn = 1.0f;
-		float Sunrise = 1.0f;
-		float Day = 1.0f;
-		float Sunset = 1.0f;
-		float Dusk = 1.0f;
-		float Night = 1.0f;
-
-		float& operator[](const std::string& timeOfDay)
-		{
-			if (timeOfDay == "Dawn")
-				return Dawn;
-			if (timeOfDay == "Sunrise")
-				return Sunrise;
-			if (timeOfDay == "Day")
-				return Day;
-			if (timeOfDay == "Sunset")
-				return Sunset;
-			if (timeOfDay == "Dusk")
-				return Dusk;
-			if (timeOfDay == "Night")
-				return Night;
-			return Dawn;  // fallback
-		}
-	};
-
-	// ENB settings storage
-	struct ENBSettings
-	{
-		struct
-		{
-			float Brightness = 1.0f;
-			float GammaCurve = 1.0f;
-		} COLORCORRECTION;
-
-		struct
-		{
-			float AdaptationSensitivity = 1.0f;
-			bool ForceMinMaxValues = false;
-			float AdaptationMin = 0.0f;
-			float AdaptationMax = 1.0f;
-			float AdaptationTime = 1.0f;
-		} ADAPTATION;
-
-		struct
-		{
-			float FocusingTime = 1.0f;
-			float ApertureTime = 1.0f;
-		} DEPTHOFFIELD;
-
-		struct
-		{
-			TimeOfDaySettings Amount;
-		} BLOOM;
-
-		struct
-		{
-			TimeOfDaySettings Amount;
-		} LENS;
-	} enbSettings;
-
-	// Settings management
+	// Settings management (now delegated to SettingsRegistry)
 	void LoadENBSettings();
 	void SaveENBSettings();
-	void RenderTimeOfDaySettings(const std::string& prefix, TimeOfDaySettings& settings);
-	void LoadTimeOfDaySettings(CSimpleIniA& ini, const std::string& section, const std::string& prefix, TimeOfDaySettings& settings);
-	void SaveTimeOfDaySettings(CSimpleIniA& ini, const std::string& section, const std::string& prefix, const TimeOfDaySettings& settings);
 
-	// Time of day computation
-	float ComputeTimeOfDayValue(const TimeOfDaySettings& settings);
-
-	// Weather-based settings
-	WeatherManager::WeatherSettings GetCurrentWeatherSettings();
-
-	// Get effective settings (weather-based if available, fallback to ENB settings)
-	TimeOfDaySettings GetEffectiveBloomAmount();
-	TimeOfDaySettings GetEffectiveLensAmount();
+	// Helper methods for backwards compatibility
+	float GetInterpolatedBloomAmount();
+	float GetInterpolatedLensAmount();
+	
+	// Settings access helpers
+	template<typename T>
+	T GetSetting(const std::string& key) { return SettingsRegistry::GetSingleton().GetValue<T>(key); }
+	
+	template<typename T>
+	void SetSetting(const std::string& key, const T& value) { SettingsRegistry::GetSingleton().SetValue<T>(key, value); }
 };
