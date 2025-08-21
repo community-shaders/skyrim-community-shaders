@@ -141,7 +141,7 @@ public:
 
 	// Execute a technique sequence with ping-pong rendering
 	void ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Texture& a_input, Texture& a_output, Texture& a_temp);
-	
+
 	// Execute a single technique
 	void ExecuteTechnique(const std::string& techniqueName, Texture& output);
 
