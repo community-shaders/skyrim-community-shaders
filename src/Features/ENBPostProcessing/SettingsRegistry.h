@@ -130,7 +130,7 @@ public:
 	// File I/O
 	void LoadFromFile(const std::string& filePath);
 	void SaveToFile(const std::string& filePath);
-	
+
 	// Weather ignore settings management
 	void SaveWeatherIgnoreSettings(const std::string& filePath);
 	void LoadWeatherIgnoreSettings(const std::string& filePath);
@@ -155,10 +155,10 @@ private:
 	uint32_t currentWeatherID = 0;
 	uint32_t lastWeatherID = 0;
 	float weatherBlendFactor = 0.0f;
-	
+
 	// Weather ignore settings per category
-	std::unordered_map<std::string, bool> ignoreWeatherSystem;        // category -> bool
-	std::unordered_map<std::string, bool> ignoreWeatherSystemInterior; // category -> bool
+	std::unordered_map<std::string, bool> ignoreWeatherSystem;          // category -> bool
+	std::unordered_map<std::string, bool> ignoreWeatherSystemInterior;  // category -> bool
 
 	// Time of day interpolation state
 	float timeOfDay1[4] = { 0, 0, 0, 0 };
