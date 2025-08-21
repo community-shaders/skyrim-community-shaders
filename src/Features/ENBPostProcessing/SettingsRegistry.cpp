@@ -60,65 +60,6 @@ void SettingsRegistry::RegisterTimeOfDaySetting(const std::string& key, const st
 	settings[compositeKey] = std::move(setting);
 }
 
-template <typename T>
-T SettingsRegistry::GetValue(const std::string& key)
-{
-	auto it = settings.find(key);
-	if (it == settings.end()) {
-		logger::error("[SettingsRegistry] Setting '{}' not found", key);
-		return T{};
-	}
-
-	const auto& setting = *it->second;
-
-	// If setting has weather support, try to get weather-blended value
-	if (setting.hasWeatherSupport) {
-		auto& weatherManager = WeatherManager::GetSingleton();
-
-		// Check if we have weather settings for current weather
-		auto currentWeatherEntry = weatherManager.FindWeatherEntry(currentWeatherID);
-		auto lastWeatherEntry = weatherManager.FindWeatherEntry(lastWeatherID);
-
-		if (currentWeatherEntry || lastWeatherEntry) {
-			// Get weather values
-			SettingValue currentWeatherValue = setting.currentValue;  // fallback
-			SettingValue lastWeatherValue = setting.currentValue;     // fallback
-
-			// Look up weather-specific values
-			if (currentWeatherEntry) {
-				std::ostringstream oss;
-				oss << "weather_" << currentWeatherID;
-				auto weatherIt = weatherSettings.find(oss.str());
-				if (weatherIt != weatherSettings.end()) {
-					auto valueIt = weatherIt->second.find(key);
-					if (valueIt != weatherIt->second.end()) {
-						currentWeatherValue = valueIt->second;
-					}
-				}
-			}
-
-			if (lastWeatherEntry) {
-				std::ostringstream oss;
-				oss << "weather_" << lastWeatherID;
-				auto weatherIt = weatherSettings.find(oss.str());
-				if (weatherIt != weatherSettings.end()) {
-					auto valueIt = weatherIt->second.find(key);
-					if (valueIt != weatherIt->second.end()) {
-						lastWeatherValue = valueIt->second;
-					}
-				}
-			}
-
-			// Interpolate between weather values
-			SettingValue blendedValue = InterpolateWeatherValues(currentWeatherValue, lastWeatherValue, weatherBlendFactor);
-			return std::get<T>(blendedValue);
-		}
-	}
-
-	// Return base setting value
-	return std::get<T>(setting.currentValue);
-}
-
 template<typename T>
 T SettingsRegistry::GetValue(const std::string& key, const std::string& category)
 {
@@ -180,18 +121,6 @@ T SettingsRegistry::GetValue(const std::string& key, const std::string& category
 }
 
 template<typename T>
-void SettingsRegistry::SetValue(const std::string& key, const T& value)
-{
-	auto it = settings.find(key);
-	if (it == settings.end()) {
-		logger::error("[SettingsRegistry] Setting '{}' not found", key);
-		return;
-	}
-
-	it->second->currentValue = value;
-}
-
-template<typename T>
 void SettingsRegistry::SetValue(const std::string& key, const std::string& category, const T& value)
 {
 	std::string compositeKey = MakeCompositeKey(key, category);
@@ -206,8 +135,16 @@ void SettingsRegistry::SetValue(const std::string& key, const std::string& categ
 
 float SettingsRegistry::GetInterpolatedTimeOfDayValue(const std::string& key)
 {
-	TimeOfDayValue timeOfDayValue = GetValue<TimeOfDayValue>(key);
-	return ComputeTimeOfDayInterpolation(timeOfDayValue);
+	// This method is deprecated - try to find the setting by key across all categories
+	// This is kept for backwards compatibility but should be avoided
+	for (const auto& [compositeKey, setting] : settings) {
+		if (setting->key == key && setting->type == SettingType::TimeOfDay) {
+			TimeOfDayValue timeOfDayValue = std::get<TimeOfDayValue>(setting->currentValue);
+			return ComputeTimeOfDayInterpolation(timeOfDayValue);
+		}
+	}
+	logger::warn("[SettingsRegistry] GetInterpolatedTimeOfDayValue: Setting '{}' not found", key);
+	return 0.0f;
 }
 
 float SettingsRegistry::GetInterpolatedTimeOfDayValue(const std::string& key, const std::string& category)
@@ -216,21 +153,10 @@ float SettingsRegistry::GetInterpolatedTimeOfDayValue(const std::string& key, co
 	return ComputeTimeOfDayInterpolation(timeOfDayValue);
 }
 
-bool SettingsRegistry::HasSetting(const std::string& key) const
-{
-	return settings.find(key) != settings.end();
-}
-
 bool SettingsRegistry::HasSetting(const std::string& key, const std::string& category) const
 {
 	std::string compositeKey = MakeCompositeKey(key, category);
 	return settings.find(compositeKey) != settings.end();
-}
-
-const SettingInfo* SettingsRegistry::GetSettingInfo(const std::string& key) const
-{
-	auto it = settings.find(key);
-	return (it != settings.end()) ? it->second.get() : nullptr;
 }
 
 const SettingInfo* SettingsRegistry::GetSettingInfo(const std::string& key, const std::string& category) const
@@ -300,18 +226,21 @@ void SettingsRegistry::SetTimeOfDayData(const float newTimeOfDay1[4], const floa
 
 void SettingsRegistry::LoadFromFile(const std::string& filePath)
 {
-	if (!std::filesystem::exists(filePath)) {
-		logger::warn("[SettingsRegistry] Settings file not found: {}, using defaults", filePath);
+	// Convert to absolute path
+	std::filesystem::path absPath = std::filesystem::absolute(filePath);
+	
+	if (!std::filesystem::exists(absPath)) {
+		logger::warn("[SettingsRegistry] Settings file not found: {}, using defaults", absPath.string());
 		return;
 	}
 
 	for (const auto& [compositeKey, setting] : settings) {
 		if (!setting->hasWeatherSupport) { // Only load non-weather settings from main file
-			LoadSettingFromFile(filePath, setting->category, setting->key, *setting);
+			LoadSettingFromFile(absPath.string(), setting->category, setting->key, *setting);
 		}
 	}
 
-	logger::info("[SettingsRegistry] Loaded settings from: {}", filePath);
+	logger::info("[SettingsRegistry] Loaded settings from: {}", absPath.string());
 }
 
 void SettingsRegistry::SaveToFile(const std::string& filePath)
@@ -404,7 +333,6 @@ void SettingsRegistry::LoadSettingFromFile(const std::string& filePath, const st
 			std::string valueStr = buffer;
 			std::transform(valueStr.begin(), valueStr.end(), valueStr.begin(), ::tolower);
 			setting.currentValue = (valueStr == "true" || valueStr == "1");
-			logger::debug("[SettingsRegistry] Loaded [{}]::{} = {}", section, key, valueStr);
 			break;
 		}
 	case SettingType::Float:
@@ -415,7 +343,6 @@ void SettingsRegistry::LoadSettingFromFile(const std::string& filePath, const st
 				logger::warn("[SettingsRegistry] Failed to load float setting [{}]::{} from {}", section, key, filePath);
 			}
 			setting.currentValue = static_cast<float>(atof(buffer));
-			logger::debug("[SettingsRegistry] Loaded [{}]::{} = {}", section, key, buffer);
 			break;
 		}
 	case SettingType::TimeOfDay:
@@ -430,7 +357,6 @@ void SettingsRegistry::LoadSettingFromFile(const std::string& filePath, const st
 					logger::warn("[SettingsRegistry] Failed to load TimeOfDay setting [{}]::{} from {}", section, fullKey, filePath);
 				}
 				timeOfDayValue[timeOfDay] = static_cast<float>(atof(buffer));
-				logger::debug("[SettingsRegistry] Loaded [{}]::{} = {}", section, fullKey, buffer);
 			}
 
 			setting.currentValue = timeOfDayValue;
@@ -473,17 +399,9 @@ void SettingsRegistry::SaveSettingToFile(const std::string& filePath, const std:
 }
 
 // Explicit template instantiations
-template bool SettingsRegistry::GetValue<bool>(const std::string& key);
-template float SettingsRegistry::GetValue<float>(const std::string& key);
-template TimeOfDayValue SettingsRegistry::GetValue<TimeOfDayValue>(const std::string& key);
-
 template bool SettingsRegistry::GetValue<bool>(const std::string& key, const std::string& category);
 template float SettingsRegistry::GetValue<float>(const std::string& key, const std::string& category);
 template TimeOfDayValue SettingsRegistry::GetValue<TimeOfDayValue>(const std::string& key, const std::string& category);
-
-template void SettingsRegistry::SetValue<bool>(const std::string& key, const bool& value);
-template void SettingsRegistry::SetValue<float>(const std::string& key, const float& value);
-template void SettingsRegistry::SetValue<TimeOfDayValue>(const std::string& key, const TimeOfDayValue& value);
 
 template void SettingsRegistry::SetValue<bool>(const std::string& key, const std::string& category, const bool& value);
 template void SettingsRegistry::SetValue<float>(const std::string& key, const std::string& category, const float& value);

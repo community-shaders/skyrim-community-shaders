@@ -103,15 +103,9 @@ public:
 	void RegisterTimeOfDaySetting(const std::string& key, const std::string& category,
 		const TimeOfDayValue& defaultValue, bool hasWeatherSupport = false);
 
-	// Setting access
-	template <typename T>
-	T GetValue(const std::string& key);
-	
+	// Setting access	
 	template<typename T>
 	T GetValue(const std::string& key, const std::string& category);
-	
-	template<typename T>
-	void SetValue(const std::string& key, const T& value);
 	
 	template<typename T>
 	void SetValue(const std::string& key, const std::string& category, const T& value);
@@ -122,9 +116,7 @@ public:
 	float GetInterpolatedTimeOfDayValue(const std::string& key, const std::string& category);
 
 	// Setting queries
-	bool HasSetting(const std::string& key) const;
 	bool HasSetting(const std::string& key, const std::string& category) const;
-	const SettingInfo* GetSettingInfo(const std::string& key) const;
 	const SettingInfo* GetSettingInfo(const std::string& key, const std::string& category) const;
 	std::vector<std::string> GetSettingsByCategory(const std::string& category) const;
 	std::vector<std::string> GetAllCategories() const;

@@ -115,14 +115,14 @@ public:
 
 	// Settings access helpers
 	template <typename T>
-	T GetSetting(const std::string& key)
+	T GetSetting(const std::string& key, const std::string& category)
 	{
-		return SettingsRegistry::GetSingleton().GetValue<T>(key);
+		return SettingsRegistry::GetSingleton().GetValue<T>(key, category);
 	}
 
 	template <typename T>
-	void SetSetting(const std::string& key, const T& value)
+	void SetSetting(const std::string& key, const std::string& category, const T& value)
 	{
-		SettingsRegistry::GetSingleton().SetValue<T>(key, value);
+		SettingsRegistry::GetSingleton().SetValue<T>(key, category, value);
 	}
 };
