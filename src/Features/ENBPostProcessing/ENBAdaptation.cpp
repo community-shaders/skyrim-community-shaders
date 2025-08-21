@@ -43,10 +43,10 @@ void ENBAdaptation::UpdateEffectVariables()
 	auto& effectManager = EffectManager::GetSingleton();
 
 	float4 adaptationParameters{};
-	adaptationParameters.x = effectManager.GetSetting<float>("AdaptationMin");
-	adaptationParameters.y = effectManager.GetSetting<float>("AdaptationMax");
-	adaptationParameters.z = effectManager.GetSetting<float>("AdaptationSensitivity");
-	adaptationParameters.w = effectManager.GetSetting<float>("AdaptationTime") * (*globals::game::deltaTime);
+	adaptationParameters.x = effectManager.GetSetting<float>("ADAPTATION::AdaptationMin");
+	adaptationParameters.y = effectManager.GetSetting<float>("ADAPTATION::AdaptationMax");
+	adaptationParameters.z = effectManager.GetSetting<float>("ADAPTATION::AdaptationSensitivity");
+	adaptationParameters.w = effectManager.GetSetting<float>("ADAPTATION::AdaptationTime") * (*globals::game::deltaTime);
 
 	auto AdaptationParameters = effect->GetVariableByName("AdaptationParameters")->AsVector();
 	if (AdaptationParameters && AdaptationParameters->IsValid())

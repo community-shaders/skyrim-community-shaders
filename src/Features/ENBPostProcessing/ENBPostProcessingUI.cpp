@@ -153,7 +153,7 @@ void ENBPostProcessingUI::RenderAllSettings()
 				ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 				
 				for (const auto& settingKey : settings) {
-					auto settingInfo = settingsRegistry.GetSettingInfo(settingKey);
+					auto settingInfo = settingsRegistry.GetSettingInfo(settingKey, category);
 					if (!settingInfo) continue;
 					
 					ImGui::TableNextRow();
@@ -165,24 +165,24 @@ void ENBPostProcessingUI::RenderAllSettings()
 					switch (settingInfo->type) {
 						case SettingType::Bool:
 						{
-							bool v = settingsRegistry.GetValue<bool>(settingKey);
+							bool v = settingsRegistry.GetValue<bool>(settingKey, category);
 							if (ImGui::Checkbox(("##" + settingKey).c_str(), &v)) {
-								settingsRegistry.SetValue<bool>(settingKey, v);
+								settingsRegistry.SetValue<bool>(settingKey, category, v);
 							}
 							break;
 						}
 						case SettingType::Float:
 						{
-							float v = settingsRegistry.GetValue<float>(settingKey);
+							float v = settingsRegistry.GetValue<float>(settingKey, category);
 							if (ImGui::SliderFloat(("##" + settingKey).c_str(), &v, settingInfo->minValue, settingInfo->maxValue, "%.2f")) {
-								settingsRegistry.SetValue<float>(settingKey, v);
+								settingsRegistry.SetValue<float>(settingKey, category, v);
 							}
 							break;
 						}
 						case SettingType::TimeOfDay:
 						{
 							const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night" };
-							auto v = settingsRegistry.GetValue<TimeOfDayValue>(settingKey);
+							auto v = settingsRegistry.GetValue<TimeOfDayValue>(settingKey, category);
 							bool changed = false;
 							
 							for (const auto& timeOfDay : timeOfDayNames) {
@@ -197,7 +197,7 @@ void ENBPostProcessingUI::RenderAllSettings()
 							}
 							
 							if (changed) {
-								settingsRegistry.SetValue<TimeOfDayValue>(settingKey, v);
+								settingsRegistry.SetValue<TimeOfDayValue>(settingKey, category, v);
 							}
 							break;
 						}

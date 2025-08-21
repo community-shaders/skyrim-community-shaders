@@ -657,8 +657,8 @@ void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 	HRESULT hr = context->Map(colorCorrectionConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
 	if (SUCCEEDED(hr)) {
 		float* cbData = static_cast<float*>(mapped.pData);
-		cbData[0] = GetSetting<float>("Brightness");
-		cbData[1] = GetSetting<float>("GammaCurve");
+		cbData[0] = GetSetting<float>("COLORCORRECTION::Brightness");
+		cbData[1] = GetSetting<float>("COLORCORRECTION::GammaCurve");
 		cbData[2] = 0.0f;  // padding
 		cbData[3] = 0.0f;  // padding
 		context->Unmap(colorCorrectionConstantBuffer.Get(), 0);
@@ -715,11 +715,11 @@ void EffectManager::SaveENBSettings()
 float EffectManager::GetInterpolatedBloomAmount()
 {
 	auto& registry = SettingsRegistry::GetSingleton();
-	return registry.GetInterpolatedTimeOfDayValue("BloomAmount");
+	return registry.GetInterpolatedTimeOfDayValue("BLOOM::Amount");
 }
 
 float EffectManager::GetInterpolatedLensAmount()
 {
 	auto& registry = SettingsRegistry::GetSingleton();
-	return registry.GetInterpolatedTimeOfDayValue("LensAmount");
+	return registry.GetInterpolatedTimeOfDayValue("LENS::Amount");
 }

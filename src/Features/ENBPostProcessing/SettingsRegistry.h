@@ -92,14 +92,24 @@ public:
 	T GetValue(const std::string& key);
 	
 	template<typename T>
+	T GetValue(const std::string& key, const std::string& category);
+	
+	template<typename T>
 	void SetValue(const std::string& key, const T& value);
+	
+	template<typename T>
+	void SetValue(const std::string& key, const std::string& category, const T& value);
 
 	// Get interpolated time-of-day value (automatically handles weather blending if enabled)
 	float GetInterpolatedTimeOfDayValue(const std::string& key);
+	
+	float GetInterpolatedTimeOfDayValue(const std::string& key, const std::string& category);
 
 	// Setting queries
 	bool HasSetting(const std::string& key) const;
+	bool HasSetting(const std::string& key, const std::string& category) const;
 	const SettingInfo* GetSettingInfo(const std::string& key) const;
+	const SettingInfo* GetSettingInfo(const std::string& key, const std::string& category) const;
 	std::vector<std::string> GetSettingsByCategory(const std::string& category) const;
 	std::vector<std::string> GetAllCategories() const;
 
@@ -134,6 +144,7 @@ private:
 	float interiorFactor = 0.0f;
 
 	// Helper methods
+	std::string MakeCompositeKey(const std::string& key, const std::string& category) const;
 	SettingValue InterpolateWeatherValues(const SettingValue& currentValue, const SettingValue& lastValue, float t);
 	TimeOfDayValue InterpolateTimeOfDayValues(const TimeOfDayValue& a, const TimeOfDayValue& b, float t);
 	float ComputeTimeOfDayInterpolation(const TimeOfDayValue& value);
