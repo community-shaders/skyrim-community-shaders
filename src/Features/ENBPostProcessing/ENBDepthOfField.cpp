@@ -25,6 +25,11 @@ void ENBDepthOfField::Execute()
 
 	ExecuteTechnique("Aperture", nullInputTexture, effectTextureCache[textureApertureName]);
 
+	auto textureAperture = effect->GetVariableByName("TextureAperture")->AsShaderResource();
+	if (textureAperture && textureAperture->IsValid()) {
+		textureAperture->SetResource(effectTextureCache[textureApertureName].srv.Get());
+	}
+
 	ExecuteTechnique("ReadFocus", nullInputTexture, effectTextureCache["TextureReadFocus"]);
 
 	const std::string texturePreviousFocusName = (effectManager.textureSwap & 1) ? "TextureFocusSwap" : "TextureFocus";
@@ -59,6 +64,9 @@ void ENBDepthOfField::Execute()
 	}
 
 	auto textureHDRTemp = effectManager.GetCommonTexture("TextureHDRTemp");
+	
+	globals::d3d::context->CopyResource(textureHDRTemp->texture.Get(), textureOriginal2.texture.Get());
+
 	auto textureHDRTemp2 = effectManager.GetCommonTexture("TextureHDRTemp2");
 
 	ExecuteTechniqueSequence(GetSelectedTechnique(), textureOriginal2, *textureHDRTemp, *textureHDRTemp2);
