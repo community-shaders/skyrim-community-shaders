@@ -355,7 +355,7 @@ struct TransformInfo
 				[](CTP& params) { exposureSlider(&params[0].x); },
 				{ f4{ 2.f, 0.f, 0.f, 0.f } } },
 
-			{ "GT7"sv, "GT7ToneMappingSDR"sv,
+			{ "GT7"sv, "GT7ToneMapping"sv,
 				"Tonemapper designed for Gran Turismo 7."sv,
 				[](CTP& params) { exposureSlider(&params[0].x); },
 				{ f4{ 2.f, 0.f, 0.f, 0.f } } }

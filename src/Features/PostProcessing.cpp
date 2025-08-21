@@ -14,8 +14,8 @@ void PostProcessing::DrawSettings()
 {
 	// 0 for list of feats
 	// 1 for feat settings
-	static int pageNum = 0;
-	static int featIdx = 0;
+	// static int pageNum = 0;
+	// static int featIdx = 0;
 	static int pipelinePageNum = 0;
 	static int pipelineFeatIdx = 0;
 	static int presetIdx = -1;
@@ -124,155 +124,10 @@ void PostProcessing::DrawSettings()
 
 	ImGui::Separator();
 
-	if (pageNum == 0 && pipelinePageNum == 0) {
-		if (ImGui::Button(ICON_FA_PLUS))
-		{
-			const auto& featConstructors = PostProcessFeatureConstructor::GetFeatureConstructors();
-			auto& firstCon = featConstructors.begin()->second;
-			colorTransformsFeats.push_back(std::unique_ptr<PostProcessFeature>{ firstCon.fn() });
-			colorTransformsFeats.back()->name = colorTransformsFeats.back()->GetType();
-			auto bogey = json::object();
-			colorTransformsFeats.back()->LoadSettings(bogey);
-			colorTransformsFeats.back()->SetupResources();
-			featIdx = (int)colorTransformsFeats.size() - 1;
-		}
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("Add a new color transform.");
-
-		ImGui::SameLine();
-		ImGui::Text("Color Transforms");
-
-		int markedFeat = -1;
-		int actionType = -1;  // 0 - remove, 1 - move up, 2 - move down
-		if (ImGui::BeginListBox("##Features", { -FLT_MIN, 200.f })) {
-			ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));  // I hate this
-			for (int i = 0; i < colorTransformsFeats.size(); ++i) {
-				ImGui::PushID(i);
-
-				auto& feat = colorTransformsFeats[i];
-
-				bool nonVR = REL::Module::IsVR() && !feat->SupportsVR();
-
-				ImGui::Checkbox("##Enabled", &feat->enabled);
-				if (auto _tt = Util::HoverTooltipWrapper())
-					ImGui::Text("Enabled/Bypassed");
-
-				ImGui::SameLine();
-				if (ImGui::Button(ICON_FA_TIMES)) {
-					markedFeat = i;
-					actionType = 0;
-				}
-				if (auto _tt = Util::HoverTooltipWrapper())
-					ImGui::Text("Remove the selected effect.");
-
-				ImGui::SameLine();
-				if (ImGui::Button(ICON_FA_ARROW_UP) && (i != 0)) {
-					markedFeat = i;
-					actionType = 1;
-				}
-				if (auto _tt = Util::HoverTooltipWrapper())
-					ImGui::Text("Move the selected effect up.");
-
-				ImGui::SameLine();
-				if (ImGui::Button(ICON_FA_ARROW_DOWN) && (i < colorTransformsFeats.size() - 1)) {
-					markedFeat = i;
-					actionType = 2;
-				}
-				if (auto _tt = Util::HoverTooltipWrapper())
-					ImGui::Text("Move the selected effect down.");
-
-				ImGui::SameLine();
-				if (ImGui::Button(ICON_FA_BARS)) {
-					markedFeat = i;
-					actionType = 3;
-				}
-				if (auto _tt = Util::HoverTooltipWrapper())
-					ImGui::Text("Edit the selected effect.");
-
-				ImGui::SameLine();
-				ImGui::AlignTextToFramePadding();
-
-				if (nonVR)
-					ImGui::BeginDisabled();
-				if (ImGui::Selectable(std::format("{} ({})", feat->name, feat->GetType()).c_str(), featIdx == i))
-					featIdx = i;
-				if (nonVR)
-					ImGui::EndDisabled();
-
-				if (auto _tt = Util::HoverTooltipWrapper())
-					if (nonVR)
-						ImGui::Text("Bypassed due to no VR support.");
-					else
-						ImGui::Text(feat->GetDesc().c_str());
-
-				ImGui::PopID();
-			}
-			ImGui::PopStyleColor();
-
-			ImGui::EndListBox();
-		}
-
-		if (markedFeat >= 0 && actionType >= 0) {
-			switch (actionType) {
-			case 0:
-				colorTransformsFeats.erase(colorTransformsFeats.begin() + markedFeat);
-				break;
-			case 1:
-				std::iter_swap(colorTransformsFeats.begin() + markedFeat, colorTransformsFeats.begin() + markedFeat - 1);
-				if (markedFeat == featIdx)
-					featIdx--;
-				else if (markedFeat - 1 == featIdx)
-					featIdx++;
-				break;
-			case 2:
-				std::iter_swap(colorTransformsFeats.begin() + markedFeat, colorTransformsFeats.begin() + markedFeat + 1);
-				if (markedFeat == featIdx)
-					featIdx++;
-				else if (markedFeat + 1 == featIdx)
-					featIdx--;
-				break;
-			case 3:
-				featIdx = markedFeat;
-				pageNum = 1;
-				break;
-			default:
-				break;
-			}
-		}
-
-	} else if (pageNum == 1 && pipelinePageNum == 0) {
-		// Effect Settings
-		if (ImGui::Button(ICON_FA_ARROW_LEFT)) {
-			pageNum = 0;
-		}
-
-		if (featIdx < colorTransformsFeats.size()) {
-			auto& feat = colorTransformsFeats[featIdx];
-
-			ImGui::Spacing();
-
-			ImGui::InputText("Name", &feat->name);
-
-			ImGui::SeparatorText(std::format("{} ({})", feat->name, feat->GetType()).c_str());
-
-			ImGui::TextWrapped(feat->GetDesc().c_str());
-
-			ImGui::Spacing();
-			ImGui::Separator();
-			ImGui::Spacing();
-
-			ImGui::PushID(featIdx);
-			feat->DrawSettings();
-			ImGui::PopID();
-		} else {
-			ImGui::TextDisabled("Please select an effect in the effect list to continue.");
-		}
-	}
-
 	if (ImGui::TreeNode("Debug")) {
 		ImGui::Text("In Interior: %s", imageSpaceManager->inInterior ? "Yes" : "No");
 		ImGui::Text("Time of Day:");
-		ImGui::Text("Dawn: %.2f\nDusk: %.2f\nDay: %.2f\nNight: %.2f\nMidnight: %.2f\nMorning: %.2f",
+		ImGui::Text("Dawn: %.2f\nSunrise: %.2f\nDay: %.2f\nSunset: %.2f\nDusk: %.2f\nNight: %.2f",
 			imageSpaceManager->timeOfDay[0],
 			imageSpaceManager->timeOfDay[1],
 			imageSpaceManager->timeOfDay[2],
@@ -351,8 +206,6 @@ void PostProcessing::LoadSettings(json& o_json)
 
 void PostProcessing::ProcessSettings(json& o_json)
 {
-	const auto& featConstructors = PostProcessFeatureConstructor::GetFeatureConstructors();
-
 	logger::info("Loading post processing settings...");
 
 	for (auto& feat : pipeline) {
@@ -362,40 +215,6 @@ void PostProcessing::ProcessSettings(json& o_json)
 			feat->LoadSettings(featSettings);
 			if (loaded)
 				feat->SetupResources();
-		}
-	}
-
-	auto colorTransforms = o_json["ColorTransforms"];
-	if (!colorTransforms.is_array()) {
-		RestoreDefaultSettings();
-		logger::warn("Invalid post processing settings, restoring defaults.");
-		return;
-	}
-
-	colorTransformsFeats.clear();
-
-	for (auto& item : colorTransforms) {
-		auto currFeatCount = colorTransforms.size();
-		try {
-			auto itemType = item.value<std::string>("type", "UNSPECIFIED");
-			if (featConstructors.contains(itemType)) {
-				PostProcessFeature* feat = featConstructors.at(itemType).fn();
-				feat->name = item.value<std::string>("name", feat->GetType());
-				feat->enabled = item.value<bool>("enabled", true);
-				feat->LoadSettings(item["settings"]);
-				if (loaded)
-					feat->SetupResources();  // to prevent double setup before loaded
-
-				colorTransformsFeats.push_back(std::unique_ptr<PostProcessFeature>{ feat });
-
-				logger::info("Loaded {}({}).", feat->name, feat->GetType());
-			} else {
-				logger::warn("Invalid post processing feature type \"{}\" detected in settings.", itemType);
-			}
-		} catch (json::exception& e) {
-			logger::error("Error occured while parsing post processing settings: {}", e.what());
-			if (colorTransformsFeats.size() > currFeatCount)
-				colorTransformsFeats.pop_back();
 		}
 	}
 
@@ -416,20 +235,6 @@ void PostProcessing::SaveSettings(json& o_json)
 		}
 	}
 
-	auto arr = json::array();
-
-	for (auto& feat : colorTransformsFeats) {
-		json temp_json{};
-		feat->SaveSettings(temp_json);
-		arr.push_back({
-			{ "type", feat->GetType() },
-			{ "name", feat->name },
-			{ "enabled", feat->enabled },
-			{ "settings", temp_json },
-		});
-	}
-
-	o_json["ColorTransforms"] = arr;
 	o_json["ppsettings"] = settings;
 }
 
@@ -506,7 +311,7 @@ void PostProcessing::RestoreDefaultSettings()
 {
 	settings = {};
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::AutoExposure)].get()->enabled = true;
-	pipeline[static_cast<size_t>(FeaturePipelineIndex::VanillaImagespace)].get()->enabled = true;
+	pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)].get()->enabled = true;
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::LUT)].get()->enabled = false;
 
 	if (!REL::Module::IsVR()) {
@@ -531,10 +336,6 @@ void PostProcessing::ClearShaderCache()
 		if (pipe)
 			pipe->ClearShaderCache();
 	}
-
-	for (auto& feat : colorTransformsFeats)
-		if (!REL::Module::IsVR() || feat->SupportsVR())
-			feat->ClearShaderCache();
 }
 
 void PostProcessing::SetupResources()
@@ -579,8 +380,8 @@ void PostProcessing::SetupResources()
 
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::AutoExposure)] = std::make_unique<HistogramAutoExposure>();
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::AutoExposure)].get()->enabled = true;
-	pipeline[static_cast<size_t>(FeaturePipelineIndex::VanillaImagespace)] = std::make_unique<VanillaImagespace>();
-	pipeline[static_cast<size_t>(FeaturePipelineIndex::VanillaImagespace)].get()->enabled = true;
+	pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)] = std::make_unique<ColorGrading>();
+	pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)].get()->enabled = true;
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::LUT)] = std::make_unique<LUT>();
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::LUT)].get()->enabled = false;
 
@@ -615,10 +416,6 @@ void PostProcessing::Reset()
 		if (pipe)
 			pipe->Reset();
 	}
-
-	for (auto& feat : colorTransformsFeats)
-		if (!REL::Module::IsVR() || feat->SupportsVR())
-			feat->Reset();
 }
 
 // from doodlum
@@ -717,10 +514,6 @@ void PostProcessing::PreProcess()
 			pipe->Draw(lastTexColor);
 		}
 	}
-
-	for (auto& feat : colorTransformsFeats)
-		if (feat->enabled && (!REL::Module::IsVR() || feat->SupportsVR()))
-			feat->Draw(lastTexColor);
 
 	for (auto& pipe : pipeline) {
 		if (pipe && pipe->enabled && pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu())) {

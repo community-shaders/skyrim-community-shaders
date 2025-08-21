@@ -1,16 +1,40 @@
-#ifndef COLOR_TRANSFORMS_COMMON_HLSLI
-#define COLOR_TRANSFORMS_COMMON_HLSLI
+#include "Common/Color.hlsli"
+#include "Common/Math.hlsli"
 
-#define PI 3.1415926535
+#include "PostProcessing/common.hlsli"
 
-cbuffer TonemapCB : register(b1)
-{
-	float4 Params[8];
+RWTexture2D<float4> RWTexOut : register(u0);
+
+Texture2D<float4> TexColor : register(t0);
+
+cbuffer ColorCB : register(b1) {
+    float4 asccdl[3];
+    float4 liftgammagain[3]; // lift，gamma，gain
+    float4 saturationHueInOutGamma;
+    float4 oklchSaturation;
+    float4 oklchColorMixer[7];
+
+	float4 tonemapParams[2];
+	float4 colorSpaceTransform[3];
+    float4 invColorSpaceTransform[3];
+
+    // game value
+    float4 cinematic; // saturation, brightness, contrast
+    float4 fade; // color
+    float4 tint; // color
+
+    uint logType;
+    uint skipLDR;
+    uint enableTonemap;
+    uint enableColorSpaceTransform;
 };
 
-#include "PostProcessing/ColourTransforms/GT7ToneMapping.hlsli"
-
-////////////////////////////////////////////////////////////////////////////////
+namespace LogType {
+	static const uint ACEScct = (1 << 0);
+	static const uint ARRIlogC4 = (1 << 1);
+	static const uint SonySLog3 = (1 << 2);
+	static const uint Invert = (1 << 3);
+};
 
 // https://www.shadertoy.com/view/ss23DD
 float3 LiftGammaGain(float3 rgb, float4 lift, float4 gamma, float4 gain)
@@ -37,37 +61,6 @@ float3 LiftGammaGain(float3 rgb, float4 lift, float4 gamma, float4 gain)
 	return col;
 }
 
-/////////////////////////////////////////////////////////////////////////////////
-
-/////////////////////////////////////////////////////////////////////////////////
-
-float3 Clamp(float3 val)
-{
-	return clamp(val, Params[0].xyz, Params[1].xyz);
-}
-
-float3 Gamma(float3 val)
-{
-	return Gamma(val, Params[0].rgb, Params[1].rgb, Params[2].rgb);
-}
-
-float3 ASC_CDL(float3 val)
-{
-	return ASC_CDL(val, Params[0].rgb, Params[1].rgb, Params[2].rgb);
-}
-
-float3 LiftGammaGain(float3 val)
-{
-	return LiftGammaGain(val, Params[0].gbar, Params[1].gbar, Params[2].gbar);
-}
-
-float3 SaturationHue(float3 val)
-{
-	val = Saturation(val, Params[0].r);
-	val = HueShift(val, Params[0].g);
-	return val;
-}
-
 float3 OklchSaturation(float3 val)
 {
 	float3 oklab = RgbToOklab(val);
@@ -75,9 +68,9 @@ float3 OklchSaturation(float3 val)
 	float c = length(oklab.yz);
 	float h = atan2(oklab.z, oklab.y);
 
-	c = min(0.37, c * Params[0].r);
-	c = (1 - pow(1 - c / 0.37, Params[0].g)) * 0.37;
-	h += Params[0].b * PI;
+	c = min(0.37, c * oklchSaturation[0].r);
+	c = (1 - pow(1 - c / 0.37, oklchSaturation[0].g)) * 0.37;
+	h += oklchSaturation[0].b * Math::PI;
 
 	sincos(h, oklab.z, oklab.y);
 	oklab.yz *= c;
@@ -96,7 +89,7 @@ float3 OklchColourMixer(float3 val)
 	float c = length(oklab.yz);
 	float h = atan2(oklab.z, oklab.y);
 
-	float lerpFactor = (h / (2 * PI) - redHue) * 7;
+	float lerpFactor = (h / (2 * Math::PI) - redHue) * 7;
 	int leftHue = floor(lerpFactor);
 	lerpFactor = lerpFactor - leftHue;
 	leftHue += (leftHue < 0) * 7;
@@ -104,35 +97,19 @@ float3 OklchColourMixer(float3 val)
 	float effect = saturate(c / 0.37);
 
 	// hue shift
-	h = h + lerp(Params[leftHue].x, Params[rightHue].x, lerpFactor) * PI / 4;
+	h = h + lerp(oklchColorMixer[leftHue].x, oklchColorMixer[rightHue].x, lerpFactor) * Math::PI / 4;
 	// vibrance
-	float c1 = (1 - pow(1 - c / 0.37, Params[leftHue].y)) * 0.37;
-	float c2 = (1 - pow(1 - c / 0.37, Params[rightHue].y)) * 0.37;
+	float c1 = (1 - pow(1 - c / 0.37, oklchColorMixer[leftHue].y)) * 0.37;
+	float c2 = (1 - pow(1 - c / 0.37, oklchColorMixer[rightHue].y)) * 0.37;
 	c = lerp(c1, c2, lerpFactor);
 	// brightness
-	l = l + lerp(Params[leftHue].z, Params[rightHue].z, lerpFactor) * effect;
+	l = l + lerp(oklchColorMixer[leftHue].z, oklchColorMixer[rightHue].z, lerpFactor) * effect;
 
 	oklab.x = l;
 	sincos(h, oklab.z, oklab.y);
 	oklab.yz *= c;
 
 	return max(0, OklabToRgb(oklab));
-}
-
-/////////////////////////////////////////////////////////////////////////////////
-
-float3 MatMul(float3 val)
-{
-	return mul(float3x3(Params[0].rgb, Params[1].rgb, Params[2].rgb), val);
-}
-
-/////////////////////////////////////////////////////////////////////////////////
-
-float3 ExposureContrast(float3 val)
-{
-	val *= Params[0].xyz;
-	val = LinearContrast(val, Params[1].xyz, Params[2].xyz);
-	return val;
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -166,7 +143,7 @@ float3 ExposureContrast(float3 val)
 
 float3 Reinhard(float3 val)
 {
-	val *= Params[0].x;
+	val *= tonemapParams[0].x;
 	float luma = Color::RGBToLuminance(val);
 	float lumaOut = luma / (1 + luma);
 	val = val / (luma + 1e-10) * lumaOut;
@@ -176,9 +153,9 @@ float3 Reinhard(float3 val)
 
 float3 ReinhardExt(float3 val)
 {
-	val *= Params[0].x;
+	val *= tonemapParams[0].x;
 	float luma = Color::RGBToLuminance(val);
-	float lumaOut = luma * (1 + luma / (Params[0].y * Params[0].y)) / (1 + luma);
+	float lumaOut = luma * (1 + luma / (tonemapParams[0].y * tonemapParams[0].y)) / (1 + luma);
 	val = val / (luma + 1e-10) * lumaOut;
 	val = saturate(val);
 	return val;
@@ -186,7 +163,7 @@ float3 ReinhardExt(float3 val)
 
 float3 HejlBurgessDawsonFilmic(float3 val)
 {
-	val *= Params[0].x;
+	val *= tonemapParams[0].x;
 	val = max(0, val - 0.004);
 	val = (val * (6.2 * val + .5)) / (val * (6.2 * val + 1.7) + 0.06);
 	val = pow(saturate(val), 2.2);
@@ -195,110 +172,12 @@ float3 HejlBurgessDawsonFilmic(float3 val)
 
 float3 AldridgeFilmic(float3 val)
 {
-	val *= Params[0].x;
-	float tmp = 2.0 * Params[0].y;
-	val = val + (tmp - val) * clamp(tmp - val, 0.0, 1.0) * (0.25 / Params[0].y) - Params[0].y;
+	val *= tonemapParams[0].x;
+	float tmp = 2.0 * tonemapParams[0].y;
+	val = val + (tmp - val) * clamp(tmp - val, 0.0, 1.0) * (0.25 / tonemapParams[0].y) - tonemapParams[0].y;
 	val = (val * (6.2 * val + 0.5)) / (val * (6.2 * val + 1.7) + 0.06);
 	val = pow(saturate(val), 2.2);
 	return val;
-}
-
-float3 ACEScct(float3 linearColor, bool inverse)
-{
-	const float a = 10.5402377416545;
-	const float b = 0.0729055341958355;
-	const float cutoff = 0.0078125;
-	const float cutoff2 = 0.155251141552511;
-
-	float3 cct = linearColor;
-
-	if (!inverse) {
-		for (int i = 0; i < 3; i++) {
-			if (linearColor[i] > cutoff) {
-				cct[i] = (log2(linearColor[i]) + 9.72) / 17.52;
-			} else {
-				cct[i] = linearColor[i] * a + b;
-			}
-		}
-	} else {
-		for (int i = 0; i < 3; i++) {
-			if (linearColor[i] >= cutoff2) {
-				cct[i] = pow(2, linearColor[i] * 17.52 - 9.72);
-			} else {
-				cct[i] = (linearColor[i] - b) / a;
-			}
-		}
-	}
-
-	return cct;
-}
-
-float3 ARRIlogC4(float3 linearColor, bool inverse)
-{
-	const float a = 2231.8263;
-	const float b = 0.9071359;
-	const float c = 0.0928641;
-	const float s = 0.6816768;
-	const float t = -0.0180570;
-
-	float3 logColor = linearColor;
-
-	if (!inverse) {
-		for (int i = 0; i < 3; i++) {
-			if (linearColor[i] > t) {
-				logColor[i] = (log2(linearColor[i] * a + 64) - 6) / 14 * b + c;
-			} else {
-				logColor[i] = (linearColor[i] - t) / s;
-			}
-		}
-	} else {
-		for (int i = 0; i < 3; i++) {
-			if (linearColor[i] > 0) {
-				logColor[i] = (pow(2, 14 * (linearColor[i] - c) / b + 6) - 64) / a;
-			} else {
-				logColor[i] = linearColor[i] * s + t;
-			}
-		}
-	}
-
-	return logColor;
-}
-
-float3 SonySLog3(float3 linearColor, bool inverse)
-{
-	float3 logColor = linearColor;
-
-	if (!inverse) {
-		for (int i = 0; i < 3; i++) {
-			if (linearColor[i] > 0.0112500) {
-				logColor[i] = (420.0 + log10((linearColor[i] + 0.01) / 0.19) * 261.5) / 1023.0;
-			} else {
-				logColor[i] = (linearColor[i] * (171.2102946929 - 95.0) / 0.0112500 + 95.0) / 1023.0;
-			}
-		}
-	} else {
-		for (int i = 0; i < 3; i++) {
-			if (linearColor[i] > 0.1712102946929 / 1023.0) {
-				logColor[i] = pow(10, (linearColor[i] * 1023.0 - 420.0) / 261.5) * 0.19 - 0.01;
-			} else {
-				logColor[i] = (linearColor[i] * 1023.0 - 95.0) * 0.0112500 / (171.2102946929 - 95.0);
-			}
-		}
-	}
-
-	return logColor;
-}
-
-float3 LinearToLog(float3 val)
-{
-	float3 logColor = val;
-	if (Params[0].y == 0)
-		logColor = ACEScct(val, (bool)Params[0].x);
-	else if (Params[0].y == 1)
-		logColor = ARRIlogC4(val, (bool)Params[0].x);
-	else if (Params[0].y == 2)
-		logColor = SonySLog3(val, (bool)Params[0].x);
-	return logColor;
 }
 
 float3 AcesHill(float3 val)
@@ -312,7 +191,7 @@ float3 AcesHill(float3 val)
 		-0.129520935348888, 1.138399326040076, -0.008779241755018,
 		-0.024127059936902, -0.124620612286390, 1.148822109913262);
 
-	val *= Params[0].x;
+	val *= tonemapParams[0].x;
 
 	val = mul(g_sRGBToACEScg, val);
 	float3 a = val * (val + 0.0245786f) - 0.000090537f;
@@ -327,7 +206,7 @@ float3 AcesHill(float3 val)
 
 float3 AcesNarkowicz(float3 val)
 {
-	val *= Params[0].x;
+	val *= tonemapParams[0].x;
 
 	static const float A = 2.51;
 	static const float B = 0.03;
@@ -342,7 +221,7 @@ float3 AcesNarkowicz(float3 val)
 
 float3 AcesGuy(float3 val)
 {
-	val *= Params[0].x;
+	val *= tonemapParams[0].x;
 	val = val / (val + 0.155f) * 1.019;
 
 	val = pow(saturate(val), 2.2);
@@ -351,13 +230,13 @@ float3 AcesGuy(float3 val)
 
 float3 LottesFilmic(float3 val)
 {
-	val *= Params[0].x;
-	float a = Params[0].y,
-		  d = Params[0].z,
-		  b = (-pow(Params[1].x, a) + pow(Params[0].w, a) * Params[1].y) /
-	          ((pow(Params[0].w, a * d) - pow(Params[1].x, a * d)) * Params[1].y),
-		  c = (pow(Params[0].w, a * d) * pow(Params[1].x, a) - pow(Params[0].w, a) * pow(Params[1].x, a * d) * Params[1].y) /
-	          ((pow(Params[0].w, a * d) - pow(Params[1].x, a * d)) * Params[1].y);
+	val *= tonemapParams[0].x;
+	float a = tonemapParams[0].y,
+		  d = tonemapParams[0].z,
+		  b = (-pow(tonemapParams[1].x, a) + pow(tonemapParams[0].w, a) * tonemapParams[1].y) /
+	          ((pow(tonemapParams[0].w, a * d) - pow(tonemapParams[1].x, a * d)) * tonemapParams[1].y),
+		  c = (pow(tonemapParams[0].w, a * d) * pow(tonemapParams[1].x, a) - pow(tonemapParams[0].w, a) * pow(tonemapParams[1].x, a * d) * tonemapParams[1].y) /
+	          ((pow(tonemapParams[0].w, a * d) - pow(tonemapParams[1].x, a * d)) * tonemapParams[1].y);
 
 	val = pow(val, a) / (pow(val, a * d) * b + c);
 	val = saturate(val);
@@ -366,11 +245,11 @@ float3 LottesFilmic(float3 val)
 
 float DayCurve(float x, float k)
 {
-	const float b = Params[0].y;
-	const float w = Params[0].z;
-	const float c = Params[0].w;
-	const float s = Params[1].x;
-	const float t = Params[1].y;
+	const float b = tonemapParams[0].y;
+	const float w = tonemapParams[0].z;
+	const float c = tonemapParams[0].w;
+	const float s = tonemapParams[1].x;
+	const float t = tonemapParams[1].y;
 
 	if (x < c) {
 		return k * (1.0 - t) * (x - b) / (c - (1.0 - t) * b - t * x);
@@ -381,13 +260,13 @@ float DayCurve(float x, float k)
 
 float3 DayFilmic(float3 val)
 {
-	const float b = Params[0].y;
-	const float w = Params[0].z;
-	const float c = Params[0].w;
-	const float s = Params[1].x;
-	const float t = Params[1].y;
+	const float b = tonemapParams[0].y;
+	const float w = tonemapParams[0].z;
+	const float c = tonemapParams[0].w;
+	const float s = tonemapParams[1].x;
+	const float t = tonemapParams[1].y;
 
-	val *= Params[0].x;
+	val *= tonemapParams[0].x;
 	float k = (1.0 - t) * (c - b) / ((1.0 - s) * (w - c) + (1.0 - t) * (c - b));
 	val = float3(DayCurve(val.r, k), DayCurve(val.g, k), DayCurve(val.b, k));
 
@@ -397,14 +276,14 @@ float3 DayFilmic(float3 val)
 
 float3 UchimuraFilmic(float3 val)
 {
-	const float P = Params[0].y;
-	const float a = Params[0].z;
-	const float m = Params[0].w;
-	const float l = Params[1].x;
-	const float c = Params[1].y;
-	const float b = Params[1].z;
+	const float P = tonemapParams[0].y;
+	const float a = tonemapParams[0].z;
+	const float m = tonemapParams[0].w;
+	const float l = tonemapParams[1].x;
+	const float c = tonemapParams[1].y;
+	const float b = tonemapParams[1].z;
 
-	val *= Params[0].x;
+	val *= tonemapParams[0].x;
 
 	float l0 = ((P - m) * l) / a,
 		  S0 = m + l0,
@@ -495,11 +374,11 @@ float3 AgxEotf(float3 val)
 
 float3 AgxMinimal(float3 val)
 {
-	val *= Params[0].x;
+	val *= tonemapParams[0].x;
 
 	val = Agx(val);
-	val = ASC_CDL(val, Params[0].y, Params[0].z, Params[0].w);
-	val = Saturation(val, Params[1].x);
+	val = ASC_CDL(val, tonemapParams[0].y, tonemapParams[0].z, tonemapParams[0].w);
+	val = Saturation(val, tonemapParams[1].x);
 	val = AgxEotf(val);
 
 	return val;
@@ -515,7 +394,7 @@ float3 MelonHueShift(float3 In)
 
 float3 MelonTonemap(float3 color)
 {
-	color *= Params[0].r;
+	color *= tonemapParams[0].r;
 
 	// remaps the colors to [0-1] range
 	// tested to be as close ti ACES contrast levels as possible
@@ -578,7 +457,7 @@ float3 KajiyaCurve(float3 v)
 
 float3 KajiyaTonemap(float3 col)
 {
-	col *= Params[0].r;
+	col *= tonemapParams[0].r;
 
 	float3 ycbcr = RgbToYCbCr(col);
 
@@ -598,9 +477,186 @@ float3 KajiyaTonemap(float3 col)
 
 float3 GT7ToneMapping(float3 color)
 {
-    color *= Params[0].r;
-	color = GT7ToneMappingSDR(color);
+    color *= tonemapParams[0].x;
+	if (tonemapParams[0].y == 0)
+		color = GT7ToneMappingSDR(color);
+	else
+		color = GT7ToneMappingHDR(color, tonemapParams[0].z);
     return color;
 }
 
-#endif  // COLOR_TRANSFORMS_COMMON_HLSLI
+////////////////////////////////////////////////////////////////////////
+
+// Linear to Log
+float3 ACEScct(float3 linearColor, bool inverse)
+{
+	const float a = 10.5402377416545;
+	const float b = 0.0729055341958355;
+	const float cutoff = 0.0078125;
+	const float cutoff2 = 0.155251141552511;
+
+	float3 cct = linearColor;
+
+	if (!inverse) {
+		for (int i = 0; i < 3; i++) {
+			if (linearColor[i] > cutoff) {
+				cct[i] = (log2(linearColor[i]) + 9.72) / 17.52;
+			} else {
+				cct[i] = linearColor[i] * a + b;
+			}
+		}
+	} else {
+		for (int i = 0; i < 3; i++) {
+			if (linearColor[i] >= cutoff2) {
+				cct[i] = pow(2, linearColor[i] * 17.52 - 9.72);
+			} else {
+				cct[i] = (linearColor[i] - b) / a;
+			}
+		}
+	}
+
+	return cct;
+}
+
+float3 ARRIlogC4(float3 linearColor, bool inverse)
+{
+	const float a = 2231.8263;
+	const float b = 0.9071359;
+	const float c = 0.0928641;
+	const float s = 0.6816768;
+	const float t = -0.0180570;
+
+	float3 logColor = linearColor;
+
+	if (!inverse) {
+		for (int i = 0; i < 3; i++) {
+			if (linearColor[i] > t) {
+				logColor[i] = (log2(linearColor[i] * a + 64) - 6) / 14 * b + c;
+			} else {
+				logColor[i] = (linearColor[i] - t) / s;
+			}
+		}
+	} else {
+		for (int i = 0; i < 3; i++) {
+			if (linearColor[i] > 0) {
+				logColor[i] = (pow(2, 14 * (linearColor[i] - c) / b + 6) - 64) / a;
+			} else {
+				logColor[i] = linearColor[i] * s + t;
+			}
+		}
+	}
+
+	return logColor;
+}
+
+float3 SonySLog3(float3 linearColor, bool inverse)
+{
+	float3 logColor = linearColor;
+
+	if (!inverse) {
+		for (int i = 0; i < 3; i++) {
+			if (linearColor[i] > 0.0112500) {
+				logColor[i] = (420.0 + log10((linearColor[i] + 0.01) / 0.19) * 261.5) / 1023.0;
+			} else {
+				logColor[i] = (linearColor[i] * (171.2102946929 - 95.0) / 0.0112500 + 95.0) / 1023.0;
+			}
+		}
+	} else {
+		for (int i = 0; i < 3; i++) {
+			if (linearColor[i] > 0.1712102946929 / 1023.0) {
+				logColor[i] = pow(10, (linearColor[i] * 1023.0 - 420.0) / 261.5) * 0.19 - 0.01;
+			} else {
+				logColor[i] = (linearColor[i] * 1023.0 - 95.0) * 0.0112500 / (171.2102946929 - 95.0);
+			}
+		}
+	}
+
+	return logColor;
+}
+
+float3 LinearToLog(float3 val, uint logType)
+{
+	float3 logColor = val;
+	if (logType & LogType::ACEScct)
+		logColor = ACEScct(val, false);
+	else if (logType & LogType::ARRIlogC4)
+		logColor = ARRIlogC4(val, false);
+	else if (logType & LogType::SonySLog3)
+		logColor = SonySLog3(val, false);
+	return logColor;
+}
+
+float3 LogToLinear(float3 val, uint logType)
+{
+    float3 linearColor = val;
+    if (logType & LogType::ACEScct)
+        linearColor = ACEScct(val, true);
+    else if (logType & LogType::ARRIlogC4)
+        linearColor = ARRIlogC4(val, true);
+    else if (logType & LogType::SonySLog3)
+        linearColor = SonySLog3(val, true);
+    return linearColor;
+}
+
+////////////////////////////////////////////////////////////////////////
+
+[numthreads(8, 8, 1)] void main(uint2 DTid : SV_DispatchThreadID) {
+	float3 color = pow(abs(TexColor[DTid].xyz), saturationHueInOutGamma.z) * cinematic.y;
+
+	// Color space transform
+    if (enableColorSpaceTransform) {
+		const float3x3 colorSpaceTransformMat = float3x3(colorSpaceTransform[0].xyz, colorSpaceTransform[1].xyz, colorSpaceTransform[2].xyz);
+        color = mul(colorSpaceTransformMat, color);
+    }
+
+    // HDR
+    // Log
+    color = LinearToLog(color, logType);
+
+    // ASC CDL
+    color = ASC_CDL(color, asccdl[0].xyz, asccdl[1].xyz, asccdl[2].xyz);
+
+    // Saturation and Hue
+    {
+        color = Saturation(color, saturationHueInOutGamma.x * cinematic.x);
+        color = HueShift(color, saturationHueInOutGamma.y);
+    }
+
+    if (logType & LogType::Invert) {
+        color = LogToLinear(color, logType);
+    }
+
+    // Tonemap
+    if (enableTonemap) {
+        color = TONEMAP_FUNC(color);
+    }
+
+	// LDR
+	// Lift Gamma Gain
+    color = LiftGammaGain(color, liftgammagain[0].gbar, liftgammagain[1].gbar, liftgammagain[2].gbar);
+
+    // Oklch Saturation
+    color = OklchSaturation(color);
+
+    // Oklch Colour Mixer
+    color = OklchColourMixer(color);
+
+    // Game tint
+    float luma = Color::RGBToLuminance2(color);
+    color = lerp(color, luma * tint.xyz, tint.w);
+
+    color = LinearContrast(color, cinematic.z, 0.18);
+
+	color = pow(abs(color), saturationHueInOutGamma.w);
+
+    // Inverse color space transform
+    if (enableColorSpaceTransform) {
+		const float3x3 invColorSpaceTransformMat = float3x3(invColorSpaceTransform[0].xyz, invColorSpaceTransform[1].xyz, invColorSpaceTransform[2].xyz);
+        color = mul(invColorSpaceTransformMat, color);
+    }
+
+    // Game fade
+    color = lerp(color, fade.xyz, fade.w);
+
+	RWTexOut[DTid] = float4(color, 1);
+}

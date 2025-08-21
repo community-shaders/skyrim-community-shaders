@@ -25,7 +25,6 @@
 
 #ifndef GT7_TONE_MAPPING_HLSLI
 #define GT7_TONE_MAPPING_HLSLI
-#include "PostProcessing/ColourTransforms/common.hlsli"
 
 // -----------------------------------------------------------------------------
 // Configuration
@@ -370,7 +369,6 @@ float3 applyGT7ToneMapping(GT7ToneMapping toneMapper, float3 rgb)
 // Apply GT7 tone mapping for HDR output
 float3 GT7ToneMappingHDR(float3 linearRgb, float targetLuminanceNits)
 {
-    linearRgb *= Params[0].r;
     GT7ToneMapping toneMapper = initializeHDR(targetLuminanceNits);
     return applyGT7ToneMapping(toneMapper, linearRgb);
 }
@@ -378,7 +376,6 @@ float3 GT7ToneMappingHDR(float3 linearRgb, float targetLuminanceNits)
 // Apply GT7 tone mapping for SDR output
 float3 GT7ToneMappingSDR(float3 linearRgb)
 {
-    linearRgb *= Params[0].r;
     GT7ToneMapping toneMapper = initializeSDR();
     return applyGT7ToneMapping(toneMapper, linearRgb);
 }

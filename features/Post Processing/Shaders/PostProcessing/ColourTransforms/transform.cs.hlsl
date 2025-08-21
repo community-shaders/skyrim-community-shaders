@@ -2,7 +2,6 @@
 
 #include "PostProcessing/common.hlsli"
 #include "PostProcessing/ColourTransforms/common.hlsli"
-#include "PostProcessing/ColourTransforms/GT7ToneMapping.hlsli"
 
 RWTexture2D<float4> RWTexOut : register(u0);
 

@@ -9,6 +9,7 @@
 #include "PostProcessing/LUT.h"
 #include "PostProcessing/LensFlare.h"
 #include "PostProcessing/MotionBlur.h"
+#include "PostProcessing/ColorGrading.h"
 #include "PostProcessing/VanillaImagespace.h"
 #include "PostProcessing/Vignette.h"
 #include "PostProcessing/pCamera.h"
@@ -73,7 +74,7 @@ struct PostProcessing : Feature
 		DoF,
 		CODBloom,
 		LensFlare,
-		VanillaImagespace,
+		ColorGrading,
 		LUT,
 		Vignette,
 		Camera,
@@ -108,7 +109,7 @@ struct PostProcessing : Feature
 	ImageSpaceManager* imageSpaceManager = new ImageSpaceManager();
 
 	// std::vector<std::unique_ptr<PostProcessFeature>> feats = {};
-	std::vector<std::unique_ptr<PostProcessFeature>> colorTransformsFeats = {};
+	// std::vector<std::unique_ptr<PostProcessFeature>> colorTransformsFeats = {};
 
 	eastl::unique_ptr<Texture2D> texCopy = nullptr;
 	eastl::unique_ptr<Texture2D> texAfterTAA = nullptr;
