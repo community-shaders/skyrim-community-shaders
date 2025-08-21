@@ -74,6 +74,30 @@ T SettingsRegistry::GetValue(const std::string& key, const std::string& category
 
 	// If setting has weather support, try to get weather-blended value
 	if (setting.hasWeatherSupport) {
+		// Check ignore weather system settings
+		bool shouldIgnoreWeather = false;
+		
+		// Check if we should ignore weather system based on interior state
+		auto ignoreWeatherIt = ignoreWeatherSystem.find(setting.category);
+		auto ignoreWeatherInteriorIt = ignoreWeatherSystemInterior.find(setting.category);
+		
+		if (interiorFactor > 0.5f) {
+			// We're in an interior
+			if (ignoreWeatherInteriorIt != ignoreWeatherSystemInterior.end() && ignoreWeatherInteriorIt->second) {
+				shouldIgnoreWeather = true;
+			}
+		} else {
+			// We're in an exterior
+			if (ignoreWeatherIt != ignoreWeatherSystem.end() && ignoreWeatherIt->second) {
+				shouldIgnoreWeather = true;
+			}
+		}
+		
+		// If ignore is set, skip weather processing and use enbseries.ini values
+		if (shouldIgnoreWeather) {
+			return std::get<T>(setting.currentValue);
+		}
+		
 		auto& weatherManager = WeatherManager::GetSingleton();
 
 		// Check if we have weather settings for current weather
@@ -187,6 +211,27 @@ std::vector<std::string> SettingsRegistry::GetAllCategories() const
 	return std::vector<std::string>(categorySet.begin(), categorySet.end());
 }
 
+bool SettingsRegistry::CategoryHasWeatherSupport(const std::string& category) const
+{
+	for (const auto& [compositeKey, setting] : settings) {
+		if (setting->category == category && setting->hasWeatherSupport) {
+			return true;
+		}
+	}
+	return false;
+}
+
+std::vector<std::string> SettingsRegistry::GetCategoriesWithWeatherSupport() const
+{
+	std::set<std::string> categoriesWithWeather;
+	for (const auto& [compositeKey, setting] : settings) {
+		if (setting->hasWeatherSupport) {
+			categoriesWithWeather.insert(setting->category);
+		}
+	}
+	return std::vector<std::string>(categoriesWithWeather.begin(), categoriesWithWeather.end());
+}
+
 void SettingsRegistry::SetWeatherBlendFactors(uint32_t newCurrentWeatherID, uint32_t newLastWeatherID, float blendFactor)
 {
 	this->currentWeatherID = newCurrentWeatherID;
@@ -239,6 +284,9 @@ void SettingsRegistry::LoadFromFile(const std::string& filePath)
 			LoadSettingFromFile(absPath.string(), setting->category, setting->key, *setting);
 		}
 	}
+	
+	// Load weather ignore settings
+	LoadWeatherIgnoreSettings(absPath.string());
 
 	logger::info("[SettingsRegistry] Loaded settings from: {}", absPath.string());
 }
@@ -250,6 +298,9 @@ void SettingsRegistry::SaveToFile(const std::string& filePath)
 			SaveSettingToFile(filePath, setting->category, setting->key, *setting);
 		}
 	}
+	
+	// Save weather ignore settings for categories with weather support
+	SaveWeatherIgnoreSettings(filePath);
 
 	logger::info("[SettingsRegistry] Saved settings to: {}", filePath);
 }
@@ -396,6 +447,91 @@ void SettingsRegistry::SaveSettingToFile(const std::string& filePath, const std:
 			break;
 		}
 	}
+}
+
+void SettingsRegistry::SaveWeatherIgnoreSettings(const std::string& filePath)
+{
+	auto categoriesWithWeather = GetCategoriesWithWeatherSupport();
+	
+	for (const auto& category : categoriesWithWeather) {
+		// Get current values or use defaults
+		bool ignoreWeather = false;
+		bool ignoreWeatherInterior = true;
+		
+		auto itIgnore = ignoreWeatherSystem.find(category);
+		if (itIgnore != ignoreWeatherSystem.end()) {
+			ignoreWeather = itIgnore->second;
+		}
+		
+		auto itIgnoreInterior = ignoreWeatherSystemInterior.find(category);
+		if (itIgnoreInterior != ignoreWeatherSystemInterior.end()) {
+			ignoreWeatherInterior = itIgnoreInterior->second;
+		}
+		
+		// Write the ignore settings
+		WritePrivateProfileStringA(category.c_str(), "IgnoreWeatherSystem", ignoreWeather ? "true" : "false", filePath.c_str());
+		WritePrivateProfileStringA(category.c_str(), "IgnoreWeatherSystemInterior", ignoreWeatherInterior ? "true" : "false", filePath.c_str());
+	}
+	
+	logger::debug("[SettingsRegistry] Saved weather ignore settings for {} categories", categoriesWithWeather.size());
+}
+
+void SettingsRegistry::LoadWeatherIgnoreSettings(const std::string& filePath)
+{
+	auto categoriesWithWeather = GetCategoriesWithWeatherSupport();
+	char buffer[256];
+	
+	for (const auto& category : categoriesWithWeather) {
+		// Load IgnoreWeatherSystem setting
+		DWORD result = GetPrivateProfileStringA(category.c_str(), "IgnoreWeatherSystem", "false", buffer, sizeof(buffer), filePath.c_str());
+		if (result > 0) {
+			std::string valueStr = buffer;
+			std::transform(valueStr.begin(), valueStr.end(), valueStr.begin(), ::tolower);
+			bool ignoreWeatherSystemValue = (valueStr == "true" || valueStr == "1");
+			this->ignoreWeatherSystem[category] = ignoreWeatherSystemValue;
+			logger::debug("[SettingsRegistry] Loaded [{}]::IgnoreWeatherSystem = {}", category, ignoreWeatherSystemValue);
+		} else {
+			// Set default value
+			this->ignoreWeatherSystem[category] = false;
+		}
+		
+		// Load IgnoreWeatherSystemInterior setting
+		result = GetPrivateProfileStringA(category.c_str(), "IgnoreWeatherSystemInterior", "true", buffer, sizeof(buffer), filePath.c_str());
+		if (result > 0) {
+			std::string valueStr = buffer;
+			std::transform(valueStr.begin(), valueStr.end(), valueStr.begin(), ::tolower);
+			bool ignoreWeatherSystemInteriorValue = (valueStr == "true" || valueStr == "1");
+			this->ignoreWeatherSystemInterior[category] = ignoreWeatherSystemInteriorValue;
+			logger::debug("[SettingsRegistry] Loaded [{}]::IgnoreWeatherSystemInterior = {}", category, ignoreWeatherSystemInteriorValue);
+		} else {
+			// Set default value
+			this->ignoreWeatherSystemInterior[category] = true;
+		}
+	}
+	
+	logger::debug("[SettingsRegistry] Loaded weather ignore settings for {} categories", categoriesWithWeather.size());
+}
+
+bool SettingsRegistry::GetIgnoreWeatherSystem(const std::string& category) const
+{
+	auto it = ignoreWeatherSystem.find(category);
+	return (it != ignoreWeatherSystem.end()) ? it->second : false;  // Default to false
+}
+
+bool SettingsRegistry::GetIgnoreWeatherSystemInterior(const std::string& category) const
+{
+	auto it = ignoreWeatherSystemInterior.find(category);
+	return (it != ignoreWeatherSystemInterior.end()) ? it->second : true;  // Default to true
+}
+
+void SettingsRegistry::SetIgnoreWeatherSystem(const std::string& category, bool ignore)
+{
+	ignoreWeatherSystem[category] = ignore;
+}
+
+void SettingsRegistry::SetIgnoreWeatherSystemInterior(const std::string& category, bool ignore)
+{
+	ignoreWeatherSystemInterior[category] = ignore;
 }
 
 // Explicit template instantiations

@@ -120,6 +120,8 @@ public:
 	const SettingInfo* GetSettingInfo(const std::string& key, const std::string& category) const;
 	std::vector<std::string> GetSettingsByCategory(const std::string& category) const;
 	std::vector<std::string> GetAllCategories() const;
+	bool CategoryHasWeatherSupport(const std::string& category) const;
+	std::vector<std::string> GetCategoriesWithWeatherSupport() const;
 
 	// Weather integration
 	void SetWeatherBlendFactors(uint32_t currentWeatherID, uint32_t lastWeatherID, float blendFactor);
@@ -128,6 +130,14 @@ public:
 	// File I/O
 	void LoadFromFile(const std::string& filePath);
 	void SaveToFile(const std::string& filePath);
+	
+	// Weather ignore settings management
+	void SaveWeatherIgnoreSettings(const std::string& filePath);
+	void LoadWeatherIgnoreSettings(const std::string& filePath);
+	bool GetIgnoreWeatherSystem(const std::string& category) const;
+	bool GetIgnoreWeatherSystemInterior(const std::string& category) const;
+	void SetIgnoreWeatherSystem(const std::string& category, bool ignore);
+	void SetIgnoreWeatherSystemInterior(const std::string& category, bool ignore);
 
 	// Time of day interpolation data
 	void SetTimeOfDayData(const float timeOfDay1[4], const float timeOfDay2[4], float interiorFactor);
@@ -145,6 +155,10 @@ private:
 	uint32_t currentWeatherID = 0;
 	uint32_t lastWeatherID = 0;
 	float weatherBlendFactor = 0.0f;
+	
+	// Weather ignore settings per category
+	std::unordered_map<std::string, bool> ignoreWeatherSystem;        // category -> bool
+	std::unordered_map<std::string, bool> ignoreWeatherSystemInterior; // category -> bool
 
 	// Time of day interpolation state
 	float timeOfDay1[4] = { 0, 0, 0, 0 };

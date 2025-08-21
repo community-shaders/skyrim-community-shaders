@@ -152,6 +152,40 @@ void ENBPostProcessingUI::RenderAllSettings()
 				ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed);
 				ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
+				// Add weather ignore controls for categories with weather support
+				if (settingsRegistry.CategoryHasWeatherSupport(category)) {
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::Text("IgnoreWeatherSystem");
+					ImGui::TableSetColumnIndex(1);
+					bool ignoreWeather = settingsRegistry.GetIgnoreWeatherSystem(category);
+					if (ImGui::Checkbox(("##IgnoreWeatherSystem_" + category).c_str(), &ignoreWeather)) {
+						settingsRegistry.SetIgnoreWeatherSystem(category, ignoreWeather);
+					}
+					if (ImGui::IsItemHovered()) {
+						ImGui::SetTooltip("When enabled, uses enbseries.ini values instead of weather-specific values for exterior areas");
+					}
+
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::Text("IgnoreWeatherSystemInterior");
+					ImGui::TableSetColumnIndex(1);
+					bool ignoreWeatherInterior = settingsRegistry.GetIgnoreWeatherSystemInterior(category);
+					if (ImGui::Checkbox(("##IgnoreWeatherSystemInterior_" + category).c_str(), &ignoreWeatherInterior)) {
+						settingsRegistry.SetIgnoreWeatherSystemInterior(category, ignoreWeatherInterior);
+					}
+					if (ImGui::IsItemHovered()) {
+						ImGui::SetTooltip("When enabled, uses enbseries.ini values instead of weather-specific values for interior areas");
+					}
+
+					// Add separator
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::Separator();
+					ImGui::TableSetColumnIndex(1);
+					ImGui::Separator();
+				}
+
 				for (const auto& settingKey : settings) {
 					auto settingInfo = settingsRegistry.GetSettingInfo(settingKey, category);
 					if (!settingInfo)
