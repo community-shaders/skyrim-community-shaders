@@ -68,11 +68,11 @@ void ENBPostProcessingUI::RenderEffectsList()
 
 		// Set text color based on compilation status
 		if (!isCompiled && !errors.empty()) {
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.0f, 0.0f, 1.0f)); // Red for errors
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.0f, 0.0f, 1.0f));  // Red for errors
 		} else if (!isCompiled) {
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f)); // Yellow for uncompiled
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f));  // Yellow for uncompiled
 		} else {
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f)); // Green for successful
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));  // Green for successful
 		}
 
 		if (ImGui::CollapsingHeader(name.c_str())) {
@@ -207,7 +207,7 @@ void ENBPostProcessingUI::RenderWeatherControl()
 		// Weather file list
 		if (ImGui::TreeNodeEx("Weather Files", ImGuiTreeNodeFlags_DefaultOpen)) {
 			const auto& weatherEntries = weatherManager.GetWeatherEntries();
-			
+
 			if (!weatherEntries.empty()) {
 				if (ImGui::BeginChild("WeatherList", ImVec2(0, 200), true)) {
 					// Sort weather entries by name for consistent display
@@ -219,24 +219,25 @@ void ENBPostProcessingUI::RenderWeatherControl()
 
 					for (const auto& [key, entry] : sortedWeathers) {
 						ImGui::PushID(key.c_str());
-						
+
 						// Show weather file name and IDs
 						ImGui::Text("%s", entry->fileName.c_str());
 						ImGui::SameLine();
 						ImGui::Text("(%s)", key.c_str());
-						
+
 						// Show weather IDs on same line
 						ImGui::SameLine();
 						std::string idsText = "IDs: ";
 						for (size_t i = 0; i < entry->weatherIDs.size() && i < 3; ++i) {
-							if (i > 0) idsText += ", ";
+							if (i > 0)
+								idsText += ", ";
 							idsText += std::format("0x{:X}", entry->weatherIDs[i]);
 						}
 						if (entry->weatherIDs.size() > 3) {
 							idsText += "...";
 						}
 						ImGui::Text("%s", idsText.c_str());
-						
+
 						ImGui::PopID();
 					}
 				}
@@ -245,7 +246,7 @@ void ENBPostProcessingUI::RenderWeatherControl()
 				ImGui::Text("No weather files loaded");
 				ImGui::Text("Make sure _weatherlist.ini exists in enbseries folder");
 			}
-			
+
 			ImGui::TreePop();
 		}
 
@@ -262,9 +263,9 @@ void ENBPostProcessingUI::RenderBloomSettings()
 		// Check if weather settings are active
 		uint32_t currentWeatherID = static_cast<uint32_t>(effectManager.commonData.weather[0]);
 		uint32_t lastWeatherID = static_cast<uint32_t>(effectManager.commonData.weather[1]);
-		bool hasWeatherSettings = weatherManager.FindWeatherEntry(currentWeatherID) != nullptr || 
-			                weatherManager.FindWeatherEntry(lastWeatherID) != nullptr;
-		
+		bool hasWeatherSettings = weatherManager.FindWeatherEntry(currentWeatherID) != nullptr ||
+		                          weatherManager.FindWeatherEntry(lastWeatherID) != nullptr;
+
 		if (hasWeatherSettings) {
 			auto effectiveSettings = effectManager.GetEffectiveBloomAmount();
 			ImGui::BeginDisabled(true);
@@ -288,9 +289,9 @@ void ENBPostProcessingUI::RenderLensSettings()
 		// Check if weather settings are active
 		uint32_t currentWeatherID = static_cast<uint32_t>(effectManager.commonData.weather[0]);
 		uint32_t lastWeatherID = static_cast<uint32_t>(effectManager.commonData.weather[1]);
-		bool hasWeatherSettings = weatherManager.FindWeatherEntry(currentWeatherID) != nullptr || 
-			                weatherManager.FindWeatherEntry(lastWeatherID) != nullptr;
-			
+		bool hasWeatherSettings = weatherManager.FindWeatherEntry(currentWeatherID) != nullptr ||
+		                          weatherManager.FindWeatherEntry(lastWeatherID) != nullptr;
+
 		if (hasWeatherSettings) {
 			auto effectiveSettings = effectManager.GetEffectiveLensAmount();
 			ImGui::BeginDisabled(true);
