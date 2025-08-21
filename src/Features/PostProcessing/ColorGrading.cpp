@@ -398,7 +398,6 @@ void ColorGrading::LoadSettings(json& o_json)
     if (auto it = std::ranges::find_if(tonemappers, [&](TonemapperInfo& x) { return settings.currentTonemapper == x.name; });
 		it != tonemappers.end()) {
 		tonemapperType = (int)(it - tonemappers.begin());
-		settings.tonemapParams = it->default_settings;
 	} else {
 		TonemapperInfo::GetDefaultParams(tonemapperType, settings.tonemapParams);
 	}
