@@ -154,7 +154,21 @@ void SettingsRegistry::SetValue(const std::string& key, const std::string& categ
 		return;
 	}
 
+	// Update the base setting value
 	it->second->currentValue = value;
+	
+	// If this setting has weather support and we have a current weather, update the weather setting too
+	if (it->second->hasWeatherSupport && currentWeatherID != 0) {
+		std::ostringstream oss;
+		oss << "weather_" << currentWeatherID;
+		std::string weatherKey = oss.str();
+		
+		// Update the weather-specific value
+		weatherSettings[weatherKey][compositeKey] = value;
+		
+		logger::debug("[SettingsRegistry] Updated weather setting [{}]::{} for weather {}", 
+			category, key, currentWeatherID);
+	}
 }
 
 float SettingsRegistry::GetInterpolatedTimeOfDayValue(const std::string& key)
@@ -316,18 +330,52 @@ void SettingsRegistry::SaveAllWeatherSettings()
 		std::filesystem::path weatherFilePathObj(weatherFilePath);
 		std::filesystem::create_directories(weatherFilePathObj.parent_path());
 
-		// Save all weather-supported settings with their current values
-		for (const auto& [compositeKey, setting] : settings) {
-			if (setting->hasWeatherSupport) {
-				SaveSettingToFile(weatherFilePath, setting->category, setting->key, *setting);
+		// For each weather ID in this file, check if we have weather-specific values
+		// Use the first weather ID for this file to look up values
+		if (!entry.weatherIDs.empty()) {
+			uint32_t weatherID = entry.weatherIDs[0];  // Use first weather ID as representative
+			std::ostringstream oss;
+			oss << "weather_" << weatherID;
+			std::string weatherKey = oss.str();
+			
+			auto weatherIt = weatherSettings.find(weatherKey);
+			if (weatherIt != weatherSettings.end()) {
+				// Save weather-specific values for this file
+				const auto& weatherSettingMap = weatherIt->second;
+				for (const auto& [compositeKey, weatherValue] : weatherSettingMap) {
+					auto settingIt = settings.find(compositeKey);
+					if (settingIt != settings.end()) {
+						const auto& setting = *settingIt->second;
+						
+						// Create temporary setting with weather-specific value
+						SettingInfo tempSetting = setting;
+						tempSetting.currentValue = weatherValue;
+						
+						SaveSettingToFile(weatherFilePath, setting.category, setting.key, tempSetting);
+					}
+				}
+			} else {
+				// No weather-specific values found, save current UI values
+				for (const auto& [compositeKey, setting] : settings) {
+					if (setting->hasWeatherSupport) {
+						SaveSettingToFile(weatherFilePath, setting->category, setting->key, *setting);
+					}
+				}
+			}
+		} else {
+			// No weather IDs, save current UI values as fallback
+			for (const auto& [compositeKey, setting] : settings) {
+				if (setting->hasWeatherSupport) {
+					SaveSettingToFile(weatherFilePath, setting->category, setting->key, *setting);
+				}
 			}
 		}
 		
 		savedCount++;
-		logger::debug("[SettingsRegistry] Saved current settings to weather file: {}", weatherFilePath);
+		logger::debug("[SettingsRegistry] Saved settings to weather file: {}", weatherFilePath);
 	}
 
-	logger::info("[SettingsRegistry] Saved current settings to {} weather files", savedCount);
+	logger::info("[SettingsRegistry] Saved settings to {} weather files", savedCount);
 }
 
 void SettingsRegistry::ReloadAllWeatherSettings()
@@ -342,31 +390,6 @@ void SettingsRegistry::ReloadAllWeatherSettings()
 	logger::info("[SettingsRegistry] Reloaded all weather settings");
 }
 
-void SettingsRegistry::UpdateWeatherSettingsFromCurrent()
-{
-	// This method captures the current state of settings and stores them as weather values
-	// It's used when the user modifies settings in the UI and wants to save them to weather files
-	
-	if (currentWeatherID == 0) {
-		logger::warn("[SettingsRegistry] No current weather ID set, cannot update weather settings");
-		return;
-	}
-	
-	std::ostringstream oss;
-	oss << "weather_" << currentWeatherID;
-	std::string weatherKey = oss.str();
-	
-	auto& weatherSettingMap = weatherSettings[weatherKey];
-	
-	// Update weather settings with current values for weather-supported settings
-	for (const auto& [compositeKey, setting] : settings) {
-		if (setting->hasWeatherSupport) {
-			weatherSettingMap[compositeKey] = setting->currentValue;
-		}
-	}
-	
-	logger::debug("[SettingsRegistry] Updated weather settings for current weather ID: {}", currentWeatherID);
-}
 
 void SettingsRegistry::SetTimeOfDayData(const float newTimeOfDay1[4], const float newTimeOfDay2[4], float newInteriorFactor)
 {

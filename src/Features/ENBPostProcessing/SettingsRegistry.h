@@ -129,7 +129,6 @@ public:
 	void SaveWeatherSettings(const std::string& weatherKey, const std::string& filePath);
 	void SaveAllWeatherSettings();
 	void ReloadAllWeatherSettings();
-	void UpdateWeatherSettingsFromCurrent();
 
 	// File I/O
 	void LoadFromFile(const std::string& filePath);

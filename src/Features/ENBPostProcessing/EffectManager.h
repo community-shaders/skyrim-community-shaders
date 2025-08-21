@@ -110,7 +110,6 @@ public:
 	void SaveENBSettings();
 	void LoadAllWeatherSettings();
 	void SaveAllWeatherSettings();
-	void UpdateCurrentWeatherSettings();
 
 	// Helper methods for backwards compatibility
 	float GetInterpolatedBloomAmount();

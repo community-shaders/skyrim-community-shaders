@@ -739,9 +739,3 @@ void EffectManager::SaveAllWeatherSettings()
 	logger::info("[EffectManager] Saved all weather settings");
 }
 
-void EffectManager::UpdateCurrentWeatherSettings()
-{
-	auto& registry = SettingsRegistry::GetSingleton();
-	registry.UpdateWeatherSettingsFromCurrent();
-	logger::info("[EffectManager] Updated current weather settings from UI values");
-}
