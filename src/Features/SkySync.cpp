@@ -19,7 +19,7 @@ void SkySync::DrawSettings()
 			SetSunAngle();
 
 		if (settings.SunPath == static_cast<int32_t>(SunPath::Custom)) {
-			if (ImGui::SliderFloat("Custom angle", &settings.CustomAngle, -90.0f, 90.0f, "%.0f"), ImGuiSliderFlags_AlwaysClamp)
+			if (ImGui::SliderFloat("Custom angle", &settings.CustomAngle, -90.0f, 90.0f, "%.0f", ImGuiSliderFlags_AlwaysClamp))
 				SetSunAngle();
 		}
 	}
