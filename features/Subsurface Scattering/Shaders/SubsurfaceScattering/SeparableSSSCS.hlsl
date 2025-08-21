@@ -27,7 +27,7 @@ cbuffer PerFrameSSS : register(b1)
 #if defined(BURLEY)
 #	include "SubsurfaceScattering/Burley.hlsli"
 #else
-#	include "SubsurfaceScattering/SeparableSSSCS.hlsli"
+#	include "SubsurfaceScattering/SeparableSSS.hlsli"
 #endif
 
 [numthreads(8, 8, 1)] void main(uint3 DTid
