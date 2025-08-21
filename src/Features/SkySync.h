@@ -16,7 +16,7 @@ public:
 		return {
 			"Synchronizes volumetric lighting and shadows with the actual sun and moon positions in the sky.",
 			{ "Fixes the mismatch between the positions of the sun and moons and the lighting direction",
-				"Includes an configurable alternative sun path for more realistic and dramatic lighting",
+				"Includes a configurable alternative sun path for more realistic and dramatic lighting",
 				"Smoothly switches the light source between the sun and moons based on visibility",
 				"Moon light source can be switched between Masser, Secunda, or the brightest",
 				"Automatic calculation of moon lighting intensity based on moon phase",
