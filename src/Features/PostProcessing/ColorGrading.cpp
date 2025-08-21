@@ -374,6 +374,12 @@ void ColorGrading::DrawSettings()
             float3{ colorSpaceTransformMatrix(1, 0), colorSpaceTransformMatrix(1, 1), colorSpaceTransformMatrix(1, 2) },
             float3{ colorSpaceTransformMatrix(2, 0), colorSpaceTransformMatrix(2, 1), colorSpaceTransformMatrix(2, 2) }
         };
+
+		settings.invColorSpaceTransform = {
+			float3{ invColorSpaceTransformMatrix(0, 0), invColorSpaceTransformMatrix(0, 1), invColorSpaceTransformMatrix(0, 2) },
+			float3{ invColorSpaceTransformMatrix(1, 0), invColorSpaceTransformMatrix(1, 1), invColorSpaceTransformMatrix(1, 2) },
+			float3{ invColorSpaceTransformMatrix(2, 0), invColorSpaceTransformMatrix(2, 1), invColorSpaceTransformMatrix(2, 2) }
+		};
     }
 }
 
