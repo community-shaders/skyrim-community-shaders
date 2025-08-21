@@ -60,7 +60,7 @@ void SettingsRegistry::RegisterTimeOfDaySetting(const std::string& key, const st
 	settings[compositeKey] = std::move(setting);
 }
 
-template<typename T>
+template <typename T>
 T SettingsRegistry::GetValue(const std::string& key, const std::string& category)
 {
 	std::string compositeKey = MakeCompositeKey(key, category);
@@ -144,7 +144,7 @@ T SettingsRegistry::GetValue(const std::string& key, const std::string& category
 	return std::get<T>(setting.currentValue);
 }
 
-template<typename T>
+template <typename T>
 void SettingsRegistry::SetValue(const std::string& key, const std::string& category, const T& value)
 {
 	std::string compositeKey = MakeCompositeKey(key, category);
@@ -273,14 +273,14 @@ void SettingsRegistry::LoadFromFile(const std::string& filePath)
 {
 	// Convert to absolute path
 	std::filesystem::path absPath = std::filesystem::absolute(filePath);
-	
+
 	if (!std::filesystem::exists(absPath)) {
 		logger::warn("[SettingsRegistry] Settings file not found: {}, using defaults", absPath.string());
 		return;
 	}
 
 	for (const auto& [compositeKey, setting] : settings) {
-		if (!setting->hasWeatherSupport) { // Only load non-weather settings from main file
+		if (!setting->hasWeatherSupport) {  // Only load non-weather settings from main file
 			LoadSettingFromFile(absPath.string(), setting->category, setting->key, *setting);
 		}
 	}
