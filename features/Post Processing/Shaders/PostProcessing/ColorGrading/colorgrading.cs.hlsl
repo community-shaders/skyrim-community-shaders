@@ -2,6 +2,7 @@
 #include "Common/Math.hlsli"
 
 #include "PostProcessing/common.hlsli"
+#include "PostProcessing/ColourTransforms/GT7ToneMapping.hlsli"
 
 RWTexture2D<float4> RWTexOut : register(u0);
 
@@ -68,9 +69,9 @@ float3 OklchSaturation(float3 val)
 	float c = length(oklab.yz);
 	float h = atan2(oklab.z, oklab.y);
 
-	c = min(0.37, c * oklchSaturation[0].r);
-	c = (1 - pow(1 - c / 0.37, oklchSaturation[0].g)) * 0.37;
-	h += oklchSaturation[0].b * Math::PI;
+	c = min(0.37, c * oklchSaturation.x);
+	c = (1 - pow(abs(1 - c / 0.37), oklchSaturation.y)) * 0.37;
+	h += oklchSaturation.z * Math::PI;
 
 	sincos(h, oklab.z, oklab.y);
 	oklab.yz *= c;
@@ -632,15 +633,17 @@ float3 LogToLinear(float3 val, uint logType)
     }
 
 	// LDR
-	// Lift Gamma Gain
-    color = LiftGammaGain(color, liftgammagain[0].gbar, liftgammagain[1].gbar, liftgammagain[2].gbar);
+	if (!skipLDR) {
+		// Lift Gamma Gain
+		color = LiftGammaGain(color, liftgammagain[0].gbar, liftgammagain[1].gbar, liftgammagain[2].gbar);
 
-    // Oklch Saturation
-    color = OklchSaturation(color);
+		// Oklch Saturation
+		color = OklchSaturation(color);
 
-    // Oklch Colour Mixer
-    color = OklchColourMixer(color);
-
+		// Oklch Colour Mixer
+		color = OklchColourMixer(color);
+	}
+	
     // Game tint
     float luma = Color::RGBToLuminance2(color);
     color = lerp(color, luma * tint.xyz, tint.w);

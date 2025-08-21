@@ -265,7 +265,7 @@ float3 ucsToRgb(float3 ucs)
 // -----------------------------------------------------------------------------
 // GT7 Tone Mapping Structure
 // -----------------------------------------------------------------------------
-struct GT7ToneMapping
+struct GT7ToneMapper
 {
     float sdrCorrectionFactor;
     float framebufferLuminanceTarget;
@@ -276,9 +276,9 @@ struct GT7ToneMapping
     float fadeEnd;
 };
 
-GT7ToneMapping initializeHDR(float physicalTargetLuminance)
+GT7ToneMapper initializeHDR(float physicalTargetLuminance)
 {
-    GT7ToneMapping toneMapper;
+    GT7ToneMapper toneMapper;
     toneMapper.sdrCorrectionFactor = 1.0f;
     toneMapper.framebufferLuminanceTarget = physicalValueToFrameBufferValue(physicalTargetLuminance);
     
@@ -300,9 +300,9 @@ GT7ToneMapping initializeHDR(float physicalTargetLuminance)
     return toneMapper;
 }
 
-GT7ToneMapping initializeSDR()
+GT7ToneMapper initializeSDR()
 {
-    GT7ToneMapping toneMapper;
+    GT7ToneMapper toneMapper;
     toneMapper.sdrCorrectionFactor = 1.0f / physicalValueToFrameBufferValue(GRAN_TURISMO_SDR_PAPER_WHITE);
     toneMapper.framebufferLuminanceTarget = physicalValueToFrameBufferValue(GRAN_TURISMO_SDR_PAPER_WHITE);
     
@@ -327,7 +327,7 @@ GT7ToneMapping initializeSDR()
 // -----------------------------------------------------------------------------
 // Main Tone Mapping Function
 // -----------------------------------------------------------------------------
-float3 applyGT7ToneMapping(GT7ToneMapping toneMapper, float3 rgb)
+float3 applyGT7ToneMapping(GT7ToneMapper toneMapper, float3 rgb)
 {
     // Convert to UCS to separate luminance and chroma
     float3 ucs = rgbToUcs(rgb);
@@ -369,14 +369,14 @@ float3 applyGT7ToneMapping(GT7ToneMapping toneMapper, float3 rgb)
 // Apply GT7 tone mapping for HDR output
 float3 GT7ToneMappingHDR(float3 linearRgb, float targetLuminanceNits)
 {
-    GT7ToneMapping toneMapper = initializeHDR(targetLuminanceNits);
+    GT7ToneMapper toneMapper = initializeHDR(targetLuminanceNits);
     return applyGT7ToneMapping(toneMapper, linearRgb);
 }
 
 // Apply GT7 tone mapping for SDR output
 float3 GT7ToneMappingSDR(float3 linearRgb)
 {
-    GT7ToneMapping toneMapper = initializeSDR();
+    GT7ToneMapper toneMapper = initializeSDR();
     return applyGT7ToneMapping(toneMapper, linearRgb);
 }
 

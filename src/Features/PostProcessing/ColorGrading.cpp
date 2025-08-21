@@ -271,15 +271,15 @@ void ColorGrading::DrawSettings()
         }
 
         if (ImGui::TreeNode("Saturation/Hue")) {
-            shiftSlider("Saturation", &profile.params[6].x, 0.f, 3.f, "%.3f");
-            shiftSlider("Hue Shift", &profile.params[6].y, -1.f, 1.f, "%.3f");
+            ImGui::SliderFloat("Saturation", &profile.params[6].x, 0.f, 3.f, "%.3f");
+            ImGui::SliderFloat("Hue Shift", &profile.params[6].y, -1.f, 1.f, "%.3f");
             ImGui::TreePop();
         }
 
         if (ImGui::TreeNode("Lift Gamma Gain")) {
-            shiftSlider("Lift", &profile.params[3].x, -1.f, 1.f, "%.2f");
-            shiftSlider("Gamma", &profile.params[4].x, 0.f, 2.f, "%.2f");
-            shiftSlider("Gain", &profile.params[5].x, 0.f, 2.f, "%.2f");
+            ImGui::DragFloat4("Lift", &profile.params[3].x, 1e-3f, -1.f, 1.f, "%.3f");
+            ImGui::DragFloat4("Gamma", &profile.params[4].x, 1e-3f, -1.5f, 1.5f, "%.3f");
+            ImGui::DragFloat4("Gain", &profile.params[5].x, 1e-3f, 0.f, 2.f, "%.3f");
             ImGui::TreePop();
         }
 

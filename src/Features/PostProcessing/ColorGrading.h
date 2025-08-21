@@ -7,6 +7,7 @@ struct ColorGrading : public PostProcessFeature
 {
 	virtual inline std::string GetType() const override { return "Color Grading and Tone Mapping"; }
 	virtual inline std::string GetDesc() const override { return "Color grading operations and multiple tone mapping options."; }
+    virtual inline bool DisableInMainLoadingMenu() const override { return true; }
 
 	virtual bool SupportsVR() { return true; }
 
