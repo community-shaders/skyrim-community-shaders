@@ -79,11 +79,11 @@ void Effect::Save()
 			{
 				std::ostringstream oss;
 				int numComponents = (uiVar.type == UIVariableType::Color3) ? 3 : 4;
-				for (int i = 0; i < numComponents; ++i) {
-					oss << uiVar.colorValue[i];
-					if (i < numComponents - 1)
-						oss << " ";
-				}
+
+				std::copy(uiVar.colorValue, uiVar.colorValue + numComponents - 1,
+					std::ostream_iterator<float>(oss, ", "));
+				oss << uiVar.colorValue[numComponents - 1];
+
 				value = oss.str();
 			}
 			break;
@@ -939,7 +939,11 @@ void Effect::LoadVariableFromString(UIVariable& uiVar, const std::string& value)
 				std::istringstream ss(value);
 				int numComponents = (uiVar.type == UIVariableType::Color3) ? 3 : 4;
 				for (int i = 0; i < numComponents; ++i) {
+					char sep;
 					ss >> uiVar.colorValue[i];
+					if (ss.peek() == ',') {
+						ss >> sep;
+					}
 				}
 				uiVar.effectVariable->AsVector()->SetFloatVector(uiVar.colorValue);
 			}
