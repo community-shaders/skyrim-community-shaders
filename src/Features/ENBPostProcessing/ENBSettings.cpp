@@ -1,5 +1,5 @@
-#include "SettingsRegistry.h"
 #include "PCH.h"
+#include "SettingsRegistry.h"
 
 void RegisterENBSettings()
 {
@@ -9,7 +9,7 @@ void RegisterENBSettings()
 	registry.RegisterFloatSetting("Brightness", "COLORCORRECTION", 1.0f, 0.0f, 3.0f, false);
 	registry.RegisterFloatSetting("GammaCurve", "COLORCORRECTION", 1.0f, 0.1f, 3.0f, false);
 
-	// ADAPTATION settings  
+	// ADAPTATION settings
 	registry.RegisterFloatSetting("AdaptationSensitivity", "ADAPTATION", 1.0f, 0.0f, 5.0f, false);
 	registry.RegisterBoolSetting("ForceMinMaxValues", "ADAPTATION", false, false);
 	registry.RegisterFloatSetting("AdaptationMin", "ADAPTATION", 0.0f, 0.0f, 1.0f, false);
