@@ -738,4 +738,3 @@ void EffectManager::SaveAllWeatherSettings()
 	registry.SaveAllWeatherSettings();
 	logger::info("[EffectManager] Saved all weather settings");
 }
-

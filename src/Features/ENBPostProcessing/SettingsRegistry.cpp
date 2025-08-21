@@ -156,17 +156,17 @@ void SettingsRegistry::SetValue(const std::string& key, const std::string& categ
 
 	// Update the base setting value
 	it->second->currentValue = value;
-	
+
 	// If this setting has weather support and we have a current weather, update the weather setting too
 	if (it->second->hasWeatherSupport && currentWeatherID != 0) {
 		std::ostringstream oss;
 		oss << "weather_" << currentWeatherID;
 		std::string weatherKey = oss.str();
-		
+
 		// Update the weather-specific value
 		weatherSettings[weatherKey][compositeKey] = value;
-		
-		logger::debug("[SettingsRegistry] Updated weather setting [{}]::{} for weather {}", 
+
+		logger::debug("[SettingsRegistry] Updated weather setting [{}]::{} for weather {}",
 			category, key, currentWeatherID);
 	}
 }
@@ -337,7 +337,7 @@ void SettingsRegistry::SaveAllWeatherSettings()
 			std::ostringstream oss;
 			oss << "weather_" << weatherID;
 			std::string weatherKey = oss.str();
-			
+
 			auto weatherIt = weatherSettings.find(weatherKey);
 			if (weatherIt != weatherSettings.end()) {
 				// Save weather-specific values for this file
@@ -346,11 +346,11 @@ void SettingsRegistry::SaveAllWeatherSettings()
 					auto settingIt = settings.find(compositeKey);
 					if (settingIt != settings.end()) {
 						const auto& setting = *settingIt->second;
-						
+
 						// Create temporary setting with weather-specific value
 						SettingInfo tempSetting = setting;
 						tempSetting.currentValue = weatherValue;
-						
+
 						SaveSettingToFile(weatherFilePath, setting.category, setting.key, tempSetting);
 					}
 				}
