@@ -493,9 +493,12 @@ void ColorGrading::CompileComputeShaders()
 void ColorGrading::Draw(TextureInfo& inout_tex)
 {
 	auto context = globals::d3d::context;
+	auto state = globals::state;
 
 	if (recompileFlag)
 		ClearShaderCache();
+
+	state->BeginPerfEvent("Color Grading and Tonemapping");
 
     auto& pp = globals::features::postProcessing;
 
@@ -597,4 +600,6 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	context->CSSetShader(nullptr, nullptr, 0);
 
 	inout_tex = { texColor->resource.get(), texColor->srv.get() };
+
+	state->EndPerfEvent();
 }
