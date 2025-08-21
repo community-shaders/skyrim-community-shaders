@@ -154,8 +154,9 @@ void ENBPostProcessingUI::RenderAllSettings()
 
 				for (const auto& settingKey : settings) {
 					auto settingInfo = settingsRegistry.GetSettingInfo(settingKey, category);
-					if (!settingInfo) continue;
-					
+					if (!settingInfo)
+						continue;
+
 					ImGui::TableNextRow();
 					ImGui::TableSetColumnIndex(0);
 					if (settingInfo->type != SettingType::TimeOfDay)

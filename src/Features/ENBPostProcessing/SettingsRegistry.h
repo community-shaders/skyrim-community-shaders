@@ -106,19 +106,19 @@ public:
 	// Setting access
 	template <typename T>
 	T GetValue(const std::string& key);
-	
-	template<typename T>
+
+	template <typename T>
 	T GetValue(const std::string& key, const std::string& category);
-	
-	template<typename T>
+
+	template <typename T>
 	void SetValue(const std::string& key, const T& value);
-	
-	template<typename T>
+
+	template <typename T>
 	void SetValue(const std::string& key, const std::string& category, const T& value);
 
 	// Get interpolated time-of-day value (automatically handles weather blending if enabled)
 	float GetInterpolatedTimeOfDayValue(const std::string& key);
-	
+
 	float GetInterpolatedTimeOfDayValue(const std::string& key, const std::string& category);
 
 	// Setting queries
