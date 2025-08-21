@@ -558,7 +558,7 @@ void SettingsRegistry::SaveSettingToFile(const std::string& filePath, const std:
 	case SettingType::Float:
 		{
 			float value = std::get<float>(setting.currentValue);
-			sprintf_s(buffer, "%.6f", value);
+			sprintf_s(buffer, "%.3f", value);
 			WritePrivateProfileStringA(section.c_str(), key.c_str(), buffer, filePath.c_str());
 			break;
 		}
@@ -569,7 +569,7 @@ void SettingsRegistry::SaveSettingToFile(const std::string& filePath, const std:
 
 			for (const auto& timeOfDay : timeOfDayNames) {
 				std::string fullKey = key + timeOfDay;
-				sprintf_s(buffer, "%.6f", timeOfDayValue[timeOfDay]);
+				sprintf_s(buffer, "%.3f", timeOfDayValue[timeOfDay]);
 				WritePrivateProfileStringA(section.c_str(), fullKey.c_str(), buffer, filePath.c_str());
 			}
 			break;
