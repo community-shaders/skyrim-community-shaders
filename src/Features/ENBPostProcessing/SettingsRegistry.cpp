@@ -23,7 +23,7 @@ void SettingsRegistry::RegisterBoolSetting(const std::string& key, const std::st
 	setting->hasWeatherSupport = hasWeatherSupport;
 	setting->defaultValue = defaultValue;
 	setting->currentValue = defaultValue;
-	
+
 	std::string compositeKey = MakeCompositeKey(key, category);
 	settings[compositeKey] = std::move(setting);
 }
@@ -40,7 +40,7 @@ void SettingsRegistry::RegisterFloatSetting(const std::string& key, const std::s
 	setting->currentValue = defaultValue;
 	setting->minValue = minValue;
 	setting->maxValue = maxValue;
-	
+
 	std::string compositeKey = MakeCompositeKey(key, category);
 	settings[compositeKey] = std::move(setting);
 }
@@ -55,7 +55,7 @@ void SettingsRegistry::RegisterTimeOfDaySetting(const std::string& key, const st
 	setting->hasWeatherSupport = hasWeatherSupport;
 	setting->defaultValue = defaultValue;
 	setting->currentValue = defaultValue;
-	
+
 	std::string compositeKey = MakeCompositeKey(key, category);
 	settings[compositeKey] = std::move(setting);
 }
@@ -71,20 +71,20 @@ T SettingsRegistry::GetValue(const std::string& key, const std::string& category
 	}
 
 	const auto& setting = *it->second;
-	
+
 	// If setting has weather support, try to get weather-blended value
 	if (setting.hasWeatherSupport) {
 		auto& weatherManager = WeatherManager::GetSingleton();
-		
+
 		// Check if we have weather settings for current weather
 		auto currentWeatherEntry = weatherManager.FindWeatherEntry(currentWeatherID);
 		auto lastWeatherEntry = weatherManager.FindWeatherEntry(lastWeatherID);
-		
+
 		if (currentWeatherEntry || lastWeatherEntry) {
 			// Get weather values
-			SettingValue currentWeatherValue = setting.currentValue; // fallback
-			SettingValue lastWeatherValue = setting.currentValue;    // fallback
-			
+			SettingValue currentWeatherValue = setting.currentValue;  // fallback
+			SettingValue lastWeatherValue = setting.currentValue;     // fallback
+
 			// Look up weather-specific values
 			if (currentWeatherEntry) {
 				std::ostringstream oss;
@@ -97,7 +97,7 @@ T SettingsRegistry::GetValue(const std::string& key, const std::string& category
 					}
 				}
 			}
-			
+
 			if (lastWeatherEntry) {
 				std::ostringstream oss;
 				oss << "weather_" << lastWeatherID;
@@ -109,13 +109,13 @@ T SettingsRegistry::GetValue(const std::string& key, const std::string& category
 					}
 				}
 			}
-			
+
 			// Interpolate between weather values
 			SettingValue blendedValue = InterpolateWeatherValues(currentWeatherValue, lastWeatherValue, weatherBlendFactor);
 			return std::get<T>(blendedValue);
 		}
 	}
-	
+
 	// Return base setting value
 	return std::get<T>(setting.currentValue);
 }
@@ -246,7 +246,7 @@ void SettingsRegistry::LoadFromFile(const std::string& filePath)
 void SettingsRegistry::SaveToFile(const std::string& filePath)
 {
 	for (const auto& [compositeKey, setting] : settings) {
-		if (!setting->hasWeatherSupport) { // Only save non-weather settings to main file
+		if (!setting->hasWeatherSupport) {  // Only save non-weather settings to main file
 			SaveSettingToFile(filePath, setting->category, setting->key, *setting);
 		}
 	}

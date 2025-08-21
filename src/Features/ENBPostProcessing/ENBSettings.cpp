@@ -25,7 +25,7 @@ void RegisterENBSettings()
 	defaultBloomAmount.Dawn = defaultBloomAmount.Sunrise = defaultBloomAmount.Day = 1.0f;
 	defaultBloomAmount.Sunset = defaultBloomAmount.Dusk = defaultBloomAmount.Night = 1.0f;
 	defaultBloomAmount.InteriorDay = defaultBloomAmount.InteriorNight = 1.0f;
-	
+
 	registry.RegisterTimeOfDaySetting("Amount", "BLOOM", defaultBloomAmount, true);
 
 	// LENS settings (with weather support)
@@ -33,6 +33,6 @@ void RegisterENBSettings()
 	defaultLensAmount.Dawn = defaultLensAmount.Sunrise = defaultLensAmount.Day = 1.0f;
 	defaultLensAmount.Sunset = defaultLensAmount.Dusk = defaultLensAmount.Night = 1.0f;
 	defaultLensAmount.InteriorDay = defaultLensAmount.InteriorNight = 1.0f;
-	
+
 	registry.RegisterTimeOfDaySetting("Amount", "LENS", defaultLensAmount, true);
 }
