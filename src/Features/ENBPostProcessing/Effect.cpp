@@ -81,7 +81,8 @@ void Effect::Save()
 				int numComponents = (uiVar.type == UIVariableType::Color3) ? 3 : 4;
 				for (int i = 0; i < numComponents; ++i) {
 					oss << uiVar.colorValue[i];
-					if (i < numComponents - 1) oss << " ";
+					if (i < numComponents - 1)
+						oss << " ";
 				}
 				value = oss.str();
 			}
@@ -1021,7 +1022,7 @@ void Effect::RenderImGui()
 
 			// Skip inputs
 			bool isLabelOnly = ((uiVar.type == UIVariableType::Float && uiVar.floatMin == 0 && uiVar.floatMax == 0) ||
-			                    (uiVar.type == UIVariableType::Int && uiVar.intMin == 0 && uiVar.intMax == 0));
+								(uiVar.type == UIVariableType::Int && uiVar.intMin == 0 && uiVar.intMax == 0));
 
 			if (isLabelOnly) {
 				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ImGui::GetColorU32(ImVec4(0.2f, 0.2f, 0.2f, 1.0f)));
@@ -1029,10 +1030,10 @@ void Effect::RenderImGui()
 			}
 
 			ImGui::TableSetColumnIndex(1);
-			
+
 			std::string id = "##" + uiVar.displayName + "_" + GetName();
-			const char* currentItem = ""; 
-			
+			const char* currentItem = "";
+
 			switch (uiVar.type) {
 			case UIVariableType::Float:
 				if (ImGui::InputFloat(id.c_str(), &uiVar.floatValue, 0.0f, 0.0f, "%.3f")) {

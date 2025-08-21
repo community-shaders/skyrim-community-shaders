@@ -114,7 +114,7 @@ public:
 			int intValue;
 			bool boolValue;
 		};
-		
+
 		// Color value storage
 		float colorValue[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
