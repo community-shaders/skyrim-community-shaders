@@ -103,11 +103,11 @@ public:
 	void RegisterTimeOfDaySetting(const std::string& key, const std::string& category,
 		const TimeOfDayValue& defaultValue, bool hasWeatherSupport = false);
 
-	// Setting access	
-	template<typename T>
+	// Setting access
+	template <typename T>
 	T GetValue(const std::string& key, const std::string& category);
-	
-	template<typename T>
+
+	template <typename T>
 	void SetValue(const std::string& key, const std::string& category, const T& value);
 
 	// Get interpolated time-of-day value (automatically handles weather blending if enabled)
