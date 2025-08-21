@@ -14,6 +14,9 @@ cbuffer ColorCB : register(b1) {
     float4 saturationHueInOutGamma;
     float4 oklchSaturation;
     float4 oklchColorMixer[7];
+	float4 contrast;
+	float4 pivot;
+	float4 exposureTemperatureTint;
 
 	float4 tonemapParams[2];
 	float4 colorSpaceTransform[3];
@@ -610,18 +613,24 @@ float3 LogToLinear(float3 val, uint logType)
         color = mul(colorSpaceTransformMat, color);
     }
 
-    // HDR
+	// HDR
+	// Exposure/Temperature/Tint
+	{
+		color *= exposureTemperatureTint.x;
+		// color = Temperature(color, exposureTemperatureTint.y);
+		// color = Tint(color, exposureTemperatureTint.z);
+	}
+	// Saturation and Hue
+    {
+        color = Saturation(color, saturationHueInOutGamma.x * cinematic.x);
+        color = HueShift(color, saturationHueInOutGamma.y);
+    }
+
     // Log
     color = LinearToLog(color, logType);
 
     // ASC CDL
     color = ASC_CDL(color, asccdl[0].xyz, asccdl[1].xyz, asccdl[2].xyz);
-
-    // Saturation and Hue
-    {
-        color = Saturation(color, saturationHueInOutGamma.x * cinematic.x);
-        color = HueShift(color, saturationHueInOutGamma.y);
-    }
 
     if (logType & LogType::Invert) {
         color = LogToLinear(color, logType);
@@ -632,10 +641,19 @@ float3 LogToLinear(float3 val, uint logType)
         color = TONEMAP_FUNC(color);
     }
 
+	// Inverse color space transform
+    if (enableColorSpaceTransform) {
+		const float3x3 invColorSpaceTransformMat = float3x3(invColorSpaceTransform[0].xyz, invColorSpaceTransform[1].xyz, invColorSpaceTransform[2].xyz);
+        color = mul(invColorSpaceTransformMat, color);
+    }
+
 	// LDR
 	if (!skipLDR) {
 		// Lift Gamma Gain
 		color = LiftGammaGain(color, liftgammagain[0].gbar, liftgammagain[1].gbar, liftgammagain[2].gbar);
+
+		// Contrast
+		color = LinearContrast(color, contrast.xyz, pivot.xyz);
 
 		// Oklch Saturation
 		color = OklchSaturation(color);
@@ -651,12 +669,6 @@ float3 LogToLinear(float3 val, uint logType)
     color = LinearContrast(color, cinematic.z, 0.18);
 
 	color = pow(abs(color), saturationHueInOutGamma.w);
-
-    // Inverse color space transform
-    if (enableColorSpaceTransform) {
-		const float3x3 invColorSpaceTransformMat = float3x3(invColorSpaceTransform[0].xyz, invColorSpaceTransform[1].xyz, invColorSpaceTransform[2].xyz);
-        color = mul(invColorSpaceTransformMat, color);
-    }
 
     // Game fade
     color = lerp(color, fade.xyz, fade.w);
