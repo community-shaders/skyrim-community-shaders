@@ -40,7 +40,7 @@ void ENBDepthOfField::Execute()
 	}
 
 	ExecuteTechnique("Focus", nullInputTexture, effectTextureCache[textureFocusName]);
-	
+
 	auto textureFocus = effect->GetVariableByName("TextureFocus")->AsShaderResource();
 	if (textureFocus && textureFocus->IsValid()) {
 		textureFocus->SetResource(effectTextureCache["TextureFocus"].srv.Get());
