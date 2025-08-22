@@ -2,6 +2,7 @@
 #include "ENBAdaptation.h"
 #include "ENBBloom.h"
 #include "ENBDepthOfField.h"
+#include "ENBDownsampler.h"
 #include "ENBEffect.h"
 #include "ENBEffectPostPass.h"
 #include "ENBLens.h"
@@ -9,12 +10,11 @@
 #include "Globals.h"
 #include "SettingsManager.h"
 #include "State.h"
+#include "TextureManager.h"
 #include "Utils/D3D.h"
 #include "WeatherManager.h"
 #include <d3dcompiler.h>
 #include <functional>
-#include "ENBDownsampler.h"
-#include "TextureManager.h"
 
 EffectManager& EffectManager::GetSingleton()
 {

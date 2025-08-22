@@ -1,8 +1,8 @@
 #include "ENBBloom.h"
 
+#include "ENBDownsampler.h"
 #include "EffectManager.h"
 #include "TextureManager.h"
-#include "ENBDownsampler.h"
 
 void ENBBloom::Execute()
 {

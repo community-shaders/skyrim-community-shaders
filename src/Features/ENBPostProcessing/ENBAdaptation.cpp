@@ -1,8 +1,8 @@
 #include "ENBAdaptation.h"
 
-#include "TextureManager.h"
 #include "ENBDownsampler.h"
 #include "SettingsManager.h"
+#include "TextureManager.h"
 
 void ENBAdaptation::Execute()
 {

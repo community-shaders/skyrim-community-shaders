@@ -1,11 +1,11 @@
 #pragma once
 
-#include "ENBDepthOfField.h"
-#include "ENBBloom.h"
-#include "ENBLens.h"
 #include "ENBAdaptation.h"
+#include "ENBBloom.h"
+#include "ENBDepthOfField.h"
 #include "ENBEffect.h"
 #include "ENBEffectPostPass.h"
+#include "ENBLens.h"
 
 using Microsoft::WRL::ComPtr;
 
