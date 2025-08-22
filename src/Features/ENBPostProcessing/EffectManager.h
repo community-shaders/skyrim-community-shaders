@@ -9,8 +9,16 @@
 #include "ENBBloom.h"
 #include "ENBLens.h"
 #include "ENBAdaptation.h"
+#include "ENBBloom.h"
+#include "ENBDepthOfField.h"
+#include "ENBDownsampler.h"
 #include "ENBEffect.h"
 #include "ENBEffectPostPass.h"
+#include "ENBLens.h"
+#include "ENBTexture.h"
+#include "SettingsRegistry.h"
+#include "TextureManager.h"
+#include "WeatherManager.h"
 #include <Effects11/d3dx11effect.h>
 #include <d3d11.h>
 #include <filesystem>

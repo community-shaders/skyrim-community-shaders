@@ -28,7 +28,7 @@ public:
 
 	// Perform downsampling using custom shader
 	void DownsampleToFixed(ID3D11ShaderResourceView* source, FixedDownsampleTexture& texture);
-	
+
 	// Access to shared downsample texture
 	const FixedDownsampleTexture& GetSharedDownsampleTexture() const { return sharedDownsampleTexture; }
 
@@ -45,7 +45,7 @@ private:
 	// Compiled shader objects
 	ComPtr<ID3D11PixelShader> downsamplePS;
 	ComPtr<ID3D11SamplerState> linearSampler;
-	
+
 	// Shared downsample texture used by all effects
 	FixedDownsampleTexture sharedDownsampleTexture;
 };
