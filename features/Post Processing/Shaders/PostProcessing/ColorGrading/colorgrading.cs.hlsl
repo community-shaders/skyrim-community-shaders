@@ -5,9 +5,14 @@
 #include "PostProcessing/aces.hlsli"
 #include "PostProcessing/ColourTransforms/GT7ToneMapping.hlsli"
 
+#define LUT_SIZE 64
+
 RWTexture2D<float4> RWTexOut : register(u0);
 
 Texture2D<float4> TexColor : register(t0);
+Texture3D<float4> TexLUT : register(t1);
+
+SamplerState LinearSampler : register(s0);
 
 cbuffer ColorCB : register(b1) {
     float4 asccdl[3];
@@ -48,7 +53,7 @@ namespace LogType {
 // https://www.shadertoy.com/view/ss23DD
 float3 LiftGammaGain(float3 rgb, float4 lift, float4 gamma, float4 gain)
 {
-	float4 liftt = 1.0 - pow(1.0 - lift, log2(gain + 1.0));
+	float4 liftt = 1.0 - pow(max(1.0 - lift, 0.0), log2(gain + 1.0));
 
 	float4 gammat = gamma.rgba - float4(0.0, 0.0, 0.0, Color::RGBToLuminance(gamma.rgb));
 	float4 gammatTemp = 1.0 + 4.0 * abs(gammat);
@@ -57,12 +62,12 @@ float3 LiftGammaGain(float3 rgb, float4 lift, float4 gamma, float4 gain)
 	float3 col = rgb;
 	float luma = Color::RGBToLuminance(col);
 
-	col = pow(col, gammat.rgb);
-	col *= pow(gain.rgb, gammat.rgb);
+	col = pow(max(col, 0.0), gammat.rgb);
+	col *= pow(abs(gain.rgb), gammat.rgb);
 	col = max(lerp(2.0 * liftt.rgb, 1.0, col), 0.0);
 
-	luma = pow(luma, gammat.a);
-	luma *= pow(gain.a, gammat.a);
+	luma = pow(abs(luma), gammat.a);
+	luma *= pow(abs(gain.a), gammat.a);
 	luma = max(lerp(2.0 * liftt.a, 1.0, luma), 0.0);
 
 	col += luma - Color::RGBToLuminance(col);
@@ -99,17 +104,17 @@ float3 OklchColourMixer(float3 val)
 	float h = atan2(oklab.z, oklab.y);
 
 	float lerpFactor = (h / (2 * Math::PI) - redHue) * 7;
-	int leftHue = floor(lerpFactor);
+	uint leftHue = floor(lerpFactor);
 	lerpFactor = lerpFactor - leftHue;
 	leftHue += (leftHue < 0) * 7;
-	int rightHue = (leftHue + 1) % 7;
+	uint rightHue = (leftHue + 1) % 7;
 	float effect = saturate(c / 0.37);
 
 	// hue shift
 	h = h + lerp(oklchColorMixer[leftHue].x, oklchColorMixer[rightHue].x, lerpFactor) * Math::PI / 4;
 	// vibrance
-	float c1 = (1 - pow(1 - c / 0.37, oklchColorMixer[leftHue].y)) * 0.37;
-	float c2 = (1 - pow(1 - c / 0.37, oklchColorMixer[rightHue].y)) * 0.37;
+	float c1 = (1 - pow(abs(1 - c / 0.37), oklchColorMixer[leftHue].y)) * 0.37;
+	float c2 = (1 - pow(abs(1 - c / 0.37), oklchColorMixer[rightHue].y)) * 0.37;
 	c = lerp(c1, c2, lerpFactor);
 	// brightness
 	l = l + lerp(oklchColorMixer[leftHue].z, oklchColorMixer[rightHue].z, lerpFactor) * effect;
@@ -146,13 +151,24 @@ float2 IlluminantChromaticity(float temp)
 	return float2(x, y);
 }
 
+// Accurate for 1000K < temp < 15000K
+// [Krystek 1985, "An algorithm to calculate correlated colour temperature"]
+float2 PlanckianLocusChromaticity(float temp)
+{
+	float u = (0.860117757f + 1.54118254e-4f * temp + 1.28641212e-7f * temp * temp) / (1.0f + 8.42420235e-4f * temp + 7.08145163e-7f * temp * temp);
+	float v = (0.317398726f + 4.22806245e-5f * temp + 4.20481691e-8f * temp * temp) / (1.0f - 2.89741816e-5f * temp + 1.61456053e-7f * temp * temp);
+	float x = 3 * u / (2 * u - 8 * v + 4);
+	float y = 2 * v / (2 * u - 8 * v + 4);
+	return float2(x, y);
+}
+
 // [McCamy 1992, "Correlated color temperature as an explicit function of chromaticity coordinates"]
 float2 PlanckianIsothermal(float temp, float tint)
 {
 	float u = (0.860117757f + 1.54118254e-4f * temp + 1.28641212e-7f * temp * temp) / (1.0f + 8.42420235e-4f * temp + 7.08145163e-7f * temp * temp);
 	float v = (0.317398726f + 4.22806245e-5f * temp + 4.20481691e-8f * temp * temp) / (1.0f - 2.89741816e-5f * temp + 1.61456053e-7f * temp * temp);
-	float ud = (-1.13758118e9f - 1.91615621e6f * temp - 1.53177f * temp * temp) / Square(1.41213984e6f + 1189.62f * temp + temp * temp);
-	float vd = (1.97471536e9f - 705674.0f * temp - 308.607f * temp * temp) / Square(6.19363586e6f - 179.456f * temp + temp * temp);
+	float ud = (-1.13758118e9f - 1.91615621e6f * temp - 1.53177f * temp * temp) / pow(1.41213984e6f + 1189.62f * temp + temp * temp, 2);
+	float vd = (1.97471536e9f - 705674.0f * temp - 308.607f * temp * temp) / pow(6.19363586e6f - 179.456f * temp + temp * temp, 2);
 	float2 uvd = normalize(float2(u, v));
 	u += -uvd.y * tint * 0.05;
 	v +=  uvd.x * tint * 0.05;
@@ -163,13 +179,18 @@ float2 PlanckianIsothermal(float temp, float tint)
 
 float3 WhiteBalance(float3 linearColor)
 {
-	float2 srcWhiteDaylight = IlluminantChromaticity(exposureTemperatureTint.y);
-	float2 srcWhitePlankian = PlanckianLocusChromaticity(exposureTemperatureTint.y);
+	if (abs(exposureTemperatureTint.y - 65) < 0.1 && abs(exposureTemperatureTint.z) < 0.001)
+		return linearColor;
+
+	float temp = exposureTemperatureTint.y * 100;
+	float tint = exposureTemperatureTint.z;
+	float2 srcWhiteDaylight = IlluminantChromaticity(temp);
+	float2 srcWhitePlankian = PlanckianLocusChromaticity(temp);
 
 	float2 srcWhite = exposureTemperatureTint.y < 4000 ? srcWhitePlankian : srcWhiteDaylight;
 	float2 d65White = float2(0.31270, 0.32900);
 
-	float2 isothermal = PlanckianIsothermal(exposureTemperatureTint.y, exposureTemperatureTint.z) - srcWhitePlankian;
+	float2 isothermal = PlanckianIsothermal(temp, tint) - srcWhitePlankian;
 	srcWhite += isothermal;
 
 	float3x3 whiteBalance = ChromaticAdaptation(srcWhite, d65White);
@@ -580,21 +601,17 @@ float3 ACEScct(float3 linearColor, bool inverse)
 	float3 cct = linearColor;
 
 	if (!inverse) {
-		for (int i = 0; i < 3; i++) {
-			if (linearColor[i] > cutoff) {
-				cct[i] = (log2(linearColor[i]) + 9.72) / 17.52;
-			} else {
-				cct[i] = linearColor[i] * a + b;
-			}
-		}
+		cct = float3(
+			linearColor.x > cutoff ? (log2(linearColor.x) + 9.72) / 17.52 : linearColor.x * a + b,
+			linearColor.y > cutoff ? (log2(linearColor.y) + 9.72) / 17.52 : linearColor.y * a + b,
+			linearColor.z > cutoff ? (log2(linearColor.z) + 9.72) / 17.52 : linearColor.z * a + b
+		);
 	} else {
-		for (int i = 0; i < 3; i++) {
-			if (linearColor[i] >= cutoff2) {
-				cct[i] = pow(2, linearColor[i] * 17.52 - 9.72);
-			} else {
-				cct[i] = (linearColor[i] - b) / a;
-			}
-		}
+		cct = float3(
+			linearColor.x >= cutoff2 ? pow(2, linearColor.x * 17.52 - 9.72) : (linearColor.x - b) / a,
+			linearColor.y >= cutoff2 ? pow(2, linearColor.y * 17.52 - 9.72) : (linearColor.y - b) / a,
+			linearColor.z >= cutoff2 ? pow(2, linearColor.z * 17.52 - 9.72) : (linearColor.z - b) / a
+		);
 	}
 
 	return cct;
@@ -611,21 +628,17 @@ float3 ARRIlogC4(float3 linearColor, bool inverse)
 	float3 logColor = linearColor;
 
 	if (!inverse) {
-		for (int i = 0; i < 3; i++) {
-			if (linearColor[i] > t) {
-				logColor[i] = (log2(linearColor[i] * a + 64) - 6) / 14 * b + c;
-			} else {
-				logColor[i] = (linearColor[i] - t) / s;
-			}
-		}
+		logColor = float3(
+			(linearColor.x > t ? (log2(linearColor.x * a + 64) - 6) / 14 * b + c : (linearColor.x - t) / s),
+			(linearColor.y > t ? (log2(linearColor.y * a + 64) - 6) / 14 * b + c : (linearColor.y - t) / s),
+			(linearColor.z > t ? (log2(linearColor.z * a + 64) - 6) / 14 * b + c : (linearColor.z - t) / s)
+		);
 	} else {
-		for (int i = 0; i < 3; i++) {
-			if (linearColor[i] > 0) {
-				logColor[i] = (pow(2, 14 * (linearColor[i] - c) / b + 6) - 64) / a;
-			} else {
-				logColor[i] = linearColor[i] * s + t;
-			}
-		}
+		logColor = float3(
+			(linearColor.x >= 0 ? (pow(2, 14 * (linearColor.x - c) / b + 6) - 64) / a : linearColor.x * s + t),
+			(linearColor.y >= 0 ? (pow(2, 14 * (linearColor.y - c) / b + 6) - 64) / a : linearColor.y * s + t),
+			(linearColor.z >= 0 ? (pow(2, 14 * (linearColor.z - c) / b + 6) - 64) / a : linearColor.z * s + t)
+		);
 	}
 
 	return logColor;
@@ -636,21 +649,17 @@ float3 SonySLog3(float3 linearColor, bool inverse)
 	float3 logColor = linearColor;
 
 	if (!inverse) {
-		for (int i = 0; i < 3; i++) {
-			if (linearColor[i] > 0.0112500) {
-				logColor[i] = (420.0 + log10((linearColor[i] + 0.01) / 0.19) * 261.5) / 1023.0;
-			} else {
-				logColor[i] = (linearColor[i] * (171.2102946929 - 95.0) / 0.0112500 + 95.0) / 1023.0;
-			}
-		}
+		logColor = float3(
+			(linearColor.x >= 0.0112500 ? (420.0 + log10((linearColor.x + 0.01) / 0.19) * 261.5) / 1023.0 : (linearColor.x * (171.2102946929 - 95.0) / 0.0112500 + 95.0) / 1023.0),
+			(linearColor.y >= 0.0112500 ? (420.0 + log10((linearColor.y + 0.01) / 0.19) * 261.5) / 1023.0 : (linearColor.y * (171.2102946929 - 95.0) / 0.0112500 + 95.0) / 1023.0),
+			(linearColor.z >= 0.0112500 ? (420.0 + log10((linearColor.z + 0.01) / 0.19) * 261.5) / 1023.0 : (linearColor.z * (171.2102946929 - 95.0) / 0.0112500 + 95.0) / 1023.0)
+		);
 	} else {
-		for (int i = 0; i < 3; i++) {
-			if (linearColor[i] > 0.1712102946929 / 1023.0) {
-				logColor[i] = pow(10, (linearColor[i] * 1023.0 - 420.0) / 261.5) * 0.19 - 0.01;
-			} else {
-				logColor[i] = (linearColor[i] * 1023.0 - 95.0) * 0.0112500 / (171.2102946929 - 95.0);
-			}
-		}
+		logColor = float3(
+			(linearColor.x > 0.1712102946929 / 1023.0 ? pow(10, (linearColor.x * 1023.0 - 420.0) / 261.5) * 0.19 - 0.01 : (linearColor.x * 1023.0 - 95.0) * 0.0112500 / (171.2102946929 - 95.0)),
+			(linearColor.y > 0.1712102946929 / 1023.0 ? pow(10, (linearColor.y * 1023.0 - 420.0) / 261.5) * 0.19 - 0.01 : (linearColor.y * 1023.0 - 95.0) * 0.0112500 / (171.2102946929 - 95.0)),
+			(linearColor.z > 0.1712102946929 / 1023.0 ? pow(10, (linearColor.z * 1023.0 - 420.0) / 261.5) * 0.19 - 0.01 : (linearColor.z * 1023.0 - 95.0) * 0.0112500 / (171.2102946929 - 95.0))
+		);
 	}
 
 	return logColor;
@@ -682,9 +691,8 @@ float3 LogToLinearSpace(float3 val, uint logType)
 
 ////////////////////////////////////////////////////////////////////////
 
-[numthreads(8, 8, 1)] void main(uint2 DTid : SV_DispatchThreadID) {
-	float3 color = pow(abs(TexColor[DTid].xyz), saturationHueInOutGamma.z) * cinematic.y;
-
+float3 ColorGrading(float3 color)
+{
 	// Color space transform (preferably sRGB to ACEScg)
     if (enableColorSpaceTransform) {
 		const float3x3 colorSpaceTransformMat = float3x3(colorSpaceTransform[0].xyz, colorSpaceTransform[1].xyz, colorSpaceTransform[2].xyz);
@@ -693,10 +701,8 @@ float3 LogToLinearSpace(float3 val, uint logType)
 
 	// HDR
 	// Exposure/White Balance
-	{
-		color *= exposureTemperatureTint.x;
-		color = WhiteBalance(color);
-	}
+	color *= exposureTemperatureTint.x;
+	color = WhiteBalance(color);
 
     // Log
 	if (logType)
@@ -706,7 +712,7 @@ float3 LogToLinearSpace(float3 val, uint logType)
     color = ASC_CDL(color, asccdl[0].xyz, asccdl[1].xyz, asccdl[2].xyz);
 
 	// Saturation and Hue
-	color = Saturation(color, saturationHueInOutGamma.x * cinematic.x);
+	color = Saturation(color, saturationHueInOutGamma.x);
 	color = HueShift(color, saturationHueInOutGamma.y);
 
 	// Shadows Midtones Highlights
@@ -741,17 +747,44 @@ float3 LogToLinearSpace(float3 val, uint logType)
 		// Oklch Colour Mixer
 		color = OklchColourMixer(color);
 	}
-	
+
+	return color;
+}
+
+float3 ApplyLUT(float3 color)
+{
+	color = LinearToLog(color);
+	color = TexLUT.SampleLevel(LinearSampler, color, 0).xyz;
+	return color;
+}
+
+[numthreads(8, 8, 1)] void CSColorGrading(uint2 DTid : SV_DispatchThreadID) {
+	// Game cinematic
+	float3 color = pow(abs(TexColor[DTid].xyz), saturationHueInOutGamma.z) * cinematic.y;
+	color = Saturation(color, cinematic.x);
+	color = LinearContrast(color, cinematic.z, 0.18);
+
+	// Apply LUT or Color Grading
+	color = ApplyLUT(color);
+
+	color = pow(abs(color), saturationHueInOutGamma.w);
+
     // Game tint
     float luma = Color::RGBToLuminance(color);
     color = lerp(color, luma * tint.xyz, tint.w);
-
-    color = LinearContrast(color, cinematic.z, 0.18);
-
-	color = pow(abs(color), saturationHueInOutGamma.w);
 
     // Game fade
     color = lerp(color, fade.xyz, fade.w);
 
 	RWTexOut[DTid] = float4(color, 1);
+}
+
+RWTexture3D<float4> RWLUT : register(u0);
+
+[numthreads(8, 8, 8)] void CSLUTGen(uint3 DTid : SV_DispatchThreadID) {
+	float3 uvw = (float3(DTid) + 0.5) / float3((LUT_SIZE - 1).xxx);
+	float4 neutralColor = float4(uvw, 1);
+	float3 linearColor = LogToLinear(neutralColor.xyz) - LogToLinear(0);
+	linearColor = ColorGrading(linearColor);
+	RWLUT[DTid] = float4(linearColor, 1);
 }

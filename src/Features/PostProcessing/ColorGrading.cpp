@@ -228,7 +228,7 @@ struct TonemapperInfo
     static void GetDefaultParams(int& tonemapperType, CTP& params)
 	{
 		auto& tonemappers = GetTonemappers();
-		if (auto it = std::ranges::find_if(tonemappers, [&](TonemapperInfo& x) { return "Reinhard"sv == x.name; });
+		if (auto it = std::ranges::find_if(tonemappers, [&](TonemapperInfo& x) { return "GT7"sv == x.name; });
 			it != tonemappers.end()) {
 			tonemapperType = (int)(it - tonemappers.begin());
 			params = it->default_settings;
@@ -268,7 +268,7 @@ void ColorGrading::DrawSettings()
 		ImGui::Text("Pre-Tonemapping Settings");
 		if (ImGui::TreeNode("Exposure/Temperature/Tint")) {
 			exposureSlider(&profile.params[17].x);
-			ImGui::SliderFloat("Temperature", &profile.params[17].y, 1000.f, 10000.f, "%100.f K");
+			ImGui::SliderFloat("Temperature", &profile.params[17].y, 10.f, 150.f, "%1.f00K");
 			ImGui::SliderFloat("Tint", &profile.params[17].z, -1.f, 1.f, "%.3f");
 			ImGui::TreePop();
 		}
@@ -287,9 +287,9 @@ void ColorGrading::DrawSettings()
         }
 
 		if (ImGui::TreeNode("Shadows/Midtones/Highlights")) {
-            shiftSlider("Shadows", &profile.params[18].x, -1.f, 1.f, "%.3f");
-            shiftSlider("Midtones", &profile.params[19].x, -1.f, 1.f, "%.3f");
-            shiftSlider("Highlights", &profile.params[20].x, -1.f, 1.f, "%.3f");
+            shiftSlider("Shadows", &profile.params[18].x, 0.f, 2.f, "%.3f");
+            shiftSlider("Midtones", &profile.params[19].x, 0.f, 2.f, "%.3f");
+            shiftSlider("Highlights", &profile.params[20].x, 0.f, 2.f, "%.3f");
             ImGui::InputFloat2("Shadows Start/End", &profile.params[21].x, "%.3f");
             ImGui::InputFloat2("Highlights Start/End", &profile.params[21].z, "%.3f");
             ImGui::TreePop();
@@ -407,6 +407,8 @@ void ColorGrading::DrawSettings()
 			float3{ invColorSpaceTransformMatrix(2, 0), invColorSpaceTransformMatrix(2, 1), invColorSpaceTransformMatrix(2, 2) }
 		};
     }
+
+	ImGui::PopID();
 }
 
 void ColorGrading::RestoreDefaultSettings()
@@ -418,14 +420,19 @@ void ColorGrading::RestoreDefaultSettings()
 
 void ColorGrading::LoadSettings(json& o_json)
 {
-    settings = o_json;
+	try {
+		settings = o_json;
     
-    auto& tonemappers = TonemapperInfo::GetTonemappers();
-    if (auto it = std::ranges::find_if(tonemappers, [&](TonemapperInfo& x) { return settings.currentTonemapper == x.name; });
-		it != tonemappers.end()) {
-		tonemapperType = (int)(it - tonemappers.begin());
-	} else {
-		TonemapperInfo::GetDefaultParams(tonemapperType, settings.tonemapParams);
+		auto& tonemappers = TonemapperInfo::GetTonemappers();
+		if (auto it = std::ranges::find_if(tonemappers, [&](TonemapperInfo& x) { return settings.currentTonemapper == x.name; });
+			it != tonemappers.end()) {
+			tonemapperType = (int)(it - tonemappers.begin());
+		} else {
+			TonemapperInfo::GetDefaultParams(tonemapperType, settings.tonemapParams);
+		}
+	} catch (const json::exception& e) {
+		logger::error("Failed to load Color Grading settings: {}", e.what());
+		RestoreDefaultSettings();
 	}
 
     recompileFlag = true;
@@ -441,6 +448,7 @@ void ColorGrading::SaveSettings(json& o_json)
 void ColorGrading::SetupResources()
 {
 	auto renderer = globals::game::renderer;
+	auto device = globals::d3d::device;
 
 	logger::debug("Creating buffers...");
 	{
@@ -475,6 +483,48 @@ void ColorGrading::SetupResources()
 		texColor = std::make_unique<Texture2D>(texDesc);
 		texColor->CreateSRV(srvDesc);
 		texColor->CreateUAV(uavDesc);
+
+		D3D11_TEXTURE3D_DESC lutTexDesc = {
+			.Width = LUTDim,
+			.Height = LUTDim,
+			.Depth = LUTDim,
+			.MipLevels = 1,
+			.Format = DXGI_FORMAT_R16G16B16A16_FLOAT,
+			.Usage = D3D11_USAGE_DEFAULT,
+			.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS,
+			.CPUAccessFlags = 0,
+			.MiscFlags = 0
+		};
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC lutSrvDesc = {
+			.Format = lutTexDesc.Format,
+			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D,
+			.Texture3D = { .MostDetailedMip = 0, .MipLevels = lutTexDesc.MipLevels }
+		};
+
+		D3D11_UNORDERED_ACCESS_VIEW_DESC lutUavDesc = {
+			.Format = lutTexDesc.Format,
+			.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE3D,
+			.Texture3D = { .MipSlice = 0, .FirstWSlice = 0, .WSize = lutTexDesc.Depth }
+		};
+
+		texLUT = std::make_unique<Texture3D>(lutTexDesc);
+		texLUT->CreateSRV(lutSrvDesc);
+		texLUT->CreateUAV(lutUavDesc);
+	}
+
+	logger::debug("Creating samplers...");
+	{
+		D3D11_SAMPLER_DESC samplerDesc = {
+			.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR,
+			.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP,
+			.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP,
+			.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP,
+			.MaxAnisotropy = 1,
+			.MinLOD = 0,
+			.MaxLOD = D3D11_FLOAT32_MAX
+		};
+		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, linearSampler.put()));
 	}
 
 	CompileComputeShaders();
@@ -483,7 +533,8 @@ void ColorGrading::SetupResources()
 void ColorGrading::ClearShaderCache()
 {
 	const auto shaderPtrs = std::array{
-		&colorgradingCS
+		&colorgradingCS,
+		&lutgenCS
 	};
 
 	for (auto shader : shaderPtrs)
@@ -509,7 +560,8 @@ void ColorGrading::CompileComputeShaders()
 
 	std::vector<ShaderCompileInfo>
 		shaderInfos = {
-			{ &colorgradingCS, "colorgrading.cs.hlsl", { { "TONEMAP_FUNC", tonemappers[tonemapperType].func_name.data() } } },
+			{ &colorgradingCS, "colorgrading.cs.hlsl", { { "TONEMAP_FUNC", tonemappers[tonemapperType].func_name.data() } }, "CSColorGrading" },
+			{ &lutgenCS, "colorgrading.cs.hlsl", { { "TONEMAP_FUNC", tonemappers[tonemapperType].func_name.data() } }, "CSLUTGen" }
 		};
 
 	for (auto& info : shaderInfos) {
@@ -617,23 +669,38 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	};
 	colorCB->Update(colorCBData);
 
-	ID3D11ShaderResourceView* srv = inout_tex.srv;
-	ID3D11UnorderedAccessView* uav = texColor->uav.get();
 	ID3D11Buffer* cb = colorCB->CB();
-
 	context->CSSetConstantBuffers(1, 1, &cb);
+
+	std::array<ID3D11SamplerState*, 1> samplers = { linearSampler.get() };
+    context->CSSetSamplers(0, 1, samplers.data());
+	ID3D11UnorderedAccessView* uav = nullptr;
+
+	// LUT Gen
+	uav = texLUT->uav.get();
 	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
-	context->CSSetShaderResources(0, 1, &srv);
+	context->CSSetShader(lutgenCS.get(), nullptr, 0);
+	context->Dispatch(LUTDim >> 3, LUTDim >> 3, LUTDim >> 3);
+
+	uav = nullptr;
+	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+	context->CSSetShader(nullptr, nullptr, 0);
+
+	// Apply LUT
+	std::array<ID3D11ShaderResourceView*, 2> srvs = { inout_tex.srv, texLUT->srv.get() };
+	uav = texColor->uav.get();
+	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+	context->CSSetShaderResources(0, 2, srvs.data());
 	context->CSSetShader(colorgradingCS.get(), nullptr, 0);
 
 	context->Dispatch((texColor->desc.Width + 7) >> 3, (texColor->desc.Height + 7) >> 3, 1);
 
 	// clean up
-	srv = nullptr;
+	srvs.fill(nullptr);
 	uav = nullptr;
 	cb = nullptr;
 	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
-	context->CSSetShaderResources(0, 1, &srv);
+	context->CSSetShaderResources(0, 2, srvs.data());
 	context->CSSetConstantBuffers(0, 1, &cb);
 	context->CSSetShader(nullptr, nullptr, 0);
 

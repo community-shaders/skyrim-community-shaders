@@ -33,8 +33,8 @@ struct ColorGrading : public PostProcessFeature
             float4{ 1.f, 1.f, 1.f, 1.f }, float4{ 1.f, 1.f, 0.f, 0.f }, float4{ 0.f, 1.f, 0.f, 0.f },
             float4{ 0.f, 1.f, 0.f, 0.f }, float4{ 0.f, 1.f, 0.f, 0.f }, float4{ 0.f, 1.f, 0.f, 0.f },
             float4{ 0.f, 1.f, 0.f, 0.f }, float4{ 0.f, 1.f, 0.f, 0.f }, float4{ 0.f, 1.f, 0.f, 0.f },
-            float4{ 1.f, 1.f, 1.f, 0.f }, float4{ 1.f, 1.f, 1.f, 0.f }, float4{ 1.f, 6500.f, 0.f, 0.f },
-            float4{ 0.f, 0.f, 0.f, 0.f }, float4{ 0.f, 0.f, 0.f, 0.f }, float4{ 0.f, 0.f, 0.f, 0.f },
+            float4{ 1.f, 1.f, 1.f, 0.f }, float4{ 0.18f, 0.18f, 0.18f, 0.f }, float4{ 1.f, 65.f, 0.f, 0.f },
+            float4{ 1.f, 1.f, 1.f, 0.f }, float4{ 1.f, 1.f, 1.f, 0.f }, float4{ 1.f, 1.f, 1.f, 0.f },
             float4{ 0.f, 0.3f, 0.55f, 1.f }
         };
     };
@@ -106,9 +106,15 @@ struct ColorGrading : public PostProcessFeature
 	std::unique_ptr<ConstantBuffer> colorCB = nullptr;
 
 	std::unique_ptr<Texture2D> texColor = nullptr;
+    std::unique_ptr<Texture3D> texLUT = nullptr;
+
+    static constexpr int LUTDim = 64;
 
 	bool recompileFlag = true;
 	winrt::com_ptr<ID3D11ComputeShader> colorgradingCS = nullptr;
+    winrt::com_ptr<ID3D11ComputeShader> lutgenCS = nullptr;
+
+    winrt::com_ptr<ID3D11SamplerState> linearSampler = nullptr;
 
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
