@@ -14,13 +14,8 @@ void ENBEffect::Execute()
 
 	auto textureOriginal = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-	TextureManager::Texture textureColor{};
-	textureColor.texture = textureOriginal.texture;
-	textureColor.srv = textureOriginal.SRV;
-	textureColor.rtv = textureOriginal.RTV;
-
 	// Execute with: input (16bit HDR), output (10bit SDR), temp (10bit SDR)
-	ExecuteTechniqueSequence(GetSelectedTechnique(), textureColor, *textureSDRTemp, *textureSDRTemp2);
+	ExecuteTechniqueSequence(GetSelectedTechnique(), textureOriginal.SRV, *textureSDRTemp, *textureSDRTemp2);
 }
 
 void ENBEffect::UpdateEffectVariables()

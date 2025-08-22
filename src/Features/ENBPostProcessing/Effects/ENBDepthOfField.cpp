@@ -47,26 +47,21 @@ void ENBDepthOfField::Execute()
 
 	auto textureMain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-	TextureManager::Texture textureOriginal2{};
-	textureOriginal2.texture = textureMain.texture;
-	textureOriginal2.srv = textureMain.SRV;
-	textureOriginal2.rtv = textureMain.RTV;
-
 	auto textureOriginal = effect->GetVariableByName("TextureOriginal")->AsShaderResource();
 	if (textureOriginal && textureOriginal->IsValid()) {
-		textureOriginal->SetResource(textureOriginal2.srv.Get());
+		textureOriginal->SetResource(textureMain.SRV);
 	}
 
 	auto& textureManager = TextureManager::GetSingleton();
 	auto textureHDRTemp = textureManager.GetCommonTexture("TextureHDRTemp");
 
-	globals::d3d::context->CopyResource(textureHDRTemp->texture.Get(), textureOriginal2.texture.Get());
+	globals::d3d::context->CopyResource(textureHDRTemp->texture.Get(), textureMain.texture);
 
 	auto textureHDRTemp2 = textureManager.GetCommonTexture("TextureHDRTemp2");
 
-	ExecuteTechniqueSequence(GetSelectedTechnique(), textureOriginal2, *textureHDRTemp, *textureHDRTemp2);
+	ExecuteTechniqueSequence(GetSelectedTechnique(), textureMain.SRV, *textureHDRTemp, *textureHDRTemp2);
 
-	globals::d3d::context->CopyResource(textureOriginal2.texture.Get(), textureHDRTemp->texture.Get());
+	globals::d3d::context->CopyResource(textureMain.texture, textureHDRTemp->texture.Get());
 }
 
 void ENBDepthOfField::UpdateEffectVariables()

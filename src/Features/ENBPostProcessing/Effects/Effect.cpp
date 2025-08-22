@@ -188,7 +188,7 @@ bool Effect::LoadFXFile()
 	return true;
 }
 
-void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, TextureManager::Texture& a_input, TextureManager::Texture& a_output, TextureManager::Texture& a_temp)
+void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID3D11ShaderResourceView* a_input, TextureManager::Texture& a_output, TextureManager::Texture& a_temp)
 {
 	if (!IsCompiled() || !effect) {
 		return;  // Skip execution if not compiled
@@ -226,13 +226,13 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 
 		if (sequence.size() == 1) {
 			// Single technique: input -> output
-			inputSRV = a_input.srv.Get();
+			inputSRV = a_input;
 			outputRTV = a_output.rtv.Get();
 			if (techniqueInfo.renderTargetName.empty())
 				targetInOutput = true;
 		} else if (swapCounter == 0) {
 			// First pass: input -> output (start the ping-pong with output)
-			inputSRV = a_input.srv.Get();
+			inputSRV = a_input;
 			outputRTV = a_output.rtv.Get();
 			if (techniqueInfo.renderTargetName.empty())
 				targetInOutput = true;
