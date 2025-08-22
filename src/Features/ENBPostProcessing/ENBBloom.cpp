@@ -1,5 +1,6 @@
 #include "ENBBloom.h"
 
+#include "ENBDownsampler.h"
 #include "EffectManager.h"
 #include "TextureManager.h"
 
