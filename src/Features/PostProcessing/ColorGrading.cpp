@@ -654,13 +654,13 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 			imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeR],
 			imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeG],
 			imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeB],
-			imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeAmount]
+			imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeAmount] * settings.gameFadeBlend
 		},
 		.tint = float4{
 			imageSpaceData.baseData.tint.color.red,
 			imageSpaceData.baseData.tint.color.green,
 			imageSpaceData.baseData.tint.color.blue,
-			imageSpaceData.baseData.tint.amount
+			imageSpaceData.baseData.tint.amount * settings.gameTintBlend
 		},
 		.logType = settings.useLog ? ((1u << settings.logType) | (settings.invertLog ? (1u << 3u) : 0u)) : 0u,
 		.skipLDR = settings.skipLDR,
