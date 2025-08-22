@@ -4,8 +4,8 @@
 #include <DirectXTK/DDSTextureLoader.h>
 #include <DirectXTK/WICTextureLoader.h>
 
-#include "State.h"
 #include "../TextureManager.h"
+#include "State.h"
 
 bool Effect::Load()
 {
