@@ -11,7 +11,7 @@ void ENBBloom::Execute()
 
 	auto textureHDRTemp = effectManager.GetCommonTexture("TextureBloomLensTemp");
 	auto textureBloom = effectManager.GetCommonTexture("TextureBloom");
-	
+
 	// Set dowsampled texture, typically the one used (use 1024x1024 mip)
 	auto& downsampler = effectManager.GetDownsampler();
 	auto& sharedTexture = effectManager.GetSharedDownsampleTexture();

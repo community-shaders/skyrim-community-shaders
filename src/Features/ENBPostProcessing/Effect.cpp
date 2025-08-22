@@ -299,7 +299,7 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 
 	if (!targetInOutput) {
 		context->CopyResource(a_output.texture.Get(), a_temp.texture.Get());
-	}	
+	}
 }
 
 void Effect::ExecuteTechnique(const std::string& techniqueName, Texture& output)

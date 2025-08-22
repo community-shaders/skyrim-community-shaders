@@ -183,7 +183,7 @@ bool Downsampler::CompileShaders()
 
 	if (FAILED(hr)) {
 		if (errorBlob) {
-			logger::error("[ENBPP] Pixel shader compilation failed: {}", 
+			logger::error("[ENBPP] Pixel shader compilation failed: {}",
 				static_cast<const char*>(errorBlob->GetBufferPointer()));
 		}
 		return false;
@@ -260,7 +260,7 @@ float4 DownsampleCODFirstMip(Texture2D tex, SamplerState samp, float2 uv, float2
     [unroll] for (x = 0; x < 2; ++x)
         [unroll] for (y = 0; y < 2; ++y)
             fetches2x2[x * 2 + y] = tex.SampleLevel(samp, uv + (int2(x, y) * 2 - 1) * out_px_size, 0);
-    
+
     [unroll] for (x = 0; x < 3; ++x)
         [unroll] for (y = 0; y < 3; ++y)
             fetches3x3[x * 3 + y] = tex.SampleLevel(samp, uv + (int2(x, y) - 1) * 2 * out_px_size, 0);

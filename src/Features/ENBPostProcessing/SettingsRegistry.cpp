@@ -135,7 +135,7 @@ T SettingsRegistry::GetValue(const std::string& key, const std::string& category
 			}
 
 			// Return with no interpolation
-			if (rawValue){
+			if (rawValue) {
 				return std::get<T>(weatherBlendFactor > 0.5f ? currentWeatherValue : lastWeatherValue);
 			}
 

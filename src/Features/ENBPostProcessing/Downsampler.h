@@ -35,7 +35,7 @@ public:
 private:
 	// Compile the downsample shaders
 	bool CompileShaders();
-	
+
 	// Shader source strings
 	static const char* GetDownsamplePixelShaderSource();
 

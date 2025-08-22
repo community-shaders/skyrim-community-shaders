@@ -43,11 +43,11 @@ void ENBAdaptation::UpdateEffectVariables()
 	auto& effectManager = EffectManager::GetSingleton();
 
 	auto forceMinMaxValues = effectManager.GetSetting<bool>("ForceMinMaxValues", "ADAPTATION");
-	
+
 	float delta = (*globals::game::deltaTime);
 
 	float4 adaptationParameters{};
-	adaptationParameters.x = !forceMinMaxValues ? 0.0f : effectManager.GetSetting<float>("AdaptationMin", "ADAPTATION") ;
+	adaptationParameters.x = !forceMinMaxValues ? 0.0f : effectManager.GetSetting<float>("AdaptationMin", "ADAPTATION");
 	adaptationParameters.y = !forceMinMaxValues ? 65535.0f : effectManager.GetSetting<float>("AdaptationMax", "ADAPTATION");
 	adaptationParameters.z = effectManager.GetSetting<float>("AdaptationSensitivity", "ADAPTATION");
 	adaptationParameters.w = delta / effectManager.GetSetting<float>("AdaptationTime", "ADAPTATION");
