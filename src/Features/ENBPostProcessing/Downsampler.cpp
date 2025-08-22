@@ -134,7 +134,7 @@ void Downsampler::DownsampleToFixed(ID3D11ShaderResourceView* source, FixedDowns
 	context->PSSetShader(downsamplePS.Get(), nullptr, 0);
 	context->PSSetConstantBuffers(0, 1, constantBuffer.GetAddressOf());
 	context->PSSetShaderResources(0, 1, &source);
-	context->PSSetSamplers(0, 1, m_linearSampler.GetAddressOf());
+	context->PSSetSamplers(0, 1, linearSampler.GetAddressOf());
 
 	// Draw fullscreen quad
 	context->Draw(4, 0);
@@ -210,7 +210,7 @@ bool Downsampler::CompileShaders()
 	samplerDesc.MinLOD = 0;
 	samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 
-	hr = device->CreateSamplerState(&samplerDesc, &m_linearSampler);
+	hr = device->CreateSamplerState(&samplerDesc, &linearSampler);
 	if (FAILED(hr)) {
 		logger::error("[ENBPP] Failed to create sampler state");
 		return false;
@@ -223,19 +223,12 @@ bool Downsampler::CompileShaders()
 const char* Downsampler::GetDownsamplePixelShaderSource()
 {
 	return R"HLSL(
-Texture2D<float4> InputTexture : register(t0);
+Texture2D<float4> SourceTexture : register(t0);
 SamplerState LinearSampler : register(s0);
 
 cbuffer DownsampleConstants : register(b0)
 {
-    float2 SourceTexelSize;  // x = 1/width, y = 1/height of source texture
-    float2 Padding;
-};
-
-struct PSInput
-{
-    float4 position : SV_POSITION;
-    float2 texcoord : TEXCOORD0;
+    float2 SourceTexelSize;
 };
 
 // Color luminance calculation
@@ -281,10 +274,10 @@ float4 DownsampleCODFirstMip(Texture2D tex, SamplerState samp, float2 uv, float2
     return retval;
 }
 
-float4 main(PSInput input) : SV_TARGET
-{
-    // Use the actual source texture texel size for proper sampling
-    return DownsampleCODFirstMip(InputTexture, LinearSampler, input.texcoord, SourceTexelSize);
+struct PS_INPUT { float4 pos : SV_POSITION; float2 txcoord0 : TEXCOORD0; };
+
+float4 main(PS_INPUT input) : SV_TARGET {
+    return DownsampleCODFirstMip(SourceTexture, LinearSampler, input.txcoord0, SourceTexelSize);
 }
 )HLSL";
 }

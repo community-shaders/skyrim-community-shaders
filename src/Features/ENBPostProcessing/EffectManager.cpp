@@ -93,27 +93,6 @@ void EffectManager::ExecuteEffects()
 
 	UpdateCommonData();
 
-	// Backup current render state
-	ComPtr<ID3D11RasterizerState> previousRS;
-	ComPtr<ID3D11BlendState> previousBS;
-	ComPtr<ID3D11DepthStencilState> previousDSS;
-	ComPtr<ID3D11InputLayout> previousIL;
-	FLOAT previousBlendFactor[4];
-	UINT previousSampleMask;
-	UINT previousStencilRef;
-
-	context->RSGetState(previousRS.GetAddressOf());
-	context->OMGetBlendState(previousBS.GetAddressOf(), previousBlendFactor, &previousSampleMask);
-	context->OMGetDepthStencilState(previousDSS.GetAddressOf(), &previousStencilRef);
-	context->IAGetInputLayout(previousIL.GetAddressOf());
-
-	ID3D11Buffer* previousVBs[1] = { nullptr };
-	UINT previousStrides[1] = { 0 };
-	UINT previousOffsets[1] = { 0 };
-	D3D11_PRIMITIVE_TOPOLOGY previousTopology;
-	context->IAGetVertexBuffers(0, 1, previousVBs, previousStrides, previousOffsets);
-	context->IAGetPrimitiveTopology(&previousTopology);
-
 	// Set our render state
 	context->RSSetState(rasterizerState.Get());
 	context->OMSetBlendState(blendState.Get(), nullptr, 0xFFFFFFFF);
@@ -155,18 +134,6 @@ void EffectManager::ExecuteEffects()
 
 	// Change textures used next frame
 	textureSwap++;
-
-	// Restore previous render state
-	context->RSSetState(previousRS.Get());
-	context->OMSetBlendState(previousBS.Get(), previousBlendFactor, previousSampleMask);
-	context->OMSetDepthStencilState(previousDSS.Get(), previousStencilRef);
-	context->IASetInputLayout(previousIL.Get());
-	context->IASetVertexBuffers(0, 1, previousVBs, previousStrides, previousOffsets);
-	context->IASetPrimitiveTopology(previousTopology);
-
-	// Clean up retrieved interfaces
-	if (previousVBs[0])
-		previousVBs[0]->Release();
 }
 
 Effect::Texture* EffectManager::GetCommonTexture(const std::string& name)
@@ -320,13 +287,12 @@ void EffectManager::CreateCopyShaders()
 
 	// Compile pixel shader for texture copy
 	const char* pixelShaderSource = R"(
-		Texture2D sourceTexture : register(t0);
+		Texture2D SourceTexture : register(t0);
 
 		struct PS_INPUT { float4 pos : SV_POSITION; float2 txcoord0 : TEXCOORD0; };
 
 		float4 main(PS_INPUT input) : SV_TARGET {
-			int2 pixelPos = int2(input.pos.xy);
-			return sourceTexture.Load(int3(pixelPos, 0));
+			return SourceTexture.Load(int3(input.pos.xy, 0));
 		}
 	)";
 
