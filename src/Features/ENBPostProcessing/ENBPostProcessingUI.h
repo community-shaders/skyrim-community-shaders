@@ -12,7 +12,6 @@ public:
 	void RenderImGui();
 
 private:
-
 	// UI section rendering methods
 	void RenderEffectsList();
 	void RenderSettingsPanel();

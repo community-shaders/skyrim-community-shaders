@@ -1,10 +1,10 @@
 #include "ENBPostProcessing.h"
-#include "PCH.h"
-#include "State.h"
+#include "ENBPostProcessing/ENBPostProcessingUI.h"
+#include "ENBPostProcessing/SettingsManager.h"
 #include "ENBPostProcessing/TextureManager.h"
 #include "ENBPostProcessing/WeatherManager.h"
-#include "ENBPostProcessing/SettingsManager.h"
-#include "ENBPostProcessing/ENBPostProcessingUI.h"
+#include "PCH.h"
+#include "State.h"
 
 void ENBPostProcessing::SaveSettings(json&)
 {
@@ -28,7 +28,7 @@ void ENBPostProcessing::SetupResources()
 	// Initialize subsystems first
 	TextureManager::GetSingleton().Initialize();
 	WeatherManager::GetSingleton().Initialize();
-	
+
 	// Then initialize the effect manager
 	EffectManager::GetSingleton().Initialize();
 }
@@ -43,7 +43,7 @@ struct Main_HDRTonemapBlendCinematic_Render
 	static void thunk(RE::ImageSpaceManager*, RE::ImageSpaceEffect*, uint32_t, uint32_t, RE::ImageSpaceShaderParam*)
 	{
 		auto& effectManager = EffectManager::GetSingleton();
-		
+
 		effectManager.UpdateCommonData();
 
 		const auto& commonData = effectManager.GetCommonData();
@@ -55,7 +55,7 @@ struct Main_HDRTonemapBlendCinematic_Render
 			commonData.weather[2]);
 
 		effectManager.ExecuteEffects();
-			
+
 		//func(a1, a2, a3, a4, a5);
 	}
 

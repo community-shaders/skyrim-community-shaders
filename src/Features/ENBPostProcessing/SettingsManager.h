@@ -143,7 +143,6 @@ public:
 	void IncrementTextureSwap() { textureSwap++; }
 
 private:
-
 	std::unordered_map<std::string, std::unique_ptr<SettingInfo>> settings;
 	std::unordered_map<std::string, std::unordered_map<std::string, SettingValue>> weatherSettings;  // weatherKey -> settingKey -> value
 

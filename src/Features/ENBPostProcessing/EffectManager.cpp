@@ -50,7 +50,7 @@ void EffectManager::Load()
 	LoadENBSettings();
 
 	logger::info("[ENBPP] Loading effects");
-	
+
 	enbDepthOfField.Load();
 	enbBloom.Load();
 	enbLens.Load();
