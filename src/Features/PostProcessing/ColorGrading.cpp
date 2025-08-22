@@ -6,6 +6,9 @@
 #include "ColourSpace.h"
 #include "Features/PostProcessing.h"
 
+#include <DDSTextureLoader.h>
+#include <DirectXTex.h>
+
 #include "IconsFontAwesome5.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -408,6 +411,10 @@ void ColorGrading::DrawSettings()
 		};
     }
 
+	if (ImGui::Button("Save LUT and Output Image")) {
+		saveImagesFlag = true;
+	}
+
 	ImGui::PopID();
 }
 
@@ -704,7 +711,41 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	context->CSSetConstantBuffers(0, 1, &cb);
 	context->CSSetShader(nullptr, nullptr, 0);
 
+	if (saveImagesFlag) {
+		saveImagesFlag = false;
+		OutputTextures();
+	}
+
 	inout_tex = { texColor->resource.get(), texColor->srv.get() };
 
 	state->EndPerfEvent();
+}
+
+void ColorGrading::OutputTextures()
+{
+	auto device = globals::d3d::device;
+	auto context = globals::d3d::context;
+
+	DirectX::ScratchImage lutImage;
+	DirectX::ScratchImage colorImage;
+
+	if (texLUT->resource)
+	{
+		DirectX::CaptureTexture(device, context, texLUT->resource.get(), lutImage);
+	}
+
+	if (texColor->resource)
+	{
+		DirectX::CaptureTexture(device, context, texColor->resource.get(), colorImage);
+	}
+
+	if (std::filesystem::create_directories(outputPath)) {
+		logger::info("Missing pp directory created: {}", outputPath);
+	}
+
+	std::filesystem::path lutPath = outputPath / "PP_ColorGrading_BakedLUT.dds";
+	std::filesystem::path colorPath = outputPath / "PP_ColorGrading_ColorOutput.dds";
+
+	DX::ThrowIfFailed(SaveToDDSFile(lutImage.GetImages(), lutImage.GetImageCount(), lutImage.GetMetadata(), DirectX::DDS_FLAGS::DDS_FLAGS_NONE, lutPath.c_str()));
+	DX::ThrowIfFailed(SaveToDDSFile(colorImage.GetImages(), colorImage.GetImageCount(), colorImage.GetMetadata(), DirectX::DDS_FLAGS::DDS_FLAGS_NONE, colorPath.c_str()));
 }

@@ -20,6 +20,8 @@ struct ColorGrading : public PostProcessFeature
         return a;
     }
 
+    const std::string outputPath = "Data\\Shaders\\PostProcessing\\ColorGrading";
+
     struct ColorProfile
     {
         // std::array<float4, 3> asccdl = { float4{ 1.f, 1.f, 1.f, 0.f }, float4{ 1.f, 1.f, 1.f, 0.f }, float4{ 0.f, 0.f, 0.f, 0.f } };
@@ -111,6 +113,7 @@ struct ColorGrading : public PostProcessFeature
     static constexpr int LUTDim = 64;
 
 	bool recompileFlag = true;
+    bool saveImagesFlag = false;
 	winrt::com_ptr<ID3D11ComputeShader> colorgradingCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> lutgenCS = nullptr;
 
@@ -127,4 +130,6 @@ struct ColorGrading : public PostProcessFeature
 	virtual void DrawSettings() override;
 
 	virtual void Draw(TextureInfo&) override;
+
+    void OutputTextures();
 };
