@@ -1,6 +1,5 @@
 #include "ENBAdaptation.h"
 
-#include "../TextureManager.h"
 #include "../EffectManager.h"
 #include "../SettingsManager.h"
 #include "../TextureManager.h"
