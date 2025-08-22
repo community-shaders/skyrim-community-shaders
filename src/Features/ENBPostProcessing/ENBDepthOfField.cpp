@@ -1,7 +1,7 @@
 #include "ENBDepthOfField.h"
 
-#include "TextureManager.h"
 #include "SettingsManager.h"
+#include "TextureManager.h"
 
 void ENBDepthOfField::Execute()
 {

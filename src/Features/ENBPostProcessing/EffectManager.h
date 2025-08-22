@@ -1,13 +1,5 @@
 #pragma once
 
-#include "ENBDownsampler.h"
-#include "SettingsManager.h"
-#include "WeatherManager.h"
-#include "TextureManager.h"
-#include "ENBTexture.h"
-#include "ENBDepthOfField.h"
-#include "ENBBloom.h"
-#include "ENBLens.h"
 #include "ENBAdaptation.h"
 #include "ENBBloom.h"
 #include "ENBDepthOfField.h"
@@ -16,6 +8,7 @@
 #include "ENBEffectPostPass.h"
 #include "ENBLens.h"
 #include "ENBTexture.h"
+#include "SettingsManager.h"
 #include "SettingsRegistry.h"
 #include "TextureManager.h"
 #include "WeatherManager.h"
