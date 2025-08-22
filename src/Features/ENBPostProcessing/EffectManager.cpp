@@ -107,7 +107,7 @@ void EffectManager::ExecuteEffects()
 	ApplyColorCorrection(textureOriginal.UAV);
 
 	// Perform shared downsampling once
-	Downsampler::GetSingleton().DownsampleToFixed(textureOriginal.SRV, sharedDownsampleTexture);
+	ENBDownsampler::GetSingleton().DownsampleToFixed(textureOriginal.SRV, sharedDownsampleTexture);
 
 	for (auto& [name, effect] : effects) {
 		if (effect->IsCompiled()) {
@@ -157,10 +157,10 @@ void EffectManager::CreateCommonResources()
 	CreateCommonTextures();
 
 	// Initialize downsampler and create shared downsample chain
-	Downsampler::GetSingleton().Initialize();
+	ENBDownsampler::GetSingleton().Initialize();
 
 	// Create shared fixed downsample texture (1024x1024 with 3 mips: 1024, 512, 256)
-	sharedDownsampleTexture = Downsampler::GetSingleton().CreateFixedDownsampleTexture(DXGI_FORMAT_R16G16B16A16_FLOAT);
+	sharedDownsampleTexture = ENBDownsampler::GetSingleton().CreateFixedDownsampleTexture(DXGI_FORMAT_R16G16B16A16_FLOAT);
 }
 
 void EffectManager::CreateQuadGeometry()

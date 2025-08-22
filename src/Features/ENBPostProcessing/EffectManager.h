@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Downsampler.h"
+#include "ENBDownsampler.h"
 #include "SettingsRegistry.h"
 #include "WeatherManager.h"
 #include <Effects11/d3dx11effect.h>
@@ -93,14 +93,14 @@ public:
 	void ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV);
 
 	// Downsampling support
-	Downsampler& GetDownsampler() { return Downsampler::GetSingleton(); }
-	const Downsampler::FixedDownsampleTexture& GetSharedDownsampleTexture() const { return sharedDownsampleTexture; }
+	ENBDownsampler& GetDownsampler() { return ENBDownsampler::GetSingleton(); }
+	const ENBDownsampler::FixedDownsampleTexture& GetSharedDownsampleTexture() const { return sharedDownsampleTexture; }
 
 	// Common texture access
 
 	const std::unordered_map<std::string, Effect::Texture>& GetAllCommonTextures() const { return commonTextureCache; }
 
-	Downsampler::FixedDownsampleTexture sharedDownsampleTexture;
+	ENBDownsampler::FixedDownsampleTexture sharedDownsampleTexture;
 
 	// Texture swap tracking
 	uint32_t textureSwap = 0;

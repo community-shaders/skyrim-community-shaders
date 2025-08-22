@@ -1,17 +1,17 @@
-#include "Downsampler.h"
+#include "ENBDownsampler.h"
 #include "Globals.h"
 #include "Utils/D3D.h"
 #include <algorithm>
 #include <cmath>
 #include <d3dcompiler.h>
 
-Downsampler& Downsampler::GetSingleton()
+ENBDownsampler& ENBDownsampler::GetSingleton()
 {
-	static Downsampler instance;
+	static ENBDownsampler instance;
 	return instance;
 }
 
-void Downsampler::Initialize()
+void ENBDownsampler::Initialize()
 {
 	if (!CompileShaders()) {
 		logger::error("[ENBPP] Failed to compile downsampler shaders");
@@ -20,7 +20,7 @@ void Downsampler::Initialize()
 	logger::info("[ENBPP] Downsampler initialized with custom shaders");
 }
 
-Downsampler::FixedDownsampleTexture Downsampler::CreateFixedDownsampleTexture(DXGI_FORMAT format)
+ENBDownsampler::FixedDownsampleTexture ENBDownsampler::CreateFixedDownsampleTexture(DXGI_FORMAT format)
 {
 	auto device = globals::d3d::device;
 	FixedDownsampleTexture fixedTexture;
@@ -65,18 +65,18 @@ Downsampler::FixedDownsampleTexture Downsampler::CreateFixedDownsampleTexture(DX
 	DX::ThrowIfFailed(device->CreateShaderResourceView(fixedTexture.texture.Get(), &srvDesc, fixedTexture.srvBlurry.GetAddressOf()));
 
 	// Set debug names
-	Util::SetResourceName(fixedTexture.texture.Get(), "Downsampler::FixedTexture (1024x1024, 3 mips)");
-	Util::SetResourceName(fixedTexture.rtv.Get(), "Downsampler::FixedTexture RTV");
-	Util::SetResourceName(fixedTexture.srvChain.Get(), "Downsampler::FixedTexture SRV Chain");
-	Util::SetResourceName(fixedTexture.srv.Get(), "Downsampler::FixedTexture SRV 1024x1024");
-	Util::SetResourceName(fixedTexture.srvBlurry.Get(), "Downsampler::FixedTexture SRV 256x256");
+	Util::SetResourceName(fixedTexture.texture.Get(), "ENBDownsampler::FixedTexture (1024x1024, 3 mips)");
+	Util::SetResourceName(fixedTexture.rtv.Get(), "ENBDownsampler::FixedTexture RTV");
+	Util::SetResourceName(fixedTexture.srvChain.Get(), "ENBDownsampler::FixedTexture SRV Chain");
+	Util::SetResourceName(fixedTexture.srv.Get(), "ENBDownsampler::FixedTexture SRV 1024x1024");
+	Util::SetResourceName(fixedTexture.srvBlurry.Get(), "ENBDownsampler::FixedTexture SRV 256x256");
 
 	logger::info("[ENBPP] Created fixed downsample texture: 1024x1024 with 3 mips (1024, 512, 256)");
 
 	return fixedTexture;
 }
 
-void Downsampler::DownsampleToFixed(ID3D11ShaderResourceView* source, FixedDownsampleTexture& texture)
+void ENBDownsampler::DownsampleToFixed(ID3D11ShaderResourceView* source, FixedDownsampleTexture& texture)
 {
 	auto context = globals::d3d::context;
 
@@ -150,17 +150,17 @@ void Downsampler::DownsampleToFixed(ID3D11ShaderResourceView* source, FixedDowns
 	context->GenerateMips(texture.srvChain.Get());
 }
 
-ID3D11ShaderResourceView* Downsampler::GetTexture(const FixedDownsampleTexture& texture) const
+ID3D11ShaderResourceView* ENBDownsampler::GetTexture(const FixedDownsampleTexture& texture) const
 {
 	return texture.srv.Get();
 }
 
-ID3D11ShaderResourceView* Downsampler::GetTextureBlurry(const FixedDownsampleTexture& texture) const
+ID3D11ShaderResourceView* ENBDownsampler::GetTextureBlurry(const FixedDownsampleTexture& texture) const
 {
 	return texture.srvBlurry.Get();
 }
 
-bool Downsampler::CompileShaders()
+bool ENBDownsampler::CompileShaders()
 {
 	auto device = globals::d3d::device;
 
@@ -220,7 +220,7 @@ bool Downsampler::CompileShaders()
 	return true;
 }
 
-const char* Downsampler::GetDownsamplePixelShaderSource()
+const char* ENBDownsampler::GetDownsamplePixelShaderSource()
 {
 	return R"HLSL(
 Texture2D<float4> SourceTexture : register(t0);

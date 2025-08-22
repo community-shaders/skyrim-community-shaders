@@ -6,10 +6,10 @@
 
 using Microsoft::WRL::ComPtr;
 
-class Downsampler
+class ENBDownsampler
 {
 public:
-	static Downsampler& GetSingleton();
+	static ENBDownsampler& GetSingleton();
 
 	struct FixedDownsampleTexture
 	{

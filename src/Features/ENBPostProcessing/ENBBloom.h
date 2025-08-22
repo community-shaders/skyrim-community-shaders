@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Downsampler.h"
 #include "Effect.h"
 #include <d3d11.h>
 #include <unordered_map>
