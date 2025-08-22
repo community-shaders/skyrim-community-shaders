@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../ENBTexture.h"
+#include "../TextureManager.h"
 #include <Effects11/d3dx11effect.h>
 #include <d3d11.h>
 #include <d3dcompiler.h>
@@ -73,7 +73,7 @@ public:
 	std::unordered_map<std::string, std::vector<TechniqueInfo>> techniques;
 	std::unordered_map<std::string, ComPtr<ID3DX11EffectVariable>> variables;
 
-	std::unordered_map<std::string, ENBTexture> effectTextureCache;
+	std::unordered_map<std::string, TextureManager::Texture> effectTextureCache;
 	std::unordered_map<std::string, ComPtr<ID3D11ShaderResourceView>> customTextureCache;
 
 	// UI Variable System
@@ -134,10 +134,10 @@ public:
 	std::vector<std::string> errors;
 
 	// Execute a technique sequence with ping-pong rendering
-	void ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ENBTexture& a_input, ENBTexture& a_output, ENBTexture& a_temp);
+	void ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, TextureManager::Texture& a_input, TextureManager::Texture& a_output, TextureManager::Texture& a_temp);
 
 	// Execute a single technique
-	void ExecuteTechnique(const std::string& techniqueName, ENBTexture& output);
+	void ExecuteTechnique(const std::string& techniqueName, TextureManager::Texture& output);
 
 	// Allow EffectManager to setup common variables
 	ID3DX11Effect* GetEffect() const { return effect.Get(); }
@@ -146,7 +146,7 @@ public:
 	bool SetShaderResourceVariable(const std::string& variableName, ID3D11ShaderResourceView* resource);
 
 	// Texture creation helper
-	static ENBTexture CreateTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, const std::string& debugName);
+	static TextureManager::Texture CreateTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, const std::string& debugName);
 
 	// Static helper functions for any effect
 	static bool SetShaderResourceVariable(ID3DX11Effect* effect, const std::string& variableName, ID3D11ShaderResourceView* resource);
@@ -167,7 +167,7 @@ private:
 	std::string GetRenderTargetFromTechnique(ID3DX11EffectTechnique* technique);
 	std::string GetUINameFromTechnique(ID3DX11EffectTechnique* technique);
 	void LoadUITechniques();
-	ENBTexture* GetEffectTexture(const std::string& name);
+	TextureManager::Texture* GetEffectTexture(const std::string& name);
 	ID3D11RenderTargetView* GetRenderTargetView(const std::string& renderTargetName, ID3D11RenderTargetView* fallback);
 
 	// UI Variable helpers

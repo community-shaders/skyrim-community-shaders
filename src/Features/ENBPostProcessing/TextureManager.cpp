@@ -13,7 +13,7 @@ void TextureManager::Initialize()
 	CreateCommonTextures();
 }
 
-ENBTexture* TextureManager::GetCommonTexture(const std::string& name)
+TextureManager::Texture* TextureManager::GetCommonTexture(const std::string& name)
 {
 	auto it = commonTextureCache.find(name);
 	if (it != commonTextureCache.end()) {
@@ -65,9 +65,9 @@ void TextureManager::CreateCommonTextures()
 	}
 }
 
-ENBTexture TextureManager::CreateTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, const std::string& debugName)
+TextureManager::Texture TextureManager::CreateTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, const std::string& debugName)
 {
-	ENBTexture result;
+	TextureManager::Texture result;
 
 	D3D11_TEXTURE2D_DESC texDesc = {};
 	texDesc.Width = width;

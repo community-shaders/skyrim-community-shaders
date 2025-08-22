@@ -14,7 +14,7 @@ void ENBEffect::Execute()
 
 	auto textureOriginal = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-	ENBTexture textureColor{};
+	TextureManager::Texture textureColor{};
 	textureColor.texture = textureOriginal.texture;
 	textureColor.srv = textureOriginal.SRV;
 	textureColor.rtv = textureOriginal.RTV;

@@ -13,7 +13,7 @@ void ENBLens::Execute()
 	auto textureLens = textureManager.GetCommonTexture("TextureLens");
 
 	// Set dowsampled texture, typically the one used (use 1024x1024 mip)
-	ENBTexture downsampledInput{};
+	TextureManager::Texture downsampledInput{};
 	downsampledInput.srv = effectManager.GetDownsampleTexture();
 
 	ExecuteTechniqueSequence(GetSelectedTechnique(), downsampledInput, *textureLens, *textureHDRTemp);

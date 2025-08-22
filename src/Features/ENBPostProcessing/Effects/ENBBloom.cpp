@@ -14,7 +14,7 @@ void ENBBloom::Execute()
 	// Set dowsampled texture, typically the one used (use 1024x1024 mip)
 	auto& effectManager = EffectManager::GetSingleton();
 
-	ENBTexture downsampledInput{};
+	TextureManager::Texture downsampledInput{};
 	downsampledInput.srv = effectManager.GetDownsampleTexture();
 
 	ExecuteTechniqueSequence(GetSelectedTechnique(), downsampledInput, *textureBloom, *textureHDRTemp);

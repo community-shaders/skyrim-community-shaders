@@ -188,7 +188,7 @@ bool Effect::LoadFXFile()
 	return true;
 }
 
-void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ENBTexture& a_input, ENBTexture& a_output, ENBTexture& a_temp)
+void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, TextureManager::Texture& a_input, TextureManager::Texture& a_output, TextureManager::Texture& a_temp)
 {
 	if (!IsCompiled() || !effect) {
 		return;  // Skip execution if not compiled
@@ -295,7 +295,7 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, EN
 	}
 }
 
-void Effect::ExecuteTechnique(const std::string& techniqueName, ENBTexture& output)
+void Effect::ExecuteTechnique(const std::string& techniqueName, TextureManager::Texture& output)
 {
 	if (!IsCompiled() || !effect) {
 		return;
@@ -642,7 +642,7 @@ std::string Effect::GetUINameFromTechnique(ID3DX11EffectTechnique* technique)
 	return "";
 }
 
-ENBTexture* Effect::GetEffectTexture(const std::string& name)
+TextureManager::Texture* Effect::GetEffectTexture(const std::string& name)
 {
 	auto it = effectTextureCache.find(name);
 	if (it != effectTextureCache.end()) {
@@ -1161,7 +1161,7 @@ bool Effect::SetVectorVariable(ID3DX11Effect* effect, const std::string& variabl
 	return false;
 }
 
-ENBTexture Effect::CreateTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, const std::string& debugName)
+TextureManager::Texture Effect::CreateTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, const std::string& debugName)
 {
 	auto device = globals::d3d::device;
 
@@ -1178,7 +1178,7 @@ ENBTexture Effect::CreateTexture(uint32_t width, uint32_t height, DXGI_FORMAT fo
 	texDesc.CPUAccessFlags = 0;
 	texDesc.MiscFlags = 0;
 
-	ENBTexture texture{};
+	TextureManager::Texture texture{};
 	DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, texture.texture.GetAddressOf()));
 	DX::ThrowIfFailed(device->CreateRenderTargetView(texture.texture.Get(), nullptr, texture.rtv.GetAddressOf()));
 	DX::ThrowIfFailed(device->CreateShaderResourceView(texture.texture.Get(), nullptr, texture.srv.GetAddressOf()));

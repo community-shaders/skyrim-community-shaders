@@ -47,7 +47,7 @@ void ENBDepthOfField::Execute()
 
 	auto textureMain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-	ENBTexture textureOriginal2{};
+	TextureManager::Texture textureOriginal2{};
 	textureOriginal2.texture = textureMain.texture;
 	textureOriginal2.srv = textureMain.SRV;
 	textureOriginal2.rtv = textureMain.RTV;
