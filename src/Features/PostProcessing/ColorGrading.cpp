@@ -743,8 +743,10 @@ void ColorGrading::OutputTextures()
 		logger::info("Missing pp directory created: {}", outputPath);
 	}
 
-	std::filesystem::path lutPath = outputPath / "PP_ColorGrading_BakedLUT.dds";
-	std::filesystem::path colorPath = outputPath / "PP_ColorGrading_ColorOutput.dds";
+	std::filesystem::path savePath = outputPath;
+
+	std::filesystem::path lutPath = savePath / "PP_ColorGrading_BakedLUT.dds";
+	std::filesystem::path colorPath = savePath / "PP_ColorGrading_ColorOutput.dds";
 
 	DX::ThrowIfFailed(SaveToDDSFile(lutImage.GetImages(), lutImage.GetImageCount(), lutImage.GetMetadata(), DirectX::DDS_FLAGS::DDS_FLAGS_NONE, lutPath.c_str()));
 	DX::ThrowIfFailed(SaveToDDSFile(colorImage.GetImages(), colorImage.GetImageCount(), colorImage.GetMetadata(), DirectX::DDS_FLAGS::DDS_FLAGS_NONE, colorPath.c_str()));
