@@ -1,17 +1,14 @@
 #include "ENBAdaptation.h"
 
-#include "../EffectManager.h"
 #include "../SettingManager.h"
 #include "../TextureManager.h"
 
 void ENBAdaptation::Execute()
 {
-	auto& effectManager = EffectManager::GetSingleton();
-
 	auto downsampledInput = effect->GetVariableByName("TextureCurrent")->AsShaderResource();
 	if (downsampledInput && downsampledInput->IsValid()) {
 		// Use 256x256 mip for adaptation
-		downsampledInput->SetResource(effectManager.GetDownsampleTextureBlurry());
+		downsampledInput->SetResource(TextureManager::GetSingleton().GetDownsampleTextureBlurry());
 	}
 
 	ExecuteTechnique("Downsample", effectTextureCache["TextureCurrent"]);

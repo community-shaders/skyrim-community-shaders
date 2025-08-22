@@ -55,31 +55,11 @@ public:
 	ComPtr<ID3D11ComputeShader> colorCorrectionComputeShader;
 	ComPtr<ID3D11Buffer> colorCorrectionConstantBuffer;
 
-	// Downsampling resources
-	struct FixedDownsampleTexture
-	{
-		ComPtr<ID3D11Texture2D> texture;
-		ComPtr<ID3D11ShaderResourceView> srvChain;   // Mip 0 -> Mip 1 -> Mip2
-		ComPtr<ID3D11ShaderResourceView> srv;        // Mip 0: 1024x1024
-		ComPtr<ID3D11ShaderResourceView> srvBlurry;  // Mip 2: 256x256
-		ComPtr<ID3D11RenderTargetView> rtv;
-	};
-
-	ComPtr<ID3D11PixelShader> downsamplePS;
-	ComPtr<ID3D11SamplerState> linearSampler;
-	FixedDownsampleTexture sharedDownsampleTexture;
 
 	void CreateQuadGeometry();
 	void CreateRenderStates();
 	void CreateCopyShaders();
 	void CreateColorCorrectionShader();
-	void CreateDownsampleShader();
-
-	// Downsampling methods
-	FixedDownsampleTexture CreateFixedDownsampleTexture(DXGI_FORMAT format);
-	void DownsampleToFixed(ID3D11ShaderResourceView* source, FixedDownsampleTexture& texture);
-	ID3D11ShaderResourceView* GetDownsampleTexture() const;
-	ID3D11ShaderResourceView* GetDownsampleTextureBlurry() const;
 
 	void RenderEffectsList();
 
