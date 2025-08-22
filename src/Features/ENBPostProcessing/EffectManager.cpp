@@ -13,6 +13,8 @@
 #include "WeatherManager.h"
 #include <d3dcompiler.h>
 #include <functional>
+#include "ENBDownsampler.h"
+#include "TextureManager.h"
 
 EffectManager& EffectManager::GetSingleton()
 {

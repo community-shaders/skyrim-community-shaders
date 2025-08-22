@@ -1,12 +1,12 @@
 #include "ENBAdaptation.h"
 
-#include "EffectManager.h"
 #include "TextureManager.h"
+#include "ENBDownsampler.h"
+#include "SettingsManager.h"
 
 void ENBAdaptation::Execute()
 {
-	auto& effectManager = EffectManager::GetSingleton();
-	auto& downsampler = effectManager.GetDownsampler();
+	auto& downsampler = ENBDownsampler::GetSingleton();
 
 	auto downsampledInput = effect->GetVariableByName("TextureCurrent")->AsShaderResource();
 	if (downsampledInput && downsampledInput->IsValid()) {

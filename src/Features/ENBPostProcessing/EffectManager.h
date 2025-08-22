@@ -1,24 +1,13 @@
 #pragma once
 
+#include "ENBDepthOfField.h"
+#include "ENBBloom.h"
+#include "ENBLens.h"
 #include "ENBAdaptation.h"
 #include "ENBEffect.h"
 #include "ENBEffectPostPass.h"
-#include <Effects11/d3dx11effect.h>
-#include <d3d11.h>
-#include <filesystem>
-#include <functional>
-#include <memory>
-#include <string>
-#include <unordered_map>
-#include <vector>
-#include <wrl/client.h>
-
-#include <Features/ENBPostProcessing/Effect.h>
 
 using Microsoft::WRL::ComPtr;
-
-// Forward declarations
-class Effect;
 
 class EffectManager
 {
@@ -27,9 +16,6 @@ public:
 
 	// Effect execution
 	void ExecuteEffects();
-
-	// UI Integration
-	void RenderImGui();
 
 	// Lifecycle
 	void Initialize();
@@ -96,9 +82,6 @@ public:
 
 	// Color correction using compute shader
 	void ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV);
-
-	// Downsampling support
-	ENBDownsampler& GetDownsampler() { return ENBDownsampler::GetSingleton(); }
 
 	// Settings management (now delegated to SettingsManager)
 	void LoadENBSettings();
