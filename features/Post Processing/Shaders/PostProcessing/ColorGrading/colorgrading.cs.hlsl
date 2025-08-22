@@ -104,17 +104,17 @@ float3 OklchColourMixer(float3 val)
 	float h = atan2(oklab.z, oklab.y);
 
 	float lerpFactor = (h / (2 * Math::PI) - redHue) * 7;
-	uint leftHue = floor(lerpFactor);
+	int leftHue = floor(lerpFactor);
 	lerpFactor = lerpFactor - leftHue;
 	leftHue += (leftHue < 0) * 7;
-	uint rightHue = (leftHue + 1) % 7;
+	int rightHue = (leftHue + 1) % 7;
 	float effect = saturate(c / 0.37);
 
 	// hue shift
 	h = h + lerp(oklchColorMixer[leftHue].x, oklchColorMixer[rightHue].x, lerpFactor) * Math::PI / 4;
 	// vibrance
-	float c1 = (1 - pow(abs(1 - c / 0.37), oklchColorMixer[leftHue].y)) * 0.37;
-	float c2 = (1 - pow(abs(1 - c / 0.37), oklchColorMixer[rightHue].y)) * 0.37;
+	float c1 = (1 - pow(max(0, 1 - c / 0.37), oklchColorMixer[leftHue].y)) * 0.37;
+	float c2 = (1 - pow(max(0, 1 - c / 0.37), oklchColorMixer[rightHue].y)) * 0.37;
 	c = lerp(c1, c2, lerpFactor);
 	// brightness
 	l = l + lerp(oklchColorMixer[leftHue].z, oklchColorMixer[rightHue].z, lerpFactor) * effect;
@@ -719,7 +719,7 @@ float3 ColorGrading(float3 color)
 	color = ShadowsMidtonesHighlights(color, shadows.xyz, midtones.xyz, highlights.xyz, shadowsHighlightsRange.x, shadowsHighlightsRange.y, shadowsHighlightsRange.z, shadowsHighlightsRange.w);
 
 	// Contrast
-	color = LinearContrast(color, contrast.xyz, pivot.xyz);
+	color = logType ? LogContrast(color, contrast.xyz, pivot.xyz) : LinearContrast(color, contrast.xyz, pivot.xyz);
 
     if (logType & LogType::Invert) {
         color = LogToLinearSpace(color, logType);
