@@ -1,9 +1,9 @@
 #include "PCH.h"
-#include "SettingsRegistry.h"
+#include "SettingsManager.h"
 
 void RegisterENBSettings()
 {
-	auto& registry = SettingsRegistry::GetSingleton();
+	auto& registry = SettingsManager::GetSingleton();
 
 	// COLORCORRECTION settings
 	registry.RegisterFloatSetting("Brightness", "COLORCORRECTION", 1.0f, 0.0f, 3.0f, false);

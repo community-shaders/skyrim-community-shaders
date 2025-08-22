@@ -1,17 +1,16 @@
 #include "ENBDepthOfField.h"
-#include "EffectManager.h"
+
 #include "TextureManager.h"
-#include "Globals.h"
-#include "Utils/D3D.h"
+#include "SettingsManager.h"
 
 void ENBDepthOfField::Execute()
 {
 	auto renderer = globals::game::renderer;
 
-	auto& effectManager = EffectManager::GetSingleton();
+	auto& settingsManager = SettingsManager::GetSingleton();
 
-	const std::string texturePreviousApertureName = (effectManager.textureSwap & 1) ? "TextureApertureSwap" : "TextureAperture";
-	const std::string textureApertureName = (effectManager.textureSwap & 1) ? "TextureAperture" : "TextureApertureSwap";
+	const std::string texturePreviousApertureName = (settingsManager.GetTextureSwap() & 1) ? "TextureApertureSwap" : "TextureAperture";
+	const std::string textureApertureName = (settingsManager.GetTextureSwap() & 1) ? "TextureAperture" : "TextureApertureSwap";
 
 	auto texturePrevious = effect->GetVariableByName("TexturePrevious")->AsShaderResource();
 	if (texturePrevious && texturePrevious->IsValid()) {
@@ -27,8 +26,8 @@ void ENBDepthOfField::Execute()
 
 	ExecuteTechnique("ReadFocus", effectTextureCache["TextureReadFocus"]);
 
-	const std::string texturePreviousFocusName = (effectManager.textureSwap & 1) ? "TextureFocusSwap" : "TextureFocus";
-	const std::string textureFocusName = (effectManager.textureSwap & 1) ? "TextureFocus" : "TextureFocusSwap";
+	const std::string texturePreviousFocusName = (settingsManager.GetTextureSwap() & 1) ? "TextureFocusSwap" : "TextureFocus";
+	const std::string textureFocusName = (settingsManager.GetTextureSwap() & 1) ? "TextureFocus" : "TextureFocusSwap";
 
 	if (texturePrevious && texturePrevious->IsValid()) {
 		texturePrevious->SetResource(effectTextureCache[texturePreviousFocusName].srv.Get());
@@ -72,14 +71,11 @@ void ENBDepthOfField::Execute()
 
 void ENBDepthOfField::UpdateEffectVariables()
 {
-	auto& effectManager = EffectManager::GetSingleton();
+	auto& settingsManager = SettingsManager::GetSingleton();
 
 	float4 dofParameters{};
-
-	float delta = (*globals::game::deltaTime);
-
-	dofParameters.z = delta / effectManager.GetSetting<float>("ApertureTime", "DEPTHOFFIELD");
-	dofParameters.w = delta / effectManager.GetSetting<float>("FocusingTime", "DEPTHOFFIELD");
+	dofParameters.z = *globals::game::deltaTime / settingsManager.GetValue<float>("ApertureTime", "DEPTHOFFIELD");
+	dofParameters.w = *globals::game::deltaTime / settingsManager.GetValue<float>("FocusingTime", "DEPTHOFFIELD");
 
 	auto DofParameters = effect->GetVariableByName("DofParameters")->AsVector();
 	if (DofParameters && DofParameters->IsValid())

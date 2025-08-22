@@ -8,7 +8,7 @@
 #include "ENBPostProcessingUI.h"
 #include "ENBSettings.h"
 #include "Globals.h"
-#include "SettingsRegistry.h"
+#include "SettingsManager.h"
 #include "State.h"
 #include "Utils/D3D.h"
 #include "WeatherManager.h"
@@ -23,27 +23,13 @@ EffectManager& EffectManager::GetSingleton()
 
 void EffectManager::Initialize()
 {
-	// Register all ENB settings with the registry
 	RegisterENBSettings();
 
 	CreateCommonResources();
 	TextureManager::GetSingleton().Initialize();
-	RegisterEffects();
 	ApplyEffects();
 	LoadENBSettings();
 	WeatherManager::GetSingleton().Initialize();
-}
-
-void EffectManager::RegisterEffects()
-{
-	// Effects are now direct instances, no need to register them in the vector
-	// The vector is kept for legacy compatibility with other systems
-	logger::info("[ENBPP] Registered effect: {}", enbDepthOfField.GetName());
-	logger::info("[ENBPP] Registered effect: {}", enbBloom.GetName());
-	logger::info("[ENBPP] Registered effect: {}", enbLens.GetName());
-	logger::info("[ENBPP] Registered effect: {}", enbAdaptation.GetName());
-	logger::info("[ENBPP] Registered effect: {}", enbEffect.GetName());
-	logger::info("[ENBPP] Registered effect: {}", enbEffectPostPass.GetName());
 }
 
 void EffectManager::ApplyEffects()
@@ -176,7 +162,7 @@ void EffectManager::ExecuteEffects()
 	CopyTexture(textureSDRTemp->srv.Get(), textureFramebuffer3.RTV);
 
 	// Change textures used next frame
-	textureSwap++;
+	SettingsManager::GetSingleton().IncrementTextureSwap();
 }
 
 void EffectManager::RenderImGui()
@@ -522,9 +508,9 @@ void EffectManager::UpdateCommonData()
 		commonData.eInteriorFactor = !sky->mode.any(RE::Sky::Mode::kFull);
 	}
 
-	// Update SettingsRegistry with time-of-day data and weather info
+	// Update SettingsManager with time-of-day data and weather info
 	{
-		auto& registry = SettingsRegistry::GetSingleton();
+		auto& registry = SettingsManager::GetSingleton();
 		registry.SetTimeOfDayData(commonData.timeOfDay1, commonData.timeOfDay2, commonData.eInteriorFactor);
 		registry.SetWeatherBlendFactors(
 			static_cast<uint32_t>(commonData.weather[0]),
@@ -618,7 +604,7 @@ void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 	D3D11_MAPPED_SUBRESOURCE mapped;
 	HRESULT hr = context->Map(colorCorrectionConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
 	if (SUCCEEDED(hr)) {
-		auto& registry = SettingsRegistry::GetSingleton();
+		auto& registry = SettingsManager::GetSingleton();
 		float* cbData = static_cast<float*>(mapped.pData);
 		cbData[0] = registry.GetValue<float>("Brightness", "COLORCORRECTION");
 		cbData[1] = registry.GetValue<float>("GammaCurve", "COLORCORRECTION");
@@ -665,38 +651,26 @@ void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 
 void EffectManager::LoadENBSettings()
 {
-	auto& registry = SettingsRegistry::GetSingleton();
+	auto& registry = SettingsManager::GetSingleton();
 	registry.LoadFromFile("enbseries.ini");
 }
 
 void EffectManager::SaveENBSettings()
 {
-	auto& registry = SettingsRegistry::GetSingleton();
+	auto& registry = SettingsManager::GetSingleton();
 	registry.SaveToFile("enbseries.ini");
-}
-
-float EffectManager::GetInterpolatedBloomAmount()
-{
-	auto& registry = SettingsRegistry::GetSingleton();
-	return registry.GetInterpolatedTimeOfDayValue("Amount", "BLOOM");
-}
-
-float EffectManager::GetInterpolatedLensAmount()
-{
-	auto& registry = SettingsRegistry::GetSingleton();
-	return registry.GetInterpolatedTimeOfDayValue("Amount", "LENS");
 }
 
 void EffectManager::LoadAllWeatherSettings()
 {
-	auto& registry = SettingsRegistry::GetSingleton();
+	auto& registry = SettingsManager::GetSingleton();
 	registry.ReloadAllWeatherSettings();
 	logger::info("[EffectManager] Loaded all weather settings");
 }
 
 void EffectManager::SaveAllWeatherSettings()
 {
-	auto& registry = SettingsRegistry::GetSingleton();
+	auto& registry = SettingsManager::GetSingleton();
 	registry.SaveAllWeatherSettings();
 	logger::info("[EffectManager] Saved all weather settings");
 }

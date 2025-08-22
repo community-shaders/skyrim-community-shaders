@@ -90,10 +90,10 @@ struct SettingInfo
 	float maxValue = 10.0f;  // For float settings
 };
 
-class SettingsRegistry
+class SettingsManager
 {
 public:
-	static SettingsRegistry& GetSingleton();
+	static SettingsManager& GetSingleton();
 
 	// Setting registration
 	void RegisterBoolSetting(const std::string& key, const std::string& category,
@@ -145,11 +145,15 @@ public:
 	// Time of day interpolation data
 	void SetTimeOfDayData(const float timeOfDay1[4], const float timeOfDay2[4], float interiorFactor);
 
+	// Frame-based state access
+	uint32_t GetTextureSwap() const { return textureSwap; }
+	void IncrementTextureSwap() { textureSwap++; }
+
 private:
-	SettingsRegistry() = default;
-	~SettingsRegistry() = default;
-	SettingsRegistry(const SettingsRegistry&) = delete;
-	SettingsRegistry& operator=(const SettingsRegistry&) = delete;
+	SettingsManager() = default;
+	~SettingsManager() = default;
+	SettingsManager(const SettingsManager&) = delete;
+	SettingsManager& operator=(const SettingsManager&) = delete;
 
 	std::unordered_map<std::string, std::unique_ptr<SettingInfo>> settings;
 	std::unordered_map<std::string, std::unordered_map<std::string, SettingValue>> weatherSettings;  // weatherKey -> settingKey -> value
@@ -167,6 +171,9 @@ private:
 	float timeOfDay1[4] = { 0, 0, 0, 0 };
 	float timeOfDay2[4] = { 0, 0, 0, 0 };
 	float interiorFactor = 0.0f;
+
+	// Frame-based state
+	uint32_t textureSwap = 0;
 
 	// Helper methods
 	std::string MakeCompositeKey(const std::string& key, const std::string& category) const;

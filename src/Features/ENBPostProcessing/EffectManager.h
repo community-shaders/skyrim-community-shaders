@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ENBDownsampler.h"
-#include "SettingsRegistry.h"
+#include "SettingsManager.h"
 #include "WeatherManager.h"
 #include "TextureManager.h"
 #include "ENBTexture.h"
@@ -41,7 +41,6 @@ public:
 
 	// Lifecycle
 	void Initialize();
-	void RegisterEffects();
 
 	void ApplyEffects();
 	void LoadEffects();
@@ -106,29 +105,9 @@ public:
 	// Downsampling support
 	ENBDownsampler& GetDownsampler() { return ENBDownsampler::GetSingleton(); }
 
-	// Texture swap tracking
-	uint32_t textureSwap = 0;
-
-	// Settings management (now delegated to SettingsRegistry)
+	// Settings management (now delegated to SettingsManager)
 	void LoadENBSettings();
 	void SaveENBSettings();
 	void LoadAllWeatherSettings();
 	void SaveAllWeatherSettings();
-
-	// Helper methods for backwards compatibility
-	float GetInterpolatedBloomAmount();
-	float GetInterpolatedLensAmount();
-
-	// Settings access helpers
-	template <typename T>
-	T GetSetting(const std::string& key, const std::string& category)
-	{
-		return SettingsRegistry::GetSingleton().GetValue<T>(key, category);
-	}
-
-	template <typename T>
-	void SetSetting(const std::string& key, const std::string& category, const T& value)
-	{
-		SettingsRegistry::GetSingleton().SetValue<T>(key, category, value);
-	}
 };

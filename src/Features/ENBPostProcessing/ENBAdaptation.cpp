@@ -24,8 +24,9 @@ void ENBAdaptation::Execute()
 	}
 
 	// Use swap mechanism to determine input/output textures
-	const std::string texturePreviousName = (effectManager.textureSwap & 1) ? "TextureAdaptationSwap" : "TextureAdaptation";
-	const std::string textureAdaptationName = (effectManager.textureSwap & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
+	auto& settingsManager = SettingsManager::GetSingleton();
+	const std::string texturePreviousName = (settingsManager.GetTextureSwap() & 1) ? "TextureAdaptationSwap" : "TextureAdaptation";
+	const std::string textureAdaptationName = (settingsManager.GetTextureSwap() & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
 
 	// Set input texture (previous frame's adaptation value)
 	auto& textureManager = TextureManager::GetSingleton();
@@ -41,17 +42,15 @@ void ENBAdaptation::Execute()
 
 void ENBAdaptation::UpdateEffectVariables()
 {
-	auto& effectManager = EffectManager::GetSingleton();
+	auto& settingsManager = SettingsManager::GetSingleton();
 
-	auto forceMinMaxValues = effectManager.GetSetting<bool>("ForceMinMaxValues", "ADAPTATION");
-
-	float delta = (*globals::game::deltaTime);
+	auto forceMinMaxValues = settingsManager.GetValue<bool>("ForceMinMaxValues", "ADAPTATION");
 
 	float4 adaptationParameters{};
-	adaptationParameters.x = !forceMinMaxValues ? 0.0f : effectManager.GetSetting<float>("AdaptationMin", "ADAPTATION");
-	adaptationParameters.y = !forceMinMaxValues ? 65535.0f : effectManager.GetSetting<float>("AdaptationMax", "ADAPTATION");
-	adaptationParameters.z = effectManager.GetSetting<float>("AdaptationSensitivity", "ADAPTATION");
-	adaptationParameters.w = delta / effectManager.GetSetting<float>("AdaptationTime", "ADAPTATION");
+	adaptationParameters.x = !forceMinMaxValues ? 0.0f : settingsManager.GetValue<float>("AdaptationMin", "ADAPTATION");
+	adaptationParameters.y = !forceMinMaxValues ? 65535.0f : settingsManager.GetValue<float>("AdaptationMax", "ADAPTATION");
+	adaptationParameters.z = settingsManager.GetValue<float>("AdaptationSensitivity", "ADAPTATION");
+	adaptationParameters.w = *globals::game::deltaTime / settingsManager.GetValue<float>("AdaptationTime", "ADAPTATION");
 
 	auto AdaptationParameters = effect->GetVariableByName("AdaptationParameters")->AsVector();
 	if (AdaptationParameters && AdaptationParameters->IsValid())

@@ -1,6 +1,6 @@
 ﻿#include "ENBPostProcessingUI.h"
 #include "PCH.h"
-#include "SettingsRegistry.h"
+#include "SettingsManager.h"
 
 ENBPostProcessingUI& ENBPostProcessingUI::GetSingleton()
 {
@@ -150,7 +150,7 @@ void ENBPostProcessingUI::RenderWeatherControl()
 
 void ENBPostProcessingUI::RenderAllSettings()
 {
-	auto& settingsRegistry = SettingsRegistry::GetSingleton();
+	auto& settingsRegistry = SettingsManager::GetSingleton();
 
 	auto categories = settingsRegistry.GetAllCategories();
 	for (const auto& category : categories) {
