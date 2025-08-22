@@ -1,7 +1,7 @@
 #include "ENBEffect.h"
 
-#include "TextureManager.h"
 #include "SettingsManager.h"
+#include "TextureManager.h"
 
 void ENBEffect::Execute()
 {
