@@ -1,36 +1,36 @@
 #include "ENBPostProcessing.h"
 #include "PCH.h"
 #include "State.h"
+#include "ENBPostProcessing/TextureManager.h"
+#include "ENBPostProcessing/WeatherManager.h"
+#include "ENBPostProcessing/SettingsManager.h"
+#include "ENBPostProcessing/ENBPostProcessingUI.h"
 
-void ENBPostProcessing::SaveSettings(json& o_json)
+void ENBPostProcessing::SaveSettings(json&)
 {
-	o_json["Enabled"] = settings.Enabled;
-	o_json["EffectPath"] = settings.EffectPath;
 }
 
-void ENBPostProcessing::LoadSettings(json& o_json)
+void ENBPostProcessing::LoadSettings(json&)
 {
-	if (o_json["Enabled"].is_boolean())
-		settings.Enabled = o_json["Enabled"];
-
-	if (o_json["EffectPath"].is_string())
-		settings.EffectPath = o_json["EffectPath"];
 }
 
 void ENBPostProcessing::RestoreDefaultSettings()
 {
-	settings.Enabled = false;
-	settings.EffectPath = "";
 }
 
 void ENBPostProcessing::DrawSettings()
 {
-	GetEffectManager().RenderImGui();
+	ENBPostProcessingUI::GetSingleton().RenderImGui();
 }
 
 void ENBPostProcessing::SetupResources()
 {
-	GetEffectManager().Initialize();
+	// Initialize subsystems first
+	TextureManager::GetSingleton().Initialize();
+	WeatherManager::GetSingleton().Initialize();
+	
+	// Then initialize the effect manager
+	EffectManager::GetSingleton().Initialize();
 }
 
 void ENBPostProcessing::Reset()
@@ -42,7 +42,20 @@ struct Main_HDRTonemapBlendCinematic_Render
 {
 	static void thunk(RE::ImageSpaceManager*, RE::ImageSpaceEffect*, uint32_t, uint32_t, RE::ImageSpaceShaderParam*)
 	{
-		globals::features::enbPostProcessing.GetEffectManager().ExecuteEffects();
+		auto& effectManager = EffectManager::GetSingleton();
+		
+		effectManager.UpdateCommonData();
+
+		const auto& commonData = effectManager.GetCommonData();
+		auto& settingsManager = SettingsManager::GetSingleton();
+		settingsManager.SetTimeOfDayData(commonData.timeOfDay1, commonData.timeOfDay2, commonData.eInteriorFactor);
+		settingsManager.SetWeatherBlendFactors(
+			static_cast<uint32_t>(commonData.weather[0]),
+			static_cast<uint32_t>(commonData.weather[1]),
+			commonData.weather[2]);
+
+		effectManager.ExecuteEffects();
+			
 		//func(a1, a2, a3, a4, a5);
 	}
 

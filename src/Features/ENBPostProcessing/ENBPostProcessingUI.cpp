@@ -41,7 +41,7 @@ void ENBPostProcessingUI::RenderSettingsPanel()
 	auto& effectManager = EffectManager::GetSingleton();
 
 	if (ImGui::Button("Load")) {
-		effectManager.LoadEffects();
+		effectManager.Load();
 		effectManager.LoadENBSettings();
 		effectManager.LoadAllWeatherSettings();
 	}
@@ -52,7 +52,7 @@ void ENBPostProcessingUI::RenderSettingsPanel()
 	ImGui::SameLine();
 
 	if (ImGui::Button("Save")) {
-		effectManager.SaveEffects();
+		effectManager.Save();
 		effectManager.SaveENBSettings();
 		effectManager.SaveAllWeatherSettings();
 	}

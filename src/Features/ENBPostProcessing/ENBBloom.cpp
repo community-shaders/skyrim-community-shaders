@@ -1,9 +1,7 @@
 #include "ENBBloom.h"
+
 #include "EffectManager.h"
-#include "Globals.h"
-#include "State.h"
 #include "TextureManager.h"
-#include <imgui.h>
 
 void ENBBloom::Execute()
 {

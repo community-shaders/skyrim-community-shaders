@@ -1,7 +1,5 @@
 #pragma once
 
-#include "Features/ENBPostProcessing/EffectManager.h"
-
 struct ENBPostProcessing : Feature
 {
 public:
@@ -37,9 +35,4 @@ public:
 	virtual void SetupResources() override;
 	virtual void Reset() override;
 	virtual void PostPostLoad() override;
-
-	EffectManager& GetEffectManager() { return EffectManager::GetSingleton(); }
-
-private:
-	// Effect manager handles all effects now
 };

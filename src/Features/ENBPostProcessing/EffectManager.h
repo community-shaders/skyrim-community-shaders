@@ -9,16 +9,8 @@
 #include "ENBBloom.h"
 #include "ENBLens.h"
 #include "ENBAdaptation.h"
-#include "ENBBloom.h"
-#include "ENBDepthOfField.h"
-#include "ENBDownsampler.h"
 #include "ENBEffect.h"
 #include "ENBEffectPostPass.h"
-#include "ENBLens.h"
-#include "ENBTexture.h"
-#include "SettingsRegistry.h"
-#include "TextureManager.h"
-#include "WeatherManager.h"
 #include <Effects11/d3dx11effect.h>
 #include <d3d11.h>
 #include <filesystem>
@@ -50,9 +42,11 @@ public:
 	// Lifecycle
 	void Initialize();
 
-	void ApplyEffects();
-	void LoadEffects();
-	void SaveEffects();
+	void Apply();
+	void Load();
+	void Save();
+
+	void RegisterSettings();
 
 	// Common variable management
 	void UpdateCommonVariablesForEffect(ID3DX11Effect* effect);
@@ -103,6 +97,7 @@ public:
 	} commonData;
 
 	void UpdateCommonData();
+	const CommonVariableData& GetCommonData() const { return commonData; }
 
 	// Texture copy using pixel shader
 	void CopyTexture(ID3D11ShaderResourceView* source, ID3D11RenderTargetView* destination);

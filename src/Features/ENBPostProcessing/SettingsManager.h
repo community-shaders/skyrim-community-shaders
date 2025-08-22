@@ -1,12 +1,5 @@
 #pragma once
 
-#include <functional>
-#include <memory>
-#include <string>
-#include <unordered_map>
-#include <variant>
-#include <vector>
-
 // Forward declaration
 class WeatherManager;
 
@@ -150,10 +143,6 @@ public:
 	void IncrementTextureSwap() { textureSwap++; }
 
 private:
-	SettingsManager() = default;
-	~SettingsManager() = default;
-	SettingsManager(const SettingsManager&) = delete;
-	SettingsManager& operator=(const SettingsManager&) = delete;
 
 	std::unordered_map<std::string, std::unique_ptr<SettingInfo>> settings;
 	std::unordered_map<std::string, std::unordered_map<std::string, SettingValue>> weatherSettings;  // weatherKey -> settingKey -> value

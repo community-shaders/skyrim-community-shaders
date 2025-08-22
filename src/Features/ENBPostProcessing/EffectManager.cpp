@@ -6,7 +6,6 @@
 #include "ENBEffectPostPass.h"
 #include "ENBLens.h"
 #include "ENBPostProcessingUI.h"
-#include "ENBSettings.h"
 #include "Globals.h"
 #include "SettingsManager.h"
 #include "State.h"
@@ -23,17 +22,15 @@ EffectManager& EffectManager::GetSingleton()
 
 void EffectManager::Initialize()
 {
-	RegisterENBSettings();
-
+	RegisterSettings();
 	CreateCommonResources();
-	TextureManager::GetSingleton().Initialize();
-	ApplyEffects();
-	LoadENBSettings();
-	WeatherManager::GetSingleton().Initialize();
+	Apply();
 }
 
-void EffectManager::ApplyEffects()
+void EffectManager::Apply()
 {
+	LoadENBSettings();
+
 	logger::info("[ENBPP] Applying effects");
 
 	enbDepthOfField.Apply();
@@ -46,10 +43,12 @@ void EffectManager::ApplyEffects()
 	logger::info("[ENBPP] Applied effects");
 }
 
-void EffectManager::LoadEffects()
+void EffectManager::Load()
 {
-	logger::info("[ENBPP] Loading effects");
+	LoadENBSettings();
 
+	logger::info("[ENBPP] Loading effects");
+	
 	enbDepthOfField.Load();
 	enbBloom.Load();
 	enbLens.Load();
@@ -60,7 +59,7 @@ void EffectManager::LoadEffects()
 	logger::info("[ENBPP] Loaded effects");
 }
 
-void EffectManager::SaveEffects()
+void EffectManager::Save()
 {
 	logger::info("[ENBPP] Saving effects");
 
@@ -74,14 +73,43 @@ void EffectManager::SaveEffects()
 	logger::info("[ENBPP] Saved effects");
 }
 
+void EffectManager::RegisterSettings()
+{
+	auto& settingsManager = SettingsManager::GetSingleton();
+
+	settingsManager.RegisterFloatSetting("Brightness", "COLORCORRECTION", 1.0f, 0.0f, 3.0f, false);
+	settingsManager.RegisterFloatSetting("GammaCurve", "COLORCORRECTION", 1.0f, 0.1f, 3.0f, false);
+
+	settingsManager.RegisterFloatSetting("AdaptationSensitivity", "ADAPTATION", 1.0f, 0.0f, 5.0f, false);
+	settingsManager.RegisterBoolSetting("ForceMinMaxValues", "ADAPTATION", false, false);
+	settingsManager.RegisterFloatSetting("AdaptationMin", "ADAPTATION", 0.0f, 0.0f, 1.0f, false);
+	settingsManager.RegisterFloatSetting("AdaptationMax", "ADAPTATION", 1.0f, 0.0f, 2.0f, false);
+	settingsManager.RegisterFloatSetting("AdaptationTime", "ADAPTATION", 1.0f, 0.1f, 10.0f, false);
+
+	settingsManager.RegisterFloatSetting("FocusingTime", "DEPTHOFFIELD", 1.0f, 0.1f, 10.0f, false);
+	settingsManager.RegisterFloatSetting("ApertureTime", "DEPTHOFFIELD", 1.0f, 0.1f, 10.0f, false);
+
+	TimeOfDayValue defaultBloomAmount;
+	defaultBloomAmount.Dawn = defaultBloomAmount.Sunrise = defaultBloomAmount.Day = 1.0f;
+	defaultBloomAmount.Sunset = defaultBloomAmount.Dusk = defaultBloomAmount.Night = 1.0f;
+	defaultBloomAmount.InteriorDay = defaultBloomAmount.InteriorNight = 1.0f;
+
+	settingsManager.RegisterTimeOfDaySetting("Amount", "BLOOM", defaultBloomAmount, true);
+
+	TimeOfDayValue defaultLensAmount;
+	defaultLensAmount.Dawn = defaultLensAmount.Sunrise = defaultLensAmount.Day = 1.0f;
+	defaultLensAmount.Sunset = defaultLensAmount.Dusk = defaultLensAmount.Night = 1.0f;
+	defaultLensAmount.InteriorDay = defaultLensAmount.InteriorNight = 1.0f;
+
+	settingsManager.RegisterTimeOfDaySetting("Amount", "LENS", defaultLensAmount, true);
+}
+
 void EffectManager::ExecuteEffects()
 {
 	auto context = globals::d3d::context;
 	auto renderer = globals::game::renderer;
 
 	auto textureOriginal = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-
-	UpdateCommonData();
 
 	// Set our render state
 	context->RSSetState(rasterizerState.Get());
@@ -108,6 +136,7 @@ void EffectManager::ExecuteEffects()
 		state->EndPerfEvent();
 	}
 
+	// Downsampled texture shared between bloom, lens and adaptation
 	auto& downsampler = ENBDownsampler::GetSingleton();
 	downsampler.DownsampleToFixed(textureOriginal.SRV, const_cast<ENBDownsampler::FixedDownsampleTexture&>(downsampler.GetSharedDownsampleTexture()));
 
@@ -160,14 +189,6 @@ void EffectManager::ExecuteEffects()
 	CopyTexture(textureSDRTemp->srv.Get(), textureFramebuffer1.RTV);
 	CopyTexture(textureSDRTemp->srv.Get(), textureFramebuffer2.RTV);
 	CopyTexture(textureSDRTemp->srv.Get(), textureFramebuffer3.RTV);
-
-	// Change textures used next frame
-	SettingsManager::GetSingleton().IncrementTextureSwap();
-}
-
-void EffectManager::RenderImGui()
-{
-	ENBPostProcessingUI::GetSingleton().RenderImGui();
 }
 
 void EffectManager::CreateCommonResources()
@@ -506,16 +527,6 @@ void EffectManager::UpdateCommonData()
 	{
 		commonData.eInteriorFactor = !sky->mode.any(RE::Sky::Mode::kFull);
 	}
-
-	// Update SettingsManager with time-of-day data and weather info
-	{
-		auto& registry = SettingsManager::GetSingleton();
-		registry.SetTimeOfDayData(commonData.timeOfDay1, commonData.timeOfDay2, commonData.eInteriorFactor);
-		registry.SetWeatherBlendFactors(
-			static_cast<uint32_t>(commonData.weather[0]),
-			static_cast<uint32_t>(commonData.weather[1]),
-			commonData.weather[2]);
-	}
 }
 
 void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
@@ -607,18 +618,8 @@ void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 		float* cbData = static_cast<float*>(mapped.pData);
 		cbData[0] = registry.GetValue<float>("Brightness", "COLORCORRECTION");
 		cbData[1] = registry.GetValue<float>("GammaCurve", "COLORCORRECTION");
-		cbData[2] = 0.0f;  // padding
-		cbData[3] = 0.0f;  // padding
 		context->Unmap(colorCorrectionConstantBuffer.Get(), 0);
 	}
-
-	// Store previous compute shader state
-	ComPtr<ID3D11ComputeShader> previousCS;
-	ComPtr<ID3D11Buffer> previousCB;
-	ID3D11UnorderedAccessView* previousUAVs[1] = { nullptr };
-	context->CSGetShader(previousCS.GetAddressOf(), nullptr, nullptr);
-	context->CSGetConstantBuffers(0, 1, previousCB.GetAddressOf());
-	context->CSGetUnorderedAccessViews(0, 1, previousUAVs);
 
 	// Set compute shader and resources
 	context->CSSetShader(colorCorrectionComputeShader.Get(), nullptr, 0);
@@ -637,15 +638,6 @@ void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 	UINT dispatchX = (texDesc.Width + 7) / 8;
 	UINT dispatchY = (texDesc.Height + 7) / 8;
 	context->Dispatch(dispatchX, dispatchY, 1);
-
-	// Restore previous state
-	context->CSSetShader(previousCS.Get(), nullptr, 0);
-	context->CSSetConstantBuffers(0, 1, &previousCB);
-	context->CSSetUnorderedAccessViews(0, 1, previousUAVs, nullptr);
-
-	// Clean up retrieved interfaces
-	if (previousUAVs[0])
-		previousUAVs[0]->Release();
 }
 
 void EffectManager::LoadENBSettings()

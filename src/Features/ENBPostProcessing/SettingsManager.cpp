@@ -1,11 +1,6 @@
 #include "SettingsManager.h"
-#include "PCH.h"
+
 #include "WeatherManager.h"
-#include <Windows.h>
-#include <algorithm>
-#include <filesystem>
-#include <set>
-#include <sstream>
 
 SettingsManager& SettingsManager::GetSingleton()
 {
