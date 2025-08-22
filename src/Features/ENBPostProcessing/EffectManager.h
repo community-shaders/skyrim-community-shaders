@@ -55,7 +55,6 @@ public:
 	ComPtr<ID3D11ComputeShader> colorCorrectionComputeShader;
 	ComPtr<ID3D11Buffer> colorCorrectionConstantBuffer;
 
-
 	void CreateQuadGeometry();
 	void CreateRenderStates();
 	void CreateCopyShaders();

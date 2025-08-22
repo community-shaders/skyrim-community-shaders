@@ -136,12 +136,12 @@ struct VertexOutput
 VertexOutput main(uint vertexID : SV_VertexID)
 {
 	VertexOutput output;
-	
+
 	// Generate fullscreen triangle
 	output.txcoord0 = float2((vertexID << 1) & 2, vertexID & 2);
 	output.pos = float4(output.txcoord0 * 2.0 - 1.0, 0.0, 1.0);
 	output.pos.y = -output.pos.y; // Flip Y for D3D
-	
+
 	return output;
 }
 )HLSL";
@@ -195,7 +195,7 @@ struct VertexOutput
 float4 DownsampleCODFirstMip(Texture2D tex, SamplerState samp, float2 uv, float2 out_px_size)
 {
 	// https://www.iryoku.com/next-generation-post-processing-in-call-of-duty-advanced-warfare (slide 162)
-	
+
 	float4 A = tex.Sample(samp, uv + out_px_size * float2(-1.0, -1.0));
 	float4 B = tex.Sample(samp, uv + out_px_size * float2(0.0, -1.0));
 	float4 C = tex.Sample(samp, uv + out_px_size * float2(1.0, -1.0));
@@ -328,7 +328,8 @@ void TextureManager::DownsampleToFixed(ID3D11ShaderResourceView* source, Downsam
 	sourceTexture->GetDesc(&sourceDesc);
 
 	// Create constant buffer for texel size
-	struct Constants {
+	struct Constants
+	{
 		float sourceTexelSizeX;
 		float sourceTexelSizeY;
 		float padding[2];
@@ -371,7 +372,7 @@ void TextureManager::DownsampleToFixed(ID3D11ShaderResourceView* source, Downsam
 
 	// Draw fullscreen triangle (no vertex buffer needed)
 	context->Draw(3, 0);
-	
+
 	context->GenerateMips(texture.srvChain.Get());
 }
 
