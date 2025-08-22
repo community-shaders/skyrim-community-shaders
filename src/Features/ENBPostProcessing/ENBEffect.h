@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Effect.h"
-#include "EffectManager.h"
 
 class ENBEffect : public Effect
 {

@@ -1,5 +1,6 @@
 #include "ENBDepthOfField.h"
 #include "EffectManager.h"
+#include "TextureManager.h"
 #include "Globals.h"
 #include "Utils/D3D.h"
 
@@ -47,7 +48,7 @@ void ENBDepthOfField::Execute()
 
 	auto textureMain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-	Texture textureOriginal2{};
+	ENBTexture textureOriginal2{};
 	textureOriginal2.texture = textureMain.texture;
 	textureOriginal2.srv = textureMain.SRV;
 	textureOriginal2.rtv = textureMain.RTV;
@@ -57,11 +58,12 @@ void ENBDepthOfField::Execute()
 		textureOriginal->SetResource(textureOriginal2.srv.Get());
 	}
 
-	auto textureHDRTemp = effectManager.GetCommonTexture("TextureHDRTemp");
+	auto& textureManager = TextureManager::GetSingleton();
+	auto textureHDRTemp = textureManager.GetCommonTexture("TextureHDRTemp");
 
 	globals::d3d::context->CopyResource(textureHDRTemp->texture.Get(), textureOriginal2.texture.Get());
 
-	auto textureHDRTemp2 = effectManager.GetCommonTexture("TextureHDRTemp2");
+	auto textureHDRTemp2 = textureManager.GetCommonTexture("TextureHDRTemp2");
 
 	ExecuteTechniqueSequence(GetSelectedTechnique(), textureOriginal2, *textureHDRTemp, *textureHDRTemp2);
 

@@ -1,18 +1,11 @@
 ﻿#include "Effect.h"
-#include "EffectManager.h"
-#include "Globals.h"
-#include "PCH.h"
-#include "State.h"
-
-#include <algorithm>
-#include <chrono>
 #include <d3dcompiler.h>
-#include <filesystem>
-#include <fstream>
-#include <sstream>
 
 #include <DirectXTK/DDSTextureLoader.h>
 #include <DirectXTK/WICTextureLoader.h>
+
+#include "State.h"
+#include "TextureManager.h"
 
 bool Effect::Load()
 {
@@ -195,7 +188,7 @@ bool Effect::LoadFXFile()
 	return true;
 }
 
-void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Texture& a_input, Texture& a_output, Texture& a_temp)
+void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ENBTexture& a_input, ENBTexture& a_output, ENBTexture& a_temp)
 {
 	if (!IsCompiled() || !effect) {
 		return;  // Skip execution if not compiled
@@ -302,7 +295,7 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, Te
 	}
 }
 
-void Effect::ExecuteTechnique(const std::string& techniqueName, Texture& output)
+void Effect::ExecuteTechnique(const std::string& techniqueName, ENBTexture& output)
 {
 	if (!IsCompiled() || !effect) {
 		return;
@@ -649,7 +642,7 @@ std::string Effect::GetUINameFromTechnique(ID3DX11EffectTechnique* technique)
 	return "";
 }
 
-Effect::Texture* Effect::GetEffectTexture(const std::string& name)
+ENBTexture* Effect::GetEffectTexture(const std::string& name)
 {
 	auto it = effectTextureCache.find(name);
 	if (it != effectTextureCache.end()) {
@@ -669,8 +662,8 @@ ID3D11RenderTargetView* Effect::GetRenderTargetView(const std::string& renderTar
 		return texture->rtv.Get();
 
 	// Get render target from EffectManager's common texture cache
-	auto& effectManager = EffectManager::GetSingleton();
-	texture = effectManager.GetCommonTexture(renderTargetName);
+	auto& textureManager = TextureManager::GetSingleton();
+	texture = textureManager.GetCommonTexture(renderTargetName);
 	if (texture && texture->rtv)
 		return texture->rtv.Get();
 
@@ -1159,7 +1152,7 @@ bool Effect::SetVectorVariable(ID3DX11Effect* effect, const std::string& variabl
 	return false;
 }
 
-Effect::Texture Effect::CreateTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, const std::string& debugName)
+ENBTexture Effect::CreateTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, const std::string& debugName)
 {
 	auto device = globals::d3d::device;
 
@@ -1176,7 +1169,7 @@ Effect::Texture Effect::CreateTexture(uint32_t width, uint32_t height, DXGI_FORM
 	texDesc.CPUAccessFlags = 0;
 	texDesc.MiscFlags = 0;
 
-	Texture texture{};
+	ENBTexture texture{};
 	DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, texture.texture.GetAddressOf()));
 	DX::ThrowIfFailed(device->CreateRenderTargetView(texture.texture.Get(), nullptr, texture.rtv.GetAddressOf()));
 	DX::ThrowIfFailed(device->CreateShaderResourceView(texture.texture.Get(), nullptr, texture.srv.GetAddressOf()));

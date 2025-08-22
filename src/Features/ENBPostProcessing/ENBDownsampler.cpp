@@ -17,7 +17,11 @@ void ENBDownsampler::Initialize()
 		logger::error("[ENBPP] Failed to compile downsampler shaders");
 		return;
 	}
-	logger::info("[ENBPP] Downsampler initialized with custom shaders");
+	
+	// Create shared downsample texture
+	sharedDownsampleTexture = CreateFixedDownsampleTexture(DXGI_FORMAT_R16G16B16A16_FLOAT);
+	
+	logger::info("[ENBPP] Downsampler initialized with custom shaders and shared texture");
 }
 
 ENBDownsampler::FixedDownsampleTexture ENBDownsampler::CreateFixedDownsampleTexture(DXGI_FORMAT format)
@@ -150,14 +154,14 @@ void ENBDownsampler::DownsampleToFixed(ID3D11ShaderResourceView* source, FixedDo
 	context->GenerateMips(texture.srvChain.Get());
 }
 
-ID3D11ShaderResourceView* ENBDownsampler::GetTexture(const FixedDownsampleTexture& texture) const
+ID3D11ShaderResourceView* ENBDownsampler::GetTexture() const
 {
-	return texture.srv.Get();
+	return sharedDownsampleTexture.srv.Get();
 }
 
-ID3D11ShaderResourceView* ENBDownsampler::GetTextureBlurry(const FixedDownsampleTexture& texture) const
+ID3D11ShaderResourceView* ENBDownsampler::GetTextureBlurry() const
 {
-	return texture.srvBlurry.Get();
+	return sharedDownsampleTexture.srvBlurry.Get();
 }
 
 bool ENBDownsampler::CompileShaders()

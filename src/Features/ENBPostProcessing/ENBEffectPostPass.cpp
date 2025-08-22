@@ -1,13 +1,13 @@
 #include "ENBEffectPostPass.h"
-#include "EffectManager.h"
-#include <imgui.h>
+
+#include "TextureManager.h"
 
 void ENBEffectPostPass::Execute()
 {
-	auto& effectManager = EffectManager::GetSingleton();
+	auto& textureManager = TextureManager::GetSingleton();
 
-	auto textureSDRTemp = effectManager.GetCommonTexture("TextureSDRTemp");
-	auto textureSDRTemp2 = effectManager.GetCommonTexture("TextureSDRTemp2");
+	auto textureSDRTemp = textureManager.GetCommonTexture("TextureSDRTemp");
+	auto textureSDRTemp2 = textureManager.GetCommonTexture("TextureSDRTemp2");
 
 	ExecuteTechniqueSequence(GetSelectedTechnique(), *textureSDRTemp, *textureSDRTemp2, *textureSDRTemp);
 

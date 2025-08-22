@@ -1,5 +1,6 @@
 #include "ENBAdaptation.h"
 #include "EffectManager.h"
+#include "TextureManager.h"
 #include "Globals.h"
 #include "State.h"
 #include "Utils/D3D.h"
@@ -8,12 +9,11 @@ void ENBAdaptation::Execute()
 {
 	auto& effectManager = EffectManager::GetSingleton();
 	auto& downsampler = effectManager.GetDownsampler();
-	auto& sharedTexture = effectManager.GetSharedDownsampleTexture();
 
 	auto downsampledInput = effect->GetVariableByName("TextureCurrent")->AsShaderResource();
 	if (downsampledInput && downsampledInput->IsValid()) {
 		// Use 256x256 mip for adaptation
-		downsampledInput->SetResource(downsampler.GetTextureBlurry(sharedTexture));
+		downsampledInput->SetResource(downsampler.GetTextureBlurry());
 	}
 
 	ExecuteTechnique("Downsample", effectTextureCache["TextureCurrent"]);
@@ -28,13 +28,14 @@ void ENBAdaptation::Execute()
 	const std::string textureAdaptationName = (effectManager.textureSwap & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
 
 	// Set input texture (previous frame's adaptation value)
+	auto& textureManager = TextureManager::GetSingleton();
 	auto texturePrevious = effect->GetVariableByName("TexturePrevious")->AsShaderResource();
 	if (texturePrevious && texturePrevious->IsValid()) {
-		texturePrevious->SetResource(effectManager.GetCommonTexture(texturePreviousName)->srv.Get());
+		texturePrevious->SetResource(textureManager.GetCommonTexture(texturePreviousName)->srv.Get());
 	}
 
 	// Execute adaptation technique, writing to output texture
-	auto* textureAdaptation = effectManager.GetCommonTexture(textureAdaptationName);
+	auto* textureAdaptation = textureManager.GetCommonTexture(textureAdaptationName);
 	ExecuteTechnique(GetSelectedTechnique(), *textureAdaptation);
 }
 

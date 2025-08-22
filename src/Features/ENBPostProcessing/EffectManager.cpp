@@ -27,6 +27,7 @@ void EffectManager::Initialize()
 	RegisterENBSettings();
 
 	CreateCommonResources();
+	TextureManager::GetSingleton().Initialize();
 	RegisterEffects();
 	ApplyEffects();
 	LoadENBSettings();
@@ -35,27 +36,26 @@ void EffectManager::Initialize()
 
 void EffectManager::RegisterEffects()
 {
-	auto registerEffect = [this](auto effect) {
-		std::string name = effect->GetName();
-		effects.emplace_back(name, std::move(effect));
-		logger::info("[ENBPP] Registered effect: {}", name);
-	};
-
-	registerEffect(std::make_unique<ENBDepthOfField>());
-	registerEffect(std::make_unique<ENBBloom>());
-	registerEffect(std::make_unique<ENBLens>());
-	registerEffect(std::make_unique<ENBAdaptation>());
-	registerEffect(std::make_unique<ENBEffect>());
-	registerEffect(std::make_unique<ENBEffectPostPass>());
+	// Effects are now direct instances, no need to register them in the vector
+	// The vector is kept for legacy compatibility with other systems
+	logger::info("[ENBPP] Registered effect: {}", enbDepthOfField.GetName());
+	logger::info("[ENBPP] Registered effect: {}", enbBloom.GetName());
+	logger::info("[ENBPP] Registered effect: {}", enbLens.GetName());
+	logger::info("[ENBPP] Registered effect: {}", enbAdaptation.GetName());
+	logger::info("[ENBPP] Registered effect: {}", enbEffect.GetName());
+	logger::info("[ENBPP] Registered effect: {}", enbEffectPostPass.GetName());
 }
 
 void EffectManager::ApplyEffects()
 {
 	logger::info("[ENBPP] Applying effects");
 
-	for (auto& [name, effect] : effects) {
-		effect->Apply();
-	}
+	enbDepthOfField.Apply();
+	enbBloom.Apply();
+	enbLens.Apply();
+	enbAdaptation.Apply();
+	enbEffect.Apply();
+	enbEffectPostPass.Apply();
 
 	logger::info("[ENBPP] Applied effects");
 }
@@ -64,9 +64,12 @@ void EffectManager::LoadEffects()
 {
 	logger::info("[ENBPP] Loading effects");
 
-	for (auto& [name, effect] : effects) {
-		effect->Load();
-	}
+	enbDepthOfField.Load();
+	enbBloom.Load();
+	enbLens.Load();
+	enbAdaptation.Load();
+	enbEffect.Load();
+	enbEffectPostPass.Load();
 
 	logger::info("[ENBPP] Loaded effects");
 }
@@ -75,9 +78,12 @@ void EffectManager::SaveEffects()
 {
 	logger::info("[ENBPP] Saving effects");
 
-	for (auto& [name, effect] : effects) {
-		effect->Save();
-	}
+	enbDepthOfField.Save();
+	enbBloom.Save();
+	enbLens.Save();
+	enbAdaptation.Save();
+	enbEffect.Save();
+	enbEffectPostPass.Save();
 
 	logger::info("[ENBPP] Saved effects");
 }
@@ -105,23 +111,62 @@ void EffectManager::ExecuteEffects()
 
 	// Apply brightness and gamma curve
 	ApplyColorCorrection(textureOriginal.UAV);
+	
+	auto state = globals::state;
 
-	// Perform shared downsampling once
-	ENBDownsampler::GetSingleton().DownsampleToFixed(textureOriginal.SRV, sharedDownsampleTexture);
+	if (enbDepthOfField.IsCompiled()) {
+		state->BeginPerfEvent(enbDepthOfField.GetName());
+		UpdateCommonVariablesForEffect(enbDepthOfField.GetEffect());
+		enbDepthOfField.UpdateEffectVariables();
+		enbDepthOfField.Execute();
+		state->EndPerfEvent();
+	}
 
-	for (auto& [name, effect] : effects) {
-		if (effect->IsCompiled()) {
-			auto state = globals::state;
-			state->BeginPerfEvent(std::format("{}", effect->GetName()));
-			UpdateCommonVariablesForEffect(effect->GetEffect());
-			effect->UpdateEffectVariables();
-			effect->Execute();
-			state->EndPerfEvent();
-		}
+	auto& downsampler = ENBDownsampler::GetSingleton();
+	downsampler.DownsampleToFixed(textureOriginal.SRV, const_cast<ENBDownsampler::FixedDownsampleTexture&>(downsampler.GetSharedDownsampleTexture()));
+
+	if (enbBloom.IsCompiled()) {
+		state->BeginPerfEvent(enbBloom.GetName());
+		UpdateCommonVariablesForEffect(enbBloom.GetEffect());
+		enbBloom.UpdateEffectVariables();
+		enbBloom.Execute();
+		state->EndPerfEvent();
+	}
+
+	if (enbLens.IsCompiled()) {
+		state->BeginPerfEvent(enbLens.GetName());
+		UpdateCommonVariablesForEffect(enbLens.GetEffect());
+		enbLens.UpdateEffectVariables();
+		enbLens.Execute();
+		state->EndPerfEvent();
+	}
+
+	if (enbAdaptation.IsCompiled()) {
+		state->BeginPerfEvent(enbAdaptation.GetName());
+		UpdateCommonVariablesForEffect(enbAdaptation.GetEffect());
+		enbAdaptation.UpdateEffectVariables();
+		enbAdaptation.Execute();
+		state->EndPerfEvent();
+	}
+
+	if (enbEffect.IsCompiled()) {
+		state->BeginPerfEvent(enbEffect.GetName());
+		UpdateCommonVariablesForEffect(enbEffect.GetEffect());
+		enbEffect.UpdateEffectVariables();
+		enbEffect.Execute();
+		state->EndPerfEvent();
+	}
+
+	if (enbEffectPostPass.IsCompiled()) {
+		state->BeginPerfEvent(enbEffectPostPass.GetName());
+		UpdateCommonVariablesForEffect(enbEffectPostPass.GetEffect());
+		enbEffectPostPass.UpdateEffectVariables();
+		enbEffectPostPass.Execute();
+		state->EndPerfEvent();
 	}
 
 	// Copy final render target to framebuffers
-	auto textureSDRTemp = GetCommonTexture("TextureSDRTemp");
+	auto textureSDRTemp = TextureManager::GetSingleton().GetCommonTexture("TextureSDRTemp");
 	auto textureFramebuffer1 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
 	auto textureFramebuffer2 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
 	auto textureFramebuffer3 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY2];
@@ -132,15 +177,6 @@ void EffectManager::ExecuteEffects()
 
 	// Change textures used next frame
 	textureSwap++;
-}
-
-Effect::Texture* EffectManager::GetCommonTexture(const std::string& name)
-{
-	auto it = commonTextureCache.find(name);
-	if (it != commonTextureCache.end()) {
-		return &it->second;
-	}
-	return nullptr;
 }
 
 void EffectManager::RenderImGui()
@@ -154,13 +190,9 @@ void EffectManager::CreateCommonResources()
 	CreateRenderStates();
 	CreateCopyShaders();
 	CreateColorCorrectionShader();
-	CreateCommonTextures();
 
 	// Initialize downsampler and create shared downsample chain
 	ENBDownsampler::GetSingleton().Initialize();
-
-	// Create shared fixed downsample texture (1024x1024 with 3 mips: 1024, 512, 256)
-	sharedDownsampleTexture = ENBDownsampler::GetSingleton().CreateFixedDownsampleTexture(DXGI_FORMAT_R16G16B16A16_FLOAT);
 }
 
 void EffectManager::CreateQuadGeometry()
@@ -369,48 +401,6 @@ void EffectManager::CreateColorCorrectionShader()
 	logger::info("[ENBPP] Created color correction compute shader successfully");
 }
 
-void EffectManager::CreateCommonTextures()
-{
-	auto state = globals::state;
-	UINT screenWidth = static_cast<UINT>(state->screenSize.x);
-	UINT screenHeight = static_cast<UINT>(state->screenSize.y);
-
-	commonTextureCache.insert({ "TextureHDRTemp", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, "EffectManager::TextureHDRTemp") });
-	commonTextureCache.insert({ "TextureHDRTemp2", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, "EffectManager::TextureHDRTemp2") });
-
-	commonTextureCache.insert({ "RenderTargetRGBA32", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R8G8B8A8_UNORM, "EffectManager::RenderTargetRGBA32") });
-	commonTextureCache.insert({ "RenderTargetRGBA64", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16G16B16A16_UNORM, "EffectManager::RenderTargetRGBA64") });
-	commonTextureCache.insert({ "RenderTargetRGBA64F", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, "EffectManager::RenderTargetRGBA64F") });
-	commonTextureCache.insert({ "RenderTargetR16F", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16_FLOAT, "EffectManager::RenderTargetR16F") });
-	commonTextureCache.insert({ "RenderTargetR32F", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R32_FLOAT, "EffectManager::RenderTargetR32F") });
-	commonTextureCache.insert({ "RenderTargetRGB32F", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R11G11B10_FLOAT, "EffectManager::RenderTargetRGB32F") });
-
-	commonTextureCache.insert({ "TextureSDRTemp", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R10G10B10A2_UNORM, "EffectManager::TextureSDRTemp") });
-	commonTextureCache.insert({ "TextureSDRTemp2", Effect::CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R10G10B10A2_UNORM, "EffectManager::TextureSDRTemp2") });
-
-	commonTextureCache.insert({ "TextureBloom", Effect::CreateTexture(1024, 1024, DXGI_FORMAT_R16G16B16A16_FLOAT, "EffectManager::TextureBloom") });
-	commonTextureCache.insert({ "TextureLens", Effect::CreateTexture(1024, 1024, DXGI_FORMAT_R16G16B16A16_FLOAT, "EffectManager::TextureLens") });
-
-	commonTextureCache.insert({ "TextureBloomLensTemp", Effect::CreateTexture(1024, 1024, DXGI_FORMAT_R16G16B16A16_FLOAT, "EffectManager::TextureBloomLensTemp") });
-
-	commonTextureCache.insert({ "TextureAdaptation", Effect::CreateTexture(1, 1, DXGI_FORMAT_R32_FLOAT, "EffectManager::TextureAdaptation") });
-	commonTextureCache.insert({ "TextureAdaptationSwap", Effect::CreateTexture(1, 1, DXGI_FORMAT_R32_FLOAT, "EffectManager::TextureAdaptationSwap") });
-
-	// Create fixed-size render targets for bloom/lens
-	std::vector<std::pair<std::string, UINT>> fixedSizes = {
-		{ "RenderTarget1024", 1024 },
-		{ "RenderTarget512", 512 },
-		{ "RenderTarget256", 256 },
-		{ "RenderTarget128", 128 },
-		{ "RenderTarget64", 64 },
-		{ "RenderTarget32", 32 },
-		{ "RenderTarget16", 16 }
-	};
-
-	for (auto& [name, size] : fixedSizes) {
-		commonTextureCache[name] = Effect::CreateTexture(size, size, DXGI_FORMAT_R16G16B16A16_FLOAT, "EffectManager::" + name);
-	}
-}
 
 void EffectManager::UpdateCommonData()
 {
@@ -560,8 +550,12 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 		"RenderTargetR16F", "RenderTargetR32F", "RenderTargetRGB32F"
 	};
 
+	auto& textureManager = TextureManager::GetSingleton();
 	for (const auto& targetName : formatTargets) {
-		Effect::SetShaderResourceVariable(effect, targetName, commonTextureCache[targetName].srv.Get());
+		auto* texture = textureManager.GetCommonTexture(targetName);
+		if (texture) {
+			Effect::SetShaderResourceVariable(effect, targetName, texture->srv.Get());
+		}
 	}
 
 	// Set fixed-size render targets
@@ -571,7 +565,10 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 	};
 
 	for (const auto& targetName : fixedSizeTargets) {
-		Effect::SetShaderResourceVariable(effect, targetName, commonTextureCache[targetName].srv.Get());
+		auto* texture = textureManager.GetCommonTexture(targetName);
+		if (texture) {
+			Effect::SetShaderResourceVariable(effect, targetName, texture->srv.Get());
+		}
 	}
 
 	// Set vector variables

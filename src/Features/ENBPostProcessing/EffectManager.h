@@ -3,6 +3,14 @@
 #include "ENBDownsampler.h"
 #include "SettingsRegistry.h"
 #include "WeatherManager.h"
+#include "TextureManager.h"
+#include "ENBTexture.h"
+#include "ENBDepthOfField.h"
+#include "ENBBloom.h"
+#include "ENBLens.h"
+#include "ENBAdaptation.h"
+#include "ENBEffect.h"
+#include "ENBEffectPostPass.h"
 #include <Effects11/d3dx11effect.h>
 #include <d3d11.h>
 #include <filesystem>
@@ -28,8 +36,6 @@ public:
 	// Effect execution
 	void ExecuteEffects();
 
-	Effect::Texture* GetCommonTexture(const std::string& name);
-
 	// UI Integration
 	void RenderImGui();
 
@@ -45,6 +51,14 @@ public:
 	void UpdateCommonVariablesForEffect(ID3DX11Effect* effect);
 
 public:
+	// Direct effect instances
+	ENBDepthOfField enbDepthOfField;
+	ENBBloom enbBloom;
+	ENBLens enbLens;
+	ENBAdaptation enbAdaptation;
+	ENBEffect enbEffect;
+	ENBEffectPostPass enbEffectPostPass;
+
 	std::vector<std::pair<std::string, std::unique_ptr<Effect>>> effects;
 
 	// Common resources shared across effects
@@ -69,8 +83,6 @@ public:
 	void CreateCopyShaders();
 	void CreateColorCorrectionShader();
 
-	std::unordered_map<std::string, Effect::Texture> commonTextureCache;
-
 	// Common variable data (updated once, applied to all effects)
 	struct CommonVariableData
 	{
@@ -83,7 +95,6 @@ public:
 		float eInteriorFactor;
 	} commonData;
 
-	void CreateCommonTextures();
 	void UpdateCommonData();
 
 	// Texture copy using pixel shader
@@ -94,13 +105,6 @@ public:
 
 	// Downsampling support
 	ENBDownsampler& GetDownsampler() { return ENBDownsampler::GetSingleton(); }
-	const ENBDownsampler::FixedDownsampleTexture& GetSharedDownsampleTexture() const { return sharedDownsampleTexture; }
-
-	// Common texture access
-
-	const std::unordered_map<std::string, Effect::Texture>& GetAllCommonTextures() const { return commonTextureCache; }
-
-	ENBDownsampler::FixedDownsampleTexture sharedDownsampleTexture;
 
 	// Texture swap tracking
 	uint32_t textureSwap = 0;

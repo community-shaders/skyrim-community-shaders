@@ -2,18 +2,21 @@
 #include "Globals.h"
 #include "State.h"
 
+#include "TextureManager.h"
+#include "EffectManager.h"
+
 void ENBEffect::Execute()
 {
 	auto renderer = globals::game::renderer;
 
-	auto& effectManager = EffectManager::GetSingleton();
+	auto& textureManager = TextureManager::GetSingleton();
 
-	auto textureSDRTemp = effectManager.GetCommonTexture("TextureSDRTemp");
-	auto textureSDRTemp2 = effectManager.GetCommonTexture("TextureSDRTemp2");
+	auto textureSDRTemp = textureManager.GetCommonTexture("TextureSDRTemp");
+	auto textureSDRTemp2 = textureManager.GetCommonTexture("TextureSDRTemp2");
 
 	auto textureOriginal = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-	Texture textureColor{};
+	ENBTexture textureColor{};
 	textureColor.texture = textureOriginal.texture;
 	textureColor.srv = textureOriginal.SRV;
 	textureColor.rtv = textureOriginal.RTV;
@@ -59,6 +62,7 @@ void ENBEffect::UpdateEffectVariables()
 		Params01->SetRawValue(&params01, 0, sizeof(params01));
 
 	auto& effectManager = EffectManager::GetSingleton();
+	auto& textureManager = TextureManager::GetSingleton();
 
 	float4 enbParams01{};
 	enbParams01.x = effectManager.GetInterpolatedBloomAmount();
@@ -67,9 +71,9 @@ void ENBEffect::UpdateEffectVariables()
 	if (ENBParams01 && ENBParams01->IsValid())
 		ENBParams01->SetRawValue(&enbParams01, 0, sizeof(enbParams01));
 
-	SetShaderResourceVariable("TextureBloom", effectManager.GetCommonTexture("TextureBloom")->srv.Get());
-	SetShaderResourceVariable("TextureLens", effectManager.GetCommonTexture("TextureLens")->srv.Get());
+	SetShaderResourceVariable("TextureBloom", textureManager.GetCommonTexture("TextureBloom")->srv.Get());
+	SetShaderResourceVariable("TextureLens", textureManager.GetCommonTexture("TextureLens")->srv.Get());
 
 	const std::string textureAdaptationName = (effectManager.textureSwap & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
-	SetShaderResourceVariable("TextureAdaptation", effectManager.GetCommonTexture(textureAdaptationName)->srv.Get());
+	SetShaderResourceVariable("TextureAdaptation", textureManager.GetCommonTexture(textureAdaptationName)->srv.Get());
 }
