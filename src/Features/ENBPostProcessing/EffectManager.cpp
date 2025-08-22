@@ -111,7 +111,7 @@ void EffectManager::ExecuteEffects()
 
 	// Apply brightness and gamma curve
 	ApplyColorCorrection(textureOriginal.UAV);
-	
+
 	auto state = globals::state;
 
 	if (enbDepthOfField.IsCompiled()) {
@@ -400,7 +400,6 @@ void EffectManager::CreateColorCorrectionShader()
 
 	logger::info("[ENBPP] Created color correction compute shader successfully");
 }
-
 
 void EffectManager::UpdateCommonData()
 {

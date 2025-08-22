@@ -17,10 +17,10 @@ void ENBDownsampler::Initialize()
 		logger::error("[ENBPP] Failed to compile downsampler shaders");
 		return;
 	}
-	
+
 	// Create shared downsample texture
 	sharedDownsampleTexture = CreateFixedDownsampleTexture(DXGI_FORMAT_R16G16B16A16_FLOAT);
-	
+
 	logger::info("[ENBPP] Downsampler initialized with custom shaders and shared texture");
 }
 

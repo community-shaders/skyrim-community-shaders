@@ -2,8 +2,8 @@
 #include "Globals.h"
 #include "State.h"
 
-#include "TextureManager.h"
 #include "EffectManager.h"
+#include "TextureManager.h"
 
 void ENBEffect::Execute()
 {

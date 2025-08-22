@@ -1,7 +1,7 @@
 #include "ENBDepthOfField.h"
 #include "EffectManager.h"
-#include "TextureManager.h"
 #include "Globals.h"
+#include "TextureManager.h"
 #include "Utils/D3D.h"
 
 void ENBDepthOfField::Execute()
