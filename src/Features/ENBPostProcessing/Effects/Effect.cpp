@@ -124,7 +124,8 @@ bool Effect::Apply()
 
 void Effect::Unload()
 {
-	effect.Reset();
+	effect = nullptr;
+
 	techniques.clear();
 	variables.clear();
 	customTextureCache.clear();
@@ -144,8 +145,8 @@ bool Effect::LoadFXFile()
 	auto filePath = std::filesystem::path("enbseries");
 	filePath /= GetName();
 
-	ComPtr<ID3DBlob> compiledShader;
-	ComPtr<ID3DBlob> errorBlob;
+	winrt::com_ptr<ID3DBlob> compiledShader;
+	winrt::com_ptr<ID3DBlob> errorBlob;
 
 	HRESULT hr = D3DX11CompileEffectFromFile(
 		filePath.c_str(),
@@ -154,8 +155,8 @@ bool Effect::LoadFXFile()
 		NULL,
 		NULL,
 		globals::d3d::device,
-		effect.GetAddressOf(),
-		errorBlob.GetAddressOf());
+		effect.put(),
+		errorBlob.put());
 
 	if (FAILED(hr)) {
 		std::string errorMsg = "Compilation failed";
@@ -227,13 +228,13 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID
 		if (sequence.size() == 1) {
 			// Single technique: input -> output
 			inputSRV = a_input;
-			outputRTV = a_output.rtv.Get();
+			outputRTV = a_output.rtv.get();
 			if (techniqueInfo.renderTargetName.empty())
 				targetInOutput = true;
 		} else if (swapCounter == 0) {
 			// First pass: input -> output (start the ping-pong with output)
 			inputSRV = a_input;
-			outputRTV = a_output.rtv.Get();
+			outputRTV = a_output.rtv.get();
 			if (techniqueInfo.renderTargetName.empty())
 				targetInOutput = true;
 		} else {
@@ -241,14 +242,14 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID
 			bool useTemp = (swapCounter & 1) == 0;  // Use counter LSB for swap determination
 			if (useTemp) {
 				// Read from temp, write to output
-				inputSRV = a_temp.srv.Get();
-				outputRTV = a_output.rtv.Get();
+				inputSRV = a_temp.srv.get();
+				outputRTV = a_output.rtv.get();
 				if (techniqueInfo.renderTargetName.empty())
 					targetInOutput = true;
 			} else {
 				// Read from output, write to temp
-				inputSRV = a_output.srv.Get();
-				outputRTV = a_temp.rtv.Get();
+				inputSRV = a_output.srv.get();
+				outputRTV = a_temp.rtv.get();
 				if (techniqueInfo.renderTargetName.empty())
 					targetInOutput = false;
 			}
@@ -268,10 +269,10 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID
 		context->OMSetRenderTargets(1, &outputRTV, nullptr);
 
 		// Set viewport based on render target description
-		ComPtr<ID3D11Resource> resource;
-		outputRTV->GetResource(&resource);
-		ComPtr<ID3D11Texture2D> texture;
-		resource.As(&texture);
+		winrt::com_ptr<ID3D11Resource> resource;
+		outputRTV->GetResource(resource.put());
+		winrt::com_ptr<ID3D11Texture2D> texture;
+		resource.as(texture);
 		D3D11_TEXTURE2D_DESC texDesc;
 		texture->GetDesc(&texDesc);
 
@@ -291,7 +292,7 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID
 	}
 
 	if (!targetInOutput) {
-		context->CopyResource(a_output.texture.Get(), a_temp.texture.Get());
+		context->CopyResource(a_output.texture.get(), a_temp.texture.get());
 	}
 }
 
@@ -313,7 +314,8 @@ void Effect::ExecuteTechnique(const std::string& techniqueName, TextureManager::
 	logger::trace("[ENBPP] Executing single technique '{}'", techniqueName);
 
 	// Set output render target
-	context->OMSetRenderTargets(1, output.rtv.GetAddressOf(), nullptr);
+	ID3D11RenderTargetView* rtvArray[] = { output.rtv.get() };
+	context->OMSetRenderTargets(1, rtvArray, nullptr);
 
 	// Set viewport based on render target description
 	D3D11_TEXTURE2D_DESC texDesc;
@@ -343,7 +345,7 @@ void Effect::SetupCustomTextures()
 	// Iterate through all variables to find texture variables with ResourceName annotations
 	for (auto& [varName, effectVar] : variables) {
 		// Get ResourceName annotation
-		std::string resourceName = GetResourceNameFromVariable(effectVar.Get());
+		std::string resourceName = GetResourceNameFromVariable(effectVar.get());
 
 		if (!resourceName.empty()) {
 			logger::info("[ENBPP] Loading texture for variable '{}': {}", varName, resourceName);
@@ -371,20 +373,20 @@ ID3D11ShaderResourceView* Effect::LoadTextureFromFile(const std::string& filenam
 	// Check cache first
 	auto cacheIt = customTextureCache.find(filename);
 	if (cacheIt != customTextureCache.end()) {
-		return cacheIt->second.Get();
+		return cacheIt->second.get();
 	}
 
 	// Construct full path - check enbseries folder first
 	std::filesystem::path filepath = std::filesystem::path{ "enbseries" } / filename;
 
-	ComPtr<ID3D11Resource> texture;
-	ComPtr<ID3D11ShaderResourceView> srv;
+	winrt::com_ptr<ID3D11Resource> texture;
+	winrt::com_ptr<ID3D11ShaderResourceView> srv;
 
-	HRESULT hr = DirectX::CreateDDSTextureFromFile(device, filepath.c_str(), texture.GetAddressOf(), srv.GetAddressOf());
+	HRESULT hr = DirectX::CreateDDSTextureFromFile(device, filepath.c_str(), texture.put(), srv.put());
 
 	if (FAILED(hr)) {
 		// Try loading as other format (PNG, BMP, etc.)
-		hr = DirectX::CreateWICTextureFromFile(device, filepath.c_str(), texture.GetAddressOf(), srv.GetAddressOf());
+		hr = DirectX::CreateWICTextureFromFile(device, filepath.c_str(), texture.put(), srv.put());
 	}
 
 	auto fileString = filepath.string();
@@ -398,7 +400,7 @@ ID3D11ShaderResourceView* Effect::LoadTextureFromFile(const std::string& filenam
 	customTextureCache[filename] = srv;
 
 	logger::info("[ENBPP] Successfully loaded texture: {}", fileString);
-	return srv.Get();
+	return srv.get();
 }
 
 std::string Effect::GetResourceNameFromVariable(ID3DX11EffectVariable* variable)
@@ -497,7 +499,10 @@ void Effect::LoadTechniques()
 		}
 
 		// Store the technique info in the correct sequence position
-		techniques[baseName][sequenceNumber] = { technique, renderTargetName };
+		TechniqueInfo techInfo;
+		techInfo.technique.copy_from(technique);
+		techInfo.renderTargetName = renderTargetName;
+		techniques[baseName][sequenceNumber] = std::move(techInfo);
 
 		logger::debug("[ENBPP] Loaded technique '{}' as base '{}' sequence {}", techniqueName, baseName, sequenceNumber);
 	}
@@ -659,13 +664,13 @@ ID3D11RenderTargetView* Effect::GetRenderTargetView(const std::string& renderTar
 
 	auto* texture = GetEffectTexture(renderTargetName);
 	if (texture && texture->rtv)
-		return texture->rtv.Get();
+		return texture->rtv.get();
 
 	// Get render target from EffectManager's common texture cache
 	auto& textureManager = TextureManager::GetSingleton();
 	texture = textureManager.GetCommonTexture(renderTargetName);
 	if (texture && texture->rtv)
-		return texture->rtv.Get();
+		return texture->rtv.get();
 
 	logger::warn("[ENBPP] Render target '{}' not found in cache, using fallback", renderTargetName);
 	return fallback;
@@ -705,7 +710,7 @@ void Effect::LoadUIVariables()
 		UIVariable uiVar = {};
 		uiVar.name = varDesc.Name;
 		uiVar.displayName = uiName;
-		uiVar.effectVariable = variable;
+		uiVar.effectVariable.copy_from(variable);
 
 		// Determine variable type
 		D3DX11_EFFECT_TYPE_DESC typeDesc;
@@ -1120,7 +1125,7 @@ void Effect::EnumerateAllVariables()
 		}
 
 		std::string varName = varDesc.Name;
-		variables[varName] = variable;
+		variables[varName].copy_from(variable);
 
 		logger::debug("[ENBPP] Enumerated variable: {}", varName);
 	}
@@ -1130,7 +1135,7 @@ void Effect::EnumerateAllVariables()
 
 bool Effect::SetShaderResourceVariable(const std::string& variableName, ID3D11ShaderResourceView* resource)
 {
-	return SetShaderResourceVariable(effect.Get(), variableName, resource);
+	return SetShaderResourceVariable(effect.get(), variableName, resource);
 }
 
 bool Effect::SetShaderResourceVariable(ID3DX11Effect* effect, const std::string& variableName, ID3D11ShaderResourceView* resource)
@@ -1179,14 +1184,14 @@ TextureManager::Texture Effect::CreateTexture(uint32_t width, uint32_t height, D
 	texDesc.MiscFlags = 0;
 
 	TextureManager::Texture texture{};
-	DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, texture.texture.GetAddressOf()));
-	DX::ThrowIfFailed(device->CreateRenderTargetView(texture.texture.Get(), nullptr, texture.rtv.GetAddressOf()));
-	DX::ThrowIfFailed(device->CreateShaderResourceView(texture.texture.Get(), nullptr, texture.srv.GetAddressOf()));
+	DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, texture.texture.put()));
+	DX::ThrowIfFailed(device->CreateRenderTargetView(texture.texture.get(), nullptr, texture.rtv.put()));
+	DX::ThrowIfFailed(device->CreateShaderResourceView(texture.texture.get(), nullptr, texture.srv.put()));
 
 	if (!debugName.empty()) {
-		Util::SetResourceName(texture.texture.Get(), (debugName).c_str());
-		Util::SetResourceName(texture.rtv.Get(), (debugName + " RTV").c_str());
-		Util::SetResourceName(texture.srv.Get(), (debugName + " SRV").c_str());
+		Util::SetResourceName(texture.texture.get(), (debugName).c_str());
+		Util::SetResourceName(texture.rtv.get(), (debugName + " RTV").c_str());
+		Util::SetResourceName(texture.srv.get(), (debugName + " SRV").c_str());
 	}
 
 	return texture;

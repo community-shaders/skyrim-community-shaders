@@ -23,7 +23,10 @@ void ENBPostProcessing::DrawSettings()
 
 void ENBPostProcessing::SetupResources()
 {
-	// Then initialize the effect manager
+	// Create shared texture resources
+	TextureManager::GetSingleton().Initialize();
+
+	// Then initialize the effects system
 	EffectManager::GetSingleton().Initialize();
 
 	// Load registered settings

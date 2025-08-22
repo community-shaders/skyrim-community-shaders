@@ -2,8 +2,6 @@
 
 #include "Effect.h"
 
-using Microsoft::WRL::ComPtr;
-
 class ENBAdaptation : public Effect
 {
 public:

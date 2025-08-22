@@ -2,9 +2,7 @@
 #include "PCH.h"
 #include "SettingManager.h"
 #include <Windows.h>
-#include <algorithm>
 #include <filesystem>
-#include <fstream>
 #include <sstream>
 
 WeatherManager& WeatherManager::GetSingleton()

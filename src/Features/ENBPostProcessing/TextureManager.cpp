@@ -85,7 +85,7 @@ TextureManager::Texture TextureManager::CreateTexture(uint32_t width, uint32_t h
 	texDesc.CPUAccessFlags = 0;
 	texDesc.MiscFlags = 0;
 
-	DX::ThrowIfFailed(globals::d3d::device->CreateTexture2D(&texDesc, nullptr, result.texture.GetAddressOf()));
+	DX::ThrowIfFailed(globals::d3d::device->CreateTexture2D(&texDesc, nullptr, result.texture.put()));
 
 	if (!debugName.empty()) {
 		result.texture->SetPrivateData(WKPDID_D3DDebugObjectName, static_cast<UINT>(debugName.length()), debugName.c_str());
@@ -96,7 +96,7 @@ TextureManager::Texture TextureManager::CreateTexture(uint32_t width, uint32_t h
 	rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
 	rtvDesc.Texture2D.MipSlice = 0;
 
-	DX::ThrowIfFailed(globals::d3d::device->CreateRenderTargetView(result.texture.Get(), &rtvDesc, result.rtv.GetAddressOf()));
+	DX::ThrowIfFailed(globals::d3d::device->CreateRenderTargetView(result.texture.get(), &rtvDesc, result.rtv.put()));
 
 	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.Format = format;
@@ -104,7 +104,7 @@ TextureManager::Texture TextureManager::CreateTexture(uint32_t width, uint32_t h
 	srvDesc.Texture2D.MostDetailedMip = 0;
 	srvDesc.Texture2D.MipLevels = 1;
 
-	DX::ThrowIfFailed(globals::d3d::device->CreateShaderResourceView(result.texture.Get(), &srvDesc, result.srv.GetAddressOf()));
+	DX::ThrowIfFailed(globals::d3d::device->CreateShaderResourceView(result.texture.get(), &srvDesc, result.srv.put()));
 
 	return result;
 }
@@ -123,31 +123,34 @@ void TextureManager::CreateDownsampleResources()
 	samplerDesc.MinLOD = 0;
 	samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 
-	DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, linearSampler.GetAddressOf()));
+	DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, linearSampler.put()));
 
 	// Create downsample vertex shader (fullscreen triangle)
 	const char* downsampleVertexShaderSource = R"HLSL(
-struct VertexOutput
-{
-	float4 pos : SV_Position;
-	float2 txcoord0 : TEXCOORD0;
-};
+	struct VS_INPUT_POST
+	{
+		float3 pos		: POSITION;
+		float2 txcoord	: TEXCOORD0;
+	};
+	struct VS_OUTPUT_POST
+	{
+		float4 pos		: SV_POSITION;
+		float2 txcoord0	: TEXCOORD0;
+	};
+	VS_OUTPUT_POST	main(VS_INPUT_POST IN)
+	{
+		VS_OUTPUT_POST	OUT;
+		float4	pos;
+		pos.xyz=IN.pos.xyz;
+		pos.w=1.0;
+		OUT.pos=pos;
+		OUT.txcoord0.xy=IN.txcoord.xy;
+		return OUT;
+	}
+	)HLSL";
 
-VertexOutput main(uint vertexID : SV_VertexID)
-{
-	VertexOutput output;
-	
-	// Generate fullscreen triangle
-	output.txcoord0 = float2((vertexID << 1) & 2, vertexID & 2);
-	output.pos = float4(output.txcoord0 * 2.0 - 1.0, 0.0, 1.0);
-	output.pos.y = -output.pos.y; // Flip Y for D3D
-	
-	return output;
-}
-)HLSL";
-
-	ComPtr<ID3DBlob> vertexShaderBlob;
-	ComPtr<ID3DBlob> vertexErrorBlob;
+	winrt::com_ptr<ID3DBlob> vertexShaderBlob;
+	winrt::com_ptr<ID3DBlob> vertexErrorBlob;
 
 	HRESULT vsResult = D3DCompile(
 		downsampleVertexShaderSource,
@@ -159,8 +162,8 @@ VertexOutput main(uint vertexID : SV_VertexID)
 		"vs_5_0",
 		0,
 		0,
-		vertexShaderBlob.GetAddressOf(),
-		vertexErrorBlob.GetAddressOf());
+		vertexShaderBlob.put(),
+		vertexErrorBlob.put());
 
 	if (FAILED(vsResult)) {
 		if (vertexErrorBlob) {
@@ -174,28 +177,24 @@ VertexOutput main(uint vertexID : SV_VertexID)
 		vertexShaderBlob->GetBufferPointer(),
 		vertexShaderBlob->GetBufferSize(),
 		nullptr,
-		&downsampleVS));
+		downsampleVS.put()));
 
 	// Create downsample pixel shader
 	const char* downsamplePixelShaderSource = R"HLSL(
 Texture2D<float4> SourceTexture : register(t0);
 SamplerState LinearSampler : register(s0);
-
 cbuffer Constants : register(b0)
 {
 	float2 SourceTexelSize;
 };
-
-struct VertexOutput
+struct VS_OUTPUT_POST
 {
-	float4 pos : SV_Position;
-	float2 txcoord0 : TEXCOORD0;
+	float4 pos		: SV_POSITION;
+	float2 txcoord0	: TEXCOORD0;
 };
-
 float4 DownsampleCODFirstMip(Texture2D tex, SamplerState samp, float2 uv, float2 out_px_size)
 {
 	// https://www.iryoku.com/next-generation-post-processing-in-call-of-duty-advanced-warfare (slide 162)
-	
 	float4 A = tex.Sample(samp, uv + out_px_size * float2(-1.0, -1.0));
 	float4 B = tex.Sample(samp, uv + out_px_size * float2(0.0, -1.0));
 	float4 C = tex.Sample(samp, uv + out_px_size * float2(1.0, -1.0));
@@ -209,9 +208,7 @@ float4 DownsampleCODFirstMip(Texture2D tex, SamplerState samp, float2 uv, float2
 	float4 K = tex.Sample(samp, uv + out_px_size * float2(-1.0, 1.0));
 	float4 L = tex.Sample(samp, uv + out_px_size * float2(0.0, 1.0));
 	float4 M = tex.Sample(samp, uv + out_px_size * float2(1.0, 1.0));
-
 	float2 div = (1.0 / 4.0) * float2(0.5, 0.125);
-
 	float4 o = (D + E + I + J) * div.x;
 	o += (A + B + G + F) * div.y;
 	o += (B + C + H + G) * div.y;
@@ -219,15 +216,14 @@ float4 DownsampleCODFirstMip(Texture2D tex, SamplerState samp, float2 uv, float2
 	o += (H + G + L + M) * div.y;
 	return o;
 }
-
-float4 main(VertexOutput input) : SV_Target
+float4 main(VS_OUTPUT_POST IN) : SV_Target
 {
-    return DownsampleCODFirstMip(SourceTexture, LinearSampler, input.txcoord0, SourceTexelSize);
+    return DownsampleCODFirstMip(SourceTexture, LinearSampler, IN.txcoord0.xy, SourceTexelSize);
 }
 )HLSL";
 
-	ComPtr<ID3DBlob> pixelShaderBlob;
-	ComPtr<ID3DBlob> errorBlob;
+	winrt::com_ptr<ID3DBlob> pixelShaderBlob;
+	winrt::com_ptr<ID3DBlob> errorBlob;
 
 	HRESULT result = D3DCompile(
 		downsamplePixelShaderSource,
@@ -239,8 +235,8 @@ float4 main(VertexOutput input) : SV_Target
 		"ps_5_0",
 		0,
 		0,
-		pixelShaderBlob.GetAddressOf(),
-		errorBlob.GetAddressOf());
+		pixelShaderBlob.put(),
+		errorBlob.put());
 
 	if (FAILED(result)) {
 		if (errorBlob) {
@@ -254,10 +250,18 @@ float4 main(VertexOutput input) : SV_Target
 		pixelShaderBlob->GetBufferPointer(),
 		pixelShaderBlob->GetBufferSize(),
 		nullptr,
-		&downsamplePS));
+		downsamplePS.put()));
 
 	// Create shared downsample texture
 	sharedDownsampleTexture = CreateDownsampleTexture(DXGI_FORMAT_R16G16B16A16_FLOAT);
+
+	D3D11_BUFFER_DESC cbDesc = {};
+	cbDesc.ByteWidth = sizeof(DownsampleCB);
+	cbDesc.Usage = D3D11_USAGE_DYNAMIC;
+	cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+	DX::ThrowIfFailed(globals::d3d::device->CreateBuffer(&cbDesc, nullptr, downsampleCB.put()));
 }
 
 TextureManager::DownsampleTexture TextureManager::CreateDownsampleTexture(DXGI_FORMAT format)
@@ -279,34 +283,34 @@ TextureManager::DownsampleTexture TextureManager::CreateDownsampleTexture(DXGI_F
 	texDesc.CPUAccessFlags = 0;
 	texDesc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
 
-	DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, fixedTexture.texture.GetAddressOf()));
+	DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, fixedTexture.texture.put()));
 
 	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
 	rtvDesc.Format = format;
 	rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
 	rtvDesc.Texture2D.MipSlice = 0;
 
-	DX::ThrowIfFailed(device->CreateRenderTargetView(fixedTexture.texture.Get(), &rtvDesc, fixedTexture.rtv.GetAddressOf()));
+	DX::ThrowIfFailed(device->CreateRenderTargetView(fixedTexture.texture.get(), &rtvDesc, fixedTexture.rtv.put()));
 
 	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.Format = format;
 	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
 	srvDesc.Texture2D.MipLevels = 3;
 	srvDesc.Texture2D.MostDetailedMip = 0;
-	DX::ThrowIfFailed(device->CreateShaderResourceView(fixedTexture.texture.Get(), &srvDesc, fixedTexture.srvChain.GetAddressOf()));
+	DX::ThrowIfFailed(device->CreateShaderResourceView(fixedTexture.texture.get(), &srvDesc, fixedTexture.srvChain.put()));
 
 	srvDesc.Texture2D.MipLevels = 1;
-	DX::ThrowIfFailed(device->CreateShaderResourceView(fixedTexture.texture.Get(), &srvDesc, fixedTexture.srv.GetAddressOf()));
+	DX::ThrowIfFailed(device->CreateShaderResourceView(fixedTexture.texture.get(), &srvDesc, fixedTexture.srv.put()));
 
 	srvDesc.Texture2D.MostDetailedMip = 2;
-	DX::ThrowIfFailed(device->CreateShaderResourceView(fixedTexture.texture.Get(), &srvDesc, fixedTexture.srvBlurry.GetAddressOf()));
+	DX::ThrowIfFailed(device->CreateShaderResourceView(fixedTexture.texture.get(), &srvDesc, fixedTexture.srvBlurry.put()));
 
 	// Set debug names
-	Util::SetResourceName(fixedTexture.texture.Get(), "TextureManager::DownsampleTexture (1024x1024, 3 mips)");
-	Util::SetResourceName(fixedTexture.rtv.Get(), "TextureManager::DownsampleTexture RTV");
-	Util::SetResourceName(fixedTexture.srvChain.Get(), "TextureManager::DownsampleTexture SRV Chain");
-	Util::SetResourceName(fixedTexture.srv.Get(), "TextureManager::DownsampleTexture SRV 1024x1024");
-	Util::SetResourceName(fixedTexture.srvBlurry.Get(), "TextureManager::DownsampleTexture SRV 256x256");
+	Util::SetResourceName(fixedTexture.texture.get(), "TextureManager::DownsampleTexture (1024x1024, 3 mips)");
+	Util::SetResourceName(fixedTexture.rtv.get(), "TextureManager::DownsampleTexture RTV");
+	Util::SetResourceName(fixedTexture.srvChain.get(), "TextureManager::DownsampleTexture SRV Chain");
+	Util::SetResourceName(fixedTexture.srv.get(), "TextureManager::DownsampleTexture SRV 1024x1024");
+	Util::SetResourceName(fixedTexture.srvBlurry.get(), "TextureManager::DownsampleTexture SRV 256x256");
 
 	logger::info("[TextureManager] Created downsample texture: 1024x1024 with 3 mips (1024, 512, 256)");
 
@@ -318,38 +322,23 @@ void TextureManager::DownsampleToFixed(ID3D11ShaderResourceView* source, Downsam
 	auto context = globals::d3d::context;
 
 	// Get source texture description for calculating texel size
-	ComPtr<ID3D11Resource> sourceResource;
-	source->GetResource(sourceResource.GetAddressOf());
+	winrt::com_ptr<ID3D11Resource> sourceResource;
+	source->GetResource(sourceResource.put());
 
-	ComPtr<ID3D11Texture2D> sourceTexture;
-	sourceResource.As(&sourceTexture);
+	winrt::com_ptr<ID3D11Texture2D> sourceTexture;
+	sourceResource.as(sourceTexture);
 
 	D3D11_TEXTURE2D_DESC sourceDesc;
 	sourceTexture->GetDesc(&sourceDesc);
 
-	// Create constant buffer for texel size
-	struct Constants {
-		float sourceTexelSizeX;
-		float sourceTexelSizeY;
-		float padding[2];
-	} constants;
-
+	DownsampleCB constants{};
 	constants.sourceTexelSizeX = 1.0f / static_cast<float>(sourceDesc.Width);
 	constants.sourceTexelSizeY = 1.0f / static_cast<float>(sourceDesc.Height);
 
-	D3D11_BUFFER_DESC cbDesc = {};
-	cbDesc.ByteWidth = sizeof(Constants);
-	cbDesc.Usage = D3D11_USAGE_DYNAMIC;
-	cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-	cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-
-	ComPtr<ID3D11Buffer> constantBuffer;
-	DX::ThrowIfFailed(globals::d3d::device->CreateBuffer(&cbDesc, nullptr, constantBuffer.GetAddressOf()));
-
 	D3D11_MAPPED_SUBRESOURCE mappedResource;
-	context->Map(constantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
-	memcpy(mappedResource.pData, &constants, sizeof(Constants));
-	context->Unmap(constantBuffer.Get(), 0);
+	context->Map(downsampleCB.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
+	memcpy(mappedResource.pData, &constants, sizeof(DownsampleCB));
+	context->Unmap(downsampleCB.get(), 0);
 
 	// Set up render state for downsampling
 	D3D11_VIEWPORT viewport = {};
@@ -359,20 +348,24 @@ void TextureManager::DownsampleToFixed(ID3D11ShaderResourceView* source, Downsam
 	viewport.MaxDepth = 1.0f;
 
 	context->RSSetViewports(1, &viewport);
-	context->OMSetRenderTargets(1, texture.rtv.GetAddressOf(), nullptr);
+	ID3D11RenderTargetView* rtvArray[] = { texture.rtv.get() };
 
-	context->VSSetShader(downsampleVS.Get(), nullptr, 0);
+	context->OMSetRenderTargets(1, rtvArray, nullptr);
+
+	context->VSSetShader(downsampleVS.get(), nullptr, 0);
 	context->PSSetShaderResources(0, 1, &source);
-	context->PSSetSamplers(0, 1, linearSampler.GetAddressOf());
-	context->PSSetConstantBuffers(0, 1, constantBuffer.GetAddressOf());
-	context->PSSetShader(downsamplePS.Get(), nullptr, 0);
-	context->IASetInputLayout(nullptr);
-	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	// Draw fullscreen triangle (no vertex buffer needed)
-	context->Draw(3, 0);
+	ID3D11SamplerState* samplerArray[] = { linearSampler.get() };
+	context->PSSetSamplers(0, 1, samplerArray);
+
+	ID3D11Buffer* bufferArray[] = { downsampleCB.get() };
+	context->PSSetConstantBuffers(0, 1, bufferArray);
+
+	context->PSSetShader(downsamplePS.get(), nullptr, 0);
+
+	context->Draw(4, 0);
 	
-	context->GenerateMips(texture.srvChain.Get());
+	context->GenerateMips(texture.srvChain.get());
 }
 
 void TextureManager::UpdateDownsampledTexture(ID3D11ShaderResourceView* source)
@@ -382,10 +375,10 @@ void TextureManager::UpdateDownsampledTexture(ID3D11ShaderResourceView* source)
 
 ID3D11ShaderResourceView* TextureManager::GetDownsampleTexture() const
 {
-	return sharedDownsampleTexture.srv.Get();
+	return sharedDownsampleTexture.srv.get();
 }
 
 ID3D11ShaderResourceView* TextureManager::GetDownsampleTextureBlurry() const
 {
-	return sharedDownsampleTexture.srvBlurry.Get();
+	return sharedDownsampleTexture.srvBlurry.get();
 }

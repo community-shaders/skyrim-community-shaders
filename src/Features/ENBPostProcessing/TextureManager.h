@@ -3,27 +3,25 @@
 #include <d3d11.h>
 #include <string>
 #include <unordered_map>
-#include <wrl/client.h>
-
-using Microsoft::WRL::ComPtr;
+#include <winrt/base.h>
 
 class TextureManager
 {
 public:
 	struct Texture
 	{
-		ComPtr<ID3D11Texture2D> texture;
-		ComPtr<ID3D11RenderTargetView> rtv;
-		ComPtr<ID3D11ShaderResourceView> srv;
+		winrt::com_ptr<ID3D11Texture2D> texture;
+		winrt::com_ptr<ID3D11RenderTargetView> rtv;
+		winrt::com_ptr<ID3D11ShaderResourceView> srv;
 	};
 
 	struct DownsampleTexture
 	{
-		ComPtr<ID3D11Texture2D> texture;
-		ComPtr<ID3D11ShaderResourceView> srvChain;   // Mip 0 -> Mip 1 -> Mip2
-		ComPtr<ID3D11ShaderResourceView> srv;        // Mip 0: 1024x1024
-		ComPtr<ID3D11ShaderResourceView> srvBlurry;  // Mip 2: 256x256
-		ComPtr<ID3D11RenderTargetView> rtv;
+		winrt::com_ptr<ID3D11Texture2D> texture;
+		winrt::com_ptr<ID3D11ShaderResourceView> srvChain;   // Mip 0 -> Mip 1 -> Mip2
+		winrt::com_ptr<ID3D11ShaderResourceView> srv;        // Mip 0: 1024x1024
+		winrt::com_ptr<ID3D11ShaderResourceView> srvBlurry;  // Mip 2: 256x256
+		winrt::com_ptr<ID3D11RenderTargetView> rtv;
 	};
 
 	static TextureManager& GetSingleton();
@@ -47,8 +45,17 @@ private:
 	std::unordered_map<std::string, Texture> commonTextureCache;
 
 	// Downsampling resources
-	ComPtr<ID3D11VertexShader> downsampleVS;
-	ComPtr<ID3D11PixelShader> downsamplePS;
-	ComPtr<ID3D11SamplerState> linearSampler;
+	winrt::com_ptr<ID3D11VertexShader> downsampleVS;
+	winrt::com_ptr<ID3D11PixelShader> downsamplePS;
+	winrt::com_ptr<ID3D11Buffer> downsampleCB;
+
+	winrt::com_ptr<ID3D11SamplerState> linearSampler;
 	DownsampleTexture sharedDownsampleTexture;
+
+	struct DownsampleCB
+	{
+		float sourceTexelSizeX;
+		float sourceTexelSizeY;
+		float padding[2];
+	};
 };

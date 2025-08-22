@@ -1,6 +1,5 @@
 #include "ENBBloom.h"
 
-#include "../EffectManager.h"
 #include "../TextureManager.h"
 
 void ENBBloom::Execute()

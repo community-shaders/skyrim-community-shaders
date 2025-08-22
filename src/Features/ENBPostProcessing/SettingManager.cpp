@@ -1,6 +1,5 @@
 #include "SettingManager.h"
 
-#include "EffectManager.h"
 #include "WeatherManager.h"
 
 SettingManager& SettingManager::GetSingleton()
@@ -711,20 +710,12 @@ void SettingManager::Load()
 {
 	LoadFromFile("enbseries.ini");
 	ReloadAllWeatherSettings();
-
-	EffectManager::GetSingleton().Load();
-
-	logger::info("[SettingManager] Loaded all settings and effects");
 }
 
 void SettingManager::Save()
 {
 	SaveToFile("enbseries.ini");
 	SaveAllWeatherSettings();
-
-	EffectManager::GetSingleton().Save();
-
-	logger::info("[SettingManager] Saved all settings and effects");
 }
 
 // Explicit template instantiations

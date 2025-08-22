@@ -1,19 +1,9 @@
 #pragma once
 
-#include "../TextureManager.h"
 #include <Effects11/d3dx11effect.h>
-#include <d3d11.h>
-#include <d3dcompiler.h>
-#include <filesystem>
-#include <memory>
-#include <string>
-#include <unordered_map>
-#include <vector>
-#include <wrl/client.h>
-// Forward declarations
-class EffectManager;
+#include <winrt/base.h>
 
-using Microsoft::WRL::ComPtr;
+#include "../TextureManager.h"
 
 class Effect
 {
@@ -65,16 +55,16 @@ public:
 
 	struct TechniqueInfo
 	{
-		ComPtr<ID3DX11EffectTechnique> technique;
+		winrt::com_ptr<ID3DX11EffectTechnique> technique;
 		std::string renderTargetName;
 	};
 
-	ComPtr<ID3DX11Effect> effect;
+	winrt::com_ptr<ID3DX11Effect> effect;
 	std::unordered_map<std::string, std::vector<TechniqueInfo>> techniques;
-	std::unordered_map<std::string, ComPtr<ID3DX11EffectVariable>> variables;
+	std::unordered_map<std::string, winrt::com_ptr<ID3DX11EffectVariable>> variables;
 
 	std::unordered_map<std::string, TextureManager::Texture> effectTextureCache;
-	std::unordered_map<std::string, ComPtr<ID3D11ShaderResourceView>> customTextureCache;
+	std::unordered_map<std::string, winrt::com_ptr<ID3D11ShaderResourceView>> customTextureCache;
 
 	// UI Variable System
 	enum class UIVariableType
@@ -99,7 +89,7 @@ public:
 		UIWidgetType widgetType;
 		LPCSTR name;
 		std::string displayName;
-		ComPtr<ID3DX11EffectVariable> effectVariable;
+		winrt::com_ptr<ID3DX11EffectVariable> effectVariable;
 
 		// Value storage
 		union
@@ -140,7 +130,7 @@ public:
 	void ExecuteTechnique(const std::string& techniqueName, TextureManager::Texture& output);
 
 	// Allow EffectManager to setup common variables
-	ID3DX11Effect* GetEffect() const { return effect.Get(); }
+	ID3DX11Effect* GetEffect() const { return effect.get(); }
 
 	// Helper function to set shader resource variables (non-static version for this effect)
 	bool SetShaderResourceVariable(const std::string& variableName, ID3D11ShaderResourceView* resource);

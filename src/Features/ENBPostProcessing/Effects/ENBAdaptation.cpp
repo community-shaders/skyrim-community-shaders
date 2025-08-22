@@ -15,7 +15,7 @@ void ENBAdaptation::Execute()
 
 	auto textureCurrent = effect->GetVariableByName("TextureCurrent")->AsShaderResource();
 	if (textureCurrent && textureCurrent->IsValid()) {
-		textureCurrent->SetResource(effectTextureCache["TextureCurrent"].srv.Get());
+		textureCurrent->SetResource(effectTextureCache["TextureCurrent"].srv.get());
 	}
 
 	// Use swap mechanism to determine input/output textures
@@ -27,7 +27,7 @@ void ENBAdaptation::Execute()
 	auto& textureManager = TextureManager::GetSingleton();
 	auto texturePrevious = effect->GetVariableByName("TexturePrevious")->AsShaderResource();
 	if (texturePrevious && texturePrevious->IsValid()) {
-		texturePrevious->SetResource(textureManager.GetCommonTexture(texturePreviousName)->srv.Get());
+		texturePrevious->SetResource(textureManager.GetCommonTexture(texturePreviousName)->srv.get());
 	}
 
 	// Execute adaptation technique, writing to output texture

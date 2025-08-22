@@ -7,7 +7,6 @@
 #include "Effects/ENBEffectPostPass.h"
 #include "Effects/ENBLens.h"
 
-using Microsoft::WRL::ComPtr;
 
 class EffectManager
 {
@@ -30,7 +29,6 @@ public:
 	void UpdateCommonVariablesForEffect(ID3DX11Effect* effect);
 
 public:
-	// Direct effect instances
 	ENBDepthOfField enbDepthOfField;
 	ENBBloom enbBloom;
 	ENBLens enbLens;
@@ -42,19 +40,18 @@ public:
 	void CreateCommonResources();
 
 	// Shared D3D resources
-	ComPtr<ID3D11Buffer> quadVertexBuffer;
-	ComPtr<ID3D11InputLayout> inputLayout;
-	ComPtr<ID3D11RasterizerState> rasterizerState;
-	ComPtr<ID3D11BlendState> blendState;
+	winrt::com_ptr<ID3D11Buffer> quadVertexBuffer;
+	winrt::com_ptr<ID3D11InputLayout> inputLayout;
+	winrt::com_ptr<ID3D11RasterizerState> rasterizerState;
+	winrt::com_ptr<ID3D11BlendState> blendState;
 
 	// Copy shader resources
-	ComPtr<ID3D11VertexShader> copyVertexShader;
-	ComPtr<ID3D11PixelShader> copyPixelShader;
+	winrt::com_ptr<ID3D11VertexShader> copyVertexShader;
+	winrt::com_ptr<ID3D11PixelShader> copyPixelShader;
 
 	// Color correction compute shader resources
-	ComPtr<ID3D11ComputeShader> colorCorrectionComputeShader;
-	ComPtr<ID3D11Buffer> colorCorrectionConstantBuffer;
-
+	winrt::com_ptr<ID3D11ComputeShader> colorCorrectionComputeShader;
+	winrt::com_ptr<ID3D11Buffer> colorCorrectionConstantBuffer;
 
 	void CreateQuadGeometry();
 	void CreateRenderStates();

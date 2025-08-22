@@ -91,15 +91,15 @@ void EffectManager::ExecuteEffects()
 	auto textureOriginal = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
 	// Set our render state
-	context->RSSetState(rasterizerState.Get());
-	context->OMSetBlendState(blendState.Get(), nullptr, 0xFFFFFFFF);
+	context->RSSetState(rasterizerState.get());
+	context->OMSetBlendState(blendState.get(), nullptr, 0xFFFFFFFF);
 	context->OMSetDepthStencilState(nullptr, 0);
 
 	UINT stride = sizeof(float) * 5;
 	UINT offset = 0;
-	ID3D11Buffer* vertexBuffers[] = { quadVertexBuffer.Get() };
+	ID3D11Buffer* vertexBuffers[] = { quadVertexBuffer.get() };
 	context->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
-	context->IASetInputLayout(inputLayout.Get());
+	context->IASetInputLayout(inputLayout.get());
 	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
 	// Apply brightness and gamma curve
@@ -164,9 +164,9 @@ void EffectManager::ExecuteEffects()
 	auto textureFramebuffer2 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
 	auto textureFramebuffer3 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY2];
 
-	CopyTexture(textureSDRTemp->srv.Get(), textureFramebuffer1.RTV);
-	CopyTexture(textureSDRTemp->srv.Get(), textureFramebuffer2.RTV);
-	CopyTexture(textureSDRTemp->srv.Get(), textureFramebuffer3.RTV);
+	CopyTexture(textureSDRTemp->srv.get(), textureFramebuffer1.RTV);
+	CopyTexture(textureSDRTemp->srv.get(), textureFramebuffer2.RTV);
+	CopyTexture(textureSDRTemp->srv.get(), textureFramebuffer3.RTV);
 }
 
 void EffectManager::CreateCommonResources()
@@ -202,7 +202,7 @@ void EffectManager::CreateQuadGeometry()
 	D3D11_SUBRESOURCE_DATA initData = {};
 	initData.pSysMem = vertices;
 
-	DX::ThrowIfFailed(globals::d3d::device->CreateBuffer(&bufferDesc, &initData, quadVertexBuffer.GetAddressOf()));
+	DX::ThrowIfFailed(globals::d3d::device->CreateBuffer(&bufferDesc, &initData, quadVertexBuffer.put()));
 
 	// Create input layout for ENB post-processing
 	D3D11_INPUT_ELEMENT_DESC inputElementDescs[] = {
@@ -211,7 +211,7 @@ void EffectManager::CreateQuadGeometry()
 	};
 
 	// Create a simple vertex shader for the input layout
-	ComPtr<ID3DBlob> vertexShaderBlob;
+	winrt::com_ptr<ID3DBlob> vertexShaderBlob;
 	const char* vertexShaderSource = R"(
         struct VS_INPUT_POST { float3 pos : POSITION; float2 txcoord : TEXCOORD0; };
         struct VS_OUTPUT_POST { float4 pos : SV_POSITION; float2 txcoord0 : TEXCOORD0; };
@@ -223,15 +223,15 @@ void EffectManager::CreateQuadGeometry()
         }
     )";
 
-	ComPtr<ID3DBlob> errorBlob;
+	winrt::com_ptr<ID3DBlob> errorBlob;
 	HRESULT hr = D3DCompile(vertexShaderSource, strlen(vertexShaderSource), nullptr, nullptr, nullptr,
-		"VS_Draw", "vs_4_0", 0, 0, vertexShaderBlob.GetAddressOf(), errorBlob.GetAddressOf());
+		"VS_Draw", "vs_4_0", 0, 0, vertexShaderBlob.put(), errorBlob.put());
 
 	if (SUCCEEDED(hr)) {
 		hr = globals::d3d::device->CreateInputLayout(inputElementDescs, ARRAYSIZE(inputElementDescs),
 			vertexShaderBlob->GetBufferPointer(),
 			vertexShaderBlob->GetBufferSize(),
-			inputLayout.GetAddressOf());
+			inputLayout.put());
 		if (FAILED(hr)) {
 			logger::error("[ENBPP] Failed to create shared input layout for ENB effects");
 		}
@@ -253,7 +253,7 @@ void EffectManager::CreateRenderStates()
 	rastDesc.MultisampleEnable = FALSE;
 	rastDesc.AntialiasedLineEnable = FALSE;
 
-	DX::ThrowIfFailed(globals::d3d::device->CreateRasterizerState(&rastDesc, rasterizerState.GetAddressOf()));
+	DX::ThrowIfFailed(globals::d3d::device->CreateRasterizerState(&rastDesc, rasterizerState.put()));
 
 	// Blend state for standard rendering (no blending)
 	D3D11_BLEND_DESC blendDesc = {};
@@ -262,7 +262,7 @@ void EffectManager::CreateRenderStates()
 	blendDesc.RenderTarget[0].BlendEnable = FALSE;
 	blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 
-	DX::ThrowIfFailed(globals::d3d::device->CreateBlendState(&blendDesc, blendState.GetAddressOf()));
+	DX::ThrowIfFailed(globals::d3d::device->CreateBlendState(&blendDesc, blendState.put()));
 }
 
 void EffectManager::CreateCopyShaders()
@@ -280,9 +280,9 @@ void EffectManager::CreateCopyShaders()
 		}
 	)";
 
-	ComPtr<ID3DBlob> vsBlob, errorBlob;
+	winrt::com_ptr<ID3DBlob> vsBlob, errorBlob;
 	HRESULT hr = D3DCompile(vertexShaderSource, strlen(vertexShaderSource), nullptr, nullptr, nullptr,
-		"main", "vs_4_0", 0, 0, vsBlob.GetAddressOf(), errorBlob.GetAddressOf());
+		"main", "vs_4_0", 0, 0, vsBlob.put(), errorBlob.put());
 
 	if (FAILED(hr)) {
 		if (errorBlob) {
@@ -291,7 +291,7 @@ void EffectManager::CreateCopyShaders()
 		return;
 	}
 
-	hr = globals::d3d::device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, copyVertexShader.GetAddressOf());
+	hr = globals::d3d::device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, copyVertexShader.put());
 	if (FAILED(hr)) {
 		logger::error("[ENBPP] Failed to create copy vertex shader");
 		return;
@@ -308,9 +308,9 @@ void EffectManager::CreateCopyShaders()
 		}
 	)";
 
-	ComPtr<ID3DBlob> psBlob;
+	winrt::com_ptr<ID3DBlob> psBlob;
 	hr = D3DCompile(pixelShaderSource, strlen(pixelShaderSource), nullptr, nullptr, nullptr,
-		"main", "ps_4_0", 0, 0, psBlob.GetAddressOf(), errorBlob.GetAddressOf());
+		"main", "ps_4_0", 0, 0, psBlob.put(), errorBlob.put());
 
 	if (FAILED(hr)) {
 		if (errorBlob) {
@@ -319,7 +319,7 @@ void EffectManager::CreateCopyShaders()
 		return;
 	}
 
-	hr = globals::d3d::device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, copyPixelShader.GetAddressOf());
+	hr = globals::d3d::device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, copyPixelShader.put());
 	if (FAILED(hr)) {
 		logger::error("[ENBPP] Failed to create copy pixel shader");
 		return;
@@ -350,9 +350,9 @@ void EffectManager::CreateColorCorrectionShader()
 		}
 	)";
 
-	ComPtr<ID3DBlob> csBlob, errorBlob;
+	winrt::com_ptr<ID3DBlob> csBlob, errorBlob;
 	HRESULT hr = D3DCompile(computeShaderSource, strlen(computeShaderSource), nullptr, nullptr, nullptr,
-		"main", "cs_5_0", 0, 0, csBlob.GetAddressOf(), errorBlob.GetAddressOf());
+		"main", "cs_5_0", 0, 0, csBlob.put(), errorBlob.put());
 
 	if (FAILED(hr)) {
 		if (errorBlob) {
@@ -361,7 +361,7 @@ void EffectManager::CreateColorCorrectionShader()
 		return;
 	}
 
-	hr = globals::d3d::device->CreateComputeShader(csBlob->GetBufferPointer(), csBlob->GetBufferSize(), nullptr, colorCorrectionComputeShader.GetAddressOf());
+	hr = globals::d3d::device->CreateComputeShader(csBlob->GetBufferPointer(), csBlob->GetBufferSize(), nullptr, colorCorrectionComputeShader.put());
 	if (FAILED(hr)) {
 		logger::error("[ENBPP] Failed to create color correction compute shader");
 		return;
@@ -374,7 +374,7 @@ void EffectManager::CreateColorCorrectionShader()
 	cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 	cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
-	hr = globals::d3d::device->CreateBuffer(&cbDesc, nullptr, colorCorrectionConstantBuffer.GetAddressOf());
+	hr = globals::d3d::device->CreateBuffer(&cbDesc, nullptr, colorCorrectionConstantBuffer.put());
 	if (FAILED(hr)) {
 		logger::error("[ENBPP] Failed to create color correction constant buffer");
 		return;
@@ -525,7 +525,7 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 	for (const auto& targetName : formatTargets) {
 		auto* texture = textureManager.GetCommonTexture(targetName);
 		if (texture) {
-			Effect::SetShaderResourceVariable(effect, targetName, texture->srv.Get());
+			Effect::SetShaderResourceVariable(effect, targetName, texture->srv.get());
 		}
 	}
 
@@ -538,7 +538,7 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 	for (const auto& targetName : fixedSizeTargets) {
 		auto* texture = textureManager.GetCommonTexture(targetName);
 		if (texture) {
-			Effect::SetShaderResourceVariable(effect, targetName, texture->srv.Get());
+			Effect::SetShaderResourceVariable(effect, targetName, texture->srv.get());
 		}
 	}
 
@@ -566,8 +566,8 @@ void EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11Render
 	context->OMSetDepthStencilState(nullptr, 0);
 
 	// Set shaders
-	context->VSSetShader(copyVertexShader.Get(), nullptr, 0);
-	context->PSSetShader(copyPixelShader.Get(), nullptr, 0);
+	context->VSSetShader(copyVertexShader.get(), nullptr, 0);
+	context->PSSetShader(copyPixelShader.get(), nullptr, 0);
 
 	// Set source texture
 	context->PSSetShaderResources(0, 1, &a_source);
@@ -595,24 +595,25 @@ void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 
 	// Update constant buffer with current settings
 	D3D11_MAPPED_SUBRESOURCE mapped;
-	HRESULT hr = context->Map(colorCorrectionConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+	HRESULT hr = context->Map(colorCorrectionConstantBuffer.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
 	if (SUCCEEDED(hr)) {
 		float* cbData = static_cast<float*>(mapped.pData);
 		cbData[0] = brightness;
 		cbData[1] = gammaCurve;
-		context->Unmap(colorCorrectionConstantBuffer.Get(), 0);
+		context->Unmap(colorCorrectionConstantBuffer.get(), 0);
 	}
 
 	// Set compute shader and resources
-	context->CSSetShader(colorCorrectionComputeShader.Get(), nullptr, 0);
-	context->CSSetConstantBuffers(0, 1, colorCorrectionConstantBuffer.GetAddressOf());
+	context->CSSetShader(colorCorrectionComputeShader.get(), nullptr, 0);
+	ID3D11Buffer* bufferArray[] = { colorCorrectionConstantBuffer.get() };
+	context->CSSetConstantBuffers(0, 1, bufferArray);
 	context->CSSetUnorderedAccessViews(0, 1, &textureUAV, nullptr);
 
 	// Get texture dimensions for dispatch
-	ComPtr<ID3D11Resource> resource;
-	textureUAV->GetResource(&resource);
-	ComPtr<ID3D11Texture2D> texture;
-	resource.As(&texture);
+	winrt::com_ptr<ID3D11Resource> resource;
+	textureUAV->GetResource(resource.put());
+	winrt::com_ptr<ID3D11Texture2D> texture;
+	resource.as(texture);
 	D3D11_TEXTURE2D_DESC texDesc;
 	texture->GetDesc(&texDesc);
 

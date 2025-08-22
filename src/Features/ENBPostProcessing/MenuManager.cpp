@@ -40,9 +40,18 @@ void MenuManager::RenderImGui()
 void MenuManager::RenderSettingsPanel()
 {
 	auto& settingManager = SettingManager::GetSingleton();
+	auto& effectManager = EffectManager::GetSingleton();
 
+	if (ImGui::Button("Apply")) {
+		settingManager.Load();
+		effectManager.Apply();
+	}
+	if (ImGui::IsItemHovered()) {
+		ImGui::SetTooltip("Load all settings from enbseries.ini, weather files, and effect configurations, reload shaders");
+	}
 	if (ImGui::Button("Load")) {
 		settingManager.Load();
+		effectManager.Load();
 	}
 	if (ImGui::IsItemHovered()) {
 		ImGui::SetTooltip("Load all settings from enbseries.ini, weather files, and effect configurations");
@@ -52,6 +61,7 @@ void MenuManager::RenderSettingsPanel()
 
 	if (ImGui::Button("Save")) {
 		settingManager.Save();
+		effectManager.Save();
 	}
 	if (ImGui::IsItemHovered()) {
 		ImGui::SetTooltip("Save all settings to enbseries.ini, weather files, and effect configurations");

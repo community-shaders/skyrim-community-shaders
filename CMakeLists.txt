@@ -95,6 +95,7 @@ target_link_libraries(
 	Streamline
 	d3d12.lib
 	Microsoft::Effects11
+	windowsapp
 )
 
 # https://gitlab.kitware.com/cmake/cmake/-/issues/24922#note_1371990
