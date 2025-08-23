@@ -21,4 +21,5 @@ private:
 	void RenderAllSettings();
 	std::map<std::string, std::vector<std::string>> GetCategorizedSettings() const;
 	std::vector<int> GetActiveTimeOfDayIndices() const;
+	float GetTimeOfDayBlendFactor(int timeIndex) const;
 };

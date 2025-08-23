@@ -93,7 +93,7 @@ void MenuManager::RenderWeatherControl()
 	auto activeIndices = GetActiveTimeOfDayIndices();
 
 	if (!activeIndices.empty()) {
-		std::string activeTimesText = "Active Times: ";
+		std::string activeTimesText = "Active Times";
 		for (size_t i = 0; i < activeIndices.size(); ++i) {
 			if (i > 0)
 				activeTimesText += ", ";
@@ -193,6 +193,33 @@ std::vector<int> MenuManager::GetActiveTimeOfDayIndices() const
 	}
 
 	return activeIndices;
+}
+
+float MenuManager::GetTimeOfDayBlendFactor(int timeIndex) const
+{
+	auto& effectManager = EffectManager::GetSingleton();
+	const auto& commonData = effectManager.commonData;
+	
+	// Return the actual blend factor for each time period
+	switch (timeIndex) {
+		case 0: return commonData.timeOfDay1[0]; // Dawn
+		case 1: return commonData.timeOfDay1[1]; // Sunrise
+		case 2: return commonData.timeOfDay1[2]; // Day
+		case 3: return commonData.timeOfDay1[3]; // Sunset
+		case 4: return commonData.timeOfDay2[0]; // Dusk
+		case 5: return commonData.timeOfDay2[1]; // Night
+		case 6: // InteriorDay - calculate from interior blend
+		case 7: // InteriorNight - calculate from interior blend
+			{
+				if (commonData.eInteriorFactor > 0.5f) {
+					float dayNightFactor = (commonData.timeOfDay1[2] + commonData.timeOfDay1[1] + 
+											commonData.timeOfDay1[0] * 0.5f + commonData.timeOfDay1[3] * 0.5f);
+					return (timeIndex == 6) ? dayNightFactor : (1.0f - dayNightFactor);
+				}
+				return 0.0f;
+			}
+		default: return 0.0f;
+	}
 }
 
 void MenuManager::RenderAllSettings()
@@ -295,7 +322,22 @@ void MenuManager::RenderAllSettings()
 									if (centerOffset > 0) {
 										ImGui::SetCursorPosX(centerOffset);
 									}
+									
+									// Style the label based on activity
+									float blendFactor = GetTimeOfDayBlendFactor(i);
+									bool isActive = blendFactor > 0.01f;
+									
+									if (!isActive) {
+										// Inactive periods: dim the text
+										ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 0.7f));
+									}
+									// Active periods: use default theme color (no style override)
+									
 									ImGui::Text("%s", timeOfDayNames[i].c_str());
+									
+									if (!isActive) {
+										ImGui::PopStyleColor();
+									}
 
 									ImGui::EndChild();
 								}
@@ -359,12 +401,31 @@ void MenuManager::RenderAllSettings()
 												ImGui::SameLine();
 											}
 
+											// Style the slider based on activity
+											float blendFactor = GetTimeOfDayBlendFactor(i);
+											bool isActive = blendFactor > 0.0f;
+											
+											if (!isActive) {
+												// Inactive sliders: dim the appearance
+												ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
+											}
+
 											ImGui::PushItemWidth(sliderWidth);
 											std::string id = "##" + settingKey + std::to_string(i);
 											if (ImGui::SliderFloat(id.c_str(), &v.values[i], settingInfo->minValue, settingInfo->maxValue, "%.1f")) {
 												changed = true;
 											}
+											
+											// Add tooltip showing blend factor
+											if (ImGui::IsItemHovered()) {
+												ImGui::SetTooltip("%.0f%%", blendFactor * 100.0f);
+											}
+											
 											ImGui::PopItemWidth();
+											
+											if (!isActive) {
+												ImGui::PopStyleVar(); // Alpha
+											}
 										}
 
 										if (changed) {
