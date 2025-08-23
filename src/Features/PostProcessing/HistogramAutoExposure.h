@@ -22,7 +22,7 @@ struct HistogramAutoExposure : public PostProcessFeature
 
 		// auto exposure
 		float2 AdaptationRange = { -.5f, .2f };  // EV
-		std::array<float2, 6> ToDAdaptationRange = { { -.5f, .2f }, { -.5f, .2f }, { -.5f, .2f }, { -.5f, .2f }, { -.5f, .2f }, { -.5f, .2f } };
+		std::array<float2, 6> ToDAdaptationRange = { float2{ -.5f, .2f }, float2{ -.5f, .2f }, float2{ -.5f, .2f }, float2{ -.5f, .2f }, float2{ -.5f, .2f }, float2{ -.5f, .2f } };
 		float2 InteriorAdaptationRange = { -.5f, .2f };
 		float2 AdaptArea = { .6f, .6f };
 
