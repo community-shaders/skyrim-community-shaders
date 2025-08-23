@@ -169,10 +169,7 @@ void PerformanceOverlay::DrawSettings()
 			ImGui::Indent();
 
 			ImGui::Checkbox("Show FPS Counter", &this->settings.ShowFPS);
-			// Show Draw Calls setting is only available in developer mode
-			if (globals::state->IsDeveloperMode()) {
-				ImGui::Checkbox("Show Draw Calls", &this->settings.ShowDrawCalls);
-			}
+			ImGui::Checkbox("Show Draw Calls", &this->settings.ShowDrawCalls);
 			ImGui::Checkbox("Show VRAM Usage", &this->settings.ShowVRAM);
 
 			bool isFrameGenerationActive = globals::upscaling && globals::upscaling->IsFrameGenerationActive();
@@ -300,9 +297,12 @@ void PerformanceOverlay::DrawOverlay()
 			float fpsWidth = ImGui::CalcTextSize(fpsText.c_str()).x;
 			minWidth = std::max(minWidth, fpsWidth + PerformanceOverlay::Settings::kLabelPadding);  // Add padding for labels
 		}
-		if (this->settings.ShowDrawCalls && globals::state->IsDeveloperMode()) {
-			// Draw calls table needs significant width for all columns
-			minWidth = std::max(minWidth, PerformanceOverlay::Settings::kDrawCallsTableWidth * this->settings.TextSize);
+		if (this->settings.ShowDrawCalls) {
+			// Draw calls table needs width - less if only showing draw calls without performance data
+			float tableWidth = globals::state->IsDeveloperMode() ? 
+				PerformanceOverlay::Settings::kDrawCallsTableWidth : 
+				PerformanceOverlay::Settings::kDrawCallsTableWidth * 0.5f; // Narrower for basic draw calls table
+			minWidth = std::max(minWidth, tableWidth * this->settings.TextSize);
 		}
 		if (this->settings.ShowVRAM && menu->GetDXGIAdapter3()) {
 			// VRAM section needs width for the progress bar and text
@@ -350,11 +350,13 @@ void PerformanceOverlay::DrawOverlay()
 		}
 	}
 
-	// Show Draw Calls if enabled and in developer mode
-	if (this->settings.ShowDrawCalls && globals::state->IsDeveloperMode()) {
+	// Show Draw Calls if enabled
+	if (this->settings.ShowDrawCalls) {
 		static bool drawCallsExpanded = true;
 		if (showCollapsibleSections) {
-			Util::DrawSectionHeader("Draw Calls & Shader Performance", false, true, &drawCallsExpanded);
+			std::string sectionHeader = globals::state->IsDeveloperMode() ? 
+				"Draw Calls & Shader Performance" : "Draw Calls";
+			Util::DrawSectionHeader(sectionHeader, false, true, &drawCallsExpanded);
 		}
 		if (drawCallsExpanded) {
 			DrawDrawCallsTable(mainRows, summaryRows);
@@ -1426,86 +1428,89 @@ std::vector<ColumnConfig> PerformanceOverlay::BuildDrawCallTableColumns(const Me
 					}
 				}
 			} },
-		{ legends.drawCalls.header,
-			[](const DrawCallRow& row, int) {
-				if (row.drawCalls == kDrawCallsNotApplicable) {
-					ImGui::TextDisabled("-");
-				} else {
-					ImGui::Text("%d", row.drawCalls);
-				}
-				if (ImGui::IsItemHovered()) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						if (row.drawCalls == kDrawCallsNotApplicable) {
-							ImGui::TextUnformatted("Draw Calls: Not applicable for unmeasured GPU time.");
-						} else {
-							ImGui::TextUnformatted("Draw Calls: Number of draw calls for this shader type in the current frame.");
-						}
+	columns.push_back(ColumnConfig{
+		legends.drawCalls.header,
+		[](const DrawCallRow& row, int) {
+			if (row.drawCalls == kDrawCallsNotApplicable) {
+				ImGui::TextDisabled("-");
+			} else {
+				ImGui::Text("%d", row.drawCalls);
+			}
+			if (ImGui::IsItemHovered()) {
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					if (row.drawCalls == kDrawCallsNotApplicable) {
+						ImGui::TextUnformatted("Draw Calls: Not applicable for unmeasured GPU time.");
+					} else {
+						ImGui::TextUnformatted("Draw Calls: Number of draw calls for this shader type in the current frame.");
 					}
 				}
-			},
-			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.drawCalls < b.drawCalls) : (a.drawCalls > b.drawCalls); },
-			[legends]() {
-				if (ImGui::IsItemHovered()) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						Util::DrawColoredMultiLineTooltip(legends.drawCalls.tooltip);
-					}
+			}
+		},
+		[](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.drawCalls < b.drawCalls) : (a.drawCalls > b.drawCalls); },
+		[legends]() {
+			if (ImGui::IsItemHovered()) {
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					Util::DrawColoredMultiLineTooltip(legends.drawCalls.tooltip);
 				}
-			} }
-	};
+			}
+		} });
 
-	columns.push_back(ColumnConfig{
-		legends.frameTime.header,
-		MakeMetricColumn(theme, [](const DrawCallRow& row) { return row.frameTime; }, [](const auto& theme, float value, const DrawCallRow&) { return Util::GetThresholdColor(value, PerformanceOverlay::Settings::kFrameTimeGoodThreshold, PerformanceOverlay::Settings::kFrameTimeWarningThreshold, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error); }, [](float /*value*/, const DrawCallRow& row) { return Util::FormatMilliseconds(row.frameTime) + " (" + Util::FormatPercent(row.percent) + ")"; }, legends.frameTime.tooltip), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.percent < b.percent) : (a.percent > b.percent); }, [legends]() {
-			 if (ImGui::IsItemHovered()) {
-				 if (auto _tt = Util::HoverTooltipWrapper()) {
-					 Util::DrawColoredMultiLineTooltip(legends.frameTime.tooltip);
-				 }
-			 } } });
-
-	columns.push_back(ColumnConfig{
-		legends.costPerCall.header,
-		MakeMetricColumn(theme, [](const DrawCallRow& row) { return row.costPerCall; }, [](const auto& theme, float value, const DrawCallRow&) { return Util::GetThresholdColor(value, PerformanceOverlay::Settings::kCostPerCallGoodThreshold, PerformanceOverlay::Settings::kCostPerCallWarningThreshold, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error); }, [](float value, const DrawCallRow&) { return (value < PerformanceOverlay::Settings::kMicrosecondThreshold && value > 0.0f) ? Util::FormatMicroseconds(value * 1000.0f) : Util::FormatMilliseconds(value); }, legends.costPerCall.tooltip), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.costPerCall < b.costPerCall) : (a.costPerCall > b.costPerCall); }, [legends]() {
-			 if (ImGui::IsItemHovered()) {
-				 if (auto _tt = Util::HoverTooltipWrapper()) {
-					 Util::DrawColoredMultiLineTooltip(legends.costPerCall.tooltip);
-				 }
-			 } } });
-
-	// Add test columns if present
-	if (anyTestData) {
+	// Only show performance-related columns in developer mode
+	if (globals::state->IsDeveloperMode()) {
 		columns.push_back(ColumnConfig{
-			legends.testFrameTime.header,
-			MakeMetricColumn(theme, [](const DrawCallRow& row) { return row.testFrameTime; }, [](const auto& theme, float value, const DrawCallRow& row) {
-					 if (value < row.frameTime)
-						 return theme.StatusPalette.SuccessColor;
-					 if (value > row.frameTime)
-						 return theme.StatusPalette.Error;
-					 return theme.Palette.Text; }, [this](float value, const DrawCallRow& row) { return Util::FormatMilliseconds(value) + " (" + Util::FormatPercent(testData[row.shaderType].percent) + ")"; }, legends.testFrameTime.tooltip), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
-				 float aVal = a.testFrameTime.value_or(FLT_MAX);
-				 float bVal = b.testFrameTime.value_or(FLT_MAX);
-				 return asc ? (aVal < bVal) : (aVal > bVal); }, [legends]() {
+			legends.frameTime.header,
+			MakeMetricColumn(theme, [](const DrawCallRow& row) { return row.frameTime; }, [](const auto& theme, float value, const DrawCallRow&) { return Util::GetThresholdColor(value, PerformanceOverlay::Settings::kFrameTimeGoodThreshold, PerformanceOverlay::Settings::kFrameTimeWarningThreshold, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error); }, [](float /*value*/, const DrawCallRow& row) { return Util::FormatMilliseconds(row.frameTime) + " (" + Util::FormatPercent(row.percent) + ")"; }, legends.frameTime.tooltip), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.percent < b.percent) : (a.percent > b.percent); }, [legends]() {
 				 if (ImGui::IsItemHovered()) {
 					 if (auto _tt = Util::HoverTooltipWrapper()) {
-						 Util::DrawColoredMultiLineTooltip(legends.testFrameTime.tooltip);
+						 Util::DrawColoredMultiLineTooltip(legends.frameTime.tooltip);
 					 }
 				 } } });
 
 		columns.push_back(ColumnConfig{
-			legends.testCostPerCall.header,
-			MakeMetricColumn(theme, [](const DrawCallRow& row) { return row.testCostPerCall; }, [](const auto& theme, float value, const DrawCallRow& row) {
-					 if (value < row.costPerCall)
-						 return theme.StatusPalette.SuccessColor;
-					 if (value > row.costPerCall)
-						 return theme.StatusPalette.Error;
-					 return theme.Palette.Text; }, [](float value, const DrawCallRow&) { return (value < PerformanceOverlay::Settings::kMicrosecondThreshold && value > 0.0f) ? Util::FormatMicroseconds(value * 1000.0f) : Util::FormatMilliseconds(value); }, legends.testCostPerCall.tooltip), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
-				 float aVal = a.testCostPerCall.value_or(FLT_MAX);
-				 float bVal = b.testCostPerCall.value_or(FLT_MAX);
-				 return asc ? (aVal < bVal) : (aVal > bVal); }, [legends]() {
+			legends.costPerCall.header,
+			MakeMetricColumn(theme, [](const DrawCallRow& row) { return row.costPerCall; }, [](const auto& theme, float value, const DrawCallRow&) { return Util::GetThresholdColor(value, PerformanceOverlay::Settings::kCostPerCallGoodThreshold, PerformanceOverlay::Settings::kCostPerCallWarningThreshold, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error); }, [](float value, const DrawCallRow&) { return (value < PerformanceOverlay::Settings::kMicrosecondThreshold && value > 0.0f) ? Util::FormatMicroseconds(value * 1000.0f) : Util::FormatMilliseconds(value); }, legends.costPerCall.tooltip), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.costPerCall < b.costPerCall) : (a.costPerCall > b.costPerCall); }, [legends]() {
 				 if (ImGui::IsItemHovered()) {
 					 if (auto _tt = Util::HoverTooltipWrapper()) {
-						 Util::DrawColoredMultiLineTooltip(legends.testCostPerCall.tooltip);
+						 Util::DrawColoredMultiLineTooltip(legends.costPerCall.tooltip);
 					 }
 				 } } });
+
+		// Add test columns if present
+		if (anyTestData) {
+			columns.push_back(ColumnConfig{
+				legends.testFrameTime.header,
+				MakeMetricColumn(theme, [](const DrawCallRow& row) { return row.testFrameTime; }, [](const auto& theme, float value, const DrawCallRow& row) {
+						 if (value < row.frameTime)
+							 return theme.StatusPalette.SuccessColor;
+						 if (value > row.frameTime)
+							 return theme.StatusPalette.Error;
+						 return theme.Palette.Text; }, [this](float value, const DrawCallRow& row) { return Util::FormatMilliseconds(value) + " (" + Util::FormatPercent(testData[row.shaderType].percent) + ")"; }, legends.testFrameTime.tooltip), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
+					 float aVal = a.testFrameTime.value_or(FLT_MAX);
+					 float bVal = b.testFrameTime.value_or(FLT_MAX);
+					 return asc ? (aVal < bVal) : (aVal > bVal); }, [legends]() {
+					 if (ImGui::IsItemHovered()) {
+						 if (auto _tt = Util::HoverTooltipWrapper()) {
+							 Util::DrawColoredMultiLineTooltip(legends.testFrameTime.tooltip);
+						 }
+					 } } });
+
+			columns.push_back(ColumnConfig{
+				legends.testCostPerCall.header,
+				MakeMetricColumn(theme, [](const DrawCallRow& row) { return row.testCostPerCall; }, [](const auto& theme, float value, const DrawCallRow& row) {
+						 if (value < row.costPerCall)
+							 return theme.StatusPalette.SuccessColor;
+						 if (value > row.costPerCall)
+							 return theme.StatusPalette.Error;
+						 return theme.Palette.Text; }, [](float value, const DrawCallRow&) { return (value < PerformanceOverlay::Settings::kMicrosecondThreshold && value > 0.0f) ? Util::FormatMicroseconds(value * 1000.0f) : Util::FormatMilliseconds(value); }, legends.testCostPerCall.tooltip), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) {
+					 float aVal = a.testCostPerCall.value_or(FLT_MAX);
+					 float bVal = b.testCostPerCall.value_or(FLT_MAX);
+					 return asc ? (aVal < bVal) : (aVal > bVal); }, [legends]() {
+					 if (ImGui::IsItemHovered()) {
+						 if (auto _tt = Util::HoverTooltipWrapper()) {
+							 Util::DrawColoredMultiLineTooltip(legends.testCostPerCall.tooltip);
+						 }
+					 } } });
+		}
 	}
 
 	return columns;
