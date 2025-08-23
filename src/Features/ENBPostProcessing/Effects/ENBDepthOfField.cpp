@@ -5,42 +5,32 @@
 
 void ENBDepthOfField::Execute()
 {
-	auto renderer = globals::game::renderer;
-
 	auto& textureManager = TextureManager::GetSingleton();
 
 	const std::string texturePreviousApertureName = (textureManager.GetTextureSwap() & 1) ? "TextureApertureSwap" : "TextureAperture";
 	const std::string textureApertureName = (textureManager.GetTextureSwap() & 1) ? "TextureAperture" : "TextureApertureSwap";
 
 	SetShaderResourceVariable("TexturePrevious", effectTextureCache[texturePreviousApertureName].srv.get());
-
 	ExecuteTechnique("Aperture", effectTextureCache[textureApertureName]);
 
 	SetShaderResourceVariable("TextureAperture", effectTextureCache[textureApertureName].srv.get());
-
 	ExecuteTechnique("ReadFocus", effectTextureCache["TextureReadFocus"]);
 
 	const std::string texturePreviousFocusName = (textureManager.GetTextureSwap() & 1) ? "TextureFocusSwap" : "TextureFocus";
 	const std::string textureFocusName = (textureManager.GetTextureSwap() & 1) ? "TextureFocus" : "TextureFocusSwap";
 
 	SetShaderResourceVariable("TexturePrevious", effectTextureCache[texturePreviousFocusName].srv.get());
-
 	SetShaderResourceVariable("TextureCurrent", effectTextureCache["TextureReadFocus"].srv.get());
-
 	ExecuteTechnique("Focus", effectTextureCache[textureFocusName]);
 
-	SetShaderResourceVariable("TextureFocus", effectTextureCache[textureFocusName].srv.get());
-
-	auto textureMain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-
-	SetShaderResourceVariable("TextureOriginal", textureMain.SRV);
-
+	auto textureMain = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 	auto textureHDRTemp = textureManager.GetCommonTexture("TextureHDRTemp");
+	auto textureHDRTemp2 = textureManager.GetCommonTexture("TextureHDRTemp2");
 
 	globals::d3d::context->CopyResource(textureHDRTemp->texture.get(), textureMain.texture);
 
-	auto textureHDRTemp2 = textureManager.GetCommonTexture("TextureHDRTemp2");
-
+	SetShaderResourceVariable("TextureFocus", effectTextureCache[textureFocusName].srv.get());
+	SetShaderResourceVariable("TextureOriginal", textureMain.SRV);
 	ExecuteTechniqueSequence(GetSelectedTechnique(), textureMain.SRV, *textureHDRTemp, *textureHDRTemp2);
 
 	globals::d3d::context->CopyResource(textureMain.texture, textureHDRTemp->texture.get());
