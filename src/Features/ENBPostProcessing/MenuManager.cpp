@@ -87,15 +87,16 @@ void MenuManager::RenderWeatherControl()
 
 	ImGui::Text("Current: 0x%X, Last: 0x%X", currentWeatherID, lastWeatherID);
 	ImGui::Text("Blend Factor: %.2f", blendFactor);
-	
+
 	// Time of day status
 	const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
 	auto activeIndices = GetActiveTimeOfDayIndices();
-	
+
 	if (!activeIndices.empty()) {
 		std::string activeTimesText = "Active Times: ";
 		for (size_t i = 0; i < activeIndices.size(); ++i) {
-			if (i > 0) activeTimesText += ", ";
+			if (i > 0)
+				activeTimesText += ", ";
 			activeTimesText += timeOfDayNames[activeIndices[i]];
 		}
 		ImGui::Text("%s", activeTimesText.c_str());
@@ -173,29 +174,35 @@ std::vector<int> MenuManager::GetActiveTimeOfDayIndices() const
 
 	// Access time of day data from EffectManager (this data is updated every frame)
 	const auto& commonData = effectManager.commonData;
-	
+
 	// Check if we're in interior (> 0.5) or exterior
 	bool isInterior = commonData.eInteriorFactor > 0.5f;
-	
+
 	if (isInterior) {
 		// For interiors, show both day and night interior settings
-		activeIndices.push_back(6); // InteriorDay
-		activeIndices.push_back(7); // InteriorNight
+		activeIndices.push_back(6);  // InteriorDay
+		activeIndices.push_back(7);  // InteriorNight
 	} else {
 		// For exteriors, check which time-of-day periods have significant blend factors
-		const float threshold = 0.01f; // Only show periods with > 1% influence
-		
+		const float threshold = 0.01f;  // Only show periods with > 1% influence
+
 		// timeOfDay1: Dawn(0), Sunrise(1), Day(2), Sunset(3)
-		if (commonData.timeOfDay1[0] > threshold) activeIndices.push_back(0); // Dawn
-		if (commonData.timeOfDay1[1] > threshold) activeIndices.push_back(1); // Sunrise  
-		if (commonData.timeOfDay1[2] > threshold) activeIndices.push_back(2); // Day
-		if (commonData.timeOfDay1[3] > threshold) activeIndices.push_back(3); // Sunset
-		
+		if (commonData.timeOfDay1[0] > threshold)
+			activeIndices.push_back(0);  // Dawn
+		if (commonData.timeOfDay1[1] > threshold)
+			activeIndices.push_back(1);  // Sunrise
+		if (commonData.timeOfDay1[2] > threshold)
+			activeIndices.push_back(2);  // Day
+		if (commonData.timeOfDay1[3] > threshold)
+			activeIndices.push_back(3);  // Sunset
+
 		// timeOfDay2: Dusk(0), Night(1)
-		if (commonData.timeOfDay2[0] > threshold) activeIndices.push_back(4); // Dusk
-		if (commonData.timeOfDay2[1] > threshold) activeIndices.push_back(5); // Night
+		if (commonData.timeOfDay2[0] > threshold)
+			activeIndices.push_back(4);  // Dusk
+		if (commonData.timeOfDay2[1] > threshold)
+			activeIndices.push_back(5);  // Night
 	}
-	
+
 	return activeIndices;
 }
 
