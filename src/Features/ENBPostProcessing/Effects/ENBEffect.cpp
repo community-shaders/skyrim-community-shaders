@@ -79,6 +79,5 @@ void ENBEffect::UpdateEffectVariables()
 		SetShaderResourceVariable("TextureAdaptation", textureManager.GetCommonTexture(textureAdaptationName)->srv.get());
 	} else {
 		SetShaderResourceVariable("TextureAdaptation", nullptr);
-
 	}
 }
