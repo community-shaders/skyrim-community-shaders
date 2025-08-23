@@ -8,12 +8,12 @@
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	IBL::Settings,
 	EnableDiffuseIBL,
-	SampleUnderHorizonFromDynCube,
 	PreserveFogLuminance,
 	DiffuseIBLScale,
 	DALCAmount,
 	IBLSaturation,
-	FogAmount)
+	FogAmount,
+	DynamicCubemapsAmount)
 
 void IBL::DrawSettings()
 {
@@ -23,13 +23,12 @@ void IBL::DrawSettings()
 	ImGui::SliderFloat("DALC Amount", &settings.DALCAmount, 0.0f, 1.0f, "%.2f");
 	ImGui::SliderFloat("Fog Mix", &settings.FogAmount, 0.0f, 1.0f, "%.2f");
 	ImGui::Checkbox("Preserve Fog Luminance", (bool*)&settings.PreserveFogLuminance);
-	ImGui::Checkbox("[EXP] Sample Under Horizon From Dynamic Cubemaps", (bool*)&settings.SampleUnderHorizonFromDynCube);
+	ImGui::SliderFloat("Dynamic Cubemaps Amount", &settings.DynamicCubemapsAmount, 0.0f, 1.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
-			"Samples under the horizon from dynamic cubemaps.\n"
-			"Enables the use of dynamic cubemaps for IBL.\n"
+			"Samples from dynamic cubemaps.\n"
 			"Requires the Dynamic Cubemaps feature to be enabled.\n"
-			"Warning: may cause dynamic cubemaps sampling accumulation issues.");
+			"May cause dynamic cubemaps sampling accumulation issues under certain conditions.");
 	}
 }
 

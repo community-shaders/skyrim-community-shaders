@@ -42,17 +42,11 @@ void main(uint3 dispatchID : SV_DispatchThreadID, uint groupIndex : SV_GroupInde
 	// Sample cubemap with optimized direction
 	float3 color = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
 #if defined(DYNAMIC_CUBEMAPS)
-	// Optimized condition check using faster comparisons
-	if (rayDir.z >= 0 && SharedData::iblSettings.SampleUnderHorizonFromDynCube) {
-		float absZ = abs(rayDir.z);
-		if (absZ > abs(rayDir.x) && absZ > abs(rayDir.y)) {
-			color = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0);
-		}
+	if (SharedData::iblSettings.DynamicCubemapsAmount > 0.0f) {
+		float3 dcColor = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0);
+		color = lerp(color, dcColor, SharedData::iblSettings.DynamicCubemapsAmount);
 	}
 #endif
-
-	// Apply gamma correction
-	color = Color::GammaToLinear(color);
 
 	// Compute spherical harmonics basis for this direction
 	sh2 sh = SphericalHarmonics::Evaluate(rayDir);
