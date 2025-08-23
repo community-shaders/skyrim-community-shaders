@@ -7,66 +7,43 @@ enum class SettingType
 	TimeOfDay
 };
 
-// Time of Day setting with interpolation
 struct TimeOfDayValue
 {
-	float Dawn = 1.0f;
-	float Sunrise = 1.0f;
-	float Day = 1.0f;
-	float Sunset = 1.0f;
-	float Dusk = 1.0f;
-	float Night = 1.0f;
-	float InteriorDay = 1.0f;
-	float InteriorNight = 1.0f;
-
-	float& operator[](const std::string& timeOfDay)
+	float values[8] = { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
+	
+	enum Index
 	{
-		if (timeOfDay == "Dawn")
-			return Dawn;
-		if (timeOfDay == "Sunrise")
-			return Sunrise;
-		if (timeOfDay == "Day")
-			return Day;
-		if (timeOfDay == "Sunset")
-			return Sunset;
-		if (timeOfDay == "Dusk")
-			return Dusk;
-		if (timeOfDay == "Night")
-			return Night;
-		if (timeOfDay == "InteriorDay")
-			return InteriorDay;
-		if (timeOfDay == "InteriorNight")
-			return InteriorNight;
-		return Dawn;  // fallback
-	}
-
-	const float& operator[](const std::string& timeOfDay) const
+		Dawn = 0,
+		Sunrise = 1,
+		Day = 2,
+		Sunset = 3,
+		Dusk = 4,
+		Night = 5,
+		InteriorDay = 6,
+		InteriorNight = 7,
+		Total = 8
+	};
+	
+	float& operator[](Index idx) { return values[idx]; }
+	const float& operator[](Index idx) const { return values[idx]; }
+	
+	float& GetByName(const std::string& name)
 	{
-		if (timeOfDay == "Dawn")
-			return Dawn;
-		if (timeOfDay == "Sunrise")
-			return Sunrise;
-		if (timeOfDay == "Day")
-			return Day;
-		if (timeOfDay == "Sunset")
-			return Sunset;
-		if (timeOfDay == "Dusk")
-			return Dusk;
-		if (timeOfDay == "Night")
-			return Night;
-		if (timeOfDay == "InteriorDay")
-			return InteriorDay;
-		if (timeOfDay == "InteriorNight")
-			return InteriorNight;
-		return Dawn;  // fallback
+		if (name == "Dawn") return values[Dawn];
+		if (name == "Sunrise") return values[Sunrise];
+		if (name == "Day") return values[Day];
+		if (name == "Sunset") return values[Sunset];
+		if (name == "Dusk") return values[Dusk];
+		if (name == "Night") return values[Night];
+		if (name == "InteriorDay") return values[InteriorDay];
+		if (name == "InteriorNight") return values[InteriorNight];
+		return values[Dawn];
 	}
 };
 
-// Setting value variant
 using SettingValue = std::variant<bool, float, TimeOfDayValue>;
 
-// Setting metadata
-struct SettingInfo
+struct Setting
 {
 	std::string key;
 	std::string category;
@@ -74,10 +51,8 @@ struct SettingInfo
 	bool hasWeatherSupport;
 	SettingValue defaultValue;
 	SettingValue currentValue;
-
-	// UI metadata
-	float minValue = 0.0f;   // For float settings
-	float maxValue = 10.0f;  // For float settings
+	float minValue = 0.0f;
+	float maxValue = 10.0f;
 };
 
 class SettingManager
@@ -91,26 +66,21 @@ public:
 	void RegisterFloatSetting(const std::string& key, const std::string& category,
 		float defaultValue, float minValue = 0.0f, float maxValue = 10.0f, bool hasWeatherSupport = false);
 	void RegisterTimeOfDaySetting(const std::string& key, const std::string& category,
-		const TimeOfDayValue& defaultValue, bool hasWeatherSupport = false);
+		float defaultValue, bool hasWeatherSupport = false);
 
-	// Setting access
 	template <typename T>
 	T GetValue(const std::string& key, const std::string& category, bool rawValue = false);
 
 	template <typename T>
 	void SetValue(const std::string& key, const std::string& category, const T& value);
 
-	// Get interpolated time-of-day value (automatically handles weather blending if enabled)
-	float GetInterpolatedTimeOfDayValue(const std::string& key);
 	float GetInterpolatedTimeOfDayValue(const std::string& key, const std::string& category);
 
-	// Setting queries
 	bool HasSetting(const std::string& key, const std::string& category) const;
-	const SettingInfo* GetSettingInfo(const std::string& key, const std::string& category) const;
+	const Setting* GetSettingInfo(const std::string& key, const std::string& category) const;
 	std::vector<std::string> GetSettingsByCategory(const std::string& category) const;
 	std::vector<std::string> GetAllCategories() const;
 	bool CategoryHasWeatherSupport(const std::string& category) const;
-	std::vector<std::string> GetCategoriesWithWeatherSupport() const;
 
 	// Weather integration
 	void SetWeatherBlendFactors(uint32_t currentWeatherID, uint32_t lastWeatherID, float blendFactor);
@@ -139,28 +109,25 @@ public:
 	void SetTimeOfDayData(const float timeOfDay1[4], const float timeOfDay2[4], float interiorFactor);
 
 private:
-	std::unordered_map<std::string, std::unique_ptr<SettingInfo>> settings;
-	std::unordered_map<std::string, std::unordered_map<std::string, SettingValue>> weatherSettings;  // weatherKey -> settingKey -> value
+	struct CategorySettings {
+		std::unordered_map<std::string, Setting> settings;
+		bool ignoreWeatherSystem = false;
+		bool ignoreWeatherSystemInterior = true;
+	};
+	
+	std::unordered_map<std::string, CategorySettings> categories;
+	std::unordered_map<uint32_t, std::unordered_map<std::string, SettingValue>> weatherData;
 
-	// Current weather state
 	uint32_t currentWeatherID = 0;
 	uint32_t lastWeatherID = 0;
 	float weatherBlendFactor = 0.0f;
 
-	// Weather ignore settings per category
-	std::unordered_map<std::string, bool> ignoreWeatherSystem;          // category -> bool
-	std::unordered_map<std::string, bool> ignoreWeatherSystemInterior;  // category -> bool
-
-	// Time of day interpolation state
 	float timeOfDay1[4] = { 0, 0, 0, 0 };
 	float timeOfDay2[4] = { 0, 0, 0, 0 };
 	float interiorFactor = 0.0f;
 
-	// Helper methods
-	std::string MakeCompositeKey(const std::string& key, const std::string& category) const;
-	SettingValue InterpolateWeatherValues(const SettingValue& currentValue, const SettingValue& lastValue, float t);
-	TimeOfDayValue InterpolateTimeOfDayValues(const TimeOfDayValue& a, const TimeOfDayValue& b, float t);
+	SettingValue InterpolateValues(const SettingValue& a, const SettingValue& b, float t);
 	float ComputeTimeOfDayInterpolation(const TimeOfDayValue& value);
-	void LoadSettingFromFile(const std::string& filePath, const std::string& section, const std::string& key, SettingInfo& setting);
-	void SaveSettingToFile(const std::string& filePath, const std::string& section, const std::string& key, const SettingInfo& setting);
+	void LoadSettingFromFile(const std::string& filePath, const std::string& section, const std::string& key, Setting& setting);
+	void SaveSettingToFile(const std::string& filePath, const std::string& section, const std::string& key, const Setting& setting);
 };

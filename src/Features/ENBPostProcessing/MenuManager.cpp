@@ -212,17 +212,17 @@ void MenuManager::RenderAllSettings()
 						}
 					case SettingType::TimeOfDay:
 						{
-							const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night" };
+							const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
 							auto v = settingManager.GetValue<TimeOfDayValue>(settingKey, category, true);
 							bool changed = false;
 
-							for (const auto& timeOfDay : timeOfDayNames) {
+							for (int i = 0; i < TimeOfDayValue::Total; ++i) {
 								ImGui::TableNextRow();
 								ImGui::TableSetColumnIndex(0);
-								ImGui::Text("%s%s", settingKey.c_str(), timeOfDay.c_str());
+								ImGui::Text("%s%s", settingKey.c_str(), timeOfDayNames[i].c_str());
 								ImGui::TableSetColumnIndex(1);
-								std::string id = "##" + settingKey + timeOfDay;
-								if (ImGui::SliderFloat(id.c_str(), &v[timeOfDay], settingInfo->minValue, settingInfo->maxValue, "%.1f")) {
+								std::string id = "##" + settingKey + timeOfDayNames[i];
+								if (ImGui::SliderFloat(id.c_str(), &v.values[i], settingInfo->minValue, settingInfo->maxValue, "%.1f")) {
 									changed = true;
 								}
 							}
