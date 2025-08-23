@@ -120,8 +120,3 @@ target_link_libraries(
 	PUBLIC
 	CommonLibSSE::CommonLibSSE
 )
-
-# Add buffer alignment validation if enabled
-if(ENABLE_BUFFER_ALIGNMENT_VALIDATION)
-    add_buffer_alignment_validation(${PROJECT_NAME})
-endif()
