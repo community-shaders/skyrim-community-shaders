@@ -308,24 +308,28 @@ void PostProcessing::SavePresetTo(std::string a_name)
 }
 
 void PostProcessing::RestoreDefaultSettings()
-{
-	settings = {};
-	pipeline[static_cast<size_t>(FeaturePipelineIndex::AutoExposure)].get()->enabled = true;
-	pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)].get()->enabled = true;
-	pipeline[static_cast<size_t>(FeaturePipelineIndex::LUT)].get()->enabled = false;
+{	
+	try {
+		LoadSettings("default");
+	} catch (const std::exception& e) {
+		settings = {};
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::AutoExposure)].get()->enabled = true;
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)].get()->enabled = true;
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::LUT)].get()->enabled = false;
 
-	if (!REL::Module::IsVR()) {
-		pipeline[static_cast<size_t>(FeaturePipelineIndex::MotionBlur)].get()->enabled = false;
-		pipeline[static_cast<size_t>(FeaturePipelineIndex::DoF)].get()->enabled = false;
-		pipeline[static_cast<size_t>(FeaturePipelineIndex::CODBloom)].get()->enabled = true;
-		pipeline[static_cast<size_t>(FeaturePipelineIndex::LensFlare)].get()->enabled = false;
-		pipeline[static_cast<size_t>(FeaturePipelineIndex::Vignette)].get()->enabled = true;
-		pipeline[static_cast<size_t>(FeaturePipelineIndex::Camera)].get()->enabled = false;
-	}
+		if (!REL::Module::IsVR()) {
+			pipeline[static_cast<size_t>(FeaturePipelineIndex::MotionBlur)].get()->enabled = false;
+			pipeline[static_cast<size_t>(FeaturePipelineIndex::DoF)].get()->enabled = false;
+			pipeline[static_cast<size_t>(FeaturePipelineIndex::CODBloom)].get()->enabled = true;
+			pipeline[static_cast<size_t>(FeaturePipelineIndex::LensFlare)].get()->enabled = false;
+			pipeline[static_cast<size_t>(FeaturePipelineIndex::Vignette)].get()->enabled = true;
+			pipeline[static_cast<size_t>(FeaturePipelineIndex::Camera)].get()->enabled = false;
+		}
 
-	for (auto& pipe : pipeline) {
-		if (pipe) {
-			pipe->RestoreDefaultSettings();
+		for (auto& pipe : pipeline) {
+			if (pipe) {
+				pipe->RestoreDefaultSettings();
+			}
 		}
 	}
 }
