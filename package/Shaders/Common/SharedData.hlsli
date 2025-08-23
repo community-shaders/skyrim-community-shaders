@@ -178,13 +178,13 @@ namespace SharedData
 	struct IBLSettings
 	{
 		uint EnableDiffuseIBL;
-		uint SampleUnderHorizonFromDynCube;
 		uint PreserveFogLuminance;
-		uint pad;
 		float DiffuseIBLScale;
 		float DALCAmount;
 		float IBLSaturation;
 		float FogAmount;
+		float DynamicCubemapsAmount;
+		float pad;
 	};
 
 	struct ExtendedTranslucencySettings
