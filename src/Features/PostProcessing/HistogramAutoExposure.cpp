@@ -9,15 +9,12 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	HistogramAutoExposure::Settings,
 	ExposureCompensation,
 	EnableToD,
-	ToDExposure[0],
-	ToDExposure[1],
-	ToDExposure[2],
-	ToDExposure[3],
-	ToDExposure[4],
-	ToDExposure[5],
+	ToDExposure,
 	EnableInterior,
 	InteriorExposure,
 	AdaptationRange,
+	ToDAdaptationRange,
+	InteriorAdaptationRange,
 	AdaptArea,
 	AdaptSpeed,
 	PurkinjeStartEV,
@@ -55,12 +52,30 @@ void HistogramAutoExposure::DrawSettings()
 	ImGui::SliderFloat2("Focus Area", &settings.AdaptArea.x, 0.f, 1.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("Specifies the proportion of the area [width, height] that auto exposure will adapt to.");
-	ImGui::SliderFloat2("Adaptation Range", &settings.AdaptationRange.x, -6.f, 21.f, "%.2f EV");
-	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(
-			"[Min, Max] The average scene luminance will be clamped between them when doing auto exposure."
-			"Turning up the minimum, for example, makes it adapt less to darkness and therefore prevents over-brightening of dark scenes.");
-
+	if (settings.EnableToD) {
+		if (ImGui::TreeNodeEx("ToD Adaptation Range Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::SliderFloat2("Dawn Adaptation Range", &settings.ToDAdaptationRange[0].x, -6.f, 21.f, "%.2f EV");
+			ImGui::SliderFloat2("Sunrise Adaptation Range", &settings.ToDAdaptationRange[1].x, -6.f, 21.f, "%.2f EV");
+			ImGui::SliderFloat2("Day Adaptation Range", &settings.ToDAdaptationRange[2].x, -6.f, 21.f, "%.2f EV");
+			ImGui::SliderFloat2("Sunset Adaptation Range", &settings.ToDAdaptationRange[3].x, -6.f, 21.f, "%.2f EV");
+			ImGui::SliderFloat2("Dusk Adaptation Range", &settings.ToDAdaptationRange[4].x, -6.f, 21.f, "%.2f EV");
+			ImGui::SliderFloat2("Night Adaptation Range", &settings.ToDAdaptationRange[5].x, -6.f, 21.f, "%.2f EV");
+			ImGui::TreePop();
+		}
+	} else {
+		ImGui::SliderFloat2("Adaptation Range", &settings.AdaptationRange.x, -6.f, 21.f, "%.2f EV");
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text(
+				"[Min, Max] The average scene luminance will be clamped between them when doing auto exposure."
+				"Turning up the minimum, for example, makes it adapt less to darkness and therefore prevents over-brightening of dark scenes.");
+	}
+	if (settings.EnableInterior) {
+		ImGui::SliderFloat2("Interior Adaptation Range", &settings.InteriorAdaptationRange.x, -6.f, 21.f, "%.2f EV");
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text(
+				"[Min, Max] The average scene luminance will be clamped between them when doing auto exposure for interiors."
+				"Turning up the minimum, for example, makes it adapt less to darkness and therefore prevents over-brightening of dark scenes.");
+	}
 	if (ImGui::TreeNodeEx("Purkinje Effect", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::TextWrapped(
 			"The Purkinje effect simulates the blue shift of human vision under low light.\n"
@@ -187,6 +202,7 @@ void HistogramAutoExposure::Draw(TextureInfo& inout_tex)
 
 	auto& pp = globals::features::postProcessing;
 	float exposureCompensation = settings.ExposureCompensation;
+	float2 adaptationRange = settings.AdaptationRange;
 	if (pp.imageSpaceManager != nullptr) {
 		if (settings.EnableToD) {
 			exposureCompensation = pp.imageSpaceManager->timeOfDay[0] * settings.ToDExposure[0] +
@@ -195,15 +211,22 @@ void HistogramAutoExposure::Draw(TextureInfo& inout_tex)
 				pp.imageSpaceManager->timeOfDay[3] * settings.ToDExposure[3] +
 				pp.imageSpaceManager->timeOfDay[4] * settings.ToDExposure[4] +
 				pp.imageSpaceManager->timeOfDay[5] * settings.ToDExposure[5];
+			adaptationRange = pp.imageSpaceManager->timeOfDay[0] * settings.ToDAdaptationRange[0] +
+				pp.imageSpaceManager->timeOfDay[1] * settings.ToDAdaptationRange[1] +
+				pp.imageSpaceManager->timeOfDay[2] * settings.ToDAdaptationRange[2] +
+				pp.imageSpaceManager->timeOfDay[3] * settings.ToDAdaptationRange[3] +
+				pp.imageSpaceManager->timeOfDay[4] * settings.ToDAdaptationRange[4] +
+				pp.imageSpaceManager->timeOfDay[5] * settings.ToDAdaptationRange[5];
 		}
 		if (settings.EnableInterior && pp.imageSpaceManager->inInterior) {
 			exposureCompensation = settings.InteriorExposure;
+			adaptationRange = settings.InteriorAdaptationRange;
 		}
 	}
 
 	AutoExposureCB cbData = {
 		.AdaptArea = settings.AdaptArea,
-		.AdaptationRange = { exp2(settings.AdaptationRange.x) * 0.125f, exp2(settings.AdaptationRange.y) * 0.125f },
+		.AdaptationRange = { exp2(adaptationRange.x) * 0.125f, exp2(adaptationRange.y) * 0.125f },
 		.AdaptLerp = std::clamp(1.f - exp(-RE::BSTimer::GetSingleton()->realTimeDelta * settings.AdaptSpeed), 0.f, 1.f),
 		.ExposureCompensation = exp2(exposureCompensation),
 		.PurkinjeStartEV = settings.PurkinjeStartEV,
