@@ -798,7 +798,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #					if defined(VANILLA_FRESNEL)
 	if (SharedData::vanillaFresnelSettings.Enable) {
 #					endif
-	float2 specularBDRF = DynamicCubemaps::EnvBRDFApprox(roughness, saturate(dot(viewDirection, normalVS)));
+	float2 specularBDRF = BRDF::EnvBRDF(roughness, saturate(dot(viewDirection, normalVS)));
 	reflectance = F0 * specularBDRF.x + specularBDRF.y;
 #					if defined(VANILLA_FRESNEL)
 	}
