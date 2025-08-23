@@ -46,8 +46,8 @@ struct ColorGrading : public PostProcessFeature
         bool useToDInterior = false;
         bool skipLDR = false;
         std::array<ColorProfile, 8> profiles = {};
-        std::string currentTonemapper = "Reinhard";
-        std::array<float4, 2> tonemapParams = { float4{ 0.f, 0.f, 0.f, 0.f }, float4{ 0.f, 0.f, 0.f, 0.f } };
+        std::string currentTonemapper = "GT7";
+        std::array<float4, 2> tonemapParams = { float4{ 1.f, 0.f, 0.f, 0.f }, float4{ 0.f, 0.f, 0.f, 0.f } };
         float3 gameCinematicBlend = { 1.0f, 1.0f, 1.0f };
         float gameFadeBlend = 1.0f;
         float gameTintBlend = 1.0f;
@@ -59,8 +59,8 @@ struct ColorGrading : public PostProcessFeature
         int inputColorSpace = 0;
         int processColorSpace = 0;
         int outputColorSpace = 0;
-        std::array<float3, 3> colorSpaceTransform = { float3{ 1.0f, 1.0f, 1.0f }, float3{ 1.0f, 1.0f, 1.0f }, float3{ 1.0f, 1.0f, 1.0f } };
-        std::array<float3, 3> invColorSpaceTransform = { float3{ 1.0f, 1.0f, 1.0f }, float3{ 1.0f, 1.0f, 1.0f }, float3{ 1.0f, 1.0f, 1.0f } };
+        std::array<float3, 3> colorSpaceTransform = { float3{ 1.0f, 0.0f, 0.0f }, float3{ 0.0f, 1.0f, 0.0f }, float3{ 0.0f, 0.0f, 1.0f } };
+        std::array<float3, 3> invColorSpaceTransform = { float3{ 1.0f, 0.0f, 0.0f }, float3{ 0.0f, 1.0f, 0.0f }, float3{ 0.0f, 0.0f, 1.0f } };
     } settings;
 
     int tonemapperType = 1;
