@@ -299,9 +299,9 @@ void PerformanceOverlay::DrawOverlay()
 		}
 		if (this->settings.ShowDrawCalls) {
 			// Draw calls table needs width - less if only showing draw calls without performance data
-			float tableWidth = globals::state->IsDeveloperMode() ? 
-				PerformanceOverlay::Settings::kDrawCallsTableWidth : 
-				PerformanceOverlay::Settings::kDrawCallsTableWidth * 0.5f; // Narrower for basic draw calls table
+			float tableWidth = globals::state->IsDeveloperMode() ?
+			                       PerformanceOverlay::Settings::kDrawCallsTableWidth :
+			                       PerformanceOverlay::Settings::kDrawCallsTableWidth * 0.5f;  // Narrower for basic draw calls table
 			minWidth = std::max(minWidth, tableWidth * this->settings.TextSize);
 		}
 		if (this->settings.ShowVRAM && menu->GetDXGIAdapter3()) {
@@ -354,8 +354,9 @@ void PerformanceOverlay::DrawOverlay()
 	if (this->settings.ShowDrawCalls) {
 		static bool drawCallsExpanded = true;
 		if (showCollapsibleSections) {
-			std::string sectionHeader = globals::state->IsDeveloperMode() ? 
-				"Draw Calls & Shader Performance" : "Draw Calls";
+			std::string sectionHeader = globals::state->IsDeveloperMode() ?
+			                                "Draw Calls & Shader Performance" :
+			                                "Draw Calls";
 			Util::DrawSectionHeader(sectionHeader, false, true, &drawCallsExpanded);
 		}
 		if (drawCallsExpanded) {
@@ -1428,32 +1429,32 @@ std::vector<ColumnConfig> PerformanceOverlay::BuildDrawCallTableColumns(const Me
 					}
 				}
 			} },
-	columns.push_back(ColumnConfig{
-		legends.drawCalls.header,
-		[](const DrawCallRow& row, int) {
-			if (row.drawCalls == kDrawCallsNotApplicable) {
-				ImGui::TextDisabled("-");
-			} else {
-				ImGui::Text("%d", row.drawCalls);
-			}
-			if (ImGui::IsItemHovered()) {
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					if (row.drawCalls == kDrawCallsNotApplicable) {
-						ImGui::TextUnformatted("Draw Calls: Not applicable for unmeasured GPU time.");
-					} else {
-						ImGui::TextUnformatted("Draw Calls: Number of draw calls for this shader type in the current frame.");
+		columns.push_back(ColumnConfig{
+			legends.drawCalls.header,
+			[](const DrawCallRow& row, int) {
+				if (row.drawCalls == kDrawCallsNotApplicable) {
+					ImGui::TextDisabled("-");
+				} else {
+					ImGui::Text("%d", row.drawCalls);
+				}
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						if (row.drawCalls == kDrawCallsNotApplicable) {
+							ImGui::TextUnformatted("Draw Calls: Not applicable for unmeasured GPU time.");
+						} else {
+							ImGui::TextUnformatted("Draw Calls: Number of draw calls for this shader type in the current frame.");
+						}
 					}
 				}
-			}
-		},
-		[](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.drawCalls < b.drawCalls) : (a.drawCalls > b.drawCalls); },
-		[legends]() {
-			if (ImGui::IsItemHovered()) {
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					Util::DrawColoredMultiLineTooltip(legends.drawCalls.tooltip);
+			},
+			[](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.drawCalls < b.drawCalls) : (a.drawCalls > b.drawCalls); },
+			[legends]() {
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						Util::DrawColoredMultiLineTooltip(legends.drawCalls.tooltip);
+					}
 				}
-			}
-		} });
+			} });
 
 	// Only show performance-related columns in developer mode
 	if (globals::state->IsDeveloperMode()) {
