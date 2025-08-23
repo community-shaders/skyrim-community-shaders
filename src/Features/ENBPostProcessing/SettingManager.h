@@ -157,7 +157,6 @@ private:
 	float timeOfDay2[4] = { 0, 0, 0, 0 };
 	float interiorFactor = 0.0f;
 
-
 	// Helper methods
 	std::string MakeCompositeKey(const std::string& key, const std::string& category) const;
 	SettingValue InterpolateWeatherValues(const SettingValue& currentValue, const SettingValue& lastValue, float t);
