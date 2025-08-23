@@ -1,7 +1,7 @@
 #include "IniFile.h"
+#include <algorithm>
 #include <fstream>
 #include <sstream>
-#include <algorithm>
 
 IniFile::IniFile(const std::string& filePath)
 {
@@ -14,7 +14,7 @@ void IniFile::Load(const std::string& filePath)
 	loadedFilePath = filePath;
 
 	if (!std::filesystem::exists(filePath)) {
-		return; // File doesn't exist, start with empty data
+		return;  // File doesn't exist, start with empty data
 	}
 
 	std::ifstream file(filePath);
@@ -44,12 +44,12 @@ void IniFile::Save(const std::string& filePath)
 	for (const auto& [sectionName, keyValueMap] : sections) {
 		if (!keyValueMap.empty()) {
 			file << "[" << sectionName << "]\n";
-			
+
 			// Write key-value pairs in consistent order
 			for (const auto& [key, value] : keyValueMap) {
 				file << key << "=" << value << "\n";
 			}
-			file << "\n"; // Empty line after each section
+			file << "\n";  // Empty line after each section
 		}
 	}
 }
@@ -104,7 +104,7 @@ void IniFile::Clear()
 void IniFile::ParseLine(const std::string& line, std::string& currentSection)
 {
 	std::string trimmedLine = Trim(line);
-	
+
 	// Skip empty lines and comments
 	if (trimmedLine.empty() || trimmedLine[0] == ';' || trimmedLine[0] == '#') {
 		return;
@@ -122,7 +122,7 @@ void IniFile::ParseLine(const std::string& line, std::string& currentSection)
 	if (equalPos != std::string::npos && !currentSection.empty()) {
 		std::string key = Trim(trimmedLine.substr(0, equalPos));
 		std::string value = Trim(trimmedLine.substr(equalPos + 1));
-		
+
 		if (!key.empty()) {
 			sections[currentSection][key] = value;
 		}

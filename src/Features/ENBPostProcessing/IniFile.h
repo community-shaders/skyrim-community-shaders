@@ -1,8 +1,8 @@
 #pragma once
 
+#include <filesystem>
 #include <string>
 #include <unordered_map>
-#include <filesystem>
 
 class IniFile
 {
@@ -12,14 +12,14 @@ public:
 
 	// Load from file
 	void Load(const std::string& filePath);
-	
+
 	// Save to file
 	void Save(const std::string& filePath);
-	void Save(); // Save to the file it was loaded from
+	void Save();  // Save to the file it was loaded from
 
 	// Get value (returns defaultValue if not found)
 	std::string GetString(const std::string& section, const std::string& key, const std::string& defaultValue = "") const;
-	
+
 	// Set value
 	void SetString(const std::string& section, const std::string& key, const std::string& value);
 

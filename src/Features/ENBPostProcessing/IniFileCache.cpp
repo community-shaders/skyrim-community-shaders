@@ -1,6 +1,6 @@
 #include "IniFileCache.h"
-#include <filesystem>
 #include <algorithm>
+#include <filesystem>
 
 IniFileCache& IniFileCache::GetSingleton()
 {
@@ -11,7 +11,7 @@ IniFileCache& IniFileCache::GetSingleton()
 IniFile& IniFileCache::GetFile(const std::string& filePath)
 {
 	std::string normalizedPath = NormalizePath(filePath);
-	
+
 	auto it = cache.find(normalizedPath);
 	if (it != cache.end()) {
 		return *it->second;
@@ -57,7 +57,7 @@ std::string IniFileCache::NormalizePath(const std::string& path) const
 		std::filesystem::path fsPath(path);
 		fsPath = std::filesystem::absolute(fsPath);
 		std::string result = fsPath.string();
-		
+
 		// Convert to lowercase for consistent caching on Windows
 		std::transform(result.begin(), result.end(), result.begin(), ::tolower);
 		return result;
@@ -69,23 +69,24 @@ std::string IniFileCache::NormalizePath(const std::string& path) const
 	}
 }
 
-namespace IniAPI {
-	std::string GetPrivateProfileString(const std::string& section, const std::string& key, 
+namespace IniAPI
+{
+	std::string GetPrivateProfileString(const std::string& section, const std::string& key,
 		const std::string& defaultValue, const std::string& filePath)
 	{
 		auto& cache = IniFileCache::GetSingleton();
 		IniFile& iniFile = cache.GetFile(filePath);
 		return iniFile.GetString(section, key, defaultValue);
 	}
-	
-	void WritePrivateProfileString(const std::string& section, const std::string& key, 
+
+	void WritePrivateProfileString(const std::string& section, const std::string& key,
 		const std::string& value, const std::string& filePath)
 	{
 		auto& cache = IniFileCache::GetSingleton();
 		IniFile& iniFile = cache.GetFile(filePath);
 		iniFile.SetString(section, key, value);
 	}
-	
+
 	void FlushAll()
 	{
 		auto& cache = IniFileCache::GetSingleton();

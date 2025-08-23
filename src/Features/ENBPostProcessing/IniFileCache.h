@@ -1,9 +1,9 @@
 #pragma once
 
 #include "IniFile.h"
-#include <unordered_map>
-#include <memory>
 #include <future>
+#include <memory>
+#include <unordered_map>
 #include <vector>
 
 class IniFileCache
@@ -28,18 +28,19 @@ public:
 
 private:
 	std::unordered_map<std::string, std::unique_ptr<IniFile>> cache;
-	
+
 	std::string NormalizePath(const std::string& path) const;
 };
 
 // Convenience functions that match the Windows API but use our cache
-namespace IniAPI {
-	std::string GetPrivateProfileString(const std::string& section, const std::string& key, 
+namespace IniAPI
+{
+	std::string GetPrivateProfileString(const std::string& section, const std::string& key,
 		const std::string& defaultValue, const std::string& filePath);
-	
-	void WritePrivateProfileString(const std::string& section, const std::string& key, 
+
+	void WritePrivateProfileString(const std::string& section, const std::string& key,
 		const std::string& value, const std::string& filePath);
-		
+
 	// Batch save all cached files (call this after multiple writes)
 	void FlushAll();
 }
