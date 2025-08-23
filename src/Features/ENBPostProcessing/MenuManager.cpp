@@ -241,6 +241,64 @@ void MenuManager::RenderAllSettings()
 				if (tabName == "Weather") {
 					RenderWeatherControl();
 					ImGui::Separator();
+					
+					// Show TimeOfDay header for Weather tab only
+					const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
+					auto activeIndices = GetActiveTimeOfDayIndices();
+					
+					if (!activeIndices.empty()) {
+						if (ImGui::BeginTable("WeatherTimeOfDayHeader", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
+							ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed);
+							ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+							ImGui::TableNextRow();
+							ImGui::TableSetColumnIndex(0);
+							ImGui::Text("Time Periods");
+							ImGui::TableSetColumnIndex(1);
+							
+							float totalWidth = ImGui::GetContentRegionAvail().x;
+							float sliderWidth = (totalWidth - (activeIndices.size() - 1) * 8.0f) / activeIndices.size();
+							
+							for (size_t idx = 0; idx < activeIndices.size(); ++idx) {
+								int i = activeIndices[idx];
+								
+								if (idx > 0) {
+									ImGui::SameLine();
+								}
+								
+								// Use a child region to control the exact width and center the text
+								ImGui::BeginChild(("##weatherheader_" + std::to_string(i)).c_str(), ImVec2(sliderWidth, ImGui::GetTextLineHeight()), false, ImGuiWindowFlags_NoScrollbar);
+								
+								float labelWidth = ImGui::CalcTextSize(timeOfDayNames[i].c_str()).x;
+								float centerOffset = (sliderWidth - labelWidth) * 0.5f;
+								if (centerOffset > 0) {
+									ImGui::SetCursorPosX(centerOffset);
+								}
+								
+								// Style the label based on activity
+								float blendFactor = GetTimeOfDayBlendFactor(i);
+								bool isActive = blendFactor > 0.01f;
+								
+								if (!isActive) {
+									// Inactive periods: dim the text
+									ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 0.7f));
+								}
+								// Active periods: use default theme color (no style override)
+								
+								ImGui::Text("%s", timeOfDayNames[i].c_str());
+								
+								if (!isActive) {
+									ImGui::PopStyleColor();
+								}
+								
+								ImGui::EndChild();
+							}
+							
+							ImGui::EndTable();
+						}
+						
+						ImGui::Separator();
+					}
 				}
 
 				for (const auto& category : categories) {
@@ -292,70 +350,6 @@ void MenuManager::RenderAllSettings()
 								ImGui::Separator();
 							}
 
-							// Show TimeOfDay annotation header once for the category
-							bool hasTimeOfDaySettings = false;
-							for (const auto& settingKey : settings) {
-								auto settingInfo = settingManager.GetSettingInfo(settingKey, category);
-								if (settingInfo && settingInfo->type == SettingType::TimeOfDay) {
-									hasTimeOfDaySettings = true;
-									break;
-								}
-							}
-
-							if (hasTimeOfDaySettings) {
-								const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
-								auto activeIndices = GetActiveTimeOfDayIndices();
-
-								ImGui::TableNextRow();
-								ImGui::TableSetColumnIndex(0);
-								ImGui::Text("Active Times:");
-								ImGui::TableSetColumnIndex(1);
-
-								float totalWidth = ImGui::GetContentRegionAvail().x;
-								float sliderWidth = (totalWidth - (activeIndices.size() - 1) * 8.0f) / activeIndices.size();
-
-								for (size_t idx = 0; idx < activeIndices.size(); ++idx) {
-									int i = activeIndices[idx];
-
-									if (idx > 0) {
-										ImGui::SameLine();
-									}
-
-									// Use a child region to control the exact width and center the text
-									ImGui::BeginChild(("##timeheader_" + std::to_string(i)).c_str(), ImVec2(sliderWidth, ImGui::GetTextLineHeight()), false, ImGuiWindowFlags_NoScrollbar);
-
-									float labelWidth = ImGui::CalcTextSize(timeOfDayNames[i].c_str()).x;
-									float centerOffset = (sliderWidth - labelWidth) * 0.5f;
-									if (centerOffset > 0) {
-										ImGui::SetCursorPosX(centerOffset);
-									}
-
-									// Style the label based on activity
-									float blendFactor = GetTimeOfDayBlendFactor(i);
-									bool isActive = blendFactor > 0.01f;
-
-									if (!isActive) {
-										// Inactive periods: dim the text
-										ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 0.7f));
-									}
-									// Active periods: use default theme color (no style override)
-
-									ImGui::Text("%s", timeOfDayNames[i].c_str());
-
-									if (!isActive) {
-										ImGui::PopStyleColor();
-									}
-
-									ImGui::EndChild();
-								}
-
-								// Add separator after header
-								ImGui::TableNextRow();
-								ImGui::TableSetColumnIndex(0);
-								ImGui::Separator();
-								ImGui::TableSetColumnIndex(1);
-								ImGui::Separator();
-							}
 
 							for (const auto& settingKey : settings) {
 								auto settingInfo = settingManager.GetSettingInfo(settingKey, category);
