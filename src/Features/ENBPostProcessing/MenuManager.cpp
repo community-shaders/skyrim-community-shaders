@@ -232,7 +232,7 @@ void MenuManager::RenderAllSettings()
 							if (settingManager.CategoryHasWeatherSupport(category)) {
 								auto& effectManager = EffectManager::GetSingleton();
 								bool isInterior = effectManager.commonData.eInteriorFactor > 0.5f;
-								
+
 								if (!isInterior) {
 									// Show exterior ignore setting when outside
 									ImGui::TableNextRow();
@@ -278,39 +278,39 @@ void MenuManager::RenderAllSettings()
 									break;
 								}
 							}
-							
+
 							if (hasTimeOfDaySettings) {
 								const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
 								auto activeIndices = GetActiveTimeOfDayIndices();
-								
+
 								ImGui::TableNextRow();
 								ImGui::TableSetColumnIndex(0);
 								ImGui::Text("Active Times:");
 								ImGui::TableSetColumnIndex(1);
-								
+
 								float totalWidth = ImGui::GetContentRegionAvail().x;
 								float sliderWidth = (totalWidth - (activeIndices.size() - 1) * 8.0f) / activeIndices.size();
-								
+
 								for (size_t idx = 0; idx < activeIndices.size(); ++idx) {
 									int i = activeIndices[idx];
-									
+
 									if (idx > 0) {
 										ImGui::SameLine();
 									}
-									
+
 									// Use a child region to control the exact width and center the text
 									ImGui::BeginChild(("##timeheader_" + std::to_string(i)).c_str(), ImVec2(sliderWidth, ImGui::GetTextLineHeight()), false, ImGuiWindowFlags_NoScrollbar);
-									
+
 									float labelWidth = ImGui::CalcTextSize(timeOfDayNames[i].c_str()).x;
 									float centerOffset = (sliderWidth - labelWidth) * 0.5f;
 									if (centerOffset > 0) {
 										ImGui::SetCursorPosX(centerOffset);
 									}
 									ImGui::Text("%s", timeOfDayNames[i].c_str());
-									
+
 									ImGui::EndChild();
 								}
-								
+
 								// Add separator after header
 								ImGui::TableNextRow();
 								ImGui::TableSetColumnIndex(0);
@@ -361,15 +361,15 @@ void MenuManager::RenderAllSettings()
 
 										// Render all active sliders horizontally
 										float totalWidth = ImGui::GetContentRegionAvail().x;
-										float sliderWidth = (totalWidth - (activeIndices.size() - 1) * 8.0f) / activeIndices.size(); // 8px spacing between sliders
+										float sliderWidth = (totalWidth - (activeIndices.size() - 1) * 8.0f) / activeIndices.size();  // 8px spacing between sliders
 
 										for (size_t idx = 0; idx < activeIndices.size(); ++idx) {
 											int i = activeIndices[idx];
-											
+
 											if (idx > 0) {
 												ImGui::SameLine();
 											}
-											
+
 											ImGui::PushItemWidth(sliderWidth);
 											std::string id = "##" + settingKey + std::to_string(i);
 											if (ImGui::SliderFloat(id.c_str(), &v.values[i], settingInfo->minValue, settingInfo->maxValue, "%.1f")) {
