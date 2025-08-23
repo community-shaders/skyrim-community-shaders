@@ -23,6 +23,9 @@ void ENBPostProcessing::DrawSettings()
 
 void ENBPostProcessing::SetupResources()
 {
+	auto& settingManager = SettingManager::GetSingleton();
+	settingManager.RegisterBoolSetting("UseEffect", "GLOBAL", true, false);
+
 	// Create shared texture resources
 	TextureManager::GetSingleton().Initialize();
 
@@ -30,7 +33,7 @@ void ENBPostProcessing::SetupResources()
 	EffectManager::GetSingleton().Initialize();
 
 	// Load registered settings
-	SettingManager::GetSingleton().Load();
+	settingManager.Load();
 }
 
 void ENBPostProcessing::Reset()
@@ -40,23 +43,25 @@ void ENBPostProcessing::Reset()
 
 struct Main_HDRTonemapBlendCinematic_Render
 {
-	static void thunk(RE::ImageSpaceManager*, RE::ImageSpaceEffect*, uint32_t, uint32_t, RE::ImageSpaceShaderParam*)
+	static void thunk(RE::ImageSpaceManager* a1, RE::ImageSpaceEffect* a2, uint32_t a3, uint32_t a4, RE::ImageSpaceShaderParam* a5)
 	{
-		auto& effectManager = EffectManager::GetSingleton();
-
-		effectManager.UpdateCommonData();
-
-		const auto& commonData = effectManager.GetCommonData();
 		auto& settingManager = SettingManager::GetSingleton();
-		settingManager.SetTimeOfDayData(commonData.timeOfDay1, commonData.timeOfDay2, commonData.eInteriorFactor);
-		settingManager.SetWeatherBlendFactors(
-			static_cast<uint32_t>(commonData.weather[0]),
-			static_cast<uint32_t>(commonData.weather[1]),
-			commonData.weather[2]);
+		if (settingManager.GetValue<bool>("UseEffect", "GLOBAL")) {
+			auto& effectManager = EffectManager::GetSingleton();
 
-		effectManager.ExecuteEffects();
+			effectManager.UpdateCommonData();
 
-		//func(a1, a2, a3, a4, a5);
+			const auto& commonData = effectManager.GetCommonData();
+			settingManager.SetTimeOfDayData(commonData.timeOfDay1, commonData.timeOfDay2, commonData.eInteriorFactor);
+			settingManager.SetWeatherBlendFactors(
+				static_cast<uint32_t>(commonData.weather[0]),
+				static_cast<uint32_t>(commonData.weather[1]),
+				commonData.weather[2]);
+
+			effectManager.ExecuteEffects();
+		} else {
+			func(a1, a2, a3, a4, a5);
+		}
 	}
 
 	static inline REL::Relocation<decltype(thunk)> func;

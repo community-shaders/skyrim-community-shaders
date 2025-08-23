@@ -56,6 +56,12 @@ void EffectManager::RegisterSettings()
 {
 	auto& settingManager = SettingManager::GetSingleton();
 
+	settingManager.RegisterBoolSetting("EnablePostPassShader", "EFFECT", false, false);
+	settingManager.RegisterBoolSetting("EnableAdaptation", "EFFECT", true, false);
+	settingManager.RegisterBoolSetting("EnableBloom", "EFFECT", true, false);
+	settingManager.RegisterBoolSetting("EnableLens", "EFFECT", false, false);
+	settingManager.RegisterBoolSetting("EnableDepthOfField", "EFFECT", true, false);
+
 	settingManager.RegisterFloatSetting("Brightness", "COLORCORRECTION", 1.0f, 0.0f, 3.0f, false);
 	settingManager.RegisterFloatSetting("GammaCurve", "COLORCORRECTION", 1.0f, 0.1f, 3.0f, false);
 
@@ -107,7 +113,10 @@ void EffectManager::ExecuteEffects()
 
 	auto state = globals::state;
 
-	if (enbDepthOfField.IsCompiled()) {
+	auto& settingManager = SettingManager::GetSingleton();
+	auto& textureManager = TextureManager::GetSingleton();
+
+	if (enbDepthOfField.IsCompiled() && settingManager.GetValue<bool>("EnableDepthOfField", "EFFECT")) {
 		state->BeginPerfEvent(enbDepthOfField.GetName());
 		UpdateCommonVariablesForEffect(enbDepthOfField.GetEffect());
 		enbDepthOfField.UpdateEffectVariables();
@@ -116,9 +125,9 @@ void EffectManager::ExecuteEffects()
 	}
 
 	// Downsampled texture shared between bloom, lens and adaptation
-	TextureManager::GetSingleton().UpdateDownsampledTexture(textureOriginal.SRV);
+	textureManager.UpdateDownsampledTexture(textureOriginal.SRV);
 
-	if (enbBloom.IsCompiled()) {
+	if (enbBloom.IsCompiled() && settingManager.GetValue<bool>("EnableBloom", "EFFECT")) {
 		state->BeginPerfEvent(enbBloom.GetName());
 		UpdateCommonVariablesForEffect(enbBloom.GetEffect());
 		enbBloom.UpdateEffectVariables();
@@ -126,7 +135,7 @@ void EffectManager::ExecuteEffects()
 		state->EndPerfEvent();
 	}
 
-	if (enbLens.IsCompiled()) {
+	if (enbLens.IsCompiled() && settingManager.GetValue<bool>("EnableLens", "EFFECT")) {
 		state->BeginPerfEvent(enbLens.GetName());
 		UpdateCommonVariablesForEffect(enbLens.GetEffect());
 		enbLens.UpdateEffectVariables();
@@ -134,7 +143,7 @@ void EffectManager::ExecuteEffects()
 		state->EndPerfEvent();
 	}
 
-	if (enbAdaptation.IsCompiled()) {
+	if (enbAdaptation.IsCompiled() && settingManager.GetValue<bool>("EnableAdaptation", "EFFECT")) {
 		state->BeginPerfEvent(enbAdaptation.GetName());
 		UpdateCommonVariablesForEffect(enbAdaptation.GetEffect());
 		enbAdaptation.UpdateEffectVariables();
@@ -150,7 +159,7 @@ void EffectManager::ExecuteEffects()
 		state->EndPerfEvent();
 	}
 
-	if (enbEffectPostPass.IsCompiled()) {
+	if (enbEffectPostPass.IsCompiled() && settingManager.GetValue<bool>("EnablePostPassShader", "EFFECT")) {
 		state->BeginPerfEvent(enbEffectPostPass.GetName());
 		UpdateCommonVariablesForEffect(enbEffectPostPass.GetEffect());
 		enbEffectPostPass.UpdateEffectVariables();
@@ -390,18 +399,20 @@ void EffectManager::UpdateCommonData()
 
 	// Update timer
 	{
+		auto delta = (*globals::game::deltaTime);
+		
 		static double timer = 0.0f;
-		timer += *globals::game::deltaTime;
+		timer += delta;
 
 		static uint frameCount = 0;
 
-		auto modifiedTimer = std::fmodf(static_cast<float>(timer * 1000.0), 16777216);
+		auto modifiedTimer = std::fmodf(static_cast<float>(timer), 16777216);
 		modifiedTimer /= 16777216.0f;
 
 		commonData.timer[0] = modifiedTimer;
 		commonData.timer[1] = 60.0f;
 		commonData.timer[2] = static_cast<float>(frameCount % 9999);
-		commonData.timer[3] = *globals::game::deltaTime * 1000.0f;
+		commonData.timer[3] = delta;
 
 		frameCount++;
 	}

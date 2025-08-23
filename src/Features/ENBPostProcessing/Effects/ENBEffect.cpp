@@ -64,9 +64,14 @@ void ENBEffect::UpdateEffectVariables()
 	if (ENBParams01 && ENBParams01->IsValid())
 		ENBParams01->SetRawValue(&enbParams01, 0, sizeof(enbParams01));
 
-	SetShaderResourceVariable("TextureBloom", textureManager.GetCommonTexture("TextureBloom")->srv.get());
-	SetShaderResourceVariable("TextureLens", textureManager.GetCommonTexture("TextureLens")->srv.get());
+	if (settingManager.GetValue<bool>("EnableBloom", "EFFECT"))
+		SetShaderResourceVariable("TextureBloom", textureManager.GetCommonTexture("TextureBloom")->srv.get());
+	
+	if (settingManager.GetValue<bool>("EnableLens", "EFFECT"))
+		SetShaderResourceVariable("TextureLens", textureManager.GetCommonTexture("TextureLens")->srv.get());
 
-	const std::string textureAdaptationName = (settingManager.GetTextureSwap() & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
-	SetShaderResourceVariable("TextureAdaptation", textureManager.GetCommonTexture(textureAdaptationName)->srv.get());
+	if (settingManager.GetValue<bool>("EnableAdaptation", "EFFECT")) {
+		const std::string textureAdaptationName = (settingManager.GetTextureSwap() & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
+		SetShaderResourceVariable("TextureAdaptation", textureManager.GetCommonTexture(textureAdaptationName)->srv.get());
+	}
 }
