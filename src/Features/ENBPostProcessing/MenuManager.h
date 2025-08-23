@@ -19,4 +19,5 @@ private:
 
 	// Helper UI methods
 	void RenderAllSettings();
+	std::map<std::string, std::vector<std::string>> GetCategorizedSettings() const;
 };
