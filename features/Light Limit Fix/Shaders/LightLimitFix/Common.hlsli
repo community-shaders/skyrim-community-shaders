@@ -1,6 +1,8 @@
 #ifndef __LLF_COMMON_DEPENDENCY_HLSL__
 #define __LLF_COMMON_DEPENDENCY_HLSL__
 
+#include "Common/BufferAlignment.hlsli"
+
 #define NUMTHREAD_X 16
 #define NUMTHREAD_Y 16
 #define NUMTHREAD_Z 4
@@ -28,8 +30,10 @@ struct LightGrid
 {
 	uint offset;
 	uint lightCount;
-	uint pad0[2];
+	uint pad0[2];  // Manual padding for 16-byte alignment
 };
+// Validate that LightGrid is properly aligned
+VALIDATE_BUFFER_DETAILED(LightGrid);
 
 struct Light
 {
@@ -43,8 +47,10 @@ struct Light
 	uint4 roomFlags;
 	uint lightFlags;
 	uint shadowLightIndex;
-	uint pad0;
-	uint pad1;
+	uint pad0;  // Manual padding for 16-byte alignment
+	uint pad1;  // Manual padding for 16-byte alignment
 };
+// Validate that Light structure is properly aligned
+VALIDATE_BUFFER_DETAILED(Light);
 
 #endif  //__LLF_COMMON_DEPENDENCY_HLSL__
