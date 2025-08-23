@@ -753,7 +753,7 @@ float3 ColorGrading(float3 color)
 
 float3 ApplyLUT(float3 color)
 {
-	color = LinearToLog(color);
+	color = LinearToLog(color + LogToLinear(0));
 	color = TexLUT.SampleLevel(LinearSampler, color, 0).xyz;
 	return color;
 }
@@ -782,7 +782,7 @@ float3 ApplyLUT(float3 color)
 RWTexture3D<float4> RWLUT : register(u0);
 
 [numthreads(8, 8, 8)] void CSLUTGen(uint3 DTid : SV_DispatchThreadID) {
-	float3 uvw = (float3(DTid) + 0.5) / float3((LUT_SIZE - 1).xxx);
+	float3 uvw = float3(DTid + 0.5) / float3((LUT_SIZE - 1).xxx);
 	float4 neutralColor = float4(uvw, 1);
 	float3 linearColor = LogToLinear(neutralColor.xyz) - LogToLinear(0);
 	linearColor = ColorGrading(linearColor);
