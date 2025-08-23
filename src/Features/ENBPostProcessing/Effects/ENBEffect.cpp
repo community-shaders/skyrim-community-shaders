@@ -20,7 +20,6 @@ void ENBEffect::Execute()
 
 void ENBEffect::UpdateEffectVariables()
 {
-
 	float4 params01[7]{};
 
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
