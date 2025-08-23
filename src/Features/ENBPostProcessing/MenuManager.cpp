@@ -80,7 +80,6 @@ void MenuManager::RenderWeatherControl()
 	auto& effectManager = EffectManager::GetSingleton();
 	auto& weatherManager = WeatherManager::GetSingleton();
 
-	
 	// Current weather status
 	uint32_t currentWeatherID = static_cast<uint32_t>(effectManager.commonData.weather[0]);
 	uint32_t lastWeatherID = static_cast<uint32_t>(effectManager.commonData.weather[1]);
@@ -134,13 +133,12 @@ void MenuManager::RenderWeatherControl()
 
 		ImGui::TreePop();
 	}
-	
 }
 
 std::map<std::string, std::vector<std::string>> MenuManager::GetCategorizedSettings() const
 {
 	std::map<std::string, std::vector<std::string>> categorizedSettings;
-	
+
 	// Global Settings - Master controls and basic adjustments
 	categorizedSettings["Main"] = {
 		"GLOBAL",
@@ -148,10 +146,10 @@ std::map<std::string, std::vector<std::string>> MenuManager::GetCategorizedSetti
 		"EFFECT",
 		"DEPTHOFFIELD"
 	};
-	
+
 	// Weather-Based Settings - Categories that change with weather/time
 	categorizedSettings["Weather"] = { "BLOOM", "LENS", "SKY", "ENVIRONMENT", "IMAGEBASEDLIGHTING", "VOLUMETRICFOG", "GAMEVOLUMETRICRAYS" };
-	
+
 	return categorizedSettings;
 }
 
@@ -168,7 +166,7 @@ void MenuManager::RenderAllSettings()
 					RenderWeatherControl();
 					ImGui::Separator();
 				}
-				
+
 				for (const auto& category : categories) {
 					if (ImGui::CollapsingHeader(category.c_str())) {
 						auto settings = settingManager.GetSettingsByCategory(category);
