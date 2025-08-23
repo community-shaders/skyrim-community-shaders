@@ -43,7 +43,7 @@ void main(uint3 dispatchID : SV_DispatchThreadID, uint groupIndex : SV_GroupInde
 	float3 color = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
 #if defined(DYNAMIC_CUBEMAPS)
 	if (SharedData::iblSettings.DynamicCubemapsAmount > 0.0f) {
-		float3 dcColor = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0);
+		float3 dcColor = EnvReflectionsTexture.SampleLevel(LinearSampler, -rayDir, 0);
 		color = lerp(color, dcColor, SharedData::iblSettings.DynamicCubemapsAmount);
 	}
 #endif
