@@ -10,7 +10,7 @@ enum class SettingType
 struct TimeOfDayValue
 {
 	float values[8] = { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
-	
+
 	enum Index
 	{
 		Dawn = 0,
@@ -23,20 +23,28 @@ struct TimeOfDayValue
 		InteriorNight = 7,
 		Total = 8
 	};
-	
+
 	float& operator[](Index idx) { return values[idx]; }
 	const float& operator[](Index idx) const { return values[idx]; }
-	
+
 	float& GetByName(const std::string& name)
 	{
-		if (name == "Dawn") return values[Dawn];
-		if (name == "Sunrise") return values[Sunrise];
-		if (name == "Day") return values[Day];
-		if (name == "Sunset") return values[Sunset];
-		if (name == "Dusk") return values[Dusk];
-		if (name == "Night") return values[Night];
-		if (name == "InteriorDay") return values[InteriorDay];
-		if (name == "InteriorNight") return values[InteriorNight];
+		if (name == "Dawn")
+			return values[Dawn];
+		if (name == "Sunrise")
+			return values[Sunrise];
+		if (name == "Day")
+			return values[Day];
+		if (name == "Sunset")
+			return values[Sunset];
+		if (name == "Dusk")
+			return values[Dusk];
+		if (name == "Night")
+			return values[Night];
+		if (name == "InteriorDay")
+			return values[InteriorDay];
+		if (name == "InteriorNight")
+			return values[InteriorNight];
 		return values[Dawn];
 	}
 };
@@ -109,12 +117,13 @@ public:
 	void SetTimeOfDayData(const float timeOfDay1[4], const float timeOfDay2[4], float interiorFactor);
 
 private:
-	struct CategorySettings {
+	struct CategorySettings
+	{
 		std::unordered_map<std::string, Setting> settings;
 		bool ignoreWeatherSystem = false;
 		bool ignoreWeatherSystemInterior = true;
 	};
-	
+
 	std::unordered_map<std::string, CategorySettings> categories;
 	std::unordered_map<uint32_t, std::unordered_map<std::string, SettingValue>> weatherData;
 

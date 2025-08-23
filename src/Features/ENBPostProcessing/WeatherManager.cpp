@@ -92,7 +92,6 @@ void WeatherManager::LoadWeatherList()
 	}
 }
 
-
 WeatherManager::WeatherEntry* WeatherManager::FindWeatherEntry(uint32_t weatherID)
 {
 	auto it = weatherIDMap.find(weatherID);
@@ -104,8 +103,6 @@ WeatherManager::WeatherEntry* WeatherManager::FindWeatherEntry(uint32_t weatherI
 	}
 	return nullptr;
 }
-
-
 
 void WeatherManager::ParseWeatherIDs(const std::string& weatherIDsStr, std::vector<uint32_t>& weatherIDs)
 {
@@ -131,7 +128,6 @@ void WeatherManager::ParseWeatherIDs(const std::string& weatherIDsStr, std::vect
 		}
 	}
 }
-
 
 uint32_t WeatherManager::ParseHexID(const std::string& hexStr)
 {

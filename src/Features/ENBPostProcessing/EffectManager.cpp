@@ -74,7 +74,6 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterFloatSetting("FocusingTime", "DEPTHOFFIELD", 1.0f, 0.1f, 10.0f, false);
 	settingManager.RegisterFloatSetting("ApertureTime", "DEPTHOFFIELD", 1.0f, 0.1f, 10.0f, false);
 
-
 	settingManager.RegisterTimeOfDaySetting("Amount", "BLOOM", 1, true);
 	settingManager.RegisterTimeOfDaySetting("Amount", "LENS", 1, true);
 
