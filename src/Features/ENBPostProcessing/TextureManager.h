@@ -35,6 +35,10 @@ public:
 	ID3D11ShaderResourceView* GetDownsampleTexture() const;
 	ID3D11ShaderResourceView* GetDownsampleTextureBlurry() const;
 
+	// Frame-based state access
+	uint32_t GetTextureSwap() const { return textureSwap; }
+	void IncrementTextureSwap() { textureSwap++; }
+
 private:
 	void CreateCommonTextures();
 	void CreateDownsampleResources();
@@ -58,4 +62,7 @@ private:
 		float sourceTexelSizeY;
 		float padding[2];
 	};
+
+	// Frame-based state
+	uint32_t textureSwap = 0;
 };

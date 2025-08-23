@@ -167,6 +167,8 @@ void EffectManager::ExecuteEffects()
 		state->EndPerfEvent();
 	}
 
+	textureManager.IncrementTextureSwap();
+
 	// Copy final render target to framebuffers
 	auto textureSDRTemp = TextureManager::GetSingleton().GetCommonTexture("TextureSDRTemp");
 	auto textureFramebuffer1 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];

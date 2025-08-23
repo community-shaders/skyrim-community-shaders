@@ -71,7 +71,7 @@ void ENBEffect::UpdateEffectVariables()
 		SetShaderResourceVariable("TextureLens", textureManager.GetCommonTexture("TextureLens")->srv.get());
 
 	if (settingManager.GetValue<bool>("EnableAdaptation", "EFFECT")) {
-		const std::string textureAdaptationName = (settingManager.GetTextureSwap() & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
+		const std::string textureAdaptationName = (textureManager.GetTextureSwap() & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
 		SetShaderResourceVariable("TextureAdaptation", textureManager.GetCommonTexture(textureAdaptationName)->srv.get());
 	}
 }

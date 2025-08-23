@@ -139,10 +139,6 @@ public:
 	// Time of day interpolation data
 	void SetTimeOfDayData(const float timeOfDay1[4], const float timeOfDay2[4], float interiorFactor);
 
-	// Frame-based state access
-	uint32_t GetTextureSwap() const { return textureSwap; }
-	void IncrementTextureSwap() { textureSwap++; }
-
 private:
 	std::unordered_map<std::string, std::unique_ptr<SettingInfo>> settings;
 	std::unordered_map<std::string, std::unordered_map<std::string, SettingValue>> weatherSettings;  // weatherKey -> settingKey -> value
@@ -161,8 +157,6 @@ private:
 	float timeOfDay2[4] = { 0, 0, 0, 0 };
 	float interiorFactor = 0.0f;
 
-	// Frame-based state
-	uint32_t textureSwap = 0;
 
 	// Helper methods
 	std::string MakeCompositeKey(const std::string& key, const std::string& category) const;

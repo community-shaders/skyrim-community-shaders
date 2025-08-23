@@ -7,10 +7,10 @@ void ENBDepthOfField::Execute()
 {
 	auto renderer = globals::game::renderer;
 
-	auto& settingManager = SettingManager::GetSingleton();
+	auto& textureManager = TextureManager::GetSingleton();
 
-	const std::string texturePreviousApertureName = (settingManager.GetTextureSwap() & 1) ? "TextureApertureSwap" : "TextureAperture";
-	const std::string textureApertureName = (settingManager.GetTextureSwap() & 1) ? "TextureAperture" : "TextureApertureSwap";
+	const std::string texturePreviousApertureName = (textureManager.GetTextureSwap() & 1) ? "TextureApertureSwap" : "TextureAperture";
+	const std::string textureApertureName = (textureManager.GetTextureSwap() & 1) ? "TextureAperture" : "TextureApertureSwap";
 
 	auto texturePrevious = effect->GetVariableByName("TexturePrevious")->AsShaderResource();
 	if (texturePrevious && texturePrevious->IsValid()) {
@@ -26,8 +26,8 @@ void ENBDepthOfField::Execute()
 
 	ExecuteTechnique("ReadFocus", effectTextureCache["TextureReadFocus"]);
 
-	const std::string texturePreviousFocusName = (settingManager.GetTextureSwap() & 1) ? "TextureFocusSwap" : "TextureFocus";
-	const std::string textureFocusName = (settingManager.GetTextureSwap() & 1) ? "TextureFocus" : "TextureFocusSwap";
+	const std::string texturePreviousFocusName = (textureManager.GetTextureSwap() & 1) ? "TextureFocusSwap" : "TextureFocus";
+	const std::string textureFocusName = (textureManager.GetTextureSwap() & 1) ? "TextureFocus" : "TextureFocusSwap";
 
 	if (texturePrevious && texturePrevious->IsValid()) {
 		texturePrevious->SetResource(effectTextureCache[texturePreviousFocusName].srv.get());
@@ -52,7 +52,6 @@ void ENBDepthOfField::Execute()
 		textureOriginal->SetResource(textureMain.SRV);
 	}
 
-	auto& textureManager = TextureManager::GetSingleton();
 	auto textureHDRTemp = textureManager.GetCommonTexture("TextureHDRTemp");
 
 	globals::d3d::context->CopyResource(textureHDRTemp->texture.get(), textureMain.texture);
