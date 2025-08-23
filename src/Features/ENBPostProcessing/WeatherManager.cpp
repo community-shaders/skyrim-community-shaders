@@ -106,7 +106,6 @@ WeatherManager::WeatherEntry* WeatherManager::FindWeatherEntry(uint32_t weatherI
 }
 
 
-
 void WeatherManager::ParseWeatherIDs(const std::string& weatherIDsStr, std::vector<uint32_t>& weatherIDs)
 {
 	weatherIDs.clear();

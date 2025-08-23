@@ -1,6 +1,7 @@
 #include "SettingManager.h"
 
 #include "WeatherManager.h"
+#include "IniFileCache.h"
 
 SettingManager& SettingManager::GetSingleton()
 {
@@ -278,6 +279,7 @@ void SettingManager::SaveWeatherSettings(const std::string& weatherKey, const st
 	}
 
 	logger::debug("[SettingManager] Saved weather settings to: {}", filePath);
+	IniAPI::FlushAll();
 }
 
 void SettingManager::SaveAllWeatherSettings()
@@ -330,6 +332,9 @@ void SettingManager::SaveAllWeatherSettings()
 
 		savedCount++;
 	}
+
+	IniAPI::FlushAll();
+	logger::info("[SettingManager] Saved settings to {} weather files", savedCount);
 }
 
 void SettingManager::ReloadAllWeatherSettings()
@@ -377,6 +382,7 @@ void SettingManager::SaveToFile(const std::string& filePath)
 	}
 
 	SaveWeatherIgnoreSettings(filePath);
+	IniAPI::FlushAll();
 }
 
 SettingValue SettingManager::InterpolateValues(const SettingValue& a, const SettingValue& b, float t)
@@ -427,13 +433,10 @@ float SettingManager::ComputeTimeOfDayInterpolation(const TimeOfDayValue& value)
 
 void SettingManager::LoadSettingFromFile(const std::string& filePath, const std::string& section, const std::string& key, Setting& setting)
 {
-	char buffer[256];
-
 	switch (setting.type) {
 	case SettingType::Bool:
 		{
-			GetPrivateProfileStringA(section.c_str(), key.c_str(), "false", buffer, sizeof(buffer), filePath.c_str());
-			std::string valueStr = buffer;
+			std::string valueStr = IniAPI::GetPrivateProfileString(section, key, "false", filePath);
 			std::transform(valueStr.begin(), valueStr.end(), valueStr.begin(), ::tolower);
 			setting.currentValue = (valueStr == "true" || valueStr == "1");
 			break;
@@ -441,8 +444,8 @@ void SettingManager::LoadSettingFromFile(const std::string& filePath, const std:
 	case SettingType::Float:
 		{
 			float defaultVal = std::get<float>(setting.defaultValue);
-			GetPrivateProfileStringA(section.c_str(), key.c_str(), std::to_string(defaultVal).c_str(), buffer, sizeof(buffer), filePath.c_str());
-			setting.currentValue = static_cast<float>(atof(buffer));
+			std::string valueStr = IniAPI::GetPrivateProfileString(section, key, std::to_string(defaultVal), filePath);
+			setting.currentValue = static_cast<float>(atof(valueStr.c_str()));
 			break;
 		}
 	case SettingType::TimeOfDay:
@@ -452,8 +455,8 @@ void SettingManager::LoadSettingFromFile(const std::string& filePath, const std:
 
 			for (int i = 0; i < 8; ++i) {
 				std::string fullKey = key + timeOfDayNames[i];
-				GetPrivateProfileStringA(section.c_str(), fullKey.c_str(), "1.0", buffer, sizeof(buffer), filePath.c_str());
-				timeOfDayValue.values[i] = static_cast<float>(atof(buffer));
+				std::string valueStr = IniAPI::GetPrivateProfileString(section, fullKey, "1.0", filePath);
+				timeOfDayValue.values[i] = static_cast<float>(atof(valueStr.c_str()));
 			}
 
 			setting.currentValue = timeOfDayValue;
@@ -464,20 +467,35 @@ void SettingManager::LoadSettingFromFile(const std::string& filePath, const std:
 
 void SettingManager::SaveSettingToFile(const std::string& filePath, const std::string& section, const std::string& key, const Setting& setting)
 {
-	char buffer[256];
+	auto formatFloat = [](float value) -> std::string {
+		char temp[32];
+		sprintf_s(temp, "%.3f", value);
+		std::string result = temp;
+		
+		// Remove trailing zeros
+		while (result.length() > 1 && result.back() == '0') {				result.pop_back();
+		}
+		
+		// Ensure at least one decimal place (add .0 if needed)
+		if (result.back() == '.') {
+			result += '0';
+		}
+		
+		return result;
+	};
 
 	switch (setting.type) {
 	case SettingType::Bool:
 		{
 			bool value = std::get<bool>(setting.currentValue);
-			WritePrivateProfileStringA(section.c_str(), key.c_str(), value ? "true" : "false", filePath.c_str());
+			IniAPI::WritePrivateProfileString(section, key, value ? "true" : "false", filePath);
 			break;
 		}
 	case SettingType::Float:
 		{
 			float value = std::get<float>(setting.currentValue);
-			sprintf_s(buffer, "%.3f", value);
-			WritePrivateProfileStringA(section.c_str(), key.c_str(), buffer, filePath.c_str());
+			std::string formatted = formatFloat(value);
+			IniAPI::WritePrivateProfileString(section, key, formatted, filePath);
 			break;
 		}
 	case SettingType::TimeOfDay:
@@ -487,8 +505,8 @@ void SettingManager::SaveSettingToFile(const std::string& filePath, const std::s
 
 			for (int i = 0; i < 8; ++i) {
 				std::string fullKey = key + timeOfDayNames[i];
-				sprintf_s(buffer, "%.3f", timeOfDayValue.values[i]);
-				WritePrivateProfileStringA(section.c_str(), fullKey.c_str(), buffer, filePath.c_str());
+				std::string formatted = formatFloat(timeOfDayValue.values[i]);
+				IniAPI::WritePrivateProfileString(section, fullKey, formatted, filePath);
 			}
 			break;
 		}
@@ -508,10 +526,10 @@ void SettingManager::SaveWeatherIgnoreSettings(const std::string& filePath)
 		}
 		
 		if (hasWeatherSupport) {
-			WritePrivateProfileStringA(category.c_str(), "IgnoreWeatherSystem", 
-				categoryData.ignoreWeatherSystem ? "true" : "false", filePath.c_str());
-			WritePrivateProfileStringA(category.c_str(), "IgnoreWeatherSystemInterior", 
-				categoryData.ignoreWeatherSystemInterior ? "true" : "false", filePath.c_str());
+			IniAPI::WritePrivateProfileString(category, "IgnoreWeatherSystem", 
+				categoryData.ignoreWeatherSystem ? "true" : "false", filePath);
+			IniAPI::WritePrivateProfileString(category, "IgnoreWeatherSystemInterior", 
+				categoryData.ignoreWeatherSystemInterior ? "true" : "false", filePath);
 			count++;
 		}
 	}
@@ -519,9 +537,6 @@ void SettingManager::SaveWeatherIgnoreSettings(const std::string& filePath)
 
 void SettingManager::LoadWeatherIgnoreSettings(const std::string& filePath)
 {
-	char buffer[256];
-	int count = 0;
-
 	for (auto& [category, categoryData] : categories) {
 		bool hasWeatherSupport = false;
 		for (const auto& [key, setting] : categoryData.settings) {
@@ -532,20 +547,13 @@ void SettingManager::LoadWeatherIgnoreSettings(const std::string& filePath)
 		}
 		
 		if (hasWeatherSupport) {
-			DWORD result = GetPrivateProfileStringA(category.c_str(), "IgnoreWeatherSystem", "false", buffer, sizeof(buffer), filePath.c_str());
-			if (result > 0) {
-				std::string valueStr = buffer;
-				std::transform(valueStr.begin(), valueStr.end(), valueStr.begin(), ::tolower);
-				categoryData.ignoreWeatherSystem = (valueStr == "true" || valueStr == "1");
-			}
+			std::string valueStr = IniAPI::GetPrivateProfileString(category, "IgnoreWeatherSystem", "false", filePath);
+			std::transform(valueStr.begin(), valueStr.end(), valueStr.begin(), ::tolower);
+			categoryData.ignoreWeatherSystem = (valueStr == "true" || valueStr == "1");
 
-			result = GetPrivateProfileStringA(category.c_str(), "IgnoreWeatherSystemInterior", "true", buffer, sizeof(buffer), filePath.c_str());
-			if (result > 0) {
-				std::string valueStr = buffer;
-				std::transform(valueStr.begin(), valueStr.end(), valueStr.begin(), ::tolower);
-				categoryData.ignoreWeatherSystemInterior = (valueStr == "true" || valueStr == "1");
-			}
-			count++;
+			valueStr = IniAPI::GetPrivateProfileString(category, "IgnoreWeatherSystemInterior", "true", filePath);
+			std::transform(valueStr.begin(), valueStr.end(), valueStr.begin(), ::tolower);
+			categoryData.ignoreWeatherSystemInterior = (valueStr == "true" || valueStr == "1");
 		}
 	}
 }
