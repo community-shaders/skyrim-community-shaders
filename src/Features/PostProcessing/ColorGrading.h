@@ -20,7 +20,7 @@ struct ColorGrading : public PostProcessFeature
         return a;
     }
 
-    const std::string outputPath = "Data\\Shaders\\PostProcessing\\ColorGrading";
+    const std::string outputPath = "SKSE\\Plugins\\CommunityShaders\\PostProcessing\\ColorGrading";
 
     struct ColorProfile
     {

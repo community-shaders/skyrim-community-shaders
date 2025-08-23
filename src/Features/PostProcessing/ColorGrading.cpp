@@ -414,6 +414,8 @@ void ColorGrading::DrawSettings()
 	if (ImGui::Button("Save LUT and Output Image")) {
 		saveImagesFlag = true;
 	}
+	ImGui::SameLine();
+	ImGui::Text("Output will be saved to: %s", outputPath.c_str());
 
 	ImGui::PopID();
 }
