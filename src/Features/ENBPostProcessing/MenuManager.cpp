@@ -179,28 +179,17 @@ std::vector<int> MenuManager::GetActiveTimeOfDayIndices() const
 	bool isInterior = commonData.eInteriorFactor > 0.5f;
 
 	if (isInterior) {
-		// For interiors, show both day and night interior settings
+		// For interiors, show both interior time periods
 		activeIndices.push_back(6);  // InteriorDay
 		activeIndices.push_back(7);  // InteriorNight
 	} else {
-		// For exteriors, check which time-of-day periods have significant blend factors
-		const float threshold = 0.01f;  // Only show periods with > 1% influence
-
-		// timeOfDay1: Dawn(0), Sunrise(1), Day(2), Sunset(3)
-		if (commonData.timeOfDay1[0] > threshold)
-			activeIndices.push_back(0);  // Dawn
-		if (commonData.timeOfDay1[1] > threshold)
-			activeIndices.push_back(1);  // Sunrise
-		if (commonData.timeOfDay1[2] > threshold)
-			activeIndices.push_back(2);  // Day
-		if (commonData.timeOfDay1[3] > threshold)
-			activeIndices.push_back(3);  // Sunset
-
-		// timeOfDay2: Dusk(0), Night(1)
-		if (commonData.timeOfDay2[0] > threshold)
-			activeIndices.push_back(4);  // Dusk
-		if (commonData.timeOfDay2[1] > threshold)
-			activeIndices.push_back(5);  // Night
+		// For exteriors, show all exterior time periods
+		activeIndices.push_back(0);  // Dawn
+		activeIndices.push_back(1);  // Sunrise
+		activeIndices.push_back(2);  // Day
+		activeIndices.push_back(3);  // Sunset
+		activeIndices.push_back(4);  // Dusk
+		activeIndices.push_back(5);  // Night
 	}
 
 	return activeIndices;
