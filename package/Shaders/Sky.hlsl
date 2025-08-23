@@ -231,7 +231,7 @@ PS_OUTPUT main(PS_INPUT input)
 	blendColor.w = saturate(blendColor.w * SharedData::enbSettings.CloudsOpacity);
 	blendColor.xyz = pow(blendColor.xyz, SharedData::enbSettings.CloudsCurve);
 	blendColor.xyz = lerp(blendColor.xyz, Color::RGBToLuminance(blendColor.xyz), SharedData::enbSettings.CloudsDesaturation) * SharedData::enbSettings.CloudsIntensity * SharedData::enbSettings.CloudsColorFilter;
-	
+
 	baseColor.w = saturate(baseColor.w * SharedData::enbSettings.CloudsOpacity);
 	baseColor.xyz = pow(baseColor.xyz, SharedData::enbSettings.CloudsCurve);
 	baseColor.xyz = lerp(baseColor.xyz, Color::RGBToLuminance(baseColor.xyz), SharedData::enbSettings.CloudsDesaturation) * SharedData::enbSettings.CloudsIntensity * SharedData::enbSettings.CloudsColorFilter;

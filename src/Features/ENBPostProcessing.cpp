@@ -52,7 +52,7 @@ ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
 	auto dirLightColorFilterAmount = settingManager.GetInterpolatedTimeOfDayValue("DirectLightingColorFilterAmount", "ENVIRONMENT");
 	auto dirLightColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("DirectLightingColorFilter", "ENVIRONMENT");
 	data.DirectLightingColorFilter = (1.0f - dirLightColorFilterAmount) * float3(1.0f) + dirLightColorFilterAmount * dirLightColorFilter;
-	
+
 	data.AmbientLightingIntensity = settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingIntensity", "ENVIRONMENT");
 	data.AmbientLightingDesaturation = settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingDesaturation", "ENVIRONMENT");
 
