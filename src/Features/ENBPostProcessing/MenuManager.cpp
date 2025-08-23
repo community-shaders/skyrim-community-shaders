@@ -223,31 +223,88 @@ void MenuManager::RenderAllSettings()
 
 							// Add weather ignore controls for categories with weather support
 							if (settingManager.CategoryHasWeatherSupport(category)) {
-								ImGui::TableNextRow();
-								ImGui::TableSetColumnIndex(0);
-								ImGui::Text("IgnoreWeatherSystem");
-								ImGui::TableSetColumnIndex(1);
-								bool ignoreWeather = settingManager.GetIgnoreWeatherSystem(category);
-								if (ImGui::Checkbox(("##IgnoreWeatherSystem_" + category).c_str(), &ignoreWeather)) {
-									settingManager.SetIgnoreWeatherSystem(category, ignoreWeather);
-								}
-								if (ImGui::IsItemHovered()) {
-									ImGui::SetTooltip("When enabled, uses enbseries.ini values instead of weather-specific values for exterior areas");
-								}
-
-								ImGui::TableNextRow();
-								ImGui::TableSetColumnIndex(0);
-								ImGui::Text("IgnoreWeatherSystemInterior");
-								ImGui::TableSetColumnIndex(1);
-								bool ignoreWeatherInterior = settingManager.GetIgnoreWeatherSystemInterior(category);
-								if (ImGui::Checkbox(("##IgnoreWeatherSystemInterior_" + category).c_str(), &ignoreWeatherInterior)) {
-									settingManager.SetIgnoreWeatherSystemInterior(category, ignoreWeatherInterior);
-								}
-								if (ImGui::IsItemHovered()) {
-									ImGui::SetTooltip("When enabled, uses enbseries.ini values instead of weather-specific values for interior areas");
+								auto& effectManager = EffectManager::GetSingleton();
+								bool isInterior = effectManager.commonData.eInteriorFactor > 0.5f;
+								
+								if (!isInterior) {
+									// Show exterior ignore setting when outside
+									ImGui::TableNextRow();
+									ImGui::TableSetColumnIndex(0);
+									ImGui::Text("IgnoreWeatherSystem");
+									ImGui::TableSetColumnIndex(1);
+									bool ignoreWeather = settingManager.GetIgnoreWeatherSystem(category);
+									if (ImGui::Checkbox(("##IgnoreWeatherSystem_" + category).c_str(), &ignoreWeather)) {
+										settingManager.SetIgnoreWeatherSystem(category, ignoreWeather);
+									}
+									if (ImGui::IsItemHovered()) {
+										ImGui::SetTooltip("When enabled, uses enbseries.ini values instead of weather-specific values for exterior areas");
+									}
+								} else {
+									// Show interior ignore setting when inside
+									ImGui::TableNextRow();
+									ImGui::TableSetColumnIndex(0);
+									ImGui::Text("IgnoreWeatherSystemInterior");
+									ImGui::TableSetColumnIndex(1);
+									bool ignoreWeatherInterior = settingManager.GetIgnoreWeatherSystemInterior(category);
+									if (ImGui::Checkbox(("##IgnoreWeatherSystemInterior_" + category).c_str(), &ignoreWeatherInterior)) {
+										settingManager.SetIgnoreWeatherSystemInterior(category, ignoreWeatherInterior);
+									}
+									if (ImGui::IsItemHovered()) {
+										ImGui::SetTooltip("When enabled, uses enbseries.ini values instead of weather-specific values for interior areas");
+									}
 								}
 
 								// Add separator
+								ImGui::TableNextRow();
+								ImGui::TableSetColumnIndex(0);
+								ImGui::Separator();
+								ImGui::TableSetColumnIndex(1);
+								ImGui::Separator();
+							}
+
+							// Show TimeOfDay annotation header once for the category
+							bool hasTimeOfDaySettings = false;
+							for (const auto& settingKey : settings) {
+								auto settingInfo = settingManager.GetSettingInfo(settingKey, category);
+								if (settingInfo && settingInfo->type == SettingType::TimeOfDay) {
+									hasTimeOfDaySettings = true;
+									break;
+								}
+							}
+							
+							if (hasTimeOfDaySettings) {
+								const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
+								auto activeIndices = GetActiveTimeOfDayIndices();
+								
+								ImGui::TableNextRow();
+								ImGui::TableSetColumnIndex(0);
+								ImGui::Text("Active Times:");
+								ImGui::TableSetColumnIndex(1);
+								
+								float totalWidth = ImGui::GetContentRegionAvail().x;
+								float sliderWidth = (totalWidth - (activeIndices.size() - 1) * 8.0f) / activeIndices.size();
+								
+								for (size_t idx = 0; idx < activeIndices.size(); ++idx) {
+									int i = activeIndices[idx];
+									
+									if (idx > 0) {
+										ImGui::SameLine();
+									}
+									
+									// Use a child region to control the exact width and center the text
+									ImGui::BeginChild(("##timeheader_" + std::to_string(i)).c_str(), ImVec2(sliderWidth, ImGui::GetTextLineHeight()), false, ImGuiWindowFlags_NoScrollbar);
+									
+									float labelWidth = ImGui::CalcTextSize(timeOfDayNames[i].c_str()).x;
+									float centerOffset = (sliderWidth - labelWidth) * 0.5f;
+									if (centerOffset > 0) {
+										ImGui::SetCursorPosX(centerOffset);
+									}
+									ImGui::Text("%s", timeOfDayNames[i].c_str());
+									
+									ImGui::EndChild();
+								}
+								
+								// Add separator after header
 								ImGui::TableNextRow();
 								ImGui::TableSetColumnIndex(0);
 								ImGui::Separator();
@@ -285,21 +342,33 @@ void MenuManager::RenderAllSettings()
 									}
 								case SettingType::TimeOfDay:
 									{
-										const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
 										auto v = settingManager.GetValue<TimeOfDayValue>(settingKey, category, true);
 										auto activeIndices = GetActiveTimeOfDayIndices();
 										bool changed = false;
 
-										// Show only active time-of-day periods
-										for (int i : activeIndices) {
-											ImGui::TableNextRow();
-											ImGui::TableSetColumnIndex(0);
-											ImGui::Text("%s%s", settingKey.c_str(), timeOfDayNames[i].c_str());
-											ImGui::TableSetColumnIndex(1);
-											std::string id = "##" + settingKey + timeOfDayNames[i];
+										// Show active time-of-day periods on one row
+										ImGui::TableNextRow();
+										ImGui::TableSetColumnIndex(0);
+										ImGui::Text("%s", settingKey.c_str());
+										ImGui::TableSetColumnIndex(1);
+
+										// Render all active sliders horizontally
+										float totalWidth = ImGui::GetContentRegionAvail().x;
+										float sliderWidth = (totalWidth - (activeIndices.size() - 1) * 8.0f) / activeIndices.size(); // 8px spacing between sliders
+
+										for (size_t idx = 0; idx < activeIndices.size(); ++idx) {
+											int i = activeIndices[idx];
+											
+											if (idx > 0) {
+												ImGui::SameLine();
+											}
+											
+											ImGui::PushItemWidth(sliderWidth);
+											std::string id = "##" + settingKey + std::to_string(i);
 											if (ImGui::SliderFloat(id.c_str(), &v.values[i], settingInfo->minValue, settingInfo->maxValue, "%.1f")) {
 												changed = true;
 											}
+											ImGui::PopItemWidth();
 										}
 
 										if (changed) {
