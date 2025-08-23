@@ -12,45 +12,28 @@ void ENBDepthOfField::Execute()
 	const std::string texturePreviousApertureName = (textureManager.GetTextureSwap() & 1) ? "TextureApertureSwap" : "TextureAperture";
 	const std::string textureApertureName = (textureManager.GetTextureSwap() & 1) ? "TextureAperture" : "TextureApertureSwap";
 
-	auto texturePrevious = effect->GetVariableByName("TexturePrevious")->AsShaderResource();
-	if (texturePrevious && texturePrevious->IsValid()) {
-		texturePrevious->SetResource(effectTextureCache[texturePreviousApertureName].srv.get());
-	}
+	SetShaderResourceVariable("TexturePrevious", effectTextureCache[texturePreviousApertureName].srv.get());
 
 	ExecuteTechnique("Aperture", effectTextureCache[textureApertureName]);
 
-	auto textureAperture = effect->GetVariableByName("TextureAperture")->AsShaderResource();
-	if (textureAperture && textureAperture->IsValid()) {
-		textureAperture->SetResource(effectTextureCache[textureApertureName].srv.get());
-	}
+	SetShaderResourceVariable("TextureAperture", effectTextureCache[textureApertureName].srv.get());
 
 	ExecuteTechnique("ReadFocus", effectTextureCache["TextureReadFocus"]);
 
 	const std::string texturePreviousFocusName = (textureManager.GetTextureSwap() & 1) ? "TextureFocusSwap" : "TextureFocus";
 	const std::string textureFocusName = (textureManager.GetTextureSwap() & 1) ? "TextureFocus" : "TextureFocusSwap";
 
-	if (texturePrevious && texturePrevious->IsValid()) {
-		texturePrevious->SetResource(effectTextureCache[texturePreviousFocusName].srv.get());
-	}
+	SetShaderResourceVariable("TexturePrevious", effectTextureCache[texturePreviousFocusName].srv.get());
 
-	auto textureCurrent = effect->GetVariableByName("TextureCurrent")->AsShaderResource();
-	if (textureCurrent && textureCurrent->IsValid()) {
-		textureCurrent->SetResource(effectTextureCache["TextureReadFocus"].srv.get());
-	}
+	SetShaderResourceVariable("TextureCurrent", effectTextureCache["TextureReadFocus"].srv.get());
 
 	ExecuteTechnique("Focus", effectTextureCache[textureFocusName]);
 
-	auto textureFocus = effect->GetVariableByName("TextureFocus")->AsShaderResource();
-	if (textureFocus && textureFocus->IsValid()) {
-		textureFocus->SetResource(effectTextureCache[textureFocusName].srv.get());
-	}
+	SetShaderResourceVariable("TextureFocus", effectTextureCache[textureFocusName].srv.get());
 
 	auto textureMain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-	auto textureOriginal = effect->GetVariableByName("TextureOriginal")->AsShaderResource();
-	if (textureOriginal && textureOriginal->IsValid()) {
-		textureOriginal->SetResource(textureMain.SRV);
-	}
+	SetShaderResourceVariable("TextureOriginal", textureMain.SRV);
 
 	auto textureHDRTemp = textureManager.GetCommonTexture("TextureHDRTemp");
 

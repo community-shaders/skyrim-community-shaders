@@ -7,28 +7,18 @@ void ENBAdaptation::Execute()
 {
 	auto& textureManager = TextureManager::GetSingleton();
 
-	auto downsampledInput = effect->GetVariableByName("TextureCurrent")->AsShaderResource();
-	if (downsampledInput && downsampledInput->IsValid()) {
-		// Use 256x256 mip for adaptation
-		downsampledInput->SetResource(textureManager.GetDownsampleTextureBlurry());
-	}
+	SetShaderResourceVariable("TextureCurrent", textureManager.GetDownsampleTextureBlurry());
 
 	ExecuteTechnique("Downsample", effectTextureCache["TextureCurrent"]);
 
-	auto textureCurrent = effect->GetVariableByName("TextureCurrent")->AsShaderResource();
-	if (textureCurrent && textureCurrent->IsValid()) {
-		textureCurrent->SetResource(effectTextureCache["TextureCurrent"].srv.get());
-	}
+	SetShaderResourceVariable("TextureCurrent", effectTextureCache["TextureCurrent"].srv.get());
 
 	// Use swap mechanism to determine input/output 
 	const std::string texturePreviousName = (textureManager.GetTextureSwap() & 1) ? "TextureAdaptationSwap" : "TextureAdaptation";
 	const std::string textureAdaptationName = (textureManager.GetTextureSwap() & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
 
 	// Set input texture (previous frame's adaptation value)
-	auto texturePrevious = effect->GetVariableByName("TexturePrevious")->AsShaderResource();
-	if (texturePrevious && texturePrevious->IsValid()) {
-		texturePrevious->SetResource(textureManager.GetCommonTexture(texturePreviousName)->srv.get());
-	}
+	SetShaderResourceVariable("TexturePrevious", textureManager.GetCommonTexture(texturePreviousName)->srv.get());
 
 	// Execute adaptation technique, writing to output texture
 	auto* textureAdaptation = textureManager.GetCommonTexture(textureAdaptationName);
