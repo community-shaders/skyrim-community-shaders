@@ -528,19 +528,19 @@ void SettingManager::LoadSettingFromFile(const std::string& filePath, const std:
 			for (int i = 0; i < 8; ++i) {
 				std::string fullKey = key + timeOfDayNames[i];
 				std::string valueStr = IniAPI::GetPrivateProfileString(section, fullKey, "1.0, 1.0, 1.0", filePath);
-				
+
 				// Parse comma-separated float3 values
 				std::stringstream ss(valueStr);
 				std::string item;
 				std::vector<float> components;
-				
+
 				while (std::getline(ss, item, ',')) {
 					// Trim whitespace
 					item.erase(0, item.find_first_not_of(" \t"));
 					item.erase(item.find_last_not_of(" \t") + 1);
 					components.push_back(static_cast<float>(atof(item.c_str())));
 				}
-				
+
 				// Ensure we have exactly 3 components
 				if (components.size() >= 3) {
 					colorTimeOfDayValue.values[i] = { components[0], components[1], components[2] };

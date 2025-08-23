@@ -466,7 +466,7 @@ void MenuManager::RenderAllSettings()
 											ImGui::PushItemWidth(colorWidth);
 											std::string id = "##" + settingKey + std::to_string(i);
 											float color[3] = { v.values[i].x, v.values[i].y, v.values[i].z };
-											
+
 											if (ImGui::ColorEdit3(id.c_str(), color, ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_NoInputs)) {
 												v.values[i].x = color[0];
 												v.values[i].y = color[1];
