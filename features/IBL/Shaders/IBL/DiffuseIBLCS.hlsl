@@ -40,12 +40,20 @@ void main(uint3 dispatchID : SV_DispatchThreadID, uint groupIndex : SV_GroupInde
 	float3 rayDir = SphericalHarmonics::GetUniformSphereSample(sampleCoord.x, sampleCoord.y);
 
 	// Sample cubemap with optimized direction
-	float3 color = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
 #if defined(DYNAMIC_CUBEMAPS)
-	if (SharedData::iblSettings.DynamicCubemapsAmount > 0.0f) {
-		float3 dcColor = EnvReflectionsTexture.SampleLevel(LinearSampler, -rayDir, 0);
-		color = lerp(color, dcColor, SharedData::iblSettings.DynamicCubemapsAmount);
+	float3 color = 0;
+	const float dcAmount = saturate(SharedData::iblSettings.DynamicCubemapsAmount);
+	if (dcAmount <= 0.001f) {
+		color = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
+	} else if (dcAmount >= 0.999f) {
+		color = EnvReflectionsTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
+	} else {
+		const float3 base = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
+		const float3 dynamicCubemap = EnvReflectionsTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
+		color = lerp(base, dynamicCubemap, dcAmount);
 	}
+#else
+	float3 color = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
 #endif
 
 	// Compute spherical harmonics basis for this direction
