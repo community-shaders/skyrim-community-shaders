@@ -310,8 +310,9 @@ void PostProcessing::SavePresetTo(std::string a_name)
 void PostProcessing::RestoreDefaultSettings()
 {	
 	try {
-		LoadSettings("default");
+		LoadPresetFrom("default");
 	} catch (const std::exception& e) {
+		logger::warn("Failed to load default preset. Error: {}", e.what());
 		settings = {};
 		pipeline[static_cast<size_t>(FeaturePipelineIndex::AutoExposure)].get()->enabled = true;
 		pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)].get()->enabled = true;

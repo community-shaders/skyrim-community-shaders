@@ -213,12 +213,7 @@ void DoF::SetupResources()
 			.MinLOD = 0,
 			.MaxLOD = D3D11_FLOAT32_MAX
 		};
-		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, colorSampler.put()));
-
-		samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_MIRROR;
-		samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_MIRROR;
-		samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_MIRROR;
-		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, depthSampler.put()));
+		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, linearSampler.put()));
 	}
 
 	CompileComputeShaders();
@@ -392,7 +387,7 @@ void DoF::Draw(TextureInfo& inout_tex)
 		if (targetFocusEnabled) {
 			nearBlur = settings.NearPlaneMaxBlur;
 			focusLen = settings.targetFocusFocalLength;
-			manualFocus = targetFocusDistanceGame * 1.428e-5f;
+			manualFocus = Util::Units::GameUnitsToMeters(targetFocusDistanceGame) * 0.001f; // in KM
 		} else {
 			return;
 		}
@@ -420,7 +415,7 @@ void DoF::Draw(TextureInfo& inout_tex)
 
 	std::array<ID3D11ShaderResourceView*, 8> srvs = { inout_tex.srv, texPreFocus->srv.get(), depth.depthSRV, nullptr, nullptr, nullptr, nullptr, nullptr };
 	std::array<ID3D11UnorderedAccessView*, 3> uavs = { texOutput->uav.get(), texFocus->uav.get(), texCoC->uav.get() };
-	std::array<ID3D11SamplerState*, 2> samplers = { colorSampler.get(), depthSampler.get() };
+	std::array<ID3D11SamplerState*, 1> samplers = { linearSampler.get() };
 	auto cb = dofCB->CB();
 	auto resetViews = [&]() {
 		srvs.fill(nullptr);
