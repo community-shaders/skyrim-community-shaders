@@ -112,7 +112,7 @@ void MenuManager::RenderWeatherControl()
 		ImGui::TableHeadersRow();
 
 		// Display timeOfDay1 values
-		const char* tod1Names[] = {"Dawn", "Sunrise", "Day", "Sunset"};
+		const char* tod1Names[] = { "Dawn", "Sunrise", "Day", "Sunset" };
 		for (int i = 0; i < 4; ++i) {
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
@@ -124,7 +124,7 @@ void MenuManager::RenderWeatherControl()
 		}
 
 		// Display timeOfDay2 values
-		const char* tod2Names[] = {"Dusk", "Night", "InteriorDay", "InteriorNight"};
+		const char* tod2Names[] = { "Dusk", "Night", "InteriorDay", "InteriorNight" };
 		for (int i = 0; i < 4; ++i) {
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);

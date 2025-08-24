@@ -501,7 +501,7 @@ void EffectManager::UpdateCommonData()
 	// Update time of day
 	{
 		auto& settingManager = SettingManager::GetSingleton();
-		
+
 		// Clamp current time to valid range
 		float currentTime = std::clamp(sky->currentGameHour, 0.0f, 24.0f);
 
@@ -555,7 +555,8 @@ void EffectManager::UpdateCommonData()
 
 			// Calculate blend weight
 			float timeDiff = std::abs(nextPeriodTime - currentPeriodTime);
-			if (timeDiff == 0.0f) timeDiff = 1.0f;
+			if (timeDiff == 0.0f)
+				timeDiff = 1.0f;
 
 			const float blend = std::abs(currentTime - currentPeriodTime) / timeDiff;
 
@@ -595,7 +596,7 @@ void EffectManager::UpdateCommonData()
 			commonData.eNightDayFactor = 0.5f;  // Fallback if both distances are 0
 		}
 
-		commonData.timeOfDay2[2] = commonData.eInteriorFactor * commonData.eNightDayFactor;			  // interior day
+		commonData.timeOfDay2[2] = commonData.eInteriorFactor * commonData.eNightDayFactor;           // interior day
 		commonData.timeOfDay2[3] = commonData.eInteriorFactor * (1.0f - commonData.eNightDayFactor);  // interior night
 	}
 }

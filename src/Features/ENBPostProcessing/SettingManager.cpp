@@ -658,14 +658,14 @@ void SettingManager::LoadWeatherIgnoreSettings(const std::string& filePath)
 
 		if (hasWeatherSupport) {
 			char buffer1[256];
-		GetPrivateProfileStringA(category.c_str(), "IgnoreWeatherSystem", "false", buffer1, sizeof(buffer1), filePath.c_str());
-		std::string valueStr = buffer1;
+			GetPrivateProfileStringA(category.c_str(), "IgnoreWeatherSystem", "false", buffer1, sizeof(buffer1), filePath.c_str());
+			std::string valueStr = buffer1;
 			std::transform(valueStr.begin(), valueStr.end(), valueStr.begin(), ::tolower);
 			categoryData.ignoreWeatherSystem = (valueStr == "true" || valueStr == "1");
 
 			char buffer2[256];
-		GetPrivateProfileStringA(category.c_str(), "IgnoreWeatherSystemInterior", "true", buffer2, sizeof(buffer2), filePath.c_str());
-		valueStr = buffer2;
+			GetPrivateProfileStringA(category.c_str(), "IgnoreWeatherSystemInterior", "true", buffer2, sizeof(buffer2), filePath.c_str());
+			valueStr = buffer2;
 			std::transform(valueStr.begin(), valueStr.end(), valueStr.begin(), ::tolower);
 			categoryData.ignoreWeatherSystemInterior = (valueStr == "true" || valueStr == "1");
 		}
@@ -705,7 +705,6 @@ void SettingManager::Save()
 	SaveToFile("enbseries.ini");
 	SaveAllWeatherSettings();
 }
-
 
 // Explicit template instantiations
 template bool SettingManager::GetValue<bool>(const std::string& key, const std::string& category, bool rawValue);
