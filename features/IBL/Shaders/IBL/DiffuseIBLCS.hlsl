@@ -40,19 +40,21 @@ void main(uint3 dispatchID : SV_DispatchThreadID, uint groupIndex : SV_GroupInde
 	float3 rayDir = SphericalHarmonics::GetUniformSphereSample(sampleCoord.x, sampleCoord.y);
 
 	// Sample cubemap with optimized direction
-	float3 color = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
 #if defined(DYNAMIC_CUBEMAPS)
-	// Optimized condition check using faster comparisons
-	if (rayDir.z >= 0 && SharedData::iblSettings.SampleUnderHorizonFromDynCube) {
-		float absZ = abs(rayDir.z);
-		if (absZ > abs(rayDir.x) && absZ > abs(rayDir.y)) {
-			color = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0);
-		}
+	float3 color = 0;
+	const float dcAmount = saturate(SharedData::iblSettings.DynamicCubemapsAmount);
+	if (dcAmount <= 0.001f) {
+		color = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
+	} else if (dcAmount >= 0.999f) {
+		color = EnvReflectionsTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
+	} else {
+		const float3 base = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
+		const float3 dynamicCubemap = EnvReflectionsTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
+		color = lerp(base, dynamicCubemap, dcAmount);
 	}
+#else
+	float3 color = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
 #endif
-
-	// Apply gamma correction
-	color = Color::GammaToLinear(color);
 
 	// Compute spherical harmonics basis for this direction
 	sh2 sh = SphericalHarmonics::Evaluate(rayDir);

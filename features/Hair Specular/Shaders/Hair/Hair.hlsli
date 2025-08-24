@@ -255,8 +255,8 @@ namespace Hair
 			specularLobeWeightPrimary = 0;
 			specularLobeWeightSecondary = 0;
 
-			const float2 specularBRDFPrimary = BRDF::EnvBRDFApproxLazarov(roughnessPrimary, NdotVshifted);
-			const float2 specularBRDFSecondary = BRDF::EnvBRDFApproxLazarov(roughnessSecondary, NdotVshifted2);
+			const float2 specularBRDFPrimary = BRDF::EnvBRDF(roughnessPrimary, NdotVshifted);
+			const float2 specularBRDFSecondary = BRDF::EnvBRDF(roughnessSecondary, NdotVshifted2);
 
 			const float3 F0 = HairF0();
 			specularLobeWeightPrimary = F0 * specularBRDFPrimary.x + specularBRDFPrimary.y;

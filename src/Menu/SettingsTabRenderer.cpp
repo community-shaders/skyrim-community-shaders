@@ -38,7 +38,7 @@ void SettingsTabRenderer::RenderShadersTab()
 			shaderCache->SetDiskCache(useDiskCache);
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Disabling this stops shaders from being loaded from disk, as well as stops shaders from being saved to it.");
+			ImGui::Text("Disables loading shaders from disk and prevents saving compiled shaders to disk cache.");
 		}
 
 		bool useAsync = shaderCache->IsAsync();
@@ -47,6 +47,11 @@ void SettingsTabRenderer::RenderShadersTab()
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Skips a shader being replaced if it hasn't been compiled yet. Also makes compilation blazingly fast!");
+		}
+
+		if (shaderCache->GetTotalTasks() > 0) {
+			ImGui::Text("Last shader cache build duration: %s",
+				shaderCache->GetShaderStatsString(true, true).c_str());
 		}
 
 		ImGui::EndTabItem();
