@@ -45,9 +45,9 @@ void TextureManager::CreateCommonTextures()
 	commonTextureCache.insert({ "TextureSDRTemp2", CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R10G10B10A2_UNORM, "TextureManager::TextureSDRTemp2") });
 
 	commonTextureCache.insert({ "TextureBloom", CreateTexture(1024, 1024, DXGI_FORMAT_R16G16B16A16_FLOAT, "TextureManager::TextureBloom") });
-	commonTextureCache.insert({ "TextureLens", CreateTexture(1024, 1024, DXGI_FORMAT_R16G16B16A16_FLOAT, "TextureManager::TextureLens") });
+	commonTextureCache.insert({ "TextureLens", CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, "TextureManager::TextureLens") });
 
-	commonTextureCache.insert({ "TextureBloomLensTemp", CreateTexture(1024, 1024, DXGI_FORMAT_R16G16B16A16_FLOAT, "TextureManager::TextureBloomLensTemp") });
+	commonTextureCache.insert({ "TextureBloomTemp", CreateTexture(1024, 1024, DXGI_FORMAT_R16G16B16A16_FLOAT, "TextureManager::TextureBloomLensTemp") });
 
 	commonTextureCache.insert({ "TextureAdaptation", CreateTexture(1, 1, DXGI_FORMAT_R32_FLOAT, "TextureManager::TextureAdaptation") });
 	commonTextureCache.insert({ "TextureAdaptationSwap", CreateTexture(1, 1, DXGI_FORMAT_R32_FLOAT, "TextureManager::TextureAdaptationSwap") });
@@ -218,7 +218,7 @@ float4 DownsampleCODFirstMip(Texture2D tex, SamplerState samp, float2 uv, float2
 }
 float4 main(VS_OUTPUT_POST IN) : SV_Target
 {
-    return DownsampleCODFirstMip(SourceTexture, LinearSampler, IN.txcoord0.xy, SourceTexelSize);
+    return max(0, DownsampleCODFirstMip(SourceTexture, LinearSampler, IN.txcoord0.xy, SourceTexelSize));
 }
 )HLSL";
 

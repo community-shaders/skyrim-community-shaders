@@ -7,7 +7,7 @@ void ENBLens::Execute()
 	// Get common textures for input/output
 	auto& textureManager = TextureManager::GetSingleton();
 
-	auto textureHDRTemp = textureManager.GetCommonTexture("TextureBloomLensTemp");
+	auto textureHDRTemp = textureManager.GetCommonTexture("TextureHDRTemp");
 	auto textureLens = textureManager.GetCommonTexture("TextureLens");
 
 	// Set dowsampled texture, typically the one used (use 1024x1024 mip)

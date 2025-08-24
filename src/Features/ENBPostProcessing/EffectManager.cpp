@@ -413,7 +413,7 @@ void EffectManager::CreateColorCorrectionShader()
 			float4 color = OutputTexture[id.xy];
 			color.rgb = pow(color.rgb, GammaCurve);
 			color.rgb *= Brightness;
-			OutputTexture[id.xy] = color;
+			OutputTexture[id.xy] = max(0, color);
 		}
 	)";
 
