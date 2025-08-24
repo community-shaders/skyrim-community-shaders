@@ -736,6 +736,12 @@ PS_OUTPUT main(PS_INPUT input)
 	baseColor = baseColorMul * baseColor;
 	baseColor.w *= softMul;
 
+#if defined(SOFT) && defined(FALLOFF) && !defined(MEMBRANE)
+	baseColor.w = saturate(baseColor.w * SharedData::enbSettings.VolumetricFogOpacity);
+	baseColor.xyz = pow(baseColor, SharedData::enbSettings.VolumetricFogCurve);
+	baseColor.xyz = baseColor.xyz * SharedData::enbSettings.VolumetricFogIntensity * SharedData::enbSettings.VolumetricFogColorFilter;
+#endif
+
 #	if defined(SOFT) && !(defined(FALLOFF) && defined(MULTBLEND))
 	if (baseColor.w - 0.003 < 0) {
 		discard;
