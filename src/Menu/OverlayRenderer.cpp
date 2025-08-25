@@ -1,6 +1,6 @@
 #include "OverlayRenderer.h"
-#include "ThemeManager.h"
 #include "HomePageRenderer.h"
+#include "ThemeManager.h"
 
 #include <imgui.h>
 #include <imgui_impl_dx11.h>
@@ -200,7 +200,7 @@ void OverlayRenderer::FinalizeImGuiFrame()
 
 void OverlayRenderer::RenderFirstTimeSetupOverlay(const std::function<const char*(uint32_t)>& keyIdToString)
 {
-	(void)keyIdToString; // Suppress unused parameter warning
+	(void)keyIdToString;  // Suppress unused parameter warning
 	if (HomePageRenderer::ShouldShowFirstTimeSetup()) {
 		HomePageRenderer::RenderFirstTimeSetupDialog();
 	}
