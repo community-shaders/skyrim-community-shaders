@@ -152,6 +152,9 @@ cbuffer DoFCB : register(b1)
 
 #define SENSOR_SIZE 0.024f
 
+static const float blurPixelSizeLength = length(SharedData::BufferDim.zw) * 0.5f;
+static const float invBlurPixelSizeLength = 1.0f / blurPixelSizeLength;
+
 struct FocusInfo
 {
 	float2 texcoord;
@@ -392,126 +395,6 @@ float4 PerformPreDiscBlur(DiscBlurInfo blurInfo, Texture2D source)
 	return fragment;
 }
 
-// Calculates the new RGBA fragment for a pixel at texcoord in source using a disc based blur technique described in [Jimenez2014]
-// (Though without using tiles). Blurs far plane.
-// In:	blurInfo, the pre-calculated disc blur information from the vertex shader.
-// 		source, the source buffer to read RGBA data from. RGB is in HDR. A not used.
-//		shape, the shape sampler to use if shapes are used.
-// Out: RGBA fragment that's the result of the disc-blur on the pixel at texcoord in source. A contains luma of pixel.
-float4 PerformDiscBlur(DiscBlurInfo blurInfo, Texture2D source)
-{
-	const float pointsFirstRing = 7;  // each ring has a multiple of this value of sample points.
-	float4 fragment = source.SampleLevel(LinearSampler, blurInfo.texcoord, 0);
-	float fragmentRadius = TexCoCInput.SampleLevel(LinearSampler, blurInfo.texcoord, 0).r;
-	// we'll not process near plane fragments as they're processed in a separate pass.
-	if (fragmentRadius < 0 || blurInfo.farPlaneMaxBlurInPixels <= 0) {
-		// near plane fragment, will be done in near plane pass
-		return fragment;
-	}
-	float bokehBusyFactorToUse = saturate(1.0 - BokehBusyFactor);  // use the busy factor as an edge bias on the blur, not the highlights
-	float4 average = float4(fragment.rgb * fragmentRadius * bokehBusyFactorToUse, bokehBusyFactorToUse);
-	float2 pointOffset = float2(0, 0);
-	float2 ringRadiusDeltaCoords = (SharedData::BufferDim.zw * blurInfo.farPlaneMaxBlurInPixels * fragmentRadius) / blurInfo.numberOfRings;
-	float2 currentRingRadiusCoords = ringRadiusDeltaCoords;
-	float cocPerRing = (fragmentRadius * FarPlaneMaxBlur) / blurInfo.numberOfRings;
-	float pointsOnRing = pointsFirstRing;
-	float4 anamorphicFactors = CalculateAnamorphicFactor(blurInfo.texcoord - 0.5);  // xy are up vector, zw are right vector
-	float2x2 anamorphicRotationMatrix = CalculateAnamorphicRotationMatrix(blurInfo.texcoord);
-	bool useShape = HighlightShape > 0;
-	float4 shapeTap = float4(1.0f, 1.0f, 1.0f, 1.0f);
-	for (float ringIndex = 0; ringIndex < blurInfo.numberOfRings; ringIndex++) {
-		float anglePerPoint = Math::TAU / pointsOnRing;
-		float angle = anglePerPoint;
-		float ringWeight = lerp(ringIndex / blurInfo.numberOfRings, 1, bokehBusyFactorToUse);
-		float ringDistance = cocPerRing * ringIndex;
-		float shapeRingDistance = ((ringIndex + 1) / blurInfo.numberOfRings) * 0.5f;
-		for (float pointNumber = 0; pointNumber < pointsOnRing; pointNumber++) {
-			sincos(angle, pointOffset.y, pointOffset.x);
-			// shapeLuma is in Alpha
-			shapeTap = useShape ? GetShapeTap(angle, shapeRingDistance) : shapeTap;
-			// now transform the offset vector with the anamorphic factors and rotate it accordingly to the rotation matrix, so we get a nice
-			// bending around the center of the screen.
-			pointOffset = useShape ? pointOffset : MorphPointOffsetWithAnamorphicDeltas(pointOffset, anamorphicFactors, anamorphicRotationMatrix);
-			float2 tapCoords = float2(blurInfo.texcoord + (pointOffset * currentRingRadiusCoords));
-			float sampleRadius = TexCoCInput.SampleLevel(LinearSampler, tapCoords, 0).r;
-			float weight = (sampleRadius >= 0) * ringWeight * CalculateSampleWeight(sampleRadius * FarPlaneMaxBlur, ringDistance) * (shapeTap.a > 0.01 ? 1.0f : 0.0f);
-			// adjust the weight for samples which are in front of the fragment, as they have to get their weight boosted so we don't see edges bleeding through.
-			// as otherwise they'll get a weight that's too low relatively to the pixels sampled from the plane the fragment is in.The 3.0 value is empirically determined.
-			weight *= (1.0 + min(FarPlaneMaxBlur, 3.0f) * saturate(fragmentRadius - sampleRadius));
-			float4 tap = source.SampleLevel(LinearSampler, tapCoords, 0);
-			average.rgb += tap.rgb * weight;
-			average.w += weight;
-			angle += anglePerPoint;
-		}
-		pointsOnRing += pointsFirstRing;
-		currentRingRadiusCoords += ringRadiusDeltaCoords;
-	}
-	fragment.rgb = average.rgb / (average.w + (average.w == 0));
-	return fragment;
-}
-
-float4 PerformNearPlaneDiscBlur(DiscBlurInfo blurInfo, Texture2D source)
-{
-	float4 fragment = source.SampleLevel(LinearSampler, blurInfo.texcoord, 0);
-	// r contains blurred CoC, g contains original CoC. Original is negative.
-	float2 fragmentRadii = float2(TexCoCBlurredInput.SampleLevel(LinearSampler, blurInfo.texcoord, 0), TexCoCInput.SampleLevel(LinearSampler, blurInfo.texcoord, 0));
-	float fragmentRadiusToUse = fragmentRadii.r;
-
-	if (fragmentRadii.r <= 0) {
-		// the blurred CoC value is still 0, we'll never end up with a pixel that has a different value than fragment, so abort now by
-		// returning the fragment we already read.
-		fragment.a = 0;
-		return fragment;
-	}
-
-	// use one extra ring as undersampling is really prominent in near-camera objects.
-	float numberOfRings = max(blurInfo.numberOfRings, 1) + 1;
-	float pointsFirstRing = 7;
-	// luma is stored in alpha
-	float bokehBusyFactorToUse = saturate(1.0 - BokehBusyFactor);  // use the busy factor as an edge bias on the blur, not the highlights
-	float4 average = float4(fragment.rgb * fragmentRadiusToUse * bokehBusyFactorToUse, bokehBusyFactorToUse);
-	float2 pointOffset = float2(0, 0);
-	float nearPlaneBlurInPixels = blurInfo.nearPlaneMaxBlurInPixels * fragmentRadiusToUse;
-	float2 ringRadiusDeltaCoords = float2(SharedData::BufferDim.z, SharedData::BufferDim.w) * (nearPlaneBlurInPixels / (numberOfRings - 1));
-	float pointsOnRing = pointsFirstRing;
-	float2 currentRingRadiusCoords = ringRadiusDeltaCoords;
-	float4 anamorphicFactors = CalculateAnamorphicFactor(blurInfo.texcoord - 0.5);  // xy are up vector, zw are right vector
-	float2x2 anamorphicRotationMatrix = CalculateAnamorphicRotationMatrix(blurInfo.texcoord);
-	bool useShape = HighlightShape > 0;
-	float4 shapeTap = float4(1.0f, 1.0f, 1.0f, 1.0f);
-	for (float ringIndex = 0; ringIndex < numberOfRings; ringIndex++) {
-		float anglePerPoint = Math::TAU / pointsOnRing;
-		float angle = anglePerPoint;
-		// no further weight needed, bleed all you want.
-		float weight = lerp(ringIndex / numberOfRings, 1, smoothstep(0, 1, bokehBusyFactorToUse));
-		float shapeRingDistance = ((ringIndex + 1) / numberOfRings) * 0.5f;
-		for (float pointNumber = 0; pointNumber < pointsOnRing; pointNumber++) {
-			sincos(angle, pointOffset.y, pointOffset.x);
-			// shapeLuma is in Alpha
-			shapeTap = useShape ? GetShapeTap(angle, shapeRingDistance) : shapeTap;
-			// now transform the offset vector with the anamorphic factors and rotate it accordingly to the rotation matrix, so we get a nice
-			// bending around the center of the screen.
-			pointOffset = useShape ? pointOffset : MorphPointOffsetWithAnamorphicDeltas(pointOffset, anamorphicFactors, anamorphicRotationMatrix);
-			float2 tapCoords = float2(blurInfo.texcoord + (pointOffset * currentRingRadiusCoords));
-			float4 tap = source.SampleLevel(LinearSampler, tapCoords, 0);
-			// r contains blurred CoC, g contains original CoC. Original can be negative
-			float2 sampleRadii = float2(TexCoCBlurredInput.SampleLevel(LinearSampler, tapCoords, 0), TexCoCInput.SampleLevel(LinearSampler, tapCoords, 0));
-			float blurredSampleRadius = sampleRadii.r;
-			float sampleWeight = weight * (shapeTap.a > 0.01 ? 1.0f : 0.0f);
-			average.rgb += tap.rgb * sampleWeight;
-			average.w += sampleWeight;
-			angle += anglePerPoint;
-		}
-		pointsOnRing += pointsFirstRing;
-		currentRingRadiusCoords += ringRadiusDeltaCoords;
-	}
-	average.rgb /= (average.w + (average.w == 0));
-	float alpha = saturate((min(2.5, NearPlaneMaxBlur) + 0.4) * (fragmentRadiusToUse > 0.1 ? (fragmentRadii.g <= 0 ? 2 : 1) * fragmentRadiusToUse : max(fragmentRadiusToUse, -fragmentRadii.g)));
-	fragment.rgb = average.rgb;
-	fragment.a = alpha;
-	return fragment;
-}
-
 float4 PerformFullFragmentGaussianBlur(Texture2D source, float2 texcoord, uint2 DTid, float2 offsetWeight)
 {
 	float offset[6] = { 0.0, 1.4584295168, 3.40398480678, 5.3518057801, 7.302940716, 9.2581597095 };
@@ -608,10 +491,9 @@ float4 PerformFullFragmentGaussianBlur(Texture2D source, float2 texcoord, uint2 
 	DiscBlurInfo blurInfo;
 	blurInfo.texcoord = 2.0f * (DTid.xy + 0.5f) * SharedData::BufferDim.zw;
 	blurInfo.numberOfRings = round(BlurQuality);
-	float pixelSizeLength = length(SharedData::BufferDim.zw) * 0.5f;
-	blurInfo.farPlaneMaxBlurInPixels = (FarPlaneMaxBlur / 100.0f) / pixelSizeLength;
-	blurInfo.nearPlaneMaxBlurInPixels = (NearPlaneMaxBlur / 100.0f) / pixelSizeLength;
-	blurInfo.cocFactorPerPixel = pixelSizeLength * blurInfo.farPlaneMaxBlurInPixels;  // not needed for near plane.
+	blurInfo.farPlaneMaxBlurInPixels = (FarPlaneMaxBlur * 0.01f) * invBlurPixelSizeLength;
+	blurInfo.nearPlaneMaxBlurInPixels = (NearPlaneMaxBlur * 0.01f) * invBlurPixelSizeLength;
+	blurInfo.cocFactorPerPixel = blurPixelSizeLength * blurInfo.farPlaneMaxBlurInPixels;  // not needed for near plane.
 	// Pre Blur
 	float4 color = PerformPreDiscBlur(blurInfo, TexColor);
 	RWTexOut[DTid] = color;
@@ -622,11 +504,63 @@ float4 PerformFullFragmentGaussianBlur(Texture2D source, float2 texcoord, uint2 
 	DiscBlurInfo blurInfo;
 	blurInfo.texcoord = 2.0f * (DTid.xy + 0.5f) * SharedData::BufferDim.zw;
 	blurInfo.numberOfRings = round(BlurQuality);
-	float pixelSizeLength = length(SharedData::BufferDim.zw) * 0.5f;
-	blurInfo.farPlaneMaxBlurInPixels = (FarPlaneMaxBlur / 100.0f) / pixelSizeLength;
-	blurInfo.nearPlaneMaxBlurInPixels = (NearPlaneMaxBlur / 100.0f) / pixelSizeLength;
-	blurInfo.cocFactorPerPixel = pixelSizeLength * blurInfo.farPlaneMaxBlurInPixels;  // not needed for near plane.
-	float4 color = PerformDiscBlur(blurInfo, TexColor);
+	blurInfo.farPlaneMaxBlurInPixels = (FarPlaneMaxBlur * 0.01f) * invBlurPixelSizeLength;
+	blurInfo.nearPlaneMaxBlurInPixels = (NearPlaneMaxBlur * 0.01f) * invBlurPixelSizeLength;
+	blurInfo.cocFactorPerPixel = blurPixelSizeLength * blurInfo.farPlaneMaxBlurInPixels;  // not needed for near plane.
+
+	const float pointsFirstRing = 7;  // each ring has a multiple of this value of sample points.
+	float4 color = TexColor[DTid];
+	float colorRadius = TexCoCInput[2 * DTid].r;
+	// we'll not process near plane fragments as they're processed in a separate pass.
+	if (colorRadius < blurPixelSizeLength || blurInfo.farPlaneMaxBlurInPixels <= 0) {
+		// near plane fragment, will be done in near plane pass
+		RWTexOut[DTid] = color;
+		return;
+	}
+	float bokehBusyFactorToUse = saturate(1.0 - BokehBusyFactor);  // use the busy factor as an edge bias on the blur, not the highlights
+	float4 average = float4(color.rgb * colorRadius * bokehBusyFactorToUse, bokehBusyFactorToUse);
+	float2 pointOffset = float2(0, 0);
+	float2 ringRadiusDeltaCoords = (SharedData::BufferDim.zw * blurInfo.farPlaneMaxBlurInPixels * colorRadius) / blurInfo.numberOfRings;
+	float2 currentRingRadiusCoords = ringRadiusDeltaCoords;
+	float cocPerRing = (colorRadius * FarPlaneMaxBlur) / blurInfo.numberOfRings;
+	float ringDistance = 0;
+	float pointsOnRing = pointsFirstRing;
+	float4 anamorphicFactors = CalculateAnamorphicFactor(blurInfo.texcoord - 0.5);  // xy are up vector, zw are right vector
+	float2x2 anamorphicRotationMatrix = CalculateAnamorphicRotationMatrix(blurInfo.texcoord);
+	bool useShape = HighlightShape > 0;
+	float4 shapeTap = float4(1.0f, 1.0f, 1.0f, 1.0f);
+	for (float ringIndex = 0; ringIndex < blurInfo.numberOfRings; ringIndex++) {
+		float anglePerPoint = Math::TAU / pointsOnRing;
+		float angle = anglePerPoint;
+		float ringWeight = lerp(ringIndex / blurInfo.numberOfRings, 1, bokehBusyFactorToUse);
+		ringDistance += cocPerRing;
+		float shapeRingDistance = ((ringIndex + 1) / blurInfo.numberOfRings) * 0.5f;
+		for (float pointNumber = 0; pointNumber < pointsOnRing; pointNumber++) {
+			sincos(angle, pointOffset.y, pointOffset.x);
+			// shapeLuma is in Alpha
+			if (useShape)
+				shapeTap = GetShapeTap(angle, shapeRingDistance);
+			// now transform the offset vector with the anamorphic factors and rotate it accordingly to the rotation matrix, so we get a nice
+			// bending around the center of the screen.
+			else
+				pointOffset = MorphPointOffsetWithAnamorphicDeltas(pointOffset, anamorphicFactors, anamorphicRotationMatrix);
+			float2 tapCoords = float2(blurInfo.texcoord + (pointOffset * currentRingRadiusCoords));
+			float sampleRadius = TexCoCInput.SampleLevel(LinearSampler, tapCoords, 0).r;
+			float4 tap = 0;
+			float weight = (sampleRadius >= 0) * ringWeight * CalculateSampleWeight(sampleRadius * FarPlaneMaxBlur, ringDistance) * (shapeTap.a > 0.01 ? 1.0f : 0.0f);
+			// adjust the weight for samples which are in front of the fragment, as they have to get their weight boosted so we don't see edges bleeding through.
+			// as otherwise they'll get a weight that's too low relatively to the pixels sampled from the plane the fragment is in.The 3.0 value is empirically determined.
+			weight *= (1.0 + min(FarPlaneMaxBlur, 3.0f) * saturate(colorRadius - sampleRadius));
+			if (weight > 0)
+				tap = TexColor.SampleLevel(LinearSampler, tapCoords, 0);
+			average.rgb += tap.rgb * weight;
+			average.w += weight;
+			angle += anglePerPoint;
+		}
+		pointsOnRing += pointsFirstRing;
+		currentRingRadiusCoords += ringRadiusDeltaCoords;
+	}
+	color.rgb = average.rgb / (average.w + (average.w == 0));
 	RWTexOut[DTid] = color;
 }
 
@@ -636,28 +570,76 @@ float4 PerformFullFragmentGaussianBlur(Texture2D source, float2 texcoord, uint2 
 	DiscBlurInfo blurInfo;
 	blurInfo.texcoord = 2.0f * (DTid.xy + 0.5f) * SharedData::BufferDim.zw;
 	blurInfo.numberOfRings = round(BlurQuality);
-	float pixelSizeLength = length(SharedData::BufferDim.zw) * 0.5f;
-	blurInfo.farPlaneMaxBlurInPixels = (FarPlaneMaxBlur / 100.0f) / pixelSizeLength;
-	blurInfo.nearPlaneMaxBlurInPixels = (NearPlaneMaxBlur / 100.0f) / pixelSizeLength;
-	blurInfo.cocFactorPerPixel = pixelSizeLength * blurInfo.farPlaneMaxBlurInPixels;  // not needed for near plane.
-	float4 color = PerformNearPlaneDiscBlur(blurInfo, TexColor);
+	blurInfo.farPlaneMaxBlurInPixels = (FarPlaneMaxBlur * 0.01f) * invBlurPixelSizeLength;
+	blurInfo.nearPlaneMaxBlurInPixels = (NearPlaneMaxBlur * 0.01f) * invBlurPixelSizeLength;
+	blurInfo.cocFactorPerPixel = blurPixelSizeLength * blurInfo.farPlaneMaxBlurInPixels;  // not needed for near plane.
+
+	float4 color = TexColor[DTid];
+	// r contains blurred CoC, g contains original CoC. Original is negative.
+	float2 colorRadii = float2(TexCoCBlurredInput[DTid], TexCoCInput[2 * DTid]);
+	float colorRadiusToUse = colorRadii.r;
+
+	if (colorRadii.r <= blurPixelSizeLength) {
+		// the blurred CoC value is still 0, we'll never end up with a pixel that has a different value than color, so abort now by
+		// returning the color we already read.
+		color.a = 0;
+		RWTexOut[DTid] = color;
+		return;
+	}
+
+	// use one extra ring as undersampling is really prominent in near-camera objects.
+	float numberOfRings = max(blurInfo.numberOfRings, 1) + 1;
+	float pointsFirstRing = 7;
+	// luma is stored in alpha
+	float bokehBusyFactorToUse = saturate(1.0 - BokehBusyFactor);  // use the busy factor as an edge bias on the blur, not the highlights
+	float4 average = float4(color.rgb * colorRadiusToUse * bokehBusyFactorToUse, bokehBusyFactorToUse);
+	float2 pointOffset = float2(0, 0);
+	float nearPlaneBlurInPixels = blurInfo.nearPlaneMaxBlurInPixels * colorRadiusToUse;
+	float2 ringRadiusDeltaCoords = float2(SharedData::BufferDim.z, SharedData::BufferDim.w) * (nearPlaneBlurInPixels / (numberOfRings - 1));
+	float pointsOnRing = pointsFirstRing;
+	float2 currentRingRadiusCoords = ringRadiusDeltaCoords;
+	float4 anamorphicFactors = CalculateAnamorphicFactor(blurInfo.texcoord - 0.5);  // xy are up vector, zw are right vector
+	float2x2 anamorphicRotationMatrix = CalculateAnamorphicRotationMatrix(blurInfo.texcoord);
+	bool useShape = HighlightShape > 0;
+	float4 shapeTap = float4(1.0f, 1.0f, 1.0f, 1.0f);
+	for (float ringIndex = 0; ringIndex < numberOfRings; ringIndex++) {
+		float anglePerPoint = Math::TAU / pointsOnRing;
+		float angle = anglePerPoint;
+		// no further weight needed, bleed all you want.
+		float weight = lerp(ringIndex / numberOfRings, 1, smoothstep(0, 1, bokehBusyFactorToUse));
+		float shapeRingDistance = ((ringIndex + 1) / numberOfRings) * 0.5f;
+		for (float pointNumber = 0; pointNumber < pointsOnRing; pointNumber++) {
+			sincos(angle, pointOffset.y, pointOffset.x);
+			// shapeLuma is in Alpha
+			if (useShape)
+				shapeTap = GetShapeTap(angle, shapeRingDistance);
+			// now transform the offset vector with the anamorphic factors and rotate it accordingly to the rotation matrix, so we get a nice
+			// bending around the center of the screen.
+			else
+				pointOffset = MorphPointOffsetWithAnamorphicDeltas(pointOffset, anamorphicFactors, anamorphicRotationMatrix);
+			float2 tapCoords = float2(blurInfo.texcoord + (pointOffset * currentRingRadiusCoords));
+			float4 tap = TexColor.SampleLevel(LinearSampler, tapCoords, 0);
+			// r contains blurred CoC, g contains original CoC. Original can be negative
+			float2 sampleRadii = float2(TexCoCBlurredInput.SampleLevel(LinearSampler, tapCoords, 0), TexCoCInput.SampleLevel(LinearSampler, tapCoords, 0));
+			float blurredSampleRadius = sampleRadii.r;
+			float sampleWeight = weight * (shapeTap.a > 0.01 ? 1.0f : 0.0f);
+			average.rgb += tap.rgb * sampleWeight;
+			average.w += sampleWeight;
+			angle += anglePerPoint;
+		}
+		pointsOnRing += pointsFirstRing;
+		currentRingRadiusCoords += ringRadiusDeltaCoords;
+	}
+	average.rgb /= (average.w + (average.w == 0));
+	float alpha = saturate((min(2.5, NearPlaneMaxBlur) + 0.4) * (colorRadiusToUse > 0.1 ? (colorRadii.g <= 0 ? 2 : 1) * colorRadiusToUse : max(colorRadiusToUse, -colorRadii.g)));
+	color.rgb = average.rgb;
+	color.a = alpha;
 	RWTexOut[DTid] = color;
 }
 
 [numthreads(8, 8, 1)] void CS_TentFilter(uint2 DTid
 										 : SV_DispatchThreadID) {
-	// float4 coord = (0.5f / float4(SharedData::BufferDim.x, SharedData::BufferDim.y, SharedData::BufferDim.x, SharedData::BufferDim.y)) * float4(1, 1, -1, 0);
 	float4 average;
-	// float2 uv = 2.0f * (DTid.xy + 0.5f) * SharedData::BufferDim.zw;
-	// average = TexColor.SampleLevel(LinearSampler, (uv - coord.xy), 0);
-	// average += TexColor.SampleLevel(LinearSampler, (uv - coord.wy), 0) * 2;
-	// average += TexColor.SampleLevel(LinearSampler, (uv - coord.zy), 0);
-	// average += TexColor.SampleLevel(LinearSampler, (uv + coord.zw), 0) * 2;
-	// average += TexColor.SampleLevel(LinearSampler, uv, 0) * 4;
-	// average += TexColor.SampleLevel(LinearSampler, (uv + coord.xw), 0) * 2;
-	// average += TexColor.SampleLevel(LinearSampler, (uv + coord.zy), 0);
-	// average += TexColor.SampleLevel(LinearSampler, (uv + coord.wy), 0) * 2;
-	// average += TexColor.SampleLevel(LinearSampler, (uv + coord.xy), 0);
 	uint4 offset = uint4(1, 1, -1, 0);
 	average = TexColor[DTid - offset.xy];
 	average += TexColor[DTid - offset.wy] * 2;

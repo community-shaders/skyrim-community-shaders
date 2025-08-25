@@ -267,6 +267,7 @@ void PostProcessing::LoadPresetFrom(std::string a_name)
 		a_name = a_name.substr(0, a_name.size() - 5);
 
 	try {
+		logger::info("Loading preset: {}", a_name);
 		std::ifstream i{ std::format("{}\\{}.json", ppPresetPath, a_name) };
 		i >> a_presets;
 	} catch (const std::exception& e) {

@@ -47,7 +47,7 @@ struct ColorGrading : public PostProcessFeature
         bool skipLDR = false;
         std::array<ColorProfile, 8> profiles = {};
         std::string currentTonemapper = "GT7";
-        std::array<float4, 2> tonemapParams = { float4{ 1.f, 0.f, 0.f, 0.f }, float4{ 0.f, 0.f, 0.f, 0.f } };
+        std::array<float4, 2> tonemapParams = { float4{ 1.f, 2.f, 0.f, 0.f }, float4{ 0.f, 0.f, 0.f, 0.f } };
         float3 gameCinematicBlend = { 1.0f, 1.0f, 1.0f };
         float gameFadeBlend = 1.0f;
         float gameTintBlend = 1.0f;
@@ -63,7 +63,7 @@ struct ColorGrading : public PostProcessFeature
         std::array<float3, 3> invColorSpaceTransform = { float3{ 1.0f, 0.0f, 0.0f }, float3{ 0.0f, 1.0f, 0.0f }, float3{ 0.0f, 0.0f, 1.0f } };
     } settings;
 
-    int tonemapperType = 1;
+    int tonemapperType = 11;
 
 	// std::array<float4, 17> profiles[8]; // normal, dawn, sunrise, day, sunset, dusk, night, interior
     const std::array<std::string, 8> profileNames = {
