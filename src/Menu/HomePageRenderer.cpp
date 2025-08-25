@@ -307,7 +307,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	ImGui::Text("%s", welcomeTitle);
 
 	// Version text - centered
-	const char* versionText = "This appears to be your first time installing.";
+	const char* versionText = "This appears to be a new install, update, or reinstallation of Community Shaders.";
 	float versionWidth = ImGui::CalcTextSize(versionText).x;
 	ImGui::SetCursorPosX((windowWidth - versionWidth) * 0.5f);
 	ImGui::Text("%s", versionText);
