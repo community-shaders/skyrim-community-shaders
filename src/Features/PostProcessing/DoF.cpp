@@ -4,6 +4,9 @@
 #include "State.h"
 #include "Util.h"
 
+#include <DDSTextureLoader.h>
+#include <DirectXTex.h>
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	DoF::Settings,
 	AutoFocus,
@@ -19,6 +22,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	HighlightBoost,
 	BokehBusyFactor,
 	PostBlurSmoothing,
+	HighlightShape,
+	HighlightShapeRotationAngle,
 	targetFocus,
 	targetFocusFocalLength,
 	consoleSelection)
@@ -28,7 +33,7 @@ void DoF::DrawSettings()
 	ImGui::Checkbox("Auto Focus", &settings.AutoFocus);
 
 	if (settings.AutoFocus) {
-		ImGui::SliderFloat2("Focus Point", &settings.FocusCoord.x, 0.0f, 1.0f, "%.2f");
+		ImGui::SliderFloat2("Focus Point", &settings.FocusCoord.x, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
 	}
 	ImGui::SliderFloat("Transition Speed", &settings.TransitionSpeed, 0.1f, 1.0f, "%.2f");
 	ImGui::SliderFloat("Manual Focus", &settings.ManualFocusPlane, 0.1f, 150.0f, "%.2f m");
@@ -41,7 +46,8 @@ void DoF::DrawSettings()
 	ImGui::SliderFloat("Bokeh Busy Factor", &settings.BokehBusyFactor, 0.0f, 1.0f, "%.2f");
 	ImGui::SliderFloat("Highlight Boost", &settings.HighlightBoost, 0.0f, 1.0f, "%.2f");
 	ImGui::SliderFloat("Post Blur Smoothing", &settings.PostBlurSmoothing, 0.0f, 2.0f, "%.2f");
-
+	ImGui::Combo("Highlight Custom Shape", &settings.HighlightShape, "Circle (No custom shape)\0Heart\0Hexagon\0Circle with fringe\0Hexagon with fringe\0Star\0Square\0");
+	ImGui::SliderFloat("Highlight Shape Rotation", &settings.HighlightShapeRotationAngle, 0.0f, 1.0f, "%.2f");
 	ImGui::Checkbox("Target Focus", &settings.targetFocus);
 	ImGui::SliderFloat("Target Focus Focal Length", &settings.targetFocusFocalLength, 1.0f, 300.0f, "%.1f mm");
 	ImGui::Checkbox("Console Selection", &settings.consoleSelection);
@@ -57,6 +63,7 @@ void DoF::DrawSettings()
 
 		BUFFER_VIEWER_NODE(texFocus, 64.0f)
 		BUFFER_VIEWER_NODE(texPreFocus, 64.0f)
+		BUFFER_VIEWER_NODE(texBokehShapes[std::clamp((settings.HighlightShape - 1), 0, (int)texBokehShapes.size() - 1)], 1.f)
 
 		BUFFER_VIEWER_NODE(texCoC, debugRescale)
 		BUFFER_VIEWER_NODE(texCoCTileTmp, debugRescale)
@@ -202,6 +209,40 @@ void DoF::SetupResources()
 		g_TDM = reinterpret_cast<TDM_API::IVTDM2*>(TDM_API::RequestPluginAPI(TDM_API::InterfaceVersion::V2));
 	}
 
+	logger::debug("Loading Bokeh Shapes...");
+	{
+		for (int i = 0; i < bokehShapeFiles.size(); i++) {
+			auto& shapeFile = bokehShapeFiles[i];
+			auto shapePath = bokehShapesPath / shapeFile;
+
+			DirectX::ScratchImage image;
+			try {
+				DX::ThrowIfFailed(DirectX::LoadFromWICFile(shapePath.c_str(), DirectX::WIC_FLAGS_NONE, nullptr, image));
+			} catch (std::runtime_error& e) {
+				logger::warn("Error loading bokeh shape {}: {}", shapePath.string(), e.what());
+			}
+
+			ID3D11Resource* pRsrc = nullptr;
+			try {
+				DX::ThrowIfFailed(CreateTexture(device, image.GetImages(), image.GetImageCount(), image.GetMetadata(), &pRsrc));
+			} catch (std::runtime_error& e) {
+				errMsg = std::format(comErrMsg, e.what());
+				logger::warn(comErrMsg, e.what());
+			}
+
+			texBokehShapes[i] = eastl::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pRsrc));
+
+			D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+				.Format = texBokehShapes[i]->desc.Format,
+				.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+				.Texture2D = {
+					.MostDetailedMip = 0,
+					.MipLevels = 1 }
+			};
+			texBokehShapes[i]->CreateSRV(srvDesc);
+		}
+	}
+
 	logger::debug("Creating samplers...");
 	{
 		D3D11_SAMPLER_DESC samplerDesc = {
@@ -342,8 +383,6 @@ void DoF::Draw(TextureInfo& inout_tex)
 	auto renderer = globals::game::renderer;
 	auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 
-	float2 res = { (float)texOutput->desc.Width, (float)texOutput->desc.Height };
-
 	float focusLen = settings.FocalLength;
 	float nearBlur = settings.NearPlaneMaxBlur;
 	float manualFocus = settings.ManualFocusPlane / 1000.0f;
@@ -407,13 +446,13 @@ void DoF::Draw(TextureInfo& inout_tex)
 		.BokehBusyFactor = settings.BokehBusyFactor,
 		.HighlightBoost = settings.HighlightBoost,
 		.PostBlurSmoothing = settings.PostBlurSmoothing,
-		.Width = res.x,
-		.Height = res.y,
+		.HighlightShape = (uint)settings.HighlightShape,
+		.HighlightShapeRotationAngle = settings.HighlightShapeRotationAngle,
 		.AutoFocus = autoFocus
 	};
 	dofCB->Update(dofData);
 
-	std::array<ID3D11ShaderResourceView*, 8> srvs = { inout_tex.srv, texPreFocus->srv.get(), depth.depthSRV, nullptr, nullptr, nullptr, nullptr, nullptr };
+	std::array<ID3D11ShaderResourceView*, 9> srvs = { inout_tex.srv, texPreFocus->srv.get(), depth.depthSRV, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 	std::array<ID3D11UnorderedAccessView*, 3> uavs = { texOutput->uav.get(), texFocus->uav.get(), texCoC->uav.get() };
 	std::array<ID3D11SamplerState*, 1> samplers = { linearSampler.get() };
 	auto cb = dofCB->CB();
@@ -544,6 +583,7 @@ void DoF::Draw(TextureInfo& inout_tex)
 		srvs.at(0) = texPreBlurred->srv.get();
 		srvs.at(3) = texCoC->srv.get();
 		srvs.at(4) = texCoCBlur2->srv.get();
+		srvs.at(8) = texBokehShapes[std::clamp((settings.HighlightShape - 1), 0, (int)texBokehShapes.size() - 1)]->srv.get();
 		uavs.at(0) = texFarBlurred->uav.get();
 
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
@@ -557,6 +597,7 @@ void DoF::Draw(TextureInfo& inout_tex)
 		srvs.at(0) = texFarBlurred->srv.get();
 		srvs.at(3) = texCoCTileNeighbor->srv.get();
 		srvs.at(4) = texCoCBlur2->srv.get();
+		srvs.at(8) = texBokehShapes[std::clamp((settings.HighlightShape - 1), 0, (int)texBokehShapes.size() - 1)]->srv.get();
 		uavs.at(0) = texNearBlurred->uav.get();
 
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());

@@ -15,7 +15,6 @@ struct DoF : public PostProcessFeature
 	struct Settings
 	{
 		bool AutoFocus = true;
-		uint8_t pad[3];
 		float TransitionSpeed = 0.5f;
 		float2 FocusCoord = float2(0.5f, 0.5f);
 		float ManualFocusPlane = 0.4f;
@@ -28,6 +27,8 @@ struct DoF : public PostProcessFeature
 		float BokehBusyFactor = 0.5f;
 		float HighlightBoost = 0.0f;
 		float PostBlurSmoothing = 0.0f;
+		int HighlightShape = 0;
+		float HighlightShapeRotationAngle = 0.0f;
 		bool targetFocus = false;
 		float targetFocusFocalLength = 50.0f;
 		bool consoleSelection = false;
@@ -47,10 +48,9 @@ struct DoF : public PostProcessFeature
 		float BokehBusyFactor;
 		float HighlightBoost;
 		float PostBlurSmoothing;
-		float Width;
-		float Height;
-		bool AutoFocus;
-		uint8_t pad[3];
+		uint HighlightShape;
+		float HighlightShapeRotationAngle;
+		uint AutoFocus;
 	};
 
 	eastl::unique_ptr<ConstantBuffer> dofCB = nullptr;
@@ -71,6 +71,16 @@ struct DoF : public PostProcessFeature
 	eastl::unique_ptr<Texture2D> texCoCTileNeighbor = nullptr;
 	eastl::unique_ptr<Texture2D> texCoCBlur1 = nullptr;
 	eastl::unique_ptr<Texture2D> texCoCBlur2 = nullptr;
+	std::array<eastl::unique_ptr<Texture2D>, 6> texBokehShapes = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+	const std::filesystem::path bokehShapesPath = "Data\\Shaders\\PostProcessing\\DoF\\bokehshapes";
+	std::array<std::string, 6> bokehShapeFiles = {
+		"moyheart.png",
+		"hex.png",
+		"fringy_soft_chr_rb.png",
+		"hex_fringy_soft.png",
+		"cutestar.png",
+		"square.png"
+	};
 
 	winrt::com_ptr<ID3D11ComputeShader> UpdateFocusCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> CalculateCoCCS = nullptr;
