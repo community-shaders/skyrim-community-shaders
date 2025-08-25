@@ -3,20 +3,20 @@
 
 #include <filesystem>
 #include <format>
-#include <imgui.h>
-#include <ranges>
 #include <fstream>
-#include <sstream>
+#include <imgui.h>
 #include <nlohmann/json.hpp>
+#include <ranges>
+#include <sstream>
 
 #include "Feature.h"
 #include "Globals.h"
 #include "Menu.h"
 #include "Menu/ThemeManager.h"
+#include "Plugin.h"
 #include "SettingsOverrideManager.h"
 #include "State.h"
 #include "Util.h"
-#include "Plugin.h"
 
 using json = nlohmann::json;
 
@@ -50,10 +50,10 @@ void HomePageRenderer::RenderWelcomeSection()
 	if (io.Fonts && io.Fonts->Fonts.Size > 1 && io.Fonts->Fonts[1] != nullptr) {
 		titleFont = io.Fonts->Fonts[1];
 	}
-	
+
 	// Scale the text to make it larger (1.3x size)
 	ImGui::SetWindowFontScale(2.0f);
-	
+
 	// Only push font if we have a valid one, otherwise use default scaled
 	if (titleFont) {
 		ImGui::PushFont(titleFont);
@@ -69,10 +69,10 @@ void HomePageRenderer::RenderWelcomeSection()
 	if (titleFont) {
 		ImGui::PopFont();
 	}
-	
+
 	// Reset text scale back to normal
 	ImGui::SetWindowFontScale(1.0f);
-	
+
 	ImGui::Spacing();
 
 	// Intro text - centered
@@ -251,67 +251,67 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	auto& io = ImGui::GetIO();
 	io.WantCaptureMouse = true;
 	io.WantCaptureKeyboard = true;
-	io.MouseDrawCursor = true; // Show ImGui cursor
-	
+	io.MouseDrawCursor = true;  // Show ImGui cursor
+
 	// Center the window properly with rounded corners and thin border
 	ImVec2 center = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
 	ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 	ImGui::SetNextWindowSize(ImVec2(500, 350), ImGuiCond_Always);
-	
+
 	// Style for rounded window with thin border
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
-	
-	ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | 
-	                        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
-	                        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar; // Prevent scrolling and remove title
-	
+
+	ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+	                         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
+	                         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar;  // Prevent scrolling and remove title
+
 	if (!ImGui::Begin("##FirstTimeSetup", nullptr, flags)) {
 		ImGui::PopStyleVar(2);
 		ImGui::End();
 		return;
 	}
-	
+
 	auto menu = Menu::GetSingleton();
-	
+
 	// Render CS logo as background watermark with proper aspect ratio
 	if (menu && menu->uiIcons.logo.texture) {
 		ImVec2 windowPos = ImGui::GetWindowPos();
 		ImVec2 windowSize = ImGui::GetWindowSize();
-		
+
 		// Get the original texture size to maintain aspect ratio
 		ImVec2 textureSize = menu->uiIcons.logo.size;
 		float aspectRatio = textureSize.x / textureSize.y;
-		
+
 		// Set desired height and calculate width to maintain aspect ratio
 		float logoHeight = 260.0f;
 		float logoWidth = logoHeight * aspectRatio;
-		
-		ImVec2 logoMin(windowPos.x + (windowSize.x - logoWidth) * 0.5f, 
-		               windowPos.y + (windowSize.y - logoHeight) * 0.5f);
+
+		ImVec2 logoMin(windowPos.x + (windowSize.x - logoWidth) * 0.5f,
+			windowPos.y + (windowSize.y - logoHeight) * 0.5f);
 		ImVec2 logoMax(logoMin.x + logoWidth, logoMin.y + logoHeight);
-		
+
 		// Render as subtle watermark background
 		ImU32 watermarkColor = IM_COL32(255, 255, 255, 60);
-		ImGui::GetWindowDrawList()->AddImage(menu->uiIcons.logo.texture, logoMin, logoMax, 
-		                                     ImVec2(0, 0), ImVec2(1, 1), watermarkColor);
+		ImGui::GetWindowDrawList()->AddImage(menu->uiIcons.logo.texture, logoMin, logoMax,
+			ImVec2(0, 0), ImVec2(1, 1), watermarkColor);
 	}
-	
+
 	// Center all content
 	float windowWidth = ImGui::GetWindowWidth();
-	
+
 	// Welcome title - centered
 	const char* welcomeTitle = "Welcome to Community Shaders!";
 	float welcomeTitleWidth = ImGui::CalcTextSize(welcomeTitle).x;
 	ImGui::SetCursorPosX((windowWidth - welcomeTitleWidth) * 0.5f);
 	ImGui::Text("%s", welcomeTitle);
-	
+
 	// Version text - centered
 	const char* versionText = "This appears to be your first time installing.";
 	float versionWidth = ImGui::CalcTextSize(versionText).x;
 	ImGui::SetCursorPosX((windowWidth - versionWidth) * 0.5f);
 	ImGui::Text("%s", versionText);
-	
+
 	ImGui::Spacing();
 
 	// Description - centered
@@ -319,43 +319,42 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	float descWidth = ImGui::CalcTextSize(description).x;
 	ImGui::SetCursorPosX((windowWidth - descWidth) * 0.5f);
 	ImGui::Text("%s", description);
-	
-	
+
 	// Hotkey selection - centered
 	static int selectedKey = 0;
 	const char* keyOptions[] = {
-		"END (default)", "INSERT", "HOME", "DELETE", 
+		"END (default)", "INSERT", "HOME", "DELETE",
 		"PAGE UP", "PAGE DOWN", "F9", "F10", "F11", "F12"
 	};
-	
+
 	const uint32_t keyValues[] = {
 		VK_END, VK_INSERT, VK_HOME, VK_DELETE,
 		VK_PRIOR, VK_NEXT, VK_F9, VK_F10, VK_F11, VK_F12
 	};
-	
+
 	// Center the dropdown
 	float comboWidth = 160.0f;
 	ImGui::SetCursorPosX((windowWidth - comboWidth) * 0.5f);
 	ImGui::SetNextItemWidth(comboWidth);
 	ImGui::Combo("##HotkeyDropdown", &selectedKey, keyOptions, IM_ARRAYSIZE(keyOptions));
-	
+
 	ImGui::Spacing();
-	
+
 	// "You can change this later" text - centered
 	const char* laterText = "You can change this later in General > Keybindings.";
 	float laterWidth = ImGui::CalcTextSize(laterText).x;
 	ImGui::SetCursorPosX((windowWidth - laterWidth) * 0.5f);
 	ImGui::Text("%s", laterText);
-	
+
 	ImGui::Spacing();
-	
+
 	// Center the continue button
 	float buttonWidth = 120.0f;
 	ImGui::SetCursorPosX((windowWidth - buttonWidth) * 0.5f);
-	
+
 	// Check for Enter or Escape key first
 	bool shouldClose = ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Escape);
-	
+
 	if (ImGui::Button("Continue", ImVec2(buttonWidth, 30)) || shouldClose) {
 		// Apply the selected hotkey
 		if (menu) {
@@ -363,14 +362,14 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 		}
 		MarkFirstTimeSetupComplete();
 	}
-	
+
 	// Center the help text
 	const char* helpText = "(Press Enter or Escape to continue)";
 	float helpWidth = ImGui::CalcTextSize(helpText).x;
 	ImGui::SetCursorPosX((windowWidth - helpWidth) * 0.5f);
 	ImGui::TextDisabled("%s", helpText);
-	
-	ImGui::PopStyleVar(2); // Pop WindowRounding and WindowBorderSize
+
+	ImGui::PopStyleVar(2);  // Pop WindowRounding and WindowBorderSize
 	ImGui::End();
 }
 
@@ -380,35 +379,35 @@ bool HomePageRenderer::ShouldShowFirstTimeSetup()
 	if (isFirstTimeSetupShown) {
 		return false;
 	}
-	
+
 	// Check if first-time setup has been completed by looking at UserSettings.json
 	std::filesystem::path userSettingsPath = "Data\\SKSE\\Plugins\\CommunityShaders\\UserSettings.json";
-	
+
 	// If UserSettings.json doesn't exist at all, this is definitely a first-time launch
 	if (!std::filesystem::exists(userSettingsPath)) {
 		return true;
 	}
-	
+
 	// If UserSettings.json exists, check if FirstTimeSetupCompleted flag is set
 	try {
 		std::ifstream file(userSettingsPath);
 		if (!file.is_open()) {
-			return true; // If we can't read the file, assume first time
+			return true;  // If we can't read the file, assume first time
 		}
-		
+
 		nlohmann::json settings;
 		file >> settings;
 		file.close();
-		
+
 		// Check if FirstTimeSetupCompleted exists and is true
-		if (settings.contains("FirstTimeSetupCompleted") && 
-		    settings["FirstTimeSetupCompleted"].is_boolean() && 
-		    settings["FirstTimeSetupCompleted"] == true) {
-			return false; // Setup already completed
+		if (settings.contains("FirstTimeSetupCompleted") &&
+			settings["FirstTimeSetupCompleted"].is_boolean() &&
+			settings["FirstTimeSetupCompleted"] == true) {
+			return false;  // Setup already completed
 		}
-		
-		return true; // Field doesn't exist or is false, show setup
-		
+
+		return true;  // Field doesn't exist or is false, show setup
+
 	} catch (const std::exception&) {
 		// If there's any error reading the file, assume first time
 		return true;
@@ -418,10 +417,10 @@ bool HomePageRenderer::ShouldShowFirstTimeSetup()
 void HomePageRenderer::MarkFirstTimeSetupComplete()
 {
 	std::filesystem::path userSettingsPath = "Data\\SKSE\\Plugins\\CommunityShaders\\UserSettings.json";
-	
+
 	try {
 		nlohmann::json settings;
-		
+
 		// Read existing settings if file exists
 		if (std::filesystem::exists(userSettingsPath)) {
 			std::ifstream file(userSettingsPath);
@@ -430,10 +429,10 @@ void HomePageRenderer::MarkFirstTimeSetupComplete()
 				file.close();
 			}
 		}
-		
+
 		// Set the FirstTimeSetupCompleted flag
 		settings["FirstTimeSetupCompleted"] = true;
-		
+
 		// Write back to file
 		std::filesystem::create_directories(userSettingsPath.parent_path());
 		std::ofstream outFile(userSettingsPath);
@@ -441,10 +440,10 @@ void HomePageRenderer::MarkFirstTimeSetupComplete()
 			outFile << settings.dump(2);
 			outFile.close();
 		}
-		
+
 	} catch (const std::exception&) {
 		// If we can't write the file, just mark as shown this session to avoid repeated popups
 	}
-	
-	isFirstTimeSetupShown = true; // Mark as shown this session
+
+	isFirstTimeSetupShown = true;  // Mark as shown this session
 }
