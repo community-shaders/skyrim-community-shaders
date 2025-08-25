@@ -1,13 +1,12 @@
-#include "PCH.h"
 #include "HomePageRenderer.h"
 
-#include <imgui.h>
-#include <imgui_stdlib.h>
-#include <fstream>
-#include <ctime>
 #include <filesystem>
+#include <format>
+#include <imgui.h>
+#include <ranges>
+#include <fstream>
+#include <sstream>
 #include <nlohmann/json.hpp>
-#include <magic_enum.hpp>
 
 #include "Feature.h"
 #include "Globals.h"
@@ -15,7 +14,7 @@
 #include "Menu/ThemeManager.h"
 #include "State.h"
 #include "Util.h"
-#include "SettingsOverrideManager.h"
+#include "Plugin.h"
 
 using json = nlohmann::json;
 
@@ -25,11 +24,6 @@ bool HomePageRenderer::isFirstTimeSetupShown = false;
 void HomePageRenderer::RenderHomePage()
 {
 	ImGui::BeginChild("HomePage", ImVec2(0, 0), false);
-
-	// Check if we should show first-time setup dialog
-	if (ShouldShowFirstTimeSetup()) {
-		RenderFirstTimeSetupDialog();
-	}
 
 	RenderWelcomeSection();
 	ImGui::Spacing();
@@ -55,7 +49,10 @@ void HomePageRenderer::RenderWelcomeSection()
 		titleFont = io.Fonts->Fonts[1];
 	}
 	
-	// Only push font if we have a valid one, otherwise use default
+	// Scale the text to make it larger (1.3x size)
+	ImGui::SetWindowFontScale(2.0f);
+	
+	// Only push font if we have a valid one, otherwise use default scaled
 	if (titleFont) {
 		ImGui::PushFont(titleFont);
 	}
@@ -70,6 +67,9 @@ void HomePageRenderer::RenderWelcomeSection()
 	if (titleFont) {
 		ImGui::PopFont();
 	}
+	
+	// Reset text scale back to normal
+	ImGui::SetWindowFontScale(1.0f);
 	
 	ImGui::Spacing();
 	
@@ -253,173 +253,204 @@ void HomePageRenderer::RenderFAQSection()
 
 void HomePageRenderer::RenderFirstTimeSetupDialog()
 {
-	// Center the dialog
-	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSize(ImVec2(500, 350), ImGuiCond_Appearing);
+	// Block input to the game and make cursor visible
+	auto& io = ImGui::GetIO();
+	io.WantCaptureMouse = true;
+	io.WantCaptureKeyboard = true;
+	io.MouseDrawCursor = true; // Show ImGui cursor
 	
-	if (ImGui::BeginPopupModal("Welcome to Community Shaders!", NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse)) {
-		ImGui::Text("Thank you for installing Community Shaders!");
-		ImGui::Spacing();
-		
-		ImGui::TextWrapped(
-			"Community Shaders provides advanced graphics enhancements for Skyrim. "
-			"This appears to be your first time running this version."
-		);
-		
-		ImGui::Spacing();
-		ImGui::Separator();
-		ImGui::Spacing();
-		
-		ImGui::Text("Menu Hotkey Configuration");
-		ImGui::TextWrapped(
-			"By default, the Community Shaders menu opens with the END key. "
-			"If you don't have an END key or prefer a different hotkey, you can change it below:"
-		);
-		
-		ImGui::Spacing();
-		
-		static int selectedKey = VK_END; // Default to END key
-		static bool keyChanged = false;
-		
-		auto menu = Menu::GetSingleton();
-		static uint32_t currentMenuKey = menu ? menu->GetSettings().ToggleKey : VK_END;
-		
-		// Key selection
-		const char* keyNames[] = {
-			"END (Default)", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
-			"INSERT", "DELETE", "HOME", "PAGE UP", "PAGE DOWN", "PAUSE", "SCROLL LOCK"
-		};
-		
-		const int keyValues[] = {
-			VK_END, VK_F1, VK_F2, VK_F3, VK_F4, VK_F5, VK_F6, VK_F7, VK_F8, VK_F9, VK_F10, VK_F11, VK_F12,
-			VK_INSERT, VK_DELETE, VK_HOME, VK_PRIOR, VK_NEXT, VK_PAUSE, VK_SCROLL
-		};
-		
-		static int currentItem = 0;
-		if (ImGui::Combo("Menu Hotkey", &currentItem, keyNames, IM_ARRAYSIZE(keyNames))) {
-			selectedKey = keyValues[currentItem];
-			keyChanged = true;
-		}
-		
-		ImGui::Spacing();
-		ImGui::TextWrapped("You can also change this later in General > Keybindings.");
-		
-		ImGui::Spacing();
-		ImGui::Separator();
-		ImGui::Spacing();
-		
-		// Action buttons
-		if (ImGui::Button("Continue with Default Settings", ImVec2(200, 0))) {
-			if (!keyChanged) {
-				selectedKey = VK_END; // Ensure default
-			}
-			
-			// Apply the selected key
-			if (menu) {
-				menu->GetSettings().ToggleKey = selectedKey;
-			}
-			
-			MarkFirstTimeSetupComplete();
-			ImGui::CloseCurrentPopup();
-		}
-		
-		ImGui::SameLine();
-		
-		if (ImGui::Button("Apply and Continue", ImVec2(120, 0))) {
-			// Apply the selected key
-			if (menu) {
-				menu->GetSettings().ToggleKey = selectedKey;
-			}
-			
-			MarkFirstTimeSetupComplete();
-			ImGui::CloseCurrentPopup();
-		}
-		
-		ImGui::Spacing();
-		
-		if (ImGui::Button("Skip Setup", ImVec2(100, 0))) {
-			MarkFirstTimeSetupComplete();
-			ImGui::CloseCurrentPopup();
-		}
-		
-		ImGui::EndPopup();
+	// Center the window properly with rounded corners and thin border
+	ImVec2 center = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
+	ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSize(ImVec2(500, 350), ImGuiCond_Always);
+	
+	// Style for rounded window with thin border
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+	
+	ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | 
+	                        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
+	                        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar; // Prevent scrolling and remove title
+	
+	if (!ImGui::Begin("##FirstTimeSetup", nullptr, flags)) {
+		ImGui::PopStyleVar(2);
+		ImGui::End();
+		return;
 	}
+	
+	auto menu = Menu::GetSingleton();
+	
+	// Render CS logo as background watermark with proper aspect ratio
+	if (menu && menu->uiIcons.logo.texture) {
+		ImVec2 windowPos = ImGui::GetWindowPos();
+		ImVec2 windowSize = ImGui::GetWindowSize();
+		
+		// Get the original texture size to maintain aspect ratio
+		ImVec2 textureSize = menu->uiIcons.logo.size;
+		float aspectRatio = textureSize.x / textureSize.y;
+		
+		// Set desired height and calculate width to maintain aspect ratio
+		float logoHeight = 260.0f;
+		float logoWidth = logoHeight * aspectRatio;
+		
+		ImVec2 logoMin(windowPos.x + (windowSize.x - logoWidth) * 0.5f, 
+		               windowPos.y + (windowSize.y - logoHeight) * 0.5f);
+		ImVec2 logoMax(logoMin.x + logoWidth, logoMin.y + logoHeight);
+		
+		// Render as subtle watermark background
+		ImU32 watermarkColor = IM_COL32(255, 255, 255, 60);
+		ImGui::GetWindowDrawList()->AddImage(menu->uiIcons.logo.texture, logoMin, logoMax, 
+		                                     ImVec2(0, 0), ImVec2(1, 1), watermarkColor);
+	}
+	
+	// Center all content
+	float windowWidth = ImGui::GetWindowWidth();
+	
+	// Welcome title - centered
+	const char* welcomeTitle = "Welcome to Community Shaders!";
+	float welcomeTitleWidth = ImGui::CalcTextSize(welcomeTitle).x;
+	ImGui::SetCursorPosX((windowWidth - welcomeTitleWidth) * 0.5f);
+	ImGui::Text("%s", welcomeTitle);
+	
+	// Version text - centered
+	const char* versionText = "This appears to be your first time installing.";
+	float versionWidth = ImGui::CalcTextSize(versionText).x;
+	ImGui::SetCursorPosX((windowWidth - versionWidth) * 0.5f);
+	ImGui::Text("%s", versionText);
+	
+	ImGui::Spacing();
+
+	// Description - centered
+	const char* description = "Please select a hotkey to access the menu:";
+	float descWidth = ImGui::CalcTextSize(description).x;
+	ImGui::SetCursorPosX((windowWidth - descWidth) * 0.5f);
+	ImGui::Text("%s", description);
+	
+	
+	// Hotkey selection - centered
+	static int selectedKey = 0;
+	const char* keyOptions[] = {
+		"END (default)", "INSERT", "HOME", "DELETE", 
+		"PAGE UP", "PAGE DOWN", "F9", "F10", "F11", "F12"
+	};
+	
+	const uint32_t keyValues[] = {
+		VK_END, VK_INSERT, VK_HOME, VK_DELETE,
+		VK_PRIOR, VK_NEXT, VK_F9, VK_F10, VK_F11, VK_F12
+	};
+	
+	// Center the dropdown
+	float comboWidth = 160.0f;
+	ImGui::SetCursorPosX((windowWidth - comboWidth) * 0.5f);
+	ImGui::SetNextItemWidth(comboWidth);
+	ImGui::Combo("##HotkeyDropdown", &selectedKey, keyOptions, IM_ARRAYSIZE(keyOptions));
+	
+	ImGui::Spacing();
+	
+	// "You can change this later" text - centered
+	const char* laterText = "You can change this later in the Settings tab of the menu.";
+	float laterWidth = ImGui::CalcTextSize(laterText).x;
+	ImGui::SetCursorPosX((windowWidth - laterWidth) * 0.5f);
+	ImGui::Text("%s", laterText);
+	
+	ImGui::Spacing();
+	
+	// Center the continue button
+	float buttonWidth = 120.0f;
+	ImGui::SetCursorPosX((windowWidth - buttonWidth) * 0.5f);
+	
+	// Check for Enter or Escape key first
+	bool shouldClose = ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Escape);
+	
+	if (ImGui::Button("Continue", ImVec2(buttonWidth, 30)) || shouldClose) {
+		// Apply the selected hotkey
+		if (menu) {
+			menu->GetSettings().ToggleKey = keyValues[selectedKey];
+		}
+		MarkFirstTimeSetupComplete();
+	}
+	
+	// Center the help text
+	const char* helpText = "(Press Enter or Escape to continue)";
+	float helpWidth = ImGui::CalcTextSize(helpText).x;
+	ImGui::SetCursorPosX((windowWidth - helpWidth) * 0.5f);
+	ImGui::TextDisabled("%s", helpText);
+	
+	ImGui::PopStyleVar(2); // Pop WindowRounding and WindowBorderSize
+	ImGui::End();
 }
 
 bool HomePageRenderer::ShouldShowFirstTimeSetup()
 {
+	// Check if already completed this session
 	if (isFirstTimeSetupShown) {
 		return false;
 	}
 	
-	// Use the same hash-based system as SettingsOverrideManager
-	// Check if we have a setup completion marker
-	std::filesystem::path setupPath = std::filesystem::path(globals::state->folderPath) / "setup_complete.json";
+	// Check if first-time setup has been completed by looking at UserSettings.json
+	std::filesystem::path userSettingsPath = "Data\\SKSE\\Plugins\\CommunityShaders\\UserSettings.json";
 	
-	if (!std::filesystem::exists(setupPath)) {
-		// First time installation
-		isFirstTimeSetupShown = true;
-		ImGui::OpenPopup("Welcome to Community Shaders!");
+	// If UserSettings.json doesn't exist at all, this is definitely a first-time launch
+	if (!std::filesystem::exists(userSettingsPath)) {
 		return true;
 	}
 	
-	// Check if version has changed (update scenario)
+	// If UserSettings.json exists, check if FirstTimeSetupCompleted flag is set
 	try {
-		std::ifstream file(setupPath);
-		if (file.is_open()) {
-			json setupData;
-			file >> setupData;
-			file.close();
-			
-			std::string lastVersion = setupData.value("version", std::string(""));
-			std::string currentVersion = Plugin::VERSION.string();
-			
-			if (lastVersion != currentVersion) {
-				// Version changed, show setup again
-				isFirstTimeSetupShown = true;
-				ImGui::OpenPopup("Welcome to Community Shaders!");
-				return true;
-			}
+		std::ifstream file(userSettingsPath);
+		if (!file.is_open()) {
+			return true; // If we can't read the file, assume first time
 		}
-	} catch (const std::exception& e) {
-		// If we can't read the file, assume first time
-		logger::warn("Could not read setup completion file: {}", e.what());
-		isFirstTimeSetupShown = true;
-		ImGui::OpenPopup("Welcome to Community Shaders!");
+		
+		nlohmann::json settings;
+		file >> settings;
+		file.close();
+		
+		// Check if FirstTimeSetupCompleted exists and is true
+		if (settings.contains("FirstTimeSetupCompleted") && 
+		    settings["FirstTimeSetupCompleted"].is_boolean() && 
+		    settings["FirstTimeSetupCompleted"] == true) {
+			return false; // Setup already completed
+		}
+		
+		return true; // Field doesn't exist or is false, show setup
+		
+	} catch (const std::exception&) {
+		// If there's any error reading the file, assume first time
 		return true;
 	}
-	
-	return false;
 }
 
 void HomePageRenderer::MarkFirstTimeSetupComplete()
 {
-	// Create setup completion marker
-	std::filesystem::path setupPath = std::filesystem::path(globals::state->folderPath) / "setup_complete.json";
+	std::filesystem::path userSettingsPath = "Data\\SKSE\\Plugins\\CommunityShaders\\UserSettings.json";
 	
 	try {
-		// Ensure directory exists
-		std::filesystem::create_directories(setupPath.parent_path());
+		nlohmann::json settings;
 		
-		json setupData;
-		setupData["version"] = Plugin::VERSION.string();
-		setupData["completed_at"] = static_cast<int64_t>(std::time(nullptr));
-		setupData["description"] = "Community Shaders first-time setup completion marker";
-		
-		std::ofstream file(setupPath);
-		if (file.is_open()) {
-			file << setupData.dump(2);
-			file.close();
-			logger::info("First-time setup completed for version {}", Plugin::VERSION.string());
-		} else {
-			logger::warn("Could not write setup completion file");
+		// Read existing settings if file exists
+		if (std::filesystem::exists(userSettingsPath)) {
+			std::ifstream file(userSettingsPath);
+			if (file.is_open()) {
+				file >> settings;
+				file.close();
+			}
 		}
 		
-		isFirstTimeSetupShown = false;
-	} catch (const std::exception& e) {
-		// If we can't write the file, just mark as shown to avoid repeated popups
-		logger::warn("Error writing setup completion file: {}", e.what());
-		isFirstTimeSetupShown = false;
+		// Set the FirstTimeSetupCompleted flag
+		settings["FirstTimeSetupCompleted"] = true;
+		
+		// Write back to file
+		std::filesystem::create_directories(userSettingsPath.parent_path());
+		std::ofstream outFile(userSettingsPath);
+		if (outFile.is_open()) {
+			outFile << settings.dump(2);
+			outFile.close();
+		}
+		
+	} catch (const std::exception&) {
+		// If we can't write the file, just mark as shown this session to avoid repeated popups
 	}
+	
+	isFirstTimeSetupShown = true; // Mark as shown this session
 }
