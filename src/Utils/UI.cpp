@@ -231,6 +231,15 @@ namespace Util
 			logger::warn("InitializeMenuIcons: Failed to load logo icon from: {}", basePath + "Community Shaders Logo\\cs-logo.png");
 		}
 
+		// Load Discord icon
+		if (LoadTextureFromFile(device, (basePath + "Action Icons\\discord.png").c_str(), &menu->uiIcons.discord.texture, menu->uiIcons.discord.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded discord icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load discord icon from: {}", basePath + "Action Icons\\discord.png");
+		}
+
 		// Load category icons
 		if (LoadTextureFromFile(device, (basePath + "Categories\\characters.png").c_str(), &menu->uiIcons.characters.texture, menu->uiIcons.characters.size)) {
 			logger::info("InitializeMenuIcons: Successfully loaded characters icon");
@@ -305,7 +314,7 @@ namespace Util
 			logger::warn("InitializeMenuIcons: Failed to load post-processing icon from: {}", basePath + "Categories\\post-processing.png");
 		}
 
-		logger::info("InitializeMenuIcons: Loaded {}/13 icons successfully", iconsLoaded);
+		logger::info("InitializeMenuIcons: Loaded {}/14 icons successfully", iconsLoaded);
 
 		return anyIconLoaded;
 	}

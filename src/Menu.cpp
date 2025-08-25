@@ -21,6 +21,7 @@
 #include "Menu/OverlayRenderer.h"
 #include "Menu/SettingsTabRenderer.h"
 #include "Menu/ThemeManager.h"
+#include "Menu/HomePageRenderer.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Streamline.h"
@@ -125,6 +126,7 @@ Menu::~Menu()
 	uiIcons.loadSettings.Release();
 	uiIcons.clearCache.Release();
 	uiIcons.logo.Release();
+	uiIcons.discord.Release();
 	uiIcons.characters.Release();
 	uiIcons.grass.Release();
 	uiIcons.lighting.Release();
@@ -133,6 +135,7 @@ Menu::~Menu()
 	uiIcons.water.Release();
 	uiIcons.debug.Release();
 	uiIcons.materials.Release();
+	uiIcons.postProcessing.Release();
 
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
