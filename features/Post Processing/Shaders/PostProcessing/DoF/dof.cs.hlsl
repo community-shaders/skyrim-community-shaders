@@ -236,7 +236,7 @@ float CalculateBlurDiscSize(FocusInfo focusInfo)
 	// where f = FocalLength, N = FNumber, S1 = focusInfo.focusDepthInM, x = pixelDepthInM. In-lined to save on registers.
 	float cocInMM = (((FocalLength * FocalLength) / FNumber) / ((focusInfo.focusDepthInM / 1000.0) - FocalLength)) *
 	                (abs(pixelDepthInM - focusInfo.focusDepthInM) / (pixelDepthInM + (pixelDepthInM == 0)));
-	float toReturn = saturate(abs(cocInMM) * SENSOR_SIZE);  // divide by sensor size to get coc in % of screen (or better: in sampler units)
+	float toReturn = max(abs(cocInMM) * SENSOR_SIZE, 0);  // divide by sensor size to get coc in % of screen (or better: in sampler units)
 	return (pixelDepth < focusInfo.focusDepth) ? -toReturn : toReturn;
 }
 
