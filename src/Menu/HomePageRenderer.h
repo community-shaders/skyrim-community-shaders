@@ -18,7 +18,7 @@ private:
 	static void RenderFAQSection();
 	
 	static void MarkFirstTimeSetupComplete();
-	
+
 	// State
 	static bool isFirstTimeSetupShown;
 };
