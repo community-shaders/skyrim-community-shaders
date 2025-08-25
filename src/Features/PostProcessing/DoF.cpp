@@ -226,8 +226,7 @@ void DoF::SetupResources()
 			try {
 				DX::ThrowIfFailed(CreateTexture(device, image.GetImages(), image.GetImageCount(), image.GetMetadata(), &pRsrc));
 			} catch (std::runtime_error& e) {
-				errMsg = std::format(comErrMsg, e.what());
-				logger::warn(comErrMsg, e.what());
+				logger::warn("Error creating texture for bokeh shape {}: {}", shapePath.string(), e.what());
 			}
 
 			texBokehShapes[i] = eastl::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pRsrc));
@@ -382,6 +381,8 @@ void DoF::Draw(TextureInfo& inout_tex)
 	auto context = globals::d3d::context;
 	auto renderer = globals::game::renderer;
 	auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+
+	float2 res = { (float)texOutput->desc.Width, (float)texOutput->desc.Height };
 
 	float focusLen = settings.FocalLength;
 	float nearBlur = settings.NearPlaneMaxBlur;
