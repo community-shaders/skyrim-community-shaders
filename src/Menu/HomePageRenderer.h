@@ -13,11 +13,11 @@ private:
 	static void RenderQuickLinksSection();
 	static void RenderFAQSection();
 	static void RenderFirstTimeSetupDialog();
-	
+
 	// First-time setup management
 	static bool ShouldShowFirstTimeSetup();
 	static void MarkFirstTimeSetupComplete();
-	
+
 	// State
 	static bool isFirstTimeSetupShown;
 };
