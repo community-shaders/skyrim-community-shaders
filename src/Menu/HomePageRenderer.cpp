@@ -342,7 +342,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	ImGui::Spacing();
 	
 	// "You can change this later" text - centered
-	const char* laterText = "You can change this later in the Settings tab of the menu.";
+	const char* laterText = "You can change this later in General > Keybindings.";
 	float laterWidth = ImGui::CalcTextSize(laterText).x;
 	ImGui::SetCursorPosX((windowWidth - laterWidth) * 0.5f);
 	ImGui::Text("%s", laterText);
