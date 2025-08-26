@@ -179,12 +179,12 @@ namespace SharedData
 	{
 		uint EnableDiffuseIBL;
 		uint PreserveFogLuminance;
+		uint UseStaticIBL;
 		float DiffuseIBLScale;
 		float DALCAmount;
 		float IBLSaturation;
 		float FogAmount;
 		float DynamicCubemapsAmount;
-		float pad;
 	};
 
 	struct ExtendedTranslucencySettings

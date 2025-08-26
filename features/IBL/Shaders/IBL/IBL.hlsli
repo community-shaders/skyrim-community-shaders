@@ -1,3 +1,6 @@
+#ifndef __IBL_HLSLI__
+#define __IBL_HLSLI__
+
 #include "Common/Color.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Random.hlsli"
@@ -12,6 +15,8 @@ namespace ImageBasedLighting
 	Texture2D<sh2> DiffuseIBLTexture : register(t14);
 #else
 	Texture2D<sh2> DiffuseIBLTexture : register(t76);
+	TextureCube<float4> StaticDiffuseIBLTexture : register(t77);
+	TextureCube<float4> StaticSpecularIBLTexture : register(t78);
 #endif
 	float3 GetDiffuseIBL(float3 rayDir)
 	{
@@ -23,6 +28,13 @@ namespace ImageBasedLighting
 		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(shB, rayDir);
 		return float3(colorR, colorG, colorB) / Math::PI;
 	}
+
+#if defined(LIGHTING)
+	float3 GetStaticDiffuseIBL(float3 N)
+	{
+		return StaticDiffuseIBLTexture.SampleLevel(SampColorSampler, N, 0).xyz / Math::PI;
+	}
+#endif
 
 	float3 GetFogIBLColor(float3 fogColor)
 	{
@@ -41,3 +53,5 @@ namespace ImageBasedLighting
 		return lerp(fogColor, iblColor, SharedData::iblSettings.FogAmount);
 	}
 }
+
+#endif // __IBL_HLSLI__
