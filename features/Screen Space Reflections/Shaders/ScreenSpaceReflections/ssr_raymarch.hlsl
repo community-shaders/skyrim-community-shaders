@@ -27,6 +27,7 @@ Texture2D<float4> ScreenColorTextureMips : register(t3);
 Texture2D<float> DepthTexture : register(t4);
 Texture2D<float> DepthTextureMips : register(t5);
 Texture2DArray<float> NoiseTexture : register(t6);
+TextureCube<float3> EnvTexture : register(t7);
 
 RWTexture2D<float4> SSRColorOutput : register(u0);
 RWTexture2D<float4> SSRPDFOutput : register(u1);
@@ -45,6 +46,8 @@ cbuffer SSRCB : register(b1)
     float DepthWeight;
     float NormalWeight;
     float BRDFBias;
+    uint UseDynamicCubemapsAsFallback;
+    uint3 pad;
 };
 
 #define HIZ_MAX_ITERATIONS MaxSteps
@@ -388,6 +391,13 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
     GetNormalRoughness(coords.xy, normalVS, roughness);
     roughness = clamp(roughness, 0.02f, 1.0f);
 
+    if (roughness > RoughnessMask)
+    {
+        SSRColorOutput[coords.xy] = float4(0, 0, 0, 0);
+        SSRPDFOutput[coords.xy] = float4(0, 0, 0, 0);
+        return;
+    }
+
     bool is_mirror = IsMirrorReflection(roughness);
     int most_detailed_mip = HIZ_MIN_MIP;
     float2 mip_resolution = FFX_SSSR_GetMipResolution(screen_size, most_detailed_mip);
@@ -409,13 +419,6 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
     float confidence = 0.0;
     float3 world_space_hit = float3(0.0, 0.0, 0.0);
     float3 world_space_ray = float3(0.0, 0.0, 0.0);
-
-    if (roughness > RoughnessMask)
-    {
-        SSRColorOutput[coords.xy] = float4(0, 0, 0, 0);
-        SSRPDFOutput[coords.xy] = float4(0, 0, 0, 0);
-        return;
-    }
 
     float depth = DepthTexture[coords.xy].x;
     float4 positionWS = float4(2 * float2(uv.x, -uv.y + 1) - 1, depth, 1);
@@ -468,16 +471,14 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
             outPDF.w = confidence;
             outColor.w *= confidence;
         }
-        if (go_through_thin)
+        if (UseDynamicCubemapsAsFallback != 0)
         {
-            debug = float3(0, 1, 0); // Debug color for going through thin geometry.
-        }
-        else
-        {
-            debug = float3(1, 0, 0); // Debug color for valid hit.
+            // Fallback to dynamic cubemaps
+            float3 envColor = EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 0);
+            outColor.xyz = lerp(envColor, outColor.xyz, confidence);
+            outColor.w = 1.f;
         }
     }
     SSRColorOutput[coords.xy] = outColor;
-    // SSRColorOutput[coords.xy] = float4(debug, 1);
     SSRPDFOutput[coords.xy] = outPDF;
 }

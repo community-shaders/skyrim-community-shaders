@@ -54,6 +54,7 @@ struct ScreenSpaceReflections : Feature
         float BilateralColorWeight = 0.1f;
         float BilateralDepthWeight = 0.1f;
         float BilateralNormalWeight = 0.1f;
+        bool UseDynamicCubemapsAsFallback = true;
     } settings;
 
     struct alignas(16) SSRCB
@@ -70,6 +71,8 @@ struct ScreenSpaceReflections : Feature
         float DepthWeight;
         float NormalWeight;
         float BRDFBias;
+        uint UseDynamicCubemapsAsFallback;
+        uint pad[3];
     };
 
     struct alignas(16) SPDCB
