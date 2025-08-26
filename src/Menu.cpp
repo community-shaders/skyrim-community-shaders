@@ -186,7 +186,8 @@ void Menu::Init()
 
 	fontSize = std::clamp(fontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE);
 
-	if (!imgui_io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\Jost-Regular.ttf",
+	auto fontPath = Util::PathHelpers::GetFontsPath() / "Jost-Regular.ttf";
+	if (!imgui_io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(),
 			std::round(fontSize), &font_config)) {
 		logger::warn("Menu::Init() - Failed to load custom font. Using default font.");
 		imgui_io.Fonts->AddFontDefault();
@@ -615,7 +616,7 @@ void Menu::ProcessInputEvents(RE::InputEvent* const* a_events)
 
 bool Menu::ShouldSwallowInput()
 {
-	return IsEnabled;
+	return IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup();
 }
 
 void Menu::SelectFeatureMenu(const std::string& featureName)

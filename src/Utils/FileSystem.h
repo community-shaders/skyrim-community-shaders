@@ -33,6 +33,66 @@ namespace Util
 		std::filesystem::path GetDataPath();
 
 		/**
+		 * Gets the CommunityShaders plugin directory path
+		 * @return Data / "SKSE" / "Plugins" / "CommunityShaders"
+		 */
+		std::filesystem::path GetCommunityShaderPath();
+
+		/**
+		 * Gets the UserSettings.json file path
+		 * @return CommunityShaderPath / "UserSettings.json"
+		 */
+		std::filesystem::path GetUserSettingsPath();
+
+		/**
+		 * Gets the CommunityShaders Interface directory path
+		 * @return Data / "Interface" / "CommunityShaders"
+		 */
+		std::filesystem::path GetInterfacePath();
+
+		/**
+		 * Gets the CommunityShaders Fonts directory path
+		 * @return Interface / "Fonts"
+		 */
+		std::filesystem::path GetFontsPath();
+
+		/**
+		 * Gets the CommunityShaders Icons directory path
+		 * @return Interface / "Icons"
+		 */
+		std::filesystem::path GetIconsPath();
+
+		/**
+		 * Gets the SettingsUser.json file path
+		 * @return CommunityShaderPath / "SettingsUser.json"
+		 */
+		std::filesystem::path GetSettingsUserPath();
+
+		/**
+		 * Gets the SettingsTest.json file path
+		 * @return CommunityShaderPath / "SettingsTest.json"
+		 */
+		std::filesystem::path GetSettingsTestPath();
+
+		/**
+		 * Gets the SettingsDefault.json file path
+		 * @return CommunityShaderPath / "SettingsDefault.json"
+		 */
+		std::filesystem::path GetSettingsDefaultPath();
+
+		/**
+		 * Gets the Overrides directory path
+		 * @return CommunityShaderPath / "Overrides"
+		 */
+		std::filesystem::path GetOverridesPath();
+
+		/**
+		 * Gets the AppliedOverrides.json file path
+		 * @return CommunityShaderPath / "AppliedOverrides.json"
+		 */
+		std::filesystem::path GetAppliedOverridesPath();
+
+		/**
 		 * Gets the main Shaders directory path
 		 * @return Data / "Shaders"
 		 */

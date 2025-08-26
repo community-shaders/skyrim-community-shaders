@@ -12,6 +12,7 @@
 #include "../Feature.h"
 #include "../Globals.h"
 #include "../Menu.h"
+#include "FileSystem.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <algorithm>
@@ -163,7 +164,7 @@ namespace Util
 			return false;
 		}
 		// Define path to icons
-		std::string basePath = "Data\\Interface\\CommunityShaders\\Icons\\";
+		std::string basePath = Util::PathHelpers::GetIconsPath().string() + "\\";
 		logger::info("InitializeMenuIcons: Loading icons from base path: {}", basePath);
 
 		// Initialize all texture pointers to nullptr for safe cleanup

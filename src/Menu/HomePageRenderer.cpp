@@ -51,8 +51,8 @@ void HomePageRenderer::RenderWelcomeSection()
 		titleFont = io.Fonts->Fonts[1];
 	}
 
-	// Scale the text to make it larger (1.3x size)
-	ImGui::SetWindowFontScale(2.0f);
+	// Scale the text to make it larger (2.0x size)
+	ImGui::SetWindowFontScale(TITLE_FONT_SCALE);
 
 	// Only push font if we have a valid one, otherwise use default scaled
 	if (titleFont) {
@@ -107,7 +107,7 @@ void HomePageRenderer::RenderWelcomeSection()
 		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.2f, 0.2f, 0.2f, 0.5f));   // Subtle click
 
 		if (ImGui::ImageButton("##DiscordButton", menu->uiIcons.discord.texture, iconSize)) {
-			ShellExecuteA(NULL, "open", "https://discord.com/invite/nkrQybAsyy", NULL, NULL, SW_SHOWNORMAL);
+			ShellExecuteA(NULL, "open", DISCORD_URL, NULL, NULL, SW_SHOWNORMAL);
 		}
 
 		// Pop the style changes
@@ -122,7 +122,7 @@ void HomePageRenderer::RenderWelcomeSection()
 		float buttonWidth = 200.0f;
 		ImGui::SetCursorPosX((windowSize.x - buttonWidth) * 0.5f);
 		if (ImGui::Button("Join Discord Server", ImVec2(buttonWidth, 0))) {
-			ShellExecuteA(NULL, "open", "https://discord.com/invite/nkrQybAsyy", NULL, NULL, SW_SHOWNORMAL);
+			ShellExecuteA(NULL, "open", DISCORD_URL, NULL, NULL, SW_SHOWNORMAL);
 		}
 		if (ImGui::IsItemHovered()) {
 			ImGui::SetTooltip("Join Community Shaders Discord Server - Icon not found, using fallback button");
@@ -141,7 +141,7 @@ void HomePageRenderer::RenderQuickLinksSection()
 	ImGui::Text("Quick Links");
 
 	// Center the button layout
-	float buttonWidth = 180.0f;
+	float buttonWidth = QUICK_LINKS_BUTTON_WIDTH;
 	float totalWidth = buttonWidth * 3 + ImGui::GetStyle().ItemSpacing.x * 2;  // 3 buttons with spacing
 	ImGui::SetCursorPosX((windowSize.x - totalWidth) * 0.5f);
 
@@ -247,7 +247,7 @@ void HomePageRenderer::RenderFAQSection()
 
 void HomePageRenderer::RenderFirstTimeSetupDialog()
 {
-	// Block input to the game and make cursor visible
+	// Block input to the game and make cursor visible - input blocking is handled by ShouldSwallowInput()
 	auto& io = ImGui::GetIO();
 	io.WantCaptureMouse = true;
 	io.WantCaptureKeyboard = true;
@@ -256,7 +256,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	// Center the window properly with rounded corners and thin border
 	ImVec2 center = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
 	ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSize(ImVec2(500, 350), ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_Always);
 
 	// Style for rounded window with thin border
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
@@ -284,7 +284,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 		float aspectRatio = textureSize.x / textureSize.y;
 
 		// Set desired height and calculate width to maintain aspect ratio
-		float logoHeight = 260.0f;
+		float logoHeight = LOGO_WATERMARK_HEIGHT;
 		float logoWidth = logoHeight * aspectRatio;
 
 		ImVec2 logoMin(windowPos.x + (windowSize.x - logoWidth) * 0.5f,
@@ -306,11 +306,27 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	ImGui::SetCursorPosX((windowWidth - welcomeTitleWidth) * 0.5f);
 	ImGui::Text("%s", welcomeTitle);
 
-	// Version text - centered
+	ImGui::Spacing();
+
+	// Version text - wrapped and centered
 	const char* versionText = "This appears to be a new install, update, or reinstallation of Community Shaders.";
-	float versionWidth = ImGui::CalcTextSize(versionText).x;
-	ImGui::SetCursorPosX((windowWidth - versionWidth) * 0.5f);
-	ImGui::Text("%s", versionText);
+	float textPadding = 40.0f; // Padding from window edges
+	
+	// Use a centered region for wrapped text
+	ImGui::SetCursorPosX(textPadding);
+	ImGui::BeginGroup();
+	ImGui::PushTextWrapPos(windowWidth - textPadding);
+	
+	// Calculate the wrapped text size to center it
+	ImVec2 textSize = ImGui::CalcTextSize(versionText, nullptr, true, windowWidth - textPadding * 2);
+	float centerOffset = (windowWidth - textPadding * 2 - textSize.x) * 0.5f;
+	if (centerOffset > 0) {
+		ImGui::SetCursorPosX(textPadding + centerOffset);
+	}
+	
+	ImGui::TextWrapped("%s", versionText);
+	ImGui::PopTextWrapPos();
+	ImGui::EndGroup();
 
 	ImGui::Spacing();
 
@@ -320,46 +336,95 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	ImGui::SetCursorPosX((windowWidth - descWidth) * 0.5f);
 	ImGui::Text("%s", description);
 
-	// Hotkey selection - centered
-	static int selectedKey = 0;
-	const char* keyOptions[] = {
-		"END (default)", "INSERT", "HOME", "DELETE",
-		"PAGE UP", "PAGE DOWN", "F9", "F10", "F11", "F12"
-	};
+	// Hotkey selection - clickable hotkey text
+	// Show current toggle key and allow user to change it by clicking on it
+	auto& themeSettings = menu->GetTheme();
+	const char* currentKeyName = Util::Input::KeyIdToString(menu->GetSettings().ToggleKey);
+	
+	// Calculate text dimensions for centering and button area
+	float hotkeyWidth = ImGui::CalcTextSize(currentKeyName).x;
+	float centerX = (windowWidth - hotkeyWidth) * 0.5f;
+	ImGui::SetCursorPosX(centerX);
+	
+	// Create invisible button for hover detection and clicking
+	ImVec2 buttonPos = ImGui::GetCursorScreenPos();
+	ImVec2 hotkeyTextSize = ImGui::CalcTextSize(currentKeyName);
+	bool hovered = false;
+	bool clicked = false;
+	
+	ImGui::PushID("HotkeyButton");
+	if (ImGui::InvisibleButton("##HotkeyClick", hotkeyTextSize)) {
+		clicked = true;
+	}
+	hovered = ImGui::IsItemHovered();
+	ImGui::PopID();
+	
+	// Set cursor position back for text rendering
+	ImGui::SetCursorScreenPos(buttonPos);
+	
+	// Choose color based on hover state - darken when hovered.
+	ImVec4 hotkeyColor = hovered ? 
+		ImVec4(themeSettings.StatusPalette.CurrentHotkey.x * 0.7f,
+		       themeSettings.StatusPalette.CurrentHotkey.y * 0.7f,
+		       themeSettings.StatusPalette.CurrentHotkey.z * 0.7f,
+		       themeSettings.StatusPalette.CurrentHotkey.w) :
+		themeSettings.StatusPalette.CurrentHotkey;
+	
+	ImGui::TextColored(hotkeyColor, "%s", currentKeyName);
+	
+	// Handle click to start hotkey capture
+	if (clicked) {
+		menu->settingToggleKey = true;
+	}
 
-	const uint32_t keyValues[] = {
-		VK_END, VK_INSERT, VK_HOME, VK_DELETE,
-		VK_PRIOR, VK_NEXT, VK_F9, VK_F10, VK_F11, VK_F12
-	};
-
-	// Center the dropdown
-	float comboWidth = 160.0f;
-	ImGui::SetCursorPosX((windowWidth - comboWidth) * 0.5f);
-	ImGui::SetNextItemWidth(comboWidth);
-	ImGui::Combo("##HotkeyDropdown", &selectedKey, keyOptions, IM_ARRAYSIZE(keyOptions));
+	// Show hotkey capture message or hotkey text
+	if (menu->settingToggleKey) {
+		const char* pressKeyText = "Press any key to set as toggle key...";
+		float pressKeyWidth = ImGui::CalcTextSize(pressKeyText).x;
+		ImGui::SetCursorPosX((windowWidth - pressKeyWidth) * 0.5f);
+		ImGui::Text("%s", pressKeyText);
+	}
 
 	ImGui::Spacing();
 
-	// "You can change this later" text - centered
+	// "You can change this later" text - wrapped and centered
 	const char* laterText = "You can change this later in General > Keybindings.";
 	float laterWidth = ImGui::CalcTextSize(laterText).x;
-	ImGui::SetCursorPosX((windowWidth - laterWidth) * 0.5f);
-	ImGui::Text("%s", laterText);
+	if (laterWidth > windowWidth - 40.0f) {
+		// Text is too wide, use wrapped text with centering
+		float laterTextPadding = 40.0f;
+		
+		ImGui::SetCursorPosX(laterTextPadding);
+		ImGui::BeginGroup();
+		ImGui::PushTextWrapPos(windowWidth - laterTextPadding);
+		
+		// Calculate the wrapped text size to center it
+		ImVec2 laterTextSize = ImGui::CalcTextSize(laterText, nullptr, true, windowWidth - laterTextPadding * 2);
+		float laterCenterOffset = (windowWidth - laterTextPadding * 2 - laterTextSize.x) * 0.5f;
+		if (laterCenterOffset > 0) {
+			ImGui::SetCursorPosX(laterTextPadding + laterCenterOffset);
+		}
+		
+		ImGui::TextWrapped("%s", laterText);
+		ImGui::PopTextWrapPos();
+		ImGui::EndGroup();
+	} else {
+		// Text fits, center it normally
+		ImGui::SetCursorPosX((windowWidth - laterWidth) * 0.5f);
+		ImGui::Text("%s", laterText);
+	}
 
 	ImGui::Spacing();
 
 	// Center the continue button
-	float buttonWidth = 120.0f;
-	ImGui::SetCursorPosX((windowWidth - buttonWidth) * 0.5f);
+	float continueButtonWidth = 140.0f;
+	ImGui::SetCursorPosX((windowWidth - continueButtonWidth) * 0.5f);
 
 	// Check for Enter or Escape key first
 	bool shouldClose = ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Escape);
 
-	if (ImGui::Button("Continue", ImVec2(buttonWidth, 30)) || shouldClose) {
-		// Apply the selected hotkey
-		if (menu) {
-			menu->GetSettings().ToggleKey = keyValues[selectedKey];
-		}
+	if (ImGui::Button("Continue", ImVec2(continueButtonWidth, 30)) || shouldClose) {
+		// No need to apply any hotkey - user has already set it or it defaults to VK_END
 		MarkFirstTimeSetupComplete();
 	}
 
@@ -381,7 +446,7 @@ bool HomePageRenderer::ShouldShowFirstTimeSetup()
 	}
 
 	// Check if first-time setup has been completed by looking at UserSettings.json
-	std::filesystem::path userSettingsPath = "Data\\SKSE\\Plugins\\CommunityShaders\\UserSettings.json";
+	std::filesystem::path userSettingsPath = Util::PathHelpers::GetUserSettingsPath();
 
 	// If UserSettings.json doesn't exist at all, this is definitely a first-time launch
 	if (!std::filesystem::exists(userSettingsPath)) {
@@ -416,7 +481,7 @@ bool HomePageRenderer::ShouldShowFirstTimeSetup()
 
 void HomePageRenderer::MarkFirstTimeSetupComplete()
 {
-	std::filesystem::path userSettingsPath = "Data\\SKSE\\Plugins\\CommunityShaders\\UserSettings.json";
+	std::filesystem::path userSettingsPath = Util::PathHelpers::GetUserSettingsPath();
 
 	try {
 		nlohmann::json settings;

@@ -42,7 +42,7 @@ void OverlayRenderer::RenderOverlay(
 	InitializeImGuiFrame(menu);
 
 	RenderShaderCompilationStatus(keyIdToString);
-	RenderFirstTimeSetupOverlay(keyIdToString);
+	RenderFirstTimeSetupOverlay();
 
 	if (menu.IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup()) {
 		ImGui::GetIO().MouseDrawCursor = true;
@@ -198,9 +198,8 @@ void OverlayRenderer::FinalizeImGuiFrame()
 	}
 }
 
-void OverlayRenderer::RenderFirstTimeSetupOverlay(const std::function<const char*(uint32_t)>& keyIdToString)
+void OverlayRenderer::RenderFirstTimeSetupOverlay()
 {
-	(void)keyIdToString;  // Suppress unused parameter warning
 	if (HomePageRenderer::ShouldShowFirstTimeSetup()) {
 		HomePageRenderer::RenderFirstTimeSetupDialog();
 	}
