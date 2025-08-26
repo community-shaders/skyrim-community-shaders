@@ -41,7 +41,7 @@ namespace DynamicCubemaps
 		const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
 		const bool inReflection = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection);
 		if (SharedData::iblSettings.EnableDiffuseIBL && SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
-			float3 specularIrradiance = StaticSpecularIBLTexture.SampleLevel(SampColorSampler, R, level).xyz;
+			float3 specularIrradiance = ImageBasedLighting::StaticSpecularIBLTexture.SampleLevel(SampColorSampler, R.xzy, level).xyz;
 			finalIrradiance += specularIrradiance;
 			return finalIrradiance;
 		}
@@ -108,7 +108,7 @@ namespace DynamicCubemaps
 		const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
 		const bool inReflection = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection);
 		if (SharedData::iblSettings.EnableDiffuseIBL && SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
-			float3 specularIrradiance = StaticSpecularIBLTexture.SampleLevel(SampColorSampler, R, level).xyz;
+			float3 specularIrradiance = ImageBasedLighting::StaticSpecularIBLTexture.SampleLevel(SampColorSampler, R.xzy, level).xyz;
 			finalIrradiance += specularIrradiance;
 			return horizon * (F0 * specularBRDF.x + specularBRDF.y) * finalIrradiance;
 		}

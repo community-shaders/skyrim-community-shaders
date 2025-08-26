@@ -30,9 +30,9 @@ namespace ImageBasedLighting
 	}
 
 #if defined(LIGHTING)
-	float3 GetStaticDiffuseIBL(float3 N)
+	float3 GetStaticDiffuseIBL(float3 N, SamplerState samp)
 	{
-		return StaticDiffuseIBLTexture.SampleLevel(SampColorSampler, N, 0).xyz / Math::PI;
+		return StaticDiffuseIBLTexture.SampleLevel(samp, N.xzy, 0).xyz / Math::PI;
 	}
 #endif
 

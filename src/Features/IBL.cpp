@@ -5,6 +5,9 @@
 #include "Shadercache.h"
 #include "State.h"
 
+#include <DDSTextureLoader.h>
+#include <DirectXTex.h>
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	IBL::Settings,
 	EnableDiffuseIBL,
@@ -155,6 +158,8 @@ void IBL::SetupResources()
 		diffuseIBLTexture->CreateUAV(uavDesc);
 	}
 
+	auto device = globals::d3d::device;
+
 	logger::debug("Loading static Diffuse IBL textures...");
 	{
 		DirectX::ScratchImage image;
@@ -179,12 +184,14 @@ void IBL::SetupResources()
 
 		staticDiffuseIBLTexture = eastl::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource));
 
+		staticDiffuseIBLTexture->desc.MiscFlags |= D3D11_RESOURCE_MISC_TEXTURECUBE;
+
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
 			.Format = staticDiffuseIBLTexture->desc.Format,
 			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE,
 			.TextureCube = {
 				.MostDetailedMip = 0,
-				.MipLevels = 8 }
+				.MipLevels = 1 }
 		};
 		staticDiffuseIBLTexture->CreateSRV(srvDesc);
 	}
@@ -212,6 +219,8 @@ void IBL::SetupResources()
 		}
 
 		staticSpecularIBLTexture = eastl::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource));
+
+		staticSpecularIBLTexture->desc.MiscFlags |= D3D11_RESOURCE_MISC_TEXTURECUBE;
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
 			.Format = staticSpecularIBLTexture->desc.Format,
