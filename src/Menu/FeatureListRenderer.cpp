@@ -16,11 +16,13 @@
 #include "State.h"
 #include "Util.h"
 
-namespace {
+namespace
+{
 	// Core built-in menu names that always appear first in the menu list
 	constexpr std::array<const char*, 4> CORE_MENU_NAMES = { "Home", "General", "Advanced", "Display" };
-	
-	bool IsCoreMenu(const std::string& menuName) {
+
+	bool IsCoreMenu(const std::string& menuName)
+	{
 		return std::find(CORE_MENU_NAMES.begin(), CORE_MENU_NAMES.end(), menuName) != CORE_MENU_NAMES.end();
 	}
 }

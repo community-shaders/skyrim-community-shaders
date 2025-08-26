@@ -310,20 +310,20 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 
 	// Version text - wrapped and centered
 	const char* versionText = "This appears to be a new install, update, or reinstallation of Community Shaders.";
-	float textPadding = 40.0f; // Padding from window edges
-	
+	float textPadding = 40.0f;  // Padding from window edges
+
 	// Use a centered region for wrapped text
 	ImGui::SetCursorPosX(textPadding);
 	ImGui::BeginGroup();
 	ImGui::PushTextWrapPos(windowWidth - textPadding);
-	
+
 	// Calculate the wrapped text size to center it
 	ImVec2 textSize = ImGui::CalcTextSize(versionText, nullptr, true, windowWidth - textPadding * 2);
 	float centerOffset = (windowWidth - textPadding * 2 - textSize.x) * 0.5f;
 	if (centerOffset > 0) {
 		ImGui::SetCursorPosX(textPadding + centerOffset);
 	}
-	
+
 	ImGui::TextWrapped("%s", versionText);
 	ImGui::PopTextWrapPos();
 	ImGui::EndGroup();
@@ -340,38 +340,38 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	// Show current toggle key and allow user to change it by clicking on it
 	auto& themeSettings = menu->GetTheme();
 	const char* currentKeyName = Util::Input::KeyIdToString(menu->GetSettings().ToggleKey);
-	
+
 	// Calculate text dimensions for centering and button area
 	float hotkeyWidth = ImGui::CalcTextSize(currentKeyName).x;
 	float centerX = (windowWidth - hotkeyWidth) * 0.5f;
 	ImGui::SetCursorPosX(centerX);
-	
+
 	// Create invisible button for hover detection and clicking
 	ImVec2 buttonPos = ImGui::GetCursorScreenPos();
 	ImVec2 hotkeyTextSize = ImGui::CalcTextSize(currentKeyName);
 	bool hovered = false;
 	bool clicked = false;
-	
+
 	ImGui::PushID("HotkeyButton");
 	if (ImGui::InvisibleButton("##HotkeyClick", hotkeyTextSize)) {
 		clicked = true;
 	}
 	hovered = ImGui::IsItemHovered();
 	ImGui::PopID();
-	
+
 	// Set cursor position back for text rendering
 	ImGui::SetCursorScreenPos(buttonPos);
-	
+
 	// Choose color based on hover state - darken when hovered.
-	ImVec4 hotkeyColor = hovered ? 
-		ImVec4(themeSettings.StatusPalette.CurrentHotkey.x * 0.7f,
-		       themeSettings.StatusPalette.CurrentHotkey.y * 0.7f,
-		       themeSettings.StatusPalette.CurrentHotkey.z * 0.7f,
-		       themeSettings.StatusPalette.CurrentHotkey.w) :
-		themeSettings.StatusPalette.CurrentHotkey;
-	
+	ImVec4 hotkeyColor = hovered ?
+	                         ImVec4(themeSettings.StatusPalette.CurrentHotkey.x * 0.7f,
+								 themeSettings.StatusPalette.CurrentHotkey.y * 0.7f,
+								 themeSettings.StatusPalette.CurrentHotkey.z * 0.7f,
+								 themeSettings.StatusPalette.CurrentHotkey.w) :
+	                         themeSettings.StatusPalette.CurrentHotkey;
+
 	ImGui::TextColored(hotkeyColor, "%s", currentKeyName);
-	
+
 	// Handle click to start hotkey capture
 	if (clicked) {
 		menu->settingToggleKey = true;
@@ -393,18 +393,18 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	if (laterWidth > windowWidth - 40.0f) {
 		// Text is too wide, use wrapped text with centering
 		float laterTextPadding = 40.0f;
-		
+
 		ImGui::SetCursorPosX(laterTextPadding);
 		ImGui::BeginGroup();
 		ImGui::PushTextWrapPos(windowWidth - laterTextPadding);
-		
+
 		// Calculate the wrapped text size to center it
 		ImVec2 laterTextSize = ImGui::CalcTextSize(laterText, nullptr, true, windowWidth - laterTextPadding * 2);
 		float laterCenterOffset = (windowWidth - laterTextPadding * 2 - laterTextSize.x) * 0.5f;
 		if (laterCenterOffset > 0) {
 			ImGui::SetCursorPosX(laterTextPadding + laterCenterOffset);
 		}
-		
+
 		ImGui::TextWrapped("%s", laterText);
 		ImGui::PopTextWrapPos();
 		ImGui::EndGroup();
