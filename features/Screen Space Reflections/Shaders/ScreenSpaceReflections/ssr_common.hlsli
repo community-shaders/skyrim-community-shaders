@@ -85,6 +85,22 @@ float4 ImportanceSampleVisibleGGX(float2 E, float2 Alpha, float3 V, bool bLimitV
 	return float4(H, VisibleGGXPDF_aniso(V, H, Alpha));
 }
 
+float4 CosineSampleHemisphere( float2 E )
+{
+	float Phi = 2 * Math::PI * E.x;
+	float CosTheta = sqrt(E.y);
+	float SinTheta = sqrt(1 - CosTheta * CosTheta);
+
+	float3 H;
+	H.x = SinTheta * cos(Phi);
+	H.y = SinTheta * sin(Phi);
+	H.z = CosTheta;
+
+	float PDF = CosTheta * (1.0 / Math::PI);
+
+	return float4(H, PDF);
+}
+
 void GetNormalRoughness(uint2 dtid, out float3 normal, out float roughness)
 {
     float3 normalGlossiness = NormalRoughnessTexture[dtid];

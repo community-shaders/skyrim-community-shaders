@@ -29,14 +29,21 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     BilateralColorWeight,
     BilateralDepthWeight,
     BilateralNormalWeight,
-    UseDynamicCubemapsAsFallback
+    UseDynamicCubemapsAsFallback,
+    SpecularSPP,
+    DiffuseSPP,
+    EnableDiffuse
 )
 
 void ScreenSpaceReflections::DrawSettings()
 {
     ImGui::Checkbox("Enabled", &settings.Enabled);
+    ImGui::SameLine();
+    ImGui::Checkbox("Enable Diffuse", &settings.EnableDiffuse);
     ImGui::SliderInt("Max Steps", (int*)&settings.MaxSteps, 1, 256);
     ImGui::SliderInt("Max Mip Level", (int*)&settings.MaxMips, 1, maxMips, "%d", ImGuiSliderFlags_AlwaysClamp);
+    ImGui::SliderInt("Specular SPP", (int*)&settings.SpecularSPP, 1, 16, "%d", ImGuiSliderFlags_AlwaysClamp);
+    ImGui::SliderInt("Diffuse SPP", (int*)&settings.DiffuseSPP, 1, 16, "%d", ImGuiSliderFlags_AlwaysClamp);
     ImGui::SliderFloat("Thickness", &settings.Thickness, 0.0f, 50.0f, "%.2f");
     ImGui::SliderFloat("Roughness Mask", &settings.RoughnessMask, 0.0f, 1.0f, "%.2f");
     ImGui::SliderFloat("BRDF Bias", &settings.BRDFBias, 0.0f, 1.0f, "%.2f");
@@ -131,6 +138,9 @@ void ScreenSpaceReflections::SetupResources()
         texSSRColor = eastl::make_unique<Texture2D>(texDesc);
         texSSRColor->CreateSRV(srvDesc);
         texSSRColor->CreateUAV(uavDesc);
+        texSSRTDiffuseColor = eastl::make_unique<Texture2D>(texDesc);
+        texSSRTDiffuseColor->CreateSRV(srvDesc);
+        texSSRTDiffuseColor->CreateUAV(uavDesc);
         texHitPDF = eastl::make_unique<Texture2D>(texDesc);
         texHitPDF->CreateSRV(srvDesc);
         texHitPDF->CreateUAV(uavDesc);
@@ -198,7 +208,7 @@ void ScreenSpaceReflections::SetupResources()
 void ScreenSpaceReflections::ClearShaderCache()
 {
     static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-        &raymarchCS, &prepareColorCS, &preprocessDepthCS, &spatialCS, &temporalCS, &bilateralCS, &depthDownsampleCS
+        &raymarchSpecularCS, &prepareColorCS, &preprocessDepthCS, &spatialCS, &temporalCS, &bilateralCS, &depthDownsampleCS
     };
 
     for (auto shader : shaderPtrs)
@@ -227,9 +237,13 @@ void ScreenSpaceReflections::CompileComputeShaders()
     if (globals::features::skylighting.loaded)
 		defines.push_back({ "SKYLIGHTING", nullptr });
 
+    auto definesSpecular = defines;
+    definesSpecular.push_back({ "SSSR_SPECULAR", nullptr });
+
     std::vector<ShaderCompileInfo>
         shaderInfos = {
-            { &raymarchCS, "ssr_raymarch.hlsl", defines },
+            { &raymarchDiffuseCS, "ssr_raymarch.hlsl", defines },
+            { &raymarchSpecularCS, "ssr_raymarch.hlsl", definesSpecular },
             { &prepareColorCS, "ssr_prepare_color.hlsl", {} },
             { &preprocessDepthCS, "ssr_preprocess_depth.hlsl", {} },
             // { &spdCS, "ssr_spd.hlsl", {} },
@@ -389,6 +403,8 @@ void ScreenSpaceReflections::DrawSSR()
         ssrCBData.NormalWeight = settings.BilateralNormalWeight;
         ssrCBData.BRDFBias = settings.BRDFBias;
         ssrCBData.UseDynamicCubemapsAsFallback = (uint)settings.UseDynamicCubemapsAsFallback && dynamicCubemaps.loaded;
+        ssrCBData.SpecularSPP = settings.SpecularSPP;
+        ssrCBData.DiffuseSPP = settings.DiffuseSPP;
     }
     ssrCB->Update(ssrCBData);
     auto buffer = ssrCB->CB();
@@ -457,7 +473,7 @@ void ScreenSpaceReflections::DrawSSR()
 
     context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
     context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-    context->CSSetShader(raymarchCS.get(), nullptr, 0);
+    context->CSSetShader(raymarchSpecularCS.get(), nullptr, 0);
     context->CSSetConstantBuffers(1, 1, &buffer);
 
     context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
@@ -550,4 +566,118 @@ void ScreenSpaceReflections::DrawSSR()
     context->CSSetShader(nullptr, nullptr, 0);
 
     state->EndPerfEvent();
+}
+
+void ScreenSpaceReflections::DrawSSRTDiffuse()
+{
+    if (!(settings.Enabled && settings.EnableDiffuse))
+        return;
+
+    auto renderer = globals::game::renderer;
+    auto context = globals::d3d::context;
+    auto state = globals::state;
+
+    state->BeginPerfEvent("SSRT Diffuse Compute");
+
+    auto main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+    auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+    auto specular = renderer->GetRuntimeData().renderTargets[SPECULAR];
+    auto normal = renderer->GetRuntimeData().renderTargets[NORMALROUGHNESS];
+    auto motion = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+
+    auto& dynamicCubemaps = globals::features::dynamicCubemaps;
+    auto& ssgi = globals::features::screenSpaceGI;
+    auto& skylighting = globals::features::skylighting;
+
+    float2 size = Util::ConvertToDynamic(state->screenSize);
+    float2 dispatchCount = { (size.x + 7) / 8, (size.y + 7) / 8 };
+    
+    SSRCB ssrCBData;
+    {
+        ssrCBData.MaxSteps = settings.MaxSteps;
+        ssrCBData.MaxMips = settings.MaxMips;
+        ssrCBData.Thickness = settings.Thickness;
+        ssrCBData.SpatialRadius = settings.SpatialRadius;
+        ssrCBData.RoughnessMask = settings.RoughnessMask;
+        ssrCBData.TemporalScale = settings.TemporalScale;
+        ssrCBData.TemporalWeight = settings.TemporalWeight;
+        ssrCBData.BilateralScale = settings.BilateralScale;
+        ssrCBData.ColorWeight = settings.BilateralColorWeight;
+        ssrCBData.DepthWeight = settings.BilateralDepthWeight;
+        ssrCBData.NormalWeight = settings.BilateralNormalWeight;
+        ssrCBData.BRDFBias = settings.BRDFBias;
+        ssrCBData.UseDynamicCubemapsAsFallback = (uint)settings.UseDynamicCubemapsAsFallback && dynamicCubemaps.loaded;
+        ssrCBData.SpecularSPP = settings.SpecularSPP;
+        ssrCBData.DiffuseSPP = settings.DiffuseSPP;
+    }
+    ssrCB->Update(ssrCBData);
+    auto buffer = ssrCB->CB();
+    context->CSSetConstantBuffers(1, 1, &buffer);
+
+    std::array<ID3D11ShaderResourceView*, 12> srvs = { nullptr };
+	std::array<ID3D11UnorderedAccessView*, 2> uavs = { nullptr };
+
+    auto resetViews = [&]() {
+		srvs.fill(nullptr);
+		uavs.fill(nullptr);
+
+		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+	};
+
+    std::array<ID3D11SamplerState*, 1> samplers = { linearSampler.get() };
+
+    context->CSSetSamplers(0, 1, samplers.data());
+
+    const auto envTexture = dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr;
+	const auto envReflectionsTexture = dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr;
+
+    auto [ssgi_ao, ssgi_y, ssgi_cocg, ssgi_gi_spec] = ssgi.GetOutputTextures();
+
+    bool inInterior = true;
+
+    if (auto player = RE::PlayerCharacter::GetSingleton()) {
+        if (auto parentCell = player->GetParentCell()) {
+            inInterior = parentCell->IsInteriorCell();
+        }
+    }
+
+    uavs.at(0) = texSSRTDiffuseColor->uav.get();
+    uavs.at(1) = texHitPDF->uav.get();
+
+    srvs.at(0) = main.SRV;
+    srvs.at(1) = motion.SRV;
+    srvs.at(2) = normal.SRV;
+    srvs.at(3) = main.SRV;
+    srvs.at(4) = depth.depthSRV;
+    srvs.at(5) = texDepth->srv.get();
+    srvs.at(6) = noiseSRV.get();
+    srvs.at(7) = envTexture;
+    srvs.at(8) = inInterior ? envTexture : envReflectionsTexture;
+    srvs.at(9) = ssgi_ao;
+    srvs.at(10) = dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr;
+    srvs.at(11) = dynamicCubemaps.loaded && skylighting.loaded ? skylighting.stbn_vec3_2Dx1D_128x128x64.get() : nullptr;
+
+    context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+    context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+    context->CSSetShader(raymarchSpecularCS.get(), nullptr, 0);
+    context->CSSetConstantBuffers(1, 1, &buffer);
+
+    context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
+
+    state->EndPerfEvent();
+
+    resetViews();
+
+    context->CSSetShader(nullptr, nullptr, 0);
+}
+
+ScreenSpaceReflections::SharedData ScreenSpaceReflections::GetCommonBufferData()
+{
+    SharedData data;
+    data.Enabled = settings.Enabled;
+    data.UseDynamicCubemapsAsFallback = settings.UseDynamicCubemapsAsFallback;
+    data.SpecularMult = settings.SpecularMult;
+    data.DiffuseMult = settings.EnableDiffuse ? settings.DiffuseMult : 0.0f;
+    return data;
 }

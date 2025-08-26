@@ -180,8 +180,11 @@ Texture2D<float4> SSRTexture : register(t15);
 #	endif
 
 #	if defined(SSR)
-		float4 ssrIrradiance = SSRTexture[dispatchID.xy];
-		finalIrradiance = lerp(finalIrradiance, Color::GammaToLinear(ssrIrradiance.rgb), ssrIrradiance.a);
+		if (SharedData::ssrSettings.Enabled) {
+			float4 ssrIrradiance = SSRTexture[dispatchID.xy];
+			ssrIrradiance.xyz *= SharedData::ssrSettings.SpecularMult;
+			finalIrradiance = lerp(finalIrradiance, Color::GammaToLinear(ssrIrradiance.rgb), ssrIrradiance.a);
+		}
 #	endif
 
 		color += reflectance * finalIrradiance;

@@ -55,7 +55,20 @@ struct ScreenSpaceReflections : Feature
         float BilateralDepthWeight = 0.1f;
         float BilateralNormalWeight = 0.1f;
         bool UseDynamicCubemapsAsFallback = true;
+        uint SpecularSPP = 1;
+        uint DiffuseSPP = 1;
+        bool EnableDiffuse = true;
+        float SpecularMult = 1.0f;
+        float DiffuseMult = 1.0f;
     } settings;
+
+    struct alignas(16) SharedData
+    {
+        uint Enabled;
+        uint UseDynamicCubemapsAsFallback;
+        float SpecularMult;
+        float DiffuseMult;
+    }
 
     struct alignas(16) SSRCB
     {
@@ -72,7 +85,9 @@ struct ScreenSpaceReflections : Feature
         float NormalWeight;
         float BRDFBias;
         uint UseDynamicCubemapsAsFallback;
-        uint pad[3];
+        uint SpecularSPP;
+        uint DiffuseSPP;
+        uint pad;
     };
 
     struct alignas(16) SPDCB
@@ -89,11 +104,15 @@ struct ScreenSpaceReflections : Feature
     // eastl::unique_ptr<ConstantBuffer> spdCB;
     
     void DrawSSR();
+    void DrawSSRTDiffuse();
     virtual void Prepass() override;
+
+    SharedData GetCommonBufferData();
 
     eastl::unique_ptr<Texture2D> texDepth = nullptr;
     eastl::unique_ptr<Texture2D> texColor = nullptr;
     eastl::unique_ptr<Texture2D> texSSRColor = nullptr;
+    eastl::unique_ptr<Texture2D> texSSRTDiffuseColor = nullptr;
     eastl::unique_ptr<Texture2D> texHitPDF = nullptr;
     eastl::unique_ptr<Texture2D> texSpatial = nullptr;
     eastl::unique_ptr<Texture2D> texTemporal = nullptr;
@@ -111,7 +130,8 @@ struct ScreenSpaceReflections : Feature
     winrt::com_ptr<ID3D11SamplerState> linearSampler = nullptr;
 
     winrt::com_ptr<ID3D11ComputeShader> preprocessDepthCS = nullptr;
-    winrt::com_ptr<ID3D11ComputeShader> raymarchCS = nullptr;
+    winrt::com_ptr<ID3D11ComputeShader> raymarchSpecularCS = nullptr;
+    winrt::com_ptr<ID3D11ComputeShader> raymarchDiffuseCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> prepareColorCS = nullptr;
     // winrt::com_ptr<ID3D11ComputeShader> spdCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> spatialCS = nullptr;

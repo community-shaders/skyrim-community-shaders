@@ -195,6 +195,14 @@ namespace SharedData
 		float Strength;      // [0, 1.0] The inverse blend weight of the effect
 	};
 
+	struct SSRSettings
+    {
+        uint Enabled;
+        uint UseDynamicCubemapsAsFallback;
+        float SpecularMult;
+        float DiffuseMult;
+    }
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -210,6 +218,7 @@ namespace SharedData
 		TerrainVariationSettings terrainVariationSettings;
 		IBLSettings iblSettings;
 		ExtendedTranslucencySettings extendedTranslucencySettings;
+		SSRSettings ssrSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);

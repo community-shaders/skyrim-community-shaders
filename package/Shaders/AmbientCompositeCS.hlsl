@@ -29,6 +29,10 @@ Texture2D<float2> SsgiCoCgTexture : register(t7);
 #	include "IBL/IBL.hlsli"
 #endif
 
+#if defined(SSR)
+Texture2D<float4> SSRTDiffuseTexture : register(t9);
+#endif
+
 RWTexture2D<float4> MainRW : register(u0);
 #if defined(SSGI)
 RWTexture2D<float3> DiffuseAmbientRW : register(u1);
@@ -131,6 +135,17 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 #	endif
 
 	linDiffuseColor += ssgiIl * linAlbedo;
+#endif
+
+#if defined(SSR)
+	if (SharedData::ssrSettings.Enabled && SharedData::ssrSettings.DiffuseMult > 0.0) {
+		float4 ssrIrradiance = SSRTDiffuseTexture[dispatchID.xy];
+		ssrIrradiance.xyz *= SharedData::ssrSettings.DiffuseMult;
+		linDiffuseColor = lerp(linDiffuseColor, Color::GammaToLinear(ssrIrradiance.rgb) * linAlbedo, ssrIrradiance.a);
+		if (SharedData::ssrSettings.UseDynamicCubemapsAsFallback) {
+			linDirectionalAmbientColor = 0;
+		}
+	}
 #endif
 
 	linAmbient *= visibility;
