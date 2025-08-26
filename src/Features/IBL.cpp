@@ -65,7 +65,8 @@ void IBL::EarlyPrepass()
 			std::array<ID3D11ShaderResourceView*, 3> srvs = {
 				diffuseIBLTexture->srv.get(),
 				staticDiffuseIBLTexture->srv.get(),
-				staticSpecularIBLTexture->srv.get() };
+				staticSpecularIBLTexture->srv.get()
+			};
 			context->PSSetShaderResources(76, 3, srvs.data());
 		}
 	}
