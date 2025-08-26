@@ -8,6 +8,8 @@
 #include "ShaderCache.h"
 
 #include "DynamicCubemaps.h"
+#include "ScreenSpaceGI.h"
+#include "Skylighting.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     ScreenSpaceReflections::Settings,
@@ -214,9 +216,20 @@ void ScreenSpaceReflections::CompileComputeShaders()
         std::vector<std::pair<const char*, const char*>> defines;
     };
 
+    std::vector<std::pair<const char*, const char*>> defines;
+
+    if (globals::features::dynamicCubemaps.loaded)
+		defines.push_back({ "DYNAMIC_CUBEMAPS", nullptr });
+
+    if (globals::features::screenSpaceGI.loaded)
+		defines.push_back({ "SSGI", nullptr });
+
+    if (globals::features::skylighting.loaded)
+		defines.push_back({ "SKYLIGHTING", nullptr });
+
     std::vector<ShaderCompileInfo>
         shaderInfos = {
-            { &raymarchCS, "ssr_raymarch.hlsl", {} },
+            { &raymarchCS, "ssr_raymarch.hlsl", defines },
             { &prepareColorCS, "ssr_prepare_color.hlsl", {} },
             { &preprocessDepthCS, "ssr_preprocess_depth.hlsl", {} },
             // { &spdCS, "ssr_spd.hlsl", {} },
@@ -355,6 +368,8 @@ void ScreenSpaceReflections::DrawSSR()
     auto motion = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
     auto& dynamicCubemaps = globals::features::dynamicCubemaps;
+    auto& ssgi = globals::features::screenSpaceGI;
+    auto& skylighting = globals::features::skylighting;
 
     float2 size = Util::ConvertToDynamic(state->screenSize);
     float2 dispatchCount = { (size.x + 7) / 8, (size.y + 7) / 8 };
@@ -379,7 +394,7 @@ void ScreenSpaceReflections::DrawSSR()
     auto buffer = ssrCB->CB();
     context->CSSetConstantBuffers(1, 1, &buffer);
 
-    std::array<ID3D11ShaderResourceView*, 8> srvs = { nullptr };
+    std::array<ID3D11ShaderResourceView*, 12> srvs = { nullptr };
 	std::array<ID3D11UnorderedAccessView*, 2> uavs = { nullptr };
 
     auto resetViews = [&]() {
@@ -408,8 +423,11 @@ void ScreenSpaceReflections::DrawSSR()
 
     resetViews();
 
-    const auto& envTexture = dynamicCubemaps.envTexture;
-	const auto& envReflectionsTexture = dynamicCubemaps.envReflectionsTexture;
+    const auto envTexture = dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr;
+	const auto envReflectionsTexture = dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr;
+
+    auto [ssgi_ao, ssgi_y, ssgi_cocg, ssgi_gi_spec] = ssgi.GetOutputTextures();
+
     bool inInterior = true;
 
     if (auto player = RE::PlayerCharacter::GetSingleton()) {
@@ -431,7 +449,11 @@ void ScreenSpaceReflections::DrawSSR()
     srvs.at(4) = depth.depthSRV;
     srvs.at(5) = texDepth->srv.get();
     srvs.at(6) = noiseSRV.get();
-    srvs.at(7) = inInterior ? envTexture->srv.get() : envReflectionsTexture->srv.get();
+    srvs.at(7) = envTexture;
+    srvs.at(8) = inInterior ? envTexture : envReflectionsTexture;
+    srvs.at(9) = ssgi_ao;
+    srvs.at(10) = dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr;
+    srvs.at(11) = dynamicCubemaps.loaded && skylighting.loaded ? skylighting.stbn_vec3_2Dx1D_128x128x64.get() : nullptr;
 
     context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
     context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);

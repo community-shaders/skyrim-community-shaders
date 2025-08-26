@@ -221,3 +221,7 @@ void ReprojectHit(Texture2D MotionTexture, SamplerState s, float3 hitUVz, uint e
 	
 	outPrevUV = prevUV;
 }
+
+float GetSpecularOcclusionFromAmbientOcclusion(float NdotV, float ao, float roughness) {
+    return saturate(pow(NdotV + ao, exp2(-16.0 * roughness - 1.0)) - 1.0 + ao);
+}

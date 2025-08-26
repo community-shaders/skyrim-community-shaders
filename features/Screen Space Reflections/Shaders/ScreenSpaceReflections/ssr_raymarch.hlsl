@@ -27,7 +27,18 @@ Texture2D<float4> ScreenColorTextureMips : register(t3);
 Texture2D<float> DepthTexture : register(t4);
 Texture2D<float> DepthTextureMips : register(t5);
 Texture2DArray<float> NoiseTexture : register(t6);
+#if defined(DYNAMIC_CUBEMAPS)
 TextureCube<float3> EnvTexture : register(t7);
+TextureCube<float3> EnvReflectionsTexture : register(t8);
+#   if defined(SSGI)
+Texture2D<float> SsgiAoTexture : register(t9);
+#   endif
+#   if defined(SKYLIGHTING)
+#	    include "Skylighting/Skylighting.hlsli"
+Texture3D<sh2> SkylightingProbeArray : register(t10);
+Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t11);
+#   endif
+#endif
 
 RWTexture2D<float4> SSRColorOutput : register(u0);
 RWTexture2D<float4> SSRPDFOutput : register(u1);
@@ -471,13 +482,38 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
             outPDF.w = confidence;
             outColor.w *= confidence;
         }
-        if (UseDynamicCubemapsAsFallback != 0)
+#if defined(DYNAMIC_CUBEMAPS)
+        if (UseDynamicCubemapsAsFallback != 0 && confidence < 0.999f)
         {
             // Fallback to dynamic cubemaps
-            float3 envColor = EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 0);
+            float3 envColor = EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, roughness * 7);
+#	if defined(SKYLIGHTING)
+            if (!SharedData::InInterior)
+            {
+                float3 positionMS = positionWS.xyz;
+
+                sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, SkylightingProbeArray, stbn_vec3_2Dx1D_128x128x64, coords.xy, positionMS.xyz, world_space_reflected_direction);
+
+                sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(world_space_normal, -normalize(positionWS), roughness);
+                float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
+		        skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
+
+                float3 envNonReflectionColor = 0;
+                if (skylightingSpecular < 1.0) {
+                    envNonReflectionColor = EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction, roughness * 7);
+                    envColor = lerp(envNonReflectionColor, envColor, skylightingSpecular);
+                }
+            }
+#   endif
+#   if defined(SSGI)
+            float ao = 1 - SsgiAoTexture[coords.xy].x;
+            ao = GetSpecularOcclusionFromAmbientOcclusion(saturate(dot(normalize(view_space_ray), view_space_surface_normal)), ao, roughness);
+            envColor *= ao;
+#   endif
             outColor.xyz = lerp(envColor, outColor.xyz, confidence);
             outColor.w = 1.f;
         }
+#endif
     }
     SSRColorOutput[coords.xy] = outColor;
     SSRPDFOutput[coords.xy] = outPDF;
