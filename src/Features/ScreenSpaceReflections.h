@@ -55,7 +55,6 @@ struct ScreenSpaceReflections : Feature
         float BilateralDepthWeight = 0.1f;
         float BilateralNormalWeight = 0.1f;
         bool UseDynamicCubemapsAsFallback = true;
-        uint SpecularSPP = 1;
         uint DiffuseSPP = 1;
         bool EnableDiffuse = true;
         float SpecularMult = 1.0f;

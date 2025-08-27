@@ -68,7 +68,7 @@ cbuffer SSRCB : register(b1)
 #define FFX_SSSR_FLOAT_MAX 3.402823466e+38
 #define FFX_SSSR_DEPTH_HIERARCHY_MAX_MIP MaxMips
 #if defined(SSSR_SPECULAR)
-#   define SAMPLES_PER_PIXEL SPECULAR_SPP
+#   define SAMPLES_PER_PIXEL 1
 #else
 #   define SAMPLES_PER_PIXEL DIFFUSE_SPP
 #endif
@@ -388,10 +388,17 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
     return InvProjectPosition(screen_uv_coord, invProj);
 }
 
+#if defined(SSSR_SPECULAR)
 [numthreads(8, 8, 1)] void main(uint2 DTid : SV_DispatchThreadID)
+#else
+groupshared float4 samples[64][SAMPLES_PER_PIXEL];
+
+[numthreads(8, 8, SAMPLES_PER_PIXEL)] void main(uint3 DTid : SV_DispatchThreadID)
+#endif
 {
     uint2 screen_size = SharedData::BufferDim.xy;
-    uint2 coords = DTid;
+    uint2 coords = DTid.xy;
+    uint sample_id = DTid.z;
     float3 debug;
 
     float4 outColor = float4(0, 0, 0, 0);
@@ -426,23 +433,11 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
     float3 world_space_normal = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
     float3 view_space_surface_normal = normalVS;
     float3 view_space_ray_direction = normalize(view_space_ray);
-    float3 view_space_reflected_direction[SAMPLES_PER_PIXEL];
-    float pdf[SAMPLES_PER_PIXEL];
-    [unroll(SAMPLES_PER_PIXEL)]
-    for (uint reflected_index = 0; reflected_index < SAMPLES_PER_PIXEL; ++reflected_index) {
-        view_space_reflected_direction[reflected_index] = SampleReflectionVector(view_space_ray_direction, view_space_surface_normal, roughness, coords, reflected_index, SAMPLES_PER_PIXEL, pdf[reflected_index]);
-    }
+    float pdf;
+    float3 view_space_reflected_direction = SampleReflectionVector(view_space_ray_direction, view_space_surface_normal, roughness, coords, sample_id, SAMPLES_PER_PIXEL, pdf[reflected_index]);
     screen_uv_space_ray_origin = ProjectPosition(view_space_ray, FrameBuffer::CameraProj[eyeIndex]);
-    float3 screen_space_ray_direction[SAMPLES_PER_PIXEL];
-    [unroll(SAMPLES_PER_PIXEL)]
-    for (uint project_index = 0; project_index < SAMPLES_PER_PIXEL; ++project_index) {
-        screen_space_ray_direction[project_index] = ProjectDirection(view_space_ray, view_space_reflected_direction[project_index], screen_uv_space_ray_origin, FrameBuffer::CameraProj[eyeIndex]);
-    }
-    float3 world_space_reflected_direction[SAMPLES_PER_PIXEL];
-    [unroll(SAMPLES_PER_PIXEL)]
-    for (uint reflected_index = 0; reflected_index < SAMPLES_PER_PIXEL; ++reflected_index) {
-        world_space_reflected_direction[reflected_index] = mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(view_space_reflected_direction[reflected_index], 0)).xyz;
-    }
+    float3 screen_space_ray_direction = ProjectDirection(view_space_ray, view_space_reflected_direction, screen_uv_space_ray_origin, FrameBuffer::CameraProj[eyeIndex]);
+    float3 world_space_reflected_direction = mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(view_space_reflected_direction, 0)).xyz;
     float3 world_space_origin = mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(view_space_ray, 1)).xyz;
     float world_ray_length = 0.0;
     bool valid_ray = all(coords < int2(screen_size)) && all(coords >= int2(0, 0));
@@ -465,14 +460,13 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
     }
 
     if (valid_ray)
-    [unroll(SAMPLES_PER_PIXEL)]
-    for (uint i = 0; i < SAMPLES_PER_PIXEL; ++i) {
+    {
         bool valid_hit;
         bool go_through_thin = false;
         uint numIterations;
         float thickness  = Thickness  + roughness * 10.0;
         hit = FFX_SSSR_HierarchicalRaymarch(screen_uv_space_ray_origin,
-                                            screen_space_ray_direction[i],
+                                            screen_space_ray_direction,
                                             is_mirror,
                                             screen_size,
                                             most_detailed_mip,
@@ -506,8 +500,8 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
                 continue;
             }
             // colorAccum += ScreenColorTextureMips.SampleLevel(LinearSampler, hit.xy, 0).xyz;
-            outPDF.xyz += hit * confidence / SAMPLES_PER_PIXEL;
-            outPDF.w += pdf[i] * confidence / SAMPLES_PER_PIXEL;
+            outPDF.xyz += hit * confidence;
+            outPDF.w += pdf * confidence;
             continue;
         }
         float3 sampleColor = 0;
@@ -518,8 +512,8 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
 
             sampleColor = ScreenColorTextureMips.SampleLevel(LinearSampler, hit.xy, 0).xyz;
 
-            outPDF.xyz += hit * confidence / SAMPLES_PER_PIXEL;
-            outPDF.w += pdf[i] * confidence / SAMPLES_PER_PIXEL;
+            outPDF.xyz += hit * confidence;
+            outPDF.w += pdf * confidence;
         }
 #if defined(DYNAMIC_CUBEMAPS)
         if (UseDynamicCubemapsAsFallback != 0 && (confidence < 0.999f))
@@ -530,13 +524,13 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
             const uint sampleMip = 4;
 #   endif
             // Fallback to dynamic cubemaps
-            float3 envColor = EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction[i], sampleMip);
+            float3 envColor = EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, sampleMip);
 #	if defined(SKYLIGHTING)
             if (!SharedData::InInterior)
             {
                 float3 positionMS = positionWS.xyz;
 
-                sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, SkylightingProbeArray, stbn_vec3_2Dx1D_128x128x64, coords.xy, positionMS.xyz, world_space_reflected_direction[i]);
+                sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, SkylightingProbeArray, stbn_vec3_2Dx1D_128x128x64, coords.xy, positionMS.xyz, world_space_reflected_direction);
 #       if defined(SSSR_SPECULAR)
                 sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(world_space_normal, -normalize(positionWS.xyz), roughness);
                 float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
@@ -544,7 +538,7 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
 
                 float3 envNonReflectionColor = 0;
                 if (skylightingSpecular < 1.0) {
-                    envNonReflectionColor = EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction[i], sampleMip);
+                    envNonReflectionColor = EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction, sampleMip);
                     envColor = lerp(envNonReflectionColor, envColor, skylightingSpecular);
                 }
 #       else
@@ -572,11 +566,28 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
             confidence = 1;
         }
         colorAccum += sampleColor;
-        outColor.w += confidence / SAMPLES_PER_PIXEL;
+        outColor.w += confidence;
 #endif
     }
-    outColor.xyz = colorAccum / SAMPLES_PER_PIXEL;
+#if defined(SSSR_SPECULAR)
+    outColor.xyz = colorAccum;
     outColor.w = saturate(outColor.w);
     SSRColorOutput[coords.xy] = outColor;
     SSRPDFOutput[coords.xy] = outPDF;
+#else
+    samples[DTid.x * 8 + DTid.y][sample_id] = float4(colorAccum, outColor.w);
+    GroupMemoryBarrierWithGroupSync();
+
+    if (sample_id == 0) {
+        outColor.xyz = 0.f;
+        for (int i = 0; i < SAMPLES_PER_PIXEL; ++i) {
+            outColor.xyz += samples[DTid.x * 8 + DTid.y][i].xyz;
+            outColor.w += samples[DTid.x * 8 + DTid.y][i].w;
+        }
+        outColor.xyz /= SAMPLES_PER_PIXEL;
+        outColor.w = saturate(outColor.w / SAMPLES_PER_PIXEL);
+        SSRColorOutput[coords.xy] = outColor;
+        SSRPDFOutput[coords.xy] = outPDF;
+    }
+#endif
 }

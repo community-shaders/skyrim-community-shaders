@@ -30,7 +30,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     BilateralDepthWeight,
     BilateralNormalWeight,
     UseDynamicCubemapsAsFallback,
-    SpecularSPP,
     DiffuseSPP,
     EnableDiffuse,
     SpecularMult,
@@ -45,8 +44,7 @@ void ScreenSpaceReflections::DrawSettings()
     ImGui::Checkbox("Enable Diffuse", &settings.EnableDiffuse);
     ImGui::SliderInt("Max Steps", (int*)&settings.MaxSteps, 1, 256);
     ImGui::SliderInt("Max Mip Level", (int*)&settings.MaxMips, 1, maxMips, "%d", ImGuiSliderFlags_AlwaysClamp);
-    recompileFlag |= ImGui::SliderInt("Specular SPP", (int*)&settings.SpecularSPP, 1, 16, "%d", ImGuiSliderFlags_AlwaysClamp);
-    recompileFlag |= ImGui::SliderInt("Diffuse SPP", (int*)&settings.DiffuseSPP, 1, 16, "%d", ImGuiSliderFlags_AlwaysClamp);
+    recompileFlag |= ImGui::SliderInt("Diffuse SPP", (int*)&settings.DiffuseSPP, 1, 8, "%d", ImGuiSliderFlags_AlwaysClamp);
     ImGui::SliderFloat("Specular Multiplier", &settings.SpecularMult, 0.0f, 5.0f, "%.2f");
     ImGui::SliderFloat("Diffuse Multiplier", &settings.DiffuseMult, 0.0f, 5.0f, "%.2f");
     ImGui::SliderFloat("Ambience Multiplier", &settings.AmbienceMult, 0.0f, 1.0f, "%.2f");
@@ -246,10 +244,8 @@ void ScreenSpaceReflections::CompileComputeShaders()
 		defines.push_back({ "SKYLIGHTING", nullptr });
 
     const std::string DiffuseSPPStr = std::to_string(settings.DiffuseSPP);
-    const std::string SpecularSPPStr = std::to_string(settings.SpecularSPP);
 
     defines.push_back({ "DIFFUSE_SPP", DiffuseSPPStr.c_str() });
-    defines.push_back({ "SPECULAR_SPP", SpecularSPPStr.c_str() });
 
     auto definesSpecular = defines;
     definesSpecular.push_back({ "SSSR_SPECULAR", nullptr });
