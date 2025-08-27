@@ -68,9 +68,9 @@ cbuffer SSRCB : register(b1)
 #define FFX_SSSR_FLOAT_MAX 3.402823466e+38
 #define FFX_SSSR_DEPTH_HIERARCHY_MAX_MIP MaxMips
 #if defined(SSSR_SPECULAR)
-#   define SAMPLES_PER_PIXEL SpecularSPP
+#   define SAMPLES_PER_PIXEL SPECULAR_SPP
 #else
-#   define SAMPLES_PER_PIXEL DiffuseSPP
+#   define SAMPLES_PER_PIXEL DIFFUSE_SPP
 #endif
 
 float3 ProjectPosition(float3 origin, float4x4 mat)
@@ -150,8 +150,7 @@ bool FFX_SSSR_AdvanceRay(float3       origin,
                          float        surface_z,
                          float        thickness,
                          inout float3 position,
-                         inout float  current_t,
-                         out bool     go_through_thin)
+                         inout float  current_t)
 {
     // Create boundary planes
     float2 xy_plane        = floor(current_mip_position) + floor_offset;
@@ -180,23 +179,13 @@ bool FFX_SSSR_AdvanceRay(float3       origin,
     bool above_surface = surface_z > position.z;
 #endif
 
-    go_through_thin = false;
-    // [branch]
-    // if (!above_surface && current_mip_level == HIZ_MIN_MIP) {
-    //     float3 curr_position = position;
-    //     float3 view_space_surface = FFX_SSSR_ScreenSpaceToViewSpace(float3(curr_position.xy, surface_z));
-    //     float3 view_space_hit = FFX_SSSR_ScreenSpaceToViewSpace(curr_position);
-    //     float distance = length(view_space_surface - view_space_hit);
-    //     go_through_thin = distance > thickness && curr_position.z > 1e-6;
-    // }
-
     // Decide whether we are able to advance the ray until we hit the xy boundaries or if we had to clamp it at the surface.
     // We use the asuint comparison to avoid NaN / Inf logic, also we actually care about bitwise equality here to see if t_min is the t.z we fed into the min3 above.
-    bool skipped_tile = (asuint(t_min) != asuint(t.z) && above_surface);
+    bool skipped_tile = asuint(t_min) != asuint(t.z) && above_surface;
 
     // Make sure to only advance the ray if we're still above the surface.
     current_t = above_surface ? t_min : current_t;
-    
+
     // Advance ray
     position = origin + current_t * direction;
 
@@ -205,7 +194,7 @@ bool FFX_SSSR_AdvanceRay(float3       origin,
 
 // Requires origin and direction of the ray to be in screen space [0, 1] x [0, 1]
 float3 FFX_SSSR_HierarchicalRaymarch(float3 origin, float3 direction, bool is_mirror, float2 screen_size, int most_detailed_mip, float roughness, float thickness,
-                                     uint max_traversal_intersections, out bool valid_hit, out uint _num_iters, out bool _go_through_thin) {
+                                     uint max_traversal_intersections, out bool valid_hit, out uint _num_iters) {
     const float3 inv_direction = abs(direction) > float(1.0e-12) ? float(1.0) / direction : FFX_SSSR_FLOAT_MAX;
 
     // Start on mip with highest detail.
@@ -214,9 +203,6 @@ float3 FFX_SSSR_HierarchicalRaymarch(float3 origin, float3 direction, bool is_mi
     // Could recompute these every iteration, but it's faster to hoist them out and update them.
     float2 current_mip_resolution     = FFX_SSSR_GetMipResolution(screen_size, current_mip);
     float2 current_mip_resolution_inv = rcp(current_mip_resolution);
-
-    uint FrameCountMod8 = uint(fmod(SharedData::FrameCount, 8));
-    float noise = Random::InterleavedGradientNoise(origin.xy * screen_size, FrameCountMod8) + 0.5;
 
     // Offset to the bounding boxes uv space to intersect the ray with the center of the next pixel.
     // This means we ever so slightly over shoot into the next region.
@@ -245,9 +231,8 @@ float3 FFX_SSSR_HierarchicalRaymarch(float3 origin, float3 direction, bool is_mi
 
         float2 current_mip_position = current_mip_resolution * position.xy;
         float  surface_z            = FFX_SSSR_LoadDepth(current_mip_position, current_mip);
-        _go_through_thin = false;
         bool skipped_tile =
-            FFX_SSSR_AdvanceRay(origin, direction, inv_direction, current_mip_position, current_mip_resolution_inv, current_mip, floor_offset, uv_offset, surface_z, thickness, position, current_t, _go_through_thin);
+            FFX_SSSR_AdvanceRay(origin, direction, inv_direction, current_mip_position, current_mip_resolution_inv, current_mip, floor_offset, uv_offset, surface_z, thickness, position, current_t);
         bool nextMipIsOutOfRange = skipped_tile && (current_mip >= FFX_SSSR_DEPTH_HIERARCHY_MAX_MIP);
         if (!nextMipIsOutOfRange)
         {
@@ -273,13 +258,6 @@ float FFX_SSSR_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_directi
         return 0.0f;
     }
 
-    // Reject the hit if we didnt advance the ray significantly to avoid immediate self reflection
-    float2 manhattan_dist = abs(hit.xy - uv);
-    if ((manhattan_dist.x < (2.0f / screen_size.x)) && (manhattan_dist.y < (2.0f / screen_size.y)))
-    {
-        return 0.0;
-    }
-
     // Don't lookup radiance from the background.
     int2  texel_coords = int2(screen_size * hit.xy);
     float surface_z    = FFX_SSSR_LoadDepth(texel_coords / 2, 1);
@@ -293,6 +271,23 @@ float FFX_SSSR_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_directi
         return 0;
     }
 
+    float3 view_space_surface = FFX_SSSR_ScreenSpaceToViewSpace(float3(hit.xy, surface_z), eyeIndex);
+    float3 view_space_hit     = FFX_SSSR_ScreenSpaceToViewSpace(hit, eyeIndex);
+    float  distance           = length(view_space_surface - view_space_hit);
+
+    // We accept all hits that are within a reasonable minimum distance below the surface.
+    // Add constant in linear space to avoid growing of the reflections toward the reflected objects.
+    float confidence = 1.0f - smoothstep(0.0f, depth_buffer_thickness, distance);
+    confidence *= confidence;
+
+    // Reject the hit if we didnt advance the ray significantly to avoid immediate self reflection
+    float2 manhattan_dist = abs(hit.xy - uv);
+    if ((manhattan_dist.x < (1.f / screen_size.x)) && (manhattan_dist.y < (1.f / screen_size.y)))
+    {
+        // occluded = true;
+        return 0;
+    }
+
     // We check if we hit the surface from the back, these should be rejected.
     float3 hit_normalVS;
     float hit_roughness;
@@ -300,26 +295,16 @@ float FFX_SSSR_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_directi
     float3 hit_normal = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(hit_normalVS, 0)).xyz);
     if (dot(hit_normal, world_space_ray_direction) > 0)
     {
-        occluded = true;
-        return 1;
+        occluded = confidence > 0 ? true : false;
+        return 0;
     }
-
-    float3 view_space_surface = FFX_SSSR_ScreenSpaceToViewSpace(float3(hit.xy, surface_z), eyeIndex);
-    float3 view_space_hit     = FFX_SSSR_ScreenSpaceToViewSpace(hit, eyeIndex);
-    float  distance           = length(view_space_surface - view_space_hit);
 
     // Fade out hits near the screen borders
     float2 fov      = 0.05 * float2(screen_size.y / screen_size.x, 1);
     float2 border   = smoothstep(float2(0.0f, 0.0f), fov, hit.xy) * (1 - smoothstep(float2(1.0f, 1.0f) - fov, float2(1.0f, 1.0f), hit.xy));
     float  vignette = border.x * border.y;
 
-    // We accept all hits that are within a reasonable minimum distance below the surface.
-    // Add constant in linear space to avoid growing of the reflections toward the reflected objects.
-    float confidence = 1.0f - smoothstep(0.0f, depth_buffer_thickness, distance);
-    confidence *= confidence;
-
     return vignette * confidence;
-    // return vignette;
 }
 
 bool IsMirrorReflection(float roughness)
@@ -379,7 +364,7 @@ float3 SampleReflectionVector(float3 view_direction, float3 normal, float roughn
     float2   u = SampleRandomVector2DBaked(dispatch_thread_id, index, numSamples);
     // float3   sampled_normal_tbn = Sample_GGX_VNDF_Hemisphere(view_direction_tbn, roughness, u.x, u.y);
 #if defined(SSSR_SPECULAR)
-    float4   sampled_normal_tbn = ImportanceSampleVisibleGGX(u, roughness * roughness, view_direction_tbn);
+    float4   sampled_normal_tbn = ImportanceSampleGGX(u, roughness * roughness * roughness * roughness);
 #else
     float4   sampled_normal_tbn = CosineSampleHemisphere(u);
 #endif
@@ -413,6 +398,7 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
     float4 outPDF = float4(0, 0, 0, 0);
 
     float3 colorAccum = float3(0, 0, 0);
+    float weightAccum = 0.f;
 
     float2 uv = float2(coords.xy + 0.5) * SharedData::BufferDim.zw;
     uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
@@ -479,7 +465,7 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
     }
 
     if (valid_ray)
-    [unroll(4)]
+    [unroll(SAMPLES_PER_PIXEL)]
     for (uint i = 0; i < SAMPLES_PER_PIXEL; ++i) {
         bool valid_hit;
         bool go_through_thin = false;
@@ -493,7 +479,7 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
                                             roughness,
                                             thickness,
                                             HIZ_MAX_ITERATIONS,
-                                            valid_hit, numIterations, go_through_thin);
+                                            valid_hit, numIterations);
 
         world_space_hit  = ScreenSpaceToWorldSpace(hit, FrameBuffer::CameraViewProjInverse[eyeIndex]);
         world_space_ray  = world_space_hit - world_space_origin.xyz;
@@ -508,11 +494,20 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
                                                       occluded
                                                       )
                                      : 0;
+        float weight = 0.f;
+#if defined(SSSR_SPECULAR)
+        weight = confidence;
+#else
+        weight = 1;
+#endif
         if (occluded)
         {
-            colorAccum += float4(0, 0, 0, 1);
-            outPDF.xyz += hit / SAMPLES_PER_PIXEL;
-            outPDF.w += 1.f / SAMPLES_PER_PIXEL;
+            if (confidence == 0) {
+                continue;
+            }
+            // colorAccum += ScreenColorTextureMips.SampleLevel(LinearSampler, hit.xy, 0).xyz;
+            outPDF.xyz += hit * confidence / SAMPLES_PER_PIXEL;
+            outPDF.w += pdf[i] * confidence / SAMPLES_PER_PIXEL;
             continue;
         }
         float3 sampleColor = 0;
@@ -521,19 +516,18 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
             // float2 projUV;
             // ReprojectHit(MotionVectorTexture, LinearSampler, hit, eyeIndex, projUV);
 
-            sampleColor = ScreenColorTextureMips.SampleLevel(LinearSampler, hit.xy, 0);
+            sampleColor = ScreenColorTextureMips.SampleLevel(LinearSampler, hit.xy, 0).xyz;
 
-            outPDF.xyz += hit / SAMPLES_PER_PIXEL;
-            outPDF.w += 1 * pdf[i];
-            outColor.w += confidence / SAMPLES_PER_PIXEL;
+            outPDF.xyz += hit * confidence / SAMPLES_PER_PIXEL;
+            outPDF.w += pdf[i] * confidence / SAMPLES_PER_PIXEL;
         }
 #if defined(DYNAMIC_CUBEMAPS)
-        if (UseDynamicCubemapsAsFallback != 0 && confidence < 0.999f)
+        if (UseDynamicCubemapsAsFallback != 0 && (confidence < 0.999f))
         {
 #   if defined(SSSR_SPECULAR)            
-            const uint sampleMip = roughness * 4;
+            const uint sampleMip = 0;
 #   else
-            const uint sampleMip = 1;
+            const uint sampleMip = 4;
 #   endif
             // Fallback to dynamic cubemaps
             float3 envColor = EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction[i], sampleMip);
@@ -544,7 +538,7 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
 
                 sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, SkylightingProbeArray, stbn_vec3_2Dx1D_128x128x64, coords.xy, positionMS.xyz, world_space_reflected_direction[i]);
 #       if defined(SSSR_SPECULAR)
-                sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(world_space_normal, -normalize(positionWS), roughness);
+                sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(world_space_normal, -normalize(positionWS.xyz), roughness);
                 float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
 		        skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
 
@@ -577,11 +571,11 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
             sampleColor.xyz = lerp(envColor, sampleColor.xyz, confidence);
             confidence = 1;
         }
-        colorAccum += sampleColor * confidence * pdf[i] / SAMPLES_PER_PIXEL;
+        colorAccum += sampleColor;
         outColor.w += confidence / SAMPLES_PER_PIXEL;
 #endif
     }
-    outColor.xyz = colorAccum;
+    outColor.xyz = colorAccum / SAMPLES_PER_PIXEL;
     outColor.w = saturate(outColor.w);
     SSRColorOutput[coords.xy] = outColor;
     SSRPDFOutput[coords.xy] = outPDF;

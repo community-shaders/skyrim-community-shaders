@@ -141,10 +141,8 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 	if (SharedData::ssrSettings.Enabled && SharedData::ssrSettings.DiffuseMult > 0.0) {
 		float4 ssrIrradiance = SSRTDiffuseTexture[dispatchID.xy];
 		ssrIrradiance.xyz *= SharedData::ssrSettings.DiffuseMult;
-		linDiffuseColor = lerp(linDiffuseColor, Color::GammaToLinear(ssrIrradiance.rgb) * linAlbedo, ssrIrradiance.a);
-		if (SharedData::ssrSettings.UseDynamicCubemapsAsFallback) {
-			linDirectionalAmbientColor = 0;
-		}
+		linDiffuseColor += Color::GammaToLinear(ssrIrradiance.rgb) * linAlbedo;
+		linDirectionalAmbientColor *= SharedData::ssrSettings.AmbienceMult;
 	}
 #endif
 
@@ -156,6 +154,10 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 
 #if defined(SSGI)
 	DiffuseAmbientRW[dispatchID.xy] = Color::GammaToLinear(diffuseColor - originalDiffuseColor);
+#endif
+
+#if defined(SSR_DEBUG_DIFFUSE) && defined(SSR)
+	diffuseColor = SSRTDiffuseTexture[dispatchID.xy].xyz;
 #endif
 
 	MainRW[dispatchID.xy] = float4(diffuseColor, 1);

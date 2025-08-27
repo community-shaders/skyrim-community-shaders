@@ -198,10 +198,10 @@ namespace SharedData
 	struct SSRSettings
     {
         uint Enabled;
-        uint UseDynamicCubemapsAsFallback;
         float SpecularMult;
         float DiffuseMult;
-    }
+		float AmbienceMult;
+    };
 
 	cbuffer FeatureData : register(b6)
 	{
