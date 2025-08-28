@@ -11,7 +11,7 @@ cbuffer SSRCB : register(b1)
     uint MaxMips;
     float Thickness;
     float SpatialRadius;
-    float RoughnessMask;
+    float NormalBias;
     float TemporalScale;
     float TemporalWeight;
     float BilateralRadius;

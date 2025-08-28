@@ -42,7 +42,7 @@ struct ScreenSpaceReflections : Feature
         uint MaxSteps = 128;
         uint MaxMips = 6;
         float Thickness = 5.f;
-        float RoughnessMask = 1.f;
+        float NormalBias = 0.25f;
         float BRDFBias = 0.25f;
         int SpatialTimes = 0;
         float SpatialRadius = 0.5f;
@@ -80,7 +80,7 @@ struct ScreenSpaceReflections : Feature
         uint MaxMips;
         float Thickness;
         float SpatialRadius;
-        float RoughnessMask;
+        float NormalBias;
         float TemporalScale;
         float TemporalWeight;
         float BilateralScale;

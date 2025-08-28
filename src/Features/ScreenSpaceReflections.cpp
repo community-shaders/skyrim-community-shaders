@@ -17,6 +17,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     MaxSteps,
     MaxMips,
     Thickness,
+    NormalBias,
     BRDFBias,
     SpatialTimes,
     SpatialRadius,
@@ -60,9 +61,12 @@ void ScreenSpaceReflections::DrawSettings()
     ImGui::Checkbox("Reuse Ray For Diffuse", &settings.ReuseRayDiffuse);
     ImGui::SameLine();
     ImGui::Checkbox("Reuse Ray For Specular", &settings.ReuseRaySpecular);
-    ImGui::Separator();
     ImGui::Text("Ray Reusing may help with irradiance accumulation but might introduce artifacts.");
+    ImGui::Separator();
     ImGui::SliderFloat("Thickness", &settings.Thickness, 0.0f, 50.0f, "%.2f");
+    ImGui::SliderFloat("Normal Bias", &settings.NormalBias, 0.0f, 1.0f, "%.2f");
+    if (auto _tt = Util::HoverTooltipWrapper())
+        ImGui::Text("To avoid false hits from nearby geometry, increase this value to push the ray origin along the normal.");
     ImGui::SliderFloat("BRDF Bias", &settings.BRDFBias, 0.0f, 1.0f, "%.2f");
     if (auto _tt = Util::HoverTooltipWrapper())
         ImGui::Text("Specular only. Higher BRDF bias reduces noise but makes reflections more glossy.");
@@ -431,7 +435,7 @@ void ScreenSpaceReflections::DrawSSR()
         ssrCBData.MaxMips = settings.MaxMips;
         ssrCBData.Thickness = settings.Thickness;
         ssrCBData.SpatialRadius = settings.SpatialRadius;
-        ssrCBData.RoughnessMask = settings.RoughnessMask;
+        ssrCBData.NormalBias = settings.NormalBias;
         ssrCBData.TemporalScale = settings.TemporalScale;
         ssrCBData.TemporalWeight = settings.TemporalWeight;
         ssrCBData.BilateralScale = settings.BilateralScale;
@@ -636,7 +640,7 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
         ssrCBData.MaxMips = settings.MaxMips;
         ssrCBData.Thickness = settings.Thickness;
         ssrCBData.SpatialRadius = settings.SpatialRadius;
-        ssrCBData.RoughnessMask = settings.RoughnessMask;
+        ssrCBData.NormalBias = settings.NormalBias;
         ssrCBData.TemporalScale = settings.TemporalScale;
         ssrCBData.TemporalWeight = settings.TemporalWeight;
         ssrCBData.BilateralScale = settings.BilateralScale;

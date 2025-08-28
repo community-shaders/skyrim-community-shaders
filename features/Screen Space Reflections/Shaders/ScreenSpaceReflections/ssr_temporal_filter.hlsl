@@ -18,7 +18,7 @@ cbuffer SSRCB : register(b1)
     uint NumRays;
     uint Glossy;
     float SpatialRadius;
-    float RoughnessMask;
+    float NormalBias;
     float TemporalScale;
     float TemporalWeight;
     float BilateralRadius;

@@ -50,7 +50,7 @@ cbuffer SSRCB : register(b1)
     uint MaxMips;
     float Thickness;
     float SpatialRadius;
-    float RoughnessMask;
+    float NormalBias;
     float TemporalScale;
     float TemporalWeight;
     float BilateralRadius;
@@ -449,6 +449,7 @@ float LocalBRDF(float3 V, float3 L, float3 N, float roughness) {
     float3 world_space_normal = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
     float3 view_space_surface_normal = normalVS;
     float3 view_space_ray_direction = normalize(view_space_ray);
+    view_space_ray += view_space_surface_normal * NormalBias;
     float pdf;
     float3 view_space_reflected_direction = SampleReflectionVector(view_space_ray_direction, view_space_surface_normal, roughness, coords, sample_id, SAMPLES_PER_PIXEL, pdf);
     screen_uv_space_ray_origin = ProjectPosition(view_space_ray, FrameBuffer::CameraProj[eyeIndex]);
