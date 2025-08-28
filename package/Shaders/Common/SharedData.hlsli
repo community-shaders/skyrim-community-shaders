@@ -200,7 +200,7 @@ namespace SharedData
         uint Enabled;
         float SpecularMult;
         float DiffuseMult;
-		float AmbienceMult;
+		float AmbientMult;
     };
 
 	cbuffer FeatureData : register(b6)

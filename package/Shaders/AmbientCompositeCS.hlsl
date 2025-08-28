@@ -142,7 +142,7 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 		float4 ssrIrradiance = SSRTDiffuseTexture[dispatchID.xy];
 		ssrIrradiance.xyz *= SharedData::ssrSettings.DiffuseMult;
 		linDiffuseColor += Color::GammaToLinear(ssrIrradiance.rgb) * linAlbedo;
-		linDirectionalAmbientColor *= SharedData::ssrSettings.AmbienceMult;
+		linDirectionalAmbientColor *= SharedData::ssrSettings.AmbientMult;
 	}
 #endif
 

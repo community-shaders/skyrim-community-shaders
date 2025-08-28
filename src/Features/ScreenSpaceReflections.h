@@ -42,7 +42,7 @@ struct ScreenSpaceReflections : Feature
         uint MaxSteps = 128;
         uint MaxMips = 6;
         float Thickness = 5.f;
-        float RoughnessMask = 0.8f;
+        float RoughnessMask = 1.f;
         float BRDFBias = 0.25f;
         int SpatialTimes = 0;
         float SpatialRadius = 0.5f;
@@ -55,11 +55,11 @@ struct ScreenSpaceReflections : Feature
         float BilateralDepthWeight = 0.1f;
         float BilateralNormalWeight = 0.1f;
         bool UseDynamicCubemapsAsFallback = true;
-        uint DiffuseSPP = 1;
+        uint DiffuseSPP = 2;
         bool EnableDiffuse = true;
         float SpecularMult = 1.0f;
         float DiffuseMult = 1.0f;
-        float AmbienceMult = 1.0f;
+        float AmbientMult = 1.0f;
         float HistoryWeight = 1.0f;
         float OcclusionStrength = 1.0f;
         bool ReuseRayDiffuse = true;
@@ -71,7 +71,7 @@ struct ScreenSpaceReflections : Feature
         uint Enabled;
         float SpecularMult;
         float DiffuseMult;
-        float AmbienceMult;
+        float AmbientMult;
     };
 
     struct alignas(16) SSRCB

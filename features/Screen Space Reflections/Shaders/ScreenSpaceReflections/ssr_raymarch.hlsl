@@ -575,8 +575,10 @@ float LocalBRDF(float3 V, float3 L, float3 N, float roughness) {
         for (int i = 0; i < 4; ++i) {
             int2 pixel = groupThreadID.xy + offset[i];
             if (IsInGroup(pixel)) {
-                float weight = weights[pixel.x * 8 + pixel.y][sample_id].w;
-                colorSum += samples[pixel.x * 8 + pixel.y][sample_id].xyz * weight;
+                float3 pixelColor = samples[pixel.x * 8 + pixel.y][sample_id].xyz;
+                float pixelLum = Color::RGBToLuminance(pixelColor);
+                float weight = weights[pixel.x * 8 + pixel.y][sample_id].w * pixelLum;
+                colorSum += pixelColor * weight;
                 weightSum += weight;
             }
         }
@@ -607,12 +609,18 @@ float LocalBRDF(float3 V, float3 L, float3 N, float roughness) {
 
     if (sample_id == 0) {
         outColor.xyz = 0.f;
+        uint brightest = 0;
+        float brightestLum = 0.f;
         for (int i = 0; i < SAMPLES_PER_PIXEL; ++i) {
-            outColor.xyz += samples[groupThreadID.x * 8 + groupThreadID.y][i].xyz;
-            outColor.w += samples[groupThreadID.x * 8 + groupThreadID.y][i].w;
+            float lum = Color::RGBToLuminance(samples[groupThreadID.x * 8 + groupThreadID.y][i].xyz);
+            if (lum > brightestLum) {
+                brightest = i;
+                brightestLum = lum;
+            }
         }
-        outColor.xyz /= SAMPLES_PER_PIXEL;
-        outColor.w = saturate(outColor.w / SAMPLES_PER_PIXEL);
+        // outColor.xyz /= SAMPLES_PER_PIXEL;
+        // outColor.w = saturate(outColor.w / SAMPLES_PER_PIXEL);
+        outColor = samples[groupThreadID.x * 8 + groupThreadID.y][brightest];
 
         // History
         [branch]

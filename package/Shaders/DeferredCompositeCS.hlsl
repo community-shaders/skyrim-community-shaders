@@ -183,7 +183,7 @@ Texture2D<float4> SSRTexture : register(t15);
 		if (SharedData::ssrSettings.Enabled) {
 			float4 ssrIrradiance = SSRTexture[dispatchID.xy];
 			ssrIrradiance.xyz *= SharedData::ssrSettings.SpecularMult;
-			ssrIrradiance.a = lerp(ssrIrradiance.a, 1.0, 1.0 - SharedData::ssrSettings.AmbienceMult);
+			ssrIrradiance.a = lerp(ssrIrradiance.a, 1.0, 1.0 - SharedData::ssrSettings.AmbientMult);
 			finalIrradiance = lerp(finalIrradiance, Color::GammaToLinear(ssrIrradiance.rgb), ssrIrradiance.a);
 		}
 #	endif
