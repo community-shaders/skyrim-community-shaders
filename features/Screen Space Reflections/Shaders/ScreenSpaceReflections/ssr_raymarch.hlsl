@@ -22,6 +22,7 @@
 
 #include "ScreenSpaceReflections/ssr_common.hlsli"
 
+Texture2D<float4> HistoryTexture : register(t0);
 Texture2D<float4> MotionVectorTexture : register(t1);
 Texture2D<float4> ScreenColorTextureMips : register(t3);
 Texture2D<float> DepthTexture : register(t4);
@@ -57,10 +58,10 @@ cbuffer SSRCB : register(b1)
     float DepthWeight;
     float NormalWeight;
     float BRDFBias;
+    float HistoryWeight;
+    float OcclusionStrength;
     uint UseDynamicCubemapsAsFallback;
-    uint SpecularSPP;
-    uint DiffuseSPP;
-    uint pad;
+    uint ReuseRay;
 };
 
 #define HIZ_MAX_ITERATIONS MaxSteps
@@ -248,9 +249,9 @@ float3 FFX_SSSR_HierarchicalRaymarch(float3 origin, float3 direction, bool is_mi
     return position;
 }
 
-float FFX_SSSR_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_direction, float2 screen_size, float depth_buffer_thickness, uint eyeIndex, out bool occluded)
+float FFX_SSSR_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_direction, float2 screen_size, float depth_buffer_thickness, uint eyeIndex, out float occlusion)
 {
-    occluded = false;
+    occlusion = 1.f;
 
     // Reject hits outside the view frustum
     if ((hit.x < 0.0f) || (hit.y < 0.0f) || (hit.x > 1.0f) || (hit.y > 1.0f))
@@ -280,14 +281,6 @@ float FFX_SSSR_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_directi
     float confidence = 1.0f - smoothstep(0.0f, depth_buffer_thickness, distance);
     confidence *= confidence;
 
-    // Reject the hit if we didnt advance the ray significantly to avoid immediate self reflection
-    float2 manhattan_dist = abs(hit.xy - uv);
-    if ((manhattan_dist.x < (1.f / screen_size.x)) && (manhattan_dist.y < (1.f / screen_size.y)))
-    {
-        // occluded = true;
-        return 0;
-    }
-
     // We check if we hit the surface from the back, these should be rejected.
     float3 hit_normalVS;
     float hit_roughness;
@@ -295,7 +288,15 @@ float FFX_SSSR_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_directi
     float3 hit_normal = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(hit_normalVS, 0)).xyz);
     if (dot(hit_normal, world_space_ray_direction) > 0)
     {
-        occluded = confidence > 0 ? true : false;
+        occlusion = 1 - confidence;
+        return 0;
+    }
+
+    // Reject the hit if we didnt advance the ray significantly to avoid immediate self reflection
+    float2 manhattan_dist = abs(hit.xy - uv);
+    if ((manhattan_dist.x < (2.f / screen_size.x)) && (manhattan_dist.y < (2.f / screen_size.y)))
+    {
+        occlusion = 1 - confidence;
         return 0;
     }
 
@@ -366,7 +367,7 @@ float3 SampleReflectionVector(float3 view_direction, float3 normal, float roughn
 #if defined(SSSR_SPECULAR)
     float4   sampled_normal_tbn = ImportanceSampleGGX(u, roughness * roughness * roughness * roughness);
 #else
-    float4   sampled_normal_tbn = CosineSampleHemisphere(u);
+    float4   sampled_normal_tbn = CosineSampleHemisphereConcentric(u);
 #endif
 #ifdef PERFECT_REFLECTIONS
     sampled_normal_tbn.xyz = float3(0, 0, 1); // Overwrite normal sample to produce perfect reflection.
@@ -374,7 +375,7 @@ float3 SampleReflectionVector(float3 view_direction, float3 normal, float roughn
     float3 reflected_direction_tbn = reflect(-view_direction_tbn, sampled_normal_tbn.xyz);
     // Transform reflected_direction back to the initial space.
     float3x3 inv_tbn_transform = transpose(tbn_transform);
-    pdf = sampled_normal_tbn.w == 0 ? 0 : rcp(sampled_normal_tbn.w);
+    pdf = sampled_normal_tbn.w;
     return mul(reflected_direction_tbn, inv_tbn_transform);
 }
 
@@ -388,24 +389,48 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
     return InvProjectPosition(screen_uv_coord, invProj);
 }
 
-#if defined(SSSR_SPECULAR)
-[numthreads(8, 8, 1)] void main(uint2 DTid : SV_DispatchThreadID)
-#else
 groupshared float4 samples[64][SAMPLES_PER_PIXEL];
+groupshared float4 weights[64][SAMPLES_PER_PIXEL];
 
-[numthreads(8, 8, SAMPLES_PER_PIXEL)] void main(uint3 DTid : SV_DispatchThreadID)
+bool IsInGroup(int2 groupThreadID)
+{
+    return groupThreadID.x < 8 && groupThreadID.y < 8 && groupThreadID.x >= 0 && groupThreadID.y >= 0;
+}
+
+static const int2 offset[4] = {
+    int2(-1, 0), int2(1, 0), int2(0, 1), int2(0, -1)
+};
+
+float LocalBRDF(float3 V, float3 L, float3 N, float roughness) {
+#if defined(SSSR_SPECULAR)  // D_GGX only
+    float3 H = normalize(V + L);
+    float NdotL = saturate(dot(N, L));
+    float NdotV = saturate(dot(N, V));
+    float NdotH = saturate(dot(N, H));
+    float D = BRDF::D_GGX(roughness, NdotH);
+    float G = BRDF::Vis_SmithJointApprox(roughness, NdotV, NdotL);
+    return D * G;
+#else  // Lambert
+    float NdotL = saturate(dot(N, L));
+    return NdotL * BRDF::Diffuse_Lambert();
 #endif
+}
+
+[numthreads(8, 8, SAMPLES_PER_PIXEL)] void main(uint3 groupID : SV_GroupID,
+                                                uint3 groupThreadID : SV_GroupThreadID,
+                                                uint3 DTid : SV_DispatchThreadID)
 {
     uint2 screen_size = SharedData::BufferDim.xy;
     uint2 coords = DTid.xy;
-    uint sample_id = DTid.z;
+#if defined(SSSR_SPECULAR)
+    uint sample_id = 0;
+#else
+    uint sample_id = groupThreadID.z;
+#endif
     float3 debug;
 
     float4 outColor = float4(0, 0, 0, 0);
     float4 outPDF = float4(0, 0, 0, 0);
-
-    float3 colorAccum = float3(0, 0, 0);
-    float weightAccum = 0.f;
 
     float2 uv = float2(coords.xy + 0.5) * SharedData::BufferDim.zw;
     uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
@@ -414,15 +439,6 @@ groupshared float4 samples[64][SAMPLES_PER_PIXEL];
     float roughness;
     GetNormalRoughness(coords.xy, normalVS, roughness);
     roughness = clamp(roughness, 0.02f, 1.0f);
-
-#if defined(SSSR_SPECULAR)
-    if (roughness > RoughnessMask)
-    {
-        SSRColorOutput[coords.xy] = float4(0, 0, 0, 0);
-        SSRPDFOutput[coords.xy] = float4(0, 0, 0, 0);
-        return;
-    }
-#endif
 
     bool is_mirror = IsMirrorReflection(roughness);
     int most_detailed_mip = HIZ_MIN_MIP;
@@ -434,7 +450,7 @@ groupshared float4 samples[64][SAMPLES_PER_PIXEL];
     float3 view_space_surface_normal = normalVS;
     float3 view_space_ray_direction = normalize(view_space_ray);
     float pdf;
-    float3 view_space_reflected_direction = SampleReflectionVector(view_space_ray_direction, view_space_surface_normal, roughness, coords, sample_id, SAMPLES_PER_PIXEL, pdf[reflected_index]);
+    float3 view_space_reflected_direction = SampleReflectionVector(view_space_ray_direction, view_space_surface_normal, roughness, coords, sample_id, SAMPLES_PER_PIXEL, pdf);
     screen_uv_space_ray_origin = ProjectPosition(view_space_ray, FrameBuffer::CameraProj[eyeIndex]);
     float3 screen_space_ray_direction = ProjectDirection(view_space_ray, view_space_reflected_direction, screen_uv_space_ray_origin, FrameBuffer::CameraProj[eyeIndex]);
     float3 world_space_reflected_direction = mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(view_space_reflected_direction, 0)).xyz;
@@ -452,12 +468,9 @@ groupshared float4 samples[64][SAMPLES_PER_PIXEL];
 	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
 	positionWS.xyz = positionWS.xyz / positionWS.w;
 
-    if (depth <= 1e-6f)
-    {
-        SSRColorOutput[coords.xy] = float4(0, 0, 0, 0);
-        SSRPDFOutput[coords.xy] = float4(0, 0, 0, 0);
-        return;
-    }
+    samples[groupThreadID.x * 8 + groupThreadID.y][sample_id] = 0.f;
+    float localWeight = pdf == 0 ? 0 : LocalBRDF(-view_space_ray_direction, view_space_surface_normal, view_space_reflected_direction, roughness) / max(pdf, 1e-4);
+    weights[groupThreadID.x * 8 + groupThreadID.y][sample_id] = float4(view_space_surface_normal, localWeight);
 
     if (valid_ray)
     {
@@ -478,32 +491,16 @@ groupshared float4 samples[64][SAMPLES_PER_PIXEL];
         world_space_hit  = ScreenSpaceToWorldSpace(hit, FrameBuffer::CameraViewProjInverse[eyeIndex]);
         world_space_ray  = world_space_hit - world_space_origin.xyz;
         world_ray_length = length(world_space_ray);
-        bool occluded;
+        float occlusion;
         confidence       = valid_hit ? FFX_SSSR_ValidateHit(hit,
                                                       uv,
                                                       world_space_ray,
                                                       screen_size,
                                                       thickness,
                                                       eyeIndex,
-                                                      occluded
+                                                      occlusion
                                                       )
                                      : 0;
-        float weight = 0.f;
-#if defined(SSSR_SPECULAR)
-        weight = confidence;
-#else
-        weight = 1;
-#endif
-        if (occluded)
-        {
-            if (confidence == 0) {
-                continue;
-            }
-            // colorAccum += ScreenColorTextureMips.SampleLevel(LinearSampler, hit.xy, 0).xyz;
-            outPDF.xyz += hit * confidence;
-            outPDF.w += pdf * confidence;
-            continue;
-        }
         float3 sampleColor = 0;
         if (confidence > 0.0f)
         {
@@ -515,13 +512,14 @@ groupshared float4 samples[64][SAMPLES_PER_PIXEL];
             outPDF.xyz += hit * confidence;
             outPDF.w += pdf * confidence;
         }
+        const float NdotV = saturate(dot(normalize(view_space_ray), view_space_surface_normal));
 #if defined(DYNAMIC_CUBEMAPS)
         if (UseDynamicCubemapsAsFallback != 0 && (confidence < 0.999f))
         {
 #   if defined(SSSR_SPECULAR)            
             const uint sampleMip = 0;
 #   else
-            const uint sampleMip = 4;
+            const uint sampleMip = 2;
 #   endif
             // Fallback to dynamic cubemaps
             float3 envColor = EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, sampleMip);
@@ -531,17 +529,6 @@ groupshared float4 samples[64][SAMPLES_PER_PIXEL];
                 float3 positionMS = positionWS.xyz;
 
                 sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, SkylightingProbeArray, stbn_vec3_2Dx1D_128x128x64, coords.xy, positionMS.xyz, world_space_reflected_direction);
-#       if defined(SSSR_SPECULAR)
-                sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(world_space_normal, -normalize(positionWS.xyz), roughness);
-                float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
-		        skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
-
-                float3 envNonReflectionColor = 0;
-                if (skylightingSpecular < 1.0) {
-                    envNonReflectionColor = EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction, sampleMip);
-                    envColor = lerp(envNonReflectionColor, envColor, skylightingSpecular);
-                }
-#       else
                 float3 skylightingNormal = normalize(float3(world_space_normal.xy, max(0, world_space_normal.z)));
                 float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylighting, SphericalHarmonics::EvaluateCosineLobe(skylightingNormal)) / Math::PI;
                 skylightingDiffuse = saturate(skylightingDiffuse);
@@ -551,41 +538,92 @@ groupshared float4 samples[64][SAMPLES_PER_PIXEL];
                 skylightingDiffuse *= 1.0 + saturate(world_space_normal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
 
                 skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
-                envColor *= skylightingDiffuse;
+#       if defined(SSSR_SPECULAR)
+                skylightingDiffuse = GetSpecularOcclusionFromAmbientOcclusion(NdotV, skylightingDiffuse, roughness);
 #       endif
+                if (skylightingDiffuse < 0.99) {
+                    float3 envNoSkyColor = EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction, sampleMip).xyz;
+                    envColor = lerp(envColor, envNoSkyColor, 1 - skylightingDiffuse);
+                }
             }
 #   endif
 #   if defined(SSGI)
-            float ao = 1 - SsgiAoTexture[coords.xy].x;
+            float ao = 1 - saturate(SsgiAoTexture[coords.xy].x);
 #       if defined(SSSR_SPECULAR)
-            ao = GetSpecularOcclusionFromAmbientOcclusion(saturate(dot(normalize(view_space_ray), view_space_surface_normal)), ao, roughness);
+            ao = GetSpecularOcclusionFromAmbientOcclusion(NdotV, ao, roughness);
 #       endif
             envColor *= ao;
 #   endif
             sampleColor.xyz = lerp(envColor, sampleColor.xyz, confidence);
             confidence = 1;
         }
-        colorAccum += sampleColor;
-        outColor.w += confidence;
+#       if defined(SSSR_SPECULAR)
+        occlusion = GetSpecularOcclusionFromAmbientOcclusion(NdotV, occlusion, roughness);
+#       endif
 #endif
+        sampleColor *= lerp(1.0f, occlusion, OcclusionStrength);
+        samples[groupThreadID.x * 8 + groupThreadID.y][sample_id] = float4(sampleColor, confidence);
     }
+    GroupMemoryBarrierWithGroupSync();
+
+    // Ray Reuse
+    if (ReuseRay != 0) {
+        float3 colorSum = samples[groupThreadID.x * 8 + groupThreadID.y][sample_id].xyz * localWeight;
+        float weightSum = localWeight;
+
+        [unroll(4)]
+        for (int i = 0; i < 4; ++i) {
+            int2 pixel = groupThreadID.xy + offset[i];
+            if (IsInGroup(pixel)) {
+                float weight = weights[pixel.x * 8 + pixel.y][sample_id].w;
+                colorSum += samples[pixel.x * 8 + pixel.y][sample_id].xyz * weight;
+                weightSum += weight;
+            }
+        }
+        if (weightSum > 0)
+            colorSum /= weightSum;
+        else
+            colorSum = float3(0.0, 0.0, 0.0);
+        GroupMemoryBarrierWithGroupSync();
+
+        samples[groupThreadID.x * 8 + groupThreadID.y][0] = float4(colorSum, 1);
+    }
+
 #if defined(SSSR_SPECULAR)
-    outColor.xyz = colorAccum;
-    outColor.w = saturate(outColor.w);
+    outColor.xyz = samples[groupThreadID.x * 8 + groupThreadID.y][0].xyz;
+    outColor.w = samples[groupThreadID.x * 8 + groupThreadID.y][0].w;
+    [branch]
+    if (HistoryWeight > 0) {
+        float2 prevUV;
+        ReprojectHit(MotionVectorTexture, LinearSampler, float3(uv, z), eyeIndex, prevUV);
+        float4 prevColor = HistoryTexture.SampleLevel(LinearSampler, prevUV, 0);
+        prevColor.w *= HistoryWeight;
+        if (outColor.w + prevColor.w > 0)
+            outColor.xyz = (outColor.xyz * outColor.w + filterNaN(prevColor.xyz) * prevColor.w) / (outColor.w + prevColor.w);
+    }
     SSRColorOutput[coords.xy] = outColor;
     SSRPDFOutput[coords.xy] = outPDF;
 #else
-    samples[DTid.x * 8 + DTid.y][sample_id] = float4(colorAccum, outColor.w);
-    GroupMemoryBarrierWithGroupSync();
 
     if (sample_id == 0) {
         outColor.xyz = 0.f;
         for (int i = 0; i < SAMPLES_PER_PIXEL; ++i) {
-            outColor.xyz += samples[DTid.x * 8 + DTid.y][i].xyz;
-            outColor.w += samples[DTid.x * 8 + DTid.y][i].w;
+            outColor.xyz += samples[groupThreadID.x * 8 + groupThreadID.y][i].xyz;
+            outColor.w += samples[groupThreadID.x * 8 + groupThreadID.y][i].w;
         }
         outColor.xyz /= SAMPLES_PER_PIXEL;
         outColor.w = saturate(outColor.w / SAMPLES_PER_PIXEL);
+
+        // History
+        [branch]
+        if (HistoryWeight > 0) {
+            float2 prevUV;
+            ReprojectHit(MotionVectorTexture, LinearSampler, float3(uv, z), eyeIndex, prevUV);
+            float4 prevColor = HistoryTexture.SampleLevel(LinearSampler, prevUV, 0);
+            prevColor.w *= HistoryWeight;
+            if (outColor.w + prevColor.w > 0)
+                outColor.xyz = (outColor.xyz * outColor.w + filterNaN(prevColor.xyz) * prevColor.w) / (outColor.w + prevColor.w);
+        }
         SSRColorOutput[coords.xy] = outColor;
         SSRPDFOutput[coords.xy] = outPDF;
     }

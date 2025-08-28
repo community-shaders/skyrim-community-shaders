@@ -17,7 +17,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     MaxSteps,
     MaxMips,
     Thickness,
-    RoughnessMask,
     BRDFBias,
     SpatialTimes,
     SpatialRadius,
@@ -34,7 +33,11 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     EnableDiffuse,
     SpecularMult,
     DiffuseMult,
-    AmbienceMult
+    AmbienceMult,
+    HistoryWeight,
+    OcclusionStrength,
+    ReuseRayDiffuse,
+    ReuseRaySpecular
 )
 
 void ScreenSpaceReflections::DrawSettings()
@@ -44,13 +47,17 @@ void ScreenSpaceReflections::DrawSettings()
     ImGui::Checkbox("Enable Diffuse", &settings.EnableDiffuse);
     ImGui::SliderInt("Max Steps", (int*)&settings.MaxSteps, 1, 256);
     ImGui::SliderInt("Max Mip Level", (int*)&settings.MaxMips, 1, maxMips, "%d", ImGuiSliderFlags_AlwaysClamp);
-    recompileFlag |= ImGui::SliderInt("Diffuse SPP", (int*)&settings.DiffuseSPP, 1, 8, "%d", ImGuiSliderFlags_AlwaysClamp);
+    recompileFlag |= ImGui::SliderInt("Diffuse SPP", (int*)&settings.DiffuseSPP, 1, 16, "%d", ImGuiSliderFlags_AlwaysClamp);
     ImGui::SliderFloat("Specular Multiplier", &settings.SpecularMult, 0.0f, 5.0f, "%.2f");
-    ImGui::SliderFloat("Diffuse Multiplier", &settings.DiffuseMult, 0.0f, 5.0f, "%.2f");
+    ImGui::SliderFloat("Diffuse Multiplier", &settings.DiffuseMult, 0.01f, 5.0f, "%.2f");
+    ImGui::SliderFloat("Occlusion Strength", &settings.OcclusionStrength, 0.0f, 1.0f, "%.2f");
     ImGui::SliderFloat("Ambience Multiplier", &settings.AmbienceMult, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("Last Frame History Weight", &settings.HistoryWeight, 0.0f, 1.0f, "%.2f");
+    ImGui::Checkbox("Reuse Ray For Diffuse", &settings.ReuseRayDiffuse);
+    ImGui::SameLine();
+    ImGui::Checkbox("Reuse Ray For Specular", &settings.ReuseRaySpecular);
     ImGui::Separator();
     ImGui::SliderFloat("Thickness", &settings.Thickness, 0.0f, 50.0f, "%.2f");
-    ImGui::SliderFloat("Roughness Mask", &settings.RoughnessMask, 0.0f, 1.0f, "%.2f");
     ImGui::SliderFloat("BRDF Bias", &settings.BRDFBias, 0.0f, 1.0f, "%.2f");
     ImGui::SliderInt("Spatial Times", &settings.SpatialTimes, 0, 2, "%d", ImGuiSliderFlags_AlwaysClamp);
     ImGui::SliderFloat("Spatial Radius", &settings.SpatialRadius, 0.0f, 5.0f, "%.2f");
@@ -162,6 +169,9 @@ void ScreenSpaceReflections::SetupResources()
         texHistory = eastl::make_unique<Texture2D>(texDesc);
         texHistory->CreateSRV(srvDesc);
         texHistory->CreateUAV(uavDesc);
+        texHistoryDiffuse = eastl::make_unique<Texture2D>(texDesc);
+        texHistoryDiffuse->CreateSRV(srvDesc);
+        texHistoryDiffuse->CreateUAV(uavDesc);
         texOutput = eastl::make_unique<Texture2D>(texDesc);
         texOutput->CreateSRV(srvDesc);
         texOutput->CreateUAV(uavDesc);
@@ -418,6 +428,9 @@ void ScreenSpaceReflections::DrawSSR()
         ssrCBData.NormalWeight = settings.BilateralNormalWeight;
         ssrCBData.BRDFBias = settings.BRDFBias;
         ssrCBData.UseDynamicCubemapsAsFallback = (uint)settings.UseDynamicCubemapsAsFallback && dynamicCubemaps.loaded;
+        ssrCBData.HistoryWeight = settings.HistoryWeight;
+        ssrCBData.OcclusionStrength = settings.OcclusionStrength;
+        ssrCBData.ReuseRay = settings.ReuseRaySpecular ? 1 : 0;
     }
     ssrCB->Update(ssrCBData);
     auto buffer = ssrCB->CB();
@@ -471,7 +484,7 @@ void ScreenSpaceReflections::DrawSSR()
     uavs.at(0) = texSSRColor->uav.get();
     uavs.at(1) = texHitPDF->uav.get();
 
-    srvs.at(0) = main.SRV;
+    srvs.at(0) = texHistory->srv.get();
     srvs.at(1) = motion.SRV;
     srvs.at(2) = normal.SRV;
     srvs.at(3) = texColor->srv.get();
@@ -620,6 +633,9 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
         ssrCBData.NormalWeight = settings.BilateralNormalWeight;
         ssrCBData.BRDFBias = settings.BRDFBias;
         ssrCBData.UseDynamicCubemapsAsFallback = (uint)settings.UseDynamicCubemapsAsFallback && dynamicCubemaps.loaded;
+        ssrCBData.HistoryWeight = settings.HistoryWeight;
+        ssrCBData.OcclusionStrength = settings.OcclusionStrength;
+        ssrCBData.ReuseRay = settings.ReuseRayDiffuse ? 1 : 0;
     }
     ssrCB->Update(ssrCBData);
     auto buffer = ssrCB->CB();
@@ -656,7 +672,7 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
     uavs.at(0) = texSSRTDiffuseColor->uav.get();
     uavs.at(1) = texHitPDF->uav.get();
 
-    srvs.at(0) = main.SRV;
+    srvs.at(0) = texHistoryDiffuse->srv.get();
     srvs.at(1) = motion.SRV;
     srvs.at(2) = normal.SRV;
     srvs.at(3) = main.SRV;
@@ -675,10 +691,11 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
     context->CSSetConstantBuffers(1, 1, &buffer);
 
     context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
+    resetViews();
+
+    context->CopyResource(texHistoryDiffuse->resource.get(), texSSRTDiffuseColor->resource.get());
 
     state->EndPerfEvent();
-
-    resetViews();
 
     context->CSSetShader(nullptr, nullptr, 0);
 }

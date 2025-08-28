@@ -1,3 +1,4 @@
+#include "Common/BRDF.hlsli"
 #include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
@@ -85,6 +86,23 @@ float4 ImportanceSampleVisibleGGX(float2 E, float2 Alpha, float3 V, bool bLimitV
 	return float4(H, VisibleGGXPDF_aniso(V, H, Alpha));
 }
 
+float3 ConcentricDiskSamplingHelper(float2 E)
+{
+	// Rescale input from [0,1) to (-1,1). This ensures the output radius is in [0,1)
+	float2 p = 2 * E - 0.99999994;
+	float2 a = abs(p);
+	float Lo = min(a.x, a.y);
+	float Hi = max(a.x, a.y);
+	float Epsilon = 5.42101086243e-20; // 2^-64 (this avoids 0/0 without changing the rest of the mapping)
+	float Phi = (Math::PI / 4) * (Lo / (Hi + Epsilon) + 2 * float(a.y >= a.x));
+	float Radius = Hi;
+	// copy sign bits from p
+	const uint SignMask = 0x80000000;
+	float2 Disk = asfloat((asuint(float2(cos(Phi), sin(Phi))) & ~SignMask) | (asuint(p) & SignMask));
+	// return point on the circle as well as the radius
+	return float3(Disk, Radius);
+}
+
 float4 CosineSampleHemisphere( float2 E )
 {
 	float Phi = 2 * Math::PI * E.x;
@@ -99,6 +117,14 @@ float4 CosineSampleHemisphere( float2 E )
 	float PDF = CosTheta * (1.0 / Math::PI);
 
 	return float4(H, PDF);
+}
+
+float4 CosineSampleHemisphereConcentric(float2 E)
+{
+	float3 Result = ConcentricDiskSamplingHelper(E);
+	float SinTheta = Result.z;
+	float CosTheta = sqrt(1 - SinTheta * SinTheta);
+	return float4(Result.xy * SinTheta, CosTheta, CosTheta * (1.0 / Math::PI));
 }
 
 void GetNormalRoughness(uint2 dtid, out float3 normal, out float roughness)
@@ -231,7 +257,7 @@ void ReprojectHit(Texture2D MotionTexture, SamplerState s, float3 hitUVz, uint e
 
 	float2 velocity = MotionTexture.SampleLevel(s, hitUVz.xy, 0).xy;
 
-	prevScreen = thisClip.xy - velocity * float2(2.f, -2.f);
+	prevScreen = thisClip.xy + velocity * float2(2.f, -2.f);
 
 	float2 prevUV = prevScreen.xy * float2(0.5f, -0.5f) + 0.5f;
 	
@@ -239,5 +265,20 @@ void ReprojectHit(Texture2D MotionTexture, SamplerState s, float3 hitUVz, uint e
 }
 
 float GetSpecularOcclusionFromAmbientOcclusion(float NdotV, float ao, float roughness) {
-    return saturate(pow(NdotV + ao, exp2(-16.0 * roughness - 1.0)) - 1.0 + ao);
+    return saturate(pow(abs(NdotV + ao), exp2(-16.0 * roughness - 1.0)) - 1.0 + ao);
 }
+
+// by Profjack
+#define ISNAN(x) (!(x < 0.f || x > 0.f || x == 0.f))
+float filterNaN(float v)
+{
+	return ISNAN(v) ? 0 : v;
+}
+float2 filterNaN(float2 v) { return float2(filterNaN(v.x), filterNaN(v.y)); }
+float3 filterNaN(float3 v) { return float3(filterNaN(v.x), filterNaN(v.y), filterNaN(v.z)); }
+float4 filterNaN(float4 v) { return float4(filterNaN(v.x), filterNaN(v.y), filterNaN(v.z), filterNaN(v.w)); }
+
+float filterInf(float v) { return isinf(v) ? 0 : v; }
+float2 filterInf(float2 v) { return float2(filterInf(v.x), filterInf(v.y)); }
+float3 filterInf(float3 v) { return float3(filterInf(v.x), filterInf(v.y), filterInf(v.z)); }
+float4 filterInf(float4 v) { return float4(filterInf(v.x), filterInf(v.y), filterInf(v.z), filterInf(v.w)); }
