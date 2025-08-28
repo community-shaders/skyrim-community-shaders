@@ -47,6 +47,18 @@ namespace PBR
 		static const uint LandTile5HasGlint = (1 << 17);
 	}
 
+	namespace Constants
+	{
+		static const float MinRoughness = 0.04f;
+		static const float MaxRoughness = 1.0f;
+		static const float MinGlintDensity = 1.0f;
+		static const float MaxGlintDensity = 40.0f;
+		static const float MinGlintRoughness = 0.005f;
+		static const float MaxGlintRoughness = 0.3f;
+		static const float MinGlintDensityRandomization = 0.0f;
+		static const float MaxGlintDensityRandomization = 5.0f;
+	}
+
 #if defined(GLINT)
 #	include "Common/Glints/Glints2023.hlsli"
 #else
