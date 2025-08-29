@@ -64,7 +64,7 @@ void FidelityFX::SetupFrameGeneration()
 	ffx::CreateContextDescFrameGeneration createFg{};
 	createFg.displaySize = { swapChain.swapChainDesc.Width, swapChain.swapChainDesc.Height };
 	createFg.maxRenderSize = createFg.displaySize;
-	createFg.flags = FFX_FRAMEGENERATION_ENABLE_ASYNC_WORKLOAD_SUPPORT;
+	createFg.flags = 0;
 	createFg.backBufferFormat = ffxApiGetSurfaceFormatDX12(swapChain.swapChainDesc.Format);
 
 	ffx::CreateBackendDX12Desc backendDesc{};
@@ -85,49 +85,21 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 {
 	auto& upscaling = globals::features::upscaling;
 	auto& swapChain = globals::features::upscaling.dx12SwapChain;
-	auto commandList = swapChain.commandLists[swapChain.frameIndex].get();
-
-	auto HUDLessColor = upscaling.HUDLessBufferShared12->resource.get();
-	auto depth = upscaling.depthBufferShared12->resource.get();
-	auto motionVectors = upscaling.motionVectorBufferShared12->resource.get();
-
-	FfxApiSwapchainFramePacingTuning framePacingTuning{ 0.1f, 0.1f, true, 2, false };
-
-	ffx::ConfigureDescFrameGenerationSwapChainKeyValueDX12 framePacingTuningParameters{};
-	framePacingTuningParameters.key = FFX_API_CONFIGURE_FG_SWAPCHAIN_KEY_FRAMEPACINGTUNING;
-	framePacingTuningParameters.ptr = &framePacingTuning;
-
-	if (ffx::Configure(swapChainContext, framePacingTuningParameters) != ffx::ReturnCode::Ok) {
-		logger::critical("[FidelityFX] Failed to configure frame pacing tuning!");
-	}
 
 	ffx::ConfigureDescFrameGeneration configParameters{};
 
-	if (a_useFrameGeneration) {
-		configParameters.frameGenerationEnabled = true;
+	configParameters.frameGenerationEnabled = a_useFrameGeneration;
 
-		configParameters.frameGenerationCallback = [](ffxDispatchDescFrameGeneration* params, void* pUserCtx) -> ffxReturnCode_t {
-			return ffxModule.Dispatch(reinterpret_cast<ffxContext*>(pUserCtx), &params->header);
-		};
-		configParameters.frameGenerationCallbackUserContext = &frameGenContext;
-		configParameters.frameGenerationCallbackUserContext = this;
+	configParameters.frameGenerationCallbackUserContext = nullptr;
+	configParameters.frameGenerationCallback = nullptr;
 
-		configParameters.HUDLessColor = ffxApiGetResourceDX12(HUDLessColor);
-
-	} else {
-		configParameters.frameGenerationEnabled = false;
-
-		configParameters.frameGenerationCallbackUserContext = nullptr;
-		configParameters.frameGenerationCallback = nullptr;
-
-		configParameters.HUDLessColor = FfxApiResource({});
-	}
+	configParameters.HUDLessColor = FfxApiResource({});
 
 	static uint64_t frameID = 0;
 	configParameters.frameID = frameID;
 	configParameters.swapChain = swapChain.swapChain;
 	configParameters.onlyPresentGenerated = false;
-	configParameters.allowAsyncWorkloads = true;
+	configParameters.allowAsyncWorkloads = false;
 	configParameters.flags = 0;
 
 	auto state = globals::state;
@@ -146,15 +118,12 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		logger::critical("[FidelityFX] Failed to configure frame generation!");
 	}
 
-	ffx::ConfigureDescFrameGenerationSwapChainRegisterUiResourceDX12 uiConfig{};
-	uiConfig.uiResource = ffxApiGetResourceDX12(swapChain.uiBufferWrapped->resource.get());
-	uiConfig.flags = FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_USE_PREMUL_ALPHA | FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_ENABLE_INTERNAL_UI_DOUBLE_BUFFERING;
-
-	if (ffx::Configure(swapChainContext, uiConfig) != ffx::ReturnCode::Ok) {
-		logger::critical("[FidelityFX] Failed to configure UI composition!");
-	}
-
 	if (a_useFrameGeneration) {
+	 	auto commandList = swapChain.commandLists[swapChain.frameIndex].get();
+
+		auto depth = upscaling.depthBufferShared12->resource.get();
+		auto motionVectors = upscaling.motionVectorBufferShared12->resource.get();
+
 		ffx::DispatchDescFrameGenerationPrepare dispatchParameters{};
 
 		dispatchParameters.commandList = commandList;
@@ -196,10 +165,6 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		dispatchParameters.depth = ffxApiGetResourceDX12(depth);
 		dispatchParameters.motionVectors = ffxApiGetResourceDX12(motionVectors);
 
-		if (ffx::Dispatch(frameGenContext, dispatchParameters) != ffx::ReturnCode::Ok) {
-			logger::critical("[FidelityFX] Failed to dispatch frame generation!");
-		}
-
 		ffx::DispatchDescFrameGenerationPrepareCameraInfo cameraConfig{};
 
 		auto viewMatrix = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
@@ -221,8 +186,49 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		cameraConfig.cameraPosition[1] = globals::game::frameBufferCached.GetCameraPosAdjust().y;
 		cameraConfig.cameraPosition[2] = globals::game::frameBufferCached.GetCameraPosAdjust().z;
 
-		if (ffx::Dispatch(frameGenContext, cameraConfig) != ffx::ReturnCode::Ok) {
-			logger::critical("[FidelityFX] Failed to dispatch frame generation camera info!");
+		if (ffx::Dispatch(frameGenContext, dispatchParameters, cameraConfig) != ffx::ReturnCode::Ok) {
+			logger::critical("[FidelityFX] Failed to dispatch frame generation!");
+		}
+	}
+
+	ffx::ConfigureDescFrameGenerationSwapChainRegisterUiResourceDX12 uiConfig{};
+	uiConfig.uiResource = ffxApiGetResourceDX12(swapChain.uiBufferWrapped->resource.get());
+	uiConfig.flags = FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_USE_PREMUL_ALPHA | FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_ENABLE_INTERNAL_UI_DOUBLE_BUFFERING;
+
+	if (ffx::Configure(swapChainContext, uiConfig) != ffx::ReturnCode::Ok) {
+		logger::critical("[FidelityFX] Failed to configure UI composition!");
+	}
+
+	if (a_useFrameGeneration)
+	{
+		auto HUDLessColor = upscaling.HUDLessBufferShared12->resource.get();
+
+		ffx::DispatchDescFrameGeneration dispatchFg{};
+		dispatchFg.presentColor = ffxApiGetResourceDX12(HUDLessColor);
+		dispatchFg.numGeneratedFrames = 1;
+
+		dispatchFg.generationRect.left = (swapChain.swapChainDesc.Width - swapChain.swapChainDesc.Width) / 2;
+		dispatchFg.generationRect.top = (swapChain.swapChainDesc.Height - swapChain.swapChainDesc.Height) / 2;
+		dispatchFg.generationRect.width = swapChain.swapChainDesc.Width;
+		dispatchFg.generationRect.height = swapChain.swapChainDesc.Height;
+
+		ffx::QueryDescFrameGenerationSwapChainInterpolationCommandListDX12 queryCmdList{};
+		queryCmdList.pOutCommandList = &dispatchFg.commandList;
+		if (ffx::Query(swapChainContext, queryCmdList) != ffx::ReturnCode::Ok) {
+			logger::critical("[FidelityFX] Failed to query frame generation!");
+		}
+
+		ffx::QueryDescFrameGenerationSwapChainInterpolationTextureDX12 queryFiTexture{};
+		queryFiTexture.pOutTexture = &dispatchFg.outputs[0];
+		if (ffx::Query(swapChainContext, queryFiTexture) != ffx::ReturnCode::Ok) {
+			logger::critical("[FidelityFX] Failed to query frame generation!");
+		}
+
+		dispatchFg.frameID = frameID;
+		dispatchFg.reset = false;
+
+		if (ffx::Dispatch(frameGenContext, dispatchFg) != ffx::ReturnCode::Ok) {
+			logger::critical("[FidelityFX] Failed to dispatch frame generation!");
 		}
 	}
 
