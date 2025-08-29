@@ -210,14 +210,18 @@ void Upscaling::DrawSettings()
 	auto upscaleMethod = GetUpscaleMethod();
 
 	// Display upscaling settings if applicable
-	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
-		const char* upscalePresetsDLSS[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "DLAA" };
-		const char* upscalePresets[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "Native AA" };
+	if (!globals::game::isVR) {
+		if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
+			const char* upscalePresetsDLSS[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "DLAA" };
+			const char* upscalePresets[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "Native AA" };
 
-		if (upscaleMethod == UpscaleMethod::kDLSS)
-			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresetsDLSS[4 - settings.qualityMode]).c_str());
-		else
-			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
+			if (upscaleMethod == UpscaleMethod::kDLSS)
+				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresetsDLSS[4 - settings.qualityMode]).c_str());
+			else
+				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
+		}
+	} else {
+		ImGui::Text("Upscaling is not currently available for VR.");
 	}
 
 	if (!globals::game::isVR) {
@@ -651,7 +655,9 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 		auto state = globals::state;
 		auto screenSize = state->screenSize;
 
-		if (upscaleMethod == UpscaleMethod::kXESS) {
+		if (globals::game::isVR) {
+			resolutionScale = 1.0f;
+		} else if (upscaleMethod == UpscaleMethod::kXESS) {
 			resolutionScale = xess.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
 		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
 			resolutionScale = streamline.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
