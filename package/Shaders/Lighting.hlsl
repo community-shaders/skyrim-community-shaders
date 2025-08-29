@@ -2117,7 +2117,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	pbrSurfaceProperties.Noise = screenNoise;
 
-	pbrSurfaceProperties.Roughness = clamp(rawRMAOS.x, 0.04, 1.0);
+	pbrSurfaceProperties.Roughness = clamp(rawRMAOS.x, PBR::Constants::MinRoughness, PBR::Constants::MaxRoughness);
 	pbrSurfaceProperties.Metallic = saturate(rawRMAOS.y);
 	pbrSurfaceProperties.AO = rawRMAOS.z;
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
@@ -2127,9 +2127,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 
 	pbrSurfaceProperties.GlintScreenSpaceScale = max(1, glintParameters.x);
-	pbrSurfaceProperties.GlintLogMicrofacetDensity = clamp(40.f - glintParameters.y, 1, 40);
-	pbrSurfaceProperties.GlintMicrofacetRoughness = clamp(glintParameters.z, 0.005, 0.3);
-	pbrSurfaceProperties.GlintDensityRandomization = clamp(glintParameters.w, 0, 5);
+	pbrSurfaceProperties.GlintLogMicrofacetDensity = clamp(PBR::Constants::MaxGlintDensity - glintParameters.y, PBR::Constants::MinGlintDensity, PBR::Constants::MaxGlintDensity);
+	pbrSurfaceProperties.GlintMicrofacetRoughness = clamp(glintParameters.z, PBR::Constants::MinGlintRoughness, PBR::Constants::MaxGlintRoughness);
+	pbrSurfaceProperties.GlintDensityRandomization = clamp(glintParameters.w, PBR::Constants::MinGlintDensityRandomization, PBR::Constants::MaxGlintDensityRandomization);
 
 #		if defined(GLINT)
 	float glintNoise = Random::R1Modified(float(SharedData::FrameCount), (Random::pcg2d(uint2(input.Position.xy)) / 4294967296.0).x);
