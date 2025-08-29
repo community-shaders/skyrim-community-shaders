@@ -5,6 +5,7 @@
 #include "../Upscaling.h"
 
 #include <directx/d3dx12.h>
+#include <dxgi1_6.h>
 #include <magic_enum.hpp>
 
 // Define the static member
@@ -21,6 +22,7 @@ void XeSS::LoadXeSS()
 
 	if (module) {
 		xessGetVersion = (xessGetVersionPtr)GetProcAddress(module, "xessGetVersion");
+		xessGetIntelXeFXVersion = (xessGetIntelXeFXVersionPtr)GetProcAddress(module, "xessGetIntelXeFXVersion");
 		xessD3D12CreateContext = (xessD3D12CreateContextPtr)GetProcAddress(module, "xessD3D12CreateContext");
 		xessD3D12Init = (xessD3D12InitPtr)GetProcAddress(module, "xessD3D12Init");
 		xessD3D12Execute = (xessD3D12ExecutePtr)GetProcAddress(module, "xessD3D12Execute");
@@ -31,12 +33,7 @@ void XeSS::LoadXeSS()
 
 		if (xessGetVersion && xessD3D12CreateContext && xessD3D12Init && xessD3D12Execute && xessDestroyContext && xessSetJitterScale && xessSetVelocityScale && xessGetInputResolution) {
 			featureXeSS = true;
-			xess_version_t version;
-			if (xessGetVersion(&version) == XESS_RESULT_SUCCESS) {
-				logger::info("[XeSS] Successfully loaded XeSS SDK version: {}.{}.{}", version.major, version.minor, version.patch);
-			} else {
-				logger::info("[XeSS] Successfully loaded XeSS SDK");
-			}
+			logger::info("[XeSS] Successfully loaded XeSS SDK");
 		} else {
 			featureXeSS = false;
 			logger::error("[XeSS] Failed to load XeSS function pointers");
@@ -44,6 +41,21 @@ void XeSS::LoadXeSS()
 	} else {
 		featureXeSS = false;
 		logger::error("[XeSS] Failed to load libxess.dll");
+	}
+}
+
+void XeSS::QueryVersion()
+{	
+	// Clear existing version info
+	versionInfo.clear();
+
+	xess_version_t version;
+	xess_version_t versionXeFX;
+
+	if (xessGetVersion(&version) == XESS_RESULT_SUCCESS && xessGetIntelXeFXVersion(xessContext, &versionXeFX) == XESS_RESULT_SUCCESS) {		
+		bool xeFX = versionXeFX.major != 0 && versionXeFX.minor != 0 && versionXeFX.patch != 0;
+		versionInfo = std::format("{}.{}.{} {}", version.major, version.minor, version.patch, xeFX ? "Xe" : "DP4a");
+		logger::info("[XeSS] Upscaler version: {}", versionInfo);
 	}
 }
 
@@ -82,6 +94,8 @@ void XeSS::CreateXeSSResources()
 		logger::critical("[XeSS] Failed to initialize XeSS context, error: {} ({})", magic_enum::enum_name(initResult), (int)initResult);
 		return;
 	}
+
+	QueryVersion();
 }
 
 void XeSS::DestroyXeSSResources()

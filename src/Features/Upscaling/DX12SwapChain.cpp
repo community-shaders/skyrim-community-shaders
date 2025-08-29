@@ -1,6 +1,6 @@
 #include "DX12SwapChain.h"
 
-#include <dx12/ffx_api_dx12.hpp>
+#include <FidelityFX/api/include/dx12/ffx_api_dx12.hpp>
 #include <dxgi1_6.h>
 
 #include "../Upscaling.h"

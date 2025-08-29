@@ -124,7 +124,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 
 			return S_OK;
 		} else {
-			logger::warn("[Frame Generation] amd_fidelityfx_dx12.dll is not loaded, skipping proxy");
+			logger::warn("[Frame Generation] FidelityFX DLLs are not loaded, skipping proxy");
 			upscaling.fidelityFXMissing = true;
 		}
 	}
@@ -156,8 +156,23 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 
 void Upscaling::DrawSettings()
 {
-	// Display upscaling options in the UI
-	const char* upscaleModes[] = { "None", "TAA", "AMD FSR", "Intel XeSS", "NVIDIA DLSS" };
+	// Display upscaling options in the UI - build labels with version info
+	std::vector<std::string> upscaleModes = { "None", "TAA" };
+	
+	std::string fsrLabel = "AMD FSR";
+	if (!fidelityFX.versionInfo.empty()) {
+		fsrLabel += " " + fidelityFX.versionInfo;
+	}
+	upscaleModes.push_back(fsrLabel);
+	
+	std::string xessLabel = "Intel XeSS";
+	if (!xess.versionInfo.empty()) {
+		xessLabel += " " + xess.versionInfo;
+	}
+	upscaleModes.push_back(xessLabel);
+	
+	std::string dlssLabel = "NVIDIA DLSS 4";
+	upscaleModes.push_back(dlssLabel);
 
 	// Determine available modes
 	bool featureDLSS = streamline.featureDLSS;
@@ -173,7 +188,8 @@ void Upscaling::DrawSettings()
 	}
 
 	// Slider for method selection
-	ImGui::SliderInt("Method", (int*)currentUpscaleMode, 0, availableModes, std::format("{}", upscaleModes[(uint)*currentUpscaleMode]).c_str());
+	std::string currentLabel = upscaleModes[(uint)*currentUpscaleMode];
+	ImGui::SliderInt("Method", (int*)currentUpscaleMode, 0, availableModes, currentLabel.c_str());
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
 			"TAA:\n"
@@ -233,7 +249,7 @@ void Upscaling::DrawSettings()
 
 			if (fidelityFXMissing) {
 				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
-				ImGui::Text("Warning: amd_fidelityfx_dx12.dll is not loaded");
+				ImGui::Text("Warning: FidelityFX DLLs are not loaded");
 				ImGui::PopStyleColor();
 
 				onlyRequiresRestart = false;
@@ -1224,7 +1240,7 @@ void Upscaling::PostBackendDevice()
 // Module availability methods
 bool Upscaling::HasFrameGenModule() const
 {
-	return fidelityFX.module != nullptr;
+	return fidelityFX.featureFSR3FG;
 }
 
 // Proxy interface methods

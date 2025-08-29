@@ -13,6 +13,7 @@
 
 // XeSS function pointers - matching exact signatures from xess.h and xess_d3d12.h
 typedef xess_result_t (*xessGetVersionPtr)(xess_version_t* pVersion);
+typedef xess_result_t (*xessGetIntelXeFXVersionPtr)(xess_context_handle_t hContext, xess_version_t* pVersion);
 typedef xess_result_t (*xessD3D12CreateContextPtr)(ID3D12Device* pDevice, xess_context_handle_t* phContext);
 typedef xess_result_t (*xessD3D12InitPtr)(xess_context_handle_t hContext, const xess_d3d12_init_params_t* pInitParams);
 typedef xess_result_t (*xessD3D12ExecutePtr)(xess_context_handle_t hContext, ID3D12GraphicsCommandList* pCommandList, const xess_d3d12_execute_params_t* pExecParams);
@@ -32,6 +33,7 @@ public:
 
 	// XeSS function pointers
 	xessGetVersionPtr xessGetVersion = nullptr;
+	xessGetIntelXeFXVersionPtr xessGetIntelXeFXVersion = nullptr;
 	xessD3D12CreateContextPtr xessD3D12CreateContext = nullptr;
 	xessD3D12InitPtr xessD3D12Init = nullptr;
 	xessD3D12ExecutePtr xessD3D12Execute = nullptr;
@@ -47,7 +49,10 @@ public:
 	// Cached DLL version info for XeSS plugin directory
 	static std::vector<std::pair<std::string, std::string>> dllVersions;
 
+	std::string versionInfo;
+
 	void LoadXeSS();
+	void QueryVersion();
 	void CreateXeSSResources();
 	void DestroyXeSSResources();
 	float GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityPreset);

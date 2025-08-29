@@ -3,14 +3,13 @@
 #include <d3d12.h>
 #include <winrt/base.h>
 
-#include <dx12/ffx_api_dx12.h>
-#include <dx12/ffx_api_dx12.hpp>
+#include <FidelityFX/api/include/dx12/ffx_api_dx12.hpp>
 
-#include <ffx_api.hpp>
-#include <ffx_api_loader.h>
-#include <ffx_api_types.h>
-#include <ffx_framegeneration.hpp>
-#include <ffx_upscale.hpp>
+#include <FidelityFX/api/include/ffx_api.hpp>
+#include <FidelityFX/api/include/ffx_api_loader.h>
+#include <FidelityFX/framegeneration/include/ffx_framegeneration.hpp>
+#include <FidelityFX/framegeneration/include/dx12/ffx_api_framegeneration_dx12.hpp>
+#include <FidelityFX/upscalers/include/ffx_upscale.hpp>
 
 #include "../../Buffer.h"
 #include "../../State.h"
@@ -20,7 +19,6 @@ class FidelityFX
 public:
 	static constexpr const wchar_t* PluginDir = L"Data\\Shaders\\Upscaling\\FidelityFX";
 
-	FidelityFX() = default;
 
 	HMODULE module = nullptr;
 
@@ -37,7 +35,10 @@ public:
 	// Cached DLL version info for FidelityFX plugin directory
 	static std::vector<std::pair<std::string, std::string>> dllVersions;
 
+	std::string versionInfo;
+
 	void LoadFFX();
+	void QueryVersion();
 	void SetupFrameGeneration();
 	void Present(bool a_useFrameGeneration);
 

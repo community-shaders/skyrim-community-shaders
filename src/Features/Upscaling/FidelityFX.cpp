@@ -14,42 +14,45 @@ std::vector<std::pair<std::string, std::string>> FidelityFX::dllVersions = {};
 
 void FidelityFX::LoadFFX()
 {
-	// Try loading from root folder first
-	std::wstring rootDllPath = L"amd_fidelityfx_dx12.dll";
-	module = LoadLibrary(rootDllPath.c_str());
+	// Load upscaler and frame generation DLLs and their function pointers
+	std::wstring upscalerDllName = L"amd_fidelityfx_upscaler_dx12.dll";
+	std::wstring framegenDllName = L"amd_fidelityfx_framegeneration_dx12.dll";
 
-	std::wstring loadedFrom;
-	if (module) {
-		loadedFrom = L"root folder";
-	} else {
-		// Fallback to plugin directory
-		std::wstring pluginDllPath = std::wstring(FidelityFX::PluginDir) + L"\\amd_fidelityfx_dx12.dll";
-		module = LoadLibrary(pluginDllPath.c_str());
-		if (module) {
-			loadedFrom = L"plugin directory";
-		}
-	}
+	std::wstring upscalerPath = std::wstring(FidelityFX::PluginDir) + L"\\" + upscalerDllName;
+	std::wstring framegenPath = std::wstring(FidelityFX::PluginDir) + L"\\" + framegenDllName;
+
+	featureFSR3 = LoadLibrary(upscalerPath.c_str());
+	featureFSR3FG = LoadLibrary(framegenPath.c_str());
+
+	// Load loader DLL from plugin directory
+	std::wstring loaderDllName = L"amd_fidelityfx_loader_dx12.dll";
+	std::wstring pluginLoaderPath = std::wstring(FidelityFX::PluginDir) + L"\\" + loaderDllName;
+
+	module = LoadLibrary(pluginLoaderPath.c_str());
 
 	// Cache all DLL versions in the FidelityFX directory
 	std::filesystem::path pluginDir = std::filesystem::path(FidelityFX::PluginDir);
 	FidelityFX::dllVersions = Util::EnumerateDllVersions(pluginDir);
 
 	if (module) {
+		logger::info("[FidelityFX] Loader DLL loaded successfully from plugin directory");
+
 		ffxLoadFunctions(&ffxModule, module);
 
-		featureFSR3FG = true;
-		featureFSR3 = true;
-
 		if (featureFSR3) {
-			logger::info("[FidelityFX] FSR 3 API loaded successfully from {}",
-				loadedFrom == L"root folder" ? "root folder" : "plugin directory");
+			logger::info("[FidelityFX] Upscaler DLL found and available");
 		} else {
-			logger::warn("[FidelityFX] FSR 3 API functions not found, falling back to legacy implementation");
+			logger::warn("[FidelityFX] Upscaler DLL not found - FSR3 upscaling disabled");
+		}
+		
+		if (featureFSR3FG) {
+			logger::info("[FidelityFX] Frame generation DLL found and available");
+		} else {
+			logger::warn("[FidelityFX] Frame generation DLL not found - FSR3 frame generation disabled");
 		}
 	} else {
-		featureFSR3FG = false;
-		featureFSR3 = false;
-		logger::error("[FidelityFX] Failed to load amd_fidelityfx_dx12.dll from both root folder and plugin directory");
+		logger::error("[FidelityFX] Failed to load {} from plugin directory", 
+			stl::utf16_to_utf8(loaderDllName).value_or("loader DLL"));
 	}
 }
 
@@ -64,10 +67,10 @@ void FidelityFX::SetupFrameGeneration()
 	createFg.flags = FFX_FRAMEGENERATION_ENABLE_ASYNC_WORKLOAD_SUPPORT;
 	createFg.backBufferFormat = ffxApiGetSurfaceFormatDX12(swapChain.swapChainDesc.Format);
 
-	ffx::CreateBackendDX12Desc createBackend{};
-	createBackend.device = upscaling.sharedD3D12Device.get();
+	ffx::CreateBackendDX12Desc backendDesc{};
+	backendDesc.device = upscaling.sharedD3D12Device.get();
 
-	if (ffx::CreateContext(frameGenContext, nullptr, createFg, createBackend) != ffx::ReturnCode::Ok)
+	if (ffx::CreateContext(frameGenContext, nullptr, createFg, backendDesc) != ffx::ReturnCode::Ok)
 		logger::critical("[FidelityFX] Failed to create frame generation context!");
 }
 
@@ -107,6 +110,7 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 			return ffxModule.Dispatch(reinterpret_cast<ffxContext*>(pUserCtx), &params->header);
 		};
 		configParameters.frameGenerationCallbackUserContext = &frameGenContext;
+		configParameters.frameGenerationCallbackUserContext = this;
 
 		configParameters.HUDLessColor = ffxApiGetResourceDX12(HUDLessColor);
 
@@ -179,7 +183,7 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 			dispatchParameters.jitterOffset.y = 0.0f;
 		}
 
-		dispatchParameters.frameTimeDelta = *globals::game::deltaTime * 1000.f;
+		dispatchParameters.frameTimeDelta = RE::GetSecondsSinceLastFrame() * 1000.f;
 
 		dispatchParameters.cameraFar = *globals::game::cameraFar;
 		dispatchParameters.cameraNear = *globals::game::cameraNear;
@@ -217,7 +221,7 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		cameraConfig.cameraPosition[1] = globals::game::frameBufferCached.GetCameraPosAdjust().y;
 		cameraConfig.cameraPosition[2] = globals::game::frameBufferCached.GetCameraPosAdjust().z;
 
-		if (ffx::Dispatch(frameGenContext, dispatchParameters, cameraConfig) != ffx::ReturnCode::Ok) {
+		if (ffx::Dispatch(frameGenContext, cameraConfig) != ffx::ReturnCode::Ok) {
 			logger::critical("[FidelityFX] Failed to dispatch frame generation camera info!");
 		}
 	}
@@ -238,7 +242,7 @@ void FidelityFX::CreateFSRResources()
 	createUpscaling.maxRenderSize.height = (uint)state->screenSize.y;
 	createUpscaling.maxUpscaleSize.width = (uint)state->screenSize.x;
 	createUpscaling.maxUpscaleSize.height = (uint)state->screenSize.y;
-	createUpscaling.flags = FFX_UPSCALE_ENABLE_NON_LINEAR_COLORSPACE | FFX_UPSCALE_ENABLE_AUTO_EXPOSURE | FFX_UPSCALE_ENABLE_DYNAMIC_RESOLUTION;
+	createUpscaling.flags = FFX_UPSCALE_ENABLE_NON_LINEAR_COLORSPACE | FFX_UPSCALE_ENABLE_AUTO_EXPOSURE;
 
 	createUpscaling.fpMessage = [](uint32_t type, const wchar_t* wideMessage) {
 		auto message = stl::utf16_to_utf8(wideMessage);
@@ -255,6 +259,9 @@ void FidelityFX::CreateFSRResources()
 
 	if (ffx::CreateContext(upscalingContext, nullptr, createUpscaling, backendDesc) != ffx::ReturnCode::Ok)
 		logger::critical("[FidelityFX] Failed to create FSR3 API context");
+		
+	// Query version information after context creation
+	QueryVersion();
 }
 
 void FidelityFX::DestroyFSRResources()
@@ -334,4 +341,45 @@ void FidelityFX::Upscale(
 
 	if (ffx::Dispatch(upscalingContext, dispatchUpscale) != ffx::ReturnCode::Ok)
 		logger::critical("[FidelityFX] Failed to upscale");
+}
+
+void FidelityFX::QueryVersion()
+{
+	auto& upscaling = globals::features::upscaling;
+	
+	// Clear existing version info
+	versionInfo.clear();
+
+	// Query upscaler versions if available
+	if (featureFSR3) {
+		ffxQueryDescGetVersions upscalerQuery{};
+		upscalerQuery.header.type = FFX_API_QUERY_DESC_TYPE_GET_VERSIONS;
+		upscalerQuery.header.pNext = nullptr;
+		
+		ffx::CreateContextDescUpscale dummyUpscaler{};
+		upscalerQuery.createDescType = dummyUpscaler.header.type;
+		upscalerQuery.device = upscaling.sharedD3D12Device.get();
+		
+		uint64_t upscalerCount = 0;
+		upscalerQuery.outputCount = &upscalerCount;
+		upscalerQuery.versionIds = nullptr;
+		upscalerQuery.versionNames = nullptr;
+		
+		if (ffxModule.Query(nullptr, &upscalerQuery.header) == (ffxReturnCode_t)ffx::ReturnCode::Ok && upscalerCount > 0) {
+			// Allocate arrays for version info
+			std::vector<uint64_t> upscalerIds(upscalerCount);
+			std::vector<const char*> upscalerNames(upscalerCount);
+			
+			upscalerQuery.versionIds = upscalerIds.data();
+			upscalerQuery.versionNames = upscalerNames.data();
+			
+			// Second query to get actual data
+			if (ffxModule.Query(nullptr, &upscalerQuery.header) == (ffxReturnCode_t)ffx::ReturnCode::Ok) {
+				if (upscalerCount > 0 && upscalerNames[0]) {
+					versionInfo = upscalerNames[0];
+					logger::info("[FidelityFX] Upscaler version: {}", versionInfo);
+				}
+			}
+		}
+	}
 }
