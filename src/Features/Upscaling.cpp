@@ -171,7 +171,7 @@ void Upscaling::DrawSettings()
 	}
 	upscaleModes.push_back(xessLabel);
 	
-	std::string dlssLabel = "NVIDIA DLSS 4";
+	std::string dlssLabel = "NVIDIA DLSS 4 Preset K";
 	upscaleModes.push_back(dlssLabel);
 
 	// Determine available modes
@@ -639,8 +639,10 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	CheckResources(upscaleMethod);
 
 	// The game defaults this to a non-zero value
-	auto fDRClampOffset = RE::GetINISetting("fDRClampOffset:Display");
-	fDRClampOffset->data.f = 0.0f;
+	if (!globals::game::isVR) {
+		auto fDRClampOffset = RE::GetINISetting("fDRClampOffset:Display");
+		fDRClampOffset->data.f = 0.0f;
+	}
 
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
@@ -1333,7 +1335,7 @@ void Upscaling::Upscale()
 		state->BeginPerfEvent("Upscaling");
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), sl::DLSSPreset::eDefault);
+			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), sl::DLSSPreset::ePresetK);
 		else {
 			// Copy input color texture to shared D3D12 resource (only dynamic resolution area)
 			auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
