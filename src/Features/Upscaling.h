@@ -164,7 +164,7 @@ public:
 	static inline FidelityFX fidelityFX;
 	static inline class DX12SwapChain dx12SwapChain;
 
-	winrt::com_ptr<ID3D11ComputeShader> copyDepthToSharedBufferCS;
+	winrt::com_ptr<ID3D11PixelShader> copyDepthToSharedBufferPS;
 
 	void CreateFrameGenerationResources();
 	void CopyHUDLessBuffer();

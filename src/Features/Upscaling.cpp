@@ -902,8 +902,8 @@ void Upscaling::CreateSharedD3D12Resources(UpscaleMethod a_upscalemethod)
 	}
 
 	// Shader for copying depth - only needed if we have frame generation or shared resources
-	if ((needsSharedResources || needsFrameGenResources) && !copyDepthToSharedBufferCS) {
-		copyDepthToSharedBufferCS.attach((ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\Upscaling\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0"));
+	if ((needsSharedResources || needsFrameGenResources) && !copyDepthToSharedBufferPS) {
+		copyDepthToSharedBufferPS.attach((ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\Upscaling\\CopyDepthToSharedBufferPS.hlsl", { { "PSHADER", "" } }, "ps_5_0"));
 	}
 }
 
@@ -952,7 +952,7 @@ void Upscaling::DestroySharedD3D12Resources(UpscaleMethod a_upscalemethod)
 		}
 		
 		// Clean up shader only when no longer needed by either upscaling or frame generation
-		copyDepthToSharedBufferCS = nullptr;  // com_ptr automatically releases
+		copyDepthToSharedBufferPS = nullptr;  // com_ptr automatically releases
 	}
 }
 
@@ -973,7 +973,7 @@ void Upscaling::CreateFrameGenerationResources()
 	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	HUDLessBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
 
-	copyDepthToSharedBufferCS.attach((ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\FrameGeneration\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0"));
+	copyDepthToSharedBufferPS.attach((ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\FrameGeneration\\CopyDepthToSharedBufferPS.hlsl", { { "PSHADER", "" } }, "ps_5_0"));
 }
 
 void Upscaling::CopyHUDLessBuffer()
@@ -1039,27 +1039,49 @@ void Upscaling::CopySharedD3D12Resources(bool a_upscale)
 		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
 		{
-			auto dispatchCount = Util::GetScreenDispatchCount(true);
+			auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
+			D3D11_VIEWPORT viewport = {};
+			viewport.TopLeftX = 0.0f;
+			viewport.TopLeftY = 0.0f;
+			viewport.Width = renderSize.x;
+			viewport.Height = renderSize.y;
+			viewport.MinDepth = 0.0f;
+			viewport.MaxDepth = 1.0f;
+			context->RSSetViewports(1, &viewport);
 
+			// Set up Input Assembler for fullscreen triangle
+			context->IASetInputLayout(nullptr);
+			context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
+			context->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
+			context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+			// Set up vertex shader
+			context->VSSetShader(GetUpscaleVS(), nullptr, 0);
+
+			// Set up rasterizer and blend states
+			context->RSSetState(upscaleRasterizerState.get());
+			context->OMSetBlendState(upscaleBlendState.get(), nullptr, 0xffffffff);
+
+			// Set up pixel shader resources
 			ID3D11ShaderResourceView* views[1] = { depth.depthSRV };
-			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+			context->PSSetShaderResources(0, ARRAYSIZE(views), views);
 
-			ID3D11UnorderedAccessView* uavs[1] = { depthBufferShared12->uav };
-			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+			// Set render target view for pixel shader output
+			ID3D11RenderTargetView* rtvs[1] = { depthBufferShared12->rtv };
+			context->OMSetRenderTargets(ARRAYSIZE(rtvs), rtvs, nullptr);
 
-			context->CSSetShader(copyDepthToSharedBufferCS.get(), nullptr, 0);
+			context->PSSetShader(copyDepthToSharedBufferPS.get(), nullptr, 0);
 
-			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+			context->Draw(3, 0);
 		}
 
+		// Clean up
 		ID3D11ShaderResourceView* views[1] = { nullptr };
-		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+		context->PSSetShaderResources(0, ARRAYSIZE(views), views);
 
-		ID3D11UnorderedAccessView* uavs[1] = { nullptr };
-		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
-
-		ID3D11ComputeShader* shader = nullptr;
-		context->CSSetShader(shader, nullptr, 0);
+		context->OMSetRenderTargets(0, nullptr, nullptr);
+		context->PSSetShader(nullptr, nullptr, 0);
+		context->VSSetShader(nullptr, nullptr, 0);
 	}
 
 	globals::state->EndPerfEvent();
