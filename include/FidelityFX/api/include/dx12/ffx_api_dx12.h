@@ -1,7 +1,7 @@
 // This file is part of the FidelityFX SDK.
 //
 // Copyright (C) 2025 Advanced Micro Devices, Inc.
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -88,7 +88,7 @@ static inline uint32_t ffxApiGetSurfaceFormatDX12(DXGI_FORMAT format)
     case DXGI_FORMAT_R10G10B10A2_UNORM:
         return FFX_API_SURFACE_FORMAT_R10G10B10A2_UNORM;
     //case DXGI_FORMAT_R10G10B10A2_UINT:
-    
+
     case DXGI_FORMAT_R11G11B10_FLOAT:
         return FFX_API_SURFACE_FORMAT_R11G11B10_FLOAT;
 
@@ -117,7 +117,7 @@ static inline uint32_t ffxApiGetSurfaceFormatDX12(DXGI_FORMAT format)
     case DXGI_FORMAT_R16G16_UINT:
         return FFX_API_SURFACE_FORMAT_R16G16_UINT;
     //case DXGI_FORMAT_R16G16_SNORM
-    //case DXGI_FORMAT_R16G16_SINT 
+    //case DXGI_FORMAT_R16G16_SINT
 
     //case DXGI_FORMAT_R32_SINT:
     case DXGI_FORMAT_R32_UINT:
@@ -204,7 +204,7 @@ static inline FfxApiResource ffxApiGetResourceDX12(ID3D12Resource* pRes, uint32_
 
         if (desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS)
             res.description.usage |= FFX_API_RESOURCE_USAGE_UAV;
-        
+
         res.description.width = static_cast<uint32_t>(desc.Width);
         res.description.height = static_cast<uint32_t>(desc.Height);
         res.description.depth = static_cast<uint32_t>(desc.DepthOrArraySize);

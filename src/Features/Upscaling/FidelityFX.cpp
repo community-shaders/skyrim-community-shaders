@@ -44,14 +44,14 @@ void FidelityFX::LoadFFX()
 		} else {
 			logger::warn("[FidelityFX] Upscaler DLL not found - FSR3 upscaling disabled");
 		}
-		
+
 		if (featureFSR3FG) {
 			logger::info("[FidelityFX] Frame generation DLL found and available");
 		} else {
 			logger::warn("[FidelityFX] Frame generation DLL not found - FSR3 frame generation disabled");
 		}
 	} else {
-		logger::error("[FidelityFX] Failed to load {} from plugin directory", 
+		logger::error("[FidelityFX] Failed to load {} from plugin directory",
 			stl::utf16_to_utf8(loaderDllName).value_or("loader DLL"));
 	}
 }
@@ -119,7 +119,7 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 	}
 
 	if (a_useFrameGeneration) {
-	 	auto commandList = swapChain.commandLists[swapChain.frameIndex].get();
+		auto commandList = swapChain.commandLists[swapChain.frameIndex].get();
 
 		auto depth = upscaling.depthBufferShared12->resource.get();
 		auto motionVectors = upscaling.motionVectorBufferShared12->resource.get();
@@ -199,8 +199,7 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		logger::critical("[FidelityFX] Failed to configure UI composition!");
 	}
 
-	if (a_useFrameGeneration)
-	{
+	if (a_useFrameGeneration) {
 		auto HUDLessColor = upscaling.HUDLessBufferShared12->resource.get();
 
 		ffx::DispatchDescFrameGeneration dispatchFg{};
@@ -265,7 +264,7 @@ void FidelityFX::CreateFSRResources()
 
 	if (ffx::CreateContext(upscalingContext, nullptr, createUpscaling, backendDesc) != ffx::ReturnCode::Ok)
 		logger::critical("[FidelityFX] Failed to create FSR3 API context");
-		
+
 	// Query version information after context creation
 	QueryVersion();
 }
@@ -352,7 +351,7 @@ void FidelityFX::Upscale(
 void FidelityFX::QueryVersion()
 {
 	auto& upscaling = globals::features::upscaling;
-	
+
 	// Clear existing version info
 	versionInfo.clear();
 
@@ -361,24 +360,24 @@ void FidelityFX::QueryVersion()
 		ffxQueryDescGetVersions upscalerQuery{};
 		upscalerQuery.header.type = FFX_API_QUERY_DESC_TYPE_GET_VERSIONS;
 		upscalerQuery.header.pNext = nullptr;
-		
+
 		ffx::CreateContextDescUpscale dummyUpscaler{};
 		upscalerQuery.createDescType = dummyUpscaler.header.type;
 		upscalerQuery.device = upscaling.sharedD3D12Device.get();
-		
+
 		uint64_t upscalerCount = 0;
 		upscalerQuery.outputCount = &upscalerCount;
 		upscalerQuery.versionIds = nullptr;
 		upscalerQuery.versionNames = nullptr;
-		
+
 		if (ffxModule.Query(nullptr, &upscalerQuery.header) == (ffxReturnCode_t)ffx::ReturnCode::Ok && upscalerCount > 0) {
 			// Allocate arrays for version info
 			std::vector<uint64_t> upscalerIds(upscalerCount);
 			std::vector<const char*> upscalerNames(upscalerCount);
-			
+
 			upscalerQuery.versionIds = upscalerIds.data();
 			upscalerQuery.versionNames = upscalerNames.data();
-			
+
 			// Second query to get actual data
 			if (ffxModule.Query(nullptr, &upscalerQuery.header) == (ffxReturnCode_t)ffx::ReturnCode::Ok) {
 				if (upscalerCount > 0 && upscalerNames[0]) {

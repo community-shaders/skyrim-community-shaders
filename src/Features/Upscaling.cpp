@@ -158,19 +158,19 @@ void Upscaling::DrawSettings()
 {
 	// Display upscaling options in the UI - build labels with version info
 	std::vector<std::string> upscaleModes = { "None", "TAA" };
-	
+
 	std::string fsrLabel = "AMD FSR";
 	if (!fidelityFX.versionInfo.empty()) {
 		fsrLabel += " " + fidelityFX.versionInfo;
 	}
 	upscaleModes.push_back(fsrLabel);
-	
+
 	std::string xessLabel = "Intel XeSS";
 	if (!xess.versionInfo.empty()) {
 		xessLabel += " " + xess.versionInfo;
 	}
 	upscaleModes.push_back(xessLabel);
-	
+
 	std::string dlssLabel = "NVIDIA DLSS 4 Preset K";
 	upscaleModes.push_back(dlssLabel);
 
