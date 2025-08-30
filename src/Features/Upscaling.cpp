@@ -485,9 +485,9 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 
 	bool frameGenModeChanged = (settings.frameGenerationMode && d3d12Interop) != previousFrameGenMode;
 	bool upscaleModeChanged = (previousUpscaleMode != a_upscalemethod);
-	
+
 	if (upscaleModeChanged || frameGenModeChanged) {
-		logger::debug("[Upscaling] Resource change detected - Upscale: {} -> {}, FrameGen: {} -> {}", 
+		logger::debug("[Upscaling] Resource change detected - Upscale: {} -> {}, FrameGen: {} -> {}",
 			(int)previousUpscaleMode, (int)a_upscalemethod, previousFrameGenMode, (settings.frameGenerationMode && d3d12Interop));
 
 		// Synchronise all pending GPU work before destroying contexts
@@ -850,7 +850,7 @@ void Upscaling::CreateSharedD3D12Resources(UpscaleMethod a_upscalemethod)
 	// Only create resources if they're actually needed
 	bool needsSharedResources = (a_upscalemethod == UpscaleMethod::kFSR || a_upscalemethod == UpscaleMethod::kXESS);
 	bool needsFrameGenResources = (settings.frameGenerationMode && d3d12Interop);
-	
+
 	if (!needsSharedResources && !needsFrameGenResources) {
 		return;
 	}
@@ -914,7 +914,7 @@ void Upscaling::DestroySharedD3D12Resources(UpscaleMethod a_upscalemethod)
 	// Determine what resources are still needed
 	bool stillNeedsSharedResources = (a_upscalemethod == UpscaleMethod::kFSR || a_upscalemethod == UpscaleMethod::kXESS);
 	bool stillNeedsFrameGenResources = (settings.frameGenerationMode && d3d12Interop);
-	
+
 	// Clean up resources that are no longer needed
 
 	// Input/output color buffers and reactive mask are only needed for FSR/XeSS
@@ -950,7 +950,7 @@ void Upscaling::DestroySharedD3D12Resources(UpscaleMethod a_upscalemethod)
 			delete motionVectorBufferShared12;
 			motionVectorBufferShared12 = nullptr;
 		}
-		
+
 		// Clean up shader only when no longer needed by either upscaling or frame generation
 		copyDepthToSharedBufferCS = nullptr;  // com_ptr automatically releases
 	}
