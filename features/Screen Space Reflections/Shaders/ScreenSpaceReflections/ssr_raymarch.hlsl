@@ -48,20 +48,14 @@ cbuffer SSRCB : register(b1)
 {
     uint MaxSteps;
     uint MaxMips;
+    uint UseDynamicCubemapsAsFallback;
+    uint ReuseRay;
     float Thickness;
-    float SpatialRadius;
     float NormalBias;
-    float TemporalScale;
-    float TemporalWeight;
-    float BilateralRadius;
-    float ColorWeight;
-    float DepthWeight;
-    float NormalWeight;
     float BRDFBias;
     float HistoryWeight;
     float OcclusionStrength;
-    uint UseDynamicCubemapsAsFallback;
-    uint ReuseRay;
+    float3 pad;
 };
 
 #define HIZ_MAX_ITERATIONS MaxSteps

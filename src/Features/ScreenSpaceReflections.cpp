@@ -19,16 +19,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     Thickness,
     NormalBias,
     BRDFBias,
-    SpatialTimes,
-    SpatialRadius,
-    EnableTemporal,
-    TemporalScale,
-    TemporalWeight,
-    EnableBilateral,
-    BilateralScale,
-    BilateralColorWeight,
-    BilateralDepthWeight,
-    BilateralNormalWeight,
     UseDynamicCubemapsAsFallback,
     DiffuseSPP,
     EnableDiffuse,
@@ -70,23 +60,6 @@ void ScreenSpaceReflections::DrawSettings()
     ImGui::SliderFloat("BRDF Bias", &settings.BRDFBias, 0.0f, 1.0f, "%.2f");
     if (auto _tt = Util::HoverTooltipWrapper())
         ImGui::Text("Specular only. Higher BRDF bias reduces noise but makes reflections more glossy.");
-    /*
-    ImGui::SliderInt("Spatial Times", &settings.SpatialTimes, 0, 2, "%d", ImGuiSliderFlags_AlwaysClamp);
-    ImGui::SliderFloat("Spatial Radius", &settings.SpatialRadius, 0.0f, 5.0f, "%.2f");
-    ImGui::Checkbox("Enable Temporal Filtering", &settings.EnableTemporal);
-    if (settings.EnableTemporal) {
-        ImGui::SliderFloat("Temporal Scale", &settings.TemporalScale, 0.0f, 8.0f, "%.2f");
-        ImGui::SliderFloat("Temporal Weight", &settings.TemporalWeight, 0.0f, 0.97f, "%.2f");
-    }
-    ImGui::Checkbox("Enable Bilateral Filtering", &settings.EnableBilateral);
-    if (settings.EnableBilateral) {
-        ImGui::SliderFloat("Bilateral Scale", &settings.BilateralScale, 0.01f, 5.0f, "%.2f");
-        ImGui::SliderFloat("Bilateral Color Weight", &settings.BilateralColorWeight, 0.0f, 1.0f, "%.2f");
-        ImGui::SliderFloat("Bilateral Depth Weight", &settings.BilateralDepthWeight, 0.0f, 1.0f, "%.2f");
-        ImGui::SliderFloat("Bilateral Normal Weight", &settings.BilateralNormalWeight, 0.0f, 1.0f, "%.2f");
-    }
-    */
-    // Hide unfinished filters for now
     ImGui::Checkbox("Use Dynamic Cubemaps as Fallback", &settings.UseDynamicCubemapsAsFallback);
     if (auto _tt = Util::HoverTooltipWrapper())
         ImGui::Text("When ray marching misses, use dynamic cubemaps for reflections. This with diffuse would provide natural ambient lighting.");
@@ -102,10 +75,8 @@ void ScreenSpaceReflections::DrawSettings()
         BUFFER_VIEWER_NODE(texSSRColor, debugRescale)
         BUFFER_VIEWER_NODE(texSSRTDiffuseColor, debugRescale)
         BUFFER_VIEWER_NODE(texHistory, debugRescale)
+        BUFFER_VIEWER_NODE(texHistoryDiffuse, debugRescale)
         BUFFER_VIEWER_NODE(texHitPDF, debugRescale)
-        BUFFER_VIEWER_NODE(texSpatial, debugRescale)
-        BUFFER_VIEWER_NODE(texTemporal, debugRescale)
-        BUFFER_VIEWER_NODE(texBilateral, debugRescale)
         BUFFER_VIEWER_NODE(texOutput, debugRescale)
 
 		ImGui::TreePop();
@@ -173,15 +144,6 @@ void ScreenSpaceReflections::SetupResources()
         texHitPDF = eastl::make_unique<Texture2D>(texDesc);
         texHitPDF->CreateSRV(srvDesc);
         texHitPDF->CreateUAV(uavDesc);
-        texSpatial = eastl::make_unique<Texture2D>(texDesc);
-        texSpatial->CreateSRV(srvDesc);
-        texSpatial->CreateUAV(uavDesc);
-        texTemporal = eastl::make_unique<Texture2D>(texDesc);
-        texTemporal->CreateSRV(srvDesc);
-        texTemporal->CreateUAV(uavDesc);
-        texBilateral = eastl::make_unique<Texture2D>(texDesc);
-        texBilateral->CreateSRV(srvDesc);
-        texBilateral->CreateUAV(uavDesc);
         texHistory = eastl::make_unique<Texture2D>(texDesc);
         texHistory->CreateSRV(srvDesc);
         texHistory->CreateUAV(uavDesc);
@@ -214,6 +176,47 @@ void ScreenSpaceReflections::SetupResources()
 		}
     }
 
+    logger::debug("Creating buffers...");
+	{
+		D3D11_BUFFER_DESC sbDesc{};
+		sbDesc.Usage = D3D11_USAGE_DEFAULT;
+		sbDesc.CPUAccessFlags = 0;
+		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+		srvDesc.Buffer.FirstElement = 0;
+
+		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
+		uavDesc.Format = DXGI_FORMAT_UNKNOWN;
+		uavDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+		uavDesc.Buffer.FirstElement = 0;
+		uavDesc.Buffer.Flags = 0;
+
+        std::uint32_t numEntries = sharcNumEntries;
+
+        // Hash entries buffer - structured buffer with 64-bits entries to store the hashes
+        // Voxel data buffer - structured buffer with 128-bit entries which stores accumulated radiance and sample count. Two instances are used to store current and previous frame data
+
+        sbDesc.StructureByteStride = sizeof(std::uint64_t);
+        sbDesc.ByteWidth = sbDesc.StructureByteStride * numEntries;
+        sharcHashEntries = eastl::make_unique<Buffer>(sbDesc);
+        srvDesc.Buffer.NumElements = numEntries;
+        uavDesc.Buffer.NumElements = numEntries;
+        sharcHashEntries->CreateSRV(srvDesc);
+        sharcHashEntries->CreateUAV(uavDesc);
+
+        sbDesc.StructureByteStride = sizeof(float) * 4;
+        sbDesc.ByteWidth = sbDesc.StructureByteStride * numEntries;
+        sharcVoxelData = eastl::make_unique<Buffer>(sbDesc);
+        srvDesc.Buffer.NumElements = numEntries;
+        uavDesc.Buffer.NumElements = numEntries;
+        sharcVoxelData->CreateSRV(srvDesc);
+        sharcVoxelData->CreateUAV(uavDesc);
+	}
+
     logger::debug("Creating samplers...");
 	{
 		D3D11_SAMPLER_DESC samplerDesc = {
@@ -240,7 +243,7 @@ void ScreenSpaceReflections::SetupResources()
 void ScreenSpaceReflections::ClearShaderCache()
 {
     static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-        &raymarchSpecularCS, &prepareColorCS, &preprocessDepthCS, &spatialCS, &temporalCS, &bilateralCS, &depthDownsampleCS
+        &raymarchSpecularCS, &raymarchDiffuseCS, &prepareColorCS, &preprocessDepthCS, &depthDownsampleCS
     };
 
     for (auto shader : shaderPtrs)
@@ -282,10 +285,6 @@ void ScreenSpaceReflections::CompileComputeShaders()
             { &raymarchSpecularCS, "ssr_raymarch.hlsl", definesSpecular },
             { &prepareColorCS, "ssr_prepare_color.hlsl", {} },
             { &preprocessDepthCS, "ssr_preprocess_depth.hlsl", {} },
-            // { &spdCS, "ssr_spd.hlsl", {} },
-            { &spatialCS, "ssr_spatial_filter.hlsl", {} },
-            { &temporalCS, "ssr_temporal_filter.hlsl", {} },
-            { &bilateralCS, "ssr_bilateral_filter.hlsl", {} },
             { &depthDownsampleCS, "ssr_depth_downsample.hlsl", {} }
         };
 
@@ -312,23 +311,8 @@ void ScreenSpaceReflections::Prepass()
     float2 size = Util::ConvertToDynamic(state->screenSize);
     float2 dispatchCount = { (size.x + 7) / 8, (size.y + 7) / 8 };
 
-    // SPDCB spdCBData;
-    // {
-    //     spdCBData.numMips = maxMips;
-    //     spdCBData.srcDimensions[0] = (uint)size.x;
-    //     spdCBData.srcDimensions[1] = (uint)size.y;
-    //     spdCBData.workGroupOffset[0] = 0;
-    //     spdCBData.workGroupOffset[1] = 0;
-    //     spdCBData.numWorkGroups = 256;
-    //     spdCBData.slice = 0; // unused
-    //     spdCBData._padding = 0; // padding
-    // }
-    // spdCB->Update(spdCBData);
-    // auto spdBuffer = spdCB->CB();
-    // context->CSSetConstantBuffers(2, 1, &spdBuffer);
-
-    std::array<ID3D11ShaderResourceView*, 7> srvs = { nullptr };
-	std::array<ID3D11UnorderedAccessView*, 2> uavs = { nullptr };
+    std::array<ID3D11ShaderResourceView*, 5> srvs = { nullptr };
+	std::array<ID3D11UnorderedAccessView*, 1> uavs = { nullptr };
 
     auto resetViews = [&]() {
 		srvs.fill(nullptr);
@@ -358,29 +342,6 @@ void ScreenSpaceReflections::Prepass()
 
         resetViews();
     }
-
-    // spd
-    // state->BeginPerfEvent("SPD");
-
-    // std::array<ID3D11UnorderedAccessView*, maxMips - 1> uavsSPD = { nullptr };
-    // for (int i = 0; i < maxMips - 1; ++i) {
-    //     uavsSPD.at(i) = depthUAVs[i + 1].get();
-    // }
-    // srvs.at(5) = depthSRVs[0].get();
-
-    // context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-    // context->CSSetUnorderedAccessViews(0, (uint)uavsSPD.size(), uavsSPD.data(), nullptr);
-    // context->CSSetShader(spdCS.get(), nullptr, 0);
-
-    // context->Dispatch((uint)dispatchCount.x >> 2, (uint)dispatchCount.y >> 2, 1);
-
-    // srvs.fill(nullptr);
-    // uavsSPD.fill(nullptr);
-    // context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-    // context->CSSetUnorderedAccessViews(0, (uint)uavsSPD.size(), uavsSPD.data(), nullptr);
-
-    // state->EndPerfEvent();
-    // resetViews();
 
     // downsample depth
     {
@@ -434,14 +395,7 @@ void ScreenSpaceReflections::DrawSSR()
         ssrCBData.MaxSteps = settings.MaxSteps;
         ssrCBData.MaxMips = settings.MaxMips;
         ssrCBData.Thickness = settings.Thickness;
-        ssrCBData.SpatialRadius = settings.SpatialRadius;
         ssrCBData.NormalBias = settings.NormalBias;
-        ssrCBData.TemporalScale = settings.TemporalScale;
-        ssrCBData.TemporalWeight = settings.TemporalWeight;
-        ssrCBData.BilateralScale = settings.BilateralScale;
-        ssrCBData.ColorWeight = settings.BilateralColorWeight;
-        ssrCBData.DepthWeight = settings.BilateralDepthWeight;
-        ssrCBData.NormalWeight = settings.BilateralNormalWeight;
         ssrCBData.BRDFBias = settings.BRDFBias;
         ssrCBData.UseDynamicCubemapsAsFallback = (uint)settings.UseDynamicCubemapsAsFallback && dynamicCubemaps.loaded;
         ssrCBData.HistoryWeight = settings.HistoryWeight;
@@ -524,83 +478,6 @@ void ScreenSpaceReflections::DrawSSR()
 
     resetViews();
 
-    // spartial filter
-    for(int i = 0; i < settings.SpatialTimes; ++i) {
-        state->BeginPerfEvent("Spatial Filter");
-        if ((i & 1) == 0) {
-            uavs.at(0) = texSpatial->uav.get();
-
-            srvs.at(0) = texSSRColor->srv.get();
-            srvs.at(1) = texHitPDF->srv.get();
-            srvs.at(2) = normal.SRV;
-            srvs.at(5) = texDepth->srv.get();
-            srvs.at(6) = noiseSRV.get();
-        } else {
-            uavs.at(0) = texSSRColor->uav.get();
-
-            srvs.at(0) = texSpatial->srv.get();
-            srvs.at(1) = texHitPDF->srv.get();
-            srvs.at(2) = normal.SRV;
-            srvs.at(5) = texDepth->srv.get();
-            srvs.at(6) = noiseSRV.get();
-        }
-        context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-        context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-        context->CSSetShader(spatialCS.get(), nullptr, 0);
-        context->CSSetConstantBuffers(1, 1, &buffer);
-
-        context->Dispatch((uint)dispatchCount.x >> 1, (uint)dispatchCount.y >> 1, 1);
-        if ((i & 1) == 0) {
-            context->CopyResource(texSSRColor->resource.get(), texSpatial->resource.get());
-        } else {
-            context->CopyResource(texSpatial->resource.get(), texSSRColor->resource.get());
-        }
-        resetViews();
-        state->EndPerfEvent();
-    }
-
-    // temporal filter
-    if (settings.EnableTemporal) {
-        state->BeginPerfEvent("Temporal Filter");
-        uavs.at(0) = texTemporal->uav.get();
-        srvs.at(0) = texSSRColor->srv.get();
-        srvs.at(1) = motion.SRV;
-        srvs.at(4) = texHistory->srv.get();
-        srvs.at(5) = texDepth->srv.get();
-        srvs.at(6) = texHitPDF->srv.get();
-
-        context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-        context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-        context->CSSetShader(temporalCS.get(), nullptr, 0);
-        context->CSSetConstantBuffers(1, 1, &buffer);
-
-        context->Dispatch((uint)dispatchCount.x >> 1, (uint)dispatchCount.y >> 1, 1);
-        context->CopyResource(texSSRColor->resource.get(), texTemporal->resource.get());
-        
-        resetViews();
-        state->EndPerfEvent();
-    }
-
-    // bilateral filter
-    if (settings.EnableBilateral) {
-        state->BeginPerfEvent("Bilateral Filter");
-        uavs.at(0) = texBilateral->uav.get();
-        srvs.at(0) = texSSRColor->srv.get();
-        srvs.at(2) = normal.SRV;
-        srvs.at(4) = depth.depthSRV;
-
-        context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-        context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-        context->CSSetShader(bilateralCS.get(), nullptr, 0);
-        context->CSSetConstantBuffers(1, 1, &buffer);
-
-        context->Dispatch((uint)dispatchCount.x >> 1, (uint)dispatchCount.y >> 1, 1);
-        context->CopyResource(texSSRColor->resource.get(), texBilateral->resource.get());
-        resetViews();
-        state->EndPerfEvent();
-    }
-    resetViews();
-
     // output
     context->CopyResource(texOutput->resource.get(), texSSRColor->resource.get());
     context->CopyResource(texHistory->resource.get(), texSSRColor->resource.get());
@@ -639,14 +516,7 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
         ssrCBData.MaxSteps = settings.MaxSteps;
         ssrCBData.MaxMips = settings.MaxMips;
         ssrCBData.Thickness = settings.Thickness;
-        ssrCBData.SpatialRadius = settings.SpatialRadius;
         ssrCBData.NormalBias = settings.NormalBias;
-        ssrCBData.TemporalScale = settings.TemporalScale;
-        ssrCBData.TemporalWeight = settings.TemporalWeight;
-        ssrCBData.BilateralScale = settings.BilateralScale;
-        ssrCBData.ColorWeight = settings.BilateralColorWeight;
-        ssrCBData.DepthWeight = settings.BilateralDepthWeight;
-        ssrCBData.NormalWeight = settings.BilateralNormalWeight;
         ssrCBData.BRDFBias = settings.BRDFBias;
         ssrCBData.UseDynamicCubemapsAsFallback = (uint)settings.UseDynamicCubemapsAsFallback && dynamicCubemaps.loaded;
         ssrCBData.HistoryWeight = settings.HistoryWeight;
