@@ -1,7 +1,7 @@
 // This file is part of the FidelityFX SDK.
 //
 // Copyright (C) 2025 Advanced Micro Devices, Inc.
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -53,7 +53,7 @@ enum FfxApiCreateContextUpscaleFlags
 
 enum FfxApiDispatchFsrUpscaleFlags
 {
-    FFX_UPSCALE_FLAG_DRAW_DEBUG_VIEW                    = (1 << 0),  ///< A bit indicating that the output resource will contain debug views with relevant information.   
+    FFX_UPSCALE_FLAG_DRAW_DEBUG_VIEW                    = (1 << 0),  ///< A bit indicating that the output resource will contain debug views with relevant information.
     FFX_UPSCALE_FLAG_NON_LINEAR_COLOR_SRGB              = (1 << 1),  ///< A bit indicating that the input color resource contains perceptual sRGB colors
     FFX_UPSCALE_FLAG_NON_LINEAR_COLOR_PQ                = (1 << 2),  ///< A bit indicating that the input color resource contains perceptual PQ colors
 };

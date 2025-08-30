@@ -7,8 +7,8 @@
 
 #include <FidelityFX/api/include/ffx_api.hpp>
 #include <FidelityFX/api/include/ffx_api_loader.h>
-#include <FidelityFX/framegeneration/include/ffx_framegeneration.hpp>
 #include <FidelityFX/framegeneration/include/dx12/ffx_api_framegeneration_dx12.hpp>
+#include <FidelityFX/framegeneration/include/ffx_framegeneration.hpp>
 #include <FidelityFX/upscalers/include/ffx_upscale.hpp>
 
 #include "../../Buffer.h"
@@ -18,7 +18,6 @@ class FidelityFX
 {
 public:
 	static constexpr const wchar_t* PluginDir = L"Data\\Shaders\\Upscaling\\FidelityFX";
-
 
 	HMODULE module = nullptr;
 

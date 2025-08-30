@@ -1,7 +1,7 @@
 // This file is part of the FidelityFX SDK.
 //
 // Copyright (C) 2025 Advanced Micro Devices, Inc.
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -25,7 +25,7 @@
 
 /*
 Tuning varianceFactor and safetyMarginInMs Tips:
-Calculation of frame pacing algorithm's next target timestamp: 
+Calculation of frame pacing algorithm's next target timestamp:
 target frametime delta = average Frametime - (variance * varianceFactor) - safetyMarginInMs
 
 Default Tuning uses safetyMarginInMs==0.1ms and varianceFactor==0.1.
@@ -33,9 +33,9 @@ Say Tuning set A uses safetyMarginInMs==0.75ms, and varianceFactor==0.1.
 Say Tuning Set B uses safetyMarginInMs==0.01ms and varianceFactor==0.3.
 
 Example #1 - Actual Game Cutscene. Game's framerate after FG ON during camera pan from normal (19ms avg frametime) to complex (37ms avg frametime over 1 sec) and back to normal scene complexity (19ms avg frametime).
-After the panning is done, 
+After the panning is done,
 - Default Tuning now gets stuck at targeting ~33ms after panning to a complex scene. GPU utilization significantly lower in this case.
-- Tuning Set B and Tuning Set A are able to recover close to ~19ms because of these 2 tuning result in lower "target frametime delta" than Default Tuning. 
+- Tuning Set B and Tuning Set A are able to recover close to ~19ms because of these 2 tuning result in lower "target frametime delta" than Default Tuning.
 
 However, larger varianceFactor or safetyMarginInMs results in higher variance. As seen in Example #2 bellow.
 

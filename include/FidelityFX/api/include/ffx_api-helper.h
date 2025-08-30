@@ -1,7 +1,7 @@
 // This file is part of the FidelityFX SDK.
 //
 // Copyright (C) 2025 Advanced Micro Devices, Inc.
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -173,7 +173,7 @@ ffxReturnCode_t ffxQueryFallback(ffxContext* context, ffxQueryDescHeader* header
                 retCode = FFX_API_RETURN_OK;
             }
             // on a older driver or effect DLL that doesn't support this new query DESTYPE, fill in default output.
-#if defined(FFX_UPSCALER)            
+#if defined(FFX_UPSCALER)
             else if (header->type == FFX_API_QUERY_DESC_TYPE_UPSCALE_GET_RESOURCE_REQUIREMENTS)
             {
                 auto desc = reinterpret_cast<ffxQueryDescUpscaleGetResourceRequirements*>(header);
