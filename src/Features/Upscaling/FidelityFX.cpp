@@ -327,7 +327,7 @@ void FidelityFX::Upscale(
 	dispatchUpscale.enableSharpening = true;
 	dispatchUpscale.sharpness = 0.0f;
 
-	dispatchUpscale.frameTimeDelta = static_cast<float>(*globals::game::deltaTime * 1000.f);
+	dispatchUpscale.frameTimeDelta = static_cast<float>(RE::GetSecondsSinceLastFrame() * 1000.f);
 
 	dispatchUpscale.preExposure = 1.0f;
 	dispatchUpscale.renderSize.width = a_renderWidth;

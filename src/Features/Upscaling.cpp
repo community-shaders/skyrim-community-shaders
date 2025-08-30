@@ -15,6 +15,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Upscaling::Settings,
 	upscaleMethod,
 	upscaleMethodNoDLSS,
+	qualityMode,
 	frameLimitMode,
 	frameGenerationMode,
 	frameGenerationForceEnable,
@@ -1282,11 +1283,10 @@ void Upscaling::Upscale()
 		state->BeginPerfEvent("Encode Upscaling Textures");
 
 		auto& temporalAAMask = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kTEMPORAL_AA_MASK];
-		auto& depthPreWater = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
-		auto& depthPostWater = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+		auto& normals = renderer->GetRuntimeData().renderTargets[globals::deferred->forwardRenderTargets[2]];
 
 		{
-			ID3D11ShaderResourceView* views[3] = { temporalAAMask.SRV, depthPreWater.depthSRV, depthPostWater.depthSRV };
+			ID3D11ShaderResourceView* views[2] = { temporalAAMask.SRV, normals.SRV };
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
 			// Use shared D3D12 textures for FSR/XeSS, regular D3D11 textures for DLSS
@@ -1306,7 +1306,7 @@ void Upscaling::Upscale()
 			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 		}
 
-		ID3D11ShaderResourceView* views[3] = { nullptr, nullptr, nullptr };
+		ID3D11ShaderResourceView* views[2] = { nullptr, nullptr };
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
 		ID3D11UnorderedAccessView* uavs[2] = { nullptr, nullptr };
