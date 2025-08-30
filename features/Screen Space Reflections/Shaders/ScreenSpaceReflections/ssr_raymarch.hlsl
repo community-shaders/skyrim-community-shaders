@@ -223,7 +223,7 @@ float3 FFX_SSSR_HierarchicalRaymarch(float3 origin, float3 direction, bool is_mi
 
     _num_iters                     = uint(0);
     while (_num_iters < max_traversal_intersections && current_mip >= most_detailed_mip) {
-        if (any(position.xy > float2(1.0, 1.0)) || any(position.xy < float2(0.0, 0.0))) break;
+        if (any(position.xy > float2(FrameBuffer::DynamicResolutionParams1.x, FrameBuffer::DynamicResolutionParams1.y)) || any(position.xy < float2(0.0, 0.0))) break;
 #ifdef FFX_SSSR_INVERTED_DEPTH_RANGE
         if (position.z < f32(1.0e-6)) break;
 #else
@@ -254,7 +254,7 @@ float FFX_SSSR_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_directi
     occlusion = 1.f;
 
     // Reject hits outside the view frustum
-    if ((hit.x < 0.0f) || (hit.y < 0.0f) || (hit.x > 1.0f) || (hit.y > 1.0f))
+    if ((hit.x < 0.0f) || (hit.y < 0.0f) || (hit.x > FrameBuffer::DynamicResolutionParams1.x) || (hit.y > FrameBuffer::DynamicResolutionParams1.y))
     {
         return 0.0f;
     }
@@ -457,7 +457,7 @@ float LocalBRDF(float3 V, float3 L, float3 N, float roughness) {
     float3 world_space_reflected_direction = mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(view_space_reflected_direction, 0)).xyz;
     float3 world_space_origin = mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(view_space_ray, 1)).xyz;
     float world_ray_length = 0.0;
-    bool valid_ray = all(coords < int2(screen_size)) && all(coords >= int2(0, 0));
+    bool valid_ray = all(coords < int2(screen_size * FrameBuffer::DynamicResolutionParams1.xy)) && all(coords >= int2(0, 0));
     uint hit_counter = 0;
     float3 hit = float3(0.0, 0.0, 0.0);
     float confidence = 0.0;
@@ -465,7 +465,7 @@ float LocalBRDF(float3 V, float3 L, float3 N, float roughness) {
     float3 world_space_ray = float3(0.0, 0.0, 0.0);
 
     float depth = DepthTexture[coords.xy].x;
-    float4 positionWS = float4(2 * float2(uv.x, -uv.y + 1) - 1, depth, 1);
+    float4 positionWS = float4(2 * float2(uv.x * FrameBuffer::DynamicResolutionParams2.x, -uv.y * FrameBuffer::DynamicResolutionParams2.y + 1) - 1, depth, 1);
 	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
 	positionWS.xyz = positionWS.xyz / positionWS.w;
 
