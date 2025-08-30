@@ -28,7 +28,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     HistoryWeight,
     OcclusionStrength,
     ReuseRayDiffuse,
-    ReuseRaySpecular
+    ReuseRaySpecular,
+    EnableSharc
 )
 
 void ScreenSpaceReflections::DrawSettings()
@@ -63,6 +64,9 @@ void ScreenSpaceReflections::DrawSettings()
     ImGui::Checkbox("Use Dynamic Cubemaps as Fallback", &settings.UseDynamicCubemapsAsFallback);
     if (auto _tt = Util::HoverTooltipWrapper())
         ImGui::Text("When ray marching misses, use dynamic cubemaps for reflections. This with diffuse would provide natural ambient lighting.");
+    ImGui::Checkbox("Enable SHARC", &settings.EnableSharc);
+    if (auto _tt = Util::HoverTooltipWrapper())
+        ImGui::Text("(Experimental) Enables Spatially Hashed Radiance Cache (SHARC) to improve diffuse quality. This requires more memory and might impact performance.");
 
     ImGui::SeparatorText("Debug");
 
@@ -208,13 +212,24 @@ void ScreenSpaceReflections::SetupResources()
         sharcHashEntries->CreateSRV(srvDesc);
         sharcHashEntries->CreateUAV(uavDesc);
 
-        sbDesc.StructureByteStride = sizeof(float) * 4;
+        sbDesc.StructureByteStride = sizeof(std::uint32_t);
         sbDesc.ByteWidth = sbDesc.StructureByteStride * numEntries;
+        sharcHashCopyOffsets = eastl::make_unique<Buffer>(sbDesc);
+        srvDesc.Buffer.NumElements = numEntries;
+        uavDesc.Buffer.NumElements = numEntries;
+        sharcHashCopyOffsets->CreateSRV(srvDesc);
+        sharcHashCopyOffsets->CreateUAV(uavDesc);
+
+        sbDesc.StructureByteStride = 4 * sizeof(uint32_t);
+        sbDesc.ByteWidth = numEntries * sizeof(float4);
         sharcVoxelData = eastl::make_unique<Buffer>(sbDesc);
         srvDesc.Buffer.NumElements = numEntries;
         uavDesc.Buffer.NumElements = numEntries;
         sharcVoxelData->CreateSRV(srvDesc);
         sharcVoxelData->CreateUAV(uavDesc);
+        sharcVoxelDataPrev = eastl::make_unique<Buffer>(sbDesc);
+        sharcVoxelDataPrev->CreateSRV(srvDesc);
+        sharcVoxelDataPrev->CreateUAV(uavDesc);
 	}
 
     logger::debug("Creating samplers...");
@@ -243,7 +258,7 @@ void ScreenSpaceReflections::SetupResources()
 void ScreenSpaceReflections::ClearShaderCache()
 {
     static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-        &raymarchSpecularCS, &raymarchDiffuseCS, &prepareColorCS, &preprocessDepthCS, &depthDownsampleCS
+        &raymarchSpecularCS, &raymarchDiffuseCS, &raymarchDiffuseSharcCS, &prepareColorCS, &preprocessDepthCS, &depthDownsampleCS, &sharcResolveCS
     };
 
     for (auto shader : shaderPtrs)
@@ -276,6 +291,12 @@ void ScreenSpaceReflections::CompileComputeShaders()
 
     defines.push_back({ "DIFFUSE_SPP", DiffuseSPPStr.c_str() });
 
+    auto definesSharcUpdate = defines;
+    definesSharcUpdate.push_back({ "SHARC_UPDATE", "1" });
+
+    auto definesSharc = defines;
+    definesSharc.push_back({ "SHARC_RENDER", "1" });
+
     auto definesSpecular = defines;
     definesSpecular.push_back({ "SSSR_SPECULAR", nullptr });
 
@@ -283,9 +304,12 @@ void ScreenSpaceReflections::CompileComputeShaders()
         shaderInfos = {
             { &raymarchDiffuseCS, "ssr_raymarch.hlsl", defines },
             { &raymarchSpecularCS, "ssr_raymarch.hlsl", definesSpecular },
+            { &raymarchDiffuseSharcCS, "ssr_raymarch.hlsl", definesSharc },
+            { &sharcUpdateRaymarchCS, "ssr_raymarch.hlsl", definesSharcUpdate },
             { &prepareColorCS, "ssr_prepare_color.hlsl", {} },
             { &preprocessDepthCS, "ssr_preprocess_depth.hlsl", {} },
-            { &depthDownsampleCS, "ssr_depth_downsample.hlsl", {} }
+            { &depthDownsampleCS, "ssr_depth_downsample.hlsl", {} },
+            { &sharcResolveCS, "sharc_resolve.hlsl", {} }
         };
 
     for (auto& info : shaderInfos) {
@@ -528,7 +552,7 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
     context->CSSetConstantBuffers(1, 1, &buffer);
 
     std::array<ID3D11ShaderResourceView*, 12> srvs = { nullptr };
-	std::array<ID3D11UnorderedAccessView*, 2> uavs = { nullptr };
+	std::array<ID3D11UnorderedAccessView*, 6> uavs = { nullptr };
 
     auto resetViews = [&]() {
 		srvs.fill(nullptr);
@@ -557,6 +581,10 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
 
     uavs.at(0) = texSSRTDiffuseColor->uav.get();
     uavs.at(1) = texHitPDF->uav.get();
+    uavs.at(2) = sharcHashEntries->uav.get();
+    uavs.at(3) = sharcHashCopyOffsets->uav.get();
+    uavs.at(4) = sharcVoxelData->uav.get();
+    uavs.at(5) = sharcVoxelDataPrev->uav.get();
 
     srvs.at(0) = texHistoryDiffuse->srv.get();
     srvs.at(1) = motion.SRV;
@@ -573,8 +601,23 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
 
     context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
     context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-    context->CSSetShader(raymarchDiffuseCS.get(), nullptr, 0);
     context->CSSetConstantBuffers(1, 1, &buffer);
+
+    if (settings.EnableSharc) {
+        state->BeginPerfEvent("SHARC Update");
+        context->CSSetShader(sharcUpdateRaymarchCS.get(), nullptr, 0);
+
+        context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
+        state->EndPerfEvent();
+
+        state->BeginPerfEvent("SHARC Resolve");
+        context->CSSetShader(sharcResolveCS.get(), nullptr, 0);
+
+        context->Dispatch(sharcNumEntries / 256u, 1, 1);
+        state->EndPerfEvent();
+    }
+
+    context->CSSetShader(settings.EnableSharc ? raymarchDiffuseSharcCS.get() : raymarchDiffuseCS.get(), nullptr, 0);
 
     context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
     resetViews();
