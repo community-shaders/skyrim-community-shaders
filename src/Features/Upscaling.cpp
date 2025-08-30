@@ -448,37 +448,19 @@ void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 	// Destroy D3D11 textures for DLSS
 	if (a_upscalemethod == UpscaleMethod::kDLSS) {
 		if (reactiveMaskTexture) {
-			// Properly release COM interfaces before setting to nullptr
-			if (reactiveMaskTexture->srv) {
-				reactiveMaskTexture->srv->Release();
-				reactiveMaskTexture->srv = nullptr;
-			}
-			if (reactiveMaskTexture->uav) {
-				reactiveMaskTexture->uav->Release();
-				reactiveMaskTexture->uav = nullptr;
-			}
-			if (reactiveMaskTexture->resource) {
-				reactiveMaskTexture->resource->Release();
-				reactiveMaskTexture->resource = nullptr;
-			}
+			reactiveMaskTexture->srv = nullptr;
+			reactiveMaskTexture->uav = nullptr;	
+			reactiveMaskTexture->resource = nullptr;
+			
 			delete reactiveMaskTexture;
 			reactiveMaskTexture = nullptr;
 		}
 
 		if (transparencyCompositionMaskTexture) {
-			// Properly release COM interfaces before setting to nullptr
-			if (transparencyCompositionMaskTexture->srv) {
-				transparencyCompositionMaskTexture->srv->Release();
-				transparencyCompositionMaskTexture->srv = nullptr;
-			}
-			if (transparencyCompositionMaskTexture->uav) {
-				transparencyCompositionMaskTexture->uav->Release();
-				transparencyCompositionMaskTexture->uav = nullptr;
-			}
-			if (transparencyCompositionMaskTexture->resource) {
-				transparencyCompositionMaskTexture->resource->Release();
-				transparencyCompositionMaskTexture->resource = nullptr;
-			}
+			transparencyCompositionMaskTexture->srv = nullptr;	
+			transparencyCompositionMaskTexture->uav = nullptr;		
+			transparencyCompositionMaskTexture->resource = nullptr;
+			
 			delete transparencyCompositionMaskTexture;
 			transparencyCompositionMaskTexture = nullptr;
 		}
@@ -778,12 +760,12 @@ void Upscaling::SetupResources()
 
 	// Create shared D3D11/D3D12 fences for synchronization
 	winrt::com_ptr<ID3D11Device5> d3d11Device5;
-	DX::ThrowIfFailed(globals::d3d::device->QueryInterface(IID_PPV_ARGS(&d3d11Device5)));
+	DX::ThrowIfFailed(globals::d3d::device->QueryInterface(IID_PPV_ARGS(d3d11Device5.put())));
 
 	HANDLE sharedFenceHandle;
-	DX::ThrowIfFailed(sharedD3D12Device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&sharedD3D12Fence)));
+	DX::ThrowIfFailed(sharedD3D12Device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(sharedD3D12Fence.put())));
 	DX::ThrowIfFailed(sharedD3D12Device->CreateSharedHandle(sharedD3D12Fence.get(), nullptr, GENERIC_ALL, nullptr, &sharedFenceHandle));
-	DX::ThrowIfFailed(d3d11Device5->OpenSharedFence(sharedFenceHandle, IID_PPV_ARGS(&sharedD3D11Fence)));
+	DX::ThrowIfFailed(d3d11Device5->OpenSharedFence(sharedFenceHandle, IID_PPV_ARGS(sharedD3D11Fence.put())));
 	CloseHandle(sharedFenceHandle);
 }
 
@@ -801,7 +783,7 @@ void Upscaling::ClearShaderCache()
 void Upscaling::CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter)
 {
 	// Create D3D12 device on same adapter
-	DX::ThrowIfFailed(D3D12CreateDevice(a_dxgiAdapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&sharedD3D12Device)));
+	DX::ThrowIfFailed(D3D12CreateDevice(a_dxgiAdapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(sharedD3D12Device.put())));
 
 	// Create command queue
 	D3D12_COMMAND_QUEUE_DESC queueDesc = {};
@@ -810,16 +792,16 @@ void Upscaling::CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter)
 	queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
 	queueDesc.NodeMask = 0;
 
-	DX::ThrowIfFailed(sharedD3D12Device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&sharedD3D12CommandQueue)));
+	DX::ThrowIfFailed(sharedD3D12Device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(sharedD3D12CommandQueue.put())));
 
 	// Create command allocator
-	DX::ThrowIfFailed(sharedD3D12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&sharedD3D12CommandAllocator)));
+	DX::ThrowIfFailed(sharedD3D12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(sharedD3D12CommandAllocator.put())));
 
 	// Create command list
-	DX::ThrowIfFailed(sharedD3D12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, sharedD3D12CommandAllocator.get(), nullptr, IID_PPV_ARGS(&sharedD3D12CommandList)));
+	DX::ThrowIfFailed(sharedD3D12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, sharedD3D12CommandAllocator.get(), nullptr, IID_PPV_ARGS(sharedD3D12CommandList.put())));
 
 	// Create fence for synchronization
-	DX::ThrowIfFailed(sharedD3D12Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&sharedD3D12Fence)));
+	DX::ThrowIfFailed(sharedD3D12Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(sharedD3D12Fence.put())));
 
 	sharedFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 	if (sharedFenceEvent == nullptr) {
@@ -838,7 +820,7 @@ void Upscaling::CreateSharedD3D12Resources(UpscaleMethod a_upscalemethod, bool a
 
 	// Get D3D11 device5 interface for WrappedResource creation
 	winrt::com_ptr<ID3D11Device5> d3d11Device5;
-	DX::ThrowIfFailed(globals::d3d::device->QueryInterface(IID_PPV_ARGS(&d3d11Device5)));
+	DX::ThrowIfFailed(globals::d3d::device->QueryInterface(IID_PPV_ARGS(d3d11Device5.put())));
 
 	auto renderer = globals::game::renderer;
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
@@ -925,7 +907,7 @@ void Upscaling::CreateFrameGenerationResources()
 
 	// Get D3D11 device5 interface for WrappedResource creation
 	winrt::com_ptr<ID3D11Device5> d3d11Device5;
-	DX::ThrowIfFailed(globals::d3d::device->QueryInterface(IID_PPV_ARGS(&d3d11Device5)));
+	DX::ThrowIfFailed(globals::d3d::device->QueryInterface(IID_PPV_ARGS(d3d11Device5.put())));
 
 	auto renderer = globals::game::renderer;
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
@@ -1338,7 +1320,7 @@ void Upscaling::Upscale()
 
 			// Wait for D3D11 to finish
 			winrt::com_ptr<ID3D11DeviceContext4> d3d11Context4;
-			DX::ThrowIfFailed(context->QueryInterface(IID_PPV_ARGS(&d3d11Context4)));
+			DX::ThrowIfFailed(context->QueryInterface(IID_PPV_ARGS(d3d11Context4.put())));
 			DX::ThrowIfFailed(d3d11Context4->Signal(sharedD3D11Fence.get(), sharedInteropFenceValue));
 			DX::ThrowIfFailed(sharedD3D12CommandQueue->Wait(sharedD3D12Fence.get(), sharedInteropFenceValue));
 			sharedInteropFenceValue++;
@@ -1385,8 +1367,6 @@ void Upscaling::Upscale()
 
 			// Copy back to main buffer
 			context->CopyResource(main.texture, outputColorBufferShared12->resource11);
-
-			state->EndPerfEvent();
 		}
 
 		state->EndPerfEvent();

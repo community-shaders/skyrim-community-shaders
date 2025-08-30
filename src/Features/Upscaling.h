@@ -169,7 +169,6 @@ public:
 	void CreateFrameGenerationResources();
 	void CopyHUDLessBuffer();
 	void CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter);
-	void CreateSharedD3D12Resources();
 	void CopyFrameGenerationResources();
 	void CopySharedD3D12Resources(bool a_upscale);
 	void PostDisplay();

@@ -273,6 +273,7 @@ void FidelityFX::DestroyFSRResources()
 {
 	if (ffx::DestroyContext(upscalingContext) != ffx::ReturnCode::Ok)
 		logger::critical("[FidelityFX] Failed to destroy FSR3 API context");
+	upscalingContext = {};
 }
 
 float FidelityFX::GetInputResolutionScale([[maybe_unused]] uint32_t outputWidth, [[maybe_unused]] uint32_t outputHeight, uint32_t qualityMode)
