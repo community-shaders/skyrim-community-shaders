@@ -408,6 +408,8 @@ Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
 
 void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 {
+	logger::debug("[Upscaling] Creating texture resources for method {}", (int)a_upscalemethod);
+
 	auto renderer = globals::game::renderer;
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
@@ -424,7 +426,7 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 	srvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
 
-	// Create D3D11 textures for DLSS
+	// DLSS uses D3D11 textures (not shared D3D12)
 	if (a_upscalemethod == UpscaleMethod::kDLSS) {
 		if (!reactiveMaskTexture) {
 			reactiveMaskTexture = new Texture2D(texDesc);
@@ -439,7 +441,7 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 		}
 	}
 
-	// Create shared D3D12 resources for FSR/XeSS
+	// FSR and XeSS use shared D3D12 resources for interop
 	if (a_upscalemethod == UpscaleMethod::kFSR || a_upscalemethod == UpscaleMethod::kXESS) {
 		CreateSharedD3D12Resources(a_upscalemethod);
 	}
@@ -447,8 +449,11 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 
 void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 {
-	// Destroy D3D11 textures for DLSS
-	if (a_upscalemethod == UpscaleMethod::kDLSS) {
+	logger::debug("[Upscaling] Destroying texture resources for method {}", (int)a_upscalemethod);
+
+	// Clean up D3D11 textures that are no longer needed
+	// Only destroy DLSS textures when switching away from DLSS
+	if (a_upscalemethod != UpscaleMethod::kDLSS) {
 		if (reactiveMaskTexture) {
 			reactiveMaskTexture->srv = nullptr;
 			reactiveMaskTexture->uav = nullptr;
@@ -468,17 +473,23 @@ void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 		}
 	}
 
-	// Destroy shared D3D12 resources for FSR/XeSS
-	if (a_upscalemethod == UpscaleMethod::kFSR || a_upscalemethod == UpscaleMethod::kXESS) {
-		DestroySharedD3D12Resources(a_upscalemethod);
-	}
+	// Always attempt to clean up shared D3D12 resources - the function will intelligently
+	// preserve resources still needed by frame generation
+	DestroySharedD3D12Resources(a_upscalemethod);
 }
 
 void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 {
 	static auto previousUpscaleMode = UpscaleMethod::kTAA;
+	static bool previousFrameGenMode = false;
 
-	if (previousUpscaleMode != a_upscalemethod) {
+	bool frameGenModeChanged = (settings.frameGenerationMode && d3d12Interop) != previousFrameGenMode;
+	bool upscaleModeChanged = (previousUpscaleMode != a_upscalemethod);
+	
+	if (upscaleModeChanged || frameGenModeChanged) {
+		logger::debug("[Upscaling] Resource change detected - Upscale: {} -> {}, FrameGen: {} -> {}", 
+			(int)previousUpscaleMode, (int)a_upscalemethod, previousFrameGenMode, (settings.frameGenerationMode && d3d12Interop));
+
 		// Synchronise all pending GPU work before destroying contexts
 		// Otherwise resources will be destroyed whilst in use, causing the device to crash
 		if (previousUpscaleMode == UpscaleMethod::kFSR || previousUpscaleMode == UpscaleMethod::kXESS) {
@@ -490,25 +501,38 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 			}
 		}
 
-		// Destroy previous upscaling method resources
-		DestroyUpscalingTextureResources(previousUpscaleMode);
+		// Destroy previous upscaling method resources (this will intelligently clean up based on what's still needed)
+		if (upscaleModeChanged) {
+			DestroyUpscalingTextureResources(a_upscalemethod);
 
-		if (previousUpscaleMode == UpscaleMethod::kDLSS)
-			streamline.DestroyDLSSResources();
-		else if (previousUpscaleMode == UpscaleMethod::kFSR)
-			fidelityFX.DestroyFSRResources();
-		else if (previousUpscaleMode == UpscaleMethod::kXESS)
-			xess.DestroyXeSSResources();
+			if (previousUpscaleMode == UpscaleMethod::kDLSS)
+				streamline.DestroyDLSSResources();
+			else if (previousUpscaleMode == UpscaleMethod::kFSR)
+				fidelityFX.DestroyFSRResources();
+			else if (previousUpscaleMode == UpscaleMethod::kXESS)
+				xess.DestroyXeSSResources();
+		}
+
+		// Handle frame generation resource changes
+		if (frameGenModeChanged) {
+			// Update shared resources based on new frame generation state
+			if (a_upscalemethod == UpscaleMethod::kFSR || a_upscalemethod == UpscaleMethod::kXESS) {
+				CreateSharedD3D12Resources(a_upscalemethod);  // Will create/update based on current frameGen state
+			}
+		}
 
 		// Create new upscaling method resources
-		CreateUpscalingTextureResources(a_upscalemethod);
+		if (upscaleModeChanged) {
+			CreateUpscalingTextureResources(a_upscalemethod);
 
-		if (a_upscalemethod == UpscaleMethod::kFSR)
-			fidelityFX.CreateFSRResources();
-		else if (a_upscalemethod == UpscaleMethod::kXESS)
-			xess.CreateXeSSResources();
+			if (a_upscalemethod == UpscaleMethod::kFSR)
+				fidelityFX.CreateFSRResources();
+			else if (a_upscalemethod == UpscaleMethod::kXESS)
+				xess.CreateXeSSResources();
+		}
 
 		previousUpscaleMode = a_upscalemethod;
+		previousFrameGenMode = (settings.frameGenerationMode && d3d12Interop);
 	}
 }
 
@@ -705,7 +729,8 @@ void Upscaling::SetupResources()
 	srvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
 
-	// Resource allocation is now handled in CheckResources() based on upscale method
+	// Initial resource allocation will be handled by CheckResources() during first upscaling call
+	// This avoids creating unnecessary resources at startup
 
 	if (d3d12Interop)
 		CreateFrameGenerationResources();
@@ -822,6 +847,14 @@ void Upscaling::CreateSharedD3D12Resources(UpscaleMethod a_upscalemethod)
 {
 	logger::info("[Upscaling] Creating shared D3D12 resources for upscale method {}", (int)a_upscalemethod);
 
+	// Only create resources if they're actually needed
+	bool needsSharedResources = (a_upscalemethod == UpscaleMethod::kFSR || a_upscalemethod == UpscaleMethod::kXESS);
+	bool needsFrameGenResources = (settings.frameGenerationMode && d3d12Interop);
+	
+	if (!needsSharedResources && !needsFrameGenResources) {
+		return;
+	}
+
 	// Get D3D11 device5 interface for WrappedResource creation
 	winrt::com_ptr<ID3D11Device5> d3d11Device5;
 	DX::ThrowIfFailed(globals::d3d::device->QueryInterface(IID_PPV_ARGS(d3d11Device5.put())));
@@ -833,38 +866,43 @@ void Upscaling::CreateSharedD3D12Resources(UpscaleMethod a_upscalemethod)
 	main.texture->GetDesc(&texDesc);
 	texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
-	// Common resources for both FSR and XeSS
-	if (!inputColorBufferShared12) {
-		inputColorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
-	}
-	if (!outputColorBufferShared12) {
-		outputColorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
-	}
+	// FSR and XeSS require input/output color buffers
+	if (needsSharedResources) {
+		if (!inputColorBufferShared12) {
+			inputColorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+		}
+		if (!outputColorBufferShared12) {
+			outputColorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+		}
 
-	texDesc.Format = DXGI_FORMAT_R8_UNORM;
+		// Reactive mask is needed for both FSR and XeSS
+		texDesc.Format = DXGI_FORMAT_R8_UNORM;
+		if (!reactiveMaskShared12) {
+			reactiveMaskShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+		}
 
-	if (!reactiveMaskShared12) {
-		reactiveMaskShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
-	}
-
-	// Transparency mask only for FSR
-	if (a_upscalemethod == UpscaleMethod::kFSR && !transparencyCompositionMaskShared12) {
-		transparencyCompositionMaskShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
-	}
-
-	texDesc.Format = DXGI_FORMAT_R32_FLOAT;
-
-	if (!depthBufferShared12) {
-		depthBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+		// Transparency mask only for FSR
+		if (a_upscalemethod == UpscaleMethod::kFSR && !transparencyCompositionMaskShared12) {
+			transparencyCompositionMaskShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+		}
 	}
 
-	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-	motionVector.texture->GetDesc(&texDesc);
-	if (!motionVectorBufferShared12) {
-		motionVectorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+	// Depth and motion vectors are needed for both upscaling (FSR/XeSS) and frame generation
+	if (needsSharedResources || needsFrameGenResources) {
+		texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+		if (!depthBufferShared12) {
+			depthBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+		}
+
+		auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+		motionVector.texture->GetDesc(&texDesc);
+		if (!motionVectorBufferShared12) {
+			motionVectorBufferShared12 = new WrappedResource(texDesc, d3d11Device5.get(), sharedD3D12Device.get());
+		}
 	}
 
-	if (!copyDepthToSharedBufferCS) {
+	// Shader for copying depth - only needed if we have frame generation or shared resources
+	if ((needsSharedResources || needsFrameGenResources) && !copyDepthToSharedBufferCS) {
 		copyDepthToSharedBufferCS.attach((ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\Upscaling\\CopyDepthToSharedBufferCS.hlsl", {}, "cs_5_0"));
 	}
 }
@@ -873,36 +911,49 @@ void Upscaling::DestroySharedD3D12Resources(UpscaleMethod a_upscalemethod)
 {
 	logger::info("[Upscaling] Destroying shared D3D12 resources for upscale method {}", (int)a_upscalemethod);
 
-	// Delete common resources
-	if (inputColorBufferShared12) {
-		delete inputColorBufferShared12;
-		inputColorBufferShared12 = nullptr;
-	}
-	if (outputColorBufferShared12) {
-		delete outputColorBufferShared12;
-		outputColorBufferShared12 = nullptr;
-	}
-	if (reactiveMaskShared12) {
-		delete reactiveMaskShared12;
-		reactiveMaskShared12 = nullptr;
-	}
-	if (depthBufferShared12) {
-		delete depthBufferShared12;
-		depthBufferShared12 = nullptr;
-	}
-	if (motionVectorBufferShared12) {
-		delete motionVectorBufferShared12;
-		motionVectorBufferShared12 = nullptr;
+	// Determine what resources are still needed
+	bool stillNeedsSharedResources = (a_upscalemethod == UpscaleMethod::kFSR || a_upscalemethod == UpscaleMethod::kXESS);
+	bool stillNeedsFrameGenResources = (settings.frameGenerationMode && d3d12Interop);
+	
+	// Clean up resources that are no longer needed
+
+	// Input/output color buffers and reactive mask are only needed for FSR/XeSS
+	if (!stillNeedsSharedResources) {
+		if (inputColorBufferShared12) {
+			delete inputColorBufferShared12;
+			inputColorBufferShared12 = nullptr;
+		}
+		if (outputColorBufferShared12) {
+			delete outputColorBufferShared12;
+			outputColorBufferShared12 = nullptr;
+		}
+		if (reactiveMaskShared12) {
+			delete reactiveMaskShared12;
+			reactiveMaskShared12 = nullptr;
+		}
 	}
 
-	// Delete transparency mask (FSR-specific)
-	if (transparencyCompositionMaskShared12) {
+	// Transparency mask is FSR-specific
+	if (a_upscalemethod != UpscaleMethod::kFSR && transparencyCompositionMaskShared12) {
 		delete transparencyCompositionMaskShared12;
 		transparencyCompositionMaskShared12 = nullptr;
 	}
 
-	// Delete shader
-	copyDepthToSharedBufferCS = nullptr;  // com_ptr automatically releases
+	// Depth and motion vector buffers are needed for both upscaling and frame generation
+	// Only clean up if neither is active
+	if (!stillNeedsSharedResources && !stillNeedsFrameGenResources) {
+		if (depthBufferShared12) {
+			delete depthBufferShared12;
+			depthBufferShared12 = nullptr;
+		}
+		if (motionVectorBufferShared12) {
+			delete motionVectorBufferShared12;
+			motionVectorBufferShared12 = nullptr;
+		}
+		
+		// Clean up shader only when no longer needed by either upscaling or frame generation
+		copyDepthToSharedBufferCS = nullptr;  // com_ptr automatically releases
+	}
 }
 
 void Upscaling::CreateFrameGenerationResources()
