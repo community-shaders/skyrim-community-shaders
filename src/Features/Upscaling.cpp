@@ -190,19 +190,6 @@ void Upscaling::DrawSettings()
 	// Slider for method selection
 	std::string currentLabel = upscaleModes[(uint)*currentUpscaleMode];
 	ImGui::SliderInt("Method", (int*)currentUpscaleMode, 0, availableModes, currentLabel.c_str());
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text(
-			"TAA:\n"
-			"TAA uses frame history to smooth out jagged edges, reducing flickering and improving image stability.\n"
-			"\n"
-			"AMD FSR:\n"
-			"AMD FidelityFX Super Resolution is an open-source upscaling algorithm compatible with all GPUs.\n"
-			"Intel XeSS:\n"
-			"XeSS or Xe Super Sampling is a novel upscaling technology that enables high performance and high-fidelity visuals. It uses deep learning to synthesize images that are very close to the quality of native high-res rendering. It works by reconstructing subpixel details from neighboring pixels, as well as motion-compensated previous frames. This reconstruction is performed by a neural network trained to deliver high performance and great quality, with up to a 2x performance boost.\n"
-			"\n"
-			"NVIDIA DLSS:\n"
-			"DLSS Super Resolution boosts performance by using AI to output higher-resolution frames from a lower-resolution input. DLSS samples multiple lower-resolution images and uses motion data and feedback from prior frames to construct high-quality images.\n");
-	}
 
 	*currentUpscaleMode = std::min(availableModes, (uint)*currentUpscaleMode);
 
@@ -221,15 +208,15 @@ void Upscaling::DrawSettings()
 				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
 		}
 	} else {
-		ImGui::Text("Upscaling is not currently available for VR.");
+		ImGui::Text("Upscaling from lower resolutions is not currently available for VR");
 	}
 
 	if (!globals::game::isVR) {
 		if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Text("Frame Generation interpolates real frames with generated ones for a smoother experience");
-			ImGui::Text("Uses AMD FSR 3.1 Frame Generation technology");
+			ImGui::Text("Uses AMD FSR Frame Generation technology");
 			if (fidelityFX.featureFSR3FG)
-				ImGui::Text("AMD FSR 3.1 Frame Generation is available.");
+				ImGui::Text("AMD FSR Frame Generation is available.");
 			ImGui::Text("Requires a D3D11 to D3D12 proxy which can create compatibility issues");
 			ImGui::Text("Toggling this setting requires a restart to work correctly");
 
