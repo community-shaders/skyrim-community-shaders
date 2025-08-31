@@ -17,7 +17,8 @@
 #define HASH_GRID_NORMAL_BIT_MASK           ((1u << HASH_GRID_NORMAL_BIT_NUM) - 1)
 #define HASH_GRID_HASH_MAP_BUCKET_SIZE      16
 #define HASH_GRID_HASH_MAP_SEARCH_WINDOW    4
-#define HASH_GRID_INVALID_HASH_KEY          0
+#define HASH_GRID_INVALID_HASH_KEY_LO       0u
+#define HASH_GRID_INVALID_HASH_KEY_HI       0u
 #define HASH_GRID_INVALID_CACHE_INDEX       0xFFFFFFFF
 
 // Tweakable parameters
@@ -38,7 +39,7 @@
 #endif
 
 #define HashGridIndex uint
-#define HashGridKey uint64_t
+#define HashGridKey uint2
 
 struct HashGridParameters
 {
@@ -68,7 +69,52 @@ uint HashGridHashJenkins32(uint a)
 
 uint HashGridHash32(HashGridKey hashKey)
 {
-    return HashGridHashJenkins32(uint((hashKey >> 0) & 0xFFFFFFFF)) ^ HashGridHashJenkins32(uint((hashKey >> 32) & 0xFFFFFFFF));
+    return HashGridHashJenkins32(hashKey.x) ^ HashGridHashJenkins32(hashKey.y);
+}
+
+HashGridKey HashGridPackKey(uint gx, uint gy, uint gz, uint glevel, uint normalBits)
+{
+    const uint xMask = HASH_GRID_POSITION_BIT_MASK; // 17 bits mask
+    const uint lowYBits = 32u - HASH_GRID_POSITION_BIT_NUM; // = 15
+    const uint lowYMask = ((1u << lowYBits) - 1u);         // mask for y low 15 bits
+    // low word:
+    uint lo = (gx & xMask) | ((gy & lowYMask) << (HASH_GRID_POSITION_BIT_NUM * 1)); // <<17
+    // high word:
+    uint gy_high = (gy >> lowYBits) & ((1u << (HASH_GRID_POSITION_BIT_NUM - lowYBits)) - 1u); // remaining 2 bits
+    uint hi = (gy_high) | ((gz & HASH_GRID_POSITION_BIT_MASK) << 2) | ((glevel & HASH_GRID_LEVEL_BIT_MASK) << 19);
+
+#if HASH_GRID_USE_NORMALS
+    hi |= ((normalBits & HASH_GRID_NORMAL_BIT_MASK) << 29);
+#endif
+
+    return uint2(lo, hi);
+}
+
+int4 HashGridUnpackKey_getPositionLevel(const HashGridKey hashKey)
+{
+    const int signBit      = 1 << (HASH_GRID_POSITION_BIT_NUM - 1);
+    const int signMask     = ~((1 << HASH_GRID_POSITION_BIT_NUM) - 1);
+
+    uint lo = hashKey.x;
+    uint hi = hashKey.y;
+
+    int gx = int(lo & HASH_GRID_POSITION_BIT_MASK);
+
+    const uint lowYBits = 32u - HASH_GRID_POSITION_BIT_NUM; // 15
+    uint y_lo = (lo >> (HASH_GRID_POSITION_BIT_NUM * 1)) & ((1u << lowYBits) - 1u); // lo >> 17
+    uint y_hi = hi & ((1u << (HASH_GRID_POSITION_BIT_NUM - lowYBits)) - 1u); // 2 bits
+    int gy = int((y_hi << lowYBits) | y_lo);
+
+    uint gz = (hi >> 2) & HASH_GRID_POSITION_BIT_MASK;
+
+    uint glevel = (hi >> 19) & HASH_GRID_LEVEL_BIT_MASK;
+
+    gx = (gx & signBit) != 0 ? gx | signMask : gx;
+    gy = (gy & signBit) != 0 ? gy | signMask : gy;
+    int gz_signed = int(gz);
+    gz_signed = (gz_signed & signBit) != 0 ? gz_signed | signMask : gz_signed;
+
+    return int4(gx, gy, gz_signed, int(glevel));
 }
 
 uint HashGridGetBaseSlot(const HashGridKey hashKey, uint capacity)
@@ -107,41 +153,28 @@ HashGridKey HashGridComputeSpatialHash(float3 samplePosition, float3 sampleNorma
 {
     uint4 gridPosition = uint4(HashGridCalculatePositionLog(samplePosition, gridParameters));
 
-    HashGridKey hashKey = ((uint64_t(gridPosition.x) & HASH_GRID_POSITION_BIT_MASK) << (HASH_GRID_POSITION_BIT_NUM * 0)) |
-                          ((uint64_t(gridPosition.y) & HASH_GRID_POSITION_BIT_MASK) << (HASH_GRID_POSITION_BIT_NUM * 1)) |
-                          ((uint64_t(gridPosition.z) & HASH_GRID_POSITION_BIT_MASK) << (HASH_GRID_POSITION_BIT_NUM * 2)) |
-                          ((uint64_t(gridPosition.w) & HASH_GRID_LEVEL_BIT_MASK) << (HASH_GRID_POSITION_BIT_NUM * 3));
+    uint gx = gridPosition.x & HASH_GRID_POSITION_BIT_MASK;
+    uint gy = gridPosition.y & HASH_GRID_POSITION_BIT_MASK;
+    uint gz = gridPosition.z & HASH_GRID_POSITION_BIT_MASK;
+    uint glevel = gridPosition.w & HASH_GRID_LEVEL_BIT_MASK;
 
+    uint normalBits = 0;
 #if HASH_GRID_USE_NORMALS
-    uint normalBits =
-        (sampleNormal.x + HASH_GRID_NORMAL_BIAS >= 0 ? 0 : 1) +
-        (sampleNormal.y + HASH_GRID_NORMAL_BIAS >= 0 ? 0 : 2) +
-        (sampleNormal.z + HASH_GRID_NORMAL_BIAS >= 0 ? 0 : 4);
-
-    hashKey |= (uint64_t(normalBits) << (HASH_GRID_POSITION_BIT_NUM * 3 + HASH_GRID_LEVEL_BIT_NUM));
+    normalBits =
+        (sampleNormal.x + HASH_GRID_NORMAL_BIAS >= 0 ? 0u : 1u) +
+        (sampleNormal.y + HASH_GRID_NORMAL_BIAS >= 0 ? 0u : 2u) +
+        (sampleNormal.z + HASH_GRID_NORMAL_BIAS >= 0 ? 0u : 4u);
 #endif // HASH_GRID_USE_NORMALS
 
-    return hashKey;
+    return HashGridPackKey(gx, gy, gz, glevel, normalBits);
 }
 
 float3 HashGridGetPositionFromKey(const HashGridKey hashKey, HashGridParameters gridParameters)
 {
-    const int signBit      = 1 << (HASH_GRID_POSITION_BIT_NUM - 1);
-    const int signMask     = ~((1 << HASH_GRID_POSITION_BIT_NUM) - 1);
-
-    int3 gridPosition;
-    gridPosition.x = int((hashKey >> (HASH_GRID_POSITION_BIT_NUM * 0)) & HASH_GRID_POSITION_BIT_MASK);
-    gridPosition.y = int((hashKey >> (HASH_GRID_POSITION_BIT_NUM * 1)) & HASH_GRID_POSITION_BIT_MASK);
-    gridPosition.z = int((hashKey >> (HASH_GRID_POSITION_BIT_NUM * 2)) & HASH_GRID_POSITION_BIT_MASK);
-
-    // Fix negative coordinates
-    gridPosition.x = (gridPosition.x & signBit) != 0 ? gridPosition.x | signMask : gridPosition.x;
-    gridPosition.y = (gridPosition.y & signBit) != 0 ? gridPosition.y | signMask : gridPosition.y;
-    gridPosition.z = (gridPosition.z & signBit) != 0 ? gridPosition.z | signMask : gridPosition.z;
-
-    uint   gridLevel        = uint((hashKey >> HASH_GRID_POSITION_BIT_NUM * 3) & HASH_GRID_LEVEL_BIT_MASK);
+    int4 gp = HashGridUnpackKey_getPositionLevel(hashKey);
+    uint   gridLevel        = uint(gp.w);
     float  voxelSize        = HashGridGetVoxelSize(gridLevel, gridParameters);
-    float3 samplePosition   = (gridPosition + 0.5f) * voxelSize;
+    float3 samplePosition   = (float3(gp.xyz) + 0.5f) * voxelSize;
 
     return samplePosition;
 }
@@ -150,20 +183,22 @@ struct HashMapData
 {
     uint capacity;
 
-    RW_STRUCTURED_BUFFER(hashEntriesBuffer, uint64_t);
+    RW_STRUCTURED_BUFFER(hashEntriesBuffer, uint2);
 
 #if !HASH_GRID_ENABLE_64_BIT_ATOMICS
     RW_STRUCTURED_BUFFER(lockBuffer, uint);
 #endif // !HASH_GRID_ENABLE_64_BIT_ATOMICS
 };
 
-void HashMapAtomicCompareExchange(in HashMapData hashMapData, in uint dstOffset, in uint64_t compareValue, in uint64_t value, out uint64_t originalValue)
+void HashMapAtomicCompareExchange(in HashMapData hashMapData, in uint dstOffset, in uint2 compareValue, in uint2 value, out uint2 originalValue)
 {
 #if HASH_GRID_ENABLE_64_BIT_ATOMICS
 #if SHARC_ENABLE_GLSL
-    originalValue = InterlockedCompareExchange(BUFFER_AT_OFFSET(hashMapData.hashEntriesBuffer, dstOffset), compareValue, value);
+    originalValue.x = InterlockedCompareExchange(BUFFER_AT_OFFSET(hashMapData.hashEntriesBuffer, dstOffset), compareValue.x, value.x);
+    originalValue.y = InterlockedCompareExchange(BUFFER_AT_OFFSET(hashMapData.hashEntriesBuffer, dstOffset).y, compareValue.y, value.y);
 #else // !SHARC_ENABLE_GLSL
-    InterlockedCompareExchange(BUFFER_AT_OFFSET(hashMapData.hashEntriesBuffer, dstOffset), compareValue, value, originalValue);
+    InterlockedCompareExchange(BUFFER_AT_OFFSET(hashMapData.hashEntriesBuffer, dstOffset).x, compareValue.x, value.x, originalValue.x);
+    InterlockedCompareExchange(BUFFER_AT_OFFSET(hashMapData.hashEntriesBuffer, dstOffset).y, compareValue.y, value.y, originalValue.y);
 #endif // !SHARC_ENABLE_GLSL
 #else // !HASH_GRID_ENABLE_64_BIT_ATOMICS
     // ANY rearangments to the code below lead to device hang if fuse is unlimited
@@ -180,7 +215,7 @@ void HashMapAtomicCompareExchange(in HashMapData hashMapData, in uint dstOffset,
         if (state != cLock)
         {
             originalValue = BUFFER_AT_OFFSET(hashMapData.hashEntriesBuffer, dstOffset);
-            if (originalValue == compareValue)
+            if (originalValue.x == compareValue.x && originalValue.y == compareValue.y)
                 BUFFER_AT_OFFSET(hashMapData.hashEntriesBuffer, dstOffset) = value;
             InterlockedExchange(hashMapData.lockBuffer[dstOffset], state, fuse);
             fuse = fuseLength;
@@ -196,9 +231,9 @@ bool HashMapInsert(in HashMapData hashMapData, const HashGridKey hashKey, out Ha
     for (uint bucketOffset = 0; bucketOffset < HASH_GRID_HASH_MAP_BUCKET_SIZE; ++bucketOffset)
     {
         HashGridKey prevHashGridKey;
-        HashMapAtomicCompareExchange(hashMapData, baseSlot + bucketOffset, HASH_GRID_INVALID_HASH_KEY, hashKey, prevHashGridKey);
+        HashMapAtomicCompareExchange(hashMapData, baseSlot + bucketOffset, uint2(HASH_GRID_INVALID_HASH_KEY_LO, HASH_GRID_INVALID_HASH_KEY_HI), hashKey, prevHashGridKey);
 
-        if (prevHashGridKey == HASH_GRID_INVALID_HASH_KEY || prevHashGridKey == hashKey)
+        if (prevHashGridKey.x == HASH_GRID_INVALID_HASH_KEY_LO && prevHashGridKey.y == HASH_GRID_INVALID_HASH_KEY_HI || prevHashGridKey.x == hashKey.x && prevHashGridKey.y == hashKey.y)
         {
             cacheIndex = baseSlot + bucketOffset;
             return true;
@@ -217,7 +252,7 @@ bool HashMapFind(in HashMapData hashMapData, const HashGridKey hashKey, inout Ha
     {
         HashGridKey storedHashKey = BUFFER_AT_OFFSET(hashMapData.hashEntriesBuffer, baseSlot + bucketOffset);
 
-        if (storedHashKey == hashKey)
+        if (storedHashKey.x == hashKey.x && storedHashKey.y == hashKey.y)
         {
             cacheIndex = baseSlot + bucketOffset;
             return true;
@@ -281,7 +316,7 @@ float3 HashGridDebugOccupancy(uint2 pixelPosition, uint2 screenSize, HashMapData
     if (elementIndex < hashMapData.capacity && ((pixelPosition.x % blockSize) < elementSize && (pixelPosition.y % blockSize) < elementSize))
     {
         HashGridKey storedHashGridKey = BUFFER_AT_OFFSET(hashMapData.hashEntriesBuffer, elementIndex);
-        if (storedHashGridKey != HASH_GRID_INVALID_HASH_KEY)
+        if (storedHashGridKey.x != HASH_GRID_INVALID_HASH_KEY_LO || storedHashGridKey.y != HASH_GRID_INVALID_HASH_KEY_HI)
             return float3(0.0f, 1.0f, 0.0f);
     }
 

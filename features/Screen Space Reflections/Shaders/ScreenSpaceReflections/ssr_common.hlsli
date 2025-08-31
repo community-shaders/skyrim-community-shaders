@@ -1,6 +1,7 @@
 #include "Common/BRDF.hlsli"
 #include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
+#include "Common/Game.hlsli"
 #include "Common/GBuffer.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/Math.hlsli"

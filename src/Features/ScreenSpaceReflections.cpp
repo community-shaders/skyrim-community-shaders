@@ -622,6 +622,10 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
     context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
     resetViews();
 
+    if (settings.EnableSharc) {
+        std::swap(sharcVoxelData, sharcVoxelDataPrev);
+    }
+
     context->CopyResource(texHistoryDiffuse->resource.get(), texSSRTDiffuseColor->resource.get());
 
     state->EndPerfEvent();

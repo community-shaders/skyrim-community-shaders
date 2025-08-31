@@ -16,23 +16,24 @@
 
 #define LINEAR_BLOCK_SIZE 256
 
-RWStructuredBuffer<uint64_t> u_SharcHashEntriesBuffer : register(u2);
+RWStructuredBuffer<uint2> u_SharcHashEntriesBuffer : register(u2);
 RWStructuredBuffer<uint> u_HashCopyOffsetBuffer : register(u3);
 RWStructuredBuffer<uint4> u_SharcVoxelDataBuffer : register(u4);
 RWStructuredBuffer<uint4> u_SharcVoxelDataBufferPrev : register(u5);
 
 [numthreads(LINEAR_BLOCK_SIZE, 1, 1)]
-void sharcResolve(in uint2 did : SV_DispatchThreadID)
+void main(in uint2 did : SV_DispatchThreadID)
 {
     SharcParameters sharcParameters;
 
     sharcParameters.gridParameters.cameraPosition = FrameBuffer::CameraPosAdjust[0].xyz;
-    sharcParameters.gridParameters.sceneScale = GAME_UNIT_TO_CM;
+    sharcParameters.gridParameters.sceneScale = GAME_UNIT_TO_M;
     sharcParameters.gridParameters.logarithmBase = SHARC_GRID_LOGARITHM_BASE;
     sharcParameters.gridParameters.levelBias = SHARC_GRID_LEVEL_BIAS;
 
     sharcParameters.hashMapData.capacity = 0x100000;
     sharcParameters.hashMapData.hashEntriesBuffer = u_SharcHashEntriesBuffer;
+    sharcParameters.hashMapData.lockBuffer = u_HashCopyOffsetBuffer;
 
     sharcParameters.voxelDataBuffer = u_SharcVoxelDataBuffer;
     sharcParameters.voxelDataBufferPrev = u_SharcVoxelDataBufferPrev;

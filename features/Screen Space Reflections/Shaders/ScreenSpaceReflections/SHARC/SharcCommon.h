@@ -111,7 +111,7 @@
 #else
 #define HASH_GRID_ENABLE_64_BIT_ATOMICS 0
 #endif
-#include "HashGridCommon.h"
+#include "ScreenSpaceReflections/sharc/HashGridCommon.h"
 
 struct SharcParameters
 {
@@ -358,20 +358,9 @@ int SharcGetGridDistance2(int3 position)
 
 HashGridKey SharcGetAdjacentLevelHashKey(HashGridKey hashKey, HashGridParameters gridParameters, float3 cameraPositionPrev)
 {
-	const int signBit      = 1 << (HASH_GRID_POSITION_BIT_NUM - 1);
-    const int signMask     = ~((1 << HASH_GRID_POSITION_BIT_NUM) - 1);
-
-    int3 gridPosition;
-    gridPosition.x = int((hashKey >> HASH_GRID_POSITION_BIT_NUM * 0) & HASH_GRID_POSITION_BIT_MASK);
-    gridPosition.y = int((hashKey >> HASH_GRID_POSITION_BIT_NUM * 1) & HASH_GRID_POSITION_BIT_MASK);
-    gridPosition.z = int((hashKey >> HASH_GRID_POSITION_BIT_NUM * 2) & HASH_GRID_POSITION_BIT_MASK);
-
-    // Fix negative coordinates
-    gridPosition.x = ((gridPosition.x & signBit) != 0) ? gridPosition.x | signMask : gridPosition.x;
-    gridPosition.y = ((gridPosition.y & signBit) != 0) ? gridPosition.y | signMask : gridPosition.y;
-    gridPosition.z = ((gridPosition.z & signBit) != 0) ? gridPosition.z | signMask : gridPosition.z;
-
-    int level = int((hashKey >> (HASH_GRID_POSITION_BIT_NUM * 3)) & HASH_GRID_LEVEL_BIT_MASK);
+    int4 gp = HashGridUnpackKey_getPositionLevel(hashKey);
+    int3 gridPosition = gp.xyz;
+    int level = gp.w;
 
     float voxelSize = HashGridGetVoxelSize(level, gridParameters);
     int3 cameraGridPosition = int3(floor((gridParameters.cameraPosition + HASH_GRID_POSITION_OFFSET) / voxelSize));
@@ -393,14 +382,17 @@ HashGridKey SharcGetAdjacentLevelHashKey(HashGridKey hashKey, HashGridParameters
         level = max(level - 1, 1);
     }
 
-    HashGridKey modifiedHashGridKey = ((uint64_t(gridPosition.x) & HASH_GRID_POSITION_BIT_MASK) << (HASH_GRID_POSITION_BIT_NUM * 0))
-        | ((uint64_t(gridPosition.y) & HASH_GRID_POSITION_BIT_MASK) << (HASH_GRID_POSITION_BIT_NUM * 1))
-        | ((uint64_t(gridPosition.z) & HASH_GRID_POSITION_BIT_MASK) << (HASH_GRID_POSITION_BIT_NUM * 2))
-        | ((uint64_t(level) & HASH_GRID_LEVEL_BIT_MASK) << (HASH_GRID_POSITION_BIT_NUM * 3));
+    HashGridKey modifiedHashGridKey;
+    uint gx = gridPosition.x & HASH_GRID_POSITION_BIT_MASK;
+    uint gy = gridPosition.y & HASH_GRID_POSITION_BIT_MASK;
+    uint gz = gridPosition.z & HASH_GRID_POSITION_BIT_MASK;
+    uint glevel = level & HASH_GRID_LEVEL_BIT_MASK;
 
+    uint normalBits = 0;
 #if HASH_GRID_USE_NORMALS
-    modifiedHashGridKey |= hashKey & (uint64_t(HASH_GRID_NORMAL_BIT_MASK) << (HASH_GRID_POSITION_BIT_NUM * 3 + HASH_GRID_LEVEL_BIT_NUM));
+    normalBits = (hashKey.y >> (HASH_GRID_POSITION_BIT_NUM * 3 + HASH_GRID_LEVEL_BIT_NUM - 32)) & HASH_GRID_NORMAL_BIT_MASK;
 #endif // HASH_GRID_USE_NORMALS
+    modifiedHashGridKey = HashGridPackKey(gx, gy, gz, glevel, normalBits);
 
     return modifiedHashGridKey;
 }
@@ -411,7 +403,7 @@ void SharcResolveEntry(uint entryIndex, SharcParameters sharcParameters, SharcRe
         return;
 
     HashGridKey hashKey = BUFFER_AT_OFFSET(sharcParameters.hashMapData.hashEntriesBuffer, entryIndex);
-    if (hashKey == HASH_GRID_INVALID_HASH_KEY)
+    if (hashKey.x == HASH_GRID_INVALID_HASH_KEY_LO && hashKey.y == HASH_GRID_INVALID_HASH_KEY_HI)
         return;
 
     uint4 voxelDataPackedPrev = BUFFER_AT_OFFSET(sharcParameters.voxelDataBufferPrev, entryIndex);
@@ -483,7 +475,7 @@ void SharcResolveEntry(uint entryIndex, SharcParameters sharcParameters, SharcRe
     if (!isValidElement)
     {
         packedData = uint4(0, 0, 0, 0);
-        BUFFER_AT_OFFSET(sharcParameters.hashMapData.hashEntriesBuffer, entryIndex) = HASH_GRID_INVALID_HASH_KEY;
+        BUFFER_AT_OFFSET(sharcParameters.hashMapData.hashEntriesBuffer, entryIndex) = uint2(HASH_GRID_INVALID_HASH_KEY_LO, HASH_GRID_INVALID_HASH_KEY_HI);
     }
 
     {

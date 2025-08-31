@@ -23,6 +23,7 @@
 #include "ScreenSpaceReflections/ssr_common.hlsli"
 
 #if SHARC_UPDATE || SHARC_RENDER
+#   define SHARC_ENABLE_64_BIT_ATOMICS 1
 #   include "ScreenSpaceReflections/sharc/SharcCommon.h"
 #endif
 
@@ -48,7 +49,7 @@ Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t11);
 RWTexture2D<float4> SSRColorOutput : register(u0);
 RWTexture2D<float4> SSRPDFOutput : register(u1);
 
-RWStructuredBuffer<uint64_t> u_SharcHashEntriesBuffer : register(u2);
+RWStructuredBuffer<uint2> u_SharcHashEntriesBuffer : register(u2);
 RWStructuredBuffer<uint> u_HashCopyOffsetBuffer : register(u3);
 RWStructuredBuffer<uint4> u_SharcVoxelDataBuffer : register(u4);
 RWStructuredBuffer<uint4> u_SharcVoxelDataBufferPrev : register(u5);
@@ -499,27 +500,32 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
     SharcParameters sharcParameters;
 
     sharcParameters.gridParameters.cameraPosition = FrameBuffer::CameraPosAdjust[0].xyz;
-    sharcParameters.gridParameters.sceneScale = GAME_UNIT_TO_CM;
+    sharcParameters.gridParameters.sceneScale = GAME_UNIT_TO_M;
     sharcParameters.gridParameters.logarithmBase = SHARC_GRID_LOGARITHM_BASE;
     sharcParameters.gridParameters.levelBias = SHARC_GRID_LEVEL_BIAS;
 
     sharcParameters.hashMapData.capacity = 0x100000;
     sharcParameters.hashMapData.hashEntriesBuffer = u_SharcHashEntriesBuffer;
+#if !SHARC_ENABLE_64_BIT_ATOMICS
+    sharcParameters.hashMapData.lockBuffer = u_HashCopyOffsetBuffer;
+#endif
 
     sharcParameters.voxelDataBuffer = u_SharcVoxelDataBuffer;
     sharcParameters.voxelDataBufferPrev = u_SharcVoxelDataBufferPrev;
 
     SharcHitData hitData;
-    hitData.positionWorld = positionWS.xyz;
+    hitData.positionWorld = positionWS.xyz + FrameBuffer::CameraPosAdjust[0].xyz;
     hitData.normalWorld = world_space_normal;
 
     float3 sharcColor = 0;
 
-    if (valid_ray && SharcGetCachedRadiance(sharcParameters, hitData, sharcColor, false))
+    if (valid_ray && SharcGetCachedRadiance(sharcParameters, hitData, sharcColor, true))
     {
         samples[groupThreadID.x * 8 + groupThreadID.y][sample_id] = float4(sharcColor, 1);
     }
-    else if (valid_ray)
+    else
+#endif
+    if (valid_ray)
     {
         bool valid_hit;
         bool go_through_thin = false;
@@ -616,27 +622,28 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
             SharcParameters sharcParameters;
 
             sharcParameters.gridParameters.cameraPosition = FrameBuffer::CameraPosAdjust[0].xyz;
-            sharcParameters.gridParameters.sceneScale = GAME_UNIT_TO_CM;
+            sharcParameters.gridParameters.sceneScale = GAME_UNIT_TO_M;
             sharcParameters.gridParameters.logarithmBase = SHARC_GRID_LOGARITHM_BASE;
             sharcParameters.gridParameters.levelBias = SHARC_GRID_LEVEL_BIAS;
 
             sharcParameters.hashMapData.capacity = 0x100000;
             sharcParameters.hashMapData.hashEntriesBuffer = u_SharcHashEntriesBuffer;
+#   if !SHARC_ENABLE_64_BIT_ATOMICS
+            sharcParameters.hashMapData.lockBuffer = u_HashCopyOffsetBuffer;
+#   endif
 
             sharcParameters.voxelDataBuffer = u_SharcVoxelDataBuffer;
             sharcParameters.voxelDataBufferPrev = u_SharcVoxelDataBufferPrev;
 
-            SharcResolveParameters resolveParameters;
-            resolveParameters.accumulationFrameNum = 8;
-            resolveParameters.staleFrameNumMax = 16;
-            resolveParameters.cameraPositionPrev = FrameBuffer::CameraPreviousPosAdjust[0].xyz;
-            resolveParameters.enableAntiFireflyFilter = true;
-
             SharcState sharcState;
-            SharcInit(sharcState);
+            for (int i = 0; i < 4; ++i) {
+                sharcState.cacheIndices[i] = 0;
+                sharcState.sampleWeights[i] = 0;
+            }
+            sharcState.pathLength = 0;
 
             SharcHitData hitData;
-            hitData.positionWorld = positionWS.xyz;
+            hitData.positionWorld = positionWS.xyz + FrameBuffer::CameraPosAdjust[0].xyz;
             hitData.normalWorld = world_space_normal;
 
             float random = Random::InterleavedGradientNoise(uv, SharedData::FrameCount);
@@ -688,7 +695,6 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
     SSRColorOutput[coords.xy] = outColor;
     SSRPDFOutput[coords.xy] = outPDF;
 #elif SHARC_UPDATE
-
 #else
 
     if (sample_id == 0) {
