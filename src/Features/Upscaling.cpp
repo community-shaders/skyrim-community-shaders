@@ -82,8 +82,6 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 			shouldProxy = false;
 	}
 
-	shouldProxy = true;
-
 	upscaling.lowRefreshRate = refreshRate < 119;
 	upscaling.isWindowed = pSwapChainDesc->Windowed;
 
@@ -352,7 +350,6 @@ void Upscaling::LoadSettings(json& o_json)
 			iniSettingCollection->ReadSetting(setting);
 		}
 	}
-	settings.frameGenerationMode = 0;
 }
 
 void Upscaling::RestoreDefaultSettings()
@@ -1042,12 +1039,14 @@ void Upscaling::CopySharedD3D12Resources(bool a_upscale)
 		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
 		{
-			auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
+			// Set up viewport for fullscreen rendering
+			auto screenSize = globals::state->screenSize;
+
 			D3D11_VIEWPORT viewport = {};
 			viewport.TopLeftX = 0.0f;
 			viewport.TopLeftY = 0.0f;
-			viewport.Width = renderSize.x;
-			viewport.Height = renderSize.y;
+			viewport.Width = screenSize.x;
+			viewport.Height = screenSize.y;
 			viewport.MinDepth = 0.0f;
 			viewport.MaxDepth = 1.0f;
 			context->RSSetViewports(1, &viewport);

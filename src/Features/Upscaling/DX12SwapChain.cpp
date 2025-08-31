@@ -59,7 +59,7 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
 
-	//fidelityFX.SetupFrameGeneration();
+	fidelityFX.SetupFrameGeneration();
 }
 
 void DX12SwapChain::CreateInterop()
@@ -146,7 +146,7 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 		}
 	}
 
-	//	globals::features::upscaling.fidelityFX.Present(upscaling.settings.frameGenerationMode && !globals::game::ui->GameIsPaused());
+	globals::features::upscaling.fidelityFX.Present(upscaling.settings.frameGenerationMode && !globals::game::ui->GameIsPaused());
 
 	DX::ThrowIfFailed(commandLists[frameIndex]->Close());
 
@@ -392,9 +392,9 @@ HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetLastPresentCount(_Out_ UINT* pL
 
 void DX12SwapChain::SetUIBuffer()
 {
-	//if (!globals::game::ui->GameIsPaused()) {
-	//	auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-	//	data.RTV = uiBufferWrapped->rtv;
-	//	d3d11Context->OMSetRenderTargets(1, &data.RTV, nullptr);
-	//}
+	if (!globals::game::ui->GameIsPaused()) {
+		auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+		data.RTV = uiBufferWrapped->rtv;
+		d3d11Context->OMSetRenderTargets(1, &data.RTV, nullptr);
+	}
 }
