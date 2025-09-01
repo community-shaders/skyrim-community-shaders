@@ -180,7 +180,6 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 			logger::critical("[FidelityFX] Failed to dispatch frame generation!");
 		}
 
-
 		if (ffx::Dispatch(frameGenContext, dispatchParameters) != ffx::ReturnCode::Ok) {
 			logger::critical("[FidelityFX] Failed to dispatch frame generation camera info!");
 		}
