@@ -251,7 +251,7 @@ bool Flowmap::GenerateFlowmap(bool useMips)
 
 				D3D11_TEXTURE2D_DESC d{};
 				tex->GetDesc(&d);
-				if (d.Width != 64 || d.Height != 64 || d.Format != DXGI_FORMAT_B8G8R8A8_UNORM || d.MipLevels != 6) {
+				if (d.Width != 64 || d.Height != 64 || d.Format != DXGI_FORMAT_B8G8R8A8_UNORM || d.MipLevels < 6) {
 					logger::warn("[Unified Water] [Flowmap] Flow texture at {},{} is invalid", x, y);
 					continue;
 				}
