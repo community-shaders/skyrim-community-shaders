@@ -1107,43 +1107,6 @@ namespace Hooks
 		stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately2>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
 		stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately3>(REL::RelocationID(100871, 107667).address() + REL::Relocate(0xEE, 0xED));
 
-		const auto renderPassCacheCtor = REL::VariantID(100720, 107500, 0x1340330);
-		const int32_t passCount = 4194240;
-		const int32_t passCountSE = 4194240 * 16;
-
-		const int32_t passSize = 4194240 * sizeof(RE::BSRenderPass);
-		const int32_t lightsCount = passCount * 16;
-		const int32_t lightsSize = lightsCount * sizeof(void*);
-		const int32_t lastPassIndex = passCount - 1;
-		const int32_t lastPassOffset =
-			(passCount - 1) * sizeof(RE::BSRenderPass);
-		const int32_t lastPassNextOffset =
-			(passCount - 1) * sizeof(RE::BSRenderPass) + offsetof(RE::BSRenderPass, next);
-		PatchMemory(
-			REL::Relocation<std::uintptr_t>(renderPassCacheCtor, 0x76).address(),
-			reinterpret_cast<const uint8_t*>(&lightsSize), 4);
-		PatchMemory(
-			REL::Relocation<std::uintptr_t>(renderPassCacheCtor, 0xAD).address(),
-			reinterpret_cast<const uint8_t*>(&passSize), 4);
-		PatchMemory(
-			REL::Relocation<std::uintptr_t>(renderPassCacheCtor, 0xCB).address(),
-			reinterpret_cast<const uint8_t*>(&lastPassIndex), 4);
-		PatchMemory(
-			REL::Relocation<std::uintptr_t>(renderPassCacheCtor, 0xF0).address(),
-			reinterpret_cast<const uint8_t*>(&lastPassNextOffset), 4);
-		PatchMemory(
-			REL::Relocation<std::uintptr_t>(renderPassCacheCtor, 0xFD).address(),
-			reinterpret_cast<const uint8_t*>(&lastPassOffset), 4);
-		if (REL::Module::IsAE()) {
-			PatchMemory(
-				REL::Relocation<std::uintptr_t>(renderPassCacheCtor, 0x191).address(),
-				reinterpret_cast<const uint8_t*>(&passCount), 4);
-		} else {
-			PatchMemory(
-				REL::Relocation<std::uintptr_t>(renderPassCacheCtor, 0x191 - 2).address(),
-				reinterpret_cast<const uint8_t*>(&passCountSE), 4);
-		}
-
 		if (!REL::Module::IsVR()) {
 			stl::write_thunk_call<Main_Update_Begin>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x53, 0x6E));
 			stl::write_thunk_call<Main_Update_Swap>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x5D2, 0xA97));
