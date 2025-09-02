@@ -216,7 +216,7 @@ struct IDXGISwapChain_Present
 		auto state = globals::state;
 		auto& upscaling = globals::features::upscaling;
 		auto menu = globals::menu;
-		upscaling.CopyFrameGenerationResources();
+		upscaling.CopyBuffersToSharedResources();
 		state->PresentReShade();
 		state->Reset();
 		menu->DrawOverlay();

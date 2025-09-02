@@ -3,7 +3,7 @@
 #include "Feature.h"
 #include "Upscaling/FidelityFX.h"
 #include "Upscaling/Streamline.h"
-#include "Upscaling/XeSS.h"
+#include "Upscaling/DX12SwapChain.h"
 #include <d3d11_4.h>
 #include <d3d12.h>
 #include <winrt/base.h>
@@ -29,8 +29,6 @@ public:
 		return {
 			"Advanced upscaling and frame generation technologies for improved performance",
 			{ "DLSS (Deep Learning Super Sampling) support",
-				"FSR (FidelityFX Super Resolution) support",
-				"XeSS (Intel Xe Super Sampling) support",
 				"TAA (Temporal Anti-Aliasing) support",
 				"Frame generation for supported systems" }
 		};
@@ -42,15 +40,13 @@ public:
 	{
 		kNONE,
 		kTAA,
-		kFSR,
-		kXESS,
 		kDLSS
 	};
 
 	struct Settings
 	{
 		uint upscaleMethod = (uint)UpscaleMethod::kDLSS;
-		uint upscaleMethodNoDLSS = (uint)UpscaleMethod::kFSR;
+		uint upscaleMethodNoDLSS = (uint)UpscaleMethod::kTAA;
 		uint qualityMode = 1;  // Default to Quality (1=Quality, 2=Balanced, 3=Performance, 4=Ultra Performance, 0=Native AA)
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 1;
@@ -101,13 +97,7 @@ public:
 
 	UpscaleMethod GetUpscaleMethod();
 
-	void CheckResources(UpscaleMethod a_upscalemethod);
-	void CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod);
-	void DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod);
-	void CreateSharedD3D12Resources(UpscaleMethod a_upscalemethod);
-	void DestroySharedD3D12Resources(UpscaleMethod a_upscalemethod);
-
-	winrt::com_ptr<ID3D11ComputeShader> encodeTexturesCS[5];  // One for each UpscaleMethod
+	winrt::com_ptr<ID3D11ComputeShader> encodeTexturesCS[3];  // One for each UpscaleMethod
 	ID3D11ComputeShader* GetEncodeTexturesCS();
 
 	winrt::com_ptr<ID3D11PixelShader> depthRefractionUpscalePS;
@@ -125,6 +115,7 @@ public:
 
 	void ConfigureUpscaling(RE::BSGraphics::State* a_state);
 	void Upscale();
+	void UpscaleDepth();
 
 	// D3D11 textures
 	Texture2D* reactiveMaskTexture = nullptr;
@@ -132,27 +123,16 @@ public:
 
 	virtual void ClearShaderCache() override;
 
-	// Shared D3D12 device and interop resources
-	winrt::com_ptr<ID3D12Device> sharedD3D12Device;
-	winrt::com_ptr<ID3D12CommandQueue> sharedD3D12CommandQueue;
-	winrt::com_ptr<ID3D12CommandAllocator> sharedD3D12CommandAllocator;
-	winrt::com_ptr<ID3D12GraphicsCommandList> sharedD3D12CommandList;
-	winrt::com_ptr<ID3D12Fence> sharedD3D12Fence;
-	HANDLE sharedFenceEvent = nullptr;
-	UINT64 sharedFenceValue = 0;
 
-	// D3D11/D3D12 shared fence for interop synchronization
-	winrt::com_ptr<ID3D11Fence> sharedD3D11Fence;
-	UINT64 sharedInteropFenceValue = 0;
-
-	// Shared D3D12 resources for upscaling systems
-	WrappedResource* HUDLessBufferShared12 = nullptr;
-	WrappedResource* depthBufferShared12 = nullptr;
-	WrappedResource* motionVectorBufferShared12 = nullptr;
-	WrappedResource* reactiveMaskShared12 = nullptr;
-	WrappedResource* transparencyCompositionMaskShared12 = nullptr;
-	WrappedResource* inputColorBufferShared12 = nullptr;
-	WrappedResource* outputColorBufferShared12 = nullptr;
+	// Frame Generation resources (dev branch style - D3D11 textures + D3D12 shared handles)
+	Texture2D* HUDLessBufferShared = nullptr;
+	Texture2D* depthBufferShared = nullptr;
+	Texture2D* motionVectorBufferShared = nullptr;
+	
+	// D3D12 shared resource handles
+	winrt::com_ptr<ID3D12Resource> HUDLessBufferShared12;
+	winrt::com_ptr<ID3D12Resource> depthBufferShared12;
+	winrt::com_ptr<ID3D12Resource> motionVectorBufferShared12;
 
 	// Frame tracking to ensure shared resources are only copied once per frame
 	Util::FrameChecker sharedResourcesFrameChecker;
@@ -160,20 +140,15 @@ public:
 
 	// Static instances instead of singletons
 	static inline Streamline streamline;
-	static inline XeSS xess;
 	static inline FidelityFX fidelityFX;
 	static inline class DX12SwapChain dx12SwapChain;
 
-	winrt::com_ptr<ID3D11PixelShader> copyDepthToSharedBufferPS;
+	winrt::com_ptr<ID3D11ComputeShader> copyDepthToSharedBufferCS;
 
 	void CreateFrameGenerationResources();
 	void CopyHUDLessBuffer();
-	void CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter);
-	void CopyFrameGenerationResources();
-	void CopySharedD3D12Resources(bool a_upscale);
+	void CopyBuffersToSharedResources();
 	void PostDisplay();
-	void PerformUpscaling();
-	void UpscaleDepth();
 
 	static void TimerSleepQPC(int64_t targetQPC);
 
@@ -182,22 +157,29 @@ public:
 	static double GetRefreshRate(HWND a_window);
 
 	// Unified interface methods - external code should use these instead of direct access
-	void LoadUpscalingSDKs();  // Loads all SDKs at once
-	void CheckFrameConstants();
+	// Frame generation interface methods
 	bool IsFrameGenActive() const;
-	void SetUIBuffer();
 	HANDLE GetFrameLatencyWaitableObject() const;
 	float GetFrameTime() const;
 
-	// Backend interface methods
+	// Module availability methods
+	bool HasFrameGenModule() const;
+
+	// SDK loading methods
+	void LoadUpscalingSDKs();
+	void CheckFrameConstants();
 	bool IsBackendInitialized() const;
 	void CheckBackendFeatures(IDXGIAdapter* adapter);
 	void UpgradeBackendInterface(void** ppInterface);
+	void CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter);
 	void SetBackendD3DDevice(ID3D11Device* device);
 	void PostBackendDevice();
-
-	// Module availability methods
-	bool HasFrameGenModule() const;
+	void CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod);
+	void DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod);
+	void CheckResources(UpscaleMethod a_upscalemethod);
+	void CreateSharedD3D12Resources(UpscaleMethod a_upscalemethod);
+	void DestroySharedD3D12Resources(UpscaleMethod a_upscalemethod);
+	void PerformUpscaling();
 
 	// Proxy interface methods
 	void SetProxyD3D11Device(ID3D11Device* device);

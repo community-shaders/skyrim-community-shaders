@@ -59,7 +59,6 @@ void FidelityFX::LoadFFX()
 void FidelityFX::SetupFrameGeneration()
 {
 	auto& swapChain = globals::features::upscaling.dx12SwapChain;
-	auto& upscaling = globals::features::upscaling;
 
 	ffx::CreateContextDescFrameGeneration createFg{};
 	createFg.displaySize = { swapChain.swapChainDesc.Width, swapChain.swapChainDesc.Height };
@@ -68,7 +67,7 @@ void FidelityFX::SetupFrameGeneration()
 	createFg.backBufferFormat = ffxApiGetSurfaceFormatDX12(swapChain.swapChainDesc.Format);
 
 	ffx::CreateBackendDX12Desc backendDesc{};
-	backendDesc.device = upscaling.sharedD3D12Device.get();
+	backendDesc.device = swapChain.d3d12Device.get();
 
 	if (ffx::CreateContext(frameGenContext, nullptr, createFg, backendDesc) != ffx::ReturnCode::Ok)
 		logger::critical("[FidelityFX] Failed to create frame generation context!");
@@ -88,9 +87,9 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 
 	auto commandList = swapChain.commandLists[swapChain.frameIndex].get();
 
-	auto HUDLessColor = upscaling.HUDLessBufferShared12->resource.get();
-	auto depth = upscaling.depthBufferShared12->resource.get();
-	auto motionVectors = upscaling.motionVectorBufferShared12->resource.get();
+	auto HUDLessColor = upscaling.HUDLessBufferShared12.get();
+	auto depth = upscaling.depthBufferShared12.get();
+	auto motionVectors = upscaling.motionVectorBufferShared12.get();
 
 	FfxApiSwapchainFramePacingTuning framePacingTuning{ 0.1f, 0.1f, true, 2, false };
 
@@ -128,7 +127,7 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 	configParameters.swapChain = swapChain.swapChain;
 	configParameters.onlyPresentGenerated = false;
 	configParameters.allowAsyncWorkloads = true;
-	configParameters.flags = 0;
+	configParameters.flags = FFX_FRAMEGENERATION_FLAG_DRAW_DEBUG_VIEW;
 
 	configParameters.generationRect.left = (swapChain.swapChainDesc.Width - swapChain.swapChainDesc.Width) / 2;
 	configParameters.generationRect.top = (swapChain.swapChainDesc.Height - swapChain.swapChainDesc.Height) / 2;
@@ -179,11 +178,6 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		if (ffx::Dispatch(frameGenContext, dispatchParameters) != ffx::ReturnCode::Ok) {
 			logger::critical("[FidelityFX] Failed to dispatch frame generation!");
 		}
-
-
-		if (ffx::Dispatch(frameGenContext, dispatchParameters) != ffx::ReturnCode::Ok) {
-			logger::critical("[FidelityFX] Failed to dispatch frame generation camera info!");
-		}
 	}
 
 	frameID++;
@@ -215,7 +209,7 @@ void FidelityFX::CreateFSRResources()
 	};
 
 	ffx::CreateBackendDX12Desc backendDesc{};
-	backendDesc.device = upscaling.sharedD3D12Device.get();
+	backendDesc.device = upscaling.dx12SwapChain.d3d12Device.get();
 
 	if (ffx::CreateContext(upscalingContext, nullptr, createUpscaling, backendDesc) != ffx::ReturnCode::Ok)
 		logger::critical("[FidelityFX] Failed to create FSR3 API context");
@@ -319,7 +313,7 @@ void FidelityFX::QueryVersion()
 
 		ffx::CreateContextDescUpscale dummyUpscaler{};
 		upscalerQuery.createDescType = dummyUpscaler.header.type;
-		upscalerQuery.device = upscaling.sharedD3D12Device.get();
+		upscalerQuery.device = upscaling.dx12SwapChain.d3d12Device.get();
 
 		uint64_t upscalerCount = 0;
 		upscalerQuery.outputCount = &upscalerCount;
