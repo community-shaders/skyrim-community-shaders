@@ -226,6 +226,9 @@ void UnifiedWater::PostPostLoad()
 	stl::detour_thunk<TES_SetWorldSpace>(REL::RelocationID(13170, 13315));
 	stl::detour_thunk<TES_DestroySkyCell>(REL::RelocationID(20029, 20463));
 
+	stl::write_thunk_call<TESWaterSystem_InitializeWater_SetWaterShaderMaterialParams>(REL::RelocationID(31388, 32179).address() + REL::Relocate(0x0, 0x3BC));
+	stl::write_vfunc<0x4, BSWaterShaderMaterial_ComputeCRC32>(RE::VTABLE_BSWaterShaderMaterial[0]);
+
 	stl::detour_thunk<BGSTerrainBlock_Attach>(REL::RelocationID(30934, 31737));
 	// Skip iterating attached meshes and calling TESWaterSystem::AddLODWater, this is handled in Attach now
 	const auto addLoopOffset = REL::RelocationID(30934, 31737).address() + REL::Relocate(0x109, 0x109);
@@ -257,6 +260,46 @@ void UnifiedWater::PostPostLoad()
 	gDisplacementMeshFlowCellOffset = reinterpret_cast<RE::NiPoint2*>(REL::RelocationID(528164, 415109).address());
 
 	logger::info("[Unified Water] Installed hooks");
+}
+
+void UnifiedWater::TESWaterSystem_InitializeWater_SetWaterShaderMaterialParams::thunk(RE::TESWaterForm* form, RE::BSWaterShaderMaterial* material)
+{
+	func(form, material);
+
+	auto hashStrAndStore = [&](RE::NiPointer<RE::NiSourceTexture>& tex, const char* str) {
+		uint64_t hash = 14695981039346656037ull;
+		for (auto p = reinterpret_cast<const unsigned char*>(str); *p; ++p) {
+			hash ^= *p;
+			hash *= 1099511628211ull;
+		}
+		std::memcpy(&tex, &hash, sizeof(uintptr_t));
+	};
+	
+	hashStrAndStore(material->normalTexture1, form->noiseTextures[0].textureName.c_str());
+	hashStrAndStore(material->normalTexture2, form->noiseTextures[1].textureName.c_str());
+	hashStrAndStore(material->normalTexture3, form->noiseTextures[2].textureName.c_str());
+	hashStrAndStore(material->normalTexture4, form->noiseTextures[3].textureName.c_str());
+}
+
+int32_t UnifiedWater::BSWaterShaderMaterial_ComputeCRC32::thunk(RE::BSWaterShaderMaterial* material, uint32_t srcHash)
+{
+	auto addToHashAndClear = [](RE::NiPointer<RE::NiSourceTexture>& tex, uint32_t& hash) {
+		auto mix32 = [&](const uint32_t v) {
+			hash ^= v + 0x9e3779b9u + (hash << 6) + (hash >> 2);
+		};
+		const auto h = reinterpret_cast<uint64_t>(tex.get());
+		mix32(static_cast<uint32_t>(h));
+		mix32(static_cast<uint32_t>(h >> 32));
+		constexpr uintptr_t zero = 0;
+		std::memcpy(&tex, &zero, sizeof(uintptr_t));
+	};
+	
+	addToHashAndClear(material->normalTexture1, srcHash);
+	addToHashAndClear(material->normalTexture2, srcHash);
+	addToHashAndClear(material->normalTexture3, srcHash);
+	addToHashAndClear(material->normalTexture4, srcHash);
+
+	return func(material, srcHash);
 }
 
 void UnifiedWater::TES_SetWorldSpace::thunk(RE::TES* tes, RE::TESWorldSpace* worldSpace, bool isExterior)

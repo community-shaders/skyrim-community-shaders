@@ -130,10 +130,10 @@ bool Flowmap::LoadFlowmap()
 
 	const auto sourceTex = static_cast<RE::NiSourceTexture*>(tex.get());
 
-	if (!sourceTex || !sourceTex->rendererTexture || !sourceTex->rendererTexture->texture) {
-		logger::error("[Unified Water] [Flowmap] Flowmap invalid", path);
-		return false;
-	}
+	// if (!sourceTex || !sourceTex->rendererTexture || !sourceTex->rendererTexture->texture) {
+	// 	logger::error("[Unified Water] [Flowmap] Flowmap invalid", path);
+	// 	return false;
+	// }
 
 	flowmapTex = RE::NiPointer(sourceTex);
 
@@ -169,6 +169,8 @@ bool Flowmap::GenerateFlowmap(bool useMips)
 		return false;
 	}
 
+	multithread->Enter();
+
 	const auto tamriel = RE::TESForm::LookupByEditorID<RE::TESWorldSpace>("Tamriel");
 	if (!tamriel) {
 		logger::error("[Unified Water] [Flowmap] Failed to load Tamriel WorldSpace");
@@ -197,7 +199,6 @@ bool Flowmap::GenerateFlowmap(bool useMips)
 	cells.reserve(1024);
 
 	{
-		multithread->Enter();
 		for (auto y = worldMinY; y < worldMaxY; ++y) {
 			for (auto x = worldMinX; x < worldMaxX; ++x) {
 				auto path = std::format(R"(Textures\Water\skyrim.esm\flow.{}.{}.dds)", x, y);
@@ -264,7 +265,6 @@ bool Flowmap::GenerateFlowmap(bool useMips)
 				cells.emplace_back(FlowCell{ x, y, tex });
 			}
 		}
-		multithread->Leave();
 	}
 
 	const auto width = mapMaxX - mapMinX + 1;
@@ -319,19 +319,19 @@ bool Flowmap::GenerateFlowmap(bool useMips)
 	}
 
 	{
-		multithread->Enter();
-		ctx->ExecuteCommandList(commandList.get(), FALSE);
+		ctx->ExecuteCommandList(commandList.get(), TRUE);
 
 		const auto filename = std::format(L"Tamriel-Flowmap.{}.{}.{}.{}.dds", width, height, offsetX, offsetY);
 		const auto path = Util::PathHelpers::GetDataPath() / "textures" / "water" / "flowmaps" / filename;
 		const auto hr = Util::SaveTextureToFile(dvc, ctx, path, flowmap.get());
-		multithread->Leave();
+		
 		if (FAILED(hr)) {
 			logger::error("[Unified Water] [Flowmap] Failed to save flowmap to {}: hr={:08X}", path.string().c_str(), static_cast<uint32_t>(hr));
 			return false;
 		}
 	}
-
+	
+	multithread->Leave();
 	multithread->SetMultithreadProtected(FALSE);
 
 	const auto t1 = std::chrono::steady_clock::now();
