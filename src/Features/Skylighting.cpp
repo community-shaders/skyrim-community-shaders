@@ -369,9 +369,6 @@ RE::BSLightingShaderProperty::Data* Skylighting::BSLightingShaderProperty_GetPre
 {
 	auto& skylighting = globals::features::skylighting;
 
-	auto batch = accumulator->GetRuntimeData().batchRenderer;
-	batch->geometryGroups[14]->flags &= ~1;
-
 	using enum RE::BSShaderProperty::EShaderPropertyFlag;
 	using enum RE::BSUtilityShader::Flags;
 
@@ -525,7 +522,6 @@ void Skylighting::RenderOcclusion()
 				}
 				if (precipObject) {
 					precip->SetupMask();
-					precip->SetupMask();  // Calling setup twice fixes an issue when it is raining
 					auto effect = precipObject->GetGeometryRuntimeData().properties[RE::BSGeometry::States::kEffect];
 					auto shaderProp = netimmerse_cast<RE::BSShaderProperty*>(effect.get());
 					auto particleShaderProperty = netimmerse_cast<RE::BSParticleShaderProperty*>(shaderProp);
@@ -594,7 +590,6 @@ void Skylighting::RenderOcclusion()
 				PrecipitationShaderDirection = { PrecipitationShaderDirectionF.x, PrecipitationShaderDirectionF.y, PrecipitationShaderDirectionF.z };
 
 				precip->SetupMask();
-				precip->SetupMask();  // Calling setup twice fixes an issue when it is raining
 
 				BSParticleShaderRainEmitter* rain = new BSParticleShaderRainEmitter;
 				{
