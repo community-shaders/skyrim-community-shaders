@@ -264,41 +264,34 @@ void UnifiedWater::PostPostLoad()
 
 void UnifiedWater::TESWaterSystem_InitializeWater_SetWaterShaderMaterialParams::thunk(RE::TESWaterForm* form, RE::BSWaterShaderMaterial* material)
 {
+	// The game prefills the material and hashes its contents, it uses this hash to check if there is an existing identical material and swaps
+	// to using that material if so.
+	// Problem is it does not include all data from the form, especially normal textures which can cause problems with existing materials
+	// having their textures swapped out.
+	// This func hash the texture names and temporarily stashes them in a ptr slot, this is added to the hash in ComputeCRC and zeroed back out again
 	func(form, material);
 
-	auto hashStrAndStore = [&](RE::NiPointer<RE::NiSourceTexture>& tex, const char* str) {
-		uint64_t hash = 14695981039346656037ull;
+	uint32_t hash = 2166136261u;
+	auto addStrToHash = [&](const char* str) {
 		for (auto p = reinterpret_cast<const unsigned char*>(str); *p; ++p) {
 			hash ^= *p;
-			hash *= 1099511628211ull;
+			hash *= 16777619u;
 		}
-		std::memcpy(&tex, &hash, sizeof(uintptr_t));
 	};
-	
-	hashStrAndStore(material->normalTexture1, form->noiseTextures[0].textureName.c_str());
-	hashStrAndStore(material->normalTexture2, form->noiseTextures[1].textureName.c_str());
-	hashStrAndStore(material->normalTexture3, form->noiseTextures[2].textureName.c_str());
-	hashStrAndStore(material->normalTexture4, form->noiseTextures[3].textureName.c_str());
+
+	addStrToHash(form->noiseTextures[0].textureName.c_str());
+	addStrToHash(form->noiseTextures[1].textureName.c_str());
+	addStrToHash(form->noiseTextures[2].textureName.c_str());
+	addStrToHash(form->noiseTextures[3].textureName.c_str());
+	uintptr_t bits = hash;
+	std::memcpy(&material->normalTexture1, &bits, sizeof(uintptr_t));
 }
 
 int32_t UnifiedWater::BSWaterShaderMaterial_ComputeCRC32::thunk(RE::BSWaterShaderMaterial* material, uint32_t srcHash)
 {
-	auto addToHashAndClear = [](RE::NiPointer<RE::NiSourceTexture>& tex, uint32_t& hash) {
-		auto mix32 = [&](const uint32_t v) {
-			hash ^= v + 0x9e3779b9u + (hash << 6) + (hash >> 2);
-		};
-		const auto h = reinterpret_cast<uint64_t>(tex.get());
-		mix32(static_cast<uint32_t>(h));
-		mix32(static_cast<uint32_t>(h >> 32));
-		constexpr uintptr_t zero = 0;
-		std::memcpy(&tex, &zero, sizeof(uintptr_t));
-	};
-	
-	addToHashAndClear(material->normalTexture1, srcHash);
-	addToHashAndClear(material->normalTexture2, srcHash);
-	addToHashAndClear(material->normalTexture3, srcHash);
-	addToHashAndClear(material->normalTexture4, srcHash);
-
+	srcHash ^= static_cast<uint32_t>(reinterpret_cast<uint64_t>(material->normalTexture1.get())) + (srcHash << 6) + (srcHash >> 2);
+	constexpr auto zero = static_cast<uintptr_t>(0);
+	std::memcpy(&material->normalTexture1, &zero, sizeof(uintptr_t));
 	return func(material, srcHash);
 }
 
