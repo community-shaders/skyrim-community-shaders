@@ -87,7 +87,6 @@ public:
 
 	void Load(ConfigMode a_configMode = ConfigMode::USER, bool a_allowReload = true);
 	void Save(ConfigMode a_configMode = ConfigMode::USER);
-	void SaveUserOverrides();
 	void PostPostLoad();
 
 	bool ValidateCache(CSimpleIniA& a_ini);
