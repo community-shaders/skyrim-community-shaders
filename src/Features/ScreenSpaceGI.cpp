@@ -93,7 +93,7 @@ void ScreenSpaceGI::DrawSettings()
 			if (auto _tt = Util::HoverTooltipWrapper())
 				ImGui::Text("1 Slice, 6 Steps, blur enabled, no GI\n");
 
-				ImGui::TableNextColumn();
+			ImGui::TableNextColumn();
 			if (ImGui::Button("Low", { -1, 0 })) {
 				settings.NumSlices = 10;
 				settings.NumSteps = 12;
