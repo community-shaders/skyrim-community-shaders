@@ -826,7 +826,7 @@ void ScreenSpaceGI::DrawSSGI(Texture2D* srcPrevAmbient)
 		lastFrameAccumTexIdx = !lastFrameAccumTexIdx;
 	}
 
-	// upsasmple
+	// upsample
 	if (settings.ResolutionMode != 0) {
 		resetViews();
 		srvs.at(0) = texWorkingDepth->srv.get();
