@@ -32,7 +32,7 @@ RWTexture2D<float2> MotionVectorOutput : register(u2);
 #if defined(DLSS) || defined(XESS)
 	float depth = DepthMask[dispatchID.xy];
 	float2 motionVector = MotionVectorMask[dispatchID.xy];
-		
+
 	// Find longest motion vector in 3x3 neighborhood
 	float2 longestMotionVector = motionVector;
 	float maxMotionLengthSq = dot(motionVector, motionVector);

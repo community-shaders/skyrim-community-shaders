@@ -51,7 +51,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.RefractionNormals = RefractionNormals.SampleLevel(LinearSampler, uv, 0);
 	psout.Depth = DepthTex.SampleLevel(LinearSampler, uv, 0);
 	psout.SAOCameraZ = psout.Depth;
-	
+
 	return psout;
 }
 
