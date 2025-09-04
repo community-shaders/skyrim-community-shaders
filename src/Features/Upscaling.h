@@ -104,8 +104,7 @@ public:
 	void CheckResources(UpscaleMethod a_upscalemethod);
 	void CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod);
 	void DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod);
-	void CreateSharedD3D12Resources(UpscaleMethod a_upscalemethod);
-	void DestroySharedD3D12Resources(UpscaleMethod a_upscalemethod);
+	void UpdateSharedResources();
 
 	winrt::com_ptr<ID3D11ComputeShader> encodeTexturesCS[5];  // One for each UpscaleMethod
 	ID3D11ComputeShader* GetEncodeTexturesCS();
@@ -146,7 +145,6 @@ public:
 	UINT64 sharedInteropFenceValue = 0;
 
 	// Shared D3D12 resources for upscaling systems
-	WrappedResource* HUDLessBufferShared12 = nullptr;
 	WrappedResource* depthBufferShared12 = nullptr;
 	WrappedResource* motionVectorBufferShared12 = nullptr;
 	WrappedResource* reactiveMaskShared12 = nullptr;
@@ -156,7 +154,6 @@ public:
 
 	// Frame tracking to ensure shared resources are only copied once per frame
 	Util::FrameChecker sharedResourcesFrameChecker;
-	Util::FrameChecker HUDLessBufferFrameChecker;
 
 	// Static instances instead of singletons
 	static inline Streamline streamline;
@@ -166,8 +163,6 @@ public:
 
 	winrt::com_ptr<ID3D11PixelShader> copyDepthToSharedBufferPS;
 
-	void CreateFrameGenerationResources();
-	void CopyHUDLessBuffer();
 	void CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter);
 	void CopyFrameGenerationResources();
 	void CopySharedD3D12Resources(bool a_upscale);

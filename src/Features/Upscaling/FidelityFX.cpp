@@ -88,12 +88,26 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 
 	ffx::ConfigureDescFrameGeneration configParameters{};
 
-	configParameters.frameGenerationEnabled = a_useFrameGeneration;
+	if (a_useFrameGeneration) {
+		configParameters.frameGenerationEnabled = true;
 
-	configParameters.frameGenerationCallbackUserContext = nullptr;
-	configParameters.frameGenerationCallback = nullptr;
+		configParameters.frameGenerationCallback = [](ffxDispatchDescFrameGeneration* params, void* pUserCtx) -> ffxReturnCode_t {
+			return ffxModule.Dispatch(reinterpret_cast<ffxContext*>(pUserCtx), &params->header);
+		};
+
+		configParameters.frameGenerationCallbackUserContext = &frameGenContext;
+
+	} else {
+		configParameters.frameGenerationEnabled = false;
+
+		configParameters.frameGenerationCallbackUserContext = nullptr;
+		configParameters.frameGenerationCallback = nullptr;
+	}
 
 	configParameters.HUDLessColor = FfxApiResource({});
+
+	configParameters.presentCallback = nullptr;
+	configParameters.presentCallbackUserContext = nullptr;
 
 	static uint64_t frameID = 0;
 	configParameters.frameID = frameID;
@@ -116,6 +130,14 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 
 	if (ffx::Configure(frameGenContext, configParameters) != ffx::ReturnCode::Ok) {
 		logger::critical("[FidelityFX] Failed to configure frame generation!");
+	}
+
+	ffx::ConfigureDescFrameGenerationSwapChainRegisterUiResourceDX12 uiConfig{};
+	uiConfig.uiResource = ffxApiGetResourceDX12(swapChain.uiBufferWrapped->resource.get());
+	uiConfig.flags = FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_USE_PREMUL_ALPHA | FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_ENABLE_INTERNAL_UI_DOUBLE_BUFFERING;
+
+	if (ffx::Configure(swapChainContext, uiConfig) != ffx::ReturnCode::Ok) {
+		logger::critical("[FidelityFX] Failed to configure UI composition!");
 	}
 
 	if (a_useFrameGeneration) {
@@ -187,46 +209,6 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		cameraConfig.cameraPosition[2] = globals::game::frameBufferCached.GetCameraPosAdjust().z;
 
 		if (ffx::Dispatch(frameGenContext, dispatchParameters, cameraConfig) != ffx::ReturnCode::Ok) {
-			logger::critical("[FidelityFX] Failed to dispatch frame generation!");
-		}
-	}
-
-	ffx::ConfigureDescFrameGenerationSwapChainRegisterUiResourceDX12 uiConfig{};
-	uiConfig.uiResource = ffxApiGetResourceDX12(swapChain.uiBufferWrapped->resource.get());
-	uiConfig.flags = FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_USE_PREMUL_ALPHA | FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_ENABLE_INTERNAL_UI_DOUBLE_BUFFERING;
-
-	if (ffx::Configure(swapChainContext, uiConfig) != ffx::ReturnCode::Ok) {
-		logger::critical("[FidelityFX] Failed to configure UI composition!");
-	}
-
-	if (a_useFrameGeneration) {
-		auto HUDLessColor = upscaling.HUDLessBufferShared12->resource.get();
-
-		ffx::DispatchDescFrameGeneration dispatchFg{};
-		dispatchFg.presentColor = ffxApiGetResourceDX12(HUDLessColor);
-		dispatchFg.numGeneratedFrames = 1;
-
-		dispatchFg.generationRect.left = (swapChain.swapChainDesc.Width - swapChain.swapChainDesc.Width) / 2;
-		dispatchFg.generationRect.top = (swapChain.swapChainDesc.Height - swapChain.swapChainDesc.Height) / 2;
-		dispatchFg.generationRect.width = swapChain.swapChainDesc.Width;
-		dispatchFg.generationRect.height = swapChain.swapChainDesc.Height;
-
-		ffx::QueryDescFrameGenerationSwapChainInterpolationCommandListDX12 queryCmdList{};
-		queryCmdList.pOutCommandList = &dispatchFg.commandList;
-		if (ffx::Query(swapChainContext, queryCmdList) != ffx::ReturnCode::Ok) {
-			logger::critical("[FidelityFX] Failed to query frame generation!");
-		}
-
-		ffx::QueryDescFrameGenerationSwapChainInterpolationTextureDX12 queryFiTexture{};
-		queryFiTexture.pOutTexture = &dispatchFg.outputs[0];
-		if (ffx::Query(swapChainContext, queryFiTexture) != ffx::ReturnCode::Ok) {
-			logger::critical("[FidelityFX] Failed to query frame generation!");
-		}
-
-		dispatchFg.frameID = frameID;
-		dispatchFg.reset = false;
-
-		if (ffx::Dispatch(frameGenContext, dispatchFg) != ffx::ReturnCode::Ok) {
 			logger::critical("[FidelityFX] Failed to dispatch frame generation!");
 		}
 	}
