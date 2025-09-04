@@ -1544,6 +1544,7 @@ void Upscaling::UpscaleDepth()
 
 		{
 			auto& refractionNormals = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kREFRACTION_NORMALS];
+			auto& saoCameraZ = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kSAO_CAMERAZ];
 
 			auto& depthCopy = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN_COPY];
 
@@ -1559,7 +1560,7 @@ void Upscaling::UpscaleDepth()
 			ID3D11ShaderResourceView* srvs[] = { refractionNormals.SRVCopy, depthCopy.depthSRV, depthCopy.stencilSRV };
 			context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
 
-			ID3D11RenderTargetView* rtvs[] = { refractionNormals.RTV };
+			ID3D11RenderTargetView* rtvs[] = { refractionNormals.RTV, saoCameraZ.RTV };
 			context->OMSetRenderTargets(ARRAYSIZE(rtvs), rtvs, depth.views[0]);
 
 			context->PSSetShader(GetDepthRefractionUpscalePS(), nullptr, 0);

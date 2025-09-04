@@ -8,7 +8,8 @@ typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-	float4 RefractionNormals : SV_TARGET;
+	float4 RefractionNormals : SV_TARGET0;
+	float SAOCameraZ : SV_TARGET1;
 	float Depth : SV_Depth;
 };
 
@@ -49,7 +50,8 @@ PS_OUTPUT main(PS_INPUT input)
 	// Upscale using linear sampling
 	psout.RefractionNormals = RefractionNormals.SampleLevel(LinearSampler, uv, 0);
 	psout.Depth = DepthTex.SampleLevel(LinearSampler, uv, 0);
-
+	psout.SAOCameraZ = psout.Depth;
+	
 	return psout;
 }
 
