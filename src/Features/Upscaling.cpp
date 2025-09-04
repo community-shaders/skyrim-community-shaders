@@ -417,11 +417,6 @@ void Upscaling::PostPostLoad()
 {
 	bool isGOG = !GetModuleHandle(L"steam_api64.dll");
 	stl::detour_thunk<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
-	
-	stl::write_thunk_call<CreateRenderTarget_LDR1>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x529, 0x45B, 0x5B0));
-	stl::write_thunk_call<CreateRenderTarget_LDR2>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0xB2E, 0x45B, 0x5B0));
-	stl::write_thunk_call<CreateRenderTarget_LDR3>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x62F, 0x45B, 0x5B0));
-	stl::write_thunk_call<CreateRenderTarget_LDR4>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x642, 0x45B, 0x5B0));
 
 	// Calculates resolution and jitter
 	stl::write_thunk_call<Main_UpdateJitter>(REL::RelocationID(75460, 77245).address() + REL::Relocate(0xE5, isGOG ? 0x133 : 0xE2, 0x104));
@@ -433,6 +428,12 @@ void Upscaling::PostPostLoad()
 	stl::write_thunk_call<Main_PostProcessing>(REL::RelocationID(100430, 107148).address() + REL::Relocate(0x1F0, 0x1E7, 0x206));
 
 	if (!REL::Module::IsVR()) {
+		// Patches render target creation to use higher precision format
+		stl::write_thunk_call<CreateRenderTarget_LDR1>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x529, 0x528));
+		stl::write_thunk_call<CreateRenderTarget_LDR2>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0xB2E, 0xB2E));
+		stl::write_thunk_call<CreateRenderTarget_LDR3>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x62F, 0x62E));
+		stl::write_thunk_call<CreateRenderTarget_LDR4>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x642, 0x641));
+
 		// Patches RSSetScissorRect calls to use dynamic resolution
 		// This is a PC-specific function hence it was missing
 		stl::detour_thunk<SetScissorRect>(REL::RelocationID(75564, 77365));
