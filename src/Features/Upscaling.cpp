@@ -727,7 +727,9 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 
 	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
 
-	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
+	bool menuTAA = globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME);
+
+	if (!menuTAA && upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
 		auto state = globals::state;
 		auto screenSize = state->screenSize;
 
@@ -741,28 +743,30 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 			resolutionScale = fidelityFX.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
 		}
 
-		auto screenWidth = static_cast<int>(screenSize.x);
-		auto renderWidth = static_cast<int>(screenWidth * resolutionScale);
+		if (wasUpscaled) {
+			auto screenWidth = static_cast<int>(screenSize.x);
+			auto renderWidth = static_cast<int>(screenWidth * resolutionScale);
 
-		auto screenHeight = static_cast<int>(screenSize.y);
-		auto renderHeight = static_cast<int>(screenHeight * resolutionScale);
+			auto screenHeight = static_cast<int>(screenSize.y);
+			auto renderHeight = static_cast<int>(screenHeight * resolutionScale);
 
-		auto phaseCount = GetJitterPhaseCount(renderWidth, screenWidth);
+			auto phaseCount = GetJitterPhaseCount(renderWidth, screenWidth);
 
-		// Disable jitter due to VR head movements emulating it
-		if (globals::game::isVR) {
-			jitter.x = 0.0f;
-			jitter.y = 0.0f;
-		} else {
-			GetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
+			// Disable jitter due to VR head movements emulating it
+			if (globals::game::isVR) {
+				jitter.x = 0.0f;
+				jitter.y = 0.0f;
+			} else {
+				GetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
+			}
+
+			if (globals::game::isVR)
+				a_viewport->projectionPosScaleX = -jitter.x / renderWidth;
+			else
+				a_viewport->projectionPosScaleX = -2.0f * jitter.x / renderWidth;
+
+			a_viewport->projectionPosScaleY = 2.0f * jitter.y / renderHeight;
 		}
-
-		if (globals::game::isVR)
-			a_viewport->projectionPosScaleX = -jitter.x / renderWidth;
-		else
-			a_viewport->projectionPosScaleX = -2.0f * jitter.x / renderWidth;
-
-		a_viewport->projectionPosScaleY = 2.0f * jitter.y / renderHeight;
 	} else {
 		resolutionScale = 1.0f;
 	}
@@ -1157,7 +1161,9 @@ void Upscaling::PostDisplay()
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
 
-	BSImagespaceShaderISTemporalAA->taaEnabled = false;
+	bool menuTAA = globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME);
+
+	BSImagespaceShaderISTemporalAA->taaEnabled = menuTAA;
 
 	globals::state->RenderReShade();
 
