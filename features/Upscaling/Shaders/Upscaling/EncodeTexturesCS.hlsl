@@ -38,22 +38,25 @@ RWTexture2D<float2> MotionVectorOutput : register(u2);
 	float maxMotionLengthSq = dot(motionVector, motionVector);
 
 	[unroll]
-	for (int y = -1; y <= 1; y++) {
+	for (int y = -2; y <= 2; y++) {
 		[unroll]
-		for (int x = -1; x <= 1; x++) {
+		for (int x = -2; x <= 2; x++) {
 			int2 samplePos = int2(dispatchID.xy) + int2(x, y);
 
-			// Load neighbor motion vector and depth
-			float2 neighborMotionVector = MotionVectorMask[samplePos];
 			float neighborDepth = DepthMask[samplePos];
 
-			// Square motion vector for length
-			float motionLengthSq = dot(neighborMotionVector, neighborMotionVector);
-
 			// Take neighbor if it's longer AND closer
-			bool takeNeighbor = (motionLengthSq > maxMotionLengthSq) && (neighborDepth < depth);
-			maxMotionLengthSq = takeNeighbor ? motionLengthSq : maxMotionLengthSq;
-			longestMotionVector = takeNeighbor ? neighborMotionVector : longestMotionVector;
+			if (neighborDepth < depth){
+				float2 neighborMotionVector = MotionVectorMask[samplePos];
+
+				// Square motion vector for length
+				float motionLengthSq = dot(neighborMotionVector, neighborMotionVector);
+
+				if (motionLengthSq > maxMotionLengthSq){
+					maxMotionLengthSq = motionLengthSq;
+					longestMotionVector = neighborMotionVector;
+				}
+			}
 		}
 	}
 
