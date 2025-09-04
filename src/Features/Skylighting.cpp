@@ -592,6 +592,8 @@ void Skylighting::RenderOcclusion()
 
 				PrecipitationShaderDirection = { PrecipitationShaderDirectionF.x, PrecipitationShaderDirectionF.y, PrecipitationShaderDirectionF.z };
 
+				static REL::Relocation<void(RE::Precipitation*, RE::NiPointer<RE::NiCamera>)> _computeProjection { REL::RelocationID(25643, 26185) };
+				_computeProjection(precip, precip->occlusionData.camera);
 				precip->SetupMask();
 
 				BSParticleShaderRainEmitter* rain = new BSParticleShaderRainEmitter;
@@ -613,7 +615,6 @@ void Skylighting::RenderOcclusion()
 
 				precipitation = precipitationCopy;
 
-				static REL::Relocation<void(RE::Precipitation*, RE::NiPointer<RE::NiCamera>)> _computeProjection { REL::RelocationID(25643, 26185) };
 				_computeProjection(precip, precip->occlusionData.camera);
 
 				state->EndPerfEvent();
