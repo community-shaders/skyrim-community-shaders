@@ -62,6 +62,12 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	if (upscaling.IsBackendInitialized())
 		upscaling.CheckBackendFeatures(pAdapter);
 
+	// Use better swap effect to prevent tearing and improve performance
+	pSwapChainDesc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+	 
+	// Set new more precise format
+	pSwapChainDesc->BufferDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+
 	bool shouldProxy = !REL::Module::IsVR();
 	if (shouldProxy)
 		if (!pSwapChainDesc->Windowed)
@@ -364,10 +370,58 @@ void Upscaling::Load()
 	*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", !REL::Module::IsVR() ? "CreateDXGIFactory" : "CreateDXGIFactory1");
 }
 
+struct CreateRenderTarget_LDR1
+{
+	static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
+	{
+		RE::BSGraphics::RenderTargetProperties properties = *a_properties;
+		properties.format.set(RE::BSGraphics::Format::kR10G10B10A2_UNORM);
+		func(This, a_target, &properties);
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
+struct CreateRenderTarget_LDR2
+{
+	static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
+	{
+		RE::BSGraphics::RenderTargetProperties properties = *a_properties;
+		properties.format.set(RE::BSGraphics::Format::kR10G10B10A2_UNORM);
+		func(This, a_target, &properties);
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
+struct CreateRenderTarget_LDR3
+{
+	static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
+	{
+		RE::BSGraphics::RenderTargetProperties properties = *a_properties;
+		properties.format.set(RE::BSGraphics::Format::kR10G10B10A2_UNORM);
+		func(This, a_target, &properties);
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
+struct CreateRenderTarget_LDR4
+{
+	static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
+	{
+		RE::BSGraphics::RenderTargetProperties properties = *a_properties;
+		properties.format.set(RE::BSGraphics::Format::kR10G10B10A2_UNORM);
+		func(This, a_target, &properties);
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
 void Upscaling::PostPostLoad()
 {
 	bool isGOG = !GetModuleHandle(L"steam_api64.dll");
 	stl::detour_thunk<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
+	
+	stl::write_thunk_call<CreateRenderTarget_LDR1>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x529, 0x45B, 0x5B0));
+	stl::write_thunk_call<CreateRenderTarget_LDR2>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0xB2E, 0x45B, 0x5B0));
+	stl::write_thunk_call<CreateRenderTarget_LDR3>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x62F, 0x45B, 0x5B0));
+	stl::write_thunk_call<CreateRenderTarget_LDR4>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x642, 0x45B, 0x5B0));
 
 	// Calculates resolution and jitter
 	stl::write_thunk_call<Main_UpdateJitter>(REL::RelocationID(75460, 77245).address() + REL::Relocate(0xE5, isGOG ? 0x133 : 0xE2, 0x104));

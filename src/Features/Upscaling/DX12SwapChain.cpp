@@ -88,6 +88,8 @@ void DX12SwapChain::CreateInterop()
 	texDesc11.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
 	swapChainBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), upscaling.sharedD3D12Device.get());
+
+	texDesc11.Format = DXGI_FORMAT_R16G16B16A16_UNORM;
 	uiBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), upscaling.sharedD3D12Device.get());
 }
 
