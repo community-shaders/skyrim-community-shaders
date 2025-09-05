@@ -1608,7 +1608,7 @@ void Upscaling::UpscaleDepth()
 			auto& saoCameraZ = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kSAO_CAMERAZ];
 
 			auto& depthCopy = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN_COPY];
-			
+
 			// Sometimes this is not already copied e.g. map menu
 			context->CopyResource(depthCopy.texture, depth.texture);
 
