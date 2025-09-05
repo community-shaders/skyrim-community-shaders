@@ -1610,16 +1610,7 @@ void Upscaling::UpscaleDepth()
 			auto& depthCopy = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN_COPY];
 			
 			// Sometimes this is not already copied e.g. map menu
-			auto renderSize = Util::ConvertToDynamic(screenSize);
-			D3D11_BOX srcBox = {};
-			srcBox.left = 0;
-			srcBox.top = 0;
-			srcBox.front = 0;
-			srcBox.right = (UINT)renderSize.x;
-			srcBox.bottom = (UINT)renderSize.y;
-			srcBox.back = 1;
-
-			context->CopySubresourceRegion(depthCopy.texture, 0, 0, 0, 0, depth.texture, 0, &srcBox);
+			context->CopyResource(depthCopy.texture, depth.texture);
 
 			// Clear stencil to be 0xFF
 			if (globals::game::isVR)
