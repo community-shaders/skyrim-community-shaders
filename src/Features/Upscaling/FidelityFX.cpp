@@ -118,8 +118,7 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 
 	auto state = globals::state;
 
-	auto screenSize = state->screenSize;
-	auto renderSize = Util::ConvertToDynamic(state->screenSize, true);
+	auto renderSize = state->screenSize * upscaling.resolutionScale;
 
 	configParameters.generationRect.left = (swapChain.swapChainDesc.Width - swapChain.swapChainDesc.Width) / 2;
 	configParameters.generationRect.top = (swapChain.swapChainDesc.Height - swapChain.swapChainDesc.Height) / 2;
