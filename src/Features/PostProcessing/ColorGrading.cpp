@@ -603,7 +603,7 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
             profile = settings.profiles[7];
         } else {
             for (int i = 0; i < 6; i++) {
-                for (int j = 0; j < 15; j++) {
+                for (int j = 0; j < 22; j++) {
                     profile.params[j] = (i == 0 ? float4{ 0.f, 0.f, 0.f, 0.f } : profile.params[j]) + settings.profiles[i + 1].params[j] * pp.imageSpaceManager->timeOfDay[i];
                 }
             }
