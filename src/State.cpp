@@ -698,7 +698,7 @@ void State::SetAdapterDescription(const std::wstring& description)
 	adapterDescription = converter.to_bytes(description);
 }
 
-void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
+void State::UpdateSharedData(bool a_inWorld, [[maybe_unused]] bool a_prepass)
 {
 	{
 		SharedDataCB data{};
@@ -755,7 +755,7 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 		else
 			data.InMapMenu = true;
 
-		if (temporal && (a_inWorld || a_prepass)) {
+		if (temporal) {
 			auto renderSize = Util::ConvertToDynamic(screenSize);
 			data.MipBias = std::log2f(renderSize.x / screenSize.x) - 1.0f;
 		} else {
