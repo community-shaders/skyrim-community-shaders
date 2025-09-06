@@ -37,10 +37,7 @@ cbuffer PerGeometry : register(b2)
 void CheckOffsetDepth(float2 center, float2 offset, inout float crossSection,
 	inout float totalDepth)
 {
-	float depth = DepthTex
-	                  .Sample(DepthSampler, FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(
-												invScreenRes.xy * offset + center))
-	                  .x;
+	float depth = DepthTex.Sample(DepthSampler, FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(invScreenRes.xy * offset + center));
 
 	float crossSectionDelta = 0;
 	if (depth > 0.999998987) {
@@ -84,7 +81,7 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #	endif
 
-	float depthCC = DepthTex.Sample(DepthSampler, adjustedTexCoord).x;
+	float depthCC = DepthTex.Sample(DepthSampler, adjustedTexCoord);
 
 	float crossSection = 0;
 	float avgDepth = depthCC;
