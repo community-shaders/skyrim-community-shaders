@@ -2752,9 +2752,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 directionalAmbientColor = Color::Ambient(max(0, mul(DirectionalAmbient, float4(worldNormal, 1.0))));
 
 #	if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
-		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(-worldNormal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+	if (SharedData::iblSettings.EnableDiffuseIBL) {
+		if (SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
+			directionalAmbientColor = ImageBasedLighting::GetStaticDiffuseIBL(worldNormal, SampColorSampler);
+		} else if (!SharedData::InInterior) {
+			directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
+			directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(-worldNormal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+		}
 	}
 #	endif
 
