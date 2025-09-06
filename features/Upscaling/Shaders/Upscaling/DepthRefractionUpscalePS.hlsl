@@ -40,10 +40,10 @@ PS_OUTPUT main(PS_INPUT input)
 	uint4 stencilSamples = StencilTex.GatherRed(LinearSampler, uv);
 
 	// Choose the minimum stencil value
-	uint maxStencil = min(min(stencilSamples.x, stencilSamples.y), min(stencilSamples.z, stencilSamples.w));
+	uint minStencil = min(min(stencilSamples.x, stencilSamples.y), min(stencilSamples.z, stencilSamples.w));
 
 	// Only write depth/stencil that is inside the viewable area
-	if (maxStencil > 0x00)
+	if (minStencil > 0x00)
 		discard;
 #	endif
 
