@@ -1,6 +1,6 @@
 #include "LensEffects.h"
-#include "../Upscaling.h"
 #include "State.h"
+#include "Upscaling.h"
 #include "Util.h"
 #include <DDSTextureLoader.h>
 #include <DirectXTex.h>
@@ -93,6 +93,13 @@ void LensEffects::SetupResources()
 	DX::ThrowIfFailed(device->CreateSamplerState(&pointMirSamplerDesc, &PointMirrorSampler));
 	DX::ThrowIfFailed(device->CreateSamplerState(&depthSamplerDesc, &DepthSampler));
 
+	viewport.TopLeftX = 0.0f;
+	viewport.TopLeftY = 0.0f;
+	viewport.Width = 16.0f;
+	viewport.Height = 1.0f;
+	viewport.MinDepth = 0.0f;
+	viewport.MaxDepth = 1.0f;
+
 	D3D11_TEXTURE2D_DESC OcclusionTexDesc{};
 	OcclusionTexDesc.Width = 16;
 	OcclusionTexDesc.Height = 1;
@@ -139,6 +146,11 @@ void LensEffects::SetupResources()
 
 	renderdata = new Setup::LF_RenderData;
 
+	if (!settingsLoaded || !settings) {
+		stdSettings = {};
+		settings = &stdSettings;
+	}
+
 	renderdata->SetupPass(Shaders::LensCA, settings->EnableCA, 1, { .uncond_pass = true });
 	renderdata->SetupPass(Shaders::LensIce, settings->EnableIce, 1, { .weather_pass = true });
 	renderdata->SetupPass(Shaders::LensBurst, settings->EnableStarburst, 1);
@@ -160,7 +172,7 @@ void LensEffects::CheckOverride()
 		if (frame_checker.IsNewFrame()) {
 			SettingsCB->Update(UpdateBufferValues());
 			UpdateWeatherBasedDisable();
-			UpdateFrameGenBasedDisable();
+			UpdateUpscalingBasedDisable();
 			frameIdx = (frameIdx < 16) ? ++frameIdx : 5;
 		}
 		LookupShader(shaderdesc);
@@ -217,6 +229,8 @@ void LensEffects::SetupOcclusionMask()
 
 	ID3D11UnorderedAccessView* OcclusionLUTs[2] = { SunOcclusionUAV, SunOcclusionUAV_AT };
 	context->OMSetRenderTargetsAndUnorderedAccessViews(0, nullptr, nullptr, 0, 2, OcclusionLUTs, nullptr);
+
+	context->RSSetViewports(1, &viewport);
 
 	context->PSSetShader(SunOcclusionMaskPixelShader, NULL, NULL);
 
@@ -384,7 +398,7 @@ void LensEffects::AppendOcclusionLUT()
 		context->OMSetRenderTargetsAndUnorderedAccessViews(numRTs, reinterpret_cast<ID3D11RenderTargetView* const*>(oldRTVs), oldDSV.Get(), numRTs, 1, &SunOcclusionUAV, nullptr);
 	} else {
 		context->OMSetRenderTargetsAndUnorderedAccessViews(numRTs, reinterpret_cast<ID3D11RenderTargetView* const*>(oldRTVs), oldDSV.Get(), numRTs, 1, &SunOcclusionUAV_AT, nullptr);
-		context->PSSetShaderResources(3, 1, &SunOcclusionSRV);
+		context->PSSetShaderResources(30, 1, &SunOcclusionSRV);
 		useCloudLUT = false;
 	}
 
@@ -508,17 +522,16 @@ void LensEffects::UpdateWeatherBasedDisable()
 	}
 }
 
-void LensEffects::UpdateFrameGenBasedDisable()
+void LensEffects::UpdateUpscalingBasedDisable()
 {
-	if (auto upscaling = globals::upscaling) {
-		auto method = globals::upscaling->GetUpscaleMethod();
-		if (upscaling->IsFrameGenerationActive() || method == Upscaling::UpscaleMethod::kDLSS || method == Upscaling::UpscaleMethod::kFSR) {
-			renderdata->GetEffect(Shaders::LensIce).Toggle(false);
-			upscalingActive = true;
-		} else if (upscalingActive) {
-			renderdata->GetEffect(Shaders::LensIce).Toggle(settings->EnableIce);
-			upscalingActive = false;
-		}
+	auto& upscaling = globals::features::upscaling;
+	auto method = globals::features::upscaling.GetUpscaleMethod();
+	if (upscaling.IsFrameGenerationActive() || method == Upscaling::UpscaleMethod::kDLSS || method == Upscaling::UpscaleMethod::kFSR || method == Upscaling::UpscaleMethod::kXESS) {
+		renderdata->GetEffect(Shaders::LensIce).Toggle(false);
+		upscalingActive = true;
+	} else if (upscalingActive) {
+		renderdata->GetEffect(Shaders::LensIce).Toggle(settings->EnableIce);
+		upscalingActive = false;
 	}
 }
 
@@ -529,6 +542,7 @@ DirectX::XMFLOAT4A LensEffects::GetSunPosition()
 	Matrix viewMatrix = Util::GetCameraData(0).viewMat;
 	float4 sunPosVS = float4::Transform(sunPosition, viewMatrix);
 	sunPosVS.w = *skyrim_SunGlareScale * SunScale;
+
 	return VectorToXMFloat(sunPosVS);
 }
 
@@ -560,7 +574,7 @@ void LensEffects::Hooks::BSSkyShader_SetupMaterial::thunk(RE::BSShader* This, RE
 		}
 
 		else if (skyProperty->uiSkyObjectType == RE::BSSkyShaderProperty::SkyObject::SO_CLOUDS) {
-			if ((Pass->passEnum == 0x5C000062 || Pass->passEnum == 0x5C000063) && RenderFlags == 65) {
+			if ((Pass->passEnum == 0x5C000062 || Pass->passEnum == 0x5C000063 || Pass->passEnum == 0x5C000064) && RenderFlags == 65) {
 				lens.overrideShader = true;
 				lens.shaderdesc = Shaders::AttachLUT;
 				lens.useCloudLUT = true;
@@ -691,7 +705,7 @@ void LensEffects::DrawSettings()
 
 	if (upscalingActive) {
 		ImGui::SameLine();
-		ImGui::Text("  (Incompatible with Frame Generation)");
+		ImGui::Text("  (Incompatible with Upscaling Method)");
 		ImGui::EndDisabled();
 	}
 
@@ -705,8 +719,8 @@ void LensEffects::DrawSettings()
 
 	ImGui::Spacing();
 	ImGui::SliderFloat("Glare Scale ##sun", &mainSettings.SG_Scale, 0.25f, 1.0f);
-	ImGui::SliderFloat("Glare Intensity ##sun", &mainSettings.SG_Intensity, 1.0, 3.0f);
-	ImGui::SliderFloat("Glare Outer Intensity ##sun", &mainSettings.SG_OuterInt, 0.0f, 2.5f);
+	ImGui::SliderFloat("Glare Intensity ##sun", &mainSettings.SG_Intensity, 0.01f, 3.0f);
+	ImGui::SliderFloat("Glare Outer Intensity ##sun", &mainSettings.SG_OuterInt, 0.01f, 3.5f);
 	ImGui::SliderFloat("Glare Outer Fade ##sun", &mainSettings.SG_OuterFade, 0.0f, 1.0f);
 	ImGui::Spacing();
 	ImGui::Spacing();
@@ -1069,6 +1083,8 @@ void LensEffects::LoadSettings(json& o_json)
 	settings = (presetLoaded && stdSettings.useCustomPreset) ? &customSettings : &stdSettings;
 
 	RefreshToggles();
+
+	settingsLoaded = true;
 }
 
 void LensEffects::SaveSettings(json& o_json)

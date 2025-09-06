@@ -171,7 +171,7 @@ Texture2D<float4> TexNoiseGradSampler : register(t2);
 #if defined(LENS_EFFECTS) && defined(DEFERRED)
 	#if defined(CLOUDS)
 		RWTexture2D<uint> LensEffectsAT : register(u7);
-		Texture2D<float4> LensEffects : register(t3);
+		Texture2D<float4> LensEffects : register(t30);
 	#else
 		RWTexture2D<float4> LensEffects : register(u7);
 	#endif

@@ -1,6 +1,5 @@
 #pragma once
 #include "Feature.h"
-#include <vector>
 
 struct LensEffects : Feature
 {
@@ -17,6 +16,7 @@ struct LensEffects : Feature
 	virtual std::string_view GetCategory() const override { return "Post-Processing"; }
 	virtual inline bool SupportsVR() override { return false; };  //
 
+	virtual inline void DataLoaded() override { RE::GetINISetting("bLensFlare:Imagespace")->data.b = true; }
 	virtual inline void PostPostLoad() override { Hooks::Install(); }
 	virtual void SetupResources() override;
 	virtual void CompileShaders();
@@ -37,6 +37,7 @@ struct LensEffects : Feature
 
 	ConstantBuffer* SettingsCB = nullptr;
 	ID3D11BlendState* BlendState[2] = {};
+	D3D11_VIEWPORT viewport{};
 
 	ID3D11SamplerState* LinearSampler = nullptr;
 	ID3D11SamplerState* PointSampler = nullptr;
@@ -94,7 +95,7 @@ struct LensEffects : Feature
 	virtual float GetWeatherPrecip();
 	virtual bool CheckWeatherChange();
 	virtual void UpdateWeatherBasedDisable();
-	virtual void UpdateFrameGenBasedDisable();
+	virtual void UpdateUpscalingBasedDisable();
 
 	bool disableSunFX = false;
 	float weatherFadeout = 0.0f;
@@ -112,6 +113,7 @@ struct LensEffects : Feature
 
 	static const inline std::string customSettingsPath = "Data\\Shaders\\LensEffects\\Lens Settings.json";
 	bool presetLoaded = false;
+	bool settingsLoaded = false;
 
 	virtual void RefreshToggles();
 	virtual void RestoreDefaultSettings() override;
@@ -192,15 +194,15 @@ struct LensEffects : Feature
 		float HL_ColorShift = 0.52f;
 
 		//Sun Glare
-		float SG_Scale = 0.7f;
-		float SG_Intensity = 2.0f;
-		float SG_OuterInt = 1.2f;
+		float SG_Scale = 0.5f;
+		float SG_Intensity = 1.0f;
+		float SG_OuterInt = 1.0f;
 		float SG_OuterFade = 0.8f;
 
 		//LensCA
-		float CA_Intensity = 0.50f;
-		float CA_Threshold = 0.025f;
-		float CA_MaxOffset = 0.004f;
+		float CA_Intensity = 0.30f;
+		float CA_Threshold = 0.028f;
+		float CA_MaxOffset = 0.003f;
 
 		//LensIce
 		float LI_Intensity = 0.50f;

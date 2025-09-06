@@ -3,6 +3,7 @@
 #include "Common/CoordMath.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/Color.hlsli"
+#include "Common/SharedData.hlsli"
 
 //// Structs ////////////////////////////////////////////////////////////////////////////
 
@@ -87,7 +88,7 @@ cbuffer Settings : register(b1){
     uint  Frame;
     float Precip;
     float WeatherBasedFadeout;
-    float4 SunParams;
+    float4 SunData;
     float4 SunBlendColor;
 
     float UIBurstScale;
@@ -294,20 +295,19 @@ void main(MaskVSOutput input)
         uint OldClouds = SunLUT_AT.Load(int2(1,0));
 
         float SunUVRadius;
-        float SunSSRadius = GetSunRadius(SunParams.z, SunParams.w, SunUVRadius);
+        float SunSSRadius = GetSunRadius(SunData.z, SunData.w, SunUVRadius);
         if(SunUVRadius < 0.0 || SunSSRadius < 0.0){
-            float4 Sun = SunLUT.Load(int2(3,0));
-            SunSSRadius = Sun.z;
+            SunSSRadius = SunLUT.Load(int2(3,0)).z;
             SunUVRadius = SunSSRadius * rcp(ScreenSize.x);
         }
 
         float CloudFactor = UpdateCloudFactor(SunSSCoords, Clouds, OldClouds);
-        float DepthFactor = UpdateDepthFactor(SunCoords, SunUVRadius);
+        float DepthFactor = UpdateDepthFactor(FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(SunCoords), SunUVRadius);
 
         float WeatherFactor = GetWeatherFactor(SunBlendColor, CloudFactor, SunSSRadius);
 
         float DistFactor = CoordMath::ChebyDistance(float2(SunCoords.x, 1.0 - SunCoords.y) * 2.0 - 1.0);
-              DistFactor = LinearStep(0.0, 0.65, inv(saturate(DistFactor-0.2)));
+              DistFactor = LinearStep(0.0, 0.65, inv(saturate(DistFactor-0.4)));
 
 
         SunLUT[int2(0,0)] = float4(DepthFactor, WeatherFactor, DistFactor, DepthFactor * WeatherFactor * DistFactor);
@@ -383,11 +383,7 @@ float4 main(StarburstVSOutput input) : SV_Target
     clip(min(input.SunInt.w - SUNCLIP, InvDist));
 
     float CoronaDist = saturate(Dist - input.Scale);
-    float SunBorder = smoothstep(0.0, 0.01, CoronaDist);
     float BladeMask = 0.0, RayMask = 0.0;
-
-    float Depth = depth.SampleCmpLevelZero(Depth_Sampler, input.Position.xy / ScreenSize.xy, 1).x;
-
 
     [branch] if(UIEnableBlades){
         float2 Normal = normalize(input.TexCoord.xy);
@@ -445,7 +441,6 @@ float4 main(StarburstVSOutput input) : SV_Target
     float Starburst = BladeMask * UIEnableBlades;
 
     Starburst *= LinearStep(0.2, 0.6, pow(input.SunInt.x, 2));
-    Starburst += Depth * inv(SunBorder);
     Starburst += RayMask * LinearStep(0.3, 1.0, input.SunInt.x);
     Starburst *= input.SunInt.y;
 
@@ -632,8 +627,8 @@ SunGlareVertexOutput main(VertexShaderInput input)
 
 #ifdef SUNGLARE_PIXEL_SHADER
 
-Texture2D Depth : register(t0);
-Texture2D Main : register(t1);
+Texture2D DepthTexture : register(t0);
+Texture2D SceneTexture : register(t1);
 
 float4 main(SunGlareVertexOutput input) : SV_Target
 {
@@ -648,17 +643,19 @@ float4 main(SunGlareVertexOutput input) : SV_Target
     float Glow = exp(-(Dist * Dist) / (2.0 * sigma * sigma));
           Glow *= pow(saturate(InvDist), Intensity * 2) * Intensity;
 
-    float3 Scene = Main.Sample(Point_Sampler, input.Position.xy / ScreenSize.xy).xyz;
-
     float Edge = UISunGlareOuterInt * Dist;
 
+    float2 SampleCoords = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.Position.xy / ScreenSize.xy);
+
+    float3 Scene = SceneTexture.Sample(Point_Sampler, SampleCoords).xyz;
+
     float3 Color = float3(1.0, 1.0, 1.0) * Glow + (input.Color * Edge) - Scene;
-    Color *= smoothstep(-0.01, UISunGlareFade, InvDist) * InvDist;
+           Color *= smoothstep(-0.01, UISunGlareFade, InvDist) * InvDist;
 
-    float depth = Depth.SampleCmpLevelZero(Depth_Sampler, input.Position.xy / ScreenSize.xy, 1).x;
-          depth = saturate(depth + input.SunInt.x);
+    float Depth = DepthTexture.SampleCmpLevelZero(Depth_Sampler, SampleCoords, 1).x;
+          Depth = saturate(Depth + input.SunInt.x);
 
-    Color *= depth * input.SunInt.y;
+    Color *= Depth * input.SunInt.y;
 
     return float4(Color, 0.0);
 }
@@ -805,15 +802,15 @@ LensGlareVertexOutput main(VertexShaderInput input)
 
 float4 main(LensGlareVertexOutput input) : SV_Target
 {
-
-    float Mask = length(input.TexCoord.xy) - 0.9;
-    float Mask2 = length(input.TexCoord.xy - float2(0.0, UIGlareCutDepth)) - UIGlareRadius;
+    float2 Coords = input.TexCoord.xy;
+    float Mask = length(Coords) - 0.9;
+    float Mask2 = length(Coords - float2(0.0, UIGlareCutDepth)) - UIGlareRadius;
 
     clip(min(-max(Mask, -Mask2), input.SunInt.w - SUNCLIP));
 
     float Glare = lerp(0.0, 0.6, abs(max(Mask, -Mask2))) * UIGlareInt;
 
-    float GlareMask = inv(smoothstep(0.5, 1.0, distance(input.TexCoord.y, -UIGlareTipFade)));
+    float GlareMask = inv(smoothstep(0.5, 1.0, distance(Coords.y, -UIGlareTipFade)));
           GlareMask *= Glare * input.SunInt.w;
 
     return float4(float3(1.0, 1.0, 1.0) * GlareMask, 0.0);
@@ -833,8 +830,9 @@ Texture2D MotionVector : register(t2);
 
 float4 main(VertexShaderOutput input) : SV_Target
 {
-    float2 Coords = input.TexCoord.xy;
     float4 Aberration;
+
+    float2 Coords = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord.xy);
 
     float2 MotionVec = MotionVector.Sample(PointMirror_Sampler, Coords).xy;
 
