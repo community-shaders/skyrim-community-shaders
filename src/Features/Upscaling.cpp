@@ -122,15 +122,6 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 
 			upscaling.d3d12Interop = true;
 
-			globals::state->InitReShade(*ppSwapChain);
-
-			if (upscaling.IsBackendInitialized()) {
-				upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
-				upscaling.UpgradeBackendInterface((void**)&(*ppSwapChain));
-				upscaling.SetBackendD3DDevice(*ppDevice);
-				upscaling.PostBackendDevice();
-			}
-
 			return S_OK;
 		} else {
 			logger::warn("[Frame Generation] FidelityFX DLLs are not loaded, skipping proxy");
@@ -150,15 +141,6 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 		ppDevice,
 		pFeatureLevel,
 		ppImmediateContext);
-
-	globals::state->InitReShade(*ppSwapChain);
-
-	if (upscaling.IsBackendInitialized()) {
-		upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
-		upscaling.UpgradeBackendInterface((void**)&(*ppSwapChain));
-		upscaling.SetBackendD3DDevice(*ppDevice);
-		upscaling.PostBackendDevice();
-	}
 
 	return ret;
 }

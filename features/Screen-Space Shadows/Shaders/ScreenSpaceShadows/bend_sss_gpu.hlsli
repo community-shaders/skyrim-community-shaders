@@ -377,7 +377,6 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 	half writeX = write_xy.x * inParameters.InvDepthTextureSize.x;
 
 #		if defined(RIGHT)
-	// Right eye: only process pixels in [0.5, 1.0] range
 	if (writeX < 0.0)
 		return;
 #		else

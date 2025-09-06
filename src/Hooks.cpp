@@ -355,6 +355,17 @@ namespace Hooks
 
 			func();
 
+			globals::state->InitReShade(globals::d3d::swapChain);
+
+			auto& upscaling = globals::features::upscaling;
+
+			if (upscaling.IsBackendInitialized()) {
+				upscaling.UpgradeBackendInterface((void**)&(globals::d3d::device));
+				upscaling.UpgradeBackendInterface((void**)&(globals::d3d::swapChain));
+				upscaling.SetBackendD3DDevice(globals::d3d::device);
+				upscaling.PostBackendDevice();
+			}
+
 			if (!globals::features::upscaling.loaded)
 				globals::state->InitReShade(globals::d3d::swapChain);
 
