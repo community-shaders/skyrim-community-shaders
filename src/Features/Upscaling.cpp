@@ -1189,13 +1189,8 @@ void Upscaling::FrameLimiter()
 		if (settings.frameLimitMode) {
 			// Fall back to the original timing method
 			// Use integer arithmetic for more precise timing
-			int64_t targetFrameTimeNS = int64_t(1000000000.0
-				/ (refreshRate
-				   * (settings.frameGenerationMode && !globals::game::ui->GameIsPaused()
-					  ? 0.5
-					  : 1.0)));
-			int64_t targetFrameTicks = (targetFrameTimeNS * qpf.QuadPart)
-				/ 1000000000LL;
+			int64_t targetFrameTimeNS = int64_t(1000000000.0 / (refreshRate * (settings.frameGenerationMode && !globals::game::ui->GameIsPaused() ? 0.5 : 1.0)));
+			int64_t targetFrameTicks = (targetFrameTimeNS * qpf.QuadPart) / 1000000000LL;
 
 			static LARGE_INTEGER lastFrame = {};
 			LARGE_INTEGER timeNow;
