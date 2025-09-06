@@ -109,25 +109,25 @@ void ScreenSpaceGI::DrawSettings()
 			if (ImGui::Button("Standard", { -1, 0 })) {
 				settings.NumSlices = 4;
 				settings.NumSteps = 8;
+				settings.ResolutionMode = 2;
+				settings.EnableBlur = true;
+				settings.EnableGI = true;
+				recompileFlag = true;
+			}
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("Quarter res and somewhat stable.");
+
+			ImGui::TableNextColumn();
+			if (ImGui::Button("High", { -1, 0 })) {
+				settings.NumSlices = 4;
+				settings.NumSteps = 8;
 				settings.ResolutionMode = 1;
 				settings.EnableBlur = true;
 				settings.EnableGI = true;
 				recompileFlag = true;
 			}
 			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("Half res and somewhat stable.");
-
-			ImGui::TableNextColumn();
-			if (ImGui::Button("Extreme", { -1, 0 })) {
-				settings.NumSlices = 4;
-				settings.NumSteps = 8;
-				settings.ResolutionMode = 0;
-				settings.EnableBlur = true;
-				settings.EnableGI = true;
-				recompileFlag = true;
-			}
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("Full res and clean.");
+				ImGui::Text("Half res and clean.");
 
 			ImGui::TableNextColumn();
 			if (ImGui::Button("Reference", { -1, 0 })) {
@@ -826,7 +826,7 @@ void ScreenSpaceGI::DrawSSGI(Texture2D* srcPrevAmbient)
 		lastFrameAccumTexIdx = !lastFrameAccumTexIdx;
 	}
 
-	// upsasmple
+	// upsample
 	if (settings.ResolutionMode != 0) {
 		resetViews();
 		srvs.at(0) = texWorkingDepth->srv.get();
