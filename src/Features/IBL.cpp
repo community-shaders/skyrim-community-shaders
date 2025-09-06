@@ -72,7 +72,11 @@ void IBL::Prepass()
 	auto& envTexture = dynamicCubemaps.envTexture;
 	auto& envReflectionsTexture = dynamicCubemaps.envReflectionsTexture;
 
-	std::array<ID3D11ShaderResourceView*, 3> srvs = { reflections.SRV, dynamicCubemaps.loaded ? envTexture->srv.get() : nullptr, dynamicCubemaps.loaded ? envReflectionsTexture->srv.get() : nullptr };
+	std::array<ID3D11ShaderResourceView*, 3> srvs = {
+		reflections.SRV,
+		(dynamicCubemaps.loaded && envTexture) ? envTexture->srv.get() : nullptr,
+		(dynamicCubemaps.loaded && envReflectionsTexture) ? envReflectionsTexture->srv.get() : nullptr
+	};
 	std::array<ID3D11UnorderedAccessView*, 1> uavs = { diffuseIBLTexture->uav.get() };
 	std::array<ID3D11SamplerState*, 1> samplers = { Deferred::GetSingleton()->linearSampler };
 
