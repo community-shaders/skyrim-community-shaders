@@ -530,8 +530,11 @@ cbuffer PerGeometry : register(b2)
 
 float ComputeShadowVariance(float shadow)
 {
-	float variance = abs(ddx_fine(shadow)) + abs(ddy_fine(shadow));
-    return variance == 0 && fwidth(shadow) == 0;
+    // Measure local gradient magnitude; classify "no variation" using a small threshold.
+    const float2 grad = float2(ddx(shadow), ddy(shadow));
+    const float v = abs(grad.x) + abs(grad.y) + fwidth(shadow);
+    const float epsilon = 1e-4;
+    return (v < epsilon) ? 1.0 : 0.0;
 }
 
 #	if defined(LIGHTING)
