@@ -366,9 +366,6 @@ namespace Hooks
 				upscaling.PostBackendDevice();
 			}
 
-			if (!globals::features::upscaling.loaded)
-				globals::state->InitReShade(globals::d3d::swapChain);
-
 			logger::info("Accessing render device information");
 			globals::ReInit();
 
