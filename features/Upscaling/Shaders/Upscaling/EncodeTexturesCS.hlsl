@@ -3,7 +3,7 @@
 Texture2D<float2> TAAMask : register(t0);
 Texture2D<float4> NormalsWaterMask : register(t1);
 Texture2D<float2> MotionVectorMask : register(t2);
-Texture2D<float2> DepthMask : register(t3);
+Texture2D<float> DepthMask : register(t3);
 
 RWTexture2D<float> ReactiveMask : register(u0);
 
