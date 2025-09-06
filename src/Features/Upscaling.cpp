@@ -1188,13 +1188,19 @@ void Upscaling::FrameLimiter()
 
 		if (settings.frameLimitMode) {
 			// Fall back to the original timing method
-			double bestRefreshRate = refreshRate - (refreshRate * refreshRate) / 3600.0;
-
-			int64_t targetFrameTicks = int64_t(double(qpf.QuadPart) / (bestRefreshRate * (settings.frameGenerationMode && !globals::game::ui->GameIsPaused() ? 0.5 : 1.0)));
+			// Use integer arithmetic for more precise timing
+			int64_t targetFrameTimeNS = int64_t(1000000000.0
+				/ (refreshRate
+				   * (settings.frameGenerationMode && !globals::game::ui->GameIsPaused()
+					  ? 0.5
+					  : 1.0)));
+			int64_t targetFrameTicks = (targetFrameTimeNS * qpf.QuadPart)
+				/ 1000000000LL;
 
 			static LARGE_INTEGER lastFrame = {};
 			LARGE_INTEGER timeNow;
 			QueryPerformanceCounter(&timeNow);
+
 			int64_t delta = timeNow.QuadPart - lastFrame.QuadPart;
 			if (delta < targetFrameTicks) {
 				TimerSleepQPC(lastFrame.QuadPart + targetFrameTicks);
