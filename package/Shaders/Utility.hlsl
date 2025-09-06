@@ -78,9 +78,6 @@ struct VS_OUTPUT
 	float CullDistance : SV_CullDistance0;  // p11
 	uint EyeIndex : EYEIDX0;
 #endif  // VR
-#if defined(TREE_ANIM) && defined(VC)
-	float TreeAlpha: TEXCOORD6;
-#endif
 };
 
 #ifdef VSHADER
@@ -131,10 +128,6 @@ VS_OUTPUT main(VS_INPUT input)
 		input.InstanceID
 #	endif
 	);
-
-#	if defined(TREE_ANIM) && defined(VC)
-	vsout.TreeAlpha = input.Color.w;
-#	endif
 
 #	if (defined(RENDER_DEPTH) && defined(RENDER_SHADOWMASK_ANY)) || SHADOWFILTER == 2
 	vsout.PositionCS.xy = input.PositionMS.xy;
@@ -554,11 +547,7 @@ PS_OUTPUT main(PS_INPUT input)
 	baseTexCoord = input.TexCoord0.xy;
 #		endif
 #	endif
-	float adjustBias = 0;
-#		if defined(TREE_ANIM) && defined(VC) && !defined(RENDER_SHADOWMAP) && !defined(RENDER_SHADOWMAP_CLAMPED) && !defined(RENDER_SHADOWMAP_PB)
-	adjustBias = saturate(input.TreeAlpha * 10.0);
-#		endif
-	float4 baseColor = TexBaseSampler.SampleBias(SampBaseSampler, baseTexCoord, SharedData::MipBias + adjustBias);
+	float4 baseColor = TexBaseSampler.SampleBias(SampBaseSampler, baseTexCoord, SharedData::MipBias);
 
 #	if defined(RENDER_SHADOWMAP_PB)
 	if (input.TexCoord1.z < 0) {

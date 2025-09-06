@@ -1808,17 +1808,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	rawRMAOS = blendedRMAOS;
 #		endif
 #	else  // Non-landscape code
-
-float adjustBias = 0;
-#	if defined(TREE_ANIM)
-	adjustBias = saturate(input.Color.w * 10.0);
-	#endif
-	float4 rawBaseColor = TexColorSampler.SampleBias(SampColorSampler, diffuseUv, SharedData::MipBias + adjustBias);
+	float4 rawBaseColor = TexColorSampler.SampleBias(SampColorSampler, diffuseUv, SharedData::MipBias);
 	baseColor = float4(Color::Diffuse(rawBaseColor.rgb), rawBaseColor.a);
-	float4 normalColor = TexNormalSampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias + adjustBias);
+	float4 normalColor = TexNormalSampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias);
 	normal = normalColor;
 #		if defined(TRUE_PBR)
-	rawRMAOS = TexRMAOSSampler.SampleBias(SampRMAOSSampler, diffuseUv, SharedData::MipBias + adjustBias) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
+	rawRMAOS = TexRMAOSSampler.SampleBias(SampRMAOSSampler, diffuseUv, SharedData::MipBias) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
 		if ((PBRFlags & PBR::Flags::Glint) != 0) {
 				glintParameters = MultiLayerParallaxData;
 			}
@@ -3143,11 +3138,11 @@ float adjustBias = 0;
 	float alpha = baseColor.w;
 #		if defined(EMAT) && !defined(LANDSCAPE)
 #			if defined(PARALLAX)
-	alpha = TexColorSampler.SampleBias(SampColorSampler, uvOriginal, SharedData::MipBias + adjustBias).w;
+	alpha = TexColorSampler.SampleBias(SampColorSampler, uvOriginal, SharedData::MipBias).w;
 #			elif defined(TRUE_PBR)
 	[branch] if (PBRParallax)
 	{
-		alpha = TexColorSampler.SampleBias(SampColorSampler, uvOriginal, SharedData::MipBias + adjustBias).w;
+		alpha = TexColorSampler.SampleBias(SampColorSampler, uvOriginal, SharedData::MipBias).w;
 	}
 #			endif
 #		endif
