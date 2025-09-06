@@ -9,6 +9,8 @@
 
 ffxFunctions ffxModule;
 
+std::vector<std::pair<std::string, std::string>> FidelityFX::dllVersions = {};
+
 void FidelityFX::LoadFFX()
 {
 	// Load upscaler and frame generation DLLs and their function pointers
