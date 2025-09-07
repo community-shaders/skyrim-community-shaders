@@ -262,18 +262,6 @@ struct ID3D11Device_CreatePixelShader
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
-struct ID3D11Device_CreateSamplerState
-{
-	static HRESULT STDMETHODCALLTYPE thunk(ID3D11Device* This, D3D11_SAMPLER_DESC* pSamplerDesc, ID3D11SamplerState** ppSamplerState)
-	{
-		// Limit Anisotropy to 8x for performance
-		D3D11_SAMPLER_DESC descCopy = *pSamplerDesc;  // make a copy, pSamplerDesc is supposed to be immutable
-		descCopy.MaxAnisotropy = std::min(descCopy.MaxAnisotropy, 8u);
-		return func(This, &descCopy, ppSamplerState);
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
-
 struct BSShaderRenderTargets_Create
 {
 	/**
@@ -377,8 +365,6 @@ namespace Hooks
 				stl::detour_vfunc<12, ID3D11Device_CreateVertexShader>(globals::d3d::device);
 				stl::detour_vfunc<15, ID3D11Device_CreatePixelShader>(globals::d3d::device);
 			}
-
-			stl::detour_vfunc<23, ID3D11Device_CreateSamplerState>(globals::d3d::device);
 
 			globals::InstallD3DHooks(globals::d3d::context);
 
