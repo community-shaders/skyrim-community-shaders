@@ -38,6 +38,7 @@
 #include "Features/WaterEffects.h"
 #include "Features/WeatherPicker.h"
 #include "Features/WetnessEffects.h"
+#include "Features/ReverseZ.h"
 
 #include "Features/LightLimitFix/ParticleLights.h"
 
@@ -81,6 +82,7 @@ namespace globals
 		PerformanceOverlay performanceOverlay{};
 		WetnessEffects wetnessEffects{};
 		ExtendedTranslucency extendedTranslucency{};
+		ReverseZ reverseZ{};
 
 		namespace llf
 		{

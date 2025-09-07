@@ -11,6 +11,7 @@
 
 #include "Features/InteriorSun.h"
 #include "Features/LightLimitFix.h"
+#include "Features/ReverseZ.h"
 #include "Features/TerrainHelper.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
@@ -267,7 +268,18 @@ struct IDXGISwapChain_Present
 
 void Hooks::BSGraphics_SetDirtyStates::thunk(bool isCompute)
 {
+	// Override depth clear value for reverse Z
+	if (globals::features::reverseZ.settings.EnableReverseZ) {
+		// HIDWORD(qword_143027EE8) controls depth being set to 1, make it 0 for reverse Z
+		static REL::Relocation<uint64_t*> qword_143027EE8{ REL::RelocationID(524780, 524780) };
+		uint64_t& depthClearControl = *qword_143027EE8.get();
+
+		// Clear the high DWORD (HIDWORD) to 0 instead of 1
+		depthClearControl = (depthClearControl & 0xFFFFFFFF);  // Keep low DWORD, clear high DWORD
+	}
+
 	func(isCompute);
+		
 	globals::state->Draw();
 }
 
