@@ -343,8 +343,6 @@ namespace Hooks
 
 			func();
 
-			globals::state->InitReShade(globals::d3d::swapChain);
-
 			auto& upscaling = globals::features::upscaling;
 
 			if (upscaling.IsBackendInitialized()) {

@@ -838,6 +838,8 @@ void State::InitReShade(IDXGISwapChain* a_swapChain)
 
 void State::SetupReShade()
 {
+	InitReShade(globals::d3d::swapChain);
+
 	if (reShadeRuntime) {
 		logger::info("[ReShade] Setting render target information");
 
