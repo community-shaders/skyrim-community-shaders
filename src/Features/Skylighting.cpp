@@ -525,7 +525,6 @@ void Skylighting::RenderOcclusion()
 				}
 				if (precipObject) {
 					precip->SetupMask();
-					precip->SetupMask();  // Calling setup twice fixes an issue when it is raining
 					auto effect = precipObject->GetGeometryRuntimeData().properties[RE::BSGeometry::States::kEffect];
 					auto shaderProp = netimmerse_cast<RE::BSShaderProperty*>(effect.get());
 					auto particleShaderProperty = netimmerse_cast<RE::BSParticleShaderProperty*>(shaderProp);
@@ -593,8 +592,9 @@ void Skylighting::RenderOcclusion()
 
 				PrecipitationShaderDirection = { PrecipitationShaderDirectionF.x, PrecipitationShaderDirectionF.y, PrecipitationShaderDirectionF.z };
 
+				static REL::Relocation<void(RE::Precipitation*, RE::NiPointer<RE::NiCamera>)> _computeProjection { REL::RelocationID(25643, 26185) };
+				_computeProjection(precip, precip->occlusionData.camera);
 				precip->SetupMask();
-				precip->SetupMask();  // Calling setup twice fixes an issue when it is raining
 
 				BSParticleShaderRainEmitter* rain = new BSParticleShaderRainEmitter;
 				{
@@ -614,6 +614,8 @@ void Skylighting::RenderOcclusion()
 				PrecipitationShaderDirection = originalParticleShaderDirection;
 
 				precipitation = precipitationCopy;
+
+				_computeProjection(precip, precip->occlusionData.camera);
 
 				state->EndPerfEvent();
 			}
