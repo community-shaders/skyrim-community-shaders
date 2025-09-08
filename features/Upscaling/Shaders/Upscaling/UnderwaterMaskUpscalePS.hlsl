@@ -28,7 +28,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 	// Remove jitter offset to get the correct sampling coordinates
 	float2 uv = originalUV - (jitter * SharedData::BufferDim.zw);
-	
+
 	// Clamp within bounds
 	uv = clamp(uv, 0.0, FrameBuffer::DynamicResolutionParams1.xy);
 
