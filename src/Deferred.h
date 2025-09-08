@@ -35,12 +35,6 @@ public:
 
 	ID3D11ComputeShader* GetComputeMainCompositeInterior();
 
-	void HDRShaderHacks();
-
-	void BindAdaptationShader();
-
-	void BindHDRShader();
-
 	ID3D11BlendState* deferredBlendStates[7][2][13][2];
 	ID3D11BlendState* forwardBlendStates[7][2][13][2];
 
@@ -79,9 +73,6 @@ public:
 	ID3D11ComputeShader* copyShadowCS = nullptr;
 	Buffer* perShadow = nullptr;
 	ID3D11ShaderResourceView* shadowView = nullptr;
-
-	Texture2D* adaptationTextures[2];
-	winrt::com_ptr<ID3D11ShaderResourceView> lutTexture = nullptr;
 
 	struct Hooks
 	{
