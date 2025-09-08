@@ -1,5 +1,5 @@
-#include "DX12SwapChain.h"
 #include "Deferred.h"
+#include "Features/Upscaling.h"
 #include "FrameAnnotations.h"
 #include "Globals.h"
 #include "Hooks.h"
@@ -7,7 +7,6 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
-#include "Upscaling.h"
 
 #include "ENB/ENBSeriesAPI.h"
 
@@ -79,11 +78,8 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 	case SKSE::MessagingInterface::kPostPostLoad:
 		{
 			if (errors.empty()) {
-				auto state = globals::state;
-				state->PostPostLoad();  // state should load first so basic information is populated
 				Deferred::Hooks::Install();
 				globals::truePBR->PostPostLoad();
-				Upscaling::InstallHooks();
 				Hooks::Install();
 				EngineFix::InstallOnPostPostLoadFixes();
 				FrameAnnotations::OnPostPostLoad();
@@ -175,7 +171,8 @@ bool Load()
 
 	const std::array dlls = {
 		L"Data/SKSE/Plugins/ShaderTools.dll",
-		L"Data/SKSE/Plugins/SSEShaderTools.dll"
+		L"Data/SKSE/Plugins/SSEShaderTools.dll",
+		L"Data/SKSE/Plugins/SkyrimUpscaler.dll"
 	};
 
 	for (const auto dll : dlls) {
@@ -186,7 +183,14 @@ bool Load()
 		}
 	}
 
-	if (errors.empty())
-		Hooks::InstallD3DHooks();
-	return true;
+	if (errors.empty()) {
+		logger::info("Calling feature Load methods");
+		for (auto* feature : Feature::GetFeatureList()) {
+			if (feature->loaded) {
+				feature->Load();
+			}
+		}
+	}
+
+	return errors.empty();
 }

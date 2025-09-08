@@ -1,0 +1,8 @@
+{
+    "name": "intel-xess",
+    "version": "2.1.0",
+    "port-version": 1,
+    "description": "Intel Xe Super Sampling (XeSS) SDK - AI-based upscaling technology (headers only)",
+    "homepage": "https://github.com/intel/xess",
+    "supports": "windows"
+}

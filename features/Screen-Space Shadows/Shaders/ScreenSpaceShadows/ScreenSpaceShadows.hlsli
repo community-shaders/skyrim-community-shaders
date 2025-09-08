@@ -25,7 +25,7 @@ namespace ScreenSpaceShadows
 		float4 shadowSamples = 0;
 		float4 depthSamples = 0;
 
-#	if defined(DEFERRED) && !defined(DO_ALPHA_TEST)
+#	if defined(DEFERRED)
 		depthSamples[0] = screenPosition.z;
 #	else
 		depthSamples[0] = SharedData::DepthTexture.Load(int3(int2(screenPosition.xy + 0.5f), 0)).x;
