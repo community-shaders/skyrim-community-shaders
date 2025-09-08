@@ -58,8 +58,6 @@ public:
 	const std::string userConfigPath = "Data\\SKSE\\Plugins\\CommunityShaders\\SettingsUser.json";
 	const std::string defaultConfigPath = "Data\\SKSE\\Plugins\\CommunityShaders\\SettingsDefault.json";
 
-	bool upscalerLoaded = false;
-
 	float timer = 0;
 	double smoothDrawCalls[RE::BSShader::Type::Total + 1];
 	int drawCalls[RE::BSShader::Type::Total + 1];
@@ -87,7 +85,6 @@ public:
 
 	void Load(ConfigMode a_configMode = ConfigMode::USER, bool a_allowReload = true);
 	void Save(ConfigMode a_configMode = ConfigMode::USER);
-	void PostPostLoad();
 
 	bool ValidateCache(CSimpleIniA& a_ini);
 	void WriteDiskCacheInfo(CSimpleIniA& a_ini);
@@ -231,6 +228,7 @@ public:
 	reshade::api::resource_view reshadeSwapChainRTV;
 	reshade::api::resource_view reshadeSwapChainRTVsRGB;
 
+	void InitReShade(IDXGISwapChain* a_swapChain);
 	void SetupReShade();
 	void RenderReShade();
 	void PresentReShade();

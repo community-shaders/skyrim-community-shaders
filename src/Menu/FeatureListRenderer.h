@@ -31,8 +31,7 @@ public:
 		std::string& pendingFeatureSelection,
 		std::map<std::string, bool>& categoryExpansionStates,
 		const std::function<void()>& drawGeneralSettings,
-		const std::function<void()>& drawAdvancedSettings,
-		const std::function<void()>& drawDisplaySettings);
+		const std::function<void()>& drawAdvancedSettings);
 
 private:
 	struct ListMenuVisitor
@@ -66,8 +65,7 @@ private:
 		const std::string& featureSearch,
 		std::map<std::string, bool>& categoryExpansionStates,
 		const std::function<void()>& drawGeneralSettings,
-		const std::function<void()>& drawAdvancedSettings,
-		const std::function<void()>& drawDisplaySettings);
+		const std::function<void()>& drawAdvancedSettings);
 
 	static void HandlePendingFeatureSelection(
 		std::string& pendingFeatureSelection,

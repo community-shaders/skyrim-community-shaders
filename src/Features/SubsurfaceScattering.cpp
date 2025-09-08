@@ -12,8 +12,12 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SubsurfaceScattering::Settings,
 	EnableCharacterLighting,
 	CharacterLightingStrength,
+	SSMode,
 	BaseProfile,
-	HumanProfile)
+	HumanProfile,
+	BurleySamples,
+	MeanFreePathBase,
+	MeanFreePathHuman)
 
 void SubsurfaceScattering::DrawSettings()
 {
@@ -26,38 +30,69 @@ void SubsurfaceScattering::DrawSettings()
 			ImGui::SliderFloat("Strength", &settings.CharacterLightingStrength, 0, 5, "%.2f");
 		}
 
-		if (ImGui::TreeNodeEx("Base Profile", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::SliderFloat("Blur Radius", &settings.BaseProfile.BlurRadius, 0, 3, "%.2f");
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Blur radius.");
+		ImGui::RadioButton("Separable SSS", &settings.SSMode, 0);
+		ImGui::SameLine();
+		ImGui::RadioButton("Burley", &settings.SSMode, 1);
+
+		if (settings.SSMode == 0) {
+			if (ImGui::TreeNodeEx("Base Profile", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::SliderFloat("Blur Radius", &settings.BaseProfile.BlurRadius, 0, 3, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Blur radius.");
+				}
+
+				ImGui::SliderFloat("Thickness", &settings.BaseProfile.Thickness, 0, 3, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Blur radius relative to depth.");
+				}
+
+				updateKernels = updateKernels || ImGui::ColorEdit3("Strength", (float*)&settings.BaseProfile.Strength);
+				updateKernels = updateKernels || ImGui::ColorEdit3("Falloff", (float*)&settings.BaseProfile.Falloff);
+
+				ImGui::TreePop();
 			}
 
-			ImGui::SliderFloat("Thickness", &settings.BaseProfile.Thickness, 0, 3, "%.2f");
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Blur radius relative to depth.");
+			if (ImGui::TreeNodeEx("Human Profile", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::SliderFloat("Blur Radius", &settings.HumanProfile.BlurRadius, 0, 3, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Blur radius.");
+				}
+
+				ImGui::SliderFloat("Thickness", &settings.HumanProfile.Thickness, 0, 3, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Blur radius relative to depth.");
+				}
+
+				updateKernels = updateKernels || ImGui::ColorEdit3("Strength", (float*)&settings.HumanProfile.Strength);
+				updateKernels = updateKernels || ImGui::ColorEdit3("Falloff", (float*)&settings.HumanProfile.Falloff);
+
+				ImGui::TreePop();
+			}
+		} else if (settings.SSMode == 1) {
+			ImGui::SliderInt("Burley Samples", (int*)&settings.BurleySamples, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
+			if (ImGui::TreeNodeEx("Base Profile", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::ColorEdit3("Mean Free Path Color", (float*)&settings.MeanFreePathBase);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Controls how far light goes into the subsurface in the red, green, and blue channel. It is scaled by the Mean Free Path Distance.");
+				}
+				ImGui::SliderFloat("Mean Free Path Distance", &settings.MeanFreePathBase.w, 0.01f, 10.0f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Controls the distance that Mean Free Path Color goes into subsurface.");
+				}
+				ImGui::TreePop();
 			}
 
-			updateKernels = updateKernels || ImGui::ColorEdit3("Strength", (float*)&settings.BaseProfile.Strength);
-			updateKernels = updateKernels || ImGui::ColorEdit3("Falloff", (float*)&settings.BaseProfile.Falloff);
-
-			ImGui::TreePop();
-		}
-
-		if (ImGui::TreeNodeEx("Human Profile", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::SliderFloat("Blur Radius", &settings.HumanProfile.BlurRadius, 0, 3, "%.2f");
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Blur radius.");
+			if (ImGui::TreeNodeEx("Human Profile", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::ColorEdit3("Mean Free Path Color", (float*)&settings.MeanFreePathHuman);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Controls how far light goes into the subsurface in the red, green, and blue channel. It is scaled by the Mean Free Path Distance.");
+				}
+				ImGui::SliderFloat("Mean Free Path Distance", &settings.MeanFreePathHuman.w, 0.01f, 10.0f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Controls the distance that Mean Free Path Color goes into subsurface.");
+				}
+				ImGui::TreePop();
 			}
-
-			ImGui::SliderFloat("Thickness", &settings.HumanProfile.Thickness, 0, 3, "%.2f");
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Blur radius relative to depth.");
-			}
-
-			updateKernels = updateKernels || ImGui::ColorEdit3("Strength", (float*)&settings.HumanProfile.Strength);
-			updateKernels = updateKernels || ImGui::ColorEdit3("Falloff", (float*)&settings.HumanProfile.Falloff);
-
-			ImGui::TreePop();
 		}
 
 		ImGui::Spacing();
@@ -180,6 +215,11 @@ void SubsurfaceScattering::DrawSSS()
 		blurCBData.BaseProfile = { settings.BaseProfile.BlurRadius, settings.BaseProfile.Thickness, 0, 0 };
 		blurCBData.HumanProfile = { settings.HumanProfile.BlurRadius, settings.HumanProfile.Thickness, 0, 0 };
 
+		blurCBData.BurleySamples = settings.BurleySamples;
+
+		blurCBData.MeanFreePathBase = settings.MeanFreePathBase;
+		blurCBData.MeanFreePathHuman = settings.MeanFreePathHuman;
+
 		blurCB->Update(blurCBData);
 	}
 
@@ -194,54 +234,72 @@ void SubsurfaceScattering::DrawSSS()
 
 		auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 		auto mask = renderer->GetRuntimeData().renderTargets[MASKS];
+		auto albedo = renderer->GetRuntimeData().renderTargets[ALBEDO];
+		auto normal = renderer->GetRuntimeData().renderTargets[NORMALROUGHNESS];
 
 		ID3D11UnorderedAccessView* uav = blurHorizontalTemp->uav.get();
 		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 
 		auto& terrainBlending = globals::features::terrainBlending;
 
-		ID3D11ShaderResourceView* views[3];
+		ID3D11ShaderResourceView* views[5];
 		views[0] = main.SRV;
-		views[1] = terrainBlending.loaded ? terrainBlending.blendedDepthTexture16->srv.get() : depth.depthSRV,
+		views[1] = terrainBlending.loaded ? terrainBlending.blendedDepthTexture16->srv.get() : depth.depthSRV;
 		views[2] = mask.SRV;
+		views[3] = albedo.SRV;
+		views[4] = normal.SRV;
 
-		context->CSSetShaderResources(0, 3, views);
+		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
-		// Horizontal pass to temporary texture
-		{
-			TracyD3D11Zone(globals::state->tracyCtx, "Subsurface Scattering - Horizontal");
+		if (settings.SSMode == 0) {
+			// Horizontal pass to temporary texture
+			{
+				TracyD3D11Zone(globals::state->tracyCtx, "Subsurface Scattering - Horizontal");
 
-			auto shader = GetComputeShaderHorizontalBlur();
-			context->CSSetShader(shader, nullptr, 0);
+				auto shader = GetComputeShaderHorizontalBlur();
+				context->CSSetShader(shader, nullptr, 0);
 
-			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
-		}
+				context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+			}
 
-		uav = nullptr;
-		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+			uav = nullptr;
+			context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 
-		// Vertical pass to main texture
-		{
-			TracyD3D11Zone(globals::state->tracyCtx, "Subsurface Scattering - Vertical");
+			// Vertical pass to main texture
+			{
+				TracyD3D11Zone(globals::state->tracyCtx, "Subsurface Scattering - Vertical");
 
-			views[0] = blurHorizontalTemp->srv.get();
-			context->CSSetShaderResources(0, 1, views);
+				views[0] = blurHorizontalTemp->srv.get();
+				context->CSSetShaderResources(0, 1, views);
 
-			ID3D11UnorderedAccessView* uavs[1] = { main.UAV };
-			context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+				ID3D11UnorderedAccessView* uavs[1] = { main.UAV };
+				context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
 
-			auto shader = GetComputeShaderVerticalBlur();
-			context->CSSetShader(shader, nullptr, 0);
+				auto shader = GetComputeShaderVerticalBlur();
+				context->CSSetShader(shader, nullptr, 0);
 
-			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+				context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+			}
+		} else if (settings.SSMode == 1) {
+			// Burley pass to main texture
+			{
+				TracyD3D11Zone(globals::state->tracyCtx, "Subsurface Scattering - Burley");
+
+				auto shader = GetComputeShaderBurley();
+				context->CSSetShader(shader, nullptr, 0);
+
+				context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+
+				context->CopyResource(main.texture, blurHorizontalTemp->resource.get());
+			}
 		}
 	}
 
 	ID3D11Buffer* buffer = nullptr;
 	context->CSSetConstantBuffers(1, 1, &buffer);
 
-	ID3D11ShaderResourceView* views[3]{ nullptr, nullptr, nullptr };
-	context->CSSetShaderResources(0, 3, views);
+	ID3D11ShaderResourceView* views[5]{ nullptr, nullptr, nullptr, nullptr, nullptr };
+	context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
 	ID3D11UnorderedAccessView* uavs[1]{ nullptr };
 	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
@@ -322,6 +380,10 @@ void SubsurfaceScattering::ClearShaderCache()
 		verticalSSBlur->Release();
 		verticalSSBlur = nullptr;
 	}
+	if (burleySS) {
+		burleySS->Release();
+		burleySS = nullptr;
+	}
 }
 
 ID3D11ComputeShader* SubsurfaceScattering::GetComputeShaderHorizontalBlur()
@@ -340,6 +402,15 @@ ID3D11ComputeShader* SubsurfaceScattering::GetComputeShaderVerticalBlur()
 		verticalSSBlur = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\SubsurfaceScattering\\SeparableSSSCS.hlsl", {}, "cs_5_0");
 	}
 	return verticalSSBlur;
+}
+
+ID3D11ComputeShader* SubsurfaceScattering::GetComputeShaderBurley()
+{
+	if (!burleySS) {
+		logger::debug("Compiling burleySS");
+		burleySS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\SubsurfaceScattering\\SeparableSSSCS.hlsl", { { "BURLEY", "" } }, "cs_5_0");
+	}
+	return burleySS;
 }
 
 void SubsurfaceScattering::DataLoaded()

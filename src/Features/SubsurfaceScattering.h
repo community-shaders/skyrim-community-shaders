@@ -20,8 +20,12 @@ public:
 	{
 		uint EnableCharacterLighting = false;
 		float CharacterLightingStrength = 1.0f;
+		int SSMode = 0;
 		DiffusionProfile BaseProfile{ 0.5f, 1.0f, { 0.48f, 0.41f, 0.28f }, { 0.56f, 0.56f, 0.56f } };
 		DiffusionProfile HumanProfile{ 1.0f, 1.0f, { 0.48f, 0.41f, 0.28f }, { 1.0f, 0.37f, 0.3f } };
+		uint BurleySamples = 16;
+		float4 MeanFreePathBase = { 0.56f, 0.56f, 0.56f, 2.67f };
+		float4 MeanFreePathHuman = { 1.0f, 0.37f, 0.3f, 2.67f };
 	};
 
 	Settings settings;
@@ -40,7 +44,10 @@ public:
 		float4 BaseProfile;
 		float4 HumanProfile;
 		float SSSS_FOVY;
-		uint pad[3];
+		uint BurleySamples;
+		uint pad[2];
+		float4 MeanFreePathBase;
+		float4 MeanFreePathHuman;
 	};
 
 	ConstantBuffer* blurCB = nullptr;
@@ -54,6 +61,7 @@ public:
 
 	ID3D11ComputeShader* horizontalSSBlur = nullptr;
 	ID3D11ComputeShader* verticalSSBlur = nullptr;
+	ID3D11ComputeShader* burleySS = nullptr;
 	RE::BGSKeyword* isBeastRaceKeyword = nullptr;
 
 	virtual inline std::string GetName() override { return "Subsurface Scattering"; }
@@ -95,6 +103,7 @@ public:
 	virtual void ClearShaderCache() override;
 	ID3D11ComputeShader* GetComputeShaderHorizontalBlur();
 	ID3D11ComputeShader* GetComputeShaderVerticalBlur();
+	ID3D11ComputeShader* GetComputeShaderBurley();
 
 	virtual void DataLoaded() override;
 	virtual void PostPostLoad() override;

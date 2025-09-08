@@ -22,12 +22,11 @@ void FeatureListRenderer::RenderFeatureList(
 	std::string& pendingFeatureSelection,
 	std::map<std::string, bool>& categoryExpansionStates,
 	const std::function<void()>& drawGeneralSettings,
-	const std::function<void()>& drawAdvancedSettings,
-	const std::function<void()>& drawDisplaySettings)
+	const std::function<void()>& drawAdvancedSettings)
 {
 	ImGui::BeginChild("Menus Table", ImVec2(0, -footerHeight));
 
-	auto menuList = BuildMenuList(featureSearch, categoryExpansionStates, drawGeneralSettings, drawAdvancedSettings, drawDisplaySettings);
+	auto menuList = BuildMenuList(featureSearch, categoryExpansionStates, drawGeneralSettings, drawAdvancedSettings);
 
 	HandlePendingFeatureSelection(pendingFeatureSelection, menuList, selectedMenu);
 
@@ -49,8 +48,7 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	const std::string& featureSearch,
 	std::map<std::string, bool>& categoryExpansionStates,
 	const std::function<void()>& drawGeneralSettings,
-	const std::function<void()>& drawAdvancedSettings,
-	const std::function<void()>& drawDisplaySettings)
+	const std::function<void()>& drawAdvancedSettings)
 {
 	// Build the menu list
 	auto& featureList = Feature::GetFeatureList();
@@ -68,8 +66,7 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 
 	auto menuList = std::vector<MenuFuncInfo>{
 		BuiltInMenu{ "General", drawGeneralSettings },
-		BuiltInMenu{ "Advanced", drawAdvancedSettings },
-		BuiltInMenu{ "Display", drawDisplaySettings }
+		BuiltInMenu{ "Advanced", drawAdvancedSettings }
 	};  // NOTE: The menu list is rebuilt every frame, so category expansion states
 	// persist correctly. This is acceptable since the list is small and built
 	// infrequently, but could be optimized if performance becomes an issue.
@@ -176,23 +173,23 @@ void FeatureListRenderer::RenderLeftColumn(
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 	ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4());
 	if (ImGui::BeginListBox("##MenusList", { -FLT_MIN, -FLT_MIN })) {
-		// Find where built-in menus end (General, Advanced, Display)
+		// Find where built-in menus end (General, Advanced)
 		size_t builtInMenuCount = 0;
 		for (size_t i = 0; i < menuList.size(); i++) {
 			if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
 				const BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
-				if (menu.name == "General" || menu.name == "Advanced" || menu.name == "Display") {
+				if (menu.name == "General" || menu.name == "Advanced") {
 					builtInMenuCount++;
 				}
 			}
 		}
 
-		// First render the built-in menus (General, Advanced, Display)
+		// First render the built-in menus (General, Advanced)
 		size_t renderedBuiltIns = 0;
-		for (size_t i = 0; i < menuList.size() && renderedBuiltIns < 3; i++) {
+		for (size_t i = 0; i < menuList.size() && renderedBuiltIns < 2; i++) {
 			if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
 				const BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
-				if (menu.name == "General" || menu.name == "Advanced" || menu.name == "Display") {
+				if (menu.name == "General" || menu.name == "Advanced") {
 					std::visit(ListMenuVisitor{ i, selectedMenu, categoryExpansionStates }, menuList[i]);
 					renderedBuiltIns++;
 				}
@@ -207,7 +204,7 @@ void FeatureListRenderer::RenderLeftColumn(
 		for (size_t i = 0; i < menuList.size(); i++) {
 			if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
 				const BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
-				if (menu.name == "General" || menu.name == "Advanced" || menu.name == "Display") {
+				if (menu.name == "General" || menu.name == "Advanced") {
 					continue;  // Skip, already rendered
 				}
 			}
