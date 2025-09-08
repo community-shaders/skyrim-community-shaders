@@ -35,10 +35,9 @@ PS_OUTPUT main(PS_INPUT input)
 
 	// Remove jitter offset to get the correct sampling coordinates
 	float2 uv = originalUV - (jitter * SharedData::BufferDim.zw);
-
+	
 	// Clamp within bounds
-	uv.x = clamp(uv.x, 0.0, originalUV.x - SharedData::BufferDim.zw);
-	uv.y = clamp(uv.y, 0.0, originalUV.y - SharedData::BufferDim.zw);
+	uv = clamp(uv, 0.0, FrameBuffer::DynamicResolutionParams1.xy);
 
 #	if defined(VR)
 	uint4 stencilSamples = StencilTex.GatherRed(LinearSampler, uv);
