@@ -128,7 +128,7 @@ void LightLimitFix::CleanupParticleLights(RE::NiNode* a_node)
 
 void LightLimitFix::SetupResources()
 {
-	auto screenSize = Util::ConvertToDynamic(globals::state->screenSize);
+	auto screenSize = globals::state->screenSize;
 	if (REL::Module::IsVR())
 		screenSize.x *= .5;
 	clusterSize[0] = ((uint)screenSize.x + 63) / 64;
@@ -738,6 +738,66 @@ namespace RE
 
 void LightLimitFix::UpdateLights()
 {
+	auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
+	if (REL::Module::IsVR())
+		renderSize.x *= .5;
+	clusterSize[0] = ((uint)renderSize.x + 63) / 64;
+	clusterSize[1] = ((uint)renderSize.y + 63) / 64;
+	clusterSize[2] = 32;
+
+	// Recreate cluster-dependent GPU buffers if capacity changed
+	{
+		uint newClusterCount = clusterSize[0] * clusterSize[1] * clusterSize[2];
+		static uint allocatedClusterCount = 0;
+		if (allocatedClusterCount != newClusterCount) {
+			D3D11_BUFFER_DESC sbDesc{};
+			sbDesc.Usage = D3D11_USAGE_DEFAULT;
+			sbDesc.CPUAccessFlags = 0;
+			sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+			sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+
+			D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+			srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+			srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+			srvDesc.Buffer.FirstElement = 0;
+
+			D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
+			uavDesc.Format = DXGI_FORMAT_UNKNOWN;
+			uavDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+			uavDesc.Buffer.FirstElement = 0;
+			uavDesc.Buffer.Flags = 0;
+
+			// clusters
+			sbDesc.StructureByteStride = sizeof(ClusterAABB);
+			sbDesc.ByteWidth = sizeof(ClusterAABB) * newClusterCount;
+			clusters = eastl::make_unique<Buffer>(sbDesc);
+			srvDesc.Buffer.NumElements = newClusterCount;
+			clusters->CreateSRV(srvDesc);
+			uavDesc.Buffer.NumElements = newClusterCount;
+			clusters->CreateUAV(uavDesc);
+
+			// lightIndexList
+			uint lilCount = newClusterCount * CLUSTER_MAX_LIGHTS;
+			sbDesc.StructureByteStride = sizeof(uint32_t);
+			sbDesc.ByteWidth = sizeof(uint32_t) * lilCount;
+			lightIndexList = eastl::make_unique<Buffer>(sbDesc);
+			srvDesc.Buffer.NumElements = lilCount;
+			lightIndexList->CreateSRV(srvDesc);
+			uavDesc.Buffer.NumElements = lilCount;
+			lightIndexList->CreateUAV(uavDesc);
+
+			// lightGrid
+			sbDesc.StructureByteStride = sizeof(LightGrid);
+			sbDesc.ByteWidth = sizeof(LightGrid) * newClusterCount;
+			lightGrid = eastl::make_unique<Buffer>(sbDesc);
+			srvDesc.Buffer.NumElements = newClusterCount;
+			lightGrid->CreateSRV(srvDesc);
+			uavDesc.Buffer.NumElements = newClusterCount;
+			lightGrid->CreateUAV(uavDesc);
+
+			allocatedClusterCount = newClusterCount;
+		}
+	}
 	auto smState = globals::game::smState;
 	auto& isl = globals::features::inverseSquareLighting;
 
@@ -966,7 +1026,8 @@ void LightLimitFix::UpdateLights()
 		float fov = atan(1.0f / static_cast<float4x4>(projMatrixUnjittered).m[0][0]) * 2.0f * (180.0f / 3.14159265359f);
 
 		static float _lightsNear = 0.0f, _lightsFar = 0.0f, _fov = 0.0f;
-		if (fabs(_fov - fov) > 1e-4 || fabs(_lightsNear - lightsNear) > 1e-4 || fabs(_lightsFar - lightsFar) > 1e-4) {
+		static uint _clusterSizeX = 0, _clusterSizeY = 0, _clusterSizeZ = 0;
+		if (fabs(_fov - fov) > 1e-4 || fabs(_lightsNear - lightsNear) > 1e-4 || fabs(_lightsFar - lightsFar) > 1e-4 || _clusterSizeX != clusterSize[0] || _clusterSizeY != clusterSize[1] || _clusterSizeZ != clusterSize[2]) {
 			LightBuildingCB updateData{};
 			updateData.InvProjMatrix[0] = DirectX::XMMatrixInverse(nullptr, projMatrixUnjittered);
 			if (eyeCount == 1)
@@ -975,6 +1036,7 @@ void LightLimitFix::UpdateLights()
 				updateData.InvProjMatrix[1] = DirectX::XMMatrixInverse(nullptr, Util::GetCameraData(1).projMatrixUnjittered);
 			updateData.LightsNear = lightsNear;
 			updateData.LightsFar = lightsFar;
+			std::copy(clusterSize, clusterSize + 3, updateData.ClusterSize);
 
 			lightBuildingCB->Update(updateData);
 
@@ -993,6 +1055,9 @@ void LightLimitFix::UpdateLights()
 			_fov = fov;
 			_lightsNear = lightsNear;
 			_lightsFar = lightsFar;
+			_clusterSizeX = clusterSize[0];
+			_clusterSizeY = clusterSize[1];
+			_clusterSizeZ = clusterSize[2];
 		}
 	}
 
@@ -1007,6 +1072,8 @@ void LightLimitFix::UpdateLights()
 
 		LightCullingCB updateData{};
 		updateData.LightCount = lightCount;
+		std::copy(clusterSize, clusterSize + 3, updateData.ClusterSize);
+
 		lightCullingCB->Update(updateData);
 
 		UINT counterReset[4] = { 0, 0, 0, 0 };

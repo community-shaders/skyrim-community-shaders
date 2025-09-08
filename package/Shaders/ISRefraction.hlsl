@@ -1,6 +1,7 @@
 #include "Common/Color.hlsli"
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
+#include "Common/SharedData.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
 
@@ -35,21 +36,17 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float2 texCoordOriginal = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 
-	float4 normalOriginal = Src1Tex.Sample(Src1Sampler, texCoordOriginal);
+	float4 normalOriginal = Src1Tex.Sample(Src0Sampler, texCoordOriginal);
+
 	float4 colorOriginal = Src0Tex.Sample(Src0Sampler, texCoordOriginal);
 
 	float2 texCoordRefracted = GetRefractedTexCoord(input.TexCoord, normalOriginal.xyz);
 
-	float refractedMask = Src1Tex.Sample(Src1Sampler, texCoordRefracted).w;
+	float refractedMask = Src1Tex.Sample(Src0Sampler, texCoordRefracted).w;
 	float4 colorRefracted = Src0Tex.Sample(Src0Sampler, texCoordRefracted);
-	float4 colorResulting = refractedMask != 0 ? colorRefracted : colorOriginal;
+	float4 colorResulting = lerp(colorOriginal, colorRefracted, refractedMask);
 
-	if (normalOriginal.w > 0.8 && normalOriginal.w < 1) {
-		psout.Color.xyz = lerp(colorResulting.xyz, Tint.xyz * Color::RGBToLuminance2(colorRefracted.xyz), Tint.w);
-	} else {
-		psout.Color.xyz = colorResulting.xyz;
-	}
-
+	psout.Color.xyz = colorResulting.xyz;
 	psout.Color.w = colorResulting.w;
 
 	return psout;

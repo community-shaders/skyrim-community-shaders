@@ -82,12 +82,14 @@ public:
 		float LightsNear;
 		float LightsFar;
 		uint pad0[2];
+		uint ClusterSize[4];
 	};
 
 	struct alignas(16) LightCullingCB
 	{
 		uint LightCount;
 		uint pad[3];
+		uint ClusterSize[4];
 	};
 
 	struct alignas(16) PerFrame

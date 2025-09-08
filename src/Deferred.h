@@ -57,6 +57,7 @@ public:
 	Texture2D* prevDiffuseAmbientTexture = nullptr;
 
 	ID3D11SamplerState* linearSampler = nullptr;
+	ID3D11SamplerState* pointSampler = nullptr;
 
 	struct alignas(16) PerGeometry
 	{

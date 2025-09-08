@@ -46,8 +46,9 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
 	float2 uv = float2(dispatchID.xy + 0.5) * SharedData::BufferDim.zw;
-	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
 	uv *= FrameBuffer::DynamicResolutionParams2.xy;  // adjust for dynamic res
+
+	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
 	uv = Stereo::ConvertFromStereoUV(uv, eyeIndex);
 
 	float3 normalGlossiness = NormalRoughnessTexture[dispatchID.xy];
