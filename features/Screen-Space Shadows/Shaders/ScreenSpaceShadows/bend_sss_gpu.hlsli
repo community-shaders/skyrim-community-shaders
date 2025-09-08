@@ -414,7 +414,7 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 
 	// Brute force go!
 	// The main shadow samples, averaged in to a set of 4 shadow values
-	for (i = 0; i < min(inParameters.DynamicReadCount, READ_COUNT); i++)
+	for (i = 0; i < min(inParameters.DynamicSampleCount, SAMPLE_COUNT); i++)
 	{
 		half depth_delta = abs(start_depth - DepthData[sample_index + i] * depth_scale);
 
