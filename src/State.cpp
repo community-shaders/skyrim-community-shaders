@@ -38,8 +38,6 @@ void State::Draw()
 
 		truePBR->SetShaderResouces(context);
 
-		globals::deferred->HDRShaderHacks();
-
 		if (permutationData != permutationDataPrevious) {
 			permutationCB->Update(permutationData);
 			permutationDataPrevious = permutationData;

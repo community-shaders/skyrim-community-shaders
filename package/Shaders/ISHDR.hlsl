@@ -39,10 +39,23 @@ cbuffer PerGeometry : register(b2)
 	float4 BlurOffsets[16] : packoffset(c7);
 };
 
+float GetTonemapFactorReinhard(float luminance)
+{
+	return (luminance * (luminance * Param.y + 1)) / (luminance + 1);
+}
+
 float3 GetTonemapFactorReinhard(float3 luminance)
 {
 	return (luminance * (luminance * Param.y + 1)) / (luminance + 1);
 }
+
+float GetTonemapFactorHejlBurgessDawson(float luminance)
+{
+	float tmp = max(0, luminance - 0.004);
+	return Param.y *
+	       pow(((tmp * 6.2 + 0.5) * tmp) / (tmp * (tmp * 6.2 + 1.7) + 0.06), Color::GammaCorrectionValue);
+}
+
 
 float3 GetTonemapFactorHejlBurgessDawson(float3 luminance)
 {
@@ -89,7 +102,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	elif defined(BLEND)
 	float2 uv = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 
-	float3 inputColor = BlendTex.Sample(BlendSampler, uv).xyz;
+	float3 hdrColor = BlendTex.Sample(BlendSampler, uv).xyz;
 
 	float3 bloomColor = 0;
 	if (Flags.x > 0.5) {
@@ -100,41 +113,16 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float2 avgValue = AvgTex.Sample(AvgSampler, input.TexCoord.xy).xy;
 
-	// Vanilla tonemapping and post-processing
-	float3 gameSdrColor = 0.0;
-	float3 ppColor = 0.0;
-	{
-		if (avgValue.x != 0 && avgValue.y != 0)
-			inputColor *= avgValue.y / avgValue.x;
+	hdrColor *= avgValue.y / avgValue.x;
 
-		inputColor = max(0, inputColor);
+	hdrColor += max(0, Param.x - hdrColor) * bloomColor;
 
-		float3 blendedColor;
-		[branch] if (Param.z > 0.5)
-		{
-			blendedColor = DisplayMapping::HuePreservingHejlBurgessDawson(inputColor, bloomColor);
-		}
-		else
-		{
-			float maxCol = Color::RGBToLuminance(inputColor);
-			float mappedMax = GetTonemapFactorReinhard(maxCol).x;
-			float3 compressedHuePreserving = inputColor * mappedMax / maxCol;
-			blendedColor = compressedHuePreserving;
-			blendedColor += saturate(Param.x - blendedColor) * bloomColor;
-		}
+	hdrColor = pow(abs(hdrColor) / avgValue.x, Cinematic.z) * avgValue.x * sign(hdrColor);
 
-		gameSdrColor = blendedColor;
+	float hdrLuminance = Color::RGBToLuminance(hdrColor);
+	hdrColor = Cinematic.w * lerp(lerp(hdrLuminance, hdrColor, Cinematic.x), lerp(hdrColor, hdrLuminance, saturate(hdrLuminance)) * Tint.xyz, Tint.w).xyz;
 
-		float blendedLuminance = Color::RGBToLuminance(blendedColor);
-
-		float3 linearColor = Cinematic.w * lerp(lerp(blendedLuminance, blendedColor, Cinematic.x), blendedLuminance * Tint.xyz, Tint.w).xyz;
-
-		linearColor = lerp(avgValue.x, linearColor, Cinematic.z);
-
-		ppColor = max(0, linearColor);
-	}
-
-	float3 srgbColor = ppColor;
+	float3 srgbColor = DisplayMapping::HuePreservingTonemap(hdrColor);
 
 #		if defined(FADE)
 	srgbColor = lerp(srgbColor, Fade.xyz, Fade.w);
