@@ -162,7 +162,7 @@ void Upscaling::DrawSettings()
 	}
 	upscaleModes.push_back(xessLabel);
 
-	std::string dlssLabel = resolutionScale == 1.0f ? "NVIDIA DLSS 4 Preset F" : "NVIDIA DLSS 4 Preset K";
+	std::string dlssLabel = resolutionScale.x == 1.0f ? "NVIDIA DLSS 4 Preset F" : "NVIDIA DLSS 4 Preset K";
 	upscaleModes.push_back(dlssLabel);
 
 	// Determine available modes
@@ -722,19 +722,24 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	auto screenHeight = static_cast<int>(screenSize.y);
 
 	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
+
+		float resolutionScaleBase = 1.0f;
+
 		if (globals::game::isVR) {
-			resolutionScale = 1.0f;
+			resolutionScaleBase = 1.0f;
 		} else if (upscaleMethod == UpscaleMethod::kXESS) {
-			resolutionScale = xess.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
+			resolutionScaleBase = xess.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
 		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
-			resolutionScale = streamline.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
+			resolutionScaleBase = streamline.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
 		} else if (upscaleMethod == UpscaleMethod::kFSR) {
-			resolutionScale = fidelityFX.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
+			resolutionScaleBase = fidelityFX.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
 		}
 
-		auto renderWidth = static_cast<int>(screenWidth * resolutionScale);
+		auto renderWidth = static_cast<int>(screenWidth * resolutionScaleBase);
+		auto renderHeight = static_cast<int>(screenHeight * resolutionScaleBase);
 
-		auto renderHeight = static_cast<int>(screenHeight * resolutionScale);
+		resolutionScale.x = static_cast<float>(renderWidth) / static_cast<float>(screenWidth);
+		resolutionScale.y = static_cast<float>(renderHeight) / static_cast<float>(screenHeight);
 
 		auto phaseCount = GetJitterPhaseCount(renderWidth, screenWidth);
 
@@ -747,7 +752,7 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 
 		a_viewport->projectionPosScaleY = 2.0f * jitter.y / renderHeight;
 	} else {
-		resolutionScale = 1.0f;
+		resolutionScale = { 1.0f, 1.0f };
 
 		if (globals::game::isVR)
 			jitter.x = -a_viewport->projectionPosScaleX * screenWidth;
@@ -761,18 +766,15 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 
 	runtimeData.dynamicResolutionPreviousWidthRatio = dynamicResolutionWidthRatio;
 	runtimeData.dynamicResolutionPreviousHeightRatio = dynamicResolutionHeightRatio;
-	runtimeData.dynamicResolutionWidthRatio = resolutionScale;
-	runtimeData.dynamicResolutionHeightRatio = resolutionScale;
+	runtimeData.dynamicResolutionWidthRatio = resolutionScale.x;
+	runtimeData.dynamicResolutionHeightRatio = resolutionScale.y;
 
-	dynamicResolutionWidthRatio = resolutionScale;
-	dynamicResolutionHeightRatio = resolutionScale;
+	dynamicResolutionWidthRatio = resolutionScale.x;
+	dynamicResolutionHeightRatio = resolutionScale.y;
 
 	// Disable dynamic resolution unless the game explictly enables it
 	if (!globals::game::isVR)
 		runtimeData.dynamicResolutionLock = 1;
-
-	if (upscaleMethod == UpscaleMethod::kTAA)
-		resolutionScale = 1.0f;
 }
 
 void Upscaling::SetupResources()
@@ -1439,7 +1441,7 @@ void Upscaling::Upscale()
 		state->BeginPerfEvent("Upscaling");
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get(), resolutionScale == 1.0f ? sl::DLSSPreset::ePresetF : sl::DLSSPreset::ePresetK);
+			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get(), resolutionScale.x == 1.0f ? sl::DLSSPreset::ePresetF : sl::DLSSPreset::ePresetK);
 		else {
 			// Copy input color texture to shared D3D12 resource (only dynamic resolution area)
 			auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
@@ -1524,7 +1526,7 @@ void Upscaling::PerformUpscaling()
 
 void Upscaling::UpscaleDepth()
 {
-	if (resolutionScale != 1.0f) {
+	if (resolutionScale.x != 1.0f) {
 		globals::state->BeginPerfEvent("Render Target Upscaling");
 
 		auto& renderer = globals::game::renderer;

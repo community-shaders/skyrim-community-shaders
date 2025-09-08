@@ -76,7 +76,7 @@ public:
 
 	// Timing and scaling
 	double refreshRate = 0.0f;
-	float resolutionScale = 1.0f;
+	float2 resolutionScale = { 1.0f, 1.0f };
 	LARGE_INTEGER qpf;
 
 	// FG FPS Measurement for Overlay
