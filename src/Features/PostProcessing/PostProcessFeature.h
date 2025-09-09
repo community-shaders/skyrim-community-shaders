@@ -14,6 +14,7 @@ struct PostProcessFeature
 	std::string name;
 	virtual std::string GetDesc() const = 0;
 	virtual bool SupportsVR() const { return true; }
+	virtual bool DrawBeforeUpscaling() const { return false; }
 	virtual bool DrawAfterColorGrading() const { return false; }
 	virtual bool DisableInMainLoadingMenu() const { return false; }
 

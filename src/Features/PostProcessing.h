@@ -92,6 +92,7 @@ struct PostProcessing : Feature
 	virtual void Prepass() override;
 
 	void PreProcess();
+	void DrawBeforeUpscaling();
 	void UpdateToD();
 
 	/////////////////////////////////////////////////////////////////////////////////

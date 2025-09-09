@@ -10,6 +10,8 @@ struct HistogramAutoExposure : public PostProcessFeature
 	virtual inline std::string GetDesc() const override { return "Auto exposure/Eye adaptation method that uses histogram to calculate average screen brightness. "
 																 "Expects HDR linear RGB inputs."; }
 
+	virtual inline bool DrawBeforeUpscaling() const override { return true; }
+
 	virtual bool SupportsVR() { return true; }
 
 	struct Settings

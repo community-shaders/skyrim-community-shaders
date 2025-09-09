@@ -4,7 +4,8 @@
 #include "imgui_stdlib.h"
 
 #include "State.h"
-#include "Upscaling.h"
+
+#include "Features/Upscaling.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	PostProcessing::Settings,
@@ -500,6 +501,58 @@ void PostProcessing::UpdateToD()
 	}
 }
 
+void PostProcessing::DrawBeforeUpscaling()
+{
+	if (bypass)
+		return;
+
+	auto& upscaling = globals::features::upscaling;
+	if (!upscaling || !upscaling.loaded)
+		return;
+
+	auto renderer = globals::game::renderer;
+	auto context = globals::d3d::context;
+	auto state = globals::state;
+
+	bool inMainLoadingMenu = globals::game::ui && (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+	auto gameTexMain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	PostProcessFeature::TextureInfo lastTexColor = { gameTexMain.texture, gameTexMain.SRV };
+
+	state->BeginPerfEvent("[Post Processing] Pre-Upscale");
+
+	// go through each fx
+	for (auto& pipe : pipeline) {
+		if (pipe && pipe->enabled && !pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) && pipe->DrawBeforeUpscaling()) {
+			pipe->Draw(lastTexColor);
+		}
+	}
+
+	D3D11_TEXTURE2D_DESC desc;
+	lastTexColor.tex->GetDesc(&desc);
+	if (desc.Format == texCopy->desc.Format) {
+		context->CopySubresourceRegion(gameTexMain.texture, 0, 0, 0, 0, lastTexColor.tex, 0, nullptr);
+	} else {
+		ID3D11ShaderResourceView* srv = lastTexColor.srv;
+		ID3D11UnorderedAccessView* uav = texCopy->uav.get();
+
+		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+		context->CSSetShaderResources(0, 1, &srv);
+		context->CSSetShader(copyCS.get(), nullptr, 0);
+		context->Dispatch((texCopy->desc.Width + 7) >> 3, (texCopy->desc.Height + 7) >> 3, 1);
+
+		srv = nullptr;
+		uav = nullptr;
+
+		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+		context->CSSetShaderResources(0, 1, &srv);
+		context->CSSetShader(nullptr, nullptr, 0);
+
+		context->CopySubresourceRegion(gameTexMain.texture, 0, 0, 0, 0, texCopy->resource.get(), 0, nullptr);
+	}
+
+	state->EndPerfEvent();
+}
+
 void PostProcessing::PreProcess()
 {
 	if (bypass)
@@ -507,6 +560,9 @@ void PostProcessing::PreProcess()
 
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
+
+	auto& upscaling = globals::features::upscaling;
+	bool upscalingActive = upscaling && upscaling.loaded;
 
 	bool inMainLoadingMenu = globals::game::ui && (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
 
@@ -516,13 +572,13 @@ void PostProcessing::PreProcess()
 
 	// go through each fx
 	for (auto& pipe : pipeline) {
-		if (pipe && pipe->enabled && !pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu())) {
+		if (pipe && pipe->enabled && !pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) && (!pipe->DrawBeforeUpscaling() || !upscalingActive)) {
 			pipe->Draw(lastTexColor);
 		}
 	}
 
 	for (auto& pipe : pipeline) {
-		if (pipe && pipe->enabled && pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu())) {
+		if (pipe && pipe->enabled && pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) && (!pipe->DrawBeforeUpscaling() || !upscalingActive)) {
 			pipe->Draw(lastTexColor);
 		}
 	}
