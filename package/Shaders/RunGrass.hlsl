@@ -455,7 +455,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float y;
 	TexBaseSampler.GetDimensions(x, y);
 
-	float3 complexTest = TexBaseSampler.Load(int3(0, y, 0));
+	float3 complexTest = TexBaseSampler.Load(int3(0, int(y) - 1, 0)).xyz;
 	float complexLength = length(complexTest);
 	bool complex = complexLength > 0.9 && complexLength < 1.1;
 #		endif  // !TRUE_PBR
