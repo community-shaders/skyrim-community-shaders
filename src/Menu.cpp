@@ -123,6 +123,7 @@ Menu::~Menu()
 	uiIcons.clearCache.Release();
 	uiIcons.logo.Release();
 	uiIcons.characters.Release();
+	uiIcons.display.Release();
 	uiIcons.grass.Release();
 	uiIcons.lighting.Release();
 	uiIcons.sky.Release();

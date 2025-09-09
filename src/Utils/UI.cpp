@@ -167,12 +167,13 @@ namespace Util
 		logger::info("InitializeMenuIcons: Loading icons from base path: {}", basePath);
 
 		// Initialize all texture pointers to nullptr for safe cleanup
-		std::array<ID3D11ShaderResourceView**, 13> texturePointers = {
+		std::array<ID3D11ShaderResourceView**, 14> texturePointers = {
 			&menu->uiIcons.saveSettings.texture,
 			&menu->uiIcons.loadSettings.texture,
 			&menu->uiIcons.clearCache.texture,
 			&menu->uiIcons.logo.texture,
 			&menu->uiIcons.characters.texture,
+			&menu->uiIcons.display.texture,
 			&menu->uiIcons.grass.texture,
 			&menu->uiIcons.lighting.texture,
 			&menu->uiIcons.sky.texture,
@@ -195,117 +196,55 @@ namespace Util
 		bool anyIconLoaded = false;
 		int iconsLoaded = 0;
 
-		// Load save settings icon
-		if (LoadTextureFromFile(device, (basePath + "Action Icons\\save-settings.png").c_str(), &menu->uiIcons.saveSettings.texture, menu->uiIcons.saveSettings.size)) {
-			logger::info("InitializeMenuIcons: Successfully loaded save-settings icon");
-			iconsLoaded++;
-			anyIconLoaded = true;
-		} else {
-			logger::warn("InitializeMenuIcons: Failed to load save-settings icon from: {}", basePath + "Action Icons\\save-settings.png");
+		// Helper function to load a single icon
+		auto loadIcon = [&](const std::string& path, ID3D11ShaderResourceView** texture, ImVec2& size) -> bool {
+			if (LoadTextureFromFile(device, path.c_str(), texture, size)) {
+				iconsLoaded++;
+				anyIconLoaded = true;
+				return true;
+			}
+			return false;
+		};
+
+		// Helper function to load icon with logging
+		auto loadIconWithLogging = [&](const std::string& path, ID3D11ShaderResourceView** texture, ImVec2& size, const std::string& name) {
+			if (!loadIcon(path, texture, size)) {
+				logger::warn("InitializeMenuIcons: Failed to load {} icon from: {}", name, path);
+			}
+		};
+
+		// Load action icons
+		loadIconWithLogging(basePath + "Action Icons\\save-settings.png", &menu->uiIcons.saveSettings.texture, menu->uiIcons.saveSettings.size, "save-settings");
+		loadIconWithLogging(basePath + "Action Icons\\load-settings.png", &menu->uiIcons.loadSettings.texture, menu->uiIcons.loadSettings.size, "load-settings");
+		loadIconWithLogging(basePath + "Action Icons\\clear-cache.png", &menu->uiIcons.clearCache.texture, menu->uiIcons.clearCache.size, "clear-cache");
+		loadIconWithLogging(basePath + "Community Shaders Logo\\cs-logo.png", &menu->uiIcons.logo.texture, menu->uiIcons.logo.size, "logo");
+
+		// Load category icons in a more compact way
+		struct CategoryIcon {
+			const char* filename;
+			ID3D11ShaderResourceView** texture;
+			ImVec2& size;
+		};
+
+		std::vector<CategoryIcon> categoryIcons = {
+			{ "characters.png", &menu->uiIcons.characters.texture, menu->uiIcons.characters.size },
+			{ "display.png", &menu->uiIcons.display.texture, menu->uiIcons.display.size },
+			{ "grass.png", &menu->uiIcons.grass.texture, menu->uiIcons.grass.size },
+			{ "lighting.png", &menu->uiIcons.lighting.texture, menu->uiIcons.lighting.size },
+			{ "sky.png", &menu->uiIcons.sky.texture, menu->uiIcons.sky.size },
+			{ "landscape.png", &menu->uiIcons.landscape.texture, menu->uiIcons.landscape.size },
+			{ "water.png", &menu->uiIcons.water.texture, menu->uiIcons.water.size },
+			{ "debug.png", &menu->uiIcons.debug.texture, menu->uiIcons.debug.size },
+			{ "materials.png", &menu->uiIcons.materials.texture, menu->uiIcons.materials.size },
+			{ "post-processing.png", &menu->uiIcons.postProcessing.texture, menu->uiIcons.postProcessing.size }
+		};
+
+		for (const auto& icon : categoryIcons) {
+			std::string path = basePath + "Categories\\" + icon.filename;
+			loadIcon(path, icon.texture, icon.size);
 		}
 
-		// Load load settings icon
-		if (LoadTextureFromFile(device, (basePath + "Action Icons\\load-settings.png").c_str(), &menu->uiIcons.loadSettings.texture, menu->uiIcons.loadSettings.size)) {
-			logger::info("InitializeMenuIcons: Successfully loaded load-settings icon");
-			iconsLoaded++;
-			anyIconLoaded = true;
-		} else {
-			logger::warn("InitializeMenuIcons: Failed to load load-settings icon from: {}", basePath + "Action Icons\\load-settings.png");
-		}
-
-		// Load clear cache icon
-		if (LoadTextureFromFile(device, (basePath + "Action Icons\\clear-cache.png").c_str(), &menu->uiIcons.clearCache.texture, menu->uiIcons.clearCache.size)) {
-			logger::info("InitializeMenuIcons: Successfully loaded clear-cache icon");
-			iconsLoaded++;
-			anyIconLoaded = true;
-		} else {
-			logger::warn("InitializeMenuIcons: Failed to load clear-cache icon from: {}", basePath + "Action Icons\\clear-cache.png");
-		}
-
-		// Load logo icon
-		if (LoadTextureFromFile(device, (basePath + "Community Shaders Logo\\cs-logo.png").c_str(), &menu->uiIcons.logo.texture, menu->uiIcons.logo.size)) {
-			logger::info("InitializeMenuIcons: Successfully loaded logo icon");
-			iconsLoaded++;
-			anyIconLoaded = true;
-		} else {
-			logger::warn("InitializeMenuIcons: Failed to load logo icon from: {}", basePath + "Community Shaders Logo\\cs-logo.png");
-		}
-
-		// Load category icons
-		if (LoadTextureFromFile(device, (basePath + "Categories\\characters.png").c_str(), &menu->uiIcons.characters.texture, menu->uiIcons.characters.size)) {
-			logger::info("InitializeMenuIcons: Successfully loaded characters icon");
-			iconsLoaded++;
-			anyIconLoaded = true;
-		} else {
-			logger::warn("InitializeMenuIcons: Failed to load characters icon from: {}", basePath + "Categories\\characters.png");
-		}
-
-		if (LoadTextureFromFile(device, (basePath + "Categories\\grass.png").c_str(), &menu->uiIcons.grass.texture, menu->uiIcons.grass.size)) {
-			logger::info("InitializeMenuIcons: Successfully loaded grass icon");
-			iconsLoaded++;
-			anyIconLoaded = true;
-		} else {
-			logger::warn("InitializeMenuIcons: Failed to load grass icon from: {}", basePath + "Categories\\grass.png");
-		}
-
-		if (LoadTextureFromFile(device, (basePath + "Categories\\lighting.png").c_str(), &menu->uiIcons.lighting.texture, menu->uiIcons.lighting.size)) {
-			logger::info("InitializeMenuIcons: Successfully loaded lighting icon");
-			iconsLoaded++;
-			anyIconLoaded = true;
-		} else {
-			logger::warn("InitializeMenuIcons: Failed to load lighting icon from: {}", basePath + "Categories\\lighting.png");
-		}
-
-		if (LoadTextureFromFile(device, (basePath + "Categories\\sky.png").c_str(), &menu->uiIcons.sky.texture, menu->uiIcons.sky.size)) {
-			logger::info("InitializeMenuIcons: Successfully loaded sky icon");
-			iconsLoaded++;
-			anyIconLoaded = true;
-		} else {
-			logger::warn("InitializeMenuIcons: Failed to load sky icon from: {}", basePath + "Categories\\sky.png");
-		}
-
-		if (LoadTextureFromFile(device, (basePath + "Categories\\landscape.png").c_str(), &menu->uiIcons.landscape.texture, menu->uiIcons.landscape.size)) {
-			logger::info("InitializeMenuIcons: Successfully loaded landscape icon");
-			iconsLoaded++;
-			anyIconLoaded = true;
-		} else {
-			logger::warn("InitializeMenuIcons: Failed to load landscape icon from: {}", basePath + "Categories\\landscape.png");
-		}
-
-		if (LoadTextureFromFile(device, (basePath + "Categories\\water.png").c_str(), &menu->uiIcons.water.texture, menu->uiIcons.water.size)) {
-			logger::info("InitializeMenuIcons: Successfully loaded water icon");
-			iconsLoaded++;
-			anyIconLoaded = true;
-		} else {
-			logger::warn("InitializeMenuIcons: Failed to load water icon from: {}", basePath + "Categories\\water.png");
-		}
-
-		if (LoadTextureFromFile(device, (basePath + "Categories\\debug.png").c_str(), &menu->uiIcons.debug.texture, menu->uiIcons.debug.size)) {
-			logger::info("InitializeMenuIcons: Successfully loaded debug icon");
-			iconsLoaded++;
-			anyIconLoaded = true;
-		} else {
-			logger::warn("InitializeMenuIcons: Failed to load debug icon from: {}", basePath + "Categories\\debug.png");
-		}
-
-		// Materials placeholder - will fail to load for now
-		if (LoadTextureFromFile(device, (basePath + "Categories\\materials.png").c_str(), &menu->uiIcons.materials.texture, menu->uiIcons.materials.size)) {
-			logger::info("InitializeMenuIcons: Successfully loaded materials icon");
-			iconsLoaded++;
-			anyIconLoaded = true;
-		} else {
-			logger::warn("InitializeMenuIcons: Failed to load materials icon from: {}", basePath + "Categories\\materials.png");
-		}
-
-		if (LoadTextureFromFile(device, (basePath + "Categories\\post-processing.png").c_str(), &menu->uiIcons.postProcessing.texture, menu->uiIcons.postProcessing.size)) {
-			logger::info("InitializeMenuIcons: Successfully loaded post-processing icon");
-			iconsLoaded++;
-			anyIconLoaded = true;
-		} else {
-			logger::warn("InitializeMenuIcons: Failed to load post-processing icon from: {}", basePath + "Categories\\post-processing.png");
-		}
-
-		logger::info("InitializeMenuIcons: Loaded {}/13 icons successfully", iconsLoaded);
+		logger::info("InitializeMenuIcons: Loaded {}/14 icons successfully", iconsLoaded);
 
 		return anyIconLoaded;
 	}
@@ -434,6 +373,8 @@ namespace Util
 
 		if (strcmp(categoryName, "Characters") == 0) {
 			categoryIcon = menu.characters.texture;
+		} else if (strcmp(categoryName, "Display") == 0) {
+			categoryIcon = menu.display.texture;
 		} else if (strcmp(categoryName, "Grass") == 0) {
 			categoryIcon = menu.grass.texture;
 		} else if (strcmp(categoryName, "Lighting") == 0) {
