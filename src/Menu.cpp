@@ -16,6 +16,7 @@
 #include "Features/Upscaling.h"
 #include "Menu/AdvancedSettingsRenderer.h"
 #include "Menu/FeatureListRenderer.h"
+#include "Menu/HomePageRenderer.h"
 #include "Menu/MenuHeaderRenderer.h"
 #include "Menu/OverlayRenderer.h"
 #include "Menu/SettingsTabRenderer.h"
@@ -122,6 +123,7 @@ Menu::~Menu()
 	uiIcons.loadSettings.Release();
 	uiIcons.clearCache.Release();
 	uiIcons.logo.Release();
+	uiIcons.discord.Release();
 	uiIcons.characters.Release();
 	uiIcons.grass.Release();
 	uiIcons.lighting.Release();
@@ -130,6 +132,7 @@ Menu::~Menu()
 	uiIcons.water.Release();
 	uiIcons.debug.Release();
 	uiIcons.materials.Release();
+	uiIcons.postProcessing.Release();
 
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
@@ -180,7 +183,8 @@ void Menu::Init()
 
 	fontSize = std::clamp(fontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE);
 
-	if (!imgui_io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\Jost-Regular.ttf",
+	auto fontPath = Util::PathHelpers::GetFontsPath() / "Jost-Regular.ttf";
+	if (!imgui_io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(),
 			std::round(fontSize), &font_config)) {
 		logger::warn("Menu::Init() - Failed to load custom font. Using default font.");
 		imgui_io.Fonts->AddFontDefault();
@@ -593,7 +597,7 @@ void Menu::ProcessInputEvents(RE::InputEvent* const* a_events)
 
 bool Menu::ShouldSwallowInput()
 {
-	return IsEnabled;
+	return IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup();
 }
 
 void Menu::SelectFeatureMenu(const std::string& featureName)

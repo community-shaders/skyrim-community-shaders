@@ -55,7 +55,9 @@ public:
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 1;
 		uint frameGenerationForceEnable = 0;
-		uint streamlineLogLevel = 0;  // 0=Off, 1=Default, 2=Verbose
+		uint streamlineLogLevel = 0;   // 0=Off, 1=Default, 2=Verbose
+		uint enableNISSharpening = 1;  // 0=Off, 1=On
+		float nisSharpness = 0.3f;     // 0.0 to 1.0
 	};
 
 	Settings settings;
@@ -123,11 +125,13 @@ public:
 
 	void ConfigureUpscaling(RE::BSGraphics::State* a_state);
 	void Upscale();
+	void ApplyNISSharpening();
 
 	// D3D11 textures
 	Texture2D* reactiveMaskTexture = nullptr;
 	Texture2D* transparencyCompositionMaskTexture = nullptr;
 	Texture2D* motionVectorCopyTexture = nullptr;
+	Texture2D* nisSharpenerTexture = nullptr;
 
 	virtual void ClearShaderCache() override;
 

@@ -29,7 +29,7 @@ public:
 	struct Settings
 	{
 		bool EnableGrassCollision = 1;
-		bool TrackRagdolls = false;
+		bool TrackRagdolls = 1;
 	};
 
 	struct alignas(16) CollisionData
