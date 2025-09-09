@@ -455,7 +455,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float y;
 	TexBaseSampler.GetDimensions(x, y);
 
-	bool complex = x != y;
+	float3 complexTest = TexBaseSampler.Load(int3(0, int(y) - 1, 0)).xyz;
+	float complexLength = length(complexTest);
+	bool complex = complexLength > 0.9 && complexLength < 1.1;
 #		endif  // !TRUE_PBR
 
 	float4 baseColor;
@@ -590,11 +592,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	dirLightColor *= dirLightColorMultiplier;
 	dirLightColor *= dirShadow;
 
-	float wrapAmount = saturate(input.VertexNormal.w * 10.0);
+	float wrapAmount = saturate(input.VertexNormal.w * 10.0) * 0.5;
 
 	float dirNoL = dot(SharedData::DirLightDirection.xyz, viewDirection);
-	float dirViewWrap = -dirNoL * 0.5 + 0.5;
-	float wrappedDirLight = saturate(dirLightAngle + wrapAmount * dirViewWrap) / (1.0 + wrapAmount * dirViewWrap);
+	float wrappedDirLight = saturate(dirLightAngle + wrapAmount) / (1.0 + wrapAmount);
 	lightsDiffuseColor += dirLightColor * saturate(wrappedDirLight) * dirDetailShadow;
 
 	float3 vertexColor = input.VertexColor.xyz;
@@ -613,7 +614,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float dirBacklighting = 1.0 + saturate(-dirNoL);
 
-	float3 sss = dirBacklighting * dirLightColor * saturate(-dirLightAngle);
+	float3 sss = dirBacklighting * dirLightColor * saturate(-dirLightAngle) * lerp(1.0, dirDetailShadow, 0.5);
 
 	if (complex)
 		lightsSpecularColor += GrassLighting::GetLightSpecularInput(DirLightDirection, viewDirection, normal, dirLightColor, SharedData::grassLightingSettings.Glossiness);
@@ -674,8 +675,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 				float lightAngle = dot(normal, normalizedLightDirection);
 				float lightNoL = dot(normalizedLightDirection.xyz, viewDirection);
-				float lightViewWrap = -lightNoL * 0.5 + 0.5;
-				float wrappedLight = saturate(lightAngle + wrapAmount * lightViewWrap) / (1.0 + wrapAmount * lightViewWrap);
+				float wrappedLight = saturate(lightAngle + wrapAmount) / (1.0 + wrapAmount);
 
 				float3 lightDiffuseColor = lightColor * wrappedLight;
 
