@@ -12,6 +12,7 @@
 #include "../Feature.h"
 #include "../Globals.h"
 #include "../Menu.h"
+#include "FileSystem.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <algorithm>
@@ -163,15 +164,16 @@ namespace Util
 			return false;
 		}
 		// Define path to icons
-		std::string basePath = "Data\\Interface\\CommunityShaders\\Icons\\";
+		std::string basePath = Util::PathHelpers::GetIconsPath().string() + "\\";
 		logger::info("InitializeMenuIcons: Loading icons from base path: {}", basePath);
 
 		// Initialize all texture pointers to nullptr for safe cleanup
-		std::array<ID3D11ShaderResourceView**, 13> texturePointers = {
+		std::array<ID3D11ShaderResourceView**, 14> texturePointers = {
 			&menu->uiIcons.saveSettings.texture,
 			&menu->uiIcons.loadSettings.texture,
 			&menu->uiIcons.clearCache.texture,
 			&menu->uiIcons.logo.texture,
+			&menu->uiIcons.discord.texture,
 			&menu->uiIcons.characters.texture,
 			&menu->uiIcons.grass.texture,
 			&menu->uiIcons.lighting.texture,
@@ -229,6 +231,15 @@ namespace Util
 			anyIconLoaded = true;
 		} else {
 			logger::warn("InitializeMenuIcons: Failed to load logo icon from: {}", basePath + "Community Shaders Logo\\cs-logo.png");
+		}
+
+		// Load Discord icon
+		if (LoadTextureFromFile(device, (basePath + "Action Icons\\discord.png").c_str(), &menu->uiIcons.discord.texture, menu->uiIcons.discord.size)) {
+			logger::info("InitializeMenuIcons: Successfully loaded discord icon");
+			iconsLoaded++;
+			anyIconLoaded = true;
+		} else {
+			logger::warn("InitializeMenuIcons: Failed to load discord icon from: {}", basePath + "Action Icons\\discord.png");
 		}
 
 		// Load category icons
@@ -305,7 +316,7 @@ namespace Util
 			logger::warn("InitializeMenuIcons: Failed to load post-processing icon from: {}", basePath + "Categories\\post-processing.png");
 		}
 
-		logger::info("InitializeMenuIcons: Loaded {}/13 icons successfully", iconsLoaded);
+		logger::info("InitializeMenuIcons: Loaded {}/14 icons successfully", iconsLoaded);
 
 		return anyIconLoaded;
 	}

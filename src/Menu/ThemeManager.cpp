@@ -6,6 +6,7 @@
 #include <imgui_impl_dx11.h>
 
 #include "RE/Skyrim.h"
+#include "Util.h"
 
 void ThemeManager::SetupImGuiStyle(const Menu& menu)
 {
@@ -126,7 +127,8 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	float fontSize = themeSettings.FontSize;
 	fontSize = std::clamp(fontSize, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE);
 
-	if (!io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\Jost-Regular.ttf",
+	auto fontPath = Util::PathHelpers::GetFontsPath() / "Jost-Regular.ttf";
+	if (!io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(),
 			std::round(fontSize), &font_config)) {
 		logger::warn("ThemeManager::ReloadFont() - Failed to load custom font. Using default font.");
 		io.Fonts->AddFontDefault();

@@ -81,6 +81,9 @@ public:
 		UIIcon logo;    // New logo icon
 		UIIcon search;  // Search icon for search bars
 
+		// Social media/external link icons
+		UIIcon discord;
+
 		// Category icons
 		UIIcon characters;
 		UIIcon grass;
