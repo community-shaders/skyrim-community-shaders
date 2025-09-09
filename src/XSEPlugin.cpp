@@ -188,7 +188,7 @@ bool Load()
 	};
 
 	for (const auto dll : requiredDLLs) {
-		if (LoadLibrary(dll)) {
+		if (!LoadLibrary(dll)) {
 			auto errorMessage = std::format("Required DLL {} was missing", stl::utf16_to_utf8(dll).value_or("<unicode conversion error>"s));
 			logger::error("{}", errorMessage);
 			errors.push_back(errorMessage);

@@ -115,7 +115,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 	hdrColor *= avgValue.y / avgValue.x;
 
-	hdrColor += max(0, Param.x - hdrColor) * bloomColor;
+	hdrColor += DisplayMapping::RangeCompress(max(0, Param.x - hdrColor)) * bloomColor;
 
 	hdrColor = pow(abs(hdrColor) / avgValue.x, Cinematic.z) * avgValue.x * sign(hdrColor);
 
