@@ -184,9 +184,9 @@ bool Load()
 	}
 
 	const std::array requiredDLLs = {
-		L"Data/SKSE/Plugins/EngineFixes.dll"
+		REL::Module::IsVR() ? L"Data/SKSE/Plugins/EngineFixesVR.dll" : L"Data/SKSE/Plugins/EngineFixes.dll"
 	};
-
+	
 	for (const auto dll : requiredDLLs) {
 		if (!LoadLibrary(dll)) {
 			auto errorMessage = std::format("Required DLL {} was missing", stl::utf16_to_utf8(dll).value_or("<unicode conversion error>"s));
