@@ -198,6 +198,34 @@ void Upscaling::DrawSettings()
 			else
 				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
 		}
+
+		// NIS Sharpening section
+		if (ImGui::TreeNodeEx("NIS Sharpening", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::Text("NVIDIA Image Sharpening applied after upscaling for enhanced clarity");
+			if (streamline.featureNIS) {
+				ImGui::Text("NIS is available");
+			} else {
+				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
+				ImGui::Text("Warning: NIS feature is not available");
+				ImGui::PopStyleColor();
+			}
+
+			const char* nisToggleModes[] = { "Disabled", "Enabled" };
+			ImGui::SliderInt("Enable NIS Sharpening", (int*)&settings.enableNISSharpening, 0, 1, nisToggleModes[settings.enableNISSharpening]);
+
+			if (settings.enableNISSharpening && streamline.featureNIS) {
+				ImGui::SliderFloat("Sharpening Strength", &settings.nisSharpness, 0.0f, 1.0f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Controls the intensity of NIS sharpening. Higher values provide more sharpening.");
+				}
+			} else if (settings.enableNISSharpening && !streamline.featureNIS) {
+				ImGui::BeginDisabled();
+				ImGui::SliderFloat("Sharpening Strength", &settings.nisSharpness, 0.0f, 1.0f, "%.2f");
+				ImGui::EndDisabled();
+			}
+
+			ImGui::TreePop();
+		}
 	} else {
 		ImGui::Text("Upscaling from lower resolutions is not currently available for VR");
 	}
@@ -1505,6 +1533,8 @@ void Upscaling::Upscale()
 void Upscaling::PerformUpscaling()
 {
 	Upscale();
+	ApplyNISSharpening();
+
 	UpscaleDepth();
 
 	auto& runtimeData = globals::game::graphicsState->GetRuntimeData();
@@ -1681,6 +1711,19 @@ void Upscaling::Main_RenderPrecipitation::thunk()
 	runtimeData.dynamicResolutionLock = 1;
 	func();
 	runtimeData.dynamicResolutionLock = 0;
+}
+
+void Upscaling::ApplyNISSharpening()
+{
+	if (!settings.enableNISSharpening || !streamline.featureNIS) {
+		return;
+	}
+
+	auto renderer = globals::game::renderer;
+	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+
+	// Apply NIS sharpening to the main render target
+	streamline.ApplyNISSharpening(main.texture, settings.nisSharpness);
 }
 
 void Upscaling::BSFaceGenManager_UpdatePendingCustomizationTextures::thunk()
