@@ -809,8 +809,9 @@ void LightLimitFix::UpdateLights()
 	// Cache data since cameraData can become invalid in first-person
 
 	for (int eyeIndex = 0; eyeIndex < eyeCount; eyeIndex++) {
-		eyePositionCached[eyeIndex] = Util::GetEyePosition(eyeIndex);
-		viewMatrixCached[eyeIndex] = Util::GetCameraData(eyeIndex).viewMat;
+		auto eyePosition = globals::game::frameBufferCached.GetCameraPosAdjust(eyeIndex);
+		eyePositionCached[eyeIndex] = { eyePosition.x, eyePosition.y, eyePosition.z };
+		viewMatrixCached[eyeIndex] = globals::game::frameBufferCached.GetCameraView(eyeIndex).Transpose();
 		viewMatrixCached[eyeIndex].Invert(viewMatrixInverseCached[eyeIndex]);
 	}
 
@@ -1020,18 +1021,18 @@ void LightLimitFix::UpdateLights()
 	auto context = globals::d3d::context;
 
 	{
-		auto projMatrixUnjittered = Util::GetCameraData(0).projMatrixUnjittered;
+		auto projMatrixUnjittered = globals::game::frameBufferCached.GetCameraProjUnjittered().Transpose();
 		float fov = atan(1.0f / static_cast<float4x4>(projMatrixUnjittered).m[0][0]) * 2.0f * (180.0f / 3.14159265359f);
 
 		static float _lightsNear = 0.0f, _lightsFar = 0.0f, _fov = 0.0f;
 		static uint _clusterSizeX = 0, _clusterSizeY = 0, _clusterSizeZ = 0;
 		if (fabs(_fov - fov) > 1e-4 || fabs(_lightsNear - lightsNear) > 1e-4 || fabs(_lightsFar - lightsFar) > 1e-4 || _clusterSizeX != clusterSize[0] || _clusterSizeY != clusterSize[1] || _clusterSizeZ != clusterSize[2]) {
 			LightBuildingCB updateData{};
-			updateData.InvProjMatrix[0] = DirectX::XMMatrixInverse(nullptr, projMatrixUnjittered);
+			updateData.InvProjMatrix[0] = globals::game::frameBufferCached.GetCameraProjUnjitteredInverse(0).Transpose();
 			if (eyeCount == 1)
 				updateData.InvProjMatrix[1] = updateData.InvProjMatrix[0];
 			else
-				updateData.InvProjMatrix[1] = DirectX::XMMatrixInverse(nullptr, Util::GetCameraData(1).projMatrixUnjittered);
+				updateData.InvProjMatrix[1] = globals::game::frameBufferCached.GetCameraProjUnjitteredInverse(1).Transpose();
 			updateData.LightsNear = lightsNear;
 			updateData.LightsFar = lightsFar;
 			std::copy(clusterSize, clusterSize + 3, updateData.ClusterSize);

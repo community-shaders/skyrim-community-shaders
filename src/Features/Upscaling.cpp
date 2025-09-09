@@ -1557,6 +1557,11 @@ void Upscaling::PerformUpscaling()
 	// Disable dynamic resolution past this point
 	runtimeData.dynamicResolutionLock = 1;
 
+	// Disable jitter after upscaling
+	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
+	BSImagespaceShaderISTemporalAA->taaEnabled = false;
+
 	// Updates the PerFrame constant buffer so that dynamic resolution settings are disabled
 	UpdateCameraData();
 }
@@ -1702,8 +1707,6 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a1, uint32_t a
 	func(a1, a3, er8_);
 
 	upscaling.ApplyNISSharpening();
-
-	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod == UpscaleMethod::kTAA;
 }
 
 void Upscaling::SetScissorRect::thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom)
