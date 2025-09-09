@@ -426,7 +426,7 @@ void Streamline::ApplyNISSharpening(ID3D11Resource* a_texture, float sharpness)
 	sl::NISOptions nisOptions{};
 	nisOptions.mode = sl::NISMode::eSharpen;
 	nisOptions.sharpness = std::clamp(sharpness, 0.0f, 1.0f);
-	nisOptions.hdrMode = sl::NISHDR::eLinear;
+	nisOptions.hdrMode = sl::NISHDR::eNone;
 
 	if (SL_FAILED(result, slNISSetOptions(viewport, nisOptions))) {
 		logger::error("[Streamline] Could not set NIS options");
