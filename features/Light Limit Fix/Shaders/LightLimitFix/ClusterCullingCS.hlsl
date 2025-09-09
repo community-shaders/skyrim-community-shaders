@@ -2,7 +2,9 @@
 
 cbuffer PerFrame : register(b0)
 {
-	uint LightCount;
+    uint LightCount;
+    uint3 pad;
+    uint4 ClusterSize;
 }
 
 //references
@@ -31,15 +33,15 @@ bool LightIntersectsCluster(float3 position, float radius, ClusterAABB cluster)
 	: SV_DispatchThreadID, uint3 groupThreadId
 	: SV_GroupThreadID, uint groupIndex
 	: SV_GroupIndex) {
-	if (any(dispatchThreadId >= uint3(CLUSTER_BUILDING_DISPATCH_SIZE_X, CLUSTER_BUILDING_DISPATCH_SIZE_Y, CLUSTER_BUILDING_DISPATCH_SIZE_Z)))
+	if (any(dispatchThreadId >= uint3(ClusterSize.x, ClusterSize.y, ClusterSize.z)))
 		return;
 
 	uint visibleLightCount = 0;
 	uint visibleLightIndices[MAX_CLUSTER_LIGHTS];
 
 	uint clusterIndex = dispatchThreadId.x +
-	                    dispatchThreadId.y * CLUSTER_BUILDING_DISPATCH_SIZE_X +
-	                    dispatchThreadId.z * (CLUSTER_BUILDING_DISPATCH_SIZE_X * CLUSTER_BUILDING_DISPATCH_SIZE_Y);
+	                    dispatchThreadId.y * ClusterSize.x +
+	                    dispatchThreadId.z * (ClusterSize.x * ClusterSize.y);
 
 	ClusterAABB cluster = clusters[clusterIndex];
 

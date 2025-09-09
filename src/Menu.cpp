@@ -9,13 +9,12 @@
 #include <imgui_internal.h>
 #include <imgui_stdlib.h>
 
-#include "DX12SwapChain.h"
 #include "Deferred.h"
 #include "Feature.h"
 #include "FeatureIssues.h"
 #include "FeatureVersions.h"
+#include "Features/Upscaling.h"
 #include "Menu/AdvancedSettingsRenderer.h"
-#include "Menu/DisplaySettingsRenderer.h"
 #include "Menu/FeatureListRenderer.h"
 #include "Menu/HomePageRenderer.h"
 #include "Menu/MenuHeaderRenderer.h"
@@ -24,9 +23,7 @@
 #include "Menu/ThemeManager.h"
 #include "ShaderCache.h"
 #include "State.h"
-#include "Streamline.h"
 #include "TruePBR.h"
-#include "Upscaling.h"
 #include "Util.h"
 #include "Utils/UI.h"
 
@@ -292,8 +289,7 @@ void Menu::DrawSettings()
 			pendingFeatureSelection,
 			categoryExpansionStates,
 			[&]() { DrawGeneralSettings(); },
-			[&]() { DrawAdvancedSettings(); },
-			[&]() { DrawDisplaySettings(); });
+			[&]() { DrawAdvancedSettings(); });
 
 		ImGui::Spacing();
 		ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, ThemeManager::Constants::SEPARATOR_THICKNESS);
@@ -395,26 +391,11 @@ void Menu::DrawDisableAtBootSettings()
 	}
 }
 
-/**
- * @brief Renders the Display settings tab content
- *
- * Delegates rendering to DisplaySettingsRenderer to handle upscaling and frame
- * generation settings. Provides callbacks for feature status checking and upscaling
- * configuration while maintaining clean architecture separation.
- */
-void Menu::DrawDisplaySettings()
-{
-	DisplaySettingsRenderer::RenderDisplaySettings(
-		globals::state->upscalerLoaded,
-		[](const std::string& featureName) { return globals::state->IsFeatureDisabled(featureName); },
-		[]() { globals::upscaling->DrawSettings(); });
-}
-
 void Menu::DrawFooter()
 {
 	ImGui::BulletText(std::format("Game Version: {} {}", magic_enum::enum_name(REL::Module::GetRuntime()), Util::GetFormattedVersion(REL::Module::get().version()).c_str()).c_str());
 	ImGui::SameLine();
-	ImGui::BulletText(std::format("D3D12 Interop: {}", globals::upscaling->d3d12Interop ? "Active" : "Inactive").c_str());
+	ImGui::BulletText(std::format("D3D12 Interop: {}", globals::features::upscaling.d3d12Interop ? "Active" : "Inactive").c_str());
 	ImGui::SameLine();
 	ImGui::Text(std::format("GPU: {}", globals::state->adapterDescription.c_str()).c_str());
 }

@@ -34,12 +34,11 @@ void FeatureListRenderer::RenderFeatureList(
 	std::string& pendingFeatureSelection,
 	std::map<std::string, bool>& categoryExpansionStates,
 	const std::function<void()>& drawGeneralSettings,
-	const std::function<void()>& drawAdvancedSettings,
-	const std::function<void()>& drawDisplaySettings)
+	const std::function<void()>& drawAdvancedSettings)
 {
 	ImGui::BeginChild("Menus Table", ImVec2(0, -footerHeight));
 
-	auto menuList = BuildMenuList(featureSearch, categoryExpansionStates, drawGeneralSettings, drawAdvancedSettings, drawDisplaySettings);
+	auto menuList = BuildMenuList(featureSearch, categoryExpansionStates, drawGeneralSettings, drawAdvancedSettings);
 
 	HandlePendingFeatureSelection(pendingFeatureSelection, menuList, selectedMenu);
 
@@ -61,8 +60,7 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	const std::string& featureSearch,
 	std::map<std::string, bool>& categoryExpansionStates,
 	const std::function<void()>& drawGeneralSettings,
-	const std::function<void()>& drawAdvancedSettings,
-	const std::function<void()>& drawDisplaySettings)
+	const std::function<void()>& drawAdvancedSettings)
 {
 	// Build the menu list
 	auto& featureList = Feature::GetFeatureList();
@@ -81,8 +79,7 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	auto menuList = std::vector<MenuFuncInfo>{
 		BuiltInMenu{ "Home", []() { HomePageRenderer::RenderHomePage(); } },
 		BuiltInMenu{ "General", drawGeneralSettings },
-		BuiltInMenu{ "Advanced", drawAdvancedSettings },
-		BuiltInMenu{ "Display", drawDisplaySettings }
+		BuiltInMenu{ "Advanced", drawAdvancedSettings }
 	};  // NOTE: The menu list is rebuilt every frame, so category expansion states
 	// persist correctly. This is acceptable since the list is small and built
 	// infrequently, but could be optimized if performance becomes an issue.

@@ -48,6 +48,11 @@ set(Boost_USE_STATIC_RUNTIME ON)
 
 set(BUILD_TESTS OFF)
 
+# Define _WINDOWS for all Windows builds (required by FidelityFX API loader)
+if(WIN32)
+	add_compile_definitions(_WINDOWS)
+endif()
+
 if(CMAKE_GENERATOR MATCHES "Visual Studio")
 	add_compile_definitions(_UNICODE)
 

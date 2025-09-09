@@ -12,9 +12,9 @@
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
+#include "Features/Upscaling.h"
 
 #include "Hooks.h"
-#include "Streamline.h"
 
 struct DepthStates
 {
@@ -107,21 +107,6 @@ void Deferred::SetupResources()
 		SetupRenderTarget(NORMALROUGHNESS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Masks
 		SetupRenderTarget(MASKS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
-
-		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-		texDesc.Width = 2;
-		texDesc.Height = 2;
-
-		adaptationTextures[0] = new Texture2D(texDesc);
-		adaptationTextures[1] = new Texture2D(texDesc);
-
-		srvDesc.Format = texDesc.Format;
-		adaptationTextures[0]->CreateSRV(srvDesc);
-		adaptationTextures[1]->CreateSRV(srvDesc);
-
-		rtvDesc.Format = texDesc.Format;
-		adaptationTextures[0]->CreateRTV(rtvDesc);
-		adaptationTextures[1]->CreateRTV(rtvDesc);
 	}
 
 	{
@@ -136,6 +121,9 @@ void Deferred::SetupResources()
 		samplerDesc.MinLOD = 0;
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &linearSampler));
+
+		samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
+		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &pointSampler));
 	}
 
 	{
@@ -193,13 +181,6 @@ void Deferred::SetupResources()
 		prevDiffuseAmbientTexture = new Texture2D(texDesc);
 		prevDiffuseAmbientTexture->CreateSRV(srvDesc);
 		prevDiffuseAmbientTexture->CreateUAV(uavDesc);
-	}
-
-	// Testing code for imagespace shaders
-	{
-		auto device = globals::d3d::device;
-		auto context = globals::d3d::context;
-		DirectX::CreateDDSTextureFromFile(device, context, L"Data\\Shaders\\LUT.dds", nullptr, lutTexture.put());
 	}
 }
 
@@ -378,7 +359,7 @@ void Deferred::StartDeferred()
 
 void Deferred::DeferredPasses()
 {
-	globals::streamline->CheckFrameConstants();
+	globals::features::upscaling.CheckFrameConstants();
 
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "Deferred");
@@ -409,7 +390,7 @@ void Deferred::DeferredPasses()
 
 	auto main = renderer->GetRuntimeData().renderTargets[forwardRenderTargets[0]];
 	auto normals = renderer->GetRuntimeData().renderTargets[forwardRenderTargets[2]];
-	auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+	auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 	auto reflectance = renderer->GetRuntimeData().renderTargets[REFLECTANCE];
 
 	auto motionVectors = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
@@ -431,7 +412,7 @@ void Deferred::DeferredPasses()
 
 	auto& ibl = globals::features::ibl;
 
-	auto dispatchCount = Util::GetScreenDispatchCount();
+	auto dispatchCount = Util::GetScreenDispatchCount(true);
 
 	if (ssgi.loaded) {
 		// Ambient Composite
@@ -770,61 +751,6 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 	return mainCompositeInteriorCS;
 }
 
-void Deferred::HDRShaderHacks()
-{
-	if (globals::state->currentShader && globals::state->currentShader->shaderType.get() == RE::BSShader::Type::ImageSpace) {
-		const auto& isShader = static_cast<const RE::BSImagespaceShader&>(*globals::state->currentShader);
-
-		enum class ShaderAction
-		{
-			Adaptation,
-			HDR
-		};
-
-		static const ankerl::unordered_dense::map<std::string_view, ShaderAction> shaderMap{
-			{ "BSImagespaceShaderHDRDownSample4LightAdapt", ShaderAction::Adaptation },
-			{ "BSImagespaceShaderHDRDownSample16LightAdapt", ShaderAction::Adaptation },
-			{ "BSImagespaceShaderHDRTonemapBlendCinematic", ShaderAction::HDR },
-			{ "BSImagespaceShaderHDRTonemapBlendCinematicFade", ShaderAction::HDR }
-		};
-
-		auto it = shaderMap.find(isShader.name);
-		if (it != shaderMap.cend()) {
-			switch (it->second) {
-			case ShaderAction::Adaptation:
-				BindAdaptationShader();
-				break;
-			case ShaderAction::HDR:
-				BindHDRShader();
-				break;
-			}
-		}
-	}
-}
-
-void Deferred::BindAdaptationShader()
-{
-	uint frameSwap = (globals::state->frameCount % 2);
-
-	auto srv = adaptationTextures[frameSwap]->srv.get();
-	globals::d3d::context->PSSetShaderResources(1, 1, &srv);
-
-	auto rtv = adaptationTextures[!frameSwap]->rtv.get();
-	globals::d3d::context->OMSetRenderTargets(1, &rtv, nullptr);
-}
-
-void Deferred::BindHDRShader()
-{
-	uint frameSwap = (globals::state->frameCount % 2);
-
-	auto srv = adaptationTextures[!frameSwap]->srv.get();
-	globals::d3d::context->PSSetShaderResources(2, 1, &srv);
-
-	auto view = lutTexture.get();
-	if (view)
-		globals::d3d::context->PSSetShaderResources(100, 1, &view);
-}
-
 void Deferred::Hooks::Main_RenderShadowMaps::thunk()
 {
 	func();
@@ -867,6 +793,15 @@ void Deferred::Hooks::Main_RenderWorld_BlendedDecals::thunk(RE::BSShaderAccumula
 	func(This, RenderFlags);
 
 	deferred->EndDeferred();
+
+	// Copy depth from before water
+	auto renderer = globals::game::renderer;
+	auto context = globals::d3d::context;
+
+	auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+	auto depthCopy = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+
+	context->CopyResource(depthCopy.texture, depth.texture);
 
 	// After this point, water starts rendering
 };

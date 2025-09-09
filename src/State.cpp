@@ -4,19 +4,17 @@
 
 #include <pystring/pystring.h>
 
-#include "DX12SwapChain.h"
 #include "Deferred.h"
 #include "FeatureIssues.h"
 #include "Features/CloudShadows.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
+#include "Features/Upscaling.h"
 #include "Menu.h"
 #include "SettingsOverrideManager.h"
 #include "ShaderCache.h"
-#include "Streamline.h"
 #include "TruePBR.h"
-#include "Upscaling.h"
 
 void State::Draw()
 {
@@ -39,8 +37,6 @@ void State::Draw()
 			terrainHelper.SetShaderResouces(context);
 
 		truePBR->SetShaderResouces(context);
-
-		globals::deferred->HDRShaderHacks();
 
 		if (permutationData != permutationDataPrevious) {
 			permutationCB->Update(permutationData);
@@ -138,8 +134,6 @@ void State::Setup()
 		if (feature->loaded)
 			feature->SetupResources();
 	globals::deferred->SetupResources();
-	if (!upscalerLoaded)
-		globals::upscaling->CreateUpscalingResources();
 	SetupReShade();
 	if (initialized)
 		return;
@@ -322,22 +316,6 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 				logger::info("Special Feature '{}' disabled at boot", featureName);
 			}
 		}
-
-		auto upscaling = globals::upscaling;
-		auto& upscalingJson = settings[upscaling->GetShortName()];
-		if (upscalingJson.is_object()) {
-			logger::info("Loading Upscaling settings");
-			try {
-				upscaling->LoadSettings(upscalingJson);
-			} catch (...) {
-				logger::warn("Invalid settings for Upscaling, using default.");
-				upscaling->RestoreDefaultSettings();
-			}
-		} else {
-			logger::warn("Missing settings for Upscaling, using default.");
-		}
-
-		// Feature loading with new override tracking system
 		for (auto* feature : Feature::GetFeatureList()) {
 			try {
 				const std::string featureName = feature->GetShortName();
@@ -440,9 +418,9 @@ void State::Save(ConfigMode a_configMode)
 
 	settings["General"] = general;
 
-	auto upscaling = globals::upscaling;
-	auto& upscalingJson = settings[upscaling->GetShortName()];
-	upscaling->SaveSettings(upscalingJson);
+	auto& upscaling = globals::features::upscaling;
+	auto& upscalingJson = settings[upscaling.GetShortName()];
+	upscaling.SaveSettings(upscalingJson);
 
 	json originalShaders;
 	ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
@@ -467,16 +445,6 @@ void State::Save(ConfigMode a_configMode)
 	} catch (const std::exception& e) {
 		logger::warn("Failed to write settings to file: {}. Error: {}", configPath, e.what());
 	}
-}
-
-void State::PostPostLoad()
-{
-	upscalerLoaded = GetModuleHandle(L"Data\\SKSE\\Plugins\\SkyrimUpscaler.dll");
-	if (upscalerLoaded)
-		logger::info("Skyrim Upscaler detected");
-	else
-		logger::info("Skyrim Upscaler not detected");
-	// No hooks should be here, hook in XSEPlugin::MessageHandler()
 }
 
 bool State::ValidateCache(CSimpleIniA& a_ini)
@@ -755,10 +723,9 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 		data.BufferDim = { screenSize.x, screenSize.y, 1.0f / screenSize.x, 1.0f / screenSize.y };
 		data.Timer = timer;
 
-		auto bTAA = !globals::game::isVR ? imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled :
-		                                   imageSpaceManager->GetVRRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled;
+		auto temporal = Util::GetTemporal();
 
-		data.FrameCount = frameCount * (bTAA || globals::state->upscalerLoaded);
+		data.FrameCount = frameCount * temporal;
 		data.FrameCountAlwaysActive = frameCount;
 
 		if (a_inWorld) {
@@ -786,9 +753,15 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 		else
 			data.InMapMenu = true;
 
-		if (!globals::game::isVR && bTAA && (a_inWorld || a_prepass)) {
-			auto renderSize = Util::ConvertToDynamic(screenSize);
-			data.MipBias = std::log2f(renderSize.x / screenSize.x) - 1.0f;
+		auto& upscaling = globals::features::upscaling;
+
+		if (upscaling.loaded) {
+			if (temporal && (a_inWorld || a_prepass) && upscaling.GetUpscaleMethod() != Upscaling::UpscaleMethod::kTAA) {
+				auto renderSize = Util::ConvertToDynamic(screenSize);
+				data.MipBias = std::log2f(renderSize.x / screenSize.x) - 1.0f;
+			} else {
+				data.MipBias = 0;
+			}
 		} else {
 			data.MipBias = 0;
 		}
@@ -841,18 +814,41 @@ std::unordered_map<std::string, bool>& State::GetDisabledFeatures()
 	return disabledFeatures;
 }
 
-void State::SetupReShade()
+void State::InitReShade(IDXGISwapChain* a_swapChain)
 {
+	logger::info("[ReShade] Initialising ReShade64.dll if available");
+
+	winrt::com_ptr<ID3D11Device> device;
+	ID3D11DeviceContext* immediateContext;
+
+	DX::ThrowIfFailed(a_swapChain->GetDevice(IID_PPV_ARGS(&device)));
+	device->GetImmediateContext(&immediateContext);
+
 	SetEnvironmentVariableW(L"RESHADE_DISABLE_GRAPHICS_HOOK", L"1");
 	auto module = LoadLibraryW(L"ReShade64.dll");
 
-	auto device = globals::d3d::device;
-	auto context = globals::d3d::context;
-	auto swapChain = globals::d3d::swapChain;
+	if (module) {
+		if (reshade::create_effect_runtime(reshade::api::device_api::d3d11, device.get(), immediateContext, a_swapChain, "ReShade", &reShadeRuntime)) {
+			logger::info("[ReShade] Successfully initialised");
+		} else {
+			logger::error("[ReShade] Failed to initialise");
+		}
+	} else {
+		logger::info("[ReShade] ReShade64.dll not available");
+	}
+}
 
-	if (module && reshade::create_effect_runtime(reshade::api::device_api::d3d11, device, context, swapChain, "ReShade", &reShadeRuntime)) {
+void State::SetupReShade()
+{
+	InitReShade(globals::d3d::swapChain);
+
+	if (reShadeRuntime) {
+		logger::info("[ReShade] Setting render target information");
+
 		auto renderer = globals::game::renderer;
-		auto& swapChainRTV = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER].RTV;
+		auto swapChainRTV = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER].RTV;
+		if (globals::features::upscaling.d3d12Interop)
+			swapChainRTV = globals::features::upscaling.dx12SwapChain.swapChainBufferWrapped->rtv;
 
 		auto reShadeDevice = reShadeRuntime->get_device();
 
@@ -862,7 +858,7 @@ void State::SetupReShade()
 		reShadeDevice->create_resource_view(reShadeSwapChainResource, reshade::api::resource_usage::render_target, reshade::api::resource_view_desc(reshade::api::format_to_default_typed(reShadeSwapChainDesc.texture.format, 0), 0, 1, 0, 1), &reshadeSwapChainRTV);
 		reShadeDevice->create_resource_view(reShadeSwapChainResource, reshade::api::resource_usage::render_target, reshade::api::resource_view_desc(reshade::api::format_to_default_typed(reShadeSwapChainDesc.texture.format, 1), 0, 1, 0, 1), &reshadeSwapChainRTVsRGB);
 
-		auto& depth = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+		auto& depth = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
 		auto depthRTV = reshade::api::resource_view{ reinterpret_cast<uintptr_t>(depth.depthSRV) };
 		reShadeRuntime->update_texture_bindings("DEPTH", depthRTV, depthRTV);

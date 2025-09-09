@@ -287,7 +287,6 @@ private:
 
 	void DrawGeneralSettings();
 	void DrawAdvancedSettings();
-	void DrawDisplaySettings();
 	void DrawDisableAtBootSettings();
 	void DrawFooter();
 	void BuildCategoryCounts();

@@ -97,5 +97,5 @@ public:
 			logger::info("[Terrain Blending] Installed hooks");
 		}
 	};
-	virtual bool SupportsVR() override { return true; };
+	virtual bool SupportsVR() override { return false; };
 };
