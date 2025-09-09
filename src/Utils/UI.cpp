@@ -220,7 +220,8 @@ namespace Util
 		loadIconWithLogging(basePath + "Community Shaders Logo\\cs-logo.png", &menu->uiIcons.logo.texture, menu->uiIcons.logo.size, "logo");
 
 		// Load category icons in a more compact way
-		struct CategoryIcon {
+		struct CategoryIcon
+		{
 			const char* filename;
 			ID3D11ShaderResourceView** texture;
 			ImVec2& size;
