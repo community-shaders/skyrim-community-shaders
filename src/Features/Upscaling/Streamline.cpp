@@ -106,7 +106,7 @@ void Streamline::LoadInterposer()
 	sl::Feature featuresToLoadVR[] = { sl::kFeatureDLSS, sl::kFeatureNIS };
 
 	pref.featuresToLoad = REL::Module::IsVR() ? featuresToLoadVR : featuresToLoad;
-	pref.numFeaturesToLoad = _countof(featuresToLoad);
+	pref.numFeaturesToLoad = REL::Module::IsVR() ? _countof(featuresToLoadVR) : _countof(featuresToLoad);
 
 	// Set log level from settings
 	switch (globals::features::upscaling.settings.streamlineLogLevel) {

@@ -19,7 +19,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	frameLimitMode,
 	frameGenerationMode,
 	frameGenerationForceEnable,
-	streamlineLogLevel);
+	streamlineLogLevel,
+	enableNISSharpening,
+	nisSharpness);
 
 // D3D hook function pointers and implementations
 decltype(&CreateDXGIFactory) ptrCreateDXGIFactory;
