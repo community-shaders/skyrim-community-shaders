@@ -11,6 +11,7 @@
 #include "ScreenSpaceGI.h"
 #include "Skylighting.h"
 
+#ifdef ENABLE_SHARC
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     ScreenSpaceReflections::Settings,
     Enabled,
@@ -31,6 +32,27 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     ReuseRaySpecular,
     EnableSharc
 )
+#else
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+    ScreenSpaceReflections::Settings,
+    Enabled,
+    MaxSteps,
+    MaxMips,
+    Thickness,
+    NormalBias,
+    BRDFBias,
+    UseDynamicCubemapsAsFallback,
+    DiffuseSPP,
+    EnableDiffuse,
+    SpecularMult,
+    DiffuseMult,
+    AmbientMult,
+    HistoryWeight,
+    OcclusionStrength,
+    ReuseRayDiffuse,
+    ReuseRaySpecular
+)
+#endif
 
 void ScreenSpaceReflections::DrawSettings()
 {
@@ -64,10 +86,11 @@ void ScreenSpaceReflections::DrawSettings()
     ImGui::Checkbox("Use Dynamic Cubemaps as Fallback", &settings.UseDynamicCubemapsAsFallback);
     if (auto _tt = Util::HoverTooltipWrapper())
         ImGui::Text("When ray marching misses, use dynamic cubemaps for reflections. This with diffuse would provide natural ambient lighting.");
+#ifdef ENABLE_SHARC
     ImGui::Checkbox("Enable SHARC", &settings.EnableSharc);
     if (auto _tt = Util::HoverTooltipWrapper())
         ImGui::Text("(Experimental) Enables Spatially Hashed Radiance Cache (SHARC) to improve diffuse quality. This requires more memory and might impact performance.");
-
+#endif
     ImGui::SeparatorText("Debug");
 
 	if (ImGui::TreeNode("Buffer Viewer")) {
@@ -180,6 +203,7 @@ void ScreenSpaceReflections::SetupResources()
 		}
     }
 
+#ifdef ENABLE_SHARC
     logger::debug("Creating buffers...");
 	{
 		D3D11_BUFFER_DESC sbDesc{};
@@ -231,6 +255,7 @@ void ScreenSpaceReflections::SetupResources()
         sharcVoxelDataPrev->CreateSRV(srvDesc);
         sharcVoxelDataPrev->CreateUAV(uavDesc);
 	}
+#endif
 
     logger::debug("Creating samplers...");
 	{
@@ -258,7 +283,10 @@ void ScreenSpaceReflections::SetupResources()
 void ScreenSpaceReflections::ClearShaderCache()
 {
     static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-        &raymarchSpecularCS, &raymarchDiffuseCS, &raymarchDiffuseSharcCS, &prepareColorCS, &preprocessDepthCS, &depthDownsampleCS, &sharcResolveCS
+        &raymarchSpecularCS, &raymarchDiffuseCS, &raymarchDiffuseSharcCS, &prepareColorCS, &preprocessDepthCS, &depthDownsampleCS,
+#ifdef ENABLE_SHARC
+        &sharcResolveCS
+#endif
     };
 
     for (auto shader : shaderPtrs)
@@ -309,7 +337,9 @@ void ScreenSpaceReflections::CompileComputeShaders()
             { &prepareColorCS, "ssr_prepare_color.hlsl", {} },
             { &preprocessDepthCS, "ssr_preprocess_depth.hlsl", {} },
             { &depthDownsampleCS, "ssr_depth_downsample.hlsl", {} },
+#ifdef ENABLE_SHARC
             { &sharcResolveCS, "sharc_resolve.hlsl", {} }
+#endif
         };
 
     for (auto& info : shaderInfos) {
@@ -581,10 +611,12 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
 
     uavs.at(0) = texSSRTDiffuseColor->uav.get();
     uavs.at(1) = texHitPDF->uav.get();
+#ifdef ENABLE_SHARC
     uavs.at(2) = sharcHashEntries->uav.get();
     uavs.at(3) = sharcHashCopyOffsets->uav.get();
     uavs.at(4) = sharcVoxelData->uav.get();
     uavs.at(5) = sharcVoxelDataPrev->uav.get();
+#endif
 
     srvs.at(0) = texHistoryDiffuse->srv.get();
     srvs.at(1) = motion.SRV;
@@ -602,7 +634,7 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
     context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
     context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
     context->CSSetConstantBuffers(1, 1, &buffer);
-
+#ifdef ENABLE_SHARC
     if (settings.EnableSharc) {
         state->BeginPerfEvent("SHARC Update");
         context->CSSetShader(sharcUpdateRaymarchCS.get(), nullptr, 0);
@@ -618,13 +650,17 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
     }
 
     context->CSSetShader(settings.EnableSharc ? raymarchDiffuseSharcCS.get() : raymarchDiffuseCS.get(), nullptr, 0);
-
+#else
+    context->CSSetShader(raymarchDiffuseCS.get(), nullptr, 0);
+#endif
     context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
     resetViews();
 
+#ifdef ENABLE_SHARC
     if (settings.EnableSharc) {
         std::swap(sharcVoxelData, sharcVoxelDataPrev);
     }
+#endif
 
     context->CopyResource(texHistoryDiffuse->resource.get(), texSSRTDiffuseColor->resource.get());
 

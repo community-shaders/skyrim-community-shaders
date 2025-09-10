@@ -54,7 +54,9 @@ struct ScreenSpaceReflections : Feature
         float OcclusionStrength = 1.0f;
         bool ReuseRayDiffuse = true;
         bool ReuseRaySpecular = false;
+#ifdef ENABLE_SHARC
         bool EnableSharc = false;
+#endif
     } settings;
 
     struct alignas(16) SharedData
@@ -108,10 +110,12 @@ struct ScreenSpaceReflections : Feature
     eastl::unique_ptr<Texture2D> texHistoryDiffuse = nullptr;
     eastl::unique_ptr<Texture2D> texOutput = nullptr;
 
+#ifdef ENABLE_SHARC
     eastl::unique_ptr<Buffer> sharcHashEntries = nullptr;
     eastl::unique_ptr<Buffer> sharcHashCopyOffsets = nullptr;
     eastl::unique_ptr<Buffer> sharcVoxelData = nullptr;
     eastl::unique_ptr<Buffer> sharcVoxelDataPrev = nullptr;
+#endif
 
     winrt::com_ptr<ID3D11ShaderResourceView> noiseSRV = nullptr;
 
@@ -130,5 +134,7 @@ struct ScreenSpaceReflections : Feature
     winrt::com_ptr<ID3D11ComputeShader> sharcUpdateRaymarchCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> prepareColorCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> depthDownsampleCS = nullptr;
+#ifdef ENABLE_SHARC
     winrt::com_ptr<ID3D11ComputeShader> sharcResolveCS = nullptr;
+#endif
 };
