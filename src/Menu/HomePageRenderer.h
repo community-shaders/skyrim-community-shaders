@@ -11,7 +11,7 @@ public:
 	static constexpr float TITLE_FONT_SCALE = 2.0f;
 	static constexpr float QUICK_LINKS_BUTTON_WIDTH = 180.0f;
 	static constexpr float LOGO_WATERMARK_HEIGHT = 260.0f;
-	
+
 	// Discord banner scaling constants
 	static constexpr float DISCORD_BANNER_TARGET_WIDTH_RATIO = 0.25f;  // 25% of window width
 	static constexpr float DISCORD_BANNER_MIN_WIDTH = 150.0f;
