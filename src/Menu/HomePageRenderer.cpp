@@ -1,6 +1,7 @@
 #include "HomePageRenderer.h"
 #include "PCH.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -97,7 +98,22 @@ void HomePageRenderer::RenderWelcomeSection()
 	}
 
 	if (discordIconAvailable) {
-		ImVec2 iconSize = ImVec2(menu->uiIcons.discord.size.x, menu->uiIcons.discord.size.y);
+		// Calculate scaled icon size based on window width, with min/max constraints
+		ImVec2 originalSize = ImVec2(menu->uiIcons.discord.size.x, menu->uiIcons.discord.size.y);
+		
+		// Scale based on window width - aim for about 25% of window width, but with constraints
+		float targetWidth = windowSize.x * DISCORD_BANNER_TARGET_WIDTH_RATIO;
+		float aspectRatio = originalSize.y / originalSize.x;
+		
+		// Apply minimum and maximum size constraints
+		targetWidth = std::max(DISCORD_BANNER_MIN_WIDTH, std::min(DISCORD_BANNER_MAX_WIDTH, targetWidth));
+		
+		// If the scaled width would still cause cutoff (with some padding), reduce it further
+		if (targetWidth > (windowSize.x - DISCORD_BANNER_PADDING_MARGIN)) {
+			targetWidth = windowSize.x - DISCORD_BANNER_PADDING_MARGIN;
+		}
+		
+		ImVec2 iconSize = ImVec2(targetWidth, targetWidth * aspectRatio);
 		ImGui::SetCursorPosX((windowSize.x - iconSize.x) * 0.5f);
 
 		// Push style to remove border
