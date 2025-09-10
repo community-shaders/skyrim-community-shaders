@@ -160,7 +160,9 @@ void Menu::Init()
 	auto& imgui_io = ImGui::GetIO();
 	imgui_io.ConfigFlags = ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad | ImGuiConfigFlags_DockingEnable;
 	imgui_io.BackendFlags = ImGuiBackendFlags_HasMouseCursors | ImGuiBackendFlags_RendererHasVtxOffset | ImGuiBackendFlags_HasGamepad;
-	imgui_io.IniFilename = "Data/SKSE/Plugins/CommunityShaders_ImGui.ini";
+
+	cachedIniPath = Util::PathHelpers::GetImGuiIniPath().string();
+	imgui_io.IniFilename = cachedIniPath.c_str();
 
 	// Enhanced font configuration for sharper text rendering
 	ImFontConfig font_config;
