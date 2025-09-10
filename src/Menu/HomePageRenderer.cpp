@@ -242,9 +242,9 @@ void HomePageRenderer::RenderFAQSection()
 			"Yes! Community Shaders is completely open source and available on GitHub. You can view "
 			"the source code, report issues, suggest features, and contribute to the project. "
 			"The project is licensed under GPL, ensuring it remains free and open for everyone."
-			"Branding materials and assets (icons, nexus branding, typography, etc) are not covered by the GPL Licence."
-			"Any included assets may not be used without explicit permission.");
-	}
+            "The project is licensed under GPL, ensuring it remains free and open for everyone."
+            " Branding materials and assets (icons, nexus branding, typography, etc) are not covered by the GPL Licence."
+            " Any included assets may not be used without explicit permission.");
 }
 
 void HomePageRenderer::RenderFirstTimeSetupDialog()
