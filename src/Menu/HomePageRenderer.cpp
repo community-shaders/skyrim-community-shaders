@@ -242,280 +242,280 @@ void HomePageRenderer::RenderFAQSection()
 			"Yes! Community Shaders is completely open source and available on GitHub. You can view "
 			"the source code, report issues, suggest features, and contribute to the project. "
 			"The project is licensed under GPL, ensuring it remains free and open for everyone."
-            "The project is licensed under GPL, ensuring it remains free and open for everyone."
-            " Branding materials and assets (icons, nexus branding, typography, etc) are not covered by the GPL Licence."
-            " Any included assets may not be used without explicit permission.");
-}
-
-void HomePageRenderer::RenderFirstTimeSetupDialog()
-{
-	// Block input to the game and make cursor visible - input blocking is handled by ShouldSwallowInput()
-	auto& io = ImGui::GetIO();
-	io.WantCaptureMouse = true;
-	io.WantCaptureKeyboard = true;
-	io.MouseDrawCursor = true;  // Show ImGui cursor
-
-	// Center the window properly with rounded corners and thin border
-	ImVec2 center = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
-	ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_Always);
-
-	// Style for rounded window with thin border
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
-
-	ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-	                         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
-	                         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar;  // Prevent scrolling and remove title
-
-	if (!ImGui::Begin("##FirstTimeSetup", nullptr, flags)) {
-		ImGui::PopStyleVar(2);
-		ImGui::End();
-		return;
+			"The project is licensed under GPL, ensuring it remains free and open for everyone."
+			" Branding materials and assets (icons, nexus branding, typography, etc) are not covered by the GPL Licence."
+			" Any included assets may not be used without explicit permission.");
 	}
 
-	auto menu = Menu::GetSingleton();
+	void HomePageRenderer::RenderFirstTimeSetupDialog()
+	{
+		// Block input to the game and make cursor visible - input blocking is handled by ShouldSwallowInput()
+		auto& io = ImGui::GetIO();
+		io.WantCaptureMouse = true;
+		io.WantCaptureKeyboard = true;
+		io.MouseDrawCursor = true;  // Show ImGui cursor
 
-	// Render CS logo as background watermark with proper aspect ratio
-	if (menu && menu->uiIcons.logo.texture) {
-		ImVec2 windowPos = ImGui::GetWindowPos();
-		ImVec2 windowSize = ImGui::GetWindowSize();
+		// Center the window properly with rounded corners and thin border
+		ImVec2 center = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
+		ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+		ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_Always);
 
-		// Get the original texture size to maintain aspect ratio
-		ImVec2 textureSize = menu->uiIcons.logo.size;
-		float aspectRatio = textureSize.x / textureSize.y;
+		// Style for rounded window with thin border
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
 
-		// Set desired height and calculate width to maintain aspect ratio
-		float logoHeight = LOGO_WATERMARK_HEIGHT;
-		float logoWidth = logoHeight * aspectRatio;
+		ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+		                         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
+		                         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar;  // Prevent scrolling and remove title
 
-		ImVec2 logoMin(windowPos.x + (windowSize.x - logoWidth) * 0.5f,
-			windowPos.y + (windowSize.y - logoHeight) * 0.5f);
-		ImVec2 logoMax(logoMin.x + logoWidth, logoMin.y + logoHeight);
+		if (!ImGui::Begin("##FirstTimeSetup", nullptr, flags)) {
+			ImGui::PopStyleVar(2);
+			ImGui::End();
+			return;
+		}
 
-		// Render as subtle watermark background
-		ImU32 watermarkColor = IM_COL32(255, 255, 255, 60);
-		ImGui::GetWindowDrawList()->AddImage(menu->uiIcons.logo.texture, logoMin, logoMax,
-			ImVec2(0, 0), ImVec2(1, 1), watermarkColor);
-	}
+		auto menu = Menu::GetSingleton();
 
-	// Center all content
-	float windowWidth = ImGui::GetWindowWidth();
+		// Render CS logo as background watermark with proper aspect ratio
+		if (menu && menu->uiIcons.logo.texture) {
+			ImVec2 windowPos = ImGui::GetWindowPos();
+			ImVec2 windowSize = ImGui::GetWindowSize();
 
-	// Welcome title - centered
-	const char* welcomeTitle = "Welcome to Community Shaders!";
-	float welcomeTitleWidth = ImGui::CalcTextSize(welcomeTitle).x;
-	ImGui::SetCursorPosX((windowWidth - welcomeTitleWidth) * 0.5f);
-	ImGui::Text("%s", welcomeTitle);
+			// Get the original texture size to maintain aspect ratio
+			ImVec2 textureSize = menu->uiIcons.logo.size;
+			float aspectRatio = textureSize.x / textureSize.y;
 
-	ImGui::Spacing();
+			// Set desired height and calculate width to maintain aspect ratio
+			float logoHeight = LOGO_WATERMARK_HEIGHT;
+			float logoWidth = logoHeight * aspectRatio;
 
-	// Version text - wrapped and centered
-	const char* versionText = "This appears to be a new install, update, or reinstallation of Community Shaders.";
-	float textPadding = 40.0f;  // Padding from window edges
+			ImVec2 logoMin(windowPos.x + (windowSize.x - logoWidth) * 0.5f,
+				windowPos.y + (windowSize.y - logoHeight) * 0.5f);
+			ImVec2 logoMax(logoMin.x + logoWidth, logoMin.y + logoHeight);
 
-	// Use a centered region for wrapped text
-	ImGui::SetCursorPosX(textPadding);
-	ImGui::BeginGroup();
-	ImGui::PushTextWrapPos(windowWidth - textPadding);
+			// Render as subtle watermark background
+			ImU32 watermarkColor = IM_COL32(255, 255, 255, 60);
+			ImGui::GetWindowDrawList()->AddImage(menu->uiIcons.logo.texture, logoMin, logoMax,
+				ImVec2(0, 0), ImVec2(1, 1), watermarkColor);
+		}
 
-	// Calculate the wrapped text size to center it
-	ImVec2 textSize = ImGui::CalcTextSize(versionText, nullptr, true, windowWidth - textPadding * 2);
-	float centerOffset = (windowWidth - textPadding * 2 - textSize.x) * 0.5f;
-	if (centerOffset > 0) {
-		ImGui::SetCursorPosX(textPadding + centerOffset);
-	}
+		// Center all content
+		float windowWidth = ImGui::GetWindowWidth();
 
-	ImGui::TextWrapped("%s", versionText);
-	ImGui::PopTextWrapPos();
-	ImGui::EndGroup();
+		// Welcome title - centered
+		const char* welcomeTitle = "Welcome to Community Shaders!";
+		float welcomeTitleWidth = ImGui::CalcTextSize(welcomeTitle).x;
+		ImGui::SetCursorPosX((windowWidth - welcomeTitleWidth) * 0.5f);
+		ImGui::Text("%s", welcomeTitle);
 
-	ImGui::Spacing();
+		ImGui::Spacing();
 
-	// Description - centered
-	const char* description = "Please select a hotkey to access the menu:";
-	float descWidth = ImGui::CalcTextSize(description).x;
-	ImGui::SetCursorPosX((windowWidth - descWidth) * 0.5f);
-	ImGui::Text("%s", description);
+		// Version text - wrapped and centered
+		const char* versionText = "This appears to be a new install, update, or reinstallation of Community Shaders.";
+		float textPadding = 40.0f;  // Padding from window edges
 
-	// Hotkey selection - clickable hotkey text
-	// Show current toggle key and allow user to change it by clicking on it
-	auto& themeSettings = menu->GetTheme();
-	const char* currentKeyName = Util::Input::KeyIdToString(menu->GetSettings().ToggleKey);
-
-	// Calculate text dimensions for centering and button area
-	float hotkeyWidth = ImGui::CalcTextSize(currentKeyName).x;
-	float centerX = (windowWidth - hotkeyWidth) * 0.5f;
-	ImGui::SetCursorPosX(centerX);
-
-	// Create invisible button for hover detection and clicking
-	ImVec2 buttonPos = ImGui::GetCursorScreenPos();
-	ImVec2 hotkeyTextSize = ImGui::CalcTextSize(currentKeyName);
-	bool hovered = false;
-	bool clicked = false;
-
-	ImGui::PushID("HotkeyButton");
-	if (ImGui::InvisibleButton("##HotkeyClick", hotkeyTextSize)) {
-		clicked = true;
-	}
-	hovered = ImGui::IsItemHovered();
-	ImGui::PopID();
-
-	// Set cursor position back for text rendering
-	ImGui::SetCursorScreenPos(buttonPos);
-
-	// Choose color based on hover state - darken when hovered.
-	ImVec4 hotkeyColor = hovered ?
-	                         ImVec4(themeSettings.StatusPalette.CurrentHotkey.x * 0.7f,
-								 themeSettings.StatusPalette.CurrentHotkey.y * 0.7f,
-								 themeSettings.StatusPalette.CurrentHotkey.z * 0.7f,
-								 themeSettings.StatusPalette.CurrentHotkey.w) :
-	                         themeSettings.StatusPalette.CurrentHotkey;
-
-	ImGui::TextColored(hotkeyColor, "%s", currentKeyName);
-
-	// Handle click to start hotkey capture
-	if (clicked) {
-		menu->settingToggleKey = true;
-	}
-
-	// Show hotkey capture message or hotkey text
-	if (menu->settingToggleKey) {
-		const char* pressKeyText = "Press any key to set as toggle key...";
-		float pressKeyWidth = ImGui::CalcTextSize(pressKeyText).x;
-		ImGui::SetCursorPosX((windowWidth - pressKeyWidth) * 0.5f);
-		ImGui::Text("%s", pressKeyText);
-	}
-
-	ImGui::Spacing();
-
-	// "You can change this later" text - wrapped and centered
-	const char* laterText = "You can change this later in General > Keybindings.";
-	float laterWidth = ImGui::CalcTextSize(laterText).x;
-	if (laterWidth > windowWidth - 40.0f) {
-		// Text is too wide, use wrapped text with centering
-		float laterTextPadding = 40.0f;
-
-		ImGui::SetCursorPosX(laterTextPadding);
+		// Use a centered region for wrapped text
+		ImGui::SetCursorPosX(textPadding);
 		ImGui::BeginGroup();
-		ImGui::PushTextWrapPos(windowWidth - laterTextPadding);
+		ImGui::PushTextWrapPos(windowWidth - textPadding);
 
 		// Calculate the wrapped text size to center it
-		ImVec2 laterTextSize = ImGui::CalcTextSize(laterText, nullptr, true, windowWidth - laterTextPadding * 2);
-		float laterCenterOffset = (windowWidth - laterTextPadding * 2 - laterTextSize.x) * 0.5f;
-		if (laterCenterOffset > 0) {
-			ImGui::SetCursorPosX(laterTextPadding + laterCenterOffset);
+		ImVec2 textSize = ImGui::CalcTextSize(versionText, nullptr, true, windowWidth - textPadding * 2);
+		float centerOffset = (windowWidth - textPadding * 2 - textSize.x) * 0.5f;
+		if (centerOffset > 0) {
+			ImGui::SetCursorPosX(textPadding + centerOffset);
 		}
 
-		ImGui::TextWrapped("%s", laterText);
+		ImGui::TextWrapped("%s", versionText);
 		ImGui::PopTextWrapPos();
 		ImGui::EndGroup();
-	} else {
-		// Text fits, center it normally
-		ImGui::SetCursorPosX((windowWidth - laterWidth) * 0.5f);
-		ImGui::Text("%s", laterText);
-	}
 
-	ImGui::Spacing();
+		ImGui::Spacing();
 
-	// Center the continue button
-	float continueButtonWidth = 140.0f;
-	ImGui::SetCursorPosX((windowWidth - continueButtonWidth) * 0.5f);
+		// Description - centered
+		const char* description = "Please select a hotkey to access the menu:";
+		float descWidth = ImGui::CalcTextSize(description).x;
+		ImGui::SetCursorPosX((windowWidth - descWidth) * 0.5f);
+		ImGui::Text("%s", description);
 
-	// Check for Enter or Escape key first
-	bool shouldClose = ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Escape);
+		// Hotkey selection - clickable hotkey text
+		// Show current toggle key and allow user to change it by clicking on it
+		auto& themeSettings = menu->GetTheme();
+		const char* currentKeyName = Util::Input::KeyIdToString(menu->GetSettings().ToggleKey);
 
-	if (ImGui::Button("Continue", ImVec2(continueButtonWidth, 30)) || shouldClose) {
-		// No need to apply any hotkey - user has already set it or it defaults to VK_END
-		MarkFirstTimeSetupComplete();
-	}
+		// Calculate text dimensions for centering and button area
+		float hotkeyWidth = ImGui::CalcTextSize(currentKeyName).x;
+		float centerX = (windowWidth - hotkeyWidth) * 0.5f;
+		ImGui::SetCursorPosX(centerX);
 
-	// Center the help text
-	const char* helpText = "(Press Enter or Escape to continue)";
-	float helpWidth = ImGui::CalcTextSize(helpText).x;
-	ImGui::SetCursorPosX((windowWidth - helpWidth) * 0.5f);
-	ImGui::TextDisabled("%s", helpText);
+		// Create invisible button for hover detection and clicking
+		ImVec2 buttonPos = ImGui::GetCursorScreenPos();
+		ImVec2 hotkeyTextSize = ImGui::CalcTextSize(currentKeyName);
+		bool hovered = false;
+		bool clicked = false;
 
-	ImGui::PopStyleVar(2);  // Pop WindowRounding and WindowBorderSize
-	ImGui::End();
-}
+		ImGui::PushID("HotkeyButton");
+		if (ImGui::InvisibleButton("##HotkeyClick", hotkeyTextSize)) {
+			clicked = true;
+		}
+		hovered = ImGui::IsItemHovered();
+		ImGui::PopID();
 
-bool HomePageRenderer::ShouldShowFirstTimeSetup()
-{
-	// Never show first-time setup in VR mode
-	if (REL::Module::IsVR()) {
-		return false;
-	}
+		// Set cursor position back for text rendering
+		ImGui::SetCursorScreenPos(buttonPos);
 
-	// Check if already completed this session
-	if (isFirstTimeSetupShown) {
-		return false;
-	}
+		// Choose color based on hover state - darken when hovered.
+		ImVec4 hotkeyColor = hovered ?
+		                         ImVec4(themeSettings.StatusPalette.CurrentHotkey.x * 0.7f,
+									 themeSettings.StatusPalette.CurrentHotkey.y * 0.7f,
+									 themeSettings.StatusPalette.CurrentHotkey.z * 0.7f,
+									 themeSettings.StatusPalette.CurrentHotkey.w) :
+		                         themeSettings.StatusPalette.CurrentHotkey;
 
-	// Check if first-time setup has been completed by looking at UserSettings.json
-	std::filesystem::path userSettingsPath = Util::PathHelpers::GetUserSettingsPath();
+		ImGui::TextColored(hotkeyColor, "%s", currentKeyName);
 
-	// If UserSettings.json doesn't exist at all, this is definitely a first-time launch
-	if (!std::filesystem::exists(userSettingsPath)) {
-		return true;
-	}
-
-	// If UserSettings.json exists, check if FirstTimeSetupCompleted flag is set
-	try {
-		std::ifstream file(userSettingsPath);
-		if (!file.is_open()) {
-			return true;  // If we can't read the file, assume first time
+		// Handle click to start hotkey capture
+		if (clicked) {
+			menu->settingToggleKey = true;
 		}
 
-		nlohmann::json settings;
-		file >> settings;
-		file.close();
-
-		// Check if FirstTimeSetupCompleted exists and is true
-		if (settings.contains("FirstTimeSetupCompleted") &&
-			settings["FirstTimeSetupCompleted"].is_boolean() &&
-			settings["FirstTimeSetupCompleted"] == true) {
-			return false;  // Setup already completed
+		// Show hotkey capture message or hotkey text
+		if (menu->settingToggleKey) {
+			const char* pressKeyText = "Press any key to set as toggle key...";
+			float pressKeyWidth = ImGui::CalcTextSize(pressKeyText).x;
+			ImGui::SetCursorPosX((windowWidth - pressKeyWidth) * 0.5f);
+			ImGui::Text("%s", pressKeyText);
 		}
 
-		return true;  // Field doesn't exist or is false, show setup
+		ImGui::Spacing();
 
-	} catch (const std::exception&) {
-		// If there's any error reading the file, assume first time
-		return true;
-	}
-}
+		// "You can change this later" text - wrapped and centered
+		const char* laterText = "You can change this later in General > Keybindings.";
+		float laterWidth = ImGui::CalcTextSize(laterText).x;
+		if (laterWidth > windowWidth - 40.0f) {
+			// Text is too wide, use wrapped text with centering
+			float laterTextPadding = 40.0f;
 
-void HomePageRenderer::MarkFirstTimeSetupComplete()
-{
-	std::filesystem::path userSettingsPath = Util::PathHelpers::GetUserSettingsPath();
+			ImGui::SetCursorPosX(laterTextPadding);
+			ImGui::BeginGroup();
+			ImGui::PushTextWrapPos(windowWidth - laterTextPadding);
 
-	try {
-		nlohmann::json settings;
-
-		// Read existing settings if file exists
-		if (std::filesystem::exists(userSettingsPath)) {
-			std::ifstream file(userSettingsPath);
-			if (file.is_open()) {
-				file >> settings;
-				file.close();
+			// Calculate the wrapped text size to center it
+			ImVec2 laterTextSize = ImGui::CalcTextSize(laterText, nullptr, true, windowWidth - laterTextPadding * 2);
+			float laterCenterOffset = (windowWidth - laterTextPadding * 2 - laterTextSize.x) * 0.5f;
+			if (laterCenterOffset > 0) {
+				ImGui::SetCursorPosX(laterTextPadding + laterCenterOffset);
 			}
+
+			ImGui::TextWrapped("%s", laterText);
+			ImGui::PopTextWrapPos();
+			ImGui::EndGroup();
+		} else {
+			// Text fits, center it normally
+			ImGui::SetCursorPosX((windowWidth - laterWidth) * 0.5f);
+			ImGui::Text("%s", laterText);
 		}
 
-		// Set the FirstTimeSetupCompleted flag
-		settings["FirstTimeSetupCompleted"] = true;
+		ImGui::Spacing();
 
-		// Write back to file
-		std::filesystem::create_directories(userSettingsPath.parent_path());
-		std::ofstream outFile(userSettingsPath);
-		if (outFile.is_open()) {
-			outFile << settings.dump(2);
-			outFile.close();
+		// Center the continue button
+		float continueButtonWidth = 140.0f;
+		ImGui::SetCursorPosX((windowWidth - continueButtonWidth) * 0.5f);
+
+		// Check for Enter or Escape key first
+		bool shouldClose = ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Escape);
+
+		if (ImGui::Button("Continue", ImVec2(continueButtonWidth, 30)) || shouldClose) {
+			// No need to apply any hotkey - user has already set it or it defaults to VK_END
+			MarkFirstTimeSetupComplete();
 		}
 
-	} catch (const std::exception&) {
-		// If we can't write the file, just mark as shown this session to avoid repeated popups
+		// Center the help text
+		const char* helpText = "(Press Enter or Escape to continue)";
+		float helpWidth = ImGui::CalcTextSize(helpText).x;
+		ImGui::SetCursorPosX((windowWidth - helpWidth) * 0.5f);
+		ImGui::TextDisabled("%s", helpText);
+
+		ImGui::PopStyleVar(2);  // Pop WindowRounding and WindowBorderSize
+		ImGui::End();
 	}
 
-	isFirstTimeSetupShown = true;  // Mark as shown this session
-}
+	bool HomePageRenderer::ShouldShowFirstTimeSetup()
+	{
+		// Never show first-time setup in VR mode
+		if (REL::Module::IsVR()) {
+			return false;
+		}
+
+		// Check if already completed this session
+		if (isFirstTimeSetupShown) {
+			return false;
+		}
+
+		// Check if first-time setup has been completed by looking at UserSettings.json
+		std::filesystem::path userSettingsPath = Util::PathHelpers::GetUserSettingsPath();
+
+		// If UserSettings.json doesn't exist at all, this is definitely a first-time launch
+		if (!std::filesystem::exists(userSettingsPath)) {
+			return true;
+		}
+
+		// If UserSettings.json exists, check if FirstTimeSetupCompleted flag is set
+		try {
+			std::ifstream file(userSettingsPath);
+			if (!file.is_open()) {
+				return true;  // If we can't read the file, assume first time
+			}
+
+			nlohmann::json settings;
+			file >> settings;
+			file.close();
+
+			// Check if FirstTimeSetupCompleted exists and is true
+			if (settings.contains("FirstTimeSetupCompleted") &&
+				settings["FirstTimeSetupCompleted"].is_boolean() &&
+				settings["FirstTimeSetupCompleted"] == true) {
+				return false;  // Setup already completed
+			}
+
+			return true;  // Field doesn't exist or is false, show setup
+
+		} catch (const std::exception&) {
+			// If there's any error reading the file, assume first time
+			return true;
+		}
+	}
+
+	void HomePageRenderer::MarkFirstTimeSetupComplete()
+	{
+		std::filesystem::path userSettingsPath = Util::PathHelpers::GetUserSettingsPath();
+
+		try {
+			nlohmann::json settings;
+
+			// Read existing settings if file exists
+			if (std::filesystem::exists(userSettingsPath)) {
+				std::ifstream file(userSettingsPath);
+				if (file.is_open()) {
+					file >> settings;
+					file.close();
+				}
+			}
+
+			// Set the FirstTimeSetupCompleted flag
+			settings["FirstTimeSetupCompleted"] = true;
+
+			// Write back to file
+			std::filesystem::create_directories(userSettingsPath.parent_path());
+			std::ofstream outFile(userSettingsPath);
+			if (outFile.is_open()) {
+				outFile << settings.dump(2);
+				outFile.close();
+			}
+
+		} catch (const std::exception&) {
+			// If we can't write the file, just mark as shown this session to avoid repeated popups
+		}
+
+		isFirstTimeSetupShown = true;  // Mark as shown this session
+	}
