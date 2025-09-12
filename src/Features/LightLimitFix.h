@@ -164,9 +164,6 @@ public:
 	void CleanupParticleLights(RE::NiNode* a_node);
 
 	RE::NiPoint3 eyePositionCached[2]{};
-	Matrix viewMatrixCached[2]{};
-	Matrix viewMatrixInverseCached[2]{};
-
 	bool wasEmpty = false;
 	bool wasWorld = false;
 	int previousRoomIndex = -1;
@@ -186,11 +183,13 @@ public:
 
 	virtual void PostPostLoad() override;
 	virtual void DataLoaded() override;
+	virtual void ClearShaderCache() override;
 
 	float CalculateLightDistance(float3 a_lightPosition, float a_radius);
 	void AddCachedParticleLights(eastl::vector<LightData>& lightsData, LightLimitFix::LightData& light);
 	void SetLightPosition(LightLimitFix::LightData& a_light, RE::NiPoint3 a_initialPosition, bool a_cached = true);
 	void UpdateLights();
+	void UpdateStructure();
 	virtual void Prepass() override;
 
 	static inline float3 Saturation(float3 color, float saturation);

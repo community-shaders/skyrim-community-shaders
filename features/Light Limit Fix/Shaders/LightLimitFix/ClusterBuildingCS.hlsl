@@ -17,7 +17,7 @@ float3 GetPositionVS(float2 texcoord, float depth, int eyeIndex = 0)
 	clipSpaceLocation.y *= -1;
 	clipSpaceLocation.z = depth;
 	clipSpaceLocation.w = 1.0f;
-	float4 homogenousLocation = mul(FrameBuffer::CameraProjUnjitteredInverse[eyeIndex], clipSpaceLocation);
+	float4 homogenousLocation = mul(FrameBuffer::CameraProjInverse[eyeIndex], clipSpaceLocation);
 	return homogenousLocation.xyz / homogenousLocation.w;
 }
 

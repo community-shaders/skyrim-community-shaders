@@ -21,13 +21,10 @@ namespace LightLimitFix
 	{
 		const uint3 clusterSize = SharedData::lightLimitFixSettings.ClusterSize.xyz;
 
-		z = max(z, SharedData::CameraData.y);
+		if (!FrameBuffer::FrameParams.y) // Fix first person lights
+			uv = 0.5;
 
-		if (z > SharedData::CameraData.x)
-			return false;
-
-		float clampedZ = clamp(z, SharedData::CameraData.y, SharedData::CameraData.x);
-		uint clusterZ = uint(max(log(clampedZ / SharedData::CameraData.y) * clusterSize.z / log(SharedData::CameraData.x / SharedData::CameraData.y), 0.0));
+		uint clusterZ = log(z / SharedData::CameraData.y) * clusterSize.z / log(SharedData::CameraData.x / SharedData::CameraData.y);
 		uint3 cluster = uint3(uint2(uv * clusterSize.xy), clusterZ);
 
 		// Bounds validation to prevent out-of-range cluster indices
