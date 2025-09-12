@@ -19,7 +19,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	frameLimitMode,
 	frameGenerationMode,
 	frameGenerationForceEnable,
-	streamlineLogLevel);
+	streamlineLogLevel,
+	enableNISSharpening,
+	nisSharpness);
 
 // D3D hook function pointers and implementations
 decltype(&CreateDXGIFactory) ptrCreateDXGIFactory;
@@ -197,6 +199,34 @@ void Upscaling::DrawSettings()
 				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresetsDLSS[4 - settings.qualityMode]).c_str());
 			else
 				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
+		}
+
+		// NIS Sharpening section
+		if (ImGui::TreeNodeEx("NIS Sharpening", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::Text("NVIDIA Image Sharpening applied after upscaling for enhanced clarity");
+			if (streamline.featureNIS) {
+				ImGui::Text("NIS is available");
+			} else {
+				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
+				ImGui::Text("Warning: NIS feature is not available");
+				ImGui::PopStyleColor();
+			}
+
+			const char* nisToggleModes[] = { "Disabled", "Enabled" };
+			ImGui::SliderInt("Enable NIS Sharpening", (int*)&settings.enableNISSharpening, 0, 1, nisToggleModes[settings.enableNISSharpening]);
+
+			if (settings.enableNISSharpening && streamline.featureNIS) {
+				ImGui::SliderFloat("Sharpening Strength", &settings.nisSharpness, 0.0f, 1.0f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Controls the intensity of NIS sharpening. Higher values provide more sharpening.");
+				}
+			} else if (settings.enableNISSharpening && !streamline.featureNIS) {
+				ImGui::BeginDisabled();
+				ImGui::SliderFloat("Sharpening Strength", &settings.nisSharpness, 0.0f, 1.0f, "%.2f");
+				ImGui::EndDisabled();
+			}
+
+			ImGui::TreePop();
 		}
 	} else {
 		ImGui::Text("Upscaling from lower resolutions is not currently available for VR");
@@ -826,6 +856,21 @@ void Upscaling::SetupResources()
 	// Create jitter offset constant buffer for depth upscaling
 	jitterCB = new ConstantBuffer(ConstantBufferDesc<JitterCB>());
 
+	// Create NIS sharpener texture with swapchain format and UAV access
+	D3D11_TEXTURE2D_DESC nisTexDesc = texDesc;
+	nisTexDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+	nisTexDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC nisSrvDesc = srvDesc;
+	nisSrvDesc.Format = nisTexDesc.Format;
+
+	D3D11_UNORDERED_ACCESS_VIEW_DESC nisUavDesc = uavDesc;
+	nisUavDesc.Format = nisTexDesc.Format;
+
+	nisSharpenerTexture = new Texture2D(nisTexDesc);
+	nisSharpenerTexture->CreateSRV(nisSrvDesc);
+	nisSharpenerTexture->CreateUAV(nisUavDesc);
+
 	// Create blend state for depth upscaling
 	D3D11_BLEND_DESC blendDesc = {};
 	blendDesc.AlphaToCoverageEnable = false;
@@ -911,7 +956,7 @@ void Upscaling::CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter)
 
 void Upscaling::UpdateSharedResources()
 {
-	logger::info("[Upscaling] Updating shared D3D12 resources");
+	logger::debug("[Upscaling] Updating shared D3D12 resources");
 
 	auto currentMethod = GetUpscaleMethod();
 
@@ -962,7 +1007,6 @@ void Upscaling::UpdateSharedResources()
 
 	D3D11_TEXTURE2D_DESC texDesc{};
 	main.texture->GetDesc(&texDesc);
-	texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
 	// Upscaling-specific resources (FSR/XeSS)
 	if (needsUpscalingResources) {
@@ -1034,7 +1078,7 @@ void Upscaling::UpdateSharedResources()
 		copyDepthToSharedBufferPS = nullptr;
 	}
 
-	logger::info("[Upscaling] Shared resource update complete - Upscaling: {}, FSR: {}, FrameGen: {}",
+	logger::debug("[Upscaling] Shared resource update complete - Upscaling: {}, FSR: {}, FrameGen: {}",
 		needsUpscalingResources, needsFSRSpecific, needsFrameGenResources);
 }
 
@@ -1512,6 +1556,11 @@ void Upscaling::PerformUpscaling()
 	// Disable dynamic resolution past this point
 	runtimeData.dynamicResolutionLock = 1;
 
+	// Disable jitter after upscaling
+	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
+	BSImagespaceShaderISTemporalAA->taaEnabled = false;
+
 	// Updates the PerFrame constant buffer so that dynamic resolution settings are disabled
 	UpdateCameraData();
 }
@@ -1656,7 +1705,7 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a1, uint32_t a
 
 	func(a1, a3, er8_);
 
-	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod == UpscaleMethod::kTAA;
+	upscaling.ApplyNISSharpening();
 }
 
 void Upscaling::SetScissorRect::thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom)
@@ -1681,6 +1730,29 @@ void Upscaling::Main_RenderPrecipitation::thunk()
 	runtimeData.dynamicResolutionLock = 1;
 	func();
 	runtimeData.dynamicResolutionLock = 0;
+}
+
+void Upscaling::ApplyNISSharpening()
+{
+	if (!settings.enableNISSharpening || !streamline.featureNIS) {
+		return;
+	}
+
+	auto renderer = globals::game::renderer;
+	auto context = globals::d3d::context;
+
+	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
+
+	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
+
+	winrt::com_ptr<ID3D11Resource> mainResource;
+	main.RTV->GetResource(mainResource.put());
+
+	context->CopyResource(nisSharpenerTexture->resource.get(), mainResource.get());
+
+	streamline.ApplyNISSharpening(nisSharpenerTexture->resource.get(), settings.nisSharpness);
+
+	context->CopyResource(mainResource.get(), nisSharpenerTexture->resource.get());
 }
 
 void Upscaling::BSFaceGenManager_UpdatePendingCustomizationTextures::thunk()

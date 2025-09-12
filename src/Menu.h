@@ -81,6 +81,9 @@ public:
 		UIIcon logo;    // New logo icon
 		UIIcon search;  // Search icon for search bars
 
+		// Social media/external link icons
+		UIIcon discord;
+
 		// Category icons
 		UIIcon characters;
 		UIIcon display;
@@ -273,6 +276,8 @@ private:
 	Settings settings;
 
 	float cachedFontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;  // Tracks whether font has been modified and may require reloading
+
+	std::string cachedIniPath;  // io.IniFilename must point to a string that lives for the duration of the runtime
 
 	// Menu navigation
 	std::string pendingFeatureSelection;  // Feature to select on next frame

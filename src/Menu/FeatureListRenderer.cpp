@@ -10,10 +10,22 @@
 #include "FeatureIssues.h"
 #include "Globals.h"
 #include "Menu.h"
+#include "Menu/HomePageRenderer.h"
 #include "Menu/ThemeManager.h"
 #include "SettingsOverrideManager.h"
 #include "State.h"
 #include "Util.h"
+
+namespace
+{
+	// Core built-in menu names that always appear first in the menu list
+	constexpr std::array<const char*, 4> CORE_MENU_NAMES = { "Home", "General", "Advanced", "Display" };
+
+	bool IsCoreMenu(const std::string& menuName)
+	{
+		return std::find(CORE_MENU_NAMES.begin(), CORE_MENU_NAMES.end(), menuName) != CORE_MENU_NAMES.end();
+	}
+}
 
 void FeatureListRenderer::RenderFeatureList(
 	float footerHeight,
@@ -65,6 +77,7 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	}
 
 	auto menuList = std::vector<MenuFuncInfo>{
+		BuiltInMenu{ "Home", []() { HomePageRenderer::RenderHomePage(); } },
 		BuiltInMenu{ "General", drawGeneralSettings },
 		BuiltInMenu{ "Advanced", drawAdvancedSettings }
 	};  // NOTE: The menu list is rebuilt every frame, so category expansion states
@@ -173,25 +186,25 @@ void FeatureListRenderer::RenderLeftColumn(
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 	ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4());
 	if (ImGui::BeginListBox("##MenusList", { -FLT_MIN, -FLT_MIN })) {
-		// Find where built-in menus end (General, Advanced)
-		size_t builtInMenuCount = 0;
+		// Find where core built-in menus end (Home, General, Advanced, Display)
+		size_t coreMenuCount = 0;
 		for (size_t i = 0; i < menuList.size(); i++) {
 			if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
 				const BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
-				if (menu.name == "General" || menu.name == "Advanced") {
-					builtInMenuCount++;
+				if (IsCoreMenu(menu.name)) {
+					coreMenuCount++;
 				}
 			}
 		}
 
-		// First render the built-in menus (General, Advanced)
-		size_t renderedBuiltIns = 0;
-		for (size_t i = 0; i < menuList.size() && renderedBuiltIns < 2; i++) {
+		// First render the core built-in menus (Home, General, Advanced, Display)
+		size_t renderedCoreMenus = 0;
+		for (size_t i = 0; i < menuList.size() && renderedCoreMenus < CORE_MENU_NAMES.size(); i++) {
 			if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
 				const BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
-				if (menu.name == "General" || menu.name == "Advanced") {
+				if (IsCoreMenu(menu.name)) {
 					std::visit(ListMenuVisitor{ i, selectedMenu, categoryExpansionStates }, menuList[i]);
-					renderedBuiltIns++;
+					renderedCoreMenus++;
 				}
 			}
 		}
@@ -200,11 +213,11 @@ void FeatureListRenderer::RenderLeftColumn(
 		Util::DrawSectionHeader("Features", true);
 		Util::DrawFeatureSearchBar(featureSearch);
 
-		// Then render the rest (features and categories, but skip already rendered built-ins)
+		// Then render the rest (features and categories, but skip already rendered core menus)
 		for (size_t i = 0; i < menuList.size(); i++) {
 			if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
 				const BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
-				if (menu.name == "General" || menu.name == "Advanced") {
+				if (IsCoreMenu(menu.name)) {
 					continue;  // Skip, already rendered
 				}
 			}

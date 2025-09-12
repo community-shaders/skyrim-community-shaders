@@ -169,15 +169,27 @@ bool Load()
 	auto log = spdlog::default_logger();
 	log->set_level(state->GetLogLevel());
 
-	const std::array dlls = {
+	const std::array incompatibleDLLs = {
 		L"Data/SKSE/Plugins/ShaderTools.dll",
 		L"Data/SKSE/Plugins/SSEShaderTools.dll",
 		L"Data/SKSE/Plugins/SkyrimUpscaler.dll"
 	};
 
-	for (const auto dll : dlls) {
+	for (const auto dll : incompatibleDLLs) {
 		if (LoadLibrary(dll)) {
 			auto errorMessage = std::format("Incompatible DLL {} detected", stl::utf16_to_utf8(dll).value_or("<unicode conversion error>"s));
+			logger::error("{}", errorMessage);
+			errors.push_back(errorMessage);
+		}
+	}
+
+	const std::array requiredDLLs = {
+		REL::Module::IsVR() ? L"Data/SKSE/Plugins/EngineFixesVR.dll" : L"Data/SKSE/Plugins/EngineFixes.dll"
+	};
+
+	for (const auto dll : requiredDLLs) {
+		if (!LoadLibrary(dll)) {
+			auto errorMessage = std::format("Required DLL {} was missing", stl::utf16_to_utf8(dll).value_or("<unicode conversion error>"s));
 			logger::error("{}", errorMessage);
 			errors.push_back(errorMessage);
 		}
