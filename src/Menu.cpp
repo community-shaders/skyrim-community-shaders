@@ -161,6 +161,9 @@ void Menu::Init()
 	imgui_io.ConfigFlags = ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad | ImGuiConfigFlags_DockingEnable;
 	imgui_io.BackendFlags = ImGuiBackendFlags_HasMouseCursors | ImGuiBackendFlags_RendererHasVtxOffset | ImGuiBackendFlags_HasGamepad;
 
+	cachedIniPath = Util::PathHelpers::GetImGuiIniPath().string();
+	imgui_io.IniFilename = cachedIniPath.c_str();
+
 	// Enhanced font configuration for sharper text rendering
 	ImFontConfig font_config;
 	font_config.OversampleH = ThemeManager::Constants::FCONF_OVERSAMPLE_H;
