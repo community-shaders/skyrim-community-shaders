@@ -21,7 +21,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	frameGenerationForceEnable,
 	streamlineLogLevel,
 	enableNISSharpening,
-	nisSharpness);
+	nisSharpness,
+	fsrTechnique);
 
 // D3D hook function pointers and implementations
 decltype(&CreateDXGIFactory) ptrCreateDXGIFactory;
@@ -189,17 +190,28 @@ void Upscaling::DrawSettings()
 	// Check the current upscale method
 	auto upscaleMethod = GetUpscaleMethod();
 
-	// Display upscaling settings if applicable
-	if (!globals::game::isVR) {
-		if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
-			const char* upscalePresetsDLSS[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "DLAA" };
-			const char* upscalePresets[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "Native AA" };
+		// Display upscaling settings if applicable
+		if (!globals::game::isVR) {
+			if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
+				const char* upscalePresetsDLSS[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "DLAA" };
+				const char* upscalePresets[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "Native AA" };
 
-			if (upscaleMethod == UpscaleMethod::kDLSS)
-				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresetsDLSS[4 - settings.qualityMode]).c_str());
-			else
-				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
-		}
+				if (upscaleMethod == UpscaleMethod::kDLSS)
+					ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresetsDLSS[4 - settings.qualityMode]).c_str());
+				else
+					ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
+			}
+
+			// FSR Technique selection (only for FSR)
+			if (upscaleMethod == UpscaleMethod::kFSR) {
+				const char* fsrTechniques[] = { "FSR3", "FSR4" };
+				ImGui::SliderInt("FSR Technique", (int*)&settings.fsrTechnique, 0, 1, fsrTechniques[settings.fsrTechnique]);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Select between FSR3 and FSR4 upscaling techniques.");
+					ImGui::Text("FSR4 requires AMD Radeon RX 9000 Series or newer.");
+					ImGui::Text("The actual FSR version used will be automatically selected based on hardware capabilities.");
+				}
+			}
 
 		// NIS Sharpening section
 		if (ImGui::TreeNodeEx("NIS Sharpening", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -606,8 +618,10 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 		if (upscaleModeChanged) {
 			CreateUpscalingTextureResources(a_upscalemethod);
 
-			if (a_upscalemethod == UpscaleMethod::kFSR)
-				fidelityFX.CreateFSRResources();
+			if (a_upscalemethod == UpscaleMethod::kFSR) {
+				FidelityFX::FSRTechnique technique = static_cast<FidelityFX::FSRTechnique>(settings.fsrTechnique);
+				fidelityFX.CreateFSRResources(technique);
+			}
 			else if (a_upscalemethod == UpscaleMethod::kXESS)
 				xess.CreateXeSSResources();
 		}

@@ -199,7 +199,7 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 	isFrameGenActive = a_useFrameGeneration;
 }
 
-void FidelityFX::CreateFSRResources()
+void FidelityFX::CreateFSRResources(FSRTechnique technique)
 {
 	auto state = globals::state;
 	auto& upscaling = globals::features::upscaling;
@@ -224,8 +224,16 @@ void FidelityFX::CreateFSRResources()
 	ffx::CreateBackendDX12Desc backendDesc{};
 	backendDesc.device = upscaling.sharedD3D12Device.get();
 
+	// Log the selected FSR technique
+	if (technique == FSRTechnique::kFSR4) {
+		logger::info("[FidelityFX] Requesting FSR4 upscaling (requires AMD Radeon RX 9000 Series or newer)");
+		logger::info("[FidelityFX] Note: FSR version will be automatically selected based on hardware capabilities");
+	} else {
+		logger::info("[FidelityFX] Requesting FSR3 upscaling");
+	}
+
 	if (ffx::CreateContext(upscalingContext, nullptr, createUpscaling, backendDesc) != ffx::ReturnCode::Ok)
-		logger::critical("[FidelityFX] Failed to create FSR3 API context");
+		logger::critical("[FidelityFX] Failed to create FSR API context");
 
 	// Query version information after context creation
 	QueryVersion();
@@ -319,7 +327,7 @@ void FidelityFX::QueryVersion()
 	versionInfo.clear();
 
 	// Query upscaler versions if available
-	if (featureFSR3) {
+	if (featureFSR3 || featureFSR4) {
 		ffxQueryDescGetVersions upscalerQuery{};
 		upscalerQuery.header.type = FFX_API_QUERY_DESC_TYPE_GET_VERSIONS;
 		upscalerQuery.header.pNext = nullptr;

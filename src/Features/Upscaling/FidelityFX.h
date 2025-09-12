@@ -19,6 +19,12 @@ class FidelityFX
 public:
 	static constexpr const wchar_t* PluginDir = L"Data\\Shaders\\Upscaling\\FidelityFX";
 
+	enum class FSRTechnique
+	{
+		kFSR3 = 0,
+		kFSR4 = 1
+	};
+
 	HMODULE module = nullptr;
 
 	ffx::Context swapChainContext{};
@@ -27,6 +33,7 @@ public:
 
 	bool featureFSR3FG = false;
 	bool featureFSR3 = false;
+	bool featureFSR4 = false;
 
 	// Track if FidelityFX is currently being used for frame generation
 	bool isFrameGenActive = false;
@@ -41,7 +48,7 @@ public:
 	void SetupFrameGeneration();
 	void Present(bool a_useFrameGeneration);
 
-	void CreateFSRResources();
+	void CreateFSRResources(FSRTechnique technique = FSRTechnique::kFSR3);
 	void DestroyFSRResources();
 	float GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityPreset);
 	void Upscale(
