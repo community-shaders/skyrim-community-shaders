@@ -956,7 +956,7 @@ void Upscaling::CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter)
 
 void Upscaling::UpdateSharedResources()
 {
-	logger::info("[Upscaling] Updating shared D3D12 resources");
+	logger::debug("[Upscaling] Updating shared D3D12 resources");
 
 	auto currentMethod = GetUpscaleMethod();
 
@@ -1007,7 +1007,6 @@ void Upscaling::UpdateSharedResources()
 
 	D3D11_TEXTURE2D_DESC texDesc{};
 	main.texture->GetDesc(&texDesc);
-	texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
 	// Upscaling-specific resources (FSR/XeSS)
 	if (needsUpscalingResources) {
@@ -1079,7 +1078,7 @@ void Upscaling::UpdateSharedResources()
 		copyDepthToSharedBufferPS = nullptr;
 	}
 
-	logger::info("[Upscaling] Shared resource update complete - Upscaling: {}, FSR: {}, FrameGen: {}",
+	logger::debug("[Upscaling] Shared resource update complete - Upscaling: {}, FSR: {}, FrameGen: {}",
 		needsUpscalingResources, needsFSRSpecific, needsFrameGenResources);
 }
 

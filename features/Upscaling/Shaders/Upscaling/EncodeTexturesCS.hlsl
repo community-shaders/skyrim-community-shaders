@@ -15,17 +15,14 @@ RWTexture2D<float2> MotionVectorOutput : register(u2);
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
 	float2 taaMask = TAAMask[dispatchID.xy];
-
-	float reactiveMask = taaMask.x * 0.1 + taaMask.y;
 	float transparencyCompositionMask = NormalsWaterMask[dispatchID.xy].z;
 
-#if defined(DLSS)
-	ReactiveMask[dispatchID.xy] = reactiveMask;
-	TransparencyCompositionMask[dispatchID.xy] = transparencyCompositionMask;
-#elif defined(FSR)
+#if defined(DLSS) || defined(FSR)
+	float reactiveMask = taaMask.x * 0.2 + taaMask.y;
 	ReactiveMask[dispatchID.xy] = reactiveMask;
 	TransparencyCompositionMask[dispatchID.xy] = transparencyCompositionMask;
 #else
+	float reactiveMask = taaMask.y;
 	ReactiveMask[dispatchID.xy] = reactiveMask + transparencyCompositionMask * 0.1;
 #endif
 
