@@ -38,6 +38,10 @@ public:
 	// Track if FidelityFX is currently being used for frame generation
 	bool isFrameGenActive = false;
 
+	// Available FSR version IDs
+	uint64_t fsr3VersionId = 0;
+	uint64_t fsr4VersionId = 0;
+
 	// Cached DLL version info for FidelityFX plugin directory
 	static std::vector<std::pair<std::string, std::string>> dllVersions;
 

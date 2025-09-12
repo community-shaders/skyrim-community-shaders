@@ -204,6 +204,9 @@ void FidelityFX::CreateFSRResources(FSRTechnique technique)
 	auto state = globals::state;
 	auto& upscaling = globals::features::upscaling;
 
+	// Query available versions first to get version IDs
+	QueryVersion();
+
 	ffx::CreateContextDescUpscale createUpscaling;
 	createUpscaling.maxRenderSize.width = (uint)state->screenSize.x;
 	createUpscaling.maxRenderSize.height = (uint)state->screenSize.y;
@@ -224,19 +227,39 @@ void FidelityFX::CreateFSRResources(FSRTechnique technique)
 	ffx::CreateBackendDX12Desc backendDesc{};
 	backendDesc.device = upscaling.sharedD3D12Device.get();
 
-	// Log the selected FSR technique
+	// Determine which version ID to use based on technique selection
+	uint64_t selectedVersionId = 0;
 	if (technique == FSRTechnique::kFSR4) {
-		logger::info("[FidelityFX] Requesting FSR4 upscaling (requires AMD Radeon RX 9000 Series or newer)");
-		logger::info("[FidelityFX] Note: FSR version will be automatically selected based on hardware capabilities");
+		if (fsr4VersionId != 0) {
+			selectedVersionId = fsr4VersionId;
+			logger::info("[FidelityFX] Requesting FSR4 upscaling (version ID: {})", selectedVersionId);
+		} else {
+			selectedVersionId = fsr3VersionId;
+			logger::warn("[FidelityFX] FSR4 not available, falling back to FSR3 (version ID: {})", selectedVersionId);
+		}
 	} else {
-		logger::info("[FidelityFX] Requesting FSR3 upscaling");
+		selectedVersionId = fsr3VersionId;
+		logger::info("[FidelityFX] Requesting FSR3 upscaling (version ID: {})", selectedVersionId);
 	}
 
-	if (ffx::CreateContext(upscalingContext, nullptr, createUpscaling, backendDesc) != ffx::ReturnCode::Ok)
-		logger::critical("[FidelityFX] Failed to create FSR API context");
+	// Create version override if we have a specific version ID
+	ffx::CreateContextDescOverrideVersion versionOverride{};
+	if (selectedVersionId != 0) {
+		versionOverride.versionId = selectedVersionId;
+		logger::info("[FidelityFX] Using version override: {}", selectedVersionId);
+	}
 
-	// Query version information after context creation
-	QueryVersion();
+	// Create context with or without version override
+	ffx::ReturnCode result;
+	if (selectedVersionId != 0) {
+		result = ffx::CreateContext(upscalingContext, nullptr, createUpscaling, backendDesc, versionOverride);
+	} else {
+		result = ffx::CreateContext(upscalingContext, nullptr, createUpscaling, backendDesc);
+	}
+
+	if (result != ffx::ReturnCode::Ok) {
+		logger::critical("[FidelityFX] Failed to create FSR API context with version ID: {}", selectedVersionId);
+	}
 }
 
 void FidelityFX::DestroyFSRResources()
@@ -351,9 +374,31 @@ void FidelityFX::QueryVersion()
 
 			// Second query to get actual data
 			if (ffxModule.Query(nullptr, &upscalerQuery.header) == (ffxReturnCode_t)ffx::ReturnCode::Ok) {
+				// Store version IDs for FSR3 and FSR4 selection
+				for (uint64_t i = 0; i < upscalerCount; i++) {
+					if (upscalerNames[i]) {
+						std::string versionName = upscalerNames[i];
+						logger::info("[FidelityFX] Available upscaler version {}: {} (ID: {})", i, versionName, upscalerIds[i]);
+						
+						// Try to identify FSR3 and FSR4 versions by name
+						if (versionName.find("FSR3") != std::string::npos || versionName.find("3.") != std::string::npos) {
+							fsr3VersionId = upscalerIds[i];
+							logger::info("[FidelityFX] FSR3 version ID: {}", fsr3VersionId);
+						}
+						if (versionName.find("FSR4") != std::string::npos || versionName.find("4.") != std::string::npos) {
+							fsr4VersionId = upscalerIds[i];
+							logger::info("[FidelityFX] FSR4 version ID: {}", fsr4VersionId);
+						}
+					}
+				}
+				
+				// Use first available version as default if we couldn't identify specific versions
 				if (upscalerCount > 0 && upscalerNames[0]) {
 					versionInfo = upscalerNames[0];
-					logger::info("[FidelityFX] Upscaler version: {}", versionInfo);
+					if (fsr3VersionId == 0) {
+						fsr3VersionId = upscalerIds[0]; // Default to first available
+					}
+					logger::info("[FidelityFX] Default upscaler version: {}", versionInfo);
 				}
 			}
 		}
