@@ -286,10 +286,27 @@ void Deferred::PrepassPasses()
 	if (!shaderCache->IsEnabled())
 		return;
 
-	auto context = globals::game::renderer->GetRuntimeData().context;
+	auto context = globals::d3d::context;
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
+
+	{
+		ID3D11Buffer* buffers[1] = { *globals::game::perFrame.get() };
+
+		ID3D11Buffer* vrBuffer = nullptr;
+
+		if (REL::Module::IsVR()) {
+			static REL::Relocation<ID3D11Buffer**> VRValues{ REL::Offset(0x3180688) };
+			vrBuffer = *VRValues.get();
+		}
+		if (vrBuffer) {
+			context->CSSetConstantBuffers(12, 1, buffers);
+			context->CSSetConstantBuffers(13, 1, &vrBuffer);
+		} else {
+			context->CSSetConstantBuffers(12, 1, buffers);
+		}
+	}
 
 	globals::truePBR->PrePass();
 	for (auto* feature : Feature::GetFeatureList()) {
