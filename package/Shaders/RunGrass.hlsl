@@ -886,7 +886,7 @@ PS_OUTPUT main(PS_INPUT input)
 	normal.xyz = normalize(FrameBuffer::WorldToView(normal.xyz));
 	normal.z = -abs(normal.z);
 	normal.xyz = normalize(FrameBuffer::ViewToWorld(normal.xyz));
-	
+
 	normal = normalize(float3(normal.xy, max(0, normal.z)));
 
 	float3 vertexColor = input.VertexColor.xyz;
