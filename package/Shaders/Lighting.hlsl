@@ -1007,6 +1007,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3x3 tbnTr = transpose(tbn);
 
+	// Fix incorrect normals without flipping everything
+#if defined(TREE_ANIM)
+	tbnTr[2] = normalize(FrameBuffer::WorldToView(tbnTr[2]));
+	tbnTr[2].z = -abs(tbnTr[2].z);
+	tbnTr[2] = normalize(FrameBuffer::ViewToWorld(tbnTr[2]));
+#endif
+
 #	endif  // defined (SKINNED) || !defined (MODELSPACENORMALS)
 
 #	if !defined(TRUE_PBR)

@@ -883,7 +883,10 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 ddx = ddx_coarse(input.WorldPosition);
 	float3 ddy = ddy_coarse(input.WorldPosition);
 	float3 normal = -normalize(cross(ddx, ddy));
-
+	normal.xyz = normalize(FrameBuffer::WorldToView(normal.xyz));
+	normal.z = -abs(normal.z);
+	normal.xyz = normalize(FrameBuffer::ViewToWorld(normal.xyz));
+	
 	normal = normalize(float3(normal.xy, max(0, normal.z)));
 
 	float3 vertexColor = input.VertexColor.xyz;
