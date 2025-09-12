@@ -2229,11 +2229,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float flatnessAmount = smoothstep(SharedData::wetnessEffectsSettings.PuddleMaxAngle, 1.0, minWetnessAngle);
 	// Calculate raindrop effects
 	float4 raindropInfo = float4(0, 0, 1, 0);
-	bool shouldCalculateRaindrops = (worldNormal.z > 0.0) && 
-	                                (SharedData::wetnessEffectsSettings.Raining > 0.0) && 
-	                                (SharedData::wetnessEffectsSettings.EnableRaindropFx) && 
+	bool shouldCalculateRaindrops = (worldNormal.z > 0.0) &&
+	                                (SharedData::wetnessEffectsSettings.Raining > 0.0) &&
+	                                (SharedData::wetnessEffectsSettings.EnableRaindropFx) &&
 	                                (wetnessOcclusion > 0.5);
-	
+
 	if (shouldCalculateRaindrops) {
 #		if defined(SKINNED)
 		float3 ripplePosition = input.ModelPosition.xyz;
