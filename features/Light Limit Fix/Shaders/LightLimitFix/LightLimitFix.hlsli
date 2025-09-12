@@ -23,7 +23,7 @@ namespace LightLimitFix
 
 		if (!FrameBuffer::FrameParams.y) // Fix first person lights
 			uv = 0.5;
-			
+
 		z = max(z, SharedData::CameraData.y);
 
 		uint clusterZ = log(z / SharedData::CameraData.y) * clusterSize.z / log(SharedData::CameraData.x / SharedData::CameraData.y);
