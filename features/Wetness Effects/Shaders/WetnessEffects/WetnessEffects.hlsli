@@ -49,75 +49,88 @@ namespace WetnessEffects
 		// Apply flow offset to world position for flow-aware ripple positioning
 		worldPos.xy += flowOffset;
 
-		const static float uintToFloat = rcp(4294967295.0);
-		const float rippleBreadthRcp = rcp(SharedData::wetnessEffectsSettings.RippleBreadth);
+		// Precompute constants
+		float uintToFloat = rcp(4294967295.0);
+		float rippleBreadthRcp = rcp(SharedData::wetnessEffectsSettings.RippleBreadth);
+		float intervalRcp = SharedData::wetnessEffectsSettings.RaindropIntervalRcp;
+		float lifetimeRcp = SharedData::wetnessEffectsSettings.RippleLifetimeRcp;
 
-		float2 gridUV = worldPos.xy * SharedData::wetnessEffectsSettings.RaindropGridSizeRcp;
-		gridUV += normal.xy;
+		// Calculate grid coordinates
+		float2 gridUV = worldPos.xy * SharedData::wetnessEffectsSettings.RaindropGridSizeRcp + normal.xy;
 		int2 grid = floor(gridUV);
 		gridUV -= grid;
 
+		// Initialize output values
 		float3 rippleNormal = float3(0, 0, 1);
-		float wetness = 0;
+		float wetness = 0.0;
 
-		if (SharedData::wetnessEffectsSettings.EnableSplashes || SharedData::wetnessEffectsSettings.EnableRipples) {
-			for (int i = -1; i <= 1; i++) {
-				for (int j = -1; j <= 1; j++) {
-					int2 gridCurr = grid + int2(i, j);
-					float tOffset = float(Random::iqint3(gridCurr)) * uintToFloat;
+		// Early exit if no effects enabled
+		bool hasEffects = SharedData::wetnessEffectsSettings.EnableSplashes || SharedData::wetnessEffectsSettings.EnableRipples;
+		if (!hasEffects) {
+			return float4(rippleNormal, wetness * SharedData::wetnessEffectsSettings.SplashesStrength);
+		}
 
-					// splashes
-					if (SharedData::wetnessEffectsSettings.EnableSplashes) {
-						float residual = t * SharedData::wetnessEffectsSettings.RaindropIntervalRcp / SharedData::wetnessEffectsSettings.SplashesLifetime + tOffset + worldPos.z * 0.001;
-						uint timestep = residual;
-						residual = residual - timestep;
+		// Process surrounding grid cells
+		for (int i = -1; i <= 1; i++) {
+			for (int j = -1; j <= 1; j++) {
+				int2 gridCurr = grid + int2(i, j);
+				float tOffset = float(Random::iqint3(gridCurr)) * uintToFloat;
 
-						uint3 hash = Random::pcg3d(uint3(asuint(gridCurr), timestep));
-						float3 floatHash = float3(hash) * uintToFloat;
+				// Calculate splashes
+				if (SharedData::wetnessEffectsSettings.EnableSplashes) {
+					float residual = t * intervalRcp / SharedData::wetnessEffectsSettings.SplashesLifetime + tOffset + worldPos.z * 0.001;
+					uint timestep = uint(residual);
+					residual -= timestep;
 
-						if (floatHash.z < (SharedData::wetnessEffectsSettings.RaindropChance)) {
-							float2 vec2Centre = int2(i, j) + floatHash.xy - gridUV;
-							float distSqr = dot(vec2Centre, vec2Centre);
-							float drop_radius = lerp(SharedData::wetnessEffectsSettings.SplashesMinRadius, SharedData::wetnessEffectsSettings.SplashesMaxRadius,
-								float(Random::iqint3(hash.yz)) * uintToFloat);
-							if (distSqr < drop_radius * drop_radius)
-								wetness = max(wetness, RainFade(residual));
+					uint3 hash = Random::pcg3d(uint3(asuint(gridCurr), timestep));
+					float3 floatHash = float3(hash) * uintToFloat;
+
+					if (floatHash.z < SharedData::wetnessEffectsSettings.RaindropChance) {
+						float2 vec2Centre = int2(i, j) + floatHash.xy - gridUV;
+						float distSqr = dot(vec2Centre, vec2Centre);
+						float dropRadius = lerp(SharedData::wetnessEffectsSettings.SplashesMinRadius, 
+						                      SharedData::wetnessEffectsSettings.SplashesMaxRadius,
+						                      float(Random::iqint3(hash.yz)) * uintToFloat);
+						if (distSqr < dropRadius * dropRadius) {
+							wetness = max(wetness, RainFade(residual));
 						}
 					}
+				}
 
-					// ripples
-					if (SharedData::wetnessEffectsSettings.EnableRipples) {
-						float residual = t * SharedData::wetnessEffectsSettings.RaindropIntervalRcp + tOffset + worldPos.z * 0.001;
-						uint timestep = residual;
-						residual = residual - timestep;
+				// Calculate ripples
+				if (SharedData::wetnessEffectsSettings.EnableRipples) {
+					float residual = t * intervalRcp + tOffset + worldPos.z * 0.001;
+					uint timestep = uint(residual);
+					residual -= timestep;
 
-						uint3 hash = Random::pcg3d(uint3(asuint(gridCurr), timestep));
-						float3 floatHash = float3(hash) * uintToFloat;
+					uint3 hash = Random::pcg3d(uint3(asuint(gridCurr), timestep));
+					float3 floatHash = float3(hash) * uintToFloat;
 
-						if (floatHash.z < (SharedData::wetnessEffectsSettings.RaindropChance)) {
-							float2 vec2Centre = int2(i, j) + floatHash.xy - gridUV;
-							float distSqr = dot(vec2Centre, vec2Centre);
-							float rippleT = residual * SharedData::wetnessEffectsSettings.RippleLifetimeRcp;
-							if (rippleT < 1.) {
-								// vary ripple size using high-quality random hash (preserves full entropy)
-								uint sizeHash = Random::iqint3(hash.xy);
-								float sizeRandom = float(sizeHash) * uintToFloat;
-								float sizeVariation = lerp(0.7, 1.3, sizeRandom);
+					if (floatHash.z < SharedData::wetnessEffectsSettings.RaindropChance) {
+						float2 vec2Centre = int2(i, j) + floatHash.xy - gridUV;
+						float distSqr = dot(vec2Centre, vec2Centre);
+						float rippleT = residual * lifetimeRcp;
+						
+						if (rippleT < 1.0) {
+							// Vary ripple size using high-quality random hash
+							uint sizeHash = Random::iqint3(hash.xy);
+							float sizeVariation = lerp(0.7, 1.3, float(sizeHash) * uintToFloat);
 
-								float ripple_r = lerp(0.f, SharedData::wetnessEffectsSettings.RippleRadius * sizeVariation, rippleT);
-								float ripple_inner_radius = ripple_r - SharedData::wetnessEffectsSettings.RippleBreadth;
+							float rippleRadius = SharedData::wetnessEffectsSettings.RippleRadius * sizeVariation;
+							float rippleR = lerp(0.0, rippleRadius, rippleT);
+							float rippleInnerRadius = rippleR - SharedData::wetnessEffectsSettings.RippleBreadth;
 
-								float band_lerp = (sqrt(distSqr) - ripple_inner_radius) * rippleBreadthRcp;
-								if (band_lerp > 0. && band_lerp < 1.) {
-									float deriv = (band_lerp < .5 ? SmoothstepDeriv(band_lerp * 2.) : -SmoothstepDeriv(2. - band_lerp * 2.)) *
-									              lerp(SharedData::wetnessEffectsSettings.RippleStrength * rippleStrengthModifier, 0, rippleT * rippleT);
+							float bandLerp = (sqrt(distSqr) - rippleInnerRadius) * rippleBreadthRcp;
+							if (bandLerp > 0.0 && bandLerp < 1.0) {
+								float rippleStrength = SharedData::wetnessEffectsSettings.RippleStrength * rippleStrengthModifier;
+								float deriv = (bandLerp < 0.5 ? SmoothstepDeriv(bandLerp * 2.0) : -SmoothstepDeriv(2.0 - bandLerp * 2.0)) *
+								              lerp(rippleStrength, 0.0, rippleT * rippleT);
 
-									float3 grad = float3(normalize(vec2Centre), -deriv);
-									float3 bitangent = float3(-grad.y, grad.x, 0);
-									float3 normal = normalize(cross(grad, bitangent));
+								float3 grad = float3(normalize(vec2Centre), -deriv);
+								float3 bitangent = float3(-grad.y, grad.x, 0.0);
+								float3 normal = normalize(cross(grad, bitangent));
 
-									rippleNormal = ReorientNormal(normal, rippleNormal);
-								}
+								rippleNormal = ReorientNormal(normal, rippleNormal);
 							}
 						}
 					}
@@ -125,9 +138,7 @@ namespace WetnessEffects
 			}
 		}
 
-		wetness *= SharedData::wetnessEffectsSettings.SplashesStrength;
-
-		return float4(rippleNormal, wetness);
+		return float4(rippleNormal, wetness * SharedData::wetnessEffectsSettings.SplashesStrength);
 	}
 
 	float3 GetWetnessAmbientSpecular(float2 uv, float3 N, float3 VN, float3 V, float roughness)
@@ -149,17 +160,12 @@ namespace WetnessEffects
 
 		float2 specularBRDF = BRDF::EnvBRDF(roughness, NoV);
 
-		// Horizon specular occlusion
-		// https://marmosetco.tumblr.com/post/81245981087
-		float horizon = min(1.0 + dot(R, VN), 1.0);
-		specularIrradiance *= horizon * horizon;
+		// Standard Schlick fresnel approximation
+		// Assuming F0 of 0.02 for water (common for wetness effects)
+		float3 F0 = 0.02;
+		float3 F = F0 + (1.0 - F0) * pow(1.0 - NoV, 5.0);
 
-		// Roughness dependent fresnel
-		// https://www.jcgt.org/published/0008/01/03/paper.pdf
-		float3 Fr = max(1.0.xxx - roughness.xxx, 0.02) - 0.02;
-		float3 S = 0.02 + Fr * pow(1.0 - NoV, 5.0);
-
-		return specularIrradiance * (S * specularBRDF.x + specularBRDF.y);
+		return specularIrradiance * (F * specularBRDF.x + specularBRDF.y);
 	}
 
 	float3 GetWetnessSpecular(float3 N, float3 L, float3 V, float3 lightColor, float roughness)
@@ -199,16 +205,17 @@ namespace WetnessEffects
 	 */
 	float3 GetDebugWetnessColor(float2 effectIntensities, float3 rippleColor, float3 splashColor, float3 baseColor = float3(0, 0, 0), float brightnessMultiplier = 1.0)
 	{
+		float threshold = 0.01;
 		float rippleEffect = effectIntensities.x;
 		float splashEffect = effectIntensities.y;
 
-		if (rippleEffect > 0.01 || splashEffect > 0.01) {
+		if (rippleEffect > threshold || splashEffect > threshold) {
 			float3 debugColor = baseColor;
-			if (rippleEffect > 0.01) {
-				debugColor += rippleColor * rippleEffect * brightnessMultiplier;
+			if (rippleEffect > threshold) {
+				debugColor += rippleColor * (rippleEffect * brightnessMultiplier);
 			}
-			if (splashEffect > 0.01) {
-				debugColor += splashColor * splashEffect * brightnessMultiplier;
+			if (splashEffect > threshold) {
+				debugColor += splashColor * (splashEffect * brightnessMultiplier);
 			}
 			return saturate(debugColor);
 		}
@@ -269,15 +276,15 @@ namespace WetnessEffects
 		// Mathematical relationship: avgMultiplier × uvToWorldScale gives base flow scaling
 		// uvToWorldScale (1/8) relates to the 64× texture coordinate scaling: 64 × (1/8) = 8
 		float baseFlowMultiplier = avgFlowmapMultiplier * uvToWorldScale;  // ≈ 1.16
-		float flowTimeScale = baseFlowMultiplier * reflectionTimingScale;  // Match flowmap timing
+		float flowTimeScale = baseFlowMultiplier * reflectionTimingScale;
 
-		// Calculate base flow offset (strength-modulated)
-		float2 flowOffset = worldFlowVector * flowTimeScale * flowStrength;
+		// Calculate base flow offset with strength modulation
+		float2 flowOffset = worldFlowVector * (flowTimeScale * flowStrength);
 
 		// Apply dual-phase smoothstep timing for natural flow animation
 		// This creates the essential dual-phase animation pattern used in flowmap blending
 		float smoothTime = smoothstep(0.0, 1.0, frac(flowTimeScale));
-		smoothTime = 0.15 + 0.85 * smoothTime;  // Range: 0.15→1.0→0.15 (avoids complete stops)
+		smoothTime = lerp(0.15, 1.0, smoothTime);  // Range: 0.15→1.0→0.15 (avoids complete stops)
 
 		return flowOffset * smoothTime;
 	}

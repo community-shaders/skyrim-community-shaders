@@ -2208,95 +2208,87 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float waterRoughnessSpecular = 1;
 
 #	if defined(WETNESS_EFFECTS)
+	// Initialize wetness parameters
 	float wetness = 0.0;
+	float3 wetnessSpecular = 0.0;
+	float3 wetnessNormal = worldNormal;
 
+	// Calculate shore wetness factors
 	float wetnessDistToWater = abs(input.WorldPosition.z - waterHeight);
-	float shoreFactor = saturate(1.0 - (wetnessDistToWater / (float)SharedData::wetnessEffectsSettings.ShoreRange));
-	float shoreFactorAlbedo = shoreFactor;
+	float shoreFactor = saturate(1.0 - (wetnessDistToWater / SharedData::wetnessEffectsSettings.ShoreRange));
+	float shoreFactorAlbedo = (input.WorldPosition.z < waterHeight) ? 1.0 : shoreFactor;
 
-	[flatten] if (input.WorldPosition.z < waterHeight)
-		shoreFactorAlbedo = 1.0;
-
+	// Calculate wetness angle and occlusion
 	float minWetnessValue = SharedData::wetnessEffectsSettings.MinRainWetness;
-
-	float maxOcclusion = 1;
-	float minWetnessAngle = 0;
-	minWetnessAngle = saturate(max(minWetnessValue, worldNormal.z));
+	float minWetnessAngle = saturate(max(minWetnessValue, worldNormal.z));
 #		if defined(SKYLIGHTING)
-	float wetnessOcclusion = inWorld ? pow(saturate(SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1))), 2) : 0;
+	float wetnessOcclusion = inWorld ? pow(saturate(SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1))), 2) : 0.0;
 #		else
 	float wetnessOcclusion = inWorld;
 #		endif
-
+	float flatnessAmount = smoothstep(SharedData::wetnessEffectsSettings.PuddleMaxAngle, 1.0, minWetnessAngle);
+	// Calculate raindrop effects
 	float4 raindropInfo = float4(0, 0, 1, 0);
-	if (worldNormal.z > 0 && SharedData::wetnessEffectsSettings.Raining > 0.0f && SharedData::wetnessEffectsSettings.EnableRaindropFx) {
-		float4 precipOcclusionTexCoord = mul(SharedData::wetnessEffectsSettings.OcclusionViewProj, float4(input.WorldPosition.xyz, 1));
-		precipOcclusionTexCoord.y = -precipOcclusionTexCoord.y;
-		float2 precipOcclusionUV = precipOcclusionTexCoord.xy * 0.5 + 0.5;
-
-		if (saturate(precipOcclusionUV.x) == precipOcclusionUV.x && saturate(precipOcclusionUV.y) == precipOcclusionUV.y) {
-			float precipOcclusionZ = WetnessEffects::TexPrecipOcclusion.SampleLevel(SampColorSampler, precipOcclusionUV, 0).x;
-
-			if (precipOcclusionTexCoord.z < precipOcclusionZ + 0.1)
+	bool shouldCalculateRaindrops = (worldNormal.z > 0.0) && 
+	                                (SharedData::wetnessEffectsSettings.Raining > 0.0) && 
+	                                (SharedData::wetnessEffectsSettings.EnableRaindropFx) && 
+	                                (wetnessOcclusion > 0.5);
+	
+	if (shouldCalculateRaindrops) {
 #		if defined(SKINNED)
-				raindropInfo = WetnessEffects::GetRainDrops(input.ModelPosition.xyz, SharedData::wetnessEffectsSettings.Time, worldNormal);
+		float3 ripplePosition = input.ModelPosition.xyz;
 #		elif defined(DEFERRED)
-				raindropInfo = WetnessEffects::GetRainDrops(input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz, SharedData::wetnessEffectsSettings.Time, worldNormal);
+		float3 ripplePosition = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 #		else
-				raindropInfo = WetnessEffects::GetRainDrops(!FrameBuffer::FrameParams.y ? input.ModelPosition.xyz : input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz, SharedData::wetnessEffectsSettings.Time, worldNormal);
+		float3 ripplePosition = !FrameBuffer::FrameParams.y ? input.ModelPosition.xyz : input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 #		endif
-		}
+		raindropInfo = WetnessEffects::GetRainDrops(ripplePosition, SharedData::wetnessEffectsSettings.Time, worldNormal, flatnessAmount);
 	}
 
+	// Calculate different wetness types
 	float rainWetness = SharedData::wetnessEffectsSettings.Wetness * minWetnessAngle * SharedData::wetnessEffectsSettings.MaxRainWetness;
 	rainWetness = max(rainWetness, raindropInfo.w);
 
+#		if defined(SKIN) || defined(HAIR)
+		rainWetness = SharedData::wetnessEffectsSettings.SkinWetness * SharedData::wetnessEffectsSettings.Wetness;
+#		endif
+
+	float shoreWetness = shoreFactor * SharedData::wetnessEffectsSettings.MaxShoreWetness;
+	wetness = max(shoreWetness, rainWetness);
+
+	// Calculate puddle effects
 	float puddleWetness = SharedData::wetnessEffectsSettings.PuddleWetness * minWetnessAngle;
-#		if defined(SKIN)
-	rainWetness = SharedData::wetnessEffectsSettings.SkinWetness * SharedData::wetnessEffectsSettings.Wetness;
-#		endif
-#		if defined(HAIR)
-	rainWetness = SharedData::wetnessEffectsSettings.SkinWetness * SharedData::wetnessEffectsSettings.Wetness * 0.8f;
-#		endif
-
-	rainWetness *= wetnessOcclusion;
-	puddleWetness *= wetnessOcclusion;
-
-	wetness = max(shoreFactor * SharedData::wetnessEffectsSettings.MaxShoreWetness, rainWetness);
-
-	float3 wetnessNormal = worldNormal;
-
-	float3 puddleCoords = ((input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz) * 0.5 + 0.5) * 0.01 / SharedData::wetnessEffectsSettings.PuddleRadius;
 	float puddle = wetness;
-	if (wetness > 0.0 || puddleWetness > 0) {
+
 #		if !defined(SKINNED)
-		puddle = Random::perlinNoise(puddleCoords) * .5 + .5;
+	if (wetness > 0.0 || puddleWetness > 0.0) {
+		float3 puddleCoords = ((input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz) * 0.5 + 0.5) * 0.01 / SharedData::wetnessEffectsSettings.PuddleRadius;
+		puddle = Random::perlinNoise(puddleCoords) * 0.5 + 0.5;
 		puddle = puddle * ((minWetnessAngle / SharedData::wetnessEffectsSettings.PuddleMaxAngle) * SharedData::wetnessEffectsSettings.MaxPuddleWetness * 0.25) + 0.5;
-		wetness = lerp(wetness, puddleWetness, saturate(puddle - 0.25));
-#		endif
-		puddle *= wetness;
+		puddle *= lerp(wetness, puddleWetness, saturate(puddle - 0.25));
 	}
+#		endif
 
-	puddle *= nearFactor;
+	// Apply occlusion and distance factors
+	puddle *= wetnessOcclusion * nearFactor;
 
-	float3 wetnessSpecular = 0.0;
-
+	// Calculate wetness glossiness factors
 	float wetnessGlossinessAlbedo = max(puddle, shoreFactorAlbedo * SharedData::wetnessEffectsSettings.MaxShoreWetness);
 	wetnessGlossinessAlbedo *= wetnessGlossinessAlbedo;
 
 	float wetnessGlossinessSpecular = puddle;
-	wetnessGlossinessSpecular = lerp(wetnessGlossinessSpecular, wetnessGlossinessSpecular * shoreFactor, input.WorldPosition.z < waterHeight);
+	if (input.WorldPosition.z < waterHeight) {
+		wetnessGlossinessSpecular *= shoreFactor;
+	}
 
-	float flatnessAmount = smoothstep(SharedData::wetnessEffectsSettings.PuddleMaxAngle, 1.0, minWetnessAngle);
-
+	// Update flatness and normal calculations
 	flatnessAmount *= smoothstep(SharedData::wetnessEffectsSettings.PuddleMinWetness, 1.0, wetnessGlossinessSpecular);
 
-	wetnessNormal = normalize(lerp(wetnessNormal, float3(0, 0, 1), flatnessAmount));
-
-	float3 rippleNormal = normalize(lerp(float3(0, 0, 1), raindropInfo.xyz, lerp(1.0, flatnessAmount, 0.8)));
+	// Apply ripple normal effects
+	float3 rippleNormal = normalize(lerp(float3(0, 0, 1), raindropInfo.xyz, lerp(flatnessAmount, 1.0, 0.5)));
 	wetnessNormal = WetnessEffects::ReorientNormal(rippleNormal, wetnessNormal);
 
-	waterRoughnessSpecular = 1.0 - wetnessGlossinessSpecular * 0.9;
+	waterRoughnessSpecular = 1.0 - wetnessGlossinessSpecular;
 #	endif
 
 	float3 dirLightColor = Color::Light(DirLightColor.xyz);
@@ -2895,10 +2887,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	porosity = lerp(porosity, 0.0, saturate(sqrt(envMask)));
 #			endif
 	float wetnessDarkeningAmount = porosity * wetnessGlossinessAlbedo;
-	baseColor.xyz = lerp(baseColor.xyz, pow(abs(baseColor.xyz), 1.0 + wetnessDarkeningAmount), 0.8);
+	baseColor.xyz = lerp(baseColor.xyz, pow(abs(baseColor.xyz), 1.0 + wetnessDarkeningAmount), 0.5);
 #		endif
 
-	float3 wetnessReflectance = WetnessEffects::GetWetnessAmbientSpecular(screenUV, wetnessNormal, vertexNormal, viewDirection, waterRoughnessSpecular) * wetnessGlossinessSpecular;
+	float3 wetnessReflectance = WetnessEffects::GetWetnessAmbientSpecular(screenUV, wetnessNormal, vertexNormal, viewDirection, 0.0);
 
 #		if !defined(DEFERRED)
 	wetnessSpecular += wetnessReflectance;
@@ -3371,10 +3363,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 
 #		if defined(SSS) && defined(SKIN)
+#			if defined(WETNESS_EFFECTS)
+	psout.Masks = float4(saturate(baseColor.a), !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsBeastRace), wetnessNormal.z * 0.5 + 0.5, psout.Diffuse.w);
+#			else
 	psout.Masks = float4(saturate(baseColor.a), !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsBeastRace), 0, psout.Diffuse.w);
+#			endif
 #		elif defined(WETNESS_EFFECTS)
-	float wetnessNormalAmount = saturate(dot(float3(0, 0, 1), wetnessNormal) * saturate(flatnessAmount));
-	psout.Masks = float4(0, 0, wetnessNormalAmount, psout.Diffuse.w);
+	psout.Masks = float4(0, 0, wetnessNormal.z * 0.5 + 0.5, psout.Diffuse.w);
 #		else
 	psout.Masks = float4(0, 0, 0, psout.Diffuse.w);
 #		endif
