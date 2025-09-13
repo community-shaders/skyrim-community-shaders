@@ -2,7 +2,6 @@
 
 #include <DDSTextureLoader.h>
 
-#include "ScreenSpaceGI.h"
 #include "ShaderCache.h"
 #include "State.h"
 
@@ -10,8 +9,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Skylighting::Settings,
 	MaxZenith,
 	MinDiffuseVisibility,
-	MinSpecularVisibility,
-	SSGIAmbientDimmer)
+	MinSpecularVisibility)
 
 void Skylighting::LoadSettings(json& o_json)
 {
@@ -41,11 +39,6 @@ void Skylighting::DrawSettings()
 	ImGui::Text("Minimum visibility values. Diffuse darkens objects. Specular removes the sky from reflections.");
 	ImGui::SliderFloat("Diffuse Min Visibility", &settings.MinDiffuseVisibility, 0.01f, 1.f, "%.2f");
 	ImGui::SliderFloat("Specular Min Visibility", &settings.MinSpecularVisibility, 0.01f, 1.f, "%.2f");
-
-	ImGui::Separator();
-
-	ImGui::Text("Extra diffuse darkening if Screen Space GI is enabled.");
-	ImGui::SliderFloat("Screen Space GI Ambient Dimmer", &settings.SSGIAmbientDimmer, 0.01f, 1.f, "%.2f");
 
 	ImGui::Separator();
 
@@ -197,13 +190,6 @@ Skylighting::SkylightingCB Skylighting::GetCommonBufferData(bool a_inWorld)
 	float3 cellIDDiff = prevCellID - cellID;
 	prevCellID = cellID;
 
-	auto ambientDimmer = 1.0f;
-
-	auto& ssgi = globals::features::screenSpaceGI;
-	if (ssgi.loaded)
-		if (ssgi.settings.Enabled && ssgi.settings.EnableGI && ssgi.settings.GIStrength > 0.0f)
-			ambientDimmer = settings.SSGIAmbientDimmer;
-
 	return {
 		.OcclusionViewProj = OcclusionTransform,
 		.OcclusionDir = OcclusionDir,
@@ -213,7 +199,7 @@ Skylighting::SkylightingCB Skylighting::GetCommonBufferData(bool a_inWorld)
 			((int)cellID.y - probeArrayDims[1] / 2) % probeArrayDims[1],
 			((int)cellID.z - probeArrayDims[2] / 2) % probeArrayDims[2] },
 		.ValidMargin = { (int)cellIDDiff.x, (int)cellIDDiff.y, (int)cellIDDiff.z },
-		.MinDiffuseVisibility = settings.MinDiffuseVisibility * ambientDimmer,
+		.MinDiffuseVisibility = settings.MinDiffuseVisibility,
 		.MinSpecularVisibility = settings.MinSpecularVisibility
 	};
 }
