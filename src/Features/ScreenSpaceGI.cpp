@@ -664,6 +664,12 @@ void ScreenSpaceGI::DrawSSGI(Texture2D* srcPrevAmbient)
 {
 	auto context = globals::d3d::context;
 
+	if (auto iniSettingCollection = globals::game::iniPrefSettingCollection) {
+		if (auto setting = iniSettingCollection->GetSetting("bSAOEnable:Display")) {
+			setting->data.b = false;
+		}
+	}
+
 	if (!(settings.Enabled && ShadersOK())) {
 		FLOAT clr[4] = { 0.f, 0.f, 0.f, 0.f };
 		context->ClearUnorderedAccessViewFloat(texAo[outputAoIdx]->uav.get(), clr);
