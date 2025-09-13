@@ -998,22 +998,19 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(SKINNED) || !defined(MODELSPACENORMALS)
 	float3x3 tbn = float3x3(input.TBN0.xyz, input.TBN1.xyz, input.TBN2.xyz);
-
-#		if !defined(TREE_ANIM) && !defined(LOD)
-	// Fix incorrect vertex normals on double-sided meshes
-	if (!frontFace)
-		tbn = lerp(tbn, -tbn, nearFactor);
-#		endif
-
 	float3x3 tbnTr = transpose(tbn);
 
 	// Fix incorrect normals without flipping everything
-#if defined(TREE_ANIM)
-	tbnTr[2].xyz = normalize(FrameBuffer::WorldToView(tbnTr[2].xyz, false, eyeIndex));
-	tbnTr[2].z = -abs(tbnTr[2].z);
-	tbnTr[2].xyz  = normalize(FrameBuffer::ViewToWorld(tbnTr[2].xyz, false, eyeIndex));
-#endif
+	float3 normalTest = normalize(FrameBuffer::WorldToView(tbnTr[2], false, eyeIndex));
 
+	if (normalTest.z != -abs(normalTest.z))
+		tbnTr[2] = lerp(-tbnTr[2], tbnTr[2], nearFactor);
+
+	tbnTr[0] = normalize(tbnTr[0]);
+	tbnTr[1] = normalize(tbnTr[1]);
+	tbnTr[2] = normalize(tbnTr[2]);
+
+	tbn = transpose(tbnTr);
 #	endif  // defined (SKINNED) || !defined (MODELSPACENORMALS)
 
 #	if !defined(TRUE_PBR)
@@ -1966,11 +1963,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif  // SNOW
 
 #	if defined(BACK_LIGHTING)
-	float4 backLightColor = TexBackLightSampler.Sample(SampBackLightSampler, uv);
-#		if defined(HAIR) && defined(CS_HAIR)
+#		if defined(TREE_ANIM)	
+	float3 backLightColor = normalize(baseColor.xyz);
+	backLightColor.xyz /= max(backLightColor.x, max(backLightColor.y, backLightColor.z));
+#		else
+	float3 backLightColor = TexBackLightSampler.Sample(SampBackLightSampler, uv);
+#			if defined(HAIR) && defined(CS_HAIR)
 	if (useHairFlowMap) {
 		backLightColor = 0.0f;
 	}
+#			endif
 #		endif
 #	endif  // BACK_LIGHTING
 
@@ -2411,18 +2413,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	dirLightColor *= dirLightColorMultiplier;
 
 	float3 dirDiffuseColor = dirLightColor * saturate(dirLightAngle) * dirDetailShadow;
-	float dirBacklighting = 1.0 + saturate(-dot(DirLightDirection.xyz, viewDirection));
 
 #		if defined(SOFT_LIGHTING)
-	lightsDiffuseColor += dirBacklighting * dirLightColor * GetSoftLightMultiplier(dirLightAngle) * rimSoftLightColor.xyz;
+	lightsDiffuseColor += dirLightColor * GetSoftLightMultiplier(dirLightAngle) * rimSoftLightColor.xyz;
 #		endif
 
 #		if defined(RIM_LIGHTING)
-	lightsDiffuseColor += dirBacklighting * dirLightColor * GetRimLightMultiplier(DirLightDirection, viewDirection, worldNormal.xyz) * rimSoftLightColor.xyz;
+	lightsDiffuseColor += dirLightColor * GetRimLightMultiplier(DirLightDirection, viewDirection, worldNormal.xyz) * rimSoftLightColor.xyz;
 #		endif
 
 #		if defined(BACK_LIGHTING)
-	lightsDiffuseColor += dirBacklighting * dirLightColor * saturate(-dirLightAngle) * backLightColor.xyz;
+	lightsDiffuseColor += dirLightColor * saturate(-dirLightAngle) * backLightColor.xyz;
 #		endif
 
 	if (useSnowSpecular && useSnowDecalSpecular) {
@@ -2498,18 +2499,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		lightColor *= lightShadow;
 		float lightAngle = dot(worldNormal.xyz, normalizedLightDirection.xyz);
 		float3 lightDiffuseColor = lightColor * saturate(lightAngle.xxx);
-		float lightBacklighting = 1.0 + saturate(-dot(normalizedLightDirection.xyz, viewDirection));
 
 #				if defined(SOFT_LIGHTING)
-		lightDiffuseColor += lightBacklighting * lightColor * GetSoftLightMultiplier(lightAngle) * rimSoftLightColor.xyz;
+		lightDiffuseColor += lightColor * GetSoftLightMultiplier(lightAngle) * rimSoftLightColor.xyz;
 #				endif  // SOFT_LIGHTING
 
 #				if defined(RIM_LIGHTING)
-		lightDiffuseColor += lightBacklighting * lightColor * GetRimLightMultiplier(normalizedLightDirection, viewDirection, worldNormal.xyz) * rimSoftLightColor.xyz;
+		lightDiffuseColor += lightColor * GetRimLightMultiplier(normalizedLightDirection, viewDirection, worldNormal.xyz) * rimSoftLightColor.xyz;
 #				endif  // RIM_LIGHTING
 
 #				if defined(BACK_LIGHTING)
-		lightDiffuseColor += lightBacklighting * lightColor * saturate(-lightAngle) * backLightColor.xyz;
+		lightDiffuseColor += lightColor * saturate(-lightAngle) * backLightColor.xyz;
 #				endif  // BACK_LIGHTING
 #				if defined(HAIR) && defined(CS_HAIR)
 		if (SharedData::hairSpecularSettings.Enabled) {
@@ -2880,7 +2880,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	baseColor.xyz = lerp(baseColor.xyz, pow(abs(baseColor.xyz), 1.0 + wetnessDarkeningAmount), 0.5);
 #		endif
 
-	float3 wetnessReflectance = WetnessEffects::GetWetnessAmbientSpecular(screenUV, wetnessNormal, vertexNormal, viewDirection, 0.0);
+	float3 wetnessReflectance = WetnessEffects::GetWetnessAmbientSpecular(screenUV, wetnessNormal, vertexNormal, viewDirection, wetnessGlossinessSpecular) * sqrt(wetnessGlossinessSpecular);
 
 #		if !defined(DEFERRED)
 	wetnessSpecular += wetnessReflectance;
