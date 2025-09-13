@@ -124,6 +124,11 @@ void State::Reset()
 	initialized = false;
 	std::memset(&permutationDataPrevious, 0xFF, sizeof(PermutationCB));
 	frameCount++;
+
+	if (!globals::game::isVR) {
+		RE::GetINISetting("bEnableImprovedSnow:Display")->data.b = false;
+		RE::GetINISetting("bIBLFEnable:Display")->data.b = false;
+	}
 }
 
 void State::Setup()
