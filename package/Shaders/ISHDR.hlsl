@@ -116,7 +116,9 @@ PS_OUTPUT main(PS_INPUT input)
 
 	hdrColor += DisplayMapping::RangeCompress(max(0, Param.x - hdrColor)) * bloomColor;
 
-	hdrColor = pow(abs(hdrColor) / avgValue.x, Cinematic.z) * avgValue.x * sign(hdrColor);
+	float3 contrastOriginal = lerp(avgValue.x, hdrColor, Cinematic.z);
+	float3 contrastShadows = pow(abs(hdrColor) / avgValue.x, Cinematic.z) * avgValue.x * sign(hdrColor);
+	hdrColor = contrastOriginal < hdrColor ? contrastShadows : contrastOriginal;
 
 	float hdrLuminance = Color::RGBToLuminance(hdrColor);
 	hdrColor = Cinematic.w * lerp(lerp(hdrLuminance, hdrColor, Cinematic.x), lerp(hdrColor, hdrLuminance, saturate(hdrLuminance)) * Tint.xyz, Tint.w).xyz;
