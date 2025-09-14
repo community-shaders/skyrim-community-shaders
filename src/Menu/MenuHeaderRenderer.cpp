@@ -97,7 +97,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 
 			// Load Settings Button
 			ImGui::TableNextColumn();
-			if (ImGui::Button("Load Settings", { -1, 0 })) {
+			if (ImGui::Button("Restore Saved Settings", { -1, 0 })) {
 				globals::state->Load();
 				globals::features::llf::particleLights.GetConfigs();
 			}
