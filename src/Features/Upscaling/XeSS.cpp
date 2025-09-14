@@ -29,15 +29,9 @@ void XeSS::LoadXeSS()
 		xessDestroyContext = (xessDestroyContextPtr)GetProcAddress(module, "xessDestroyContext");
 		xessSetJitterScale = (xessSetJitterScalePtr)GetProcAddress(module, "xessSetJitterScale");
 		xessSetVelocityScale = (xessSetVelocityScalePtr)GetProcAddress(module, "xessSetVelocityScale");
-		xessGetInputResolution = (xessGetInputResolutionPtr)GetProcAddress(module, "xessGetInputResolution");
-
-		if (xessGetVersion && xessD3D12CreateContext && xessD3D12Init && xessD3D12Execute && xessDestroyContext && xessSetJitterScale && xessSetVelocityScale && xessGetInputResolution) {
-			featureXeSS = true;
-			logger::info("[XeSS] Successfully loaded XeSS SDK");
-		} else {
-			featureXeSS = false;
-			logger::error("[XeSS] Failed to load XeSS function pointers");
-		}
+		xessGetInputResolution = (xessGetInputResolutionPtr)GetProcAddress(module, "xessGetInputResolution");	
+		featureXeSS = true;
+		logger::info("[XeSS] Successfully loaded XeSS SDK");
 	} else {
 		featureXeSS = false;
 		logger::error("[XeSS] Failed to load libxess.dll");
