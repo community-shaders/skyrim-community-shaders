@@ -184,10 +184,15 @@ void CalculateGI(
 
 				float sampleOffsetLength = length(sampleOffset);
 				float mipLevel = clamp(log2(sampleOffsetLength) - 3.3, 0, 5);
-#ifdef HALF_RES
+				float mipLevelRadiance = mipLevel;
+#if defined(HALF_RES)
 				mipLevel = max(mipLevel, 1);
+				mipLevelRadiance = max(mipLevelRadiance, 2);
 #elif defined(QUARTER_RES)
 				mipLevel = max(mipLevel, 2);
+				mipLevelRadiance = max(mipLevelRadiance, 3);
+#else
+				mipLevelRadiance = max(mipLevelRadiance, 1);
 #endif
 
 				float SZ = srcWorkingDepth.SampleLevel(samplerPointClamp, sampleUV * frameScale, mipLevel);
@@ -251,7 +256,7 @@ void CalculateGI(
 					if (frontBackMult > 0.f) {
 						float3 sampleHorizonVecWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], half4(sampleHorizonVec, 0)).xyz);
 
-						float3 sampleRadiance = srcRadiance.SampleLevel(samplerPointClamp, sampleUV * OUT_FRAME_SCALE, mipLevel).rgb * frontBackMult * giBoost * countbits(validBits) * 0.03125;
+						float3 sampleRadiance = srcRadiance.SampleLevel(samplerPointClamp, sampleUV * OUT_FRAME_SCALE, mipLevelRadiance).rgb * frontBackMult * giBoost * countbits(validBits) * 0.03125;
 						sampleRadiance = max(sampleRadiance, 0);
 						float3 sampleRadianceYCoCg = Color::RGBToYCoCg(sampleRadiance);
 
