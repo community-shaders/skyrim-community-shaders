@@ -1963,7 +1963,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif  // SNOW
 
 #	if defined(BACK_LIGHTING)
-#		if defined(TREE_ANIM)	
+#		if defined(TREE_ANIM)
 	float3 backLightColor = normalize(baseColor.xyz);
 	backLightColor.xyz /= max(backLightColor.x, max(backLightColor.y, backLightColor.z));
 #		else
