@@ -70,7 +70,7 @@ public:
 		// performance/quality
 		uint NumSlices = REL::Module::IsVR() ? 1u : 4u;  // AO preset for VR
 		uint NumSteps = REL::Module::IsVR() ? 6u : 8u;   // AO preset for VR
-		int ResolutionMode = 2;                          // 0-full, 1-half, 2-quarter - DBF default
+		int ResolutionMode = 1;                          // 0-full, 1-half, 2-quarter - DBF default
 		// visual
 		float MinScreenRadius = 0.01f;
 		float AORadius = 256.f;

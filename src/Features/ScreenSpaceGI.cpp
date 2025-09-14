@@ -109,7 +109,7 @@ void ScreenSpaceGI::DrawSettings()
 			if (ImGui::Button("Standard", { -1, 0 })) {
 				settings.NumSlices = 4;
 				settings.NumSteps = 8;
-				settings.ResolutionMode = 2;
+				settings.ResolutionMode = 1;
 				settings.EnableBlur = true;
 				settings.EnableGI = true;
 				recompileFlag = true;
