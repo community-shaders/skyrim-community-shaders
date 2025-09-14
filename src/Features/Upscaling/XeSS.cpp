@@ -54,7 +54,7 @@ void XeSS::QueryVersion()
 
 	if (xessGetVersion(&version) == XESS_RESULT_SUCCESS && xessGetIntelXeFXVersion(xessContext, &versionXeFX) == XESS_RESULT_SUCCESS) {
 		bool xeFX = versionXeFX.major != 0 && versionXeFX.minor != 0 && versionXeFX.patch != 0;
-		versionInfo = std::format("{}.{}.{} {}", version.major, version.minor, version.patch, xeFX ? "Xe" : "DP4a");
+		versionInfo = std::format("{}.{}.{} {}", version.major, version.minor, version.patch, xeFX ? "XMX" : "DP4a");
 		logger::info("[XeSS] Upscaler version: {}", versionInfo);
 	}
 }
