@@ -95,7 +95,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 				globals::state->Save();
 			}
 
-			// Load Settings Button
+			// Restore Saved Settings Button
 			ImGui::TableNextColumn();
 			if (ImGui::Button("Restore Saved Settings", { -1, 0 })) {
 				globals::state->Load();
@@ -180,7 +180,7 @@ std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons
 	}
 	if (uiIcons.loadSettings.texture) {
 		actionIcons.push_back({ uiIcons.loadSettings.texture,
-			"Load Settings",
+			"Restore Saved Settings",
 			[]() {
 				globals::state->Load();
 				globals::features::llf::particleLights.GetConfigs();
