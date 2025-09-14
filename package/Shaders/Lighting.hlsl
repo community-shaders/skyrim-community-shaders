@@ -985,6 +985,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	uint eyeIndex = Stereo::GetEyeIndexPS(input.Position, VPOSOffset);
 
 	float3 viewPosition = mul(FrameBuffer::CameraView[eyeIndex], float4(input.WorldPosition.xyz, 1)).xyz;
+	float3 viewDirection = -normalize(input.WorldPosition.xyz);
+
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
 	float screenNoise = Random::InterleavedGradientNoise(input.Position.xy, SharedData::FrameCount);
 
@@ -1009,9 +1011,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	// Fix incorrect normals without flipping everything
 #if defined(TREE_ANIM)
-	tbnTr[2].xyz = normalize(FrameBuffer::WorldToView(tbnTr[2].xyz, false, eyeIndex));
-	tbnTr[2].z = -abs(tbnTr[2].z);
-	tbnTr[2].xyz = normalize(FrameBuffer::ViewToWorld(tbnTr[2].xyz, false, eyeIndex));
+	if (dot(tbnTr[2], viewDirection) > 0.0)
+	     tbnTr[2] = -tbnTr[2];
+	tbn = transpose(tbn);
 #endif
 
 #	endif  // defined (SKINNED) || !defined (MODELSPACENORMALS)
@@ -1037,8 +1039,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	blendFactorTerrain = saturate(blendFactorTerrain);
 #	endif
-
-	float3 viewDirection = -normalize(input.WorldPosition.xyz);
 
 	float2 uv = input.TexCoord0.xy;
 	float2 uvOriginal = uv;

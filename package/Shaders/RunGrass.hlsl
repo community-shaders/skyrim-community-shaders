@@ -503,9 +503,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		normal = -normal;
 
 	// Fix incorrect normals without flipping everything
-	normal= normalize(FrameBuffer::WorldToView(normal.xyz, false, eyeIndex));
-	normal.z = -abs(normal.z);
-	normal = normalize(FrameBuffer::ViewToWorld(normal.xyz, false, eyeIndex));
+ 	if (dot(normal, viewDirection) > 0.0)
+     	normal = -normal;
 
 	float3x3 tbn = 0;
 
