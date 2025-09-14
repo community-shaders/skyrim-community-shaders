@@ -781,11 +781,11 @@ void ScreenSpaceGI::DrawSSGI()
 
 			resetViews();
 			srvs.at(0) = texRadianceTemp->srv.get();  // Use temporary texture as input
-			uavs.at(0) = uavRadiance[0].get();  // Mip 0
-			uavs.at(1) = uavRadiance[1].get();  // Mip 1
-			uavs.at(2) = uavRadiance[2].get();  // Mip 2
-			uavs.at(3) = uavRadiance[3].get();  // Mip 3
-			uavs.at(4) = uavRadiance[4].get();  // Mip 4
+			uavs.at(0) = uavRadiance[0].get();        // Mip 0
+			uavs.at(1) = uavRadiance[1].get();        // Mip 1
+			uavs.at(2) = uavRadiance[2].get();        // Mip 2
+			uavs.at(3) = uavRadiance[3].get();        // Mip 3
+			uavs.at(4) = uavRadiance[4].get();        // Mip 4
 
 			context->CSSetShaderResources(0, 1, srvs.data());
 			context->CSSetUnorderedAccessViews(0, 5, uavs.data(), nullptr);
