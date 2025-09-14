@@ -29,7 +29,7 @@ void XeSS::LoadXeSS()
 		xessDestroyContext = (xessDestroyContextPtr)GetProcAddress(module, "xessDestroyContext");
 		xessSetJitterScale = (xessSetJitterScalePtr)GetProcAddress(module, "xessSetJitterScale");
 		xessSetVelocityScale = (xessSetVelocityScalePtr)GetProcAddress(module, "xessSetVelocityScale");
-		xessGetInputResolution = (xessGetInputResolutionPtr)GetProcAddress(module, "xessGetInputResolution");	
+		xessGetInputResolution = (xessGetInputResolutionPtr)GetProcAddress(module, "xessGetInputResolution");
 		featureXeSS = true;
 		logger::info("[XeSS] Successfully loaded XeSS SDK");
 	} else {
