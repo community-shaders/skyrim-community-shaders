@@ -140,6 +140,8 @@ public:
 	winrt::com_ptr<ID3D11UnorderedAccessView> uavWorkingDepth[5] = { nullptr };
 	eastl::unique_ptr<Texture2D> texPrevGeo = nullptr;
 	eastl::unique_ptr<Texture2D> texRadiance = nullptr;
+	eastl::unique_ptr<Texture2D> texRadianceTemp = nullptr;
+	winrt::com_ptr<ID3D11UnorderedAccessView> uavRadiance[5] = { nullptr };
 	eastl::unique_ptr<Texture2D> texAccumFrames[2] = { nullptr };
 	eastl::unique_ptr<Texture2D> texAo[2] = { nullptr };
 	eastl::unique_ptr<Texture2D> texIlY[2] = { nullptr };
@@ -161,6 +163,7 @@ public:
 	winrt::com_ptr<ID3D11SamplerState> pointClampSampler = nullptr;
 
 	winrt::com_ptr<ID3D11ComputeShader> prefilterDepthsCompute = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> prefilterRadianceCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> radianceDisoccCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> giCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> blurCompute = nullptr;

@@ -390,14 +390,39 @@ void ScreenSpaceGI::SetupResources()
 		auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 		mainTex.texture->GetDesc(&texDesc);
 		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
-		texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 5;
-		texDesc.MiscFlags |= D3D11_RESOURCE_MISC_GENERATE_MIPS;
 
 		{
 			texRadiance = eastl::make_unique<Texture2D>(texDesc);
 			texRadiance->CreateSRV(srvDesc);
-			texRadiance->CreateUAV(uavDesc);
+			texRadiance->CreateUAV(uavDesc);  // Create default UAV for mip 0
+
+			// Create individual UAVs for each mip level for prefiltering
+			for (uint i = 0; i < 5; ++i) {
+				D3D11_UNORDERED_ACCESS_VIEW_DESC mipUavDesc = {
+					.Format = DXGI_FORMAT_R11G11B10_FLOAT,
+					.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+					.Texture2D = { .MipSlice = i }
+				};
+				DX::ThrowIfFailed(device->CreateUnorderedAccessView(texRadiance->resource.get(), &mipUavDesc, uavRadiance[i].put()));
+			}
+
+			// Create temporary texture for prefiltering (single mip level, used as SRV input)
+			D3D11_TEXTURE2D_DESC tempTexDesc = texDesc;
+			tempTexDesc.MipLevels = 1;
+			tempTexDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+
+			D3D11_SHADER_RESOURCE_VIEW_DESC tempSrvDesc = {
+				.Format = DXGI_FORMAT_R11G11B10_FLOAT,
+				.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+				.Texture2D = {
+					.MostDetailedMip = 0,
+					.MipLevels = 1 }
+			};
+
+			texRadianceTemp = eastl::make_unique<Texture2D>(tempTexDesc);
+			texRadianceTemp->CreateSRV(tempSrvDesc);
 		}
 
 		texDesc.BindFlags &= ~D3D11_BIND_RENDER_TARGET;
@@ -528,7 +553,7 @@ void ScreenSpaceGI::SetupResources()
 void ScreenSpaceGI::ClearShaderCache()
 {
 	static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-		&prefilterDepthsCompute, &radianceDisoccCompute, &giCompute, &blurCompute, &upsampleCompute
+		&prefilterDepthsCompute, &prefilterRadianceCompute, &radianceDisoccCompute, &giCompute, &blurCompute, &upsampleCompute
 	};
 
 	for (auto shader : shaderPtrs)
@@ -549,6 +574,7 @@ void ScreenSpaceGI::CompileComputeShaders()
 	std::vector<ShaderCompileInfo>
 		shaderInfos = {
 			{ &prefilterDepthsCompute, "prefilterDepths.cs.hlsl", { { "LINEAR_FILTER", "" } } },
+			{ &prefilterRadianceCompute, "prefilterRadiance.cs.hlsl", {} },
 			{ &radianceDisoccCompute, "radianceDisocc.cs.hlsl", {} },
 			{ &giCompute, "gi.cs.hlsl", {} },
 			{ &blurCompute, "blur.cs.hlsl", {} },
@@ -580,7 +606,7 @@ void ScreenSpaceGI::CompileComputeShaders()
 
 bool ScreenSpaceGI::ShadersOK()
 {
-	return texNoise && prefilterDepthsCompute && radianceDisoccCompute && giCompute && blurCompute && upsampleCompute;
+	return texNoise && prefilterDepthsCompute && prefilterRadianceCompute && radianceDisoccCompute && giCompute && blurCompute && upsampleCompute;
 }
 
 void ScreenSpaceGI::UpdateSB()
@@ -747,7 +773,28 @@ void ScreenSpaceGI::DrawSSGI()
 		context->CSSetShader(radianceDisoccCompute.get(), nullptr, 0);
 		context->Dispatch((internalRes[0] + 7u) >> 3, (internalRes[1] + 7u) >> 3, 1);
 
-		context->GenerateMips(texRadiance->srv.get());
+		// Prefilter radiance texture instead of using GenerateMips for proper dynamic resolution handling
+		{
+			TracyD3D11Zone(globals::state->tracyCtx, "SSGI - Prefilter Radiance");
+
+			// First copy mip 0 from radiance to temporary texture to avoid read/write conflict
+			context->CopySubresourceRegion(
+				texRadianceTemp->resource.get(), 0, 0, 0, 0,
+				texRadiance->resource.get(), 0, nullptr);
+
+			resetViews();
+			srvs.at(0) = texRadianceTemp->srv.get();  // Use temporary texture as input
+			uavs.at(0) = uavRadiance[0].get();  // Mip 0
+			uavs.at(1) = uavRadiance[1].get();  // Mip 1
+			uavs.at(2) = uavRadiance[2].get();  // Mip 2
+			uavs.at(3) = uavRadiance[3].get();  // Mip 3
+			uavs.at(4) = uavRadiance[4].get();  // Mip 4
+
+			context->CSSetShaderResources(0, 1, srvs.data());
+			context->CSSetUnorderedAccessViews(0, 5, uavs.data(), nullptr);
+			context->CSSetShader(prefilterRadianceCompute.get(), nullptr, 0);
+			context->Dispatch((internalRes[0] + 15u) >> 4, (internalRes[1] + 15u) >> 4, 1);
+		}
 
 		inputAoTexIdx = !inputAoTexIdx;
 		inputGITexIdx = !inputGITexIdx;
