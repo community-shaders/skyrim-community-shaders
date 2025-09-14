@@ -502,9 +502,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (!frontFace)
 		normal = -normal;
 
-	// Fix incorrect normals without flipping everything
- 	if (dot(normal, viewDirection) < 0.0)
-     	normal = -normal;
+	normal.z = max(0.0, normal.z);
+	normal = normalize(float3(normal.xy, max(0, normal.z)));
 
 	float3x3 tbn = 0;
 
@@ -611,9 +610,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 albedo = max(0, baseColor.xyz * vertexColor);
 
-	float maxC = max(albedo.x, max(albedo.y, albedo.z));
-	float3 normalizedColor = (maxC > 1e-3) ? (albedo / maxC) : 0;
-	float3 subsurfaceColor = albedo * normalizedColor * saturate(input.VertexNormal.w * 10.0);
+	float3 subsurfaceColor = lerp(dot(albedo, 1.0 / 3.0), albedo, 2.0) * saturate(input.VertexNormal.w * 10.0);
 	float3 sss = dirLightColor * saturate(-dirLightAngle);
 
 	if (complex)
@@ -878,9 +875,6 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 ddx = ddx_coarse(input.WorldPosition);
 	float3 ddy = ddy_coarse(input.WorldPosition);
 	float3 normal = -normalize(cross(ddx, ddy));
-	normal.xyz = normalize(FrameBuffer::WorldToView(normal.xyz, false, eyeIndex));
-	normal.z = -abs(normal.z);
-	normal.xyz = normalize(FrameBuffer::ViewToWorld(normal.xyz, false, eyeIndex));
 
 	normal = normalize(float3(normal.xy, max(0, normal.z)));
 

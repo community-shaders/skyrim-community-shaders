@@ -1013,12 +1013,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	tbnTr[1] = normalize(tbnTr[1]);
 	tbnTr[2] = normalize(tbnTr[2]);
 
-#if defined(TREE_ANIM)
-	// Fix incorrect normals without flipping everything
-	if (dot(tbnTr[2], viewDirection) < 0.0)
-	     tbnTr[2] = -tbnTr[2];
-#endif
-
 	tbn = transpose(tbnTr);
 
 #	endif  // defined (SKINNED) || !defined (MODELSPACENORMALS)
@@ -1971,7 +1965,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif  // SNOW
 
 #	if defined(BACK_LIGHTING)
-	float4 backLightColor = TexBackLightSampler.Sample(SampBackLightSampler, uv);
+	float3 backLightColor = TexBackLightSampler.Sample(SampBackLightSampler, uv);
 #		if defined(HAIR) && defined(CS_HAIR)
 	if (useHairFlowMap) {
 		backLightColor = 0.0f;
