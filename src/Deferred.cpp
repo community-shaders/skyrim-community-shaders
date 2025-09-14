@@ -177,7 +177,6 @@ void Deferred::SetupResources()
 			.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
 			.Texture2D = { .MipSlice = 0 }
 		};
-
 	}
 }
 

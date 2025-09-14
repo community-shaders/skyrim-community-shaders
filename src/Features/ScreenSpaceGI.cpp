@@ -251,7 +251,6 @@ void ScreenSpaceGI::DrawSettings()
 		}
 
 		Util::PercentageSlider("IL Saturation", &settings.GISaturation);
-
 	}
 
 	///////////////////////////////
@@ -312,7 +311,6 @@ void ScreenSpaceGI::DrawSettings()
 	ImGui::SeparatorText("Debug");
 
 	if (ImGui::TreeNode("Buffer Viewer")) {
-
 		static float debugRescale = .3f;
 		ImGui::SliderFloat("View Resize", &debugRescale, 0.f, 1.f);
 
@@ -326,7 +324,6 @@ void ScreenSpaceGI::DrawSettings()
 		BUFFER_VIEWER_NODE(texIlY[1], debugRescale)
 		BUFFER_VIEWER_NODE(texIlCoCg[0], debugRescale)
 		BUFFER_VIEWER_NODE(texIlCoCg[1], debugRescale)
-
 
 		ImGui::TreePop();
 	}

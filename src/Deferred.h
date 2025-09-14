@@ -48,7 +48,6 @@ public:
 
 	bool deferredPass = false;
 
-
 	ID3D11SamplerState* linearSampler = nullptr;
 	ID3D11SamplerState* pointSampler = nullptr;
 
