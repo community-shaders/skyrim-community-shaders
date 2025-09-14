@@ -201,17 +201,7 @@ namespace LightingExtensions
 
 struct IDXGISwapChain_Present
 {
-	static HRESULT WINAPI /**
-	 * @brief Presents the swap chain with additional upscaling, overlay, and Reflex marker integration.
-	 *
-	 * Copies frame buffers for upscaling, processes overlays, manages tearing flags, and integrates Streamline Reflex markers for frame timing if enabled. Also collects profiling data and applies frame limiting after presentation.
-	 *
-	 * @param This The swap chain instance to present.
-	 * @param SyncInterval The vertical sync interval.
-	 * @param Flags Presentation flags, possibly modified for tearing support.
-	 * @return HRESULT Result of the present operation.
-	 */
-	thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
+	static HRESULT WINAPI thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
 	{
 		auto state = globals::state;
 		auto menu = globals::menu;
@@ -386,15 +376,6 @@ namespace Hooks
 			logger::info("Calling original Init3D");
 
 			func();
-
-			auto& upscaling = globals::features::upscaling;
-
-			if (upscaling.IsBackendInitialized()) {
-				upscaling.UpgradeBackendInterface((void**)&(globals::d3d::device));
-				upscaling.UpgradeBackendInterface((void**)&(globals::d3d::swapChain));
-				upscaling.SetBackendD3DDevice(globals::d3d::device);
-				upscaling.PostBackendDevice();
-			}
 
 			logger::info("Accessing render device information");
 			globals::ReInit();
