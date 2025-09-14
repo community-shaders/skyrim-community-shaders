@@ -124,24 +124,23 @@ void State::Reset()
 	std::memset(&permutationDataPrevious, 0xFF, sizeof(PermutationCB));
 	frameCount++;
 
-	if (auto* imageSpaceManager = RE::ImageSpaceManager::GetSingleton())
-	{
+	if (auto* imageSpaceManager = RE::ImageSpaceManager::GetSingleton()) {
 		GET_INSTANCE_MEMBER(BSImagespaceShaderApplyReflections, imageSpaceManager);
-		if (BSImagespaceShaderApplyReflections.get()){
-			BSImagespaceShaderApplyReflections->active = false;		
+		if (BSImagespaceShaderApplyReflections.get()) {
+			BSImagespaceShaderApplyReflections->active = false;
 		}
 
-		if (!globals::game::isVR){
+		if (!globals::game::isVR) {
 			GET_INSTANCE_MEMBER(BSImagespaceShaderISSnowSSS, imageSpaceManager);
 			GET_INSTANCE_MEMBER(BSImagespaceShaderISBlur, imageSpaceManager);
 
 			// Disable Snow SSS
-			if (auto* snowSSS = static_cast<RE::BSImagespaceShader*>(BSImagespaceShaderISSnowSSS.get())){
-				snowSSS->active = false;			
+			if (auto* snowSSS = static_cast<RE::BSImagespaceShader*>(BSImagespaceShaderISSnowSSS.get())) {
+				snowSSS->active = false;
 			}
 
 			// Disable IBLF
-			if (auto* isBlur = BSImagespaceShaderISBlur.get()){
+			if (auto* isBlur = BSImagespaceShaderISBlur.get()) {
 				auto& enableIBLF = REL::RelocateMember<bool>(isBlur, 0x48, 0x48);
 				enableIBLF = false;
 			}
