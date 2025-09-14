@@ -178,9 +178,6 @@ void Deferred::SetupResources()
 			.Texture2D = { .MipSlice = 0 }
 		};
 
-		prevDiffuseAmbientTexture = new Texture2D(texDesc);
-		prevDiffuseAmbientTexture->CreateSRV(srvDesc);
-		prevDiffuseAmbientTexture->CreateUAV(uavDesc);
 	}
 }
 
@@ -423,7 +420,7 @@ void Deferred::DeferredPasses()
 
 	auto& ssgi = globals::features::screenSpaceGI;
 	if (ssgi.loaded)
-		ssgi.DrawSSGI(prevDiffuseAmbientTexture);
+		ssgi.DrawSSGI();
 	auto [ssgi_ao, ssgi_y, ssgi_cocg, ssgi_gi_spec] = ssgi.GetOutputTextures();
 	bool ssgi_hq_spec = ssgi.settings.EnableExperimentalSpecularGI;
 
@@ -450,8 +447,8 @@ void Deferred::DeferredPasses()
 
 			context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
 
-			ID3D11UnorderedAccessView* uavs[2]{ main.UAV, prevDiffuseAmbientTexture->uav.get() };
-			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+			ID3D11UnorderedAccessView* uavs[1]{ main.UAV };
+			context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
 
 			auto shader = interior ? GetComputeAmbientCompositeInterior() : GetComputeAmbientComposite();
 			context->CSSetShader(shader, nullptr, 0);

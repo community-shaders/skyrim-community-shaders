@@ -31,7 +31,6 @@ Texture2D<float2> SsgiCoCgTexture : register(t7);
 
 RWTexture2D<float4> MainRW : register(u0);
 #if defined(SSGI)
-RWTexture2D<float3> DiffuseAmbientRW : register(u1);
 void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 {
 	ao = 1 - SsgiAoTexture[pixCoord];
@@ -139,9 +138,6 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 
 	diffuseColor = diffuseColor + directionalAmbientColor * albedo;
 
-#if defined(SSGI)
-	DiffuseAmbientRW[dispatchID.xy] = Color::GammaToLinear(diffuseColor - originalDiffuseColor);
-#endif
 
 	MainRW[dispatchID.xy] = float4(diffuseColor, 1);
 };

@@ -53,7 +53,7 @@ public:
 	void CompileComputeShaders();
 	bool ShadersOK();
 
-	void DrawSSGI(Texture2D* srcPrevAmbient);
+	void DrawSSGI();
 	void UpdateSB();
 
 	//////////////////////////////////////////////////////////////////////////////////
@@ -79,8 +79,6 @@ public:
 		float2 DepthFadeRange = { 4e4, 5e4 };
 		// gi
 		float GISaturation = 0.9f;
-		bool EnableGIBounce = false;
-		float GIBounceFade = 0.3f;
 		float GIDistanceCompensation = 0.f;
 		// mix
 		float AOPower = 1.0f;
@@ -119,9 +117,9 @@ public:
 		float DepthFadeScaleConst;
 
 		float GISaturation;  //
-		float GIBounceFade;
 		float GIDistanceCompensation;
 		float GICompensationMaxDist;
+		float pad1;
 
 		float AOPower;  //
 		float GIStrength;
@@ -133,7 +131,7 @@ public:
 		float BlurRadius;
 		float DistanceNormalisation;
 
-		float pad[2];
+		float2 pad;
 	};
 	eastl::unique_ptr<ConstantBuffer> ssgiCB;
 

@@ -20,8 +20,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Thickness,
 	DepthFadeRange,
 	GISaturation,
-	EnableGIBounce,
-	GIBounceFade,
 	GIDistanceCompensation,
 	AOPower,
 	GIStrength,
@@ -254,20 +252,6 @@ void ScreenSpaceGI::DrawSettings()
 
 		Util::PercentageSlider("IL Saturation", &settings.GISaturation);
 
-		recompileFlag |= ImGui::Checkbox("Ambient Bounce", &settings.EnableGIBounce);
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(
-				"Simulates multiple light bounces. Better with denoiser on.\n"
-				"Mandatory if you want ambient as part of the light source for IL calculation.");
-
-		{
-			auto bounceGuard = Util::DisableGuard(!settings.EnableGIBounce);
-			ImGui::Indent();
-			Util::PercentageSlider("Ambient Bounce Strength", &settings.GIBounceFade);
-			ImGui::Unindent();
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("How much of this frame's ambient+IL get carried to the next frame as source.");
-		}
 	}
 
 	///////////////////////////////
@@ -299,7 +283,7 @@ void ScreenSpaceGI::DrawSettings()
 			ImGui::Separator();
 
 			{
-				auto disocclusionGuard = Util::DisableGuard(!settings.EnableTemporalDenoiser && !(settings.EnableGI || settings.EnableGIBounce));
+				auto disocclusionGuard = Util::DisableGuard(!settings.EnableTemporalDenoiser && !settings.EnableGI);
 
 				Util::PercentageSlider("Movement Disocclusion", &settings.DepthDisocclusion, 0.f, 20.f);
 				if (auto _tt = Util::HoverTooltipWrapper())
@@ -328,7 +312,6 @@ void ScreenSpaceGI::DrawSettings()
 	ImGui::SeparatorText("Debug");
 
 	if (ImGui::TreeNode("Buffer Viewer")) {
-		auto deferred = globals::deferred;
 
 		static float debugRescale = .3f;
 		ImGui::SliderFloat("View Resize", &debugRescale, 0.f, 1.f);
@@ -344,7 +327,6 @@ void ScreenSpaceGI::DrawSettings()
 		BUFFER_VIEWER_NODE(texIlCoCg[0], debugRescale)
 		BUFFER_VIEWER_NODE(texIlCoCg[1], debugRescale)
 
-		BUFFER_VIEWER_NODE(deferred->prevDiffuseAmbientTexture, debugRescale)
 
 		ImGui::TreePop();
 	}
@@ -585,8 +567,6 @@ void ScreenSpaceGI::CompileComputeShaders()
 			info.defines.push_back({ "GI", "" });
 		if (settings.EnableExperimentalSpecularGI)
 			info.defines.push_back({ "GI_SPECULAR", "" });
-		if (settings.EnableGIBounce)
-			info.defines.push_back({ "GI_BOUNCE", "" });
 	}
 
 	for (auto& info : shaderInfos) {
@@ -643,7 +623,6 @@ void ScreenSpaceGI::UpdateSB()
 		data.DepthFadeScaleConst = 1 / (settings.DepthFadeRange.y - settings.DepthFadeRange.x);
 
 		data.GISaturation = settings.GISaturation;
-		data.GIBounceFade = settings.GIBounceFade;
 		data.GIDistanceCompensation = settings.GIDistanceCompensation;
 		data.GICompensationMaxDist = settings.AORadius;
 
@@ -660,7 +639,7 @@ void ScreenSpaceGI::UpdateSB()
 	ssgiCB->Update(data);
 }
 
-void ScreenSpaceGI::DrawSSGI(Texture2D* srcPrevAmbient)
+void ScreenSpaceGI::DrawSSGI()
 {
 	auto context = globals::d3d::context;
 
@@ -749,12 +728,12 @@ void ScreenSpaceGI::DrawSSGI(Texture2D* srcPrevAmbient)
 		srvs.at(2) = rts[NORMALROUGHNESS].SRV;
 		srvs.at(3) = texPrevGeo->srv.get();
 		srvs.at(4) = rts[RE::RENDER_TARGET::kMOTION_VECTOR].SRV;
-		srvs.at(5) = srcPrevAmbient->srv.get();
-		srvs.at(6) = texAccumFrames[lastFrameAccumTexIdx]->srv.get();
-		srvs.at(7) = texAo[inputAoTexIdx]->srv.get();
-		srvs.at(8) = texIlY[inputGITexIdx]->srv.get();
-		srvs.at(9) = texIlCoCg[inputGITexIdx]->srv.get();
-		srvs.at(10) = texGiSpecular[inputAoTexIdx]->srv.get();
+		srvs.at(5) = texAccumFrames[lastFrameAccumTexIdx]->srv.get();
+		srvs.at(6) = texAo[inputAoTexIdx]->srv.get();
+		srvs.at(7) = texIlY[inputGITexIdx]->srv.get();
+		srvs.at(8) = texIlCoCg[inputGITexIdx]->srv.get();
+		srvs.at(9) = texGiSpecular[inputAoTexIdx]->srv.get();
+		srvs.at(10) = nullptr;
 
 		uavs.at(0) = texRadiance->uav.get();
 		uavs.at(1) = texAccumFrames[!lastFrameAccumTexIdx]->uav.get();
