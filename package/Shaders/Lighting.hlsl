@@ -998,19 +998,22 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(SKINNED) || !defined(MODELSPACENORMALS)
 	float3x3 tbn = float3x3(input.TBN0.xyz, input.TBN1.xyz, input.TBN2.xyz);
+
+#		if !defined(TREE_ANIM) && !defined(LOD)
+	// Fix incorrect vertex normals on double-sided meshes
+	if (!frontFace)
+		tbn = lerp(tbn, -tbn, nearFactor);
+#		endif
+
 	float3x3 tbnTr = transpose(tbn);
 
 	// Fix incorrect normals without flipping everything
-	float3 normalTest = normalize(FrameBuffer::WorldToView(tbnTr[2], false, eyeIndex));
+#if defined(TREE_ANIM)
+	tbnTr[2].xyz = normalize(FrameBuffer::WorldToView(tbnTr[2].xyz, false, eyeIndex));
+	tbnTr[2].z = -abs(tbnTr[2].z);
+	tbnTr[2].xyz = normalize(FrameBuffer::ViewToWorld(tbnTr[2].xyz, false, eyeIndex));
+#endif
 
-	if (normalTest.z != -abs(normalTest.z))
-		tbnTr[2] = lerp(-tbnTr[2], tbnTr[2], nearFactor);
-
-	tbnTr[0] = normalize(tbnTr[0]);
-	tbnTr[1] = normalize(tbnTr[1]);
-	tbnTr[2] = normalize(tbnTr[2]);
-
-	tbn = transpose(tbnTr);
 #	endif  // defined (SKINNED) || !defined (MODELSPACENORMALS)
 
 #	if !defined(TRUE_PBR)

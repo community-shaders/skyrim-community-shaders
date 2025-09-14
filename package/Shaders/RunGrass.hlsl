@@ -498,10 +498,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
 	float screenNoise = Random::InterleavedGradientNoise(input.HPosition.xy, SharedData::FrameCount);
 
-	float3 normalTest = normalize(FrameBuffer::WorldToView(normal, false, eyeIndex));
-
-	if (normalTest.z != -abs(normalTest.z))
+	// Swaps direction of the backfaces otherwise they seem to get lit from the wrong direction.
+	if (!frontFace)
 		normal = -normal;
+
+	// Fix incorrect normals without flipping everything
+	normal= normalize(FrameBuffer::WorldToView(normal.xyz, false, eyeIndex));
+	normal.z = -abs(normal.z);
+	normal = normalize(FrameBuffer::ViewToWorld(normal.xyz, false, eyeIndex));
 
 	float3x3 tbn = 0;
 
