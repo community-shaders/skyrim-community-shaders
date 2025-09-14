@@ -1965,7 +1965,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif  // SNOW
 
 #	if defined(BACK_LIGHTING)
-	float3 backLightColor = TexBackLightSampler.Sample(SampBackLightSampler, uv);
+	float4 backLightColor = TexBackLightSampler.Sample(SampBackLightSampler, uv);
 #		if defined(HAIR) && defined(CS_HAIR)
 	if (useHairFlowMap) {
 		backLightColor = 0.0f;
