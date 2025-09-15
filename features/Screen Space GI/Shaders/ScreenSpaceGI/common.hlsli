@@ -48,9 +48,9 @@ cbuffer SSGICB : register(b1)
 	float DepthFadeScaleConst;
 
 	float GISaturation;
-	float GIBounceFade;
 	float GIDistanceCompensation;
 	float GICompensationMaxDist;
+	float pad1;
 
 	float AOPower;
 	float GIStrength;

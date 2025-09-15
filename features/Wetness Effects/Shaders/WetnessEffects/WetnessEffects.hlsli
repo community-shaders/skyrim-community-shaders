@@ -141,33 +141,6 @@ namespace WetnessEffects
 		return float4(rippleNormal, wetness * SharedData::wetnessEffectsSettings.SplashesStrength);
 	}
 
-	float3 GetWetnessAmbientSpecular(float2 uv, float3 N, float3 VN, float3 V, float roughness)
-	{
-		float3 R = reflect(-V, N);
-		float NoV = saturate(dot(N, V));
-
-#if defined(DYNAMIC_CUBEMAPS) && !defined(WATER)
-#	if defined(DEFERRED)
-		float level = roughness * 7.0;
-		float3 specularIrradiance = 1.0;
-#	else
-		float level = roughness * 7.0;
-		float3 specularIrradiance = Color::GammaToLinear(DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).rgb);
-#	endif
-#else
-		float3 specularIrradiance = 1.0;
-#endif
-
-		float2 specularBRDF = BRDF::EnvBRDF(roughness, NoV);
-
-		// Standard Schlick fresnel approximation
-		// Assuming F0 of 0.02 for water (common for wetness effects)
-		float3 F0 = 0.02;
-		float3 F = F0 + (1.0 - F0) * pow(1.0 - NoV, 5.0);
-
-		return specularIrradiance * (F * specularBRDF.x + specularBRDF.y);
-	}
-
 	float3 GetWetnessSpecular(float3 N, float3 L, float3 V, float3 lightColor, float roughness)
 	{
 		return LightingFuncGGX_OPT3(N, V, L, roughness, 0.02) * lightColor;

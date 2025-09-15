@@ -2,6 +2,7 @@
 
 #include "Feature.h"
 #include "Upscaling/FidelityFX.h"
+#include "Upscaling/NIS/NIS.h"
 #include "Upscaling/Streamline.h"
 #include "Upscaling/XeSS.h"
 #include <d3d11_4.h>
@@ -68,7 +69,14 @@ public:
 		float2 pad0;
 	};
 
+	struct UpscalingDataCB
+	{
+		float2 trueSamplingDim;  // BufferDim.xy * ResolutionScale
+		float2 pad0;
+	};
+
 	ConstantBuffer* jitterCB = nullptr;
+	ConstantBuffer* upscalingDataCB = nullptr;
 
 	// Runtime state
 	bool isWindowed = false;
@@ -163,6 +171,7 @@ public:
 	static inline Streamline streamline;
 	static inline XeSS xess;
 	static inline FidelityFX fidelityFX;
+	static inline NIS nis;
 	static inline class DX12SwapChain dx12SwapChain;
 
 	winrt::com_ptr<ID3D11PixelShader> copyDepthToSharedBufferPS;

@@ -1,5 +1,11 @@
 #include "Common/SharedData.hlsli"
 
+cbuffer UpscalingData : register(b0)
+{
+	float2 TrueSamplingDim;  // BufferDim.xy * ResolutionScale
+	float2 pad0;
+};
+
 Texture2D<float2> TAAMask : register(t0);
 Texture2D<float4> NormalsWaterMask : register(t1);
 Texture2D<float2> MotionVectorMask : register(t2);
@@ -14,6 +20,10 @@ RWTexture2D<float> TransparencyCompositionMask : register(u1);
 RWTexture2D<float2> MotionVectorOutput : register(u2);
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
+	// Early exit if dispatch thread is outside true sampling dimensions
+	if (any(dispatchID.xy >= uint2(TrueSamplingDim)))
+		return;
+
 	float2 taaMask = TAAMask[dispatchID.xy];
 	float transparencyCompositionMask = NormalsWaterMask[dispatchID.xy].z;
 
@@ -32,13 +42,17 @@ RWTexture2D<float2> MotionVectorOutput : register(u2);
 		for (int x = -2; x <= 2; x++) {
 			int2 samplePos = int2(dispatchID.xy) + int2(x, y);
 
+			// Skip samples outside true sampling dimensions
+			if (any(samplePos < 0) || any(samplePos >= int2(TrueSamplingDim)))
+				continue;
+
 			float neighborDepth = DepthMask[samplePos];
 
+#if defined(DLSS) || defined(XESS)
 			// Take neighbor if it's longer AND closer
 			if (neighborDepth < depth){
 				taaMask.x = min(taaMask.x, TAAMask[samplePos].x);
 
-#if defined(DLSS) || defined(XESS)
 				float2 neighborMotionVector = MotionVectorMask[samplePos];
 
 				// Square motion vector for length

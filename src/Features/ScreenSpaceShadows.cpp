@@ -57,7 +57,7 @@ uint ScreenSpaceShadows::GetScaledSampleCount(bool a_dynamic)
 	float referenceArea = referenceRes.x * referenceRes.y;
 	float currentArea = screenSize.x * screenSize.y;
 	float areaScale = std::sqrt(currentArea / referenceArea);
-	uint scaledSampleCount = static_cast<uint>(std::round(bendSettings.SampleCount * 120 * areaScale));
+	uint scaledSampleCount = static_cast<uint>(std::round(bendSettings.SampleCount * 60 * areaScale));
 
 	return scaledSampleCount;
 }
