@@ -1440,7 +1440,7 @@ void Upscaling::Upscale()
 
 			upscalingDataCB->Update(upscalingData);
 			auto upscalingBuffer = upscalingDataCB->CB();
-			context->CSSetConstantBuffers(7, 1, &upscalingBuffer);
+			context->CSSetConstantBuffers(0, 1, &upscalingBuffer);
 
 			ID3D11ShaderResourceView* views[4] = { temporalAAMask.SRV, normals.SRV, motionVector.SRV, depth.depthSRV };
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);

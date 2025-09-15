@@ -1,6 +1,6 @@
 #include "Common/SharedData.hlsli"
 
-cbuffer UpscalingData : register(b7)
+cbuffer UpscalingData : register(b0)
 {
 	float2 TrueSamplingDim;  // BufferDim.xy * ResolutionScale
 	float2 pad0;
