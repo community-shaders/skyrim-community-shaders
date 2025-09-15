@@ -246,8 +246,9 @@ void HomePageRenderer::RenderFAQSection()
 			" Branding materials and assets (icons, nexus branding, typography, etc) are not covered by the GPL Licence."
 			" Any included assets may not be used without explicit permission.");
 	}
+}
 
-	void HomePageRenderer::RenderFirstTimeSetupDialog()
+void HomePageRenderer::RenderFirstTimeSetupDialog()
 	{
 		// Block input to the game and make cursor visible - input blocking is handled by ShouldSwallowInput()
 		auto& io = ImGui::GetIO();
