@@ -229,7 +229,7 @@ float3 FFX_SSSR_HierarchicalRaymarch(float3 origin, float3 direction, bool is_mi
 
     _num_iters                     = uint(0);
     while (_num_iters < max_traversal_intersections && current_mip >= most_detailed_mip) {
-        if (any(position.xy > float2(FrameBuffer::DynamicResolutionParams1.x, FrameBuffer::DynamicResolutionParams1.y)) || any(position.xy < float2(0.0, 0.0))) break;
+        if (any(position.xy > float2(1.0, 1.0)) || any(position.xy < float2(0.0, 0.0))) break;
 #ifdef FFX_SSSR_INVERTED_DEPTH_RANGE
         if (position.z < f32(1.0e-6)) break;
 #else
@@ -237,7 +237,7 @@ float3 FFX_SSSR_HierarchicalRaymarch(float3 origin, float3 direction, bool is_mi
 #endif
 
         float2 current_mip_position = current_mip_resolution * position.xy;
-        float  surface_z            = FFX_SSSR_LoadDepth(current_mip_position, current_mip);
+        float  surface_z            = FFX_SSSR_LoadDepth(current_mip_position * FrameBuffer::DynamicResolutionParams1.xy, current_mip);
         bool skipped_tile =
             FFX_SSSR_AdvanceRay(origin, direction, inv_direction, current_mip_position, current_mip_resolution_inv, current_mip, floor_offset, uv_offset, surface_z, thickness, position, current_t);
         bool nextMipIsOutOfRange = skipped_tile && (current_mip >= FFX_SSSR_DEPTH_HIERARCHY_MAX_MIP);
@@ -260,13 +260,13 @@ float FFX_SSSR_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_directi
     occlusion = 1.f;
 
     // Reject hits outside the view frustum
-    if ((hit.x < 0.0f) || (hit.y < 0.0f) || (hit.x > FrameBuffer::DynamicResolutionParams1.x) || (hit.y > FrameBuffer::DynamicResolutionParams1.y))
+    if ((hit.x < 0.0f) || (hit.y < 0.0f) || (hit.x > 1.0f) || (hit.y > 1.0f))
     {
         return 0.0f;
     }
 
     // Don't lookup radiance from the background.
-    int2  texel_coords = int2(screen_size * hit.xy);
+    int2  texel_coords = int2(screen_size * hit.xy * FrameBuffer::DynamicResolutionParams1.xy);
     float surface_z    = FFX_SSSR_LoadDepth(texel_coords / 2, 1);
 #if FFX_SSSR_OPTION_INVERTED_DEPTH
     if (surface_z == 0.0)
@@ -452,7 +452,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
     float4 outColor = float4(0, 0, 0, 0);
     float4 outPDF = float4(0, 0, 0, 0);
 
-    float2 uv = float2(coords.xy + 0.5) * SharedData::BufferDim.zw;
+    float2 uv = float2(coords.xy + 0.5) * SharedData::BufferDim.zw * FrameBuffer::DynamicResolutionParams2.xy;
     uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
 
     float3 normalVS;
@@ -463,7 +463,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
     bool is_mirror = IsMirrorReflection(roughness);
     int most_detailed_mip = HIZ_MIN_MIP;
     float2 mip_resolution = FFX_SSSR_GetMipResolution(screen_size, most_detailed_mip);
-    float z = FFX_SSSR_LoadDepth(uv * mip_resolution, most_detailed_mip);
+    float z = FFX_SSSR_LoadDepth(uv * mip_resolution * FrameBuffer::DynamicResolutionParams1.xy, most_detailed_mip);
     float3 screen_uv_space_ray_origin = float3(uv, z);
     float3 view_space_ray = ScreenSpaceToViewSpace(screen_uv_space_ray_origin, FrameBuffer::CameraProjInverse[eyeIndex]);
     float3 world_space_normal = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
@@ -488,7 +488,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
     float3 world_space_ray = float3(0.0, 0.0, 0.0);
 
     float depth = DepthTexture[coords.xy].x;
-    float4 positionWS = float4(2 * float2(uv.x * FrameBuffer::DynamicResolutionParams2.x, -uv.y * FrameBuffer::DynamicResolutionParams2.y + 1) - 1, depth, 1);
+    float4 positionWS = float4(2 * float2(uv.x, -uv.y + 1) - 1, depth, 1);
 	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
 	positionWS.xyz = positionWS.xyz / positionWS.w;
 
@@ -560,7 +560,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
             // float2 projUV;
             // ReprojectHit(MotionVectorTexture, LinearSampler, hit, eyeIndex, projUV);
 
-            sampleColor = ScreenColorTextureMips.SampleLevel(LinearSampler, hit.xy, 0).xyz;
+            sampleColor = ScreenColorTextureMips.SampleLevel(LinearSampler, hit.xy * FrameBuffer::DynamicResolutionParams1.xy, 0).xyz;
 
             outPDF.xyz += hit * confidence;
             outPDF.w += pdf * confidence;
