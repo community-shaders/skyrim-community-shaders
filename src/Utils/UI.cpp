@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <format>
 #include <functional>
 #include <iomanip>
 #include <sstream>
@@ -103,7 +104,7 @@ namespace Util
 		ZeroMemory(&desc, sizeof(desc));
 		desc.Width = image_width;
 		desc.Height = image_height;
-		desc.MipLevels = 1;  // Start with just one mip level
+		desc.MipLevels = 0;  // Let D3D11 calculate the full mipmap chain
 		desc.ArraySize = 1;
 		desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 		desc.SampleDesc.Count = 1;
@@ -114,30 +115,33 @@ namespace Util
 		desc.CPUAccessFlags = 0;
 
 		ID3D11Texture2D* pTexture = nullptr;
-		D3D11_SUBRESOURCE_DATA subResource;
-		subResource.pSysMem = image_data;
-		subResource.SysMemPitch = desc.Width * 4;
-		subResource.SysMemSlicePitch = 0;
-
-		HRESULT hr = device->CreateTexture2D(&desc, &subResource, &pTexture);
+		// Create texture without initial data to enable full mipmap chain
+		HRESULT hr = device->CreateTexture2D(&desc, nullptr, &pTexture);
 		if (FAILED(hr) || !pTexture) {
 			logger::warn("LoadTextureFromFile: Failed to create D3D11 texture, HRESULT: 0x{:08X}", static_cast<uint32_t>(hr));
 			stbi_image_free(image_data);
 			return false;
 		}
+
+		// Upload the base level data using UpdateSubresource
+		ID3D11DeviceContext* context = nullptr;
+		device->GetImmediateContext(&context);
+		if (context) {
+			context->UpdateSubresource(pTexture, 0, nullptr, image_data, image_width * 4, 0);
+		}
+
 		// Create simple shader resource view
 		hr = device->CreateShaderResourceView(pTexture, nullptr, out_srv);
 		if (FAILED(hr) || !*out_srv) {
 			logger::warn("LoadTextureFromFile: Failed to create shader resource view, HRESULT: 0x{:08X}", static_cast<uint32_t>(hr));
 			pTexture->Release();
 			stbi_image_free(image_data);
+			if (context) context->Release();
 			*out_srv = nullptr;
 			return false;
 		}
 
 		// Generate mipmaps for better icon quality at different scales
-		ID3D11DeviceContext* context = nullptr;
-		device->GetImmediateContext(&context);
 		if (context) {
 			context->GenerateMips(*out_srv);
 			context->Release();
@@ -168,7 +172,7 @@ namespace Util
 		logger::info("InitializeMenuIcons: Loading icons from base path: {}", basePath);
 
 		// Initialize all texture pointers to nullptr for safe cleanup
-		std::array<ID3D11ShaderResourceView**, 14> texturePointers = {
+		std::array<ID3D11ShaderResourceView**, 15> texturePointers = {
 			&menu->uiIcons.saveSettings.texture,
 			&menu->uiIcons.loadSettings.texture,
 			&menu->uiIcons.clearCache.texture,
@@ -220,6 +224,7 @@ namespace Util
 		loadIconWithLogging(basePath + "Action Icons\\load-settings.png", &menu->uiIcons.loadSettings.texture, menu->uiIcons.loadSettings.size, "load-settings");
 		loadIconWithLogging(basePath + "Action Icons\\clear-cache.png", &menu->uiIcons.clearCache.texture, menu->uiIcons.clearCache.size, "clear-cache");
 		loadIconWithLogging(basePath + "Community Shaders Logo\\cs-logo.png", &menu->uiIcons.logo.texture, menu->uiIcons.logo.size, "logo");
+		loadIconWithLogging(basePath + "Action Icons\\discord.png", &menu->uiIcons.discord.texture, menu->uiIcons.discord.size, "discord");
 
 		// Load category icons in a more compact way
 		struct CategoryIcon
@@ -247,7 +252,7 @@ namespace Util
 			loadIcon(path, icon.texture, icon.size);
 		}
 
-		logger::info("InitializeMenuIcons: Loaded {}/14 icons successfully", iconsLoaded);
+		logger::info("InitializeMenuIcons: Loaded {}/15 icons successfully", iconsLoaded);
 
 		return anyIconLoaded;
 	}
