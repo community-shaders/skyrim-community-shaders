@@ -221,11 +221,28 @@ jobs:
                     }
                   }
 
+            - name: Install GitVersion
+              uses: gittools/actions/gitversion/setup@v1
+              with:
+                versionSpec: '5.x'
+            
+            - name: Run GitVersion
+              id: gitversion
+              uses: gittools/actions/gitversion/execute@v1
+            
+            - name: Show GitVersion output
+              run: |
+                echo "FullSemVer = ${{ steps.gitversion.outputs.FullSemVer }}"
+                echo "Major = ${{ steps.gitversion.outputs.Major }}"
+                echo "Minor = ${{ steps.gitversion.outputs.Minor }}"
+                echo "Patch = ${{ steps.gitversion.outputs.Patch }}"
+
             - name: Build using run-cmake
               uses: lukka/run-cmake@v10
               with:
                   configurePreset: ALL
                   buildPreset: ALL
+                  configurePresetAdditionalArgs: "['-DPROJECT_VERSION=${{ steps.gitversion.outputs.FullSemVer }}']"
 
             - name: Extract version from CMake
               id: get_version
