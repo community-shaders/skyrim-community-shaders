@@ -209,23 +209,16 @@ void Upscaling::DrawSettings()
 		// NIS Sharpening section
 		if (ImGui::TreeNodeEx("NIS Sharpening", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Text("NVIDIA Image Sharpening applied after upscaling for enhanced clarity");
-			if (streamline.featureNIS) {
-				ImGui::Text("NIS is available");
-			} else {
-				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
-				ImGui::Text("Warning: NIS feature is not available");
-				ImGui::PopStyleColor();
-			}
 
 			const char* nisToggleModes[] = { "Disabled", "Enabled" };
 			ImGui::SliderInt("Enable NIS Sharpening", (int*)&settings.enableNISSharpening, 0, 1, nisToggleModes[settings.enableNISSharpening]);
 
-			if (settings.enableNISSharpening && streamline.featureNIS) {
+			if (settings.enableNISSharpening) {
 				ImGui::SliderFloat("Sharpening Strength", &settings.nisSharpness, 0.0f, 1.0f, "%.2f");
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Controls the intensity of NIS sharpening. Higher values provide more sharpening.");
 				}
-			} else if (settings.enableNISSharpening && !streamline.featureNIS) {
+			} else if (settings.enableNISSharpening) {
 				ImGui::BeginDisabled();
 				ImGui::SliderFloat("Sharpening Strength", &settings.nisSharpness, 0.0f, 1.0f, "%.2f");
 				ImGui::EndDisabled();
@@ -859,6 +852,9 @@ void Upscaling::SetupResources()
 	// Create jitter offset constant buffer for depth upscaling
 	jitterCB = new ConstantBuffer(ConstantBufferDesc<JitterCB>());
 
+	// Create upscaling data constant buffer for encode textures compute shader
+	upscalingDataCB = new ConstantBuffer(ConstantBufferDesc<UpscalingDataCB>());
+
 	// Create NIS sharpener texture with swapchain format and UAV access
 	D3D11_TEXTURE2D_DESC nisTexDesc = texDesc;
 	nisTexDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
@@ -905,6 +901,9 @@ void Upscaling::SetupResources()
 	DX::ThrowIfFailed(sharedD3D12Device->CreateSharedHandle(sharedD3D12Fence.get(), nullptr, GENERIC_ALL, nullptr, &sharedFenceHandle));
 	DX::ThrowIfFailed(d3d11Device5->OpenSharedFence(sharedFenceHandle, IID_PPV_ARGS(sharedD3D11Fence.put())));
 	CloseHandle(sharedFenceHandle);
+
+	// Initialize standalone NIS implementation
+	nis.Initialize();
 
 	auto upscaleMethod = GetUpscaleMethod();
 
@@ -1434,6 +1433,15 @@ void Upscaling::Upscale()
 		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
 		{
+			// Set up upscaling data constant buffer
+			auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
+			UpscalingDataCB upscalingData;
+			upscalingData.trueSamplingDim = renderSize;
+
+			upscalingDataCB->Update(upscalingData);
+			auto upscalingBuffer = upscalingDataCB->CB();
+			context->CSSetConstantBuffers(7, 1, &upscalingBuffer);
+
 			ID3D11ShaderResourceView* views[4] = { temporalAAMask.SRV, normals.SRV, motionVector.SRV, depth.depthSRV };
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
@@ -1447,12 +1455,7 @@ void Upscaling::Upscale()
 				transparencyUAV = transparencyCompositionMaskShared12->uav;
 			}
 
-			ID3D11UnorderedAccessView* motionVectorUAV = nullptr;
-			if (upscaleMethod == UpscaleMethod::kDLSS) {
-				motionVectorUAV = motionVectorCopyTexture->uav.get();
-			} else if (upscaleMethod == UpscaleMethod::kXESS) {
-				motionVectorUAV = motionVectorBufferShared12->uav;
-			}
+			ID3D11UnorderedAccessView* motionVectorUAV = upscaleMethod == UpscaleMethod::kDLSS ? motionVectorCopyTexture->uav.get() : motionVectorBufferShared12->uav;
 
 			ID3D11UnorderedAccessView* uavs[3] = { reactiveMaskUAV, transparencyUAV, motionVectorUAV };
 			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
@@ -1467,6 +1470,9 @@ void Upscaling::Upscale()
 
 		ID3D11UnorderedAccessView* uavs[3] = { nullptr, nullptr, nullptr };
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+		ID3D11Buffer* nullBuffer = nullptr;
+		context->CSSetConstantBuffers(7, 1, &nullBuffer);
 
 		ID3D11ComputeShader* shader = nullptr;
 		context->CSSetShader(shader, nullptr, 0);
@@ -1706,7 +1712,8 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a1, uint32_t a
 
 	func(a1, a3, er8_);
 
-	upscaling.ApplyNISSharpening();
+	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA)
+		upscaling.ApplyNISSharpening();
 }
 
 void Upscaling::SetScissorRect::thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom)
@@ -1735,7 +1742,7 @@ void Upscaling::Main_RenderPrecipitation::thunk()
 
 void Upscaling::ApplyNISSharpening()
 {
-	if (!settings.enableNISSharpening || !streamline.featureNIS) {
+	if (!settings.enableNISSharpening) {
 		return;
 	}
 
@@ -1745,13 +1752,14 @@ void Upscaling::ApplyNISSharpening()
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
+	auto& tempCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
 
 	winrt::com_ptr<ID3D11Resource> mainResource;
 	main.RTV->GetResource(mainResource.put());
 
-	context->CopyResource(nisSharpenerTexture->resource.get(), mainResource.get());
+	context->CopyResource(tempCopy.texture, mainResource.get());
 
-	streamline.ApplyNISSharpening(nisSharpenerTexture->resource.get(), settings.nisSharpness);
+	nis.ApplySharpen(tempCopy.SRV, nisSharpenerTexture->uav.get(), settings.nisSharpness);
 
 	context->CopyResource(mainResource.get(), nisSharpenerTexture->resource.get());
 }
