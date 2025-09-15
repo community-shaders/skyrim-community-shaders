@@ -798,9 +798,9 @@ namespace Hooks
 		auto shadowState = globals::game::shadowState;
 
 		// Constant buffer indices based on HLSL PerGeometry definition
-		const uint32_t pointLightPositionIndex = globals::game::isVR ? 27 : 15;  // c27 for VR, c15 for non-VR
-		const uint32_t pointLightColorIndex = globals::game::isVR ? 41 : 22;     // c41 for VR, c22 for non-VR
-		const uint32_t shadowLightMaskSelectIndex = globals::game::isVR ? 14 : 2; // c14 for VR, c2 for non-VR
+		const uint32_t pointLightPositionIndex = globals::game::isVR ? 27 : 15;    // c27 for VR, c15 for non-VR
+		const uint32_t pointLightColorIndex = globals::game::isVR ? 41 : 22;       // c41 for VR, c22 for non-VR
+		const uint32_t shadowLightMaskSelectIndex = globals::game::isVR ? 14 : 2;  // c14 for VR, c2 for non-VR
 
 		for (uint32_t i = 0; i < LightCount && i < 7; i++) {
 			if (auto bsLight = Pass->sceneLights[i + 1]) {
@@ -815,7 +815,7 @@ namespace Hooks
 					if (globals::game::isVR) {
 						auto posAdjustLeft = shadowState->GetRuntimeData().posAdjust.getEye(0);
 						auto posAdjustRight = shadowState->GetRuntimeData().posAdjust.getEye(1);
-					
+
 						RE::NiPoint3 worldPosLeft = niLight->world.translate - posAdjustLeft;
 						RE::NiPoint3 worldPosRight = niLight->world.translate - posAdjustRight;
 
