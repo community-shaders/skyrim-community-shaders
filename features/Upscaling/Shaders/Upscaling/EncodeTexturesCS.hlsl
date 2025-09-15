@@ -62,7 +62,7 @@ RWTexture2D<float2> MotionVectorOutput : register(u2);
 					maxMotionLengthSq = motionLengthSq;
 					longestMotionVector = neighborMotionVector;
 				}
-#endif				
+#endif
 			}
 		}
 	}
