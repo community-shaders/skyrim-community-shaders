@@ -24,8 +24,8 @@ void NIS::CreateCoefficientTextures()
 	// Create scaler coefficients texture
 	{
 		D3D11_TEXTURE2D_DESC texDesc = {};
-		texDesc.Width = 8; // kFilterSize
-		texDesc.Height = 64; // kPhaseCount
+		texDesc.Width = 8;    // kFilterSize
+		texDesc.Height = 64;  // kPhaseCount
 		texDesc.MipLevels = 1;
 		texDesc.ArraySize = 1;
 		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
@@ -36,7 +36,7 @@ void NIS::CreateCoefficientTextures()
 		texDesc.CPUAccessFlags = 0;
 
 		// Convert coefficient data to the correct format
-		std::vector<uint16_t> scalerData(8 * 64 * 4); // 4 components per texel
+		std::vector<uint16_t> scalerData(8 * 64 * 4);  // 4 components per texel
 
 		// Use the pre-computed FP16 coefficients from NIS_Config.h
 		for (size_t phase = 0; phase < 64; ++phase) {
@@ -69,8 +69,8 @@ void NIS::CreateCoefficientTextures()
 	// Create USM coefficients texture
 	{
 		D3D11_TEXTURE2D_DESC texDesc = {};
-		texDesc.Width = 8; // kFilterSize
-		texDesc.Height = 64; // kPhaseCount
+		texDesc.Width = 8;    // kFilterSize
+		texDesc.Height = 64;  // kPhaseCount
 		texDesc.MipLevels = 1;
 		texDesc.ArraySize = 1;
 		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
@@ -81,7 +81,7 @@ void NIS::CreateCoefficientTextures()
 		texDesc.CPUAccessFlags = 0;
 
 		// Convert coefficient data to the correct format
-		std::vector<uint16_t> usmData(8 * 64 * 4); // 4 components per texel
+		std::vector<uint16_t> usmData(8 * 64 * 4);  // 4 components per texel
 
 		// Use the pre-computed FP16 coefficients from NIS_Config.h
 		for (size_t phase = 0; phase < 64; ++phase) {
@@ -119,7 +119,7 @@ void NIS::CreateComputeShader()
 	logger::debug("[Upscaling] Compiling NIS compute shader");
 
 	std::vector<std::pair<const char*, const char*>> defines = {
-		{ "NIS_SCALER", "0" }, // Use sharpen-only mode
+		{ "NIS_SCALER", "0" },  // Use sharpen-only mode
 		{ "NIS_HLSL", "1" },
 		{ "NIS_BLOCK_WIDTH", "32" },
 		{ "NIS_BLOCK_HEIGHT", "32" },

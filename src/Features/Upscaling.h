@@ -2,9 +2,9 @@
 
 #include "Feature.h"
 #include "Upscaling/FidelityFX.h"
+#include "Upscaling/NIS/NIS.h"
 #include "Upscaling/Streamline.h"
 #include "Upscaling/XeSS.h"
-#include "Upscaling/NIS/NIS.h"
 #include <d3d11_4.h>
 #include <d3d12.h>
 #include <winrt/base.h>
