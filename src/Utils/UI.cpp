@@ -136,7 +136,8 @@ namespace Util
 			logger::warn("LoadTextureFromFile: Failed to create shader resource view, HRESULT: 0x{:08X}", static_cast<uint32_t>(hr));
 			pTexture->Release();
 			stbi_image_free(image_data);
-			if (context) context->Release();
+			if (context)
+				context->Release();
 			*out_srv = nullptr;
 			return false;
 		}
