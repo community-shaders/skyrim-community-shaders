@@ -793,76 +793,14 @@ namespace Hooks
 		PatchMemory(Address, Data.begin(), Data.size());
 	}
 
-	void GeometrySetupConstantPointLights(RE::BSRenderPass* Pass, uint32_t LightCount, uint32_t ShadowLightCount)
-	{
-		auto shadowState = globals::game::shadowState;
-
-		// Constant buffer indices based on HLSL PerGeometry definition
-		const uint32_t pointLightPositionIndex = globals::game::isVR ? 27 : 15;    // c27 for VR, c15 for non-VR
-		const uint32_t pointLightColorIndex = globals::game::isVR ? 41 : 22;       // c41 for VR, c22 for non-VR
-		const uint32_t shadowLightMaskSelectIndex = globals::game::isVR ? 14 : 2;  // c14 for VR, c2 for non-VR
-
-		for (uint32_t i = 0; i < LightCount && i < 7; i++) {
-			if (auto bsLight = Pass->sceneLights[i + 1]) {
-				if (auto niLight = bsLight->light.get()) {
-					auto& runtimeData = niLight->GetLightRuntimeData();
-
-					float intensity = runtimeData.fade * bsLight->lodDimmer;
-					float colorR = runtimeData.diffuse.red * intensity;
-					float colorG = runtimeData.diffuse.green * intensity;
-					float colorB = runtimeData.diffuse.blue * intensity;
-
-					if (globals::game::isVR) {
-						auto posAdjustLeft = shadowState->GetRuntimeData().posAdjust.getEye(0);
-						auto posAdjustRight = shadowState->GetRuntimeData().posAdjust.getEye(1);
-
-						RE::NiPoint3 worldPosLeft = niLight->world.translate - posAdjustLeft;
-						RE::NiPoint3 worldPosRight = niLight->world.translate - posAdjustRight;
-
-						// Set point light position (xyz = position, w = radius)
-						std::array<float, 4> pointLightPosition = { worldPosLeft.x, worldPosLeft.y, worldPosLeft.z, runtimeData.radius.x };
-						shadowState->SetPSConstant(pointLightPosition, RE::BSGraphics::ConstantGroupLevel::PerGeometry, pointLightPositionIndex + i * 2);
-						pointLightPosition = { worldPosRight.x, worldPosRight.y, worldPosRight.z, runtimeData.radius.x };
-						shadowState->SetPSConstant(pointLightPosition, RE::BSGraphics::ConstantGroupLevel::PerGeometry, pointLightPositionIndex + 1 + i * 2);
-
-					} else {
-						auto posAdjust = shadowState->GetRuntimeData().posAdjust.getEye(0);
-						RE::NiPoint3 worldPos = niLight->world.translate - posAdjust;
-
-						// Set point light position (xyz = position, w = radius)
-						std::array<float, 4> pointLightPosition = { worldPos.x, worldPos.y, worldPos.z, runtimeData.radius.x };
-						shadowState->SetPSConstant(pointLightPosition, RE::BSGraphics::ConstantGroupLevel::PerGeometry, pointLightPositionIndex + i);
-					}
-
-					// Set point light color
-					std::array<float, 4> pointLightColor = { colorR, colorG, colorB, 1.0f };
-					shadowState->SetPSConstant(pointLightColor, RE::BSGraphics::ConstantGroupLevel::PerGeometry, pointLightColorIndex + i);
-				}
-			}
-		}
-
-		// Set shadow light mask select for shadow-casting lights
-		if (ShadowLightCount > 0) {
-			std::array<float, 4> shadowLightMaskSelect = { 0.0f, 0.0f, 0.0f, 0.0f };
-			for (uint32_t i = 0; i < ShadowLightCount && i < 4; i++) {
-				if (auto bsLight = Pass->sceneLights[i + 1]) {
-					auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
-					GET_INSTANCE_MEMBER(shadowLightIndex, shadowLight);
-					shadowLightMaskSelect[i] = static_cast<float>(shadowLightIndex);
-				}
-			}
-			shadowState->SetPSConstant(shadowLightMaskSelect, RE::BSGraphics::ConstantGroupLevel::PerGeometry, shadowLightMaskSelectIndex);
-		}
-	}
-
 	struct BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights
 	{
-		static void thunk(RE::BSGraphics::PixelShader*, RE::BSRenderPass* Pass, DirectX::XMMATRIX&, uint32_t LightCount, uint32_t ShadowLightCount, float, uint32_t)
+		static void thunk(RE::BSGraphics::PixelShader* PixelShader, RE::BSRenderPass* Pass, DirectX::XMMATRIX& Transform, uint32_t LightCount, uint32_t ShadowLightCount, float WorldScale, uint32_t)
 		{
 			if (globals::features::lightLimitFix.loaded)
 				globals::features::lightLimitFix.BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(Pass);
 			else
-				GeometrySetupConstantPointLights(Pass, LightCount, ShadowLightCount);
+				func(PixelShader, Pass, Transform, LightCount, ShadowLightCount, WorldScale, 0);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
