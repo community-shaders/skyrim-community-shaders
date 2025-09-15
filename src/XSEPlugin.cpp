@@ -124,11 +124,6 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 					shaderCache->WriteDiskCacheInfo();
 				}
 
-				if (!REL::Module::IsVR()) {
-					RE::GetINISetting("bEnableImprovedSnow:Display")->data.b = false;
-					RE::GetINISetting("bIBLFEnable:Display")->data.b = false;
-				}
-
 				globals::truePBR->DataLoaded();
 				for (auto* feature : Feature::GetFeatureList()) {
 					if (feature->loaded) {
@@ -184,7 +179,7 @@ bool Load()
 	}
 
 	const std::array requiredDLLs = {
-		L"Data/SKSE/Plugins/EngineFixes.dll"
+		REL::Module::IsVR() ? L"Data/SKSE/Plugins/EngineFixesVR.dll" : L"Data/SKSE/Plugins/EngineFixes.dll"
 	};
 
 	for (const auto dll : requiredDLLs) {

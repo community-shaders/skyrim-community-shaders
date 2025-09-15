@@ -9,12 +9,11 @@ Texture2D<half> srcCurrDepth : register(t1);
 Texture2D<half4> srcCurrNormal : register(t2);
 Texture2D<half3> srcPrevGeo : register(t3);  // maybe half-res
 Texture2D<float4> srcMotionVec : register(t4);
-Texture2D<half3> srcPrevAmbient : register(t5);
-Texture2D<unorm float> srcAccumFrames : register(t6);  // maybe half-res
-Texture2D<half> srcPrevAo : register(t7);              // maybe half-res
-Texture2D<half4> srcPrevIlY : register(t8);            // maybe half-res
-Texture2D<half2> srcPrevIlCoCg : register(t9);         // maybe half-res
-Texture2D<half4> srcPrevGISpecular : register(t10);    // maybe half-res
+Texture2D<unorm float> srcAccumFrames : register(t5);  // maybe half-res
+Texture2D<half> srcPrevAo : register(t6);              // maybe half-res
+Texture2D<half4> srcPrevIlY : register(t7);            // maybe half-res
+Texture2D<half2> srcPrevIlCoCg : register(t8);         // maybe half-res
+Texture2D<half4> srcPrevGISpecular : register(t9);    // maybe half-res
 
 RWTexture2D<float3> outRadianceDisocc : register(u0);
 RWTexture2D<unorm float> outAccumFrames : register(u1);
@@ -23,7 +22,7 @@ RWTexture2D<float4> outRemappedIlY : register(u3);
 RWTexture2D<float2> outRemappedIlCoCg : register(u4);
 RWTexture2D<float4> outRemappedPrevGISpecular : register(u5);
 
-#if (defined(GI) && defined(GI_BOUNCE)) || defined(TEMPORAL_DENOISER) || defined(HALF_RATE)
+#if defined(TEMPORAL_DENOISER) || defined(HALF_RATE)
 #	define REPROJECTION
 #endif
 
@@ -50,9 +49,6 @@ void readHistory(
 	bool depth_pass = dot(delta_pos, delta_pos) < movement_thres * movement_thres;
 	// bool normal_pass = normal_prod * normal_prod > NormalDisocclusion;
 	if (depth_pass) {
-#if defined(GI) && defined(GI_BOUNCE)
-		prev_ambient += FULLRES_LOAD(srcPrevAmbient, pixCoord, uv * FrameDim * RcpTexDim, samplerLinearClamp) * bilinear_weight;
-#endif
 #ifdef TEMPORAL_DENOISER
 		prev_ao += srcPrevAo[pixCoord] * bilinear_weight;
 		prev_y += srcPrevIlY[pixCoord] * bilinear_weight;
@@ -133,9 +129,6 @@ void readHistory(
 			prev_gi_specular *= rcpWsum;
 #		endif
 #	endif
-#	if defined(GI) && defined(GI_BOUNCE)
-			prev_ambient *= rcpWsum;
-#	endif
 		}
 	}
 #endif
@@ -143,9 +136,6 @@ void readHistory(
 	half3 radiance = 0;
 #ifdef GI
 	radiance = Color::RadianceToLinear(FULLRES_LOAD(srcDiffuse, pixCoord, uv * frameScale, samplerLinearClamp).rgb * GIStrength);
-#	ifdef GI_BOUNCE
-	radiance += prev_ambient.rgb * GIBounceFade;
-#	endif
 	radiance = filterNaN(radiance);
 	radiance = filterInf(radiance);
 	outRadianceDisocc[pixCoord] = radiance;
