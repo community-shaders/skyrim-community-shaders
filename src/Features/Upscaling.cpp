@@ -58,9 +58,6 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 	if (!globals::game::isVR) {
 		// Use better swap effect to prevent tearing and improve performance
 		pSwapChainDesc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-
-		// Set new more precise format
-		pSwapChainDesc->BufferDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
 	}
 
 	bool shouldProxy = !globals::game::isVR;
@@ -380,49 +377,6 @@ void Upscaling::Load()
 	*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChainUpscaling = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChainUpscaling, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
 }
 
-struct CreateRenderTarget_LDR1
-{
-	static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
-	{
-		RE::BSGraphics::RenderTargetProperties properties = *a_properties;
-		properties.format.set(RE::BSGraphics::Format::kR10G10B10A2_UNORM);
-		func(This, a_target, &properties);
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
-
-struct CreateRenderTarget_LDR2
-{
-	static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
-	{
-		RE::BSGraphics::RenderTargetProperties properties = *a_properties;
-		properties.format.set(RE::BSGraphics::Format::kR10G10B10A2_UNORM);
-		func(This, a_target, &properties);
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
-
-struct CreateRenderTarget_LDR3
-{
-	static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
-	{
-		RE::BSGraphics::RenderTargetProperties properties = *a_properties;
-		properties.format.set(RE::BSGraphics::Format::kR10G10B10A2_UNORM);
-		func(This, a_target, &properties);
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
-
-struct CreateRenderTarget_LDR4
-{
-	static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
-	{
-		RE::BSGraphics::RenderTargetProperties properties = *a_properties;
-		properties.format.set(RE::BSGraphics::Format::kR10G10B10A2_UNORM);
-		func(This, a_target, &properties);
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
 void Upscaling::PostPostLoad()
 {
 	bool isGOG = !GetModuleHandle(L"steam_api64.dll");
@@ -438,12 +392,6 @@ void Upscaling::PostPostLoad()
 	stl::write_thunk_call<Main_PostProcessing>(REL::RelocationID(100430, 107148).address() + REL::Relocate(0x1F0, 0x1E7, 0x206));
 
 	if (!REL::Module::IsVR()) {
-		// Patches render target creation to use higher precision format
-		stl::write_thunk_call<CreateRenderTarget_LDR1>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x529, 0x528));
-		stl::write_thunk_call<CreateRenderTarget_LDR2>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0xB2E, 0xB2E));
-		stl::write_thunk_call<CreateRenderTarget_LDR3>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x62F, 0x62E));
-		stl::write_thunk_call<CreateRenderTarget_LDR4>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x642, 0x641));
-
 		// Patches RSSetScissorRect calls to use dynamic resolution
 		// This is a PC-specific function hence it was missing
 		stl::detour_thunk<SetScissorRect>(REL::RelocationID(75564, 77365));
@@ -857,7 +805,7 @@ void Upscaling::SetupResources()
 
 	// Create NIS sharpener texture with swapchain format and UAV access
 	D3D11_TEXTURE2D_DESC nisTexDesc = texDesc;
-	nisTexDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+	nisTexDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	nisTexDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
 	D3D11_SHADER_RESOURCE_VIEW_DESC nisSrvDesc = srvDesc;
