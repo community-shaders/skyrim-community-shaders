@@ -18,8 +18,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	frameLimitMode,
 	frameGenerationMode,
 	frameGenerationForceEnable,
-	streamlineLogLevel
-);
+	streamlineLogLevel);
 
 decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChainUpscaling;
 
@@ -391,7 +390,7 @@ void Upscaling::PostPostLoad()
 
 		// Patches precipitation camera to not use dynamic resolution
 		stl::write_thunk_call<Main_RenderPrecipitation>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x3A1, 0x3A1, 0x2FA));
-		
+
 		// Forces FXAA off
 		stl::detour_thunk<BSImageSpace_Init_FXAA>(REL::RelocationID(98974, 105626));
 	}
@@ -1440,7 +1439,7 @@ void Upscaling::Upscale()
 			srcBox.back = 1;
 
 			context->CopySubresourceRegion(inputColorBufferShared12->resource11, 0, 0, 0, 0, main.texture, 0, &srcBox);
-			
+
 			// Wait for D3D11 to finish
 			winrt::com_ptr<ID3D11DeviceContext4> d3d11Context4;
 			DX::ThrowIfFailed(context->QueryInterface(IID_PPV_ARGS(d3d11Context4.put())));
