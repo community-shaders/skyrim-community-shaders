@@ -18,10 +18,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	frameLimitMode,
 	frameGenerationMode,
 	frameGenerationForceEnable,
-	streamlineLogLevel,
-	enableNISSharpening,
-	sharpeningMethod,
-	nisSharpness);
+	streamlineLogLevel
+);
 
 decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChainUpscaling;
 
@@ -202,36 +200,6 @@ void Upscaling::DrawSettings()
 				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresetsDLSS[4 - settings.qualityMode]).c_str());
 			else
 				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
-		}
-
-		// Sharpening section
-		if (ImGui::TreeNodeEx("Image Sharpening", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Text("Image sharpening applied after upscaling for enhanced clarity");
-
-			const char* sharpeningToggleModes[] = { "Disabled", "Enabled" };
-			ImGui::SliderInt("Enable Sharpening", (int*)&settings.enableNISSharpening, 0, 1, sharpeningToggleModes[settings.enableNISSharpening]);
-
-			if (settings.enableNISSharpening) {
-				const char* sharpeningMethods[] = { "NIS", "RCAS" };
-				ImGui::SliderInt("Sharpening Method", (int*)&settings.sharpeningMethod, 0, 1, sharpeningMethods[settings.sharpeningMethod]);
-
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("NIS: NVIDIA Image Sharpening - Good general purpose sharpening");
-					ImGui::Text("RCAS: Robust Contrast Adaptive Sharpening - AMD's advanced sharpening algorithm");
-				}
-
-				ImGui::SliderFloat("Sharpening Strength", &settings.nisSharpness, 0.0f, 1.0f, "%.2f");
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Controls the intensity of sharpening. Higher values provide more sharpening.");
-				}
-			} else {
-				ImGui::BeginDisabled();
-				ImGui::SliderInt("Sharpening Method", (int*)&settings.sharpeningMethod, 0, 1, "Disabled");
-				ImGui::SliderFloat("Sharpening Strength", &settings.nisSharpness, 0.0f, 1.0f, "%.2f");
-				ImGui::EndDisabled();
-			}
-
-			ImGui::TreePop();
 		}
 	} else {
 		ImGui::Text("Upscaling from lower resolutions is not currently available for VR");
@@ -874,12 +842,6 @@ void Upscaling::SetupResources()
 	DX::ThrowIfFailed(sharedD3D12Device->CreateSharedHandle(sharedD3D12Fence.get(), nullptr, GENERIC_ALL, nullptr, &sharedFenceHandle));
 	DX::ThrowIfFailed(d3d11Device5->OpenSharedFence(sharedFenceHandle, IID_PPV_ARGS(sharedD3D11Fence.put())));
 	CloseHandle(sharedFenceHandle);
-
-	// Initialize standalone NIS implementation
-	nis.Initialize();
-
-	// Initialize standalone RCAS implementation
-	rcas.Initialize();
 
 	auto upscaleMethod = GetUpscaleMethod();
 
@@ -1692,9 +1654,6 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a1, uint32_t a
 	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod == UpscaleMethod::kTAA;
 
 	func(a1, a3, er8_);
-
-	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA)
-		upscaling.ApplyNISSharpening();
 }
 
 void Upscaling::SetScissorRect::thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom)
@@ -1719,37 +1678,6 @@ void Upscaling::Main_RenderPrecipitation::thunk()
 	runtimeData.dynamicResolutionLock = 1;
 	func();
 	runtimeData.dynamicResolutionLock = 0;
-}
-
-void Upscaling::ApplyNISSharpening()
-{
-	if (!settings.enableNISSharpening) {
-		return;
-	}
-
-	auto renderer = globals::game::renderer;
-	auto context = globals::d3d::context;
-
-	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
-
-	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
-	auto& tempCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
-
-	winrt::com_ptr<ID3D11Resource> mainResource;
-	main.RTV->GetResource(mainResource.put());
-
-	context->CopyResource(tempCopy.texture, mainResource.get());
-
-	// Apply sharpening based on selected method
-	if (settings.sharpeningMethod == 0) {
-		// Use NIS sharpening
-		nis.ApplySharpen(tempCopy.SRV, nisSharpenerTexture->uav.get(), settings.nisSharpness);
-	} else {
-		// Use RCAS sharpening
-		rcas.ApplySharpen(tempCopy.SRV, nisSharpenerTexture->uav.get(), settings.nisSharpness);
-	}
-
-	context->CopyResource(mainResource.get(), nisSharpenerTexture->resource.get());
 }
 
 void Upscaling::BSFaceGenManager_UpdatePendingCustomizationTextures::thunk()
