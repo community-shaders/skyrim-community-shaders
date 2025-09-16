@@ -377,6 +377,18 @@ void Upscaling::Load()
 	*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChainUpscaling = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChainUpscaling, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
 }
 
+struct BSImageSpace_Init_FXAA
+{
+	static void thunk()
+	{
+		func();
+
+		auto enableFXAA = (float*)(REL::RelocationID(513281, 391028).address());
+		*enableFXAA = false;
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
 void Upscaling::PostPostLoad()
 {
 	bool isGOG = !GetModuleHandle(L"steam_api64.dll");
@@ -401,6 +413,9 @@ void Upscaling::PostPostLoad()
 
 		// Patches precipitation camera to not use dynamic resolution
 		stl::write_thunk_call<Main_RenderPrecipitation>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x3A1, 0x3A1, 0x2FA));
+		
+		// Forces FXAA off
+		stl::detour_thunk<BSImageSpace_Init_FXAA>(REL::RelocationID(98974, 105626));
 	}
 
 	logger::info("[Upscaling] Installed hooks");

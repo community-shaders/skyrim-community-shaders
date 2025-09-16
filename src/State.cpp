@@ -126,25 +126,16 @@ void State::Reset()
 
 	if (auto* imageSpaceManager = RE::ImageSpaceManager::GetSingleton()) {
 		GET_INSTANCE_MEMBER(BSImagespaceShaderApplyReflections, imageSpaceManager);
+
+		// Disable reflections being applied to things other than water
 		if (BSImagespaceShaderApplyReflections.get()) {
 			BSImagespaceShaderApplyReflections->active = false;
 		}
+	}
 
-		if (!globals::game::isVR) {
-			GET_INSTANCE_MEMBER(BSImagespaceShaderISSnowSSS, imageSpaceManager);
-			GET_INSTANCE_MEMBER(BSImagespaceShaderISBlur, imageSpaceManager);
-
-			// Disable Snow SSS
-			if (auto* snowSSS = static_cast<RE::BSImagespaceShader*>(BSImagespaceShaderISSnowSSS.get())) {
-				snowSSS->active = false;
-			}
-
-			// Disable IBLF
-			if (auto* isBlur = BSImagespaceShaderISBlur.get()) {
-				auto& enableIBLF = REL::RelocateMember<bool>(isBlur, 0x48, 0x48);
-				enableIBLF = false;
-			}
-		}
+	// Disable "improved" snow shader, unsupported
+	if (!globals::game::isVR) {
+		RE::GetINISetting("bEnableImprovedSnow:Display")->data.b = false;
 	}
 }
 
