@@ -550,9 +550,8 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 		float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
 
 #		if defined(IBL)
-		if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+		if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
 			ambientColor *= SharedData::iblSettings.DALCAmount;
-			ambientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 		}
 #		endif
 
@@ -574,6 +573,19 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 		color = Color::GammaToLinear(color);
 		color *= skylightingDiffuse;
 		color = Color::LinearToGamma(color);
+#		endif
+
+#		if defined(IBL)
+		if (SharedData::iblSettings.EnableDiffuseIBL) {
+			if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)
+			{
+#			if defined(SKYLIGHTING)
+				color += Color::Saturation(ImageBasedLighting::GetIBLColor(-worldNormal, skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#			else
+				color += Color::Saturation(ImageBasedLighting::GetIBLColor(-worldNormal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#			endif
+			}
+		}
 #		endif
 
 		if (!SharedData::InInterior){

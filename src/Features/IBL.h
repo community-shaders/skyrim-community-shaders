@@ -25,6 +25,7 @@ public:
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
 	Texture2D* diffuseIBLTexture = nullptr;
+	Texture2D* diffuseSkyIBLTexture = nullptr;
 	ID3D11ComputeShader* diffuseIBLCS = nullptr;
 
 	virtual void RestoreDefaultSettings() override;
@@ -43,11 +44,11 @@ public:
 		uint EnableDiffuseIBL = 1;
 		uint PreserveFogLuminance = 0;
 		uint UseStaticIBL = 1;
+		uint EnableInterior = 0;
 		float DiffuseIBLScale = 1.0f;
 		float DALCAmount = 0.33f;
 		float IBLSaturation = 1.0f;
 		float FogAmount = 0.0f;
-		float DynamicCubemapsAmount = 0.0f;
 	} settings;
 
 	eastl::unique_ptr<Texture2D> staticDiffuseIBLTexture = nullptr;

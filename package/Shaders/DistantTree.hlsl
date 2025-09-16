@@ -239,7 +239,7 @@ PS_OUTPUT main(PS_INPUT input)
 #				if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 	}
 #				endif
 	diffuseColor += directionalAmbientColor;
@@ -267,7 +267,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 	}
 #			endif
 	diffuseColor += directionalAmbientColor;
