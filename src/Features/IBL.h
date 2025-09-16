@@ -39,7 +39,7 @@ public:
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
 
-	struct alignas(16) Settings
+	struct Settings
 	{
 		uint EnableDiffuseIBL = 1;
 		uint PreserveFogLuminance = 0;
