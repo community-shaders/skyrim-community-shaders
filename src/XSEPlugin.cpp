@@ -167,7 +167,10 @@ bool Load()
 	const std::array incompatibleDLLs = {
 		L"Data/SKSE/Plugins/ShaderTools.dll",
 		L"Data/SKSE/Plugins/SSEShaderTools.dll",
-		L"Data/SKSE/Plugins/SkyrimUpscaler.dll"
+		L"Data/SKSE/Plugins/SkyrimUpscaler.dll",
+		L"Data/SKSE/Plugins/EVLaS.dll",
+		L"Data/SKSE/Plugins/AELAS.dll",
+		L"Data/SKSE/Plugins/SSEReShadeHelper.dll"
 	};
 
 	for (const auto dll : incompatibleDLLs) {
