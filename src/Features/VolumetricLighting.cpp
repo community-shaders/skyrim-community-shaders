@@ -189,22 +189,20 @@ void VolumetricLighting::SetupResources()
 
 void VolumetricLighting::EarlyPrepass()
 {
-	const auto& mainDepth = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
-	D3D11_TEXTURE2D_DESC texDesc;
-	mainDepth.texture->GetDesc(&texDesc);
+	auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
 
-	int32_t width = static_cast<int32_t>(texDesc.Width);
-	int32_t height = static_cast<int32_t>(texDesc.Height);
+	int32_t width = static_cast<int32_t>(renderSize.x);
+	int32_t height = static_cast<int32_t>(renderSize.y);
 
 	if (width != vlData.screenX || height != vlData.screenY) {
 		blurHCS = nullptr;
 		blurVCS = nullptr;
 	}
 
-	vlData.screenX = texDesc.Width;
-	vlData.screenY = texDesc.Height;
-	vlData.screenXMin1 = texDesc.Width - 1;
-	vlData.screenYMin1 = texDesc.Height - 1;
+	vlData.screenX = width;
+	vlData.screenY = height;
+	vlData.screenXMin1 = width - 1;
+	vlData.screenYMin1 = height - 1;
 	vlDataCB->Update(vlData);
 
 	const auto interiorCell = globals::game::tes->interiorCell;
