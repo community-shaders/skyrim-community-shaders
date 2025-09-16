@@ -11,6 +11,10 @@
 #	define GRASS
 #endif  // GRASS_LIGHTING
 
+#if !defined(DYNAMIC_CUBEMAPS) && defined(IBL)
+#	undef IBL
+#endif
+
 struct VS_INPUT
 {
 	float4 Position : POSITION0;

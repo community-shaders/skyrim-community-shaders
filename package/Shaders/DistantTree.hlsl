@@ -6,6 +6,10 @@
 #include "Common/SharedData.hlsli"
 #include "Common/VR.hlsli"
 
+#if !defined(DYNAMIC_CUBEMAPS) && defined(IBL)
+#	undef IBL
+#endif
+
 struct VS_INPUT
 {
 	float3 Position : POSITION0;
@@ -239,7 +243,11 @@ PS_OUTPUT main(PS_INPUT input)
 #				if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
+#					if defined(SKYLIGHTING)
+		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, 1.0), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#					else
 		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#					endif
 	}
 #				endif
 	diffuseColor += directionalAmbientColor;
@@ -267,7 +275,11 @@ PS_OUTPUT main(PS_INPUT input)
 #			if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
+#					if defined(SKYLIGHTING)
+		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, 1.0), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#					else
 		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#					endif
 	}
 #			endif
 	diffuseColor += directionalAmbientColor;
