@@ -12,6 +12,7 @@
 #include "Common/Game.hlsli"
 #include "Common/SharedData.hlsli"
 
+#define SHARC_ENABLE_64_BIT_ATOMICS 1
 #include "ScreenSpaceReflections/sharc/SharcCommon.h"
 
 #define LINEAR_BLOCK_SIZE 256
@@ -33,7 +34,9 @@ void main(in uint2 did : SV_DispatchThreadID)
 
     sharcParameters.hashMapData.capacity = 0x100000;
     sharcParameters.hashMapData.hashEntriesBuffer = u_SharcHashEntriesBuffer;
+#if !SHARC_ENABLE_64_BIT_ATOMICS
     sharcParameters.hashMapData.lockBuffer = u_HashCopyOffsetBuffer;
+#endif
 
     sharcParameters.voxelDataBuffer = u_SharcVoxelDataBuffer;
     sharcParameters.voxelDataBufferPrev = u_SharcVoxelDataBufferPrev;
