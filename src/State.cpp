@@ -137,6 +137,8 @@ void State::Reset()
 	if (!globals::game::isVR) {
 		RE::GetINISetting("bEnableImprovedSnow:Display")->data.b = false;
 	}
+
+	activeReflections = false;
 }
 
 void State::Setup()
@@ -746,17 +748,10 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 			}
 		}
 
-		data.InInterior = true;
-		data.HideSky = true;
-		if (auto sky = globals::game::sky) {
-			data.InInterior = sky->mode.get() != RE::Sky::Mode::kFull;
-			data.HideSky = sky->flags.any(RE::Sky::Flags::kHideSky);
-		}
+		data.InInterior = Util::IsInterior();
+		data.HideSky = globals::game::sky->flags.any(RE::Sky::Flags::kHideSky);
 
-		if (auto ui = globals::game::ui)
-			data.InMapMenu = ui->IsMenuOpen(RE::MapMenu::MENU_NAME);
-		else
-			data.InMapMenu = true;
+		data.InMapMenu = globals::game::ui->IsMenuOpen(RE::MapMenu::MENU_NAME);
 
 		auto& upscaling = globals::features::upscaling;
 

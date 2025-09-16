@@ -164,6 +164,7 @@ public:
 	};
 
 	bool inWorld = false;
+	bool activeReflections = false;
 
 	void UpdateSharedData(bool a_inWorld, bool a_prepass);
 

@@ -231,7 +231,10 @@ void Deferred::ReflectionsPrepasses()
 	if (!shaderCache->IsEnabled())
 		return;
 
-	globals::state->UpdateSharedData(false, false);
+	auto state = globals::state;
+
+	state->activeReflections = true;
+	state->UpdateSharedData(false, false);
 
 	ZoneScoped;
 	TracyD3D11Zone(globals::game::graphicsState->tracyCtx, "Early Prepass");
@@ -408,9 +411,7 @@ void Deferred::DeferredPasses()
 
 	auto motionVectors = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
-	bool interior = true;
-	if (auto sky = globals::game::sky)
-		interior = sky->mode.get() != RE::Sky::Mode::kFull;
+	bool interior = Util::IsInterior();
 
 	auto& skylighting = globals::features::skylighting;
 
