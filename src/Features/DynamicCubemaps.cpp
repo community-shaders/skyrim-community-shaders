@@ -653,8 +653,7 @@ void DynamicCubemaps::Reset()
 	else
 		fakeReflections = false;
 
-	if (!activeReflections && !Util::IsInterior())
-	{
+	if (!activeReflections && !Util::IsInterior()) {
 		activeReflections = true;
 		fakeReflections = true;
 	}
