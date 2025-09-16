@@ -307,7 +307,7 @@ float FFX_SSSR_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_directi
     }
 
     // Fade out hits near the screen borders
-    float2 fov      = 0.05 * float2(screen_size.y / screen_size.x, 1);
+    float2 fov      = 0.01 * float2(screen_size.y / screen_size.x, 1);
     float2 border   = smoothstep(float2(0.0f, 0.0f), fov, hit.xy) * (1 - smoothstep(float2(1.0f, 1.0f) - fov, float2(1.0f, 1.0f), hit.xy));
     float  vignette = border.x * border.y;
 
@@ -687,7 +687,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
     if (HistoryWeight > 0) {
         float2 prevUV;
         ReprojectHit(MotionVectorTexture, LinearSampler, float3(uv, z), eyeIndex, prevUV);
-        float4 prevColor = HistoryTexture.SampleLevel(LinearSampler, prevUV, 0);
+        float4 prevColor = HistoryTexture.SampleLevel(LinearSampler, prevUV * FrameBuffer::DynamicResolutionParams1.xy, 0);
         prevColor.w *= HistoryWeight;
         if (outColor.w + prevColor.w > 0)
             outColor.xyz = (outColor.xyz * outColor.w + filterNaN(prevColor.xyz) * prevColor.w) / (outColor.w + prevColor.w);
@@ -717,7 +717,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
         if (HistoryWeight > 0) {
             float2 prevUV;
             ReprojectHit(MotionVectorTexture, LinearSampler, float3(uv, z), eyeIndex, prevUV);
-            float4 prevColor = HistoryTexture.SampleLevel(LinearSampler, prevUV, 0);
+            float4 prevColor = HistoryTexture.SampleLevel(LinearSampler, prevUV * FrameBuffer::DynamicResolutionParams1.xy, 0);
             prevColor.w *= HistoryWeight;
             if (outColor.w + prevColor.w > 0)
                 outColor.xyz = (outColor.xyz * outColor.w + filterNaN(prevColor.xyz) * prevColor.w) / (outColor.w + prevColor.w);

@@ -256,7 +256,7 @@ void ReprojectHit(Texture2D MotionTexture, SamplerState s, float3 hitUVz, uint e
 	float4 prevClip = mul(FrameBuffer::CameraPreviousViewProjUnjittered[eyeIndex], float4(thisWorld.xyz, 1.0f));
 	float2 prevScreen = prevClip.xy / prevClip.w;
 
-	float2 velocity = MotionTexture.SampleLevel(s, hitUVz.xy, 0).xy;
+	float2 velocity = MotionTexture.SampleLevel(s, hitUVz.xy * FrameBuffer::DynamicResolutionParams1.xy, 0).xy;
 
 	prevScreen = thisClip.xy + velocity * float2(2.f, -2.f);
 
