@@ -86,6 +86,7 @@ public:
 
 		// Category icons
 		UIIcon characters;
+		UIIcon display;
 		UIIcon grass;
 		UIIcon lighting;
 		UIIcon sky;
@@ -275,6 +276,8 @@ private:
 	Settings settings;
 
 	float cachedFontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;  // Tracks whether font has been modified and may require reloading
+
+	std::string cachedIniPath;  // io.IniFilename must point to a string that lives for the duration of the runtime
 
 	// Menu navigation
 	std::string pendingFeatureSelection;  // Feature to select on next frame

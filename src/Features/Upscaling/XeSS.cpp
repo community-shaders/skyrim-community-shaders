@@ -30,14 +30,8 @@ void XeSS::LoadXeSS()
 		xessSetJitterScale = (xessSetJitterScalePtr)GetProcAddress(module, "xessSetJitterScale");
 		xessSetVelocityScale = (xessSetVelocityScalePtr)GetProcAddress(module, "xessSetVelocityScale");
 		xessGetInputResolution = (xessGetInputResolutionPtr)GetProcAddress(module, "xessGetInputResolution");
-
-		if (xessGetVersion && xessD3D12CreateContext && xessD3D12Init && xessD3D12Execute && xessDestroyContext && xessSetJitterScale && xessSetVelocityScale && xessGetInputResolution) {
-			featureXeSS = true;
-			logger::info("[XeSS] Successfully loaded XeSS SDK");
-		} else {
-			featureXeSS = false;
-			logger::error("[XeSS] Failed to load XeSS function pointers");
-		}
+		featureXeSS = true;
+		logger::info("[XeSS] Successfully loaded XeSS SDK");
 	} else {
 		featureXeSS = false;
 		logger::error("[XeSS] Failed to load libxess.dll");
@@ -54,7 +48,7 @@ void XeSS::QueryVersion()
 
 	if (xessGetVersion(&version) == XESS_RESULT_SUCCESS && xessGetIntelXeFXVersion(xessContext, &versionXeFX) == XESS_RESULT_SUCCESS) {
 		bool xeFX = versionXeFX.major != 0 && versionXeFX.minor != 0 && versionXeFX.patch != 0;
-		versionInfo = std::format("{}.{}.{} {}", version.major, version.minor, version.patch, xeFX ? "Xe" : "DP4a");
+		versionInfo = std::format("{}.{}.{} {}", version.major, version.minor, version.patch, xeFX ? "XMX" : "DP4a");
 		logger::info("[XeSS] Upscaler version: {}", versionInfo);
 	}
 }

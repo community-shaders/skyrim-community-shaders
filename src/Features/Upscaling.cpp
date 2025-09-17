@@ -9,7 +9,6 @@
 #include "Upscaling/XeSS.h"
 #include <Windows.h>
 #include <directx/d3dx12.h>
-#include <reshade/reshade.hpp>
 
 #include "Features/PostProcessing.h"
 
@@ -21,19 +20,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	frameLimitMode,
 	frameGenerationMode,
 	frameGenerationForceEnable,
-	streamlineLogLevel,
-	enableNISSharpening,
-	nisSharpness);
+	streamlineLogLevel);
 
-// D3D hook function pointers and implementations
-decltype(&CreateDXGIFactory) ptrCreateDXGIFactory;
-
-HRESULT WINAPI hk_CreateDXGIFactory(REFIID, void** ppFactory)
-{
-	return ptrCreateDXGIFactory(__uuidof(IDXGIFactory4), ppFactory);
-}
-
-decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChain;
+decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChainUpscaling;
 
 /**
  * @brief Creates a Direct3D 11 device and swap chain, with support for advanced upscaling and frame generation features.
@@ -42,7 +31,7 @@ decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChain;
  *
  * @return HRESULT indicating the success or failure of device and swap chain creation.
  */
-HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
+HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 	IDXGIAdapter* pAdapter,
 	D3D_DRIVER_TYPE DriverType,
 	HMODULE Software,
@@ -69,9 +58,6 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	if (!globals::game::isVR) {
 		// Use better swap effect to prevent tearing and improve performance
 		pSwapChainDesc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-
-		// Set new more precise format
-		pSwapChainDesc->BufferDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
 	}
 
 	bool shouldProxy = !globals::game::isVR;
@@ -126,6 +112,13 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 
 			upscaling.d3d12Interop = true;
 
+			if (upscaling.IsBackendInitialized()) {
+				upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
+				upscaling.UpgradeBackendInterface((void**)&(*ppSwapChain));
+				upscaling.SetBackendD3DDevice(*ppDevice);
+				upscaling.PostBackendDevice();
+			}
+
 			return S_OK;
 		} else {
 			logger::warn("[Frame Generation] FidelityFX DLLs are not loaded, skipping proxy");
@@ -133,7 +126,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 		}
 	}
 
-	auto ret = ptrD3D11CreateDeviceAndSwapChain(pAdapter,
+	auto ret = ptrD3D11CreateDeviceAndSwapChainUpscaling(pAdapter,
 		DriverType,
 		Software,
 		Flags,
@@ -145,6 +138,13 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 		ppDevice,
 		pFeatureLevel,
 		ppImmediateContext);
+
+	if (upscaling.IsBackendInitialized()) {
+		upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
+		upscaling.UpgradeBackendInterface((void**)&(*ppSwapChain));
+		upscaling.SetBackendD3DDevice(*ppDevice);
+		upscaling.PostBackendDevice();
+	}
 
 	return ret;
 }
@@ -166,7 +166,7 @@ void Upscaling::DrawSettings()
 	}
 	upscaleModes.push_back(xessLabel);
 
-	std::string dlssLabel = resolutionScale.x == 1.0f ? "NVIDIA DLSS 4 Preset F" : "NVIDIA DLSS 4 Preset K";
+	std::string dlssLabel = "NVIDIA DLSS 4 Preset K";
 	upscaleModes.push_back(dlssLabel);
 
 	// Determine available modes
@@ -201,34 +201,6 @@ void Upscaling::DrawSettings()
 				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresetsDLSS[4 - settings.qualityMode]).c_str());
 			else
 				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
-		}
-
-		// NIS Sharpening section
-		if (ImGui::TreeNodeEx("NIS Sharpening", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Text("NVIDIA Image Sharpening applied after upscaling for enhanced clarity");
-			if (streamline.featureNIS) {
-				ImGui::Text("NIS is available");
-			} else {
-				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
-				ImGui::Text("Warning: NIS feature is not available");
-				ImGui::PopStyleColor();
-			}
-
-			const char* nisToggleModes[] = { "Disabled", "Enabled" };
-			ImGui::SliderInt("Enable NIS Sharpening", (int*)&settings.enableNISSharpening, 0, 1, nisToggleModes[settings.enableNISSharpening]);
-
-			if (settings.enableNISSharpening && streamline.featureNIS) {
-				ImGui::SliderFloat("Sharpening Strength", &settings.nisSharpness, 0.0f, 1.0f, "%.2f");
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Controls the intensity of NIS sharpening. Higher values provide more sharpening.");
-				}
-			} else if (settings.enableNISSharpening && !streamline.featureNIS) {
-				ImGui::BeginDisabled();
-				ImGui::SliderFloat("Sharpening Strength", &settings.nisSharpness, 0.0f, 1.0f, "%.2f");
-				ImGui::EndDisabled();
-			}
-
-			ImGui::TreePop();
 		}
 	} else {
 		ImGui::Text("Upscaling from lower resolutions is not currently available for VR");
@@ -381,51 +353,18 @@ void Upscaling::RestoreDefaultSettings()
 
 void Upscaling::Load()
 {
-	logger::info("[Upscaling] Load: Installing D3D IAT hooks and loading upscaling SDKs");
-	*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
-	*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", !REL::Module::IsVR() ? "CreateDXGIFactory" : "CreateDXGIFactory1");
+	*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChainUpscaling = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChainUpscaling, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
 }
 
-struct CreateRenderTarget_LDR1
+struct BSImageSpace_Init_FXAA
 {
-	static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
+	static void thunk()
 	{
-		RE::BSGraphics::RenderTargetProperties properties = *a_properties;
-		properties.format.set(RE::BSGraphics::Format::kR10G10B10A2_UNORM);
-		func(This, a_target, &properties);
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
+		func();
 
-struct CreateRenderTarget_LDR2
-{
-	static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
-	{
-		RE::BSGraphics::RenderTargetProperties properties = *a_properties;
-		properties.format.set(RE::BSGraphics::Format::kR10G10B10A2_UNORM);
-		func(This, a_target, &properties);
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
-
-struct CreateRenderTarget_LDR3
-{
-	static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
-	{
-		RE::BSGraphics::RenderTargetProperties properties = *a_properties;
-		properties.format.set(RE::BSGraphics::Format::kR10G10B10A2_UNORM);
-		func(This, a_target, &properties);
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
-
-struct CreateRenderTarget_LDR4
-{
-	static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
-	{
-		RE::BSGraphics::RenderTargetProperties properties = *a_properties;
-		properties.format.set(RE::BSGraphics::Format::kR10G10B10A2_UNORM);
-		func(This, a_target, &properties);
+		// Force FXAA off safely
+		auto fxaaEnabled = reinterpret_cast<bool*>(REL::RelocationID(513281, 391028).address());
+		*fxaaEnabled = false;
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
@@ -444,12 +383,6 @@ void Upscaling::PostPostLoad()
 	stl::write_thunk_call<Main_PostProcessing>(REL::RelocationID(100430, 107148).address() + REL::Relocate(0x1F0, 0x1E7, 0x206));
 
 	if (!REL::Module::IsVR()) {
-		// Patches render target creation to use higher precision format
-		stl::write_thunk_call<CreateRenderTarget_LDR1>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x529, 0x528));
-		stl::write_thunk_call<CreateRenderTarget_LDR2>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0xB2E, 0xB2E));
-		stl::write_thunk_call<CreateRenderTarget_LDR3>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x62F, 0x62E));
-		stl::write_thunk_call<CreateRenderTarget_LDR4>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x642, 0x641));
-
 		// Patches RSSetScissorRect calls to use dynamic resolution
 		// This is a PC-specific function hence it was missing
 		stl::detour_thunk<SetScissorRect>(REL::RelocationID(75564, 77365));
@@ -459,6 +392,9 @@ void Upscaling::PostPostLoad()
 
 		// Patches precipitation camera to not use dynamic resolution
 		stl::write_thunk_call<Main_RenderPrecipitation>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x3A1, 0x3A1, 0x2FA));
+
+		// Forces FXAA off
+		stl::detour_thunk<BSImageSpace_Init_FXAA>(REL::RelocationID(98974, 105626));
 	}
 
 	logger::info("[Upscaling] Installed hooks");
@@ -858,9 +794,12 @@ void Upscaling::SetupResources()
 	// Create jitter offset constant buffer for depth upscaling
 	jitterCB = new ConstantBuffer(ConstantBufferDesc<JitterCB>());
 
+	// Create upscaling data constant buffer for encode textures compute shader
+	upscalingDataCB = new ConstantBuffer(ConstantBufferDesc<UpscalingDataCB>());
+
 	// Create NIS sharpener texture with swapchain format and UAV access
 	D3D11_TEXTURE2D_DESC nisTexDesc = texDesc;
-	nisTexDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+	nisTexDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	nisTexDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
 	D3D11_SHADER_RESOURCE_VIEW_DESC nisSrvDesc = srvDesc;
@@ -958,7 +897,7 @@ void Upscaling::CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter)
 
 void Upscaling::UpdateSharedResources()
 {
-	logger::info("[Upscaling] Updating shared D3D12 resources");
+	logger::debug("[Upscaling] Updating shared D3D12 resources");
 
 	auto currentMethod = GetUpscaleMethod();
 
@@ -1009,7 +948,6 @@ void Upscaling::UpdateSharedResources()
 
 	D3D11_TEXTURE2D_DESC texDesc{};
 	main.texture->GetDesc(&texDesc);
-	texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
 	// Upscaling-specific resources (FSR/XeSS)
 	if (needsUpscalingResources) {
@@ -1081,7 +1019,7 @@ void Upscaling::UpdateSharedResources()
 		copyDepthToSharedBufferPS = nullptr;
 	}
 
-	logger::info("[Upscaling] Shared resource update complete - Upscaling: {}, FSR: {}, FrameGen: {}",
+	logger::debug("[Upscaling] Shared resource update complete - Upscaling: {}, FSR: {}, FrameGen: {}",
 		needsUpscalingResources, needsFSRSpecific, needsFrameGenResources);
 }
 
@@ -1193,8 +1131,6 @@ void Upscaling::PostDisplay()
 
 	globals::game::renderer->UpdateViewPort(0, 0, 1);
 	UpdateCameraData();
-
-	globals::state->RenderReShade();
 
 	if (d3d12Interop)
 		SetUIBuffer();
@@ -1436,6 +1372,15 @@ void Upscaling::Upscale()
 		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
 		{
+			// Set up upscaling data constant buffer
+			auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
+			UpscalingDataCB upscalingData;
+			upscalingData.trueSamplingDim = renderSize;
+
+			upscalingDataCB->Update(upscalingData);
+			auto upscalingBuffer = upscalingDataCB->CB();
+			context->CSSetConstantBuffers(0, 1, &upscalingBuffer);
+
 			ID3D11ShaderResourceView* views[4] = { temporalAAMask.SRV, normals.SRV, motionVector.SRV, depth.depthSRV };
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
@@ -1470,6 +1415,9 @@ void Upscaling::Upscale()
 		ID3D11UnorderedAccessView* uavs[3] = { nullptr, nullptr, nullptr };
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
+		ID3D11Buffer* nullBuffer = nullptr;
+		context->CSSetConstantBuffers(7, 1, &nullBuffer);
+
 		ID3D11ComputeShader* shader = nullptr;
 		context->CSSetShader(shader, nullptr, 0);
 
@@ -1480,7 +1428,7 @@ void Upscaling::Upscale()
 		state->BeginPerfEvent("Upscaling");
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get(), resolutionScale.x == 1.0f ? sl::DLSSPreset::ePresetF : sl::DLSSPreset::ePresetK);
+			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get(), sl::DLSSPreset::ePresetK);
 		else {
 			// Copy input color texture to shared D3D12 resource (only dynamic resolution area)
 			auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
@@ -1558,6 +1506,11 @@ void Upscaling::PerformUpscaling()
 
 	// Disable dynamic resolution past this point
 	runtimeData.dynamicResolutionLock = 1;
+
+	// Disable jitter after upscaling
+	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
+	BSImagespaceShaderISTemporalAA->taaEnabled = false;
 
 	// Updates the PerFrame constant buffer so that dynamic resolution settings are disabled
 	UpdateCameraData();
@@ -1707,10 +1660,6 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a1, uint32_t a
 	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod == UpscaleMethod::kTAA;
 
 	func(a1, a3, er8_);
-
-	upscaling.ApplyNISSharpening();
-
-	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod == UpscaleMethod::kTAA;
 }
 
 void Upscaling::SetScissorRect::thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom)
@@ -1735,29 +1684,6 @@ void Upscaling::Main_RenderPrecipitation::thunk()
 	runtimeData.dynamicResolutionLock = 1;
 	func();
 	runtimeData.dynamicResolutionLock = 0;
-}
-
-void Upscaling::ApplyNISSharpening()
-{
-	if (!settings.enableNISSharpening || !streamline.featureNIS) {
-		return;
-	}
-
-	auto renderer = globals::game::renderer;
-	auto context = globals::d3d::context;
-
-	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
-
-	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
-
-	winrt::com_ptr<ID3D11Resource> mainResource;
-	main.RTV->GetResource(mainResource.put());
-
-	context->CopyResource(nisSharpenerTexture->resource.get(), mainResource.get());
-
-	streamline.ApplyNISSharpening(nisSharpenerTexture->resource.get(), settings.nisSharpness);
-
-	context->CopyResource(mainResource.get(), nisSharpenerTexture->resource.get());
 }
 
 void Upscaling::BSFaceGenManager_UpdatePendingCustomizationTextures::thunk()

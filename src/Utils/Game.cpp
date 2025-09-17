@@ -299,4 +299,17 @@ namespace Util
 
 		return textureSet;
 	}
+
+	bool IsInterior()
+	{
+		auto tes = globals::game::tes;
+		if (tes && !tes->interiorCell) {
+			if (auto worldSpace = tes->GetRuntimeData2().worldSpace) {
+				if (!worldSpace->flags.all(RE::TESWorldSpace::Flag::kNoSky)) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
 }  // namespace Util

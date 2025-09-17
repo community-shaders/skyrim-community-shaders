@@ -66,10 +66,9 @@ namespace SharedData
 
 	struct LightLimitFixSettings
 	{
-		uint EnableContactShadows;
 		uint EnableLightsVisualisation;
 		uint LightsVisualisationMode;
-		float pad0;
+		float2 pad0;
 		uint4 ClusterSize;
 	};
 

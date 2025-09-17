@@ -201,21 +201,10 @@ namespace LightingExtensions
 
 struct IDXGISwapChain_Present
 {
-	static HRESULT WINAPI /**
-	 * @brief Presents the swap chain with additional upscaling, overlay, and Reflex marker integration.
-	 *
-	 * Copies frame buffers for upscaling, processes overlays, manages tearing flags, and integrates Streamline Reflex markers for frame timing if enabled. Also collects profiling data and applies frame limiting after presentation.
-	 *
-	 * @param This The swap chain instance to present.
-	 * @param SyncInterval The vertical sync interval.
-	 * @param Flags Presentation flags, possibly modified for tearing support.
-	 * @return HRESULT Result of the present operation.
-	 */
-	thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
+	static HRESULT WINAPI thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
 	{
 		auto state = globals::state;
 		auto menu = globals::menu;
-		state->PresentReShade();
 		state->Reset();
 		menu->DrawOverlay();
 
@@ -227,6 +216,51 @@ struct IDXGISwapChain_Present
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
+
+decltype(&CreateDXGIFactory) ptrCreateDXGIFactory;
+
+HRESULT WINAPI hk_CreateDXGIFactory(REFIID, void** ppFactory)
+{
+	return ptrCreateDXGIFactory(__uuidof(IDXGIFactory4), ppFactory);
+}
+
+decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChain;
+
+HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
+	IDXGIAdapter* pAdapter,
+	D3D_DRIVER_TYPE DriverType,
+	HMODULE Software,
+	UINT Flags,
+	[[maybe_unused]] const D3D_FEATURE_LEVEL* pFeatureLevels,
+	[[maybe_unused]] UINT FeatureLevels,
+	UINT SDKVersion,
+	DXGI_SWAP_CHAIN_DESC* pSwapChainDesc,
+	IDXGISwapChain** ppSwapChain,
+	ID3D11Device** ppDevice,
+	D3D_FEATURE_LEVEL* pFeatureLevel,
+	ID3D11DeviceContext** ppImmediateContext)
+{
+	DXGI_ADAPTER_DESC adapterDesc;
+	pAdapter->GetDesc(&adapterDesc);
+	globals::state->SetAdapterDescription(adapterDesc.Description);
+
+	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
+
+	auto ret = ptrD3D11CreateDeviceAndSwapChain(pAdapter,
+		DriverType,
+		Software,
+		Flags,
+		&featureLevel,
+		1,
+		SDKVersion,
+		pSwapChainDesc,
+		ppSwapChain,
+		ppDevice,
+		pFeatureLevel,
+		ppImmediateContext);
+
+	return ret;
+}
 
 void Hooks::BSGraphics_SetDirtyStates::thunk(bool isCompute)
 {
@@ -342,15 +376,6 @@ namespace Hooks
 			logger::info("Calling original Init3D");
 
 			func();
-
-			auto& upscaling = globals::features::upscaling;
-
-			if (upscaling.IsBackendInitialized()) {
-				upscaling.UpgradeBackendInterface((void**)&(globals::d3d::device));
-				upscaling.UpgradeBackendInterface((void**)&(globals::d3d::swapChain));
-				upscaling.SetBackendD3DDevice(globals::d3d::device);
-				upscaling.PostBackendDevice();
-			}
 
 			logger::info("Accessing render device information");
 			globals::ReInit();
@@ -780,6 +805,24 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	struct BSImageSpace_Init_IBLF
+	{
+		static void thunk(char* a1,
+			void* a2,
+			void* a3,
+			void* a4,
+			void* a5,
+			void* a6,
+			void* a7)
+		{
+			auto enableIBLF = (float*)(REL::RelocationID(513510, 391362).address());
+			*enableIBLF = false;
+
+			func(a1, a2, a3, a4, a5, a6, a7);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	/**
 	 * @brief Installs hooks, detours, and memory patches for graphics, input, and rendering subsystems.
 	 *
@@ -787,6 +830,18 @@ namespace Hooks
 	 */
 	void Install()
 	{
+		if (!globals::features::upscaling.loaded) {
+			logger::info("Hooking D3D11CreateDeviceAndSwapChain");
+			*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
+		}
+
+		*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", !REL::Module::IsVR() ? "CreateDXGIFactory" : "CreateDXGIFactory1");
+
+		if (!REL::Module::IsVR()) {
+			logger::info("Hooking BSImageSpace::Init::IBLF");
+			stl::detour_thunk<BSImageSpace_Init_IBLF>(REL::RelocationID(100480, 107198));
+		}
+
 		logger::info("Hooking BSInputDeviceManager::PollInputDevices");
 		stl::write_thunk_call<BSInputDeviceManager_PollInputDevices>(REL::RelocationID(67315, 68617).address() + REL::Relocate(0x7B, 0x7B, 0x81));
 
@@ -883,5 +938,4 @@ namespace Hooks
 
 		stl::write_thunk_call<BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights>(REL::RelocationID(100565, 107300).address() + REL::Relocate(0x523, 0xB0E, 0x5FE));
 	}
-
 }
