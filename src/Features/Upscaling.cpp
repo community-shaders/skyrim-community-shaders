@@ -1504,7 +1504,7 @@ void Upscaling::PerformUpscaling()
 
 	// Disable dynamic resolution past this point
 	runtimeData.dynamicResolutionLock = 1;
-	
+
 	// Updates the PerFrame constant buffer so that dynamic resolution settings are disabled
 	UpdateCameraData();
 }
