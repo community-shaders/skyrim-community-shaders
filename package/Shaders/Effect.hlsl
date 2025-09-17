@@ -583,11 +583,13 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 		if (SharedData::iblSettings.EnableDiffuseIBL) {
 			if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)
 			{
+				color = Color::GammaToLinear(color);
 #			if defined(SKYLIGHTING)
 				color += Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1), skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 #			else
 				color += Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 #			endif
+				color = Color::LinearToGamma(color);
 			}
 		}
 #		endif

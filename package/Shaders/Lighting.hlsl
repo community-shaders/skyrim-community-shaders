@@ -2740,11 +2740,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		if ((!SharedData::InInterior || SharedData::iblSettings.EnableInterior) && !(SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection))
 		{
+		directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
 #		if defined(SKYLIGHTING)
 			directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-ambientNormal, skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 #		else
 			directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-ambientNormal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 #		endif
+		directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
 		}
 	}
 #	endif
