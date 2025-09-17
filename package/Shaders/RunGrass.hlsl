@@ -5,6 +5,7 @@
 #include "Common/MotionBlur.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
+#include "Common/Permutation.hlsli"
 
 #ifdef GRASS_LIGHTING
 #	define GRASS
@@ -499,11 +500,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float screenNoise = Random::InterleavedGradientNoise(input.HPosition.xy, SharedData::FrameCount);
 
 	// Swaps direction of the backfaces otherwise they seem to get lit from the wrong direction.
-	if (!frontFace)
-		normal = -normal;
+	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::ObjectGrass)) {
+		if (!frontFace)
+			normal = -normal;
 
-	normal.z = max(0.0, normal.z);
-	normal = normalize(float3(normal.xy, max(0, normal.z)));
+		normal.z = max(0.0, normal.z);
+		normal = normalize(float3(normal.xy, max(0, normal.z)));
+	}
 
 	float3x3 tbn = 0;
 
