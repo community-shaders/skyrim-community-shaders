@@ -4,6 +4,7 @@
 #include "imgui_stdlib.h"
 
 #include "State.h"
+#include "Util.h"
 
 #include "Features/Upscaling.h"
 
@@ -435,12 +436,7 @@ void PostProcessing::UpdateToD()
 	if (!sky)
 		return;
 
-	imageSpaceManager->inInterior = true;
-	if (auto player = RE::PlayerCharacter::GetSingleton()) {
-		if (auto parentCell = player->GetParentCell()) {
-			imageSpaceManager->inInterior = parentCell->IsInteriorCell();
-		}
-	}
+	imageSpaceManager->inInterior = Util::IsInterior();
 
 	float currentTime = sky->currentGameHour;
 
