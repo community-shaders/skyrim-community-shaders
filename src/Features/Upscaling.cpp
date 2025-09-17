@@ -360,12 +360,12 @@ struct BSImageSpace_Init_FXAA
 	{
 		func();
 
-		auto enableFXAA = (float*)(REL::RelocationID(513281, 391028).address());
-		*enableFXAA = false;
+		// Force FXAA off safely
+		auto fxaaEnabled = reinterpret_cast<bool*>(REL::RelocationID(513281, 391028).address());
+		*fxaaEnabled = false;
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
-
 void Upscaling::PostPostLoad()
 {
 	bool isGOG = !GetModuleHandle(L"steam_api64.dll");
