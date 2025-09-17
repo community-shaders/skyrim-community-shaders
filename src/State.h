@@ -150,7 +150,7 @@ public:
 		IsBeastRace = 1 << 2,
 		EffectShadows = 1 << 3,
 		IsTree = 1 << 4,
-		ObjectGrass = 1 << 5
+		GrassSphereNormal = 1 << 5
 	};
 
 	enum class ExtraFeatureDescriptors : uint32_t
