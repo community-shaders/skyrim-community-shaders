@@ -47,6 +47,18 @@ namespace PBR
 		static const uint LandTile5HasGlint = (1 << 17);
 	}
 
+	namespace Constants
+	{
+		static const float MinRoughness = 0.04f;
+		static const float MaxRoughness = 1.0f;
+		static const float MinGlintDensity = 1.0f;
+		static const float MaxGlintDensity = 40.0f;
+		static const float MinGlintRoughness = 0.005f;
+		static const float MaxGlintRoughness = 0.3f;
+		static const float MinGlintDensityRandomization = 0.0f;
+		static const float MaxGlintDensityRandomization = 5.0f;
+	}
+
 #if defined(GLINT)
 #	include "Common/Glints/Glints2023.hlsli"
 #else
@@ -251,7 +263,7 @@ namespace PBR
 		h = cosHalfPhi * (1 + a * (0.6 - 0.8 * cosPhi));
 		f = BRDF::F_Schlick(specularColor, cosThetaD * sqrt(saturate(1 - h * h))).x;
 		Fp = (1 - f) * (1 - f);
-		Tp = pow(surfaceProperties.BaseColor, 0.5 * sqrt(1 - (h * a) * (h * a)) / cosThetaD);
+		Tp = pow(abs(surfaceProperties.BaseColor), 0.5 * sqrt(1 - (h * a) * (h * a)) / cosThetaD);
 		Np = exp(-3.65 * cosPhi - 3.98);
 		S += (Mp * Np) * (Fp * Tp) * backlit;
 
@@ -259,7 +271,7 @@ namespace PBR
 		Mp = HairGaussian(B[2], ThetaH - Alpha[2]);
 		f = BRDF::F_Schlick(specularColor, cosThetaD * 0.5f).x;
 		Fp = (1 - f) * (1 - f) * f;
-		Tp = pow(surfaceProperties.BaseColor, 0.8 / cosThetaD);
+		Tp = pow(abs(surfaceProperties.BaseColor), 0.8 / cosThetaD);
 		Np = exp(17 * cosPhi - 16.78);
 		S += (Mp * Np) * (Fp * Tp);
 
@@ -334,7 +346,7 @@ namespace PBR
 			specular += GetSpecularDirectLightMultiplierMicrofacet(surfaceProperties.Roughness, surfaceProperties.F0, satNdotL, satNdotV, satNdotH, satVdotH, F) * lightProperties.LightColor * satNdotL;
 #endif
 
-			float2 specularBRDF = BRDF::EnvBRDFApproxLazarov(surfaceProperties.Roughness, satNdotV);
+			float2 specularBRDF = BRDF::EnvBRDF(surfaceProperties.Roughness, satNdotV);
 			specular *= 1 + surfaceProperties.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
 
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
@@ -432,7 +444,7 @@ namespace PBR
 			}
 #endif
 
-			float2 specularBRDF = BRDF::EnvBRDFApproxLazarov(surfaceProperties.Roughness, NdotV);
+			float2 specularBRDF = BRDF::EnvBRDF(surfaceProperties.Roughness, NdotV);
 			specularLobeWeight = surfaceProperties.F0 * specularBRDF.x + specularBRDF.y;
 
 			diffuseLobeWeight *= (1 - specularLobeWeight);
@@ -441,7 +453,7 @@ namespace PBR
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 			[branch] if ((PBRFlags & Flags::TwoLayer) != 0)
 			{
-				float2 coatSpecularBRDF = BRDF::EnvBRDFApproxLazarov(surfaceProperties.CoatRoughness, NdotV);
+				float2 coatSpecularBRDF = BRDF::EnvBRDF(surfaceProperties.CoatRoughness, NdotV);
 				float3 coatSpecularLobeWeight = surfaceProperties.CoatF0 * coatSpecularBRDF.x + coatSpecularBRDF.y;
 				coatSpecularLobeWeight *= 1 + surfaceProperties.CoatF0 * (1 / (coatSpecularBRDF.x + coatSpecularBRDF.y) - 1);
 
@@ -484,7 +496,7 @@ namespace PBR
 		const float wetnessF0 = 0.02;
 
 		float NdotV = saturate(abs(dot(N, V)) + EPSILON_DOT_CLAMP);
-		float2 specularBRDF = BRDF::EnvBRDFApproxLazarov(roughness, NdotV);
+		float2 specularBRDF = BRDF::EnvBRDF(roughness, NdotV);
 		float3 specularLobeWeight = wetnessF0 * specularBRDF.x + specularBRDF.y;
 
 		// Horizon specular occlusion

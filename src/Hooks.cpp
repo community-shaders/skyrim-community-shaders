@@ -2,6 +2,7 @@
 
 #include "ShaderTools/BSShaderHooks.h"
 
+#include "Feature.h"
 #include "Globals.h"
 #include "Menu.h"
 #include "ShaderCache.h"
@@ -9,18 +10,14 @@
 #include "TruePBR.h"
 #include "Util.h"
 
-#include "Features/InteriorSunShadows.h"
+#include "Features/InteriorSun.h"
 #include "Features/LightLimitFix.h"
 #include "Features/TerrainHelper.h"
+#include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 
 #include "ShaderTools/BSShaderHooks.h"
-
-#include "DX12SwapChain.h"
-#include "FidelityFX.h"
-#include "Streamline.h"
-#include "Upscaling.h"
 
 std::unordered_map<void*, std::pair<std::unique_ptr<uint8_t[]>, size_t>> ShaderBytecodeMap;
 
@@ -172,10 +169,14 @@ namespace EffectExtensions
 		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
 			func(shader, pass, renderFlags);
+
+			auto state = globals::state;
+
+			state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::EffectShadows);
+
 			if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(pass->geometry->GetGeometryRuntimeData().properties[1].get())) {
 				if (shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kUniformScale)) {
-					auto state = globals::state;
-					state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::EffectShadows;
+					state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::EffectShadows);
 				}
 			}
 		}
@@ -191,12 +192,55 @@ namespace LightingExtensions
 		{
 			func(shader, pass, renderFlags);
 
-			globals::state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::IsTree);
+			auto state = globals::state;
+
+			state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::IsTree);
 
 			if (auto userData = pass->geometry->GetUserData())
 				if (auto baseObject = userData->GetBaseObject())
 					if (baseObject->As<RE::TESObjectTREE>())
-						globals::state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::IsTree);
+						state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::IsTree);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+}
+
+namespace GrassExtensions
+{
+	struct BSGrassShaderProperty_ctor
+	{
+		static RE::BSLightingShaderProperty* thunk(RE::BSLightingShaderProperty* property)
+		{
+			const uint64_t stackPointer = reinterpret_cast<uint64_t>(_AddressOfReturnAddress());
+			const uint64_t lightingPropertyAddress = stackPointer + (REL::Module::IsAE() ? 0x68 : 0x70);
+			auto* lightingProperty = *reinterpret_cast<RE::BSLightingShaderProperty**>(lightingPropertyAddress);
+
+			RE::BSLightingShaderProperty* grassProperty = func(property);
+
+			if (lightingProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kEffectLighting)) {
+				grassProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kEffectLighting, true);
+			}
+
+			return grassProperty;
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct BSGrassShader_SetupGeometry
+	{
+		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
+		{
+			func(shader, pass, renderFlags);
+
+			auto state = globals::state;
+
+			state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::GrassSphereNormal);
+
+			if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(pass->geometry->GetGeometryRuntimeData().properties[1].get())) {
+				if (shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kEffectLighting)) {
+					state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::GrassSphereNormal);
+				}
+			}
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -204,66 +248,66 @@ namespace LightingExtensions
 
 struct IDXGISwapChain_Present
 {
-	static HRESULT WINAPI /**
-	 * @brief Presents the swap chain with additional upscaling, overlay, and Reflex marker integration.
-	 *
-	 * Copies frame buffers for upscaling, processes overlays, manages tearing flags, and integrates Streamline Reflex markers for frame timing if enabled. Also collects profiling data and applies frame limiting after presentation.
-	 *
-	 * @param This The swap chain instance to present.
-	 * @param SyncInterval The vertical sync interval.
-	 * @param Flags Presentation flags, possibly modified for tearing support.
-	 * @return HRESULT Result of the present operation.
-	 */
-	thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
+	static HRESULT WINAPI thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
 	{
 		auto state = globals::state;
-		auto streamline = globals::streamline;
-		auto upscaling = globals::upscaling;
 		auto menu = globals::menu;
-
-		upscaling->CopyBuffersToSharedResources();
-		state->PresentReShade();
-		streamline->Present();
 		state->Reset();
 		menu->DrawOverlay();
 
-		if (upscaling->d3d12Interop)
-			SyncInterval = 0;
-
-		if (!globals::game::isVR) {
-			BOOL fullscreen = FALSE;
-			((IDXGISwapChain*)This)->GetFullscreenState(&fullscreen, nullptr);
-			if (fullscreen || SyncInterval) {
-				Flags &= ~DXGI_PRESENT_ALLOW_TEARING;
-			} else if (SyncInterval == 0) {
-				Flags |= DXGI_PRESENT_ALLOW_TEARING;
-			}
-		}
-
-		HRESULT retval = S_OK;
-
-		if (globals::streamline->featureReflex) {
-			sl::FrameToken* frameToken;
-			globals::streamline->slGetNewFrameToken(frameToken, &globals::state->frameCount);
-
-			globals::streamline->slReflexSetMarker(sl::ReflexMarker::eRenderSubmitEnd, *frameToken);
-			globals::streamline->slReflexSetMarker(sl::ReflexMarker::ePresentStart, *frameToken);
-
-			retval = func(This, SyncInterval, Flags);
-
-			globals::streamline->slReflexSetMarker(sl::ReflexMarker::ePresentEnd, *frameToken);
-		} else {
-			retval = func(This, SyncInterval, Flags);
-		}
+		HRESULT retval = func(This, SyncInterval, Flags);
 
 		TracyD3D11Collect(state->tracyCtx);
-
-		upscaling->FrameLimiter();
 
 		return retval;
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
+
+decltype(&CreateDXGIFactory) ptrCreateDXGIFactory;
+
+HRESULT WINAPI hk_CreateDXGIFactory(REFIID, void** ppFactory)
+{
+	return ptrCreateDXGIFactory(__uuidof(IDXGIFactory4), ppFactory);
+}
+
+decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChain;
+
+HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
+	IDXGIAdapter* pAdapter,
+	D3D_DRIVER_TYPE DriverType,
+	HMODULE Software,
+	UINT Flags,
+	[[maybe_unused]] const D3D_FEATURE_LEVEL* pFeatureLevels,
+	[[maybe_unused]] UINT FeatureLevels,
+	UINT SDKVersion,
+	DXGI_SWAP_CHAIN_DESC* pSwapChainDesc,
+	IDXGISwapChain** ppSwapChain,
+	ID3D11Device** ppDevice,
+	D3D_FEATURE_LEVEL* pFeatureLevel,
+	ID3D11DeviceContext** ppImmediateContext)
+{
+	DXGI_ADAPTER_DESC adapterDesc;
+	pAdapter->GetDesc(&adapterDesc);
+	globals::state->SetAdapterDescription(adapterDesc.Description);
+
+	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
+
+	auto ret = ptrD3D11CreateDeviceAndSwapChain(pAdapter,
+		DriverType,
+		Software,
+		Flags,
+		&featureLevel,
+		1,
+		SDKVersion,
+		pSwapChainDesc,
+		ppSwapChain,
+		ppDevice,
+		pFeatureLevel,
+		ppImmediateContext);
+
+	return ret;
+}
 
 void Hooks::BSGraphics_SetDirtyStates::thunk(bool isCompute)
 {
@@ -299,255 +343,6 @@ struct ID3D11Device_CreatePixelShader
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
-struct ID3D11Device_CreateSamplerState
-{
-	static HRESULT STDMETHODCALLTYPE thunk(ID3D11Device* This, D3D11_SAMPLER_DESC* pSamplerDesc, ID3D11SamplerState** ppSamplerState)
-	{
-		// Limit Anisotropy to 8x for performance
-		D3D11_SAMPLER_DESC descCopy = *pSamplerDesc;  // make a copy, pSamplerDesc is supposed to be immutable
-		descCopy.MaxAnisotropy = std::min(descCopy.MaxAnisotropy, 8u);
-		return func(This, &descCopy, ppSamplerState);
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
-
-decltype(&CreateDXGIFactory) ptrCreateDXGIFactory;
-
-HRESULT WINAPI hk_CreateDXGIFactory(REFIID, void** ppFactory)
-{
-	auto streamline = globals::streamline;
-	if (!streamline->triedInitialization)
-		globals::streamline->LoadInterposer();
-	if (streamline->initialized)
-		return streamline->slCreateDXGIFactory1(__uuidof(IDXGIFactory4), ppFactory);
-	return ptrCreateDXGIFactory(__uuidof(IDXGIFactory4), ppFactory);
-}
-
-decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChain;
-
-/**
- * @brief Creates a Direct3D 11 device and swap chain, with support for advanced upscaling and frame generation features.
- *
- * This function intercepts the standard D3D11 device and swap chain creation process to enable integration with Streamline and FidelityFX technologies, as well as optional D3D12 proxying for frame generation. It adjusts swap chain flags for tearing support, manages feature checks, and conditionally routes device creation through Streamline or FidelityFX proxies based on runtime settings and hardware capabilities. If frame generation is enabled and supported, a D3D12 proxy is used; otherwise, the standard D3D11 creation path is followed.
- *
- * @return HRESULT indicating the success or failure of device and swap chain creation.
- */
-HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
-	IDXGIAdapter* pAdapter,
-	D3D_DRIVER_TYPE DriverType,
-	HMODULE Software,
-	UINT Flags,
-	[[maybe_unused]] const D3D_FEATURE_LEVEL* pFeatureLevels,
-	[[maybe_unused]] UINT FeatureLevels,
-	UINT SDKVersion,
-	DXGI_SWAP_CHAIN_DESC* pSwapChainDesc,
-	IDXGISwapChain** ppSwapChain,
-	ID3D11Device** ppDevice,
-	D3D_FEATURE_LEVEL* pFeatureLevel,
-	ID3D11DeviceContext** ppImmediateContext)
-{
-	DXGI_ADAPTER_DESC adapterDesc;
-	pAdapter->GetDesc(&adapterDesc);
-	globals::state->SetAdapterDescription(adapterDesc.Description);
-
-	if (!REL::Module::IsVR()) {
-		pSwapChainDesc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-
-		IDXGIFactory5* dxgiFactory;
-		DX::ThrowIfFailed(pAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory)));
-
-		BOOL allowTearing = FALSE;
-		DX::ThrowIfFailed(dxgiFactory->CheckFeatureSupport(
-			DXGI_FEATURE_PRESENT_ALLOW_TEARING,
-			&allowTearing,
-			sizeof(allowTearing)));
-
-		if (allowTearing) {
-			pSwapChainDesc->Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
-		} else {
-			pSwapChainDesc->Flags &= ~DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
-		}
-	}
-
-	auto streamline = globals::streamline;
-	auto fidelityFX = globals::fidelityFX;
-	auto upscaling = globals::upscaling;
-
-	if (streamline->initialized)
-		streamline->CheckFeatures(pAdapter);
-	else
-		upscaling->streamlineMissing = true;
-
-	auto proxy = globals::dx12SwapChain;
-
-	bool shouldProxy = !REL::Module::IsVR();
-	if (shouldProxy)
-		if (!pSwapChainDesc->Windowed)
-			shouldProxy = false;
-
-	auto refreshRate = Upscaling::GetRefreshRate(pSwapChainDesc->OutputWindow);
-	upscaling->refreshRate = refreshRate;
-
-	if (shouldProxy) {
-		if (upscaling->settings.frameGenerationMode)
-			if (refreshRate >= 120)
-				shouldProxy = true;
-			else if (upscaling->settings.frameGenerationForceEnable)
-				shouldProxy = true;
-			else
-				shouldProxy = false;
-		else
-			shouldProxy = false;
-	}
-
-	upscaling->lowRefreshRate = refreshRate < 119;
-	upscaling->isWindowed = pSwapChainDesc->Windowed;
-
-	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
-
-	if (shouldProxy) {
-		logger::info("[Frame Generation] Frame Generation enabled, using D3D12 proxy");
-
-		if (streamline->featureDLSSG) {
-			logger::info("[Frame Generation] Using D3D12 proxy via Streamline");
-
-			auto ret = streamline->slD3D11CreateDeviceAndSwapChain(pAdapter,
-				DriverType,
-				Software,
-				Flags,
-				&featureLevel,
-				1,
-				SDKVersion,
-				pSwapChainDesc,
-				ppSwapChain,
-				ppDevice,
-				pFeatureLevel,
-				ppImmediateContext);
-
-			upscaling->d3d12Interop = true;
-
-			streamline->PostDevice();
-			upscaling->InstallD3DHooks(*ppImmediateContext);
-
-			IDXGIFactory* factory = nullptr;
-			if (SUCCEEDED((*ppSwapChain)->GetParent(IID_PPV_ARGS(&factory)))) {
-				factory->MakeWindowAssociation(pSwapChainDesc->OutputWindow, DXGI_MWA_NO_WINDOW_CHANGES);
-				factory->Release();
-			}
-
-			return ret;
-
-		} else {
-			logger::info("[Frame Generation] Using manual D3D12 proxy");
-
-			if (fidelityFX->module) {
-				proxy->CreateD3D12Device(pAdapter);
-
-				D3D11CreateDevice(
-					pAdapter,
-					DriverType,
-					Software,
-					Flags,
-					&featureLevel,
-					1,
-					SDKVersion,
-					ppDevice,
-					pFeatureLevel,
-					ppImmediateContext);
-
-				proxy->SetD3D11Device(*ppDevice);
-				proxy->SetD3D11DeviceContext(*ppImmediateContext);
-
-				proxy->CreateSwapChain(pAdapter, *pSwapChainDesc);
-
-				proxy->CreateInterop();
-
-				*ppSwapChain = proxy->GetSwapChainProxy();
-
-				upscaling->d3d12Interop = true;
-
-				if (streamline->initialized) {
-					streamline->slSetD3DDevice(*ppDevice);
-					streamline->PostDevice();
-				}
-
-				IDXGIFactory* factory = nullptr;
-				if (SUCCEEDED((*ppSwapChain)->GetParent(IID_PPV_ARGS(&factory)))) {
-					factory->MakeWindowAssociation(pSwapChainDesc->OutputWindow, DXGI_MWA_NO_WINDOW_CHANGES);
-					factory->Release();
-				}
-
-				return S_OK;
-			} else {
-				logger::warn("[Frame Generation] amd_fidelityfx_dx12.dll is not loaded, skipping proxy");
-				upscaling->fidelityFXMissing = true;
-			}
-		}
-	}
-
-	auto ret = ptrD3D11CreateDeviceAndSwapChain(pAdapter,
-		DriverType,
-		Software,
-		Flags,
-		&featureLevel,
-		1,
-		SDKVersion,
-		pSwapChainDesc,
-		ppSwapChain,
-		ppDevice,
-		pFeatureLevel,
-		ppImmediateContext);
-
-	if (streamline->initialized) {
-		streamline->slSetD3DDevice(*ppDevice);
-		streamline->PostDevice();
-	}
-
-	return ret;
-}
-
-struct Main_Update_Begin
-{
-	/**
-	 * @brief Wraps the player character update with Reflex frame timing markers.
-	 *
-	 * If the Reflex feature is enabled, obtains a new frame token and sets markers for input sampling and simulation start before invoking the original update function.
-	 *
-	 * @param a_player Pointer to the player character being updated.
-	 */
-	static void thunk(RE::PlayerCharacter* a_player)
-	{
-		if (globals::streamline->featureReflex) {
-			sl::FrameToken* frameToken;
-			globals::streamline->slGetNewFrameToken(frameToken, &globals::state->frameCount);
-			globals::streamline->slReflexSetMarker(sl::ReflexMarker::eInputSample, *frameToken);
-			globals::streamline->slReflexSetMarker(sl::ReflexMarker::eSimulationStart, *frameToken);
-		}
-		func(a_player);
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
-
-struct Main_Update_Swap
-{
-	/**
-	 * @brief Wraps a function call with Streamline Reflex simulation and render submit markers.
-	 *
-	 * If the Reflex feature is enabled, obtains a new frame token and sets markers for simulation end and render submit start before invoking the original function.
-	 */
-	static void thunk(void* This)
-	{
-		if (globals::streamline->featureReflex) {
-			sl::FrameToken* frameToken;
-			globals::streamline->slGetNewFrameToken(frameToken, &globals::state->frameCount);
-			globals::streamline->slReflexSetMarker(sl::ReflexMarker::eSimulationEnd, *frameToken);
-			globals::streamline->slReflexSetMarker(sl::ReflexMarker::eRenderSubmitStart, *frameToken);
-		}
-		func(This);
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
-
 struct BSShaderRenderTargets_Create
 {
 	/**
@@ -578,18 +373,28 @@ struct BSInputDeviceManager_PollInputDevices
 			if (*a_events) {
 				if (auto device = (*a_events)->GetDevice()) {
 					if (globals::game::isVR) {
-						// Check if this is a VR device that should be blocked when menu is open
-						bool vrDevice = false;
-						vrDevice = (globals::game::isVR && ((device == RE::INPUT_DEVICES::INPUT_DEVICE::kVivePrimary) ||
-															   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kViveSecondary) ||
-															   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusPrimary) ||
-															   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusSecondary) ||
-															   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRPrimary) ||
-															   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRSecondary)));
-						// Block VR devices when menu is open to prevent game interaction
-						// Allow gamepad and non-VR devices to pass through
-						// Only block VR device if openvr is compatible with the in game vr menu
-						blockedDevice = !((device == RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad) || !vrDevice || (vrDevice && !globals::features::vr.IsOpenVRCompatible()));
+						// In VR, block mouse/keyboard input when menu is open (like Flatrim)
+						// Allow gamepad input to pass through
+						// Also handle VR controller devices based on OpenVR compatibility
+						bool isVRController = ((device == RE::INPUT_DEVICES::INPUT_DEVICE::kVivePrimary) ||
+											   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kViveSecondary) ||
+											   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusPrimary) ||
+											   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusSecondary) ||
+											   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRPrimary) ||
+											   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRSecondary));
+
+						// Allow gamepad input to pass through always
+						if (device == RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad) {
+							blockedDevice = false;
+						}
+						// For VR controllers, only block if OpenVR is compatible
+						else if (isVRController) {
+							blockedDevice = globals::features::vr.IsOpenVRCompatible();
+						}
+						// For mouse/keyboard and other devices, block them (like Flatrim)
+						else {
+							blockedDevice = true;
+						}
 					} else {
 						// Block all devices except gamepad when menu is open
 						blockedDevice = (device != RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad);
@@ -631,7 +436,7 @@ namespace Hooks
 				stl::detour_vfunc<15, ID3D11Device_CreatePixelShader>(globals::d3d::device);
 			}
 
-			stl::detour_vfunc<23, ID3D11Device_CreateSamplerState>(globals::d3d::device);
+			globals::InstallD3DHooks(globals::d3d::context);
 
 			globals::menu->Init();
 		}
@@ -709,6 +514,28 @@ namespace Hooks
 		{
 			globals::state->ModifyRenderTarget(a_target, a_properties);
 			func(This, a_target, a_properties);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct CreateRenderTarget_RefractionNormals
+	{
+		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
+		{
+			auto properties = *a_properties;
+			properties.copyable = true;
+			func(This, a_target, &properties);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct CreateRenderTarget_UnderwaterMask
+	{
+		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
+		{
+			auto properties = *a_properties;
+			properties.copyable = true;
+			func(This, a_target, &properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -890,8 +717,8 @@ namespace Hooks
 			if (globals::features::lightLimitFix.loaded && !globals::features::lightLimitFix.CheckParticleLights(a_pass, a_technique))
 				return;
 
-			if (globals::features::interiorSunShadows.loaded)
-				globals::features::interiorSunShadows.UpdateRasterStateCullMode(a_pass, a_technique);
+			if (globals::features::interiorSun.loaded)
+				globals::features::interiorSun.UpdateRasterStateCullMode(a_pass, a_technique);
 
 			func(a_pass, a_technique, a_alphaTest, a_renderFlags);
 		}
@@ -1025,6 +852,24 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	struct BSImageSpace_Init_IBLF
+	{
+		static void thunk(char* a1,
+			void* a2,
+			void* a3,
+			void* a4,
+			void* a5,
+			void* a6,
+			void* a7)
+		{
+			auto enableIBLF = (float*)(REL::RelocationID(513510, 391362).address());
+			*enableIBLF = false;
+
+			func(a1, a2, a3, a4, a5, a6, a7);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	/**
 	 * @brief Installs hooks, detours, and memory patches for graphics, input, and rendering subsystems.
 	 *
@@ -1032,6 +877,18 @@ namespace Hooks
 	 */
 	void Install()
 	{
+		if (!globals::features::upscaling.loaded) {
+			logger::info("Hooking D3D11CreateDeviceAndSwapChain");
+			*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
+		}
+
+		*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", !REL::Module::IsVR() ? "CreateDXGIFactory" : "CreateDXGIFactory1");
+
+		if (!REL::Module::IsVR()) {
+			logger::info("Hooking BSImageSpace::Init::IBLF");
+			stl::detour_thunk<BSImageSpace_Init_IBLF>(REL::RelocationID(100480, 107198));
+		}
+
 		logger::info("Hooking BSInputDeviceManager::PollInputDevices");
 		stl::write_thunk_call<BSInputDeviceManager_PollInputDevices>(REL::RelocationID(67315, 68617).address() + REL::Relocate(0x7B, 0x7B, 0x81));
 
@@ -1062,6 +919,10 @@ namespace Hooks
 		stl::write_thunk_call<CreateRenderTarget_NormalsSwap>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x46B, 0x46E, 0x5C3));
 		stl::write_thunk_call<CreateRenderTarget_Snow>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x406, 0x409, 0x55e));
 		stl::write_thunk_call<CreateRenderTarget_MotionVectors>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x4F0, 0x4EF, 0x64E));
+
+		stl::write_thunk_call<CreateRenderTarget_RefractionNormals>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x503, 0x502, 0x661));
+		stl::write_thunk_call<CreateRenderTarget_UnderwaterMask>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0xB19, 0xB19, 0xE06));
+
 		stl::write_thunk_call<CreateDepthStencil_PrecipitationMask>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x1245, 0x123B, 0x1917));
 		stl::write_thunk_call<CreateCubemapRenderTarget_Reflections>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0xA25, 0xA25, 0xCD2));
 		stl::write_thunk_call<CreateDepthStencil_Reflections>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0xA59, 0xA59, 0xD13));
@@ -1082,9 +943,11 @@ namespace Hooks
 		logger::info("Hooking TESWaterReflections::Update_Actor::GetLOSPosition for Sky Reflection Fix");
 		stl::write_thunk_call<TESWaterReflections_Update_Actor_GetLOSPosition>(REL::RelocationID(31373, 32160).address() + REL::Relocate(0x1AD, 0x1CA, 0x1ed));
 
-		logger::info("Hooking BSEffectShader");
+		logger::info("Installing SetupGeometry hooks");
 		stl::write_vfunc<0x6, EffectExtensions::BSEffectShader_SetupGeometry>(RE::VTABLE_BSEffectShader[0]);
 		stl::write_vfunc<0x6, LightingExtensions::BSLightingShader_SetupGeometry>(RE::VTABLE_BSLightingShader[0]);
+		stl::write_thunk_call<GrassExtensions::BSGrassShaderProperty_ctor>(REL::RelocationID(15214, 15383).address() + REL::Relocate(0x45B, 0x4F5));
+		stl::write_vfunc<0x6, GrassExtensions::BSGrassShader_SetupGeometry>(RE::VTABLE_BSGrassShader[0]);
 
 		logger::info("Hooking TESObjectLAND");
 		stl::detour_thunk<TESObjectLAND_SetupMaterial>(REL::RelocationID(18368, 18791));
@@ -1096,48 +959,6 @@ namespace Hooks
 		stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately1>(REL::RelocationID(100877, 107673).address() + REL::Relocate(0x1E5, 0x1EE));
 		stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately2>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
 		stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately3>(REL::RelocationID(100871, 107667).address() + REL::Relocate(0xEE, 0xED));
-
-		const auto renderPassCacheCtor = REL::VariantID(100720, 107500, 0x1340330);
-		const int32_t passCount = 4194240;
-		const int32_t passCountSE = 4194240 * 16;
-
-		const int32_t passSize = 4194240 * sizeof(RE::BSRenderPass);
-		const int32_t lightsCount = passCount * 16;
-		const int32_t lightsSize = lightsCount * sizeof(void*);
-		const int32_t lastPassIndex = passCount - 1;
-		const int32_t lastPassOffset =
-			(passCount - 1) * sizeof(RE::BSRenderPass);
-		const int32_t lastPassNextOffset =
-			(passCount - 1) * sizeof(RE::BSRenderPass) + offsetof(RE::BSRenderPass, next);
-		PatchMemory(
-			REL::Relocation<std::uintptr_t>(renderPassCacheCtor, 0x76).address(),
-			reinterpret_cast<const uint8_t*>(&lightsSize), 4);
-		PatchMemory(
-			REL::Relocation<std::uintptr_t>(renderPassCacheCtor, 0xAD).address(),
-			reinterpret_cast<const uint8_t*>(&passSize), 4);
-		PatchMemory(
-			REL::Relocation<std::uintptr_t>(renderPassCacheCtor, 0xCB).address(),
-			reinterpret_cast<const uint8_t*>(&lastPassIndex), 4);
-		PatchMemory(
-			REL::Relocation<std::uintptr_t>(renderPassCacheCtor, 0xF0).address(),
-			reinterpret_cast<const uint8_t*>(&lastPassNextOffset), 4);
-		PatchMemory(
-			REL::Relocation<std::uintptr_t>(renderPassCacheCtor, 0xFD).address(),
-			reinterpret_cast<const uint8_t*>(&lastPassOffset), 4);
-		if (REL::Module::IsAE()) {
-			PatchMemory(
-				REL::Relocation<std::uintptr_t>(renderPassCacheCtor, 0x191).address(),
-				reinterpret_cast<const uint8_t*>(&passCount), 4);
-		} else {
-			PatchMemory(
-				REL::Relocation<std::uintptr_t>(renderPassCacheCtor, 0x191 - 2).address(),
-				reinterpret_cast<const uint8_t*>(&passCountSE), 4);
-		}
-
-		if (!REL::Module::IsVR()) {
-			stl::write_thunk_call<Main_Update_Begin>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x53, 0x6E));
-			stl::write_thunk_call<Main_Update_Swap>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x5D2, 0xA97));
-		}
 
 		// Patch render space in BSLightingShader::SetupGeometry to always use world space
 		// The variable updateEyePosition is set to 1 when not skinned. By patching to be 0 it will always use world space
@@ -1165,18 +986,5 @@ namespace Hooks
 		}
 
 		stl::write_thunk_call<BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights>(REL::RelocationID(100565, 107300).address() + REL::Relocate(0x523, 0xB0E, 0x5FE));
-	}
-
-	/**
-	 * @brief Installs Direct3D-related hooks for device and factory creation.
-	 *
-	 * Loads FidelityFX support and patches the import address table (IAT) to redirect D3D11 device and DXGI factory creation functions to custom hook implementations.
-	 */
-	void InstallD3DHooks()
-	{
-		globals::fidelityFX->LoadFFX();
-
-		*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
-		*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", !REL::Module::IsVR() ? "CreateDXGIFactory" : "CreateDXGIFactory1");
 	}
 }

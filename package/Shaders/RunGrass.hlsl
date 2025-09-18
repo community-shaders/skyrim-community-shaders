@@ -5,6 +5,7 @@
 #include "Common/MotionBlur.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
+#include "Common/Permutation.hlsli"
 
 #ifdef GRASS_LIGHTING
 #	define GRASS
@@ -457,14 +458,16 @@ cbuffer PerMaterial : register(b1)
 
 PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 {
-	PS_OUTPUT psout;
+	PS_OUTPUT psout = (PS_OUTPUT)0;
 
 #		if !defined(TRUE_PBR)
 	float x;
 	float y;
 	TexBaseSampler.GetDimensions(x, y);
 
-	bool complex = x != y;
+	float3 complexTest = TexBaseSampler.Load(int3(0, int(y) - 1, 0)).xyz * 2.0 - 1.0;
+	float complexLength = length(complexTest);
+	bool complex = abs(complexLength - 1.0) < 0.02;
 #		endif  // !TRUE_PBR
 
 	float4 baseColor;
@@ -506,8 +509,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float screenNoise = Random::InterleavedGradientNoise(input.HPosition.xy, SharedData::FrameCount);
 
 	// Swaps direction of the backfaces otherwise they seem to get lit from the wrong direction.
-	if (!frontFace)
-		normal = -normal;
+	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::GrassSphereNormal)) {
+		if (!frontFace)
+			normal = -normal;
+
+		normal.z = max(0.0, normal.z);
+		normal = normalize(float3(normal.xy, max(0, normal.z)));
+	}
 
 	float3x3 tbn = 0;
 
@@ -634,13 +642,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			else
 	dirLightColor *= dirLightColorMultiplier;
 	dirLightColor *= dirShadow;
+	dirLightColor *= dirDetailShadow;
 
-	float wrapAmount = saturate(input.VertexNormal.w * 10.0);
-
-	float dirNoL = dot(SharedData::DirLightDirection.xyz, viewDirection);
-	float dirViewWrap = -dirNoL * 0.5 + 0.5;
-	float wrappedDirLight = saturate(dirLightAngle + wrapAmount * dirViewWrap) / (1.0 + wrapAmount * dirViewWrap);
-	lightsDiffuseColor += dirLightColor * saturate(wrappedDirLight) * dirDetailShadow;
+	lightsDiffuseColor += dirLightColor * saturate(dirLightAngle);
 
 	float3 vertexColor = input.VertexColor.xyz;
 
@@ -654,11 +658,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 albedo = max(0, baseColor.xyz * vertexColor);
 
-	float3 subsurfaceColor = albedo.xyz * albedo.xyz * saturate(input.VertexNormal.w * 10.0);
-
-	float dirBacklighting = 1.0 + saturate(-dirNoL);
-
-	float3 sss = dirBacklighting * dirLightColor * saturate(-dirLightAngle);
+	float3 subsurfaceColor = lerp(dot(albedo, 1.0 / 3.0), albedo, 2.0) * saturate(input.VertexNormal.w * 10.0);
+	float3 sss = dirLightColor * saturate(-dirLightAngle);
 
 	if (complex)
 		lightsSpecularColor += GrassLighting::GetLightSpecularInput(DirLightDirection, viewDirection, normal, dirLightColor, SharedData::grassLightingSettings.Glossiness);
@@ -719,14 +720,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 				float lightAngle = dot(normal, normalizedLightDirection);
 				float lightNoL = dot(normalizedLightDirection.xyz, viewDirection);
-				float lightViewWrap = -lightNoL * 0.5 + 0.5;
-				float wrappedLight = saturate(lightAngle + wrapAmount * lightViewWrap) / (1.0 + wrapAmount * lightViewWrap);
 
-				float3 lightDiffuseColor = lightColor * wrappedLight;
+				float3 lightDiffuseColor = lightColor * saturate(lightAngle);
 
-				float lightBacklighting = 1.0 + saturate(-lightNoL);
-
-				sss += lightBacklighting * lightColor * saturate(-lightAngle);
+				sss += lightColor * saturate(-lightAngle);
 
 				lightsDiffuseColor += lightDiffuseColor;
 
@@ -749,8 +746,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	specularColor.xyz = Color::LinearToGamma(specularColor.xyz);
 	diffuseColor.xyz = Color::LinearToGamma(diffuseColor.xyz);
 #			else
-
-	normal = normalize(float3(normal.xy, max(0, normal.z)));
 
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
 
@@ -779,9 +774,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 
 		directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
-
 		directionalAmbientColor *= skylightingDiffuse;
-		directionalAmbientColor *= 1.0 + saturate(normal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
 		directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
 	}
 #				endif  // SKYLIGHTING
@@ -878,7 +871,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif
 	}
 
-	float3 diffuseColor = SharedData::DirLightColor.xyz * dirShadow * lerp(dirDetailShadow, 1.0, 0.5) * 0.5;
+	float3 diffuseColor = SharedData::DirLightColor.xyz * dirShadow * dirDetailShadow * 0.5;
 
 #			if defined(LIGHT_LIMIT_FIX)
 	uint clusterIndex = 0;
@@ -970,10 +963,7 @@ PS_OUTPUT main(PS_INPUT input)
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 
 		directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
-
 		directionalAmbientColor *= skylightingDiffuse;
-		directionalAmbientColor *= 1.0 + saturate(normal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
-
 		directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
 	}
 #			endif  // SKYLIGHTING

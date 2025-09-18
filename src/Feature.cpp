@@ -10,7 +10,7 @@
 #include "Features/GrassLighting.h"
 #include "Features/HairSpecular.h"
 #include "Features/IBL.h"
-#include "Features/InteriorSunShadows.h"
+#include "Features/InteriorSun.h"
 #include "Features/InverseSquareLighting.h"
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
@@ -25,12 +25,14 @@
 #include "Features/TerrainHelper.h"
 #include "Features/TerrainShadows.h"
 #include "Features/TerrainVariation.h"
+#include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
 #include "Features/WeatherPicker.h"
 #include "Features/WetnessEffects.h"
 #include "Menu.h"
+#include "SettingsOverrideManager.h"
 #include "Utils/Format.h"
 
 #include "State.h"
@@ -206,7 +208,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::grassLighting,
 		&globals::features::hairSpecular,
 		&globals::features::ibl,
-		&globals::features::interiorSunShadows,
+		&globals::features::interiorSun,
 		&globals::features::inverseSquareLighting,
 		&globals::features::lightLimitFix,
 		&globals::features::lodBlending,
@@ -221,6 +223,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::terrainHelper,
 		&globals::features::terrainShadows,
 		&globals::features::terrainVariation,
+		&globals::features::upscaling
 		&globals::features::volumetricLighting,
 		&globals::features::waterEffects,
 		&globals::features::weatherPicker,
@@ -265,6 +268,29 @@ bool Feature::ToggleAtBootSetting()
 	state->SetFeatureDisabled(featureName, !disabled);
 
 	return state->IsFeatureDisabled(featureName);  // Return the new state
+}
+
+bool Feature::ReapplyOverrideSettings()
+{
+	auto overrideManager = SettingsOverrideManager::GetSingleton();
+	if (!overrideManager || !overrideManager->HasFeatureOverrides(GetShortName())) {
+		return false;
+	}
+
+	// Get current settings as JSON
+	json featureJson;
+	SaveSettings(featureJson);
+
+	// Apply overrides to the current settings
+	size_t appliedCount = overrideManager->ReapplyFeatureOverrides(GetShortName(), featureJson);
+
+	if (appliedCount > 0) {
+		// Load the modified settings back into the feature
+		LoadSettings(featureJson);
+		return true;
+	}
+
+	return false;
 }
 
 void Feature::DrawUnloadedUI()

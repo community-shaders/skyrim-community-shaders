@@ -5,13 +5,19 @@
 #include "Shadercache.h"
 #include "State.h"
 
+#include <DDSTextureLoader.h>
+#include <DirectXTex.h>
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	IBL::Settings,
 	EnableDiffuseIBL,
+	PreserveFogLuminance,
+	UseStaticIBL,
 	DiffuseIBLScale,
 	DALCAmount,
 	IBLSaturation,
-	SampleUnderHorizonFromDynCube)
+	FogAmount,
+	DynamicCubemapsAmount)
 
 void IBL::DrawSettings()
 {
@@ -19,13 +25,18 @@ void IBL::DrawSettings()
 	ImGui::SliderFloat("Diffuse IBL Scale", &settings.DiffuseIBLScale, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("Diffuse IBL Saturation", &settings.IBLSaturation, 0.0f, 2.0f, "%.2f");
 	ImGui::SliderFloat("DALC Amount", &settings.DALCAmount, 0.0f, 1.0f, "%.2f");
-	ImGui::Checkbox("[EXP] Sample Under Horizon From Dynamic Cubemaps", (bool*)&settings.SampleUnderHorizonFromDynCube);
+	ImGui::Checkbox("Use Static IBL For Out-of-World Objects", (bool*)&settings.UseStaticIBL);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Enables the use of static IBL textures for objects that are not in the world (e.g. inventory items).");
+	}
+	ImGui::SliderFloat("Fog Mix", &settings.FogAmount, 0.0f, 1.0f, "%.2f");
+	ImGui::Checkbox("Preserve Fog Luminance", (bool*)&settings.PreserveFogLuminance);
+	ImGui::SliderFloat("Dynamic Cubemaps Amount", &settings.DynamicCubemapsAmount, 0.0f, 1.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
-			"Samples under the horizon from dynamic cubemaps.\n"
-			"Enables the use of dynamic cubemaps for IBL.\n"
+			"Samples from dynamic cubemaps.\n"
 			"Requires the Dynamic Cubemaps feature to be enabled.\n"
-			"Warning: may cause dynamic cubemaps sampling accumulation issues.");
+			"May cause dynamic cubemaps sampling accumulation issues under certain conditions.");
 	}
 }
 
@@ -51,8 +62,12 @@ void IBL::EarlyPrepass()
 
 		// Set PS shader resource
 		{
-			ID3D11ShaderResourceView* srv = diffuseIBLTexture->srv.get();
-			context->PSSetShaderResources(76, 1, &srv);
+			std::array<ID3D11ShaderResourceView*, 3> srvs = {
+				diffuseIBLTexture->srv.get(),
+				staticDiffuseIBLTexture->srv.get(),
+				staticSpecularIBLTexture->srv.get()
+			};
+			context->PSSetShaderResources(76, 3, srvs.data());
 		}
 	}
 }
@@ -66,10 +81,14 @@ void IBL::Prepass()
 
 	auto& dynamicCubemaps = globals::features::dynamicCubemaps;
 
-	const auto& envTexture = dynamicCubemaps.envTexture;
-	const auto& envReflectionsTexture = dynamicCubemaps.envReflectionsTexture;
+	auto& envTexture = dynamicCubemaps.envTexture;
+	auto& envReflectionsTexture = dynamicCubemaps.envReflectionsTexture;
 
-	std::array<ID3D11ShaderResourceView*, 3> srvs = { reflections.SRV, envTexture->srv.get(), envReflectionsTexture->srv.get() };
+	std::array<ID3D11ShaderResourceView*, 3> srvs = {
+		reflections.SRV,
+		(dynamicCubemaps.loaded && envTexture) ? envTexture->srv.get() : nullptr,
+		(dynamicCubemaps.loaded && envReflectionsTexture) ? envReflectionsTexture->srv.get() : nullptr
+	};
 	std::array<ID3D11UnorderedAccessView*, 1> uavs = { diffuseIBLTexture->uav.get() };
 	std::array<ID3D11SamplerState*, 1> samplers = { Deferred::GetSingleton()->linearSampler };
 
@@ -142,6 +161,80 @@ void IBL::SetupResources()
 		diffuseIBLTexture = new Texture2D(texDesc);
 		diffuseIBLTexture->CreateSRV(srvDesc);
 		diffuseIBLTexture->CreateUAV(uavDesc);
+	}
+
+	auto device = globals::d3d::device;
+
+	logger::debug("Loading static Diffuse IBL textures...");
+	{
+		DirectX::ScratchImage image;
+		try {
+			std::filesystem::path path = "Data\\Shaders\\IBL\\DiffuseIBL.dds";
+
+			DX::ThrowIfFailed(LoadFromDDSFile(path.c_str(), DirectX::DDS_FLAGS_NONE, nullptr, image));
+		} catch (const DX::com_exception& e) {
+			logger::error("{}", e.what());
+			return;
+		}
+
+		ID3D11Resource* pResource = nullptr;
+		try {
+			DX::ThrowIfFailed(CreateTexture(device,
+				image.GetImages(), image.GetImageCount(),
+				image.GetMetadata(), &pResource));
+		} catch (const DX::com_exception& e) {
+			logger::error("{}", e.what());
+			return;
+		}
+
+		staticDiffuseIBLTexture = eastl::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource));
+
+		staticDiffuseIBLTexture->desc.MiscFlags |= D3D11_RESOURCE_MISC_TEXTURECUBE;
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+			.Format = staticDiffuseIBLTexture->desc.Format,
+			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE,
+			.TextureCube = {
+				.MostDetailedMip = 0,
+				.MipLevels = 1 }
+		};
+		staticDiffuseIBLTexture->CreateSRV(srvDesc);
+	}
+
+	logger::debug("Loading static Specular IBL textures...");
+	{
+		DirectX::ScratchImage image;
+		try {
+			std::filesystem::path path = "Data\\Shaders\\IBL\\SpecIBL.dds";
+
+			DX::ThrowIfFailed(LoadFromDDSFile(path.c_str(), DirectX::DDS_FLAGS_NONE, nullptr, image));
+		} catch (const DX::com_exception& e) {
+			logger::error("{}", e.what());
+			return;
+		}
+
+		ID3D11Resource* pResource = nullptr;
+		try {
+			DX::ThrowIfFailed(CreateTexture(device,
+				image.GetImages(), image.GetImageCount(),
+				image.GetMetadata(), &pResource));
+		} catch (const DX::com_exception& e) {
+			logger::error("{}", e.what());
+			return;
+		}
+
+		staticSpecularIBLTexture = eastl::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource));
+
+		staticSpecularIBLTexture->desc.MiscFlags |= D3D11_RESOURCE_MISC_TEXTURECUBE;
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+			.Format = staticSpecularIBLTexture->desc.Format,
+			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE,
+			.TextureCube = {
+				.MostDetailedMip = 0,
+				.MipLevels = 8 }
+		};
+		staticSpecularIBLTexture->CreateSRV(srvDesc);
 	}
 }
 

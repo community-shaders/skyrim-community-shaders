@@ -21,11 +21,10 @@
 #include "Feature.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTestAggregator.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
-#include "FidelityFX.h"
+#include "Features/Upscaling.h"
 #include "Globals.h"
 #include "Menu.h"
 #include "State.h"
-#include "Upscaling.h"
 #include "Utils/FileSystem.h"
 #include "Utils/Format.h"
 #include "Utils/Game.h"
@@ -172,13 +171,12 @@ void PerformanceOverlay::DrawSettings()
 			ImGui::Checkbox("Show Draw Calls", &this->settings.ShowDrawCalls);
 			ImGui::Checkbox("Show VRAM Usage", &this->settings.ShowVRAM);
 
-			bool isFrameGenerationActive = globals::upscaling && globals::upscaling->IsFrameGenerationActive();
+			bool isFrameGenerationActive = globals::features::upscaling.IsFrameGenerationActive();
 			if (this->settings.ShowFPS && isFrameGenerationActive) {
 				ImGui::Checkbox("Show Pre-FG Frametime Graph", &this->settings.ShowPreFGFrameTimeGraph);
 
 				ImGui::Checkbox("Show Post-FG Frametime Graph", &this->settings.ShowPostFGFrameTimeGraph);
-				bool isFSRFrameGen = globals::fidelityFX && globals::fidelityFX->isFrameGenActive;
-				if (isFSRFrameGen && ImGui::IsItemHovered()) {
+				if (ImGui::IsItemHovered()) {
 					if (auto _tt = Util::HoverTooltipWrapper()) {
 						ImGui::Text("FSR Frame Generation uses calculated timing data (2x Pre-FG).\nDLSS Frame Generation provides measured timing data.");
 					}
@@ -392,7 +390,19 @@ void PerformanceOverlay::DrawFPS()
 		ImGui::TableNextColumn();
 		ImGui::Text(this->state.isFrameGenerationActive ? "Raw FPS:" : "FPS:");
 		ImGui::TableNextColumn();
-		ImGui::Text("%.1f (%.2f ms)", this->state.smoothFps, this->state.smoothFrameTimeMs);
+
+		// Check if buffer is full for the avg
+		auto frameData = this->state.frameTimeHistory.GetData();
+		size_t validFrameCount = std::count_if(frameData.begin(), frameData.end(), [](float ft) { return ft > 0.0f; });
+		bool bufferIsFull = validFrameCount == frameData.size();
+
+		if (bufferIsFull) {
+			float avgFrameTime = std::accumulate(frameData.begin(), frameData.end(), 0.0f) / frameData.size();
+			float avgFps = (avgFrameTime > 0.001f) ? 1000.0f / avgFrameTime : 0.0f;
+			ImGui::Text("%.1f (%.2f ms) | Avg: %.1f", this->state.smoothFps, this->state.smoothFrameTimeMs, avgFps);
+		} else {
+			ImGui::Text("%.1f (%.2f ms)", this->state.smoothFps, this->state.smoothFrameTimeMs);
+		}
 
 		if (this->state.isFrameGenerationActive) {
 			ImGui::TableNextColumn();
@@ -446,9 +456,9 @@ void PerformanceOverlay::DrawFPS()
 	// Show Post-FG frametime graph if enabled
 	if (this->settings.ShowPostFGFrameTimeGraph && this->state.isFrameGenerationActive) {
 		// Check if FSR frame generation is active (FSR doesn't provide timing data)
-		bool isFSRFrameGen = globals::fidelityFX && globals::fidelityFX->isFrameGenActive;
+		bool isFrameGenActive = globals::features::upscaling.IsFrameGenerationActive();
 
-		if (isFSRFrameGen) {
+		if (isFrameGenActive) {
 			// Show note that FSR uses calculated data
 			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Post-FG: Calculated timing (2x Pre-FG)");
 			if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -1870,7 +1880,7 @@ void PerformanceOverlay::UpdateSummaryTestData(float smoothedFrameTime, float ot
 void PerformanceOverlay::UpdateGraphValues()
 {
 	// Check if Frame Generation is active
-	state.isFrameGenerationActive = globals::upscaling && globals::upscaling->IsFrameGenerationActive();
+	state.isFrameGenerationActive = globals::features::upscaling.IsFrameGenerationActive();
 
 	// Sync frame history buffer size with user settings
 	settings.FrameHistorySize = std::clamp(
@@ -1947,11 +1957,11 @@ void PerformanceOverlay::UpdateGraphValues()
 
 	if (state.isFrameGenerationActive) {
 		// Get frametime directly from the Frame Generation system
-		float fgDeltaTime = globals::upscaling->GetFrameGenerationFrameTime();
+		float fgDeltaTime = globals::features::upscaling.GetFrameGenerationFrameTime();
 
 		// Check if FSR frame generation is active (FSR doesn't provide timing data)
-		bool isFSRFrameGen = globals::fidelityFX && globals::fidelityFX->isFrameGenActive;
-		if (fgDeltaTime > 0.0f && !isFSRFrameGen) {
+		bool isFrameGenActive = globals::features::upscaling.IsFrameGenerationActive();
+		if (fgDeltaTime > 0.0f && !isFrameGenActive) {
 			state.postFGFrameTimeMs = fgDeltaTime * 1000.0f;
 			state.postFGFps = 1000.0f / state.postFGFrameTimeMs;
 		} else {

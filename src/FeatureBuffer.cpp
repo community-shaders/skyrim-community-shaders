@@ -39,7 +39,7 @@ std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 		globals::features::cloudShadows.settings,
 		globals::features::dynamicCubemaps.settings,
 		globals::features::extendedMaterials.settings,
-		globals::features::extendedTranslucency.settings,
+		globals::features::extendedTranslucency.GetCommonBufferData(),
 	    globals::features::grassLighting.settings,
 	    globals::features::hairSpecular.settings,
 	    globals::features::ibl.settings,

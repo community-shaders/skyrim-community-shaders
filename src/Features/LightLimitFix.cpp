@@ -9,7 +9,6 @@ static constexpr uint MAX_LIGHTS = 1024;
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LightLimitFix::Settings,
-	EnableContactShadows,
 	EnableParticleLights,
 	EnableParticleLightsCulling,
 	EnableParticleLightsDetection,
@@ -61,17 +60,6 @@ void LightLimitFix::DrawSettings()
 		ImGui::TreePop();
 	}
 
-	if (ImGui::TreeNodeEx("Shadows", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Checkbox("Enable Contact Shadows", &settings.EnableContactShadows);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("All lights cast small shadows. Performance impact.");
-		}
-
-		ImGui::Spacing();
-		ImGui::Spacing();
-		ImGui::TreePop();
-	}
-
 	auto shaderCache = globals::shaderCache;
 
 	if (ImGui::TreeNodeEx("Light Limit Visualization", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -114,7 +102,6 @@ void LightLimitFix::DrawSettings()
 LightLimitFix::PerFrame LightLimitFix::GetCommonBufferData()
 {
 	PerFrame perFrame{};
-	perFrame.EnableContactShadows = settings.EnableContactShadows;
 	perFrame.EnableLightsVisualisation = settings.EnableLightsVisualisation;
 	perFrame.LightsVisualisationMode = settings.LightsVisualisationMode;
 	std::copy(clusterSize, clusterSize + 3, perFrame.ClusterSize);
@@ -128,7 +115,7 @@ void LightLimitFix::CleanupParticleLights(RE::NiNode* a_node)
 
 void LightLimitFix::SetupResources()
 {
-	auto screenSize = Util::ConvertToDynamic(globals::state->screenSize);
+	auto screenSize = globals::state->screenSize;
 	if (REL::Module::IsVR())
 		screenSize.x *= .5;
 	clusterSize[0] = ((uint)screenSize.x + 63) / 64;
@@ -137,18 +124,8 @@ void LightLimitFix::SetupResources()
 	uint clusterCount = clusterSize[0] * clusterSize[1] * clusterSize[2];
 
 	{
-		std::string clusterSizeStrs[3];
-		for (int i = 0; i < 3; ++i)
-			clusterSizeStrs[i] = std::format("{}", clusterSize[i]);
-
-		std::vector<std::pair<const char*, const char*>> defines = {
-			{ "CLUSTER_BUILDING_DISPATCH_SIZE_X", clusterSizeStrs[0].c_str() },
-			{ "CLUSTER_BUILDING_DISPATCH_SIZE_Y", clusterSizeStrs[1].c_str() },
-			{ "CLUSTER_BUILDING_DISPATCH_SIZE_Z", clusterSizeStrs[2].c_str() }
-		};
-
-		clusterBuildingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterBuildingCS.hlsl", defines, "cs_5_0");
-		clusterCullingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterCullingCS.hlsl", defines, "cs_5_0");
+		clusterBuildingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterBuildingCS.hlsl", {}, "cs_5_0");
+		clusterCullingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterCullingCS.hlsl", {}, "cs_5_0");
 
 		lightBuildingCB = new ConstantBuffer(ConstantBufferDesc<LightBuildingCB>());
 		lightCullingCB = new ConstantBuffer(ConstantBufferDesc<LightCullingCB>());
@@ -386,21 +363,17 @@ void LightLimitFix::SetLightPosition(LightLimitFix::LightData& a_light, RE::NiPo
 {
 	for (int eyeIndex = 0; eyeIndex < eyeCount; eyeIndex++) {
 		RE::NiPoint3 eyePosition;
-		Matrix viewMatrix;
 
 		if (a_cached) {
 			eyePosition = eyePositionCached[eyeIndex];
-			viewMatrix = viewMatrixCached[eyeIndex];
 		} else {
 			eyePosition = Util::GetEyePosition(eyeIndex);
-			viewMatrix = Util::GetCameraData(eyeIndex).viewMat;
 		}
 
 		auto worldPos = a_initialPosition - eyePosition;
 		a_light.positionWS[eyeIndex].data.x = worldPos.x;
 		a_light.positionWS[eyeIndex].data.y = worldPos.y;
 		a_light.positionWS[eyeIndex].data.z = worldPos.z;
-		a_light.positionVS[eyeIndex].data = DirectX::SimpleMath::Vector3::Transform(a_light.positionWS[eyeIndex].data, viewMatrix);
 	}
 }
 
@@ -441,6 +414,9 @@ void LightLimitFix::Prepass()
 {
 	auto context = globals::d3d::context;
 
+	auto state = globals::state;
+
+	state->BeginPerfEvent("LightLimitFix Prepass");
 	UpdateLights();
 
 	ID3D11ShaderResourceView* views[3]{};
@@ -448,6 +424,8 @@ void LightLimitFix::Prepass()
 	views[1] = lightIndexList->srv.get();
 	views[2] = lightGrid->srv.get();
 	context->PSSetShaderResources(35, ARRAYSIZE(views), views);
+
+	state->EndPerfEvent();
 }
 
 bool LightLimitFix::IsValidLight(RE::BSLight* a_light)
@@ -681,6 +659,20 @@ void LightLimitFix::DataLoaded()
 	logger::info("[LLF] Unlocked magic light limit");
 }
 
+void LightLimitFix::ClearShaderCache()
+{
+	if (clusterBuildingCS) {
+		clusterBuildingCS->Release();
+		clusterBuildingCS = nullptr;
+	}
+	if (clusterCullingCS) {
+		clusterCullingCS->Release();
+		clusterCullingCS = nullptr;
+	}
+	clusterBuildingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterBuildingCS.hlsl", {}, "cs_5_0");
+	clusterCullingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterCullingCS.hlsl", {}, "cs_5_0");
+}
+
 float LightLimitFix::CalculateLightDistance(float3 a_lightPosition, float a_radius)
 {
 	return (a_lightPosition.x * a_lightPosition.x) + (a_lightPosition.y * a_lightPosition.y) + (a_lightPosition.z * a_lightPosition.z) - (a_radius * a_radius);
@@ -706,9 +698,6 @@ void LightLimitFix::AddCachedParticleLights(eastl::vector<LightData>& lightsData
 	light.color *= dimmer;
 
 	if ((light.color.x + light.color.y + light.color.z) > 1e-4 && light.radius > 1e-4) {
-		for (int eyeIndex = 0; eyeIndex < eyeCount; eyeIndex++)
-			light.positionVS[eyeIndex].data = DirectX::SimpleMath::Vector3::Transform(light.positionWS[eyeIndex].data, viewMatrixCached[eyeIndex]);
-
 		light.invRadius = 1.f / light.radius;
 		lightsData.push_back(light);
 
@@ -741,17 +730,13 @@ void LightLimitFix::UpdateLights()
 	auto smState = globals::game::smState;
 	auto& isl = globals::features::inverseSquareLighting;
 
-	lightsNear = *globals::game::cameraNear;
-	lightsFar = *globals::game::cameraFar;
-
 	auto shadowSceneNode = smState->shadowSceneNode[0];
 
 	// Cache data since cameraData can become invalid in first-person
 
 	for (int eyeIndex = 0; eyeIndex < eyeCount; eyeIndex++) {
-		eyePositionCached[eyeIndex] = Util::GetEyePosition(eyeIndex);
-		viewMatrixCached[eyeIndex] = Util::GetCameraData(eyeIndex).viewMat;
-		viewMatrixCached[eyeIndex].Invert(viewMatrixInverseCached[eyeIndex]);
+		auto eyePosition = globals::game::frameBufferCached.GetCameraPosAdjust(eyeIndex);
+		eyePositionCached[eyeIndex] = { eyePosition.x, eyePosition.y, eyePosition.z };
 	}
 
 	eastl::vector<LightData> lightsData{};
@@ -959,52 +944,57 @@ void LightLimitFix::UpdateLights()
 
 	auto context = globals::d3d::context;
 
+	lightCount = std::min((uint)lightsData.size(), MAX_LIGHTS);
+
+	D3D11_MAPPED_SUBRESOURCE mapped;
+	DX::ThrowIfFailed(context->Map(lights->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
+	size_t bytes = sizeof(LightData) * lightCount;
+	memcpy_s(mapped.pData, bytes, lightsData.data(), bytes);
+	context->Unmap(lights->resource.get(), 0);
+
+	UpdateStructure();
+}
+
+void LightLimitFix::UpdateStructure()
+{
+	auto context = globals::d3d::context;
+
+	lightsNear = *globals::game::cameraNear;
+	lightsFar = *globals::game::cameraFar;
+
+	auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
+	if (REL::Module::IsVR())
+		renderSize.x *= .5;
+	clusterSize[0] = ((uint)renderSize.x + 63) / 64;
+	clusterSize[1] = ((uint)renderSize.y + 63) / 64;
+	clusterSize[2] = 32;
+
 	{
-		auto projMatrixUnjittered = Util::GetCameraData(0).projMatrixUnjittered;
-		float fov = atan(1.0f / static_cast<float4x4>(projMatrixUnjittered).m[0][0]) * 2.0f * (180.0f / 3.14159265359f);
+		LightBuildingCB updateData{};
+		updateData.LightsNear = lightsNear;
+		updateData.LightsFar = lightsFar;
+		std::copy(clusterSize, clusterSize + 3, updateData.ClusterSize);
 
-		static float _lightsNear = 0.0f, _lightsFar = 0.0f, _fov = 0.0f;
-		if (fabs(_fov - fov) > 1e-4 || fabs(_lightsNear - lightsNear) > 1e-4 || fabs(_lightsFar - lightsFar) > 1e-4) {
-			LightBuildingCB updateData{};
-			updateData.InvProjMatrix[0] = DirectX::XMMatrixInverse(nullptr, projMatrixUnjittered);
-			if (eyeCount == 1)
-				updateData.InvProjMatrix[1] = updateData.InvProjMatrix[0];
-			else
-				updateData.InvProjMatrix[1] = DirectX::XMMatrixInverse(nullptr, Util::GetCameraData(1).projMatrixUnjittered);
-			updateData.LightsNear = lightsNear;
-			updateData.LightsFar = lightsFar;
+		lightBuildingCB->Update(updateData);
 
-			lightBuildingCB->Update(updateData);
+		ID3D11Buffer* buffer = lightBuildingCB->CB();
+		context->CSSetConstantBuffers(0, 1, &buffer);
 
-			ID3D11Buffer* buffer = lightBuildingCB->CB();
-			context->CSSetConstantBuffers(0, 1, &buffer);
+		ID3D11UnorderedAccessView* clusters_uav = clusters->uav.get();
+		context->CSSetUnorderedAccessViews(0, 1, &clusters_uav, nullptr);
 
-			ID3D11UnorderedAccessView* clusters_uav = clusters->uav.get();
-			context->CSSetUnorderedAccessViews(0, 1, &clusters_uav, nullptr);
+		context->CSSetShader(clusterBuildingCS, nullptr, 0);
+		context->Dispatch(clusterSize[0], clusterSize[1], clusterSize[2]);
 
-			context->CSSetShader(clusterBuildingCS, nullptr, 0);
-			context->Dispatch(clusterSize[0], clusterSize[1], clusterSize[2]);
-
-			ID3D11UnorderedAccessView* null_uav = nullptr;
-			context->CSSetUnorderedAccessViews(0, 1, &null_uav, nullptr);
-
-			_fov = fov;
-			_lightsNear = lightsNear;
-			_lightsFar = lightsFar;
-		}
+		ID3D11UnorderedAccessView* null_uav = nullptr;
+		context->CSSetUnorderedAccessViews(0, 1, &null_uav, nullptr);
 	}
 
 	{
-		lightCount = std::min((uint)lightsData.size(), MAX_LIGHTS);
-
-		D3D11_MAPPED_SUBRESOURCE mapped;
-		DX::ThrowIfFailed(context->Map(lights->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
-		size_t bytes = sizeof(LightData) * lightCount;
-		memcpy_s(mapped.pData, bytes, lightsData.data(), bytes);
-		context->Unmap(lights->resource.get(), 0);
-
 		LightCullingCB updateData{};
 		updateData.LightCount = lightCount;
+		std::copy(clusterSize, clusterSize + 3, updateData.ClusterSize);
+
 		lightCullingCB->Update(updateData);
 
 		UINT counterReset[4] = { 0, 0, 0, 0 };

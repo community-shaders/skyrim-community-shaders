@@ -1,5 +1,6 @@
 #include "FileSystem.h"
 #include <fstream>
+#include <psapi.h>
 
 namespace Util
 {
@@ -27,6 +28,61 @@ namespace Util
 			}
 		}
 
+		std::filesystem::path GetCommunityShaderPath()
+		{
+			return GetDataPath() / "SKSE" / "Plugins" / "CommunityShaders";
+		}
+
+		std::filesystem::path GetImGuiIniPath()
+		{
+			return GetDataPath() / "SKSE" / "Plugins" / "CommunityShaders_ImGui.ini";
+		}
+
+		std::filesystem::path GetUserSettingsPath()
+		{
+			return GetCommunityShaderPath() / "UserSettings.json";
+		}
+
+		std::filesystem::path GetInterfacePath()
+		{
+			return GetDataPath() / "Interface" / "CommunityShaders";
+		}
+
+		std::filesystem::path GetFontsPath()
+		{
+			return GetInterfacePath() / "Fonts";
+		}
+
+		std::filesystem::path GetIconsPath()
+		{
+			return GetInterfacePath() / "Icons";
+		}
+
+		std::filesystem::path GetSettingsUserPath()
+		{
+			return GetCommunityShaderPath() / "SettingsUser.json";
+		}
+
+		std::filesystem::path GetSettingsTestPath()
+		{
+			return GetCommunityShaderPath() / "SettingsTest.json";
+		}
+
+		std::filesystem::path GetSettingsDefaultPath()
+		{
+			return GetCommunityShaderPath() / "SettingsDefault.json";
+		}
+
+		std::filesystem::path GetOverridesPath()
+		{
+			return GetCommunityShaderPath() / "Overrides";
+		}
+
+		std::filesystem::path GetAppliedOverridesPath()
+		{
+			return GetCommunityShaderPath() / "AppliedOverrides.json";
+		}
+
 		std::filesystem::path GetShadersPath()
 		{
 			return GetDataPath() / "Shaders";
@@ -45,6 +101,49 @@ namespace Util
 		std::filesystem::path GetFeatureShaderPath(const std::string& featureName)
 		{
 			return GetShadersPath() / featureName;
+		}
+
+		std::filesystem::path GetCurrentModuleRealPath()
+		{
+			try {
+				HMODULE selfModule = nullptr;
+				if (!GetModuleHandleExW(
+						GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+						reinterpret_cast<LPCWSTR>(&GetCurrentModuleRealPath),
+						&selfModule)) {
+					return {};
+				}
+				wchar_t buffer[MAX_PATH]{};
+				DWORD size = GetModuleFileNameExW(GetCurrentProcess(), selfModule, buffer, MAX_PATH);
+				if (size == 0 || size == MAX_PATH) {
+					throw std::runtime_error("Failed to get module filename");
+				}
+				return std::filesystem::path(buffer);
+			} catch (const std::exception& e) {
+				logger::error("GetCurrentModuleRealPath: Exception caught: {}", e.what());
+				return {};
+			}
+		}
+
+		std::filesystem::path GetRootRealPath()
+		{
+			static std::filesystem::path cachedPath = []() {
+				std::filesystem::path dllPath = GetCurrentModuleRealPath();
+				if (dllPath.empty())
+					return std::filesystem::path{};
+				return dllPath.parent_path().parent_path().parent_path();
+			}();
+			return cachedPath;
+		}
+
+		std::filesystem::path GetShadersRealPath()
+		{
+			return GetRootRealPath() / "Shaders";
+		}
+
+		std::filesystem::path GetFeaturesRealPath()
+		{
+			return GetShadersRealPath() / "Features";
 		}
 	}
 

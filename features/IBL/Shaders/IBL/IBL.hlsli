@@ -1,3 +1,7 @@
+#ifndef __IBL_HLSLI__
+#define __IBL_HLSLI__
+
+#include "Common/Color.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
@@ -11,6 +15,8 @@ namespace ImageBasedLighting
 	Texture2D<sh2> DiffuseIBLTexture : register(t14);
 #else
 	Texture2D<sh2> DiffuseIBLTexture : register(t76);
+	TextureCube<float4> StaticDiffuseIBLTexture : register(t77);
+	TextureCube<float4> StaticSpecularIBLTexture : register(t78);
 #endif
 	float3 GetDiffuseIBL(float3 rayDir)
 	{
@@ -20,6 +26,32 @@ namespace ImageBasedLighting
 		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(shR, rayDir);
 		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(shG, rayDir);
 		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(shB, rayDir);
-		return float3(colorR, colorG, colorB);
+		return float3(colorR, colorG, colorB) / Math::PI;
+	}
+
+#if defined(LIGHTING)
+	float3 GetStaticDiffuseIBL(float3 N, SamplerState samp)
+	{
+		return StaticDiffuseIBLTexture.SampleLevel(samp, N.xzy, 0).xyz / Math::PI;
+	}
+#endif
+
+	float3 GetFogIBLColor(float3 fogColor)
+	{
+		float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(float3(0, 0, 0), 1.0))).xyz;
+		float3 iblColor = directionalAmbientColor * SharedData::iblSettings.DALCAmount + Color::Saturation(GetDiffuseIBL(float3(0, 0, 0)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+		if (SharedData::iblSettings.PreserveFogLuminance) {
+			const float fogLuminance = Color::RGBToLuminance(fogColor);
+			const float iblLuminance = Color::RGBToLuminance(iblColor);
+			if (iblLuminance > 0) {
+				const float scale = fogLuminance / iblLuminance;
+				iblColor *= scale;
+			} else {
+				iblColor = fogColor;
+			}
+		}
+		return lerp(fogColor, iblColor, SharedData::iblSettings.FogAmount);
 	}
 }
+
+#endif // __IBL_HLSLI__

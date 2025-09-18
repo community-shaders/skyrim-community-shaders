@@ -10,9 +10,22 @@
 #include "FeatureIssues.h"
 #include "Globals.h"
 #include "Menu.h"
+#include "Menu/HomePageRenderer.h"
 #include "Menu/ThemeManager.h"
+#include "SettingsOverrideManager.h"
 #include "State.h"
 #include "Util.h"
+
+namespace
+{
+	// Core built-in menu names that always appear first in the menu list
+	constexpr std::array<const char*, 4> CORE_MENU_NAMES = { "Home", "General", "Advanced", "Display" };
+
+	bool IsCoreMenu(const std::string& menuName)
+	{
+		return std::find(CORE_MENU_NAMES.begin(), CORE_MENU_NAMES.end(), menuName) != CORE_MENU_NAMES.end();
+	}
+}
 
 void FeatureListRenderer::RenderFeatureList(
 	float footerHeight,
@@ -21,12 +34,11 @@ void FeatureListRenderer::RenderFeatureList(
 	std::string& pendingFeatureSelection,
 	std::map<std::string, bool>& categoryExpansionStates,
 	const std::function<void()>& drawGeneralSettings,
-	const std::function<void()>& drawAdvancedSettings,
-	const std::function<void()>& drawDisplaySettings)
+	const std::function<void()>& drawAdvancedSettings)
 {
 	ImGui::BeginChild("Menus Table", ImVec2(0, -footerHeight));
 
-	auto menuList = BuildMenuList(featureSearch, categoryExpansionStates, drawGeneralSettings, drawAdvancedSettings, drawDisplaySettings);
+	auto menuList = BuildMenuList(featureSearch, categoryExpansionStates, drawGeneralSettings, drawAdvancedSettings);
 
 	HandlePendingFeatureSelection(pendingFeatureSelection, menuList, selectedMenu);
 
@@ -48,8 +60,7 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	const std::string& featureSearch,
 	std::map<std::string, bool>& categoryExpansionStates,
 	const std::function<void()>& drawGeneralSettings,
-	const std::function<void()>& drawAdvancedSettings,
-	const std::function<void()>& drawDisplaySettings)
+	const std::function<void()>& drawAdvancedSettings)
 {
 	// Build the menu list
 	auto& featureList = Feature::GetFeatureList();
@@ -66,9 +77,9 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	}
 
 	auto menuList = std::vector<MenuFuncInfo>{
+		BuiltInMenu{ "Home", []() { HomePageRenderer::RenderHomePage(); } },
 		BuiltInMenu{ "General", drawGeneralSettings },
-		BuiltInMenu{ "Advanced", drawAdvancedSettings },
-		BuiltInMenu{ "Display", drawDisplaySettings }
+		BuiltInMenu{ "Advanced", drawAdvancedSettings }
 	};  // NOTE: The menu list is rebuilt every frame, so category expansion states
 	// persist correctly. This is acceptable since the list is small and built
 	// infrequently, but could be optimized if performance becomes an issue.
@@ -90,7 +101,7 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	}
 
 	// Define category order
-	std::vector<std::string> categoryOrder = { "Debug", "Characters", "Grass", "Lighting", "Materials", "Sky", "Landscape & Textures", "Water", "Other" };
+	std::vector<std::string> categoryOrder = { "Display", "Debug", "Characters", "Grass", "Lighting", "Materials", "Post-Processing", "Sky", "Landscape & Textures", "Water", "Other" };
 	// Add categorized features to menu with collapsible headers
 	for (const std::string& category : categoryOrder) {
 		if (categorizedFeatures.find(category) != categorizedFeatures.end() && !categorizedFeatures[category].empty()) {
@@ -175,25 +186,25 @@ void FeatureListRenderer::RenderLeftColumn(
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 	ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4());
 	if (ImGui::BeginListBox("##MenusList", { -FLT_MIN, -FLT_MIN })) {
-		// Find where built-in menus end (General, Advanced, Display)
-		size_t builtInMenuCount = 0;
+		// Find where core built-in menus end (Home, General, Advanced, Display)
+		size_t coreMenuCount = 0;
 		for (size_t i = 0; i < menuList.size(); i++) {
 			if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
 				const BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
-				if (menu.name == "General" || menu.name == "Advanced" || menu.name == "Display") {
-					builtInMenuCount++;
+				if (IsCoreMenu(menu.name)) {
+					coreMenuCount++;
 				}
 			}
 		}
 
-		// First render the built-in menus (General, Advanced, Display)
-		size_t renderedBuiltIns = 0;
-		for (size_t i = 0; i < menuList.size() && renderedBuiltIns < 3; i++) {
+		// First render the core built-in menus (Home, General, Advanced, Display)
+		size_t renderedCoreMenus = 0;
+		for (size_t i = 0; i < menuList.size() && renderedCoreMenus < CORE_MENU_NAMES.size(); i++) {
 			if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
 				const BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
-				if (menu.name == "General" || menu.name == "Advanced" || menu.name == "Display") {
+				if (IsCoreMenu(menu.name)) {
 					std::visit(ListMenuVisitor{ i, selectedMenu, categoryExpansionStates }, menuList[i]);
-					renderedBuiltIns++;
+					renderedCoreMenus++;
 				}
 			}
 		}
@@ -202,11 +213,11 @@ void FeatureListRenderer::RenderLeftColumn(
 		Util::DrawSectionHeader("Features", true);
 		Util::DrawFeatureSearchBar(featureSearch);
 
-		// Then render the rest (features and categories, but skip already rendered built-ins)
+		// Then render the rest (features and categories, but skip already rendered core menus)
 		for (size_t i = 0; i < menuList.size(); i++) {
 			if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
 				const BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
-				if (menu.name == "General" || menu.name == "Advanced" || menu.name == "Display") {
+				if (IsCoreMenu(menu.name)) {
 					continue;  // Skip, already rendered
 				}
 			}
@@ -516,13 +527,22 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureActionButtons(Feature* f
 	// Calculate button widths based on text content
 	const char* bootButtonText = isDisabled ? "Enable at Boot" : "Disable at Boot";
 	const char* defaultsButtonText = "Restore Defaults";
+	const char* overrideButtonText = "Apply Override";
 
 	float bootButtonWidth = ImGui::CalcTextSize(bootButtonText).x + buttonPadding;
 	float defaultsButtonWidth = ImGui::CalcTextSize(defaultsButtonText).x + buttonPadding;
+	float overrideButtonWidth = ImGui::CalcTextSize(overrideButtonText).x + buttonPadding;
+
+	// Check if override is available for this feature
+	auto overrideManager = SettingsOverrideManager::GetSingleton();
+	bool hasOverrides = overrideManager && overrideManager->HasFeatureOverrides(featureName);
 
 	float totalButtonWidth = bootButtonWidth;
 	if (!isDisabled && isLoaded) {
 		totalButtonWidth += defaultsButtonWidth + buttonSpacing;
+		if (hasOverrides) {
+			totalButtonWidth += overrideButtonWidth + buttonSpacing;
+		}
 	}
 
 	// Position buttons on the right side of the tab bar
@@ -572,6 +592,25 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureActionButtons(Feature* f
 			ImGui::Text(
 				"Restores the feature's settings back to their default values. "
 				"You will still need to Save Settings to make these changes permanent.");
+		}
+
+		// Apply Override button (when feature has available overrides)
+		if (hasOverrides) {
+			ImGui::SameLine();
+			if (ImGui::Button(overrideButtonText, { overrideButtonWidth, 0 })) {
+				if (feat->ReapplyOverrideSettings()) {
+					logger::info("Successfully reapplied override settings for {}", featureName);
+				} else {
+					logger::warn("Failed to reapply override settings for {}", featureName);
+				}
+			}
+
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text(
+					"Reapplies override settings from mod override JSON files. "
+					"This will overwrite current settings with override values. "
+					"You will still need to Save Settings to make these changes permanent.");
+			}
 		}
 	}
 }

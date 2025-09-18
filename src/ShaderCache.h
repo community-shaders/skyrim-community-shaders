@@ -3,7 +3,7 @@
 #include <BS_thread_pool.hpp>
 #include <efsw/efsw.hpp>
 
-static constexpr REL::Version SHADER_CACHE_VERSION = { 0, 0, 0, 34 };
+static constexpr REL::Version SHADER_CACHE_VERSION = { 0, 0, 0, 37 };
 
 using namespace std::chrono;
 
@@ -260,7 +260,7 @@ namespace SIE
 		void Clear();
 		std::string GetHumanTime(double a_totalMs);
 		double GetEta();
-		std::string GetStatsString(bool a_timeOnly = false);
+		std::string GetStatsString(bool a_timeOnly = false, bool a_elapsedOnly = false);
 		std::atomic<uint64_t> completedTasks = 0;
 		std::atomic<uint64_t> totalTasks = 0;
 		std::atomic<uint64_t> failedTasks = 0;
@@ -396,7 +396,7 @@ namespace SIE
 		ID3DBlob* GetCompletedShader(const SIE::ShaderCompilationTask& a_task);
 		ID3DBlob* GetCompletedShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor);
 		ShaderCompilationTask::Status GetShaderStatus(const std::string& a_key);
-		std::string GetShaderStatsString(bool a_timeOnly = false);
+		std::string GetShaderStatsString(bool a_timeOnly = false, bool a_elapsedOnly = false);
 
 		RE::BSGraphics::VertexShader* GetVertexShader(const RE::BSShader& shader, uint32_t descriptor);
 		RE::BSGraphics::PixelShader* GetPixelShader(const RE::BSShader& shader,

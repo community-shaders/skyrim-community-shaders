@@ -211,6 +211,38 @@ namespace BRDF
 		float2 AB = float2(-1.04, 1.04) * a004 + r.zw;
 		return AB;
 	}
+
+    // [Hirvonen et al. 2019 "Accurate Real-Time Specular Reflections with Radiance Caching"]
+    float2 EnvBRDFApproxHirvonen(float roughness, float NdotV)
+	{
+		const float2x2 m0 = float2x2(0.99044, -1.28514, 1.29678, -0.755907);
+        const float3x3 m1 = float3x3(1, 2.92338, 59.4188, 20.3225, -27.0302, 222.592, 121.563, 626.13, 316.627);
+        const float2x2 m2 = float2x2(0.0365463, 3.32707, 9.0632, -9.04756);
+        const float3x3 m3 = float3x3(1, 3.59685, -1.36772, 9.04401, -16.3174, 9.22949, 5.56589, 19.7886, -20.2123);
+
+        float a = roughness * roughness;
+        float a2 = a * a;
+        float a3 = a * a2;
+        float c = NdotV;
+        float c2 = c * c;
+        float c3 = c * c2;
+
+        float k0 = dot(float2(1.0, a), mul(m0, float2(1.0, c)));
+        k0 /= dot(float3(1.0, a, a3), mul(m1, float3(1.0, c, c3)));
+        float k1 = dot(float2(1.0, a), mul(m2, float2(1.0, c)));
+        k1 /= dot(float3(1.0, a, a3), mul(m3, float3(1.0, c2, c3)));
+
+        return float2(k1, k0);
+	}
+
+    float2 EnvBRDF(float roughness, float NdotV)
+	{
+#   if defined(ENV_BRDF_HIRVONEN)
+		return EnvBRDFApproxHirvonen(roughness, NdotV);
+#   else
+        return EnvBRDFApproxLazarov(roughness, NdotV);
+#   endif
+	}
 }
 
 #endif  // __BRDF_DEPENDENCY_HLSL__

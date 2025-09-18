@@ -120,9 +120,6 @@ cbuffer PerTechnique : register(b0)
 	float phaseContribution = lerp(1, phaseFactor, PhaseContribution);
 
 	float shadowContribution = noShadow;
-	if (noShadow && !SharedData::InInterior && !SharedData::HideSky)
-		shadowContribution *= ShadowSampling::GetWorldShadow(positionWS.xyz, PosAdjust[eyeIndex].xyz, eyeIndex);
-
 	float vl = shadowContribution * densityContribution * phaseContribution;
 
 	DensityRW[dispatchID.xyz] = vl;

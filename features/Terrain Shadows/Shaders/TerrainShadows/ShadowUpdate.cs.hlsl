@@ -81,7 +81,7 @@ groupshared float2 g_shadowHeight[NTHREADS];
 	float2 threadUV = rawThreadUV - floor(rawThreadUV);  // wraparound
 	float2 threadPxCoord = threadUV * dims;
 
-	float2 pastHeights;
+float2 pastHeights = 0.0f.xx;
 	if (isValid) {
 		pastHeights = RWTexShadowHeights[uint2(threadPxCoord)];
 

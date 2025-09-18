@@ -1,4 +1,5 @@
 #include "OverlayRenderer.h"
+#include "HomePageRenderer.h"
 #include "ThemeManager.h"
 
 #include <imgui.h>
@@ -41,10 +42,13 @@ void OverlayRenderer::RenderOverlay(
 	InitializeImGuiFrame(menu);
 
 	RenderShaderCompilationStatus(keyIdToString);
+	RenderFirstTimeSetupOverlay();
 
-	if (menu.IsEnabled) {
+	if (menu.IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup()) {
 		ImGui::GetIO().MouseDrawCursor = true;
-		drawSettings();
+		if (menu.IsEnabled) {
+			drawSettings();
+		}
 	} else {
 		ImGui::GetIO().MouseDrawCursor = false;
 	}
@@ -191,5 +195,12 @@ void OverlayRenderer::FinalizeImGuiFrame()
 
 	if (globals::features::vr.IsOpenVRCompatible()) {
 		globals::features::vr.SubmitOverlayFrame();
+	}
+}
+
+void OverlayRenderer::RenderFirstTimeSetupOverlay()
+{
+	if (HomePageRenderer::ShouldShowFirstTimeSetup()) {
+		HomePageRenderer::RenderFirstTimeSetupDialog();
 	}
 }

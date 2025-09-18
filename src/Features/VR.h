@@ -368,7 +368,7 @@ public:
 		// General interaction settings
 		float comboTimeout = Config::kDefaultComboTimeout;       ///< Timeout for button combo sequences (1.0-10.0 seconds)
 		int kAutoHideSeconds = Config::kDefaultAutoHideSeconds;  ///< Auto-hide timeout for overlay messages (>0 shows overlay, <=0 hides it)
-		bool EnableDragToReposition = true;                      ///< Allow drag-and-drop overlay repositioning
+		bool EnableDragToReposition = false;                     ///< Allow drag-and-drop overlay repositioning
 
 		float VRMenuAutoResetDistance = 1000.0f;  // Default: 1000 units ≈ 14.3 meters
 

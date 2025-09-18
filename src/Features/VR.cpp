@@ -5,7 +5,6 @@
 #include "RE/P/PlayerCharacter.h"
 #include <openvr.h>
 
-#include "DX12SwapChain.h"
 #include "State.h"
 #include "Utils/D3D.h"
 #include "Utils/PerfUtils.h"
@@ -1446,11 +1445,12 @@ void VR::SubmitOverlayFrame()
 		return;
 	}
 
-	// Update drag logic for all modes
-	UpdateOverlayDrag();
+	// Update drag logic for all modes - only when overlay is visible
 	auto& enabled = globals::menu->IsEnabled;
 	auto& overlayVisible = globals::menu->overlayVisible;
 	if ((enabled || overlayVisible || settings.kAutoHideSeconds > 0) && menuOverlayHandle != vr::k_ulOverlayHandleInvalid && menuTexture.get() && menuRTV.get()) {
+		// Update drag logic only when overlay is active
+		UpdateOverlayDrag();
 		// Copy ImGui output to overlay texture
 		ID3D11RenderTargetView* oldRTV = nullptr;
 		globals::d3d::context->OMGetRenderTargets(1, &oldRTV, nullptr);
@@ -1927,6 +1927,9 @@ void VR::UpdateOverlayDrag()
 
 bool VR::CanPerformDrag()
 {
+	if (!settings.EnableDragToReposition)
+		return false;
+
 	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
 	auto* system = openvr ? openvr->vrSystem : nullptr;
 	if (!system)
@@ -1936,9 +1939,6 @@ bool VR::CanPerformDrag()
 	if (settings.VRMenuControllerDiagnosticsTestMode) {
 		return false;
 	}
-
-	if (!settings.EnableDragToReposition)
-		return false;
 
 	return true;
 }

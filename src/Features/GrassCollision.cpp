@@ -1,10 +1,18 @@
 #include "GrassCollision.h"
-
+#include "../Utils/ActorUtils.h"
 #include "State.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	GrassCollision::Settings,
-	EnableGrassCollision)
+	EnableGrassCollision,
+	TrackRagdolls)
+
+struct ActorRow
+{
+	RE::TESObjectREFR* actor;
+	std::vector<std::string> row;
+	float sqDist;
+};
 
 void GrassCollision::DrawSettings()
 {
@@ -13,97 +21,18 @@ void GrassCollision::DrawSettings()
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Allows player collision to modify grass position.");
 		}
-
+		ImGui::Checkbox("Track Ragdolls", &settings.TrackRagdolls);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("If enabled, dead actors (ragdolls) will be tracked.");
+		}
 		ImGui::TreePop();
 	}
-	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Text(std::format("Active/Total Actors : {}/{}", activeActorCount, totalActorCount).c_str());
-		ImGui::Text(std::format("Total Collisions : {}", currentCollisionCount).c_str());
-		ImGui::TreePop();
-	}
-}
-
-static bool GetShapeBound(RE::NiAVObject* a_node, RE::NiPoint3& centerPos, float& radius)
-{
-	RE::bhkNiCollisionObject* Colliedobj = nullptr;
-	if (a_node->collisionObject)
-		Colliedobj = a_node->collisionObject->AsBhkNiCollisionObject();
-
-	if (!Colliedobj)
-		return false;
-
-	RE::bhkRigidBody* bhkRigid = Colliedobj->body.get() ? Colliedobj->body.get()->AsBhkRigidBody() : nullptr;
-	RE::hkpRigidBody* hkpRigid = bhkRigid ? skyrim_cast<RE::hkpRigidBody*>(bhkRigid->referencedObject.get()) : nullptr;
-	if (bhkRigid && hkpRigid) {
-		RE::hkVector4 massCenter;
-		bhkRigid->GetCenterOfMassWorld(massCenter);
-		float massTrans[4];
-		_mm_store_ps(massTrans, massCenter.quad);
-		centerPos = RE::NiPoint3(massTrans[0], massTrans[1], massTrans[2]) * RE::bhkWorld::GetWorldScaleInverse();
-
-		const RE::hkpShape* shape = hkpRigid->collidable.GetShape();
-		if (shape && shape->type == RE::hkpShapeType::kCapsule) {
-			float upExtent = shape->GetMaximumProjection(RE::hkVector4{ 0.0f, 0.0f, 1.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			float downExtent = shape->GetMaximumProjection(RE::hkVector4{ 0.0f, 0.0f, -1.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			auto z_extent = (upExtent + downExtent) / 2.0f;
-
-			float forwardExtent = shape->GetMaximumProjection(RE::hkVector4{ 0.0f, 1.0f, 0.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			float backwardExtent = shape->GetMaximumProjection(RE::hkVector4{ 0.0f, -1.0f, 0.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			auto y_extent = (forwardExtent + backwardExtent) / 2.0f;
-
-			float leftExtent = shape->GetMaximumProjection(RE::hkVector4{ 1.0f, 0.0f, 0.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			float rightExtent = shape->GetMaximumProjection(RE::hkVector4{ -1.0f, 0.0f, 0.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			auto x_extent = (leftExtent + rightExtent) / 2.0f;
-
-			radius = sqrtf(x_extent * x_extent + y_extent * y_extent + z_extent * z_extent);
-
-			return true;
-		}
-	}
-
-	return false;
-}
-
-static bool GetShapeBound(RE::bhkNiCollisionObject* Colliedobj, RE::NiPoint3& centerPos, float& radius)
-{
-	if (!Colliedobj)
-		return false;
-
-	RE::bhkRigidBody* bhkRigid = Colliedobj->body.get() ? Colliedobj->body.get()->AsBhkRigidBody() : nullptr;
-	RE::hkpRigidBody* hkpRigid = bhkRigid ? skyrim_cast<RE::hkpRigidBody*>(bhkRigid->referencedObject.get()) : nullptr;
-	if (bhkRigid && hkpRigid) {
-		RE::hkVector4 massCenter;
-		bhkRigid->GetCenterOfMassWorld(massCenter);
-		float massTrans[4];
-		_mm_store_ps(massTrans, massCenter.quad);
-		centerPos = RE::NiPoint3(massTrans[0], massTrans[1], massTrans[2]) * RE::bhkWorld::GetWorldScaleInverse();
-
-		const RE::hkpShape* shape = hkpRigid->collidable.GetShape();
-		if (shape && shape->type == RE::hkpShapeType::kCapsule) {
-			float upExtent = shape->GetMaximumProjection(RE::hkVector4{ 0.0f, 0.0f, 1.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			float downExtent = shape->GetMaximumProjection(RE::hkVector4{ 0.0f, 0.0f, -1.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			auto z_extent = (upExtent + downExtent) / 2.0f;
-
-			float forwardExtent = shape->GetMaximumProjection(RE::hkVector4{ 0.0f, 1.0f, 0.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			float backwardExtent = shape->GetMaximumProjection(RE::hkVector4{ 0.0f, -1.0f, 0.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			auto y_extent = (forwardExtent + backwardExtent) / 2.0f;
-
-			float leftExtent = shape->GetMaximumProjection(RE::hkVector4{ 1.0f, 0.0f, 0.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			float rightExtent = shape->GetMaximumProjection(RE::hkVector4{ -1.0f, 0.0f, 0.0f, 0.0f }) * RE::bhkWorld::GetWorldScaleInverse();
-			auto x_extent = (leftExtent + rightExtent) / 2.0f;
-
-			radius = sqrtf(x_extent * x_extent + y_extent * y_extent + z_extent * z_extent);
-
-			return true;
-		}
-	}
-
-	return false;
 }
 
 void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 {
 	actorList.clear();
+	std::vector<Util::ActorDisplayInfo> actorDisplayInfos;
 
 	// Actor query code from po3 under MIT
 	// https://github.com/powerof3/PapyrusExtenderSSE/blob/7a73b47bc87331bec4e16f5f42f2dbc98b66c3a7/include/Papyrus/Functions/Faction.h#L24C7-L46
@@ -127,19 +56,28 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 	RE::NiPoint3 cameraPosition = Util::GetAverageEyePosition();
 
 	for (const auto actor : actorList) {
+		Util::ActorDisplayInfo info;
+		if (!Util::GetActorDisplayInfo(actor, cameraPosition, settings.TrackRagdolls, info))
+			continue;
+		actorDisplayInfos.push_back(info);
+	}
+
+	for (const auto& info : actorDisplayInfos) {
 		if (currentCollisionCount == 256)
 			break;
-		if (auto root = actor->Get3D(false)) {
-			auto position = actor->GetPosition();
-			float distance = cameraPosition.GetDistance(position);
-			if (distance > 2048.0f)  // Cull against distance
+		auto actor = static_cast<RE::Actor*>(info.actor);
+		if (actor && actor->Is3DLoaded()) {
+			auto root = actor->Get3D(false);
+			if (!root)
 				continue;
-
+			float distance = cameraPosition.GetDistance(info.pos);
+			if (distance > 2048.0f)
+				continue;
 			activeActorCount++;
 			RE::BSVisit::TraverseScenegraphCollision(root, [&](RE::bhkNiCollisionObject* a_object) -> RE::BSVisit::BSVisitControl {
 				RE::NiPoint3 centerPos;
 				float radius;
-				if (GetShapeBound(a_object, centerPos, radius)) {
+				if (Util::GetShapeBound(a_object, centerPos, radius)) {
 					if (radius < distance * 0.01f)
 						return RE::BSVisit::BSVisitControl::kContinue;
 					radius *= 2.0f;

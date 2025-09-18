@@ -1553,11 +1553,11 @@ namespace SIE
 				{ "BSImagespaceShaderISCompositeLensFlareVolumetricLighting",
 					static_cast<uint32_t>(ISCompositeLensFlareVolumetricLighting) },
 				// { "BSImagespaceShaderISDebugSnow", static_cast<uint32_t>(ISDebugSnow) },
-				// { "BSImagespaceShaderDepthOfField", static_cast<uint32_t>(ISDepthOfField) },
-				// { "BSImagespaceShaderDepthOfFieldFogged",
-				// 	static_cast<uint32_t>(ISDepthOfFieldFogged) },
-				// { "BSImagespaceShaderDepthOfFieldMaskedFogged",
-				// 	static_cast<uint32_t>(ISDepthOfFieldMaskedFogged) },
+				{ "BSImagespaceShaderDepthOfField", static_cast<uint32_t>(ISDepthOfField) },
+				{ "BSImagespaceShaderDepthOfFieldFogged",
+					static_cast<uint32_t>(ISDepthOfFieldFogged) },
+				{ "BSImagespaceShaderDepthOfFieldMaskedFogged",
+					static_cast<uint32_t>(ISDepthOfFieldMaskedFogged) },
 				// { "BSImagespaceShaderDistantBlur", static_cast<uint32_t>(ISDistantBlur) },
 				// { "BSImagespaceShaderDistantBlurFogged",
 				// 	static_cast<uint32_t>(ISDistantBlurFogged) },
@@ -1627,7 +1627,7 @@ namespace SIE
 				// 	static_cast<uint32_t>(ISRadialBlur) },
 				// { "BSImagespaceShaderRadialBlurHigh", static_cast<uint32_t>(ISRadialBlurHigh) },
 				// { "BSImagespaceShaderRadialBlurMedium", static_cast<uint32_t>(ISRadialBlurMedium) },
-				// { "BSImagespaceShaderRefraction", static_cast<uint32_t>(ISRefraction) },
+				{ "BSImagespaceShaderRefraction", static_cast<uint32_t>(ISRefraction) },
 				{ "BSImagespaceShaderISSAOCompositeSAO", static_cast<uint32_t>(ISSAOCompositeSAO) },
 				{ "BSImagespaceShaderISSAOCompositeFog", static_cast<uint32_t>(ISSAOCompositeFog) },
 				{ "BSImagespaceShaderISSAOCompositeSAOFog", static_cast<uint32_t>(ISSAOCompositeSAOFog) },
@@ -2057,9 +2057,9 @@ namespace SIE
 		return ShaderCompilationTask::Status::Pending;
 	}
 
-	std::string ShaderCache::GetShaderStatsString(bool a_timeOnly)
+	std::string ShaderCache::GetShaderStatsString(bool a_timeOnly, bool a_elapsedOnly)
 	{
-		return compilationSet.GetStatsString(a_timeOnly);
+		return compilationSet.GetStatsString(a_timeOnly, a_elapsedOnly);
 	}
 
 	inline bool ShaderCache::IsShaderSourceAvailable(const RE::BSShader& shader)
@@ -2614,14 +2614,22 @@ namespace SIE
 		return std::max(remaining / rate, 0.0);
 	}
 
-	std::string CompilationSet::GetStatsString(bool a_timeOnly)
+	std::string CompilationSet::GetStatsString(bool a_timeOnly, bool a_elapsedOnly)
 	{
 		double totalMs = static_cast<double>(totalTime.QuadPart) * 1000.0 / frequency.QuadPart;
 
-		if (a_timeOnly)
-			return fmt::format("{}/{}",
-				GetHumanTime(totalMs),
-				GetHumanTime(GetEta() + totalMs));
+		if (a_timeOnly) {
+			if (a_elapsedOnly) {
+				// Only elapsed
+				return GetHumanTime(totalMs);
+			} else {
+				// Elapsed + estimated
+				return fmt::format("{}/{}",
+					GetHumanTime(totalMs),
+					GetHumanTime(GetEta() + totalMs));
+			}
+		}
+
 		return fmt::format("{}/{} (successful/total)\tfailed: {}\tcachehits: {}\nElapsed/Estimated Time: {}/{}",
 			(std::uint64_t)completedTasks,
 			(std::uint64_t)totalTasks,

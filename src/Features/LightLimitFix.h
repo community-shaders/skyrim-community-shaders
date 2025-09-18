@@ -55,7 +55,6 @@ public:
 		float fadeZone;
 		float sizeBias;
 		PositionOpt positionWS[2];
-		PositionOpt positionVS[2];
 		uint128_t roomFlags = uint32_t(0);
 		stl::enumeration<LightFlags> lightFlags;
 		uint32_t shadowMaskIndex = 0;
@@ -78,24 +77,24 @@ public:
 
 	struct alignas(16) LightBuildingCB
 	{
-		float4x4 InvProjMatrix[2];
 		float LightsNear;
 		float LightsFar;
 		uint pad0[2];
+		uint ClusterSize[4];
 	};
 
 	struct alignas(16) LightCullingCB
 	{
 		uint LightCount;
 		uint pad[3];
+		uint ClusterSize[4];
 	};
 
 	struct alignas(16) PerFrame
 	{
-		uint EnableContactShadows;
 		uint EnableLightsVisualisation;
 		uint LightsVisualisationMode;
-		float pad0;
+		float pad0[2];
 		uint ClusterSize[4];
 	};
 
@@ -164,9 +163,6 @@ public:
 	void CleanupParticleLights(RE::NiNode* a_node);
 
 	RE::NiPoint3 eyePositionCached[2]{};
-	Matrix viewMatrixCached[2]{};
-	Matrix viewMatrixInverseCached[2]{};
-
 	bool wasEmpty = false;
 	bool wasWorld = false;
 	int previousRoomIndex = -1;
@@ -186,11 +182,13 @@ public:
 
 	virtual void PostPostLoad() override;
 	virtual void DataLoaded() override;
+	virtual void ClearShaderCache() override;
 
 	float CalculateLightDistance(float3 a_lightPosition, float a_radius);
 	void AddCachedParticleLights(eastl::vector<LightData>& lightsData, LightLimitFix::LightData& light);
 	void SetLightPosition(LightLimitFix::LightData& a_light, RE::NiPoint3 a_initialPosition, bool a_cached = true);
 	void UpdateLights();
+	void UpdateStructure();
 	virtual void Prepass() override;
 
 	static inline float3 Saturation(float3 color, float saturation);
@@ -328,11 +326,10 @@ struct fmt::formatter<LightLimitFix::LightData>
 	auto format(const LightLimitFix::LightData& l, format_context& ctx) const -> format_context::iterator
 	{
 		// ctx.out() is an output iterator to write to.
-		return fmt::format_to(ctx.out(), "{{address {:x} color {} radius {} posWS {} {} posVS {} {}}}",
+		return fmt::format_to(ctx.out(), "{{address {:x} color {} radius {} posWS {} {}}}",
 			reinterpret_cast<uintptr_t>(&l),
 			(Vector3)l.color,
 			l.radius,
-			(Vector3)l.positionWS[0].data, (Vector3)l.positionWS[1].data,
-			(Vector3)l.positionVS[0].data, (Vector3)l.positionVS[1].data);
+			(Vector3)l.positionWS[0].data, (Vector3)l.positionWS[1].data);
 	}
 };

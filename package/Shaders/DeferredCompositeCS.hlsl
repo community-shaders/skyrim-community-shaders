@@ -68,9 +68,14 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 #endif
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
+	// Early exit if dispatch thread is outside screen bounds
+	if (any(dispatchID.xy >= uint2(SharedData::BufferDim.xy)))
+		return;
+
 	float2 uv = float2(dispatchID.xy + 0.5) * SharedData::BufferDim.zw;
+	uv *= FrameBuffer::DynamicResolutionParams2.xy;  // adjust for dynamic res
+
 	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
-	uv *= FrameBuffer::DynamicResolutionParams2.xy;  // Adjust for dynamic res
 	uv = Stereo::ConvertFromStereoUV(uv, eyeIndex);
 
 	float3 normalGlossiness = NormalRoughnessTexture[dispatchID.xy];
@@ -99,9 +104,11 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	if (reflectance.x > 0.0 || reflectance.y > 0.0 || reflectance.z > 0.0) {
 		float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
 
-		float wetnessMask = MasksTexture[dispatchID.xy].z;
+		float wetnessMask = MasksTexture[dispatchID.xy].z * 2.0 - 1.0;
 
-		normalWS = lerp(normalWS, float3(0, 0, 1), wetnessMask);
+		normalWS.z = wetnessMask;
+		float xyLength = sqrt(max(0.0, 1.0 - wetnessMask * wetnessMask));
+		normalWS.xy = normalize(normalWS.xy) * xyLength;
 
 		float3 V = normalize(positionWS.xyz);
 		float3 R = reflect(V, normalWS);

@@ -4,28 +4,27 @@
 #	define DIRECTINPUT_VERSION 0x0800
 #endif
 #include <dinput.h>
+#include <format>
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
 #include <imgui_internal.h>
 #include <imgui_stdlib.h>
 
-#include "DX12SwapChain.h"
 #include "Deferred.h"
 #include "Feature.h"
 #include "FeatureIssues.h"
 #include "FeatureVersions.h"
+#include "Features/Upscaling.h"
 #include "Menu/AdvancedSettingsRenderer.h"
-#include "Menu/DisplaySettingsRenderer.h"
 #include "Menu/FeatureListRenderer.h"
+#include "Menu/HomePageRenderer.h"
 #include "Menu/MenuHeaderRenderer.h"
 #include "Menu/OverlayRenderer.h"
 #include "Menu/SettingsTabRenderer.h"
 #include "Menu/ThemeManager.h"
 #include "ShaderCache.h"
 #include "State.h"
-#include "Streamline.h"
 #include "TruePBR.h"
-#include "Upscaling.h"
 #include "Util.h"
 #include "Utils/UI.h"
 
@@ -125,7 +124,9 @@ Menu::~Menu()
 	uiIcons.loadSettings.Release();
 	uiIcons.clearCache.Release();
 	uiIcons.logo.Release();
+	uiIcons.discord.Release();
 	uiIcons.characters.Release();
+	uiIcons.display.Release();
 	uiIcons.grass.Release();
 	uiIcons.lighting.Release();
 	uiIcons.sky.Release();
@@ -133,6 +134,7 @@ Menu::~Menu()
 	uiIcons.water.Release();
 	uiIcons.debug.Release();
 	uiIcons.materials.Release();
+	uiIcons.postProcessing.Release();
 
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
@@ -161,6 +163,9 @@ void Menu::Init()
 	imgui_io.ConfigFlags = ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad | ImGuiConfigFlags_DockingEnable;
 	imgui_io.BackendFlags = ImGuiBackendFlags_HasMouseCursors | ImGuiBackendFlags_RendererHasVtxOffset | ImGuiBackendFlags_HasGamepad;
 
+	cachedIniPath = Util::PathHelpers::GetImGuiIniPath().string();
+	imgui_io.IniFilename = cachedIniPath.c_str();
+
 	// Enhanced font configuration for sharper text rendering
 	ImFontConfig font_config;
 	font_config.OversampleH = ThemeManager::Constants::FCONF_OVERSAMPLE_H;
@@ -183,7 +188,8 @@ void Menu::Init()
 
 	fontSize = std::clamp(fontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE);
 
-	if (!imgui_io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\Jost-Regular.ttf",
+	auto fontPath = Util::PathHelpers::GetFontsPath() / "Jost-Regular.ttf";
+	if (!imgui_io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(),
 			std::round(fontSize), &font_config)) {
 		logger::warn("Menu::Init() - Failed to load custom font. Using default font.");
 		imgui_io.Fonts->AddFontDefault();
@@ -288,8 +294,7 @@ void Menu::DrawSettings()
 			pendingFeatureSelection,
 			categoryExpansionStates,
 			[&]() { DrawGeneralSettings(); },
-			[&]() { DrawAdvancedSettings(); },
-			[&]() { DrawDisplaySettings(); });
+			[&]() { DrawAdvancedSettings(); });
 
 		ImGui::Spacing();
 		ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, ThemeManager::Constants::SEPARATOR_THICKNESS);
@@ -391,26 +396,11 @@ void Menu::DrawDisableAtBootSettings()
 	}
 }
 
-/**
- * @brief Renders the Display settings tab content
- *
- * Delegates rendering to DisplaySettingsRenderer to handle upscaling and frame
- * generation settings. Provides callbacks for feature status checking and upscaling
- * configuration while maintaining clean architecture separation.
- */
-void Menu::DrawDisplaySettings()
-{
-	DisplaySettingsRenderer::RenderDisplaySettings(
-		globals::state->upscalerLoaded,
-		[](const std::string& featureName) { return globals::state->IsFeatureDisabled(featureName); },
-		[]() { globals::upscaling->DrawSettings(); });
-}
-
 void Menu::DrawFooter()
 {
 	ImGui::BulletText(std::format("Game Version: {} {}", magic_enum::enum_name(REL::Module::GetRuntime()), Util::GetFormattedVersion(REL::Module::get().version()).c_str()).c_str());
 	ImGui::SameLine();
-	ImGui::BulletText(std::format("D3D12 Interop: {}", globals::upscaling->d3d12Interop ? "Active" : "Inactive").c_str());
+	ImGui::BulletText(std::format("D3D12 Interop: {}", globals::features::upscaling.d3d12Interop ? "Active" : "Inactive").c_str());
 	ImGui::SameLine();
 	ImGui::Text(std::format("GPU: {}", globals::state->adapterDescription.c_str()).c_str());
 }
@@ -612,7 +602,7 @@ void Menu::ProcessInputEvents(RE::InputEvent* const* a_events)
 
 bool Menu::ShouldSwallowInput()
 {
-	return IsEnabled;
+	return IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup();
 }
 
 void Menu::SelectFeatureMenu(const std::string& featureName)

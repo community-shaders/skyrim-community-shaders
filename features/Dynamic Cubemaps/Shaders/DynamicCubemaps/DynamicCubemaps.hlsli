@@ -1,23 +1,17 @@
+#include "Common/BRDF.hlsli"
 
 #if defined(SKYLIGHTING)
 #	include "Skylighting/Skylighting.hlsli"
+#endif
+
+#if defined(IBL)
+#	include "IBL/IBL.hlsli"
 #endif
 
 namespace DynamicCubemaps
 {
 	TextureCube<float4> EnvReflectionsTexture : register(t30);
 	TextureCube<float4> EnvTexture : register(t31);
-
-	// https://www.unrealengine.com/en-US/blog/physically-based-shading-on-mobile
-	half2 EnvBRDFApprox(half Roughness, half NoV)
-	{
-		const half4 c0 = { -1, -0.0275, -0.572, 0.022 };
-		const half4 c1 = { 1, 0.0425, 1.04, -0.04 };
-		half4 r = Roughness * c0 + c1;
-		half a004 = min(r.x * r.x, exp2(-9.28 * NoV)) * r.x + r.y;
-		half2 AB = half2(-1.04, 1.04) * a004 + r.zw;
-		return AB;
-	}
 
 #if !defined(WATER)
 
@@ -43,9 +37,19 @@ namespace DynamicCubemaps
 
 		float3 finalIrradiance = 0;
 
+#		if defined(IBL) && defined(LIGHTING)
+		const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
+		const bool inReflection = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection);
+		if (SharedData::iblSettings.EnableDiffuseIBL && SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
+			float3 specularIrradiance = ImageBasedLighting::StaticSpecularIBLTexture.SampleLevel(SampColorSampler, R.xzy, level).xyz;
+			finalIrradiance += specularIrradiance;
+			return finalIrradiance;
+		}
+#		endif
+
 #		if defined(SKYLIGHTING)
 		if (SharedData::InInterior) {
-			float3 specularIrradiance = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
+			float3 specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, level).xyz);
 
 			finalIrradiance += specularIrradiance;
 			return finalIrradiance;
@@ -87,7 +91,7 @@ namespace DynamicCubemaps
 
 		float level = roughness * 7.0;
 
-		float2 specularBRDF = EnvBRDFApprox(roughness, NoV);
+		float2 specularBRDF = BRDF::EnvBRDF(roughness, NoV);
 
 		// Horizon specular occlusion
 		// https://marmosetco.tumblr.com/post/81245981087
@@ -100,9 +104,19 @@ namespace DynamicCubemaps
 
 		float3 finalIrradiance = 0;
 
+#		if defined(IBL) && defined(LIGHTING)
+		const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
+		const bool inReflection = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection);
+		if (SharedData::iblSettings.EnableDiffuseIBL && SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
+			float3 specularIrradiance = ImageBasedLighting::StaticSpecularIBLTexture.SampleLevel(SampColorSampler, R.xzy, level).xyz;
+			finalIrradiance += specularIrradiance;
+			return horizon * (F0 * specularBRDF.x + specularBRDF.y) * finalIrradiance;
+		}
+#		endif
+
 #		if defined(SKYLIGHTING)
 		if (SharedData::InInterior) {
-			float3 specularIrradiance = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
+			float3 specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, level).xyz);
 
 			finalIrradiance += specularIrradiance;
 

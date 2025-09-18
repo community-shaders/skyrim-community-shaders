@@ -31,7 +31,6 @@ Texture2D<float2> SsgiCoCgTexture : register(t7);
 
 RWTexture2D<float4> MainRW : register(u0);
 #if defined(SSGI)
-RWTexture2D<float3> DiffuseAmbientRW : register(u1);
 void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 {
 	ao = 1 - SsgiAoTexture[pixCoord];
@@ -45,9 +44,14 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 #endif
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
+	// Early exit if dispatch thread is outside screen bounds
+	if (any(dispatchID.xy >= uint2(SharedData::BufferDim.xy)))
+		return;
+
 	float2 uv = float2(dispatchID.xy + 0.5) * SharedData::BufferDim.zw;
-	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
 	uv *= FrameBuffer::DynamicResolutionParams2.xy;  // adjust for dynamic res
+
+	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
 	uv = Stereo::ConvertFromStereoUV(uv, eyeIndex);
 
 	float3 normalGlossiness = NormalRoughnessTexture[dispatchID.xy];
@@ -69,11 +73,6 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 
 	float3 linAlbedo = Color::GammaToLinear(albedo);
 	float3 linDirectionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
-#if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL) {
-		linDirectionalAmbientColor = directionalAmbientColor;
-	}
-#endif
 	float3 linDiffuseColor = Color::GammaToLinear(diffuseColor);
 	float3 originalDiffuseColor = linDiffuseColor;
 
@@ -96,8 +95,6 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 		skylightingDiffuse = saturate(skylightingDiffuse);
 
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(positionMS.xyz));
-
-		skylightingDiffuse *= 1.0 + saturate(normalWS.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
 
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 
@@ -145,9 +142,6 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 
 	diffuseColor = diffuseColor + directionalAmbientColor * albedo;
 
-#if defined(SSGI)
-	DiffuseAmbientRW[dispatchID.xy] = Color::GammaToLinear(diffuseColor - originalDiffuseColor);
-#endif
 
 	MainRW[dispatchID.xy] = float4(diffuseColor, 1);
 };

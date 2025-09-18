@@ -4,18 +4,17 @@
 
 #include <pystring/pystring.h>
 
-#include "DX12SwapChain.h"
 #include "Deferred.h"
 #include "FeatureIssues.h"
 #include "Features/CloudShadows.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
+#include "Features/Upscaling.h"
 #include "Menu.h"
+#include "SettingsOverrideManager.h"
 #include "ShaderCache.h"
-#include "Streamline.h"
 #include "TruePBR.h"
-#include "Upscaling.h"
 
 void State::Draw()
 {
@@ -38,8 +37,6 @@ void State::Draw()
 			terrainHelper.SetShaderResouces(context);
 
 		truePBR->SetShaderResouces(context);
-
-		globals::deferred->HDRShaderHacks();
 
 		if (permutationData != permutationDataPrevious) {
 			permutationCB->Update(permutationData);
@@ -124,9 +121,24 @@ void State::Reset()
 	lastModifiedVertexDescriptor = 0;
 	lastPixelDescriptor = 0;
 	lastVertexDescriptor = 0;
-	initialized = false;
 	std::memset(&permutationDataPrevious, 0xFF, sizeof(PermutationCB));
 	frameCount++;
+
+	if (auto* imageSpaceManager = RE::ImageSpaceManager::GetSingleton()) {
+		GET_INSTANCE_MEMBER(BSImagespaceShaderApplyReflections, imageSpaceManager);
+
+		// Disable reflections being applied to things other than water
+		if (BSImagespaceShaderApplyReflections.get()) {
+			BSImagespaceShaderApplyReflections->active = false;
+		}
+	}
+
+	// Disable "improved" snow shader, unsupported
+	if (!globals::game::isVR) {
+		RE::GetINISetting("bEnableImprovedSnow:Display")->data.b = false;
+	}
+
+	activeReflections = false;
 }
 
 void State::Setup()
@@ -137,12 +149,6 @@ void State::Setup()
 		if (feature->loaded)
 			feature->SetupResources();
 	globals::deferred->SetupResources();
-	if (!upscalerLoaded)
-		globals::upscaling->CreateUpscalingResources();
-	SetupReShade();
-	if (initialized)
-		return;
-	initialized = true;
 }
 
 static const std::string& GetConfigPath(State::ConfigMode a_configMode)
@@ -160,20 +166,23 @@ static const std::string& GetConfigPath(State::ConfigMode a_configMode)
 
 void State::Load(ConfigMode a_configMode, bool a_allowReload)
 {
-	ConfigMode configMode = a_configMode;
 	auto shaderCache = globals::shaderCache;
 	json settings;
 	bool errorDetected = false;
 
+	auto configFolderPath = std::filesystem::path(GetConfigPath(a_configMode)).parent_path().string();
+	auto defaultConfigFilePath = GetConfigPath(ConfigMode::DEFAULT);
+	auto userConfigFilePath = GetConfigPath(ConfigMode::USER);
+
 	try {
-		std::filesystem::create_directories(folderPath);
+		std::filesystem::create_directories(configFolderPath);
 	} catch (const std::filesystem::filesystem_error& e) {
-		logger::warn("Error creating directory during Load ({}) : {}\n", folderPath, e.what());
+		logger::warn("Error creating directory during Load ({}) : {}\n", configFolderPath, e.what());
 		errorDetected = true;
 	}
 
 	// Attempt to load the config file
-	auto tryLoadConfig = [&](const std::string& path) {
+	auto tryLoadConfig = [&](const std::string& path) -> bool {
 		std::ifstream i(path);
 		logger::info("Attempting to open config file: {}", path);
 		if (!i.is_open()) {
@@ -182,35 +191,67 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 		}
 		try {
 			i >> settings;
-			i.close();  // Close the file after reading
+			i.close();
 			return true;
 		} catch (const nlohmann::json::parse_error& e) {
 			logger::warn("Error parsing json config file ({}) : {}\n", path, e.what());
-			i.close();  // Ensure the file is closed even on error
+			i.close();
 			return false;
 		}
 	};
 
-	std::string configPath = GetConfigPath(configMode);
-	if (!tryLoadConfig(configPath)) {
-		logger::info("Unable to open user config file ({}); trying default ({})", configPath, defaultConfigPath);
-		configMode = ConfigMode::DEFAULT;
-		configPath = GetConfigPath(configMode);
+	// NEW LOADING ORDER: Default → Overrides → User
 
-		if (!tryLoadConfig(configPath)) {
-			logger::info("No default config ({}), generating new one", configPath);
-			std::fill(enabledClasses, enabledClasses + magic_enum::enum_integer(RE::BSShader::Type::Total) - 1, true);
-			Save(configMode);
-			// Attempt to load the newly created config
-			configPath = GetConfigPath(configMode);
-			if (!tryLoadConfig(configPath)) {
-				logger::error("Error opening newly created config file ({})\n", configPath);
-				return;  // Exit if the new config can't be opened
-			}
+	// Step 1: Always start with default settings
+	logger::info("Loading default settings from: {}", defaultConfigFilePath);
+	if (!tryLoadConfig(defaultConfigFilePath)) {
+		logger::info("No default config ({}), generating new one", defaultConfigFilePath);
+		std::fill(enabledClasses, enabledClasses + magic_enum::enum_integer(RE::BSShader::Type::Total) - 1, true);
+		Save(ConfigMode::DEFAULT);
+		// Attempt to load the newly created config
+		if (!tryLoadConfig(defaultConfigFilePath)) {
+			logger::error("Error opening newly created default config file ({})\n", defaultConfigFilePath);
+			return;
 		}
 	}
 
-	// Proceed with loading settings from the loaded configuration
+	// Step 2: Apply overrides (only new/changed ones) to default settings
+	auto overrideManager = SettingsOverrideManager::GetSingleton();
+	size_t overridesDiscovered = overrideManager->DiscoverOverrides();
+	json appliedOverrides = overrideManager->LoadAppliedOverridesTracking();
+
+	if (overridesDiscovered > 0) {
+		logger::info("Discovered {} override files", overridesDiscovered);
+
+		// Apply global overrides to main settings (only new/changed ones)
+		size_t newGlobalOverrides = overrideManager->ApplyNewOverrides(settings, appliedOverrides);
+		if (newGlobalOverrides > 0) {
+			logger::info("Applied {} new/changed global override(s)", newGlobalOverrides);
+		}
+	}
+
+	// Step 3: Apply user settings on top of default + overrides
+	if (a_configMode == ConfigMode::USER) {
+		json userSettings;
+		std::ifstream userFile(userConfigFilePath);
+		if (userFile.is_open()) {
+			try {
+				userFile >> userSettings;
+				userFile.close();
+
+				// Merge user settings on top of (default + overrides)
+				for (auto& [key, value] : userSettings.items()) {
+					settings[key] = value;
+				}
+				logger::info("Applied user settings from: {}", userConfigFilePath);
+			} catch (const nlohmann::json::parse_error& e) {
+				logger::warn("Error parsing user config file: {}", e.what());
+				userFile.close();
+			}
+		} else {
+			logger::info("No user config file found at: {}", userConfigFilePath);
+		}
+	}
 
 	try {
 		// Load Menu settings
@@ -286,43 +327,52 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 				logger::info("Special Feature '{}' disabled at boot", featureName);
 			}
 		}
-
-		auto upscaling = globals::upscaling;
-		auto& upscalingJson = settings[upscaling->GetShortName()];
-		if (upscalingJson.is_object()) {
-			logger::info("Loading Upscaling settings");
-			try {
-				upscaling->LoadSettings(upscalingJson);
-			} catch (...) {
-				logger::warn("Invalid settings for Upscaling, using default.");
-				upscaling->RestoreDefaultSettings();
-			}
-		} else {
-			logger::warn("Missing settings for Upscaling, using default.");
-		}
-
 		for (auto* feature : Feature::GetFeatureList()) {
 			try {
 				const std::string featureName = feature->GetShortName();
 				bool isDisabled = disabledFeatures.contains(featureName) && disabledFeatures[featureName];
 				if (!isDisabled) {
 					logger::info("Loading Feature: '{}'", featureName);
+
+					// Load base feature settings from merged config (default + user)
 					feature->Load(settings);
+
+					// Apply new/changed feature-specific overrides if any
+					if (overridesDiscovered > 0) {
+						json featureJson;
+						feature->SaveSettings(featureJson);  // Get current settings as JSON
+
+						size_t newFeatureOverrides = overrideManager->ApplyNewFeatureOverrides(featureName, featureJson, appliedOverrides);
+						if (newFeatureOverrides > 0) {
+							logger::info("Applied {} new/changed override(s) to {}", newFeatureOverrides, feature->GetName());
+							try {
+								feature->LoadSettings(featureJson);  // Reload with new overrides applied
+							} catch (...) {
+								logger::warn("Invalid override settings for {}, keeping original settings.", feature->GetName());
+							}
+						}
+					}
 				} else {
 					logger::info("Feature '{}' is disabled at boot.", featureName);
 				}
 			} catch (const std::exception& e) {
-				feature->failedLoadedMessage = std::format(
-					"{}{} failed to load. Check CommunityShaders.log",
-					feature->failedLoadedMessage.empty() ? "" : feature->failedLoadedMessage + "\n",
-					feature->GetName());
+				feature->failedLoadedMessage = feature->failedLoadedMessage.empty() ?
+				                                   (feature->GetName() + " failed to load. Check CommunityShaders.log") :
+				                                   (feature->failedLoadedMessage + "\n" + feature->GetName() + " failed to load. Check CommunityShaders.log");
 				logger::warn("Error loading setting for feature '{}': {}", feature->GetShortName(), e.what());
 			}
 		}
+
+		// Save updated applied overrides tracking
+		if (overridesDiscovered > 0) {
+			overrideManager->SaveAppliedOverridesTracking(appliedOverrides);
+		}
+
 		if (settings["Version"].is_string() && settings["Version"].get<std::string>() != Plugin::VERSION.string()) {
 			logger::info("Found older config for version {}; upgrading to {}", (std::string)settings["Version"], Plugin::VERSION.string());
-			Save(configMode);
+			Save(a_configMode);  // Use original config mode
 		}
+
 		FeatureIssues::ScanForOrphanedFeatureINIs();
 
 		logger::info("Loading Settings Complete");
@@ -379,9 +429,9 @@ void State::Save(ConfigMode a_configMode)
 
 	settings["General"] = general;
 
-	auto upscaling = globals::upscaling;
-	auto& upscalingJson = settings[upscaling->GetShortName()];
-	upscaling->SaveSettings(upscalingJson);
+	auto& upscaling = globals::features::upscaling;
+	auto& upscalingJson = settings[upscaling.GetShortName()];
+	upscaling.SaveSettings(upscalingJson);
 
 	json originalShaders;
 	ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
@@ -406,16 +456,6 @@ void State::Save(ConfigMode a_configMode)
 	} catch (const std::exception& e) {
 		logger::warn("Failed to write settings to file: {}. Error: {}", configPath, e.what());
 	}
-}
-
-void State::PostPostLoad()
-{
-	upscalerLoaded = GetModuleHandle(L"Data\\SKSE\\Plugins\\SkyrimUpscaler.dll");
-	if (upscalerLoaded)
-		logger::info("Skyrim Upscaler detected");
-	else
-		logger::info("Skyrim Upscaler not detected");
-	// No hooks should be here, hook in XSEPlugin::MessageHandler()
 }
 
 bool State::ValidateCache(CSimpleIniA& a_ini)
@@ -694,10 +734,9 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 		data.BufferDim = { screenSize.x, screenSize.y, 1.0f / screenSize.x, 1.0f / screenSize.y };
 		data.Timer = timer;
 
-		auto bTAA = !globals::game::isVR ? imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled :
-		                                   imageSpaceManager->GetVRRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled;
+		auto temporal = Util::GetTemporal();
 
-		data.FrameCount = frameCount * (bTAA || globals::state->upscalerLoaded);
+		data.FrameCount = frameCount * temporal;
 		data.FrameCountAlwaysActive = frameCount;
 
 		if (a_inWorld) {
@@ -709,25 +748,27 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 			}
 		}
 
-		data.InInterior = true;
-		data.HideSky = true;
-		if (auto sky = globals::game::sky) {
-			if (auto player = RE::PlayerCharacter::GetSingleton()) {
-				if (auto parentCell = player->GetParentCell()) {
-					data.InInterior = parentCell->IsInteriorCell();
-					data.HideSky = !data.InInterior && sky->flags.any(RE::Sky::Flags::kHideSky);
-				}
-			}
-		}
+		data.InInterior = Util::IsInterior();
 
-		if (auto ui = globals::game::ui)
-			data.InMapMenu = ui->IsMenuOpen(RE::MapMenu::MENU_NAME);
+		if (globals::game::sky)
+			data.HideSky = globals::game::sky->flags.any(RE::Sky::Flags::kHideSky);
 		else
-			data.InMapMenu = true;
+			data.HideSky = false;
 
-		if (!globals::game::isVR && bTAA && (a_inWorld || a_prepass)) {
-			auto renderSize = Util::ConvertToDynamic(screenSize);
-			data.MipBias = std::log2f(renderSize.x / screenSize.x) - 1.0f;
+		if (globals::game::ui)
+			data.InMapMenu = globals::game::ui->IsMenuOpen(RE::MapMenu::MENU_NAME);
+		else
+			data.InMapMenu = false;
+
+		auto& upscaling = globals::features::upscaling;
+
+		if (upscaling.loaded) {
+			if (temporal && (a_inWorld || a_prepass) && upscaling.GetUpscaleMethod() != Upscaling::UpscaleMethod::kTAA) {
+				auto renderSize = Util::ConvertToDynamic(screenSize);
+				data.MipBias = std::log2f(renderSize.x / screenSize.x) - 1.0f;
+			} else {
+				data.MipBias = 0;
+			}
 		} else {
 			data.MipBias = 0;
 		}
@@ -778,53 +819,6 @@ bool State::IsFeatureDisabled(const std::string& featureName)
 std::unordered_map<std::string, bool>& State::GetDisabledFeatures()
 {
 	return disabledFeatures;
-}
-
-void State::SetupReShade()
-{
-	SetEnvironmentVariableW(L"RESHADE_DISABLE_GRAPHICS_HOOK", L"1");
-	auto module = LoadLibraryW(L"ReShade64.dll");
-
-	auto device = globals::d3d::device;
-	auto context = globals::d3d::context;
-	auto swapChain = globals::d3d::swapChain;
-
-	if (module && reshade::create_effect_runtime(reshade::api::device_api::d3d11, device, context, swapChain, "ReShade", &reShadeRuntime)) {
-		auto renderer = globals::game::renderer;
-		auto& swapChainRTV = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER].RTV;
-
-		auto reShadeDevice = reShadeRuntime->get_device();
-
-		reshade::api::resource reShadeSwapChainResource = reShadeDevice->get_resource_from_view(reshade::api::resource_view{ reinterpret_cast<uintptr_t>(swapChainRTV) });
-		reshade::api::resource_desc reShadeSwapChainDesc = reShadeDevice->get_resource_desc(reShadeSwapChainResource);
-
-		reShadeDevice->create_resource_view(reShadeSwapChainResource, reshade::api::resource_usage::render_target, reshade::api::resource_view_desc(reshade::api::format_to_default_typed(reShadeSwapChainDesc.texture.format, 0), 0, 1, 0, 1), &reshadeSwapChainRTV);
-		reShadeDevice->create_resource_view(reShadeSwapChainResource, reshade::api::resource_usage::render_target, reshade::api::resource_view_desc(reshade::api::format_to_default_typed(reShadeSwapChainDesc.texture.format, 1), 0, 1, 0, 1), &reshadeSwapChainRTVsRGB);
-
-		auto& depth = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
-
-		auto depthRTV = reshade::api::resource_view{ reinterpret_cast<uintptr_t>(depth.depthSRV) };
-		reShadeRuntime->update_texture_bindings("DEPTH", depthRTV, depthRTV);
-
-		reShadeRuntime->enumerate_uniform_variables(nullptr, [](reshade::api::effect_runtime* runtime, reshade::api::effect_uniform_variable variable) {
-			char source[32];
-			if (runtime->get_annotation_string_from_uniform_variable(variable, "source", source) &&
-				std::strcmp(source, "bufready_depth") == 0)
-				runtime->set_uniform_value_bool(variable, true);
-		});
-	}
-}
-
-void State::RenderReShade()
-{
-	if (reShadeRuntime) {
-		reShadeRuntime->render_effects(reShadeRuntime->get_command_queue()->get_immediate_command_list(), reshadeSwapChainRTV, reshadeSwapChainRTVsRGB);
-	}
-}
-
-void State::PresentReShade()
-{
-	reshade::update_and_present_effect_runtime(reShadeRuntime);
 }
 
 // --- Utility Method Implementations ---
