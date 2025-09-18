@@ -376,7 +376,7 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 			break;
 
 		half depth_delta = abs(start_depth - DepthData[sample_index + i] * depth_scale);
-		
+
 		// By using 4 values, the average shadow can be taken, which can help soften single-pixel shadows.
 		shadow_value[i & 3] = min(shadow_value[i & 3], depth_delta);
 	}
