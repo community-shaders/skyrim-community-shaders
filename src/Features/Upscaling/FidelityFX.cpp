@@ -288,7 +288,7 @@ void FidelityFX::Upscale(
 	dispatchUpscale.motionVectorScale.y = (float)a_renderHeight;
 	dispatchUpscale.reset = false;
 	dispatchUpscale.enableSharpening = true;
-	dispatchUpscale.sharpness = 0.0f;
+	dispatchUpscale.sharpness = 0.5f;
 
 	dispatchUpscale.frameTimeDelta = static_cast<float>(RE::GetSecondsSinceLastFrame() * 1000.f);
 
