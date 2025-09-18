@@ -61,13 +61,7 @@ namespace globals
 		extern GrassLighting grassLighting;
 		extern HairSpecular hairSpecular;
 		extern IBL ibl;
-<<<<<<< HEAD
-		extern InteriorSunShadows interiorSunShadows;
-=======
-		extern LightLimitFix lightLimitFix;
-		extern LODBlending lodBlending;
 		extern InteriorSun interiorSun;
->>>>>>> origin/dev
 		extern InverseSquareLighting inverseSquareLighting;
 		extern LODBlending lodBlending;
 		extern LightLimitFix lightLimitFix;
@@ -82,16 +76,12 @@ namespace globals
 		extern TerrainHelper terrainHelper;
 		extern TerrainShadows terrainShadows;
 		extern TerrainVariation terrainVariation;
+		extern Upscaling upscaling;
 		extern VR vr;
 		extern VolumetricLighting volumetricLighting;
 		extern WaterEffects waterEffects;
 		extern WeatherPicker weatherPicker;
 		extern WetnessEffects wetnessEffects;
-<<<<<<< HEAD
-=======
-		extern ExtendedTranslucency extendedTranslucency;
-		extern Upscaling upscaling;
->>>>>>> origin/dev
 
 		namespace llf
 		{

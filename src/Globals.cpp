@@ -58,7 +58,7 @@ namespace globals
 		GrassLighting grassLighting{};
 		HairSpecular hairSpecular{};
 		IBL ibl{};
-		InteriorSunShadows interiorSun{};
+		InteriorSun interiorSun{};
 		InverseSquareLighting inverseSquareLighting{};
 		LODBlending lodBlending{};
 		LightLimitFix lightLimitFix{};
