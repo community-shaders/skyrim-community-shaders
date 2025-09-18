@@ -453,15 +453,15 @@ bool HomePageRenderer::ShouldShowFirstTimeSetup()
 		return false;
 	}
 
-	// Check if first-time setup has been completed by looking at UserSettings.json
+	// Check if first-time setup has been completed by looking at SettingsUser.json
 	std::filesystem::path userSettingsPath = Util::PathHelpers::GetUserSettingsPath();
 
-	// If UserSettings.json doesn't exist at all, this is definitely a first-time launch
+	// If SettingsUser.json doesn't exist at all, this is definitely a first-time launch
 	if (!std::filesystem::exists(userSettingsPath)) {
 		return true;
 	}
 
-	// If UserSettings.json exists, check if FirstTimeSetupCompleted flag is set
+	// If SettingsUser.json exists, check if FirstTimeSetupCompleted flag is set
 	try {
 		std::ifstream file(userSettingsPath);
 		if (!file.is_open()) {
