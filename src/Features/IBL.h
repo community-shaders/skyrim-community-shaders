@@ -4,7 +4,7 @@ struct IBL : Feature
 {
 public:
 	virtual bool SupportsVR() override { return true; };
-	virtual bool IsCore() const override { return true; };
+	virtual bool IsCore() const override { return false; };
 
 	virtual inline std::string GetName() override { return "Image Based Lighting"; }
 	virtual inline std::string GetShortName() override { return "ImageBasedLighting"; }

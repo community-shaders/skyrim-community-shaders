@@ -55,9 +55,7 @@ public:
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 1;
 		uint frameGenerationForceEnable = 0;
-		uint streamlineLogLevel = 0;   // 0=Off, 1=Default, 2=Verbose
-		uint enableNISSharpening = 1;  // 0=Off, 1=On
-		float nisSharpness = 0.15f;    // 0.0 to 1.0
+		uint streamlineLogLevel = 0;  // 0=Off, 1=Default, 2=Verbose
 	};
 
 	Settings settings;
@@ -68,7 +66,14 @@ public:
 		float2 pad0;
 	};
 
+	struct UpscalingDataCB
+	{
+		float2 trueSamplingDim;  // BufferDim.xy * ResolutionScale
+		float2 pad0;
+	};
+
 	ConstantBuffer* jitterCB = nullptr;
+	ConstantBuffer* upscalingDataCB = nullptr;
 
 	// Runtime state
 	bool isWindowed = false;

@@ -92,7 +92,7 @@ static constexpr const char* NORDIC_DETAILED[] = {
 	"Balanced temperate Nordic climate.",
 	"Max precipitation: ~3.35 mm/hr (moderate)",
 	"Multipliers: Wetness 1.0x, Puddle 1.0x, Transition 1.0x.",
-	"Raindrop: 100% chance, grid 3.0 units, interval 0.3s.",
+	"Raindrop: 100% chance, grid 3.0 units, interval 1.0s.",
 	"Performance impact: Low",
 	nullptr
 };
@@ -156,7 +156,7 @@ static constexpr std::array<ClimatePresetInfo, 6> CLIMATE_PRESET_INFO = {
 			"Balanced Nordic climate (moderate rain)",
 			NORDIC_DETAILED,
 			NORDIC_EFFECTS,
-			{ 1.0f, 1.0f, 1.0f, 1.0f, 3.0f, 0.3f } },
+			{ 1.0f, 1.0f, 1.0f, 1.0f, 3.0f, 1.0f } },
 		// Arctic Tundra
 		{
 			"Arctic Tundra",

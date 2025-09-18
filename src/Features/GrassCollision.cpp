@@ -23,74 +23,8 @@ void GrassCollision::DrawSettings()
 		}
 		ImGui::Checkbox("Track Ragdolls", &settings.TrackRagdolls);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("If enabled, dead actors (ragdolls) will be tracked and shown in the table.");
+			ImGui::Text("If enabled, dead actors (ragdolls) will be tracked.");
 		}
-		ImGui::TreePop();
-	}
-	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Text(std::format("Active/Total Actors : {}/{}", activeActorCount, totalActorCount).c_str());
-		ImGui::Text(std::format("Total Collisions : {}", currentCollisionCount).c_str());
-
-		std::vector<std::string> headers = { "Name/EditorID", "FormID", "Type", "X", "Y", "Z", "SqDist" };
-		std::vector<ActorRow> sortableRows;
-		RE::NiPoint3 eyePos = Util::GetAverageEyePosition();
-		RE::NiPoint3 playerPos{};
-		if (auto player = RE::PlayerCharacter::GetSingleton()) {
-			playerPos = player->GetPosition();
-		}
-		for (const auto ref : actorList) {
-			Util::ActorDisplayInfo info;
-			if (!Util::GetActorDisplayInfo(ref, eyePos, settings.TrackRagdolls, info))
-				continue;
-			float offsetSqDist = (info.pos).GetSquaredDistance(playerPos);
-			std::vector<std::string> row = {
-				info.name,
-				info.formID,
-				info.type,
-				std::format("{:.2f}", info.pos.x),
-				std::format("{:.2f}", info.pos.y),
-				std::format("{:.2f}", info.pos.z),
-				std::format("{:.2f}", offsetSqDist)
-			};
-			sortableRows.push_back(ActorRow{ info.actor, row, offsetSqDist });
-		}
-		ImGui::BeginChild("GrassCollidersTableChild", ImVec2(0, 300), true);
-		Util::ShowSortedStringTableCustom<ActorRow>(
-			"GrassCollidersTable",
-			headers,
-			sortableRows,
-			6,  // Default sort by sqDist
-			true,
-			{
-				// Custom comparators for each column
-				[](const ActorRow& a, const ActorRow& b, bool asc) { return asc ? a.row[0] < b.row[0] : a.row[0] > b.row[0]; },                                              // Name
-				[](const ActorRow& a, const ActorRow& b, bool asc) { return asc ? a.row[1] < b.row[1] : a.row[1] > b.row[1]; },                                              // FormID
-				[](const ActorRow& a, const ActorRow& b, bool asc) { return asc ? a.row[2] < b.row[2] : a.row[2] > b.row[2]; },                                              // Type
-				[](const ActorRow& a, const ActorRow& b, bool asc) { return asc ? std::stof(a.row[3]) < std::stof(b.row[3]) : std::stof(a.row[3]) > std::stof(b.row[3]); },  // X
-				[](const ActorRow& a, const ActorRow& b, bool asc) { return asc ? std::stof(a.row[4]) < std::stof(b.row[4]) : std::stof(a.row[4]) > std::stof(b.row[4]); },  // Y
-				[](const ActorRow& a, const ActorRow& b, bool asc) { return asc ? std::stof(a.row[5]) < std::stof(b.row[5]) : std::stof(a.row[5]) > std::stof(b.row[5]); },  // Z
-				[](const ActorRow& a, const ActorRow& b, bool asc) { return asc ? a.sqDist < b.sqDist : a.sqDist > b.sqDist; }                                               // SqDist
-			},
-			[](int, int colIdx, const ActorRow& actorRow) {
-				if (colIdx == 0) {
-					if (ImGui::Selectable(actorRow.row[colIdx].c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
-						// Teleport player to actor
-						if (auto player = RE::PlayerCharacter::GetSingleton()) {
-							auto actor = static_cast<RE::Actor*>(actorRow.actor);
-							if (actor) {
-								RE::NiPoint3 dest = actor->GetPosition();
-								player->SetPosition(dest, true);
-							}
-						}
-					}
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip("Teleport to this actor's position.");
-					}
-				} else {
-					ImGui::TextUnformatted(actorRow.row[colIdx].c_str());
-				}
-			});
-		ImGui::EndChild();
 		ImGui::TreePop();
 	}
 }

@@ -47,7 +47,7 @@ public:
 		uint EnableVanillaRipples = false;
 		float RaindropFxRange = 1000.f;
 		float RaindropGridSize = 4.f;
-		float RaindropInterval = 2.0f;
+		float RaindropInterval = 1.0f;
 		float RaindropChance = 1.0f;
 		float SplashesLifetime = 10.0f;
 		float SplashesStrength = 1.05f;

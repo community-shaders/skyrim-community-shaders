@@ -4,6 +4,7 @@
 #	define DIRECTINPUT_VERSION 0x0800
 #endif
 #include <dinput.h>
+#include <format>
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
 #include <imgui_internal.h>
@@ -125,6 +126,7 @@ Menu::~Menu()
 	uiIcons.logo.Release();
 	uiIcons.discord.Release();
 	uiIcons.characters.Release();
+	uiIcons.display.Release();
 	uiIcons.grass.Release();
 	uiIcons.lighting.Release();
 	uiIcons.sky.Release();

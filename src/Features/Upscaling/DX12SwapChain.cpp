@@ -86,7 +86,7 @@ void DX12SwapChain::CreateInterop()
 
 	swapChainBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), upscaling.sharedD3D12Device.get());
 
-	texDesc11.Format = DXGI_FORMAT_R16G16B16A16_UNORM;
+	texDesc11.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	uiBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), upscaling.sharedD3D12Device.get());
 }
 
@@ -166,7 +166,9 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	float clearColor[4]{ 0, 0, 0, 0 };
 	d3d11Context->ClearRenderTargetView(uiBufferWrapped->rtv, clearColor);
 
-	upscaling.FrameLimiter();
+	// If VSync is disabled, use frame limiter to prevent tearing and optimise pacing
+	if (SyncInterval == 0)
+		upscaling.FrameLimiter();
 
 	return S_OK;
 }
