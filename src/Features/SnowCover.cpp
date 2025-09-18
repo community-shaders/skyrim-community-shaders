@@ -396,7 +396,7 @@ void SnowCover::Reload()
 		WinterHeightOffset = config["WinterHeightOffset"];
 		mapMin = float2(config["MapMin"][0], config["MapMin"][1]);
 		mapMax = float2(config["MapMax"][0], config["MapMax"][1]);
-		wsettings.mapScale = float2(1.0)/(mapMax - mapMin);
+		wsettings.mapScale = float2(1.0) / (mapMax - mapMin);
 		wsettings.mapOffset = -mapMin * wsettings.mapScale;
 		wsettings.mapZscale = config["MapZscale"];
 		wsettings.BlendSmoothness = config["BlendSmoothness"];

@@ -9,24 +9,24 @@
 struct SnowCover : Feature
 {
 private:
-	static constexpr float DEFAULT_FOLIGE_EFFECT_OFFSET = -2048.0; // color foliage earlier/later than snow appears
+	static constexpr float DEFAULT_FOLIGE_EFFECT_OFFSET = -2048.0;  // color foliage earlier/later than snow appears
 	static constexpr float DEFAULT_UV_SCALE = 0.5;
-	static constexpr float DEFAULT_PEAK_MAIN_ANGLE = 0.45; // material is strongest at this angle
+	static constexpr float DEFAULT_PEAK_MAIN_ANGLE = 0.45;  // material is strongest at this angle
 	static constexpr float DEFAULT_PEAK_ALT_ANGLE = 0.9;    // material is strongest at this angle
-	static constexpr float DEFAULT_MIN_ANGLE = 0.3;        // lowest angle snow appears at
+	static constexpr float DEFAULT_MIN_ANGLE = 0.3;         // lowest angle snow appears at
 	static constexpr float DEFAULT_MAX_ANGLE = 0.9;         // angle for full opacity snow
-	static constexpr float DEFULAT_MAIN_SPEC = 0.02;       // specular for main material
+	static constexpr float DEFULAT_MAIN_SPEC = 0.02;        // specular for main material
 	static constexpr float DEFULAT_ALT_SPEC = 0.02;         // specular for alt material
-	static constexpr float DEFULAT_MAP_ZSCALE = 75000.0f;  // vertical scale of the map of 'altitude offsets'
-	static constexpr float DEFULAT_GLINT_1 = 1.2f;	// glint values based on Faultier's snow
+	static constexpr float DEFULAT_MAP_ZSCALE = 75000.0f;   // vertical scale of the map of 'altitude offsets'
+	static constexpr float DEFULAT_GLINT_1 = 1.2f;          // glint values based on Faultier's snow
 	static constexpr float DEFULAT_GLINT_2 = 33.f;
 	static constexpr float DEFULAT_GLINT_3 = .15f;
 	static constexpr float DEFULAT_GLINT_4 = 2.f;
-	static constexpr float DEFAULT_BLEND_SMOOTHNESS = 5000.0f;  // range in game units in which the snow transition gradually happens
+	static constexpr float DEFAULT_BLEND_SMOOTHNESS = 5000.0f;              // range in game units in which the snow transition gradually happens
 	static constexpr float2 DEFAULT_MAP_MIN = float2(-233472.0, 208896.0);  // one corner of skyrim map (where cells end)
 	static constexpr float2 DEFAULT_MAP_MAX = float2(253952.0, -176128.0);  // other corner of skyrim map
-	static constexpr float DEFAULT_SUMMER_HEIGHT_OFFSET = 20000.0f; // how high snow is in summer (in game units)
-	static constexpr float DEFAULT_WINTER_HEIGHT_OFFSET = -20000.0f; // how high snow is in winter (in game units)
+	static constexpr float DEFAULT_SUMMER_HEIGHT_OFFSET = 20000.0f;         // how high snow is in summer (in game units)
+	static constexpr float DEFAULT_WINTER_HEIGHT_OFFSET = -20000.0f;        // how high snow is in winter (in game units)
 	static constexpr uint DEFAULT_PEAK_SUMMER_MONTH = 6;
 	static constexpr uint DEFAULT_PEAK_WINTER_MONTH = 0;
 
@@ -135,7 +135,7 @@ public:
 		float maxMonth = static_cast<float>(std::max(MaxSummerMonth, MaxWinterMonth));
 		float minMonth = static_cast<float>(std::min(MaxSummerMonth, MaxWinterMonth));
 		float summerToWinter;
-		auto month = (maxMonth + minMonth) / 2.0f; // fallback value if calendar not exist
+		auto month = (maxMonth + minMonth) / 2.0f;  // fallback value if calendar not exist
 		if (auto calendar = RE::Calendar::GetSingleton()) {
 			auto time = calendar->GetTime();
 			month = static_cast<float>(time.tm_mon + (time.tm_mday + (time.tm_hour + (time.tm_min + time.tm_sec / 60.0) / 60.0) / 24.0) / 32.0);

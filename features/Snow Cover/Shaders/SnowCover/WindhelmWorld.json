@@ -1,6 +1,6 @@
 {
     "AffectGrassTint": 1,
-"AffectTreeTint": 0,
+    "AffectTreeTint": 0,
     "AltSpec": 0.019999999552965164,
     "AltTexture": "textures/pbr/landscape/frozenmarshice01",
     "AltTint": [1.0, 1.0, 1.0, 0.4274509847164154],

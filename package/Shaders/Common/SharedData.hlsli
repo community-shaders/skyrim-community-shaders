@@ -152,12 +152,12 @@ namespace SharedData
 		uint AffectGrassTint;
 		uint AffectTreeTint;
 		float FoliageHeightOffset;
-	
+
 		float UVScale;
 		float peakMainAngle;
 		float peakAltAngle;
 		float minAngle;
-	
+
 		float maxAngle;
 		float mainSpec;
 		float altSpec;
@@ -169,7 +169,7 @@ namespace SharedData
 		float4 Glint;
 		float4 MainTint;
 		float4 AltTint;
-	
+
 		float BlendSmoothness;
 		uint3 pad2;
 	};
