@@ -223,8 +223,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::terrainHelper,
 		&globals::features::terrainShadows,
 		&globals::features::terrainVariation,
-		&globals::features::upscaling
-		&globals::features::volumetricLighting,
+		&globals::features::upscaling & globals::features::volumetricLighting,
 		&globals::features::waterEffects,
 		&globals::features::weatherPicker,
 		&globals::features::wetnessEffects,
