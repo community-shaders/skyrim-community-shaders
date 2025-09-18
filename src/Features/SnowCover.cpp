@@ -65,32 +65,36 @@ void SnowCover::DrawSettings()
 			ImGui::Text("Enables the feature. This is set automatically when a config is found.");
 		}
 		if (wsettings.EnableSnowCover) {
-			ImGui::Checkbox("Foliage Color Affected", (bool*)&wsettings.AffectFoliageColor);
+			ImGui::Checkbox("Affect Grass Tint", (bool*)&wsettings.AffectGrassTint);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Should grass and trees turn yellow?");
+				ImGui::Text("Should grass turn yellow?");
+			}
+			ImGui::Checkbox("Affect Tree Tint", (bool*)&wsettings.AffectTreeTint);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Should trees turn yellow?");
 			}
 			ImGui::SliderFloat("Foliage Color Height Offset", &wsettings.FoliageHeightOffset, -2000.0f, 2000.0f);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("How far below/above the snow line should the foliage color start changing?");
 			}
-			ImGui::SliderFloat("Blend smoothness", &wsettings.blendSmoothness, 1.f, 10000.0f);
+			ImGui::SliderFloat("Blend smoothness", &wsettings.BlendSmoothness, 1.f, 10000.0f);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("How gradual the snow transition is.");
 			}
 			if (ImGui::TreeNodeEx("Weather and Seasons")) {
-				ImGui::SliderInt("Maximum Summer Month", (int*)&wsettings.MaxSummerMonth, 0, 11);
+				ImGui::SliderInt("Maximum Summer Month", (int*)&MaxSummerMonth, 0, 11);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("In which month is the snow line highest?");
 				}
-				ImGui::SliderInt("Maximum Winter Month", (int*)&wsettings.MaxWinterMonth, 0, 11);
+				ImGui::SliderInt("Maximum Winter Month", (int*)&MaxWinterMonth, 0, 11);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("In which month is the snow line lowest?");
 				}
-				ImGui::SliderFloat("Summer Height Offset", &wsettings.SummerHeightOffset, -20000.0f, 20000.0f);
+				ImGui::SliderFloat("Summer Height Offset", &SummerHeightOffset, -20000.0f, 20000.0f);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("What is the snow line altitude in summer?");
 				}
-				ImGui::SliderFloat("Winter Height Offset", &wsettings.WinterHeightOffset, -20000.0f, 20000.0f);
+				ImGui::SliderFloat("Winter Height Offset", &WinterHeightOffset, -20000.0f, 20000.0f);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("What is the snow line altitude in winter?");
 				}
@@ -110,19 +114,19 @@ void SnowCover::DrawSettings()
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Path to the map texture relative to Data folder. Interpreted as grayscale.");
 				}
-				ImGui::InputFloat("Min X", &wsettings.mapMin.x, 0.0f, 10.0f);
+				ImGui::InputFloat("Min X", &mapMin.x, 0.0f, 10.0f);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("");
 				}
-				ImGui::InputFloat("Min Y", &wsettings.mapMin.y, 0.0f, 10.0f);
+				ImGui::InputFloat("Min Y", &mapMin.y, 0.0f, 10.0f);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("");
 				}
-				ImGui::InputFloat("Max X", &wsettings.mapMax.x, 0.0f, 10.0f);
+				ImGui::InputFloat("Max X", &mapMax.x, 0.0f, 10.0f);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("");
 				}
-				ImGui::InputFloat("Max Y", &wsettings.mapMax.y, 0.0f, 10.0f);
+				ImGui::InputFloat("Max Y", &mapMax.y, 0.0f, 10.0f);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("");
 				}
@@ -258,10 +262,11 @@ SnowCover::PerFrame SnowCover::GetCommonBufferData()
 		lastHour = h;
 
 		auto time = calendar->GetTime();
-		perFrame.Month = static_cast<float>(time.tm_mon + (time.tm_mday + (time.tm_hour + (time.tm_min + time.tm_sec / 61.0) / 60.0) / 24.0) / 32.0);
+		perFrame.Month = static_cast<float>(time.tm_mon + (time.tm_mday + (time.tm_hour + (time.tm_min + time.tm_sec / 60.0) / 60.0) / 24.0) / 32.0);
 	}
 	perFrame.SnowingDensity = snowingDensity;
 	perFrame.TimeSnowing = timeSnowing;
+	perFrame.SeasonalAltitude = GetSeasonalAltitude();
 	perFrame.settings = settings;
 	perFrame.wsettings = wsettings;
 
@@ -295,22 +300,23 @@ void SnowCover::SaveConfig()
 	if (last_worldspace == nullptr)
 		return;
 	json config = {
-		{ "AffectFoliageColor", wsettings.AffectFoliageColor },
+		{ "AffectGrassTint", wsettings.AffectGrassTint },
+		{ "AffectTreeTint", wsettings.AffectTreeTint },
 		{ "FoliageHeightOffset", wsettings.FoliageHeightOffset },
 		{ "UVScale", wsettings.UVScale },
-		{ "MaxSummerMonth", wsettings.MaxSummerMonth },
-		{ "MaxWinterMonth", wsettings.MaxWinterMonth },
-		{ "SummerHeightOffset", wsettings.SummerHeightOffset },
-		{ "WinterHeightOffset", wsettings.WinterHeightOffset },
+		{ "MaxSummerMonth", MaxSummerMonth },
+		{ "MaxWinterMonth", MaxWinterMonth },
+		{ "SummerHeightOffset", SummerHeightOffset },
+		{ "WinterHeightOffset", WinterHeightOffset },
 		{ "MapTexture", map_tex.c_str() },
 		{ "MapZscale", wsettings.mapZscale },
-		{ "BlendSmoothness", wsettings.blendSmoothness },
+		{ "BlendSmoothness", wsettings.BlendSmoothness },
 		{ "ScreenSpaceScale", wsettings.ScreenSpaceScale },
 		{ "LogMicrofacetDensity", wsettings.LogMicrofacetDensity },
 		{ "MicrofacetRoughness", wsettings.MicrofacetRoughness },
 		{ "DensityRandomization", wsettings.DensityRandomization },
-		{ "MapMin", json::array({ wsettings.mapMin.x, wsettings.mapMin.y }) },
-		{ "MapMax", json::array({ wsettings.mapMax.x, wsettings.mapMax.y }) },
+		{ "MapMin", json::array({ mapMin.x, mapMin.y }) },
+		{ "MapMax", json::array({ mapMax.x, mapMax.y }) },
 		{ "MainTexture", main_tex.c_str() },
 		{ "AltTexture", alt_tex.c_str() },
 		{ "MainTint", json::array({ wsettings.MainTint.x,
@@ -380,17 +386,20 @@ void SnowCover::Reload()
 	json config;
 	try {
 		fileStream >> config;
-		wsettings.AffectFoliageColor = config["AffectFoliageColor"];
+		wsettings.AffectGrassTint = config["AffectGrassTint"];
+		wsettings.AffectTreeTint = config["AffectTreeTint"];
 		wsettings.FoliageHeightOffset = config["FoliageHeightOffset"];
 		wsettings.UVScale = config["UVScale"];
-		wsettings.MaxSummerMonth = config["MaxSummerMonth"];
-		wsettings.MaxWinterMonth = config["MaxWinterMonth"];
-		wsettings.SummerHeightOffset = config["SummerHeightOffset"];
-		wsettings.WinterHeightOffset = config["WinterHeightOffset"];
-		wsettings.mapMin = float2(config["MapMin"][0], config["MapMin"][1]);
-		wsettings.mapMax = float2(config["MapMax"][0], config["MapMax"][1]);
+		MaxSummerMonth = config["MaxSummerMonth"];
+		MaxWinterMonth = config["MaxWinterMonth"];
+		SummerHeightOffset = config["SummerHeightOffset"];
+		WinterHeightOffset = config["WinterHeightOffset"];
+		mapMin = float2(config["MapMin"][0], config["MapMin"][1]);
+		mapMax = float2(config["MapMax"][0], config["MapMax"][1]);
+		wsettings.mapScale = float2(1.0)/(mapMax - mapMin);
+		wsettings.mapOffset = -mapMin * wsettings.mapScale;
 		wsettings.mapZscale = config["MapZscale"];
-		wsettings.blendSmoothness = config["BlendSmoothness"];
+		wsettings.BlendSmoothness = config["BlendSmoothness"];
 		wsettings.ScreenSpaceScale = config["ScreenSpaceScale"];
 		wsettings.LogMicrofacetDensity = config["LogMicrofacetDensity"];
 		wsettings.MicrofacetRoughness = config["MicrofacetRoughness"];

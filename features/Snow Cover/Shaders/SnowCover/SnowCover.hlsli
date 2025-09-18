@@ -63,8 +63,8 @@ namespace SnowCover
 
 	float GetHeightMult(float3 p)
 	{
-		float2 scale = rcp(SharedData::snowCoverSettings.mapMax-SharedData::snowCoverSettings.mapMin);
-		float2 offset = -SharedData::snowCoverSettings.mapMin*scale;
+		float2 scale = SharedData::snowCoverSettings.mapScale;
+		float2 offset = SharedData::snowCoverSettings.mapOffset;
 		float2 uv = p.xy*scale + offset;
 		float height_tresh = p.z - SharedData::snowCoverSettings.SnowHeightOffset + (SnowMap.SampleLevel(SampColorSampler, uv, 0) - 0.5)*SharedData::snowCoverSettings.mapZscale;
 		return height_tresh;
@@ -72,24 +72,7 @@ namespace SnowCover
 
 	float GetEnvironmentalMultiplier(float3 p)
 	{
-		float maxMonth = max(SharedData::snowCoverSettings.MaxSummerMonth, SharedData::snowCoverSettings.MaxWinterMonth);
-		float minMonth = min(SharedData::snowCoverSettings.MaxSummerMonth, SharedData::snowCoverSettings.MaxWinterMonth);
-		float summerToWinter;
-		if (SharedData::snowCoverSettings.Month > maxMonth) {
-			summerToWinter = (SharedData::snowCoverSettings.Month - maxMonth) / (minMonth + 12 - maxMonth);
-			if (SharedData::snowCoverSettings.MaxWinterMonth > SharedData::snowCoverSettings.MaxSummerMonth)
-				summerToWinter = 1 - summerToWinter;
-		} else if (SharedData::snowCoverSettings.Month < minMonth) {
-			summerToWinter = (12 - maxMonth + SharedData::snowCoverSettings.Month) / (minMonth + 12 - maxMonth);
-			if (SharedData::snowCoverSettings.MaxSummerMonth > SharedData::snowCoverSettings.MaxWinterMonth)
-				summerToWinter = 1 - summerToWinter;
-		} else {
-			summerToWinter = (SharedData::snowCoverSettings.Month - minMonth) / (maxMonth - minMonth);
-			if (SharedData::snowCoverSettings.MaxSummerMonth > SharedData::snowCoverSettings.MaxWinterMonth)
-				summerToWinter = 1 - summerToWinter;
-		}
-
-		return (GetHeightMult(p) - lerp(SharedData::snowCoverSettings.SummerHeightOffset, SharedData::snowCoverSettings.WinterHeightOffset, summerToWinter)) / SharedData::snowCoverSettings.blendSmoothness;
+		return (GetHeightMult(p) + SharedData::snowCoverSettings.SeasonalAltitude) / SharedData::snowCoverSettings.BlendSmoothness;
 	}
 
 	void ApplyFoliageColor(inout float3 color, float env_mult)
@@ -111,7 +94,11 @@ namespace SnowCover
 		float weatherMult = distMult * SharedData::snowCoverSettings.TimeSnowing * max(500, SharedData::snowCoverSettings.SnowingDensity) / 500;
 		float mult = SharedData::snowCoverSettings.MainTint.a * saturate(env_mult);
 		mult = skylight * saturate(mult + weatherMult) * smoothstep(SharedData::snowCoverSettings.minAngle, SharedData::snowCoverSettings.maxAngle, worldNormal.z);
-		if (SharedData::snowCoverSettings.AffectFoliageColor) {
+#	if defined(GRASS)
+		if (SharedData::snowCoverSettings.AffectGrassTint) {
+#	else
+		if (SharedData::snowCoverSettings.AffectTreeTint) {
+#	endif
 			ApplyFoliageColor(color, env_mult);
 		}
 		if (mult < 0.01)

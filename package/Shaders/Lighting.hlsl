@@ -1014,7 +1014,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(SKINNED) || !defined(MODELSPACENORMALS)
 	float3x3 tbn = float3x3(input.TBN0.xyz, input.TBN1.xyz, input.TBN2.xyz);
 
-#		if !defined(TREE_ANIM) && !defined(LOD) && !(defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(RIM_LIGHTING) && defined(SOFT_LIGHTING))
+#		if !defined(TREE_ANIM) && !defined(LOD) && !(defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(SOFT_LIGHTING))
 	// Fix incorrect vertex normals on double-sided meshes
 	if (!frontFace)
 		tbn = lerp(tbn, -tbn, nearFactor);
@@ -2226,7 +2226,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float snowOcclusion = inWorld;
 #		endif
 
-#	if defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(RIM_LIGHTING) && defined(SOFT_LIGHTING) // should only match object lod trees (ultra trees), they have no define
+#	if defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(SOFT_LIGHTING) // should only match object lod trees (ultra trees), they have no define
 	float rx;
 	float ry;
 	TexColorSampler.GetDimensions(rx, ry);
@@ -2264,7 +2264,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float3 snowNormal = worldNormal;
 		float3 snowedColor = baseColor.rgb;
 #		if defined(TREE_ANIM)
-		if (SharedData::snowCoverSettings.AffectFoliageColor)
+		if (SharedData::snowCoverSettings.AffectTreeTint)
 			SnowCover::ApplyFoliageColor(snowedColor.rgb, SnowCover::GetEnvironmentalMultiplier(adjustedWorldPos));
 #		endif
 #		if defined(TRUE_PBR)

@@ -143,38 +143,36 @@ namespace SharedData
 		float Month;
 		float TimeSnowing;
 		float SnowingDensity;
-		uint pad0;
+		float SeasonalAltitude;
 
 		uint EnableExpensiveFoliage;
 		float SnowHeightOffset;
 		uint2 pad;
 
 		uint EnableSnowCover;
-		uint AffectFoliageColor;
+		uint AffectGrassTint;
+		uint AffectTreeTint;
 		float FoliageHeightOffset;
+	
 		float UVScale;
-
-		uint MaxSummerMonth;
-		uint MaxWinterMonth;
-		float SummerHeightOffset;
-		float WinterHeightOffset;
-
 		float peakMainAngle;
 		float peakAltAngle;
 		float minAngle;
+	
 		float maxAngle;
-
 		float mainSpec;
 		float altSpec;
 		float mapZscale;
-		float blendSmoothness;
 
-		float2 mapMin;
-		float2 mapMax;
+		float2 mapScale;
+		float2 mapOffset;
 
 		float4 Glint;
 		float4 MainTint;
 		float4 AltTint;
+	
+		float BlendSmoothness;
+		uint3 pad2;
 	};
 
 	struct LODBlendingSettings
