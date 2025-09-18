@@ -427,7 +427,9 @@ struct PS_OUTPUT
 #	elif defined(NORMALS)
 	float4 NormalGlossiness : SV_Target2;
 #	endif
+#	if defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 	float4 Albedo : SV_Target3;
+#	endif
 	float4 Specular : SV_Target4;
 	float4 Reflectance : SV_Target5;
 	float4 Masks : SV_Target6;
@@ -860,7 +862,6 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Masks = float4(Color::RGBToLuminance(psout.Diffuse.xyz).xxx, finalColor.w);
 #else
 	psout.Specular = float4(0, 0, 0, finalColor.w);
-	psout.Albedo = float4(0, 0, 0, finalColor.w);
 	psout.Reflectance = float4(0, 0, 0, finalColor.w);
 	psout.Masks = float4(0, 0, 0, finalColor.w);
 #endif
