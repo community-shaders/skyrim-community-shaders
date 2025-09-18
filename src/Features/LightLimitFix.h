@@ -49,7 +49,7 @@ public:
 	struct alignas(16) LightData
 	{
 		float3 color;
-		float fade;
+		float fade = 1.0f;
 		float radius;
 		float invRadius;
 		float fadeZone;
