@@ -2956,6 +2956,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	endif
 
+#	if defined(SPECULAR)
+	reflectance *= MaterialData.yyy;
+#	endif
+
 	float2 screenMotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);
 
 #	if defined(WETNESS_EFFECTS)
@@ -3147,10 +3151,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (!(enableVanillaFresnel && SharedData::vanillaFresnelSettings.EnableGGX))
 #		endif
 #		if defined(VANILLA_FRESNEL) && (defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE))
-		specularColor = (specularColor * glossiness * MaterialData.yyy) * ((enableVanillaFresnel && SharedData::vanillaFresnelSettings.EnableDynamicCubemapsConversion) ? lerp(SpecularColor.xyz, F0, envMask) : SpecularColor.xyz);
+		specularColor = (specularColor * glossiness) * ((enableVanillaFresnel && SharedData::vanillaFresnelSettings.EnableDynamicCubemapsConversion) ? lerp(SpecularColor.xyz, F0, envMask) : SpecularColor.xyz);
 #		else
-		specularColor = (specularColor * glossiness * MaterialData.yyy) * SpecularColor.xyz;
+		specularColor = (specularColor * glossiness) * SpecularColor.xyz;
 #		endif
+	specularColor *= MaterialData.yyy;
 #	elif defined(SPARKLE)
 	specularColor *= glossiness;
 #	endif  // SPECULAR
