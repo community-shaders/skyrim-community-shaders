@@ -18,6 +18,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	vanillaSpecularMult,
 	grassDiffuseMult,
 	grassSpecularMult,
+	vanillaDiffuseColorMult,
 	lightMult,
 	effectLightingMult,
 	membraneEffectMult,
@@ -47,6 +48,7 @@ void LinearLighting::DrawSettings()
 	ImGui::SliderFloat("Vanilla Specular Multiplier", &settings.vanillaSpecularMult, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("Grass Diffuse Multiplier", &settings.grassDiffuseMult, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("Grass Specular Multiplier", &settings.grassSpecularMult, 0.0f, 10.0f, "%.2f");
+	ImGui::SliderFloat("Vanilla Diffuse Color Multiplier", &settings.vanillaDiffuseColorMult, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("Light Multiplier", &settings.lightMult, 0.0f, 10.0f, "%.2f");
 	if (ImGui::TreeNodeEx("Effects", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::SliderFloat("Effect Lighting Multiplier", &settings.effectLightingMult, 0.0f, 10.0f, "%.2f");
@@ -112,6 +114,7 @@ LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 	data.vanillaSpecularMult = settings.vanillaSpecularMult;
 	data.grassDiffuseMult = settings.grassDiffuseMult;
 	data.grassSpecularMult = settings.grassSpecularMult;
+	data.vanillaDiffuseColorMult = settings.vanillaDiffuseColorMult;
 	data.lightMult = settings.lightMult;
 	data.effectLightingMult = settings.effectLightingMult;
 	data.membraneEffectMult = settings.membraneEffectMult;

@@ -83,10 +83,7 @@ namespace Color
 		if (!ENABLE_LL) {
 			return color;
 		}
-		float originalLuminance = RGBToLuminance(color);
-		if (originalLuminance <= 1e-5) {
-			return float3(0.0, 0.0, 0.0);
-		}
+		float originalLuminance = max(RGBToLuminance(color), 1e-5);
 		float3 linearColorRaw = GammaToLinear(color / originalLuminance);
 		float scale = GammaToLinear(originalLuminance).x;
 		return linearColorRaw * scale;
@@ -97,10 +94,7 @@ namespace Color
 		if (!ENABLE_LL) {
 			return color;
 		}
-		float originalLuminance = RGBToLuminance(color);
-		if (originalLuminance <= 1e-5) {
-			return float3(0.0, 0.0, 0.0);
-		}
+		float originalLuminance = max(RGBToLuminance(color), 1e-5);
 		float3 linearColorRaw = pow(abs(color / originalLuminance), SharedData::linearLightingSettings.lightGamma);
 		float scale = originalLuminance;
 		return linearColorRaw * scale;
@@ -122,7 +116,7 @@ namespace Color
 #	if defined(TRUE_PBR)
 		return ENABLE_LL ? color : LinearToGamma(color);
 #	else
-		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.colorGamma) : color;
+		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.colorGamma) * SharedData::linearLightingSettings.vanillaDiffuseColorMult : color;
 #	endif
 	}
 

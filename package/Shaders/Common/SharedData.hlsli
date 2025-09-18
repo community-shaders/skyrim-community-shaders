@@ -214,6 +214,7 @@ namespace SharedData
 		float vanillaSpecularMult;
 		float grassDiffuseMult;
 		float grassSpecularMult;
+		float vanillaDiffuseColorMult;
 		float lightMult;
 		float effectLightingMult;
 		float membraneEffectMult;
@@ -221,7 +222,7 @@ namespace SharedData
 		float projectedEffectMult;
 		float deferredEffectMult;
 		float otherEffectMult;
-		float3 pad;
+		float2 pad;
 	};
 
 	cbuffer FeatureData : register(b6)
