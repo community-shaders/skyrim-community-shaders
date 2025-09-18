@@ -508,15 +508,6 @@ namespace Permutations
 		AddLightingShaderDescriptors(SIE::ShaderCache::LightingShaderTechniques::MTLandLODBlend, landFlagValues, result);
 		return result;
 	}
-
-	std::unordered_set<uint32_t> GeneratePBRGrassPixelPermutations()
-	{
-		using enum SIE::ShaderCache::GrassShaderTechniques;
-		using enum SIE::ShaderCache::GrassShaderFlags;
-
-		return { static_cast<uint32_t>(TruePbr),
-			static_cast<uint32_t>(TruePbr) | static_cast<uint32_t>(AlphaTest) };
-	}
 }
 
 void TruePBR::GenerateShaderPermutations(RE::BSShader* shader)
@@ -525,14 +516,6 @@ void TruePBR::GenerateShaderPermutations(RE::BSShader* shader)
 	auto shaderCache = globals::shaderCache;
 	if (shader->shaderType == RE::BSShader::Type::Lighting) {
 		const auto pixelPermutations = Permutations::GeneratePBRLightingPixelPermutations();
-		for (auto descriptor : pixelPermutations) {
-			auto vertexShaderDesriptor = descriptor;
-			auto pixelShaderDescriptor = descriptor;
-			state->ModifyShaderLookup(*shader, vertexShaderDesriptor, pixelShaderDescriptor);
-			std::ignore = shaderCache->GetPixelShader(*shader, pixelShaderDescriptor);
-		}
-	} else if (shader->shaderType == RE::BSShader::Type::Grass) {
-		const auto pixelPermutations = Permutations::GeneratePBRGrassPixelPermutations();
 		for (auto descriptor : pixelPermutations) {
 			auto vertexShaderDesriptor = descriptor;
 			auto pixelShaderDescriptor = descriptor;
@@ -1304,180 +1287,6 @@ struct BSTempEffectGeometryDecal_Initialize
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
-struct BSGrassShaderProperty_ctor
-{
-	static RE::BSLightingShaderProperty* thunk(RE::BSLightingShaderProperty* property)
-	{
-		const uint64_t stackPointer = reinterpret_cast<uint64_t>(_AddressOfReturnAddress());
-		const uint64_t lightingPropertyAddress = stackPointer + (REL::Module::IsAE() ? 0x68 : 0x70);
-		auto* lightingProperty = *reinterpret_cast<RE::BSLightingShaderProperty**>(lightingPropertyAddress);
-
-		RE::BSLightingShaderProperty* grassProperty = func(property);
-
-		if (lightingProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting)) {
-			if (auto* pbrSrcMaterial = static_cast<BSLightingShaderMaterialPBR*>(lightingProperty->material)) {
-				BSLightingShaderMaterialPBR srcMaterial;
-				grassProperty->LinkMaterial(&srcMaterial, true);
-
-				// Since grass actually uses kVertexLighting flag we need to switch to some flag which it does not
-				// use, specifically kMenuScreen.
-				grassProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kMenuScreen, true);
-
-				auto pbrMaterial = static_cast<BSLightingShaderMaterialPBR*>(grassProperty->material);
-				pbrMaterial->pbrFlags = pbrSrcMaterial->pbrFlags;
-				pbrMaterial->normalTexture = pbrSrcMaterial->normalTexture;
-				pbrMaterial->rmaosTexture = pbrSrcMaterial->rmaosTexture;
-				pbrMaterial->featuresTexture0 = pbrSrcMaterial->featuresTexture0;
-				pbrMaterial->featuresTexture1 = pbrSrcMaterial->featuresTexture1;
-				pbrMaterial->specularColorScale = pbrSrcMaterial->specularColorScale;
-				pbrMaterial->specularPower = pbrSrcMaterial->specularPower;
-				pbrMaterial->specularColor = pbrSrcMaterial->specularColor;
-				pbrMaterial->subSurfaceLightRolloff = pbrSrcMaterial->subSurfaceLightRolloff;
-				pbrMaterial->coatRoughness = pbrSrcMaterial->coatRoughness;
-			}
-		}
-
-		return grassProperty;
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
-
-struct BSGrassShaderProperty_GetRenderPasses
-{
-	static RE::BSShaderProperty::RenderPassArray* thunk(RE::BSLightingShaderProperty* property, RE::BSGeometry* geometry, std::uint32_t renderFlags, RE::BSShaderAccumulator* accumulator)
-	{
-		auto renderPasses = func(property, geometry, renderFlags, accumulator);
-		if (renderPasses == nullptr) {
-			return renderPasses;
-		}
-
-		const bool isPbr = property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen);
-		if (isPbr) {
-			auto currentPass = renderPasses->head;
-			while (currentPass != nullptr) {
-				if (currentPass->shader->shaderType == RE::BSShader::Type::Grass && currentPass->passEnum != 0x5C00005C) {
-					currentPass->passEnum = 0x5C000042;
-				}
-				currentPass = currentPass->next;
-			}
-		}
-
-		return renderPasses;
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
-
-struct BSGrassShader_SetupTechnique
-{
-	static bool thunk(RE::BSShader* shader, uint32_t globalTechnique)
-	{
-		if (globalTechnique == 0x5C000042) {
-			auto shadowState = globals::game::shadowState;
-			auto graphicsState = globals::game::graphicsState;
-			auto renderer = globals::game::renderer;
-
-			const uint32_t localTechnique = static_cast<uint32_t>(SIE::ShaderCache::GrassShaderTechniques::TruePbr);
-			uint32_t shaderDescriptor = localTechnique;
-			if (graphicsState->useEarlyZ) {
-				shaderDescriptor |= static_cast<uint32_t>(SIE::ShaderCache::GrassShaderFlags::AlphaTest);
-			}
-
-			const bool began = Hooks::BSShader_BeginTechnique::thunk(shader, shaderDescriptor, shaderDescriptor, false);
-			if (!began) {
-				return false;
-			}
-
-			static auto fogMethod = REL::Relocation<void (*)()>(REL::RelocationID(100000, 106707));
-			fogMethod();
-
-			if (!globals::game::bShadowsOnGrass->GetBool()) {
-				shadowState->SetPSTexture(1, graphicsState->GetRuntimeData().defaultTextureWhite->rendererTexture);
-				shadowState->SetPSTextureAddressMode(1, RE::BSGraphics::TextureAddressMode::kClampSClampT);
-				shadowState->SetPSTextureFilterMode(1, RE::BSGraphics::TextureFilterMode::kNearest);
-			} else {
-				shadowState->SetPSTexture(1, renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kSHADOW_MASK]);
-				shadowState->SetPSTextureAddressMode(1, RE::BSGraphics::TextureAddressMode::kClampSClampT);
-				shadowState->SetPSTextureFilterMode(1, globals::game::shadowMaskQuarter->GetSInt() != 4 ? RE::BSGraphics::TextureFilterMode::kBilinear : RE::BSGraphics::TextureFilterMode::kNearest);
-			}
-
-			return true;
-		}
-
-		return func(shader, globalTechnique);
-	};
-	static inline REL::Relocation<decltype(thunk)> func;
-};
-
-struct BSGrassShader_SetupMaterial
-{
-	static void thunk(RE::BSShader* shader, RE::BSLightingShaderMaterialBase const* material)
-	{
-		const auto state = globals::state;
-		const auto technique = static_cast<SIE::ShaderCache::GrassShaderTechniques>(state->currentPixelDescriptor & 0b1111);
-
-		const auto& grassPSConstants = ShaderConstants::GrassPS::Get();
-
-		if (technique == SIE::ShaderCache::GrassShaderTechniques::TruePbr) {
-			auto shadowState = globals::game::shadowState;
-
-			RE::BSGraphics::Renderer::PreparePSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
-
-			auto* pbrMaterial = static_cast<const BSLightingShaderMaterialPBR*>(material);
-			shadowState->SetPSTexture(0, pbrMaterial->diffuseTexture->rendererTexture);
-			shadowState->SetPSTextureAddressMode(0, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
-			shadowState->SetPSTextureFilterMode(0, RE::BSGraphics::TextureFilterMode::kAnisotropic);
-
-			shadowState->SetPSTexture(2, pbrMaterial->normalTexture->rendererTexture);
-			shadowState->SetPSTextureAddressMode(2, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
-			shadowState->SetPSTextureFilterMode(2, RE::BSGraphics::TextureFilterMode::kAnisotropic);
-
-			shadowState->SetPSTexture(3, pbrMaterial->rmaosTexture->rendererTexture);
-			shadowState->SetPSTextureAddressMode(3, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
-			shadowState->SetPSTextureFilterMode(3, RE::BSGraphics::TextureFilterMode::kAnisotropic);
-
-			stl::enumeration<PBRShaderFlags> shaderFlags;
-			if (pbrMaterial->pbrFlags.any(PBRFlags::Subsurface)) {
-				shaderFlags.set(PBRShaderFlags::Subsurface);
-			}
-
-			const bool hasSubsurface = pbrMaterial->featuresTexture0 != nullptr && pbrMaterial->featuresTexture0 != globals::game::graphicsState->GetRuntimeData().defaultTextureWhite;
-			if (hasSubsurface) {
-				shadowState->SetPSTexture(4, pbrMaterial->featuresTexture0->rendererTexture);
-				shadowState->SetPSTextureAddressMode(4, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
-				shadowState->SetPSTextureFilterMode(4, RE::BSGraphics::TextureFilterMode::kAnisotropic);
-
-				shaderFlags.set(PBRShaderFlags::HasFeaturesTexture0);
-			}
-
-			{
-				shadowState->SetPSConstant(shaderFlags, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRFlags);
-			}
-
-			{
-				std::array<float, 3> PBRParams1;
-				PBRParams1[0] = pbrMaterial->GetRoughnessScale();
-				PBRParams1[1] = pbrMaterial->GetSpecularLevel();
-				shadowState->SetPSConstant(PBRParams1, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams1);
-			}
-
-			{
-				std::array<float, 4> PBRParams2;
-				PBRParams2[0] = pbrMaterial->GetSubsurfaceColor().red;
-				PBRParams2[1] = pbrMaterial->GetSubsurfaceColor().green;
-				PBRParams2[2] = pbrMaterial->GetSubsurfaceColor().blue;
-				PBRParams2[3] = pbrMaterial->GetSubsurfaceOpacity();
-				shadowState->SetPSConstant(PBRParams2, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams2);
-			}
-
-			RE::BSGraphics::Renderer::FlushPSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
-			RE::BSGraphics::Renderer::ApplyPSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
-		} else {
-			func(shader, material);
-		}
-	};
-	static inline REL::Relocation<decltype(thunk)> func;
-};
-
 struct TESBoundObject_Clone3D
 {
 	static RE::NiAVObject* thunk(RE::TESBoundObject* object, RE::TESObjectREFR* ref, bool arg3)
@@ -1564,16 +1373,6 @@ void TruePBR::PostPostLoad()
 
 	logger::info("Hooking BSTempEffectGeometryDecal");
 	stl::write_vfunc<0x25, BSTempEffectGeometryDecal_Initialize>(RE::VTABLE_BSTempEffectGeometryDecal[0]);
-
-	logger::info("Hooking BSGrassShaderProperty::ctor");
-	stl::write_thunk_call<BSGrassShaderProperty_ctor>(REL::RelocationID(15214, 15383).address() + REL::Relocate(0x45B, 0x4F5));
-
-	logger::info("Hooking BSGrassShaderProperty");
-	stl::write_vfunc<0x2A, BSGrassShaderProperty_GetRenderPasses>(RE::VTABLE_BSGrassShaderProperty[0]);
-
-	logger::info("Hooking BSGrassShader");
-	stl::write_vfunc<0x2, BSGrassShader_SetupTechnique>(RE::VTABLE_BSGrassShader[0]);
-	stl::write_vfunc<0x4, BSGrassShader_SetupMaterial>(RE::VTABLE_BSGrassShader[0]);
 
 	logger::info("Hooking TESObjectSTAT");
 	stl::write_vfunc<0x4A, TESBoundObject_Clone3D>(RE::VTABLE_TESObjectSTAT[0]);
