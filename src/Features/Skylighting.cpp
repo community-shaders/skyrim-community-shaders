@@ -495,7 +495,7 @@ void Skylighting::RenderOcclusion()
 	}
 
 	if (sky) {
-		if (sky->mode.get() == RE::Sky::Mode::kFull) {
+		if (!Util::IsInterior()) {
 			static bool doPrecip = false;
 
 			auto precip = sky->precip;

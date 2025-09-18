@@ -2,7 +2,6 @@
 
 #include "Feature.h"
 #include "Upscaling/FidelityFX.h"
-#include "Upscaling/NIS/NIS.h"
 #include "Upscaling/Streamline.h"
 #include "Upscaling/XeSS.h"
 #include <d3d11_4.h>
@@ -56,9 +55,7 @@ public:
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 1;
 		uint frameGenerationForceEnable = 0;
-		uint streamlineLogLevel = 0;   // 0=Off, 1=Default, 2=Verbose
-		uint enableNISSharpening = 1;  // 0=Off, 1=On
-		float nisSharpness = 0.15f;    // 0.0 to 1.0
+		uint streamlineLogLevel = 0;  // 0=Off, 1=Default, 2=Verbose
 	};
 
 	Settings settings;
@@ -171,7 +168,6 @@ public:
 	static inline Streamline streamline;
 	static inline XeSS xess;
 	static inline FidelityFX fidelityFX;
-	static inline NIS nis;
 	static inline class DX12SwapChain dx12SwapChain;
 
 	winrt::com_ptr<ID3D11PixelShader> copyDepthToSharedBufferPS;

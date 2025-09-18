@@ -149,7 +149,8 @@ public:
 		IsReflections = 1 << 1,
 		IsBeastRace = 1 << 2,
 		EffectShadows = 1 << 3,
-		IsTree = 1 << 4
+		IsTree = 1 << 4,
+		GrassSphereNormal = 1 << 5
 	};
 
 	enum class ExtraFeatureDescriptors : uint32_t
@@ -164,6 +165,7 @@ public:
 	};
 
 	bool inWorld = false;
+	bool activeReflections = false;
 
 	void UpdateSharedData(bool a_inWorld, bool a_prepass);
 

@@ -166,7 +166,9 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	float clearColor[4]{ 0, 0, 0, 0 };
 	d3d11Context->ClearRenderTargetView(uiBufferWrapped->rtv, clearColor);
 
-	upscaling.FrameLimiter();
+	// If VSync is disabled, use frame limiter to prevent tearing and optimise pacing
+	if (SyncInterval == 0)
+		upscaling.FrameLimiter();
 
 	return S_OK;
 }

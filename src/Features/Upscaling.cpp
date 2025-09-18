@@ -18,9 +18,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	frameLimitMode,
 	frameGenerationMode,
 	frameGenerationForceEnable,
-	streamlineLogLevel,
-	enableNISSharpening,
-	nisSharpness);
+	streamlineLogLevel);
 
 decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChainUpscaling;
 
@@ -166,7 +164,7 @@ void Upscaling::DrawSettings()
 	}
 	upscaleModes.push_back(xessLabel);
 
-	std::string dlssLabel = resolutionScale.x == 1.0f ? "NVIDIA DLSS 4 Preset F" : "NVIDIA DLSS 4 Preset K";
+	std::string dlssLabel = "NVIDIA DLSS 4 Preset K";
 	upscaleModes.push_back(dlssLabel);
 
 	// Determine available modes
@@ -201,27 +199,6 @@ void Upscaling::DrawSettings()
 				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresetsDLSS[4 - settings.qualityMode]).c_str());
 			else
 				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
-		}
-
-		// NIS Sharpening section
-		if (ImGui::TreeNodeEx("NIS Sharpening", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Text("NVIDIA Image Sharpening applied after upscaling for enhanced clarity");
-
-			const char* nisToggleModes[] = { "Disabled", "Enabled" };
-			ImGui::SliderInt("Enable NIS Sharpening", (int*)&settings.enableNISSharpening, 0, 1, nisToggleModes[settings.enableNISSharpening]);
-
-			if (settings.enableNISSharpening) {
-				ImGui::SliderFloat("Sharpening Strength", &settings.nisSharpness, 0.0f, 1.0f, "%.2f");
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Controls the intensity of NIS sharpening. Higher values provide more sharpening.");
-				}
-			} else if (settings.enableNISSharpening) {
-				ImGui::BeginDisabled();
-				ImGui::SliderFloat("Sharpening Strength", &settings.nisSharpness, 0.0f, 1.0f, "%.2f");
-				ImGui::EndDisabled();
-			}
-
-			ImGui::TreePop();
 		}
 	} else {
 		ImGui::Text("Upscaling from lower resolutions is not currently available for VR");
@@ -377,6 +354,18 @@ void Upscaling::Load()
 	*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChainUpscaling = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChainUpscaling, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
 }
 
+struct BSImageSpace_Init_FXAA
+{
+	static void thunk()
+	{
+		func();
+
+		// Force FXAA off safely
+		auto fxaaEnabled = reinterpret_cast<bool*>(REL::RelocationID(513281, 391028).address());
+		*fxaaEnabled = false;
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
 void Upscaling::PostPostLoad()
 {
 	bool isGOG = !GetModuleHandle(L"steam_api64.dll");
@@ -401,6 +390,9 @@ void Upscaling::PostPostLoad()
 
 		// Patches precipitation camera to not use dynamic resolution
 		stl::write_thunk_call<Main_RenderPrecipitation>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x3A1, 0x3A1, 0x2FA));
+
+		// Forces FXAA off
+		stl::detour_thunk<BSImageSpace_Init_FXAA>(REL::RelocationID(98974, 105626));
 	}
 
 	logger::info("[Upscaling] Installed hooks");
@@ -849,9 +841,6 @@ void Upscaling::SetupResources()
 	DX::ThrowIfFailed(sharedD3D12Device->CreateSharedHandle(sharedD3D12Fence.get(), nullptr, GENERIC_ALL, nullptr, &sharedFenceHandle));
 	DX::ThrowIfFailed(d3d11Device5->OpenSharedFence(sharedFenceHandle, IID_PPV_ARGS(sharedD3D11Fence.put())));
 	CloseHandle(sharedFenceHandle);
-
-	// Initialize standalone NIS implementation
-	nis.Initialize();
 
 	auto upscaleMethod = GetUpscaleMethod();
 
@@ -1437,7 +1426,7 @@ void Upscaling::Upscale()
 		state->BeginPerfEvent("Upscaling");
 
 		if (upscaleMethod == UpscaleMethod::kDLSS)
-			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get(), resolutionScale.x == 1.0f ? sl::DLSSPreset::ePresetF : sl::DLSSPreset::ePresetK);
+			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get(), sl::DLSSPreset::ePresetK);
 		else {
 			// Copy input color texture to shared D3D12 resource (only dynamic resolution area)
 			auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
@@ -1515,11 +1504,6 @@ void Upscaling::PerformUpscaling()
 
 	// Disable dynamic resolution past this point
 	runtimeData.dynamicResolutionLock = 1;
-
-	// Disable jitter after upscaling
-	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
-	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
-	BSImagespaceShaderISTemporalAA->taaEnabled = false;
 
 	// Updates the PerFrame constant buffer so that dynamic resolution settings are disabled
 	UpdateCameraData();
@@ -1665,8 +1649,8 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a1, uint32_t a
 
 	func(a1, a3, er8_);
 
-	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA)
-		upscaling.ApplyNISSharpening();
+	// Disable TAA in some menus
+	BSImagespaceShaderISTemporalAA->taaEnabled = false;
 }
 
 void Upscaling::SetScissorRect::thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom)
@@ -1691,30 +1675,6 @@ void Upscaling::Main_RenderPrecipitation::thunk()
 	runtimeData.dynamicResolutionLock = 1;
 	func();
 	runtimeData.dynamicResolutionLock = 0;
-}
-
-void Upscaling::ApplyNISSharpening()
-{
-	if (!settings.enableNISSharpening) {
-		return;
-	}
-
-	auto renderer = globals::game::renderer;
-	auto context = globals::d3d::context;
-
-	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
-
-	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
-	auto& tempCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
-
-	winrt::com_ptr<ID3D11Resource> mainResource;
-	main.RTV->GetResource(mainResource.put());
-
-	context->CopyResource(tempCopy.texture, mainResource.get());
-
-	nis.ApplySharpen(tempCopy.SRV, nisSharpenerTexture->uav.get(), settings.nisSharpness);
-
-	context->CopyResource(mainResource.get(), nisSharpenerTexture->resource.get());
 }
 
 void Upscaling::BSFaceGenManager_UpdatePendingCustomizationTextures::thunk()
