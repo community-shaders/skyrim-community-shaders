@@ -525,7 +525,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		baseColor.xyz *= SharedData::grassLightingSettings.BasicGrassBrightness;
 #			endif  // !TRUE_PBR
 
-	float3 F0 = specColor.w * SharedData::grassLightingSettings.SpecularStrength;
+	float3 F0 = saturate(specColor.w * SharedData::grassLightingSettings.SpecularStrength / Math::PI);
 	float roughness = saturate(1.0 - SharedData::grassLightingSettings.Glossiness * 0.01);
 
 #			if defined(TRUE_PBR)

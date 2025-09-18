@@ -1,4 +1,5 @@
 #include "Common/BRDF.hlsli"
+#include "Common/Color.hlsli"
 
 namespace GrassLighting
 {
@@ -16,7 +17,7 @@ namespace GrassLighting
 			float G = BRDF::Vis_SmithJointApprox(roughness, NdotL, NdotV);
 			float3 F = BRDF::F_Schlick(F0, VdotH);
 			float3 specular = D * G * F;
-			return specular * lightColor * NdotL;
+			return specular * lightColor * NdotL * Color::PBRLightingCompensation;
 		}
 #endif
 		float shininess = (1.0 - roughness) * 100.f;

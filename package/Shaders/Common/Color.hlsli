@@ -67,6 +67,7 @@ namespace Color
 
 	// Attempt to match vanilla materials that are darker than PBR
 	const static float PBRLightingScale = 0.666;
+	const static float PBRLightingCompensation = Math::PI;
 
 	// Attempt to normalise reflection brightness against DALC
 	const static float ReflectionNormalisationScale = 0.666;
@@ -103,7 +104,7 @@ namespace Color
 	float3 Light(float3 color)
 	{
 #if defined(TRUE_PBR)
-		return color * Math::PI;  // Compensate for traditional Lambertian diffuse
+		return color * PBRLightingCompensation;  // Compensate for traditional Lambertian diffuse
 #else
 		return color;
 #endif

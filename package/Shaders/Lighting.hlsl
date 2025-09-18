@@ -692,7 +692,7 @@ float3 GetLightSpecularInput(PS_INPUT input, float3 L, float3 V, float3 N, float
 		float D = BRDF::D_GGX(roughness, HdotN);
 		float3 F = BRDF::F_Schlick(F0, HdotV);
 		float G = BRDF::Vis_SmithJointApprox(roughness, NdotV, NdotL);
-		lightColorMultiplier = max(D * G * F * NdotL, 0.0);
+		lightColorMultiplier = max(D * G * F * NdotL, 0.0) * Color::PBRLightingCompensation;
 	}
 #	endif
 
@@ -2214,7 +2214,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(VANILLA_FRESNEL)
 #		if defined(SPECULAR) && !defined(TRUE_PBR)
 	if (enableVanillaFresnel) {
-		F0 = saturate(glossiness * SpecularColor.xyz);
+		F0 = saturate(glossiness * SpecularColor.xyz / Math::PI);
 		roughness = pow(2.0 / (shininess + 2.0), 0.25);
 	}
 #		elif defined(EYE)
