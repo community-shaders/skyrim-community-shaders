@@ -40,7 +40,7 @@ namespace Util
 
 		std::filesystem::path GetUserSettingsPath()
 		{
-			return GetCommunityShaderPath() / "UserSettings.json";
+			return GetCommunityShaderPath() / "SettingsUser.json";
 		}
 
 		std::filesystem::path GetInterfacePath()
