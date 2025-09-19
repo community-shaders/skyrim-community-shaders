@@ -108,7 +108,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 
 			*ppSwapChain = upscaling.GetProxySwapChain();
 
-			upscaling.d3d12Interop = true;
+			upscaling.d3d12SwapChainActive = true;
 
 			if (upscaling.IsBackendInitialized()) {
 				upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
@@ -239,7 +239,7 @@ void Upscaling::DrawSettings()
 				onlyRequiresRestart = false;
 			}
 
-			if (onlyRequiresRestart && settings.frameGenerationMode && !d3d12Interop) {
+			if (onlyRequiresRestart && settings.frameGenerationMode && !d3d12SwapChainActive) {
 				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
 				ImGui::Text("Warning: Requires restart");
 				ImGui::PopStyleColor();
@@ -252,12 +252,12 @@ void Upscaling::DrawSettings()
 
 			ImGui::SliderInt("Frame Generation", (int*)&settings.frameGenerationMode, 0, 1, toggleModesFG[settings.frameGenerationMode]);
 
-			if (!d3d12Interop)
+			if (!d3d12SwapChainActive)
 				ImGui::BeginDisabled();
 
 			ImGui::SliderInt("Frame Limit (Variable Refresh Rate)", (int*)&settings.frameLimitMode, 0, 1, std::format("{}", toggleModes[settings.frameLimitMode]).c_str());
 
-			if (!d3d12Interop)
+			if (!d3d12SwapChainActive)
 				ImGui::EndDisabled();
 
 			ImGui::Text("Allows frame generation to function on low refresh rate monitors");
@@ -503,12 +503,12 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 	static auto previousUpscaleMode = UpscaleMethod::kTAA;
 	static bool previousFrameGenMode = false;
 
-	bool frameGenModeChanged = (settings.frameGenerationMode && d3d12Interop) != previousFrameGenMode;
+	bool frameGenModeChanged = (settings.frameGenerationMode && d3d12SwapChainActive) != previousFrameGenMode;
 	bool upscaleModeChanged = (previousUpscaleMode != a_upscalemethod);
 
 	if (upscaleModeChanged || frameGenModeChanged) {
 		logger::debug("[Upscaling] Resource change detected - Upscale: {} -> {}, FrameGen: {} -> {}",
-			(int)previousUpscaleMode, (int)a_upscalemethod, previousFrameGenMode, (settings.frameGenerationMode && d3d12Interop));
+			(int)previousUpscaleMode, (int)a_upscalemethod, previousFrameGenMode, (settings.frameGenerationMode && d3d12SwapChainActive));
 
 		// Synchronise all pending GPU work before destroying contexts
 		// Otherwise resources will be destroyed whilst in use, causing the device to crash
@@ -549,7 +549,7 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 		}
 
 		previousUpscaleMode = a_upscalemethod;
-		previousFrameGenMode = (settings.frameGenerationMode && d3d12Interop);
+		previousFrameGenMode = (settings.frameGenerationMode && d3d12SwapChainActive);
 	}
 }
 
@@ -902,7 +902,7 @@ void Upscaling::UpdateSharedResources()
 	// Determine current feature requirements
 	bool needsUpscalingResources = (currentMethod == UpscaleMethod::kFSR || currentMethod == UpscaleMethod::kXESS);
 	bool needsFSRSpecific = (currentMethod == UpscaleMethod::kFSR);
-	bool needsFrameGenResources = (settings.frameGenerationMode && d3d12Interop);
+	bool needsFrameGenResources = (settings.frameGenerationMode && d3d12SwapChainActive);
 	bool needsSharedBasics = needsUpscalingResources || needsFrameGenResources;
 
 	if (!needsSharedBasics) {
@@ -923,7 +923,7 @@ void Upscaling::UpdateSharedResources()
 			delete transparencyCompositionMaskShared12;
 			transparencyCompositionMaskShared12 = nullptr;
 		}
-		if (!d3d12Interop) {
+		if (!d3d12SwapChainActive) {
 			if (depthBufferShared12) {
 				delete depthBufferShared12;
 				depthBufferShared12 = nullptr;
@@ -1005,7 +1005,7 @@ void Upscaling::UpdateSharedResources()
 		if (!copyDepthToSharedBufferPS) {
 			copyDepthToSharedBufferPS.attach((ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\Upscaling\\CopyDepthToSharedBufferPS.hlsl", { { "PSHADER", "" } }, "ps_5_0"));
 		}
-	} else if (!d3d12Interop) {
+	} else if (!d3d12SwapChainActive) {
 		if (depthBufferShared12) {
 			delete depthBufferShared12;
 			depthBufferShared12 = nullptr;
@@ -1035,7 +1035,7 @@ void Upscaling::CopySharedD3D12Resources()
 	auto context = globals::d3d::context;
 
 	// Not required by XeSS
-	if (upscaleMethod == UpscaleMethod::kFSR || (d3d12Interop && settings.frameGenerationMode && upscaleMethod != UpscaleMethod::kXESS)) {
+	if (upscaleMethod == UpscaleMethod::kFSR || (d3d12SwapChainActive && settings.frameGenerationMode && upscaleMethod != UpscaleMethod::kXESS)) {
 		auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
 		// Copy only the dynamic resolution area
@@ -1051,7 +1051,7 @@ void Upscaling::CopySharedD3D12Resources()
 		context->CopySubresourceRegion(motionVectorBufferShared12->resource11, 0, 0, 0, 0, motionVector.texture, 0, &srcBox);
 	}
 
-	if (upscaleMethod == UpscaleMethod::kFSR || upscaleMethod == UpscaleMethod::kXESS || d3d12Interop && settings.frameGenerationMode) {
+	if (upscaleMethod == UpscaleMethod::kFSR || upscaleMethod == UpscaleMethod::kXESS || d3d12SwapChainActive && settings.frameGenerationMode) {
 		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
 		{
@@ -1130,7 +1130,7 @@ void Upscaling::PostDisplay()
 	globals::game::renderer->UpdateViewPort(0, 0, 1);
 	UpdateCameraData();
 
-	if (d3d12Interop)
+	if (d3d12SwapChainActive)
 		SetUIBuffer();
 
 	globals::state->UpdateSharedData(false, false);
@@ -1146,7 +1146,7 @@ void Upscaling::TimerSleepQPC(int64_t targetQPC)
 
 void Upscaling::FrameLimiter()
 {
-	if (d3d12Interop) {
+	if (d3d12SwapChainActive) {
 		// Use frame latency waitable object if available for better frame pacing
 		HANDLE waitableObject = GetFrameLatencyWaitableObject();
 
@@ -1235,7 +1235,7 @@ double Upscaling::GetRefreshRate(HWND a_window)
 
 bool Upscaling::IsFrameGenerationActive() const
 {
-	return d3d12Interop && settings.frameGenerationMode && fidelityFX.isFrameGenActive;
+	return d3d12SwapChainActive && settings.frameGenerationMode && fidelityFX.isFrameGenActive;
 }
 
 /**

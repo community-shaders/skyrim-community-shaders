@@ -79,7 +79,7 @@ public:
 	bool isWindowed = false;
 	bool lowRefreshRate = false;
 	bool fidelityFXMissing = false;
-	bool d3d12Interop = false;
+	bool d3d12SwapChainActive = false;
 
 	// Timing and scaling
 	double refreshRate = 0.0f;
