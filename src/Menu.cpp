@@ -28,7 +28,6 @@
 #include "Util.h"
 #include "Utils/UI.h"
 
-#include "Features/LightLimitFix/ParticleLights.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTestAggregator.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
