@@ -1423,8 +1423,8 @@ void Upscaling::Upscale()
 			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get(), sl::DLSSPreset::ePresetK);
 		else {
 			auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
-			
-			// Copy input color texture to shared D3D12 resource 
+
+			// Copy input color texture to shared D3D12 resource
 			context->CopyResource(inputColorBufferShared12->resource11, main.texture);
 
 			// Wait for D3D11 to finish
