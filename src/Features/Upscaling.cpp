@@ -646,6 +646,21 @@ void GetJitterOffset(float* outX, float* outY, int32_t index, int32_t phaseCount
 	*outY = y;
 }
 
+void Upscaling::ConfigureTAA()
+{
+	auto upscaleMethod = GetUpscaleMethod();
+
+	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
+
+	// Disable water TAA when upscaling is enabled
+	bool* enableWaterTAA = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISTemporalAA) + 0x38LL);
+	*enableWaterTAA = upscaleMethod == UpscaleMethod::kNONE || upscaleMethod == UpscaleMethod::kTAA;
+
+	// Force enable TAA if needed
+	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
+}
+
 void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 {
 	auto upscaleMethod = GetUpscaleMethod();
@@ -658,16 +673,6 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 		auto fDRClampOffset = RE::GetINISetting("fDRClampOffset:Display");
 		fDRClampOffset->data.f = 0.0f;
 	}
-
-	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
-	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
-
-	// Disable water TAA when upscaling is enabled
-	bool* enableWaterTAA = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISTemporalAA) + 0x38LL);
-	*enableWaterTAA = upscaleMethod == UpscaleMethod::kNONE || upscaleMethod == UpscaleMethod::kTAA;
-
-	// Force enable TAA if needed
-	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
 
 	// Cache original TAA values for UI
 	projectionPosScaleX = a_viewport->projectionPosScaleX;
@@ -1037,18 +1042,7 @@ void Upscaling::CopySharedD3D12Resources()
 	// Not required by XeSS
 	if (upscaleMethod == UpscaleMethod::kFSR || (d3d12SwapChainActive && settings.frameGenerationMode && upscaleMethod != UpscaleMethod::kXESS)) {
 		auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-
-		// Copy only the dynamic resolution area
-		auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
-		D3D11_BOX srcBox = {};
-		srcBox.left = 0;
-		srcBox.top = 0;
-		srcBox.front = 0;
-		srcBox.right = (UINT)renderSize.x;
-		srcBox.bottom = (UINT)renderSize.y;
-		srcBox.back = 1;
-
-		context->CopySubresourceRegion(motionVectorBufferShared12->resource11, 0, 0, 0, 0, motionVector.texture, 0, &srcBox);
+		context->CopyResource(motionVectorBufferShared12->resource11, motionVector.texture);
 	}
 
 	if (upscaleMethod == UpscaleMethod::kFSR || upscaleMethod == UpscaleMethod::kXESS || d3d12SwapChainActive && settings.frameGenerationMode) {
@@ -1428,17 +1422,10 @@ void Upscaling::Upscale()
 		if (upscaleMethod == UpscaleMethod::kDLSS)
 			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get(), sl::DLSSPreset::ePresetK);
 		else {
-			// Copy input color texture to shared D3D12 resource (only dynamic resolution area)
 			auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
-			D3D11_BOX srcBox = {};
-			srcBox.left = 0;
-			srcBox.top = 0;
-			srcBox.front = 0;
-			srcBox.right = (UINT)renderSize.x;
-			srcBox.bottom = (UINT)renderSize.y;
-			srcBox.back = 1;
 
-			context->CopySubresourceRegion(inputColorBufferShared12->resource11, 0, 0, 0, 0, main.texture, 0, &srcBox);
+			// Copy input color texture to shared D3D12 resource
+			context->CopyResource(inputColorBufferShared12->resource11, main.texture);
 
 			// Wait for D3D11 to finish
 			winrt::com_ptr<ID3D11DeviceContext4> d3d11Context4;
@@ -1622,6 +1609,7 @@ void Upscaling::UpscaleDepth()
 
 void Upscaling::Main_UpdateJitter::thunk(RE::BSGraphics::State* a_state)
 {
+	globals::features::upscaling.ConfigureTAA();
 	func(a_state);
 	globals::features::upscaling.ConfigureUpscaling(a_state);
 }

@@ -1537,7 +1537,7 @@ namespace SIE
 				// { "BSImagespaceShaderISDisplayDepth", static_cast<uint32_t>(ISDisplayDepth) },
 				// { "BSImagespaceShaderAlphaBlend", static_cast<uint32_t>(ISAlphaBlend) },
 				// { "BSImagespaceShaderWaterFlow", static_cast<uint32_t>(ISWaterFlow) },
-				// { "BSImagespaceShaderISWaterBlend", static_cast<uint32_t>(ISWaterBlend) },
+				{ "BSImagespaceShaderISWaterBlend", static_cast<uint32_t>(ISWaterBlend) },
 				// { "BSImagespaceShaderGreyScale", static_cast<uint32_t>(ISCopyGrayScale) },
 				// { "BSImagespaceShaderCopy", static_cast<uint32_t>(ISCopy) },
 				// { "BSImagespaceShaderCopyScaleBias", static_cast<uint32_t>(ISCopyScaleBias) },

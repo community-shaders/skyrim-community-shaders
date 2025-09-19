@@ -230,6 +230,7 @@ public:
 	};
 
 	virtual bool SupportsVR() override { return true; };
+	virtual bool IsCore() const override { return true; }
 };
 
 template <>

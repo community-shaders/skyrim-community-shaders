@@ -128,9 +128,9 @@ public:
 	winrt::com_ptr<ID3D11BlendState> upscaleBlendState;
 	winrt::com_ptr<ID3D11RasterizerState> upscaleRasterizerState;
 
+	void ConfigureTAA();
 	void ConfigureUpscaling(RE::BSGraphics::State* a_state);
 	void Upscale();
-	void ApplyNISSharpening();
 
 	// D3D11 textures
 	Texture2D* reactiveMaskTexture = nullptr;
