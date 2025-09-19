@@ -34,7 +34,6 @@
 #include "State.h"
 #include "Utils/Game.h"
 
-
 #include "TruePBR.h"
 
 namespace globals

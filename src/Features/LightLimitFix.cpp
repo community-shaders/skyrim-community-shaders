@@ -308,7 +308,6 @@ void LightLimitFix::SetLightPosition(LightLimitFix::LightData& a_light, RE::NiPo
 	}
 }
 
-
 void LightLimitFix::Prepass()
 {
 	auto context = globals::d3d::context;

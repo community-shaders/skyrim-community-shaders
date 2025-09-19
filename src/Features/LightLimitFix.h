@@ -1,6 +1,5 @@
 #pragma once
 
-
 struct LightLimitFix : Feature
 {
 private:
@@ -110,7 +109,6 @@ public:
 
 	StrictLightDataCB strictLightDataTemp;
 
-
 	ConstantBuffer* strictLightDataCB = nullptr;
 
 	int eyeCount = !REL::Module::IsVR() ? 1 : 2;
@@ -132,7 +130,6 @@ public:
 	std::uint32_t lightCount = 0;
 	float lightsNear = 1;
 	float lightsFar = 16384;
-
 
 	RE::NiPoint3 eyePositionCached[2]{};
 	bool wasEmpty = false;

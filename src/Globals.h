@@ -29,7 +29,6 @@ struct WetnessEffects;
 struct ExtendedTranslucency;
 struct Upscaling;
 
-
 class State;
 class Deferred;
 struct TruePBR;
