@@ -728,9 +728,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 
-		directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
-		directionalAmbientColor *= skylightingDiffuse;
-		directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
+		directionalAmbientColor *= Color::LinearToGamma(skylightingDiffuse);
 	}
 #				endif  // SKYLIGHTING
 
@@ -915,9 +913,7 @@ PS_OUTPUT main(PS_INPUT input)
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 
-		directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
-		directionalAmbientColor *= skylightingDiffuse;
-		directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
+		directionalAmbientColor *= Color::LinearToGamma(skylightingDiffuse);
 	}
 #			endif  // SKYLIGHTING
 

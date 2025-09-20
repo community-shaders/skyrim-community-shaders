@@ -2739,9 +2739,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 
-		directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
-		directionalAmbientColor *= skylightingDiffuse;
-		directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
+		directionalAmbientColor *= Color::LinearToGamma(skylightingDiffuse);
 	}
 #	endif
 
@@ -3347,7 +3345,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			endif
 #		endif
 
+#		if defined(SSS) && defined(SKIN)
 	psout.Masks = float4(saturate(baseColor.a), !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsBeastRace), Color::RGBToYCoCg(directionalAmbientColor).x, psout.Diffuse.w);
+#		else
+	psout.Masks = float4(0, 0, Color::RGBToYCoCg(directionalAmbientColor).x, psout.Diffuse.w);
+#		endif
+
+#		if defined(TERRAIN_BLENDING)
+	float stochasticBlend = (screenNoise * screenNoise) < blendFactorTerrain ? 1.0 : 0.0;
+	psout.NormalGlossiness.w = stochasticBlend;
+#		endif
 
 #	endif
 

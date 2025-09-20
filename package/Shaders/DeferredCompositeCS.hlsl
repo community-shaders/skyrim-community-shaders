@@ -132,16 +132,22 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	directionalAmbientColor = Color::RGBToYCoCg(directionalAmbientColor);
 	directionalAmbientColor.x = MasksTexture[dispatchID.xy].z;
 	directionalAmbientColor = Color::YCoCgToRGB(directionalAmbientColor);
+	directionalAmbientColor *= albedo;
 
-	float3 linDirectionalAmbientColor = Color::GammaToLinear(directionalAmbientColor * albedo);
-	float3 linAlbedo = Color::GammaToLinear(albedo);
+	float maxScale = 1.0;
+	if (directionalAmbientColor.x > 0.0)
+		maxScale = min(maxScale, diffuseColor.x / directionalAmbientColor.x);
+	if (directionalAmbientColor.y > 0.0)
+		maxScale = min(maxScale, diffuseColor.y / directionalAmbientColor.y);
+	if (directionalAmbientColor.z > 0.0)
+		maxScale = min(maxScale, diffuseColor.z / directionalAmbientColor.z);
+	directionalAmbientColor *= maxScale;
+	
+	diffuseColor = diffuseColor - directionalAmbientColor;
+	diffuseColor += directionalAmbientColor * Color::LinearToGamma(ssgiAo);
 
-	diffuseColor = max(0, diffuseColor - directionalAmbientColor * albedo);
 	linDiffuseColor = Color::GammaToLinear(diffuseColor);
-
-	linDiffuseColor += linDirectionalAmbientColor * ssgiAo.xxx;
-
-	linDiffuseColor += ssgiIl * linAlbedo;
+	linDiffuseColor += ssgiIl * Color::GammaToLinear(albedo);
 #endif
 
 	float3 color = linDiffuseColor + specularColor;
