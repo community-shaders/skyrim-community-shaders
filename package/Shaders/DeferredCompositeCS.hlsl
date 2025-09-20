@@ -130,7 +130,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normalWS, 1.0)));
 
 	directionalAmbientColor = Color::RGBToYCoCg(directionalAmbientColor);
-	directionalAmbientColor.x = MasksTexture[dispatchID.xy].zzz;
+	directionalAmbientColor.x = MasksTexture[dispatchID.xy].z;
 	directionalAmbientColor = Color::YCoCgToRGB(directionalAmbientColor);
 
 	float3 linDirectionalAmbientColor = Color::GammaToLinear(directionalAmbientColor * albedo);
