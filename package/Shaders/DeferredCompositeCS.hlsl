@@ -39,6 +39,14 @@ Texture2D<float4> SsgiYTexture : register(t11);
 Texture2D<float4> SsgiCoCgTexture : register(t12);
 Texture2D<float4> SsgiSpecularTexture : register(t13);
 
+void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
+{
+	ao = 1 - SsgiAoTexture[pixCoord];
+	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
+	float ssgiIlY = max(SphericalHarmonics::SHHallucinateZH3Irradiance(ssgiIlYSh, normalWS), SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, SphericalHarmonics::EvaluateCosineLobe(normalWS)));
+	il = max(0, Color::YCoCgToRGB(float3(ssgiIlY, ssgiIlCoCg)));
+}
+
 void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, in float3 normal, in float3 view)
 {
 	// https://www.iryoku.com/stare-into-the-future/
@@ -51,9 +59,6 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
 	float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, lobe);
 	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord].xy;
-	// specular is a bit too saturated, because CoCg are average over hemisphere
-	// we just cheese this bit
-	ssgiIlCoCg *= 0.8;
 
 	// pi to compensate for the /pi in specularLobe
 	// i don't think there really should be a 1/PI but without it the specular is too strong
@@ -95,21 +100,56 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 	float glossiness = normalGlossiness.z;
 
-	float3 color = Color::GammaToLinear(diffuseColor) + specularColor;
+	float3 linDiffuseColor = Color::GammaToLinear(diffuseColor);
+	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
+	
+#if defined(SSGI)
+#	if defined(VR)
+	float3 uvF = float3((dispatchID.xy + 0.5) * SharedData::BufferDim.zw, depth);  // calculate high precision uv of initial eye
+	float3 uv2 = Stereo::ConvertStereoUVToOtherEyeStereoUV(uvF, eyeIndex, false);  // calculate other eye uv
+	float3 uv1Mono = Stereo::ConvertFromStereoUV(uvF, eyeIndex);
+	float3 uv2Mono = Stereo::ConvertFromStereoUV(uv2, (1 - eyeIndex));
+	uint2 pixCoord2 = (uint2)(uv2.xy / SharedData::BufferDim.zw - 0.5);
+#	endif
+
+	float ssgiAo;
+	float3 ssgiIl;
+	SampleSSGI(dispatchID.xy, normalWS, ssgiAo, ssgiIl);
+
+#	if defined(VR)
+	float ssgiAo2;
+	float3 ssgiIl2;
+	SampleSSGI(pixCoord2, normalWS, ssgiAo2, ssgiIl2);
+
+	float4 ssgiMixed = Stereo::BlendEyeColors(uv1Mono, float4(ssgiIl, ssgiAo), uv2Mono, float4(ssgiIl2, ssgiAo2));
+	ssgiAo = ssgiMixed.a;
+	ssgiIl = ssgiMixed.rgb;
+#	endif
+
+	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normalWS, 1.0)));
+
+	directionalAmbientColor = Color::RGBToYCoCg(directionalAmbientColor);
+	directionalAmbientColor.x = MasksTexture[dispatchID.xy].zzz;
+	directionalAmbientColor = Color::YCoCgToRGB(directionalAmbientColor);
+
+	float3 linDirectionalAmbientColor = Color::GammaToLinear(directionalAmbientColor * albedo);
+	float3 linAlbedo = Color::GammaToLinear(albedo);
+
+	diffuseColor = max(0, diffuseColor - directionalAmbientColor * albedo);
+	linDiffuseColor = Color::GammaToLinear(diffuseColor);
+
+	linDiffuseColor += linDirectionalAmbientColor * ssgiAo.xxx;
+
+	linDiffuseColor += ssgiIl * linAlbedo;
+#endif
+
+	float3 color = linDiffuseColor + specularColor;
 
 #if defined(DYNAMIC_CUBEMAPS)
 
 	float3 reflectance = ReflectanceTexture[dispatchID.xy];
 
 	if (reflectance.x > 0.0 || reflectance.y > 0.0 || reflectance.z > 0.0) {
-		float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
-
-		float wetnessMask = MasksTexture[dispatchID.xy].z * 2.0 - 1.0;
-
-		normalWS.z = wetnessMask;
-		float xyLength = sqrt(max(0.0, 1.0 - wetnessMask * wetnessMask));
-		normalWS.xy = normalize(normalWS.xy) * xyLength;
-
 		float3 V = normalize(positionWS.xyz);
 		float3 R = reflect(V, normalWS);
 

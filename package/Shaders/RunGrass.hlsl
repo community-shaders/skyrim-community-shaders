@@ -458,7 +458,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 complexTest = TexBaseSampler.Load(int3(0, int(y) - 1, 0)).xyz * 2.0 - 1.0;
 	float complexLength = length(complexTest);
-	bool complex = abs(complexLength - 1.0) < 0.02;
+	bool complex = abs(complexLength - 1.0) < 0.03;
 #		endif  // !TRUE_PBR
 
 	float4 baseColor;
@@ -734,9 +734,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #				endif  // SKYLIGHTING
 
-#				if !defined(SSGI)
 	diffuseColor += directionalAmbientColor;
-#				endif
 
 	diffuseColor *= albedo;
 	diffuseColor += max(0, sss * subsurfaceColor * SharedData::grassLightingSettings.SubsurfaceScatteringAmount);
@@ -923,9 +921,7 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #			endif  // SKYLIGHTING
 
-#			if !defined(SSGI)
 	diffuseColor += directionalAmbientColor;
-#			endif
 
 	float3 albedo = baseColor.xyz * vertexColor;
 	psout.Diffuse.xyz = diffuseColor * albedo;
