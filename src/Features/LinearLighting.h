@@ -87,7 +87,6 @@ struct LinearLighting : Feature
 		float pad[2];
 	};
 
-	uint tempDisable = false;
 	uint isDirLightLinear = false;
 	float dirLightMult = 1.0f;
 
@@ -98,40 +97,7 @@ struct LinearLighting : Feature
 
 	virtual void RestoreDefaultSettings() override;
 
-	virtual void PostPostLoad() override;
 	virtual void Prepass() override;
 
 	PerFrameData GetCommonBufferData();
-
-	// Event handler
-	class MenuOpenCloseEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
-	{
-	public:
-		virtual RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
-		{
-			// Disable linear lighting when entering the loading screen
-			if (a_event->menuName == RE::LoadingMenu::MENU_NAME) {
-				globals::features::linearLighting.tempDisable = a_event->opening;
-			}
-
-			return RE::BSEventNotifyControl::kContinue;
-		}
-
-		static bool Register()
-		{
-			static MenuOpenCloseEventHandler singleton;
-			auto ui = globals::game::ui;
-
-			if (!ui) {
-				logger::error("UI event source not found");
-				return false;
-			}
-
-			ui->GetEventSource<RE::MenuOpenCloseEvent>()->AddEventSink(&singleton);
-
-			logger::info("Registered {}", typeid(singleton).name());
-
-			return true;
-		}
-	};
 };

@@ -76,14 +76,11 @@ void LinearLighting::RestoreDefaultSettings()
 	settings = {};
 }
 
-void LinearLighting::PostPostLoad()
-{
-	MenuOpenCloseEventHandler::Register();
-}
-
 void LinearLighting::Prepass()
 {
-	if (!settings.enableLinearLighting || tempDisable)
+	bool isMainLoadingMenu = globals::game::ui && (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+	dirLightMult = 1.0f;
+	if (!settings.enableLinearLighting || isMainLoadingMenu)
 		return;
 
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
@@ -95,8 +92,9 @@ void LinearLighting::Prepass()
 
 LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 {
+	bool isMainLoadingMenu = globals::game::ui && (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
 	auto data = PerFrameData{};
-	data.enableLinearLighting = settings.enableLinearLighting && !tempDisable;
+	data.enableLinearLighting = settings.enableLinearLighting && !isMainLoadingMenu;
 	data.enableGammaCorrection = settings.enableGammaCorrection;
 	data.isDirLightLinear = isDirLightLinear;
 	data.dirLightMult = dirLightMult;
