@@ -1,3 +1,4 @@
+#include "Common/FrameBuffer.hlsli"
 #include "LightLimitFix/Common.hlsli"
 
 cbuffer PerFrame : register(b0)
@@ -19,12 +20,12 @@ RWStructuredBuffer<LightGrid> lightGrid : register(u2);
 
 groupshared Light sharedLights[GROUP_SIZE];
 
-bool LightIntersectsCluster(float3 position, float radius, ClusterAABB cluster)
+bool LightIntersectsCluster(float3 position, float radiusSquared, ClusterAABB cluster)
 {
 	float3 closest = max(cluster.minPoint.xyz, min(position, cluster.maxPoint.xyz));
 
 	float3 dist = closest - position;
-	return dot(dist, dist) <= radius;
+	return dot(dist, dist) <= radiusSquared;
 }
 
 [numthreads(NUMTHREAD_X, NUMTHREAD_Y, NUMTHREAD_Z)] void main(
@@ -56,13 +57,18 @@ bool LightIntersectsCluster(float3 position, float radius, ClusterAABB cluster)
 	for (uint i = 0; i < LightCount; i++) {
 		Light light = lights[i];
 
-		float radius = light.radius * light.radius;
+		float radiusSquared = light.radius * light.radius;
 
 #if defined(VR)
-		[branch] if (LightIntersectsCluster(light.positionVS[0].xyz, radius, cluster) || LightIntersectsCluster(light.positionVS[1].xyz, radius, cluster))
+		float3 positionVSLeft = FrameBuffer::WorldToView(light.positionWS[0].xyz, true, 0);
+		float3 positionVSRight = FrameBuffer::WorldToView(light.positionWS[1].xyz, true, 0);
+
+		[branch] if (LightIntersectsCluster(positionVSLeft, radiusSquared, cluster) || LightIntersectsCluster(positionVSRight, radiusSquared, cluster))
 		{
 #else
-		[branch] if (LightIntersectsCluster(light.positionVS[0].xyz, radius, cluster))
+		float3 positionVS = FrameBuffer::WorldToView(light.positionWS[0].xyz, true, 0);
+
+		[branch] if (LightIntersectsCluster(positionVS, radiusSquared, cluster))
 		{
 #endif
 			visibleLightIndices[visibleLightCount] = i;

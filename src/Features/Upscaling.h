@@ -55,9 +55,7 @@ public:
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 1;
 		uint frameGenerationForceEnable = 0;
-		uint streamlineLogLevel = 0;   // 0=Off, 1=Default, 2=Verbose
-		uint enableNISSharpening = 1;  // 0=Off, 1=On
-		float nisSharpness = 0.3f;     // 0.0 to 1.0
+		uint streamlineLogLevel = 0;  // 0=Off, 1=Default, 2=Verbose
 	};
 
 	Settings settings;
@@ -68,13 +66,20 @@ public:
 		float2 pad0;
 	};
 
+	struct UpscalingDataCB
+	{
+		float2 trueSamplingDim;  // BufferDim.xy * ResolutionScale
+		float2 pad0;
+	};
+
 	ConstantBuffer* jitterCB = nullptr;
+	ConstantBuffer* upscalingDataCB = nullptr;
 
 	// Runtime state
 	bool isWindowed = false;
 	bool lowRefreshRate = false;
 	bool fidelityFXMissing = false;
-	bool d3d12Interop = false;
+	bool d3d12SwapChainActive = false;
 
 	// Timing and scaling
 	double refreshRate = 0.0f;
@@ -123,9 +128,9 @@ public:
 	winrt::com_ptr<ID3D11BlendState> upscaleBlendState;
 	winrt::com_ptr<ID3D11RasterizerState> upscaleRasterizerState;
 
+	void ConfigureTAA();
 	void ConfigureUpscaling(RE::BSGraphics::State* a_state);
 	void Upscale();
-	void ApplyNISSharpening();
 
 	// D3D11 textures
 	Texture2D* reactiveMaskTexture = nullptr;

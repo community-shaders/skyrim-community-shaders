@@ -121,9 +121,24 @@ void State::Reset()
 	lastModifiedVertexDescriptor = 0;
 	lastPixelDescriptor = 0;
 	lastVertexDescriptor = 0;
-	initialized = false;
 	std::memset(&permutationDataPrevious, 0xFF, sizeof(PermutationCB));
 	frameCount++;
+
+	if (auto* imageSpaceManager = RE::ImageSpaceManager::GetSingleton()) {
+		GET_INSTANCE_MEMBER(BSImagespaceShaderApplyReflections, imageSpaceManager);
+
+		// Disable reflections being applied to things other than water
+		if (BSImagespaceShaderApplyReflections.get()) {
+			BSImagespaceShaderApplyReflections->active = false;
+		}
+	}
+
+	// Disable "improved" snow shader, unsupported
+	if (!globals::game::isVR) {
+		RE::GetINISetting("bEnableImprovedSnow:Display")->data.b = false;
+	}
+
+	activeReflections = false;
 }
 
 void State::Setup()
@@ -134,10 +149,6 @@ void State::Setup()
 		if (feature->loaded)
 			feature->SetupResources();
 	globals::deferred->SetupResources();
-	SetupReShade();
-	if (initialized)
-		return;
-	initialized = true;
 }
 
 static const std::string& GetConfigPath(State::ConfigMode a_configMode)
@@ -737,21 +748,17 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 			}
 		}
 
-		data.InInterior = true;
-		data.HideSky = true;
-		if (auto sky = globals::game::sky) {
-			if (auto player = RE::PlayerCharacter::GetSingleton()) {
-				if (auto parentCell = player->GetParentCell()) {
-					data.InInterior = parentCell->IsInteriorCell();
-					data.HideSky = !data.InInterior && sky->flags.any(RE::Sky::Flags::kHideSky);
-				}
-			}
-		}
+		data.InInterior = Util::IsInterior();
 
-		if (auto ui = globals::game::ui)
-			data.InMapMenu = ui->IsMenuOpen(RE::MapMenu::MENU_NAME);
+		if (globals::game::sky)
+			data.HideSky = globals::game::sky->flags.any(RE::Sky::Flags::kHideSky);
 		else
-			data.InMapMenu = true;
+			data.HideSky = false;
+
+		if (globals::game::ui)
+			data.InMapMenu = globals::game::ui->IsMenuOpen(RE::MapMenu::MENU_NAME);
+		else
+			data.InMapMenu = false;
 
 		auto& upscaling = globals::features::upscaling;
 
@@ -812,76 +819,6 @@ bool State::IsFeatureDisabled(const std::string& featureName)
 std::unordered_map<std::string, bool>& State::GetDisabledFeatures()
 {
 	return disabledFeatures;
-}
-
-void State::InitReShade(IDXGISwapChain* a_swapChain)
-{
-	logger::info("[ReShade] Initialising ReShade64.dll if available");
-
-	winrt::com_ptr<ID3D11Device> device;
-	ID3D11DeviceContext* immediateContext;
-
-	DX::ThrowIfFailed(a_swapChain->GetDevice(IID_PPV_ARGS(&device)));
-	device->GetImmediateContext(&immediateContext);
-
-	SetEnvironmentVariableW(L"RESHADE_DISABLE_GRAPHICS_HOOK", L"1");
-	auto module = LoadLibraryW(L"ReShade64.dll");
-
-	if (module) {
-		if (reshade::create_effect_runtime(reshade::api::device_api::d3d11, device.get(), immediateContext, a_swapChain, "ReShade", &reShadeRuntime)) {
-			logger::info("[ReShade] Successfully initialised");
-		} else {
-			logger::error("[ReShade] Failed to initialise");
-		}
-	} else {
-		logger::info("[ReShade] ReShade64.dll not available");
-	}
-}
-
-void State::SetupReShade()
-{
-	InitReShade(globals::d3d::swapChain);
-
-	if (reShadeRuntime) {
-		logger::info("[ReShade] Setting render target information");
-
-		auto renderer = globals::game::renderer;
-		auto swapChainRTV = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER].RTV;
-		if (globals::features::upscaling.d3d12Interop)
-			swapChainRTV = globals::features::upscaling.dx12SwapChain.swapChainBufferWrapped->rtv;
-
-		auto reShadeDevice = reShadeRuntime->get_device();
-
-		reshade::api::resource reShadeSwapChainResource = reShadeDevice->get_resource_from_view(reshade::api::resource_view{ reinterpret_cast<uintptr_t>(swapChainRTV) });
-		reshade::api::resource_desc reShadeSwapChainDesc = reShadeDevice->get_resource_desc(reShadeSwapChainResource);
-
-		reShadeDevice->create_resource_view(reShadeSwapChainResource, reshade::api::resource_usage::render_target, reshade::api::resource_view_desc(reshade::api::format_to_default_typed(reShadeSwapChainDesc.texture.format, 0), 0, 1, 0, 1), &reshadeSwapChainRTV);
-		reShadeDevice->create_resource_view(reShadeSwapChainResource, reshade::api::resource_usage::render_target, reshade::api::resource_view_desc(reshade::api::format_to_default_typed(reShadeSwapChainDesc.texture.format, 1), 0, 1, 0, 1), &reshadeSwapChainRTVsRGB);
-
-		auto& depth = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
-
-		auto depthRTV = reshade::api::resource_view{ reinterpret_cast<uintptr_t>(depth.depthSRV) };
-		reShadeRuntime->update_texture_bindings("DEPTH", depthRTV, depthRTV);
-
-		reShadeRuntime->enumerate_uniform_variables(nullptr, [](reshade::api::effect_runtime* runtime, reshade::api::effect_uniform_variable variable) {
-			char source[32];
-			if (runtime->get_annotation_string_from_uniform_variable(variable, "source", source) &&
-				std::strcmp(source, "bufready_depth") == 0)
-				runtime->set_uniform_value_bool(variable, true);
-		});
-	}
-}
-
-void State::RenderReShade()
-{
-	if (reShadeRuntime) {
-		reShadeRuntime->render_effects(reShadeRuntime->get_command_queue()->get_immediate_command_list(), reshadeSwapChainRTV, reshadeSwapChainRTVsRGB);
-	}
-}
-
-void State::PresentReShade()
-{
-	reshade::update_and_present_effect_runtime(reShadeRuntime);
 }
 
 // --- Utility Method Implementations ---

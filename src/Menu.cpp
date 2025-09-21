@@ -4,6 +4,7 @@
 #	define DIRECTINPUT_VERSION 0x0800
 #endif
 #include <dinput.h>
+#include <format>
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
 #include <imgui_internal.h>
@@ -27,7 +28,6 @@
 #include "Util.h"
 #include "Utils/UI.h"
 
-#include "Features/LightLimitFix/ParticleLights.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTestAggregator.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
@@ -112,6 +112,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkipCompilationKey,
 	EffectToggleKey,
 	OverlayToggleKey,
+	FirstTimeSetupCompleted,
 	Theme)
 
 bool IsEnabled = false;
@@ -125,6 +126,7 @@ Menu::~Menu()
 	uiIcons.logo.Release();
 	uiIcons.discord.Release();
 	uiIcons.characters.Release();
+	uiIcons.display.Release();
 	uiIcons.grass.Release();
 	uiIcons.lighting.Release();
 	uiIcons.sky.Release();
@@ -160,6 +162,9 @@ void Menu::Init()
 	auto& imgui_io = ImGui::GetIO();
 	imgui_io.ConfigFlags = ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad | ImGuiConfigFlags_DockingEnable;
 	imgui_io.BackendFlags = ImGuiBackendFlags_HasMouseCursors | ImGuiBackendFlags_RendererHasVtxOffset | ImGuiBackendFlags_HasGamepad;
+
+	cachedIniPath = Util::PathHelpers::GetImGuiIniPath().string();
+	imgui_io.IniFilename = cachedIniPath.c_str();
 
 	// Enhanced font configuration for sharper text rendering
 	ImFontConfig font_config;
@@ -395,7 +400,7 @@ void Menu::DrawFooter()
 {
 	ImGui::BulletText(std::format("Game Version: {} {}", magic_enum::enum_name(REL::Module::GetRuntime()), Util::GetFormattedVersion(REL::Module::get().version()).c_str()).c_str());
 	ImGui::SameLine();
-	ImGui::BulletText(std::format("D3D12 Interop: {}", globals::features::upscaling.d3d12Interop ? "Active" : "Inactive").c_str());
+	ImGui::BulletText(std::format("D3D12 Swap Chain: {}", globals::features::upscaling.d3d12SwapChainActive ? "Active" : "Inactive").c_str());
 	ImGui::SameLine();
 	ImGui::Text(std::format("GPU: {}", globals::state->adapterDescription.c_str()).c_str());
 }

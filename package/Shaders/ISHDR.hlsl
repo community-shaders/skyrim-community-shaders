@@ -77,7 +77,7 @@ PS_OUTPUT main(PS_INPUT input)
 		{
 			texCoord = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(texCoord);
 		}
-		float3 imageColor = ImageTex.Sample(ImageSampler, texCoord).xyz;
+		float3 imageColor = max(0.0, ImageTex.Sample(ImageSampler, texCoord).xyz);
 #		if defined(RGB2LUM)
 		imageColor = Color::RGBToLuminance(imageColor);
 #		elif (defined(LUM) || defined(LUMCLAMP)) && !defined(DOWNADAPT)
@@ -86,15 +86,11 @@ PS_OUTPUT main(PS_INPUT input)
 		downsampledColor += imageColor * BlurOffsets[sampleIndex].z;
 	}
 #		if defined(DOWNADAPT)
-	float2 adaptValue = AdaptTex.Sample(AdaptSampler, input.TexCoord).xy;
-	if (isnan(downsampledColor.x) || isnan(downsampledColor.y) || isnan(downsampledColor.z)) {
-		downsampledColor.xy = adaptValue;
-	} else {
-		float2 adaptDelta = downsampledColor.xy - adaptValue;
-		downsampledColor.xy =
-			sign(adaptDelta) * clamp(abs(Param.wz * adaptDelta), 0.00390625, abs(adaptDelta)) +
-			adaptValue;
-	}
+	float2 adaptValue = max(0.001, AdaptTex.Sample(AdaptSampler, input.TexCoord).xy);
+	float2 adaptDelta = downsampledColor.xy - adaptValue;
+	downsampledColor.xy =
+		sign(adaptDelta) * clamp(abs(Param.wz * adaptDelta), 0.00390625, abs(adaptDelta)) +
+		adaptValue;
 #		endif
 	psout.Color = float4(downsampledColor, BlurScale.z);
 
@@ -116,7 +112,9 @@ PS_OUTPUT main(PS_INPUT input)
 
 	hdrColor += DisplayMapping::RangeCompress(max(0, Param.x - hdrColor)) * bloomColor;
 
-	hdrColor = pow(abs(hdrColor) / avgValue.x, Cinematic.z) * avgValue.x * sign(hdrColor);
+	float3 contrastOriginal = lerp(avgValue.x, hdrColor, Cinematic.z);
+	float3 contrastShadows = pow(abs(hdrColor) / avgValue.x, Cinematic.z) * avgValue.x * sign(hdrColor);
+	hdrColor = contrastOriginal < hdrColor ? contrastShadows : contrastOriginal;
 
 	float hdrLuminance = Color::RGBToLuminance(hdrColor);
 	hdrColor = Cinematic.w * lerp(lerp(hdrLuminance, hdrColor, Cinematic.x), lerp(hdrColor, hdrLuminance, saturate(hdrLuminance)) * Tint.xyz, Tint.w).xyz;

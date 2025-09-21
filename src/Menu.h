@@ -86,6 +86,7 @@ public:
 
 		// Category icons
 		UIIcon characters;
+		UIIcon display;
 		UIIcon grass;
 		UIIcon lighting;
 		UIIcon sky;
@@ -207,6 +208,7 @@ public:
 		uint32_t SkipCompilationKey = VK_ESCAPE;
 		uint32_t EffectToggleKey = VK_MULTIPLY;  // toggle all effects
 		uint32_t OverlayToggleKey = VK_F10;      // Global overlay toggle key for all overlays
+		bool FirstTimeSetupCompleted = false;    // Track if first-time setup has been completed
 		ThemeSettings Theme;
 	};
 	const ThemeSettings& GetTheme() const { return settings.Theme; }                // Provide read-only access to the Theme.
@@ -275,6 +277,8 @@ private:
 	Settings settings;
 
 	float cachedFontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;  // Tracks whether font has been modified and may require reloading
+
+	std::string cachedIniPath;  // io.IniFilename must point to a string that lives for the duration of the runtime
 
 	// Menu navigation
 	std::string pendingFeatureSelection;  // Feature to select on next frame

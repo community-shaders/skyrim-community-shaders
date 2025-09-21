@@ -59,5 +59,7 @@ cbuffer PerFrame : register(b1)
 	parameters.DynamicSampleCount = DynamicSampleCount;
 	parameters.DynamicReadCount = DynamicReadCount;
 
+	parameters.UsePrecisionOffset = true;
+
 	WriteScreenSpaceShadow(parameters, groupID, groupThreadID);
 }

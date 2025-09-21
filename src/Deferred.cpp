@@ -177,10 +177,6 @@ void Deferred::SetupResources()
 			.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
 			.Texture2D = { .MipSlice = 0 }
 		};
-
-		prevDiffuseAmbientTexture = new Texture2D(texDesc);
-		prevDiffuseAmbientTexture->CreateSRV(srvDesc);
-		prevDiffuseAmbientTexture->CreateUAV(uavDesc);
 	}
 }
 
@@ -235,7 +231,10 @@ void Deferred::ReflectionsPrepasses()
 	if (!shaderCache->IsEnabled())
 		return;
 
-	globals::state->UpdateSharedData(false, false);
+	auto state = globals::state;
+
+	state->activeReflections = true;
+	state->UpdateSharedData(false, false);
 
 	ZoneScoped;
 	TracyD3D11Zone(globals::game::graphicsState->tracyCtx, "Early Prepass");
@@ -286,10 +285,27 @@ void Deferred::PrepassPasses()
 	if (!shaderCache->IsEnabled())
 		return;
 
-	auto context = globals::game::renderer->GetRuntimeData().context;
+	auto context = globals::d3d::context;
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
+
+	{
+		ID3D11Buffer* buffers[1] = { *globals::game::perFrame.get() };
+
+		ID3D11Buffer* vrBuffer = nullptr;
+
+		if (REL::Module::IsVR()) {
+			static REL::Relocation<ID3D11Buffer**> VRValues{ REL::Offset(0x3180688) };
+			vrBuffer = *VRValues.get();
+		}
+		if (vrBuffer) {
+			context->CSSetConstantBuffers(12, 1, buffers);
+			context->CSSetConstantBuffers(13, 1, &vrBuffer);
+		} else {
+			context->CSSetConstantBuffers(12, 1, buffers);
+		}
+	}
 
 	globals::truePBR->PrePass();
 	for (auto* feature : Feature::GetFeatureList()) {
@@ -395,18 +411,13 @@ void Deferred::DeferredPasses()
 
 	auto motionVectors = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
-	bool interior = true;
-	if (auto player = RE::PlayerCharacter::GetSingleton()) {
-		if (auto parentCell = player->GetParentCell()) {
-			interior = parentCell->IsInteriorCell();
-		}
-	}
+	bool interior = Util::IsInterior();
 
 	auto& skylighting = globals::features::skylighting;
 
 	auto& ssgi = globals::features::screenSpaceGI;
 	if (ssgi.loaded)
-		ssgi.DrawSSGI(prevDiffuseAmbientTexture);
+		ssgi.DrawSSGI();
 	auto [ssgi_ao, ssgi_y, ssgi_cocg, ssgi_gi_spec] = ssgi.GetOutputTextures();
 	bool ssgi_hq_spec = ssgi.settings.EnableExperimentalSpecularGI;
 
@@ -433,8 +444,8 @@ void Deferred::DeferredPasses()
 
 			context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
 
-			ID3D11UnorderedAccessView* uavs[2]{ main.UAV, prevDiffuseAmbientTexture->uav.get() };
-			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+			ID3D11UnorderedAccessView* uavs[1]{ main.UAV };
+			context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
 
 			auto shader = interior ? GetComputeAmbientCompositeInterior() : GetComputeAmbientComposite();
 			context->CSSetShader(shader, nullptr, 0);

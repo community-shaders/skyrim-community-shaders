@@ -21,66 +21,20 @@ namespace LightLimitFix
 	{
 		const uint3 clusterSize = SharedData::lightLimitFixSettings.ClusterSize.xyz;
 
+		if (!FrameBuffer::FrameParams.y) // Fix first person lights
+			uv = 0.5;
+
 		z = max(z, SharedData::CameraData.y);
 
-		if (z > SharedData::CameraData.x)
-			return false;
-
-		float clampedZ = clamp(z, SharedData::CameraData.y, SharedData::CameraData.x);
-		uint clusterZ = uint(max((log2(z) - log2(SharedData::CameraData.y)) * clusterSize.z / log2(SharedData::CameraData.x / SharedData::CameraData.y), 0.0));
+		uint clusterZ = log(z / SharedData::CameraData.y) * clusterSize.z / log(SharedData::CameraData.x / SharedData::CameraData.y);
 		uint3 cluster = uint3(uint2(uv * clusterSize.xy), clusterZ);
+
+		// Bounds validation to prevent out-of-range cluster indices
+		if (any(cluster >= clusterSize))
+			return false;
 
 		clusterIndex = cluster.x + (clusterSize.x * cluster.y) + (clusterSize.x * clusterSize.y * cluster.z);
 		return true;
-	}
-
-	bool IsSaturated(float value)
-	{
-		return value == saturate(value);
-	}
-
-	bool IsSaturated(float2 value)
-	{
-		return IsSaturated(value.x) && IsSaturated(value.y);
-	}
-
-	float ContactShadows(float3 viewPosition, float noise2D, float3 lightDirectionVS, uint contactShadowSteps, uint a_eyeIndex = 0)
-	{
-		if (contactShadowSteps == 0)
-			return 1.0;
-
-		float2 depthDeltaMult = float2(0.20, 0.05);
-
-		// Extend contact shadow distance
-		lightDirectionVS *= 2.0;
-
-		// Offset starting position with interleaved gradient noise
-		viewPosition += lightDirectionVS * noise2D;
-
-		// Accumulate samples
-		float contactShadow = 0.0;
-		for (uint i = 0; i < contactShadowSteps; i++) {
-			// Step the ray
-			viewPosition += lightDirectionVS;
-
-			float2 rayUV = FrameBuffer::ViewToUV(viewPosition, true, a_eyeIndex);
-
-			// Ensure the UV coordinates are inside the screen
-			if (!IsSaturated(rayUV))
-				break;
-
-			// Compute the difference between the ray's and the camera's depth
-			float rayDepth = SharedData::GetScreenDepth(rayUV, a_eyeIndex);
-
-			// Difference between the current ray distance and the marched light
-			float depthDelta = viewPosition.z - rayDepth;
-			if (rayDepth > 16.5)  // First person
-				contactShadow = max(contactShadow, saturate(depthDelta * depthDeltaMult.x) - saturate(depthDelta * depthDeltaMult.y));
-			if (contactShadow == 1.0)
-				break;
-		}
-
-		return 1.0 - saturate(contactShadow);
 	}
 
 	// Copyright 2019 Google LLC.

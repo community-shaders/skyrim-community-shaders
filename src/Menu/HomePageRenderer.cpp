@@ -1,25 +1,14 @@
 #include "HomePageRenderer.h"
 #include "PCH.h"
 
-#include <algorithm>
-#include <filesystem>
-#include <format>
-#include <fstream>
 #include <imgui.h>
-#include <nlohmann/json.hpp>
-#include <ranges>
-#include <sstream>
 
-#include "Feature.h"
 #include "Globals.h"
 #include "Menu.h"
 #include "Menu/ThemeManager.h"
 #include "Plugin.h"
-#include "SettingsOverrideManager.h"
 #include "State.h"
 #include "Util.h"
-
-using json = nlohmann::json;
 
 // Static member definitions
 bool HomePageRenderer::isFirstTimeSetupShown = false;
@@ -253,7 +242,10 @@ void HomePageRenderer::RenderFAQSection()
 		ImGui::TextWrapped(
 			"Yes! Community Shaders is completely open source and available on GitHub. You can view "
 			"the source code, report issues, suggest features, and contribute to the project. "
-			"The project is licensed under GPL, ensuring it remains free and open for everyone.");
+			"The project is licensed under GPL, ensuring it remains free and open for everyone."
+			"The project is licensed under GPL, ensuring it remains free and open for everyone."
+			" Branding materials and assets (icons, nexus branding, typography, etc) are not covered by the GPL Licence."
+			" Any included assets may not be used without explicit permission.");
 	}
 }
 
@@ -436,8 +428,8 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	bool shouldClose = ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Escape);
 
 	if (ImGui::Button("Continue", ImVec2(continueButtonWidth, 30)) || shouldClose) {
-		// No need to apply any hotkey - user has already set it or it defaults to VK_END
 		MarkFirstTimeSetupComplete();
+		// Note: Settings are automatically saved to ensure welcome screen won't show again
 	}
 
 	// Center the help text
@@ -462,70 +454,20 @@ bool HomePageRenderer::ShouldShowFirstTimeSetup()
 		return false;
 	}
 
-	// Check if first-time setup has been completed by looking at UserSettings.json
-	std::filesystem::path userSettingsPath = Util::PathHelpers::GetUserSettingsPath();
-
-	// If UserSettings.json doesn't exist at all, this is definitely a first-time launch
-	if (!std::filesystem::exists(userSettingsPath)) {
-		return true;
-	}
-
-	// If UserSettings.json exists, check if FirstTimeSetupCompleted flag is set
-	try {
-		std::ifstream file(userSettingsPath);
-		if (!file.is_open()) {
-			return true;  // If we can't read the file, assume first time
-		}
-
-		nlohmann::json settings;
-		file >> settings;
-		file.close();
-
-		// Check if FirstTimeSetupCompleted exists and is true
-		if (settings.contains("FirstTimeSetupCompleted") &&
-			settings["FirstTimeSetupCompleted"].is_boolean() &&
-			settings["FirstTimeSetupCompleted"] == true) {
-			return false;  // Setup already completed
-		}
-
-		return true;  // Field doesn't exist or is false, show setup
-
-	} catch (const std::exception&) {
-		// If there's any error reading the file, assume first time
-		return true;
-	}
+	// Check if first-time setup has been completed using the Menu settings
+	auto menu = Menu::GetSingleton();
+	return !menu->GetSettings().FirstTimeSetupCompleted;
 }
 
 void HomePageRenderer::MarkFirstTimeSetupComplete()
 {
-	std::filesystem::path userSettingsPath = Util::PathHelpers::GetUserSettingsPath();
+	// Set the flag in the Menu settings
+	auto menu = Menu::GetSingleton();
+	menu->GetSettings().FirstTimeSetupCompleted = true;
 
-	try {
-		nlohmann::json settings;
-
-		// Read existing settings if file exists
-		if (std::filesystem::exists(userSettingsPath)) {
-			std::ifstream file(userSettingsPath);
-			if (file.is_open()) {
-				file >> settings;
-				file.close();
-			}
-		}
-
-		// Set the FirstTimeSetupCompleted flag
-		settings["FirstTimeSetupCompleted"] = true;
-
-		// Write back to file
-		std::filesystem::create_directories(userSettingsPath.parent_path());
-		std::ofstream outFile(userSettingsPath);
-		if (outFile.is_open()) {
-			outFile << settings.dump(2);
-			outFile.close();
-		}
-
-	} catch (const std::exception&) {
-		// If we can't write the file, just mark as shown this session to avoid repeated popups
-	}
+	// Immediately save settings to ensure the flag is persisted
+	// This prevents the welcome screen from showing again even if user doesn't manually save
+	globals::state->Save();
 
 	isFirstTimeSetupShown = true;  // Mark as shown this session
 }

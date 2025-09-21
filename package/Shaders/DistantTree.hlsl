@@ -200,7 +200,7 @@ PS_OUTPUT main(PS_INPUT input)
 		discard;
 	}
 
-	float alpha = TexDiffuse.Sample(SampDiffuse, input.TexCoord.xy).w;
+	float alpha = TexDiffuse.SampleBias(SampDiffuse, input.TexCoord.xy, SharedData::MipBias).w;
 
 	if ((alpha - AlphaTestRefRS) < 0) {
 		discard;
@@ -209,7 +209,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Diffuse.xyz = input.Depth.xxx / input.Depth.yyy;
 	psout.Diffuse.w = 0;
 #	else
-	float4 baseColor = TexDiffuse.Sample(SampDiffuse, input.TexCoord.xy);
+	float4 baseColor = TexDiffuse.SampleBias(SampDiffuse, input.TexCoord.xy, SharedData::MipBias);
 
 	if ((baseColor.w - AlphaTestRefRS) < 0) {
 		discard;
@@ -233,7 +233,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 ddx = ddx_coarse(input.WorldPosition.xyz);
 	float3 ddy = ddy_coarse(input.WorldPosition.xyz);
-	float3 normal = normalize(cross(ddx, ddy));
+	float3 normal = -normalize(cross(ddx, ddy));
 
 #			if !defined(SSGI)
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));

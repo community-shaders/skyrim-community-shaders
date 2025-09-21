@@ -33,9 +33,9 @@ namespace Util
 			return GetDataPath() / "SKSE" / "Plugins" / "CommunityShaders";
 		}
 
-		std::filesystem::path GetUserSettingsPath()
+		std::filesystem::path GetImGuiIniPath()
 		{
-			return GetCommunityShaderPath() / "UserSettings.json";
+			return GetDataPath() / "SKSE" / "Plugins" / "CommunityShaders_ImGui.ini";
 		}
 
 		std::filesystem::path GetInterfacePath()

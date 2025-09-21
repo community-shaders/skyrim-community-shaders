@@ -18,7 +18,8 @@ void InteriorSun::DrawSettings()
 	}
 	if (ImGui::SliderFloat("Interior Shadow Distance", &settings.InteriorShadowDistance, 1000.0f, 8000.0f)) {
 		*gInteriorShadowDistance = settings.InteriorShadowDistance;
-		SetShadowDistance(globals::game::tes && globals::game::tes->interiorCell);
+		auto tes = RE::TES::GetSingleton();
+		SetShadowDistance(tes && tes->interiorCell);
 	}
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
@@ -72,7 +73,7 @@ void InteriorSun::PostPostLoad()
 
 void InteriorSun::EarlyPrepass()
 {
-	isInteriorWithSun = IsInteriorWithSun(globals::game::tes->interiorCell);
+	isInteriorWithSun = IsInteriorWithSun(RE::TES::GetSingleton()->interiorCell);
 }
 
 inline bool InteriorSun::IsInteriorWithSun(const RE::TESObjectCELL* cell)
@@ -102,7 +103,7 @@ RE::TESWorldSpace* InteriorSun::disableInteriorSun = [] {
 void InteriorSun::DirShadowLightCulling::thunk(RE::BSShadowDirectionalLight* dirLight, RE::BSTArray<RE::BSTArray<RE::NiPointer<RE::NiAVObject>>>& jobArrays, RE::BSTArray<RE::NiPointer<RE::NiAVObject>>& nodes)
 {
 	auto& singleton = globals::features::interiorSun;
-	const auto cell = globals::game::tes->interiorCell;
+	const auto cell = RE::TES::GetSingleton()->interiorCell;
 	auto* passedJobArrays = &jobArrays;
 
 	if (cell && singleton.isInteriorWithSun) {

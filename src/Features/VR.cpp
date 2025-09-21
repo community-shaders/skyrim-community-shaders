@@ -116,7 +116,7 @@ void VR::DataLoaded()
 
 void VR::EarlyPrepass()
 {
-	*gDepthBufferCulling = globals::game::tes->interiorCell ? settings.EnableDepthBufferCullingInterior : settings.EnableDepthBufferCullingExterior;
+	*gDepthBufferCulling = RE::TES::GetSingleton()->interiorCell ? settings.EnableDepthBufferCullingInterior : settings.EnableDepthBufferCullingExterior;
 }
 
 //=============================================================================

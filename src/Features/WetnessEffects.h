@@ -31,7 +31,7 @@ public:
 		uint EnableWetnessEffects = true;
 		float MaxRainWetness = 1.0f;
 		float MaxPuddleWetness = 2.5f;
-		float MaxShoreWetness = 0.5f;
+		float MaxShoreWetness = 1.0f;
 		uint ShoreRange = 32;
 		float PuddleRadius = 1.0f;
 		float PuddleMaxAngle = 0.95f;
@@ -47,8 +47,8 @@ public:
 		uint EnableVanillaRipples = false;
 		float RaindropFxRange = 1000.f;
 		float RaindropGridSize = 4.f;
-		float RaindropInterval = .5f;
-		float RaindropChance = .3f;
+		float RaindropInterval = 1.0f;
+		float RaindropChance = 1.0f;
 		float SplashesLifetime = 10.0f;
 		float SplashesStrength = 1.05f;
 		float SplashesMinRadius = .3f;

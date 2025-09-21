@@ -23,6 +23,7 @@
         },
         "intel-xess",
         "magic-enum",
+        "detours",
         "nlohmann-json",
         "pystring",
         "stb",

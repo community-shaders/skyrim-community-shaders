@@ -112,6 +112,12 @@ namespace FrameBuffer
 		return mul(CameraView[a_eyeIndex], newPosition).xyz;
 	}
 
+	float3 ViewToWorld(float3 x, bool is_position = true, uint a_eyeIndex = 0)
+	{
+		float4 newPosition = float4(x, (float)is_position);
+		return mul(CameraViewInverse[a_eyeIndex], newPosition).xyz;
+	}
+
 	float2 ViewToUV(float3 x, bool is_position = true, uint a_eyeIndex = 0)
 	{
 		float4 newPosition = float4(x, (float)is_position);
