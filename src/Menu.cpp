@@ -112,6 +112,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkipCompilationKey,
 	EffectToggleKey,
 	OverlayToggleKey,
+	FirstTimeSetupCompleted,
 	Theme)
 
 bool IsEnabled = false;
