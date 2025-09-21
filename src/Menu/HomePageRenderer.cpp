@@ -453,10 +453,10 @@ void HomePageRenderer::MarkFirstTimeSetupComplete()
 	// Set the flag in the Menu settings
 	auto menu = Menu::GetSingleton();
 	menu->GetSettings().FirstTimeSetupCompleted = true;
-	
+
 	// Immediately save settings to ensure the flag is persisted
 	// This prevents the welcome screen from showing again even if user doesn't manually save
 	globals::state->Save();
-	
+
 	isFirstTimeSetupShown = true;  // Mark as shown this session
 }
