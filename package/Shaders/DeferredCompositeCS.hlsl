@@ -41,10 +41,10 @@ Texture2D<float4> SsgiSpecularTexture : register(t13);
 
 void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 {
-	ao = 1 - SsgiAoTexture[pixCoord];
+	ao = 1 - SsgiAoTexture[pixCoord].x;
 	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
 	float ssgiIlY = max(SphericalHarmonics::SHHallucinateZH3Irradiance(ssgiIlYSh, normalWS), SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, SphericalHarmonics::EvaluateCosineLobe(normalWS)));
-	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord];
+	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord].xy;
 	il = max(0, Color::YCoCgToRGB(float3(ssgiIlY, ssgiIlCoCg)));
 }
 
