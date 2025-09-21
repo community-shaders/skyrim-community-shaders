@@ -13,7 +13,7 @@ public:
 	static constexpr float LOGO_WATERMARK_HEIGHT = 260.0f;
 
 	// Discord banner scaling constants
-	static constexpr float DISCORD_BANNER_TARGET_WIDTH_RATIO = 0.25f;  // 25% of window width
+	static constexpr float DISCORD_BANNER_TARGET_WIDTH_RATIO = 0.85f;  // 25% of window width
 	static constexpr float DISCORD_BANNER_MIN_WIDTH = 150.0f;
 	static constexpr float DISCORD_BANNER_MAX_WIDTH = 1200.0f;
 	static constexpr float DISCORD_BANNER_PADDING_MARGIN = 40.0f;
