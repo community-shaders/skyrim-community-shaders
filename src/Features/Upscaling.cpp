@@ -602,6 +602,8 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 				xess.CreateXeSSResources();
 		}
 
+		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
 		previousUpscaleMode = a_upscalemethod;
 		previousFrameGenMode = (settings.frameGenerationMode && d3d12SwapChainActive);
 	}
