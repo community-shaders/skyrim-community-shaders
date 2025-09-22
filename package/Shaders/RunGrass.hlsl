@@ -732,8 +732,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	diffuseColor *= albedo;
 	diffuseColor += max(0, sss * subsurfaceColor * SharedData::grassLightingSettings.SubsurfaceScatteringAmount);
 
+	directionalAmbientColor *= albedo;
+
 #	if defined(SKYLIGHTING)
-	Skylighting::applySkylighting(diffuseColor, directionalAmbientColor, skylightingDiffuse, albedo);
+	Skylighting::applySkylighting(diffuseColor, directionalAmbientColor, skylightingDiffuse);
 #	endif
 
 	specularColor += lightsSpecularColor;
@@ -916,9 +918,10 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 albedo = baseColor.xyz * vertexColor;
 
 	diffuseColor *= albedo;
+	directionalAmbientColor *= albedo;
 
 #	if defined(SKYLIGHTING)
-	Skylighting::applySkylighting(diffuseColor, directionalAmbientColor, skylightingDiffuse, albedo);
+	Skylighting::applySkylighting(diffuseColor, directionalAmbientColor, skylightingDiffuse);
 #	endif
 
 	psout.Diffuse.xyz = diffuseColor;

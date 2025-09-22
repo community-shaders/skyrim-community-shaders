@@ -3086,8 +3086,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #		endif
 
+	directionalAmbientColor *= outputAlbedo;
+
 #	if defined(SKYLIGHTING)
-	Skylighting::applySkylighting(color.xyz, directionalAmbientColor, skylightingDiffuse, outputAlbedo);
+	Skylighting::applySkylighting(color.xyz, directionalAmbientColor, skylightingDiffuse);
 #	endif
 
 #	if !defined(DEFERRED)
@@ -3342,7 +3344,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.Masks = float4(0, 0, Color::RGBToYCoCg(directionalAmbientColor).x, psout.Diffuse.w);
 #		endif
 
-	float stochasticBlend = screenNoise < psout.Diffuse.w ? 1.0 : 0.0;
+	float stochasticBlend = (screenNoise * screenNoise) < psout.Diffuse.w ? 1.0 : 0.0;
 	psout.NormalGlossiness.w = stochasticBlend;
 
 #	endif
