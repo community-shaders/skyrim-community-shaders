@@ -1,0 +1,14 @@
+{
+	"DisplayName": "Warm Amber",
+	"Description": "Cozy amber tones reminiscent of hearth fires and candlelight",
+	"Version": "1.0.0",
+	"Author": "Community Shaders Team",
+	"Theme": {
+		"UseSimplePalette": true,
+		"Palette": {
+			"Background": [0.2, 0.15, 0.05, 0.9],
+			"Text": [1.0, 0.9, 0.7, 1.0],
+			"Border": [0.8, 0.6, 0.3, 0.8]
+		}
+	}
+}

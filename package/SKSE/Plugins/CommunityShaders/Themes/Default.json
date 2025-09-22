@@ -1,0 +1,14 @@
+{
+	"DisplayName": "Default Dark",
+	"Description": "The classic Community Shaders dark theme",
+	"Version": "1.0.0",
+	"Author": "Community Shaders Team",
+	"Theme": {
+		"UseSimplePalette": true,
+		"Palette": {
+			"Background": [0.09, 0.09, 0.09, 0.95],
+			"Text": [1.0, 1.0, 1.0, 1.0],
+			"Border": [0.5, 0.5, 0.5, 0.8]
+		}
+	}
+}

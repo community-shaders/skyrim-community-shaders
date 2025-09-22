@@ -1,0 +1,14 @@
+{
+	"DisplayName": "High Contrast",
+	"Description": "High contrast theme for improved accessibility and visibility",
+	"Version": "1.0.0",
+	"Author": "Community Shaders Team",
+	"Theme": {
+		"UseSimplePalette": true,
+		"Palette": {
+			"Background": [0.0, 0.0, 0.0, 0.95],
+			"Text": [1.0, 1.0, 1.0, 1.0],
+			"Border": [1.0, 1.0, 1.0, 0.9]
+		}
+	}
+}

@@ -6,6 +6,7 @@
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
+#include "ThemeManager.h"
 #include "TruePBR.h"
 
 #include "ENB/ENBSeriesAPI.h"
@@ -162,6 +163,12 @@ bool Load()
 	auto state = globals::state;
 	state->Load();
 	state->LoadTheme();  // Load theme settings from SettingsTheme.json
+	
+	// Initialize theme system - create default themes and discover existing ones
+	globals::menu->CreateDefaultThemes();  // Creates JSON files if they don't exist
+	auto themeManager = ThemeManager::GetSingleton();
+	themeManager->DiscoverThemes();  // Discover all available themes
+	
 	auto log = spdlog::default_logger();
 	log->set_level(state->GetLogLevel());
 

@@ -1,11 +1,13 @@
 #include "SettingsTabRenderer.h"
 
+#include <algorithm>
 #include <imgui.h>
 #include <imgui_internal.h>
 
 #include "Globals.h"
 #include "Menu.h"
 #include "ShaderCache.h"
+#include "ThemeManager.h"
 #include "Util.h"
 
 void SettingsTabRenderer::RenderGeneralSettings(
@@ -241,6 +243,77 @@ void SettingsTabRenderer::RenderColorsTab()
 	if (ImGui::BeginTabItem("Colors")) {
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 		auto& colors = themeSettings.FullPalette;
+
+		// Theme Preset Selection
+		ImGui::SeparatorText("Theme Preset");
+
+		// Get theme manager
+		auto themeManager = ThemeManager::GetSingleton();
+		
+		// Get available themes (force discovery if not done)
+		if (!themeManager->IsDiscovered()) {
+			themeManager->DiscoverThemes();
+		}
+		
+		const auto& themes = themeManager->GetThemes();
+
+		// Create dropdown items
+		std::vector<const char*> items;
+		std::vector<std::string> displayNames;
+		items.push_back("Custom"); // First item for custom theme
+		displayNames.push_back("Custom");
+
+		for (const auto& theme : themes) {
+			displayNames.push_back(theme.displayName);
+			items.push_back(displayNames.back().c_str());
+		}
+
+		// Find current selection index
+		int currentItem = 0; // Default to "Custom"
+		if (!globals::menu->GetSettings().SelectedThemePreset.empty()) {
+			for (size_t i = 0; i < themes.size(); ++i) {
+				if (themes[i].name == globals::menu->GetSettings().SelectedThemePreset) {
+					currentItem = static_cast<int>(i) + 1; // +1 for "Custom"
+					break;
+				}
+			}
+		}
+
+		// Theme preset dropdown
+		if (ImGui::Combo("##ThemePreset", &currentItem, items.data(), static_cast<int>(items.size()))) {
+			if (currentItem == 0) {
+				// Custom theme selected
+				globals::menu->GetSettings().SelectedThemePreset = "";
+			} else {
+				// Preset theme selected
+				std::string selectedTheme = themes[currentItem - 1].name; // -1 for "Custom" offset
+				if (globals::menu->LoadThemePreset(selectedTheme)) {
+					// Theme loaded successfully, update UI
+					themeSettings = globals::menu->GetSettings().Theme;
+				}
+			}
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Refresh Themes")) {
+			themeManager->RefreshThemes();
+			// Reset selection if current theme no longer exists
+			if (!globals::menu->GetSettings().SelectedThemePreset.empty()) {
+				const auto* themeInfo = themeManager->GetThemeInfo(globals::menu->GetSettings().SelectedThemePreset);
+				if (!themeInfo) {
+					globals::menu->GetSettings().SelectedThemePreset = "";
+				}
+			}
+		}
+
+		// Show theme description if available
+		if (currentItem > 0 && currentItem - 1 < static_cast<int>(themes.size())) {
+			const auto& selectedTheme = themes[currentItem - 1];
+			if (!selectedTheme.description.empty()) {
+				ImGui::SameLine();
+				ImGui::Text("- %s", selectedTheme.description.c_str());
+			}
+		}
 
 		ImGui::SeparatorText("Status");
 

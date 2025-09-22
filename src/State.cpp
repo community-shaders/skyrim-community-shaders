@@ -15,6 +15,7 @@
 #include "SettingsOverrideManager.h"
 #include "ShaderCache.h"
 #include "TruePBR.h"
+#include "Utils/FileSystem.h"
 
 void State::Draw()
 {
@@ -151,18 +152,18 @@ void State::Setup()
 	globals::deferred->SetupResources();
 }
 
-static const std::string& GetConfigPath(State::ConfigMode a_configMode)
+static std::string GetConfigPath(State::ConfigMode a_configMode)
 {
 	switch (a_configMode) {
 	case State::ConfigMode::USER:
-		return globals::state->userConfigPath;
+		return Util::PathHelpers::GetSettingsUserPath().string();
 	case State::ConfigMode::TEST:
-		return globals::state->testConfigPath;
+		return Util::PathHelpers::GetSettingsTestPath().string();
 	case State::ConfigMode::THEME:
-		return globals::state->themeConfigPath;
+		return Util::PathHelpers::GetSettingsThemePath().string();
 	case State::ConfigMode::DEFAULT:
 	default:
-		return globals::state->defaultConfigPath;
+		return Util::PathHelpers::GetSettingsDefaultPath().string();
 	}
 }
 
@@ -398,9 +399,9 @@ void State::Save(ConfigMode a_configMode)
 	std::ofstream o{ configPath };
 
 	try {
-		std::filesystem::create_directories(folderPath);
+		std::filesystem::create_directories(Util::PathHelpers::GetCommunityShaderPath());
 	} catch (const std::filesystem::filesystem_error& e) {
-		logger::warn("Error creating directory during Save ({}) : {}\n", folderPath, e.what());
+		logger::warn("Error creating directory during Save ({}) : {}\n", Util::PathHelpers::GetCommunityShaderPath().string(), e.what());
 		return;
 	}
 

@@ -3,12 +3,19 @@
 #ifndef DIRECTINPUT_VERSION
 #	define DIRECTINPUT_VERSION 0x0800
 #endif
+#include <algorithm>
 #include <dinput.h>
+#include <filesystem>
 #include <format>
+#include <fstream>
+#include <iomanip>
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
 #include <imgui_internal.h>
 #include <imgui_stdlib.h>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 #include "Deferred.h"
 #include "Feature.h"
@@ -24,7 +31,9 @@
 #include "Menu/ThemeManager.h"
 #include "ShaderCache.h"
 #include "State.h"
+#include "ThemeManager.h"
 #include "TruePBR.h"
+#include "Util.h"
 #include "Util.h"
 #include "Utils/UI.h"
 
@@ -112,7 +121,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkipCompilationKey,
 	EffectToggleKey,
 	OverlayToggleKey,
-	Theme)
+	Theme,
+	SelectedThemePreset)
 
 bool IsEnabled = false;
 std::unordered_map<std::string, int> Menu::categoryCounts;
@@ -163,6 +173,41 @@ void Menu::LoadTheme(json& o_json)
 void Menu::SaveTheme(json& o_json)
 {
 	o_json["Theme"] = settings.Theme;
+}
+
+std::vector<std::string> Menu::DiscoverThemes()
+{
+	auto themeManager = ThemeManager::GetSingleton();
+	return themeManager->GetThemeNames();
+}
+
+bool Menu::LoadThemePreset(const std::string& themeName)
+{
+	if (themeName.empty()) {
+		// Empty theme name means custom/user theme
+		settings.SelectedThemePreset = "";
+		return true;
+	}
+
+	auto themeManager = ThemeManager::GetSingleton();
+	json themeSettings;
+	
+	if (themeManager->LoadTheme(themeName, themeSettings)) {
+		settings.Theme = themeSettings;
+		settings.SelectedThemePreset = themeName;
+		logger::info("Loaded theme preset: {}", themeName);
+		return true;
+	} else {
+		logger::warn("Failed to load theme preset: {}", themeName);
+		return false;
+	}
+}
+
+void Menu::CreateDefaultThemes()
+{
+	// Use ThemeManager to create default theme files
+	auto themeManager = ThemeManager::GetSingleton();
+	themeManager->CreateDefaultThemeFiles();
 }
 
 void Menu::Init()

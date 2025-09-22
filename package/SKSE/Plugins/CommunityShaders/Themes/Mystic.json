@@ -1,0 +1,14 @@
+{
+	"DisplayName": "Mystic Purple",
+	"Description": "Magical purple theme with mystical vibes for spell crafting",
+	"Version": "1.0.0",
+	"Author": "Community Shaders Team",
+	"Theme": {
+		"UseSimplePalette": true,
+		"Palette": {
+			"Background": [0.2, 0.1, 0.3, 0.9],
+			"Text": [0.95, 0.9, 1.0, 1.0],
+			"Border": [0.6, 0.4, 0.8, 0.8]
+		}
+	}
+}

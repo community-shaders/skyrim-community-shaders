@@ -93,6 +93,12 @@ namespace Util
 		std::filesystem::path GetSettingsThemePath();
 
 		/**
+		 * Gets the Themes directory path
+		 * @return CommunityShaderPath / "Themes"
+		 */
+		std::filesystem::path GetThemesPath();
+
+		/**
 		 * Gets the Overrides directory path
 		 * @return CommunityShaderPath / "Overrides"
 		 */

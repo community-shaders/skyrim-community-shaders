@@ -33,6 +33,11 @@ public:
 	void LoadTheme(json& o_json);
 	void SaveTheme(json& o_json);
 
+	// Multi-theme support (deprecated - use ThemeManager)
+	std::vector<std::string> DiscoverThemes();
+	bool LoadThemePreset(const std::string& themeName);
+	void CreateDefaultThemes();  // Deprecated - creates JSON files instead
+
 	void Init();
 	void DrawSettings();
 
@@ -212,6 +217,7 @@ public:
 		uint32_t EffectToggleKey = VK_MULTIPLY;  // toggle all effects
 		uint32_t OverlayToggleKey = VK_F10;      // Global overlay toggle key for all overlays
 		ThemeSettings Theme;
+		std::string SelectedThemePreset = ""; // Currently selected theme preset (empty = custom/user theme)
 	};
 	const ThemeSettings& GetTheme() const { return settings.Theme; }                // Provide read-only access to the Theme.
 	Settings& GetSettings() { return settings; }                                    // Provide access to settings for other components

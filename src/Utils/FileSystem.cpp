@@ -78,6 +78,11 @@ namespace Util
 			return GetCommunityShaderPath() / "SettingsTheme.json";
 		}
 
+		std::filesystem::path GetThemesPath()
+		{
+			return GetCommunityShaderPath() / "Themes";
+		}
+
 		std::filesystem::path GetOverridesPath()
 		{
 			return GetCommunityShaderPath() / "Overrides";

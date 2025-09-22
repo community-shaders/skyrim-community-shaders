@@ -1,0 +1,14 @@
+{
+	"DisplayName": "Forest Green",
+	"Description": "Natural green theme inspired by Skyrim's ancient forests",
+	"Version": "1.0.0",
+	"Author": "Community Shaders Team",
+	"Theme": {
+		"UseSimplePalette": true,
+		"Palette": {
+			"Background": [0.1, 0.3, 0.15, 0.9],
+			"Text": [0.9, 1.0, 0.9, 1.0],
+			"Border": [0.4, 0.7, 0.4, 0.8]
+		}
+	}
+}

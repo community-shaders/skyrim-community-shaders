@@ -1,0 +1,14 @@
+{
+	"DisplayName": "Dwemer Bronze",
+	"Description": "Ancient bronze theme inspired by lost Dwemer technology",
+	"Version": "1.0.0",
+	"Author": "Community Shaders Team",
+	"Theme": {
+		"UseSimplePalette": true,
+		"Palette": {
+			"Background": [0.15, 0.12, 0.08, 0.9],
+			"Text": [0.9, 0.75, 0.5, 1.0],
+			"Border": [0.7, 0.5, 0.3, 0.8]
+		}
+	}
+}
