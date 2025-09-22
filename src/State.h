@@ -55,6 +55,7 @@ public:
 	const std::string testConfigPath = "Data\\SKSE\\Plugins\\CommunityShaders\\SettingsTest.json";
 	const std::string userConfigPath = "Data\\SKSE\\Plugins\\CommunityShaders\\SettingsUser.json";
 	const std::string defaultConfigPath = "Data\\SKSE\\Plugins\\CommunityShaders\\SettingsDefault.json";
+	const std::string themeConfigPath = "Data\\SKSE\\Plugins\\CommunityShaders\\SettingsTheme.json";
 
 	float timer = 0;
 	double smoothDrawCalls[RE::BSShader::Type::Total + 1];
@@ -73,7 +74,8 @@ public:
 	{
 		DEFAULT,
 		USER,
-		TEST
+		TEST,
+		THEME
 	};
 
 	void Draw();
@@ -83,6 +85,9 @@ public:
 
 	void Load(ConfigMode a_configMode = ConfigMode::USER, bool a_allowReload = true);
 	void Save(ConfigMode a_configMode = ConfigMode::USER);
+
+	void LoadTheme();
+	void SaveTheme();
 
 	bool ValidateCache(CSimpleIniA& a_ini);
 	void WriteDiskCacheInfo(CSimpleIniA& a_ini);

@@ -161,6 +161,7 @@ bool Load()
 
 	auto state = globals::state;
 	state->Load();
+	state->LoadTheme();  // Load theme settings from SettingsTheme.json
 	auto log = spdlog::default_logger();
 	log->set_level(state->GetLogLevel());
 

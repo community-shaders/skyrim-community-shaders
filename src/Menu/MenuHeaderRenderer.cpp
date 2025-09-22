@@ -92,6 +92,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 			ImGui::TableNextColumn();
 			if (ImGui::Button("Save Settings", { -1, 0 })) {
 				globals::state->Save();
+				globals::state->SaveTheme();
 			}
 
 			// Restore Saved Settings Button
@@ -174,7 +175,10 @@ std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons
 	if (uiIcons.saveSettings.texture) {
 		actionIcons.push_back({ uiIcons.saveSettings.texture,
 			"Save Settings",
-			[]() { globals::state->Save(); } });
+			[]() { 
+				globals::state->Save(); 
+				globals::state->SaveTheme();
+			} });
 	}
 	if (uiIcons.loadSettings.texture) {
 		actionIcons.push_back({ uiIcons.loadSettings.texture,

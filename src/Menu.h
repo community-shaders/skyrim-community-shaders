@@ -30,6 +30,9 @@ public:
 	void Load(json& o_json);
 	void Save(json& o_json);
 
+	void LoadTheme(json& o_json);
+	void SaveTheme(json& o_json);
+
 	void Init();
 	void DrawSettings();
 

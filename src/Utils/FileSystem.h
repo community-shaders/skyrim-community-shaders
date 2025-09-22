@@ -87,6 +87,12 @@ namespace Util
 		std::filesystem::path GetSettingsDefaultPath();
 
 		/**
+		 * Gets the SettingsTheme.json file path
+		 * @return CommunityShaderPath / "SettingsTheme.json"
+		 */
+		std::filesystem::path GetSettingsThemePath();
+
+		/**
 		 * Gets the Overrides directory path
 		 * @return CommunityShaderPath / "Overrides"
 		 */

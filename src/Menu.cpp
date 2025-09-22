@@ -153,6 +153,18 @@ void Menu::Save(json& o_json)
 	o_json = settings;
 }
 
+void Menu::LoadTheme(json& o_json)
+{
+	if (o_json["Theme"].is_object()) {
+		settings.Theme = o_json["Theme"];
+	}
+}
+
+void Menu::SaveTheme(json& o_json)
+{
+	o_json["Theme"] = settings.Theme;
+}
+
 void Menu::Init()
 {
 	// Setup Dear ImGui context

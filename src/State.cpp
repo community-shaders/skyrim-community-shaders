@@ -158,6 +158,8 @@ static const std::string& GetConfigPath(State::ConfigMode a_configMode)
 		return globals::state->userConfigPath;
 	case State::ConfigMode::TEST:
 		return globals::state->testConfigPath;
+	case State::ConfigMode::THEME:
+		return globals::state->themeConfigPath;
 	case State::ConfigMode::DEFAULT:
 	default:
 		return globals::state->defaultConfigPath;
@@ -826,4 +828,59 @@ std::unordered_map<std::string, bool>& State::GetDisabledFeatures()
 float State::GetTotalSmoothedDrawCalls() const
 {
 	return static_cast<float>(smoothDrawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]);
+}
+
+void State::LoadTheme()
+{
+	auto themeConfigPath = Util::PathHelpers::GetSettingsThemePath();
+	
+	if (!std::filesystem::exists(themeConfigPath)) {
+		logger::info("No theme config file found at: {}", themeConfigPath.string());
+		return;
+	}
+
+	try {
+		std::ifstream themeFile(themeConfigPath);
+		if (!themeFile.is_open()) {
+			logger::warn("Unable to open theme config file: {}", themeConfigPath.string());
+			return;
+		}
+
+		json themeSettings;
+		themeFile >> themeSettings;
+		themeFile.close();
+
+		if (themeSettings["Menu"].is_object()) {
+			logger::info("Loading theme settings from: {}", themeConfigPath.string());
+			globals::menu->LoadTheme(themeSettings["Menu"]);
+		}
+	} catch (const std::exception& e) {
+		logger::warn("Error loading theme config file: {}", e.what());
+	}
+}
+
+void State::SaveTheme()
+{
+	auto themeConfigPath = Util::PathHelpers::GetSettingsThemePath();
+	
+	try {
+		std::filesystem::create_directories(themeConfigPath.parent_path());
+	} catch (const std::filesystem::filesystem_error& e) {
+		logger::warn("Error creating directory during SaveTheme: {}", e.what());
+		return;
+	}
+
+	std::ofstream themeFile(themeConfigPath);
+	if (!themeFile.is_open()) {
+		logger::warn("Failed to open theme config file for saving: {}", themeConfigPath.string());
+		return;
+	}
+
+	json themeSettings;
+	globals::menu->SaveTheme(themeSettings["Menu"]);
+
+	themeFile << std::setw(4) << themeSettings << std::endl;
+	themeFile.close();
+	
+	logger::info("Theme settings saved to: {}", themeConfigPath.string());
 }
