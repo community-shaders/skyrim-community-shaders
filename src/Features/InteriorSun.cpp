@@ -45,6 +45,8 @@ void InteriorSun::RestoreDefaultSettings()
 
 void InteriorSun::PostPostLoad()
 {
+	stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
+
 	// Hooks and patch to enable directional lighting for interiors
 	stl::write_thunk_call<GetWorldSpace>(REL::RelocationID(35562, 36561).address() + REL::Relocate(0x399, 0x37D, 0x639));
 	stl::write_thunk_call<GetWorldSpace>(REL::RelocationID(35562, 36561).address() + REL::Relocate(0x3AE, 0x392, 0x64E));
@@ -121,6 +123,12 @@ void InteriorSun::DirShadowLightCulling::thunk(RE::BSShadowDirectionalLight* dir
 	}
 
 	func(dirLight, *passedJobArrays, nodes);
+}
+
+void InteriorSun::BSBatchRenderer_RenderPassImmediately::thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags)
+{
+	globals::features::interiorSun.UpdateRasterStateCullMode(a_pass, a_technique);
+	func(a_pass, a_technique, a_alphaTest, a_renderFlags);
 }
 
 void InteriorSun::ClearArrays()
