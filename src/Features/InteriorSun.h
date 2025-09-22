@@ -49,7 +49,7 @@ public:
 		static void thunk(RE::BSShadowDirectionalLight* dirLight, RE::BSTArray<RE::BSTArray<RE::NiPointer<RE::NiAVObject>>>& jobArrays, RE::BSTArray<RE::NiPointer<RE::NiAVObject>>& nodes);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
-	
+
 	struct BSBatchRenderer_RenderPassImmediately
 	{
 		static void thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags);
