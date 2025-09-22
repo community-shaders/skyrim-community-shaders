@@ -8,7 +8,7 @@
 
 namespace Skylighting
 {
-#ifdef PSHADER
+#if defined(PSHADER)
 	Texture3D<sh2> SkylightingProbeArray : register(t50);
 	Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t51);
 #endif
@@ -35,6 +35,7 @@ namespace Skylighting
 		return lerp(params.MinSpecularVisibility, 1.0, saturate(visibility));
 	}
 
+#if defined(PSHADER)
 	void applySkylighting(inout float3 diffuseColor, inout float3 directionalAmbientColor, float skylightingDiffuse, float3 albedo)
 	{
 		directionalAmbientColor *= albedo;
@@ -54,6 +55,7 @@ namespace Skylighting
 
 		diffuseColor += directionalAmbientColor;
 	}
+#endif
 
 	sh2 sample(SharedData::SkylightingSettings params, Texture3D<sh2> probeArray, Texture2DArray<float3> blueNoise, float2 screenPosition, float3 positionMS, float3 normalWS)
 	{
