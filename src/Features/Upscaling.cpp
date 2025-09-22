@@ -8,7 +8,9 @@
 #include "Upscaling/Streamline.h"
 #include "Upscaling/XeSS.h"
 #include <Windows.h>
+#include <algorithm>
 #include <directx/d3dx12.h>
+#include <format>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Upscaling::Settings,
@@ -156,22 +158,25 @@ void Upscaling::DrawSettings()
 	if (!fidelityFX.versionInfo.empty()) {
 		fsrLabel += " " + fidelityFX.versionInfo;
 	}
+	std::array<float, 5> fsrScales{};
 	upscaleModes.push_back(fsrLabel);
 
 	std::string xessLabel = "Intel XeSS";
 	if (!xess.versionInfo.empty()) {
 		xessLabel += " " + xess.versionInfo;
 	}
+	std::array<float, 5> xessScales{};
 	upscaleModes.push_back(xessLabel);
 
 	std::string dlssLabel = "NVIDIA DLSS 4 Preset K";
+	std::array<float, 5> dlssScales{};
 	upscaleModes.push_back(dlssLabel);
 
 	// Determine available modes
 	bool featureDLSS = streamline.featureDLSS;
 
-	uint* currentUpscaleMode = &settings.upscaleMethod;
-	uint availableModes = 4;
+	uint32_t* currentUpscaleMode = &settings.upscaleMethod;
+	uint32_t availableModes = 4;
 
 	if (featureDLSS) {
 		// All modes available including DLSS
@@ -181,13 +186,30 @@ void Upscaling::DrawSettings()
 	}
 
 	// Slider for method selection
-	std::string currentLabel = upscaleModes[(uint)*currentUpscaleMode];
+	// Clamp the index used to read from the built label vector to avoid OOB if the stored value is stale
+	uint32_t modeLabelIndex = std::min(*currentUpscaleMode, static_cast<uint32_t>(upscaleModes.size() - 1));
+	std::string currentLabel = upscaleModes[modeLabelIndex];
 	ImGui::SliderInt("Method", (int*)currentUpscaleMode, 0, availableModes, currentLabel.c_str());
 
-	*currentUpscaleMode = std::min(availableModes, (uint)*currentUpscaleMode);
+	*currentUpscaleMode = std::min(availableModes, *currentUpscaleMode);
 
 	// Check the current upscale method
 	auto upscaleMethod = GetUpscaleMethod();
+
+	// Prepopulate per-backend local scale arrays only if we already have cached
+	// preset scales populated by the runtime upscale operation. Until then,
+	// leave them as unavailable so the UI shows '(unavailable)'.
+	// Consider the cachedPresetScales valid when the first entry is non-negative
+	// and the last populated method matches the current method.
+	if (cachedPresetMethod == upscaleMethod && cachedPresetScales[0] != Upscaling::kScaleUnavailable) {
+		if (upscaleMethod == UpscaleMethod::kFSR) {
+			std::copy(cachedPresetScales.begin(), cachedPresetScales.end(), fsrScales.begin());
+		} else if (upscaleMethod == UpscaleMethod::kXESS) {
+			std::copy(cachedPresetScales.begin(), cachedPresetScales.end(), xessScales.begin());
+		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
+			std::copy(cachedPresetScales.begin(), cachedPresetScales.end(), dlssScales.begin());
+		}
+	}
 
 	// Display upscaling settings if applicable
 	if (!globals::game::isVR) {
@@ -195,10 +217,42 @@ void Upscaling::DrawSettings()
 			const char* upscalePresetsDLSS[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "DLAA" };
 			const char* upscalePresets[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "Native AA" };
 
-			if (upscaleMethod == UpscaleMethod::kDLSS)
-				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresetsDLSS[4 - settings.qualityMode]).c_str());
-			else
-				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, std::format("{}", upscalePresets[4 - settings.qualityMode]).c_str());
+			auto formatScalePct = [&](float scale) -> int {
+				int pct = static_cast<int>(roundf(scale * 100.0f));
+				return pct;
+			};
+
+			auto makePresetLabel = [&](const char* baseLabel, const std::array<float, 5>& scales) -> std::string {
+				const int mode = settings.qualityMode;
+				if (scales[mode] != Upscaling::kScaleUnavailable) {
+					int pct = formatScalePct(scales[mode]);
+					return std::format("{} ({}%)", baseLabel, pct);
+				}
+				return std::format("{} (unavailable)", baseLabel);
+			};
+
+			// Compute a safe preset index (4 - qualityMode) clamped to [0,4] to avoid negative/overflow indexing
+			int presetIndex = 0;
+			if (settings.qualityMode <= 4)
+				presetIndex = 4 - static_cast<int>(settings.qualityMode);
+			presetIndex = std::clamp(presetIndex, 0, 4);
+
+			// Choose preset name set and the corresponding scales once, then show a
+			// single SliderInt to avoid duplicated calls.
+			const char* baseLabel = nullptr;
+			const std::array<float, 5>* scalesPtr = nullptr;
+
+			if (upscaleMethod == UpscaleMethod::kDLSS) {
+				baseLabel = upscalePresetsDLSS[presetIndex];
+				scalesPtr = &dlssScales;
+			} else {
+				baseLabel = upscalePresets[presetIndex];
+				scalesPtr = (upscaleMethod == UpscaleMethod::kXESS) ? &xessScales : &fsrScales;
+			}
+
+			if (baseLabel && scalesPtr) {
+				ImGui::SliderInt("Upscale Preset (Scale %)", (int*)&settings.qualityMode, 0, 4, makePresetLabel(baseLabel, *scalesPtr).c_str());
+			}
 		}
 	} else {
 		ImGui::Text("Upscaling from lower resolutions is not currently available for VR");
@@ -661,6 +715,70 @@ void Upscaling::ConfigureTAA()
 	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
 }
 
+void Upscaling::PopulateCachedPresetScales(UpscaleMethod a_method)
+{
+	try {
+		// If we already have valid cached scales for this method, no work needed
+		if (cachedPresetMethod == a_method && cachedPresetScales[0] != Upscaling::kScaleUnavailable) {
+			return;
+		}
+
+		// If method changed, mark cache as uninitialized
+		if (cachedPresetMethod != a_method) {
+			for (auto& v : cachedPresetScales) v = Upscaling::kScaleUnavailable;
+			cachedPresetMethod = UpscaleMethod::kNONE;
+		}
+
+		auto screenSize = globals::state->screenSize;
+		bool success = false;
+
+		if (a_method == UpscaleMethod::kFSR) {
+			if (fidelityFX.featureFSR3 || fidelityFX.featureFSR3FG) {
+				for (uint32_t q = 0; q < cachedPresetScales.size(); ++q) {
+					float s = fidelityFX.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, q);
+					// Treat near-1.0 scales as exact 1.0 to avoid showing 99% and to
+					// ensure IsUpscalingActive() treats them as non-downscaling.
+					if (s >= 0.99f)
+						s = 1.0f;
+					cachedPresetScales[q] = s;
+				}
+				success = true;
+				cachedPresetMethod = UpscaleMethod::kFSR;
+			}
+		} else if (a_method == UpscaleMethod::kXESS) {
+			if (xess.featureXeSS) {
+				for (uint32_t q = 0; q < cachedPresetScales.size(); ++q) {
+					float s = xess.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, q);
+					if (s >= 0.99f)
+						s = 1.0f;
+					cachedPresetScales[q] = s;
+				}
+				success = true;
+				cachedPresetMethod = UpscaleMethod::kXESS;
+			}
+		} else if (a_method == UpscaleMethod::kDLSS) {
+			if (streamline.featureDLSS) {
+				for (uint32_t q = 0; q < cachedPresetScales.size(); ++q) {
+					float s = streamline.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, q);
+					if (s >= 0.99f)
+						s = 1.0f;
+					cachedPresetScales[q] = s;
+				}
+				success = true;
+				cachedPresetMethod = UpscaleMethod::kDLSS;
+			}
+		}
+
+		if (!success) {
+			for (auto& v : cachedPresetScales) v = Upscaling::kScaleUnavailable;
+			cachedPresetMethod = UpscaleMethod::kNONE;
+		}
+	} catch (...) {
+		for (auto& v : cachedPresetScales) v = Upscaling::kScaleUnavailable;
+		cachedPresetMethod = UpscaleMethod::kNONE;
+	}
+}
+
 void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 {
 	auto upscaleMethod = GetUpscaleMethod();
@@ -738,6 +856,9 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	// Disable dynamic resolution unless the game explictly enables it
 	if (!globals::game::isVR)
 		runtimeData.dynamicResolutionLock = 1;
+
+	// Populate cached scales for the current method
+	PopulateCachedPresetScales(upscaleMethod);
 }
 
 void Upscaling::SetupResources()
@@ -1480,6 +1601,8 @@ void Upscaling::Upscale()
 
 		state->EndPerfEvent();
 	}
+
+	PopulateCachedPresetScales(upscaleMethod);
 }
 
 void Upscaling::PerformUpscaling()

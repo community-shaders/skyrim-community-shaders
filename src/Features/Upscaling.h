@@ -215,6 +215,17 @@ public:
 	IDXGISwapChain* GetProxySwapChain();
 
 private:
+	// Sentinel value used to mark unavailable preset scales.
+	static constexpr float kScaleUnavailable = -1.0f;
+
+	// Cached preset scales for UI labels. Uninitialized entries are marked
+	// with kScaleUnavailable.
+	std::array<float, 5> cachedPresetScales{ kScaleUnavailable, kScaleUnavailable, kScaleUnavailable, kScaleUnavailable, kScaleUnavailable };
+	UpscaleMethod cachedPresetMethod = UpscaleMethod::kNONE;
+	// Populate the cachedPresetScales for the specified method. Encapsulates
+	// vendor SDK calls and sentinel handling.
+	void PopulateCachedPresetScales(UpscaleMethod a_method);
+
 	struct Main_UpdateJitter
 	{
 		static void thunk(RE::BSGraphics::State* a_state);
