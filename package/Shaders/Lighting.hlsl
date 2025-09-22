@@ -350,7 +350,6 @@ struct PS_OUTPUT
 {
 	float4 Diffuse : SV_Target0;
 	float4 MotionVectors : SV_Target1;
-	float4 Parameters : SV_Target3;
 };
 #endif
 
