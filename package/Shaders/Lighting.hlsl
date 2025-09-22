@@ -2922,6 +2922,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	else
 	float3 vertexColor = input.Color.xyz;
+#		if defined(LANDSCAPE) && defined(LOD_BLENDING)
+		vertexColor = lerp(vertexColor, 1, SharedData::lodBlendingSettings.DisableTerrainVertexColors);
+#		endif  // LOD_BLENDING
 #	endif  // defined (HAIR)
 
 	float4 color = 0;
