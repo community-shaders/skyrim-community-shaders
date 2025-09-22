@@ -41,10 +41,12 @@ Texture2D<float4> SsgiSpecularTexture : register(t13);
 
 void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 {
-	ao = 1 - SsgiAoTexture[pixCoord].x;
+	ao = 1 - SsgiAoTexture[pixCoord];
 	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
-	float ssgiIlY = max(SphericalHarmonics::SHHallucinateZH3Irradiance(ssgiIlYSh, normalWS), SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, SphericalHarmonics::EvaluateCosineLobe(normalWS)));
-	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord].xy;
+	// without ZH hallucination
+	// float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, SphericalHarmonics::EvaluateCosineLobe(normalWS));
+	float ssgiIlY = SphericalHarmonics::SHHallucinateZH3Irradiance(ssgiIlYSh, normalWS);
+	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord];
 	il = max(0, Color::YCoCgToRGB(float3(ssgiIlY, ssgiIlCoCg)));
 }
 
@@ -131,12 +133,12 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 #	endif
 
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normalWS, 1.0)));
+	directionalAmbientColor *= albedo;
 
 	directionalAmbientColor = Color::RGBToYCoCg(directionalAmbientColor);
 	directionalAmbientColor.x = MasksTexture[dispatchID.xy].z;
 	directionalAmbientColor = Color::YCoCgToRGB(directionalAmbientColor);
 	directionalAmbientColor = max(0, directionalAmbientColor);
-	directionalAmbientColor *= albedo;
 
 	float maxScale = 1.0;
 	if (directionalAmbientColor.x > 0.0)
@@ -147,15 +149,21 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 		maxScale = min(maxScale, diffuseColor.z / directionalAmbientColor.z);
 	directionalAmbientColor *= maxScale;
 
-	diffuseColor = diffuseColor - directionalAmbientColor;
+	diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
+	
+	linDiffuseColor = Color::GammaToLinear(diffuseColor);
+#	if defined(INTERIOR)	
+	linDiffuseColor *= ssgiAo;
+#	else
+	linDiffuseColor *= sqrt(ssgiAo);
+#	endif
+	diffuseColor = Color::LinearToGamma(linDiffuseColor);
 
 	diffuseColor += Color::LinearToGamma(Color::GammaToLinear(directionalAmbientColor) * ssgiAo);
 
 	linDiffuseColor = Color::GammaToLinear(diffuseColor);
 
-	linDiffuseColor *= lerp(1.0, ssgiAo, 0.5);
 	linDiffuseColor += ssgiIl * Color::GammaToLinear(albedo);
-
 #endif
 
 	float3 color = linDiffuseColor + specularColor;
