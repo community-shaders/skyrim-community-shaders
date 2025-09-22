@@ -712,23 +712,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				endif  // IBL
 
 #				if defined(SKYLIGHTING)
+	float skylightingDiffuse = 1.0;
 	if (!SharedData::InInterior) {
-		float3 skylightingNormal = normal;
-
 #					if defined(VR)
 		float3 positionMSSkylight = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
 #					else
 		float3 positionMSSkylight = input.WorldPosition.xyz;
 #					endif
-
 		sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, normal);
-		float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(skylightingNormal)) / Math::PI;
+		skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(normal)) / Math::PI;
 		skylightingDiffuse = saturate(skylightingDiffuse);
-
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
-
-		directionalAmbientColor *= Color::LinearToGamma(skylightingDiffuse);
 	}
 #				endif  // SKYLIGHTING
 
@@ -736,6 +731,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	diffuseColor *= albedo;
 	diffuseColor += max(0, sss * subsurfaceColor * SharedData::grassLightingSettings.SubsurfaceScatteringAmount);
+
+#	if defined(SKYLIGHTING)
+	Skylighting::applySkylighting(diffuseColor, directionalAmbientColor, skylightingDiffuse, albedo);
+#	endif
 
 	specularColor += lightsSpecularColor;
 	specularColor *= specColor.w * SharedData::grassLightingSettings.SpecularStrength;
@@ -770,7 +769,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			endif
 
 	psout.Specular = float4(specularColor, 1);
-	psout.Masks = float4(0, 0, 0, 0);
+	psout.Masks = float4(0, 0, Color::RGBToYCoCg(directionalAmbientColor).x, 0);
 #		endif
 	return psout;
 }
@@ -897,30 +896,32 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif  // IBL
 
 #			if defined(SKYLIGHTING)
+	float skylightingDiffuse = 1.0;
 	if (!SharedData::InInterior) {
-		float3 skylightingNormal = normal;
-
 #				if defined(VR)
 		float3 positionMSSkylight = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
 #				else
 		float3 positionMSSkylight = input.WorldPosition.xyz;
 #				endif
-
 		sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, normal);
-		float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(skylightingNormal)) / Math::PI;
+		skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(normal)) / Math::PI;
 		skylightingDiffuse = saturate(skylightingDiffuse);
-
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
-
-		directionalAmbientColor *= Color::LinearToGamma(skylightingDiffuse);
 	}
 #			endif  // SKYLIGHTING
 
 	diffuseColor += directionalAmbientColor;
 
 	float3 albedo = baseColor.xyz * vertexColor;
-	psout.Diffuse.xyz = diffuseColor * albedo;
+
+	diffuseColor *= albedo;
+
+#	if defined(SKYLIGHTING)
+	Skylighting::applySkylighting(diffuseColor, directionalAmbientColor, skylightingDiffuse, albedo);
+#	endif
+
+	psout.Diffuse.xyz = diffuseColor;
 
 	psout.Diffuse.w = 1;
 
@@ -929,7 +930,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Normal.zw = 0;
 
 	psout.Albedo = float4(albedo, 1);
-	psout.Masks = float4(0, 0, 0, 0);
+	psout.Masks = float4(0, 0, Color::RGBToYCoCg(directionalAmbientColor).x, 0);
 #		endif
 
 	return psout;

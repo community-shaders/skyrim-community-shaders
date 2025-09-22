@@ -35,6 +35,26 @@ namespace Skylighting
 		return lerp(params.MinSpecularVisibility, 1.0, saturate(visibility));
 	}
 
+	void applySkylighting(inout float3 diffuseColor, inout float3 directionalAmbientColor, float skylightingDiffuse, float3 albedo)
+	{
+		directionalAmbientColor *= albedo;
+
+		float maxScale = 1.0;
+		if (directionalAmbientColor.x > 0.0)
+			maxScale = min(maxScale, diffuseColor.x / directionalAmbientColor.x);
+		if (directionalAmbientColor.y > 0.0)
+			maxScale = min(maxScale, diffuseColor.y / directionalAmbientColor.y);
+		if (directionalAmbientColor.z > 0.0)
+			maxScale = min(maxScale, diffuseColor.z / directionalAmbientColor.z);
+		directionalAmbientColor *= maxScale;
+
+		diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
+
+		directionalAmbientColor = Color::LinearToGamma(Color::GammaToLinear(directionalAmbientColor) * skylightingDiffuse);
+
+		diffuseColor += directionalAmbientColor;
+	}
+
 	sh2 sample(SharedData::SkylightingSettings params, Texture3D<sh2> probeArray, Texture2DArray<float3> blueNoise, float2 screenPosition, float3 positionMS, float3 normalWS)
 	{
 		const static sh2 unitSH = float4(sqrt(4 * Math::PI), 0, 0, 0);
