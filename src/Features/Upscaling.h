@@ -216,11 +216,11 @@ public:
 
 private:
 	// Sentinel value used to mark unavailable preset scales.
-	static constexpr float kScaleUnavailable = -1.0f;
+	static constexpr float kScaleUnavailable = 0.0f;
 
 	// Cached preset scales for UI labels. Uninitialized entries are marked
 	// with kScaleUnavailable.
-	std::array<float, 5> cachedPresetScales{ kScaleUnavailable, kScaleUnavailable, kScaleUnavailable, kScaleUnavailable, kScaleUnavailable };
+	std::array<float, 5> cachedPresetScales{};
 	UpscaleMethod cachedPresetMethod = UpscaleMethod::kNONE;
 	// Populate the cachedPresetScales for the specified method. Encapsulates
 	// vendor SDK calls and sentinel handling.
