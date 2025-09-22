@@ -235,7 +235,6 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 ddy = ddy_coarse(input.WorldPosition.xyz);
 	float3 normal = -normalize(cross(ddx, ddy));
 
-#			if !defined(SSGI)
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
 #				if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
@@ -244,7 +243,6 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #				endif
 	diffuseColor += directionalAmbientColor;
-#			endif
 
 	psout.Diffuse.xyz = diffuseColor * baseColor.xyz;
 	psout.Diffuse.w = 1;
