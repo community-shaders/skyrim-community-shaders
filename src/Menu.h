@@ -99,7 +99,7 @@ public:
 
 	struct ThemeSettings
 	{
-		float FontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;
+		float FontSize = 0.0f; // When 0, dynamic default (resolution-based) is used
 		float GlobalScale = REL::Module::IsVR() ? -0.5f : 0.f;  // exponential
 
 		bool UseSimplePalette = true;    // simple palette or full customization

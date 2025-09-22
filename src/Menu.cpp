@@ -176,17 +176,8 @@ void Menu::Init()
 	DXGI_SWAP_CHAIN_DESC desc{};
 	globals::d3d::swapChain->GetDesc(&desc);
 
-	float fontSize = settings.Theme.FontSize;
-
-	if (std::round(fontSize) != std::round(ThemeManager::Constants::DEFAULT_FONT_SIZE)) {
-		if (globals::state->screenSize.y > 0) {
-			fontSize = globals::state->screenSize.y * ThemeManager::Constants::DEFAULT_FONT_RATIO;
-		} else {
-			logger::warn("Menu::Init() - Failed to get game resolution from globals::state->screenSize.");
-		}
-	}
-
-	fontSize = std::clamp(fontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE);
+    // Determine effective font size: user setting when >0, otherwise dynamic default by resolution
+    float fontSize = ThemeManager::ResolveFontSize(*this);
 
 	auto fontPath = Util::PathHelpers::GetFontsPath() / "Jost-Regular.ttf";
 	if (!imgui_io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(),
@@ -195,7 +186,10 @@ void Menu::Init()
 		imgui_io.Fonts->AddFontDefault();
 	}
 
-	imgui_io.FontGlobalScale = exp2(settings.Theme.GlobalScale);
+    imgui_io.FontGlobalScale = exp2(settings.Theme.GlobalScale);
+
+    // Initialize cached font size to effective size to prevent redundant reload on first frame
+    cachedFontSize = fontSize;
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplWin32_Init(desc.OutputWindow);
@@ -417,13 +411,13 @@ void Menu::DrawFooter()
  */
 void Menu::DrawOverlay()
 {
-	OverlayRenderer::RenderOverlay(
-		*this,
-		[this]() { ProcessInputEventQueue(); },
-		[this]() { DrawSettings(); },
-		[](uint32_t key) { return Util::Input::KeyIdToString(key); },
-		cachedFontSize,
-		settings.Theme.FontSize);
+    OverlayRenderer::RenderOverlay(
+        *this,
+        [this]() { ProcessInputEventQueue(); },
+        [this]() { DrawSettings(); },
+        [](uint32_t key) { return Util::Input::KeyIdToString(key); },
+        cachedFontSize,
+        ThemeManager::ResolveFontSize(*this));
 }
 
 /**

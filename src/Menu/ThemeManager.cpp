@@ -7,6 +7,7 @@
 
 #include "RE/Skyrim.h"
 #include "Util.h"
+#include "State.h"
 
 void ThemeManager::SetupImGuiStyle(const Menu& menu)
 {
@@ -124,8 +125,8 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	font_config.PixelSnapH = Constants::FCONF_PIXELSNAP_H;
 	font_config.RasterizerMultiply = Constants::FCONF_RASTERIZER_MULTIPLY;
 
-	float fontSize = themeSettings.FontSize;
-	fontSize = std::clamp(fontSize, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE);
+	// Compute effective font size (user value or dynamic default)
+	float fontSize = ResolveFontSize(menu);
 
 	auto fontPath = Util::PathHelpers::GetFontsPath() / "Jost-Regular.ttf";
 	if (!io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(),
@@ -140,5 +141,26 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 
 	io.FontGlobalScale = exp2(themeSettings.GlobalScale);
 
-	cachedFontSize = themeSettings.FontSize;
+	// Cache the effective size so we can detect changes accurately
+	cachedFontSize = fontSize;
+}
+
+float ThemeManager::ResolveFontSize(const Menu& menu)
+{
+	const auto& themeSettings = menu.GetTheme();
+	float configured = themeSettings.FontSize;
+
+	// If user configured a positive size, use it (clamped)
+	if (std::round(configured) > 0) {
+		return std::clamp(configured, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE);
+	}
+
+	// Otherwise, compute dynamic default based on current screen resolution
+	float dynamicSize = Constants::DEFAULT_FONT_SIZE;
+	if (globals::state && globals::state->screenSize.y > 0) {
+		dynamicSize = globals::state->screenSize.y * Constants::DEFAULT_FONT_RATIO;
+	} else {
+		logger::warn("ThemeManager::ResolveFontSize() - Falling back to DEFAULT_FONT_SIZE due to missing screen height.");
+	}
+	return std::clamp(dynamicSize, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE);
 }
