@@ -5,8 +5,8 @@
 
 #include "Globals.h"
 #include "Menu.h"
-#include "ThemeManager.h"
 #include "ShaderCache.h"
+#include "ThemeManager.h"
 #include "Util.h"
 
 void SettingsTabRenderer::RenderGeneralSettings(
@@ -145,7 +145,7 @@ void SettingsTabRenderer::RenderInterfaceTab()
 		// Restore theme defaults button
 		if (ImGui::Button("Restore Theme Defaults")) {
 			auto& settings = globals::menu->GetSettings();
-			settings.Theme = Menu::ThemeSettings{}; // reset to default-initialized theme
+			settings.Theme = Menu::ThemeSettings{};  // reset to default-initialized theme
 			// Apply global font scale immediately
 			ImGui::GetIO().FontGlobalScale = exp2(settings.Theme.GlobalScale);
 		}

@@ -6,8 +6,8 @@
 #include <imgui_impl_dx11.h>
 
 #include "RE/Skyrim.h"
-#include "Util.h"
 #include "State.h"
+#include "Util.h"
 
 void ThemeManager::SetupImGuiStyle(const Menu& menu)
 {

@@ -176,8 +176,8 @@ void Menu::Init()
 	DXGI_SWAP_CHAIN_DESC desc{};
 	globals::d3d::swapChain->GetDesc(&desc);
 
-    // Determine effective font size: user setting when >0, otherwise dynamic default by resolution
-    float fontSize = ThemeManager::ResolveFontSize(*this);
+	// Determine effective font size: user setting when >0, otherwise dynamic default by resolution
+	float fontSize = ThemeManager::ResolveFontSize(*this);
 
 	auto fontPath = Util::PathHelpers::GetFontsPath() / "Jost-Regular.ttf";
 	if (!imgui_io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(),
@@ -186,10 +186,10 @@ void Menu::Init()
 		imgui_io.Fonts->AddFontDefault();
 	}
 
-    imgui_io.FontGlobalScale = exp2(settings.Theme.GlobalScale);
+	imgui_io.FontGlobalScale = exp2(settings.Theme.GlobalScale);
 
-    // Initialize cached font size to effective size to prevent redundant reload on first frame
-    cachedFontSize = fontSize;
+	// Initialize cached font size to effective size to prevent redundant reload on first frame
+	cachedFontSize = fontSize;
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplWin32_Init(desc.OutputWindow);
@@ -411,13 +411,13 @@ void Menu::DrawFooter()
  */
 void Menu::DrawOverlay()
 {
-    OverlayRenderer::RenderOverlay(
-        *this,
-        [this]() { ProcessInputEventQueue(); },
-        [this]() { DrawSettings(); },
-        [](uint32_t key) { return Util::Input::KeyIdToString(key); },
-        cachedFontSize,
-        ThemeManager::ResolveFontSize(*this));
+	OverlayRenderer::RenderOverlay(
+		*this,
+		[this]() { ProcessInputEventQueue(); },
+		[this]() { DrawSettings(); },
+		[](uint32_t key) { return Util::Input::KeyIdToString(key); },
+		cachedFontSize,
+		ThemeManager::ResolveFontSize(*this));
 }
 
 /**
