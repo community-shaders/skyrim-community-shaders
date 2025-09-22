@@ -350,10 +350,7 @@ struct PS_OUTPUT
 {
 	float4 Diffuse : SV_Target0;
 	float4 MotionVectors : SV_Target1;
-	float4 ScreenSpaceNormals : SV_Target2;
-#	if defined(SNOW)
 	float4 Parameters : SV_Target3;
-#	endif
 };
 #endif
 
@@ -3219,8 +3216,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif  // ANISOTROPIC_ALPHA
 
 	psout.Diffuse.w = alpha;
-
 #	endif
+
 #	if defined(LIGHT_LIMIT_FIX) && defined(LLFDEBUG)
 	if (SharedData::lightLimitFixSettings.EnableLightsVisualisation) {
 		if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 0) {
@@ -3240,31 +3237,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.Diffuse.xyz = color.xyz;
 #	endif  // defined(LIGHT_LIMIT_FIX)
 
-#	if defined(SNOW)
-#		if defined(TRUE_PBR)
-	psout.Parameters.x = Color::RGBToLuminanceAlternative(specularColor);
-	psout.Parameters.y = 0;
-#		else
-	psout.Parameters.x = Color::RGBToLuminanceAlternative(lightsSpecularColor);
-#		endif
-#	endif  // SNOW && !PBR
+	psout.MotionVectors.xy = screenMotionVector.xy;
+	psout.MotionVectors.zw = float2(0, psout.Diffuse.w);
 
-	psout.MotionVectors.xy = SSRParams.z > 1e-5 ? float2(1, 0) : screenMotionVector.xy;
-	psout.MotionVectors.zw = float2(0, 1);
-
-#	if !defined(DEFERRED)
-	float ssrMask = glossiness;
-#		if defined(TRUE_PBR)
-	ssrMask = Color::RGBToLuminanceAlternative(pbrSurfaceProperties.F0);
-#		endif
-	psout.ScreenSpaceNormals.w = smoothstep(-1e-5 + SSRParams.x, SSRParams.y, ssrMask) * SSRParams.w;
-
-	screenSpaceNormal.z = max(0.001, sqrt(8 + -8 * screenSpaceNormal.z));
-	screenSpaceNormal.xy /= screenSpaceNormal.zz;
-	psout.ScreenSpaceNormals.xy = screenSpaceNormal.xy + 0.5.xx;
-	psout.ScreenSpaceNormals.z = 0;
-	psout.ScreenSpaceNormals.w = 0;
-#	else
+#	if defined(DEFERRED)
 
 #		if defined(TERRAIN_BLENDING)
 	psout.Diffuse.w = blendFactorTerrain;
@@ -3321,6 +3297,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 
 #		if defined(SNOW)
+#			if defined(TRUE_PBR)
+	psout.Parameters.x = Color::RGBToLuminanceAlternative(specularColor);
+	psout.Parameters.y = 0;
+#			else
+	psout.Parameters.x = Color::RGBToLuminanceAlternative(lightsSpecularColor);
+#			endif
 	psout.Parameters.w = psout.Diffuse.w;
 #		endif
 
