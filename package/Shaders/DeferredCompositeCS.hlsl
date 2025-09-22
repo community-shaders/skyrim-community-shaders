@@ -150,9 +150,9 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	directionalAmbientColor *= maxScale;
 
 	diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
-	
+
 	linDiffuseColor = Color::GammaToLinear(diffuseColor);
-#	if defined(INTERIOR)	
+#	if defined(INTERIOR)
 	linDiffuseColor *= ssgiAo;
 #	else
 	linDiffuseColor *= sqrt(ssgiAo);
