@@ -3,7 +3,7 @@
 #include "Feature.h"
 #include "Upscaling/FidelityFX.h"
 #include "Upscaling/Streamline.h"
-#include "Upscaling/XeSS.h"
+#include "Upscaling/DX12SwapChain.h"
 #include <d3d11_4.h>
 #include <d3d12.h>
 #include <winrt/base.h>
@@ -42,15 +42,12 @@ public:
 	{
 		kNONE,
 		kTAA,
-		kFSR,
-		kXESS,
 		kDLSS
 	};
 
 	struct Settings
 	{
-		uint upscaleMethod = (uint)UpscaleMethod::kDLSS;
-		uint upscaleMethodNoDLSS = (uint)UpscaleMethod::kFSR;
+		uint upscaleMethod = (uint)UpscaleMethod::kTAA;
 		uint qualityMode = 1;  // Default to Quality (1=Quality, 2=Balanced, 3=Performance, 4=Ultra Performance, 0=Native AA)
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 1;
@@ -153,22 +150,15 @@ public:
 	winrt::com_ptr<ID3D11Fence> sharedD3D11Fence;
 	UINT64 sharedInteropFenceValue = 0;
 
-	// Shared D3D12 resources for upscaling systems
-	WrappedResource* depthBufferShared12 = nullptr;
-	WrappedResource* motionVectorBufferShared12 = nullptr;
-	WrappedResource* reactiveMaskShared12 = nullptr;
-	WrappedResource* transparencyCompositionMaskShared12 = nullptr;
-	WrappedResource* inputColorBufferShared12 = nullptr;
-	WrappedResource* outputColorBufferShared12 = nullptr;
+	// Shared D3D12 resources moved to DX12SwapChain class
 
 	// Frame tracking to ensure shared resources are only copied once per frame
 	Util::FrameChecker sharedResourcesFrameChecker;
 
 	// Static instances instead of singletons
 	static inline Streamline streamline;
-	static inline XeSS xess;
-	static inline FidelityFX fidelityFX;
-	static inline class DX12SwapChain dx12SwapChain;
+	static inline FidelityFX fidelityFX;  // Only for frame generation
+	static inline DX12SwapChain dx12SwapChain;
 
 	winrt::com_ptr<ID3D11PixelShader> copyDepthToSharedBufferPS;
 

@@ -401,3 +401,67 @@ void DX12SwapChain::SetUIBuffer()
 		d3d11Context->OMSetRenderTargets(1, &data.RTV, nullptr);
 	}
 }
+
+void DX12SwapChain::UpdateSharedResources()
+{
+	auto& upscaling = globals::features::upscaling;
+
+	// Only create resources when frame generation is active
+	if (!upscaling.settings.frameGenerationMode || !upscaling.d3d12SwapChainActive) {
+		// Clean up resources when not needed
+		if (depthBufferShared12) {
+			delete depthBufferShared12;
+			depthBufferShared12 = nullptr;
+		}
+		if (motionVectorBufferShared12) {
+			delete motionVectorBufferShared12;
+			motionVectorBufferShared12 = nullptr;
+		}
+		return;
+	}
+
+	auto renderer = globals::game::renderer;
+	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+
+	D3D11_TEXTURE2D_DESC texDesc{};
+	main.texture->GetDesc(&texDesc);
+
+	// Create depth buffer
+	texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+	if (!depthBufferShared12) {
+		depthBufferShared12 = new WrappedResource(texDesc, d3d11Device.get(), upscaling.sharedD3D12Device.get());
+	}
+
+	// Create motion vector buffer
+	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+	motionVector.texture->GetDesc(&texDesc);
+	if (!motionVectorBufferShared12) {
+		motionVectorBufferShared12 = new WrappedResource(texDesc, d3d11Device.get(), upscaling.sharedD3D12Device.get());
+	}
+}
+
+void DX12SwapChain::CopySharedD3D12Resources()
+{
+	auto& upscaling = globals::features::upscaling;
+
+	// Only copy if frame generation is active
+	if (!upscaling.settings.frameGenerationMode || !upscaling.d3d12SwapChainActive) {
+		return;
+	}
+
+	auto renderer = globals::game::renderer;
+	auto context = globals::d3d::context;
+
+	// Copy motion vector and depth for frame generation
+	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+	auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+
+	if (motionVectorBufferShared12) {
+		context->CopyResource(motionVectorBufferShared12->resource11, motionVector.texture);
+	}
+
+	if (depthBufferShared12) {
+		// Copy depth buffer - this may need to be done with a pixel shader for format conversion
+		context->CopyResource(depthBufferShared12->resource11, depth.texture);
+	}
+}
