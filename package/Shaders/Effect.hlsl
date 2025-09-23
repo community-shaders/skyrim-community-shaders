@@ -859,7 +859,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Reflectance = float4(psout.Diffuse.xyz, finalColor.w);
 	psout.Masks = float4(Color::RGBToLuminance(psout.Diffuse.xyz).xxx, finalColor.w);
 #else
-	psout.Albedo = float4(psout.Diffuse.xyz, finalColor.w);
+	psout.Albedo = float4(0, 0, 0, finalColor.w);
 	psout.Specular = float4(0, 0, 0, finalColor.w);
 	psout.Reflectance = float4(0, 0, 0, finalColor.w);
 	psout.Masks = float4(0, 0, 0, finalColor.w);
