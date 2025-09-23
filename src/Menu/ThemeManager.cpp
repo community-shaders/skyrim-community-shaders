@@ -125,10 +125,10 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	float fontSize = themeSettings.FontSize;
 	fontSize = std::clamp(fontSize, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE);
 
-	auto fontPath = Util::PathHelpers::GetFontsPath() / "Jost-Regular.ttf";
+	auto fontPath = Util::PathHelpers::GetFontsPath() / themeSettings.FontName;
 	if (!io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(),
 			std::round(fontSize), &font_config)) {
-		logger::warn("ThemeManager::ReloadFont() - Failed to load custom font. Using default font.");
+		logger::warn("ThemeManager::ReloadFont() - Failed to load custom font '{}'. Using default font.", themeSettings.FontName);
 		io.Fonts->AddFontDefault();
 	}
 
@@ -139,6 +139,8 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	io.FontGlobalScale = exp2(themeSettings.GlobalScale);
 
 	cachedFontSize = themeSettings.FontSize;
+	// Also update cached font name in the menu instance
+	const_cast<Menu&>(menu).cachedFontName = themeSettings.FontName;
 }
 
 // Theme management methods

@@ -81,8 +81,13 @@ bool OverlayRenderer::ShouldSkipRendering()
 
 void OverlayRenderer::HandleFontReload(Menu& menu, float& cachedFontSize, float currentFontSize)
 {
-	// Reload font if user changed something
-	if (std::abs(cachedFontSize - currentFontSize) > ThemeManager::Constants::FONT_CACHE_EPSILON) {
+	auto& currentTheme = menu.GetTheme();
+	
+	// Reload font if size changed or font file changed
+	bool fontSizeChanged = std::abs(cachedFontSize - currentFontSize) > ThemeManager::Constants::FONT_CACHE_EPSILON;
+	bool fontNameChanged = menu.cachedFontName != currentTheme.FontName;
+	
+	if (fontSizeChanged || fontNameChanged) {
 		ThemeManager::ReloadFont(menu, cachedFontSize);
 	}
 }

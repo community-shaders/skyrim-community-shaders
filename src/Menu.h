@@ -58,6 +58,10 @@ public:
 	uint32_t priorShaderKey = VK_PRIOR;  // used for blocking shaders in debugging
 	uint32_t nextShaderKey = VK_NEXT;    // used for blocking shaders in debugging
 
+	// Font caching (made public for ThemeManager and OverlayRenderer access)
+	float cachedFontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;  // Tracks whether font has been modified and may require reloading
+	std::string cachedFontName = "Jost-Regular.ttf";  // Tracks whether font file has changed and may require reloading
+
 	// Used for resetting input keys to solve alt-tab stuck issue
 	std::atomic<bool> focusChanged = false;
 	void OnFocusChanged();
@@ -108,6 +112,7 @@ public:
 	struct ThemeSettings
 	{
 		float FontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;
+		std::string FontName = "Jost-Regular.ttf";  // Default font file name
 		float GlobalScale = REL::Module::IsVR() ? -0.5f : 0.f;  // exponential
 
 		bool UseSimplePalette = true;    // DEPRECATED: No longer affects behavior. UI now shows both Simple and Advanced controls.
@@ -292,8 +297,6 @@ public:
 
 private:
 	Settings settings;
-
-	float cachedFontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;  // Tracks whether font has been modified and may require reloading
 
 	std::string cachedIniPath;  // io.IniFilename must point to a string that lives for the duration of the runtime
 

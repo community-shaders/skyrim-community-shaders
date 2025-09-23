@@ -110,6 +110,22 @@ namespace Util
 	};
 
 	/**
+	 * Creates a button with visual feedback that briefly shows success colors when clicked.
+	 * Useful for save/update operations where users need confirmation that the action worked.
+	 * @param label Button text
+	 * @param size Button size (optional)
+	 * @param feedbackDurationMs How long to show feedback colors in milliseconds (default 1000ms)
+	 * @return True if the button was clicked
+	 */
+	bool ButtonWithFeedback(const char* label, const ImVec2& size = ImVec2(0, 0), int feedbackDurationMs = 1000);
+
+	/**
+	 * Discovers available font files in the Fonts directory
+	 * @return Vector of font file names (including .ttf extension)
+	 */
+	std::vector<std::string> DiscoverFonts();
+
+	/**
 	 * RAII wrapper for creating collapsible UI sections.
 	 * Automatically handles the TreeNode creation, styling, and cleanup.
 	 */
@@ -177,6 +193,15 @@ namespace Util
 		float CalculateContrastRatio(const ImVec4& color1, const ImVec4& color2);
 
 		/**
+		 * Adjusts a text color to ensure sufficient contrast against a background
+		 * @param textColor The desired text color (semantic color)
+		 * @param backgroundColor The background color to contrast against
+		 * @param minimumRatio Minimum acceptable contrast ratio (default 3.0)
+		 * @return Adjusted text color with sufficient contrast
+		 */
+		ImVec4 AdjustColorForContrast(const ImVec4& textColor, const ImVec4& backgroundColor, float minimumRatio = 3.0f);
+
+		/**
 		 * Creates a selectable item with automatic contrast-aware text coloring
 		 * @param label Text to display
 		 * @param selected Whether the item is currently selected
@@ -185,6 +210,18 @@ namespace Util
 		 * @return True if the selectable was clicked
 		 */
 		bool ContrastSelectable(const char* label, bool selected, ImGuiSelectableFlags flags = 0, const ImVec2& size = ImVec2(0, 0));
+
+		/**
+		 * Creates a selectable item with contrast-adjusted semantic text coloring
+		 * Preserves the intent of semantic colors while ensuring adequate contrast
+		 * @param label Text to display
+		 * @param selected Whether the item is currently selected
+		 * @param semanticTextColor The desired semantic color (will be adjusted for contrast)
+		 * @param flags Selectable flags (optional)
+		 * @param size Size of the selectable area (optional)
+		 * @return True if the selectable was clicked
+		 */
+		bool ContrastSelectableWithColor(const char* label, bool selected, const ImVec4& semanticTextColor, ImGuiSelectableFlags flags = 0, const ImVec2& size = ImVec2(0, 0));
 	}
 
 	bool PercentageSlider(const char* label, float* data, float lb = 0.f, float ub = 100.f, const char* format = "%.1f %%");

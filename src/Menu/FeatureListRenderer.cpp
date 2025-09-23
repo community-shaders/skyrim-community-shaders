@@ -251,13 +251,15 @@ void FeatureListRenderer::ListMenuVisitor::operator()(const BuiltInMenu& menu)
 	if (isFeatureIssues) {
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 		ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.Error);
-	}
-
-	if (ImGui::Selectable(fmt::format(" {} ", menu.name).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns))
-		selectedMenuRef = listId;
-
-	if (isFeatureIssues) {
+		
+		if (ImGui::Selectable(fmt::format(" {} ", menu.name).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns))
+			selectedMenuRef = listId;
+		
 		ImGui::PopStyleColor();
+	} else {
+		// Use contrast-aware selectable for better text visibility
+		if (Util::ColorUtils::ContrastSelectable(fmt::format(" {} ", menu.name).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 0)))
+			selectedMenuRef = listId;
 	}
 }
 
@@ -313,16 +315,10 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 		}
 	}
 
-	// Set text color
-	ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-
-	// Create selectable item
-	if (ImGui::Selectable(fmt::format(" {} ", feat->GetName()).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns)) {
+	// Create selectable item with contrast-adjusted semantic color
+	if (Util::ColorUtils::ContrastSelectableWithColor(fmt::format(" {} ", feat->GetName()).c_str(), selectedMenuRef == listId, textColor, ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 0))) {
 		selectedMenuRef = listId;
 	}
-
-	// Restore original text color
-	ImGui::PopStyleColor();
 
 	// Display version if loaded
 	if (isLoaded) {

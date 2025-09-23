@@ -111,6 +111,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::ThemeSettings,
 	FontSize,
+	FontName,
 	GlobalScale,
 	UseSimplePalette,
 	ShowActionIcons,
@@ -202,6 +203,8 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 	if (themeManager->LoadTheme(themeName, themeSettings)) {
 		settings.Theme = themeSettings;
 		settings.SelectedThemePreset = themeName;
+		// Update cached values for font reload detection
+		cachedFontName = settings.Theme.FontName;
 		logger::info("Loaded theme preset: {}", themeName);
 		return true;
 	} else {
@@ -251,12 +254,15 @@ void Menu::Init()
 
 	fontSize = std::clamp(fontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE);
 
-	auto fontPath = Util::PathHelpers::GetFontsPath() / "Jost-Regular.ttf";
+	auto fontPath = Util::PathHelpers::GetFontsPath() / settings.Theme.FontName;
 	if (!imgui_io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(),
 			std::round(fontSize), &font_config)) {
 		logger::warn("Menu::Init() - Failed to load custom font. Using default font.");
 		imgui_io.Fonts->AddFontDefault();
 	}
+
+	// Initialize cached values for reload detection
+	cachedFontName = settings.Theme.FontName;
 
 	imgui_io.FontGlobalScale = exp2(settings.Theme.GlobalScale);
 

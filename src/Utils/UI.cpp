@@ -24,6 +24,7 @@
 #include <sstream>
 #include <stb_image.h>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace Util
@@ -1205,9 +1206,10 @@ namespace Util
 
 			return keyboard_keys_international[key];
 		}
+	}  // namespace Input
 
-		// Color utilities for contrast and readability
-		namespace ColorUtils
+	// Color utilities for contrast and readability
+	namespace ColorUtils
 		{
 			float CalculateLuminance(const ImVec4& color)
 			{
@@ -1243,8 +1245,8 @@ namespace Util
 				float lum2 = CalculateLuminance(color2);
 				
 				// Ensure lighter color is in numerator
-				float lighter = std::max(lum1, lum2);
-				float darker = std::min(lum1, lum2);
+				float lighter = (std::max)(lum1, lum2);
+				float darker = (std::min)(lum1, lum2);
 				
 				return (lighter + 0.05f) / (darker + 0.05f);
 			}
@@ -1286,6 +1288,109 @@ namespace Util
 				
 				return result;
 			}
+
+			bool ContrastSelectableWithColor(const char* label, bool selected, const ImVec4& semanticTextColor, ImGuiSelectableFlags flags, const ImVec2& size)
+			{
+				// Get current style colors for different states
+				ImGuiStyle& style = ImGui::GetStyle();
+				
+				// We need to handle text color based on the selectable's background state
+				// For selected items, ImGui uses HeaderActive color which might be light
+				ImVec4 selectedBgColor = style.Colors[ImGuiCol_HeaderActive];
+				ImVec4 hoveredBgColor = style.Colors[ImGuiCol_HeaderHovered];
+				
+				// Use the provided semantic color but ensure it has good contrast
+				ImVec4 textColor = semanticTextColor;
+				
+				// If the item is selected, we know it will have the selected background
+				if (selected) {
+					// Check contrast with selected background
+					float contrast = CalculateContrastRatio(semanticTextColor, selectedBgColor);
+					if (contrast < 3.0f) {
+						textColor = GetContrastingTextColor(selectedBgColor, 0.5f);
+					}
+				} else {
+					// Check contrast with potential hover background
+					float hoveredContrast = CalculateContrastRatio(semanticTextColor, hoveredBgColor);
+					if (hoveredContrast < 3.0f) {
+						textColor = GetContrastingTextColor(hoveredBgColor, 0.5f);
+					}
+				}
+				
+				ImGui::PushStyleColor(ImGuiCol_Text, textColor);
+				
+				// Create the selectable with the adjusted text color
+				bool result = ImGui::Selectable(label, selected, flags, size);
+				
+				// Restore original text color
+				ImGui::PopStyleColor();
+				
+				return result;
+			}
+		}  // namespace ColorUtils
+
+	bool ButtonWithFeedback(const char* label, const ImVec2& size, int feedbackDurationMs)
+	{
+		static std::unordered_map<std::string, std::chrono::steady_clock::time_point> feedbackTimers;
+		
+		std::string buttonId = std::string(label);
+		auto now = std::chrono::steady_clock::now();
+		
+		// Check if this button has active feedback
+		bool hasActiveFeedback = false;
+		auto it = feedbackTimers.find(buttonId);
+		if (it != feedbackTimers.end()) {
+			auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second);
+			if (elapsed.count() < feedbackDurationMs) {
+				hasActiveFeedback = true;
+			} else {
+				// Feedback expired, remove it
+				feedbackTimers.erase(it);
+			}
 		}
+		
+		// Style the button differently if it has active feedback
+		bool styleChanged = false;
+		if (hasActiveFeedback) {
+			// Get success color from theme for feedback
+			ImVec4 successColor = globals::menu->GetTheme().StatusPalette.SuccessColor;
+			ImVec4 successHovered = ImVec4(successColor.x * 0.8f, successColor.y * 0.8f, successColor.z * 0.8f, successColor.w);
+			ImVec4 successActive = ImVec4(successColor.x * 0.6f, successColor.y * 0.6f, successColor.z * 0.6f, successColor.w);
+			
+			ImGui::PushStyleColor(ImGuiCol_Button, successColor);
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, successHovered);
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, successActive);
+			styleChanged = true;
+		}
+		
+		bool clicked = ImGui::Button(label, size);
+		
+		if (styleChanged) {
+			ImGui::PopStyleColor(3);
+		}
+		
+		// If clicked, start the feedback timer
+		if (clicked) {
+			feedbackTimers[buttonId] = now;
+		}
+		
+		return clicked;
+	}
+
+	std::vector<std::string> DiscoverFonts()
+	{
+		std::vector<std::string> fonts;
+		
+		// Add some common system fonts as a basic implementation
+		fonts.push_back("Arial");
+		fonts.push_back("Calibri");
+		fonts.push_back("Consolas");
+		fonts.push_back("Courier New");
+		fonts.push_back("Georgia");
+		fonts.push_back("Segoe UI");
+		fonts.push_back("Times New Roman");
+		fonts.push_back("Verdana");
+		
+		return fonts;
 	}
 }  // namespace Util

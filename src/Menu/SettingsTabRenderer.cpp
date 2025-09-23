@@ -270,12 +270,21 @@ void SettingsTabRenderer::RenderThemesTab()
 			ImGui::Text("Opens the Themes folder where you can add custom theme files.");
 		}
 
-		// Update Current Theme Button (only show for existing themes, not when creating new)
-		if (!isCreatingNewTheme) {
-			if (!currentThemePreset.empty() && currentThemePreset != "Default") {
-				ImGui::SameLine();
-				if (ImGui::Button("Update Current Theme")) {
-					// Get current theme info
+		// Save/Update Theme Button (show based on context)
+		if (isCreatingNewTheme || (!currentThemePreset.empty() && currentThemePreset != "Default")) {
+			ImGui::SameLine();
+			
+			const char* buttonText = isCreatingNewTheme ? "Save Theme" : "Update Theme";
+			if (Util::ButtonWithFeedback(buttonText)) {
+				if (isCreatingNewTheme) {
+					// Show popup for new theme creation
+					showCreateThemePopup = true;
+					// Clear the input fields
+					memset(newThemeName, 0, sizeof(newThemeName));
+					memset(newThemeDisplayName, 0, sizeof(newThemeDisplayName));
+					memset(newThemeDescription, 0, sizeof(newThemeDescription));
+				} else {
+					// Update existing theme
 					const auto* currentThemeInfo = themeManager->GetThemeInfo(currentThemePreset);
 					if (currentThemeInfo) {
 						// Use the existing SaveTheme method to serialize the theme settings
@@ -289,47 +298,17 @@ void SettingsTabRenderer::RenderThemesTab()
 						}
 					}
 				}
-				if (auto _tt = Util::HoverTooltipWrapper()) {
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				if (isCreatingNewTheme) {
+					ImGui::Text("Create a new theme with current settings");
+				} else {
 					ImGui::Text("Updates the currently selected theme (%s) with your current settings", currentThemePreset.c_str());
 				}
 			}
 		}
 
-		// Save Theme Button
-		ImGui::SeparatorText("Save Theme");
-		if (ImGui::Button("Save Theme")) {
-			if (isCreatingNewTheme) {
-				// Show popup for new theme creation
-				showCreateThemePopup = true;
-				// Clear the input fields
-				memset(newThemeName, 0, sizeof(newThemeName));
-				memset(newThemeDisplayName, 0, sizeof(newThemeDisplayName));
-				memset(newThemeDescription, 0, sizeof(newThemeDescription));
-			} else {
-				// Overwrite existing theme
-				if (!currentThemePreset.empty()) {
-					const auto* currentThemeInfo = themeManager->GetThemeInfo(currentThemePreset);
-					if (currentThemeInfo) {
-						// Use the existing SaveTheme method to serialize the theme settings
-						json currentThemeJson;
-						globals::menu->SaveTheme(currentThemeJson);
-						
-						// Overwrite the current theme with updated settings
-						if (themeManager->SaveTheme(currentThemePreset, currentThemeJson["Theme"], 
-						                           currentThemeInfo->displayName, currentThemeInfo->description)) {
-							// Theme updated successfully
-						}
-					}
-				}
-			}
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			if (isCreatingNewTheme) {
-				ImGui::Text("Create a new theme with current settings");
-			} else {
-				ImGui::Text("Overwrite the current theme with your settings");
-			}
-		}
+
 
 		// Create Theme Popup
 		if (showCreateThemePopup) {
@@ -359,7 +338,7 @@ void SettingsTabRenderer::RenderThemesTab()
 			ImGui::Separator();
 
 			// Buttons
-			if (ImGui::Button("Create Theme") && strlen(newThemeName) > 0) {
+			if (Util::ButtonWithFeedback("Create Theme") && strlen(newThemeName) > 0) {
 				// Use the existing SaveTheme method to serialize the theme settings
 				json currentThemeJson;
 				globals::menu->SaveTheme(currentThemeJson);
@@ -413,7 +392,67 @@ void SettingsTabRenderer::RenderStylingTab()
 			auto& io = ImGui::GetIO();
 			io.FontGlobalScale = trueScale;
 		}
-		ImGui::SliderFloat("Font Size", &themeSettings.FontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE, "%.0f");
+		
+		ImGui::SeparatorText("Font");
+		if (ImGui::SliderFloat("Font Size", &themeSettings.FontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE, "%.0f")) {
+			// Font size changed, force reload
+			ThemeManager::ReloadFont(*globals::menu, globals::menu->cachedFontSize);
+		}
+		
+		// Font selection dropdown
+		static std::vector<std::string> availableFonts;
+		static std::vector<const char*> fontItems;
+		static bool fontsDiscovered = false;
+		
+		if (!fontsDiscovered) {
+			availableFonts = Util::DiscoverFonts();
+			fontItems.clear();
+			for (const auto& font : availableFonts) {
+				fontItems.push_back(font.c_str());
+			}
+			fontsDiscovered = true;
+		}
+		
+		// Find current font index
+		int currentFontIndex = 0;
+		for (size_t i = 0; i < availableFonts.size(); ++i) {
+			if (availableFonts[i] == themeSettings.FontName) {
+				currentFontIndex = static_cast<int>(i);
+				break;
+			}
+		}
+		
+		if (ImGui::Combo("Font", &currentFontIndex, fontItems.data(), static_cast<int>(fontItems.size()))) {
+			if (currentFontIndex >= 0 && currentFontIndex < static_cast<int>(availableFonts.size())) {
+				themeSettings.FontName = availableFonts[currentFontIndex];
+				// Force font reload by updating cached font size
+				ThemeManager::ReloadFont(*globals::menu, globals::menu->cachedFontSize);
+			}
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Select a custom font file (.ttf/.otf) from the Fonts folder.\nPlace custom fonts in: Interface/CommunityShaders/Fonts/");
+		}
+		
+		if (ImGui::Button("Refresh Font List")) {
+			availableFonts = Util::DiscoverFonts();
+			fontItems.clear();
+			for (const auto& font : availableFonts) {
+				fontItems.push_back(font.c_str());
+			}
+			// Update current selection
+			currentFontIndex = 0;
+			for (size_t i = 0; i < availableFonts.size(); ++i) {
+				if (availableFonts[i] == themeSettings.FontName) {
+					currentFontIndex = static_cast<int>(i);
+					break;
+				}
+			}
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Refresh the list of available fonts after adding new font files.");
+		}
+
+		ImGui::SeparatorText("Layout");
 		ImGui::SliderFloat2("Window Padding", (float*)&style.WindowPadding, 0.0f, 20.0f, "%.0f");
 		ImGui::SliderFloat2("Frame Padding", (float*)&style.FramePadding, 0.0f, 20.0f, "%.0f");
 		ImGui::SliderFloat2("Item Spacing", (float*)&style.ItemSpacing, 0.0f, 20.0f, "%.0f");
