@@ -213,24 +213,19 @@ float DX12SwapChain::GetFrameTime() const
 
 WrappedResource::WrappedResource(D3D11_TEXTURE2D_DESC a_texDesc, ID3D11Device5* a_d3d11Device, ID3D12Device* a_d3d12Device)
 {
-	D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
-	if (a_texDesc.BindFlags & D3D11_BIND_DEPTH_STENCIL)
-		flags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
-	if (a_texDesc.BindFlags & D3D11_BIND_UNORDERED_ACCESS)
-		flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-	if (!(a_texDesc.BindFlags & D3D11_BIND_SHADER_RESOURCE))
-		flags |= D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE;
-	if (!(a_texDesc.BindFlags & D3D11_BIND_RENDER_TARGET))
-		flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-	D3D12_RESOURCE_DESC desc12{ D3D12_RESOURCE_DIMENSION_TEXTURE2D, 0, a_texDesc.Width, a_texDesc.Height, (UINT16)a_texDesc.ArraySize, (UINT16)a_texDesc.MipLevels, a_texDesc.Format, { a_texDesc.SampleDesc.Count, a_texDesc.SampleDesc.Quality }, D3D12_TEXTURE_LAYOUT_UNKNOWN, flags };
-	D3D12_HEAP_PROPERTIES heapProp = { D3D12_HEAP_TYPE_DEFAULT, D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 1, 1 };
+	// Create D3D11 shared texture directly instead of wrapping D3D12 resource
+	a_texDesc.MiscFlags |= D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+	DX::ThrowIfFailed(a_d3d11Device->CreateTexture2D(&a_texDesc, nullptr, &resource11));
 
-	DX::ThrowIfFailed(a_d3d12Device->CreateCommittedResource(&heapProp, D3D12_HEAP_FLAG_SHARED, &desc12, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&resource)));
-
+	// Get shared handle from D3D11 texture to enable D3D12 access
+	winrt::com_ptr<IDXGIResource1> dxgiResource;
+	DX::ThrowIfFailed(resource11->QueryInterface(IID_PPV_ARGS(dxgiResource.put())));
 	HANDLE sharedHandle = nullptr;
-	DX::ThrowIfFailed(a_d3d12Device->CreateSharedHandle(resource.get(), nullptr, GENERIC_ALL, nullptr, &sharedHandle));
+	DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE, nullptr, &sharedHandle));
 
-	DX::ThrowIfFailed(a_d3d11Device->OpenSharedResource1(sharedHandle, IID_PPV_ARGS(&resource11)));
+	// Open the shared D3D11 texture as D3D12 resource
+	DX::ThrowIfFailed(a_d3d12Device->OpenSharedHandle(sharedHandle, IID_PPV_ARGS(resource.put())));
+	CloseHandle(sharedHandle);
 
 	if (a_texDesc.BindFlags & D3D11_BIND_SHADER_RESOURCE) {
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
