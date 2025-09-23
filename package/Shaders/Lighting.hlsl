@@ -2706,15 +2706,21 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	diffuseColor += emitColor.xyz;
 #	endif
 
-	float3 directionalAmbientColor = max(0, mul(DirectionalAmbient, float4(worldNormal, 1.0)));
+	float3 ambientNormal = worldNormal;
+#	if defined(HAIR) && defined(CS_HAIR)
+	if (SharedData::hairSpecularSettings.Enabled && SharedData::hairSpecularSettings.HairMode == 1)
+		ambientNormal = normalize(viewDirection - hairT * dot(viewDirection, hairT));
+#	endif
+
+	float3 directionalAmbientColor = max(0, mul(DirectionalAmbient, float4(ambientNormal, 1.0)));
 
 #	if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		if (SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
-			directionalAmbientColor = ImageBasedLighting::GetStaticDiffuseIBL(worldNormal, SampColorSampler);
+			directionalAmbientColor = ImageBasedLighting::GetStaticDiffuseIBL(ambientNormal, SampColorSampler);
 		} else if (!SharedData::InInterior) {
 			directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-			directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(-worldNormal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+			directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(-ambientNormal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 		}
 	}
 #	endif
@@ -2724,7 +2730,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float skylightingFadeOutFactor = 1.0;
 	if (!SharedData::InInterior) {
 		skylightingFadeOutFactor = Skylighting::getFadeOutFactor(input.WorldPosition.xyz);
-		skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(worldNormal)) / Math::PI;
+		skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(ambientNormal)) / Math::PI;
 		skylightingDiffuse = saturate(skylightingDiffuse);
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
@@ -2982,7 +2988,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(HAIR) && defined(CS_HAIR)
 #		if !defined(DEFERRED)
 #			if defined(DYNAMIC_CUBEMAPS)
-	if (SharedData::hairSpecularSettings.Enabled)
+	if (SharedData::hairSpecularSettings.Enabled && SharedData::hairSpecularSettings.HairMode != 1)
 #				if defined(SKYLIGHTING)
 	{
 		float3 indirectSpecular = Hair::GetHairDynamicCubemapSpecularIrradiance(uv, screenUV, hairT, worldNormal, vertexNormal, viewDirection, SharedData::hairSpecularSettings.HairGlossiness, indirectSpecularLobeWeightPrim, indirectSpecularLobeWeightSec, skylightingSH);

@@ -185,7 +185,7 @@ namespace Hair
 		const float wrap = 1;
 		float wrappedNdotL = saturate((dot(fakeN, L) + wrap) / ((1 + wrap) * (1 + wrap)));
 		float diffuseScatter = (1 / Math::PI) * lerp(wrappedNdotL, diffuseKajiya, 0.33);
-		float luma = Color::RGBToLuminance2(baseColor);
+		float luma = Color::RGBToLuminance(baseColor);
 		float3 scatterTint = shadow < 1 ? pow(abs(baseColor / luma), 1 - shadow) : 1;
 		S += sqrt(baseColor) * diffuseScatter * scatterTint;
 
@@ -209,7 +209,7 @@ namespace Hair
 
 		float backlit = SharedData::hairSpecularSettings.Transmission;
 
-		dirSpecular += D_Marschner(L, V, T, roughness, baseColor, 0, backlit) * lightColor * SharedData::hairSpecularSettings.SpecularMult;
+		dirTransmission += D_Marschner(L, V, T, roughness, baseColor, 0, backlit) * lightColor * SharedData::hairSpecularSettings.SpecularMult;
 		dirTransmission += GetHairDiffuseAttenuationKajiyaKay(T, V, L, selfShadow, baseColor) * lightColor * SharedData::hairSpecularSettings.DiffuseMult;
 	}
 
@@ -231,15 +231,15 @@ namespace Hair
 		if (SharedData::hairSpecularSettings.HairMode == 1) {
 			specularLobeWeightPrimary = 0;
 			specularLobeWeightSecondary = 0;
-			float3 L = normalize(V - N * dot(V, N));
 
 			if (SharedData::hairSpecularSettings.EnableTangentShift) {
 				const float shift = TexTangentShift.SampleLevel(SampColorSampler, uv, 0).x - 0.5;
 				T = ShiftTangent(T, N, shift);
 			}
+			float3 L = normalize(V - T * dot(V, T));
 
-			specularLobeWeightPrimary = D_Marschner(L, V, T, roughnessPrimary, baseColor, 0.2, 0) * Math::PI;
-			diffuseLobeWeight = GetHairDiffuseAttenuationKajiyaKay(T, V, L, 1, baseColor) * Math::PI;
+			diffuseLobeWeight = D_Marschner(L, V, T, roughnessPrimary, baseColor, 0.2, 0) * Math::PI;
+			diffuseLobeWeight += GetHairDiffuseAttenuationKajiyaKay(T, V, L, 1, baseColor) * Math::PI;
 			return;
 		} else {
 			float NdotVshifted = NdotV;
