@@ -156,11 +156,17 @@ void Upscaling::DrawSettings()
 	std::array<float, 5> dlssScales{};
 	upscaleModes.push_back(dlssLabel);
 
+	std::string fsrLabel = "AMD FSR 3.1";
+	std::array<float, 5> fsrScales{};
+	upscaleModes.push_back(fsrLabel);
+
 	// Determine available modes
 	bool featureDLSS = streamline.featureDLSS;
 
 	uint32_t* currentUpscaleMode = &settings.upscaleMethod;
-	uint32_t availableModes = featureDLSS ? 2 : 1;
+	uint32_t availableModes = 1;  // Start with TAA
+	if (featureDLSS) availableModes = 2;  // Add DLSS
+	if (true) availableModes = 3;   // Add FSR
 
 	// Slider for method selection
 	// Clamp the index used to read from the built label vector to avoid OOB if the stored value is stale
@@ -173,11 +179,13 @@ void Upscaling::DrawSettings()
 	// Check the current upscale method
 	auto upscaleMethod = GetUpscaleMethod();
 
-	// Prepopulate DLSS scale arrays only if we already have cached
+	// Prepopulate scale arrays only if we already have cached
 	// preset scales populated by the runtime upscale operation.
 	if (cachedPresetMethod == upscaleMethod && cachedPresetScales[0] != Upscaling::kScaleUnavailable) {
 		if (upscaleMethod == UpscaleMethod::kDLSS) {
 			std::copy(cachedPresetScales.begin(), cachedPresetScales.end(), dlssScales.begin());
+		} else if (upscaleMethod == UpscaleMethod::kFSR) {
+			std::copy(cachedPresetScales.begin(), cachedPresetScales.end(), fsrScales.begin());
 		}
 	}
 
@@ -215,6 +223,9 @@ void Upscaling::DrawSettings()
 			if (upscaleMethod == UpscaleMethod::kDLSS) {
 				baseLabel = upscalePresetsDLSS[presetIndex];
 				scalesPtr = &dlssScales;
+			} else if (upscaleMethod == UpscaleMethod::kFSR) {
+				baseLabel = upscalePresets[presetIndex];
+				scalesPtr = &fsrScales;
 			}
 
 			if (baseLabel && scalesPtr) {
@@ -421,7 +432,7 @@ void Upscaling::PostPostLoad()
 
 Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
 {
-	settings.upscaleMethod = std::clamp(settings.upscaleMethod, (uint)UpscaleMethod::kNONE, (uint)UpscaleMethod::kDLSS);
+	settings.upscaleMethod = std::clamp(settings.upscaleMethod, (uint)UpscaleMethod::kNONE, (uint)UpscaleMethod::kFSR);
 	settings.qualityMode = std::clamp(settings.qualityMode, 0u, 4u);
 	return (UpscaleMethod)settings.upscaleMethod;
 }
@@ -475,6 +486,24 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 			motionVectorCopyTexture->CreateUAV(uavDesc);
 		}
 	}
+
+	// FSR uses D3D11 textures with same setup as DLSS
+	if (a_upscalemethod == UpscaleMethod::kFSR) {
+		if (!reactiveMaskTexture) {
+			reactiveMaskTexture = new Texture2D(texDesc);
+			reactiveMaskTexture->CreateSRV(srvDesc);
+			reactiveMaskTexture->CreateUAV(uavDesc);
+		}
+
+		if (!transparencyCompositionMaskTexture) {
+			transparencyCompositionMaskTexture = new Texture2D(texDesc);
+			transparencyCompositionMaskTexture->CreateSRV(srvDesc);
+			transparencyCompositionMaskTexture->CreateUAV(uavDesc);
+		}
+
+		fidelityFX.CreateFSRResources();
+	
+	}
 }
 
 void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
@@ -482,8 +511,8 @@ void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 	logger::debug("[Upscaling] Destroying texture resources for method {}", (int)a_upscalemethod);
 
 	// Clean up D3D11 textures that are no longer needed
-	// Only destroy DLSS textures when switching away from DLSS
-	if (a_upscalemethod != UpscaleMethod::kDLSS) {
+	// Only destroy textures when switching away from methods that use them
+	if (a_upscalemethod != UpscaleMethod::kDLSS && a_upscalemethod != UpscaleMethod::kFSR) {
 		if (reactiveMaskTexture) {
 			reactiveMaskTexture->srv = nullptr;
 			reactiveMaskTexture->uav = nullptr;
@@ -541,6 +570,8 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 
 			if (previousUpscaleMode == UpscaleMethod::kDLSS)
 				streamline.DestroyDLSSResources();
+			else if (previousUpscaleMode == UpscaleMethod::kFSR)
+				fidelityFX.DestroyFSRResources();
 		}
 
 		// Handle shared resource changes
@@ -572,6 +603,9 @@ ID3D11ComputeShader* Upscaling::GetEncodeTexturesCS()
 		switch (upscaleMethod) {
 		case UpscaleMethod::kDLSS:
 			defines.push_back({ "DLSS", "" });
+			break;
+		case UpscaleMethod::kFSR:
+			defines.push_back({ "FSR", "" });
 			break;
 		default:
 			// No define for NONE or TAA
@@ -688,6 +722,15 @@ void Upscaling::PopulateCachedPresetScales(UpscaleMethod a_method)
 				success = true;
 				cachedPresetMethod = UpscaleMethod::kDLSS;
 			}
+		} else if (a_method == UpscaleMethod::kFSR) {
+			for (uint32_t q = 0; q < cachedPresetScales.size(); ++q) {
+				float s = fidelityFX.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, q);
+				if (s >= 0.99f)
+					s = 1.0f;
+				cachedPresetScales[q] = s;
+			}
+			success = true;
+			cachedPresetMethod = UpscaleMethod::kFSR;		
 		}
 
 		if (!success) {
@@ -731,6 +774,8 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 			resolutionScaleBase = 1.0f;
 		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
 			resolutionScaleBase = streamline.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
+		} else if (upscaleMethod == UpscaleMethod::kFSR) {
+			resolutionScaleBase = fidelityFX.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
 		}
 
 		auto renderWidth = static_cast<int>(screenWidth * resolutionScaleBase);
@@ -1228,15 +1273,17 @@ void Upscaling::Upscale()
 			ID3D11ShaderResourceView* views[4] = { temporalAAMask.SRV, normals.SRV, motionVector.SRV, depth.depthSRV };
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
-			// Only DLSS uses these textures now
+			// Both DLSS and FSR use these textures
 			ID3D11UnorderedAccessView* reactiveMaskUAV = nullptr;
 			ID3D11UnorderedAccessView* transparencyUAV = nullptr;
 			ID3D11UnorderedAccessView* motionVectorUAV = nullptr;
 
-			if (upscaleMethod == UpscaleMethod::kDLSS) {
+			if (upscaleMethod == UpscaleMethod::kDLSS || upscaleMethod == UpscaleMethod::kFSR) {
 				reactiveMaskUAV = reactiveMaskTexture->uav.get();
 				transparencyUAV = transparencyCompositionMaskTexture->uav.get();
-				motionVectorUAV = motionVectorCopyTexture->uav.get();
+				if (upscaleMethod == UpscaleMethod::kDLSS) {
+					motionVectorUAV = motionVectorCopyTexture->uav.get();
+				}
 			}
 
 			ID3D11UnorderedAccessView* uavs[3] = { reactiveMaskUAV, transparencyUAV, motionVectorUAV };
@@ -1267,6 +1314,8 @@ void Upscaling::Upscale()
 
 		if (upscaleMethod == UpscaleMethod::kDLSS) {
 			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get(), sl::DLSSPreset::ePresetK);
+		} else if (upscaleMethod == UpscaleMethod::kFSR) {
+			fidelityFX.Upscale(main.texture, reactiveMaskTexture, transparencyCompositionMaskTexture, jitter);
 		}
 
 		state->EndPerfEvent();

@@ -3,6 +3,10 @@
 #include <d3d12.h>
 #include <winrt/base.h>
 
+#include <FidelityFX/host/backends/dx11/ffx_dx11.h>
+#include <FidelityFX/host/ffx_fsr3.h>
+#include <FidelityFX/host/ffx_interface.h>
+
 #include <FidelityFX/api/include/dx12/ffx_api_dx12.hpp>
 
 #include <FidelityFX/api/include/ffx_api.hpp>
@@ -22,6 +26,7 @@ public:
 
 	ffx::Context swapChainContext{};
 	ffx::Context frameGenContext;
+	FfxFsr3Context fsrContext;
 
 	bool featureFSR3FG = false;
 
@@ -34,4 +39,12 @@ public:
 	void LoadFFX();
 	void SetupFrameGeneration();
 	void Present(bool a_useFrameGeneration);
+
+	void CreateFSRResources();
+
+	void DestroyFSRResources();
+
+	float GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityMode);
+
+	void Upscale(ID3D11Resource* a_color, Texture2D* a_reactiveMask, Texture2D* a_transparencyMask, float2 a_jitter);
 };
