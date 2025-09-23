@@ -113,6 +113,5 @@ public:
 	void SetUIBuffer();
 
 	// D3D12 interop resource management
-	void UpdateSharedResources();
-	void CopySharedD3D12Resources();
+	void CreateSharedResources();
 };

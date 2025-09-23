@@ -530,10 +530,6 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 				fidelityFX.CreateFSRResources();
 		}
 
-		// Handle shared resource changes
-		if (frameGenModeChanged || upscaleModeChanged) {
-			UpdateSharedResources();
-		}
 
 		// Create new upscaling method resources
 		if (upscaleModeChanged) {
@@ -751,9 +747,6 @@ void Upscaling::SetupResources()
 	// Initial resource allocation will be handled by CheckResources() during first upscaling call
 	// This avoids creating unnecessary resources at startup
 
-	// Initialize all shared resources based on current settings
-	UpdateSharedResources();
-
 	D3D11_DEPTH_STENCIL_DESC depthStencilDesc = {};
 	depthStencilDesc.DepthEnable = true;                           // Enable depth testing
 	depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;  // Write to all depth bits
@@ -834,6 +827,9 @@ void Upscaling::SetupResources()
 
 	// Delete or create resources as necessary
 	CheckResources(upscaleMethod);
+
+	if (d3d12SwapChainActive)
+		dx12SwapChain.CreateSharedResources();
 }
 
 void Upscaling::ClearShaderCache()
@@ -881,20 +877,73 @@ void Upscaling::CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter)
 	logger::info("[Upscaling] Shared D3D12 device and interop resources created successfully");
 }
 
-void Upscaling::UpdateSharedResources()
-{
-	// Delegate to DX12SwapChain for frame generation resources
-	if (d3d12SwapChainActive) {
-		dx12SwapChain.UpdateSharedResources();
-	}
-}
 
 void Upscaling::CopySharedD3D12Resources()
 {
-	// Delegate to DX12SwapChain for frame generation resources
-	if (d3d12SwapChainActive) {
-		dx12SwapChain.CopySharedD3D12Resources();
+	if (d3d12SwapChainActive && settings.frameGenerationMode) {
+		return;
 	}
+
+	globals::state->BeginPerfEvent("Copy Shared D3D12 Resources");
+
+	auto renderer = globals::game::renderer;
+	auto context = globals::d3d::context;
+
+	// Not required by XeSS
+	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+	context->CopyResource(dx12SwapChain.motionVectorBufferShared12->resource11, motionVector.texture);
+	
+	auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+
+	{
+		// Set up viewport for fullscreen rendering
+		auto screenSize = globals::state->screenSize;
+
+		D3D11_VIEWPORT viewport = {};
+		viewport.TopLeftX = 0.0f;
+		viewport.TopLeftY = 0.0f;
+		viewport.Width = screenSize.x;
+		viewport.Height = screenSize.y;
+		viewport.MinDepth = 0.0f;
+		viewport.MaxDepth = 1.0f;
+		context->RSSetViewports(1, &viewport);
+
+		// Set up Input Assembler for fullscreen triangle
+		context->IASetInputLayout(nullptr);
+		context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
+		context->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
+		context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+		// Set up vertex shader
+		context->VSSetShader(GetUpscaleVS(), nullptr, 0);
+
+		// Set up rasterizer and blend states
+		context->RSSetState(upscaleRasterizerState.get());
+		context->OMSetBlendState(upscaleBlendState.get(), nullptr, 0xffffffff);
+
+		// Set up pixel shader resources
+		ID3D11ShaderResourceView* views[1] = { depth.depthSRV };
+		context->PSSetShaderResources(0, ARRAYSIZE(views), views);
+
+		// Set render target view for pixel shader output
+		ID3D11RenderTargetView* rtvs[1] = { dx12SwapChain.depthBufferShared12->rtv };
+		context->OMSetRenderTargets(ARRAYSIZE(rtvs), rtvs, nullptr);
+
+		context->PSSetShader(copyDepthToSharedBufferPS.get(), nullptr, 0);
+
+		context->Draw(3, 0);
+	}
+
+	// Clean up
+	ID3D11ShaderResourceView* views[1] = { nullptr };
+	context->PSSetShaderResources(0, ARRAYSIZE(views), views);
+
+	context->OMSetRenderTargets(0, nullptr, nullptr);
+	context->PSSetShader(nullptr, nullptr, 0);
+	context->VSSetShader(nullptr, nullptr, 0);
+	
+
+	globals::state->EndPerfEvent();
 }
 
 void UpdateCameraData()
