@@ -763,9 +763,12 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 		auto& upscaling = globals::features::upscaling;
 
 		if (upscaling.loaded) {
-			if (temporal && (a_inWorld || a_prepass) && upscaling.GetUpscaleMethod() != Upscaling::UpscaleMethod::kTAA) {
+			auto upscaleMethod = upscaling.GetUpscaleMethod();
+			if (temporal && (a_inWorld || a_prepass) && upscaleMethod != Upscaling::UpscaleMethod::kTAA) {
 				auto renderSize = Util::ConvertToDynamic(screenSize);
-				data.MipBias = std::log2f(renderSize.x / screenSize.x) - 1.0f;
+				data.MipBias = std::log2f(renderSize.x / screenSize.x);
+				if (upscaleMethod == Upscaling::UpscaleMethod::kDLSS)
+					data.MipBias -= 1.0f;
 			} else {
 				data.MipBias = 0;
 			}

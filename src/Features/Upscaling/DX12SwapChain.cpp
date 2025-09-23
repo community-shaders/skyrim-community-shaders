@@ -216,7 +216,7 @@ float DX12SwapChain::GetFrameTime() const
 WrappedResource::WrappedResource(D3D11_TEXTURE2D_DESC a_texDesc, ID3D11Device5* a_d3d11Device, ID3D12Device* a_d3d12Device)
 {
 	// Create D3D11 shared texture directly instead of wrapping D3D12 resource
-	a_texDesc.MiscFlags |= D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+	a_texDesc.MiscFlags |= D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 	DX::ThrowIfFailed(a_d3d11Device->CreateTexture2D(&a_texDesc, nullptr, &resource11));
 
 	// Get shared handle from D3D11 texture to enable D3D12 access
