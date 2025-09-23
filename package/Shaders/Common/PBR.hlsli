@@ -227,7 +227,7 @@ namespace PBR
 		float cosThetaD = sqrt((1 + cosThetaL * cosThetaV + NdotV * NdotL) / 2.0);
 
 		const float3 Lp = L - NdotL * N;
-		const float3 Vp = V - NdotL * N;
+		const float3 Vp = V - NdotV * N;
 		const float cosPhi = dot(Lp, Vp) * rsqrt(dot(Lp, Lp) * dot(Vp, Vp) + EPSILON_DIVISION);
 		const float cosHalfPhi = sqrt(saturate(0.5 + 0.5 * cosPhi));
 
