@@ -188,6 +188,7 @@ void FidelityFX::CreateFSRResources()
 
 	// Prevent multiple allocations
 	if (fsrScratchBuffer) {
+		logger::warn("[FidelityFX] FSR resources already created, skipping allocation");
 		return;
 	}
 
