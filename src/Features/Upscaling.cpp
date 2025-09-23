@@ -164,8 +164,10 @@ void Upscaling::DrawSettings()
 
 	uint32_t* currentUpscaleMode = &settings.upscaleMethod;
 	uint32_t availableModes = 1;  // Start with TAA
-	if (featureFSR) availableModes = 2;   // Add FSR
-	if (featureDLSS) availableModes = 3;  // Add DLSS if available
+	if (featureFSR)
+		availableModes = 2;  // Add FSR
+	if (featureDLSS)
+		availableModes = 3;  // Add DLSS if available
 
 	// Slider for method selection
 	// Clamp the index used to read from the built label vector to avoid OOB if the stored value is stale
@@ -530,7 +532,6 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 				fidelityFX.CreateFSRResources();
 		}
 
-
 		// Create new upscaling method resources
 		if (upscaleModeChanged) {
 			CreateUpscalingTextureResources(a_upscalemethod);
@@ -877,7 +878,6 @@ void Upscaling::CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter)
 	logger::info("[Upscaling] Shared D3D12 device and interop resources created successfully");
 }
 
-
 void Upscaling::CopySharedD3D12Resources()
 {
 	if (d3d12SwapChainActive && settings.frameGenerationMode) {
@@ -892,7 +892,7 @@ void Upscaling::CopySharedD3D12Resources()
 	// Not required by XeSS
 	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 	context->CopyResource(dx12SwapChain.motionVectorBufferShared12->resource11, motionVector.texture);
-	
+
 	auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
 	{
@@ -941,7 +941,6 @@ void Upscaling::CopySharedD3D12Resources()
 	context->OMSetRenderTargets(0, nullptr, nullptr);
 	context->PSSetShader(nullptr, nullptr, 0);
 	context->VSSetShader(nullptr, nullptr, 0);
-	
 
 	globals::state->EndPerfEvent();
 }

@@ -1,9 +1,9 @@
 #pragma once
 
 #include "Feature.h"
+#include "Upscaling/DX12SwapChain.h"
 #include "Upscaling/FidelityFX.h"
 #include "Upscaling/Streamline.h"
-#include "Upscaling/DX12SwapChain.h"
 #include <d3d11_4.h>
 #include <d3d12.h>
 #include <winrt/base.h>
@@ -204,7 +204,6 @@ public:
 	IDXGISwapChain* GetProxySwapChain();
 
 private:
-
 	struct Main_UpdateJitter
 	{
 		static void thunk(RE::BSGraphics::State* a_state);
