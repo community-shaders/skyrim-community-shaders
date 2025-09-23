@@ -3,11 +3,37 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctime>
+#include <fstream>
+#include <iomanip>
+
 #include <imgui_impl_dx11.h>
 
 #include "RE/Skyrim.h"
-#include "Util.h"
+#include "../Utils/FileSystem.h"
+#include "../Util.h"
 
+using namespace SKSE;
+
+namespace
+{
+	/**
+	 * @brief Gets file modification time
+	 */
+	std::time_t GetFileModTime(const std::filesystem::path& filePath)
+	{
+		try {
+			auto fileTime = std::filesystem::last_write_time(filePath);
+			auto systemTime = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+				fileTime - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
+			return std::chrono::system_clock::to_time_t(systemTime);
+		} catch (...) {
+			return 0;
+		}
+	}
+}
+
+// Static UI helper methods
 void ThemeManager::SetupImGuiStyle(const Menu& menu)
 {
 	auto& style = ImGui::GetStyle();
@@ -23,91 +49,29 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 	style = styleCopy;
 	style.HoverDelayNormal = themeSettings.TooltipHoverDelay;
 
-	if (themeSettings.UseSimplePalette) {
-		float hoveredAlpha{ 0.1f };
-
-		ImVec4 resizeGripHovered = themeSettings.Palette.Border;
-		resizeGripHovered.w = hoveredAlpha;
-
-		ImVec4 textDisabled = themeSettings.Palette.Text;
-		textDisabled.w = 0.3f;
-
-		ImVec4 header{ 1.0f, 1.0f, 1.0f, 0.15f };
-		ImVec4 headerHovered = header;
-		headerHovered.w = hoveredAlpha;
-
-		ImVec4 tabHovered{ 0.2f, 0.2f, 0.2f, 1.0f };
-
-		ImVec4 sliderGrab{ 1.0f, 1.0f, 1.0f, 0.245f };
-		ImVec4 sliderGrabActive{ 1.0f, 1.0f, 1.0f, 0.531f };
-
-		ImVec4 scrollbarGrab{ 0.31f, 0.31f, 0.31f, 1.0f };
-		ImVec4 scrollbarGrabHovered{ 0.41f, 0.41f, 0.41f, 1.0f };
-		ImVec4 scrollbarGrabActive{ 0.51f, 0.51f, 0.51f, 1.0f };
-
-		colors[ImGuiCol_WindowBg] = themeSettings.Palette.Background;
-		colors[ImGuiCol_ChildBg] = ImVec4();
-		colors[ImGuiCol_ScrollbarBg] = ImVec4();
-		colors[ImGuiCol_TableHeaderBg] = ImVec4();
-		colors[ImGuiCol_TableRowBg] = ImVec4();
-		colors[ImGuiCol_TableRowBgAlt] = ImVec4();
-
-		colors[ImGuiCol_Border] = themeSettings.Palette.Border;
-		colors[ImGuiCol_Separator] = colors[ImGuiCol_Border];
-		colors[ImGuiCol_ResizeGrip] = colors[ImGuiCol_Border];
-		colors[ImGuiCol_ResizeGripHovered] = resizeGripHovered;
-		colors[ImGuiCol_ResizeGripActive] = colors[ImGuiCol_ResizeGripHovered];
-
-		colors[ImGuiCol_Text] = themeSettings.Palette.Text;
-		colors[ImGuiCol_TextDisabled] = textDisabled;
-
-		colors[ImGuiCol_FrameBg] = themeSettings.Palette.Background;
-		colors[ImGuiCol_FrameBgHovered] = headerHovered;
-		colors[ImGuiCol_FrameBgActive] = colors[ImGuiCol_FrameBg];
-
-		colors[ImGuiCol_DockingEmptyBg] = themeSettings.Palette.Border;
-		colors[ImGuiCol_DockingPreview] = themeSettings.Palette.Border;
-
-		colors[ImGuiCol_PlotHistogram] = themeSettings.Palette.Border;
-
-		colors[ImGuiCol_SliderGrab] = sliderGrab;
-		colors[ImGuiCol_SliderGrabActive] = sliderGrabActive;
-
-		colors[ImGuiCol_Header] = header;
-		colors[ImGuiCol_HeaderActive] = colors[ImGuiCol_Header];
-		colors[ImGuiCol_HeaderHovered] = headerHovered;
-
-		colors[ImGuiCol_Button] = ImVec4();
-		colors[ImGuiCol_ButtonHovered] = headerHovered;
-		colors[ImGuiCol_ButtonActive] = ImVec4();
-
-		colors[ImGuiCol_ScrollbarGrab] = scrollbarGrab;
-		colors[ImGuiCol_ScrollbarGrabHovered] = scrollbarGrabHovered;
-		colors[ImGuiCol_ScrollbarGrabActive] = scrollbarGrabActive;
-
-		colors[ImGuiCol_TitleBg] = themeSettings.Palette.Background;
-		colors[ImGuiCol_TitleBgActive] = colors[ImGuiCol_TitleBg];
-		colors[ImGuiCol_TitleBgCollapsed] = colors[ImGuiCol_TitleBg];
-
-		colors[ImGuiCol_MenuBarBg] = colors[ImGuiCol_TitleBg];
-
-		colors[ImGuiCol_CheckMark] = themeSettings.Palette.Text;
-
-		colors[ImGuiCol_Tab] = themeSettings.FullPalette[ImGuiCol_Tab];
-		colors[ImGuiCol_TabActive] = themeSettings.FullPalette[ImGuiCol_TabActive];
-		colors[ImGuiCol_TabHovered] = tabHovered;
-		colors[ImGuiCol_TabUnfocused] = themeSettings.FullPalette[ImGuiCol_TabUnfocused];
-		colors[ImGuiCol_TabUnfocusedActive] = themeSettings.FullPalette[ImGuiCol_TabUnfocusedActive];
-
-		colors[ImGuiCol_PopupBg] = themeSettings.Palette.Background;
-
-		colors[ImGuiCol_TableBorderStrong] = colors[ImGuiCol_Border];
-		colors[ImGuiCol_TableBorderLight] = colors[ImGuiCol_Border];
-
-		colors[ImGuiCol_TextSelectedBg] = header;
-	} else {
-		std::copy(themeSettings.FullPalette.begin(), themeSettings.FullPalette.end(), std::span(colors).begin());
+	// Always use the unified FullPalette system instead of switching between simple/full
+	// This ensures consistent behavior regardless of UI presentation mode
+	for (size_t i = 0; i < std::min(themeSettings.FullPalette.size(), static_cast<size_t>(ImGuiCol_COUNT)); ++i) {
+		colors[i] = themeSettings.FullPalette[i];
 	}
+	
+	// Apply simple palette overrides to the FullPalette for key colors
+	// This allows the simple palette controls to work by updating the FullPalette
+	colors[ImGuiCol_WindowBg] = themeSettings.Palette.Background;
+	colors[ImGuiCol_Text] = themeSettings.Palette.Text;
+	colors[ImGuiCol_Border] = themeSettings.Palette.Border;
+	colors[ImGuiCol_Separator] = themeSettings.Palette.Border;
+	colors[ImGuiCol_ResizeGrip] = themeSettings.Palette.Border;
+	
+	// Apply derived colors based on simple palette
+	ImVec4 textDisabled = themeSettings.Palette.Text;
+	textDisabled.w = 0.3f;
+	colors[ImGuiCol_TextDisabled] = textDisabled;
+	
+	ImVec4 resizeGripHovered = themeSettings.Palette.Border;
+	resizeGripHovered.w = 0.1f;
+	colors[ImGuiCol_ResizeGripHovered] = resizeGripHovered;
+	colors[ImGuiCol_ResizeGripActive] = resizeGripHovered;
 }
 
 void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
@@ -141,4 +105,258 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	io.FontGlobalScale = exp2(themeSettings.GlobalScale);
 
 	cachedFontSize = themeSettings.FontSize;
+}
+
+// Theme management methods
+size_t ThemeManager::DiscoverThemes()
+{
+	if (discovered) {
+		return themes.size();
+	}
+
+	themes.clear();
+
+	auto themesDir = GetThemesDirectory();
+	if (!std::filesystem::exists(themesDir)) {
+		logger::info("Themes directory does not exist: {}", themesDir.string());
+		discovered = true;
+		return 0;
+	}
+
+	logger::info("Discovering themes in: {}", themesDir.string());
+
+	try {
+		for (const auto& entry : std::filesystem::directory_iterator(themesDir)) {
+			if (!entry.is_regular_file() || entry.path().extension() != ".json") {
+				continue;
+			}
+
+			// Check file size
+			auto fileSize = entry.file_size();
+			if (fileSize > MAX_FILE_SIZE) {
+				logger::warn("Theme file too large, skipping: {} ({}MB)", 
+					entry.path().filename().string(), fileSize / (1024 * 1024));
+				continue;
+			}
+
+			if (themes.size() >= MAX_THEMES) {
+				logger::warn("Maximum number of themes ({}) reached, skipping remaining files", MAX_THEMES);
+				break;
+			}
+
+			auto themeInfo = LoadThemeFile(entry.path());
+			if (themeInfo && themeInfo->isValid) {
+				themes.push_back(std::move(*themeInfo));
+				logger::info("Discovered theme: {} ({})", themes.back().name, themes.back().displayName);
+			}
+		}
+	} catch (const std::filesystem::filesystem_error& e) {
+		logger::warn("Error discovering themes: {}", e.what());
+	}
+
+	// Sort themes alphabetically by display name
+	std::sort(themes.begin(), themes.end(), [](const ThemeInfo& a, const ThemeInfo& b) {
+		return a.displayName < b.displayName;
+	});
+
+	discovered = true;
+	logger::info("Theme discovery complete. Found {} themes", themes.size());
+	return themes.size();
+}
+
+std::vector<std::string> ThemeManager::GetThemeNames() const
+{
+	std::vector<std::string> names;
+	names.reserve(themes.size());
+	
+	for (const auto& theme : themes) {
+		names.push_back(theme.name);
+	}
+	
+	return names;
+}
+
+bool ThemeManager::LoadTheme(const std::string& themeName, json& themeSettings)
+{
+	if (!discovered) {
+		DiscoverThemes();
+	}
+
+	if (themeName.empty()) {
+		// Empty theme name means use current/custom theme
+		return true;
+	}
+
+	auto it = std::find_if(themes.begin(), themes.end(), 
+		[&themeName](const ThemeInfo& theme) { return theme.name == themeName; });
+
+	if (it == themes.end()) {
+		logger::warn("Theme not found: {}", themeName);
+		return false;
+	}
+
+	if (!it->isValid) {
+		logger::warn("Theme is invalid: {}", themeName);
+		return false;
+	}
+
+	try {
+		if (it->themeData.contains("Theme") && it->themeData["Theme"].is_object()) {
+			themeSettings = it->themeData["Theme"];
+			logger::info("Loaded theme: {} ({})", it->name, it->displayName);
+			return true;
+		} else {
+			logger::warn("Theme file missing 'Theme' object: {}", themeName);
+			return false;
+		}
+	} catch (const std::exception& e) {
+		logger::warn("Error loading theme {}: {}", themeName, e.what());
+		return false;
+	}
+}
+
+const ThemeManager::ThemeInfo* ThemeManager::GetThemeInfo(const std::string& themeName) const
+{
+	auto it = std::find_if(themes.begin(), themes.end(), 
+		[&themeName](const ThemeInfo& theme) { return theme.name == themeName; });
+	
+	return (it != themes.end()) ? &(*it) : nullptr;
+}
+
+void ThemeManager::RefreshThemes()
+{
+	discovered = false;
+	DiscoverThemes();
+}
+
+std::filesystem::path ThemeManager::GetThemesDirectory() const
+{
+	return Util::PathHelpers::GetThemesPath();
+}
+
+void ThemeManager::CreateDefaultThemeFiles()
+{
+	auto themesDir = GetThemesDirectory();
+	
+	try {
+		std::filesystem::create_directories(themesDir);
+		logger::info("Ensured themes directory exists: {}", themesDir.string());
+	} catch (const std::filesystem::filesystem_error& e) {
+		logger::warn("Failed to create themes directory: {}", e.what());
+		return;
+	}
+
+	// Check if any theme files exist - if so, use those instead of creating defaults
+	bool hasThemes = false;
+	try {
+		for (const auto& entry : std::filesystem::directory_iterator(themesDir)) {
+			if (entry.is_regular_file() && entry.path().extension() == ".json") {
+				hasThemes = true;
+				break;
+			}
+		}
+	} catch (const std::filesystem::filesystem_error& e) {
+		logger::warn("Failed to check for existing themes: {}", e.what());
+	}
+
+	if (hasThemes) {
+		logger::info("Theme files already exist, skipping default creation");
+		return;
+	}
+
+	// Only create a minimal default theme if no themes exist at all (rare fallback)
+	auto defaultThemeFile = themesDir / "Default.json";
+	try {
+		std::ofstream file(defaultThemeFile);
+		if (!file.is_open()) {
+			logger::warn("Failed to create default theme file: {}", defaultThemeFile.string());
+			return;
+		}
+
+		file << R"({
+	"DisplayName": "Default Theme",
+	"Description": "Default community shaders theme",
+	"Version": "1.0",
+	"Author": "Community Shaders",
+	"Theme": {
+		"UseSimplePalette": true,
+		"Palette": {
+			"Background": [0.05, 0.05, 0.05, 1.0],
+			"Text": [1.0, 1.0, 1.0, 1.0],
+			"Border": [0.4, 0.4, 0.4, 1.0]
+		},
+		"FontSize": 27.0,
+		"GlobalScale": 0.0,
+		"TooltipHoverDelay": 0.5
+	}
+})";
+
+		file.close();
+		logger::info("Created default theme file: {}", defaultThemeFile.string());
+	} catch (const std::exception& e) {
+		logger::warn("Failed to create default theme file: {}", e.what());
+	}
+}
+
+std::unique_ptr<ThemeManager::ThemeInfo> ThemeManager::LoadThemeFile(const std::filesystem::path& filePath)
+{
+	auto themeInfo = std::make_unique<ThemeInfo>();
+	themeInfo->name = filePath.stem().string();
+	themeInfo->filePath = filePath.string();
+	themeInfo->lastModified = GetFileModTime(filePath);
+
+	try {
+		std::ifstream file(filePath);
+		if (!file.is_open()) {
+			logger::warn("Failed to open theme file: {}", filePath.string());
+			return themeInfo;
+		}
+
+		json data;
+		file >> data;
+
+		if (!ValidateThemeData(data)) {
+			logger::warn("Invalid theme data in file: {}", filePath.string());
+			return themeInfo;
+		}
+
+		themeInfo->themeData = data;
+		
+		// Extract metadata
+		if (data.contains("DisplayName") && data["DisplayName"].is_string()) {
+			themeInfo->displayName = data["DisplayName"].get<std::string>();
+		} else {
+			themeInfo->displayName = themeInfo->name;
+		}
+
+		if (data.contains("Description") && data["Description"].is_string()) {
+			themeInfo->description = data["Description"].get<std::string>();
+		}
+
+		if (data.contains("Version") && data["Version"].is_string()) {
+			themeInfo->version = data["Version"].get<std::string>();
+		}
+
+		if (data.contains("Author") && data["Author"].is_string()) {
+			themeInfo->author = data["Author"].get<std::string>();
+		}
+
+		themeInfo->isValid = true;
+		
+	} catch (const std::exception& e) {
+		logger::warn("Error parsing theme file {}: {}", filePath.string(), e.what());
+	}
+
+	return themeInfo;
+}
+
+bool ThemeManager::ValidateThemeData(const json& themeData) const
+{
+	// Basic validation - ensure Theme object exists
+	if (!themeData.contains("Theme") || !themeData["Theme"].is_object()) {
+		return false;
+	}
+
+	// Could add more detailed validation here if needed
+	return true;
 }

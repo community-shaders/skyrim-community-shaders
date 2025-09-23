@@ -440,13 +440,17 @@ namespace Util
 		hovered = ImGui::IsItemHovered();
 
 		// Draw the lines and text using Menu theme colors
-		auto& theme = globals::menu->GetTheme().FeatureHeading;
+		auto& palette = globals::menu->GetTheme().Palette;
 
-		// Get the color based on hover state
-		ImVec4 color = hovered ? theme.ColorHovered : theme.ColorDefault;
-		// If minimized, apply the minimized factor
+		// Use theme text color for category headers to match other text elements
+		ImVec4 color = palette.Text;
+		// If minimized, apply reduced alpha
 		if (!isExpanded) {
-			color.w *= theme.MinimizedFactor;
+			color.w *= 0.7f;  // 70% alpha when minimized
+		}
+		// If hovered, slightly dim the color
+		if (hovered) {
+			color.w *= 0.8f;  // 80% alpha when hovered
 		}
 		ImU32 headerColor = ImGui::GetColorU32(color);
 
@@ -498,7 +502,9 @@ namespace Util
 
 		// Use Menu theme colors for consistent styling
 		auto& theme = globals::menu->GetTheme().FeatureHeading;
-		ImVec4 color = useWhiteText ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : theme.ColorDefault;
+		auto& palette = globals::menu->GetTheme().Palette;
+		// When useWhiteText is true, use the theme's text color instead of hardcoded white
+		ImVec4 color = useWhiteText ? palette.Text : theme.ColorDefault;
 
 		ImU32 headerColor = ImGui::GetColorU32(color);
 
@@ -738,7 +744,9 @@ namespace Util
 		// Custom style - always transparent background to avoid click blocking
 		ImVec4 bgColor = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 		ImVec4 bgColorActive = ImVec4(0.3f, 0.3f, 0.3f, 0.9f);
-		ImVec4 textColor = ImVec4(0.9f, 0.9f, 0.9f, 1.0f);
+		// Use theme text color instead of hardcoded color
+		auto& palette = globals::menu->GetTheme().Palette;
+		ImVec4 textColor = palette.Text;
 
 		ImGui::PushStyleColor(ImGuiCol_FrameBg, bgColor);
 		ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, bgColor);
@@ -764,7 +772,12 @@ namespace Util
 
 		ImVec2 center = ImVec2(iconPos.x + iconSize * 0.46f, iconPos.y + iconSize * 0.5f);
 		float radius = iconSize * 0.3f;
-		ImU32 placeholderColor = IM_COL32(140, 140, 140, 180);
+		
+		// Use themed text color with reduced alpha for search icon
+		auto& theme = globals::menu->GetTheme().Palette;
+		ImVec4 iconColor = theme.Text;
+		iconColor.w *= 0.7f; // Reduce alpha for subtler appearance
+		ImU32 placeholderColor = ImGui::GetColorU32(iconColor);
 
 		// Draw circle
 		drawList->AddCircle(center, radius, placeholderColor, 12, 2.2f);

@@ -12,7 +12,6 @@
 #include "Feature.h"
 #include "Globals.h"
 #include "Menu.h"
-#include "Menu/ThemeManager.h"
 #include "Plugin.h"
 #include "SettingsOverrideManager.h"
 #include "State.h"

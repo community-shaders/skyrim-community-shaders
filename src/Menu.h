@@ -110,7 +110,7 @@ public:
 		float FontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;
 		float GlobalScale = REL::Module::IsVR() ? -0.5f : 0.f;  // exponential
 
-		bool UseSimplePalette = true;    // simple palette or full customization
+		bool UseSimplePalette = true;    // DEPRECATED: No longer affects behavior. UI now shows both Simple and Advanced controls.
 		bool ShowActionIcons = true;     // whether to show action buttons as icons
 		float TooltipHoverDelay = 0.5f;  // tooltip hover delay in seconds
 		struct PaletteColors

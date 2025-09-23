@@ -144,8 +144,8 @@ void SettingsTabRenderer::RenderInterfaceTab()
 {
 	if (ImGui::BeginTabItem("Interface")) {
 		if (ImGui::BeginTabBar("##tabs", ImGuiTabBarFlags_None)) {
-			RenderUIOptionsTab();
-			RenderSizesTab();
+			RenderThemesTab();
+			RenderStylingTab();
 			RenderColorsTab();
 			ImGui::EndTabBar();
 		}
@@ -153,10 +153,86 @@ void SettingsTabRenderer::RenderInterfaceTab()
 	}
 }
 
-void SettingsTabRenderer::RenderUIOptionsTab()
+void SettingsTabRenderer::RenderThemesTab()
 {
-	if (ImGui::BeginTabItem("UI Options")) {
+	if (ImGui::BeginTabItem("Themes")) {
 		auto& themeSettings = globals::menu->GetSettings().Theme;
+
+		// Theme Preset Selection
+		ImGui::SeparatorText("Theme Preset");
+
+		// Get theme manager
+		auto themeManager = ThemeManager::GetSingleton();
+		
+		// Get available themes (force discovery if not done)
+		if (!themeManager->IsDiscovered()) {
+			themeManager->DiscoverThemes();
+		}
+		
+		const auto& themes = themeManager->GetThemes();
+
+		// Create dropdown items - using static storage to avoid dangling pointers
+		static std::vector<std::string> displayNames;
+		static std::vector<const char*> items;
+		
+		// Clear and rebuild the lists
+		displayNames.clear();
+		items.clear();
+		
+		displayNames.push_back("Custom"); // First item for custom theme
+		items.push_back(displayNames.back().c_str());
+
+		for (const auto& theme : themes) {
+			displayNames.push_back(theme.displayName);
+			items.push_back(displayNames.back().c_str());
+		}
+
+		// Find current selection index
+		int currentItem = 0; // Default to "Custom"
+		if (!globals::menu->GetSettings().SelectedThemePreset.empty()) {
+			for (size_t i = 0; i < themes.size(); ++i) {
+				if (themes[i].name == globals::menu->GetSettings().SelectedThemePreset) {
+					currentItem = static_cast<int>(i) + 1; // +1 for "Custom"
+					break;
+				}
+			}
+		}
+
+		// Theme preset dropdown
+		if (ImGui::Combo("##ThemePreset", &currentItem, items.data(), static_cast<int>(items.size()))) {
+			if (currentItem == 0) {
+				// Custom theme selected
+				globals::menu->GetSettings().SelectedThemePreset = "";
+			} else {
+				// Preset theme selected
+				std::string selectedTheme = themes[currentItem - 1].name; // -1 for "Custom" offset
+				if (globals::menu->LoadThemePreset(selectedTheme)) {
+					// Theme loaded successfully, update UI
+					themeSettings = globals::menu->GetSettings().Theme;
+				}
+			}
+		}
+		// Show theme description as tooltip
+		if (currentItem > 0 && currentItem - 1 < static_cast<int>(themes.size())) {
+			const auto& selectedTheme = themes[currentItem - 1];
+			if (!selectedTheme.description.empty()) {
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("%s", selectedTheme.description.c_str());
+				}
+			}
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Refresh Themes")) {
+			themeManager->RefreshThemes();
+			// Reset selection if current theme no longer exists
+			if (!globals::menu->GetSettings().SelectedThemePreset.empty()) {
+				const auto* themeInfo = themeManager->GetThemeInfo(globals::menu->GetSettings().SelectedThemePreset);
+				if (!themeInfo) {
+					globals::menu->GetSettings().SelectedThemePreset = "";
+				}
+			}
+		}
 
 		ImGui::SeparatorText("UI Elements");
 		ImGui::Checkbox("Use Icon Buttons in Header", &themeSettings.ShowActionIcons);
@@ -175,9 +251,9 @@ void SettingsTabRenderer::RenderUIOptionsTab()
 	}
 }
 
-void SettingsTabRenderer::RenderSizesTab()
+void SettingsTabRenderer::RenderStylingTab()
 {
-	if (ImGui::BeginTabItem("Sizes")) {
+	if (ImGui::BeginTabItem("Styling")) {
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 		auto& style = themeSettings.Style;
 
@@ -244,77 +320,6 @@ void SettingsTabRenderer::RenderColorsTab()
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 		auto& colors = themeSettings.FullPalette;
 
-		// Theme Preset Selection
-		ImGui::SeparatorText("Theme Preset");
-
-		// Get theme manager
-		auto themeManager = ThemeManager::GetSingleton();
-		
-		// Get available themes (force discovery if not done)
-		if (!themeManager->IsDiscovered()) {
-			themeManager->DiscoverThemes();
-		}
-		
-		const auto& themes = themeManager->GetThemes();
-
-		// Create dropdown items
-		std::vector<const char*> items;
-		std::vector<std::string> displayNames;
-		items.push_back("Custom"); // First item for custom theme
-		displayNames.push_back("Custom");
-
-		for (const auto& theme : themes) {
-			displayNames.push_back(theme.displayName);
-			items.push_back(displayNames.back().c_str());
-		}
-
-		// Find current selection index
-		int currentItem = 0; // Default to "Custom"
-		if (!globals::menu->GetSettings().SelectedThemePreset.empty()) {
-			for (size_t i = 0; i < themes.size(); ++i) {
-				if (themes[i].name == globals::menu->GetSettings().SelectedThemePreset) {
-					currentItem = static_cast<int>(i) + 1; // +1 for "Custom"
-					break;
-				}
-			}
-		}
-
-		// Theme preset dropdown
-		if (ImGui::Combo("##ThemePreset", &currentItem, items.data(), static_cast<int>(items.size()))) {
-			if (currentItem == 0) {
-				// Custom theme selected
-				globals::menu->GetSettings().SelectedThemePreset = "";
-			} else {
-				// Preset theme selected
-				std::string selectedTheme = themes[currentItem - 1].name; // -1 for "Custom" offset
-				if (globals::menu->LoadThemePreset(selectedTheme)) {
-					// Theme loaded successfully, update UI
-					themeSettings = globals::menu->GetSettings().Theme;
-				}
-			}
-		}
-
-		ImGui::SameLine();
-		if (ImGui::Button("Refresh Themes")) {
-			themeManager->RefreshThemes();
-			// Reset selection if current theme no longer exists
-			if (!globals::menu->GetSettings().SelectedThemePreset.empty()) {
-				const auto* themeInfo = themeManager->GetThemeInfo(globals::menu->GetSettings().SelectedThemePreset);
-				if (!themeInfo) {
-					globals::menu->GetSettings().SelectedThemePreset = "";
-				}
-			}
-		}
-
-		// Show theme description if available
-		if (currentItem > 0 && currentItem - 1 < static_cast<int>(themes.size())) {
-			const auto& selectedTheme = themes[currentItem - 1];
-			if (!selectedTheme.description.empty()) {
-				ImGui::SameLine();
-				ImGui::Text("- %s", selectedTheme.description.c_str());
-			}
-		}
-
 		ImGui::SeparatorText("Status");
 
 		ImGui::ColorEdit4("Disabled Text", (float*)&themeSettings.StatusPalette.Disable);
@@ -333,17 +338,17 @@ void SettingsTabRenderer::RenderColorsTab()
 
 		ImGui::SeparatorText("Palette");
 
-		if (ImGui::RadioButton("Simple Palette", themeSettings.UseSimplePalette))
-			themeSettings.UseSimplePalette = true;
-		ImGui::SameLine();
-		if (ImGui::RadioButton("Full Palette", !themeSettings.UseSimplePalette))
-			themeSettings.UseSimplePalette = false;
-
-		if (themeSettings.UseSimplePalette) {
+		// Simple Colors Section - collapsed by default for clean interface
+		if (ImGui::CollapsingHeader("Simple", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::ColorEdit4("Background", (float*)&themeSettings.Palette.Background);
 			ImGui::ColorEdit4("Text", (float*)&themeSettings.Palette.Text);
 			ImGui::ColorEdit4("Border", (float*)&themeSettings.Palette.Border);
-		} else {
+		}
+
+		// Advanced Colors Section - collapsed by default to avoid overwhelming users
+		if (ImGui::CollapsingHeader("Advanced")) {
+			ImGui::TextWrapped("Advanced color controls for detailed customization of all UI elements.");
+			
 			static ImGuiTextFilter filter;
 			filter.Draw("Filter colors", ImGui::GetFontSize() * 16);
 

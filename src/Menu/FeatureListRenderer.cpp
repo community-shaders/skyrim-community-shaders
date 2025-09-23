@@ -267,7 +267,7 @@ void FeatureListRenderer::ListMenuVisitor::operator()(const std::string& label)
 	if (label == "Unloaded Features") {
 		Util::DrawSectionHeader(label.c_str(), true);
 	} else {
-		// Use default separator text for other labels
+		// Use default separator text for other labels - should be themed via ImGuiCol_Separator
 		ImGui::SeparatorText(label.c_str());
 	}
 }

@@ -189,26 +189,6 @@ namespace Util
 	}
 }
 
-std::vector<std::pair<std::string, std::string>> Util::EnumerateDllVersions(const std::filesystem::path& dir)
-{
-	std::vector<std::pair<std::string, std::string>> result;
-	try {
-		for (const auto& entry : std::filesystem::directory_iterator(dir)) {
-			if (entry.is_regular_file() && entry.path().extension() == L".dll") {
-				const auto& path = entry.path();
-				auto version = Util::GetDllVersion(path.c_str());
-				auto name = path.filename().string();
-				std::string versionStr = version ? Util::GetFormattedVersion(*version) : "Unknown";
-				result.emplace_back(name, versionStr);
-			}
-		}
-	} catch (const std::filesystem::filesystem_error& e) {
-		// Log error but return empty vector to avoid crashing
-		logger::warn("Failed to enumerate DLL versions in {}: {}", dir.string(), e.what());
-	}
-	return result;
-}
-
 std::vector<SettingsDiffEntry> Util::FileSystem::LoadJsonDiff(const std::filesystem::path& userPath, const std::filesystem::path& testPath)
 {
 	std::vector<SettingsDiffEntry> diffEntries;

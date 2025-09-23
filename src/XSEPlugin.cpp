@@ -6,7 +6,7 @@
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
-#include "ThemeManager.h"
+#include "Menu/ThemeManager.h"
 #include "TruePBR.h"
 
 #include "ENB/ENBSeriesAPI.h"

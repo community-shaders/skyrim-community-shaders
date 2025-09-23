@@ -29,7 +29,7 @@ private:
 	static void RenderInterfaceTab();
 
 	// Interface sub-tabs
-	static void RenderUIOptionsTab();
-	static void RenderSizesTab();
+	static void RenderThemesTab();
+	static void RenderStylingTab();
 	static void RenderColorsTab();
 };
