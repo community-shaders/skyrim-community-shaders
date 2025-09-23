@@ -186,15 +186,28 @@ void FidelityFX::CreateFSRResources()
 {
 	auto state = globals::state;
 
+	// Prevent multiple allocations
+	if (fsrScratchBuffer) {
+		return;
+	}
+
 	auto fsrDevice = ffxGetDeviceDX11(globals::d3d::device);
 
 	size_t scratchBufferSize = ffxGetScratchMemorySizeDX11(FFX_FSR3UPSCALER_CONTEXT_COUNT);
-	void* scratchBuffer = calloc(scratchBufferSize, 1);
-	memset(scratchBuffer, 0, scratchBufferSize);
+	fsrScratchBuffer = calloc(scratchBufferSize, 1);
+	if (!fsrScratchBuffer) {
+		logger::critical("[FidelityFX] Failed to allocate FSR3 scratch buffer memory!");
+		return;
+	}
+	memset(fsrScratchBuffer, 0, scratchBufferSize);
 
 	FfxInterface fsrInterface;
-	if (ffxGetInterfaceDX11(&fsrInterface, fsrDevice, scratchBuffer, scratchBufferSize, FFX_FSR3UPSCALER_CONTEXT_COUNT) != FFX_OK)
+	if (ffxGetInterfaceDX11(&fsrInterface, fsrDevice, fsrScratchBuffer, scratchBufferSize, FFX_FSR3UPSCALER_CONTEXT_COUNT) != FFX_OK) {
 		logger::critical("[FidelityFX] Failed to initialize FSR3 backend interface!");
+		free(fsrScratchBuffer);
+		fsrScratchBuffer = nullptr;
+		return;
+	}
 
 	FfxFsr3ContextDescription contextDescription;
 	contextDescription.maxRenderSize.width = (uint)state->screenSize.x;
@@ -206,14 +219,24 @@ void FidelityFX::CreateFSRResources()
 	contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE | FFX_FSR3_ENABLE_HIGH_DYNAMIC_RANGE;
 	contextDescription.backendInterfaceUpscaling = fsrInterface;
 
-	if (ffxFsr3ContextCreate(&fsrContext, &contextDescription) != FFX_OK)
+	if (ffxFsr3ContextCreate(&fsrContext, &contextDescription) != FFX_OK) {
 		logger::critical("[FidelityFX] Failed to initialize FSR3 context!");
+		free(fsrScratchBuffer);
+		fsrScratchBuffer = nullptr;
+		return;
+	}
 }
 
 void FidelityFX::DestroyFSRResources()
 {
 	if (ffxFsr3ContextDestroy(&fsrContext) != FFX_OK)
 		logger::critical("[FidelityFX] Failed to destroy FSR3 context!");
+
+	// Free the scratch buffer to prevent memory leak
+	if (fsrScratchBuffer) {
+		free(fsrScratchBuffer);
+		fsrScratchBuffer = nullptr;
+	}
 }
 
 float FidelityFX::GetInputResolutionScale([[maybe_unused]] uint32_t outputWidth, [[maybe_unused]] uint32_t outputHeight, uint32_t qualityMode)
