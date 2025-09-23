@@ -2737,16 +2737,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if defined(IBL)
+	float3 iblColor = 0;
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		if ((!SharedData::InInterior || SharedData::iblSettings.EnableInterior) && !(SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection))
 		{
-		directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
 #		if defined(SKYLIGHTING)
-			directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-ambientNormal, skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-ambientNormal, skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 #		else
-			directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-ambientNormal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-ambientNormal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 #		endif
-		directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
+		iblColor = Color::LinearToGamma(iblColor);
+		directionalAmbientColor += iblColor;
 		}
 	}
 #	endif
@@ -3105,10 +3106,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #		endif
 
+#	if defined(IBL) && defined(SKYLIGHTING)
+	directionalAmbientColor -= iblColor;
+#	endif
+
 	directionalAmbientColor *= outputAlbedo;
 
 #	if defined(SKYLIGHTING)
 	Skylighting::applySkylighting(color.xyz, directionalAmbientColor, skylightingDiffuse);
+#	endif
+
+#	if defined(IBL) && defined(SKYLIGHTING)
+	directionalAmbientColor += iblColor * outputAlbedo;
 #	endif
 
 #	if !defined(DEFERRED)
