@@ -441,18 +441,26 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 			transparencyCompositionMaskTexture->CreateSRV(srvDesc);
 			transparencyCompositionMaskTexture->CreateUAV(uavDesc);
 		}
+	}
 
+	// Motion vector copy texture is only needed for DLSS
+	if (a_upscalemethod == UpscaleMethod::kDLSS) {
 		if (!motionVectorCopyTexture) {
+			auto renderer = globals::game::renderer;
 			auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
 			D3D11_TEXTURE2D_DESC motionTexDesc{};
+			D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+			D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+
 			motionVector.texture->GetDesc(&motionTexDesc);
+			motionVector.SRV->GetDesc(&srvDesc);
+			motionVector.UAV->GetDesc(&uavDesc);
 
-			texDesc.Format = motionTexDesc.Format;
-			srvDesc.Format = texDesc.Format;
-			uavDesc.Format = texDesc.Format;
+			srvDesc.Format = motionTexDesc.Format;
+			uavDesc.Format = motionTexDesc.Format;
 
-			motionVectorCopyTexture = new Texture2D(texDesc);
+			motionVectorCopyTexture = new Texture2D(motionTexDesc);
 			motionVectorCopyTexture->CreateSRV(srvDesc);
 			motionVectorCopyTexture->CreateUAV(uavDesc);
 		}
@@ -483,7 +491,10 @@ void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 			delete transparencyCompositionMaskTexture;
 			transparencyCompositionMaskTexture = nullptr;
 		}
+	}
 
+	// Motion vector copy texture is only needed for DLSS - destroy when switching away from DLSS
+	if (a_upscalemethod != UpscaleMethod::kDLSS) {
 		if (motionVectorCopyTexture) {
 			motionVectorCopyTexture->srv = nullptr;
 			motionVectorCopyTexture->uav = nullptr;
@@ -1121,6 +1132,7 @@ void Upscaling::Upscale()
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
 	auto dispatchCount = Util::GetScreenDispatchCount(true);
 
@@ -1129,7 +1141,6 @@ void Upscaling::Upscale()
 
 		auto& temporalAAMask = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kTEMPORAL_AA_MASK];
 		auto& normals = renderer->GetRuntimeData().renderTargets[globals::deferred->forwardRenderTargets[2]];
-		auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
 		{
@@ -1145,7 +1156,7 @@ void Upscaling::Upscale()
 			ID3D11ShaderResourceView* views[4] = { temporalAAMask.SRV, normals.SRV, motionVector.SRV, depth.depthSRV };
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
-			ID3D11UnorderedAccessView* uavs[3] = { reactiveMaskTexture->uav.get(), transparencyCompositionMaskTexture->uav.get(), motionVectorCopyTexture->uav.get() };
+			ID3D11UnorderedAccessView* uavs[3] = { reactiveMaskTexture->uav.get(), transparencyCompositionMaskTexture->uav.get(), upscaleMethod == UpscaleMethod::kDLSS ? motionVectorCopyTexture->uav.get() : nullptr };
 			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
 			context->CSSetShader(GetEncodeTexturesCS(), nullptr, 0);
@@ -1174,7 +1185,7 @@ void Upscaling::Upscale()
 		if (upscaleMethod == UpscaleMethod::kDLSS) {
 			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get());
 		} else if (upscaleMethod == UpscaleMethod::kFSR) {
-			fidelityFX.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get());
+			fidelityFX.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVector.texture);
 		}
 
 		state->EndPerfEvent();

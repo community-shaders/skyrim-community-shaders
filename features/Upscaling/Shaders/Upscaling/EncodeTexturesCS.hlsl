@@ -23,6 +23,7 @@ RWTexture2D<float2> MotionVectorOutput : register(u2);
 	float2 taaMask = TAAMask[dispatchID.xy];
 	float transparencyCompositionMask = NormalsWaterMask[dispatchID.xy].z;
 
+#if defined(DLSS)
 	float depth = DepthMask[dispatchID.xy];
 
 	// Find longest motion vector in 5x5 neighborhood
@@ -44,8 +45,6 @@ RWTexture2D<float2> MotionVectorOutput : register(u2);
 
 			// Take neighbor if it's longer AND closer
 			if (neighborDepth < depth){
-				taaMask.x = min(taaMask.x, TAAMask[samplePos].x);
-
 				float2 neighborMotionVector = MotionVectorMask[samplePos];
 
 				// Square motion vector for length
@@ -60,6 +59,7 @@ RWTexture2D<float2> MotionVectorOutput : register(u2);
 	}
 
 	MotionVectorOutput[dispatchID.xy] = longestMotionVector;
+#endif
 
 	float reactiveMask = taaMask.x * 0.1 + taaMask.y;
 	ReactiveMask[dispatchID.xy] = reactiveMask;
