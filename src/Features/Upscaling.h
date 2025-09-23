@@ -136,24 +136,6 @@ public:
 
 	virtual void ClearShaderCache() override;
 
-	// Shared D3D12 device and interop resources
-	winrt::com_ptr<ID3D12Device> sharedD3D12Device;
-	winrt::com_ptr<ID3D12CommandQueue> sharedD3D12CommandQueue;
-	winrt::com_ptr<ID3D12CommandAllocator> sharedD3D12CommandAllocator;
-	winrt::com_ptr<ID3D12GraphicsCommandList> sharedD3D12CommandList;
-	winrt::com_ptr<ID3D12Fence> sharedD3D12Fence;
-	HANDLE sharedFenceEvent = nullptr;
-	UINT64 sharedFenceValue = 0;
-
-	// D3D11/D3D12 shared fence for interop synchronization
-	winrt::com_ptr<ID3D11Fence> sharedD3D11Fence;
-	UINT64 sharedInteropFenceValue = 0;
-
-	// Shared D3D12 resources moved to DX12SwapChain class
-
-	// Frame tracking to ensure shared resources are only copied once per frame
-	Util::FrameChecker sharedResourcesFrameChecker;
-
 	// Static instances instead of singletons
 	static inline Streamline streamline;
 	static inline FidelityFX fidelityFX;  // Only for frame generation
@@ -167,7 +149,6 @@ public:
 	float dynamicResolutionWidthRatio = 1.0f;
 	float dynamicResolutionHeightRatio = 1.0f;
 
-	void CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter);
 	void CopySharedD3D12Resources();
 	void PostDisplay();
 	void PerformUpscaling();

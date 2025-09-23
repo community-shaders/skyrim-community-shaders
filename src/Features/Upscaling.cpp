@@ -83,8 +83,6 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
 
-	upscaling.CreateSharedD3D12Device(pAdapter);
-
 	if (shouldProxy) {
 		logger::info("[Frame Generation] Frame Generation enabled, using D3D12 proxy");
 
@@ -509,16 +507,6 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 		logger::debug("[Upscaling] Resource change detected - Upscale: {} -> {}, FrameGen: {} -> {}",
 			(int)previousUpscaleMode, (int)a_upscalemethod, previousFrameGenMode, (settings.frameGenerationMode && d3d12SwapChainActive));
 
-		// Synchronization for D3D12 operations (frame generation only now)
-		if (d3d12SwapChainActive) {
-			UINT64 fenceValue = sharedInteropFenceValue++;
-			DX::ThrowIfFailed(sharedD3D12CommandQueue->Signal(sharedD3D12Fence.get(), fenceValue));
-			if (sharedD3D12Fence->GetCompletedValue() < fenceValue) {
-				sharedD3D12Fence->SetEventOnCompletion(fenceValue, sharedFenceEvent);
-				WaitForSingleObject(sharedFenceEvent, INFINITE);
-			}
-		}
-
 		// Destroy previous upscaling method resources (this will intelligently clean up based on what's still needed)
 		if (upscaleModeChanged) {
 			DestroyUpscalingTextureResources(a_upscalemethod);
@@ -745,9 +733,6 @@ void Upscaling::SetupResources()
 	srvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
 
-	// Initial resource allocation will be handled by CheckResources() during first upscaling call
-	// This avoids creating unnecessary resources at startup
-
 	D3D11_DEPTH_STENCIL_DESC depthStencilDesc = {};
 	depthStencilDesc.DepthEnable = true;                           // Enable depth testing
 	depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;  // Write to all depth bits
@@ -781,17 +766,6 @@ void Upscaling::SetupResources()
 	// Create upscaling data constant buffer for encode textures compute shader
 	upscalingDataCB = new ConstantBuffer(ConstantBufferDesc<UpscalingDataCB>());
 
-	// Create NIS sharpener texture with swapchain format and UAV access
-	D3D11_TEXTURE2D_DESC nisTexDesc = texDesc;
-	nisTexDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	nisTexDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-
-	D3D11_SHADER_RESOURCE_VIEW_DESC nisSrvDesc = srvDesc;
-	nisSrvDesc.Format = nisTexDesc.Format;
-
-	D3D11_UNORDERED_ACCESS_VIEW_DESC nisUavDesc = uavDesc;
-	nisUavDesc.Format = nisTexDesc.Format;
-
 	// Create blend state for depth upscaling
 	D3D11_BLEND_DESC blendDesc = {};
 	blendDesc.AlphaToCoverageEnable = false;
@@ -814,23 +788,12 @@ void Upscaling::SetupResources()
 	rasterizerDesc.AntialiasedLineEnable = false;
 	DX::ThrowIfFailed(globals::d3d::device->CreateRasterizerState(&rasterizerDesc, upscaleRasterizerState.put()));
 
-	// Create shared D3D11/D3D12 fences for synchronization
-	winrt::com_ptr<ID3D11Device5> d3d11Device5;
-	DX::ThrowIfFailed(globals::d3d::device->QueryInterface(IID_PPV_ARGS(d3d11Device5.put())));
-
-	HANDLE sharedFenceHandle;
-	DX::ThrowIfFailed(sharedD3D12Device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(sharedD3D12Fence.put())));
-	DX::ThrowIfFailed(sharedD3D12Device->CreateSharedHandle(sharedD3D12Fence.get(), nullptr, GENERIC_ALL, nullptr, &sharedFenceHandle));
-	DX::ThrowIfFailed(d3d11Device5->OpenSharedFence(sharedFenceHandle, IID_PPV_ARGS(sharedD3D11Fence.put())));
-	CloseHandle(sharedFenceHandle);
-
-	auto upscaleMethod = GetUpscaleMethod();
-
-	// Delete or create resources as necessary
-	CheckResources(upscaleMethod);
+	CheckResources(GetUpscaleMethod());
 
 	if (d3d12SwapChainActive)
 		dx12SwapChain.CreateSharedResources();
+
+	copyDepthToSharedBufferPS.attach((ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\Upscaling\\CopyDepthToSharedBufferPS.hlsl", { { "PSHADER", "" } }, "ps_5_0"));
 }
 
 void Upscaling::ClearShaderCache()
@@ -842,40 +805,6 @@ void Upscaling::ClearShaderCache()
 	depthRefractionUpscalePS = nullptr;  // com_ptr automatically releases
 	underwaterMaskUpscalePS = nullptr;   // com_ptr automatically releases
 	upscaleVS = nullptr;                 // com_ptr automatically releases
-}
-
-void Upscaling::CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter)
-{
-	// Create D3D12 device on same adapter
-	DX::ThrowIfFailed(D3D12CreateDevice(a_dxgiAdapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(sharedD3D12Device.put())));
-
-	// Create command queue
-	D3D12_COMMAND_QUEUE_DESC queueDesc = {};
-	queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-	queueDesc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
-	queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-	queueDesc.NodeMask = 0;
-
-	DX::ThrowIfFailed(sharedD3D12Device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(sharedD3D12CommandQueue.put())));
-
-	// Create command allocator
-	DX::ThrowIfFailed(sharedD3D12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(sharedD3D12CommandAllocator.put())));
-
-	// Create command list
-	DX::ThrowIfFailed(sharedD3D12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, sharedD3D12CommandAllocator.get(), nullptr, IID_PPV_ARGS(sharedD3D12CommandList.put())));
-
-	// Create fence for synchronization
-	DX::ThrowIfFailed(sharedD3D12Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(sharedD3D12Fence.put())));
-
-	sharedFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-	if (sharedFenceEvent == nullptr) {
-		throw std::runtime_error("Failed to create shared fence event");
-	}
-
-	// Close initial command list
-	sharedD3D12CommandList->Close();
-
-	logger::info("[Upscaling] Shared D3D12 device and interop resources created successfully");
 }
 
 void Upscaling::CopySharedD3D12Resources()
