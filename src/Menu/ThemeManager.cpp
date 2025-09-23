@@ -72,6 +72,40 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 	resizeGripHovered.w = 0.1f;
 	colors[ImGuiCol_ResizeGripHovered] = resizeGripHovered;
 	colors[ImGuiCol_ResizeGripActive] = resizeGripHovered;
+
+	// Auto-adjust text colors for better contrast on selection backgrounds
+	// This fixes white-on-white text issues in high contrast themes
+	auto calculateLuminance = [](const ImVec4& color) {
+		auto toLinear = [](float c) { return c <= 0.03928f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f); };
+		float r = toLinear(color.x), g = toLinear(color.y), b = toLinear(color.z);
+		return 0.2126f * r + 0.7152f * g + 0.0722f * b;
+	};
+
+	auto getContrastingTextColor = [&](const ImVec4& bgColor) {
+		float luminance = calculateLuminance(bgColor);
+		return luminance > 0.5f ? ImVec4(0.0f, 0.0f, 0.0f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+	};
+
+	// Apply contrast-aware text for selection states
+	if (calculateLuminance(colors[ImGuiCol_HeaderActive]) > 0.5f) {
+		colors[ImGuiCol_TextSelectedBg] = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);  // Black text on light selection
+	}
+	if (calculateLuminance(colors[ImGuiCol_HeaderHovered]) > 0.5f) {
+		// For hovered items, we can't directly change text color, but we can adjust the hover background
+		// to ensure better contrast with the current text color
+		float textLum = calculateLuminance(colors[ImGuiCol_Text]);
+		if (textLum > 0.5f) {  // If text is light, darken the hover background
+			ImVec4 darkerHover = colors[ImGuiCol_HeaderHovered];
+			darkerHover.x *= 0.3f; darkerHover.y *= 0.3f; darkerHover.z *= 0.3f;
+			colors[ImGuiCol_HeaderHovered] = darkerHover;
+		}
+	}
+
+	// Apply scrollbar opacity settings
+	colors[ImGuiCol_ScrollbarBg].w = themeSettings.ScrollbarOpacity.Background;
+	colors[ImGuiCol_ScrollbarGrab].w = themeSettings.ScrollbarOpacity.Thumb;
+	colors[ImGuiCol_ScrollbarGrabHovered].w = themeSettings.ScrollbarOpacity.ThumbHovered;
+	colors[ImGuiCol_ScrollbarGrabActive].w = themeSettings.ScrollbarOpacity.ThumbActive;
 }
 
 void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
@@ -211,6 +245,58 @@ bool ThemeManager::LoadTheme(const std::string& themeName, json& themeSettings)
 		}
 	} catch (const std::exception& e) {
 		logger::warn("Error loading theme {}: {}", themeName, e.what());
+		return false;
+	}
+}
+
+bool ThemeManager::SaveTheme(const std::string& themeName, const json& themeSettings, 
+                            const std::string& displayName, const std::string& description)
+{
+	if (themeName.empty()) {
+		logger::warn("Cannot save theme with empty name");
+		return false;
+	}
+
+	// Create the full theme JSON structure
+	json fullTheme = {
+		{"DisplayName", displayName.empty() ? themeName : displayName},
+		{"Description", description.empty() ? "Custom user theme" : description},
+		{"Version", "1.0.0"},
+		{"Author", "User"},
+		{"Theme", themeSettings}
+	};
+
+	// Generate safe filename (remove invalid characters)
+	std::string safeFileName = themeName;
+	std::replace_if(safeFileName.begin(), safeFileName.end(), 
+		[](char c) { return c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|'; }, 
+		'_');
+
+	auto themesDir = GetThemesDirectory();
+	auto filePath = themesDir / (safeFileName + ".json");
+
+	try {
+		// Ensure themes directory exists
+		std::filesystem::create_directories(themesDir);
+
+		// Write the theme file
+		std::ofstream file(filePath);
+		if (!file.is_open()) {
+			logger::warn("Failed to create theme file: {}", filePath.string());
+			return false;
+		}
+
+		file << fullTheme.dump(4);  // Pretty print with 4-space indentation
+		file.close();
+
+		logger::info("Saved theme: {} to {}", themeName, filePath.string());
+
+		// Refresh themes to include the new one
+		RefreshThemes();
+		
+		return true;
+	} catch (const std::exception& e) {
+		logger::warn("Error saving theme {}: {}", themeName, e.what());
 		return false;
 	}
 }

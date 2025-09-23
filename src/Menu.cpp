@@ -65,6 +65,13 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	MinimizedFactor)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	Menu::ThemeSettings::ScrollbarOpacitySettings,
+	Background,
+	Thumb,
+	ThumbHovered,
+	ThumbActive)
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ImGuiStyle,
 	WindowPadding,
 	WindowRounding,
@@ -108,6 +115,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UseSimplePalette,
 	ShowActionIcons,
 	TooltipHoverDelay,
+	ScrollbarOpacity,
 	Palette,
 	StatusPalette,
 	FeatureHeading,

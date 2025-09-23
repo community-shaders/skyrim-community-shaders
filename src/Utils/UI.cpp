@@ -1205,5 +1205,87 @@ namespace Util
 
 			return keyboard_keys_international[key];
 		}
+
+		// Color utilities for contrast and readability
+		namespace ColorUtils
+		{
+			float CalculateLuminance(const ImVec4& color)
+			{
+				// Convert to linear RGB first (gamma correction)
+				auto toLinear = [](float c) {
+					return c <= 0.03928f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f);
+				};
+
+				float r = toLinear(color.x);
+				float g = toLinear(color.y);
+				float b = toLinear(color.z);
+
+				// Calculate relative luminance using WCAG formula
+				return 0.2126f * r + 0.7152f * g + 0.0722f * b;
+			}
+
+			ImVec4 GetContrastingTextColor(const ImVec4& backgroundColor, float threshold)
+			{
+				float luminance = CalculateLuminance(backgroundColor);
+				
+				// If background is bright (high luminance), use black text
+				// If background is dark (low luminance), use white text
+				if (luminance > threshold) {
+					return ImVec4(0.0f, 0.0f, 0.0f, 1.0f);  // Black
+				} else {
+					return ImVec4(1.0f, 1.0f, 1.0f, 1.0f);  // White
+				}
+			}
+
+			float CalculateContrastRatio(const ImVec4& color1, const ImVec4& color2)
+			{
+				float lum1 = CalculateLuminance(color1);
+				float lum2 = CalculateLuminance(color2);
+				
+				// Ensure lighter color is in numerator
+				float lighter = std::max(lum1, lum2);
+				float darker = std::min(lum1, lum2);
+				
+				return (lighter + 0.05f) / (darker + 0.05f);
+			}
+
+			bool ContrastSelectable(const char* label, bool selected, ImGuiSelectableFlags flags, const ImVec2& size)
+			{
+				// Get current style colors for different states
+				ImGuiStyle& style = ImGui::GetStyle();
+				
+				// We need to handle text color based on the selectable's background state
+				// For selected items, ImGui uses HeaderActive color which might be light
+				ImVec4 selectedBgColor = style.Colors[ImGuiCol_HeaderActive];
+				ImVec4 hoveredBgColor = style.Colors[ImGuiCol_HeaderHovered];
+				
+				// Calculate text colors for each state
+				ImVec4 selectedTextColor = GetContrastingTextColor(selectedBgColor, 0.5f);
+				ImVec4 hoveredTextColor = GetContrastingTextColor(hoveredBgColor, 0.5f);
+				ImVec4 normalTextColor = style.Colors[ImGuiCol_Text];
+				
+				// If the item is selected, we know it will have the selected background
+				if (selected) {
+					ImGui::PushStyleColor(ImGuiCol_Text, selectedTextColor);
+				} else {
+					// For non-selected items, we'll use normal text unless we detect high contrast issues
+					// Check if hover/active backgrounds would cause contrast issues
+					float hoveredContrast = CalculateContrastRatio(normalTextColor, hoveredBgColor);
+					if (hoveredContrast < 3.0f) {  // WCAG AA minimum is 4.5, but 3.0 for safety
+						ImGui::PushStyleColor(ImGuiCol_Text, hoveredTextColor);
+					} else {
+						ImGui::PushStyleColor(ImGuiCol_Text, normalTextColor);
+					}
+				}
+				
+				// Create the selectable with the adjusted text color
+				bool result = ImGui::Selectable(label, selected, flags, size);
+				
+				// Restore original text color
+				ImGui::PopStyleColor();
+				
+				return result;
+			}
+		}
 	}
 }  // namespace Util

@@ -113,6 +113,15 @@ public:
 		bool UseSimplePalette = true;    // DEPRECATED: No longer affects behavior. UI now shows both Simple and Advanced controls.
 		bool ShowActionIcons = true;     // whether to show action buttons as icons
 		float TooltipHoverDelay = 0.5f;  // tooltip hover delay in seconds
+		
+		// Scrollbar opacity settings
+		struct ScrollbarOpacitySettings
+		{
+			float Background = 1.0f;  // Background of the scrollbar area
+			float Thumb = 1.0f;       // The draggable thumb/grip
+			float ThumbHovered = 1.0f; // Thumb when hovered
+			float ThumbActive = 1.0f;  // Thumb when being dragged
+		} ScrollbarOpacity;
 		struct PaletteColors
 		{
 			ImVec4 Background{ 0.f, 0.f, 0.f, 0.5882353186607361f };

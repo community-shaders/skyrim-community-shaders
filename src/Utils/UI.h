@@ -147,6 +147,46 @@ namespace Util
 		bool m_treeNodeOpened;
 	};
 
+	/**
+	 * Color utilities for contrast and readability
+	 */
+	namespace ColorUtils
+	{
+		/**
+		 * Calculates the relative luminance of a color according to WCAG guidelines
+		 * @param color ImVec4 color to calculate luminance for
+		 * @return Luminance value between 0.0 (darkest) and 1.0 (brightest)
+		 */
+		float CalculateLuminance(const ImVec4& color);
+
+		/**
+		 * Determines the appropriate text color (black or white) for maximum contrast
+		 * against the given background color
+		 * @param backgroundColor Background color to test against
+		 * @param threshold Luminance threshold for switching (default 0.5)
+		 * @return Black color for light backgrounds, white color for dark backgrounds
+		 */
+		ImVec4 GetContrastingTextColor(const ImVec4& backgroundColor, float threshold = 0.5f);
+
+		/**
+		 * Calculates contrast ratio between two colors according to WCAG guidelines
+		 * @param color1 First color
+		 * @param color2 Second color  
+		 * @return Contrast ratio (1.0 = no contrast, 21.0 = maximum contrast)
+		 */
+		float CalculateContrastRatio(const ImVec4& color1, const ImVec4& color2);
+
+		/**
+		 * Creates a selectable item with automatic contrast-aware text coloring
+		 * @param label Text to display
+		 * @param selected Whether the item is currently selected
+		 * @param flags Selectable flags (optional)
+		 * @param size Size of the selectable area (optional)
+		 * @return True if the selectable was clicked
+		 */
+		bool ContrastSelectable(const char* label, bool selected, ImGuiSelectableFlags flags = 0, const ImVec2& size = ImVec2(0, 0));
+	}
+
 	bool PercentageSlider(const char* label, float* data, float lb = 0.f, float ub = 100.f, const char* format = "%.1f %%");
 	ImVec2 GetNativeViewportSizeScaled(float scale);
 

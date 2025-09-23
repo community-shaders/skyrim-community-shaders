@@ -151,6 +151,11 @@ namespace Util
 			return GetRootRealPath() / "Shaders";
 		}
 
+		std::filesystem::path GetThemesRealPath()
+		{
+			return GetRootRealPath() / "SKSE" / "Plugins" / "CommunityShaders" / "Themes";
+		}
+
 		std::filesystem::path GetFeaturesRealPath()
 		{
 			return GetShadersRealPath() / "Features";

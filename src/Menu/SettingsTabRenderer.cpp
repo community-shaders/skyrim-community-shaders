@@ -1,14 +1,19 @@
 #include "SettingsTabRenderer.h"
 
 #include <algorithm>
+#include <cstring>
+#include <filesystem>
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <windows.h>
 
 #include "Globals.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "ThemeManager.h"
 #include "Util.h"
+
+using json = nlohmann::json;
 
 void SettingsTabRenderer::RenderGeneralSettings(
 	SettingsState& state,
@@ -158,6 +163,13 @@ void SettingsTabRenderer::RenderThemesTab()
 	if (ImGui::BeginTabItem("Themes")) {
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 
+		// Static variables for popup state and new theme creation
+		static bool showCreateThemePopup = false;
+		static bool isCreatingNewTheme = false;
+		static char newThemeName[128] = "";
+		static char newThemeDisplayName[128] = "";
+		static char newThemeDescription[256] = "";
+
 		// Theme Preset Selection
 		ImGui::SeparatorText("Theme Preset");
 
@@ -178,8 +190,9 @@ void SettingsTabRenderer::RenderThemesTab()
 		// Clear and rebuild the lists
 		displayNames.clear();
 		items.clear();
-		
-		displayNames.push_back("Custom"); // First item for custom theme
+
+		// Add "+ Create New" option at the top
+		displayNames.push_back("+ Create New");
 		items.push_back(displayNames.back().c_str());
 
 		for (const auto& theme : themes) {
@@ -187,12 +200,25 @@ void SettingsTabRenderer::RenderThemesTab()
 			items.push_back(displayNames.back().c_str());
 		}
 
-		// Find current selection index
-		int currentItem = 0; // Default to "Custom"
-		if (!globals::menu->GetSettings().SelectedThemePreset.empty()) {
+		// Find current selection index - default to "Default" if no theme selected
+		// Note: Add 1 to account for "+ Create New" option at index 0
+		int currentItem = 1; // Default to first actual theme (Default Dark)
+		std::string currentThemePreset = globals::menu->GetSettings().SelectedThemePreset;
+		
+		// If no theme is selected, default to "Default"
+		if (currentThemePreset.empty()) {
+			currentThemePreset = "Default";
+			globals::menu->GetSettings().SelectedThemePreset = "Default";
+		}
+		
+		// If we're in create new mode, show that as selected
+		if (isCreatingNewTheme) {
+			currentItem = 0; // "+ Create New"
+		} else {
+			// Find the theme in the list (skip index 0 which is "+ Create New")
 			for (size_t i = 0; i < themes.size(); ++i) {
-				if (themes[i].name == globals::menu->GetSettings().SelectedThemePreset) {
-					currentItem = static_cast<int>(i) + 1; // +1 for "Custom"
+				if (themes[i].name == currentThemePreset) {
+					currentItem = static_cast<int>(i + 1); // +1 for "+ Create New" offset
 					break;
 				}
 			}
@@ -201,20 +227,23 @@ void SettingsTabRenderer::RenderThemesTab()
 		// Theme preset dropdown
 		if (ImGui::Combo("##ThemePreset", &currentItem, items.data(), static_cast<int>(items.size()))) {
 			if (currentItem == 0) {
-				// Custom theme selected
-				globals::menu->GetSettings().SelectedThemePreset = "";
-			} else {
-				// Preset theme selected
-				std::string selectedTheme = themes[currentItem - 1].name; // -1 for "Custom" offset
+				// "+ Create New" selected
+				isCreatingNewTheme = true;
+				// Keep current theme settings as starting point
+			} else if (currentItem >= 1 && currentItem <= static_cast<int>(themes.size())) {
+				// Actual theme selected (subtract 1 for "+ Create New" offset)
+				isCreatingNewTheme = false;
+				std::string selectedTheme = themes[currentItem - 1].name;
 				if (globals::menu->LoadThemePreset(selectedTheme)) {
 					// Theme loaded successfully, update UI
 					themeSettings = globals::menu->GetSettings().Theme;
 				}
 			}
 		}
-		// Show theme description as tooltip
-		if (currentItem > 0 && currentItem - 1 < static_cast<int>(themes.size())) {
-			const auto& selectedTheme = themes[currentItem - 1];
+		
+		// Show theme description as tooltip (only for actual themes, not "+ Create New")
+		if (currentItem >= 1 && currentItem <= static_cast<int>(themes.size())) {
+			const auto& selectedTheme = themes[currentItem - 1]; // -1 for "+ Create New" offset
 			if (!selectedTheme.description.empty()) {
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("%s", selectedTheme.description.c_str());
@@ -225,13 +254,133 @@ void SettingsTabRenderer::RenderThemesTab()
 		ImGui::SameLine();
 		if (ImGui::Button("Refresh Themes")) {
 			themeManager->RefreshThemes();
-			// Reset selection if current theme no longer exists
-			if (!globals::menu->GetSettings().SelectedThemePreset.empty()) {
-				const auto* themeInfo = themeManager->GetThemeInfo(globals::menu->GetSettings().SelectedThemePreset);
-				if (!themeInfo) {
-					globals::menu->GetSettings().SelectedThemePreset = "";
+			// Ensure a valid theme is still selected
+			const auto* themeInfo = themeManager->GetThemeInfo(globals::menu->GetSettings().SelectedThemePreset);
+			if (!themeInfo) {
+				globals::menu->GetSettings().SelectedThemePreset = "Default";
+			}
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Open Themes Folder")) {
+			std::filesystem::path themesPath = Util::PathHelpers::GetThemesRealPath();
+			ShellExecuteA(NULL, "open", themesPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Opens the Themes folder where you can add custom theme files.");
+		}
+
+		// Update Current Theme Button (only show for existing themes, not when creating new)
+		if (!isCreatingNewTheme) {
+			if (!currentThemePreset.empty() && currentThemePreset != "Default") {
+				ImGui::SameLine();
+				if (ImGui::Button("Update Current Theme")) {
+					// Get current theme info
+					const auto* currentThemeInfo = themeManager->GetThemeInfo(currentThemePreset);
+					if (currentThemeInfo) {
+						// Use the existing SaveTheme method to serialize the theme settings
+						json currentThemeJson;
+						globals::menu->SaveTheme(currentThemeJson);
+						
+						// Overwrite the current theme with updated settings
+						if (themeManager->SaveTheme(currentThemePreset, currentThemeJson["Theme"], 
+						                           currentThemeInfo->displayName, currentThemeInfo->description)) {
+							// Theme updated successfully
+						}
+					}
+				}
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Updates the currently selected theme (%s) with your current settings", currentThemePreset.c_str());
 				}
 			}
+		}
+
+		// Save Theme Button
+		ImGui::SeparatorText("Save Theme");
+		if (ImGui::Button("Save Theme")) {
+			if (isCreatingNewTheme) {
+				// Show popup for new theme creation
+				showCreateThemePopup = true;
+				// Clear the input fields
+				memset(newThemeName, 0, sizeof(newThemeName));
+				memset(newThemeDisplayName, 0, sizeof(newThemeDisplayName));
+				memset(newThemeDescription, 0, sizeof(newThemeDescription));
+			} else {
+				// Overwrite existing theme
+				if (!currentThemePreset.empty()) {
+					const auto* currentThemeInfo = themeManager->GetThemeInfo(currentThemePreset);
+					if (currentThemeInfo) {
+						// Use the existing SaveTheme method to serialize the theme settings
+						json currentThemeJson;
+						globals::menu->SaveTheme(currentThemeJson);
+						
+						// Overwrite the current theme with updated settings
+						if (themeManager->SaveTheme(currentThemePreset, currentThemeJson["Theme"], 
+						                           currentThemeInfo->displayName, currentThemeInfo->description)) {
+							// Theme updated successfully
+						}
+					}
+				}
+			}
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			if (isCreatingNewTheme) {
+				ImGui::Text("Create a new theme with current settings");
+			} else {
+				ImGui::Text("Overwrite the current theme with your settings");
+			}
+		}
+
+		// Create Theme Popup
+		if (showCreateThemePopup) {
+			ImGui::OpenPopup("Create New Theme");
+		}
+
+		// Popup modal for creating new theme
+		if (ImGui::BeginPopupModal("Create New Theme", &showCreateThemePopup, ImGuiWindowFlags_AlwaysAutoResize)) {
+			ImGui::Text("Create a new theme with your current settings:");
+			ImGui::Separator();
+
+			ImGui::InputText("Theme Name", newThemeName, sizeof(newThemeName));
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("File name for the theme (without .json extension)");
+			}
+			
+			ImGui::InputText("Display Name", newThemeDisplayName, sizeof(newThemeDisplayName));
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Human-readable name shown in the dropdown");
+			}
+			
+			ImGui::InputTextMultiline("Description", newThemeDescription, sizeof(newThemeDescription), ImVec2(400, 80));
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Optional description for the theme");
+			}
+
+			ImGui::Separator();
+
+			// Buttons
+			if (ImGui::Button("Create Theme") && strlen(newThemeName) > 0) {
+				// Use the existing SaveTheme method to serialize the theme settings
+				json currentThemeJson;
+				globals::menu->SaveTheme(currentThemeJson);
+				
+				std::string displayName = strlen(newThemeDisplayName) > 0 ? std::string(newThemeDisplayName) : std::string(newThemeName);
+				std::string description = strlen(newThemeDescription) > 0 ? std::string(newThemeDescription) : "";
+				
+				if (themeManager->SaveTheme(std::string(newThemeName), currentThemeJson["Theme"], displayName, description)) {
+					// Theme created successfully, load it and exit create mode
+					globals::menu->LoadThemePreset(std::string(newThemeName));
+					isCreatingNewTheme = false;
+					showCreateThemePopup = false;
+				}
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel")) {
+				showCreateThemePopup = false;
+			}
+
+			ImGui::EndPopup();
 		}
 
 		ImGui::SeparatorText("UI Elements");
@@ -272,6 +421,20 @@ void SettingsTabRenderer::RenderStylingTab()
 		ImGui::SliderFloat("Indent Spacing", &style.IndentSpacing, 0.0f, 30.0f, "%.0f");
 		ImGui::SliderFloat("Scrollbar Size", &style.ScrollbarSize, 1.0f, 20.0f, "%.0f");
 		ImGui::SliderFloat("Grab Min Size", &style.GrabMinSize, 1.0f, 20.0f, "%.0f");
+
+		ImGui::SeparatorText("Scrollbar Opacity");
+		ImGui::SliderFloat("Track Opacity", &themeSettings.ScrollbarOpacity.Background, 0.0f, 1.0f, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Controls the opacity of the scrollbar track/channel (the background area behind the scrollbar).");
+		ImGui::SliderFloat("Thumb Opacity", &themeSettings.ScrollbarOpacity.Thumb, 0.0f, 1.0f, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Controls the opacity of the scrollbar thumb (the draggable part).");
+		ImGui::SliderFloat("Thumb Hovered Opacity", &themeSettings.ScrollbarOpacity.ThumbHovered, 0.0f, 1.0f, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Controls the opacity of the scrollbar thumb when hovered.");
+		ImGui::SliderFloat("Thumb Active Opacity", &themeSettings.ScrollbarOpacity.ThumbActive, 0.0f, 1.0f, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Controls the opacity of the scrollbar thumb when being dragged.");
 
 		ImGui::SeparatorText("Borders");
 		ImGui::SliderFloat("Window Border Size", &style.WindowBorderSize, 0.0f, 5.0f, "%.0f");

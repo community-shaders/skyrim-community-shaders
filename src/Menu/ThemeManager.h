@@ -109,6 +109,17 @@ public:
 	bool LoadTheme(const std::string& themeName, json& themeSettings);
 
 	/**
+	 * @brief Saves current theme settings to a new theme file
+	 * @param themeName Name for the new theme file
+	 * @param themeSettings Theme settings to save
+	 * @param displayName Display name for the theme
+	 * @param description Description for the theme
+	 * @return True if theme was saved successfully
+	 */
+	bool SaveTheme(const std::string& themeName, const json& themeSettings, 
+	               const std::string& displayName, const std::string& description);
+
+	/**
 	 * @brief Gets theme info by name
 	 * @param themeName Name of the theme
 	 * @return Pointer to theme info or nullptr if not found

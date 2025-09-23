@@ -161,6 +161,12 @@ namespace Util
 		std::filesystem::path GetShadersRealPath();
 
 		/**
+		 * Returns the real path to the Themes directory containing theme JSON files.
+		 * @return  <mod_root> / "SKSE" / "Plugins" / "CommunityShaders" / "Themes"
+		 */
+		std::filesystem::path GetThemesRealPath();
+
+		/**
 		 * Returns the real path to the Features directory containing feature INI files.
 		 * @return  <mod_root> / "Shaders" / "Features"
 		 */
