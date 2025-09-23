@@ -880,10 +880,6 @@ void Upscaling::CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter)
 
 void Upscaling::CopySharedD3D12Resources()
 {
-	if (!d3d12SwapChainActive || !settings.frameGenerationMode) {
-		return;
-	}
-
 	globals::state->BeginPerfEvent("Copy Shared D3D12 Resources");
 
 	auto renderer = globals::game::renderer;
@@ -1399,7 +1395,8 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a1, uint32_t a
 	auto& upscaling = globals::features::upscaling;
 	auto upscaleMethod = upscaling.GetUpscaleMethod();
 
-	upscaling.CopySharedD3D12Resources();
+	if (upscaling.d3d12SwapChainActive && upscaling.settings.frameGenerationMode)
+		upscaling.CopySharedD3D12Resources();
 
 	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA)
 		upscaling.PerformUpscaling();
