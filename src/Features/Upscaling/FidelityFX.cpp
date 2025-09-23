@@ -51,7 +51,7 @@ void FidelityFX::SetupFrameGeneration()
 	ffx::CreateContextDescFrameGeneration createFg{};
 	createFg.displaySize = { swapChain.swapChainDesc.Width, swapChain.swapChainDesc.Height };
 	createFg.maxRenderSize = createFg.displaySize;
-	createFg.flags = 0;
+	createFg.flags = FFX_FRAMEGENERATION_ENABLE_ASYNC_WORKLOAD_SUPPORT;
 	createFg.backBufferFormat = ffxApiGetSurfaceFormatDX12(swapChain.swapChainDesc.Format);
 
 	ffx::CreateBackendDX12Desc backendDesc{};
@@ -100,8 +100,8 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 	configParameters.frameID = frameID;
 	configParameters.swapChain = swapChain.swapChain;
 	configParameters.onlyPresentGenerated = false;
-	configParameters.allowAsyncWorkloads = false;
 	configParameters.flags = 0;
+	configParameters.allowAsyncWorkloads = true;
 
 	auto state = globals::state;
 
@@ -278,7 +278,7 @@ void FidelityFX::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 		dispatchParameters.cameraNear = *globals::game::cameraNear;
 
 		dispatchParameters.enableSharpening = true;
-		dispatchParameters.sharpness = 0.7f;
+		dispatchParameters.sharpness = 0.5f;
 
 		dispatchParameters.cameraFovAngleVertical = Util::GetVerticalFOVRad();
 		dispatchParameters.viewSpaceToMetersFactor = 0.01428222656f;
