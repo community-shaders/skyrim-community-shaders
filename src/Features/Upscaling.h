@@ -42,8 +42,8 @@ public:
 	{
 		kNONE,
 		kTAA,
-		kDLSS,
-		kFSR
+		kFSR,
+		kDLSS
 	};
 
 	struct Settings
@@ -134,7 +134,6 @@ public:
 	Texture2D* reactiveMaskTexture = nullptr;
 	Texture2D* transparencyCompositionMaskTexture = nullptr;
 	Texture2D* motionVectorCopyTexture = nullptr;
-	Texture2D* nisSharpenerTexture = nullptr;
 
 	virtual void ClearShaderCache() override;
 
@@ -206,16 +205,6 @@ public:
 	IDXGISwapChain* GetProxySwapChain();
 
 private:
-	// Sentinel value used to mark unavailable preset scales.
-	static constexpr float kScaleUnavailable = 0.0f;
-
-	// Cached preset scales for UI labels. Uninitialized entries are marked
-	// with kScaleUnavailable.
-	std::array<float, 5> cachedPresetScales{};
-	UpscaleMethod cachedPresetMethod = UpscaleMethod::kNONE;
-	// Populate the cachedPresetScales for the specified method. Encapsulates
-	// vendor SDK calls and sentinel handling.
-	void PopulateCachedPresetScales(UpscaleMethod a_method);
 
 	struct Main_UpdateJitter
 	{
