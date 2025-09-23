@@ -153,11 +153,9 @@ void Upscaling::DrawSettings()
 	std::vector<std::string> upscaleModes = { "None", "TAA" };
 
 	std::string fsrLabel = "AMD FSR 3.1";
-	std::array<float, 5> fsrScales{};
 	upscaleModes.push_back(fsrLabel);
 
 	std::string dlssLabel = "NVIDIA DLSS";
-	std::array<float, 5> dlssScales{};
 	upscaleModes.push_back(dlssLabel);
 
 	// Determine available modes
@@ -195,19 +193,15 @@ void Upscaling::DrawSettings()
 			// Choose preset name set and the corresponding scales once, then show a
 			// single SliderInt to avoid duplicated calls.
 			const char* baseLabel = nullptr;
-			const std::array<float, 5>* scalesPtr = nullptr;
 
 			if (upscaleMethod == UpscaleMethod::kFSR) {
 				baseLabel = upscalePresets[presetIndex];
-				scalesPtr = &fsrScales;
 			} else if (upscaleMethod == UpscaleMethod::kDLSS) {
 				baseLabel = upscalePresetsDLSS[presetIndex];
-				scalesPtr = &dlssScales;
 			}
 
-			if (baseLabel && scalesPtr) {
-				int scalePercent = static_cast<int>(resolutionScale.x * 100.0f);
-				ImGui::SliderInt("Upscale Preset (Scale %)", (int*)&settings.qualityMode, 0, 4, std::format("{} ({}%)", baseLabel, scalePercent).c_str());
+			if (baseLabel) {
+				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, baseLabel);
 			}
 		}
 	} else {
