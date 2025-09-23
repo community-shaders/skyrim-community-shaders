@@ -249,8 +249,7 @@ void Upscaling::DrawSettings()
 				ImGui::PopStyleColor();
 			}
 
-			std::string backendLabel = fidelityFX.isFrameGenActive ? "FSR3" : "None";
-			std::string enabledLabel = "Enabled (" + backendLabel + ")";
+			std::string enabledLabel = "Enabled";
 			const char* toggleModes[] = { "Disabled", "Enabled" };
 			const char* toggleModesFG[] = { "Disabled", enabledLabel.c_str() };
 
