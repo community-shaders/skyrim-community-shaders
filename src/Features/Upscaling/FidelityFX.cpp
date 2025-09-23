@@ -240,13 +240,12 @@ FfxResource ffxGetResource(ID3D11Resource* dx11Resource,
 	return resource;
 }
 
-void FidelityFX::Upscale(ID3D11Resource* a_color, Texture2D* a_reactiveMask, Texture2D* a_transparencyMask, float2 a_jitter)
+void FidelityFX::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, ID3D11Resource* a_motionVectors)
 {
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
 	auto state = globals::state;
 	auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
-	auto& motionVectorsTexture = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kMOTION_VECTOR];
 
 	auto screenSize = state->screenSize;
 	auto renderSize = Util::ConvertToDynamic(screenSize);
@@ -255,20 +254,24 @@ void FidelityFX::Upscale(ID3D11Resource* a_color, Texture2D* a_reactiveMask, Tex
 		FfxFsr3DispatchUpscaleDescription dispatchParameters{};
 
 		dispatchParameters.commandList = ffxGetCommandListDX11(context);
-		dispatchParameters.color = ffxGetResource(a_color, L"FSR3_Input_OutputColor");
+		dispatchParameters.color = ffxGetResource(a_upscalingTexture, L"FSR3_Input_OutputColor");
 		dispatchParameters.depth = ffxGetResource(depthTexture.texture, L"FSR3_InputDepth");
-		dispatchParameters.motionVectors = ffxGetResource(motionVectorsTexture.texture, L"FSR3_InputMotionVectors");
+		dispatchParameters.motionVectors = ffxGetResource(a_motionVectors, L"FSR3_InputMotionVectors");
 		dispatchParameters.exposure = ffxGetResource(nullptr, L"FSR3_InputExposure");
 		dispatchParameters.upscaleOutput = dispatchParameters.color;
-		dispatchParameters.reactive = ffxGetResource(a_reactiveMask->resource.get(), L"FSR3_InputReactiveMap");
-		dispatchParameters.transparencyAndComposition = ffxGetResource(a_transparencyMask->resource.get(), L"FSR3_TransparencyAndCompositionMap");
+		dispatchParameters.reactive = ffxGetResource(a_reactiveMask, L"FSR3_InputReactiveMap");
+		dispatchParameters.transparencyAndComposition = ffxGetResource(a_transparencyCompositionMask, L"FSR3_TransparencyAndCompositionMap");
 
 		dispatchParameters.motionVectorScale.x = globals::game::isVR ? renderSize.x * 0.5f : renderSize.x;
 		dispatchParameters.motionVectorScale.y = renderSize.y;
 		dispatchParameters.renderSize.width = (uint)renderSize.x;
 		dispatchParameters.renderSize.height = (uint)renderSize.y;
-		dispatchParameters.jitterOffset.x = -a_jitter.x;
-		dispatchParameters.jitterOffset.y = -a_jitter.y;
+
+		auto& upscaling = globals::features::upscaling;
+		auto jitter = upscaling.jitter;
+
+		dispatchParameters.jitterOffset.x = -jitter.x;
+		dispatchParameters.jitterOffset.y = -jitter.y;
 
 		dispatchParameters.frameTimeDelta = *globals::game::deltaTime * 1000.f;
 

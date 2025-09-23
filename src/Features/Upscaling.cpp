@@ -441,24 +441,23 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 {
 	logger::debug("[Upscaling] Creating texture resources for method {}", (int)a_upscalemethod);
 
-	auto renderer = globals::game::renderer;
-	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	if (a_upscalemethod == UpscaleMethod::kDLSS || a_upscalemethod == UpscaleMethod::kFSR) {
+		auto renderer = globals::game::renderer;
+		auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-	D3D11_TEXTURE2D_DESC texDesc{};
-	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-	D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+		D3D11_TEXTURE2D_DESC texDesc{};
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 
-	main.texture->GetDesc(&texDesc);
-	main.SRV->GetDesc(&srvDesc);
-	main.UAV->GetDesc(&uavDesc);
+		main.texture->GetDesc(&texDesc);
+		main.SRV->GetDesc(&srvDesc);
+		main.UAV->GetDesc(&uavDesc);
 
-	texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-	texDesc.Format = DXGI_FORMAT_R8_UNORM;
-	srvDesc.Format = texDesc.Format;
-	uavDesc.Format = texDesc.Format;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+		texDesc.Format = DXGI_FORMAT_R8_UNORM;
+		srvDesc.Format = texDesc.Format;
+		uavDesc.Format = texDesc.Format;
 
-	// DLSS uses D3D11 textures (not shared D3D12)
-	if (a_upscalemethod == UpscaleMethod::kDLSS) {
 		if (!reactiveMaskTexture) {
 			reactiveMaskTexture = new Texture2D(texDesc);
 			reactiveMaskTexture->CreateSRV(srvDesc);
@@ -487,22 +486,8 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 		}
 	}
 
-	// FSR uses D3D11 textures with same setup as DLSS
 	if (a_upscalemethod == UpscaleMethod::kFSR) {
-		if (!reactiveMaskTexture) {
-			reactiveMaskTexture = new Texture2D(texDesc);
-			reactiveMaskTexture->CreateSRV(srvDesc);
-			reactiveMaskTexture->CreateUAV(uavDesc);
-		}
-
-		if (!transparencyCompositionMaskTexture) {
-			transparencyCompositionMaskTexture = new Texture2D(texDesc);
-			transparencyCompositionMaskTexture->CreateSRV(srvDesc);
-			transparencyCompositionMaskTexture->CreateUAV(uavDesc);
-		}
-
 		fidelityFX.CreateFSRResources();
-	
 	}
 }
 
@@ -1273,20 +1258,7 @@ void Upscaling::Upscale()
 			ID3D11ShaderResourceView* views[4] = { temporalAAMask.SRV, normals.SRV, motionVector.SRV, depth.depthSRV };
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
-			// Both DLSS and FSR use these textures
-			ID3D11UnorderedAccessView* reactiveMaskUAV = nullptr;
-			ID3D11UnorderedAccessView* transparencyUAV = nullptr;
-			ID3D11UnorderedAccessView* motionVectorUAV = nullptr;
-
-			if (upscaleMethod == UpscaleMethod::kDLSS || upscaleMethod == UpscaleMethod::kFSR) {
-				reactiveMaskUAV = reactiveMaskTexture->uav.get();
-				transparencyUAV = transparencyCompositionMaskTexture->uav.get();
-				if (upscaleMethod == UpscaleMethod::kDLSS) {
-					motionVectorUAV = motionVectorCopyTexture->uav.get();
-				}
-			}
-
-			ID3D11UnorderedAccessView* uavs[3] = { reactiveMaskUAV, transparencyUAV, motionVectorUAV };
+			ID3D11UnorderedAccessView* uavs[3] = { reactiveMaskTexture->uav.get(), transparencyCompositionMaskTexture->uav.get(), motionVectorCopyTexture->uav.get() };
 			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
 			context->CSSetShader(GetEncodeTexturesCS(), nullptr, 0);
@@ -1313,9 +1285,9 @@ void Upscaling::Upscale()
 		state->BeginPerfEvent("Upscaling");
 
 		if (upscaleMethod == UpscaleMethod::kDLSS) {
-			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get(), sl::DLSSPreset::ePresetK);
+			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get());
 		} else if (upscaleMethod == UpscaleMethod::kFSR) {
-			fidelityFX.Upscale(main.texture, reactiveMaskTexture, transparencyCompositionMaskTexture, jitter);
+			fidelityFX.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get());
 		}
 
 		state->EndPerfEvent();

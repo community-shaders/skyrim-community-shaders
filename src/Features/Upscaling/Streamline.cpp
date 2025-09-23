@@ -251,7 +251,7 @@ void Streamline::CheckFrameConstants()
 	}
 }
 
-void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, ID3D11Resource* a_motionVectors, sl::DLSSPreset a_preset)
+void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, ID3D11Resource* a_motionVectors)
 {
 	CheckFrameConstants();
 
@@ -290,11 +290,11 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	dlssOptions.preExposure = 1.0f;
 	dlssOptions.sharpness = 0.0f;
 
-	dlssOptions.dlaaPreset = a_preset;
-	dlssOptions.qualityPreset = a_preset;
-	dlssOptions.balancedPreset = a_preset;
-	dlssOptions.performancePreset = a_preset;
-	dlssOptions.ultraPerformancePreset = a_preset;
+	dlssOptions.dlaaPreset = sl::DLSSPreset::ePresetK;
+	dlssOptions.qualityPreset = dlssOptions.dlaaPreset;
+	dlssOptions.balancedPreset = dlssOptions.dlaaPreset;
+	dlssOptions.performancePreset = dlssOptions.dlaaPreset;
+	dlssOptions.ultraPerformancePreset = dlssOptions.dlaaPreset;
 
 	if (SL_FAILED(result, slDLSSSetOptions(viewport, dlssOptions))) {
 		logger::critical("[Streamline] Could not enable DLSS");
