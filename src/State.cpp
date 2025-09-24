@@ -707,7 +707,7 @@ void State::SetAdapterDescription(const std::wstring& description)
 	adapterDescription = converter.to_bytes(description);
 }
 
-void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
+void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] bool a_prepass)
 {
 	{
 		SharedDataCB data{};
@@ -764,8 +764,8 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 
 		if (upscaling.loaded) {
 			auto upscaleMethod = upscaling.GetUpscaleMethod();
-			if (temporal && (a_inWorld || a_prepass) && upscaleMethod != Upscaling::UpscaleMethod::kTAA) {
-				auto renderSize = Util::ConvertToDynamic(screenSize);
+			if (temporal && upscaleMethod != Upscaling::UpscaleMethod::kTAA) {
+				auto renderSize = Util::ConvertToDynamic(screenSize, true);
 				data.MipBias = std::log2f(renderSize.x / screenSize.x);
 				if (upscaleMethod == Upscaling::UpscaleMethod::kDLSS)
 					data.MipBias -= 1.0f;
