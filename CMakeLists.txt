@@ -49,6 +49,7 @@ include(XeSS-SDK)
 
 find_path(DETOURS_INCLUDE_DIRS "detours/detours.h")
 find_library(DETOURS_LIBRARY detours REQUIRED)
+include(FidelityFX-SDK)
 
 target_compile_definitions(
 	${PROJECT_NAME}

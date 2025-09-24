@@ -30,7 +30,7 @@ namespace Util
 {
 	HoverTooltipWrapper::HoverTooltipWrapper()
 	{
-		hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal);
+		hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled);
 		if (hovered) {
 			ImGui::BeginTooltip();
 			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);

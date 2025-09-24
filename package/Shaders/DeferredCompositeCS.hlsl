@@ -10,7 +10,7 @@
 Texture2D<float3> SpecularTexture : register(t0);
 Texture2D<unorm float3> AlbedoTexture : register(t1);
 Texture2D<unorm float3> NormalRoughnessTexture : register(t2);
-Texture2D<unorm float3> MasksTexture : register(t3);
+Texture2D<float3> MasksTexture : register(t3);
 
 RWTexture2D<float4> MainRW : register(u0);
 RWTexture2D<float4> NormalTAAMaskSpecularMaskRW : register(u1);
@@ -38,6 +38,17 @@ Texture2D<float4> SsgiAoTexture : register(t10);
 Texture2D<float4> SsgiYTexture : register(t11);
 Texture2D<float4> SsgiCoCgTexture : register(t12);
 Texture2D<float4> SsgiSpecularTexture : register(t13);
+
+void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
+{
+	ao = 1 - SsgiAoTexture[pixCoord];
+	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
+	// without ZH hallucination
+	// float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, SphericalHarmonics::EvaluateCosineLobe(normalWS));
+	float ssgiIlY = SphericalHarmonics::SHHallucinateZH3Irradiance(ssgiIlYSh, normalWS);
+	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord];
+	il = max(0, Color::YCoCgToRGB(float3(ssgiIlY, ssgiIlCoCg)));
+}
 
 void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, in float3 normal, in float3 view)
 {
@@ -95,21 +106,73 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 	float glossiness = normalGlossiness.z;
 
-	float3 color = Color::IrradianceToLinear(diffuseColor) + specularColor;
+	float3 linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
+	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
+
+#if defined(SSGI)
+#	if defined(VR)
+	float3 uvF = float3((dispatchID.xy + 0.5) * SharedData::BufferDim.zw, depth);  // calculate high precision uv of initial eye
+	float3 uv2 = Stereo::ConvertStereoUVToOtherEyeStereoUV(uvF, eyeIndex, false);  // calculate other eye uv
+	float3 uv1Mono = Stereo::ConvertFromStereoUV(uvF, eyeIndex);
+	float3 uv2Mono = Stereo::ConvertFromStereoUV(uv2, (1 - eyeIndex));
+	uint2 pixCoord2 = (uint2)(uv2.xy / SharedData::BufferDim.zw - 0.5);
+#	endif
+
+	float ssgiAo;
+	float3 ssgiIl;
+	SampleSSGI(dispatchID.xy, normalWS, ssgiAo, ssgiIl);
+
+#	if defined(VR)
+	float ssgiAo2;
+	float3 ssgiIl2;
+	SampleSSGI(pixCoord2, normalWS, ssgiAo2, ssgiIl2);
+
+	float4 ssgiMixed = Stereo::BlendEyeColors(uv1Mono, float4(ssgiIl, ssgiAo), uv2Mono, float4(ssgiIl2, ssgiAo2));
+	ssgiAo = ssgiMixed.a;
+	ssgiIl = ssgiMixed.rgb;
+#	endif
+
+	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normalWS, 1.0)));
+	directionalAmbientColor *= albedo;
+
+	directionalAmbientColor = Color::RGBToYCoCg(directionalAmbientColor);
+	directionalAmbientColor.x = MasksTexture[dispatchID.xy].z;
+	directionalAmbientColor = Color::YCoCgToRGB(directionalAmbientColor);
+	directionalAmbientColor = max(0, directionalAmbientColor);
+
+	float maxScale = 1.0;
+	if (directionalAmbientColor.x > 0.0)
+		maxScale = min(maxScale, diffuseColor.x / directionalAmbientColor.x);
+	if (directionalAmbientColor.y > 0.0)
+		maxScale = min(maxScale, diffuseColor.y / directionalAmbientColor.y);
+	if (directionalAmbientColor.z > 0.0)
+		maxScale = min(maxScale, diffuseColor.z / directionalAmbientColor.z);
+	directionalAmbientColor *= maxScale;
+
+	diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
+
+	linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
+#	if defined(INTERIOR)
+	linDiffuseColor *= ssgiAo;
+#	else
+	linDiffuseColor *= sqrt(ssgiAo);
+#	endif
+	diffuseColor = Color::IrradianceToGamma(linDiffuseColor);
+
+	diffuseColor += Color::IrradianceToGamma(Color::IrradianceToLinear(directionalAmbientColor) * ssgiAo);
+
+	linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
+
+	linDiffuseColor += ssgiIl * Color::IrradianceToLinear(albedo);
+#endif
+
+	float3 color = linDiffuseColor + specularColor;
 
 #if defined(DYNAMIC_CUBEMAPS)
 
 	float3 reflectance = ReflectanceTexture[dispatchID.xy];
 
 	if (reflectance.x > 0.0 || reflectance.y > 0.0 || reflectance.z > 0.0) {
-		float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
-
-		float wetnessMask = MasksTexture[dispatchID.xy].z * 2.0 - 1.0;
-
-		normalWS.z = wetnessMask;
-		float xyLength = sqrt(max(0.0, 1.0 - wetnessMask * wetnessMask));
-		normalWS.xy = normalize(normalWS.xy) * xyLength;
-
 		float3 V = normalize(positionWS.xyz);
 		float3 R = reflect(V, normalWS);
 

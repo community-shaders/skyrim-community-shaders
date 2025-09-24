@@ -40,13 +40,13 @@ public:
 		float HairSaturation = 1.0f;
 		float SpecularIndirectMult = 1.0f;
 		float DiffuseIndirectMult = 1.0f;
-		float BaseColorMult = 1.0f;
+		float BaseColorMult = 1.5f;
 		float Transmission = 1.0f;
 		uint EnableSelfShadow = true;
 		float SelfShadowStrength = 1.0f;
 		float SelfShadowExponent = 0.1f;
 		float SelfShadowScale = 2.5f;
-		uint HairMode = 0;  // 0: Kajiya-Kay, 1: Marschner
+		uint HairMode = 1;  // 0: Kajiya-Kay, 1: Marschner
 		uint pad[3];
 	} settings;
 

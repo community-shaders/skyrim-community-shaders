@@ -205,7 +205,7 @@ void VolumetricLighting::EarlyPrepass()
 	vlData.screenYMin1 = height - 1;
 	vlDataCB->Update(vlData);
 
-	const auto interiorCell = globals::game::tes->interiorCell;
+	const auto interiorCell = RE::TES::GetSingleton()->interiorCell;
 	const bool currentlyInInterior = interiorCell != nullptr;
 
 	if (initialised && currentlyInInterior == inInterior)

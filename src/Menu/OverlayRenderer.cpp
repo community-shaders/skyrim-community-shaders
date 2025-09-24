@@ -21,7 +21,7 @@ void OverlayRenderer::RenderOverlay(
 	const std::function<void()>& processInputEventQueue,
 	const std::function<void()>& drawSettings,
 	const std::function<const char*(uint32_t)>& keyIdToString,
-	float cachedFontSize,
+	float& cachedFontSize,
 	float currentFontSize)
 {
 	HandleVRSetup();

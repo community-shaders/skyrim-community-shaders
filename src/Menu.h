@@ -99,7 +99,7 @@ public:
 
 	struct ThemeSettings
 	{
-		float FontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;
+		float FontSize = 0.0f;                                  // When 0, dynamic default (resolution-based) is used
 		float GlobalScale = REL::Module::IsVR() ? -0.5f : 0.f;  // exponential
 
 		bool UseSimplePalette = true;    // simple palette or full customization
@@ -208,6 +208,7 @@ public:
 		uint32_t SkipCompilationKey = VK_ESCAPE;
 		uint32_t EffectToggleKey = VK_MULTIPLY;  // toggle all effects
 		uint32_t OverlayToggleKey = VK_F10;      // Global overlay toggle key for all overlays
+		bool FirstTimeSetupCompleted = false;    // Track if first-time setup has been completed
 		ThemeSettings Theme;
 	};
 	const ThemeSettings& GetTheme() const { return settings.Theme; }                // Provide read-only access to the Theme.

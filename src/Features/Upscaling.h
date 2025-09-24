@@ -1,9 +1,9 @@
 #pragma once
 
 #include "Feature.h"
+#include "Upscaling/DX12SwapChain.h"
 #include "Upscaling/FidelityFX.h"
 #include "Upscaling/Streamline.h"
-#include "Upscaling/XeSS.h"
 #include <d3d11_4.h>
 #include <d3d12.h>
 #include <winrt/base.h>
@@ -43,14 +43,12 @@ public:
 		kNONE,
 		kTAA,
 		kFSR,
-		kXESS,
 		kDLSS
 	};
 
 	struct Settings
 	{
-		uint upscaleMethod = (uint)UpscaleMethod::kDLSS;
-		uint upscaleMethodNoDLSS = (uint)UpscaleMethod::kFSR;
+		uint upscaleMethod = (uint)UpscaleMethod::kTAA;
 		uint qualityMode = 1;  // Default to Quality (1=Quality, 2=Balanced, 3=Performance, 4=Ultra Performance, 0=Native AA)
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 1;
@@ -110,7 +108,6 @@ public:
 	void CheckResources(UpscaleMethod a_upscalemethod);
 	void CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod);
 	void DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod);
-	void UpdateSharedResources();
 
 	winrt::com_ptr<ID3D11ComputeShader> encodeTexturesCS[5];  // One for each UpscaleMethod
 	ID3D11ComputeShader* GetEncodeTexturesCS();
@@ -136,39 +133,13 @@ public:
 	Texture2D* reactiveMaskTexture = nullptr;
 	Texture2D* transparencyCompositionMaskTexture = nullptr;
 	Texture2D* motionVectorCopyTexture = nullptr;
-	Texture2D* nisSharpenerTexture = nullptr;
 
 	virtual void ClearShaderCache() override;
 
-	// Shared D3D12 device and interop resources
-	winrt::com_ptr<ID3D12Device> sharedD3D12Device;
-	winrt::com_ptr<ID3D12CommandQueue> sharedD3D12CommandQueue;
-	winrt::com_ptr<ID3D12CommandAllocator> sharedD3D12CommandAllocator;
-	winrt::com_ptr<ID3D12GraphicsCommandList> sharedD3D12CommandList;
-	winrt::com_ptr<ID3D12Fence> sharedD3D12Fence;
-	HANDLE sharedFenceEvent = nullptr;
-	UINT64 sharedFenceValue = 0;
-
-	// D3D11/D3D12 shared fence for interop synchronization
-	winrt::com_ptr<ID3D11Fence> sharedD3D11Fence;
-	UINT64 sharedInteropFenceValue = 0;
-
-	// Shared D3D12 resources for upscaling systems
-	WrappedResource* depthBufferShared12 = nullptr;
-	WrappedResource* motionVectorBufferShared12 = nullptr;
-	WrappedResource* reactiveMaskShared12 = nullptr;
-	WrappedResource* transparencyCompositionMaskShared12 = nullptr;
-	WrappedResource* inputColorBufferShared12 = nullptr;
-	WrappedResource* outputColorBufferShared12 = nullptr;
-
-	// Frame tracking to ensure shared resources are only copied once per frame
-	Util::FrameChecker sharedResourcesFrameChecker;
-
 	// Static instances instead of singletons
 	static inline Streamline streamline;
-	static inline XeSS xess;
-	static inline FidelityFX fidelityFX;
-	static inline class DX12SwapChain dx12SwapChain;
+	static inline FidelityFX fidelityFX;  // Only for frame generation
+	static inline DX12SwapChain dx12SwapChain;
 
 	winrt::com_ptr<ID3D11PixelShader> copyDepthToSharedBufferPS;
 
@@ -178,7 +149,6 @@ public:
 	float dynamicResolutionWidthRatio = 1.0f;
 	float dynamicResolutionHeightRatio = 1.0f;
 
-	void CreateSharedD3D12Device(IDXGIAdapter* a_dxgiAdapter);
 	void CopySharedD3D12Resources();
 	void PostDisplay();
 	void PerformUpscaling();
