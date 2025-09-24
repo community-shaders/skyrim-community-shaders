@@ -2752,6 +2752,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	endif
 
+#	if defined(SSR) && defined(DEFERRED)
+	if (SharedData::ssrSettings.Enabled && SharedData::ssrSettings.DiffuseMult > 0.0) {
+		directionalAmbientColor *= SharedData::ssrSettings.AmbientMult;
+		iblColor *= SharedData::ssrSettings.AmbientMult;
+	}
+#	endif
+
 	float3 reflectionDiffuseColor = diffuseColor + directionalAmbientColor;
 
 #	if defined(TRUE_PBR) && defined(LOD_LAND_BLEND) && !defined(DEFERRED)
