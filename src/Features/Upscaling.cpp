@@ -352,6 +352,12 @@ void Upscaling::RestoreDefaultSettings()
 	settings = {};
 }
 
+void Upscaling::DataLoaded()
+{
+	// Fix screenshots fix from Engine Fixes
+	RE::GetINISetting("bUseTAA:Display")->data.b = false;
+}
+
 void Upscaling::Load()
 {
 	*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChainUpscaling = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChainUpscaling, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
