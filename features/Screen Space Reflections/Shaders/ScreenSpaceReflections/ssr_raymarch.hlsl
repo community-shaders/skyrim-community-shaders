@@ -48,6 +48,9 @@ Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t11);
 
 RWTexture2D<float4> SSRColorOutput : register(u0);
 RWTexture2D<float4> SSRPDFOutput : register(u1);
+#if defined(SSSR_SPECULAR)
+RWTexture2D<float> SSRHitDistanceOutput : register(u2);
+#endif
 
 RWStructuredBuffer<uint2> u_SharcHashEntriesBuffer : register(u2);
 RWStructuredBuffer<uint> u_HashCopyOffsetBuffer : register(u3);
@@ -255,32 +258,35 @@ float3 FFX_SSSR_HierarchicalRaymarch(float3 origin, float3 direction, bool is_mi
     return position;
 }
 
-float FFX_SSSR_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_direction, float2 screen_size, float depth_buffer_thickness, uint eyeIndex, out float occlusion)
+float FFX_SSSR_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_direction, float2 screen_size, float depth_buffer_thickness, uint eyeIndex, out float occlusion, out float hit_distance)
 {
     occlusion = 1.f;
+    hit_distance = 0.f;
 
     // Reject hits outside the view frustum
     if ((hit.x < 0.0f) || (hit.y < 0.0f) || (hit.x > 1.0f) || (hit.y > 1.0f))
     {
+        hit_distance = 65536.0f;
         return 0.0f;
     }
 
     // Don't lookup radiance from the background.
     int2  texel_coords = int2(screen_size * hit.xy * FrameBuffer::DynamicResolutionParams1.xy);
     float surface_z    = FFX_SSSR_LoadDepth(texel_coords / 2, 1);
-#if FFX_SSSR_OPTION_INVERTED_DEPTH
-    if (surface_z == 0.0)
-    {
-#else
-    if (surface_z == 1.0)
-    {
-#endif
-        return 0;
-    }
+// #if FFX_SSSR_OPTION_INVERTED_DEPTH
+//     if (surface_z == 0.0)
+//     {
+// #else
+//     if (surface_z == 1.0)
+//     {
+// #endif
+//         return 0;
+//     }
 
     float3 view_space_surface = FFX_SSSR_ScreenSpaceToViewSpace(float3(hit.xy, surface_z), eyeIndex);
     float3 view_space_hit     = FFX_SSSR_ScreenSpaceToViewSpace(hit, eyeIndex);
     float  distance           = length(view_space_surface - view_space_hit);
+    hit_distance = distance;
 
     // We accept all hits that are within a reasonable minimum distance below the surface.
     // Add constant in linear space to avoid growing of the reflections toward the reflected objects.
@@ -499,6 +505,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
     samples[groupThreadID.x * 8 + groupThreadID.y][sample_id] = 0.f;
     float localWeight = pdf == 0 ? 0 : LocalBRDF(-view_space_ray_direction, view_space_surface_normal, view_space_reflected_direction, roughness) / max(pdf, 1e-4);
     weights[groupThreadID.x * 8 + groupThreadID.y][sample_id] = float4(view_space_surface_normal, localWeight);
+    float hit_distance = 0;
 
 #if SHARC_RENDER
     SharcParameters sharcParameters;
@@ -555,7 +562,8 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
                                                       screen_size,
                                                       thickness,
                                                       eyeIndex,
-                                                      occlusion
+                                                      occlusion,
+                                                      hit_distance
                                                       )
                                      : 0;
         float3 sampleColor = 0;
@@ -698,6 +706,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
     }
     SSRColorOutput[coords.xy] = outColor;
     SSRPDFOutput[coords.xy] = outPDF;
+    SSRHitDistanceOutput[coords.xy] = hit_distance;
 #elif SHARC_UPDATE
 #else
 

@@ -110,6 +110,7 @@ struct ScreenSpaceReflections : Feature
     eastl::unique_ptr<Texture2D> texHistory = nullptr;
     eastl::unique_ptr<Texture2D> texHistoryDiffuse = nullptr;
     eastl::unique_ptr<Texture2D> texOutput = nullptr;
+    Texture2D* texHitDistance = nullptr;
 
 #ifdef ENABLE_SHARC
     eastl::unique_ptr<Buffer> sharcHashEntries = nullptr;

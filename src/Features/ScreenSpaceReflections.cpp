@@ -185,6 +185,9 @@ void ScreenSpaceReflections::SetupResources()
         texDepth = eastl::make_unique<Texture2D>(texDesc);
         texDepth->CreateSRV(srvDesc);
         texDepth->CreateUAV(uavDesc);
+        texHitDistance = new Texture2D(texDesc);
+        texHitDistance->CreateSRV(srvDesc);
+        texHitDistance->CreateUAV(uavDesc);
 
         for (uint i = 0; i < maxMips; i++) {
 			D3D11_SHADER_RESOURCE_VIEW_DESC mipSrvDesc = {
@@ -464,7 +467,7 @@ void ScreenSpaceReflections::DrawSSR()
     context->CSSetConstantBuffers(1, 1, &buffer);
 
     std::array<ID3D11ShaderResourceView*, 12> srvs = { nullptr };
-	std::array<ID3D11UnorderedAccessView*, 2> uavs = { nullptr };
+	std::array<ID3D11UnorderedAccessView*, 3> uavs = { nullptr };
 
     auto resetViews = [&]() {
 		srvs.fill(nullptr);
@@ -510,6 +513,7 @@ void ScreenSpaceReflections::DrawSSR()
     
     uavs.at(0) = texSSRColor->uav.get();
     uavs.at(1) = texHitPDF->uav.get();
+    uavs.at(2) = texHitDistance->uav.get();
 
     srvs.at(0) = texHistory->srv.get();
     srvs.at(1) = motion.SRV;
