@@ -10,7 +10,7 @@ struct ScreenSpaceReflections : Feature
 
     virtual inline std::string GetName() override { return "Screen Space Reflections"; }
     virtual inline std::string GetShortName() override { return "ScreenSpaceReflections"; }
-    virtual inline std::string_view GetShaderDefineName() override { return "SSSR"; }
+    virtual inline std::string_view GetShaderDefineName() override { return "SSR"; }
     virtual std::string_view GetCategory() const override { return "Lighting"; }
     virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
@@ -34,6 +34,7 @@ struct ScreenSpaceReflections : Feature
 	virtual void ClearShaderCache() override;
 	void CompileComputeShaders();
 
+    bool HasShaderDefine(RE::BSShader::Type) override { return true; };
     virtual bool SupportsVR() override { return true; };
 
     struct Settings
