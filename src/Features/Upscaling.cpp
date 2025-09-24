@@ -11,6 +11,8 @@
 #include <directx/d3dx12.h>
 #include <format>
 
+#include "Features/ScreenSpaceReflections.h"
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Upscaling::Settings,
 	upscaleMethod,
@@ -19,7 +21,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	frameLimitMode,
 	frameGenerationMode,
 	frameGenerationForceEnable,
-	streamlineLogLevel);
+	streamlineLogLevel,
+	enableDLSSRR);
 
 decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChainUpscaling;
 
@@ -215,6 +218,10 @@ void Upscaling::DrawSettings()
 		}
 	} else {
 		ImGui::Text("Upscaling from lower resolutions is not currently available for VR");
+	}
+
+	if (upscaleMethod == UpscaleMethod::kDLSS && streamline.featureDLSS_RR) {
+		ImGui::Checkbox("Enable DLSS Ray Reconstruction", &settings.enableDLSSRR);
 	}
 
 	if (!globals::game::isVR) {
@@ -429,9 +436,9 @@ Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
 	return (UpscaleMethod)settings.upscaleMethodNoDLSS;
 }
 
-void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
+void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod, bool a_enableDLSSRR)
 {
-	logger::debug("[Upscaling] Creating texture resources for method {}", (int)a_upscalemethod);
+	logger::debug("[Upscaling] Creating texture resources for method {}, DLSS-RR enabled: {}", (int)a_upscalemethod, a_enableDLSSRR);
 
 	auto renderer = globals::game::renderer;
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
@@ -460,6 +467,19 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 			transparencyCompositionMaskTexture = new Texture2D(texDesc);
 			transparencyCompositionMaskTexture->CreateSRV(srvDesc);
 			transparencyCompositionMaskTexture->CreateUAV(uavDesc);
+		}
+
+		if (!packedNormalTexture) {
+			D3D11_TEXTURE2D_DESC packedNormalTexDesc = texDesc;
+			packedNormalTexDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+			D3D11_SHADER_RESOURCE_VIEW_DESC packedNormalSrvDesc = srvDesc;
+			packedNormalSrvDesc.Format = packedNormalTexDesc.Format;
+			D3D11_UNORDERED_ACCESS_VIEW_DESC packedNormalUavDesc = uavDesc;
+			packedNormalUavDesc.Format = packedNormalTexDesc.Format;
+
+			packedNormalTexture = new Texture2D(packedNormalTexDesc);
+			packedNormalTexture->CreateSRV(packedNormalSrvDesc);
+			packedNormalTexture->CreateUAV(packedNormalUavDesc);
 		}
 	}
 
@@ -516,6 +536,15 @@ void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 			delete transparencyCompositionMaskTexture;
 			transparencyCompositionMaskTexture = nullptr;
 		}
+
+		if (packedNormalTexture) {
+			packedNormalTexture->srv = nullptr;
+			packedNormalTexture->uav = nullptr;
+			packedNormalTexture->resource = nullptr;
+
+			delete packedNormalTexture;
+			packedNormalTexture = nullptr;
+		}
 	}
 
 	// Motion vector copy texture is only needed for DLSS - destroy when switching away from DLSS
@@ -543,34 +572,50 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 {
 	static auto previousUpscaleMode = UpscaleMethod::kTAA;
 	static bool previousFrameGenMode = false;
+	static bool previousRR = false;
 
 	bool frameGenModeChanged = (settings.frameGenerationMode && d3d12SwapChainActive) != previousFrameGenMode;
 	bool upscaleModeChanged = (previousUpscaleMode != a_upscalemethod);
+	bool rrChanged = (settings.enableDLSSRR != previousRR);
 
-	if (upscaleModeChanged || frameGenModeChanged) {
-		logger::debug("[Upscaling] Resource change detected - Upscale: {} -> {}, FrameGen: {} -> {}",
-			(int)previousUpscaleMode, (int)a_upscalemethod, previousFrameGenMode, (settings.frameGenerationMode && d3d12SwapChainActive));
+	if (upscaleModeChanged || frameGenModeChanged || rrChanged) {
+		logger::debug("[Upscaling] Resource change detected - Upscale: {} -> {}, FrameGen: {} -> {}, DLSS RR: {} -> {}",
+			(int)previousUpscaleMode, (int)a_upscalemethod, previousFrameGenMode, (settings.frameGenerationMode && d3d12SwapChainActive), previousRR, settings.enableDLSSRR);
 
 		// Destroy previous upscaling method resources (this will intelligently clean up based on what's still needed)
 		if (upscaleModeChanged) {
 			DestroyUpscalingTextureResources(a_upscalemethod);
 
 			if (previousUpscaleMode == UpscaleMethod::kDLSS)
-				streamline.DestroyDLSSResources();
+				if (previousRR)
+					streamline.DestroyDLSSRRResources();
+				else
+					streamline.DestroyDLSSResources();
 			else if (previousUpscaleMode == UpscaleMethod::kFSR)
 				fidelityFX.DestroyFSRResources();
 
 			if (a_upscalemethod == UpscaleMethod::kFSR)
 				fidelityFX.CreateFSRResources();
+			
+			if (previousRR && previousUpscaleMode == UpscaleMethod::kDLSS)
+				streamline.DestroyDLSSRRResources();
+		}
+
+		if (rrChanged && !upscaleModeChanged) {
+			if (previousRR)
+				streamline.DestroyDLSSRRResources(true);
+			else
+				streamline.DestroyDLSSResources(true);
 		}
 
 		// Create new upscaling method resources
-		if (upscaleModeChanged) {
-			CreateUpscalingTextureResources(a_upscalemethod);
+		if (upscaleModeChanged || rrChanged) {
+			CreateUpscalingTextureResources(a_upscalemethod, settings.enableDLSSRR);
 		}
 
 		previousUpscaleMode = a_upscalemethod;
 		previousFrameGenMode = (settings.frameGenerationMode && d3d12SwapChainActive);
+		previousRR = settings.enableDLSSRR;
 	}
 }
 
@@ -708,8 +753,10 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 
 		if (globals::game::isVR) {
 			resolutionScaleBase = 1.0f;
-		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
+		} else if (upscaleMethod == UpscaleMethod::kDLSS && !settings.enableDLSSRR) {
 			resolutionScaleBase = streamline.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
+		} else if (upscaleMethod == UpscaleMethod::kDLSS && settings.enableDLSSRR) {
+			resolutionScaleBase = streamline.GetInputResolutionScaleRR((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
 		} else if (upscaleMethod == UpscaleMethod::kFSR) {
 			resolutionScaleBase = fidelityFX.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
 		}
@@ -1175,6 +1222,7 @@ void Upscaling::Upscale()
 		auto& temporalAAMask = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kTEMPORAL_AA_MASK];
 		auto& normals = renderer->GetRuntimeData().renderTargets[globals::deferred->forwardRenderTargets[2]];
 		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+		auto& normalroughness = renderer->GetRuntimeData().renderTargets[NORMALROUGHNESS];
 
 		{
 			// Set up upscaling data constant buffer
@@ -1186,10 +1234,10 @@ void Upscaling::Upscale()
 			auto upscalingBuffer = upscalingDataCB->CB();
 			context->CSSetConstantBuffers(0, 1, &upscalingBuffer);
 
-			ID3D11ShaderResourceView* views[4] = { temporalAAMask.SRV, normals.SRV, motionVector.SRV, depth.depthSRV };
+			ID3D11ShaderResourceView* views[5] = { temporalAAMask.SRV, normals.SRV, motionVector.SRV, depth.depthSRV, normalroughness.SRV };
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
-			ID3D11UnorderedAccessView* uavs[3] = { reactiveMaskTexture->uav.get(), transparencyCompositionMaskTexture->uav.get(), upscaleMethod == UpscaleMethod::kDLSS ? motionVectorCopyTexture->uav.get() : nullptr };
+			ID3D11UnorderedAccessView* uavs[4] = { reactiveMaskTexture->uav.get(), transparencyCompositionMaskTexture->uav.get(), upscaleMethod == UpscaleMethod::kDLSS ? motionVectorCopyTexture->uav.get() : nullptr, upscaleMethod == UpscaleMethod::kDLSS ? packedNormalTexture->uav.get() : nullptr };
 			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
 			context->CSSetShader(GetEncodeTexturesCS(), nullptr, 0);
@@ -1197,10 +1245,10 @@ void Upscaling::Upscale()
 			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 		}
 
-		ID3D11ShaderResourceView* views[4] = { nullptr, nullptr, nullptr, nullptr };
+		ID3D11ShaderResourceView* views[5] = { nullptr, nullptr, nullptr, nullptr, nullptr };
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
-		ID3D11UnorderedAccessView* uavs[3] = { nullptr, nullptr, nullptr };
+		ID3D11UnorderedAccessView* uavs[4] = { nullptr, nullptr, nullptr, nullptr };
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
 		ID3D11Buffer* nullBuffer = nullptr;
@@ -1215,8 +1263,17 @@ void Upscaling::Upscale()
 	{
 		state->BeginPerfEvent("Upscaling");
 
-		if (upscaleMethod == UpscaleMethod::kDLSS) {
+		if (upscaleMethod == UpscaleMethod::kDLSS && !settings.enableDLSSRR) {
 			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get());
+		} else if (upscaleMethod == UpscaleMethod::kDLSS && settings.enableDLSSRR && streamline.featureDLSS_RR) {
+			logger::debug("Begin DLSS RR");
+			auto& ssr = globals::features::screenSpaceReflections;
+			ID3D11Texture2D* specHitDistanceTexture = nullptr;
+			if (ssr.loaded && ssr.settings.Enabled) {
+				specHitDistanceTexture = ssr.texHitDistance->resource.get();
+			}
+			logger::debug("Call DLSS RR");
+			streamline.RayReconstruction(main.texture, packedNormalTexture->resource.get(), specHitDistanceTexture, motionVectorCopyTexture->resource.get());
 		} else if (upscaleMethod == UpscaleMethod::kFSR) {
 			fidelityFX.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVector.texture, settings.sharpnessFSR);
 		}

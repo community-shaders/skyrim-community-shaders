@@ -102,8 +102,8 @@ void Streamline::LoadInterposer()
 
 	sl::Preferences pref;
 
-	sl::Feature featuresToLoad[] = { sl::kFeatureDLSS, sl::kFeatureNIS };
-	sl::Feature featuresToLoadVR[] = { sl::kFeatureDLSS, sl::kFeatureNIS };
+	sl::Feature featuresToLoad[] = { sl::kFeatureDLSS, sl::kFeatureDLSS_RR, sl::kFeatureNIS };
+	sl::Feature featuresToLoadVR[] = { sl::kFeatureDLSS, sl::kFeatureDLSS_RR, sl::kFeatureNIS };
 
 	pref.featuresToLoad = REL::Module::IsVR() ? featuresToLoadVR : featuresToLoad;
 	pref.numFeaturesToLoad = REL::Module::IsVR() ? _countof(featuresToLoadVR) : _countof(featuresToLoad);
@@ -181,6 +181,19 @@ void Streamline::CheckFeatures(IDXGIAdapter* a_adapter)
 		}
 	}
 
+	slIsFeatureLoaded(sl::kFeatureDLSS_RR, featureDLSS_RR);
+	if (featureDLSS_RR) {
+		logger::info("[Streamline] DLSS RR feature is loaded");
+		featureDLSS_RR = slIsFeatureSupported(sl::kFeatureDLSS_RR, adapterInfo) == sl::Result::eOk;
+	} else {
+		logger::info("[Streamline] DLSS RR feature is not loaded");
+		sl::FeatureRequirements featureRequirements;
+		sl::Result result = slGetFeatureRequirements(sl::kFeatureDLSS_RR, featureRequirements);
+		if (result != sl::Result::eOk) {
+			logger::info("[Streamline] DLSS RR feature failed to load due to: {}", magic_enum::enum_name(result));
+		}
+	}
+
 	slIsFeatureLoaded(sl::kFeatureNIS, featureNIS);
 	if (featureNIS) {
 		logger::info("[Streamline] NIS feature is loaded");
@@ -195,6 +208,7 @@ void Streamline::CheckFeatures(IDXGIAdapter* a_adapter)
 	}
 
 	logger::info("[Streamline] DLSS {} available", featureDLSS ? "is" : "is not");
+	logger::info("[Streamline] DLSS RR {} available", featureDLSS_RR ? "is" : "is not");
 	logger::info("[Streamline] NIS {} available", featureNIS ? "is" : "is not");
 }
 
@@ -206,6 +220,12 @@ void Streamline::PostDevice()
 		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetOptimalSettings", (void*&)slDLSSGetOptimalSettings);
 		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetState", (void*&)slDLSSGetState);
 		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSSetOptions", (void*&)slDLSSSetOptions);
+	}
+
+	if (featureDLSS_RR) {
+		slGetFeatureFunction(sl::kFeatureDLSS_RR, "slDLSSDGetOptimalSettings", (void*&)slDLSSDGetOptimalSettings);
+		slGetFeatureFunction(sl::kFeatureDLSS_RR, "slDLSSDGetState", (void*&)slDLSSDGetState);
+		slGetFeatureFunction(sl::kFeatureDLSS_RR, "slDLSSDSetOptions", (void*&)slDLSSDSetOptions);
 	}
 
 	if (featureNIS) {
@@ -352,6 +372,116 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
 }
 
+void Streamline::RayReconstruction(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_normalRoughness, ID3D11Resource* a_specularHitDistance, ID3D11Resource* a_motionVectors)
+{
+	if (!featureDLSS_RR)
+		return;
+
+	logger::debug("[DLSS RR] Starting Ray Reconstruction");
+
+	CheckFrameConstants();
+	logger::debug("[DLSS RR] Frame constants set");
+
+	auto state = globals::state;
+	auto renderer = globals::game::renderer;
+	auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+	auto& albedoTexture = renderer->GetRuntimeData().renderTargets[ALBEDO];
+	auto& reflectanceTexture = renderer->GetRuntimeData().renderTargets[REFLECTANCE];
+
+	sl::DLSSDOptions dlssdOptions{};
+
+	// Map quality mode to DLSS mode
+	uint32_t qualityMode = globals::features::upscaling.settings.qualityMode;
+	switch (qualityMode) {
+	case 1:
+		dlssdOptions.mode = sl::DLSSMode::eMaxQuality;
+		break;
+	case 2:
+		dlssdOptions.mode = sl::DLSSMode::eBalanced;
+		break;
+	case 3:
+		dlssdOptions.mode = sl::DLSSMode::eMaxPerformance;
+		break;
+	case 4:
+		dlssdOptions.mode = sl::DLSSMode::eUltraPerformance;
+		break;
+	default:
+		dlssdOptions.mode = sl::DLSSMode::eDLAA;
+		break;
+	}
+
+	auto worldToCameraView = globals::game::frameBufferCached.GetCameraView().Transpose();
+	auto cameraViewToWorld = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
+
+	dlssdOptions.outputWidth = (uint)state->screenSize.x;
+	dlssdOptions.outputHeight = (uint)state->screenSize.y;
+	dlssdOptions.colorBuffersHDR = sl::Boolean::eTrue;
+	dlssdOptions.normalRoughnessMode = sl::DLSSDNormalRoughnessMode::ePacked;
+	dlssdOptions.alphaUpscalingEnabled = sl::Boolean::eFalse;
+
+	dlssdOptions.worldToCameraView = *(sl::float4x4*)&worldToCameraView;
+	dlssdOptions.cameraViewToWorld = *(sl::float4x4*)&cameraViewToWorld;
+
+	dlssdOptions.dlaaPreset = sl::DLSSDPreset::ePresetD;
+	dlssdOptions.qualityPreset = sl::DLSSDPreset::ePresetD;
+	dlssdOptions.balancedPreset = sl::DLSSDPreset::ePresetD;
+	dlssdOptions.performancePreset = sl::DLSSDPreset::ePresetD;
+	dlssdOptions.ultraPerformancePreset = sl::DLSSDPreset::ePresetD;
+
+	if(SL_FAILED(result, slDLSSDSetOptions(viewport, dlssdOptions))) {
+		logger::critical("[DLSS RR] Could not set DLSS RR options");
+		return;
+	}
+
+	logger::debug("[DLSS RR] DLSS RR options set");
+	{
+		auto screenSize = state->screenSize;
+		auto renderSize = Util::ConvertToDynamic(screenSize);
+
+		sl::Extent inputExtent{ 0, 0, (uint)renderSize.x, (uint)renderSize.y };
+		sl::Extent outputExtent{ 0, 0, (uint)screenSize.x, (uint)screenSize.y };
+
+		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
+		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
+		sl::Resource depth = { sl::ResourceType::eTex2d, depthTexture.texture, 0 };
+		sl::Resource mvec = { sl::ResourceType::eTex2d, a_motionVectors, 0 };
+		sl::Resource diffuseAlbedo = { sl::ResourceType::eTex2d, albedoTexture.texture, 0 };
+		sl::Resource specularAlbedo = { sl::ResourceType::eTex2d, reflectanceTexture.texture, 0 };
+		sl::Resource normalRoughness = { sl::ResourceType::eTex2d, a_normalRoughness, 0 };
+		sl::Resource specHitDistance = { sl::ResourceType::eTex2d, a_specularHitDistance, 0 };
+
+		sl::ResourceTag colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &inputExtent };
+		sl::ResourceTag colorOutTag = sl::ResourceTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &outputExtent };
+		sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
+		sl::ResourceTag mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
+		sl::ResourceTag diffuseAlbedoTag = sl::ResourceTag{ &diffuseAlbedo, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
+		sl::ResourceTag specularAlbedoTag = sl::ResourceTag{ &specularAlbedo, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
+		sl::ResourceTag normalRoughnessTag = sl::ResourceTag{ &normalRoughness, sl::kBufferTypeNormalRoughness, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
+		sl::ResourceTag specHitDistanceTag = sl::ResourceTag{ &specHitDistance, sl::kBufferTypeSpecularHitDistance, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
+
+		sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag, depthTag, mvecTag, diffuseAlbedoTag, specularAlbedoTag, normalRoughnessTag, specHitDistanceTag };
+		if (SL_FAILED(result, slSetTag(viewport, resourceTags, _countof(resourceTags), globals::d3d::context))) {
+			logger::error("[DLSS RR] Failed to set DLSS RR tags, error code: {}", (int)result);
+			return;
+		}
+	}
+
+	logger::debug("[DLSS RR] DLSS RR resources set");
+
+	sl::ViewportHandle view(viewport);
+	const sl::BaseStructure* inputs[] = { &view };
+	// slAllocateResources(globals::d3d::device, sl::kFeatureDLSS_RR, viewport);
+	// logger::debug("[DLSS RR] slAllocateResources completed");
+
+	if (SL_FAILED(result, slEvaluateFeature(sl::kFeatureDLSS_RR, *frameToken, inputs, _countof(inputs), globals::d3d::context))) {
+		logger::error("[DLSS RR] Failed to evaluate DLSS RR feature, error code: {}", (int)result);
+		return;
+	} else {
+		logger::debug("[DLSS RR] slEvaluateFeature executed successfully, output texture updated");
+	}
+	logger::debug("[DLSS RR] slEvaluateFeature completed");
+}
+
 float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityMode)
 {
 	sl::DLSSMode dlssMode;
@@ -402,17 +532,81 @@ float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputH
 	return (scaleX + scaleY) * 0.5f;
 }
 
+float Streamline::GetInputResolutionScaleRR(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityMode)
+{
+	logger::debug("[DLSS RR] Getting input resolution scale for output {}x{} and quality mode {}", outputWidth, outputHeight, qualityMode);
+	sl::DLSSMode dlssMode;
+	switch (qualityMode) {
+	case 1:
+		dlssMode = sl::DLSSMode::eMaxQuality;
+		break;
+	case 2:
+		dlssMode = sl::DLSSMode::eBalanced;
+		break;
+	case 3:
+		dlssMode = sl::DLSSMode::eMaxPerformance;
+		break;
+	case 4:
+		dlssMode = sl::DLSSMode::eUltraPerformance;
+		break;
+	default:
+		dlssMode = sl::DLSSMode::eDLAA;
+		break;
+	}
+
+	sl::DLSSDOptions dlssdOptions{};
+	dlssdOptions.mode = dlssMode;
+	dlssdOptions.outputWidth = outputWidth;
+	dlssdOptions.outputHeight = outputHeight;
+
+	sl::DLSSDOptimalSettings optimalSettings{};
+	sl::Result result = slDLSSDGetOptimalSettings(dlssdOptions, optimalSettings);
+	if (result != sl::Result::eOk) {
+		logger::critical("[Streamline] Failed to get DLSS RR optimal settings, error code: {}", (int)result);
+		return 1.0f;
+	}
+
+	float scaleX;
+	float scaleY;
+
+	if (globals::game::ui->GameIsPaused()) {
+		// Calculate scale as ratio of minimum render resolution to output resolution
+		scaleX = (float)optimalSettings.renderWidthMin / (float)outputWidth;
+		scaleY = (float)optimalSettings.renderHeightMin / (float)outputHeight;
+	} else {
+		// Calculate scale as ratio of optimal render resolution to output resolution
+		scaleX = (float)optimalSettings.optimalRenderWidth / (float)outputWidth;
+		scaleY = (float)optimalSettings.optimalRenderHeight / (float)outputHeight;
+	}
+
+	// Use the average scale (both should be the same for uniform scaling)
+	return (scaleX + scaleY) * 0.5f;
+}
+
 /**
  * @brief Releases DLSS resources and disables DLSS for the current viewport.
  *
  * Sets the DLSS mode to off and frees all DLSS-related resources associated with the viewport.
  */
-void Streamline::DestroyDLSSResources()
+void Streamline::DestroyDLSSResources(bool keepOptions)
 {
-	sl::DLSSOptions dlssOptions{};
-	dlssOptions.mode = sl::DLSSMode::eOff;
-	slDLSSSetOptions(viewport, dlssOptions);
+	if (!keepOptions) {
+		sl::DLSSOptions dlssOptions{};
+		dlssOptions.mode = sl::DLSSMode::eOff;
+		slDLSSSetOptions(viewport, dlssOptions);
+	}
 	slFreeResources(sl::kFeatureDLSS, viewport);
+}
+
+void Streamline::DestroyDLSSRRResources(bool keepOptions)
+{
+	logger::debug("[Streamline] Destroying DLSS-RR resources");
+	if (!keepOptions) {
+		sl::DLSSDOptions dlssdOptions{};
+		dlssdOptions.mode = sl::DLSSMode::eOff;
+		slDLSSDSetOptions(viewport, dlssdOptions);
+	}
+	slFreeResources(sl::kFeatureDLSS_RR, viewport);
 }
 
 void Streamline::ApplyNISSharpening(ID3D11Resource* a_texture, float sharpness)
