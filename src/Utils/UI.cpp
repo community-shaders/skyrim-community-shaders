@@ -1381,15 +1381,39 @@ namespace Util
 	{
 		std::vector<std::string> fonts;
 		
-		// Add some common system fonts as a basic implementation
-		fonts.push_back("Arial");
-		fonts.push_back("Calibri");
-		fonts.push_back("Consolas");
-		fonts.push_back("Courier New");
-		fonts.push_back("Georgia");
-		fonts.push_back("Segoe UI");
-		fonts.push_back("Times New Roman");
-		fonts.push_back("Verdana");
+		try {
+			auto fontsPath = Util::PathHelpers::GetFontsPath();
+			logger::debug("DiscoverFonts: Scanning fonts directory: {}", fontsPath.string());
+			
+			// Check if fonts directory exists
+			if (!std::filesystem::exists(fontsPath)) {
+				logger::warn("DiscoverFonts: Fonts directory does not exist: {}", fontsPath.string());
+				return fonts;
+			}
+			
+			// Scan for font files (.ttf and .otf)
+			for (const auto& entry : std::filesystem::directory_iterator(fontsPath)) {
+				if (entry.is_regular_file()) {
+					auto extension = entry.path().extension().string();
+					// Convert to lowercase for comparison
+					std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+					
+					if (extension == ".ttf" || extension == ".otf") {
+						std::string fontFile = entry.path().filename().string();
+						fonts.push_back(fontFile);
+						logger::debug("DiscoverFonts: Found font file: {}", fontFile);
+					}
+				}
+			}
+			
+			// Sort fonts alphabetically for better user experience
+			std::sort(fonts.begin(), fonts.end());
+			logger::info("DiscoverFonts: Found {} font files", fonts.size());
+		}
+		catch (const std::exception& e) {
+			logger::error("DiscoverFonts: Exception occurred while scanning fonts: {}", e.what());
+			// Silently return empty vector on error
+		}
 		
 		return fonts;
 	}
