@@ -131,11 +131,12 @@ struct ScreenSpaceReflections : Feature
     winrt::com_ptr<ID3D11ComputeShader> preprocessDepthCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> raymarchSpecularCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> raymarchDiffuseCS = nullptr;
-    winrt::com_ptr<ID3D11ComputeShader> raymarchDiffuseSharcCS = nullptr;
-    winrt::com_ptr<ID3D11ComputeShader> sharcUpdateRaymarchCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> prepareColorCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> depthDownsampleCS = nullptr;
+    winrt::com_ptr<ID3D11ComputeShader> diffuseCompositeCS = nullptr;
 #ifdef ENABLE_SHARC
+    winrt::com_ptr<ID3D11ComputeShader> raymarchDiffuseSharcCS = nullptr;
+    winrt::com_ptr<ID3D11ComputeShader> sharcUpdateRaymarchCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> sharcResolveCS = nullptr;
 #endif
 };

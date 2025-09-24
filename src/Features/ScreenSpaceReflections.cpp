@@ -283,9 +283,9 @@ void ScreenSpaceReflections::SetupResources()
 void ScreenSpaceReflections::ClearShaderCache()
 {
     static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-        &raymarchSpecularCS, &raymarchDiffuseCS, &raymarchDiffuseSharcCS, &prepareColorCS, &preprocessDepthCS, &depthDownsampleCS,
+        &raymarchSpecularCS, &raymarchDiffuseCS, &prepareColorCS, &preprocessDepthCS, &depthDownsampleCS, &diffuseCompositeCS,
 #ifdef ENABLE_SHARC
-        &sharcResolveCS
+        &raymarchDiffuseSharcCS, &sharcUpdateRaymarchCS, &sharcResolveCS
 #endif
     };
 
@@ -319,11 +319,13 @@ void ScreenSpaceReflections::CompileComputeShaders()
 
     defines.push_back({ "DIFFUSE_SPP", DiffuseSPPStr.c_str() });
 
+#ifdef ENABLE_SHARC
     auto definesSharcUpdate = defines;
     definesSharcUpdate.push_back({ "SHARC_UPDATE", "1" });
 
     auto definesSharc = defines;
     definesSharc.push_back({ "SHARC_RENDER", "1" });
+#endif
 
     auto definesSpecular = defines;
     definesSpecular.push_back({ "SSSR_SPECULAR", nullptr });
@@ -332,12 +334,13 @@ void ScreenSpaceReflections::CompileComputeShaders()
         shaderInfos = {
             { &raymarchDiffuseCS, "ssr_raymarch.hlsl", defines },
             { &raymarchSpecularCS, "ssr_raymarch.hlsl", definesSpecular },
-            { &raymarchDiffuseSharcCS, "ssr_raymarch.hlsl", definesSharc },
-            { &sharcUpdateRaymarchCS, "ssr_raymarch.hlsl", definesSharcUpdate },
             { &prepareColorCS, "ssr_prepare_color.hlsl", {} },
             { &preprocessDepthCS, "ssr_preprocess_depth.hlsl", {} },
             { &depthDownsampleCS, "ssr_depth_downsample.hlsl", {} },
+            { &diffuseCompositeCS, "ssr_diffuse_composite.hlsl", {} },
 #ifdef ENABLE_SHARC
+            { &raymarchDiffuseSharcCS, "ssr_raymarch.hlsl", definesSharc },
+            { &sharcUpdateRaymarchCS, "ssr_raymarch.hlsl", definesSharcUpdate },
             { &sharcResolveCS, "sharc_resolve.hlsl", {} }
 #endif
         };
@@ -663,6 +666,22 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
 #endif
 
     context->CopyResource(texHistoryDiffuse->resource.get(), texSSRTDiffuseColor->resource.get());
+
+    // composite
+    {
+        auto albedo = renderer->GetRuntimeData().renderTargets[ALBEDO];
+        uavs.at(0) = main.UAV;
+        srvs.at(0) = texSSRTDiffuseColor->srv.get();
+        srvs.at(1) = albedo.SRV;
+
+        context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+        context->CSSetUnorderedAccessViews(0, 1, uavs.data(), nullptr);
+        context->CSSetShader(diffuseCompositeCS.get(), nullptr, 0);
+
+        context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
+
+        resetViews();
+    }
 
     state->EndPerfEvent();
 

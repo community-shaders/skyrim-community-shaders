@@ -83,7 +83,6 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 #if defined(SSR)
 Texture2D<float4> SSRTexture : register(t15);
-Texture2D<float4> SSRTDiffuseTexture : register(t16);
 #endif
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
@@ -172,14 +171,6 @@ Texture2D<float4> SSRTDiffuseTexture : register(t16);
 	linDiffuseColor = Color::GammaToLinear(diffuseColor);
 
 	linDiffuseColor += ssgiIl * Color::GammaToLinear(albedo);
-#endif
-
-#if defined(SSR)
-	if (SharedData::ssrSettings.Enabled && SharedData::ssrSettings.DiffuseMult > 0.0) {
-		float4 ssrIrradiance = SSRTDiffuseTexture[dispatchID.xy];
-		ssrIrradiance.xyz *= SharedData::ssrSettings.DiffuseMult;
-		linDiffuseColor += Color::GammaToLinear(ssrIrradiance.rgb) * Color::GammaToLinear(albedo);
-	}
 #endif
 
 	float3 color = linDiffuseColor + specularColor;
