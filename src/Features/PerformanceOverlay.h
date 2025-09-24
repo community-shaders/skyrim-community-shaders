@@ -129,6 +129,10 @@ struct PerformanceOverlay : OverlayFeature
 	virtual void DrawSettings() override;
 	virtual void DataLoaded() override;
 	void DrawOverlay() override;
+	// Settings persistence and defaults
+	void SaveSettings(json& j) override;
+	void LoadSettings(json& j) override;
+	void RestoreDefaultSettings() override;
 
 	// ============================================================================
 	// CORE PERFORMANCE DISPLAY FUNCTIONS

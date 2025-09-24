@@ -169,10 +169,14 @@ namespace EffectExtensions
 		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
 			func(shader, pass, renderFlags);
+
+			auto state = globals::state;
+
+			state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::EffectShadows);
+
 			if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(pass->geometry->GetGeometryRuntimeData().properties[1].get())) {
 				if (shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kUniformScale)) {
-					auto state = globals::state;
-					state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::EffectShadows;
+					state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::EffectShadows);
 				}
 			}
 		}
@@ -188,12 +192,55 @@ namespace LightingExtensions
 		{
 			func(shader, pass, renderFlags);
 
-			globals::state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::IsTree);
+			auto state = globals::state;
+
+			state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::IsTree);
 
 			if (auto userData = pass->geometry->GetUserData())
 				if (auto baseObject = userData->GetBaseObject())
 					if (baseObject->As<RE::TESObjectTREE>())
-						globals::state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::IsTree);
+						state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::IsTree);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+}
+
+namespace GrassExtensions
+{
+	struct BSGrassShaderProperty_ctor
+	{
+		static RE::BSLightingShaderProperty* thunk(RE::BSLightingShaderProperty* property)
+		{
+			const uint64_t stackPointer = reinterpret_cast<uint64_t>(_AddressOfReturnAddress());
+			const uint64_t lightingPropertyAddress = stackPointer + (REL::Module::IsAE() ? 0x68 : 0x70);
+			auto* lightingProperty = *reinterpret_cast<RE::BSLightingShaderProperty**>(lightingPropertyAddress);
+
+			RE::BSLightingShaderProperty* grassProperty = func(property);
+
+			if (lightingProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kEffectLighting)) {
+				grassProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kEffectLighting, true);
+			}
+
+			return grassProperty;
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct BSGrassShader_SetupGeometry
+	{
+		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
+		{
+			func(shader, pass, renderFlags);
+
+			auto state = globals::state;
+
+			state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::GrassSphereNormal);
+
+			if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(pass->geometry->GetGeometryRuntimeData().properties[1].get())) {
+				if (shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kEffectLighting)) {
+					state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::GrassSphereNormal);
+				}
+			}
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -201,21 +248,10 @@ namespace LightingExtensions
 
 struct IDXGISwapChain_Present
 {
-	static HRESULT WINAPI /**
-	 * @brief Presents the swap chain with additional upscaling, overlay, and Reflex marker integration.
-	 *
-	 * Copies frame buffers for upscaling, processes overlays, manages tearing flags, and integrates Streamline Reflex markers for frame timing if enabled. Also collects profiling data and applies frame limiting after presentation.
-	 *
-	 * @param This The swap chain instance to present.
-	 * @param SyncInterval The vertical sync interval.
-	 * @param Flags Presentation flags, possibly modified for tearing support.
-	 * @return HRESULT Result of the present operation.
-	 */
-	thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
+	static HRESULT WINAPI thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
 	{
 		auto state = globals::state;
 		auto menu = globals::menu;
-		state->PresentReShade();
 		state->Reset();
 		menu->DrawOverlay();
 
@@ -227,6 +263,51 @@ struct IDXGISwapChain_Present
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
+
+decltype(&CreateDXGIFactory) ptrCreateDXGIFactory;
+
+HRESULT WINAPI hk_CreateDXGIFactory(REFIID, void** ppFactory)
+{
+	return ptrCreateDXGIFactory(__uuidof(IDXGIFactory4), ppFactory);
+}
+
+decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChain;
+
+HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
+	IDXGIAdapter* pAdapter,
+	D3D_DRIVER_TYPE DriverType,
+	HMODULE Software,
+	UINT Flags,
+	[[maybe_unused]] const D3D_FEATURE_LEVEL* pFeatureLevels,
+	[[maybe_unused]] UINT FeatureLevels,
+	UINT SDKVersion,
+	DXGI_SWAP_CHAIN_DESC* pSwapChainDesc,
+	IDXGISwapChain** ppSwapChain,
+	ID3D11Device** ppDevice,
+	D3D_FEATURE_LEVEL* pFeatureLevel,
+	ID3D11DeviceContext** ppImmediateContext)
+{
+	DXGI_ADAPTER_DESC adapterDesc;
+	pAdapter->GetDesc(&adapterDesc);
+	globals::state->SetAdapterDescription(adapterDesc.Description);
+
+	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
+
+	auto ret = ptrD3D11CreateDeviceAndSwapChain(pAdapter,
+		DriverType,
+		Software,
+		Flags,
+		&featureLevel,
+		1,
+		SDKVersion,
+		pSwapChainDesc,
+		ppSwapChain,
+		ppDevice,
+		pFeatureLevel,
+		ppImmediateContext);
+
+	return ret;
+}
 
 void Hooks::BSGraphics_SetDirtyStates::thunk(bool isCompute)
 {
@@ -258,6 +339,18 @@ struct ID3D11Device_CreatePixelShader
 			RegisterShaderBytecode(*ppPixelShader, pShaderBytecode, BytecodeLength);
 
 		return hr;
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
+struct ID3D11Device_CreateSamplerState
+{
+	static HRESULT STDMETHODCALLTYPE thunk(ID3D11Device* This, D3D11_SAMPLER_DESC* pSamplerDesc, ID3D11SamplerState** ppSamplerState)
+	{
+		// Limit Anisotropy to 8x for performance
+		D3D11_SAMPLER_DESC descCopy = *pSamplerDesc;  // make a copy, pSamplerDesc is supposed to be immutable
+		descCopy.MaxAnisotropy = std::min(descCopy.MaxAnisotropy, 8u);
+		return func(This, &descCopy, ppSamplerState);
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
@@ -343,15 +436,6 @@ namespace Hooks
 
 			func();
 
-			auto& upscaling = globals::features::upscaling;
-
-			if (upscaling.IsBackendInitialized()) {
-				upscaling.UpgradeBackendInterface((void**)&(globals::d3d::device));
-				upscaling.UpgradeBackendInterface((void**)&(globals::d3d::swapChain));
-				upscaling.SetBackendD3DDevice(globals::d3d::device);
-				upscaling.PostBackendDevice();
-			}
-
 			logger::info("Accessing render device information");
 			globals::ReInit();
 
@@ -363,6 +447,8 @@ namespace Hooks
 				stl::detour_vfunc<12, ID3D11Device_CreateVertexShader>(globals::d3d::device);
 				stl::detour_vfunc<15, ID3D11Device_CreatePixelShader>(globals::d3d::device);
 			}
+
+			stl::detour_vfunc<23, ID3D11Device_CreateSamplerState>(globals::d3d::device);
 
 			globals::InstallD3DHooks(globals::d3d::context);
 
@@ -417,16 +503,6 @@ namespace Hooks
 	};
 
 	struct CreateRenderTarget_NormalsSwap
-	{
-		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
-		{
-			globals::state->ModifyRenderTarget(a_target, a_properties);
-			func(This, a_target, a_properties);
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	struct CreateRenderTarget_Snow
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
@@ -630,41 +706,6 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	void BSBatchRenderer_RenderPassImmediately1::thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags)
-	{
-		if (globals::features::lightLimitFix.loaded && !globals::features::lightLimitFix.CheckParticleLights(a_pass, a_technique))
-			return;
-
-		func(a_pass, a_technique, a_alphaTest, a_renderFlags);
-	}
-
-	struct BSBatchRenderer_RenderPassImmediately2
-	{
-		static void thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags)
-		{
-			if (globals::features::lightLimitFix.loaded && !globals::features::lightLimitFix.CheckParticleLights(a_pass, a_technique))
-				return;
-
-			if (globals::features::interiorSun.loaded)
-				globals::features::interiorSun.UpdateRasterStateCullMode(a_pass, a_technique);
-
-			func(a_pass, a_technique, a_alphaTest, a_renderFlags);
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	struct BSBatchRenderer_RenderPassImmediately3
-	{
-		static void thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags)
-		{
-			if (globals::features::lightLimitFix.loaded && !globals::features::lightLimitFix.CheckParticleLights(a_pass, a_technique))
-				return;
-
-			func(a_pass, a_technique, a_alphaTest, a_renderFlags);
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
 #ifdef TRACY_ENABLE
 	struct Main_Update
 	{
@@ -780,6 +821,24 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	struct BSImageSpace_Init_IBLF
+	{
+		static void thunk(char* a1,
+			void* a2,
+			void* a3,
+			void* a4,
+			void* a5,
+			void* a6,
+			void* a7)
+		{
+			auto enableIBLF = (float*)(REL::RelocationID(513510, 391362).address());
+			*enableIBLF = false;
+
+			func(a1, a2, a3, a4, a5, a6, a7);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	/**
 	 * @brief Installs hooks, detours, and memory patches for graphics, input, and rendering subsystems.
 	 *
@@ -787,6 +846,11 @@ namespace Hooks
 	 */
 	void Install()
 	{
+		if (!REL::Module::IsVR()) {
+			logger::info("Hooking BSImageSpace::Init::IBLF");
+			stl::detour_thunk<BSImageSpace_Init_IBLF>(REL::RelocationID(100480, 107198));
+		}
+
 		logger::info("Hooking BSInputDeviceManager::PollInputDevices");
 		stl::write_thunk_call<BSInputDeviceManager_PollInputDevices>(REL::RelocationID(67315, 68617).address() + REL::Relocate(0x7B, 0x7B, 0x81));
 
@@ -815,7 +879,6 @@ namespace Hooks
 		stl::write_thunk_call<CreateRenderTarget_Main>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x3F0, 0x3F3, 0x548));
 		stl::write_thunk_call<CreateRenderTarget_Normals>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x458, 0x45B, 0x5B0));
 		stl::write_thunk_call<CreateRenderTarget_NormalsSwap>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x46B, 0x46E, 0x5C3));
-		stl::write_thunk_call<CreateRenderTarget_Snow>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x406, 0x409, 0x55e));
 		stl::write_thunk_call<CreateRenderTarget_MotionVectors>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x4F0, 0x4EF, 0x64E));
 
 		stl::write_thunk_call<CreateRenderTarget_RefractionNormals>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x503, 0x502, 0x661));
@@ -841,20 +904,17 @@ namespace Hooks
 		logger::info("Hooking TESWaterReflections::Update_Actor::GetLOSPosition for Sky Reflection Fix");
 		stl::write_thunk_call<TESWaterReflections_Update_Actor_GetLOSPosition>(REL::RelocationID(31373, 32160).address() + REL::Relocate(0x1AD, 0x1CA, 0x1ed));
 
-		logger::info("Hooking BSEffectShader");
+		logger::info("Installing SetupGeometry hooks");
 		stl::write_vfunc<0x6, EffectExtensions::BSEffectShader_SetupGeometry>(RE::VTABLE_BSEffectShader[0]);
 		stl::write_vfunc<0x6, LightingExtensions::BSLightingShader_SetupGeometry>(RE::VTABLE_BSLightingShader[0]);
+		stl::write_thunk_call<GrassExtensions::BSGrassShaderProperty_ctor>(REL::RelocationID(15214, 15383).address() + REL::Relocate(0x45B, 0x4F5));
+		stl::write_vfunc<0x6, GrassExtensions::BSGrassShader_SetupGeometry>(RE::VTABLE_BSGrassShader[0]);
 
 		logger::info("Hooking TESObjectLAND");
 		stl::detour_thunk<TESObjectLAND_SetupMaterial>(REL::RelocationID(18368, 18791));
 
 		logger::info("Hooking BSLightingShader");
 		stl::write_vfunc<0x4, BSLightingShader_SetupMaterial>(RE::VTABLE_BSLightingShader[0]);
-
-		logger::info("Hooking BSBatchRenderer::RenderPassImmediately");
-		stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately1>(REL::RelocationID(100877, 107673).address() + REL::Relocate(0x1E5, 0x1EE));
-		stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately2>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
-		stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately3>(REL::RelocationID(100871, 107667).address() + REL::Relocate(0xEE, 0xED));
 
 		// Patch render space in BSLightingShader::SetupGeometry to always use world space
 		// The variable updateEyePosition is set to 1 when not skinned. By patching to be 0 it will always use world space
@@ -884,4 +944,14 @@ namespace Hooks
 		stl::write_thunk_call<BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights>(REL::RelocationID(100565, 107300).address() + REL::Relocate(0x523, 0xB0E, 0x5FE));
 	}
 
+	void InstallEarlyHooks()
+	{
+		if (!globals::features::upscaling.loaded) {
+			logger::info("Hooking D3D11CreateDeviceAndSwapChain");
+			*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
+		}
+
+		logger::info("Hooking CreateDXGIFactory");
+		*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", !REL::Module::IsVR() ? "CreateDXGIFactory" : "CreateDXGIFactory1");
+	}
 }

@@ -29,10 +29,8 @@ public:
 	void PrepassPasses();
 
 	void ClearShaderCache();
-	ID3D11ComputeShader* GetComputeAmbientComposite();
-	ID3D11ComputeShader* GetComputeAmbientCompositeInterior();
-	ID3D11ComputeShader* GetComputeMainComposite();
 
+	ID3D11ComputeShader* GetComputeMainComposite();
 	ID3D11ComputeShader* GetComputeMainCompositeInterior();
 
 	ID3D11BlendState* deferredBlendStates[7][2][13][2];
@@ -40,15 +38,10 @@ public:
 
 	RE::RENDER_TARGET forwardRenderTargets[4];
 
-	ID3D11ComputeShader* ambientCompositeCS = nullptr;
-	ID3D11ComputeShader* ambientCompositeInteriorCS = nullptr;
-
 	ID3D11ComputeShader* mainCompositeCS = nullptr;
 	ID3D11ComputeShader* mainCompositeInteriorCS = nullptr;
 
 	bool deferredPass = false;
-
-	Texture2D* prevDiffuseAmbientTexture = nullptr;
 
 	ID3D11SamplerState* linearSampler = nullptr;
 	ID3D11SamplerState* pointSampler = nullptr;

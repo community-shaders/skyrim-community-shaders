@@ -124,11 +124,6 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 					shaderCache->WriteDiskCacheInfo();
 				}
 
-				if (!REL::Module::IsVR()) {
-					RE::GetINISetting("bEnableImprovedSnow:Display")->data.b = false;
-					RE::GetINISetting("bIBLFEnable:Display")->data.b = false;
-				}
-
 				globals::truePBR->DataLoaded();
 				for (auto* feature : Feature::GetFeatureList()) {
 					if (feature->loaded) {
@@ -172,7 +167,11 @@ bool Load()
 	const std::array incompatibleDLLs = {
 		L"Data/SKSE/Plugins/ShaderTools.dll",
 		L"Data/SKSE/Plugins/SSEShaderTools.dll",
-		L"Data/SKSE/Plugins/SkyrimUpscaler.dll"
+		L"Data/SKSE/Plugins/SkyrimUpscaler.dll",
+		L"Data/SKSE/Plugins/EVLaS.dll",
+		L"Data/SKSE/Plugins/AELAS.dll",
+		L"Data/SKSE/Plugins/SSEReShadeHelper.dll",
+		L"Data/SKSE/Plugins/trainwreck.dll"
 	};
 
 	for (const auto dll : incompatibleDLLs) {
@@ -184,7 +183,8 @@ bool Load()
 	}
 
 	const std::array requiredDLLs = {
-		L"Data/SKSE/Plugins/EngineFixes.dll"
+		REL::Module::IsVR() ? L"Data/SKSE/Plugins/EngineFixesVR.dll" : L"Data/SKSE/Plugins/EngineFixes.dll",
+		L"Data/SKSE/Plugins/CrashLogger.dll"
 	};
 
 	for (const auto dll : requiredDLLs) {
@@ -196,6 +196,7 @@ bool Load()
 	}
 
 	if (errors.empty()) {
+		Hooks::InstallEarlyHooks();
 		logger::info("Calling feature Load methods");
 		for (auto* feature : Feature::GetFeatureList()) {
 			if (feature->loaded) {
@@ -204,5 +205,5 @@ bool Load()
 		}
 	}
 
-	return errors.empty();
+	return true;
 }

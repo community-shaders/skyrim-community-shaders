@@ -31,7 +31,7 @@ namespace Util
 	float4 TryGetWaterData(float offsetX, float offsetY)
 	{
 		if (globals::game::shadowState) {
-			if (auto tes = globals::game::tes) {
+			if (auto tes = RE::TES::GetSingleton()) {
 				auto position = GetEyePosition(0);
 				position.x += offsetX;
 				position.y += offsetY;
@@ -298,5 +298,18 @@ namespace Util
 		}
 
 		return textureSet;
+	}
+
+	bool IsInterior()
+	{
+		auto tes = RE::TES::GetSingleton();
+		if (tes && !tes->interiorCell) {
+			if (auto worldSpace = tes->GetRuntimeData2().worldSpace) {
+				if (!worldSpace->flags.any(RE::TESWorldSpace::Flag::kNoSky, RE::TESWorldSpace::Flag::kFixedDimensions)) {
+					return false;
+				}
+			}
+		}
+		return true;
 	}
 }  // namespace Util

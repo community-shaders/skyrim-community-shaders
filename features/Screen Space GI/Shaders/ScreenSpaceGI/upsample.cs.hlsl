@@ -21,6 +21,9 @@ RWTexture2D<half4> outGiSpecular : register(u3);
 
 [numthreads(8, 8, 1)] void main(const uint2 dtid
 								: SV_DispatchThreadID) {
+	// Early exit if dispatch thread is outside frame bounds
+	if (any(dtid >= uint2(FrameDim)))
+		return;
 #ifdef HALF_RES
 	int2 px00 = (dtid >> 1) + (dtid & 1) - 1;
 #else  // QUARTER_RES

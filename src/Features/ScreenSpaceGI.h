@@ -6,19 +6,12 @@ private:
 	static constexpr std::string_view MOD_ID = "130375";
 
 public:
-	bool inline SupportsVR() override { return true; }
+	bool inline SupportsVR() override { return false; }
 
 	virtual inline std::string GetName() override { return "Screen Space GI"; }
 	virtual inline std::string GetShortName() override { return "ScreenSpaceGI"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
-	virtual inline std::string_view GetShaderDefineName() override { return "SSGI"; }
 	virtual std::string_view GetCategory() const override { return "Lighting"; }
-	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override
-	{
-		return t == RE::BSShader::Type::Lighting ||
-		       t == RE::BSShader::Type::Grass ||
-		       t == RE::BSShader::Type::DistantTree;
-	};
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
@@ -53,7 +46,7 @@ public:
 	void CompileComputeShaders();
 	bool ShadersOK();
 
-	void DrawSSGI(Texture2D* srcPrevAmbient);
+	void DrawSSGI();
 	void UpdateSB();
 
 	//////////////////////////////////////////////////////////////////////////////////
@@ -70,7 +63,7 @@ public:
 		// performance/quality
 		uint NumSlices = REL::Module::IsVR() ? 1u : 4u;  // AO preset for VR
 		uint NumSteps = REL::Module::IsVR() ? 6u : 8u;   // AO preset for VR
-		int ResolutionMode = 2;                          // 0-full, 1-half, 2-quarter - DBF default
+		int ResolutionMode = 1;                          // 0-full, 1-half, 2-quarter - DBF default
 		// visual
 		float MinScreenRadius = 0.01f;
 		float AORadius = 256.f;
@@ -79,12 +72,10 @@ public:
 		float2 DepthFadeRange = { 4e4, 5e4 };
 		// gi
 		float GISaturation = 0.9f;
-		bool EnableGIBounce = false;
-		float GIBounceFade = 0.3f;
 		float GIDistanceCompensation = 0.f;
 		// mix
 		float AOPower = 1.0f;
-		float GIStrength = 1.0f;
+		float GIStrength = 1.5f;
 		// denoise
 		bool EnableTemporalDenoiser = true;
 		bool EnableBlur = true;
@@ -119,9 +110,9 @@ public:
 		float DepthFadeScaleConst;
 
 		float GISaturation;  //
-		float GIBounceFade;
 		float GIDistanceCompensation;
 		float GICompensationMaxDist;
+		float pad1;
 
 		float AOPower;  //
 		float GIStrength;
@@ -133,7 +124,7 @@ public:
 		float BlurRadius;
 		float DistanceNormalisation;
 
-		float pad[2];
+		float2 pad;
 	};
 	eastl::unique_ptr<ConstantBuffer> ssgiCB;
 
@@ -142,6 +133,8 @@ public:
 	winrt::com_ptr<ID3D11UnorderedAccessView> uavWorkingDepth[5] = { nullptr };
 	eastl::unique_ptr<Texture2D> texPrevGeo = nullptr;
 	eastl::unique_ptr<Texture2D> texRadiance = nullptr;
+	eastl::unique_ptr<Texture2D> texRadianceTemp = nullptr;
+	winrt::com_ptr<ID3D11UnorderedAccessView> uavRadiance[5] = { nullptr };
 	eastl::unique_ptr<Texture2D> texAccumFrames[2] = { nullptr };
 	eastl::unique_ptr<Texture2D> texAo[2] = { nullptr };
 	eastl::unique_ptr<Texture2D> texIlY[2] = { nullptr };
@@ -163,6 +156,7 @@ public:
 	winrt::com_ptr<ID3D11SamplerState> pointClampSampler = nullptr;
 
 	winrt::com_ptr<ID3D11ComputeShader> prefilterDepthsCompute = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> prefilterRadianceCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> radianceDisoccCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> giCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> blurCompute = nullptr;

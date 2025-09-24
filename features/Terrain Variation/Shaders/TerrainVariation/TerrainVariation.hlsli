@@ -142,11 +142,12 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 {
 	// Calculate custom mip level from original UVs.
 	float mipLevel = tex.CalculateLevelOfDetail(samp, uv);
+	float adjustedMipLevel = mipLevel + SharedData::MipBias;
 
 	// 3 Sample Blend
-	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
-	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
-	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
+	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
+	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, adjustedMipLevel);
+	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, adjustedMipLevel);
 
 	// Full height-based blending for terrain
 	float contrastFactor = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE);

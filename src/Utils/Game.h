@@ -168,4 +168,6 @@ namespace Util
 	std::string FormatTESForm(const RE::TESForm* form);
 	std::string FormatWeather(const RE::TESWeather* weather);
 
+	bool IsInterior();
+
 }  // namespace Util

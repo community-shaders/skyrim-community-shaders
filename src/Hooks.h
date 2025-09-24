@@ -20,4 +20,5 @@ namespace Hooks
 	};
 
 	void Install();
+	void InstallEarlyHooks();
 }

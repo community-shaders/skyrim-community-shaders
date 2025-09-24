@@ -3,7 +3,6 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 
-#include "Features/LightLimitFix/ParticleLights.h"
 #include "Globals.h"
 #include "Plugin.h"
 #include "ShaderCache.h"
@@ -95,11 +94,10 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 				globals::state->Save();
 			}
 
-			// Load Settings Button
+			// Restore Saved Settings Button
 			ImGui::TableNextColumn();
-			if (ImGui::Button("Load Settings", { -1, 0 })) {
+			if (ImGui::Button("Restore Saved Settings", { -1, 0 })) {
 				globals::state->Load();
-				globals::features::llf::particleLights.GetConfigs();
 			}
 
 			// Clear Shader Cache Button
@@ -180,10 +178,9 @@ std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons
 	}
 	if (uiIcons.loadSettings.texture) {
 		actionIcons.push_back({ uiIcons.loadSettings.texture,
-			"Load Settings",
+			"Restore Saved Settings",
 			[]() {
 				globals::state->Load();
-				globals::features::llf::particleLights.GetConfigs();
 			} });
 	}
 	if (uiIcons.clearCache.texture) {

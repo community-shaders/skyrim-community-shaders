@@ -86,6 +86,9 @@ float2x2 getRotationMatrix(float noise)
 
 [numthreads(8, 8, 1)] void main(const uint2 dtid
 								: SV_DispatchThreadID) {
+	// Early exit if dispatch thread is outside frame bounds
+	if (any(dtid >= uint2(OUT_FRAME_DIM)))
+		return;
 	const float2 frameScale = FrameDim * RcpTexDim;
 
 	float radius = BlurRadius;

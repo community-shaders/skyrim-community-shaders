@@ -27,10 +27,16 @@
 // It can compile to DX11, but requires some modifications (e.g., early-out's use of wave intrinsics is not supported in DX11).
 // Note; you can customize the 'EarlyOutPixel' function to perform custom early-out logic to optimize this shader.
 
-
 #define WAVE_SIZE 64           // Wavefront size of the compute shader running this code.                                                                                                                      \
+
+//#if defined(__HLSL_VERSION) || defined(__hlsl_dx_compiler)
+
 #define USE_HALF_PIXEL_OFFSET 1  // Apply a 0.5 texel offset when sampling a texture. Toggle this macro if the output shadow has odd, regular grid-like artefacts.
 
+// HLSL enforces that a pixel offset in a Sample() call must be a compile time constant, which isn't always required - and in some cases can give a small perf boost if used.
+#define USE_UV_PIXEL_BIAS 1  // Use Sample(uv + bias) instead of Sample(uv, bias)
+
+//#endif
 
 // This is the list of runtime properties to pass to the shader
 // Wherever possible, it is highly recommended to have these values be compile-time constants
@@ -125,24 +131,6 @@ struct DispatchParameters
 //	(int)	inGroupThreadId:	Compute shader group thread id register (SV_GroupThreadID)
 void WriteScreenSpaceShadow(struct DispatchParameters inParameters, int3 inGroupID, int inGroupThreadID);
 
-#if !defined(WAVE_SIZE) || !defined(SAMPLE_COUNT)
-#	error Before including bend_sss_gpu.h, four macros must be defined to configure the shader compile: WAVE_SIZE, SAMPLE_COUNT. See the top of this file for details.
-#else
-
-// static bool EarlyOutPixel(struct DispatchParameters inParameters, int2 pixel_xy, half depth)
-// {
-// 	//OPTIONAL TODO; customize this function to return true if the pixel should early-out for custom reasons. E.g., A shadow map pass already found the pixel was in shadow / backfaced, etc.
-// 	// Recommended to keep this code very simple!
-
-// 	// Example:
-// 	// return inParameters.CustomShadowMapTerm[pixel_xy] == 0;
-
-// 	(void)pixel_xy;	//unused by this implementation, avoid potential compiler warning.
-
-// 	// The compiled code will be more optimal if the 'depth' value is not referenced.
-// 	return depth >= inParameters.DepthBounds.y || depth <= inParameters.DepthBounds.x;
-// }
-
 // Gets the start pixel coordinates for the pixels in the wavefront
 // Also returns the delta to get to the next pixel after WAVE_COUNT pixels along the ray
 static void ComputeWavefrontExtents(DispatchParameters inParameters, int3 inGroupID, uint inGroupThreadID, out half2 outDeltaXY, out half2 outPixelXY, out half outPixelDistance, out bool outMajorAxisX)
@@ -235,8 +223,11 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 
 	half2 write_xy = floor(pixel_xy);
 
-	for (i = 0; i < min(inParameters.DynamicReadCount, READ_COUNT); i++)
+	[loop] for (i = 0; i < READ_COUNT; i++)
 	{
+		if (i == inParameters.DynamicSampleCount)
+			break;
+
 		// We sample depth twice per pixel per sample, and interpolate with an edge detect filter
 		// Interpolation should only occur on the minor axis of the ray - major axis coordinates should be at pixel centers
 		half2 read_xy = floor(pixel_xy);
@@ -316,45 +307,12 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 		pixel_xy += xy_delta * direction;
 	}
 
-	// Using early out, and no debug mode is enabled?
-	// if (inParameters.UseEarlyOut && (inParameters.DebugOutputWaveIndex == false && inParameters.DebugOutputThreadIndex == false && inParameters.DebugOutputEdgeMask == false))
-	// {
-	// 	// read the depth of the pixel we are shadowing, and early-out
-	// 	// The compiler will typically rearrange this code to put it directly after the first depth read
-	// 	skip_pixel = EarlyOutPixel(inParameters, (int2)write_xy, sampling_depth[0]);
-
-	// 	// are all threads in this wave out of bounds?
-	// 	bool early_out = WaveActiveAnyTrue(!skip_pixel) == false;
-
-	// 	// WaveGetLaneCount returns the hardware wave size
-	// 	if (WaveGetLaneCount() == WAVE_SIZE)
-	// 	{
-	// 		// Optimal case:
-	// 		// If each wavefront is just a single wave, then we can trivially early-out.
-	// 		if (early_out == true)
-	// 			return;
-	// 	}
-	// 	else
-	// 	{
-	// 		// This wavefront is made up of multiple small waves, so we need to coordinate them for all to early-out together.
-	// 		// Doing this can make the worst case (all pixels drawn) a bit more expensive (~15%), but the best-case (all early-out) is typically 2-3x better.
-	// 		LdsEarlyOut = true;
-
-	// 		GroupMemoryBarrierWithGroupSync();
-
-	// 		[branch] if (early_out == false)
-	// 			LdsEarlyOut = false;
-
-	// 		GroupMemoryBarrierWithGroupSync();
-
-	// 		[branch] if (LdsEarlyOut)
-	// 			return;
-	// 	}
-	// }
-
 	// Write the shadow depths to LDS
-	for (i = 0; i < min(inParameters.DynamicReadCount, READ_COUNT); i++)
+	[loop] for (i = 0; i < READ_COUNT; i++)
 	{
+		if (i == inParameters.DynamicSampleCount)
+			break;
+
 		// Perspective correct the shadowing depth, in this space, all light rays are parallel
 		half stored_depth = (shadowing_depth[i] - inParameters.LightCoordinate.z) / sample_distance[i];
 
@@ -391,7 +349,8 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 		return;
 
 	// lerp away from far depth by a tiny fraction?
-	start_depth = lerp(start_depth, inParameters.FarDepthValue, -1.0 / 0xFFFF);
+	if (inParameters.UsePrecisionOffset)
+		start_depth = lerp(start_depth, inParameters.FarDepthValue, -1.0 / 0xFFFF);
 
 	// perspective correct the depth
 	start_depth = (start_depth - inParameters.LightCoordinate.z) / sample_distance[0];
@@ -400,7 +359,6 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 	int sample_index = inGroupThreadID.x + 1;
 
 	half4 shadow_value = 1;
-	half hard_shadow = 1;
 
 	// This is the inverse of how large the shadowing window is for the projected sample data.
 	// All values in the LDS sample list are scaled by 1.0 / sample_distance, such that all light directions become parallel.
@@ -412,13 +370,13 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 
 	start_depth = start_depth * depth_scale - z_sign;
 
-	// Brute force go!
-	// The main shadow samples, averaged in to a set of 4 shadow values
-	for (i = 0; i < min(inParameters.DynamicSampleCount, SAMPLE_COUNT); i++)
+	for (i = 0; i < SAMPLE_COUNT; i++)
 	{
+		if (i == inParameters.DynamicSampleCount)
+			break;
+
 		half depth_delta = abs(start_depth - DepthData[sample_index + i] * depth_scale);
 
-		// Do the same as the hard_shadow code above, but this will accumulate to 4 separate values.
 		// By using 4 values, the average shadow can be taken, which can help soften single-pixel shadows.
 		shadow_value[i & 3] = min(shadow_value[i & 3], depth_delta);
 	}
@@ -437,5 +395,3 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 	// But thankfully the latency is hidden by all the work we're doing...
 	inParameters.OutputTexture[(int2)write_xy] = result;
 }
-
-#endif  // macro check

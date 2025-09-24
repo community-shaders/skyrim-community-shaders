@@ -38,23 +38,10 @@ cbuffer PerGeometry : register(b2)
 	float4 BlurOffsets[16] : packoffset(c7);
 };
 
-float GetTonemapFactorReinhard(float luminance)
-{
-	return (luminance * (luminance * Param.y + 1)) / (luminance + 1);
-}
-
 float3 GetTonemapFactorReinhard(float3 luminance)
 {
 	return (luminance * (luminance * Param.y + 1)) / (luminance + 1);
 }
-
-float GetTonemapFactorHejlBurgessDawson(float luminance)
-{
-	float tmp = max(0, luminance - 0.004);
-	return Param.y *
-	       pow(((tmp * 6.2 + 0.5) * tmp) / (tmp * (tmp * 6.2 + 1.7) + 0.06), Color::GammaCorrectionValue);
-}
-
 
 float3 GetTonemapFactorHejlBurgessDawson(float3 luminance)
 {
@@ -77,7 +64,7 @@ PS_OUTPUT main(PS_INPUT input)
 		{
 			texCoord = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(texCoord);
 		}
-		float3 imageColor = ImageTex.Sample(ImageSampler, texCoord).xyz;
+		float3 imageColor = max(0.0, ImageTex.Sample(ImageSampler, texCoord).xyz);
 #		if defined(RGB2LUM)
 		imageColor = Color::RGBToLuminance(imageColor);
 #		elif (defined(LUM) || defined(LUMCLAMP)) && !defined(DOWNADAPT)
@@ -86,22 +73,18 @@ PS_OUTPUT main(PS_INPUT input)
 		downsampledColor += imageColor * BlurOffsets[sampleIndex].z;
 	}
 #		if defined(DOWNADAPT)
-	float2 adaptValue = AdaptTex.Sample(AdaptSampler, input.TexCoord).xy;
-	if (isnan(downsampledColor.x) || isnan(downsampledColor.y) || isnan(downsampledColor.z)) {
-		downsampledColor.xy = adaptValue;
-	} else {
-		float2 adaptDelta = downsampledColor.xy - adaptValue;
-		downsampledColor.xy =
-			sign(adaptDelta) * clamp(abs(Param.wz * adaptDelta), 0.00390625, abs(adaptDelta)) +
-			adaptValue;
-	}
+	float2 adaptValue = max(0.001, AdaptTex.Sample(AdaptSampler, input.TexCoord).xy);
+	float2 adaptDelta = downsampledColor.xy - adaptValue;
+	downsampledColor.xy =
+		sign(adaptDelta) * clamp(abs(Param.wz * adaptDelta), 0.00390625, abs(adaptDelta)) +
+		adaptValue;
 #		endif
 	psout.Color = float4(downsampledColor, BlurScale.z);
 
 #	elif defined(BLEND)
 	float2 uv = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 
-	float3 hdrColor = BlendTex.Sample(BlendSampler, uv).xyz;
+	float3 inputColor = BlendTex.Sample(BlendSampler, uv).xyz;
 
 	float3 bloomColor = 0;
 	if (Flags.x > 0.5) {
@@ -112,16 +95,41 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float2 avgValue = AvgTex.Sample(AvgSampler, input.TexCoord.xy).xy;
 
-	hdrColor *= avgValue.y / avgValue.x;
+	// Vanilla tonemapping and post-processing
+	float3 gameSdrColor = 0.0;
+	float3 ppColor = 0.0;
+	{
+		if (avgValue.x != 0 && avgValue.y != 0)
+			inputColor *= avgValue.y / avgValue.x;
 
-	hdrColor += DisplayMapping::RangeCompress(max(0, Param.x - hdrColor)) * bloomColor;
+		inputColor = max(0, inputColor);
 
-	hdrColor = pow(abs(hdrColor) / avgValue.x, Cinematic.z) * avgValue.x * sign(hdrColor);
+		float3 blendedColor;
+		[branch] if (Param.z > 0.5)
+		{
+			blendedColor = DisplayMapping::HuePreservingHejlBurgessDawson(inputColor, bloomColor);
+		}
+		else
+		{
+			float maxCol = Color::RGBToLuminance(inputColor);
+			float mappedMax = GetTonemapFactorReinhard(maxCol).x;
+			float3 compressedHuePreserving = inputColor * mappedMax / maxCol;
+			blendedColor = compressedHuePreserving;
+			blendedColor += saturate(Param.x - blendedColor) * bloomColor;
+		}
 
-	float hdrLuminance = Color::RGBToLuminance(hdrColor);
-	hdrColor = Cinematic.w * lerp(lerp(hdrLuminance, hdrColor, Cinematic.x), lerp(hdrColor, hdrLuminance, saturate(hdrLuminance)) * Tint.xyz, Tint.w).xyz;
+		gameSdrColor = blendedColor;
 
-	float3 srgbColor = DisplayMapping::HuePreservingTonemap(hdrColor);
+		float blendedLuminance = Color::RGBToLuminance(blendedColor);
+
+		float3 linearColor = Cinematic.w * lerp(lerp(blendedLuminance, blendedColor, Cinematic.x), blendedLuminance * Tint.xyz, Tint.w).xyz;
+
+		linearColor = lerp(avgValue.x, linearColor, Cinematic.z);
+
+		ppColor = max(0, linearColor);
+	}
+
+	float3 srgbColor = ppColor;
 
 #		if defined(FADE)
 	srgbColor = lerp(srgbColor, Fade.xyz, Fade.w);

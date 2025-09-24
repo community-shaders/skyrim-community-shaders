@@ -39,10 +39,10 @@ namespace Util
 		std::filesystem::path GetCommunityShaderPath();
 
 		/**
-		 * Gets the UserSettings.json file path
-		 * @return CommunityShaderPath / "UserSettings.json"
+		 * Gets the CommunityShaders_ImGui.ini file path
+		 * @return Data / "SKSE" / "Plugins" / "CommunityShaders_ImGui.ini"
 		 */
-		std::filesystem::path GetUserSettingsPath();
+		std::filesystem::path GetImGuiIniPath();
 
 		/**
 		 * Gets the CommunityShaders Interface directory path
