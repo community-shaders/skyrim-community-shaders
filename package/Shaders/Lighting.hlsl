@@ -15,8 +15,8 @@
 #	define SKIN
 #endif
 
-#if defined(HAIR) && defined(CS_HAIR)
-#	define DYNAMIC_CUBEMAPS
+#if !defined(DYNAMIC_CUBEMAPS) && defined(IBL)
+#	undef IBL
 #endif
 
 #if (defined(TREE_ANIM) || defined(LANDSCAPE)) && !defined(VC)
@@ -2718,9 +2718,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		if (SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
 			directionalAmbientColor = ImageBasedLighting::GetStaticDiffuseIBL(ambientNormal, SampColorSampler);
-		} else if (!SharedData::InInterior) {
+		} else if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior) {
 			directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-			directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(-ambientNormal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 		}
 	}
 #	endif
@@ -2734,6 +2733,22 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		skylightingDiffuse = saturate(skylightingDiffuse);
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+	}
+#	endif
+
+#	if defined(IBL)
+	float3 iblColor = 0;
+	if (SharedData::iblSettings.EnableDiffuseIBL) {
+		if ((!SharedData::InInterior || SharedData::iblSettings.EnableInterior) && !(SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection))
+		{
+#		if defined(SKYLIGHTING)
+			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-ambientNormal, skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#		else
+			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-ambientNormal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#		endif
+		iblColor = Color::LinearToGamma(iblColor);
+		directionalAmbientColor += iblColor;
+		}
 	}
 #	endif
 
@@ -3091,10 +3106,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #		endif
 
+#	if defined(IBL) && defined(SKYLIGHTING)
+	directionalAmbientColor -= iblColor;
+#	endif
+
 	directionalAmbientColor *= outputAlbedo;
 
 #	if defined(SKYLIGHTING)
 	Skylighting::applySkylighting(color.xyz, directionalAmbientColor, skylightingDiffuse);
+#	endif
+
+#	if defined(IBL) && defined(SKYLIGHTING)
+	directionalAmbientColor += iblColor * outputAlbedo;
 #	endif
 
 #	if !defined(DEFERRED)

@@ -13,11 +13,11 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EnableDiffuseIBL,
 	PreserveFogLuminance,
 	UseStaticIBL,
+	EnableInterior,
 	DiffuseIBLScale,
 	DALCAmount,
 	IBLSaturation,
-	FogAmount,
-	DynamicCubemapsAmount)
+	FogAmount)
 
 void IBL::DrawSettings()
 {
@@ -25,19 +25,13 @@ void IBL::DrawSettings()
 	ImGui::SliderFloat("Diffuse IBL Scale", &settings.DiffuseIBLScale, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("Diffuse IBL Saturation", &settings.IBLSaturation, 0.0f, 2.0f, "%.2f");
 	ImGui::SliderFloat("DALC Amount", &settings.DALCAmount, 0.0f, 1.0f, "%.2f");
+	ImGui::Checkbox("Enable Interior", (bool*)&settings.EnableInterior);
 	ImGui::Checkbox("Use Static IBL For Out-of-World Objects", (bool*)&settings.UseStaticIBL);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Enables the use of static IBL textures for objects that are not in the world (e.g. inventory items).");
 	}
 	ImGui::SliderFloat("Fog Mix", &settings.FogAmount, 0.0f, 1.0f, "%.2f");
 	ImGui::Checkbox("Preserve Fog Luminance", (bool*)&settings.PreserveFogLuminance);
-	ImGui::SliderFloat("Dynamic Cubemaps Amount", &settings.DynamicCubemapsAmount, 0.0f, 1.0f, "%.2f");
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text(
-			"Samples from dynamic cubemaps.\n"
-			"Requires the Dynamic Cubemaps feature to be enabled.\n"
-			"May cause dynamic cubemaps sampling accumulation issues under certain conditions.");
-	}
 }
 
 void IBL::LoadSettings(json& o_json)
@@ -62,12 +56,13 @@ void IBL::EarlyPrepass()
 
 		// Set PS shader resource
 		{
-			std::array<ID3D11ShaderResourceView*, 3> srvs = {
+			std::array<ID3D11ShaderResourceView*, 4> srvs = {
 				diffuseIBLTexture->srv.get(),
+				diffuseSkyIBLTexture->srv.get(),
 				staticDiffuseIBLTexture->srv.get(),
 				staticSpecularIBLTexture->srv.get()
 			};
-			context->PSSetShaderResources(76, 3, srvs.data());
+			context->PSSetShaderResources(76, 4, srvs.data());
 		}
 	}
 }
@@ -75,28 +70,23 @@ void IBL::EarlyPrepass()
 void IBL::Prepass()
 {
 	auto context = globals::d3d::context;
-
-	auto renderer = globals::game::renderer;
-	auto& reflections = renderer->GetRendererData().cubemapRenderTargets[RE::RENDER_TARGET_CUBEMAP::kREFLECTIONS];
+	auto state = globals::state;
 
 	auto& dynamicCubemaps = globals::features::dynamicCubemaps;
 
 	auto& envTexture = dynamicCubemaps.envTexture;
 	auto& envReflectionsTexture = dynamicCubemaps.envReflectionsTexture;
 
-	std::array<ID3D11ShaderResourceView*, 3> srvs = {
-		reflections.SRV,
-		(dynamicCubemaps.loaded && envTexture) ? envTexture->srv.get() : nullptr,
-		(dynamicCubemaps.loaded && envReflectionsTexture) ? envReflectionsTexture->srv.get() : nullptr
-	};
-	std::array<ID3D11UnorderedAccessView*, 1> uavs = { diffuseIBLTexture->uav.get() };
-	std::array<ID3D11SamplerState*, 1> samplers = { Deferred::GetSingleton()->linearSampler };
-
 	// Unset PS shader resource
 	{
-		ID3D11ShaderResourceView* srv = nullptr;
-		context->PSSetShaderResources(76, 1, &srv);
+		ID3D11ShaderResourceView* views[2]{ nullptr, nullptr };
+		context->PSSetShaderResources(76, 2, views);
 	}
+
+	state->BeginPerfEvent("IBL");
+	std::array<ID3D11ShaderResourceView*, 1> srvs = { (dynamicCubemaps.loaded && envTexture) ? envTexture->srv.get() : nullptr };
+	std::array<ID3D11UnorderedAccessView*, 1> uavs = { diffuseIBLTexture->uav.get() };
+	std::array<ID3D11SamplerState*, 1> samplers = { Deferred::GetSingleton()->linearSampler };
 
 	// IBL
 	{
@@ -106,6 +96,16 @@ void IBL::Prepass()
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
 		context->CSSetShader(GetDiffuseIBLCS(), nullptr, 0);
+		context->Dispatch(1, 1, 1);
+	}
+
+	// IBL with sky
+	{
+		srvs.at(0) = (dynamicCubemaps.loaded && envReflectionsTexture) ? envReflectionsTexture->srv.get() : nullptr;
+		uavs.at(0) = diffuseSkyIBLTexture->uav.get();
+
+		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
 		context->Dispatch(1, 1, 1);
 	}
 
@@ -120,11 +120,12 @@ void IBL::Prepass()
 		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
 		context->CSSetShader(nullptr, nullptr, 0);
 	}
+	state->EndPerfEvent();
 
 	// Set PS shader resource
 	{
-		ID3D11ShaderResourceView* srv = diffuseIBLTexture->srv.get();
-		context->PSSetShaderResources(76, 1, &srv);
+		ID3D11ShaderResourceView* views[2]{ diffuseIBLTexture->srv.get(), diffuseSkyIBLTexture->srv.get() };
+		context->PSSetShaderResources(76, 2, views);
 	}
 }
 
@@ -161,6 +162,9 @@ void IBL::SetupResources()
 		diffuseIBLTexture = new Texture2D(texDesc);
 		diffuseIBLTexture->CreateSRV(srvDesc);
 		diffuseIBLTexture->CreateUAV(uavDesc);
+		diffuseSkyIBLTexture = new Texture2D(texDesc);
+		diffuseSkyIBLTexture->CreateSRV(srvDesc);
+		diffuseSkyIBLTexture->CreateUAV(uavDesc);
 	}
 
 	auto device = globals::d3d::device;
