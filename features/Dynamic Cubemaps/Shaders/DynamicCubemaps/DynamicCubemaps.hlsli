@@ -36,7 +36,7 @@ namespace DynamicCubemaps
 #	else
 
 		float3 finalIrradiance = 0;
-		
+
 		float directionalAmbientColorSpecular = Color::RGBToLuminance(max(0, mul(SharedData::DirectionalAmbient, float4(R, 1.0)))) / Math::PI;
 
 #		if defined(IBL) && defined(LIGHTING)
@@ -52,7 +52,7 @@ namespace DynamicCubemaps
 #		if defined(SKYLIGHTING)
 		if (SharedData::InInterior) {
 			float3 specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, level).xyz);
-			
+
 			float specularIrradianceLuminance = Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, 15).xyz);
 			specularIrradiance /= specularIrradiance;
 			specularIrradiance *= directionalAmbientColorSpecular;
@@ -67,12 +67,12 @@ namespace DynamicCubemaps
 		skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
 
 		directionalAmbientColorSpecular *= skylightingSpecular;
-		
+
 		float3 specularIrradiance = 1;
 
 		if (skylightingSpecular < 1.0){
 			specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, level).xyz);
-			
+
 			float specularIrradianceLuminance = Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, 15).xyz);
 			specularIrradiance /= specularIrradiance;
 			specularIrradiance *= directionalAmbientColorSpecular;
@@ -82,7 +82,7 @@ namespace DynamicCubemaps
 
 		if (skylightingSpecular > 0.0){
 			specularIrradianceReflections = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
-			
+
 			float specularIrradianceReflectionsLuminance = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, 15).xyz);
 			specularIrradianceReflections /= specularIrradianceReflectionsLuminance;
 			specularIrradianceReflections *= directionalAmbientColorSpecular;
@@ -91,7 +91,7 @@ namespace DynamicCubemaps
 		finalIrradiance = lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
 #		else
 		float3 specularIrradiance = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
-		
+
 		float specularIrradianceLuminance = Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, 15).xyz);
 		specularIrradiance /= specularIrradiance;
 		specularIrradiance *= directionalAmbientColorSpecular;
