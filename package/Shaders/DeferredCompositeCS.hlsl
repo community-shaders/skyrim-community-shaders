@@ -199,7 +199,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 		float specularIrradianceLuminance = Color::RGBToLuminance(Color::GammaToLinear(EnvTexture.SampleLevel(LinearSampler, R, 15)));
 		specularIrradiance /= specularIrradianceLuminance;
 		specularIrradiance = Color::GammaToLinear(Color::LinearToGamma(specularIrradiance) * directionalAmbientColorSpecular);
-	
+
 		finalIrradiance += specularIrradiance;
 #	elif defined(SKYLIGHTING)
 #		if defined(VR)
@@ -212,7 +212,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 		float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
 		skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
-		
+
 		directionalAmbientColorSpecular = Color::GammaToLinear(directionalAmbientColorSpecular);
 		directionalAmbientColorSpecular *= skylightingSpecular;
 		directionalAmbientColorSpecular = Color::LinearToGamma(directionalAmbientColorSpecular);
