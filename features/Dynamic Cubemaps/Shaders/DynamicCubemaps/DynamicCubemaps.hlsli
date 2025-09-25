@@ -54,7 +54,7 @@ namespace DynamicCubemaps
 			float3 specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, level).xyz);
 
 			float specularIrradianceLuminance = Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, 15).xyz);
-			specularIrradiance /= specularIrradiance;
+			specularIrradiance /= specularIrradiance + 0.001;
 			specularIrradiance = Color::GammaToLinear(Color::LinearToGamma(specularIrradiance) * directionalAmbientColorSpecular);
 
 			finalIrradiance += specularIrradiance;
@@ -77,7 +77,7 @@ namespace DynamicCubemaps
 			specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, level).xyz);
 
             float specularIrradianceLuminance = Color::RGBToLuminance(Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, 15).xyz));
-            specularIrradiance /= specularIrradianceLuminance;
+            specularIrradiance /= specularIrradianceLuminance + 0.001;
             specularIrradiance = Color::GammaToLinear(Color::LinearToGamma(specularIrradiance) * directionalAmbientColorSpecular);
 		}
 
@@ -87,7 +87,7 @@ namespace DynamicCubemaps
 			specularIrradianceReflections = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
 
 			float specularIrradianceReflectionsLuminance = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, 15).xyz);
-			specularIrradianceReflections /= specularIrradianceReflectionsLuminance;
+			specularIrradianceReflections /= specularIrradianceReflectionsLuminance + 0.001;
 			specularIrradianceReflections = Color::GammaToLinear(Color::LinearToGamma(specularIrradianceReflections) * directionalAmbientColorSpecular);
 		}
 
@@ -96,7 +96,7 @@ namespace DynamicCubemaps
 		float3 specularIrradiance = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
 
 		float specularIrradianceLuminance = Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, 15).xyz);
-		specularIrradiance /= specularIrradiance;
+		specularIrradiance /= specularIrradiance + 0.001;
 		specularIrradiance = Color::GammaToLinear(Color::LinearToGamma(specularIrradiance) * directionalAmbientColorSpecular);
 
 		finalIrradiance += specularIrradiance;
