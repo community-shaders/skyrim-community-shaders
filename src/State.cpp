@@ -138,7 +138,7 @@ void State::Setup()
 		if (feature->loaded)
 			feature->SetupResources();
 	globals::deferred->SetupResources();
-	if (!upscalerLoaded)
+		if (!upscalerLoaded)
 		globals::upscaling->CreateUpscalingResources();
 	SetupReShade();
 	if (initialized)
@@ -644,7 +644,7 @@ void State::ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescr
 				static bool vr = REL::Module::IsVR();
 
 				if (vr || !enableImprovedSnow->GetBool())
-					a_pixelDescriptor &= ~((uint32_t)SIE::ShaderCache::LightingShaderFlags::Snow);
+				a_pixelDescriptor &= ~((uint32_t)SIE::ShaderCache::LightingShaderFlags::Snow);
 
 				if (deferred->deferredPass || a_forceDeferred)
 					a_pixelDescriptor |= (uint32_t)SIE::ShaderCache::LightingShaderFlags::Deferred;

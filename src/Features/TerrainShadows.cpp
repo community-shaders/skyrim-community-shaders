@@ -27,7 +27,7 @@ void TerrainShadows::DrawSettings()
 	if (ImGui::CollapsingHeader("Debug")) {
 		std::string curr_worldspace = "N/A";
 		std::string curr_worldspace_name = "N/A";
-		auto tes = globals::game::tes;
+		auto tes = RE::TES::GetSingleton();
 		if (tes) {
 			auto worldspace = tes->GetRuntimeData2().worldSpace;
 			if (worldspace) {
@@ -171,7 +171,7 @@ void TerrainShadows::CompileComputeShaders()
 
 bool TerrainShadows::IsHeightMapReady()
 {
-	if (auto tes = globals::game::tes)
+	if (auto tes = RE::TES::GetSingleton())
 		if (auto worldspace = tes->GetRuntimeData2().worldSpace)
 			return cachedHeightmap && cachedHeightmap->worldspace == worldspace->GetFormEditorID();
 	return false;
@@ -197,7 +197,7 @@ TerrainShadows::PerFrame TerrainShadows::GetCommonBufferData()
 
 void TerrainShadows::LoadHeightmap()
 {
-	auto tes = globals::game::tes;
+	auto tes = RE::TES::GetSingleton();
 	if (!tes)
 		return;
 	auto worldspace = tes->GetRuntimeData2().worldSpace;

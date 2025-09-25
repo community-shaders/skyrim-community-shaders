@@ -5,7 +5,6 @@
 #include "RE/P/PlayerCharacter.h"
 #include <openvr.h>
 
-#include "DX12SwapChain.h"
 #include "State.h"
 #include "Utils/D3D.h"
 #include "Utils/PerfUtils.h"
@@ -117,7 +116,7 @@ void VR::DataLoaded()
 
 void VR::EarlyPrepass()
 {
-	*gDepthBufferCulling = globals::game::tes->interiorCell ? settings.EnableDepthBufferCullingInterior : settings.EnableDepthBufferCullingExterior;
+	*gDepthBufferCulling = RE::TES::GetSingleton()->interiorCell ? settings.EnableDepthBufferCullingInterior : settings.EnableDepthBufferCullingExterior;
 }
 
 //=============================================================================
@@ -1555,18 +1554,27 @@ void VR::UpdateOverlayMenuStateFromInput()
 		return;
 	}
 
-	// Check if we're in a valid menu state for input
-	bool inValidMenuState = globals::game::ui &&
-	                        (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::TweenMenu::MENU_NAME));
+	// Compute whether the game's UI menus we care about are open. Do this early so
+	// downstream logic can reuse the result and we only check the UI once.
+	bool uiMenusOpen = globals::game::ui &&
+	                   (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::TweenMenu::MENU_NAME));
+
+	// Valid menu state means either one of those UI menus is open, or our menu is
+	// enabled (but only if the game's UI system is present).
+	bool inValidMenuState = uiMenusOpen || (globals::game::ui && isEnabled);
 
 	if (!inValidMenuState)
 		return;
 
-	// Define menu state mappings
+	// Define menu state mappings. The `allowWhenUIMenusClosed` flag controls whether
+	// a mapping is allowed to run when our menu is enabled but the game's UI menus
+	// are not reported open. This prevents 'open' controls from firing in that state
+	// while still allowing 'close' actions.
 	struct MenuStateMapping
 	{
 		std::function<bool()> condition;
 		std::function<void()> action;
+		bool allowWhenUIMenusClosed = false;
 	};
 
 	// Generic combo checking function - makes the system truly extensible
@@ -1617,7 +1625,8 @@ void VR::UpdateOverlayMenuStateFromInput()
 		{ [&]() {
 			 return CheckCombo(settings.VRMenuCloseKeys) && isEnabled;
 		 },
-			[&]() { isEnabled = false; } },
+			[&]() { isEnabled = false; },
+			true },
 
 		// Open VR overlay when closed
 		{ [&]() {
@@ -1632,8 +1641,15 @@ void VR::UpdateOverlayMenuStateFromInput()
 			[&]() { overlayEnabled = false; } }
 	};
 
-	// Process mappings in order
+	// Process mappings in order. If our menu is enabled but the game's UI menus
+	// are not open, only allow mappings explicitly marked with
+	// allowWhenUIMenusClosed (close actions).
+	bool onlyAllowClose = isEnabled && !uiMenusOpen;
+
 	for (const auto& mapping : mappings) {
+		if (onlyAllowClose && !mapping.allowWhenUIMenusClosed)
+			continue;
+
 		if (mapping.condition()) {
 			mapping.action();
 			break;  // Only execute one action per frame

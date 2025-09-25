@@ -11,24 +11,10 @@ namespace GrassCollision
 		uint numCollisions;
 	}
 
-	void SmoothLimitDisplacement(inout float3 displacement, float maxLength)
-	{
-		float lengthSq = dot(displacement, displacement);
-		float maxLengthSq = maxLength * maxLength;
-
-		if (lengthSq > maxLengthSq) {
-			float length = sqrt(lengthSq);
-			float smoothFactor = smoothstep(0.0, maxLength, length);
-			float scale = lerp(1.0, maxLength / length, smoothFactor);
-
-			displacement *= scale;
-		}
-	}
-
 	float3 GetDisplacedPosition(VS_INPUT input, float3 position, uint eyeIndex = 0)
 	{
 		float3 worldPosition = mul(World[eyeIndex], float4(position, 1.0)).xyz;
-		float alpha = saturate(input.Color.w * 10.0);
+		float alpha = pow(saturate(input.Color.w), 0.25);
 
 		if (length(worldPosition) < 2048.0 && alpha > 0.0) {
 			float3 displacement = 0.0;
@@ -44,11 +30,9 @@ namespace GrassCollision
 				displacement -= length(shift);
 			}
 
-			displacement *= saturate((position.z - input.InstanceData1.z) * 0.1) * alpha;
+			displacement *= alpha * 0.5;
 
-			SmoothLimitDisplacement(displacement, 32.0);
-
-			return displacement * 0.75;
+			return displacement;
 		}
 
 		return 0.0;

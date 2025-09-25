@@ -20,8 +20,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Thickness,
 	DepthFadeRange,
 	GISaturation,
-	EnableGIBounce,
-	GIBounceFade,
 	GIDistanceCompensation,
 	AOPower,
 	GIStrength,
@@ -253,21 +251,6 @@ void ScreenSpaceGI::DrawSettings()
 		}
 
 		Util::PercentageSlider("IL Saturation", &settings.GISaturation);
-
-		recompileFlag |= ImGui::Checkbox("Ambient Bounce", &settings.EnableGIBounce);
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(
-				"Simulates multiple light bounces. Better with denoiser on.\n"
-				"Mandatory if you want ambient as part of the light source for IL calculation.");
-
-		{
-			auto bounceGuard = Util::DisableGuard(!settings.EnableGIBounce);
-			ImGui::Indent();
-			Util::PercentageSlider("Ambient Bounce Strength", &settings.GIBounceFade);
-			ImGui::Unindent();
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("How much of this frame's ambient+IL get carried to the next frame as source.");
-		}
 	}
 
 	///////////////////////////////
@@ -299,7 +282,7 @@ void ScreenSpaceGI::DrawSettings()
 			ImGui::Separator();
 
 			{
-				auto disocclusionGuard = Util::DisableGuard(!settings.EnableTemporalDenoiser && !(settings.EnableGI || settings.EnableGIBounce));
+				auto disocclusionGuard = Util::DisableGuard(!settings.EnableTemporalDenoiser && !settings.EnableGI);
 
 				Util::PercentageSlider("Movement Disocclusion", &settings.DepthDisocclusion, 0.f, 20.f);
 				if (auto _tt = Util::HoverTooltipWrapper())
@@ -328,8 +311,6 @@ void ScreenSpaceGI::DrawSettings()
 	ImGui::SeparatorText("Debug");
 
 	if (ImGui::TreeNode("Buffer Viewer")) {
-		auto deferred = globals::deferred;
-
 		static float debugRescale = .3f;
 		ImGui::SliderFloat("View Resize", &debugRescale, 0.f, 1.f);
 
@@ -344,8 +325,6 @@ void ScreenSpaceGI::DrawSettings()
 		BUFFER_VIEWER_NODE(texIlCoCg[0], debugRescale)
 		BUFFER_VIEWER_NODE(texIlCoCg[1], debugRescale)
 
-		BUFFER_VIEWER_NODE(deferred->prevDiffuseAmbientTexture, debugRescale)
-
 		ImGui::TreePop();
 	}
 }
@@ -353,12 +332,6 @@ void ScreenSpaceGI::DrawSettings()
 void ScreenSpaceGI::LoadSettings(json& o_json)
 {
 	settings = o_json;
-
-	if (auto iniSettingCollection = globals::game::iniPrefSettingCollection) {
-		if (auto setting = iniSettingCollection->GetSetting("bSAOEnable:Display")) {
-			setting->data.b = false;
-		}
-	}
 
 	recompileFlag = true;
 }
@@ -408,14 +381,39 @@ void ScreenSpaceGI::SetupResources()
 		auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 		mainTex.texture->GetDesc(&texDesc);
 		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
-		texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 5;
-		texDesc.MiscFlags |= D3D11_RESOURCE_MISC_GENERATE_MIPS;
 
 		{
 			texRadiance = eastl::make_unique<Texture2D>(texDesc);
 			texRadiance->CreateSRV(srvDesc);
-			texRadiance->CreateUAV(uavDesc);
+			texRadiance->CreateUAV(uavDesc);  // Create default UAV for mip 0
+
+			// Create individual UAVs for each mip level for prefiltering
+			for (uint i = 0; i < 5; ++i) {
+				D3D11_UNORDERED_ACCESS_VIEW_DESC mipUavDesc = {
+					.Format = DXGI_FORMAT_R11G11B10_FLOAT,
+					.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+					.Texture2D = { .MipSlice = i }
+				};
+				DX::ThrowIfFailed(device->CreateUnorderedAccessView(texRadiance->resource.get(), &mipUavDesc, uavRadiance[i].put()));
+			}
+
+			// Create temporary texture for prefiltering (single mip level, used as SRV input)
+			D3D11_TEXTURE2D_DESC tempTexDesc = texDesc;
+			tempTexDesc.MipLevels = 1;
+			tempTexDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+
+			D3D11_SHADER_RESOURCE_VIEW_DESC tempSrvDesc = {
+				.Format = DXGI_FORMAT_R11G11B10_FLOAT,
+				.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+				.Texture2D = {
+					.MostDetailedMip = 0,
+					.MipLevels = 1 }
+			};
+
+			texRadianceTemp = eastl::make_unique<Texture2D>(tempTexDesc);
+			texRadianceTemp->CreateSRV(tempSrvDesc);
 		}
 
 		texDesc.BindFlags &= ~D3D11_BIND_RENDER_TARGET;
@@ -546,7 +544,7 @@ void ScreenSpaceGI::SetupResources()
 void ScreenSpaceGI::ClearShaderCache()
 {
 	static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-		&prefilterDepthsCompute, &radianceDisoccCompute, &giCompute, &blurCompute, &upsampleCompute
+		&prefilterDepthsCompute, &prefilterRadianceCompute, &radianceDisoccCompute, &giCompute, &blurCompute, &upsampleCompute
 	};
 
 	for (auto shader : shaderPtrs)
@@ -567,6 +565,7 @@ void ScreenSpaceGI::CompileComputeShaders()
 	std::vector<ShaderCompileInfo>
 		shaderInfos = {
 			{ &prefilterDepthsCompute, "prefilterDepths.cs.hlsl", { { "LINEAR_FILTER", "" } } },
+			{ &prefilterRadianceCompute, "prefilterRadiance.cs.hlsl", {} },
 			{ &radianceDisoccCompute, "radianceDisocc.cs.hlsl", {} },
 			{ &giCompute, "gi.cs.hlsl", {} },
 			{ &blurCompute, "blur.cs.hlsl", {} },
@@ -585,8 +584,6 @@ void ScreenSpaceGI::CompileComputeShaders()
 			info.defines.push_back({ "GI", "" });
 		if (settings.EnableExperimentalSpecularGI)
 			info.defines.push_back({ "GI_SPECULAR", "" });
-		if (settings.EnableGIBounce)
-			info.defines.push_back({ "GI_BOUNCE", "" });
 	}
 
 	for (auto& info : shaderInfos) {
@@ -600,7 +597,7 @@ void ScreenSpaceGI::CompileComputeShaders()
 
 bool ScreenSpaceGI::ShadersOK()
 {
-	return texNoise && prefilterDepthsCompute && radianceDisoccCompute && giCompute && blurCompute && upsampleCompute;
+	return texNoise && prefilterDepthsCompute && prefilterRadianceCompute && radianceDisoccCompute && giCompute && blurCompute && upsampleCompute;
 }
 
 void ScreenSpaceGI::UpdateSB()
@@ -643,7 +640,6 @@ void ScreenSpaceGI::UpdateSB()
 		data.DepthFadeScaleConst = 1 / (settings.DepthFadeRange.y - settings.DepthFadeRange.x);
 
 		data.GISaturation = settings.GISaturation;
-		data.GIBounceFade = settings.GIBounceFade;
 		data.GIDistanceCompensation = settings.GIDistanceCompensation;
 		data.GICompensationMaxDist = settings.AORadius;
 
@@ -660,9 +656,16 @@ void ScreenSpaceGI::UpdateSB()
 	ssgiCB->Update(data);
 }
 
-void ScreenSpaceGI::DrawSSGI(Texture2D* srcPrevAmbient)
+void ScreenSpaceGI::DrawSSGI()
 {
 	auto context = globals::d3d::context;
+
+	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+	GET_INSTANCE_MEMBER(BSImagespaceShaderISSAOBlurH, imageSpaceManager);
+
+	// Disable vanilla SSAO
+	bool* enableSSAO = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISSAOBlurH.get()) + 0x50LL);
+	*enableSSAO = false;
 
 	if (!(settings.Enabled && ShadersOK())) {
 		FLOAT clr[4] = { 0.f, 0.f, 0.f, 0.f };
@@ -743,12 +746,12 @@ void ScreenSpaceGI::DrawSSGI(Texture2D* srcPrevAmbient)
 		srvs.at(2) = rts[NORMALROUGHNESS].SRV;
 		srvs.at(3) = texPrevGeo->srv.get();
 		srvs.at(4) = rts[RE::RENDER_TARGET::kMOTION_VECTOR].SRV;
-		srvs.at(5) = srcPrevAmbient->srv.get();
-		srvs.at(6) = texAccumFrames[lastFrameAccumTexIdx]->srv.get();
-		srvs.at(7) = texAo[inputAoTexIdx]->srv.get();
-		srvs.at(8) = texIlY[inputGITexIdx]->srv.get();
-		srvs.at(9) = texIlCoCg[inputGITexIdx]->srv.get();
-		srvs.at(10) = texGiSpecular[inputAoTexIdx]->srv.get();
+		srvs.at(5) = texAccumFrames[lastFrameAccumTexIdx]->srv.get();
+		srvs.at(6) = texAo[inputAoTexIdx]->srv.get();
+		srvs.at(7) = texIlY[inputGITexIdx]->srv.get();
+		srvs.at(8) = texIlCoCg[inputGITexIdx]->srv.get();
+		srvs.at(9) = texGiSpecular[inputAoTexIdx]->srv.get();
+		srvs.at(10) = nullptr;
 
 		uavs.at(0) = texRadiance->uav.get();
 		uavs.at(1) = texAccumFrames[!lastFrameAccumTexIdx]->uav.get();
@@ -762,7 +765,28 @@ void ScreenSpaceGI::DrawSSGI(Texture2D* srcPrevAmbient)
 		context->CSSetShader(radianceDisoccCompute.get(), nullptr, 0);
 		context->Dispatch((internalRes[0] + 7u) >> 3, (internalRes[1] + 7u) >> 3, 1);
 
-		context->GenerateMips(texRadiance->srv.get());
+		// Prefilter radiance texture instead of using GenerateMips for proper dynamic resolution handling
+		{
+			TracyD3D11Zone(globals::state->tracyCtx, "SSGI - Prefilter Radiance");
+
+			// First copy mip 0 from radiance to temporary texture to avoid read/write conflict
+			context->CopySubresourceRegion(
+				texRadianceTemp->resource.get(), 0, 0, 0, 0,
+				texRadiance->resource.get(), 0, nullptr);
+
+			resetViews();
+			srvs.at(0) = texRadianceTemp->srv.get();  // Use temporary texture as input
+			uavs.at(0) = uavRadiance[0].get();        // Mip 0
+			uavs.at(1) = uavRadiance[1].get();        // Mip 1
+			uavs.at(2) = uavRadiance[2].get();        // Mip 2
+			uavs.at(3) = uavRadiance[3].get();        // Mip 3
+			uavs.at(4) = uavRadiance[4].get();        // Mip 4
+
+			context->CSSetShaderResources(0, 1, srvs.data());
+			context->CSSetUnorderedAccessViews(0, 5, uavs.data(), nullptr);
+			context->CSSetShader(prefilterRadianceCompute.get(), nullptr, 0);
+			context->Dispatch((internalRes[0] + 15u) >> 4, (internalRes[1] + 15u) >> 4, 1);
+		}
 
 		inputAoTexIdx = !inputAoTexIdx;
 		inputGITexIdx = !inputGITexIdx;
@@ -826,7 +850,7 @@ void ScreenSpaceGI::DrawSSGI(Texture2D* srcPrevAmbient)
 		lastFrameAccumTexIdx = !lastFrameAccumTexIdx;
 	}
 
-	// upsasmple
+	// upsample
 	if (settings.ResolutionMode != 0) {
 		resetViews();
 		srvs.at(0) = texWorkingDepth->srv.get();

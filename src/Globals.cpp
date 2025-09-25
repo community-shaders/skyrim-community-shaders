@@ -1,16 +1,6 @@
 #include "Globals.h"
 
-#include "Utils/Game.h"
-
-#include "DX12SwapChain.h"
 #include "Deferred.h"
-#include "FidelityFX.h"
-#include "Menu.h"
-#include "ShaderCache.h"
-#include "State.h"
-#include "Streamline.h"
-#include "Upscaling.h"
-
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExtendedMaterials.h"
@@ -33,13 +23,16 @@
 #include "Features/TerrainHelper.h"
 #include "Features/TerrainShadows.h"
 #include "Features/TerrainVariation.h"
+#include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
 #include "Features/WeatherPicker.h"
 #include "Features/WetnessEffects.h"
-
-#include "Features/LightLimitFix/ParticleLights.h"
+#include "Menu.h"
+#include "ShaderCache.h"
+#include "State.h"
+#include "Utils/Game.h"
 
 #include "TruePBR.h"
 
@@ -81,10 +74,10 @@ namespace globals
 		PerformanceOverlay performanceOverlay{};
 		WetnessEffects wetnessEffects{};
 		ExtendedTranslucency extendedTranslucency{};
+		Upscaling upscaling{};
 
 		namespace llf
 		{
-			ParticleLights particleLights{};
 		}
 	}
 
@@ -94,9 +87,7 @@ namespace globals
 		RE::BSGraphics::State* graphicsState = nullptr;
 		RE::BSGraphics::Renderer* renderer = nullptr;
 		RE::BSShaderManager::State* smState = nullptr;
-		RE::TES* tes = nullptr;
 		bool isVR = false;
-		RE::MemoryManager* memoryManager = nullptr;
 		RE::INISettingCollection* iniSettingCollection = nullptr;
 		RE::INIPrefSettingCollection* iniPrefSettingCollection = nullptr;
 		RE::GameSettingCollection* gameSettingCollection = nullptr;
@@ -117,6 +108,9 @@ namespace globals
 
 		REL::Relocation<ID3D11Buffer**> perFrame;
 		REL::Relocation<RE::BSGraphics::BSShaderAccumulator**> currentAccumulator;
+
+		D3D11_MAPPED_SUBRESOURCE* mappedFrameBuffer = nullptr;
+		FrameBufferCache frameBufferCached{};
 	}
 
 	namespace rtti
@@ -134,10 +128,6 @@ namespace globals
 	TruePBR* truePBR = nullptr;
 	Menu* menu = nullptr;
 	SIE::ShaderCache* shaderCache = nullptr;
-	Streamline* streamline = nullptr;
-	Upscaling* upscaling = nullptr;
-	DX12SwapChain* dx12SwapChain = nullptr;
-	FidelityFX* fidelityFX = nullptr;
 
 	void OnInit()
 	{
@@ -146,10 +136,6 @@ namespace globals
 		menu = Menu::GetSingleton();
 		deferred = Deferred::GetSingleton();
 		truePBR = TruePBR::GetSingleton();
-		streamline = Streamline::GetSingleton();
-		upscaling = Upscaling::GetSingleton();
-		dx12SwapChain = DX12SwapChain::GetSingleton();
-		fidelityFX = FidelityFX::GetSingleton();
 	}
 
 	void ReInit()
@@ -162,7 +148,6 @@ namespace globals
 			renderer = RE::BSGraphics::Renderer::GetSingleton();
 			smState = &RE::BSShaderManager::State::GetSingleton();
 			isVR = REL::Module::IsVR();
-			memoryManager = RE::MemoryManager::GetSingleton();
 			iniSettingCollection = RE::INISettingCollection::GetSingleton();
 			iniPrefSettingCollection = RE::INIPrefSettingCollection::GetSingleton();
 			gameSettingCollection = RE::GameSettingCollection::GetSingleton();
@@ -198,7 +183,6 @@ namespace globals
 	void OnDataLoaded()
 	{
 		using namespace game;
-		tes = RE::TES::GetSingleton();
 		sky = RE::Sky::GetSingleton();
 		utilityShader = RE::BSUtilityShader::GetSingleton();
 
@@ -206,5 +190,71 @@ namespace globals
 
 		bShadowsOnGrass = RE::GetINISetting("bShadowsOnGrass:Display");
 		shadowMaskQuarter = RE::GetINISetting("iShadowMaskQuarter:Display");
+	}
+
+	/**
+ * @brief Caches the current frame buffer data and clears the mapped pointer.
+ *
+ * Copies the contents of the mapped frame buffer into an internal cache and resets the mapped frame buffer pointer.
+ */
+	void CacheFramebuffer()
+	{
+		using namespace game;
+		if (REL::Module::IsVR()) {
+			auto frameBufferVR = (FrameBufferVR*)mappedFrameBuffer->pData;
+			frameBufferCached.vr = *frameBufferVR;
+		} else {
+			auto frameBuffer = (FrameBuffer*)mappedFrameBuffer->pData;
+			frameBufferCached.nonVR = *frameBuffer;
+		}
+		mappedFrameBuffer = nullptr;
+	}
+
+	/**
+ * @brief Hooks the ID3D11DeviceContext::Map method to track mapping of the per-frame resource.
+ *
+ * Calls the original Map function and, if the mapped resource matches the current per-frame buffer, stores the mapped subresource pointer for later use.
+ *
+ * @return HRESULT Result of the original Map call.
+ */
+	struct ID3D11DeviceContext_Map
+	{
+		static HRESULT thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource, D3D11_MAP MapType, UINT MapFlags, D3D11_MAPPED_SUBRESOURCE* pMappedResource)
+		{
+			HRESULT hr = func(This, pResource, Subresource, MapType, MapFlags, pMappedResource);
+			if (hr == S_OK) {
+				if (*globals::game::perFrame.get() == pResource)
+					globals::game::mappedFrameBuffer = pMappedResource;
+			}
+			return hr;
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	/**
+ * @brief Hooked implementation of ID3D11DeviceContext::Unmap that caches the frame buffer if applicable.
+ *
+ * If the resource being unmapped matches the current per-frame buffer and a mapped frame buffer is present, caches the frame buffer data before calling the original Unmap function.
+ */
+	struct ID3D11DeviceContext_Unmap
+	{
+		static void thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource)
+		{
+			if (*globals::game::perFrame.get() == pResource && globals::game::mappedFrameBuffer)
+				CacheFramebuffer();
+			func(This, pResource, Subresource);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	/**
+ * @brief Installs hooks on the Map and Unmap methods of the provided D3D11 device context.
+ *
+ * This enables interception of resource mapping and unmapping operations for frame buffer caching.
+ */
+	void InstallD3DHooks(ID3D11DeviceContext* a_context)
+	{
+		stl::detour_vfunc<14, ID3D11DeviceContext_Map>(a_context);
+		stl::detour_vfunc<15, ID3D11DeviceContext_Unmap>(a_context);
 	}
 }

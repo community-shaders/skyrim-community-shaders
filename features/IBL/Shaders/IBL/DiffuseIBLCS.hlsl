@@ -3,13 +3,8 @@
 #include "Common/SharedData.hlsli"
 #include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
 
-TextureCube<float4> ReflectionTexture : register(t0);
+TextureCube<float4> EnvTexture : register(t0);
 RWTexture2D<sh2> IBLTexture : register(u0);
-
-#if defined(DYNAMIC_CUBEMAPS)
-TextureCube<float3> EnvTexture : register(t1);
-TextureCube<float3> EnvReflectionsTexture : register(t2);
-#endif
 
 SamplerState LinearSampler : register(s0);
 
@@ -40,19 +35,7 @@ void main(uint3 dispatchID : SV_DispatchThreadID, uint groupIndex : SV_GroupInde
 	float3 rayDir = SphericalHarmonics::GetUniformSphereSample(sampleCoord.x, sampleCoord.y);
 
 	// Sample cubemap with optimized direction
-	float3 color = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
-#if defined(DYNAMIC_CUBEMAPS)
-	// Optimized condition check using faster comparisons
-	if (rayDir.z >= 0 && SharedData::iblSettings.SampleUnderHorizonFromDynCube) {
-		float absZ = abs(rayDir.z);
-		if (absZ > abs(rayDir.x) && absZ > abs(rayDir.y)) {
-			color = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0);
-		}
-	}
-#endif
-
-	// Apply gamma correction
-	color = Color::GammaToLinear(color);
+	float3 color = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
 
 	// Compute spherical harmonics basis for this direction
 	sh2 sh = SphericalHarmonics::Evaluate(rayDir);
