@@ -249,6 +249,12 @@ void Upscaling::DrawSettings()
 				ImGui::PopStyleColor();
 			}
 
+			if (!settings.frameGenerationMode && d3d12SwapChainActive) {
+				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
+				ImGui::Text("Warning: Requires restart");
+				ImGui::PopStyleColor();
+			}
+
 			std::string enabledLabel = "Enabled";
 			const char* toggleModes[] = { "Disabled", "Enabled" };
 			const char* toggleModesFG[] = { "Disabled", enabledLabel.c_str() };
