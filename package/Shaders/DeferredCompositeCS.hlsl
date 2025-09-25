@@ -39,6 +39,16 @@ Texture2D<float4> SsgiYTexture : register(t11);
 Texture2D<float4> SsgiCoCgTexture : register(t12);
 Texture2D<float4> SsgiSpecularTexture : register(t13);
 
+
+// [Jimenez et al. 2016, "Practical Realtime Strategies for Accurate Indirect Occlusion"]
+float3 MultiBounceAO(float3 baseColor, float ao)
+{
+	float3 a = 2.0404 * baseColor - 0.3324;
+	float3 b = -4.7951 * baseColor + 0.6417;
+	float3 c = 2.7552 * baseColor + 0.6903;
+	return max(ao, ((ao * a + b) * ao + c) * ao);
+}
+
 void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 {
 	ao = 1 - SsgiAoTexture[pixCoord];
@@ -54,17 +64,13 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 {
 	// https://www.iryoku.com/stare-into-the-future/
 	ao = 1 - SsgiAoTexture[pixCoord].x;
-	const float SpecularPow = 8.0;
 	float NdotV = dot(normal, view);
-	float s = saturate(-0.3 + NdotV * NdotV);
-	ao = lerp(pow(ao, SpecularPow), 1.0, s);
+	float s = saturate(NdotV * NdotV);
+	ao = lerp(ao, 1.0, s);
 
 	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
 	float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, lobe);
 	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord].xy;
-	// specular is a bit too saturated, because CoCg are average over hemisphere
-	// we just cheese this bit
-	ssgiIlCoCg *= 0.8;
 
 	// pi to compensate for the /pi in specularLobe
 	// i don't think there really should be a 1/PI but without it the specular is too strong
@@ -152,18 +158,20 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
 
 	linDiffuseColor = Color::GammaToLinear(diffuseColor);
-#	if defined(INTERIOR)
-	linDiffuseColor *= ssgiAo;
-#	else
-	linDiffuseColor *= sqrt(ssgiAo);
-#	endif
+	
+	float3 linAlbedo = Color::GammaToLinear(albedo);
+
+	float3 multiBounceAO = MultiBounceAO(linAlbedo, ssgiAo);
+
+	linDiffuseColor *= sqrt(multiBounceAO);
+
 	diffuseColor = Color::LinearToGamma(linDiffuseColor);
 
-	diffuseColor += Color::LinearToGamma(Color::GammaToLinear(directionalAmbientColor) * ssgiAo);
+	diffuseColor += Color::LinearToGamma(Color::GammaToLinear(directionalAmbientColor) * multiBounceAO);
 
 	linDiffuseColor = Color::GammaToLinear(diffuseColor);
 
-	linDiffuseColor += ssgiIl * Color::GammaToLinear(albedo);
+	linDiffuseColor += ssgiIl * linAlbedo;
 #endif
 
 	float3 color = linDiffuseColor + specularColor;
