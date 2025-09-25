@@ -396,7 +396,7 @@ void Menu::DrawFooter()
 	ImGui::SameLine();
 	ImGui::BulletText(std::format("D3D12 Swap Chain: {}", globals::features::upscaling.d3d12SwapChainActive ? "Active" : "Inactive").c_str());
 	ImGui::SameLine();
-	ImGui::Text(std::format("GPU: {}", globals::state->adapterDescription.c_str()).c_str());
+	ImGui::BulletText(std::format("GPU: {}", globals::state->adapterDescription.c_str()).c_str());
 }
 
 /**
