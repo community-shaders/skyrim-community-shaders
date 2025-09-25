@@ -36,7 +36,7 @@ namespace DynamicCubemaps
 #	else
 
 		float3 finalIrradiance = 0;
-		
+
 		float directionalAmbientColorSpecular = Color::RGBToLuminance(max(0, mul(SharedData::DirectionalAmbient, float4(R, 1.0))));
 
 #		if defined(IBL) && defined(LIGHTING)
@@ -66,11 +66,11 @@ namespace DynamicCubemaps
 		float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
 		skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
 
-		
+
 		directionalAmbientColorSpecular = Color::GammaToLinear(directionalAmbientColorSpecular);
 		directionalAmbientColorSpecular *= skylightingSpecular;
 		directionalAmbientColorSpecular = Color::LinearToGamma(directionalAmbientColorSpecular);
-		
+
 		float3 specularIrradiance = 1;
 
 		if (skylightingSpecular < 1.0){
