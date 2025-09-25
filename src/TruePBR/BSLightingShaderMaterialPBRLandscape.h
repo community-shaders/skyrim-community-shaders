@@ -27,7 +27,6 @@ public:
 
 	static BSLightingShaderMaterialPBRLandscape* Make();
 
-	bool HasGlint() const;
 
 	inline static std::unordered_map<BSLightingShaderMaterialPBRLandscape*, std::array<TruePBR::PBRTextureSetData*, NumTiles>> All;
 
@@ -55,7 +54,6 @@ public:
 	std::array<float, NumTiles> displacementScales;
 	std::array<float, NumTiles> specularLevels;
 
-	std::array<GlintParameters, NumTiles> glintParameters;
 };
 static_assert(offsetof(BSLightingShaderMaterialPBRLandscape, terrainOverlayTexture) == offsetof(RE::BSLightingShaderMaterialLandscape, terrainOverlayTexture));
 static_assert(offsetof(BSLightingShaderMaterialPBRLandscape, terrainNoiseTexture) == offsetof(RE::BSLightingShaderMaterialLandscape, terrainNoiseTexture));

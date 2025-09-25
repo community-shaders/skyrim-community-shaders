@@ -51,12 +51,6 @@ namespace ShaderConstants
 				.LandscapeTexture5PBRParams = 49,
 				.LandscapeTexture6PBRParams = 50,
 				.PBRParams2 = 51,
-				.LandscapeTexture1GlintParameters = 52,
-				.LandscapeTexture2GlintParameters = 53,
-				.LandscapeTexture3GlintParameters = 54,
-				.LandscapeTexture4GlintParameters = 55,
-				.LandscapeTexture5GlintParameters = 56,
-				.LandscapeTexture6GlintParameters = 57,
 
 				.ShadowSampleParam = 18,
 				.EndSplitDistances = 19,
@@ -113,12 +107,6 @@ namespace ShaderConstants
 		const int32_t LandscapeTexture5PBRParams = 41;
 		const int32_t LandscapeTexture6PBRParams = 42;
 		const int32_t PBRParams2 = 43;
-		const int32_t LandscapeTexture1GlintParameters = 44;
-		const int32_t LandscapeTexture2GlintParameters = 45;
-		const int32_t LandscapeTexture3GlintParameters = 46;
-		const int32_t LandscapeTexture4GlintParameters = 47;
-		const int32_t LandscapeTexture5GlintParameters = 48;
-		const int32_t LandscapeTexture6GlintParameters = 49;
 
 		const int32_t ShadowSampleParam = -1;
 		const int32_t EndSplitDistances = -1;
@@ -481,7 +469,7 @@ namespace SIE
 			ShadowDir = 1 << 13,
 			DefShadow = 1 << 14,
 			ProjectedUV = 1 << 15,
-			AnisoLighting = 1 << 16,  // Reused for glint with PBR
+			AnisoLighting = 1 << 16,
 			AmbientSpecular = 1 << 17,
 			WorldMap = 1 << 18,
 			BaseObjectIsSnow = 1 << 19,

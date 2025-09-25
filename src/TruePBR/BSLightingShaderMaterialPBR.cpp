@@ -29,11 +29,9 @@ void BSLightingShaderMaterialPBR::CopyMembers(RE::BSShaderMaterial* that)
 	coatSpecularLevel = pbrThat->coatSpecularLevel;
 	fuzzColor = pbrThat->fuzzColor;
 	fuzzWeight = pbrThat->fuzzWeight;
-	glintParameters = pbrThat->glintParameters;
 	projectedMaterialBaseColorScale = pbrThat->projectedMaterialBaseColorScale;
 	projectedMaterialRoughness = pbrThat->projectedMaterialRoughness;
 	projectedMaterialSpecularLevel = pbrThat->projectedMaterialSpecularLevel;
-	projectedMaterialGlintParameters = pbrThat->projectedMaterialGlintParameters;
 
 	rmaosTexture = pbrThat->rmaosTexture;
 	emissiveTexture = pbrThat->emissiveTexture;
@@ -53,17 +51,9 @@ std::uint32_t BSLightingShaderMaterialPBR::ComputeCRC32(uint32_t srcHash)
 		float coatSpecularLevel = 0.f;
 		std::array<float, 3> fuzzColor = { 0.f, 0.f, 0.f };
 		float fuzzWeight = 0.f;
-		float screenSpaceScale = 0.f;
-		float logMicrofacetDensity = 0.f;
-		float microfacetRoughness = 0.f;
-		float densityRandomization = 0.f;
 		std::array<float, 3> projectedMaterialBaseColorScale = { 0.f, 0.f, 0.f };
 		float projectedMaterialRoughness = 0.f;
 		float projectedMaterialSpecularLevel = 0.f;
-		float projectedMaterialScreenSpaceScale = 0.f;
-		float projectedMaterialLogMicrofacetDensity = 0.f;
-		float projectedMaterialMicrofacetRoughness = 0.f;
-		float projectedMaterialDensityRandomization = 0.f;
 		uint32_t rmaodHash = 0;
 		uint32_t emissiveHash = 0;
 		uint32_t displacementHash = 0;
@@ -79,19 +69,11 @@ std::uint32_t BSLightingShaderMaterialPBR::ComputeCRC32(uint32_t srcHash)
 	hashes.fuzzColor[1] = fuzzColor[1] * 100.f;
 	hashes.fuzzColor[2] = fuzzColor[2] * 100.f;
 	hashes.fuzzWeight = fuzzWeight * 100.f;
-	hashes.screenSpaceScale = glintParameters.screenSpaceScale * 100.f;
-	hashes.logMicrofacetDensity = glintParameters.logMicrofacetDensity * 100.f;
-	hashes.microfacetRoughness = glintParameters.microfacetRoughness * 100.f;
-	hashes.densityRandomization = glintParameters.densityRandomization * 100.f;
 	hashes.projectedMaterialBaseColorScale[0] = projectedMaterialBaseColorScale[0] * 100.f;
 	hashes.projectedMaterialBaseColorScale[1] = projectedMaterialBaseColorScale[1] * 100.f;
 	hashes.projectedMaterialBaseColorScale[2] = projectedMaterialBaseColorScale[2] * 100.f;
 	hashes.projectedMaterialRoughness = projectedMaterialRoughness * 100.f;
 	hashes.projectedMaterialSpecularLevel = projectedMaterialSpecularLevel * 100.f;
-	hashes.projectedMaterialScreenSpaceScale = projectedMaterialGlintParameters.screenSpaceScale * 100.f;
-	hashes.projectedMaterialLogMicrofacetDensity = projectedMaterialGlintParameters.logMicrofacetDensity * 100.f;
-	hashes.projectedMaterialMicrofacetRoughness = projectedMaterialGlintParameters.microfacetRoughness * 100.f;
-	hashes.projectedMaterialDensityRandomization = projectedMaterialGlintParameters.densityRandomization * 100.f;
 	if (textureSet != nullptr) {
 		hashes.rmaodHash = RE::BSCRC32<const char*>()(textureSet->GetTexturePath(RmaosTexture));
 		hashes.emissiveHash = RE::BSCRC32<const char*>()(textureSet->GetTexturePath(EmissiveTexture));
@@ -134,7 +116,6 @@ void BSLightingShaderMaterialPBR::ApplyTextureSetData(const TruePBR::PBRTextureS
 		}
 	}
 
-	glintParameters = textureSetData.glintParameters;
 }
 
 void BSLightingShaderMaterialPBR::ApplyMaterialObjectData(const TruePBR::PBRMaterialObjectData& materialObjectData)
@@ -142,7 +123,6 @@ void BSLightingShaderMaterialPBR::ApplyMaterialObjectData(const TruePBR::PBRMate
 	projectedMaterialBaseColorScale = materialObjectData.baseColorScale;
 	projectedMaterialRoughness = materialObjectData.roughness;
 	projectedMaterialSpecularLevel = materialObjectData.specularLevel;
-	projectedMaterialGlintParameters = materialObjectData.glintParameters;
 }
 
 void BSLightingShaderMaterialPBR::OnLoadTextureSet(std::uint64_t arg1, RE::BSTextureSet* inTextureSet)
@@ -268,10 +248,6 @@ void BSLightingShaderMaterialPBR::LoadBinary(RE::NiStream& stream)
 			parameters[2] };
 		fuzzWeight = parameters[3];
 
-		glintParameters.screenSpaceScale = parameters[0];
-		glintParameters.logMicrofacetDensity = parameters[1];
-		glintParameters.microfacetRoughness = parameters[2];
-		glintParameters.densityRandomization = parameters[3];
 
 		if (stream.header.version > 0x4A) {
 			float dummy;
@@ -340,10 +316,6 @@ float BSLightingShaderMaterialPBR::GetProjectedMaterialSpecularLevel() const
 	return projectedMaterialSpecularLevel;
 }
 
-const GlintParameters& BSLightingShaderMaterialPBR::GetProjectedMaterialGlintParameters() const
-{
-	return projectedMaterialGlintParameters;
-}
 
 const RE::NiColor& BSLightingShaderMaterialPBR::GetFuzzColor() const
 {
@@ -355,7 +327,3 @@ float BSLightingShaderMaterialPBR::GetFuzzWeight() const
 	return fuzzWeight;
 }
 
-const GlintParameters& BSLightingShaderMaterialPBR::GetGlintParameters() const
-{
-	return glintParameters;
-}

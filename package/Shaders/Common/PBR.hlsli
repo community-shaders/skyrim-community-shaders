@@ -21,8 +21,6 @@ namespace PBR
 		static const uint CoatNormal = (1 << 8);
 		static const uint Fuzz = (1 << 9);
 		static const uint HairMarschner = (1 << 10);
-		static const uint Glint = (1 << 11);
-		static const uint ProjectedGlint = (1 << 12);
 	}
 
 	namespace TerrainFlags
@@ -39,34 +37,14 @@ namespace PBR
 		static const uint LandTile3HasDisplacement = (1 << 9);
 		static const uint LandTile4HasDisplacement = (1 << 10);
 		static const uint LandTile5HasDisplacement = (1 << 11);
-		static const uint LandTile0HasGlint = (1 << 12);
-		static const uint LandTile1HasGlint = (1 << 13);
-		static const uint LandTile2HasGlint = (1 << 14);
-		static const uint LandTile3HasGlint = (1 << 15);
-		static const uint LandTile4HasGlint = (1 << 16);
-		static const uint LandTile5HasGlint = (1 << 17);
 	}
 
 	namespace Constants
 	{
 		static const float MinRoughness = 0.04f;
 		static const float MaxRoughness = 1.0f;
-		static const float MinGlintDensity = 1.0f;
-		static const float MaxGlintDensity = 40.0f;
-		static const float MinGlintRoughness = 0.005f;
-		static const float MaxGlintRoughness = 0.3f;
-		static const float MinGlintDensityRandomization = 0.0f;
-		static const float MaxGlintDensityRandomization = 5.0f;
 	}
 
-#if defined(GLINT)
-#	include "Common/Glints/Glints2023.hlsli"
-#else
-	namespace Glints
-	{
-		typedef float GlintCachedVars;
-	}
-#endif
 
 	struct SurfaceProperties
 	{
@@ -83,11 +61,6 @@ namespace PBR
 		float3 CoatF0;
 		float3 FuzzColor;
 		float FuzzWeight;
-		float GlintScreenSpaceScale;
-		float GlintLogMicrofacetDensity;
-		float GlintMicrofacetRoughness;
-		float GlintDensityRandomization;
-		Glints::GlintCachedVars GlintCache;
 		float Noise;
 	};
 
@@ -111,17 +84,6 @@ namespace PBR
 		surfaceProperties.FuzzColor = 0;
 		surfaceProperties.FuzzWeight = 0;
 
-		surfaceProperties.GlintScreenSpaceScale = 1.5;
-		surfaceProperties.GlintLogMicrofacetDensity = 1.0;
-		surfaceProperties.GlintMicrofacetRoughness = 0.015;
-		surfaceProperties.GlintDensityRandomization = 2.0;
-
-#ifdef GLINT
-		surfaceProperties.GlintCache.uv = 0;
-		surfaceProperties.GlintCache.gridSeed = 0;
-		surfaceProperties.GlintCache.footprintArea = 0;
-		surfaceProperties.Noise = 0;
-#endif
 
 		return surfaceProperties;
 	}
@@ -162,23 +124,6 @@ namespace PBR
 		return saturate(pow(abs(NdotV + ao), exp2(-16.0 * roughness - 1.0)) - 1.0 + ao);
 	}
 
-#if defined(GLINT)
-	float3 GetSpecularDirectLightMultiplierMicrofacetWithGlint(float noise, float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH, float glintH,
-		float logDensity, float microfacetRoughness, float densityRandomization, Glints::GlintCachedVars glintCache,
-		out float3 F)
-	{
-		float D = BRDF::D_GGX(roughness, NdotH);
-		[branch] if (logDensity > 1.1)
-		{
-			float D_max = BRDF::D_GGX(roughness, 1);
-			D = Glints::SampleGlints2023NDF(noise, logDensity, microfacetRoughness, densityRandomization, glintCache, glintH, D, D_max).x;
-		}
-		float G = BRDF::Vis_SmithJointApprox(roughness, NdotV, NdotL);
-		F = BRDF::F_Schlick(specularColor, VdotH);
-
-		return D * G * F;
-	}
-#endif
 
 	float3 GetSpecularDirectLightMultiplierMicrofacet(float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH, out float3 F)
 	{
@@ -338,13 +283,7 @@ namespace PBR
 			diffuse += lightProperties.LightColor * satNdotL * BRDF::Diffuse_Lambert();
 
 			float3 F;
-#if defined(GLINT)
-			specular += GetSpecularDirectLightMultiplierMicrofacetWithGlint(surfaceProperties.Noise, surfaceProperties.Roughness, surfaceProperties.F0, satNdotL, satNdotV, satNdotH, satVdotH, mul(tbnTr, H).x,
-							surfaceProperties.GlintLogMicrofacetDensity, surfaceProperties.GlintMicrofacetRoughness, surfaceProperties.GlintDensityRandomization, surfaceProperties.GlintCache, F) *
-			            lightProperties.LightColor * satNdotL;
-#else
 			specular += GetSpecularDirectLightMultiplierMicrofacet(surfaceProperties.Roughness, surfaceProperties.F0, satNdotL, satNdotV, satNdotH, satVdotH, F) * lightProperties.LightColor * satNdotL;
-#endif
 
 			float2 specularBRDF = BRDF::EnvBRDF(surfaceProperties.Roughness, satNdotV);
 			specular *= 1 + surfaceProperties.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);

@@ -26,8 +26,6 @@ enum class PBRShaderFlags : uint32_t
 	CoatNormal = 1 << 8,
 	Fuzz = 1 << 9,
 	HairMarschner = 1 << 10,
-	Glint = 1 << 11,
-	ProjectedGlint = 1 << 12,
 };
 
 class BSLightingShaderMaterialPBR : public RE::BSLightingShaderMaterialBase
@@ -81,12 +79,10 @@ public:
 	const std::array<float, 3>& GetProjectedMaterialBaseColorScale() const;
 	float GetProjectedMaterialRoughness() const;
 	float GetProjectedMaterialSpecularLevel() const;
-	const GlintParameters& GetProjectedMaterialGlintParameters() const;
 
 	const RE::NiColor& GetFuzzColor() const;
 	float GetFuzzWeight() const;
 
-	const GlintParameters& GetGlintParameters() const;
 
 	inline static std::unordered_map<BSLightingShaderMaterialPBR*, MaterialExtensions> All;
 
@@ -101,7 +97,6 @@ public:
 	RE::NiColor fuzzColor;
 	float fuzzWeight = 0.f;
 
-	GlintParameters glintParameters;
 
 	// Roughness in r, metallic in g, AO in b, nonmetal reflectance in a
 	RE::NiPointer<RE::NiSourceTexture> rmaosTexture;
@@ -121,6 +116,5 @@ public:
 	std::array<float, 3> projectedMaterialBaseColorScale = { 1.f, 1.f, 1.f };
 	float projectedMaterialRoughness = 1.f;
 	float projectedMaterialSpecularLevel = 0.04f;
-	GlintParameters projectedMaterialGlintParameters;
 	std::string inputFilePath = "";
 };

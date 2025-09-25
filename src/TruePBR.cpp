@@ -8,13 +8,6 @@
 #include "ShaderCache.h"
 #include "State.h"
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-	GlintParameters,
-	enabled,
-	screenSpaceScale,
-	logMicrofacetDensity,
-	microfacetRoughness,
-	densityRandomization);
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	TruePBR::PBRTextureSetData,
@@ -29,15 +22,13 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	coatSpecularLevel,
 	innerLayerDisplacementOffset,
 	fuzzColor,
-	fuzzWeight,
-	glintParameters);
+	fuzzWeight);
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	TruePBR::PBRMaterialObjectData,
 	baseColorScale,
 	roughness,
-	specularLevel,
-	glintParameters);
+	specularLevel);
 
 #define CHECK_PBR_TEXTURE(textureName)                                                                         \
 	if (!(pbrMaterial->textureName)) {                                                                         \
@@ -156,26 +147,6 @@ void TruePBR::DrawSettings()
 					}
 					ImGui::TreePop();
 				}
-				if (ImGui::TreeNodeEx("Glint")) {
-					if (ImGui::Checkbox("Enabled", &selectedPbrTextureSet->glintParameters.enabled)) {
-						wasEdited = true;
-					}
-					if (selectedPbrTextureSet->glintParameters.enabled) {
-						if (ImGui::SliderFloat("Screenspace Scale", &selectedPbrTextureSet->glintParameters.screenSpaceScale, 0.f, 3.f, "%.3f")) {
-							wasEdited = true;
-						}
-						if (ImGui::SliderFloat("Log Microfacet Density", &selectedPbrTextureSet->glintParameters.logMicrofacetDensity, 0.f, 40.f, "%.3f")) {
-							wasEdited = true;
-						}
-						if (ImGui::SliderFloat("Microfacet Roughness", &selectedPbrTextureSet->glintParameters.microfacetRoughness, 0.f, 1.f, "%.3f")) {
-							wasEdited = true;
-						}
-						if (ImGui::SliderFloat("Density Randomization", &selectedPbrTextureSet->glintParameters.densityRandomization, 0.f, 5.f, "%.3f")) {
-							wasEdited = true;
-						}
-					}
-					ImGui::TreePop();
-				}
 				if (wasEdited) {
 					for (auto& [material, extensions] : BSLightingShaderMaterialPBR::All) {
 						if (extensions.textureSetData == selectedPbrTextureSet) {
@@ -221,26 +192,6 @@ void TruePBR::DrawSettings()
 				if (ImGui::SliderFloat("Specular Level", &selectedPbrMaterialObject->specularLevel, 0.f, 1.f, "%.3f")) {
 					wasEdited = true;
 				}
-				if (ImGui::TreeNodeEx("Glint")) {
-					if (ImGui::Checkbox("Enabled", &selectedPbrMaterialObject->glintParameters.enabled)) {
-						wasEdited = true;
-					}
-					if (selectedPbrMaterialObject->glintParameters.enabled) {
-						if (ImGui::SliderFloat("Screenspace Scale", &selectedPbrMaterialObject->glintParameters.screenSpaceScale, 0.f, 3.f, "%.3f")) {
-							wasEdited = true;
-						}
-						if (ImGui::SliderFloat("Log Microfacet Density", &selectedPbrMaterialObject->glintParameters.logMicrofacetDensity, 0.f, 40.f, "%.3f")) {
-							wasEdited = true;
-						}
-						if (ImGui::SliderFloat("Microfacet Roughness", &selectedPbrMaterialObject->glintParameters.microfacetRoughness, 0.f, 1.f, "%.3f")) {
-							wasEdited = true;
-						}
-						if (ImGui::SliderFloat("Density Randomization", &selectedPbrMaterialObject->glintParameters.densityRandomization, 0.f, 5.f, "%.3f")) {
-							wasEdited = true;
-						}
-					}
-					ImGui::TreePop();
-				}
 				if (wasEdited) {
 					for (auto& [material, extensions] : BSLightingShaderMaterialPBR::All) {
 						if (extensions.materialObjectData == selectedPbrMaterialObject) {
@@ -263,93 +214,6 @@ void TruePBR::SetupResources()
 {
 	SetupTextureSetData();
 	SetupMaterialObjectData();
-}
-
-void TruePBR::PrePass()
-{
-	auto context = globals::d3d::context;
-	if (!glintsNoiseTexture)
-		SetupGlintsTexture();
-	ID3D11ShaderResourceView* srv = glintsNoiseTexture->srv.get();
-	context->PSSetShaderResources(20, 1, &srv);
-}
-
-void TruePBR::SetupGlintsTexture()
-{
-	constexpr uint noiseTexSize = 128;
-
-	D3D11_TEXTURE2D_DESC tex_desc{
-		.Width = noiseTexSize,
-		.Height = noiseTexSize,
-		.MipLevels = 1,
-		.ArraySize = 1,
-		.Format = DXGI_FORMAT_R32G32B32A32_FLOAT,
-		.SampleDesc = { .Count = 1, .Quality = 0 },
-		.Usage = D3D11_USAGE_DEFAULT,
-		.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS,
-		.CPUAccessFlags = 0,
-		.MiscFlags = 0
-	};
-	D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc = {
-		.Format = tex_desc.Format,
-		.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-		.Texture2D = {
-			.MostDetailedMip = 0,
-			.MipLevels = 1 }
-	};
-	D3D11_UNORDERED_ACCESS_VIEW_DESC uav_desc = {
-		.Format = tex_desc.Format,
-		.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
-		.Texture2D = { .MipSlice = 0 }
-	};
-
-	glintsNoiseTexture = eastl::make_unique<Texture2D>(tex_desc);
-	glintsNoiseTexture->CreateSRV(srv_desc);
-	glintsNoiseTexture->CreateUAV(uav_desc);
-
-	// Compile
-	auto noiseGenProgram = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Common\\Glints\\noisegen.cs.hlsl", {}, "cs_5_0"));
-	if (!noiseGenProgram) {
-		logger::error("Failed to compile glints noise generation shader!");
-		return;
-	}
-
-	// Generate the noise
-	{
-		auto context = globals::d3d::context;
-
-		struct OldState
-		{
-			ID3D11ComputeShader* shader;
-			ID3D11UnorderedAccessView* uav[1];
-			ID3D11ClassInstance* instance;
-			UINT numInstances;
-		};
-
-		OldState newer{}, old{};
-		context->CSGetShader(&old.shader, &old.instance, &old.numInstances);
-		context->CSGetUnorderedAccessViews(0, ARRAYSIZE(old.uav), old.uav);
-
-		{
-			newer.uav[0] = glintsNoiseTexture->uav.get();
-			context->CSSetShader(noiseGenProgram, nullptr, 0);
-			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(newer.uav), newer.uav, nullptr);
-			context->Dispatch((noiseTexSize + 31) >> 5, (noiseTexSize + 31) >> 5, 1);
-		}
-
-		context->CSSetShader(old.shader, &old.instance, old.numInstances);
-		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(old.uav), old.uav, nullptr);
-
-		// Release COM objects to prevent memory leaks
-		if (old.shader)
-			old.shader->Release();
-		for (auto& uav : old.uav) {
-			if (uav)
-				uav->Release();
-		}
-	}
-
-	noiseGenProgram->Release();
 }
 
 void TruePBR::SetupFrame()
@@ -630,8 +494,6 @@ struct BSLightingShaderProperty_LoadBinary
 				}
 				if (property->flags.any(kSoftLighting)) {
 					pbrMaterial->pbrFlags.set(PBRFlags::Fuzz);
-				} else if (property->flags.any(kFitSlope)) {
-					pbrMaterial->glintParameters.enabled = true;
 				}
 			}
 
@@ -677,17 +539,6 @@ struct BSLightingShaderProperty_GetRenderPasses
 				if (isPbr) {
 					lightingFlags |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr);
 					lightingFlags &= ~static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::Specular);
-					if (property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kMultiTextureLandscape)) {
-						auto* material = static_cast<BSLightingShaderMaterialPBRLandscape*>(property->material);
-						if (material->HasGlint()) {
-							lightingFlags |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::AnisoLighting);
-						}
-					} else {
-						auto* material = static_cast<BSLightingShaderMaterialPBR*>(property->material);
-						if (material->glintParameters.enabled || (property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kProjectedUV) && material->projectedMaterialGlintParameters.enabled)) {
-							lightingFlags |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::AnisoLighting);
-						}
-					}
 				}
 
 				if (issEnabledAndInteriorWithSun)
@@ -766,9 +617,6 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 						if (pbrMaterial->landscapeDisplacementTextures[textureIndex] != nullptr && pbrMaterial->landscapeDisplacementTextures[textureIndex] != graphicsState->GetRuntimeData().defaultTextureBlack) {
 							flags |= (1 << (BSLightingShaderMaterialPBRLandscape::NumTiles + textureIndex));
 						}
-						if (pbrMaterial->glintParameters[textureIndex].enabled) {
-							flags |= (1 << (2 * BSLightingShaderMaterialPBRLandscape::NumTiles + textureIndex));
-						}
 					}
 				}
 				shadowState->SetPSConstant(flags, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.PBRFlags);
@@ -776,7 +624,6 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 
 			{
 				const size_t PBRParamsStartIndex = lightingPSConstants.PBRParams1;
-				const size_t GlintParametersStartIndex = lightingPSConstants.LandscapeTexture1GlintParameters;
 
 				for (uint32_t textureIndex = 0; textureIndex < BSLightingShaderMaterialPBRLandscape::NumTiles; ++textureIndex) {
 					std::array<float, 3> PBRParams;
@@ -785,12 +632,6 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 					PBRParams[2] = pbrMaterial->specularLevels[textureIndex];
 					shadowState->SetPSConstant(PBRParams, RE::BSGraphics::ConstantGroupLevel::PerMaterial, PBRParamsStartIndex + textureIndex);
 
-					std::array<float, 4> glintParameters;
-					glintParameters[0] = pbrMaterial->glintParameters[textureIndex].screenSpaceScale;
-					glintParameters[1] = 40.f - pbrMaterial->glintParameters[textureIndex].logMicrofacetDensity;
-					glintParameters[2] = pbrMaterial->glintParameters[textureIndex].microfacetRoughness;
-					glintParameters[3] = pbrMaterial->glintParameters[textureIndex].densityRandomization;
-					shadowState->SetPSConstant(glintParameters, RE::BSGraphics::ConstantGroupLevel::PerMaterial, GlintParametersStartIndex + textureIndex);
 				}
 			}
 
@@ -869,27 +710,6 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 					PBRParams3[2] = pbrMaterial->GetFuzzColor().blue;
 					PBRParams3[3] = pbrMaterial->GetFuzzWeight();
 					shadowState->SetPSConstant(PBRParams3, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.MultiLayerParallaxData);
-				} else {
-					if (pbrMaterial->GetGlintParameters().enabled) {
-						shaderFlags.set(PBRShaderFlags::Glint);
-
-						std::array<float, 4> GlintParameters;
-						GlintParameters[0] = pbrMaterial->GetGlintParameters().screenSpaceScale;
-						GlintParameters[1] = 40.f - pbrMaterial->GetGlintParameters().logMicrofacetDensity;
-						GlintParameters[2] = pbrMaterial->GetGlintParameters().microfacetRoughness;
-						GlintParameters[3] = pbrMaterial->GetGlintParameters().densityRandomization;
-						shadowState->SetPSConstant(GlintParameters, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.MultiLayerParallaxData);
-					}
-					if ((lightingFlags & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::ProjectedUV)) != 0 && pbrMaterial->GetProjectedMaterialGlintParameters().enabled) {
-						shaderFlags.set(PBRShaderFlags::ProjectedGlint);
-
-						std::array<float, 4> ProjectedGlintParameters;
-						ProjectedGlintParameters[0] = pbrMaterial->GetProjectedMaterialGlintParameters().screenSpaceScale;
-						ProjectedGlintParameters[1] = 40.f - pbrMaterial->GetProjectedMaterialGlintParameters().logMicrofacetDensity;
-						ProjectedGlintParameters[2] = pbrMaterial->GetProjectedMaterialGlintParameters().microfacetRoughness;
-						ProjectedGlintParameters[3] = pbrMaterial->GetProjectedMaterialGlintParameters().densityRandomization;
-						shadowState->SetPSConstant(ProjectedGlintParameters, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.SparkleParams);
-					}
 				}
 			}
 
@@ -1034,7 +854,6 @@ void SetupPBRLandscapeTextureParameters(BSLightingShaderMaterialPBRLandscape& ma
 	material.displacementScales[textureIndex] = textureSetData.displacementScale;
 	material.roughnessScales[textureIndex] = textureSetData.roughnessScale;
 	material.specularLevels[textureIndex] = textureSetData.specularLevel;
-	material.glintParameters[textureIndex] = textureSetData.glintParameters;
 }
 
 void SetupLandscapeTexture(BSLightingShaderMaterialPBRLandscape& material, RE::TESLandTexture& landTexture, uint32_t textureIndex, std::array<TruePBR::PBRTextureSetData*, BSLightingShaderMaterialPBRLandscape::NumTiles>& textureSets)

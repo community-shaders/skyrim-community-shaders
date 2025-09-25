@@ -47,7 +47,6 @@ void BSLightingShaderMaterialPBRLandscape::CopyMembers(RE::BSShaderMaterial* tha
 	pbrThat->terrainTexOffsetX = terrainTexOffsetX;
 	pbrThat->terrainTexOffsetY = terrainTexOffsetY;
 	pbrThat->terrainTexFade = terrainTexFade;
-	pbrThat->glintParameters = glintParameters;
 
 	All[this] = All[pbrThat];
 }
@@ -136,12 +135,3 @@ uint32_t BSLightingShaderMaterialPBRLandscape::GetTextures(RE::NiSourceTexture**
 	return textureIndex;
 }
 
-bool BSLightingShaderMaterialPBRLandscape::HasGlint() const
-{
-	for (uint32_t textureIndex = 0; textureIndex < numLandscapeTextures; ++textureIndex) {
-		if (glintParameters[textureIndex].enabled) {
-			return true;
-		}
-	}
-	return false;
-}

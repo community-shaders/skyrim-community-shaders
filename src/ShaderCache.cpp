@@ -58,9 +58,6 @@ namespace SIE
 			}
 			if ((descriptor & static_cast<uint32_t>(ShaderCache::LightingShaderFlags::TruePbr)) != 0) {
 				defines[lastIndex++] = { "TRUE_PBR", nullptr };
-				if ((descriptor & static_cast<uint32_t>(ShaderCache::LightingShaderFlags::AnisoLighting)) != 0) {
-					defines[lastIndex++] = { "GLINT", nullptr };
-				}
 			}
 
 			for (auto* feature : Feature::GetFeatureList()) {
@@ -713,12 +710,6 @@ namespace SIE
 				{ "LandscapeTexture5PBRParams", lightingPSConstants.LandscapeTexture5PBRParams },
 				{ "LandscapeTexture6PBRParams", lightingPSConstants.LandscapeTexture6PBRParams },
 				{ "PBRParams2", lightingPSConstants.PBRParams2 },
-				{ "LandscapeTexture1GlintParameters", lightingPSConstants.LandscapeTexture1GlintParameters },
-				{ "LandscapeTexture2GlintParameters", lightingPSConstants.LandscapeTexture2GlintParameters },
-				{ "LandscapeTexture3GlintParameters", lightingPSConstants.LandscapeTexture3GlintParameters },
-				{ "LandscapeTexture4GlintParameters", lightingPSConstants.LandscapeTexture4GlintParameters },
-				{ "LandscapeTexture5GlintParameters", lightingPSConstants.LandscapeTexture5GlintParameters },
-				{ "LandscapeTexture6GlintParameters", lightingPSConstants.LandscapeTexture6GlintParameters },
 			};
 
 			auto& bloodSplatterVS = result[static_cast<size_t>(RE::BSShader::Type::BloodSplatter)]

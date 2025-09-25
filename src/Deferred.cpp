@@ -307,7 +307,6 @@ void Deferred::PrepassPasses()
 		}
 	}
 
-	globals::truePBR->PrePass();
 	for (auto* feature : Feature::GetFeatureList()) {
 		if (feature->loaded) {
 			feature->Prepass();

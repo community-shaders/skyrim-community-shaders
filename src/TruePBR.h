@@ -1,13 +1,5 @@
 #pragma once
 
-struct GlintParameters
-{
-	bool enabled = false;
-	float screenSpaceScale = 1.5f;
-	float logMicrofacetDensity = 40.f;
-	float microfacetRoughness = .015f;
-	float densityRandomization = 2.f;
-};
 
 struct TruePBR
 {
@@ -22,7 +14,6 @@ public:
 
 	void DrawSettings();
 	void SetupResources();
-	void PrePass();
 	void PostPostLoad();
 	void DataLoaded();
 	bool TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land);
@@ -31,8 +22,6 @@ public:
 	void SetShaderResouces(ID3D11DeviceContext* a_context);
 	void GenerateShaderPermutations(RE::BSShader* shader);
 
-	void SetupGlintsTexture();
-	eastl::unique_ptr<Texture2D> glintsNoiseTexture = nullptr;
 
 	std::unordered_map<uint32_t, std::string> editorIDs;
 
@@ -54,7 +43,6 @@ public:
 		RE::NiColor fuzzColor;
 		float fuzzWeight = 0.f;
 
-		GlintParameters glintParameters;
 	};
 
 	void SetupFrame();
@@ -78,7 +66,6 @@ public:
 		float roughness = 1.f;
 		float specularLevel = 1.f;
 
-		GlintParameters glintParameters;
 	};
 
 	void SetupMaterialObjectData();
