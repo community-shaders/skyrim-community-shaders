@@ -3360,6 +3360,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float stochasticBlend = (screenNoise * screenNoise) < psout.Diffuse.w ? 1.0 : 0.0;
 	psout.NormalGlossiness.w = stochasticBlend;
 
+	psout.Reflectance.xyz = max(0.0, (psout.Reflectance.xyz - 0.04)) / 0.96;
+
 #	endif
 
 	return psout;
