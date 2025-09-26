@@ -19,7 +19,8 @@ namespace Color
 	// [Lagarde et al. 2014, "Moving Frostbite to Physically Based Rendering 3.0"]
 	float SpecularAOLagarde(float NdotV, float ao, float roughness)
 	{
-		return saturate(pow(abs(NdotV + ao), exp2(-16.0 * roughness - 1.0)) - 1.0 + ao);
+		float k = exp2(-16.0 * roughness - 1.0);
+		return saturate(ao + pow(saturate(NdotV), k) - 1.0);
 	}
 
 	float RGBToLuminance(float3 color)
