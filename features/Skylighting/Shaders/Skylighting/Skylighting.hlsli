@@ -36,7 +36,7 @@ namespace Skylighting
 	}
 
 #if defined(PSHADER)
-	void applySkylighting(inout float3 diffuseColor, inout float3 directionalAmbientColor, float albedo, float skylightingDiffuse)
+	void applySkylighting(inout float3 diffuseColor, inout float3 directionalAmbientColor, float3 albedo, float skylightingDiffuse)
 	{
 		float maxScale = 1.0;
 		if (directionalAmbientColor.x > 0.0)
