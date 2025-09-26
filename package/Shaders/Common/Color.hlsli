@@ -66,7 +66,7 @@ namespace Color
 		return color;
 	}
 
-	// Attempt to match vanilla materials that are a darker than PBR
+	// Attempt to match vanilla materials that are darker than PBR
 	const static float PBRLightingScale = 0.666;
 
 	// Attempt to normalise reflection brightness against DALC
