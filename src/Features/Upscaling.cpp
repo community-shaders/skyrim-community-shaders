@@ -14,6 +14,7 @@
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Upscaling::Settings,
 	upscaleMethod,
+	upscaleMethodNoDLSS,
 	qualityMode,
 	frameLimitMode,
 	frameGenerationMode,
@@ -166,6 +167,8 @@ void Upscaling::DrawSettings()
 		availableModes = 2;  // Add FSR
 	if (featureDLSS)
 		availableModes = 3;  // Add DLSS if available
+	else
+		currentUpscaleMode = &settings.upscaleMethodNoDLSS;
 
 	// Slider for method selection
 	// Clamp the index used to read from the built label vector to avoid OOB if the stored value is stale
@@ -202,6 +205,12 @@ void Upscaling::DrawSettings()
 
 			if (baseLabel) {
 				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, baseLabel);
+			}
+			
+			if (upscaleMethod == UpscaleMethod::kFSR) {
+				ImGui::SliderFloat("Sharpness", &settings.sharpnessFSR, 0.0f, 1.0f, "%.1f");
+			} else if (upscaleMethod == UpscaleMethod::kDLSS) {
+				ImGui::SliderFloat("Sharpness", &settings.sharpnessDLSS, 0.0f, 1.0f, "%.1f");
 			}
 		}
 	} else {
@@ -415,9 +424,9 @@ void Upscaling::PostPostLoad()
 
 Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
 {
-	settings.upscaleMethod = std::clamp(settings.upscaleMethod, (uint)UpscaleMethod::kNONE, (uint)UpscaleMethod::kDLSS);
-	settings.qualityMode = std::clamp(settings.qualityMode, 0u, 4u);
-	return (UpscaleMethod)settings.upscaleMethod;
+	if (streamline.featureDLSS) 
+		return (UpscaleMethod)settings.upscaleMethod;
+	return (UpscaleMethod)settings.upscaleMethodNoDLSS;
 }
 
 void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
@@ -1196,7 +1205,11 @@ void Upscaling::Upscale()
 		if (upscaleMethod == UpscaleMethod::kDLSS) {
 			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get());
 		} else if (upscaleMethod == UpscaleMethod::kFSR) {
-			fidelityFX.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVector.texture);
+			fidelityFX.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVector.texture, settings.sharpnessFSR);
+		}
+
+		if (upscaleMethod == UpscaleMethod::kDLSS) {
+			streamline.ApplyNISSharpening(main.texture, settings.sharpnessDLSS);
 		}
 
 		state->EndPerfEvent();
