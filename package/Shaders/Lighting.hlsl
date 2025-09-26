@@ -3113,7 +3113,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	directionalAmbientColor *= outputAlbedo;
 
 #	if defined(SKYLIGHTING)
-	Skylighting::applySkylighting(color.xyz, directionalAmbientColor, skylightingDiffuse);
+	Skylighting::applySkylighting(color.xyz, directionalAmbientColor, outputAlbedo, skylightingDiffuse);
 #	endif
 
 #	if defined(IBL) && defined(SKYLIGHTING)

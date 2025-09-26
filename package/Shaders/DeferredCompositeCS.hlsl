@@ -39,16 +39,6 @@ Texture2D<float4> SsgiYTexture : register(t11);
 Texture2D<float4> SsgiCoCgTexture : register(t12);
 Texture2D<float4> SsgiSpecularTexture : register(t13);
 
-
-// [Jimenez et al. 2016, "Practical Realtime Strategies for Accurate Indirect Occlusion"]
-float3 MultiBounceAO(float3 baseColor, float ao)
-{
-	float3 a = 2.0404 * baseColor - 0.3324;
-	float3 b = -4.7951 * baseColor + 0.6417;
-	float3 c = 2.7552 * baseColor + 0.6903;
-	return max(ao, ((ao * a + b) * ao + c) * ao);
-}
-
 void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 {
 	ao = 1 - SsgiAoTexture[pixCoord];
@@ -60,13 +50,11 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 	il = max(0, Color::YCoCgToRGB(float3(ssgiIlY, ssgiIlCoCg)));
 }
 
-void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, in float3 normal, in float3 view)
+void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, in float3 normal, in float3 view, in float roughness)
 {
-	// https://www.iryoku.com/stare-into-the-future/
 	ao = 1 - SsgiAoTexture[pixCoord].x;
 	float NdotV = dot(normal, view);
-	float s = saturate(NdotV * NdotV);
-	ao = lerp(ao, 1.0, s);
+	ao = Color::SpecularAOLagarde(NdotV, ao, roughness);
 
 	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
 	float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, lobe);
@@ -158,10 +146,10 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
 
 	linDiffuseColor = Color::GammaToLinear(diffuseColor);
-
+	
 	float3 linAlbedo = Color::GammaToLinear(albedo);
 
-	float3 multiBounceAO = MultiBounceAO(linAlbedo, ssgiAo);
+	float3 multiBounceAO = Color::MultiBounceAO(linAlbedo, ssgiAo);
 
 	linDiffuseColor *= sqrt(multiBounceAO);
 
@@ -195,11 +183,11 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 #	if defined(INTERIOR)
 		float3 specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(LinearSampler, R, level));
-
+		
 		float specularIrradianceLuminance = Color::RGBToLuminance(Color::GammaToLinear(EnvTexture.SampleLevel(LinearSampler, R, 15)));
 		specularIrradiance /= specularIrradianceLuminance;
 		specularIrradiance = Color::GammaToLinear(Color::LinearToGamma(specularIrradiance) * directionalAmbientColorSpecular);
-
+	
 		finalIrradiance += specularIrradiance;
 #	elif defined(SKYLIGHTING)
 #		if defined(VR)
@@ -212,7 +200,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 		float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
 		skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
-
+		
 		directionalAmbientColorSpecular = Color::GammaToLinear(directionalAmbientColorSpecular);
 		directionalAmbientColorSpecular *= skylightingSpecular;
 		directionalAmbientColorSpecular = Color::LinearToGamma(directionalAmbientColorSpecular);
@@ -221,9 +209,9 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 		if (skylightingSpecular < 1.0){
 			specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(LinearSampler, R, level));
-
-			float specularIrradianceLuminance = Color::RGBToLuminance(Color::GammaToLinear(EnvTexture.SampleLevel(LinearSampler, R, 15)));
-			specularIrradiance /= specularIrradianceLuminance + 0.001;
+			
+			float3 specularIrradianceLuminance = Color::RGBToLuminance(Color::GammaToLinear(EnvTexture.SampleLevel(LinearSampler, R, 15)));	
+			specularIrradiance /= specularIrradianceLuminance;
 			specularIrradiance = Color::GammaToLinear(Color::LinearToGamma(specularIrradiance) * directionalAmbientColorSpecular);
 		}
 
@@ -231,18 +219,18 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 		if (skylightingSpecular > 0.0){
 			specularIrradianceReflections = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(LinearSampler, R, level));
-
-			float specularIrradianceReflectionsLuminance = Color::RGBToLuminance(Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(LinearSampler, R, 15)));
-			specularIrradianceReflections /= specularIrradianceReflectionsLuminance + 0.001;
+			
+			float3 specularIrradianceReflectionsLuminance = Color::RGBToLuminance(Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(LinearSampler, R, 15)));	
+			specularIrradianceReflections /= specularIrradianceReflectionsLuminance;
 			specularIrradianceReflections = Color::GammaToLinear(Color::LinearToGamma(specularIrradianceReflections) * directionalAmbientColorSpecular);
 		}
 
 		finalIrradiance = lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
 #	else
 		float3 specularIrradianceReflections = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(LinearSampler, R, level));
-
-		float specularIrradianceReflectionsLuminance = Color::RGBToLuminance(Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(LinearSampler, R, 15)));
-		specularIrradianceReflections /= specularIrradianceReflectionsLuminance + 0.001;
+		
+		float3 specularIrradianceReflectionsLuminance = Color::RGBToLuminance(Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(LinearSampler, R, 15)));	
+		specularIrradianceReflections /= specularIrradianceReflectionsLuminance;
 		specularIrradianceReflections = Color::GammaToLinear(Color::LinearToGamma(specularIrradianceReflections) * directionalAmbientColorSpecular);
 
 		finalIrradiance += specularIrradianceReflections;
@@ -259,12 +247,12 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 		float ssgiAo;
 		float3 ssgiIlSpecular;
-		SampleSSGISpecular(dispatchID.xy, specularLobe, ssgiAo, ssgiIlSpecular, normalWS, V);
+		SampleSSGISpecular(dispatchID.xy, specularLobe, ssgiAo, ssgiIlSpecular, normalWS, V, roughness);
 
 #		if defined(VR)
 		float ssgiAo2;
 		float3 ssgiIlSpecular2;
-		SampleSSGISpecular(pixCoord2, specularLobe, ssgiAo2, ssgiIlSpecular2, normalWS, V);
+		SampleSSGISpecular(pixCoord2, specularLobe, ssgiAo2, ssgiIlSpecular2, normalWS, V, roughness);
 		float4 ssgiMixed = Stereo::BlendEyeColors(uv1Mono, float4(ssgiIlSpecular, ssgiAo), uv2Mono, float4(ssgiIlSpecular2, ssgiAo2));
 		ssgiAo = ssgiMixed.a;
 		ssgiIlSpecular = ssgiMixed.rgb;
