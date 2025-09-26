@@ -90,7 +90,7 @@ namespace Color
 
 	float3 Diffuse(float3 color)
 	{
-#if defined(TRUE_PBR)	
+#if defined(TRUE_PBR)
 		return TrueLinearToGamma(color);
 #else
 		return color;
