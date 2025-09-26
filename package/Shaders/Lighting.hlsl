@@ -3097,12 +3097,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 outputAlbedo = baseColor.xyz * vertexColor;
 #		if defined(TRUE_PBR)
-	outputAlbedo = indirectDiffuseLobeWeight;
+	outputAlbedo = indirectDiffuseLobeWeight * Color::PBRLightingScale;
 #		endif
 
 #		if defined(HAIR) && defined(CS_HAIR)
 	if (SharedData::hairSpecularSettings.Enabled) {
-		outputAlbedo = indirectDiffuseLobeWeight;
+		outputAlbedo = indirectDiffuseLobeWeight * Color::PBRLightingScale;
 	}
 #		endif
 
@@ -3360,7 +3360,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float stochasticBlend = (screenNoise * screenNoise) < psout.Diffuse.w ? 1.0 : 0.0;
 	psout.NormalGlossiness.w = stochasticBlend;
 
-	psout.Reflectance.xyz = lerp(0.0, psout.Reflectance.xyz, saturate(psout.Reflectance.xyz / 0.04));
+	psout.Reflectance.xyz = saturate((psout.Reflectance.xyz - 0.04) / 0.96);
 
 #	endif
 
