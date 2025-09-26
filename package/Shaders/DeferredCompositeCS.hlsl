@@ -179,8 +179,10 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 		float3 finalIrradiance = 0;
 
-		float directionalAmbientColorSpecular = Color::GammaToLinear(Color::RGBToLuminance(max(0, mul(SharedData::DirectionalAmbient, float4(R, 1.0))) * Color::ReflectionNormalisationScale));
-
+        float directionalAmbientColorSpecular = Color::RGBToLuminance(
+            Color::GammaToLinear(max(0, mul(SharedData::DirectionalAmbient, float4(R, 1.0))))
+            * Color::ReflectionNormalisationScale
+        );
 #	if defined(INTERIOR)
 		float3 specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(LinearSampler, R, level));
 
