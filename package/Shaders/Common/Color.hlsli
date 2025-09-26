@@ -15,13 +15,13 @@ namespace Color
 		float3 c = 2.7552 * baseColor + 0.6903;
 		return max(ao, ((ao * a + b) * ao + c) * ao);
 	}
-	
+
 	// [Lagarde et al. 2014, "Moving Frostbite to Physically Based Rendering 3.0"]
 	float SpecularAOLagarde(float NdotV, float ao, float roughness)
 	{
 		return saturate(pow(abs(NdotV + ao), exp2(-16.0 * roughness - 1.0)) - 1.0 + ao);
 	}
-	
+
 	float RGBToLuminance(float3 color)
 	{
 		return dot(color, float3(0.2125, 0.7154, 0.0721));
