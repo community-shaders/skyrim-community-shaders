@@ -208,9 +208,9 @@ void Upscaling::DrawSettings()
 			}
 			
 			if (upscaleMethod == UpscaleMethod::kFSR) {
-				ImGui::SliderFloat("Sharpness", &settings.sharpnessFSR, 0.0f, 1.0f, "%.2f");
+				ImGui::SliderFloat("Sharpness", &settings.sharpnessFSR, 0.0f, 1.0f, "%.1f");
 			} else if (upscaleMethod == UpscaleMethod::kDLSS) {
-				ImGui::SliderFloat("Sharpness", &settings.sharpnessDLSS, 0.0f, 1.0f, "%.2f");
+				ImGui::SliderFloat("Sharpness", &settings.sharpnessDLSS, 0.0f, 1.0f, "%.1f");
 			}
 		}
 	} else {
