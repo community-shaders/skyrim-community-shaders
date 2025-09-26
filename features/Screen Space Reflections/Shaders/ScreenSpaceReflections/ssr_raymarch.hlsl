@@ -378,7 +378,11 @@ float3 SampleReflectionVector(float3 view_direction, float3 normal, float roughn
 #ifdef PERFECT_REFLECTIONS
     sampled_normal_tbn.xyz = float3(0, 0, 1); // Overwrite normal sample to produce perfect reflection.
 #endif
+#if defined(SSSR_SPECULAR)
     float3 reflected_direction_tbn = reflect(-view_direction_tbn, sampled_normal_tbn.xyz);
+#else
+    float3 reflected_direction_tbn = sampled_normal_tbn.xyz;
+#endif
     // Transform reflected_direction back to the initial space.
     float3x3 inv_tbn_transform = transpose(tbn_transform);
     pdf = sampled_normal_tbn.w;
@@ -698,19 +702,13 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
 #else
 
     if (sample_id == 0) {
-        outColor.xyz = 0.f;
-        uint brightest = 0;
-        float brightestLum = 0.f;
+        outColor = 0.f;
         for (int i = 0; i < SAMPLES_PER_PIXEL; ++i) {
-            float lum = Color::RGBToLuminance(samples[groupThreadID.x * 8 + groupThreadID.y][i].xyz);
-            if (lum > brightestLum) {
-                brightest = i;
-                brightestLum = lum;
-            }
+            outColor.xyz += samples[groupThreadID.x * 8 + groupThreadID.y][i].xyz;
+            outColor.w += samples[groupThreadID.x * 8 + groupThreadID.y][i].w;
         }
-        // outColor.xyz /= SAMPLES_PER_PIXEL;
-        // outColor.w = saturate(outColor.w / SAMPLES_PER_PIXEL);
-        outColor = samples[groupThreadID.x * 8 + groupThreadID.y][brightest];
+        outColor.xyz /= SAMPLES_PER_PIXEL;
+        outColor.w = saturate(outColor.w / SAMPLES_PER_PIXEL);
 
         // History
         [branch]
