@@ -258,7 +258,12 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 		ssgiIlSpecular = ssgiMixed.rgb;
 #		endif
 
-		finalIrradiance = (finalIrradiance * ssgiAo) + ssgiIlSpecular;
+		finalIrradiance = (finalIrradiance * ssgiAo);
+
+		ssgiIlSpecular = Color::RGBToYCoCg(ssgiIlSpecular);
+		ssgiIlSpecular = max(0, Color::YCoCgToRGB(float3(ssgiIlSpecular.x, lerp(ssgiIlSpecular.yz, Color::RGBToYCoCg(finalIrradiance).yz, 0.5))));
+
+		finalIrradiance += ssgiIlSpecular;
 #	endif
 
 		color += reflectance * finalIrradiance;
