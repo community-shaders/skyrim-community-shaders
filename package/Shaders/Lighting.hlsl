@@ -3085,19 +3085,21 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		color.xyz = lerp(color.xyz * Color::PBRLightingScale, litLodLandColor, lodLandBlendFactor);
 
 		specularColor = lerp(specularColorPBR * Color::PBRLightingScale, 0, lodLandBlendFactor);
-		indirectDiffuseLobeWeight = lerp(indirectDiffuseLobeWeight, vertexColor * lodLandColor.xyz * lodLandFadeFactor, lodLandBlendFactor);
+		indirectDiffuseLobeWeight = lerp(indirectDiffuseLobeWeight * Color::PBRLightingScale, vertexColor * lodLandColor.xyz * lodLandFadeFactor, lodLandBlendFactor);
 		indirectSpecularLobeWeight = lerp(indirectSpecularLobeWeight, 0, lodLandBlendFactor);
 		pbrGlossiness = lerp(pbrGlossiness, 0, lodLandBlendFactor);
 	}
 #	elif defined(TRUE_PBR)
 	color.xyz *= Color::PBRLightingScale;
 	specularColorPBR *= Color::PBRLightingScale;
+	indirectDiffuseLobeWeight *= Color::PBRLightingScale;
 	specularColor = specularColorPBR;
 #	endif
 
 	float3 outputAlbedo = baseColor.xyz * vertexColor;
+	
 #		if defined(TRUE_PBR)
-	outputAlbedo = indirectDiffuseLobeWeight * Color::PBRLightingScale;
+	outputAlbedo = indirectDiffuseLobeWeight;
 #		endif
 
 #		if defined(HAIR) && defined(CS_HAIR)
