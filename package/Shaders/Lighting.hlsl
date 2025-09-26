@@ -3097,7 +3097,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 	float3 outputAlbedo = baseColor.xyz * vertexColor;
-	
+
 #		if defined(TRUE_PBR)
 	outputAlbedo = indirectDiffuseLobeWeight;
 #		endif
