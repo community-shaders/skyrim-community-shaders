@@ -1352,7 +1352,7 @@ void Upscaling::UpscaleDepth()
 
 void Upscaling::ApplyNISSharpening()
 {
-	if (!streamline.featureNIS && settings.sharpnessDLSS <= 0.0f) {
+	if (!streamline.featureNIS || settings.sharpnessDLSS <= 0.0f) {
 		return;
 	}
 
