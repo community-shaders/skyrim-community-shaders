@@ -54,7 +54,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 {
 	ao = 1 - SsgiAoTexture[pixCoord].x;
 	float NdotV = dot(normal, view);
-	ao = Color::SpecularAOLagarde(NdotV, ao, roughness);
+	ao = Color::SpecularAOLagarde(saturate(NdotV), ao, roughness);
 
 	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
 	float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, lobe);
