@@ -53,7 +53,7 @@ namespace DynamicCubemaps
 		if (SharedData::InInterior) {
 			float3 specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, level).xyz);
 
-			float specularIrradianceLuminance = Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, 15).xyz);
+			float specularIrradianceLuminance = Color::RGBToLuminance(Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, 15).xyz));
 			specularIrradiance /= specularIrradianceLuminance + 0.001;
 			specularIrradiance = Color::GammaToLinear(Color::LinearToGamma(specularIrradiance) * directionalAmbientColorSpecular);
 
@@ -66,9 +66,9 @@ namespace DynamicCubemaps
 		float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
 		skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
 
-		directionalAmbientColorSpecular = Color::GammaToLinear(directionalAmbientColorSpecular);
+		directionalAmbientColorSpecular = Color::GammaToLinear(directionalAmbientColorSpecular).x;
 		directionalAmbientColorSpecular *= skylightingSpecular;
-		directionalAmbientColorSpecular = Color::LinearToGamma(directionalAmbientColorSpecular);
+		directionalAmbientColorSpecular = Color::LinearToGamma(directionalAmbientColorSpecular).x;
 
 		float3 specularIrradiance = 1;
 
