@@ -90,10 +90,9 @@ namespace DynamicCubemaps
 #		else
 		float3 specularIrradiance = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level).xyz);
 
-		float specularIrradianceLuminance = Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, 15).xyz);
-		specularIrradiance /= specularIrradiance + 0.001;
+		float specularIrradianceLuminance = Color::RGBToLuminance(Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, 15).xyz));
+		specularIrradiance /= max(specularIrradianceLuminance, 0.001);
 		specularIrradiance = Color::GammaToLinear(Color::LinearToGamma(specularIrradiance) * directionalAmbientColorSpecular);
-
 		finalIrradiance += specularIrradiance;
 #		endif
 		return finalIrradiance;
