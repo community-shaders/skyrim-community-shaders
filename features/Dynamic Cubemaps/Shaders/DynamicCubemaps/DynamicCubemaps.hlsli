@@ -55,7 +55,7 @@ namespace DynamicCubemaps
 
 			float specularIrradianceLuminance = Color::RGBToLuminance(Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, 15).xyz));
 
-			specularIrradiance = (specularIrradiance / specularIrradianceLuminance + 0.001) * directionalAmbientColorSpecular;
+			specularIrradiance = (specularIrradiance / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
 
 			finalIrradiance += specularIrradiance;
 			return finalIrradiance;
@@ -75,7 +75,7 @@ namespace DynamicCubemaps
 
             float specularIrradianceLuminance = Color::RGBToLuminance(Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, 15).xyz));
 
-			specularIrradiance = (specularIrradiance / specularIrradianceLuminance + 0.001) * directionalAmbientColorSpecular;
+			specularIrradiance = (specularIrradiance / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
 		}
 
 		float3 specularIrradianceReflections = 1.0;
@@ -85,7 +85,7 @@ namespace DynamicCubemaps
 
 		    float specularIrradianceReflectionsLuminance = Color::RGBToLuminance(Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(SampColorSampler, R, 15).xyz));
 
-			specularIrradianceReflections = (specularIrradianceReflections / specularIrradianceReflectionsLuminance + 0.001) * directionalAmbientColorSpecular;
+			specularIrradianceReflections = (specularIrradianceReflections / max(specularIrradianceReflectionsLuminance, 0.001)) * directionalAmbientColorSpecular;
 		}
 
 		finalIrradiance = lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
@@ -94,7 +94,7 @@ namespace DynamicCubemaps
 
 		float specularIrradianceLuminance = Color::RGBToLuminance(Color::GammaToLinear(EnvTexture.SampleLevel(SampColorSampler, R, 15).xyz));
 
-		specularIrradiance = (specularIrradiance / specularIrradianceLuminance + 0.001) * directionalAmbientColorSpecular;
+		specularIrradiance = (specularIrradiance / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
 
 		finalIrradiance += specularIrradiance;
 #		endif
