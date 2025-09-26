@@ -206,7 +206,7 @@ void Upscaling::DrawSettings()
 			if (baseLabel) {
 				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, baseLabel);
 			}
-			
+
 			if (upscaleMethod == UpscaleMethod::kFSR) {
 				ImGui::SliderFloat("Sharpness", &settings.sharpnessFSR, 0.0f, 1.0f, "%.1f");
 			} else if (upscaleMethod == UpscaleMethod::kDLSS) {
@@ -424,7 +424,7 @@ void Upscaling::PostPostLoad()
 
 Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
 {
-	if (streamline.featureDLSS) 
+	if (streamline.featureDLSS)
 		return (UpscaleMethod)settings.upscaleMethod;
 	return (UpscaleMethod)settings.upscaleMethodNoDLSS;
 }
@@ -432,7 +432,7 @@ Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
 void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 {
 	logger::debug("[Upscaling] Creating texture resources for method {}", (int)a_upscalemethod);
-	
+
 	auto renderer = globals::game::renderer;
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
@@ -470,7 +470,7 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 
 			D3D11_TEXTURE2D_DESC motionTexDesc{};
 			motionVector.texture->GetDesc(&motionTexDesc);
-			
+
 			texDesc.Format = motionTexDesc.Format;
 			srvDesc.Format = texDesc.Format;
 			uavDesc.Format = texDesc.Format;
@@ -1373,7 +1373,7 @@ void Upscaling::ApplyNISSharpening()
 	context->CopyResource(mainResource.get(), nisSharpenerTexture->resource.get());
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
-	
+
 	if (renderTarget)
 		renderTarget->Release();
 }
@@ -1408,7 +1408,7 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a1, uint32_t a
 	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod == UpscaleMethod::kTAA;
 
 	func(a1, a3, er8_);
-	
+
 	if (upscaleMethod == UpscaleMethod::kDLSS)
 		upscaling.ApplyNISSharpening();
 

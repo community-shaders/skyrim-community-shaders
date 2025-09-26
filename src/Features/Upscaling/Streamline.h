@@ -13,8 +13,8 @@
 #include <sl.h>
 #include <sl_consts.h>
 #include <sl_dlss.h>
-#include <sl_nis.h>
 #include <sl_matrix_helpers.h>
+#include <sl_nis.h>
 #include <sl_version.h>
 #pragma warning(pop)
 
