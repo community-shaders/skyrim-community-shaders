@@ -147,7 +147,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 	linDiffuseColor = Color::GammaToLinear(diffuseColor);
 
-	float3 linAlbedo = Color::GammaToLinear(albedo);
+	float3 linAlbedo = Color::GammaToLinear(albedo / Color::PBRLightingScale);
 
 	float3 multiBounceAO = Color::MultiBounceAO(linAlbedo, ssgiAo);
 
