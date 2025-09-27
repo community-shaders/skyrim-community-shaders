@@ -33,10 +33,10 @@ public:
 	void LoadTheme(json& o_json);
 	void SaveTheme(json& o_json);
 
-	// Multi-theme support (deprecated - use ThemeManager)
+	// Multi-theme support
 	std::vector<std::string> DiscoverThemes();
 	bool LoadThemePreset(const std::string& themeName);
-	void CreateDefaultThemes();  // Deprecated - creates JSON files instead
+	void CreateDefaultThemes();
 
 	void Init();
 	void DrawSettings();
