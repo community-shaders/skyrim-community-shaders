@@ -39,15 +39,6 @@ Texture2D<float4> SsgiYTexture : register(t11);
 Texture2D<float4> SsgiCoCgTexture : register(t12);
 Texture2D<float4> SsgiSpecularTexture : register(t13);
 
-#if defined(IBL)
-#	if !defined(DYNAMIC_CUBEMAPS)
-#		undef IBL
-#	else
-#		define IBL_DEFERRED
-#		include "IBL/IBL.hlsli"
-#	endif
-#endif
-
 void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 {
 	ao = 1 - SsgiAoTexture[pixCoord];
@@ -79,6 +70,15 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	ao *= 1 - hq_spec.a;
 	il += hq_spec.rgb;
 }
+#endif
+
+#if defined(IBL)
+#	if !defined(DYNAMIC_CUBEMAPS)
+#		undef IBL
+#	else
+#		define IBL_DEFERRED
+#		include "IBL/IBL.hlsli"
+#	endif
 #endif
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
