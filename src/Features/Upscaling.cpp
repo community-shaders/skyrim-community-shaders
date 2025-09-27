@@ -204,7 +204,10 @@ void Upscaling::DrawSettings()
 			}
 
 			if (baseLabel) {
-				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, baseLabel);
+				// Format the label with preset name and resolution scale
+				std::string labelWithScale = std::format("{} ( {:.2f}x )", baseLabel, (resolutionScale.x + resolutionScale.y) * 0.5f);
+
+				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, labelWithScale.c_str());
 			}
 
 			if (upscaleMethod == UpscaleMethod::kFSR) {
