@@ -13,6 +13,9 @@
 #include <imgui_internal.h>
 
 #include "RE/Skyrim.h"
+#include "State.h"
+#include "Util.h"
+
 #include "../Utils/FileSystem.h"
 #include "../Util.h"
 
@@ -434,10 +437,15 @@ void ThemeManager::RefreshThemes()
 	DiscoverThemes();
 }
 
+
 std::filesystem::path ThemeManager::GetThemesDirectory() const
 {
 	return Util::PathHelpers::GetThemesPath();
 }
+
+	// Compute effective font size (user value or dynamic default)
+	float fontSize = ResolveFontSize(menu);
+
 
 void ThemeManager::CreateDefaultThemeFiles()
 {
@@ -495,6 +503,7 @@ void ThemeManager::CreateDefaultThemeFiles()
 		"TooltipHoverDelay": 0.5
 	}
 })";
+
 
 		file.close();
 		logger::info("Created default theme file: {}", defaultThemeFile.string());
@@ -564,4 +573,28 @@ bool ThemeManager::ValidateThemeData(const json& themeData) const
 
 	// Could add more detailed validation here if needed
 	return true;
+
+	// Cache the effective size so we can detect changes accurately
+	cachedFontSize = fontSize;
+}
+
+float ThemeManager::ResolveFontSize(const Menu& menu)
+{
+	const auto& themeSettings = menu.GetTheme();
+	float configured = themeSettings.FontSize;
+
+	// If user configured a positive size, use it (clamped)
+	if (std::round(configured) > 0) {
+		return std::clamp(configured, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE);
+	}
+
+	// Otherwise, compute dynamic default based on current screen resolution
+	float dynamicSize = Constants::DEFAULT_FONT_SIZE;
+	if (globals::state && globals::state->screenSize.y > 0) {
+		dynamicSize = globals::state->screenSize.y * Constants::DEFAULT_FONT_RATIO;
+	} else {
+		logger::warn("ThemeManager::ResolveFontSize() - Falling back to DEFAULT_FONT_SIZE due to missing screen height.");
+	}
+	return std::clamp(dynamicSize, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE);
+
 }

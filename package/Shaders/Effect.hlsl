@@ -11,6 +11,10 @@
 
 #define EFFECT
 
+#if !defined(DYNAMIC_CUBEMAPS) && defined(IBL)
+#	undef IBL
+#endif
+
 struct VS_INPUT
 {
 	float4 Position : POSITION0;
@@ -427,9 +431,7 @@ struct PS_OUTPUT
 #	elif defined(NORMALS)
 	float4 NormalGlossiness : SV_Target2;
 #	endif
-#	if defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 	float4 Albedo : SV_Target3;
-#	endif
 	float4 Specular : SV_Target4;
 	float4 Reflectance : SV_Target5;
 	float4 Masks : SV_Target6;
@@ -552,9 +554,8 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 		float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
 
 #		if defined(IBL)
-		if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+		if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
 			ambientColor *= SharedData::iblSettings.DALCAmount;
-			ambientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 		}
 #		endif
 
@@ -576,6 +577,21 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 		color = Color::GammaToLinear(color);
 		color *= skylightingDiffuse;
 		color = Color::LinearToGamma(color);
+#		endif
+
+#		if defined(IBL)
+		float3 iblColor = 0;
+		if (SharedData::iblSettings.EnableDiffuseIBL) {
+			if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)
+			{
+#			if defined(SKYLIGHTING)
+				iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1), skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#			else
+				iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#			endif
+				color += Color::LinearToGamma(iblColor);
+			}
+		}
 #		endif
 
 		if (!SharedData::InInterior){
@@ -861,6 +877,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Reflectance = float4(psout.Diffuse.xyz, finalColor.w);
 	psout.Masks = float4(Color::RGBToLuminance(psout.Diffuse.xyz).xxx, finalColor.w);
 #else
+	psout.Albedo = float4(0, 0, 0, finalColor.w);
 	psout.Specular = float4(0, 0, 0, finalColor.w);
 	psout.Reflectance = float4(0, 0, 0, finalColor.w);
 	psout.Masks = float4(0, 0, 0, finalColor.w);

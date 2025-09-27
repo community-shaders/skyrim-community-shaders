@@ -128,7 +128,7 @@ namespace DisplayMapping
 		return XYZToRGB(col);
 	}
 
-	float3 HuePreservingTonemap(float3 col)
+	float3 HuePreservingHejlBurgessDawson(float3 col, float3 bloomCol)
 	{
 		float3 ictcp = RGBToICtCp(col);
 
@@ -136,7 +136,11 @@ namespace DisplayMapping
 		float saturationAmount = pow(smoothstep(1.0, 0.3, ictcp.x), 1.3);
 		col = ICtCpToRGB(ictcp * float3(1, saturationAmount.xx));
 
-		col = Param.z > 0.5 ? GetTonemapFactorHejlBurgessDawson(col) : GetTonemapFactorReinhard(col);
+		// Non-hue preserving mapping
+		float3 perChannelCompressed = GetTonemapFactorHejlBurgessDawson(col);
+		perChannelCompressed += saturate(Param.x - perChannelCompressed) * bloomCol;
+
+		col = perChannelCompressed;
 
 		float3 ictcpMapped = RGBToICtCp(col);
 

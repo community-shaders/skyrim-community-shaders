@@ -21,6 +21,7 @@ using json = nlohmann::json;
 class ThemeManager
 {
 public:
+
 	struct ThemeInfo
 	{
 		std::string name;          // Filename without extension
@@ -35,6 +36,13 @@ public:
 		std::string author;
 		std::time_t lastModified = 0;
 	};
+
+	static void SetupImGuiStyle(const class Menu& menu);
+	static void ReloadFont(const class Menu& menu, float& cachedFontSize);
+	// Returns the effective font size to use. If the user setting is <= 0, a dynamic
+	// default based on current screen resolution is returned; otherwise the user value.
+	static float ResolveFontSize(const class Menu& menu);
+
 
 	struct Constants
 	{

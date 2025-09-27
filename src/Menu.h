@@ -234,6 +234,7 @@ public:
 		uint32_t SkipCompilationKey = VK_ESCAPE;
 		uint32_t EffectToggleKey = VK_MULTIPLY;  // toggle all effects
 		uint32_t OverlayToggleKey = VK_F10;      // Global overlay toggle key for all overlays
+		bool FirstTimeSetupCompleted = false;    // Track if first-time setup has been completed
 		ThemeSettings Theme;
 		std::string SelectedThemePreset = ""; // Currently selected theme preset (empty = custom/user theme)
 	};

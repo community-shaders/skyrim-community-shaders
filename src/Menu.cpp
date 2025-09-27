@@ -129,6 +129,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkipCompilationKey,
 	EffectToggleKey,
 	OverlayToggleKey,
+	FirstTimeSetupCompleted,
 	Theme,
 	SelectedThemePreset)
 
@@ -264,7 +265,9 @@ void Menu::Init()
 	DXGI_SWAP_CHAIN_DESC desc{};
 	globals::d3d::swapChain->GetDesc(&desc);
 
-	float fontSize = settings.Theme.FontSize;
+
+  // Determine effective font size: user setting when >0, otherwise dynamic default by resolution
+	float fontSize = ThemeManager::ResolveFontSize(*this);
 
 	// Use dynamic font sizing when FontSize equals the default (indicating theme doesn't override)
 	if (std::round(fontSize) == std::round(ThemeManager::Constants::DEFAULT_FONT_SIZE)) {
@@ -276,6 +279,7 @@ void Menu::Init()
 	}
 
 	fontSize = std::clamp(fontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE);
+	
 
 	auto fontPath = Util::PathHelpers::GetFontsPath() / settings.Theme.FontName;
 	if (!imgui_io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(),
@@ -296,6 +300,9 @@ void Menu::Init()
 	}
 
 	imgui_io.FontGlobalScale = exp2(globalScale);
+
+	// Initialize cached font size to effective size to prevent redundant reload on first frame
+	cachedFontSize = fontSize;
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplWin32_Init(desc.OutputWindow);
@@ -513,7 +520,7 @@ void Menu::DrawFooter()
 	ImGui::SameLine();
 	ImGui::BulletText(std::format("D3D12 Swap Chain: {}", globals::features::upscaling.d3d12SwapChainActive ? "Active" : "Inactive").c_str());
 	ImGui::SameLine();
-	ImGui::Text(std::format("GPU: {}", globals::state->adapterDescription.c_str()).c_str());
+	ImGui::BulletText(std::format("GPU: {}", globals::state->adapterDescription.c_str()).c_str());
 }
 
 /**
@@ -543,7 +550,7 @@ void Menu::DrawOverlay()
 		[this]() { DrawSettings(); },
 		[](uint32_t key) { return Util::Input::KeyIdToString(key); },
 		cachedFontSize,
-		settings.Theme.FontSize);
+		ThemeManager::ResolveFontSize(*this));
 }
 
 /**

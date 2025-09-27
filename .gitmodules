@@ -4,3 +4,6 @@
 [submodule "extern/Streamline-DX12"]
 	path = extern/Streamline-DX12
 	url = https://github.com/NVIDIAGameWorks/Streamline.git
+[submodule "extern/FidelityFX-SDK"]
+	path = extern/FidelityFX-SDK
+	url = https://github.com/MapleHinata/FidelityFX-SDK

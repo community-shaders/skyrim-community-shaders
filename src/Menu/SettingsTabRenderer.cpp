@@ -148,6 +148,17 @@ void SettingsTabRenderer::RenderKeybindingsTab(
 void SettingsTabRenderer::RenderInterfaceTab()
 {
 	if (ImGui::BeginTabItem("Interface")) {
+		// Restore theme defaults button
+		if (ImGui::Button("Restore Theme Defaults")) {
+			auto& settings = globals::menu->GetSettings();
+			settings.Theme = Menu::ThemeSettings{};  // reset to default-initialized theme
+			// Apply global font scale immediately
+			ImGui::GetIO().FontGlobalScale = exp2(settings.Theme.GlobalScale);
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::TextUnformatted("Resets UI sizes, colors and options to their defaults (including resolution-based font size).");
+		}
+
 		if (ImGui::BeginTabBar("##tabs", ImGuiTabBarFlags_None)) {
 			RenderThemesTab();
 			RenderStylingTab();
@@ -392,6 +403,7 @@ void SettingsTabRenderer::RenderStylingTab()
 			auto& io = ImGui::GetIO();
 			io.FontGlobalScale = trueScale;
 		}
+
 		
 		ImGui::SeparatorText("Font");
 		if (ImGui::SliderFloat("Font Size", &themeSettings.FontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE, "%.0f")) {
@@ -478,6 +490,34 @@ void SettingsTabRenderer::RenderStylingTab()
 		}
 
 		ImGui::SeparatorText("Layout");
+
+
+		// Font size controls: Auto (resolution-based) or Manual
+		bool useAutoFont = (themeSettings.FontSize <= 0.0f);
+		if (ImGui::Checkbox("Use resolution-based font size", &useAutoFont)) {
+			if (useAutoFont) {
+				// Enable auto: set sentinel 0.0f
+				themeSettings.FontSize = 0.0f;
+			} else {
+				// Disable auto: seed manual size with current effective (what user sees now)
+				float effective = ThemeManager::ResolveFontSize(*globals::menu);
+				themeSettings.FontSize = std::clamp(effective, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE);
+			}
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::TextUnformatted("When enabled, the UI font size scales with your screen resolution. Disable to set a fixed size.");
+		}
+
+		// Show current effective size for clarity
+		float effectiveNow = ThemeManager::ResolveFontSize(*globals::menu);
+		ImGui::Text("Effective size: %.0f px", std::round(effectiveNow));
+
+		// Manual font size slider (disabled in auto mode)
+		ImGui::BeginDisabled(useAutoFont);
+		ImGui::SliderFloat("Font Size", &themeSettings.FontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE, "%.0f");
+		ImGui::EndDisabled();
+
+
 		ImGui::SliderFloat2("Window Padding", (float*)&style.WindowPadding, 0.0f, 20.0f, "%.0f");
 		ImGui::SliderFloat2("Frame Padding", (float*)&style.FramePadding, 0.0f, 20.0f, "%.0f");
 		ImGui::SliderFloat2("Item Spacing", (float*)&style.ItemSpacing, 0.0f, 20.0f, "%.0f");
