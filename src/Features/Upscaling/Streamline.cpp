@@ -372,7 +372,7 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
 }
 
-void Streamline::RayReconstruction(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_normalRoughness, ID3D11Resource* a_specularHitDistance, ID3D11Resource* a_motionVectors)
+void Streamline::RayReconstruction(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_outputTexture, ID3D11Resource* a_normalRoughness, ID3D11Resource* a_specularHitDistance, ID3D11Resource* a_motionVectors)
 {
 	if (!featureDLSS_RR)
 		return;
@@ -442,7 +442,7 @@ void Streamline::RayReconstruction(ID3D11Resource* a_upscalingTexture, ID3D11Res
 		sl::Extent outputExtent{ 0, 0, (uint)screenSize.x, (uint)screenSize.y };
 
 		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
-		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
+		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_outputTexture, 0 };
 		sl::Resource depth = { sl::ResourceType::eTex2d, depthTexture.texture, 0 };
 		sl::Resource mvec = { sl::ResourceType::eTex2d, a_motionVectors, 0 };
 		sl::Resource diffuseAlbedo = { sl::ResourceType::eTex2d, albedoTexture.texture, 0 };

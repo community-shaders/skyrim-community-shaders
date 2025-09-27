@@ -507,14 +507,24 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod, b
 			packedNormalTexture->CreateUAV(uavDesc);
 		}
 
-		if (!rrTexture) {
+		if (!rrInputTexture) {
 			texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 			srvDesc.Format = texDesc.Format;
 			uavDesc.Format = texDesc.Format;
 
-			rrTexture = new Texture2D(texDesc);
-			rrTexture->CreateSRV(srvDesc);
-			rrTexture->CreateUAV(uavDesc);
+			rrInputTexture = new Texture2D(texDesc);
+			rrInputTexture->CreateSRV(srvDesc);
+			rrInputTexture->CreateUAV(uavDesc);
+		}
+
+		if (!rrOutputTexture) {
+			texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+			srvDesc.Format = texDesc.Format;
+			uavDesc.Format = texDesc.Format;
+
+			rrOutputTexture = new Texture2D(texDesc);
+			rrOutputTexture->CreateSRV(srvDesc);
+			rrOutputTexture->CreateUAV(uavDesc);
 		}
 
 		if (!specHitDistanceTexture) {
@@ -581,13 +591,21 @@ void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 			delete packedNormalTexture;
 			packedNormalTexture = nullptr;
 		}
-		if (rrTexture) {
-			rrTexture->srv = nullptr;
-			rrTexture->uav = nullptr;
-			rrTexture->resource = nullptr;
+		if (rrInputTexture) {
+			rrInputTexture->srv = nullptr;
+			rrInputTexture->uav = nullptr;
+			rrInputTexture->resource = nullptr;
 
-			delete rrTexture;
-			rrTexture = nullptr;
+			delete rrInputTexture;
+			rrInputTexture = nullptr;
+		}
+		if (rrOutputTexture) {
+			rrOutputTexture->srv = nullptr;
+			rrOutputTexture->uav = nullptr;
+			rrOutputTexture->resource = nullptr;
+
+			delete rrOutputTexture;
+			rrOutputTexture = nullptr;
 		}
 		if (specHitDistanceTexture) {
 			specHitDistanceTexture->srv = nullptr;
@@ -1298,17 +1316,20 @@ void Upscaling::Upscale()
 		if (upscaleMethod == UpscaleMethod::kDLSS && !settings.enableDLSSRR) {
 			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get());
 		} else if (upscaleMethod == UpscaleMethod::kDLSS && settings.enableDLSSRR && streamline.featureDLSS_RR) {
+			HRESULT hr = globals::d3d::device->GetDeviceRemovedReason();
+			if (hr != S_OK) {
+				logger::error("Device removed before DLSS RR: 0X{:#X}", static_cast<uint32_t>(hr));
+				return;
+			}
 			logger::debug("Begin DLSS RR");
-			context->CopyResource(rrTexture->resource.get(), main.texture);
+			context->CopyResource(rrInputTexture->resource.get(), main.texture);
 			auto& ssr = globals::features::screenSpaceReflections;
 			if (ssr.loaded && ssr.settings.Enabled && ssr.texHitDistance) {
 				context->CopyResource(specHitDistanceTexture->resource.get(), ssr.texHitDistance->resource.get());
 			}
 			logger::debug("Call DLSS RR");
-			context->Flush();
-			streamline.RayReconstruction(rrTexture->resource.get(), packedNormalTexture->resource.get(), specHitDistanceTexture->resource.get(), motionVectorCopyTexture->resource.get());
-			context->Flush();
-			context->CopyResource(main.texture, rrTexture->resource.get());
+			streamline.RayReconstruction(rrInputTexture->resource.get(), rrOutputTexture->resource.get(), packedNormalTexture->resource.get(), specHitDistanceTexture->resource.get(), motionVectorCopyTexture->resource.get());
+			context->CopyResource(main.texture, rrOutputTexture->resource.get());
 		} else if (upscaleMethod == UpscaleMethod::kFSR) {
 			fidelityFX.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVector.texture, settings.sharpnessFSR);
 		}
