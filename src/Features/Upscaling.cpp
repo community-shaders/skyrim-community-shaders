@@ -707,18 +707,18 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	auto screenHeight = static_cast<int>(screenSize.y);
 
 	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
-		float resolutionScaleBase = 1.0f;
+		float2 resolutionScaleBase = { 1.0f, 1.0f };
 
 		if (globals::game::isVR) {
-			resolutionScaleBase = 1.0f;
+			resolutionScaleBase = { 1.0f, 1.0f };
 		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
 			resolutionScaleBase = streamline.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
 		} else if (upscaleMethod == UpscaleMethod::kFSR) {
 			resolutionScaleBase = fidelityFX.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
 		}
 
-		auto renderWidth = static_cast<int>(screenWidth * resolutionScaleBase);
-		auto renderHeight = static_cast<int>(screenHeight * resolutionScaleBase);
+		auto renderWidth = static_cast<int>(screenWidth * resolutionScaleBase.x);
+		auto renderHeight = static_cast<int>(screenHeight * resolutionScaleBase.y);
 
 		// Use precise scale if the integer conversion doesn't change the dimensions
 		if (renderWidth == screenWidth && renderHeight == screenHeight) {

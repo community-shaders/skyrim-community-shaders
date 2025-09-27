@@ -240,9 +240,10 @@ void FidelityFX::DestroyFSRResources()
 	}
 }
 
-float FidelityFX::GetInputResolutionScale([[maybe_unused]] uint32_t outputWidth, [[maybe_unused]] uint32_t outputHeight, uint32_t qualityMode)
+float2 FidelityFX::GetInputResolutionScale([[maybe_unused]] uint32_t outputWidth, [[maybe_unused]] uint32_t outputHeight, uint32_t qualityMode)
 {
-	return 1.0f / ffxFsr3GetUpscaleRatioFromQualityMode((FfxFsr3QualityMode)qualityMode);
+	float scale = 1.0f / ffxFsr3GetUpscaleRatioFromQualityMode((FfxFsr3QualityMode)qualityMode);
+	return { scale, scale };
 }
 
 FfxResource ffxGetResource(ID3D11Resource* dx11Resource,
