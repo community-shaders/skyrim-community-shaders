@@ -286,6 +286,7 @@ void Menu::Init()
 
 	// Initialize cached values for reload detection
 	cachedFontName = settings.Theme.FontName;
+	cachedFontSize = fontSize;  // Update cached size to match the actually loaded font size
 
 	float globalScale = settings.Theme.GlobalScale;
 	
