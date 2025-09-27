@@ -1,3 +1,5 @@
+#include "PCH.h"
+
 #include "UI.h"
 #include "Menu.h"
 
@@ -1330,37 +1332,43 @@ namespace Util
 			}
 		}  // namespace ColorUtils
 
-	bool ButtonWithFeedback(const char* label, const ImVec2& size, int feedbackDurationMs)
+	bool ButtonWithFlash(const char* label, const ImVec2& size, int flashDurationMs)
 	{
-		static std::unordered_map<std::string, std::chrono::steady_clock::time_point> feedbackTimers;
+		static std::unordered_map<std::string, std::chrono::steady_clock::time_point> flashTimers;
 		
 		std::string buttonId = std::string(label);
 		auto now = std::chrono::steady_clock::now();
 		
-		// Check if this button has active feedback
-		bool hasActiveFeedback = false;
-		auto it = feedbackTimers.find(buttonId);
-		if (it != feedbackTimers.end()) {
+		// Check if this button has active flash
+		bool hasActiveFlash = false;
+		auto it = flashTimers.find(buttonId);
+		if (it != flashTimers.end()) {
 			auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second);
-			if (elapsed.count() < feedbackDurationMs) {
-				hasActiveFeedback = true;
+			if (elapsed.count() < flashDurationMs) {
+				hasActiveFlash = true;
 			} else {
-				// Feedback expired, remove it
-				feedbackTimers.erase(it);
+				// Flash expired, remove it
+				flashTimers.erase(it);
 			}
 		}
 		
-		// Style the button differently if it has active feedback
+		// Style the button with flash effect if active.
 		bool styleChanged = false;
-		if (hasActiveFeedback) {
-			// Get success color from theme for feedback
-			ImVec4 successColor = globals::menu->GetTheme().StatusPalette.SuccessColor;
-			ImVec4 successHovered = ImVec4(successColor.x * 0.8f, successColor.y * 0.8f, successColor.z * 0.8f, successColor.w);
-			ImVec4 successActive = ImVec4(successColor.x * 0.6f, successColor.y * 0.6f, successColor.z * 0.6f, successColor.w);
+		if (hasActiveFlash) {
+			// Use subtle white overlay similar to action icon hover effect
+			ImVec4 normalButton = ImGui::GetStyleColorVec4(ImGuiCol_Button);
+			ImVec4 flashColor = ImVec4(
+				normalButton.x + 0.2f,  // Brighten slightly
+				normalButton.y + 0.2f,
+				normalButton.z + 0.2f,
+				normalButton.w
+			);
+			ImVec4 flashHovered = ImVec4(flashColor.x * 1.1f, flashColor.y * 1.1f, flashColor.z * 1.1f, flashColor.w);
+			ImVec4 flashActive = ImVec4(flashColor.x * 0.9f, flashColor.y * 0.9f, flashColor.z * 0.9f, flashColor.w);
 			
-			ImGui::PushStyleColor(ImGuiCol_Button, successColor);
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, successHovered);
-			ImGui::PushStyleColor(ImGuiCol_ButtonActive, successActive);
+			ImGui::PushStyleColor(ImGuiCol_Button, flashColor);
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, flashHovered);
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, flashActive);
 			styleChanged = true;
 		}
 		
@@ -1370,9 +1378,9 @@ namespace Util
 			ImGui::PopStyleColor(3);
 		}
 		
-		// If clicked, start the feedback timer
+		// If clicked, start the flash timer
 		if (clicked) {
-			feedbackTimers[buttonId] = now;
+			flashTimers[buttonId] = now;
 		}
 		
 		return clicked;
@@ -1418,5 +1426,30 @@ namespace Util
 		}
 		
 		return fonts;
+	}
+
+	bool ValidateFont(const std::string& fontName)
+	{
+		if (fontName.empty()) {
+			return false;
+		}
+
+		try {
+			auto fontsPath = Util::PathHelpers::GetFontsPath();
+			auto fontPath = fontsPath / fontName;
+			
+			// Check if the font file exists and is a regular file
+			if (std::filesystem::exists(fontPath) && std::filesystem::is_regular_file(fontPath)) {
+				// Validate extension is .ttf or .otf
+				auto extension = fontPath.extension().string();
+				std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+				return extension == ".ttf" || extension == ".otf";
+			}
+		}
+		catch (const std::exception& e) {
+			logger::error("ValidateFont: Exception occurred while validating font '{}': {}", fontName, e.what());
+		}
+		
+		return false;
 	}
 }  // namespace Util

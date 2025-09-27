@@ -109,21 +109,28 @@ namespace Util
 		int m_pushedStyles;
 	};
 
+
 	/**
-	 * Creates a button with visual feedback that briefly shows success colors when clicked.
-	 * Useful for save/update operations where users need confirmation that the action worked.
+	 * Button with simple flash feedback (matches action icon hover effect style)
 	 * @param label Button text
 	 * @param size Button size (optional)
-	 * @param feedbackDurationMs How long to show feedback colors in milliseconds (default 1000ms)
+	 * @param flashDurationMs How long to show flash effect in milliseconds (default 200ms)
 	 * @return True if the button was clicked
 	 */
-	bool ButtonWithFeedback(const char* label, const ImVec2& size = ImVec2(0, 0), int feedbackDurationMs = 1000);
+	bool ButtonWithFlash(const char* label, const ImVec2& size = ImVec2(0, 0), int flashDurationMs = 200);
 
 	/**
 	 * Discovers available font files in the Fonts directory
 	 * @return Vector of font file names (including .ttf extension)
 	 */
 	std::vector<std::string> DiscoverFonts();
+
+	/**
+	 * Validates if a font file exists in the Fonts directory
+	 * @param fontName The font file name to check (including .ttf extension)
+	 * @return True if the font exists, false otherwise
+	 */
+	bool ValidateFont(const std::string& fontName);
 
 	/**
 	 * RAII wrapper for creating collapsible UI sections.

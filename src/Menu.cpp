@@ -175,11 +175,25 @@ void Menu::LoadTheme(json& o_json)
 {
 	if (o_json["Theme"].is_object()) {
 		settings.Theme = o_json["Theme"];
+		
+		// Validate the loaded font and fallback to default if necessary
+		if (!Util::ValidateFont(settings.Theme.FontName)) {
+			logger::warn("Font '{}' not found, falling back to default font '{}'", 
+				settings.Theme.FontName, ThemeSettings{}.FontName);
+			settings.Theme.FontName = ThemeSettings{}.FontName;
+		}
 	}
 }
 
 void Menu::SaveTheme(json& o_json)
 {
+	// Validate font before saving and fallback to default if necessary
+	if (!Util::ValidateFont(settings.Theme.FontName)) {
+		logger::warn("Font '{}' not found during save, falling back to default font '{}'", 
+			settings.Theme.FontName, ThemeSettings{}.FontName);
+		settings.Theme.FontName = ThemeSettings{}.FontName;
+	}
+	
 	o_json["Theme"] = settings.Theme;
 }
 
@@ -202,6 +216,14 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 	
 	if (themeManager->LoadTheme(themeName, themeSettings)) {
 		settings.Theme = themeSettings;
+		
+		// Validate the loaded font and fallback to default if necessary
+		if (!Util::ValidateFont(settings.Theme.FontName)) {
+			logger::warn("Font '{}' from theme '{}' not found, falling back to default font '{}'", 
+				settings.Theme.FontName, themeName, ThemeSettings{}.FontName);
+			settings.Theme.FontName = ThemeSettings{}.FontName;
+		}
+		
 		settings.SelectedThemePreset = themeName;
 		// Update cached values for font reload detection
 		cachedFontName = settings.Theme.FontName;

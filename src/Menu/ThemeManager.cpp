@@ -97,19 +97,39 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 		return luminance > 0.5f ? ImVec4(0.0f, 0.0f, 0.0f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 	};
 
-	// Apply contrast-aware text for selection states
+	// Helper function to adjust background color for better contrast with text
+	auto adjustBackgroundForContrast = [&](ImVec4& backgroundColor, float textLuminance) {
+		float bgLuminance = calculateLuminance(backgroundColor);
+		
+		if (bgLuminance > 0.5f && textLuminance > 0.5f) {
+			// Both background and text are light - darken the background
+			backgroundColor.x *= 0.4f;
+			backgroundColor.y *= 0.4f;
+			backgroundColor.z *= 0.4f;
+		} else if (bgLuminance < 0.5f && textLuminance < 0.5f) {
+			// Both background and text are dark - lighten the background
+			backgroundColor.x = std::min(1.0f, backgroundColor.x + 0.3f);
+			backgroundColor.y = std::min(1.0f, backgroundColor.y + 0.3f);
+			backgroundColor.z = std::min(1.0f, backgroundColor.z + 0.3f);
+		}
+	};
+
+	// Apply contrast-aware adjustments for headers and tabs
+	float textLum = calculateLuminance(colors[ImGuiCol_Text]);
+	
+	// Apply contrast adjustments for all header and tab backgrounds using unified logic
+	adjustBackgroundForContrast(colors[ImGuiCol_Header], textLum);
+	adjustBackgroundForContrast(colors[ImGuiCol_HeaderHovered], textLum);
+	adjustBackgroundForContrast(colors[ImGuiCol_HeaderActive], textLum);
+	adjustBackgroundForContrast(colors[ImGuiCol_Tab], textLum);
+	adjustBackgroundForContrast(colors[ImGuiCol_TabActive], textLum);  
+	adjustBackgroundForContrast(colors[ImGuiCol_TabHovered], textLum);
+	
+	// Apply contrast-aware text for selection states (TextSelectedBg is used when text is selected)
 	if (calculateLuminance(colors[ImGuiCol_HeaderActive]) > 0.5f) {
 		colors[ImGuiCol_TextSelectedBg] = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);  // Black text on light selection
-	}
-	if (calculateLuminance(colors[ImGuiCol_HeaderHovered]) > 0.5f) {
-		// For hovered items, we can't directly change text color, but we can adjust the hover background
-		// to ensure better contrast with the current text color
-		float textLum = calculateLuminance(colors[ImGuiCol_Text]);
-		if (textLum > 0.5f) {  // If text is light, darken the hover background
-			ImVec4 darkerHover = colors[ImGuiCol_HeaderHovered];
-			darkerHover.x *= 0.3f; darkerHover.y *= 0.3f; darkerHover.z *= 0.3f;
-			colors[ImGuiCol_HeaderHovered] = darkerHover;
-		}
+	} else {
+		colors[ImGuiCol_TextSelectedBg] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);  // White text on dark selection
 	}
 
 	// Apply scrollbar opacity settings

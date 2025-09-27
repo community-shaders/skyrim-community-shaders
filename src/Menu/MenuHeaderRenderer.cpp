@@ -90,7 +90,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 		if (ImGui::BeginTable("##ActionButtons", 4, ImGuiTableFlags_SizingStretchSame)) {
 			// Save Settings Button
 			ImGui::TableNextColumn();
-			if (Util::ButtonWithFeedback("Save Settings", { -1, 0 })) {
+			if (Util::ButtonWithFlash("Save Settings", { -1, 0 })) {
 				globals::state->Save();
 				globals::state->SaveTheme();
 			}

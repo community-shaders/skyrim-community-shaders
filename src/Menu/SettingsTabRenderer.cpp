@@ -275,7 +275,7 @@ void SettingsTabRenderer::RenderThemesTab()
 			ImGui::SameLine();
 			
 			const char* buttonText = isCreatingNewTheme ? "Save Theme" : "Update Theme";
-			if (Util::ButtonWithFeedback(buttonText)) {
+			if (Util::ButtonWithFlash(buttonText)) {
 				if (isCreatingNewTheme) {
 					// Show popup for new theme creation
 					showCreateThemePopup = true;
@@ -338,7 +338,7 @@ void SettingsTabRenderer::RenderThemesTab()
 			ImGui::Separator();
 
 			// Buttons
-			if (Util::ButtonWithFeedback("Create Theme") && strlen(newThemeName) > 0) {
+			if (Util::ButtonWithFlash("Create Theme") && strlen(newThemeName) > 0) {
 				// Use the existing SaveTheme method to serialize the theme settings
 				json currentThemeJson;
 				globals::menu->SaveTheme(currentThemeJson);
