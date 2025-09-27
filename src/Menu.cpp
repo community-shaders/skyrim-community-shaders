@@ -244,7 +244,8 @@ void Menu::Init()
 
 	float fontSize = settings.Theme.FontSize;
 
-	if (std::round(fontSize) != std::round(ThemeManager::Constants::DEFAULT_FONT_SIZE)) {
+	// Use dynamic font sizing when FontSize equals the default (indicating theme doesn't override)
+	if (std::round(fontSize) == std::round(ThemeManager::Constants::DEFAULT_FONT_SIZE)) {
 		if (globals::state->screenSize.y > 0) {
 			fontSize = globals::state->screenSize.y * ThemeManager::Constants::DEFAULT_FONT_RATIO;
 		} else {
@@ -264,7 +265,14 @@ void Menu::Init()
 	// Initialize cached values for reload detection
 	cachedFontName = settings.Theme.FontName;
 
-	imgui_io.FontGlobalScale = exp2(settings.Theme.GlobalScale);
+	float globalScale = settings.Theme.GlobalScale;
+	
+	// Use default global scale (0.0) for built-in themes when GlobalScale equals the default
+	if (std::abs(globalScale - ThemeManager::Constants::DEFAULT_GLOBAL_SCALE) < 0.001f) {
+		globalScale = ThemeManager::Constants::DEFAULT_GLOBAL_SCALE;  // Ensure built-in themes stay at 0.0
+	}
+
+	imgui_io.FontGlobalScale = exp2(globalScale);
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplWin32_Init(desc.OutputWindow);
@@ -313,6 +321,9 @@ void Menu::DrawSettings()
 		focusChanged = false;
 	}
 	
+	// Apply theme styling with universal contrast enhancement
+	ThemeManager::SetupImGuiStyle(*this);
+	
 	ImGui::DockSpaceOverViewport(NULL, ImGuiDockNodeFlags_PassthruCentralNode);
 
 	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
@@ -336,7 +347,14 @@ void Menu::DrawSettings()
 		bool isDocked = ImGui::IsWindowDocked();
 		wasDocked = isDocked;
 
-		const float uiScale = exp2(settings.Theme.GlobalScale);  // Get current UI scale
+		float globalScale = settings.Theme.GlobalScale;
+		
+		// Use default global scale (0.0) for built-in themes when GlobalScale equals the default
+		if (std::abs(globalScale - ThemeManager::Constants::DEFAULT_GLOBAL_SCALE) < 0.001f) {
+			globalScale = ThemeManager::Constants::DEFAULT_GLOBAL_SCALE;  // Ensure built-in themes stay at 0.0
+		}
+		
+		const float uiScale = exp2(globalScale);  // Get current UI scale
 		// Check if we can show icons - require setting enabled and at least some icons loaded (for undocked)
 		// For docked mode, always show icons if textures are available
 		bool canShowIcons = settings.Theme.ShowActionIcons &&

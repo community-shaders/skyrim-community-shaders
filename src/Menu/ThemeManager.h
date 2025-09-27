@@ -45,6 +45,9 @@ public:
 		static constexpr float MAX_FONT_SIZE = 108.0f;           // 5.0% @ 2160px height
 		static constexpr float DEFAULT_FONT_SIZE = 27.0f;
 
+		// Global scale constants
+		static constexpr float DEFAULT_GLOBAL_SCALE = 0.0f;      // Default global scale for built-in themes
+
 		// Font configuration constants
 		static constexpr int FCONF_OVERSAMPLE_H = 3;              // ImGui default = 2
 		static constexpr int FCONF_OVERSAMPLE_V = 2;              // ImGui default = 1

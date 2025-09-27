@@ -5,10 +5,8 @@
 	"Author": "Community Shaders Team",
 	"Theme": {
 		"UseSimplePalette": false,
-		"FontSize": 26.5,
-		"GlobalScale": -0.05,
 		"ShowActionIcons": true,
-		"TooltipHoverDelay": 0.6,
+		"TooltipHoverDelay": 0.5,
 		"Palette": {
 			"Background": [0.1, 0.3, 0.15, 0.9],
 			"Text": [0.9, 1.0, 0.9, 1.0],

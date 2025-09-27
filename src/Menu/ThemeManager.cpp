@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <numeric>
 
 #include <imgui_impl_dx11.h>
 #include <imgui_internal.h>
@@ -46,7 +47,15 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 
 	// rescale here
 	auto styleCopy = themeSettings.Style;
-	styleCopy.ScaleAllSizes(exp2(themeSettings.GlobalScale));
+	
+	float globalScale = themeSettings.GlobalScale;
+	
+	// Use default global scale (0.0) for built-in themes when GlobalScale equals the default
+	if (std::abs(globalScale - Constants::DEFAULT_GLOBAL_SCALE) < 0.001f) {
+		globalScale = Constants::DEFAULT_GLOBAL_SCALE;  // Ensure built-in themes stay at 0.0
+	}
+	
+	styleCopy.ScaleAllSizes(exp2(globalScale));
 	styleCopy.MouseCursorScale = 1.f;
 	style = styleCopy;
 	style.HoverDelayNormal = themeSettings.TooltipHoverDelay;
@@ -214,7 +223,14 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	
 	logger::debug("ThemeManager::ReloadFont() - Device objects recreated successfully");
 
-	io.FontGlobalScale = exp2(themeSettings.GlobalScale);
+	float globalScale = themeSettings.GlobalScale;
+	
+	// Use default global scale (0.0) for built-in themes when GlobalScale equals the default
+	if (std::abs(globalScale - Constants::DEFAULT_GLOBAL_SCALE) < 0.001f) {
+		globalScale = Constants::DEFAULT_GLOBAL_SCALE;  // Ensure built-in themes stay at 0.0
+	}
+
+	io.FontGlobalScale = exp2(globalScale);
 
 	cachedFontSize = themeSettings.FontSize;
 	// Also update cached font name in the menu instance

@@ -1,12 +1,10 @@
 {
 	"DisplayName": "Default Dark",
 	"Description": "The classic Community Shaders dark theme with comprehensive styling",
-	"Version": "2.0.0",
+	"Version": "1.0.0",
 	"Author": "Community Shaders Team",
 	"Theme": {
 		"UseSimplePalette": false,
-		"FontSize": 27.0,
-		"GlobalScale": 0.0,
 		"ShowActionIcons": true,
 		"TooltipHoverDelay": 0.5,
 		"Palette": {
