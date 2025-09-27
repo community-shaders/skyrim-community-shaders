@@ -20,11 +20,9 @@ These are the **required** files that must be modified for your feature to appea
 
 struct YourFeature;
 
-
 **Feature Instance Declaration** - Add in `globals::features` namespace (~lines 51-80):
 
 extern YourFeature yourFeature;
-
 
 ### 2. `src/Globals.cpp`
 
@@ -32,13 +30,11 @@ extern YourFeature yourFeature;
 
 YourFeature yourFeature{};
 
-
 ### 3. `src/Feature.cpp`
 
 **Feature Registration** - Add to features vector in `GetFeatureList()` (~lines 200-225):
 
 &globals::features::yourFeature,
-
 
 ## Template Customization
 
@@ -73,14 +69,14 @@ Set `SupportsVR()` return value:
 
 ## Naming Conventions
 
-| Component | Convention | Example |
-|-----------|------------|---------|
-| C++ Class | PascalCase | `YourFeature` |
-| Instance Variable | camelCase | `yourFeature` |
-| Display Name | Spaces | `"Your Feature Name"` |
-| Short Name | PascalCase | `"YourFeature"` |
-| Features Directory | Spaces | `features/Your Feature Name/` |
-| Shader Directory | PascalCase | `YourFeature/` |
+| Component          | Convention | Example                       |
+| ------------------ | ---------- | ----------------------------- |
+| C++ Class          | PascalCase | `YourFeature`                 |
+| Instance Variable  | camelCase  | `yourFeature`                 |
+| Display Name       | Spaces     | `"Your Feature Name"`         |
+| Short Name         | PascalCase | `"YourFeature"`               |
+| Features Directory | Spaces     | `features/Your Feature Name/` |
+| Shader Directory   | PascalCase | `YourFeature/`                |
 
 ## Automatic Build Integration
 
