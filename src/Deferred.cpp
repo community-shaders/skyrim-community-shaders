@@ -638,7 +638,7 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 
 		if (globals::features::screenSpaceGI.loaded)
 			defines.push_back({ "SSGI", nullptr });
-		
+
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
 
