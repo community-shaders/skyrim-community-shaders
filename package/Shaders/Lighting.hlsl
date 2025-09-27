@@ -3104,7 +3104,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #		if defined(HAIR) && defined(CS_HAIR)
 	if (SharedData::hairSpecularSettings.Enabled) {
-		outputAlbedo = indirectDiffuseLobeWeight * Color::PBRLightingScale;
+		outputAlbedo = indirectDiffuseLobeWeight;
 	}
 #		endif
 
