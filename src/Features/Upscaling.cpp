@@ -468,19 +468,6 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod, b
 			transparencyCompositionMaskTexture->CreateSRV(srvDesc);
 			transparencyCompositionMaskTexture->CreateUAV(uavDesc);
 		}
-
-		if (!packedNormalTexture) {
-			D3D11_TEXTURE2D_DESC packedNormalTexDesc = texDesc;
-			packedNormalTexDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-			D3D11_SHADER_RESOURCE_VIEW_DESC packedNormalSrvDesc = srvDesc;
-			packedNormalSrvDesc.Format = packedNormalTexDesc.Format;
-			D3D11_UNORDERED_ACCESS_VIEW_DESC packedNormalUavDesc = uavDesc;
-			packedNormalUavDesc.Format = packedNormalTexDesc.Format;
-
-			packedNormalTexture = new Texture2D(packedNormalTexDesc);
-			packedNormalTexture->CreateSRV(packedNormalSrvDesc);
-			packedNormalTexture->CreateUAV(packedNormalUavDesc);
-		}
 	}
 
 	// Motion vector copy texture is only needed for DLSS
@@ -509,6 +496,36 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod, b
 			nisSharpenerTexture->CreateSRV(srvDesc);
 			nisSharpenerTexture->CreateUAV(uavDesc);
 		}
+
+		if (!packedNormalTexture) {
+			texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+			srvDesc.Format = texDesc.Format;
+			uavDesc.Format = texDesc.Format;
+
+			packedNormalTexture = new Texture2D(texDesc);
+			packedNormalTexture->CreateSRV(srvDesc);
+			packedNormalTexture->CreateUAV(uavDesc);
+		}
+
+		if (!rrTexture) {
+			texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+			srvDesc.Format = texDesc.Format;
+			uavDesc.Format = texDesc.Format;
+
+			rrTexture = new Texture2D(texDesc);
+			rrTexture->CreateSRV(srvDesc);
+			rrTexture->CreateUAV(uavDesc);
+		}
+
+		if (!specHitDistanceTexture) {
+			texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+			srvDesc.Format = texDesc.Format;
+			uavDesc.Format = texDesc.Format;
+
+			specHitDistanceTexture = new Texture2D(texDesc);
+			specHitDistanceTexture->CreateSRV(srvDesc);
+			specHitDistanceTexture->CreateUAV(uavDesc);
+		}
 	}
 }
 
@@ -536,15 +553,6 @@ void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 			delete transparencyCompositionMaskTexture;
 			transparencyCompositionMaskTexture = nullptr;
 		}
-
-		if (packedNormalTexture) {
-			packedNormalTexture->srv = nullptr;
-			packedNormalTexture->uav = nullptr;
-			packedNormalTexture->resource = nullptr;
-
-			delete packedNormalTexture;
-			packedNormalTexture = nullptr;
-		}
 	}
 
 	// Motion vector copy texture is only needed for DLSS - destroy when switching away from DLSS
@@ -564,6 +572,30 @@ void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 
 			delete nisSharpenerTexture;
 			nisSharpenerTexture = nullptr;
+		}
+		if (packedNormalTexture) {
+			packedNormalTexture->srv = nullptr;
+			packedNormalTexture->uav = nullptr;
+			packedNormalTexture->resource = nullptr;
+
+			delete packedNormalTexture;
+			packedNormalTexture = nullptr;
+		}
+		if (rrTexture) {
+			rrTexture->srv = nullptr;
+			rrTexture->uav = nullptr;
+			rrTexture->resource = nullptr;
+
+			delete rrTexture;
+			rrTexture = nullptr;
+		}
+		if (specHitDistanceTexture) {
+			specHitDistanceTexture->srv = nullptr;
+			specHitDistanceTexture->uav = nullptr;
+			specHitDistanceTexture->resource = nullptr;
+
+			delete specHitDistanceTexture;
+			specHitDistanceTexture = nullptr;
 		}
 	}
 }
@@ -1267,13 +1299,16 @@ void Upscaling::Upscale()
 			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get());
 		} else if (upscaleMethod == UpscaleMethod::kDLSS && settings.enableDLSSRR && streamline.featureDLSS_RR) {
 			logger::debug("Begin DLSS RR");
+			context->CopyResource(rrTexture->resource.get(), main.texture);
 			auto& ssr = globals::features::screenSpaceReflections;
-			ID3D11Texture2D* specHitDistanceTexture = nullptr;
-			if (ssr.loaded && ssr.settings.Enabled) {
-				specHitDistanceTexture = ssr.texHitDistance->resource.get();
+			if (ssr.loaded && ssr.settings.Enabled && ssr.texHitDistance) {
+				context->CopyResource(specHitDistanceTexture->resource.get(), ssr.texHitDistance->resource.get());
 			}
 			logger::debug("Call DLSS RR");
-			streamline.RayReconstruction(main.texture, packedNormalTexture->resource.get(), specHitDistanceTexture, motionVectorCopyTexture->resource.get());
+			context->Flush();
+			streamline.RayReconstruction(rrTexture->resource.get(), packedNormalTexture->resource.get(), specHitDistanceTexture->resource.get(), motionVectorCopyTexture->resource.get());
+			context->Flush();
+			context->CopyResource(main.texture, rrTexture->resource.get());
 		} else if (upscaleMethod == UpscaleMethod::kFSR) {
 			fidelityFX.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVector.texture, settings.sharpnessFSR);
 		}

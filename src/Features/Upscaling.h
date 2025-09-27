@@ -140,6 +140,8 @@ public:
 	Texture2D* motionVectorCopyTexture = nullptr;
 	Texture2D* nisSharpenerTexture = nullptr;
 	Texture2D* packedNormalTexture = nullptr;  // For DLSSRR
+	Texture2D* specHitDistanceTexture = nullptr;  // For DLSSRR
+	Texture2D* rrTexture = nullptr;  // For DLSSRR
 
 	virtual void ClearShaderCache() override;
 
