@@ -39,7 +39,7 @@ public:
 	// Returns the effective font size to use. If the user setting is <= 0, a dynamic
 	// default based on current screen resolution is returned; otherwise the user value.
 	static float ResolveFontSize(const class Menu& menu);
-	
+
 	// Static UI helper methods
 	static void SetupImGuiStyle(const class Menu& menu);
 	static void ReloadFont(const class Menu& menu, float& cachedFontSize);
