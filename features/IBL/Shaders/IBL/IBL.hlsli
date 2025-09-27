@@ -9,9 +9,9 @@
 
 namespace ImageBasedLighting
 {
-#if defined(IBL_AMBIENTCOMPOSITE)
-	Texture2D<sh2> DiffuseIBLTexture : register(t8);
-	Texture2D<sh2> DiffuseSkyIBLTexture : register(t9);
+#if defined(IBL_DEFERRED)
+	Texture2D<sh2> DiffuseIBLTexture : register(t14);
+	Texture2D<sh2> DiffuseSkyIBLTexture : register(t15);
 #else
 	Texture2D<sh2> DiffuseIBLTexture : register(t76);
 	Texture2D<sh2> DiffuseSkyIBLTexture : register(t77);
@@ -40,7 +40,7 @@ namespace ImageBasedLighting
 		return float3(colorR, colorG, colorB) / Math::PI;
 	}
 
-#if defined(SKYLIGHTING)
+#if defined(SKYLIGHTING) && !defined(INTERIOR)
 	float3 GetIBLColor(float3 rayDir, float skylighting)
 #else
 	float3 GetIBLColor(float3 rayDir)

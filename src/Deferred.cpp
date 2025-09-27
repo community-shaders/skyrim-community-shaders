@@ -433,11 +433,13 @@ void Deferred::DeferredPasses()
 
 	auto& terrainBlending = globals::features::terrainBlending;
 
+	auto& ibl = globals::features::ibl;
+
 	// Deferred Composite
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite");
 
-		ID3D11ShaderResourceView* srvs[14]{
+		ID3D11ShaderResourceView* srvs[16]{
 			specular.SRV,
 			albedo.SRV,
 			normalRoughness.SRV,
@@ -452,6 +454,8 @@ void Deferred::DeferredPasses()
 			ssgi_hq_spec ? nullptr : ssgi_y,
 			ssgi_hq_spec ? nullptr : ssgi_cocg,
 			ssgi_hq_spec ? ssgi_gi_spec : nullptr,
+			ibl.loaded ? ibl.diffuseIBLTexture->srv.get() : nullptr,
+			ibl.loaded ? ibl.diffuseSkyIBLTexture->srv.get() : nullptr,
 		};
 
 		if (dynamicCubemaps.loaded)
@@ -470,7 +474,7 @@ void Deferred::DeferredPasses()
 
 	// Clear
 	{
-		ID3D11ShaderResourceView* views[14]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+		ID3D11ShaderResourceView* views[16]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
 		ID3D11UnorderedAccessView* uavs[3]{ nullptr, nullptr, nullptr };
@@ -634,6 +638,9 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 
 		if (globals::features::screenSpaceGI.loaded)
 			defines.push_back({ "SSGI", nullptr });
+		
+		if (globals::features::ibl.loaded)
+			defines.push_back({ "IBL", nullptr });
 
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });
@@ -656,6 +663,9 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 
 		if (globals::features::screenSpaceGI.loaded)
 			defines.push_back({ "SSGI", nullptr });
+
+		if (globals::features::ibl.loaded)
+			defines.push_back({ "IBL", nullptr });
 
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });

@@ -2746,8 +2746,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		else
 			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-ambientNormal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 #		endif
-		iblColor = Color::LinearToGamma(iblColor);
-		directionalAmbientColor += iblColor;
+			iblColor = Color::LinearToGamma(iblColor);
+			directionalAmbientColor += iblColor;
 		}
 	}
 #	endif
