@@ -720,8 +720,15 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 		auto renderWidth = static_cast<int>(screenWidth * resolutionScaleBase);
 		auto renderHeight = static_cast<int>(screenHeight * resolutionScaleBase);
 
-		resolutionScale.x = static_cast<float>(renderWidth) / static_cast<float>(screenWidth);
-		resolutionScale.y = static_cast<float>(renderHeight) / static_cast<float>(screenHeight);
+		// Use precise scale if the integer conversion doesn't change the dimensions
+		if (renderWidth == screenWidth && renderHeight == screenHeight) {
+			// For DLAA and other 1:1 modes, ensure exactly 1.0
+			resolutionScale.x = 1.0f;
+			resolutionScale.y = 1.0f;
+		} else {
+			resolutionScale.x = static_cast<float>(renderWidth) / static_cast<float>(screenWidth);
+			resolutionScale.y = static_cast<float>(renderHeight) / static_cast<float>(screenHeight);
+		}
 
 		auto phaseCount = GetJitterPhaseCount(renderWidth, screenWidth);
 

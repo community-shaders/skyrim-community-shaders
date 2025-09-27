@@ -398,6 +398,11 @@ float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputH
 		scaleY = (float)optimalSettings.optimalRenderHeight / (float)outputHeight;
 	}
 
+	// For DLAA, ensure exactly 1.0 scale
+	if (dlssMode == sl::DLSSMode::eDLAA) {
+		return 1.0f;
+	}
+
 	// Use the average scale (both should be the same for uniform scaling)
 	return (scaleX + scaleY) * 0.5f;
 }
