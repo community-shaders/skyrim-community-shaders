@@ -48,12 +48,15 @@ public:
 
 	struct Settings
 	{
-		uint upscaleMethod = (uint)UpscaleMethod::kTAA;
+		uint upscaleMethod = (uint)UpscaleMethod::kDLSS;
+		uint upscaleMethodNoDLSS = (uint)UpscaleMethod::kFSR;
 		uint qualityMode = 1;  // Default to Quality (1=Quality, 2=Balanced, 3=Performance, 4=Ultra Performance, 0=Native AA)
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 1;
 		uint frameGenerationForceEnable = 0;
 		uint streamlineLogLevel = 0;  // 0=Off, 1=Default, 2=Verbose
+		float sharpnessFSR = 1.0f;
+		float sharpnessDLSS = 0.1f;
 	};
 
 	Settings settings;
@@ -134,6 +137,7 @@ public:
 	Texture2D* reactiveMaskTexture = nullptr;
 	Texture2D* transparencyCompositionMaskTexture = nullptr;
 	Texture2D* motionVectorCopyTexture = nullptr;
+	Texture2D* nisSharpenerTexture = nullptr;
 
 	virtual void ClearShaderCache() override;
 
@@ -154,6 +158,8 @@ public:
 	void PostDisplay();
 	void PerformUpscaling();
 	void UpscaleDepth();
+
+	void ApplyNISSharpening();
 
 	static void TimerSleepQPC(int64_t targetQPC);
 

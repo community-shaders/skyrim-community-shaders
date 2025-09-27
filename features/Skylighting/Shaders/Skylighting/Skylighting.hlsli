@@ -36,7 +36,7 @@ namespace Skylighting
 	}
 
 #if defined(PSHADER)
-	void applySkylighting(inout float3 diffuseColor, inout float3 directionalAmbientColor, float skylightingDiffuse)
+	void applySkylighting(inout float3 diffuseColor, inout float3 directionalAmbientColor, float3 albedo, float skylightingDiffuse)
 	{
 		float maxScale = 1.0;
 		if (directionalAmbientColor.x > 0.0)
@@ -49,7 +49,7 @@ namespace Skylighting
 
 		diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
 
-		directionalAmbientColor = Color::IrradianceToGamma(Color::IrradianceToLinear(directionalAmbientColor) * skylightingDiffuse);
+		directionalAmbientColor = Color::IrradianceToGamma(Color::IrradianceToLinear(directionalAmbientColor) * Color::MultiBounceAO(Color::IrradianceToLinear(albedo / Color::PBRLightingScale), skylightingDiffuse));
 
 		diffuseColor += directionalAmbientColor;
 	}

@@ -71,11 +71,11 @@ public:
 		float Thickness = 32.f;
 		float2 DepthFadeRange = { 4e4, 5e4 };
 		// gi
-		float GISaturation = 0.9f;
+		float GISaturation = 0.8f;
 		float GIDistanceCompensation = 0.f;
 		// mix
 		float AOPower = 1.0f;
-		float GIStrength = 1.5f;
+		float GIStrength = 1.0f;
 		// denoise
 		bool EnableTemporalDenoiser = true;
 		bool EnableBlur = true;

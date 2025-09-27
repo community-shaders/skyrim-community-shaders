@@ -14,6 +14,7 @@
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Upscaling::Settings,
 	upscaleMethod,
+	upscaleMethodNoDLSS,
 	qualityMode,
 	frameLimitMode,
 	frameGenerationMode,
@@ -166,6 +167,8 @@ void Upscaling::DrawSettings()
 		availableModes = 2;  // Add FSR
 	if (featureDLSS)
 		availableModes = 3;  // Add DLSS if available
+	else
+		currentUpscaleMode = &settings.upscaleMethodNoDLSS;
 
 	// Slider for method selection
 	// Clamp the index used to read from the built label vector to avoid OOB if the stored value is stale
@@ -202,6 +205,12 @@ void Upscaling::DrawSettings()
 
 			if (baseLabel) {
 				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, baseLabel);
+			}
+
+			if (upscaleMethod == UpscaleMethod::kFSR) {
+				ImGui::SliderFloat("Sharpness", &settings.sharpnessFSR, 0.0f, 1.0f, "%.1f");
+			} else if (upscaleMethod == UpscaleMethod::kDLSS) {
+				ImGui::SliderFloat("Sharpness", &settings.sharpnessDLSS, 0.0f, 1.0f, "%.1f");
 			}
 		}
 	} else {
@@ -415,28 +424,28 @@ void Upscaling::PostPostLoad()
 
 Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
 {
-	settings.upscaleMethod = std::clamp(settings.upscaleMethod, (uint)UpscaleMethod::kNONE, (uint)UpscaleMethod::kDLSS);
-	settings.qualityMode = std::clamp(settings.qualityMode, 0u, 4u);
-	return (UpscaleMethod)settings.upscaleMethod;
+	if (streamline.featureDLSS)
+		return (UpscaleMethod)settings.upscaleMethod;
+	return (UpscaleMethod)settings.upscaleMethodNoDLSS;
 }
 
 void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 {
 	logger::debug("[Upscaling] Creating texture resources for method {}", (int)a_upscalemethod);
 
+	auto renderer = globals::game::renderer;
+	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+
+	D3D11_TEXTURE2D_DESC texDesc{};
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+	main.texture->GetDesc(&texDesc);
+	main.SRV->GetDesc(&srvDesc);
+	main.UAV->GetDesc(&uavDesc);
+
+	texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+
 	if (a_upscalemethod == UpscaleMethod::kDLSS || a_upscalemethod == UpscaleMethod::kFSR) {
-		auto renderer = globals::game::renderer;
-		auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-
-		D3D11_TEXTURE2D_DESC texDesc{};
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-
-		main.texture->GetDesc(&texDesc);
-		main.SRV->GetDesc(&srvDesc);
-		main.UAV->GetDesc(&uavDesc);
-
-		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 		texDesc.Format = DXGI_FORMAT_R8_UNORM;
 		srvDesc.Format = texDesc.Format;
 		uavDesc.Format = texDesc.Format;
@@ -457,23 +466,28 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 	// Motion vector copy texture is only needed for DLSS
 	if (a_upscalemethod == UpscaleMethod::kDLSS) {
 		if (!motionVectorCopyTexture) {
-			auto renderer = globals::game::renderer;
 			auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
 			D3D11_TEXTURE2D_DESC motionTexDesc{};
-			D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-			D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-
 			motionVector.texture->GetDesc(&motionTexDesc);
-			motionVector.SRV->GetDesc(&srvDesc);
-			motionVector.UAV->GetDesc(&uavDesc);
 
-			srvDesc.Format = motionTexDesc.Format;
-			uavDesc.Format = motionTexDesc.Format;
+			texDesc.Format = motionTexDesc.Format;
+			srvDesc.Format = texDesc.Format;
+			uavDesc.Format = texDesc.Format;
 
 			motionVectorCopyTexture = new Texture2D(motionTexDesc);
 			motionVectorCopyTexture->CreateSRV(srvDesc);
 			motionVectorCopyTexture->CreateUAV(uavDesc);
+		}
+
+		if (!nisSharpenerTexture) {
+			texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+			srvDesc.Format = texDesc.Format;
+			uavDesc.Format = texDesc.Format;
+
+			nisSharpenerTexture = new Texture2D(texDesc);
+			nisSharpenerTexture->CreateSRV(srvDesc);
+			nisSharpenerTexture->CreateUAV(uavDesc);
 		}
 	}
 }
@@ -513,6 +527,14 @@ void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 
 			delete motionVectorCopyTexture;
 			motionVectorCopyTexture = nullptr;
+		}
+		if (nisSharpenerTexture) {
+			nisSharpenerTexture->srv = nullptr;
+			nisSharpenerTexture->uav = nullptr;
+			nisSharpenerTexture->resource = nullptr;
+
+			delete nisSharpenerTexture;
+			nisSharpenerTexture = nullptr;
 		}
 	}
 }
@@ -1196,7 +1218,7 @@ void Upscaling::Upscale()
 		if (upscaleMethod == UpscaleMethod::kDLSS) {
 			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get());
 		} else if (upscaleMethod == UpscaleMethod::kFSR) {
-			fidelityFX.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVector.texture);
+			fidelityFX.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVector.texture, settings.sharpnessFSR);
 		}
 
 		state->EndPerfEvent();
@@ -1328,6 +1350,34 @@ void Upscaling::UpscaleDepth()
 	}
 }
 
+void Upscaling::ApplyNISSharpening()
+{
+	if (!streamline.featureNIS || settings.sharpnessDLSS <= 0.0f) {
+		return;
+	}
+
+	auto context = globals::d3d::context;
+
+	ID3D11RenderTargetView* renderTarget = nullptr;
+	context->OMGetRenderTargets(1, &renderTarget, nullptr);
+
+	winrt::com_ptr<ID3D11Resource> mainResource;
+	renderTarget->GetResource(mainResource.put());
+
+	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
+
+	context->CopyResource(nisSharpenerTexture->resource.get(), mainResource.get());
+
+	streamline.ApplyNISSharpening(nisSharpenerTexture->resource.get(), settings.sharpnessDLSS);
+
+	context->CopyResource(mainResource.get(), nisSharpenerTexture->resource.get());
+
+	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
+
+	if (renderTarget)
+		renderTarget->Release();
+}
+
 void Upscaling::Main_UpdateJitter::thunk(RE::BSGraphics::State* a_state)
 {
 	globals::features::upscaling.ConfigureTAA();
@@ -1358,6 +1408,9 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a1, uint32_t a
 	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod == UpscaleMethod::kTAA;
 
 	func(a1, a3, er8_);
+
+	if (upscaleMethod == UpscaleMethod::kDLSS)
+		upscaling.ApplyNISSharpening();
 
 	// Disable TAA in some menus
 	BSImagespaceShaderISTemporalAA->taaEnabled = false;
