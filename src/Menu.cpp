@@ -312,6 +312,7 @@ void Menu::DrawSettings()
 		OnFocusChanged();
 		focusChanged = false;
 	}
+	
 	ImGui::DockSpaceOverViewport(NULL, ImGuiDockNodeFlags_PassthruCentralNode);
 
 	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
@@ -486,6 +487,15 @@ void Menu::DrawFooter()
  */
 void Menu::DrawOverlay()
 {
+	// Process deferred font reload BEFORE any ImGui operations
+	// This is the safest place to do font atlas modifications
+	if (pendingFontReload) {
+		pendingFontReload = false;
+		settings.Theme.FontName = pendingFontName;
+		ThemeManager::ReloadFont(*this, cachedFontSize);
+		pendingFontName.clear();
+	}
+	
 	OverlayRenderer::RenderOverlay(
 		*this,
 		[this]() { ProcessInputEventQueue(); },

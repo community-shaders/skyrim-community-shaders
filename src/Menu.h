@@ -61,6 +61,10 @@ public:
 	// Font caching (made public for ThemeManager and OverlayRenderer access)
 	float cachedFontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;  // Tracks whether font has been modified and may require reloading
 	std::string cachedFontName = "Jost-Regular.ttf";  // Tracks whether font file has changed and may require reloading
+	
+	// Deferred font reload system (public for SettingsTabRenderer access)
+	bool pendingFontReload = false;
+	std::string pendingFontName;
 
 	// Used for resetting input keys to solve alt-tab stuck issue
 	std::atomic<bool> focusChanged = false;

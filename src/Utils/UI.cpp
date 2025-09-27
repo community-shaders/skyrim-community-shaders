@@ -1399,6 +1399,7 @@ namespace Util
 					std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 					
 					if (extension == ".ttf" || extension == ".otf") {
+						// Use the full filename (including extension) for proper font loading
 						std::string fontFile = entry.path().filename().string();
 						fonts.push_back(fontFile);
 						logger::debug("DiscoverFonts: Found font file: {}", fontFile);

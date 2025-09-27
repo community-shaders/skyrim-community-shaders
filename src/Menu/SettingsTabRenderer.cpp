@@ -395,21 +395,26 @@ void SettingsTabRenderer::RenderStylingTab()
 		
 		ImGui::SeparatorText("Font");
 		if (ImGui::SliderFloat("Font Size", &themeSettings.FontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE, "%.0f")) {
-			// Font size changed, force reload
-			ThemeManager::ReloadFont(*globals::menu, globals::menu->cachedFontSize);
+			// Font size changed, schedule deferred reload
+			globals::menu->pendingFontReload = true;
+			globals::menu->pendingFontName = themeSettings.FontName;  // Keep current font name
 		}
 		
 		// Font selection dropdown
 		static std::vector<std::string> availableFonts;
-		static std::vector<const char*> fontItems;
 		static bool fontsDiscovered = false;
 		
-		if (!fontsDiscovered) {
-			availableFonts = Util::DiscoverFonts();
-			fontItems.clear();
-			for (const auto& font : availableFonts) {
-				fontItems.push_back(font.c_str());
+		auto refreshFontList = [&]() {
+			try {
+				availableFonts = Util::DiscoverFonts();
+			} catch (const std::exception&) {
+				// Failed to discover fonts, clear list
+				availableFonts.clear();
 			}
+		};
+		
+		if (!fontsDiscovered) {
+			refreshFontList();
 			fontsDiscovered = true;
 		}
 		
@@ -422,30 +427,50 @@ void SettingsTabRenderer::RenderStylingTab()
 			}
 		}
 		
-		if (ImGui::Combo("Font", &currentFontIndex, fontItems.data(), static_cast<int>(fontItems.size()))) {
-			if (currentFontIndex >= 0 && currentFontIndex < static_cast<int>(availableFonts.size())) {
-				themeSettings.FontName = availableFonts[currentFontIndex];
-				// Force font reload by updating cached font size
-				ThemeManager::ReloadFont(*globals::menu, globals::menu->cachedFontSize);
+		// Use ImGui::Combo with safety checks to avoid crashes
+		const char* previewText = "None";
+		if (!availableFonts.empty() && currentFontIndex >= 0 && currentFontIndex < static_cast<int>(availableFonts.size())) {
+			previewText = availableFonts[currentFontIndex].c_str();
+		}
+		
+		if (ImGui::BeginCombo("Font", previewText)) {
+			if (availableFonts.empty()) {
+				ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No fonts available");
+				ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Place .ttf/.otf files in Fonts folder");
+			} else {
+				for (int i = 0; i < static_cast<int>(availableFonts.size()); ++i) {
+					const bool isSelected = (i == currentFontIndex);
+					if (ImGui::Selectable(availableFonts[i].c_str(), isSelected)) {
+						if (i != currentFontIndex && !availableFonts[i].empty()) {
+							// Validate font name before applying
+							const std::string& newFontName = availableFonts[i];
+							auto fontPath = Util::PathHelpers::GetFontsPath() / newFontName;
+							
+							if (std::filesystem::exists(fontPath)) {
+								// Schedule deferred font reload (safe - will happen between frames)
+								globals::menu->pendingFontReload = true;
+								globals::menu->pendingFontName = newFontName;
+							}
+						}
+					}
+					
+					// Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+					if (isSelected) {
+						ImGui::SetItemDefaultFocus();
+					}
+				}
 			}
+			ImGui::EndCombo();
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Select a custom font file (.ttf/.otf) from the Fonts folder.\nPlace custom fonts in: Interface/CommunityShaders/Fonts/");
 		}
 		
 		if (ImGui::Button("Refresh Font List")) {
-			availableFonts = Util::DiscoverFonts();
-			fontItems.clear();
-			for (const auto& font : availableFonts) {
-				fontItems.push_back(font.c_str());
-			}
-			// Update current selection
-			currentFontIndex = 0;
-			for (size_t i = 0; i < availableFonts.size(); ++i) {
-				if (availableFonts[i] == themeSettings.FontName) {
-					currentFontIndex = static_cast<int>(i);
-					break;
-				}
+			refreshFontList();
+			// Reset current font index if it's out of bounds after refresh
+			if (currentFontIndex >= static_cast<int>(availableFonts.size())) {
+				currentFontIndex = 0;
 			}
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {

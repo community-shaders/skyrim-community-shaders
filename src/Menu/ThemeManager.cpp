@@ -4,10 +4,12 @@
 #include <algorithm>
 #include <cmath>
 #include <ctime>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 
 #include <imgui_impl_dx11.h>
+#include <imgui_internal.h>
 
 #include "RE/Skyrim.h"
 #include "../Utils/FileSystem.h"
@@ -110,9 +112,43 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 
 void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 {
+	// Static flag to prevent concurrent font reloads
+	static bool isReloading = false;
+	if (isReloading) {
+		logger::warn("ThemeManager::ReloadFont() - Font reload already in progress, skipping");
+		return;
+	}
+	
+	isReloading = true;
 	auto& themeSettings = menu.GetTheme();
 
+	logger::info("ThemeManager::ReloadFont() - Starting font reload...");
+
 	ImGuiIO& io = ImGui::GetIO();
+	
+	// Additional safety checks: ensure ImGui is in a valid state
+	ImGuiContext* ctx = ImGui::GetCurrentContext();
+	if (!ctx) {
+		logger::error("ThemeManager::ReloadFont() - No valid ImGui context!");
+		isReloading = false;
+		return;
+	}
+	
+	// Ensure we're not in the middle of a frame
+	if (ctx->WithinFrameScope) {
+		logger::error("ThemeManager::ReloadFont() - Cannot reload font within frame scope!");
+		isReloading = false;
+		return;
+	}
+	
+	// Additional check: make sure font atlas exists
+	if (!io.Fonts) {
+		logger::error("ThemeManager::ReloadFont() - No font atlas available!");
+		isReloading = false;
+		return;
+	}
+	
+	// Clear existing fonts from the atlas
 	io.Fonts->Clear();
 
 	ImFontConfig font_config;
@@ -125,22 +161,67 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	float fontSize = themeSettings.FontSize;
 	fontSize = std::clamp(fontSize, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE);
 
-	auto fontPath = Util::PathHelpers::GetFontsPath() / themeSettings.FontName;
-	if (!io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(),
-			std::round(fontSize), &font_config)) {
-		logger::warn("ThemeManager::ReloadFont() - Failed to load custom font '{}'. Using default font.", themeSettings.FontName);
+	// Check if font name is empty or invalid
+	if (themeSettings.FontName.empty()) {
+		logger::info("ThemeManager::ReloadFont() - No custom font specified, using default font.");
 		io.Fonts->AddFontDefault();
+	} else {
+		auto fontPath = Util::PathHelpers::GetFontsPath() / themeSettings.FontName;
+		
+		// Check if font file exists before trying to load it
+		if (!std::filesystem::exists(fontPath)) {
+			logger::warn("ThemeManager::ReloadFont() - Font file '{}' does not exist. Using default font.", fontPath.string());
+			io.Fonts->AddFontDefault();
+		} else if (!io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(),
+				std::round(fontSize), &font_config)) {
+			logger::warn("ThemeManager::ReloadFont() - Failed to load custom font '{}'. Using default font.", themeSettings.FontName);
+			io.Fonts->AddFontDefault();
+		} else {
+			logger::info("ThemeManager::ReloadFont() - Successfully loaded font '{}'", themeSettings.FontName);
+		}
 	}
 
-	io.Fonts->Build();
+	// Build the font atlas - this bakes all fonts into the texture
+	if (!io.Fonts->Build()) {
+		logger::error("ThemeManager::ReloadFont() - Failed to build font atlas!");
+		isReloading = false;
+		return;
+	}
 
+	// Recreate device objects - this is where the crash was likely happening
+	// We need to be very careful about the order and ensure everything is valid
+	
+	// Important: We must ensure ImGui is not in the middle of any rendering operations
+	// The deferred execution should guarantee this, but let's be extra safe
+	
+	logger::debug("ThemeManager::ReloadFont() - Invalidating DX11 device objects...");
 	ImGui_ImplDX11_InvalidateDeviceObjects();
+	
+	logger::debug("ThemeManager::ReloadFont() - Creating DX11 device objects...");
+	if (!ImGui_ImplDX11_CreateDeviceObjects()) {
+		logger::error("ThemeManager::ReloadFont() - Failed to create device objects!");
+		
+		// Emergency fallback: try to restore with default font
+		io.Fonts->Clear();
+		io.Fonts->AddFontDefault();
+		io.Fonts->Build();
+		ImGui_ImplDX11_InvalidateDeviceObjects();
+		ImGui_ImplDX11_CreateDeviceObjects();
+		
+		isReloading = false;
+		return;
+	}
+	
+	logger::debug("ThemeManager::ReloadFont() - Device objects recreated successfully");
 
 	io.FontGlobalScale = exp2(themeSettings.GlobalScale);
 
 	cachedFontSize = themeSettings.FontSize;
 	// Also update cached font name in the menu instance
 	const_cast<Menu&>(menu).cachedFontName = themeSettings.FontName;
+	
+	logger::info("ThemeManager::ReloadFont() - Font reload completed successfully");
+	isReloading = false;
 }
 
 // Theme management methods
