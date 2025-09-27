@@ -16,6 +16,7 @@
 #include "State.h"
 #include "Util.h"
 
+#include "../Globals.h"
 #include "../Util.h"
 #include "../Utils/FileSystem.h"
 
@@ -440,9 +441,6 @@ std::filesystem::path ThemeManager::GetThemesDirectory() const
 	return Util::PathHelpers::GetThemesPath();
 }
 
-// Compute effective font size (user value or dynamic default)
-float fontSize = ResolveFontSize(menu);
-
 void ThemeManager::CreateDefaultThemeFiles()
 {
 	auto themesDir = GetThemesDirectory();
@@ -568,9 +566,6 @@ bool ThemeManager::ValidateThemeData(const json& themeData) const
 
 	// Could add more detailed validation here if needed
 	return true;
-
-	// Cache the effective size so we can detect changes accurately
-	cachedFontSize = fontSize;
 }
 
 float ThemeManager::ResolveFontSize(const Menu& menu)
