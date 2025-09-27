@@ -1,10 +1,10 @@
 #pragma once
 
 #include <filesystem>
+#include <imgui.h>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
-#include <imgui.h>
 
 using json = nlohmann::json;
 
@@ -21,16 +21,15 @@ using json = nlohmann::json;
 class ThemeManager
 {
 public:
-
 	struct ThemeInfo
 	{
-		std::string name;          // Filename without extension
-		std::string displayName;   // Human-readable name from JSON
-		std::string description;   // Theme description from JSON
-		std::string filePath;      // Full path to theme file
+		std::string name;         // Filename without extension
+		std::string displayName;  // Human-readable name from JSON
+		std::string description;  // Theme description from JSON
+		std::string filePath;     // Full path to theme file
 		json themeData;           // Complete theme settings
 		bool isValid = false;     // Whether theme loaded successfully
-		
+
 		// Metadata
 		std::string version;
 		std::string author;
@@ -43,7 +42,6 @@ public:
 	// default based on current screen resolution is returned; otherwise the user value.
 	static float ResolveFontSize(const class Menu& menu);
 
-
 	struct Constants
 	{
 		// Font size constants
@@ -54,7 +52,7 @@ public:
 		static constexpr float DEFAULT_FONT_SIZE = 27.0f;
 
 		// Global scale constants
-		static constexpr float DEFAULT_GLOBAL_SCALE = 0.0f;      // Default global scale for built-in themes
+		static constexpr float DEFAULT_GLOBAL_SCALE = 0.0f;  // Default global scale for built-in themes
 
 		// Font configuration constants
 		static constexpr int FCONF_OVERSAMPLE_H = 3;              // ImGui default = 2
@@ -127,8 +125,8 @@ public:
 	 * @param description Description for the theme
 	 * @return True if theme was saved successfully
 	 */
-	bool SaveTheme(const std::string& themeName, const json& themeSettings, 
-	               const std::string& displayName, const std::string& description);
+	bool SaveTheme(const std::string& themeName, const json& themeSettings,
+		const std::string& displayName, const std::string& description);
 
 	/**
 	 * @brief Gets theme info by name
@@ -181,6 +179,6 @@ private:
 	bool discovered = false;
 
 	// Constants
-	static constexpr size_t MAX_THEMES = 100;  // Prevent excessive theme loading
+	static constexpr size_t MAX_THEMES = 100;             // Prevent excessive theme loading
 	static constexpr size_t MAX_FILE_SIZE = 1024 * 1024;  // 1MB max theme file size
 };

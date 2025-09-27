@@ -16,8 +16,8 @@
 #include "State.h"
 #include "Util.h"
 
-#include "../Utils/FileSystem.h"
 #include "../Util.h"
+#include "../Utils/FileSystem.h"
 
 using namespace SKSE;
 
@@ -50,14 +50,14 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 
 	// rescale here
 	auto styleCopy = themeSettings.Style;
-	
+
 	float globalScale = themeSettings.GlobalScale;
-	
+
 	// Use default global scale (0.0) for built-in themes when GlobalScale equals the default
 	if (std::abs(globalScale - Constants::DEFAULT_GLOBAL_SCALE) < 0.001f) {
 		globalScale = Constants::DEFAULT_GLOBAL_SCALE;  // Ensure built-in themes stay at 0.0
 	}
-	
+
 	styleCopy.ScaleAllSizes(exp2(globalScale));
 	styleCopy.MouseCursorScale = 1.f;
 	style = styleCopy;
@@ -68,7 +68,7 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 	for (size_t i = 0; i < std::min(themeSettings.FullPalette.size(), static_cast<size_t>(ImGuiCol_COUNT)); ++i) {
 		colors[i] = themeSettings.FullPalette[i];
 	}
-	
+
 	// Apply simple palette overrides to the FullPalette for key colors
 	// This allows the simple palette controls to work by updating the FullPalette
 	colors[ImGuiCol_WindowBg] = themeSettings.Palette.Background;
@@ -76,12 +76,12 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 	colors[ImGuiCol_Border] = themeSettings.Palette.Border;
 	colors[ImGuiCol_Separator] = themeSettings.Palette.Border;
 	colors[ImGuiCol_ResizeGrip] = themeSettings.Palette.Border;
-	
+
 	// Apply derived colors based on simple palette
 	ImVec4 textDisabled = themeSettings.Palette.Text;
 	textDisabled.w = 0.3f;
 	colors[ImGuiCol_TextDisabled] = textDisabled;
-	
+
 	ImVec4 resizeGripHovered = themeSettings.Palette.Border;
 	resizeGripHovered.w = 0.1f;
 	colors[ImGuiCol_ResizeGripHovered] = resizeGripHovered;
@@ -103,7 +103,7 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 	// Helper function to adjust background color for better contrast with text
 	auto adjustBackgroundForContrast = [&](ImVec4& backgroundColor, float textLuminance) {
 		float bgLuminance = calculateLuminance(backgroundColor);
-		
+
 		if (bgLuminance > 0.5f && textLuminance > 0.5f) {
 			// Both background and text are light - darken the background
 			backgroundColor.x *= 0.4f;
@@ -119,15 +119,15 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 
 	// Apply contrast-aware adjustments for headers and tabs
 	float textLum = calculateLuminance(colors[ImGuiCol_Text]);
-	
+
 	// Apply contrast adjustments for all header and tab backgrounds using unified logic
 	adjustBackgroundForContrast(colors[ImGuiCol_Header], textLum);
 	adjustBackgroundForContrast(colors[ImGuiCol_HeaderHovered], textLum);
 	adjustBackgroundForContrast(colors[ImGuiCol_HeaderActive], textLum);
 	adjustBackgroundForContrast(colors[ImGuiCol_Tab], textLum);
-	adjustBackgroundForContrast(colors[ImGuiCol_TabActive], textLum);  
+	adjustBackgroundForContrast(colors[ImGuiCol_TabActive], textLum);
 	adjustBackgroundForContrast(colors[ImGuiCol_TabHovered], textLum);
-	
+
 	// Apply contrast-aware text for selection states (TextSelectedBg is used when text is selected)
 	if (calculateLuminance(colors[ImGuiCol_HeaderActive]) > 0.5f) {
 		colors[ImGuiCol_TextSelectedBg] = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);  // Black text on light selection
@@ -150,14 +150,14 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		logger::warn("ThemeManager::ReloadFont() - Font reload already in progress, skipping");
 		return;
 	}
-	
+
 	isReloading = true;
 	auto& themeSettings = menu.GetTheme();
 
 	logger::info("ThemeManager::ReloadFont() - Starting font reload...");
 
 	ImGuiIO& io = ImGui::GetIO();
-	
+
 	// Additional safety checks: ensure ImGui is in a valid state
 	ImGuiContext* ctx = ImGui::GetCurrentContext();
 	if (!ctx) {
@@ -165,21 +165,21 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		isReloading = false;
 		return;
 	}
-	
+
 	// Ensure we're not in the middle of a frame
 	if (ctx->WithinFrameScope) {
 		logger::error("ThemeManager::ReloadFont() - Cannot reload font within frame scope!");
 		isReloading = false;
 		return;
 	}
-	
+
 	// Additional check: make sure font atlas exists
 	if (!io.Fonts) {
 		logger::error("ThemeManager::ReloadFont() - No font atlas available!");
 		isReloading = false;
 		return;
 	}
-	
+
 	// Clear existing fonts from the atlas
 	io.Fonts->Clear();
 
@@ -199,13 +199,13 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		io.Fonts->AddFontDefault();
 	} else {
 		auto fontPath = Util::PathHelpers::GetFontsPath() / themeSettings.FontName;
-		
+
 		// Check if font file exists before trying to load it
 		if (!std::filesystem::exists(fontPath)) {
 			logger::warn("ThemeManager::ReloadFont() - Font file '{}' does not exist. Using default font.", fontPath.string());
 			io.Fonts->AddFontDefault();
 		} else if (!io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(),
-				std::round(fontSize), &font_config)) {
+					   std::round(fontSize), &font_config)) {
 			logger::warn("ThemeManager::ReloadFont() - Failed to load custom font '{}'. Using default font.", themeSettings.FontName);
 			io.Fonts->AddFontDefault();
 		} else {
@@ -222,32 +222,32 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 
 	// Recreate device objects - this is where the crash was likely happening
 	// We need to be very careful about the order and ensure everything is valid
-	
+
 	// Important: We must ensure ImGui is not in the middle of any rendering operations
 	// The deferred execution should guarantee this, but let's be extra safe
-	
+
 	logger::debug("ThemeManager::ReloadFont() - Invalidating DX11 device objects...");
 	ImGui_ImplDX11_InvalidateDeviceObjects();
-	
+
 	logger::debug("ThemeManager::ReloadFont() - Creating DX11 device objects...");
 	if (!ImGui_ImplDX11_CreateDeviceObjects()) {
 		logger::error("ThemeManager::ReloadFont() - Failed to create device objects!");
-		
+
 		// Emergency fallback: try to restore with default font
 		io.Fonts->Clear();
 		io.Fonts->AddFontDefault();
 		io.Fonts->Build();
 		ImGui_ImplDX11_InvalidateDeviceObjects();
 		ImGui_ImplDX11_CreateDeviceObjects();
-		
+
 		isReloading = false;
 		return;
 	}
-	
+
 	logger::debug("ThemeManager::ReloadFont() - Device objects recreated successfully");
 
 	float globalScale = themeSettings.GlobalScale;
-	
+
 	// Use default global scale (0.0) for built-in themes when GlobalScale equals the default
 	if (std::abs(globalScale - Constants::DEFAULT_GLOBAL_SCALE) < 0.001f) {
 		globalScale = Constants::DEFAULT_GLOBAL_SCALE;  // Ensure built-in themes stay at 0.0
@@ -258,7 +258,7 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	cachedFontSize = themeSettings.FontSize;
 	// Also update cached font name in the menu instance
 	const_cast<Menu&>(menu).cachedFontName = themeSettings.FontName;
-	
+
 	logger::info("ThemeManager::ReloadFont() - Font reload completed successfully");
 	isReloading = false;
 }
@@ -290,7 +290,7 @@ size_t ThemeManager::DiscoverThemes()
 			// Check file size
 			auto fileSize = entry.file_size();
 			if (fileSize > MAX_FILE_SIZE) {
-				logger::warn("Theme file too large, skipping: {} ({}MB)", 
+				logger::warn("Theme file too large, skipping: {} ({}MB)",
 					entry.path().filename().string(), fileSize / (1024 * 1024));
 				continue;
 			}
@@ -324,11 +324,11 @@ std::vector<std::string> ThemeManager::GetThemeNames() const
 {
 	std::vector<std::string> names;
 	names.reserve(themes.size());
-	
+
 	for (const auto& theme : themes) {
 		names.push_back(theme.name);
 	}
-	
+
 	return names;
 }
 
@@ -343,7 +343,7 @@ bool ThemeManager::LoadTheme(const std::string& themeName, json& themeSettings)
 		return true;
 	}
 
-	auto it = std::find_if(themes.begin(), themes.end(), 
+	auto it = std::find_if(themes.begin(), themes.end(),
 		[&themeName](const ThemeInfo& theme) { return theme.name == themeName; });
 
 	if (it == themes.end()) {
@@ -371,8 +371,8 @@ bool ThemeManager::LoadTheme(const std::string& themeName, json& themeSettings)
 	}
 }
 
-bool ThemeManager::SaveTheme(const std::string& themeName, const json& themeSettings, 
-                            const std::string& displayName, const std::string& description)
+bool ThemeManager::SaveTheme(const std::string& themeName, const json& themeSettings,
+	const std::string& displayName, const std::string& description)
 {
 	if (themeName.empty()) {
 		logger::warn("Cannot save theme with empty name");
@@ -381,18 +381,16 @@ bool ThemeManager::SaveTheme(const std::string& themeName, const json& themeSett
 
 	// Create the full theme JSON structure
 	json fullTheme = {
-		{"DisplayName", displayName.empty() ? themeName : displayName},
-		{"Description", description.empty() ? "Custom user theme" : description},
-		{"Version", "1.0.0"},
-		{"Author", "User"},
-		{"Theme", themeSettings}
+		{ "DisplayName", displayName.empty() ? themeName : displayName },
+		{ "Description", description.empty() ? "Custom user theme" : description },
+		{ "Version", "1.0.0" },
+		{ "Author", "User" },
+		{ "Theme", themeSettings }
 	};
 
 	// Generate safe filename (remove invalid characters)
 	std::string safeFileName = themeName;
-	std::replace_if(safeFileName.begin(), safeFileName.end(), 
-		[](char c) { return c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|'; }, 
-		'_');
+	std::replace_if(safeFileName.begin(), safeFileName.end(), [](char c) { return c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|'; }, '_');
 
 	auto themesDir = GetThemesDirectory();
 	auto filePath = themesDir / (safeFileName + ".json");
@@ -415,7 +413,7 @@ bool ThemeManager::SaveTheme(const std::string& themeName, const json& themeSett
 
 		// Refresh themes to include the new one
 		RefreshThemes();
-		
+
 		return true;
 	} catch (const std::exception& e) {
 		logger::warn("Error saving theme {}: {}", themeName, e.what());
@@ -425,9 +423,9 @@ bool ThemeManager::SaveTheme(const std::string& themeName, const json& themeSett
 
 const ThemeManager::ThemeInfo* ThemeManager::GetThemeInfo(const std::string& themeName) const
 {
-	auto it = std::find_if(themes.begin(), themes.end(), 
+	auto it = std::find_if(themes.begin(), themes.end(),
 		[&themeName](const ThemeInfo& theme) { return theme.name == themeName; });
-	
+
 	return (it != themes.end()) ? &(*it) : nullptr;
 }
 
@@ -437,20 +435,18 @@ void ThemeManager::RefreshThemes()
 	DiscoverThemes();
 }
 
-
 std::filesystem::path ThemeManager::GetThemesDirectory() const
 {
 	return Util::PathHelpers::GetThemesPath();
 }
 
-	// Compute effective font size (user value or dynamic default)
-	float fontSize = ResolveFontSize(menu);
-
+// Compute effective font size (user value or dynamic default)
+float fontSize = ResolveFontSize(menu);
 
 void ThemeManager::CreateDefaultThemeFiles()
 {
 	auto themesDir = GetThemesDirectory();
-	
+
 	try {
 		std::filesystem::create_directories(themesDir);
 		logger::info("Ensured themes directory exists: {}", themesDir.string());
@@ -504,7 +500,6 @@ void ThemeManager::CreateDefaultThemeFiles()
 	}
 })";
 
-
 		file.close();
 		logger::info("Created default theme file: {}", defaultThemeFile.string());
 	} catch (const std::exception& e) {
@@ -535,7 +530,7 @@ std::unique_ptr<ThemeManager::ThemeInfo> ThemeManager::LoadThemeFile(const std::
 		}
 
 		themeInfo->themeData = data;
-		
+
 		// Extract metadata
 		if (data.contains("DisplayName") && data["DisplayName"].is_string()) {
 			themeInfo->displayName = data["DisplayName"].get<std::string>();
@@ -556,7 +551,7 @@ std::unique_ptr<ThemeManager::ThemeInfo> ThemeManager::LoadThemeFile(const std::
 		}
 
 		themeInfo->isValid = true;
-		
+
 	} catch (const std::exception& e) {
 		logger::warn("Error parsing theme file {}: {}", filePath.string(), e.what());
 	}
@@ -596,5 +591,4 @@ float ThemeManager::ResolveFontSize(const Menu& menu)
 		logger::warn("ThemeManager::ResolveFontSize() - Falling back to DEFAULT_FONT_SIZE due to missing screen height.");
 	}
 	return std::clamp(dynamicSize, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE);
-
 }

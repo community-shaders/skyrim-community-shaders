@@ -8,11 +8,11 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <iomanip>
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
 #include <imgui_internal.h>
 #include <imgui_stdlib.h>
+#include <iomanip>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -28,11 +28,10 @@
 #include "Menu/MenuHeaderRenderer.h"
 #include "Menu/OverlayRenderer.h"
 #include "Menu/SettingsTabRenderer.h"
+#include "Menu/ThemeManager.h"
 #include "ShaderCache.h"
 #include "State.h"
-#include "Menu/ThemeManager.h"
 #include "TruePBR.h"
-#include "Util.h"
 #include "Util.h"
 #include "Utils/UI.h"
 
@@ -176,10 +175,10 @@ void Menu::LoadTheme(json& o_json)
 {
 	if (o_json["Theme"].is_object()) {
 		settings.Theme = o_json["Theme"];
-		
+
 		// Validate the loaded font and fallback to default if necessary
 		if (!Util::ValidateFont(settings.Theme.FontName)) {
-			logger::warn("Font '{}' not found, falling back to default font '{}'", 
+			logger::warn("Font '{}' not found, falling back to default font '{}'",
 				settings.Theme.FontName, ThemeSettings{}.FontName);
 			settings.Theme.FontName = ThemeSettings{}.FontName;
 		}
@@ -190,11 +189,11 @@ void Menu::SaveTheme(json& o_json)
 {
 	// Validate font before saving and fallback to default if necessary
 	if (!Util::ValidateFont(settings.Theme.FontName)) {
-		logger::warn("Font '{}' not found during save, falling back to default font '{}'", 
+		logger::warn("Font '{}' not found during save, falling back to default font '{}'",
 			settings.Theme.FontName, ThemeSettings{}.FontName);
 		settings.Theme.FontName = ThemeSettings{}.FontName;
 	}
-	
+
 	o_json["Theme"] = settings.Theme;
 }
 
@@ -214,17 +213,17 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 
 	auto themeManager = ThemeManager::GetSingleton();
 	json themeSettings;
-	
+
 	if (themeManager->LoadTheme(themeName, themeSettings)) {
 		settings.Theme = themeSettings;
-		
+
 		// Validate the loaded font and fallback to default if necessary
 		if (!Util::ValidateFont(settings.Theme.FontName)) {
-			logger::warn("Font '{}' from theme '{}' not found, falling back to default font '{}'", 
+			logger::warn("Font '{}' from theme '{}' not found, falling back to default font '{}'",
 				settings.Theme.FontName, themeName, ThemeSettings{}.FontName);
 			settings.Theme.FontName = ThemeSettings{}.FontName;
 		}
-		
+
 		settings.SelectedThemePreset = themeName;
 		// Update cached values for font reload detection
 		cachedFontName = settings.Theme.FontName;
@@ -265,8 +264,7 @@ void Menu::Init()
 	DXGI_SWAP_CHAIN_DESC desc{};
 	globals::d3d::swapChain->GetDesc(&desc);
 
-
-  // Determine effective font size: user setting when >0, otherwise dynamic default by resolution
+	// Determine effective font size: user setting when >0, otherwise dynamic default by resolution
 	float fontSize = ThemeManager::ResolveFontSize(*this);
 
 	// Use dynamic font sizing when FontSize equals the default (indicating theme doesn't override)
@@ -279,7 +277,6 @@ void Menu::Init()
 	}
 
 	fontSize = std::clamp(fontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE);
-	
 
 	auto fontPath = Util::PathHelpers::GetFontsPath() / settings.Theme.FontName;
 	if (!imgui_io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(),
@@ -293,7 +290,7 @@ void Menu::Init()
 	cachedFontSize = fontSize;  // Update cached size to match the actually loaded font size
 
 	float globalScale = settings.Theme.GlobalScale;
-	
+
 	// Use default global scale (0.0) for built-in themes when GlobalScale equals the default
 	if (std::abs(globalScale - ThemeManager::Constants::DEFAULT_GLOBAL_SCALE) < 0.001f) {
 		globalScale = ThemeManager::Constants::DEFAULT_GLOBAL_SCALE;  // Ensure built-in themes stay at 0.0
@@ -350,10 +347,10 @@ void Menu::DrawSettings()
 		OnFocusChanged();
 		focusChanged = false;
 	}
-	
+
 	// Apply theme styling with universal contrast enhancement
 	ThemeManager::SetupImGuiStyle(*this);
-	
+
 	ImGui::DockSpaceOverViewport(NULL, ImGuiDockNodeFlags_PassthruCentralNode);
 
 	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
@@ -378,12 +375,12 @@ void Menu::DrawSettings()
 		wasDocked = isDocked;
 
 		float globalScale = settings.Theme.GlobalScale;
-		
+
 		// Use default global scale (0.0) for built-in themes when GlobalScale equals the default
 		if (std::abs(globalScale - ThemeManager::Constants::DEFAULT_GLOBAL_SCALE) < 0.001f) {
 			globalScale = ThemeManager::Constants::DEFAULT_GLOBAL_SCALE;  // Ensure built-in themes stay at 0.0
 		}
-		
+
 		const float uiScale = exp2(globalScale);  // Get current UI scale
 		// Check if we can show icons - require setting enabled and at least some icons loaded (for undocked)
 		// For docked mode, always show icons if textures are available
@@ -543,7 +540,7 @@ void Menu::DrawOverlay()
 		ThemeManager::ReloadFont(*this, cachedFontSize);
 		pendingFontName.clear();
 	}
-	
+
 	OverlayRenderer::RenderOverlay(
 		*this,
 		[this]() { ProcessInputEventQueue(); },

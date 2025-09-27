@@ -175,8 +175,8 @@ std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons
 	if (uiIcons.saveSettings.texture) {
 		actionIcons.push_back({ uiIcons.saveSettings.texture,
 			"Save Settings",
-			[]() { 
-				globals::state->Save(); 
+			[]() {
+				globals::state->Save();
 				globals::state->SaveTheme();
 			} });
 	}

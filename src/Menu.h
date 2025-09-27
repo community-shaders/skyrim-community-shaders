@@ -60,8 +60,8 @@ public:
 
 	// Font caching (made public for ThemeManager and OverlayRenderer access)
 	float cachedFontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;  // Tracks whether font has been modified and may require reloading
-	std::string cachedFontName = "Jost-Regular.ttf";  // Tracks whether font file has changed and may require reloading
-	
+	std::string cachedFontName = "Jost-Regular.ttf";                    // Tracks whether font file has changed and may require reloading
+
 	// Deferred font reload system (public for SettingsTabRenderer access)
 	bool pendingFontReload = false;
 	std::string pendingFontName;
@@ -116,20 +116,20 @@ public:
 	struct ThemeSettings
 	{
 		float FontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;
-		std::string FontName = "Jost-Regular.ttf";  // Default font file name
+		std::string FontName = "Jost-Regular.ttf";              // Default font file name
 		float GlobalScale = REL::Module::IsVR() ? -0.5f : 0.f;  // exponential
 
 		bool UseSimplePalette = true;    // DEPRECATED: No longer affects behavior. UI now shows both Simple and Advanced controls.
 		bool ShowActionIcons = true;     // whether to show action buttons as icons
 		float TooltipHoverDelay = 0.5f;  // tooltip hover delay in seconds
-		
+
 		// Scrollbar opacity settings
 		struct ScrollbarOpacitySettings
 		{
-			float Background = 1.0f;  // Background of the scrollbar area
-			float Thumb = 1.0f;       // The draggable thumb/grip
-			float ThumbHovered = 1.0f; // Thumb when hovered
-			float ThumbActive = 1.0f;  // Thumb when being dragged
+			float Background = 1.0f;    // Background of the scrollbar area
+			float Thumb = 1.0f;         // The draggable thumb/grip
+			float ThumbHovered = 1.0f;  // Thumb when hovered
+			float ThumbActive = 1.0f;   // Thumb when being dragged
 		} ScrollbarOpacity;
 		struct PaletteColors
 		{
@@ -236,7 +236,7 @@ public:
 		uint32_t OverlayToggleKey = VK_F10;      // Global overlay toggle key for all overlays
 		bool FirstTimeSetupCompleted = false;    // Track if first-time setup has been completed
 		ThemeSettings Theme;
-		std::string SelectedThemePreset = ""; // Currently selected theme preset (empty = custom/user theme)
+		std::string SelectedThemePreset = "";  // Currently selected theme preset (empty = custom/user theme)
 	};
 	const ThemeSettings& GetTheme() const { return settings.Theme; }                // Provide read-only access to the Theme.
 	Settings& GetSettings() { return settings; }                                    // Provide access to settings for other components

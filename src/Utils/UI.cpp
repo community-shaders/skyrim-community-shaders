@@ -1,7 +1,7 @@
 #include "PCH.h"
 
-#include "UI.h"
 #include "Menu.h"
+#include "UI.h"
 
 #ifndef DIRECTINPUT_VERSION
 #	define DIRECTINPUT_VERSION 0x0800
@@ -20,7 +20,6 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <format>
 #include <format>
 #include <functional>
 #include <iomanip>
@@ -776,11 +775,11 @@ namespace Util
 
 		ImVec2 center = ImVec2(iconPos.x + iconSize * 0.46f, iconPos.y + iconSize * 0.5f);
 		float radius = iconSize * 0.3f;
-		
+
 		// Use themed text color with reduced alpha for search icon
 		auto& theme = globals::menu->GetTheme().Palette;
 		ImVec4 iconColor = theme.Text;
-		iconColor.w *= 0.7f; // Reduce alpha for subtler appearance
+		iconColor.w *= 0.7f;  // Reduce alpha for subtler appearance
 		ImU32 placeholderColor = ImGui::GetColorU32(iconColor);
 
 		// Draw circle
@@ -1213,132 +1212,132 @@ namespace Util
 
 	// Color utilities for contrast and readability
 	namespace ColorUtils
+	{
+		float CalculateLuminance(const ImVec4& color)
 		{
-			float CalculateLuminance(const ImVec4& color)
-			{
-				// Convert to linear RGB first (gamma correction)
-				auto toLinear = [](float c) {
-					return c <= 0.03928f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f);
-				};
+			// Convert to linear RGB first (gamma correction)
+			auto toLinear = [](float c) {
+				return c <= 0.03928f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f);
+			};
 
-				float r = toLinear(color.x);
-				float g = toLinear(color.y);
-				float b = toLinear(color.z);
+			float r = toLinear(color.x);
+			float g = toLinear(color.y);
+			float b = toLinear(color.z);
 
-				// Calculate relative luminance using WCAG formula
-				return 0.2126f * r + 0.7152f * g + 0.0722f * b;
+			// Calculate relative luminance using WCAG formula
+			return 0.2126f * r + 0.7152f * g + 0.0722f * b;
+		}
+
+		ImVec4 GetContrastingTextColor(const ImVec4& backgroundColor, float threshold)
+		{
+			float luminance = CalculateLuminance(backgroundColor);
+
+			// If background is bright (high luminance), use black text
+			// If background is dark (low luminance), use white text
+			if (luminance > threshold) {
+				return ImVec4(0.0f, 0.0f, 0.0f, 1.0f);  // Black
+			} else {
+				return ImVec4(1.0f, 1.0f, 1.0f, 1.0f);  // White
 			}
+		}
 
-			ImVec4 GetContrastingTextColor(const ImVec4& backgroundColor, float threshold)
-			{
-				float luminance = CalculateLuminance(backgroundColor);
-				
-				// If background is bright (high luminance), use black text
-				// If background is dark (low luminance), use white text
-				if (luminance > threshold) {
-					return ImVec4(0.0f, 0.0f, 0.0f, 1.0f);  // Black
+		float CalculateContrastRatio(const ImVec4& color1, const ImVec4& color2)
+		{
+			float lum1 = CalculateLuminance(color1);
+			float lum2 = CalculateLuminance(color2);
+
+			// Ensure lighter color is in numerator
+			float lighter = (std::max)(lum1, lum2);
+			float darker = (std::min)(lum1, lum2);
+
+			return (lighter + 0.05f) / (darker + 0.05f);
+		}
+
+		bool ContrastSelectable(const char* label, bool selected, ImGuiSelectableFlags flags, const ImVec2& size)
+		{
+			// Get current style colors for different states
+			ImGuiStyle& style = ImGui::GetStyle();
+
+			// We need to handle text color based on the selectable's background state
+			// For selected items, ImGui uses HeaderActive color which might be light
+			ImVec4 selectedBgColor = style.Colors[ImGuiCol_HeaderActive];
+			ImVec4 hoveredBgColor = style.Colors[ImGuiCol_HeaderHovered];
+
+			// Calculate text colors for each state
+			ImVec4 selectedTextColor = GetContrastingTextColor(selectedBgColor, 0.5f);
+			ImVec4 hoveredTextColor = GetContrastingTextColor(hoveredBgColor, 0.5f);
+			ImVec4 normalTextColor = style.Colors[ImGuiCol_Text];
+
+			// If the item is selected, we know it will have the selected background
+			if (selected) {
+				ImGui::PushStyleColor(ImGuiCol_Text, selectedTextColor);
+			} else {
+				// For non-selected items, we'll use normal text unless we detect high contrast issues
+				// Check if hover/active backgrounds would cause contrast issues
+				float hoveredContrast = CalculateContrastRatio(normalTextColor, hoveredBgColor);
+				if (hoveredContrast < 3.0f) {  // WCAG AA minimum is 4.5, but 3.0 for safety
+					ImGui::PushStyleColor(ImGuiCol_Text, hoveredTextColor);
 				} else {
-					return ImVec4(1.0f, 1.0f, 1.0f, 1.0f);  // White
+					ImGui::PushStyleColor(ImGuiCol_Text, normalTextColor);
 				}
 			}
 
-			float CalculateContrastRatio(const ImVec4& color1, const ImVec4& color2)
-			{
-				float lum1 = CalculateLuminance(color1);
-				float lum2 = CalculateLuminance(color2);
-				
-				// Ensure lighter color is in numerator
-				float lighter = (std::max)(lum1, lum2);
-				float darker = (std::min)(lum1, lum2);
-				
-				return (lighter + 0.05f) / (darker + 0.05f);
+			// Create the selectable with the adjusted text color
+			bool result = ImGui::Selectable(label, selected, flags, size);
+
+			// Restore original text color
+			ImGui::PopStyleColor();
+
+			return result;
+		}
+
+		bool ContrastSelectableWithColor(const char* label, bool selected, const ImVec4& semanticTextColor, ImGuiSelectableFlags flags, const ImVec2& size)
+		{
+			// Get current style colors for different states
+			ImGuiStyle& style = ImGui::GetStyle();
+
+			// We need to handle text color based on the selectable's background state
+			// For selected items, ImGui uses HeaderActive color which might be light
+			ImVec4 selectedBgColor = style.Colors[ImGuiCol_HeaderActive];
+			ImVec4 hoveredBgColor = style.Colors[ImGuiCol_HeaderHovered];
+
+			// Use the provided semantic color but ensure it has good contrast
+			ImVec4 textColor = semanticTextColor;
+
+			// If the item is selected, we know it will have the selected background
+			if (selected) {
+				// Check contrast with selected background
+				float contrast = CalculateContrastRatio(semanticTextColor, selectedBgColor);
+				if (contrast < 3.0f) {
+					textColor = GetContrastingTextColor(selectedBgColor, 0.5f);
+				}
+			} else {
+				// Check contrast with potential hover background
+				float hoveredContrast = CalculateContrastRatio(semanticTextColor, hoveredBgColor);
+				if (hoveredContrast < 3.0f) {
+					textColor = GetContrastingTextColor(hoveredBgColor, 0.5f);
+				}
 			}
 
-			bool ContrastSelectable(const char* label, bool selected, ImGuiSelectableFlags flags, const ImVec2& size)
-			{
-				// Get current style colors for different states
-				ImGuiStyle& style = ImGui::GetStyle();
-				
-				// We need to handle text color based on the selectable's background state
-				// For selected items, ImGui uses HeaderActive color which might be light
-				ImVec4 selectedBgColor = style.Colors[ImGuiCol_HeaderActive];
-				ImVec4 hoveredBgColor = style.Colors[ImGuiCol_HeaderHovered];
-				
-				// Calculate text colors for each state
-				ImVec4 selectedTextColor = GetContrastingTextColor(selectedBgColor, 0.5f);
-				ImVec4 hoveredTextColor = GetContrastingTextColor(hoveredBgColor, 0.5f);
-				ImVec4 normalTextColor = style.Colors[ImGuiCol_Text];
-				
-				// If the item is selected, we know it will have the selected background
-				if (selected) {
-					ImGui::PushStyleColor(ImGuiCol_Text, selectedTextColor);
-				} else {
-					// For non-selected items, we'll use normal text unless we detect high contrast issues
-					// Check if hover/active backgrounds would cause contrast issues
-					float hoveredContrast = CalculateContrastRatio(normalTextColor, hoveredBgColor);
-					if (hoveredContrast < 3.0f) {  // WCAG AA minimum is 4.5, but 3.0 for safety
-						ImGui::PushStyleColor(ImGuiCol_Text, hoveredTextColor);
-					} else {
-						ImGui::PushStyleColor(ImGuiCol_Text, normalTextColor);
-					}
-				}
-				
-				// Create the selectable with the adjusted text color
-				bool result = ImGui::Selectable(label, selected, flags, size);
-				
-				// Restore original text color
-				ImGui::PopStyleColor();
-				
-				return result;
-			}
+			ImGui::PushStyleColor(ImGuiCol_Text, textColor);
 
-			bool ContrastSelectableWithColor(const char* label, bool selected, const ImVec4& semanticTextColor, ImGuiSelectableFlags flags, const ImVec2& size)
-			{
-				// Get current style colors for different states
-				ImGuiStyle& style = ImGui::GetStyle();
-				
-				// We need to handle text color based on the selectable's background state
-				// For selected items, ImGui uses HeaderActive color which might be light
-				ImVec4 selectedBgColor = style.Colors[ImGuiCol_HeaderActive];
-				ImVec4 hoveredBgColor = style.Colors[ImGuiCol_HeaderHovered];
-				
-				// Use the provided semantic color but ensure it has good contrast
-				ImVec4 textColor = semanticTextColor;
-				
-				// If the item is selected, we know it will have the selected background
-				if (selected) {
-					// Check contrast with selected background
-					float contrast = CalculateContrastRatio(semanticTextColor, selectedBgColor);
-					if (contrast < 3.0f) {
-						textColor = GetContrastingTextColor(selectedBgColor, 0.5f);
-					}
-				} else {
-					// Check contrast with potential hover background
-					float hoveredContrast = CalculateContrastRatio(semanticTextColor, hoveredBgColor);
-					if (hoveredContrast < 3.0f) {
-						textColor = GetContrastingTextColor(hoveredBgColor, 0.5f);
-					}
-				}
-				
-				ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-				
-				// Create the selectable with the adjusted text color
-				bool result = ImGui::Selectable(label, selected, flags, size);
-				
-				// Restore original text color
-				ImGui::PopStyleColor();
-				
-				return result;
-			}
-		}  // namespace ColorUtils
+			// Create the selectable with the adjusted text color
+			bool result = ImGui::Selectable(label, selected, flags, size);
+
+			// Restore original text color
+			ImGui::PopStyleColor();
+
+			return result;
+		}
+	}  // namespace ColorUtils
 
 	bool ButtonWithFlash(const char* label, const ImVec2& size, int flashDurationMs)
 	{
 		static std::unordered_map<std::string, std::chrono::steady_clock::time_point> flashTimers;
-		
+
 		std::string buttonId = std::string(label);
 		auto now = std::chrono::steady_clock::now();
-		
+
 		// Check if this button has active flash
 		bool hasActiveFlash = false;
 		auto it = flashTimers.find(buttonId);
@@ -1351,7 +1350,7 @@ namespace Util
 				flashTimers.erase(it);
 			}
 		}
-		
+
 		// Style the button with flash effect if active.
 		bool styleChanged = false;
 		if (hasActiveFlash) {
@@ -1361,52 +1360,51 @@ namespace Util
 				normalButton.x + 0.2f,  // Brighten slightly
 				normalButton.y + 0.2f,
 				normalButton.z + 0.2f,
-				normalButton.w
-			);
+				normalButton.w);
 			ImVec4 flashHovered = ImVec4(flashColor.x * 1.1f, flashColor.y * 1.1f, flashColor.z * 1.1f, flashColor.w);
 			ImVec4 flashActive = ImVec4(flashColor.x * 0.9f, flashColor.y * 0.9f, flashColor.z * 0.9f, flashColor.w);
-			
+
 			ImGui::PushStyleColor(ImGuiCol_Button, flashColor);
 			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, flashHovered);
 			ImGui::PushStyleColor(ImGuiCol_ButtonActive, flashActive);
 			styleChanged = true;
 		}
-		
+
 		bool clicked = ImGui::Button(label, size);
-		
+
 		if (styleChanged) {
 			ImGui::PopStyleColor(3);
 		}
-		
+
 		// If clicked, start the flash timer
 		if (clicked) {
 			flashTimers[buttonId] = now;
 		}
-		
+
 		return clicked;
 	}
 
 	std::vector<std::string> DiscoverFonts()
 	{
 		std::vector<std::string> fonts;
-		
+
 		try {
 			auto fontsPath = Util::PathHelpers::GetFontsPath();
 			logger::debug("DiscoverFonts: Scanning fonts directory: {}", fontsPath.string());
-			
+
 			// Check if fonts directory exists
 			if (!std::filesystem::exists(fontsPath)) {
 				logger::warn("DiscoverFonts: Fonts directory does not exist: {}", fontsPath.string());
 				return fonts;
 			}
-			
+
 			// Scan for font files (.ttf and .otf)
 			for (const auto& entry : std::filesystem::directory_iterator(fontsPath)) {
 				if (entry.is_regular_file()) {
 					auto extension = entry.path().extension().string();
 					// Convert to lowercase for comparison
 					std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
-					
+
 					if (extension == ".ttf" || extension == ".otf") {
 						// Use the full filename (including extension) for proper font loading
 						std::string fontFile = entry.path().filename().string();
@@ -1415,16 +1413,15 @@ namespace Util
 					}
 				}
 			}
-			
+
 			// Sort fonts alphabetically for better user experience
 			std::sort(fonts.begin(), fonts.end());
 			logger::info("DiscoverFonts: Found {} font files", fonts.size());
-		}
-		catch (const std::exception& e) {
+		} catch (const std::exception& e) {
 			logger::error("DiscoverFonts: Exception occurred while scanning fonts: {}", e.what());
 			// Silently return empty vector on error
 		}
-		
+
 		return fonts;
 	}
 
@@ -1437,7 +1434,7 @@ namespace Util
 		try {
 			auto fontsPath = Util::PathHelpers::GetFontsPath();
 			auto fontPath = fontsPath / fontName;
-			
+
 			// Check if the font file exists and is a regular file
 			if (std::filesystem::exists(fontPath) && std::filesystem::is_regular_file(fontPath)) {
 				// Validate extension is .ttf or .otf
@@ -1445,11 +1442,10 @@ namespace Util
 				std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 				return extension == ".ttf" || extension == ".otf";
 			}
-		}
-		catch (const std::exception& e) {
+		} catch (const std::exception& e) {
 			logger::error("ValidateFont: Exception occurred while validating font '{}': {}", fontName, e.what());
 		}
-		
+
 		return false;
 	}
 }  // namespace Util

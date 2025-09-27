@@ -186,18 +186,18 @@ void SettingsTabRenderer::RenderThemesTab()
 
 		// Get theme manager
 		auto themeManager = ThemeManager::GetSingleton();
-		
+
 		// Get available themes (force discovery if not done)
 		if (!themeManager->IsDiscovered()) {
 			themeManager->DiscoverThemes();
 		}
-		
+
 		const auto& themes = themeManager->GetThemes();
 
 		// Create dropdown items - using static storage to avoid dangling pointers
 		static std::vector<std::string> displayNames;
 		static std::vector<const char*> items;
-		
+
 		// Clear and rebuild the lists
 		displayNames.clear();
 		items.clear();
@@ -213,23 +213,23 @@ void SettingsTabRenderer::RenderThemesTab()
 
 		// Find current selection index - default to "Default" if no theme selected
 		// Note: Add 1 to account for "+ Create New" option at index 0
-		int currentItem = 1; // Default to first actual theme (Default Dark)
+		int currentItem = 1;  // Default to first actual theme (Default Dark)
 		std::string currentThemePreset = globals::menu->GetSettings().SelectedThemePreset;
-		
+
 		// If no theme is selected, default to "Default"
 		if (currentThemePreset.empty()) {
 			currentThemePreset = "Default";
 			globals::menu->GetSettings().SelectedThemePreset = "Default";
 		}
-		
+
 		// If we're in create new mode, show that as selected
 		if (isCreatingNewTheme) {
-			currentItem = 0; // "+ Create New"
+			currentItem = 0;  // "+ Create New"
 		} else {
 			// Find the theme in the list (skip index 0 which is "+ Create New")
 			for (size_t i = 0; i < themes.size(); ++i) {
 				if (themes[i].name == currentThemePreset) {
-					currentItem = static_cast<int>(i + 1); // +1 for "+ Create New" offset
+					currentItem = static_cast<int>(i + 1);  // +1 for "+ Create New" offset
 					break;
 				}
 			}
@@ -251,10 +251,10 @@ void SettingsTabRenderer::RenderThemesTab()
 				}
 			}
 		}
-		
+
 		// Show theme description as tooltip (only for actual themes, not "+ Create New")
 		if (currentItem >= 1 && currentItem <= static_cast<int>(themes.size())) {
-			const auto& selectedTheme = themes[currentItem - 1]; // -1 for "+ Create New" offset
+			const auto& selectedTheme = themes[currentItem - 1];  // -1 for "+ Create New" offset
 			if (!selectedTheme.description.empty()) {
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("%s", selectedTheme.description.c_str());
@@ -284,7 +284,7 @@ void SettingsTabRenderer::RenderThemesTab()
 		// Save/Update Theme Button (show based on context)
 		if (isCreatingNewTheme || (!currentThemePreset.empty() && currentThemePreset != "Default")) {
 			ImGui::SameLine();
-			
+
 			const char* buttonText = isCreatingNewTheme ? "Save Theme" : "Update Theme";
 			if (Util::ButtonWithFlash(buttonText)) {
 				if (isCreatingNewTheme) {
@@ -301,10 +301,10 @@ void SettingsTabRenderer::RenderThemesTab()
 						// Use the existing SaveTheme method to serialize the theme settings
 						json currentThemeJson;
 						globals::menu->SaveTheme(currentThemeJson);
-						
+
 						// Overwrite the current theme with updated settings
-						if (themeManager->SaveTheme(currentThemePreset, currentThemeJson["Theme"], 
-						                           currentThemeInfo->displayName, currentThemeInfo->description)) {
+						if (themeManager->SaveTheme(currentThemePreset, currentThemeJson["Theme"],
+								currentThemeInfo->displayName, currentThemeInfo->description)) {
 							// Theme updated successfully
 						}
 					}
@@ -318,8 +318,6 @@ void SettingsTabRenderer::RenderThemesTab()
 				}
 			}
 		}
-
-
 
 		// Create Theme Popup
 		if (showCreateThemePopup) {
@@ -335,12 +333,12 @@ void SettingsTabRenderer::RenderThemesTab()
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("File name for the theme (without .json extension)");
 			}
-			
+
 			ImGui::InputText("Display Name", newThemeDisplayName, sizeof(newThemeDisplayName));
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Human-readable name shown in the dropdown");
 			}
-			
+
 			ImGui::InputTextMultiline("Description", newThemeDescription, sizeof(newThemeDescription), ImVec2(400, 80));
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Optional description for the theme");
@@ -353,10 +351,10 @@ void SettingsTabRenderer::RenderThemesTab()
 				// Use the existing SaveTheme method to serialize the theme settings
 				json currentThemeJson;
 				globals::menu->SaveTheme(currentThemeJson);
-				
+
 				std::string displayName = strlen(newThemeDisplayName) > 0 ? std::string(newThemeDisplayName) : std::string(newThemeName);
 				std::string description = strlen(newThemeDescription) > 0 ? std::string(newThemeDescription) : "";
-				
+
 				if (themeManager->SaveTheme(std::string(newThemeName), currentThemeJson["Theme"], displayName, description)) {
 					// Theme created successfully, load it and exit create mode
 					globals::menu->LoadThemePreset(std::string(newThemeName));
@@ -404,18 +402,17 @@ void SettingsTabRenderer::RenderStylingTab()
 			io.FontGlobalScale = trueScale;
 		}
 
-		
 		ImGui::SeparatorText("Font");
 		if (ImGui::SliderFloat("Font Size", &themeSettings.FontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE, "%.0f")) {
 			// Font size changed, schedule deferred reload
 			globals::menu->pendingFontReload = true;
 			globals::menu->pendingFontName = themeSettings.FontName;  // Keep current font name
 		}
-		
+
 		// Font selection dropdown
 		static std::vector<std::string> availableFonts;
 		static bool fontsDiscovered = false;
-		
+
 		auto refreshFontList = [&]() {
 			try {
 				availableFonts = Util::DiscoverFonts();
@@ -424,12 +421,12 @@ void SettingsTabRenderer::RenderStylingTab()
 				availableFonts.clear();
 			}
 		};
-		
+
 		if (!fontsDiscovered) {
 			refreshFontList();
 			fontsDiscovered = true;
 		}
-		
+
 		// Find current font index
 		int currentFontIndex = 0;
 		for (size_t i = 0; i < availableFonts.size(); ++i) {
@@ -438,13 +435,13 @@ void SettingsTabRenderer::RenderStylingTab()
 				break;
 			}
 		}
-		
+
 		// Use ImGui::Combo with safety checks to avoid crashes
 		const char* previewText = "None";
 		if (!availableFonts.empty() && currentFontIndex >= 0 && currentFontIndex < static_cast<int>(availableFonts.size())) {
 			previewText = availableFonts[currentFontIndex].c_str();
 		}
-		
+
 		if (ImGui::BeginCombo("Font", previewText)) {
 			if (availableFonts.empty()) {
 				ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No fonts available");
@@ -457,7 +454,7 @@ void SettingsTabRenderer::RenderStylingTab()
 							// Validate font name before applying
 							const std::string& newFontName = availableFonts[i];
 							auto fontPath = Util::PathHelpers::GetFontsPath() / newFontName;
-							
+
 							if (std::filesystem::exists(fontPath)) {
 								// Schedule deferred font reload (safe - will happen between frames)
 								globals::menu->pendingFontReload = true;
@@ -465,7 +462,7 @@ void SettingsTabRenderer::RenderStylingTab()
 							}
 						}
 					}
-					
+
 					// Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
 					if (isSelected) {
 						ImGui::SetItemDefaultFocus();
@@ -477,7 +474,7 @@ void SettingsTabRenderer::RenderStylingTab()
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Select a custom font file (.ttf/.otf) from the Fonts folder.\nPlace custom fonts in: Interface/CommunityShaders/Fonts/");
 		}
-		
+
 		if (ImGui::Button("Refresh Font List")) {
 			refreshFontList();
 			// Reset current font index if it's out of bounds after refresh
@@ -490,7 +487,6 @@ void SettingsTabRenderer::RenderStylingTab()
 		}
 
 		ImGui::SeparatorText("Layout");
-
 
 		// Font size controls: Auto (resolution-based) or Manual
 		bool useAutoFont = (themeSettings.FontSize <= 0.0f);
@@ -516,7 +512,6 @@ void SettingsTabRenderer::RenderStylingTab()
 		ImGui::BeginDisabled(useAutoFont);
 		ImGui::SliderFloat("Font Size", &themeSettings.FontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE, "%.0f");
 		ImGui::EndDisabled();
-
 
 		ImGui::SliderFloat2("Window Padding", (float*)&style.WindowPadding, 0.0f, 20.0f, "%.0f");
 		ImGui::SliderFloat2("Frame Padding", (float*)&style.FramePadding, 0.0f, 20.0f, "%.0f");
@@ -615,7 +610,7 @@ void SettingsTabRenderer::RenderColorsTab()
 		// Advanced Colors Section - collapsed by default to avoid overwhelming users
 		if (ImGui::CollapsingHeader("Advanced")) {
 			ImGui::TextWrapped("Advanced color controls for detailed customization of all UI elements.");
-			
+
 			static ImGuiTextFilter filter;
 			filter.Draw("Filter colors", ImGui::GetFontSize() * 16);
 

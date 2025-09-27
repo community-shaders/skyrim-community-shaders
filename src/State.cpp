@@ -831,7 +831,7 @@ float State::GetTotalSmoothedDrawCalls() const
 void State::LoadTheme()
 {
 	auto themeConfigPath = Util::PathHelpers::GetSettingsThemePath();
-	
+
 	if (!std::filesystem::exists(themeConfigPath)) {
 		logger::info("No theme config file found at: {}", themeConfigPath.string());
 		return;
@@ -860,7 +860,7 @@ void State::LoadTheme()
 void State::SaveTheme()
 {
 	auto themeConfigPath = Util::PathHelpers::GetSettingsThemePath();
-	
+
 	try {
 		std::filesystem::create_directories(themeConfigPath.parent_path());
 	} catch (const std::filesystem::filesystem_error& e) {
@@ -879,6 +879,6 @@ void State::SaveTheme()
 
 	themeFile << std::setw(4) << themeSettings << std::endl;
 	themeFile.close();
-	
+
 	logger::info("Theme settings saved to: {}", themeConfigPath.string());
 }

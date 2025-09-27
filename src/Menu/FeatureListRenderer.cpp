@@ -251,10 +251,10 @@ void FeatureListRenderer::ListMenuVisitor::operator()(const BuiltInMenu& menu)
 	if (isFeatureIssues) {
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 		ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.Error);
-		
+
 		if (ImGui::Selectable(fmt::format(" {} ", menu.name).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns))
 			selectedMenuRef = listId;
-		
+
 		ImGui::PopStyleColor();
 	} else {
 		// Use contrast-aware selectable for better text visibility

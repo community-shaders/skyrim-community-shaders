@@ -109,7 +109,6 @@ namespace Util
 		int m_pushedStyles;
 	};
 
-
 	/**
 	 * Button with simple flash feedback (matches action icon hover effect style)
 	 * @param label Button text
@@ -194,7 +193,7 @@ namespace Util
 		/**
 		 * Calculates contrast ratio between two colors according to WCAG guidelines
 		 * @param color1 First color
-		 * @param color2 Second color  
+		 * @param color2 Second color
 		 * @return Contrast ratio (1.0 = no contrast, 21.0 = maximum contrast)
 		 */
 		float CalculateContrastRatio(const ImVec4& color1, const ImVec4& color2);
