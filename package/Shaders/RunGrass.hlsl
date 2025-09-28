@@ -764,7 +764,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	directionalAmbientColor *= albedo;
 
 #				if defined(SKYLIGHTING)
-	Skylighting::applySkylighting(diffuseColor, directionalAmbientColor, skylightingDiffuse);
+	Skylighting::applySkylighting(diffuseColor, directionalAmbientColor, albedo, skylightingDiffuse);
 #				endif
 
 #				if defined(IBL) && defined(SKYLIGHTING)
@@ -979,7 +979,7 @@ PS_OUTPUT main(PS_INPUT input)
 	directionalAmbientColor *= albedo;
 
 #			if defined(SKYLIGHTING)
-	Skylighting::applySkylighting(diffuseColor, directionalAmbientColor, skylightingDiffuse);
+	Skylighting::applySkylighting(diffuseColor, directionalAmbientColor, albedo, skylightingDiffuse);
 #			endif
 
 #			if defined(IBL) && defined(SKYLIGHTING)
