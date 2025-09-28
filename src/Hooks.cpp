@@ -268,7 +268,10 @@ decltype(&CreateDXGIFactory) ptrCreateDXGIFactory;
 
 HRESULT WINAPI hk_CreateDXGIFactory(REFIID, void** ppFactory)
 {
-	return ptrCreateDXGIFactory(__uuidof(IDXGIFactory4), ppFactory);
+	auto& upscaling = globals::features::upscaling;
+	upscaling.LoadUpscalingSDKs();
+
+	return upscaling.streamline.slCreateDXGIFactory(__uuidof(IDXGIFactory4), ppFactory);
 }
 
 decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChain;

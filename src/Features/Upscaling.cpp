@@ -52,7 +52,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 	globals::state->SetAdapterDescription(adapterDesc.Description);
 
 	auto& upscaling = globals::features::upscaling;
-	upscaling.LoadUpscalingSDKs();
+//	upscaling.LoadUpscalingSDKs();
 
 	if (upscaling.IsBackendInitialized())
 		upscaling.CheckBackendFeatures(pAdapter);
@@ -87,6 +87,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
 
+	shouldProxy = false;
 	if (shouldProxy) {
 		logger::info("[Frame Generation] Frame Generation enabled, using D3D12 proxy");
 
@@ -126,7 +127,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 		}
 	}
 
-	auto ret = ptrD3D11CreateDeviceAndSwapChainUpscaling(pAdapter,
+	auto ret = upscaling.streamline.slD3D11CreateDeviceAndSwapChain(pAdapter,
 		DriverType,
 		Software,
 		Flags,
@@ -140,8 +141,6 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 		ppImmediateContext);
 
 	if (upscaling.IsBackendInitialized()) {
-		upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
-		upscaling.UpgradeBackendInterface((void**)&(*ppSwapChain));
 		upscaling.SetBackendD3DDevice(*ppDevice);
 		upscaling.PostBackendDevice();
 	}

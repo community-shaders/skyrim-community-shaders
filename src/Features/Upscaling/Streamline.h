@@ -73,6 +73,9 @@ public:
 	PFun_slNISSetOptions* slNISSetOptions{};
 	PFun_slNISGetState* slNISGetState{};
 
+	decltype(&D3D11CreateDeviceAndSwapChain) slD3D11CreateDeviceAndSwapChain{};
+	decltype(&CreateDXGIFactory) slCreateDXGIFactory{};
+
 	Util::FrameChecker frameChecker;
 	sl::FrameToken* frameToken = nullptr;
 

@@ -129,7 +129,7 @@ void Streamline::LoadInterposer()
 	pref.projectId = "f8776929-c969-43bd-ac2b-294b4de58aac";
 
 	pref.renderAPI = sl::RenderAPI::eD3D11;
-	pref.flags = sl::PreferenceFlags::eUseManualHooking;
+	pref.flags = sl::PreferenceFlags::eAllowOTA;
 
 	// Hook up all of the functions exported by the SL Interposer Library
 	slInit = (PFun_slInit*)GetProcAddress(interposer, "slInit");
@@ -149,6 +149,8 @@ void Streamline::LoadInterposer()
 	slGetFeatureFunction = (PFun_slGetFeatureFunction*)GetProcAddress(interposer, "slGetFeatureFunction");
 	slGetNewFrameToken = (PFun_slGetNewFrameToken*)GetProcAddress(interposer, "slGetNewFrameToken");
 	slSetD3DDevice = (PFun_slSetD3DDevice*)GetProcAddress(interposer, "slSetD3DDevice");
+	slD3D11CreateDeviceAndSwapChain = (decltype(&D3D11CreateDeviceAndSwapChain))GetProcAddress(interposer, "D3D11CreateDeviceAndSwapChain");
+	slCreateDXGIFactory = (decltype(&CreateDXGIFactory))GetProcAddress(interposer, "CreateDXGIFactory");
 
 	if (SL_FAILED(res, slInit(pref, sl::kSDKVersion))) {
 		logger::critical("[Streamline] Failed to initialize Streamline");
@@ -372,7 +374,7 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
 }
 
-void Streamline::RayReconstruction(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_outputTexture, ID3D11Resource* a_normalRoughness, ID3D11Resource* a_specularHitDistance, ID3D11Resource* a_motionVectors)
+void Streamline::RayReconstruction(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_outputTexture, ID3D11Resource* , ID3D11Resource* , ID3D11Resource* )
 {
 	if (!featureDLSS_RR)
 		return;
@@ -383,10 +385,10 @@ void Streamline::RayReconstruction(ID3D11Resource* a_upscalingTexture, ID3D11Res
 	logger::debug("[DLSS RR] Frame constants set");
 
 	auto state = globals::state;
-	auto renderer = globals::game::renderer;
-	auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
-	auto& albedoTexture = renderer->GetRuntimeData().renderTargets[ALBEDO];
-	auto& reflectanceTexture = renderer->GetRuntimeData().renderTargets[REFLECTANCE];
+//	auto renderer = globals::game::renderer;
+	//auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+	//auto& albedoTexture = renderer->GetRuntimeData().renderTargets[ALBEDO];
+	//auto& reflectanceTexture = renderer->GetRuntimeData().renderTargets[REFLECTANCE];
 
 	sl::DLSSDOptions dlssdOptions{};
 
@@ -422,11 +424,11 @@ void Streamline::RayReconstruction(ID3D11Resource* a_upscalingTexture, ID3D11Res
 	dlssdOptions.worldToCameraView = *(sl::float4x4*)&worldToCameraView;
 	dlssdOptions.cameraViewToWorld = *(sl::float4x4*)&cameraViewToWorld;
 
-	dlssdOptions.dlaaPreset = sl::DLSSDPreset::ePresetD;
-	dlssdOptions.qualityPreset = sl::DLSSDPreset::ePresetD;
-	dlssdOptions.balancedPreset = sl::DLSSDPreset::ePresetD;
-	dlssdOptions.performancePreset = sl::DLSSDPreset::ePresetD;
-	dlssdOptions.ultraPerformancePreset = sl::DLSSDPreset::ePresetD;
+	dlssdOptions.dlaaPreset = sl::DLSSDPreset::eDefault;
+	dlssdOptions.qualityPreset = sl::DLSSDPreset::eDefault;
+	dlssdOptions.balancedPreset = sl::DLSSDPreset::eDefault;
+	dlssdOptions.performancePreset = sl::DLSSDPreset::eDefault;
+	dlssdOptions.ultraPerformancePreset = sl::DLSSDPreset::eDefault;
 
 	if(SL_FAILED(result, slDLSSDSetOptions(viewport, dlssdOptions))) {
 		logger::critical("[DLSS RR] Could not set DLSS RR options");
@@ -443,12 +445,11 @@ void Streamline::RayReconstruction(ID3D11Resource* a_upscalingTexture, ID3D11Res
 
 		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
 		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_outputTexture, 0 };
-		sl::Resource depth = { sl::ResourceType::eTex2d, depthTexture.texture, 0 };
-		sl::Resource mvec = { sl::ResourceType::eTex2d, a_motionVectors, 0 };
-		sl::Resource diffuseAlbedo = { sl::ResourceType::eTex2d, albedoTexture.texture, 0 };
-		sl::Resource specularAlbedo = { sl::ResourceType::eTex2d, reflectanceTexture.texture, 0 };
-		sl::Resource normalRoughness = { sl::ResourceType::eTex2d, a_normalRoughness, 0 };
-		sl::Resource specHitDistance = { sl::ResourceType::eTex2d, a_specularHitDistance, 0 };
+		sl::Resource depth = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
+		sl::Resource mvec = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
+		sl::Resource diffuseAlbedo = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
+		sl::Resource specularAlbedo = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
+		sl::Resource normalRoughness = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
 
 		sl::ResourceTag colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &inputExtent };
 		sl::ResourceTag colorOutTag = sl::ResourceTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &outputExtent };
@@ -457,9 +458,8 @@ void Streamline::RayReconstruction(ID3D11Resource* a_upscalingTexture, ID3D11Res
 		sl::ResourceTag diffuseAlbedoTag = sl::ResourceTag{ &diffuseAlbedo, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
 		sl::ResourceTag specularAlbedoTag = sl::ResourceTag{ &specularAlbedo, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
 		sl::ResourceTag normalRoughnessTag = sl::ResourceTag{ &normalRoughness, sl::kBufferTypeNormalRoughness, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
-		sl::ResourceTag specHitDistanceTag = sl::ResourceTag{ &specHitDistance, sl::kBufferTypeSpecularHitDistance, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
 
-		sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag, depthTag, mvecTag, diffuseAlbedoTag, specularAlbedoTag, normalRoughnessTag, specHitDistanceTag };
+		sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag, depthTag, mvecTag, diffuseAlbedoTag, specularAlbedoTag, normalRoughnessTag };
 		if (SL_FAILED(result, slSetTag(viewport, resourceTags, _countof(resourceTags), globals::d3d::context))) {
 			logger::error("[DLSS RR] Failed to set DLSS RR tags, error code: {}", (int)result);
 			return;
