@@ -206,7 +206,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 			directionalAmbientColorSpecular += iblColorLuminance;
 		}
 #		endif
-        specularIrradiance = (specularIrradiance / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
+        specularIrradiance = Color::ConditionalSpecularNormalization(specularIrradiance, specularIrradianceLuminance, directionalAmbientColorSpecular);
 
         finalIrradiance += specularIrradiance;
 #	elif defined(SKYLIGHTING)
@@ -239,7 +239,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 			float specularIrradianceLuminance = Color::RGBToLuminance(Color::GammaToLinear(EnvTexture.SampleLevel(LinearSampler, R, 15)));
 
-			specularIrradiance = (specularIrradiance / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
+			specularIrradiance = Color::ConditionalSpecularNormalization(specularIrradiance, specularIrradianceLuminance, directionalAmbientColorSpecular);
 		}
 
 		float3 specularIrradianceReflections = 1.0;
@@ -249,7 +249,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 			float specularIrradianceLuminance = Color::RGBToLuminance(Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(LinearSampler, R, 15)));
 
-			specularIrradianceReflections = (specularIrradianceReflections / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
+			specularIrradianceReflections = Color::ConditionalSpecularNormalization(specularIrradianceReflections, specularIrradianceLuminance, directionalAmbientColorSpecular);
 		}
 
 		finalIrradiance = lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
@@ -267,7 +267,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
         float specularIrradianceReflectionsLuminance = Color::RGBToLuminance(Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(LinearSampler, R, 15)));
 
-	    specularIrradianceReflections = (specularIrradianceReflections / max(specularIrradianceReflectionsLuminance, 0.001)) * directionalAmbientColorSpecular;
+        specularIrradianceReflections = Color::ConditionalSpecularNormalization(specularIrradianceReflections, specularIrradianceReflectionsLuminance, directionalAmbientColorSpecular);
 
 		finalIrradiance += specularIrradianceReflections;
 #	endif

@@ -108,6 +108,22 @@ namespace Color
 		return color;
 #endif
 	}
+
+	// Conditional specular irradiance normalization to fix PBR blue tint issues
+	// Only applies normalization when environment map appears overblown relative to ambient lighting
+	float3 ConditionalSpecularNormalization(float3 specularIrradiance, float specularIrradianceLuminance, float directionalAmbientColorSpecular)
+	{
+		float specularToAmbientRatio = specularIrradianceLuminance / max(directionalAmbientColorSpecular, 0.001);
+		if (specularToAmbientRatio > 2.0) {
+			// Full normalization for overblown environment maps
+			return (specularIrradiance / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
+		} else {
+			// Gradual blend to preserve color information while reducing inconsistencies
+			float blendFactor = saturate((specularToAmbientRatio - 1.0) / 1.0);
+			float3 normalizedSpecular = (specularIrradiance / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
+			return lerp(specularIrradiance, normalizedSpecular, blendFactor * 0.3);
+		}
+	}
 }
 
 #endif  //__COLOR_DEPENDENCY_HLSL__
