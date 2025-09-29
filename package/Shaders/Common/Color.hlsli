@@ -113,16 +113,22 @@ namespace Color
 	// Only applies normalization when environment map appears overblown relative to ambient lighting
 	float3 ConditionalSpecularNormalization(float3 specularIrradiance, float specularIrradianceLuminance, float directionalAmbientColorSpecular)
 	{
-		float specularToAmbientRatio = specularIrradianceLuminance / max(directionalAmbientColorSpecular, 0.001);
-		if (specularToAmbientRatio > 2.0) {
-			// Full normalization for overblown environment maps
-			return (specularIrradiance / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
-		} else {
-			// Gradual blend to preserve color information while reducing inconsistencies
-			float blendFactor = saturate((specularToAmbientRatio - 1.0) / 1.0);
-			float3 normalizedSpecular = (specularIrradiance / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
-			return lerp(specularIrradiance, normalizedSpecular, blendFactor * 0.3);
+		const float LUMINANCE_EPSILON = 1e-6;
+		const float AMBIENT_EPSILON = 1e-4;
+		
+		// Safety check for essentially black ambient lighting
+		if (directionalAmbientColorSpecular < AMBIENT_EPSILON) {
+			return specularIrradiance; // Don't normalize if ambient is essentially black
 		}
+		
+		float specularToAmbientRatio = specularIrradianceLuminance / max(directionalAmbientColorSpecular, AMBIENT_EPSILON);
+		
+		// Use logarithmic blend factor for better handling of high dynamic range
+		// This provides smoother transitions across wide brightness ranges
+		float blendFactor = saturate(log2(max(specularToAmbientRatio, 1.0)) * 0.5);
+		
+		float3 normalizedSpecular = (specularIrradiance / max(specularIrradianceLuminance, LUMINANCE_EPSILON)) * directionalAmbientColorSpecular;
+		return lerp(specularIrradiance, normalizedSpecular, blendFactor);
 	}
 }
 
