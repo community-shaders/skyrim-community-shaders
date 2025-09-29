@@ -79,7 +79,7 @@ namespace DynamicCubemaps
 			specularIrradianceReflections = (specularIrradianceReflections / max(specularIrradianceReflectionsLuminance, 0.001)) * directionalAmbientColorSpecular;
 			specularIrradianceReflections = Color::GammaToLinear(specularIrradianceReflections);
 		}
-		
+
 		float3 specularIrradiance = 0.0;
 
 		if (skylightingSpecular < 1.0){
