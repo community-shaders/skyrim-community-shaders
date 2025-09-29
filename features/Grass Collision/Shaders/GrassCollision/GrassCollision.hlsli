@@ -16,7 +16,7 @@ namespace GrassCollision
 		float3 worldPosition = mul(World[eyeIndex], float4(position, 1.0)).xyz;
 
 		if (length(worldPosition) < 2048.0 && input.Color.w > 0.0) {
-		
+
 			float3 worldPosition = mul(World[eyeIndex], float4(position, 1.0)).xyz;
 
 			float lowestHeight = worldPosition.z;
@@ -24,21 +24,21 @@ namespace GrassCollision
 
 			for (uint i = 0; i < numCollisions; i++) {
 				float radius = collisionData[i].centre[0].w;
-				
+
 				// Get the lowest point of the sphere at WorldPosition.xy
 				float dist = distance(collisionData[i].centre[eyeIndex].xy, worldPosition.xy);
-				
+
 				// Only process if we're within the sphere's radius
 				if (dist < radius) {
 					// Get sphere geometry
 					float heightFromCenter = sqrt(radius * radius - dist * dist);
 					float height = collisionData[i].centre[eyeIndex].z - heightFromCenter;
-					
+
 					// Add weighted displacement direction
 					lowestDisplacement += (worldPosition.xyz - collisionData[i].centre[eyeIndex].xyz) * max(0, worldPosition.z - height);
-					
+
 					// Set lowest point
-					lowestHeight = min(lowestHeight, height);		
+					lowestHeight = min(lowestHeight, height);
 				}
 			}
 
@@ -46,7 +46,7 @@ namespace GrassCollision
 			if (lowestHeight < worldPosition.z){
 				float3 displacementNormal = normalize(lowestDisplacement);
 				displacementNormal.z = -abs(displacementNormal.z);
-								
+
 				float displacementAmount = max(0, worldPosition.z - lowestHeight);
 
 				float scaledHeight = input.Position.z * (input.InstanceData4.y * ScaleMask.z + 1.0);
