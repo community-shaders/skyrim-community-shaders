@@ -19,7 +19,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	frameLimitMode,
 	frameGenerationMode,
 	frameGenerationForceEnable,
-	streamlineLogLevel);
+	streamlineLogLevel,
+	sharpnessFSR,
+	sharpnessDLSS);
 
 decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChainUpscaling;
 
