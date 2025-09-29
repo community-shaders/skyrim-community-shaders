@@ -118,14 +118,24 @@ namespace Color
 			return specularIrradiance; // Don't normalize if ambient is essentially black
 		}
 		
-		float specularToAmbientRatio = specularIrradianceLuminance / max(directionalAmbientColorSpecular, EPSILON_AMBIENT);
+		// Compensate for ReflectionNormalisationScale (0.666) being pre-applied to directionalAmbientColorSpecular
+		// Use the original unscaled ambient value for proper normalization calculations
+		float originalDirectionalAmbientColorSpecular = directionalAmbientColorSpecular / ReflectionNormalisationScale;
 		
-		// Use logarithmic blend factor for better handling of high dynamic range
-		// This provides smoother transitions across wide brightness ranges
-		float blendFactor = saturate(log2(max(specularToAmbientRatio, 1.0)) * 0.5);
+		float specularToAmbientRatio = specularIrradianceLuminance / max(originalDirectionalAmbientColorSpecular, EPSILON_AMBIENT);
 		
-		float3 normalizedSpecular = (specularIrradiance / max(specularIrradianceLuminance, EPSILON_DIVISION)) * directionalAmbientColorSpecular;
-		return lerp(specularIrradiance, normalizedSpecular, blendFactor);
+		// Use very gentle logarithmic blend to minimize normalization impact
+		float blendFactor = saturate(log2(max(specularToAmbientRatio, 1.0)) * 0.1);
+		
+		// Normalize using the original (unscaled) ambient value to prevent double-darkening
+		float3 normalizedSpecular = (specularIrradiance / max(specularIrradianceLuminance, EPSILON_DIVISION)) * originalDirectionalAmbientColorSpecular;
+		
+		float3 result = lerp(specularIrradiance, normalizedSpecular, blendFactor);
+		
+		// Apply brightness compensation to counter cumulative darkening effects
+		// This compensates for SSGI AO, skylighting, and other pipeline darkening
+		float brightnessCompensation = 1.33;
+		return result * brightnessCompensation;
 	}
 }
 
