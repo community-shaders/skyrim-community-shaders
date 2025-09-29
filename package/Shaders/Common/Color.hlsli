@@ -115,18 +115,18 @@ namespace Color
 	{
 		const float LUMINANCE_EPSILON = 1e-6;
 		const float AMBIENT_EPSILON = 1e-4;
-		
+
 		// Safety check for essentially black ambient lighting
 		if (directionalAmbientColorSpecular < AMBIENT_EPSILON) {
 			return specularIrradiance; // Don't normalize if ambient is essentially black
 		}
-		
+
 		float specularToAmbientRatio = specularIrradianceLuminance / max(directionalAmbientColorSpecular, AMBIENT_EPSILON);
-		
+
 		// Use logarithmic blend factor for better handling of high dynamic range
 		// This provides smoother transitions across wide brightness ranges
 		float blendFactor = saturate(log2(max(specularToAmbientRatio, 1.0)) * 0.5);
-		
+
 		float3 normalizedSpecular = (specularIrradiance / max(specularIrradianceLuminance, LUMINANCE_EPSILON)) * directionalAmbientColorSpecular;
 		return lerp(specularIrradiance, normalizedSpecular, blendFactor);
 	}
