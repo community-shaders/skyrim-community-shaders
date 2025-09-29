@@ -69,7 +69,7 @@ namespace DynamicCubemaps
 		skylightingSpecular = saturate(skylightingSpecular);
 		skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
 
-		float3 specularIrradianceReflections = 1.0;
+		float3 specularIrradianceReflections = 0.0;
 
 		if (skylightingSpecular > 0.0){
 			specularIrradianceReflections = EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level);
@@ -80,7 +80,7 @@ namespace DynamicCubemaps
 			specularIrradianceReflections = Color::GammaToLinear(specularIrradianceReflections);
 		}
 		
-		float3 specularIrradiance = 1.0;
+		float3 specularIrradiance = 0.0;
 
 		if (skylightingSpecular < 1.0){
 			specularIrradiance = EnvTexture.SampleLevel(SampColorSampler, R, level);
