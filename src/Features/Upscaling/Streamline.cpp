@@ -304,7 +304,7 @@ void Streamline::SetDLSSOptions()
 	dlssOptions.preExposure = 1.0f;
 	dlssOptions.sharpness = 0.0f;
 
-	dlssOptions.dlaaPreset = sl::DLSSPreset::ePresetJ;
+	dlssOptions.dlaaPreset = sl::DLSSPreset::ePresetK;
 	dlssOptions.qualityPreset = dlssOptions.dlaaPreset;
 	dlssOptions.balancedPreset = dlssOptions.dlaaPreset;
 	dlssOptions.performancePreset = dlssOptions.dlaaPreset;
