@@ -200,7 +200,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 		if (SharedData::iblSettings.EnableDiffuseIBL && SharedData::iblSettings.EnableInterior) {
 			directionalAmbientColorSpecular *= SharedData::iblSettings.DALCAmount;
 			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-R), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-			float iblColorLuminance = Color::RGBToLuminance(iblColor);
+			float iblColorLuminance = Color::RGBToLuminance(Color::LinearToGamma(iblColor));
 			directionalAmbientColorSpecular += iblColorLuminance;
 		}
 #		endif
@@ -225,7 +225,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 		if (SharedData::iblSettings.EnableDiffuseIBL) {
 			directionalAmbientColorSpecular *= SharedData::iblSettings.DALCAmount;
 			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-R, skylightingSpecular), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-			float iblColorLuminance = Color::RGBToLuminance(iblColor);
+			float iblColorLuminance = Color::RGBToLuminance(Color::LinearToGamma(iblColor));
 			directionalAmbientColorSpecular += iblColorLuminance;
 		}
 #		endif
@@ -261,7 +261,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 		if (SharedData::iblSettings.EnableDiffuseIBL) {
 			directionalAmbientColorSpecular *= SharedData::iblSettings.DALCAmount;
 			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-R), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-			float iblColorLuminance = Color::RGBToLuminance(iblColor);
+			float iblColorLuminance = Color::RGBToLuminance(Color::LinearToGamma(iblColor));
 			directionalAmbientColorSpecular += iblColorLuminance;
 		}
 #		endif
