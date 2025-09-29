@@ -14,22 +14,47 @@ namespace GrassCollision
 	float3 GetDisplacedPosition(VS_INPUT input, float3 position, uint eyeIndex = 0)
 	{
 		float3 worldPosition = mul(World[eyeIndex], float4(position, 1.0)).xyz;
-		float alpha = saturate(input.Color.w * 10.0);
 
-		if (length(worldPosition) < 2048.0 && alpha > 0.0) {
-			float3 displacement = 0.0;
+		if (length(worldPosition) < 2048.0 && input.Color.w > 0.0) {
+		
+			float3 worldPosition = mul(World[eyeIndex], float4(position, 1.0)).xyz;
+
+			float lowestHeight = worldPosition.z;
+			float3 lowestDisplacement = float3(0.0, 0.0, 0.0);
 
 			for (uint i = 0; i < numCollisions; i++) {
-				float dist = distance(collisionData[i].centre[eyeIndex].xyz, worldPosition);
-				float power = 1.0 - saturate(dist / collisionData[i].centre[0].w);
-				float3 direction = worldPosition - collisionData[i].centre[eyeIndex].xyz;
-				float3 shift = power * power * direction;
-				displacement += shift;
+				float radius = collisionData[i].centre[0].w;
+				
+				// Get the lowest point of the sphere at WorldPosition.xy
+				float dist = distance(collisionData[i].centre[eyeIndex].xy, worldPosition.xy);
+				
+				// Only process if we're within the sphere's radius
+				if (dist < radius) {
+					// Get sphere geometry
+					float heightFromCenter = sqrt(radius * radius - dist * dist);
+					float height = collisionData[i].centre[eyeIndex].z - heightFromCenter;
+					
+					// Add weighted displacement direction
+					lowestDisplacement += (worldPosition.xyz - collisionData[i].centre[eyeIndex].xyz) * max(0, worldPosition.z - height);
+					
+					// Set lowest point
+					lowestHeight = min(lowestHeight, height);		
+				}
 			}
 
-			displacement *= alpha;
+			// Check for valid collision
+			if (lowestHeight < worldPosition.z){
+				float3 displacementNormal = normalize(lowestDisplacement);
+				displacementNormal.z = -abs(displacementNormal.z);
+								
+				float displacementAmount = max(0, worldPosition.z - lowestHeight);
 
-			return displacement;
+				float scaledHeight = input.Position.z * (input.InstanceData4.y * ScaleMask.z + 1.0);
+				float bendability = saturate(input.Color.w * 10.0) * max(0.0, scaledHeight) * 0.005;
+
+				return displacementNormal * displacementAmount * bendability;
+			}
+
 		}
 
 		return 0.0;
