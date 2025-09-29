@@ -66,10 +66,10 @@ namespace Color
 	}
 
 	// Attempt to match vanilla materials that are darker than PBR
-	const static float PBRLightingScale = 0.666;
+	const static float PBRLightingScale = 0.65;
 
 	// Attempt to normalise reflection brightness against DALC
-	const static float ReflectionNormalisationScale = 0.666;
+	const static float ReflectionNormalisationScale = 0.65;
 
 	float3 GammaToLinear(float3 color)
 	{
