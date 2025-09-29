@@ -117,13 +117,13 @@ namespace Color
 		if (directionalAmbientColorSpecular < EPSILON_AMBIENT) {
 			return specularIrradiance; // Don't normalize if ambient is essentially black
 		}
-		
+
 		float specularToAmbientRatio = specularIrradianceLuminance / max(directionalAmbientColorSpecular, EPSILON_AMBIENT);
-		
+
 		// Use logarithmic blend factor for better handling of high dynamic range
 		// This provides smoother transitions across wide brightness ranges
 		float blendFactor = saturate(log2(max(specularToAmbientRatio, 1.0)) * 0.5);
-		
+
 		float3 normalizedSpecular = (specularIrradiance / max(specularIrradianceLuminance, EPSILON_DIVISION)) * directionalAmbientColorSpecular;
 		return lerp(specularIrradiance, normalizedSpecular, blendFactor);
 	}
