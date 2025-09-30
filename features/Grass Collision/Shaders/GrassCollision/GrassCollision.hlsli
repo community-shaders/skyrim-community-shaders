@@ -31,7 +31,7 @@ namespace GrassCollision
 				// Only process if we're within the sphere's radius
 				if (dist < radius) {
 					// Get sphere geometry
-					float heightFromCenter = sqrt(radius * radius - dist * dist);
+					float heightFromCenter = sqrt(max(0.0, radius * radius - dist * dist));
 					float height = collisionData[i].centre[eyeIndex].z - heightFromCenter;
 
 					// Add weighted displacement direction
