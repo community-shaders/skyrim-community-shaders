@@ -59,16 +59,15 @@ SamplerState LinearSampler : register(s0);
 	// Process collision data
 	for (uint i = 0; i < numCollisions; i++) {
 		float radius = collisionData[i].centre[0].w;
-		collisionData[i].centre[0].xyz -= eyePosition;
 
 		// Get the lowest point of the sphere at this cell position
-		float dist = distance(collisionData[i].centre[0].xy, cellCentreMS);
+		float dist = distance(collisionData[i].centre[0].xy - eyePosition.xy, cellCentreMS);
 
 		// Only process if we're within the sphere's radius
 		if (dist < radius) {
 			// Get sphere geometry
 			float heightFromCenter = sqrt(radius * radius - dist * dist);
-			float height = collisionData[i].centre[0].z - heightFromCenter;
+			float height = collisionData[i].centre[0].z - heightFromCenter - eyePosition.z;
 
 			if (height <= lowestHeight.x) {
 				lowestHeight = height;
