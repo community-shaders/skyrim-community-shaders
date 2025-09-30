@@ -1,6 +1,7 @@
 #include "GrassCollision.h"
 #include "../Utils/ActorUtils.h"
 #include "State.h"
+#include "Deferred.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	GrassCollision::Settings,
@@ -26,6 +27,8 @@ void GrassCollision::DrawSettings()
 			ImGui::Text("If enabled, dead actors (ragdolls) will be tracked.");
 		}
 		ImGui::TreePop();
+
+		ImGui::Image(collisionTexture->srv.get(), { 512, 512 });
 	}
 }
 
@@ -111,11 +114,58 @@ void GrassCollision::Update()
 		currentCollisionCount = 0;
 		totalActorCount = 0;
 		activeActorCount = 0;
+		
+		auto cameraPosition = Util::GetAverageEyePosition();
+
+
+		// Calculate texel size in world space
+		float worldSize = 2048.0f;
+		float textureSize = 1024.0f;
+		float texelWorldSize = worldSize / textureSize;
+
+		// Snap camera position to texel grid
+		DirectX::XMFLOAT2 desiredCenter(cameraPosition.x, cameraPosition.y);
+
+		// Snap to texel boundaries
+		DirectX::XMFLOAT2 snappedCenter;
+		snappedCenter.x = floor(desiredCenter.x / texelWorldSize) * texelWorldSize;
+		snappedCenter.y = floor(desiredCenter.y / texelWorldSize) * texelWorldSize;
+		
+		static auto previousSnappedCenter = snappedCenter;
+
+		// Calculate how many texels the clipmap shifted
+		DirectX::XMFLOAT2 centerDelta;
+		centerDelta.x = snappedCenter.x - previousSnappedCenter.x;
+		centerDelta.y = snappedCenter.y - previousSnappedCenter.y;
+
+		DirectX::XMINT2 texelOffset;
+		texelOffset.x = static_cast<int>(round(centerDelta.x / texelWorldSize));
+		texelOffset.y = static_cast<int>(round(centerDelta.y / texelWorldSize));
+
+		// First frame initialization
+		static bool firstFrame = true;
+		if (firstFrame) {
+			previousSnappedCenter = snappedCenter;
+			texelOffset.x = 0;
+			texelOffset.y = 0;
+			firstFrame = false;
+		}
+
+		perFrameData.currentCenter = snappedCenter;
+		perFrameData.previousCenter = previousSnappedCenter;
+		perFrameData.worldSize = worldSize;
+		perFrameData.timeDelta = *globals::game::deltaTime;
+		perFrameData.textureDimensions = DirectX::XMUINT2(1024, 1024);
+		perFrameData.texelOffset = texelOffset;
 
 		if (settings.EnableGrassCollision)
 			UpdateCollisions(perFrameData);
 
 		perFrame->Update(perFrameData);
+
+		UpdateCollision();
+
+		previousSnappedCenter = snappedCenter;
 
 		updatePerFrame = false;
 	}
@@ -153,6 +203,44 @@ void GrassCollision::PostPostLoad()
 void GrassCollision::SetupResources()
 {
 	perFrame = new ConstantBuffer(ConstantBufferDesc<PerFrame>());
+	collisionUpdateCB = new ConstantBuffer(ConstantBufferDesc<CollisionUpdateCB>());
+
+	D3D11_TEXTURE2D_DESC texDesc = {
+		.Width = 4096,
+		.Height = 4096,
+		.MipLevels = 1,
+		.ArraySize = 1,
+		.Format = DXGI_FORMAT_R32G32_FLOAT,
+		.SampleDesc = { .Count = 1 },
+		.Usage = D3D11_USAGE_DEFAULT,
+		.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS
+	};
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+		.Format = texDesc.Format,
+		.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+		.Texture2D = {
+			.MostDetailedMip = 0,
+			.MipLevels = 1 }
+	};
+
+	D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
+		.Format = texDesc.Format,
+		.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+		.Texture2D = { .MipSlice = 0 }
+	};
+
+	collisionTexture = new Texture2D(texDesc);
+	collisionTexture->CreateSRV(srvDesc);
+	collisionTexture->CreateUAV(uavDesc);
+
+	collisionTextureSwap = new Texture2D(texDesc);
+	collisionTextureSwap->CreateSRV(srvDesc);
+	collisionTextureSwap->CreateUAV(uavDesc);
+
+	blurredCollisionTexture = new Texture2D(texDesc);
+	blurredCollisionTexture->CreateSRV(srvDesc);
+	blurredCollisionTexture->CreateUAV(uavDesc);
 }
 
 void GrassCollision::Reset()
@@ -175,3 +263,76 @@ void GrassCollision::Hooks::BSGrassShader_SetupGeometry::thunk(RE::BSShader* Thi
 	globals::features::grassCollision.Update();
 	func(This, Pass, RenderFlags);
 }
+
+void GrassCollision::ClearShaderCache()
+{
+	if (collisionUpdateCS)
+		collisionUpdateCS->Release();
+	collisionUpdateCS = nullptr;
+}
+
+ID3D11ComputeShader* GrassCollision::GetCollisionUpdateCS()
+{
+	if (!collisionUpdateCS) {
+		logger::debug("Compiling CollisionUpdateCS");
+		collisionUpdateCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\GrassCollision\\CollisionUpdateCS.hlsl", {}, "cs_5_0"));
+	}
+	return collisionUpdateCS;
+}
+
+void GrassCollision::UpdateCollision()
+{
+	auto context = globals::d3d::context;
+
+	{
+		ID3D11Buffer* buffers[1] = { *globals::game::perFrame };
+		ID3D11Buffer* vrBuffer = nullptr;
+
+		if (REL::Module::IsVR()) {
+			static REL::Relocation<ID3D11Buffer**> VRValues{ REL::Offset(0x3180688) };
+			vrBuffer = *VRValues.get();
+		}
+		if (vrBuffer) {
+			context->CSSetConstantBuffers(12, 1, buffers);
+			context->CSSetConstantBuffers(13, 1, &vrBuffer);
+		} else {
+			context->CSSetConstantBuffers(12, 1, buffers);
+		}
+	}
+
+	ID3D11Buffer* buffers[1] = { perFrame->CB() };
+	context->CSSetConstantBuffers(0, 1, buffers);
+
+	auto inputCollision = useCollisionSwap ? collisionTextureSwap : collisionTexture;
+	auto outputCollision = !useCollisionSwap ? collisionTextureSwap : collisionTexture;
+
+	useCollisionSwap = !useCollisionSwap;
+
+	ID3D11ShaderResourceView* srvs[] = { inputCollision->srv.get() };
+	context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
+
+	ID3D11UnorderedAccessView* uavs[] = { outputCollision->uav.get() };
+	context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+	context->CSGetSamplers(0, 1, &globals::deferred->linearSampler);
+
+	context->CSSetShader(GetCollisionUpdateCS(), nullptr, 0);
+	context->Dispatch(4096 / 8, 4096 / 8, 1);
+
+	context->CSSetShader(nullptr, nullptr, 0);
+
+	ID3D11Buffer* null_buffer = nullptr;
+	context->CSSetConstantBuffers(0, 1, &null_buffer);
+
+	ID3D11ShaderResourceView* null_srvs[1] = { nullptr };
+	context->CSSetShaderResources(0, 1, null_srvs);
+
+	ID3D11UnorderedAccessView* null_uavs[1] = { nullptr };
+	context->CSSetUnorderedAccessViews(0, 1, null_uavs, nullptr);
+
+	auto srv = outputCollision->srv.get();
+	context->VSSetShaderResources(100, 1, &srv);
+
+	context->VSSetSamplers(0, 1, &globals::deferred->linearSampler);
+}
+			

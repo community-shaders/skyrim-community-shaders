@@ -158,6 +158,7 @@ float4 GetMSPosition(VS_INPUT input, float windTimer)
 
 	float3 inputPosition = input.Position.xyz * (input.InstanceData4.yyy * ScaleMask.xyz + float3(1, 1, 1));
 	float3 windVector = float3(WindVector.xy, 0);
+	windVector = 0;
 
 #	ifdef GRASS_LIGHTING
 	float3 InstanceData4 = mul(world3x3, inputPosition);
@@ -228,6 +229,7 @@ VS_OUTPUT main(VS_INPUT input)
 	float4 previousMsPosition = GetMSPosition(input, PreviousWindTimer, world3x3);
 
 #		ifdef GRASS_COLLISION
+	displacement = GrassCollision::GetDisplacedPosition(input, previousMsPosition.xyz, eyeIndex);
 	previousMsPosition.xyz += displacement;
 #		endif  // GRASS_COLLISION
 

@@ -26,6 +26,8 @@ public:
 
 	bool HasShaderDefine(RE::BSShader::Type shaderType) override;
 
+	void UpdateCollision();
+
 	struct Settings
 	{
 		bool EnableGrassCollision = 1;
@@ -39,6 +41,16 @@ public:
 
 	struct alignas(16) PerFrame
 	{
+		DirectX::XMFLOAT2 currentCenter;
+		DirectX::XMFLOAT2 previousCenter;
+
+		float worldSize;
+		float timeDelta;
+		float2 pad2;
+
+		DirectX::XMUINT2 textureDimensions;
+		DirectX::XMINT2 texelOffset;  // How many texels shifted
+
 		CollisionData collisionData[256];
 		uint numCollisions;
 		uint pad0[3];
@@ -55,6 +67,29 @@ public:
 	bool updatePerFrame = false;
 	ConstantBuffer* perFrame = nullptr;
 	int eyeCount = !REL::Module::IsVR() ? 1 : 2;
+
+	virtual void ClearShaderCache() override;
+
+	ID3D11ComputeShader* GetCollisionUpdateCS();
+	void UpdateCollision(DirectX::XMFLOAT2 currentCenter, DirectX::XMFLOAT2 previousCenter);
+	ID3D11ComputeShader* collisionUpdateCS;
+
+	bool useCollisionSwap = false;
+
+	Texture2D* collisionTexture = nullptr;
+	Texture2D* collisionTextureSwap = nullptr;
+	Texture2D* blurredCollisionTexture = nullptr;
+
+	struct alignas(16) CollisionUpdateCB
+	{
+		DirectX::XMFLOAT2 currentCenter;
+		DirectX::XMFLOAT2 previousCenter;
+		float worldSize;
+		float timeDelta;
+		DirectX::XMUINT2 textureDimensions;
+	};
+
+	ConstantBuffer* collisionUpdateCB = nullptr;
 
 	virtual void SetupResources() override;
 	virtual void Reset() override;
