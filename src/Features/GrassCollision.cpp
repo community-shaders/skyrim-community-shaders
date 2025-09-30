@@ -1,7 +1,7 @@
 #include "GrassCollision.h"
 #include "../Utils/ActorUtils.h"
-#include "State.h"
 #include "Deferred.h"
+#include "State.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	GrassCollision::Settings,
@@ -131,7 +131,7 @@ void GrassCollision::Update()
 			worldSize / textureArrayDims,
 			worldSize / textureArrayDims
 		};
-		
+
 		auto cellID = eyePos / cellSize;
 		cellID = { round(cellID.x), round(cellID.y) };
 		auto cellOrigin = cellID * cellSize;
@@ -144,7 +144,7 @@ void GrassCollision::Update()
 			((int)cellID.x - textureArrayDims / 2) % textureArrayDims,
 			((int)cellID.y - textureArrayDims / 2) % textureArrayDims
 		};
-		perFrameData.eyePosition = {eyePosNI.x, eyePosNI.y, eyePosNI.z};
+		perFrameData.eyePosition = { eyePosNI.x, eyePosNI.y, eyePosNI.z };
 		perFrameData.timeDelta = *globals::game::deltaTime;
 
 		if (settings.EnableGrassCollision)
@@ -319,4 +319,3 @@ void GrassCollision::UpdateCollision()
 
 	context->VSSetSamplers(0, 1, &globals::deferred->linearSampler);
 }
-			

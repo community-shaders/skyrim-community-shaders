@@ -43,7 +43,7 @@ public:
 
 	struct alignas(16) PerFrame
 	{
-		float2 PosOffset;  // cell origin in camera model space
+		float2 PosOffset;              // cell origin in camera model space
 		DirectX::XMUINT2 ArrayOrigin;  // xy: array origin (clipmap wrapping)
 
 		float timeDelta;
