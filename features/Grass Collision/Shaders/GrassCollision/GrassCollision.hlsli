@@ -40,8 +40,12 @@ namespace GrassCollision
 			}
 
 			// Check for valid collision
-			if (lowestHeight < worldPosition.z){
-				float3 displacementNormal = normalize(lowestDisplacement);
+			if (lowestHeight < worldPosition.z) {
+				float displacementLength = length(lowestDisplacement);
+				if (displacementLength < 0.0001) {
+					return 0.0;
+				}
+				float3 displacementNormal = lowestDisplacement / displacementLength;
 				displacementNormal.z = -abs(displacementNormal.z);
 
 				float displacementAmount = max(0, worldPosition.z - lowestHeight);
