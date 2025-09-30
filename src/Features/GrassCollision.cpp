@@ -6,7 +6,9 @@
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	GrassCollision::Settings,
 	EnableGrassCollision,
-	TrackRagdolls)
+	TrackRagdolls,
+	EnableBlur,
+	BlurRadius)
 
 struct ActorRow
 {
@@ -25,6 +27,16 @@ void GrassCollision::DrawSettings()
 		ImGui::Checkbox("Track Ragdolls", &settings.TrackRagdolls);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("If enabled, dead actors (ragdolls) will be tracked.");
+		}
+		ImGui::Checkbox("Enable Blur", &settings.EnableBlur);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Applies blur to the collision texture for smoother grass transitions.");
+		}
+		if (settings.EnableBlur) {
+			ImGui::SliderFloat("Blur Radius", &settings.BlurRadius, 0.5f, 5.0f, "%.1f");
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Controls the blur intensity. Higher values create smoother but less precise collision areas.");
+			}
 		}
 		ImGui::TreePop();
 
@@ -83,7 +95,6 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 				if (Util::GetShapeBound(a_object, centerPos, radius)) {
 					if (radius < distance * 0.01f)
 						return RE::BSVisit::BSVisitControl::kContinue;
-					radius *= 2.0f;
 					CollisionData data{};
 					RE::NiPoint3 eyePosition{};
 					for (int eyeIndex = 0; eyeIndex < eyeCount; eyeIndex++) {
@@ -120,7 +131,7 @@ void GrassCollision::Update()
 
 		// Calculate texel size in world space
 		float worldSize = 2048.0f;
-		float textureSize = 1024.0f;
+		float textureSize = 4096.0f;;
 		float texelWorldSize = worldSize / textureSize;
 
 		// Snap camera position to texel grid
@@ -155,7 +166,7 @@ void GrassCollision::Update()
 		perFrameData.previousCenter = previousSnappedCenter;
 		perFrameData.worldSize = worldSize;
 		perFrameData.timeDelta = *globals::game::deltaTime;
-		perFrameData.textureDimensions = DirectX::XMUINT2(1024, 1024);
+		perFrameData.textureDimensions = DirectX::XMUINT2(4096, 4096);
 		perFrameData.texelOffset = texelOffset;
 
 		if (settings.EnableGrassCollision)
@@ -164,6 +175,8 @@ void GrassCollision::Update()
 		perFrame->Update(perFrameData);
 
 		UpdateCollision();
+
+		ApplyBlur();
 
 		previousSnappedCenter = snappedCenter;
 
@@ -204,6 +217,7 @@ void GrassCollision::SetupResources()
 {
 	perFrame = new ConstantBuffer(ConstantBufferDesc<PerFrame>());
 	collisionUpdateCB = new ConstantBuffer(ConstantBufferDesc<CollisionUpdateCB>());
+	blurCB = new ConstantBuffer(ConstantBufferDesc<BlurCB>());
 
 	D3D11_TEXTURE2D_DESC texDesc = {
 		.Width = 4096,
@@ -269,6 +283,9 @@ void GrassCollision::ClearShaderCache()
 	if (collisionUpdateCS)
 		collisionUpdateCS->Release();
 	collisionUpdateCS = nullptr;
+	if (blurCS)
+		blurCS->Release();
+	blurCS = nullptr;
 }
 
 ID3D11ComputeShader* GrassCollision::GetCollisionUpdateCS()
@@ -278,6 +295,65 @@ ID3D11ComputeShader* GrassCollision::GetCollisionUpdateCS()
 		collisionUpdateCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\GrassCollision\\CollisionUpdateCS.hlsl", {}, "cs_5_0"));
 	}
 	return collisionUpdateCS;
+}
+
+ID3D11ComputeShader* GrassCollision::GetBlurCS()
+{
+	if (!blurCS) {
+		logger::debug("Compiling BlurCS");
+		blurCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\GrassCollision\\BlurCS.hlsl", {}, "cs_5_0"));
+	}
+	return blurCS;
+}
+
+void GrassCollision::ApplyBlur()
+{
+	if (!settings.EnableBlur)
+		return;
+
+	auto context = globals::d3d::context;
+
+	BlurCB blurData{};
+	blurData.textureDimensions = DirectX::XMUINT2(4096, 4096);
+	blurData.blurRadius = settings.BlurRadius;
+
+	auto currentOutput = useCollisionSwap ? collisionTextureSwap : collisionTexture;
+
+	// Two-pass blur: horizontal then vertical
+	for (uint32_t pass = 0; pass < 2; pass++) {
+		blurData.blurDirection = pass; // 0 = horizontal, 1 = vertical
+		blurCB->Update(blurData);
+
+		ID3D11Buffer* buffers[1] = { blurCB->CB() };
+		context->CSSetConstantBuffers(0, 1, buffers);
+
+		// Input texture
+		auto inputTex = (pass == 0) ? currentOutput : blurredCollisionTexture;
+		ID3D11ShaderResourceView* srvs[] = { inputTex->srv.get() };
+		context->CSSetShaderResources(0, 1, srvs);
+
+		// Output texture
+		auto outputTex = (pass == 0) ? blurredCollisionTexture : currentOutput;
+		ID3D11UnorderedAccessView* uavs[] = { outputTex->uav.get() };
+		context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+
+		context->CSSetSamplers(0, 1, &globals::deferred->linearSampler);
+		context->CSSetShader(GetBlurCS(), nullptr, 0);
+		context->Dispatch(4096 / 8, 4096 / 8, 1);
+
+		// Clear resources
+		ID3D11ShaderResourceView* null_srvs[1] = { nullptr };
+		context->CSSetShaderResources(0, 1, null_srvs);
+		ID3D11UnorderedAccessView* null_uavs[1] = { nullptr };
+		context->CSSetUnorderedAccessViews(0, 1, null_uavs, nullptr);
+	}
+
+	context->CSSetShader(nullptr, nullptr, 0);
+	ID3D11Buffer* null_buffer = nullptr;
+	context->CSSetConstantBuffers(0, 1, &null_buffer);
+
+	auto srv = blurredCollisionTexture->srv.get();
+	context->VSSetShaderResources(100, 1, &srv);
 }
 
 void GrassCollision::UpdateCollision()
@@ -334,5 +410,7 @@ void GrassCollision::UpdateCollision()
 	context->VSSetShaderResources(100, 1, &srv);
 
 	context->VSSetSamplers(0, 1, &globals::deferred->linearSampler);
+
+
 }
 			

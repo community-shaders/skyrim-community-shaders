@@ -51,7 +51,7 @@ SamplerState LinearSampler : register(s0);
 	float2 displacementNormal = float2(0, 0);
 
 	if (saturate(previousUv.x) == previousUv.x && saturate(previousUv.y) == previousUv.y) {
-		float4 previousCollisionSample = previousCollision.SampleLevel(LinearSampler, previousUv, 0);
+		float2 previousCollisionSample = previousCollision.SampleLevel(LinearSampler, previousUv, 0);
 
 		lowestHeight = previousCollisionSample.xy;
 
@@ -60,13 +60,11 @@ SamplerState LinearSampler : register(s0);
 		lowestHeight.xy -= FrameBuffer::CameraPosAdjust[0].z - FrameBuffer::CameraPreviousPosAdjust[0].z;
 
 		float timeSince = (
-			saturate((lowestHeight.y - (lowestHeight.x + 2)) / (lowestHeight.x - (lowestHeight.x + 2)))
+			saturate((lowestHeight.y - (lowestHeight.x + 1)) / (lowestHeight.x - (lowestHeight.x + 1)))
 		);
 
 		if (timeSince == 0.0)
 			lowestHeight.xy = 100000000;
-					
-		displacementNormal = normalize(previousCollisionSample.zw);
 	}
 
 	for (uint i = 0; i < numCollisions; i++) {
@@ -81,7 +79,7 @@ SamplerState LinearSampler : register(s0);
 			float heightFromCenter = sqrt(radius * radius - dist * dist);
 			float height = collisionData[i].centre[0].z - heightFromCenter;
 			
-			if (height <= lowestHeight.x || height <= lowestHeight.y){
+			if (height <= lowestHeight.x){
 				lowestHeight = height; 
 			}
 		}

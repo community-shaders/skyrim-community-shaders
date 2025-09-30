@@ -24,7 +24,7 @@ namespace GrassCollision
 		uint numCollisions;
 	}
 	
-	float4 SampleCollision(float2 worldPosXY)
+	float2 SampleCollision(float2 worldPosXY)
 	{
 		// Convert world position to UV [0, 1]
 		float2 uv = (worldPosXY / 2048.0) * 0.5 + 0.5;
@@ -75,7 +75,7 @@ namespace GrassCollision
 			if (input.Color.w > 0.0){
 				float lowestHeight = worldPosition.z;
 
-				float4 collision = SampleCollision(worldPosition.xy);
+				float2 collision = SampleCollision(worldPosition.xy);
 
 				// Check for valid collision
 				if (collision.y < worldPosition.z)
@@ -86,7 +86,7 @@ namespace GrassCollision
 					displacementNormal.z = -abs(displacementNormal.z);
 
 					float timeSince = ease_in_out_elastic(
-						saturate((collision.y - (collision.x + 2)) / (collision.x - (collision.x + 2)))
+						saturate((collision.y - (collision.x + 1)) / (collision.x - (collision.x + 1)))
 					);
 					
 					float3 displacement = displacementNormal * displacementAmount * timeSince * 0.5;

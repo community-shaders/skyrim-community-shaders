@@ -32,6 +32,8 @@ public:
 	{
 		bool EnableGrassCollision = 1;
 		bool TrackRagdolls = 1;
+		bool EnableBlur = 1;
+		float BlurRadius = 2.0f;
 	};
 
 	struct alignas(16) CollisionData
@@ -71,8 +73,11 @@ public:
 	virtual void ClearShaderCache() override;
 
 	ID3D11ComputeShader* GetCollisionUpdateCS();
+	ID3D11ComputeShader* GetBlurCS();
 	void UpdateCollision(DirectX::XMFLOAT2 currentCenter, DirectX::XMFLOAT2 previousCenter);
+	void ApplyBlur();
 	ID3D11ComputeShader* collisionUpdateCS;
+	ID3D11ComputeShader* blurCS;
 
 	bool useCollisionSwap = false;
 
@@ -89,7 +94,15 @@ public:
 		DirectX::XMUINT2 textureDimensions;
 	};
 
+	struct alignas(16) BlurCB
+	{
+		DirectX::XMUINT2 textureDimensions;
+		float blurRadius;
+		uint32_t blurDirection; // 0 = horizontal, 1 = vertical
+	};
+
 	ConstantBuffer* collisionUpdateCB = nullptr;
+	ConstantBuffer* blurCB = nullptr;
 
 	virtual void SetupResources() override;
 	virtual void Reset() override;

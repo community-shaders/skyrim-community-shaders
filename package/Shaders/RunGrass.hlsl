@@ -141,9 +141,9 @@ cbuffer cb8 : register(b8)
 }
 
 #	ifdef GRASS_LIGHTING
-float4 GetMSPosition(VS_INPUT input, float windTimer, float3x3 world3x3)
+float4 GetMSPosition(VS_INPUT input, float windTimer, float3x3 world3x3, out float3 windDisplacement)
 #	else
-float4 GetMSPosition(VS_INPUT input, float windTimer)
+float4 GetMSPosition(VS_INPUT input, float windTimer, out float3 windDisplacement)
 #	endif
 {
 	float windAngle = 0.4 * ((input.InstanceData1.x + input.InstanceData1.y) * -0.0078125 + windTimer);
@@ -158,12 +158,11 @@ float4 GetMSPosition(VS_INPUT input, float windTimer)
 
 	float3 inputPosition = input.Position.xyz * (input.InstanceData4.yyy * ScaleMask.xyz + float3(1, 1, 1));
 	float3 windVector = float3(WindVector.xy, 0);
-	windVector = 0;
 
 #	ifdef GRASS_LIGHTING
 	float3 InstanceData4 = mul(world3x3, inputPosition);
 	float4 msPosition;
-	msPosition.xyz = input.InstanceData1.xyz + (windVector * windPower + InstanceData4);
+	msPosition.xyz = input.InstanceData1.xyz + InstanceData4;
 #	else
 	float3 instancePosition;
 	instancePosition.z = dot(
@@ -172,9 +171,10 @@ float4 GetMSPosition(VS_INPUT input, float windTimer)
 	instancePosition.y = dot(input.InstanceData3.xyz, inputPosition);
 
 	float4 msPosition;
-	msPosition.xyz = input.InstanceData1.xyz + (windVector * windPower + instancePosition);
+	msPosition.xyz = input.InstanceData1.xyz + instancePosition;
 #	endif
 	msPosition.w = 1;
+	windDisplacement = windVector * windPower;
 
 	return msPosition;
 }
@@ -191,12 +191,15 @@ VS_OUTPUT main(VS_INPUT input)
 	);
 	float3x3 world3x3 = float3x3(input.InstanceData2.xyz, input.InstanceData3.xyz, float3(input.InstanceData4.x, input.InstanceData2.w, input.InstanceData3.w));
 
-	float4 msPosition = GetMSPosition(input, WindTimer, world3x3);
+	float3 windDisplacement;
+	float4 msPosition = GetMSPosition(input, WindTimer, world3x3, windDisplacement);
 
 #		ifdef GRASS_COLLISION
 	float3 displacement = GrassCollision::GetDisplacedPosition(input, msPosition.xyz, eyeIndex);
 	msPosition.xyz += displacement;
 #		endif  // GRASS_COLLISION
+
+	msPosition.xyz += windDisplacement;
 
 	float4 projSpacePosition = mul(WorldViewProj[eyeIndex], msPosition);
 #		if !defined(VR)
@@ -226,12 +229,15 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.ViewSpacePosition = mul(WorldView[eyeIndex], msPosition).xyz;
 	vsout.WorldPosition = mul(World[eyeIndex], msPosition);
 
-	float4 previousMsPosition = GetMSPosition(input, PreviousWindTimer, world3x3);
+	float3 previousWindDisplacement;
+	float4 previousMsPosition = GetMSPosition(input, PreviousWindTimer, world3x3, previousWindDisplacement);
 
 #		ifdef GRASS_COLLISION
 	displacement = GrassCollision::GetDisplacedPosition(input, previousMsPosition.xyz, eyeIndex);
 	previousMsPosition.xyz += displacement;
 #		endif  // GRASS_COLLISION
+
+	previousMsPosition.xyz += previousWindDisplacement;
 
 	vsout.PreviousWorldPosition = mul(PreviousWorld[eyeIndex], previousMsPosition);
 #		if defined(VR)
@@ -258,12 +264,15 @@ VS_OUTPUT main(VS_INPUT input)
 #		endif  // VR
 	);
 
-	float4 msPosition = GetMSPosition(input, WindTimer);
+	float3 windDisplacement;
+	float4 msPosition = GetMSPosition(input, WindTimer, windDisplacement);
 
 #		ifdef GRASS_COLLISION
 	float3 displacement = GrassCollision::GetDisplacedPosition(input, msPosition.xyz, eyeIndex);
 	msPosition.xyz += displacement;
 #		endif  // GRASS_COLLISION
+
+	msPosition.xyz += windDisplacement;
 
 	float4 projSpacePosition = mul(WorldViewProj[eyeIndex], msPosition);
 #		if !defined(VR)
@@ -298,8 +307,9 @@ VS_OUTPUT main(VS_INPUT input)
 
 	vsout.ViewSpacePosition = mul(WorldView[eyeIndex], msPosition).xyz;
 	vsout.WorldPosition = mul(World[eyeIndex], msPosition);
-
-	float4 previousMsPosition = GetMSPosition(input, PreviousWindTimer);
+	
+	float3 previousWindDisplacement;
+	float4 previousMsPosition = GetMSPosition(input, PreviousWindTimer, previousWindDisplacement);
 #		if defined(VR)
 	Stereo::VR_OUTPUT VRout = Stereo::GetVRVSOutput(projSpacePosition, eyeIndex);
 	vsout.HPosition = VRout.VRPosition;
@@ -310,6 +320,8 @@ VS_OUTPUT main(VS_INPUT input)
 #		ifdef GRASS_COLLISION
 	previousMsPosition.xyz += displacement;
 #		endif  // GRASS_COLLISION
+
+	previousMsPosition.xyz += previousWindDisplacement;
 
 	vsout.PreviousWorldPosition = mul(PreviousWorld[eyeIndex], previousMsPosition);
 
