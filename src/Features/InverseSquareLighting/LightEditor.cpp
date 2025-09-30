@@ -42,11 +42,19 @@ void LightEditor::DrawSettings()
 		sortOption = static_cast<SortOption>(selectedSort);
 	}
 
-	if (ImGui::Button("Export Lights to JSON")) {
+	if (ImGui::Button("Export All Lights to JSON")) {
 		ExportLightsToJson();
 	}
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Export all visible lights to JSON file with RefID, timestamp, and light data");
+		ImGui::Text("Export all visible lights with metadata to JSON file with RefID, timestamp, and light data");
+	}
+
+	ImGui::SameLine();
+	if (ImGui::Button("Export Selected Light")) {
+		ExportSelectedLightToJson();
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Export only the currently selected light to JSON file");
 	}
 
 	if (ImGui::BeginCombo("Lights", selected.isSelected ? GetLightName(selected).c_str() : "Select a light")) {
@@ -411,11 +419,20 @@ void LightEditor::ExportLightsToJson()
 		{"lightCount", lights.size()}
 	};
 
-	// Add light data
+	// Add light data - only include lights with metadata (edited/meaningful lights)
 	exportData["lights"] = json::array();
+	int metadataLightCount = 0;
 	for (const auto& light : lights) {
-		exportData["lights"].push_back(CreateLightJsonData(light));
+		// Only export lights that have metadata (isRef or isAttached)
+		if (light.isRef || light.isAttached) {
+			exportData["lights"].push_back(CreateLightJsonData(light));
+			metadataLightCount++;
+		}
 	}
+	
+	// Update the light count to reflect only exported lights
+	exportData["exportSettings"]["lightCount"] = metadataLightCount;
+	exportData["exportSettings"]["totalSceneLights"] = lights.size();
 
 	// Generate filename with timestamp
 	const auto exportPath = Util::PathHelpers::GetCommunityShaderPath() / "LightExports";
@@ -440,7 +457,7 @@ void LightEditor::ExportLightsToJson()
 	outFile << exportData.dump(4);
 	outFile.close();
 
-	logger::info("Successfully exported {} lights to: {}", lights.size(), filePath.string());
+	logger::info("Successfully exported {} lights with metadata to: {}", metadataLightCount, filePath.string());
 }
 
 json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
@@ -516,4 +533,97 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 	}
 
 	return lightData;
+}
+
+void LightEditor::ExportSelectedLightToJson()
+{
+	if (!selected.isSelected) {
+		logger::warn("No light is currently selected for export");
+		return;
+	}
+
+	json exportData;
+	
+	// Add timestamp
+	const auto now = std::chrono::system_clock::now();
+	const auto time_t = std::chrono::system_clock::to_time_t(now);
+	std::stringstream ss;
+	ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+	exportData["timestamp"] = ss.str();
+
+	// Add current scene context
+	const auto* tes = RE::TES::GetSingleton();
+	const auto* currentCell = tes ? tes->interiorCell : nullptr;
+	if (!currentCell && tes) {
+		const auto* player = RE::PlayerCharacter::GetSingleton();
+		if (player) {
+			currentCell = player->GetParentCell();
+		}
+	}
+	
+	// Cell information
+	if (currentCell) {
+		exportData["cell"] = {
+			{"formID", fmt::format("0x{:08X}", currentCell->GetFormID())},
+			{"editorID", currentCell->GetFormEditorID() ? currentCell->GetFormEditorID() : "Unknown"},
+			{"isInterior", currentCell->IsInteriorCell()}
+		};
+	} else {
+		exportData["cell"] = {
+			{"formID", "0x00000000"},
+			{"editorID", "Unknown"},
+			{"isInterior", false}
+		};
+	}
+
+	// Player position for reference
+	const auto* player = RE::PlayerCharacter::GetSingleton();
+	if (player) {
+		const auto playerPos = player->GetPosition();
+		exportData["playerPosition"] = {
+			{"x", playerPos.x},
+			{"y", playerPos.y},
+			{"z", playerPos.z}
+		};
+	}
+
+	// Export settings for selected light
+	exportData["exportSettings"] = {
+		{"exportType", "selected_light"},
+		{"lightCount", 1},
+		{"selectedLightInfo", {
+			{"refID", fmt::format("0x{:08X}", selected.id)},
+			{"name", selected.name},
+			{"type", selected.isRef ? "Reference" : (selected.isAttached ? "Attached" : "Other")}
+		}}
+	};
+
+	// Add the selected light data
+	exportData["lights"] = json::array();
+	exportData["lights"].push_back(CreateLightJsonData(selected));
+
+	// Generate filename with timestamp
+	const auto exportPath = Util::PathHelpers::GetCommunityShaderPath() / "LightExports";
+	try {
+		std::filesystem::create_directories(exportPath);
+	} catch (const std::filesystem::filesystem_error& e) {
+		logger::warn("Failed to create export directory: {}", e.what());
+		return;
+	}
+
+	std::stringstream timeStream;
+	timeStream << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
+	const auto filename = fmt::format("selected_light_export_{}.json", timeStream.str());
+	const auto filePath = exportPath / filename;
+
+	std::ofstream outFile(filePath);
+	if (!outFile.is_open()) {
+		logger::warn("Failed to create export file: {}", filePath.string());
+		return;
+	}
+
+	outFile << exportData.dump(4);
+	outFile.close();
+
+	logger::info("Successfully exported selected light to: {}", filePath.string());
 }

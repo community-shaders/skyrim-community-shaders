@@ -102,5 +102,6 @@ private:
 	void UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight);
 
 	void ExportLightsToJson();
+	void ExportSelectedLightToJson();
 	json CreateLightJsonData(const LightInfo& lightInfo);
 };
