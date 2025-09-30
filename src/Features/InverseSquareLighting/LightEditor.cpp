@@ -426,8 +426,9 @@ void LightEditor::ExportLightsToJson()
 		return;
 	}
 
-	const auto filename = fmt::format("lights_export_{:%Y%m%d_%H%M%S}.json", 
-		std::chrono::system_clock::now());
+	std::stringstream timeStream;
+	timeStream << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
+	const auto filename = fmt::format("lights_export_{}.json", timeStream.str());
 	const auto filePath = exportPath / filename;
 
 	std::ofstream outFile(filePath);
@@ -472,7 +473,7 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 			{"radius", current.data.radius},
 			{"size", current.data.size},
 			{"cutoffOverride", current.data.cutoffOverride},
-			{"isInverseSquare", current.data.flags.any(LightLimitFix::LightFlags::InverseSquare)}
+			{"isInverseSquare", static_cast<bool>(*reinterpret_cast<const uint32_t*>(&current.data.flags) & static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare))}
 		};
 
 		// Position offset if applicable
@@ -486,16 +487,17 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 
 		// TES flags if applicable
 		if (!lightInfo.isOther && displayInfo.ownerFormId != 0) {
+			auto flagsValue = *reinterpret_cast<const uint32_t*>(&current.tesFlags);
 			lightData["settings"]["tesFlags"] = {
-				{"dynamic", current.tesFlags.any(RE::TES_LIGHT_FLAGS::kDynamic)},
-				{"negative", current.tesFlags.any(RE::TES_LIGHT_FLAGS::kNegative)},
-				{"flicker", current.tesFlags.any(RE::TES_LIGHT_FLAGS::kFlicker)},
-				{"flickerSlow", current.tesFlags.any(RE::TES_LIGHT_FLAGS::kFlickerSlow)},
-				{"pulse", current.tesFlags.any(RE::TES_LIGHT_FLAGS::kPulse)},
-				{"pulseSlow", current.tesFlags.any(RE::TES_LIGHT_FLAGS::kPulseSlow)},
-				{"hemiShadow", current.tesFlags.any(RE::TES_LIGHT_FLAGS::kHemiShadow)},
-				{"omniShadow", current.tesFlags.any(RE::TES_LIGHT_FLAGS::kOmniShadow)},
-				{"portalStrict", current.tesFlags.any(RE::TES_LIGHT_FLAGS::kPortalStrict)}
+				{"dynamic", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic))},
+				{"negative", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative))},
+				{"flicker", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker))},
+				{"flickerSlow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow))},
+				{"pulse", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse))},
+				{"pulseSlow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow))},
+				{"hemiShadow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow))},
+				{"omniShadow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow))},
+				{"portalStrict", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict))}
 			};
 		}
 
