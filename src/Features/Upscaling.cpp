@@ -19,7 +19,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	frameLimitMode,
 	frameGenerationMode,
 	frameGenerationForceEnable,
-	streamlineLogLevel);
+	streamlineLogLevel,
+	sharpnessFSR,
+	sharpnessDLSS);
 
 decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChainUpscaling;
 
@@ -204,7 +206,10 @@ void Upscaling::DrawSettings()
 			}
 
 			if (baseLabel) {
-				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, baseLabel);
+				// Format the label with preset name and resolution scale
+				std::string labelWithScale = std::format("{} ( {:.2f}x )", baseLabel, (resolutionScale.x + resolutionScale.y) * 0.5f);
+
+				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, labelWithScale.c_str());
 			}
 
 			if (upscaleMethod == UpscaleMethod::kFSR) {
@@ -704,21 +709,28 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	auto screenHeight = static_cast<int>(screenSize.y);
 
 	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
-		float resolutionScaleBase = 1.0f;
+		float2 resolutionScaleBase = { 1.0f, 1.0f };
 
 		if (globals::game::isVR) {
-			resolutionScaleBase = 1.0f;
+			resolutionScaleBase = { 1.0f, 1.0f };
 		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
 			resolutionScaleBase = streamline.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
 		} else if (upscaleMethod == UpscaleMethod::kFSR) {
 			resolutionScaleBase = fidelityFX.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
 		}
 
-		auto renderWidth = static_cast<int>(screenWidth * resolutionScaleBase);
-		auto renderHeight = static_cast<int>(screenHeight * resolutionScaleBase);
+		auto renderWidth = static_cast<int>(screenWidth * resolutionScaleBase.x);
+		auto renderHeight = static_cast<int>(screenHeight * resolutionScaleBase.y);
 
-		resolutionScale.x = static_cast<float>(renderWidth) / static_cast<float>(screenWidth);
-		resolutionScale.y = static_cast<float>(renderHeight) / static_cast<float>(screenHeight);
+		// Use precise scale if the integer conversion doesn't change the dimensions
+		if (renderWidth == screenWidth && renderHeight == screenHeight) {
+			// For DLAA and other 1:1 modes, ensure exactly 1.0
+			resolutionScale.x = 1.0f;
+			resolutionScale.y = 1.0f;
+		} else {
+			resolutionScale.x = static_cast<float>(renderWidth) / static_cast<float>(screenWidth);
+			resolutionScale.y = static_cast<float>(renderHeight) / static_cast<float>(screenHeight);
+		}
 
 		auto phaseCount = GetJitterPhaseCount(renderWidth, screenWidth);
 
