@@ -43,7 +43,7 @@ namespace GrassCollision
 			if (lowestHeight < worldPosition.z) {
 				float displacementLength = length(lowestDisplacement);
 				if (displacementLength < 0.0001) {
-					return 0.0;
+					return float3(0.0, 0.0, 0.0);
 				}
 				float3 displacementNormal = lowestDisplacement / displacementLength;
 				displacementNormal.z = -abs(displacementNormal.z);
@@ -58,6 +58,6 @@ namespace GrassCollision
 
 		}
 
-		return 0.0;
+		return float3(0.0, 0.0, 0.0);
 	}
 }
