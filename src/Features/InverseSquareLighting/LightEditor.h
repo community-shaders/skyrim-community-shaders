@@ -100,4 +100,7 @@ private:
 	static std::string GetLightName(LightInfo& lightInfo);
 
 	void UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight);
+
+	void ExportLightsToJson();
+	json CreateLightJsonData(const LightInfo& lightInfo);
 };

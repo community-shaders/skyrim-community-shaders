@@ -1,6 +1,13 @@
 ﻿#include "Features/InverseSquareLighting/LightEditor.h"
 #include "Features/LightLimitFix.h"
 #include "Menu.h"
+#include "Util.h"
+#include <chrono>
+#include <fstream>
+#include <filesystem>
+#include <sstream>
+#include <iomanip>
+#include <format>
 
 void LightEditor::DrawSettings()
 {
@@ -33,6 +40,13 @@ void LightEditor::DrawSettings()
 	int selectedSort = static_cast<int>(sortOption);
 	if (ImGui::Combo("Sort By", &selectedSort, SortOptionLabels, static_cast<int>(SortOption::Count))) {
 		sortOption = static_cast<SortOption>(selectedSort);
+	}
+
+	if (ImGui::Button("Export Lights to JSON")) {
+		ExportLightsToJson();
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Export all visible lights to JSON file with RefID, timestamp, and light data");
 	}
 
 	if (ImGui::BeginCombo("Lights", selected.isSelected ? GetLightName(selected).c_str() : "Select a light")) {
@@ -336,4 +350,168 @@ void LightEditor::SortLights()
 	default:
 		break;
 	}
+}
+
+void LightEditor::ExportLightsToJson()
+{
+	if (lights.empty()) {
+		logger::warn("No lights available to export");
+		return;
+	}
+
+	json exportData;
+	
+	// Add timestamp
+	const auto now = std::chrono::system_clock::now();
+	const auto time_t = std::chrono::system_clock::to_time_t(now);
+	std::stringstream ss;
+	ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+	exportData["timestamp"] = ss.str();
+
+	// Add current scene context
+	const auto* tes = RE::TES::GetSingleton();
+	const auto* currentCell = tes ? tes->interiorCell : nullptr;
+	if (!currentCell && tes) {
+		const auto* player = RE::PlayerCharacter::GetSingleton();
+		if (player) {
+			currentCell = player->GetParentCell();
+		}
+	}
+	
+	// Cell information
+	if (currentCell) {
+		exportData["cell"] = {
+			{"formID", fmt::format("0x{:08X}", currentCell->GetFormID())},
+			{"editorID", currentCell->GetFormEditorID() ? currentCell->GetFormEditorID() : "Unknown"},
+			{"isInterior", currentCell->IsInteriorCell()}
+		};
+	} else {
+		exportData["cell"] = {
+			{"formID", "0x00000000"},
+			{"editorID", "Unknown"},
+			{"isInterior", false}
+		};
+	}
+
+	// Player position for reference
+	const auto* player = RE::PlayerCharacter::GetSingleton();
+	if (player) {
+		const auto playerPos = player->GetPosition();
+		exportData["playerPosition"] = {
+			{"x", playerPos.x},
+			{"y", playerPos.y},
+			{"z", playerPos.z}
+		};
+	}
+
+	// Filter and sort settings used for this export
+	exportData["exportSettings"] = {
+		{"filterOption", FilterOptionLabels[static_cast<int>(filterOption)]},
+		{"sortOption", SortOptionLabels[static_cast<int>(sortOption)]},
+		{"lightCount", lights.size()}
+	};
+
+	// Add light data
+	exportData["lights"] = json::array();
+	for (const auto& light : lights) {
+		exportData["lights"].push_back(CreateLightJsonData(light));
+	}
+
+	// Generate filename with timestamp
+	const auto exportPath = Util::PathHelpers::GetCommunityShaderPath() / "LightExports";
+	try {
+		std::filesystem::create_directories(exportPath);
+	} catch (const std::filesystem::filesystem_error& e) {
+		logger::warn("Failed to create export directory: {}", e.what());
+		return;
+	}
+
+	const auto filename = fmt::format("lights_export_{:%Y%m%d_%H%M%S}.json", 
+		std::chrono::system_clock::now());
+	const auto filePath = exportPath / filename;
+
+	std::ofstream outFile(filePath);
+	if (!outFile.is_open()) {
+		logger::warn("Failed to create export file: {}", filePath.string());
+		return;
+	}
+
+	outFile << exportData.dump(4);
+	outFile.close();
+
+	logger::info("Successfully exported {} lights to: {}", lights.size(), filePath.string());
+}
+
+json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
+{
+	json lightData;
+
+	// Basic light info - using refID as the main identifier for compatibility
+	lightData["refID"] = fmt::format("0x{:08X}", lightInfo.id);
+	lightData["editorID"] = lightInfo.name;
+	lightData["index"] = lightInfo.index;
+	lightData["type"] = lightInfo.isRef ? "Reference" : (lightInfo.isAttached ? "Attached" : "Other");
+	lightData["memoryAddress"] = fmt::format("{:p}", lightInfo.ptr);
+
+	// Position - using standard light placer format
+	lightData["position"] = {
+		{"x", lightInfo.position.x},
+		{"y", lightInfo.position.y},
+		{"z", lightInfo.position.z}
+	};
+
+	// If this is the selected light, include detailed settings
+	if (lightInfo == selected && lightInfo.isSelected) {
+		lightData["settings"] = {
+			{"color", {
+				{"r", current.data.diffuse.red},
+				{"g", current.data.diffuse.green},
+				{"b", current.data.diffuse.blue}
+			}},
+			{"intensity", current.data.fade},
+			{"radius", current.data.radius},
+			{"size", current.data.size},
+			{"cutoffOverride", current.data.cutoffOverride},
+			{"isInverseSquare", current.data.flags.any(LightLimitFix::LightFlags::InverseSquare)}
+		};
+
+		// Position offset if applicable
+		if (!lightInfo.isOther) {
+			lightData["settings"]["positionOffset"] = {
+				{"x", current.pos.x},
+				{"y", current.pos.y},
+				{"z", current.pos.z}
+			};
+		}
+
+		// TES flags if applicable
+		if (!lightInfo.isOther && displayInfo.ownerFormId != 0) {
+			lightData["settings"]["tesFlags"] = {
+				{"dynamic", current.tesFlags.any(RE::TES_LIGHT_FLAGS::kDynamic)},
+				{"negative", current.tesFlags.any(RE::TES_LIGHT_FLAGS::kNegative)},
+				{"flicker", current.tesFlags.any(RE::TES_LIGHT_FLAGS::kFlicker)},
+				{"flickerSlow", current.tesFlags.any(RE::TES_LIGHT_FLAGS::kFlickerSlow)},
+				{"pulse", current.tesFlags.any(RE::TES_LIGHT_FLAGS::kPulse)},
+				{"pulseSlow", current.tesFlags.any(RE::TES_LIGHT_FLAGS::kPulseSlow)},
+				{"hemiShadow", current.tesFlags.any(RE::TES_LIGHT_FLAGS::kHemiShadow)},
+				{"omniShadow", current.tesFlags.any(RE::TES_LIGHT_FLAGS::kOmniShadow)},
+				{"portalStrict", current.tesFlags.any(RE::TES_LIGHT_FLAGS::kPortalStrict)}
+			};
+		}
+
+		// Additional metadata for reference/attached lights
+		if (lightInfo.isRef || lightInfo.isAttached) {
+			lightData["metadata"] = {
+				{"ownerFormID", fmt::format("0x{:08X}", displayInfo.ownerFormId)},
+				{"ownerEditorID", displayInfo.ownerEditorId},
+				{"baseObjectFormID", fmt::format("0x{:08X}", displayInfo.baseObjectFormId)},
+				{"ownerLastEditedBy", displayInfo.ownerLastEditedBy},
+				{"cellEditorID", displayInfo.cellEditorId},
+				{"lightFormID", fmt::format("0x{:08X}", displayInfo.lighFormId)},
+				{"lightEditorID", displayInfo.lighEditorId}
+			};
+		}
+	}
+
+	return lightData;
 }
