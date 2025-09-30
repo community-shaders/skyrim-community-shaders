@@ -9,16 +9,12 @@ struct CollisionData
 
 cbuffer PerFrameCB : register(b0)
 {
-	float2 currentCenter;
-	float2 previousCenter;
+	float2 PosOffset;  // cell origin in camera model space
+	uint2 ArrayOrigin;  // xy: array origin (clipmap wrapping)
 
-	float worldSize;
 	float timeDelta;
-	float2 pad;
+	float3 eyePosition;
 
-	uint2 textureDimensions;
-	int2 texelOffset;   
-		
 	CollisionData collisionData[256];
 	uint numCollisions;
 	uint pad0[3];
@@ -30,60 +26,56 @@ RWTexture2D<float2> currentCollision : register(u0);
 
 SamplerState LinearSampler : register(s0);
 
-[numthreads(8, 8, 1)] void main(
-	uint3 groupId
-	: SV_GroupID, uint3 dispatchThreadId
-	: SV_DispatchThreadID, uint3 groupThreadId
-	: SV_GroupThreadID, uint groupIndex
-	: SV_GroupIndex) {
-	const float textureSize = 4096;
+[numthreads(8, 8, 1)] void main(uint3 dtid : SV_DispatchThreadID)
+{
+	const uint2 ARRAY_DIM = uint2(1024, 1024);
+	const float2 ARRAY_SIZE = float2(2048.0, 2048.0);
 
-	float2 uv = float2(dispatchThreadId.xy + 0.5) / textureSize;
+	uint2 cellID = (uint2)max(int2(dtid.xy) - (int2)ArrayOrigin, 0) % ARRAY_DIM;
 
-	float2 worldPosition = (uv * 2.0 - 1.0) * 2048.0;
-
-	float2 eyePositionDelta = FrameBuffer::CameraPosAdjust[0].xyz - FrameBuffer::CameraPreviousPosAdjust[0].xyz;
-
-	float2 previousUv = worldPosition + eyePositionDelta.xy;
-	previousUv = (previousUv / 2048.0) * 0.5 + 0.5;
+	float2 cellCentreMS = cellID + 0.5 - ARRAY_DIM / 2;
+	cellCentreMS = cellCentreMS / ARRAY_DIM * ARRAY_SIZE + PosOffset.xy;
 
 	float2 lowestHeight = 100000000;
-	float2 displacementNormal = float2(0, 0);
 
-	if (saturate(previousUv.x) == previousUv.x && saturate(previousUv.y) == previousUv.y) {
-		float2 previousCollisionSample = previousCollision.SampleLevel(LinearSampler, previousUv, 0);
+	uint2 prevTexID = (cellID + ArrayOrigin) % ARRAY_DIM;
+	float2 previousCollisionSample = previousCollision[prevTexID];
 
-		lowestHeight = previousCollisionSample.xy;
+	// Apply temporal decay
+	// if (previousCollisionSample.x < 100000000) {
+	// 	lowestHeight = previousCollisionSample;
+	// 	lowestHeight.y += timeDelta;
 
-		lowestHeight.y += timeDelta;
+	// 	// Apply camera height change
+	// 	lowestHeight.x -= FrameBuffer::CameraPosAdjust[0].z - FrameBuffer::CameraPreviousPosAdjust[0].z;
 
-		lowestHeight.xy -= FrameBuffer::CameraPosAdjust[0].z - FrameBuffer::CameraPreviousPosAdjust[0].z;
+	// 	// Fade out over time
+	// 	float timeSince = saturate((lowestHeight.y - (lowestHeight.x + 1)) / max(lowestHeight.x - (lowestHeight.x + 1), 0.001));
 
-		float timeSince = (
-			saturate((lowestHeight.y - (lowestHeight.x + 1)) / (lowestHeight.x - (lowestHeight.x + 1)))
-		);
+	// 	if (timeSince == 0.0)
+	// 		lowestHeight = 100000000;
+	// }
 
-		if (timeSince == 0.0)
-			lowestHeight.xy = 100000000;
-	}
-
+	// Process collision data
 	for (uint i = 0; i < numCollisions; i++) {
 		float radius = collisionData[i].centre[0].w;
-		
-		// Get the lowest point of the sphere at WorldPosition.xy
-		float dist = distance(collisionData[i].centre[0].xy, worldPosition.xy);
-		
+		collisionData[i].centre[0].xyz -= eyePosition;
+
+		// Get the lowest point of the sphere at this cell position
+		float dist = distance(collisionData[i].centre[0].xy, cellCentreMS);
+
 		// Only process if we're within the sphere's radius
 		if (dist < radius) {
 			// Get sphere geometry
 			float heightFromCenter = sqrt(radius * radius - dist * dist);
 			float height = collisionData[i].centre[0].z - heightFromCenter;
-			
-			if (height <= lowestHeight.x){
-				lowestHeight = height; 
+
+			if (height <= lowestHeight.x) {
+				lowestHeight = height;
+				lowestHeight = -1000;
 			}
 		}
 	}
 
-	currentCollision[dispatchThreadId.xy] = float4(lowestHeight, displacementNormal);
+	currentCollision[dtid.xy] = lowestHeight;
 }

@@ -10,51 +10,62 @@ namespace GrassCollision
 
 	cbuffer GrassCollisionPerFrame : register(b5)
 	{
-		float2 currentCenter;
-		float2 previousCenter;
+		float2 PosOffset;  // cell origin in camera model space
+		uint2 ArrayOrigin;  // xy: array origin (clipmap wrapping)
 
-		float worldSize;
 		float timeDelta;
-		float2 pad;
+		float3 eyePosition;
 
-		uint2 textureDimensions;
-		int2 texelOffset;   
-		
 		CollisionData collisionData[256];
 		uint numCollisions;
+		uint pad0[3];
 	}
-	
-	float2 SampleCollision(float2 worldPosXY)
+
+	const static uint2 ARRAY_DIM = uint2(1024, 1024);
+	const static float2 ARRAY_SIZE = float2(2048.0, 2048.0);
+	const static float2 CELL_SIZE = ARRAY_SIZE / ARRAY_DIM;
+
+	float2 SampleCollision(float2 worldPosMS)
 	{
-		// Convert world position to UV [0, 1]
-		float2 uv = (worldPosXY / 2048.0) * 0.5 + 0.5;
-		
+		// Convert model space position to clipmap coordinates (similar to Skylighting)
+		float2 positionMSAdjusted = worldPosMS - PosOffset;
+		float2 uv = positionMSAdjusted / ARRAY_SIZE + 0.5;
+
+		// Check bounds
+		if (any(uv < 0) || any(uv > 1))
+			return float2(100000000, 0);
+
 		// Sample at mip level 0 (vertex shader requires explicit mip level)
 		return Collision.SampleLevel(CollisionSampler, uv, 0);
 	}
 
 	// Compute surface normal from Collision texture
-    float3 GetCollisionNormal(float2 worldPosXY, int pixelOffset = 1)
-    {
-        // Convert world position to UV
-        float2 uv = (worldPosXY / 2048.0) * 0.5 + 0.5;
+	float3 GetCollisionNormal(float2 worldPosMS, int pixelOffset = 1)
+	{
+		// Convert model space position to clipmap coordinates
+		float2 positionMSAdjusted = worldPosMS - PosOffset;
+		float2 uv = positionMSAdjusted / ARRAY_SIZE + 0.5;
 
-        // Fetch texel size (inverse of textureDimensions, supplied in cbuffer)
-        float2 texelSize = 1.0 / textureDimensions;
+		// Check bounds
+		if (any(uv < 0) || any(uv > 1))
+			return float3(0, 0, 1);
 
-        // Sample with offsets in texture space
-        float heightLeft  = Collision.SampleLevel(CollisionSampler, uv + float2(-texelSize.x * pixelOffset, 0), 0).y;
-        float heightRight = Collision.SampleLevel(CollisionSampler, uv + float2( texelSize.x * pixelOffset, 0), 0).y;
-        float heightDown  = Collision.SampleLevel(CollisionSampler, uv + float2(0, -texelSize.y * pixelOffset), 0).y;
-        float heightUp    = Collision.SampleLevel(CollisionSampler, uv + float2(0,  texelSize.y * pixelOffset), 0).y;
+		// Fetch texel size
+		float2 texelSize = 1.0 / ARRAY_DIM;
 
-        // Build tangent vectors in XY plane
-        float3 tangentX = float3(1, 0, heightRight - heightLeft);
-        float3 tangentY = float3(0, 1, heightUp - heightDown);
+		// Sample with offsets in texture space
+		float heightLeft = Collision.SampleLevel(CollisionSampler, uv + float2(-texelSize.x * pixelOffset, 0), 0).x;
+		float heightRight = Collision.SampleLevel(CollisionSampler, uv + float2(texelSize.x * pixelOffset, 0), 0).x;
+		float heightDown = Collision.SampleLevel(CollisionSampler, uv + float2(0, -texelSize.y * pixelOffset), 0).x;
+		float heightUp = Collision.SampleLevel(CollisionSampler, uv + float2(0, texelSize.y * pixelOffset), 0).x;
 
-        // Cross product gives the surface normal
-        return normalize(cross(tangentX, tangentY));
-    }
+		// Build tangent vectors in XY plane
+		float3 tangentX = float3(1, 0, heightRight - heightLeft);
+		float3 tangentY = float3(0, 1, heightUp - heightDown);
+
+		// Cross product gives the surface normal
+		return normalize(cross(tangentX, tangentY));
+	}
 
 	float ease_in_out_elastic(float x) {
 		float t = x; float b = 0; float c = 1; float d = 1;
@@ -69,26 +80,26 @@ namespace GrassCollision
 	float3 GetDisplacedPosition(VS_INPUT input, float3 position, uint eyeIndex = 0)
 	{
 		float3 worldPosition = mul(World[eyeIndex], float4(position, 1.0)).xyz;
-		float2 uv = (worldPosition.xy / 2048.0) * 0.5 + 0.5;
 
-		if (saturate(uv.x) == uv.x && saturate(uv.y) == uv.y) {
-			if (input.Color.w > 0.0){
-				float lowestHeight = worldPosition.z;
+		// Convert to model space (camera-relative) for clipmap sampling
+		float2 worldPosMS = worldPosition.xy;
 
-				float2 collision = SampleCollision(worldPosition.xy);
+		if (input.Color.w > 0.0) {
+			float2 collision = SampleCollision(worldPosMS);
 
-				// Check for valid collision
-				if (collision.y < worldPosition.z)
-				{
+			// Check for valid collision (not out of bounds)
+			if (collision.x < 100000000) {
+				// Check if collision is below grass vertex
+				if (collision.x < worldPosition.z) {
 					float displacementAmount = max(0, worldPosition.z - collision.x);
 
-					float3 displacementNormal = -GetCollisionNormal(worldPosition.xy);
+					float3 displacementNormal = -GetCollisionNormal(worldPosMS);
 					displacementNormal.z = -abs(displacementNormal.z);
 
 					float timeSince = ease_in_out_elastic(
-						saturate((collision.y - (collision.x + 1)) / (collision.x - (collision.x + 1)))
+						saturate((collision.y - (collision.x + 1)) / max(collision.x - (collision.x + 1), 0.001))
 					);
-					
+
 					float3 displacement = displacementNormal * displacementAmount * timeSince * 0.5;
 
 					return displacement;

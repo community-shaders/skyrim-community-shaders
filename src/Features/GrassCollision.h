@@ -43,15 +43,11 @@ public:
 
 	struct alignas(16) PerFrame
 	{
-		DirectX::XMFLOAT2 currentCenter;
-		DirectX::XMFLOAT2 previousCenter;
+		float2 PosOffset;  // cell origin in camera model space
+		DirectX::XMUINT2 ArrayOrigin;  // xy: array origin (clipmap wrapping)
 
-		float worldSize;
 		float timeDelta;
-		float2 pad2;
-
-		DirectX::XMUINT2 textureDimensions;
-		DirectX::XMINT2 texelOffset;  // How many texels shifted
+		float3 eyePosition;
 
 		CollisionData collisionData[256];
 		uint numCollisions;
@@ -73,36 +69,12 @@ public:
 	virtual void ClearShaderCache() override;
 
 	ID3D11ComputeShader* GetCollisionUpdateCS();
-	ID3D11ComputeShader* GetBlurCS();
-	void UpdateCollision(DirectX::XMFLOAT2 currentCenter, DirectX::XMFLOAT2 previousCenter);
-	void ApplyBlur();
 	ID3D11ComputeShader* collisionUpdateCS;
-	ID3D11ComputeShader* blurCS;
 
 	bool useCollisionSwap = false;
 
 	Texture2D* collisionTexture = nullptr;
 	Texture2D* collisionTextureSwap = nullptr;
-	Texture2D* blurredCollisionTexture = nullptr;
-
-	struct alignas(16) CollisionUpdateCB
-	{
-		DirectX::XMFLOAT2 currentCenter;
-		DirectX::XMFLOAT2 previousCenter;
-		float worldSize;
-		float timeDelta;
-		DirectX::XMUINT2 textureDimensions;
-	};
-
-	struct alignas(16) BlurCB
-	{
-		DirectX::XMUINT2 textureDimensions;
-		float blurRadius;
-		uint32_t blurDirection; // 0 = horizontal, 1 = vertical
-	};
-
-	ConstantBuffer* collisionUpdateCB = nullptr;
-	ConstantBuffer* blurCB = nullptr;
 
 	virtual void SetupResources() override;
 	virtual void Reset() override;
