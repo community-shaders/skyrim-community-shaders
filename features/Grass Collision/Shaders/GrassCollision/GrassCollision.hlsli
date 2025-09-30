@@ -16,9 +16,6 @@ namespace GrassCollision
 		float3 worldPosition = mul(World[eyeIndex], float4(position, 1.0)).xyz;
 
 		if (length(worldPosition) < 2048.0 && input.Color.w > 0.0) {
-
-			float3 worldPosition = mul(World[eyeIndex], float4(position, 1.0)).xyz;
-
 			float lowestHeight = worldPosition.z;
 			float3 lowestDisplacement = float3(0.0, 0.0, 0.0);
 
