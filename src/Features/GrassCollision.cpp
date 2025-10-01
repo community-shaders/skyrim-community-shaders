@@ -34,6 +34,8 @@ void GrassCollision::DrawSettings()
 		}
 
 		ImGui::Image(collisionTexture->srv.get(), { 512, 512 });
+		ImGui::SameLine();
+		ImGui::Image(collisionNormalTexture->srv.get(), { 512, 512 });
 
 		ImGui::TreePop();
 	}
@@ -193,38 +195,67 @@ void GrassCollision::SetupResources()
 {
 	perFrame = new ConstantBuffer(ConstantBufferDesc<PerFrame>());
 
-	D3D11_TEXTURE2D_DESC texDesc = {
-		.Width = 1024,
-		.Height = 1024,
-		.MipLevels = 1,
-		.ArraySize = 1,
-		.Format = DXGI_FORMAT_R32G32_FLOAT,
-		.SampleDesc = { .Count = 1 },
-		.Usage = D3D11_USAGE_DEFAULT,
-		.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS
-	};
+	{
+		D3D11_TEXTURE2D_DESC texDesc = {
+			.Width = 1024,
+			.Height = 1024,
+			.MipLevels = 1,
+			.ArraySize = 1,
+			.Format = DXGI_FORMAT_R32G32_FLOAT,
+			.SampleDesc = { .Count = 1 },
+			.Usage = D3D11_USAGE_DEFAULT,
+			.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS
+		};
 
-	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-		.Format = texDesc.Format,
-		.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-		.Texture2D = {
-			.MostDetailedMip = 0,
-			.MipLevels = 1 }
-	};
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+			.Format = texDesc.Format,
+			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+			.Texture2D = {
+				.MostDetailedMip = 0,
+				.MipLevels = 1 }
+		};
 
-	D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
-		.Format = texDesc.Format,
-		.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
-		.Texture2D = { .MipSlice = 0 }
-	};
+		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
+			.Format = texDesc.Format,
+			.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+			.Texture2D = { .MipSlice = 0 }
+		};
 
-	collisionTexture = new Texture2D(texDesc);
-	collisionTexture->CreateSRV(srvDesc);
-	collisionTexture->CreateUAV(uavDesc);
+		collisionTexture = new Texture2D(texDesc);
+		collisionTexture->CreateSRV(srvDesc);
+		collisionTexture->CreateUAV(uavDesc);
+	}
 
-	collisionTextureSwap = new Texture2D(texDesc);
-	collisionTextureSwap->CreateSRV(srvDesc);
-	collisionTextureSwap->CreateUAV(uavDesc);
+	{
+		D3D11_TEXTURE2D_DESC texDesc = {
+			.Width = 1024,
+			.Height = 1024,
+			.MipLevels = 1,
+			.ArraySize = 1,
+			.Format = DXGI_FORMAT_R16G16_UNORM,
+			.SampleDesc = { .Count = 1 },
+			.Usage = D3D11_USAGE_DEFAULT,
+			.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS
+		};
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+			.Format = texDesc.Format,
+			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+			.Texture2D = {
+				.MostDetailedMip = 0,
+				.MipLevels = 1 }
+		};
+
+		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
+			.Format = texDesc.Format,
+			.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+			.Texture2D = { .MipSlice = 0 }
+		};
+
+		collisionNormalTexture = new Texture2D(texDesc);
+		collisionNormalTexture->CreateSRV(srvDesc);
+		collisionNormalTexture->CreateUAV(uavDesc);
+	}
 }
 
 void GrassCollision::Reset()
@@ -287,18 +318,8 @@ void GrassCollision::UpdateCollision()
 	ID3D11Buffer* buffers[1] = { perFrame->CB() };
 	context->CSSetConstantBuffers(0, 1, buffers);
 
-	auto inputCollision = useCollisionSwap ? collisionTextureSwap : collisionTexture;
-	auto outputCollision = !useCollisionSwap ? collisionTextureSwap : collisionTexture;
-
-	useCollisionSwap = !useCollisionSwap;
-
-	ID3D11ShaderResourceView* srvs[] = { inputCollision->srv.get() };
-	context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
-
-	ID3D11UnorderedAccessView* uavs[] = { outputCollision->uav.get() };
+	ID3D11UnorderedAccessView* uavs[] = { collisionTexture->uav.get(), collisionNormalTexture->uav.get() };
 	context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
-
-	context->CSGetSamplers(0, 1, &globals::deferred->linearSampler);
 
 	context->CSSetShader(GetCollisionUpdateCS(), nullptr, 0);
 	context->Dispatch(1024 / 8, 1024 / 8, 1);
@@ -308,14 +329,11 @@ void GrassCollision::UpdateCollision()
 	ID3D11Buffer* null_buffer = nullptr;
 	context->CSSetConstantBuffers(0, 1, &null_buffer);
 
-	ID3D11ShaderResourceView* null_srvs[1] = { nullptr };
-	context->CSSetShaderResources(0, 1, null_srvs);
+	ID3D11UnorderedAccessView* null_uavs[2] = { nullptr, nullptr };
+	context->CSSetUnorderedAccessViews(0, 2, null_uavs, nullptr);
 
-	ID3D11UnorderedAccessView* null_uavs[1] = { nullptr };
-	context->CSSetUnorderedAccessViews(0, 1, null_uavs, nullptr);
-
-	auto srv = outputCollision->srv.get();
-	context->VSSetShaderResources(100, 1, &srv);
+	ID3D11ShaderResourceView* srvs[] = { collisionTexture->srv.get(), collisionNormalTexture->srv.get() };
+	context->VSSetShaderResources(100, ARRAYSIZE(srvs), srvs);
 
 	context->VSSetSamplers(0, 1, &globals::deferred->linearSampler);
 }

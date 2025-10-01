@@ -71,10 +71,8 @@ public:
 	ID3D11ComputeShader* GetCollisionUpdateCS();
 	ID3D11ComputeShader* collisionUpdateCS;
 
-	bool useCollisionSwap = false;
-
 	Texture2D* collisionTexture = nullptr;
-	Texture2D* collisionTextureSwap = nullptr;
+	Texture2D* collisionNormalTexture = nullptr;
 
 	virtual void SetupResources() override;
 	virtual void Reset() override;

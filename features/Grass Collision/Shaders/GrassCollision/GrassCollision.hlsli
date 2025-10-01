@@ -1,6 +1,8 @@
 namespace GrassCollision
 {
 	Texture2D<float2> Collision : register(t100);
+	Texture2D<float2> CollisionNormal : register(t101);
+
 	SamplerState CollisionSampler : register(s0);  // Bilinear sampler
 
 	struct CollisionData
@@ -23,88 +25,115 @@ namespace GrassCollision
 
 	const static uint2 ARRAY_DIM = uint2(1024, 1024);
 	const static float2 ARRAY_SIZE = float2(2048.0, 2048.0);
+
 	const static float2 CELL_SIZE = ARRAY_SIZE / ARRAY_DIM;
 
-	float2 SampleCollision(float2 worldPosMS)
+	float ElasticFunction(float x) {
+		float frequency = 50;
+		float dampening = 5;
+		x = saturate(1.0 - x);
+		return cos(x * frequency) * (1.0 - x) * exp(-x * dampening);
+	}
+
+	float ComputeCollisionAmount(float3 worldPosition, float2 collision)
 	{
-		// Convert model space position to clipmap coordinates (similar to Skylighting)
-		float2 positionMSAdjusted = worldPosMS - PosOffset;
-		float2 uv = positionMSAdjusted / ARRAY_SIZE + 0.5;
+		float collisionAmount = max(0, worldPosition.z - collision.x);
+		return collisionAmount * saturate((collision.x + 10.0 - collision.y) / 10.0);
+	}
 
-		// Check bounds
-		if (any(uv < 0) || any(uv > 1))
-			return float2(100000000, 0);
-
-		// Sample at mip level 0 (vertex shader requires explicit mip level)
-		return Collision.SampleLevel(CollisionSampler, uv, 0);
+	float ComputeCollisionAmountElastic(float3 worldPosition, float2 collision)
+	{
+		float collisionAmount = max(0, worldPosition.z - collision.x);
+		return collisionAmount * ElasticFunction(saturate((collision.x + 10.0 - collision.y) / 10.0));
+	}
+	
+	float ComputeCollisionAmountBent(float3 worldPosition, float2 collision)
+	{
+		float collisionAmount = max(0, worldPosition.z - collision.y);
+		return collisionAmount * saturate((collision.x + 10.0 - collision.y) / 10.0);
 	}
 
 	// Compute surface normal from Collision texture
-	float3 GetCollisionNormal(float2 worldPosMS, int pixelOffset = 1)
+	void GetCollision(float3 worldPosition, out float2 collision, out float3 collisionNormal)
 	{
-		// Convert model space position to clipmap coordinates
-		float2 positionMSAdjusted = worldPosMS - PosOffset;
-		float2 uv = positionMSAdjusted / ARRAY_SIZE + 0.5;
+		// Convert world space position to clipmap coordinates
+		float2 positionMSAdjusted = worldPosition - PosOffset.xy;
+		float2 uv = positionMSAdjusted / ARRAY_SIZE + .5;
 
-		// Check bounds
-		if (any(uv < 0) || any(uv > 1))
-			return float3(0, 0, 1);
+		float2 cellVxCoord = uv * ARRAY_DIM;
+		int2 cell000 = floor(cellVxCoord - 0.5);
+		float2 bilinearPos = cellVxCoord - 0.5 - cell000;
 
-		// Fetch texel size
-		float2 texelSize = 1.0 / ARRAY_DIM;
+		int2 cellID = cell000;
+		
+		collision = 0.0;
+		collisionNormal = float3(0.0, 0.0, -1);
 
-		// Sample with offsets in texture space
-		float heightLeft = Collision.SampleLevel(CollisionSampler, uv + float2(-texelSize.x * pixelOffset, 0), 0).x;
-		float heightRight = Collision.SampleLevel(CollisionSampler, uv + float2(texelSize.x * pixelOffset, 0), 0).x;
-		float heightDown = Collision.SampleLevel(CollisionSampler, uv + float2(0, -texelSize.y * pixelOffset), 0).x;
-		float heightUp = Collision.SampleLevel(CollisionSampler, uv + float2(0, texelSize.y * pixelOffset), 0).x;
+		float wsum = 0;
+		
+		for (int i = 0; i < 2; i++)
+			for (int j = 0; j < 2; j++)
+		{
+			int2 offset = int2(i, j);
+			int2 cellID = cell000 + offset;
 
-		// Build tangent vectors in XY plane
-		float3 tangentX = float3(1, 0, heightRight - heightLeft);
-		float3 tangentY = float3(0, 1, heightUp - heightDown);
+			if (any(cellID < 0) || any((uint2)cellID >= ARRAY_DIM))
+				continue;
 
-		// Cross product gives the surface normal
-		return normalize(cross(tangentX, tangentY));
-	}
+			float2 cellCentreMS = cellID + 0.5 - ARRAY_DIM / 2;
+			cellCentreMS = cellCentreMS * CELL_SIZE;
 
-	float ease_in_out_elastic(float x) {
-		float t = x; float b = 0; float c = 1; float d = 1;
-		float s=1.70158;float p=0;float a=c;
-		if (t==0) return b;  if ((t/=d/2)==2) return b+c;  if (p ==0) p=d*(.3*1.5);
-		if (a < abs(c)) { a=c; s=p/4; }
-		else s = p/(2*3.14159265359) * asin (c/a);
-		if (t < 1) return -.5*(a*pow(2,10*(t-=1)) * sin( (t*d-s)*(2*3.14159265359)/p )) + b;
-		return a*pow(2,-10*(t-=1)) * sin( (t*d-s)*(2*3.14159265359)/p )*.5 + c + b;
+			float2 bilinearWeights = 1 - abs(offset - bilinearPos);
+			float w = bilinearWeights.x * bilinearWeights.y;
+
+			uint2 cellTexID = (cellID + ArrayOrigin.xy) % ARRAY_DIM;
+			
+			float2 collisionSample = Collision[cellTexID];
+
+			float3 collisionNormalSample;
+			collisionNormalSample.xy = CollisionNormal[cellTexID] * 2.0 - 1.0;
+			collisionNormalSample.z = -sqrt(saturate(1.0 - dot(collisionNormalSample.xy, collisionNormalSample.xy)));
+
+			collision += collisionSample * w;
+			collisionNormal += collisionNormalSample * ComputeCollisionAmount(worldPosition, collisionSample) * w;
+
+			wsum += w;
+		}
+		
+		if (wsum > 0){
+			collision /= wsum;
+		} else {
+			collision = 1000000;
+		}
+		
+		collisionNormal = normalize(collisionNormal);
 	}
 
 	float3 GetDisplacedPosition(VS_INPUT input, float3 position, uint eyeIndex = 0)
 	{
 		float3 worldPosition = mul(World[eyeIndex], float4(position, 1.0)).xyz;
 
-		// Convert to model space (camera-relative) for clipmap sampling
-		float2 worldPosMS = worldPosition.xy;
-
 		if (input.Color.w > 0.0) {
-			float2 collision = SampleCollision(worldPosMS);
+			float2 collision;
+			float3 collisionNormal;
+			GetCollision(worldPosition, collision, collisionNormal);
 
-			// Check for valid collision (not out of bounds)
-			if (collision.x < 100000000) {
-				// Check if collision is below grass vertex
-				if (collision.x < worldPosition.z) {
-					float displacementAmount = max(0, worldPosition.z - collision.x);
+			float3 displacement = collisionNormal * ComputeCollisionAmountElastic(worldPosition, collision);
 
-					float3 displacementNormal = -GetCollisionNormal(worldPosMS);
-					displacementNormal.z = -abs(displacementNormal.z);
+			// As grass bends outwards, curve downwards as well
+			displacement.z = -length(displacement.xy);
 
-					float timeSince = ease_in_out_elastic(
-						saturate((collision.y - (collision.x + 1)) / max(collision.x - (collision.x + 1), 0.001))
-					);
+			// Additional flattening of grass
+			displacement.z -= ComputeCollisionAmountBent(worldPosition, collision);
 
-					float3 displacement = displacementNormal * displacementAmount * timeSince * 0.5;
+			// Scale grass by physical height
+			float scaledHeight = input.Position.z * (input.InstanceData4.y * ScaleMask.z + 1.0);
+			float bendability = max(0.0, scaledHeight) * 0.005;
 
-					return displacement;
-				}
-			}
+			// Scale grass by wind amount (detect rocks and bottom of grass)
+			float alpha = saturate(input.Color.w * 10.0); 
+
+			return displacement * bendability * alpha;			
 		}
 
 		return 0.0;
