@@ -132,11 +132,11 @@ namespace GrassCollision
 			float bendabilityZ = max(1.0, scaledHeight + 1.0) * 0.005;
 
 			displacement.z -= ComputeCollisionAmount(worldPosition, collision) * bendabilityZ;
-			
+
 			// Scale grass by wind amount (detect rocks and bottom of grass)
 			float alpha = saturate(input.Color.w * 10.0);
 
-			return displacement * alpha;			
+			return displacement * alpha;
 		}
 
 		return 0.0;
