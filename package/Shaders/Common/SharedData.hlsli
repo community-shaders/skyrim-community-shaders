@@ -240,8 +240,8 @@ namespace SharedData
 		GrassLightingSettings grassLightingSettings;
 		HairSpecularSettings hairSpecularSettings;
 		IBLSettings iblSettings;
-		LODBlendingSettings lodBlendingSettings;
 		LightLimitFixSettings lightLimitFixSettings;
+		LODBlendingSettings lodBlendingSettings;
 		SkylightingSettings skylightingSettings;
 		SnowCoverSettings snowCoverSettings;
 		TerraOccSettings terraOccSettings;
