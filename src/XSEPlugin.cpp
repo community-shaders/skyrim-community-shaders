@@ -196,6 +196,7 @@ bool Load()
 	}
 
 	if (errors.empty()) {
+		Hooks::InstallEarlyHooks();
 		logger::info("Calling feature Load methods");
 		for (auto* feature : Feature::GetFeatureList()) {
 			if (feature->loaded) {

@@ -610,11 +610,7 @@ void State::ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescr
 					a_pixelDescriptor &= ~(uint32_t)SIE::ShaderCache::LightingShaderFlags::AdditionalAlphaMask;
 				}
 
-				static auto enableImprovedSnow = RE::GetINISetting("bEnableImprovedSnow:Display");
-				static bool vr = REL::Module::IsVR();
-
-				if (vr || !enableImprovedSnow->GetBool())
-					a_pixelDescriptor &= ~((uint32_t)SIE::ShaderCache::LightingShaderFlags::Snow);
+				a_pixelDescriptor &= ~((uint32_t)SIE::ShaderCache::LightingShaderFlags::Snow);
 
 				if (deferred->deferredPass || a_forceDeferred)
 					a_pixelDescriptor |= (uint32_t)SIE::ShaderCache::LightingShaderFlags::Deferred;
@@ -707,7 +703,7 @@ void State::SetAdapterDescription(const std::wstring& description)
 	adapterDescription = converter.to_bytes(description);
 }
 
-void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
+void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] bool a_prepass)
 {
 	{
 		SharedDataCB data{};
@@ -763,9 +759,12 @@ void State::UpdateSharedData(bool a_inWorld, bool a_prepass)
 		auto& upscaling = globals::features::upscaling;
 
 		if (upscaling.loaded) {
-			if (temporal && (a_inWorld || a_prepass) && upscaling.GetUpscaleMethod() != Upscaling::UpscaleMethod::kTAA) {
-				auto renderSize = Util::ConvertToDynamic(screenSize);
-				data.MipBias = std::log2f(renderSize.x / screenSize.x) - 1.0f;
+			auto upscaleMethod = upscaling.GetUpscaleMethod();
+			if (temporal && upscaleMethod != Upscaling::UpscaleMethod::kTAA) {
+				auto renderSize = Util::ConvertToDynamic(screenSize, true);
+				data.MipBias = std::log2f(renderSize.x / screenSize.x);
+				if (upscaleMethod == Upscaling::UpscaleMethod::kDLSS)
+					data.MipBias -= 1.0f;
 			} else {
 				data.MipBias = 0;
 			}

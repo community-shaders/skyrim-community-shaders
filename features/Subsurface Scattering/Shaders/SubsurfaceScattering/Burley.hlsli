@@ -108,7 +108,13 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssA
 		float2 sampleUV = texCoord + uvOffset;
 		float2 clampedUV = clamp(sampleUV, float2(0.0f, 0.0f), float2(1.0f, 1.0f));
 		uint2 samplePixcoord = uint2(clampedUV * SharedData::BufferDim.xy);
-		float3 sampleColor = Color::GammaToLinear(ColorTexture[samplePixcoord].xyz / max(AlbedoTexture[samplePixcoord].xyz, EPSILON_SSS_ALBEDO));
+		float maskSample = MaskTexture[samplePixcoord].x;
+		bool mask = maskSample > 1e-5f;
+
+		if (!mask)
+			continue;
+
+		float3 sampleColor = Color::GammaToLinear(ColorTexture[samplePixcoord].xyz * maskSample / max(AlbedoTexture[samplePixcoord].xyz, EPSILON_SSS_ALBEDO));
 		float sampleDepth = SharedData::GetScreenDepth(DepthTexture[samplePixcoord].x);
 		float3 sampleNormalVS = GBuffer::DecodeNormal(NormalTexture[samplePixcoord].xy);
 		float3 sampleNormalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(sampleNormalVS, 0)).xyz);
@@ -116,12 +122,9 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssA
 		float deltaDepth = (sampleDepth - centerDepth) * 10.f / GAME_UNIT_TO_CM;  // convert to mm
 		float radiusSampledInMM = sqrt(radius * radius + deltaDepth * deltaDepth);
 
-		float maskSample = MaskTexture[samplePixcoord].x;
-		bool mask = maskSample > 1e-5f;
-
 		float3 diffusionProfile = GetBurleyProfile(diffuseMeanFreePath.xyz, s3d, radiusSampledInMM);
 		float normalWeight = sqrt(saturate(dot(sampleNormalWS, normalWS) * 0.5f + 0.5f));
-		float3 sampleWeight = mask ? (diffusionProfile / pdf) * normalWeight : 0.0f;
+		float3 sampleWeight = (diffusionProfile / pdf) * normalWeight * maskSample;
 
 		colorSum += sampleWeight * sampleColor;
 		weightSum += sampleWeight;
@@ -130,6 +133,7 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssA
 	colorSum *= any(weightSum == 0.0f) ? 0.0f : (1.0f / weightSum);
 	colorSum = lerp(colorSum, originalColor, saturate(centerWeight));
 	float3 color = Color::LinearToGamma(colorSum) * AlbedoTexture[DTid.xy].xyz;
+	color = lerp(centerColor.xyz, color, saturate(sssAmount));
 
 	float4 outColor = float4(color, ColorTexture[DTid.xy].w);
 	return outColor;

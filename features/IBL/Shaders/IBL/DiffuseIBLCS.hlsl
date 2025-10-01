@@ -3,13 +3,8 @@
 #include "Common/SharedData.hlsli"
 #include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
 
-TextureCube<float4> ReflectionTexture : register(t0);
+TextureCube<float4> EnvTexture : register(t0);
 RWTexture2D<sh2> IBLTexture : register(u0);
-
-#if defined(DYNAMIC_CUBEMAPS)
-TextureCube<float3> EnvTexture : register(t1);
-TextureCube<float3> EnvReflectionsTexture : register(t2);
-#endif
 
 SamplerState LinearSampler : register(s0);
 
@@ -40,21 +35,7 @@ void main(uint3 dispatchID : SV_DispatchThreadID, uint groupIndex : SV_GroupInde
 	float3 rayDir = SphericalHarmonics::GetUniformSphereSample(sampleCoord.x, sampleCoord.y);
 
 	// Sample cubemap with optimized direction
-#if defined(DYNAMIC_CUBEMAPS)
-	float3 color = 0;
-	const float dcAmount = saturate(SharedData::iblSettings.DynamicCubemapsAmount);
-	if (dcAmount <= 0.001f) {
-		color = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
-	} else if (dcAmount >= 0.999f) {
-		color = EnvReflectionsTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
-	} else {
-		const float3 base = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
-		const float3 dynamicCubemap = EnvReflectionsTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
-		color = lerp(base, dynamicCubemap, dcAmount);
-	}
-#else
-	float3 color = ReflectionTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
-#endif
+	float3 color = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
 
 	// Compute spherical harmonics basis for this direction
 	sh2 sh = SphericalHarmonics::Evaluate(rayDir);

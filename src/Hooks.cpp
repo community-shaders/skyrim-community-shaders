@@ -343,6 +343,18 @@ struct ID3D11Device_CreatePixelShader
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
+struct ID3D11Device_CreateSamplerState
+{
+	static HRESULT STDMETHODCALLTYPE thunk(ID3D11Device* This, D3D11_SAMPLER_DESC* pSamplerDesc, ID3D11SamplerState** ppSamplerState)
+	{
+		// Limit Anisotropy to 8x for performance
+		D3D11_SAMPLER_DESC descCopy = *pSamplerDesc;  // make a copy, pSamplerDesc is supposed to be immutable
+		descCopy.MaxAnisotropy = std::min(descCopy.MaxAnisotropy, 8u);
+		return func(This, &descCopy, ppSamplerState);
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
 struct BSShaderRenderTargets_Create
 {
 	/**
@@ -436,6 +448,8 @@ namespace Hooks
 				stl::detour_vfunc<15, ID3D11Device_CreatePixelShader>(globals::d3d::device);
 			}
 
+			stl::detour_vfunc<23, ID3D11Device_CreateSamplerState>(globals::d3d::device);
+
 			globals::InstallD3DHooks(globals::d3d::context);
 
 			globals::menu->Init();
@@ -489,16 +503,6 @@ namespace Hooks
 	};
 
 	struct CreateRenderTarget_NormalsSwap
-	{
-		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
-		{
-			globals::state->ModifyRenderTarget(a_target, a_properties);
-			func(This, a_target, a_properties);
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	struct CreateRenderTarget_Snow
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
@@ -702,41 +706,6 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	void BSBatchRenderer_RenderPassImmediately1::thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags)
-	{
-		if (globals::features::lightLimitFix.loaded && !globals::features::lightLimitFix.CheckParticleLights(a_pass, a_technique))
-			return;
-
-		func(a_pass, a_technique, a_alphaTest, a_renderFlags);
-	}
-
-	struct BSBatchRenderer_RenderPassImmediately2
-	{
-		static void thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags)
-		{
-			if (globals::features::lightLimitFix.loaded && !globals::features::lightLimitFix.CheckParticleLights(a_pass, a_technique))
-				return;
-
-			if (globals::features::interiorSun.loaded)
-				globals::features::interiorSun.UpdateRasterStateCullMode(a_pass, a_technique);
-
-			func(a_pass, a_technique, a_alphaTest, a_renderFlags);
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	struct BSBatchRenderer_RenderPassImmediately3
-	{
-		static void thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags)
-		{
-			if (globals::features::lightLimitFix.loaded && !globals::features::lightLimitFix.CheckParticleLights(a_pass, a_technique))
-				return;
-
-			func(a_pass, a_technique, a_alphaTest, a_renderFlags);
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
 #ifdef TRACY_ENABLE
 	struct Main_Update
 	{
@@ -877,13 +846,6 @@ namespace Hooks
 	 */
 	void Install()
 	{
-		if (!globals::features::upscaling.loaded) {
-			logger::info("Hooking D3D11CreateDeviceAndSwapChain");
-			*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
-		}
-
-		*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", !REL::Module::IsVR() ? "CreateDXGIFactory" : "CreateDXGIFactory1");
-
 		if (!REL::Module::IsVR()) {
 			logger::info("Hooking BSImageSpace::Init::IBLF");
 			stl::detour_thunk<BSImageSpace_Init_IBLF>(REL::RelocationID(100480, 107198));
@@ -917,7 +879,6 @@ namespace Hooks
 		stl::write_thunk_call<CreateRenderTarget_Main>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x3F0, 0x3F3, 0x548));
 		stl::write_thunk_call<CreateRenderTarget_Normals>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x458, 0x45B, 0x5B0));
 		stl::write_thunk_call<CreateRenderTarget_NormalsSwap>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x46B, 0x46E, 0x5C3));
-		stl::write_thunk_call<CreateRenderTarget_Snow>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x406, 0x409, 0x55e));
 		stl::write_thunk_call<CreateRenderTarget_MotionVectors>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x4F0, 0x4EF, 0x64E));
 
 		stl::write_thunk_call<CreateRenderTarget_RefractionNormals>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x503, 0x502, 0x661));
@@ -955,11 +916,6 @@ namespace Hooks
 		logger::info("Hooking BSLightingShader");
 		stl::write_vfunc<0x4, BSLightingShader_SetupMaterial>(RE::VTABLE_BSLightingShader[0]);
 
-		logger::info("Hooking BSBatchRenderer::RenderPassImmediately");
-		stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately1>(REL::RelocationID(100877, 107673).address() + REL::Relocate(0x1E5, 0x1EE));
-		stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately2>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
-		stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately3>(REL::RelocationID(100871, 107667).address() + REL::Relocate(0xEE, 0xED));
-
 		// Patch render space in BSLightingShader::SetupGeometry to always use world space
 		// The variable updateEyePosition is set to 1 when not skinned. By patching to be 0 it will always use world space
 		// We offset from the base address of the containing function to the start of the patch
@@ -986,5 +942,16 @@ namespace Hooks
 		}
 
 		stl::write_thunk_call<BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights>(REL::RelocationID(100565, 107300).address() + REL::Relocate(0x523, 0xB0E, 0x5FE));
+	}
+
+	void InstallEarlyHooks()
+	{
+		if (!globals::features::upscaling.loaded) {
+			logger::info("Hooking D3D11CreateDeviceAndSwapChain");
+			*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
+		}
+
+		logger::info("Hooking CreateDXGIFactory");
+		*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", !REL::Module::IsVR() ? "CreateDXGIFactory" : "CreateDXGIFactory1");
 	}
 }
