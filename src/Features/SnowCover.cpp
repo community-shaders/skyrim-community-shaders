@@ -10,6 +10,7 @@
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SnowCover::UserSettings,
 	EnableExpensiveFoliage,
+	AffectHavok,
 	SnowHeightOffset)
 
 void copyString(const std::string& input, char* dst, size_t dst_size)
@@ -23,6 +24,10 @@ void SnowCover::DrawSettings()
 	ImGui::Checkbox("Enable Nicer Foliage", (bool*)&settings.EnableExpensiveFoliage);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Uses one more texture sample to put snow on edges of tree lods and grass.");
+	}
+	ImGui::Checkbox("Snow on Mobile Objects", (bool*)&settings.AffectHavok);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Moving objects (Havok rigidbodies), such as clutter, will receive snow when they are not moving. Snow appears and disappears instantly.");
 	}
 	ImGui::SliderFloat("Snow Offset", &settings.SnowHeightOffset, -20000.0f, 20000.0f);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -544,7 +549,17 @@ void SnowCover::BSLightingShader_Setup(RE::BSRenderPass* a_pass)
 	auto userData = a_pass->geometry->GetUserData();
 	auto name = a_pass->geometry->name.c_str();
 	if ((a_pass->geometry->HasAnimation() || (userData && (userData->GetObjectReference()->IsBoundAnimObject() || userData->CanBeMoved()))) && !whitelist.contains(FormIdParser::fnv_hash(name))) {
-		state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::NoSnow;
+		{
+			if (settings.AffectHavok && userData && userData->CanBeMoved()){
+				RE::NiPoint3 vel;
+				userData->GetLinearVelocity(vel);
+				if (vel.SqrLength() < 10000.0f)
+					state->permutationData.ExtraShaderDescriptor &= ~(uint)State::ExtraShaderDescriptors::NoSnow;
+				else
+					state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::NoSnow;
+			} else
+				state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::NoSnow;
+		}
 	} else if (blacklist.contains(FormIdParser::fnv_hash(name))) {
 		state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::NoSnow;
 	} else {

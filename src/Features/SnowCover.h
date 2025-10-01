@@ -47,7 +47,8 @@ public:
 	{
 		uint EnableExpensiveFoliage = 1;
 		float SnowHeightOffset = 0.0f;
-		uint pad[2];
+		uint AffectHavok = 0;
+		uint pad;
 	};
 	static_assert(sizeof(UserSettings) % 16 == 0);
 
