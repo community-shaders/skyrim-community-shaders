@@ -28,7 +28,7 @@ SamplerState LinearSampler : register(s0);
 [numthreads(8, 8, 1)] void main(uint3 dtid : SV_DispatchThreadID)
 {
 	const uint2 ARRAY_DIM = uint2(1024, 1024);
-	const float2 ARRAY_SIZE = float2(2048.0, 2048.0);
+	const float2 ARRAY_SIZE = float2(4096.0, 4096.0);
 
 	uint2 cellID = uint2(max(int2(dtid.xy) - ArrayOrigin, 0) % ARRAY_DIM);
 
@@ -68,7 +68,7 @@ SamplerState LinearSampler : register(s0);
 
 	// Process collision data
 	for (uint i = 0; i < numCollisions; i++) {
-		float radius = collisionData[i].centre[0].w * 2.0;
+		float radius = collisionData[i].centre[0].w;
 		float3 colliderCentreMS = collisionData[i].centre[0].xyz - eyePosition.xyz;
 
 		// Get the lowest point of the sphere at this cell position
@@ -79,7 +79,7 @@ SamplerState LinearSampler : register(s0);
 			// Get sphere geometry
 			float heightFromCenter = sqrt(radius * radius - dist * dist);
 			float height = colliderCentreMS.z - heightFromCenter;
-			if (height < collision.x) {
+			if (height < collision.x || height < collision.y) {
 				collision = height;
 			
 				// Get normal of sphere

@@ -126,7 +126,7 @@ void GrassCollision::Update()
 		auto eyePosNI = Util::GetEyePosition(0);
 		auto eyePos = float2{ eyePosNI.x, eyePosNI.y };
 
-		float worldSize = 2048.0f;
+		float worldSize = 4096.0f;
 		uint textureArrayDims = 1024;
 
 		float2 cellSize = {

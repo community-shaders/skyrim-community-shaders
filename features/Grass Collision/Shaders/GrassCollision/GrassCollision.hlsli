@@ -24,7 +24,7 @@ namespace GrassCollision
 	}
 
 	const static uint2 ARRAY_DIM = uint2(1024, 1024);
-	const static float2 ARRAY_SIZE = float2(2048.0, 2048.0);
+	const static float2 ARRAY_SIZE = float2(4096.0, 4096.0);
 
 	const static float2 CELL_SIZE = ARRAY_SIZE / ARRAY_DIM;
 
@@ -32,7 +32,7 @@ namespace GrassCollision
 		float frequency = 50;
 		float dampening = 5;
 		x = saturate(1.0 - x);
-		return cos(x * frequency) * (1.0 - x) * exp(-x * dampening);
+		return sin(x * frequency) * (1.0 - x) * exp(-x * dampening);
 	}
 
 	float ComputeCollisionAmount(float3 worldPosition, float2 collision)
@@ -53,7 +53,6 @@ namespace GrassCollision
 		return collisionAmount * saturate((collision.x + 10.0 - collision.y) / 10.0);
 	}
 
-	// Compute surface normal from Collision texture
 	void GetCollision(float3 worldPosition, out float2 collision, out float3 collisionNormal)
 	{
 		// Convert world space position to clipmap coordinates
@@ -118,22 +117,26 @@ namespace GrassCollision
 			float3 collisionNormal;
 			GetCollision(worldPosition, collision, collisionNormal);
 
-			float3 displacement = collisionNormal * ComputeCollisionAmountElastic(worldPosition, collision);
+			float3 displacement = collisionNormal;
+			displacement.xyz *= ComputeCollisionAmountElastic(worldPosition, collision);
 
-			// As grass bends outwards, curve downwards as well
-			displacement.z = -length(displacement.xy);
+			// Bend grass downwards
+			displacement.z -= length(displacement.xy);
 
-			// Additional flattening of grass
-			displacement.z -= ComputeCollisionAmountBent(worldPosition, collision);
+			// Scale grass by mesh
+			float bendability = max(1.0, input.Position.z + 1.0) * 0.01;
+			displacement.xyz *= bendability;
 
 			// Scale grass by physical height
 			float scaledHeight = input.Position.z * (input.InstanceData4.y * ScaleMask.z + 1.0);
-			float bendability = max(0.0, scaledHeight) * 0.005;
+			float bendabilityZ = max(1.0, scaledHeight + 1.0) * 0.005;
 
+			displacement.z -= ComputeCollisionAmount(worldPosition, collision) * bendabilityZ;
+			
 			// Scale grass by wind amount (detect rocks and bottom of grass)
 			float alpha = saturate(input.Color.w * 10.0); 
 
-			return displacement * bendability * alpha;			
+			return displacement * alpha;			
 		}
 
 		return 0.0;
