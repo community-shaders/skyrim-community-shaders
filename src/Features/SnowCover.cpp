@@ -550,7 +550,7 @@ void SnowCover::BSLightingShader_Setup(RE::BSRenderPass* a_pass)
 	auto name = a_pass->geometry->name.c_str();
 	if ((a_pass->geometry->HasAnimation() || (userData && (userData->GetObjectReference()->IsBoundAnimObject() || userData->CanBeMoved()))) && !whitelist.contains(FormIdParser::fnv_hash(name))) {
 		{
-			if (settings.AffectHavok && userData && userData->CanBeMoved()){
+			if (settings.AffectHavok && userData && userData->CanBeMoved()) {
 				RE::NiPoint3 vel;
 				userData->GetLinearVelocity(vel);
 				if (vel.SqrLength() < 10000.0f)
