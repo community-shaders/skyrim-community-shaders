@@ -283,7 +283,7 @@ void SnowCover::SetupResources()
 const char* GetWorldspace()
 {
 	auto curr_worldspace = "none";
-	auto tes = globals::game::tes;
+	auto tes = RE::TES::GetSingleton();
 	if (tes) {
 		auto worldspace = tes->GetRuntimeData2().worldSpace;
 		if (tes->interiorCell) {
