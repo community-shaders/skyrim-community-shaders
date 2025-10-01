@@ -34,13 +34,13 @@ namespace GrassCollision
 		x = 1.0 - x;
 		return sin(x * frequency) * (1.0 - x) * exp(-x * dampening);
 	}
-	
+
 	float ComputeCollisionAmountElastic(float3 worldPosition, float2 collision)
 	{
 		float collisionDepth = saturate(max(0, worldPosition.z - collision.x) / 50.0);
 		return collisionDepth * ElasticFunction(saturate((collision.x + 2.0 - collision.y) / 2.0));
 	}
-	
+
 	float ComputeCollisionAmount(float3 worldPosition, float2 collision)
 	{
 		float collisionDepth = saturate(max(0, worldPosition.z - collision.x) / 50.0);
@@ -57,12 +57,12 @@ namespace GrassCollision
 		float2 bilinearPos = cellVxCoord - 0.5 - cell000;
 
 		int2 cellID = cell000;
-		
+
 		collision = 0.0;
 		collisionNormal = float3(0.0, 0.0, 0.0);
 
 		float wsum = 0;
-		
+
 		for (int i = 0; i < 2; i++)
 			for (int j = 0; j < 2; j++)
 		{
@@ -79,7 +79,7 @@ namespace GrassCollision
 			float w = bilinearWeights.x * bilinearWeights.y;
 
 			uint2 cellTexID = (cellID + ArrayOrigin.xy) % ARRAY_DIM;
-			
+
 			float2 collisionSample = Collision[cellTexID];
 
 			float collisionAmount = ComputeCollisionAmount(worldPosition, collisionSample);
@@ -99,12 +99,12 @@ namespace GrassCollision
 
 			wsum += w;
 		}
-		
+
 		if (wsum > 0.0)
 			collision /= wsum;
-		else 
+		else
 			collision = 1000000;
-				
+
 		if (length(collisionNormal) > 0.0)
 			collisionNormal = normalize(collisionNormal);
 		else
@@ -128,9 +128,9 @@ namespace GrassCollision
 			// Scale grass by mesh
 			float bendability = max(1.0, input.Position.z + 1.0);
 			displacement.xyz *= bendability;
-			
+
 			// Scale grass by wind amount (detect rocks and bottom of some grass)
-			float alpha = saturate(input.Color.w * 10.0); 
+			float alpha = saturate(input.Color.w * 10.0);
 
 			return displacement * alpha;
 		}
