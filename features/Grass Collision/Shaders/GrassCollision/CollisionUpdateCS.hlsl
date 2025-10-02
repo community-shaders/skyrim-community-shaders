@@ -56,7 +56,7 @@ SamplerState LinearSampler : register(s0);
 		// Temporal decay
 		previousCollision.y += timeDelta;
 
-		float collisionAmount = saturate((previousCollision.x + 2.0 - previousCollision.y) / 2.0);
+		float collisionAmount = saturate((previousCollision.x + 3.0 - previousCollision.y) / 3.0);
 
 		if (collisionAmount == 0.0){
 			previousCollision = 100000000;
@@ -80,9 +80,10 @@ SamplerState LinearSampler : register(s0);
 			// Get sphere geometry
 			float heightFromCenter = sqrt(radius * radius - dist * dist);
 			float height = colliderCentreMS.z - heightFromCenter;
-			if (height < collision.x || height < collision.y) {
-				collision = height;
-
+			if (height <= collision.y) {
+				collision.y = height;
+				collision.x = min(collision.x, height);
+			
 				// Get normal of sphere
 				// Collision point on the sphere surface
 				float3 collisionPoint = float3(cellCentreMS.xy, height);
