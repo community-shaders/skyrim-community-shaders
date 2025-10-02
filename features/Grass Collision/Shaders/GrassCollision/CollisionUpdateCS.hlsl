@@ -21,14 +21,12 @@ cbuffer PerFrameCB : register(b0)
 }
 
 RWTexture2D<float2> Collision : register(u0);
-RWTexture2D<float2> CollisionNormal : register(u1);
-
-SamplerState LinearSampler : register(s0);
 
 [numthreads(8, 8, 1)] void main(uint3 dtid : SV_DispatchThreadID)
 {
-	const uint2 ARRAY_DIM = uint2(1024, 1024);
+	const uint2 ARRAY_DIM = uint2(512, 512);
 	const float2 ARRAY_SIZE = float2(4096.0, 4096.0);
+	float2 ZRANGE = float2(1024.0, -1024.0);
 
 	uint2 cellID = uint2(max(int2(dtid.xy) - ArrayOrigin, 0) % ARRAY_DIM);
 
@@ -37,39 +35,28 @@ SamplerState LinearSampler : register(s0);
 
 	bool isValid = true;
 
-	float2 collision = 100000000;
-	float3 collisionNormal = float3(0, 0, -1);
+	float2 collision = ARRAY_SIZE.x * 0.5;
+	float2 previousCollision = ARRAY_SIZE.x * 0.5;
 
-	float2 previousCollision = 100000000;
-	float3 previousCollisionNormal = float3(0, 0, -1);
+	float fadeRate = timeDelta * 10;
 
 	if (isValid) {
 		previousCollision = Collision[dtid.xy];
-
-		previousCollisionNormal.xy = CollisionNormal[dtid.xy] * 2.0 - 1.0;
-		// Recompute Z
-		previousCollisionNormal.z = sqrt(saturate(1.0 - dot(previousCollisionNormal.xy, previousCollisionNormal.xy)));
+		previousCollision = lerp(ZRANGE.x, ZRANGE.y, previousCollision);
 
 		// Apply camera height change
 		previousCollision -= FrameBuffer::CameraPosAdjust[0].z - FrameBuffer::CameraPreviousPosAdjust[0].z;
 
 		// Temporal decay
-		previousCollision.y += timeDelta;
-
-		float collisionAmount = saturate((previousCollision.x + 3.0 - previousCollision.y) / 3.0);
-
-		if (collisionAmount == 0.0){
-			previousCollision = 100000000;
-			previousCollisionNormal = float3(0, 0, -1);
-		}
+		previousCollision.x += fadeRate * 0.5;
+		previousCollision.y += fadeRate;
 
 		collision = previousCollision;
-		collisionNormal = previousCollisionNormal;
 	}
 
 	// Process collision data
 	for (uint i = 0; i < numCollisions; i++) {
-		float radius = collisionData[i].centre[0].w;
+		float radius = collisionData[i].centre[0].w * 1.5;
 		float3 colliderCentreMS = collisionData[i].centre[0].xyz - eyePosition.xyz;
 
 		// Get the lowest point of the sphere at this cell position
@@ -78,22 +65,18 @@ SamplerState LinearSampler : register(s0);
 		// Only process if we're within the sphere's radius
 		if (dist < radius) {
 			// Get sphere geometry
-			float heightFromCenter = sqrt(radius * radius - dist * dist);
+			float heightFromCenter = (radius - dist);
 			float height = colliderCentreMS.z - heightFromCenter;
-			if (height <= collision.y) {
+			
+			collision.x = min(previousCollision.x, height);
+
+			if (height < collision.y) {
 				collision.y = height;
-				collision.x = min(collision.x, height);
-
-				// Get normal of sphere
-				// Collision point on the sphere surface
-				float3 collisionPoint = float3(cellCentreMS.xy, height);
-
-				// Normal is the direction from sphere center to surface point
-				collisionNormal = collisionPoint - colliderCentreMS;
 			}
 		}
 	}
+	
+	collision = (collision - ZRANGE.x) / (ZRANGE.y - ZRANGE.x);
 
 	Collision[dtid.xy] = collision;
-	CollisionNormal[dtid.xy] = normalize(collisionNormal) * 0.5 + 0.5;
 }

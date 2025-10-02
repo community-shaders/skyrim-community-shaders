@@ -1,9 +1,6 @@
 namespace GrassCollision
 {
 	Texture2D<float2> Collision : register(t100);
-	Texture2D<float2> CollisionNormal : register(t101);
-
-	SamplerState CollisionSampler : register(s0);  // Bilinear sampler
 
 	struct CollisionData
 	{
@@ -23,31 +20,21 @@ namespace GrassCollision
 		uint pad0[3];
 	}
 
-	const static uint2 ARRAY_DIM = uint2(1024, 1024);
+	const static uint2 ARRAY_DIM = uint2(512, 512);
 	const static float2 ARRAY_SIZE = float2(4096.0, 4096.0);
 
 	const static float2 CELL_SIZE = ARRAY_SIZE / ARRAY_DIM;
-
-	float ElasticFunction(float x) {
-		float frequency = 3 * Math::PI;
+	const static float2 ZRANGE = float2(1024.0, -1024.0);
+	
+	float ProceduralAnimation(float x) {
+		float fadeRate = 10;
+		x /= fadeRate;
+		float frequency = 4 * Math::PI;
 		float dampening = 1;
-		x = 1.0 - x;
-		return sin(x * frequency) * (1.0 - x) * exp(-x * dampening);
+		return cos(x * frequency) * exp(-x * dampening);
 	}
 
-	float ComputeCollisionAmountElastic(float3 worldPosition, float2 collision)
-	{
-		float collisionDepth = saturate(max(0, worldPosition.z - collision.x) / 50.0);
-		return collisionDepth * ElasticFunction(saturate((collision.x + 3.0 - collision.y) / 3.0));
-	}
-
-	float ComputeCollisionAmount(float3 worldPosition, float2 collision)
-	{
-		float collisionDepth = saturate(max(0, worldPosition.z - collision.x) / 50.0);
-		return collisionDepth * saturate((collision.x + 3.0 - collision.y) / 3.0);
-	}
-
-	void GetCollision(float3 worldPosition, out float2 collision, out float3 collisionNormal)
+	void GetCollision(float3 worldPosition, out float2 collisionHeights, out float collisionAmount)
 	{
 		float2 positionMSAdjusted = worldPosition - PosOffset.xy;
 		float2 uv = positionMSAdjusted / ARRAY_SIZE + .5;
@@ -57,12 +44,12 @@ namespace GrassCollision
 		float2 bilinearPos = cellVxCoord - 0.5 - cell000;
 
 		int2 cellID = cell000;
-
-		collision = 0.0;
-		collisionNormal = float3(0.0, 0.0, 0.0);
+		
+		collisionHeights = 0.0;
+		collisionAmount = 0.0;
 
 		float wsum = 0;
-
+		
 		for (int i = 0; i < 2; i++)
 			for (int j = 0; j < 2; j++)
 		{
@@ -79,60 +66,81 @@ namespace GrassCollision
 			float w = bilinearWeights.x * bilinearWeights.y;
 
 			uint2 cellTexID = (cellID + ArrayOrigin.xy) % ARRAY_DIM;
-
+			
 			float2 collisionSample = Collision[cellTexID];
+			collisionSample = lerp(ZRANGE.x, ZRANGE.y, collisionSample);
+			
+			collisionSample.x = min(collisionSample.x, collisionSample.y);
 
-			float collisionAmount = ComputeCollisionAmount(worldPosition, collisionSample);
+			float collisionDepth = max(0, worldPosition.z - collisionSample.x);
 
-			if (collisionAmount > 0.0){
-				float3 collisionNormalSample;
-				collisionNormalSample.xy = CollisionNormal[cellTexID] * 2.0 - 1.0;
-				// Recompute Z
-				collisionNormalSample.z = -sqrt(saturate(1.0 - dot(collisionNormalSample.xy, collisionNormalSample.xy)));
-				// Weighted by if the normal is a valid collision
-				collisionNormal += lerp(float3(0, 0, -1), collisionNormalSample, collisionAmount) * w;
-			} else {
-				collisionNormal += float3(0, 0, -1) * w;
-			}
-
-			collision += collisionSample * w;
+			collisionHeights += collisionSample.x * w;
+			collisionAmount += collisionDepth * ProceduralAnimation(collisionSample.y - collisionSample.x) * w;
 
 			wsum += w;
 		}
+		
+		if (wsum > 0.0){
+			collisionHeights /= wsum;
+			collisionAmount /= wsum;
+		} else {
+			collisionHeights = ARRAY_DIM.x;
+			collisionAmount = 0.0;
+		}
+	}
 
-		if (wsum > 0.0)
-			collision /= wsum;
-		else
-			collision = 1000000;
+	float3 ComputeCollision(float3 worldPosition, float delta)
+	{
+		// Sample collision at three points forming a small triangle
+		float2 collisionCenter;
+		float2 collisionX;
+		float2 collisionY;
+		
+		float collisionCenterAmount;
+		float collisionXAmount;
+		float collisionYAmount;
 
-		if (length(collisionNormal) > 0.0)
-			collisionNormal = normalize(collisionNormal);
-		else
-			collisionNormal = float3(0, 0, -1);
+		GetCollision(worldPosition + float3(-delta, -delta, 0), collisionCenter, collisionCenterAmount);
+		GetCollision(worldPosition + float3(delta, 0, 0), collisionX, collisionXAmount);
+		GetCollision(worldPosition + float3(0, delta, 0), collisionY, collisionYAmount);
+		
+		// Use the collision data as height (using .x component - adjust if needed)
+		float h0 = collisionCenter.x;
+		float hX = collisionX.x;
+		float hY = collisionY.x;
+		
+		// Compute tangent vectors in 3D space
+		float3 tangentX = float3(delta, 0, hX - h0);
+		float3 tangentY = float3(0, delta, hY - h0);
+
+		// Cross product gives the full normal
+		float3 normal = cross(tangentX, tangentY);
+		normal.z *= 0.1;
+
+		// Average collision samples
+		float collisionAmount = (collisionCenterAmount + collisionXAmount + collisionYAmount) / 3.0;
+		
+		// Normalize the result
+		return -normalize(normal) * collisionAmount;
 	}
 
 	float3 GetDisplacedPosition(VS_INPUT input, float3 position, uint eyeIndex = 0)
 	{
-		float3 worldPosition = mul(World[eyeIndex], float4(position, 1.0)).xyz;
+		float3 worldPosition = mul(World[eyeIndex], float4(position.xyz, 1.0)).xyz;
 
 		if (input.Color.w > 0.0) {
-			float2 collision;
-			float3 collisionNormal;
-			GetCollision(worldPosition, collision, collisionNormal);
-
-			float3 displacement = collisionNormal * ComputeCollisionAmountElastic(worldPosition, collision);
+			float3 displacement = ComputeCollision(worldPosition, CELL_SIZE);
 
 			// Bounce around the Z axis
 			displacement.z = -abs(displacement.z);
-
-			// Scale grass by mesh
-			float bendability = max(1.0, input.Position.z + 1.0);
-			displacement.xyz *= bendability;
+			displacement.z -= length(displacement.xy);
 
 			// Scale grass by wind amount (detect rocks and bottom of some grass)
-			float alpha = saturate(input.Color.w * 10.0);
+			float alpha = saturate(input.Color.w * 10.0); 
 
-			return displacement * alpha;
+			float bendibility = max(0, input.Position.z);
+
+			return displacement * alpha * bendibility * 0.01;			
 		}
 
 		return 0.0;
