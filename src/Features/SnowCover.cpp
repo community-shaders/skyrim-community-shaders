@@ -231,6 +231,7 @@ SnowCover::PerFrame SnowCover::GetCommonBufferData()
 	bool snowing = false;
 	bool raining = false;
 	if (wsettings.EnableSnowCover) {
+		snowingDensity = 0;
 		if (auto sky = RE::Sky::GetSingleton()) {
 			if (auto currentWeather = sky->currentWeather) {
 				if (currentWeather->precipitationData) {
@@ -472,8 +473,11 @@ void SnowCover::Reload()
 			}
 
 		} else {
+			views[0]->AddRef();
 			views[3] = views[0];
+			views[1]->AddRef();
 			views[4] = views[1];
+			views[2]->AddRef();
 			views[5] = views[2];
 		}
 
@@ -548,7 +552,7 @@ void SnowCover::BSLightingShader_Setup(RE::BSRenderPass* a_pass)
 	auto state = globals::state;
 	auto userData = a_pass->geometry->GetUserData();
 	auto name = a_pass->geometry->name.c_str();
-	if ((a_pass->geometry->HasAnimation() || (userData && (userData->GetObjectReference()->IsBoundAnimObject() || userData->CanBeMoved()))) && !whitelist.contains(FormIdParser::fnv_hash(name))) {
+	if ((a_pass->geometry->HasAnimation() || (userData && ((userData->GetObjectReference() && userData->GetObjectReference()->IsBoundAnimObject()) || userData->CanBeMoved()))) && !whitelist.contains(FormIdParser::fnv_hash(name))) {
 		{
 			if (settings.AffectHavok && userData && userData->CanBeMoved()){
 				RE::NiPoint3 vel;

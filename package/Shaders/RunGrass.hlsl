@@ -451,7 +451,6 @@ cbuffer PerMaterial : register(b1)
 
 #		include "GrassLighting/GrassLighting.hlsli"
 
-#		define PI 3.1415927
 #		if defined(SNOW_COVER)
 #			undef SNOW
 #			undef PROJECTED_UV

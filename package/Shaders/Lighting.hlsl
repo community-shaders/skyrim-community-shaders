@@ -1407,7 +1407,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 		else
 		{
-			landRMAOS1 = input.LandBlendWeights1.x * float4(1 - glossiness.x, 0, 1, 0);
+			landRMAOS1 = input.LandBlendWeights1.x * float4(1 - glossiness, 0, 1, 0);
 		}
 		blendedRMAOS += landRMAOS1 * weight;
 #		endif
@@ -1488,7 +1488,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 		else
 		{
-			landRMAOS2 = input.LandBlendWeights1.y * float4(1 - glossiness.x, 0, 1, 0);
+			landRMAOS2 = input.LandBlendWeights1.y * float4(1 - glossiness, 0, 1, 0);
 		}
 		blendedRMAOS += landRMAOS2 * weight;
 #		endif
@@ -1568,7 +1568,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 		else
 		{
-			landRMAOS3 = input.LandBlendWeights1.z * float4(1 - glossiness.x, 0, 1, 0);
+			landRMAOS3 = input.LandBlendWeights1.z * float4(1 - glossiness, 0, 1, 0);
 		}
 		blendedRMAOS += landRMAOS3 * weight;
 #		endif
@@ -1648,7 +1648,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 		else
 		{
-			landRMAOS4 = input.LandBlendWeights1.w * float4(1 - glossiness.x, 0, 1, 0);
+			landRMAOS4 = input.LandBlendWeights1.w * float4(1 - glossiness, 0, 1, 0);
 		}
 		blendedRMAOS += landRMAOS4 * weight;
 #		endif
@@ -1729,7 +1729,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 		else
 		{
-			landRMAOS5 = input.LandBlendWeights2.x * float4(1 - glossiness.x, 0, 1, 0);
+			landRMAOS5 = input.LandBlendWeights2.x * float4(1 - glossiness, 0, 1, 0);
 		}
 		blendedRMAOS += landRMAOS5 * weight;
 #		endif
@@ -1809,7 +1809,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 		else
 		{
-			landRMAOS6 = input.LandBlendWeights2.y * float4(1 - glossiness.x, 0, 1, 0);
+			landRMAOS6 = input.LandBlendWeights2.y * float4(1 - glossiness, 0, 1, 0);
 		}
 		blendedRMAOS += landRMAOS6 * weight;
 #		endif
@@ -2269,9 +2269,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(TRUE_PBR)
 		pbrSurfaceProperties = SnowCover::ApplySnowPBR(snowedColor, snowNormal, snowFactor, disp, adjustedWorldPos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, pbrSurfaceProperties, uv - uvOriginal);
 #		else
-		snowFactor = SnowCover::ApplySnow(snowedColor, snowNormal, glossiness.x, shininess, disp, adjustedWorldPos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, uv - uvOriginal);
+		snowFactor = SnowCover::ApplySnow(snowedColor, snowNormal, glossiness, shininess, disp, adjustedWorldPos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, uv - uvOriginal);
 		// why is glossiness not just a float anyway?
-		glossiness = glossiness.xxxx;
 #		endif
 	if (snowFactor > 0)
 #	if defined(MODELSPACENORMALS) && !defined(SKINNED)
