@@ -307,7 +307,7 @@ VS_OUTPUT main(VS_INPUT input)
 
 	vsout.ViewSpacePosition = mul(WorldView[eyeIndex], msPosition).xyz;
 	vsout.WorldPosition = mul(World[eyeIndex], msPosition);
-	
+
 	float3 previousWindDisplacement;
 	float4 previousMsPosition = GetMSPosition(input, PreviousWindTimer, previousWindDisplacement);
 #		if defined(VR)
