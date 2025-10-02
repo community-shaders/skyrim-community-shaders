@@ -83,7 +83,7 @@ SamplerState LinearSampler : register(s0);
 			if (height <= collision.y) {
 				collision.y = height;
 				collision.x = min(collision.x, height);
-			
+
 				// Get normal of sphere
 				// Collision point on the sphere surface
 				float3 collisionPoint = float3(cellCentreMS.xy, height);
