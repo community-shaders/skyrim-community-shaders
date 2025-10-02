@@ -2270,7 +2270,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		pbrSurfaceProperties = SnowCover::ApplySnowPBR(snowedColor, snowNormal, snowFactor, disp, adjustedWorldPos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, pbrSurfaceProperties, uv - uvOriginal);
 #		else
 		snowFactor = SnowCover::ApplySnow(snowedColor, snowNormal, glossiness, shininess, disp, adjustedWorldPos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, uv - uvOriginal);
-		// why is glossiness not just a float anyway?
 #		endif
 	if (snowFactor > 0)
 #	if defined(MODELSPACENORMALS) && !defined(SKINNED)
