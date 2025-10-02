@@ -33,7 +33,6 @@ public:
 		bool EnableGrassCollision = 1;
 		bool TrackRagdolls = 1;
 		bool EnableBlur = 1;
-		float BlurRadius = 2.0f;
 	};
 
 	struct alignas(16) CollisionData
@@ -72,7 +71,6 @@ public:
 	ID3D11ComputeShader* collisionUpdateCS;
 
 	Texture2D* collisionTexture = nullptr;
-	Texture2D* collisionNormalTexture = nullptr;
 
 	virtual void SetupResources() override;
 	virtual void Reset() override;
