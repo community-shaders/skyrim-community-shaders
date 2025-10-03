@@ -30,7 +30,7 @@ namespace GrassCollision
 		float fadeRate = 10;
 		x /= fadeRate;
 		float frequency = 4 * Math::PI;
-		float dampening = 3;
+		float dampening = 1;
 		return cos(x * frequency) * exp(-x * dampening);
 	}
 
