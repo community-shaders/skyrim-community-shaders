@@ -67,7 +67,7 @@ RWTexture2D<float2> Collision : register(u0);
 			// Get sphere geometry
 			float heightFromCenter = (radius - dist);
 			float height = colliderCentreMS.z - heightFromCenter;
-			
+
 			collision.x = min(previousCollision.x, height);
 
 			if (height < collision.y) {
@@ -75,7 +75,7 @@ RWTexture2D<float2> Collision : register(u0);
 			}
 		}
 	}
-	
+
 	collision = (collision - ZRANGE.x) / (ZRANGE.y - ZRANGE.x);
 
 	Collision[dtid.xy] = collision;
