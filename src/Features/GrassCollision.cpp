@@ -155,7 +155,7 @@ void GrassCollision::Update()
 			UpdateCollisions(perFrameData);
 
 		perFrame->Update(perFrameData);
-		
+
 		if (settings.EnableGrassCollision)
 			UpdateCollision();
 
