@@ -30,7 +30,7 @@ namespace GrassCollision
 		float fadeRate = 10;
 		x /= fadeRate;
 		float frequency = 4 * Math::PI;
-		float dampening = 1;
+		float dampening = 3;
 		return cos(x * frequency) * exp(-x * dampening);
 	}
 
@@ -114,33 +114,39 @@ namespace GrassCollision
 		float3 tangentY = float3(0, delta, hY - h0);
 
 		// Cross product gives the full normal
-		float3 normal = cross(tangentX, tangentY);
-		normal.z *= 0.1;
+		float3 collisionNormal = cross(tangentX, tangentY);
+		collisionNormal.z *= 0.1;
 
 		// Average collision samples
 		float collisionAmount = (collisionCenterAmount + collisionXAmount + collisionYAmount) / 3.0;
 		
 		// Normalize the result
-		return -normalize(normal) * collisionAmount;
+		return -normalize(collisionNormal) * collisionAmount;
 	}
 
 	float3 GetDisplacedPosition(VS_INPUT input, float3 position, uint eyeIndex = 0)
 	{
 		float3 worldPosition = mul(World[eyeIndex], float4(position.xyz, 1.0)).xyz;
 
-		if (input.Color.w > 0.0) {
-			float3 displacement = ComputeCollision(worldPosition, CELL_SIZE);
+		if (input.Color.w > 0.0 && length(worldPosition) < 2048.0) {
+			float3 worldPositionCentre = mul(World[eyeIndex], float4(input.InstanceData1.xyz, 1.0)).xyz;
+
+			// Limit stretching
+			worldPosition.xy = lerp(worldPosition.xy, worldPositionCentre.xy, 0.95);
+	
+			// Return base collision
+			float3 collision = ComputeCollision(worldPosition, CELL_SIZE * 0.5);
 
 			// Bounce around the Z axis
-			displacement.z = -abs(displacement.z);
-			displacement.z -= length(displacement.xy);
+			collision.z = -abs(collision.z);
+
+			// Grass bends depending on how much it is supporting
+			collision.z -= length(collision.xy) * length(worldPosition.xy - worldPositionCentre.xy) * 0.5;
 
 			// Scale grass by wind amount (detect rocks and bottom of some grass)
 			float alpha = saturate(input.Color.w * 10.0); 
 
-			float bendibility = max(0, input.Position.z);
-
-			return displacement * alpha * bendibility * 0.01;			
+			return collision * alpha * 0.75;			
 		}
 
 		return 0.0;
