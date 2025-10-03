@@ -45,19 +45,18 @@ public:
 		float2 PosOffset;              // cell origin in camera model space
 		DirectX::XMUINT2 ArrayOrigin;  // xy: array origin (clipmap wrapping)
 
-		float timeDelta;
-		float3 eyePosition;
+		DirectX::XMINT2 ValidMargin;
+		float TimeDelta;
+		uint NumCollisions;
 
-		CollisionData collisionData[256];
-		uint numCollisions;
-		uint pad0[3];
+		CollisionData CollisionData[256];
 	};
 
 	std::uint32_t totalActorCount = 0;
 	std::uint32_t activeActorCount = 0;
 	std::uint32_t currentCollisionCount = 0;
 	std::vector<RE::Actor*> actorList{};
-	std::uint32_t colllisionCount = 0;
+	std::uint32_t collisionCount = 0;
 
 	Settings settings;
 

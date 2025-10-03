@@ -91,7 +91,7 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 						data.centre[eyeIndex].z = centerPos.z;
 					}
 					data.centre[0].w = radius;
-					perFrameData.collisionData[currentCollisionCount] = data;
+					perFrameData.CollisionData[currentCollisionCount] = data;
 					currentCollisionCount++;
 					if (currentCollisionCount == 256)
 						return RE::BSVisit::BSVisitControl::kStop;
@@ -100,7 +100,7 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 			});
 		}
 	}
-	perFrameData.numCollisions = currentCollisionCount;
+	perFrameData.NumCollisions = currentCollisionCount;
 }
 
 void GrassCollision::Update()
@@ -108,7 +108,7 @@ void GrassCollision::Update()
 	if (updatePerFrame) {
 		PerFrame perFrameData{};
 
-		perFrameData.numCollisions = 0;
+		perFrameData.NumCollisions = 0;
 		currentCollisionCount = 0;
 		totalActorCount = 0;
 		activeActorCount = 0;
@@ -130,23 +130,34 @@ void GrassCollision::Update()
 		cellID = { round(cellID.x), round(cellID.y) };
 		auto cellOrigin = cellID * cellSize;
 
-		// float2 cellIDDiff = prevCellID - cellID;
+		float2 cellIDDiff = prevCellID - cellID;
 		prevCellID = cellID;
 
 		perFrameData.PosOffset = cellOrigin - eyePos;
+
 		perFrameData.ArrayOrigin = {
 			((int)cellID.x - textureArrayDims / 2) % textureArrayDims,
 			((int)cellID.y - textureArrayDims / 2) % textureArrayDims
 		};
-		perFrameData.eyePosition = { eyePosNI.x, eyePosNI.y, eyePosNI.z };
-		perFrameData.timeDelta = *globals::game::deltaTime;
+
+		perFrameData.ValidMargin = { (int)cellIDDiff.x, (int)cellIDDiff.y };
+
+		auto thiscalendar = RE::Calendar::GetSingleton();
+
+		float currentGameTime = thiscalendar->GetCurrentGameTime();
+		static float lastGameTime = currentGameTime;
+
+		perFrameData.TimeDelta = 100000 * abs(currentGameTime - lastGameTime) / thiscalendar->GetTimescale();
+
+		lastGameTime = currentGameTime;
 
 		if (settings.EnableGrassCollision)
 			UpdateCollisions(perFrameData);
 
 		perFrame->Update(perFrameData);
-
-		UpdateCollision();
+		
+		if (settings.EnableGrassCollision)
+			UpdateCollision();
 
 		prevCellID = cellID;
 
