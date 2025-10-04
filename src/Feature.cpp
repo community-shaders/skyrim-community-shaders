@@ -25,6 +25,7 @@
 #include "Features/TerrainShadows.h"
 #include "Features/TerrainVariation.h"
 #include "Features/Upscaling.h"
+#include "Features/UnifiedWater.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
@@ -224,8 +225,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::interiorSun,
 		&globals::features::terrainVariation,
 		&globals::features::ibl,
-		&globals::features::extendedTranslucency,
-		&globals::features::upscaling
+		&globals::features::extendedTranslucency
 	};
 
 	if (REL::Module::IsVR()) {
