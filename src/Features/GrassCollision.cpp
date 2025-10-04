@@ -69,10 +69,7 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 			if (distance > 2048.0f)
 				continue;
 
-			BoundingBoxPacked boundingBox;
-
-			boundingBox.IndexStart = collisionIndexExtent;
-			boundingBox.IndexEnd = collisionIndexExtent;
+			eastl::vector<float4> collisionShapes{};
 
 			RE::BSVisit::TraverseScenegraphCollision(root, [&](RE::bhkNiCollisionObject* a_object) -> RE::BSVisit::BSVisitControl {
 				RE::NiPoint3 centerPos;
@@ -93,26 +90,44 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 					data.z = centerPos.z;
 					data.w = radius;
 
-					collisionsData.push_back(data);
-
-					float2 pointMin(centerPos.x - radius, centerPos.y - radius);
-					float2 pointMax(centerPos.x + radius, centerPos.y + radius);
-
-					boundingBox.MinExtent.x = std::min(boundingBox.MinExtent.x, pointMin.x);
-					boundingBox.MinExtent.y = std::min(boundingBox.MinExtent.y, pointMin.y);
-
-					boundingBox.MaxExtent.x = std::max(boundingBox.MaxExtent.x, pointMax.x);
-					boundingBox.MaxExtent.y = std::max(boundingBox.MaxExtent.y, pointMax.y);
-
-					boundingBox.IndexEnd++;
-
-					if (boundingBox.IndexEnd == MAX_COLLISIONS_PER_BOUNDING_BOX)
-						return RE::BSVisit::BSVisitControl::kStop;
+					collisionShapes.push_back(data);
 				}
 				return RE::BSVisit::BSVisitControl::kContinue;
 			});
 
-			boundingBoxData.push_back(boundingBox);
+			std::sort(collisionShapes.begin(), collisionShapes.end(), [](const float4& a, const float4& b) {
+				return a.w > b.w;
+			});
+
+			BoundingBoxPacked boundingBox;
+
+			boundingBox.IndexStart = collisionIndexExtent;
+			boundingBox.IndexEnd = collisionIndexExtent;
+
+			uint boundingBoxCollisions = 0;
+
+			for (const auto& data : collisionShapes) {
+				collisionsData.push_back(data);
+
+				float2 pointMin(data.x - data.w, data.y - data.w);
+				float2 pointMax(data.x + data.w, data.y + data.w);
+
+				boundingBox.MinExtent.x = std::min(boundingBox.MinExtent.x, pointMin.x);
+				boundingBox.MinExtent.y = std::min(boundingBox.MinExtent.y, pointMin.y);
+
+				boundingBox.MaxExtent.x = std::max(boundingBox.MaxExtent.x, pointMax.x);
+				boundingBox.MaxExtent.y = std::max(boundingBox.MaxExtent.y, pointMax.y);
+
+				boundingBox.IndexEnd++;
+
+				boundingBoxCollisions++;
+
+				if (boundingBoxCollisions == MAX_COLLISIONS_PER_BOUNDING_BOX)
+					break;
+			}
+
+			if (boundingBox.IndexStart != boundingBox.IndexEnd)
+				boundingBoxData.push_back(boundingBox);
 
 			collisionIndexExtent = boundingBox.IndexEnd;
 		}

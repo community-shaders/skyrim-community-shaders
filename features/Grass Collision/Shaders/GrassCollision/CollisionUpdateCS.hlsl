@@ -60,7 +60,7 @@ groupshared BoundingBoxPacked SharedBoundingBoxes[64];
 	float2 collision = max(ZRANGE.x, ZRANGE.y);
 	float2 previousCollision = collision;
 
-	float2 fadeRate = TimeDelta * 1000 * float2(0.1, 1.0);
+	float2 fadeRate = TimeDelta * 1000 * float2(0.01, 1.0);
 
 	if (isValid) {
 		previousCollision = Collision[dispatchThreadId.xy];
