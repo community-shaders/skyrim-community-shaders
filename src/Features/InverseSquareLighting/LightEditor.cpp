@@ -3,11 +3,11 @@
 #include "Menu.h"
 #include "Util.h"
 #include <chrono>
-#include <fstream>
 #include <filesystem>
-#include <sstream>
-#include <iomanip>
 #include <format>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
 
 void LightEditor::DrawSettings()
 {
@@ -368,7 +368,7 @@ void LightEditor::ExportLightsToJson()
 	}
 
 	json exportData;
-	
+
 	// Add timestamp
 	const auto now = std::chrono::system_clock::now();
 	const auto time_t = std::chrono::system_clock::to_time_t(now);
@@ -385,19 +385,19 @@ void LightEditor::ExportLightsToJson()
 			currentCell = player->GetParentCell();
 		}
 	}
-	
+
 	// Cell information
 	if (currentCell) {
 		exportData["cell"] = {
-			{"formID", fmt::format("0x{:08X}", currentCell->GetFormID())},
-			{"editorID", currentCell->GetFormEditorID() ? currentCell->GetFormEditorID() : "Unknown"},
-			{"isInterior", currentCell->IsInteriorCell()}
+			{ "formID", fmt::format("0x{:08X}", currentCell->GetFormID()) },
+			{ "editorID", currentCell->GetFormEditorID() ? currentCell->GetFormEditorID() : "Unknown" },
+			{ "isInterior", currentCell->IsInteriorCell() }
 		};
 	} else {
 		exportData["cell"] = {
-			{"formID", "0x00000000"},
-			{"editorID", "Unknown"},
-			{"isInterior", false}
+			{ "formID", "0x00000000" },
+			{ "editorID", "Unknown" },
+			{ "isInterior", false }
 		};
 	}
 
@@ -406,17 +406,17 @@ void LightEditor::ExportLightsToJson()
 	if (player) {
 		const auto playerPos = player->GetPosition();
 		exportData["playerPosition"] = {
-			{"x", playerPos.x},
-			{"y", playerPos.y},
-			{"z", playerPos.z}
+			{ "x", playerPos.x },
+			{ "y", playerPos.y },
+			{ "z", playerPos.z }
 		};
 	}
 
 	// Filter and sort settings used for this export
 	exportData["exportSettings"] = {
-		{"filterOption", FilterOptionLabels[static_cast<int>(filterOption)]},
-		{"sortOption", SortOptionLabels[static_cast<int>(sortOption)]},
-		{"lightCount", lights.size()}
+		{ "filterOption", FilterOptionLabels[static_cast<int>(filterOption)] },
+		{ "sortOption", SortOptionLabels[static_cast<int>(sortOption)] },
+		{ "lightCount", lights.size() }
 	};
 
 	// Add light data - only include lights with metadata (edited/meaningful lights)
@@ -429,7 +429,7 @@ void LightEditor::ExportLightsToJson()
 			metadataLightCount++;
 		}
 	}
-	
+
 	// Update the light count to reflect only exported lights
 	exportData["exportSettings"]["lightCount"] = metadataLightCount;
 	exportData["exportSettings"]["totalSceneLights"] = lights.size();
@@ -473,32 +473,30 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 
 	// Position - using standard light placer format
 	lightData["position"] = {
-		{"x", lightInfo.position.x},
-		{"y", lightInfo.position.y},
-		{"z", lightInfo.position.z}
+		{ "x", lightInfo.position.x },
+		{ "y", lightInfo.position.y },
+		{ "z", lightInfo.position.z }
 	};
 
 	// If this is the selected light, include detailed settings
 	if (lightInfo == selected && lightInfo.isSelected) {
 		lightData["settings"] = {
-			{"color", {
-				{"r", current.data.diffuse.red},
-				{"g", current.data.diffuse.green},
-				{"b", current.data.diffuse.blue}
-			}},
-			{"intensity", current.data.fade},
-			{"radius", current.data.radius},
-			{"size", current.data.size},
-			{"cutoffOverride", current.data.cutoffOverride},
-			{"isInverseSquare", static_cast<bool>(*reinterpret_cast<const uint32_t*>(&current.data.flags) & static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare))}
+			{ "color", { { "r", current.data.diffuse.red },
+						   { "g", current.data.diffuse.green },
+						   { "b", current.data.diffuse.blue } } },
+			{ "intensity", current.data.fade },
+			{ "radius", current.data.radius },
+			{ "size", current.data.size },
+			{ "cutoffOverride", current.data.cutoffOverride },
+			{ "isInverseSquare", static_cast<bool>(*reinterpret_cast<const uint32_t*>(&current.data.flags) & static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare)) }
 		};
 
 		// Position offset if applicable
 		if (!lightInfo.isOther) {
 			lightData["settings"]["positionOffset"] = {
-				{"x", current.pos.x},
-				{"y", current.pos.y},
-				{"z", current.pos.z}
+				{ "x", current.pos.x },
+				{ "y", current.pos.y },
+				{ "z", current.pos.z }
 			};
 		}
 
@@ -506,28 +504,28 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 		if (!lightInfo.isOther && displayInfo.ownerFormId != 0) {
 			auto flagsValue = *reinterpret_cast<const uint32_t*>(&current.tesFlags);
 			lightData["settings"]["tesFlags"] = {
-				{"dynamic", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic))},
-				{"negative", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative))},
-				{"flicker", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker))},
-				{"flickerSlow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow))},
-				{"pulse", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse))},
-				{"pulseSlow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow))},
-				{"hemiShadow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow))},
-				{"omniShadow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow))},
-				{"portalStrict", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict))}
+				{ "dynamic", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic)) },
+				{ "negative", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative)) },
+				{ "flicker", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker)) },
+				{ "flickerSlow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow)) },
+				{ "pulse", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse)) },
+				{ "pulseSlow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow)) },
+				{ "hemiShadow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow)) },
+				{ "omniShadow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow)) },
+				{ "portalStrict", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict)) }
 			};
 		}
 
 		// Additional metadata for reference/attached lights
 		if (lightInfo.isRef || lightInfo.isAttached) {
 			lightData["metadata"] = {
-				{"ownerFormID", fmt::format("0x{:08X}", displayInfo.ownerFormId)},
-				{"ownerEditorID", displayInfo.ownerEditorId},
-				{"baseObjectFormID", fmt::format("0x{:08X}", displayInfo.baseObjectFormId)},
-				{"ownerLastEditedBy", displayInfo.ownerLastEditedBy},
-				{"cellEditorID", displayInfo.cellEditorId},
-				{"lightFormID", fmt::format("0x{:08X}", displayInfo.lighFormId)},
-				{"lightEditorID", displayInfo.lighEditorId}
+				{ "ownerFormID", fmt::format("0x{:08X}", displayInfo.ownerFormId) },
+				{ "ownerEditorID", displayInfo.ownerEditorId },
+				{ "baseObjectFormID", fmt::format("0x{:08X}", displayInfo.baseObjectFormId) },
+				{ "ownerLastEditedBy", displayInfo.ownerLastEditedBy },
+				{ "cellEditorID", displayInfo.cellEditorId },
+				{ "lightFormID", fmt::format("0x{:08X}", displayInfo.lighFormId) },
+				{ "lightEditorID", displayInfo.lighEditorId }
 			};
 		}
 	}
@@ -543,7 +541,7 @@ void LightEditor::ExportSelectedLightToJson()
 	}
 
 	json exportData;
-	
+
 	// Add timestamp
 	const auto now = std::chrono::system_clock::now();
 	const auto time_t = std::chrono::system_clock::to_time_t(now);
@@ -560,19 +558,19 @@ void LightEditor::ExportSelectedLightToJson()
 			currentCell = player->GetParentCell();
 		}
 	}
-	
+
 	// Cell information
 	if (currentCell) {
 		exportData["cell"] = {
-			{"formID", fmt::format("0x{:08X}", currentCell->GetFormID())},
-			{"editorID", currentCell->GetFormEditorID() ? currentCell->GetFormEditorID() : "Unknown"},
-			{"isInterior", currentCell->IsInteriorCell()}
+			{ "formID", fmt::format("0x{:08X}", currentCell->GetFormID()) },
+			{ "editorID", currentCell->GetFormEditorID() ? currentCell->GetFormEditorID() : "Unknown" },
+			{ "isInterior", currentCell->IsInteriorCell() }
 		};
 	} else {
 		exportData["cell"] = {
-			{"formID", "0x00000000"},
-			{"editorID", "Unknown"},
-			{"isInterior", false}
+			{ "formID", "0x00000000" },
+			{ "editorID", "Unknown" },
+			{ "isInterior", false }
 		};
 	}
 
@@ -581,21 +579,19 @@ void LightEditor::ExportSelectedLightToJson()
 	if (player) {
 		const auto playerPos = player->GetPosition();
 		exportData["playerPosition"] = {
-			{"x", playerPos.x},
-			{"y", playerPos.y},
-			{"z", playerPos.z}
+			{ "x", playerPos.x },
+			{ "y", playerPos.y },
+			{ "z", playerPos.z }
 		};
 	}
 
 	// Export settings for selected light
 	exportData["exportSettings"] = {
-		{"exportType", "selected_light"},
-		{"lightCount", 1},
-		{"selectedLightInfo", {
-			{"refID", fmt::format("0x{:08X}", selected.id)},
-			{"name", selected.name},
-			{"type", selected.isRef ? "Reference" : (selected.isAttached ? "Attached" : "Other")}
-		}}
+		{ "exportType", "selected_light" },
+		{ "lightCount", 1 },
+		{ "selectedLightInfo", { { "refID", fmt::format("0x{:08X}", selected.id) },
+								   { "name", selected.name },
+								   { "type", selected.isRef ? "Reference" : (selected.isAttached ? "Attached" : "Other") } } }
 	};
 
 	// Add the selected light data
