@@ -6,7 +6,7 @@ cbuffer PerFrameCB : register(b0)
 {
 	float2 PosOffset;  // cell origin in camera space
 	uint2 ArrayOrigin; // xy: array origin (clipmap wrapping)
-	
+
 	int2 ValidMargin;
 	float TimeDelta;
 	uint BoundingBoxCount;
