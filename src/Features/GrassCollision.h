@@ -54,7 +54,7 @@ public:
 		uint BoundingBoxCount;
 
 		float CameraHeightDelta;
-		float pad0[3];
+		float3 CameraRightDelta;
 	};
 
 	Settings settings;

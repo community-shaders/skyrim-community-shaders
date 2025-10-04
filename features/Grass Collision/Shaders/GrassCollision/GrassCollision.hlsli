@@ -10,6 +10,9 @@ namespace GrassCollision
 		int2 ValidMargin;
 		float TimeDelta;
 		uint BoundingBoxCount;
+
+		float CameraHeightDelta;
+		float3 CameraRightDelta;
 	}
 
 	const static uint TEXTURE_SIZE = 512;
@@ -120,7 +123,7 @@ namespace GrassCollision
 		float3 currentAmounts = float3(collisionCenterAmount, collisionXAmount, collisionYAmount);
 		float avgCurrentAmount = dot(currentAmounts, 1.0 / 3.0);
 		collision = ComputeNormalFromHeights(collisionCenter, collisionX, collisionY, delta) * avgCurrentAmount;
-
+		
 		// Process previous collision
 		float3 previousAmounts = float3(previousCollisionCenterAmount, previousCollisionXAmount, previousCollisionYAmount);
 		float avgPreviousAmount = dot(previousAmounts, 1.0 / 3.0);
@@ -136,6 +139,11 @@ namespace GrassCollision
 
 			// Limit stretching
 			float3 remappedWorldPosition = lerp(worldPosition, worldPositionCentre, float3(0.95, 0.95, 0.5));
+
+#if defined(VR)
+			if (eyeIndex)
+				remappedWorldPosition += CameraRightDelta;
+#endif
 
 			// Return base collision
 			float3 collision, previousCollision;
