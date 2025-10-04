@@ -434,6 +434,41 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettingsTab(Feature* fea
 				ImGui::SeparatorText("Error");
 				ImGui::TextColored(themeSettings.StatusPalette.Error, feat->failedLoadedMessage.c_str());
 			}
+
+			// Restore Defaults icon at bottom right (when feature is not disabled and is loaded)
+			if (!isDisabled && isLoaded) {
+			// Position at bottom right of the child window
+			ImVec2 childSize = ImGui::GetWindowSize();
+			// Scale icon with font size like other UI elements
+			float iconDimension = ImGui::GetFrameHeight() * 1.2f; // Larger for better visibility
+			ImVec2 iconSize = ImVec2(iconDimension, iconDimension);
+			ImGui::SetCursorPos(ImVec2(childSize.x - iconSize.x - 10.0f, childSize.y - iconSize.y - 10.0f));				auto& theme = globals::menu->GetTheme().Palette;
+				ImVec4 iconColor = theme.Text;
+				iconColor.w *= 0.7f;  // Reduce alpha for subtler appearance
+				
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f)); // Transparent background
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(iconColor.x, iconColor.y, iconColor.z, 0.3f)); // Subtle hover
+				ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(iconColor.x, iconColor.y, iconColor.z, 0.5f)); // Subtle active
+				
+				// Check if icon is available, fallback to text if not
+				auto& menu = *globals::menu;
+				if (menu.uiIcons.featureSettingRevert.texture) {
+					if (ImGui::ImageButton("##RestoreDefaults", menu.uiIcons.featureSettingRevert.texture, iconSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), iconColor)) {
+						feat->RestoreDefaultSettings();
+					}
+				} else {
+					// Fallback to small text button if icon not available
+					if (ImGui::Button("R##RestoreDefaults", iconSize)) {
+						feat->RestoreDefaultSettings();
+					}
+				}
+				
+				ImGui::PopStyleColor(3);
+				
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Restore default settings for this feature");
+				}
+			}
 		}
 		ImGui::EndChild();
 		ImGui::EndTabItem();
@@ -521,24 +556,19 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureActionButtons(Feature* f
 	const auto featureName = feat->GetShortName();
 
 	// Calculate button widths based on text content
-	const char* bootButtonText = isDisabled ? "Enable at Boot" : "Disable at Boot";
-	const char* defaultsButtonText = "Restore Defaults";
 	const char* overrideButtonText = "Apply Override";
 
-	float bootButtonWidth = ImGui::CalcTextSize(bootButtonText).x + buttonPadding;
-	float defaultsButtonWidth = ImGui::CalcTextSize(defaultsButtonText).x + buttonPadding;
+	// Toggle is more compact without label - just the toggle width
+	float bootToggleWidth = ImGui::GetFrameHeight() * 1.6f;
 	float overrideButtonWidth = ImGui::CalcTextSize(overrideButtonText).x + buttonPadding;
 
 	// Check if override is available for this feature
 	auto overrideManager = SettingsOverrideManager::GetSingleton();
 	bool hasOverrides = overrideManager && overrideManager->HasFeatureOverrides(featureName);
 
-	float totalButtonWidth = bootButtonWidth;
-	if (!isDisabled && isLoaded) {
-		totalButtonWidth += defaultsButtonWidth + buttonSpacing;
-		if (hasOverrides) {
-			totalButtonWidth += overrideButtonWidth + buttonSpacing;
-		}
+	float totalButtonWidth = bootToggleWidth;
+	if (!isDisabled && isLoaded && hasOverrides) {
+		totalButtonWidth += overrideButtonWidth + buttonSpacing;
 	}
 
 	// Position buttons on the right side of the tab bar
@@ -549,64 +579,48 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureActionButtons(Feature* f
 		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + rightOffset);
 	}
 
-	// Disable/Enable at boot button
-	ImVec4 textColor;
-	if (isDisabled) {
-		textColor = themeSettings.StatusPalette.Disable;
-	} else if (!feat->failedLoadedMessage.empty()) {
-		textColor = themeSettings.StatusPalette.Error;
-	} else {
-		textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+	// Enable/Disable at boot toggle
+	bool bootEnabled = !isDisabled;
+	
+	// Apply disabled styling if feature has failed to load
+	if (!feat->failedLoadedMessage.empty()) {
+		ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.Error);
 	}
-
-	ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-	if (ImGui::Button(bootButtonText, { bootButtonWidth, 0 })) {
+	
+	if (Util::FeatureToggle("##BootToggle", &bootEnabled)) {
 		bool newState = feat->ToggleAtBootSetting();
 		logger::info("{}: {} at boot.", featureName, newState ? "Enabled" : "Disabled");
 	}
-	ImGui::PopStyleColor();
+	
+	if (!feat->failedLoadedMessage.empty()) {
+		ImGui::PopStyleColor();
+	}
 
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
-			"Current State: %s\n"
-			"%s the feature settings at boot. "
-			"Restart will be required to reenable. "
-			"This is the same as deleting the ini file. "
-			"This should remove any performance impact for the feature.",
-			isDisabled ? "Disabled" : "Enabled",
-			isDisabled ? "Enable" : "Disable");
+			"Toggle feature loading at boot.\n"
+			"Current state: %s\n"
+			"Restart required for changes to take effect.\n"
+			"Disabling removes performance impact.",
+			bootEnabled ? "Enabled" : "Disabled");
 	}
 
-	// Restore Defaults button (when feature is not disabled and is loaded)
-	if (!isDisabled && isLoaded) {
+	// Apply Override button (when feature has available overrides)
+	if (!isDisabled && isLoaded && hasOverrides) {
 		ImGui::SameLine();
-		if (ImGui::Button(defaultsButtonText, { defaultsButtonWidth, 0 })) {
-			feat->RestoreDefaultSettings();
+		if (ImGui::Button(overrideButtonText, { overrideButtonWidth, 0 })) {
+			if (feat->ReapplyOverrideSettings()) {
+				logger::info("Successfully reapplied override settings for {}", featureName);
+			} else {
+				logger::warn("Failed to reapply override settings for {}", featureName);
+			}
 		}
 
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
-				"Restores the feature's settings back to their default values. "
+				"Reapplies override settings from mod override JSON files. "
+				"This will overwrite current settings with override values. "
 				"You will still need to Save Settings to make these changes permanent.");
-		}
-
-		// Apply Override button (when feature has available overrides)
-		if (hasOverrides) {
-			ImGui::SameLine();
-			if (ImGui::Button(overrideButtonText, { overrideButtonWidth, 0 })) {
-				if (feat->ReapplyOverrideSettings()) {
-					logger::info("Successfully reapplied override settings for {}", featureName);
-				} else {
-					logger::warn("Failed to reapply override settings for {}", featureName);
-				}
-			}
-
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text(
-					"Reapplies override settings from mod override JSON files. "
-					"This will overwrite current settings with override values. "
-					"You will still need to Save Settings to make these changes permanent.");
-			}
 		}
 	}
 }

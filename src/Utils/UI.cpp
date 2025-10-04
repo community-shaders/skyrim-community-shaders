@@ -176,11 +176,12 @@ namespace Util
 		logger::info("InitializeMenuIcons: Loading icons from base path: {}", basePath);
 
 		// Initialize all texture pointers to nullptr for safe cleanup
-		std::array<ID3D11ShaderResourceView**, 15> texturePointers = {
+		std::array<ID3D11ShaderResourceView**, 16> texturePointers = {
 			&menu->uiIcons.saveSettings.texture,
 			&menu->uiIcons.loadSettings.texture,
 			&menu->uiIcons.clearCache.texture,
 			&menu->uiIcons.logo.texture,
+			&menu->uiIcons.featureSettingRevert.texture,
 			&menu->uiIcons.discord.texture,
 			&menu->uiIcons.characters.texture,
 			&menu->uiIcons.display.texture,
@@ -228,6 +229,7 @@ namespace Util
 		loadIconWithLogging(basePath + "Action Icons\\load-settings.png", &menu->uiIcons.loadSettings.texture, menu->uiIcons.loadSettings.size, "load-settings");
 		loadIconWithLogging(basePath + "Action Icons\\clear-cache.png", &menu->uiIcons.clearCache.texture, menu->uiIcons.clearCache.size, "clear-cache");
 		loadIconWithLogging(basePath + "Community Shaders Logo\\cs-logo.png", &menu->uiIcons.logo.texture, menu->uiIcons.logo.size, "logo");
+		loadIconWithLogging(basePath + "Action Icons\\restore-settings.png", &menu->uiIcons.featureSettingRevert.texture, menu->uiIcons.featureSettingRevert.size, "restore-settings");
 		loadIconWithLogging(basePath + "Action Icons\\discord.png", &menu->uiIcons.discord.texture, menu->uiIcons.discord.size, "discord");
 
 		// Load category icons in a more compact way
@@ -256,7 +258,7 @@ namespace Util
 			loadIcon(path, icon.texture, icon.size);
 		}
 
-		logger::info("InitializeMenuIcons: Loaded {}/15 icons successfully", iconsLoaded);
+		logger::info("InitializeMenuIcons: Loaded {}/16 icons successfully", iconsLoaded);
 
 		return anyIconLoaded;
 	}
@@ -311,6 +313,9 @@ namespace Util
 		// Render logo
 		ImGui::Image(logoTexture, logoSize);
 		ImGui::SameLine();
+		
+		// Add consistent spacing between logo and text
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 8.0f);
 
 		// Reset cursor for text with proper vertical alignment
 		ImGui::SetCursorPos(ImVec2(ImGui::GetCursorPosX(), startPos.y));
@@ -1379,6 +1384,79 @@ namespace Util
 		// If clicked, start the flash timer
 		if (clicked) {
 			flashTimers[buttonId] = now;
+		}
+
+		return clicked;
+	}
+
+	bool FeatureToggle(const char* label, bool* enabled, const ImVec2& size)
+	{
+		if (!enabled) return false;
+
+		// Calculate appropriate size if not specified - make it smaller
+		ImVec2 toggleSize = size;
+		if (toggleSize.x <= 0) {
+			toggleSize.x = ImGui::GetFrameHeight() * 1.6f; // Smaller 1.6:1 aspect ratio
+		}
+		if (toggleSize.y <= 0) {
+			toggleSize.y = ImGui::GetFrameHeight() * 0.8f; // Smaller height
+		}
+
+		// Get theme colors for better integration
+		auto& style = ImGui::GetStyle();
+		auto& colors = style.Colors;
+		
+		// Use theme header colors instead of bright green/red
+		ImVec4 toggleBg = *enabled ? 
+			colors[ImGuiCol_Header] :           // Use header color when enabled
+			colors[ImGuiCol_FrameBg];          // Use frame background when disabled
+		
+		ImVec4 toggleBgHovered = *enabled ?
+			colors[ImGuiCol_HeaderHovered] :    // Use header hovered when enabled
+			colors[ImGuiCol_FrameBgHovered];   // Use frame hovered when disabled
+		
+		ImVec4 toggleBgActive = *enabled ?
+			colors[ImGuiCol_HeaderActive] :     // Use header active when enabled
+			colors[ImGuiCol_FrameBgActive];    // Use frame active when disabled
+
+		// Apply toggle styling with border
+		ImGui::PushStyleColor(ImGuiCol_Button, toggleBg);
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, toggleBgHovered);
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, toggleBgActive);
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, toggleSize.y * 0.5f); // Round ends
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.5f); // Larger border
+
+		// Create unique ID for the toggle
+		ImGui::PushID(label);
+		
+		// Draw the toggle button
+		bool clicked = ImGui::Button("", toggleSize);
+		
+		// Draw the toggle knob
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		ImVec2 buttonMin = ImGui::GetItemRectMin();
+		ImVec2 buttonMax = ImGui::GetItemRectMax();
+		
+		// Calculate knob position and size
+		float knobRadius = (toggleSize.y - 4.0f) * 0.5f;
+		float knobPadding = 2.0f;
+		float knobTravel = toggleSize.x - (knobRadius * 2.0f) - (knobPadding * 2.0f);
+		float knobX = *enabled ? 
+			buttonMin.x + knobPadding + knobRadius + knobTravel :
+			buttonMin.x + knobPadding + knobRadius;
+		float knobY = buttonMin.y + toggleSize.y * 0.5f;
+		
+		// Draw knob
+		ImU32 knobColor = ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+		drawList->AddCircleFilled(ImVec2(knobX, knobY), knobRadius, knobColor);
+		
+		ImGui::PopID();
+		ImGui::PopStyleVar(2); // Pop both FrameRounding and FrameBorderSize
+		ImGui::PopStyleColor(3);
+
+		// Handle toggle action
+		if (clicked) {
+			*enabled = !*enabled;
 		}
 
 		return clicked;

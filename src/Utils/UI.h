@@ -119,6 +119,15 @@ namespace Util
 	bool ButtonWithFlash(const char* label, const ImVec2& size = ImVec2(0, 0), int flashDurationMs = 200);
 
 	/**
+	 * Clean, minimalist toggle switch for feature enable/disable state
+	 * @param label Label text to display next to the toggle
+	 * @param enabled Reference to the boolean state to toggle
+	 * @param size Toggle size (optional, defaults to automatic sizing)
+	 * @return True if the toggle state was changed
+	 */
+	bool FeatureToggle(const char* label, bool* enabled, const ImVec2& size = ImVec2(0, 0));
+
+	/**
 	 * Discovers available font files in the Fonts directory
 	 * @return Vector of font file names (including .ttf extension)
 	 */

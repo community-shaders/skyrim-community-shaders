@@ -830,6 +830,12 @@ float State::GetTotalSmoothedDrawCalls() const
 
 void State::LoadTheme()
 {
+	// Don't override if a theme preset is already selected (e.g., first-time Default Dark setup)
+	if (!globals::menu->GetSettings().SelectedThemePreset.empty()) {
+		logger::info("Theme preset '{}' already selected, skipping SettingsTheme.json load", globals::menu->GetSettings().SelectedThemePreset);
+		return;
+	}
+
 	auto themeConfigPath = Util::PathHelpers::GetSettingsThemePath();
 
 	if (!std::filesystem::exists(themeConfigPath)) {

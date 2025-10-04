@@ -115,6 +115,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UseSimplePalette,
 	ShowActionIcons,
 	TooltipHoverDelay,
+	BackgroundBlur,
 	ScrollbarOpacity,
 	Palette,
 	StatusPalette,
@@ -141,6 +142,7 @@ Menu::~Menu()
 	uiIcons.loadSettings.Release();
 	uiIcons.clearCache.Release();
 	uiIcons.logo.Release();
+	uiIcons.featureSettingRevert.Release();
 	uiIcons.discord.Release();
 	uiIcons.characters.Release();
 	uiIcons.display.Release();
@@ -153,6 +155,9 @@ Menu::~Menu()
 	uiIcons.materials.Release();
 	uiIcons.postProcessing.Release();
 
+	// Clean up blur resources
+	ThemeManager::CleanupBlurResources();
+
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
@@ -164,6 +169,20 @@ Menu::~Menu()
 void Menu::Load(json& o_json)
 {
 	settings = o_json;
+	
+	// Apply Default Dark theme on first launch if no theme is selected
+	if (!settings.FirstTimeSetupCompleted && settings.SelectedThemePreset.empty()) {
+		// Ensure default themes are created/available
+		CreateDefaultThemes();
+		
+		// Load the Default Dark theme and mark it as selected to prevent override
+		if (LoadThemePreset("Default")) {
+			settings.SelectedThemePreset = "Default";  // Mark as selected to prevent State::LoadTheme override
+			logger::info("Applied Default Dark theme on first launch");
+		} else {
+			logger::warn("Failed to load Default Dark theme on first launch");
+		}
+	}
 }
 
 void Menu::Save(json& o_json)
@@ -247,6 +266,23 @@ void Menu::Init()
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
+	
+	// IMPORTANT: Immediately override ImGui's default styles with our Default.json theme
+	// This prevents hardcoded ImGui defaults from ever showing through
+	auto* themeManager = ThemeManager::GetSingleton();
+	json defaultThemeSettings;
+	if (themeManager->LoadTheme("Default", defaultThemeSettings)) {
+		// Temporarily create a minimal theme structure to apply defaults
+		json tempSettings;
+		tempSettings["Theme"] = defaultThemeSettings;
+		LoadTheme(tempSettings);
+		logger::info("Applied Default.json theme immediately after ImGui context creation");
+	} else {
+		logger::warn("Could not load Default.json theme - trying direct force application");
+		// Last resort: Apply Default.json colors directly to ImGui
+		ThemeManager::ForceApplyDefaultTheme();
+	}
+	
 	auto& imgui_io = ImGui::GetIO();
 	imgui_io.ConfigFlags = ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad | ImGuiConfigFlags_DockingEnable;
 	imgui_io.BackendFlags = ImGuiBackendFlags_HasMouseCursors | ImGuiBackendFlags_RendererHasVtxOffset | ImGuiBackendFlags_HasGamepad;

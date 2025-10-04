@@ -1,5 +1,6 @@
 #pragma once
 
+#include <d3d11.h>
 #include <filesystem>
 #include <imgui.h>
 #include <nlohmann/json.hpp>
@@ -43,6 +44,15 @@ public:
 	// Static UI helper methods
 	static void SetupImGuiStyle(const class Menu& menu);
 	static void ReloadFont(const class Menu& menu, float& cachedFontSize);
+	static void ApplyBackgroundBlur(float blurIntensity, ImVec4* colors);
+	static void RenderBackgroundBlur(); // Real-time shader-based blur rendering
+	static void ForceApplyDefaultTheme(); // Force Default.json colors to ImGui (bypass hardcoded defaults)
+
+	// Blur system methods
+	static bool InitializeBlurShaders();
+	static void CreateBlurTextures(UINT width, UINT height, DXGI_FORMAT format);
+	static void PerformGaussianBlur(ID3D11Texture2D* sourceTexture, ID3D11RenderTargetView* targetRTV, ImVec2 menuMin, ImVec2 menuMax);
+	static void CleanupBlurResources();
 
 	struct Constants
 	{
@@ -78,7 +88,7 @@ public:
 		static constexpr float BUTTON_SPACING = 8.0f;
 		static constexpr float OVERLAY_WINDOW_POSITION = 10.0f;
 		static constexpr float FONT_CACHE_EPSILON = 0.01f;
-		static constexpr float CURSOR_POSITION_PADDING = 5.0f;
+		static constexpr float CURSOR_POSITION_PADDING = 14.0f;
 		static constexpr float SEPARATOR_THICKNESS = 3.0f;
 		static constexpr float UNDOCKED_ICON_ITEM_SPACING = 6.0f;
 	};
@@ -156,6 +166,29 @@ public:
 	void CreateDefaultThemeFiles();
 
 private:
+	// Blur system state
+	static inline float currentBlurIntensity = 0.0f;
+	static inline bool isBlurEnabled = false;
+	
+	// DirectX blur resources
+	static inline ID3D11VertexShader* blurVertexShader = nullptr;
+	static inline ID3D11PixelShader* blurHorizontalPixelShader = nullptr;
+	static inline ID3D11PixelShader* blurVerticalPixelShader = nullptr;
+	static inline ID3D11Buffer* blurConstantBuffer = nullptr;
+	static inline ID3D11SamplerState* blurSamplerState = nullptr;
+	static inline ID3D11BlendState* blurBlendState = nullptr;
+	
+	// Intermediate blur textures
+	static inline ID3D11Texture2D* blurTexture1 = nullptr;
+	static inline ID3D11Texture2D* blurTexture2 = nullptr;
+	static inline ID3D11RenderTargetView* blurRTV1 = nullptr;
+	static inline ID3D11RenderTargetView* blurRTV2 = nullptr;
+	static inline ID3D11ShaderResourceView* blurSRV1 = nullptr;
+	static inline ID3D11ShaderResourceView* blurSRV2 = nullptr;
+	
+	static inline UINT blurTextureWidth = 0;
+	static inline UINT blurTextureHeight = 0;
+
 	ThemeManager() = default;
 	~ThemeManager() = default;
 	ThemeManager(const ThemeManager&) = delete;

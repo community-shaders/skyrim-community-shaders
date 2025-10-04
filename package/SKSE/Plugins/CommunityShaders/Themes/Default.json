@@ -7,8 +7,9 @@
         "UseSimplePalette": false,
         "ShowActionIcons": true,
         "TooltipHoverDelay": 0.5,
+        "BackgroundBlur": 0.5,
         "Palette": {
-            "Background": [0.09, 0.09, 0.09, 0.95],
+            "Background": [0.1, 0.1, 0.1, 1.0],
             "Text": [1.0, 1.0, 1.0, 1.0],
             "Border": [0.5, 0.5, 0.5, 0.8]
         },

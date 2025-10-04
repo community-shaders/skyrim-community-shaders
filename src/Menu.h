@@ -96,6 +96,7 @@ public:
 		UIIcon clearCache;
 		UIIcon logo;    // New logo icon
 		UIIcon search;  // Search icon for search bars
+		UIIcon featureSettingRevert; // Feature revert settings icon
 
 		// Social media/external link icons
 		UIIcon discord;
@@ -119,52 +120,59 @@ public:
 		std::string FontName = "Jost-Regular.ttf";              // Default font file name
 		float GlobalScale = REL::Module::IsVR() ? -0.5f : 0.f;  // exponential
 
-		bool UseSimplePalette = true;    // DEPRECATED: No longer affects behavior. UI now shows both Simple and Advanced controls.
+		bool UseSimplePalette = false;   // DEPRECATED: No longer affects behavior. UI now shows both Simple and Advanced controls.
 		bool ShowActionIcons = true;     // whether to show action buttons as icons
 		float TooltipHoverDelay = 0.5f;  // tooltip hover delay in seconds
+		float BackgroundBlur = 0.0f;     // background blur effect intensity
 
 		// Scrollbar opacity settings
 		struct ScrollbarOpacitySettings
 		{
-			float Background = 1.0f;    // Background of the scrollbar area
-			float Thumb = 1.0f;         // The draggable thumb/grip
-			float ThumbHovered = 1.0f;  // Thumb when hovered
-			float ThumbActive = 1.0f;   // Thumb when being dragged
+			float Background = 0.0f;    // Background of the scrollbar area
+			float Thumb = 0.5f;         // The draggable thumb/grip
+			float ThumbHovered = 0.75f; // Thumb when hovered
+			float ThumbActive = 0.9f;   // Thumb when being dragged
 		} ScrollbarOpacity;
 		struct PaletteColors
 		{
-			ImVec4 Background{ 0.f, 0.f, 0.f, 0.5882353186607361f };
-			ImVec4 Text{ 1.f, 1.f, 1.f, 1.f };
-			ImVec4 Border{ 0.5882353186607361f, 0.5882353186607361f, 0.5882353186607361f, 0.5882353186607361f };
+			ImVec4 Background{ 0.10f, 0.10f, 0.10f, 0.80f };
+			ImVec4 Text{ 1.0f, 1.0f, 1.0f, 1.0f };
+			ImVec4 Border{ 0.5f, 0.5f, 0.5f, 0.8f };
 		} Palette;
 		struct StatusPaletteColors
 		{
-			ImVec4 Disable{ 0.5f, 0.5f, 0.5f, 1.f };
-			ImVec4 Error{ 1.f, 0.5f, 0.5f, 1.f };
+			ImVec4 Disable{ 0.5f, 0.5f, 0.5f, 1.0f };
+			ImVec4 Error{ 1.0f, 0.4f, 0.4f, 1.0f };
 			ImVec4 Warning{ 1.0f, 0.6f, 0.2f, 1.0f };
-			ImVec4 RestartNeeded{ 0.5f, 1.f, 0.5f, 1.f };
-			ImVec4 CurrentHotkey{ 1.f, 1.f, 0.f, 1.f };
+			ImVec4 RestartNeeded{ 0.4f, 1.0f, 0.4f, 1.0f };
+			ImVec4 CurrentHotkey{ 1.0f, 1.0f, 0.0f, 1.0f };
 			ImVec4 SuccessColor{ 0.0f, 1.0f, 0.0f, 1.0f };
-			ImVec4 InfoColor{ 0.0f, 0.5f, 1.0f, 1.0f };
+			ImVec4 InfoColor{ 0.2f, 0.6f, 1.0f, 1.0f };
 		} StatusPalette;
 		struct FeatureHeadingColors
 		{
-			ImVec4 ColorDefault{ 0.47f, 0.47f, 0.47f, 1.00f };  // ~120, 120, 120
-			ImVec4 ColorHovered{ 0.39f, 0.39f, 0.39f, 1.00f };  // ~100, 100, 100
-			float MinimizedFactor = 0.7f;                       // 70% of original alpha for when the header is minimized
+			ImVec4 ColorDefault{ 0.8f, 0.8f, 0.8f, 1.0f };
+			ImVec4 ColorHovered{ 0.6f, 0.6f, 0.6f, 1.0f };
+			float MinimizedFactor = 0.7f;                   // 70% of original alpha for when the header is minimized
 		} FeatureHeading;
 
 		ImGuiStyle Style = []() {
 			ImGuiStyle style = {};
-			style.WindowBorderSize = 3.f;
-			style.ChildBorderSize = 0.f;
-			style.FrameBorderSize = 1.5f;
-			style.WindowPadding = { 16.f, 16.f };
-			style.WindowRounding = 0.f;
-			style.IndentSpacing = 8.f;
-			style.FramePadding = { 4.0f, 4.0f };
-			style.CellPadding = { 16.f, 2.f };
-			style.ItemSpacing = { 8.f, 12.f };
+			style.WindowBorderSize = 2.0f;
+			style.ChildBorderSize = 0.0f;
+			style.FrameBorderSize = 1.0f;
+			style.WindowPadding = { 8.0f, 8.0f };
+			style.WindowRounding = 12.0f;
+			style.IndentSpacing = 8.0f;
+			style.FramePadding = { 8.0f, 4.0f };
+			style.CellPadding = { 8.0f, 2.0f };
+			style.ItemSpacing = { 4.0f, 8.0f };
+			style.FrameRounding = 4.0f;
+			style.TabRounding = 4.0f;
+			style.ScrollbarRounding = 9.0f;
+			style.ScrollbarSize = 12.0f;
+			style.GrabRounding = 3.0f;
+			style.GrabMinSize = 12.0f;
 			return std::move(style);
 		}();
 		// Theme by @Maksasj, edited by FiveLimbedCat
