@@ -191,8 +191,7 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	font_config.PixelSnapH = Constants::FCONF_PIXELSNAP_H;
 	font_config.RasterizerMultiply = Constants::FCONF_RASTERIZER_MULTIPLY;
 
-	float fontSize = themeSettings.FontSize;
-	fontSize = std::clamp(fontSize, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE);
+	float fontSize = ResolveFontSize(menu);
 
 	// Check if font name is empty or invalid
 	if (themeSettings.FontName.empty()) {
@@ -256,7 +255,7 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 
 	io.FontGlobalScale = exp2(globalScale);
 
-	cachedFontSize = themeSettings.FontSize;
+	cachedFontSize = fontSize;
 	// Also update cached font name in the menu instance
 	const_cast<Menu&>(menu).cachedFontName = themeSettings.FontName;
 

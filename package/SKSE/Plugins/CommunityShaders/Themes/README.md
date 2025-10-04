@@ -7,7 +7,7 @@ This directory contains JSON theme files that can be hot-swapped at runtime with
 The theme system automatically discovers `.json` files in this directory and makes them available in the Community Shaders menu. Simply:
 
 1. Create or edit a `.json` theme file in this directory
-2. Click "Refresh Themes" in the Colors tab of the Community Shaders menu
+2. Click "Refresh Themes" in the Themes tab of the Community Shaders menu
 3. Select your theme from the dropdown
 
 ## Theme File Format

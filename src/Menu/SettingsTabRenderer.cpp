@@ -202,6 +202,10 @@ void SettingsTabRenderer::RenderThemesTab()
 		displayNames.clear();
 		items.clear();
 
+		// Reserve capacity to prevent reallocations that would invalidate pointers
+		displayNames.reserve(themes.size() + 1);
+		items.reserve(themes.size() + 1);
+
 		// Add "+ Create New" option at the top
 		displayNames.push_back("+ Create New");
 		items.push_back(displayNames.back().c_str());
