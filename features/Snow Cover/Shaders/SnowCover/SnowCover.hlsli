@@ -115,16 +115,19 @@ namespace SnowCover
 		// the range in which water level affects snow
 		waterDist = smoothstep(-64, 8, -waterDist - disp);
 		// distance from the camera in which weather has effect, this extends far beyond where lod starts
-		float distMult = 1 - smoothstep(20000, 40000 + 1000 * sin(p.z * 0.001 + cos(p.x * p.y * 0.001)), viewDist);
+		float weatherRange = 1 - smoothstep(20000, 40000 + 1000 * sin(p.z * 0.001 + cos(p.x * p.y * 0.001)), viewDist);
 		// the amount of snow based on weather, TimeSnowing transitions smoothly between -1 in rain and 1 when snowing
-		float weatherMult = distMult * pow(SharedData::snowCoverSettings.TimeSnowing, 3) * max(500, SharedData::snowCoverSettings.SnowingDensity) / 500;
+		float weatherMult = weatherRange * pow(SharedData::snowCoverSettings.TimeSnowing, 3) * max(500, SharedData::snowCoverSettings.SnowingDensity) / 500;
 		weatherMult = clamp(-1, 1, (weatherMult + disp * 0.1) * max(SharedData::snowCoverSettings.minAngle, worldNormal.z));
 		// the amount of snow based on season and weather
 		float env_mult = saturate(max(saturate(GetEnvironmentalMultiplier(p) + disp), weatherMult)) - waterDist;
-		#if defined(LODOBJECTSHD) || defined(LODOBJECTS)
-
-		#endif
-		float mult = skylight * env_mult * smoothstep(SharedData::snowCoverSettings.minAngle, SharedData::snowCoverSettings.maxAngle, worldNormal.z);
+#		if !defined(LANDSCAPE) && !defined(LOD)
+		// removes pure white lod object billboard trees (ultra billboards) that have no special flags and are not marked as lod
+		float distMult = 1 - smoothstep(4096+2048,9192, viewDist)*0.5;
+#		else
+		float distMult = 1;
+#		endif
+		float mult = distMult * skylight * env_mult * smoothstep(SharedData::snowCoverSettings.minAngle, SharedData::snowCoverSettings.maxAngle, worldNormal.z);
 		if (mult < 0.001){
 			alt = false;
 			return 0;
@@ -165,7 +168,7 @@ namespace SnowCover
 		}
 		prop.Roughness = lerp(prop.Roughness, rmaos.x, mult);
 		prop.Metallic = lerp(prop.Metallic, rmaos.y, mult);
-		prop.AO = lerp(prop.AO, rmaos.z, mult);
+		prop.AO = lerp(prop.AO, rmaos.z, mult * 0.5); //always leave a part of the original ao to make it more interesting
 		prop.GlintScreenSpaceScale = lerp(prop.GlintScreenSpaceScale, SharedData::snowCoverSettings.Glint.x, mult);
 		prop.GlintLogMicrofacetDensity = lerp(prop.GlintLogMicrofacetDensity, SharedData::snowCoverSettings.Glint.y, mult);
 		prop.GlintMicrofacetRoughness = lerp(prop.GlintMicrofacetRoughness, SharedData::snowCoverSettings.Glint.z, mult);

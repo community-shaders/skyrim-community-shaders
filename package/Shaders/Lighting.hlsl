@@ -2263,6 +2263,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float3 snowNormal = worldNormal;
 		float3 snowedColor = baseColor.rgb;
 #		if defined(TREE_ANIM)
+			snowNormal = normalize(snowNormal + float3(0, 0, 0.5));
 		if (SharedData::snowCoverSettings.AffectTreeTint)
 			SnowCover::ApplyFoliageColor(snowedColor.rgb, SnowCover::GetEnvironmentalMultiplier(adjustedWorldPos));
 #		endif
