@@ -109,23 +109,26 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 			for (const auto& data : collisionShapes) {
 				collisionsData.push_back(data);
 
-				if (boundingBoxCollisions == 0) {
-					// Seed from the first sample rather than starting at {0,0}
-					boundingBox.MinExtent = { data.x - data.w, data.y - data.w };
-					boundingBox.MaxExtent = { data.x + data.w, data.y + data.w };
-				} else {
-					float2 pointMin(data.x - data.w, data.y - data.w);
-					float2 pointMax(data.x + data.w, data.y + data.w);
+			for (const auto& data : collisionShapes) {
+				// Stop adding once we’ve hit our GPU‐side capacity
+				if (collisionIndexExtent >= MAX_COLLISIONS)
+					break;
 
-					boundingBox.MinExtent.x = std::min(boundingBox.MinExtent.x, pointMin.x);
-					boundingBox.MinExtent.y = std::min(boundingBox.MinExtent.y, pointMin.y);
+				collisionsData.push_back(data);
 
-					boundingBox.MaxExtent.x = std::max(boundingBox.MaxExtent.x, pointMax.x);
-					boundingBox.MaxExtent.y = std::max(boundingBox.MaxExtent.y, pointMax.y);
-				}
+				float2 pointMin(data.x - data.w, data.y - data.w);
+				float2 pointMax(data.x + data.w, data.y + data.w);
+
+				boundingBox.MinExtent.x = std::min(boundingBox.MinExtent.x, pointMin.x);
+				boundingBox.MinExtent.y = std::min(boundingBox.MinExtent.y, pointMin.y);
+
+				boundingBox.MaxExtent.x = std::max(boundingBox.MaxExtent.x, pointMax.x);
+				boundingBox.MaxExtent.y = std::max(boundingBox.MaxExtent.y, pointMax.y);
 
 				boundingBox.IndexEnd++;
+
 				boundingBoxCollisions++;
+
 				if (boundingBoxCollisions == MAX_COLLISIONS_PER_BOUNDING_BOX)
 					break;
 			}
@@ -134,21 +137,9 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 				boundingBoxData.push_back(boundingBox);
 
 			collisionIndexExtent = boundingBox.IndexEnd;
-		}
-	}
-
-	perFrameData.BoundingBoxCount = std::min((uint)boundingBoxData.size(), MAX_BOUNDING_BOXES);
-
-	auto context = globals::d3d::context;
-
-	if (collisionIndexExtent > 0) {
-		D3D11_MAPPED_SUBRESOURCE mapped;
-		DX::ThrowIfFailed(context->Map(collisionInstances->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
-		size_t bytes = sizeof(float4) * collisionIndexExtent;
-		memcpy_s(mapped.pData, bytes, collisionsData.data(), bytes);
-		context->Unmap(collisionInstances->resource.get(), 0);
-	}
-
+			// Bail out of the bounding‐box loop when we’ve filled our buffer
+			if (collisionIndexExtent >= MAX_COLLISIONS)
+				break;
 	if (perFrameData.BoundingBoxCount > 0) {
 		D3D11_MAPPED_SUBRESOURCE mapped;
 		DX::ThrowIfFailed(context->Map(collisionBoundingBoxes->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
