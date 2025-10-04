@@ -56,7 +56,6 @@ public:
 
 	Settings settings;
 
-	bool updatePerFrame = false;
 	ConstantBuffer* perFrame = nullptr;
 
 	eastl::unique_ptr<Buffer> collisionBoundingBoxes = nullptr;
@@ -70,7 +69,6 @@ public:
 	Texture2D* collisionTexture = nullptr;
 
 	virtual void SetupResources() override;
-	virtual void Reset() override;
 
 	virtual void DrawSettings() override;
 	void UpdateCollisions(PerFrame& perFrame);

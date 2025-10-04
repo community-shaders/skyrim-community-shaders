@@ -147,7 +147,8 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 
 void GrassCollision::Update()
 {
-	if (updatePerFrame) {
+	static Util::FrameChecker frameChecker;
+	if (frameChecker.IsNewFrame()) {
 		PerFrame perFrameData{};
 
 		perFrameData.BoundingBoxCount = 0;
@@ -197,16 +198,14 @@ void GrassCollision::Update()
 
 		prevCellID = cellID;
 
-		updatePerFrame = false;
-	}
+		auto context = globals::d3d::context;
 
-	auto context = globals::d3d::context;
-
-	static Util::FrameChecker frameChecker;
-	if (frameChecker.IsNewFrame()) {
 		ID3D11Buffer* buffers[1];
 		buffers[0] = perFrame->CB();
 		context->VSSetConstantBuffers(5, ARRAYSIZE(buffers), buffers);
+
+		ID3D11ShaderResourceView* srvs[] = { collisionTexture->srv.get() };
+		context->VSSetShaderResources(100, ARRAYSIZE(srvs), srvs);
 	}
 }
 
@@ -302,11 +301,6 @@ void GrassCollision::SetupResources()
 	}
 }
 
-void GrassCollision::Reset()
-{
-	updatePerFrame = true;
-}
-
 bool GrassCollision::HasShaderDefine(RE::BSShader::Type shaderType)
 {
 	switch (shaderType) {
@@ -384,7 +378,4 @@ void GrassCollision::UpdateCollisionTexture()
 
 	ID3D11UnorderedAccessView* null_uavs[1] = { nullptr };
 	context->CSSetUnorderedAccessViews(0, 1, null_uavs, nullptr);
-
-	ID3D11ShaderResourceView* srvs[] = { collisionTexture->srv.get() };
-	context->VSSetShaderResources(100, ARRAYSIZE(srvs), srvs);
 }
