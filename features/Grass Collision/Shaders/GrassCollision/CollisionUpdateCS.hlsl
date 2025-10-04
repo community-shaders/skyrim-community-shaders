@@ -6,7 +6,7 @@ cbuffer PerFrameCB : register(b0)
 {
 	float2 PosOffset;  // cell origin in camera space
 	uint2 ArrayOrigin; // xy: array origin (clipmap wrapping)
-
+	
 	int2 ValidMargin;
 	float TimeDelta;
 	uint BoundingBoxCount;
@@ -50,9 +50,10 @@ groupshared BoundingBoxPacked SharedBoundingBoxes[64];
 	float2 cellCentreMS = cellID + 0.5 - TEXTURE_SIZE / 2;
 	cellCentreMS = cellCentreMS / TEXTURE_SIZE * WORLD_SIZE + PosOffset.xy;
 
+	// Check if the cell is newly added
 	uint2 validMin = (uint2)max(0, ValidMargin.xy);
 	uint2 validMax = TEXTURE_SIZE - 1 + (uint2)min(0, ValidMargin.xy);
-	bool isValid = all(cellID >= validMin) && all(cellID <= validMax);  // check if the cell is newly added
+	bool isValid = all(cellID >= validMin) && all(cellID <= validMax);
 
 	float2 collision = max(ZRANGE.x, ZRANGE.y);
 	float2 previousCollision = collision;
@@ -72,15 +73,12 @@ groupshared BoundingBoxPacked SharedBoundingBoxes[64];
 	
 	for (uint i = 0; i < BoundingBoxCount; i++) {
 		BoundingBoxPacked boundingBox = SharedBoundingBoxes[i];
-
-		float2 insideBoundingBox = step(boundingBox.MinExtent, cellCentreMS) * step(cellCentreMS, boundingBox.MaxExtent);
-
 		// Test high level collision
-		if (all(insideBoundingBox)){
+		if (all(cellCentreMS >= boundingBox.MinExtent && cellCentreMS <= boundingBox.MaxExtent)){
 			// Process collision data
 			for (uint j = boundingBox.IndexStart; j < boundingBox.IndexEnd; j++) {
 				float4 collisionInstance = CollisionInstances[j];
-				float radius = collisionInstance.w * 1.5;
+				float radius = collisionInstance.w;
 
 				// Get the lowest point of the sphere at this cell position
 				float dist = distance(collisionInstance.xy, cellCentreMS);
@@ -88,7 +86,8 @@ groupshared BoundingBoxPacked SharedBoundingBoxes[64];
 				// Check if we're within the sphere's radius
 				if (dist < radius) {
 					// Get sphere geometry approximation (diamond shape)
-					float height = collisionInstance.z;
+					float heightFromCenter = radius - dist;
+					float height = collisionInstance.z - heightFromCenter;
 
 					collision.x = min(collision.x, height);
 
