@@ -2,11 +2,6 @@ namespace GrassCollision
 {
 	Texture2D<float4> Collision : register(t100);
 
-	struct CollisionData
-	{
-		float4 centre[2];
-	};
-
 	cbuffer GrassCollisionPerFrame : register(b5)
 	{
 		float2 PosOffset;  // cell origin in camera space
@@ -15,11 +10,9 @@ namespace GrassCollision
 		int2 ValidMargin;
 		float TimeDelta;
 		uint numCollisions;
-
-		CollisionData collisionData[256];
 	}
 
-	const static uint TEXTURE_SIZE = 256;
+	const static uint TEXTURE_SIZE = 512;
 	const static float WORLD_SIZE = 4096;
 	const static float CELL_SIZE = WORLD_SIZE / TEXTURE_SIZE;
 	const static float2 ZRANGE = float2(2048.0, -2048.0);
@@ -125,12 +118,12 @@ namespace GrassCollision
 		GetCollision(worldPosition + float3(delta, 0, 0), collisionX, collisionXAmount, previousCollisionX, previousCollisionXAmount);
 		GetCollision(worldPosition + float3(0, delta, 0), collisionY, collisionYAmount, previousCollisionY, previousCollisionYAmount);
 
-		// Process current collision (using y component for height)
+		// Process current collision
 		float3 currentAmounts = float3(collisionCenterAmount, collisionXAmount, collisionYAmount);
 		float avgCurrentAmount = dot(currentAmounts, 1.0 / 3.0);
 		collision = ComputeNormalFromHeights(collisionCenter.x, collisionX.x, collisionY.x, delta) * avgCurrentAmount;
 		
-		// Process previous collision (using w component for height)
+		// Process previous collision
 		float3 previousAmounts = float3(previousCollisionCenterAmount, previousCollisionXAmount, previousCollisionYAmount);
 		float avgPreviousAmount = dot(previousAmounts, 1.0 / 3.0);
 		previousCollision = ComputeNormalFromHeights(previousCollisionCenter.x, previousCollisionX.x, previousCollisionY.x, delta) * avgPreviousAmount;

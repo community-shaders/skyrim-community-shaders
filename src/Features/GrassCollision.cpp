@@ -1,33 +1,26 @@
 #include "GrassCollision.h"
-#include "../Utils/ActorUtils.h"
-#include "Deferred.h"
+
 #include "State.h"
+#include "Utils/ActorUtils.h"
+
+static const uint MAX_BOUNDING_BOXES = 64;
+static const uint MAX_COLLISIONS_PER_BOUNDING_BOX = 64;
+static const uint MAX_COLLISIONS = MAX_BOUNDING_BOXES * MAX_COLLISIONS_PER_BOUNDING_BOX;
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	GrassCollision::Settings,
 	EnableGrassCollision,
 	TrackRagdolls)
 
-struct ActorRow
-{
-	RE::TESObjectREFR* actor;
-	std::vector<std::string> row;
-	float sqDist;
-};
-
 void GrassCollision::DrawSettings()
 {
 	if (ImGui::TreeNodeEx("Grass Collision", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Checkbox("Enable Grass Collision", (bool*)&settings.EnableGrassCollision);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Allows player collision to modify grass position.");
+		
+		if (ImGui::TreeNodeEx("Collision Height", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::Image(collisionTexture->srv.get(), { 512, 512 });
+			ImGui::TreePop();
 		}
-		ImGui::Checkbox("Track Ragdolls", &settings.TrackRagdolls);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("If enabled, dead actors (ragdolls) will be tracked.");
-		}
-
-		ImGui::Image(collisionTexture->srv.get(), { 512, 512 });
 
 		ImGui::TreePop();
 	}
@@ -35,8 +28,7 @@ void GrassCollision::DrawSettings()
 
 void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 {
-	actorList.clear();
-	std::vector<Util::ActorDisplayInfo> actorDisplayInfos;
+	eastl::vector<RE::Actor*> actorList{};
 
 	// Actor query code from po3 under MIT
 	// https://github.com/powerof3/PapyrusExtenderSSE/blob/7a73b47bc87331bec4e16f5f42f2dbc98b66c3a7/include/Papyrus/Functions/Faction.h#L24C7-L46
@@ -46,9 +38,8 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 		for (auto array : actors) {
 			for (auto& actorHandle : *array) {
 				auto actorPtr = actorHandle.get();
-				if (actorPtr && actorPtr.get() && actorPtr.get()->Is3DLoaded()) {
+				if (actorPtr && actorPtr.get()) {
 					actorList.push_back(actorPtr.get());
-					totalActorCount++;
 				}
 			}
 		}
@@ -57,50 +48,92 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 	if (auto player = RE::PlayerCharacter::GetSingleton())
 		actorList.push_back(player);
 
-	RE::NiPoint3 cameraPosition = Util::GetAverageEyePosition();
+	RE::NiPoint3 cameraPosition = Util::GetEyePosition(0);
+
+	eastl::vector<BoundingBoxPacked> boundingBoxData{};
+	boundingBoxData.reserve(MAX_BOUNDING_BOXES);
+
+	eastl::vector<float4> collisionsData{};
+	collisionsData.reserve(MAX_COLLISIONS);
+
+	uint collisionIndexExtent = 0;
 
 	for (const auto actor : actorList) {
-		Util::ActorDisplayInfo info;
-		if (!Util::GetActorDisplayInfo(actor, cameraPosition, settings.TrackRagdolls, info))
-			continue;
-		actorDisplayInfos.push_back(info);
-	}
-
-	for (const auto& info : actorDisplayInfos) {
-		if (currentCollisionCount == 256)
-			break;
-		auto actor = static_cast<RE::Actor*>(info.actor);
 		if (actor && actor->Is3DLoaded()) {
 			auto root = actor->Get3D(false);
 			if (!root)
 				continue;
-			float distance = cameraPosition.GetDistance(info.pos);
+
+			float distance = cameraPosition.GetDistance(actor->GetPosition());
 			if (distance > 2048.0f)
 				continue;
-			activeActorCount++;
+
+			BoundingBoxPacked boundingBox;
+
+			boundingBox.IndexStart = collisionIndexExtent;
+			boundingBox.IndexEnd = collisionIndexExtent;
+
 			RE::BSVisit::TraverseScenegraphCollision(root, [&](RE::bhkNiCollisionObject* a_object) -> RE::BSVisit::BSVisitControl {
 				RE::NiPoint3 centerPos;
 				float radius;
 				if (Util::GetShapeBound(a_object, centerPos, radius)) {
-					if (radius < distance * 0.01f)
+					if (radius < distance * 0.001f)
 						return RE::BSVisit::BSVisitControl::kContinue;
-					CollisionData data{};
-					for (int eyeIndex = 0; eyeIndex < eyeCount; eyeIndex++) {
-						data.centre[eyeIndex].x = centerPos.x;
-						data.centre[eyeIndex].y = centerPos.y;
-						data.centre[eyeIndex].z = centerPos.z;
-					}
-					data.centre[0].w = radius;
-					perFrameData.CollisionData[currentCollisionCount] = data;
-					currentCollisionCount++;
-					if (currentCollisionCount == 256)
+
+					centerPos -= cameraPosition;
+
+					float4 data{};
+					data.x = centerPos.x;
+					data.y = centerPos.y;
+					data.z = centerPos.z;
+					data.w = radius;
+
+					collisionsData.push_back(data);
+
+					float2 pointMin(centerPos.x - radius, centerPos.y - radius);
+					float2 pointMax(centerPos.x + radius, centerPos.y + radius);
+
+					boundingBox.MinExtent.x = std::min(boundingBox.MinExtent.x, pointMin.x);
+					boundingBox.MinExtent.y = std::min(boundingBox.MinExtent.y, pointMin.y);
+
+					boundingBox.MaxExtent.x = std::max(boundingBox.MaxExtent.x, pointMax.x);
+					boundingBox.MaxExtent.y = std::max(boundingBox.MaxExtent.y, pointMax.y);
+
+					boundingBox.IndexEnd++;
+
+					if (boundingBox.IndexEnd == MAX_COLLISIONS_PER_BOUNDING_BOX)
 						return RE::BSVisit::BSVisitControl::kStop;
 				}
 				return RE::BSVisit::BSVisitControl::kContinue;
 			});
+
+			boundingBoxData.push_back(boundingBox);
+
+			collisionIndexExtent = boundingBox.IndexEnd;
 		}
 	}
-	perFrameData.NumCollisions = currentCollisionCount;
+
+	perFrameData.BoundingBoxCount = std::min((uint)boundingBoxData.size(), MAX_BOUNDING_BOXES);
+
+	auto context = globals::d3d::context;
+
+	if (collisionIndexExtent > 0)
+	{
+		D3D11_MAPPED_SUBRESOURCE mapped;
+		DX::ThrowIfFailed(context->Map(collisionInstances->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
+		size_t bytes = sizeof(float4) * collisionIndexExtent;
+		memcpy_s(mapped.pData, bytes, collisionsData.data(), bytes);
+		context->Unmap(collisionInstances->resource.get(), 0);
+	}
+
+	if (perFrameData.BoundingBoxCount > 0)
+	{
+		D3D11_MAPPED_SUBRESOURCE mapped;
+		DX::ThrowIfFailed(context->Map(collisionBoundingBoxes->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
+		size_t bytes = sizeof(BoundingBoxPacked) * perFrameData.BoundingBoxCount;
+		memcpy_s(mapped.pData, bytes, boundingBoxData.data(), bytes);
+		context->Unmap(collisionBoundingBoxes->resource.get(), 0);
+	}
 }
 
 void GrassCollision::Update()
@@ -108,10 +141,7 @@ void GrassCollision::Update()
 	if (updatePerFrame) {
 		PerFrame perFrameData{};
 
-		perFrameData.NumCollisions = 0;
-		currentCollisionCount = 0;
-		totalActorCount = 0;
-		activeActorCount = 0;
+		perFrameData.BoundingBoxCount = 0;
 
 		static float2 prevCellID = { 0, 0 };
 
@@ -119,7 +149,7 @@ void GrassCollision::Update()
 		auto eyePos = float2{ eyePosNI.x, eyePosNI.y };
 
 		float worldSize = 4096.0f;
-		uint textureArrayDims = 256;
+		uint textureArrayDims = 512;
 
 		float2 cellSize = {
 			worldSize / textureArrayDims,
@@ -157,7 +187,7 @@ void GrassCollision::Update()
 		perFrame->Update(perFrameData);
 
 		if (settings.EnableGrassCollision)
-			UpdateCollision();
+			UpdateCollisionTexture();
 
 		prevCellID = cellID;
 
@@ -200,8 +230,8 @@ void GrassCollision::SetupResources()
 
 	{
 		D3D11_TEXTURE2D_DESC texDesc = {
-			.Width = 256,
-			.Height = 256,
+			.Width = 512,
+			.Height = 512,
 			.MipLevels = 1,
 			.ArraySize = 1,
 			.Format = DXGI_FORMAT_R16G16B16A16_UNORM,
@@ -227,6 +257,42 @@ void GrassCollision::SetupResources()
 		collisionTexture = new Texture2D(texDesc);
 		collisionTexture->CreateSRV(srvDesc);
 		collisionTexture->CreateUAV(uavDesc);
+	}
+
+	{
+		D3D11_BUFFER_DESC sbDesc{};
+		sbDesc.Usage = D3D11_USAGE_DYNAMIC;
+		sbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+		sbDesc.StructureByteStride = sizeof(BoundingBoxPacked);
+		sbDesc.ByteWidth = sizeof(BoundingBoxPacked) * MAX_BOUNDING_BOXES;
+		collisionBoundingBoxes = eastl::make_unique<Buffer>(sbDesc);
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
+		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+		srvDesc.Buffer.FirstElement = 0;
+		srvDesc.Buffer.NumElements = MAX_BOUNDING_BOXES;
+		collisionBoundingBoxes->CreateSRV(srvDesc);
+	}
+
+	{
+		D3D11_BUFFER_DESC sbDesc{};
+		sbDesc.Usage = D3D11_USAGE_DYNAMIC;
+		sbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+		sbDesc.StructureByteStride = sizeof(float4);
+		sbDesc.ByteWidth = sizeof(float4) * MAX_COLLISIONS;
+		collisionInstances = eastl::make_unique<Buffer>(sbDesc);
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
+		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+		srvDesc.Buffer.FirstElement = 0;
+		srvDesc.Buffer.NumElements = MAX_COLLISIONS;
+		collisionInstances->CreateSRV(srvDesc);
 	}
 }
 
@@ -267,7 +333,7 @@ ID3D11ComputeShader* GrassCollision::GetCollisionUpdateCS()
 	return collisionUpdateCS;
 }
 
-void GrassCollision::UpdateCollision()
+void GrassCollision::UpdateCollisionTexture()
 {
 	auto context = globals::d3d::context;
 
@@ -287,14 +353,23 @@ void GrassCollision::UpdateCollision()
 		}
 	}
 
-	ID3D11Buffer* buffers[1] = { perFrame->CB() };
-	context->CSSetConstantBuffers(0, 1, buffers);
+	{
+		ID3D11Buffer* buffers[1] = { perFrame->CB() };
+		context->CSSetConstantBuffers(0, 1, buffers);
 
-	ID3D11UnorderedAccessView* uavs[] = { collisionTexture->uav.get() };
-	context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+		ID3D11ShaderResourceView* srvs[] = {
+			collisionBoundingBoxes->srv.get(),
+			collisionInstances->srv.get(),
+		};
 
-	context->CSSetShader(GetCollisionUpdateCS(), nullptr, 0);
-	context->Dispatch(512 / 8, 512 / 8, 1);
+		context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
+
+		ID3D11UnorderedAccessView* uavs[] = { collisionTexture->uav.get() };
+		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+		context->CSSetShader(GetCollisionUpdateCS(), nullptr, 0);
+		context->Dispatch(512 / 8, 512 / 8, 1);
+	}
 
 	context->CSSetShader(nullptr, nullptr, 0);
 
@@ -306,6 +381,4 @@ void GrassCollision::UpdateCollision()
 
 	ID3D11ShaderResourceView* srvs[] = { collisionTexture->srv.get() };
 	context->VSSetShaderResources(100, ARRAYSIZE(srvs), srvs);
-
-	context->VSSetSamplers(0, 1, &globals::deferred->linearSampler);
 }

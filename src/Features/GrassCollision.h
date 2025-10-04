@@ -26,7 +26,7 @@ public:
 
 	bool HasShaderDefine(RE::BSShader::Type shaderType) override;
 
-	void UpdateCollision();
+	void UpdateCollisionTexture();
 
 	struct Settings
 	{
@@ -35,9 +35,13 @@ public:
 		bool EnableBlur = 1;
 	};
 
-	struct alignas(16) CollisionData
+	struct alignas(16) BoundingBoxPacked
 	{
-		float4 centre[2];
+		float2 MinExtent = { 0, 0 };
+		float2 MaxExtent = { 0, 0 };
+		uint IndexStart = 0;
+		uint IndexEnd = 0;
+		float2 pad0;
 	};
 
 	struct alignas(16) PerFrame
@@ -47,22 +51,16 @@ public:
 
 		DirectX::XMINT2 ValidMargin;
 		float TimeDelta;
-		uint NumCollisions;
-
-		CollisionData CollisionData[256];
+		uint BoundingBoxCount;
 	};
-
-	std::uint32_t totalActorCount = 0;
-	std::uint32_t activeActorCount = 0;
-	std::uint32_t currentCollisionCount = 0;
-	std::vector<RE::Actor*> actorList{};
-	std::uint32_t collisionCount = 0;
 
 	Settings settings;
 
 	bool updatePerFrame = false;
 	ConstantBuffer* perFrame = nullptr;
-	int eyeCount = !REL::Module::IsVR() ? 1 : 2;
+
+	eastl::unique_ptr<Buffer> collisionBoundingBoxes = nullptr;
+	eastl::unique_ptr<Buffer> collisionInstances = nullptr;
 
 	virtual void ClearShaderCache() override;
 
