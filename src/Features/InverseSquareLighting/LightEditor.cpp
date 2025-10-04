@@ -372,7 +372,7 @@ void LightEditor::ExportLightsToJson()
 
 	// Group lights by model/reference to create proper Light Placer structure
 	std::map<std::string, std::vector<const LightInfo*>> lightsByModel;
-	
+
 	int metadataLightCount = 0;
 	for (const auto& light : lights) {
 		// Only export lights that have metadata (isRef or isAttached)
@@ -385,7 +385,7 @@ void LightEditor::ExportLightsToJson()
 			metadataLightCount++;
 		}
 	}
-	
+
 	// Create Light Placer entries for each model group
 	for (const auto& [modelKey, modelLights] : lightsByModel) {
 		json modelEntry;
@@ -462,7 +462,7 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 
 	// Light data section
 	json lightData;
-	
+
 	// Basic light properties - using display info when available
 	if (lightInfo.isRef || lightInfo.isAttached) {
 		lightData["light"] = displayInfo.lighEditorId.empty() ? "DefaultPointLight01" : displayInfo.lighEditorId;
@@ -523,13 +523,13 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 			}
 			// Store other TES flags in metadata
 			lightData["_islMetadata"]["tesFlags"] = {
-				{"dynamic", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic))},
-				{"negative", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative))},
-				{"flicker", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker))},
-				{"flickerSlow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow))},
-				{"pulse", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse))},
-				{"pulseSlow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow))},
-				{"hemiShadow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow))}
+				{ "dynamic", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic)) },
+				{ "negative", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative)) },
+				{ "flicker", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker)) },
+				{ "flickerSlow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow)) },
+				{ "pulse", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse)) },
+				{ "pulseSlow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow)) },
+				{ "hemiShadow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow)) }
 			};
 		}
 
@@ -546,11 +546,11 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 		// Additional reference metadata
 		if (lightInfo.isRef || lightInfo.isAttached) {
 			lightData["_islMetadata"]["ownerInfo"] = {
-				{"ownerFormID", fmt::format("0x{:08X}", displayInfo.ownerFormId)},
-				{"ownerEditorID", displayInfo.ownerEditorId},
-				{"baseObjectFormID", fmt::format("0x{:08X}", displayInfo.baseObjectFormId)},
-				{"ownerLastEditedBy", displayInfo.ownerLastEditedBy},
-				{"cellEditorID", displayInfo.cellEditorId}
+				{ "ownerFormID", fmt::format("0x{:08X}", displayInfo.ownerFormId) },
+				{ "ownerEditorID", displayInfo.ownerEditorId },
+				{ "baseObjectFormID", fmt::format("0x{:08X}", displayInfo.baseObjectFormId) },
+				{ "ownerLastEditedBy", displayInfo.ownerLastEditedBy },
+				{ "cellEditorID", displayInfo.cellEditorId }
 			};
 		}
 	}
@@ -589,7 +589,7 @@ void LightEditor::ExportSelectedLightToJson()
 			currentCell = player->GetParentCell();
 		}
 	}
-	
+
 	// Create single model entry for selected light
 	json modelEntry;
 
@@ -602,14 +602,12 @@ void LightEditor::ExportSelectedLightToJson()
 
 	// Add export metadata (custom extension)
 	modelEntry["_islExportInfo"] = {
-		{"timestamp", ss.str()},
-		{"exportType", "selected_light"},
-		{"cellEditorID", currentCell && currentCell->GetFormEditorID() ? currentCell->GetFormEditorID() : "Unknown"},
-		{"selectedLightInfo", {
-			{"refID", fmt::format("0x{:08X}", selected.id)},
-			{"name", selected.name},
-			{"type", selected.isRef ? "Reference" : (selected.isAttached ? "Attached" : "Other")}
-		}}
+		{ "timestamp", ss.str() },
+		{ "exportType", "selected_light" },
+		{ "cellEditorID", currentCell && currentCell->GetFormEditorID() ? currentCell->GetFormEditorID() : "Unknown" },
+		{ "selectedLightInfo", { { "refID", fmt::format("0x{:08X}", selected.id) },
+								   { "name", selected.name },
+								   { "type", selected.isRef ? "Reference" : (selected.isAttached ? "Attached" : "Other") } } }
 	};
 
 	// Add player position for reference
