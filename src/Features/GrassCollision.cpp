@@ -16,7 +16,7 @@ void GrassCollision::DrawSettings()
 {
 	if (ImGui::TreeNodeEx("Grass Collision", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Checkbox("Enable Grass Collision", (bool*)&settings.EnableGrassCollision);
-		
+
 		if (ImGui::TreeNodeEx("Collision Height", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Image(collisionTexture->srv.get(), { 512, 512 });
 			ImGui::TreePop();
@@ -122,8 +122,7 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 
 	auto context = globals::d3d::context;
 
-	if (collisionIndexExtent > 0)
-	{
+	if (collisionIndexExtent > 0) {
 		D3D11_MAPPED_SUBRESOURCE mapped;
 		DX::ThrowIfFailed(context->Map(collisionInstances->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
 		size_t bytes = sizeof(float4) * collisionIndexExtent;
@@ -131,8 +130,7 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 		context->Unmap(collisionInstances->resource.get(), 0);
 	}
 
-	if (perFrameData.BoundingBoxCount > 0)
-	{
+	if (perFrameData.BoundingBoxCount > 0) {
 		D3D11_MAPPED_SUBRESOURCE mapped;
 		DX::ThrowIfFailed(context->Map(collisionBoundingBoxes->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
 		size_t bytes = sizeof(BoundingBoxPacked) * perFrameData.BoundingBoxCount;

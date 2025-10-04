@@ -70,7 +70,7 @@ groupshared BoundingBoxPacked SharedBoundingBoxes[64];
 		// Temporal decay
 		collision = previousCollision + fadeRate;
 	}
-	
+
 	for (uint i = 0; i < BoundingBoxCount; i++) {
 		BoundingBoxPacked boundingBox = SharedBoundingBoxes[i];
 		// Test high level collision
