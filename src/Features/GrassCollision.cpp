@@ -331,7 +331,7 @@ void GrassCollision::UpdateCollisionTexture()
 	auto context = globals::d3d::context;
 
 	if (!settings.EnableGrassCollision) {
-		float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };	
+		float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 		context->ClearUnorderedAccessViewFloat(collisionTexture->uav.get(), clearColor);
 		return;
 	}
