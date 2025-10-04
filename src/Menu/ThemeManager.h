@@ -48,7 +48,8 @@ public:
 	static void RenderBackgroundBlur(); // Real-time shader-based blur rendering
 	static void ForceApplyDefaultTheme(); // Force Default.json colors to ImGui (bypass hardcoded defaults)
 
-	// Blur system methods
+	// Blur system methods - inspired by Unrimp rendering engine
+	// Credits: Christian Ofenberg and the Unrimp project (https://github.com/cofenberg/unrimp)
 	static bool InitializeBlurShaders();
 	static void CreateBlurTextures(UINT width, UINT height, DXGI_FORMAT format);
 	static void PerformGaussianBlur(ID3D11Texture2D* sourceTexture, ID3D11RenderTargetView* targetRTV, ImVec2 menuMin, ImVec2 menuMax);
