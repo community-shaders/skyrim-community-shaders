@@ -18,13 +18,13 @@ namespace GrassCollision
 	const static float2 ZRANGE = float2(2048.0, -2048.0);
 
 	float ProceduralAnimation(float x) {
-		float fadeRate = 100;
+		float fadeRate = 1000;
 		x /= fadeRate;
 		float frequency = 4 * Math::PI;
 		return cos(x * frequency) * exp(-x * 4);
 	}
 
-	void GetCollision(float3 worldPosition, out float2 collisionHeights, out float collisionAmount, out float2 previousCollisionHeights, out float previousCollisionAmount)
+	void GetCollision(float3 worldPosition, out float collisionHeights, out float collisionAmount, out float previousCollisionHeights, out float previousCollisionAmount)
 	{
 		float2 positionMSAdjusted = worldPosition - PosOffset.xy;
 		float2 uv = positionMSAdjusted / WORLD_SIZE + .5;
@@ -96,17 +96,17 @@ namespace GrassCollision
 	void ComputeCollision(float3 worldPosition, float delta, out float3 collision, out float3 previousCollision)
 	{
 		// Sample collision at three points forming a small triangle
-		float2 collisionCenter;
-		float2 collisionX;
-		float2 collisionY;
+		float collisionCenter;
+		float collisionX;
+		float collisionY;
 
 		float collisionCenterAmount;
 		float collisionXAmount;
 		float collisionYAmount;
 
-		float2 previousCollisionCenter;
-		float2 previousCollisionX;
-		float2 previousCollisionY;
+		float previousCollisionCenter;
+		float previousCollisionX;
+		float previousCollisionY;
 
 		float previousCollisionCenterAmount;
 		float previousCollisionXAmount;
@@ -119,12 +119,12 @@ namespace GrassCollision
 		// Process current collision
 		float3 currentAmounts = float3(collisionCenterAmount, collisionXAmount, collisionYAmount);
 		float avgCurrentAmount = dot(currentAmounts, 1.0 / 3.0);
-		collision = ComputeNormalFromHeights(collisionCenter.x, collisionX.x, collisionY.x, delta) * avgCurrentAmount;
+		collision = ComputeNormalFromHeights(collisionCenter, collisionX, collisionY, delta) * avgCurrentAmount;
 		
 		// Process previous collision
 		float3 previousAmounts = float3(previousCollisionCenterAmount, previousCollisionXAmount, previousCollisionYAmount);
 		float avgPreviousAmount = dot(previousAmounts, 1.0 / 3.0);
-		previousCollision = ComputeNormalFromHeights(previousCollisionCenter.x, previousCollisionX.x, previousCollisionY.x, delta) * avgPreviousAmount;
+		previousCollision = ComputeNormalFromHeights(previousCollisionCenter, previousCollisionX, previousCollisionY, delta) * avgPreviousAmount;
 	}
 
 	void GetDisplacedPosition(VS_INPUT input, float3 position, uint eyeIndex, out float3 displacement, out float3 previousDisplacement)

@@ -52,6 +52,9 @@ public:
 		DirectX::XMINT2 ValidMargin;
 		float TimeDelta;
 		uint BoundingBoxCount;
+
+		float CameraHeightDelta;
+		float pad0[3];
 	};
 
 	Settings settings;

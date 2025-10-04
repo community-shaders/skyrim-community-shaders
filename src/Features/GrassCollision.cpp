@@ -150,6 +150,8 @@ void GrassCollision::Update()
 		static float2 prevCellID = { 0, 0 };
 
 		auto eyePosNI = Util::GetEyePosition(0);
+		static auto prevEyePosNI = eyePosNI;
+
 		auto eyePos = float2{ eyePosNI.x, eyePosNI.y };
 
 		float worldSize = 4096.0f;
@@ -182,6 +184,8 @@ void GrassCollision::Update()
 
 		lastGameTime = currentGameTime;
 
+		perFrameData.CameraHeightDelta = prevEyePosNI.z - eyePosNI.z;
+
 		if (settings.EnableGrassCollision)
 			UpdateCollisions(perFrameData);
 
@@ -190,6 +194,7 @@ void GrassCollision::Update()
 		UpdateCollisionTexture();
 
 		prevCellID = cellID;
+		prevEyePosNI = eyePosNI;
 
 		auto context = globals::d3d::context;
 

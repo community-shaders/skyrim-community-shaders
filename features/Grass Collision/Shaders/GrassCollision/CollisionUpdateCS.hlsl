@@ -10,6 +10,8 @@ cbuffer PerFrameCB : register(b0)
 	int2 ValidMargin;
 	float TimeDelta;
 	uint BoundingBoxCount;
+
+	float CameraHeightDelta;
 }
 
 struct BoundingBoxPacked
@@ -58,14 +60,14 @@ groupshared BoundingBoxPacked SharedBoundingBoxes[64];
 	float2 collision = max(ZRANGE.x, ZRANGE.y);
 	float2 previousCollision = collision;
 
-	float2 fadeRate = TimeDelta * 100 * float2(0.01, 1.0);
+	float2 fadeRate = TimeDelta * 1000 * float2(0.1, 1.0);
 
 	if (isValid) {
 		previousCollision = Collision[dispatchThreadId.xy];
 		previousCollision = lerp(ZRANGE.x, ZRANGE.y, previousCollision);
 
 		// Apply camera height change
-		previousCollision -= FrameBuffer::CameraPosAdjust[0].z - FrameBuffer::CameraPreviousPosAdjust[0].z;
+		previousCollision += CameraHeightDelta;
 
 		// Temporal decay
 		collision = previousCollision + fadeRate;
