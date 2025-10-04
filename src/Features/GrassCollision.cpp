@@ -77,7 +77,6 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 				RE::NiPoint3 centerPos;
 				float radius;
 				if (Util::GetShapeBound(a_object, centerPos, radius)) {
-
 					// Increase radius to pad around meshes
 					radius *= 1.5f;
 
@@ -154,7 +153,7 @@ void GrassCollision::Update()
 		float worldSize = 4096.0f;
 		uint textureArrayDims = 512;
 
-		float cellSize = worldSize / textureArrayDims;	
+		float cellSize = worldSize / textureArrayDims;
 
 		auto cellID = eyePos / cellSize;
 		cellID = { round(cellID.x), round(cellID.y) };
