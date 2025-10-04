@@ -199,7 +199,7 @@ VS_OUTPUT main(VS_INPUT input)
 
 #		ifdef GRASS_COLLISION
 	float3 displacement, previousDisplacement;
-	GrassCollision::GetDisplacedPosition(input, msPosition.xyz, eyeIndex, displacement, previousDisplacement);
+	GrassCollision::GetDisplacedPosition(input, msPosition.xyz, displacement, previousDisplacement);
 	msPosition.xyz += displacement;
 #		endif  // GRASS_COLLISION
 
@@ -266,7 +266,7 @@ VS_OUTPUT main(VS_INPUT input)
 
 #		ifdef GRASS_COLLISION
 	float3 displacement, previousDisplacement;
-	GrassCollision::GetDisplacedPosition(input, msPosition.xyz, eyeIndex, displacement, previousDisplacement);
+	GrassCollision::GetDisplacedPosition(input, msPosition.xyz, displacement, previousDisplacement);
 	msPosition.xyz += displacement;
 #		endif  // GRASS_COLLISION
 

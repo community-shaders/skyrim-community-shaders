@@ -12,7 +12,6 @@ cbuffer PerFrameCB : register(b0)
 	uint BoundingBoxCount;
 
 	float CameraHeightDelta;
-	float3 CameraRightDelta;
 }
 
 struct BoundingBoxPacked

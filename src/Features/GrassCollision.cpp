@@ -201,12 +201,6 @@ void GrassCollision::Update()
 
 		perFrameData.CameraHeightDelta = prevEyePosNI.z - eyePosNI.z;
 
-		if (globals::game::isVR){
-			auto eyePosNIRight = Util::GetEyePosition(1);
-			auto cameraRightDelta = eyePosNI - eyePosNIRight;
-			perFrameData.CameraRightDelta = { cameraRightDelta.x, cameraRightDelta.y, cameraRightDelta.z };
-		}
-
 		if (settings.EnableGrassCollision)
 			UpdateCollisions(perFrameData);
 
