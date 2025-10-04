@@ -16,12 +16,6 @@ void GrassCollision::DrawSettings()
 {
 	if (ImGui::TreeNodeEx("Grass Collision", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Checkbox("Enable Grass Collision", (bool*)&settings.EnableGrassCollision);
-
-		if (ImGui::TreeNodeEx("Collision Height", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Image(collisionTexture->srv.get(), { 512, 512 });
-			ImGui::TreePop();
-		}
-
 		ImGui::TreePop();
 	}
 }
@@ -193,8 +187,7 @@ void GrassCollision::Update()
 
 		perFrame->Update(perFrameData);
 
-		if (settings.EnableGrassCollision)
-			UpdateCollisionTexture();
+		UpdateCollisionTexture();
 
 		prevCellID = cellID;
 
@@ -336,6 +329,12 @@ ID3D11ComputeShader* GrassCollision::GetCollisionUpdateCS()
 void GrassCollision::UpdateCollisionTexture()
 {
 	auto context = globals::d3d::context;
+
+	if (!settings.EnableGrassCollision) {
+		float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };	
+		context->ClearUnorderedAccessViewFloat(collisionTexture->uav.get(), clearColor);
+		return;
+	}
 
 	{
 		ID3D11Buffer* buffers[1] = { *globals::game::perFrame };
