@@ -367,6 +367,7 @@ void LightEditor::ExportLightsToJson()
 		return;
 	}
 
+<<<<<<< Updated upstream
 	json exportData;
 
 	// Add timestamp
@@ -421,18 +422,74 @@ void LightEditor::ExportLightsToJson()
 
 	// Add light data - only include lights with metadata (edited/meaningful lights)
 	exportData["lights"] = json::array();
+=======
+	// Create Light Placer compatible format: array of light configurations
+	json exportArray = json::array();
+	
+	// Group lights by model/reference to create proper Light Placer structure
+	std::map<std::string, std::vector<const LightInfo*>> lightsByModel;
+	
+>>>>>>> Stashed changes
 	int metadataLightCount = 0;
 	for (const auto& light : lights) {
 		// Only export lights that have metadata (isRef or isAttached)
 		if (light.isRef || light.isAttached) {
-			exportData["lights"].push_back(CreateLightJsonData(light));
+			// Use a model identifier - for actual game objects this would be the model path
+			// For now, group by owner/type for demo purposes
+			std::string modelKey = fmt::format("ISL_Export_Group_{}", 
+				light.isRef ? "Reference" : "Attached");
+			lightsByModel[modelKey].push_back(&light);
 			metadataLightCount++;
 		}
 	}
+<<<<<<< Updated upstream
 
 	// Update the light count to reflect only exported lights
 	exportData["exportSettings"]["lightCount"] = metadataLightCount;
 	exportData["exportSettings"]["totalSceneLights"] = lights.size();
+=======
+	
+	// Create Light Placer entries for each model group
+	for (const auto& [modelKey, modelLights] : lightsByModel) {
+		json modelEntry;
+		
+		// Add ISL metadata as a comment (not part of Light Placer spec)
+		const auto now = std::chrono::system_clock::now();
+		const auto time_t = std::chrono::system_clock::to_time_t(now);
+		std::stringstream ss;
+		ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+		
+		// Get current cell info for context
+		const auto* tes = RE::TES::GetSingleton();
+		const auto* currentCell = tes ? tes->interiorCell : nullptr;
+		if (!currentCell && tes) {
+			const auto* player = RE::PlayerCharacter::GetSingleton();
+			if (player) {
+				currentCell = player->GetParentCell();
+			}
+		}
+		
+		// Models array - in real usage this would be actual .nif paths
+		modelEntry["models"] = json::array({modelKey + ".nif"});
+		
+		// Add export metadata (custom extension)
+		modelEntry["_islExportInfo"] = {
+			{"timestamp", ss.str()},
+			{"cellEditorID", currentCell && currentCell->GetFormEditorID() ? currentCell->GetFormEditorID() : "Unknown"},
+			{"filterOption", FilterOptionLabels[static_cast<int>(filterOption)]},
+			{"sortOption", SortOptionLabels[static_cast<int>(sortOption)]}
+		};
+		
+		// Lights array
+		modelEntry["lights"] = json::array();
+		
+		for (const auto* light : modelLights) {
+			modelEntry["lights"].push_back(CreateLightJsonData(*light));
+		}
+		
+		exportArray.push_back(modelEntry);
+	}
+>>>>>>> Stashed changes
 
 	// Generate filename with timestamp
 	const auto exportPath = Util::PathHelpers::GetCommunityShaderPath() / "LightExports";
@@ -443,9 +500,11 @@ void LightEditor::ExportLightsToJson()
 		return;
 	}
 
+	const auto now = std::chrono::system_clock::now();
+	const auto time_t = std::chrono::system_clock::to_time_t(now);
 	std::stringstream timeStream;
 	timeStream << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
-	const auto filename = fmt::format("lights_export_{}.json", timeStream.str());
+	const auto filename = fmt::format("ISL_Export_{}.json", timeStream.str());
 	const auto filePath = exportPath / filename;
 
 	std::ofstream outFile(filePath);
@@ -454,7 +513,7 @@ void LightEditor::ExportLightsToJson()
 		return;
 	}
 
-	outFile << exportData.dump(4);
+	outFile << exportArray.dump(2); // Use 2-space indent like the example
 	outFile.close();
 
 	logger::info("Successfully exported {} lights with metadata to: {}", metadataLightCount, filePath.string());
@@ -462,7 +521,12 @@ void LightEditor::ExportLightsToJson()
 
 json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 {
+	// Create Light Placer compatible format
+	json lightEntry;
+	
+	// Light data section
 	json lightData;
+<<<<<<< Updated upstream
 
 	// Basic light info - using refID as the main identifier for compatibility
 	lightData["refID"] = fmt::format("0x{:08X}", lightInfo.id);
@@ -476,10 +540,38 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 		{ "x", lightInfo.position.x },
 		{ "y", lightInfo.position.y },
 		{ "z", lightInfo.position.z }
+=======
+	
+	// Basic light properties - using display info when available
+	if (lightInfo.isRef || lightInfo.isAttached) {
+		lightData["light"] = displayInfo.lighEditorId.empty() ? "DefaultPointLight01" : displayInfo.lighEditorId;
+	} else {
+		lightData["light"] = "DefaultPointLight01"; // Default for non-ref lights
+	}
+	
+	// Color in Light Placer format [r, g, b] as 0-1 normalized values
+	lightData["color"] = {
+		current.data.diffuse.red,
+		current.data.diffuse.green,
+		current.data.diffuse.blue
+>>>>>>> Stashed changes
 	};
-
-	// If this is the selected light, include detailed settings
+	
+	// Radius and fade
+	lightData["radius"] = current.data.radius;
+	lightData["fade"] = current.data.fade;
+	
+	// Add custom metadata for ISL tracking (non-standard but useful)
+	lightData["_islMetadata"] = {
+		{"refID", fmt::format("0x{:08X}", lightInfo.id)},
+		{"editorID", lightInfo.name},
+		{"type", lightInfo.isRef ? "Reference" : (lightInfo.isAttached ? "Attached" : "Other")},
+		{"memoryAddress", fmt::format("{:p}", lightInfo.ptr)}
+	};
+	
+	// Additional settings if this is the selected light
 	if (lightInfo == selected && lightInfo.isSelected) {
+<<<<<<< Updated upstream
 		lightData["settings"] = {
 			{ "color", { { "r", current.data.diffuse.red },
 						   { "g", current.data.diffuse.green },
@@ -497,12 +589,33 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 				{ "x", current.pos.x },
 				{ "y", current.pos.y },
 				{ "z", current.pos.z }
+=======
+		// Add size and cutoff if different from default
+		if (current.data.size != 0.0f) {
+			lightData["size"] = current.data.size;
+		}
+		
+		// Position offset
+		if (current.pos.x != 0.0f || current.pos.y != 0.0f || current.pos.z != 0.0f) {
+			lightData["offset"] = {
+				current.pos.x,
+				current.pos.y,
+				current.pos.z
+>>>>>>> Stashed changes
 			};
 		}
-
-		// TES flags if applicable
+		
+		// Flags in Light Placer format
+		std::vector<std::string> flags;
+		if (static_cast<bool>(*reinterpret_cast<const uint32_t*>(&current.data.flags) & static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare))) {
+			// Note: InverseSquare is not a standard Light Placer flag
+			lightData["_islMetadata"]["isInverseSquare"] = true;
+		}
+		
+		// TES flags converted to Light Placer equivalents where possible
 		if (!lightInfo.isOther && displayInfo.ownerFormId != 0) {
 			auto flagsValue = *reinterpret_cast<const uint32_t*>(&current.tesFlags);
+<<<<<<< Updated upstream
 			lightData["settings"]["tesFlags"] = {
 				{ "dynamic", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic)) },
 				{ "negative", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative)) },
@@ -513,11 +626,38 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 				{ "hemiShadow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow)) },
 				{ "omniShadow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow)) },
 				{ "portalStrict", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict)) }
+=======
+			if (flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict)) {
+				flags.push_back("PortalStrict");
+			}
+			if (flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow)) {
+				flags.push_back("Shadow");
+			}
+			// Store other TES flags in metadata
+			lightData["_islMetadata"]["tesFlags"] = {
+				{"dynamic", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic))},
+				{"negative", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative))},
+				{"flicker", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker))},
+				{"flickerSlow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow))},
+				{"pulse", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse))},
+				{"pulseSlow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow))},
+				{"hemiShadow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow))}
+>>>>>>> Stashed changes
 			};
 		}
-
-		// Additional metadata for reference/attached lights
+		
+		if (!flags.empty()) {
+			std::string flagsStr;
+			for (size_t i = 0; i < flags.size(); ++i) {
+				if (i > 0) flagsStr += "|";
+				flagsStr += flags[i];
+			}
+			lightData["flags"] = flagsStr;
+		}
+		
+		// Additional reference metadata
 		if (lightInfo.isRef || lightInfo.isAttached) {
+<<<<<<< Updated upstream
 			lightData["metadata"] = {
 				{ "ownerFormID", fmt::format("0x{:08X}", displayInfo.ownerFormId) },
 				{ "ownerEditorID", displayInfo.ownerEditorId },
@@ -526,11 +666,29 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 				{ "cellEditorID", displayInfo.cellEditorId },
 				{ "lightFormID", fmt::format("0x{:08X}", displayInfo.lighFormId) },
 				{ "lightEditorID", displayInfo.lighEditorId }
+=======
+			lightData["_islMetadata"]["ownerInfo"] = {
+				{"ownerFormID", fmt::format("0x{:08X}", displayInfo.ownerFormId)},
+				{"ownerEditorID", displayInfo.ownerEditorId},
+				{"baseObjectFormID", fmt::format("0x{:08X}", displayInfo.baseObjectFormId)},
+				{"ownerLastEditedBy", displayInfo.ownerLastEditedBy},
+				{"cellEditorID", displayInfo.cellEditorId}
+>>>>>>> Stashed changes
 			};
 		}
 	}
-
-	return lightData;
+	
+	// Create the light entry with points array (Light Placer format)
+	lightEntry["data"] = lightData;
+	lightEntry["points"] = json::array({
+		json::array({
+			lightInfo.position.x,
+			lightInfo.position.y,
+			lightInfo.position.z
+		})
+	});
+	
+	return lightEntry;
 }
 
 void LightEditor::ExportSelectedLightToJson()
@@ -540,16 +698,22 @@ void LightEditor::ExportSelectedLightToJson()
 		return;
 	}
 
+<<<<<<< Updated upstream
 	json exportData;
 
 	// Add timestamp
+=======
+	// Create Light Placer compatible format: array with single entry
+	json exportArray = json::array();
+	
+	// Add timestamp and context metadata
+>>>>>>> Stashed changes
 	const auto now = std::chrono::system_clock::now();
 	const auto time_t = std::chrono::system_clock::to_time_t(now);
 	std::stringstream ss;
 	ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
-	exportData["timestamp"] = ss.str();
 
-	// Add current scene context
+	// Get current cell info for context
 	const auto* tes = RE::TES::GetSingleton();
 	const auto* currentCell = tes ? tes->interiorCell : nullptr;
 	if (!currentCell && tes) {
@@ -558,6 +722,7 @@ void LightEditor::ExportSelectedLightToJson()
 			currentCell = player->GetParentCell();
 		}
 	}
+<<<<<<< Updated upstream
 
 	// Cell information
 	if (currentCell) {
@@ -592,11 +757,47 @@ void LightEditor::ExportSelectedLightToJson()
 		{ "selectedLightInfo", { { "refID", fmt::format("0x{:08X}", selected.id) },
 								   { "name", selected.name },
 								   { "type", selected.isRef ? "Reference" : (selected.isAttached ? "Attached" : "Other") } } }
+=======
+	
+	// Create single model entry for selected light
+	json modelEntry;
+	
+	// Use a descriptive model name for the selected light
+	std::string modelKey = fmt::format("ISL_Selected_Light_Export_{}_{}", 
+		selected.isRef ? "Reference" : (selected.isAttached ? "Attached" : "Other"),
+		selected.id);
+	
+	modelEntry["models"] = json::array({modelKey + ".nif"});
+	
+	// Add export metadata (custom extension)
+	modelEntry["_islExportInfo"] = {
+		{"timestamp", ss.str()},
+		{"exportType", "selected_light"},
+		{"cellEditorID", currentCell && currentCell->GetFormEditorID() ? currentCell->GetFormEditorID() : "Unknown"},
+		{"selectedLightInfo", {
+			{"refID", fmt::format("0x{:08X}", selected.id)},
+			{"name", selected.name},
+			{"type", selected.isRef ? "Reference" : (selected.isAttached ? "Attached" : "Other")}
+		}}
+>>>>>>> Stashed changes
 	};
+	
+	// Add player position for reference
+	const auto* player = RE::PlayerCharacter::GetSingleton();
+	if (player) {
+		const auto playerPos = player->GetPosition();
+		modelEntry["_islExportInfo"]["playerPosition"] = {
+			{"x", playerPos.x},
+			{"y", playerPos.y},
+			{"z", playerPos.z}
+		};
+	}
 
-	// Add the selected light data
-	exportData["lights"] = json::array();
-	exportData["lights"].push_back(CreateLightJsonData(selected));
+	// Lights array with single light
+	modelEntry["lights"] = json::array();
+	modelEntry["lights"].push_back(CreateLightJsonData(selected));
+	
+	exportArray.push_back(modelEntry);
 
 	// Generate filename with timestamp
 	const auto exportPath = Util::PathHelpers::GetCommunityShaderPath() / "LightExports";
@@ -609,7 +810,7 @@ void LightEditor::ExportSelectedLightToJson()
 
 	std::stringstream timeStream;
 	timeStream << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
-	const auto filename = fmt::format("selected_light_export_{}.json", timeStream.str());
+	const auto filename = fmt::format("ISL_Selected_{}.json", timeStream.str());
 	const auto filePath = exportPath / filename;
 
 	std::ofstream outFile(filePath);
@@ -618,7 +819,7 @@ void LightEditor::ExportSelectedLightToJson()
 		return;
 	}
 
-	outFile << exportData.dump(4);
+	outFile << exportArray.dump(2); // Use 2-space indent like the example
 	outFile.close();
 
 	logger::info("Successfully exported selected light to: {}", filePath.string());
