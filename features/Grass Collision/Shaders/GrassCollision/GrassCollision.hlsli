@@ -123,7 +123,7 @@ namespace GrassCollision
 		float3 currentAmounts = float3(collisionCenterAmount, collisionXAmount, collisionYAmount);
 		float avgCurrentAmount = dot(currentAmounts, 1.0 / 3.0);
 		collision = ComputeNormalFromHeights(collisionCenter, collisionX, collisionY, delta) * avgCurrentAmount;
-		
+
 		// Process previous collision
 		float3 previousAmounts = float3(previousCollisionCenterAmount, previousCollisionXAmount, previousCollisionYAmount);
 		float avgPreviousAmount = dot(previousAmounts, 1.0 / 3.0);
