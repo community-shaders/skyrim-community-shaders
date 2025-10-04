@@ -28,7 +28,7 @@ namespace GrassCollision
 		float fadeRate = 50;
 		x /= fadeRate;
 		float frequency = 4 * Math::PI;
-		return cos(x * frequency) * exp(-x);
+		return cos(x * frequency) * exp(-x * 4);
 	}
 
 	void GetCollision(float3 worldPosition, out float2 collisionHeights, out float collisionAmount, out float2 previousCollisionHeights, out float previousCollisionAmount)
@@ -50,7 +50,7 @@ namespace GrassCollision
 
 		float wsum = 0;
 
-		float2 fadeRate = TimeDelta * 10 * float2(0.5, 1.0);
+		float2 fadeRate = TimeDelta * 50 * float2(0.01, 1.0);
 
 		for (int i = 0; i < 2; i++)
 			for (int j = 0; j < 2; j++)
@@ -172,17 +172,17 @@ namespace GrassCollision
 			float3 worldPositionCentre = mul(World[eyeIndex], float4(input.InstanceData1.xyz, 1.0)).xyz;
 
 			// Limit stretching
-			worldPosition.xy = lerp(worldPosition.xy, worldPositionCentre.xy, 0.95);
+			float3 remappedWorldPosition = lerp(worldPosition, worldPositionCentre, float3(0.95, 0.95, 0.5));
 
 			// Return base collision
 			float3 collision, previousCollision;
-			ComputeCollision(worldPosition, CELL_SIZE, collision, previousCollision);
+			ComputeCollision(remappedWorldPosition, CELL_SIZE, collision, previousCollision);
 
 			// Scale grass by wind amount (detect rocks and bottom of some grass)
 			float alpha = saturate(input.Color.w * 10.0);
 
-			displacement = collision * alpha * 0.75;
-			previousDisplacement = previousCollision * alpha * 0.75;
+			displacement = collision * alpha;
+			previousDisplacement  = previousCollision * alpha;
 		} else {
 			displacement = 0.0;
 			previousDisplacement = 0.0;

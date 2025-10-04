@@ -39,7 +39,7 @@ RWTexture2D<float2> Collision : register(u0);
 	float2 collision = max(ZRANGE.x, ZRANGE.y);
 	float2 previousCollision = collision;
 
-	float2 fadeRate = TimeDelta * 50 * float2(0.5, 1.0);
+	float2 fadeRate = TimeDelta * 50 * float2(0.01, 1.0);
 
 	if (isValid) {
 		previousCollision = Collision[dtid.xy];
@@ -56,7 +56,7 @@ RWTexture2D<float2> Collision : register(u0);
 
 	// Process collision data
 	for (uint i = 0; i < numCollisions; i++) {
-		float radius = collisionData[i].centre[0].w * 2.0;
+		float radius = collisionData[i].centre[0].w * 1.5;
 		float3 colliderCentreMS = collisionData[i].centre[0].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
 
 		// Get the lowest point of the sphere at this cell position
