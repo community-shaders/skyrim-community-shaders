@@ -313,7 +313,7 @@ namespace Util
 		// Render logo
 		ImGui::Image(logoTexture, logoSize);
 		ImGui::SameLine();
-		
+
 		// Add consistent spacing between logo and text
 		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 8.0f);
 
@@ -1391,67 +1391,68 @@ namespace Util
 
 	bool FeatureToggle(const char* label, bool* enabled, const ImVec2& size)
 	{
-		if (!enabled) return false;
+		if (!enabled)
+			return false;
 
 		// Calculate appropriate size if not specified - make it smaller
 		ImVec2 toggleSize = size;
 		if (toggleSize.x <= 0) {
-			toggleSize.x = ImGui::GetFrameHeight() * 1.6f; // Smaller 1.6:1 aspect ratio
+			toggleSize.x = ImGui::GetFrameHeight() * 1.6f;  // Smaller 1.6:1 aspect ratio
 		}
 		if (toggleSize.y <= 0) {
-			toggleSize.y = ImGui::GetFrameHeight() * 0.8f; // Smaller height
+			toggleSize.y = ImGui::GetFrameHeight() * 0.8f;  // Smaller height
 		}
 
 		// Get theme colors for better integration
 		auto& style = ImGui::GetStyle();
 		auto& colors = style.Colors;
-		
+
 		// Use theme header colors instead of bright green/red
-		ImVec4 toggleBg = *enabled ? 
-			colors[ImGuiCol_Header] :           // Use header color when enabled
-			colors[ImGuiCol_FrameBg];          // Use frame background when disabled
-		
+		ImVec4 toggleBg = *enabled ?
+		                      colors[ImGuiCol_Header] :  // Use header color when enabled
+		                      colors[ImGuiCol_FrameBg];  // Use frame background when disabled
+
 		ImVec4 toggleBgHovered = *enabled ?
-			colors[ImGuiCol_HeaderHovered] :    // Use header hovered when enabled
-			colors[ImGuiCol_FrameBgHovered];   // Use frame hovered when disabled
-		
+		                             colors[ImGuiCol_HeaderHovered] :  // Use header hovered when enabled
+		                             colors[ImGuiCol_FrameBgHovered];  // Use frame hovered when disabled
+
 		ImVec4 toggleBgActive = *enabled ?
-			colors[ImGuiCol_HeaderActive] :     // Use header active when enabled
-			colors[ImGuiCol_FrameBgActive];    // Use frame active when disabled
+		                            colors[ImGuiCol_HeaderActive] :  // Use header active when enabled
+		                            colors[ImGuiCol_FrameBgActive];  // Use frame active when disabled
 
 		// Apply toggle styling with border
 		ImGui::PushStyleColor(ImGuiCol_Button, toggleBg);
 		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, toggleBgHovered);
 		ImGui::PushStyleColor(ImGuiCol_ButtonActive, toggleBgActive);
-		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, toggleSize.y * 0.5f); // Round ends
-		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.5f); // Larger border
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, toggleSize.y * 0.5f);  // Round ends
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.5f);               // Larger border
 
 		// Create unique ID for the toggle
 		ImGui::PushID(label);
-		
+
 		// Draw the toggle button
 		bool clicked = ImGui::Button("", toggleSize);
-		
+
 		// Draw the toggle knob
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 		ImVec2 buttonMin = ImGui::GetItemRectMin();
 		ImVec2 buttonMax = ImGui::GetItemRectMax();
-		
+
 		// Calculate knob position and size
 		float knobRadius = (toggleSize.y - 4.0f) * 0.5f;
 		float knobPadding = 2.0f;
 		float knobTravel = toggleSize.x - (knobRadius * 2.0f) - (knobPadding * 2.0f);
-		float knobX = *enabled ? 
-			buttonMin.x + knobPadding + knobRadius + knobTravel :
-			buttonMin.x + knobPadding + knobRadius;
+		float knobX = *enabled ?
+		                  buttonMin.x + knobPadding + knobRadius + knobTravel :
+		                  buttonMin.x + knobPadding + knobRadius;
 		float knobY = buttonMin.y + toggleSize.y * 0.5f;
-		
+
 		// Draw knob
 		ImU32 knobColor = ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
 		drawList->AddCircleFilled(ImVec2(knobX, knobY), knobRadius, knobColor);
-		
+
 		ImGui::PopID();
-		ImGui::PopStyleVar(2); // Pop both FrameRounding and FrameBorderSize
+		ImGui::PopStyleVar(2);  // Pop both FrameRounding and FrameBorderSize
 		ImGui::PopStyleColor(3);
 
 		// Handle toggle action

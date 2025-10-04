@@ -50,11 +50,11 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 {
     float4 result = float4(0.0f, 0.0f, 0.0f, 0.0f);
     float totalWeight = 0.0f;
-    
+
     // Use configurable blur samples (default 7 like Unrimp's SHADOW_MAP_FILTER_SIZE)
     const int samples = min(BlurParams.x, 15); // Cap at 15 for performance
     const int halfSamples = samples / 2;
-    
+
     // Improved vertical sampling with sub-pixel offset for anti-aliasing
     for (int i = -halfSamples; i <= halfSamples; ++i)
     {
@@ -62,20 +62,20 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
         float offset = float(i) + 0.5f * (float(i % 2) - 0.5f) * 0.1f;
         float2 sampleCoord = input.TexCoord + float2(0.0f, offset * TexelSize.y * TexelSize.z);
         float weight = GaussianWeight(offset);
-        
+
         // Use clamp addressing to avoid artifacts at borders
         sampleCoord = clamp(sampleCoord, 0.0f, 1.0f);
-        
+
         float4 sample = InputTexture.Sample(LinearSampler, sampleCoord);
         result += sample * weight;
         totalWeight += weight;
     }
-    
+
     // Normalize by total weight to maintain brightness
     result /= totalWeight;
-    
+
     // Apply slight gamma correction to reduce scanline perception
     result.rgb = pow(abs(result.rgb), 0.95f) * sign(result.rgb);
-    
+
     return result;
 }

@@ -94,9 +94,9 @@ public:
 		UIIcon saveSettings;
 		UIIcon loadSettings;
 		UIIcon clearCache;
-		UIIcon logo;    // New logo icon
-		UIIcon search;  // Search icon for search bars
-		UIIcon featureSettingRevert; // Feature revert settings icon
+		UIIcon logo;                  // New logo icon
+		UIIcon search;                // Search icon for search bars
+		UIIcon featureSettingRevert;  // Feature revert settings icon
 
 		// Social media/external link icons
 		UIIcon discord;
@@ -128,20 +128,20 @@ public:
 		// Scrollbar opacity settings
 		struct ScrollbarOpacitySettings
 		{
-			float Background = 0.0f;    // Background of the scrollbar area
-			float Thumb = 0.5f;         // The draggable thumb/grip
-			float ThumbHovered = 0.75f; // Thumb when hovered
-			float ThumbActive = 0.9f;   // Thumb when being dragged
+			float Background = 0.0f;     // Background of the scrollbar area
+			float Thumb = 0.5f;          // The draggable thumb/grip
+			float ThumbHovered = 0.75f;  // Thumb when hovered
+			float ThumbActive = 0.9f;    // Thumb when being dragged
 		} ScrollbarOpacity;
 		struct PaletteColors
 		{
 			ImVec4 Background{ 0.10f, 0.10f, 0.10f, 0.80f };
 			ImVec4 Text{ 1.0f, 1.0f, 1.0f, 1.0f };
 			// Separated border controls for better theming granularity
-			ImVec4 WindowBorder{ 0.5f, 0.5f, 0.5f, 0.8f };     // Outer window borders
-			ImVec4 FrameBorder{ 0.4f, 0.4f, 0.4f, 0.7f };      // Button, slider, input field borders
-			ImVec4 Separator{ 0.5f, 0.5f, 0.5f, 0.6f };        // Internal separators and dividers
-			ImVec4 ResizeGrip{ 0.6f, 0.6f, 0.6f, 0.8f };       // Window resize grips
+			ImVec4 WindowBorder{ 0.5f, 0.5f, 0.5f, 0.8f };  // Outer window borders
+			ImVec4 FrameBorder{ 0.4f, 0.4f, 0.4f, 0.7f };   // Button, slider, input field borders
+			ImVec4 Separator{ 0.5f, 0.5f, 0.5f, 0.6f };     // Internal separators and dividers
+			ImVec4 ResizeGrip{ 0.6f, 0.6f, 0.6f, 0.8f };    // Window resize grips
 		} Palette;
 		struct StatusPaletteColors
 		{
@@ -157,7 +157,7 @@ public:
 		{
 			ImVec4 ColorDefault{ 0.8f, 0.8f, 0.8f, 1.0f };
 			ImVec4 ColorHovered{ 0.6f, 0.6f, 0.6f, 1.0f };
-			float MinimizedFactor = 0.7f;                   // 70% of original alpha for when the header is minimized
+			float MinimizedFactor = 0.7f;  // 70% of original alpha for when the header is minimized
 		} FeatureHeading;
 
 		ImGuiStyle Style = []() {

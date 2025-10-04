@@ -196,11 +196,11 @@ void OverlayRenderer::HandleABTesting()
 void OverlayRenderer::FinalizeImGuiFrame()
 {
 	ImGui::Render();
-	
+
 	// Apply background blur behind ImGui windows before rendering them
 	// This ensures blur is only applied to areas behind visible windows
 	ThemeManager::RenderBackgroundBlur();
-	
+
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
 	if (globals::features::vr.IsOpenVRCompatible()) {

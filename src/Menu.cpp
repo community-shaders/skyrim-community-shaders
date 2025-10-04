@@ -172,12 +172,12 @@ Menu::~Menu()
 void Menu::Load(json& o_json)
 {
 	settings = o_json;
-	
+
 	// Apply Default Dark theme on first launch if no theme is selected
 	if (!settings.FirstTimeSetupCompleted && settings.SelectedThemePreset.empty()) {
 		// Ensure default themes are created/available
 		CreateDefaultThemes();
-		
+
 		// Load the Default Dark theme and mark it as selected to prevent override
 		if (LoadThemePreset("Default")) {
 			settings.SelectedThemePreset = "Default";  // Mark as selected to prevent State::LoadTheme override
@@ -269,7 +269,7 @@ void Menu::Init()
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
-	
+
 	// IMPORTANT: Immediately override ImGui's default styles with our Default.json theme
 	// This prevents hardcoded ImGui defaults from ever showing through
 	auto* themeManager = ThemeManager::GetSingleton();
@@ -285,7 +285,7 @@ void Menu::Init()
 		// Last resort: Apply Default.json colors directly to ImGui
 		ThemeManager::ForceApplyDefaultTheme();
 	}
-	
+
 	auto& imgui_io = ImGui::GetIO();
 	imgui_io.ConfigFlags = ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad | ImGuiConfigFlags_DockingEnable;
 	imgui_io.BackendFlags = ImGuiBackendFlags_HasMouseCursors | ImGuiBackendFlags_RendererHasVtxOffset | ImGuiBackendFlags_HasGamepad;

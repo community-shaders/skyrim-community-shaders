@@ -45,8 +45,8 @@ public:
 	static void SetupImGuiStyle(const class Menu& menu);
 	static void ReloadFont(const class Menu& menu, float& cachedFontSize);
 	static void ApplyBackgroundBlur(float blurIntensity, ImVec4* colors);
-	static void RenderBackgroundBlur(); // Real-time shader-based blur rendering
-	static void ForceApplyDefaultTheme(); // Force Default.json colors to ImGui (bypass hardcoded defaults)
+	static void RenderBackgroundBlur();    // Real-time shader-based blur rendering
+	static void ForceApplyDefaultTheme();  // Force Default.json colors to ImGui (bypass hardcoded defaults)
 
 	// Blur system methods - inspired by Unrimp rendering engine
 	// Credits: Christian Ofenberg and the Unrimp project (https://github.com/cofenberg/unrimp)
@@ -170,7 +170,7 @@ private:
 	// Blur system state
 	static inline float currentBlurIntensity = 0.0f;
 	static inline bool isBlurEnabled = false;
-	
+
 	// DirectX blur resources
 	static inline ID3D11VertexShader* blurVertexShader = nullptr;
 	static inline ID3D11PixelShader* blurHorizontalPixelShader = nullptr;
@@ -178,7 +178,7 @@ private:
 	static inline ID3D11Buffer* blurConstantBuffer = nullptr;
 	static inline ID3D11SamplerState* blurSamplerState = nullptr;
 	static inline ID3D11BlendState* blurBlendState = nullptr;
-	
+
 	// Intermediate blur textures
 	static inline ID3D11Texture2D* blurTexture1 = nullptr;
 	static inline ID3D11Texture2D* blurTexture2 = nullptr;
@@ -186,7 +186,7 @@ private:
 	static inline ID3D11RenderTargetView* blurRTV2 = nullptr;
 	static inline ID3D11ShaderResourceView* blurSRV1 = nullptr;
 	static inline ID3D11ShaderResourceView* blurSRV2 = nullptr;
-	
+
 	static inline UINT blurTextureWidth = 0;
 	static inline UINT blurTextureHeight = 0;
 

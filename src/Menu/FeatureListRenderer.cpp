@@ -437,19 +437,20 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettingsTab(Feature* fea
 
 			// Restore Defaults icon at bottom right (when feature is not disabled and is loaded)
 			if (!isDisabled && isLoaded) {
-			// Position at bottom right of the child window
-			ImVec2 childSize = ImGui::GetWindowSize();
-			// Scale icon with font size like other UI elements
-			float iconDimension = ImGui::GetFrameHeight() * 1.2f; // Larger for better visibility
-			ImVec2 iconSize = ImVec2(iconDimension, iconDimension);
-			ImGui::SetCursorPos(ImVec2(childSize.x - iconSize.x - 10.0f, childSize.y - iconSize.y - 10.0f));				auto& theme = globals::menu->GetTheme().Palette;
+				// Position at bottom right of the child window
+				ImVec2 childSize = ImGui::GetWindowSize();
+				// Scale icon with font size like other UI elements
+				float iconDimension = ImGui::GetFrameHeight() * 1.2f;  // Larger for better visibility
+				ImVec2 iconSize = ImVec2(iconDimension, iconDimension);
+				ImGui::SetCursorPos(ImVec2(childSize.x - iconSize.x - 10.0f, childSize.y - iconSize.y - 10.0f));
+				auto& theme = globals::menu->GetTheme().Palette;
 				ImVec4 iconColor = theme.Text;
 				iconColor.w *= 0.7f;  // Reduce alpha for subtler appearance
-				
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f)); // Transparent background
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(iconColor.x, iconColor.y, iconColor.z, 0.3f)); // Subtle hover
-				ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(iconColor.x, iconColor.y, iconColor.z, 0.5f)); // Subtle active
-				
+
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));                              // Transparent background
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(iconColor.x, iconColor.y, iconColor.z, 0.3f));  // Subtle hover
+				ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(iconColor.x, iconColor.y, iconColor.z, 0.5f));   // Subtle active
+
 				// Check if icon is available, fallback to text if not
 				auto& menu = *globals::menu;
 				if (menu.uiIcons.featureSettingRevert.texture) {
@@ -462,9 +463,9 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettingsTab(Feature* fea
 						feat->RestoreDefaultSettings();
 					}
 				}
-				
+
 				ImGui::PopStyleColor(3);
-				
+
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Restore default settings for this feature");
 				}
@@ -581,17 +582,17 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureActionButtons(Feature* f
 
 	// Enable/Disable at boot toggle
 	bool bootEnabled = !isDisabled;
-	
+
 	// Apply disabled styling if feature has failed to load
 	if (!feat->failedLoadedMessage.empty()) {
 		ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.Error);
 	}
-	
+
 	if (Util::FeatureToggle("##BootToggle", &bootEnabled)) {
 		bool newState = feat->ToggleAtBootSetting();
 		logger::info("{}: {} at boot.", featureName, newState ? "Enabled" : "Disabled");
 	}
-	
+
 	if (!feat->failedLoadedMessage.empty()) {
 		ImGui::PopStyleColor();
 	}
