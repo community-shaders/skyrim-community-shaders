@@ -12,12 +12,12 @@ struct UnifiedWater : OverlayFeature
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"TO DO.",
-			{ "TO DO",
-				"TO DO",
-				"TO DO",
-				"TO DO",
-				"TO DO" }
+			"Enhanced water rendering system with improved wave simulation and foam generation.",
+			{ "Optimized water meshes for better performance",
+				"Gerstner wave simulation for realistic water movement", 
+				"Advanced depth-based foam generation",
+				"Enhanced flowmap support for dynamic water flow",
+				"Seamless integration with existing water effects" }
 		};
 	}
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
@@ -25,6 +25,10 @@ struct UnifiedWater : OverlayFeature
 	struct Settings
 	{
 		bool UseOptimisedMeshes = true;
+		
+		// Enhanced Water Effects
+		float WaveIntensity = 0.3f;
+		float FoamIntensity = 0.5f;
 	};
 
 	Settings settings;

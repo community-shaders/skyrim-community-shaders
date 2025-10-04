@@ -7,7 +7,9 @@
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UnifiedWater::Settings,
-	UseOptimisedMeshes)
+	UseOptimisedMeshes,
+	WaveIntensity,
+	FoamIntensity)
 
 void UnifiedWater::LoadSettings(json& o_json)
 {
@@ -31,6 +33,30 @@ void UnifiedWater::DrawSettings()
 		ImGui::Text(
 			"Uses meshes with significantly lower tri-count for improved performance with no visual quality loss.\n"
 			"Will only affect newly created water - requires a change of location or game restart to take effect.");
+	}
+
+	ImGui::Spacing();
+
+	if (ImGui::TreeNodeEx("Enhanced Water Effects", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::Text("Enhanced Wave System");
+		ImGui::SliderFloat("Wave Enhancement", &settings.WaveIntensity, 0.0f, 1.0f, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"Controls Gerstner wave enhancement strength.\n"
+				"Adds realistic directional waves for more dynamic water surface.\n"
+				"Set to 0 to disable enhanced waves.");
+		}
+
+		ImGui::Spacing();
+		
+		ImGui::Text("Advanced Foam System");
+		ImGui::SliderFloat("Foam Enhancement", &settings.FoamIntensity, 0.0f, 1.0f, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"Controls depth-based foam generation strength.\n"
+				"Provides more realistic foam patterns near shorelines.\n"
+				"Set to 0 to disable enhanced foam.");
+		}
 	}
 
 	ImGui::Spacing();

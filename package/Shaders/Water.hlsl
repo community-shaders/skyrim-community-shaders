@@ -606,6 +606,139 @@ FlowmapData GetFlowmapDataWorldSpace(FlowmapData textureSpaceData)
 	data.flowVector = data.flowVector * flowDirection;  // Transform to world space
 	return data;
 }
+
+#			if defined(UNIFIED_WATER)
+/**
+ * Enhanced Wave System - Gerstner Wave Implementation
+ * Based on GPU Gems Chapter 1 by Mark Finch and Cyan Worlds
+ * Provides more realistic wave simulation with directionality and steepness control
+ */
+
+/**
+ * Calculate Gerstner wave values for a given position
+ * @param position 2D world position
+ * @param direction Normalized wave direction vector
+ * @param amplitude Wave height multiplier
+ * @param wavelength Distance between wave peaks
+ * @param steepness Wave steepness factor (0-1, higher = more peaked)
+ * @param timer Time value for animation
+ * @return float3 (cos(phase), sin(phase), frequency)
+ */
+float3 GerstnerWaveValues(float2 position, float2 direction, float amplitude, float wavelength, float steepness, float timer)
+{
+	float w = 2.0 * 3.14159265 / wavelength;
+	float dotD = dot(position, direction);
+	float phase = w * dotD + timer;
+	return float3(cos(phase), sin(phase), w);
+}
+
+/**
+ * Calculate Gerstner wave normal contribution
+ * @param direction Wave direction
+ * @param amplitude Wave amplitude  
+ * @param steepness Wave steepness (Q factor)
+ * @param vals Wave values from GerstnerWaveValues
+ * @return Normal contribution
+ */
+float3 GerstnerWaveNormal(float2 direction, float amplitude, float steepness, float3 vals)
+{
+	float C = vals.x;
+	float S = vals.y; 
+	float w = vals.z;
+	float WA = w * amplitude;
+	float WAC = WA * C;
+	float3 normal = float3(-direction.x * WAC, 1.0 - steepness * WA * S, -direction.y * WAC);
+	return normalize(normal);
+}
+
+/**
+ * Calculate Gerstner wave displacement
+ * @param direction Wave direction
+ * @param amplitude Wave amplitude
+ * @param steepness Wave steepness
+ * @param vals Wave values from GerstnerWaveValues
+ * @return 3D displacement vector
+ */
+float3 GerstnerWaveDisplacement(float2 direction, float amplitude, float steepness, float3 vals)
+{
+	float C = vals.x;
+	float S = vals.y;
+	float Q = steepness / (2.0 * 3.14159265 / 60.0 * amplitude); // Normalize steepness
+	return float3(Q * amplitude * direction.x * C, amplitude * S, Q * amplitude * direction.y * C);
+}
+
+/**
+ * Compute enhanced wave normal with Gerstner wave contribution
+ * @param worldPos World space position
+ * @param baseNormal Existing normal from texture sampling
+ * @param timer Time for animation
+ * @param waveIntensity Overall wave intensity multiplier
+ * @return Enhanced normal with wave displacement
+ */
+float3 ComputeEnhancedWaveNormal(float3 worldPos, float3 baseNormal, float timer, float waveIntensity)
+{
+	if (waveIntensity < 0.01) return baseNormal;
+	
+	// Wave parameters - tuned for Skyrim's scale
+	float2 waveDir1 = normalize(float2(1.0, 0.3));  // Primary wave direction
+	float2 waveDir2 = normalize(float2(-0.5, 1.0)); // Secondary wave direction
+	
+	float3 combinedNormal = baseNormal;
+	
+	// Primary wave set
+	float3 vals1 = GerstnerWaveValues(worldPos.xz * 0.01, waveDir1, 0.8, 120.0, 0.3, timer * 0.5);
+	float3 normal1 = GerstnerWaveNormal(waveDir1, 0.8, 0.3, vals1);
+	
+	float3 vals2 = GerstnerWaveValues(worldPos.xz * 0.015, waveDir2, 0.5, 80.0, 0.4, timer * 0.7);
+	float3 normal2 = GerstnerWaveNormal(waveDir2, 0.5, 0.4, vals2);
+	
+	// Smaller detail waves
+	float3 vals3 = GerstnerWaveValues(worldPos.xz * 0.03, waveDir1, 0.2, 40.0, 0.5, timer * 1.2);
+	float3 normal3 = GerstnerWaveNormal(waveDir1, 0.2, 0.5, vals3);
+	
+	// Blend wave normals with base normal
+	combinedNormal = normalize(baseNormal + waveIntensity * (normal1 * 0.5 + normal2 * 0.3 + normal3 * 0.2));
+	
+	return combinedNormal;
+}
+
+/**
+ * Enhanced Foam System - Depth-based foam generation
+ * Based on tuxalin water shader foam calculations
+ * Provides more realistic foam patterns near shorelines
+ */
+
+/**
+ * Calculate foam intensity based on water depth and wave action
+ * @param worldPos World position
+ * @param waterDepth Distance to sea floor (if available)
+ * @param waveStrength Current wave intensity
+ * @param timer Time for animation
+ * @return Foam intensity multiplier
+ */
+float ComputeEnhancedFoam(float3 worldPos, float waterDepth, float waveStrength, float timer)
+{
+	// Basic foam intensity based on position noise
+	float2 foamPos = worldPos.xz * 0.05;
+	float foamNoise1 = sin(foamPos.x * 4.0 + timer * 2.0) * cos(foamPos.y * 3.0 + timer * 1.5);
+	float foamNoise2 = sin(foamPos.x * 8.0 - timer * 3.0) * cos(foamPos.y * 6.0 - timer * 2.5);
+	
+	// Combine noise patterns
+	float foamPattern = (foamNoise1 * 0.6 + foamNoise2 * 0.4) * 0.5 + 0.5;
+	
+	// Depth-based foam intensity (more foam in shallow water)
+	float depthFactor = saturate(1.0 - waterDepth * 0.1); // Increase foam as depth decreases
+	
+	// Wave-based foam (more foam where waves are stronger)
+	float waveFactor = saturate(waveStrength * 2.0);
+	
+	// Combine all factors
+	float foamIntensity = foamPattern * depthFactor * waveFactor;
+	
+	return saturate(foamIntensity);
+}
+#			endif
+
 #			endif
 
 #			if defined(LOD)
@@ -780,9 +913,42 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 		// Store ripple and splash information for color effects
 		result.rippleInfo.xyz = raindropInfo.xyz * rippleIntensity;
 		result.rippleInfo.w = splashIntensity;
+		
+#				if defined(UNIFIED_WATER)
+		// Enhanced foam integration
+		float currentWaveStrength = length(raindropInfo.xy);
+		float waterDepth = max(1.0, abs(input.WPosition.y)); // Approximate depth
+		float timer = SharedData::wetnessEffectsSettings.Time;
+		float enhancedFoam = ComputeEnhancedFoam(input.WPosition.xyz, waterDepth, currentWaveStrength, timer);
+		
+		// Add enhanced foam to existing splash effects
+		result.rippleInfo.w += enhancedFoam * 0.3; // Scale down to blend with existing effects
+#				endif
 	}
 	float3 rippleNormal = normalize(raindropInfo.xyz);
 	finalNormal = WetnessEffects::ReorientNormal(rippleNormal, finalNormal);
+#			endif
+
+#			if defined(UNIFIED_WATER)
+	// Enhanced wave integration - basic implementation
+	// Use NormalsAmplitude.x as intensity control (existing water system parameter)
+	float waveIntensity = NormalsAmplitude.x * 0.3; // Scaled for subtle enhancement
+	if (waveIntensity > 0.01) {
+		float timer = SharedData::FrameCount * 0.01; // Use frame count for animation
+		float3 enhancedNormal = ComputeEnhancedWaveNormal(input.WPosition.xyz, finalNormal, timer, waveIntensity);
+		// Blend enhanced normal with original for subtle improvement
+		finalNormal = normalize(lerp(finalNormal, enhancedNormal, 0.5));
+	}
+	
+	// Enhanced foam for non-wetness-effects case
+#				if !defined(WETNESS_EFFECTS)
+	float waterDepth = max(1.0, abs(input.WPosition.y));
+	float timer = SharedData::FrameCount * 0.01;
+	float enhancedFoam = ComputeEnhancedFoam(input.WPosition.xyz, waterDepth, waveIntensity, timer);
+	
+	// Add enhanced foam to ripple info (initialize if needed)
+	result.rippleInfo.w = max(result.rippleInfo.w, enhancedFoam * 0.2);
+#				endif
 #			endif
 
 	result.normal = finalNormal;
