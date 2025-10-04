@@ -6,7 +6,7 @@ namespace GrassCollision
 	{
 		float2 PosOffset;  // cell origin in camera space
 		uint2 ArrayOrigin; // xy: array origin (clipmap wrapping)
-		
+
 		int2 ValidMargin;
 		float TimeDelta;
 		uint BoundingBoxCount;
@@ -79,11 +79,11 @@ namespace GrassCollision
 			previousCollisionAmount /= wsum;
 		} else {
 			collisionHeights = TEXTURE_SIZE;
-			collisionAmount = 0.0;	
+			collisionAmount = 0.0;
 			previousCollisionHeights = TEXTURE_SIZE;
 			previousCollisionAmount = 0.0;
 		}
-		
+
 	}
 
 	float3 ComputeNormalFromHeights(float h0, float hX, float hY, float delta)
@@ -120,7 +120,7 @@ namespace GrassCollision
 		float3 currentAmounts = float3(collisionCenterAmount, collisionXAmount, collisionYAmount);
 		float avgCurrentAmount = dot(currentAmounts, 1.0 / 3.0);
 		collision = ComputeNormalFromHeights(collisionCenter.x, collisionX.x, collisionY.x, delta) * avgCurrentAmount;
-		
+
 		// Process previous collision
 		float3 previousAmounts = float3(previousCollisionCenterAmount, previousCollisionXAmount, previousCollisionYAmount);
 		float avgPreviousAmount = dot(previousAmounts, 1.0 / 3.0);
