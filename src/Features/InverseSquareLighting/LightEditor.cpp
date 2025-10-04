@@ -367,69 +367,12 @@ void LightEditor::ExportLightsToJson()
 		return;
 	}
 
-<<<<<<< Updated upstream
-	json exportData;
-
-	// Add timestamp
-	const auto now = std::chrono::system_clock::now();
-	const auto time_t = std::chrono::system_clock::to_time_t(now);
-	std::stringstream ss;
-	ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
-	exportData["timestamp"] = ss.str();
-
-	// Add current scene context
-	const auto* tes = RE::TES::GetSingleton();
-	const auto* currentCell = tes ? tes->interiorCell : nullptr;
-	if (!currentCell && tes) {
-		const auto* player = RE::PlayerCharacter::GetSingleton();
-		if (player) {
-			currentCell = player->GetParentCell();
-		}
-	}
-
-	// Cell information
-	if (currentCell) {
-		exportData["cell"] = {
-			{ "formID", fmt::format("0x{:08X}", currentCell->GetFormID()) },
-			{ "editorID", currentCell->GetFormEditorID() ? currentCell->GetFormEditorID() : "Unknown" },
-			{ "isInterior", currentCell->IsInteriorCell() }
-		};
-	} else {
-		exportData["cell"] = {
-			{ "formID", "0x00000000" },
-			{ "editorID", "Unknown" },
-			{ "isInterior", false }
-		};
-	}
-
-	// Player position for reference
-	const auto* player = RE::PlayerCharacter::GetSingleton();
-	if (player) {
-		const auto playerPos = player->GetPosition();
-		exportData["playerPosition"] = {
-			{ "x", playerPos.x },
-			{ "y", playerPos.y },
-			{ "z", playerPos.z }
-		};
-	}
-
-	// Filter and sort settings used for this export
-	exportData["exportSettings"] = {
-		{ "filterOption", FilterOptionLabels[static_cast<int>(filterOption)] },
-		{ "sortOption", SortOptionLabels[static_cast<int>(sortOption)] },
-		{ "lightCount", lights.size() }
-	};
-
-	// Add light data - only include lights with metadata (edited/meaningful lights)
-	exportData["lights"] = json::array();
-=======
 	// Create Light Placer compatible format: array of light configurations
 	json exportArray = json::array();
 	
 	// Group lights by model/reference to create proper Light Placer structure
 	std::map<std::string, std::vector<const LightInfo*>> lightsByModel;
 	
->>>>>>> Stashed changes
 	int metadataLightCount = 0;
 	for (const auto& light : lights) {
 		// Only export lights that have metadata (isRef or isAttached)
@@ -442,12 +385,6 @@ void LightEditor::ExportLightsToJson()
 			metadataLightCount++;
 		}
 	}
-<<<<<<< Updated upstream
-
-	// Update the light count to reflect only exported lights
-	exportData["exportSettings"]["lightCount"] = metadataLightCount;
-	exportData["exportSettings"]["totalSceneLights"] = lights.size();
-=======
 	
 	// Create Light Placer entries for each model group
 	for (const auto& [modelKey, modelLights] : lightsByModel) {
@@ -489,7 +426,6 @@ void LightEditor::ExportLightsToJson()
 		
 		exportArray.push_back(modelEntry);
 	}
->>>>>>> Stashed changes
 
 	// Generate filename with timestamp
 	const auto exportPath = Util::PathHelpers::GetCommunityShaderPath() / "LightExports";
@@ -526,21 +462,6 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 	
 	// Light data section
 	json lightData;
-<<<<<<< Updated upstream
-
-	// Basic light info - using refID as the main identifier for compatibility
-	lightData["refID"] = fmt::format("0x{:08X}", lightInfo.id);
-	lightData["editorID"] = lightInfo.name;
-	lightData["index"] = lightInfo.index;
-	lightData["type"] = lightInfo.isRef ? "Reference" : (lightInfo.isAttached ? "Attached" : "Other");
-	lightData["memoryAddress"] = fmt::format("{:p}", lightInfo.ptr);
-
-	// Position - using standard light placer format
-	lightData["position"] = {
-		{ "x", lightInfo.position.x },
-		{ "y", lightInfo.position.y },
-		{ "z", lightInfo.position.z }
-=======
 	
 	// Basic light properties - using display info when available
 	if (lightInfo.isRef || lightInfo.isAttached) {
@@ -554,7 +475,6 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 		current.data.diffuse.red,
 		current.data.diffuse.green,
 		current.data.diffuse.blue
->>>>>>> Stashed changes
 	};
 	
 	// Radius and fade
@@ -571,25 +491,6 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 	
 	// Additional settings if this is the selected light
 	if (lightInfo == selected && lightInfo.isSelected) {
-<<<<<<< Updated upstream
-		lightData["settings"] = {
-			{ "color", { { "r", current.data.diffuse.red },
-						   { "g", current.data.diffuse.green },
-						   { "b", current.data.diffuse.blue } } },
-			{ "intensity", current.data.fade },
-			{ "radius", current.data.radius },
-			{ "size", current.data.size },
-			{ "cutoffOverride", current.data.cutoffOverride },
-			{ "isInverseSquare", static_cast<bool>(*reinterpret_cast<const uint32_t*>(&current.data.flags) & static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare)) }
-		};
-
-		// Position offset if applicable
-		if (!lightInfo.isOther) {
-			lightData["settings"]["positionOffset"] = {
-				{ "x", current.pos.x },
-				{ "y", current.pos.y },
-				{ "z", current.pos.z }
-=======
 		// Add size and cutoff if different from default
 		if (current.data.size != 0.0f) {
 			lightData["size"] = current.data.size;
@@ -601,7 +502,6 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 				current.pos.x,
 				current.pos.y,
 				current.pos.z
->>>>>>> Stashed changes
 			};
 		}
 		
@@ -615,18 +515,6 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 		// TES flags converted to Light Placer equivalents where possible
 		if (!lightInfo.isOther && displayInfo.ownerFormId != 0) {
 			auto flagsValue = *reinterpret_cast<const uint32_t*>(&current.tesFlags);
-<<<<<<< Updated upstream
-			lightData["settings"]["tesFlags"] = {
-				{ "dynamic", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic)) },
-				{ "negative", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative)) },
-				{ "flicker", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker)) },
-				{ "flickerSlow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow)) },
-				{ "pulse", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse)) },
-				{ "pulseSlow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow)) },
-				{ "hemiShadow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow)) },
-				{ "omniShadow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow)) },
-				{ "portalStrict", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict)) }
-=======
 			if (flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict)) {
 				flags.push_back("PortalStrict");
 			}
@@ -642,7 +530,6 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 				{"pulse", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse))},
 				{"pulseSlow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow))},
 				{"hemiShadow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow))}
->>>>>>> Stashed changes
 			};
 		}
 		
@@ -657,23 +544,12 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 		
 		// Additional reference metadata
 		if (lightInfo.isRef || lightInfo.isAttached) {
-<<<<<<< Updated upstream
-			lightData["metadata"] = {
-				{ "ownerFormID", fmt::format("0x{:08X}", displayInfo.ownerFormId) },
-				{ "ownerEditorID", displayInfo.ownerEditorId },
-				{ "baseObjectFormID", fmt::format("0x{:08X}", displayInfo.baseObjectFormId) },
-				{ "ownerLastEditedBy", displayInfo.ownerLastEditedBy },
-				{ "cellEditorID", displayInfo.cellEditorId },
-				{ "lightFormID", fmt::format("0x{:08X}", displayInfo.lighFormId) },
-				{ "lightEditorID", displayInfo.lighEditorId }
-=======
 			lightData["_islMetadata"]["ownerInfo"] = {
 				{"ownerFormID", fmt::format("0x{:08X}", displayInfo.ownerFormId)},
 				{"ownerEditorID", displayInfo.ownerEditorId},
 				{"baseObjectFormID", fmt::format("0x{:08X}", displayInfo.baseObjectFormId)},
 				{"ownerLastEditedBy", displayInfo.ownerLastEditedBy},
 				{"cellEditorID", displayInfo.cellEditorId}
->>>>>>> Stashed changes
 			};
 		}
 	}
@@ -698,16 +574,10 @@ void LightEditor::ExportSelectedLightToJson()
 		return;
 	}
 
-<<<<<<< Updated upstream
-	json exportData;
-
-	// Add timestamp
-=======
 	// Create Light Placer compatible format: array with single entry
 	json exportArray = json::array();
 	
 	// Add timestamp and context metadata
->>>>>>> Stashed changes
 	const auto now = std::chrono::system_clock::now();
 	const auto time_t = std::chrono::system_clock::to_time_t(now);
 	std::stringstream ss;
@@ -722,42 +592,6 @@ void LightEditor::ExportSelectedLightToJson()
 			currentCell = player->GetParentCell();
 		}
 	}
-<<<<<<< Updated upstream
-
-	// Cell information
-	if (currentCell) {
-		exportData["cell"] = {
-			{ "formID", fmt::format("0x{:08X}", currentCell->GetFormID()) },
-			{ "editorID", currentCell->GetFormEditorID() ? currentCell->GetFormEditorID() : "Unknown" },
-			{ "isInterior", currentCell->IsInteriorCell() }
-		};
-	} else {
-		exportData["cell"] = {
-			{ "formID", "0x00000000" },
-			{ "editorID", "Unknown" },
-			{ "isInterior", false }
-		};
-	}
-
-	// Player position for reference
-	const auto* player = RE::PlayerCharacter::GetSingleton();
-	if (player) {
-		const auto playerPos = player->GetPosition();
-		exportData["playerPosition"] = {
-			{ "x", playerPos.x },
-			{ "y", playerPos.y },
-			{ "z", playerPos.z }
-		};
-	}
-
-	// Export settings for selected light
-	exportData["exportSettings"] = {
-		{ "exportType", "selected_light" },
-		{ "lightCount", 1 },
-		{ "selectedLightInfo", { { "refID", fmt::format("0x{:08X}", selected.id) },
-								   { "name", selected.name },
-								   { "type", selected.isRef ? "Reference" : (selected.isAttached ? "Attached" : "Other") } } }
-=======
 	
 	// Create single model entry for selected light
 	json modelEntry;
@@ -779,7 +613,6 @@ void LightEditor::ExportSelectedLightToJson()
 			{"name", selected.name},
 			{"type", selected.isRef ? "Reference" : (selected.isAttached ? "Attached" : "Other")}
 		}}
->>>>>>> Stashed changes
 	};
 	
 	// Add player position for reference
