@@ -119,7 +119,7 @@ void GrassCollision::Update()
 		auto eyePos = float2{ eyePosNI.x, eyePosNI.y };
 
 		float worldSize = 4096.0f;
-		uint textureArrayDims = 512;
+		uint textureArrayDims = 256;
 
 		float2 cellSize = {
 			worldSize / textureArrayDims,
@@ -142,12 +142,12 @@ void GrassCollision::Update()
 
 		perFrameData.ValidMargin = { (int)cellIDDiff.x, (int)cellIDDiff.y };
 
-		auto thiscalendar = RE::Calendar::GetSingleton();
+		auto calendar = RE::Calendar::GetSingleton();
 
-		float currentGameTime = thiscalendar->GetCurrentGameTime();
+		float currentGameTime = calendar->GetCurrentGameTime();
 		static float lastGameTime = currentGameTime;
 
-		perFrameData.TimeDelta = 100000 * abs(currentGameTime - lastGameTime) / thiscalendar->GetTimescale();
+		perFrameData.TimeDelta = float((100000.0 / 1.16) * abs(double(currentGameTime) - double(lastGameTime)) / double(calendar->GetTimescale()));
 
 		lastGameTime = currentGameTime;
 
@@ -200,11 +200,11 @@ void GrassCollision::SetupResources()
 
 	{
 		D3D11_TEXTURE2D_DESC texDesc = {
-			.Width = 512,
-			.Height = 512,
+			.Width = 256,
+			.Height = 256,
 			.MipLevels = 1,
 			.ArraySize = 1,
-			.Format = DXGI_FORMAT_R16G16_UNORM,
+			.Format = DXGI_FORMAT_R16G16B16A16_UNORM,
 			.SampleDesc = { .Count = 1 },
 			.Usage = D3D11_USAGE_DEFAULT,
 			.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS

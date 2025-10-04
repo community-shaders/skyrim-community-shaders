@@ -1,6 +1,6 @@
 namespace GrassCollision
 {
-	Texture2D<float2> Collision : register(t100);
+	Texture2D<float4> Collision : register(t100);
 
 	struct CollisionData
 	{
@@ -11,7 +11,7 @@ namespace GrassCollision
 	{
 		float2 PosOffset;  // cell origin in camera space
 		uint2 ArrayOrigin; // xy: array origin (clipmap wrapping)
-
+		
 		int2 ValidMargin;
 		float TimeDelta;
 		uint numCollisions;
@@ -19,13 +19,13 @@ namespace GrassCollision
 		CollisionData collisionData[256];
 	}
 
-	const static uint TEXTURE_SIZE = 512;
+	const static uint TEXTURE_SIZE = 256;
 	const static float WORLD_SIZE = 4096;
 	const static float CELL_SIZE = WORLD_SIZE / TEXTURE_SIZE;
-	const static float2 ZRANGE = float2(1024.0, -1024.0);
+	const static float2 ZRANGE = float2(2048.0, -2048.0);
 
 	float ProceduralAnimation(float x) {
-		float fadeRate = 50;
+		float fadeRate = 100;
 		x /= fadeRate;
 		float frequency = 4 * Math::PI;
 		return cos(x * frequency) * exp(-x * 4);
@@ -69,19 +69,14 @@ namespace GrassCollision
 
 			uint2 cellTexID = (cellID + ArrayOrigin.xy) % TEXTURE_SIZE;
 
-			float2 collisionSample = Collision[cellTexID];
+			float4 collisionSample = Collision[cellTexID];
 			collisionSample = lerp(ZRANGE.x, ZRANGE.y, collisionSample);
-
-			collisionSample.x = min(collisionSample.x, collisionSample.y);
 
 			collisionHeights += collisionSample.x * w;
 			collisionAmount += max(0, worldPosition.z - collisionSample.x) * ProceduralAnimation(collisionSample.y - collisionSample.x) * w;
 
-			// Motion vectors not working yet
-			// collisionSample -= fadeRate;
-
-			previousCollisionHeights += collisionSample.x * w;
-			previousCollisionAmount += max(0, worldPosition.z - collisionSample.x) * ProceduralAnimation(collisionSample.y - collisionSample.x) * w;
+			previousCollisionHeights += collisionSample.z * w;
+			previousCollisionAmount += max(0, worldPosition.z - collisionSample.z) * ProceduralAnimation(collisionSample.w - collisionSample.z) * w;
 
 			wsum += w;
 		}
@@ -93,11 +88,18 @@ namespace GrassCollision
 			previousCollisionAmount /= wsum;
 		} else {
 			collisionHeights = TEXTURE_SIZE.x;
-			collisionAmount = 0.0;
+			collisionAmount = 0.0;	
 			previousCollisionHeights = TEXTURE_SIZE;
 			previousCollisionAmount = 0.0;
 		}
+		
+	}
 
+	float3 ComputeNormalFromHeights(float h0, float hX, float hY, float delta)
+	{
+		float3 tangentX = float3(delta, 0, hX - h0);
+		float3 tangentY = float3(0, delta, hY - h0);
+		return -normalize(cross(tangentX, tangentY) * float3(1.0, 1.0, 0.1));
 	}
 
 	void ComputeCollision(float3 worldPosition, float delta, out float3 collision, out float3 previousCollision)
@@ -123,45 +125,15 @@ namespace GrassCollision
 		GetCollision(worldPosition + float3(delta, 0, 0), collisionX, collisionXAmount, previousCollisionX, previousCollisionXAmount);
 		GetCollision(worldPosition + float3(0, delta, 0), collisionY, collisionYAmount, previousCollisionY, previousCollisionYAmount);
 
-		{
-			// Use the collision data as height (using .x component - adjust if needed)
-			float h0 = collisionCenter.x;
-			float hX = collisionX.x;
-			float hY = collisionY.x;
-
-			// Compute tangent vectors in 3D space
-			float3 tangentX = float3(delta, 0, hX - h0);
-			float3 tangentY = float3(0, delta, hY - h0);
-
-			// Cross product gives the full normal
-			float3 collisionNormal = cross(tangentX, tangentY);
-
-			// Average collision samples
-			float collisionAmount = (collisionCenterAmount + collisionXAmount + collisionYAmount) / 3.0;
-
-			// Normalize the result
-			collision = -normalize(collisionNormal) * collisionAmount;
-		}
-
-		{
-			// Use the collision data as height (using .x component - adjust if needed)
-			float h0 = previousCollisionCenter.x;
-			float hX = previousCollisionX.x;
-			float hY = previousCollisionY.x;
-
-			// Compute tangent vectors in 3D space
-			float3 tangentX = float3(delta, 0, hX - h0);
-			float3 tangentY = float3(0, delta, hY - h0);
-
-			// Cross product gives the full normal
-			float3 collisionNormal = cross(tangentX, tangentY);
-
-			// Average collision samples
-			float collisionAmount = (previousCollisionCenterAmount + previousCollisionXAmount + previousCollisionYAmount) / 3.0;
-
-			// Normalize the result
-			previousCollision = -normalize(collisionNormal) * collisionAmount;
-		}
+		// Process current collision (using y component for height)
+		float3 currentAmounts = float3(collisionCenterAmount, collisionXAmount, collisionYAmount);
+		float avgCurrentAmount = dot(currentAmounts, 1.0 / 3.0);
+		collision = ComputeNormalFromHeights(collisionCenter.x, collisionX.x, collisionY.x, delta) * avgCurrentAmount;
+		
+		// Process previous collision (using w component for height)
+		float3 previousAmounts = float3(previousCollisionCenterAmount, previousCollisionXAmount, previousCollisionYAmount);
+		float avgPreviousAmount = dot(previousAmounts, 1.0 / 3.0);
+		previousCollision = ComputeNormalFromHeights(previousCollisionCenter.x, previousCollisionX.x, previousCollisionY.x, delta) * avgPreviousAmount;
 	}
 
 	void GetDisplacedPosition(VS_INPUT input, float3 position, uint eyeIndex, out float3 displacement, out float3 previousDisplacement)
@@ -176,7 +148,7 @@ namespace GrassCollision
 
 			// Return base collision
 			float3 collision, previousCollision;
-			ComputeCollision(remappedWorldPosition, CELL_SIZE, collision, previousCollision);
+			ComputeCollision(remappedWorldPosition, CELL_SIZE * 0.5, collision, previousCollision);
 
 			// Scale grass by wind amount (detect rocks and bottom of some grass)
 			float alpha = saturate(input.Color.w * 10.0);

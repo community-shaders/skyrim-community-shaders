@@ -11,7 +11,7 @@ cbuffer PerFrameCB : register(b0)
 {
 	float2 PosOffset;  // cell origin in camera space
 	uint2 ArrayOrigin; // xy: array origin (clipmap wrapping)
-
+	
 	int2 ValidMargin;
 	float TimeDelta;
 	uint numCollisions;
@@ -19,13 +19,13 @@ cbuffer PerFrameCB : register(b0)
 	CollisionData collisionData[256];
 }
 
-RWTexture2D<float2> Collision : register(u0);
+RWTexture2D<float4> Collision : register(u0);
 
 [numthreads(8, 8, 1)] void main(uint3 dtid : SV_DispatchThreadID)
 {
-	const uint TEXTURE_SIZE = 512;
+	const uint TEXTURE_SIZE = 256;
 	const float WORLD_SIZE = 4096;
-	float2 ZRANGE = float2(1024.0, -1024.0);
+	float2 ZRANGE = float2(2048.0, -2048.0);
 
 	uint2 cellID = uint2(max(int2(dtid.xy) - ArrayOrigin, 0) % TEXTURE_SIZE);
 
@@ -39,7 +39,7 @@ RWTexture2D<float2> Collision : register(u0);
 	float2 collision = max(ZRANGE.x, ZRANGE.y);
 	float2 previousCollision = collision;
 
-	float2 fadeRate = TimeDelta * 50 * float2(0.01, 1.0);
+	float2 fadeRate = TimeDelta * 100 * float2(0.01, 1.0);
 
 	if (isValid) {
 		previousCollision = Collision[dtid.xy];
@@ -49,9 +49,7 @@ RWTexture2D<float2> Collision : register(u0);
 		previousCollision -= FrameBuffer::CameraPosAdjust[0].z - FrameBuffer::CameraPreviousPosAdjust[0].z;
 
 		// Temporal decay
-		previousCollision += fadeRate;
-
-		collision = previousCollision;
+		collision = previousCollision + fadeRate;
 	}
 
 	// Process collision data
@@ -68,7 +66,7 @@ RWTexture2D<float2> Collision : register(u0);
 			float heightFromCenter = radius - dist;
 			float height = colliderCentreMS.z - heightFromCenter;
 
-			collision.x = min(previousCollision.x, height);
+			collision.x = min(collision.x, height);
 
 			if (height < collision.y) {
 				collision.y = height;
@@ -77,6 +75,7 @@ RWTexture2D<float2> Collision : register(u0);
 	}
 
 	collision = (collision - ZRANGE.x) / (ZRANGE.y - ZRANGE.x);
+	previousCollision = (previousCollision - ZRANGE.x) / (ZRANGE.y - ZRANGE.x);
 
-	Collision[dtid.xy] = collision;
+	Collision[dtid.xy] = float4(collision, previousCollision);
 }
