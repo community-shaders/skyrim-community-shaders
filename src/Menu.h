@@ -137,7 +137,11 @@ public:
 		{
 			ImVec4 Background{ 0.10f, 0.10f, 0.10f, 0.80f };
 			ImVec4 Text{ 1.0f, 1.0f, 1.0f, 1.0f };
-			ImVec4 Border{ 0.5f, 0.5f, 0.5f, 0.8f };
+			// Separated border controls for better theming granularity
+			ImVec4 WindowBorder{ 0.5f, 0.5f, 0.5f, 0.8f };     // Outer window borders
+			ImVec4 FrameBorder{ 0.4f, 0.4f, 0.4f, 0.7f };      // Button, slider, input field borders
+			ImVec4 Separator{ 0.5f, 0.5f, 0.5f, 0.6f };        // Internal separators and dividers
+			ImVec4 ResizeGrip{ 0.6f, 0.6f, 0.6f, 0.8f };       // Window resize grips
 		} Palette;
 		struct StatusPaletteColors
 		{

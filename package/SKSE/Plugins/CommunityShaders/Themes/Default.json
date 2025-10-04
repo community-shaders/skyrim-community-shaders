@@ -11,7 +11,10 @@
         "Palette": {
             "Background": [0.03, 0.03, 0.03, 0.39216],
             "Text": [1.0, 1.0, 1.0, 1.0],
-            "Border": [0.5, 0.5, 0.5, 0.8]
+            "WindowBorder": [0.5, 0.5, 0.5, 0.8],
+            "FrameBorder": [0.4, 0.4, 0.4, 0.7],
+            "Separator": [0.5, 0.5, 0.5, 0.6],
+            "ResizeGrip": [0.6, 0.6, 0.6, 0.8]
         },
         "StatusPalette": {
             "Disable": [0.5, 0.5, 0.5, 1.0],

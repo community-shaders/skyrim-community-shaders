@@ -90,16 +90,22 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 	// This allows the simple palette controls to work by updating the FullPalette
 	colors[ImGuiCol_WindowBg] = themeSettings.Palette.Background;
 	colors[ImGuiCol_Text] = themeSettings.Palette.Text;
-	colors[ImGuiCol_Border] = themeSettings.Palette.Border;
-	colors[ImGuiCol_Separator] = themeSettings.Palette.Border;
-	colors[ImGuiCol_ResizeGrip] = themeSettings.Palette.Border;
+	colors[ImGuiCol_Border] = themeSettings.Palette.WindowBorder;
+	colors[ImGuiCol_Separator] = themeSettings.Palette.Separator;
+	colors[ImGuiCol_ResizeGrip] = themeSettings.Palette.ResizeGrip;
+	
+	// Apply frame border to UI elements with frames/borders
+	colors[ImGuiCol_FrameBg] = themeSettings.Palette.FrameBorder;
+	colors[ImGuiCol_CheckMark] = themeSettings.Palette.Text;
+	colors[ImGuiCol_SliderGrab] = themeSettings.Palette.FrameBorder;
+	colors[ImGuiCol_SliderGrabActive] = themeSettings.Palette.FrameBorder;
 
 	// Apply derived colors based on simple palette
 	ImVec4 textDisabled = themeSettings.Palette.Text;
 	textDisabled.w = 0.3f;
 	colors[ImGuiCol_TextDisabled] = textDisabled;
 
-	ImVec4 resizeGripHovered = themeSettings.Palette.Border;
+	ImVec4 resizeGripHovered = themeSettings.Palette.ResizeGrip;
 	resizeGripHovered.w = 0.1f;
 	colors[ImGuiCol_ResizeGripHovered] = resizeGripHovered;
 	colors[ImGuiCol_ResizeGripActive] = resizeGripHovered;

@@ -614,11 +614,19 @@ void SettingsTabRenderer::RenderColorsTab()
 		if (ImGui::CollapsingHeader("Simple", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::ColorEdit4("Background", (float*)&themeSettings.Palette.Background);
 			ImGui::ColorEdit4("Text", (float*)&themeSettings.Palette.Text);
-			ImGui::ColorEdit4("Border", (float*)&themeSettings.Palette.Border);
 		}
 
 		// Advanced Colors Section - collapsed by default to avoid overwhelming users
 		if (ImGui::CollapsingHeader("Advanced")) {
+			// Separated border controls for granular theming
+			if (ImGui::TreeNode("Border Controls")) {
+				ImGui::ColorEdit4("Window Border", (float*)&themeSettings.Palette.WindowBorder);
+				ImGui::ColorEdit4("Frame Border", (float*)&themeSettings.Palette.FrameBorder);
+				ImGui::ColorEdit4("Separator", (float*)&themeSettings.Palette.Separator);
+				ImGui::ColorEdit4("Resize Grip", (float*)&themeSettings.Palette.ResizeGrip);
+				ImGui::TreePop();
+			}
+			ImGui::Separator();
 			ImGui::TextWrapped("Advanced color controls for detailed customization of all UI elements.");
 
 			static ImGuiTextFilter filter;

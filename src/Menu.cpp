@@ -45,7 +45,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::ThemeSettings::PaletteColors,
 	Background,
 	Text,
-	Border)
+	WindowBorder,
+	FrameBorder,
+	Separator,
+	ResizeGrip)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::ThemeSettings::StatusPaletteColors,
