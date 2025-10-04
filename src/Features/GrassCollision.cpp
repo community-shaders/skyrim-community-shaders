@@ -50,6 +50,13 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 
 	RE::NiPoint3 cameraPosition = Util::GetEyePosition(0);
 
+	// Sort actors by distance to eye, closest first
+	std::sort(actorList.begin(), actorList.end(), [&cameraPosition](RE::Actor* a, RE::Actor* b) {
+		float distA = cameraPosition.GetSquaredDistance(a->GetPosition());
+		float distB = cameraPosition.GetSquaredDistance(b->GetPosition());
+		return distA < distB;
+	});
+
 	eastl::vector<BoundingBoxPacked> boundingBoxData{};
 	boundingBoxData.reserve(MAX_BOUNDING_BOXES);
 
