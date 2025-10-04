@@ -123,7 +123,7 @@ public:
 		bool UseSimplePalette = false;   // DEPRECATED: No longer affects behavior. UI now shows both Simple and Advanced controls.
 		bool ShowActionIcons = true;     // whether to show action buttons as icons
 		float TooltipHoverDelay = 0.5f;  // tooltip hover delay in seconds
-		float BackgroundBlur = 0.0f;     // background blur effect intensity
+		float BackgroundBlur = 0.5f;     // background blur effect intensity
 
 		// Scrollbar opacity settings
 		struct ScrollbarOpacitySettings
