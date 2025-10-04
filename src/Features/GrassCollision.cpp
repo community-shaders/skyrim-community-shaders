@@ -102,26 +102,30 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 			BoundingBoxPacked boundingBox;
 
 			boundingBox.IndexStart = collisionIndexExtent;
-			boundingBox.IndexEnd = collisionIndexExtent;
+			boundingBox.IndexEnd   = collisionIndexExtent;
 
 			uint boundingBoxCollisions = 0;
 
 			for (const auto& data : collisionShapes) {
 				collisionsData.push_back(data);
 
-				float2 pointMin(data.x - data.w, data.y - data.w);
-				float2 pointMax(data.x + data.w, data.y + data.w);
+				if (boundingBoxCollisions == 0) {
+					// Seed from the first sample rather than starting at {0,0}
+					boundingBox.MinExtent = { data.x - data.w, data.y - data.w };
+					boundingBox.MaxExtent = { data.x + data.w, data.y + data.w };
+				} else {
+					float2 pointMin(data.x - data.w, data.y - data.w);
+					float2 pointMax(data.x + data.w, data.y + data.w);
 
-				boundingBox.MinExtent.x = std::min(boundingBox.MinExtent.x, pointMin.x);
-				boundingBox.MinExtent.y = std::min(boundingBox.MinExtent.y, pointMin.y);
+					boundingBox.MinExtent.x = std::min(boundingBox.MinExtent.x, pointMin.x);
+					boundingBox.MinExtent.y = std::min(boundingBox.MinExtent.y, pointMin.y);
 
-				boundingBox.MaxExtent.x = std::max(boundingBox.MaxExtent.x, pointMax.x);
-				boundingBox.MaxExtent.y = std::max(boundingBox.MaxExtent.y, pointMax.y);
+					boundingBox.MaxExtent.x = std::max(boundingBox.MaxExtent.x, pointMax.x);
+					boundingBox.MaxExtent.y = std::max(boundingBox.MaxExtent.y, pointMax.y);
+				}
 
 				boundingBox.IndexEnd++;
-
 				boundingBoxCollisions++;
-
 				if (boundingBoxCollisions == MAX_COLLISIONS_PER_BOUNDING_BOX)
 					break;
 			}
