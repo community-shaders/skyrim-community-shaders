@@ -222,9 +222,9 @@ float3 CalculateWaterDisplacement(float2 worldPos, float waveIntensity)
 	
 	float3 totalDisplacement = float3(0, 0, 0);
 	
-	// Combine all waves - use world position as spatial phase
+	// Combine all waves - use proper Gerstner wave phase calculation
 	for (int i = 0; i < 3; i++) {
-		// Use dot product of world position with wave direction as phase
+		// Standard Gerstner wave phase: dot product of direction with position, scaled by frequency
 		float spatialPhase = dot(waves[i].direction, worldPos) * waves[i].frequency;
 		totalDisplacement += CalculateGerstnerWave(waves[i], worldPos, spatialPhase);
 	}
@@ -310,8 +310,9 @@ VS_OUTPUT main(VS_INPUT input)
 	// Use moderate wave intensity for visible waves
 	float waveIntensity = 1.0; // Visible but not excessive
 	
-	// Calculate wave displacement based on world position
-	float3 waveDisplacement = CalculateWaterDisplacement(worldPos.xy, waveIntensity);
+	// Calculate wave displacement using camera-independent world coordinates
+	float2 absoluteWorldPos = worldPos.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy;
+	float3 waveDisplacement = CalculateWaterDisplacement(absoluteWorldPos, waveIntensity);
 	
 	// Apply displacement only to vertex position for surface geometry, not world placement
 	float4 displacedPosition = inputPosition;
@@ -967,7 +968,9 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 // Apply Gerstner wave normal enhancement - always active for visible waves
 			float gerstnerIntensity = 1.0; // Moderate intensity to match vertex displacement
 			
-			float3 gerstnerNormal = CalculateGerstnerNormals(input.WPosition.xy, gerstnerIntensity);
+			// Use camera-independent world coordinates for stationary waves
+			float2 absoluteWorldPos = input.WPosition.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy;
+			float3 gerstnerNormal = CalculateGerstnerNormals(absoluteWorldPos, gerstnerIntensity);
 			// Blend Gerstner normals with existing water normals
 			float blendFactor = 0.5; // Moderate blend for visible wave normals
 			finalNormal = normalize(lerp(finalNormal, gerstnerNormal, blendFactor));
