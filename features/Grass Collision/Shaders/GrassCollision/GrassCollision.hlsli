@@ -126,7 +126,7 @@ namespace GrassCollision
 		float3 currentAmounts = float3(collisionCenterAmount, collisionXAmount, collisionYAmount);
 		float avgCurrentAmount = dot(currentAmounts, float3(1.0, 1.0, 1.0)) / 3.0;
 		collision = ComputeNormalFromHeights(collisionCenter, collisionX, collisionY, delta) * avgCurrentAmount;
-		
+
 		// Process previous collision
 		float3 previousAmounts = float3(previousCollisionCenterAmount, previousCollisionXAmount, previousCollisionYAmount);
 		float avgPreviousAmount = dot(previousAmounts, float3(1.0, 1.0, 1.0)) / 3.0;
@@ -149,7 +149,7 @@ namespace GrassCollision
 			// Return base collision
 			float3 collision, previousCollision;
 			ComputeCollision(remappedWorldPosition, maximumDepth, distanceFromCenter, CELL_SIZE, collision, previousCollision);
-			
+
 			// Scale grass by wind amount (detect rocks and bottom of some grass)
 			float alpha = saturate(input.Color.w * 10.0);
 
