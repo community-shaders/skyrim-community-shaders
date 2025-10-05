@@ -81,20 +81,21 @@ groupshared BoundingBoxPacked SharedBoundingBoxes[64];
 			for (uint j = boundingBox.IndexStart; j < boundingBox.IndexEnd; j++) {
 				float4 collisionInstance = CollisionInstances[j];
 				float radius = collisionInstance.w;
+				// Check if collision can lower the height
+				if (collisionInstance.z - radius < collision.y){
+					// Get the lowest point of the sphere at this cell position
+					float dist = distance(collisionInstance.xy, cellCentreMS);
+					// Check if we're within the sphere's radius
+					if (dist < radius) {
+						// Get sphere geometry
+						float heightFromCenter = sqrt(radius * radius - dist * dist);
+						float height = collisionInstance.z - heightFromCenter;
 
-				// Get the lowest point of the sphere at this cell position
-				float dist = distance(collisionInstance.xy, cellCentreMS);
+						collision.x = min(collision.x, height);
 
-				// Check if we're within the sphere's radius
-				if (dist < radius) {
-					// Get sphere geometry approximation (diamond shape)
-					float heightFromCenter = sqrt(radius * radius - dist * dist);
-					float height = collisionInstance.z - heightFromCenter;
-
-					collision.x = min(collision.x, height);
-
-					if (height < collision.y) {
-						collision.y = height;
+						if (height < collision.y) {
+							collision.y = height;
+						}
 					}
 				}
 			}
