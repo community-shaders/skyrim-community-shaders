@@ -71,23 +71,27 @@ void UnifiedWater::DrawSettings()
 			waterCache->RegenerateCaches();
 
 		if (ImGui::Button("Quick Test - Guardian Stones")) {
-			RE::Console::ExecuteCommand("player.setav speedmult 1000");
-			RE::Console::ExecuteCommand("tgm");
-			RE::Console::ExecuteCommand("tcl");
-			RE::Console::ExecuteCommand("set timescale to 0");
-			RE::Console::ExecuteCommand("set gamehour to 12");
-			RE::Console::ExecuteCommand("coc guardianstones");
-			RE::Console::ExecuteCommand("fw 81a");
+			if (auto ui = RE::UI::GetSingleton(); ui && !ui->menuStack.empty() && RE::PlayerCharacter::GetSingleton()) {
+				RE::Console::ExecuteCommand("player.setav speedmult 1000");
+				RE::Console::ExecuteCommand("tgm");
+				RE::Console::ExecuteCommand("tcl");
+				RE::Console::ExecuteCommand("set timescale to 0");
+				RE::Console::ExecuteCommand("set gamehour to 12");
+				RE::Console::ExecuteCommand("coc guardianstones");
+				RE::Console::ExecuteCommand("fw 81a");
+			}
 		}
 
 		if (ImGui::Button("Quick Test - Solitude Exterior")) {
-			RE::Console::ExecuteCommand("player.setav speedmult 1000");
-			RE::Console::ExecuteCommand("tgm");
-			RE::Console::ExecuteCommand("tcl");
-			RE::Console::ExecuteCommand("set timescale to 0");
-			RE::Console::ExecuteCommand("set gamehour to 12");
-			RE::Console::ExecuteCommand("coc solitudeexterior01");
-			RE::Console::ExecuteCommand("fw 81a");
+			if (auto ui = RE::UI::GetSingleton(); ui && !ui->menuStack.empty() && RE::PlayerCharacter::GetSingleton()) {
+				RE::Console::ExecuteCommand("player.setav speedmult 1000");
+				RE::Console::ExecuteCommand("tgm");
+				RE::Console::ExecuteCommand("tcl");
+				RE::Console::ExecuteCommand("set timescale to 0");
+				RE::Console::ExecuteCommand("set gamehour to 12");
+				RE::Console::ExecuteCommand("coc solitudeexterior01");
+				RE::Console::ExecuteCommand("fw 81a");
+			}
 		}
 	}
 }
@@ -308,7 +312,10 @@ void UnifiedWater::BGSTerrainNode_UpdateWaterMeshSubVisibility::thunk(const RE::
 		return;
 
 	const auto tes = globals::game::tes;
-	const auto& gridCells = globals::game::tes->gridCells;
+	if (!tes || !tes->gridCells)
+		return;
+	
+	const auto& gridCells = tes->gridCells;
 
 	const int32_t offsetX = tes->currentGridX - static_cast<int32_t>(gridCells->length >> 1);
 	const int32_t offsetY = tes->currentGridY - static_cast<int32_t>(gridCells->length >> 1);
@@ -337,6 +344,10 @@ void UnifiedWater::BGSTerrainNode_UpdateWaterMeshSubVisibility::thunk(const RE::
 void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 {
 	const auto waterSystem = RE::TESWaterSystem::GetSingleton();
+	if (!waterSystem) {
+		return;
+	}
+
 	const auto& singleton = globals::features::unifiedWater;
 
 	std::vector<std::pair<RE::BSTriShape*, const WaterCache::Instruction*>> built;
