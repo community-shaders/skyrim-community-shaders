@@ -8,6 +8,8 @@
 #include "ShaderCache.h"
 #include "State.h"
 
+#include <unordered_set>
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	GlintParameters,
 	enabled,
@@ -41,7 +43,11 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 #define CHECK_PBR_TEXTURE(textureName)                                                                         \
 	if (!(pbrMaterial->textureName)) {                                                                         \
-		logger::warn("[TruePBR] {} missing {}; treating as nonPBR", pbrMaterial->inputFilePath, #textureName); \
+		static std::unordered_set<std::string> warnedMaterials;                                               \
+		if (warnedMaterials.find(pbrMaterial->inputFilePath) == warnedMaterials.end()) {                     \
+			logger::warn("[TruePBR] {} missing {}; treating as nonPBR", pbrMaterial->inputFilePath, #textureName); \
+			warnedMaterials.insert(pbrMaterial->inputFilePath);                                               \
+		}                                                                                                      \
 		return false;                                                                                          \
 	}
 
