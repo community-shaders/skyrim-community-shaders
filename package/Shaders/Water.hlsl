@@ -152,12 +152,10 @@ struct VS_OUTPUT
 #	endif  // VR
 };
 
-#ifdef UNIFIED_WATER
 // Basic Gerstner Wave System for Enhanced Water Rendering
 // 
 // This system adds realistic directional waves to water surfaces using Gerstner wave mathematics.
-// Wave intensity is controlled by existing water material settings (NormalsAmplitude.w in pixel shader,
-// NormalsScale.w in vertex shader). Higher displacement/normal amplitudes will create more pronounced waves.
+// The system is always active and provides visible wave displacement and normal perturbation.
 //
 // Since SharedData (timer) is not available in vertex shader, we use position-based pseudo-time
 // for wave animation, creating spatial variation that appears animated as the player moves.
@@ -166,7 +164,7 @@ struct VS_OUTPUT
 // - Multiple wave sets with different directions, frequencies, and speeds
 // - Realistic wave steepness and amplitude control
 // - Compatible with existing water effects (flowmaps, caustics, parallax)
-// - Automatic scaling based on existing water material parameters
+// - Always active for consistent water enhancement
 
 struct GerstnerWave
 {
@@ -206,24 +204,24 @@ float3 CalculateWaterDisplacement(float2 worldPos, float waveIntensity)
 	
 	// Primary wave - larger, slower
 	waves[0].direction = normalize(float2(1.0, 0.3));
-	waves[0].amplitude = 8.0 * waveIntensity;
-	waves[0].frequency = 0.02;
-	waves[0].speed = 0.8;
-	waves[0].steepness = 0.4;
+	waves[0].amplitude = 12.0 * waveIntensity;  // Reduced for better mesh continuity
+	waves[0].frequency = 0.015;  // Slightly higher frequency
+	waves[0].speed = 1.2;
+	waves[0].steepness = 0.5;
 	
 	// Secondary wave - medium
 	waves[1].direction = normalize(float2(-0.7, 1.0));
-	waves[1].amplitude = 4.0 * waveIntensity;
-	waves[1].frequency = 0.035;
-	waves[1].speed = 1.2;
-	waves[1].steepness = 0.3;
+	waves[1].amplitude = 8.0 * waveIntensity;  // Reduced for better mesh continuity
+	waves[1].frequency = 0.025;  // Slightly higher frequency
+	waves[1].speed = 1.5;
+	waves[1].steepness = 0.4;
 	
 	// Tertiary wave - smaller, faster
 	waves[2].direction = normalize(float2(0.5, -0.8));
-	waves[2].amplitude = 2.0 * waveIntensity;
-	waves[2].frequency = 0.06;
-	waves[2].speed = 1.8;
-	waves[2].steepness = 0.2;
+	waves[2].amplitude = 4.0 * waveIntensity;  // Reduced for better mesh continuity
+	waves[2].frequency = 0.045;  // Slightly higher frequency
+	waves[2].speed = 0.8;
+	waves[2].steepness = 0.3;
 	
 	float3 totalDisplacement = float3(0, 0, 0);
 	
@@ -255,7 +253,6 @@ float3 CalculateGerstnerNormals(float2 worldPos, float waveIntensity)
 	float3 normal = normalize(cross(tangentY, tangentX));
 	return normal;
 }
-#endif
 
 #	ifdef VSHADER
 
@@ -310,20 +307,16 @@ VS_OUTPUT main(VS_INPUT input)
 	
 	float4 worldPos = mul(World[eyeIndex], inputPosition);
 	
-#ifdef UNIFIED_WATER
-	// Apply Gerstner wave displacement to world position
-	// Use NormalsScale.w as base intensity parameter (available in vertex shader)
-	float baseIntensity = NormalsScale.w;
-	float waveIntensity = saturate(baseIntensity * 0.1); // Scale for vertex displacement
+// Apply Gerstner wave displacement to world position
+	// Use a fixed wave intensity for more visible waves
+	float waveIntensity = 1.2; // Moderate intensity to prevent mesh issues
 	
-	if (waveIntensity > 0.01) {
-		float3 waveDisplacement = CalculateWaterDisplacement(worldPos.xy, waveIntensity);
-		// Apply displacement to world position
-		worldPos.xyz += waveDisplacement;
-	}
-#endif
+	float3 waveDisplacement = CalculateWaterDisplacement(worldPos.xy, waveIntensity);
+	// Apply displacement to world position
+	worldPos.xyz += waveDisplacement;
 
-	float4 worldViewPos = mul(WorldViewProj[eyeIndex], inputPosition);
+	// Calculate projection using the wave-displaced world position
+	float4 worldViewPos = mul(WorldViewProj[eyeIndex], float4(worldPos.xyz, 1.0));
 
 	float heightMult = min((1.0 / 10000.0) * max(worldViewPos.z - 70000, 0), 1);
 
@@ -966,20 +959,13 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 		normalize(float3(0, 0, 1) + NormalsAmplitude.xxx * normals1);
 #			endif
 
-#ifdef UNIFIED_WATER
-			// Apply Gerstner wave normal enhancement
-			// Use a combination of existing shader parameters to control wave intensity
-			// This allows waves to be controlled via existing water material settings
-			float baseIntensity = NormalsAmplitude.w; // Use displacement amplitude as base
-			float gerstnerIntensity = saturate(baseIntensity * 0.3); // Scale for reasonable wave effect
+// Apply Gerstner wave normal enhancement - always active for visible waves
+			float gerstnerIntensity = 1.2; // Moderate intensity to match vertex displacement
 			
-			if (gerstnerIntensity > 0.01) {
-				float3 gerstnerNormal = CalculateGerstnerNormals(input.WPosition.xy, gerstnerIntensity);
-				// Blend Gerstner normals with existing water normals
-				float blendFactor = saturate(gerstnerIntensity * 0.8); // Limit blend strength
-				finalNormal = normalize(lerp(finalNormal, gerstnerNormal, blendFactor));
-			}
-#endif
+			float3 gerstnerNormal = CalculateGerstnerNormals(input.WPosition.xy, gerstnerIntensity);
+			// Blend Gerstner normals with existing water normals
+			float blendFactor = 0.6; // Moderate blend strength for good visibility without artifacts
+			finalNormal = normalize(lerp(finalNormal, gerstnerNormal, blendFactor));
 
 #			if defined(WADING)
 #				if defined(FLOWMAP)
