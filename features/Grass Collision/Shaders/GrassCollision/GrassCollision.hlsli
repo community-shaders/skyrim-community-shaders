@@ -96,7 +96,7 @@ namespace GrassCollision
 	{
 		float3 tangentX = float3(delta, 0, hX - h0);
 		float3 tangentY = float3(0, delta, hY - h0);
-		return -normalize(cross(tangentX, tangentY) * float3(1000.0, 1000.0, 0.0001));
+		return -normalize(cross(tangentX, tangentY) * float3(1.0, 1.0, 0.1));
 	}
 
 	void ComputeCollision(float3 worldPosition, float maximumDepth, float distanceFromCenter, float delta, out float3 collision, out float3 previousCollision)
@@ -126,7 +126,7 @@ namespace GrassCollision
 		float3 currentAmounts = float3(collisionCenterAmount, collisionXAmount, collisionYAmount);
 		float avgCurrentAmount = dot(currentAmounts, float3(1.0, 1.0, 1.0)) / 3.0;
 		collision = ComputeNormalFromHeights(collisionCenter, collisionX, collisionY, delta) * avgCurrentAmount;
-
+		
 		// Process previous collision
 		float3 previousAmounts = float3(previousCollisionCenterAmount, previousCollisionXAmount, previousCollisionYAmount);
 		float avgPreviousAmount = dot(previousAmounts, float3(1.0, 1.0, 1.0)) / 3.0;
@@ -149,12 +149,12 @@ namespace GrassCollision
 			// Return base collision
 			float3 collision, previousCollision;
 			ComputeCollision(remappedWorldPosition, maximumDepth, distanceFromCenter, CELL_SIZE, collision, previousCollision);
-
+			
 			// Scale grass by wind amount (detect rocks and bottom of some grass)
 			float alpha = saturate(input.Color.w * 10.0);
 
-			displacement = collision * alpha;
-			previousDisplacement  = previousCollision * alpha;
+			displacement = collision * alpha * 0.75;
+			previousDisplacement  = previousCollision * alpha * 0.75;
 		} else {
 			displacement = 0.0;
 			previousDisplacement = 0.0;
