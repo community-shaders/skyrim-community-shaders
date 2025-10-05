@@ -38,6 +38,18 @@ struct UnifiedWater : OverlayFeature
 
 	Settings settings;
 
+	struct TESWaterSystem_InitializeWater_SetWaterShaderMaterialParams
+	{
+		static void thunk(RE::TESWaterForm* form, RE::BSWaterShaderMaterial* material);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct BSWaterShaderMaterial_ComputeCRC32
+	{
+		static int32_t thunk(RE::BSWaterShaderMaterial* material, uint32_t srcHash);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	struct BGSTerrainBlock_Attach
 	{
 		static void thunk(RE::BGSTerrainBlock* block);
@@ -108,7 +120,7 @@ private:
 	float4* gDisplacementCellTexCoordOffset = nullptr;
 	RE::NiPoint2* gDisplacementMeshPos = nullptr;
 	RE::NiPoint2* gDisplacementMeshFlowCellOffset = nullptr;
-
+	
 	void SetFlowmapTex() const;
 	static bool LoadOrderChanged();
 };
