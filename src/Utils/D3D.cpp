@@ -407,7 +407,7 @@ namespace Util
 
 		return S_OK;
 	}
-	
+
 	HRESULT SaveTextureToFile(ID3D11Device* device, ID3D11DeviceContext* context, const std::filesystem::path& path, ID3D11Texture2D* tex)
 	{
 		// Input validation

@@ -154,7 +154,7 @@ struct VS_OUTPUT
 
 #ifdef UNIFIED_WATER
 // Basic Gerstner Wave System for Enhanced Water Rendering
-// 
+//
 // This system adds realistic directional waves to water surfaces using Gerstner wave mathematics.
 // Wave intensity is controlled by existing water material settings (NormalsAmplitude.w in pixel shader,
 // NormalsScale.w in vertex shader). Higher displacement/normal amplitudes will create more pronounced waves.
@@ -183,13 +183,13 @@ float3 CalculateGerstnerWave(GerstnerWave wave, float2 position, float pseudoTim
 	float phase = dot(wave.direction, position) * wave.frequency + pseudoTime * wave.speed;
 	float cosPhase = cos(phase);
 	float sinPhase = sin(phase);
-	
+
 	// Displacement
 	float3 displacement;
 	displacement.x = wave.steepness * wave.amplitude * wave.direction.x * cosPhase;
 	displacement.y = wave.steepness * wave.amplitude * wave.direction.y * cosPhase;
 	displacement.z = wave.amplitude * sinPhase;
-	
+
 	return displacement;
 }
 
@@ -197,41 +197,41 @@ float3 CalculateGerstnerWave(GerstnerWave wave, float2 position, float pseudoTim
 float3 CalculateWaterDisplacement(float2 worldPos, float waveIntensity)
 {
 	if (waveIntensity <= 0.0) return float3(0, 0, 0);
-	
+
 	// Use world position as pseudo-time for spatial variation
 	float pseudoTime = (worldPos.x + worldPos.y) * 0.001;
-	
+
 	// Define multiple wave sets for more realistic water
 	GerstnerWave waves[3];
-	
+
 	// Primary wave - larger, slower
 	waves[0].direction = normalize(float2(1.0, 0.3));
 	waves[0].amplitude = 8.0 * waveIntensity;
 	waves[0].frequency = 0.02;
 	waves[0].speed = 0.8;
 	waves[0].steepness = 0.4;
-	
+
 	// Secondary wave - medium
 	waves[1].direction = normalize(float2(-0.7, 1.0));
 	waves[1].amplitude = 4.0 * waveIntensity;
 	waves[1].frequency = 0.035;
 	waves[1].speed = 1.2;
 	waves[1].steepness = 0.3;
-	
+
 	// Tertiary wave - smaller, faster
 	waves[2].direction = normalize(float2(0.5, -0.8));
 	waves[2].amplitude = 2.0 * waveIntensity;
 	waves[2].frequency = 0.06;
 	waves[2].speed = 1.8;
 	waves[2].steepness = 0.2;
-	
+
 	float3 totalDisplacement = float3(0, 0, 0);
-	
+
 	// Combine all waves
 	for (int i = 0; i < 3; i++) {
 		totalDisplacement += CalculateGerstnerWave(waves[i], worldPos, pseudoTime);
 	}
-	
+
 	return totalDisplacement;
 }
 
@@ -239,18 +239,18 @@ float3 CalculateWaterDisplacement(float2 worldPos, float waveIntensity)
 float3 CalculateGerstnerNormals(float2 worldPos, float waveIntensity)
 {
 	if (waveIntensity <= 0.0) return float3(0, 0, 1);
-	
+
 	const float epsilon = 1.0;
-	
+
 	// Sample displacement at current position and nearby points
 	float3 center = CalculateWaterDisplacement(worldPos, waveIntensity);
 	float3 right = CalculateWaterDisplacement(worldPos + float2(epsilon, 0), waveIntensity);
 	float3 forward = CalculateWaterDisplacement(worldPos + float2(0, epsilon), waveIntensity);
-	
+
 	// Calculate tangent vectors
 	float3 tangentX = float3(epsilon, 0, right.z - center.z);
 	float3 tangentY = float3(0, epsilon, forward.z - center.z);
-	
+
 	// Calculate normal via cross product
 	float3 normal = normalize(cross(tangentY, tangentX));
 	return normal;
@@ -307,15 +307,15 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.NormalsScale = NormalsScale;
 
 	float4 inputPosition = float4(input.Position.xyz, 1.0);
-	
+
 	float4 worldPos = mul(World[eyeIndex], inputPosition);
-	
+
 #ifdef UNIFIED_WATER
 	// Apply Gerstner wave displacement to world position
 	// Use NormalsScale.w as base intensity parameter (available in vertex shader)
 	float baseIntensity = NormalsScale.w;
 	float waveIntensity = saturate(baseIntensity * 0.1); // Scale for vertex displacement
-	
+
 	if (waveIntensity > 0.01) {
 		float3 waveDisplacement = CalculateWaterDisplacement(worldPos.xy, waveIntensity);
 		// Apply displacement to world position
@@ -341,7 +341,7 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.FogParam.xyz = lerp(VSFogNearColor.xyz, VSFogFarColor.xyz, fogDistanceFactor);
 	vsout.FogParam.w = fogDistanceFactor;
 		#endif
-	
+
 	vsout.WPosition.xyz = worldPos.xyz;
 	vsout.WPosition.w = length(worldPos.xyz);
 
@@ -410,7 +410,7 @@ VS_OUTPUT main(VS_INPUT input)
 #					elif defined(WADING)
 #						if defined(UNIFIED_WATER)
 	float2 wadingUV = (input.TexCoord0.xy - 0.5f) * 0.5f;
-	vsout.TexCoord2.zw = (CellTexCoordOffset.xy + wadingUV) / ObjectUV.xy; 
+	vsout.TexCoord2.zw = (CellTexCoordOffset.xy + wadingUV) / ObjectUV.xy;
 	vsout.TexCoord3.xy = CellTexCoordOffset.zw + wadingUV;
 #						else
 	vsout.TexCoord2.zw = ((-0.5 + input.TexCoord0.xy) * 0.1 + CellTexCoordOffset.xy) +
@@ -755,7 +755,7 @@ float3 GerstnerWaveValues(float2 position, float2 direction, float amplitude, fl
 /**
  * Calculate Gerstner wave normal contribution
  * @param direction Wave direction
- * @param amplitude Wave amplitude  
+ * @param amplitude Wave amplitude
  * @param steepness Wave steepness (Q factor)
  * @param vals Wave values from GerstnerWaveValues
  * @return Normal contribution
@@ -763,7 +763,7 @@ float3 GerstnerWaveValues(float2 position, float2 direction, float amplitude, fl
 float3 GerstnerWaveNormal(float2 direction, float amplitude, float steepness, float3 vals)
 {
 	float C = vals.x;
-	float S = vals.y; 
+	float S = vals.y;
 	float w = vals.z;
 	float WA = w * amplitude;
 	float WAC = WA * C;
@@ -798,27 +798,27 @@ float3 GerstnerWaveDisplacement(float2 direction, float amplitude, float steepne
 float3 ComputeEnhancedWaveNormal(float3 worldPos, float3 baseNormal, float timer, float waveIntensity)
 {
 	if (waveIntensity < 0.01) return baseNormal;
-	
+
 	// Wave parameters - tuned for Skyrim's scale
 	float2 waveDir1 = normalize(float2(1.0, 0.3));  // Primary wave direction
 	float2 waveDir2 = normalize(float2(-0.5, 1.0)); // Secondary wave direction
-	
+
 	float3 combinedNormal = baseNormal;
-	
+
 	// Primary wave set
 	float3 vals1 = GerstnerWaveValues(worldPos.xz * 0.01, waveDir1, 0.8, 120.0, 0.3, timer * 0.5);
 	float3 normal1 = GerstnerWaveNormal(waveDir1, 0.8, 0.3, vals1);
-	
+
 	float3 vals2 = GerstnerWaveValues(worldPos.xz * 0.015, waveDir2, 0.5, 80.0, 0.4, timer * 0.7);
 	float3 normal2 = GerstnerWaveNormal(waveDir2, 0.5, 0.4, vals2);
-	
+
 	// Smaller detail waves
 	float3 vals3 = GerstnerWaveValues(worldPos.xz * 0.03, waveDir1, 0.2, 40.0, 0.5, timer * 1.2);
 	float3 normal3 = GerstnerWaveNormal(waveDir1, 0.2, 0.5, vals3);
-	
+
 	// Blend wave normals with base normal
 	combinedNormal = normalize(baseNormal + waveIntensity * (normal1 * 0.5 + normal2 * 0.3 + normal3 * 0.2));
-	
+
 	return combinedNormal;
 }
 
@@ -842,19 +842,19 @@ float ComputeEnhancedFoam(float3 worldPos, float waterDepth, float waveStrength,
 	float2 foamPos = worldPos.xz * 0.05;
 	float foamNoise1 = sin(foamPos.x * 4.0 + timer * 2.0) * cos(foamPos.y * 3.0 + timer * 1.5);
 	float foamNoise2 = sin(foamPos.x * 8.0 - timer * 3.0) * cos(foamPos.y * 6.0 - timer * 2.5);
-	
+
 	// Combine noise patterns
 	float foamPattern = (foamNoise1 * 0.6 + foamNoise2 * 0.4) * 0.5 + 0.5;
-	
+
 	// Depth-based foam intensity (more foam in shallow water)
 	float depthFactor = saturate(1.0 - waterDepth * 0.1); // Increase foam as depth decreases
-	
+
 	// Wave-based foam (more foam where waves are stronger)
 	float waveFactor = saturate(waveStrength * 2.0);
-	
+
 	// Combine all factors
 	float foamIntensity = foamPattern * depthFactor * waveFactor;
-	
+
 	return saturate(foamIntensity);
 }
 #			endif
@@ -972,7 +972,7 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 			// This allows waves to be controlled via existing water material settings
 			float baseIntensity = NormalsAmplitude.w; // Use displacement amplitude as base
 			float gerstnerIntensity = saturate(baseIntensity * 0.3); // Scale for reasonable wave effect
-			
+
 			if (gerstnerIntensity > 0.01) {
 				float3 gerstnerNormal = CalculateGerstnerNormals(input.WPosition.xy, gerstnerIntensity);
 				// Blend Gerstner normals with existing water normals
@@ -1048,7 +1048,7 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 		// Store ripple and splash information for color effects
 		result.rippleInfo.xyz = raindropInfo.xyz * rippleIntensity;
 		result.rippleInfo.w = splashIntensity;
-		
+
 
 	}
 	float3 rippleNormal = normalize(raindropInfo.xyz);
@@ -1305,16 +1305,16 @@ PS_OUTPUT main(PS_INPUT input)
 	PS_OUTPUT psout;
 
 #ifdef FLOWMAP
-	
+
 	// float2 v = input.TexCoord2.zw;
 	// float N  = 64.0;
-	
+
 	// float2 v = input.TexCoord3.xy;
 	// float N  = 2.0;
 
 	// float2 v = input.TexCoord3.zw;
 	// float N  = 2.0;
-	
+
 	// float2 s = step(0.5, frac(v * N));
 	// psout.Lighting = float4(s.x, s.y, 0, 1);
 	// return psout;
@@ -1325,7 +1325,7 @@ PS_OUTPUT main(PS_INPUT input)
 #endif
 
 
-	
+
 
 	uint eyeIndex = Stereo::GetEyeIndexPS(input.HPosition, VPOSOffset);
 	float2 screenPosition = FrameBuffer::DynamicResolutionParams1.xy * (FrameBuffer::DynamicResolutionParams2.xy * input.HPosition.xy);
@@ -1483,7 +1483,7 @@ PS_OUTPUT main(PS_INPUT input)
 #					if defined(VC)
 	float specularFraction = lerp(1, fresnel * diffuseOutput.refractionMul, distanceBlendFactor);
 	float3 finalColorPreFog = lerp(diffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
-	
+
 #						if !defined(UNIFIED_WATER)
 	float fogDistanceFactor = input.FogParam.w;
 	float3 fogColor = input.FogParam.xyz;
@@ -1491,7 +1491,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float fogDistanceFactor = min(FogFarColor.w, pow(saturate(input.WPosition.w * FogParam.y - FogParam.x), FresnelRI.y));
 	float3 fogColor = lerp(FogNearColor.xyz, FogFarColor.xyz, fogDistanceFactor);
 #						endif
-	
+
 #						if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
 		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
@@ -1517,7 +1517,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float fogDistanceFactor = min(FogFarColor.w, pow(saturate(input.WPosition.w * FogParam.y - FogParam.x), FresnelRI.y));
 	float3 preFogColor = lerp(FogNearColor.xyz, FogFarColor.xyz, fogDistanceFactor);
 #						endif
-	
+
 #						if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
 		preFogColor = ImageBasedLighting::GetFogIBLColor(preFogColor);

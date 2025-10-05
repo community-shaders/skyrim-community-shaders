@@ -48,7 +48,7 @@ void UnifiedWater::DrawSettings()
 		}
 
 		ImGui::Spacing();
-		
+
 		ImGui::Text("Advanced Foam System");
 		ImGui::SliderFloat("Foam Enhancement", &settings.FoamIntensity, 0.0f, 1.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -314,7 +314,7 @@ void UnifiedWater::BGSTerrainNode_UpdateWaterMeshSubVisibility::thunk(const RE::
 	const auto tes = globals::game::tes;
 	if (!tes || !tes->gridCells)
 		return;
-	
+
 	const auto& gridCells = tes->gridCells;
 
 	const int32_t offsetX = tes->currentGridX - static_cast<int32_t>(gridCells->length >> 1);

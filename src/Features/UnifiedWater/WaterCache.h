@@ -1,6 +1,6 @@
 ﻿#pragma once
-#include <BS_thread_pool.hpp>
 #include "RE/T/TESFile.h"
+#include <BS_thread_pool.hpp>
 
 class WaterCache
 {
@@ -102,7 +102,7 @@ private:
 	struct AsyncBuild
 	{
 		std::unique_ptr<BS::thread_pool> pool;
-		std::jthread monitor; 
+		std::jthread monitor;
 		std::atomic<bool> running{ false };
 		std::atomic<bool> failed{ false };
 	};
@@ -163,7 +163,7 @@ private:
 	using CacheMap = std::unordered_map<std::string, std::shared_ptr<RuntimeCache>>;
 
 	std::atomic<std::shared_ptr<const CacheMap>> cacheMap{ std::make_shared<CacheMap>() };
-	
+
 	std::shared_ptr<RuntimeCache> currentCache;
 	std::string currentWorldSpace;
 

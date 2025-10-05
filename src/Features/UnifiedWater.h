@@ -19,7 +19,7 @@ struct UnifiedWater : OverlayFeature
 		return {
 			"Enhanced water rendering system with improved wave simulation and foam generation.",
 			{ "Optimized water meshes for better performance",
-				"Gerstner wave simulation for realistic water movement", 
+				"Gerstner wave simulation for realistic water movement",
 				"Advanced depth-based foam generation",
 				"Enhanced flowmap support for dynamic water flow",
 				"Seamless integration with existing water effects" }
@@ -30,7 +30,7 @@ struct UnifiedWater : OverlayFeature
 	struct Settings
 	{
 		bool UseOptimisedMeshes = true;
-		
+
 		// Enhanced Water Effects
 		float WaveIntensity = 0.3f;
 		float FoamIntensity = 0.5f;

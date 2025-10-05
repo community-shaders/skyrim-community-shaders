@@ -169,7 +169,7 @@ namespace Util
 	std::string FormatWeather(const RE::TESWeather* weather);
 
 	bool IsInterior();
-	
+
 	void WorldToCell(const RE::NiPoint2& worldPos, int32_t& x, int32_t& y);
 
 	void WorldToCell(const RE::NiPoint3& worldPos, int32_t& x, int32_t& y);

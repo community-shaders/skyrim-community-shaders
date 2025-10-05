@@ -41,14 +41,14 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	specularLevel,
 	glintParameters);
 
-#define CHECK_PBR_TEXTURE(textureName)                                                                         \
-	if (!(pbrMaterial->textureName)) {                                                                         \
-		static std::unordered_set<std::string> warnedMaterials;                                               \
-		if (warnedMaterials.find(pbrMaterial->inputFilePath) == warnedMaterials.end()) {                     \
+#define CHECK_PBR_TEXTURE(textureName)                                                                             \
+	if (!(pbrMaterial->textureName)) {                                                                             \
+		static std::unordered_set<std::string> warnedMaterials;                                                    \
+		if (warnedMaterials.find(pbrMaterial->inputFilePath) == warnedMaterials.end()) {                           \
 			logger::warn("[TruePBR] {} missing {}; treating as nonPBR", pbrMaterial->inputFilePath, #textureName); \
-			warnedMaterials.insert(pbrMaterial->inputFilePath);                                               \
-		}                                                                                                      \
-		return false;                                                                                          \
+			warnedMaterials.insert(pbrMaterial->inputFilePath);                                                    \
+		}                                                                                                          \
+		return false;                                                                                              \
 	}
 
 namespace PNState
