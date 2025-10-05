@@ -256,6 +256,9 @@ void UnifiedWater::PostPostLoad()
 	stl::detour_thunk<TES_SetWorldSpace>(REL::RelocationID(13170, 13315));
 	stl::detour_thunk<TES_DestroySkyCell>(REL::RelocationID(20029, 20463));
 
+	stl::write_thunk_call<TESWaterSystem_InitializeWater_SetWaterShaderMaterialParams>(REL::RelocationID(31388, 32179).address() + REL::Relocate(0x360, 0x3BC, 0x35B));
+	stl::write_vfunc<0x4, BSWaterShaderMaterial_ComputeCRC32>(RE::VTABLE_BSWaterShaderMaterial[0]);
+
 	stl::detour_thunk<BGSTerrainBlock_Attach>(REL::RelocationID(30934, 31737));
 	// Skip iterating attached meshes and calling TESWaterSystem::AddLODWater, this is handled in Attach now
 	const auto addLoopOffset = REL::RelocationID(30934, 31737).address() + REL::Relocate(0x109, 0x109);
@@ -287,6 +290,39 @@ void UnifiedWater::PostPostLoad()
 	gDisplacementMeshFlowCellOffset = reinterpret_cast<RE::NiPoint2*>(REL::RelocationID(528164, 415109).address());
 
 	logger::info("[Unified Water] Installed hooks");
+}
+
+void UnifiedWater::TESWaterSystem_InitializeWater_SetWaterShaderMaterialParams::thunk(RE::TESWaterForm* form, RE::BSWaterShaderMaterial* material)
+{
+	// The game prefills the material and hashes its contents, it uses this hash to check if there is an existing identical material and swaps
+	// to using that material if so.
+	// Problem is it does not include all data from the form, especially normal textures which can cause problems with existing materials
+	// having their textures swapped out.
+	// This func hash the texture names and temporarily stashes them in a ptr slot, this is added to the hash in ComputeCRC and zeroed back out again
+	func(form, material);
+
+	uint32_t hash = 2166136261u;
+	auto addStrToHash = [&](const char* str) {
+		for (auto p = reinterpret_cast<const unsigned char*>(str); *p; ++p) {
+			hash ^= *p;
+			hash *= 16777619u;
+		}
+	};
+
+	addStrToHash(form->noiseTextures[0].textureName.c_str());
+	addStrToHash(form->noiseTextures[1].textureName.c_str());
+	addStrToHash(form->noiseTextures[2].textureName.c_str());
+	addStrToHash(form->noiseTextures[3].textureName.c_str());
+	uintptr_t bits = hash;
+	std::memcpy(&material->normalTexture1, &bits, sizeof(uintptr_t));
+}
+
+int32_t UnifiedWater::BSWaterShaderMaterial_ComputeCRC32::thunk(RE::BSWaterShaderMaterial* material, uint32_t srcHash)
+{
+	srcHash ^= static_cast<uint32_t>(reinterpret_cast<uint64_t>(material->normalTexture1.get())) + (srcHash << 6) + (srcHash >> 2);
+	constexpr auto zero = static_cast<uintptr_t>(0);
+	std::memcpy(&material->normalTexture1, &zero, sizeof(uintptr_t));
+	return func(material, srcHash);
 }
 
 void UnifiedWater::TES_SetWorldSpace::thunk(RE::TES* tes, RE::TESWorldSpace* worldSpace, bool isExterior)
