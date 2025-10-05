@@ -20,10 +20,10 @@ namespace GrassCollision
 	const static float2 ZRANGE = float2(2048.0, -2048.0);
 
 	float ProceduralAnimation(float x) {
-		float fadeRate = 1000;
+		float fadeRate = 250;
 		x /= fadeRate;
 		float frequency = 4 * Math::PI;
-		return cos(x * frequency) * exp(-x * 4);
+		return cos(x * frequency) * exp(-x * 3);
 	}
 
 	void GetCollision(float3 worldPosition, out float collisionHeights, out float collisionAmount, out float previousCollisionHeights, out float previousCollisionAmount)
@@ -92,7 +92,7 @@ namespace GrassCollision
 	{
 		float3 tangentX = float3(delta, 0, hX - h0);
 		float3 tangentY = float3(0, delta, hY - h0);
-		return -normalize(cross(tangentX, tangentY) * float3(1.0, 1.0, 0.1));
+		return -normalize(cross(tangentX, tangentY) * float3(1000.0, 1000.0, 0.0001));
 	}
 
 	void ComputeCollision(float3 worldPosition, float delta, out float3 collision, out float3 previousCollision)
@@ -142,6 +142,9 @@ namespace GrassCollision
 			// Return base collision
 			float3 collision, previousCollision;
 			ComputeCollision(remappedWorldPosition, CELL_SIZE, collision, previousCollision);
+
+			collision.z -= length(collision.xy) * length(worldPosition - worldPositionCentre) * 0.01;
+			previousCollision.z -= length(previousCollision.xy) * length(worldPosition - worldPositionCentre) * 0.01;
 
 			// Scale grass by wind amount (detect rocks and bottom of some grass)
 			float alpha = saturate(input.Color.w * 10.0);
