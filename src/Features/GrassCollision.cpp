@@ -75,9 +75,6 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 				RE::NiPoint3 centerPos;
 				float radius;
 				if (Util::GetShapeBound(a_object, centerPos, radius)) {
-					// Increase radius to pad around meshes
-					radius *= 1.5f;
-
 					// Cull extremely small collisions
 					if (radius < distance * 0.001f)
 						return RE::BSVisit::BSVisitControl::kContinue;

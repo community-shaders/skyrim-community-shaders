@@ -19,14 +19,16 @@ namespace GrassCollision
 	const static float CELL_SIZE = WORLD_SIZE / TEXTURE_SIZE;
 	const static float2 ZRANGE = float2(2048.0, -2048.0);
 
-	float ProceduralAnimation(float x) {
+	float ProceduralAnimation(float x, float distanceFromCenter) {
 		float fadeRate = 250;
 		x /= fadeRate;
+		x /= distanceFromCenter;
+		x *= 100;
 		float frequency = 4 * Math::PI;
-		return cos(x * frequency) * exp(-x * 3);
+		return cos(x * frequency) * exp(-x * 4);
 	}
 
-	void GetCollision(float3 worldPosition, out float collisionHeights, out float collisionAmount, out float previousCollisionHeights, out float previousCollisionAmount)
+	void GetCollision(float3 worldPosition, float maximumDepth, float distanceFromCenter, out float collisionHeights, out float collisionAmount, out float previousCollisionHeights, out float previousCollisionAmount)
 	{
 		float2 positionMSAdjusted = worldPosition.xy - PosOffset.xy;
 		float2 uv = positionMSAdjusted / WORLD_SIZE + .5;
@@ -66,10 +68,12 @@ namespace GrassCollision
 			collisionSample = lerp(ZRANGE.x, ZRANGE.y, collisionSample);
 
 			collisionHeights += collisionSample.x * w;
-			collisionAmount += max(0, worldPosition.z - collisionSample.x) * ProceduralAnimation(collisionSample.y - collisionSample.x) * w;
+			collisionAmount += max(0, worldPosition.z - collisionSample.x) * ProceduralAnimation(collisionSample.y - collisionSample.x, distanceFromCenter) * w;
+			collisionAmount = min(collisionAmount, maximumDepth);
 
 			previousCollisionHeights += collisionSample.z * w;
-			previousCollisionAmount += max(0, worldPosition.z - collisionSample.z) * ProceduralAnimation(collisionSample.w - collisionSample.z) * w;
+			previousCollisionAmount += max(0, worldPosition.z - collisionSample.z) * ProceduralAnimation(collisionSample.w - collisionSample.z, distanceFromCenter) * w;
+			previousCollisionAmount = min(previousCollisionAmount, maximumDepth);
 
 			wsum += w;
 		}
@@ -95,7 +99,7 @@ namespace GrassCollision
 		return -normalize(cross(tangentX, tangentY) * float3(1000.0, 1000.0, 0.0001));
 	}
 
-	void ComputeCollision(float3 worldPosition, float delta, out float3 collision, out float3 previousCollision)
+	void ComputeCollision(float3 worldPosition, float maximumDepth, float distanceFromCenter, float delta, out float3 collision, out float3 previousCollision)
 	{
 		// Sample collision at three points forming a small triangle
 		float collisionCenter;
@@ -114,15 +118,15 @@ namespace GrassCollision
 		float previousCollisionXAmount;
 		float previousCollisionYAmount;
 
-		GetCollision(worldPosition + float3(-delta, -delta, 0), collisionCenter, collisionCenterAmount, previousCollisionCenter, previousCollisionCenterAmount);
-		GetCollision(worldPosition + float3(delta, 0, 0), collisionX, collisionXAmount, previousCollisionX, previousCollisionXAmount);
-		GetCollision(worldPosition + float3(0, delta, 0), collisionY, collisionYAmount, previousCollisionY, previousCollisionYAmount);
+		GetCollision(worldPosition + float3(-delta, -delta, 0), maximumDepth, distanceFromCenter, collisionCenter, collisionCenterAmount, previousCollisionCenter, previousCollisionCenterAmount);
+		GetCollision(worldPosition + float3(delta, 0, 0), maximumDepth, distanceFromCenter, collisionX, collisionXAmount, previousCollisionX, previousCollisionXAmount);
+		GetCollision(worldPosition + float3(0, delta, 0), maximumDepth, distanceFromCenter, collisionY, collisionYAmount, previousCollisionY, previousCollisionYAmount);
 
 		// Process current collision
 		float3 currentAmounts = float3(collisionCenterAmount, collisionXAmount, collisionYAmount);
 		float avgCurrentAmount = dot(currentAmounts, float3(1.0, 1.0, 1.0)) / 3.0;
 		collision = ComputeNormalFromHeights(collisionCenter, collisionX, collisionY, delta) * avgCurrentAmount;
-
+		
 		// Process previous collision
 		float3 previousAmounts = float3(previousCollisionCenterAmount, previousCollisionXAmount, previousCollisionYAmount);
 		float avgPreviousAmount = dot(previousAmounts, float3(1.0, 1.0, 1.0)) / 3.0;
@@ -137,14 +141,14 @@ namespace GrassCollision
 			float3 worldPositionCentre = mul(World[0], float4(input.InstanceData1.xyz, 1.0)).xyz;
 
 			// Limit stretching
-			float3 remappedWorldPosition = lerp(worldPosition, worldPositionCentre, float3(0.95, 0.95, 0.5));
+			float3 remappedWorldPosition = lerp(worldPosition, worldPositionCentre, float3(0.95, 0.95, 0.0));
+
+			float distanceFromCenter = length(worldPosition - worldPositionCentre) + 0.01;
+			float maximumDepth = worldPosition.z - worldPositionCentre.z;
 
 			// Return base collision
 			float3 collision, previousCollision;
-			ComputeCollision(remappedWorldPosition, CELL_SIZE, collision, previousCollision);
-
-			collision.z -= length(collision.xy) * length(worldPosition - worldPositionCentre) * 0.01;
-			previousCollision.z -= length(previousCollision.xy) * length(worldPosition - worldPositionCentre) * 0.01;
+			ComputeCollision(remappedWorldPosition, maximumDepth, distanceFromCenter, CELL_SIZE, collision, previousCollision);
 
 			// Scale grass by wind amount (detect rocks and bottom of some grass)
 			float alpha = saturate(input.Color.w * 10.0);

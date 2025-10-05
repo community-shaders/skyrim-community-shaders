@@ -88,7 +88,7 @@ groupshared BoundingBoxPacked SharedBoundingBoxes[64];
 				// Check if we're within the sphere's radius
 				if (dist < radius) {
 					// Get sphere geometry approximation (diamond shape)
-					float heightFromCenter = radius - dist;
+					float heightFromCenter = sqrt(radius * radius - dist * dist);
 					float height = collisionInstance.z - heightFromCenter;
 
 					collision.x = min(collision.x, height);
