@@ -176,7 +176,7 @@ void TerrainHelper::BSLightingShader_SetupMaterial(RE::BSLightingShaderMaterialB
 
 	const auto state = globals::state;
 	const auto& stateData = globals::game::graphicsState->GetRuntimeData();
-	
+
 	state->permutationData.ExtraFeatureDescriptor &= ~(1 << 6);
 
 	// Populate extended slots
