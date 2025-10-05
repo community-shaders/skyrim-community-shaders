@@ -28,7 +28,7 @@ namespace GrassCollision
 
 	void GetCollision(float3 worldPosition, out float collisionHeights, out float collisionAmount, out float previousCollisionHeights, out float previousCollisionAmount)
 	{
-		float2 positionMSAdjusted = worldPosition - PosOffset.xy;
+		float2 positionMSAdjusted = worldPosition.xy - PosOffset.xy;
 		float2 uv = positionMSAdjusted / WORLD_SIZE + .5;
 
 		float2 cellVxCoord = uv * TEXTURE_SIZE;
