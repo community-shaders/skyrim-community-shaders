@@ -199,33 +199,37 @@ float3 CalculateWaterDisplacement(float2 worldPos, float waveIntensity)
 	// Define multiple wave sets for more realistic water
 	GerstnerWave waves[3];
 	
-	// Primary wave - larger, slower
-	waves[0].direction = normalize(float2(1.0, 0.3));
-	waves[0].amplitude = 8.0 * waveIntensity;  // Visible amplitude
-	waves[0].frequency = 0.01;  // Lower frequency for larger waves
-	waves[0].speed = 1.2;  // Speed unused in spatial mode
-	waves[0].steepness = 0.4;  // Moderate steepness
+	// Primary wave - horizontal stripes
+	waves[0].direction = normalize(float2(1.0, 0.0));  // Pure horizontal
+	waves[0].amplitude = 8.0 * waveIntensity;
+	waves[0].frequency = 0.01;
+	waves[0].speed = 1.2;
+	waves[0].steepness = 0.4;
 	
-	// Secondary wave - medium
-	waves[1].direction = normalize(float2(-0.7, 1.0));
-	waves[1].amplitude = 5.0 * waveIntensity;  // Visible amplitude
-	waves[1].frequency = 0.015;  // Lower frequency for larger waves
-	waves[1].speed = 1.5;  // Speed unused in spatial mode
-	waves[1].steepness = 0.35;  // Moderate steepness
+	// Secondary wave - vertical stripes (should be perpendicular)
+	waves[1].direction = normalize(float2(0.0, 1.0));  // Pure vertical
+	waves[1].amplitude = 6.0 * waveIntensity;
+	waves[1].frequency = 0.015;
+	waves[1].speed = 1.5;
+	waves[1].steepness = 0.35;
 	
-	// Tertiary wave - smaller, faster
-	waves[2].direction = normalize(float2(0.5, -0.8));
-	waves[2].amplitude = 3.0 * waveIntensity;  // Visible amplitude
-	waves[2].frequency = 0.025;  // Higher frequency for detail
-	waves[2].speed = 0.8;  // Speed unused in spatial mode
-	waves[2].steepness = 0.3;  // Moderate steepness
+	// Tertiary wave - diagonal (should create diamond pattern when combined)
+	waves[2].direction = normalize(float2(0.707, 0.707));  // 45 degree diagonal
+	waves[2].amplitude = 4.0 * waveIntensity;
+	waves[2].frequency = 0.02;
+	waves[2].speed = 0.8;
+	waves[2].steepness = 0.3;
 	
 	float3 totalDisplacement = float3(0, 0, 0);
 	
-	// Combine all waves - use proper Gerstner wave phase calculation
+	// Combine all waves - calculate each wave individually with proper direction
 	for (int i = 0; i < 3; i++) {
-		// Standard Gerstner wave phase: dot product of direction with position, scaled by frequency
+		// Calculate phase using the wave's direction - this should create different patterns
 		float spatialPhase = dot(waves[i].direction, worldPos) * waves[i].frequency;
+		
+		// Debug: Add offset to ensure waves are different
+		spatialPhase += float(i) * 1.57; // Add π/2 offset per wave
+		
 		totalDisplacement += CalculateGerstnerWave(waves[i], worldPos, spatialPhase);
 	}
 	
@@ -307,8 +311,8 @@ VS_OUTPUT main(VS_INPUT input)
 	float4 worldPos = mul(World[eyeIndex], inputPosition);
 	
 // Apply Gerstner wave displacement for surface deformation only
-	// Use moderate wave intensity for visible waves
-	float waveIntensity = 1.0; // Visible but not excessive
+	// Use higher wave intensity for dramatic waves
+	float waveIntensity = 1.8; // More dramatic for testing
 	
 	// Calculate wave displacement using camera-independent world coordinates
 	float2 absoluteWorldPos = worldPos.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy;
@@ -966,14 +970,17 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 #			endif
 
 // Apply Gerstner wave normal enhancement - always active for visible waves
-			float gerstnerIntensity = 1.0; // Moderate intensity to match vertex displacement
+			float gerstnerIntensity = 1.8; // Higher intensity to match dramatic vertex displacement
 			
 			// Use camera-independent world coordinates for stationary waves
 			float2 absoluteWorldPos = input.WPosition.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy;
 			float3 gerstnerNormal = CalculateGerstnerNormals(absoluteWorldPos, gerstnerIntensity);
-			// Blend Gerstner normals with existing water normals
-			float blendFactor = 0.5; // Moderate blend for visible wave normals
-			finalNormal = normalize(lerp(finalNormal, gerstnerNormal, blendFactor));
+			// Blend Gerstner normals with existing water normals - reduced blend to fix reflections
+			float blendFactor = 0.3; // Lower blend to prevent normal corruption
+			// Ensure gerstner normal is valid before blending
+			if (length(gerstnerNormal) > 0.1) {
+				finalNormal = normalize(lerp(finalNormal, normalize(gerstnerNormal), blendFactor));
+			}
 
 #			if defined(WADING)
 #				if defined(FLOWMAP)
