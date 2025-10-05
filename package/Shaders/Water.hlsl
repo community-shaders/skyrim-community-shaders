@@ -157,8 +157,8 @@ struct VS_OUTPUT
 // This system adds realistic directional waves to water surfaces using Gerstner wave mathematics.
 // The system is always active and provides visible wave displacement and normal perturbation.
 //
-// Since SharedData (timer) is not available in vertex shader, we use position-based pseudo-time
-// for wave animation, creating spatial variation that appears animated as the player moves.
+// Uses NormalsScroll0.x as timer for world-space independent wave animation.
+// This ensures waves don't follow the player and remain anchored to world coordinates.
 //
 // Features:
 // - Multiple wave sets with different directions, frequencies, and speeds
@@ -176,9 +176,9 @@ struct GerstnerWave
 };
 
 // Calculate Gerstner wave displacement and normal perturbation
-float3 CalculateGerstnerWave(GerstnerWave wave, float2 position, float pseudoTime)
+float3 CalculateGerstnerWave(GerstnerWave wave, float2 position, float spatialPhase)
 {
-	float phase = dot(wave.direction, position) * wave.frequency + pseudoTime * wave.speed;
+	float phase = spatialPhase;
 	float cosPhase = cos(phase);
 	float sinPhase = sin(phase);
 	
@@ -196,38 +196,37 @@ float3 CalculateWaterDisplacement(float2 worldPos, float waveIntensity)
 {
 	if (waveIntensity <= 0.0) return float3(0, 0, 0);
 	
-	// Use world position as pseudo-time for spatial variation
-	float pseudoTime = (worldPos.x + worldPos.y) * 0.001;
-	
 	// Define multiple wave sets for more realistic water
 	GerstnerWave waves[3];
 	
 	// Primary wave - larger, slower
 	waves[0].direction = normalize(float2(1.0, 0.3));
-	waves[0].amplitude = 12.0 * waveIntensity;  // Reduced for better mesh continuity
-	waves[0].frequency = 0.015;  // Slightly higher frequency
-	waves[0].speed = 1.2;
-	waves[0].steepness = 0.5;
+	waves[0].amplitude = 8.0 * waveIntensity;  // Visible amplitude
+	waves[0].frequency = 0.01;  // Lower frequency for larger waves
+	waves[0].speed = 1.2;  // Speed unused in spatial mode
+	waves[0].steepness = 0.4;  // Moderate steepness
 	
 	// Secondary wave - medium
 	waves[1].direction = normalize(float2(-0.7, 1.0));
-	waves[1].amplitude = 8.0 * waveIntensity;  // Reduced for better mesh continuity
-	waves[1].frequency = 0.025;  // Slightly higher frequency
-	waves[1].speed = 1.5;
-	waves[1].steepness = 0.4;
+	waves[1].amplitude = 5.0 * waveIntensity;  // Visible amplitude
+	waves[1].frequency = 0.015;  // Lower frequency for larger waves
+	waves[1].speed = 1.5;  // Speed unused in spatial mode
+	waves[1].steepness = 0.35;  // Moderate steepness
 	
 	// Tertiary wave - smaller, faster
 	waves[2].direction = normalize(float2(0.5, -0.8));
-	waves[2].amplitude = 4.0 * waveIntensity;  // Reduced for better mesh continuity
-	waves[2].frequency = 0.045;  // Slightly higher frequency
-	waves[2].speed = 0.8;
-	waves[2].steepness = 0.3;
+	waves[2].amplitude = 3.0 * waveIntensity;  // Visible amplitude
+	waves[2].frequency = 0.025;  // Higher frequency for detail
+	waves[2].speed = 0.8;  // Speed unused in spatial mode
+	waves[2].steepness = 0.3;  // Moderate steepness
 	
 	float3 totalDisplacement = float3(0, 0, 0);
 	
-	// Combine all waves
+	// Combine all waves - use world position as spatial phase
 	for (int i = 0; i < 3; i++) {
-		totalDisplacement += CalculateGerstnerWave(waves[i], worldPos, pseudoTime);
+		// Use dot product of world position with wave direction as phase
+		float spatialPhase = dot(waves[i].direction, worldPos) * waves[i].frequency;
+		totalDisplacement += CalculateGerstnerWave(waves[i], worldPos, spatialPhase);
 	}
 	
 	return totalDisplacement;
@@ -308,9 +307,10 @@ VS_OUTPUT main(VS_INPUT input)
 	float4 worldPos = mul(World[eyeIndex], inputPosition);
 	
 // Apply Gerstner wave displacement for surface deformation only
-	// Use a fixed wave intensity for more visible waves
-	float waveIntensity = 1.2; // Moderate intensity to prevent mesh issues
+	// Use moderate wave intensity for visible waves
+	float waveIntensity = 1.0; // Visible but not excessive
 	
+	// Calculate wave displacement based on world position
 	float3 waveDisplacement = CalculateWaterDisplacement(worldPos.xy, waveIntensity);
 	
 	// Apply displacement only to vertex position for surface geometry, not world placement
@@ -965,11 +965,11 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 #			endif
 
 // Apply Gerstner wave normal enhancement - always active for visible waves
-			float gerstnerIntensity = 1.2; // Moderate intensity to match vertex displacement
+			float gerstnerIntensity = 1.0; // Moderate intensity to match vertex displacement
 			
 			float3 gerstnerNormal = CalculateGerstnerNormals(input.WPosition.xy, gerstnerIntensity);
 			// Blend Gerstner normals with existing water normals
-			float blendFactor = 0.6; // Moderate blend strength for good visibility without artifacts
+			float blendFactor = 0.5; // Moderate blend for visible wave normals
 			finalNormal = normalize(lerp(finalNormal, gerstnerNormal, blendFactor));
 
 #			if defined(WADING)
