@@ -3,6 +3,11 @@
 #include "UnifiedWater/Flowmap.h"
 #include "UnifiedWater/WaterCache.h"
 
+// Ensure BGS terrain classes are available
+#include "RE/B/BGSTerrainBlock.h"
+#include "RE/B/BGSTerrainNode.h"
+#include "RE/C/Console.h"
+
 struct UnifiedWater : OverlayFeature
 {
 	virtual inline std::string GetName() override { return "Unified Water"; }

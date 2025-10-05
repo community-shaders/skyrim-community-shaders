@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include <BS_thread_pool.hpp>
+#include "RE/T/TESFile.h"
 
 class WaterCache
 {

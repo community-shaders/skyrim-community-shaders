@@ -225,7 +225,9 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::interiorSun,
 		&globals::features::terrainVariation,
 		&globals::features::ibl,
-		&globals::features::extendedTranslucency
+		&globals::features::extendedTranslucency,
+		&globals::features::unifiedWater,
+		&globals::features::upscaling
 	};
 
 	if (REL::Module::IsVR()) {
