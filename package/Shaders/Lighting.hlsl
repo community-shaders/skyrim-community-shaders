@@ -1234,7 +1234,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(TRUE_PBR)
 	if (SharedData::extendedMaterialSettings.EnableParallax) {
 #			else
-	if (SharedData::extendedMaterialSettings.EnableTerrainParallax || Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement) {
+	if (SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement)) {
 #			endif
 		mipLevels[0] = ExtendedMaterials::GetMipLevel(uv, TexColorSampler);
 		mipLevels[1] = ExtendedMaterials::GetMipLevel(uv, TexLandColor2Sampler);
@@ -2346,7 +2346,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(TRUE_PBR)
 	if (SharedData::extendedMaterialSettings.EnableParallax){
 #			else
-	if (SharedData::extendedMaterialSettings.EnableTerrainParallax || Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement){
+	if (SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement)){
 #			endif		
 #			if defined(TERRAIN_VARIATION)
 			float weights[6];
@@ -2608,7 +2608,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(TRUE_PBR)
 	if (SharedData::extendedMaterialSettings.EnableParallax)
 #			else
-	if (SharedData::extendedMaterialSettings.EnableTerrainParallax || Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement)
+	if (SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement))
 #			endif#					if defined(TERRAIN_VARIATION)
 				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, lightDirectionTS, sh0, parallaxShadowQuality, screenNoise, displacementParams, sharedOffset, dx, dy);
 #					else
