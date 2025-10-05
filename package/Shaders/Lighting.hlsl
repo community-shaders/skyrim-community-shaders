@@ -2347,7 +2347,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (SharedData::extendedMaterialSettings.EnableParallax){
 #			else
 	if (SharedData::extendedMaterialSettings.EnableTerrainParallax){
-#			endif		
+#			endif
 #			if defined(TERRAIN_VARIATION)
 			float weights[6];
 			// Initialize weights array
