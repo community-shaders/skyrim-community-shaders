@@ -307,16 +307,18 @@ VS_OUTPUT main(VS_INPUT input)
 	
 	float4 worldPos = mul(World[eyeIndex], inputPosition);
 	
-// Apply Gerstner wave displacement to world position
+// Apply Gerstner wave displacement for surface deformation only
 	// Use a fixed wave intensity for more visible waves
 	float waveIntensity = 1.2; // Moderate intensity to prevent mesh issues
 	
 	float3 waveDisplacement = CalculateWaterDisplacement(worldPos.xy, waveIntensity);
-	// Apply displacement to world position
-	worldPos.xyz += waveDisplacement;
+	
+	// Apply displacement only to vertex position for surface geometry, not world placement
+	float4 displacedPosition = inputPosition;
+	displacedPosition.xyz += waveDisplacement;
 
-	// Calculate projection using the wave-displaced world position
-	float4 worldViewPos = mul(WorldViewProj[eyeIndex], float4(worldPos.xyz, 1.0));
+	// Calculate projection using original world transform but displaced vertex
+	float4 worldViewPos = mul(WorldViewProj[eyeIndex], displacedPosition);
 
 	float heightMult = min((1.0 / 10000.0) * max(worldViewPos.z - 70000, 0), 1);
 
@@ -335,8 +337,11 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.FogParam.w = fogDistanceFactor;
 		#endif
 	
-	vsout.WPosition.xyz = worldPos.xyz;
-	vsout.WPosition.w = length(worldPos.xyz);
+	// Use wave-displaced position for pixel shader calculations
+	float4 displacedWorldPos = worldPos;
+	displacedWorldPos.xyz += waveDisplacement;
+	vsout.WPosition.xyz = displacedWorldPos.xyz;
+	vsout.WPosition.w = length(displacedWorldPos.xyz);
 
 #			if defined(LOD)
 	float4 posAdjust =
