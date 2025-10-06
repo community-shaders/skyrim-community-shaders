@@ -25,42 +25,42 @@ using AttachMode = VR::Settings::OverlayAttachMode;
 
 namespace
 {
-class FontRoleGuard
-{
-public:
-	explicit FontRoleGuard(Menu::FontRole role)
+	class FontRoleGuard
 	{
-		Menu* menuInstance = globals::menu;
-		if (!menuInstance) {
-			menuInstance = Menu::GetSingleton();
-		}
-		if (menuInstance) {
-			font_ = menuInstance->GetFont(role);
-			if (font_) {
-				ImGui::PushFont(font_);
+	public:
+		explicit FontRoleGuard(Menu::FontRole role)
+		{
+			Menu* menuInstance = globals::menu;
+			if (!menuInstance) {
+				menuInstance = Menu::GetSingleton();
+			}
+			if (menuInstance) {
+				font_ = menuInstance->GetFont(role);
+				if (font_) {
+					ImGui::PushFont(font_);
+				}
 			}
 		}
-	}
 
-	~FontRoleGuard()
-	{
-		if (font_) {
-			ImGui::PopFont();
+		~FontRoleGuard()
+		{
+			if (font_) {
+				ImGui::PopFont();
+			}
 		}
+
+		FontRoleGuard(const FontRoleGuard&) = delete;
+		FontRoleGuard& operator=(const FontRoleGuard&) = delete;
+
+	private:
+		ImFont* font_ = nullptr;
+	};
+
+	bool BeginTabItemWithFont(const char* label, Menu::FontRole role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None)
+	{
+		FontRoleGuard guard(role);
+		return ImGui::BeginTabItem(label, nullptr, flags);
 	}
-
-	FontRoleGuard(const FontRoleGuard&) = delete;
-	FontRoleGuard& operator=(const FontRoleGuard&) = delete;
-
-private:
-	ImFont* font_ = nullptr;
-};
-
-bool BeginTabItemWithFont(const char* label, Menu::FontRole role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None)
-{
-	FontRoleGuard guard(role);
-	return ImGui::BeginTabItem(label, nullptr, flags);
-}
 }
 
 constexpr int kOverlayWidth = 1920;

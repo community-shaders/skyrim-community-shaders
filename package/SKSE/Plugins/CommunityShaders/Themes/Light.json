@@ -38,124 +38,37 @@
         "TooltipHoverDelay": 0.5,
         "BackgroundBlur": 0.5,
         "Palette": {
-            "Background": [
-                0.9,
-                0.9,
-                0.9,
-                0.95
-            ],
-            "Text": [
-                0.1,
-                0.1,
-                0.1,
-                1.0
-            ],
-            "WindowBorder": [
-                0.4,
-                0.4,
-                0.4,
-                0.8
-            ],
-            "FrameBorder": [
-                0.3,
-                0.3,
-                0.3,
-                0.7
-            ],
-            "Separator": [
-                0.4,
-                0.4,
-                0.4,
-                0.6
-            ],
-            "ResizeGrip": [
-                0.5,
-                0.5,
-                0.5,
-                0.8
-            ]
+            "Background": [0.9, 0.9, 0.9, 0.95],
+            "Text": [0.1, 0.1, 0.1, 1.0],
+            "WindowBorder": [0.4, 0.4, 0.4, 0.8],
+            "FrameBorder": [0.3, 0.3, 0.3, 0.7],
+            "Separator": [0.4, 0.4, 0.4, 0.6],
+            "ResizeGrip": [0.5, 0.5, 0.5, 0.8]
         },
         "StatusPalette": {
-            "Disable": [
-                0.6,
-                0.6,
-                0.6,
-                1.0
-            ],
-            "Error": [
-                0.8,
-                0.2,
-                0.2,
-                1.0
-            ],
-            "Warning": [
-                0.9,
-                0.5,
-                0.1,
-                1.0
-            ],
-            "RestartNeeded": [
-                0.2,
-                0.7,
-                0.2,
-                1.0
-            ],
-            "CurrentHotkey": [
-                0.8,
-                0.6,
-                0.1,
-                1.0
-            ],
-            "SuccessColor": [
-                0.1,
-                0.6,
-                0.1,
-                1.0
-            ],
-            "InfoColor": [
-                0.2,
-                0.4,
-                0.8,
-                1.0
-            ]
+            "Disable": [0.6, 0.6, 0.6, 1.0],
+            "Error": [0.8, 0.2, 0.2, 1.0],
+            "Warning": [0.9, 0.5, 0.1, 1.0],
+            "RestartNeeded": [0.2, 0.7, 0.2, 1.0],
+            "CurrentHotkey": [0.8, 0.6, 0.1, 1.0],
+            "SuccessColor": [0.1, 0.6, 0.1, 1.0],
+            "InfoColor": [0.2, 0.4, 0.8, 1.0]
         },
         "FeatureHeading": {
-            "ColorDefault": [
-                0.3,
-                0.3,
-                0.3,
-                1.0
-            ],
-            "ColorHovered": [
-                0.2,
-                0.2,
-                0.2,
-                1.0
-            ],
+            "ColorDefault": [0.3, 0.3, 0.3, 1.0],
+            "ColorHovered": [0.2, 0.2, 0.2, 1.0],
             "MinimizedFactor": 0.7
         },
         "Style": {
             "WindowBorderSize": 1.0,
             "ChildBorderSize": 0.5,
             "FrameBorderSize": 0.5,
-            "WindowPadding": [
-                12.0,
-                10.0
-            ],
+            "WindowPadding": [12.0, 10.0],
             "WindowRounding": 3.0,
             "IndentSpacing": 7.0,
-            "FramePadding": [
-                6.0,
-                3.0
-            ],
-            "CellPadding": [
-                10.0,
-                3.0
-            ],
-            "ItemSpacing": [
-                7.0,
-                6.0
-            ]
+            "FramePadding": [6.0, 3.0],
+            "CellPadding": [10.0, 3.0],
+            "ItemSpacing": [7.0, 6.0]
         },
         "FullPalette": [
             [0.1, 0.1, 0.1, 0.9],

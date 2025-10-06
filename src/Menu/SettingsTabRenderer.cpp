@@ -4,9 +4,9 @@
 #include <cstring>
 #include <filesystem>
 #include <format>
-#include <string>
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <string>
 #include <windows.h>
 
 #include "Globals.h"
@@ -19,61 +19,61 @@ using json = nlohmann::json;
 
 namespace
 {
-class FontRoleGuard
-{
-public:
-	explicit FontRoleGuard(Menu::FontRole role)
+	class FontRoleGuard
 	{
-		Menu* menuInstance = globals::menu;
-		if (!menuInstance) {
-			menuInstance = Menu::GetSingleton();
-		}
-		if (menuInstance) {
-			font_ = menuInstance->GetFont(role);
-			if (font_) {
-				ImGui::PushFont(font_);
+	public:
+		explicit FontRoleGuard(Menu::FontRole role)
+		{
+			Menu* menuInstance = globals::menu;
+			if (!menuInstance) {
+				menuInstance = Menu::GetSingleton();
+			}
+			if (menuInstance) {
+				font_ = menuInstance->GetFont(role);
+				if (font_) {
+					ImGui::PushFont(font_);
+				}
 			}
 		}
-	}
 
-	~FontRoleGuard()
-	{
-		if (font_) {
-			ImGui::PopFont();
+		~FontRoleGuard()
+		{
+			if (font_) {
+				ImGui::PopFont();
+			}
 		}
+
+		FontRoleGuard(const FontRoleGuard&) = delete;
+		FontRoleGuard& operator=(const FontRoleGuard&) = delete;
+
+		[[nodiscard]] ImFont* Get() const { return font_; }
+
+	private:
+		ImFont* font_ = nullptr;
+	};
+
+	void SeparatorTextWithFont(const char* text, Menu::FontRole role)
+	{
+		FontRoleGuard guard(role);
+		ImGui::SeparatorText(text);
 	}
 
-	FontRoleGuard(const FontRoleGuard&) = delete;
-	FontRoleGuard& operator=(const FontRoleGuard&) = delete;
+	void SeparatorTextWithFont(const std::string& text, Menu::FontRole role)
+	{
+		SeparatorTextWithFont(text.c_str(), role);
+	}
 
-	[[nodiscard]] ImFont* Get() const { return font_; }
+	bool BeginTabItemWithFont(const char* label, Menu::FontRole role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None)
+	{
+		FontRoleGuard guard(role);
+		return ImGui::BeginTabItem(label, nullptr, flags);
+	}
 
-private:
-	ImFont* font_ = nullptr;
-};
-
-void SeparatorTextWithFont(const char* text, Menu::FontRole role)
-{
-	FontRoleGuard guard(role);
-	ImGui::SeparatorText(text);
-}
-
-void SeparatorTextWithFont(const std::string& text, Menu::FontRole role)
-{
-	SeparatorTextWithFont(text.c_str(), role);
-}
-
-bool BeginTabItemWithFont(const char* label, Menu::FontRole role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None)
-{
-	FontRoleGuard guard(role);
-	return ImGui::BeginTabItem(label, nullptr, flags);
-}
-
-bool ComboWithFont(const char* label, int* currentItem, const char* const items[], int itemCount, Menu::FontRole role)
-{
-	FontRoleGuard guard(role);
-	return ImGui::Combo(label, currentItem, items, itemCount);
-}
+	bool ComboWithFont(const char* label, int* currentItem, const char* const items[], int itemCount, Menu::FontRole role)
+	{
+		FontRoleGuard guard(role);
+		return ImGui::Combo(label, currentItem, items, itemCount);
+	}
 }
 
 void SettingsTabRenderer::RenderGeneralSettings(

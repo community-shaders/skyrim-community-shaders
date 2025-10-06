@@ -12,38 +12,38 @@
 
 namespace
 {
-class RoleFontGuard
-{
-public:
-	explicit RoleFontGuard(Menu::FontRole role)
+	class RoleFontGuard
 	{
-		Menu* menuInstance = globals::menu;
-		if (!menuInstance) {
-			menuInstance = Menu::GetSingleton();
-		}
-		if (menuInstance) {
-			font_ = menuInstance->GetFont(role);
-			if (font_) {
-				ImGui::PushFont(font_);
+	public:
+		explicit RoleFontGuard(Menu::FontRole role)
+		{
+			Menu* menuInstance = globals::menu;
+			if (!menuInstance) {
+				menuInstance = Menu::GetSingleton();
+			}
+			if (menuInstance) {
+				font_ = menuInstance->GetFont(role);
+				if (font_) {
+					ImGui::PushFont(font_);
+				}
 			}
 		}
-	}
 
-	~RoleFontGuard()
-	{
-		if (font_) {
-			ImGui::PopFont();
+		~RoleFontGuard()
+		{
+			if (font_) {
+				ImGui::PopFont();
+			}
 		}
-	}
 
-	RoleFontGuard(const RoleFontGuard&) = delete;
-	RoleFontGuard& operator=(const RoleFontGuard&) = delete;
+		RoleFontGuard(const RoleFontGuard&) = delete;
+		RoleFontGuard& operator=(const RoleFontGuard&) = delete;
 
-	[[nodiscard]] ImFont* Get() const { return font_; }
+		[[nodiscard]] ImFont* Get() const { return font_; }
 
-private:
-	ImFont* font_ = nullptr;
-};
+	private:
+		ImFont* font_ = nullptr;
+	};
 }
 
 void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShowIcons, float uiScale, const Menu::UIIcons& uiIcons)
@@ -86,11 +86,11 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 				// Use our helper to render aligned logo and text with perfect vertical alignment
 				{
 					RoleFontGuard headingFont(Menu::FontRole::Heading);
-				Util::DrawAlignedTextWithLogo(
-					uiIcons.logo.texture,
-					logoSizeVec,
-					title.c_str(),
-					textScaleFactor);
+					Util::DrawAlignedTextWithLogo(
+						uiIcons.logo.texture,
+						logoSizeVec,
+						title.c_str(),
+						textScaleFactor);
 				}
 			} else {
 				// No logo, just render the text with proper alignment

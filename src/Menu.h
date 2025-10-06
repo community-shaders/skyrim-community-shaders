@@ -110,7 +110,7 @@ public:
 
 	// Font caching (made public for ThemeManager and OverlayRenderer access)
 	float cachedFontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;  // Tracks whether font has been modified and may require reloading
-	std::string cachedFontName = "Jost/Jost-Regular.ttf";              // Tracks whether font file has changed and may require reloading
+	std::string cachedFontName = "Jost/Jost-Regular.ttf";               // Tracks whether font file has changed and may require reloading
 	std::array<std::string, static_cast<size_t>(FontRole::Count)> cachedFontFilesByRole = []() {
 		std::array<std::string, static_cast<size_t>(FontRole::Count)> files{};
 		auto setFile = [&files](FontRole role, std::string value) {

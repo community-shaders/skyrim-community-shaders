@@ -1,7 +1,7 @@
 #include "Fonts.h"
 
-#include "ThemeManager.h"
 #include "../Utils/FileSystem.h"
+#include "ThemeManager.h"
 
 #include <algorithm>
 #include <cctype>
@@ -174,7 +174,7 @@ namespace Util
 				}
 			}
 			auto stem = relativePath.stem().string();
-			
+
 			// Split by delimiters and take tokens before width variants
 			std::vector<std::string> tokens;
 			std::string token;
@@ -191,7 +191,7 @@ namespace Util
 			if (!token.empty()) {
 				tokens.push_back(token);
 			}
-			
+
 			// Find first width variant and take everything before it
 			std::string family;
 			for (const auto& t : tokens) {
@@ -203,13 +203,13 @@ namespace Util
 				}
 				family += t;
 			}
-			
+
 			// Fallback to simple split
 			if (family.empty()) {
 				auto pos = stem.find_first_of("-_ ");
 				family = (pos != std::string::npos && pos > 0) ? stem.substr(0, pos) : stem;
 			}
-			
+
 			return family;
 		}
 
@@ -218,7 +218,7 @@ namespace Util
 			std::string stem = relativePath.stem().string();
 			std::string lowerStem = ToLowerCopy(stem);
 			std::string lowerFamily = ToLowerCopy(family);
-			
+
 			// Remove family prefix if present
 			if (!lowerFamily.empty()) {
 				std::string hyphen = lowerFamily + "-";
@@ -249,7 +249,7 @@ namespace Util
 			if (!token.empty()) {
 				tokens.push_back(token);
 			}
-			
+
 			// Build style from all tokens
 			std::string style;
 			for (const auto& t : tokens) {
@@ -258,7 +258,7 @@ namespace Util
 				}
 				style += t;
 			}
-			
+
 			if (style.empty() || ToLowerCopy(style) == lowerFamily) {
 				style = "Regular";
 			}
@@ -299,24 +299,24 @@ namespace Util
 			if (filename.empty()) {
 				return "Unknown";
 			}
-			
+
 			std::filesystem::path filePath(filename);
 			std::string stem = filePath.stem().string();
-			
+
 			if (stem.empty()) {
 				return "Unknown";
 			}
-			
+
 			// Remove common font file prefixes if present
 			std::vector<std::string> prefixes = { "Font-", "Font_", "TTF-", "TTF_" };
 			for (const auto& prefix : prefixes) {
-				if (stem.size() > prefix.size() && 
+				if (stem.size() > prefix.size() &&
 					ToLowerCopy(stem.substr(0, prefix.size())) == ToLowerCopy(prefix)) {
 					stem = stem.substr(prefix.size());
 					break;
 				}
 			}
-			
+
 			return ToDisplayLabel(stem);
 		}
 

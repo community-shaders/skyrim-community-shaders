@@ -26,53 +26,53 @@ namespace
 		return std::find(CORE_MENU_NAMES.begin(), CORE_MENU_NAMES.end(), menuName) != CORE_MENU_NAMES.end();
 	}
 
-class FontRoleGuard
-{
-public:
-	explicit FontRoleGuard(Menu::FontRole role)
+	class FontRoleGuard
 	{
-		Menu* menuInstance = globals::menu;
-		if (!menuInstance) {
-			menuInstance = Menu::GetSingleton();
-		}
-		if (menuInstance) {
-			font_ = menuInstance->GetFont(role);
-			if (font_) {
-				ImGui::PushFont(font_);
+	public:
+		explicit FontRoleGuard(Menu::FontRole role)
+		{
+			Menu* menuInstance = globals::menu;
+			if (!menuInstance) {
+				menuInstance = Menu::GetSingleton();
+			}
+			if (menuInstance) {
+				font_ = menuInstance->GetFont(role);
+				if (font_) {
+					ImGui::PushFont(font_);
+				}
 			}
 		}
-	}
 
-	~FontRoleGuard()
-	{
-		if (font_) {
-			ImGui::PopFont();
+		~FontRoleGuard()
+		{
+			if (font_) {
+				ImGui::PopFont();
+			}
 		}
+
+		FontRoleGuard(const FontRoleGuard&) = delete;
+		FontRoleGuard& operator=(const FontRoleGuard&) = delete;
+
+	private:
+		ImFont* font_ = nullptr;
+	};
+
+	void SeparatorTextWithFont(const char* text, Menu::FontRole role)
+	{
+		FontRoleGuard guard(role);
+		ImGui::SeparatorText(text);
 	}
 
-	FontRoleGuard(const FontRoleGuard&) = delete;
-	FontRoleGuard& operator=(const FontRoleGuard&) = delete;
+	void SeparatorTextWithFont(const std::string& text, Menu::FontRole role)
+	{
+		SeparatorTextWithFont(text.c_str(), role);
+	}
 
-private:
-	ImFont* font_ = nullptr;
-};
-
-void SeparatorTextWithFont(const char* text, Menu::FontRole role)
-{
-	FontRoleGuard guard(role);
-	ImGui::SeparatorText(text);
-}
-
-void SeparatorTextWithFont(const std::string& text, Menu::FontRole role)
-{
-	SeparatorTextWithFont(text.c_str(), role);
-}
-
-bool BeginTabItemWithFont(const char* label, Menu::FontRole role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None)
-{
-	FontRoleGuard guard(role);
-	return ImGui::BeginTabItem(label, nullptr, flags);
-}
+	bool BeginTabItemWithFont(const char* label, Menu::FontRole role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None)
+	{
+		FontRoleGuard guard(role);
+		return ImGui::BeginTabItem(label, nullptr, flags);
+	}
 }
 
 void FeatureListRenderer::RenderFeatureList(
@@ -445,7 +445,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettingsTab(Feature* fea
 
 				const float epsilon = 0.1f;
 				bool cursorMoved = (std::abs(cursorPosAfter.x - cursorPosBefore.x) > epsilon ||
-					std::abs(cursorPosAfter.y - cursorPosBefore.y) > epsilon);
+									std::abs(cursorPosAfter.y - cursorPosBefore.y) > epsilon);
 				if (!cursorMoved) {
 					ImGui::TextColored(themeSettings.StatusPalette.Disable, "There are no settings available for this feature.");
 				}

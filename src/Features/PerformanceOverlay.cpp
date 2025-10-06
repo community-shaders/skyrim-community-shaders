@@ -1238,56 +1238,56 @@ void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRo
 				// Get theme for color coding
 				const auto& theme = menu->GetTheme();
 
-						// Sort the settings diff if needed
-						std::vector<SettingsDiffEntry> sortedDiff = this->settingsDiff;
-						if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
-							if (sortSpecs->SpecsCount > 0) {
-								int sortCol = sortSpecs->Specs->ColumnIndex;
-								bool sortAsc = sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending;
-								std::sort(sortedDiff.begin(), sortedDiff.end(), [sortCol, sortAsc](const SettingsDiffEntry& a, const SettingsDiffEntry& b) {
-									if (sortCol == 0)
-										return sortAsc ? (a.path < b.path) : (a.path > b.path);
-									if (sortCol == 1)
-										return sortAsc ? (a.aValue < b.aValue) : (a.aValue > b.aValue);
-									if (sortCol == 2)
-										return sortAsc ? (a.bValue < b.bValue) : (a.bValue > b.bValue);
-									return false;
-								});
-							}
-						}
-						for (const auto& entry : sortedDiff) {
-							ImGui::TableNextRow();
-							ImGui::TableSetColumnIndex(0);
-							ImGui::TextUnformatted(entry.path.c_str());
-							// Only show the path as text, no custom tooltip guessing
-							ImGui::TableSetColumnIndex(1);
-							// Color A value based on performance
-							if (variantABetter) {
-								ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.SuccessColor);
-								ImGui::TextUnformatted(entry.aValue.c_str());
-								ImGui::PopStyleColor();
-							} else if (variantBBetter) {
-								ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.Error);
-								ImGui::TextUnformatted(entry.aValue.c_str());
-								ImGui::PopStyleColor();
-							} else {
-								ImGui::TextUnformatted(entry.aValue.c_str());
-							}
-							ImGui::TableSetColumnIndex(2);
-							// Color B value based on performance
-							if (variantBBetter) {
-								ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.SuccessColor);
-								ImGui::TextUnformatted(entry.bValue.c_str());
-								ImGui::PopStyleColor();
-							} else if (variantABetter) {
-								ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.Error);
-								ImGui::TextUnformatted(entry.bValue.c_str());
-								ImGui::PopStyleColor();
-							} else {
-								ImGui::TextUnformatted(entry.bValue.c_str());
-							}
-						}
-						ImGui::EndTable();
+				// Sort the settings diff if needed
+				std::vector<SettingsDiffEntry> sortedDiff = this->settingsDiff;
+				if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
+					if (sortSpecs->SpecsCount > 0) {
+						int sortCol = sortSpecs->Specs->ColumnIndex;
+						bool sortAsc = sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending;
+						std::sort(sortedDiff.begin(), sortedDiff.end(), [sortCol, sortAsc](const SettingsDiffEntry& a, const SettingsDiffEntry& b) {
+							if (sortCol == 0)
+								return sortAsc ? (a.path < b.path) : (a.path > b.path);
+							if (sortCol == 1)
+								return sortAsc ? (a.aValue < b.aValue) : (a.aValue > b.aValue);
+							if (sortCol == 2)
+								return sortAsc ? (a.bValue < b.bValue) : (a.bValue > b.bValue);
+							return false;
+						});
+					}
+				}
+				for (const auto& entry : sortedDiff) {
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::TextUnformatted(entry.path.c_str());
+					// Only show the path as text, no custom tooltip guessing
+					ImGui::TableSetColumnIndex(1);
+					// Color A value based on performance
+					if (variantABetter) {
+						ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.SuccessColor);
+						ImGui::TextUnformatted(entry.aValue.c_str());
+						ImGui::PopStyleColor();
+					} else if (variantBBetter) {
+						ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.Error);
+						ImGui::TextUnformatted(entry.aValue.c_str());
+						ImGui::PopStyleColor();
+					} else {
+						ImGui::TextUnformatted(entry.aValue.c_str());
+					}
+					ImGui::TableSetColumnIndex(2);
+					// Color B value based on performance
+					if (variantBBetter) {
+						ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.SuccessColor);
+						ImGui::TextUnformatted(entry.bValue.c_str());
+						ImGui::PopStyleColor();
+					} else if (variantABetter) {
+						ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.Error);
+						ImGui::TextUnformatted(entry.bValue.c_str());
+						ImGui::PopStyleColor();
+					} else {
+						ImGui::TextUnformatted(entry.bValue.c_str());
+					}
+				}
+				ImGui::EndTable();
 			}
 			ImGui::Separator();
 		}
