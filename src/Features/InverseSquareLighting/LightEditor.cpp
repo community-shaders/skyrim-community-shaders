@@ -228,6 +228,9 @@ void LightEditor::GatherLights()
 
 		current.isSelected = selected == current;
 
+		// Populate runtime data for each light (needed for correct JSON export)
+		PopulateLightRuntimeData(current, refr, ligh, niLight);
+
 		lights.push_back(current);
 
 		if (!current.isSelected)
@@ -328,6 +331,34 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 	displayInfo.cellEditorId = refr && refr->GetParentCell() ? refr->GetParentCell()->GetFormEditorID() : "Unknown";
 	displayInfo.lighFormId = ligh ? ligh->GetFormID() : 0;
 	displayInfo.lighEditorId = ligh ? clib_util::editorID::get_editorID(ligh) : "Unknown";
+}
+
+void LightEditor::PopulateLightRuntimeData(LightInfo& lightInfo, RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight)
+{
+	const auto runtimeData = ISLCommon::RuntimeLightDataExt::Get(niLight);
+	auto tesFlags = ligh ? &ligh->data.flags : nullptr;
+
+	// Capture runtime light data
+	lightInfo.runtimeData = *runtimeData;
+	lightInfo.tesFlags = tesFlags ? static_cast<ISLCommon::TES_LIGHT_FLAGS_EXT>(tesFlags->underlying()) : static_cast<ISLCommon::TES_LIGHT_FLAGS_EXT>(0);
+	
+	// Capture position offset (for ref lights this would be difference from original position)
+	if (lightInfo.isRef) {
+		lightInfo.positionOffset = { 0, 0, 0 }; // Ref lights use world position directly
+	} else if (lightInfo.isAttached) {
+		lightInfo.positionOffset = niLight->parent->local.translate;
+	} else {
+		lightInfo.positionOffset = { 0, 0, 0 };
+	}
+
+	// Capture display metadata
+	lightInfo.ownerFormId = refr ? refr->GetFormID() : 0;
+	lightInfo.ownerEditorId = refr ? clib_util::editorID::get_editorID(refr) : "Unknown";
+	lightInfo.baseObjectFormId = refr && refr->GetBaseObject() ? refr->GetBaseObject()->formID : 0;
+	lightInfo.ownerLastEditedBy = refr && refr->GetDescriptionOwnerFile() ? refr->GetDescriptionOwnerFile()->fileName : "Unknown";
+	lightInfo.cellEditorId = refr && refr->GetParentCell() ? refr->GetParentCell()->GetFormEditorID() : "Unknown";
+	lightInfo.lighFormId = ligh ? ligh->GetFormID() : 0;
+	lightInfo.lighEditorId = ligh ? clib_util::editorID::get_editorID(ligh) : "Unknown";
 }
 
 void LightEditor::SortLights()
@@ -463,23 +494,23 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 	// Light data section
 	json lightData;
 
-	// Basic light properties - using display info when available
+	// Basic light properties - using per-light data
 	if (lightInfo.isRef || lightInfo.isAttached) {
-		lightData["light"] = displayInfo.lighEditorId.empty() ? "DefaultPointLight01" : displayInfo.lighEditorId;
+		lightData["light"] = lightInfo.lighEditorId.empty() ? "DefaultPointLight01" : lightInfo.lighEditorId;
 	} else {
 		lightData["light"] = "DefaultPointLight01";  // Default for non-ref lights
 	}
 
 	// Color in Light Placer format [r, g, b] as 0-1 normalized values
 	lightData["color"] = {
-		current.data.diffuse.red,
-		current.data.diffuse.green,
-		current.data.diffuse.blue
+		lightInfo.runtimeData.diffuse.red,
+		lightInfo.runtimeData.diffuse.green,
+		lightInfo.runtimeData.diffuse.blue
 	};
 
 	// Radius and fade
-	lightData["radius"] = current.data.radius;
-	lightData["fade"] = current.data.fade;
+	lightData["radius"] = lightInfo.runtimeData.radius;
+	lightData["fade"] = lightInfo.runtimeData.fade;
 
 	// Add custom metadata for ISL tracking (non-standard but useful)
 	lightData["_islMetadata"] = {
@@ -489,70 +520,69 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 		{ "memoryAddress", fmt::format("{:p}", lightInfo.ptr) }
 	};
 
-	// Additional settings if this is the selected light
-	if (lightInfo == selected && lightInfo.isSelected) {
-		// Add size and cutoff if different from default
-		if (current.data.size != 0.0f) {
-			lightData["size"] = current.data.size;
-		}
+	// Additional settings for all lights
+	// Add size and cutoff if different from default
+	if (lightInfo.runtimeData.size != 0.0f) {
+		lightData["size"] = lightInfo.runtimeData.size;
+	}
 
-		// Position offset
-		if (current.pos.x != 0.0f || current.pos.y != 0.0f || current.pos.z != 0.0f) {
-			lightData["offset"] = {
-				current.pos.x,
-				current.pos.y,
-				current.pos.z
-			};
-		}
+	// Position offset
+	if (lightInfo.positionOffset.x != 0.0f || lightInfo.positionOffset.y != 0.0f || lightInfo.positionOffset.z != 0.0f) {
+		lightData["offset"] = {
+			lightInfo.positionOffset.x,
+			lightInfo.positionOffset.y,
+			lightInfo.positionOffset.z
+		};
+	}
 
-		// Flags in Light Placer format
-		std::vector<std::string> flags;
-		if (static_cast<bool>(*reinterpret_cast<const uint32_t*>(&current.data.flags) & static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare))) {
-			// Note: InverseSquare is not a standard Light Placer flag
-			lightData["_islMetadata"]["isInverseSquare"] = true;
-		}
+	// Flags in Light Placer format
+	std::vector<std::string> flags;
+	if (static_cast<bool>(*reinterpret_cast<const uint32_t*>(&lightInfo.runtimeData.flags) & static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare))) {
+		// Note: InverseSquare is not a standard Light Placer flag
+		lightData["_islMetadata"]["isInverseSquare"] = true;
+	}
 
-		// TES flags converted to Light Placer equivalents where possible
-		if (!lightInfo.isOther && displayInfo.ownerFormId != 0) {
-			auto flagsValue = *reinterpret_cast<const uint32_t*>(&current.tesFlags);
-			if (flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict)) {
-				flags.push_back("PortalStrict");
-			}
-			if (flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow)) {
-				flags.push_back("Shadow");
-			}
-			// Store other TES flags in metadata
-			lightData["_islMetadata"]["tesFlags"] = {
-				{ "dynamic", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic)) },
-				{ "negative", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative)) },
-				{ "flicker", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker)) },
-				{ "flickerSlow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow)) },
-				{ "pulse", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse)) },
-				{ "pulseSlow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow)) },
-				{ "hemiShadow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow)) }
-			};
+	// TES flags converted to Light Placer equivalents where possible
+	if (!lightInfo.isOther && lightInfo.ownerFormId != 0) {
+		auto flagsValue = *reinterpret_cast<const uint32_t*>(&lightInfo.tesFlags);
+		if (flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict)) {
+			flags.push_back("PortalStrict");
 		}
+		if (flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow)) {
+			flags.push_back("Shadow");
+		}
+		// Store other TES flags in metadata
+		lightData["_islMetadata"]["tesFlags"] = {
+			{ "dynamic", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic)) },
+			{ "negative", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative)) },
+			{ "flicker", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker)) },
+			{ "flickerSlow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow)) },
+			{ "pulse", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse)) },
+			{ "pulseSlow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow)) },
+			{ "hemiShadow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow)) }
+		};
+	}
 
-		if (!flags.empty()) {
-			std::string flagsStr;
-			for (size_t i = 0; i < flags.size(); ++i) {
-				if (i > 0)
-					flagsStr += "|";
-				flagsStr += flags[i];
-			}
-			lightData["flags"] = flagsStr;
-		}
 
-		// Additional reference metadata
-		if (lightInfo.isRef || lightInfo.isAttached) {
-			lightData["_islMetadata"]["ownerInfo"] = {
-				{ "ownerFormID", fmt::format("0x{:08X}", displayInfo.ownerFormId) },
-				{ "ownerEditorID", displayInfo.ownerEditorId },
-				{ "baseObjectFormID", fmt::format("0x{:08X}", displayInfo.baseObjectFormId) },
-				{ "ownerLastEditedBy", displayInfo.ownerLastEditedBy },
-				{ "cellEditorID", displayInfo.cellEditorId }
-			};
+	if (!flags.empty()) {
+		std::string flagsStr;
+		for (size_t i = 0; i < flags.size(); ++i) {
+			if (i > 0)
+				flagsStr += "|";
+			flagsStr += flags[i];
 		}
+		lightData["flags"] = flagsStr;
+	}
+
+	// Additional reference metadata
+	if (lightInfo.isRef || lightInfo.isAttached) {
+		lightData["_islMetadata"]["ownerInfo"] = {
+			{ "ownerFormID", fmt::format("0x{:08X}", lightInfo.ownerFormId) },
+			{ "ownerEditorID", lightInfo.ownerEditorId },
+			{ "baseObjectFormID", fmt::format("0x{:08X}", lightInfo.baseObjectFormId) },
+			{ "ownerLastEditedBy", lightInfo.ownerLastEditedBy },
+			{ "cellEditorID", lightInfo.cellEditorId }
+		};
 	}
 
 	// Create the light entry with points array (Light Placer format)

@@ -23,6 +23,20 @@ private:
 		bool isOther;
 		RE::NiPoint3 position;
 
+		// Runtime light data for per-light JSON export
+		ISLCommon::RuntimeLightDataExt runtimeData = {};
+		stl::enumeration<ISLCommon::TES_LIGHT_FLAGS_EXT, uint32_t> tesFlags = {};
+		RE::NiPoint3 positionOffset = {};
+
+		// Display metadata for per-light JSON export
+		RE::FormID ownerFormId = 0;
+		std::string ownerEditorId;
+		RE::FormID baseObjectFormId = 0;
+		std::string ownerLastEditedBy;
+		std::string cellEditorId;
+		RE::FormID lighFormId = 0;
+		std::string lighEditorId;
+
 		bool operator==(const LightInfo& other) const noexcept
 		{
 			return id == other.id && index == other.index;
@@ -100,6 +114,8 @@ private:
 	static std::string GetLightName(LightInfo& lightInfo);
 
 	void UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight);
+
+	void PopulateLightRuntimeData(LightInfo& lightInfo, RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight);
 
 	void ExportLightsToJson();
 	void ExportSelectedLightToJson();
