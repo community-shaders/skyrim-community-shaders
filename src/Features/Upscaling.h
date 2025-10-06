@@ -208,7 +208,7 @@ private:
 
 	struct Main_PostProcessing
 	{
-		static void thunk(RE::ImageSpaceManager* a1, uint32_t a3, uint32_t er8_);
+		static void thunk(RE::ImageSpaceManager* a_this, uint32_t a3, RE::RENDER_TARGET a_target, void* a_4, bool a_5);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
