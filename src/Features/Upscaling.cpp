@@ -358,6 +358,17 @@ void Upscaling::SaveSettings(json& o_json)
 void Upscaling::LoadSettings(json& o_json)
 {
 	settings = o_json;
+
+	// Sanitize loaded settings to ensure enum indices are valid
+	constexpr auto enumCount = 4;  // UpscaleMethod has 4 values: kNONE, kTAA, kFSR, kDLSS
+	if (settings.upscaleMethod >= static_cast<uint>(enumCount)) {
+		logger::warn("[Upscaling] Loaded upscaleMethod {} out of range, clamping to {}", settings.upscaleMethod, enumCount ? enumCount - 1 : 0);
+		settings.upscaleMethod = enumCount ? enumCount - 1 : 0;
+	}
+	if (settings.upscaleMethodNoDLSS >= static_cast<uint>(enumCount)) {
+		logger::warn("[Upscaling] Loaded upscaleMethodNoDLSS {} out of range, clamping to {}", settings.upscaleMethodNoDLSS, enumCount ? enumCount - 1 : 0);
+		settings.upscaleMethodNoDLSS = enumCount ? enumCount - 1 : 0;
+	}
 	auto iniSettingCollection = globals::game::iniPrefSettingCollection;
 	if (iniSettingCollection) {
 		auto setting = iniSettingCollection->GetSetting("bUseTAA:Display");
