@@ -6,6 +6,24 @@
 
 namespace FrameAnnotations
 {
+	namespace
+	{
+		static std::string BuildEventName(RE::ImageSpaceManager::ImageSpaceEffectEnum EffectType)
+		{
+			auto enumName = RE::ImageSpaceManager::GetImageSpaceEffectName(EffectType);
+
+			if (globals::state && globals::state->IsDeveloperMode()) {
+				uint16_t packed = static_cast<uint16_t>(EffectType);
+				uint16_t se = RE::ImageSpaceManager::GetSEIndex(EffectType);
+				uint16_t vr = RE::ImageSpaceManager::GetVRIndex(EffectType);
+				std::string packedString = std::format(" (packed: 0x{:X}, SE: {}, VR: {})", packed, se, vr);
+				return enumName + packedString;
+			} else {
+				return enumName;
+			}
+		}
+	}
+
 	template <RE::BSShader::Type ShaderType>
 	struct BSShader_SetupGeometry
 	{
@@ -43,7 +61,8 @@ namespace FrameAnnotations
 	{
 		static void thunk(void* imageSpaceShader, RE::BSTriShape* shape, RE::ImageSpaceEffectParam* param)
 		{
-			globals::state->BeginPerfEvent(std::format("{} Draw", magic_enum::enum_name(EffectType)));
+			std::string eventName = BuildEventName(EffectType) + " Draw";
+			globals::state->BeginPerfEvent(eventName);
 
 			func(imageSpaceShader, shape, param);
 
@@ -58,7 +77,8 @@ namespace FrameAnnotations
 	{
 		static void thunk(void* imageSpaceShader, uint32_t a1, uint32_t a2, uint32_t a3)
 		{
-			globals::state->BeginPerfEvent(std::format("{} Dispatch", magic_enum::enum_name(EffectType)));
+			std::string eventName = BuildEventName(EffectType) + " Dispatch";
+			globals::state->BeginPerfEvent(eventName);
 
 			func(imageSpaceShader, a1, a2, a3);
 
@@ -919,7 +939,6 @@ namespace FrameAnnotations
 		stl::detour_thunk<BSShaderAccumulator_RenderBatches>(REL::RelocationID(99963, 106609));
 		stl::detour_thunk<BSShaderAccumulator_RenderPersistentPassList>(REL::RelocationID(100840, 107630));
 		stl::detour_thunk<BSShaderAccumulator_RenderEffects>(REL::RelocationID(99940, 106585));
-		stl::detour_thunk<VolumetricLightingDescriptor_Render>(REL::RelocationID(100306, 107023));
 	}
 
 	void OnDataLoaded()
