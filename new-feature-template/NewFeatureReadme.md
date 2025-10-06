@@ -8,7 +8,7 @@ Template files to copy and customize:
 
 -   `template/NewFeature.h` → Copy to `src/Features/YourFeature.h`
 -   `template/NewFeature.cpp` → Copy to `src/Features/YourFeature.cpp`
--   `template/New Feature/` → Copy to `features/Your Feature Name/`
+-   `template/New Feature/` → Copy to `features/YourFeature/`
 
 ## Core System Registration
 
@@ -69,14 +69,14 @@ Set `SupportsVR()` return value:
 
 ## Naming Conventions
 
-| Component          | Convention | Example                       |
-| ------------------ | ---------- | ----------------------------- |
-| C++ Class          | PascalCase | `YourFeature`                 |
-| Instance Variable  | camelCase  | `yourFeature`                 |
-| Display Name       | Spaces     | `"Your Feature Name"`         |
-| Short Name         | PascalCase | `"YourFeature"`               |
-| Features Directory | Spaces     | `features/Your Feature Name/` |
-| Shader Directory   | PascalCase | `YourFeature/`                |
+| Component          | Convention | Example                  |
+| ------------------ | ---------- | ------------------------ |
+| C++ Class          | PascalCase | `YourFeature`            |
+| Instance Variable  | camelCase  | `yourFeature`            |
+| Display Name       | Spaces     | `"Your Feature Name"`    |
+| Short Name         | PascalCase | `"YourFeature"`          |
+| Features Directory | PascalCase | `features/YourFeature/`  |
+| Shader Directory   | PascalCase | `YourFeature/`           |
 
 ## Automatic Build Integration
 
