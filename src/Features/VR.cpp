@@ -101,7 +101,18 @@ void VR::SetupResources()
 void VR::PostPostLoad()
 {
 	gDepthBufferCulling = reinterpret_cast<bool*>(REL::Offset(0x1EC6B88).address());
+	if (!gDepthBufferCulling) {
+		static bool s_defaultDepthBufferCulling = false;  // safe fallback
+		gDepthBufferCulling = &s_defaultDepthBufferCulling;
+		logger::warn("VR: gDepthBufferCulling address not found - using fallback default (false)");
+	}
+
 	gMinOccludeeBoxExtent = reinterpret_cast<float*>(REL::Offset(0x1ED64E8).address());
+	if (!gMinOccludeeBoxExtent) {
+		static float s_defaultMinOccludeeBoxExtent = 10.0f;
+		gMinOccludeeBoxExtent = &s_defaultMinOccludeeBoxExtent;
+		logger::warn("VR: gMinOccludeeBoxExtent address not found - using fallback default (10.0)");
+	}
 
 	// Patches BSGeometry::CopyTransformAndBounds to copy the model-bound translation across correctly instead of overwriting it with the bounding sphere centre
 	REL::safe_write(REL::RelocationID(0, 0, 69528).address() + REL::Relocate(0, 0, 0xD9) + 0x2, 0x148);
@@ -116,7 +127,11 @@ void VR::DataLoaded()
 	bool desired = settings.EnableDepthBufferCullingExterior;
 	UpdateDepthBufferCulling(desired);
 
-	*gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
+	if (gMinOccludeeBoxExtent) {
+		*gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
+	} else {
+		logger::warn("VR::DataLoaded: gMinOccludeeBoxExtent is null, skipping assignment");
+	}
 }
 
 void VR::EarlyPrepass()
