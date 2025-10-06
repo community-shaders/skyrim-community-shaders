@@ -341,10 +341,10 @@ void LightEditor::PopulateLightRuntimeData(LightInfo& lightInfo, RE::TESObjectRE
 	// Capture runtime light data
 	lightInfo.runtimeData = *runtimeData;
 	lightInfo.tesFlags = tesFlags ? static_cast<ISLCommon::TES_LIGHT_FLAGS_EXT>(tesFlags->underlying()) : static_cast<ISLCommon::TES_LIGHT_FLAGS_EXT>(0);
-	
+
 	// Capture position offset (for ref lights this would be difference from original position)
 	if (lightInfo.isRef) {
-		lightInfo.positionOffset = { 0, 0, 0 }; // Ref lights use world position directly
+		lightInfo.positionOffset = { 0, 0, 0 };  // Ref lights use world position directly
 	} else if (lightInfo.isAttached) {
 		lightInfo.positionOffset = niLight->parent->local.translate;
 	} else {
@@ -562,7 +562,6 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 			{ "hemiShadow", static_cast<bool>(flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow)) }
 		};
 	}
-
 
 	if (!flags.empty()) {
 		std::string flagsStr;
