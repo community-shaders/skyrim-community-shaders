@@ -81,13 +81,11 @@ bool OverlayRenderer::ShouldSkipRendering()
 
 void OverlayRenderer::HandleFontReload(Menu& menu, float& cachedFontSize, float currentFontSize)
 {
-	auto& currentTheme = menu.GetTheme();
-
-	// Reload font if size changed or font file changed
 	bool fontSizeChanged = std::abs(cachedFontSize - currentFontSize) > ThemeManager::Constants::FONT_CACHE_EPSILON;
-	bool fontNameChanged = menu.cachedFontName != currentTheme.FontName;
+	std::string desiredSignature = menu.BuildFontSignature(currentFontSize);
+	bool signatureChanged = desiredSignature != menu.cachedFontSignature;
 
-	if (fontSizeChanged || fontNameChanged) {
+	if (fontSizeChanged || signatureChanged) {
 		ThemeManager::ReloadFont(menu, cachedFontSize);
 	}
 }

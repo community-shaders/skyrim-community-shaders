@@ -1,9 +1,50 @@
 {
     "DisplayName": "Ocean Blue",
     "Description": "Cool blue tones inspired by deep ocean waters and maritime adventures",
-    "Version": "2.0.0",
+    "Version": "1.0.0",
     "Author": "Community Shaders Team",
     "Theme": {
+        "FontSize": 27.0,
+        "FontName": "Roboto/Roboto-Regular.ttf",
+        "GlobalScale": 0.0,
+        "FontRoles": [
+            {
+                "Family": "Roboto",
+                "Style": "Regular",
+                "File": "Roboto/Roboto-Regular.ttf",
+                "SizeScale": 1.0
+            },
+            {
+                "Family": "Roboto",
+                "Style": "SemiBold",
+                "File": "Roboto/Roboto-SemiBold.ttf",
+                "SizeScale": 1.05
+            },
+            {
+                "Family": "Roboto",
+                "Style": "Regular",
+                "File": "Roboto/Roboto-Regular.ttf",
+                "SizeScale": 1.0
+            },
+            {
+                "Family": "Roboto",
+                "Style": "Light",
+                "File": "Roboto/Roboto-Light.ttf",
+                "SizeScale": 0.95
+            },
+            {
+                "Family": "Roboto",
+                "Style": "Light",
+                "File": "Roboto/Roboto-Light.ttf",
+                "SizeScale": 0.9
+            },
+            {
+                "Family": "LeagueMono",
+                "Style": "Light",
+                "File": "LeagueMono/LeagueMono-Light.ttf",
+                "SizeScale": 0.95
+            }
+        ],
         "UseSimplePalette": false,
         "ShowActionIcons": true,
         "TooltipHoverDelay": 0.5,

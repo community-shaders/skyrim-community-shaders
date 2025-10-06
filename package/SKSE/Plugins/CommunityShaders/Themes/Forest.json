@@ -1,9 +1,50 @@
 {
     "DisplayName": "Forest Green",
     "Description": "Natural green theme inspired by Skyrim's ancient forests and wilderness",
-    "Version": "2.0.0",
+    "Version": "1.0.0",
     "Author": "Community Shaders Team",
     "Theme": {
+        "FontSize": 27.0,
+        "FontName": "Jost/Jost-Light.ttf",
+        "GlobalScale": 0.0,
+        "FontRoles": [
+            {
+                "Family": "Jost",
+                "Style": "Light",
+                "File": "Jost/Jost-Light.ttf",
+                "SizeScale": 1.05
+            },
+            {
+                "Family": "Sovngarde",
+                "Style": "Bold",
+                "File": "Sovngarde/SovngardeBold.ttf",
+                "SizeScale": 1.1
+            },
+            {
+                "Family": "Jost",
+                "Style": "Regular",
+                "File": "Jost/Jost-Regular.ttf",
+                "SizeScale": 1.0
+            },
+            {
+                "Family": "Jost",
+                "Style": "Light",
+                "File": "Jost/Jost-Light.ttf",
+                "SizeScale": 0.95
+            },
+            {
+                "Family": "Jost",
+                "Style": "Light",
+                "File": "Jost/Jost-Light.ttf",
+                "SizeScale": 0.9
+            },
+            {
+                "Family": "LeagueMono",
+                "Style": "Light",
+                "File": "LeagueMono/LeagueMono-Light.ttf",
+                "SizeScale": 0.95
+            }
+        ],
         "UseSimplePalette": false,
         "ShowActionIcons": true,
         "TooltipHoverDelay": 0.5,

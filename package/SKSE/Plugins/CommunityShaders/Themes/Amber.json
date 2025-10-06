@@ -1,9 +1,50 @@
 {
     "DisplayName": "Warm Amber",
     "Description": "Cozy amber tones reminiscent of hearth fires and candlelight in Nordic taverns",
-    "Version": "2.0.0",
+    "Version": "1.0.0",
     "Author": "Community Shaders Team",
     "Theme": {
+        "FontSize": 27.0,
+        "FontName": "LibreBaskerville/LibreBaskerville-Regular.ttf",
+        "GlobalScale": 0.0,
+        "FontRoles": [
+            {
+                "Family": "LibreBaskerville",
+                "Style": "Regular",
+                "File": "LibreBaskerville/LibreBaskerville-Regular.ttf",
+                "SizeScale": 1.0
+            },
+            {
+                "Family": "LibreBaskerville",
+                "Style": "Bold",
+                "File": "LibreBaskerville/LibreBaskerville-Bold.ttf",
+                "SizeScale": 1.1
+            },
+            {
+                "Family": "LibreBaskerville",
+                "Style": "Regular",
+                "File": "LibreBaskerville/LibreBaskerville-Regular.ttf",
+                "SizeScale": 1.0
+            },
+            {
+                "Family": "LibreBaskerville",
+                "Style": "Italic",
+                "File": "LibreBaskerville/LibreBaskerville-Italic.ttf",
+                "SizeScale": 0.95
+            },
+            {
+                "Family": "LibreBaskerville",
+                "Style": "Italic",
+                "File": "LibreBaskerville/LibreBaskerville-Italic.ttf",
+                "SizeScale": 0.9
+            },
+            {
+                "Family": "LeagueMono",
+                "Style": "Regular",
+                "File": "LeagueMono/LeagueMono-Regular.ttf",
+                "SizeScale": 0.95
+            }
+        ],
         "UseSimplePalette": false,
         "ShowActionIcons": true,
         "TooltipHoverDelay": 0.5,

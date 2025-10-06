@@ -3,17 +3,70 @@
 #include "Feature.h"
 #include "Menu/ThemeManager.h"
 #include "Utils/Serialize.h"
+#include <array>
+#include <atomic>
+#include <cstdint>
 #include <dxgi1_4.h>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <shared_mutex>
+#include <string>
+#include <string_view>
+#include <unordered_map>
 #include <vector>
 #include <winrt/base.h>
 
 using json = nlohmann::json;
 
+struct ImFont;
+
 class Menu
 {
 public:
+	enum class FontRole : std::uint8_t
+	{
+		Body = 0,
+		Heading,
+		Subheading,
+		Subtitle,
+		Caption,
+		Monospace,
+		Count
+	};
+
+	struct FontRoleDescriptor
+	{
+		std::string_view key;
+		std::string_view displayName;
+		float defaultScale;
+	};
+
+	static inline constexpr std::array<FontRoleDescriptor, static_cast<size_t>(FontRole::Count)> FontRoleDescriptors = {
+		FontRoleDescriptor{ "Body", "Body Text", 1.0f },
+		FontRoleDescriptor{ "Heading", "Headings", 1.0f },
+		FontRoleDescriptor{ "Subheading", "Subheadings", 1.0f },
+		FontRoleDescriptor{ "Subtitle", "Subtitles", 1.0f },
+		FontRoleDescriptor{ "Caption", "Captions", 1.0f },
+		FontRoleDescriptor{ "Monospace", "Monospace", 1.0f }
+	};
+
+	static constexpr std::string_view GetFontRoleKey(FontRole role)
+	{
+		return FontRoleDescriptors[static_cast<size_t>(role)].key;
+	}
+
+	static constexpr std::string_view GetFontRoleDisplayName(FontRole role)
+	{
+		return FontRoleDescriptors[static_cast<size_t>(role)].displayName;
+	}
+
+	static constexpr float GetFontRoleDefaultScale(FontRole role)
+	{
+		return FontRoleDescriptors[static_cast<size_t>(role)].defaultScale;
+	}
+
+	static std::optional<FontRole> ResolveFontRole(std::string_view key);
+
 	~Menu();
 	Menu(const Menu&) = delete;
 	Menu& operator=(const Menu&) = delete;
@@ -48,6 +101,7 @@ public:
 
 	void ProcessInputEvents(RE::InputEvent* const* a_events);
 	bool ShouldSwallowInput();
+	std::string BuildFontSignature(float baseFontSize) const;
 
 public:
 	// Input handling flags (made public for InputEventHandler access)
@@ -60,11 +114,26 @@ public:
 
 	// Font caching (made public for ThemeManager and OverlayRenderer access)
 	float cachedFontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;  // Tracks whether font has been modified and may require reloading
-	std::string cachedFontName = "Jost-Regular.ttf";                    // Tracks whether font file has changed and may require reloading
+	std::string cachedFontName = "Jost/Jost-Regular.ttf";              // Tracks whether font file has changed and may require reloading
+	std::array<std::string, static_cast<size_t>(FontRole::Count)> cachedFontFilesByRole = []() {
+		std::array<std::string, static_cast<size_t>(FontRole::Count)> files{};
+		auto setFile = [&files](FontRole role, std::string value) {
+			files[static_cast<size_t>(role)] = std::move(value);
+		};
+		setFile(FontRole::Body, "Jost/Jost-Regular.ttf");
+		setFile(FontRole::Heading, "Jost/Jost-Regular.ttf");
+		setFile(FontRole::Subheading, "Jost/Jost-Regular.ttf");
+		setFile(FontRole::Subtitle, "Jost/Jost-Regular.ttf");
+		setFile(FontRole::Caption, "Jost/Jost-Regular.ttf");
+		setFile(FontRole::Monospace, "Jost/Jost-Regular.ttf");
+		return files;
+	}();
+	std::array<float, static_cast<size_t>(FontRole::Count)> cachedFontPixelSizesByRole = {};
+	std::string cachedFontSignature;
+	std::array<ImFont*, static_cast<size_t>(FontRole::Count)> loadedFontRoles = {};
 
 	// Deferred font reload system (public for SettingsTabRenderer access)
 	bool pendingFontReload = false;
-	std::string pendingFontName;
 
 	// Used for resetting input keys to solve alt-tab stuck issue
 	std::atomic<bool> focusChanged = false;
@@ -116,9 +185,36 @@ public:
 
 	struct ThemeSettings
 	{
+		struct FontRoleSettings
+		{
+			std::string Family;
+			std::string Style;
+			std::string File;
+			float SizeScale = 1.0f;
+		};
+
 		float FontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;
-		std::string FontName = "Jost-Regular.ttf";              // Default font file name
+		std::string FontName = "Jost/Jost-Regular.ttf";         // Default font file name (legacy)
 		float GlobalScale = REL::Module::IsVR() ? -0.5f : 0.f;  // exponential
+		std::array<FontRoleSettings, static_cast<size_t>(FontRole::Count)> FontRoles = []() {
+			std::array<FontRoleSettings, static_cast<size_t>(FontRole::Count)> roles{};
+			auto setRole = [&roles](FontRole role, std::string family, std::string style, std::string file, float sizeScale) {
+				auto index = static_cast<size_t>(role);
+				roles[index].Family = std::move(family);
+				roles[index].Style = std::move(style);
+				roles[index].File = std::move(file);
+				roles[index].SizeScale = sizeScale;
+			};
+
+			setRole(FontRole::Body, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
+			setRole(FontRole::Heading, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
+			setRole(FontRole::Subheading, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
+			setRole(FontRole::Subtitle, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
+			setRole(FontRole::Caption, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
+			setRole(FontRole::Monospace, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
+
+			return roles;
+		}();
 
 		bool UseSimplePalette = false;   // DEPRECATED: No longer affects behavior. UI now shows both Simple and Advanced controls.
 		bool ShowActionIcons = true;     // whether to show action buttons as icons
@@ -240,6 +336,8 @@ public:
 		};
 	};
 
+	static const ThemeSettings::FontRoleSettings& GetDefaultFontRole(FontRole role);
+
 	struct Settings
 	{
 		uint32_t ToggleKey = VK_END;
@@ -253,6 +351,9 @@ public:
 	const ThemeSettings& GetTheme() const { return settings.Theme; }                // Provide read-only access to the Theme.
 	Settings& GetSettings() { return settings; }                                    // Provide access to settings for other components
 	winrt::com_ptr<IDXGIAdapter3> GetDXGIAdapter3() const { return dxgiAdapter3; }  // Provide access to dxgiAdapter3
+	ThemeSettings::FontRoleSettings& GetFontRoleSettings(FontRole role) { return settings.Theme.FontRoles[static_cast<size_t>(role)]; }
+	const ThemeSettings::FontRoleSettings& GetFontRoleSettings(FontRole role) const { return settings.Theme.FontRoles[static_cast<size_t>(role)]; }
+	ImFont* GetFont(FontRole role) const { return loadedFontRoles[static_cast<size_t>(role)]; }
 
 	void SelectFeatureMenu(const std::string& featureName);
 	static std::unordered_map<std::string, int> categoryCounts;  // Number of features in each feature category

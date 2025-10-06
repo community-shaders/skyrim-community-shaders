@@ -1,9 +1,50 @@
 {
     "DisplayName": "Dwemer Bronze",
     "Description": "Ancient bronze theme inspired by lost Dwemer technology and metallic machinery",
-    "Version": "2.0.0",
+    "Version": "1.0.0",
     "Author": "Community Shaders Team",
     "Theme": {
+        "FontSize": 27.0,
+        "FontName": "Roboto/Roboto_Condensed-Regular.ttf",
+        "GlobalScale": 0.0,
+        "FontRoles": [
+            {
+                "Family": "Roboto",
+                "Style": "Regular",
+                "File": "Roboto/Roboto_Condensed-Regular.ttf",
+                "SizeScale": 1.0
+            },
+            {
+                "Family": "Roboto",
+                "Style": "SemiBold",
+                "File": "Roboto/Roboto_Condensed-SemiBold.ttf",
+                "SizeScale": 1.05
+            },
+            {
+                "Family": "Roboto",
+                "Style": "Regular",
+                "File": "Roboto/Roboto_Condensed-Regular.ttf",
+                "SizeScale": 1.0
+            },
+            {
+                "Family": "Roboto",
+                "Style": "Light",
+                "File": "Roboto/Roboto_Condensed-Light.ttf",
+                "SizeScale": 0.95
+            },
+            {
+                "Family": "Roboto",
+                "Style": "Light",
+                "File": "Roboto/Roboto_Condensed-Light.ttf",
+                "SizeScale": 0.9
+            },
+            {
+                "Family": "IBMPlexMono",
+                "Style": "SemiBold",
+                "File": "IBMPlexMono/IBMPlexMono-SemiBold.ttf",
+                "SizeScale": 1.0
+            }
+        ],
         "UseSimplePalette": false,
         "ShowActionIcons": true,
         "TooltipHoverDelay": 0.5,

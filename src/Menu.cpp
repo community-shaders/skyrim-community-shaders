@@ -4,6 +4,7 @@
 #	define DIRECTINPUT_VERSION 0x0800
 #endif
 #include <algorithm>
+#include <cmath>
 #include <dinput.h>
 #include <filesystem>
 #include <format>
@@ -28,6 +29,7 @@
 #include "Menu/MenuHeaderRenderer.h"
 #include "Menu/OverlayRenderer.h"
 #include "Menu/SettingsTabRenderer.h"
+#include "Menu/Fonts.h"
 #include "Menu/ThemeManager.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -74,6 +76,13 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ThumbActive)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	Menu::ThemeSettings::FontRoleSettings,
+	Family,
+	Style,
+	File,
+	SizeScale)
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ImGuiStyle,
 	WindowPadding,
 	WindowRounding,
@@ -115,6 +124,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	FontSize,
 	FontName,
 	GlobalScale,
+	FontRoles,
 	UseSimplePalette,
 	ShowActionIcons,
 	TooltipHoverDelay,
@@ -138,6 +148,26 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 bool IsEnabled = false;
 std::unordered_map<std::string, int> Menu::categoryCounts;
+
+std::optional<Menu::FontRole> Menu::ResolveFontRole(std::string_view key)
+{
+	for (size_t i = 0; i < FontRoleDescriptors.size(); ++i) {
+		if (FontRoleDescriptors[i].key == key) {
+			return static_cast<FontRole>(i);
+		}
+	}
+	return std::nullopt;
+}
+
+std::string Menu::BuildFontSignature(float baseFontSize) const
+{
+	return MenuFonts::BuildFontSignature(settings.Theme, baseFontSize);
+}
+
+const Menu::ThemeSettings::FontRoleSettings& Menu::GetDefaultFontRole(FontRole role)
+{
+	return MenuFonts::GetDefaultRole(role);
+}
 
 Menu::~Menu()
 {  // Release icon textures if loaded
@@ -172,6 +202,17 @@ Menu::~Menu()
 void Menu::Load(json& o_json)
 {
 	settings = o_json;
+	bool hasThemeObject = o_json.contains("Theme") && o_json["Theme"].is_object();
+	bool hasFontRoles = hasThemeObject && o_json["Theme"].contains("FontRoles");
+	MenuFonts::NormalizeFontRoles(settings.Theme, hasFontRoles);
+	auto& bodyRole = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)];
+	if (!Util::ValidateFont(bodyRole.File)) {
+		const auto& defaults = Menu::GetDefaultFontRole(FontRole::Body);
+		logger::warn("Font '{}' not found while loading settings, falling back to default font '{}'",
+			bodyRole.File, defaults.File);
+		settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)] = defaults;
+		settings.Theme.FontName = defaults.File;
+	}
 
 	// Apply Default Dark theme on first launch if no theme is selected
 	if (!settings.FirstTimeSetupCompleted && settings.SelectedThemePreset.empty()) {
@@ -190,30 +231,38 @@ void Menu::Load(json& o_json)
 
 void Menu::Save(json& o_json)
 {
+	settings.Theme.FontName = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)].File;
 	o_json = settings;
 }
 
 void Menu::LoadTheme(json& o_json)
 {
 	if (o_json["Theme"].is_object()) {
+		bool hasFontRoles = o_json["Theme"].contains("FontRoles");
 		settings.Theme = o_json["Theme"];
+		MenuFonts::NormalizeFontRoles(settings.Theme, hasFontRoles);
 
-		// Validate the loaded font and fallback to default if necessary
-		if (!Util::ValidateFont(settings.Theme.FontName)) {
+		auto& bodyRole = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)];
+		if (!Util::ValidateFont(bodyRole.File)) {
+			const auto& defaults = Menu::GetDefaultFontRole(FontRole::Body);
 			logger::warn("Font '{}' not found, falling back to default font '{}'",
-				settings.Theme.FontName, ThemeSettings{}.FontName);
-			settings.Theme.FontName = ThemeSettings{}.FontName;
+				bodyRole.File, defaults.File);
+			settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)] = defaults;
+			settings.Theme.FontName = defaults.File;
 		}
 	}
 }
 
 void Menu::SaveTheme(json& o_json)
 {
-	// Validate font before saving and fallback to default if necessary
+	settings.Theme.FontName = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)].File;
+
 	if (!Util::ValidateFont(settings.Theme.FontName)) {
+		const auto& defaults = Menu::GetDefaultFontRole(FontRole::Body);
 		logger::warn("Font '{}' not found during save, falling back to default font '{}'",
-			settings.Theme.FontName, ThemeSettings{}.FontName);
-		settings.Theme.FontName = ThemeSettings{}.FontName;
+			settings.Theme.FontName, defaults.File);
+		settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)] = defaults;
+		settings.Theme.FontName = defaults.File;
 	}
 
 	o_json["Theme"] = settings.Theme;
@@ -237,13 +286,16 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 	json themeSettings;
 
 	if (themeManager->LoadTheme(themeName, themeSettings)) {
+		bool hasFontRoles = themeSettings.contains("FontRoles");
 		settings.Theme = themeSettings;
-
-		// Validate the loaded font and fallback to default if necessary
-		if (!Util::ValidateFont(settings.Theme.FontName)) {
+		MenuFonts::NormalizeFontRoles(settings.Theme, hasFontRoles);
+		auto& bodyRole = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)];
+		if (!Util::ValidateFont(bodyRole.File)) {
+			const auto& defaults = Menu::GetDefaultFontRole(FontRole::Body);
 			logger::warn("Font '{}' from theme '{}' not found, falling back to default font '{}'",
-				settings.Theme.FontName, themeName, ThemeSettings{}.FontName);
-			settings.Theme.FontName = ThemeSettings{}.FontName;
+				bodyRole.File, themeName, defaults.File);
+			settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)] = defaults;
+			settings.Theme.FontName = defaults.File;
 		}
 
 		settings.SelectedThemePreset = themeName;
@@ -293,56 +345,14 @@ void Menu::Init()
 	cachedIniPath = Util::PathHelpers::GetImGuiIniPath().string();
 	imgui_io.IniFilename = cachedIniPath.c_str();
 
-	// Enhanced font configuration for sharper text rendering
-	ImFontConfig font_config;
-	font_config.OversampleH = ThemeManager::Constants::FCONF_OVERSAMPLE_H;
-	font_config.OversampleV = ThemeManager::Constants::FCONF_OVERSAMPLE_V;
-	font_config.PixelSnapH = ThemeManager::Constants::FCONF_PIXELSNAP_H;
-	font_config.RasterizerMultiply = ThemeManager::Constants::FCONF_RASTERIZER_MULTIPLY;
-
 	DXGI_SWAP_CHAIN_DESC desc{};
 	globals::d3d::swapChain->GetDesc(&desc);
-
-	// Determine effective font size: user setting when >0, otherwise dynamic default by resolution
-	float fontSize = ThemeManager::ResolveFontSize(*this);
-
-	// Use dynamic font sizing when FontSize equals the default (indicating theme doesn't override)
-	if (std::round(fontSize) == std::round(ThemeManager::Constants::DEFAULT_FONT_SIZE)) {
-		if (globals::state->screenSize.y > 0) {
-			fontSize = globals::state->screenSize.y * ThemeManager::Constants::DEFAULT_FONT_RATIO;
-		} else {
-			logger::warn("Menu::Init() - Failed to get game resolution from globals::state->screenSize.");
-		}
-	}
-
-	fontSize = std::clamp(fontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE);
-
-	auto fontPath = Util::PathHelpers::GetFontsPath() / settings.Theme.FontName;
-	if (!imgui_io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(),
-			std::round(fontSize), &font_config)) {
-		logger::warn("Menu::Init() - Failed to load custom font. Using default font.");
-		imgui_io.Fonts->AddFontDefault();
-	}
-
-	// Initialize cached values for reload detection
-	cachedFontName = settings.Theme.FontName;
-	cachedFontSize = fontSize;  // Update cached size to match the actually loaded font size
-
-	float globalScale = settings.Theme.GlobalScale;
-
-	// Use default global scale (0.0) for built-in themes when GlobalScale equals the default
-	if (std::abs(globalScale - ThemeManager::Constants::DEFAULT_GLOBAL_SCALE) < 0.001f) {
-		globalScale = ThemeManager::Constants::DEFAULT_GLOBAL_SCALE;  // Ensure built-in themes stay at 0.0
-	}
-
-	imgui_io.FontGlobalScale = exp2(globalScale);
-
-	// Initialize cached font size to effective size to prevent redundant reload on first frame
-	cachedFontSize = fontSize;
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplWin32_Init(desc.OutputWindow);
 	ImGui_ImplDX11_Init(globals::d3d::device, globals::d3d::context);
+
+	ThemeManager::ReloadFont(*this, cachedFontSize);
 
 	{
 		winrt::com_ptr<IDXGIDevice> dxgiDevice;
@@ -575,9 +585,7 @@ void Menu::DrawOverlay()
 	// This is the safest place to do font atlas modifications
 	if (pendingFontReload) {
 		pendingFontReload = false;
-		settings.Theme.FontName = pendingFontName;
 		ThemeManager::ReloadFont(*this, cachedFontSize);
-		pendingFontName.clear();
 	}
 
 	OverlayRenderer::RenderOverlay(

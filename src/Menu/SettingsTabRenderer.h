@@ -30,6 +30,7 @@ private:
 
 	// Interface sub-tabs
 	static void RenderThemesTab();
+	static void RenderFontsTab();
 	static void RenderStylingTab();
 	static void RenderColorsTab();
 };

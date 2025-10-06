@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cstring>
 #include <filesystem>
+#include <format>
+#include <string>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <windows.h>
@@ -14,6 +16,65 @@
 #include "Util.h"
 
 using json = nlohmann::json;
+
+namespace
+{
+class FontRoleGuard
+{
+public:
+	explicit FontRoleGuard(Menu::FontRole role)
+	{
+		Menu* menuInstance = globals::menu;
+		if (!menuInstance) {
+			menuInstance = Menu::GetSingleton();
+		}
+		if (menuInstance) {
+			font_ = menuInstance->GetFont(role);
+			if (font_) {
+				ImGui::PushFont(font_);
+			}
+		}
+	}
+
+	~FontRoleGuard()
+	{
+		if (font_) {
+			ImGui::PopFont();
+		}
+	}
+
+	FontRoleGuard(const FontRoleGuard&) = delete;
+	FontRoleGuard& operator=(const FontRoleGuard&) = delete;
+
+	[[nodiscard]] ImFont* Get() const { return font_; }
+
+private:
+	ImFont* font_ = nullptr;
+};
+
+void SeparatorTextWithFont(const char* text, Menu::FontRole role)
+{
+	FontRoleGuard guard(role);
+	ImGui::SeparatorText(text);
+}
+
+void SeparatorTextWithFont(const std::string& text, Menu::FontRole role)
+{
+	SeparatorTextWithFont(text.c_str(), role);
+}
+
+bool BeginTabItemWithFont(const char* label, Menu::FontRole role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None)
+{
+	FontRoleGuard guard(role);
+	return ImGui::BeginTabItem(label, nullptr, flags);
+}
+
+bool ComboWithFont(const char* label, int* currentItem, const char* const items[], int itemCount, Menu::FontRole role)
+{
+	FontRoleGuard guard(role);
+	return ImGui::Combo(label, currentItem, items, itemCount);
+}
+}
 
 void SettingsTabRenderer::RenderGeneralSettings(
 	SettingsState& state,
@@ -29,7 +90,7 @@ void SettingsTabRenderer::RenderGeneralSettings(
 
 void SettingsTabRenderer::RenderShadersTab()
 {
-	if (ImGui::BeginTabItem("Shaders")) {
+	if (BeginTabItemWithFont("Shaders", Menu::FontRole::Heading)) {
 		auto shaderCache = globals::shaderCache;
 
 		bool useCustomShaders = shaderCache->IsEnabled();
@@ -69,7 +130,7 @@ void SettingsTabRenderer::RenderKeybindingsTab(
 	SettingsState& state,
 	const std::function<const char*(uint32_t)>& keyIdToString)
 {
-	if (ImGui::BeginTabItem("Keybindings")) {
+	if (BeginTabItemWithFont("Keybindings", Menu::FontRole::Heading)) {
 		auto& settings = globals::menu->GetSettings();
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 
@@ -147,7 +208,7 @@ void SettingsTabRenderer::RenderKeybindingsTab(
 
 void SettingsTabRenderer::RenderInterfaceTab()
 {
-	if (ImGui::BeginTabItem("Interface")) {
+	if (BeginTabItemWithFont("Interface", Menu::FontRole::Heading)) {
 		// Restore theme defaults button
 		if (ImGui::Button("Restore Theme Defaults")) {
 			auto& settings = globals::menu->GetSettings();
@@ -161,6 +222,7 @@ void SettingsTabRenderer::RenderInterfaceTab()
 
 		if (ImGui::BeginTabBar("##tabs", ImGuiTabBarFlags_None)) {
 			RenderThemesTab();
+			RenderFontsTab();
 			RenderStylingTab();
 			RenderColorsTab();
 			ImGui::EndTabBar();
@@ -171,7 +233,7 @@ void SettingsTabRenderer::RenderInterfaceTab()
 
 void SettingsTabRenderer::RenderThemesTab()
 {
-	if (ImGui::BeginTabItem("Themes")) {
+	if (BeginTabItemWithFont("Themes", Menu::FontRole::Subheading)) {
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 
 		// Static variables for popup state and new theme creation
@@ -182,7 +244,7 @@ void SettingsTabRenderer::RenderThemesTab()
 		static char newThemeDescription[256] = "";
 
 		// Theme Preset Selection
-		ImGui::SeparatorText("Theme Preset");
+		SeparatorTextWithFont("Theme Preset", Menu::FontRole::Subheading);
 
 		// Get theme manager
 		auto themeManager = ThemeManager::GetSingleton();
@@ -240,7 +302,7 @@ void SettingsTabRenderer::RenderThemesTab()
 		}
 
 		// Theme preset dropdown
-		if (ImGui::Combo("##ThemePreset", &currentItem, items.data(), static_cast<int>(items.size()))) {
+		if (ComboWithFont("##ThemePreset", &currentItem, items.data(), static_cast<int>(items.size()), Menu::FontRole::Subtitle)) {
 			if (currentItem == 0) {
 				// "+ Create New" selected
 				isCreatingNewTheme = true;
@@ -375,7 +437,7 @@ void SettingsTabRenderer::RenderThemesTab()
 			ImGui::EndPopup();
 		}
 
-		ImGui::SeparatorText("UI Elements");
+		SeparatorTextWithFont("UI Elements", Menu::FontRole::Subheading);
 		ImGui::Checkbox("Use Icon Buttons in Header", &themeSettings.ShowActionIcons);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
@@ -398,13 +460,194 @@ void SettingsTabRenderer::RenderThemesTab()
 	}
 }
 
+void SettingsTabRenderer::RenderFontsTab()
+{
+	if (BeginTabItemWithFont("Fonts", Menu::FontRole::Subheading)) {
+		auto* menuInstance = globals::menu;
+		auto& themeSettings = menuInstance->GetSettings().Theme;
+
+		SeparatorTextWithFont("Font", Menu::FontRole::Subheading);
+
+		bool useAutoFont = (themeSettings.FontSize <= 0.0f);
+		if (ImGui::Checkbox("Use resolution-based font size", &useAutoFont)) {
+			if (useAutoFont) {
+				themeSettings.FontSize = 0.0f;
+			} else {
+				float effective = ThemeManager::ResolveFontSize(*menuInstance);
+				themeSettings.FontSize = std::clamp(effective, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE);
+			}
+			menuInstance->pendingFontReload = true;
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::TextUnformatted("When enabled, the UI font size scales with your screen resolution. Disable to set a fixed size.");
+		}
+
+		ImGui::BeginDisabled(useAutoFont);
+		if (ImGui::SliderFloat("Base Font Size", &themeSettings.FontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE, "%.0f")) {
+			menuInstance->pendingFontReload = true;
+		}
+		ImGui::EndDisabled();
+
+		float effectiveNow = ThemeManager::ResolveFontSize(*menuInstance);
+		ImGui::Text("Effective size: %.0f px", std::round(effectiveNow));
+
+		static Util::Fonts::Catalog fontCatalog;
+		static bool catalogInitialized = false;
+		auto refreshFontCatalog = [&]() {
+			fontCatalog = Util::Fonts::DiscoverFontCatalog();
+		};
+
+		if (!catalogInitialized) {
+			refreshFontCatalog();
+			catalogInitialized = true;
+		}
+
+		ImGui::Spacing();
+		SeparatorTextWithFont("Font Roles", Menu::FontRole::Subheading);
+
+		if (fontCatalog.families.empty()) {
+			ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "No fonts found. Place .ttf/.otf files in Interface/CommunityShaders/Fonts/");
+		}
+
+		for (size_t roleIndex = 0; roleIndex < Menu::FontRoleDescriptors.size(); ++roleIndex) {
+			auto role = static_cast<Menu::FontRole>(roleIndex);
+			auto descriptor = Menu::FontRoleDescriptors[roleIndex];
+			auto& roleSettings = themeSettings.FontRoles[roleIndex];
+
+			ImGui::PushID(static_cast<int>(roleIndex));
+			{
+				FontRoleGuard headingFont(Menu::FontRole::Subheading);
+				ImGui::TextUnformatted(descriptor.displayName.data());
+			}
+
+			int familyIndex = 0;
+			if (!fontCatalog.families.empty()) {
+				for (size_t i = 0; i < fontCatalog.families.size(); ++i) {
+					if (_stricmp(fontCatalog.families[i].name.c_str(), roleSettings.Family.c_str()) == 0) {
+						familyIndex = static_cast<int>(i);
+						break;
+					}
+				}
+				if (familyIndex >= static_cast<int>(fontCatalog.families.size())) {
+					familyIndex = 0;
+				}
+			}
+
+			const char* familyPreview = fontCatalog.families.empty() ? "No families" : fontCatalog.families[familyIndex].displayName.c_str();
+			std::string familyLabel = std::format("{} Family##{}", descriptor.displayName, roleIndex);
+			{
+				FontRoleGuard familyComboFont(Menu::FontRole::Subtitle);
+				if (ImGui::BeginCombo(familyLabel.c_str(), familyPreview)) {
+					if (fontCatalog.families.empty()) {
+						ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No font families available");
+					} else {
+						for (int i = 0; i < static_cast<int>(fontCatalog.families.size()); ++i) {
+							bool isSelected = (i == familyIndex);
+							if (ImGui::Selectable(fontCatalog.families[i].displayName.c_str(), isSelected)) {
+								familyIndex = i;
+								if (!isSelected) {
+									const auto& newFamily = fontCatalog.families[i];
+									roleSettings.Family = newFamily.name;
+									if (!newFamily.styles.empty()) {
+										const auto& firstStyle = newFamily.styles.front();
+										roleSettings.Style = firstStyle.style;
+										roleSettings.File = firstStyle.file;
+									} else {
+										roleSettings.Style.clear();
+										roleSettings.File.clear();
+									}
+									if (role == Menu::FontRole::Body) {
+										themeSettings.FontName = roleSettings.File;
+									}
+									menuInstance->pendingFontReload = true;
+								}
+							}
+							if (isSelected) {
+								ImGui::SetItemDefaultFocus();
+							}
+						}
+					}
+					ImGui::EndCombo();
+				}
+			}
+
+			const Util::Fonts::FamilyInfo* selectedFamily = (fontCatalog.families.empty()) ? nullptr : &fontCatalog.families[familyIndex];
+			if (selectedFamily && selectedFamily->styles.empty()) {
+				ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "No style variants found for this family.");
+			} else if (selectedFamily) {
+				int styleIndex = 0;
+				for (size_t s = 0; s < selectedFamily->styles.size(); ++s) {
+					if (_stricmp(selectedFamily->styles[s].style.c_str(), roleSettings.Style.c_str()) == 0) {
+						styleIndex = static_cast<int>(s);
+						break;
+					}
+				}
+				if (styleIndex >= static_cast<int>(selectedFamily->styles.size())) {
+					styleIndex = 0;
+				}
+				const char* stylePreview = selectedFamily->styles.empty() ? "No styles" : selectedFamily->styles[styleIndex].displayName.c_str();
+				std::string styleLabel = std::format("{} Style##{}", descriptor.displayName, roleIndex);
+				{
+					FontRoleGuard styleComboFont(Menu::FontRole::Subtitle);
+					if (ImGui::BeginCombo(styleLabel.c_str(), stylePreview)) {
+						for (int s = 0; s < static_cast<int>(selectedFamily->styles.size()); ++s) {
+							bool isSelected = (s == styleIndex);
+							if (ImGui::Selectable(selectedFamily->styles[s].displayName.c_str(), isSelected)) {
+								if (!isSelected) {
+									const auto& chosen = selectedFamily->styles[s];
+									roleSettings.Style = chosen.style;
+									roleSettings.File = chosen.file;
+									roleSettings.Family = selectedFamily->name;
+									if (role == Menu::FontRole::Body) {
+										themeSettings.FontName = roleSettings.File;
+									}
+									menuInstance->pendingFontReload = true;
+								}
+							}
+							if (isSelected) {
+								ImGui::SetItemDefaultFocus();
+							}
+						}
+						ImGui::EndCombo();
+					}
+				}
+			}
+
+			ImGui::TextDisabled("File: %s", roleSettings.File.c_str());
+
+			std::string scaleLabel = std::format("{} Scale##{}", descriptor.displayName, roleIndex);
+			if (ImGui::SliderFloat(scaleLabel.c_str(), &roleSettings.SizeScale, 0.5f, 2.5f, "%.2fx", ImGuiSliderFlags_AlwaysClamp)) {
+				menuInstance->pendingFontReload = true;
+			}
+			ImGui::SameLine();
+			std::string resetLabel = std::format("Reset##Scale{}", roleIndex);
+			if (ImGui::Button(resetLabel.c_str())) {
+				roleSettings.SizeScale = Menu::GetFontRoleDefaultScale(role);
+				menuInstance->pendingFontReload = true;
+			}
+
+			ImGui::Separator();
+			ImGui::PopID();
+		}
+
+		if (ImGui::Button("Refresh Font Families")) {
+			refreshFontCatalog();
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::TextUnformatted("Rescan the Fonts directory after adding or removing font files.");
+		}
+
+		ImGui::EndTabItem();
+	}
+}
+
 void SettingsTabRenderer::RenderStylingTab()
 {
-	if (ImGui::BeginTabItem("Styling")) {
+	if (BeginTabItemWithFont("Styling", Menu::FontRole::Subheading)) {
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 		auto& style = themeSettings.Style;
 
-		ImGui::SeparatorText("Main");
+		SeparatorTextWithFont("Main", Menu::FontRole::Subheading);
 		if (ImGui::SliderFloat("Global Scale", &themeSettings.GlobalScale, -1.f, 1.f, "%.2f")) {
 			float trueScale = exp2(themeSettings.GlobalScale);
 
@@ -412,116 +655,7 @@ void SettingsTabRenderer::RenderStylingTab()
 			io.FontGlobalScale = trueScale;
 		}
 
-		ImGui::SeparatorText("Font");
-		if (ImGui::SliderFloat("Font Size", &themeSettings.FontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE, "%.0f")) {
-			// Font size changed, schedule deferred reload
-			globals::menu->pendingFontReload = true;
-			globals::menu->pendingFontName = themeSettings.FontName;  // Keep current font name
-		}
-
-		// Font selection dropdown
-		static std::vector<std::string> availableFonts;
-		static bool fontsDiscovered = false;
-
-		auto refreshFontList = [&]() {
-			try {
-				availableFonts = Util::DiscoverFonts();
-			} catch (const std::exception&) {
-				// Failed to discover fonts, clear list
-				availableFonts.clear();
-			}
-		};
-
-		if (!fontsDiscovered) {
-			refreshFontList();
-			fontsDiscovered = true;
-		}
-
-		// Find current font index
-		int currentFontIndex = 0;
-		for (size_t i = 0; i < availableFonts.size(); ++i) {
-			if (availableFonts[i] == themeSettings.FontName) {
-				currentFontIndex = static_cast<int>(i);
-				break;
-			}
-		}
-
-		// Use ImGui::Combo with safety checks to avoid crashes
-		const char* previewText = "None";
-		if (!availableFonts.empty() && currentFontIndex >= 0 && currentFontIndex < static_cast<int>(availableFonts.size())) {
-			previewText = availableFonts[currentFontIndex].c_str();
-		}
-
-		if (ImGui::BeginCombo("Font", previewText)) {
-			if (availableFonts.empty()) {
-				ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No fonts available");
-				ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Place .ttf/.otf files in Fonts folder");
-			} else {
-				for (int i = 0; i < static_cast<int>(availableFonts.size()); ++i) {
-					const bool isSelected = (i == currentFontIndex);
-					if (ImGui::Selectable(availableFonts[i].c_str(), isSelected)) {
-						if (i != currentFontIndex && !availableFonts[i].empty()) {
-							// Validate font name before applying
-							const std::string& newFontName = availableFonts[i];
-							auto fontPath = Util::PathHelpers::GetFontsPath() / newFontName;
-
-							if (std::filesystem::exists(fontPath)) {
-								// Schedule deferred font reload (safe - will happen between frames)
-								globals::menu->pendingFontReload = true;
-								globals::menu->pendingFontName = newFontName;
-							}
-						}
-					}
-
-					// Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
-					if (isSelected) {
-						ImGui::SetItemDefaultFocus();
-					}
-				}
-			}
-			ImGui::EndCombo();
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Select a custom font file (.ttf/.otf) from the Fonts folder.\nPlace custom fonts in: Interface/CommunityShaders/Fonts/");
-		}
-
-		if (ImGui::Button("Refresh Font List")) {
-			refreshFontList();
-			// Reset current font index if it's out of bounds after refresh
-			if (currentFontIndex >= static_cast<int>(availableFonts.size())) {
-				currentFontIndex = 0;
-			}
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Refresh the list of available fonts after adding new font files.");
-		}
-
-		ImGui::SeparatorText("Layout");
-
-		// Font size controls: Auto (resolution-based) or Manual
-		bool useAutoFont = (themeSettings.FontSize <= 0.0f);
-		if (ImGui::Checkbox("Use resolution-based font size", &useAutoFont)) {
-			if (useAutoFont) {
-				// Enable auto: set sentinel 0.0f
-				themeSettings.FontSize = 0.0f;
-			} else {
-				// Disable auto: seed manual size with current effective (what user sees now)
-				float effective = ThemeManager::ResolveFontSize(*globals::menu);
-				themeSettings.FontSize = std::clamp(effective, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE);
-			}
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::TextUnformatted("When enabled, the UI font size scales with your screen resolution. Disable to set a fixed size.");
-		}
-
-		// Show current effective size for clarity
-		float effectiveNow = ThemeManager::ResolveFontSize(*globals::menu);
-		ImGui::Text("Effective size: %.0f px", std::round(effectiveNow));
-
-		// Manual font size slider (disabled in auto mode)
-		ImGui::BeginDisabled(useAutoFont);
-		ImGui::SliderFloat("Font Size", &themeSettings.FontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE, "%.0f");
-		ImGui::EndDisabled();
+		SeparatorTextWithFont("Layout", Menu::FontRole::Subheading);
 
 		ImGui::SliderFloat2("Window Padding", (float*)&style.WindowPadding, 0.0f, 20.0f, "%.0f");
 		ImGui::SliderFloat2("Frame Padding", (float*)&style.FramePadding, 0.0f, 20.0f, "%.0f");
@@ -531,7 +665,7 @@ void SettingsTabRenderer::RenderStylingTab()
 		ImGui::SliderFloat("Scrollbar Size", &style.ScrollbarSize, 1.0f, 20.0f, "%.0f");
 		ImGui::SliderFloat("Grab Min Size", &style.GrabMinSize, 1.0f, 20.0f, "%.0f");
 
-		ImGui::SeparatorText("Scrollbar Opacity");
+		SeparatorTextWithFont("Scrollbar Opacity", Menu::FontRole::Subheading);
 		ImGui::SliderFloat("Track Opacity", &themeSettings.ScrollbarOpacity.Background, 0.0f, 1.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("Controls the opacity of the scrollbar track/channel (the background area behind the scrollbar).");
@@ -545,7 +679,7 @@ void SettingsTabRenderer::RenderStylingTab()
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("Controls the opacity of the scrollbar thumb when being dragged.");
 
-		ImGui::SeparatorText("Borders");
+		SeparatorTextWithFont("Borders", Menu::FontRole::Subheading);
 		ImGui::SliderFloat("Window Border Size", &style.WindowBorderSize, 0.0f, 5.0f, "%.0f");
 		ImGui::SliderFloat("Child Border Size", &style.ChildBorderSize, 0.0f, 5.0f, "%.0f");
 		ImGui::SliderFloat("Popup Border Size", &style.PopupBorderSize, 0.0f, 5.0f, "%.0f");
@@ -553,7 +687,7 @@ void SettingsTabRenderer::RenderStylingTab()
 		ImGui::SliderFloat("Tab Border Size", &style.TabBorderSize, 0.0f, 5.0f, "%.0f");
 		ImGui::SliderFloat("Tab Bar Border Size", &style.TabBarBorderSize, 0.0f, 5.0f, "%.0f");
 
-		ImGui::SeparatorText("Rounding");
+		SeparatorTextWithFont("Rounding", Menu::FontRole::Subheading);
 		ImGui::SliderFloat("Window Rounding", &style.WindowRounding, 0.0f, 12.0f, "%.0f");
 		ImGui::SliderFloat("Child Rounding", &style.ChildRounding, 0.0f, 12.0f, "%.0f");
 		ImGui::SliderFloat("Frame Rounding", &style.FrameRounding, 0.0f, 12.0f, "%.0f");
@@ -562,12 +696,15 @@ void SettingsTabRenderer::RenderStylingTab()
 		ImGui::SliderFloat("Grab Rounding", &style.GrabRounding, 0.0f, 12.0f, "%.0f");
 		ImGui::SliderFloat("Tab Rounding", &style.TabRounding, 0.0f, 12.0f, "%.0f");
 
-		ImGui::SeparatorText("Tables");
+		SeparatorTextWithFont("Tables", Menu::FontRole::Subheading);
 		ImGui::SliderFloat2("Cell Padding", (float*)&style.CellPadding, 0.0f, 20.0f, "%.0f");
 		ImGui::SliderAngle("Table Angled Headers Angle", &style.TableAngledHeadersAngle, -50.0f, +50.0f);
 
-		ImGui::SeparatorText("Widgets");
-		ImGui::Combo("ColorButtonPosition", (int*)&style.ColorButtonPosition, "Left\0Right\0");
+		SeparatorTextWithFont("Widgets", Menu::FontRole::Subheading);
+		{
+			FontRoleGuard comboFont(Menu::FontRole::Subtitle);
+			ImGui::Combo("ColorButtonPosition", (int*)&style.ColorButtonPosition, "Left\0Right\0");
+		}
 		ImGui::SliderFloat2("Button Text Align", (float*)&style.ButtonTextAlign, 0.0f, 1.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("Alignment applies when a button is larger than its text content.");
@@ -579,7 +716,7 @@ void SettingsTabRenderer::RenderStylingTab()
 		ImGui::SliderFloat2("Separator Text Padding", (float*)&style.SeparatorTextPadding, 0.0f, 40.0f, "%.0f");
 		ImGui::SliderFloat("Log Slider Deadzone", &style.LogSliderDeadzone, 0.0f, 12.0f, "%.0f");
 
-		ImGui::SeparatorText("Docking");
+		SeparatorTextWithFont("Docking", Menu::FontRole::Subheading);
 		ImGui::SliderFloat("Docking Splitter Size", &style.DockingSeparatorSize, 0.0f, 12.0f, "%.0f");
 
 		ImGui::EndTabItem();
@@ -588,11 +725,11 @@ void SettingsTabRenderer::RenderStylingTab()
 
 void SettingsTabRenderer::RenderColorsTab()
 {
-	if (ImGui::BeginTabItem("Colors")) {
+	if (BeginTabItemWithFont("Colors", Menu::FontRole::Subheading)) {
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 		auto& colors = themeSettings.FullPalette;
 
-		ImGui::SeparatorText("Status");
+		SeparatorTextWithFont("Status", Menu::FontRole::Subheading);
 
 		ImGui::ColorEdit4("Disabled Text", (float*)&themeSettings.StatusPalette.Disable);
 		ImGui::ColorEdit4("Error Text", (float*)&themeSettings.StatusPalette.Error);
@@ -602,13 +739,13 @@ void SettingsTabRenderer::RenderColorsTab()
 		ImGui::ColorEdit4("Success Text", (float*)&themeSettings.StatusPalette.SuccessColor);
 		ImGui::ColorEdit4("Info Text", (float*)&themeSettings.StatusPalette.InfoColor);
 
-		ImGui::SeparatorText("Feature Headings");
+		SeparatorTextWithFont("Feature Headings", Menu::FontRole::Subheading);
 
 		ImGui::ColorEdit4("Regular", (float*)&themeSettings.FeatureHeading.ColorDefault);
 		ImGui::ColorEdit4("Hovered", (float*)&themeSettings.FeatureHeading.ColorHovered);
 		ImGui::SliderFloat("Minimized Alpha Factor", &themeSettings.FeatureHeading.MinimizedFactor, 0.0f, 1.0f, "%.2f");
 
-		ImGui::SeparatorText("Palette");
+		SeparatorTextWithFont("Palette", Menu::FontRole::Subheading);
 
 		// Simple Colors Section - collapsed by default for clean interface
 		if (ImGui::CollapsingHeader("Simple", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -618,25 +755,26 @@ void SettingsTabRenderer::RenderColorsTab()
 
 		// Advanced Colors Section - collapsed by default to avoid overwhelming users
 		if (ImGui::CollapsingHeader("Advanced")) {
-			// Separated border controls for granular theming
-			if (ImGui::TreeNode("Border Controls")) {
+			if (ImGui::TreeNodeEx("Border Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
 				ImGui::ColorEdit4("Window Border", (float*)&themeSettings.Palette.WindowBorder);
 				ImGui::ColorEdit4("Frame Border", (float*)&themeSettings.Palette.FrameBorder);
 				ImGui::ColorEdit4("Separator", (float*)&themeSettings.Palette.Separator);
 				ImGui::ColorEdit4("Resize Grip", (float*)&themeSettings.Palette.ResizeGrip);
 				ImGui::TreePop();
 			}
-			ImGui::Separator();
-			ImGui::TextWrapped("Advanced color controls for detailed customization of all UI elements.");
 
-			static ImGuiTextFilter filter;
-			filter.Draw("Filter colors", ImGui::GetFontSize() * 16);
+			if (ImGui::TreeNode("Full Palette")) {
+				ImGui::TextWrapped("Advanced color controls for detailed customization of all UI elements.");
+				static ImGuiTextFilter filter;
+				filter.Draw("Filter colors", ImGui::GetFontSize() * 16);
 
-			for (int i = 0; i < ImGuiCol_COUNT; i++) {
-				const char* name = ImGui::GetStyleColorName(i);
-				if (!filter.PassFilter(name))
-					continue;
-				ImGui::ColorEdit4(name, (float*)&colors[i], ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf);
+				for (int i = 0; i < ImGuiCol_COUNT; i++) {
+					const char* name = ImGui::GetStyleColorName(i);
+					if (!filter.PassFilter(name))
+						continue;
+					ImGui::ColorEdit4(name, (float*)&colors[i], ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf);
+				}
+				ImGui::TreePop();
 			}
 		}
 

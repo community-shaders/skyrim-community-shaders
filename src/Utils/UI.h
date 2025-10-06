@@ -6,6 +6,8 @@
 #include <vector>
 #include <windows.h>  // For WPARAM and virtual key constants
 
+#include "../Menu/Fonts.h"
+
 // Forward declarations
 struct ID3D11Device;
 struct ID3D11ShaderResourceView;
@@ -126,19 +128,6 @@ namespace Util
 	 * @return True if the toggle state was changed
 	 */
 	bool FeatureToggle(const char* label, bool* enabled, const ImVec2& size = ImVec2(0, 0));
-
-	/**
-	 * Discovers available font files in the Fonts directory
-	 * @return Vector of font file names (including .ttf extension)
-	 */
-	std::vector<std::string> DiscoverFonts();
-
-	/**
-	 * Validates if a font file exists in the Fonts directory
-	 * @param fontName The font file name to check (including .ttf extension)
-	 * @return True if the font exists, false otherwise
-	 */
-	bool ValidateFont(const std::string& fontName);
 
 	/**
 	 * RAII wrapper for creating collapsible UI sections.
