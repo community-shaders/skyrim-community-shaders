@@ -242,7 +242,7 @@ VS_OUTPUT main(VS_INPUT input)
 	previousMsPosition.xyz += previousDisplacement;
 #		endif  // GRASS_COLLISION
 
-	previousMsPosition.xyz += windDisplacement;
+	previousMsPosition.xyz += previousWindDisplacement;
 
 	vsout.PreviousWorldPosition = mul(PreviousWorld[eyeIndex], previousMsPosition);
 #		if defined(VR)
