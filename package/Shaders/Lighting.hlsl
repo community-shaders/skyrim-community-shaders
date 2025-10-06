@@ -1231,7 +1231,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 
 #		if defined(EMAT)
-	if (SharedData::extendedMaterialSettings.EnableTerrainParallax) {
+#			if defined(TRUE_PBR)
+	if (SharedData::extendedMaterialSettings.EnableParallax) {
+#			else
+	if (SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement)) {
+#			endif
 		mipLevels[0] = ExtendedMaterials::GetMipLevel(uv, TexColorSampler);
 		mipLevels[1] = ExtendedMaterials::GetMipLevel(uv, TexLandColor2Sampler);
 		mipLevels[2] = ExtendedMaterials::GetMipLevel(uv, TexLandColor3Sampler);
@@ -2339,8 +2343,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	{
 		float3 dirLightDirectionTS = mul(refractedDirLightDirection, tbn).xyz;
 #		if defined(LANDSCAPE)
-		[branch] if (SharedData::extendedMaterialSettings.EnableTerrainParallax)
-		{
+#			if defined(TRUE_PBR)
+	if (SharedData::extendedMaterialSettings.EnableParallax){
+#			else
+	if (SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement)){
+#			endif
 #			if defined(TERRAIN_VARIATION)
 			float weights[6];
 			// Initialize weights array
@@ -2598,7 +2605,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			[branch] if (SharedData::extendedMaterialSettings.EnableParallax)
 				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, screenNoise, displacementParams);
 #				elif defined(LANDSCAPE)
-			[branch] if (SharedData::extendedMaterialSettings.EnableTerrainParallax)
+#					if defined(TRUE_PBR)
+					if (SharedData::extendedMaterialSettings.EnableParallax)
+#					else
+					if (SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement))
+#					endif
 #					if defined(TERRAIN_VARIATION)
 				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, lightDirectionTS, sh0, parallaxShadowQuality, screenNoise, displacementParams, sharedOffset, dx, dy);
 #					else

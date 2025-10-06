@@ -140,11 +140,8 @@ cbuffer cb8 : register(b8)
 	float4 cb8[240];
 }
 
-#	ifdef GRASS_LIGHTING
-float4 GetMSPosition(VS_INPUT input, float windTimer, float3x3 world3x3)
-#	else
-float4 GetMSPosition(VS_INPUT input, float windTimer)
-#	endif
+// Calculate wind displacement for a grass vertex
+float3 CalculateWindDisplacement(VS_INPUT input, float windTimer)
 {
 	float windAngle = 0.4 * ((input.InstanceData1.x + input.InstanceData1.y) * -0.0078125 + windTimer);
 	float windAngleSin, windAngleCos;
@@ -156,14 +153,22 @@ float4 GetMSPosition(VS_INPUT input, float windTimer)
 	float windPower = WindVector.z * (((windTmp1 + windTmp2) * 0.3 + windTmp3) *
 										 (0.5 * (input.Color.w * input.Color.w)));
 
-	float3 inputPosition = input.Position.xyz * (input.InstanceData4.yyy * ScaleMask.xyz + float3(1, 1, 1));
-	float3 windVector = float3(WindVector.xy, 0);
+	return float3(WindVector.xy, 0) * windPower;
+}
 
-#	ifdef GRASS_LIGHTING
-	float3 InstanceData4 = mul(world3x3, inputPosition);
+#ifdef GRASS_LIGHTING
+float4 GetMSPosition(VS_INPUT input, float3x3 world3x3)
+#else
+float4 GetMSPosition(VS_INPUT input)
+#endif
+{
+	float3 inputPosition = input.Position.xyz * (input.InstanceData4.yyy * ScaleMask.xyz + float3(1, 1, 1));
+
+#ifdef GRASS_LIGHTING
+	float3 transformedPosition = mul(world3x3, inputPosition);
 	float4 msPosition;
-	msPosition.xyz = input.InstanceData1.xyz + (windVector * windPower + InstanceData4);
-#	else
+	msPosition.xyz = input.InstanceData1.xyz + transformedPosition;
+#else
 	float3 instancePosition;
 	instancePosition.z = dot(
 		float3(input.InstanceData4.x, input.InstanceData2.w, input.InstanceData3.w), inputPosition);
@@ -171,8 +176,8 @@ float4 GetMSPosition(VS_INPUT input, float windTimer)
 	instancePosition.y = dot(input.InstanceData3.xyz, inputPosition);
 
 	float4 msPosition;
-	msPosition.xyz = input.InstanceData1.xyz + (windVector * windPower + instancePosition);
-#	endif
+	msPosition.xyz = input.InstanceData1.xyz + instancePosition;
+#endif
 	msPosition.w = 1;
 
 	return msPosition;
@@ -190,10 +195,11 @@ VS_OUTPUT main(VS_INPUT input)
 	);
 	float3x3 world3x3 = float3x3(input.InstanceData2.xyz, input.InstanceData3.xyz, float3(input.InstanceData4.x, input.InstanceData2.w, input.InstanceData3.w));
 
-	float4 msPosition = GetMSPosition(input, WindTimer, world3x3);
+	float4 msPosition = GetMSPosition(input, world3x3);
 
 #		ifdef GRASS_COLLISION
-	float3 displacement = GrassCollision::GetDisplacedPosition(input, msPosition.xyz, eyeIndex);
+	float3 displacement, previousDisplacement;
+	GrassCollision::GetDisplacedPosition(input, msPosition.xyz, displacement, previousDisplacement);
 	msPosition.xyz += displacement;
 #		endif  // GRASS_COLLISION
 
@@ -225,10 +231,10 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.ViewSpacePosition = mul(WorldView[eyeIndex], msPosition).xyz;
 	vsout.WorldPosition = mul(World[eyeIndex], msPosition);
 
-	float4 previousMsPosition = GetMSPosition(input, PreviousWindTimer, world3x3);
+	float4 previousMsPosition = GetMSPosition(input, world3x3);
 
 #		ifdef GRASS_COLLISION
-	previousMsPosition.xyz += displacement;
+	previousMsPosition.xyz += previousDisplacement;
 #		endif  // GRASS_COLLISION
 
 	vsout.PreviousWorldPosition = mul(PreviousWorld[eyeIndex], previousMsPosition);
@@ -256,10 +262,11 @@ VS_OUTPUT main(VS_INPUT input)
 #		endif  // VR
 	);
 
-	float4 msPosition = GetMSPosition(input, WindTimer);
+	float4 msPosition = GetMSPosition(input);
 
 #		ifdef GRASS_COLLISION
-	float3 displacement = GrassCollision::GetDisplacedPosition(input, msPosition.xyz, eyeIndex);
+	float3 displacement, previousDisplacement;
+	GrassCollision::GetDisplacedPosition(input, msPosition.xyz, displacement, previousDisplacement);
 	msPosition.xyz += displacement;
 #		endif  // GRASS_COLLISION
 
@@ -297,7 +304,7 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.ViewSpacePosition = mul(WorldView[eyeIndex], msPosition).xyz;
 	vsout.WorldPosition = mul(World[eyeIndex], msPosition);
 
-	float4 previousMsPosition = GetMSPosition(input, PreviousWindTimer);
+	float4 previousMsPosition = GetMSPosition(input);
 #		if defined(VR)
 	Stereo::VR_OUTPUT VRout = Stereo::GetVRVSOutput(projSpacePosition, eyeIndex);
 	vsout.HPosition = VRout.VRPosition;
@@ -306,7 +313,7 @@ VS_OUTPUT main(VS_INPUT input)
 #		endif  // !VR
 
 #		ifdef GRASS_COLLISION
-	previousMsPosition.xyz += displacement;
+	previousMsPosition.xyz += previousDisplacement;
 #		endif  // GRASS_COLLISION
 
 	vsout.PreviousWorldPosition = mul(PreviousWorld[eyeIndex], previousMsPosition);

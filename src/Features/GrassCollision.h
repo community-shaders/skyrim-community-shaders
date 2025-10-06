@@ -26,38 +26,52 @@ public:
 
 	bool HasShaderDefine(RE::BSShader::Type shaderType) override;
 
+	void UpdateCollisionTexture();
+
 	struct Settings
 	{
 		bool EnableGrassCollision = 1;
 		bool TrackRagdolls = 1;
+		bool EnableBlur = 1;
 	};
 
-	struct alignas(16) CollisionData
+	struct alignas(16) BoundingBoxPacked
 	{
-		float4 centre[2];
+		float2 MinExtent = { 0, 0 };
+		float2 MaxExtent = { 0, 0 };
+		uint IndexStart = 0;
+		uint IndexEnd = 0;
+		float2 pad0;
 	};
 
 	struct alignas(16) PerFrame
 	{
-		CollisionData collisionData[256];
-		uint numCollisions;
-		uint pad0[3];
-	};
+		float2 PosOffset;              // cell origin in camera model space
+		DirectX::XMUINT2 ArrayOrigin;  // xy: array origin (clipmap wrapping)
 
-	std::uint32_t totalActorCount = 0;
-	std::uint32_t activeActorCount = 0;
-	std::uint32_t currentCollisionCount = 0;
-	std::vector<RE::Actor*> actorList{};
-	std::uint32_t colllisionCount = 0;
+		DirectX::XMINT2 ValidMargin;
+		float TimeDelta;
+		uint BoundingBoxCount;
+
+		float CameraHeightDelta;
+		float3 pad0;
+	};
 
 	Settings settings;
 
-	bool updatePerFrame = false;
 	ConstantBuffer* perFrame = nullptr;
-	int eyeCount = !REL::Module::IsVR() ? 1 : 2;
+
+	eastl::unique_ptr<Buffer> collisionBoundingBoxes = nullptr;
+	eastl::unique_ptr<Buffer> collisionInstances = nullptr;
+
+	virtual void ClearShaderCache() override;
+
+	ID3D11ComputeShader* GetCollisionUpdateCS();
+	ID3D11ComputeShader* collisionUpdateCS;
+
+	Texture2D* collisionTexture = nullptr;
 
 	virtual void SetupResources() override;
-	virtual void Reset() override;
 
 	virtual void DrawSettings() override;
 	void UpdateCollisions(PerFrame& perFrame);
