@@ -495,7 +495,7 @@ void SettingsTabRenderer::RenderFontsTab()
 		SeparatorTextWithFont("Font Roles", Menu::FontRole::Subheading);
 
 		if (fontCatalog.families.empty()) {
-			ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "No fonts found. Place .ttf/.otf files in Interface/CommunityShaders/Fonts/");
+			ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "No fonts found. Place .ttf files in Interface/CommunityShaders/Fonts/");
 		}
 
 		for (size_t roleIndex = 0; roleIndex < Menu::FontRoleDescriptors.size(); ++roleIndex) {

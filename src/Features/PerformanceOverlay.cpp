@@ -1288,10 +1288,8 @@ void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRo
 							}
 						}
 						ImGui::EndTable();
-					}
-				}
-				ImGui::Separator();
 			}
+			ImGui::Separator();
 		}
 	}
 }
