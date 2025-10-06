@@ -197,11 +197,16 @@ VS_OUTPUT main(VS_INPUT input)
 
 	float4 msPosition = GetMSPosition(input, world3x3);
 
+	float3 windDisplacement = CalculateWindDisplacement(input, WindTimer);
+	float3 previousWindDisplacement = CalculateWindDisplacement(input, PreviousWindTimer);
+
 #		ifdef GRASS_COLLISION
 	float3 displacement, previousDisplacement;
 	GrassCollision::GetDisplacedPosition(input, msPosition.xyz, displacement, previousDisplacement);
 	msPosition.xyz += displacement;
 #		endif  // GRASS_COLLISION
+
+	msPosition.xyz += windDisplacement;
 
 	float4 projSpacePosition = mul(WorldViewProj[eyeIndex], msPosition);
 #		if !defined(VR)
@@ -237,6 +242,8 @@ VS_OUTPUT main(VS_INPUT input)
 	previousMsPosition.xyz += previousDisplacement;
 #		endif  // GRASS_COLLISION
 
+	previousMsPosition.xyz += previousWindDisplacement;
+
 	vsout.PreviousWorldPosition = mul(PreviousWorld[eyeIndex], previousMsPosition);
 #		if defined(VR)
 	Stereo::VR_OUTPUT VRout = Stereo::GetVRVSOutput(projSpacePosition, eyeIndex);
@@ -264,11 +271,16 @@ VS_OUTPUT main(VS_INPUT input)
 
 	float4 msPosition = GetMSPosition(input);
 
+	float3 windDisplacement = CalculateWindDisplacement(input, WindTimer);
+	float3 previousWindDisplacement = CalculateWindDisplacement(input, PreviousWindTimer);
+
 #		ifdef GRASS_COLLISION
 	float3 displacement, previousDisplacement;
 	GrassCollision::GetDisplacedPosition(input, msPosition.xyz, displacement, previousDisplacement);
 	msPosition.xyz += displacement;
 #		endif  // GRASS_COLLISION
+
+	msPosition.xyz += windDisplacement;
 
 	float4 projSpacePosition = mul(WorldViewProj[eyeIndex], msPosition);
 #		if !defined(VR)
@@ -315,6 +327,8 @@ VS_OUTPUT main(VS_INPUT input)
 #		ifdef GRASS_COLLISION
 	previousMsPosition.xyz += previousDisplacement;
 #		endif  // GRASS_COLLISION
+
+	previousMsPosition.xyz += previousWindDisplacement;
 
 	vsout.PreviousWorldPosition = mul(PreviousWorld[eyeIndex], previousMsPosition);
 
