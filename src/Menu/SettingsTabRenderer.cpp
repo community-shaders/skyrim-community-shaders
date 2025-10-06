@@ -209,17 +209,6 @@ void SettingsTabRenderer::RenderKeybindingsTab(
 void SettingsTabRenderer::RenderInterfaceTab()
 {
 	if (BeginTabItemWithFont("Interface", Menu::FontRole::Heading)) {
-		// Restore theme defaults button
-		if (ImGui::Button("Restore Theme Defaults")) {
-			auto& settings = globals::menu->GetSettings();
-			settings.Theme = Menu::ThemeSettings{};  // reset to default-initialized theme
-			// Apply global font scale immediately
-			ImGui::GetIO().FontGlobalScale = exp2(settings.Theme.GlobalScale);
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::TextUnformatted("Resets UI sizes, colors and options to their defaults (including resolution-based font size).");
-		}
-
 		if (ImGui::BeginTabBar("##tabs", ImGuiTabBarFlags_None)) {
 			RenderThemesTab();
 			RenderFontsTab();

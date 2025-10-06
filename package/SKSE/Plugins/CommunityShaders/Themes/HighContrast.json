@@ -5,43 +5,31 @@
     "Author": "Community Shaders Team",
     "Theme": {
         "FontSize": 27.0,
-        "FontName": "Jost/Jost-SemiBold.ttf",
+        "FontName": "Work_Sans/WorkSans-SemiBold.ttf",
         "GlobalScale": 0.0,
         "FontRoles": [
             {
-                "Family": "Jost",
+                "Family": "Work Sans",
                 "Style": "SemiBold",
-                "File": "Jost/Jost-SemiBold.ttf",
+                "File": "Work_Sans/WorkSans-SemiBold.ttf",
                 "SizeScale": 1.0
             },
             {
-                "Family": "Jost",
+                "Family": "Work Sans",
                 "Style": "SemiBold",
-                "File": "Jost/Jost-SemiBold.ttf",
-                "SizeScale": 1.15
+                "File": "Work_Sans/WorkSans-SemiBold.ttf",
+                "SizeScale": 1.1
             },
             {
-                "Family": "Jost",
+                "Family": "Work Sans",
                 "Style": "Regular",
-                "File": "Jost/Jost-Regular.ttf",
+                "File": "Work_Sans/WorkSans-Regular.ttf",
                 "SizeScale": 1.0
             },
             {
-                "Family": "Jost",
-                "Style": "Regular",
-                "File": "Jost/Jost-Regular.ttf",
-                "SizeScale": 0.95
-            },
-            {
-                "Family": "Jost",
+                "Family": "Work Sans",
                 "Style": "Light",
-                "File": "Jost/Jost-Light.ttf",
-                "SizeScale": 0.9
-            },
-            {
-                "Family": "Jost",
-                "Style": "Regular",
-                "File": "Jost/Jost-Regular.ttf",
+                "File": "Work_Sans/WorkSans-Light.ttf",
                 "SizeScale": 0.95
             }
         ],

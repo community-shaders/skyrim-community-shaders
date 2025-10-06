@@ -5,13 +5,13 @@
     "Author": "Community Shaders Team",
     "Theme": {
         "FontSize": 27.0,
-        "FontName": "Roboto/Roboto-Bold.ttf",
+        "FontName": "Bitter/Bitter-SemiBold.ttf",
         "GlobalScale": 0.0,
         "FontRoles": [
             {
-                "Family": "Roboto",
-                "Style": "Bold",
-                "File": "Roboto/Roboto-Bold.ttf",
+                "Family": "Bitter",
+                "Style": "SemiBold",
+                "File": "Bitter/Bitter-SemiBold.ttf",
                 "SizeScale": 1.0
             },
             {
@@ -21,28 +21,16 @@
                 "SizeScale": 1.1
             },
             {
-                "Family": "Roboto",
-                "Style": "SemiBold",
-                "File": "Roboto/Roboto-SemiBold.ttf",
-                "SizeScale": 1.05
-            },
-            {
-                "Family": "Roboto",
+                "Family": "Bitter",
                 "Style": "Regular",
-                "File": "Roboto/Roboto-Regular.ttf",
-                "SizeScale": 0.95
-            },
-            {
-                "Family": "Roboto",
-                "Style": "Regular",
-                "File": "Roboto/Roboto-Regular.ttf",
-                "SizeScale": 0.9
-            },
-            {
-                "Family": "LeagueMono",
-                "Style": "SemiBold",
-                "File": "LeagueMono/LeagueMono-SemiBold.ttf",
+                "File": "Bitter/Bitter-Regular.ttf",
                 "SizeScale": 1.0
+            },
+            {
+                "Family": "Bitter",
+                "Style": "Light",
+                "File": "Bitter/Bitter-Light.ttf",
+                "SizeScale": 0.95
             }
         ],
         "UseSimplePalette": false,

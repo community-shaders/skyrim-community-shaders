@@ -5,43 +5,31 @@
     "Author": "Community Shaders Team",
     "Theme": {
         "FontSize": 27.0,
-        "FontName": "Roboto/Roboto-Regular.ttf",
+        "FontName": "Rubik/Rubik-Regular.ttf",
         "GlobalScale": 0.0,
         "FontRoles": [
             {
-                "Family": "Roboto",
+                "Family": "Rubik",
                 "Style": "Regular",
-                "File": "Roboto/Roboto-Regular.ttf",
+                "File": "Rubik/Rubik-Regular.ttf",
                 "SizeScale": 1.0
             },
             {
-                "Family": "Roboto",
+                "Family": "Rubik",
                 "Style": "SemiBold",
-                "File": "Roboto/Roboto-SemiBold.ttf",
+                "File": "Rubik/Rubik-SemiBold.ttf",
                 "SizeScale": 1.05
             },
             {
-                "Family": "Roboto",
+                "Family": "Rubik",
                 "Style": "Regular",
-                "File": "Roboto/Roboto-Regular.ttf",
+                "File": "Rubik/Rubik-Regular.ttf",
                 "SizeScale": 1.0
             },
             {
-                "Family": "Roboto",
+                "Family": "Rubik",
                 "Style": "Light",
-                "File": "Roboto/Roboto-Light.ttf",
-                "SizeScale": 0.95
-            },
-            {
-                "Family": "Roboto",
-                "Style": "Light",
-                "File": "Roboto/Roboto-Light.ttf",
-                "SizeScale": 0.9
-            },
-            {
-                "Family": "LeagueMono",
-                "Style": "Light",
-                "File": "LeagueMono/LeagueMono-Light.ttf",
+                "File": "Rubik/Rubik-Light.ttf",
                 "SizeScale": 0.95
             }
         ],
@@ -50,37 +38,124 @@
         "TooltipHoverDelay": 0.5,
         "BackgroundBlur": 0.5,
         "Palette": {
-            "Background": [0.1, 0.2, 0.4, 0.9],
-            "Text": [0.9, 0.95, 1.0, 1.0],
-            "WindowBorder": [0.2, 0.6, 0.8, 0.85],
-            "FrameBorder": [0.15, 0.5, 0.7, 0.75],
-            "Separator": [0.2, 0.6, 0.8, 0.65],
-            "ResizeGrip": [0.25, 0.7, 0.9, 0.85]
+            "Background": [
+                0.1,
+                0.2,
+                0.4,
+                0.9
+            ],
+            "Text": [
+                0.9,
+                0.95,
+                1.0,
+                1.0
+            ],
+            "WindowBorder": [
+                0.2,
+                0.6,
+                0.8,
+                0.85
+            ],
+            "FrameBorder": [
+                0.15,
+                0.5,
+                0.7,
+                0.75
+            ],
+            "Separator": [
+                0.2,
+                0.6,
+                0.8,
+                0.65
+            ],
+            "ResizeGrip": [
+                0.25,
+                0.7,
+                0.9,
+                0.85
+            ]
         },
         "StatusPalette": {
-            "Disable": [0.4, 0.45, 0.5, 1.0],
-            "Error": [1.0, 0.4, 0.5, 1.0],
-            "Warning": [1.0, 0.8, 0.3, 1.0],
-            "RestartNeeded": [0.3, 0.8, 0.6, 1.0],
-            "CurrentHotkey": [0.6, 0.9, 1.0, 1.0],
-            "SuccessColor": [0.2, 0.7, 0.9, 1.0],
-            "InfoColor": [0.4, 0.7, 1.0, 1.0]
+            "Disable": [
+                0.4,
+                0.45,
+                0.5,
+                1.0
+            ],
+            "Error": [
+                1.0,
+                0.4,
+                0.5,
+                1.0
+            ],
+            "Warning": [
+                1.0,
+                0.8,
+                0.3,
+                1.0
+            ],
+            "RestartNeeded": [
+                0.3,
+                0.8,
+                0.6,
+                1.0
+            ],
+            "CurrentHotkey": [
+                0.6,
+                0.9,
+                1.0,
+                1.0
+            ],
+            "SuccessColor": [
+                0.2,
+                0.7,
+                0.9,
+                1.0
+            ],
+            "InfoColor": [
+                0.4,
+                0.7,
+                1.0,
+                1.0
+            ]
         },
         "FeatureHeading": {
-            "ColorDefault": [0.7, 0.85, 1.0, 1.0],
-            "ColorHovered": [0.8, 0.9, 1.0, 1.0],
+            "ColorDefault": [
+                0.7,
+                0.85,
+                1.0,
+                1.0
+            ],
+            "ColorHovered": [
+                0.8,
+                0.9,
+                1.0,
+                1.0
+            ],
             "MinimizedFactor": 0.65
         },
         "Style": {
             "WindowBorderSize": 2.0,
             "ChildBorderSize": 1.0,
             "FrameBorderSize": 1.5,
-            "WindowPadding": [15.0, 13.0],
+            "WindowPadding": [
+                15.0,
+                13.0
+            ],
             "WindowRounding": 5.0,
             "IndentSpacing": 8.5,
-            "FramePadding": [8.0, 5.0],
-            "CellPadding": [15.0, 4.0],
-            "ItemSpacing": [9.0, 8.0]
+            "FramePadding": [
+                8.0,
+                5.0
+            ],
+            "CellPadding": [
+                15.0,
+                4.0
+            ],
+            "ItemSpacing": [
+                9.0,
+                8.0
+            ]
         },
         "FullPalette": [
             [0.9, 0.95, 1.0, 0.9],

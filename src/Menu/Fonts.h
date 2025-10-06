@@ -45,6 +45,7 @@ namespace Util
 		};
 
 		Catalog DiscoverFontCatalog();
+		std::string FormatFontDisplayName(const std::string& filename);
 	}
 
 	std::vector<std::string> DiscoverFonts();
