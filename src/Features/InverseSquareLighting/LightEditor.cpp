@@ -102,7 +102,14 @@ void LightEditor::DrawSettings()
 	ImGui::Spacing();
 	ImGui::Spacing();
 
-	ImGui::CheckboxFlags("Inverse Square Light", reinterpret_cast<uint32_t*>(&current.data.flags), static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare));
+	// Use accessor to check/modify inverse square flag
+	bool isInvSqChecked = current.data.flags.any(LightLimitFix::LightFlags::InverseSquare);
+	if (ImGui::Checkbox("Inverse Square Light", &isInvSqChecked)) {
+		if (isInvSqChecked)
+			current.data.flags.set(LightLimitFix::LightFlags::InverseSquare);
+		else
+			current.data.flags.reset(LightLimitFix::LightFlags::InverseSquare);
+	}
 
 	ImGui::Spacing();
 	ImGui::Spacing();
@@ -134,18 +141,21 @@ void LightEditor::DrawSettings()
 		ImGui::Spacing();
 		ImGui::Spacing();
 
-		auto* flags = reinterpret_cast<uint32_t*>(&current.tesFlags);
+		// Use underlying() to get raw TES flag mask for ImGui
+		auto flagsValue = current.tesFlags.underlying();
 		ImGui::Spacing();
 		ImGui::Text("Light Flags");
-		ImGui::CheckboxFlags("Dynamic", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic));
-		ImGui::CheckboxFlags("Negative", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative));
-		ImGui::CheckboxFlags("Flicker", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker));
-		ImGui::CheckboxFlags("Flicker Slow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow));
-		ImGui::CheckboxFlags("Pulse", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse));
-		ImGui::CheckboxFlags("Pulse Slow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow));
-		ImGui::CheckboxFlags("Hemi Shadow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow));
-		ImGui::CheckboxFlags("Omni Shadow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow));
-		ImGui::CheckboxFlags("Portal Strict", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict));
+		ImGui::CheckboxFlags("Dynamic", &flagsValue, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic));
+		ImGui::CheckboxFlags("Negative", &flagsValue, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative));
+		ImGui::CheckboxFlags("Flicker", &flagsValue, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker));
+		ImGui::CheckboxFlags("Flicker Slow", &flagsValue, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow));
+		ImGui::CheckboxFlags("Pulse", &flagsValue, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse));
+		ImGui::CheckboxFlags("Pulse Slow", &flagsValue, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow));
+		ImGui::CheckboxFlags("Hemi Shadow", &flagsValue, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow));
+		ImGui::CheckboxFlags("Omni Shadow", &flagsValue, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow));
+		ImGui::CheckboxFlags("Portal Strict", &flagsValue, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict));
+		// Update the enumeration wrapper from the modified value
+		current.tesFlags = stl::enumeration<ISLCommon::TES_LIGHT_FLAGS_EXT, uint32_t>(static_cast<ISLCommon::TES_LIGHT_FLAGS_EXT>(flagsValue));
 	}
 }
 
@@ -408,8 +418,9 @@ void LightEditor::ExportLightsToJson()
 	for (const auto& light : lights) {
 		// Only export lights that have metadata (isRef or isAttached)
 		if (light.isRef || light.isAttached) {
-			// Use a model identifier - for actual game objects this would be the model path
-			// For now, group by owner/type for demo purposes
+			// Group by type for organizational purposes
+			// Note: Using placeholder keys, not actual base object model paths
+			// This is intentional as not all lights have associated .nif models
 			std::string modelKey = fmt::format("ISL_Export_Group_{}",
 				light.isRef ? "Reference" : "Attached");
 			lightsByModel[modelKey].push_back(&light);
@@ -437,7 +448,8 @@ void LightEditor::ExportLightsToJson()
 			}
 		}
 
-		// Models array - in real usage this would be actual .nif paths
+		// Models array - using placeholder keys (NOT actual .nif paths)
+		// WARNING: This is ISL-specific export format, not directly compatible with Light Placer
 		modelEntry["models"] = json::array({ modelKey + ".nif" });
 
 		// Add export metadata (custom extension)
@@ -445,7 +457,9 @@ void LightEditor::ExportLightsToJson()
 			{ "timestamp", ss.str() },
 			{ "cellEditorID", currentCell && currentCell->GetFormEditorID() ? currentCell->GetFormEditorID() : "Unknown" },
 			{ "filterOption", FilterOptionLabels[static_cast<int>(filterOption)] },
-			{ "sortOption", SortOptionLabels[static_cast<int>(sortOption)] }
+			{ "sortOption", SortOptionLabels[static_cast<int>(sortOption)] },
+			{ "warning", "This is an ISL-specific export format. Model keys are placeholders, not actual .nif paths. Not directly compatible with Light Placer imports." },
+			{ "description", "Exported lights are grouped by type (Reference/Attached) for organizational purposes. Use _islMetadata fields for detailed light information." }
 		};
 
 		// Lights array
@@ -480,8 +494,14 @@ void LightEditor::ExportLightsToJson()
 		return;
 	}
 
-	outFile << exportArray.dump(2);  // Use 2-space indent like the example
-	outFile.close();
+	try {
+		outFile << exportArray.dump(2);  // Use 2-space indent like the example
+		outFile.close();
+	} catch (const json::exception& e) {
+		logger::warn("Failed to serialize JSON for export: {}", e.what());
+		outFile.close();
+		return;
+	}
 
 	logger::info("Successfully exported {} lights with metadata to: {}", metadataLightCount, filePath.string());
 }
@@ -512,6 +532,11 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 	lightData["radius"] = lightInfo.runtimeData.radius;
 	lightData["fade"] = lightInfo.runtimeData.fade;
 
+	// Add cutoffOverride (important for ISL lights)
+	if (lightInfo.runtimeData.cutoffOverride != 0.0f) {
+		lightData["cutoffOverride"] = lightInfo.runtimeData.cutoffOverride;
+	}
+
 	// Add custom metadata for ISL tracking (non-standard but useful)
 	lightData["_islMetadata"] = {
 		{ "refID", fmt::format("0x{:08X}", lightInfo.id) },
@@ -537,14 +562,16 @@ json LightEditor::CreateLightJsonData(const LightInfo& lightInfo)
 
 	// Flags in Light Placer format
 	std::vector<std::string> flags;
-	if (static_cast<bool>(*reinterpret_cast<const uint32_t*>(&lightInfo.runtimeData.flags) & static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare))) {
+	// Use accessor to check inverse square flag
+	if (lightInfo.runtimeData.flags.any(LightLimitFix::LightFlags::InverseSquare)) {
 		// Note: InverseSquare is not a standard Light Placer flag
 		lightData["_islMetadata"]["isInverseSquare"] = true;
 	}
 
 	// TES flags converted to Light Placer equivalents where possible
 	if (!lightInfo.isOther && lightInfo.ownerFormId != 0) {
-		auto flagsValue = *reinterpret_cast<const uint32_t*>(&lightInfo.tesFlags);
+		// Use underlying() to get raw TES flag mask
+		auto flagsValue = lightInfo.tesFlags.underlying();
 		if (flagsValue & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict)) {
 			flags.push_back("PortalStrict");
 		}
@@ -623,6 +650,7 @@ void LightEditor::ExportSelectedLightToJson()
 	json modelEntry;
 
 	// Use a descriptive model name for the selected light
+	// WARNING: This is a placeholder key, not an actual .nif path
 	std::string modelKey = fmt::format("ISL_Selected_Light_Export_{}_{}",
 		selected.isRef ? "Reference" : (selected.isAttached ? "Attached" : "Other"),
 		selected.id);
@@ -634,6 +662,8 @@ void LightEditor::ExportSelectedLightToJson()
 		{ "timestamp", ss.str() },
 		{ "exportType", "selected_light" },
 		{ "cellEditorID", currentCell && currentCell->GetFormEditorID() ? currentCell->GetFormEditorID() : "Unknown" },
+		{ "warning", "This is an ISL-specific single light export. The model key is a placeholder, not an actual .nif path. Not directly compatible with Light Placer imports." },
+		{ "description", "Use _islMetadata fields for detailed light information and original reference data." },
 		{ "selectedLightInfo", { { "refID", fmt::format("0x{:08X}", selected.id) },
 								   { "name", selected.name },
 								   { "type", selected.isRef ? "Reference" : (selected.isAttached ? "Attached" : "Other") } } }
@@ -676,8 +706,14 @@ void LightEditor::ExportSelectedLightToJson()
 		return;
 	}
 
-	outFile << exportArray.dump(2);  // Use 2-space indent like the example
-	outFile.close();
+	try {
+		outFile << exportArray.dump(2);  // Use 2-space indent like the example
+		outFile.close();
+	} catch (const json::exception& e) {
+		logger::warn("Failed to serialize JSON for selected light export: {}", e.what());
+		outFile.close();
+		return;
+	}
 
 	logger::info("Successfully exported selected light to: {}", filePath.string());
 }
