@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <d3d11.h>
 #include <imgui_impl_dx11.h>
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 #include <openvr.h>
 #include <string>
 #include <unordered_map>
@@ -281,6 +281,8 @@ public:
 	virtual void PostPostLoad() override;
 	virtual void DataLoaded() override;
 	virtual void EarlyPrepass() override;
+
+	void UpdateDepthBufferCulling(bool desired);
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;

@@ -136,18 +136,11 @@ namespace DisplayMapping
 		float saturationAmount = pow(smoothstep(1.0, 0.3, ictcp.x), 1.3);
 		col = ICtCpToRGB(ictcp * float3(1, saturationAmount.xx));
 
-		// Hue preserving mapping
-		float maxCol = Color::RGBToLuminance(col);
-		float mappedMax = GetTonemapFactorHejlBurgessDawson(maxCol).x;
-		float3 compressedHuePreserving = col * mappedMax / maxCol;
-
-		compressedHuePreserving += saturate(Param.x - mappedMax) * bloomCol;
-
 		// Non-hue preserving mapping
 		float3 perChannelCompressed = GetTonemapFactorHejlBurgessDawson(col);
 		perChannelCompressed += saturate(Param.x - perChannelCompressed) * bloomCol;
 
-		col = lerp(perChannelCompressed, compressedHuePreserving, 0.6);
+		col = perChannelCompressed;
 
 		float3 ictcpMapped = RGBToICtCp(col);
 

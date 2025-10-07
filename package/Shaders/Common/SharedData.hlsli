@@ -20,7 +20,7 @@ namespace SharedData
 		bool InInterior;  // If the area lacks a directional shadow light e.g. the sun or moon
 		bool InMapMenu;   // If the world/local map is open (note that the renderer is still deferred here)
 		bool HideSky;     // HideSky flag in WorldSpace, e.g. Blackreach
-		float MipBias;    // Offset to mip level for TAA sharpness
+		float MipBias;    // Offset to mip level for TAA sharpness#
 	};
 
 	struct GrassLightingSettings
@@ -64,10 +64,9 @@ namespace SharedData
 
 	struct LightLimitFixSettings
 	{
-		uint EnableContactShadows;
 		uint EnableLightsVisualisation;
 		uint LightsVisualisationMode;
-		float pad0;
+		float2 pad0;
 		uint4 ClusterSize;
 	};
 
@@ -176,9 +175,9 @@ namespace SharedData
 	struct IBLSettings
 	{
 		uint EnableDiffuseIBL;
-		uint SampleUnderHorizonFromDynCube;
 		uint PreserveFogLuminance;
-		uint pad;
+		uint UseStaticIBL;
+		uint EnableInterior;
 		float DiffuseIBLScale;
 		float DALCAmount;
 		float IBLSaturation;

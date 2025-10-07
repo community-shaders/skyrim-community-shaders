@@ -2,15 +2,12 @@
 
 struct IBL : Feature
 {
-private:
-	static constexpr std::string_view MOD_ID = "153478";
-
 public:
 	virtual bool SupportsVR() override { return true; };
+	virtual bool IsCore() const override { return false; };
 
 	virtual inline std::string GetName() override { return "Image Based Lighting"; }
 	virtual inline std::string GetShortName() override { return "ImageBasedLighting"; }
-	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "IBL"; }
 	virtual std::string_view GetCategory() const override { return "Lighting"; }
 
@@ -28,6 +25,7 @@ public:
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
 	Texture2D* diffuseIBLTexture = nullptr;
+	Texture2D* diffuseSkyIBLTexture = nullptr;
 	ID3D11ComputeShader* diffuseIBLCS = nullptr;
 
 	virtual void RestoreDefaultSettings() override;
@@ -41,17 +39,20 @@ public:
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
 
-	struct alignas(16) Settings
+	struct Settings
 	{
 		uint EnableDiffuseIBL = 1;
-		uint SampleUnderHorizonFromDynCube = 0;
 		uint PreserveFogLuminance = 0;
-		uint pad;
+		uint UseStaticIBL = 1;
+		uint EnableInterior = 0;
 		float DiffuseIBLScale = 1.0f;
 		float DALCAmount = 0.33f;
 		float IBLSaturation = 1.0f;
 		float FogAmount = 0.0f;
 	} settings;
+
+	eastl::unique_ptr<Texture2D> staticDiffuseIBLTexture = nullptr;
+	eastl::unique_ptr<Texture2D> staticSpecularIBLTexture = nullptr;
 
 	ID3D11ComputeShader* GetDiffuseIBLCS();
 };

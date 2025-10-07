@@ -28,6 +28,56 @@ namespace Util
 			}
 		}
 
+		std::filesystem::path GetCommunityShaderPath()
+		{
+			return GetDataPath() / "SKSE" / "Plugins" / "CommunityShaders";
+		}
+
+		std::filesystem::path GetImGuiIniPath()
+		{
+			return GetDataPath() / "SKSE" / "Plugins" / "CommunityShaders_ImGui.ini";
+		}
+
+		std::filesystem::path GetInterfacePath()
+		{
+			return GetDataPath() / "Interface" / "CommunityShaders";
+		}
+
+		std::filesystem::path GetFontsPath()
+		{
+			return GetInterfacePath() / "Fonts";
+		}
+
+		std::filesystem::path GetIconsPath()
+		{
+			return GetInterfacePath() / "Icons";
+		}
+
+		std::filesystem::path GetSettingsUserPath()
+		{
+			return GetCommunityShaderPath() / "SettingsUser.json";
+		}
+
+		std::filesystem::path GetSettingsTestPath()
+		{
+			return GetCommunityShaderPath() / "SettingsTest.json";
+		}
+
+		std::filesystem::path GetSettingsDefaultPath()
+		{
+			return GetCommunityShaderPath() / "SettingsDefault.json";
+		}
+
+		std::filesystem::path GetOverridesPath()
+		{
+			return GetCommunityShaderPath() / "Overrides";
+		}
+
+		std::filesystem::path GetAppliedOverridesPath()
+		{
+			return GetCommunityShaderPath() / "AppliedOverrides.json";
+		}
+
 		std::filesystem::path GetShadersPath()
 		{
 			return GetDataPath() / "Shaders";

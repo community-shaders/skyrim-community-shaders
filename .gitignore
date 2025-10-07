@@ -9,3 +9,4 @@ shadertoolsconfig.json
 
 # Folder view configuration files
 **/.DS_Store
+.claude/settings.local.json

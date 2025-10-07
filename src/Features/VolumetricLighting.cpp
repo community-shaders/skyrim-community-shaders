@@ -21,22 +21,17 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void VolumetricLighting::DrawSettings()
 {
-	if (ImGui::TreeNodeEx("Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-		if (ImGui::Checkbox("Enable Volumetric Lighting in Exteriors", &settings.ExteriorEnabled))
-			SetupVL();
+	if (ImGui::Checkbox("Enable Volumetric Lighting in Exteriors", &settings.ExteriorEnabled))
+		SetupVL();
 
-		if (settings.ExteriorEnabled)
-			DrawVolumetricLightingSettings(settings.ExteriorQuality, settings.ExteriorCustomSize, false, !inInterior);
+	if (settings.ExteriorEnabled)
+		DrawVolumetricLightingSettings(settings.ExteriorQuality, settings.ExteriorCustomSize, false, !inInterior);
 
-		if (ImGui::Checkbox("Enable Volumetric Lighting in Interiors", &settings.InteriorEnabled))
-			SetupVL();
+	if (ImGui::Checkbox("Enable Volumetric Lighting in Interiors", &settings.InteriorEnabled))
+		SetupVL();
 
-		if (settings.InteriorEnabled)
-			DrawVolumetricLightingSettings(settings.InteriorQuality, settings.InteriorCustomSize, true, inInterior);
-
-		ImGui::Spacing();
-		ImGui::TreePop();
-	}
+	if (settings.InteriorEnabled)
+		DrawVolumetricLightingSettings(settings.InteriorQuality, settings.InteriorCustomSize, true, inInterior);
 }
 
 void VolumetricLighting::DrawVolumetricLightingSettings(int32_t& quality, TextureSize& customSize, const bool isInterior, const bool inLocationType)
@@ -194,25 +189,23 @@ void VolumetricLighting::SetupResources()
 
 void VolumetricLighting::EarlyPrepass()
 {
-	const auto& mainDepth = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
-	D3D11_TEXTURE2D_DESC texDesc;
-	mainDepth.texture->GetDesc(&texDesc);
+	auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
 
-	int32_t width = static_cast<int32_t>(texDesc.Width);
-	int32_t height = static_cast<int32_t>(texDesc.Height);
+	int32_t width = static_cast<int32_t>(renderSize.x);
+	int32_t height = static_cast<int32_t>(renderSize.y);
 
 	if (width != vlData.screenX || height != vlData.screenY) {
 		blurHCS = nullptr;
 		blurVCS = nullptr;
 	}
 
-	vlData.screenX = texDesc.Width;
-	vlData.screenY = texDesc.Height;
-	vlData.screenXMin1 = texDesc.Width - 1;
-	vlData.screenYMin1 = texDesc.Height - 1;
+	vlData.screenX = width;
+	vlData.screenY = height;
+	vlData.screenXMin1 = width - 1;
+	vlData.screenYMin1 = height - 1;
 	vlDataCB->Update(vlData);
 
-	const auto interiorCell = globals::game::tes->interiorCell;
+	const auto interiorCell = RE::TES::GetSingleton()->interiorCell;
 	const bool currentlyInInterior = interiorCell != nullptr;
 
 	if (initialised && currentlyInInterior == inInterior)

@@ -1,56 +1,163 @@
 namespace GrassCollision
 {
-	struct CollisionData
-	{
-		float4 centre[2];
-	};
+	Texture2D<float4> Collision : register(t100);
 
 	cbuffer GrassCollisionPerFrame : register(b5)
 	{
-		CollisionData collisionData[256];
-		uint numCollisions;
+		float2 PosOffset;  // cell origin in camera space
+		uint2 ArrayOrigin; // xy: array origin (clipmap wrapping)
+
+		int2 ValidMargin;
+		float TimeDelta;
+		uint BoundingBoxCount;
+
+		float CameraHeightDelta;
 	}
 
-	void SmoothLimitDisplacement(inout float3 displacement, float maxLength)
-	{
-		float lengthSq = dot(displacement, displacement);
-		float maxLengthSq = maxLength * maxLength;
+	const static uint TEXTURE_SIZE = 512;
+	const static float WORLD_SIZE = 4096;
+	const static float CELL_SIZE = WORLD_SIZE / TEXTURE_SIZE;
+	const static float2 ZRANGE = float2(2048.0, -2048.0);
 
-		if (lengthSq > maxLengthSq) {
-			float length = sqrt(lengthSq);
-			float smoothFactor = smoothstep(0.0, maxLength, length);
-			float scale = lerp(1.0, maxLength / length, smoothFactor);
-
-			displacement *= scale;
-		}
+	float ProceduralAnimation(float x, float distanceFromCenter) {
+		float fadeRate = 250;
+		x /= fadeRate;
+		x /= distanceFromCenter;
+		x *= 100;
+		float frequency = 4 * Math::PI;
+		return cos(x * frequency) * exp(-x * 4);
 	}
 
-	float3 GetDisplacedPosition(VS_INPUT input, float3 position, uint eyeIndex = 0)
+	void GetCollision(float3 worldPosition, float maximumDepth, float distanceFromCenter, out float collisionHeights, out float collisionAmount, out float previousCollisionHeights, out float previousCollisionAmount)
 	{
-		float3 worldPosition = mul(World[eyeIndex], float4(position, 1.0)).xyz;
-		float alpha = saturate(input.Color.w * 10.0);
+		float2 positionMSAdjusted = worldPosition.xy - PosOffset.xy;
+		float2 uv = positionMSAdjusted / WORLD_SIZE + .5;
 
-		if (length(worldPosition) < 2048.0 && alpha > 0.0) {
-			float3 displacement = 0.0;
+		float2 cellVxCoord = uv * TEXTURE_SIZE;
+		int2 cell000 = floor(cellVxCoord - 0.5);
+		float2 bilinearPos = cellVxCoord - 0.5 - cell000;
 
-			for (uint i = 0; i < numCollisions; i++) {
-				float dist = distance(collisionData[i].centre[eyeIndex].xyz, worldPosition);
-				float power = 1.0 - saturate(dist / collisionData[i].centre[0].w);
-				float3 direction = worldPosition - collisionData[i].centre[eyeIndex].xyz;
-				float3 shift = power * power * direction;
-				shift.xy *= 1.0 + saturate(shift.z);
-				shift.z = min(shift.z, 0);
-				displacement += shift;
-				displacement -= length(shift);
-			}
+		int2 cellID = cell000;
 
-			displacement *= saturate((position.z - input.InstanceData1.z) * 0.1) * alpha;
+		collisionHeights = 0.0;
+		collisionAmount = 0.0;
 
-			SmoothLimitDisplacement(displacement, 32.0);
+		previousCollisionHeights = 0.0;
+		previousCollisionAmount = 0.0;
 
-			return displacement * 0.75;
+		float wsum = 0;
+
+		for (int i = 0; i < 2; i++)
+			for (int j = 0; j < 2; j++)
+		{
+			int2 offset = int2(i, j);
+			int2 cellID = cell000 + offset;
+
+			if (any(cellID < 0) || any((uint2)cellID >= TEXTURE_SIZE))
+				continue;
+
+			float2 cellCentreMS = cellID + 0.5 - TEXTURE_SIZE / 2;
+			cellCentreMS = cellCentreMS * CELL_SIZE;
+
+			float2 bilinearWeights = 1 - abs(offset - bilinearPos);
+			float w = bilinearWeights.x * bilinearWeights.y;
+
+			uint2 cellTexID = (cellID + ArrayOrigin.xy) % TEXTURE_SIZE;
+
+			float4 collisionSample = Collision[cellTexID];
+			collisionSample = lerp(ZRANGE.x, ZRANGE.y, collisionSample);
+
+			collisionHeights += collisionSample.x * w;
+			collisionAmount += max(0, worldPosition.z - collisionSample.x) * ProceduralAnimation(collisionSample.y - collisionSample.x, distanceFromCenter) * w;
+			collisionAmount = min(collisionAmount, maximumDepth);
+
+			previousCollisionHeights += collisionSample.z * w;
+			previousCollisionAmount += max(0, worldPosition.z - collisionSample.z) * ProceduralAnimation(collisionSample.w - collisionSample.z, distanceFromCenter) * w;
+			previousCollisionAmount = min(previousCollisionAmount, maximumDepth);
+
+			wsum += w;
 		}
 
-		return 0.0;
+		if (wsum > 0.0){
+			collisionHeights /= wsum;
+			collisionAmount /= wsum;
+			previousCollisionHeights /= wsum;
+			previousCollisionAmount /= wsum;
+		} else {
+			collisionHeights = TEXTURE_SIZE;
+			collisionAmount = 0.0;
+			previousCollisionHeights = TEXTURE_SIZE;
+			previousCollisionAmount = 0.0;
+		}
+
+	}
+
+	float3 ComputeNormalFromHeights(float h0, float hX, float hY, float delta)
+	{
+		float3 tangentX = float3(delta, 0, hX - h0);
+		float3 tangentY = float3(0, delta, hY - h0);
+		return -normalize(cross(tangentX, tangentY) * float3(1.0, 1.0, 0.1));
+	}
+
+	void ComputeCollision(float3 worldPosition, float maximumDepth, float distanceFromCenter, float delta, out float3 collision, out float3 previousCollision)
+	{
+		// Sample collision at three points forming a small triangle
+		float collisionCenter;
+		float collisionX;
+		float collisionY;
+
+		float collisionCenterAmount;
+		float collisionXAmount;
+		float collisionYAmount;
+
+		float previousCollisionCenter;
+		float previousCollisionX;
+		float previousCollisionY;
+
+		float previousCollisionCenterAmount;
+		float previousCollisionXAmount;
+		float previousCollisionYAmount;
+
+		GetCollision(worldPosition + float3(-delta, -delta, 0), maximumDepth, distanceFromCenter, collisionCenter, collisionCenterAmount, previousCollisionCenter, previousCollisionCenterAmount);
+		GetCollision(worldPosition + float3(delta, 0, 0), maximumDepth, distanceFromCenter, collisionX, collisionXAmount, previousCollisionX, previousCollisionXAmount);
+		GetCollision(worldPosition + float3(0, delta, 0), maximumDepth, distanceFromCenter, collisionY, collisionYAmount, previousCollisionY, previousCollisionYAmount);
+
+		// Process current collision
+		float3 currentAmounts = float3(collisionCenterAmount, collisionXAmount, collisionYAmount);
+		float avgCurrentAmount = dot(currentAmounts, float3(1.0, 1.0, 1.0)) / 3.0;
+		collision = ComputeNormalFromHeights(collisionCenter, collisionX, collisionY, delta) * avgCurrentAmount;
+
+		// Process previous collision
+		float3 previousAmounts = float3(previousCollisionCenterAmount, previousCollisionXAmount, previousCollisionYAmount);
+		float avgPreviousAmount = dot(previousAmounts, float3(1.0, 1.0, 1.0)) / 3.0;
+		previousCollision = ComputeNormalFromHeights(previousCollisionCenter, previousCollisionX, previousCollisionY, delta) * avgPreviousAmount;
+	}
+
+	void GetDisplacedPosition(VS_INPUT input, float3 position, out float3 displacement, out float3 previousDisplacement)
+	{
+		float3 worldPosition = mul(World[0], float4(position.xyz, 1.0)).xyz;
+
+		if (input.Color.w > 0.0 && length(worldPosition) < 2048.0) {
+			float3 worldPositionCentre = mul(World[0], float4(input.InstanceData1.xyz, 1.0)).xyz;
+
+			// Limit stretching
+			float3 remappedWorldPosition = lerp(worldPosition, worldPositionCentre, float3(0.95, 0.95, 0.0));
+
+			float distanceFromCenter = length(worldPosition - worldPositionCentre) + 0.01;
+			float maximumDepth = worldPosition.z - worldPositionCentre.z;
+
+			// Return base collision
+			float3 collision, previousCollision;
+			ComputeCollision(remappedWorldPosition, maximumDepth, distanceFromCenter, CELL_SIZE, collision, previousCollision);
+
+			// Scale grass by wind amount (detect rocks and bottom of some grass)
+			float alpha = saturate(input.Color.w * 10.0);
+
+			displacement = collision * alpha * 0.75;
+			previousDisplacement  = previousCollision * alpha * 0.75;
+		} else {
+			displacement = 0.0;
+			previousDisplacement = 0.0;
+		}
 	}
 }

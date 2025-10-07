@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.21)
 
 project(
 	CommunityShaders
-	VERSION 1.3.4
+	VERSION 1.4.5
 	LANGUAGES CXX
 )
 
@@ -43,9 +43,14 @@ find_package(cppwinrt CONFIG REQUIRED)
 find_package(unordered_dense CONFIG REQUIRED)
 find_package(efsw CONFIG REQUIRED)
 find_package(Tracy CONFIG REQUIRED)
+find_package(directx-headers CONFIG REQUIRED)
 find_package(effects11 CONFIG REQUIRED)
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/cmake/Streamline)
+include(XeSS-SDK)
+
+find_path(DETOURS_INCLUDE_DIRS "detours/detours.h")
+find_library(DETOURS_LIBRARY detours REQUIRED)
 include(FidelityFX-SDK)
 
 target_compile_definitions(
@@ -73,13 +78,12 @@ target_include_directories(
 	${BSHOSHANY_THREAD_POOL_INCLUDE_DIRS}
 	${CLIB_UTIL_INCLUDE_DIRS}
 	"${CMAKE_SOURCE_DIR}/package/Shaders"
+	${DETOURS_INCLUDE_DIRS}
 )
 
 target_link_libraries(
 	${PROJECT_NAME}
 	PRIVATE
-	debug ${CMAKE_CURRENT_SOURCE_DIR}/include/detours/Debug/detours.lib
-	optimized ${CMAKE_CURRENT_SOURCE_DIR}/include/detours/Release/detours.lib
 	Microsoft::CppWinRT
 	magic_enum::magic_enum
 	xbyak::xbyak
@@ -94,6 +98,8 @@ target_link_libraries(
 	Tracy::TracyClient
 	Streamline
 	d3d12.lib
+	Microsoft::DirectX-Headers
+	${DETOURS_LIBRARY}
 	Microsoft::Effects11
 	windowsapp
 )

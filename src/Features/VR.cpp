@@ -3,9 +3,9 @@
 #include "RE/B/BSOpenVR.h"
 #include "RE/N/NiPoint3.h"
 #include "RE/P/PlayerCharacter.h"
+#include "Upscaling.h"
 #include <openvr.h>
 
-#include "DX12SwapChain.h"
 #include "State.h"
 #include "Utils/D3D.h"
 #include "Utils/PerfUtils.h"
@@ -16,7 +16,6 @@
 #include <cmath>
 #include <d3d11.h>
 #include <imgui_impl_dx11.h>
-#include <magic_enum.hpp>
 #include <unordered_map>
 #include <windows.h>
 #include <winver.h>
@@ -101,7 +100,18 @@ void VR::SetupResources()
 void VR::PostPostLoad()
 {
 	gDepthBufferCulling = reinterpret_cast<bool*>(REL::Offset(0x1EC6B88).address());
+	if (!gDepthBufferCulling) {
+		static bool s_defaultDepthBufferCulling = false;  // safe fallback
+		gDepthBufferCulling = &s_defaultDepthBufferCulling;
+		logger::warn("VR: gDepthBufferCulling address not found - using fallback default (false)");
+	}
+
 	gMinOccludeeBoxExtent = reinterpret_cast<float*>(REL::Offset(0x1ED64E8).address());
+	if (!gMinOccludeeBoxExtent) {
+		static float s_defaultMinOccludeeBoxExtent = 10.0f;
+		gMinOccludeeBoxExtent = &s_defaultMinOccludeeBoxExtent;
+		logger::warn("VR: gMinOccludeeBoxExtent address not found - using fallback default (10.0)");
+	}
 
 	// Patches BSGeometry::CopyTransformAndBounds to copy the model-bound translation across correctly instead of overwriting it with the bounding sphere centre
 	REL::safe_write(REL::RelocationID(0, 0, 69528).address() + REL::Relocate(0, 0, 0xD9) + 0x2, 0x148);
@@ -111,13 +121,24 @@ void VR::PostPostLoad()
 
 void VR::DataLoaded()
 {
-	*gDepthBufferCulling = settings.EnableDepthBufferCullingExterior;
-	*gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
+	// Initialize occlusion culling based on settings, but force-disable if an external
+	// upscaler is active (FSR/XeSS/DLSS) since upscalers may modify the depth buffer.
+	bool desired = settings.EnableDepthBufferCullingExterior;
+	UpdateDepthBufferCulling(desired);
+
+	if (gMinOccludeeBoxExtent) {
+		*gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
+	} else {
+		logger::warn("VR::DataLoaded: gMinOccludeeBoxExtent is null, skipping assignment");
+	}
 }
 
 void VR::EarlyPrepass()
 {
-	*gDepthBufferCulling = globals::game::tes->interiorCell ? settings.EnableDepthBufferCullingInterior : settings.EnableDepthBufferCullingExterior;
+	// Respect user settings unless an external upscaler is active; if so, force-disable
+	// depth-buffer culling to avoid incorrect occlusion tests in VR.
+	bool desired = RE::TES::GetSingleton()->interiorCell ? settings.EnableDepthBufferCullingInterior : settings.EnableDepthBufferCullingExterior;
+	UpdateDepthBufferCulling(desired);
 }
 
 //=============================================================================
@@ -557,13 +578,44 @@ namespace
 		auto& vr = globals::features::vr;
 		VR::Settings& settings = vr.settings;
 		if (ImGui::CollapsingHeader("General Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+			// If an upscaler is active that rewrites or repurposes the depth buffer,
+			// depth-buffer-culling must be disabled to avoid incorrect occlusion tests
+			// (which are especially problematic in VR). Query the Upscaling feature
+			// to see whether we're running FSR, XeSS or DLSS.
+			// Determine if an external upscaler is active by reading the numeric
+			// setting value directly. Avoid referencing Upscaling types here to
+			// prevent header/type collisions in this translation unit.
+			// Query the Upscaling feature for an authoritative state flag.
+			bool upscalingActive = globals::features::upscaling.IsUpscalingActive();
+
+			// Exteriors
+			if (upscalingActive)
+				ImGui::BeginDisabled();
 			ImGui::Checkbox("Enable Depth Buffer Culling in Exteriors", &settings.EnableDepthBufferCullingExterior);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Improves performance in exteriors, recommended ON.");
+			if (upscalingActive) {
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Disabled while an external upscaler is active (FSR/XeSS/DLSS) because upscalers may modify depth.\nThis prevents incorrect occlusion in VR.");
+				}
+				ImGui::EndDisabled();
+			} else {
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Improves performance in exteriors, recommended ON.");
+				}
 			}
+
+			// Interiors
+			if (upscalingActive)
+				ImGui::BeginDisabled();
 			ImGui::Checkbox("Enable Depth Buffer Culling in Interiors", &settings.EnableDepthBufferCullingInterior);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Improves performance in interiors, recommended OFF due to occasional visual glitches.");
+			if (upscalingActive) {
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Disabled while an external upscaler is active (FSR/XeSS/DLSS) because upscalers may modify depth.\nThis prevents incorrect occlusion in VR.");
+				}
+				ImGui::EndDisabled();
+			} else {
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Improves performance in interiors, recommended OFF due to occasional visual glitches.");
+				}
 			}
 			if (ImGui::SliderFloat("Min Occludee Box Extent", &settings.MinOccludeeBoxExtent, 0.0f, 1000.0f, "%.1f"))
 				*vr.gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
@@ -1532,6 +1584,22 @@ void VR::SubmitOverlayFrame()
 	}
 }
 
+// Helper to centralize VR depth buffer culling logic, reducing duplication between DataLoaded and EarlyPrepass.
+void VR::UpdateDepthBufferCulling(bool desired)
+{
+	if (globals::features::upscaling.IsUpscalingActive()) {
+		if (gDepthBufferCulling && *gDepthBufferCulling) {
+			logger::info("Upscaling detected, disabling incompatible depth buffer culling.");
+			*gDepthBufferCulling = false;
+		}
+	} else {
+		if (gDepthBufferCulling && *gDepthBufferCulling != desired) {
+			*gDepthBufferCulling = desired;
+			logger::info("VR depth buffer culling restored to {}", desired);
+		}
+	}
+}
+
 // Handles overlay/menu open/close logic based on controller input state
 void VR::UpdateOverlayMenuStateFromInput()
 {
@@ -1555,18 +1623,27 @@ void VR::UpdateOverlayMenuStateFromInput()
 		return;
 	}
 
-	// Check if we're in a valid menu state for input
-	bool inValidMenuState = globals::game::ui &&
-	                        (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::TweenMenu::MENU_NAME));
+	// Compute whether the game's UI menus we care about are open. Do this early so
+	// downstream logic can reuse the result and we only check the UI once.
+	bool uiMenusOpen = globals::game::ui &&
+	                   (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::TweenMenu::MENU_NAME));
+
+	// Valid menu state means either one of those UI menus is open, or our menu is
+	// enabled (but only if the game's UI system is present).
+	bool inValidMenuState = uiMenusOpen || (globals::game::ui && isEnabled);
 
 	if (!inValidMenuState)
 		return;
 
-	// Define menu state mappings
+	// Define menu state mappings. The `allowWhenUIMenusClosed` flag controls whether
+	// a mapping is allowed to run when our menu is enabled but the game's UI menus
+	// are not reported open. This prevents 'open' controls from firing in that state
+	// while still allowing 'close' actions.
 	struct MenuStateMapping
 	{
 		std::function<bool()> condition;
 		std::function<void()> action;
+		bool allowWhenUIMenusClosed = false;
 	};
 
 	// Generic combo checking function - makes the system truly extensible
@@ -1617,7 +1694,8 @@ void VR::UpdateOverlayMenuStateFromInput()
 		{ [&]() {
 			 return CheckCombo(settings.VRMenuCloseKeys) && isEnabled;
 		 },
-			[&]() { isEnabled = false; } },
+			[&]() { isEnabled = false; },
+			true },
 
 		// Open VR overlay when closed
 		{ [&]() {
@@ -1632,8 +1710,15 @@ void VR::UpdateOverlayMenuStateFromInput()
 			[&]() { overlayEnabled = false; } }
 	};
 
-	// Process mappings in order
+	// Process mappings in order. If our menu is enabled but the game's UI menus
+	// are not open, only allow mappings explicitly marked with
+	// allowWhenUIMenusClosed (close actions).
+	bool onlyAllowClose = isEnabled && !uiMenusOpen;
+
 	for (const auto& mapping : mappings) {
+		if (onlyAllowClose && !mapping.allowWhenUIMenusClosed)
+			continue;
+
 		if (mapping.condition()) {
 			mapping.action();
 			break;  // Only execute one action per frame

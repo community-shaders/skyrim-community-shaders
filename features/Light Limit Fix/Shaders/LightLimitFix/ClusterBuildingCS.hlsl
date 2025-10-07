@@ -1,10 +1,13 @@
+#include "Common/FrameBuffer.hlsli"
+
 #include "LightLimitFix/Common.hlsli"
 
 cbuffer PerFrame : register(b0)
 {
-	row_major float4x4 InvProjMatrix[2];
-	float LightsNear;
-	float LightsFar;
+    float LightsNear;
+    float LightsFar;
+    uint2 pad0;
+    uint4 ClusterSize;
 }
 
 float3 GetPositionVS(float2 texcoord, float depth, int eyeIndex = 0)
@@ -14,7 +17,7 @@ float3 GetPositionVS(float2 texcoord, float depth, int eyeIndex = 0)
 	clipSpaceLocation.y *= -1;
 	clipSpaceLocation.z = depth;
 	clipSpaceLocation.w = 1.0f;
-	float4 homogenousLocation = mul(clipSpaceLocation, InvProjMatrix[eyeIndex]);
+	float4 homogenousLocation = mul(FrameBuffer::CameraProjInverse[eyeIndex], clipSpaceLocation);
 	return homogenousLocation.xyz / homogenousLocation.w;
 }
 
@@ -46,10 +49,10 @@ float3 IntersectionZPlane(float3 B, float z_dist)
 								uint groupIndex
 								: SV_GroupIndex) {
 	uint clusterIndex = groupId.x +
-	                    groupId.y * CLUSTER_BUILDING_DISPATCH_SIZE_X +
-	                    groupId.z * (CLUSTER_BUILDING_DISPATCH_SIZE_X * CLUSTER_BUILDING_DISPATCH_SIZE_Y);
+	                    groupId.y * ClusterSize.x +
+	                    groupId.z * (ClusterSize.x * ClusterSize.y);
 
-	float2 clusterSize = rcp(float2(CLUSTER_BUILDING_DISPATCH_SIZE_X, CLUSTER_BUILDING_DISPATCH_SIZE_Y));
+	float2 clusterSize = rcp(float2(ClusterSize.x, ClusterSize.y));
 
 	float2 texcoordMax = (groupId.xy + 1) * clusterSize;
 	float2 texcoordMin = groupId.xy * clusterSize;
@@ -61,8 +64,8 @@ float3 IntersectionZPlane(float3 B, float z_dist)
 	float3 minPointVS = min(GetPositionVS(texcoordMin, 1.0f, 0), GetPositionVS(texcoordMin, 1.0f, 1));
 #endif  // !VR
 
-	float clusterNear = LightsNear * pow(abs(LightsFar / LightsNear), groupId.z / float(CLUSTER_BUILDING_DISPATCH_SIZE_Z));
-	float clusterFar = LightsNear * pow(abs(LightsFar / LightsNear), (groupId.z + 1) / float(CLUSTER_BUILDING_DISPATCH_SIZE_Z));
+	float clusterNear = LightsNear * pow(abs(LightsFar / LightsNear), groupId.z / float(ClusterSize.z));
+	float clusterFar = LightsNear * pow(abs(LightsFar / LightsNear), (groupId.z + 1) / float(ClusterSize.z));
 
 	float3 minPointNear = IntersectionZPlane(minPointVS, clusterNear);
 	float3 minPointFar = IntersectionZPlane(minPointVS, clusterFar);

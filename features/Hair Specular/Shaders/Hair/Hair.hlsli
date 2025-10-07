@@ -119,7 +119,7 @@ namespace Hair
 		float cosThetaD = sqrt((1 + cosThetaL * cosThetaV + NdotV * NdotL) / 2.0);
 
 		const float3 Lp = L - NdotL * N;
-		const float3 Vp = V - NdotL * N;
+		const float3 Vp = V - NdotV * N;
 		const float cosPhi = dot(Lp, Vp) * rsqrt(dot(Lp, Lp) * dot(Vp, Vp) + EPSILON_DIVISION);
 		const float cosHalfPhi = sqrt(saturate(0.5 + 0.5 * cosPhi));
 
@@ -185,7 +185,7 @@ namespace Hair
 		const float wrap = 1;
 		float wrappedNdotL = saturate((dot(fakeN, L) + wrap) / ((1 + wrap) * (1 + wrap)));
 		float diffuseScatter = (1 / Math::PI) * lerp(wrappedNdotL, diffuseKajiya, 0.33);
-		float luma = Color::RGBToLuminance2(baseColor);
+		float luma = max(Color::RGBToLuminance(baseColor), 1e-4);
 		float3 scatterTint = shadow < 1 ? pow(abs(baseColor / luma), 1 - shadow) : 1;
 		S += sqrt(baseColor) * diffuseScatter * scatterTint;
 
@@ -209,7 +209,7 @@ namespace Hair
 
 		float backlit = SharedData::hairSpecularSettings.Transmission;
 
-		dirSpecular += D_Marschner(L, V, T, roughness, baseColor, 0, backlit) * lightColor * SharedData::hairSpecularSettings.SpecularMult;
+		dirTransmission += D_Marschner(L, V, T, roughness, baseColor, 0, backlit) * lightColor * SharedData::hairSpecularSettings.SpecularMult;
 		dirTransmission += GetHairDiffuseAttenuationKajiyaKay(T, V, L, selfShadow, baseColor) * lightColor * SharedData::hairSpecularSettings.DiffuseMult;
 	}
 
@@ -231,15 +231,15 @@ namespace Hair
 		if (SharedData::hairSpecularSettings.HairMode == 1) {
 			specularLobeWeightPrimary = 0;
 			specularLobeWeightSecondary = 0;
-			float3 L = normalize(V - N * dot(V, N));
 
 			if (SharedData::hairSpecularSettings.EnableTangentShift) {
 				const float shift = TexTangentShift.SampleLevel(SampColorSampler, uv, 0).x - 0.5;
 				T = ShiftTangent(T, N, shift);
 			}
+			float3 L = normalize(V - T * dot(V, T));
 
-			specularLobeWeightPrimary = D_Marschner(L, V, T, roughnessPrimary, baseColor, 0.2, 0) * Math::PI;
-			diffuseLobeWeight = GetHairDiffuseAttenuationKajiyaKay(T, V, L, 1, baseColor) * Math::PI;
+			diffuseLobeWeight = D_Marschner(L, V, T, roughnessPrimary, baseColor, 0.2, 0) * Math::PI;
+			diffuseLobeWeight += GetHairDiffuseAttenuationKajiyaKay(T, V, L, 1, baseColor) * Math::PI;
 			return;
 		} else {
 			float NdotVshifted = NdotV;
@@ -255,8 +255,8 @@ namespace Hair
 			specularLobeWeightPrimary = 0;
 			specularLobeWeightSecondary = 0;
 
-			const float2 specularBRDFPrimary = BRDF::EnvBRDFApproxLazarov(roughnessPrimary, NdotVshifted);
-			const float2 specularBRDFSecondary = BRDF::EnvBRDFApproxLazarov(roughnessSecondary, NdotVshifted2);
+			const float2 specularBRDFPrimary = BRDF::EnvBRDF(roughnessPrimary, NdotVshifted);
+			const float2 specularBRDFSecondary = BRDF::EnvBRDF(roughnessSecondary, NdotVshifted2);
 
 			const float3 F0 = HairF0();
 			specularLobeWeightPrimary = F0 * specularBRDFPrimary.x + specularBRDFPrimary.y;
