@@ -759,6 +759,7 @@ void Deferred::Hooks::Renderer_ResetState::thunk(void* This)
 	ID3D11Buffer* buffers[3] = { state->permutationCB->CB(), state->sharedDataCB->CB(), state->featureDataCB->CB() };
 	context->PSSetConstantBuffers(4, 3, buffers);
 	context->CSSetConstantBuffers(5, 2, buffers + 1);
+	context->VSSetConstantBuffers(5, 2, buffers + 1);
 
 	auto* singleton = globals::truePBR;
 	singleton->SetupFrame();

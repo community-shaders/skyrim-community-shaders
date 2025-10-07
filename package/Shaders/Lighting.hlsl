@@ -2295,6 +2295,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 	float3 dirLightColor = Color::Light(DirLightColor.xyz);
+
+	dirLightColor = lerp(dirLightColor, Color::RGBToLuminance(dirLightColor), SharedData::enbSettings.DirectLightingDesaturation) * SharedData::enbSettings.DirectLightingIntensity * SharedData::enbSettings.DirectLightingColorFilter;
+
 	float3 dirLightColorMultiplier = 1;
 
 #	if defined(WATER_EFFECTS)

@@ -6,8 +6,6 @@
 
 namespace SharedData
 {
-
-#if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
 	cbuffer SharedData : register(b5)
 	{
 		float4 WaterData[25];
@@ -194,6 +192,81 @@ namespace SharedData
 		float Strength;      // [0, 1.0] The inverse blend weight of the effect
 	};
 
+	struct ENBSettings
+	{
+		float GradientIntensity;
+		float GradientDesaturation;
+		float GradientTopIntensity;
+		float GradientTopCurve;
+
+		float3 GradientTopColorFilter;
+		float pad0;
+
+		float GradientMiddleIntensity;
+		float GradientMiddleCurve;
+		float2 pad1;
+
+		float3 GradientMiddleColorFilter;
+		float pad2;
+
+		float GradientHorizonIntensity;
+		float GradientHorizonCurve;
+		float2 pad3;
+
+		float3 GradientHorizonColorFilter;
+		float pad4;
+
+		float CloudsIntensity;
+		float CloudsCurve;
+		float CloudsDesaturation;
+		float CloudsOpacity;
+
+		float3 CloudsColorFilter;
+		float pad5;
+
+		float DirectLightingIntensity;
+		float DirectLightingCurve;
+		float DirectLightingDesaturation;
+		float pad6;
+
+		float3 DirectLightingColorFilter;
+		float pad6_1;
+
+		float AmbientLightingIntensity;
+		float AmbientLightingDesaturation;
+		float2 pad7;
+
+		float ColorPow;
+		float3 pad8;
+
+		float FogColorMultiplier;
+		float FogColorCurve;
+		float FogAmountMultiplier;
+		float FogCurveMultiplier;
+
+		float3 FogColorFilter;
+		float pad8_1;
+
+		float IBLMultiplicativeAmount;
+		float3 pad9;
+
+		float VolumetricFogIntensity;
+		float VolumetricFogCurve;
+		float VolumetricFogOpacity;
+		float pad10;
+
+		float3 VolumetricFogColorFilter;
+		float pad11;
+
+		float VolumetricRaysIntensity;
+		float VolumetricRaysRangeFactor;
+		float VolumetricRaysDesaturation;
+		float pad12;
+
+		float3 VolumetricRaysColorFilter;
+		float pad13;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -209,6 +282,7 @@ namespace SharedData
 		TerrainVariationSettings terrainVariationSettings;
 		IBLSettings iblSettings;
 		ExtendedTranslucencySettings extendedTranslucencySettings;
+		ENBSettings enbSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);
@@ -262,7 +336,5 @@ namespace SharedData
 			waterData = WaterData[waterTile];
 		return waterData;
 	}
-
-#endif  // PSHADER
 }
 #endif  // __SHARED_DATA_DEPENDENCY_HLSL__

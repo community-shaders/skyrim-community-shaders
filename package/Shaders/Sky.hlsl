@@ -1,5 +1,7 @@
 #include "Common/FrameBuffer.hlsli"
 #include "Common/VR.hlsli"
+#include "Common/SharedData.hlsli"
+#include "Common/Color.hlsli"
 
 struct VS_INPUT
 {
@@ -124,10 +126,20 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.TexCoord1.xy = TexCoordOff + input.TexCoord;
 #		endif  // TEXLERP
 
-	float3 skyColor = BlendColor[0].xyz * input.Color.xxx + BlendColor[1].xyz * input.Color.yyy +
-	                  BlendColor[2].xyz * input.Color.zzz;
+	float3 horizonColor = BlendColor[0].xyz;
+	float3 middleColor = BlendColor[1].xyz;
+	float3 topColor = BlendColor[2].xyz;
 
-	vsout.Color.xyz = VParams * skyColor;
+	horizonColor = pow(horizonColor, SharedData::enbSettings.GradientHorizonCurve) * SharedData::enbSettings.GradientHorizonIntensity * SharedData::enbSettings.GradientHorizonColorFilter;
+	middleColor = pow(middleColor, SharedData::enbSettings.GradientMiddleCurve) * SharedData::enbSettings.GradientMiddleIntensity * SharedData::enbSettings.GradientMiddleColorFilter;
+	topColor = pow(topColor, SharedData::enbSettings.GradientTopCurve) * SharedData::enbSettings.GradientTopIntensity * SharedData::enbSettings.GradientTopColorFilter;
+
+	float3 skyColor = horizonColor * input.Color.x + middleColor * input.Color.y + topColor * input.Color.z;
+	skyColor *= VParams;
+
+	skyColor = lerp(skyColor, Color::RGBToLuminance(skyColor), SharedData::enbSettings.GradientDesaturation) * SharedData::enbSettings.GradientIntensity;
+
+	vsout.Color.xyz = skyColor;
 	vsout.Color.w = BlendColor[0].w * input.Color.w;
 
 #	endif  // OCCLUSION MOONMASK HORIZFADE
@@ -201,14 +213,34 @@ PS_OUTPUT main(PS_INPUT input)
 #	ifndef OCCLUSION
 #		ifndef TEXLERP
 	float4 baseColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord0.xy);
+
+#		if defined(CLOUDS)
+	baseColor.w = saturate(baseColor.w * SharedData::enbSettings.CloudsOpacity);
+	baseColor.xyz = pow(baseColor.xyz, SharedData::enbSettings.CloudsCurve);
+	baseColor.xyz = lerp(baseColor.xyz, Color::RGBToLuminance(baseColor.xyz), SharedData::enbSettings.CloudsDesaturation) * SharedData::enbSettings.CloudsIntensity * SharedData::enbSettings.CloudsColorFilter;
+#		endif
+
 #			ifdef TEXFADE
 	baseColor.w *= PParams.x;
 #			endif
 #		else
 	float4 blendColor = TexBlendSampler.Sample(SampBlendSampler, input.TexCoord1.xy);
 	float4 baseColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord0.xy);
+
+#		if defined(CLOUDS)
+	blendColor.w = saturate(blendColor.w * SharedData::enbSettings.CloudsOpacity);
+	blendColor.xyz = pow(blendColor.xyz, SharedData::enbSettings.CloudsCurve);
+	blendColor.xyz = lerp(blendColor.xyz, Color::RGBToLuminance(blendColor.xyz), SharedData::enbSettings.CloudsDesaturation) * SharedData::enbSettings.CloudsIntensity * SharedData::enbSettings.CloudsColorFilter;
+
+	baseColor.w = saturate(baseColor.w * SharedData::enbSettings.CloudsOpacity);
+	baseColor.xyz = pow(baseColor.xyz, SharedData::enbSettings.CloudsCurve);
+	baseColor.xyz = lerp(baseColor.xyz, Color::RGBToLuminance(baseColor.xyz), SharedData::enbSettings.CloudsDesaturation) * SharedData::enbSettings.CloudsIntensity * SharedData::enbSettings.CloudsColorFilter;
+#		endif
+
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
 #		endif
+
+
 
 #		if defined(DITHER)
 	float2 noiseGradUv = float2(0.125, 0.125) * input.Position.xy;
