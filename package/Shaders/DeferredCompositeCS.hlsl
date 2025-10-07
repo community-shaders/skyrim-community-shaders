@@ -113,27 +113,10 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
 
 #if defined(SSGI)
-#	if defined(VR)
-	float3 uvF = float3((dispatchID.xy + 0.5) * SharedData::BufferDim.zw, depth);  // calculate high precision uv of initial eye
-	float3 uv2 = Stereo::ConvertStereoUVToOtherEyeStereoUV(uvF, eyeIndex, false);  // calculate other eye uv
-	float3 uv1Mono = Stereo::ConvertFromStereoUV(uvF, eyeIndex);
-	float3 uv2Mono = Stereo::ConvertFromStereoUV(uv2, (1 - eyeIndex));
-	uint2 pixCoord2 = (uint2)(uv2.xy / SharedData::BufferDim.zw - 0.5);
-#	endif
 
 	float ssgiAo;
 	float3 ssgiIl;
 	SampleSSGI(dispatchID.xy, normalWS, ssgiAo, ssgiIl);
-
-#	if defined(VR)
-	float ssgiAo2;
-	float3 ssgiIl2;
-	SampleSSGI(pixCoord2, normalWS, ssgiAo2, ssgiIl2);
-
-	float4 ssgiMixed = Stereo::BlendEyeColors(uv1Mono, float4(ssgiIl, ssgiAo), uv2Mono, float4(ssgiIl2, ssgiAo2));
-	ssgiAo = ssgiMixed.a;
-	ssgiIl = ssgiMixed.rgb;
-#	endif
 
 	float3 directionalAmbientColor = Color::Ambient(max(0, mul(SharedData::DirectionalAmbient, float4(normalWS, 1.0))));
 	directionalAmbientColor *= albedo;
@@ -280,26 +263,9 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 #	endif
 
 #	if defined(SSGI)
-#		if defined(VR)
-		float3 uvF = float3((dispatchID.xy + 0.5) * SharedData::BufferDim.zw, DepthTexture[dispatchID.xy]);  // calculate high precision uv of initial eye
-		float3 uv2 = Stereo::ConvertStereoUVToOtherEyeStereoUV(uvF, eyeIndex, false);                        // calculate other eye uv
-		float3 uv1Mono = Stereo::ConvertFromStereoUV(uvF, eyeIndex);
-		float3 uv2Mono = Stereo::ConvertFromStereoUV(uv2, (1 - eyeIndex));
-		uint2 pixCoord2 = (uint2)(uv2.xy / SharedData::BufferDim.zw - 0.5);
-#		endif
-
 		float ssgiAo;
 		float3 ssgiIlSpecular;
 		SampleSSGISpecular(dispatchID.xy, specularLobe, ssgiAo, ssgiIlSpecular, normalWS, V, roughness);
-
-#		if defined(VR)
-		float ssgiAo2;
-		float3 ssgiIlSpecular2;
-		SampleSSGISpecular(pixCoord2, specularLobe, ssgiAo2, ssgiIlSpecular2, normalWS, V, roughness);
-		float4 ssgiMixed = Stereo::BlendEyeColors(uv1Mono, float4(ssgiIlSpecular, ssgiAo), uv2Mono, float4(ssgiIlSpecular2, ssgiAo2));
-		ssgiAo = ssgiMixed.a;
-		ssgiIlSpecular = ssgiMixed.rgb;
-#		endif
 
 		finalIrradiance = (finalIrradiance * ssgiAo);
 

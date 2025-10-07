@@ -304,11 +304,26 @@ void Streamline::SetDLSSOptions()
 	dlssOptions.preExposure = 1.0f;
 	dlssOptions.sharpness = 0.0f;
 
-	dlssOptions.dlaaPreset = sl::DLSSPreset::ePresetK;
-	dlssOptions.qualityPreset = dlssOptions.dlaaPreset;
-	dlssOptions.balancedPreset = dlssOptions.dlaaPreset;
-	dlssOptions.performancePreset = dlssOptions.dlaaPreset;
-	dlssOptions.ultraPerformancePreset = dlssOptions.dlaaPreset;
+	// Set DLSS preset based on VR mode
+	sl::DLSSPreset preset = sl::DLSSPreset::ePresetK;  // Default
+	switch (globals::features::upscaling.settings.DLSSPreset) {
+	case 0:
+		preset = sl::DLSSPreset::ePresetF;
+		break;
+	case 1:
+		preset = sl::DLSSPreset::ePresetJ;
+		break;
+	case 2:
+	default:
+		preset = sl::DLSSPreset::ePresetK;
+		break;
+	}
+
+	dlssOptions.dlaaPreset = preset;
+	dlssOptions.qualityPreset = preset;
+	dlssOptions.balancedPreset = preset;
+	dlssOptions.performancePreset = preset;
+	dlssOptions.ultraPerformancePreset = preset;
 
 	if (SL_FAILED(result, slDLSSSetOptions(viewport, dlssOptions))) {
 		logger::critical("[Streamline] Could not enable DLSS");

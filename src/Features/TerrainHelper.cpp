@@ -177,12 +177,15 @@ void TerrainHelper::BSLightingShader_SetupMaterial(RE::BSLightingShaderMaterialB
 	const auto state = globals::state;
 	const auto& stateData = globals::game::graphicsState->GetRuntimeData();
 
+	state->permutationData.ExtraFeatureDescriptor &= ~(1 << 6);
+
 	// Populate extended slots
 	// Please update bits allocation in ExtraFeatureDescriptor/Permutation.hlsli and other feature code if you need to change the constant 6
 	for (uint32_t textureI = 0; textureI < 6; ++textureI) {
 		if (materialBase.parallax[textureI] != nullptr && materialBase.parallax[textureI] != stateData.defaultTextureNormalMap) {
 			thExtendedRendererState.SetPSTexture(textureI, materialBase.parallax[textureI]->rendererTexture);
 			state->permutationData.ExtraFeatureDescriptor |= 1 << textureI;
+			state->permutationData.ExtraFeatureDescriptor |= (1 << 6);
 		} else {
 			thExtendedRendererState.SetPSTexture(textureI, nullptr);
 			state->permutationData.ExtraFeatureDescriptor &= ~(1 << textureI);

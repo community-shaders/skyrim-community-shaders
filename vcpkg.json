@@ -45,10 +45,9 @@
             "version": "0.11.0"
         },
         {
-            "name": "magic-enum",
-            "version": "0.9.6",
-            "port-version": 1
+            "name": "directx-headers",
+            "version": "1.606.4"
         }
     ],
-    "builtin-baseline": "98aa6396292d57e737a6ef999d4225ca488859d5"
+    "builtin-baseline": "a62ce77d56ee07513b4b67de1ec2daeaebfae51a"
 }

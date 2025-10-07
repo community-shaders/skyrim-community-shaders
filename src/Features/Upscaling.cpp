@@ -6,6 +6,7 @@
 #include "Upscaling/DX12SwapChain.h"
 #include "Upscaling/FidelityFX.h"
 #include "Upscaling/Streamline.h"
+#include "VR.h"
 #include <Windows.h>
 #include <algorithm>
 #include <directx/d3dx12.h>
@@ -21,7 +22,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	frameGenerationForceEnable,
 	streamlineLogLevel,
 	sharpnessFSR,
-	sharpnessDLSS);
+	sharpnessDLSS,
+	DLSSPreset);
 
 decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChainUpscaling;
 
@@ -56,10 +58,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 	if (upscaling.IsBackendInitialized())
 		upscaling.CheckBackendFeatures(pAdapter);
 
-	if (!globals::game::isVR) {
-		// Use better swap effect to prevent tearing and improve performance
-		pSwapChainDesc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-	}
+	// Use better swap effect to prevent tearing and improve performance
+	pSwapChainDesc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 
 	bool shouldProxy = !globals::game::isVR;
 	if (shouldProxy)
@@ -184,42 +184,44 @@ void Upscaling::DrawSettings()
 	auto upscaleMethod = GetUpscaleMethod();
 
 	// Display upscaling settings if applicable
-	if (!globals::game::isVR) {
-		if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
-			const char* upscalePresetsDLSS[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "DLAA" };
-			const char* upscalePresets[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "Native AA" };
+	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
+		const char* upscalePresetsDLSS[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "DLAA" };
+		const char* upscalePresets[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "Native AA" };
 
-			// Compute a safe preset index (4 - qualityMode) clamped to [0,4] to avoid negative/overflow indexing
-			int presetIndex = 0;
-			if (settings.qualityMode <= 4)
-				presetIndex = 4 - static_cast<int>(settings.qualityMode);
-			presetIndex = std::clamp(presetIndex, 0, 4);
+		// Compute a safe preset index (4 - qualityMode) clamped to [0,4] to avoid negative/overflow indexing
+		int presetIndex = 0;
+		if (settings.qualityMode <= 4)
+			presetIndex = 4 - static_cast<int>(settings.qualityMode);
+		presetIndex = std::clamp(presetIndex, 0, 4);
 
-			// Choose preset name set and the corresponding scales once, then show a
-			// single SliderInt to avoid duplicated calls.
-			const char* baseLabel = nullptr;
+		// Choose preset name set and the corresponding scales once, then show a
+		// single SliderInt to avoid duplicated calls.
+		const char* baseLabel = nullptr;
 
-			if (upscaleMethod == UpscaleMethod::kFSR) {
-				baseLabel = upscalePresets[presetIndex];
-			} else if (upscaleMethod == UpscaleMethod::kDLSS) {
-				baseLabel = upscalePresetsDLSS[presetIndex];
-			}
+		if (upscaleMethod == UpscaleMethod::kFSR) {
+			baseLabel = upscalePresets[presetIndex];
+		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
+			baseLabel = upscalePresetsDLSS[presetIndex];
+		}
 
-			if (baseLabel) {
-				// Format the label with preset name and resolution scale
-				std::string labelWithScale = std::format("{} ( {:.2f}x )", baseLabel, (resolutionScale.x + resolutionScale.y) * 0.5f);
+		if (baseLabel) {
+			// Format the label with preset name and resolution scale
+			std::string labelWithScale = std::format("{} ( {:.2f}x )", baseLabel, (resolutionScale.x + resolutionScale.y) * 0.5f);
 
-				ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, labelWithScale.c_str());
-			}
+			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, labelWithScale.c_str());
+		}
 
-			if (upscaleMethod == UpscaleMethod::kFSR) {
-				ImGui::SliderFloat("Sharpness", &settings.sharpnessFSR, 0.0f, 1.0f, "%.1f");
-			} else if (upscaleMethod == UpscaleMethod::kDLSS) {
-				ImGui::SliderFloat("Sharpness", &settings.sharpnessDLSS, 0.0f, 1.0f, "%.1f");
+		if (upscaleMethod == UpscaleMethod::kFSR) {
+			ImGui::SliderFloat("Sharpness", &settings.sharpnessFSR, 0.0f, 1.0f, "%.1f");
+		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
+			ImGui::SliderFloat("Sharpness", &settings.sharpnessDLSS, 0.0f, 1.0f, "%.1f");
+
+			// VR DLSS preset selection
+			if (globals::game::isVR) {
+				const char* presets[] = { "F (Fast)", "J (Quality)", "K (Ultra)" };
+				ImGui::SliderInt("DLSS Preset", (int*)&settings.DLSSPreset, 0, 2, presets[settings.DLSSPreset]);
 			}
 		}
-	} else {
-		ImGui::Text("Upscaling from lower resolutions is not currently available for VR");
 	}
 
 	if (!globals::game::isVR) {
@@ -358,6 +360,17 @@ void Upscaling::SaveSettings(json& o_json)
 void Upscaling::LoadSettings(json& o_json)
 {
 	settings = o_json;
+
+	// Sanitize loaded settings to ensure enum indices are valid
+	constexpr auto enumCount = 4;  // UpscaleMethod has 4 values: kNONE, kTAA, kFSR, kDLSS
+	if (settings.upscaleMethod >= static_cast<uint>(enumCount)) {
+		logger::warn("[Upscaling] Loaded upscaleMethod {} out of range, clamping to {}", settings.upscaleMethod, enumCount ? enumCount - 1 : 0);
+		settings.upscaleMethod = enumCount ? enumCount - 1 : 0;
+	}
+	if (settings.upscaleMethodNoDLSS >= static_cast<uint>(enumCount)) {
+		logger::warn("[Upscaling] Loaded upscaleMethodNoDLSS {} out of range, clamping to {}", settings.upscaleMethodNoDLSS, enumCount ? enumCount - 1 : 0);
+		settings.upscaleMethodNoDLSS = enumCount ? enumCount - 1 : 0;
+	}
 	auto iniSettingCollection = globals::game::iniPrefSettingCollection;
 	if (iniSettingCollection) {
 		auto setting = iniSettingCollection->GetSetting("bUseTAA:Display");
@@ -409,20 +422,19 @@ void Upscaling::PostPostLoad()
 	// Performs upscaling in between volumetric lighting and post processing
 	stl::write_thunk_call<Main_PostProcessing>(REL::RelocationID(100430, 107148).address() + REL::Relocate(0x1F0, 0x1E7, 0x206));
 
-	if (!REL::Module::IsVR()) {
-		// Patches RSSetScissorRect calls to use dynamic resolution
-		// This is a PC-specific function hence it was missing
+	// Patches RSSetScissorRect calls to use dynamic resolution
+	// This is a PC-specific function hence it was missing
+	if (!globals::game::isVR)
 		stl::detour_thunk<SetScissorRect>(REL::RelocationID(75564, 77365));
 
-		// Patches facegen texture generation to not use dynamic resolution
-		stl::detour_thunk<BSFaceGenManager_UpdatePendingCustomizationTextures>(REL::RelocationID(26455, 27041));
+	// Patches facegen texture generation to not use dynamic resolution
+	stl::detour_thunk<BSFaceGenManager_UpdatePendingCustomizationTextures>(REL::RelocationID(26455, 27041));
 
-		// Patches precipitation camera to not use dynamic resolution
-		stl::write_thunk_call<Main_RenderPrecipitation>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x3A1, 0x3A1, 0x2FA));
+	// Patches precipitation camera to not use dynamic resolution
+	stl::write_thunk_call<Main_RenderPrecipitation>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x3A1, 0x3A1, 0x2FA));
 
-		// Forces FXAA off
-		stl::detour_thunk<BSImageSpace_Init_FXAA>(REL::RelocationID(98974, 105626));
-	}
+	// Forces FXAA off
+	stl::detour_thunk<BSImageSpace_Init_FXAA>(REL::RelocationID(98974, 105626));
 
 	logger::info("[Upscaling] Installed hooks");
 }
@@ -436,7 +448,7 @@ Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
 
 void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 {
-	logger::debug("[Upscaling] Creating texture resources for method {}", (int)a_upscalemethod);
+	logger::debug("[Upscaling] Creating texture resources for method {} ({})", static_cast<int>(a_upscalemethod), magic_enum::enum_name(a_upscalemethod));
 
 	auto renderer = globals::game::renderer;
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
@@ -499,7 +511,7 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 
 void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 {
-	logger::debug("[Upscaling] Destroying texture resources for method {}", (int)a_upscalemethod);
+	logger::debug("[Upscaling] Destroying texture resources for method {} ({})", static_cast<int>(a_upscalemethod), magic_enum::enum_name(a_upscalemethod));
 
 	// Clean up D3D11 textures that are no longer needed
 	// Only destroy textures when switching away from methods that use them
@@ -549,12 +561,13 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 	static auto previousUpscaleMode = UpscaleMethod::kTAA;
 	static bool previousFrameGenMode = false;
 
-	bool frameGenModeChanged = (settings.frameGenerationMode && d3d12SwapChainActive) != previousFrameGenMode;
+	bool frameGenModeCurrent = (settings.frameGenerationMode && d3d12SwapChainActive);
+	bool frameGenModeChanged = frameGenModeCurrent != previousFrameGenMode;
 	bool upscaleModeChanged = (previousUpscaleMode != a_upscalemethod);
 
 	if (upscaleModeChanged || frameGenModeChanged) {
-		logger::debug("[Upscaling] Resource change detected - Upscale: {} -> {}, FrameGen: {} -> {}",
-			(int)previousUpscaleMode, (int)a_upscalemethod, previousFrameGenMode, (settings.frameGenerationMode && d3d12SwapChainActive));
+		logger::debug("[Upscaling] Resource change detected - Upscale: {} ({}) -> {} ({}), FrameGen: {} -> {} (d3d12Active={})",
+			static_cast<int>(previousUpscaleMode), magic_enum::enum_name(previousUpscaleMode), static_cast<int>(a_upscalemethod), magic_enum::enum_name(a_upscalemethod), previousFrameGenMode, frameGenModeCurrent, d3d12SwapChainActive);
 
 		// Destroy previous upscaling method resources (this will intelligently clean up based on what's still needed)
 		if (upscaleModeChanged) {
@@ -692,10 +705,8 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	CheckResources(upscaleMethod);
 
 	// The game defaults this to a non-zero value
-	if (!globals::game::isVR) {
-		auto fDRClampOffset = RE::GetINISetting("fDRClampOffset:Display");
-		fDRClampOffset->data.f = 0.0f;
-	}
+	auto fDRClampOffset = RE::GetINISetting("fDRClampOffset:Display");
+	fDRClampOffset->data.f = 0.0f;
 
 	// Cache original TAA values for UI
 	projectionPosScaleX = a_viewport->projectionPosScaleX;
@@ -711,9 +722,7 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
 		float2 resolutionScaleBase = { 1.0f, 1.0f };
 
-		if (globals::game::isVR) {
-			resolutionScaleBase = { 1.0f, 1.0f };
-		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
+		if (upscaleMethod == UpscaleMethod::kDLSS) {
 			resolutionScaleBase = streamline.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
 		} else if (upscaleMethod == UpscaleMethod::kFSR) {
 			resolutionScaleBase = fidelityFX.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
@@ -763,9 +772,27 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	dynamicResolutionWidthRatio = resolutionScale.x;
 	dynamicResolutionHeightRatio = resolutionScale.y;
 
-	// Disable dynamic resolution unless the game explictly enables it
+	// Disable dynamic resolution unless the game explicitly enables it
 	if (!globals::game::isVR)
 		runtimeData.dynamicResolutionLock = 1;
+
+	// If running in VR and an external upscaler is active, force-disable
+	// the engine's depth-buffer culling immediately. This ensures that
+	// enabling upscaling at runtime (after game load) does not leave the
+	// VR depth-buffer culling enabled which can cause incorrect occlusion.
+	if (globals::game::isVR) {
+		auto& vr = globals::features::vr;
+		if (IsUpscalingActive()) {
+			if (vr.gDepthBufferCulling) {
+				if (*vr.gDepthBufferCulling) {
+					*vr.gDepthBufferCulling = false;
+					logger::info("[Upscaling] VR detected - forcing depth buffer culling OFF due to active downscaling upscaler (scale={})", resolutionScale.x);
+				}
+			} else {
+				logger::warn("[Upscaling] VR depth buffer culling pointer is null, cannot force disable");
+			}
+		}
+	}
 }
 
 void Upscaling::SetupResources()
@@ -794,7 +821,7 @@ void Upscaling::SetupResources()
 	depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;  // Write to all depth bits
 	depthStencilDesc.DepthFunc = D3D11_COMPARISON_ALWAYS;          // Always pass depth test (write all depths)
 
-	if (REL::Module::IsVR()) {
+	if (globals::game::isVR) {
 		depthStencilDesc.StencilEnable = true;     // Enable stencil testing
 		depthStencilDesc.StencilReadMask = 0xFF;   // Read all stencil bits
 		depthStencilDesc.StencilWriteMask = 0xFF;  // Write to all stencil bits
@@ -1055,7 +1082,23 @@ double Upscaling::GetRefreshRate(HWND a_window)
 
 bool Upscaling::IsFrameGenerationActive() const
 {
-	return d3d12SwapChainActive && settings.frameGenerationMode && fidelityFX.isFrameGenActive;
+	return d3d12SwapChainActive && settings.frameGenerationMode && fidelityFX.isFrameGenActive && !globals::game::isVR;
+}
+
+bool Upscaling::IsUpscalingActive()
+{
+	auto method = GetUpscaleMethod();
+
+	// Only consider vendor upscalers (FSR/XeSS/DLSS) as "active" when the
+	// selected method actually produces a downscale. If the renderer is
+	// currently running at 1:1 (no downscale) then depth-buffer culling and
+	// other VR-sensitive behavior can remain enabled.
+	if (!(method == UpscaleMethod::kFSR || method == UpscaleMethod::kDLSS)) {
+		return false;
+	}
+
+	// resolutionScale.x represents renderWidth / displayWidth.
+	return resolutionScale.x < .99f;
 }
 
 /**
@@ -1403,7 +1446,7 @@ void Upscaling::MenuManagerDrawInterfaceStartHook::thunk(int64_t a1)
 	func(a1);
 }
 
-void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a1, uint32_t a3, uint32_t er8_)
+void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32_t a3, RE::RENDER_TARGET a_target, void* a_4, bool a_5)
 {
 	auto& upscaling = globals::features::upscaling;
 	auto upscaleMethod = upscaling.GetUpscaleMethod();
@@ -1419,7 +1462,7 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a1, uint32_t a
 
 	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod == UpscaleMethod::kTAA;
 
-	func(a1, a3, er8_);
+	func(a_this, a3, a_target, a_4, a_5);
 
 	if (upscaleMethod == UpscaleMethod::kDLSS)
 		upscaling.ApplyNISSharpening();
