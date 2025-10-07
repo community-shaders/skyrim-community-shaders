@@ -187,14 +187,7 @@ void GrassCollision::Update()
 
 		perFrameData.ValidMargin = { (int)cellIDDiff.x, (int)cellIDDiff.y };
 
-		auto calendar = RE::Calendar::GetSingleton();
-
-		float currentGameTime = calendar->GetCurrentGameTime();
-		static float lastGameTime = currentGameTime;
-
-		perFrameData.TimeDelta = float((100000.0 / 1.16) * abs(double(currentGameTime) - double(lastGameTime)) / double(calendar->GetTimescale()));
-
-		lastGameTime = currentGameTime;
+		perFrameData.TimeDelta = *globals::game::deltaTime * !globals::game::ui->GameIsPaused();
 
 		perFrameData.CameraHeightDelta = prevEyePosNI.z - eyePosNI.z;
 
