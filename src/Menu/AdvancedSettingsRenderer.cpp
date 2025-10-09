@@ -117,6 +117,14 @@ void AdvancedSettingsRenderer::RenderAdvancedSection()
 			Util::DumpSettingsOptions();
 		}
 
+		// Clear Shader Cache button
+		if (ImGui::Button("Clear Shader Cache", { -1, 0 })) {
+			shaderCache->Clear();
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Clear all compiled shaders from memory. Forces recompilation of all shaders on next use.");
+		}
+
 		// Blocking shader controls
 		if (!shaderCache->blockedKey.empty()) {
 			auto blockingButtonString = std::format("Stop Blocking {} Shaders", shaderCache->blockedIDs.size());
