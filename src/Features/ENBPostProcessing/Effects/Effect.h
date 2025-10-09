@@ -40,15 +40,8 @@ public:
 	void LoadUIVariables();
 	void UpdateUIVariables();
 
-	// Technique selection (legacy)
+	// Technique selection
 	std::string GetSelectedTechnique() const;
-	const std::vector<std::string>& GetAvailableTechniques() const { return availableTechniques; }
-
-	// UI technique selection (indexed access)
-	uint32_t GetSelectedTechniqueIndex() const { return selectedTechniqueIndex; }
-	void SetSelectedTechniqueIndex(uint32_t index);
-	const std::vector<UITechnique>& GetUITechniques() const { return uiTechniques; }
-	std::string GetTechniqueNameByIndex(uint32_t index) const;
 
 	// Pure virtual methods for derived classes to implement
 	virtual std::string GetName() const = 0;

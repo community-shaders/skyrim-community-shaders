@@ -179,11 +179,6 @@ PS_OUTPUT main(PS_INPUT input)
 		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
 	}
 #		endif
-
-	fogColor = pow(fogColor, SharedData::enbSettings.FogColorCurve) * SharedData::enbSettings.FogColorMultiplier * lerp(1.0, SharedData::enbSettings.FogColorFilter, SharedData::enbSettings.FogColorFilterAmount);
-
-	fogFactor = saturate(lerp(0.0, pow(fogFactor, SharedData::enbSettings.FogCurveMultiplier), SharedData::enbSettings.FogAmountMultiplier));
-
 	if (depth < 0.999999) {
 		composedColor.xyz = FogNearColor.w * lerp(composedColor.xyz, fogColor, fogFactor);
 	}

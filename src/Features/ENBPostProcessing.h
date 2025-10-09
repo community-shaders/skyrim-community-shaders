@@ -111,5 +111,11 @@ public:
 	virtual void DrawSettings() override;
 	virtual void SetupResources() override;
 	virtual void Reset() override;
+	void OverrideWeather(RE::Sky* a_sky);
+	struct DirectionalAmbientColors
+	{
+		RE::NiColor directionalAmbientColors[3][2];
+	};
+	void OverrideAmbientLighting(DirectionalAmbientColors& DirectionalAmbientColors);
 	virtual void PostPostLoad() override;
 };

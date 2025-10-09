@@ -108,6 +108,17 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterTimeOfDaySetting("CloudsOpacity", "SKY", 1, true);
 	settingManager.RegisterColorTimeOfDaySetting("CloudsColorFilter", "SKY", { 1.0f, 1.0f, 1.0f }, true);
 
+	settingManager.RegisterTimeOfDaySetting("SunIntensity", "SKY", 1, true);
+	settingManager.RegisterTimeOfDaySetting("SunDesaturation", "SKY", 0, true);
+	settingManager.RegisterColorTimeOfDaySetting("SunColorFilter", "SKY", { 1.0f, 1.0f, 1.0f }, true);
+
+	settingManager.RegisterTimeOfDaySetting("MoonIntensity", "SKY", 1, true);
+	settingManager.RegisterTimeOfDaySetting("MoonDesaturation", "SKY", 0, true);
+	settingManager.RegisterColorTimeOfDaySetting("MoonColorFilter", "SKY", { 1.0f, 1.0f, 1.0f }, true);
+
+	settingManager.RegisterTimeOfDaySetting("StarsIntensity", "SKY", 1, true);
+	settingManager.RegisterTimeOfDaySetting("StarsCurve", "SKY", 1, true);
+
 	// ENVIRONMENT
 	settingManager.RegisterTimeOfDaySetting("DirectLightingIntensity", "ENVIRONMENT", 1, true);
 	settingManager.RegisterTimeOfDaySetting("DirectLightingCurve", "ENVIRONMENT", 1, true);
@@ -117,7 +128,7 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterTimeOfDaySetting("AmbientLightingDesaturation", "ENVIRONMENT", 0, true);
 
 	settingManager.RegisterColorTimeOfDaySetting("DirectLightingColorFilter", "ENVIRONMENT", { 1.0f, 1.0f, 1.0f }, true);
-	settingManager.RegisterTimeOfDaySetting("DirectLightingColorFilterAmount", "ENVIRONMENT", 1, true);
+	settingManager.RegisterTimeOfDaySetting("DirectLightingColorFilterAmount", "ENVIRONMENT", 0, true);
 
 	settingManager.RegisterTimeOfDaySetting("FogColorMultiplier", "ENVIRONMENT", 1, true);
 	settingManager.RegisterTimeOfDaySetting("FogColorCurve", "ENVIRONMENT", 1, true);
@@ -131,6 +142,9 @@ void EffectManager::RegisterSettings()
 
 	// IMAGEBASEDLIGHTING
 	settingManager.RegisterTimeOfDaySetting("MultiplicativeAmount", "IMAGEBASEDLIGHTING", 0, true);
+
+	// SUNGLARE
+	settingManager.RegisterTimeOfDaySetting("GlowIntensity", "SUNGLARE", 1, true);
 
 	// VOLUMETRICFOG
 	settingManager.RegisterTimeOfDaySetting("Intensity", "VOLUMETRICFOG", 1, true);

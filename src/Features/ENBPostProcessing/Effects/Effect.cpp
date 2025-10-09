@@ -36,7 +36,7 @@ bool Effect::Load()
 
 	selectedTechniqueIndex = static_cast<uint32_t>(GetPrivateProfileIntA(section.c_str(), "TECHNIQUE", selectedTechniqueIndex, iniPath.string().c_str()));
 
-	selectedTechniqueIndex = std::clamp(selectedTechniqueIndex, 0u, (uint)uiTechniques.size() - 1u);
+	selectedTechniqueIndex = std::clamp(selectedTechniqueIndex, 1u, (uint)uiTechniques.size()) - 1u;
 
 	logger::info("[ENBPP] Loaded settings from '{}' for effect '{}'", iniPath.string(), GetName());
 	return true;
@@ -88,7 +88,7 @@ void Effect::Save()
 		}
 	}
 
-	std::string techniqueValue = std::to_string(selectedTechniqueIndex);
+	std::string techniqueValue = std::to_string(selectedTechniqueIndex + 1u);
 	BOOL techniqueResult = WritePrivateProfileStringA(section.c_str(), "TECHNIQUE", techniqueValue.c_str(), iniPath.string().c_str());
 	if (!techniqueResult) {
 		logger::warn("[ENBPP] Failed to write TECHNIQUE key to ini file '{}'", iniPath.string());
@@ -1191,25 +1191,10 @@ TextureManager::Texture Effect::CreateTexture(uint32_t width, uint32_t height, D
 	return texture;
 }
 
-void Effect::SetSelectedTechniqueIndex(uint32_t index)
-{
-	if (index < uiTechniques.size()) {
-		selectedTechniqueIndex = index;
-	}
-}
-
 std::string Effect::GetSelectedTechnique() const
 {
 	if (selectedTechniqueIndex < uiTechniques.size()) {
 		return uiTechniques[selectedTechniqueIndex].techniqueName;
-	}
-	return "";
-}
-
-std::string Effect::GetTechniqueNameByIndex(uint32_t index) const
-{
-	if (index < uiTechniques.size()) {
-		return uiTechniques[index].techniqueName;
 	}
 	return "";
 }
