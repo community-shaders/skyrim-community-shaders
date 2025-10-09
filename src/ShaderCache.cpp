@@ -1671,7 +1671,7 @@ namespace SIE
 				{ "BSImagespaceShaderVolumetricLightingBlurVCS", RE::ImageSpaceManager::GetCurrentIndex(ISVolumetricLightingBlurVCS) },
 
 				// VR only shaders
-				// Disable BSImagespaceShaderCopyDepthBuffer since we don't have it REed and it cause issues with cache and upscaling
+				// Disable BSImagespaceShaderCopyDepthBuffer since we don't have it REed and it causes issues with cache and upscaling
 				// https://github.com/doodlum/skyrim-community-shaders/issues/1552
 				// { "BSImagespaceShaderCopyDepthBuffer", RE::ImageSpaceManager::GetCurrentIndex(ISCopyDepthBuffer) },
 				// { "BSImagespaceShaderCopyDepthBuffer_DR", RE::ImageSpaceManager::GetCurrentIndex(ISCopyDepthBuffer_DR) },
