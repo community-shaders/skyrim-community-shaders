@@ -158,28 +158,34 @@ void AdvancedSettingsRenderer::RenderAdvancedSection()
 			ImGui::TreePop();
 		}
 
-		// Frame debugging toggle and RenderDoc integration
-		ImGui::Checkbox("Frame Debugging", &globals::state->frameDebugging);
+		// Frame annotations toggle
+		ImGui::Checkbox("Frame Annotations", &globals::state->frameAnnotations);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Enables frame debugging for providing reports to the Community Shaders team.");
+			ImGui::Text("Enable detailed frame annotations for debugging render passes and draw calls.");
+		}
+
+		// RenderDoc capture toggle and integration
+		ImGui::Checkbox("Enable RenderDoc Capture", &globals::state->enableRenderDocCapture);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Enable RenderDoc frame capture for providing debug captures to the Community Shaders team.");
 		}
 
 		auto renderDoc = RenderDoc::GetSingleton();
 
-		bool frameDebuggingActive = globals::state->frameDebugging;
+		bool renderDocCaptureEnabled = globals::state->enableRenderDocCapture;
 		bool renderDocActive = renderDoc->IsAvailable();
 
 		static uint32_t clearedCaptures = 0;
 
-		if (frameDebuggingActive && !renderDocActive) {
+		if (renderDocCaptureEnabled && !renderDocActive) {
 			auto& themeSettings = Menu::GetSingleton()->settings.Theme;
-			ImGui::TextColored(themeSettings.StatusPalette.RestartNeeded, "Requires restart to enable frame debugging.");
-		} else if (!frameDebuggingActive && renderDocActive) {
+			ImGui::TextColored(themeSettings.StatusPalette.RestartNeeded, "Requires restart to enable RenderDoc capture.");
+		} else if (!renderDocCaptureEnabled && renderDocActive) {
 			auto& themeSettings = Menu::GetSingleton()->settings.Theme;
-			ImGui::TextColored(themeSettings.StatusPalette.Warning, "Requires restart to disable frame debugging, performance will be severely impacted.");
-		} else if (frameDebuggingActive && renderDocActive) {
+			ImGui::TextColored(themeSettings.StatusPalette.Warning, "Requires restart to disable RenderDoc capture, performance will be severely impacted.");
+		} else if (renderDocCaptureEnabled && renderDocActive) {
 			auto& themeSettings = Menu::GetSingleton()->settings.Theme;
-			ImGui::TextColored(themeSettings.StatusPalette.InfoColor, "Frame debugging is active.");
+			ImGui::TextColored(themeSettings.StatusPalette.InfoColor, "RenderDoc capture is active.");
 
 			ImGui::SameLine();
 

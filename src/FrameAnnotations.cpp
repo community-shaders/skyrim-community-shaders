@@ -29,7 +29,7 @@ namespace FrameAnnotations
 	{
 		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
-			if (globals::state->frameDebugging) {
+			if (globals::state->frameAnnotations) {
 				uint32_t descriptor = 0;
 				if (globals::game::currentPixelShader && *globals::game::currentPixelShader) {
 					descriptor = (*globals::game::currentPixelShader)->id;
@@ -53,7 +53,7 @@ namespace FrameAnnotations
 		{
 			func(shader, pass, renderFlags);
 
-			if (globals::state->frameDebugging) {
+			if (globals::state->frameAnnotations) {
 				globals::state->EndPerfEvent();
 			}
 		}
@@ -97,7 +97,7 @@ namespace FrameAnnotations
 	{
 		static void thunk(RE::BSGraphics::BSShaderAccumulator* shaderAccumulator, uint32_t renderFlags)
 		{
-			const bool frameAnnotations = globals::state->frameDebugging;
+			const bool frameAnnotations = globals::state->frameAnnotations;
 			if (frameAnnotations) {
 				globals::state->BeginPerfEvent(std::format("BSShaderAccumulator::FinishAccumulatingDispatch [{}] <{}>",
 					static_cast<uint32_t>(shaderAccumulator->GetRuntimeData().renderMode), renderFlags));
@@ -175,7 +175,7 @@ namespace FrameAnnotations
 			void* passIndexList,
 			uint32_t renderFlags)
 		{
-			const bool frameAnnotations = globals::state->frameDebugging;
+			const bool frameAnnotations = globals::state->frameAnnotations;
 			if (frameAnnotations) {
 				globals::state->BeginPerfEvent(std::format("BSBatchRenderer::RenderBatches ({:X})[{}] <{}>", *currentPass, *bucketIndex,
 					renderFlags));
@@ -287,7 +287,7 @@ namespace FrameAnnotations
 	{
 		static void thunk(void* shaderAccumulator, uint32_t firstPass, uint32_t lastPass, uint32_t renderFlags, int groupIndex)
 		{
-			const bool frameAnnotations = globals::state->frameDebugging;
+			const bool frameAnnotations = globals::state->frameAnnotations;
 			if (frameAnnotations) {
 				globals::state->BeginPerfEvent(std::format("BSShaderAccumulator::RenderBatches ({:X}:{:X})[{}] <{}>", firstPass, lastPass, groupIndex,
 					renderFlags));
@@ -306,7 +306,7 @@ namespace FrameAnnotations
 	{
 		static void thunk(void* passList, uint32_t renderFlags)
 		{
-			const bool frameAnnotations = globals::state->frameDebugging;
+			const bool frameAnnotations = globals::state->frameAnnotations;
 			if (frameAnnotations) {
 				globals::state->BeginPerfEvent(std::format("BSShaderAccumulator::RenderPersistentPassList <{}>", renderFlags));
 			}
@@ -335,7 +335,7 @@ namespace FrameAnnotations
 
 	void OnPostPostLoad()
 	{
-		if (!globals::state->frameDebugging)
+		if (!globals::state->frameAnnotations)
 			return;
 
 		stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Lighting>>(
@@ -1008,7 +1008,7 @@ namespace FrameAnnotations
 
 	void OnDataLoaded()
 	{
-		if (!globals::state->frameDebugging)
+		if (!globals::state->frameAnnotations)
 			return;
 
 		auto renderer = globals::game::renderer;

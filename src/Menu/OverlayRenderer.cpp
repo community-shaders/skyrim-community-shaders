@@ -113,7 +113,7 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 	auto& themeSettings = Menu::GetSingleton()->GetTheme();
 	auto* renderDoc = RenderDoc::GetSingleton();
 	bool renderDocAvailable = renderDoc->IsAvailable();
-	const auto renderDocInformation = "WARNING: Frame debugging is active, performance will be severely impacted.\nPress F12, Print Screen or press the Capture button in the Advanced menu.\nDisable frame debugging in the Advanced menu.";
+	const auto renderDocInformation = "WARNING: RenderDoc capture is active, performance will be severely impacted.\nPress F12, Print Screen or press the Capture button in the Advanced menu.\nDisable RenderDoc capture in the Advanced menu.";
 
 	auto progressTitle = fmt::format("{}Compiling Shaders: {}",
 		shaderCache->backgroundCompilation ? "Background " : "",

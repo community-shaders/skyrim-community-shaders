@@ -165,8 +165,8 @@ bool Load()
 	auto log = spdlog::default_logger();
 	log->set_level(state->GetLogLevel());
 
-	// Initialize RenderDoc DLL for debugging, which automatically hooks the game
-	if (state->frameDebugging)
+	// Initialize RenderDoc DLL for frame capture debugging
+	if (state->enableRenderDocCapture)
 		RenderDoc::GetSingleton()->Initialize();
 
 	const std::array incompatibleDLLs = {
