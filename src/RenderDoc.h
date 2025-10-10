@@ -2,6 +2,7 @@
 
 #include <d3d11.h>
 #include <windows.h>
+#include <string>
 
 #include <Renderdoc/renderdoc_app.h>
 

@@ -1,5 +1,7 @@
 #include "RenderDoc.h"
 
+#include <filesystem>
+
 constexpr const wchar_t* RENDERDOC_DLL_PATH = L"Data\\SKSE\\Plugins\\Renderdoc\\renderdoc.dll";
 constexpr const char* CAPTURE_PATH_TEMPLATE = ".\\Data\\SKSE\\Plugins\\CommunityShaders\\Captures\\";
 
