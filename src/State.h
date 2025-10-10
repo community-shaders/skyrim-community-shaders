@@ -132,7 +132,7 @@ public:
 
 	void SetAdapterDescription(const std::wstring& description);
 
-	bool frameAnnotations = false;
+	bool frameDebugging = false;
 
 	uint lastVertexDescriptor = 0;
 	uint lastPixelDescriptor = 0;

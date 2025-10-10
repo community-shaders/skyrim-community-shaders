@@ -9,6 +9,7 @@
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
 #include "Globals.h"
 #include "Menu.h"
+#include "RenderDoc.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
@@ -157,8 +158,60 @@ void AdvancedSettingsRenderer::RenderAdvancedSection()
 			ImGui::TreePop();
 		}
 
-		// Frame annotations toggle
-		ImGui::Checkbox("Frame Annotations", &globals::state->frameAnnotations);
+		// Frame debugging toggle and RenderDoc integration
+		ImGui::Checkbox("Frame Debugging", &globals::state->frameDebugging);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Enables frame debugging for providing reports to the Community Shaders team.");
+		}
+
+		auto renderDoc = RenderDoc::GetSingleton();
+
+		bool frameDebuggingActive = globals::state->frameDebugging;
+		bool renderDocActive = renderDoc->IsAvailable();
+
+		static uint32_t clearedCaptures = 0;
+
+		if (frameDebuggingActive && !renderDocActive) {
+			auto& themeSettings = Menu::GetSingleton()->settings.Theme;
+			ImGui::TextColored(themeSettings.StatusPalette.RestartNeeded, "Requires restart to enable frame debugging.");
+		} else if (!frameDebuggingActive && renderDocActive) {
+			auto& themeSettings = Menu::GetSingleton()->settings.Theme;
+			ImGui::TextColored(themeSettings.StatusPalette.Warning, "Requires restart to disable frame debugging, performance will be severely impacted.");
+		} else if (frameDebuggingActive && renderDocActive) {
+			auto& themeSettings = Menu::GetSingleton()->settings.Theme;
+			ImGui::TextColored(themeSettings.StatusPalette.InfoColor, "Frame debugging is active.");
+
+			ImGui::SameLine();
+
+			if (ImGui::Button("Create Capture")) {
+				renderDoc->TriggerCapture();
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Start a RenderDoc frame capture for debugging. This will capture the next frame and save it to a file next to SkyrimSE.exe.");
+			}
+
+			auto numCaptures = renderDoc->GetNumCaptures();
+			if (numCaptures > clearedCaptures) {
+				auto capturePath = renderDoc->GetCapturePath(numCaptures - 1);
+				ImGui::TextColored(themeSettings.StatusPalette.SuccessColor, std::format("Saved to {}", capturePath).c_str());
+			}
+		}
+
+		auto captureDiskStorage = renderDoc->CalculateCapturesDiskUsage();
+
+		if (captureDiskStorage > 0) {
+			auto& themeSettings = Menu::GetSingleton()->settings.Theme;
+			ImGui::TextColored(themeSettings.StatusPalette.Warning, std::format("Frame captures disk usage: {} MB", captureDiskStorage).c_str());
+		} else {
+			auto& themeSettings = Menu::GetSingleton()->settings.Theme;
+			ImGui::TextColored(themeSettings.StatusPalette.InfoColor, std::format("Frame captures disk usage: {} MB", captureDiskStorage).c_str());
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Clear Captures")) {
+			renderDoc->ClearFrameCaptures();
+			clearedCaptures = renderDoc->GetNumCaptures();
+		}
 	}
 }
 
