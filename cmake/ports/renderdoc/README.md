@@ -5,8 +5,9 @@ This is a custom vcpkg port for RenderDoc's in-application API.
 ## What This Port Provides
 
 This port installs:
-- **API Header**: `renderdoc_app.h` from the RenderDoc GitHub repository
-- **Documentation**: Usage instructions and license information
+
+-   **API Header**: `renderdoc_app.h` from the RenderDoc GitHub repository
+-   **Documentation**: Usage instructions and license information
 
 ## What This Port Does NOT Provide
 
@@ -20,8 +21,8 @@ This port does **not** include the `renderdoc.dll` runtime library because:
 ## Getting the Runtime DLL
 
 The `renderdoc.dll` should be obtained from official RenderDoc releases:
-- Download page: https://renderdoc.org/builds
-- Stable releases: https://renderdoc.org/stable/
+
+-   Download page: https://renderdoc.org/builds
 
 For Community Shaders, the DLL is stored in `package/SKSE/Plugins/Renderdoc/renderdoc.dll` and is deployed as part of the mod package.
 
@@ -35,7 +36,7 @@ After vcpkg installs this port:
 // Load the DLL at runtime
 HMODULE mod = LoadLibraryW(L"renderdoc.dll");
 if(mod) {
-    pRENDERDOC_GetAPI RENDERDOC_GetAPI = 
+    pRENDERDOC_GetAPI RENDERDOC_GetAPI =
         (pRENDERDOC_GetAPI)GetProcAddress(mod, "RENDERDOC_GetAPI");
     // ... use the API
 }
@@ -46,6 +47,7 @@ See the [official documentation](https://renderdoc.org/docs/in_application_api.h
 ## Port Maintenance
 
 To update the RenderDoc version:
+
 1. Update the `REF` in `portfile.cmake` to the new tag/version
 2. Update the `SHA512` hash (vcpkg will provide the correct hash on first build attempt)
 3. Update the `version` in `vcpkg.json`

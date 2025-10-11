@@ -1,4 +1,6 @@
 #include "FileSystem.h"
+#include <Windows.h>
+#include <filesystem>
 #include <fstream>
 #include <psapi.h>
 
@@ -88,16 +90,6 @@ namespace Util
 			return GetShadersPath() / "Features";
 		}
 
-		std::filesystem::path GetFeatureIniPath(const std::string& featureName)
-		{
-			return GetFeaturesPath() / (featureName + ".ini");
-		}
-
-		std::filesystem::path GetFeatureShaderPath(const std::string& featureName)
-		{
-			return GetShadersPath() / featureName;
-		}
-
 		std::filesystem::path GetCurrentModuleRealPath()
 		{
 			try {
@@ -140,6 +132,16 @@ namespace Util
 		{
 			return GetShadersRealPath() / "Features";
 		}
+
+		std::filesystem::path GetFeatureIniPath(const std::string& featureName)
+		{
+			return GetFeaturesPath() / (featureName + ".ini");
+		}
+
+		std::filesystem::path GetFeatureShaderPath(const std::string& featureName)
+		{
+			return GetFeaturesPath() / featureName;
+		}
 	}
 
 	// File system utilities implementation
@@ -170,6 +172,15 @@ namespace Util
 			}
 
 			return result;
+		}
+
+		void EnsureDirectoryExists(const std::filesystem::path& path)
+		{
+			std::error_code ec;
+			std::filesystem::create_directories(path, ec);
+			if (ec) {
+				logger::warn("Failed to create directory '{}': {}", path.string(), ec.message());
+			}
 		}
 	}
 }

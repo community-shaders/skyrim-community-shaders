@@ -4,7 +4,6 @@
 #include "Globals.h"
 #include "Hooks.h"
 #include "Menu.h"
-#include "RenderDoc.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
@@ -164,10 +163,6 @@ bool Load()
 	state->Load();
 	auto log = spdlog::default_logger();
 	log->set_level(state->GetLogLevel());
-
-	// Initialize RenderDoc DLL for frame capture debugging
-	if (state->enableRenderDocCapture)
-		RenderDoc::GetSingleton()->Initialize();
 
 	const std::array incompatibleDLLs = {
 		L"Data/SKSE/Plugins/ShaderTools.dll",

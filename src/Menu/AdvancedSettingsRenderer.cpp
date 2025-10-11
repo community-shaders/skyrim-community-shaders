@@ -5,11 +5,11 @@
 #include <imgui_stdlib.h>
 #include <thread>
 
+#include "Feature.h"
 #include "FeatureIssues.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
 #include "Globals.h"
 #include "Menu.h"
-#include "RenderDoc.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
@@ -162,61 +162,6 @@ void AdvancedSettingsRenderer::RenderAdvancedSection()
 		ImGui::Checkbox("Frame Annotations", &globals::state->frameAnnotations);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Enable detailed frame annotations for debugging render passes and draw calls.");
-		}
-
-		// RenderDoc capture toggle and integration
-		ImGui::Checkbox("Enable RenderDoc Capture", &globals::state->enableRenderDocCapture);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Enable RenderDoc frame capture for providing debug captures to the Community Shaders team.");
-		}
-
-		auto renderDoc = RenderDoc::GetSingleton();
-
-		bool renderDocCaptureEnabled = globals::state->enableRenderDocCapture;
-		bool renderDocActive = renderDoc->IsAvailable();
-
-		static uint32_t clearedCaptures = 0;
-
-		if (renderDocCaptureEnabled && !renderDocActive) {
-			auto& themeSettings = Menu::GetSingleton()->settings.Theme;
-			ImGui::TextColored(themeSettings.StatusPalette.RestartNeeded, "Requires restart to enable RenderDoc capture.");
-		} else if (!renderDocCaptureEnabled && renderDocActive) {
-			auto& themeSettings = Menu::GetSingleton()->settings.Theme;
-			ImGui::TextColored(themeSettings.StatusPalette.Warning, "Requires restart to disable RenderDoc capture, performance will be severely impacted.");
-		} else if (renderDocCaptureEnabled && renderDocActive) {
-			auto& themeSettings = Menu::GetSingleton()->settings.Theme;
-			ImGui::TextColored(themeSettings.StatusPalette.InfoColor, "RenderDoc capture is active.");
-
-			ImGui::SameLine();
-
-			if (ImGui::Button("Create Capture")) {
-				renderDoc->TriggerCapture();
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Start a RenderDoc frame capture for debugging. This will capture the next frame and save it to a file next to SkyrimSE.exe.");
-			}
-
-			auto numCaptures = renderDoc->GetNumCaptures();
-			if (numCaptures > clearedCaptures) {
-				auto capturePath = renderDoc->GetCapturePath(numCaptures - 1);
-				ImGui::TextColored(themeSettings.StatusPalette.SuccessColor, std::format("Saved to {}", capturePath).c_str());
-			}
-		}
-
-		auto captureDiskStorage = renderDoc->CalculateCapturesDiskUsage();
-
-		if (captureDiskStorage > 0) {
-			auto& themeSettings = Menu::GetSingleton()->settings.Theme;
-			ImGui::TextColored(themeSettings.StatusPalette.Warning, std::format("Frame captures disk usage: {} MB", captureDiskStorage).c_str());
-		} else {
-			auto& themeSettings = Menu::GetSingleton()->settings.Theme;
-			ImGui::TextColored(themeSettings.StatusPalette.InfoColor, std::format("Frame captures disk usage: {} MB", captureDiskStorage).c_str());
-		}
-
-		ImGui::SameLine();
-		if (ImGui::Button("Clear Captures")) {
-			renderDoc->ClearFrameCaptures();
-			clearedCaptures = renderDoc->GetNumCaptures();
 		}
 	}
 }

@@ -3,20 +3,20 @@
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO baldurk/renderdoc
-    REF v1.35
-    SHA512 2b4cb86350497af46cb1dc4cbf56f0a1f86aa3d1c6f63262079b6c62343e0fd1304b4d79a273840af595a073ba0a17707cf8c6a59f491b7474e8b634a552e4e2
+    REF v1.40
+    SHA512 6581d1fe7ba069e74d09b64a1de0a413bc0d1e775a45cce87bb8ea125fc2d67e9846439acc802882c0d717028e251f9f44fd896e2022e310456adafa675bf85a
     HEAD_REF v1.x
 )
 
 # Install the API header file
-file(INSTALL "${SOURCE_PATH}/renderdoc/api/app/renderdoc_app.h" 
+file(INSTALL "${SOURCE_PATH}/renderdoc/api/app/renderdoc_app.h"
      DESTINATION "${CURRENT_PACKAGES_DIR}/include/Renderdoc")
 
 # Install copyright/license
 vcpkg_install_copyright(FILE_LIST "${SOURCE_PATH}/LICENSE.md")
 
 # Create usage file with instructions for getting the runtime DLL
-file(WRITE "${CURRENT_PACKAGES_DIR}/share/${PORT}/usage" 
+file(WRITE "${CURRENT_PACKAGES_DIR}/share/${PORT}/usage"
 "RenderDoc provides an in-application API for frame capture and debugging.
 
 This port provides the renderdoc_app.h header file for compile-time integration.
@@ -30,10 +30,6 @@ To obtain renderdoc.dll:
 - Download the portable zip from: https://renderdoc.org/builds
 - Or build from source: https://github.com/baldurk/renderdoc
 - Deploy renderdoc.dll alongside your application
-
-For Community Shaders:
-The DLL is stored in package/SKSE/Plugins/Renderdoc/ and deployed with the mod.
-See package/SKSE/Plugins/Renderdoc/README.md for version information.
 
 API Documentation: https://renderdoc.org/docs/in_application_api.html
 ")

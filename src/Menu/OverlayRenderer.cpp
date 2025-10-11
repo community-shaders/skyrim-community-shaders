@@ -8,8 +8,8 @@
 
 #include "Feature.h"
 #include "FeatureIssues.h"
+#include "Features/RenderDoc.h"
 #include "Menu.h"
-#include "RenderDoc.h"
 #include "ShaderCache.h"
 #include "State.h"
 
@@ -113,7 +113,7 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 	auto& themeSettings = Menu::GetSingleton()->GetTheme();
 	auto* renderDoc = RenderDoc::GetSingleton();
 	bool renderDocAvailable = renderDoc->IsAvailable();
-	const auto renderDocInformation = "WARNING: RenderDoc capture is active, performance will be severely impacted.\nPress F12, Print Screen or press the Capture button in the Advanced menu.\nDisable RenderDoc capture in the Advanced menu.";
+	const auto renderDocInformation = renderDoc->GetOverlayWarningMessage();
 
 	auto progressTitle = fmt::format("{}Compiling Shaders: {}",
 		shaderCache->backgroundCompilation ? "Background " : "",
@@ -138,7 +138,7 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 		}
 
 		if (renderDocAvailable)
-			ImGui::TextColored(themeSettings.StatusPalette.Warning, renderDocInformation);
+			ImGui::TextColored(themeSettings.StatusPalette.Warning, renderDocInformation.c_str());
 
 		ImGui::End();
 	} else if (failed) {
@@ -157,7 +157,7 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 			}
 
 			if (renderDocAvailable)
-				ImGui::TextColored(themeSettings.StatusPalette.Warning, renderDocInformation);
+				ImGui::TextColored(themeSettings.StatusPalette.Warning, renderDocInformation.c_str());
 
 			ImGui::End();
 		}
@@ -167,7 +167,7 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 			ImGui::End();
 			return;
 		}
-		ImGui::TextColored(themeSettings.StatusPalette.Warning, renderDocInformation);
+		ImGui::TextColored(themeSettings.StatusPalette.Warning, renderDocInformation.c_str());
 		ImGui::End();
 	}
 }

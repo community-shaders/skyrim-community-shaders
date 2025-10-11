@@ -278,8 +278,6 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 				shaderCache->SetFileWatcher(advanced["Use FileWatcher"]);
 			if (advanced["Frame Annotations"].is_boolean())
 				frameAnnotations = advanced["Frame Annotations"];
-			if (advanced["Enable RenderDoc Capture"].is_boolean())
-				enableRenderDocCapture = advanced["Enable RenderDoc Capture"];
 		}
 
 		if (settings["General"].is_object()) {
@@ -422,7 +420,6 @@ void State::Save(ConfigMode a_configMode)
 	advanced["Background Compiler Threads"] = shaderCache->backgroundCompilationThreadCount;
 	advanced["Use FileWatcher"] = shaderCache->UseFileWatcher();
 	advanced["Frame Annotations"] = frameAnnotations;
-	advanced["Enable RenderDoc Capture"] = enableRenderDocCapture;
 	settings["Advanced"] = advanced;
 
 	json general;
