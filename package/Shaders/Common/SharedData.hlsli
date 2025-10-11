@@ -12,6 +12,8 @@ namespace SharedData
 		row_major float3x4 DirectionalAmbient;
 		float4 DirLightDirection;
 		float4 DirLightColor;
+		float4 SunDirection;
+		float4 SunColor;
 		float4 CameraData;
 		float4 BufferDim;
 		float Timer;
@@ -220,43 +222,20 @@ namespace SharedData
 		float CloudsCurve;
 		float CloudsDesaturation;
 		float CloudsOpacity;
-
+		
 		float3 CloudsColorFilter;
 		float pad5;
 
-		float DirectLightingIntensity;
-		float DirectLightingCurve;
-		float DirectLightingDesaturation;
-		float pad6;
-
-		float3 DirectLightingColorFilter;
-		float pad6_1;
-
-		float AmbientLightingIntensity;
-		float AmbientLightingDesaturation;
-		float2 pad7;
+		float CloudsEdgeClamp;
+		float CloudsEdgeIntensity;
+		float CloudsEdgeFadeRange;
+		float CloudsEdgeMoonMultiplier;
 
 		float ColorPow;
 		float3 pad8;
 
-		float FogColorMultiplier;
-		float FogColorCurve;
-		float FogAmountMultiplier;
-		float FogCurveMultiplier;
-
-		float3 FogColorFilter;
-		float pad8_1;
-
 		float IBLMultiplicativeAmount;
 		float3 pad9;
-
-		float VolumetricFogIntensity;
-		float VolumetricFogCurve;
-		float VolumetricFogOpacity;
-		float pad10;
-
-		float3 VolumetricFogColorFilter;
-		float pad11;
 
 		float VolumetricRaysIntensity;
 		float VolumetricRaysRangeFactor;

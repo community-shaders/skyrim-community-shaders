@@ -772,6 +772,18 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 			data.MipBias = 0;
 		}
 
+		
+		if (auto sky = globals::game::sky) {
+			if (auto sun = sky->sun){
+				float3 sunDirection = { sun->root->local.translate.x, sun->root->local.translate.y, sun->root->local.translate.z };
+				sunDirection.Normalize();
+				data.SunDirection = { sunDirection.x, sunDirection.y, sunDirection.z, 0.0f };
+
+				auto& sunColor = sky->skyColor[(uint)RE::TESWeather::ColorTypes::kSun];
+				data.SunColor = { sunColor.red, sunColor.green, sunColor.blue, 0.0f };
+			}
+		}
+		
 		sharedDataCB->Update(data);
 	}
 

@@ -192,6 +192,8 @@ public:
 		DirectX::XMFLOAT3X4 DirectionalAmbient;
 		float4 DirLightDirection;
 		float4 DirLightColor;
+		float4 SunDirection;
+		float4 SunColor;
 		float4 CameraData;
 		float4 BufferDim;
 		float Timer;

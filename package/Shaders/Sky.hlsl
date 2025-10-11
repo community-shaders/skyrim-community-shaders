@@ -1,5 +1,6 @@
 #include "Common/FrameBuffer.hlsli"
 #include "Common/VR.hlsli"
+#include "Common/Math.hlsli"
 
 struct VS_INPUT
 {
@@ -246,6 +247,16 @@ PS_OUTPUT main(PS_INPUT input)
 
 	psout.MotionVectors = float4(screenMotionVector, 0, psout.Color.w);
 	psout.Normal = float4(0.5, 0.5, 0, psout.Color.w);
+
+#	if defined(CLOUDS)
+	float cloudsEdgeAlpha = saturate(1.0 - (psout.Color.w + SharedData::enbSettings.CloudsEdgeClamp));
+	float sunPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::SunDirection.xyz)), 10.0);
+
+	float cloudsScatterPower = cloudsEdgeAlpha * sunPhase * SharedData::enbSettings.CloudsEdgeIntensity;
+	float3 cloudsScatter = cloudsScatterPower * SharedData::SunColor.xyz;
+
+	psout.Color.xyz = psout.Color.xyz + psout.Color.xyz * cloudsScatter;	
+#	endif
 
 #	if defined(CLOUD_SHADOWS) && defined(CLOUDS) && !defined(DEFERRED)
 	psout.CloudShadows = float4(1, 1, 1, psout.Color.w);

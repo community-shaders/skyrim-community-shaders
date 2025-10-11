@@ -119,6 +119,11 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterTimeOfDaySetting("StarsIntensity", "SKY", 1, true);
 	settingManager.RegisterTimeOfDaySetting("StarsCurve", "SKY", 1, true);
 
+	settingManager.RegisterFloatSetting("CloudsEdgeClamp", "SKY", 0.0f);
+	settingManager.RegisterFloatSetting("CloudsEdgeIntensity", "SKY", 0.0f);
+	settingManager.RegisterFloatSetting("CloudsEdgeFadeRange", "SKY", 0.0f);
+	settingManager.RegisterFloatSetting("CloudsEdgeMoonMultiplier", "SKY", 0.0f);
+
 	// ENVIRONMENT
 	settingManager.RegisterTimeOfDaySetting("DirectLightingIntensity", "ENVIRONMENT", 1, true);
 	settingManager.RegisterTimeOfDaySetting("DirectLightingCurve", "ENVIRONMENT", 1, true);
