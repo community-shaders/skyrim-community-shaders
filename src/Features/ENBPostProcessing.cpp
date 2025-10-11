@@ -206,7 +206,7 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 	}
 
 	{
-		a_sky->fogPower = pow(a_sky->fogPower, settingManager.GetInterpolatedTimeOfDayValue("FogCurveMultiplier", "ENVIRONMENT"));
+		a_sky->fogPower *= settingManager.GetInterpolatedTimeOfDayValue("FogCurveMultiplier", "ENVIRONMENT");
 	}
 
 	{
@@ -421,7 +421,7 @@ void ENBPostProcessing::PostPostLoad()
 	if (REL::Module::IsSE())
 		stl::write_thunk_call<Main_HDRTonemapBlendCinematic_Render>(REL::RelocationID(99023, 105674).address() + REL::Relocate(0x230, 0x178));
 
-	stl::detour_thunk<Sky_UpdateColors>(REL::RelocationID(25686, 25686));
+	stl::detour_thunk<Sky_UpdateColors>(REL::RelocationID(25686, 26233));
 
-	stl::detour_thunk<Sky_SetDirectionalAmbientColors>(REL::RelocationID(98989, 98989));
+	stl::detour_thunk<Sky_SetDirectionalAmbientColors>(REL::RelocationID(98989, 105643));
 }

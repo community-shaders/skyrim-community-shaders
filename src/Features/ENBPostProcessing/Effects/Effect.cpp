@@ -1142,7 +1142,7 @@ bool Effect::SetShaderResourceVariable(ID3DX11Effect* effect, const std::string&
 
 bool Effect::SetVectorVariable(ID3DX11Effect* effect, const std::string& variableName, const void* data, uint32_t size)
 {
-	auto variable = effect->GetVariableByName(variableName.c_str())->AsVector();
+	auto variable = effect->GetVariableByName(variableName.c_str());
 	if (variable && variable->IsValid()) {
 		variable->SetRawValue(data, 0, size);
 		return true;
@@ -1152,7 +1152,7 @@ bool Effect::SetVectorVariable(ID3DX11Effect* effect, const std::string& variabl
 
 bool Effect::SetVectorVariable(const std::string& variableName, const void* data, uint32_t size)
 {
-	auto variable = effect->GetVariableByName(variableName.c_str())->AsVector();
+	auto variable = effect->GetVariableByName(variableName.c_str());
 	if (variable && variable->IsValid()) {
 		variable->SetRawValue(data, 0, size);
 		return true;
