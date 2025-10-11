@@ -152,6 +152,7 @@ cbuffer Settings : register(b1){
     float UIHaloTaper;
     float UIHaloCrShift;
 
+    float UISunGlareEnable;
     float UISunGlareScale;
     float UISunGlareInt;
     float UISunGlareOuterInt;
@@ -630,6 +631,7 @@ SunGlareVertexOutput main(VertexShaderInput input)
 Texture2D DepthTexture : register(t0);
 Texture2D SceneTexture : register(t1);
 
+
 float4 main(SunGlareVertexOutput input) : SV_Target
 {
     float Dist = length(input.TexCoord.zw);
@@ -641,23 +643,18 @@ float4 main(SunGlareVertexOutput input) : SV_Target
 
     float sigma = max(0.01, Intensity);
     float Glow = exp(-(Dist * Dist) / (2.0 * sigma * sigma));
-          Glow *= pow(saturate(InvDist), Intensity * 2) * Intensity;
-
-    float Edge = UISunGlareOuterInt * Dist;
+          Glow *= pow(saturate(InvDist), Intensity) * Intensity * 3.0;
 
     float2 SampleCoords = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.Position.xy / ScreenSize.xy);
-
-    float3 Scene = SceneTexture.Sample(Point_Sampler, SampleCoords).xyz;
-
-    float3 Color = float3(1.0, 1.0, 1.0) * Glow + (input.Color * Edge) - Scene;
-           Color *= smoothstep(-0.01, UISunGlareFade, InvDist) * InvDist;
 
     float Depth = DepthTexture.SampleCmpLevelZero(Depth_Sampler, SampleCoords, 1).x;
           Depth = saturate(Depth + input.SunInt.x);
 
-    Color *= Depth * input.SunInt.y;
+    float Mask = Glow * smoothstep(0.0, UISunGlareFade, InvDist);
 
-    return float4(Color, 0.0);
+    float3 Color = input.Color.xyz * Mask * Depth * input.SunInt.y;
+
+    return float4(Color, 1.0);
 }
 #endif
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -832,20 +829,22 @@ float4 main(VertexShaderOutput input) : SV_Target
 {
     float4 Aberration;
 
-    float2 Coords = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord.xy);
+    float BaseOffset = 0.001;
 
-    float2 MotionVec = MotionVector.Sample(PointMirror_Sampler, Coords).xy;
+    float2 MotionVec = MotionVector.Load(int3(input.Position.xy, 0)).xy * (UICAThreshold > 0.0);
+           MotionVec += BaseOffset;
 
     float Curve = saturate(length(MotionVec) - UICAThreshold);
           Curve *= UICAIntensity;
 
-    float2 Offset = Curve * normalize(delta(MotionVec));
-           Offset = min(UICAMaxOffset, Offset);
+    float2 Offset = Curve * normalize(MotionVec);
+           Offset = min(UICAMaxOffset, Offset) * ScreenSize.xy;
 
-    [unroll] for(int i=0; i<3; ++i)
-        Aberration[i] = Main.Sample(PointMirror_Sampler, Coords + Offset * (i-1))[i];
-    Aberration.w = Main.Sample(PointMirror_Sampler, Coords).w;
-
+    [unroll] for(int i=0; i<3; ++i){
+        int2 Coords = int2(input.Position.xy) + int2(Offset * (i-1));
+        Aberration[i] = Main.Load(int3(clamp(Coords, int2(0,0), int2(ScreenSize.xy - 1)), 0))[i];
+    }
+    Aberration.w = Main.Load(int3(clamp(int2(input.Position.xy), int2(0,0), int2(ScreenSize.xy - 1)), 0)).w;
 
     return Aberration;
 }
@@ -917,5 +916,6 @@ VertexShaderOutput main(VertexShaderInput input)
 }
 #endif
 /////////////////////////////////////////////////////////////////////////////////////////
+
 
 

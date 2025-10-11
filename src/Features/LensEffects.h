@@ -1,5 +1,6 @@
 #pragma once
 #include "Feature.h"
+#include "Upscaling.h"
 
 struct LensEffects : Feature
 {
@@ -36,7 +37,8 @@ struct LensEffects : Feature
 	virtual void SetupCAEffect();
 
 	ConstantBuffer* SettingsCB = nullptr;
-	ID3D11BlendState* BlendState[2] = {};
+	ID3D11BlendState* BlendState[3] = {};
+	ID3D11RasterizerState* Raster = nullptr;
 	D3D11_VIEWPORT viewport{};
 
 	ID3D11SamplerState* LinearSampler = nullptr;
@@ -81,6 +83,10 @@ struct LensEffects : Feature
 
 	RE::NiPoint3* skyrim_SunPosition = nullptr;
 	float* skyrim_SunGlareScale = nullptr;
+	bool sunVisble;
+
+	void(__fastcall* gFlareApplyFunc)(RE::NiCamera*, void*, uint64_t) = nullptr;
+	void* gFlareShader = nullptr;
 
 	static constexpr int ghostpasses = 10;
 
@@ -95,7 +101,6 @@ struct LensEffects : Feature
 	virtual float GetWeatherPrecip();
 	virtual bool CheckWeatherChange();
 	virtual void UpdateWeatherBasedDisable();
-	virtual void UpdateUpscalingBasedDisable();
 
 	bool disableSunFX = false;
 	float weatherFadeout = 0.0f;
@@ -103,7 +108,6 @@ struct LensEffects : Feature
 	uint32_t PrevWeatherID = 0;
 	uint32_t WeatherID = 0;
 	float SunScale;
-
 	static inline std::array<uint32_t, 31> weatherDisables = { { 0x00D299E, 0x02006AEC, 0x02001407, 0x02018DBB, 0x02018DBC, 0x02018DBD,
 		0x02001407, 0x000D9329, 0x0200959F, 0x00105941, 0x000923FD, 0x00048C14,
 		0x0010FEF8, 0x0010D9EC, 0x000923FD, 0x00105941, 0x0010199F, 0x000C821E,
@@ -132,7 +136,7 @@ struct LensEffects : Feature
 		float SB_Scale = 0.30f;
 		float SB_Intensity = 1.3f;
 
-		uint SB_EnableBlades = true;
+		uint SB_EnableBlades = false;
 		float SB_BladeInt = 0.75f;
 		float SB_BladeVertices = 6.0f;
 		float SB_BladeSplay = 0.11f;
@@ -171,7 +175,7 @@ struct LensEffects : Feature
 
 		//Lens Glare
 		float GL_Scale = 0.35f;
-		float GL_Intensity = 0.5f;
+		float GL_Intensity = 0.3f;
 		float GL_XAxisOffset = 0.5f;
 		float GL_YAxisOffset = 0.1f;
 		float GL_MaxRotation = 50.0f;
@@ -194,6 +198,7 @@ struct LensEffects : Feature
 		float HL_ColorShift = 0.52f;
 
 		//Sun Glare
+		float SG_Enable = 0.0f;
 		float SG_Scale = 0.5f;
 		float SG_Intensity = 1.0f;
 		float SG_OuterInt = 1.0f;
@@ -207,9 +212,8 @@ struct LensEffects : Feature
 		//LensIce
 		float LI_Intensity = 0.50f;
 		float LIEX_FadeFactor = 0.0f;
-		//63  252
+		//64  256
 
-		float _pad[1];
 		DirectX::XMFLOAT4A SB_Color = DirectX::XMFLOAT4A(0.0f, 0.0f, 0.0f, 0.0f);
 		DirectX::XMFLOAT4A SG_Color = DirectX::XMFLOAT4A(0.0f, 0.0f, 0.0f, 0.0f);
 		DirectX::XMFLOAT4A HL_Color = DirectX::XMFLOAT4A(0.0f, 0.0f, 0.0f, 0.0f);
@@ -296,7 +300,7 @@ struct LensEffects : Feature
 		MainSettings mainsettings;
 		ColdSettings coldsettings;
 		bool EnableStarburst = true;
-		bool EnableSunGlare = true;
+		bool EnableSunGlare = false;
 		bool EnableLensGlare = true;
 		bool EnableHalo = true;
 		bool EnableGhosts = true;
@@ -334,7 +338,8 @@ struct LensEffects : Feature
 		mSettings.SB_BladeBaseWidth = 1.0f + (mSettings.SB_BladeBaseWidth - 1.0f) * 0.25f;
 		mSettings.SB_RandomRaysWidth = std::lerp(11.0f, 7.0f, mSettings.SB_RandomRaysWidth);
 		mSettings.SBEX_BladeSplayLen = (1 / mSettings.SB_BladeLength - 0.95f) * (mSettings.SB_BladeSplay > 0.01f);
-		mSettings.SG_Scale = mSettings.SG_Scale * 0.5f;
+		mSettings.SG_Enable = (float)settings->EnableSunGlare;
+		mSettings.SG_Scale = mSettings.SG_Scale * 0.75f;
 		mSettings.GH_Scale = mSettings.GH_Scale * 0.5f;
 		mSettings.HL_LineWidth = mSettings.HL_LineWidth * 0.1f;
 		mSettings.LIEX_FadeFactor = snowPrecipValue;
@@ -350,8 +355,8 @@ struct LensEffects : Feature
 		enum Enum
 		{
 			Bypass = 0,
-			AttachLUT = 1,
-			OcculsionMask = 2,
+			OcclusionLUT = 1,
+			AttachOcclusionLUT = 2,
 
 			LensIce = 3,
 			LensCA = 4,
@@ -359,7 +364,7 @@ struct LensEffects : Feature
 			LensGlare = 6,
 			LensHalo = 7,
 			LensGhosts = 8,
-			LensSunGlare = 9
+			LensSunGlare = 9,
 		};
 	};
 	Shaders::Enum shaderdesc;
@@ -369,19 +374,20 @@ struct LensEffects : Feature
 		class LF_PassData
 		{
 		private:
-			uint64_t shaderdesc;
+			const uint64_t shaderdesc;
 			uint64_t active;
-			uint64_t numpasses;
-			uint64_t weatherpass;
-			uint64_t uncondpass;
-			uint64_t pad[3] = {};
+			const uint64_t numpasses;
+			const uint64_t weatherpass;
+			const uint64_t uncondpass;
+			const uint64_t deferred;
+			const uint64_t pad[2] = {};
 			uint64_t* enginerefs_ptr = nullptr;
 
 			std::array<uint64_t, 4> enginerefs{ 1, 8, 0, 0 };
 
 		public:
-			LF_PassData(uint64_t desc, uint64_t active, uint64_t numpasses, uint64_t weather, uint64_t nocond) :
-				shaderdesc(desc), active(active), numpasses(numpasses), weatherpass(weather), uncondpass(nocond)
+			LF_PassData(uint64_t desc, uint64_t active, uint64_t numpasses, uint64_t weather, uint64_t nocond, uint64_t defer) :
+				shaderdesc(desc), active(active), numpasses(numpasses), weatherpass(weather), uncondpass(nocond), deferred(defer)
 			{
 				enginerefs_ptr = enginerefs.data();
 			}
@@ -389,11 +395,14 @@ struct LensEffects : Feature
 			int passesdone = 0;
 
 			Shaders::Enum GetDesc() const { return (Shaders::Enum)shaderdesc; }
-			int PassesLeft() const { return (int)numpasses - (int)passesdone; }
+			int PassesRemaining() const { return (int)numpasses - (int)passesdone; }
+			int PassesTotal() const { return (int)numpasses; }
 
 			void Toggle(bool value) { active = (uint64_t)value; }
 			bool IsActive() const { return (bool)active; }
 			bool IsWeatherShader() const { return (bool)weatherpass; }
+			bool IsUncond() const { return (bool)uncondpass; }
+			bool IsDeferred() const { return (bool)deferred; }  //renders between upscaling and refraction
 
 			void CheckRefs()
 			{
@@ -405,87 +414,86 @@ struct LensEffects : Feature
 		class LF_RenderData
 		{
 		private:
-			uint64_t head = 0x3F800000;
+			const uint64_t head = 0x3F800000;
 			std::unique_ptr<LF_PassData>* passarray_ptr = nullptr;
-			uint64_t _pad[1] = {};
+			const uint64_t _pad[1] = {};
 			uint64_t passcount = 0;
-			uint64_t pad[2] = {};
+			const uint64_t pad[2] = {};
 
-			std::vector<std::unique_ptr<LF_PassData>> Passes;
-			std::vector<std::unique_ptr<LF_PassData>> PassList;  //engine loops via passarray_ptr and renders for each
-			std::vector<std::unique_ptr<LF_PassData>> NoSunPassList;
-			size_t currentEffect = 0;
+			std::vector<std::unique_ptr<LF_PassData>> Effects;
+			std::vector<std::unique_ptr<LF_PassData>> RenderPassList;  //engine loops via passarray_ptr and renders for each
+			size_t currentPass = 0;
 
 		public:
 			LF_RenderData()
 			{
-				PassList.reserve(100);
-				NoSunPassList.reserve(100);
+				RenderPassList.reserve(100);
 			}
 
 			struct Type
 			{
-				bool weather_pass = false;
-				bool uncond_pass = false;
+				bool weather = false;
+				bool uncond = false;
+				bool deferred = false;
 			};
 
-			void SetupPass(int desc, bool active, int passes, Type type = {})
+			void AddPasses(LF_PassData& effect)
 			{
-				Passes.push_back(std::make_unique<LF_PassData>(desc, active, passes, type.weather_pass, type.uncond_pass));
-
-				for (auto i = 0; i < passes; i++) {
-					PassList.push_back(std::make_unique<LF_PassData>(*Passes.back()));
-					if (type.weather_pass || type.uncond_pass)
-						NoSunPassList.push_back(std::make_unique<LF_PassData>(*Passes.back()));
+				for (int i = 0; i < effect.PassesTotal(); i++) {
+					RenderPassList.push_back(std::make_unique<LF_PassData>(effect));
 				}
 			}
 
-			void SetupRenderData()
+			void AddEffect(int desc, bool active, int passes, Type type = {})
 			{
-				passcount = PassList.size();
-				passarray_ptr = PassList.data();
+				Effects.push_back(std::make_unique<LF_PassData>(desc, active, passes, type.weather, type.uncond, type.deferred));
 			}
 
-			Shaders::Enum UpdateCurrentEffect()
+			void SetRenderData()
 			{
-				if (Passes[currentEffect]->PassesLeft() == 0)
-					if (currentEffect + 1 < Passes.size())
-						currentEffect++;
-
-				Passes[currentEffect]->passesdone++;
-				return (Passes[currentEffect]->IsActive()) ? Passes[currentEffect]->GetDesc() : Shaders::Bypass;
+				passcount = RenderPassList.size();
+				passarray_ptr = RenderPassList.data();
 			}
 
-			void ResetEffects(bool sunVisible)
+			void CreateRenderList(bool sunVisible, bool deferred = false)
 			{
-				currentEffect = 0;
-				for (auto& pass : Passes) pass->passesdone = 0;
-				passarray_ptr = (sunVisible) ? PassList.data() : NoSunPassList.data();
-				passcount = (sunVisible) ? PassList.size() : NoSunPassList.size();
+				RenderPassList.clear();
+				currentPass = 0;
+
+				for (auto& effect : Effects) {
+					effect->passesdone = 0;
+					if (effect->IsActive()) {
+						if (sunVisible || effect->IsUncond() || effect->IsWeatherShader())
+							if (deferred == effect->IsDeferred())
+								AddPasses(*effect);
+					}
+				}
+				SetRenderData();
 			}
 
 			LF_PassData& GetEffect(int desc)
 			{
-				for (auto& pass : Passes) {
-					if (pass->GetDesc() == desc)
-						return *pass.get();
+				for (auto& effect : Effects) {
+					if (effect->GetDesc() == desc)
+						return *effect.get();
 				}
 				throw std::out_of_range("");
 			}
 
-			LF_PassData& GetCurrentEffect()
+			Shaders::Enum UpdateCurrentEffect()
 			{
-				return *Passes[currentEffect].get();
+				auto desc = RenderPassList[0]->GetDesc();
+				if (currentPass < RenderPassList.size()) {
+					desc = RenderPassList[currentPass]->GetDesc();
+					GetEffect(desc).passesdone++;
+					currentPass++;
+				}
+				return desc;
 			}
 
 			void CheckRefData()
 			{
-				for (auto& pass : PassList) {
-					pass->CheckRefs();
-				}
-				for (auto& pass : NoSunPassList) {
-					pass->CheckRefs();
-				}
+				for (auto& pass : RenderPassList) pass->CheckRefs();
 			}
 		};
 	};
@@ -505,16 +513,9 @@ struct LensEffects : Feature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
-		struct LensFlare_CheckRenderCondition  //setup buffers etc, if sun on screen, return true (override for non sun FX)
+		struct LensFlare_CheckRenderCondition  //setup buffers etc, if sun on screen return true (override for non sun FX)
 		{
-#pragma warning(push)
-#pragma warning(disable: 4189)
-			static bool thunk(void* shader, RE::NiCamera* camera, uint64_t unk)
-			{
-				bool result = func(shader, camera, unk);
-				return true;
-			}
-#pragma warning(pop)
+			static bool thunk(void* shader, RE::NiCamera* camera, uint64_t unk);
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
@@ -532,6 +533,12 @@ struct LensEffects : Feature
 				current = 0;
 				func(previous = &current, current);
 			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct Main_PostProcessing  //run post upscale effects
+		{
+			static void thunk(RE::ImageSpaceManager* a1, uint32_t a3, uint32_t er8_);
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
@@ -554,6 +561,8 @@ struct LensEffects : Feature
 			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISLensFlare>>(RE::VTABLE_BSImagespaceShaderLensFlare[3]);
 
 			stl::write_vfunc<0x6, BSSkyShader_SetupMaterial>(RE::VTABLE_BSSkyShader[0]);
+
+			stl::detour_thunk<Main_PostProcessing>(REL::RelocationID(99023, 105674));
 		}
 	};
 };
