@@ -218,9 +218,6 @@ void RenderDoc::DrawSettings()
 							// Actual capture logic
 							logger::info("[RenderDoc] Manual capture triggered by user");
 							TriggerCapture();
-
-							// Note: Comments will be applied automatically when the capture finishes
-							// via ApplyAutomaticCommentsToNewCaptures() called from RefreshCaptureFileCache()
 						}
 					} catch (const std::exception& e) {
 						logger::error("[RenderDoc] Exception during capture logic: {}", e.what());
@@ -315,6 +312,7 @@ void RenderDoc::DrawSettings()
 
 				// Refresh button
 				if (ImGui::Button("Refresh List")) {
+					ClearFailedDeletions();
 					RefreshCaptureFileCache();
 				}
 
@@ -392,6 +390,12 @@ void RenderDoc::DrawSettings()
 							// Filename column with double-click and hover
 							ImGui::TableSetColumnIndex(0);
 							bool isSelected = false;
+
+							// Push red color for failed deletions
+							if (file.deletionFailed) {
+								ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 100, 100, 255));  // Red text for failed deletions
+							}
+
 							if (ImGui::Selectable(file.filename.c_str(), isSelected, ImGuiSelectableFlags_AllowDoubleClick)) {
 								if (ImGui::IsMouseDoubleClicked(0)) {
 									// Double-clicked - open the file
@@ -404,10 +408,22 @@ void RenderDoc::DrawSettings()
 								}
 							}
 
+							// Pop color if we pushed it
+							if (file.deletionFailed) {
+								ImGui::PopStyleColor();
+							}
+
 							// Hover tooltip for filename
 							if (ImGui::IsItemHovered()) {
+								// Calculate time ago dynamically for tooltip
+								std::string currentTimeAgo = Util::FormatTimeAgo(file.lastWriteTime);
 								std::string tooltip = std::format("File: {}\nSize: {}\nCreated: {}",
-									file.fullPath.string(), file.sizeStr, file.timeAgo);
+									file.fullPath.string(), file.sizeStr, currentTimeAgo);
+
+								// Add deletion error message if applicable
+								if (file.deletionFailed && !file.deletionErrorMessage.empty()) {
+									tooltip += std::format("\n\nDeletion Failed: {}", file.deletionErrorMessage);
+								}
 
 								ImGui::SetTooltip("%s", tooltip.c_str());
 							}
@@ -416,9 +432,10 @@ void RenderDoc::DrawSettings()
 							ImGui::TableSetColumnIndex(1);
 							ImGui::TextUnformatted(file.sizeStr.c_str());
 
-							// Created column
+							// Created column - calculate time ago dynamically
 							ImGui::TableSetColumnIndex(2);
-							ImGui::TextUnformatted(file.timeAgo.c_str());
+							std::string currentTimeAgo = Util::FormatTimeAgo(file.lastWriteTime);
+							ImGui::TextUnformatted(currentTimeAgo.c_str());
 						}
 
 						ImGui::EndTable();
@@ -477,6 +494,10 @@ void RenderDoc::ClearFrameCaptures()
 {
 	try {
 		auto path = GetCapturesPath();
+
+		// Clear previous failed deletion tracking for a fresh start
+		failedDeletions.clear();
+
 		// Remove all files in the captures directory using safe deletion
 		std::error_code ec;
 		for (const auto& entry : std::filesystem::directory_iterator(path, ec)) {
@@ -490,9 +511,15 @@ void RenderDoc::ClearFrameCaptures()
 				auto deleteResult = Util::FileHelpers::SafeDelete(entry.path().string(), "capture file");
 				if (!deleteResult.success) {
 					logger::warn("[RenderDoc] Failed to delete capture file '{}': {}", entry.path().string(), deleteResult.errorMessage);
+
+					// Track this file as failed deletion
+					failedDeletions[entry.path()] = deleteResult.errorMessage;
 				}
 			}
 		}
+
+		// Invalidate cache to refresh the UI and show failed deletions
+		InvalidateCaptureCache();
 	} catch (const std::exception& e) {
 		logger::error("[RenderDoc] Exception in ClearFrameCaptures: {}", e.what());
 	}
@@ -558,10 +585,12 @@ void RenderDoc::RefreshCaptureFileCache()
 			info.sizeStr = Util::FormatFileSize(info.fileSize);
 
 			info.lastWriteTime = entry.last_write_time(ec);
-			if (!ec) {
-				info.timeAgo = Util::FormatTimeAgo(info.lastWriteTime);
-			} else {
-				info.timeAgo = "Unknown";
+
+			// Check if this file previously failed to delete
+			auto failedIt = failedDeletions.find(info.fullPath);
+			if (failedIt != failedDeletions.end()) {
+				info.deletionFailed = true;
+				info.deletionErrorMessage = failedIt->second;
 			}
 
 			cachedCaptureFiles.push_back(info);
@@ -803,4 +832,10 @@ std::string RenderDoc::GetOverlayWarningMessage() const
 		   "Upscaling and Framegeneration may be incompatible.\n"
 		   "Press F12, Print Screen or press the Capture button in the RenderDoc feature settings.\n"
 		   "Disable RenderDoc capture in the RenderDoc feature settings.";
+}
+
+void RenderDoc::ClearFailedDeletions()
+{
+	failedDeletions.clear();
+	logger::info("[RenderDoc] Cleared failed deletion tracking");
 }

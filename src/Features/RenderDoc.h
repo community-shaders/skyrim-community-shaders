@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -20,10 +21,11 @@ struct CaptureFileInfo
 {
 	std::string filename;
 	std::string sizeStr;
-	std::string timeAgo;
 	uint64_t fileSize;
 	std::filesystem::file_time_type lastWriteTime;
 	std::filesystem::path fullPath;
+	bool deletionFailed = false;
+	std::string deletionErrorMessage;
 };
 
 class RenderDoc : public Feature
@@ -76,6 +78,7 @@ public:
 	std::filesystem::path GetRenderDocDllPath() const;
 	std::string BuildAutomaticCaptureComments(const std::string& userComments) const;
 	void ApplyAutomaticCommentsToNewCaptures();
+	void ClearFailedDeletions();
 
 	/**
 	 * Gets the warning message to display when RenderDoc capture is active
@@ -118,6 +121,9 @@ public:
 	std::chrono::steady_clock::time_point cacheLastUpdate;
 	bool cacheValid = false;
 	bool wasSectionVisible = false;  // Track if RenderDoc section was visible last frame
+
+	// Track files that failed to delete for UI feedback
+	std::unordered_map<std::filesystem::path, std::string> failedDeletions;
 
 	static constexpr uint64_t kMinCaptureSpaceBytes = 100ULL * 1024ULL * 1024ULL;  // 100 MB minimum free space
 	static constexpr uint32_t kCacheRefreshIntervalSeconds = 5;                    // Cache refresh interval
