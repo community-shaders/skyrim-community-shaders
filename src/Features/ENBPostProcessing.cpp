@@ -194,63 +194,12 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 		a_sky->fogNear /= fogAmountMultiplier;
 		a_sky->fogFar /= fogAmountMultiplier;
 	}
-	{
-		auto skyGradientIntensity = settingManager.GetInterpolatedTimeOfDayValue("GradientIntensity", "SKY");
-		auto skyGradientDesaturation = settingManager.GetInterpolatedTimeOfDayValue("GradientDesaturation", "SKY");
-
-		{
-			auto& skyHorizonColor = colors[(uint)RE::TESWeather::ColorTypes::kHorizon];
-
-			float3 skyHorizonColorF3 = NiToF3(skyHorizonColor);
-
-			skyHorizonColorF3 = Curve(skyHorizonColorF3, settingManager.GetInterpolatedTimeOfDayValue("GradientHorizonCurve", "SKY"));
-			skyHorizonColorF3 = ColorFilter(skyHorizonColorF3, settingManager.GetInterpolatedColorTimeOfDayValue("GradientHorizonColorFilter", "SKY"), 0.0f);
-			skyHorizonColorF3 = Intensity(skyHorizonColorF3, settingManager.GetInterpolatedTimeOfDayValue("GradientHorizonIntensity", "SKY"));
-			
-			skyHorizonColorF3 = Desaturation(skyHorizonColorF3, skyGradientDesaturation);
-			skyHorizonColorF3 = Intensity(skyHorizonColorF3, skyGradientIntensity);
-
-			skyHorizonColor = F3ToNi(skyHorizonColorF3);
-		}
-
-		{
-			auto& skyLowerColor = colors[(uint)RE::TESWeather::ColorTypes::kSkyLower];
-
-			float3 skyLowerColorF3 = NiToF3(skyLowerColor);
-
-			skyLowerColorF3 = Curve(skyLowerColorF3, settingManager.GetInterpolatedTimeOfDayValue("GradientMiddleCurve", "SKY"));
-			skyLowerColorF3 = ColorFilter(skyLowerColorF3, settingManager.GetInterpolatedColorTimeOfDayValue("GradientMiddleColorFilter", "SKY"), 0.0f);
-			skyLowerColorF3 = Intensity(skyLowerColorF3, settingManager.GetInterpolatedTimeOfDayValue("GradientMiddleIntensity", "SKY"));
-
-			skyLowerColorF3 = Desaturation(skyLowerColorF3, skyGradientDesaturation);
-			skyLowerColorF3 = Intensity(skyLowerColorF3, skyGradientIntensity);
-
-			skyLowerColor = F3ToNi(skyLowerColorF3);
-		}
-
-		{
-			auto& skyUpperColor = colors[(uint)RE::TESWeather::ColorTypes::kSkyUpper];
-
-			float3 skyUpperColorF3 = NiToF3(skyUpperColor);
-
-			skyUpperColorF3 = Curve(skyUpperColorF3, settingManager.GetInterpolatedTimeOfDayValue("GradientTopCurve", "SKY"));
-			skyUpperColorF3 = ColorFilter(skyUpperColorF3, settingManager.GetInterpolatedColorTimeOfDayValue("GradientTopColorFilter", "SKY"), 0.0f);
-			skyUpperColorF3 = Intensity(skyUpperColorF3, settingManager.GetInterpolatedTimeOfDayValue("GradientTopIntensity", "SKY"));
-			
-			skyUpperColorF3 = Desaturation(skyUpperColorF3, skyGradientDesaturation);
-			skyUpperColorF3 = Intensity(skyUpperColorF3, skyGradientIntensity);
-
-			skyUpperColor = F3ToNi(skyUpperColorF3);
-		}
-	}
 
 	{
 		auto& sunColor = colors[(uint)RE::TESWeather::ColorTypes::kSun];
 
 		float3 sunColorF3 = NiToF3(sunColor);
 
-		sunColorF3 = Desaturation(sunColorF3, settingManager.GetInterpolatedTimeOfDayValue("SunDesaturation", "SKY"));
-		sunColorF3 = ColorFilter(sunColorF3, settingManager.GetInterpolatedColorTimeOfDayValue("SunColorFilter", "SKY"), 0.0f);
 		sunColorF3 = Intensity(sunColorF3, settingManager.GetInterpolatedTimeOfDayValue("SunIntensity", "SKY"));
 
 		sunColor = F3ToNi(sunColorF3);
@@ -261,8 +210,6 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 
 		float3 moonColorF3 = NiToF3(moonColor);
 
-		moonColorF3 = Desaturation(moonColorF3, settingManager.GetInterpolatedTimeOfDayValue("MoonDesaturation", "SKY"));
-		moonColorF3 = ColorFilter(moonColorF3, settingManager.GetInterpolatedColorTimeOfDayValue("MoonColorFilter", "SKY"), 0.0f);
 		moonColorF3 = Intensity(moonColorF3, settingManager.GetInterpolatedTimeOfDayValue("MoonIntensity", "SKY"));
 
 		moonColor = F3ToNi(moonColorF3);
@@ -277,32 +224,6 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 		starsColorF3 = Intensity(starsColorF3, settingManager.GetInterpolatedTimeOfDayValue("StarsIntensity", "SKY"));
 
 		starsColor = F3ToNi(starsColorF3);
-	}
-
-	{
-		auto clouds = a_sky->clouds;
-
-		auto cloudsIntensity = settingManager.GetInterpolatedTimeOfDayValue("CloudsIntensity", "SKY");
-		auto cloudsCurve = settingManager.GetInterpolatedTimeOfDayValue("CloudsCurve", "SKY");
-		auto cloudsDesaturation = settingManager.GetInterpolatedTimeOfDayValue("CloudsDesaturation", "SKY");
-		auto cloudsOpacity = settingManager.GetInterpolatedTimeOfDayValue("CloudsOpacity", "SKY");
-		auto cloudsColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("CloudsColorFilter", "SKY");
-
-		for (int i = 0; i < RE::Clouds::kTotalLayers; i++) {
-			auto& cloudColor = clouds->colors[i];
-
-			float3 cloudColorF3 = NiToF3(cloudColor);
-
-			cloudColorF3 = Curve(cloudColorF3, cloudsCurve);
-			cloudColorF3 = Desaturation(cloudColorF3, cloudsDesaturation);
-			cloudColorF3 = ColorFilter(cloudColorF3, cloudsColorFilter, 0.0f);	
-			cloudColorF3 = Intensity(cloudColorF3, cloudsIntensity);
-			
-			cloudColor = F3ToNi(cloudColorF3);
-			
-			auto& cloudAlpha = clouds->colors[i];
-			cloudAlpha *= cloudsOpacity;
-		}
 	}
 
 	{

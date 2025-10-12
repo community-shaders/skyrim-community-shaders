@@ -195,11 +195,12 @@ std::map<std::string, std::vector<std::string>> MenuManager::GetCategorizedSetti
 		"TIMEOFDAY",
 		"COLORCORRECTION",
 		"EFFECT",
-		"DEPTHOFFIELD"
+		"DEPTHOFFIELD",
+		"ADAPTATION"
 	};
 
 	// Weather-Based Settings - Categories that change with weather/time
-	categorizedSettings["Weather"] = { "BLOOM", "LENS", "SKY", "ENVIRONMENT", "IMAGEBASEDLIGHTING", "VOLUMETRICFOG", "GAMEVOLUMETRICRAYS" };
+	categorizedSettings["Weather"] = { "BLOOM", "LENS", "SKY", "ENVIRONMENT", "IMAGEBASEDLIGHTING", "VOLUMETRICFOG", "GAMEVOLUMETRICRAYS", "SUNGLARE" };
 
 	return categorizedSettings;
 }
