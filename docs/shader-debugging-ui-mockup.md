@@ -56,62 +56,69 @@ The Shader Debugging section appears in the Advanced Settings tab, between "Repl
 ## Interactive Elements
 
 ### 1. Blocked Shader Section (appears only when blocking is active)
-- **Stop Blocking Button**: Clears the current blocking state
-- **Orange Text**: Indicates blocking is active
-- **Auto-populated Details**: Pulled from active shader info when available
+
+-   **Stop Blocking Button**: Clears the current blocking state
+-   **Orange Text**: Indicates blocking is active
+-   **Auto-populated Details**: Pulled from active shader info when available
 
 ### 2. Filter Input
-- **Text Input**: Type to filter shader keys
-- **Case-sensitive**: Exact substring matching
-- **Live Update**: Table updates as you type
-- **Tooltip**: "Filter shaders by key substring (case-sensitive)"
+
+-   **Text Input**: Type to filter shader keys
+-   **Case-sensitive**: Exact substring matching
+-   **Live Update**: Table updates as you type
+-   **Tooltip**: "Filter shaders by key substring (case-sensitive)"
 
 ### 3. Sort Dropdown
-- **Options**: 
-  - Key (alphabetical)
-  - Draw Calls (descending)
-  - Type (grouped by shader type)
-- **Default**: Key
-- **Persistent**: Selection maintained during session
+
+-   **Options**:
+    -   Key (alphabetical)
+    -   Draw Calls (descending)
+    -   Type (grouped by shader type)
+-   **Default**: Key
+-   **Persistent**: Selection maintained during session
 
 ### 4. Active Shaders Table
-- **Fixed Header**: Column headers stay visible when scrolling
-- **Resizable Columns**: Drag column separators to adjust width
-- **Row Highlighting**: 
-  - Blocked shader: Orange text
-  - Hover: Standard ImGui hover color
-- **Tooltips**: Hover over any row's Key column for full details:
-  ```
-  Type: Lighting
-  Class: Pixel
-  Descriptor: 0x12345678
-  Draw Calls: 156
-  Key: Lighting_Pixel_Lighting_0x12345678_DEFERRED=1
-  Cache Path: Data/ShaderCache/Lighting/12345678.pso
-  ```
+
+-   **Fixed Header**: Column headers stay visible when scrolling
+-   **Resizable Columns**: Drag column separators to adjust width
+-   **Row Highlighting**:
+    -   Blocked shader: Orange text
+    -   Hover: Standard ImGui hover color
+-   **Tooltips**: Hover over any row's Key column for full details:
+    ```
+    Type: Lighting
+    Class: Pixel
+    Descriptor: 0x12345678
+    Draw Calls: 156
+    Key: Lighting_Pixel_Lighting_0x12345678_DEFERRED=1
+    Cache Path: Data/ShaderCache/Lighting/12345678.pso
+    ```
 
 ### 5. Block/Unblock Buttons
-- **Per-shader**: Each row has its own button
-- **Dynamic Label**: Shows "Unblock" for currently blocked shader
-- **Immediate Action**: Clicking applies instantly
-- **Visual Feedback**: Blocked shader row turns orange after clicking
+
+-   **Per-shader**: Each row has its own button
+-   **Dynamic Label**: Shows "Unblock" for currently blocked shader
+-   **Immediate Action**: Clicking applies instantly
+-   **Visual Feedback**: Blocked shader row turns orange after clicking
 
 ### 6. Keyboard Shortcuts
-- **PAGEUP**: Cycle to next shader in active list (forward)
-- **PAGEDOWN**: Cycle to previous shader in active list (backward)
-- **ESC**: Close menu (does not clear blocking)
+
+-   **PAGEUP**: Cycle to next shader in active list (forward)
+-   **PAGEDOWN**: Cycle to previous shader in active list (backward)
+-   **ESC**: Close menu (does not clear blocking)
 
 ## Visual Style
 
-- **Colors**:
-  - Blocked shader indicator: Orange (1.0, 0.5, 0.0, 1.0)
-  - Regular text: Default ImGui text color
-  - Headers: Default ImGui header color
-  - Borders: Default ImGui border color
+-   **Colors**:
 
-- **Fonts**: Uses standard Community Shaders UI font
+    -   Blocked shader indicator: Orange (1.0, 0.5, 0.0, 1.0)
+    -   Regular text: Default ImGui text color
+    -   Headers: Default ImGui header color
+    -   Borders: Default ImGui border color
 
-- **Spacing**: Follows ImGui default spacing with manual separators
+-   **Fonts**: Uses standard Community Shaders UI font
+
+-   **Spacing**: Follows ImGui default spacing with manual separators
 
 ## Empty State
 
@@ -145,22 +152,23 @@ When no shaders are active (e.g., in main menu):
 
 ## Responsive Behavior
 
-- **Column Widths**: 
-  - Type: 80px fixed
-  - Class: 60px fixed  
-  - Descriptor: 80px fixed
-  - Draw Calls: 80px fixed
-  - Key: Stretches to fill remaining space
+-   **Column Widths**:
 
-- **Scrolling**: Vertical scroll bar appears when > ~10 shaders
+    -   Type: 80px fixed
+    -   Class: 60px fixed
+    -   Descriptor: 80px fixed
+    -   Draw Calls: 80px fixed
+    -   Key: Stretches to fill remaining space
 
-- **Filtering**: Table shrinks to show only matching results
+-   **Scrolling**: Vertical scroll bar appears when > ~10 shaders
 
-- **Sorting**: Entire table re-orders without scrolling
+-   **Filtering**: Table shrinks to show only matching results
+
+-   **Sorting**: Entire table re-orders without scrolling
 
 ## Performance Considerations
 
-- **Render Cost**: Minimal - only visible in developer mode
-- **Update Frequency**: Once per frame for draw call counters
-- **Memory**: ~100 bytes per active shader (typically 10-50 shaders)
-- **Sorting**: O(n log n) where n is typically < 100
+-   **Render Cost**: Minimal - only visible in developer mode
+-   **Update Frequency**: Once per frame for draw call counters
+-   **Memory**: ~100 bytes per active shader (typically 10-50 shaders)
+-   **Sorting**: O(n log n) where n is typically < 100

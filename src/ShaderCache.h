@@ -635,7 +635,7 @@ namespace SIE
 		uint blockedKeyIndex = (uint)-1;  // index in shaderMap; negative value indicates disabled
 		std::string blockedKey = "";
 		std::vector<uint32_t> blockedIDs;  // more than one descriptor could be blocked based on shader hash
-		
+
 		// Active shader tracking for developer mode
 		struct ActiveShaderInfo
 		{
@@ -647,20 +647,20 @@ namespace SIE
 			uint32_t drawCalls = 0;
 			bool isActive = false;  // Used in current/recent frames
 			std::chrono::steady_clock::time_point lastUsed;
-			
+
 			bool operator<(const ActiveShaderInfo& other) const
 			{
 				return key < other.key;
 			}
 		};
-		
+
 		ankerl::unordered_dense::map<std::string, ActiveShaderInfo> activeShaders;
 		mutable std::mutex activeShadersMutex;
-		
+
 		void TrackActiveShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor);
 		void ResetFrameShaderTracking();
 		std::vector<ActiveShaderInfo> GetActiveShaders() const;
-		
+
 		HANDLE managementThread = nullptr;
 
 	private:

@@ -1728,7 +1728,7 @@ namespace SIE
 		if (state->IsDeveloperMode()) {
 			// Track this shader as active
 			TrackActiveShader(ShaderClass::Vertex, shader, descriptor);
-			
+
 			auto key = SIE::SShaderCache::GetShaderString(ShaderClass::Vertex, shader, descriptor, true);
 			if (blockedKeyIndex != -1 && !blockedKey.empty() && key == blockedKey) {
 				if (std::find(blockedIDs.begin(), blockedIDs.end(), descriptor) == blockedIDs.end()) {
@@ -1776,7 +1776,7 @@ namespace SIE
 		if (state->IsDeveloperMode()) {
 			// Track this shader as active
 			TrackActiveShader(ShaderClass::Pixel, shader, descriptor);
-			
+
 			auto key = SIE::SShaderCache::GetShaderString(ShaderClass::Pixel, shader, descriptor, true);
 			if (blockedKeyIndex != -1 && !blockedKey.empty() && key == blockedKey) {
 				if (std::find(blockedIDs.begin(), blockedIDs.end(), descriptor) == blockedIDs.end()) {
@@ -1820,7 +1820,7 @@ namespace SIE
 		if (state->IsDeveloperMode()) {
 			// Track this shader as active
 			TrackActiveShader(ShaderClass::Compute, shader, descriptor);
-			
+
 			auto key = SIE::SShaderCache::GetShaderString(ShaderClass::Compute, shader, descriptor, true);
 			if (blockedKeyIndex != -1 && !blockedKey.empty() && key == blockedKey) {
 				if (std::find(blockedIDs.begin(), blockedIDs.end(), descriptor) == blockedIDs.end()) {
@@ -2488,7 +2488,7 @@ namespace SIE
 					keys.push_back(key);
 				}
 				std::sort(keys.begin(), keys.end());
-				
+
 				// Find current position or start
 				int currentIdx = -1;
 				if (!blockedKey.empty()) {
@@ -2497,7 +2497,7 @@ namespace SIE
 						currentIdx = static_cast<int>(std::distance(keys.begin(), it));
 					}
 				}
-				
+
 				// Calculate next index
 				int targetIdx = 0;
 				if (currentIdx >= 0) {
@@ -2505,7 +2505,7 @@ namespace SIE
 				} else {
 					targetIdx = a_forward ? 0 : keys.size() - 1;
 				}
-				
+
 				blockedKey = keys[targetIdx];
 				blockedKeyIndex = targetIdx;
 				blockedIDs.clear();
@@ -2513,7 +2513,7 @@ namespace SIE
 				return;
 			}
 		}
-		
+
 		// Fallback to original behavior with full shader map
 		std::scoped_lock lockM{ mapMutex };
 		auto targetIndex = a_forward ? 0 : shaderMap.size() - 1;           // default start or last element
@@ -2547,7 +2547,7 @@ namespace SIE
 
 		auto key = SIE::SShaderCache::GetShaderString(shaderClass, shader, descriptor, true);
 		std::lock_guard lock(activeShadersMutex);
-		
+
 		auto& info = activeShaders[key];
 		if (info.key.empty()) {
 			// First time seeing this shader
@@ -2555,7 +2555,7 @@ namespace SIE
 			info.shaderType = shader.shaderType.get();
 			info.shaderClass = shaderClass;
 			info.descriptor = descriptor;
-			
+
 			// Construct disk path
 			const std::wstring shaderPath = SIE::SShaderCache::GetShaderPath(
 				shader.shaderType == RE::BSShader::Type::ImageSpace ?
@@ -2563,7 +2563,7 @@ namespace SIE
 					shader.fxpFilename);
 			info.diskPath = std::format(L"{}/{:X}.pso", shaderPath, descriptor);
 		}
-		
+
 		info.isActive = true;
 		info.drawCalls++;
 		info.lastUsed = std::chrono::steady_clock::now();
@@ -2575,17 +2575,17 @@ namespace SIE
 			return;
 
 		std::lock_guard lock(activeShadersMutex);
-		
+
 		// Mark all shaders as inactive for this frame
 		// Keep shaders that were used recently (within last 60 frames / ~1 second at 60fps)
 		auto now = std::chrono::steady_clock::now();
 		auto timeout = std::chrono::seconds(1);
-		
+
 		for (auto it = activeShaders.begin(); it != activeShaders.end();) {
 			auto& info = it->second;
 			info.isActive = false;
 			info.drawCalls = 0;
-			
+
 			// Remove shaders that haven't been used recently
 			if (now - info.lastUsed > timeout) {
 				it = activeShaders.erase(it);
@@ -2600,11 +2600,11 @@ namespace SIE
 		std::lock_guard lock(activeShadersMutex);
 		std::vector<ActiveShaderInfo> result;
 		result.reserve(activeShaders.size());
-		
+
 		for (const auto& [key, info] : activeShaders) {
 			result.push_back(info);
 		}
-		
+
 		return result;
 	}
 
