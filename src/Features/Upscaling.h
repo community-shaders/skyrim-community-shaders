@@ -156,6 +156,8 @@ public:
 	float dynamicResolutionWidthRatio = 1.0f;
 	float dynamicResolutionHeightRatio = 1.0f;
 
+	bool previousUpscalingWasActive = false;
+
 	void CopySharedD3D12Resources();
 	void PostDisplay();
 	void PerformUpscaling();

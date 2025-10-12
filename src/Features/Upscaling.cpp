@@ -569,15 +569,17 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 		logger::debug("[Upscaling] Resource change detected - Upscale: {} ({}) -> {} ({}), FrameGen: {} -> {} (d3d12Active={})",
 			static_cast<int>(previousUpscaleMode), magic_enum::enum_name(previousUpscaleMode), static_cast<int>(a_upscalemethod), magic_enum::enum_name(a_upscalemethod), previousFrameGenMode, frameGenModeCurrent, d3d12SwapChainActive);
 
-		// Destroy previous upscaling method resources (this will intelligently clean up based on what's still needed)
+		// Destroy previous upscaling method resources (only if they were actually active)
 		if (upscaleModeChanged) {
 			DestroyUpscalingTextureResources(a_upscalemethod);
 
-			if (previousUpscaleMode == UpscaleMethod::kDLSS)
-				streamline.DestroyDLSSResources();
-			else if (previousUpscaleMode == UpscaleMethod::kFSR)
-				fidelityFX.DestroyFSRResources();
-
+			// Only destroy SDK resources if the previous method was actually performing upscaling
+			if (previousUpscalingWasActive) {
+				if (previousUpscaleMode == UpscaleMethod::kDLSS)
+					streamline.DestroyDLSSResources();
+				else if (previousUpscaleMode == UpscaleMethod::kFSR)
+					fidelityFX.DestroyFSRResources();
+			}
 			if (a_upscalemethod == UpscaleMethod::kFSR)
 				fidelityFX.CreateFSRResources();
 		}
@@ -587,8 +589,10 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 			CreateUpscalingTextureResources(a_upscalemethod);
 		}
 
+		// Update tracking for next call
 		previousUpscaleMode = a_upscalemethod;
 		previousFrameGenMode = (settings.frameGenerationMode && d3d12SwapChainActive);
+		previousUpscalingWasActive = IsUpscalingActive();
 	}
 }
 
@@ -1065,12 +1069,10 @@ double Upscaling::GetRefreshRate(HWND a_window)
 						// there may be the possibility that display may be duplicated and windows may be one of them in such scenario
 						// there may be two callback because source is same target will be different
 						// as window is on both the display so either selecting either one is ok
-						if (wcscmp(info.szDevice, sourceName.viewGdiDeviceName) == 0) {
-							// get the refresh rate
-							UINT numerator = p.targetInfo.refreshRate.Numerator;
-							UINT denominator = p.targetInfo.refreshRate.Denominator;
-							return (double)numerator / (double)denominator;
-						}
+						// get the refresh rate
+						UINT numerator = p.targetInfo.refreshRate.Numerator;
+						UINT denominator = p.targetInfo.refreshRate.Denominator;
+						return (double)numerator / (double)denominator;
 					}
 				}
 			}
