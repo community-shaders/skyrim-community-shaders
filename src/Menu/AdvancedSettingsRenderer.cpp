@@ -1,5 +1,6 @@
 #include "AdvancedSettingsRenderer.h"
 
+#include <algorithm>
 #include <format>
 #include <imgui.h>
 #include <imgui_stdlib.h>
@@ -28,6 +29,7 @@ void AdvancedSettingsRenderer::RenderAdvancedSettings(
 	// Disable at boot settings
 	drawDisableAtBootSettings();
 
+	RenderShaderDebugSection();
 	RenderDeveloperSection();
 }
 
@@ -125,18 +127,12 @@ void AdvancedSettingsRenderer::RenderAdvancedSection()
 			ImGui::Text("Clear all compiled shaders from memory. Forces recompilation of all shaders on next use.");
 		}
 
-		// Blocking shader controls
-		if (!shaderCache->blockedKey.empty()) {
-			auto blockingButtonString = std::format("Stop Blocking {} Shaders", shaderCache->blockedIDs.size());
-			if (ImGui::Button(blockingButtonString.c_str(), { -1, 0 })) {
-				shaderCache->DisableShaderBlocking();
-			}
+		// Show shader blocking status (full controls in Shader Debugging section)
+		if (globals::state->IsDeveloperMode() && !shaderCache->blockedKey.empty()) {
+			ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), 
+				"Shader Blocking Active: %zu shaders", shaderCache->blockedIDs.size());
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text(
-					"Stop blocking Community Shaders shader. "
-					"Blocking is helpful when debugging shader errors in game to determine which shader has issues. "
-					"Blocking is enabled if in developer mode and pressing PAGEUP and PAGEDOWN. "
-					"Specific shader will be printed to logfile. ");
+				ImGui::Text("See 'Shader Debugging' section below for details and controls.");
 			}
 		}
 
@@ -204,6 +200,193 @@ void AdvancedSettingsRenderer::RenderShaderReplacementSection()
 			}
 			ImGui::EndTable();
 		}
+	}
+}
+
+void AdvancedSettingsRenderer::RenderShaderDebugSection()
+{
+	auto shaderCache = globals::shaderCache;
+	auto state = globals::state;
+
+	if (!state->IsDeveloperMode()) {
+		return;
+	}
+
+	if (ImGui::CollapsingHeader("Shader Debugging", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
+		// Show currently blocked shader info
+		if (!shaderCache->blockedKey.empty()) {
+			ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Shader Blocking Active");
+			ImGui::Separator();
+			
+			ImGui::Text("Blocked Shader:");
+			ImGui::Indent();
+			ImGui::TextWrapped("%s", shaderCache->blockedKey.c_str());
+			ImGui::Text("Descriptors Blocked: %zu", shaderCache->blockedIDs.size());
+			
+			// Try to get more details from active shaders
+			auto activeShaders = shaderCache->GetActiveShaders();
+			for (const auto& shader : activeShaders) {
+				if (shader.key == shaderCache->blockedKey) {
+					ImGui::Text("Type: %s", magic_enum::enum_name(shader.shaderType).data());
+					ImGui::Text("Class: %s", magic_enum::enum_name(shader.shaderClass).data());
+					ImGui::Text("Descriptor: 0x%X", shader.descriptor);
+					
+					// Convert wstring to string for display
+					std::string diskPathStr;
+					diskPathStr.resize(shader.diskPath.size());
+					std::transform(shader.diskPath.begin(), shader.diskPath.end(), diskPathStr.begin(),
+						[](wchar_t c) { return static_cast<char>(c); });
+					ImGui::Text("Cache Path: %s", diskPathStr.c_str());
+					break;
+				}
+			}
+			ImGui::Unindent();
+			ImGui::Spacing();
+			
+			if (ImGui::Button("Stop Blocking", { -1, 0 })) {
+				shaderCache->DisableShaderBlocking();
+			}
+			ImGui::Separator();
+		}
+
+		// Active shaders list
+		ImGui::Text("Active Shaders (Used Recently)");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"List of shaders that have been used in recent frames. "
+				"Use PAGEUP/PAGEDOWN to cycle through and block shaders for debugging. "
+				"Shaders not used for ~1 second are removed from this list.");
+		}
+		
+		auto activeShaders = shaderCache->GetActiveShaders();
+		ImGui::Text("Total Active: %zu", activeShaders.size());
+		
+		// Filter controls
+		static char filterText[256] = "";
+		ImGui::InputText("Filter", filterText, IM_ARRAYSIZE(filterText));
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Filter shaders by key substring (case-sensitive)");
+		}
+		
+		static int sortMode = 0;  // 0 = key, 1 = draw calls, 2 = type
+		ImGui::Combo("Sort By", &sortMode, "Key\0Draw Calls\0Type\0");
+		
+		// Sort active shaders
+		std::vector<SIE::ShaderCache::ActiveShaderInfo> sortedShaders = activeShaders;
+		if (sortMode == 0) {
+			std::sort(sortedShaders.begin(), sortedShaders.end(),
+				[](const auto& a, const auto& b) { return a.key < b.key; });
+		} else if (sortMode == 1) {
+			std::sort(sortedShaders.begin(), sortedShaders.end(),
+				[](const auto& a, const auto& b) { return a.drawCalls > b.drawCalls; });
+		} else if (sortMode == 2) {
+			std::sort(sortedShaders.begin(), sortedShaders.end(),
+				[](const auto& a, const auto& b) {
+					if (a.shaderType != b.shaderType)
+						return a.shaderType < b.shaderType;
+					return a.key < b.key;
+				});
+		}
+		
+		// Display shader list
+		if (ImGui::BeginTable("##ActiveShaders", 5, 
+			ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
+			ImVec2(0, 300))) {
+			
+			ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("Class", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+			ImGui::TableSetupColumn("Descriptor", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("Draw Calls", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupScrollFreeze(0, 1);
+			ImGui::TableHeadersRow();
+			
+			std::string filterStr(filterText);
+			for (const auto& shader : sortedShaders) {
+				// Apply filter
+				if (!filterStr.empty() && shader.key.find(filterStr) == std::string::npos) {
+					continue;
+				}
+				
+				ImGui::TableNextRow();
+				
+				// Type column
+				ImGui::TableNextColumn();
+				ImGui::Text("%s", magic_enum::enum_name(shader.shaderType).data());
+				
+				// Class column
+				ImGui::TableNextColumn();
+				auto classStr = magic_enum::enum_name(shader.shaderClass);
+				if (classStr == "Vertex")
+					ImGui::Text("V");
+				else if (classStr == "Pixel")
+					ImGui::Text("P");
+				else if (classStr == "Compute")
+					ImGui::Text("C");
+				else
+					ImGui::Text("%s", classStr.data());
+				
+				// Descriptor column
+				ImGui::TableNextColumn();
+				ImGui::Text("0x%X", shader.descriptor);
+				
+				// Draw calls column
+				ImGui::TableNextColumn();
+				ImGui::Text("%u", shader.drawCalls);
+				
+				// Key column with block button
+				ImGui::TableNextColumn();
+				bool isBlocked = (shader.key == shaderCache->blockedKey);
+				if (isBlocked) {
+					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f));
+				}
+				
+				ImGui::PushID(shader.key.c_str());
+				if (ImGui::SmallButton(isBlocked ? "Unblock" : "Block")) {
+					if (isBlocked) {
+						shaderCache->DisableShaderBlocking();
+					} else {
+						shaderCache->blockedKey = shader.key;
+						shaderCache->blockedKeyIndex = 0;  // Reset index
+						shaderCache->blockedIDs.clear();
+						logger::debug("Manually blocking shader: {}", shader.key);
+					}
+				}
+				ImGui::PopID();
+				
+				ImGui::SameLine();
+				ImGui::TextWrapped("%s", shader.key.c_str());
+				
+				if (isBlocked) {
+					ImGui::PopStyleColor();
+				}
+				
+				// Tooltip with full info
+				if (ImGui::IsItemHovered()) {
+					ImGui::BeginTooltip();
+					ImGui::Text("Type: %s", magic_enum::enum_name(shader.shaderType).data());
+					ImGui::Text("Class: %s", magic_enum::enum_name(shader.shaderClass).data());
+					ImGui::Text("Descriptor: 0x%X", shader.descriptor);
+					ImGui::Text("Draw Calls: %u", shader.drawCalls);
+					ImGui::Text("Key: %s", shader.key.c_str());
+					
+					// Convert wstring to string for display
+					std::string diskPathStr;
+					diskPathStr.resize(shader.diskPath.size());
+					std::transform(shader.diskPath.begin(), shader.diskPath.end(), diskPathStr.begin(),
+						[](wchar_t c) { return static_cast<char>(c); });
+					ImGui::Text("Cache Path: %s", diskPathStr.c_str());
+					ImGui::EndTooltip();
+				}
+			}
+			
+			ImGui::EndTable();
+		}
+		
+		ImGui::Spacing();
+		ImGui::TextWrapped(
+			"Tip: Use PAGEUP/PAGEDOWN keys to quickly cycle through active shaders. "
+			"Blocked shaders will use vanilla rendering instead of Community Shaders.");
 	}
 }
 
