@@ -655,7 +655,7 @@ namespace SIE
 		};
 		
 		ankerl::unordered_dense::map<std::string, ActiveShaderInfo> activeShaders;
-		std::mutex activeShadersMutex;
+		mutable std::mutex activeShadersMutex;
 		
 		void TrackActiveShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor);
 		void ResetFrameShaderTracking();
