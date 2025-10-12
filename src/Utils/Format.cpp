@@ -124,10 +124,11 @@ namespace Util
 			// Convert filesystem time to system time correctly
 			// std::filesystem::file_time_type uses Windows FILETIME epoch (1601-01-01)
 			// std::chrono::system_clock uses Unix epoch (1970-01-01)
-			// Difference is 11644473600 seconds
+			// Difference is 11644473600 seconds (number of seconds between 1601-01-01 and 1970-01-01)
+			constexpr int64_t WINDOWS_TO_UNIX_EPOCH_SECONDS = 11644473600LL;
 			auto fileDuration = fileTime.time_since_epoch();
 			auto systemDuration = std::chrono::duration_cast<std::chrono::system_clock::duration>(
-				fileDuration - std::chrono::seconds(11644473600LL));
+				fileDuration - std::chrono::seconds(WINDOWS_TO_UNIX_EPOCH_SECONDS));
 			auto systemTime = std::chrono::system_clock::time_point(systemDuration);
 			auto fileTimeT = std::chrono::system_clock::to_time_t(systemTime);
 			auto nowT = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -210,6 +211,18 @@ namespace Util
 			buffer[0] = '\0';
 		}
 		return (delta > 0.0f ? "+" : "") + FormatMilliseconds(delta) + buffer;
+	}
+
+	std::string FormatDeltaWithPercent(float delta)
+	{
+		// Format as percentage with sign
+		char buffer[32];
+		if (delta >= 0.0f) {
+			std::snprintf(buffer, sizeof(buffer), "+%.1f%%", delta);
+		} else {
+			std::snprintf(buffer, sizeof(buffer), "%.1f%%", delta);
+		}
+		return buffer;
 	}
 
 	float CalculatePercentage(float part, float total, float defaultValue)

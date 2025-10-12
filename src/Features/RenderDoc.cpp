@@ -207,7 +207,8 @@ void RenderDoc::DrawSettings()
 							// Set comments if provided
 							if (strlen(commentsBuffer) > 0) {
 								// Build complete comments with automatic metadata plus user input
-								std::string userComments = (strlen(commentsBuffer) > 0) ? std::string(commentsBuffer) : "";
+								std::string userComments = std::string(commentsBuffer);
+
 								std::string completeComments = BuildAutomaticCaptureComments(userComments);
 
 								SetPendingCaptureComments(completeComments);
@@ -218,14 +219,8 @@ void RenderDoc::DrawSettings()
 							logger::info("[RenderDoc] Manual capture triggered by user");
 							TriggerCapture();
 
-							// Apply comments to the most recent capture after triggering
-							if (!pendingCaptureComments.empty()) {
-								// Get the current number of captures (should include the one we just triggered)
-								uint32_t numCaptures = GetNumCaptures();
-								if (numCaptures > 0) {
-									ApplyPendingCaptureComments(numCaptures - 1);
-								}
-							}
+							// Note: Comments will be applied automatically when the capture finishes
+							// via ApplyAutomaticCommentsToNewCaptures() called from RefreshCaptureFileCache()
 						}
 					} catch (const std::exception& e) {
 						logger::error("[RenderDoc] Exception during capture logic: {}", e.what());
@@ -337,13 +332,21 @@ void RenderDoc::DrawSettings()
 						ImGui::TableSetupColumn("Created", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_PreferSortDescending);
 						ImGui::TableHeadersRow();
 
-						// Handle sorting
+						// Create a sorted copy of the capture files for display
+						static std::vector<CaptureFileInfo> sortedCaptureFiles;
+						static std::chrono::steady_clock::time_point sortedCacheLastUpdate = std::chrono::steady_clock::time_point::min();
 						static ImGuiTableSortSpecs* sortSpecs = nullptr;
+
+						// Update sorted copy if cache has been refreshed or sorting specs changed
+						bool needsSortUpdate = (cacheLastUpdate != sortedCacheLastUpdate) || (sortedCaptureFiles.size() != cachedCaptureFiles.size());
+
+						// Handle sorting
 						if (ImGuiTableSortSpecs* specs = ImGui::TableGetSortSpecs()) {
 							sortSpecs = specs;
-							if (specs->SpecsDirty) {
-								// Sort the cached files based on sort specs
-								std::sort(cachedCaptureFiles.begin(), cachedCaptureFiles.end(),
+							if (specs->SpecsDirty || needsSortUpdate) {
+								// Copy the current cache and sort it
+								sortedCaptureFiles = cachedCaptureFiles;
+								std::sort(sortedCaptureFiles.begin(), sortedCaptureFiles.end(),
 									[specs](const CaptureFileInfo& a, const CaptureFileInfo& b) {
 										for (int i = 0; i < specs->SpecsCount; ++i) {
 											const ImGuiTableColumnSortSpecs* spec = &specs->Specs[i];
@@ -371,13 +374,19 @@ void RenderDoc::DrawSettings()
 										}
 										return false;
 									});
+
 								specs->SpecsDirty = false;
+								sortedCacheLastUpdate = cacheLastUpdate;
 							}
+						} else if (needsSortUpdate) {
+							// No sorting specs, just copy the cache (newest first by default)
+							sortedCaptureFiles = cachedCaptureFiles;
+							sortedCacheLastUpdate = cacheLastUpdate;
 						}
 
-						// Display rows
-						for (size_t i = 0; i < cachedCaptureFiles.size(); ++i) {
-							const auto& file = cachedCaptureFiles[i];
+						// Display rows from the sorted copy
+						for (size_t i = 0; i < sortedCaptureFiles.size(); ++i) {
+							const auto& file = sortedCaptureFiles[i];
 							ImGui::TableNextRow();
 
 							// Filename column with double-click and hover
@@ -420,13 +429,13 @@ void RenderDoc::DrawSettings()
 				}
 			}
 		}
-	}
 
-	// Intelligent cache refreshing: refresh when section becomes visible
-	if (isSectionVisible && !wasSectionVisible) {
-		InvalidateCaptureCache();
+		// Intelligent cache refreshing: refresh when section becomes visible
+		if (isSectionVisible && !wasSectionVisible) {
+			InvalidateCaptureCache();
+		}
+		wasSectionVisible = isSectionVisible;
 	}
-	wasSectionVisible = isSectionVisible;
 }
 
 std::string RenderDoc::GetCapturesDirectory() const
@@ -731,6 +740,9 @@ std::string RenderDoc::BuildAutomaticCaptureComments(const std::string& userComm
 		}
 	}
 
+	// Sort features alphabetically for easier comparison
+	std::sort(enabledFeatures.begin(), enabledFeatures.end());
+
 	if (!enabledFeatures.empty()) {
 		comments += "Enabled Features:\n";
 		for (const auto& feature : enabledFeatures) {
@@ -758,15 +770,27 @@ void RenderDoc::ApplyAutomaticCommentsToNewCaptures()
 		return;  // No new captures
 	}
 
+	// Check for pending user comments and apply them to the first new capture
+	std::string userComments;
+	{
+		std::lock_guard<std::mutex> lock(pendingCommentsMutex);
+		if (!pendingCaptureComments.empty()) {
+			userComments = std::move(pendingCaptureComments);
+			pendingCaptureComments.clear();
+		}
+	}
+
 	// Build automatic comments for new captures
 	std::string automaticComments = BuildAutomaticCaptureComments("");
 
-	// Apply automatic comments to any new captures
+	// Apply comments to new captures: user comments to first capture, automatic to others
 	for (uint32_t i = lastCaptureCount; i < numCaptures; ++i) {
 		std::string capturePath = GetCapturePath(i);
 		if (!capturePath.empty()) {
-			renderDocApi->SetCaptureFileComments(capturePath.c_str(), automaticComments.c_str());
-			logger::info("[RenderDoc] Applied automatic comments to capture {}: {}", i, automaticComments);
+			// Use user comments for the first new capture, automatic for subsequent ones
+			const std::string& commentsToApply = (i == lastCaptureCount && !userComments.empty()) ? userComments : automaticComments;
+			renderDocApi->SetCaptureFileComments(capturePath.c_str(), commentsToApply.c_str());
+			logger::info("[RenderDoc] Applied comments to capture {}: {}", i, commentsToApply);
 		}
 	}
 
