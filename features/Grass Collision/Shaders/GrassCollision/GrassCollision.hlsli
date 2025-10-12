@@ -136,8 +136,9 @@ namespace GrassCollision
 	void GetDisplacedPosition(VS_INPUT input, float3 position, out float3 displacement, out float3 previousDisplacement)
 	{
 		float3 worldPosition = mul(World[0], float4(position.xyz, 1.0)).xyz;
+		float nearFactor = smoothstep(2048.0, 0.0, length(worldPosition));
 
-		if (input.Color.w > 0.0 && length(worldPosition) < 2048.0) {
+		if (input.Color.w > 0.0 && nearFactor > 0.0) {
 			float3 worldPositionCentre = mul(World[0], float4(input.InstanceData1.xyz, 1.0)).xyz;
 
 			// Limit stretching
@@ -150,11 +151,15 @@ namespace GrassCollision
 			float3 collision, previousCollision;
 			ComputeCollision(remappedWorldPosition, maximumDepth, distanceFromCenter, CELL_SIZE, collision, previousCollision);
 
+			// Do not let collision move upwards
+			collision.z = -abs(collision.z);
+			previousCollision.z = -abs(previousCollision.z);
+
 			// Scale grass by wind amount (detect rocks and bottom of some grass)
 			float alpha = saturate(input.Color.w * 10.0);
 
-			displacement = collision * alpha * 0.75;
-			previousDisplacement  = previousCollision * alpha * 0.75;
+			displacement = collision * alpha * nearFactor;
+			previousDisplacement  = previousCollision * alpha * nearFactor;
 		} else {
 			displacement = 0.0;
 			previousDisplacement = 0.0;
