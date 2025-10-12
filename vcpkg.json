@@ -26,6 +26,7 @@
         "detours",
         "nlohmann-json",
         "pystring",
+        "renderdoc",
         "stb",
         "tracy",
         "unordered-dense",

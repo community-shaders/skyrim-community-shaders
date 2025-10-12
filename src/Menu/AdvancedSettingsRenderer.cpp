@@ -159,6 +159,9 @@ void AdvancedSettingsRenderer::RenderAdvancedSection()
 
 		// Frame annotations toggle
 		ImGui::Checkbox("Frame Annotations", &globals::state->frameAnnotations);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Enable detailed frame annotations for debugging render passes and draw calls.");
+		}
 	}
 }
 

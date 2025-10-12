@@ -14,6 +14,7 @@
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
 #include "Features/PerformanceOverlay.h"
+#include "Features/RenderDoc.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/SkySync.h"
@@ -32,9 +33,8 @@
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
-#include "Utils/Game.h"
-
 #include "TruePBR.h"
+#include "Utils/Game.h"
 
 namespace globals
 {
@@ -75,6 +75,7 @@ namespace globals
 		WetnessEffects wetnessEffects{};
 		ExtendedTranslucency extendedTranslucency{};
 		Upscaling upscaling{};
+		RenderDoc renderDoc{};
 
 		namespace llf
 		{

@@ -1,8 +1,7 @@
 #pragma once
 
-#include "FileSystem.h"
 #include "Format.h"
-#include "Winapi.h"
+#include "WinApi.h"
 #include <algorithm>
 #include <filesystem>
 #include <imgui.h>
@@ -172,6 +171,12 @@ namespace Util
 		 * @return DeletionResult with success status and details
 		 */
 		DeletionResult SafeDelete(const std::string& path, const std::string& description);
+
+		/**
+		 * Ensures a directory exists, creating it if necessary with proper error handling
+		 * @param path The directory path to ensure exists
+		 */
+		void EnsureDirectoryExists(const std::filesystem::path& path);
 	}
 
 	/**
