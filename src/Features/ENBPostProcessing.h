@@ -30,6 +30,9 @@ public:
 
 	struct alignas(16) PerFrame
 	{
+		uint Enable;
+		float3 pad;
+
 		float GradientIntensity;
 		float GradientDesaturation;
 		float GradientTopIntensity;
@@ -80,6 +83,8 @@ public:
 		float pad13;
 	};
 
+	bool enableEffect = false;
+
 	PerFrame GetCommonBufferData();
 
 	virtual void SaveSettings(json&) override;
@@ -89,6 +94,7 @@ public:
 	virtual void SetupResources() override;
 	virtual void Reset() override;
 	void OverrideWeather(RE::Sky* a_sky);
+	void CheckCommonData();
 	struct DirectionalAmbientColors
 	{
 		RE::NiColor directionalAmbientColors[3][2];

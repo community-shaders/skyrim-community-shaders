@@ -511,10 +511,12 @@ void EffectManager::UpdateCommonData()
 			return formID & 0x00FFFFFF;  // Keep only the lower 6 hex digits
 		};
 
-		commonData.weather[0] = sky->currentWeather ? static_cast<float>(stripPluginIndex(sky->currentWeather->formID)) : 0;
-		commonData.weather[1] = sky->lastWeather ? static_cast<float>(stripPluginIndex(sky->lastWeather->formID)) : 0;
-		commonData.weather[2] = sky->currentWeatherPct;
-		commonData.weather[3] = sky->currentGameHour;
+		if (sky) {
+			commonData.weather[0] = sky->currentWeather ? static_cast<float>(stripPluginIndex(sky->currentWeather->formID)) : 0;
+			commonData.weather[1] = sky->lastWeather ? static_cast<float>(stripPluginIndex(sky->lastWeather->formID)) : 0;
+			commonData.weather[2] = sky->currentWeatherPct;
+			commonData.weather[3] = sky->currentGameHour;
+		}
 	}
 
 	// Update time of day
@@ -522,7 +524,7 @@ void EffectManager::UpdateCommonData()
 		auto& settingManager = SettingManager::GetSingleton();
 
 		// Clamp current time to valid range
-		float currentTime = std::clamp(sky->currentGameHour, 0.0f, 24.0f);
+		float currentTime = sky ? std::clamp(sky->currentGameHour, 0.0f, 24.0f) : 12.0f;
 
 		// Load time of day settings
 		const float nightTime = settingManager.GetValue<float>("NightTime", "TIMEOFDAY");
@@ -532,7 +534,7 @@ void EffectManager::UpdateCommonData()
 		const float sunsetTime = settingManager.GetValue<float>("SunsetTime", "TIMEOFDAY");
 		const float duskDuration = settingManager.GetValue<float>("DuskDuration", "TIMEOFDAY");
 
-		commonData.eInteriorFactor = !sky->mode.any(RE::Sky::Mode::kFull);
+		commonData.eInteriorFactor = Util::IsInterior();
 
 		// Initialize and set factors
 		float factors[6] = { 0.0f };  // dawn, sunrise, day, sunset, dusk, night

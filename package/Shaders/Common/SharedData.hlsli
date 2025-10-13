@@ -196,6 +196,9 @@ namespace SharedData
 
 	struct ENBSettings
 	{
+		bool Enable;
+		float3 pad;
+		
 		float GradientIntensity;
 		float GradientDesaturation;
 		float GradientTopIntensity;

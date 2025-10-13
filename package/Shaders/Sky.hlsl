@@ -1,6 +1,7 @@
 #include "Common/FrameBuffer.hlsli"
 #include "Common/VR.hlsli"
 #include "Common/Math.hlsli"
+#include "Common/SharedData.hlsli"
 
 struct VS_INPUT
 {
@@ -125,11 +126,44 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.TexCoord1.xy = TexCoordOff + input.TexCoord;
 #		endif  // TEXLERP
 
+#		if defined(CLOUDS)
 	float3 skyColor = BlendColor[0].xyz * input.Color.xxx + BlendColor[1].xyz * input.Color.yyy +
 	                  BlendColor[2].xyz * input.Color.zzz;
 
 	vsout.Color.xyz = VParams * skyColor;
 	vsout.Color.w = BlendColor[0].w * input.Color.w;
+
+#		else
+
+	float3 horizonColor = BlendColor[0].xyz;
+	float3 lowerColor = BlendColor[1].xyz;
+	float3 upperColor = BlendColor[2].xyz;
+
+	if (SharedData::enbSettings.Enable){
+		horizonColor = pow(horizonColor, SharedData::enbSettings.GradientHorizonCurve);
+		horizonColor *= SharedData::enbSettings.GradientHorizonColorFilter;
+		horizonColor *= SharedData::enbSettings.GradientHorizonIntensity;
+
+		lowerColor = pow(lowerColor, SharedData::enbSettings.GradientMiddleCurve);
+		lowerColor *= SharedData::enbSettings.GradientMiddleColorFilter;
+		lowerColor *= SharedData::enbSettings.GradientMiddleIntensity;
+
+		upperColor = pow(upperColor, SharedData::enbSettings.GradientTopCurve);
+		upperColor *= SharedData::enbSettings.GradientTopColorFilter;
+		upperColor *= SharedData::enbSettings.GradientTopIntensity;
+	}
+
+	float3 skyColor = horizonColor * input.Color.x + lowerColor * input.Color.y + upperColor * input.Color.z;
+
+	vsout.Color.xyz = VParams * skyColor;
+
+	if (SharedData::enbSettings.Enable){
+		vsout.Color.xyz = lerp(vsout.Color.xyz, dot(vsout.Color.xyz, 1.0 / 3.0), SharedData::enbSettings.GradientDesaturation);
+		vsout.Color.xyz *= SharedData::enbSettings.GradientIntensity;
+	}
+
+	vsout.Color.w = BlendColor[0].w * input.Color.w;
+#		endif
 
 #	endif  // OCCLUSION MOONMASK HORIZFADE
 
@@ -249,13 +283,21 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Normal = float4(0.5, 0.5, 0, psout.Color.w);
 
 #	if defined(CLOUDS)
-	float cloudsEdgeAlpha = saturate(1.0 - (psout.Color.w + SharedData::enbSettings.CloudsEdgeClamp));
-	float sunPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::SunDirection.xyz)), 10.0);
+	if (SharedData::enbSettings.Enable){
+		psout.Color.w = saturate(psout.Color.w * SharedData::enbSettings.CloudsOpacity);
+		psout.Color.xyz = pow(psout.Color.xyz, SharedData::enbSettings.CloudsCurve);
+		psout.Color.xyz = lerp(psout.Color.xyz, dot(psout.Color.xyz, 1.0 / 3.0), SharedData::enbSettings.CloudsDesaturation);
+		psout.Color.xyz *= SharedData::enbSettings.CloudsColorFilter;
+		psout.Color.xyz *= SharedData::enbSettings.CloudsIntensity;
 
-	float cloudsScatterPower = cloudsEdgeAlpha * sunPhase * SharedData::enbSettings.CloudsEdgeIntensity;
-	float3 cloudsScatter = cloudsScatterPower * SharedData::SunColor.xyz;
+		float cloudsEdgeAlpha = saturate(1.0 - (baseColor.w + SharedData::enbSettings.CloudsEdgeClamp));
+		float sunPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::SunDirection.xyz)), 10.0);
 
-	psout.Color.xyz = psout.Color.xyz + psout.Color.xyz * cloudsScatter;	
+		float cloudsScatterPower = cloudsEdgeAlpha * sunPhase * SharedData::enbSettings.CloudsEdgeIntensity;
+		float3 cloudsScatter = cloudsScatterPower * SharedData::SunColor.xyz;
+
+		psout.Color.xyz = psout.Color.xyz + psout.Color.xyz * cloudsScatter;
+	}
 #	endif
 
 #	if defined(CLOUD_SHADOWS) && defined(CLOUDS) && !defined(DEFERRED)

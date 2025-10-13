@@ -18,8 +18,12 @@ void ENBPostProcessing::RestoreDefaultSettings()
 
 ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
 {
+	CheckCommonData();
+
 	auto& settingManager = SettingManager::GetSingleton();
 	PerFrame data{};
+
+	data.Enable = enableEffect;
 
 	data.GradientIntensity = settingManager.GetInterpolatedTimeOfDayValue("GradientIntensity", "SKY");
 	data.GradientDesaturation = settingManager.GetInterpolatedTimeOfDayValue("GradientDesaturation", "SKY");
@@ -249,6 +253,29 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 	}
 }
 
+void ENBPostProcessing::CheckCommonData()
+{
+	static Util::FrameChecker checker;
+	if (checker.IsNewFrame()) {
+		auto& settingManager = SettingManager::GetSingleton();
+		auto& effectManager = EffectManager::GetSingleton();
+
+		effectManager.UpdateCommonData();
+
+		const auto& commonData = effectManager.GetCommonData();
+		settingManager.SetTimeOfDayData(commonData.timeOfDay1, commonData.timeOfDay2, commonData.eInteriorFactor);
+		settingManager.SetWeatherBlendFactors(
+			static_cast<uint32_t>(commonData.weather[0]),
+			static_cast<uint32_t>(commonData.weather[1]),
+			commonData.weather[2]);
+
+		auto ui = globals::game::ui;
+		bool isMenuOpen = ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME) || ui->IsMenuOpen(RE::MapMenu::MENU_NAME);
+
+		enableEffect = !isMenuOpen && settingManager.GetValue<bool>("UseEffect", "GLOBAL");
+	}
+}
+
 void ENBPostProcessing::OverrideAmbientLighting(DirectionalAmbientColors& DirectionalAmbientColors)
 {
 	auto& settingManager = SettingManager::GetSingleton();
@@ -272,7 +299,9 @@ struct Sky_UpdateColors
 	static void thunk(RE::Sky* This, float a_delta)
 	{
 		func(This, a_delta);	
-		globals::features::enbPostProcessing.OverrideWeather(This);
+		globals::features::enbPostProcessing.CheckCommonData();
+		if (globals::features::enbPostProcessing.enableEffect)
+			globals::features::enbPostProcessing.OverrideWeather(This);
 	}
 
 	static inline REL::Relocation<decltype(thunk)> func;
@@ -282,7 +311,9 @@ struct Sky_SetDirectionalAmbientColors
 {
 	static void thunk(ENBPostProcessing::DirectionalAmbientColors& DirectionalAmbientColors, RE::NiColor* AmbientSpecularTint, float AmbientSpecularFresnel)
 	{
-		globals::features::enbPostProcessing.OverrideAmbientLighting(DirectionalAmbientColors);
+		globals::features::enbPostProcessing.CheckCommonData();
+		if (globals::features::enbPostProcessing.enableEffect)
+			globals::features::enbPostProcessing.OverrideAmbientLighting(DirectionalAmbientColors);
 		func(DirectionalAmbientColors, AmbientSpecularTint, AmbientSpecularFresnel);
 	}
 
@@ -293,20 +324,9 @@ struct Main_HDRTonemapBlendCinematic_Render
 {
 	static void thunk(RE::ImageSpaceManager* a1, RE::ImageSpaceEffect* a2, uint32_t a3, uint32_t a4, RE::ImageSpaceShaderParam* a5)
 	{
-		auto& settingManager = SettingManager::GetSingleton();
-		if (settingManager.GetValue<bool>("UseEffect", "GLOBAL")) {
-			auto& effectManager = EffectManager::GetSingleton();
-
-			effectManager.UpdateCommonData();
-
-			const auto& commonData = effectManager.GetCommonData();
-			settingManager.SetTimeOfDayData(commonData.timeOfDay1, commonData.timeOfDay2, commonData.eInteriorFactor);
-			settingManager.SetWeatherBlendFactors(
-				static_cast<uint32_t>(commonData.weather[0]),
-				static_cast<uint32_t>(commonData.weather[1]),
-				commonData.weather[2]);
-
-			effectManager.ExecuteEffects();
+		globals::features::enbPostProcessing.CheckCommonData();
+		if (globals::features::enbPostProcessing.enableEffect) {
+			EffectManager::GetSingleton().ExecuteEffects();
 		} else {
 			func(a1, a2, a3, a4, a5);
 		}
