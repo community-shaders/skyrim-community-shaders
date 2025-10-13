@@ -158,8 +158,8 @@ namespace GrassCollision
 			// Scale grass by wind amount (detect rocks and bottom of some grass)
 			float alpha = saturate(input.Color.w * 10.0);
 
-			displacement = collision * alpha * nearFactor;
-			previousDisplacement  = previousCollision * alpha * nearFactor;
+			displacement = collision * alpha * nearFactor * 0.75;
+			previousDisplacement  = previousCollision * alpha * nearFactor * 0.75;
 		} else {
 			displacement = 0.0;
 			previousDisplacement = 0.0;
