@@ -22,7 +22,7 @@ void ENBAdaptation::Execute()
 
 	// Execute adaptation technique, writing to output texture
 	auto* textureAdaptation = textureManager.GetCommonTexture(textureAdaptationName);
-	ExecuteTechnique(GetSelectedTechnique(), *textureAdaptation);
+	ExecuteTechnique("Draw", *textureAdaptation);
 }
 
 void ENBAdaptation::UpdateEffectVariables()

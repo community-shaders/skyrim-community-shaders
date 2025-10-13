@@ -51,7 +51,6 @@ private:
 	// Downsampling resources
 	winrt::com_ptr<ID3D11VertexShader> downsampleVS;
 	winrt::com_ptr<ID3D11PixelShader> downsamplePS;
-	winrt::com_ptr<ID3D11Buffer> downsampleCB;
 
 	winrt::com_ptr<ID3D11SamplerState> linearSampler;
 	DownsampleTexture sharedDownsampleTexture;

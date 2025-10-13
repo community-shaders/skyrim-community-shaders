@@ -183,42 +183,16 @@ void TextureManager::CreateDownsampleResources()
 	const char* downsamplePixelShaderSource = R"HLSL(
 Texture2D<float4> SourceTexture : register(t0);
 SamplerState LinearSampler : register(s0);
-cbuffer Constants : register(b0)
-{
-	float2 SourceTexelSize;
-};
+
 struct VS_OUTPUT_POST
 {
 	float4 pos		: SV_POSITION;
 	float2 txcoord0	: TEXCOORD0;
 };
-float4 DownsampleCODFirstMip(Texture2D tex, SamplerState samp, float2 uv, float2 out_px_size)
-{
-	// https://www.iryoku.com/next-generation-post-processing-in-call-of-duty-advanced-warfare (slide 162)
-	float4 A = tex.Sample(samp, uv + out_px_size * float2(-1.0, -1.0));
-	float4 B = tex.Sample(samp, uv + out_px_size * float2(0.0, -1.0));
-	float4 C = tex.Sample(samp, uv + out_px_size * float2(1.0, -1.0));
-	float4 D = tex.Sample(samp, uv + out_px_size * float2(-0.5, -0.5));
-	float4 E = tex.Sample(samp, uv + out_px_size * float2(0.5, -0.5));
-	float4 F = tex.Sample(samp, uv + out_px_size * float2(-1.0, 0.0));
-	float4 G = tex.Sample(samp, uv + out_px_size * float2(0.0, 0.0));
-	float4 H = tex.Sample(samp, uv + out_px_size * float2(1.0, 0.0));
-	float4 I = tex.Sample(samp, uv + out_px_size * float2(-0.5, 0.5));
-	float4 J = tex.Sample(samp, uv + out_px_size * float2(0.5, 0.5));
-	float4 K = tex.Sample(samp, uv + out_px_size * float2(-1.0, 1.0));
-	float4 L = tex.Sample(samp, uv + out_px_size * float2(0.0, 1.0));
-	float4 M = tex.Sample(samp, uv + out_px_size * float2(1.0, 1.0));
-	float2 div = (1.0 / 4.0) * float2(0.5, 0.125);
-	float4 o = (D + E + I + J) * div.x;
-	o += (A + B + G + F) * div.y;
-	o += (B + C + H + G) * div.y;
-	o += (G + H + L + K) * div.y;
-	o += (H + G + L + M) * div.y;
-	return o;
-}
+
 float4 main(VS_OUTPUT_POST IN) : SV_Target
 {
-    return max(0, DownsampleCODFirstMip(SourceTexture, LinearSampler, IN.txcoord0.xy, SourceTexelSize));
+	return SourceTexture.SampleLevel(LinearSampler, IN.txcoord0.xy, 0);
 }
 )HLSL";
 
@@ -254,14 +228,6 @@ float4 main(VS_OUTPUT_POST IN) : SV_Target
 
 	// Create shared downsample texture
 	sharedDownsampleTexture = CreateDownsampleTexture(DXGI_FORMAT_R16G16B16A16_FLOAT);
-
-	D3D11_BUFFER_DESC cbDesc = {};
-	cbDesc.ByteWidth = sizeof(DownsampleCB);
-	cbDesc.Usage = D3D11_USAGE_DYNAMIC;
-	cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-	cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-
-	DX::ThrowIfFailed(globals::d3d::device->CreateBuffer(&cbDesc, nullptr, downsampleCB.put()));
 }
 
 TextureManager::DownsampleTexture TextureManager::CreateDownsampleTexture(DXGI_FORMAT format)
@@ -335,11 +301,6 @@ void TextureManager::DownsampleToFixed(ID3D11ShaderResourceView* source, Downsam
 	constants.sourceTexelSizeX = 1.0f / static_cast<float>(sourceDesc.Width);
 	constants.sourceTexelSizeY = 1.0f / static_cast<float>(sourceDesc.Height);
 
-	D3D11_MAPPED_SUBRESOURCE mappedResource;
-	context->Map(downsampleCB.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
-	memcpy(mappedResource.pData, &constants, sizeof(DownsampleCB));
-	context->Unmap(downsampleCB.get(), 0);
-
 	// Set up render state for downsampling
 	D3D11_VIEWPORT viewport = {};
 	viewport.Width = 1024.0f;
@@ -357,9 +318,6 @@ void TextureManager::DownsampleToFixed(ID3D11ShaderResourceView* source, Downsam
 
 	ID3D11SamplerState* samplerArray[] = { linearSampler.get() };
 	context->PSSetSamplers(0, 1, samplerArray);
-
-	ID3D11Buffer* bufferArray[] = { downsampleCB.get() };
-	context->PSSetConstantBuffers(0, 1, bufferArray);
 
 	context->PSSetShader(downsamplePS.get(), nullptr, 0);
 
