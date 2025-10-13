@@ -632,7 +632,7 @@ namespace SIE
 		};
 
 		// Shader blocking data for developer mode
-		uint blockedKeyIndex = (uint)-1;  // index in shaderMap; negative value indicates disabled
+		int blockedKeyIndex = -1;  // index in shaderMap; negative value indicates disabled
 		std::string blockedKey = "";
 		std::vector<uint32_t> blockedIDs;  // more than one descriptor could be blocked based on shader hash
 

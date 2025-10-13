@@ -382,7 +382,7 @@ namespace Util
 		size_t sortColumn,
 		bool ascending,
 		const std::vector<std::function<bool(const T&, const T&, bool)>>& customSorts,
-		std::function<void(int, int, const T&)> cellRender,
+		std::function<void(int, int, const T&, const std::string&)> cellRender,
 		std::string& filterText,
 		int& searchColumn,
 		std::function<std::vector<std::string>(const T&)> getFilterableFields,

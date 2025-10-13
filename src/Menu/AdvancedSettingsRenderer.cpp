@@ -256,6 +256,7 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 			}
 		}
 
+		ImGui::PopStyleVar();    // ChildRounding
 		ImGui::PopStyleVar();    // WindowBorderSize
 		ImGui::PopStyleColor();  // WindowBg
 	}
@@ -427,8 +428,8 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 			"ActiveShadersTable",
 			columns,
 			shaderRows,
-			4,     // Default sort column (Key)
-			true,  // Default ascending
+			3,      // Default sort column (Frame %)
+			false,  // Default descending (for "hot" shaders)
 			sorters,
 			filterState,
 			inputEvents,

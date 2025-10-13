@@ -700,8 +700,8 @@ namespace Util
 
 		std::string lowerText = text;
 		std::string lowerSearch = searchTerm;
-		std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(), ::tolower);
-		std::transform(lowerSearch.begin(), lowerSearch.end(), lowerSearch.begin(), ::tolower);
+		std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
+		std::transform(lowerSearch.begin(), lowerSearch.end(), lowerSearch.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
 
 		size_t pos = 0;
 		size_t lastPos = 0;
@@ -749,9 +749,9 @@ namespace Util
 		std::string query = searchQuery;
 
 		// Convert all to lowercase for case-insensitive search
-		std::transform(shortName.begin(), shortName.end(), shortName.begin(), ::tolower);
-		std::transform(displayName.begin(), displayName.end(), displayName.begin(), ::tolower);
-		std::transform(query.begin(), query.end(), query.begin(), ::tolower);
+		std::transform(shortName.begin(), shortName.end(), shortName.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
+		std::transform(displayName.begin(), displayName.end(), displayName.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
+		std::transform(query.begin(), query.end(), query.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
 
 		// Search in both short name and display name
 		return shortName.find(query) != std::string::npos ||

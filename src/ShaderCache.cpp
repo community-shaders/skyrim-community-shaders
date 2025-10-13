@@ -2507,7 +2507,7 @@ namespace SIE
 				}
 
 				blockedKey = keys[targetIdx];
-				blockedKeyIndex = targetIdx;
+				blockedKeyIndex = -2;  // Set to -2 for dev selections to distinguish from shaderMap indices
 				blockedIDs.clear();
 				logger::debug("Blocking active shader ({}/{}) {}", targetIdx + 1, keys.size(), blockedKey);
 				return;
@@ -2524,7 +2524,7 @@ namespace SIE
 		for (auto& [key, value] : shaderMap) {
 			if (index++ == targetIndex) {
 				blockedKey = key;
-				blockedKeyIndex = (uint)targetIndex;
+				blockedKeyIndex = -1;
 				blockedIDs.clear();
 				logger::debug("Blocking shader ({}/{}) {}", blockedKeyIndex + 1, shaderMap.size(), blockedKey);
 				return;
@@ -2535,7 +2535,7 @@ namespace SIE
 	void ShaderCache::DisableShaderBlocking()
 	{
 		blockedKey = "";
-		blockedKeyIndex = (uint)-1;
+		blockedKeyIndex = -1;
 		blockedIDs.clear();
 		logger::debug("Stopped blocking shaders");
 	}
@@ -2557,11 +2557,11 @@ namespace SIE
 			info.descriptor = descriptor;
 
 			// Construct disk path
-			const std::wstring shaderPath = SIE::SShaderCache::GetShaderPath(
+			info.diskPath = SIE::SShaderCache::GetDiskPath(
 				shader.shaderType == RE::BSShader::Type::ImageSpace ?
 					static_cast<const RE::BSImagespaceShader&>(shader).originalShaderName :
-					shader.fxpFilename);
-			info.diskPath = std::format(L"{}/{:X}.pso", shaderPath, descriptor);
+					shader.fxpFilename,
+				descriptor, shaderClass);
 		}
 
 		info.isActive = true;
