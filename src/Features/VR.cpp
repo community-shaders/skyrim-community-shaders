@@ -23,46 +23,6 @@
 
 using AttachMode = VR::Settings::OverlayAttachMode;
 
-namespace
-{
-	class FontRoleGuard
-	{
-	public:
-		explicit FontRoleGuard(Menu::FontRole role)
-		{
-			Menu* menuInstance = globals::menu;
-			if (!menuInstance) {
-				menuInstance = Menu::GetSingleton();
-			}
-			if (menuInstance) {
-				font_ = menuInstance->GetFont(role);
-				if (font_) {
-					ImGui::PushFont(font_);
-				}
-			}
-		}
-
-		~FontRoleGuard()
-		{
-			if (font_) {
-				ImGui::PopFont();
-			}
-		}
-
-		FontRoleGuard(const FontRoleGuard&) = delete;
-		FontRoleGuard& operator=(const FontRoleGuard&) = delete;
-
-	private:
-		ImFont* font_ = nullptr;
-	};
-
-	bool BeginTabItemWithFont(const char* label, Menu::FontRole role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None)
-	{
-		FontRoleGuard guard(role);
-		return ImGui::BeginTabItem(label, nullptr, flags);
-	}
-}
-
 constexpr int kOverlayWidth = 1920;
 constexpr int kOverlayHeight = 1080;
 
@@ -236,7 +196,7 @@ void VR::DrawSettings()
 		return;
 	if (ImGui::BeginTabBar("##VRTabs", ImGuiTabBarFlags_None)) {
 		// General Settings Tab
-		if (BeginTabItemWithFont("General", Menu::FontRole::Subheading)) {
+		if (ImGui::BeginTabItem("General")) {
 			if (ImGui::BeginChild("##VRGeneralFrame", { 0, 0 }, true)) {
 				DrawGeneralVRSettings();
 				DrawControllerInputInstructions();
@@ -250,7 +210,7 @@ void VR::DrawSettings()
 
 		// Key Bindings Tab
 		if (openVRInfo.isCompatible) {
-			if (BeginTabItemWithFont("Bindings", Menu::FontRole::Subheading)) {
+			if (ImGui::BeginTabItem("Bindings")) {
 				if (ImGui::BeginChild("##VRBindingsFrame", { 0, 0 }, true)) {
 					DrawKeyBindings();
 				}
@@ -259,7 +219,7 @@ void VR::DrawSettings()
 			}
 		}
 		// Debug Tab (existing debug functionality)
-		if (BeginTabItemWithFont("Debug", Menu::FontRole::Subheading)) {
+		if (ImGui::BeginTabItem("Debug")) {
 			if (ImGui::BeginChild("##VRDebugFrame", { 0, 0 }, true)) {
 				DrawDebugSection();
 			}

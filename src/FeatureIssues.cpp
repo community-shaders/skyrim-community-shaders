@@ -1459,7 +1459,7 @@ namespace FeatureIssues
 						{
 							auto disableGuard = Util::DisableGuard(hasActiveTests);
 							auto buttonStyle = Util::StyledButtonWrapper(
-								themeSettings.Palette.FrameBorder,
+								themeSettings.Palette.Border,
 								themeSettings.StatusPalette.RestartNeeded,
 								themeSettings.StatusPalette.CurrentHotkey);
 
@@ -1482,7 +1482,7 @@ namespace FeatureIssues
 						{
 							auto disableGuard = Util::DisableGuard(!hasActiveTests);
 							auto buttonStyle = Util::StyledButtonWrapper(
-								themeSettings.Palette.FrameBorder,
+								themeSettings.Palette.Border,
 								themeSettings.StatusPalette.Error,
 								themeSettings.StatusPalette.CurrentHotkey);
 
