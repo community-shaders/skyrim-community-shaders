@@ -163,7 +163,7 @@ struct PerformanceOverlay : OverlayFeature
 	// ============================================================================
 	// A/B TESTING FUNCTIONS
 	// ============================================================================
-	void DrawABTestSection(const std::vector<DrawCallRow>& allRows);
+	void DrawABTestSection(const std::vector<DrawCallRow>& allRows, bool showCollapsibleSections);
 	void DrawABTestResultsTable();
 	void DrawABTestStatisticalValidity(const Menu::ThemeSettings& theme, const ABTestAggregator& aggregator) const;
 	void ConvertABTestResultsToRows(const std::vector<AggregatedDrawCallStats>& results, std::vector<DrawCallRow>& mainRows, std::vector<DrawCallRow>& summaryRows) const;
