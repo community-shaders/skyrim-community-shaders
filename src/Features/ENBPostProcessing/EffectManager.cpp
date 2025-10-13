@@ -483,7 +483,7 @@ void EffectManager::UpdateCommonData()
 
 		static uint frameCount = 0;
 
-		auto modifiedTimer = std::fmodf(static_cast<float>(timer), 16777216);
+		auto modifiedTimer = std::fmodf(static_cast<float>(timer) * 1000.0f, 16777216);
 		modifiedTimer /= 16777216.0f;
 
 		commonData.timer[0] = modifiedTimer;
