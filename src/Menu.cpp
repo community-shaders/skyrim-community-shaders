@@ -303,12 +303,12 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 		}
 
 		settings.SelectedThemePreset = themeName;
-		
+
 		// Schedule deferred font reload if font has changed
 		if (settings.Theme.FontName != cachedFontName) {
 			pendingFontReload = true;
 		}
-		
+
 		logger::info("Loaded theme preset: {}", themeName);
 		return true;
 	} else {

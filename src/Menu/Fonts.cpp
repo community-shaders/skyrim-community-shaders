@@ -144,13 +144,12 @@ namespace Util
 			// Canonicalize both paths to resolve all symlinks and .. sequences
 			auto canonicalBase = std::filesystem::canonical(basePath);
 			auto canonicalTest = std::filesystem::weakly_canonical(testPath);
-			
+
 			// Check if test path is a subpath of base path
 			auto [baseIt, testIt] = std::mismatch(
 				canonicalBase.begin(), canonicalBase.end(),
-				canonicalTest.begin(), canonicalTest.end()
-			);
-			
+				canonicalTest.begin(), canonicalTest.end());
+
 			return baseIt == canonicalBase.end();
 		} catch (const std::filesystem::filesystem_error&) {
 			// If canonicalization fails, reject the path
@@ -164,12 +163,12 @@ namespace Util
 		std::string SanitizeFontPath(const std::string& input)
 		{
 			std::string sanitized = input;
-			
+
 			// Remove any leading path separators or traversal sequences
-			while (!sanitized.empty() && 
+			while (!sanitized.empty() &&
 				   (sanitized.front() == '/' || sanitized.front() == '\\' ||
-				    sanitized.starts_with("../") || sanitized.starts_with("..\\") ||
-				    sanitized.starts_with("./") || sanitized.starts_with(".\\"))) {
+					   sanitized.starts_with("../") || sanitized.starts_with("..\\") ||
+					   sanitized.starts_with("./") || sanitized.starts_with(".\\"))) {
 				if (sanitized.starts_with("../") || sanitized.starts_with("..\\")) {
 					sanitized = sanitized.substr(3);
 				} else if (sanitized.starts_with("./") || sanitized.starts_with(".\\")) {
@@ -178,13 +177,13 @@ namespace Util
 					sanitized = sanitized.substr(1);
 				}
 			}
-			
+
 			// Replace all instances of .. in the path
 			size_t pos = 0;
 			while ((pos = sanitized.find("..", pos)) != std::string::npos) {
 				sanitized.replace(pos, 2, "");
 			}
-			
+
 			return sanitized;
 		}
 
@@ -415,18 +414,18 @@ namespace Util
 		// Performance: Cache font catalog to avoid repeated filesystem scans
 		static std::optional<Catalog> cachedCatalog;
 		static std::mutex catalogMutex;
-		
+
 		Catalog DiscoverFontCatalog(bool forceRefresh)
 		{
 			std::lock_guard<std::mutex> lock(catalogMutex);
-			
+
 			// Return cached catalog if available and not forcing refresh
 			if (!forceRefresh && cachedCatalog.has_value()) {
-				logger::debug("DiscoverFontCatalog: Using cached catalog ({} families)", 
+				logger::debug("DiscoverFontCatalog: Using cached catalog ({} families)",
 					cachedCatalog->families.size());
 				return *cachedCatalog;
 			}
-			
+
 			Catalog catalog;
 			try {
 				auto fontsPath = Util::PathHelpers::GetFontsPath();
@@ -519,7 +518,7 @@ namespace Util
 
 			return catalog;
 		}
-		
+
 		// Convenience overload that uses cached catalog by default
 		Catalog DiscoverFontCatalog()
 		{
@@ -547,17 +546,17 @@ namespace Util
 
 		try {
 			auto fontsPath = Util::PathHelpers::GetFontsPath();
-			
+
 			// Security: Sanitize input to prevent path traversal
 			std::string sanitizedName = SanitizeFontPath(fontName);
 			if (sanitizedName.empty()) {
 				logger::warn("ValidateFont: Rejected potentially malicious path: {}", fontName);
 				return false;
 			}
-			
+
 			std::filesystem::path relative(sanitizedName);
 			std::filesystem::path directPath = fontsPath / relative;
-			
+
 			// Security: Verify the resolved path stays within fonts directory
 			if (!IsPathWithinDirectory(fontsPath, directPath)) {
 				logger::warn("ValidateFont: Path traversal attempt detected: {}", fontName);
@@ -583,7 +582,7 @@ namespace Util
 				for (const auto& style : family.styles) {
 					std::string fileLower = ToLowerCopy(style.file);
 					std::string filenameLower = ToLowerCopy(std::filesystem::path(style.file).filename().string());
-					
+
 					if (fileLower == targetNormalized || filenameLower == targetFilename) {
 						return true;
 					}

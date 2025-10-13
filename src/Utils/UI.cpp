@@ -1259,7 +1259,7 @@ namespace Util
 			return (lighter + 0.05f) / (darker + 0.05f);
 		}
 
-		void AdjustBackgroundForTextContrast(ImVec4& backgroundColor, float textLuminance, 
+		void AdjustBackgroundForTextContrast(ImVec4& backgroundColor, float textLuminance,
 			float luminanceThreshold, float darkenFactor, float lightenOffset)
 		{
 			float bgLuminance = CalculateLuminance(backgroundColor);

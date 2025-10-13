@@ -33,30 +33,30 @@ using namespace SKSE;
 /**
  * THEME MANAGER IMPLEMENTATION NOTES
  * ===================================
- * 
+ *
  * BLUR SHADER PARAMETERS:
  * -----------------------
  * The background blur system uses constant buffers to pass parameters to HLSL shaders:
- * 
+ *
  * BlurBuffer (cbuffer b0):
  *   - TexelSize.xy: Inverse texture dimensions (1/width, 1/height) for UV calculations
  *   - TexelSize.z:  Blur strength multiplier (0.0-1.0 from BackgroundBlur theme setting)
  *   - BlurParams.x: Number of blur samples (default: 13, must be odd for centered kernel)
- * 
+ *
  * The blur uses a separable Gaussian kernel split into two passes:
  *   1. Horizontal pass: Samples along X-axis, outputs to intermediate texture
  *   2. Vertical pass:   Samples along Y-axis from intermediate, outputs final result
- * 
+ *
  * Performance scales with sample count (O(width*height*samples)).
  * Higher sample counts = smoother blur but lower FPS.
  * Sub-pixel jitter reduces banding artifacts at low sample counts.
- * 
+ *
  * FONT ATLAS REBUILDING:
  * ----------------------
  * Font changes require rebuilding ImGui's texture atlas, which invalidates GPU resources.
  * Must flush GPU pipeline before invalidation to prevent use-after-free crashes.
  * Emergency fallback loads Default.json if user font fails validation.
- * 
+ *
  * THREAD SAFETY:
  * --------------
  * - blurResourcesMutex protects all D3D11 blur resources (textures, shaders, buffers)
@@ -68,40 +68,40 @@ namespace
 {
 	// Theme System Constants
 	// ======================
-	
+
 	// Text Contrast and Opacity
 	// -------------------------
 	// Disabled text alpha: Makes inactive UI elements visually distinct but still readable
 	// Value calibrated for accessibility - too low = invisible, too high = looks enabled
 	constexpr float DISABLED_TEXT_ALPHA = 0.3f;  // 30% opacity for disabled elements
-	
+
 	// Resize grip hover alpha: Subtle hover effect to avoid visual clutter
 	// Low value maintains minimalist aesthetic while providing hover feedback
 	constexpr float RESIZE_GRIP_HOVER_ALPHA = 0.1f;  // 10% opacity for hover state
-	
+
 	// Blur System Constants
 	// ---------------------
 	// Text contrast boost per unit blur: Compensates for reduced clarity behind blurred backgrounds
 	// Small value preserves theme colors while improving readability
 	// Reduced from 0.15f after user testing showed excessive brightness on light themes
 	constexpr float BLUR_TEXT_CONTRAST_FACTOR = 0.05f;  // 5% brightness boost at max blur
-	
+
 	// Gaussian blur sigma: Controls blur kernel spread (standard deviation)
 	// Value 0.5 provides smooth blur without over-blurring fine details
 	// Based on Unrimp rendering engine's empirically tested value
 	// Lower = sharper (more detail, more banding), Higher = softer (less detail, smoother)
 	constexpr float GAUSSIAN_BLUR_SIGMA = 0.5f;
-	
+
 	// Contrast Adjustment Constants
 	// ------------------------------
 	// Luminance threshold for background/text contrast (sRGB middle gray)
 	// 0.5 represents perceptual midpoint between black and white
 	constexpr float LUMINANCE_THRESHOLD = 0.5f;
-	
+
 	// Background darkening factor for light-on-light contrast issues
 	// Multiplies RGB by 0.4 = 60% darker, prevents white text on white background
 	constexpr float CONTRAST_DARKEN_FACTOR = 0.4f;
-	
+
 	// Background lightening offset for dark-on-dark contrast issues
 	// Adds 0.3 to RGB = 30% brighter, prevents black text on black background
 	constexpr float CONTRAST_LIGHTEN_OFFSET = 0.3f;
@@ -200,7 +200,7 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 	float textLum = Util::ColorUtils::CalculateLuminance(colors[ImGuiCol_Text]);
 
 	// Apply contrast adjustments for all header and tab backgrounds using unified logic
-	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_Header], textLum, 
+	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_Header], textLum,
 		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
 	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_HeaderHovered], textLum,
 		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
@@ -287,7 +287,7 @@ void ThemeManager::RenderBackgroundBlur()
 
 	{
 		std::lock_guard<std::mutex> lock(blurResourcesMutex);
-		
+
 		// Ensure resources are initialized
 		if (!blurVertexShader || !blurHorizontalPixelShader || !blurVerticalPixelShader) {
 			return;
@@ -505,15 +505,15 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		ImFont* loadedFont = nullptr;
 		if (!effective.File.empty()) {
 			auto fontPath = fontsRoot / effective.File;
-			
+
 			// Security: Validate font path stays within fonts directory
 			if (!Util::IsPathWithinDirectory(fontsRoot, fontPath)) {
-				logger::error("Security: Font path traversal attempt detected for role '{}': {}", 
+				logger::error("Security: Font path traversal attempt detected for role '{}': {}",
 					Menu::GetFontRoleKey(role), effective.File);
 				effective = Menu::GetDefaultFontRole(role);
 				fontPath = fontsRoot / effective.File;
 			}
-			
+
 			if (std::filesystem::exists(fontPath)) {
 				std::string cacheKey = std::format("{}|{}", effective.File, static_cast<int>(roundedSize));
 				auto cached = atlasCache.find(cacheKey);
@@ -601,7 +601,7 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	// Build the font atlas - this bakes all fonts into the texture
 	if (!io.Fonts->Build()) {
 		logger::error("ThemeManager::ReloadFont() - Failed to build font atlas!");
-		
+
 		// Emergency fallback: try to restore with default font before giving up
 		logger::warn("ThemeManager::ReloadFont() - Attempting emergency fallback to default font...");
 		io.Fonts->Clear();
@@ -621,10 +621,10 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	// Must be done between frames with no active rendering state
 
 	logger::debug("ThemeManager::ReloadFont() - Invalidating DX11 device objects...");
-	
+
 	// Flush any pending GPU operations before invalidating
 	context->Flush();
-	
+
 	ImGui_ImplDX11_InvalidateDeviceObjects();
 
 	logger::debug("ThemeManager::ReloadFont() - Creating DX11 device objects...");
@@ -635,7 +635,7 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		logger::warn("ThemeManager::ReloadFont() - Attempting emergency device object recovery...");
 		io.Fonts->Clear();
 		ImFont* fallbackFont = io.Fonts->AddFontDefault();
-		
+
 		bool recoverySucceeded = false;
 		if (fallbackFont && io.Fonts->Build()) {
 			ImGui_ImplDX11_InvalidateDeviceObjects();
@@ -647,7 +647,7 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 				recoverySucceeded = true;
 			}
 		}
-		
+
 		if (!recoverySucceeded) {
 			logger::error("ThemeManager::ReloadFont() - Critical failure: unable to recover device objects!");
 		}
@@ -937,7 +937,7 @@ std::unique_ptr<ThemeManager::ThemeInfo> ThemeManager::LoadThemeFile(const std::
 			logger::error("Security: Theme file outside allowed directory: {}", filePath.string());
 			return themeInfo;
 		}
-		
+
 		std::ifstream file(filePath);
 		if (!file.is_open()) {
 			logger::warn("Failed to open theme file: {}", filePath.string());
@@ -1012,7 +1012,7 @@ float ThemeManager::ResolveFontSize(const Menu& menu)
 bool ThemeManager::InitializeBlurShaders()
 {
 	std::lock_guard<std::mutex> lock(blurResourcesMutex);
-	
+
 	static bool initialized = false;
 	static bool initializationFailed = false;
 
@@ -1306,7 +1306,7 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 void ThemeManager::CreateBlurTextures(UINT width, UINT height, DXGI_FORMAT format)
 {
 	std::lock_guard<std::mutex> lock(blurResourcesMutex);
-	
+
 	// Check if textures need to be recreated
 	if (blurTexture1 && blurTextureWidth == width && blurTextureHeight == height) {
 		return;
@@ -1384,11 +1384,11 @@ void ThemeManager::CreateBlurTextures(UINT width, UINT height, DXGI_FORMAT forma
 void ThemeManager::PerformGaussianBlur(ID3D11Texture2D* sourceTexture, ID3D11RenderTargetView* targetRTV, ImVec2 menuMin, ImVec2 menuMax)
 {
 	std::lock_guard<std::mutex> lock(blurResourcesMutex);
-	
+
 	auto context = globals::d3d::context;
 	if (!context || !sourceTexture || !targetRTV)
 		return;
-	
+
 	// Ensure resources exist before using
 	if (!blurVertexShader || !blurHorizontalPixelShader || !blurVerticalPixelShader) {
 		return;
@@ -1466,7 +1466,7 @@ void ThemeManager::PerformGaussianBlur(ID3D11Texture2D* sourceTexture, ID3D11Ren
 	auto samplerStatePtr = blurSamplerState.get();
 	auto rtv1Ptr = blurRTV1.get();
 	auto rtv2Ptr = blurRTV2.get();
-	
+
 	context->VSSetShader(blurVertexShader.get(), nullptr, 0);
 	context->PSSetConstantBuffers(0, 1, &constantBufferPtr);
 	context->PSSetSamplers(0, 1, &samplerStatePtr);
@@ -1549,7 +1549,7 @@ void ThemeManager::PerformGaussianBlur(ID3D11Texture2D* sourceTexture, ID3D11Ren
 void ThemeManager::CleanupBlurResources()
 {
 	std::lock_guard<std::mutex> lock(blurResourcesMutex);
-	
+
 	// com_ptr automatically calls Release() when reset to nullptr
 	blurVertexShader = nullptr;
 	blurHorizontalPixelShader = nullptr;

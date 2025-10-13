@@ -51,7 +51,7 @@ namespace Util
 
 	std::vector<std::string> DiscoverFonts();
 	bool ValidateFont(const std::string& fontName);
-	
+
 	// Security: Path validation helpers
 	bool IsPathWithinDirectory(const std::filesystem::path& basePath, const std::filesystem::path& testPath);
 }

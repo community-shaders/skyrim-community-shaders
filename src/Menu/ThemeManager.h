@@ -13,11 +13,11 @@ using json = nlohmann::json;
 
 /**
  * @brief Manages hot-swappable theme system for Community Shaders menu
- * 
+ *
  * THEME JSON SCHEMA:
  * ==================
  * Theme files use JSON format with the following structure:
- * 
+ *
  * {
  *   "DisplayName": "Human-readable theme name",
  *   "Description": "Theme description",
@@ -27,18 +27,18 @@ using json = nlohmann::json;
  *     "FontSize": 27.0,                    // Base font size (16-108px range)
  *     "FontName": "Jost/Jost-Regular.ttf", // Legacy font path (use FontRoles instead)
  *     "GlobalScale": 0.0,                   // UI scale exponent (-2.0 to 2.0, 0.0=100%)
- *     
+ *
  *     // Font Role System (6 roles: Body, Heading, Subheading, Subtitle, Caption, Monospace)
  *     "FontRoles": [
  *       { "Family": "Jost", "Style": "Regular", "File": "Jost/Jost-Regular.ttf", "SizeScale": 1.0 },
  *       { "Family": "Jost", "Style": "SemiBold", "File": "Jost/Jost-SemiBold.ttf", "SizeScale": 1.05 },
  *       // ... 4 more roles
  *     ],
- *     
+ *
  *     "TooltipHoverDelay": 0.5,            // Seconds before tooltip appears
  *     "BackgroundBlur": 0.5,               // Gaussian blur intensity (0.0-1.0)
  *     "ShowActionIcons": true,             // Show icons on action buttons
- *     
+ *
  *     // Simple color palette (6 key colors)
  *     "Palette": {
  *       "Background": [0.03, 0.03, 0.03, 0.39],  // Window background RGBA
@@ -48,7 +48,7 @@ using json = nlohmann::json;
  *       "Separator": [0.5, 0.5, 0.5, 0.6],       // Divider lines
  *       "ResizeGrip": [0.6, 0.6, 0.6, 0.8]       // Window resize handle
  *     },
- *     
+ *
  *     // Status indicator colors
  *     "StatusPalette": {
  *       "Disable": [0.5, 0.5, 0.5, 1.0],         // Disabled elements
@@ -59,14 +59,14 @@ using json = nlohmann::json;
  *       "SuccessColor": [0.0, 1.0, 0.0, 1.0],    // Success messages
  *       "InfoColor": [0.2, 0.6, 1.0, 1.0]        // Info messages
  *     },
- *     
+ *
  *     // Feature header styling
  *     "FeatureHeading": {
  *       "ColorDefault": [0.8, 0.8, 0.8, 1.0],    // Default header color
  *       "ColorHovered": [0.6, 0.6, 0.6, 1.0],    // Hovered header color
  *       "MinimizedFactor": 0.7                    // Alpha multiplier when minimized
  *     },
- *     
+ *
  *     // Scrollbar transparency
  *     "ScrollbarOpacity": {
  *       "Background": 0.0,                        // Scrollbar track alpha
@@ -74,7 +74,7 @@ using json = nlohmann::json;
  *       "ThumbHovered": 0.75,                     // Hovered handle alpha
  *       "ThumbActive": 0.9                        // Dragged handle alpha
  *     },
- *     
+ *
  *     // ImGui style settings (spacing, rounding, etc.)
  *     "Style": {
  *       "WindowBorderSize": 2.0,
@@ -83,12 +83,12 @@ using json = nlohmann::json;
  *       "FrameRounding": 4.0,
  *       // ... see ImGuiStyle for all available fields
  *     },
- *     
+ *
  *     // Full ImGui color palette (55 colors, overrides simple palette)
  *     "FullPalette": [ [r,g,b,a], [r,g,b,a], ... ]
  *   }
  * }
- * 
+ *
  * FONT ROLE SYSTEM:
  * =================
  * Replaces legacy single-font system with semantic font roles:
@@ -98,10 +98,10 @@ using json = nlohmann::json;
  * - Role 3 (Subtitle):   Secondary text, descriptions
  * - Role 4 (Caption):    Small auxiliary text
  * - Role 5 (Monospace):  Code, file paths, technical values
- * 
+ *
  * Each role can have different font family, style, and size scale.
  * Fonts must exist in Data\SKSE\Plugins\CommunityShaders\Fonts\
- * 
+ *
  * BLUR SHADER SYSTEM:
  * ===================
  * Implements separable Gaussian blur using DirectX 11 shaders:
@@ -110,16 +110,16 @@ using json = nlohmann::json;
  * - Sub-pixel jitter for smoother results at low sample counts
  * - Blur strength controlled by BackgroundBlur field (0.0-1.0)
  * - Renders behind ImGui windows only (respects window bounds)
- * 
+ *
  * Based on Unrimp rendering engine architecture:
  * https://github.com/cofenberg/unrimp
- * 
+ *
  * MIGRATION FROM OLD CONFIGS:
  * ===========================
  * Legacy "FontName" field still supported for backward compatibility.
  * New themes should use "FontRoles" array instead.
  * Old themes without FontRoles auto-populate with defaults on load.
- * 
+ *
  * Theme files location: Data\SKSE\Plugins\CommunityShaders\Themes\
  * File naming: {ThemeName}.json (e.g., "Default.json", "DragonBlood.json")
  */
