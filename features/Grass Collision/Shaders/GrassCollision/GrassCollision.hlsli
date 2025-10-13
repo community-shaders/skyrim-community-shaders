@@ -96,7 +96,10 @@ namespace GrassCollision
 	{
 		float3 tangentX = float3(delta, 0, hX - h0);
 		float3 tangentY = float3(0, delta, hY - h0);
-		return -normalize(cross(tangentX, tangentY) * float3(1.0, 1.0, 0.1));
+		float3 crossProd = cross(tangentX, tangentY) * float3(1.0, 1.0, 0.1);
+		
+		float lenSq = dot(crossProd, crossProd);
+		return lenSq > 1e-12 ? -crossProd * rsqrt(lenSq) : float3(0, 0, -1);
 	}
 
 	void ComputeCollision(float3 worldPosition, float maximumDepth, float distanceFromCenter, float delta, out float3 collision, out float3 previousCollision)
