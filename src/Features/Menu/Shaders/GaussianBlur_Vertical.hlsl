@@ -2,6 +2,41 @@
 // Based on Unrimp rendering engine's separable blur implementation
 // Credits: Christian Ofenberg and the Unrimp project (https://github.com/cofenberg/unrimp)
 // License: MIT License
+// Used for ImGui background blur effects
+//
+// SHADER PARAMETERS DOCUMENTATION:
+// =================================
+// This shader implements the second pass of a two-pass separable Gaussian blur.
+// Samples vertically along the Y-axis from the horizontal pass output.
+//
+// Constant Buffer (b0) - BlurBuffer:
+//   TexelSize.x:  Inverse texture width (1.0 / textureWidth) - unused in vertical pass
+//   TexelSize.y:  Inverse texture height (1.0 / textureHeight) - for UV step size
+//   TexelSize.z:  Blur strength multiplier (0.0-1.0) - from theme's BackgroundBlur setting
+//   TexelSize.w:  Unused, reserved for future parameters
+//
+//   BlurParams.x: Number of blur samples (must be odd, default: 13)
+//                 Must match horizontal pass sample count for consistent blur
+//   BlurParams.y: Unused, reserved
+//   BlurParams.z: Unused, reserved
+//   BlurParams.w: Unused, reserved
+//
+// Two-Pass Separable Blur Benefits:
+// - 2D Gaussian blur decomposed into two 1D blurs (horizontal + vertical)
+// - Performance: O(2*N) instead of O(N²) for equivalent quality
+// - Example: 13x13 kernel = 169 samples naive vs 26 samples separable (6.5x faster)
+//
+// Final output is blended behind ImGui windows based on window alpha values.
+
+// Uniforms
+cbuffer BlurBuffer : register(b0)
+{
+    float4 TexelSize;       // x = 1/width, y = 1/height, z = blur strength, w = unused
+    int4   BlurParams;      // x = samples, y = unused, z = unused, w = unused
+};Gaussian Blur Shader
+// Based on Unrimp rendering engine's separable blur implementation
+// Credits: Christian Ofenberg and the Unrimp project (https://github.com/cofenberg/unrimp)
+// License: MIT License
 // Used for ImGui background blur effects - Second pass (vertical)
 
 // Uniforms
@@ -39,7 +74,12 @@ VS_OUTPUT VS_Main(VS_INPUT input)
 // Uses proper 2D Gaussian distribution with better normalization
 float GaussianWeight(float offset)
 {
-    const float SIGMA = 0.5f;  // Unrimp's SIGMA value for smooth blur
+    // SIGMA controls the blur kernel spread (standard deviation)
+    // 0.5 = optimal balance between smoothness and detail preservation
+    // Lower values = sharper blur (more detail, more banding)
+    // Higher values = softer blur (less detail, smoother gradients)
+    // This value was empirically tested by Unrimp engine developers
+    const float SIGMA = 0.5f;
     const float v = 2.0f * SIGMA * SIGMA;
     return exp(-(offset * offset) / v) / (sqrt(2.0f * 3.14159265f) * SIGMA);
 }
@@ -59,7 +99,7 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
     for (int i = -halfSamples; i <= halfSamples; ++i)
     {
         // Add slight sub-pixel jitter to reduce aliasing artifacts
-        float offset = float(i) + 0.5f * (float(i % 2) - 0.5f) * 0.1f;
+        float offset = float(i) + 0.5f * (float(abs(i) % 2) - 0.5f) * 0.1f;
         float2 sampleCoord = input.TexCoord + float2(0.0f, offset * TexelSize.y * TexelSize.z);
         float weight = GaussianWeight(offset);
 

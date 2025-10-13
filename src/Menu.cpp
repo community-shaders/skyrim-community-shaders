@@ -271,7 +271,11 @@ void Menu::SaveTheme(json& o_json)
 std::vector<std::string> Menu::DiscoverThemes()
 {
 	auto themeManager = ThemeManager::GetSingleton();
-	return themeManager->GetThemeNames();
+	if (themeManager) {
+		themeManager->DiscoverThemes();
+		return themeManager->GetThemeNames();
+	}
+	return {};
 }
 
 bool Menu::LoadThemePreset(const std::string& themeName)
@@ -299,8 +303,12 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 		}
 
 		settings.SelectedThemePreset = themeName;
-		// Update cached values for font reload detection
-		cachedFontName = settings.Theme.FontName;
+		
+		// Schedule deferred font reload if font has changed
+		if (settings.Theme.FontName != cachedFontName) {
+			pendingFontReload = true;
+		}
+		
 		logger::info("Loaded theme preset: {}", themeName);
 		return true;
 	} else {

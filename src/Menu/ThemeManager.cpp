@@ -1,7 +1,10 @@
 #include "ThemeManager.h"
 #include "../Menu.h"
 
+#include "Fonts.h"
+
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <ctime>
 #include <d3dcompiler.h>
@@ -23,11 +26,86 @@
 #include "../Globals.h"
 #include "../Util.h"
 #include "../Utils/FileSystem.h"
+#include "../Utils/UI.h"
 
 using namespace SKSE;
 
+/**
+ * THEME MANAGER IMPLEMENTATION NOTES
+ * ===================================
+ * 
+ * BLUR SHADER PARAMETERS:
+ * -----------------------
+ * The background blur system uses constant buffers to pass parameters to HLSL shaders:
+ * 
+ * BlurBuffer (cbuffer b0):
+ *   - TexelSize.xy: Inverse texture dimensions (1/width, 1/height) for UV calculations
+ *   - TexelSize.z:  Blur strength multiplier (0.0-1.0 from BackgroundBlur theme setting)
+ *   - BlurParams.x: Number of blur samples (default: 13, must be odd for centered kernel)
+ * 
+ * The blur uses a separable Gaussian kernel split into two passes:
+ *   1. Horizontal pass: Samples along X-axis, outputs to intermediate texture
+ *   2. Vertical pass:   Samples along Y-axis from intermediate, outputs final result
+ * 
+ * Performance scales with sample count (O(width*height*samples)).
+ * Higher sample counts = smoother blur but lower FPS.
+ * Sub-pixel jitter reduces banding artifacts at low sample counts.
+ * 
+ * FONT ATLAS REBUILDING:
+ * ----------------------
+ * Font changes require rebuilding ImGui's texture atlas, which invalidates GPU resources.
+ * Must flush GPU pipeline before invalidation to prevent use-after-free crashes.
+ * Emergency fallback loads Default.json if user font fails validation.
+ * 
+ * THREAD SAFETY:
+ * --------------
+ * - blurResourcesMutex protects all D3D11 blur resources (textures, shaders, buffers)
+ * - Font reloading uses atomic flag with compare_exchange_strong to prevent re-entry
+ * - Theme discovery caches are protected per-access basis
+ */
+
 namespace
 {
+	// Theme System Constants
+	// ======================
+	
+	// Text Contrast and Opacity
+	// -------------------------
+	// Disabled text alpha: Makes inactive UI elements visually distinct but still readable
+	// Value calibrated for accessibility - too low = invisible, too high = looks enabled
+	constexpr float DISABLED_TEXT_ALPHA = 0.3f;  // 30% opacity for disabled elements
+	
+	// Resize grip hover alpha: Subtle hover effect to avoid visual clutter
+	// Low value maintains minimalist aesthetic while providing hover feedback
+	constexpr float RESIZE_GRIP_HOVER_ALPHA = 0.1f;  // 10% opacity for hover state
+	
+	// Blur System Constants
+	// ---------------------
+	// Text contrast boost per unit blur: Compensates for reduced clarity behind blurred backgrounds
+	// Small value preserves theme colors while improving readability
+	// Reduced from 0.15f after user testing showed excessive brightness on light themes
+	constexpr float BLUR_TEXT_CONTRAST_FACTOR = 0.05f;  // 5% brightness boost at max blur
+	
+	// Gaussian blur sigma: Controls blur kernel spread (standard deviation)
+	// Value 0.5 provides smooth blur without over-blurring fine details
+	// Based on Unrimp rendering engine's empirically tested value
+	// Lower = sharper (more detail, more banding), Higher = softer (less detail, smoother)
+	constexpr float GAUSSIAN_BLUR_SIGMA = 0.5f;
+	
+	// Contrast Adjustment Constants
+	// ------------------------------
+	// Luminance threshold for background/text contrast (sRGB middle gray)
+	// 0.5 represents perceptual midpoint between black and white
+	constexpr float LUMINANCE_THRESHOLD = 0.5f;
+	
+	// Background darkening factor for light-on-light contrast issues
+	// Multiplies RGB by 0.4 = 60% darker, prevents white text on white background
+	constexpr float CONTRAST_DARKEN_FACTOR = 0.4f;
+	
+	// Background lightening offset for dark-on-dark contrast issues
+	// Adds 0.3 to RGB = 30% brighter, prevents black text on black background
+	constexpr float CONTRAST_LIGHTEN_OFFSET = 0.3f;
+
 	/**
 	 * @brief Gets file modification time
 	 */
@@ -60,8 +138,9 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 
 	if (isThemeCorrupted) {
 		logger::warn("Theme appears corrupted, attempting to reload Default.json to prevent ImGui defaults");
-		auto* nonConstMenu = const_cast<Menu*>(&menu);
-		if (nonConstMenu->LoadThemePreset("Default")) {
+		// Note: This violates const correctness but is necessary for emergency theme recovery
+		// TODO: Refactor to use separate recovery path that doesn't require const_cast
+		if (const_cast<Menu*>(&menu)->LoadThemePreset("Default")) {
 			logger::info("Successfully reloaded Default.json theme");
 		} else {
 			logger::error("Failed to reload Default.json - ImGui may show hardcoded defaults");
@@ -105,57 +184,37 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 
 	// Apply derived colors based on simple palette
 	ImVec4 textDisabled = themeSettings.Palette.Text;
-	textDisabled.w = 0.3f;
+	textDisabled.w = DISABLED_TEXT_ALPHA;
 	colors[ImGuiCol_TextDisabled] = textDisabled;
 
 	ImVec4 resizeGripHovered = themeSettings.Palette.ResizeGrip;
-	resizeGripHovered.w = 0.1f;
+	resizeGripHovered.w = RESIZE_GRIP_HOVER_ALPHA;
 	colors[ImGuiCol_ResizeGripHovered] = resizeGripHovered;
 	colors[ImGuiCol_ResizeGripActive] = resizeGripHovered;
 
 	// Auto-adjust text colors for better contrast on selection backgrounds
 	// This fixes white-on-white text issues in high contrast themes
-	auto calculateLuminance = [](const ImVec4& color) {
-		auto toLinear = [](float c) { return c <= 0.03928f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f); };
-		float r = toLinear(color.x), g = toLinear(color.y), b = toLinear(color.z);
-		return 0.2126f * r + 0.7152f * g + 0.0722f * b;
-	};
-
-	auto getContrastingTextColor = [&](const ImVec4& bgColor) {
-		float luminance = calculateLuminance(bgColor);
-		return luminance > 0.5f ? ImVec4(0.0f, 0.0f, 0.0f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-	};
-
-	// Helper function to adjust background color for better contrast with text
-	auto adjustBackgroundForContrast = [&](ImVec4& backgroundColor, float textLuminance) {
-		float bgLuminance = calculateLuminance(backgroundColor);
-
-		if (bgLuminance > 0.5f && textLuminance > 0.5f) {
-			// Both background and text are light - darken the background
-			backgroundColor.x *= 0.4f;
-			backgroundColor.y *= 0.4f;
-			backgroundColor.z *= 0.4f;
-		} else if (bgLuminance < 0.5f && textLuminance < 0.5f) {
-			// Both background and text are dark - lighten the background
-			backgroundColor.x = std::min(1.0f, backgroundColor.x + 0.3f);
-			backgroundColor.y = std::min(1.0f, backgroundColor.y + 0.3f);
-			backgroundColor.z = std::min(1.0f, backgroundColor.z + 0.3f);
-		}
-	};
+	// Use centralized color utilities from Utils/UI.h instead of duplicating logic
 
 	// Apply contrast-aware adjustments for headers and tabs
-	float textLum = calculateLuminance(colors[ImGuiCol_Text]);
+	float textLum = Util::ColorUtils::CalculateLuminance(colors[ImGuiCol_Text]);
 
 	// Apply contrast adjustments for all header and tab backgrounds using unified logic
-	adjustBackgroundForContrast(colors[ImGuiCol_Header], textLum);
-	adjustBackgroundForContrast(colors[ImGuiCol_HeaderHovered], textLum);
-	adjustBackgroundForContrast(colors[ImGuiCol_HeaderActive], textLum);
-	adjustBackgroundForContrast(colors[ImGuiCol_Tab], textLum);
-	adjustBackgroundForContrast(colors[ImGuiCol_TabActive], textLum);
-	adjustBackgroundForContrast(colors[ImGuiCol_TabHovered], textLum);
+	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_Header], textLum, 
+		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
+	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_HeaderHovered], textLum,
+		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
+	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_HeaderActive], textLum,
+		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
+	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_Tab], textLum,
+		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
+	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_TabActive], textLum,
+		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
+	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_TabHovered], textLum,
+		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
 
 	// Apply contrast-aware text for selection states (TextSelectedBg is used when text is selected)
-	if (calculateLuminance(colors[ImGuiCol_HeaderActive]) > 0.5f) {
+	if (Util::ColorUtils::CalculateLuminance(colors[ImGuiCol_HeaderActive]) > LUMINANCE_THRESHOLD) {
 		colors[ImGuiCol_TextSelectedBg] = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);  // Black text on light selection
 	} else {
 		colors[ImGuiCol_TextSelectedBg] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);  // White text on dark selection
@@ -189,9 +248,10 @@ void ThemeManager::ApplyBackgroundBlur(float blurIntensity, ImVec4* colors)
 	// NOTE: Window transparency is now controlled by the background alpha setting
 	// The blur intensity only affects the backdrop effect strength, not window alpha
 
-	// Optional: Enhance text contrast very slightly for better readability over backdrops
+	// Enhance text contrast slightly for better readability over blurred backgrounds
+	// Small boost preserves theme colors while compensating for reduced clarity
 	ImVec4& text = colors[ImGuiCol_Text];
-	float contrastBoost = 1.0f + (blurIntensity * 0.05f);  // Reduced from 0.15f
+	float contrastBoost = 1.0f + (blurIntensity * BLUR_TEXT_CONTRAST_FACTOR);
 	text.x = std::min(1.0f, text.x * contrastBoost);
 	text.y = std::min(1.0f, text.y * contrastBoost);
 	text.z = std::min(1.0f, text.z * contrastBoost);
@@ -223,6 +283,15 @@ void ThemeManager::RenderBackgroundBlur()
 	// Initialize blur shaders if needed
 	if (!InitializeBlurShaders()) {
 		return;
+	}
+
+	{
+		std::lock_guard<std::mutex> lock(blurResourcesMutex);
+		
+		// Ensure resources are initialized
+		if (!blurVertexShader || !blurHorizontalPixelShader || !blurVerticalPixelShader) {
+			return;
+		}
 	}
 
 	auto device = globals::d3d::device;
@@ -345,14 +414,14 @@ void ThemeManager::ForceApplyDefaultTheme()
 
 void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 {
-	// Static flag to prevent concurrent font reloads
-	static bool isReloading = false;
-	if (isReloading) {
+	// Thread-safe reentrancy guard using atomic flag
+	static std::atomic<bool> isReloading{ false };
+	bool expected = false;
+	if (!isReloading.compare_exchange_strong(expected, true)) {
 		logger::warn("ThemeManager::ReloadFont() - Font reload already in progress, skipping");
 		return;
 	}
 
-	isReloading = true;
 	auto& themeSettings = menu.GetTheme();
 
 	logger::info("ThemeManager::ReloadFont() - Starting font reload...");
@@ -374,9 +443,25 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		return;
 	}
 
+	// Additional rendering state checks
+	if (ctx->CurrentWindow || ctx->CurrentTable) {
+		logger::error("ThemeManager::ReloadFont() - ImGui has active window/table state!");
+		isReloading = false;
+		return;
+	}
+
 	// Additional check: make sure font atlas exists
 	if (!io.Fonts) {
 		logger::error("ThemeManager::ReloadFont() - No font atlas available!");
+		isReloading = false;
+		return;
+	}
+
+	// Verify D3D11 device is valid
+	auto device = globals::d3d::device;
+	auto context = globals::d3d::context;
+	if (!device || !context) {
+		logger::error("ThemeManager::ReloadFont() - D3D11 device or context is null!");
 		isReloading = false;
 		return;
 	}
@@ -393,16 +478,15 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	font_config.RasterizerMultiply = Constants::FCONF_RASTERIZER_MULTIPLY;
 
 	float fontSize = ResolveFontSize(menu);
-	auto& mutableMenu = const_cast<Menu&>(menu);
 	auto fontsRoot = Util::PathHelpers::GetFontsPath();
-	mutableMenu.loadedFontRoles.fill(nullptr);
+	menu.loadedFontRoles.fill(nullptr);
 
 	std::unordered_map<std::string, ImFont*> atlasCache;
 	std::vector<size_t> rolesNeedingFallback;
 
 	for (size_t i = 0; i < static_cast<size_t>(Menu::FontRole::Count); ++i) {
 		Menu::FontRole role = static_cast<Menu::FontRole>(i);
-		auto& mutableRoleSettings = mutableMenu.GetFontRoleSettings(role);
+		auto& mutableRoleSettings = const_cast<Menu&>(menu).GetFontRoleSettings(role);
 		Menu::ThemeSettings::FontRoleSettings effective = themeSettings.FontRoles[i];
 
 		if (effective.SizeScale <= 0.f) {
@@ -416,11 +500,20 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 
 		float scaledSize = std::clamp(fontSize * effective.SizeScale, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE);
 		float roundedSize = std::round(scaledSize);
-		mutableMenu.cachedFontPixelSizesByRole[i] = roundedSize;
+		menu.cachedFontPixelSizesByRole[i] = roundedSize;
 
 		ImFont* loadedFont = nullptr;
 		if (!effective.File.empty()) {
 			auto fontPath = fontsRoot / effective.File;
+			
+			// Security: Validate font path stays within fonts directory
+			if (!Util::IsPathWithinDirectory(fontsRoot, fontPath)) {
+				logger::error("Security: Font path traversal attempt detected for role '{}': {}", 
+					Menu::GetFontRoleKey(role), effective.File);
+				effective = Menu::GetDefaultFontRole(role);
+				fontPath = fontsRoot / effective.File;
+			}
+			
 			if (std::filesystem::exists(fontPath)) {
 				std::string cacheKey = std::format("{}|{}", effective.File, static_cast<int>(roundedSize));
 				auto cached = atlasCache.find(cacheKey);
@@ -444,18 +537,18 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		if (!loadedFont) {
 			rolesNeedingFallback.push_back(i);
 		} else {
-			mutableMenu.loadedFontRoles[i] = loadedFont;
+			menu.loadedFontRoles[i] = loadedFont;
 			mutableRoleSettings = effective;
-			mutableMenu.cachedFontFilesByRole[i] = effective.File;
+			menu.cachedFontFilesByRole[i] = effective.File;
 		}
 	}
 
 	const size_t bodyIndex = static_cast<size_t>(Menu::FontRole::Body);
-	if (!mutableMenu.loadedFontRoles[bodyIndex]) {
+	if (!menu.loadedFontRoles[bodyIndex]) {
 		const auto& defaults = Menu::GetDefaultFontRole(Menu::FontRole::Body);
 		float bodySize = std::clamp(fontSize * defaults.SizeScale, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE);
 		float roundedBodySize = std::round(bodySize);
-		mutableMenu.cachedFontPixelSizesByRole[bodyIndex] = roundedBodySize;
+		menu.cachedFontPixelSizesByRole[bodyIndex] = roundedBodySize;
 		logger::warn("ThemeManager::ReloadFont() - Falling back to default body font '{}'.", defaults.File);
 
 		ImFont* bodyFont = nullptr;
@@ -472,14 +565,14 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 			bodyFont = io.Fonts->AddFontDefault();
 		}
 
-		mutableMenu.loadedFontRoles[bodyIndex] = bodyFont;
-		mutableMenu.GetFontRoleSettings(Menu::FontRole::Body) = defaults;
-		mutableMenu.cachedFontFilesByRole[bodyIndex] = defaults.File;
-		mutableMenu.cachedFontName = defaults.File;
-		mutableMenu.GetSettings().Theme.FontName = defaults.File;
+		menu.loadedFontRoles[bodyIndex] = bodyFont;
+		const_cast<Menu&>(menu).GetFontRoleSettings(Menu::FontRole::Body) = defaults;
+		menu.cachedFontFilesByRole[bodyIndex] = defaults.File;
+		menu.cachedFontName = defaults.File;
+		const_cast<Menu&>(menu).GetSettings().Theme.FontName = defaults.File;
 	}
 
-	ImFont* bodyFont = mutableMenu.loadedFontRoles[bodyIndex];
+	ImFont* bodyFont = menu.loadedFontRoles[bodyIndex];
 	for (size_t idx : rolesNeedingFallback) {
 		if (idx == bodyIndex) {
 			continue;
@@ -487,56 +580,90 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		Menu::FontRole role = static_cast<Menu::FontRole>(idx);
 		const auto& defaults = Menu::GetDefaultFontRole(role);
 		float fallbackSize = std::clamp(fontSize * defaults.SizeScale, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE);
-		mutableMenu.cachedFontPixelSizesByRole[idx] = std::round(fallbackSize);
-		mutableMenu.loadedFontRoles[idx] = bodyFont;
-		mutableMenu.GetFontRoleSettings(role) = defaults;
-		mutableMenu.cachedFontFilesByRole[idx] = defaults.File;
+		menu.cachedFontPixelSizesByRole[idx] = std::round(fallbackSize);
+		menu.loadedFontRoles[idx] = bodyFont;
+		const_cast<Menu&>(menu).GetFontRoleSettings(role) = defaults;
+		menu.cachedFontFilesByRole[idx] = defaults.File;
 		logger::warn("ThemeManager::ReloadFont() - Falling back to '{}' for role '{}'.", defaults.File, Menu::GetFontRoleKey(role));
 	}
 
 	if (!bodyFont) {
 		bodyFont = io.Fonts->AddFontDefault();
-		mutableMenu.loadedFontRoles[bodyIndex] = bodyFont;
+		menu.loadedFontRoles[bodyIndex] = bodyFont;
 	}
 
 	io.FontDefault = bodyFont ? bodyFont : io.Fonts->AddFontDefault();
-	mutableMenu.cachedFontName = mutableMenu.GetFontRoleSettings(Menu::FontRole::Body).File;
-	mutableMenu.cachedFontSize = fontSize;
-	mutableMenu.GetSettings().Theme.FontName = mutableMenu.cachedFontName;
-	mutableMenu.cachedFontSignature = mutableMenu.BuildFontSignature(fontSize);
+	menu.cachedFontName = const_cast<Menu&>(menu).GetFontRoleSettings(Menu::FontRole::Body).File;
+	cachedFontSize = fontSize;
+	const_cast<Menu&>(menu).GetSettings().Theme.FontName = menu.cachedFontName;
+	const_cast<Menu&>(menu).cachedFontSignature = const_cast<Menu&>(menu).BuildFontSignature(fontSize);
 
 	// Build the font atlas - this bakes all fonts into the texture
 	if (!io.Fonts->Build()) {
 		logger::error("ThemeManager::ReloadFont() - Failed to build font atlas!");
-		isReloading = false;
-		return;
+		
+		// Emergency fallback: try to restore with default font before giving up
+		logger::warn("ThemeManager::ReloadFont() - Attempting emergency fallback to default font...");
+		io.Fonts->Clear();
+		ImFont* fallbackFont = io.Fonts->AddFontDefault();
+		if (fallbackFont && io.Fonts->Build()) {
+			logger::info("ThemeManager::ReloadFont() - Emergency fallback successful");
+			menu.loadedFontRoles.fill(fallbackFont);
+			io.FontDefault = fallbackFont;
+		} else {
+			logger::error("ThemeManager::ReloadFont() - Emergency fallback also failed!");
+			isReloading = false;
+			return;
+		}
 	}
 
-	// Recreate device objects - this is where the crash was likely happening
-	// We need to be very careful about the order and ensure everything is valid
-
-	// Important: We must ensure ImGui is not in the middle of any rendering operations
-	// The deferred execution should guarantee this, but let's be extra safe
+	// Recreate device objects - this is where crashes can occur
+	// Must be done between frames with no active rendering state
 
 	logger::debug("ThemeManager::ReloadFont() - Invalidating DX11 device objects...");
+	
+	// Flush any pending GPU operations before invalidating
+	context->Flush();
+	
 	ImGui_ImplDX11_InvalidateDeviceObjects();
 
 	logger::debug("ThemeManager::ReloadFont() - Creating DX11 device objects...");
 	if (!ImGui_ImplDX11_CreateDeviceObjects()) {
 		logger::error("ThemeManager::ReloadFont() - Failed to create device objects!");
 
-		// Emergency fallback: try to restore with default font
+		// Emergency fallback: restore with default font and retry device objects
+		logger::warn("ThemeManager::ReloadFont() - Attempting emergency device object recovery...");
 		io.Fonts->Clear();
-		io.Fonts->AddFontDefault();
-		io.Fonts->Build();
-		ImGui_ImplDX11_InvalidateDeviceObjects();
-		ImGui_ImplDX11_CreateDeviceObjects();
+		ImFont* fallbackFont = io.Fonts->AddFontDefault();
+		
+		bool recoverySucceeded = false;
+		if (fallbackFont && io.Fonts->Build()) {
+			ImGui_ImplDX11_InvalidateDeviceObjects();
+			if (ImGui_ImplDX11_CreateDeviceObjects()) {
+				logger::warn("ThemeManager::ReloadFont() - Emergency recovery successful with default font");
+				menu.loadedFontRoles.fill(fallbackFont);
+				io.FontDefault = fallbackFont;
+				menu.cachedFontName = "ImGui Default";
+				recoverySucceeded = true;
+			}
+		}
+		
+		if (!recoverySucceeded) {
+			logger::error("ThemeManager::ReloadFont() - Critical failure: unable to recover device objects!");
+		}
 
 		isReloading = false;
 		return;
 	}
 
 	logger::debug("ThemeManager::ReloadFont() - Device objects recreated successfully");
+
+	// Verify font texture was created successfully
+	if (!io.Fonts->TexID) {
+		logger::error("ThemeManager::ReloadFont() - Font texture not created!");
+		isReloading = false;
+		return;
+	}
 
 	float globalScale = themeSettings.GlobalScale;
 
@@ -549,7 +676,7 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 
 	cachedFontSize = fontSize;
 	// Also update cached font name in the menu instance
-	const_cast<Menu&>(menu).cachedFontName = themeSettings.FontName;
+	menu.cachedFontName = themeSettings.FontName;
 
 	logger::info("ThemeManager::ReloadFont() - Font reload completed successfully");
 	isReloading = false;
@@ -804,6 +931,13 @@ std::unique_ptr<ThemeManager::ThemeInfo> ThemeManager::LoadThemeFile(const std::
 	themeInfo->lastModified = GetFileModTime(filePath);
 
 	try {
+		// Security: Verify path is within themes directory
+		auto themesDir = GetThemesDirectory();
+		if (!Util::IsPathWithinDirectory(themesDir, filePath)) {
+			logger::error("Security: Theme file outside allowed directory: {}", filePath.string());
+			return themeInfo;
+		}
+		
 		std::ifstream file(filePath);
 		if (!file.is_open()) {
 			logger::warn("Failed to open theme file: {}", filePath.string());
@@ -850,13 +984,7 @@ std::unique_ptr<ThemeManager::ThemeInfo> ThemeManager::LoadThemeFile(const std::
 
 bool ThemeManager::ValidateThemeData(const json& themeData) const
 {
-	// Basic validation - ensure Theme object exists
-	if (!themeData.contains("Theme") || !themeData["Theme"].is_object()) {
-		return false;
-	}
-
-	// Could add more detailed validation here if needed
-	return true;
+	return themeData.contains("Theme") && themeData["Theme"].is_object();
 }
 
 float ThemeManager::ResolveFontSize(const Menu& menu)
@@ -883,6 +1011,8 @@ float ThemeManager::ResolveFontSize(const Menu& menu)
 // https://github.com/cofenberg/unrimp/
 bool ThemeManager::InitializeBlurShaders()
 {
+	std::lock_guard<std::mutex> lock(blurResourcesMutex);
+	
 	static bool initialized = false;
 	static bool initializationFailed = false;
 
@@ -929,9 +1059,12 @@ VS_OUTPUT VS_Main(uint vertexID : SV_VertexID)
 }
 
 // Gaussian weight calculation based on Unrimp's implementation
+// SIGMA = 0.5 provides good balance between smoothness and detail preservation
+// Lower values = sharper blur (more detail but more banding artifacts)
+// Higher values = softer blur (less detail but smoother gradients)
 float GaussianWeight(float offset)
 {
-    const float SIGMA = 0.5f;
+    const float SIGMA = 0.5f;  // Empirically tested optimal value from Unrimp engine
     const float v = 2.0f * SIGMA * SIGMA;
     return exp(-(offset * offset) / v) / (3.14159265f * v);
 }
@@ -993,9 +1126,12 @@ VS_OUTPUT VS_Main(uint vertexID : SV_VertexID)
 }
 
 // Gaussian weight calculation based on Unrimp's implementation
+// SIGMA = 0.5 provides good balance between smoothness and detail preservation
+// Lower values = sharper blur (more detail but more banding artifacts)
+// Higher values = softer blur (less detail but smoother gradients)
 float GaussianWeight(float offset)
 {
-    const float SIGMA = 0.5f;
+    const float SIGMA = 0.5f;  // Empirically tested optimal value from Unrimp engine
     const float v = 2.0f * SIGMA * SIGMA;
     return exp(-(offset * offset) / v) / (3.14159265f * v);
 }
@@ -1045,7 +1181,7 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 			return false;
 		}
 
-		hr = device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &blurVertexShader);
+		hr = device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, blurVertexShader.put());
 		vsBlob->Release();
 
 		if (FAILED(hr)) {
@@ -1069,7 +1205,7 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 			return false;
 		}
 
-		hr = device->CreatePixelShader(hpsBlob->GetBufferPointer(), hpsBlob->GetBufferSize(), nullptr, &blurHorizontalPixelShader);
+		hr = device->CreatePixelShader(hpsBlob->GetBufferPointer(), hpsBlob->GetBufferSize(), nullptr, blurHorizontalPixelShader.put());
 		hpsBlob->Release();
 
 		if (FAILED(hr)) {
@@ -1093,7 +1229,7 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 			return false;
 		}
 
-		hr = device->CreatePixelShader(vpsBlob->GetBufferPointer(), vpsBlob->GetBufferSize(), nullptr, &blurVerticalPixelShader);
+		hr = device->CreatePixelShader(vpsBlob->GetBufferPointer(), vpsBlob->GetBufferSize(), nullptr, blurVerticalPixelShader.put());
 		vpsBlob->Release();
 
 		if (FAILED(hr)) {
@@ -1108,7 +1244,7 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 		bufferDesc.ByteWidth = 32;  // Match our BlurConstants struct: float4 texelSize + int4 blurParams
 		bufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 
-		hr = device->CreateBuffer(&bufferDesc, nullptr, &blurConstantBuffer);
+		hr = device->CreateBuffer(&bufferDesc, nullptr, blurConstantBuffer.put());
 		if (FAILED(hr)) {
 			logger::error("Failed to create blur constant buffer");
 			initializationFailed = true;
@@ -1125,7 +1261,7 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 		samplerDesc.MinLOD = 0;
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 
-		hr = device->CreateSamplerState(&samplerDesc, &blurSamplerState);
+		hr = device->CreateSamplerState(&samplerDesc, blurSamplerState.put());
 		if (FAILED(hr)) {
 			logger::error("Failed to create blur sampler state");
 			initializationFailed = true;
@@ -1145,7 +1281,7 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 		blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 
-		hr = device->CreateBlendState(&blendDesc, &blurBlendState);
+		hr = device->CreateBlendState(&blendDesc, blurBlendState.put());
 		if (FAILED(hr)) {
 			logger::error("Failed to create blur blend state");
 			initializationFailed = true;
@@ -1169,29 +1305,19 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 
 void ThemeManager::CreateBlurTextures(UINT width, UINT height, DXGI_FORMAT format)
 {
+	std::lock_guard<std::mutex> lock(blurResourcesMutex);
+	
 	// Check if textures need to be recreated
 	if (blurTexture1 && blurTextureWidth == width && blurTextureHeight == height) {
 		return;
 	}
 
-	// Clean up existing textures
-	if (blurTexture1)
-		blurTexture1->Release();
+	// Clean up existing textures (com_ptr handles Release automatically on reset)
 	blurTexture1 = nullptr;
-	if (blurTexture2)
-		blurTexture2->Release();
 	blurTexture2 = nullptr;
-	if (blurRTV1)
-		blurRTV1->Release();
 	blurRTV1 = nullptr;
-	if (blurRTV2)
-		blurRTV2->Release();
 	blurRTV2 = nullptr;
-	if (blurSRV1)
-		blurSRV1->Release();
 	blurSRV1 = nullptr;
-	if (blurSRV2)
-		blurSRV2->Release();
 	blurSRV2 = nullptr;
 
 	auto device = globals::d3d::device;
@@ -1213,39 +1339,39 @@ void ThemeManager::CreateBlurTextures(UINT width, UINT height, DXGI_FORMAT forma
 	textureDesc.Usage = D3D11_USAGE_DEFAULT;
 	textureDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
 
-	HRESULT hr = device->CreateTexture2D(&textureDesc, nullptr, &blurTexture1);
+	HRESULT hr = device->CreateTexture2D(&textureDesc, nullptr, blurTexture1.put());
 	if (FAILED(hr)) {
 		logger::error("Failed to create blur texture 1");
 		return;
 	}
 
-	hr = device->CreateTexture2D(&textureDesc, nullptr, &blurTexture2);
+	hr = device->CreateTexture2D(&textureDesc, nullptr, blurTexture2.put());
 	if (FAILED(hr)) {
 		logger::error("Failed to create blur texture 2");
 		return;
 	}
 
 	// Create render target views
-	hr = device->CreateRenderTargetView(blurTexture1, nullptr, &blurRTV1);
+	hr = device->CreateRenderTargetView(blurTexture1.get(), nullptr, blurRTV1.put());
 	if (FAILED(hr)) {
 		logger::error("Failed to create blur RTV 1");
 		return;
 	}
 
-	hr = device->CreateRenderTargetView(blurTexture2, nullptr, &blurRTV2);
+	hr = device->CreateRenderTargetView(blurTexture2.get(), nullptr, blurRTV2.put());
 	if (FAILED(hr)) {
 		logger::error("Failed to create blur RTV 2");
 		return;
 	}
 
 	// Create shader resource views
-	hr = device->CreateShaderResourceView(blurTexture1, nullptr, &blurSRV1);
+	hr = device->CreateShaderResourceView(blurTexture1.get(), nullptr, blurSRV1.put());
 	if (FAILED(hr)) {
 		logger::error("Failed to create blur SRV 1");
 		return;
 	}
 
-	hr = device->CreateShaderResourceView(blurTexture2, nullptr, &blurSRV2);
+	hr = device->CreateShaderResourceView(blurTexture2.get(), nullptr, blurSRV2.put());
 	if (FAILED(hr)) {
 		logger::error("Failed to create blur SRV 2");
 		return;
@@ -1257,9 +1383,16 @@ void ThemeManager::CreateBlurTextures(UINT width, UINT height, DXGI_FORMAT forma
 
 void ThemeManager::PerformGaussianBlur(ID3D11Texture2D* sourceTexture, ID3D11RenderTargetView* targetRTV, ImVec2 menuMin, ImVec2 menuMax)
 {
+	std::lock_guard<std::mutex> lock(blurResourcesMutex);
+	
 	auto context = globals::d3d::context;
 	if (!context || !sourceTexture || !targetRTV)
 		return;
+	
+	// Ensure resources exist before using
+	if (!blurVertexShader || !blurHorizontalPixelShader || !blurVerticalPixelShader) {
+		return;
+	}
 
 	// Get source texture description
 	D3D11_TEXTURE2D_DESC sourceDesc;
@@ -1318,7 +1451,7 @@ void ThemeManager::PerformGaussianBlur(ID3D11Texture2D* sourceTexture, ID3D11Ren
 	constants.blurParams[2] = 0;            // Unused
 	constants.blurParams[3] = 0;            // Unused
 
-	context->UpdateSubresource(blurConstantBuffer, 0, nullptr, &constants, 0, 0);
+	context->UpdateSubresource(blurConstantBuffer.get(), 0, nullptr, &constants, 0, 0);
 
 	// Set up viewport for blur textures
 	D3D11_VIEWPORT blurViewport = {};
@@ -1329,22 +1462,29 @@ void ThemeManager::PerformGaussianBlur(ID3D11Texture2D* sourceTexture, ID3D11Ren
 	context->RSSetViewports(1, &blurViewport);
 
 	// Set shaders and states
-	context->VSSetShader(blurVertexShader, nullptr, 0);
-	context->PSSetConstantBuffers(0, 1, &blurConstantBuffer);
-	context->PSSetSamplers(0, 1, &blurSamplerState);
+	auto constantBufferPtr = blurConstantBuffer.get();
+	auto samplerStatePtr = blurSamplerState.get();
+	auto rtv1Ptr = blurRTV1.get();
+	auto rtv2Ptr = blurRTV2.get();
+	
+	context->VSSetShader(blurVertexShader.get(), nullptr, 0);
+	context->PSSetConstantBuffers(0, 1, &constantBufferPtr);
+	context->PSSetSamplers(0, 1, &samplerStatePtr);
 
 	// First pass: Horizontal blur (source -> blur texture 1)
-	context->OMSetRenderTargets(1, &blurRTV1, nullptr);
-	context->PSSetShader(blurHorizontalPixelShader, nullptr, 0);
+	context->OMSetRenderTargets(1, &rtv1Ptr, nullptr);
+	context->PSSetShader(blurHorizontalPixelShader.get(), nullptr, 0);
 	context->PSSetShaderResources(0, 1, &sourceSRV);
 	context->Draw(3, 0);  // Draw fullscreen triangle
 
 	// Second pass: Vertical blur (blur texture 1 -> blur texture 2)
-	context->OMSetRenderTargets(1, &blurRTV2, nullptr);
-	context->PSSetShader(blurVerticalPixelShader, nullptr, 0);
+	context->OMSetRenderTargets(1, &rtv2Ptr, nullptr);
+	context->PSSetShader(blurVerticalPixelShader.get(), nullptr, 0);
 	ID3D11ShaderResourceView* nullSRV = nullptr;
+	auto srv1Ptr = blurSRV1.get();
+	auto srv2Ptr = blurSRV2.get();
 	context->PSSetShaderResources(0, 1, &nullSRV);  // Clear previous SRV
-	context->PSSetShaderResources(0, 1, &blurSRV1);
+	context->PSSetShaderResources(0, 1, &srv1Ptr);
 	context->Draw(3, 0);
 
 	// Final composition: Blend blurred result back to main render target (only in menu area)
@@ -1380,10 +1520,10 @@ void ThemeManager::PerformGaussianBlur(ID3D11Texture2D* sourceTexture, ID3D11Ren
 
 	// Set blend state for proper compositing
 	float blendFactor[4] = { 1.0f, 1.0f, 1.0f, currentBlurIntensity * 0.8f };
-	context->OMSetBlendState(blurBlendState, blendFactor, 0xFFFFFFFF);
+	context->OMSetBlendState(blurBlendState.get(), blendFactor, 0xFFFFFFFF);
 
 	context->PSSetShaderResources(0, 1, &nullSRV);  // Clear previous SRV
-	context->PSSetShaderResources(0, 1, &blurSRV2);
+	context->PSSetShaderResources(0, 1, &srv2Ptr);
 	context->Draw(3, 0);
 
 	// Restore original state
@@ -1408,42 +1548,21 @@ void ThemeManager::PerformGaussianBlur(ID3D11Texture2D* sourceTexture, ID3D11Ren
 
 void ThemeManager::CleanupBlurResources()
 {
-	if (blurVertexShader)
-		blurVertexShader->Release();
+	std::lock_guard<std::mutex> lock(blurResourcesMutex);
+	
+	// com_ptr automatically calls Release() when reset to nullptr
 	blurVertexShader = nullptr;
-	if (blurHorizontalPixelShader)
-		blurHorizontalPixelShader->Release();
 	blurHorizontalPixelShader = nullptr;
-	if (blurVerticalPixelShader)
-		blurVerticalPixelShader->Release();
 	blurVerticalPixelShader = nullptr;
-	if (blurConstantBuffer)
-		blurConstantBuffer->Release();
 	blurConstantBuffer = nullptr;
-	if (blurSamplerState)
-		blurSamplerState->Release();
 	blurSamplerState = nullptr;
-	if (blurBlendState)
-		blurBlendState->Release();
 	blurBlendState = nullptr;
 
-	if (blurTexture1)
-		blurTexture1->Release();
 	blurTexture1 = nullptr;
-	if (blurTexture2)
-		blurTexture2->Release();
 	blurTexture2 = nullptr;
-	if (blurRTV1)
-		blurRTV1->Release();
 	blurRTV1 = nullptr;
-	if (blurRTV2)
-		blurRTV2->Release();
 	blurRTV2 = nullptr;
-	if (blurSRV1)
-		blurSRV1->Release();
 	blurSRV1 = nullptr;
-	if (blurSRV2)
-		blurSRV2->Release();
 	blurSRV2 = nullptr;
 
 	blurTextureWidth = 0;

@@ -3,21 +3,125 @@
 #include <d3d11.h>
 #include <filesystem>
 #include <imgui.h>
+#include <mutex>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
+#include <winrt/base.h>
 
 using json = nlohmann::json;
 
 /**
- * @brief Manages hot-swappable theme system for Community Shaders
- *
- * This class handles discovery and loading of theme JSON files from the Themes directory,
- * allowing users to create and modify themes without code changes. Similar to the
- * SettingsOverrideManager but specifically for theme management.
- *
- * Theme files should be placed in: Data\SKSE\Plugins\CommunityShaders\Themes\
- * File format: {ThemeName}.json
+ * @brief Manages hot-swappable theme system for Community Shaders menu
+ * 
+ * THEME JSON SCHEMA:
+ * ==================
+ * Theme files use JSON format with the following structure:
+ * 
+ * {
+ *   "DisplayName": "Human-readable theme name",
+ *   "Description": "Theme description",
+ *   "Version": "1.0.0",
+ *   "Author": "Your name",
+ *   "Theme": {
+ *     "FontSize": 27.0,                    // Base font size (16-108px range)
+ *     "FontName": "Jost/Jost-Regular.ttf", // Legacy font path (use FontRoles instead)
+ *     "GlobalScale": 0.0,                   // UI scale exponent (-2.0 to 2.0, 0.0=100%)
+ *     
+ *     // Font Role System (6 roles: Body, Heading, Subheading, Subtitle, Caption, Monospace)
+ *     "FontRoles": [
+ *       { "Family": "Jost", "Style": "Regular", "File": "Jost/Jost-Regular.ttf", "SizeScale": 1.0 },
+ *       { "Family": "Jost", "Style": "SemiBold", "File": "Jost/Jost-SemiBold.ttf", "SizeScale": 1.05 },
+ *       // ... 4 more roles
+ *     ],
+ *     
+ *     "TooltipHoverDelay": 0.5,            // Seconds before tooltip appears
+ *     "BackgroundBlur": 0.5,               // Gaussian blur intensity (0.0-1.0)
+ *     "ShowActionIcons": true,             // Show icons on action buttons
+ *     
+ *     // Simple color palette (6 key colors)
+ *     "Palette": {
+ *       "Background": [0.03, 0.03, 0.03, 0.39],  // Window background RGBA
+ *       "Text": [1.0, 1.0, 1.0, 1.0],            // Primary text color
+ *       "WindowBorder": [0.5, 0.5, 0.5, 0.8],    // Outer window borders
+ *       "FrameBorder": [0.4, 0.4, 0.4, 0.7],     // Button/input borders
+ *       "Separator": [0.5, 0.5, 0.5, 0.6],       // Divider lines
+ *       "ResizeGrip": [0.6, 0.6, 0.6, 0.8]       // Window resize handle
+ *     },
+ *     
+ *     // Status indicator colors
+ *     "StatusPalette": {
+ *       "Disable": [0.5, 0.5, 0.5, 1.0],         // Disabled elements
+ *       "Error": [1.0, 0.4, 0.4, 1.0],           // Error messages
+ *       "Warning": [1.0, 0.6, 0.2, 1.0],         // Warning messages
+ *       "RestartNeeded": [0.4, 1.0, 0.4, 1.0],   // Restart required indicator
+ *       "CurrentHotkey": [1.0, 1.0, 0.0, 1.0],   // Active hotkey highlight
+ *       "SuccessColor": [0.0, 1.0, 0.0, 1.0],    // Success messages
+ *       "InfoColor": [0.2, 0.6, 1.0, 1.0]        // Info messages
+ *     },
+ *     
+ *     // Feature header styling
+ *     "FeatureHeading": {
+ *       "ColorDefault": [0.8, 0.8, 0.8, 1.0],    // Default header color
+ *       "ColorHovered": [0.6, 0.6, 0.6, 1.0],    // Hovered header color
+ *       "MinimizedFactor": 0.7                    // Alpha multiplier when minimized
+ *     },
+ *     
+ *     // Scrollbar transparency
+ *     "ScrollbarOpacity": {
+ *       "Background": 0.0,                        // Scrollbar track alpha
+ *       "Thumb": 0.5,                             // Scroll handle alpha
+ *       "ThumbHovered": 0.75,                     // Hovered handle alpha
+ *       "ThumbActive": 0.9                        // Dragged handle alpha
+ *     },
+ *     
+ *     // ImGui style settings (spacing, rounding, etc.)
+ *     "Style": {
+ *       "WindowBorderSize": 2.0,
+ *       "WindowPadding": [8.0, 8.0],
+ *       "WindowRounding": 12.0,
+ *       "FrameRounding": 4.0,
+ *       // ... see ImGuiStyle for all available fields
+ *     },
+ *     
+ *     // Full ImGui color palette (55 colors, overrides simple palette)
+ *     "FullPalette": [ [r,g,b,a], [r,g,b,a], ... ]
+ *   }
+ * }
+ * 
+ * FONT ROLE SYSTEM:
+ * =================
+ * Replaces legacy single-font system with semantic font roles:
+ * - Role 0 (Body):       Default UI text, settings labels
+ * - Role 1 (Heading):    Feature section headers
+ * - Role 2 (Subheading): Subsection headers
+ * - Role 3 (Subtitle):   Secondary text, descriptions
+ * - Role 4 (Caption):    Small auxiliary text
+ * - Role 5 (Monospace):  Code, file paths, technical values
+ * 
+ * Each role can have different font family, style, and size scale.
+ * Fonts must exist in Data\SKSE\Plugins\CommunityShaders\Fonts\
+ * 
+ * BLUR SHADER SYSTEM:
+ * ===================
+ * Implements separable Gaussian blur using DirectX 11 shaders:
+ * - Two-pass blur (horizontal + vertical) for performance
+ * - Configurable sample count via BlurParams.x (default: 13 samples)
+ * - Sub-pixel jitter for smoother results at low sample counts
+ * - Blur strength controlled by BackgroundBlur field (0.0-1.0)
+ * - Renders behind ImGui windows only (respects window bounds)
+ * 
+ * Based on Unrimp rendering engine architecture:
+ * https://github.com/cofenberg/unrimp
+ * 
+ * MIGRATION FROM OLD CONFIGS:
+ * ===========================
+ * Legacy "FontName" field still supported for backward compatibility.
+ * New themes should use "FontRoles" array instead.
+ * Old themes without FontRoles auto-populate with defaults on load.
+ * 
+ * Theme files location: Data\SKSE\Plugins\CommunityShaders\Themes\
+ * File naming: {ThemeName}.json (e.g., "Default.json", "DragonBlood.json")
  */
 class ThemeManager
 {
@@ -171,21 +275,22 @@ private:
 	static inline float currentBlurIntensity = 0.0f;
 	static inline bool isBlurEnabled = false;
 
-	// DirectX blur resources
-	static inline ID3D11VertexShader* blurVertexShader = nullptr;
-	static inline ID3D11PixelShader* blurHorizontalPixelShader = nullptr;
-	static inline ID3D11PixelShader* blurVerticalPixelShader = nullptr;
-	static inline ID3D11Buffer* blurConstantBuffer = nullptr;
-	static inline ID3D11SamplerState* blurSamplerState = nullptr;
-	static inline ID3D11BlendState* blurBlendState = nullptr;
+	// DirectX blur resources (protected by blurResourcesMutex) - RAII managed
+	static inline std::mutex blurResourcesMutex;
+	static inline winrt::com_ptr<ID3D11VertexShader> blurVertexShader;
+	static inline winrt::com_ptr<ID3D11PixelShader> blurHorizontalPixelShader;
+	static inline winrt::com_ptr<ID3D11PixelShader> blurVerticalPixelShader;
+	static inline winrt::com_ptr<ID3D11Buffer> blurConstantBuffer;
+	static inline winrt::com_ptr<ID3D11SamplerState> blurSamplerState;
+	static inline winrt::com_ptr<ID3D11BlendState> blurBlendState;
 
 	// Intermediate blur textures
-	static inline ID3D11Texture2D* blurTexture1 = nullptr;
-	static inline ID3D11Texture2D* blurTexture2 = nullptr;
-	static inline ID3D11RenderTargetView* blurRTV1 = nullptr;
-	static inline ID3D11RenderTargetView* blurRTV2 = nullptr;
-	static inline ID3D11ShaderResourceView* blurSRV1 = nullptr;
-	static inline ID3D11ShaderResourceView* blurSRV2 = nullptr;
+	static inline winrt::com_ptr<ID3D11Texture2D> blurTexture1;
+	static inline winrt::com_ptr<ID3D11Texture2D> blurTexture2;
+	static inline winrt::com_ptr<ID3D11RenderTargetView> blurRTV1;
+	static inline winrt::com_ptr<ID3D11RenderTargetView> blurRTV2;
+	static inline winrt::com_ptr<ID3D11ShaderResourceView> blurSRV1;
+	static inline winrt::com_ptr<ID3D11ShaderResourceView> blurSRV2;
 
 	static inline UINT blurTextureWidth = 0;
 	static inline UINT blurTextureHeight = 0;

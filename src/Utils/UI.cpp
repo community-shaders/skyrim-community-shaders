@@ -23,6 +23,7 @@
 #include <format>
 #include <functional>
 #include <iomanip>
+#include <mutex>
 #include <sstream>
 #include <stb_image.h>
 #include <string>
@@ -1258,6 +1259,24 @@ namespace Util
 			return (lighter + 0.05f) / (darker + 0.05f);
 		}
 
+		void AdjustBackgroundForTextContrast(ImVec4& backgroundColor, float textLuminance, 
+			float luminanceThreshold, float darkenFactor, float lightenOffset)
+		{
+			float bgLuminance = CalculateLuminance(backgroundColor);
+
+			if (bgLuminance > luminanceThreshold && textLuminance > luminanceThreshold) {
+				// Both background and text are light - darken the background
+				backgroundColor.x *= darkenFactor;
+				backgroundColor.y *= darkenFactor;
+				backgroundColor.z *= darkenFactor;
+			} else if (bgLuminance < luminanceThreshold && textLuminance < luminanceThreshold) {
+				// Both background and text are dark - lighten the background
+				backgroundColor.x = std::min(1.0f, backgroundColor.x + lightenOffset);
+				backgroundColor.y = std::min(1.0f, backgroundColor.y + lightenOffset);
+				backgroundColor.z = std::min(1.0f, backgroundColor.z + lightenOffset);
+			}
+		}
+
 		bool ContrastSelectable(const char* label, bool selected, ImGuiSelectableFlags flags, const ImVec2& size)
 		{
 			// Get current style colors for different states
@@ -1339,20 +1358,24 @@ namespace Util
 	bool ButtonWithFlash(const char* label, const ImVec2& size, int flashDurationMs)
 	{
 		static std::unordered_map<std::string, std::chrono::steady_clock::time_point> flashTimers;
+		static std::mutex flashTimersMutex;
 
 		std::string buttonId = std::string(label);
 		auto now = std::chrono::steady_clock::now();
 
-		// Check if this button has active flash
+		// Check if this button has active flash (thread-safe)
 		bool hasActiveFlash = false;
-		auto it = flashTimers.find(buttonId);
-		if (it != flashTimers.end()) {
-			auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second);
-			if (elapsed.count() < flashDurationMs) {
-				hasActiveFlash = true;
-			} else {
-				// Flash expired, remove it
-				flashTimers.erase(it);
+		{
+			std::lock_guard<std::mutex> lock(flashTimersMutex);
+			auto it = flashTimers.find(buttonId);
+			if (it != flashTimers.end()) {
+				auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second);
+				if (elapsed.count() < flashDurationMs) {
+					hasActiveFlash = true;
+				} else {
+					// Flash expired, remove it
+					flashTimers.erase(it);
+				}
 			}
 		}
 
@@ -1381,8 +1404,9 @@ namespace Util
 			ImGui::PopStyleColor(3);
 		}
 
-		// If clicked, start the flash timer
+		// If clicked, start the flash timer (thread-safe)
 		if (clicked) {
+			std::lock_guard<std::mutex> lock(flashTimersMutex);
 			flashTimers[buttonId] = now;
 		}
 

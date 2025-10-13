@@ -23,13 +23,48 @@ struct ImFont;
 class Menu
 {
 public:
+	/**
+	 * @brief Semantic font roles for hierarchical UI typography
+	 * 
+	 * FONT ROLE SYSTEM:
+	 * =================
+	 * Replaces legacy single-font approach with semantic typography system.
+	 * Each role can use different font family, style, and size scaling.
+	 * 
+	 * Roles:
+	 * - Body (0):       Default UI text, setting labels, general content
+	 * - Heading (1):    Feature section headers (bold/semibold recommended)
+	 * - Subheading (2): Subsection headers within features
+	 * - Subtitle (3):   Secondary descriptive text, tooltips
+	 * - Caption (4):    Small auxiliary text (NOT CURRENTLY USED - reserved for future)
+	 * - Monospace (5):  Code, file paths, numeric values, logs
+	 * 
+	 * Theme JSON Configuration:
+	 * "FontRoles": [
+	 *   { "Family": "Jost", "Style": "Regular", "File": "Jost/Jost-Regular.ttf", "SizeScale": 1.0 },
+	 *   { "Family": "Jost", "Style": "SemiBold", "File": "Jost/Jost-SemiBold.ttf", "SizeScale": 1.05 },
+	 *   { "Family": "Jost", "Style": "Regular", "File": "Jost/Jost-Regular.ttf", "SizeScale": 1.0 },
+	 *   { "Family": "Jost", "Style": "Light", "File": "Jost/Jost-Light.ttf", "SizeScale": 0.95 },
+	 *   { "Family": "Jost", "Style": "Light", "File": "Jost/Jost-Light.ttf", "SizeScale": 0.9 },
+	 *   { "Family": "IBMPlexMono", "Style": "Regular", "File": "IBMPlexMono/IBMPlexMono-Regular.ttf", "SizeScale": 1.0 }
+	 * ]
+	 * 
+	 * SizeScale multiplies the base FontSize for each role.
+	 * Example: FontSize=27, Heading SizeScale=1.05 → 28.35px rendered size
+	 * 
+	 * Migration from Legacy:
+	 * Old "FontName" field auto-populates Body role on theme load.
+	 * Themes without FontRoles get defaults (Jost family + IBMPlexMono for code).
+	 */
 	enum class FontRole : std::uint8_t
 	{
-		Body = 0,
-		Heading,
-		Subheading,
-		Subtitle,
-		Count
+		Body = 0,      // Default UI text
+		Heading,       // Feature headers
+		Subheading,    // Subsection headers
+		Subtitle,      // Secondary text
+		Caption,       // Small text (reserved, not yet used)
+		Monospace,     // Code/paths/numbers
+		Count          // Total number of roles
 	};
 
 	struct FontRoleDescriptor
@@ -109,8 +144,9 @@ public:
 	uint32_t nextShaderKey = VK_NEXT;    // used for blocking shaders in debugging
 
 	// Font caching (made public for ThemeManager and OverlayRenderer access)
+	// Marked mutable because they're cache fields that may be updated from const methods
 	float cachedFontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;  // Tracks whether font has been modified and may require reloading
-	std::string cachedFontName = "Jost/Jost-Regular.ttf";               // Tracks whether font file has changed and may require reloading
+	mutable std::string cachedFontName = "Jost/Jost-Regular.ttf";               // Tracks whether font file has changed and may require reloading
 	std::array<std::string, static_cast<size_t>(FontRole::Count)> cachedFontFilesByRole = []() {
 		std::array<std::string, static_cast<size_t>(FontRole::Count)> files{};
 		auto setFile = [&files](FontRole role, std::string value) {
@@ -122,9 +158,9 @@ public:
 		setFile(FontRole::Subtitle, "Jost/Jost-Regular.ttf");
 		return files;
 	}();
-	std::array<float, static_cast<size_t>(FontRole::Count)> cachedFontPixelSizesByRole = {};
+	mutable std::array<float, static_cast<size_t>(FontRole::Count)> cachedFontPixelSizesByRole = {};
 	std::string cachedFontSignature;
-	std::array<ImFont*, static_cast<size_t>(FontRole::Count)> loadedFontRoles = {};
+	mutable std::array<ImFont*, static_cast<size_t>(FontRole::Count)> loadedFontRoles = {};
 
 	// Deferred font reload system (public for SettingsTabRenderer access)
 	bool pendingFontReload = false;

@@ -197,6 +197,18 @@ namespace Util
 		float CalculateContrastRatio(const ImVec4& color1, const ImVec4& color2);
 
 		/**
+		 * Adjusts a background color to ensure contrast with text
+		 * Darkens light backgrounds or lightens dark backgrounds to prevent same-color-on-same-color issues
+		 * @param backgroundColor Background color to adjust (modified in place)
+		 * @param textLuminance Luminance of the text color
+		 * @param luminanceThreshold Threshold for determining light vs dark (default 0.5)
+		 * @param darkenFactor Multiplier for darkening light backgrounds (default 0.4 = 60% darker)
+		 * @param lightenOffset Additive offset for lightening dark backgrounds (default 0.3 = 30% brighter)
+		 */
+		void AdjustBackgroundForTextContrast(ImVec4& backgroundColor, float textLuminance,
+			float luminanceThreshold = 0.5f, float darkenFactor = 0.4f, float lightenOffset = 0.3f);
+
+		/**
 		 * Adjusts a text color to ensure sufficient contrast against a background
 		 * @param textColor The desired text color (semantic color)
 		 * @param backgroundColor The background color to contrast against
