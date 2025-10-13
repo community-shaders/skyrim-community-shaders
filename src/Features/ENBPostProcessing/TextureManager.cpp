@@ -227,7 +227,7 @@ float4 main(VS_OUTPUT_POST IN) : SV_Target
 		downsamplePS.put()));
 
 	// Create shared downsample texture
-	sharedDownsampleTexture = CreateDownsampleTexture(DXGI_FORMAT_R16G16B16A16_FLOAT);
+	sharedDownsampleTexture = CreateDownsampleTexture(DXGI_FORMAT_R11G11B10_FLOAT);
 }
 
 TextureManager::DownsampleTexture TextureManager::CreateDownsampleTexture(DXGI_FORMAT format)
