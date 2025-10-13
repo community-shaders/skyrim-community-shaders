@@ -259,7 +259,8 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	// Center the window properly with rounded corners and thin border
 	ImVec2 center = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
 	ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_Always);
+	// Set a minimum width for better layout, but allow auto-sizing for height
+	ImGui::SetNextWindowSizeConstraints(ImVec2(500, 0), ImVec2(600, FLT_MAX));
 
 	// Style for rounded window with thin border
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
@@ -267,13 +268,18 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 
 	ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
 	                         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
-	                         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar;  // Prevent scrolling and remove title
+	                         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar | 
+	                         ImGuiWindowFlags_AlwaysAutoResize;  // Prevent scrolling, remove title, auto-resize
 
 	if (!ImGui::Begin("##FirstTimeSetup", nullptr, flags)) {
 		ImGui::PopStyleVar(2);
 		ImGui::End();
 		return;
 	}
+
+	// Set font scale to 27 pixels for this window only
+	// Assuming default font is approximately 13 pixels, scale to ~27
+	ImGui::SetWindowFontScale(27.0f / 13.0f);
 
 	auto menu = Menu::GetSingleton();
 
@@ -419,24 +425,21 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 
 	ImGui::Spacing();
 
-	// Center the continue button
-	float continueButtonWidth = 140.0f;
-	ImGui::SetCursorPosX((windowWidth - continueButtonWidth) * 0.5f);
-
-	// Check for Enter or Escape key first
+	// Check for Enter or Escape key to close
 	bool shouldClose = ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Escape);
 
-	if (ImGui::Button("Continue", ImVec2(continueButtonWidth, 30)) || shouldClose) {
+	if (shouldClose) {
 		MarkFirstTimeSetupComplete();
 		// Note: Settings are automatically saved to ensure welcome screen won't show again
 	}
 
 	// Center the help text
-	const char* helpText = "(Press Enter or Escape to continue)";
+	const char* helpText = "Press Escape or Enter to continue";
 	float helpWidth = ImGui::CalcTextSize(helpText).x;
 	ImGui::SetCursorPosX((windowWidth - helpWidth) * 0.5f);
 	ImGui::TextDisabled("%s", helpText);
 
+	ImGui::SetWindowFontScale(1.0f);  // Reset font scale
 	ImGui::PopStyleVar(2);  // Pop WindowRounding and WindowBorderSize
 	ImGui::End();
 }
