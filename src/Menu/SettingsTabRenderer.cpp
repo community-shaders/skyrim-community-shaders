@@ -20,6 +20,8 @@ using json = nlohmann::json;
 
 namespace
 {
+	using FontRoleGuard = MenuFonts::FontRoleGuard;  // Convenience alias
+
 	void SeparatorTextWithFont(const char* text, Menu::FontRole role)
 	{
 		MenuFonts::FontRoleGuard guard(role);

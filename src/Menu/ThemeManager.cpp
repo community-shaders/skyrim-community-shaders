@@ -370,7 +370,7 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		} else {
 			menu.loadedFontRoles[i] = loadedFont;
 			mutableRoleSettings = effective;
-			menu.cachedFontFilesByRole[i] = effective.File;
+			const_cast<Menu&>(menu).cachedFontFilesByRole[i] = effective.File;
 		}
 	}
 
@@ -398,7 +398,7 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 
 		menu.loadedFontRoles[bodyIndex] = bodyFont;
 		const_cast<Menu&>(menu).GetFontRoleSettings(Menu::FontRole::Body) = defaults;
-		menu.cachedFontFilesByRole[bodyIndex] = defaults.File;
+		const_cast<Menu&>(menu).cachedFontFilesByRole[bodyIndex] = defaults.File;
 		menu.cachedFontName = defaults.File;
 		const_cast<Menu&>(menu).GetSettings().Theme.FontName = defaults.File;
 	}
@@ -414,7 +414,7 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		menu.cachedFontPixelSizesByRole[idx] = std::round(fallbackSize);
 		menu.loadedFontRoles[idx] = bodyFont;
 		const_cast<Menu&>(menu).GetFontRoleSettings(role) = defaults;
-		menu.cachedFontFilesByRole[idx] = defaults.File;
+		const_cast<Menu&>(menu).cachedFontFilesByRole[idx] = defaults.File;
 		logger::warn("ThemeManager::ReloadFont() - Falling back to '{}' for role '{}'.", defaults.File, Menu::GetFontRoleKey(role));
 	}
 

@@ -249,6 +249,26 @@ public:
 	 */
 	void CreateDefaultThemeFiles();
 
+private:
+	ThemeManager() = default;
+	~ThemeManager() = default;
+	ThemeManager(const ThemeManager&) = delete;
+	ThemeManager& operator=(const ThemeManager&) = delete;
+
+	/**
+	 * @brief Loads a single theme file
+	 * @param filePath Path to the theme file
+	 * @return Theme info if successful, nullptr otherwise
+	 */
+	std::unique_ptr<ThemeInfo> LoadThemeFile(const std::filesystem::path& filePath);
+
+	/**
+	 * @brief Validates theme data structure
+	 * @param themeData JSON data to validate
+	 * @return True if theme data is valid
+	 */
+	bool ValidateThemeData(const json& themeData) const;
+
 	std::vector<ThemeInfo> themes;
 	bool discovered = false;
 
