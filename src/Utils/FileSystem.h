@@ -80,6 +80,18 @@ namespace Util
 		std::filesystem::path GetSettingsDefaultPath();
 
 		/**
+		 * Gets the SettingsTheme.json file path
+		 * @return CommunityShaderPath / "SettingsTheme.json"
+		 */
+		std::filesystem::path GetSettingsThemePath();
+
+		/**
+		 * Gets the Themes directory path
+		 * @return CommunityShaderPath / "Themes"
+		 */
+		std::filesystem::path GetThemesPath();
+
+		/**
 		 * Gets the Overrides directory path
 		 * @return CommunityShaderPath / "Overrides"
 		 */
@@ -140,6 +152,12 @@ namespace Util
 		 * @return  <mod_root> / "Shaders"
 		 */
 		std::filesystem::path GetShadersRealPath();
+
+		/**
+		 * Returns the real path to the Themes directory containing theme JSON files.
+		 * @return  <mod_root> / "SKSE" / "Plugins" / "CommunityShaders" / "Themes"
+		 */
+		std::filesystem::path GetThemesRealPath();
 
 		/**
 		 * Returns the real path to the Features directory containing feature INI files.

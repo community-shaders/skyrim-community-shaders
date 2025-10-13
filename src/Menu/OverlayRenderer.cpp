@@ -84,9 +84,14 @@ bool OverlayRenderer::ShouldSkipRendering()
 
 void OverlayRenderer::HandleFontReload(Menu& menu, float& cachedFontSize, float currentFontSize)
 {
-	// Reload font if user changed something
-	if (std::abs(cachedFontSize - currentFontSize) > ThemeManager::Constants::FONT_CACHE_EPSILON) {
-		ThemeManager::ReloadFont(menu, cachedFontSize);
+	bool fontSizeChanged = std::abs(cachedFontSize - currentFontSize) > ThemeManager::Constants::FONT_CACHE_EPSILON;
+	std::string desiredSignature = menu.BuildFontSignature(currentFontSize);
+	bool signatureChanged = desiredSignature != menu.cachedFontSignature;
+
+	if (fontSizeChanged || signatureChanged) {
+		if (!ThemeManager::ReloadFont(menu, cachedFontSize)) {
+			logger::warn("OverlayRenderer::HandleFontReload() - Font reload failed");
+		}
 	}
 }
 
@@ -211,6 +216,7 @@ void OverlayRenderer::HandleABTesting()
 void OverlayRenderer::FinalizeImGuiFrame()
 {
 	ImGui::Render();
+
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
 	if (globals::features::vr.IsOpenVRCompatible()) {

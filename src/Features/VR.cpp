@@ -1,5 +1,6 @@
 ﻿#include "VR.h"
 #include "Menu.h"
+#include "Menu/Fonts.h"
 #include "RE/B/BSOpenVR.h"
 #include "RE/N/NiPoint3.h"
 #include "RE/P/PlayerCharacter.h"
@@ -22,6 +23,14 @@
 #pragma comment(lib, "version.lib")
 
 using AttachMode = VR::Settings::OverlayAttachMode;
+
+namespace
+{
+	bool BeginTabItemWithFont(const char* label, Menu::FontRole role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None)
+	{
+		return MenuFonts::BeginTabItemWithFont(label, role, flags);
+	}
+}
 
 constexpr int kOverlayWidth = 1920;
 constexpr int kOverlayHeight = 1080;
@@ -218,7 +227,7 @@ void VR::DrawSettings()
 		return;
 	if (ImGui::BeginTabBar("##VRTabs", ImGuiTabBarFlags_None)) {
 		// General Settings Tab
-		if (ImGui::BeginTabItem("General")) {
+		if (BeginTabItemWithFont("General", Menu::FontRole::Subheading)) {
 			if (ImGui::BeginChild("##VRGeneralFrame", { 0, 0 }, true)) {
 				DrawGeneralVRSettings();
 				DrawControllerInputInstructions();
@@ -232,7 +241,7 @@ void VR::DrawSettings()
 
 		// Key Bindings Tab
 		if (openVRInfo.isCompatible) {
-			if (ImGui::BeginTabItem("Bindings")) {
+			if (BeginTabItemWithFont("Bindings", Menu::FontRole::Subheading)) {
 				if (ImGui::BeginChild("##VRBindingsFrame", { 0, 0 }, true)) {
 					DrawKeyBindings();
 				}
@@ -241,7 +250,7 @@ void VR::DrawSettings()
 			}
 		}
 		// Debug Tab (existing debug functionality)
-		if (ImGui::BeginTabItem("Debug")) {
+		if (BeginTabItemWithFont("Debug", Menu::FontRole::Subheading)) {
 			if (ImGui::BeginChild("##VRDebugFrame", { 0, 0 }, true)) {
 				DrawDebugSection();
 			}

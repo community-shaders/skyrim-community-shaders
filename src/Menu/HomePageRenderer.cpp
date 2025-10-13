@@ -5,7 +5,6 @@
 
 #include "Globals.h"
 #include "Menu.h"
-#include "Menu/ThemeManager.h"
 #include "Plugin.h"
 #include "State.h"
 #include "Util.h"
