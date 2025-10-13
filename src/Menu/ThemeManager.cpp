@@ -5,9 +5,9 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <ctime>
-#include <d3dcompiler.h>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -21,7 +21,6 @@
 
 #include "RE/Skyrim.h"
 #include "State.h"
-#include "Util.h"
 
 #include "../Globals.h"
 #include "../Util.h"
@@ -256,6 +255,13 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		return false;
 	}
 
+	// RAII scope guard to ensure isReloading is always reset on exit (exceptions, returns, etc.)
+	struct ReloadGuard {
+		std::atomic<bool>& flag;
+		explicit ReloadGuard(std::atomic<bool>& f) : flag(f) {}
+		~ReloadGuard() { flag = false; }
+	} guard(isReloading);
+
 	auto& themeSettings = menu.GetTheme();
 
 	ImGuiIO& io = ImGui::GetIO();
@@ -264,28 +270,24 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	ImGuiContext* ctx = ImGui::GetCurrentContext();
 	if (!ctx) {
 		logger::error("ReloadFont: No valid ImGui context");
-		isReloading = false;
 		return false;
 	}
 
 	// Ensure we're not in the middle of a frame
 	if (ctx->WithinFrameScope) {
 		logger::error("ReloadFont: Cannot reload font within frame scope");
-		isReloading = false;
 		return false;
 	}
 
 	// Additional rendering state checks
 	if (ctx->CurrentWindow || ctx->CurrentTable) {
 		logger::error("ReloadFont: ImGui has active window/table state");
-		isReloading = false;
 		return false;
 	}
 
 	// Additional check: make sure font atlas exists
 	if (!io.Fonts) {
 		logger::error("ReloadFont: No font atlas available");
-		isReloading = false;
 		return false;
 	}
 
@@ -294,7 +296,6 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	auto context = globals::d3d::context;
 	if (!device || !context) {
 		logger::error("ReloadFont: D3D11 device or context is null");
-		isReloading = false;
 		return false;
 	}
 
@@ -435,7 +436,6 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 			io.FontDefault = fallbackFont;
 		} else {
 			logger::error("ReloadFont: Emergency fallback failed");
-			isReloading = false;
 			return false;
 		}
 	}
@@ -470,14 +470,12 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 			logger::error("ReloadFont: Critical failure - unable to recover device objects");
 		}
 
-		isReloading = false;
 		return false;
 	}
 
 	// Verify font texture was created successfully
 	if (!io.Fonts->TexID) {
 		logger::error("ReloadFont: Font texture not created");
-		isReloading = false;
 		return false;
 	}
 
@@ -494,7 +492,6 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	// Also update cached font name in the menu instance
 	menu.cachedFontName = themeSettings.FontName;
 
-	isReloading = false;
 	return true;
 }
 
