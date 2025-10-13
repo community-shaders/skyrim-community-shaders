@@ -86,7 +86,9 @@ void OverlayRenderer::HandleFontReload(Menu& menu, float& cachedFontSize, float 
 	bool signatureChanged = desiredSignature != menu.cachedFontSignature;
 
 	if (fontSizeChanged || signatureChanged) {
-		ThemeManager::ReloadFont(menu, cachedFontSize);
+		if (!ThemeManager::ReloadFont(menu, cachedFontSize)) {
+			logger::warn("OverlayRenderer::HandleFontReload() - Font reload failed");
+		}
 	}
 }
 

@@ -588,8 +588,14 @@ void Menu::DrawOverlay()
 	// Process deferred font reload BEFORE any ImGui operations
 	// This is the safest place to do font atlas modifications
 	if (pendingFontReload) {
-		pendingFontReload = false;
-		ThemeManager::ReloadFont(*this, cachedFontSize);
+		// Call ReloadFont first - only clear flag if it succeeds
+		if (ThemeManager::ReloadFont(*this, cachedFontSize)) {
+			// Reload completed successfully
+			pendingFontReload = false;
+		} else {
+			// Reload failed - keep flag true to retry next frame
+			logger::warn("Menu::DrawOverlay() - Font reload failed, will retry next frame");
+		}
 	}
 
 	OverlayRenderer::RenderOverlay(

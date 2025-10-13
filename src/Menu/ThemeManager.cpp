@@ -247,58 +247,55 @@ void ThemeManager::ForceApplyDefaultTheme()
 	}
 }
 
-void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
+bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 {
 	// Thread-safe reentrancy guard using atomic flag
 	static std::atomic<bool> isReloading{ false };
 	bool expected = false;
 	if (!isReloading.compare_exchange_strong(expected, true)) {
-		logger::warn("ThemeManager::ReloadFont() - Font reload already in progress, skipping");
-		return;
+		return false;
 	}
 
 	auto& themeSettings = menu.GetTheme();
-
-	logger::info("ThemeManager::ReloadFont() - Starting font reload...");
 
 	ImGuiIO& io = ImGui::GetIO();
 
 	// Additional safety checks: ensure ImGui is in a valid state
 	ImGuiContext* ctx = ImGui::GetCurrentContext();
 	if (!ctx) {
-		logger::error("ThemeManager::ReloadFont() - No valid ImGui context!");
+		logger::error("ReloadFont: No valid ImGui context");
 		isReloading = false;
-		return;
+		return false;
 	}
 
 	// Ensure we're not in the middle of a frame
 	if (ctx->WithinFrameScope) {
-		logger::error("ThemeManager::ReloadFont() - Cannot reload font within frame scope!");
+		logger::error("ReloadFont: Cannot reload font within frame scope");
 		isReloading = false;
-		return;
+		return false;
 	}
 
 	// Additional rendering state checks
 	if (ctx->CurrentWindow || ctx->CurrentTable) {
-		logger::error("ThemeManager::ReloadFont() - ImGui has active window/table state!");
+		logger::error("ReloadFont: ImGui has active window/table state");
 		isReloading = false;
-		return;
+		return false;
 	}
 
 	// Additional check: make sure font atlas exists
 	if (!io.Fonts) {
-		logger::error("ThemeManager::ReloadFont() - No font atlas available!");
+		logger::error("ReloadFont: No font atlas available");
 		isReloading = false;
-		return;
+		return false;
 	}
 
 	// Verify D3D11 device is valid
 	auto device = globals::d3d::device;
 	auto context = globals::d3d::context;
 	if (!device || !context) {
-		logger::error("ThemeManager::ReloadFont() - D3D11 device or context is null!");
+		logger::error("ReloadFont: D3D11 device or context is null");
 		isReloading = false;
-		return;
+		return false;
 	}
 
 	// Clear existing fonts from the atlas
@@ -329,7 +326,6 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		}
 
 		if (effective.File.empty()) {
-			logger::warn("ThemeManager::ReloadFont() - No font specified for role '{}', using default.", Menu::GetFontRoleKey(role));
 			effective = Menu::GetDefaultFontRole(role);
 		}
 
@@ -343,7 +339,7 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 
 			// Security: Validate font path stays within fonts directory
 			if (!Util::IsPathWithinDirectory(fontsRoot, fontPath)) {
-				logger::error("Security: Font path traversal attempt detected for role '{}': {}",
+				logger::error("Security: Font path traversal attempt for role '{}': {}",
 					Menu::GetFontRoleKey(role), effective.File);
 				effective = Menu::GetDefaultFontRole(role);
 				fontPath = fontsRoot / effective.File;
@@ -360,12 +356,8 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 					if (font) {
 						atlasCache.emplace(cacheKey, font);
 						loadedFont = font;
-					} else {
-						logger::warn("ThemeManager::ReloadFont() - Failed to load '{}' for role '{}'.", fontPath.string(), Menu::GetFontRoleKey(role));
 					}
 				}
-			} else {
-				logger::warn("ThemeManager::ReloadFont() - Font file '{}' missing for role '{}'.", fontPath.string(), Menu::GetFontRoleKey(role));
 			}
 		}
 
@@ -384,7 +376,6 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		float bodySize = std::clamp(fontSize * defaults.SizeScale, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE);
 		float roundedBodySize = std::round(bodySize);
 		menu.cachedFontPixelSizesByRole[bodyIndex] = roundedBodySize;
-		logger::warn("ThemeManager::ReloadFont() - Falling back to default body font '{}'.", defaults.File);
 
 		ImFont* bodyFont = nullptr;
 		auto defaultPath = fontsRoot / defaults.File;
@@ -419,7 +410,6 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		menu.loadedFontRoles[idx] = bodyFont;
 		const_cast<Menu&>(menu).GetFontRoleSettings(role) = defaults;
 		const_cast<Menu&>(menu).cachedFontFilesByRole[idx] = defaults.File;
-		logger::warn("ThemeManager::ReloadFont() - Falling back to '{}' for role '{}'.", defaults.File, Menu::GetFontRoleKey(role));
 	}
 
 	if (!bodyFont) {
@@ -435,39 +425,33 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 
 	// Build the font atlas - this bakes all fonts into the texture
 	if (!io.Fonts->Build()) {
-		logger::error("ThemeManager::ReloadFont() - Failed to build font atlas!");
+		logger::error("ReloadFont: Failed to build font atlas");
 
 		// Emergency fallback: try to restore with default font before giving up
-		logger::warn("ThemeManager::ReloadFont() - Attempting emergency fallback to default font...");
 		io.Fonts->Clear();
 		ImFont* fallbackFont = io.Fonts->AddFontDefault();
 		if (fallbackFont && io.Fonts->Build()) {
-			logger::info("ThemeManager::ReloadFont() - Emergency fallback successful");
 			menu.loadedFontRoles.fill(fallbackFont);
 			io.FontDefault = fallbackFont;
 		} else {
-			logger::error("ThemeManager::ReloadFont() - Emergency fallback also failed!");
+			logger::error("ReloadFont: Emergency fallback failed");
 			isReloading = false;
-			return;
+			return false;
 		}
 	}
 
 	// Recreate device objects - this is where crashes can occur
 	// Must be done between frames with no active rendering state
 
-	logger::debug("ThemeManager::ReloadFont() - Invalidating DX11 device objects...");
-
 	// Flush any pending GPU operations before invalidating
 	context->Flush();
 
 	ImGui_ImplDX11_InvalidateDeviceObjects();
 
-	logger::debug("ThemeManager::ReloadFont() - Creating DX11 device objects...");
 	if (!ImGui_ImplDX11_CreateDeviceObjects()) {
-		logger::error("ThemeManager::ReloadFont() - Failed to create device objects!");
+		logger::error("ReloadFont: Failed to create device objects");
 
 		// Emergency fallback: restore with default font and retry device objects
-		logger::warn("ThemeManager::ReloadFont() - Attempting emergency device object recovery...");
 		io.Fonts->Clear();
 		ImFont* fallbackFont = io.Fonts->AddFontDefault();
 
@@ -475,7 +459,6 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		if (fallbackFont && io.Fonts->Build()) {
 			ImGui_ImplDX11_InvalidateDeviceObjects();
 			if (ImGui_ImplDX11_CreateDeviceObjects()) {
-				logger::warn("ThemeManager::ReloadFont() - Emergency recovery successful with default font");
 				menu.loadedFontRoles.fill(fallbackFont);
 				io.FontDefault = fallbackFont;
 				menu.cachedFontName = "ImGui Default";
@@ -484,20 +467,18 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		}
 
 		if (!recoverySucceeded) {
-			logger::error("ThemeManager::ReloadFont() - Critical failure: unable to recover device objects!");
+			logger::error("ReloadFont: Critical failure - unable to recover device objects");
 		}
 
 		isReloading = false;
-		return;
+		return false;
 	}
-
-	logger::debug("ThemeManager::ReloadFont() - Device objects recreated successfully");
 
 	// Verify font texture was created successfully
 	if (!io.Fonts->TexID) {
-		logger::error("ThemeManager::ReloadFont() - Font texture not created!");
+		logger::error("ReloadFont: Font texture not created");
 		isReloading = false;
-		return;
+		return false;
 	}
 
 	float globalScale = themeSettings.GlobalScale;
@@ -513,8 +494,8 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	// Also update cached font name in the menu instance
 	menu.cachedFontName = themeSettings.FontName;
 
-	logger::info("ThemeManager::ReloadFont() - Font reload completed successfully");
 	isReloading = false;
+	return true;
 }
 
 // Theme management methods
