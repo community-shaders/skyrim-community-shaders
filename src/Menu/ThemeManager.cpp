@@ -256,9 +256,11 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	}
 
 	// RAII scope guard to ensure isReloading is always reset on exit (exceptions, returns, etc.)
-	struct ReloadGuard {
+	struct ReloadGuard
+	{
 		std::atomic<bool>& flag;
-		explicit ReloadGuard(std::atomic<bool>& f) : flag(f) {}
+		explicit ReloadGuard(std::atomic<bool>& f) :
+			flag(f) {}
 		~ReloadGuard() { flag = false; }
 	} guard(isReloading);
 

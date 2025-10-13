@@ -134,7 +134,7 @@ public:
 	// Static UI helper methods
 	static void SetupImGuiStyle(const class Menu& menu);
 	static bool ReloadFont(const class Menu& menu, float& cachedFontSize);  // Returns true on success
-	static void ForceApplyDefaultTheme();  // Force Default.json colors to ImGui (bypass hardcoded defaults)
+	static void ForceApplyDefaultTheme();                                   // Force Default.json colors to ImGui (bypass hardcoded defaults)
 
 	struct Constants
 	{
