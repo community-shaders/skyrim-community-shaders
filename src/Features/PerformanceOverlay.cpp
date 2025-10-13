@@ -1283,15 +1283,15 @@ void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRo
 						ImGui::TextUnformatted(entry.bValue.c_str());
 						ImGui::PopStyleColor();
 					} else {
-								ImGui::TextUnformatted(entry.bValue.c_str());
-							}
-						}
-						ImGui::EndTable();
+						ImGui::TextUnformatted(entry.bValue.c_str());
 					}
-				ImGui::Separator();
+				}
+				ImGui::EndTable();
 			}
+			ImGui::Separator();
 		}
 	}
+}
 }
 // ============================================================================
 // TABLE BUILDING AND RENDERING FUNCTIONS
