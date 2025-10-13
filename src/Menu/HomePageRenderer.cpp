@@ -277,9 +277,8 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 		return;
 	}
 
-	// Set font scale to 27 pixels for this window only
-	// Assuming default font is approximately 13 pixels, scale to ~27
-	ImGui::SetWindowFontScale(27.0f / 13.0f);
+	// Set font scale for better readability in this welcome dialog
+	ImGui::SetWindowFontScale(SETUP_DIALOG_FONT_SCALE);
 
 	auto menu = Menu::GetSingleton();
 
@@ -425,8 +424,8 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 
 	ImGui::Spacing();
 
-	// Check for Enter or Escape key to close
-	bool shouldClose = ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Escape);
+	// Check for Enter or Escape key to close, but only if not capturing a hotkey
+	bool shouldClose = (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Escape)) && !menu->settingToggleKey;
 
 	if (shouldClose) {
 		MarkFirstTimeSetupComplete();
