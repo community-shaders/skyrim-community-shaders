@@ -57,13 +57,19 @@ void EffectManager::RegisterSettings()
 {
 	auto& settingManager = SettingManager::GetSingleton();
 
-	// Time of day settings
+	// GLOBAL
+	settingManager.RegisterBoolSetting("UseEffect", "GLOBAL", false, false);
+
+	// TIMEOFDAY
 	settingManager.RegisterFloatSetting("DawnDuration", "TIMEOFDAY", 1.6f, 0.1f, 12.0f, false);
 	settingManager.RegisterFloatSetting("SunriseTime", "TIMEOFDAY", 9.0f, 0.0f, 24.0f, false);
 	settingManager.RegisterFloatSetting("DayTime", "TIMEOFDAY", 12.0f, 0.0f, 24.0f, false);
 	settingManager.RegisterFloatSetting("SunsetTime", "TIMEOFDAY", 17.25f, 0.0f, 24.0f, false);
 	settingManager.RegisterFloatSetting("DuskDuration", "TIMEOFDAY", 2.0f, 0.1f, 12.0f, false);
 	settingManager.RegisterFloatSetting("NightTime", "TIMEOFDAY", 1.0f, 0.0f, 24.0f, false);
+
+	// EFFECT
+	settingManager.RegisterBoolSetting("UseOriginalPostProcessing", "EFFECT", false, false);
 
 	settingManager.RegisterBoolSetting("EnablePostPassShader", "EFFECT", false, false);
 	settingManager.RegisterBoolSetting("EnableAdaptation", "EFFECT", true, false);

@@ -325,7 +325,10 @@ struct Main_HDRTonemapBlendCinematic_Render
 	static void thunk(RE::ImageSpaceManager* a1, RE::ImageSpaceEffect* a2, uint32_t a3, uint32_t a4, RE::ImageSpaceShaderParam* a5)
 	{
 		globals::features::enbPostProcessing.CheckCommonData();
-		if (globals::features::enbPostProcessing.enableEffect) {
+
+		auto& settingManager = SettingManager::GetSingleton();
+
+		if (globals::features::enbPostProcessing.enableEffect && !settingManager.GetValue<bool>("UseOriginalPostProcessing", "EFFECT")) {
 			EffectManager::GetSingleton().ExecuteEffects();
 		} else {
 			func(a1, a2, a3, a4, a5);
