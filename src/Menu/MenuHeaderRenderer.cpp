@@ -22,7 +22,7 @@ namespace
 				logger::error("RoleFontGuard: globals::menu is null, cannot retrieve font for role");
 				return;
 			}
-			
+
 			font_ = menuInstance->GetFont(role);
 			if (font_) {
 				ImGui::PushFont(font_);
