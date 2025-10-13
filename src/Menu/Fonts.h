@@ -3,6 +3,7 @@
 #include "../Menu.h"
 #include <algorithm>
 #include <cstring>
+#include <imgui.h>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -15,6 +16,46 @@ namespace MenuFonts
 	void NormalizeFontRoles(Menu::ThemeSettings& theme, bool themeProvidedFontRoles);
 	const FontRoleSettings& GetDefaultRole(FontRole role);
 	std::string BuildFontSignature(const Menu::ThemeSettings& theme, float baseFontSize);
+
+	/**
+	 * @brief RAII guard for pushing/popping ImGui fonts based on font roles
+	 * 
+	 * Automatically pushes the specified font role on construction and pops it on destruction.
+	 * This ensures proper font stack management even if exceptions occur.
+	 * 
+	 * Usage:
+	 *   {
+	 *       MenuFonts::FontRoleGuard guard(Menu::FontRole::Heading);
+	 *       ImGui::Text("This text uses the Heading font");
+	 *   } // Font automatically popped here
+	 */
+	class FontRoleGuard
+	{
+	public:
+		explicit FontRoleGuard(FontRole role);
+		~FontRoleGuard();
+
+		FontRoleGuard(const FontRoleGuard&) = delete;
+		FontRoleGuard& operator=(const FontRoleGuard&) = delete;
+
+		[[nodiscard]] ImFont* Get() const { return font_; }
+
+	private:
+		ImFont* font_ = nullptr;
+	};
+
+	/**
+	 * @brief Begins an ImGui tab item with the specified font role
+	 * 
+	 * Convenience wrapper that combines FontRoleGuard with ImGui::BeginTabItem.
+	 * The font is automatically managed and will be popped when the tab ends.
+	 * 
+	 * @param label Tab label text
+	 * @param role Font role to use for the tab
+	 * @param flags ImGui tab item flags
+	 * @return true if the tab is selected and visible, false otherwise
+	 */
+	bool BeginTabItemWithFont(const char* label, FontRole role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None);
 }
 
 namespace Util

@@ -106,13 +106,12 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 	                        (themeSettings.Palette.Background.w == 0.0f && themeSettings.Palette.Text.w == 0.0f);
 
 	if (isThemeCorrupted) {
-		logger::warn("Theme appears corrupted, attempting to reload Default.json to prevent ImGui defaults");
-		// Note: This violates const correctness but is necessary for emergency theme recovery
-		// TODO: Refactor to use separate recovery path that doesn't require const_cast
+		logger::warn("Theme appears corrupted, attempting emergency reload of Default.json");
+		// Emergency recovery: const_cast is acceptable here to prevent total UI failure
 		if (const_cast<Menu*>(&menu)->LoadThemePreset("Default")) {
-			logger::info("Successfully reloaded Default.json theme");
+			logger::info("Successfully recovered with Default.json theme");
 		} else {
-			logger::error("Failed to reload Default.json - ImGui may show hardcoded defaults");
+			logger::error("Failed to reload Default.json - ImGui may revert to hardcoded defaults");
 		}
 	}
 

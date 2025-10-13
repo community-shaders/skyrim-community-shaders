@@ -1,5 +1,6 @@
 ﻿#include "VR.h"
 #include "Menu.h"
+#include "Menu/Fonts.h"
 #include "RE/B/BSOpenVR.h"
 #include "RE/N/NiPoint3.h"
 #include "RE/P/PlayerCharacter.h"
@@ -25,41 +26,9 @@ using AttachMode = VR::Settings::OverlayAttachMode;
 
 namespace
 {
-	class FontRoleGuard
-	{
-	public:
-		explicit FontRoleGuard(Menu::FontRole role)
-		{
-			Menu* menuInstance = globals::menu;
-			if (!menuInstance) {
-				menuInstance = Menu::GetSingleton();
-			}
-			if (menuInstance) {
-				font_ = menuInstance->GetFont(role);
-				if (font_) {
-					ImGui::PushFont(font_);
-				}
-			}
-		}
-
-		~FontRoleGuard()
-		{
-			if (font_) {
-				ImGui::PopFont();
-			}
-		}
-
-		FontRoleGuard(const FontRoleGuard&) = delete;
-		FontRoleGuard& operator=(const FontRoleGuard&) = delete;
-
-	private:
-		ImFont* font_ = nullptr;
-	};
-
 	bool BeginTabItemWithFont(const char* label, Menu::FontRole role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None)
 	{
-		FontRoleGuard guard(role);
-		return ImGui::BeginTabItem(label, nullptr, flags);
+		return MenuFonts::BeginTabItemWithFont(label, role, flags);
 	}
 }
 
