@@ -11,6 +11,7 @@
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
+#include "Util.h"
 
 #include "Features/PerformanceOverlay.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
@@ -42,6 +43,7 @@ void OverlayRenderer::RenderOverlay(
 	InitializeImGuiFrame(menu);
 
 	RenderShaderCompilationStatus(keyIdToString);
+	RenderShaderBlockingStatus();
 	RenderFirstTimeSetupOverlay();
 
 	if (menu.IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup()) {
@@ -203,4 +205,55 @@ void OverlayRenderer::RenderFirstTimeSetupOverlay()
 	if (HomePageRenderer::ShouldShowFirstTimeSetup()) {
 		HomePageRenderer::RenderFirstTimeSetupDialog();
 	}
+}
+
+void OverlayRenderer::RenderShaderBlockingStatus()
+{
+	auto shaderCache = globals::shaderCache;
+	auto state = globals::state;
+
+	if (!state->IsDeveloperMode() || shaderCache->blockedKey.empty()) {
+		return;
+	}
+
+	ImGui::SetNextWindowPos(ImVec2(ThemeManager::Constants::OVERLAY_WINDOW_POSITION, ThemeManager::Constants::OVERLAY_WINDOW_POSITION + 100));
+	if (!ImGui::Begin("ShaderBlockingInfo", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
+		ImGui::End();
+		return;
+	}
+
+	ImGui::TextColored(Util::Colors::GetError(), "Shader Blocking Active");
+	ImGui::Text("Blocked: %s", shaderCache->blockedKey.c_str());
+
+	// Try to get more details from active shaders
+	auto activeShaders = shaderCache->GetActiveShaders();
+
+	// Find the index of the blocked shader in the active list (or show N/A if not found)
+	size_t blockedIndex = 0;
+	bool foundBlocked = false;
+	for (size_t i = 0; i < activeShaders.size(); ++i) {
+		if (activeShaders[i].key == shaderCache->blockedKey) {
+			blockedIndex = i + 1;  // 1-based indexing for display
+			foundBlocked = true;
+			break;
+		}
+	}
+
+	if (foundBlocked) {
+		ImGui::Text("Index: %zu/%zu", blockedIndex, activeShaders.size());
+	} else {
+		ImGui::Text("Index: N/A (%zu active)", activeShaders.size());
+	}
+
+	for (const auto& shader : activeShaders) {
+		if (shader.key == shaderCache->blockedKey) {
+			ImGui::Text("Type: %s | Class: %s | Descriptor: 0x%X",
+				magic_enum::enum_name(shader.shaderType).data(),
+				magic_enum::enum_name(shader.shaderClass).data(),
+				shader.descriptor);
+			break;
+		}
+	}
+
+	ImGui::End();
 }

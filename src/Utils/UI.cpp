@@ -691,6 +691,43 @@ namespace Util
 		return ascending ? (a < b) : (b < a);
 	}
 
+	void RenderTextWithHighlights(const std::string& text, const std::string& searchTerm, ImVec4 highlightColor)
+	{
+		if (searchTerm.empty()) {
+			ImGui::TextUnformatted(text.c_str());
+			return;
+		}
+
+		std::string lowerText = text;
+		std::string lowerSearch = searchTerm;
+		std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(), ::tolower);
+		std::transform(lowerSearch.begin(), lowerSearch.end(), lowerSearch.begin(), ::tolower);
+
+		size_t pos = 0;
+		size_t lastPos = 0;
+
+		while ((pos = lowerText.find(lowerSearch, lastPos)) != std::string::npos) {
+			// Render text before highlight
+			if (pos > lastPos) {
+				ImGui::TextUnformatted(text.substr(lastPos, pos - lastPos).c_str());
+				ImGui::SameLine(0, 0);
+			}
+
+			// Render highlighted text
+			ImGui::PushStyleColor(ImGuiCol_Text, highlightColor);
+			ImGui::TextUnformatted(text.substr(pos, searchTerm.length()).c_str());
+			ImGui::PopStyleColor();
+			ImGui::SameLine(0, 0);
+
+			lastPos = pos + searchTerm.length();
+		}
+
+		// Render remaining text
+		if (lastPos < text.length()) {
+			ImGui::TextUnformatted(text.substr(lastPos).c_str());
+		}
+	}
+
 	ImVec4 GetThresholdColor(float value, float good, float warn, ImVec4 goodColor, ImVec4 warnColor, ImVec4 badColor)
 	{
 		if (value < good)

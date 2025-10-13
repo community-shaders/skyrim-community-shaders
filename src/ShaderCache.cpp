@@ -2501,9 +2501,9 @@ namespace SIE
 				// Calculate next index
 				int targetIdx = 0;
 				if (currentIdx >= 0) {
-					targetIdx = a_forward ? (currentIdx + 1) % keys.size() : (currentIdx - 1 + keys.size()) % keys.size();
+					targetIdx = a_forward ? (currentIdx + 1) % static_cast<int>(keys.size()) : (currentIdx - 1 + static_cast<int>(keys.size())) % static_cast<int>(keys.size());
 				} else {
-					targetIdx = a_forward ? 0 : keys.size() - 1;
+					targetIdx = a_forward ? 0 : static_cast<int>(keys.size()) - 1;
 				}
 
 				blockedKey = keys[targetIdx];
@@ -2559,7 +2559,7 @@ namespace SIE
 			// Construct disk path
 			const std::wstring shaderPath = SIE::SShaderCache::GetShaderPath(
 				shader.shaderType == RE::BSShader::Type::ImageSpace ?
-					SIE::SShaderCache::GetImageSpaceShaderName(shader) :
+					static_cast<const RE::BSImagespaceShader&>(shader).originalShaderName :
 					shader.fxpFilename);
 			info.diskPath = std::format(L"{}/{:X}.pso", shaderPath, descriptor);
 		}
@@ -2747,7 +2747,7 @@ namespace SIE
 
 	std::string CompilationSet::GetHumanTime(double a_totalMs)
 	{
-		int milliseconds = (int)a_totalMs;
+		int milliseconds = static_cast<int>(a_totalMs);
 		int seconds = milliseconds / 1000;
 		int minutes = seconds / 60;
 		seconds %= 60;

@@ -127,15 +127,6 @@ void AdvancedSettingsRenderer::RenderAdvancedSection()
 			ImGui::Text("Clear all compiled shaders from memory. Forces recompilation of all shaders on next use.");
 		}
 
-		// Show shader blocking status (full controls in Shader Debugging section)
-		if (globals::state->IsDeveloperMode() && !shaderCache->blockedKey.empty()) {
-			ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
-				"Shader Blocking Active: %zu shaders", shaderCache->blockedIDs.size());
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("See 'Shader Debugging' section below for details and controls.");
-			}
-		}
-
 		// Debug addresses section
 		if (ImGui::TreeNodeEx("Addresses")) {
 			auto Renderer = globals::game::renderer;
@@ -206,50 +197,71 @@ void AdvancedSettingsRenderer::RenderShaderReplacementSection()
 void AdvancedSettingsRenderer::RenderShaderDebugSection()
 {
 	auto shaderCache = globals::shaderCache;
-	auto state = globals::state;
 
-	if (!state->IsDeveloperMode()) {
+	if (!globals::state->IsDeveloperMode()) {
 		return;
 	}
 
-	if (ImGui::CollapsingHeader("Shader Debugging", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
-		// Show currently blocked shader info
-		if (!shaderCache->blockedKey.empty()) {
-			ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Shader Blocking Active");
-			ImGui::Separator();
+	// Show blocked shader status as a regular section
+	if (!shaderCache->blockedKey.empty()) {
+		ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.2f, 0.1f, 0.1f, 0.8f));
+		ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 4.0f);
+		ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
 
-			ImGui::Text("Blocked Shader:");
-			ImGui::Indent();
-			ImGui::TextWrapped("%s", shaderCache->blockedKey.c_str());
-			ImGui::Text("Descriptors Blocked: %zu", shaderCache->blockedIDs.size());
+		if (ImGui::CollapsingHeader("Currently Blocked Shader", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::TextColored(Util::Colors::GetError(), "Shader Blocking Active");
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Stop Blocking##Section")) {
+				shaderCache->DisableShaderBlocking();
+			}
+
+			ImGui::Text("Blocked: %s", shaderCache->blockedKey.c_str());
 
 			// Try to get more details from active shaders
 			auto activeShaders = shaderCache->GetActiveShaders();
 			for (const auto& shader : activeShaders) {
 				if (shader.key == shaderCache->blockedKey) {
-					ImGui::Text("Type: %s", magic_enum::enum_name(shader.shaderType).data());
-					ImGui::Text("Class: %s", magic_enum::enum_name(shader.shaderClass).data());
-					ImGui::Text("Descriptor: 0x%X", shader.descriptor);
+					ImGui::Text("Type: %s | Class: %s | Descriptor: 0x%X",
+						magic_enum::enum_name(shader.shaderType).data(),
+						magic_enum::enum_name(shader.shaderClass).data(),
+						shader.descriptor);
 
-					// Convert wstring to string for display
-					std::string diskPathStr;
-					diskPathStr.resize(shader.diskPath.size());
-					std::transform(shader.diskPath.begin(), shader.diskPath.end(), diskPathStr.begin(),
-						[](wchar_t c) { return static_cast<char>(c); });
-					ImGui::Text("Cache Path: %s", diskPathStr.c_str());
+					// Add copy button with full information including disk cache
+					ImGui::SameLine();
+					ImGui::PushID("copy_blocked_shader");
+					if (ImGui::SmallButton("Copy Info")) {
+						// Convert wstring to string for display
+						std::string diskPathStr;
+						diskPathStr.resize(shader.diskPath.size());
+						std::transform(shader.diskPath.begin(), shader.diskPath.end(), diskPathStr.begin(),
+							[](wchar_t c) { return static_cast<char>(c); });
+
+						std::string fullInfo = std::format("Type: {}\nClass: {}\nDescriptor: 0x{:X}\nKey: {}\nCache Path: {}",
+							magic_enum::enum_name(shader.shaderType).data(),
+							magic_enum::enum_name(shader.shaderClass).data(),
+							shader.descriptor,
+							shader.key,
+							diskPathStr);
+						ImGui::SetClipboardText(fullInfo.c_str());
+					}
+					ImGui::PopID();
+					if (ImGui::IsItemHovered()) {
+						if (auto _tt = Util::HoverTooltipWrapper()) {
+							ImGui::Text("Copy complete shader information including cache path to clipboard");
+						}
+					}
+
 					break;
 				}
 			}
-			ImGui::Unindent();
-			ImGui::Spacing();
-
-			if (ImGui::Button("Stop Blocking", { -1, 0 })) {
-				shaderCache->DisableShaderBlocking();
-			}
-			ImGui::Separator();
 		}
 
-		// Active shaders list
+		ImGui::PopStyleVar();    // WindowBorderSize
+		ImGui::PopStyleColor();  // WindowBg
+	}
+
+	// Active shaders list
+	if (ImGui::CollapsingHeader("Active Shaders", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Text("Active Shaders (Used Recently)");
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
@@ -258,134 +270,175 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 				"Shaders not used for ~1 second are removed from this list.");
 		}
 
+		// Get fresh active shaders data for accurate count and table
 		auto activeShaders = shaderCache->GetActiveShaders();
 		ImGui::Text("Total Active: %zu", activeShaders.size());
 
-		// Filter controls
+		// Calculate total draw calls for percentage calculation
+		uint32_t totalDrawCalls = 0;
+		for (const auto& shader : activeShaders) {
+			totalDrawCalls += shader.drawCalls;
+		}
+
+		// Filter controls (now handled by ShowFilteredStringTableCustom)
 		static char filterText[256] = "";
-		ImGui::InputText("Filter", filterText, IM_ARRAYSIZE(filterText));
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Filter shaders by key substring (case-sensitive)");
+		static int searchColumn = 0;  // 0 = All Columns, 1 = Type, 2 = Class, 3 = Descriptor, 4 = Draw Calls, 5 = Key
+
+		// Create shader rows for the table utility (simplified - no filter data needed)
+		struct ShaderRow
+		{
+			SIE::ShaderCache::ActiveShaderInfo shader;
+			uint32_t totalDrawCalls;
+		};
+
+		std::vector<ShaderRow> shaderRows;
+		for (const auto& shader : activeShaders) {
+			shaderRows.push_back({ shader, totalDrawCalls });
 		}
 
-		static int sortMode = 0;  // 0 = key, 1 = draw calls, 2 = type
-		ImGui::Combo("Sort By", &sortMode, "Key\0Draw Calls\0Type\0");
+		// Build column configurations
+		std::vector<Util::TableColumnConfig<ShaderRow>> columns = {
+			{ "Type", "Shader type", [](const ShaderRow& row) {
+				 return std::string(magic_enum::enum_name(row.shader.shaderType));
+			 } },
+			{ "Class", "Shader class", [](const ShaderRow& row) {
+				 return std::string(magic_enum::enum_name(row.shader.shaderClass));
+			 } },
+			{ "Descriptor", "Shader descriptor hash", [](const ShaderRow& row) {
+				 return std::format("0x{:X}", row.shader.descriptor);
+			 } },
+			{ "Frame %", "Percentage of total draw calls in current frame", [](const ShaderRow& row) {
+				 float percentage = Util::CalculatePercentage(static_cast<float>(row.shader.drawCalls), static_cast<float>(row.totalDrawCalls));
+				 return Util::FormatPercent(percentage);
+			 } },
+			{ "Key", "Shader key", [](const ShaderRow& row) {
+				 return row.shader.key;
+			 } }
+		};
 
-		// Sort active shaders
-		std::vector<SIE::ShaderCache::ActiveShaderInfo> sortedShaders = activeShaders;
-		if (sortMode == 0) {
-			std::sort(sortedShaders.begin(), sortedShaders.end(),
-				[](const auto& a, const auto& b) { return a.key < b.key; });
-		} else if (sortMode == 1) {
-			std::sort(sortedShaders.begin(), sortedShaders.end(),
-				[](const auto& a, const auto& b) { return a.drawCalls > b.drawCalls; });
-		} else if (sortMode == 2) {
-			std::sort(sortedShaders.begin(), sortedShaders.end(),
-				[](const auto& a, const auto& b) {
-					if (a.shaderType != b.shaderType)
-						return a.shaderType < b.shaderType;
-					return a.key < b.key;
-				});
-		}
-
-		// Display shader list
-		if (ImGui::BeginTable("##ActiveShaders", 5,
-				ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
-				ImVec2(0, 300))) {
-			ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-			ImGui::TableSetupColumn("Class", ImGuiTableColumnFlags_WidthFixed, 60.0f);
-			ImGui::TableSetupColumn("Descriptor", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-			ImGui::TableSetupColumn("Draw Calls", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-			ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthStretch);
-			ImGui::TableSetupScrollFreeze(0, 1);
-			ImGui::TableHeadersRow();
-
-			std::string filterStr(filterText);
-			for (const auto& shader : sortedShaders) {
-				// Apply filter
-				if (!filterStr.empty() && shader.key.find(filterStr) == std::string::npos) {
-					continue;
-				}
-
-				ImGui::TableNextRow();
-
-				// Type column
-				ImGui::TableNextColumn();
-				ImGui::Text("%s", magic_enum::enum_name(shader.shaderType).data());
-
-				// Class column
-				ImGui::TableNextColumn();
-				auto classStr = magic_enum::enum_name(shader.shaderClass);
-				if (classStr == "Vertex")
-					ImGui::Text("V");
-				else if (classStr == "Pixel")
-					ImGui::Text("P");
-				else if (classStr == "Compute")
-					ImGui::Text("C");
-				else
-					ImGui::Text("%s", classStr.data());
-
-				// Descriptor column
-				ImGui::TableNextColumn();
-				ImGui::Text("0x%X", shader.descriptor);
-
-				// Draw calls column
-				ImGui::TableNextColumn();
-				ImGui::Text("%u", shader.drawCalls);
-
-				// Key column with block button
-				ImGui::TableNextColumn();
-				bool isBlocked = (shader.key == shaderCache->blockedKey);
-				if (isBlocked) {
-					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f));
-				}
-
-				ImGui::PushID(shader.key.c_str());
-				if (ImGui::SmallButton(isBlocked ? "Unblock" : "Block")) {
-					if (isBlocked) {
-						shaderCache->DisableShaderBlocking();
-					} else {
-						shaderCache->blockedKey = shader.key;
-						shaderCache->blockedKeyIndex = 0;  // Reset index
-						shaderCache->blockedIDs.clear();
-						logger::debug("Manually blocking shader: {}", shader.key);
-					}
-				}
-				ImGui::PopID();
-
-				ImGui::SameLine();
-				ImGui::TextWrapped("%s", shader.key.c_str());
-
-				if (isBlocked) {
-					ImGui::PopStyleColor();
-				}
-
-				// Tooltip with full info
-				if (ImGui::IsItemHovered()) {
-					ImGui::BeginTooltip();
-					ImGui::Text("Type: %s", magic_enum::enum_name(shader.shaderType).data());
-					ImGui::Text("Class: %s", magic_enum::enum_name(shader.shaderClass).data());
-					ImGui::Text("Descriptor: 0x%X", shader.descriptor);
-					ImGui::Text("Draw Calls: %u", shader.drawCalls);
-					ImGui::Text("Key: %s", shader.key.c_str());
-
-					// Convert wstring to string for display
-					std::string diskPathStr;
-					diskPathStr.resize(shader.diskPath.size());
-					std::transform(shader.diskPath.begin(), shader.diskPath.end(), diskPathStr.begin(),
-						[](wchar_t c) { return static_cast<char>(c); });
-					ImGui::Text("Cache Path: %s", diskPathStr.c_str());
-					ImGui::EndTooltip();
-				}
+		// Row click callbacks
+		auto onRowLeftClick = [shaderCache](const ShaderRow& row) {
+			if (row.shader.key == shaderCache->blockedKey) {
+				// Clicking on already blocked shader - unblock it
+				shaderCache->DisableShaderBlocking();
+			} else {
+				// Clicking on different shader - block it
+				shaderCache->blockedKey = row.shader.key;
+				shaderCache->blockedKeyIndex = 0;
+				shaderCache->blockedIDs.clear();
+				logger::debug("Manually blocking shader: {}", row.shader.key);
 			}
+		};
 
-			ImGui::EndTable();
-		}
+		auto onRowRightClick = [shaderCache](const ShaderRow& row) {
+			// Convert wstring to string for display
+			std::string diskPathStr;
+			diskPathStr.resize(row.shader.diskPath.size());
+			std::transform(row.shader.diskPath.begin(), row.shader.diskPath.end(), diskPathStr.begin(),
+				[](wchar_t c) { return static_cast<char>(c); });
 
-		ImGui::Spacing();
-		ImGui::TextWrapped(
-			"Tip: Use PAGEUP/PAGEDOWN keys to quickly cycle through active shaders. "
-			"Blocked shaders will use vanilla rendering instead of Community Shaders.");
+			std::string fullInfo = std::format("Type: {}\nClass: {}\nDescriptor: 0x{:X}\nKey: {}\nCache Path: {}",
+				magic_enum::enum_name(row.shader.shaderType).data(),
+				magic_enum::enum_name(row.shader.shaderClass).data(),
+				row.shader.descriptor,
+				row.shader.key,
+				diskPathStr);
+			ImGui::SetClipboardText(fullInfo.c_str());
+		};
+
+		auto getRowTooltip = [shaderCache](const ShaderRow& row) {
+			std::string clickAction = (row.shader.key == shaderCache->blockedKey) ? "Left-click to unblock this shader" : "Left-click to block this shader";
+
+			return std::format("Type: {}\nClass: {}\nDescriptor: 0x{:X}\nKey: {}\n\n{}",
+				magic_enum::enum_name(row.shader.shaderType).data(),
+				magic_enum::enum_name(row.shader.shaderClass).data(),
+				row.shader.descriptor,
+				row.shader.key,
+				clickAction);
+		};
+
+		// Define function to extract filterable fields (for TableFilterState)
+		auto getFilterableFields = [](const ShaderRow& row) -> std::vector<std::string> {
+			return {
+				std::string(magic_enum::enum_name(row.shader.shaderType)),                                                                         // Type
+				std::string(magic_enum::enum_name(row.shader.shaderClass)),                                                                        // Class
+				std::format("0x{:X}", row.shader.descriptor),                                                                                      // Descriptor
+				Util::FormatPercent(Util::CalculatePercentage(static_cast<float>(row.shader.drawCalls), static_cast<float>(row.totalDrawCalls))),  // Frame %
+				row.shader.key                                                                                                                     // Key
+			};
+		};
+
+		// Define sorting comparators (customSorts parameter)
+		std::vector<std::function<bool(const ShaderRow&, const ShaderRow&, bool)>> sorters = {
+			// Type - string sort
+			[](const ShaderRow& a, const ShaderRow& b, bool ascending) {
+				std::string aVal = std::string(magic_enum::enum_name(a.shader.shaderType));
+				std::string bVal = std::string(magic_enum::enum_name(b.shader.shaderType));
+				return ascending ? (aVal < bVal) : (aVal > bVal);
+			},
+			// Class - string sort
+			[](const ShaderRow& a, const ShaderRow& b, bool ascending) {
+				std::string aVal = std::string(magic_enum::enum_name(a.shader.shaderClass));
+				std::string bVal = std::string(magic_enum::enum_name(b.shader.shaderClass));
+				return ascending ? (aVal < bVal) : (aVal > bVal);
+			},
+			// Descriptor - numeric sort
+			[](const ShaderRow& a, const ShaderRow& b, bool ascending) {
+				return ascending ? (a.shader.descriptor < b.shader.descriptor) : (a.shader.descriptor > b.shader.descriptor);
+			},
+			// Frame % - numeric sort
+			[](const ShaderRow& a, const ShaderRow& b, bool ascending) {
+				float aPercent = Util::CalculatePercentage(static_cast<float>(a.shader.drawCalls), static_cast<float>(a.totalDrawCalls));
+				float bPercent = Util::CalculatePercentage(static_cast<float>(b.shader.drawCalls), static_cast<float>(b.totalDrawCalls));
+				return ascending ? (aPercent < bPercent) : (aPercent > bPercent);
+			},
+			// Key - string sort
+			[](const ShaderRow& a, const ShaderRow& b, bool ascending) {
+				return ascending ? (a.shader.key < b.shader.key) : (a.shader.key > b.shader.key);
+			}
+		};
+
+		// Create filter state
+		Util::TableFilterState<ShaderRow> filterState(getFilterableFields);
+
+		// Initialize filter state from existing variables
+		filterState.filterText = std::string(filterText, filterText + strlen(filterText));
+		filterState.searchColumn = searchColumn;
+
+		// Define input events for row interactions
+		std::vector<Util::TableInputEvent<ShaderRow>> inputEvents = {
+			// Left-click to block/unblock shader
+			{ Util::TableInputEventType::MouseClick, onRowLeftClick, "", 0 },
+			// Right-click context menu for copying info
+			{ Util::TableInputEventType::ContextMenu, onRowRightClick, "Copy Info", 1 }
+		};
+
+		// Define function to get row text color (highlight blocked shaders)
+		auto getRowTextColor = [shaderCache](const ShaderRow& row) -> ImVec4 {
+			if (row.shader.key == shaderCache->blockedKey) {
+				// Use theme error color for blocked shader text
+				return Util::Colors::GetError();
+			}
+			return ImVec4(0, 0, 0, 0);  // Default text color for normal rows
+		};
+
+		// Use the new interactive table
+		Util::ShowInteractiveTable<ShaderRow>(
+			"ActiveShadersTable",
+			columns,
+			shaderRows,
+			4,     // Default sort column (Key)
+			true,  // Default ascending
+			sorters,
+			filterState,
+			inputEvents,
+			getRowTooltip,
+			nullptr,           // No background color
+			getRowTextColor);  // Pass the new text color function
+
+		// Update the filter text back to the char array
+		strncpy_s(filterText, filterState.filterText.c_str(), sizeof(filterText) - 1);
+		searchColumn = filterState.searchColumn;
 	}
 }
 
