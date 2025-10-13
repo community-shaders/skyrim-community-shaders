@@ -19,10 +19,10 @@ namespace MenuFonts
 
 	/**
 	 * @brief RAII guard for pushing/popping ImGui fonts based on font roles
-	 * 
+	 *
 	 * Automatically pushes the specified font role on construction and pops it on destruction.
 	 * This ensures proper font stack management even if exceptions occur.
-	 * 
+	 *
 	 * Usage:
 	 *   {
 	 *       MenuFonts::FontRoleGuard guard(Menu::FontRole::Heading);
@@ -46,10 +46,10 @@ namespace MenuFonts
 
 	/**
 	 * @brief Begins an ImGui tab item with the specified font role
-	 * 
+	 *
 	 * Convenience wrapper that combines FontRoleGuard with ImGui::BeginTabItem.
 	 * The font is automatically managed and will be popped when the tab ends.
-	 * 
+	 *
 	 * @param label Tab label text
 	 * @param role Font role to use for the tab
 	 * @param flags ImGui tab item flags
