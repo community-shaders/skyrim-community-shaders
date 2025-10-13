@@ -151,16 +151,18 @@ void State::Setup()
 	globals::deferred->SetupResources();
 }
 
-static const std::string& GetConfigPath(State::ConfigMode a_configMode)
+static std::string GetConfigPath(State::ConfigMode a_configMode)
 {
 	switch (a_configMode) {
 	case State::ConfigMode::USER:
-		return globals::state->userConfigPath;
+		return Util::PathHelpers::GetSettingsUserPath().string();
 	case State::ConfigMode::TEST:
-		return globals::state->testConfigPath;
+		return Util::PathHelpers::GetSettingsTestPath().string();
+	case State::ConfigMode::THEME:
+		return Util::PathHelpers::GetSettingsThemePath().string();
 	case State::ConfigMode::DEFAULT:
 	default:
-		return globals::state->defaultConfigPath;
+		return Util::PathHelpers::GetSettingsDefaultPath().string();
 	}
 }
 
@@ -395,10 +397,11 @@ void State::Save(ConfigMode a_configMode)
 	std::string configPath = GetConfigPath(a_configMode);
 	std::ofstream o{ configPath };
 
+	auto configFolderPath = std::filesystem::path(configPath).parent_path().string();
 	try {
-		std::filesystem::create_directories(folderPath);
+		std::filesystem::create_directories(configFolderPath);
 	} catch (const std::filesystem::filesystem_error& e) {
-		logger::warn("Error creating directory during Save ({}) : {}\n", folderPath, e.what());
+		logger::warn("Error creating directory during Save ({}) : {}\n", configFolderPath, e.what());
 		return;
 	}
 
@@ -456,6 +459,20 @@ void State::Save(ConfigMode a_configMode)
 	} catch (const std::exception& e) {
 		logger::warn("Failed to write settings to file: {}. Error: {}", configPath, e.what());
 	}
+}
+
+void State::LoadTheme()
+{
+	// Stub implementation for PR #1
+	// Full implementation will be added in PR #4 (Theme System Core)
+	logger::debug("LoadTheme called (stub)");
+}
+
+void State::SaveTheme()
+{
+	// Stub implementation for PR #1
+	// Full implementation will be added in PR #4 (Theme System Core)
+	logger::debug("SaveTheme called (stub)");
 }
 
 bool State::ValidateCache(CSimpleIniA& a_ini)

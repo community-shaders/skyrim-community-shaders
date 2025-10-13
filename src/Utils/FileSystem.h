@@ -74,19 +74,29 @@ namespace Util
 		 */
 		std::filesystem::path GetSettingsTestPath();
 
-		/**
-		 * Gets the SettingsDefault.json file path
-		 * @return CommunityShaderPath / "SettingsDefault.json"
-		 */
-		std::filesystem::path GetSettingsDefaultPath();
+	/**
+	 * Gets the SettingsDefault.json file path
+	 * @return CommunityShaderPath / "SettingsDefault.json"
+	 */
+	std::filesystem::path GetSettingsDefaultPath();
 
-		/**
-		 * Gets the Overrides directory path
-		 * @return CommunityShaderPath / "Overrides"
-		 */
-		std::filesystem::path GetOverridesPath();
+	/**
+	 * Gets the SettingsTheme.json file path
+	 * @return CommunityShaderPath / "SettingsTheme.json"
+	 */
+	std::filesystem::path GetSettingsThemePath();
 
-		/**
+	/**
+	 * Gets the Themes directory path
+	 * @return CommunityShaderPath / "Themes"
+	 */
+	std::filesystem::path GetThemesPath();
+
+	/**
+	 * Gets the Overrides directory path
+	 * @return CommunityShaderPath / "Overrides"
+	 */
+	std::filesystem::path GetOverridesPath();		/**
 		 * Gets the AppliedOverrides.json file path
 		 * @return CommunityShaderPath / "AppliedOverrides.json"
 		 */
@@ -136,19 +146,23 @@ namespace Util
 		 */
 		std::filesystem::path GetRootRealPath();
 
-		/**
-		 * Returns the real path to the Shaders directory located in the mod's root folder.
-		 * @return  <mod_root> / "Shaders"
-		 */
-		std::filesystem::path GetShadersRealPath();
+	/**
+	 * Returns the real path to the Shaders directory located in the mod's root folder.
+	 * @return  <mod_root> / "Shaders"
+	 */
+	std::filesystem::path GetShadersRealPath();
 
-		/**
-		 * Returns the real path to the Features directory containing feature INI files.
-		 * @return  <mod_root> / "Shaders" / "Features"
-		 */
-		std::filesystem::path GetFeaturesRealPath();
+	/**
+	 * Returns the real path to the Themes directory containing theme JSON files.
+	 * @return  <mod_root> / "SKSE" / "Plugins" / "CommunityShaders" / "Themes"
+	 */
+	std::filesystem::path GetThemesRealPath();
 
-	}
+	/**
+	 * Returns the real path to the Features directory containing feature INI files.
+	 * @return  <mod_root> / "Shaders" / "Features"
+	 */
+	std::filesystem::path GetFeaturesRealPath();	}
 
 	/**
 	 * File system utilities for safe file operations

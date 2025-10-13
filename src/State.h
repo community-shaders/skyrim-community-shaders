@@ -51,10 +51,6 @@ public:
 	spdlog::level::level_enum logLevel = spdlog::level::info;
 	std::string shaderDefinesString = "";
 	std::vector<std::pair<std::string, std::string>> shaderDefines{};  // data structure to parse string into; needed to avoid dangling pointers
-	const std::string folderPath = "Data\\SKSE\\Plugins\\CommunityShaders";
-	const std::string testConfigPath = "Data\\SKSE\\Plugins\\CommunityShaders\\SettingsTest.json";
-	const std::string userConfigPath = "Data\\SKSE\\Plugins\\CommunityShaders\\SettingsUser.json";
-	const std::string defaultConfigPath = "Data\\SKSE\\Plugins\\CommunityShaders\\SettingsDefault.json";
 
 	float timer = 0;
 	double smoothDrawCalls[RE::BSShader::Type::Total + 1];
@@ -73,7 +69,8 @@ public:
 	{
 		DEFAULT,
 		USER,
-		TEST
+		TEST,
+		THEME
 	};
 
 	void Draw();
@@ -83,6 +80,9 @@ public:
 
 	void Load(ConfigMode a_configMode = ConfigMode::USER, bool a_allowReload = true);
 	void Save(ConfigMode a_configMode = ConfigMode::USER);
+
+	void LoadTheme();
+	void SaveTheme();
 
 	bool ValidateCache(CSimpleIniA& a_ini);
 	void WriteDiskCacheInfo(CSimpleIniA& a_ini);

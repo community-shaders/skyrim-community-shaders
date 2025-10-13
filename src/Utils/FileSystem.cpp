@@ -63,17 +63,25 @@ namespace Util
 			return GetCommunityShaderPath() / "SettingsTest.json";
 		}
 
-		std::filesystem::path GetSettingsDefaultPath()
-		{
-			return GetCommunityShaderPath() / "SettingsDefault.json";
-		}
+	std::filesystem::path GetSettingsDefaultPath()
+	{
+		return GetCommunityShaderPath() / "SettingsDefault.json";
+	}
 
-		std::filesystem::path GetOverridesPath()
-		{
-			return GetCommunityShaderPath() / "Overrides";
-		}
+	std::filesystem::path GetSettingsThemePath()
+	{
+		return GetCommunityShaderPath() / "SettingsTheme.json";
+	}
 
-		std::filesystem::path GetAppliedOverridesPath()
+	std::filesystem::path GetThemesPath()
+	{
+		return GetCommunityShaderPath() / "Themes";
+	}
+
+	std::filesystem::path GetOverridesPath()
+	{
+		return GetCommunityShaderPath() / "Overrides";
+	}		std::filesystem::path GetAppliedOverridesPath()
 		{
 			return GetCommunityShaderPath() / "AppliedOverrides.json";
 		}
@@ -129,20 +137,23 @@ namespace Util
 				return dllPath.parent_path().parent_path().parent_path();
 			}();
 			return cachedPath;
-		}
-
-		std::filesystem::path GetShadersRealPath()
-		{
-			return GetRootRealPath() / "Shaders";
-		}
-
-		std::filesystem::path GetFeaturesRealPath()
-		{
-			return GetShadersRealPath() / "Features";
-		}
 	}
 
-	// File system utilities implementation
+	std::filesystem::path GetShadersRealPath()
+	{
+		return GetRootRealPath() / "Shaders";
+	}
+
+	std::filesystem::path GetThemesRealPath()
+	{
+		return GetRootRealPath() / "SKSE" / "Plugins" / "CommunityShaders" / "Themes";
+	}
+
+	std::filesystem::path GetFeaturesRealPath()
+	{
+		return GetShadersRealPath() / "Features";
+	}
+}	// File system utilities implementation
 	namespace FileHelpers
 	{
 		DeletionResult SafeDelete(const std::string& path, const std::string& description)
