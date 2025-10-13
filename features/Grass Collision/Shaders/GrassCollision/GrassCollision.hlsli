@@ -97,7 +97,7 @@ namespace GrassCollision
 		float3 tangentX = float3(delta, 0, hX - h0);
 		float3 tangentY = float3(0, delta, hY - h0);
 		float3 crossProd = cross(tangentX, tangentY) * float3(1.0, 1.0, 0.1);
-		
+
 		float lenSq = dot(crossProd, crossProd);
 		return lenSq > 1e-12 ? -crossProd * rsqrt(lenSq) : float3(0, 0, -1);
 	}
