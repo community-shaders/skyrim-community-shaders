@@ -35,7 +35,9 @@ void ENBAdaptation::UpdateEffectVariables()
 	adaptationParameters.x = !forceMinMaxValues ? 0.0f : settingManager.GetValue<float>("AdaptationMin", "ADAPTATION");
 	adaptationParameters.y = !forceMinMaxValues ? 65535.0f : settingManager.GetValue<float>("AdaptationMax", "ADAPTATION");
 	adaptationParameters.z = settingManager.GetValue<float>("AdaptationSensitivity", "ADAPTATION");
-	adaptationParameters.w = settingManager.GetValue<float>("AdaptationTime", "ADAPTATION") * (*globals::game::deltaTime);
+
+	float timeSeconds = *globals::game::deltaTime;
+	adaptationParameters.w = timeSeconds / settingManager.GetValue<float>("AdaptationTime", "ADAPTATION");
 
 	SetVectorVariable("AdaptationParameters", &adaptationParameters, sizeof(adaptationParameters));
 }
