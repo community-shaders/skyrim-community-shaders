@@ -1,6 +1,7 @@
 #include "SettingsTabRenderer.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <filesystem>
 #include <format>
@@ -21,6 +22,16 @@ using json = nlohmann::json;
 namespace
 {
 	using FontRoleGuard = MenuFonts::FontRoleGuard;  // Convenience alias
+
+	// Portable case-insensitive string comparison
+	bool iequals(const std::string& a, const std::string& b)
+	{
+		return std::equal(a.begin(), a.end(), b.begin(), b.end(),
+			[](char ca, char cb) {
+				return std::tolower(static_cast<unsigned char>(ca)) ==
+				       std::tolower(static_cast<unsigned char>(cb));
+			});
+	}
 
 	void SeparatorTextWithFont(const char* text, Menu::FontRole role)
 	{
@@ -475,7 +486,7 @@ void SettingsTabRenderer::RenderFontsTab()
 			int familyIndex = 0;
 			if (!fontCatalog.families.empty()) {
 				for (size_t i = 0; i < fontCatalog.families.size(); ++i) {
-					if (_stricmp(fontCatalog.families[i].name.c_str(), roleSettings.Family.c_str()) == 0) {
+					if (iequals(fontCatalog.families[i].name, roleSettings.Family)) {
 						familyIndex = static_cast<int>(i);
 						break;
 					}
@@ -529,7 +540,7 @@ void SettingsTabRenderer::RenderFontsTab()
 			} else if (selectedFamily) {
 				int styleIndex = 0;
 				for (size_t s = 0; s < selectedFamily->styles.size(); ++s) {
-					if (_stricmp(selectedFamily->styles[s].style.c_str(), roleSettings.Style.c_str()) == 0) {
+					if (iequals(selectedFamily->styles[s].style, roleSettings.Style)) {
 						styleIndex = static_cast<int>(s);
 						break;
 					}

@@ -16,9 +16,9 @@
             },
             {
                 "Family": "Jost",
-                "Style": "SemiBold",
-                "File": "Jost/Jost-SemiBold.ttf",
-                "SizeScale": 1.05
+                "Style": "Regular",
+                "File": "Jost/Jost-Regular.ttf",
+                "SizeScale": 1.0
             },
             {
                 "Family": "Jost",
@@ -28,20 +28,8 @@
             },
             {
                 "Family": "Jost",
-                "Style": "Light",
-                "File": "Jost/Jost-Light.ttf",
-                "SizeScale": 0.95
-            },
-            {
-                "Family": "Jost",
-                "Style": "Light",
-                "File": "Jost/Jost-Light.ttf",
-                "SizeScale": 0.9
-            },
-            {
-                "Family": "IBMPlexMono",
                 "Style": "Regular",
-                "File": "IBMPlexMono/IBMPlexMono-Regular.ttf",
+                "File": "Jost/Jost-Regular.ttf",
                 "SizeScale": 1.0
             }
         ],

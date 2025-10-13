@@ -181,11 +181,15 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_TabHovered], textLum,
 		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
 
-	// Apply contrast-aware text for selection states (TextSelectedBg is used when text is selected)
-	if (Util::ColorUtils::CalculateLuminance(colors[ImGuiCol_HeaderActive]) > LUMINANCE_THRESHOLD) {
-		colors[ImGuiCol_TextSelectedBg] = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);  // Black text on light selection
+	// Apply semi-transparent tint for text selection background
+	// TextSelectedBg should be a tinted overlay, not opaque, so underlying text remains visible
+	float selectionLum = Util::ColorUtils::CalculateLuminance(colors[ImGuiCol_HeaderActive]);
+	if (selectionLum > LUMINANCE_THRESHOLD) {
+		// Light selection background - use semi-transparent dark tint
+		colors[ImGuiCol_TextSelectedBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.25f);
 	} else {
-		colors[ImGuiCol_TextSelectedBg] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);  // White text on dark selection
+		// Dark selection background - use semi-transparent light tint
+		colors[ImGuiCol_TextSelectedBg] = ImVec4(1.0f, 1.0f, 1.0f, 0.25f);
 	}
 
 	// Apply scrollbar opacity settings

@@ -28,15 +28,15 @@ using json = nlohmann::json;
  *     "FontName": "Jost/Jost-Regular.ttf", // Legacy font path (use FontRoles instead)
  *     "GlobalScale": 0.0,                   // UI scale exponent (-2.0 to 2.0, 0.0=100%)
  *
- *     // Font Role System (6 roles: Body, Heading, Subheading, Subtitle, Caption, Monospace)
+ *     // Font Role System (4 roles: Body, Heading, Subheading, Subtitle)
  *     "FontRoles": [
  *       { "Family": "Jost", "Style": "Regular", "File": "Jost/Jost-Regular.ttf", "SizeScale": 1.0 },
- *       { "Family": "Jost", "Style": "SemiBold", "File": "Jost/Jost-SemiBold.ttf", "SizeScale": 1.05 },
- *       // ... 4 more roles
+ *       { "Family": "Jost", "Style": "Regular", "File": "Jost/Jost-Regular.ttf", "SizeScale": 1.0 },
+ *       { "Family": "Jost", "Style": "Regular", "File": "Jost/Jost-Regular.ttf", "SizeScale": 1.0 },
+ *       { "Family": "Jost", "Style": "Regular", "File": "Jost/Jost-Regular.ttf", "SizeScale": 1.0 }
  *     ],
  *
  *     "TooltipHoverDelay": 0.5,            // Seconds before tooltip appears
- *     "BackgroundBlur": 0.5,               // Gaussian blur intensity (0.0-1.0)
  *     "ShowActionIcons": true,             // Show icons on action buttons
  *
  *     // Simple color palette (6 key colors)
@@ -96,8 +96,6 @@ using json = nlohmann::json;
  * - Role 1 (Heading):    Feature section headers
  * - Role 2 (Subheading): Subsection headers
  * - Role 3 (Subtitle):   Secondary text, descriptions
- * - Role 4 (Caption):    Small auxiliary text
- * - Role 5 (Monospace):  Code, file paths, technical values
  *
  * Each role can have different font family, style, and size scale.
  * Fonts must exist in Data\SKSE\Plugins\CommunityShaders\Fonts\

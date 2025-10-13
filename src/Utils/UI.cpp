@@ -17,6 +17,7 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <format>
