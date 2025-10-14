@@ -48,6 +48,7 @@ ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
 	data.CloudsOpacity = settingManager.GetInterpolatedTimeOfDayValue("CloudsOpacity", "SKY");
 
 	data.CloudsColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("CloudsColorFilter", "SKY");
+	data.CloudsVertexAlphaBoost = settingManager.GetInterpolatedTimeOfDayValue("CloudsVertexAlphaBoost", "SKY");
 
 	data.CloudsEdgeClamp = settingManager.GetValue<float>("CloudsEdgeClamp", "SKY");
 	data.CloudsEdgeIntensity = settingManager.GetValue<float>("CloudsEdgeIntensity", "SKY");
@@ -252,6 +253,16 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 		skyStaticsColorF3 = Intensity(skyStaticsColorF3, settingManager.GetInterpolatedTimeOfDayValue("Intensity", "VOLUMETRICFOG"));
 
 		skyStaticsColor = F3ToNi(skyStaticsColorF3);
+	}
+
+	{
+		auto& effectColor = colors[(uint)RE::TESWeather::ColorTypes::kEffectLighting];
+
+		float3 effectColorF3 = NiToF3(effectColor);
+
+		effectColorF3 = Intensity(effectColorF3, settingManager.GetInterpolatedTimeOfDayValue("Intensity", "PARTICLE"));
+
+		effectColor = F3ToNi(effectColorF3);
 	}
 }
 

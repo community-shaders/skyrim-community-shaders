@@ -130,6 +130,8 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterFloatSetting("CloudsEdgeFadeRange", "SKY", 0.0f);
 	settingManager.RegisterFloatSetting("CloudsEdgeMoonMultiplier", "SKY", 0.0f);
 
+	settingManager.RegisterTimeOfDaySetting("CloudsVertexAlphaBoost", "SKY", 0.0f);
+
 	// ENVIRONMENT
 	settingManager.RegisterTimeOfDaySetting("DirectLightingIntensity", "ENVIRONMENT", 1, true);
 	settingManager.RegisterTimeOfDaySetting("DirectLightingCurve", "ENVIRONMENT", 1, true);
@@ -170,6 +172,9 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterTimeOfDaySetting("RangeFactor", "GAMEVOLUMETRICRAYS", 1, true);
 	settingManager.RegisterTimeOfDaySetting("Desaturation", "GAMEVOLUMETRICRAYS", 0, true);
 	settingManager.RegisterColorTimeOfDaySetting("ColorFilter", "GAMEVOLUMETRICRAYS", { 1.0f, 1.0f, 1.0f }, true);
+
+	// PARTICLE
+	settingManager.RegisterTimeOfDaySetting("Intensity", "PARTICLE", 1, true);
 }
 
 void EffectManager::ExecuteEffects()

@@ -61,7 +61,7 @@ public:
 		float CloudsOpacity;
 
 		float3 CloudsColorFilter;
-		float pad5;
+		float CloudsVertexAlphaBoost;
 
 		float CloudsEdgeClamp;
 		float CloudsEdgeIntensity;

@@ -133,6 +133,9 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.Color.xyz = VParams * skyColor;
 	vsout.Color.w = BlendColor[0].w * input.Color.w;
 
+	if (SharedData::enbSettings.Enable){
+		vsout.Color.w = saturate(vsout.Color.w + vsout.Color.w * SharedData::enbSettings.CloudsVertexAlphaBoost);
+	}
 #		elif defined(TEX)
 	float3 skyColor = BlendColor[0].xyz * input.Color.xxx + BlendColor[1].xyz * input.Color.yyy +
 	                  BlendColor[2].xyz * input.Color.zzz;
