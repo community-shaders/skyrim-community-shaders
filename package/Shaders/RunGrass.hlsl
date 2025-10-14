@@ -729,12 +729,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
 
-#				if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
-		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-	}
-#				endif  // IBL
-
 #				if defined(SKYLIGHTING)
 	float skylightingDiffuse = 1.0;
 	if (!SharedData::InInterior) {
@@ -752,26 +746,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				endif  // SKYLIGHTING
 
 #				if defined(IBL)
-	float3 iblColor = 0;
-	if (SharedData::iblSettings.EnableDiffuseIBL) {
-		if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)
-		{
-#					if defined(SKYLIGHTING)
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					else
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					endif
-			iblColor = Color::LinearToGamma(iblColor);
-			directionalAmbientColor += iblColor;
-		}
+	if (SharedData::iblSettings.EnableDiffuseIBL) {	
+		directionalAmbientColor += ImageBasedLighting::GetIBLColor(-normal) * SharedData::enbSettings.IBLMultiplicativeAmount;		
 	}
 #				endif
 
 	diffuseColor += directionalAmbientColor;
 
-#				if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor -= iblColor;
-#				endif
 	diffuseColor *= albedo;
 	diffuseColor += max(0, sss * subsurfaceColor * SharedData::grassLightingSettings.SubsurfaceScatteringAmount);
 
@@ -779,10 +760,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #				if defined(SKYLIGHTING)
 	Skylighting::applySkylighting(diffuseColor, directionalAmbientColor, albedo, skylightingDiffuse);
-#				endif
-
-#				if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor += iblColor * albedo;
 #				endif
 
 	specularColor += lightsSpecularColor;
@@ -960,18 +937,8 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif  // SKYLIGHTING
 
 #			if defined(IBL)
-	float3 iblColor = 0;
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
-		if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)
-		{
-#					if defined(SKYLIGHTING)
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					else
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					endif
-			iblColor = Color::LinearToGamma(iblColor);
-			directionalAmbientColor += iblColor;
-		}
+		directionalAmbientColor += ImageBasedLighting::GetIBLColor(-normal) * SharedData::enbSettings.IBLMultiplicativeAmount;				
 	}
 #			endif
 
@@ -980,17 +947,10 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 albedo = baseColor.xyz * vertexColor;
 
 	diffuseColor *= albedo;
-#			if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor -= iblColor;
-#			endif
 	directionalAmbientColor *= albedo;
 
 #			if defined(SKYLIGHTING)
 	Skylighting::applySkylighting(diffuseColor, directionalAmbientColor, albedo, skylightingDiffuse);
-#			endif
-
-#			if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor += iblColor * albedo;
 #			endif
 
 	psout.Diffuse.xyz = diffuseColor;

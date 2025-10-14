@@ -2725,16 +2725,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 directionalAmbientColor = max(0, mul(DirectionalAmbient, float4(ambientNormal, 1.0)));
 
-#	if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL) {
-		if (SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
-			directionalAmbientColor = ImageBasedLighting::GetStaticDiffuseIBL(ambientNormal, SampColorSampler);
-		} else if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior) {
-			directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-		}
-	}
-#	endif
-
 #	if defined(SKYLIGHTING)
 	float skylightingDiffuse = 1;
 	float skylightingFadeOutFactor = 1.0;
@@ -2748,18 +2738,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if defined(IBL)
-	float3 iblColor = 0;
-	if (SharedData::iblSettings.EnableDiffuseIBL) {
-		if ((!SharedData::InInterior || SharedData::iblSettings.EnableInterior) && !(SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection))
-		{
-#		if defined(SKYLIGHTING)
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-ambientNormal, skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#		else
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-ambientNormal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#		endif
-			iblColor = Color::LinearToGamma(iblColor);
-			directionalAmbientColor += iblColor;
-		}
+	if (SharedData::iblSettings.EnableDiffuseIBL && inWorld) {
+		directionalAmbientColor += ImageBasedLighting::GetIBLColor(-ambientNormal) * SharedData::enbSettings.IBLMultiplicativeAmount;	
 	}
 #	endif
 
@@ -3119,9 +3099,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #		endif
 
-#	if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor -= iblColor;
-#	endif
 
 	directionalAmbientColor *= outputAlbedo;
 
@@ -3129,18 +3106,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	Skylighting::applySkylighting(color.xyz, directionalAmbientColor, outputAlbedo, skylightingDiffuse);
 #	endif
 
-#	if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor += iblColor * outputAlbedo;
-#	endif
-
 #	if !defined(DEFERRED)
 	color.xyz = Color::LinearToGamma(Color::GammaToLinear(color.xyz) + specularColor);
 	float3 fogColor = input.FogParam.xyz;
-#		if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
-		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
-	}
-#		endif
 	if (FrameBuffer::FrameParams.y && FrameBuffer::FrameParams.z)
 		color.xyz = lerp(color.xyz, fogColor, input.FogParam.w);
 #	endif

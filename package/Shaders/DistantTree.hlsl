@@ -241,15 +241,8 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
 #			if defined(IBL)
-	float3 iblColor = 0;
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
-		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-#					if defined(SKYLIGHTING)
-		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, 1.0), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					else
-		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					endif
-		directionalAmbientColor += Color::LinearToGamma(iblColor);
+		directionalAmbientColor += ImageBasedLighting::GetIBLColor(-normal) * SharedData::enbSettings.IBLMultiplicativeAmount;	
 	}
 #			endif
 	diffuseColor += directionalAmbientColor;
@@ -275,15 +268,8 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 directionalAmbientColor = mul(SharedData::DirectionalAmbient, float4(normal, 1.0));
 #			if defined(IBL)
-	float3 iblColor = 0;
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
-		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-#					if defined(SKYLIGHTING)
-		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, 1.0), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					else
-		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					endif
-		directionalAmbientColor += Color::LinearToGamma(iblColor);
+		directionalAmbientColor += ImageBasedLighting::GetIBLColor(-normal) * SharedData::enbSettings.IBLMultiplicativeAmount;	
 	}
 #			endif
 	diffuseColor += directionalAmbientColor;

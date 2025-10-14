@@ -237,8 +237,10 @@ namespace SharedData
 		float ColorPow;
 		float3 pad8;
 
+		float IBLAdditiveAmount;
 		float IBLMultiplicativeAmount;
-		float3 pad9;
+		float IBLReflectiveAmount;
+		float pad9;
 
 		float VolumetricRaysIntensity;
 		float VolumetricRaysRangeFactor;

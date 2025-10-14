@@ -112,6 +112,17 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	float3 linDiffuseColor = Color::GammaToLinear(diffuseColor);
 	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
 
+#		if defined(VR)
+		float3 positionMS = positionWS.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
+#		else
+		float3 positionMS = positionWS.xyz;
+#		endif
+
+	sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, SkylightingProbeArray, stbn_vec3_2Dx1D_128x128x64, dispatchID.xy, positionMS.xyz, normalWS);
+	
+	float3 V = normalize(positionWS.xyz);
+	float3 R = reflect(V, normalWS);
+
 #if defined(SSGI)
 
 	float ssgiAo;
@@ -119,6 +130,19 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	SampleSSGI(dispatchID.xy, normalWS, ssgiAo, ssgiIl);
 
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normalWS, 1.0)));
+	
+	if (SharedData::enbSettings.Enable){		
+		sh2 shR = ImageBasedLighting::DiffuseSkyIBLTexture.Load(int3(0, 0, 0));
+		sh2 shG = ImageBasedLighting::DiffuseSkyIBLTexture.Load(int3(1, 0, 0));
+		sh2 shB = ImageBasedLighting::DiffuseSkyIBLTexture.Load(int3(2, 0, 0));
+  
+		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(shR, -normalWS);
+		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(shG, -normalWS);
+		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(shB, -normalWS);
+
+		directionalAmbientColor += ImageBasedLighting::GetIBLColor(-normalWS) * SharedData::enbSettings.IBLMultiplicativeAmount;
+	}
+
 	directionalAmbientColor *= albedo;
 
 	directionalAmbientColor = Color::RGBToYCoCg(directionalAmbientColor);
@@ -161,9 +185,6 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	float3 reflectance = ReflectanceTexture[dispatchID.xy];
 
 	if (reflectance.x > 0.0 || reflectance.y > 0.0 || reflectance.z > 0.0) {
-		float3 V = normalize(positionWS.xyz);
-		float3 R = reflect(V, normalWS);
-
 		float roughness = 1.0 - glossiness;
 		float level = roughness * 7.0;
 
@@ -177,41 +198,14 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 		float3 specularIrradiance = EnvTexture.SampleLevel(LinearSampler, R, level);
 
         float specularIrradianceLuminance = Color::RGBToLuminance(EnvTexture.SampleLevel(LinearSampler, R, 15));
-
-		#		if defined(IBL)
-		float3 iblColor = 0;
-		if (SharedData::iblSettings.EnableDiffuseIBL && SharedData::iblSettings.EnableInterior) {
-			directionalAmbientColorSpecular *= SharedData::iblSettings.DALCAmount;
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-R), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-			float iblColorLuminance = Color::RGBToLuminance(Color::LinearToGamma(iblColor));
-			directionalAmbientColorSpecular += iblColorLuminance;
-		}
-#		endif
         specularIrradiance = (specularIrradiance / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
 
         finalIrradiance = Color::GammaToLinear(specularIrradiance);
 #	elif defined(SKYLIGHTING)
-#		if defined(VR)
-		float3 positionMS = positionWS.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
-#		else
-		float3 positionMS = positionWS.xyz;
-#		endif
-
-		sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, SkylightingProbeArray, stbn_vec3_2Dx1D_128x128x64, dispatchID.xy, positionMS.xyz, R);
 
 		float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
 		skylightingSpecular = saturate(skylightingSpecular);
 		skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
-
-#		if defined(IBL)
-		float3 iblColor = 0;
-		if (SharedData::iblSettings.EnableDiffuseIBL) {
-			directionalAmbientColorSpecular *= SharedData::iblSettings.DALCAmount;
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-R, skylightingSpecular), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-			float iblColorLuminance = Color::RGBToLuminance(Color::LinearToGamma(iblColor));
-			directionalAmbientColorSpecular += iblColorLuminance;
-		}
-#		endif
 
 		float3 specularIrradianceReflections = 0.0;
 
@@ -244,15 +238,6 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 		finalIrradiance = lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
 #	else
-#		if defined(IBL)
-		float3 iblColor = 0;
-		if (SharedData::iblSettings.EnableDiffuseIBL) {
-			directionalAmbientColorSpecular *= SharedData::iblSettings.DALCAmount;
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-R), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-			float iblColorLuminance = Color::RGBToLuminance(Color::LinearToGamma(iblColor));
-			directionalAmbientColorSpecular += iblColorLuminance;
-		}
-#		endif
 		float3 specularIrradianceReflections = EnvReflectionsTexture.SampleLevel(LinearSampler, R, level);
 
         float specularIrradianceReflectionsLuminance = Color::RGBToLuminance(EnvReflectionsTexture.SampleLevel(LinearSampler, R, 15));

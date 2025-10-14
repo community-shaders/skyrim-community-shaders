@@ -133,8 +133,13 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.Color.xyz = VParams * skyColor;
 	vsout.Color.w = BlendColor[0].w * input.Color.w;
 
-#		else
+#		elif defined(TEX)
+	float3 skyColor = BlendColor[0].xyz * input.Color.xxx + BlendColor[1].xyz * input.Color.yyy +
+	                  BlendColor[2].xyz * input.Color.zzz;
 
+	vsout.Color.xyz = VParams * skyColor;
+	vsout.Color.w = BlendColor[0].w * input.Color.w;
+#		else
 	float3 horizonColor = BlendColor[0].xyz;
 	float3 lowerColor = BlendColor[1].xyz;
 	float3 upperColor = BlendColor[2].xyz;
@@ -251,10 +256,10 @@ PS_OUTPUT main(PS_INPUT input)
 		TexNoiseGradSampler.Sample(SampNoiseGradSampler, noiseGradUv).x * 0.03125 + -0.0078125;
 
 #			ifdef TEX
-	psout.Color.xyz = (input.Color.xyz * baseColor.xyz + PParams.yyy) + noiseGrad;
+	psout.Color.xyz = (input.Color.xyz * baseColor.xyz) + noiseGrad;
 	psout.Color.w = baseColor.w * input.Color.w;
 #			else
-	psout.Color.xyz = (PParams.yyy + input.Color.xyz) + noiseGrad;
+	psout.Color.xyz = input.Color.xyz + noiseGrad;
 	psout.Color.w = input.Color.w;
 #			endif  // TEX
 
@@ -266,11 +271,11 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 #		elif defined(HORIZFADE)
-	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (input.Color.xyz * baseColor.xyz + PParams.yyy);
+	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (input.Color.xyz * baseColor.xyz);
 	psout.Color.w = input.TexCoord2.x * (baseColor.w * input.Color.w);
 #		else
 	psout.Color.w = input.Color.w * baseColor.w;
-	psout.Color.xyz = input.Color.xyz * baseColor.xyz + PParams.yyy;
+	psout.Color.xyz = input.Color.xyz * baseColor.xyz;
 #		endif
 
 #	else
@@ -299,6 +304,9 @@ PS_OUTPUT main(PS_INPUT input)
 		psout.Color.xyz = psout.Color.xyz + psout.Color.xyz * cloudsScatter;
 	}
 #	endif
+
+	if (!SharedData::enbSettings.Enable)
+		psout.Color.xyz += PParams.y;
 
 #	if defined(CLOUD_SHADOWS) && defined(CLOUDS) && !defined(DEFERRED)
 	psout.CloudShadows = float4(1, 1, 1, psout.Color.w);

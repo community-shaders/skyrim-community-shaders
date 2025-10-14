@@ -152,7 +152,9 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterTimeOfDaySetting("ColorPow", "ENVIRONMENT", 1, true);
 
 	// IMAGEBASEDLIGHTING
+	settingManager.RegisterTimeOfDaySetting("AdditiveAmount", "IMAGEBASEDLIGHTING", 0, true);
 	settingManager.RegisterTimeOfDaySetting("MultiplicativeAmount", "IMAGEBASEDLIGHTING", 0, true);
+	settingManager.RegisterTimeOfDaySetting("ReflectiveAmount", "IMAGEBASEDLIGHTING", 0, true);
 
 	// SUNGLARE
 	settingManager.RegisterTimeOfDaySetting("GlowIntensity", "SUNGLARE", 1, true);
