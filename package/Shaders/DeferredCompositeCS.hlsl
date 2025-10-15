@@ -140,10 +140,16 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(shG, -normalWS);
 		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(shB, -normalWS);
 
-		directionalAmbientColor += ImageBasedLighting::GetIBLColor(-normalWS) * SharedData::enbSettings.IBLMultiplicativeAmount;
-	}
+		float3 iblColor = ImageBasedLighting::GetIBLColor(-normalWS);
 
-	directionalAmbientColor *= albedo;
+		directionalAmbientColor += iblColor * SharedData::enbSettings.IBLMultiplicativeAmount;
+		directionalAmbientColor *= albedo;
+		directionalAmbientColor += iblColor * SharedData::enbSettings.IBLAdditiveAmount;
+
+
+	} else {
+		directionalAmbientColor *= albedo;
+	}
 
 	directionalAmbientColor = Color::RGBToYCoCg(directionalAmbientColor);
 	directionalAmbientColor.x = MasksTexture[dispatchID.xy].z;

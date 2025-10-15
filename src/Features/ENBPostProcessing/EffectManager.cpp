@@ -172,9 +172,6 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterTimeOfDaySetting("RangeFactor", "GAMEVOLUMETRICRAYS", 1, true);
 	settingManager.RegisterTimeOfDaySetting("Desaturation", "GAMEVOLUMETRICRAYS", 0, true);
 	settingManager.RegisterColorTimeOfDaySetting("ColorFilter", "GAMEVOLUMETRICRAYS", { 1.0f, 1.0f, 1.0f }, true);
-
-	// PARTICLE
-	settingManager.RegisterTimeOfDaySetting("Intensity", "PARTICLE", 1, true);
 }
 
 void EffectManager::ExecuteEffects()

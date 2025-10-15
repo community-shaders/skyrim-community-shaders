@@ -207,6 +207,8 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 
 		float3 sunColorF3 = NiToF3(sunColor);
 
+		sunColorF3 = Desaturation(sunColorF3, settingManager.GetInterpolatedTimeOfDayValue("SunDesaturation", "SKY"));
+		sunColorF3 = ColorFilter(sunColorF3, settingManager.GetInterpolatedColorTimeOfDayValue("SunColorFilter", "SKY"), 0.0f);
 		sunColorF3 = Intensity(sunColorF3, settingManager.GetInterpolatedTimeOfDayValue("SunIntensity", "SKY"));
 
 		sunColor = F3ToNi(sunColorF3);
@@ -253,16 +255,6 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 		skyStaticsColorF3 = Intensity(skyStaticsColorF3, settingManager.GetInterpolatedTimeOfDayValue("Intensity", "VOLUMETRICFOG"));
 
 		skyStaticsColor = F3ToNi(skyStaticsColorF3);
-	}
-
-	{
-		auto& effectColor = colors[(uint)RE::TESWeather::ColorTypes::kEffectLighting];
-
-		float3 effectColorF3 = NiToF3(effectColor);
-
-		effectColorF3 = Intensity(effectColorF3, settingManager.GetInterpolatedTimeOfDayValue("Intensity", "PARTICLE"));
-
-		effectColor = F3ToNi(effectColorF3);
 	}
 }
 

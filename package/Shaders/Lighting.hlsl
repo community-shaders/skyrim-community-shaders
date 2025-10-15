@@ -2724,13 +2724,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 	float3 directionalAmbientColor = max(0, mul(DirectionalAmbient, float4(ambientNormal, 1.0)));
+	float3 directionalAmbientColorAdditive = 0.0;
 
 #	if defined(SKYLIGHTING)
 	float skylightingDiffuse = 1;
 	float skylightingFadeOutFactor = 1.0;
 	if (!SharedData::InInterior) {
 		skylightingFadeOutFactor = Skylighting::getFadeOutFactor(input.WorldPosition.xyz);
-		skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(ambientNormal)) / Math::PI;
+		skylightingDiffuse = SphericalHarmonics::Unproject(skylightingSH, ambientNormal);
 		skylightingDiffuse = saturate(skylightingDiffuse);
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
@@ -2739,7 +2740,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && inWorld) {
-		directionalAmbientColor += ImageBasedLighting::GetIBLColor(-ambientNormal) * SharedData::enbSettings.IBLMultiplicativeAmount;	
+		float3 iblColor = ImageBasedLighting::GetIBLColor(-ambientNormal);
+		directionalAmbientColor += iblColor * SharedData::enbSettings.IBLMultiplicativeAmount;		
+		directionalAmbientColorAdditive += iblColor * SharedData::enbSettings.IBLAdditiveAmount;
 	}
 #	endif
 
@@ -2991,6 +2994,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	color.xyz += diffuseColor * baseColor.xyz;
 #	endif
 
+	color.xyz += directionalAmbientColorAdditive;
+
 #	if defined(HAIR) && defined(CS_HAIR)
 #		if !defined(DEFERRED)
 #			if defined(DYNAMIC_CUBEMAPS)
@@ -3099,8 +3104,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #		endif
 
-
 	directionalAmbientColor *= outputAlbedo;
+	directionalAmbientColor += directionalAmbientColorAdditive;
 
 #	if defined(SKYLIGHTING)
 	Skylighting::applySkylighting(color.xyz, directionalAmbientColor, outputAlbedo, skylightingDiffuse);
