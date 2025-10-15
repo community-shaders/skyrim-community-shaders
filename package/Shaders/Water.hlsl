@@ -966,20 +966,6 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 		normalize(float3(0, 0, 1) + NormalsAmplitude.xxx * normals1);
 #			endif
 
-#if defined(UNIFIED_WATER)
-			float gerstnerIntensity = SharedData::unifiedWaterSettings.WaveIntensity;
-			float gerstnerAmplitude = SharedData::unifiedWaterSettings.WaveAmplitude;
-			float gerstnerSpeed = SharedData::unifiedWaterSettings.WaveSpeed;
-			float gerstnerSteepness = SharedData::unifiedWaterSettings.WaveSteepness;
-			
-			float2 absoluteWorldPos = input.WPosition.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy;
-			float3 gerstnerNormal = CalculateGerstnerNormals(absoluteWorldPos, gerstnerIntensity, gerstnerAmplitude, gerstnerSpeed, gerstnerSteepness);
-			float blendFactor = 0.3;
-			if (length(gerstnerNormal) > 0.1) {
-				finalNormal = normalize(lerp(finalNormal, normalize(gerstnerNormal), blendFactor));
-			}
-#endif
-
 #			if defined(WADING)
 #				if defined(FLOWMAP)
 	float2 displacementUv = input.TexCoord3.zw;
