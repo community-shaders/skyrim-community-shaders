@@ -170,9 +170,9 @@ float WrapUnifiedPhase(float phase)
 
 float ComputeWaveTimeSeconds(float gameTimeHours, float realTimeSeconds)
 {
-	float dayFraction = frac(gameTimeHours / 24.0f);
-	float gameSeconds = dayFraction * 86400.0f;
-	return frac((gameSeconds + realTimeSeconds) / 65536.0f) * 65536.0f;
+	float gameSeconds = gameTimeHours * 3600.0f;
+	float combined = gameSeconds + realTimeSeconds;
+	return frac(combined / 65536.0f) * 65536.0f;
 }
 
 float ComputeWaveDayPhase(float gameTimeHours)
@@ -340,14 +340,12 @@ VS_OUTPUT main(VS_INPUT input)
 	float4 previousPosition = inputPosition;
 	float4 worldPosBase = mul(World[eyeIndex], inputPosition);
 	float2 waveWorldPos = worldPosBase.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy;
-	float realtimeContribution = RealTimeSeconds * step(0.0001f, TimeScale);
-	float waveTimeSeconds = ComputeWaveTimeSeconds(GameTimeHours, realtimeContribution);
+	float waveTimeSeconds = ComputeWaveTimeSeconds(GameTimeHours, RealTimeSeconds);
 	float waveDayPhase = ComputeWaveDayPhase(GameTimeHours);
 	float3 waveDisplacement = CalculateWaterDisplacement(waveWorldPos, WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSeconds, waveDayPhase);
 	currentPosition.xyz += waveDisplacement;
 
-	float prevRealtimeContribution = PrevRealTimeSeconds * step(0.0001f, PrevTimeScale);
-	float waveTimeSecondsPrev = ComputeWaveTimeSeconds(PrevGameTimeHours, prevRealtimeContribution);
+	float waveTimeSecondsPrev = ComputeWaveTimeSeconds(PrevGameTimeHours, PrevRealTimeSeconds);
 	float waveDayPhasePrev = ComputeWaveDayPhase(PrevGameTimeHours);
 	float3 prevWaveDisplacement = CalculateWaterDisplacement(waveWorldPos, WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSecondsPrev, waveDayPhasePrev);
 	previousPosition.xyz += prevWaveDisplacement;
