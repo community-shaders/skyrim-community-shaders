@@ -283,6 +283,16 @@ cbuffer PerGeometry : register(b2)
 #		endif  // VR
 };
 
+#if defined(UNIFIED_WATER)
+cbuffer UnifiedWaterPerFrame : register(b7)
+{
+	float WaveIntensity : packoffset(c0.x);
+	float WaveAmplitude : packoffset(c0.y);
+	float WaveSpeed : packoffset(c0.z);
+	float WaveSteepness : packoffset(c0.w);
+}
+#endif
+
 VS_OUTPUT main(VS_INPUT input)
 {
 	VS_OUTPUT vsout;
@@ -299,13 +309,8 @@ VS_OUTPUT main(VS_INPUT input)
 	float4 worldPos = mul(World[eyeIndex], inputPosition);
 	
 #if defined(UNIFIED_WATER)
-	float waveIntensity = SharedData::unifiedWaterSettings.WaveIntensity;
-	float waveAmplitude = SharedData::unifiedWaterSettings.WaveAmplitude;
-	float waveSpeed = SharedData::unifiedWaterSettings.WaveSpeed;
-	float waveSteepness = SharedData::unifiedWaterSettings.WaveSteepness;
-	
 	float2 absoluteWorldPos = worldPos.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy;
-	float3 waveDisplacement = CalculateWaterDisplacement(absoluteWorldPos, waveIntensity, waveAmplitude, waveSpeed, waveSteepness);
+	float3 waveDisplacement = CalculateWaterDisplacement(absoluteWorldPos, WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness);
 	
 	float4 displacedPosition = inputPosition;
 	displacedPosition.xyz += waveDisplacement;

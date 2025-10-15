@@ -40,7 +40,19 @@ struct UnifiedWater : OverlayFeature
 		float pad0[3];
 	};
 
+	struct alignas(16) PerFrame
+	{
+		float WaveIntensity;
+		float WaveAmplitude;
+		float WaveSpeed;
+		float WaveSteepness;
+	};
+
 	Settings settings;
+	ConstantBuffer* perFrame = nullptr;
+	
+	virtual void SetupResources() override;
+	virtual void Reset() override;
 
 	struct TESWaterSystem_InitializeWater_SetWaterShaderMaterialParams
 	{

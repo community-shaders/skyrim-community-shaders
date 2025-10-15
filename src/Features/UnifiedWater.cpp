@@ -271,6 +271,16 @@ void UnifiedWater::SetFlowmapTex() const
 	logger::debug("[Unified Water] [Flowmap] Texture set");
 }
 
+void UnifiedWater::SetupResources()
+{
+	perFrame = new ConstantBuffer(ConstantBufferDesc<PerFrame>());
+}
+
+void UnifiedWater::Reset()
+{
+	// Update the constant buffer when settings change
+}
+
 void UnifiedWater::PostPostLoad()
 {
 	stl::detour_thunk<TES_SetWorldSpace>(REL::RelocationID(13170, 13315));
@@ -509,6 +519,22 @@ void UnifiedWater::BGSTerrainBlock_Detach::thunk(RE::BGSTerrainBlock* block)
 void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader, RE::BSRenderPass* pass)
 {
 	const auto& singleton = globals::features::unifiedWater;
+	
+	// Update and bind the per-frame constant buffer for vertex shader access
+	if (singleton.perFrame) {
+		PerFrame perFrameData{};
+		perFrameData.WaveIntensity = singleton.settings.WaveIntensity;
+		perFrameData.WaveAmplitude = singleton.settings.WaveAmplitude;
+		perFrameData.WaveSpeed = singleton.settings.WaveSpeed;
+		perFrameData.WaveSteepness = singleton.settings.WaveSteepness;
+		
+		singleton.perFrame->Update(perFrameData);
+		
+		auto context = globals::d3d::context;
+		ID3D11Buffer* buffers[1] = { singleton.perFrame->CB() };
+		context->VSSetConstantBuffers(7, 1, buffers);
+	}
+	
 	if (singleton.flowmap) {
 		// ObjectUV.xyz below, xy contains width and height, z contains mesh scale
 		// Previously flowmap size was in x, yz contained flowmap offset for water displacement mesh
