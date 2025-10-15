@@ -192,44 +192,35 @@ float3 CalculateGerstnerWave(GerstnerWave wave, float2 position, float spatialPh
 }
 
 // Calculate combined Gerstner wave displacement for water surface
-float3 CalculateWaterDisplacement(float2 worldPos, float waveIntensity)
+float3 CalculateWaterDisplacement(float2 worldPos, float waveIntensity, float amplitudeMult, float speedMult, float steepnessMult)
 {
 	if (waveIntensity <= 0.0) return float3(0, 0, 0);
 	
-	// Define multiple wave sets for more realistic water
 	GerstnerWave waves[3];
 	
-	// Primary wave - horizontal stripes
-	waves[0].direction = normalize(float2(1.0, 0.0));  // Pure horizontal
-	waves[0].amplitude = 8.0 * waveIntensity;
+	waves[0].direction = normalize(float2(1.0, 0.0));
+	waves[0].amplitude = 8.0 * waveIntensity * amplitudeMult;
 	waves[0].frequency = 0.01;
-	waves[0].speed = 1.2;
-	waves[0].steepness = 0.4;
+	waves[0].speed = 1.2 * speedMult;
+	waves[0].steepness = 0.4 * steepnessMult;
 	
-	// Secondary wave - vertical stripes (should be perpendicular)
-	waves[1].direction = normalize(float2(0.0, 1.0));  // Pure vertical
-	waves[1].amplitude = 6.0 * waveIntensity;
+	waves[1].direction = normalize(float2(0.0, 1.0));
+	waves[1].amplitude = 6.0 * waveIntensity * amplitudeMult;
 	waves[1].frequency = 0.015;
-	waves[1].speed = 1.5;
-	waves[1].steepness = 0.35;
+	waves[1].speed = 1.5 * speedMult;
+	waves[1].steepness = 0.35 * steepnessMult;
 	
-	// Tertiary wave - diagonal (should create diamond pattern when combined)
-	waves[2].direction = normalize(float2(0.707, 0.707));  // 45 degree diagonal
-	waves[2].amplitude = 4.0 * waveIntensity;
+	waves[2].direction = normalize(float2(0.707, 0.707));
+	waves[2].amplitude = 4.0 * waveIntensity * amplitudeMult;
 	waves[2].frequency = 0.02;
-	waves[2].speed = 0.8;
-	waves[2].steepness = 0.3;
+	waves[2].speed = 0.8 * speedMult;
+	waves[2].steepness = 0.3 * steepnessMult;
 	
 	float3 totalDisplacement = float3(0, 0, 0);
 	
-	// Combine all waves - calculate each wave individually with proper direction
 	for (int i = 0; i < 3; i++) {
-		// Calculate phase using the wave's direction - this should create different patterns
 		float spatialPhase = dot(waves[i].direction, worldPos) * waves[i].frequency;
-		
-		// Debug: Add offset to ensure waves are different
-		spatialPhase += float(i) * 1.57; // Add π/2 offset per wave
-		
+		spatialPhase += float(i) * 1.57;
 		totalDisplacement += CalculateGerstnerWave(waves[i], worldPos, spatialPhase);
 	}
 	
@@ -237,22 +228,19 @@ float3 CalculateWaterDisplacement(float2 worldPos, float waveIntensity)
 }
 
 // Calculate normal perturbation from Gerstner waves
-float3 CalculateGerstnerNormals(float2 worldPos, float waveIntensity)
+float3 CalculateGerstnerNormals(float2 worldPos, float waveIntensity, float amplitudeMult, float speedMult, float steepnessMult)
 {
 	if (waveIntensity <= 0.0) return float3(0, 0, 1);
 	
 	const float epsilon = 1.0;
 	
-	// Sample displacement at current position and nearby points
-	float3 center = CalculateWaterDisplacement(worldPos, waveIntensity);
-	float3 right = CalculateWaterDisplacement(worldPos + float2(epsilon, 0), waveIntensity);
-	float3 forward = CalculateWaterDisplacement(worldPos + float2(0, epsilon), waveIntensity);
+	float3 center = CalculateWaterDisplacement(worldPos, waveIntensity, amplitudeMult, speedMult, steepnessMult);
+	float3 right = CalculateWaterDisplacement(worldPos + float2(epsilon, 0), waveIntensity, amplitudeMult, speedMult, steepnessMult);
+	float3 forward = CalculateWaterDisplacement(worldPos + float2(0, epsilon), waveIntensity, amplitudeMult, speedMult, steepnessMult);
 	
-	// Calculate tangent vectors
 	float3 tangentX = float3(epsilon, 0, right.z - center.z);
 	float3 tangentY = float3(0, epsilon, forward.z - center.z);
 	
-	// Calculate normal via cross product
 	float3 normal = normalize(cross(tangentY, tangentX));
 	return normal;
 }
@@ -310,20 +298,22 @@ VS_OUTPUT main(VS_INPUT input)
 	
 	float4 worldPos = mul(World[eyeIndex], inputPosition);
 	
-// Apply Gerstner wave displacement for surface deformation only
-	// Use higher wave intensity for dramatic waves
-	float waveIntensity = 1.8; // More dramatic for testing
+#if defined(UNIFIED_WATER)
+	float waveIntensity = SharedData::unifiedWaterSettings.WaveIntensity;
+	float waveAmplitude = SharedData::unifiedWaterSettings.WaveAmplitude;
+	float waveSpeed = SharedData::unifiedWaterSettings.WaveSpeed;
+	float waveSteepness = SharedData::unifiedWaterSettings.WaveSteepness;
 	
-	// Calculate wave displacement using camera-independent world coordinates
 	float2 absoluteWorldPos = worldPos.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy;
-	float3 waveDisplacement = CalculateWaterDisplacement(absoluteWorldPos, waveIntensity);
+	float3 waveDisplacement = CalculateWaterDisplacement(absoluteWorldPos, waveIntensity, waveAmplitude, waveSpeed, waveSteepness);
 	
-	// Apply displacement only to vertex position for surface geometry, not world placement
 	float4 displacedPosition = inputPosition;
 	displacedPosition.xyz += waveDisplacement;
 
-	// Calculate projection using original world transform but displaced vertex
 	float4 worldViewPos = mul(WorldViewProj[eyeIndex], displacedPosition);
+#else
+	float4 worldViewPos = mul(WorldViewProj[eyeIndex], inputPosition);
+#endif
 
 	float heightMult = min((1.0 / 10000.0) * max(worldViewPos.z - 70000, 0), 1);
 
@@ -342,11 +332,15 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.FogParam.w = fogDistanceFactor;
 		#endif
 	
-	// Use wave-displaced position for pixel shader calculations
+#if defined(UNIFIED_WATER)
 	float4 displacedWorldPos = worldPos;
 	displacedWorldPos.xyz += waveDisplacement;
 	vsout.WPosition.xyz = displacedWorldPos.xyz;
 	vsout.WPosition.w = length(displacedWorldPos.xyz);
+#else
+	vsout.WPosition.xyz = worldPos.xyz;
+	vsout.WPosition.w = length(worldPos.xyz);
+#endif
 
 #			if defined(LOD)
 	float4 posAdjust =
@@ -837,26 +831,24 @@ float3 ComputeEnhancedWaveNormal(float3 worldPos, float3 baseNormal, float timer
  * @param waterDepth Distance to sea floor (if available)
  * @param waveStrength Current wave intensity
  * @param timer Time for animation
+ * @param foamIntensityMult Global foam intensity multiplier
  * @return Foam intensity multiplier
  */
-float ComputeEnhancedFoam(float3 worldPos, float waterDepth, float waveStrength, float timer)
+float ComputeEnhancedFoam(float3 worldPos, float waterDepth, float waveStrength, float timer, float foamIntensityMult)
 {
-	// Basic foam intensity based on position noise
+	if (foamIntensityMult <= 0.0) return 0.0;
+	
 	float2 foamPos = worldPos.xz * 0.05;
 	float foamNoise1 = sin(foamPos.x * 4.0 + timer * 2.0) * cos(foamPos.y * 3.0 + timer * 1.5);
 	float foamNoise2 = sin(foamPos.x * 8.0 - timer * 3.0) * cos(foamPos.y * 6.0 - timer * 2.5);
 	
-	// Combine noise patterns
 	float foamPattern = (foamNoise1 * 0.6 + foamNoise2 * 0.4) * 0.5 + 0.5;
 	
-	// Depth-based foam intensity (more foam in shallow water)
-	float depthFactor = saturate(1.0 - waterDepth * 0.1); // Increase foam as depth decreases
+	float depthFactor = saturate(1.0 - waterDepth * 0.1);
 	
-	// Wave-based foam (more foam where waves are stronger)
 	float waveFactor = saturate(waveStrength * 2.0);
 	
-	// Combine all factors
-	float foamIntensity = foamPattern * depthFactor * waveFactor;
+	float foamIntensity = foamPattern * depthFactor * waveFactor * foamIntensityMult;
 	
 	return saturate(foamIntensity);
 }
@@ -969,18 +961,19 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 		normalize(float3(0, 0, 1) + NormalsAmplitude.xxx * normals1);
 #			endif
 
-// Apply Gerstner wave normal enhancement - always active for visible waves
-			float gerstnerIntensity = 1.8; // Higher intensity to match dramatic vertex displacement
+#if defined(UNIFIED_WATER)
+			float gerstnerIntensity = SharedData::unifiedWaterSettings.WaveIntensity;
+			float gerstnerAmplitude = SharedData::unifiedWaterSettings.WaveAmplitude;
+			float gerstnerSpeed = SharedData::unifiedWaterSettings.WaveSpeed;
+			float gerstnerSteepness = SharedData::unifiedWaterSettings.WaveSteepness;
 			
-			// Use camera-independent world coordinates for stationary waves
 			float2 absoluteWorldPos = input.WPosition.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy;
-			float3 gerstnerNormal = CalculateGerstnerNormals(absoluteWorldPos, gerstnerIntensity);
-			// Blend Gerstner normals with existing water normals - reduced blend to fix reflections
-			float blendFactor = 0.3; // Lower blend to prevent normal corruption
-			// Ensure gerstner normal is valid before blending
+			float3 gerstnerNormal = CalculateGerstnerNormals(absoluteWorldPos, gerstnerIntensity, gerstnerAmplitude, gerstnerSpeed, gerstnerSteepness);
+			float blendFactor = 0.3;
 			if (length(gerstnerNormal) > 0.1) {
 				finalNormal = normalize(lerp(finalNormal, normalize(gerstnerNormal), blendFactor));
 			}
+#endif
 
 #			if defined(WADING)
 #				if defined(FLOWMAP)

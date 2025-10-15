@@ -9,6 +9,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UnifiedWater::Settings,
 	UseOptimisedMeshes,
 	WaveIntensity,
+	WaveAmplitude,
+	WaveSpeed,
+	WaveSteepness,
 	FoamIntensity)
 
 void UnifiedWater::LoadSettings(json& o_json)
@@ -47,6 +50,21 @@ void UnifiedWater::DrawSettings()
 				"Set to 0 to disable enhanced waves.");
 		}
 
+		ImGui::SliderFloat("Wave Height", &settings.WaveAmplitude, 0.1f, 3.0f, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Controls the amplitude (height) of water waves.");
+		}
+
+		ImGui::SliderFloat("Wave Speed", &settings.WaveSpeed, 0.1f, 3.0f, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Controls how fast waves move across the water surface.");
+		}
+
+		ImGui::SliderFloat("Wave Steepness", &settings.WaveSteepness, 0.1f, 2.0f, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Controls how peaked or sharp wave crests are.");
+		}
+
 		ImGui::Spacing();
 		
 		ImGui::Text("Advanced Foam System");
@@ -57,6 +75,8 @@ void UnifiedWater::DrawSettings()
 				"Provides more realistic foam patterns near shorelines.\n"
 				"Set to 0 to disable enhanced foam.");
 		}
+
+		ImGui::TreePop();
 	}
 
 	ImGui::Spacing();

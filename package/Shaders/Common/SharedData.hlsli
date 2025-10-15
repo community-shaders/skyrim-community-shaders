@@ -194,6 +194,17 @@ namespace SharedData
 		float Strength;      // [0, 1.0] The inverse blend weight of the effect
 	};
 
+	struct UnifiedWaterSettings
+	{
+		bool UseOptimisedMeshes;
+		float WaveIntensity;
+		float WaveAmplitude;
+		float WaveSpeed;
+		float WaveSteepness;
+		float FoamIntensity;
+		float2 pad0;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -209,6 +220,7 @@ namespace SharedData
 		TerrainVariationSettings terrainVariationSettings;
 		IBLSettings iblSettings;
 		ExtendedTranslucencySettings extendedTranslucencySettings;
+		UnifiedWaterSettings unifiedWaterSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);

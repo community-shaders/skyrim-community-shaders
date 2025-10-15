@@ -31,9 +31,13 @@ struct UnifiedWater : OverlayFeature
 	{
 		bool UseOptimisedMeshes = true;
 		
-		// Enhanced Water Effects
 		float WaveIntensity = 0.3f;
+		float WaveAmplitude = 1.0f;
+		float WaveSpeed = 1.0f;
+		
+		float WaveSteepness = 1.0f;
 		float FoamIntensity = 0.5f;
+		float pad0[3];
 	};
 
 	Settings settings;
