@@ -198,10 +198,12 @@ float3 EvaluateUnifiedWave(UnifiedWave wave, float2 position, float timeSeconds)
 	float sineValue;
 	float cosineValue;
 	sincos(phase, sineValue, cosineValue);
-	float horizontal = wave.steepness * wave.amplitude;
+	float crestFactor = max(sineValue, 0.0f);
+	float crestAmplitude = wave.amplitude * crestFactor;
+	float horizontal = wave.steepness * crestAmplitude;
 	return float3(horizontal * wave.direction.x * cosineValue,
-		          horizontal * wave.direction.y * cosineValue,
-		          wave.amplitude * sineValue);
+	          horizontal * wave.direction.y * cosineValue,
+	          crestAmplitude);
 }
 
 float3 CalculateWaterDisplacement(float2 worldPos, float waveIntensity, float amplitudeMult, float speedMult, float steepnessMult, float timeSeconds, float dayPhase)
