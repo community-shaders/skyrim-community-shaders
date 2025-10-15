@@ -181,6 +181,22 @@ float ComputeWaveDayPhase(float gameTimeHours)
 	return dayFraction * UW_TWO_PI;
 }
 
+// Generate per-cell spatial phase offset for wave variation
+// Uses world position to create deterministic but varied phases between cells
+float ComputeSpatialPhaseOffset(float2 worldPos)
+{
+	// Quantize to cell-sized chunks (4096 units per cell)
+	float2 cellCoord = floor(worldPos / 4096.0f);
+	
+	// Hash the cell coordinates for pseudo-random phase
+	// Using a simple hash that creates good distribution
+	float hash = frac(sin(dot(cellCoord, float2(12.9898f, 78.233f))) * 43758.5453f);
+	
+	// Map to reasonable phase range (0 to 2π)
+	// Scale down to keep variation subtle but noticeable
+	return hash * UW_TWO_PI * 0.3f; // 30% of full cycle variation
+}
+
 struct UnifiedWave
 {
 	float2 direction;
@@ -211,6 +227,9 @@ float3 CalculateWaterDisplacement(float2 worldPos, float waveIntensity, float am
 	if (waveIntensity <= 0.0f)
 		return float3(0.0f, 0.0f, 0.0f);
 
+	// Compute spatial phase offset for this cell to add variation
+	float spatialOffset = ComputeSpatialPhaseOffset(worldPos);
+
 	UnifiedWave waves[3];
 
 	waves[0].direction = normalize(float2(1.0f, 0.35f));
@@ -218,21 +237,21 @@ float3 CalculateWaterDisplacement(float2 worldPos, float waveIntensity, float am
 	waves[0].waveNumber = UW_TWO_PI / 1800.0f;
 	waves[0].angularVelocity = UW_TWO_PI / 18.0f * speedMult;
 	waves[0].steepness = saturate(0.32f * steepnessMult);
-	waves[0].phaseOffset = dayPhase * 1.0f;
+	waves[0].phaseOffset = dayPhase * 1.0f + spatialOffset;
 
 	waves[1].direction = normalize(float2(-0.6f, 1.0f));
 	waves[1].amplitude = 11.5f * waveIntensity * amplitudeMult;
 	waves[1].waveNumber = UW_TWO_PI / 1100.0f;
 	waves[1].angularVelocity = UW_TWO_PI / 11.0f * speedMult;
 	waves[1].steepness = saturate(0.26f * steepnessMult);
-	waves[1].phaseOffset = dayPhase * 1.45f + 2.0943951f;
+	waves[1].phaseOffset = dayPhase * 1.45f + 2.0943951f + spatialOffset * 1.3f;
 
 	waves[2].direction = normalize(float2(0.85f, -0.4f));
 	waves[2].amplitude = 7.0f * waveIntensity * amplitudeMult;
 	waves[2].waveNumber = UW_TWO_PI / 620.0f;
 	waves[2].angularVelocity = UW_TWO_PI / 7.0f * speedMult;
 	waves[2].steepness = saturate(0.21f * steepnessMult);
-	waves[2].phaseOffset = dayPhase * 2.2f + 4.1887903f;
+	waves[2].phaseOffset = dayPhase * 2.2f + 4.1887903f + spatialOffset * 0.7f;
 
 	float3 totalDisplacement = float3(0.0f, 0.0f, 0.0f);
 
@@ -976,8 +995,10 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 	// FLOWMAP NORMALS DISABLED: Using only base normals (flow system still active for ripples/splashes)
 	float3 finalNormal = normalize(normals1 + float3(0, 0, 1));
 #				else
-	// FLOWMAP NORMALS ENABLED: Blending flow-based normals with base normals
-	float3 finalNormal = normalize(lerp(normals1 + float3(0, 0, 1), flowmapNormal, distanceFactor));
+	// FLOWMAP NORMALS ENABLED: Blend flowmap directional flow with texture detail
+	// Use 0.5 blend to keep 50% texture normals for detail at all distances
+	float flowmapBlend = distanceFactor * 0.5;
+	float3 finalNormal = normalize(lerp(normals1 + float3(0, 0, 1), flowmapNormal, flowmapBlend));
 #				endif
 #			elif !defined(LOD)
 
